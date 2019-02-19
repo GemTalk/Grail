@@ -1,6 +1,6 @@
 # GemStone/P
 
-Run Python on GemStone/S 64 Bit
+Run [Python](https://docs.python.org/3/reference/index.html) on GemStone/S 64 Bit. 
 
 ## macOS Installation
 
