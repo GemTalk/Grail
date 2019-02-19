@@ -40,7 +40,7 @@ Object subclass: 'PyAstNode'
 %
 expectvalue /Class
 doit
-PyAstNode comment:
+PyAstNode comment: 
 'No class-specific documentation for PyAstNode, hierarchy is:
 Object
   PyAstNode
@@ -64,7 +64,7 @@ PyAstNode subclass: 'PyAlias'
 %
 expectvalue /Class
 doit
-PyAlias comment:
+PyAlias comment: 
 'No class-specific documentation for PyAlias, hierarchy is:
 Object
   PyAstNode
@@ -89,7 +89,7 @@ PyAstNode subclass: 'PyComparisonOperator'
 %
 expectvalue /Class
 doit
-PyComparisonOperator comment:
+PyComparisonOperator comment: 
 'No class-specific documentation for PyComparisonOperator, hierarchy is:
 Object
   PyAstNode( line column)
@@ -274,7 +274,7 @@ PyAstNode subclass: 'PyExpression'
 %
 expectvalue /Class
 doit
-PyExpression comment:
+PyExpression comment: 
 'No class-specific documentation for PyExpression, hierarchy is:
 Object
   PyAstNode( line column)
@@ -395,7 +395,7 @@ PyAstNode subclass: 'PyExpressionContext'
 %
 expectvalue /Class
 doit
-PyExpressionContext comment:
+PyExpressionContext comment: 
 'No class-specific documentation for PyExpressionContext, hierarchy is:
 Object
   PyAstNode( line column)
@@ -517,7 +517,7 @@ PyAstNode subclass: 'PyModule'
 %
 expectvalue /Class
 doit
-PyModule comment:
+PyModule comment: 
 'A Module is a file containing PythonGlobals definitions and statements. When a file (''script'') is executed from the command line, (e.g., ''python myFile.py''), the module global variable `__name__` is set to ''__main__''. A Module can be imported into another module using the `Import` command, and the module global variable `__name__` is then the name of the file.
 
 https://docs.python.org/3/tutorial/modules.html?highlight=module'
@@ -540,7 +540,7 @@ PyAstNode subclass: 'PyStatement'
 %
 expectvalue /Class
 doit
-PyStatement comment:
+PyStatement comment: 
 'No class-specific documentation for PyStatement, hierarchy is:
 Object
   PyAstNode( line column)
@@ -581,7 +581,7 @@ PyStatement subclass: 'PyIf'
 %
 expectvalue /Class
 doit
-PyIf comment:
+PyIf comment: 
 'No class-specific documentation for PyIf, hierarchy is:
 Object
   PyAstNode( line column)
@@ -606,7 +606,7 @@ PyStatement subclass: 'PyImport'
 %
 expectvalue /Class
 doit
-PyImport comment:
+PyImport comment: 
 'No class-specific documentation for PyImport, hierarchy is:
 Object
   PyAstNode
@@ -648,7 +648,7 @@ Object subclass: 'PyToken'
 %
 expectvalue /Class
 doit
-PyToken comment:
+PyToken comment: 
 'No class-specific documentation for Token, hierarchy is:
 Object
   Token( start stop name string)
@@ -660,7 +660,7 @@ PyToken category: 'Parser'
 %
 
 ! ------------------- Remove existing behavior from Builtins
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 Builtins removeAllMethods.
 Builtins class removeAllMethods.
@@ -698,7 +698,7 @@ __import__: name _: globals _: locals _: fromList _: level
 %
 
 ! ------------------- Remove existing behavior from PyAstNode
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyAstNode removeAllMethods.
 PyAstNode class removeAllMethods.
@@ -857,7 +857,7 @@ sys
 %
 
 ! ------------------- Remove existing behavior from PyAlias
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyAlias removeAllMethods.
 PyAlias class removeAllMethods.
@@ -907,7 +907,7 @@ name
 %
 
 ! ------------------- Remove existing behavior from PyComparisonOperator
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyComparisonOperator removeAllMethods.
 PyComparisonOperator class removeAllMethods.
@@ -944,7 +944,7 @@ initialize
 %
 
 ! ------------------- Remove existing behavior from PyEq
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyEq removeAllMethods.
 PyEq class removeAllMethods.
@@ -953,7 +953,7 @@ PyEq class removeAllMethods.
 ! ------------------- Instance methods for PyEq
 
 ! ------------------- Remove existing behavior from PyGt
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyGt removeAllMethods.
 PyGt class removeAllMethods.
@@ -962,7 +962,7 @@ PyGt class removeAllMethods.
 ! ------------------- Instance methods for PyGt
 
 ! ------------------- Remove existing behavior from PyGtE
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyGtE removeAllMethods.
 PyGtE class removeAllMethods.
@@ -971,7 +971,7 @@ PyGtE class removeAllMethods.
 ! ------------------- Instance methods for PyGtE
 
 ! ------------------- Remove existing behavior from PyIn
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyIn removeAllMethods.
 PyIn class removeAllMethods.
@@ -980,7 +980,7 @@ PyIn class removeAllMethods.
 ! ------------------- Instance methods for PyIn
 
 ! ------------------- Remove existing behavior from PyIs
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyIs removeAllMethods.
 PyIs class removeAllMethods.
@@ -989,7 +989,7 @@ PyIs class removeAllMethods.
 ! ------------------- Instance methods for PyIs
 
 ! ------------------- Remove existing behavior from PyIsNot
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyIsNot removeAllMethods.
 PyIsNot class removeAllMethods.
@@ -998,7 +998,7 @@ PyIsNot class removeAllMethods.
 ! ------------------- Instance methods for PyIsNot
 
 ! ------------------- Remove existing behavior from PyLt
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyLt removeAllMethods.
 PyLt class removeAllMethods.
@@ -1007,7 +1007,7 @@ PyLt class removeAllMethods.
 ! ------------------- Instance methods for PyLt
 
 ! ------------------- Remove existing behavior from PyLtE
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyLtE removeAllMethods.
 PyLtE class removeAllMethods.
@@ -1016,7 +1016,7 @@ PyLtE class removeAllMethods.
 ! ------------------- Instance methods for PyLtE
 
 ! ------------------- Remove existing behavior from PyNotEq
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyNotEq removeAllMethods.
 PyNotEq class removeAllMethods.
@@ -1025,7 +1025,7 @@ PyNotEq class removeAllMethods.
 ! ------------------- Instance methods for PyNotEq
 
 ! ------------------- Remove existing behavior from PyNotIn
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyNotIn removeAllMethods.
 PyNotIn class removeAllMethods.
@@ -1034,7 +1034,7 @@ PyNotIn class removeAllMethods.
 ! ------------------- Instance methods for PyNotIn
 
 ! ------------------- Remove existing behavior from PyExpression
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyExpression removeAllMethods.
 PyExpression class removeAllMethods.
@@ -1057,7 +1057,7 @@ self halt.
 ! ------------------- Instance methods for PyExpression
 
 ! ------------------- Remove existing behavior from PyAssignment
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyAssignment removeAllMethods.
 PyAssignment class removeAllMethods.
@@ -1066,7 +1066,7 @@ PyAssignment class removeAllMethods.
 ! ------------------- Instance methods for PyAssignment
 
 ! ------------------- Remove existing behavior from PyName
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyName removeAllMethods.
 PyName class removeAllMethods.
@@ -1086,7 +1086,7 @@ initialize
 %
 
 ! ------------------- Remove existing behavior from PyAttribute
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyAttribute removeAllMethods.
 PyAttribute class removeAllMethods.
@@ -1116,7 +1116,7 @@ initialize
 %
 
 ! ------------------- Remove existing behavior from PyCall
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyCall removeAllMethods.
 PyCall class removeAllMethods.
@@ -1145,7 +1145,7 @@ initialize
 %
 
 ! ------------------- Remove existing behavior from PyCompare
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyCompare removeAllMethods.
 PyCompare class removeAllMethods.
@@ -1184,7 +1184,7 @@ initialize
 %
 
 ! ------------------- Remove existing behavior from PyString
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyString removeAllMethods.
 PyString class removeAllMethods.
@@ -1201,7 +1201,7 @@ initialize
 %
 
 ! ------------------- Remove existing behavior from PyExpressionContext
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyExpressionContext removeAllMethods.
 PyExpressionContext class removeAllMethods.
@@ -1236,7 +1236,7 @@ initialize
 %
 
 ! ------------------- Remove existing behavior from PyAugLoad
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyAugLoad removeAllMethods.
 PyAugLoad class removeAllMethods.
@@ -1245,7 +1245,7 @@ PyAugLoad class removeAllMethods.
 ! ------------------- Instance methods for PyAugLoad
 
 ! ------------------- Remove existing behavior from PyAugStore
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyAugStore removeAllMethods.
 PyAugStore class removeAllMethods.
@@ -1254,7 +1254,7 @@ PyAugStore class removeAllMethods.
 ! ------------------- Instance methods for PyAugStore
 
 ! ------------------- Remove existing behavior from PyDelete
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyDelete removeAllMethods.
 PyDelete class removeAllMethods.
@@ -1263,7 +1263,7 @@ PyDelete class removeAllMethods.
 ! ------------------- Instance methods for PyDelete
 
 ! ------------------- Remove existing behavior from PyLoad
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyLoad removeAllMethods.
 PyLoad class removeAllMethods.
@@ -1272,7 +1272,7 @@ PyLoad class removeAllMethods.
 ! ------------------- Instance methods for PyLoad
 
 ! ------------------- Remove existing behavior from PyParam
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyParam removeAllMethods.
 PyParam class removeAllMethods.
@@ -1281,7 +1281,7 @@ PyParam class removeAllMethods.
 ! ------------------- Instance methods for PyParam
 
 ! ------------------- Remove existing behavior from PyStore
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyStore removeAllMethods.
 PyStore class removeAllMethods.
@@ -1290,7 +1290,7 @@ PyStore class removeAllMethods.
 ! ------------------- Instance methods for PyStore
 
 ! ------------------- Remove existing behavior from PyModule
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyModule removeAllMethods.
 PyModule class removeAllMethods.
@@ -1301,7 +1301,7 @@ category: 'other'
 classmethod: PyModule
 script: aString
 "
-PyModule script: '/Users/jfoster/code/performance/pyperformance'.
+PyModule script: '$HOME/code/Python/performance/pyperformance'.
 "
 	^self new
 		load: aString as: '__main__';
@@ -1367,14 +1367,14 @@ category: 'other'
 method: PyModule
 pythonPath
 
-	^'/Library/Frameworks/PythonGlobals.framework/Versions/3.6/bin/python3'
+	^'/Library/Frameworks/Python.framework/Versions/3.7/bin/python3'
 %
 category: 'other'
 method: PyModule
 readAst
 
-	| string |
-	string := '
+	| string1 string2 string3 |
+	string1 := '
 import ast
 file=open(''' , path , ''',''r'')
 tree=ast.parse(file.read())
@@ -1382,7 +1382,9 @@ out=ast.dump(tree,annotate_fields=False,include_attributes=True)
 file.close()
 print(out)
 '.
-	^System performOnServer: 'echo "' , string , '" | ' , self pythonPath
+	string2 := 'echo "' , string1 , '" | ' , self pythonPath.
+	string3 := System performOnServer: string2.
+	^string3
 %
 category: 'other'
 method: PyModule
@@ -1397,8 +1399,9 @@ category: 'other'
 method: PyModule
 readTokens
 
-	| tokens |
-	tokens := System performOnServer: self pythonPath , ' -m tokenize -e ' , path.
+	| string tokens |
+	string := self pythonPath , ' -m tokenize -e ' , path.
+	tokens := System performOnServer: string.
 	tokens := tokens subStrings: Character lf.
 	tokens := tokens reject: [:each | each isEmpty].
 	tokens := tokens collect: [:each | PyToken fromString: each].
@@ -1412,7 +1415,7 @@ stream
 %
 
 ! ------------------- Remove existing behavior from PyStatement
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyStatement removeAllMethods.
 PyStatement class removeAllMethods.
@@ -1440,7 +1443,7 @@ evaluate
 %
 
 ! ------------------- Remove existing behavior from PyExpr
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyExpr removeAllMethods.
 PyExpr class removeAllMethods.
@@ -1463,7 +1466,7 @@ initialize
 %
 
 ! ------------------- Remove existing behavior from PyIf
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyIf removeAllMethods.
 PyIf class removeAllMethods.
@@ -1494,7 +1497,7 @@ initialize
 %
 
 ! ------------------- Remove existing behavior from PyImport
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyImport removeAllMethods.
 PyImport class removeAllMethods.
@@ -1544,7 +1547,7 @@ initialize
 %
 
 ! ------------------- Remove existing behavior from PySystem
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PySystem removeAllMethods.
 PySystem class removeAllMethods.
@@ -1581,7 +1584,7 @@ sys
 %
 
 ! ------------------- Remove existing behavior from PyToken
-expectvalue /Metaclass3
+expectvalue /Metaclass3       
 doit
 PyToken removeAllMethods.
 PyToken class removeAllMethods.
