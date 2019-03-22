@@ -22,12 +22,14 @@ Install [Python 3.7.2](https://www.python.org/downloads/release/python-372/). Wh
 
 ## Sample Code
 
+### Hello World
 Our first task is a "Hello World!" program (`hello.py`). From [Jade](https://github.com/jgfoster/Jade) (or another GemStone/S IDE), log in to GemStone and evalute the following expression:
 
 ```
 PyModule script: '$HOME/code/Python/GemStoneP/hello.py'.
 ```
 
+### Benchmark
 Next is a [Python Benchmark Suite](https://github.com/python/performance) that "is intended to be an authoritative source of benchmarks for all Python implementations." This seems like a good target for our work and could be in a directory adjacent to this Git project. Clone this Git project to `~/code/python/performance` and then evaluate the following expression:
 
 ```
@@ -40,6 +42,7 @@ This is a trivial script that consists mostly of importing another script that c
 PyModule script: '$HOME/code/Python/performance/performance/cli.py'.
 ```
 
+### Regression Tests
 Python comes with a [regression test package](https://docs.python.org/3/library/test.html) that can be launched with `python3 -m test`. This generates a number of errors and even some crashes on macOS, so before trying to get it to run we would need to understand more about what it does and how it is expected to work.
 
 ## Process
