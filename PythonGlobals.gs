@@ -4383,7 +4383,7 @@ readTokens
 	tokens := System performOnServer: string.
 	tokens := tokens subStrings: Character lf.
 	tokens := tokens reject: [:each | each isEmpty].
-	tokens := tokens collectAst: [:each | PyToken fromString: each].
+	tokens := tokens collect: [:each | PyToken fromString: each].
 	stream := ReadStream on: tokens.
 %
 category: 'other'
