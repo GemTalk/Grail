@@ -142,6 +142,32 @@ expectvalue /Class
 doit
 PyArg category: 'Parser'
 %
+! ------------------- Class definition for PyExceptHandler
+expectvalue /Class
+doit
+PyAstNodeWithLocation subclass: 'PyExceptHandler'
+  instVarNames: #( type name body)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyExceptHandler comment: 
+'No class-specific documentation for PyExceptHandler, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyExcepthandler
+      PyExceptHandler( type name body)
+'
+%
+expectvalue /Class
+doit
+PyExceptHandler category: 'Parser'
+%
 ! ------------------- Class definition for PyExpression
 expectvalue /Class
 doit
@@ -1249,10 +1275,10 @@ expectvalue /Class
 doit
 PyWith category: 'Parser'
 %
-! ------------------- Class definition for PyComparisonOperator
+! ------------------- Class definition for PyBoolop
 expectvalue /Class
 doit
-PyAstNode subclass: 'PyComparisonOperator'
+PyAstNode subclass: 'PyBoolop'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -1263,21 +1289,60 @@ PyAstNode subclass: 'PyComparisonOperator'
 %
 expectvalue /Class
 doit
-PyComparisonOperator comment: 
-'No class-specific documentation for PyComparisonOperator, hierarchy is:
-Object
-  PyAstNode( line column)
-    PyComparisonOperator
-'
+PyBoolop category: 'Parser'
+%
+! ------------------- Class definition for PyAnd
+expectvalue /Class
+doit
+PyBoolop subclass: 'PyAnd'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
 %
 expectvalue /Class
 doit
-PyComparisonOperator category: 'Parser'
+PyAnd category: 'Parser'
+%
+! ------------------- Class definition for PyOr
+expectvalue /Class
+doit
+PyBoolop subclass: 'PyOr'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyOr category: 'Parser'
+%
+! ------------------- Class definition for PyCmpop
+expectvalue /Class
+doit
+PyAstNode subclass: 'PyCmpop'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyCmpop category: 'Parser'
 %
 ! ------------------- Class definition for PyEq
 expectvalue /Class
 doit
-PyComparisonOperator subclass: 'PyEq'
+PyCmpop subclass: 'PyEq'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -1285,6 +1350,16 @@ PyComparisonOperator subclass: 'PyEq'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyEq comment: 
+'No class-specific documentation for PyEq, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyComparisonOperator
+      PyEq
+'
 %
 expectvalue /Class
 doit
@@ -1293,7 +1368,7 @@ PyEq category: 'Parser'
 ! ------------------- Class definition for PyGt
 expectvalue /Class
 doit
-PyComparisonOperator subclass: 'PyGt'
+PyCmpop subclass: 'PyGt'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -1301,6 +1376,16 @@ PyComparisonOperator subclass: 'PyGt'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyGt comment: 
+'No class-specific documentation for PyGt, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyComparisonOperator
+      PyGt
+'
 %
 expectvalue /Class
 doit
@@ -1309,7 +1394,7 @@ PyGt category: 'Parser'
 ! ------------------- Class definition for PyGtE
 expectvalue /Class
 doit
-PyComparisonOperator subclass: 'PyGtE'
+PyCmpop subclass: 'PyGtE'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -1317,6 +1402,16 @@ PyComparisonOperator subclass: 'PyGtE'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyGtE comment: 
+'No class-specific documentation for PyGtE, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyComparisonOperator
+      PyGtE
+'
 %
 expectvalue /Class
 doit
@@ -1325,7 +1420,7 @@ PyGtE category: 'Parser'
 ! ------------------- Class definition for PyIn
 expectvalue /Class
 doit
-PyComparisonOperator subclass: 'PyIn'
+PyCmpop subclass: 'PyIn'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -1333,6 +1428,16 @@ PyComparisonOperator subclass: 'PyIn'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyIn comment: 
+'No class-specific documentation for PyIn, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyComparisonOperator
+      PyIn
+'
 %
 expectvalue /Class
 doit
@@ -1341,7 +1446,7 @@ PyIn category: 'Parser'
 ! ------------------- Class definition for PyIs
 expectvalue /Class
 doit
-PyComparisonOperator subclass: 'PyIs'
+PyCmpop subclass: 'PyIs'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -1349,6 +1454,16 @@ PyComparisonOperator subclass: 'PyIs'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyIs comment: 
+'No class-specific documentation for PyIs, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyComparisonOperator
+      PyIs
+'
 %
 expectvalue /Class
 doit
@@ -1357,7 +1472,7 @@ PyIs category: 'Parser'
 ! ------------------- Class definition for PyIsNot
 expectvalue /Class
 doit
-PyComparisonOperator subclass: 'PyIsNot'
+PyCmpop subclass: 'PyIsNot'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -1365,6 +1480,16 @@ PyComparisonOperator subclass: 'PyIsNot'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyIsNot comment: 
+'No class-specific documentation for PyIsNot, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyComparisonOperator
+      PyIsNot
+'
 %
 expectvalue /Class
 doit
@@ -1373,7 +1498,7 @@ PyIsNot category: 'Parser'
 ! ------------------- Class definition for PyLt
 expectvalue /Class
 doit
-PyComparisonOperator subclass: 'PyLt'
+PyCmpop subclass: 'PyLt'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -1381,6 +1506,16 @@ PyComparisonOperator subclass: 'PyLt'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyLt comment: 
+'No class-specific documentation for PyLt, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyComparisonOperator
+      PyLt
+'
 %
 expectvalue /Class
 doit
@@ -1389,7 +1524,7 @@ PyLt category: 'Parser'
 ! ------------------- Class definition for PyLtE
 expectvalue /Class
 doit
-PyComparisonOperator subclass: 'PyLtE'
+PyCmpop subclass: 'PyLtE'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -1397,15 +1532,25 @@ PyComparisonOperator subclass: 'PyLtE'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyLtE comment: 
+'No class-specific documentation for PyLtE, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyComparisonOperator
+      PyLtE
+'
 %
 expectvalue /Class
 doit
 PyLtE category: 'Parser'
 %
-! ------------------- Class definition for PyNotEq
+! ------------------- Class definition for PyNotEQ
 expectvalue /Class
 doit
-PyComparisonOperator subclass: 'PyNotEq'
+PyCmpop subclass: 'PyNotEQ'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -1416,12 +1561,12 @@ PyComparisonOperator subclass: 'PyNotEq'
 %
 expectvalue /Class
 doit
-PyNotEq category: 'Parser'
+PyNotEQ category: 'Parser'
 %
 ! ------------------- Class definition for PyNotIn
 expectvalue /Class
 doit
-PyComparisonOperator subclass: 'PyNotIn'
+PyCmpop subclass: 'PyNotIn'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -1429,6 +1574,16 @@ PyComparisonOperator subclass: 'PyNotIn'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyNotIn comment: 
+'No class-specific documentation for PyNotIn, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyComparisonOperator
+      PyNotIn
+'
 %
 expectvalue /Class
 doit
@@ -1507,6 +1662,22 @@ PyExpressionContext subclass: 'PyAugStore'
 expectvalue /Class
 doit
 PyAugStore category: 'Parser'
+%
+! ------------------- Class definition for PyDel
+expectvalue /Class
+doit
+PyExpressionContext subclass: 'PyDel'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyDel category: 'Parser'
 %
 ! ------------------- Class definition for PyLoad
 expectvalue /Class
@@ -1595,6 +1766,310 @@ https://docs.python.org/3/tutorial/modules.html?highlight=module'
 expectvalue /Class
 doit
 PyModule category: 'Parser'
+%
+! ------------------- Class definition for PyOperator
+expectvalue /Class
+doit
+PyAstNode subclass: 'PyOperator'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyOperator category: 'Parser'
+%
+! ------------------- Class definition for PyAdd
+expectvalue /Class
+doit
+PyOperator subclass: 'PyAdd'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyAdd category: 'Parser'
+%
+! ------------------- Class definition for PyBitAnd
+expectvalue /Class
+doit
+PyOperator subclass: 'PyBitAnd'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyBitAnd category: 'Parser'
+%
+! ------------------- Class definition for PyBitOr
+expectvalue /Class
+doit
+PyOperator subclass: 'PyBitOr'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyBitOr category: 'Parser'
+%
+! ------------------- Class definition for PyBitXor
+expectvalue /Class
+doit
+PyOperator subclass: 'PyBitXor'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyBitXor category: 'Parser'
+%
+! ------------------- Class definition for PyDiv
+expectvalue /Class
+doit
+PyOperator subclass: 'PyDiv'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyDiv category: 'Parser'
+%
+! ------------------- Class definition for PyFloorDiv
+expectvalue /Class
+doit
+PyOperator subclass: 'PyFloorDiv'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyFloorDiv category: 'Parser'
+%
+! ------------------- Class definition for PyLShift
+expectvalue /Class
+doit
+PyOperator subclass: 'PyLShift'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyLShift category: 'Parser'
+%
+! ------------------- Class definition for PyMatMult
+expectvalue /Class
+doit
+PyOperator subclass: 'PyMatMult'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyMatMult category: 'Parser'
+%
+! ------------------- Class definition for PyMod
+expectvalue /Class
+doit
+PyOperator subclass: 'PyMod'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyMod category: 'Parser'
+%
+! ------------------- Class definition for PyMult
+expectvalue /Class
+doit
+PyOperator subclass: 'PyMult'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyMult category: 'Parser'
+%
+! ------------------- Class definition for PyPow
+expectvalue /Class
+doit
+PyOperator subclass: 'PyPow'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyPow category: 'Parser'
+%
+! ------------------- Class definition for PyRShift
+expectvalue /Class
+doit
+PyOperator subclass: 'PyRShift'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyRShift category: 'Parser'
+%
+! ------------------- Class definition for PySub
+expectvalue /Class
+doit
+PyOperator subclass: 'PySub'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PySub category: 'Parser'
+%
+! ------------------- Class definition for PyUnaryop
+expectvalue /Class
+doit
+PyAstNode subclass: 'PyUnaryop'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyUnaryop category: 'Parser'
+%
+! ------------------- Class definition for PyInvert
+expectvalue /Class
+doit
+PyUnaryop subclass: 'PyInvert'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyInvert category: 'Parser'
+%
+! ------------------- Class definition for PyNot
+expectvalue /Class
+doit
+PyUnaryop subclass: 'PyNot'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyNot category: 'Parser'
+%
+! ------------------- Class definition for PyUAdd
+expectvalue /Class
+doit
+PyUnaryop subclass: 'PyUAdd'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyUAdd category: 'Parser'
+%
+! ------------------- Class definition for PyUSub
+expectvalue /Class
+doit
+PyUnaryop subclass: 'PyUSub'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyUSub category: 'Parser'
 %
 ! ------------------- Class definition for PyWithItem
 expectvalue /Class
@@ -1808,6 +2283,18 @@ module
 %
 category: 'other'
 method: PyAstNode
+optionalExpression
+
+	| stream string position |
+	stream := self stream.
+	position := stream position.
+	string := stream next: 4.
+	string = 'None' ifTrue: [^nil].
+	stream position: position.
+	^self expression.
+%
+category: 'other'
+method: PyAstNode
 readPosition
 "
 	| stream string |
@@ -2013,6 +2500,40 @@ newMethod: argument
 	^self yourself.
 %
 
+! ------------------- Remove existing behavior from PyExceptHandler
+expectvalue /Metaclass3       
+doit
+PyExceptHandler removeAllMethods.
+PyExceptHandler class removeAllMethods.
+%
+! ------------------- Class methods for PyExceptHandler
+! ------------------- Instance methods for PyExceptHandler
+set compile_env: 0
+category: 'other'
+method: PyExceptHandler
+initialize
+	"ExceptHandler(expr? type, identifier? name, stmt* body)"
+	
+	| stream next |
+	stream := self stream.
+	next := stream upTo: $(.
+	next = 'ExceptHandler' ifFalse: [self error.].
+	type := self optionalExpression.
+	self commaSpace.
+	(stream peekFor: $') ifTrue: [
+		name := stream upTo: $'.
+		(stream peekFor: $,) ifFalse: [self error].
+	] ifFalse: [
+		| string |
+		string := stream upTo: $,.
+		string = 'None' ifFalse: [self error].
+	].
+	stream skip: -1.
+	self commaSpace.
+	body := self suite.
+	self readPosition.
+%
+
 ! ------------------- Remove existing behavior from PyExpression
 expectvalue /Metaclass3       
 doit
@@ -2097,7 +2618,7 @@ initialize
 
 	left := self expression.
 	self commaSpace.
-	"operator"
+	op := PyOperator parent: self.
 	self commaSpace.
 	right := self expression.
 	self readPosition.
@@ -2117,7 +2638,7 @@ method: PyBoolOp
 initialize
 	"BoolOp(boolop op, expr* values)"
 
-	"op"
+	op := PyBoolop parent: self.
 	self commaSpace.
 	values := self collectAst:[self expression].
 	self readPosition.
@@ -2468,7 +2989,7 @@ initialize
 	|stream next |
 	stream := self stream.
 	next := stream next: 4.
-	('None' = next or: 'True' = next) ifTrue: [value := next] 
+	('None' = next or: ['True' = next]) ifTrue: [value := next] 
 		ifFalse: [
 		value := 'False'.
 		stream next:1. 	
@@ -2489,7 +3010,11 @@ category: 'other'
 method: PyNum
 initialize
 	"Num(object n) -- a number as a PyObject."
-	self halt.
+	| stream |
+	stream := self stream.
+	n := (stream upTo: $,)asNumber.
+	stream skip: -1.
+	self readPosition.
 %
 
 ! ------------------- Remove existing behavior from PySet
@@ -2628,7 +3153,7 @@ method: PyUnaryOp
 initialize
 	"UnaryOp(unaryop op, expr operand)"
 
-	"unaryop"
+	op := PyUnaryop parent: self.
 	self commaSpace.
 	operand := self expression.
 	self readPosition.
@@ -3112,7 +3637,12 @@ method: PyGlobal
 initialize
 	"Global(identifier* names)"
 
-	"check for names*"
+	| stream |
+	stream := self stream.
+	names := self collectAst: [
+		(stream peekFor: $') ifFalse: [self error].
+		self stream upTo: $'.].
+	self readPosition.
 %
 
 ! ------------------- Remove existing behavior from PyIf
@@ -3238,7 +3768,11 @@ method: PyNonlocal
 initialize
 	"Nonlocal(identifier* names)"
 
-	"check for identifier*"
+	| stream |
+	stream := self stream.
+	names := self collectAst: [
+		(stream peekFor: $') ifFalse: [self error].
+		self stream upTo: $'.].
 	self readPosition.
 %
 
@@ -3346,7 +3880,7 @@ initialize
 
 	body := self suite.
 	self commaSpace.
-	"check for handlers*"
+	handlers := self collectAst: [PyExceptHandler parent: self].
 	self commaSpace.
 	orelse := self suite.
 	self commaSpace.
@@ -3404,30 +3938,86 @@ initialize
 	self readPosition.
 %
 
-! ------------------- Remove existing behavior from PyComparisonOperator
+! ------------------- Remove existing behavior from PyBoolop
 expectvalue /Metaclass3       
 doit
-PyComparisonOperator removeAllMethods.
-PyComparisonOperator class removeAllMethods.
+PyBoolop removeAllMethods.
+PyBoolop class removeAllMethods.
 %
-! ------------------- Class methods for PyComparisonOperator
+! ------------------- Class methods for PyBoolop
 set compile_env: 0
 category: 'other'
-classmethod: PyComparisonOperator
+classmethod: PyBoolop
+parent: aNode
+	"boolop = And | Or"
+
+		| stream string |
+	stream := aNode stream.
+	string := stream upTo: $(.
+	(stream peekFor: $)) ifFalse: [self error].
+	string = 'Or'	ifTrue: [^PyOr basicNew initialize: aNode; yourself].
+	string = 'And'	ifTrue: [^PyAnd basicNew initialize: aNode; yourself].
+	self halt.
+%
+! ------------------- Instance methods for PyBoolop
+set compile_env: 0
+category: 'other'
+method: PyBoolop
+initialize
+	"override to do nothing!"
+%
+
+! ------------------- Remove existing behavior from PyAnd
+expectvalue /Metaclass3       
+doit
+PyAnd removeAllMethods.
+PyAnd class removeAllMethods.
+%
+! ------------------- Class methods for PyAnd
+! ------------------- Instance methods for PyAnd
+
+! ------------------- Remove existing behavior from PyOr
+expectvalue /Metaclass3       
+doit
+PyOr removeAllMethods.
+PyOr class removeAllMethods.
+%
+! ------------------- Class methods for PyOr
+! ------------------- Instance methods for PyOr
+
+! ------------------- Remove existing behavior from PyCmpop
+expectvalue /Metaclass3       
+doit
+PyCmpop removeAllMethods.
+PyCmpop class removeAllMethods.
+%
+! ------------------- Class methods for PyCmpop
+set compile_env: 0
+category: 'other'
+classmethod: PyCmpop
 parent: aNode
 	"cmpop = Eq | NotEq | Lt | LtE | Gt | GtE | Is | IsNot | In | NotIn"
 
-	| stream string |
+		| stream string |
 	stream := aNode stream.
 	string := stream upTo: $(.
 	(stream peekFor: $)) ifFalse: [self error].
 	string = 'Eq'	ifTrue: [^PyEq basicNew initialize: aNode; yourself].
+	string = 'NotEq'	ifTrue: [^PyNotEq basicNew initialize: aNode; yourself].
+	string = 'Lt'	ifTrue: [^PyLt basicNew initialize: aNode; yourself].
+	string = 'LtE'	ifTrue: [^PyLtE basicNew initialize: aNode; yourself].
+	string = 'Gt'	ifTrue: [^PyGt basicNew initialize: aNode; yourself].
+	string = 'GtE'	ifTrue: [^PyGtE basicNew initialize: aNode; yourself].
+	string = 'Is'	ifTrue: [^PyIs basicNew initialize: aNode; yourself].
+	string = 'IsNot'	ifTrue: [^PyIsNot basicNew initialize: aNode; yourself].
+	string = 'In'	ifTrue: [^PyIn basicNew initialize: aNode; yourself].
+	string = 'NotIn' ifTrue: [^PyNotIn basicNew initialize: aNode; yourself].
 	self halt.
 %
-! ------------------- Instance methods for PyComparisonOperator
+! ------------------- Instance methods for PyCmpop
 set compile_env: 0
 category: 'other'
-method: PyComparisonOperator
+method: PyCmpop
 initialize
 	"override to do nothing!"
 %
@@ -3504,14 +4094,14 @@ PyLtE class removeAllMethods.
 ! ------------------- Class methods for PyLtE
 ! ------------------- Instance methods for PyLtE
 
-! ------------------- Remove existing behavior from PyNotEq
+! ------------------- Remove existing behavior from PyNotEQ
 expectvalue /Metaclass3       
 doit
-PyNotEq removeAllMethods.
-PyNotEq class removeAllMethods.
+PyNotEQ removeAllMethods.
+PyNotEQ class removeAllMethods.
 %
-! ------------------- Class methods for PyNotEq
-! ------------------- Instance methods for PyNotEq
+! ------------------- Class methods for PyNotEQ
+! ------------------- Instance methods for PyNotEQ
 
 ! ------------------- Remove existing behavior from PyNotIn
 expectvalue /Metaclass3       
@@ -3560,14 +4150,19 @@ set compile_env: 0
 category: 'other'
 classmethod: PyExpressionContext
 parent: aNode
+	"expr_context = Load | Store | Del | AugLoad | AugStore | Param"
 
 	| stream string |
 	stream := aNode stream.
 	string := stream upTo: $(.
 	(stream peekFor: $)) ifFalse: [self error].
 	string = 'Load'	ifTrue: [^PyLoad basicNew initialize: aNode; yourself].
-	string = 'Store' ifTrue: [^PyStore basicNew initialize: aNode; yourself].
-self halt.
+	string = 'Store'	ifTrue: [^PyStore basicNew initialize: aNode; yourself].
+	string = 'Del'	ifTrue: [^PyDel basicNew initialize: aNode; yourself].
+	string = 'AugLoad'	ifTrue: [^PyAugLoad basicNew initialize: aNode; yourself].
+	string = 'AugStore'	ifTrue: [^PyAugStore basicNew initialize: aNode; yourself].
+	string = 'Param'	ifTrue: [^PyParam basicNew initialize: aNode; yourself].
+	self halt.
 %
 ! ------------------- Instance methods for PyExpressionContext
 set compile_env: 0
@@ -3602,6 +4197,15 @@ PyAugStore class removeAllMethods.
 %
 ! ------------------- Class methods for PyAugStore
 ! ------------------- Instance methods for PyAugStore
+
+! ------------------- Remove existing behavior from PyDel
+expectvalue /Metaclass3       
+doit
+PyDel removeAllMethods.
+PyDel class removeAllMethods.
+%
+! ------------------- Class methods for PyDel
+! ------------------- Instance methods for PyDel
 
 ! ------------------- Remove existing behavior from PyLoad
 expectvalue /Metaclass3       
@@ -3788,6 +4392,231 @@ stream
 
 	^stream
 %
+
+! ------------------- Remove existing behavior from PyOperator
+expectvalue /Metaclass3       
+doit
+PyOperator removeAllMethods.
+PyOperator class removeAllMethods.
+%
+! ------------------- Class methods for PyOperator
+set compile_env: 0
+category: 'other'
+classmethod: PyOperator
+parent: aNode
+	    "operator = Add | Sub | Mult | MatMult | Div | Mod | Pow | LShift
+                 | RShift | BitOr | BitXor | BitAnd | FloorDiv"
+
+	| stream string |
+	stream := aNode stream.
+	string := stream upTo: $(.
+	(stream peekFor: $)) ifFalse: [self error].
+	string = 'Add'	ifTrue: [^PyAdd basicNew initialize: aNode; yourself].
+	string = 'Sub'	ifTrue: [^PySub basicNew initialize: aNode; yourself].
+	string = 'Mult'	ifTrue: [^PyMult basicNew initialize: aNode; yourself].
+	string = 'MatMult'	ifTrue: [^PyMatMult basicNew initialize: aNode; yourself].
+	string = 'Div'	ifTrue: [^PyDiv basicNew initialize: aNode; yourself].
+	string = 'Mod'	ifTrue: [^PyMod basicNew initialize: aNode; yourself].
+	string = 'Pow'	ifTrue: [^PyPow basicNew initialize: aNode; yourself].
+	string = 'LShift'	ifTrue: [^PyLShift basicNew initialize: aNode; yourself].
+	string = 'RShift'	ifTrue: [^PyRShift basicNew initialize: aNode; yourself].
+	string = 'BitOr'	ifTrue: [^PyBitOr basicNew initialize: aNode; yourself].
+	string = 'BitXor'	ifTrue: [^PyBitXor basicNew initialize: aNode; yourself].
+	string = 'BitAnd'	ifTrue: [^PyBitAnd basicNew initialize: aNode; yourself].
+	string = 'FloorDiv'	ifTrue: [^PyFloorDiv basicNew initialize: aNode; yourself].
+	self halt.
+%
+! ------------------- Instance methods for PyOperator
+set compile_env: 0
+category: 'other'
+method: PyOperator
+initialize
+	"override to do nothing!"
+%
+
+! ------------------- Remove existing behavior from PyAdd
+expectvalue /Metaclass3       
+doit
+PyAdd removeAllMethods.
+PyAdd class removeAllMethods.
+%
+! ------------------- Class methods for PyAdd
+! ------------------- Instance methods for PyAdd
+
+! ------------------- Remove existing behavior from PyBitAnd
+expectvalue /Metaclass3       
+doit
+PyBitAnd removeAllMethods.
+PyBitAnd class removeAllMethods.
+%
+! ------------------- Class methods for PyBitAnd
+! ------------------- Instance methods for PyBitAnd
+
+! ------------------- Remove existing behavior from PyBitOr
+expectvalue /Metaclass3       
+doit
+PyBitOr removeAllMethods.
+PyBitOr class removeAllMethods.
+%
+! ------------------- Class methods for PyBitOr
+! ------------------- Instance methods for PyBitOr
+
+! ------------------- Remove existing behavior from PyBitXor
+expectvalue /Metaclass3       
+doit
+PyBitXor removeAllMethods.
+PyBitXor class removeAllMethods.
+%
+! ------------------- Class methods for PyBitXor
+! ------------------- Instance methods for PyBitXor
+
+! ------------------- Remove existing behavior from PyDiv
+expectvalue /Metaclass3       
+doit
+PyDiv removeAllMethods.
+PyDiv class removeAllMethods.
+%
+! ------------------- Class methods for PyDiv
+! ------------------- Instance methods for PyDiv
+
+! ------------------- Remove existing behavior from PyFloorDiv
+expectvalue /Metaclass3       
+doit
+PyFloorDiv removeAllMethods.
+PyFloorDiv class removeAllMethods.
+%
+! ------------------- Class methods for PyFloorDiv
+! ------------------- Instance methods for PyFloorDiv
+
+! ------------------- Remove existing behavior from PyLShift
+expectvalue /Metaclass3       
+doit
+PyLShift removeAllMethods.
+PyLShift class removeAllMethods.
+%
+! ------------------- Class methods for PyLShift
+! ------------------- Instance methods for PyLShift
+
+! ------------------- Remove existing behavior from PyMatMult
+expectvalue /Metaclass3       
+doit
+PyMatMult removeAllMethods.
+PyMatMult class removeAllMethods.
+%
+! ------------------- Class methods for PyMatMult
+! ------------------- Instance methods for PyMatMult
+
+! ------------------- Remove existing behavior from PyMod
+expectvalue /Metaclass3       
+doit
+PyMod removeAllMethods.
+PyMod class removeAllMethods.
+%
+! ------------------- Class methods for PyMod
+! ------------------- Instance methods for PyMod
+
+! ------------------- Remove existing behavior from PyMult
+expectvalue /Metaclass3       
+doit
+PyMult removeAllMethods.
+PyMult class removeAllMethods.
+%
+! ------------------- Class methods for PyMult
+! ------------------- Instance methods for PyMult
+
+! ------------------- Remove existing behavior from PyPow
+expectvalue /Metaclass3       
+doit
+PyPow removeAllMethods.
+PyPow class removeAllMethods.
+%
+! ------------------- Class methods for PyPow
+! ------------------- Instance methods for PyPow
+
+! ------------------- Remove existing behavior from PyRShift
+expectvalue /Metaclass3       
+doit
+PyRShift removeAllMethods.
+PyRShift class removeAllMethods.
+%
+! ------------------- Class methods for PyRShift
+! ------------------- Instance methods for PyRShift
+
+! ------------------- Remove existing behavior from PySub
+expectvalue /Metaclass3       
+doit
+PySub removeAllMethods.
+PySub class removeAllMethods.
+%
+! ------------------- Class methods for PySub
+! ------------------- Instance methods for PySub
+
+! ------------------- Remove existing behavior from PyUnaryop
+expectvalue /Metaclass3       
+doit
+PyUnaryop removeAllMethods.
+PyUnaryop class removeAllMethods.
+%
+! ------------------- Class methods for PyUnaryop
+set compile_env: 0
+category: 'other'
+classmethod: PyUnaryop
+parent: aNode
+	"unaryop = Invert | Not | UAdd | USub"
+
+	| stream string |
+	stream := aNode stream.
+	string := stream upTo: $(.
+	(stream peekFor: $)) ifFalse: [self error].
+	string = 'Invert'	ifTrue: [^PyInvert basicNew initialize: aNode; yourself].
+	string = 'Not'	ifTrue: [^PyNot basicNew initialize: aNode; yourself].
+	string = 'UAdd'	ifTrue: [^PyUAdd basicNew initialize: aNode; yourself].
+	string = 'USub'	ifTrue: [^PyUSub basicNew initialize: aNode; yourself].
+	self halt.
+%
+! ------------------- Instance methods for PyUnaryop
+set compile_env: 0
+category: 'other'
+method: PyUnaryop
+initialize
+	"override to do nothing!"
+%
+
+! ------------------- Remove existing behavior from PyInvert
+expectvalue /Metaclass3       
+doit
+PyInvert removeAllMethods.
+PyInvert class removeAllMethods.
+%
+! ------------------- Class methods for PyInvert
+! ------------------- Instance methods for PyInvert
+
+! ------------------- Remove existing behavior from PyNot
+expectvalue /Metaclass3       
+doit
+PyNot removeAllMethods.
+PyNot class removeAllMethods.
+%
+! ------------------- Class methods for PyNot
+! ------------------- Instance methods for PyNot
+
+! ------------------- Remove existing behavior from PyUAdd
+expectvalue /Metaclass3       
+doit
+PyUAdd removeAllMethods.
+PyUAdd class removeAllMethods.
+%
+! ------------------- Class methods for PyUAdd
+! ------------------- Instance methods for PyUAdd
+
+! ------------------- Remove existing behavior from PyUSub
+expectvalue /Metaclass3       
+doit
+PyUSub removeAllMethods.
+PyUSub class removeAllMethods.
+%
+! ------------------- Class methods for PyUSub
+! ------------------- Instance methods for PyUSub
 
 ! ------------------- Remove existing behavior from PyWithItem
 expectvalue /Metaclass3       
