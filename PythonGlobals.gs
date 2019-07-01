@@ -1357,7 +1357,7 @@ PyEq comment:
 'No class-specific documentation for PyEq, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyComparisonOperator
+    PyCmpop
       PyEq
 '
 %
@@ -1383,7 +1383,7 @@ PyGt comment:
 'No class-specific documentation for PyGt, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyComparisonOperator
+    PyCmpop
       PyGt
 '
 %
@@ -1409,7 +1409,7 @@ PyGtE comment:
 'No class-specific documentation for PyGtE, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyComparisonOperator
+    PyCmpop
       PyGtE
 '
 %
@@ -1435,7 +1435,7 @@ PyIn comment:
 'No class-specific documentation for PyIn, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyComparisonOperator
+    PyCmpop
       PyIn
 '
 %
@@ -1461,7 +1461,7 @@ PyIs comment:
 'No class-specific documentation for PyIs, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyComparisonOperator
+    PyCmpop
       PyIs
 '
 %
@@ -1487,7 +1487,7 @@ PyIsNot comment:
 'No class-specific documentation for PyIsNot, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyComparisonOperator
+    PyCmpop
       PyIsNot
 '
 %
@@ -1513,7 +1513,7 @@ PyLt comment:
 'No class-specific documentation for PyLt, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyComparisonOperator
+    PyCmpop
       PyLt
 '
 %
@@ -1539,7 +1539,7 @@ PyLtE comment:
 'No class-specific documentation for PyLtE, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyComparisonOperator
+    PyCmpop
       PyLtE
 '
 %
@@ -1581,7 +1581,7 @@ PyNotIn comment:
 'No class-specific documentation for PyNotIn, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyComparisonOperator
+    PyCmpop
       PyNotIn
 '
 %
@@ -2720,7 +2720,7 @@ initialize
 	[
 		stream peekFor: $]
 	] whileFalse: [
-		cmpopList add: (PyComparisonOperator parent: self).
+		cmpopList add: (PyCmpop parent: self).
 	].
 	self commaSpace.
 	comparatorList := self collectAst: [self expression].
@@ -4003,7 +4003,7 @@ parent: aNode
 	string := stream upTo: $(.
 	(stream peekFor: $)) ifFalse: [self error].
 	string = 'Eq'	ifTrue: [^PyEq basicNew initialize: aNode; yourself].
-	string = 'NotEq'	ifTrue: [^PyNotEq basicNew initialize: aNode; yourself].
+	string = 'NotEq'	ifTrue: [^PyNotEQ basicNew initialize: aNode; yourself].
 	string = 'Lt'	ifTrue: [^PyLt basicNew initialize: aNode; yourself].
 	string = 'LtE'	ifTrue: [^PyLtE basicNew initialize: aNode; yourself].
 	string = 'Gt'	ifTrue: [^PyGt basicNew initialize: aNode; yourself].
