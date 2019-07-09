@@ -415,10 +415,10 @@ expectvalue /Class
 doit
 PyFormattedValue category: 'Parser'
 %
-! ------------------- Class definition for PyGeneratorsExp
+! ------------------- Class definition for PyGeneratorExp
 expectvalue /Class
 doit
-PyExpression subclass: 'PyGeneratorsExp'
+PyExpression subclass: 'PyGeneratorExp'
   instVarNames: #( elt generators)
   classVars: #()
   classInstVars: #()
@@ -429,7 +429,7 @@ PyExpression subclass: 'PyGeneratorsExp'
 %
 expectvalue /Class
 doit
-PyGeneratorsExp category: 'Parser'
+PyGeneratorExp category: 'Parser'
 %
 ! ------------------- Class definition for PyIfExp
 expectvalue /Class
@@ -2553,6 +2553,11 @@ expressionFrom: aNode
 %
 ! ------------------- Instance methods for PyExpression
 set compile_env: 0
+category: 'other'
+method: PyExpression
+evaluate
+	self halt
+%
 
 ! ------------------- Remove existing behavior from PyAttribute
 expectvalue /Metaclass3       
@@ -2613,6 +2618,11 @@ PyBinOp class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyBinOp
+evaluate
+	^op left:left right:right
+%
+category: 'other'
+method: PyBinOp
 initialize
 	"BinOp(expr left, operator op, expr right)"
 
@@ -2633,6 +2643,11 @@ PyBoolOp class removeAllMethods.
 ! ------------------- Class methods for PyBoolOp
 ! ------------------- Instance methods for PyBoolOp
 set compile_env: 0
+category: 'other'
+method: PyBoolOp
+evaluate
+	^op values: values
+%
 category: 'other'
 method: PyBoolOp
 initialize
@@ -2829,17 +2844,17 @@ initialize
 	self readPosition.
 %
 
-! ------------------- Remove existing behavior from PyGeneratorsExp
+! ------------------- Remove existing behavior from PyGeneratorExp
 expectvalue /Metaclass3       
 doit
-PyGeneratorsExp removeAllMethods.
-PyGeneratorsExp class removeAllMethods.
+PyGeneratorExp removeAllMethods.
+PyGeneratorExp class removeAllMethods.
 %
-! ------------------- Class methods for PyGeneratorsExp
-! ------------------- Instance methods for PyGeneratorsExp
+! ------------------- Class methods for PyGeneratorExp
+! ------------------- Instance methods for PyGeneratorExp
 set compile_env: 0
 category: 'other'
-method: PyGeneratorsExp
+method: PyGeneratorExp
 initialize
 	"GeneratorExp(expr elt, comprehension* generators)"
 
@@ -2983,17 +2998,21 @@ set compile_env: 0
 set compile_env: 0
 category: 'other'
 method: PyNameConstant
+evaluate
+	^value
+%
+category: 'other'
+method: PyNameConstant
 initialize
 	"NameConstant(singleton value)"
 
 	|stream next |
 	stream := self stream.
-	next := stream next: 4.
-	('None' = next or: ['True' = next]) ifTrue: [value := next] 
-		ifFalse: [
-		value := 'False'.
-		stream next:1. 	
-		].
+	next := stream upTo: $,.
+	next = 'None' ifTrue: [value := nil] ifFalse: [
+	next = 'True' ifTrue: [value := true] ifFalse: [
+	next = 'False' ifTrue: [value := false] ifFalse: [self error: 'unrecognized constant: ', next]]].
+	stream skip: -1.
 	self readPosition.
 %
 
@@ -3006,6 +3025,11 @@ PyNum class removeAllMethods.
 ! ------------------- Class methods for PyNum
 ! ------------------- Instance methods for PyNum
 set compile_env: 0
+category: 'other'
+method: PyNum
+evaluate
+	^n
+%
 category: 'other'
 method: PyNum
 initialize
@@ -3537,6 +3561,11 @@ addMissingPositions
 %
 category: 'other'
 method: PyExpr
+evaluate
+	^value evaluate
+%
+category: 'other'
+method: PyExpr
 initialize
 	"Expr(expr value)"
 
@@ -3727,6 +3756,11 @@ addMissingPositions
 	super addMissingPositions.
 	names do: [:each | each addMissingPositions].
 	"need to handle optional level"
+%
+category: 'other'
+method: PyImportFrom
+evaluate
+	self halt.
 %
 category: 'other'
 method: PyImportFrom
@@ -3951,13 +3985,11 @@ classmethod: PyBoolop
 parent: aNode
 	"boolop = And | Or"
 
-		| stream string |
-	stream := aNode stream.
-	string := stream upTo: $(.
-	(stream peekFor: $)) ifFalse: [self error].
-	string = 'Or'	ifTrue: [^PyOr basicNew initialize: aNode; yourself].
-	string = 'And'	ifTrue: [^PyAnd basicNew initialize: aNode; yourself].
-	self halt.
+	| symbol class |
+	symbol := ('Py' , (aNode stream upTo: $()) asSymbol.
+	(aNode stream peekFor: $)) ifFalse: [self error].
+	class := PythonGlobals at: symbol.
+	^class basicNew initialize: aNode; yourself
 %
 ! ------------------- Instance methods for PyBoolop
 set compile_env: 0
@@ -3975,6 +4007,12 @@ PyAnd class removeAllMethods.
 %
 ! ------------------- Class methods for PyAnd
 ! ------------------- Instance methods for PyAnd
+set compile_env: 0
+category: 'other'
+method: PyAnd
+values: anArray
+	^anArray allSatisfy: [:each | each evaluate].
+%
 
 ! ------------------- Remove existing behavior from PyOr
 expectvalue /Metaclass3       
@@ -3984,6 +4022,12 @@ PyOr class removeAllMethods.
 %
 ! ------------------- Class methods for PyOr
 ! ------------------- Instance methods for PyOr
+set compile_env: 0
+category: 'other'
+method: PyOr
+values: anArray
+	^anArray anySatisfy: [:each | each evaluate].
+%
 
 ! ------------------- Remove existing behavior from PyCmpop
 expectvalue /Metaclass3       
@@ -3998,21 +4042,11 @@ classmethod: PyCmpop
 parent: aNode
 	"cmpop = Eq | NotEq | Lt | LtE | Gt | GtE | Is | IsNot | In | NotIn"
 
-		| stream string |
-	stream := aNode stream.
-	string := stream upTo: $(.
-	(stream peekFor: $)) ifFalse: [self error].
-	string = 'Eq'	ifTrue: [^PyEq basicNew initialize: aNode; yourself].
-	string = 'NotEq'	ifTrue: [^PyNotEQ basicNew initialize: aNode; yourself].
-	string = 'Lt'	ifTrue: [^PyLt basicNew initialize: aNode; yourself].
-	string = 'LtE'	ifTrue: [^PyLtE basicNew initialize: aNode; yourself].
-	string = 'Gt'	ifTrue: [^PyGt basicNew initialize: aNode; yourself].
-	string = 'GtE'	ifTrue: [^PyGtE basicNew initialize: aNode; yourself].
-	string = 'Is'	ifTrue: [^PyIs basicNew initialize: aNode; yourself].
-	string = 'IsNot'	ifTrue: [^PyIsNot basicNew initialize: aNode; yourself].
-	string = 'In'	ifTrue: [^PyIn basicNew initialize: aNode; yourself].
-	string = 'NotIn' ifTrue: [^PyNotIn basicNew initialize: aNode; yourself].
-	self halt.
+	| symbol class |
+	symbol := ('Py' , (aNode stream upTo: $()) asSymbol.
+	(aNode stream peekFor: $)) ifFalse: [self error].
+	class := PythonGlobals at: symbol.
+	^class basicNew initialize: aNode; yourself
 %
 ! ------------------- Instance methods for PyCmpop
 set compile_env: 0
@@ -4152,17 +4186,11 @@ classmethod: PyExpressionContext
 parent: aNode
 	"expr_context = Load | Store | Del | AugLoad | AugStore | Param"
 
-	| stream string |
-	stream := aNode stream.
-	string := stream upTo: $(.
-	(stream peekFor: $)) ifFalse: [self error].
-	string = 'Load'	ifTrue: [^PyLoad basicNew initialize: aNode; yourself].
-	string = 'Store'	ifTrue: [^PyStore basicNew initialize: aNode; yourself].
-	string = 'Del'	ifTrue: [^PyDel basicNew initialize: aNode; yourself].
-	string = 'AugLoad'	ifTrue: [^PyAugLoad basicNew initialize: aNode; yourself].
-	string = 'AugStore'	ifTrue: [^PyAugStore basicNew initialize: aNode; yourself].
-	string = 'Param'	ifTrue: [^PyParam basicNew initialize: aNode; yourself].
-	self halt.
+	| symbol class |
+	symbol := ('Py' , (aNode stream upTo: $()) asSymbol.
+	(aNode stream peekFor: $)) ifFalse: [self error].
+	class := PythonGlobals at: symbol.
+	^class basicNew initialize: aNode; yourself
 %
 ! ------------------- Instance methods for PyExpressionContext
 set compile_env: 0
@@ -4275,8 +4303,7 @@ PyModule script: '$HOME/code/Python/performance/pyperformance'.
 "
 	^self new
 		load: aString as: '__main__';
-		initialize;
-		yourself
+		initialize
 %
 category: 'other'
 classmethod: PyModule
@@ -4306,9 +4333,11 @@ self halt.
 category: 'other'
 method: PyModule
 initialize
-
+	
+	| result |
 	parent ifNil: [parent := PySystem new].
-	statements do: [:each | each evaluate].
+	statements do: [:each | result := each evaluate].
+	^result
 %
 category: 'other'
 method: PyModule
@@ -4407,24 +4436,11 @@ parent: aNode
 	    "operator = Add | Sub | Mult | MatMult | Div | Mod | Pow | LShift
                  | RShift | BitOr | BitXor | BitAnd | FloorDiv"
 
-	| stream string |
-	stream := aNode stream.
-	string := stream upTo: $(.
-	(stream peekFor: $)) ifFalse: [self error].
-	string = 'Add'	ifTrue: [^PyAdd basicNew initialize: aNode; yourself].
-	string = 'Sub'	ifTrue: [^PySub basicNew initialize: aNode; yourself].
-	string = 'Mult'	ifTrue: [^PyMult basicNew initialize: aNode; yourself].
-	string = 'MatMult'	ifTrue: [^PyMatMult basicNew initialize: aNode; yourself].
-	string = 'Div'	ifTrue: [^PyDiv basicNew initialize: aNode; yourself].
-	string = 'Mod'	ifTrue: [^PyMod basicNew initialize: aNode; yourself].
-	string = 'Pow'	ifTrue: [^PyPow basicNew initialize: aNode; yourself].
-	string = 'LShift'	ifTrue: [^PyLShift basicNew initialize: aNode; yourself].
-	string = 'RShift'	ifTrue: [^PyRShift basicNew initialize: aNode; yourself].
-	string = 'BitOr'	ifTrue: [^PyBitOr basicNew initialize: aNode; yourself].
-	string = 'BitXor'	ifTrue: [^PyBitXor basicNew initialize: aNode; yourself].
-	string = 'BitAnd'	ifTrue: [^PyBitAnd basicNew initialize: aNode; yourself].
-	string = 'FloorDiv'	ifTrue: [^PyFloorDiv basicNew initialize: aNode; yourself].
-	self halt.
+	| symbol class |
+	symbol := ('Py' , (aNode stream upTo: $()) asSymbol.
+	(aNode stream peekFor: $)) ifFalse: [self error].
+	class := PythonGlobals at: symbol.
+	^class basicNew initialize: aNode; yourself
 %
 ! ------------------- Instance methods for PyOperator
 set compile_env: 0
@@ -4432,6 +4448,12 @@ category: 'other'
 method: PyOperator
 initialize
 	"override to do nothing!"
+%
+category: 'other'
+method: PyOperator
+left: leftOperand right: rightOperand
+
+	self subclassResponsibility
 %
 
 ! ------------------- Remove existing behavior from PyAdd
@@ -4442,6 +4464,13 @@ PyAdd class removeAllMethods.
 %
 ! ------------------- Class methods for PyAdd
 ! ------------------- Instance methods for PyAdd
+set compile_env: 0
+category: 'other'
+method: PyAdd
+left: leftOperand right: rightOperand
+
+	^leftOperand evaluate + rightOperand evaluate
+%
 
 ! ------------------- Remove existing behavior from PyBitAnd
 expectvalue /Metaclass3       
@@ -4451,6 +4480,13 @@ PyBitAnd class removeAllMethods.
 %
 ! ------------------- Class methods for PyBitAnd
 ! ------------------- Instance methods for PyBitAnd
+set compile_env: 0
+category: 'other'
+method: PyBitAnd
+left: leftOperand right: rightOperand
+
+	^leftOperand evaluate bitAnd: rightOperand evaluate
+%
 
 ! ------------------- Remove existing behavior from PyBitOr
 expectvalue /Metaclass3       
@@ -4460,6 +4496,13 @@ PyBitOr class removeAllMethods.
 %
 ! ------------------- Class methods for PyBitOr
 ! ------------------- Instance methods for PyBitOr
+set compile_env: 0
+category: 'other'
+method: PyBitOr
+left: leftOperand right: rightOperand
+
+	^leftOperand evaluate bitOr: rightOperand evaluate
+%
 
 ! ------------------- Remove existing behavior from PyBitXor
 expectvalue /Metaclass3       
@@ -4469,6 +4512,13 @@ PyBitXor class removeAllMethods.
 %
 ! ------------------- Class methods for PyBitXor
 ! ------------------- Instance methods for PyBitXor
+set compile_env: 0
+category: 'other'
+method: PyBitXor
+left: leftOperand right: rightOperand
+
+	^leftOperand evaluate bitXor: rightOperand evaluate
+%
 
 ! ------------------- Remove existing behavior from PyDiv
 expectvalue /Metaclass3       
@@ -4478,6 +4528,13 @@ PyDiv class removeAllMethods.
 %
 ! ------------------- Class methods for PyDiv
 ! ------------------- Instance methods for PyDiv
+set compile_env: 0
+category: 'other'
+method: PyDiv
+left: leftOperand right: rightOperand
+
+	^leftOperand evaluate / rightOperand evaluate
+%
 
 ! ------------------- Remove existing behavior from PyFloorDiv
 expectvalue /Metaclass3       
@@ -4514,6 +4571,13 @@ PyMod class removeAllMethods.
 %
 ! ------------------- Class methods for PyMod
 ! ------------------- Instance methods for PyMod
+set compile_env: 0
+category: 'other'
+method: PyMod
+left: leftOperand right: rightOperand
+
+	^leftOperand evaluate modulo: rightOperand evaluate
+%
 
 ! ------------------- Remove existing behavior from PyMult
 expectvalue /Metaclass3       
@@ -4523,6 +4587,13 @@ PyMult class removeAllMethods.
 %
 ! ------------------- Class methods for PyMult
 ! ------------------- Instance methods for PyMult
+set compile_env: 0
+category: 'other'
+method: PyMult
+left: leftOperand right: rightOperand
+
+	^leftOperand evaluate * rightOperand evaluate
+%
 
 ! ------------------- Remove existing behavior from PyPow
 expectvalue /Metaclass3       
@@ -4532,6 +4603,13 @@ PyPow class removeAllMethods.
 %
 ! ------------------- Class methods for PyPow
 ! ------------------- Instance methods for PyPow
+set compile_env: 0
+category: 'other'
+method: PyPow
+left: leftOperand right: rightOperand
+
+	^leftOperand evaluate raisedTo: rightOperand evaluate
+%
 
 ! ------------------- Remove existing behavior from PyRShift
 expectvalue /Metaclass3       
@@ -4550,6 +4628,13 @@ PySub class removeAllMethods.
 %
 ! ------------------- Class methods for PySub
 ! ------------------- Instance methods for PySub
+set compile_env: 0
+category: 'other'
+method: PySub
+left: leftOperand right: rightOperand
+
+	^leftOperand evaluate - rightOperand evaluate
+%
 
 ! ------------------- Remove existing behavior from PyUnaryop
 expectvalue /Metaclass3       
@@ -4564,15 +4649,11 @@ classmethod: PyUnaryop
 parent: aNode
 	"unaryop = Invert | Not | UAdd | USub"
 
-	| stream string |
-	stream := aNode stream.
-	string := stream upTo: $(.
-	(stream peekFor: $)) ifFalse: [self error].
-	string = 'Invert'	ifTrue: [^PyInvert basicNew initialize: aNode; yourself].
-	string = 'Not'	ifTrue: [^PyNot basicNew initialize: aNode; yourself].
-	string = 'UAdd'	ifTrue: [^PyUAdd basicNew initialize: aNode; yourself].
-	string = 'USub'	ifTrue: [^PyUSub basicNew initialize: aNode; yourself].
-	self halt.
+	| symbol class |
+	symbol := ('Py' , (aNode stream upTo: $()) asSymbol.
+	(aNode stream peekFor: $)) ifFalse: [self error].
+	class := PythonGlobals at: symbol.
+	^class basicNew initialize: aNode; yourself
 %
 ! ------------------- Instance methods for PyUnaryop
 set compile_env: 0
