@@ -15,21 +15,13 @@ set compile_env: 0
 expectvalue /Class
 doit
 Object subclass: 'Builtins'
-  instVarNames: #( sys)
+  instVarNames: #()
   classVars: #()
   classInstVars: #( current default)
   poolDictionaries: #()
   inDictionary: PythonGlobals
   options: #()
 
-%
-expectvalue /Class
-doit
-Builtins comment: 
-'No class-specific documentation for Builtins, hierarchy is: 
-Object
-  Builtins
-'
 %
 expectvalue /Class
 doit
@@ -443,6 +435,7 @@ expectvalue /Class
 doit
 PyFormattedValue category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyGeneratorExp
 expectvalue /Class
 doit
@@ -2274,46 +2267,47 @@ default
 	default ifNil: [default := self new].
 	^default
 %
-category: 'other'
-classmethod: Builtins
-new
-
-	^self basicNew
-		initialize;
-		yourself
-%
 ! ------------------- Instance methods for Builtins
+set compile_env: 0
+category: 'functions'
+method: Builtins
+call: aPyCall
+
+	| arguments keywords selector |
+	selector := (aPyCall functionName , ':arguments:keywords:') asSymbol.
+	arguments := aPyCall arguments collect: [:each | each evaluate].
+	keywords := Dictionary new.
+	aPyCall keywords do: [:each | 
+		keywords at: each name put: each value evaluate.
+	].
+	self perform: selector with: aPyCall with: arguments with: keywords.
+%
+category: 'functions'
+method: Builtins
+print: aPyCall arguments: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html#print"
+
+	| separator stream terminator |
+	separator := keywords at: 'sep' ifAbsent: [' '].
+	terminator := keywords at: 'end' ifAbsent: [Character lf asString].
+	"We should default to stdout, but Transcript is easier (and more useful) for now"
+	stream := keywords at: 'file' ifAbsent: [Transcript].
+	arguments do: [:each | 
+		| string |
+		"https://docs.python.org/3/library/stdtypes.html#str"
+		string := each asString.
+		stream nextPutAll: string; nextPutAll: separator.
+	].
+	stream nextPutAll: terminator.
+	(keywords at: 'flush' ifAbsent: [false]) ifTrue: [stream flush].
+%
 set compile_env: 0
 category: 'other'
 method: Builtins
 __import__: name _: globals _: locals _: fromList _: level
 	"(name, globals=None, locals=None, fromlist=(), level=0)"
 
-	(name includes: $.) ifTrue: [self error: 'No support for packages yet!'].
 	self halt.
-%
-category: 'other'
-method: Builtins
-initialize
-
-	self
-		initializeSys;
-		yourself.
-%
-category: 'other'
-method: Builtins
-initializeSys
-
-	sys := StringKeyValueDictionary new.
-	sys at: 'modules' put: self initialModules.
-%
-category: 'other'
-method: Builtins
-initialModules
-
-	| dict |
-	dict := StringKeyValueDictionary new.
-	^dict
 %
 
 ! ------------------- Remove existing behavior from PyAstNode
@@ -2705,7 +2699,8 @@ set compile_env: 0
 category: 'other'
 method: PyExpression
 evaluate
-	self halt
+
+	self subclassResponsibility.
 %
 
 ! ------------------- Remove existing behavior from PyAttribute
@@ -2832,12 +2827,37 @@ PyCall class removeAllMethods.
 ! ------------------- Class methods for PyCall
 ! ------------------- Instance methods for PyCall
 set compile_env: 0
+category: 'Accessing'
+method: PyCall
+arguments
+	^arguments
+%
+category: 'Accessing'
+method: PyCall
+functionName
+	^function id
+%
+category: 'Accessing'
+method: PyCall
+keywords
+	^keywords
+%
+set compile_env: 0
 category: 'other'
 method: PyCall
 addMissingPositions
 
 	function addMissingPositions.
 	arguments do: [:each | each addMissingPositions].
+%
+category: 'other'
+method: PyCall
+evaluate
+	"https://docs.python.org/3/reference/expressions.html#calls"
+	"We should do an elaborate name lookup, but we'll just start with built-in functions"
+
+	function assertContextIsLoad.
+	^Builtins current call: self
 %
 category: 'other'
 method: PyCall
@@ -3123,6 +3143,18 @@ PyName class removeAllMethods.
 ! ------------------- Class methods for PyName
 ! ------------------- Instance methods for PyName
 set compile_env: 0
+category: 'other'
+method: PyName
+assertContextIsLoad
+
+	ctx assertIsLoad.
+%
+category: 'other'
+method: PyName
+id
+
+	^id
+%
 category: 'other'
 method: PyName
 initialize
@@ -3872,8 +3904,8 @@ evaluate
 		| module |
 		module := Builtins current
 			__import__: each name
-			_: nil
-			_: nil
+			_: self globals
+			_: self locals
 			_: #()
 			_: 0.
 		module halt.
@@ -3908,21 +3940,7 @@ addMissingPositions
 category: 'other'
 method: PyImportFrom
 evaluate
-
-	names do: [:each |
-		| newModule |
-		"The only feature in Python 3.7 that requires using the future statement is 'annotations'. 
-		Others are redundant because they are always enabled. "
-		(module ~= '__future__' or: [each name = 'annotations']) ifTrue: [
-			self halt.
-			newModule := Builtins current
-				__import__: each name
-				_: self globals
-				_: self locals
-				_: #()
-				_: 0.
-		].
-	].
+	self halt.
 %
 category: 'other'
 method: PyImportFrom
@@ -4366,6 +4384,12 @@ self halt.
 %
 category: 'other'
 method: PyExpressionContext
+assertIsLoad
+
+	self error: 'Expression Context should be <Load> but is <' , self class name , '>'.
+%
+category: 'other'
+method: PyExpressionContext
 initialize
 	"override to do nothing!"
 %
@@ -4405,6 +4429,12 @@ PyLoad class removeAllMethods.
 %
 ! ------------------- Class methods for PyLoad
 ! ------------------- Instance methods for PyLoad
+set compile_env: 0
+category: 'other'
+method: PyLoad
+assertIsLoad
+	"Override to avoid inherited error"
+%
 
 ! ------------------- Remove existing behavior from PyParam
 expectvalue /Metaclass3       
@@ -4444,8 +4474,20 @@ initialize
 	(stream peekFor: $') ifFalse: [self error].
 	arg := stream upTo: $'.
 	self commaSpace.
-	value = self expression.
+	value := self expression.
 	(stream peekFor: $)) ifFalse: [self error].
+%
+category: 'other'
+method: PyKeyword
+name
+
+	^arg
+%
+category: 'other'
+method: PyKeyword
+value
+
+	^value
 %
 
 ! ------------------- Remove existing behavior from PyModule
@@ -4464,8 +4506,7 @@ PyModule script: '$HOME/code/Python/performance/pyperformance'.
 "
 	^self new
 		load: aString as: '__main__';
-		initialize;
-		yourself
+		initialize
 %
 category: 'other'
 classmethod: PyModule
@@ -4496,8 +4537,10 @@ category: 'other'
 method: PyModule
 initialize
 	
+	| result |
 	parent ifNil: [parent := PySystem new].
-	statements do: [:each | each evaluate].
+	statements do: [:each | result := each evaluate].
+	^result
 %
 category: 'other'
 method: PyModule
