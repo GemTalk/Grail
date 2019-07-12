@@ -10,6 +10,7 @@ names := userProfile symbolList names.
 	userProfile insertDictionary: symbolDictionary at: names size + 1.
 ].
 %
+set compile_env: 0
 ! ------------------- Class definition for Builtins
 expectvalue /Class
 doit
@@ -26,6 +27,7 @@ expectvalue /Class
 doit
 Builtins category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAstNode
 expectvalue /Class
 doit
@@ -50,6 +52,7 @@ expectvalue /Class
 doit
 PyAstNode category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAlias
 expectvalue /Class
 doit
@@ -75,6 +78,7 @@ expectvalue /Class
 doit
 PyAlias category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyArguments
 expectvalue /Class
 doit
@@ -92,6 +96,7 @@ expectvalue /Class
 doit
 PyArguments category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAstNodeWithLocation
 expectvalue /Class
 doit
@@ -117,6 +122,7 @@ expectvalue /Class
 doit
 PyAstNodeWithLocation category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyArg
 expectvalue /Class
 doit
@@ -142,6 +148,7 @@ expectvalue /Class
 doit
 PyArg category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyExceptHandler
 expectvalue /Class
 doit
@@ -168,6 +175,7 @@ expectvalue /Class
 doit
 PyExceptHandler category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyExpression
 expectvalue /Class
 doit
@@ -193,6 +201,7 @@ expectvalue /Class
 doit
 PyExpression category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAttribute
 expectvalue /Class
 doit
@@ -219,6 +228,7 @@ expectvalue /Class
 doit
 PyAttribute category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAwait
 expectvalue /Class
 doit
@@ -235,6 +245,7 @@ expectvalue /Class
 doit
 PyAwait category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyBinOp
 expectvalue /Class
 doit
@@ -251,6 +262,7 @@ expectvalue /Class
 doit
 PyBinOp category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyBoolOp
 expectvalue /Class
 doit
@@ -267,6 +279,7 @@ expectvalue /Class
 doit
 PyBoolOp category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyBytes
 expectvalue /Class
 doit
@@ -283,6 +296,7 @@ expectvalue /Class
 doit
 PyBytes category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyCall
 expectvalue /Class
 doit
@@ -309,6 +323,7 @@ expectvalue /Class
 doit
 PyCall category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyCompare
 expectvalue /Class
 doit
@@ -335,6 +350,7 @@ expectvalue /Class
 doit
 PyCompare category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyConstant
 expectvalue /Class
 doit
@@ -351,6 +367,7 @@ expectvalue /Class
 doit
 PyConstant category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyDict
 expectvalue /Class
 doit
@@ -367,6 +384,7 @@ expectvalue /Class
 doit
 PyDict category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyDictComp
 expectvalue /Class
 doit
@@ -383,6 +401,7 @@ expectvalue /Class
 doit
 PyDictComp category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyEllipsis
 expectvalue /Class
 doit
@@ -399,6 +418,7 @@ expectvalue /Class
 doit
 PyEllipsis category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyFormattedValue
 expectvalue /Class
 doit
@@ -415,6 +435,7 @@ expectvalue /Class
 doit
 PyFormattedValue category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyGeneratorExp
 expectvalue /Class
 doit
@@ -431,6 +452,7 @@ expectvalue /Class
 doit
 PyGeneratorExp category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyIfExp
 expectvalue /Class
 doit
@@ -458,6 +480,7 @@ expectvalue /Class
 doit
 PyIfExp category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyJoinedStr
 expectvalue /Class
 doit
@@ -474,6 +497,7 @@ expectvalue /Class
 doit
 PyJoinedStr category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyLambda
 expectvalue /Class
 doit
@@ -501,6 +525,7 @@ expectvalue /Class
 doit
 PyLambda category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyList
 expectvalue /Class
 doit
@@ -517,6 +542,7 @@ expectvalue /Class
 doit
 PyList category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyListComp
 expectvalue /Class
 doit
@@ -533,6 +559,7 @@ expectvalue /Class
 doit
 PyListComp category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyName
 expectvalue /Class
 doit
@@ -549,6 +576,7 @@ expectvalue /Class
 doit
 PyName category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyNameConstant
 expectvalue /Class
 doit
@@ -565,6 +593,7 @@ expectvalue /Class
 doit
 PyNameConstant category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyNum
 expectvalue /Class
 doit
@@ -581,6 +610,7 @@ expectvalue /Class
 doit
 PyNum category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PySet
 expectvalue /Class
 doit
@@ -597,6 +627,7 @@ expectvalue /Class
 doit
 PySet category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PySetComp
 expectvalue /Class
 doit
@@ -613,6 +644,7 @@ expectvalue /Class
 doit
 PySetComp category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyStarred
 expectvalue /Class
 doit
@@ -629,6 +661,7 @@ expectvalue /Class
 doit
 PyStarred category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyStr
 expectvalue /Class
 doit
@@ -655,6 +688,7 @@ expectvalue /Class
 doit
 PyStr category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PySubscript
 expectvalue /Class
 doit
@@ -671,6 +705,7 @@ expectvalue /Class
 doit
 PySubscript category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyTuple
 expectvalue /Class
 doit
@@ -687,6 +722,7 @@ expectvalue /Class
 doit
 PyTuple category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyUnaryOp
 expectvalue /Class
 doit
@@ -703,6 +739,7 @@ expectvalue /Class
 doit
 PyUnaryOp category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyYield
 expectvalue /Class
 doit
@@ -719,6 +756,7 @@ expectvalue /Class
 doit
 PyYield category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyYieldFrom
 expectvalue /Class
 doit
@@ -735,6 +773,7 @@ expectvalue /Class
 doit
 PyYieldFrom category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyStatement
 expectvalue /Class
 doit
@@ -760,6 +799,7 @@ expectvalue /Class
 doit
 PyStatement category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAnnAssign
 expectvalue /Class
 doit
@@ -787,6 +827,7 @@ expectvalue /Class
 doit
 PyAnnAssign category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAssert
 expectvalue /Class
 doit
@@ -813,6 +854,7 @@ expectvalue /Class
 doit
 PyAssert category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAssign
 expectvalue /Class
 doit
@@ -839,6 +881,7 @@ expectvalue /Class
 doit
 PyAssign category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAsyncFor
 expectvalue /Class
 doit
@@ -856,6 +899,7 @@ expectvalue /Class
 doit
 PyAsyncFor category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAsyncFunctionDef
 expectvalue /Class
 doit
@@ -873,6 +917,7 @@ expectvalue /Class
 doit
 PyAsyncFunctionDef category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAsyncWith
 expectvalue /Class
 doit
@@ -889,6 +934,7 @@ expectvalue /Class
 doit
 PyAsyncWith category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAugAssign
 expectvalue /Class
 doit
@@ -905,6 +951,7 @@ expectvalue /Class
 doit
 PyAugAssign category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyBreak
 expectvalue /Class
 doit
@@ -921,6 +968,7 @@ expectvalue /Class
 doit
 PyBreak category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyClassDef
 expectvalue /Class
 doit
@@ -948,6 +996,7 @@ expectvalue /Class
 doit
 PyClassDef category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyContinue
 expectvalue /Class
 doit
@@ -964,6 +1013,7 @@ expectvalue /Class
 doit
 PyContinue category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyDelete
 expectvalue /Class
 doit
@@ -990,6 +1040,7 @@ expectvalue /Class
 doit
 PyDelete category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyExpr
 expectvalue /Class
 doit
@@ -1016,6 +1067,7 @@ expectvalue /Class
 doit
 PyExpr category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyFor
 expectvalue /Class
 doit
@@ -1033,6 +1085,7 @@ expectvalue /Class
 doit
 PyFor category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyFunctionDef
 expectvalue /Class
 doit
@@ -1050,6 +1103,7 @@ expectvalue /Class
 doit
 PyFunctionDef category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyGlobal
 expectvalue /Class
 doit
@@ -1066,6 +1120,7 @@ expectvalue /Class
 doit
 PyGlobal category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyIf
 expectvalue /Class
 doit
@@ -1091,6 +1146,7 @@ expectvalue /Class
 doit
 PyIf category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyImport
 expectvalue /Class
 doit
@@ -1116,6 +1172,7 @@ expectvalue /Class
 doit
 PyImport category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyImportFrom
 expectvalue /Class
 doit
@@ -1142,6 +1199,7 @@ expectvalue /Class
 doit
 PyImportFrom category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyNonlocal
 expectvalue /Class
 doit
@@ -1158,6 +1216,7 @@ expectvalue /Class
 doit
 PyNonlocal category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyPass
 expectvalue /Class
 doit
@@ -1174,6 +1233,7 @@ expectvalue /Class
 doit
 PyPass category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyRaise
 expectvalue /Class
 doit
@@ -1190,6 +1250,7 @@ expectvalue /Class
 doit
 PyRaise category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyReturn
 expectvalue /Class
 doit
@@ -1216,6 +1277,7 @@ expectvalue /Class
 doit
 PyReturn category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyTry
 expectvalue /Class
 doit
@@ -1233,6 +1295,7 @@ expectvalue /Class
 doit
 PyTry category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyWhile
 expectvalue /Class
 doit
@@ -1259,6 +1322,7 @@ expectvalue /Class
 doit
 PyWhile category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyWith
 expectvalue /Class
 doit
@@ -1275,6 +1339,7 @@ expectvalue /Class
 doit
 PyWith category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyBoolop
 expectvalue /Class
 doit
@@ -1291,6 +1356,7 @@ expectvalue /Class
 doit
 PyBoolop category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAnd
 expectvalue /Class
 doit
@@ -1307,6 +1373,7 @@ expectvalue /Class
 doit
 PyAnd category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyOr
 expectvalue /Class
 doit
@@ -1323,6 +1390,7 @@ expectvalue /Class
 doit
 PyOr category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyCmpop
 expectvalue /Class
 doit
@@ -1339,6 +1407,7 @@ expectvalue /Class
 doit
 PyCmpop category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyEq
 expectvalue /Class
 doit
@@ -1365,6 +1434,7 @@ expectvalue /Class
 doit
 PyEq category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyGt
 expectvalue /Class
 doit
@@ -1391,6 +1461,7 @@ expectvalue /Class
 doit
 PyGt category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyGtE
 expectvalue /Class
 doit
@@ -1417,6 +1488,7 @@ expectvalue /Class
 doit
 PyGtE category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyIn
 expectvalue /Class
 doit
@@ -1443,6 +1515,7 @@ expectvalue /Class
 doit
 PyIn category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyIs
 expectvalue /Class
 doit
@@ -1469,6 +1542,7 @@ expectvalue /Class
 doit
 PyIs category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyIsNot
 expectvalue /Class
 doit
@@ -1495,6 +1569,7 @@ expectvalue /Class
 doit
 PyIsNot category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyLt
 expectvalue /Class
 doit
@@ -1521,6 +1596,7 @@ expectvalue /Class
 doit
 PyLt category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyLtE
 expectvalue /Class
 doit
@@ -1547,6 +1623,7 @@ expectvalue /Class
 doit
 PyLtE category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyNotEQ
 expectvalue /Class
 doit
@@ -1563,6 +1640,7 @@ expectvalue /Class
 doit
 PyNotEQ category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyNotIn
 expectvalue /Class
 doit
@@ -1589,6 +1667,7 @@ expectvalue /Class
 doit
 PyNotIn category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyComprehension
 expectvalue /Class
 doit
@@ -1606,6 +1685,7 @@ expectvalue /Class
 doit
 PyComprehension category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyExpressionContext
 expectvalue /Class
 doit
@@ -1631,6 +1711,7 @@ expectvalue /Class
 doit
 PyExpressionContext category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAugLoad
 expectvalue /Class
 doit
@@ -1647,6 +1728,7 @@ expectvalue /Class
 doit
 PyAugLoad category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAugStore
 expectvalue /Class
 doit
@@ -1663,6 +1745,7 @@ expectvalue /Class
 doit
 PyAugStore category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyDel
 expectvalue /Class
 doit
@@ -1679,6 +1762,7 @@ expectvalue /Class
 doit
 PyDel category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyLoad
 expectvalue /Class
 doit
@@ -1695,6 +1779,7 @@ expectvalue /Class
 doit
 PyLoad category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyParam
 expectvalue /Class
 doit
@@ -1711,6 +1796,7 @@ expectvalue /Class
 doit
 PyParam category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyStore
 expectvalue /Class
 doit
@@ -1727,6 +1813,7 @@ expectvalue /Class
 doit
 PyStore category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyKeyword
 expectvalue /Class
 doit
@@ -1743,6 +1830,7 @@ expectvalue /Class
 doit
 PyKeyword category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyModule
 expectvalue /Class
 doit
@@ -1767,6 +1855,7 @@ expectvalue /Class
 doit
 PyModule category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyOperator
 expectvalue /Class
 doit
@@ -1783,6 +1872,7 @@ expectvalue /Class
 doit
 PyOperator category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAdd
 expectvalue /Class
 doit
@@ -1799,6 +1889,7 @@ expectvalue /Class
 doit
 PyAdd category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyBitAnd
 expectvalue /Class
 doit
@@ -1815,6 +1906,7 @@ expectvalue /Class
 doit
 PyBitAnd category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyBitOr
 expectvalue /Class
 doit
@@ -1831,6 +1923,7 @@ expectvalue /Class
 doit
 PyBitOr category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyBitXor
 expectvalue /Class
 doit
@@ -1847,6 +1940,7 @@ expectvalue /Class
 doit
 PyBitXor category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyDiv
 expectvalue /Class
 doit
@@ -1863,6 +1957,7 @@ expectvalue /Class
 doit
 PyDiv category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyFloorDiv
 expectvalue /Class
 doit
@@ -1879,6 +1974,7 @@ expectvalue /Class
 doit
 PyFloorDiv category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyLShift
 expectvalue /Class
 doit
@@ -1895,6 +1991,7 @@ expectvalue /Class
 doit
 PyLShift category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyMatMult
 expectvalue /Class
 doit
@@ -1911,6 +2008,7 @@ expectvalue /Class
 doit
 PyMatMult category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyMod
 expectvalue /Class
 doit
@@ -1927,6 +2025,7 @@ expectvalue /Class
 doit
 PyMod category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyMult
 expectvalue /Class
 doit
@@ -1943,6 +2042,7 @@ expectvalue /Class
 doit
 PyMult category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyPow
 expectvalue /Class
 doit
@@ -1959,6 +2059,7 @@ expectvalue /Class
 doit
 PyPow category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyRShift
 expectvalue /Class
 doit
@@ -1975,6 +2076,7 @@ expectvalue /Class
 doit
 PyRShift category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PySub
 expectvalue /Class
 doit
@@ -2071,6 +2173,7 @@ expectvalue /Class
 doit
 PyUnaryop category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyInvert
 expectvalue /Class
 doit
@@ -2087,6 +2190,7 @@ expectvalue /Class
 doit
 PyInvert category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyNot
 expectvalue /Class
 doit
@@ -2103,6 +2207,7 @@ expectvalue /Class
 doit
 PyNot category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyUAdd
 expectvalue /Class
 doit
@@ -2119,6 +2224,7 @@ expectvalue /Class
 doit
 PyUAdd category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyUSub
 expectvalue /Class
 doit
@@ -2135,6 +2241,7 @@ expectvalue /Class
 doit
 PyUSub category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyWithItem
 expectvalue /Class
 doit
@@ -2151,6 +2258,7 @@ expectvalue /Class
 doit
 PyWithItem category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PySystem
 expectvalue /Class
 doit
@@ -2167,6 +2275,7 @@ expectvalue /Class
 doit
 PySystem category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyToken
 expectvalue /Class
 doit
@@ -2222,6 +2331,39 @@ default
 	^default
 %
 ! ------------------- Instance methods for Builtins
+set compile_env: 0
+category: 'functions'
+method: Builtins
+call: aPyCall
+
+	| arguments keywords selector |
+	selector := (aPyCall functionName , ':arguments:keywords:') asSymbol.
+	arguments := aPyCall arguments collect: [:each | each evaluate].
+	keywords := Dictionary new.
+	aPyCall keywords do: [:each | 
+		keywords at: each name put: each value evaluate.
+	].
+	self perform: selector with: aPyCall with: arguments with: keywords.
+%
+category: 'functions'
+method: Builtins
+print: aPyCall arguments: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html#print"
+
+	| separator stream terminator |
+	separator := keywords at: 'sep' ifAbsent: [' '].
+	terminator := keywords at: 'end' ifAbsent: [Character lf asString].
+	"We should default to stdout, but Transcript is easier (and more useful) for now"
+	stream := keywords at: 'file' ifAbsent: [Transcript].
+	arguments do: [:each | 
+		| string |
+		"https://docs.python.org/3/library/stdtypes.html#str"
+		string := each asString.
+		stream nextPutAll: string; nextPutAll: separator.
+	].
+	stream nextPutAll: terminator.
+	(keywords at: 'flush' ifAbsent: [false]) ifTrue: [stream flush].
+%
 set compile_env: 0
 category: 'other'
 method: Builtins
@@ -2620,7 +2762,8 @@ set compile_env: 0
 category: 'other'
 method: PyExpression
 evaluate
-	self halt
+
+	self subclassResponsibility.
 %
 
 ! ------------------- Remove existing behavior from PyAttribute
@@ -2747,12 +2890,37 @@ PyCall class removeAllMethods.
 ! ------------------- Class methods for PyCall
 ! ------------------- Instance methods for PyCall
 set compile_env: 0
+category: 'Accessing'
+method: PyCall
+arguments
+	^arguments
+%
+category: 'Accessing'
+method: PyCall
+functionName
+	^function id
+%
+category: 'Accessing'
+method: PyCall
+keywords
+	^keywords
+%
+set compile_env: 0
 category: 'other'
 method: PyCall
 addMissingPositions
 
 	function addMissingPositions.
 	arguments do: [:each | each addMissingPositions].
+%
+category: 'other'
+method: PyCall
+evaluate
+	"https://docs.python.org/3/reference/expressions.html#calls"
+	"We should do an elaborate name lookup, but we'll just start with built-in functions"
+
+	function assertContextIsLoad.
+	^Builtins current call: self
 %
 category: 'other'
 method: PyCall
@@ -3040,6 +3208,18 @@ PyName class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyName
+assertContextIsLoad
+
+	ctx assertIsLoad.
+%
+category: 'other'
+method: PyName
+id
+
+	^id
+%
+category: 'other'
+method: PyName
 initialize
 	"Name(identifier id, expr_context ctx)"
 
@@ -3057,7 +3237,6 @@ PyNameConstant removeAllMethods.
 PyNameConstant class removeAllMethods.
 %
 ! ------------------- Class methods for PyNameConstant
-set compile_env: 0
 ! ------------------- Instance methods for PyNameConstant
 set compile_env: 0
 category: 'other'
@@ -4305,6 +4484,12 @@ self halt.
 %
 category: 'other'
 method: PyExpressionContext
+assertIsLoad
+
+	self error: 'Expression Context should be <Load> but is <' , self class name , '>'.
+%
+category: 'other'
+method: PyExpressionContext
 initialize
 	"override to do nothing!"
 %
@@ -4344,6 +4529,12 @@ PyLoad class removeAllMethods.
 %
 ! ------------------- Class methods for PyLoad
 ! ------------------- Instance methods for PyLoad
+set compile_env: 0
+category: 'other'
+method: PyLoad
+assertIsLoad
+	"Override to avoid inherited error"
+%
 
 ! ------------------- Remove existing behavior from PyParam
 expectvalue /Metaclass3       
@@ -4370,7 +4561,6 @@ PyKeyword removeAllMethods.
 PyKeyword class removeAllMethods.
 %
 ! ------------------- Class methods for PyKeyword
-set compile_env: 0
 ! ------------------- Instance methods for PyKeyword
 set compile_env: 0
 category: 'other'
@@ -4384,8 +4574,20 @@ initialize
 	(stream peekFor: $') ifFalse: [self error].
 	arg := stream upTo: $'.
 	self commaSpace.
-	value = self expression.
+	value := self expression.
 	(stream peekFor: $)) ifFalse: [self error].
+%
+category: 'other'
+method: PyKeyword
+name
+
+	^arg
+%
+category: 'other'
+method: PyKeyword
+value
+
+	^value
 %
 
 ! ------------------- Remove existing behavior from PyModule
