@@ -1357,7 +1357,7 @@ PyEq comment:
 'No class-specific documentation for PyEq, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyCmpop
+    PyComparisonOperator
       PyEq
 '
 %
@@ -1383,7 +1383,7 @@ PyGt comment:
 'No class-specific documentation for PyGt, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyCmpop
+    PyComparisonOperator
       PyGt
 '
 %
@@ -1409,7 +1409,7 @@ PyGtE comment:
 'No class-specific documentation for PyGtE, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyCmpop
+    PyComparisonOperator
       PyGtE
 '
 %
@@ -1435,7 +1435,7 @@ PyIn comment:
 'No class-specific documentation for PyIn, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyCmpop
+    PyComparisonOperator
       PyIn
 '
 %
@@ -1461,7 +1461,7 @@ PyIs comment:
 'No class-specific documentation for PyIs, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyCmpop
+    PyComparisonOperator
       PyIs
 '
 %
@@ -1487,7 +1487,7 @@ PyIsNot comment:
 'No class-specific documentation for PyIsNot, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyCmpop
+    PyComparisonOperator
       PyIsNot
 '
 %
@@ -1513,7 +1513,7 @@ PyLt comment:
 'No class-specific documentation for PyLt, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyCmpop
+    PyComparisonOperator
       PyLt
 '
 %
@@ -1539,7 +1539,7 @@ PyLtE comment:
 'No class-specific documentation for PyLtE, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyCmpop
+    PyComparisonOperator
       PyLtE
 '
 %
@@ -1581,7 +1581,7 @@ PyNotIn comment:
 'No class-specific documentation for PyNotIn, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyCmpop
+    PyComparisonOperator
       PyNotIn
 '
 %
@@ -1990,6 +1990,70 @@ PyOperator subclass: 'PySub'
 expectvalue /Class
 doit
 PySub category: 'Parser'
+%
+! ------------------- Class definition for Pyslice
+expectvalue /Class
+doit
+PyAstNode subclass: 'Pyslice'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+Pyslice category: 'Parser'
+%
+! ------------------- Class definition for PyExtSlice
+expectvalue /Class
+doit
+Pyslice subclass: 'PyExtSlice'
+  instVarNames: #( dims)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyExtSlice category: 'Parser'
+%
+! ------------------- Class definition for PyIndex
+expectvalue /Class
+doit
+Pyslice subclass: 'PyIndex'
+  instVarNames: #( value)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyIndex category: 'Parser'
+%
+! ------------------- Class definition for PySlice
+expectvalue /Class
+doit
+Pyslice subclass: 'PySlice'
+  instVarNames: #( lower upper step)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PySlice category: 'Parser'
 %
 ! ------------------- Class definition for PyUnaryop
 expectvalue /Class
@@ -2735,7 +2799,7 @@ initialize
 	[
 		stream peekFor: $]
 	] whileFalse: [
-		cmpopList add: (PyCmpop parent: self).
+		cmpopList add: (PyComparisonOperator parent: self).
 	].
 	self commaSpace.
 	comparatorList := self collectAst: [self expression].
@@ -3112,6 +3176,11 @@ PyStr class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyStr
+evaluate
+	^s
+%
+category: 'other'
+method: PyStr
 initialize
 	"Str(string s) -- need to specify raw, unicode, etc?"
 
@@ -3172,6 +3241,11 @@ PyUnaryOp class removeAllMethods.
 ! ------------------- Class methods for PyUnaryOp
 ! ------------------- Instance methods for PyUnaryOp
 set compile_env: 0
+category: 'other'
+method: PyUnaryOp
+evaluate
+	^ op operand: operand.
+%
 category: 'other'
 method: PyUnaryOp
 initialize
@@ -4055,6 +4129,12 @@ method: PyCmpop
 initialize
 	"override to do nothing!"
 %
+category: 'other'
+method: PyCmpop
+left: leftOperand right: rightOperand
+
+	^leftOperand evaluate + rightOperand evaluate
+%
 
 ! ------------------- Remove existing behavior from PyEq
 expectvalue /Metaclass3       
@@ -4064,6 +4144,13 @@ PyEq class removeAllMethods.
 %
 ! ------------------- Class methods for PyEq
 ! ------------------- Instance methods for PyEq
+set compile_env: 0
+category: 'other'
+method: PyEq
+left: leftOperand right: rightOperand
+
+	^leftOperand evaluate = rightOperand evaluate
+%
 
 ! ------------------- Remove existing behavior from PyGt
 expectvalue /Metaclass3       
@@ -4100,6 +4187,13 @@ PyIs class removeAllMethods.
 %
 ! ------------------- Class methods for PyIs
 ! ------------------- Instance methods for PyIs
+set compile_env: 0
+category: 'other'
+method: PyIs
+left: leftOperand right: rightOperand
+
+	^leftOperand evaluate == rightOperand evaluate
+%
 
 ! ------------------- Remove existing behavior from PyIsNot
 expectvalue /Metaclass3       
@@ -4145,6 +4239,13 @@ PyNotIn class removeAllMethods.
 %
 ! ------------------- Class methods for PyNotIn
 ! ------------------- Instance methods for PyNotIn
+set compile_env: 0
+category: 'other'
+method: PyNotIn
+left: leftOperand right: rightOperand
+	self error.
+	^self subclassResponsibility
+%
 
 ! ------------------- Remove existing behavior from PyComprehension
 expectvalue /Metaclass3       
@@ -4312,7 +4413,7 @@ test
 PyModule test
 "
 
-	^PyModule script: '$HOME/code/Python/performance/performance/cli.py'.
+	^PyModule script: '$HOME/code/Python/Performance/Performance/cli.py'.
 %
 ! ------------------- Instance methods for PyModule
 set compile_env: 0
@@ -4533,7 +4634,7 @@ category: 'other'
 method: PyDiv
 left: leftOperand right: rightOperand
 
-	^leftOperand evaluate / rightOperand evaluate
+	^(leftOperand evaluate / rightOperand evaluate)asFloat
 %
 
 ! ------------------- Remove existing behavior from PyFloorDiv
@@ -4544,6 +4645,13 @@ PyFloorDiv class removeAllMethods.
 %
 ! ------------------- Class methods for PyFloorDiv
 ! ------------------- Instance methods for PyFloorDiv
+set compile_env: 0
+category: 'other'
+method: PyFloorDiv
+left: leftOperand right: rightOperand
+
+	^leftOperand evaluate // rightOperand evaluate
+%
 
 ! ------------------- Remove existing behavior from PyLShift
 expectvalue /Metaclass3       
@@ -4553,6 +4661,13 @@ PyLShift class removeAllMethods.
 %
 ! ------------------- Class methods for PyLShift
 ! ------------------- Instance methods for PyLShift
+set compile_env: 0
+category: 'other'
+method: PyLShift
+left: leftOperand right: rightOperand
+
+	^leftOperand evaluate bitShift: rightOperand evaluate
+%
 
 ! ------------------- Remove existing behavior from PyMatMult
 expectvalue /Metaclass3       
@@ -4562,6 +4677,13 @@ PyMatMult class removeAllMethods.
 %
 ! ------------------- Class methods for PyMatMult
 ! ------------------- Instance methods for PyMatMult
+set compile_env: 0
+category: 'other'
+method: PyMatMult
+left: leftOperand right: rightOperand
+	self error.
+	^leftOperand evaluate bitShift: rightOperand evaluate
+%
 
 ! ------------------- Remove existing behavior from PyMod
 expectvalue /Metaclass3       
@@ -4576,7 +4698,7 @@ category: 'other'
 method: PyMod
 left: leftOperand right: rightOperand
 
-	^leftOperand evaluate modulo: rightOperand evaluate
+	^leftOperand evaluate rem: rightOperand evaluate
 %
 
 ! ------------------- Remove existing behavior from PyMult
@@ -4619,6 +4741,13 @@ PyRShift class removeAllMethods.
 %
 ! ------------------- Class methods for PyRShift
 ! ------------------- Instance methods for PyRShift
+set compile_env: 0
+category: 'other'
+method: PyRShift
+left: leftOperand right: rightOperand
+
+	^leftOperand evaluate bitShift: rightOperand evaluate negated
+%
 
 ! ------------------- Remove existing behavior from PySub
 expectvalue /Metaclass3       
@@ -4634,6 +4763,98 @@ method: PySub
 left: leftOperand right: rightOperand
 
 	^leftOperand evaluate - rightOperand evaluate
+%
+
+! ------------------- Remove existing behavior from Pyslice
+expectvalue /Metaclass3       
+doit
+Pyslice removeAllMethods.
+Pyslice class removeAllMethods.
+%
+! ------------------- Class methods for Pyslice
+set compile_env: 0
+category: 'other'
+classmethod: Pyslice
+parent: aNode
+
+	| symbol class |
+	symbol := ('Py' , (aNode stream upTo: $()) asSymbol.
+	(aNode stream peekFor: $)) ifFalse: [self error].
+	class := PythonGlobals at: symbol.
+	^class basicNew initialize: aNode; yourself
+%
+! ------------------- Instance methods for Pyslice
+
+! ------------------- Remove existing behavior from PyExtSlice
+expectvalue /Metaclass3       
+doit
+PyExtSlice removeAllMethods.
+PyExtSlice class removeAllMethods.
+%
+! ------------------- Class methods for PyExtSlice
+! ------------------- Instance methods for PyExtSlice
+set compile_env: 0
+category: 'other'
+method: PyExtSlice
+initialize
+	"ExtSlice(slice* dims)"
+	
+	self halt.
+%
+
+! ------------------- Remove existing behavior from PyIndex
+expectvalue /Metaclass3       
+doit
+PyIndex removeAllMethods.
+PyIndex class removeAllMethods.
+%
+! ------------------- Class methods for PyIndex
+! ------------------- Instance methods for PyIndex
+set compile_env: 0
+category: 'other'
+method: PyIndex
+initialize
+	"Index(expr value)"
+	
+	value := self expression.
+%
+
+! ------------------- Remove existing behavior from PySlice
+expectvalue /Metaclass3       
+doit
+PySlice removeAllMethods.
+PySlice class removeAllMethods.
+%
+! ------------------- Class methods for PySlice
+! ------------------- Instance methods for PySlice
+set compile_env: 0
+category: 'other'
+method: PySlice
+initialize
+	"Slice(expr? lower, expr? upper, expr? step)"
+
+	| stream next |
+	stream := self stream.
+	(stream peekFor: $') ifTrue: [
+		lower:= self expression.
+	] ifFalse: [
+		next := stream next: 4.
+		next ~= 'None' ifTrue: [self error.].
+	].
+	self commaSpace.
+	(stream peekFor: $') ifTrue: [
+		upper:= self expression.
+	] ifFalse: [
+		next := stream next: 4.
+		next ~= 'None' ifTrue: [self error.].
+	].
+	self commaSpace.
+	(stream peekFor: $') ifTrue: [
+		step:= self expression.
+	] ifFalse: [
+		next := stream next: 4.
+		next ~= 'None' ifTrue: [self error.].
+	].
 %
 
 ! ------------------- Remove existing behavior from PyUnaryop
@@ -4662,6 +4883,11 @@ method: PyUnaryop
 initialize
 	"override to do nothing!"
 %
+category: 'other'
+method: PyUnaryop
+operand: operand
+	^self subclassResponsibility
+%
 
 ! ------------------- Remove existing behavior from PyInvert
 expectvalue /Metaclass3       
@@ -4671,6 +4897,12 @@ PyInvert class removeAllMethods.
 %
 ! ------------------- Class methods for PyInvert
 ! ------------------- Instance methods for PyInvert
+set compile_env: 0
+category: 'other'
+method: PyInvert
+operand: operand
+	^operand bitInvert
+%
 
 ! ------------------- Remove existing behavior from PyNot
 expectvalue /Metaclass3       
@@ -4680,6 +4912,12 @@ PyNot class removeAllMethods.
 %
 ! ------------------- Class methods for PyNot
 ! ------------------- Instance methods for PyNot
+set compile_env: 0
+category: 'other'
+method: PyNot
+operand: operand
+	^operand not
+%
 
 ! ------------------- Remove existing behavior from PyUAdd
 expectvalue /Metaclass3       
@@ -4689,6 +4927,12 @@ PyUAdd class removeAllMethods.
 %
 ! ------------------- Class methods for PyUAdd
 ! ------------------- Instance methods for PyUAdd
+set compile_env: 0
+category: 'other'
+method: PyUAdd
+operand: operand
+	^operand
+%
 
 ! ------------------- Remove existing behavior from PyUSub
 expectvalue /Metaclass3       
@@ -4698,6 +4942,12 @@ PyUSub class removeAllMethods.
 %
 ! ------------------- Class methods for PyUSub
 ! ------------------- Instance methods for PyUSub
+set compile_env: 0
+category: 'other'
+method: PyUSub
+operand: operand
+	^operand negated
+%
 
 ! ------------------- Remove existing behavior from PyWithItem
 expectvalue /Metaclass3       
