@@ -1,4 +1,4 @@
-! ------- Create dictionary if it is not present
+﻿! ------- Create dictionary if it is not present
 run
 | aSymbol names userProfile |
 aSymbol := #'PythonGlobals'.
@@ -2232,6 +2232,40 @@ abs: arguments keywords: keywords
 %
 category: 'functions'
 method: Builtins
+all: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+all(iterable)
+Return True if all elements of the iterable are true (or if the iterable is empty). Equivalent to:
+
+def all(iterable):
+    for element in iterable:
+        if not element:
+            return False
+    return True
+"
+	^arguments allSatisfy: [:each | each]
+%
+category: 'functions'
+method: Builtins
+any: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+any(iterable)
+Return True if any element of the iterable is true. If the iterable is empty, return False. Equivalent to:
+
+def any(iterable):
+    for element in iterable:
+        if element:
+            return True
+    return False
+"
+	^arguments anySatisfy: [:each | each]
+%
+category: 'functions'
+method: Builtins
 call: aPyCall
 
 	| arguments keywords selector |
@@ -2242,6 +2276,142 @@ call: aPyCall
 		keywords at: each name put: each value evaluate.
 	].
 	^self perform: selector with: arguments with: keywords.
+%
+category: 'functions'
+method: Builtins
+chr: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+chr(i)
+Return the string representing a character whose Unicode code point is the integer i. 
+For example, chr(97) returns the string 'a', while chr(8364) returns the string '€'. 
+This is the inverse of ord().
+
+The valid range for the argument is from 0 through 1,114,111 (0x10FFFF in base 16).
+ ValueError will be raised if i is outside that range.
+"
+	^(Character codePoint: arguments first) asString
+%
+category: 'functions'
+method: Builtins
+dict: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+class dict(**kwarg)
+class dict(mapping, **kwarg)
+class dict(iterable, **kwarg)
+Create a new dictionary. The dict object is the dictionary class.
+ See dict and Mapping Types — dict for documentation about this class.
+
+For other containers see the built-in list, set, and tuple classes, as well as the collections module.
+"
+
+	arguments notEmpty ifTrue: [
+		(arguments first isKindOf: Dictionary) ifTrue: [
+			arguments first keysAndValuesDo: [:eachKey :eachValue | 
+				keywords at: eachKey evaluate put: eachValue evaluate.
+			]
+		] ifFalse: [
+			arguments first do: [ :each | 
+				keywords at: (each at: 1) put: (each at: 2).
+			]
+		].
+	].
+	^keywords
+%
+category: 'functions'
+method: Builtins
+list: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+class list([iterable])
+Rather than being a function, list is actually a 
+mutable sequence type, as documented in Lists and 
+Sequence Types — list, tuple, range.
+"
+	^arguments first asArray copy
+%
+category: 'functions'
+method: Builtins
+max: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+max(iterable, *[, key, default])
+max(arg1, arg2, *args[, key])
+Return the largest item in an iterable or the largest of two or more arguments.
+
+If one positional argument is provided, it should be an iterable. 
+The largest item in the iterable is returned. 
+If two or more positional arguments are provided, 
+the largest of the positional arguments is returned.
+
+There are two optional keyword-only arguments. 
+The key argument specifies a one-argument ordering function like that used for list.sort(). 
+The default argument specifies an object to return if the provided iterable is empty. 
+If the iterable is empty and default is not provided, a ValueError is raised.
+
+If multiple items are maximal, the function returns the first one encountered. 
+This is consistent with other sort-stability preserving tools such as sorted
+(iterable, key=keyfunc, reverse=True)[0] and heapq.nlargest(1, iterable, key=keyfunc).
+
+New in version 3.4: The default keyword-only argument.
+"
+arguments size == 1 ifTrue: [ 
+	"key"
+	arguments first size == 0 ifTrue: [^keywords at: 'default' ifAbsent: [self error: 'value error']].
+	^arguments first
+		inject: arguments first first 
+		into: [:last :each | last max: each]
+].
+
+^arguments
+		"key"
+		inject: arguments first
+		into: [:last :each | last max: each]
+%
+category: 'functions'
+method: Builtins
+min: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+min(iterable, *[, key, default])
+min(arg1, arg2, *args[, key])
+Return the smallest item in an iterable or the smallest of two or more arguments.
+
+If one positional argument is provided, it should be an iterable. 
+The smallest item in the iterable is returned. 
+If two or more positional arguments are provided, 
+the smallest of the positional arguments is returned.
+
+There are two optional keyword-only arguments. 
+The key argument specifies a one-argument ordering function like that used for list.sort(). 
+The default argument specifies an object to return
+ if the provided iterable is empty. 
+If the iterable is empty and default is not provided, a ValueError is raised.
+
+If multiple items are minimal, the function returns the first one encountered. 
+This is consistent with other sort-stability preserving tools such as 
+sorted(iterable, key=keyfunc)[0] and heapq.nsmallest(1, iterable, key=keyfunc).
+
+New in version 3.4: The default keyword-only argument.
+"
+arguments size == 1 ifTrue: [ 
+	"key"
+	arguments first size == 0 ifTrue: [^keywords at: 'default' ifAbsent: [self error: 'value error']].
+	^arguments first
+		inject: arguments first first 
+		into: [:last :each | last min: each]
+].
+
+^arguments
+		"key"
+		inject: arguments first
+		into: [:last :each | last min: each]
 %
 category: 'functions'
 method: Builtins
@@ -2282,11 +2452,57 @@ print: arguments keywords: keywords
 	arguments do: [:each | 
 		| string |
 		"https://docs.python.org/3/library/stdtypes.html#str"
-		string := each asString.
+		string := each printString.
 		stream nextPutAll: string; nextPutAll: separator.
 	].
 	stream nextPutAll: terminator.
 	(keywords at: 'flush' ifAbsent: [false]) ifTrue: [stream flush].
+%
+category: 'functions'
+method: Builtins
+set: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+class set([iterable])
+Return a new set object, optionally with elements taken from iterable. 
+set is a built-in class. See set and Set Types — set, frozenset for documentation about this class.
+
+For other containers see the built-in frozenset, list, tuple, and dict classes, as well as the collections module.
+"
+	^arguments asSet copy
+%
+category: 'functions'
+method: Builtins
+sum: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+Sums start and the items of an iterable from left to right and returns the total. 
+start defaults to 0. The iterable’s items are normally numbers, and the start 
+value is not allowed to be a string.
+
+For some use cases, there are good alternatives to sum(). 
+The preferred, fast way to concatenate a sequence of strings is by calling ''.
+join(sequence). To add floating point values with extended precision, see math.fsum(). 
+To concatenate a series of iterables, consider using itertools.chain().
+"
+
+	^arguments first
+		inject: (arguments size > 1 ifTrue: [arguments at: 2] ifFalse: [0]) 
+		into: [:sum :each | sum + each]
+%
+category: 'functions'
+method: Builtins
+tuple: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+tuple([iterable])
+Rather than being a function, tuple is actually an immutable sequence type, 
+as documented in Tuples and Sequence Types — list, tuple, range.
+"
+	^arguments first asArray copy immediateInvariant
 %
 set compile_env: 0
 category: 'other'
@@ -2924,6 +3140,17 @@ PyDict class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyDict
+evaluate
+
+	| dict |
+	dict := Dictionary new.
+	1 to: keys size do: [:i | 
+		dict at: (keys at: i) put: (values at: i).
+	].
+	^dict
+%
+category: 'other'
+method: PyDict
 initialize
 	"Dict(expr* keys, expr* values)"
 
@@ -3091,6 +3318,12 @@ PyList class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyList
+evaluate
+	"May wish to revisit context"
+	^elts collect: [:each | each evaluate]
+%
+category: 'other'
+method: PyList
 initialize
 	"List(expr* elts, expr_context ctx)"
 	
@@ -3219,6 +3452,11 @@ PySet class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PySet
+evaluate
+	^(elts collect: [:each | each evaluate]) asSet
+%
+category: 'other'
+method: PySet
 initialize
 	"Set(expr* elts)"
 
@@ -3324,6 +3562,12 @@ PyTuple class removeAllMethods.
 ! ------------------- Class methods for PyTuple
 ! ------------------- Instance methods for PyTuple
 set compile_env: 0
+category: 'other'
+method: PyTuple
+evaluate
+	"May wish to revisit context"
+	^(elts collect: [:each | each evaluate]) immediateInvariant
+%
 category: 'other'
 method: PyTuple
 initialize
