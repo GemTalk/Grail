@@ -1,4 +1,4 @@
-! ------- Create dictionary if it is not present
+﻿! ------- Create dictionary if it is not present
 run
 | aSymbol names userProfile |
 aSymbol := #'PythonGlobals'.
@@ -10,7 +10,6 @@ names := userProfile symbolList names.
 	userProfile insertDictionary: symbolDictionary at: names size + 1.
 ].
 %
-set compile_env: 0
 ! ------------------- Class definition for Builtins
 expectvalue /Class
 doit
@@ -27,7 +26,6 @@ expectvalue /Class
 doit
 Builtins category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyAstNode
 expectvalue /Class
 doit
@@ -52,7 +50,6 @@ expectvalue /Class
 doit
 PyAstNode category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyAlias
 expectvalue /Class
 doit
@@ -78,7 +75,6 @@ expectvalue /Class
 doit
 PyAlias category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyArguments
 expectvalue /Class
 doit
@@ -96,7 +92,6 @@ expectvalue /Class
 doit
 PyArguments category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyAstNodeWithLocation
 expectvalue /Class
 doit
@@ -122,7 +117,6 @@ expectvalue /Class
 doit
 PyAstNodeWithLocation category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyArg
 expectvalue /Class
 doit
@@ -148,7 +142,6 @@ expectvalue /Class
 doit
 PyArg category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyExceptHandler
 expectvalue /Class
 doit
@@ -175,7 +168,6 @@ expectvalue /Class
 doit
 PyExceptHandler category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyExpression
 expectvalue /Class
 doit
@@ -201,7 +193,6 @@ expectvalue /Class
 doit
 PyExpression category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyAttribute
 expectvalue /Class
 doit
@@ -228,7 +219,6 @@ expectvalue /Class
 doit
 PyAttribute category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyAwait
 expectvalue /Class
 doit
@@ -245,7 +235,6 @@ expectvalue /Class
 doit
 PyAwait category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyBinOp
 expectvalue /Class
 doit
@@ -262,7 +251,6 @@ expectvalue /Class
 doit
 PyBinOp category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyBoolOp
 expectvalue /Class
 doit
@@ -279,7 +267,6 @@ expectvalue /Class
 doit
 PyBoolOp category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyBytes
 expectvalue /Class
 doit
@@ -296,7 +283,6 @@ expectvalue /Class
 doit
 PyBytes category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyCall
 expectvalue /Class
 doit
@@ -323,7 +309,6 @@ expectvalue /Class
 doit
 PyCall category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyCompare
 expectvalue /Class
 doit
@@ -350,7 +335,6 @@ expectvalue /Class
 doit
 PyCompare category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyConstant
 expectvalue /Class
 doit
@@ -367,7 +351,6 @@ expectvalue /Class
 doit
 PyConstant category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyDict
 expectvalue /Class
 doit
@@ -384,7 +367,6 @@ expectvalue /Class
 doit
 PyDict category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyDictComp
 expectvalue /Class
 doit
@@ -401,7 +383,6 @@ expectvalue /Class
 doit
 PyDictComp category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyEllipsis
 expectvalue /Class
 doit
@@ -418,7 +399,6 @@ expectvalue /Class
 doit
 PyEllipsis category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyFormattedValue
 expectvalue /Class
 doit
@@ -435,7 +415,6 @@ expectvalue /Class
 doit
 PyFormattedValue category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyGeneratorExp
 expectvalue /Class
 doit
@@ -452,7 +431,6 @@ expectvalue /Class
 doit
 PyGeneratorExp category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyIfExp
 expectvalue /Class
 doit
@@ -480,7 +458,6 @@ expectvalue /Class
 doit
 PyIfExp category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyJoinedStr
 expectvalue /Class
 doit
@@ -497,7 +474,6 @@ expectvalue /Class
 doit
 PyJoinedStr category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyLambda
 expectvalue /Class
 doit
@@ -525,7 +501,6 @@ expectvalue /Class
 doit
 PyLambda category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyList
 expectvalue /Class
 doit
@@ -542,7 +517,6 @@ expectvalue /Class
 doit
 PyList category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyListComp
 expectvalue /Class
 doit
@@ -559,7 +533,6 @@ expectvalue /Class
 doit
 PyListComp category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyName
 expectvalue /Class
 doit
@@ -576,7 +549,6 @@ expectvalue /Class
 doit
 PyName category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyNameConstant
 expectvalue /Class
 doit
@@ -593,7 +565,6 @@ expectvalue /Class
 doit
 PyNameConstant category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyNum
 expectvalue /Class
 doit
@@ -610,7 +581,6 @@ expectvalue /Class
 doit
 PyNum category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PySet
 expectvalue /Class
 doit
@@ -627,7 +597,6 @@ expectvalue /Class
 doit
 PySet category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PySetComp
 expectvalue /Class
 doit
@@ -644,7 +613,6 @@ expectvalue /Class
 doit
 PySetComp category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyStarred
 expectvalue /Class
 doit
@@ -661,7 +629,6 @@ expectvalue /Class
 doit
 PyStarred category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyStr
 expectvalue /Class
 doit
@@ -688,7 +655,6 @@ expectvalue /Class
 doit
 PyStr category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PySubscript
 expectvalue /Class
 doit
@@ -705,7 +671,6 @@ expectvalue /Class
 doit
 PySubscript category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyTuple
 expectvalue /Class
 doit
@@ -722,7 +687,6 @@ expectvalue /Class
 doit
 PyTuple category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyUnaryOp
 expectvalue /Class
 doit
@@ -739,7 +703,6 @@ expectvalue /Class
 doit
 PyUnaryOp category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyYield
 expectvalue /Class
 doit
@@ -756,7 +719,6 @@ expectvalue /Class
 doit
 PyYield category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyYieldFrom
 expectvalue /Class
 doit
@@ -773,7 +735,6 @@ expectvalue /Class
 doit
 PyYieldFrom category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyStatement
 expectvalue /Class
 doit
@@ -799,7 +760,6 @@ expectvalue /Class
 doit
 PyStatement category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyAnnAssign
 expectvalue /Class
 doit
@@ -827,7 +787,6 @@ expectvalue /Class
 doit
 PyAnnAssign category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyAssert
 expectvalue /Class
 doit
@@ -854,7 +813,6 @@ expectvalue /Class
 doit
 PyAssert category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyAssign
 expectvalue /Class
 doit
@@ -881,7 +839,6 @@ expectvalue /Class
 doit
 PyAssign category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyAsyncFor
 expectvalue /Class
 doit
@@ -899,7 +856,6 @@ expectvalue /Class
 doit
 PyAsyncFor category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyAsyncFunctionDef
 expectvalue /Class
 doit
@@ -917,7 +873,6 @@ expectvalue /Class
 doit
 PyAsyncFunctionDef category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyAsyncWith
 expectvalue /Class
 doit
@@ -934,7 +889,6 @@ expectvalue /Class
 doit
 PyAsyncWith category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyAugAssign
 expectvalue /Class
 doit
@@ -951,7 +905,6 @@ expectvalue /Class
 doit
 PyAugAssign category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyBreak
 expectvalue /Class
 doit
@@ -968,7 +921,6 @@ expectvalue /Class
 doit
 PyBreak category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyClassDef
 expectvalue /Class
 doit
@@ -996,7 +948,6 @@ expectvalue /Class
 doit
 PyClassDef category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyContinue
 expectvalue /Class
 doit
@@ -1013,7 +964,6 @@ expectvalue /Class
 doit
 PyContinue category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyDelete
 expectvalue /Class
 doit
@@ -1040,7 +990,6 @@ expectvalue /Class
 doit
 PyDelete category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyExpr
 expectvalue /Class
 doit
@@ -1067,7 +1016,6 @@ expectvalue /Class
 doit
 PyExpr category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyFor
 expectvalue /Class
 doit
@@ -1085,7 +1033,6 @@ expectvalue /Class
 doit
 PyFor category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyFunctionDef
 expectvalue /Class
 doit
@@ -1103,7 +1050,6 @@ expectvalue /Class
 doit
 PyFunctionDef category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyGlobal
 expectvalue /Class
 doit
@@ -1120,7 +1066,6 @@ expectvalue /Class
 doit
 PyGlobal category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyIf
 expectvalue /Class
 doit
@@ -1146,7 +1091,6 @@ expectvalue /Class
 doit
 PyIf category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyImport
 expectvalue /Class
 doit
@@ -1172,7 +1116,6 @@ expectvalue /Class
 doit
 PyImport category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyImportFrom
 expectvalue /Class
 doit
@@ -1199,7 +1142,6 @@ expectvalue /Class
 doit
 PyImportFrom category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyNonlocal
 expectvalue /Class
 doit
@@ -1216,7 +1158,6 @@ expectvalue /Class
 doit
 PyNonlocal category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyPass
 expectvalue /Class
 doit
@@ -1233,7 +1174,6 @@ expectvalue /Class
 doit
 PyPass category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyRaise
 expectvalue /Class
 doit
@@ -1250,7 +1190,6 @@ expectvalue /Class
 doit
 PyRaise category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyReturn
 expectvalue /Class
 doit
@@ -1277,7 +1216,6 @@ expectvalue /Class
 doit
 PyReturn category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyTry
 expectvalue /Class
 doit
@@ -1295,7 +1233,6 @@ expectvalue /Class
 doit
 PyTry category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyWhile
 expectvalue /Class
 doit
@@ -1322,7 +1259,6 @@ expectvalue /Class
 doit
 PyWhile category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyWith
 expectvalue /Class
 doit
@@ -1339,7 +1275,6 @@ expectvalue /Class
 doit
 PyWith category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyBoolop
 expectvalue /Class
 doit
@@ -1356,7 +1291,6 @@ expectvalue /Class
 doit
 PyBoolop category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyAnd
 expectvalue /Class
 doit
@@ -1373,7 +1307,6 @@ expectvalue /Class
 doit
 PyAnd category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyOr
 expectvalue /Class
 doit
@@ -1390,7 +1323,6 @@ expectvalue /Class
 doit
 PyOr category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyCmpop
 expectvalue /Class
 doit
@@ -1407,7 +1339,6 @@ expectvalue /Class
 doit
 PyCmpop category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyEq
 expectvalue /Class
 doit
@@ -1434,7 +1365,6 @@ expectvalue /Class
 doit
 PyEq category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyGt
 expectvalue /Class
 doit
@@ -1461,7 +1391,6 @@ expectvalue /Class
 doit
 PyGt category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyGtE
 expectvalue /Class
 doit
@@ -1488,7 +1417,6 @@ expectvalue /Class
 doit
 PyGtE category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyIn
 expectvalue /Class
 doit
@@ -1515,7 +1443,6 @@ expectvalue /Class
 doit
 PyIn category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyIs
 expectvalue /Class
 doit
@@ -1542,7 +1469,6 @@ expectvalue /Class
 doit
 PyIs category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyIsNot
 expectvalue /Class
 doit
@@ -1569,7 +1495,6 @@ expectvalue /Class
 doit
 PyIsNot category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyLt
 expectvalue /Class
 doit
@@ -1596,7 +1521,6 @@ expectvalue /Class
 doit
 PyLt category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyLtE
 expectvalue /Class
 doit
@@ -1623,7 +1547,6 @@ expectvalue /Class
 doit
 PyLtE category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyNotEQ
 expectvalue /Class
 doit
@@ -1640,7 +1563,6 @@ expectvalue /Class
 doit
 PyNotEQ category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyNotIn
 expectvalue /Class
 doit
@@ -1667,7 +1589,6 @@ expectvalue /Class
 doit
 PyNotIn category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyComprehension
 expectvalue /Class
 doit
@@ -1685,7 +1606,6 @@ expectvalue /Class
 doit
 PyComprehension category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyExpressionContext
 expectvalue /Class
 doit
@@ -1711,7 +1631,6 @@ expectvalue /Class
 doit
 PyExpressionContext category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyAugLoad
 expectvalue /Class
 doit
@@ -1728,7 +1647,6 @@ expectvalue /Class
 doit
 PyAugLoad category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyAugStore
 expectvalue /Class
 doit
@@ -1745,7 +1663,6 @@ expectvalue /Class
 doit
 PyAugStore category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyDel
 expectvalue /Class
 doit
@@ -1762,7 +1679,6 @@ expectvalue /Class
 doit
 PyDel category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyLoad
 expectvalue /Class
 doit
@@ -1779,7 +1695,6 @@ expectvalue /Class
 doit
 PyLoad category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyParam
 expectvalue /Class
 doit
@@ -1796,7 +1711,6 @@ expectvalue /Class
 doit
 PyParam category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyStore
 expectvalue /Class
 doit
@@ -1813,7 +1727,6 @@ expectvalue /Class
 doit
 PyStore category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyKeyword
 expectvalue /Class
 doit
@@ -1830,7 +1743,6 @@ expectvalue /Class
 doit
 PyKeyword category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyModule
 expectvalue /Class
 doit
@@ -1855,7 +1767,6 @@ expectvalue /Class
 doit
 PyModule category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyOperator
 expectvalue /Class
 doit
@@ -1872,7 +1783,6 @@ expectvalue /Class
 doit
 PyOperator category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyAdd
 expectvalue /Class
 doit
@@ -1889,7 +1799,6 @@ expectvalue /Class
 doit
 PyAdd category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyBitAnd
 expectvalue /Class
 doit
@@ -1906,7 +1815,6 @@ expectvalue /Class
 doit
 PyBitAnd category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyBitOr
 expectvalue /Class
 doit
@@ -1923,7 +1831,6 @@ expectvalue /Class
 doit
 PyBitOr category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyBitXor
 expectvalue /Class
 doit
@@ -1940,7 +1847,6 @@ expectvalue /Class
 doit
 PyBitXor category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyDiv
 expectvalue /Class
 doit
@@ -1957,7 +1863,6 @@ expectvalue /Class
 doit
 PyDiv category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyFloorDiv
 expectvalue /Class
 doit
@@ -1974,7 +1879,6 @@ expectvalue /Class
 doit
 PyFloorDiv category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyLShift
 expectvalue /Class
 doit
@@ -1991,7 +1895,6 @@ expectvalue /Class
 doit
 PyLShift category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyMatMult
 expectvalue /Class
 doit
@@ -2008,7 +1911,6 @@ expectvalue /Class
 doit
 PyMatMult category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyMod
 expectvalue /Class
 doit
@@ -2025,7 +1927,6 @@ expectvalue /Class
 doit
 PyMod category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyMult
 expectvalue /Class
 doit
@@ -2042,7 +1943,6 @@ expectvalue /Class
 doit
 PyMult category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyPow
 expectvalue /Class
 doit
@@ -2059,7 +1959,6 @@ expectvalue /Class
 doit
 PyPow category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyRShift
 expectvalue /Class
 doit
@@ -2076,7 +1975,6 @@ expectvalue /Class
 doit
 PyRShift category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PySub
 expectvalue /Class
 doit
@@ -2093,7 +1991,70 @@ expectvalue /Class
 doit
 PySub category: 'Parser'
 %
-set compile_env: 0
+! ------------------- Class definition for Pyslice
+expectvalue /Class
+doit
+PyAstNode subclass: 'Pyslice'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+Pyslice category: 'Parser'
+%
+! ------------------- Class definition for PyExtSlice
+expectvalue /Class
+doit
+Pyslice subclass: 'PyExtSlice'
+  instVarNames: #( dims)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyExtSlice category: 'Parser'
+%
+! ------------------- Class definition for PyIndex
+expectvalue /Class
+doit
+Pyslice subclass: 'PyIndex'
+  instVarNames: #( value)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyIndex category: 'Parser'
+%
+! ------------------- Class definition for PySlice
+expectvalue /Class
+doit
+Pyslice subclass: 'PySlice'
+  instVarNames: #( lower upper step)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PySlice category: 'Parser'
+%
 ! ------------------- Class definition for PyUnaryop
 expectvalue /Class
 doit
@@ -2110,7 +2071,6 @@ expectvalue /Class
 doit
 PyUnaryop category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyInvert
 expectvalue /Class
 doit
@@ -2127,7 +2087,6 @@ expectvalue /Class
 doit
 PyInvert category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyNot
 expectvalue /Class
 doit
@@ -2144,7 +2103,6 @@ expectvalue /Class
 doit
 PyNot category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyUAdd
 expectvalue /Class
 doit
@@ -2161,7 +2119,6 @@ expectvalue /Class
 doit
 PyUAdd category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyUSub
 expectvalue /Class
 doit
@@ -2178,7 +2135,6 @@ expectvalue /Class
 doit
 PyUSub category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyWithItem
 expectvalue /Class
 doit
@@ -2195,7 +2151,6 @@ expectvalue /Class
 doit
 PyWithItem category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PySystem
 expectvalue /Class
 doit
@@ -2212,7 +2167,6 @@ expectvalue /Class
 doit
 PySystem category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyToken
 expectvalue /Class
 doit
@@ -2271,20 +2225,223 @@ default
 set compile_env: 0
 category: 'functions'
 method: Builtins
+abs: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html#abs"
+	
+	^arguments first abs
+%
+category: 'functions'
+method: Builtins
+all: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+all(iterable)
+Return True if all elements of the iterable are true (or if the iterable is empty). Equivalent to:
+
+def all(iterable):
+    for element in iterable:
+        if not element:
+            return False
+    return True
+"
+	^arguments allSatisfy: [:each | each]
+%
+category: 'functions'
+method: Builtins
+any: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+any(iterable)
+Return True if any element of the iterable is true. If the iterable is empty, return False. Equivalent to:
+
+def any(iterable):
+    for element in iterable:
+        if element:
+            return True
+    return False
+"
+	^arguments anySatisfy: [:each | each]
+%
+category: 'functions'
+method: Builtins
 call: aPyCall
 
 	| arguments keywords selector |
-	selector := (aPyCall functionName , ':arguments:keywords:') asSymbol.
+	selector := (aPyCall functionName , ':keywords:') asSymbol.
 	arguments := aPyCall arguments collect: [:each | each evaluate].
 	keywords := Dictionary new.
 	aPyCall keywords do: [:each | 
 		keywords at: each name put: each value evaluate.
 	].
-	self perform: selector with: aPyCall with: arguments with: keywords.
+	^self perform: selector with: arguments with: keywords.
 %
 category: 'functions'
 method: Builtins
-print: aPyCall arguments: arguments keywords: keywords
+chr: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+chr(i)
+Return the string representing a character whose Unicode code point is the integer i. 
+For example, chr(97) returns the string 'a', while chr(8364) returns the string '€'. 
+This is the inverse of ord().
+
+The valid range for the argument is from 0 through 1,114,111 (0x10FFFF in base 16).
+ ValueError will be raised if i is outside that range.
+"
+	^(Character codePoint: arguments first) asString
+%
+category: 'functions'
+method: Builtins
+dict: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+class dict(**kwarg)
+class dict(mapping, **kwarg)
+class dict(iterable, **kwarg)
+Create a new dictionary. The dict object is the dictionary class.
+ See dict and Mapping Types — dict for documentation about this class.
+
+For other containers see the built-in list, set, and tuple classes, as well as the collections module.
+"
+
+	arguments notEmpty ifTrue: [
+		(arguments first isKindOf: Dictionary) ifTrue: [
+			arguments first keysAndValuesDo: [:eachKey :eachValue | 
+				keywords at: eachKey evaluate put: eachValue evaluate.
+			]
+		] ifFalse: [
+			arguments first do: [ :each | 
+				keywords at: (each at: 1) put: (each at: 2).
+			]
+		].
+	].
+	^keywords
+%
+category: 'functions'
+method: Builtins
+list: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+class list([iterable])
+Rather than being a function, list is actually a 
+mutable sequence type, as documented in Lists and 
+Sequence Types — list, tuple, range.
+"
+	^arguments first asArray copy
+%
+category: 'functions'
+method: Builtins
+max: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+max(iterable, *[, key, default])
+max(arg1, arg2, *args[, key])
+Return the largest item in an iterable or the largest of two or more arguments.
+
+If one positional argument is provided, it should be an iterable. 
+The largest item in the iterable is returned. 
+If two or more positional arguments are provided, 
+the largest of the positional arguments is returned.
+
+There are two optional keyword-only arguments. 
+The key argument specifies a one-argument ordering function like that used for list.sort(). 
+The default argument specifies an object to return if the provided iterable is empty. 
+If the iterable is empty and default is not provided, a ValueError is raised.
+
+If multiple items are maximal, the function returns the first one encountered. 
+This is consistent with other sort-stability preserving tools such as sorted
+(iterable, key=keyfunc, reverse=True)[0] and heapq.nlargest(1, iterable, key=keyfunc).
+
+New in version 3.4: The default keyword-only argument.
+"
+arguments size == 1 ifTrue: [ 
+	"key"
+	arguments first size == 0 ifTrue: [^keywords at: 'default' ifAbsent: [self error: 'value error']].
+	^arguments first
+		inject: arguments first first 
+		into: [:last :each | last max: each]
+].
+
+^arguments
+		"key"
+		inject: arguments first
+		into: [:last :each | last max: each]
+%
+category: 'functions'
+method: Builtins
+min: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+min(iterable, *[, key, default])
+min(arg1, arg2, *args[, key])
+Return the smallest item in an iterable or the smallest of two or more arguments.
+
+If one positional argument is provided, it should be an iterable. 
+The smallest item in the iterable is returned. 
+If two or more positional arguments are provided, 
+the smallest of the positional arguments is returned.
+
+There are two optional keyword-only arguments. 
+The key argument specifies a one-argument ordering function like that used for list.sort(). 
+The default argument specifies an object to return
+ if the provided iterable is empty. 
+If the iterable is empty and default is not provided, a ValueError is raised.
+
+If multiple items are minimal, the function returns the first one encountered. 
+This is consistent with other sort-stability preserving tools such as 
+sorted(iterable, key=keyfunc)[0] and heapq.nsmallest(1, iterable, key=keyfunc).
+
+New in version 3.4: The default keyword-only argument.
+"
+arguments size == 1 ifTrue: [ 
+	"key"
+	arguments first size == 0 ifTrue: [^keywords at: 'default' ifAbsent: [self error: 'value error']].
+	^arguments first
+		inject: arguments first first 
+		into: [:last :each | last min: each]
+].
+
+^arguments
+		"key"
+		inject: arguments first
+		into: [:last :each | last min: each]
+%
+category: 'functions'
+method: Builtins
+pow: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"	pow(x, y[, z])
+Return x to the power y; if z is present, return x to the power y, 
+modulo z (computed more efficiently than pow(x, y) % z). 
+The two-argument form pow(x, y) is equivalent to using the power operator: x**y.
+
+The arguments must have numeric types. With mixed operand types, 
+the coercion rules for binary arithmetic operators apply. 
+For int operands, the result has the same type as the operands 
+(after coercion) unless the second argument is negative;
+ in that case, all arguments are converted to float and a float result is delivered. 
+For example, 10**2 returns 100, but 10**-2 returns 0.01.
+ If the second argument is negative, the third argument must be omitted.
+ If z is present, x and y must be of integer types, and y must be non-negative.
+"
+
+	| result |
+	result := arguments first raisedTo: (arguments at: 2).
+	^arguments size == 2
+		ifTrue: [result]
+		ifFalse:[result rem: (arguments at: 3)]
+%
+category: 'functions'
+method: Builtins
+print: arguments keywords: keywords
 	"https://docs.python.org/3/library/functions.html#print"
 
 	| separator stream terminator |
@@ -2295,11 +2452,57 @@ print: aPyCall arguments: arguments keywords: keywords
 	arguments do: [:each | 
 		| string |
 		"https://docs.python.org/3/library/stdtypes.html#str"
-		string := each asString.
+		string := each printString.
 		stream nextPutAll: string; nextPutAll: separator.
 	].
 	stream nextPutAll: terminator.
 	(keywords at: 'flush' ifAbsent: [false]) ifTrue: [stream flush].
+%
+category: 'functions'
+method: Builtins
+set: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+class set([iterable])
+Return a new set object, optionally with elements taken from iterable. 
+set is a built-in class. See set and Set Types — set, frozenset for documentation about this class.
+
+For other containers see the built-in frozenset, list, tuple, and dict classes, as well as the collections module.
+"
+	^arguments asSet copy
+%
+category: 'functions'
+method: Builtins
+sum: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+Sums start and the items of an iterable from left to right and returns the total. 
+start defaults to 0. The iterable’s items are normally numbers, and the start 
+value is not allowed to be a string.
+
+For some use cases, there are good alternatives to sum(). 
+The preferred, fast way to concatenate a sequence of strings is by calling ''.
+join(sequence). To add floating point values with extended precision, see math.fsum(). 
+To concatenate a series of iterables, consider using itertools.chain().
+"
+
+	^arguments first
+		inject: (arguments size > 1 ifTrue: [arguments at: 2] ifFalse: [0]) 
+		into: [:sum :each | sum + each]
+%
+category: 'functions'
+method: Builtins
+tuple: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+tuple([iterable])
+Rather than being a function, tuple is actually an immutable sequence type, 
+as documented in Tuples and Sequence Types — list, tuple, range.
+"
+	^arguments first asArray copy immediateInvariant
 %
 set compile_env: 0
 category: 'other'
@@ -2937,6 +3140,17 @@ PyDict class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyDict
+evaluate
+
+	| dict |
+	dict := Dictionary new.
+	1 to: keys size do: [:i | 
+		dict at: (keys at: i) put: (values at: i).
+	].
+	^dict
+%
+category: 'other'
+method: PyDict
 initialize
 	"Dict(expr* keys, expr* values)"
 
@@ -3104,6 +3318,12 @@ PyList class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyList
+evaluate
+	"May wish to revisit context"
+	^elts collect: [:each | each evaluate]
+%
+category: 'other'
+method: PyList
 initialize
 	"List(expr* elts, expr_context ctx)"
 	
@@ -3232,6 +3452,11 @@ PySet class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PySet
+evaluate
+	^(elts collect: [:each | each evaluate]) asSet
+%
+category: 'other'
+method: PySet
 initialize
 	"Set(expr* elts)"
 
@@ -3292,6 +3517,11 @@ PyStr class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyStr
+evaluate
+	^s
+%
+category: 'other'
+method: PyStr
 initialize
 	"Str(string s) -- need to specify raw, unicode, etc?"
 
@@ -3334,6 +3564,12 @@ PyTuple class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyTuple
+evaluate
+	"May wish to revisit context"
+	^(elts collect: [:each | each evaluate]) immediateInvariant
+%
+category: 'other'
+method: PyTuple
 initialize
 	"Tuple(expr* elts, expr_context ctx)"
 
@@ -3352,6 +3588,11 @@ PyUnaryOp class removeAllMethods.
 ! ------------------- Class methods for PyUnaryOp
 ! ------------------- Instance methods for PyUnaryOp
 set compile_env: 0
+category: 'other'
+method: PyUnaryOp
+evaluate
+	^ op operand: operand.
+%
 category: 'other'
 method: PyUnaryOp
 initialize
@@ -4235,6 +4476,12 @@ method: PyCmpop
 initialize
 	"override to do nothing!"
 %
+category: 'other'
+method: PyCmpop
+left: leftOperand right: rightOperand
+
+	^leftOperand evaluate + rightOperand evaluate
+%
 
 ! ------------------- Remove existing behavior from PyEq
 expectvalue /Metaclass3       
@@ -4244,6 +4491,13 @@ PyEq class removeAllMethods.
 %
 ! ------------------- Class methods for PyEq
 ! ------------------- Instance methods for PyEq
+set compile_env: 0
+category: 'other'
+method: PyEq
+left: leftOperand right: rightOperand
+
+	^leftOperand evaluate = rightOperand evaluate
+%
 
 ! ------------------- Remove existing behavior from PyGt
 expectvalue /Metaclass3       
@@ -4280,6 +4534,13 @@ PyIs class removeAllMethods.
 %
 ! ------------------- Class methods for PyIs
 ! ------------------- Instance methods for PyIs
+set compile_env: 0
+category: 'other'
+method: PyIs
+left: leftOperand right: rightOperand
+
+	^leftOperand evaluate == rightOperand evaluate
+%
 
 ! ------------------- Remove existing behavior from PyIsNot
 expectvalue /Metaclass3       
@@ -4325,6 +4586,13 @@ PyNotIn class removeAllMethods.
 %
 ! ------------------- Class methods for PyNotIn
 ! ------------------- Instance methods for PyNotIn
+set compile_env: 0
+category: 'other'
+method: PyNotIn
+left: leftOperand right: rightOperand
+	self error.
+	^self subclassResponsibility
+%
 
 ! ------------------- Remove existing behavior from PyComprehension
 expectvalue /Metaclass3       
@@ -4515,7 +4783,7 @@ test
 PyModule test
 "
 
-	^PyModule script: '$HOME/code/Python/performance/performance/cli.py'.
+	^PyModule script: '$HOME/code/Python/GemStoneP/test.py'.
 %
 ! ------------------- Instance methods for PyModule
 set compile_env: 0
@@ -4736,7 +5004,7 @@ category: 'other'
 method: PyDiv
 left: leftOperand right: rightOperand
 
-	^leftOperand evaluate / rightOperand evaluate
+	^(leftOperand evaluate / rightOperand evaluate)asFloat
 %
 
 ! ------------------- Remove existing behavior from PyFloorDiv
@@ -4747,6 +5015,13 @@ PyFloorDiv class removeAllMethods.
 %
 ! ------------------- Class methods for PyFloorDiv
 ! ------------------- Instance methods for PyFloorDiv
+set compile_env: 0
+category: 'other'
+method: PyFloorDiv
+left: leftOperand right: rightOperand
+
+	^leftOperand evaluate // rightOperand evaluate
+%
 
 ! ------------------- Remove existing behavior from PyLShift
 expectvalue /Metaclass3       
@@ -4756,6 +5031,13 @@ PyLShift class removeAllMethods.
 %
 ! ------------------- Class methods for PyLShift
 ! ------------------- Instance methods for PyLShift
+set compile_env: 0
+category: 'other'
+method: PyLShift
+left: leftOperand right: rightOperand
+
+	^leftOperand evaluate bitShift: rightOperand evaluate
+%
 
 ! ------------------- Remove existing behavior from PyMatMult
 expectvalue /Metaclass3       
@@ -4765,6 +5047,13 @@ PyMatMult class removeAllMethods.
 %
 ! ------------------- Class methods for PyMatMult
 ! ------------------- Instance methods for PyMatMult
+set compile_env: 0
+category: 'other'
+method: PyMatMult
+left: leftOperand right: rightOperand
+	self error.
+	^leftOperand evaluate bitShift: rightOperand evaluate
+%
 
 ! ------------------- Remove existing behavior from PyMod
 expectvalue /Metaclass3       
@@ -4779,7 +5068,7 @@ category: 'other'
 method: PyMod
 left: leftOperand right: rightOperand
 
-	^leftOperand evaluate modulo: rightOperand evaluate
+	^leftOperand evaluate rem: rightOperand evaluate
 %
 
 ! ------------------- Remove existing behavior from PyMult
@@ -4822,6 +5111,13 @@ PyRShift class removeAllMethods.
 %
 ! ------------------- Class methods for PyRShift
 ! ------------------- Instance methods for PyRShift
+set compile_env: 0
+category: 'other'
+method: PyRShift
+left: leftOperand right: rightOperand
+
+	^leftOperand evaluate bitShift: rightOperand evaluate negated
+%
 
 ! ------------------- Remove existing behavior from PySub
 expectvalue /Metaclass3       
@@ -4837,6 +5133,98 @@ method: PySub
 left: leftOperand right: rightOperand
 
 	^leftOperand evaluate - rightOperand evaluate
+%
+
+! ------------------- Remove existing behavior from Pyslice
+expectvalue /Metaclass3       
+doit
+Pyslice removeAllMethods.
+Pyslice class removeAllMethods.
+%
+! ------------------- Class methods for Pyslice
+set compile_env: 0
+category: 'other'
+classmethod: Pyslice
+parent: aNode
+
+	| symbol class |
+	symbol := ('Py' , (aNode stream upTo: $()) asSymbol.
+	(aNode stream peekFor: $)) ifFalse: [self error].
+	class := PythonGlobals at: symbol.
+	^class basicNew initialize: aNode; yourself
+%
+! ------------------- Instance methods for Pyslice
+
+! ------------------- Remove existing behavior from PyExtSlice
+expectvalue /Metaclass3       
+doit
+PyExtSlice removeAllMethods.
+PyExtSlice class removeAllMethods.
+%
+! ------------------- Class methods for PyExtSlice
+! ------------------- Instance methods for PyExtSlice
+set compile_env: 0
+category: 'other'
+method: PyExtSlice
+initialize
+	"ExtSlice(slice* dims)"
+	
+	self halt.
+%
+
+! ------------------- Remove existing behavior from PyIndex
+expectvalue /Metaclass3       
+doit
+PyIndex removeAllMethods.
+PyIndex class removeAllMethods.
+%
+! ------------------- Class methods for PyIndex
+! ------------------- Instance methods for PyIndex
+set compile_env: 0
+category: 'other'
+method: PyIndex
+initialize
+	"Index(expr value)"
+	
+	value := self expression.
+%
+
+! ------------------- Remove existing behavior from PySlice
+expectvalue /Metaclass3       
+doit
+PySlice removeAllMethods.
+PySlice class removeAllMethods.
+%
+! ------------------- Class methods for PySlice
+! ------------------- Instance methods for PySlice
+set compile_env: 0
+category: 'other'
+method: PySlice
+initialize
+	"Slice(expr? lower, expr? upper, expr? step)"
+
+	| stream next |
+	stream := self stream.
+	(stream peekFor: $') ifTrue: [
+		lower:= self expression.
+	] ifFalse: [
+		next := stream next: 4.
+		next ~= 'None' ifTrue: [self error.].
+	].
+	self commaSpace.
+	(stream peekFor: $') ifTrue: [
+		upper:= self expression.
+	] ifFalse: [
+		next := stream next: 4.
+		next ~= 'None' ifTrue: [self error.].
+	].
+	self commaSpace.
+	(stream peekFor: $') ifTrue: [
+		step:= self expression.
+	] ifFalse: [
+		next := stream next: 4.
+		next ~= 'None' ifTrue: [self error.].
+	].
 %
 
 ! ------------------- Remove existing behavior from PyUnaryop
@@ -4865,6 +5253,11 @@ method: PyUnaryop
 initialize
 	"override to do nothing!"
 %
+category: 'other'
+method: PyUnaryop
+operand: operand
+	^self subclassResponsibility
+%
 
 ! ------------------- Remove existing behavior from PyInvert
 expectvalue /Metaclass3       
@@ -4874,6 +5267,12 @@ PyInvert class removeAllMethods.
 %
 ! ------------------- Class methods for PyInvert
 ! ------------------- Instance methods for PyInvert
+set compile_env: 0
+category: 'other'
+method: PyInvert
+operand: operand
+	^operand bitInvert
+%
 
 ! ------------------- Remove existing behavior from PyNot
 expectvalue /Metaclass3       
@@ -4883,6 +5282,12 @@ PyNot class removeAllMethods.
 %
 ! ------------------- Class methods for PyNot
 ! ------------------- Instance methods for PyNot
+set compile_env: 0
+category: 'other'
+method: PyNot
+operand: operand
+	^operand not
+%
 
 ! ------------------- Remove existing behavior from PyUAdd
 expectvalue /Metaclass3       
@@ -4892,6 +5297,12 @@ PyUAdd class removeAllMethods.
 %
 ! ------------------- Class methods for PyUAdd
 ! ------------------- Instance methods for PyUAdd
+set compile_env: 0
+category: 'other'
+method: PyUAdd
+operand: operand
+	^operand
+%
 
 ! ------------------- Remove existing behavior from PyUSub
 expectvalue /Metaclass3       
@@ -4901,6 +5312,12 @@ PyUSub class removeAllMethods.
 %
 ! ------------------- Class methods for PyUSub
 ! ------------------- Instance methods for PyUSub
+set compile_env: 0
+category: 'other'
+method: PyUSub
+operand: operand
+	^operand evaluate negated
+%
 
 ! ------------------- Remove existing behavior from PyWithItem
 expectvalue /Metaclass3       
