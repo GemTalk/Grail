@@ -26,6 +26,22 @@ expectvalue /Class
 doit
 Builtins category: 'Parser'
 %
+! ------------------- Class definition for Complex
+expectvalue /Class
+doit
+Object subclass: 'Complex'
+  instVarNames: #( real imaginary)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+Complex category: 'Builtins'
+%
 ! ------------------- Class definition for PyAstNode
 expectvalue /Class
 doit
@@ -2295,6 +2311,32 @@ The valid range for the argument is from 0 through 1,114,111 (0x10FFFF in base 1
 %
 category: 'functions'
 method: Builtins
+complex: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+class complex([real[, imag]])
+Return a complex number with the value real + imag*1j or
+ convert a string or number to a complex number. If the first 
+parameter is a string, it will be interpreted as a complex number 
+and the function must be called without a second parameter. 
+The second parameter can never be a string. Each argument 
+may be any numeric type (including complex). If imag is omitted, 
+it defaults to zero and the constructor serves as a numeric conversion
+ like int and float. If both arguments are omitted, returns 0j.
+
+Note When converting from a string, the string must not contain
+ whitespace around the central + or - operator. For example, 
+complex('1+2j') is fine, but complex('1 + 2j') raises ValueError.
+The complex type is described in Numeric Types — int, float, complex.
+
+Changed in version 3.6: Grouping digits with underscores as in code literals is allowed.
+"
+
+^Complex real: arguments first imag: arguments second.
+%
+category: 'functions'
+method: Builtins
 dict: arguments keywords: keywords
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -2320,6 +2362,65 @@ For other containers see the built-in list, set, and tuple classes, as well as t
 		].
 	].
 	^keywords
+%
+category: 'functions'
+method: Builtins
+divmod: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+divmod(a, b)
+Take two (non complex) numbers as arguments and return 
+a pair of numbers consisting of their quotient and remainder 
+when using integer division. With mixed operand types,
+ the rules for binary arithmetic operators apply. For integers, 
+the result is the same as (a // b, a % b). For floating point numbers 
+the result is (q, a % b), where q is usually math.floor(a / b) but may be 
+1 less than that. In any case q * b + a % b is very close to a, if a % b is 
+non-zero it has the same sign as b, and 0 <= abs(a % b) < abs(b).
+"
+
+"May need some improvements for floating point or negative numbers"
+| a b q r |
+a := arguments first.
+b := arguments second.
+q := (a / b) floor.
+r := a - (b * q).
+^(Array with: q with: r) immediateInvariant
+%
+category: 'functions'
+method: Builtins
+hex: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+hex(x)
+Convert an integer number to a lowercase hexadecimal 
+string prefixed with “0x”. If x is not a Python int object, it has to define an __index__() method that returns an integer. Some examples:
+
+>>> hex(255)
+'0xff'
+>>> hex(-42)
+'-0x2a'
+If you want to convert an integer number to an uppercase or
+ lower hexadecimal string with prefix or not, you can use either of the following ways:
+
+>>> '%#x' % 255, '%x' % 255, '%X' % 255
+('0xff', 'ff', 'FF')
+>>> format(255, '#x'), format(255, 'x'), format(255, 'X')
+('0xff', 'ff', 'FF')
+>>> f'{255:#x}', f'{255:x}', f'{255:X}'
+('0xff', 'ff', 'FF')
+See also format() for more information.
+
+See also int() for converting a hexadecimal string to
+ an integer using a base of 16.
+
+Note To obtain a hexadecimal string representation
+ for a float, use the float.hex() method.
+"
+
+^'0x' , arguments first asHexString
 %
 category: 'functions'
 method: Builtins
@@ -2460,6 +2561,49 @@ print: arguments keywords: keywords
 %
 category: 'functions'
 method: Builtins
+reversed: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+reversed(seq)
+Return a reverse iterator. seq must be an object which has 
+a __reversed__() method or supports the sequence protocol 
+(the __len__() method and the __getitem__() method with 
+integer arguments starting at 0).
+"
+
+^arguments first reverse
+%
+category: 'functions'
+method: Builtins
+round: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+Return number rounded to ndigits precision after the decimal point. 
+If ndigits is omitted or is None, it returns the nearest integer to its input.
+
+For the built-in types supporting round(), values are rounded to the closest 
+multiple of 10 to the power minus ndigits; if two multiples are equally close, 
+rounding is done toward the even choice (so, for example, both round(0.5) 
+and round(-0.5) are 0, and round(1.5) is 2). Any integer value is valid for ndigits 
+(positive, zero, or negative). The return value is an integer if ndigits is omitted or None. 
+Otherwise the return value has the same type as number.
+
+For a general Python object number, round delegates to number.__round__.
+
+Note The behavior of round() for floats can be surprising: for example, 
+round(2.675, 2) gives 2.67 instead of the expected 2.68. This is not a bug: 
+it’s a result of the fact that most decimal fractions can’t be represented exactly as a float. 
+See Floating Point Arithmetic: Issues and Limitations for more information.
+"
+	| number |
+	arguments size == 1 ifTrue: [^arguments first roundedHalfToEven].
+	number := 10 raisedTo: (arguments at: 2).
+	^((arguments first * number) roundedHalfToEven / number) asFloat
+%
+category: 'functions'
+method: Builtins
 set: arguments keywords: keywords
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -2511,6 +2655,76 @@ __import__: name _: globals _: locals _: fromList _: level
 	"(name, globals=None, locals=None, fromlist=(), level=0)"
 
 	self halt.
+%
+
+! ------------------- Remove existing behavior from Complex
+expectvalue /Metaclass3       
+doit
+Complex removeAllMethods.
+Complex class removeAllMethods.
+%
+! ------------------- Class methods for Complex
+set compile_env: 0
+category: 'other'
+classmethod: Complex
+real: newValue imag: newImag
+	^self new real: newValue imag: newImag
+%
+! ------------------- Instance methods for Complex
+set compile_env: 0
+category: 'Accessing'
+method: Complex
+imag
+	^imaginary
+%
+category: 'Accessing'
+method: Complex
+imaginary
+	^imaginary
+%
+category: 'Accessing'
+method: Complex
+real
+	^real
+%
+set compile_env: 0
+category: 'Arithmetic'
+method: Complex
++ aNumber
+
+	self halt.
+%
+set compile_env: 0
+category: 'Printing'
+method: Complex
+printOn: aStream
+
+	real ~= 0 ifTrue: [
+		aStream 
+			print: real;
+			nextPut: $+.
+	].
+
+	aStream 
+		print: imaginary;
+		nextPut: $j.
+%
+set compile_env: 0
+category: 'Updating'
+method: Complex
+imaginary: newValue
+	imaginary := newValue
+%
+category: 'Updating'
+method: Complex
+real: newValue
+	real := newValue
+%
+category: 'Updating'
+method: Complex
+real: newValue imag: newImag
+	real := newValue.
+	imaginary := newImag.
 %
 
 ! ------------------- Remove existing behavior from PyAstNode
@@ -3434,10 +3648,15 @@ category: 'other'
 method: PyNum
 initialize
 	"Num(object n) -- a number as a PyObject."
-	| stream |
+	| stream string |
 	stream := self stream.
-	n := (stream upTo: $,)asNumber.
+	string := stream upTo: $,.
 	stream skip: -1.
+	n := (string notEmpty and: [string last == $j]) ifTrue: [
+		Complex real: 0 imag: (string copyFrom: 1 to: string size - 1) asNumber.
+	] ifFalse: [
+		string asNumber.
+	].
 	self readPosition.
 %
 
