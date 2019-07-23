@@ -29,7 +29,7 @@ Builtins category: 'Parser'
 ! ------------------- Class definition for Complex
 expectvalue /Class
 doit
-Object subclass: 'Complex'
+Number subclass: 'Complex'
   instVarNames: #( real imaginary)
   classVars: #()
   classInstVars: #()
@@ -37,6 +37,14 @@ Object subclass: 'Complex'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+Complex comment: 
+'No class-specific documentation for Complex, hierarchy is: 
+Object
+  Complex( real imaginary)
+'
 %
 expectvalue /Class
 doit
@@ -2668,7 +2676,7 @@ set compile_env: 0
 category: 'other'
 classmethod: Complex
 real: newValue imag: newImag
-	^self new real: newValue imag: newImag
+	^self basicNew real: newValue imag: newImag
 %
 ! ------------------- Instance methods for Complex
 set compile_env: 0
@@ -2690,11 +2698,51 @@ real
 set compile_env: 0
 category: 'Arithmetic'
 method: Complex
-+ aNumber
-
+- aNumber
 	self halt.
+	^Complex real: real - aNumber imag: imaginary
+%
+category: 'Arithmetic'
+method: Complex
+* aNumber
+	self halt.
+	^Complex real: real * aNumber imag: imaginary
+%
+category: 'Arithmetic'
+method: Complex
+/ aNumber
+	self halt.
+	^Complex real: real / aNumber imag: imaginary
+%
+category: 'Arithmetic'
+method: Complex
++ aNumber
+	(aNumber isKindOf: Complex) ifTrue: [
+		^Complex real: self real + aNumber real imag: self imaginary + aNumber imaginary
+	].
+	^self _retry: #+ coercing: aNumber
 %
 set compile_env: 0
+category: 'other'
+method: Complex
+_coerce: aNumber
+	^Complex real: aNumber imag: 0
+%
+category: 'other'
+method: Complex
+_generality
+	^150
+%
+set compile_env: 0
+category: 'Printing'
+method: Complex
+asString
+
+	| stream |
+	stream := WriteStream on: String new.
+	self printOn: stream.
+	^stream contents
+%
 category: 'Printing'
 method: Complex
 printOn: aStream
