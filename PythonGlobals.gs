@@ -2398,6 +2398,24 @@ r := a - (b * q).
 %
 category: 'functions'
 method: Builtins
+hash: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+hash(object)
+Return the hash value of the object (if it has one). Hash values are integers. 
+They are used to quickly compare dictionary keys during a dictionary lookup.
+ Numeric values that compare equal have the same hash value 
+(even if they are of different types, as is the case for 1 and 1.0).
+
+Note For objects with custom __hash__() methods, note that hash() 
+truncates the return value based on the bit width of the host machine. 
+See __hash__() for details.
+"
+	^arguments first hash
+%
+category: 'functions'
+method: Builtins
 hex: arguments keywords: keywords
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -2521,6 +2539,21 @@ arguments size == 1 ifTrue: [
 		"key"
 		inject: arguments first
 		into: [:last :each | last min: each]
+%
+category: 'functions'
+method: Builtins
+ord: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+ord(c)
+Given a string representing one Unicode character,
+ return an integer representing the Unicode code point of that character. 
+For example, ord('a') returns the integer 97 and ord('€') (Euro sign) returns 8364. 
+This is the inverse of chr().
+"
+
+^(arguments first _decodeFromUtf8: true maxSize: 1) first codePoint
 %
 category: 'functions'
 method: Builtins
@@ -2699,20 +2732,28 @@ set compile_env: 0
 category: 'Arithmetic'
 method: Complex
 - aNumber
-	self halt.
-	^Complex real: real - aNumber imag: imaginary
+	(aNumber isKindOf: Complex) ifTrue: [
+		^Complex real: self real - aNumber real imag: self imaginary - aNumber imaginary
+	].
+	^self _retry: #+ coercing: aNumber
 %
 category: 'Arithmetic'
 method: Complex
 * aNumber
-	self halt.
-	^Complex real: real * aNumber imag: imaginary
+	(aNumber isKindOf: Complex) ifTrue: [
+		^Complex real: (self real * aNumber real) + (self imaginary * aNumber imaginary)negated
+		imag: (self real * aNumber imaginary) + (self imaginary * aNumber real)
+	].
+	^self _retry: #* coercing: aNumber
 %
 category: 'Arithmetic'
 method: Complex
 / aNumber
-	self halt.
-	^Complex real: real / aNumber imag: imaginary
+	(aNumber isKindOf: Complex) ifTrue: [
+		^Complex real: (self real * aNumber real) + (self imaginary * aNumber imaginary)negated
+		imag: (self real * aNumber imaginary) + (self imaginary * aNumber real)
+	].
+	^self _retry: #/ coercing: aNumber
 %
 category: 'Arithmetic'
 method: Complex
