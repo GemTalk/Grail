@@ -2290,6 +2290,131 @@ def any(iterable):
 %
 category: 'functions'
 method: Builtins
+ascii: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+ascii(object)
+As repr(), return a string containing a printable representation of an object, 
+but escape the non-ASCII characters in the string returned by repr() using 
+\x, \u or \U escapes. This generates a string similar to that returned by repr() in Python 2.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+bin: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+bin(x)
+Convert an integer number to a binary string prefixed with “0b”. 
+The result is a valid Python expression. If x is not a Python int object,
+ it has to define an __index__() method that returns an integer. Some examples:
+
+>>> bin(3)
+'0b11'
+>>> bin(-10)
+'-0b1010'
+If prefix “0b” is desired or not, you can use either of the following ways.
+
+>>> format(14, '#b'), format(14, 'b')
+('0b1110', '1110')
+>>> f'{14:#b}', f'{14:b}'
+('0b1110', '1110')
+See also format() for more information.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+bool: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+class bool([x])
+Return a Boolean value, i.e. one of True or False. 
+x is converted using the standard truth testing procedure. 
+If x is false or omitted, this returns False; otherwise it returns True.
+The bool class is a subclass of int (see Numeric Types — int, float, complex). 
+It cannot be subclassed further. Its only instances are False and True (see Boolean Values).
+
+Changed in version 3.7: x is now a positional-only parameter.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+breakpoint: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+breakpoint(*args, **kws)
+This function drops you into the debugger at the call site. 
+Specifically, it calls sys.breakpointhook(), passing args and
+ kws straight through. By default, sys.breakpointhook() 
+calls pdb.set_trace() expecting no arguments. In this case, 
+it is purely a convenience function so you don’t 
+have to explicitly import pdb or type as much code to enter the
+ debugger. However, sys.breakpointhook() can be set
+ to some other function and breakpoint() will automatically 
+call that, allowing you to drop into the debugger of choice.
+
+New in version 3.7.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+bytearray: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+class bytearray([source[, encoding[, errors]]])
+Return a new array of bytes. The bytearray class is a 
+mutable sequence of integers in the range 0 <= x < 256.
+ It has most of the usual methods of mutable sequences, 
+described in Mutable Sequence Types, as well as most methods
+ that the bytes type has, see Bytes and Bytearray Operations.
+
+The optional source parameter can be used to initialize the array in a few different ways:
+
+If it is a string, you must also give the encoding (and optionally, errors) 
+parameters; bytearray() then converts the string to bytes using str.encode().
+If it is an integer, the array will have that size and will be initialized with null bytes.
+If it is an object conforming to the buffer interface, a read-only buffer of the object
+ will be used to initialize the bytes array.
+If it is an iterable, it must be an iterable of integers in the range 0 <= x < 256, 
+which are used as the initial contents of the array.
+Without an argument, an array of size 0 is created.
+
+See also Binary Sequence Types — bytes, bytearray, memoryview and Bytearray Objects.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+bytes: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+class bytes([source[, encoding[, errors]]])
+Return a new “bytes” object, which is an immutable
+ sequence of integers in the range 0 <= x < 256. bytes is 
+an immutable version of bytearray – it has the same
+ non-mutating methods and the same indexing and slicing behavior.
+
+Accordingly, constructor arguments are interpreted as for bytearray().
+
+Bytes objects can also be created with literals, see String and Bytes literals.
+
+See also Binary Sequence Types — bytes, bytearray, memoryview,
+ Bytes Objects, and Bytes and Bytearray Operations.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
 call: aPyCall
 
 	| arguments keywords selector |
@@ -2300,6 +2425,24 @@ call: aPyCall
 		keywords at: each name put: each value evaluate.
 	].
 	^self perform: selector with: arguments with: keywords.
+%
+category: 'functions'
+method: Builtins
+callable: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+callable(object)
+Return True if the object argument appears callable, 
+False if not. If this returns true, it is still possible that a
+ call fails, but if it is false, calling object will never succeed. 
+Note that classes are callable (calling a class returns a new instance);
+ instances are callable if their class has a __call__() method.
+
+New in version 3.2: This function was first removed in Python 3.0 
+and then brought back in Python 3.2.
+"
+self halt.
 %
 category: 'functions'
 method: Builtins
@@ -2316,6 +2459,88 @@ The valid range for the argument is from 0 through 1,114,111 (0x10FFFF in base 1
  ValueError will be raised if i is outside that range.
 "
 	^(Character codePoint: arguments first) asString
+%
+category: 'functions'
+method: Builtins
+classmethod: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+@classmethod
+Transform a method into a class method.
+
+A class method receives the class as implicit first argument,
+ just like an instance method receives the instance. To declare a class method, use this idiom:
+
+class C:
+    @classmethod
+    def f(cls, arg1, arg2, ...): ...
+The @classmethod form is a function decorator – see Function definitions for details.
+
+A class method can be called either on the class 
+(such as C.f()) or on an instance (such as C().f()). 
+The instance is ignored except for its class. 
+If a class method is called for a derived class, the derived class object is passed as the implied first argument.
+
+Class methods are different than C++ or Java static methods. If you want those, see staticmethod().
+
+For more information on class methods, see The standard type hierarchy.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+compile: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+compile(source, filename, mode, flags=0, dont_inherit=False, optimize=-1)
+Compile the source into a code or AST object. Code objects can be executed by exec() or 
+eval(). source can either be a normal string, a byte string, or an AST object. Refer to the
+ ast module documentation for information on how to work with AST objects.
+
+The filename argument should give the file from which the code was read; 
+pass some recognizable value if it wasn’t read from a file ('<string>' is commonly used).
+
+The mode argument specifies what kind of code must be compiled; it can be 'exec' 
+if source consists of a sequence of statements, 'eval' if it consists of a single expression, 
+or 'single' if it consists of a single interactive statement (in the latter case, expression 
+statements that evaluate to something other than None will be printed).
+
+The optional arguments flags and dont_inherit control which future statements 
+affect the compilation of source. If neither is present (or both are zero) the code 
+is compiled with those future statements that are in effect in the code that is calling 
+compile(). If the flags argument is given and dont_inherit is not (or is zero) 
+then the future statements specified by the flags argument are used in addition 
+to those that would be used anyway. If dont_inherit is a non-zero integer then 
+the flags argument is it – the future statements in effect around the call to compile are ignored.
+
+Future statements are specified by bits which can be bitwise ORed together 
+to specify multiple statements. The bitfield required to specify a given feature
+ can be found as the compiler_flag attribute on the _Feature instance in the __future__ module.
+
+The argument optimize specifies the optimization level of the compiler; 
+the default value of -1 selects the optimization level of the interpreter as 
+given by -O options. Explicit levels are 0 (no optimization; __debug__ is true), 
+1 (asserts are removed, __debug__ is false) or 2 (docstrings are removed too).
+
+This function raises SyntaxError if the compiled source is invalid, and ValueError
+ if the source contains null bytes.
+
+If you want to parse Python code into its AST representation, see ast.parse().
+
+Note When compiling a string with multi-line code in 'single' or 'eval' mode, input 
+must be terminated by at least one newline character. 
+This is to facilitate detection of incomplete and complete statements in the code module.
+Warning It is possible to crash the Python interpreter with a
+ sufficiently large/complex string when compiling to an AST object 
+due to stack depth limitations in Python’s AST compiler.
+Changed in version 3.2: Allowed use of Windows and Mac newlines. 
+Also input in 'exec' mode does not have to end in a newline anymore. Added the optimize parameter.
+
+Changed in version 3.5: Previously, TypeError was raised when null bytes were encountered in source.
+"
+self halt.
 %
 category: 'functions'
 method: Builtins
@@ -2342,6 +2567,20 @@ Changed in version 3.6: Grouping digits with underscores as in code literals is 
 "
 
 ^Complex real: arguments first imag: arguments second.
+%
+category: 'functions'
+method: Builtins
+delattr: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+delattr(object, name)
+This is a relative of setattr(). The arguments are an object and a string. 
+The string must be the name of one of the object’s attributes. The function 
+deletes the named attribute, provided the object allows it. 
+For example, delattr(x, 'foobar') is equivalent to del x.foobar.
+"
+self halt.
 %
 category: 'functions'
 method: Builtins
@@ -2373,6 +2612,60 @@ For other containers see the built-in list, set, and tuple classes, as well as t
 %
 category: 'functions'
 method: Builtins
+dir: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+dir([object])
+Without arguments, return the list of names in the current local scope. 
+With an argument, attempt to return a list of valid attributes for that object.
+
+If the object has a method named __dir__(), this method will be called 
+and must return the list of attributes. This allows objects that implement 
+a custom __getattr__() or __getattribute__() function to customize
+ the way dir() reports their attributes.
+
+If the object does not provide __dir__(), the function tries its best 
+to gather information from the object’s __dict__ attribute, if defined, 
+and from its type object. The resulting list is not necessarily complete,
+ and may be inaccurate when the object has a custom __getattr__().
+
+The default dir() mechanism behaves differently with different types of 
+objects, as it attempts to produce the most relevant, rather than complete, information:
+
+If the object is a module object, the list contains the names of the module’s attributes.
+If the object is a type or class object, the list contains the names of its attributes, 
+and recursively of the attributes of its bases.
+Otherwise, the list contains the object’s attributes’ names, the names 
+of its class’s attributes, and recursively of the attributes of its class’s base classes.
+The resulting list is sorted alphabetically. For example:
+
+>>> import struct
+>>> dir()   # show the names in the module namespace  # doctest: +SKIP
+['__builtins__', '__name__', 'struct']
+>>> dir(struct)   # show the names in the struct module # doctest: +SKIP
+['Struct', '__all__', '__builtins__', '__cached__', '__doc__', '__file__',
+ '__initializing__', '__loader__', '__name__', '__package__',
+ '_clearcache', 'calcsize', 'error', 'pack', 'pack_into',
+ 'unpack', 'unpack_from']
+>>> class Shape:
+...     def __dir__(self):
+...         return ['area', 'perimeter', 'location']
+>>> s = Shape()
+>>> dir(s)
+['area', 'location', 'perimeter']
+Note Because dir() is supplied primarily as a convenience for use 
+at an interactive prompt, it tries to supply an interesting set of
+ names more than it tries to supply a rigorously or consistently 
+defined set of names, and its detailed behavior may change across
+ releases. For example, metaclass attributes are not in the result list 
+when the argument is a class.
+
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
 divmod: arguments keywords: keywords
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -2398,6 +2691,285 @@ r := a - (b * q).
 %
 category: 'functions'
 method: Builtins
+enumerate: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+enumerate(iterable, start=0)
+Return an enumerate object. iterable must be a 
+sequence, an iterator, or some other object which 
+supports iteration. The __next__() method of the
+ iterator returned by enumerate() returns a tuple 
+containing a count (from start which defaults to 0) 
+and the values obtained from iterating over iterable.
+
+>>> seasons = ['Spring', 'Summer', 'Fall', 'Winter']
+>>> list(enumerate(seasons))
+[(0, 'Spring'), (1, 'Summer'), (2, 'Fall'), (3, 'Winter')]
+>>> list(enumerate(seasons, start=1))
+[(1, 'Spring'), (2, 'Summer'), (3, 'Fall'), (4, 'Winter')]
+Equivalent to:
+
+def enumerate(sequence, start=0):
+    n = start
+    for elem in sequence:
+        yield n, elem
+        n += 1
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+eval: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+eval(expression, globals=None, locals=None)
+The arguments are a string and optional globals and locals.
+ If provided, globals must be a dictionary. If provided, locals can be any mapping object.
+
+The expression argument is parsed and evaluated as a Python
+ expression (technically speaking, a condition list) using the
+ globals and locals dictionaries as global and local namespace. 
+If the globals dictionary is present and does not contain a value
+ for the key __builtins__, a reference to the dictionary of the built-in
+ module builtins is inserted under that key before expression is parsed. 
+This means that expression normally has full access to the standard 
+builtins module and restricted environments are propagated. 
+If the locals dictionary is omitted it defaults to the globals dictionary.
+ If both dictionaries are omitted, the expression is executed in the 
+environment where eval() is called. The return value is the result of
+ the evaluated expression. Syntax errors are reported as exceptions. Example:
+
+>>> x = 1
+>>> eval('x+1')
+2
+This function can also be used to execute arbitrary code objects
+ (such as those created by compile()). In this case pass a code object 
+instead of a string. If the code object has been compiled with 'exec' as 
+the mode argument, eval()’s return value will be None.
+
+Hints: dynamic execution of statements is supported by the exec() function. 
+The globals() and locals() functions returns the current global and local dictionary, 
+respectively, which may be useful to pass around for use by eval() or exec().
+
+See ast.literal_eval() for a function that can safely evaluate strings with expressions containing only literals.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+exec: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+exec(object[, globals[, locals]])
+This function supports dynamic execution of Python code. 
+object must be either a string or a code object. If it is a string,
+ the string is parsed as a suite of Python statements which is
+ then executed (unless a syntax error occurs). 1 If it is a code
+ object, it is simply executed. In all cases, the code that’s 
+executed is expected to be valid as file input (see the section
+ “File input” in the Reference Manual). Be aware that the return 
+and yield statements may not be used outside of function definitions 
+even within the context of code passed to the exec() function. The return value is None.
+
+In all cases, if the optional parts are omitted, the code is executed 
+in the current scope. If only globals is provided, it must be a dictionary,
+ which will be used for both the global and the local variables. 
+If globals and locals are given, they are used for the global and
+ local variables, respectively. If provided, locals can be any mapping object.
+ Remember that at module level, globals and locals are the same dictionary.
+ If exec gets two separate objects as globals and locals, the code will be
+ executed as if it were embedded in a class definition.
+
+If the globals dictionary does not contain a value for the key
+ __builtins__, a reference to the dictionary of the built-in module
+ builtins is inserted under that key. That way you can control
+ what builtins are available to the executed code by inserting 
+your own __builtins__ dictionary into globals before passing it to exec().
+
+Note The built-in functions globals() and locals() return the 
+current global and local dictionary, respectively, which may
+ be useful to pass around for use as the second and third argument to exec().
+Note The default locals act as described for function locals() 
+below: modifications to the default locals dictionary should not
+ be attempted. Pass an explicit locals dictionary if you need to
+ see effects of the code on locals after function exec() returns.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+filter: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+filter(function, iterable)
+Construct an iterator from those
+ elements of iterable for which function 
+returns true. iterable may be either a sequence, 
+a container which supports iteration, or an iterator.
+ If function is None, the identity function is assumed,
+ that is, all elements of iterable that are false are removed.
+
+Note that filter(function, iterable) is equivalent to the
+ generator expression (item for item in iterable if function(item)) 
+if function is not None and (item for item in iterable if item) if function is None.
+
+See itertools.filterfalse() for the complementary function that 
+returns elements of iterable for which function returns false.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+float: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+class float([x])
+Return a floating point number constructed from a number or string x.
+
+If the argument is a string, it should contain a decimal number,
+ optionally preceded by a sign, and optionally embedded in whitespace.
+ The optional sign may be '+' or '-'; a '+' sign has no effect on the value produced.
+ The argument may also be a string representing a NaN (not-a-number),
+ or a positive or negative infinity. More precisely, the input must conform 
+to the following grammar after leading and trailing whitespace characters are removed:
+
+sign           ::=  + | - (Got rid of ''')
+infinity       ::=  Infinity | inf (I got rid of "")
+nan            ::=  nan
+numeric_value  ::=  floatnumber | infinity | nan
+numeric_string ::=  [sign] numeric_value
+Here floatnumber is the form of a Python floating-point literal,
+ described in Floating point literals. Case is not significant, so, 
+for example, “inf”, “Inf”, “INFINITY” and “iNfINity” are all acceptable spellings for positive infinity.
+
+Otherwise, if the argument is an integer or a floating point number, 
+a floating point number with the same value 
+(within Python’s floating point precision) is returned. If the 
+argument is outside the range of a Python float, an OverflowError will be raised.
+
+For a general Python object x, float(x) delegates to x.__float__().
+
+If no argument is given, 0.0 is returned.
+
+Examples:
+
+>>>
+>>> float('+1.23')
+1.23
+>>> float('   -12345\n')
+-12345.0
+>>> float('1e-003')
+0.001
+>>> float('+1E6')
+1000000.0
+>>> float('-Infinity')
+-inf
+The float type is described in Numeric Types — int, float, complex.
+
+Changed in version 3.6: Grouping digits with underscores as in code literals is allowed.
+
+Changed in version 3.7: x is now a positional-only parameter.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+format: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+format(value[, format_spec])
+Convert a value to a “formatted” representation,
+ as controlled by format_spec. The interpretation 
+of format_spec will depend on the type of the value 
+argument, however there is a standard formatting
+ syntax that is used by most built-in types: Format
+ Specification Mini-Language.
+
+The default format_spec is an empty string which 
+usually gives the same effect as calling str(value).
+
+A call to format(value, format_spec) is translated to
+ type(value).__format__(value, format_spec) which 
+bypasses the instance dictionary when searching for 
+the value’s __format__() method. A TypeError exception
+ is raised if the method search reaches object and the
+ format_spec is non-empty, or if either the format_spec
+ or the return value are not strings.
+
+Changed in version 3.4: object().__format__(format_spec)
+ raises TypeError if format_spec is not an empty string.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+frozenset: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+class frozenset([iterable])
+Return a new frozenset object, optionally with 
+\elements taken from iterable. frozenset is a
+ built-in class. See frozenset and Set Types — 
+set, frozenset for documentation about this class.
+
+For other containers see the built-in set, list, tuple,
+\ and dict classes, as well as the collections module.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+getattr: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+getattr(object, name[, default])
+Return the value of the named attribute of object.
+ name must be a string. If the string is the name 
+of one of the object’s attributes, the result is the 
+value of that attribute. For example, getattr(x, 'foobar')
+ is equivalent to x.foobar. If the named attribute does not exist, 
+default is returned if provided, otherwise AttributeError is raised.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+globals: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+globals()
+Return a dictionary representing the current global symbol table. 
+This is always the dictionary of the current module (inside a function or method,
+ this is the module where it is defined, not the module from which it is called).
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+hasattr: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+hasattr(object, name)
+The arguments are an object and a string. 
+The result is True if the string is the name of one 
+of the object’s attributes, False if not.
+ (This is implemented by calling getattr(object, name) 
+and seeing whether it raises an AttributeError or not.)
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
 hash: arguments keywords: keywords
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -2413,6 +2985,33 @@ truncates the return value based on the bit width of the host machine.
 See __hash__() for details.
 "
 	^arguments first hash
+%
+category: 'functions'
+method: Builtins
+help: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+help([object])
+Invoke the built-in help system. 
+(This function is intended for interactive use.) 
+If no argument is given, the interactive help system starts 
+on the interpreter console. If the argument is a string, then 
+the string is looked up as the name of a module, function, class,
+ method, keyword, or documentation topic, and a help page is 
+printed on the console. If the argument is any other kind of object, 
+a help page on the object is generated.
+
+Note that if a slash(/) appears in the parameter list of a function, 
+when invoking help(), it means that the parameters prior to the
+ slash are positional-only. For more info, see the FAQ entry on positional-only parameters.
+
+This function is added to the built-in namespace by the site module.
+
+Changed in version 3.4: Changes to pydoc and inspect mean that
+ the reported signatures for callables are now more comprehensive and consistent.
+"
+self halt.
 %
 category: 'functions'
 method: Builtins
@@ -2993,6 +3592,16 @@ sys
 
 	^parent sys
 %
+category: 'other'
+method: PyAstNode
+variableAt: aName 
+	^parent variableAt: aName
+%
+category: 'other'
+method: PyAstNode
+variableAt: aName put: aValue
+	^parent variableAt: aName put: aValue
+%
 
 ! ------------------- Remove existing behavior from PyAlias
 expectvalue /Metaclass3       
@@ -3398,6 +4007,20 @@ addMissingPositions
 %
 category: 'other'
 method: PyCompare
+evaluate
+	| temp |
+	temp := left evaluate.
+	1 to: cmpopList size do: [:i |
+		| op operand |
+		op := cmpopList at: i.
+		operand := (comparatorList at: i) evaluate.
+		(op left: temp right: operand) ifFalse: [^false].
+		temp := operand.
+	].
+	^true
+%
+category: 'other'
+method: PyCompare
 initialize
 	"Compare(expr left, cmpop* ops, expr* comparators)"
 
@@ -3405,13 +4028,7 @@ initialize
 	stream := self stream.
 	left := self expression.
 	self commaSpace.
-	(stream peekFor: $[) ifFalse: [self error].
-	cmpopList := Array new.
-	[
-		stream peekFor: $]
-	] whileFalse: [
-		cmpopList add: (PyCmpop parent: self).
-	].
+	cmpopList := self collectAst: [PyCmpop parent: self].
 	self commaSpace.
 	comparatorList := self collectAst: [self expression].
 	self readPosition.
@@ -3674,6 +4291,17 @@ assertContextIsLoad
 %
 category: 'other'
 method: PyName
+assertContextIsStore
+
+	ctx assertIsStore.
+%
+category: 'other'
+method: PyName
+evaluate 
+	^parent variableAt: self
+%
+category: 'other'
+method: PyName
 id
 
 	^id
@@ -3688,6 +4316,14 @@ initialize
 	self commaSpace.
 	ctx := PyExpressionContext parent: self.
 	self readPosition.
+%
+category: 'other'
+method: PyName
+printOn: aStream
+	super printOn: aStream.
+	aStream nextPut: $(; 
+		nextPutAll: id;
+		nextPut: $).
 %
 
 ! ------------------- Remove existing behavior from PyNameConstant
@@ -3747,6 +4383,14 @@ initialize
 		string asNumber.
 	].
 	self readPosition.
+%
+category: 'other'
+method: PyNum
+printOn: aStream
+	super printOn: aStream.
+	aStream nextPut: $(; 
+		print: n;
+		nextPut: $).
 %
 
 ! ------------------- Remove existing behavior from PySet
@@ -4063,6 +4707,13 @@ addMissingPositions
 %
 category: 'other'
 method: PyAssign
+evaluate
+	| x |
+	x := value evaluate.
+	targets do: [:each | parent variableAt: each put: x].
+%
+category: 'other'
+method: PyAssign
 initialize
 	"Assign(expr* targets, expr value)"
 
@@ -4323,6 +4974,11 @@ addMissingPositions
 %
 category: 'other'
 method: PyFor
+evaluate
+	self halt.
+%
+category: 'other'
+method: PyFor
 initialize
 	"For(expr target, expr iter, stmt* body, stmt* orelse)"
 
@@ -4415,6 +5071,13 @@ set compile_env: 0
 category: 'other'
 method: PyIf
 addMissingPositions
+%
+category: 'other'
+method: PyIf
+evaluate
+	test evaluate
+		ifTrue: [body do: [:each | each evaluate]]
+		ifFalse: [orelse do: [:each | each evaluate]].
 %
 category: 'other'
 method: PyIf
@@ -4666,6 +5329,12 @@ addMissingPositions
 %
 category: 'other'
 method: PyWhile
+evaluate
+	[test evaluate] whileTrue: [body do: [:each | each evaluate]].
+	orelse do: [:each | each evaluate].
+%
+category: 'other'
+method: PyWhile
 initialize
 	"While(expr test, stmt* body, stmt* orelse)"
 
@@ -4815,6 +5484,12 @@ PyGt class removeAllMethods.
 %
 ! ------------------- Class methods for PyGt
 ! ------------------- Instance methods for PyGt
+set compile_env: 0
+category: 'other'
+method: PyGt
+left: left right: right
+	^left > right
+%
 
 ! ------------------- Remove existing behavior from PyGtE
 expectvalue /Metaclass3       
@@ -4867,6 +5542,12 @@ PyLt class removeAllMethods.
 %
 ! ------------------- Class methods for PyLt
 ! ------------------- Instance methods for PyLt
+set compile_env: 0
+category: 'other'
+method: PyLt
+left: left right: right
+	^left < right
+%
 
 ! ------------------- Remove existing behavior from PyLtE
 expectvalue /Metaclass3       
@@ -4966,6 +5647,12 @@ assertIsLoad
 %
 category: 'other'
 method: PyExpressionContext
+assertIsStore
+
+	self error: 'Expression Context should be <Store> but is <' , self class name , '>'.
+%
+category: 'other'
+method: PyExpressionContext
 initialize
 	"override to do nothing!"
 %
@@ -5029,6 +5716,12 @@ PyStore class removeAllMethods.
 %
 ! ------------------- Class methods for PyStore
 ! ------------------- Instance methods for PyStore
+set compile_env: 0
+category: 'other'
+method: PyStore
+assertIsStore
+	"Overide to avoid error"
+%
 
 ! ------------------- Remove existing behavior from PyKeyword
 expectvalue /Metaclass3       
@@ -5114,6 +5807,7 @@ method: PyModule
 initialize
 	
 	| result |
+	globals := Dictionary new.
 	parent ifNil: [parent := PySystem new].
 	statements do: [:each | result := each evaluate].
 	^result
@@ -5199,6 +5893,20 @@ method: PyModule
 stream
 
 	^stream
+%
+category: 'other'
+method: PyModule
+variableAt: aName 
+	
+	aName assertContextIsLoad.
+	^globals at: aName id.
+%
+category: 'other'
+method: PyModule
+variableAt: aName put: aValue
+	
+	aName assertContextIsStore.
+	globals at: aName id put: aValue.
 %
 
 ! ------------------- Remove existing behavior from PyOperator
