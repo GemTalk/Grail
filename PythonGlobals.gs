@@ -2249,6 +2249,67 @@ default
 set compile_env: 0
 category: 'functions'
 method: Builtins
+__import__: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+__import__(name, globals=None, locals=None, fromlist=(), level=0)
+Note This is an advanced function that is not needed in everyday 
+Python programming, unlike importlib.import_module().
+This function is invoked by the import statement. It can be replaced
+ (by importing the builtins module and assigning to builtins.__import__) 
+in order to change semantics of the import statement, but doing so is 
+strongly discouraged as it is usually simpler to use import hooks (see PEP 302)
+ to attain the same goals and does not cause issues with code which assumes 
+the default import implementation is in use. Direct use of __import__() is 
+also discouraged in favor of importlib.import_module().
+
+The function imports the module name, potentially using the given globals
+ and locals to determine how to interpret the name in a package context.
+ The fromlist gives the names of objects or submodules that should be
+ imported from the module given by name. The standard implementation
+ does not use its locals argument at all, and uses its globals only to determine
+\ the package context of the import statement.
+
+level specifies whether to use absolute or relative imports. 0 (the default) 
+means only perform absolute imports. Positive values for level indicate the 
+number of parent directories to search relative to the directory of the module 
+calling __import__() (see PEP 328 for the details).
+
+
+When the name variable is of the form package.module, normally, the top
+-level package (the name up till the first dot) is returned, not the module 
+named by name. However, when a non-empty fromlist argument is given,
+ the module named by name is returned.
+
+For example, the statement import spam results in bytecode resembling 
+the following code:
+
+spam = __import__('spam', globals(), locals(), [], 0)
+The statement import spam.ham results in this call:
+
+spam = __import__('spam.ham', globals(), locals(), [], 0)
+Note how __import__() returns the toplevel module here because 
+this is the object that is bound to a name by the import statement.
+
+On the other hand, the statement from spam.ham import eggs, sausage as saus results in
+
+_temp = __import__('spam.ham', globals(), locals(), ['eggs', 'sausage'], 0)
+eggs = _temp.eggs
+saus = _temp.sausage
+Here, the spam.ham module is returned from __import__(). From this 
+object, the names to import are retrieved and assigned to their respective names.
+
+If you simply want to import a module (potentially within a package) 
+by name, use importlib.import_module().
+
+Changed in version 3.3: Negative values for level are no longer 
+supported (which also changes the default value to 0).
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
 abs: arguments keywords: keywords
 	"https://docs.python.org/3/library/functions.html#abs"
 	
@@ -2324,7 +2385,7 @@ If prefix “0b” is desired or not, you can use either of the following ways.
 ('0b1110', '1110')
 See also format() for more information.
 "
-self halt.
+	^(arguments first negative ifTrue: ['-'] ifFalse: ['']), '0b' , (arguments first abs printStringRadix: 2)
 %
 category: 'functions'
 method: Builtins
@@ -3045,7 +3106,184 @@ Note To obtain a hexadecimal string representation
  for a float, use the float.hex() method.
 "
 
-^'0x' , arguments first asHexString
+^(arguments first negative ifTrue: ['-'] ifFalse: ['']), '0x' , (arguments first abs asHexString)
+%
+category: 'functions'
+method: Builtins
+id: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+id(object)
+Return the “identity” of an object. This is an integer which is guaranteed to 
+be unique and constant for this object during its lifetime. Two objects with 
+non-overlapping lifetimes may have the same id() value.
+
+CPython implementation detail: This is the address of the object in memory.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+input: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+input([prompt])
+If the prompt argument is present, it is written to standard output 
+without a trailing newline. The function then reads a line from input, 
+converts it to a string (stripping a trailing newline), and returns that. 
+When EOF is read, EOFError is raised. Example:
+
+>>>
+>>> s = input('--> ')  
+--> Monty Python's Flying Circus
+>>> s  
+Monty Python's Flying Circus (took out qoutations)
+If the readline module was loaded, then input() will use it to provide
+ elaborate line editing and history features.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+int: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+class int([x])
+class int(x, base=10)
+Return an integer object constructed from a number 
+or string x, or return 0 if no arguments are given. If 
+x defines __int__(), int(x) returns x.__int__(). If x 
+defines __trunc__(), it returns x.__trunc__(). For 
+floating point numbers, this truncates towards zero.
+
+If x is not a number or if base is given, then x must be a 
+string, bytes, or bytearray instance representing an integer
+ literal in radix base. Optionally, the literal can be preceded 
+by + or - (with no space in between) and surrounded by 
+whitespace. A base-n literal consists of the digits 0 to n-1, 
+with a to z (or A to Z) having values 10 to 35. The default base is 10. 
+The allowed values are 0 and 2–36. Base-2, -8, and -16 literals can 
+be optionally prefixed with 0b/0B, 0o/0O, or 0x/0X, as with integer 
+literals in code. Base 0 means to interpret exactly as a code literal, 
+so that the actual base is 2, 8, 10, or 16, and so that int('010', 0)
+ is not legal, while int('010') is, as well as int('010', 8).
+
+The integer type is described in Numeric Types — int, float, complex.
+
+Changed in version 3.4: If base is not an instance of int and the 
+base object has a base.__index__ method, that method is called 
+to obtain an integer for the base. Previous versions used base.__int__ 
+instead of base.__index__.
+
+Changed in version 3.6: Grouping digits with underscores as in code literals is allowed.
+
+Changed in version 3.7: x is now a positional-only parameter.
+"
+	arguments isEmpty ifTrue: [^0].
+	arguments size == 1 ifTrue: [
+		| arg stream int |
+		arg := arguments first.
+		(arg isKindOf: Number) ifTrue: [^arg truncated].
+		stream := ReadStream on: arg trimWhiteSpace.
+		int := Integer fromStream: stream.
+		stream position == stream contents size ifFalse: [self error: 'Invalid Literal'].
+		^int
+	].
+	arguments size == 2 ifTrue: [
+		| num rad |
+		num := arguments first.
+		rad := arguments second.
+		rad == 0 ifTrue: [
+			num first == $0 ifFalse: [self error: 'Number must begin with 0'].
+			rad := #(2 8 16) at: ('BOX' indexOf: num second asUppercase).
+			num := num copyFrom: 3 to: num size.
+		].
+		^Integer fromString: rad asString, 'r', num trimWhiteSpace.
+	].
+	self error: 'Too many arguments'.
+%
+category: 'functions'
+method: Builtins
+isinstance: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+isinstance(object, classinfo)¶
+Return true if the object argument is an instance of the 
+classinfo argument, or of a (direct, indirect or virtual) subclass
+ thereof. If object is not an object of the given type, the function
+ always returns false. If classinfo is a tuple of type objects 
+(or recursively, other such tuples), return true if object is an
+ instance of any of the types. If classinfo is not a type 
+or tuple of types and such tuples, a TypeError exception is raised.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+issubclass: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+issubclass(class, classinfo)
+Return true if class is a subclass (direct, indirect or virtual) of classinfo.
+ A class is considered a subclass of itself. classinfo may be a tuple of class 
+objects, in which case every entry in classinfo will be checked. In any other
+ case, a TypeError exception is raised.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+iter: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+iter(object[, sentinel])
+Return an iterator object. The first argument is interpreted 
+very differently depending on the presence of the second argument. 
+Without a second argument, object must be a collection object which
+ supports the iteration protocol (the __iter__() method), or it must
+ support the sequence protocol (the __getitem__() method with integer
+ arguments starting at 0). If it does not support either of those protocols, 
+TypeError is raised. If the second argument, sentinel, is given, then
+ object must be a callable object. The iterator created in this case 
+will call object with no arguments for each call to its __next__() method; 
+if the value returned is equal to sentinel, StopIteration will be raised, 
+otherwise the value will be returned.
+
+See also Iterator Types.
+
+One useful application of the second form of iter() is to build a 
+block-reader. For example, reading fixed-width blocks from a 
+binary database file until the end of file is reached:
+
+from functools import partial
+with open('mydata.db', 'rb') as f:
+    for block in iter(partial(f.read, 64), b''):
+        process_block(block)
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+len: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+len(s)
+Return the length (the number of items) of an object. 
+The argument may be a sequence (such as a string, bytes, tuple,
+ list, or range) or a collection (such as a dictionary, set, or frozen set).
+
+class list([iterable])
+Rather than being a function, list is actually a mutable sequence 
+type, as documented in Lists and Sequence Types — list, tuple, range.
+"
+self halt.
 %
 category: 'functions'
 method: Builtins
@@ -3059,6 +3297,40 @@ mutable sequence type, as documented in Lists and
 Sequence Types — list, tuple, range.
 "
 	^arguments first asArray copy
+%
+category: 'functions'
+method: Builtins
+locals: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+locals()
+Update and return a dictionary representing the current local symbol table. 
+Free variables are returned by locals() when it is called in function blocks, 
+but not in class blocks. Note that at the module level, locals() and globals()
+ are the same dictionary.
+
+Note The contents of this dictionary should not be modified; 
+changes may not affect the values of local and free variables 
+used by the interpreter.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+map: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+map(function, iterable, ...)
+Return an iterator that applies function to every item of iterable,
+ yielding the results. If additional iterable arguments are passed,
+ function must take that many arguments and is applied to the 
+items from all iterables in parallel. With multiple iterables, the iterator 
+stops when the shortest iterable is exhausted. For cases where the
+ function inputs are already arranged into argument tuples, see itertools.starmap().
+"
+self halt.
 %
 category: 'functions'
 method: Builtins
@@ -3101,6 +3373,18 @@ arguments size == 1 ifTrue: [
 %
 category: 'functions'
 method: Builtins
+memoryview: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+memoryview(obj)
+Return a “memory view” object created from the given argument.
+ See Memory Views for more information.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
 min: arguments keywords: keywords
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -3138,6 +3422,73 @@ arguments size == 1 ifTrue: [
 		"key"
 		inject: arguments first
 		into: [:last :each | last min: each]
+%
+category: 'functions'
+method: Builtins
+next: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+next(iterator[, default])¶
+Retrieve the next item from the iterator by calling its __next__() 
+method. If default is given, it is returned if the iterator is exhausted,
+ otherwise StopIteration is raised.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+object: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+class object
+Return a new featureless object. object is a base for all classes. 
+It has the methods that are common to all instances of Python classes. 
+This function does not accept any arguments.
+
+Note object does not have a __dict__, so you can’t assign arbitrary 
+attributes to an instance of the object class.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+oct: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+oct(x)¶
+Convert an integer number to an octal string prefixed with “0o”. 
+The result is a valid Python expression. If x is not a Python int object,
+ it has to define an __index__() method that returns an integer. For example:
+
+>>> oct(8)
+'0o10'
+>>> oct(-56)
+'-0o70'
+If you want to convert an integer number to octal string either 
+with prefix “0o” or not, you can use either of the following ways.
+
+>>> '%#o' % 10, '%o' % 10
+('0o12', '12')
+>>> format(10, '#o'), format(10, 'o')
+('0o12', '12')
+>>> f'{10:#o}', f'{10:o}'
+('0o12', '12')
+See also format() for more information.
+"
+^(arguments first negative ifTrue: ['-'] ifFalse: ['']), '0o' , (arguments first abs printStringRadix: 8)
+%
+category: 'functions'
+method: Builtins
+open: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+see documentation for more details
+"
+self halt.
 %
 category: 'functions'
 method: Builtins
@@ -3201,6 +3552,46 @@ print: arguments keywords: keywords
 %
 category: 'functions'
 method: Builtins
+property: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+see documentation for more details
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+range: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+range(stop)
+range(start, stop[, step])
+Rather than being a function, range is actually an immutable sequence type, as documented 
+in Ranges and Sequence Types — list, tuple, range.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+repr: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+repr(object)
+Return a string containing a printable representation of an object. 
+For many types, this function makes an attempt to return a string
+ that would yield an object with the same value when passed to eval(), 
+otherwise the representation is a string enclosed in angle brackets that 
+contains the name of the type of the object together with additional
+ information often including the name and address of the object. 
+A class can control what this function returns for its instances by defining a __repr__() method.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
 reversed: arguments keywords: keywords
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -3249,12 +3640,99 @@ set: arguments keywords: keywords
 	
 "
 class set([iterable])
-Return a new set object, optionally with elements taken from iterable. 
-set is a built-in class. See set and Set Types — set, frozenset for documentation about this class.
+Return a new set object, optionally with elements taken from iterable.
+ set is a built-in class. See set and Set Types — set, frozenset for documentation about this class.
 
-For other containers see the built-in frozenset, list, tuple, and dict classes, as well as the collections module.
+For other containers see the built-in frozenset, list, tuple, and 
+dict classes, as well as the collections module.
 "
-	^arguments asSet copy
+self halt.
+%
+category: 'functions'
+method: Builtins
+setattr: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+setattr(object, name, value)
+This is the counterpart of getattr(). The arguments are an 
+object, a string and an arbitrary value. The string may name 
+an existing attribute or a new attribute. The function assigns the value to the attribute, 
+provided the object allows it. For example, setattr(x, 'foobar', 123) 
+is equivalent to x.foobar = 123.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+slice: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+class slice(stop)¶
+class slice(start, stop[, step])
+Return a slice object representing the set of indices specified 
+by range(start, stop, step). The start and step arguments default 
+to None. Slice objects have read-only data attributes start, stop 
+and step which merely return the argument values (or their default).
+ They have no other explicit functionality; however they are used by
+ Numerical Python and other third party extensions. Slice objects are 
+also generated when extended indexing syntax is used.
+ For example: a[start:stop:step] or a[start:stop, i].
+ See itertools.islice() for an alternate version that returns an iterator.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+staticmethod: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+@staticmethod¶
+Transform a method into a static method.
+
+A static method does not receive an implicit first argument. 
+To declare a static method, use this idiom:
+
+class C:
+    @staticmethod
+    def f(arg1, arg2, ...): ...
+The @staticmethod form is a function decorator – see Function 
+definitions for details.
+
+A static method can be called either on the class (such as C.f()) 
+or on an instance (such as C().f()).
+
+Static methods in Python are similar to those found in Java or C++.
+ Also see classmethod() for a variant that is useful for creating alternate class constructors.
+
+Like all decorators, it is also possible to call staticmethod as a regular
+ function and do something with its result. This is needed in some cases 
+where you need a reference to a function from a class body and you 
+want to avoid the automatic transformation to instance method. For 
+these cases, use this idiom:
+
+class C:
+    builtin_open = staticmethod(open)
+For more information on static methods, see The standard type hierarchy.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+str: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+class str(object='')
+class str(object=b'', encoding='utf-8', errors='strict')
+Return a str version of object. See str() for details.
+
+str is the built-in string class. For general
+ information about strings, see Text Sequence Type — str.
+"
+self halt.
 %
 category: 'functions'
 method: Builtins
@@ -3278,6 +3756,68 @@ To concatenate a series of iterables, consider using itertools.chain().
 %
 category: 'functions'
 method: Builtins
+super: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+super([type[, object-or-type]])
+Return a proxy object that delegates method calls to a parent 
+or sibling class of type. This is useful for accessing inherited methods 
+that have been overridden in a class. The search order is same as 
+that used by getattr() except that the type itself is skipped.
+
+The __mro__ attribute of the type lists the method resolution search 
+order used by both getattr() and super(). The attribute is dynamic and 
+can change whenever the inheritance hierarchy is updated.
+
+If the second argument is omitted, the super object returned is unbound.
+ If the second argument is an object, isinstance(obj, type) must be true. 
+If the second argument is a type, issubclass(type2, type) must be true 
+(this is useful for classmethods).
+
+There are two typical use cases for super. In a class hierarchy with single
+ inheritance, super can be used to refer to parent classes without naming
+ them explicitly, thus making the code more maintainable. This use closely
+ parallels the use of super in other programming languages.
+
+The second use case is to support cooperative multiple inheritance in a
+ dynamic execution environment. This use case is unique to Python and 
+is not found in statically compiled languages or languages that only support 
+single inheritance. This makes it possible to implement “diamond diagrams”
+ where multiple base classes implement the same method. Good design 
+dictates that this method have the same calling signature in every case 
+(because the order of calls is determined at runtime, because that order 
+adapts to changes in the class hierarchy, and because that order can 
+include sibling classes that are unknown prior to runtime).
+
+For both use cases, a typical superclass call looks like this:
+
+class C(B):
+    def method(self, arg):
+        super().method(arg)    # This does the same thing as:
+                               # super(C, self).method(arg)
+Note that super() is implemented as part of the binding process for
+ explicit dotted attribute lookups such as super().__getitem__(name).
+ It does so by implementing its own __getattribute__() method for 
+searching classes in a predictable order that supports cooperative
+ multiple inheritance. Accordingly, super() is undefined for implicit 
+lookups using statements or operators such as super()[name].
+
+Also note that, aside from the zero argument form, super() is not
+ limited to use inside methods. The two argument form specifies 
+the arguments exactly and makes the appropriate references.
+ The zero argument form only works inside a class definition,
+ as the compiler fills in the necessary details to correctly 
+retrieve the class being defined, as well as accessing the 
+current instance for ordinary methods.
+
+For practical suggestions on how to design cooperative
+ classes using super(), see guide to using super().
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
 tuple: arguments keywords: keywords
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -3287,6 +3827,112 @@ Rather than being a function, tuple is actually an immutable sequence type,
 as documented in Tuples and Sequence Types — list, tuple, range.
 "
 	^arguments first asArray copy immediateInvariant
+%
+category: 'functions'
+method: Builtins
+type: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+class type(object)
+class type(name, bases, dict)
+With one argument, return the type of an object. 
+The return value is a type object and generally the same object as returned by object.__class__.
+
+The isinstance() built-in function is recommended 
+for testing the type of an object, because it takes subclasses into account.
+
+With three arguments, return a new type object. 
+This is essentially a dynamic form of the class statement. 
+The name string is the class name and becomes the __name__ 
+attribute; the bases tuple itemizes the base classes and becomes 
+the __bases__ attribute; and the dict dictionary is the namespace
+ containing definitions for class body and is copied to a standard 
+dictionary to become the __dict__ attribute. For example, the following 
+two statements create identical type objects:
+
+>>> class X:
+...     a = 1
+...
+>>> X = type('X', (object,), dict(a=1))
+See also Type Objects.
+
+Changed in version 3.6: Subclasses of type which don’t override
+ type.__new__ may no longer use the one-argument form to get the type of an object.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+vars: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+vars([object])
+Return the __dict__ attribute for a module, class, instance, 
+or any other object with a __dict__ attribute.
+
+Objects such as modules and instances have an updateable
+ __dict__ attribute; however, other objects may have write
+ restrictions on their __dict__ attributes (for example,
+ classes use a types.MappingProxyType to prevent direct dictionary updates).
+
+Without an argument, vars() acts like locals(). Note,
+ the locals dictionary is only useful for reads since
+ updates to the locals dictionary are ignored.
+"
+self halt.
+%
+category: 'functions'
+method: Builtins
+zip: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+zip(*iterables)
+Make an iterator that aggregates elements from each of the iterables.
+
+Returns an iterator of tuples, where the i-th tuple contains 
+the i-th element from each of the argument sequences or iterables. 
+The iterator stops when the shortest input iterable is exhausted. 
+With a single iterable argument, it returns an iterator of 1-tuples.
+ With no arguments, it returns an empty iterator. Equivalent to:
+
+def zip(*iterables):
+    # zip('ABCD', 'xy') --> Ax By
+    sentinel = object()
+    iterators = [iter(it) for it in iterables]
+    while iterators:
+        result = []
+        for it in iterators:
+            elem = next(it, sentinel)
+            if elem is sentinel:
+                return
+            result.append(elem)
+        yield tuple(result)
+The left-to-right evaluation order of the iterables is guaranteed. 
+This makes possible an idiom for clustering a data series into n-length 
+groups using zip(*[iter(s)]*n). This repeats the same iterator n times
+ so that each output tuple has the result of n calls to the iterator. This 
+has the effect of dividing the input into n-length chunks.
+
+zip() should only be used with unequal length inputs when you don’t care
+ about trailing, unmatched values from the longer iterables. If those values 
+are important, use itertools.zip_longest() instead.
+
+zip() in conjunction with the * operator can be used to unzip a list:
+
+>>>
+>>> x = [1, 2, 3]
+>>> y = [4, 5, 6]
+>>> zipped = zip(x, y)
+>>> list(zipped)
+[(1, 4), (2, 5), (3, 6)]
+>>> x2, y2 = zip(*zip(x, y))
+>>> x == list(x2) and y == list(y2)
+True
+"
+self halt.
 %
 set compile_env: 0
 category: 'other'
@@ -3361,6 +4007,14 @@ method: Complex
 		^Complex real: self real + aNumber real imag: self imaginary + aNumber imaginary
 	].
 	^self _retry: #+ coercing: aNumber
+%
+category: 'Arithmetic'
+method: Complex
+= aNumber
+	(aNumber isKindOf: Complex) ifTrue: [
+		^(self real = aNumber real) and: [self imag = aNumber imag]
+	].
+	^self _retry: #= coercing: aNumber
 %
 set compile_env: 0
 category: 'other'
@@ -5473,7 +6127,7 @@ category: 'other'
 method: PyEq
 left: leftOperand right: rightOperand
 
-	^leftOperand evaluate = rightOperand evaluate
+	^leftOperand = rightOperand
 %
 
 ! ------------------- Remove existing behavior from PyGt
@@ -5956,7 +6610,7 @@ category: 'other'
 method: PyAdd
 left: leftOperand right: rightOperand
 
-	^leftOperand evaluate + rightOperand evaluate
+	^leftOperand + rightOperand 
 %
 
 ! ------------------- Remove existing behavior from PyBitAnd
@@ -5972,7 +6626,7 @@ category: 'other'
 method: PyBitAnd
 left: leftOperand right: rightOperand
 
-	^leftOperand evaluate bitAnd: rightOperand evaluate
+	^leftOperand bitAnd: rightOperand
 %
 
 ! ------------------- Remove existing behavior from PyBitOr
@@ -5988,7 +6642,7 @@ category: 'other'
 method: PyBitOr
 left: leftOperand right: rightOperand
 
-	^leftOperand evaluate bitOr: rightOperand evaluate
+	^leftOperand bitOr: rightOperand 
 %
 
 ! ------------------- Remove existing behavior from PyBitXor
@@ -6004,7 +6658,7 @@ category: 'other'
 method: PyBitXor
 left: leftOperand right: rightOperand
 
-	^leftOperand evaluate bitXor: rightOperand evaluate
+	^leftOperand bitXor: rightOperand 
 %
 
 ! ------------------- Remove existing behavior from PyDiv
@@ -6132,7 +6786,7 @@ category: 'other'
 method: PyRShift
 left: leftOperand right: rightOperand
 
-	^leftOperand evaluate bitShift: rightOperand evaluate negated
+	^leftOperand bitShift: rightOperand negated
 %
 
 ! ------------------- Remove existing behavior from PySub
