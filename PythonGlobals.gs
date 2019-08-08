@@ -25,7 +25,58 @@ Object subclass: 'Builtins'
 %
 expectvalue /Class
 doit
-Builtins category: 'Parser'
+Builtins category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for Py_List
+expectvalue /Class
+doit
+Array subclass: 'Py_List'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+Py_List category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for Py_Tuple
+expectvalue /Class
+doit
+Array subclass: 'Py_Tuple'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+Py_Tuple category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for Py_String
+expectvalue /Class
+doit
+String subclass: 'Py_String'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+Py_String category: 'Builtins'
 %
 set compile_env: 0
 ! ------------------- Class definition for Complex
@@ -2331,6 +2382,23 @@ expectvalue /Class
 doit
 PyToken category: 'Parser'
 %
+set compile_env: 0
+! ------------------- Class definition for UserInteraction
+expectvalue /Class
+doit
+Object subclass: 'UserInteraction'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+UserInteraction category: 'Kernel'
+%
 
 ! ------------------- Remove existing behavior from Builtins
 expectvalue /Metaclass3       
@@ -2530,16 +2598,9 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-call: aPyCall
+call: mySelector arguments: myArguments keywords: myKeywords
 
-	| arguments keywords selector |
-	selector := (aPyCall functionName , ':keywords:') asSymbol.
-	arguments := aPyCall arguments collect: [:each | each evaluate].
-	keywords := Dictionary new.
-	aPyCall keywords do: [:each | 
-		keywords at: each name put: each value evaluate.
-	].
-	^self perform: selector with: arguments with: keywords.
+	^self perform: mySelector with: myArguments with: myKeywords.
 %
 category: 'functions'
 method: Builtins
@@ -3197,7 +3258,7 @@ Monty Python's Flying Circus (took out qoutations)
 If the readline module was loaded, then input() will use it to provide
  elaborate line editing and history features.
 "
-self halt.
+^Py_String withAll: '2 2 2 2'
 %
 category: 'functions'
 method: Builtins
@@ -3350,7 +3411,7 @@ Rather than being a function, list is actually a
 mutable sequence type, as documented in Lists and 
 Sequence Types — list, tuple, range.
 "
-	^arguments first asArray copy
+	^Py_List withAll: arguments first
 %
 category: 'functions'
 method: Builtins
@@ -3384,7 +3445,7 @@ items from all iterables in parallel. With multiple iterables, the iterator
 stops when the shortest iterable is exhausted. For cases where the
  function inputs are already arranged into argument tuples, see itertools.starmap().
 "
-self halt.
+^arguments second collect: [:each | arguments first value: each value: nil]
 %
 category: 'functions'
 method: Builtins
@@ -3598,7 +3659,7 @@ print: arguments keywords: keywords
 	arguments do: [:each | 
 		| string |
 		"https://docs.python.org/3/library/stdtypes.html#str"
-		string := each printString.
+		string := each asString.
 		stream nextPutAll: string; nextPutAll: separator.
 	].
 	stream nextPutAll: terminator.
@@ -4063,10 +4124,91 @@ self halt.
 set compile_env: 0
 category: 'other'
 method: Builtins
+call: aPyCall
+
+	| arguments keywords selector |
+	selector := (aPyCall functionName , ':keywords:') asSymbol.
+	arguments := aPyCall arguments collect: [:each | each evaluate].
+	keywords := Dictionary new.
+	aPyCall keywords do: [:each | 
+		keywords at: each name put: each value evaluate.
+	].
+	^self perform: selector with: arguments with: keywords.
+%
+category: 'other'
+method: Builtins
+variableAt: aName
+
+	^[:arguments :keywords | | x | x:= aName. self halt]
+
+"
+	| arguments keywords selector |
+	selector := (aPyCall functionName , ':keywords:') asSymbol.
+	arguments := aPyCall arguments collect: [:each | each evaluate].
+	keywords := Dictionary new.
+	aPyCall keywords do: [:each | 
+		keywords at: each name put: each value evaluate.
+	].
+	^self perform: selector with: arguments with: keywords.
+"
+%
+category: 'other'
+method: Builtins
 __import__: name _: globals _: locals _: fromList _: level
 	"(name, globals=None, locals=None, fromlist=(), level=0)"
 
 	self halt.
+%
+
+! ------------------- Remove existing behavior from Py_List
+expectvalue /Metaclass3       
+doit
+Py_List removeAllMethods.
+Py_List class removeAllMethods.
+%
+! ------------------- Class methods for Py_List
+! ------------------- Instance methods for Py_List
+set compile_env: 0
+category: 'other'
+method: Py_List
+append: arguments keywords: keywords
+
+^self add: arguments first
+%
+
+! ------------------- Remove existing behavior from Py_Tuple
+expectvalue /Metaclass3       
+doit
+Py_Tuple removeAllMethods.
+Py_Tuple class removeAllMethods.
+%
+! ------------------- Class methods for Py_Tuple
+! ------------------- Instance methods for Py_Tuple
+
+! ------------------- Remove existing behavior from Py_String
+expectvalue /Metaclass3       
+doit
+Py_String removeAllMethods.
+Py_String class removeAllMethods.
+%
+! ------------------- Class methods for Py_String
+! ------------------- Instance methods for Py_String
+set compile_env: 0
+category: 'other'
+method: Py_String
+split: arguments keywords: keywords
+	"string.split(separator, max)
+
+		The split() method splits a string into a list.
+
+		You can specify the separator, default separator is any whitespace.
+
+		Note: When max is specified, the list will contain the specified number of elements plus one.
+
+		separator	Optional. Specifies the separator to use when splitting the string. Default value is a whitespace
+		max	Optional. Specifies how many splits to do. Default value is -1, which is ""all occurrences"""
+	
+^Py_List withAll: self subStrings
 %
 
 ! ------------------- Remove existing behavior from Complex
@@ -4636,6 +4778,14 @@ call: aPyCall
 %
 category: 'other'
 method: PyAttribute
+call: mySelector arguments: myArguments keywords: myKeywords
+	| receiver |
+	self assertContextIsLoad.
+	receiver := value evaluate.
+	^receiver perform: mySelector with: myArguments with: myKeywords.
+%
+category: 'other'
+method: PyAttribute
 id
 	^attr
 %
@@ -4783,7 +4933,14 @@ evaluate
 	"https://docs.python.org/3/reference/expressions.html#calls"
 	"We should do an elaborate name lookup, but we'll just start with built-in functions"
 
-	^function call: self
+	| myArguments myKeywords mySelector |
+	mySelector := (self functionName , ':keywords:') asSymbol.
+	myArguments := self arguments collect: [:each | each evaluate].
+	myKeywords := Dictionary new.
+	self keywords do: [:each | 
+		myKeywords at: each name put: each value evaluate.
+	].
+	^function call: mySelector arguments: myArguments keywords: myKeywords.
 %
 category: 'other'
 method: PyCall
@@ -5051,7 +5208,7 @@ category: 'other'
 method: PyList
 evaluate
 	"May wish to revisit context"
-	^elts collect: [:each | each evaluate]
+	^Py_List withAll: (elts collect: [:each | each evaluate])
 %
 category: 'other'
 method: PyList
@@ -5114,7 +5271,14 @@ call: aPyCall
 %
 category: 'other'
 method: PyName
-evaluate 
+call: mySelector arguments: myArguments keywords: myKeywords
+	self assertContextIsLoad.
+	^Builtins current call: mySelector arguments: myArguments keywords: myKeywords
+%
+category: 'other'
+method: PyName
+evaluate
+	self assertContextIsLoad.
 	^parent variableAt: self
 %
 category: 'other'
@@ -5287,7 +5451,7 @@ set compile_env: 0
 category: 'other'
 method: PyStr
 evaluate
-	^s
+	^Py_String withAll: s
 %
 category: 'other'
 method: PyStr
@@ -5335,7 +5499,7 @@ category: 'other'
 method: PyTuple
 evaluate
 	"May wish to revisit context"
-	^(elts collect: [:each | each evaluate]) immediateInvariant
+	^Py_Tuple withAll: (elts collect: [:each | each evaluate]) immediateInvariant
 %
 category: 'other'
 method: PyTuple
@@ -5643,6 +5807,14 @@ set compile_env: 0
 category: 'other'
 method: PyAugAssign
 addMissingPositions
+%
+category: 'other'
+method: PyAugAssign
+evaluate
+	
+	| x |
+	x := op left: (parent variableAt: target) right: value evaluate.
+	parent variableAt: target put: x.
 %
 category: 'other'
 method: PyAugAssign
@@ -6749,8 +6921,7 @@ category: 'other'
 method: PyModule
 variableAt: aName 
 	
-	aName assertContextIsLoad.
-	^globals at: aName id.
+	^globals at: aName id ifAbsent: [Builtins current variableAt: aName]
 %
 category: 'other'
 method: PyModule
@@ -7314,4 +7485,50 @@ printOn: aStream
 		nextPutAll: ' - ';
 		print: string;
 		yourself.
+%
+
+! ------------------- Remove existing behavior from UserInteraction
+expectvalue /Metaclass3       
+doit
+UserInteraction removeAllMethods.
+UserInteraction class removeAllMethods.
+%
+! ------------------- Class methods for UserInteraction
+! ------------------- Instance methods for UserInteraction
+set compile_env: 0
+category: 'other'
+method: UserInteraction
+alert: aString
+
+	^(System __sessionStateAt: 3)
+		message: aString
+		caption: 'Python'
+		icon: #prompt
+		buttons: #yesNoCancel.
+%
+category: 'other'
+method: UserInteraction
+message: messageString caption: captionString icon: iconSymbol buttons: buttonSymbol
+
+	^(System __sessionStateAt: 3)
+		message: messageString
+		caption: captionString
+		icon: iconSymbol
+		buttons: buttonSymbol.
+%
+category: 'other'
+method: UserInteraction
+prompt: promptString
+
+	^(System __sessionStateAt: 3)
+		prompt: promptString
+		caption: 'Python'.
+%
+category: 'other'
+method: UserInteraction
+prompt: promptString caption: captionString
+
+	^(System __sessionStateAt: 3)
+		prompt: promptString
+		caption: captionString
 %
