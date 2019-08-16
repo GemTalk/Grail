@@ -11,6 +11,57 @@ names := userProfile symbolList names.
 ].
 %
 set compile_env: 0
+! ------------------- Class definition for BreakNotification
+expectvalue /Class
+doit
+Notification subclass: 'BreakNotification'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+BreakNotification category: 'Kernel'
+%
+set compile_env: 0
+! ------------------- Class definition for CancelNotification
+expectvalue /Class
+doit
+Notification subclass: 'CancelNotification'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+CancelNotification category: 'Kernel'
+%
+set compile_env: 0
+! ------------------- Class definition for ContinueNotification
+expectvalue /Class
+doit
+Notification subclass: 'ContinueNotification'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+ContinueNotification category: 'Kernel'
+%
+set compile_env: 0
 ! ------------------- Class definition for Builtins
 expectvalue /Class
 doit
@@ -1932,6 +1983,23 @@ doit
 PyModule category: 'Parser'
 %
 set compile_env: 0
+! ------------------- Class definition for PyRandom
+expectvalue /Class
+doit
+PyModule subclass: 'PyRandom'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyRandom category: 'Builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for PyOperator
 expectvalue /Class
 doit
@@ -2399,6 +2467,33 @@ expectvalue /Class
 doit
 UserInteraction category: 'Kernel'
 %
+
+! ------------------- Remove existing behavior from BreakNotification
+expectvalue /Metaclass3       
+doit
+BreakNotification removeAllMethods.
+BreakNotification class removeAllMethods.
+%
+! ------------------- Class methods for BreakNotification
+! ------------------- Instance methods for BreakNotification
+
+! ------------------- Remove existing behavior from CancelNotification
+expectvalue /Metaclass3       
+doit
+CancelNotification removeAllMethods.
+CancelNotification class removeAllMethods.
+%
+! ------------------- Class methods for CancelNotification
+! ------------------- Instance methods for CancelNotification
+
+! ------------------- Remove existing behavior from ContinueNotification
+expectvalue /Metaclass3       
+doit
+ContinueNotification removeAllMethods.
+ContinueNotification class removeAllMethods.
+%
+! ------------------- Class methods for ContinueNotification
+! ------------------- Instance methods for ContinueNotification
 
 ! ------------------- Remove existing behavior from Builtins
 expectvalue /Metaclass3       
@@ -3258,7 +3353,15 @@ Monty Python's Flying Circus (took out qoutations)
 If the readline module was loaded, then input() will use it to provide
  elaborate line editing and history features.
 "
-^Py_String withAll: '2 2 2 2'
+	| prompt result |
+	prompt := arguments notEmpty
+		ifTrue: [String withAll: arguments first]
+		ifFalse: [''].
+	result := UserInteraction new prompt: prompt.
+	result ifNil: [CancelNotification signal].
+	result := result decodeToString.
+	self print: (Array with: arguments first with: (Py_String withAll: result)) keywords: keywords.
+	^Py_String withAll: result
 %
 category: 'functions'
 method: Builtins
@@ -3445,7 +3548,7 @@ items from all iterables in parallel. With multiple iterables, the iterator
 stops when the shortest iterable is exhausted. For cases where the
  function inputs are already arranged into argument tuples, see itertools.starmap().
 "
-^arguments second collect: [:each | arguments first value: each value: nil]
+^arguments second collect: [:each | arguments first value: (Array with: each) value: Dictionary new]
 %
 category: 'functions'
 method: Builtins
@@ -3659,7 +3762,9 @@ print: arguments keywords: keywords
 	arguments do: [:each | 
 		| string |
 		"https://docs.python.org/3/library/stdtypes.html#str"
-		string := each asString.
+		string := (each isKindOf: Py_String) 
+			ifTrue: [String withAll: each]
+			ifFalse: [each printString].
 		stream nextPutAll: string; nextPutAll: separator.
 	].
 	stream nextPutAll: terminator.
@@ -3674,14 +3779,6 @@ property: arguments keywords: keywords
 see documentation for more details
 "
 self halt.
-%
-category: 'functions'
-method: Builtins
-randint: arguments keywords: keywords
-	"This is not actually a builtin"
-	"It should be part of importing random"
-
-^Random new integerBetween: arguments first and: arguments second.
 %
 category: 'functions'
 method: Builtins
@@ -4138,8 +4235,11 @@ call: aPyCall
 category: 'other'
 method: Builtins
 variableAt: aName
-
-	^[:arguments :keywords | | x | x:= aName. self halt]
+	
+	| selector |
+	aName assertContextIsLoad.
+	selector := (aName id , ':keywords:') asSymbol.
+	^[:arguments :keywords | self perform: selector with: arguments with: keywords]
 
 "
 	| arguments keywords selector |
@@ -4521,8 +4621,8 @@ variableAt: aName
 %
 category: 'other'
 method: PyAstNode
-variableAt: aName put: aValue
-	^parent variableAt: aName put: aValue
+variableAt: aTarget put: aValue
+	^parent variableAt: aTarget put: aValue
 %
 
 ! ------------------- Remove existing behavior from PyAlias
@@ -4539,6 +4639,11 @@ method: PyAlias
 asName
 
 	^asName
+%
+category: 'other'
+method: PyAlias
+assign: aValue in: globals
+	globals at: self name put: aValue.
 %
 category: 'other'
 method: PyAlias
@@ -4840,7 +4945,7 @@ assertContextIsLoad
 category: 'other'
 method: PyBinOp
 evaluate
-	^op left:left right:right
+	^op left: left evaluate right: right evaluate
 %
 category: 'other'
 method: PyBinOp
@@ -5265,6 +5370,12 @@ assertContextIsStore
 %
 category: 'other'
 method: PyName
+assign: aValue in: globals
+
+	globals at: self id put: aValue.
+%
+category: 'other'
+method: PyName
 call: aPyCall
 	self assertContextIsLoad.
 	^Builtins current call: aPyCall
@@ -5471,6 +5582,26 @@ PySubscript class removeAllMethods.
 ! ------------------- Class methods for PySubscript
 ! ------------------- Instance methods for PySubscript
 set compile_env: 0
+category: 'other'
+method: PySubscript
+assertContextIsStore
+	value assertContextIsStore.
+%
+category: 'other'
+method: PySubscript
+assign: aValue in: globals 
+
+	slice assign: aValue to: value
+%
+category: 'other'
+method: PySubscript
+evaluate
+	| x |
+	value assertContextIsLoad.
+	x := self variableAt: value.
+	^slice evaluate: x
+	
+%
 category: 'other'
 method: PySubscript
 initialize
@@ -5840,6 +5971,11 @@ PyBreak class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyBreak
+evaluate
+	BreakNotification signal.
+%
+category: 'other'
+method: PyBreak
 initialize
 
 self readPositionOnly
@@ -5887,6 +6023,11 @@ set compile_env: 0
 category: 'other'
 method: PyContinue
 addMissingPositions
+%
+category: 'other'
+method: PyContinue
+evaluate
+	ContinueNotification signal
 %
 category: 'other'
 method: PyContinue
@@ -5966,9 +6107,17 @@ category: 'other'
 method: PyFor
 evaluate
 
-	iter evaluate do: [:i | 
-		parent variableAt: target put: i.
-		body do: [:each | each evaluate].
+	[
+		iter evaluate do: [:i | 
+			[
+				parent variableAt: target put: i.
+				body do: [:each | each evaluate].
+			] on: ContinueNotification do: [:ex |
+				ex return.
+			].
+		].
+	] on: BreakNotification do: [:ex |
+		ex return.
 	].
 	orelse do: [:each | each evaluate].
 %
@@ -6106,7 +6255,12 @@ addMissingPositions
 category: 'other'
 method: PyImport
 evaluate
-
+	(names size == 1 and: [names first name = 'random']) ifTrue: [
+		parent variableAt: names first put: PyRandom new.
+		^self
+	].
+	self halt.
+"
 	names do: [:each |
 		| module |
 		module := Builtins current
@@ -6117,6 +6271,7 @@ evaluate
 			_: 0.
 		module halt.
 	].
+"
 %
 category: 'other'
 method: PyImport
@@ -6209,6 +6364,11 @@ set compile_env: 0
 category: 'other'
 method: PyPass
 addMissingPositions
+%
+category: 'other'
+method: PyPass
+evaluate
+	"This is a NULL operation"
 %
 category: 'other'
 method: PyPass
@@ -6325,7 +6485,19 @@ addMissingPositions
 category: 'other'
 method: PyWhile
 evaluate
-	[test evaluate] whileTrue: [body do: [:each | each evaluate]].
+	[
+		[
+			test evaluate.
+		] whileTrue: [
+			[
+				body do: [:each | each evaluate].
+			] on: ContinueNotification do: [:ex |
+				ex return.
+			].
+		].
+	] on: BreakNotification do: [:ex | 
+		ex return.
+	].
 	orelse do: [:each | each evaluate].
 %
 category: 'other'
@@ -6499,7 +6671,7 @@ category: 'other'
 method: PyGtE
 left: leftOperand right: rightOperand
 
-	^leftOperand evaluate >= rightOperand evaluate
+	^leftOperand >= rightOperand
 %
 
 ! ------------------- Remove existing behavior from PyIn
@@ -6524,7 +6696,7 @@ category: 'other'
 method: PyIs
 left: leftOperand right: rightOperand
 
-	^leftOperand evaluate == rightOperand evaluate
+	^leftOperand == rightOperand
 %
 
 ! ------------------- Remove existing behavior from PyIsNot
@@ -6540,7 +6712,7 @@ category: 'other'
 method: PyIsNot
 left: leftOperand right: rightOperand
 
-	^(leftOperand evaluate == rightOperand evaluate) not
+	^(leftOperand == rightOperand) not
 %
 
 ! ------------------- Remove existing behavior from PyLt
@@ -6571,7 +6743,7 @@ category: 'other'
 method: PyLtE
 left: leftOperand right: rightOperand
 
-	^leftOperand evaluate <= rightOperand evaluate
+	^leftOperand <= rightOperand
 %
 
 ! ------------------- Remove existing behavior from PyNotEq
@@ -6828,11 +7000,15 @@ self halt.
 category: 'other'
 method: PyModule
 initialize
-	
+
 	| result |
 	globals := Dictionary new.
 	parent ifNil: [parent := PySystem new].
-	statements do: [:each | result := each evaluate].
+	[
+		statements do: [:each | result := each evaluate].
+	] on: CancelNotification do: [:ex |
+		ex return.
+	].
 	^result
 %
 category: 'other'
@@ -6925,10 +7101,27 @@ variableAt: aName
 %
 category: 'other'
 method: PyModule
-variableAt: aName put: aValue
+variableAt: aTarget put: aValue
 	
-	aName assertContextIsStore.
-	globals at: aName id put: aValue.
+	aTarget assign: aValue in: globals
+%
+
+! ------------------- Remove existing behavior from PyRandom
+expectvalue /Metaclass3       
+doit
+PyRandom removeAllMethods.
+PyRandom class removeAllMethods.
+%
+! ------------------- Class methods for PyRandom
+! ------------------- Instance methods for PyRandom
+set compile_env: 0
+category: 'functions'
+method: PyRandom
+randint: arguments keywords: keywords
+	"This is not actually a builtin"
+	"It should be part of importing random"
+
+^Random new integerBetween: arguments first and: arguments second.
 %
 
 ! ------------------- Remove existing behavior from PyOperator
@@ -6978,7 +7171,7 @@ category: 'other'
 method: PyAdd
 left: leftOperand right: rightOperand
 
-	^leftOperand + rightOperand 
+	^leftOperand + rightOperand
 %
 
 ! ------------------- Remove existing behavior from PyBitAnd
@@ -7042,7 +7235,7 @@ category: 'other'
 method: PyDiv
 left: leftOperand right: rightOperand
 
-	^(leftOperand evaluate / rightOperand evaluate)asFloat
+	^(leftOperand / rightOperand) asFloat
 %
 
 ! ------------------- Remove existing behavior from PyFloorDiv
@@ -7058,7 +7251,7 @@ category: 'other'
 method: PyFloorDiv
 left: leftOperand right: rightOperand
 
-	^leftOperand evaluate // rightOperand evaluate
+	^leftOperand // rightOperand
 %
 
 ! ------------------- Remove existing behavior from PyLShift
@@ -7074,7 +7267,7 @@ category: 'other'
 method: PyLShift
 left: leftOperand right: rightOperand
 
-	^leftOperand evaluate bitShift: rightOperand evaluate
+	^leftOperand bitShift: rightOperand
 %
 
 ! ------------------- Remove existing behavior from PyMatMult
@@ -7090,7 +7283,7 @@ category: 'other'
 method: PyMatMult
 left: leftOperand right: rightOperand
 	self error.
-	^leftOperand evaluate bitShift: rightOperand evaluate
+	^leftOperand bitShift: rightOperand
 %
 
 ! ------------------- Remove existing behavior from PyMod
@@ -7106,7 +7299,7 @@ category: 'other'
 method: PyMod
 left: leftOperand right: rightOperand
 
-	^leftOperand evaluate rem: rightOperand evaluate
+	^leftOperand rem: rightOperand
 %
 
 ! ------------------- Remove existing behavior from PyMult
@@ -7122,7 +7315,7 @@ category: 'other'
 method: PyMult
 left: leftOperand right: rightOperand
 
-	^leftOperand evaluate * rightOperand evaluate
+	^leftOperand * rightOperand
 %
 
 ! ------------------- Remove existing behavior from PyPow
@@ -7138,7 +7331,7 @@ category: 'other'
 method: PyPow
 left: leftOperand right: rightOperand
 
-	^leftOperand evaluate raisedTo: rightOperand evaluate
+	^leftOperand raisedTo: rightOperand
 %
 
 ! ------------------- Remove existing behavior from PyRShift
@@ -7170,7 +7363,7 @@ category: 'other'
 method: PySub
 left: leftOperand right: rightOperand
 
-	^leftOperand evaluate - rightOperand evaluate
+	^leftOperand - rightOperand
 %
 
 ! ------------------- Remove existing behavior from Pyslice
@@ -7191,6 +7384,17 @@ sliceFrom: aNode
 	^class parent: aNode
 %
 ! ------------------- Instance methods for Pyslice
+set compile_env: 0
+category: 'other'
+method: Pyslice
+assign: aValue to: aVariable
+	self subclassResponsibility.
+%
+category: 'other'
+method: Pyslice
+evaluate: aList
+	self subclassResponsibility
+%
 
 ! ------------------- Remove existing behavior from PyExtSlice
 expectvalue /Metaclass3       
@@ -7220,6 +7424,20 @@ PyIndex class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyIndex
+assign: aValue to: aVariable
+	| x y |
+	x := value evaluate.
+	y := aVariable evaluate.
+	y at: x + 1 put: aValue.
+%
+category: 'other'
+method: PyIndex
+evaluate: aList
+	value assertContextIsLoad.
+	^aList at: value evaluate + 1.
+%
+category: 'other'
+method: PyIndex
 initialize
 	"Index(expr value)"
 	
@@ -7236,6 +7454,11 @@ PySlice class removeAllMethods.
 ! ------------------- Class methods for PySlice
 ! ------------------- Instance methods for PySlice
 set compile_env: 0
+category: 'other'
+method: PySlice
+evaluate: aList
+	self halt.
+%
 category: 'other'
 method: PySlice
 initialize

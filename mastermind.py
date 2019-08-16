@@ -1,12 +1,12 @@
-#import random
+import random
 
 humanChoices = []
 cpChoices = []
 turnCount = 0
 
 for x in range(4):
-    #cpChoices.append(random.randint(1, 6))
-    cpChoices.append(randint(1, 6))
+    cpChoices.append(random.randint(1, 6))
+    #cpChoices.append(randint(1, 6))
     
 print("The Computer has chosen 4 colors.")
 print("The colors are labeled by the numbers as followed")
