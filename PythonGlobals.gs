@@ -10,6 +10,58 @@ names := userProfile symbolList names.
 	userProfile insertDictionary: symbolDictionary at: names size + 1.
 ].
 %
+set compile_env: 0
+! ------------------- Class definition for BreakNotification
+expectvalue /Class
+doit
+Notification subclass: 'BreakNotification'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+BreakNotification category: 'Kernel'
+%
+set compile_env: 0
+! ------------------- Class definition for CancelNotification
+expectvalue /Class
+doit
+Notification subclass: 'CancelNotification'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+CancelNotification category: 'Kernel'
+%
+set compile_env: 0
+! ------------------- Class definition for ContinueNotification
+expectvalue /Class
+doit
+Notification subclass: 'ContinueNotification'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+ContinueNotification category: 'Kernel'
+%
+set compile_env: 0
 ! ------------------- Class definition for Builtins
 expectvalue /Class
 doit
@@ -24,8 +76,60 @@ Object subclass: 'Builtins'
 %
 expectvalue /Class
 doit
-Builtins category: 'Parser'
+Builtins category: 'Builtins'
 %
+set compile_env: 0
+! ------------------- Class definition for Py_List
+expectvalue /Class
+doit
+Array subclass: 'Py_List'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+Py_List category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for Py_Tuple
+expectvalue /Class
+doit
+Array subclass: 'Py_Tuple'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+Py_Tuple category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for Py_String
+expectvalue /Class
+doit
+String subclass: 'Py_String'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+Py_String category: 'Builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for Complex
 expectvalue /Class
 doit
@@ -50,6 +154,7 @@ expectvalue /Class
 doit
 Complex category: 'Builtins'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAstNode
 expectvalue /Class
 doit
@@ -74,6 +179,7 @@ expectvalue /Class
 doit
 PyAstNode category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAlias
 expectvalue /Class
 doit
@@ -99,6 +205,7 @@ expectvalue /Class
 doit
 PyAlias category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyArguments
 expectvalue /Class
 doit
@@ -116,6 +223,7 @@ expectvalue /Class
 doit
 PyArguments category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAstNodeWithLocation
 expectvalue /Class
 doit
@@ -141,6 +249,7 @@ expectvalue /Class
 doit
 PyAstNodeWithLocation category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyArg
 expectvalue /Class
 doit
@@ -166,6 +275,7 @@ expectvalue /Class
 doit
 PyArg category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyExceptHandler
 expectvalue /Class
 doit
@@ -192,6 +302,7 @@ expectvalue /Class
 doit
 PyExceptHandler category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyExpression
 expectvalue /Class
 doit
@@ -217,6 +328,7 @@ expectvalue /Class
 doit
 PyExpression category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAttribute
 expectvalue /Class
 doit
@@ -243,6 +355,7 @@ expectvalue /Class
 doit
 PyAttribute category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAwait
 expectvalue /Class
 doit
@@ -259,6 +372,7 @@ expectvalue /Class
 doit
 PyAwait category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyBinOp
 expectvalue /Class
 doit
@@ -275,6 +389,7 @@ expectvalue /Class
 doit
 PyBinOp category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyBoolOp
 expectvalue /Class
 doit
@@ -291,6 +406,7 @@ expectvalue /Class
 doit
 PyBoolOp category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyBytes
 expectvalue /Class
 doit
@@ -307,6 +423,7 @@ expectvalue /Class
 doit
 PyBytes category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyCall
 expectvalue /Class
 doit
@@ -333,6 +450,7 @@ expectvalue /Class
 doit
 PyCall category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyCompare
 expectvalue /Class
 doit
@@ -359,6 +477,7 @@ expectvalue /Class
 doit
 PyCompare category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyConstant
 expectvalue /Class
 doit
@@ -375,6 +494,7 @@ expectvalue /Class
 doit
 PyConstant category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyDict
 expectvalue /Class
 doit
@@ -391,6 +511,7 @@ expectvalue /Class
 doit
 PyDict category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyDictComp
 expectvalue /Class
 doit
@@ -407,6 +528,7 @@ expectvalue /Class
 doit
 PyDictComp category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyEllipsis
 expectvalue /Class
 doit
@@ -423,6 +545,7 @@ expectvalue /Class
 doit
 PyEllipsis category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyFormattedValue
 expectvalue /Class
 doit
@@ -439,6 +562,7 @@ expectvalue /Class
 doit
 PyFormattedValue category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyGeneratorExp
 expectvalue /Class
 doit
@@ -455,6 +579,7 @@ expectvalue /Class
 doit
 PyGeneratorExp category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyIfExp
 expectvalue /Class
 doit
@@ -482,6 +607,7 @@ expectvalue /Class
 doit
 PyIfExp category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyJoinedStr
 expectvalue /Class
 doit
@@ -498,6 +624,7 @@ expectvalue /Class
 doit
 PyJoinedStr category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyLambda
 expectvalue /Class
 doit
@@ -525,6 +652,7 @@ expectvalue /Class
 doit
 PyLambda category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyList
 expectvalue /Class
 doit
@@ -541,6 +669,7 @@ expectvalue /Class
 doit
 PyList category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyListComp
 expectvalue /Class
 doit
@@ -557,6 +686,7 @@ expectvalue /Class
 doit
 PyListComp category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyName
 expectvalue /Class
 doit
@@ -573,6 +703,7 @@ expectvalue /Class
 doit
 PyName category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyNameConstant
 expectvalue /Class
 doit
@@ -589,6 +720,7 @@ expectvalue /Class
 doit
 PyNameConstant category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyNum
 expectvalue /Class
 doit
@@ -605,6 +737,7 @@ expectvalue /Class
 doit
 PyNum category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PySet
 expectvalue /Class
 doit
@@ -621,6 +754,7 @@ expectvalue /Class
 doit
 PySet category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PySetComp
 expectvalue /Class
 doit
@@ -637,6 +771,7 @@ expectvalue /Class
 doit
 PySetComp category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyStarred
 expectvalue /Class
 doit
@@ -653,6 +788,7 @@ expectvalue /Class
 doit
 PyStarred category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyStr
 expectvalue /Class
 doit
@@ -679,6 +815,7 @@ expectvalue /Class
 doit
 PyStr category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PySubscript
 expectvalue /Class
 doit
@@ -695,6 +832,7 @@ expectvalue /Class
 doit
 PySubscript category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyTuple
 expectvalue /Class
 doit
@@ -711,6 +849,7 @@ expectvalue /Class
 doit
 PyTuple category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyUnaryOp
 expectvalue /Class
 doit
@@ -727,6 +866,7 @@ expectvalue /Class
 doit
 PyUnaryOp category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyYield
 expectvalue /Class
 doit
@@ -743,6 +883,7 @@ expectvalue /Class
 doit
 PyYield category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyYieldFrom
 expectvalue /Class
 doit
@@ -759,6 +900,7 @@ expectvalue /Class
 doit
 PyYieldFrom category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyStatement
 expectvalue /Class
 doit
@@ -784,6 +926,7 @@ expectvalue /Class
 doit
 PyStatement category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAnnAssign
 expectvalue /Class
 doit
@@ -811,6 +954,7 @@ expectvalue /Class
 doit
 PyAnnAssign category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAssert
 expectvalue /Class
 doit
@@ -837,6 +981,7 @@ expectvalue /Class
 doit
 PyAssert category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAssign
 expectvalue /Class
 doit
@@ -863,6 +1008,7 @@ expectvalue /Class
 doit
 PyAssign category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAsyncFor
 expectvalue /Class
 doit
@@ -880,6 +1026,7 @@ expectvalue /Class
 doit
 PyAsyncFor category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAsyncFunctionDef
 expectvalue /Class
 doit
@@ -897,6 +1044,7 @@ expectvalue /Class
 doit
 PyAsyncFunctionDef category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAsyncWith
 expectvalue /Class
 doit
@@ -913,6 +1061,7 @@ expectvalue /Class
 doit
 PyAsyncWith category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAugAssign
 expectvalue /Class
 doit
@@ -929,6 +1078,7 @@ expectvalue /Class
 doit
 PyAugAssign category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyBreak
 expectvalue /Class
 doit
@@ -945,6 +1095,7 @@ expectvalue /Class
 doit
 PyBreak category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyClassDef
 expectvalue /Class
 doit
@@ -972,6 +1123,7 @@ expectvalue /Class
 doit
 PyClassDef category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyContinue
 expectvalue /Class
 doit
@@ -988,6 +1140,7 @@ expectvalue /Class
 doit
 PyContinue category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyDelete
 expectvalue /Class
 doit
@@ -1014,6 +1167,7 @@ expectvalue /Class
 doit
 PyDelete category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyExpr
 expectvalue /Class
 doit
@@ -1040,6 +1194,7 @@ expectvalue /Class
 doit
 PyExpr category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyFor
 expectvalue /Class
 doit
@@ -1057,6 +1212,7 @@ expectvalue /Class
 doit
 PyFor category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyFunctionDef
 expectvalue /Class
 doit
@@ -1074,6 +1230,7 @@ expectvalue /Class
 doit
 PyFunctionDef category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyGlobal
 expectvalue /Class
 doit
@@ -1090,6 +1247,7 @@ expectvalue /Class
 doit
 PyGlobal category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyIf
 expectvalue /Class
 doit
@@ -1115,6 +1273,7 @@ expectvalue /Class
 doit
 PyIf category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyImport
 expectvalue /Class
 doit
@@ -1140,6 +1299,7 @@ expectvalue /Class
 doit
 PyImport category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyImportFrom
 expectvalue /Class
 doit
@@ -1166,6 +1326,7 @@ expectvalue /Class
 doit
 PyImportFrom category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyNonlocal
 expectvalue /Class
 doit
@@ -1182,6 +1343,7 @@ expectvalue /Class
 doit
 PyNonlocal category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyPass
 expectvalue /Class
 doit
@@ -1198,6 +1360,7 @@ expectvalue /Class
 doit
 PyPass category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyRaise
 expectvalue /Class
 doit
@@ -1214,6 +1377,7 @@ expectvalue /Class
 doit
 PyRaise category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyReturn
 expectvalue /Class
 doit
@@ -1240,6 +1404,7 @@ expectvalue /Class
 doit
 PyReturn category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyTry
 expectvalue /Class
 doit
@@ -1257,6 +1422,7 @@ expectvalue /Class
 doit
 PyTry category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyWhile
 expectvalue /Class
 doit
@@ -1283,6 +1449,7 @@ expectvalue /Class
 doit
 PyWhile category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyWith
 expectvalue /Class
 doit
@@ -1299,6 +1466,7 @@ expectvalue /Class
 doit
 PyWith category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyBoolop
 expectvalue /Class
 doit
@@ -1315,6 +1483,7 @@ expectvalue /Class
 doit
 PyBoolop category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAnd
 expectvalue /Class
 doit
@@ -1331,6 +1500,7 @@ expectvalue /Class
 doit
 PyAnd category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyOr
 expectvalue /Class
 doit
@@ -1347,6 +1517,7 @@ expectvalue /Class
 doit
 PyOr category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyCmpop
 expectvalue /Class
 doit
@@ -1363,6 +1534,7 @@ expectvalue /Class
 doit
 PyCmpop category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyEq
 expectvalue /Class
 doit
@@ -1389,6 +1561,7 @@ expectvalue /Class
 doit
 PyEq category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyGt
 expectvalue /Class
 doit
@@ -1415,6 +1588,7 @@ expectvalue /Class
 doit
 PyGt category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyGtE
 expectvalue /Class
 doit
@@ -1441,6 +1615,7 @@ expectvalue /Class
 doit
 PyGtE category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyIn
 expectvalue /Class
 doit
@@ -1467,6 +1642,7 @@ expectvalue /Class
 doit
 PyIn category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyIs
 expectvalue /Class
 doit
@@ -1493,6 +1669,7 @@ expectvalue /Class
 doit
 PyIs category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyIsNot
 expectvalue /Class
 doit
@@ -1519,6 +1696,7 @@ expectvalue /Class
 doit
 PyIsNot category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyLt
 expectvalue /Class
 doit
@@ -1545,6 +1723,7 @@ expectvalue /Class
 doit
 PyLt category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyLtE
 expectvalue /Class
 doit
@@ -1571,10 +1750,11 @@ expectvalue /Class
 doit
 PyLtE category: 'Parser'
 %
-! ------------------- Class definition for PyNotEQ
+set compile_env: 0
+! ------------------- Class definition for PyNotEq
 expectvalue /Class
 doit
-PyCmpop subclass: 'PyNotEQ'
+PyCmpop subclass: 'PyNotEq'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -1585,8 +1765,9 @@ PyCmpop subclass: 'PyNotEQ'
 %
 expectvalue /Class
 doit
-PyNotEQ category: 'Parser'
+PyNotEq category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyNotIn
 expectvalue /Class
 doit
@@ -1613,6 +1794,7 @@ expectvalue /Class
 doit
 PyNotIn category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyComprehension
 expectvalue /Class
 doit
@@ -1630,6 +1812,7 @@ expectvalue /Class
 doit
 PyComprehension category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyExpressionContext
 expectvalue /Class
 doit
@@ -1655,6 +1838,7 @@ expectvalue /Class
 doit
 PyExpressionContext category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAugLoad
 expectvalue /Class
 doit
@@ -1671,6 +1855,7 @@ expectvalue /Class
 doit
 PyAugLoad category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAugStore
 expectvalue /Class
 doit
@@ -1687,6 +1872,7 @@ expectvalue /Class
 doit
 PyAugStore category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyDel
 expectvalue /Class
 doit
@@ -1703,6 +1889,7 @@ expectvalue /Class
 doit
 PyDel category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyLoad
 expectvalue /Class
 doit
@@ -1719,6 +1906,7 @@ expectvalue /Class
 doit
 PyLoad category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyParam
 expectvalue /Class
 doit
@@ -1735,6 +1923,7 @@ expectvalue /Class
 doit
 PyParam category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyStore
 expectvalue /Class
 doit
@@ -1751,6 +1940,7 @@ expectvalue /Class
 doit
 PyStore category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyKeyword
 expectvalue /Class
 doit
@@ -1767,6 +1957,7 @@ expectvalue /Class
 doit
 PyKeyword category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyModule
 expectvalue /Class
 doit
@@ -1791,6 +1982,24 @@ expectvalue /Class
 doit
 PyModule category: 'Parser'
 %
+set compile_env: 0
+! ------------------- Class definition for PyRandom
+expectvalue /Class
+doit
+PyModule subclass: 'PyRandom'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyRandom category: 'Builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for PyOperator
 expectvalue /Class
 doit
@@ -1807,6 +2016,7 @@ expectvalue /Class
 doit
 PyOperator category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyAdd
 expectvalue /Class
 doit
@@ -1823,6 +2033,7 @@ expectvalue /Class
 doit
 PyAdd category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyBitAnd
 expectvalue /Class
 doit
@@ -1839,6 +2050,7 @@ expectvalue /Class
 doit
 PyBitAnd category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyBitOr
 expectvalue /Class
 doit
@@ -1855,6 +2067,7 @@ expectvalue /Class
 doit
 PyBitOr category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyBitXor
 expectvalue /Class
 doit
@@ -1871,6 +2084,7 @@ expectvalue /Class
 doit
 PyBitXor category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyDiv
 expectvalue /Class
 doit
@@ -1887,6 +2101,7 @@ expectvalue /Class
 doit
 PyDiv category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyFloorDiv
 expectvalue /Class
 doit
@@ -1903,6 +2118,7 @@ expectvalue /Class
 doit
 PyFloorDiv category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyLShift
 expectvalue /Class
 doit
@@ -1919,6 +2135,7 @@ expectvalue /Class
 doit
 PyLShift category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyMatMult
 expectvalue /Class
 doit
@@ -1935,6 +2152,7 @@ expectvalue /Class
 doit
 PyMatMult category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyMod
 expectvalue /Class
 doit
@@ -1951,6 +2169,7 @@ expectvalue /Class
 doit
 PyMod category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyMult
 expectvalue /Class
 doit
@@ -1967,6 +2186,7 @@ expectvalue /Class
 doit
 PyMult category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyPow
 expectvalue /Class
 doit
@@ -1983,6 +2203,7 @@ expectvalue /Class
 doit
 PyPow category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyRShift
 expectvalue /Class
 doit
@@ -1999,6 +2220,7 @@ expectvalue /Class
 doit
 PyRShift category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PySub
 expectvalue /Class
 doit
@@ -2015,6 +2237,7 @@ expectvalue /Class
 doit
 PySub category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for Pyslice
 expectvalue /Class
 doit
@@ -2031,6 +2254,7 @@ expectvalue /Class
 doit
 Pyslice category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyExtSlice
 expectvalue /Class
 doit
@@ -2047,6 +2271,7 @@ expectvalue /Class
 doit
 PyExtSlice category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyIndex
 expectvalue /Class
 doit
@@ -2063,6 +2288,7 @@ expectvalue /Class
 doit
 PyIndex category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PySlice
 expectvalue /Class
 doit
@@ -2079,6 +2305,7 @@ expectvalue /Class
 doit
 PySlice category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyUnaryop
 expectvalue /Class
 doit
@@ -2095,6 +2322,7 @@ expectvalue /Class
 doit
 PyUnaryop category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyInvert
 expectvalue /Class
 doit
@@ -2111,6 +2339,7 @@ expectvalue /Class
 doit
 PyInvert category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyNot
 expectvalue /Class
 doit
@@ -2127,6 +2356,7 @@ expectvalue /Class
 doit
 PyNot category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyUAdd
 expectvalue /Class
 doit
@@ -2143,6 +2373,7 @@ expectvalue /Class
 doit
 PyUAdd category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyUSub
 expectvalue /Class
 doit
@@ -2159,6 +2390,7 @@ expectvalue /Class
 doit
 PyUSub category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyWithItem
 expectvalue /Class
 doit
@@ -2175,6 +2407,7 @@ expectvalue /Class
 doit
 PyWithItem category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PySystem
 expectvalue /Class
 doit
@@ -2191,6 +2424,7 @@ expectvalue /Class
 doit
 PySystem category: 'Parser'
 %
+set compile_env: 0
 ! ------------------- Class definition for PyToken
 expectvalue /Class
 doit
@@ -2216,6 +2450,50 @@ expectvalue /Class
 doit
 PyToken category: 'Parser'
 %
+set compile_env: 0
+! ------------------- Class definition for UserInteraction
+expectvalue /Class
+doit
+Object subclass: 'UserInteraction'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+UserInteraction category: 'Kernel'
+%
+
+! ------------------- Remove existing behavior from BreakNotification
+expectvalue /Metaclass3       
+doit
+BreakNotification removeAllMethods.
+BreakNotification class removeAllMethods.
+%
+! ------------------- Class methods for BreakNotification
+! ------------------- Instance methods for BreakNotification
+
+! ------------------- Remove existing behavior from CancelNotification
+expectvalue /Metaclass3       
+doit
+CancelNotification removeAllMethods.
+CancelNotification class removeAllMethods.
+%
+! ------------------- Class methods for CancelNotification
+! ------------------- Instance methods for CancelNotification
+
+! ------------------- Remove existing behavior from ContinueNotification
+expectvalue /Metaclass3       
+doit
+ContinueNotification removeAllMethods.
+ContinueNotification class removeAllMethods.
+%
+! ------------------- Class methods for ContinueNotification
+! ------------------- Instance methods for ContinueNotification
 
 ! ------------------- Remove existing behavior from Builtins
 expectvalue /Metaclass3       
@@ -2247,67 +2525,6 @@ default
 %
 ! ------------------- Instance methods for Builtins
 set compile_env: 0
-category: 'functions'
-method: Builtins
-__import__: arguments keywords: keywords
-	"https://docs.python.org/3/library/functions.html"
-	
-"
-__import__(name, globals=None, locals=None, fromlist=(), level=0)
-Note This is an advanced function that is not needed in everyday 
-Python programming, unlike importlib.import_module().
-This function is invoked by the import statement. It can be replaced
- (by importing the builtins module and assigning to builtins.__import__) 
-in order to change semantics of the import statement, but doing so is 
-strongly discouraged as it is usually simpler to use import hooks (see PEP 302)
- to attain the same goals and does not cause issues with code which assumes 
-the default import implementation is in use. Direct use of __import__() is 
-also discouraged in favor of importlib.import_module().
-
-The function imports the module name, potentially using the given globals
- and locals to determine how to interpret the name in a package context.
- The fromlist gives the names of objects or submodules that should be
- imported from the module given by name. The standard implementation
- does not use its locals argument at all, and uses its globals only to determine
-\ the package context of the import statement.
-
-level specifies whether to use absolute or relative imports. 0 (the default) 
-means only perform absolute imports. Positive values for level indicate the 
-number of parent directories to search relative to the directory of the module 
-calling __import__() (see PEP 328 for the details).
-
-
-When the name variable is of the form package.module, normally, the top
--level package (the name up till the first dot) is returned, not the module 
-named by name. However, when a non-empty fromlist argument is given,
- the module named by name is returned.
-
-For example, the statement import spam results in bytecode resembling 
-the following code:
-
-spam = __import__('spam', globals(), locals(), [], 0)
-The statement import spam.ham results in this call:
-
-spam = __import__('spam.ham', globals(), locals(), [], 0)
-Note how __import__() returns the toplevel module here because 
-this is the object that is bound to a name by the import statement.
-
-On the other hand, the statement from spam.ham import eggs, sausage as saus results in
-
-_temp = __import__('spam.ham', globals(), locals(), ['eggs', 'sausage'], 0)
-eggs = _temp.eggs
-saus = _temp.sausage
-Here, the spam.ham module is returned from __import__(). From this 
-object, the names to import are retrieved and assigned to their respective names.
-
-If you simply want to import a module (potentially within a package) 
-by name, use importlib.import_module().
-
-Changed in version 3.3: Negative values for level are no longer 
-supported (which also changes the default value to 0).
-"
-self halt.
-%
 category: 'functions'
 method: Builtins
 abs: arguments keywords: keywords
@@ -2476,16 +2693,9 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-call: aPyCall
+call: mySelector arguments: myArguments keywords: myKeywords
 
-	| arguments keywords selector |
-	selector := (aPyCall functionName , ':keywords:') asSymbol.
-	arguments := aPyCall arguments collect: [:each | each evaluate].
-	keywords := Dictionary new.
-	aPyCall keywords do: [:each | 
-		keywords at: each name put: each value evaluate.
-	].
-	^self perform: selector with: arguments with: keywords.
+	^self perform: mySelector with: myArguments with: myKeywords.
 %
 category: 'functions'
 method: Builtins
@@ -3143,7 +3353,15 @@ Monty Python's Flying Circus (took out qoutations)
 If the readline module was loaded, then input() will use it to provide
  elaborate line editing and history features.
 "
-self halt.
+	| prompt result |
+	prompt := arguments notEmpty
+		ifTrue: [String withAll: arguments first]
+		ifFalse: [''].
+	result := UserInteraction new prompt: prompt.
+	result ifNil: [CancelNotification signal].
+	result := result decodeToString.
+	self print: (Array with: arguments first with: (Py_String withAll: result)) keywords: keywords.
+	^Py_String withAll: result
 %
 category: 'functions'
 method: Builtins
@@ -3296,7 +3514,7 @@ Rather than being a function, list is actually a
 mutable sequence type, as documented in Lists and 
 Sequence Types — list, tuple, range.
 "
-	^arguments first asArray copy
+	^Py_List withAll: arguments first
 %
 category: 'functions'
 method: Builtins
@@ -3330,7 +3548,7 @@ items from all iterables in parallel. With multiple iterables, the iterator
 stops when the shortest iterable is exhausted. For cases where the
  function inputs are already arranged into argument tuples, see itertools.starmap().
 "
-self halt.
+^arguments second collect: [:each | arguments first value: (Array with: each) value: Dictionary new]
 %
 category: 'functions'
 method: Builtins
@@ -3544,7 +3762,9 @@ print: arguments keywords: keywords
 	arguments do: [:each | 
 		| string |
 		"https://docs.python.org/3/library/stdtypes.html#str"
-		string := each printString.
+		string := (each isKindOf: Py_String) 
+			ifTrue: [String withAll: each]
+			ifFalse: [each printString].
 		stream nextPutAll: string; nextPutAll: separator.
 	].
 	stream nextPutAll: terminator.
@@ -3571,7 +3791,10 @@ range(start, stop[, step])
 Rather than being a function, range is actually an immutable sequence type, as documented 
 in Ranges and Sequence Types — list, tuple, range.
 "
-self halt.
+
+arguments size == 1 ifTrue: [^Interval from: 0 to: arguments first - 1].
+arguments size == 2 ifTrue: [^Interval from: arguments first to: arguments second - 1].
+^Interval from: arguments first to: arguments second - 1 by: (arguments at: 3).
 %
 category: 'functions'
 method: Builtins
@@ -3934,13 +4157,158 @@ True
 "
 self halt.
 %
+category: 'functions'
+method: Builtins
+__import__: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+__import__(name, globals=None, locals=None, fromlist=(), level=0)
+Note This is an advanced function that is not needed in everyday 
+Python programming, unlike importlib.import_module().
+This function is invoked by the import statement. It can be replaced
+ (by importing the builtins module and assigning to builtins.__import__) 
+in order to change semantics of the import statement, but doing so is 
+strongly discouraged as it is usually simpler to use import hooks (see PEP 302)
+ to attain the same goals and does not cause issues with code which assumes 
+the default import implementation is in use. Direct use of __import__() is 
+also discouraged in favor of importlib.import_module().
+
+The function imports the module name, potentially using the given globals
+ and locals to determine how to interpret the name in a package context.
+ The fromlist gives the names of objects or submodules that should be
+ imported from the module given by name. The standard implementation
+ does not use its locals argument at all, and uses its globals only to determine
+\ the package context of the import statement.
+
+level specifies whether to use absolute or relative imports. 0 (the default) 
+means only perform absolute imports. Positive values for level indicate the 
+number of parent directories to search relative to the directory of the module 
+calling __import__() (see PEP 328 for the details).
+
+
+When the name variable is of the form package.module, normally, the top
+-level package (the name up till the first dot) is returned, not the module 
+named by name. However, when a non-empty fromlist argument is given,
+ the module named by name is returned.
+
+For example, the statement import spam results in bytecode resembling 
+the following code:
+
+spam = __import__('spam', globals(), locals(), [], 0)
+The statement import spam.ham results in this call:
+
+spam = __import__('spam.ham', globals(), locals(), [], 0)
+Note how __import__() returns the toplevel module here because 
+this is the object that is bound to a name by the import statement.
+
+On the other hand, the statement from spam.ham import eggs, sausage as saus results in
+
+_temp = __import__('spam.ham', globals(), locals(), ['eggs', 'sausage'], 0)
+eggs = _temp.eggs
+saus = _temp.sausage
+Here, the spam.ham module is returned from __import__(). From this 
+object, the names to import are retrieved and assigned to their respective names.
+
+If you simply want to import a module (potentially within a package) 
+by name, use importlib.import_module().
+
+Changed in version 3.3: Negative values for level are no longer 
+supported (which also changes the default value to 0).
+"
+self halt.
+%
 set compile_env: 0
+category: 'other'
+method: Builtins
+call: aPyCall
+
+	| arguments keywords selector |
+	selector := (aPyCall functionName , ':keywords:') asSymbol.
+	arguments := aPyCall arguments collect: [:each | each evaluate].
+	keywords := Dictionary new.
+	aPyCall keywords do: [:each | 
+		keywords at: each name put: each value evaluate.
+	].
+	^self perform: selector with: arguments with: keywords.
+%
+category: 'other'
+method: Builtins
+variableAt: aName
+	
+	| selector |
+	aName assertContextIsLoad.
+	selector := (aName id , ':keywords:') asSymbol.
+	^[:arguments :keywords | self perform: selector with: arguments with: keywords]
+
+"
+	| arguments keywords selector |
+	selector := (aPyCall functionName , ':keywords:') asSymbol.
+	arguments := aPyCall arguments collect: [:each | each evaluate].
+	keywords := Dictionary new.
+	aPyCall keywords do: [:each | 
+		keywords at: each name put: each value evaluate.
+	].
+	^self perform: selector with: arguments with: keywords.
+"
+%
 category: 'other'
 method: Builtins
 __import__: name _: globals _: locals _: fromList _: level
 	"(name, globals=None, locals=None, fromlist=(), level=0)"
 
 	self halt.
+%
+
+! ------------------- Remove existing behavior from Py_List
+expectvalue /Metaclass3       
+doit
+Py_List removeAllMethods.
+Py_List class removeAllMethods.
+%
+! ------------------- Class methods for Py_List
+! ------------------- Instance methods for Py_List
+set compile_env: 0
+category: 'other'
+method: Py_List
+append: arguments keywords: keywords
+
+^self add: arguments first
+%
+
+! ------------------- Remove existing behavior from Py_Tuple
+expectvalue /Metaclass3       
+doit
+Py_Tuple removeAllMethods.
+Py_Tuple class removeAllMethods.
+%
+! ------------------- Class methods for Py_Tuple
+! ------------------- Instance methods for Py_Tuple
+
+! ------------------- Remove existing behavior from Py_String
+expectvalue /Metaclass3       
+doit
+Py_String removeAllMethods.
+Py_String class removeAllMethods.
+%
+! ------------------- Class methods for Py_String
+! ------------------- Instance methods for Py_String
+set compile_env: 0
+category: 'other'
+method: Py_String
+split: arguments keywords: keywords
+	"string.split(separator, max)
+
+		The split() method splits a string into a list.
+
+		You can specify the separator, default separator is any whitespace.
+
+		Note: When max is specified, the list will contain the specified number of elements plus one.
+
+		separator	Optional. Specifies the separator to use when splitting the string. Default value is a whitespace
+		max	Optional. Specifies how many splits to do. Default value is -1, which is ""all occurrences"""
+	
+^Py_List withAll: self subStrings
 %
 
 ! ------------------- Remove existing behavior from Complex
@@ -3976,14 +4344,6 @@ real
 set compile_env: 0
 category: 'Arithmetic'
 method: Complex
-- aNumber
-	(aNumber isKindOf: Complex) ifTrue: [
-		^Complex real: self real - aNumber real imag: self imaginary - aNumber imaginary
-	].
-	^self _retry: #+ coercing: aNumber
-%
-category: 'Arithmetic'
-method: Complex
 * aNumber
 	(aNumber isKindOf: Complex) ifTrue: [
 		^Complex real: (self real * aNumber real) + (self imaginary * aNumber imaginary)negated
@@ -3993,20 +4353,28 @@ method: Complex
 %
 category: 'Arithmetic'
 method: Complex
++ aNumber
+	(aNumber isKindOf: Complex) ifTrue: [
+		^Complex real: self real + aNumber real imag: self imaginary + aNumber imaginary
+	].
+	^self _retry: #+ coercing: aNumber
+%
+category: 'Arithmetic'
+method: Complex
+- aNumber
+	(aNumber isKindOf: Complex) ifTrue: [
+		^Complex real: self real - aNumber real imag: self imaginary - aNumber imaginary
+	].
+	^self _retry: #+ coercing: aNumber
+%
+category: 'Arithmetic'
+method: Complex
 / aNumber
 	(aNumber isKindOf: Complex) ifTrue: [
 		^Complex real: (self real * aNumber real) + (self imaginary * aNumber imaginary)negated
 		imag: (self real * aNumber imaginary) + (self imaginary * aNumber real)
 	].
 	^self _retry: #/ coercing: aNumber
-%
-category: 'Arithmetic'
-method: Complex
-+ aNumber
-	(aNumber isKindOf: Complex) ifTrue: [
-		^Complex real: self real + aNumber real imag: self imaginary + aNumber imaginary
-	].
-	^self _retry: #+ coercing: aNumber
 %
 category: 'Arithmetic'
 method: Complex
@@ -4253,8 +4621,8 @@ variableAt: aName
 %
 category: 'other'
 method: PyAstNode
-variableAt: aName put: aValue
-	^parent variableAt: aName put: aValue
+variableAt: aTarget put: aValue
+	^parent variableAt: aTarget put: aValue
 %
 
 ! ------------------- Remove existing behavior from PyAlias
@@ -4271,6 +4639,11 @@ method: PyAlias
 asName
 
 	^asName
+%
+category: 'other'
+method: PyAlias
+assign: aValue in: globals
+	globals at: self name put: aValue.
 %
 category: 'other'
 method: PyAlias
@@ -4367,9 +4740,15 @@ category: 'other'
 method: PyAstNodeWithLocation
 readPosition
 
+	(self stream peekFor: $,) ifFalse: [self error].
+	self readPositionOnly
+%
+category: 'other'
+method: PyAstNodeWithLocation
+readPositionOnly
+
 	| stream string |
 	stream := self stream.
-	(stream peekFor: $,) ifFalse: [self error].
 	(string := stream upTo: $=) = ' lineno' ifFalse: [self error].
 	line := (stream upTo: $,) asNumber.
 	(string := stream upTo: $=) = ' col_offset' ifFalse: [self error].
@@ -4489,6 +4868,34 @@ addMissingPositions
 %
 category: 'other'
 method: PyAttribute
+assertContextIsLoad
+
+	ctx assertIsLoad.
+%
+category: 'other'
+method: PyAttribute
+call: aPyCall
+	| receiver |
+	receiver := value evaluate.
+	self halt.
+	self assertContextIsLoad.
+	^Builtins current call: aPyCall
+%
+category: 'other'
+method: PyAttribute
+call: mySelector arguments: myArguments keywords: myKeywords
+	| receiver |
+	self assertContextIsLoad.
+	receiver := value evaluate.
+	^receiver perform: mySelector with: myArguments with: myKeywords.
+%
+category: 'other'
+method: PyAttribute
+id
+	^attr
+%
+category: 'other'
+method: PyAttribute
 initialize
 	"Attribute(expr value, identifier attr, expr_context ctx)"
 
@@ -4531,8 +4938,14 @@ PyBinOp class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyBinOp
+assertContextIsLoad
+
+	self halt
+%
+category: 'other'
+method: PyBinOp
 evaluate
-	^op left:left right:right
+	^op left: left evaluate right: right evaluate
 %
 category: 'other'
 method: PyBinOp
@@ -4625,8 +5038,14 @@ evaluate
 	"https://docs.python.org/3/reference/expressions.html#calls"
 	"We should do an elaborate name lookup, but we'll just start with built-in functions"
 
-	function assertContextIsLoad.
-	^Builtins current call: self
+	| myArguments myKeywords mySelector |
+	mySelector := (self functionName , ':keywords:') asSymbol.
+	myArguments := self arguments collect: [:each | each evaluate].
+	myKeywords := Dictionary new.
+	self keywords do: [:each | 
+		myKeywords at: each name put: each value evaluate.
+	].
+	^function call: mySelector arguments: myArguments keywords: myKeywords.
 %
 category: 'other'
 method: PyCall
@@ -4894,7 +5313,7 @@ category: 'other'
 method: PyList
 evaluate
 	"May wish to revisit context"
-	^elts collect: [:each | each evaluate]
+	^Py_List withAll: (elts collect: [:each | each evaluate])
 %
 category: 'other'
 method: PyList
@@ -4951,7 +5370,26 @@ assertContextIsStore
 %
 category: 'other'
 method: PyName
-evaluate 
+assign: aValue in: globals
+
+	globals at: self id put: aValue.
+%
+category: 'other'
+method: PyName
+call: aPyCall
+	self assertContextIsLoad.
+	^Builtins current call: aPyCall
+%
+category: 'other'
+method: PyName
+call: mySelector arguments: myArguments keywords: myKeywords
+	self assertContextIsLoad.
+	^Builtins current call: mySelector arguments: myArguments keywords: myKeywords
+%
+category: 'other'
+method: PyName
+evaluate
+	self assertContextIsLoad.
 	^parent variableAt: self
 %
 category: 'other'
@@ -5124,7 +5562,7 @@ set compile_env: 0
 category: 'other'
 method: PyStr
 evaluate
-	^s
+	^Py_String withAll: s
 %
 category: 'other'
 method: PyStr
@@ -5146,6 +5584,26 @@ PySubscript class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PySubscript
+assertContextIsStore
+	value assertContextIsStore.
+%
+category: 'other'
+method: PySubscript
+assign: aValue in: globals 
+
+	slice assign: aValue to: value
+%
+category: 'other'
+method: PySubscript
+evaluate
+	| x |
+	value assertContextIsLoad.
+	x := self variableAt: value.
+	^slice evaluate: x
+	
+%
+category: 'other'
+method: PySubscript
 initialize
 	"Subscript(expr value, slice slice, expr_context ctx)"
 
@@ -5153,7 +5611,7 @@ initialize
 	stream := self stream.
 	value := self expression.
 	self commaSpace.
-	"slice"
+	slice := Pyslice sliceFrom: self.
 	self commaSpace.
 	ctx := PyExpressionContext parent: self.
 	self readPosition.
@@ -5172,7 +5630,7 @@ category: 'other'
 method: PyTuple
 evaluate
 	"May wish to revisit context"
-	^(elts collect: [:each | each evaluate]) immediateInvariant
+	^Py_Tuple withAll: (elts collect: [:each | each evaluate]) immediateInvariant
 %
 category: 'other'
 method: PyTuple
@@ -5483,12 +5941,20 @@ addMissingPositions
 %
 category: 'other'
 method: PyAugAssign
+evaluate
+	
+	| x |
+	x := op left: (parent variableAt: target) right: value evaluate.
+	parent variableAt: target put: x.
+%
+category: 'other'
+method: PyAugAssign
 initialize
 	"AugAssign(expr target, operator op, expr value)"
 
 	target := self expression.
 	self commaSpace.
-	"check for operator"
+	op := PyOperator parent: self.
 	self commaSpace.
 	value := self expression.
 	self readPosition.
@@ -5505,8 +5971,14 @@ PyBreak class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyBreak
+evaluate
+	BreakNotification signal.
+%
+category: 'other'
+method: PyBreak
 initialize
-"Break"
+
+self readPositionOnly
 %
 
 ! ------------------- Remove existing behavior from PyClassDef
@@ -5551,6 +6023,11 @@ set compile_env: 0
 category: 'other'
 method: PyContinue
 addMissingPositions
+%
+category: 'other'
+method: PyContinue
+evaluate
+	ContinueNotification signal
 %
 category: 'other'
 method: PyContinue
@@ -5629,7 +6106,20 @@ addMissingPositions
 category: 'other'
 method: PyFor
 evaluate
-	self halt.
+
+	[
+		iter evaluate do: [:i | 
+			[
+				parent variableAt: target put: i.
+				body do: [:each | each evaluate].
+			] on: ContinueNotification do: [:ex |
+				ex return.
+			].
+		].
+	] on: BreakNotification do: [:ex |
+		ex return.
+	].
+	orelse do: [:each | each evaluate].
 %
 category: 'other'
 method: PyFor
@@ -5765,7 +6255,12 @@ addMissingPositions
 category: 'other'
 method: PyImport
 evaluate
-
+	(names size == 1 and: [names first name = 'random']) ifTrue: [
+		parent variableAt: names first put: PyRandom new.
+		^self
+	].
+	self halt.
+"
 	names do: [:each |
 		| module |
 		module := Builtins current
@@ -5776,6 +6271,7 @@ evaluate
 			_: 0.
 		module halt.
 	].
+"
 %
 category: 'other'
 method: PyImport
@@ -5868,6 +6364,11 @@ set compile_env: 0
 category: 'other'
 method: PyPass
 addMissingPositions
+%
+category: 'other'
+method: PyPass
+evaluate
+	"This is a NULL operation"
 %
 category: 'other'
 method: PyPass
@@ -5984,7 +6485,19 @@ addMissingPositions
 category: 'other'
 method: PyWhile
 evaluate
-	[test evaluate] whileTrue: [body do: [:each | each evaluate]].
+	[
+		[
+			test evaluate.
+		] whileTrue: [
+			[
+				body do: [:each | each evaluate].
+			] on: ContinueNotification do: [:ex |
+				ex return.
+			].
+		].
+	] on: BreakNotification do: [:ex | 
+		ex return.
+	].
 	orelse do: [:each | each evaluate].
 %
 category: 'other'
@@ -6153,6 +6666,13 @@ PyGtE class removeAllMethods.
 %
 ! ------------------- Class methods for PyGtE
 ! ------------------- Instance methods for PyGtE
+set compile_env: 0
+category: 'other'
+method: PyGtE
+left: leftOperand right: rightOperand
+
+	^leftOperand >= rightOperand
+%
 
 ! ------------------- Remove existing behavior from PyIn
 expectvalue /Metaclass3       
@@ -6176,7 +6696,7 @@ category: 'other'
 method: PyIs
 left: leftOperand right: rightOperand
 
-	^leftOperand evaluate == rightOperand evaluate
+	^leftOperand == rightOperand
 %
 
 ! ------------------- Remove existing behavior from PyIsNot
@@ -6187,6 +6707,13 @@ PyIsNot class removeAllMethods.
 %
 ! ------------------- Class methods for PyIsNot
 ! ------------------- Instance methods for PyIsNot
+set compile_env: 0
+category: 'other'
+method: PyIsNot
+left: leftOperand right: rightOperand
+
+	^(leftOperand == rightOperand) not
+%
 
 ! ------------------- Remove existing behavior from PyLt
 expectvalue /Metaclass3       
@@ -6211,15 +6738,29 @@ PyLtE class removeAllMethods.
 %
 ! ------------------- Class methods for PyLtE
 ! ------------------- Instance methods for PyLtE
+set compile_env: 0
+category: 'other'
+method: PyLtE
+left: leftOperand right: rightOperand
 
-! ------------------- Remove existing behavior from PyNotEQ
+	^leftOperand <= rightOperand
+%
+
+! ------------------- Remove existing behavior from PyNotEq
 expectvalue /Metaclass3       
 doit
-PyNotEQ removeAllMethods.
-PyNotEQ class removeAllMethods.
+PyNotEq removeAllMethods.
+PyNotEq class removeAllMethods.
 %
-! ------------------- Class methods for PyNotEQ
-! ------------------- Instance methods for PyNotEQ
+! ------------------- Class methods for PyNotEq
+! ------------------- Instance methods for PyNotEq
+set compile_env: 0
+category: 'other'
+method: PyNotEq
+left: leftOperand right: rightOperand
+
+	^(leftOperand = rightOperand) not
+%
 
 ! ------------------- Remove existing behavior from PyNotIn
 expectvalue /Metaclass3       
@@ -6438,7 +6979,7 @@ test
 PyModule test
 "
 
-	^PyModule script: '$HOME/code/Python/GemStoneP/test.py'.
+	^PyModule script: '$HOME/code/Python/GemStoneP/mastermind.py'.
 %
 ! ------------------- Instance methods for PyModule
 set compile_env: 0
@@ -6459,11 +7000,15 @@ self halt.
 category: 'other'
 method: PyModule
 initialize
-	
+
 	| result |
 	globals := Dictionary new.
 	parent ifNil: [parent := PySystem new].
-	statements do: [:each | result := each evaluate].
+	[
+		statements do: [:each | result := each evaluate].
+	] on: CancelNotification do: [:ex |
+		ex return.
+	].
 	^result
 %
 category: 'other'
@@ -6552,15 +7097,31 @@ category: 'other'
 method: PyModule
 variableAt: aName 
 	
-	aName assertContextIsLoad.
-	^globals at: aName id.
+	^globals at: aName id ifAbsent: [Builtins current variableAt: aName]
 %
 category: 'other'
 method: PyModule
-variableAt: aName put: aValue
+variableAt: aTarget put: aValue
 	
-	aName assertContextIsStore.
-	globals at: aName id put: aValue.
+	aTarget assign: aValue in: globals
+%
+
+! ------------------- Remove existing behavior from PyRandom
+expectvalue /Metaclass3       
+doit
+PyRandom removeAllMethods.
+PyRandom class removeAllMethods.
+%
+! ------------------- Class methods for PyRandom
+! ------------------- Instance methods for PyRandom
+set compile_env: 0
+category: 'functions'
+method: PyRandom
+randint: arguments keywords: keywords
+	"This is not actually a builtin"
+	"It should be part of importing random"
+
+^Random new integerBetween: arguments first and: arguments second.
 %
 
 ! ------------------- Remove existing behavior from PyOperator
@@ -6610,7 +7171,7 @@ category: 'other'
 method: PyAdd
 left: leftOperand right: rightOperand
 
-	^leftOperand + rightOperand 
+	^leftOperand + rightOperand
 %
 
 ! ------------------- Remove existing behavior from PyBitAnd
@@ -6674,7 +7235,7 @@ category: 'other'
 method: PyDiv
 left: leftOperand right: rightOperand
 
-	^(leftOperand evaluate / rightOperand evaluate)asFloat
+	^(leftOperand / rightOperand) asFloat
 %
 
 ! ------------------- Remove existing behavior from PyFloorDiv
@@ -6690,7 +7251,7 @@ category: 'other'
 method: PyFloorDiv
 left: leftOperand right: rightOperand
 
-	^leftOperand evaluate // rightOperand evaluate
+	^leftOperand // rightOperand
 %
 
 ! ------------------- Remove existing behavior from PyLShift
@@ -6706,7 +7267,7 @@ category: 'other'
 method: PyLShift
 left: leftOperand right: rightOperand
 
-	^leftOperand evaluate bitShift: rightOperand evaluate
+	^leftOperand bitShift: rightOperand
 %
 
 ! ------------------- Remove existing behavior from PyMatMult
@@ -6722,7 +7283,7 @@ category: 'other'
 method: PyMatMult
 left: leftOperand right: rightOperand
 	self error.
-	^leftOperand evaluate bitShift: rightOperand evaluate
+	^leftOperand bitShift: rightOperand
 %
 
 ! ------------------- Remove existing behavior from PyMod
@@ -6738,7 +7299,7 @@ category: 'other'
 method: PyMod
 left: leftOperand right: rightOperand
 
-	^leftOperand evaluate rem: rightOperand evaluate
+	^leftOperand rem: rightOperand
 %
 
 ! ------------------- Remove existing behavior from PyMult
@@ -6754,7 +7315,7 @@ category: 'other'
 method: PyMult
 left: leftOperand right: rightOperand
 
-	^leftOperand evaluate * rightOperand evaluate
+	^leftOperand * rightOperand
 %
 
 ! ------------------- Remove existing behavior from PyPow
@@ -6770,7 +7331,7 @@ category: 'other'
 method: PyPow
 left: leftOperand right: rightOperand
 
-	^leftOperand evaluate raisedTo: rightOperand evaluate
+	^leftOperand raisedTo: rightOperand
 %
 
 ! ------------------- Remove existing behavior from PyRShift
@@ -6802,7 +7363,7 @@ category: 'other'
 method: PySub
 left: leftOperand right: rightOperand
 
-	^leftOperand evaluate - rightOperand evaluate
+	^leftOperand - rightOperand
 %
 
 ! ------------------- Remove existing behavior from Pyslice
@@ -6815,15 +7376,25 @@ Pyslice class removeAllMethods.
 set compile_env: 0
 category: 'other'
 classmethod: Pyslice
-parent: aNode
+sliceFrom: aNode
 
-	| symbol class |
+| symbol class |
 	symbol := ('Py' , (aNode stream upTo: $()) asSymbol.
-	(aNode stream peekFor: $)) ifFalse: [self error].
 	class := PythonGlobals at: symbol.
-	^class basicNew initialize: aNode; yourself
+	^class parent: aNode
 %
 ! ------------------- Instance methods for Pyslice
+set compile_env: 0
+category: 'other'
+method: Pyslice
+assign: aValue to: aVariable
+	self subclassResponsibility.
+%
+category: 'other'
+method: Pyslice
+evaluate: aList
+	self subclassResponsibility
+%
 
 ! ------------------- Remove existing behavior from PyExtSlice
 expectvalue /Metaclass3       
@@ -6853,10 +7424,25 @@ PyIndex class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyIndex
+assign: aValue to: aVariable
+	| x y |
+	x := value evaluate.
+	y := aVariable evaluate.
+	y at: x + 1 put: aValue.
+%
+category: 'other'
+method: PyIndex
+evaluate: aList
+	value assertContextIsLoad.
+	^aList at: value evaluate + 1.
+%
+category: 'other'
+method: PyIndex
 initialize
 	"Index(expr value)"
 	
 	value := self expression.
+	(self stream peekFor: $)) ifFalse: [self error].
 %
 
 ! ------------------- Remove existing behavior from PySlice
@@ -6868,6 +7454,11 @@ PySlice class removeAllMethods.
 ! ------------------- Class methods for PySlice
 ! ------------------- Instance methods for PySlice
 set compile_env: 0
+category: 'other'
+method: PySlice
+evaluate: aList
+	self halt.
+%
 category: 'other'
 method: PySlice
 initialize
@@ -7117,4 +7708,50 @@ printOn: aStream
 		nextPutAll: ' - ';
 		print: string;
 		yourself.
+%
+
+! ------------------- Remove existing behavior from UserInteraction
+expectvalue /Metaclass3       
+doit
+UserInteraction removeAllMethods.
+UserInteraction class removeAllMethods.
+%
+! ------------------- Class methods for UserInteraction
+! ------------------- Instance methods for UserInteraction
+set compile_env: 0
+category: 'other'
+method: UserInteraction
+alert: aString
+
+	^(System __sessionStateAt: 3)
+		message: aString
+		caption: 'Python'
+		icon: #prompt
+		buttons: #yesNoCancel.
+%
+category: 'other'
+method: UserInteraction
+message: messageString caption: captionString icon: iconSymbol buttons: buttonSymbol
+
+	^(System __sessionStateAt: 3)
+		message: messageString
+		caption: captionString
+		icon: iconSymbol
+		buttons: buttonSymbol.
+%
+category: 'other'
+method: UserInteraction
+prompt: promptString
+
+	^(System __sessionStateAt: 3)
+		prompt: promptString
+		caption: 'Python'.
+%
+category: 'other'
+method: UserInteraction
+prompt: promptString caption: captionString
+
+	^(System __sessionStateAt: 3)
+		prompt: promptString
+		caption: captionString
 %
