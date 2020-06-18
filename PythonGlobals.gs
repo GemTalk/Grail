@@ -25,7 +25,7 @@ Notification subclass: 'BreakNotification'
 %
 expectvalue /Class
 doit
-BreakNotification category: 'Kernel'
+BreakNotification category: 'Builtins'
 %
 set compile_env: 0
 ! ------------------- Class definition for CancelNotification
@@ -42,7 +42,7 @@ Notification subclass: 'CancelNotification'
 %
 expectvalue /Class
 doit
-CancelNotification category: 'Kernel'
+CancelNotification category: 'Builtins'
 %
 set compile_env: 0
 ! ------------------- Class definition for ContinueNotification
@@ -59,7 +59,7 @@ Notification subclass: 'ContinueNotification'
 %
 expectvalue /Class
 doit
-ContinueNotification category: 'Kernel'
+ContinueNotification category: 'Builtins'
 %
 set compile_env: 0
 ! ------------------- Class definition for Builtins
@@ -2451,6 +2451,78 @@ doit
 PyToken category: 'Parser'
 %
 set compile_env: 0
+! ------------------- Class definition for PythonTestCase
+expectvalue /Class
+doit
+TestCase subclass: 'PythonTestCase'
+  instVarNames: #( statements)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PythonTestCase comment: 
+'No class-specific documentation for PythonTestCase, hierarchy is: 
+Object
+  TestAsserter
+    TestCase( testSelector)
+      PythonTestCase
+'
+%
+expectvalue /Class
+doit
+PythonTestCase category: 'Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for NumericLiteralsTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'NumericLiteralsTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+NumericLiteralsTestCase category: 'Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for StringLiteralsTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'StringLiteralsTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+StringLiteralsTestCase comment: 
+'No class-specific documentation for StringLiteralsTestCase, hierarchy is: 
+Object
+  TestAsserter
+    TestCase( testSelector)
+      PythonTestCase
+        StringLiteralsTestCase( statements)
+'
+%
+expectvalue /Class
+doit
+StringLiteralsTestCase category: 'Tests'
+%
+set compile_env: 0
 ! ------------------- Class definition for UserInteraction
 expectvalue /Class
 doit
@@ -2465,7 +2537,7 @@ Object subclass: 'UserInteraction'
 %
 expectvalue /Class
 doit
-UserInteraction category: 'Kernel'
+UserInteraction category: 'Builtins'
 %
 
 ! ------------------- Remove existing behavior from BreakNotification
@@ -2525,6 +2597,67 @@ default
 %
 ! ------------------- Instance methods for Builtins
 set compile_env: 0
+category: 'functions'
+method: Builtins
+__import__: arguments keywords: keywords
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+__import__(name, globals=None, locals=None, fromlist=(), level=0)
+Note This is an advanced function that is not needed in everyday 
+Python programming, unlike importlib.import_module().
+This function is invoked by the import statement. It can be replaced
+ (by importing the builtins module and assigning to builtins.__import__) 
+in order to change semantics of the import statement, but doing so is 
+strongly discouraged as it is usually simpler to use import hooks (see PEP 302)
+ to attain the same goals and does not cause issues with code which assumes 
+the default import implementation is in use. Direct use of __import__() is 
+also discouraged in favor of importlib.import_module().
+
+The function imports the module name, potentially using the given globals
+ and locals to determine how to interpret the name in a package context.
+ The fromlist gives the names of objects or submodules that should be
+ imported from the module given by name. The standard implementation
+ does not use its locals argument at all, and uses its globals only to determine
+\ the package context of the import statement.
+
+level specifies whether to use absolute or relative imports. 0 (the default) 
+means only perform absolute imports. Positive values for level indicate the 
+number of parent directories to search relative to the directory of the module 
+calling __import__() (see PEP 328 for the details).
+
+
+When the name variable is of the form package.module, normally, the top
+-level package (the name up till the first dot) is returned, not the module 
+named by name. However, when a non-empty fromlist argument is given,
+ the module named by name is returned.
+
+For example, the statement import spam results in bytecode resembling 
+the following code:
+
+spam = __import__('spam', globals(), locals(), [], 0)
+The statement import spam.ham results in this call:
+
+spam = __import__('spam.ham', globals(), locals(), [], 0)
+Note how __import__() returns the toplevel module here because 
+this is the object that is bound to a name by the import statement.
+
+On the other hand, the statement from spam.ham import eggs, sausage as saus results in
+
+_temp = __import__('spam.ham', globals(), locals(), ['eggs', 'sausage'], 0)
+eggs = _temp.eggs
+saus = _temp.sausage
+Here, the spam.ham module is returned from __import__(). From this 
+object, the names to import are retrieved and assigned to their respective names.
+
+If you simply want to import a module (potentially within a package) 
+by name, use importlib.import_module().
+
+Changed in version 3.3: Negative values for level are no longer 
+supported (which also changes the default value to 0).
+"
+self halt.
+%
 category: 'functions'
 method: Builtins
 abs: arguments keywords: keywords
@@ -4157,68 +4290,14 @@ True
 "
 self halt.
 %
-category: 'functions'
-method: Builtins
-__import__: arguments keywords: keywords
-	"https://docs.python.org/3/library/functions.html"
-	
-"
-__import__(name, globals=None, locals=None, fromlist=(), level=0)
-Note This is an advanced function that is not needed in everyday 
-Python programming, unlike importlib.import_module().
-This function is invoked by the import statement. It can be replaced
- (by importing the builtins module and assigning to builtins.__import__) 
-in order to change semantics of the import statement, but doing so is 
-strongly discouraged as it is usually simpler to use import hooks (see PEP 302)
- to attain the same goals and does not cause issues with code which assumes 
-the default import implementation is in use. Direct use of __import__() is 
-also discouraged in favor of importlib.import_module().
-
-The function imports the module name, potentially using the given globals
- and locals to determine how to interpret the name in a package context.
- The fromlist gives the names of objects or submodules that should be
- imported from the module given by name. The standard implementation
- does not use its locals argument at all, and uses its globals only to determine
-\ the package context of the import statement.
-
-level specifies whether to use absolute or relative imports. 0 (the default) 
-means only perform absolute imports. Positive values for level indicate the 
-number of parent directories to search relative to the directory of the module 
-calling __import__() (see PEP 328 for the details).
-
-
-When the name variable is of the form package.module, normally, the top
--level package (the name up till the first dot) is returned, not the module 
-named by name. However, when a non-empty fromlist argument is given,
- the module named by name is returned.
-
-For example, the statement import spam results in bytecode resembling 
-the following code:
-
-spam = __import__('spam', globals(), locals(), [], 0)
-The statement import spam.ham results in this call:
-
-spam = __import__('spam.ham', globals(), locals(), [], 0)
-Note how __import__() returns the toplevel module here because 
-this is the object that is bound to a name by the import statement.
-
-On the other hand, the statement from spam.ham import eggs, sausage as saus results in
-
-_temp = __import__('spam.ham', globals(), locals(), ['eggs', 'sausage'], 0)
-eggs = _temp.eggs
-saus = _temp.sausage
-Here, the spam.ham module is returned from __import__(). From this 
-object, the names to import are retrieved and assigned to their respective names.
-
-If you simply want to import a module (potentially within a package) 
-by name, use importlib.import_module().
-
-Changed in version 3.3: Negative values for level are no longer 
-supported (which also changes the default value to 0).
-"
-self halt.
-%
 set compile_env: 0
+category: 'other'
+method: Builtins
+__import__: name _: globals _: locals _: fromList _: level
+	"(name, globals=None, locals=None, fromlist=(), level=0)"
+
+	self halt.
+%
 category: 'other'
 method: Builtins
 call: aPyCall
@@ -4251,13 +4330,6 @@ variableAt: aName
 	].
 	^self perform: selector with: arguments with: keywords.
 "
-%
-category: 'other'
-method: Builtins
-__import__: name _: globals _: locals _: fromList _: level
-	"(name, globals=None, locals=None, fromlist=(), level=0)"
-
-	self halt.
 %
 
 ! ------------------- Remove existing behavior from Py_List
@@ -4344,6 +4416,14 @@ real
 set compile_env: 0
 category: 'Arithmetic'
 method: Complex
+- aNumber
+	(aNumber isKindOf: Complex) ifTrue: [
+		^Complex real: self real - aNumber real imag: self imaginary - aNumber imaginary
+	].
+	^self _retry: #+ coercing: aNumber
+%
+category: 'Arithmetic'
+method: Complex
 * aNumber
 	(aNumber isKindOf: Complex) ifTrue: [
 		^Complex real: (self real * aNumber real) + (self imaginary * aNumber imaginary)negated
@@ -4353,28 +4433,20 @@ method: Complex
 %
 category: 'Arithmetic'
 method: Complex
-+ aNumber
-	(aNumber isKindOf: Complex) ifTrue: [
-		^Complex real: self real + aNumber real imag: self imaginary + aNumber imaginary
-	].
-	^self _retry: #+ coercing: aNumber
-%
-category: 'Arithmetic'
-method: Complex
-- aNumber
-	(aNumber isKindOf: Complex) ifTrue: [
-		^Complex real: self real - aNumber real imag: self imaginary - aNumber imaginary
-	].
-	^self _retry: #+ coercing: aNumber
-%
-category: 'Arithmetic'
-method: Complex
 / aNumber
 	(aNumber isKindOf: Complex) ifTrue: [
 		^Complex real: (self real * aNumber real) + (self imaginary * aNumber imaginary)negated
 		imag: (self real * aNumber imaginary) + (self imaginary * aNumber real)
 	].
 	^self _retry: #/ coercing: aNumber
+%
+category: 'Arithmetic'
+method: Complex
++ aNumber
+	(aNumber isKindOf: Complex) ifTrue: [
+		^Complex real: self real + aNumber real imag: self imaginary + aNumber imaginary
+	].
+	^self _retry: #+ coercing: aNumber
 %
 category: 'Arithmetic'
 method: Complex
@@ -4722,6 +4794,17 @@ PyAstNodeWithLocation class removeAllMethods.
 %
 ! ------------------- Class methods for PyAstNodeWithLocation
 ! ------------------- Instance methods for PyAstNodeWithLocation
+set compile_env: 0
+category: 'accessors'
+method: PyAstNodeWithLocation
+column
+	^column
+%
+category: 'accessors'
+method: PyAstNodeWithLocation
+line
+	^line
+%
 set compile_env: 0
 category: 'other'
 method: PyAstNodeWithLocation
@@ -5484,6 +5567,13 @@ printOn: aStream
 		print: n;
 		nextPut: $).
 %
+set compile_env: 0
+category: 'testing support'
+method: PyNum
+_n
+
+	^n
+%
 
 ! ------------------- Remove existing behavior from PySet
 expectvalue /Metaclass3       
@@ -5571,6 +5661,13 @@ initialize
 
 	s := self string.
 	self readPosition.
+%
+set compile_env: 0
+category: 'testing support'
+method: PyStr
+_s
+
+	^s
 %
 
 ! ------------------- Remove existing behavior from PySubscript
@@ -6082,6 +6179,13 @@ initialize
 
 	value := self expression.
 	self readPosition.
+%
+set compile_env: 0
+category: 'testing support'
+method: PyExpr
+_value
+
+	^value
 %
 
 ! ------------------- Remove existing behavior from PyFor
@@ -6970,7 +7074,7 @@ PyModule script: '$HOME/code/Python/performance/pyperformance'.
 "
 	^self new
 		load: aString as: '__main__';
-		initialize
+		yourself
 %
 category: 'other'
 classmethod: PyModule
@@ -7047,7 +7151,7 @@ category: 'other'
 method: PyModule
 pythonPath
 
-	^'/Library/Frameworks/Python.framework/Versions/3.7/bin/python3'
+	^'/usr/local/bin/python3'
 %
 category: 'other'
 method: PyModule
@@ -7104,6 +7208,13 @@ method: PyModule
 variableAt: aTarget put: aValue
 	
 	aTarget assign: aValue in: globals
+%
+set compile_env: 0
+category: 'testing support'
+method: PyModule
+_statements
+
+	^statements
 %
 
 ! ------------------- Remove existing behavior from PyRandom
@@ -7708,6 +7819,112 @@ printOn: aStream
 		nextPutAll: ' - ';
 		print: string;
 		yourself.
+%
+
+! ------------------- Remove existing behavior from PythonTestCase
+expectvalue /Metaclass3       
+doit
+PythonTestCase removeAllMethods.
+PythonTestCase class removeAllMethods.
+%
+! ------------------- Class methods for PythonTestCase
+! ------------------- Instance methods for PythonTestCase
+set compile_env: 0
+category: 'other'
+method: PythonTestCase
+filename
+
+	self subclassResponsibility.
+%
+category: 'other'
+method: PythonTestCase
+setUp
+
+	super setUp.
+	statements := (PyModule script:  '$HOME/code/Python/GemStoneP/tests/' , self filename) _statements.
+%
+
+! ------------------- Remove existing behavior from NumericLiteralsTestCase
+expectvalue /Metaclass3       
+doit
+NumericLiteralsTestCase removeAllMethods.
+NumericLiteralsTestCase class removeAllMethods.
+%
+! ------------------- Class methods for NumericLiteralsTestCase
+! ------------------- Instance methods for NumericLiteralsTestCase
+set compile_env: 0
+category: 'other'
+method: NumericLiteralsTestCase
+filename
+
+	^'NumericLiterals.py'
+%
+category: 'other'
+method: NumericLiteralsTestCase
+testDecimalInteger
+
+	self
+		assert: (statements at: 1) _value _n == 1;
+		assert: (statements at: 2) _value _n == 1234;
+		assert: (statements at: 3) _value _n == 12345;
+		assert: (statements at: 4) _value _n == 0;
+		yourself.
+%
+
+! ------------------- Remove existing behavior from StringLiteralsTestCase
+expectvalue /Metaclass3       
+doit
+StringLiteralsTestCase removeAllMethods.
+StringLiteralsTestCase class removeAllMethods.
+%
+! ------------------- Class methods for StringLiteralsTestCase
+! ------------------- Instance methods for StringLiteralsTestCase
+set compile_env: 0
+category: 'other'
+method: StringLiteralsTestCase
+filename
+
+	^'StringLiterals.py'
+%
+category: 'other'
+method: StringLiteralsTestCase
+testShortStringDoubleQuotes
+
+	| x |
+	x := statements at: 2.
+	self 
+		assert: (x isKindOf: PyExpr);
+		assert: x line == 6;
+		assert: x column == 0;
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyStr);
+		assert: x line == 6;
+		assert: x column == 0;
+		yourself.
+	x := x _s.
+	self assert: x = 'vwxyz'.
+%
+category: 'other'
+method: StringLiteralsTestCase
+testShortStringSingleQuotes
+
+	| x |
+	x := statements at: 1.
+	self 
+		assert: (x isKindOf: PyExpr);
+		assert: x line == 5;
+		assert: x column == 0;
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyStr);
+		assert: x line == 5;
+		assert: x column == 0;
+		yourself.
+	x := x _s.
+	self assert: x = 'abcde'.
 %
 
 ! ------------------- Remove existing behavior from UserInteraction
