@@ -160,7 +160,7 @@ expectvalue /Class
 doit
 Object subclass: 'PyAstNode'
   instVarNames: #( parent)
-  classVars: #()
+  classVars: #( escapeCharacters)
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: PythonGlobals
@@ -218,6 +218,15 @@ PyAstNode subclass: 'PyArguments'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyArguments comment: 
+'No class-specific documentation for PyArguments, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyArguments( args vararg kwonlyargs kw_defaults kwarg defaults)
+'
 %
 expectvalue /Class
 doit
@@ -370,6 +379,17 @@ PyExpression subclass: 'PyAwait'
 %
 expectvalue /Class
 doit
+PyAwait comment: 
+'No class-specific documentation for PyAwait, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyExpression
+        PyAwait( value)
+'
+%
+expectvalue /Class
+doit
 PyAwait category: 'Parser'
 %
 set compile_env: 0
@@ -384,6 +404,17 @@ PyExpression subclass: 'PyBinOp'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyBinOp comment: 
+'No class-specific documentation for PyBinOp, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyExpression
+        PyBinOp( left op right)
+'
 %
 expectvalue /Class
 doit
@@ -404,6 +435,17 @@ PyExpression subclass: 'PyBoolOp'
 %
 expectvalue /Class
 doit
+PyBoolOp comment: 
+'No class-specific documentation for PyBoolOp, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyExpression
+        PyBoolOp( op values)
+'
+%
+expectvalue /Class
+doit
 PyBoolOp category: 'Parser'
 %
 set compile_env: 0
@@ -418,6 +460,17 @@ PyExpression subclass: 'PyBytes'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyBytes comment: 
+'No class-specific documentation for PyBytes, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyExpression
+        PyBytes( s)
+'
 %
 expectvalue /Class
 doit
@@ -492,6 +545,17 @@ PyExpression subclass: 'PyConstant'
 %
 expectvalue /Class
 doit
+PyConstant comment: 
+'No class-specific documentation for PyConstant, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyExpression
+        PyConstant( value)
+'
+%
+expectvalue /Class
+doit
 PyConstant category: 'Parser'
 %
 set compile_env: 0
@@ -506,6 +570,17 @@ PyExpression subclass: 'PyDict'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyDict comment: 
+'No class-specific documentation for PyDict, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyExpression
+        PyDict( keys values)
+'
 %
 expectvalue /Class
 doit
@@ -526,6 +601,17 @@ PyExpression subclass: 'PyDictComp'
 %
 expectvalue /Class
 doit
+PyDictComp comment: 
+'No class-specific documentation for PyDictComp, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyExpression
+        PyDictComp( key value generators)
+'
+%
+expectvalue /Class
+doit
 PyDictComp category: 'Parser'
 %
 set compile_env: 0
@@ -540,6 +626,17 @@ PyExpression subclass: 'PyEllipsis'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyEllipsis comment: 
+'No class-specific documentation for PyEllipsis, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyExpression
+        PyEllipsis
+'
 %
 expectvalue /Class
 doit
@@ -560,6 +657,17 @@ PyExpression subclass: 'PyFormattedValue'
 %
 expectvalue /Class
 doit
+PyFormattedValue comment: 
+'No class-specific documentation for PyFormattedValue, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyExpression
+        PyFormattedValue( value conversion format_spec)
+'
+%
+expectvalue /Class
+doit
 PyFormattedValue category: 'Parser'
 %
 set compile_env: 0
@@ -574,6 +682,17 @@ PyExpression subclass: 'PyGeneratorExp'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyGeneratorExp comment: 
+'No class-specific documentation for PyGeneratorExp, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyExpression
+        PyGeneratorExp( elt generators)
+'
 %
 expectvalue /Class
 doit
@@ -622,6 +741,17 @@ PyExpression subclass: 'PyJoinedStr'
 %
 expectvalue /Class
 doit
+PyJoinedStr comment: 
+'No class-specific documentation for PyJoinedStr, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyExpression
+        PyJoinedStr( values)
+'
+%
+expectvalue /Class
+doit
 PyJoinedStr category: 'Parser'
 %
 set compile_env: 0
@@ -667,6 +797,17 @@ PyExpression subclass: 'PyList'
 %
 expectvalue /Class
 doit
+PyList comment: 
+'No class-specific documentation for PyList, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyExpression
+        PyList( elts ctx)
+'
+%
+expectvalue /Class
+doit
 PyList category: 'Parser'
 %
 set compile_env: 0
@@ -681,6 +822,17 @@ PyExpression subclass: 'PyListComp'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyListComp comment: 
+'No class-specific documentation for PyListComp, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyExpression
+        PyListComp( elt generators)
+'
 %
 expectvalue /Class
 doit
@@ -701,6 +853,17 @@ PyExpression subclass: 'PyName'
 %
 expectvalue /Class
 doit
+PyName comment: 
+'No class-specific documentation for PyName, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyExpression
+        PyName( id ctx)
+'
+%
+expectvalue /Class
+doit
 PyName category: 'Parser'
 %
 set compile_env: 0
@@ -715,6 +878,17 @@ PyExpression subclass: 'PyNameConstant'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyNameConstant comment: 
+'No class-specific documentation for PyNameConstant, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyExpression
+        PyNameConstant( value)
+'
 %
 expectvalue /Class
 doit
@@ -735,6 +909,17 @@ PyExpression subclass: 'PyNum'
 %
 expectvalue /Class
 doit
+PyNum comment: 
+'No class-specific documentation for PyNum, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyExpression
+        PyNum( n)
+'
+%
+expectvalue /Class
+doit
 PyNum category: 'Parser'
 %
 set compile_env: 0
@@ -749,6 +934,17 @@ PyExpression subclass: 'PySet'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PySet comment: 
+'No class-specific documentation for PySet, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyExpression
+        PySet( elts)
+'
 %
 expectvalue /Class
 doit
@@ -769,6 +965,17 @@ PyExpression subclass: 'PySetComp'
 %
 expectvalue /Class
 doit
+PySetComp comment: 
+'No class-specific documentation for PySetComp, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyExpression
+        PySetComp( elt generators)
+'
+%
+expectvalue /Class
+doit
 PySetComp category: 'Parser'
 %
 set compile_env: 0
@@ -783,6 +990,17 @@ PyExpression subclass: 'PyStarred'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyStarred comment: 
+'No class-specific documentation for PyStarred, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyExpression
+        PyStarred( value ctx)
+'
 %
 expectvalue /Class
 doit
@@ -830,6 +1048,17 @@ PyExpression subclass: 'PySubscript'
 %
 expectvalue /Class
 doit
+PySubscript comment: 
+'No class-specific documentation for PySubscript, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyExpression
+        PySubscript( value slice ctx)
+'
+%
+expectvalue /Class
+doit
 PySubscript category: 'Parser'
 %
 set compile_env: 0
@@ -844,6 +1073,17 @@ PyExpression subclass: 'PyTuple'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyTuple comment: 
+'No class-specific documentation for PyTuple, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyExpression
+        PyTuple( elts ctx)
+'
 %
 expectvalue /Class
 doit
@@ -864,6 +1104,17 @@ PyExpression subclass: 'PyUnaryOp'
 %
 expectvalue /Class
 doit
+PyUnaryOp comment: 
+'No class-specific documentation for PyUnaryOp, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyExpression
+        PyUnaryOp( op operand)
+'
+%
+expectvalue /Class
+doit
 PyUnaryOp category: 'Parser'
 %
 set compile_env: 0
@@ -881,6 +1132,17 @@ PyExpression subclass: 'PyYield'
 %
 expectvalue /Class
 doit
+PyYield comment: 
+'No class-specific documentation for PyYield, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyExpression
+        PyYield( value)
+'
+%
+expectvalue /Class
+doit
 PyYield category: 'Parser'
 %
 set compile_env: 0
@@ -895,6 +1157,17 @@ PyExpression subclass: 'PyYieldFrom'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyYieldFrom comment: 
+'No class-specific documentation for PyYieldFrom, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyExpression
+        PyYieldFrom( value)
+'
 %
 expectvalue /Class
 doit
@@ -1024,6 +1297,17 @@ PyStatement subclass: 'PyAsyncFor'
 %
 expectvalue /Class
 doit
+PyAsyncFor comment: 
+'No class-specific documentation for PyAsyncFor, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyStatement
+        PyAsyncFor( target iter body orelse)
+'
+%
+expectvalue /Class
+doit
 PyAsyncFor category: 'Parser'
 %
 set compile_env: 0
@@ -1039,6 +1323,17 @@ PyStatement subclass: 'PyAsyncFunctionDef'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyAsyncFunctionDef comment: 
+'No class-specific documentation for PyAsyncFunctionDef, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyStatement
+        PyAsyncFunctionDef( name args body decorator_list returns)
+'
 %
 expectvalue /Class
 doit
@@ -1059,6 +1354,17 @@ PyStatement subclass: 'PyAsyncWith'
 %
 expectvalue /Class
 doit
+PyAsyncWith comment: 
+'No class-specific documentation for PyAsyncWith, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyStatement
+        PyAsyncWith( items body)
+'
+%
+expectvalue /Class
+doit
 PyAsyncWith category: 'Parser'
 %
 set compile_env: 0
@@ -1076,6 +1382,17 @@ PyStatement subclass: 'PyAugAssign'
 %
 expectvalue /Class
 doit
+PyAugAssign comment: 
+'No class-specific documentation for PyAugAssign, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyStatement
+        PyAugAssign( target op value)
+'
+%
+expectvalue /Class
+doit
 PyAugAssign category: 'Parser'
 %
 set compile_env: 0
@@ -1090,6 +1407,17 @@ PyStatement subclass: 'PyBreak'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyBreak comment: 
+'No class-specific documentation for PyBreak, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyStatement
+        PyBreak
+'
 %
 expectvalue /Class
 doit
@@ -1135,6 +1463,17 @@ PyStatement subclass: 'PyContinue'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyContinue comment: 
+'No class-specific documentation for PyContinue, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyStatement
+        PyContinue
+'
 %
 expectvalue /Class
 doit
@@ -1210,6 +1549,17 @@ PyStatement subclass: 'PyFor'
 %
 expectvalue /Class
 doit
+PyFor comment: 
+'No class-specific documentation for PyFor, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyStatement
+        PyFor( target iter body orelse)
+'
+%
+expectvalue /Class
+doit
 PyFor category: 'Parser'
 %
 set compile_env: 0
@@ -1228,6 +1578,17 @@ PyStatement subclass: 'PyFunctionDef'
 %
 expectvalue /Class
 doit
+PyFunctionDef comment: 
+'No class-specific documentation for PyFunctionDef, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyStatement
+        PyFunctionDef( name args body decorator_list returns)
+'
+%
+expectvalue /Class
+doit
 PyFunctionDef category: 'Parser'
 %
 set compile_env: 0
@@ -1242,6 +1603,17 @@ PyStatement subclass: 'PyGlobal'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyGlobal comment: 
+'No class-specific documentation for PyGlobal, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyStatement
+        PyGlobal( names)
+'
 %
 expectvalue /Class
 doit
@@ -1341,6 +1713,17 @@ PyStatement subclass: 'PyNonlocal'
 %
 expectvalue /Class
 doit
+PyNonlocal comment: 
+'No class-specific documentation for PyNonlocal, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyStatement
+        PyNonlocal( names)
+'
+%
+expectvalue /Class
+doit
 PyNonlocal category: 'Parser'
 %
 set compile_env: 0
@@ -1358,6 +1741,17 @@ PyStatement subclass: 'PyPass'
 %
 expectvalue /Class
 doit
+PyPass comment: 
+'No class-specific documentation for PyPass, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyStatement
+        PyPass
+'
+%
+expectvalue /Class
+doit
 PyPass category: 'Parser'
 %
 set compile_env: 0
@@ -1372,6 +1766,17 @@ PyStatement subclass: 'PyRaise'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyRaise comment: 
+'No class-specific documentation for PyRaise, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyStatement
+        PyRaise( exc cause)
+'
 %
 expectvalue /Class
 doit
@@ -1420,6 +1825,17 @@ PyStatement subclass: 'PyTry'
 %
 expectvalue /Class
 doit
+PyTry comment: 
+'No class-specific documentation for PyTry, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyStatement
+        PyTry( body handlers orelse finalbody)
+'
+%
+expectvalue /Class
+doit
 PyTry category: 'Parser'
 %
 set compile_env: 0
@@ -1464,6 +1880,17 @@ PyStatement subclass: 'PyWith'
 %
 expectvalue /Class
 doit
+PyWith comment: 
+'No class-specific documentation for PyWith, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyStatement
+        PyWith( items body)
+'
+%
+expectvalue /Class
+doit
 PyWith category: 'Parser'
 %
 set compile_env: 0
@@ -1478,6 +1905,15 @@ PyAstNode subclass: 'PyBoolop'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyBoolop comment: 
+'No class-specific documentation for PyBoolop, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyBoolop
+'
 %
 expectvalue /Class
 doit
@@ -1498,6 +1934,16 @@ PyBoolop subclass: 'PyAnd'
 %
 expectvalue /Class
 doit
+PyAnd comment: 
+'No class-specific documentation for PyAnd, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyBoolop
+      PyAnd
+'
+%
+expectvalue /Class
+doit
 PyAnd category: 'Parser'
 %
 set compile_env: 0
@@ -1515,6 +1961,16 @@ PyBoolop subclass: 'PyOr'
 %
 expectvalue /Class
 doit
+PyOr comment: 
+'No class-specific documentation for PyOr, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyBoolop
+      PyOr
+'
+%
+expectvalue /Class
+doit
 PyOr category: 'Parser'
 %
 set compile_env: 0
@@ -1529,6 +1985,15 @@ PyAstNode subclass: 'PyCmpop'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyCmpop comment: 
+'No class-specific documentation for PyCmpop, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyCmpop
+'
 %
 expectvalue /Class
 doit
@@ -1765,6 +2230,16 @@ PyCmpop subclass: 'PyNotEq'
 %
 expectvalue /Class
 doit
+PyNotEq comment: 
+'No class-specific documentation for PyNotEq, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyCmpop
+      PyNotEq
+'
+%
+expectvalue /Class
+doit
 PyNotEq category: 'Parser'
 %
 set compile_env: 0
@@ -1807,6 +2282,15 @@ PyAstNode subclass: 'PyComprehension'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyComprehension comment: 
+'No class-specific documentation for PyComprehension, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyComprehension( target iter ifs is_async)
+'
 %
 expectvalue /Class
 doit
@@ -1853,6 +2337,16 @@ PyExpressionContext subclass: 'PyAugLoad'
 %
 expectvalue /Class
 doit
+PyAugLoad comment: 
+'No class-specific documentation for PyAugLoad, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyExpressionContext
+      PyAugLoad
+'
+%
+expectvalue /Class
+doit
 PyAugLoad category: 'Parser'
 %
 set compile_env: 0
@@ -1867,6 +2361,16 @@ PyExpressionContext subclass: 'PyAugStore'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyAugStore comment: 
+'No class-specific documentation for PyAugStore, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyExpressionContext
+      PyAugStore
+'
 %
 expectvalue /Class
 doit
@@ -1887,6 +2391,16 @@ PyExpressionContext subclass: 'PyDel'
 %
 expectvalue /Class
 doit
+PyDel comment: 
+'No class-specific documentation for PyDel, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyExpressionContext
+      PyDel
+'
+%
+expectvalue /Class
+doit
 PyDel category: 'Parser'
 %
 set compile_env: 0
@@ -1901,6 +2415,16 @@ PyExpressionContext subclass: 'PyLoad'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyLoad comment: 
+'No class-specific documentation for PyLoad, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyExpressionContext
+      PyLoad
+'
 %
 expectvalue /Class
 doit
@@ -1921,6 +2445,16 @@ PyExpressionContext subclass: 'PyParam'
 %
 expectvalue /Class
 doit
+PyParam comment: 
+'No class-specific documentation for PyParam, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyExpressionContext
+      PyParam
+'
+%
+expectvalue /Class
+doit
 PyParam category: 'Parser'
 %
 set compile_env: 0
@@ -1938,6 +2472,16 @@ PyExpressionContext subclass: 'PyStore'
 %
 expectvalue /Class
 doit
+PyStore comment: 
+'No class-specific documentation for PyStore, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyExpressionContext
+      PyStore
+'
+%
+expectvalue /Class
+doit
 PyStore category: 'Parser'
 %
 set compile_env: 0
@@ -1952,6 +2496,15 @@ PyAstNode subclass: 'PyKeyword'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyKeyword comment: 
+'No class-specific documentation for PyKeyword, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyKeyword( arg value)
+'
 %
 expectvalue /Class
 doit
@@ -1997,6 +2550,16 @@ PyModule subclass: 'PyRandom'
 %
 expectvalue /Class
 doit
+PyRandom comment: 
+'No class-specific documentation for PyRandom, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyModule( globals name path source statements stream)
+      PyRandom
+'
+%
+expectvalue /Class
+doit
 PyRandom category: 'Builtins'
 %
 set compile_env: 0
@@ -2011,6 +2574,15 @@ PyAstNode subclass: 'PyOperator'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyOperator comment: 
+'No class-specific documentation for PyOperator, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyOperator
+'
 %
 expectvalue /Class
 doit
@@ -2031,6 +2603,16 @@ PyOperator subclass: 'PyAdd'
 %
 expectvalue /Class
 doit
+PyAdd comment: 
+'No class-specific documentation for PyAdd, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyOperator
+      PyAdd
+'
+%
+expectvalue /Class
+doit
 PyAdd category: 'Parser'
 %
 set compile_env: 0
@@ -2045,6 +2627,16 @@ PyOperator subclass: 'PyBitAnd'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyBitAnd comment: 
+'No class-specific documentation for PyBitAnd, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyOperator
+      PyBitAnd
+'
 %
 expectvalue /Class
 doit
@@ -2065,6 +2657,16 @@ PyOperator subclass: 'PyBitOr'
 %
 expectvalue /Class
 doit
+PyBitOr comment: 
+'No class-specific documentation for PyBitOr, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyOperator
+      PyBitOr
+'
+%
+expectvalue /Class
+doit
 PyBitOr category: 'Parser'
 %
 set compile_env: 0
@@ -2079,6 +2681,16 @@ PyOperator subclass: 'PyBitXor'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyBitXor comment: 
+'No class-specific documentation for PyBitXor, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyOperator
+      PyBitXor
+'
 %
 expectvalue /Class
 doit
@@ -2099,6 +2711,16 @@ PyOperator subclass: 'PyDiv'
 %
 expectvalue /Class
 doit
+PyDiv comment: 
+'No class-specific documentation for PyDiv, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyOperator
+      PyDiv
+'
+%
+expectvalue /Class
+doit
 PyDiv category: 'Parser'
 %
 set compile_env: 0
@@ -2113,6 +2735,16 @@ PyOperator subclass: 'PyFloorDiv'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyFloorDiv comment: 
+'No class-specific documentation for PyFloorDiv, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyOperator
+      PyFloorDiv
+'
 %
 expectvalue /Class
 doit
@@ -2133,6 +2765,16 @@ PyOperator subclass: 'PyLShift'
 %
 expectvalue /Class
 doit
+PyLShift comment: 
+'No class-specific documentation for PyLShift, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyOperator
+      PyLShift
+'
+%
+expectvalue /Class
+doit
 PyLShift category: 'Parser'
 %
 set compile_env: 0
@@ -2147,6 +2789,16 @@ PyOperator subclass: 'PyMatMult'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyMatMult comment: 
+'No class-specific documentation for PyMatMult, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyOperator
+      PyMatMult
+'
 %
 expectvalue /Class
 doit
@@ -2167,6 +2819,16 @@ PyOperator subclass: 'PyMod'
 %
 expectvalue /Class
 doit
+PyMod comment: 
+'No class-specific documentation for PyMod, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyOperator
+      PyMod
+'
+%
+expectvalue /Class
+doit
 PyMod category: 'Parser'
 %
 set compile_env: 0
@@ -2181,6 +2843,16 @@ PyOperator subclass: 'PyMult'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyMult comment: 
+'No class-specific documentation for PyMult, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyOperator
+      PyMult
+'
 %
 expectvalue /Class
 doit
@@ -2201,6 +2873,16 @@ PyOperator subclass: 'PyPow'
 %
 expectvalue /Class
 doit
+PyPow comment: 
+'No class-specific documentation for PyPow, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyOperator
+      PyPow
+'
+%
+expectvalue /Class
+doit
 PyPow category: 'Parser'
 %
 set compile_env: 0
@@ -2215,6 +2897,16 @@ PyOperator subclass: 'PyRShift'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyRShift comment: 
+'No class-specific documentation for PyRShift, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyOperator
+      PyRShift
+'
 %
 expectvalue /Class
 doit
@@ -2235,6 +2927,16 @@ PyOperator subclass: 'PySub'
 %
 expectvalue /Class
 doit
+PySub comment: 
+'No class-specific documentation for PySub, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyOperator
+      PySub
+'
+%
+expectvalue /Class
+doit
 PySub category: 'Parser'
 %
 set compile_env: 0
@@ -2249,6 +2951,15 @@ PyAstNode subclass: 'Pyslice'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+Pyslice comment: 
+'No class-specific documentation for Pyslice, hierarchy is: 
+Object
+  PyAstNode( parent)
+    Pyslice
+'
 %
 expectvalue /Class
 doit
@@ -2269,6 +2980,16 @@ Pyslice subclass: 'PyExtSlice'
 %
 expectvalue /Class
 doit
+PyExtSlice comment: 
+'No class-specific documentation for PyExtSlice, hierarchy is: 
+Object
+  PyAstNode( parent)
+    Pyslice
+      PyExtSlice( dims)
+'
+%
+expectvalue /Class
+doit
 PyExtSlice category: 'Parser'
 %
 set compile_env: 0
@@ -2283,6 +3004,16 @@ Pyslice subclass: 'PyIndex'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyIndex comment: 
+'No class-specific documentation for PyIndex, hierarchy is: 
+Object
+  PyAstNode( parent)
+    Pyslice
+      PyIndex( value)
+'
 %
 expectvalue /Class
 doit
@@ -2303,6 +3034,16 @@ Pyslice subclass: 'PySlice'
 %
 expectvalue /Class
 doit
+PySlice comment: 
+'No class-specific documentation for PySlice, hierarchy is: 
+Object
+  PyAstNode( parent)
+    Pyslice
+      PySlice( lower upper step)
+'
+%
+expectvalue /Class
+doit
 PySlice category: 'Parser'
 %
 set compile_env: 0
@@ -2317,6 +3058,15 @@ PyAstNode subclass: 'PyUnaryop'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyUnaryop comment: 
+'No class-specific documentation for PyUnaryop, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyUnaryop
+'
 %
 expectvalue /Class
 doit
@@ -2337,6 +3087,16 @@ PyUnaryop subclass: 'PyInvert'
 %
 expectvalue /Class
 doit
+PyInvert comment: 
+'No class-specific documentation for PyInvert, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyUnaryop
+      PyInvert
+'
+%
+expectvalue /Class
+doit
 PyInvert category: 'Parser'
 %
 set compile_env: 0
@@ -2351,6 +3111,16 @@ PyUnaryop subclass: 'PyNot'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyNot comment: 
+'No class-specific documentation for PyNot, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyUnaryop
+      PyNot
+'
 %
 expectvalue /Class
 doit
@@ -2371,6 +3141,16 @@ PyUnaryop subclass: 'PyUAdd'
 %
 expectvalue /Class
 doit
+PyUAdd comment: 
+'No class-specific documentation for PyUAdd, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyUnaryop
+      PyUAdd
+'
+%
+expectvalue /Class
+doit
 PyUAdd category: 'Parser'
 %
 set compile_env: 0
@@ -2388,6 +3168,16 @@ PyUnaryop subclass: 'PyUSub'
 %
 expectvalue /Class
 doit
+PyUSub comment: 
+'No class-specific documentation for PyUSub, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyUnaryop
+      PyUSub
+'
+%
+expectvalue /Class
+doit
 PyUSub category: 'Parser'
 %
 set compile_env: 0
@@ -2402,6 +3192,15 @@ PyAstNode subclass: 'PyWithItem'
   inDictionary: PythonGlobals
   options: #()
 
+%
+expectvalue /Class
+doit
+PyWithItem comment: 
+'No class-specific documentation for PyWithItem, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyWithItem( context_expr optional_vars)
+'
 %
 expectvalue /Class
 doit
@@ -2478,6 +3277,40 @@ doit
 PythonTestCase category: 'Tests'
 %
 set compile_env: 0
+! ------------------- Class definition for ByteLiteralsTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'ByteLiteralsTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+ByteLiteralsTestCase category: 'Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for DelimitersTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'DelimitersTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+DelimitersTestCase category: 'Tests'
+%
+set compile_env: 0
 ! ------------------- Class definition for NumericLiteralsTestCase
 expectvalue /Class
 doit
@@ -2493,6 +3326,23 @@ PythonTestCase subclass: 'NumericLiteralsTestCase'
 expectvalue /Class
 doit
 NumericLiteralsTestCase category: 'Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for OperatorsTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'OperatorsTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+OperatorsTestCase category: 'Tests'
 %
 set compile_env: 0
 ! ------------------- Class definition for StringLiteralsTestCase
@@ -4519,6 +5369,26 @@ PyAstNode class removeAllMethods.
 set compile_env: 0
 category: 'other'
 classmethod: PyAstNode
+escapeCharacters
+
+	escapeCharacters ifNil: [ 
+		escapeCharacters := IdentityKeyValueDictionary new
+			at: $\		put: 92;
+			at: $'		put: 39;
+			at: $"		put: 34;
+			at: $a		put: 7;
+			at: $b		put: 8;
+			at: $f		put: 12;
+			at: $n		put: 10;
+			at: $r		put: 13;
+			at: $t		put: 9;
+			at: $v		put: 11;
+			yourself. 
+	].
+	^ escapeCharacters
+%
+category: 'other'
+classmethod: PyAstNode
 parent: aNode
 
 	(aNode isKindOf: PyAstNode) ifFalse: [self error: 'Not a valid parent!'].
@@ -4619,6 +5489,21 @@ initialize: aNode
 %
 category: 'other'
 method: PyAstNode
+interpretEscapeSequence: aStream
+
+	| aSymbol | 
+	aSymbol := aStream next.
+	"it seems Python AST never dumps octal values, so this case is useless" 
+	(aSymbol = $o) ifTrue: [
+		^ aSymbol asString, (aStream next: 2)
+	].
+	(aSymbol = $x) ifTrue: [
+		^ (Character withValue: ('16r', (aStream next: 2)) asInteger) asString
+	].
+	^ (Character withValue: (self class escapeCharacters at: aSymbol)) asString.
+%
+category: 'other'
+method: PyAstNode
 module
 
 	^parent module
@@ -4658,24 +5543,44 @@ category: 'other'
 method: PyAstNode
 string
 
-	| stream char |
+	| stream char s next isByte |
 	stream := self stream.
 	char := stream next.
-	(char = $' or: [char = $"]) ifFalse: [self error].
-	^stream upTo: char.
+	isByte := false.
+	(char asUppercase == $B) ifTrue: [ 
+		char := stream next. 
+		isByte := true.
+	].
+	(char == $' or: [char == $"]) ifFalse: [self error].
+	s := String new.
+	[ 
+		stream peekFor: char.
+	] whileFalse: [
+		next := stream next.
+		(next = $\) ifTrue: [
+			next := self interpretEscapeSequence: stream.  
+		].
+		s := s, next. 
+	].
+	isByte ifTrue: [
+		^ s asByteArray
+	] ifFalse: [
+		^ s
+	].
 %
 category: 'other'
 method: PyAstNode
 suite
 
-	| stream suite |
+	| stream suite node |
 	stream := self stream.
 	(stream peekFor: $[) ifFalse: [self error].
 	suite := Array new.
 	[
 		stream peekFor: $]
 	] whileFalse: [
-		suite add: (PyStatement statementFrom: self).
+		node := PyStatement statementFrom: self.
+		suite add: node.
 		(stream peekFor: $,) ifTrue: [stream peekFor: Character space].
 	].
 	^suite
@@ -5021,6 +5926,21 @@ PyBinOp class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyBinOp
+_left
+	^ left
+%
+category: 'other'
+method: PyBinOp
+_op
+	^ op
+%
+category: 'other'
+method: PyBinOp
+_right
+	^ right
+%
+category: 'other'
+method: PyBinOp
 assertContextIsLoad
 
 	self halt
@@ -5079,8 +5999,16 @@ PyBytes class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyBytes
+_s
+	^s
+%
+category: 'other'
+method: PyBytes
 initialize
 	"Bytes(bytes s)"
+
+	s := self string.
+	self readPosition.
 %
 
 ! ------------------- Remove existing behavior from PyCall
@@ -5152,6 +6080,21 @@ PyCompare class removeAllMethods.
 ! ------------------- Class methods for PyCompare
 ! ------------------- Instance methods for PyCompare
 set compile_env: 0
+category: 'other'
+method: PyCompare
+_cmpopList
+	^ cmpopList
+%
+category: 'other'
+method: PyCompare
+_comparatorList
+	^ comparatorList
+%
+category: 'other'
+method: PyCompare
+_left
+	^ left
+%
 category: 'other'
 method: PyCompare
 addMissingPositions
@@ -5284,6 +6227,11 @@ PyFormattedValue class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyFormattedValue
+_value 
+	^ value
+%
+category: 'other'
+method: PyFormattedValue
 initialize
 	"FormattedValue(expr value, int? conversion, expr? format_spec)"
 
@@ -5356,6 +6304,11 @@ PyJoinedStr class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyJoinedStr
+_values
+	^ values
+%
+category: 'other'
+method: PyJoinedStr
 initialize
 	"JoinedStr(expr* values)"
 
@@ -5392,6 +6345,16 @@ PyList class removeAllMethods.
 ! ------------------- Class methods for PyList
 ! ------------------- Instance methods for PyList
 set compile_env: 0
+category: 'other'
+method: PyList
+_ctx
+	^ ctx
+%
+category: 'other'
+method: PyList
+_elts
+	^ elts
+%
 category: 'other'
 method: PyList
 evaluate
@@ -5681,6 +6644,21 @@ PySubscript class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PySubscript
+_ctx
+	^ ctx
+%
+category: 'other'
+method: PySubscript
+_slice
+	^ slice
+%
+category: 'other'
+method: PySubscript
+_value
+	^ value
+%
+category: 'other'
+method: PySubscript
 assertContextIsStore
 	value assertContextIsStore.
 %
@@ -5725,6 +6703,16 @@ PyTuple class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyTuple
+_ctx
+	^ ctx
+%
+category: 'other'
+method: PyTuple
+_elts
+	^ elts
+%
+category: 'other'
+method: PyTuple
 evaluate
 	"May wish to revisit context"
 	^Py_Tuple withAll: (elts collect: [:each | each evaluate]) immediateInvariant
@@ -5749,6 +6737,16 @@ PyUnaryOp class removeAllMethods.
 ! ------------------- Class methods for PyUnaryOp
 ! ------------------- Instance methods for PyUnaryOp
 set compile_env: 0
+category: 'other'
+method: PyUnaryOp
+_op
+	^ op
+%
+category: 'other'
+method: PyUnaryOp
+_operand
+	^ operand
+%
 category: 'other'
 method: PyUnaryOp
 evaluate
@@ -7567,6 +8565,21 @@ PySlice class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PySlice
+_lower
+	^ lower
+%
+category: 'other'
+method: PySlice
+_step
+	^ step
+%
+category: 'other'
+method: PySlice
+_upper
+	^ upper
+%
+category: 'other'
+method: PySlice
 evaluate: aList
 	self halt.
 %
@@ -7580,22 +8593,25 @@ initialize
 	(stream peekFor: $') ifTrue: [
 		lower:= self expression.
 	] ifFalse: [
-		next := stream next: 4.
-		next ~= 'None' ifTrue: [self error.].
+		next := stream peekN: 4.
+		next ~= 'None' ifTrue: [ lower := self expression. ] ifFalse: [ stream next: 4. ].
 	].
 	self commaSpace.
 	(stream peekFor: $') ifTrue: [
-		upper:= self expression.
+		upper := self expression.
 	] ifFalse: [
-		next := stream next: 4.
-		next ~= 'None' ifTrue: [self error.].
+		next := stream peekN: 4.
+		next ~= 'None' ifTrue: [ upper := self expression. ] ifFalse: [ stream next: 4. ].
 	].
 	self commaSpace.
 	(stream peekFor: $') ifTrue: [
-		step:= self expression.
+		step := self expression.
 	] ifFalse: [
-		next := stream next: 4.
-		next ~= 'None' ifTrue: [self error.].
+		next := stream peekN: 4.
+		next ~= 'None' ifTrue: [ 
+			step := self expression. 
+			(stream peekFor: $)) ifFalse: [ self error. ].
+		] ifFalse: [ stream next: 5. ].
 	].
 %
 
@@ -7844,6 +8860,411 @@ setUp
 	statements := (PyModule script:  '$HOME/code/Python/GemStoneP/tests/' , self filename) _statements.
 %
 
+! ------------------- Remove existing behavior from ByteLiteralsTestCase
+expectvalue /Metaclass3       
+doit
+ByteLiteralsTestCase removeAllMethods.
+ByteLiteralsTestCase class removeAllMethods.
+%
+! ------------------- Class methods for ByteLiteralsTestCase
+! ------------------- Instance methods for ByteLiteralsTestCase
+set compile_env: 0
+category: 'other'
+method: ByteLiteralsTestCase
+filename
+
+	^'StringLiterals.py'
+%
+category: 'other'
+method: ByteLiteralsTestCase
+testByteLiteralBackspace
+
+	| x |
+	x := statements at: 16.
+	self 
+		assert: (x isKindOf: PyExpr);
+		assert: x line == 36;
+		assert: x column == 0;
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyBytes);
+		assert: x line == 36;
+		assert: x column == 0;
+		yourself.
+	x := x _s.
+	self assert: (x isKindOf: ByteArray).
+	self assert: x = #[100 101 102 8].
+%
+category: 'other'
+method: ByteLiteralsTestCase
+testByteLiteralBell
+
+	| x |
+	x := statements at: 15.
+	self 
+		assert: (x isKindOf: PyExpr);
+		assert: x line == 35;
+		assert: x column == 0;
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyBytes);
+		assert: x line == 35;
+		assert: x column == 0;
+		yourself.
+	x := x _s.
+	self assert: (x isKindOf: ByteArray).
+	self assert: x = #[ 97 98 99 7 ].
+%
+category: 'other'
+method: ByteLiteralsTestCase
+testByteLiteralHexHigh
+
+	| x |
+	x := statements at: 20.
+	self 
+		assert: (x isKindOf: PyExpr);
+		assert: x line == 44;
+		assert: x column == 0;
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyBytes);
+		assert: x line == 44;
+		assert: x column == 0;
+		yourself.
+	x := x _s.
+	self assert: (x isKindOf: ByteArray).
+	self assert: x = #[100 101 102 255].
+%
+category: 'other'
+method: ByteLiteralsTestCase
+testByteLiteralHexLow
+
+	| x |
+	x := statements at: 19.
+	self 
+		assert: (x isKindOf: PyExpr);
+		assert: x line == 43;
+		assert: x column == 0;
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyBytes);
+		assert: x line == 43;
+		assert: x column == 0;
+		yourself.
+	x := x _s.
+	self assert: (x isKindOf: ByteArray).
+	self assert: x = #[97 98 99 0].
+%
+category: 'other'
+method: ByteLiteralsTestCase
+testByteLiteralNewline
+
+	| x |
+	x := statements at: 13.
+	self 
+		assert: (x isKindOf: PyExpr);
+		assert: x line == 31;
+		assert: x column == 0;
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyBytes);
+		assert: x line == 31;
+		assert: x column == 0;
+		yourself.
+	x := x _s.
+	self assert: (x isKindOf: ByteArray).
+	self assert: x = 'abc
+' asByteArray.
+%
+category: 'other'
+method: ByteLiteralsTestCase
+testByteLiteralOctalHigh
+
+	| x |
+	x := statements at: 18.
+	self 
+		assert: (x isKindOf: PyExpr);
+		assert: x line == 40;
+		assert: x column == 0;
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyBytes);
+		assert: x line == 40;
+		assert: x column == 0;
+		yourself.
+	x := x _s.
+	self assert: (x isKindOf: ByteArray).
+	self assert: x = #[100 101 102 255].
+%
+category: 'other'
+method: ByteLiteralsTestCase
+testByteLiteralOctalLow
+
+	| x |
+	x := statements at: 17.
+	self 
+		assert: (x isKindOf: PyExpr);
+		assert: x line == 39;
+		assert: x column == 0;
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyBytes);
+		assert: x line == 39;
+		assert: x column == 0;
+		yourself.
+	x := x _s.
+	self assert: (x isKindOf: ByteArray).
+	self assert: x = #[ 97 98 99 0].
+%
+category: 'other'
+method: ByteLiteralsTestCase
+testByteLiteralSlash
+
+	| x |
+	x := statements at: 14.
+	self 
+		assert: (x isKindOf: PyExpr);
+		assert: x line == 32;
+		assert: x column == 0;
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyBytes);
+		assert: x line == 32;
+		assert: x column == 0;
+		yourself.
+	x := x _s.
+	self assert: (x isKindOf: ByteArray).
+	self assert: x = 'def\' asByteArray.
+%
+
+! ------------------- Remove existing behavior from DelimitersTestCase
+expectvalue /Metaclass3       
+doit
+DelimitersTestCase removeAllMethods.
+DelimitersTestCase class removeAllMethods.
+%
+! ------------------- Class methods for DelimitersTestCase
+! ------------------- Instance methods for DelimitersTestCase
+set compile_env: 0
+category: 'other'
+method: DelimitersTestCase
+filename
+
+	^'Delimiters.py'
+%
+category: 'other'
+method: DelimitersTestCase
+testDelimiterCommaList
+
+	| x |
+	x := statements at: 3.
+	self 
+		assert: (x isKindOf: PyExpr);
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyList);
+		assert: (x _ctx isKindOf: PyLoad);
+		assert: (x _elts size == 3);
+		assert: ((x _elts at: 1) isKindOf: PyNum);
+		assert: ((x _elts at: 1) _n == 1);
+		assert: ((x _elts at: 2) isKindOf: PyNum);
+		assert: ((x _elts at: 2) _n == 2);
+		assert: ((x _elts at: 3) isKindOf: PyNum);
+		assert: ((x _elts at: 3) _n == 3);
+		yourself.
+%
+category: 'other'
+method: DelimitersTestCase
+testDelimiterCommaTuple
+
+	| x |
+	x := statements at: 4.
+	self 
+		assert: (x isKindOf: PyExpr);
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyTuple);
+		assert: (x _ctx isKindOf: PyLoad);
+		assert: (x _elts size == 3);
+		assert: ((x _elts at: 1) isKindOf: PyNum);
+		assert: ((x _elts at: 1) _n == 4);
+		assert: ((x _elts at: 2) isKindOf: PyNum);
+		assert: ((x _elts at: 2) _n == 5);
+		assert: ((x _elts at: 3) isKindOf: PyNum);
+		assert: ((x _elts at: 3) _n == 6);
+		yourself.
+%
+category: 'other'
+method: DelimitersTestCase
+testDelimiterParethesesLeft
+
+	| x |
+	x := statements at: 1.
+	self 
+		assert: (x isKindOf: PyExpr);
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyBinOp);
+		assert: (x _op isKindOf: PyAdd);
+		assert: (x _left isKindOf: PyBinOp);
+		assert: (x _left _left isKindOf: PyNum);
+		assert: (x _left _left _n == 1);
+		assert: (x _left _op isKindOf: PyAdd);
+		assert: (x _left _right isKindOf: PyNum);
+		assert: (x _left _right _n == 2);
+		assert: (x _right isKindOf: PyNum);
+		assert: (x _right _n == 3);
+		yourself.
+%
+category: 'other'
+method: DelimitersTestCase
+testDelimiterParethesesRight
+
+	| x |
+	x := statements at: 2.
+	self 
+		assert: (x isKindOf: PyExpr);
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyBinOp);
+		assert: (x _op isKindOf: PyAdd);
+		assert: (x _left isKindOf: PyNum);
+		assert: (x _left _n == 4);
+		assert: (x _right isKindOf: PyBinOp);
+		assert: (x _right _op isKindOf: PyAdd);
+		assert: (x _right _left isKindOf: PyNum);
+		assert: (x _right _left _n == 5);
+		assert: (x _right _right isKindOf: PyNum);
+		assert: (x _right _right _n == 6);
+		yourself.
+%
+category: 'other'
+method: DelimitersTestCase
+testDelimiterSliceList
+
+	| x |
+	x := statements at: 5.
+	self 
+		assert: (x isKindOf: PyExpr);
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PySubscript);
+		assert: (x _ctx isKindOf: PyLoad);
+		assert: (x _value isKindOf: PyList);
+		assert: (x _value _elts size == 3);
+		assert: ((x _value _elts at: 1) isKindOf: PyNum);
+		assert: ((x _value _elts at: 1) _n == 1);
+		assert: ((x _value _elts at: 2) isKindOf: PyNum);
+		assert: ((x _value _elts at: 2) _n == 2);
+		assert: ((x _value _elts at: 3) isKindOf: PyNum);
+		assert: ((x _value _elts at: 3) _n == 3);
+		assert: (x _slice isKindOf: PySlice);
+		assert: (x _slice _lower isKindOf: PyNum);
+		assert: (x _slice _lower _n == 0);
+		assert: (x _slice _upper isKindOf: PyNum);
+		assert: (x _slice _upper _n == 1);
+		assert: (x _slice _step isNil);
+		yourself.
+%
+category: 'other'
+method: DelimitersTestCase
+testDelimiterSliceListEmpty
+
+	| x |
+	x := statements at: 7.
+	self 
+		assert: (x isKindOf: PyExpr);
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PySubscript);
+		assert: (x _ctx isKindOf: PyLoad);
+		assert: (x _value isKindOf: PyList);
+		assert: (x _value _elts size == 3);
+		assert: ((x _value _elts at: 1) isKindOf: PyNum);
+		assert: ((x _value _elts at: 1) _n == 7);
+		assert: ((x _value _elts at: 2) isKindOf: PyNum);
+		assert: ((x _value _elts at: 2) _n == 8);
+		assert: ((x _value _elts at: 3) isKindOf: PyNum);
+		assert: ((x _value _elts at: 3) _n == 9);
+		assert: (x _slice isKindOf: PySlice);
+		assert: (x _slice _lower isNil);
+		assert: (x _slice _upper isNil);
+		assert: (x _slice _step isNil);
+		yourself.
+%
+category: 'other'
+method: DelimitersTestCase
+testDelimiterSliceTuple
+
+	| x |
+	x := statements at: 6.
+	self 
+		assert: (x isKindOf: PyExpr);
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PySubscript);
+		assert: (x _ctx isKindOf: PyLoad);
+		assert: (x _value isKindOf: PyTuple);
+		assert: (x _value _elts size == 3);
+		assert: ((x _value _elts at: 1) isKindOf: PyNum);
+		assert: ((x _value _elts at: 1) _n == 4);
+		assert: ((x _value _elts at: 2) isKindOf: PyNum);
+		assert: ((x _value _elts at: 2) _n == 5);
+		assert: ((x _value _elts at: 3) isKindOf: PyNum);
+		assert: ((x _value _elts at: 3) _n == 6);
+		assert: (x _slice isKindOf: PySlice);
+		assert: (x _slice _lower isNil);
+		assert: (x _slice _upper isNil);
+		assert: (x _slice _step isKindOf: PyNum);
+		assert: (x _slice _step _n == 2);
+		yourself.
+%
+category: 'other'
+method: DelimitersTestCase
+testDelimiterSliceTupleFilled
+
+	| x |
+	x := statements at: 8.
+	self 
+		assert: (x isKindOf: PyExpr);
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PySubscript);
+		assert: (x _ctx isKindOf: PyLoad);
+		assert: (x _value isKindOf: PyTuple);
+		assert: (x _value _elts size == 3);
+		assert: ((x _value _elts at: 1) isKindOf: PyNum);
+		assert: ((x _value _elts at: 1) _n == 10);
+		assert: ((x _value _elts at: 2) isKindOf: PyNum);
+		assert: ((x _value _elts at: 2) _n == 11);
+		assert: ((x _value _elts at: 3) isKindOf: PyNum);
+		assert: ((x _value _elts at: 3) _n == 12);
+		assert: (x _slice isKindOf: PySlice);
+		assert: (x _slice _lower isKindOf: PyNum);
+		assert: (x _slice _lower _n == 1);
+		assert: (x _slice _upper isKindOf: PyNum);
+		assert: (x _slice _upper _n == 2);
+		assert: (x _slice _step isKindOf: PyNum);
+		assert: (x _slice _step _n == 3);
+		yourself.
+%
+
 ! ------------------- Remove existing behavior from NumericLiteralsTestCase
 expectvalue /Metaclass3       
 doit
@@ -7871,6 +9292,228 @@ testDecimalInteger
 		yourself.
 %
 
+! ------------------- Remove existing behavior from OperatorsTestCase
+expectvalue /Metaclass3       
+doit
+OperatorsTestCase removeAllMethods.
+OperatorsTestCase class removeAllMethods.
+%
+! ------------------- Class methods for OperatorsTestCase
+! ------------------- Instance methods for OperatorsTestCase
+set compile_env: 0
+category: 'other'
+method: OperatorsTestCase
+filename
+
+	^'Operators.py'
+%
+category: 'other'
+method: OperatorsTestCase
+testOperatorAdd
+
+	| x |
+	x := statements at: 1.
+	self 
+		assert: (x isKindOf: PyExpr);
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyBinOp);
+		assert: (x _op isKindOf: PyAdd);
+		assert: (x _left isKindOf: PyNum);
+		assert: (x _left _n == 1);
+		assert: (x _right isKindOf: PyNum);
+		assert: (x _right _n == 2);
+		yourself.
+%
+category: 'other'
+method: OperatorsTestCase
+testOperatorEq
+
+	| x |
+	x := statements at: 9.
+	self 
+		assert: (x isKindOf: PyExpr);
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyCompare);
+		assert: (x _left isKindOf: PyNum);
+		assert: (x _left _n == 10);
+		assert: (x _cmpopList size == 1);
+		assert: ((x _cmpopList at: 1) isKindOf: PyEq);
+		assert: (x _comparatorList size == 1);
+		assert: ((x _comparatorList at: 1) isKindOf: PyNum);
+		assert: ((x _comparatorList at: 1) _n == 20);
+		yourself.
+%
+category: 'other'
+method: OperatorsTestCase
+testOperatorGtE
+
+	| x |
+	x := statements at: 10.
+	self 
+		assert: (x isKindOf: PyExpr);
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyCompare);
+		assert: (x _left isKindOf: PyNum);
+		assert: (x _left _n == 25);
+		assert: (x _cmpopList size == 1);
+		assert: ((x _cmpopList at: 1) isKindOf: PyGtE);
+		assert: (x _comparatorList size == 1);
+		assert: ((x _comparatorList at: 1) isKindOf: PyNum);
+		assert: ((x _comparatorList at: 1) _n == 15);
+		yourself.
+%
+category: 'other'
+method: OperatorsTestCase
+testOperatorInvert
+
+	| x |
+	x := statements at: 6.
+	self 
+		assert: (x isKindOf: PyExpr);
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyUnaryOp);
+		assert: (x _op isKindOf: PyInvert);
+		assert: (x _operand isKindOf: PyNum);
+		assert: (x _operand _n == 200);
+		yourself.
+%
+category: 'other'
+method: OperatorsTestCase
+testOperatorMod
+
+	| x |
+	x := statements at: 2.
+	self 
+		assert: (x isKindOf: PyExpr);
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyBinOp);
+		assert: (x _op isKindOf: PyMod);
+		assert: (x _left isKindOf: PyNum);
+		assert: (x _left _n == 10);
+		assert: (x _right isKindOf: PyNum);
+		assert: (x _right _n == 5);
+		yourself.
+%
+category: 'other'
+method: OperatorsTestCase
+testOperatorNestedAdd
+
+	| x |
+	x := statements at: 3.
+	self 
+		assert: (x isKindOf: PyExpr);
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyBinOp);
+		assert: (x _op isKindOf: PyAdd);
+		assert: (x _left isKindOf: PyBinOp);
+		assert: (x _left _op isKindOf: PyAdd);
+		assert: (x _left _left isKindOf: PyNum);
+		assert: (x _left _left _n == 2);
+		assert: (x _left _right isKindOf: PyNum);
+		assert: (x _left _right _n == 4);
+		assert: (x _right isKindOf: PyNum);
+		assert: (x _right _n == 6);
+		yourself.
+%
+category: 'other'
+method: OperatorsTestCase
+testOperatorNestedEq
+
+	| x |
+	x := statements at: 11.
+	self 
+		assert: (x isKindOf: PyExpr);
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyCompare);
+		assert: (x _left isKindOf: PyNum);
+		assert: (x _left _n == 11);
+		assert: (x _cmpopList size == 2);
+		assert: ((x _cmpopList at: 1) isKindOf: PyEq);
+		assert: ((x _cmpopList at: 2) isKindOf: PyEq);
+		assert: (x _comparatorList size == 2);
+		assert: ((x _comparatorList at: 1) isKindOf: PyNum);
+		assert: ((x _comparatorList at: 1) _n == 22);
+		assert: ((x _comparatorList at: 2) _n == 33);
+		yourself.
+%
+category: 'other'
+method: OperatorsTestCase
+testOperatorNestedGtE
+
+	| x |
+	x := statements at: 12.
+	self 
+		assert: (x isKindOf: PyExpr);
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyCompare);
+		assert: (x _left isKindOf: PyNum);
+		assert: (x _left _n == 44);
+		assert: (x _cmpopList size == 2);
+		assert: ((x _cmpopList at: 1) isKindOf: PyGtE);
+		assert: ((x _cmpopList at: 2) isKindOf: PyGtE);
+		assert: (x _comparatorList size == 2);
+		assert: ((x _comparatorList at: 1) isKindOf: PyNum);
+		assert: ((x _comparatorList at: 1) _n == 55);
+		assert: ((x _comparatorList at: 2) _n == 66);
+		yourself.
+%
+category: 'other'
+method: OperatorsTestCase
+testOperatorNestedMult
+
+	| x |
+	x := statements at: 4.
+	self 
+		assert: (x isKindOf: PyExpr);
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyBinOp);
+		assert: (x _op isKindOf: PyMult);
+		assert: (x _left isKindOf: PyBinOp);
+		assert: (x _left _op isKindOf: PyMult);
+		assert: (x _left _left isKindOf: PyNum);
+		assert: (x _left _left _n == 7);
+		assert: (x _left _right isKindOf: PyNum);
+		assert: (x _left _right _n == 8);
+		assert: (x _right isKindOf: PyNum);
+		assert: (x _right _n == 9);
+		yourself.
+%
+category: 'other'
+method: OperatorsTestCase
+testOperatorUSub
+
+	| x |
+	x := statements at: 5.
+	self 
+		assert: (x isKindOf: PyExpr);
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyUnaryOp);
+		assert: (x _op isKindOf: PyUSub);
+		assert: (x _operand isKindOf: PyNum);
+		assert: (x _operand _n == 100);
+		yourself.
+%
+
 ! ------------------- Remove existing behavior from StringLiteralsTestCase
 expectvalue /Metaclass3       
 doit
@@ -7885,6 +9528,237 @@ method: StringLiteralsTestCase
 filename
 
 	^'StringLiterals.py'
+%
+category: 'other'
+method: StringLiteralsTestCase
+testEmbeddedStringDoubleQuotes
+
+	| x |
+	x := statements at: 6.
+	self 
+		assert: (x isKindOf: PyExpr);
+		assert: x line == 16;
+		assert: x column == 0;
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyStr);
+		assert: x line == 16;
+		assert: x column == 0;
+		yourself.
+	x := x _s.
+	self assert: x = 'a''bc'.
+%
+category: 'other'
+method: StringLiteralsTestCase
+testEmbeddedStringSingleQuotes
+
+	| x |
+	x := statements at: 5.
+	self 
+		assert: (x isKindOf: PyExpr);
+		assert: x line == 15;
+		assert: x column == 0;
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyStr);
+		assert: x line == 15;
+		assert: x column == 0;
+		yourself.
+	x := x _s.
+	self assert: x = 'x"yz'.
+%
+category: 'other'
+method: StringLiteralsTestCase
+testEscapeCharacterStringNewline
+
+	| x |
+	x := statements at: 8.
+	self 
+		assert: (x isKindOf: PyExpr);
+		assert: x line == 20;
+		assert: x column == 0;
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyStr);
+		assert: x line == 20;
+		assert: x column == 0;
+		yourself.
+	x := x _s.
+	self assert: x = 'newline\n'.
+%
+category: 'other'
+method: StringLiteralsTestCase
+testEscapeCharacterStringSlash
+
+	| x |
+	x := statements at: 7.
+	self 
+		assert: (x isKindOf: PyExpr);
+		assert: x line == 19;
+		assert: x column == 0;
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyStr);
+		assert: x line == 19;
+		assert: x column == 0;
+		yourself.
+	x := x _s.
+	self assert: x = 'slash\\'.
+%
+category: 'other'
+method: StringLiteralsTestCase
+testJoinedStrWithFormattedValueNum
+
+	| x child |
+	x := statements at: 12.
+	self 
+		assert: (x isKindOf: PyExpr);
+		assert: x line == 28;
+		assert: x column == 0;
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyJoinedStr);
+		assert: x line == 28;
+		assert: x column == 0;
+		yourself.
+	child := x _values at: 1.
+	self
+		assert: (child isKindOf: PyStr);
+		assert: child _s = '123';
+		yourself.
+	child := x _values at: 2.
+	self
+		assert: (child isKindOf: PyFormattedValue);
+		assert: child _value _n = 456;
+		yourself.
+	child := x _values at: 3.
+	self
+		assert: (child isKindOf: PyStr);
+		assert: child _s = '789';
+		yourself.
+	self assert: x _values size = 3.
+%
+category: 'other'
+method: StringLiteralsTestCase
+testJoinedStrWithFormattedValueStr
+
+	| x child |
+	x := statements at: 11.
+	self 
+		assert: (x isKindOf: PyExpr);
+		assert: x line == 27;
+		assert: x column == 0;
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyJoinedStr);
+		assert: x line == 27;
+		assert: x column == 0;
+		yourself.
+	child := x _values at: 1.
+	self
+		assert: (child isKindOf: PyStr);
+		assert: child _s = 'abc';
+		yourself.
+	child := x _values at: 2.
+	self
+		assert: (child isKindOf: PyFormattedValue);
+		assert: child _value _s = 'def';
+		yourself.
+	child := x _values at: 3.
+	self
+		assert: (child isKindOf: PyStr);
+		assert: child _s = 'ghi';
+		yourself.
+	self assert: x _values size = 3.
+%
+category: 'other'
+method: StringLiteralsTestCase
+testLongStringDoubleQuotes
+
+	| x |
+	x := statements at: 4.
+	self 
+		assert: (x isKindOf: PyExpr);
+		assert: x line == 12;
+		assert: x column == -1;
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyStr);
+		assert: x line == 12;
+		assert: x column == -1;
+		yourself.
+	x := x _s.
+	self assert: x = 'poiu
+;lkj'.
+%
+category: 'other'
+method: StringLiteralsTestCase
+testLongStringSingleQuotes
+
+	| x |
+	x := statements at: 3.
+	self 
+		assert: (x isKindOf: PyExpr);
+		assert: x line == 10;
+		assert: x column == -1;
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyStr);
+		assert: x line == 10;
+		assert: x column == -1;
+		yourself.
+	x := x _s.
+	self assert: x = 'qwer
+asdf'.
+%
+category: 'other'
+method: StringLiteralsTestCase
+testNonEscapeCharacterStringNewline
+
+	| x |
+	x := statements at: 10.
+	self 
+		assert: (x isKindOf: PyExpr);
+		assert: x line == 24;
+		assert: x column == 0;
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyStr);
+		assert: x line == 24;
+		assert: x column == 0;
+		yourself.
+	x := x _s.
+	self assert: x = 'newline
+'.
+%
+category: 'other'
+method: StringLiteralsTestCase
+testNonEscapeCharacterStringSlash
+
+	| x |
+	x := statements at: 9.
+	self 
+		assert: (x isKindOf: PyExpr);
+		assert: x line == 23;
+		assert: x column == 0;
+		yourself.
+	x := x _value.
+	self 
+		assert: (x isKindOf: PyStr);
+		assert: x line == 23;
+		assert: x column == 0;
+		yourself.
+	x := x _s.
+	self assert: x = 'slash\'.
 %
 category: 'other'
 method: StringLiteralsTestCase
