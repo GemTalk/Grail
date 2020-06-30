@@ -5543,30 +5543,21 @@ category: 'other'
 method: PyAstNode
 string
 
-	| stream char s next isByte |
+	| stream char writeStream next |
 	stream := self stream.
 	char := stream next.
-	isByte := false.
-	(char asUppercase == $B) ifTrue: [ 
-		char := stream next. 
-		isByte := true.
-	].
 	(char == $' or: [char == $"]) ifFalse: [self error].
-	s := String new.
+	writeStream := WriteStream on: String new.
 	[ 
 		stream peekFor: char.
 	] whileFalse: [
-		next := stream next.
-		(next = $\) ifTrue: [
+		next := stream next asString.
+		(next = '\') ifTrue: [
 			next := self interpretEscapeSequence: stream.  
 		].
-		s := s, next. 
+		writeStream nextPutAll: next.
 	].
-	isByte ifTrue: [
-		^ s asByteArray
-	] ifFalse: [
-		^ s
-	].
+	^ writeStream contents
 %
 category: 'other'
 method: PyAstNode
@@ -6007,7 +5998,11 @@ method: PyBytes
 initialize
 	"Bytes(bytes s)"
 
-	s := self string.
+	| stream char |
+	stream := self stream.
+	char := stream next.
+	(char asUppercase == $B) ifFalse: [ self error. ].
+	s := self string asByteArray.
 	self readPosition.
 %
 
