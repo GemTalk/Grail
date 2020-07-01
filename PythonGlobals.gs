@@ -3345,6 +3345,23 @@ doit
 OperatorsTestCase category: 'Tests'
 %
 set compile_env: 0
+! ------------------- Class definition for SimpleStatementsTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'SimpleStatementsTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+SimpleStatementsTestCase category: 'Tests'
+%
+set compile_env: 0
 ! ------------------- Class definition for StringLiteralsTestCase
 expectvalue /Class
 doit
@@ -5604,6 +5621,16 @@ PyAlias class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyAlias
+_asName
+	^ asName
+%
+category: 'other'
+method: PyAlias
+_name
+	^ name
+%
+category: 'other'
+method: PyAlias
 asName
 
 	^asName
@@ -5648,6 +5675,36 @@ PyArguments class removeAllMethods.
 ! ------------------- Class methods for PyArguments
 ! ------------------- Instance methods for PyArguments
 set compile_env: 0
+category: 'other'
+method: PyArguments
+_args
+	^ args
+%
+category: 'other'
+method: PyArguments
+_defaults
+	^ defaults
+%
+category: 'other'
+method: PyArguments
+_kw_defaults
+	^ kw_defaults
+%
+category: 'other'
+method: PyArguments
+_kwarg
+	^ kwarg
+%
+category: 'other'
+method: PyArguments
+_kwonlyargs
+	^ kwonlyargs
+%
+category: 'other'
+method: PyArguments
+_vararg
+	^ vararg
+%
 category: 'other'
 method: PyArguments
 initialize
@@ -5728,7 +5785,8 @@ readPositionOnly
 
 	| stream string |
 	stream := self stream.
-	(string := stream upTo: $=) = ' lineno' ifFalse: [self error].
+	string := stream upTo: $=.
+	(string = ' lineno' or: [ string = 'lineno'. ]) ifFalse: [self error].
 	line := (stream upTo: $,) asNumber.
 	(string := stream upTo: $=) = ' col_offset' ifFalse: [self error].
 	column := (stream upTo: $)) asNumber.
@@ -5743,6 +5801,16 @@ PyArg class removeAllMethods.
 ! ------------------- Class methods for PyArg
 ! ------------------- Instance methods for PyArg
 set compile_env: 0
+category: 'other'
+method: PyArg
+_annotation
+	^ annotation
+%
+category: 'other'
+method: PyArg
+_arg
+	^ arg
+%
 category: 'other'
 method: PyArg
 initialize
@@ -5839,6 +5907,21 @@ PyAttribute class removeAllMethods.
 ! ------------------- Class methods for PyAttribute
 ! ------------------- Instance methods for PyAttribute
 set compile_env: 0
+category: 'other'
+method: PyAttribute
+_attr
+	^ attr
+%
+category: 'other'
+method: PyAttribute
+_ctx
+	^ ctx
+%
+category: 'other'
+method: PyAttribute
+_value
+	^ value
+%
 category: 'other'
 method: PyAttribute
 addMissingPositions
@@ -6031,6 +6114,21 @@ keywords
 	^keywords
 %
 set compile_env: 0
+category: 'other'
+method: PyCall
+_arguments
+	^ arguments
+%
+category: 'other'
+method: PyCall
+_function
+	^ function
+%
+category: 'other'
+method: PyCall
+_keywords
+	^ keywords
+%
 category: 'other'
 method: PyCall
 addMissingPositions
@@ -6399,6 +6497,16 @@ PyName class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyName
+_ctx
+	^ ctx
+%
+category: 'other'
+method: PyName
+_id
+	^ id
+%
+category: 'other'
+method: PyName
 assertContextIsLoad
 
 	ctx assertIsLoad.
@@ -6468,6 +6576,11 @@ PyNameConstant class removeAllMethods.
 ! ------------------- Class methods for PyNameConstant
 ! ------------------- Instance methods for PyNameConstant
 set compile_env: 0
+category: 'other'
+method: PyNameConstant
+_value
+	^ value
+%
 category: 'other'
 method: PyNameConstant
 evaluate
@@ -6769,16 +6882,21 @@ PyYield class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyYield
+_value
+	^ value
+%
+category: 'other'
+method: PyYield
 initialize
 	"Yield(expr? value)"
 
 	| stream next |
 	stream := self stream.
-	(stream peekFor: $') ifTrue: [
-		value:= self expression.
+	next := stream peekN: 4.
+	next ~= 'None' ifTrue: [
+		value := self expression. 
 	] ifFalse: [
-		next := stream next: 4.
-		next ~= 'None' ifTrue: [self error.].
+		stream next: 4.
 	].
 	self readPosition.
 %
@@ -6874,6 +6992,16 @@ PyAssert class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyAssert
+_msg
+	^ msg
+%
+category: 'other'
+method: PyAssert
+_test
+	^ test
+%
+category: 'other'
+method: PyAssert
 addMissingPositions
 %
 category: 'other'
@@ -6903,6 +7031,16 @@ PyAssign class removeAllMethods.
 ! ------------------- Class methods for PyAssign
 ! ------------------- Instance methods for PyAssign
 set compile_env: 0
+category: 'other'
+method: PyAssign
+_targets
+	^ targets
+%
+category: 'other'
+method: PyAssign
+_value
+	^ value
+%
 category: 'other'
 method: PyAssign
 addMissingPositions
@@ -6964,6 +7102,31 @@ PyAsyncFunctionDef class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyAsyncFunctionDef
+_args
+	^ args
+%
+category: 'other'
+method: PyAsyncFunctionDef
+_body
+	^ body
+%
+category: 'other'
+method: PyAsyncFunctionDef
+_decorator_list
+	^ decorator_list
+%
+category: 'other'
+method: PyAsyncFunctionDef
+_name
+	^ name
+%
+category: 'other'
+method: PyAsyncFunctionDef
+_returns
+	^ returns
+%
+category: 'other'
+method: PyAsyncFunctionDef
 addMissingPositions
 %
 category: 'other'
@@ -6975,10 +7138,11 @@ initialize
 
 	| stream next |
 	stream := self stream.
+	stream peekFor: $'.
 	name := stream upTo: $'.
-	(stream peekFor: $,) ifFalse: [self error].
 	self commaSpace.
 	args := PyArguments parent: self.
+	self commaSpace.
 	body := self suite.
 	self commaSpace.
 	decorator_list := self collectAst: [ self expression ].
@@ -7082,14 +7246,39 @@ PyClassDef class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyClassDef
+_bases
+	^ bases
+%
+category: 'other'
+method: PyClassDef
+_body
+	^ body
+%
+category: 'other'
+method: PyClassDef
+_decorator_list
+	^ decorator_list
+%
+category: 'other'
+method: PyClassDef
+_keywords
+	^ keywords
+%
+category: 'other'
+method: PyClassDef
+_name
+	^ name
+%
+category: 'other'
+method: PyClassDef
 initialize
 	"ClassDef(identifier name, expr* bases, 
 		keyword* keywords, stmt* body, expr* decorator_list)"
 
 	| stream |
 	stream := self stream.
+	(stream peekFor: $') ifFalse: [self error].
 	name := stream upTo: $'.
-	(stream peekFor: $,) ifFalse: [self error].
 	self commaSpace.
 	bases := self collectAst:[self expression].
 	self commaSpace.
@@ -7123,6 +7312,8 @@ category: 'other'
 method: PyContinue
 initialize
 "continue"
+
+	self readPositionOnly
 %
 
 ! ------------------- Remove existing behavior from PyDelete
@@ -7134,6 +7325,11 @@ PyDelete class removeAllMethods.
 ! ------------------- Class methods for PyDelete
 ! ------------------- Instance methods for PyDelete
 set compile_env: 0
+category: 'other'
+method: PyDelete
+_targets
+	^ targets
+%
 category: 'other'
 method: PyDelete
 addMissingPositions
@@ -7192,6 +7388,26 @@ PyFor class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyFor
+_body
+	^ body
+%
+category: 'other'
+method: PyFor
+_iter
+	^ iter
+%
+category: 'other'
+method: PyFor
+_orelse
+	^ orelse
+%
+category: 'other'
+method: PyFor
+_target
+	^ target
+%
+category: 'other'
+method: PyFor
 addMissingPositions
 
 	super addMissingPositions. 
@@ -7244,6 +7460,31 @@ PyFunctionDef class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyFunctionDef
+_args
+	^ args
+%
+category: 'other'
+method: PyFunctionDef
+_body
+	^ body
+%
+category: 'other'
+method: PyFunctionDef
+_decorator_list
+	^ decorator_list
+%
+category: 'other'
+method: PyFunctionDef
+_name
+	^ name
+%
+category: 'other'
+method: PyFunctionDef
+_returns
+	^ returns
+%
+category: 'other'
+method: PyFunctionDef
 addMissingPositions
 %
 category: 'other'
@@ -7282,10 +7523,12 @@ PyGlobal class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyGlobal
+_names
+	^ names
+%
+category: 'other'
+method: PyGlobal
 addMissingPositions
-
-	super addMissingPositions.
-	names do: [:each | each addMissingPositions].
 %
 category: 'other'
 method: PyGlobal
@@ -7344,6 +7587,11 @@ PyImport class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyImport
+_names
+	^ names
+%
+category: 'other'
+method: PyImport
 addMissingPositions
 
 	super addMissingPositions.
@@ -7390,6 +7638,21 @@ PyImportFrom class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyImportFrom
+_level
+	^ level
+%
+category: 'other'
+method: PyImportFrom
+_module
+	^ module
+%
+category: 'other'
+method: PyImportFrom
+_names
+	^ names
+%
+category: 'other'
+method: PyImportFrom
 addMissingPositions
 
 	super addMissingPositions.
@@ -7434,6 +7697,11 @@ PyNonlocal class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyNonlocal
+_names
+	^ names
+%
+category: 'other'
+method: PyNonlocal
 addMissingPositions
 %
 category: 'other'
@@ -7471,6 +7739,13 @@ category: 'other'
 method: PyPass
 initialize
 	"pass"
+
+	| stream string |
+	stream := self stream.
+	(string := stream upTo: $=) = 'lineno' ifFalse: [self error].
+	line := (stream upTo: $,) asNumber.
+	(string := stream upTo: $=) = ' col_offset' ifFalse: [self error].
+	column := (stream upTo: $)) asNumber.
 %
 
 ! ------------------- Remove existing behavior from PyRaise
@@ -7484,6 +7759,16 @@ PyRaise class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyRaise
+_cause
+	^ cause
+%
+category: 'other'
+method: PyRaise
+_exc
+	^ exc
+%
+category: 'other'
+method: PyRaise
 addMissingPositions
 %
 category: 'other'
@@ -7493,18 +7778,18 @@ initialize
 
 	| stream next |
 	stream := self stream.
-	(stream peekFor: $') ifTrue: [
+	next := stream peekN: 4.
+	next ~= 'None' ifTrue: [
 		exc := self expression.
 	] ifFalse: [
-		next := stream next: 4.
-		next ~= 'None' ifTrue: [self error.].
+		stream next: 4.
 	].
 	self commaSpace.
-	(stream peekFor: $') ifTrue: [
-		cause:= self expression.
+	next := stream peekN: 4.
+	next ~= 'None' ifTrue: [
+		cause := self expression.
 	] ifFalse: [
-		next := stream next: 4.
-		next ~= 'None' ifTrue: [self error.].
+		stream next: 4.
 	].
 	self readPosition.
 %
@@ -7520,6 +7805,11 @@ PyReturn class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyReturn
+_value
+	^ value
+%
+category: 'other'
+method: PyReturn
 addMissingPositions
 %
 category: 'other'
@@ -7529,11 +7819,11 @@ initialize
 	
 	| stream next |
 	stream := self stream.
-	(stream peekFor: $') ifTrue: [
-		next := stream next: 4.
-		next ~= 'None' ifTrue: [self error.].
-	] ifFalse: [
+	next := stream peekN: 4.
+	next ~= 'None' ifTrue: [
 		value := self expression.
+	] ifFalse: [
+		stream next: 4.
 	].
 	self readPosition.
 %
@@ -9506,6 +9796,515 @@ testOperatorUSub
 		assert: (x _op isKindOf: PyUSub);
 		assert: (x _operand isKindOf: PyNum);
 		assert: (x _operand _n == 100);
+		yourself.
+%
+
+! ------------------- Remove existing behavior from SimpleStatementsTestCase
+expectvalue /Metaclass3       
+doit
+SimpleStatementsTestCase removeAllMethods.
+SimpleStatementsTestCase class removeAllMethods.
+%
+! ------------------- Class methods for SimpleStatementsTestCase
+! ------------------- Instance methods for SimpleStatementsTestCase
+set compile_env: 0
+category: 'other'
+method: SimpleStatementsTestCase
+filename
+
+	^'SimpleStatements.py'
+%
+category: 'other'
+method: SimpleStatementsTestCase
+testSimpleStatementArrayAssignment
+
+	| x |
+	x := statements at: 6.
+	self 
+		assert: (x isKindOf: PyAssign);
+		assert: (x _targets size == 1);
+		assert: ((x _targets at: 1) isKindOf: PyName);
+		assert: ((x _targets at: 1) _id = 'x');
+		assert: ((x _targets at: 1) _ctx isKindOf: PyStore);
+		assert: (x _value isKindOf: PyList);
+		assert: (x _value _elts size == 2);
+		assert: ((x _value _elts at: 1) isKindOf: PyNum);
+		assert: ((x _value _elts at: 1) _n == 0);
+		assert: ((x _value _elts at: 2) isKindOf: PyNum);
+		assert: ((x _value _elts at: 2) _n == 1);
+		assert: (x _value _ctx isKindOf: PyLoad);
+		yourself.
+%
+category: 'other'
+method: SimpleStatementsTestCase
+testSimpleStatementAssertFalse
+
+	| x |
+	x := statements at: 10.
+	self 
+		assert: (x isKindOf: PyAssert);
+		assert: (x _test isKindOf: PyNameConstant);
+		assert: (x _test _value) not;
+		assert: (x _msg isNil);
+		yourself.
+%
+category: 'other'
+method: SimpleStatementsTestCase
+testSimpleStatementAssertTrue
+
+	| x |
+	x := statements at: 9.
+	self 
+		assert: (x isKindOf: PyAssert);
+		assert: (x _test isKindOf: PyNameConstant);
+		assert: (x _test _value);
+		assert: (x _msg isNil);
+		yourself.
+%
+category: 'other'
+method: SimpleStatementsTestCase
+testSimpleStatementAssignMultiple
+
+	| x |
+	x := statements at: 2.
+	self 
+		assert: (x isKindOf: PyAssign);
+		assert: (x _value isKindOf: PyNum);
+		assert: (x _value _n == 2);
+		assert: (x _targets size == 2);
+		assert: ((x _targets at: 1) isKindOf: PyName);
+		assert: ((x _targets at: 1) _id = 'var2');
+		assert: ((x _targets at: 1) _ctx isKindOf: PyStore);
+		assert: ((x _targets at: 2) isKindOf: PyName);
+		assert: ((x _targets at: 2) _id = 'var3');
+		assert: ((x _targets at: 2) _ctx isKindOf: PyStore);
+		yourself.
+%
+category: 'other'
+method: SimpleStatementsTestCase
+testSimpleStatementAssignSingle
+
+	| x |
+	x := statements at: 1.
+	self 
+		assert: (x isKindOf: PyAssign);
+		assert: (x _value isKindOf: PyNum);
+		assert: (x _value _n == 1);
+		assert: (x _targets size == 1);
+		assert: ((x _targets at: 1) isKindOf: PyName);
+		assert: ((x _targets at: 1) _id = 'var1');
+		assert: ((x _targets at: 1) _ctx isKindOf: PyStore);
+		yourself.
+%
+category: 'other'
+method: SimpleStatementsTestCase
+testSimpleStatementBreak
+
+	| x |
+	x := statements at: 21.
+	self 
+		assert: (x isKindOf: PyFor);
+		assert: (x _target isKindOf: PyName);
+		assert: (x _target _id = '_');
+		assert: (x _target _ctx isKindOf: PyStore);
+		assert: (x _iter isKindOf: PyName);
+		assert: (x _iter _id = 'x');
+		assert: (x _iter _ctx isKindOf: PyLoad);
+		assert: (x _body size = 1);
+		assert: ((x _body at: 1) isKindOf: PyBreak);
+		assert: (x _orelse size = 0);
+		yourself.
+%
+category: 'other'
+method: SimpleStatementsTestCase
+testSimpleStatementClassAttributeAssignment
+
+	| x |
+	x := statements at: 5.
+	self 
+		assert: (x isKindOf: PyAssign);
+		assert: (x _targets size == 1);
+		assert: ((x _targets at: 1) isKindOf: PyAttribute);
+		assert: ((x _targets at: 1) _value isKindOf: PyName);
+		assert: ((x _targets at: 1) _value _id = 'inst');
+		assert: ((x _targets at: 1) _value _ctx isKindOf: PyLoad);
+		assert: ((x _targets at: 1) _attr = 'x');
+		assert: ((x _targets at: 1) _ctx isKindOf: PyStore);
+		assert: (x _value isKindOf: PyBinOp);
+		assert: (x _value _left isKindOf: PyAttribute);
+		assert: (x _value _left _value isKindOf: PyName);
+		assert: (x _value _left _value _id = 'inst');
+		assert: (x _value _left _value _ctx isKindOf: PyLoad);
+		assert: (x _value _left _attr = 'x');
+		assert: (x _value _left _ctx isKindOf: PyLoad);
+		yourself.
+%
+category: 'other'
+method: SimpleStatementsTestCase
+testSimpleStatementClassDefCls
+
+	| x |
+	x := statements at: 3.
+	self 
+		assert: (x isKindOf: PyClassDef);
+		assert: (x _name = 'Cls');
+		assert: (x _bases size == 0);
+		assert: (x _keywords size == 0);
+		assert: (x _body size == 1);
+		assert: ((x _body at: 1) isKindOf: PyAssign);
+		assert: ((x _body at: 1) _targets size == 1);
+		assert: (((x _body at: 1) _targets at: 1) isKindOf: PyName);
+		assert: (((x _body at: 1) _targets at: 1) _id = 'x');
+		assert: (((x _body at: 1) _targets at: 1) _ctx isKindOf: PyStore);
+		assert: ((x _body at: 1) _value isKindOf: PyNum);
+		assert: ((x _body at: 1) _value _n == 3);
+		assert: (x _decorator_list size == 0);
+		yourself.
+%
+category: 'other'
+method: SimpleStatementsTestCase
+testSimpleStatementClassInstantiation
+
+	| x |
+	x := statements at: 4.
+	self 
+		assert: (x isKindOf: PyAssign);
+		assert: (x _targets size == 1);
+		assert: ((x _targets at: 1) isKindOf: PyName);
+		assert: ((x _targets at: 1) _id = 'inst');
+		assert: ((x _targets at: 1) _ctx isKindOf: PyStore);
+		assert: (x _value isKindOf: PyCall);
+		assert: (x _value _function isKindOf: PyName);
+		assert: (x _value _function _id = 'Cls');
+		assert: (x _value _function _ctx isKindOf: PyLoad);
+		assert: (x _value _arguments size == 0);
+		assert: (x _value _keywords size == 0);
+		yourself.
+%
+category: 'other'
+method: SimpleStatementsTestCase
+testSimpleStatementContinue
+
+	| x |
+	x := statements at: 22.
+	self 
+		assert: (x isKindOf: PyFor);
+		assert: (x _target isKindOf: PyName);
+		assert: (x _target _id = '_');
+		assert: (x _target _ctx isKindOf: PyStore);
+		assert: (x _iter isKindOf: PyName);
+		assert: (x _iter _id = 'x');
+		assert: (x _iter _ctx isKindOf: PyLoad);
+		assert: (x _body size = 1);
+		assert: ((x _body at: 1) isKindOf: PyContinue);
+		assert: (x _orelse size = 0);
+		yourself.
+%
+category: 'other'
+method: SimpleStatementsTestCase
+testSimpleStatementDelMultiple
+
+	| x |
+	x := statements at: 14.
+	self 
+		assert: (x isKindOf: PyDelete);
+		assert: (x _targets size == 2);
+		assert: ((x _targets at: 1) isKindOf: PyName);
+		assert: ((x _targets at: 1) _id = 'x');
+		assert: ((x _targets at: 1) _ctx isKindOf: PyDel);
+		assert: ((x _targets at: 2) isKindOf: PyName);
+		assert: ((x _targets at: 2) _id = 'i');
+		assert: ((x _targets at: 2) _ctx isKindOf: PyDel);
+		yourself.
+%
+category: 'other'
+method: SimpleStatementsTestCase
+testSimpleStatementDelSingle
+
+	| x |
+	x := statements at: 13.
+	self 
+		assert: (x isKindOf: PyDelete);
+		assert: (x _targets size == 1);
+		assert: ((x _targets at: 1) isKindOf: PyName);
+		assert: ((x _targets at: 1) _id = 'x');
+		assert: ((x _targets at: 1) _ctx isKindOf: PyDel);
+		yourself.
+%
+category: 'other'
+method: SimpleStatementsTestCase
+testSimpleStatementGlobal
+
+	| x |
+	x := statements at: 25.
+	self 
+		assert: (x isKindOf: PyGlobal);
+		assert: (x _names size == 1);
+		assert: ((x _names at: 1) = 'g');
+		yourself.
+%
+category: 'other'
+method: SimpleStatementsTestCase
+testSimpleStatementImport
+
+	| x |
+	x := statements at: 23.
+	self 
+		assert: (x isKindOf: PyImport);
+		assert: (x _names size == 1);
+		assert: ((x _names at: 1) isKindOf: PyAlias);
+		assert: ((x _names at: 1) _name = 'foo');
+		assert: ((x _names at: 1) _asName isNil);
+		yourself.
+%
+category: 'other'
+method: SimpleStatementsTestCase
+testSimpleStatementImportFrom
+
+	| x |
+	x := statements at: 24.
+	self 
+		assert: (x isKindOf: PyImportFrom);
+		assert: (x _module = 'foo');
+		assert: (x _names size == 1);
+		assert: ((x _names at: 1) isKindOf: PyAlias);
+		assert: ((x _names at: 1) _name = 'attr');
+		assert: ((x _names at: 1) _asName isNil);
+		assert: (x _level = 0);
+		yourself.
+%
+category: 'other'
+method: SimpleStatementsTestCase
+testSimpleStatementIndexAssignment
+
+	| x |
+	x := statements at: 7.
+	self 
+		assert: (x isKindOf: PyAssign);
+		assert: (x _targets size == 1);
+		assert: ((x _targets at: 1) isKindOf: PyName);
+		assert: ((x _targets at: 1) _id = 'i');
+		assert: ((x _targets at: 1) _ctx isKindOf: PyStore);
+		assert: (x _value isKindOf: PyNum);
+		assert: (x _value _n == 0);
+		yourself.
+%
+category: 'other'
+method: SimpleStatementsTestCase
+testSimpleStatementNonlocal
+
+	| x |
+	x := statements at: 26.
+	self 
+		assert: (x isKindOf: PyNonlocal);
+		assert: (x _names size == 1);
+		assert: ((x _names at: 1) = 'x');
+		yourself.
+%
+category: 'other'
+method: SimpleStatementsTestCase
+testSimpleStatementPassClass
+
+	| x |
+	x := statements at: 12.
+	self 
+		assert: (x isKindOf: PyClassDef);
+		assert: (x _name = 'C');
+		assert: (x _bases size == 0);
+		assert: (x _keywords size == 0);
+		assert: (x _body size == 1);
+		assert: ((x _body at: 1) isKindOf: PyPass);
+		assert: (x _decorator_list size == 0);
+		yourself.
+%
+category: 'other'
+method: SimpleStatementsTestCase
+testSimpleStatementPassFunction
+
+	| x |
+	x := statements at: 11.
+	self 
+		assert: (x isKindOf: PyFunctionDef);
+		assert: (x _name = 'f');
+		assert: (x _args isKindOf: PyArguments);
+		assert: ((x _args _args at: 1) isKindOf: PyArg);
+		assert: ((x _args _args at: 1) _arg = 'arg');
+		assert: ((x _args _args at: 1) _annotation isNil);
+		assert: (x _args _vararg isNil);
+		assert: (x _args _kwonlyargs size == 0);
+		assert: (x _args _kw_defaults size == 0);
+		assert: (x _args _kwarg isNil);
+		assert: (x _args _defaults size == 0);
+		assert: (x _body size == 1);
+		assert: ((x _body at: 1) isKindOf: PyPass);
+		assert: (x _decorator_list size == 0);
+		assert: (x _returns isNil);
+		yourself.
+%
+category: 'other'
+method: SimpleStatementsTestCase
+testSimpleStatementRaise
+
+	| x |
+	x := statements at: 19.
+	self 
+		assert: (x isKindOf: PyRaise);
+		assert: (x _exc isKindOf: PyCall);
+		assert: (x _exc _function isKindOf: PyName);
+		assert: (x _exc _function _id = 'RuntimeError');
+		assert: (x _exc _function _ctx isKindOf: PyLoad);
+		assert: (x _exc _arguments size == 1);
+		assert: ((x _exc _arguments at: 1) isKindOf: PyStr);
+		assert: ((x _exc _arguments at: 1) _s = 'Something bad happened');
+		assert: (x _exc _keywords size == 0);
+		assert: (x _exc _function isKindOf: PyName);
+		assert: (x _cause isNil);
+		yourself.
+%
+category: 'other'
+method: SimpleStatementsTestCase
+testSimpleStatementRaiseFromNone
+
+	| x |
+	x := statements at: 20.
+	self 
+		assert: (x isKindOf: PyRaise);
+		assert: (x _exc isKindOf: PyCall);
+		assert: (x _exc _function isKindOf: PyName);
+		assert: (x _exc _function _id = 'RuntimeError');
+		assert: (x _exc _function _ctx isKindOf: PyLoad);
+		assert: (x _exc _arguments size == 1);
+		assert: ((x _exc _arguments at: 1) isKindOf: PyStr);
+		assert: ((x _exc _arguments at: 1) _s = 'Something bad happened');
+		assert: (x _exc _keywords size == 0);
+		assert: (x _exc _function isKindOf: PyName);
+		assert: (x _cause isKindOf: PyNameConstant);
+		assert: (x _cause _value isNil);
+		yourself.
+%
+category: 'other'
+method: SimpleStatementsTestCase
+testSimpleStatementReturnNone
+
+	| x |
+	x := statements at: 15.
+	self 
+		assert: (x isKindOf: PyFunctionDef);
+		assert: (x _name = 'a');
+		assert: (x _args isKindOf: PyArguments);
+		assert: (x _args _args size == 0);
+		assert: (x _args _vararg isNil);
+		assert: (x _args _kwonlyargs size == 0);
+		assert: (x _args _kw_defaults size == 0);
+		assert: (x _args _kwarg isNil);
+		assert: (x _args _defaults size == 0);
+		assert: (x _body size == 1);
+		assert: ((x _body at: 1) isKindOf: PyReturn);
+		assert: ((x _body at: 1) _value isNil);
+		assert: (x _decorator_list size == 0);
+		assert: (x _returns isNil);
+		yourself.
+%
+category: 'other'
+method: SimpleStatementsTestCase
+testSimpleStatementReturnTrue
+
+	| x |
+	x := statements at: 16.
+	self 
+		assert: (x isKindOf: PyFunctionDef);
+		assert: (x _name = 'b');
+		assert: (x _args isKindOf: PyArguments);
+		assert: (x _args _args size == 0);
+		assert: (x _args _vararg isNil);
+		assert: (x _args _kwonlyargs size == 0);
+		assert: (x _args _kw_defaults size == 0);
+		assert: (x _args _kwarg isNil);
+		assert: (x _args _defaults size == 0);
+		assert: (x _body size == 1);
+		assert: ((x _body at: 1) isKindOf: PyReturn);
+		assert: ((x _body at: 1) _value isKindOf: PyNameConstant);
+		assert: ((x _body at: 1) _value _value);
+		assert: (x _decorator_list size == 0);
+		assert: (x _returns isNil);
+		yourself.
+%
+category: 'other'
+method: SimpleStatementsTestCase
+testSimpleStatementSwapAssignment
+
+	| x |
+	x := statements at: 8.
+	self 
+		assert: (x isKindOf: PyAssign);
+		assert: (x _targets size == 1);
+		assert: ((x _targets at: 1) isKindOf: PyTuple);
+		assert: (((x _targets at: 1) _elts at: 1) isKindOf: PyName);
+		assert: (((x _targets at: 1) _elts at: 1) _id = 'i');
+		assert: (((x _targets at: 1) _elts at: 1) _ctx isKindOf: PyStore);
+		assert: (((x _targets at: 1) _elts at: 2) isKindOf: PySubscript);
+		assert: (((x _targets at: 1) _elts at: 2) _value isKindOf: PyName);
+		assert: (((x _targets at: 1) _elts at: 2) _value _id = 'x');
+		assert: (((x _targets at: 1) _elts at: 2) _value _ctx isKindOf: PyLoad);
+		assert: (((x _targets at: 1) _elts at: 2) _ctx isKindOf: PyStore);
+		assert: ((x _targets at: 1) _ctx isKindOf: PyStore);
+		assert: (x _value isKindOf: PyTuple);
+		assert: (x _value _elts size == 2);
+		assert: ((x _value _elts at: 1) isKindOf: PyNum);
+		assert: ((x _value _elts at: 1) _n == 1);
+		assert: ((x _value _elts at: 2) isKindOf: PyNum);
+		assert: ((x _value _elts at: 2) _n == 2);
+		assert: (x _value _ctx isKindOf: PyLoad);
+		yourself.
+%
+category: 'other'
+method: SimpleStatementsTestCase
+testSimpleStatementYield
+
+	| x |
+	x := statements at: 17.
+	self 
+		assert: (x isKindOf: PyFunctionDef);
+		assert: (x _name = 'gen');
+		assert: (x _args isKindOf: PyArguments);
+		assert: (x _args _args size == 0);
+		assert: (x _args _vararg isNil);
+		assert: (x _args _kwonlyargs size == 0);
+		assert: (x _args _kw_defaults size == 0);
+		assert: (x _args _kwarg isNil);
+		assert: (x _args _defaults size == 0);
+		assert: (x _body size == 1);
+		assert: ((x _body at: 1) isKindOf: PyExpr);
+		assert: ((x _body at: 1) _value isKindOf: PyYield);
+		assert: ((x _body at: 1) _value _value isKindOf: PyNum);
+		assert: ((x _body at: 1) _value _value _n == 123);
+		assert: (x _decorator_list size == 0);
+		assert: (x _returns isNil);
+		yourself.
+%
+category: 'other'
+method: SimpleStatementsTestCase
+testSimpleStatementYieldAsync
+
+	| x |
+	x := statements at: 18.
+	self 
+		assert: (x isKindOf: PyAsyncFunctionDef);
+		assert: (x _name = 'agen');
+		assert: (x _args isKindOf: PyArguments);
+		assert: (x _args _args size == 0);
+		assert: (x _args _vararg isNil);
+		assert: (x _args _kwonlyargs size == 0);
+		assert: (x _args _kw_defaults size == 0);
+		assert: (x _args _kwarg isNil);
+		assert: (x _args _defaults size == 0);
+		assert: (x _body size == 1);
+		assert: ((x _body at: 1) isKindOf: PyExpr);
+		assert: ((x _body at: 1) _value isKindOf: PyYield);
+		assert: ((x _body at: 1) _value _value isKindOf: PyNum);
+		assert: ((x _body at: 1) _value _value _n == 123);
+		assert: (x _decorator_list size == 0);
+		assert: (x _returns isNil);
 		yourself.
 %
 
