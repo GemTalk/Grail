@@ -1,0 +1,32 @@
+﻿! ------------------- Remove existing behavior from PyBinOp
+expectvalue /Metaclass3       
+doit
+PyBinOp removeAllMethods.
+PyBinOp class removeAllMethods.
+%
+! ------------------- Class methods for PyBinOp
+! ------------------- Instance methods for PyBinOp
+set compile_env: 0
+category: 'other'
+method: PyBinOp
+assertContextIsLoad
+
+	self halt
+%
+category: 'other'
+method: PyBinOp
+evaluate
+	^op left: left evaluate right: right evaluate
+%
+category: 'other'
+method: PyBinOp
+initialize
+	"BinOp(expr left, operator op, expr right)"
+
+	left := self expression.
+	self commaSpace.
+	op := PyOperator parent: self.
+	self commaSpace.
+	right := self expression.
+	self readPosition.
+%
