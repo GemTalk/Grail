@@ -5,6 +5,15 @@ PythonTestCase removeAllMethods.
 PythonTestCase class removeAllMethods.
 %
 ! ------------------- Class methods for PythonTestCase
+set compile_env: 0
+category: 'Testing'
+classmethod: PythonTestCase
+isAbstract
+	"Override to true if a TestCase subclass is Abstract and should not have
+	TestCase instances built from it"
+
+	^self sunitName == #PythonTestCase
+%
 ! ------------------- Instance methods for PythonTestCase
 set compile_env: 0
 category: 'other'
