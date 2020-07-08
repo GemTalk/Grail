@@ -21,10 +21,5 @@ method: PyPass
 initialize
 	"pass"
 
-	| stream string |
-	stream := self stream.
-	(string := stream upTo: $=) = 'lineno' ifFalse: [self error].
-	line := (stream upTo: $,) asNumber.
-	(string := stream upTo: $=) = ' col_offset' ifFalse: [self error].
-	column := (stream upTo: $)) asNumber.
+	self readPositionOnly.
 %
