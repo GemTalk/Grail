@@ -1894,6 +1894,23 @@ doit
 PyWith category: 'Parser'
 %
 set compile_env: 0
+! ------------------- Class definition for Pywithitem
+expectvalue /Class
+doit
+PyStatement subclass: 'Pywithitem'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+Pywithitem category: 'Parser'
+%
+set compile_env: 0
 ! ------------------- Class definition for PyBoolop
 expectvalue /Class
 doit
@@ -3294,6 +3311,23 @@ doit
 ByteLiteralsTestCase category: 'Tests'
 %
 set compile_env: 0
+! ------------------- Class definition for CompoundStatementsTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'CompoundStatementsTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+CompoundStatementsTestCase category: 'Tests'
+%
+set compile_env: 0
 ! ------------------- Class definition for DelimitersTestCase
 expectvalue /Class
 doit
@@ -3478,6 +3512,7 @@ input PyReturn.gs
 input PyTry.gs
 input PyWhile.gs
 input PyWith.gs
+input Pywithitem.gs
 input PyBoolop.gs
 input PyAnd.gs
 input PyOr.gs
@@ -3531,6 +3566,7 @@ input PySystem.gs
 input PyToken.gs
 input PythonTestCase.gs
 input ByteLiteralsTestCase.gs
+input CompoundStatementsTestCase.gs
 input DelimitersTestCase.gs
 input NumericLiteralsTestCase.gs
 input OperatorsTestCase.gs

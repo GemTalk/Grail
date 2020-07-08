@@ -16,10 +16,11 @@ initialize
 	stream := self stream.
 	context_expr := self expression.
 	self commaSpace.
-	(stream peekFor: $') ifTrue: [
+	next := stream peekN: 4.
+	(next ~= 'None') ifTrue: [
 		optional_vars := self expression.
 	] ifFalse: [
-		next := stream next: 4.
-		next ~= 'None' ifTrue: [self error.].
+		stream next: 4.
 	].
+	(stream peekFor: $)) ifFalse: [ self error. ].
 %
