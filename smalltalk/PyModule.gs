@@ -12,7 +12,8 @@ script: aString
 "
 PyModule script: '$HOME/code/Python/performance/pyperformance'.
 "
-	^self new
+	^self basicNew
+		initialize;
 		load: aString as: '__main__';
 		yourself
 %
@@ -36,6 +37,18 @@ addMissingPositions
 %
 category: 'other'
 method: PyModule
+evaluate
+
+	| result |
+	[
+		statements do: [:each | result := each evaluate].
+	] on: CancelNotification do: [:ex |
+		ex return.
+	].
+	^result
+%
+category: 'other'
+method: PyModule
 globals
 
 self halt.
@@ -45,15 +58,8 @@ category: 'other'
 method: PyModule
 initialize
 
-	| result |
+	parent := PySystem.
 	globals := Dictionary new.
-	parent ifNil: [parent := PySystem new].
-	[
-		statements do: [:each | result := each evaluate].
-	] on: CancelNotification do: [:ex |
-		ex return.
-	].
-	^result
 %
 category: 'other'
 method: PyModule

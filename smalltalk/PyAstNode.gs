@@ -28,6 +28,12 @@ escapeCharacters
 %
 category: 'other'
 classmethod: PyAstNode
+new
+
+	self error: 'Use #parent: instead'.
+%
+category: 'other'
+classmethod: PyAstNode
 parent: aNode
 
 	(aNode isKindOf: PyAstNode) ifFalse: [self error: 'Not a valid parent!'].
