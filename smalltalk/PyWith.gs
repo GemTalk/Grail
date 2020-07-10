@@ -16,9 +16,7 @@ method: PyWith
 initialize
 	"With(withitem* items, stmt* body)"
 
-	| stream |
-	stream := self stream.
-	items := self suite.
+	items := self collectAst: [PyWithItem parent: self].
 	self commaSpace.
 	body := self suite.
 	self readPosition.

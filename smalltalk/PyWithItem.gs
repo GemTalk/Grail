@@ -1,18 +1,30 @@
-﻿! ------------------- Remove existing behavior from Pywithitem
+﻿! ------------------- Remove existing behavior from PyWithItem
 expectvalue /Metaclass3       
 doit
-Pywithitem removeAllMethods.
-Pywithitem class removeAllMethods.
+PyWithItem removeAllMethods.
+PyWithItem class removeAllMethods.
 %
-! ------------------- Class methods for Pywithitem
+! ------------------- Class methods for PyWithItem
+set compile_env: 0
+! ------------------- Instance methods for PyWithItem
 set compile_env: 0
 category: 'other'
-classmethod: Pywithitem
-parent: aNode
+method: PyWithItem
+initialize
+	"withitem = (expr context_expr, expr? optional_vars)"
 
-	(aNode isKindOf: PyAstNode) ifFalse: [self error: 'Not a valid parent!'].
-	^PyWithItem basicNew
-		initialize: aNode;
-		yourself
+	| stream next |
+	stream := self stream.
+	next := stream peekN: 9.
+	next ~= 'withitem(' ifTrue: [self error].
+	stream next: 9.
+	context_expr := self expression.
+	self commaSpace.
+	next := stream peekN: 4.
+	(next ~= 'None') ifTrue: [
+		optional_vars := self expression.
+	] ifFalse: [
+		stream next: 4.
+	].
+	(stream peekFor: $)) ifFalse: [ self error. ].
 %
-! ------------------- Instance methods for Pywithitem

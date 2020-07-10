@@ -1894,23 +1894,6 @@ doit
 PyWith category: 'Parser'
 %
 set compile_env: 0
-! ------------------- Class definition for Pywithitem
-expectvalue /Class
-doit
-PyStatement subclass: 'Pywithitem'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: PythonGlobals
-  options: #()
-
-%
-expectvalue /Class
-doit
-Pywithitem category: 'Parser'
-%
-set compile_env: 0
 ! ------------------- Class definition for PyBoolop
 expectvalue /Class
 doit
@@ -3594,8 +3577,7 @@ input PyUnaryop_.gs
 input PyUSub.gs
 input PyWhile.gs
 input PyWith.gs
-input Pywithitem.gs
-input PyWithItem_.gs
+input PyWithItem.gs
 input PyYield.gs
 input PyYieldFrom.gs
 input SimpleStatementsTestCase.gs
