@@ -9,6 +9,21 @@ PyIf class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyIf
+_body
+	^ body
+%
+category: 'other'
+method: PyIf
+_orelse
+	^ orelse
+%
+category: 'other'
+method: PyIf
+_test
+	^ test
+%
+category: 'other'
+method: PyIf
 addMissingPositions
 %
 category: 'other'

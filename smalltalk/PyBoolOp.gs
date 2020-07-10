@@ -1,26 +1,24 @@
-﻿! ------------------- Remove existing behavior from PyBoolop
+﻿! ------------------- Remove existing behavior from PyBoolOp
 expectvalue /Metaclass3       
 doit
-PyBoolop removeAllMethods.
-PyBoolop class removeAllMethods.
+PyBoolOp removeAllMethods.
+PyBoolOp class removeAllMethods.
 %
-! ------------------- Class methods for PyBoolop
+! ------------------- Class methods for PyBoolOp
+! ------------------- Instance methods for PyBoolOp
 set compile_env: 0
 category: 'other'
-classmethod: PyBoolop
-parent: aNode
-	"boolop = And | Or"
-
-	| symbol class |
-	symbol := ('Py' , (aNode stream upTo: $()) asSymbol.
-	(aNode stream peekFor: $)) ifFalse: [self error].
-	class := PythonGlobals at: symbol.
-	^class basicNew initialize: aNode; yourself
+method: PyBoolOp
+evaluate
+	^op values: values
 %
-! ------------------- Instance methods for PyBoolop
-set compile_env: 0
 category: 'other'
-method: PyBoolop
+method: PyBoolOp
 initialize
-	"override to do nothing!"
+	"BoolOp(boolop op, expr* values)"
+
+	op := PyBoolop parent: self.
+	self commaSpace.
+	values := self collectAst:[self expression].
+	self readPosition.
 %

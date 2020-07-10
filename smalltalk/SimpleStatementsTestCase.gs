@@ -42,9 +42,9 @@ testSimpleStatementAssertFalse
 	x := statements at: 10.
 	self 
 		assert: (x isKindOf: PyAssert);
-		assert: (x _test isKindOf: PyNameConstant);
-		assert: (x _test _value) not;
-		assert: (x _msg isNil);
+		assert: (x.test isKindOf: PyNameConstant);
+		deny: x.test.value;
+		assert: x.msg isNil;
 		yourself.
 %
 category: 'other'
@@ -220,14 +220,14 @@ category: 'other'
 method: SimpleStatementsTestCase
 testSimpleStatementDelSingle
 
-	| x |
+	| x y |
 	x := statements at: 13.
 	self 
 		assert: (x isKindOf: PyDelete);
-		assert: (x _targets size == 1);
-		assert: ((x _targets at: 1) isKindOf: PyName);
-		assert: ((x _targets at: 1) _id = 'x');
-		assert: ((x _targets at: 1) _ctx isKindOf: PyDel);
+		assert: (x.targets size == 1);
+		assert: ((y := x.targets at: 1) isKindOf: PyName);
+		assert: (y.id = 'x');
+		assert: (y.ctx isKindOf: PyDel);
 		yourself.
 %
 category: 'other'
@@ -238,8 +238,8 @@ testSimpleStatementGlobal
 	x := statements at: 25.
 	self 
 		assert: (x isKindOf: PyGlobal);
-		assert: (x _names size == 1);
-		assert: ((x _names at: 1) = 'g');
+		assert: (x.names size == 1);
+		assert: ((x.names at: 1) = 'g');
 		yourself.
 %
 category: 'other'
@@ -250,10 +250,10 @@ testSimpleStatementImport
 	x := statements at: 23.
 	self 
 		assert: (x isKindOf: PyImport);
-		assert: (x _names size == 1);
-		assert: ((x _names at: 1) isKindOf: PyAlias);
-		assert: ((x _names at: 1) _name = 'foo');
-		assert: ((x _names at: 1) _asName isNil);
+		assert: (x.names size == 1);
+		assert: ((x.names at: 1) isKindOf: PyAlias);
+		assert: ((x.names at: 1) _name = 'foo');
+		assert: ((x.names at: 1) _asName isNil);
 		yourself.
 %
 category: 'other'
@@ -265,10 +265,10 @@ testSimpleStatementImportFrom
 	self 
 		assert: (x isKindOf: PyImportFrom);
 		assert: (x _module = 'foo');
-		assert: (x _names size == 1);
-		assert: ((x _names at: 1) isKindOf: PyAlias);
-		assert: ((x _names at: 1) _name = 'attr');
-		assert: ((x _names at: 1) _asName isNil);
+		assert: (x.names size == 1);
+		assert: ((x.names at: 1) isKindOf: PyAlias);
+		assert: ((x.names at: 1) _name = 'attr');
+		assert: ((x.names at: 1) _asName isNil);
 		assert: (x _level = 0);
 		yourself.
 %
@@ -296,8 +296,8 @@ testSimpleStatementNonlocal
 	x := statements at: 26.
 	self 
 		assert: (x isKindOf: PyNonlocal);
-		assert: (x _names size == 1);
-		assert: ((x _names at: 1) = 'x');
+		assert: (x.names size == 1);
+		assert: ((x.names at: 1) = 'x');
 		yourself.
 %
 category: 'other'

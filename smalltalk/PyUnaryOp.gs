@@ -1,31 +1,34 @@
-﻿! ------------------- Remove existing behavior from PyUnaryop
+﻿! ------------------- Remove existing behavior from PyUnaryOp
 expectvalue /Metaclass3       
 doit
-PyUnaryop removeAllMethods.
-PyUnaryop class removeAllMethods.
+PyUnaryOp removeAllMethods.
+PyUnaryOp class removeAllMethods.
 %
-! ------------------- Class methods for PyUnaryop
+! ------------------- Class methods for PyUnaryOp
+! ------------------- Instance methods for PyUnaryOp
 set compile_env: 0
 category: 'other'
-classmethod: PyUnaryop
-parent: aNode
-	"unaryop = Invert | Not | UAdd | USub"
-
-	| symbol class |
-	symbol := ('Py' , (aNode stream upTo: $()) asSymbol.
-	(aNode stream peekFor: $)) ifFalse: [self error].
-	class := PythonGlobals at: symbol.
-	^class basicNew initialize: aNode; yourself
+method: PyUnaryOp
+_op
+	^ op
 %
-! ------------------- Instance methods for PyUnaryop
-set compile_env: 0
 category: 'other'
-method: PyUnaryop
+method: PyUnaryOp
+_operand
+	^ operand
+%
+category: 'other'
+method: PyUnaryOp
+evaluate
+	^ op operand: operand.
+%
+category: 'other'
+method: PyUnaryOp
 initialize
-	"override to do nothing!"
-%
-category: 'other'
-method: PyUnaryop
-operand: operand
-	^self subclassResponsibility
+	"UnaryOp(unaryop op, expr operand)"
+
+	op := PyUnaryop parent: self.
+	self commaSpace.
+	operand := self expression.
+	self readPosition.
 %

@@ -9,6 +9,21 @@ PyWhile class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyWhile
+_body
+	^ body
+%
+category: 'other'
+method: PyWhile
+_orelse
+	^ orelse
+%
+category: 'other'
+method: PyWhile
+_test
+	^ test
+%
+category: 'other'
+method: PyWhile
 addMissingPositions
 %
 category: 'other'
