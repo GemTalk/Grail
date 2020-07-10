@@ -19,7 +19,7 @@ method: OperatorsTestCase
 testAdd
 
 	| x |
-	x := statements at: 1.
+	x := self statementsAt: 1.
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.
@@ -38,7 +38,7 @@ method: OperatorsTestCase
 testEq
 
 	| x |
-	x := statements at: 9.
+	x := self statementsAt: 9.
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.
@@ -59,7 +59,7 @@ method: OperatorsTestCase
 testGtE
 
 	| x |
-	x := statements at: 10.
+	x := self statementsAt: 10.
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.
@@ -80,7 +80,7 @@ method: OperatorsTestCase
 testInvert
 
 	| x |
-	x := statements at: 6.
+	x := self statementsAt: 6.
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.
@@ -96,7 +96,7 @@ method: OperatorsTestCase
 testMod
 
 	| x |
-	x := statements at: 2.
+	x := self statementsAt: 2.
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.
@@ -115,7 +115,7 @@ method: OperatorsTestCase
 testNestedAdd
 
 	| x |
-	x := statements at: 3.
+	x := self statementsAt: 3.
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.
@@ -138,7 +138,7 @@ method: OperatorsTestCase
 testNestedEq
 
 	| x |
-	x := statements at: 11.
+	x := self statementsAt: 11.
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.
@@ -161,7 +161,7 @@ method: OperatorsTestCase
 testNestedGtE
 
 	| x |
-	x := statements at: 12.
+	x := self statementsAt: 12.
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.
@@ -184,7 +184,7 @@ method: OperatorsTestCase
 testNestedMult
 
 	| x |
-	x := statements at: 4.
+	x := self statementsAt: 4.
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.
@@ -207,7 +207,7 @@ method: OperatorsTestCase
 testUSub
 
 	| x |
-	x := statements at: 5.
+	x := self statementsAt: 5.
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.

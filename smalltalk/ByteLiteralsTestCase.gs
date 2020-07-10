@@ -19,7 +19,7 @@ method: ByteLiteralsTestCase
 testBackspace
 
 	| x |
-	x := statements at: 16.
+	x := self statementsAt: 16.
 	self 
 		assert: (x isKindOf: PyExpr);
 		assert: x line == 36;
@@ -40,7 +40,7 @@ method: ByteLiteralsTestCase
 testBell
 
 	| x |
-	x := statements at: 15.
+	x := self statementsAt: 15.
 	self 
 		assert: (x isKindOf: PyExpr);
 		assert: x line == 35;
@@ -61,7 +61,7 @@ method: ByteLiteralsTestCase
 testHexHigh
 
 	| x |
-	x := statements at: 20.
+	x := self statementsAt: 20.
 	self 
 		assert: (x isKindOf: PyExpr);
 		assert: x line == 44;
@@ -82,7 +82,7 @@ method: ByteLiteralsTestCase
 testHexLow
 
 	| x |
-	x := statements at: 19.
+	x := self statementsAt: 19.
 	self 
 		assert: (x isKindOf: PyExpr);
 		assert: x line == 43;
@@ -103,7 +103,7 @@ method: ByteLiteralsTestCase
 testNewline
 
 	| x |
-	x := statements at: 13.
+	x := self statementsAt: 13.
 	self 
 		assert: (x isKindOf: PyExpr);
 		assert: x line == 31;
@@ -125,7 +125,7 @@ method: ByteLiteralsTestCase
 testOctalHigh
 
 	| x |
-	x := statements at: 18.
+	x := self statementsAt: 18.
 	self 
 		assert: (x isKindOf: PyExpr);
 		assert: x line == 40;
@@ -146,7 +146,7 @@ method: ByteLiteralsTestCase
 testOctalLow
 
 	| x |
-	x := statements at: 17.
+	x := self statementsAt: 17.
 	self 
 		assert: (x isKindOf: PyExpr);
 		assert: x line == 39;
@@ -167,7 +167,7 @@ method: ByteLiteralsTestCase
 testSlash
 
 	| x |
-	x := statements at: 14.
+	x := self statementsAt: 14.
 	self 
 		assert: (x isKindOf: PyExpr);
 		assert: x line == 32;

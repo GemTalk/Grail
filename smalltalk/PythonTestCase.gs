@@ -48,3 +48,9 @@ setUp
 	super setUp.
 	statements := self resources first current statementsForModuleAtPath: '$HOME/code/Python/GemStoneP/tests/' , self filename.
 %
+category: 'other'
+method: PythonTestCase
+statementsAt: anInteger
+
+	^statements.body at: anInteger
+%

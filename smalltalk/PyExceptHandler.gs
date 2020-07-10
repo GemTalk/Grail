@@ -28,6 +28,6 @@ initialize
 	].
 	stream skip: -1.
 	self commaSpace.
-	body := self suite.
+	body := PySuite parent: self.
 	self readPosition.
 %

@@ -47,7 +47,7 @@ initialize
 	self commaSpace.
 	keywords := self collectAst: [PyKeyword parent: self].
 	self commaSpace.
-	body := self suite.
+	body := PySuite parent: self.
 	self commaSpace.
 	decorator_list := self collectAst:[self expression].
 	self readPosition.

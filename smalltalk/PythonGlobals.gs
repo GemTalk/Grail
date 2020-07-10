@@ -3146,6 +3146,23 @@ doit
 PySlice category: 'Parser'
 %
 set compile_env: 0
+! ------------------- Class definition for PySuite
+expectvalue /Class
+doit
+PyAstNode subclass: 'PySuite'
+  instVarNames: #( body variables)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PySuite category: 'Parser'
+%
+set compile_env: 0
 ! ------------------- Class definition for PyWithItem
 expectvalue /Class
 doit
@@ -3530,6 +3547,7 @@ input PyStore.gs
 input PyStr.gs
 input PySub.gs
 input PySubscript.gs
+input PySuite.gs
 input PySystem.gs
 input PythonTestCase.gs
 input PythonTestResource.gs

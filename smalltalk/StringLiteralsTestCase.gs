@@ -19,7 +19,7 @@ method: StringLiteralsTestCase
 testEmbeddedStringDoubleQuotes
 
 	| x |
-	x := statements at: 6.
+	x := self statementsAt: 6.
 	self 
 		assert: (x isKindOf: PyExpr);
 		assert: x line == 16;
@@ -39,7 +39,7 @@ method: StringLiteralsTestCase
 testEmbeddedStringSingleQuotes
 
 	| x |
-	x := statements at: 5.
+	x := self statementsAt: 5.
 	self 
 		assert: (x isKindOf: PyExpr);
 		assert: x line == 15;
@@ -59,7 +59,7 @@ method: StringLiteralsTestCase
 testEscapeCharacterStringNewline
 
 	| x |
-	x := statements at: 8.
+	x := self statementsAt: 8.
 	self 
 		assert: (x isKindOf: PyExpr);
 		assert: x line == 20;
@@ -79,7 +79,7 @@ method: StringLiteralsTestCase
 testEscapeCharacterStringSlash
 
 	| x |
-	x := statements at: 7.
+	x := self statementsAt: 7.
 	self 
 		assert: (x isKindOf: PyExpr);
 		assert: x line == 19;
@@ -99,7 +99,7 @@ method: StringLiteralsTestCase
 testJoinedStrWithFormattedValueNum
 
 	| x child |
-	x := statements at: 12.
+	x := self statementsAt: 12.
 	self 
 		assert: (x isKindOf: PyExpr);
 		assert: x line == 28;
@@ -133,7 +133,7 @@ method: StringLiteralsTestCase
 testJoinedStrWithFormattedValueStr
 
 	| x child |
-	x := statements at: 11.
+	x := self statementsAt: 11.
 	self 
 		assert: (x isKindOf: PyExpr);
 		assert: x line == 27;
@@ -167,7 +167,7 @@ method: StringLiteralsTestCase
 testLongStringDoubleQuotes
 
 	| x |
-	x := statements at: 4.
+	x := self statementsAt: 4.
 	self 
 		assert: (x isKindOf: PyExpr);
 		assert: x line == 12;
@@ -188,7 +188,7 @@ method: StringLiteralsTestCase
 testLongStringSingleQuotes
 
 	| x |
-	x := statements at: 3.
+	x := self statementsAt: 3.
 	self 
 		assert: (x isKindOf: PyExpr);
 		assert: x line == 10;
@@ -209,7 +209,7 @@ method: StringLiteralsTestCase
 testNonEscapeCharacterStringNewline
 
 	| x |
-	x := statements at: 10.
+	x := self statementsAt: 10.
 	self 
 		assert: (x isKindOf: PyExpr);
 		assert: x line == 24;
@@ -230,7 +230,7 @@ method: StringLiteralsTestCase
 testNonEscapeCharacterStringSlash
 
 	| x |
-	x := statements at: 9.
+	x := self statementsAt: 9.
 	self 
 		assert: (x isKindOf: PyExpr);
 		assert: x line == 23;
@@ -250,7 +250,7 @@ method: StringLiteralsTestCase
 testShortStringDoubleQuotes
 
 	| x |
-	x := statements at: 2.
+	x := self statementsAt: 2.
 	self 
 		assert: (x isKindOf: PyExpr);
 		assert: x line == 6;
@@ -270,7 +270,7 @@ method: StringLiteralsTestCase
 testShortStringSingleQuotes
 
 	| x |
-	x := statements at: 1.
+	x := self statementsAt: 1.
 	self 
 		assert: (x isKindOf: PyExpr);
 		assert: x line == 5;

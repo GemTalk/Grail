@@ -16,12 +16,12 @@ method: PyTry
 initialize
 	"Try(stmt* body, excepthandler* handlers, stmt* orelse, stmt* finalbody)"
 
-	body := self suite.
+	body := PySuite parent: self.
 	self commaSpace.
 	handlers := self collectAst: [PyExceptHandler parent: self].
 	self commaSpace.
-	orelse := self suite.
+	orelse := PySuite parent: self.
 	self commaSpace.
-	finalbody := self suite.
+	finalbody := PySuite parent: self.
 	self readPosition.
 %

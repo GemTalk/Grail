@@ -19,14 +19,14 @@ method: CompoundStatementsTestCase
 testClass
 
 	| x |
-	x := statements at: 14.
+	x := self statementsAt: 14.
 	self 
 		assert: (x isKindOf: PyClassDef);
 		assert: (x.name = 'Foo');
 		assert: (x.bases size == 0);
 		assert: (x.keywords size == 0);
-		assert: (x.body size == 1);
-		assert: ((x.body at: 1) isKindOf: PyPass);
+		assert: (x.body.body size == 1);
+		assert: ((x.body.body at: 1) isKindOf: PyPass);
 		assert: (x.bases size == 0);
 		assert: (x.decorator_list size == 0);
 		yourself.
@@ -36,7 +36,7 @@ method: CompoundStatementsTestCase
 testClassInheritance
 
 	| x name |
-	x := statements at: 15.
+	x := self statementsAt: 15.
 	self 
 		assert: (x isKindOf: PyClassDef);
 		assert: (x.name = 'Bar');
@@ -45,8 +45,8 @@ testClassInheritance
 		assert: (name.id = 'Foo');
 		assert: (name.ctx isKindOf: PyLoad);
 		assert: (x.keywords size == 0);
-		assert: (x.body size == 1);
-		assert: ((x.body at: 1) isKindOf: PyPass);
+		assert: (x.body.body size == 1);
+		assert: ((x.body.body at: 1) isKindOf: PyPass);
 		assert: (x.decorator_list size == 0);
 		yourself.
 %
@@ -55,7 +55,7 @@ method: CompoundStatementsTestCase
 testCoroutine
 
 	| x arguments arg |
-	x := statements at: 16.
+	x := self statementsAt: 16.
 	self 
 		assert: (x isKindOf: PyAsyncFunctionDef);
 		assert: (x.name = 'asyncFunc');
@@ -69,8 +69,8 @@ testCoroutine
 		assert: (arguments.kw_defaults size == 0);
 		assert: (arguments.kwarg isNil);
 		assert: (arguments.defaults size == 0);
-		assert: (x.body size == 1);
-		assert: ((x.body at: 1) isKindOf: PyPass);
+		assert: (x.body.body size == 1);
+		assert: ((x.body.body at: 1) isKindOf: PyPass);
 		assert: (x.decorator_list size == 0);
 		assert: (x.returns isNil);
 		yourself.
@@ -80,7 +80,7 @@ method: CompoundStatementsTestCase
 testCoroutineFor
 
 	| x arguments arg asyncFor call num |
-	x := statements at: 17.
+	x := self statementsAt: 17.
 	self 
 		assert: (x isKindOf: PyAsyncFunctionDef);
 		assert: (x.name = 'asyncForFunc');
@@ -94,8 +94,8 @@ testCoroutineFor
 		assert: (arguments.kw_defaults size == 0);
 		assert: (arguments.kwarg isNil);
 		assert: (arguments.defaults size == 0);
-		assert: (x.body size == 1);
-		assert: ((asyncFor := x.body at: 1) isKindOf: PyAsyncFor);
+		assert: (x.body.body size == 1);
+		assert: ((asyncFor := x.body.body at: 1) isKindOf: PyAsyncFor);
 		assert: (asyncFor.target isKindOf: PyName);
 		assert: (asyncFor.target.id = '_');
 		assert: (asyncFor.target.ctx isKindOf: PyStore);
@@ -107,9 +107,9 @@ testCoroutineFor
 		assert: ((num := call.arguments at: 1) isKindOf: PyNum);
 		assert: (num.n == 10);
 		assert: (call.keywords size == 0);
-		assert: (asyncFor.body size == 1);
-		assert: ((asyncFor.body at: 1) isKindOf: PyPass);
-		assert: (asyncFor.orelse size == 0);
+		assert: (asyncFor.body.body size == 1);
+		assert: ((asyncFor.body.body at: 1) isKindOf: PyPass);
+		assert: (asyncFor.orelse.body size == 0);
 		assert: (x.decorator_list size == 0);
 		assert: (x.returns isNil);
 		yourself.
@@ -118,8 +118,8 @@ category: 'other'
 method: CompoundStatementsTestCase
 testCoroutineWith
 
-	| x arguments arg with withItem name call str1 str2 num |
-	x := statements at: 18.
+	| x arguments arg with withItem name call str1 str2 |
+	x := self statementsAt: 18.
 	self 
 		assert: (x isKindOf: PyAsyncFunctionDef);
 		assert: (x.name = 'asyncWithFunc');
@@ -133,8 +133,8 @@ testCoroutineWith
 		assert: (arguments.kw_defaults size == 0);
 		assert: (arguments.kwarg isNil);
 		assert: (arguments.defaults size == 0);
-		assert: (x.body size == 1);		
-		assert: ((with := x.body at: 1) isKindOf: PyAsyncWith);
+		assert: (x.body.body size == 1);		
+		assert: ((with := x.body.body at: 1) isKindOf: PyAsyncWith);
 		assert: (with.items size == 1);
 		assert: ((withItem := with.items at: 1) isKindOf: PyWithItem);
 		assert: ((call := withItem.context_expr) isKindOf: PyCall);
@@ -150,8 +150,8 @@ testCoroutineWith
 		assert: ((name := withItem.optional_vars) isKindOf: PyName);
 		assert: (name.id = 'f');
 		assert: (name.ctx isKindOf: PyStore);
-		assert: (with.body size == 1);
-		assert: ((with.body at: 1) isKindOf: PyPass);
+		assert: (with.body.body size == 1);
+		assert: ((with.body.body at: 1) isKindOf: PyPass);
 		assert: (x.decorator_list size == 0);
 		assert: (x.returns isNil);
 		yourself.
@@ -165,7 +165,7 @@ testFor
 		[Pass(lineno=24, col_offset=1)], [], lineno=23, col_offset=0)"
 
 	| x name call num |
-	x := statements at: 5.
+	x := self statementsAt: 5.
 	self 
 		assert: (x isKindOf: PyFor);
 		assert: ((name := x.target) isKindOf: PyName);
@@ -179,8 +179,8 @@ testFor
 		assert: ((num := call.arguments at: 1) isKindOf: PyNum);
 		assert: (num.n == 10);
 		assert: (call.keywords size == 0);
-		assert: (x.body size == 1);
-		assert: ((x.body at: 1) isKindOf: PyPass);
+		assert: (x.body.body size == 1);
+		assert: ((x.body.body at: 1) isKindOf: PyPass);
 		assert: (x.orelse size == 0);
 		yourself.
 %
@@ -194,7 +194,7 @@ testForElse
 		[Pass(lineno=29, col_offset=1)], lineno=26, col_offset=0)"
 
 	| x name call num |
-	x := statements at: 6.
+	x := self statementsAt: 6.
 	self 
 		assert: (x isKindOf: PyFor);
 		assert: ((name := x.target) isKindOf: PyName);
@@ -208,10 +208,10 @@ testForElse
 		assert: ((num := call.arguments at: 1) isKindOf: PyNum);
 		assert: (num.n == 10);
 		assert: (call.keywords size == 0);
-		assert: (x.body size == 1);
-		assert: ((x.body at: 1) isKindOf: PyPass);
-		assert: (x.orelse size == 1);
-		assert: ((x.orelse at: 1) isKindOf: PyPass);
+		assert: (x.body.body size == 1);
+		assert: ((x.body.body at: 1) isKindOf: PyPass);
+		assert: (x.orelse.body size == 1);
+		assert: ((x.orelse.body at: 1) isKindOf: PyPass);
 		yourself.
 %
 category: 'other'
@@ -219,7 +219,7 @@ method: CompoundStatementsTestCase
 testFunctionWithOneArgument
 
 	| x arguments arg |
-	x := statements at: 10.
+	x := self statementsAt: 10.
 	self 
 		assert: (x isKindOf: PyFunctionDef);
 		assert: (x.name = 'func');
@@ -233,8 +233,8 @@ testFunctionWithOneArgument
 		assert: (arguments.kw_defaults size == 0); 
 		assert: (arguments.kwarg isNil); 
 		assert: (arguments.defaults size == 0); 
-		assert: (x.body size == 1); 
-		assert: ((x.body at: 1) isKindOf: PyPass); 
+		assert: (x.body.body size == 1); 
+		assert: ((x.body.body at: 1) isKindOf: PyPass); 
 		assert: (x.decorator_list size == 0); 
 		assert: (x.returns isNil); 
 		yourself.
@@ -244,7 +244,7 @@ method: CompoundStatementsTestCase
 testFunctionWithOneDecorator
 
 	| x arguments arg name |
-	x := statements at: 11.
+	x := self statementsAt: 11.
 	self 
 		assert: (x isKindOf: PyFunctionDef);
 		assert: (x.name = 'decoratedFunc');
@@ -258,8 +258,8 @@ testFunctionWithOneDecorator
 		assert: (arguments.kw_defaults size == 0); 
 		assert: (arguments.kwarg isNil); 
 		assert: (arguments.defaults size == 0); 
-		assert: (x.body size == 1); 
-		assert: ((x.body at: 1) isKindOf: PyPass); 
+		assert: (x.body.body size == 1); 
+		assert: ((x.body.body at: 1) isKindOf: PyPass); 
 		assert: (x.decorator_list size == 1); 
 		assert: ((name := x.decorator_list at: 1) isKindOf: PyName); 
 		assert: (name.id = 'func'); 
@@ -271,8 +271,8 @@ category: 'other'
 method: CompoundStatementsTestCase
 testFunctionWithOneDefaultValueParameter
 
-	| x arguments arg nameConstant value |
-	x := statements at: 12.
+	| x arguments arg nameConstant |
+	x := self statementsAt: 12.
 	self 
 		assert: (x isKindOf: PyFunctionDef);
 		assert: (x.name = 'defaultParameterValueFunc');
@@ -288,8 +288,8 @@ testFunctionWithOneDefaultValueParameter
 		assert: (arguments.defaults size == 1);
 		assert: ((nameConstant := arguments.defaults at: 1) isKindOf: PyNameConstant);
 		assert: (nameConstant.value isNil);
-		assert: (x.body size == 1); 
-		assert: ((x.body at: 1) isKindOf: PyPass); 
+		assert: (x.body.body size == 1); 
+		assert: ((x.body.body at: 1) isKindOf: PyPass); 
 		assert: (x.decorator_list size == 0); 
 		assert: (x.returns isNil); 
 		yourself.
@@ -300,14 +300,16 @@ testIf
 	"If(NameConstant(True, lineno=5, col_offset=3), [Pass(lineno=6, col_offset=1)], [], lineno=5, col_offset=0)"
 
 	| x |
-	x := statements at: 1.
+	x := self statementsAt: 1.
 	self 
 		assert: (x isKindOf: PyIf);
 		assert: (x.test isKindOf: PyNameConstant);
 		assert: (x.test.value);
-		assert: (x.body size == 1);
-		assert: ((x.body at: 1) isKindOf: PyPass);
-		assert: (x.orelse size == 0);
+		assert: (x.body isKindOf: PySuite);
+		assert: (x.body.body size == 1);
+		assert: ((x.body.body at: 1) isKindOf: PyPass);
+		assert: (x.orelse isKindOf: PySuite);
+		assert: (x.orelse.body size == 0);
 		yourself.
 %
 category: 'other'
@@ -316,23 +318,23 @@ testIfElse
 	"If(NameConstant(False, lineno=8, col_offset=3), [Pass(lineno=9, col_offset=1)], [Pass(lineno=11, col_offset=1)], lineno=8, col_offset=0)"
 
 	| x |
-	x := statements at: 2.
+	x := self statementsAt: 2.
 	self 
 		assert: (x isKindOf: PyIf);
 		assert: (x.test isKindOf: PyNameConstant);
 		deny: x.test.value;
-		assert: (x.body size == 1);
-		assert: ((x.body at: 1) isKindOf: PyPass);
-		assert: (x.orelse size == 1);
-		assert: ((x.orelse at: 1) isKindOf: PyPass);
+		assert: (x.body.body size == 1);
+		assert: ((x.body.body at: 1) isKindOf: PyPass);
+		assert: (x.orelse.body size == 1);
+		assert: ((x.orelse.body at: 1) isKindOf: PyPass);
 		yourself.
 %
 category: 'other'
 method: CompoundStatementsTestCase
 testNestedFunction
 
-	| x arguments arg value functionDef insideArguments insideArg return |
-	x := statements at: 13.
+	| x arguments arg functionDef insideArguments insideArg return |
+	x := self statementsAt: 13.
 	self 
 		assert: (x isKindOf: PyFunctionDef);
 		assert: (x.name = 'nestedFunc');
@@ -346,8 +348,8 @@ testNestedFunction
 		assert: (arguments.kw_defaults size == 0); 
 		assert: (arguments.kwarg isNil); 
 		assert: (arguments.defaults size == 0);
-		assert: (x.body size == 2); 
-		assert: ((functionDef := x.body at: 1) isKindOf: PyFunctionDef); 
+		assert: (x.body.body size == 2); 
+		assert: ((functionDef := x.body.body at: 1) isKindOf: PyFunctionDef); 
 		assert: (functionDef.name = 'insideFunc'); 
 		assert: ((insideArguments := functionDef.args) isKindOf: PyArguments); 
 		assert: (insideArguments.args size == 1);
@@ -359,11 +361,11 @@ testNestedFunction
 		assert: (insideArguments.kw_defaults size == 0); 
 		assert: (insideArguments.kwarg isNil); 
 		assert: (insideArguments.defaults size == 0);
-		assert: (functionDef.body size == 1);
-		assert: ((functionDef.body at: 1) isKindOf: PyPass);
+		assert: (functionDef.body.body size == 1);
+		assert: ((functionDef.body.body at: 1) isKindOf: PyPass);
 		assert: (functionDef.decorator_list size == 0);
 		assert: (functionDef.returns isNil);
-		assert: ((return := x.body at: 2) isKindOf: PyReturn);
+		assert: ((return := x.body.body at: 2) isKindOf: PyReturn);
 		assert: (return.value isKindOf: PyName);
 		assert: (return.value.id = 'insideFunc');
 		assert: (return.value.ctx isKindOf: PyLoad);
@@ -386,11 +388,11 @@ testTry
 					[Str('Something bad happened', lineno=35, col_offset=23)], [], lineno=35, col_offset=10), None, lineno=35, col_offset=4)], lineno=34, col_offset=0)], [], [], lineno=32, col_offset=0)"
 
 	| x expr call binOp exceptHandler raise insideCall str |
-	x := statements at: 7.
+	x :=self statementsAt: 7.
 	self 
 		assert: (x isKindOf: PyTry);
-		assert: (x.body size == 1);
-		assert: ((expr := x.body at: 1) isKindOf: PyExpr);
+		assert: (x.body.body size == 1);
+		assert: ((expr := x.body.body at: 1) isKindOf: PyExpr);
 		assert: ((call := expr.value) isKindOf: PyCall);
 		assert: (call.function isKindOf: PyName);
 		assert: (call.function.id = 'print');
@@ -407,8 +409,8 @@ testTry
 		assert: ((exceptHandler := x.handlers at: 1) isKindOf: PyExceptHandler);
 		assert: (exceptHandler.type isNil);
 		assert: (exceptHandler.name isNil);
-		assert: (exceptHandler.body size == 1);
-		assert: ((raise := exceptHandler.body at: 1) isKindOf: PyRaise);
+		assert: (exceptHandler.body.body size == 1);
+		assert: ((raise := exceptHandler.body.body at: 1) isKindOf: PyRaise);
 		assert: ((insideCall := raise.exc) isKindOf: PyCall);
 		assert: (insideCall.function isKindOf: PyName);
 		assert: (insideCall.arguments size == 1);
@@ -426,14 +428,14 @@ testWhile
 	"While(NameConstant(True, lineno=14, col_offset=6), [Pass(lineno=15, col_offset=1)], [], lineno=14, col_offset=0)"
 
 	| x |
-	x := statements at: 3.
+	x := self statementsAt: 3.
 	self 
 		assert: (x isKindOf: PyWhile);
 		assert: (x.test isKindOf: PyNameConstant);
 		assert: x.test.value;
-		assert: (x.body size == 1);
-		assert: ((x.body at: 1) isKindOf: PyPass);
-		assert: (x.orelse size == 0);
+		assert: (x.body.body size == 1);
+		assert: ((x.body.body at: 1) isKindOf: PyPass);
+		assert: (x.orelse.body size == 0);
 		yourself.
 %
 category: 'other'
@@ -442,15 +444,15 @@ testWhileElse
 	"While(NameConstant(False, lineno=17, col_offset=6), [Pass(lineno=18, col_offset=1)], [Pass(lineno=20, col_offset=1)], lineno=17, col_offset=0)"
 
 	| x |
-	x := statements at: 4.
+	x := self statementsAt: 4.
 	self 
 		assert: (x isKindOf: PyWhile);
 		assert: (x.test isKindOf: PyNameConstant);
 		deny: x.test.value;
-		assert: (x.body size == 1);
-		assert: ((x.body at: 1) isKindOf: PyPass);
-		assert: (x.orelse size == 1);
-		assert: ((x.orelse at: 1) isKindOf: PyPass);
+		assert: (x.body.body size == 1);
+		assert: ((x.body.body at: 1) isKindOf: PyPass);
+		assert: (x.orelse.body size == 1);
+		assert: ((x.orelse.body at: 1) isKindOf: PyPass);
 		yourself.
 %
 category: 'other'
@@ -464,7 +466,7 @@ testWith
 		[Pass(lineno=42, col_offset=4)], lineno=41, col_offset=0)"
 
 	| x withItem call str1 str2 |
-	x := statements at: 9.
+	x := self statementsAt: 9.
 	self 
 		assert: (x isKindOf: PyWith);
 		assert: (x.items size == 1);
@@ -480,8 +482,8 @@ testWith
 		assert: (str2.s = 'r');
 		assert: (call.keywords size == 0);
 		assert: (withItem.optional_vars isNil);
-		assert: (x.body size == 1);
-		assert: ((x.body at: 1) isKindOf: PyPass);
+		assert: (x.body.body size == 1);
+		assert: ((x.body.body at: 1) isKindOf: PyPass);
 		yourself.
 %
 category: 'other'
@@ -495,7 +497,7 @@ testWithOptionalVars
 		[Pass(lineno=39, col_offset=4)], lineno=38, col_offset=0)"
 
 	| x withItem call str1 str2 name |
-	x := statements at: 8.
+	x := self statementsAt: 8.
 	self 
 		assert: (x isKindOf: PyWith);
 		assert: (x.items size == 1);
@@ -513,7 +515,7 @@ testWithOptionalVars
 		assert: ((name := withItem.optional_vars) isKindOf: PyName);
 		assert: (name.id = 'f');
 		assert: (name.ctx isKindOf: PyStore);
-		assert: (x.body size == 1);
-		assert: ((x.body at: 1) isKindOf: PyPass);
+		assert: (x.body.body size == 1);
+		assert: ((x.body.body at: 1) isKindOf: PyPass);
 		yourself.
 %

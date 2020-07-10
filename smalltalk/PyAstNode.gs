@@ -219,23 +219,6 @@ string
 %
 category: 'other'
 method: PyAstNode
-suite
-
-	| stream suite node |
-	stream := self stream.
-	(stream peekFor: $[) ifFalse: [self error].
-	suite := Array new.
-	[
-		stream peekFor: $]
-	] whileFalse: [
-		node := PyStatement statementFrom: self.
-		suite add: node.
-		(stream peekFor: $,) ifTrue: [stream peekFor: Character space].
-	].
-	^suite
-%
-category: 'other'
-method: PyAstNode
 sys
 
 	^parent sys

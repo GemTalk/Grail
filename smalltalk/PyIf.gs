@@ -40,8 +40,8 @@ initialize
 
 	test := self expression.
 	self commaSpace.
-	body := self suite.
+	body := PySuite parent: self.
 	self commaSpace.
-	orelse := self suite.
+	orelse := PySuite parent: self.
 	self readPosition.
 %

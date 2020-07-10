@@ -48,7 +48,7 @@ initialize
 	self commaSpace.
 	args := PyArguments parent: self.
 	self commaSpace.
-	body := self suite. 
+	body := PySuite parent: self.
 	self commaSpace.
 	decorator_list :=  self collectAst: [self expression.].
 	self commaSpace.

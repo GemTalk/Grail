@@ -18,6 +18,6 @@ initialize
 
 	items := self collectAst: [PyWithItem parent: self].
 	self commaSpace.
-	body := self suite.
+	body := PySuite parent: self.
 	self readPosition.
 %

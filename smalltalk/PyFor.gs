@@ -34,8 +34,8 @@ addMissingPositions
 	super addMissingPositions. 
 	target addMissingPositions.
 	iter addMissingPositions.
-	body do: [:each | each addMissingPositions].
-	orelse do: [:each | each addMissingPositions].
+	body addMissingPositions.
+	orelse addMissingPositions.
 %
 category: 'other'
 method: PyFor
@@ -64,8 +64,8 @@ initialize
 	self commaSpace. 
 	iter := self expression. 
 	self commaSpace.
-	body := self suite. 
+	body := PySuite parent: self.
 	self commaSpace. 
-	orelse := self suite.
+	orelse := PySuite parent: self.
 	self readPosition.
 %

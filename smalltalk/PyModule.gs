@@ -55,7 +55,7 @@ category: 'other'
 method: PyModule
 addMissingPositions
 
-	statements do: [:each | each addMissingPositions].
+	statements addMissingPositions.
 	stream := nil.
 %
 category: 'other'
@@ -111,7 +111,7 @@ parseAst
 	stream := ReadStream on: self readAst.
 	string := stream upTo: $(.
 	string = 'Module' ifFalse: [self error].
-	statements := self suite.
+	statements :=  PySuite parent: self.
 	(stream peekFor: $)) ifFalse: [self error].
 	string := stream upToEnd trimSeparators.
 	string isEmpty ifFalse: [self error: 'Unexpected text at end of AST: ' , string printString].

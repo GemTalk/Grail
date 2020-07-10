@@ -19,7 +19,7 @@ method: DelimitersTestCase
 testCommaList
 
 	| x |
-	x := statements at: 3.
+	x := self statementsAt: 3.
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.
@@ -41,7 +41,7 @@ method: DelimitersTestCase
 testCommaTuple
 
 	| x |
-	x := statements at: 4.
+	x := self statementsAt: 4.
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.
@@ -63,7 +63,7 @@ method: DelimitersTestCase
 testParethesesLeft
 
 	| x |
-	x := statements at: 1.
+	x := self statementsAt: 1.
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.
@@ -86,7 +86,7 @@ method: DelimitersTestCase
 testParethesesRight
 
 	| x |
-	x := statements at: 2.
+	x := self statementsAt: 2.
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.
@@ -109,7 +109,7 @@ method: DelimitersTestCase
 testSliceList
 
 	| x |
-	x := statements at: 5.
+	x := self statementsAt: 5.
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.
@@ -138,7 +138,7 @@ method: DelimitersTestCase
 testSliceListEmpty
 
 	| x |
-	x := statements at: 7.
+	x := self statementsAt: 7.
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.
@@ -165,7 +165,7 @@ method: DelimitersTestCase
 testSliceTuple
 
 	| x |
-	x := statements at: 6.
+	x := self statementsAt: 6.
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.
@@ -193,7 +193,7 @@ method: DelimitersTestCase
 testSliceTupleFilled
 
 	| x |
-	x := statements at: 8.
+	x := self statementsAt: 8.
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.
