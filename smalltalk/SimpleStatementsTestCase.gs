@@ -16,7 +16,7 @@ filename
 set compile_env: 0
 category: 'other'
 method: SimpleStatementsTestCase
-testSimpleStatementArrayAssignment
+testArrayAssignment
 
 	| x |
 	x := statements at: 6.
@@ -37,7 +37,7 @@ testSimpleStatementArrayAssignment
 %
 category: 'other'
 method: SimpleStatementsTestCase
-testSimpleStatementAssertFalse
+testAssertFalse
 
 	| x |
 	x := statements at: 10.
@@ -50,7 +50,7 @@ testSimpleStatementAssertFalse
 %
 category: 'other'
 method: SimpleStatementsTestCase
-testSimpleStatementAssertTrue
+testAssertTrue
 
 	| x |
 	x := statements at: 9.
@@ -63,7 +63,7 @@ testSimpleStatementAssertTrue
 %
 category: 'other'
 method: SimpleStatementsTestCase
-testSimpleStatementAssignMultiple
+testAssignMultiple
 
 	| x |
 	x := statements at: 2.
@@ -82,7 +82,7 @@ testSimpleStatementAssignMultiple
 %
 category: 'other'
 method: SimpleStatementsTestCase
-testSimpleStatementAssignSingle
+testAssignSingle
 
 	| x |
 	x := statements at: 1.
@@ -98,7 +98,7 @@ testSimpleStatementAssignSingle
 %
 category: 'other'
 method: SimpleStatementsTestCase
-testSimpleStatementBreak
+testBreak
 
 	| x |
 	x := statements at: 21.
@@ -117,7 +117,7 @@ testSimpleStatementBreak
 %
 category: 'other'
 method: SimpleStatementsTestCase
-testSimpleStatementClassAttributeAssignment
+testClassAttributeAssignment
 
 	| x |
 	x := statements at: 5.
@@ -141,7 +141,7 @@ testSimpleStatementClassAttributeAssignment
 %
 category: 'other'
 method: SimpleStatementsTestCase
-testSimpleStatementClassDefCls
+testClassDefCls
 
 	| x |
 	x := statements at: 3.
@@ -163,7 +163,7 @@ testSimpleStatementClassDefCls
 %
 category: 'other'
 method: SimpleStatementsTestCase
-testSimpleStatementClassInstantiation
+testClassInstantiation
 
 	| x |
 	x := statements at: 4.
@@ -183,7 +183,7 @@ testSimpleStatementClassInstantiation
 %
 category: 'other'
 method: SimpleStatementsTestCase
-testSimpleStatementContinue
+testContinue
 
 	| x |
 	x := statements at: 22.
@@ -202,7 +202,7 @@ testSimpleStatementContinue
 %
 category: 'other'
 method: SimpleStatementsTestCase
-testSimpleStatementDelMultiple
+testDelMultiple
 
 	| x |
 	x := statements at: 14.
@@ -219,7 +219,7 @@ testSimpleStatementDelMultiple
 %
 category: 'other'
 method: SimpleStatementsTestCase
-testSimpleStatementDelSingle
+testDelSingle
 
 	| x y |
 	x := statements at: 13.
@@ -233,7 +233,7 @@ testSimpleStatementDelSingle
 %
 category: 'other'
 method: SimpleStatementsTestCase
-testSimpleStatementGlobal
+testGlobal
 
 	| x |
 	x := statements at: 25.
@@ -245,7 +245,7 @@ testSimpleStatementGlobal
 %
 category: 'other'
 method: SimpleStatementsTestCase
-testSimpleStatementImport
+testImport
 
 	| x |
 	x := statements at: 23.
@@ -259,7 +259,7 @@ testSimpleStatementImport
 %
 category: 'other'
 method: SimpleStatementsTestCase
-testSimpleStatementImportFrom
+testImportFrom
 
 	| x |
 	x := statements at: 24.
@@ -275,7 +275,7 @@ testSimpleStatementImportFrom
 %
 category: 'other'
 method: SimpleStatementsTestCase
-testSimpleStatementIndexAssignment
+testIndexAssignment
 
 	| x |
 	x := statements at: 7.
@@ -291,7 +291,7 @@ testSimpleStatementIndexAssignment
 %
 category: 'other'
 method: SimpleStatementsTestCase
-testSimpleStatementNonlocal
+testNonlocal
 
 	| x |
 	x := statements at: 26.
@@ -303,7 +303,7 @@ testSimpleStatementNonlocal
 %
 category: 'other'
 method: SimpleStatementsTestCase
-testSimpleStatementPassClass
+testPassClass
 
 	| x |
 	x := statements at: 12.
@@ -319,7 +319,7 @@ testSimpleStatementPassClass
 %
 category: 'other'
 method: SimpleStatementsTestCase
-testSimpleStatementPassFunction
+testPassFunction
 
 	| x |
 	x := statements at: 11.
@@ -343,7 +343,7 @@ testSimpleStatementPassFunction
 %
 category: 'other'
 method: SimpleStatementsTestCase
-testSimpleStatementRaise
+testRaise
 
 	| x |
 	x := statements at: 19.
@@ -363,7 +363,7 @@ testSimpleStatementRaise
 %
 category: 'other'
 method: SimpleStatementsTestCase
-testSimpleStatementRaiseFromNone
+testRaiseFromNone
 
 	| x |
 	x := statements at: 20.
@@ -384,7 +384,7 @@ testSimpleStatementRaiseFromNone
 %
 category: 'other'
 method: SimpleStatementsTestCase
-testSimpleStatementReturnNone
+testReturnNone
 
 	| x |
 	x := statements at: 15.
@@ -407,7 +407,7 @@ testSimpleStatementReturnNone
 %
 category: 'other'
 method: SimpleStatementsTestCase
-testSimpleStatementReturnTrue
+testReturnTrue
 
 	| x |
 	x := statements at: 16.
@@ -431,7 +431,7 @@ testSimpleStatementReturnTrue
 %
 category: 'other'
 method: SimpleStatementsTestCase
-testSimpleStatementSwapAssignment
+testSwapAssignment
 
 	| x |
 	x := statements at: 8.
@@ -459,7 +459,7 @@ testSimpleStatementSwapAssignment
 %
 category: 'other'
 method: SimpleStatementsTestCase
-testSimpleStatementYield
+testYield
 
 	| x |
 	x := statements at: 17.
@@ -484,7 +484,7 @@ testSimpleStatementYield
 %
 category: 'other'
 method: SimpleStatementsTestCase
-testSimpleStatementYieldAsync
+testYieldAsync
 
 	| x |
 	x := statements at: 18.

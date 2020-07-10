@@ -16,7 +16,7 @@ filename
 set compile_env: 0
 category: 'other'
 method: OperatorsTestCase
-testOperatorAdd
+testAdd
 
 	| x |
 	x := statements at: 1.
@@ -35,7 +35,7 @@ testOperatorAdd
 %
 category: 'other'
 method: OperatorsTestCase
-testOperatorEq
+testEq
 
 	| x |
 	x := statements at: 9.
@@ -56,7 +56,7 @@ testOperatorEq
 %
 category: 'other'
 method: OperatorsTestCase
-testOperatorGtE
+testGtE
 
 	| x |
 	x := statements at: 10.
@@ -77,7 +77,7 @@ testOperatorGtE
 %
 category: 'other'
 method: OperatorsTestCase
-testOperatorInvert
+testInvert
 
 	| x |
 	x := statements at: 6.
@@ -93,7 +93,7 @@ testOperatorInvert
 %
 category: 'other'
 method: OperatorsTestCase
-testOperatorMod
+testMod
 
 	| x |
 	x := statements at: 2.
@@ -112,7 +112,7 @@ testOperatorMod
 %
 category: 'other'
 method: OperatorsTestCase
-testOperatorNestedAdd
+testNestedAdd
 
 	| x |
 	x := statements at: 3.
@@ -135,7 +135,7 @@ testOperatorNestedAdd
 %
 category: 'other'
 method: OperatorsTestCase
-testOperatorNestedEq
+testNestedEq
 
 	| x |
 	x := statements at: 11.
@@ -158,7 +158,7 @@ testOperatorNestedEq
 %
 category: 'other'
 method: OperatorsTestCase
-testOperatorNestedGtE
+testNestedGtE
 
 	| x |
 	x := statements at: 12.
@@ -181,7 +181,7 @@ testOperatorNestedGtE
 %
 category: 'other'
 method: OperatorsTestCase
-testOperatorNestedMult
+testNestedMult
 
 	| x |
 	x := statements at: 4.
@@ -204,7 +204,7 @@ testOperatorNestedMult
 %
 category: 'other'
 method: OperatorsTestCase
-testOperatorUSub
+testUSub
 
 	| x |
 	x := statements at: 5.

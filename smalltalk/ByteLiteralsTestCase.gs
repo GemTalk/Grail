@@ -16,7 +16,7 @@ filename
 set compile_env: 0
 category: 'other'
 method: ByteLiteralsTestCase
-testByteLiteralBackspace
+testBackspace
 
 	| x |
 	x := statements at: 16.
@@ -37,7 +37,7 @@ testByteLiteralBackspace
 %
 category: 'other'
 method: ByteLiteralsTestCase
-testByteLiteralBell
+testBell
 
 	| x |
 	x := statements at: 15.
@@ -58,7 +58,7 @@ testByteLiteralBell
 %
 category: 'other'
 method: ByteLiteralsTestCase
-testByteLiteralHexHigh
+testHexHigh
 
 	| x |
 	x := statements at: 20.
@@ -79,7 +79,7 @@ testByteLiteralHexHigh
 %
 category: 'other'
 method: ByteLiteralsTestCase
-testByteLiteralHexLow
+testHexLow
 
 	| x |
 	x := statements at: 19.
@@ -100,7 +100,7 @@ testByteLiteralHexLow
 %
 category: 'other'
 method: ByteLiteralsTestCase
-testByteLiteralNewline
+testNewline
 
 	| x |
 	x := statements at: 13.
@@ -122,7 +122,7 @@ testByteLiteralNewline
 %
 category: 'other'
 method: ByteLiteralsTestCase
-testByteLiteralOctalHigh
+testOctalHigh
 
 	| x |
 	x := statements at: 18.
@@ -143,7 +143,7 @@ testByteLiteralOctalHigh
 %
 category: 'other'
 method: ByteLiteralsTestCase
-testByteLiteralOctalLow
+testOctalLow
 
 	| x |
 	x := statements at: 17.
@@ -164,7 +164,7 @@ testByteLiteralOctalLow
 %
 category: 'other'
 method: ByteLiteralsTestCase
-testByteLiteralSlash
+testSlash
 
 	| x |
 	x := statements at: 14.

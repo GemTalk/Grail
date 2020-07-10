@@ -16,7 +16,7 @@ filename
 set compile_env: 0
 category: 'other'
 method: CompoundStatementsTestCase
-testCompoundStatementClass
+testClass
 
 	| x |
 	x := statements at: 14.
@@ -33,7 +33,7 @@ testCompoundStatementClass
 %
 category: 'other'
 method: CompoundStatementsTestCase
-testCompoundStatementClassInheritance
+testClassInheritance
 
 	| x name |
 	x := statements at: 15.
@@ -52,7 +52,7 @@ testCompoundStatementClassInheritance
 %
 category: 'other'
 method: CompoundStatementsTestCase
-testCompoundStatementCoroutine
+testCoroutine
 
 	| x arguments arg |
 	x := statements at: 16.
@@ -77,7 +77,7 @@ testCompoundStatementCoroutine
 %
 category: 'other'
 method: CompoundStatementsTestCase
-testCompoundStatementCoroutineFor
+testCoroutineFor
 
 	| x arguments arg asyncFor call num |
 	x := statements at: 17.
@@ -116,7 +116,7 @@ testCompoundStatementCoroutineFor
 %
 category: 'other'
 method: CompoundStatementsTestCase
-testCompoundStatementCoroutineWith
+testCoroutineWith
 
 	| x arguments arg with withItem name call str1 str2 num |
 	x := statements at: 18.
@@ -158,7 +158,7 @@ testCompoundStatementCoroutineWith
 %
 category: 'other'
 method: CompoundStatementsTestCase
-testCompoundStatementFor
+testFor
 	"For(
 		Name('_', Store(), lineno=23, col_offset=4), 
 		Call(Name('range', Load(), lineno=23, col_offset=9), [Num(10, lineno=23, col_offset=15)], [], lineno=23, col_offset=9), 
@@ -186,7 +186,7 @@ testCompoundStatementFor
 %
 category: 'other'
 method: CompoundStatementsTestCase
-testCompoundStatementForElse
+testForElse
 	"For(
 		Name('_', Store(), lineno=26, col_offset=4), 
 		Call(Name('range', Load(), lineno=26, col_offset=9), [Num(10, lineno=26, col_offset=15)], [], lineno=26, col_offset=9), 
@@ -216,7 +216,7 @@ testCompoundStatementForElse
 %
 category: 'other'
 method: CompoundStatementsTestCase
-testCompoundStatementFunctionWithOneArgument
+testFunctionWithOneArgument
 
 	| x arguments arg |
 	x := statements at: 10.
@@ -241,7 +241,7 @@ testCompoundStatementFunctionWithOneArgument
 %
 category: 'other'
 method: CompoundStatementsTestCase
-testCompoundStatementFunctionWithOneDecorator
+testFunctionWithOneDecorator
 
 	| x arguments arg name |
 	x := statements at: 11.
@@ -269,7 +269,7 @@ testCompoundStatementFunctionWithOneDecorator
 %
 category: 'other'
 method: CompoundStatementsTestCase
-testCompoundStatementFunctionWithOneDefaultValueParameter
+testFunctionWithOneDefaultValueParameter
 
 	| x arguments arg nameConstant value |
 	x := statements at: 12.
@@ -296,7 +296,7 @@ testCompoundStatementFunctionWithOneDefaultValueParameter
 %
 category: 'other'
 method: CompoundStatementsTestCase
-testCompoundStatementIf
+testIf
 	"If(NameConstant(True, lineno=5, col_offset=3), [Pass(lineno=6, col_offset=1)], [], lineno=5, col_offset=0)"
 
 	| x |
@@ -312,7 +312,7 @@ testCompoundStatementIf
 %
 category: 'other'
 method: CompoundStatementsTestCase
-testCompoundStatementIfElse
+testIfElse
 	"If(NameConstant(False, lineno=8, col_offset=3), [Pass(lineno=9, col_offset=1)], [Pass(lineno=11, col_offset=1)], lineno=8, col_offset=0)"
 
 	| x |
@@ -329,7 +329,7 @@ testCompoundStatementIfElse
 %
 category: 'other'
 method: CompoundStatementsTestCase
-testCompoundStatementNestedFunction
+testNestedFunction
 
 	| x arguments arg value functionDef insideArguments insideArg return |
 	x := statements at: 13.
@@ -373,7 +373,7 @@ testCompoundStatementNestedFunction
 %
 category: 'other'
 method: CompoundStatementsTestCase
-testCompoundStatementTry
+testTry
 	"Try(
 		[Expr(
 			Call(Name('print', Load(), lineno=33, col_offset=4), 
@@ -422,7 +422,7 @@ testCompoundStatementTry
 %
 category: 'other'
 method: CompoundStatementsTestCase
-testCompoundStatementWhile
+testWhile
 	"While(NameConstant(True, lineno=14, col_offset=6), [Pass(lineno=15, col_offset=1)], [], lineno=14, col_offset=0)"
 
 	| x |
@@ -438,7 +438,7 @@ testCompoundStatementWhile
 %
 category: 'other'
 method: CompoundStatementsTestCase
-testCompoundStatementWhileElse
+testWhileElse
 	"While(NameConstant(False, lineno=17, col_offset=6), [Pass(lineno=18, col_offset=1)], [Pass(lineno=20, col_offset=1)], lineno=17, col_offset=0)"
 
 	| x |
@@ -455,7 +455,7 @@ testCompoundStatementWhileElse
 %
 category: 'other'
 method: CompoundStatementsTestCase
-testCompoundStatementWith
+testWith
 	"With([
 		withitem(
 			Call(Name('open', Load(), lineno=41, col_offset=5), 
@@ -486,7 +486,7 @@ testCompoundStatementWith
 %
 category: 'other'
 method: CompoundStatementsTestCase
-testCompoundStatementWithOptionalVars
+testWithOptionalVars
 	"With(
 		[withitem(
 			Call(Name('open', Load(), lineno=38, col_offset=5), 

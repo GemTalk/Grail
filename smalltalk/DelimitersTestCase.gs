@@ -16,7 +16,7 @@ filename
 set compile_env: 0
 category: 'other'
 method: DelimitersTestCase
-testDelimiterCommaList
+testCommaList
 
 	| x |
 	x := statements at: 3.
@@ -38,7 +38,7 @@ testDelimiterCommaList
 %
 category: 'other'
 method: DelimitersTestCase
-testDelimiterCommaTuple
+testCommaTuple
 
 	| x |
 	x := statements at: 4.
@@ -60,7 +60,7 @@ testDelimiterCommaTuple
 %
 category: 'other'
 method: DelimitersTestCase
-testDelimiterParethesesLeft
+testParethesesLeft
 
 	| x |
 	x := statements at: 1.
@@ -83,7 +83,7 @@ testDelimiterParethesesLeft
 %
 category: 'other'
 method: DelimitersTestCase
-testDelimiterParethesesRight
+testParethesesRight
 
 	| x |
 	x := statements at: 2.
@@ -106,7 +106,7 @@ testDelimiterParethesesRight
 %
 category: 'other'
 method: DelimitersTestCase
-testDelimiterSliceList
+testSliceList
 
 	| x |
 	x := statements at: 5.
@@ -135,7 +135,7 @@ testDelimiterSliceList
 %
 category: 'other'
 method: DelimitersTestCase
-testDelimiterSliceListEmpty
+testSliceListEmpty
 
 	| x |
 	x := statements at: 7.
@@ -162,7 +162,7 @@ testDelimiterSliceListEmpty
 %
 category: 'other'
 method: DelimitersTestCase
-testDelimiterSliceTuple
+testSliceTuple
 
 	| x |
 	x := statements at: 6.
@@ -190,7 +190,7 @@ testDelimiterSliceTuple
 %
 category: 'other'
 method: DelimitersTestCase
-testDelimiterSliceTupleFilled
+testSliceTupleFilled
 
 	| x |
 	x := statements at: 8.
