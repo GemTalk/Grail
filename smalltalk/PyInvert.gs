@@ -9,6 +9,12 @@ PyInvert class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyInvert
-operand: operand
-	^operand bitInvert
+evaluate
+
+	^operand evaluate bitInvert
+%
+category: 'other'
+method: PyInvert
+operand: x
+	^x bitInvert
 %

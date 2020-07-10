@@ -9,6 +9,12 @@ PyUAdd class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyUAdd
-operand: operand
-	^operand
+evaluate
+
+	^operand evaluate
+%
+category: 'other'
+method: PyUAdd
+operand: x
+	^x
 %

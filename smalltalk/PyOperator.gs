@@ -12,7 +12,11 @@ parent: aNode
 	    "operator = Add | Sub | Mult | MatMult | Div | Mod | Pow | LShift
                  | RShift | BitOr | BitXor | BitAnd | FloorDiv"
 
-	^self customChildForParent: aNode peekForCloseParenthesis: true
+	self == PyOperator ifTrue: [
+		^self customChildForParent: aNode peekForCloseParenthesis: true.
+	] ifFalse: [
+		^super parent: aNode
+	].
 %
 ! ------------------- Instance methods for PyOperator
 set compile_env: 0

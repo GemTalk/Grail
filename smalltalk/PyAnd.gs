@@ -9,6 +9,14 @@ PyAnd class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyAnd
+evaluate
+
+	^values allSatisfy: [:each | each evaluate].
+%
+category: 'other'
+method: PyAnd
 values: anArray
+
+	self halt.
 	^anArray allSatisfy: [:each | each evaluate].
 %

@@ -86,8 +86,7 @@ testOperatorInvert
 		yourself.
 	x := x _value.
 	self 
-		assert: (x isKindOf: PyUnaryOp);
-		assert: (x _op isKindOf: PyInvert);
+		assert: (x isKindOf: PyInvert);
 		assert: (x _operand isKindOf: PyNum);
 		assert: (x _operand _n == 200);
 		yourself.
@@ -214,8 +213,7 @@ testOperatorUSub
 		yourself.
 	x := x _value.
 	self 
-		assert: (x isKindOf: PyUnaryOp);
-		assert: (x _op isKindOf: PyUSub);
+		assert: (x isKindOf: PyUSub);
 		assert: (x _operand isKindOf: PyNum);
 		assert: (x _operand _n == 100);
 		yourself.

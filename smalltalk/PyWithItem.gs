@@ -5,7 +5,6 @@ PyWithItem removeAllMethods.
 PyWithItem class removeAllMethods.
 %
 ! ------------------- Class methods for PyWithItem
-set compile_env: 0
 ! ------------------- Instance methods for PyWithItem
 set compile_env: 0
 category: 'other'

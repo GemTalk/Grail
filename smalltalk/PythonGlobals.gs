@@ -425,7 +425,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 PyExpression subclass: 'PyBoolOp'
-  instVarNames: #( op values)
+  instVarNames: #( values)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -447,6 +447,60 @@ Object
 expectvalue /Class
 doit
 PyBoolOp category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for PyAnd
+expectvalue /Class
+doit
+PyBoolOp subclass: 'PyAnd'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyAnd comment: 
+'No class-specific documentation for PyAnd, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyBoolop
+      PyAnd
+'
+%
+expectvalue /Class
+doit
+PyAnd category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for PyOr
+expectvalue /Class
+doit
+PyBoolOp subclass: 'PyOr'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyOr comment: 
+'No class-specific documentation for PyOr, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyBoolop
+      PyOr
+'
+%
+expectvalue /Class
+doit
+PyOr category: 'Parser'
 %
 set compile_env: 0
 ! ------------------- Class definition for PyBytes
@@ -1094,7 +1148,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 PyExpression subclass: 'PyUnaryOp'
-  instVarNames: #( op operand)
+  instVarNames: #( operand)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -1116,6 +1170,114 @@ Object
 expectvalue /Class
 doit
 PyUnaryOp category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for PyInvert
+expectvalue /Class
+doit
+PyUnaryOp subclass: 'PyInvert'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyInvert comment: 
+'No class-specific documentation for PyInvert, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyUnaryop
+      PyInvert
+'
+%
+expectvalue /Class
+doit
+PyInvert category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for PyNot
+expectvalue /Class
+doit
+PyUnaryOp subclass: 'PyNot'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyNot comment: 
+'No class-specific documentation for PyNot, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyUnaryop
+      PyNot
+'
+%
+expectvalue /Class
+doit
+PyNot category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for PyUAdd
+expectvalue /Class
+doit
+PyUnaryOp subclass: 'PyUAdd'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyUAdd comment: 
+'No class-specific documentation for PyUAdd, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyUnaryop
+      PyUAdd
+'
+%
+expectvalue /Class
+doit
+PyUAdd category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for PyUSub
+expectvalue /Class
+doit
+PyUnaryOp subclass: 'PyUSub'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyUSub comment: 
+'No class-specific documentation for PyUSub, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyUnaryop
+      PyUSub
+'
+%
+expectvalue /Class
+doit
+PyUSub category: 'Parser'
 %
 set compile_env: 0
 ! ------------------- Class definition for PyYield
@@ -1892,86 +2054,6 @@ Object
 expectvalue /Class
 doit
 PyWith category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyBoolop
-expectvalue /Class
-doit
-PyAstNode subclass: 'PyBoolop'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: PythonGlobals
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyBoolop comment: 
-'No class-specific documentation for PyBoolop, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyBoolop
-'
-%
-expectvalue /Class
-doit
-PyBoolop category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyAnd
-expectvalue /Class
-doit
-PyBoolop subclass: 'PyAnd'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: PythonGlobals
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyAnd comment: 
-'No class-specific documentation for PyAnd, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyBoolop
-      PyAnd
-'
-%
-expectvalue /Class
-doit
-PyAnd category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyOr
-expectvalue /Class
-doit
-PyBoolop subclass: 'PyOr'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: PythonGlobals
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyOr comment: 
-'No class-specific documentation for PyOr, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyBoolop
-      PyOr
-'
-%
-expectvalue /Class
-doit
-PyOr category: 'Parser'
 %
 set compile_env: 0
 ! ------------------- Class definition for PyCmpop
@@ -3047,140 +3129,6 @@ doit
 PySlice category: 'Parser'
 %
 set compile_env: 0
-! ------------------- Class definition for PyUnaryop
-expectvalue /Class
-doit
-PyAstNode subclass: 'PyUnaryop'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: PythonGlobals
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyUnaryop comment: 
-'No class-specific documentation for PyUnaryop, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyUnaryop
-'
-%
-expectvalue /Class
-doit
-PyUnaryop category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyInvert
-expectvalue /Class
-doit
-PyUnaryop subclass: 'PyInvert'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: PythonGlobals
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyInvert comment: 
-'No class-specific documentation for PyInvert, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyUnaryop
-      PyInvert
-'
-%
-expectvalue /Class
-doit
-PyInvert category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyNot
-expectvalue /Class
-doit
-PyUnaryop subclass: 'PyNot'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: PythonGlobals
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyNot comment: 
-'No class-specific documentation for PyNot, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyUnaryop
-      PyNot
-'
-%
-expectvalue /Class
-doit
-PyNot category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyUAdd
-expectvalue /Class
-doit
-PyUnaryop subclass: 'PyUAdd'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: PythonGlobals
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyUAdd comment: 
-'No class-specific documentation for PyUAdd, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyUnaryop
-      PyUAdd
-'
-%
-expectvalue /Class
-doit
-PyUAdd category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyUSub
-expectvalue /Class
-doit
-PyUnaryop subclass: 'PyUSub'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: PythonGlobals
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyUSub comment: 
-'No class-specific documentation for PyUSub, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyUnaryop
-      PyUSub
-'
-%
-expectvalue /Class
-doit
-PyUSub category: 'Parser'
-%
-set compile_env: 0
 ! ------------------- Class definition for PyWithItem
 expectvalue /Class
 doit
@@ -3487,7 +3435,6 @@ input PyBitAnd.gs
 input PyBitOr.gs
 input PyBitXor.gs
 input PyBoolOp.gs
-input PyBoolop_.gs
 input PyBreak.gs
 input PyBytes.gs
 input PyCall.gs
@@ -3573,7 +3520,6 @@ input PyTry.gs
 input PyTuple.gs
 input PyUAdd.gs
 input PyUnaryOp.gs
-input PyUnaryop_.gs
 input PyUSub.gs
 input PyWhile.gs
 input PyWith.gs

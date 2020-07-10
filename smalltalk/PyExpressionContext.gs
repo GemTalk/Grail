@@ -11,7 +11,11 @@ classmethod: PyExpressionContext
 parent: aNode
 	"expr_context = Load | Store | Del | AugLoad | AugStore | Param"
 
-	^self customChildForParent: aNode peekForCloseParenthesis: true
+	self == PyExpressionContext ifTrue: [
+		^self customChildForParent: aNode peekForCloseParenthesis: true.
+	] ifFalse: [
+		^super parent: aNode
+	].
 %
 ! ------------------- Instance methods for PyExpressionContext
 set compile_env: 0

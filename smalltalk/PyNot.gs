@@ -9,6 +9,12 @@ PyNot class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyNot
-operand: operand
-	^operand not
+evaluate
+
+	^operand evaluate not
+%
+category: 'other'
+method: PyNot
+operand: x
+	^x not
 %

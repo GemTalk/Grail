@@ -11,7 +11,11 @@ classmethod: PyCmpop
 parent: aNode
 	"cmpop = Eq | NotEq | Lt | LtE | Gt | GtE | Is | IsNot | In | NotIn"
 
-	^self customChildForParent: aNode peekForCloseParenthesis: true
+	self == PyCmpop ifTrue: [
+		^self customChildForParent: aNode peekForCloseParenthesis: true.
+	] ifFalse: [
+		^super parent: aNode
+	].
 %
 ! ------------------- Instance methods for PyCmpop
 set compile_env: 0

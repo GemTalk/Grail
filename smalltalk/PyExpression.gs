@@ -10,7 +10,11 @@ category: 'other'
 classmethod: PyExpression
 expressionFrom: aNode
 
-	^self customChildForParent: aNode peekForCloseParenthesis: false
+	self == PyExpression ifTrue: [
+		^self customChildForParent: aNode peekForCloseParenthesis: false.
+	] ifFalse: [
+		^super parent: aNode
+	].
 %
 ! ------------------- Instance methods for PyExpression
 set compile_env: 0

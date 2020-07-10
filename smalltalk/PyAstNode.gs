@@ -15,7 +15,7 @@ customChildForParent: aNode peekForCloseParenthesis: aBoolean
 	symbol := ('Py' , (aNode stream upTo: $()) asSymbol.
 	aBoolean ifTrue: [(aNode stream peekFor: $)) ifFalse: [self error]].
 	class := PythonGlobals at: symbol.
-	^class basicNew initialize: aNode; yourself
+	^class parent: aNode
 %
 category: 'other'
 classmethod: PyAstNode

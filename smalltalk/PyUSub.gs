@@ -9,6 +9,12 @@ PyUSub class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyUSub
-operand: operand
+evaluate
+
 	^operand evaluate negated
+%
+category: 'other'
+method: PyUSub
+operand: x
+	^x evaluate negated
 %

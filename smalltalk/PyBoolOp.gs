@@ -5,19 +5,31 @@ PyBoolOp removeAllMethods.
 PyBoolOp class removeAllMethods.
 %
 ! ------------------- Class methods for PyBoolOp
+set compile_env: 0
+category: 'other'
+classmethod: PyBoolOp
+parent: aNode
+	"boolop = And | Or"
+
+	self == PyBoolOp ifTrue: [
+		^self customChildForParent: aNode peekForCloseParenthesis: true.
+	] ifFalse: [
+		^super parent: aNode
+	].
+%
 ! ------------------- Instance methods for PyBoolOp
 set compile_env: 0
 category: 'other'
 method: PyBoolOp
 evaluate
-	^op values: values
+
+	self subclassResponsibility.
 %
 category: 'other'
 method: PyBoolOp
 initialize
 	"BoolOp(boolop op, expr* values)"
 
-	op := PyBoolop parent: self.
 	self commaSpace.
 	values := self collectAst:[self expression].
 	self readPosition.

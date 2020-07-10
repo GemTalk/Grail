@@ -15,6 +15,14 @@ statementFrom: aNode
 	class := PythonGlobals at: symbol.
 	"Pywithitem may return an instance of PyWithItem"
 	^class parent: aNode
+
+"
+	self == PyStatement ifTrue: [
+		^self customChildForParent: aNode peekForCloseParenthesis: true.
+	] ifFalse: [
+		^super parent: aNode
+	].
+"
 %
 ! ------------------- Instance methods for PyStatement
 set compile_env: 0
