@@ -37,6 +37,8 @@ category: 'other'
 method: PyBinOp
 initialize
 	"BinOp(expr left, operator op, expr right)"
+	"If BinOp were the only use of operator, then we would replace it with a subclass of operator.
+		But see also AugAssign()."
 
 	left := self expression.
 	self commaSpace.

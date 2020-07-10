@@ -949,6 +949,23 @@ doit
 PyNameConstant category: 'Parser'
 %
 set compile_env: 0
+! ------------------- Class definition for PyNamedExpr
+expectvalue /Class
+doit
+PyExpression subclass: 'PyNamedExpr'
+  instVarNames: #( target value)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyNamedExpr category: 'Parser'
+%
+set compile_env: 0
 ! ------------------- Class definition for PyNum
 expectvalue /Class
 doit
@@ -3488,6 +3505,7 @@ input PyModule.gs
 input PyMult.gs
 input PyName.gs
 input PyNameConstant.gs
+input PyNamedExpr.gs
 input PyNonlocal.gs
 input PyNot.gs
 input PyNotEq.gs
@@ -3504,8 +3522,8 @@ input PyReturn.gs
 input PyRShift.gs
 input PySet.gs
 input PySetComp.gs
-input PySliceAbstract.gs
 input PySlice.gs
+input PySliceAbstract.gs
 input PyStarred.gs
 input PyStatement.gs
 input PyStore.gs
