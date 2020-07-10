@@ -18,21 +18,21 @@ category: 'other'
 method: SimpleStatementsTestCase
 testArrayAssignment
 
-	| x |
+	| x y |
 	x := self statementsAt: 6.
 	self 
 		assert: (x isKindOf: PyAssign);
-		assert: (x _targets size == 1);
-		assert: ((x _targets at: 1) isKindOf: PyName);
-		assert: ((x _targets at: 1) _id = 'x');
-		assert: ((x _targets at: 1) _ctx isKindOf: PyStore);
-		assert: (x _value isKindOf: PyList);
-		assert: (x _value _elts size == 2);
-		assert: ((x _value _elts at: 1) isKindOf: PyNum);
-		assert: ((x _value _elts at: 1) _n == 0);
-		assert: ((x _value _elts at: 2) isKindOf: PyNum);
-		assert: ((x _value _elts at: 2) _n == 1);
-		assert: (x _value _ctx isKindOf: PyLoad);
+		assert: (x.targets size == 1);
+		assert: ((y := x.targets at: 1) isKindOf: PyName);
+		assert: (y.id = 'x');
+		assert: (y.ctx isKindOf: PyStore);
+		assert: (x.value isKindOf: PyList);
+		assert: (x.value.elts size == 2);
+		assert: ((y := x.value.elts at: 1) isKindOf: PyNum);
+		assert: (y.n == 0);
+		assert: ((y := x.value.elts at: 2) isKindOf: PyNum);
+		assert: (y.n == 1);
+		assert: (x.value.ctx isKindOf: PyLoad);
 		yourself.
 %
 category: 'other'
@@ -56,44 +56,44 @@ testAssertTrue
 	x := self statementsAt: 9.
 	self 
 		assert: (x isKindOf: PyAssert);
-		assert: (x _test isKindOf: PyNameConstant);
-		assert: (x _test _value);
-		assert: (x _msg isNil);
+		assert: (x.test isKindOf: PyNameConstant);
+		assert: (x.test.value);
+		assert: (x.msg isNil);
 		yourself.
 %
 category: 'other'
 method: SimpleStatementsTestCase
 testAssignMultiple
 
-	| x |
+	| x y |
 	x := self statementsAt: 2.
 	self 
 		assert: (x isKindOf: PyAssign);
-		assert: (x _value isKindOf: PyNum);
-		assert: (x _value _n == 2);
-		assert: (x _targets size == 2);
-		assert: ((x _targets at: 1) isKindOf: PyName);
-		assert: ((x _targets at: 1) _id = 'var2');
-		assert: ((x _targets at: 1) _ctx isKindOf: PyStore);
-		assert: ((x _targets at: 2) isKindOf: PyName);
-		assert: ((x _targets at: 2) _id = 'var3');
-		assert: ((x _targets at: 2) _ctx isKindOf: PyStore);
+		assert: (x.value isKindOf: PyNum);
+		assert: (x.value.n == 2);
+		assert: (x.targets size == 2);
+		assert: ((y := x.targets at: 1) isKindOf: PyName);
+		assert: (y.id = 'var2');
+		assert: (y.ctx isKindOf: PyStore);
+		assert: ((y := x.targets at: 2) isKindOf: PyName);
+		assert: (y.id = 'var3');
+		assert: (y.ctx isKindOf: PyStore);
 		yourself.
 %
 category: 'other'
 method: SimpleStatementsTestCase
 testAssignSingle
 
-	| x |
+	| x y |
 	x := self statementsAt: 1.
 	self 
 		assert: (x isKindOf: PyAssign);
-		assert: (x _value isKindOf: PyNum);
-		assert: (x _value _n == 1);
-		assert: (x _targets size == 1);
-		assert: ((x _targets at: 1) isKindOf: PyName);
-		assert: ((x _targets at: 1) _id = 'var1');
-		assert: ((x _targets at: 1) _ctx isKindOf: PyStore);
+		assert: (x.value isKindOf: PyNum);
+		assert: (x.value.n == 1);
+		assert: (x.targets size == 1);
+		assert: ((y := x.targets at: 1) isKindOf: PyName);
+		assert: (y.id = 'var1');
+		assert: (y.ctx isKindOf: PyStore);
 		yourself.
 %
 category: 'other'
@@ -119,24 +119,24 @@ category: 'other'
 method: SimpleStatementsTestCase
 testClassAttributeAssignment
 
-	| x |
+	| x y |
 	x := self statementsAt: 5.
 	self 
 		assert: (x isKindOf: PyAssign);
-		assert: (x _targets size == 1);
-		assert: ((x _targets at: 1) isKindOf: PyAttribute);
-		assert: ((x _targets at: 1) _value isKindOf: PyName);
-		assert: ((x _targets at: 1) _value _id = 'inst');
-		assert: ((x _targets at: 1) _value _ctx isKindOf: PyLoad);
-		assert: ((x _targets at: 1) _attr = 'x');
-		assert: ((x _targets at: 1) _ctx isKindOf: PyStore);
-		assert: (x _value isKindOf: PyBinOp);
-		assert: (x _value _left isKindOf: PyAttribute);
-		assert: (x _value _left _value isKindOf: PyName);
-		assert: (x _value _left _value _id = 'inst');
-		assert: (x _value _left _value _ctx isKindOf: PyLoad);
-		assert: (x _value _left _attr = 'x');
-		assert: (x _value _left _ctx isKindOf: PyLoad);
+		assert: (x.targets size == 1);
+		assert: ((y := x.targets at: 1) isKindOf: PyAttribute);
+		assert: (y.value isKindOf: PyName);
+		assert: y.value.id = 'inst';
+		assert: (y.value.ctx isKindOf: PyLoad);
+		assert: (y.attr = 'x');
+		assert: (y.ctx isKindOf: PyStore);
+		assert: (x.value isKindOf: PyBinOp);
+		assert: (x.value.left isKindOf: PyAttribute);
+		assert: (x.value.left.value isKindOf: PyName);
+		assert: (x.value.left.value.id = 'inst');
+		assert: (x.value.left.value.ctx isKindOf: PyLoad);
+		assert: (x.value.left.attr = 'x');
+		assert: (x.value.left.ctx isKindOf: PyLoad);
 		yourself.
 %
 category: 'other'
@@ -165,20 +165,20 @@ category: 'other'
 method: SimpleStatementsTestCase
 testClassInstantiation
 
-	| x |
+	| x y |
 	x := self statementsAt: 4.
 	self 
 		assert: (x isKindOf: PyAssign);
-		assert: (x _targets size == 1);
-		assert: ((x _targets at: 1) isKindOf: PyName);
-		assert: ((x _targets at: 1) _id = 'inst');
-		assert: ((x _targets at: 1) _ctx isKindOf: PyStore);
-		assert: (x _value isKindOf: PyCall);
-		assert: (x _value _function isKindOf: PyName);
-		assert: (x _value _function _id = 'Cls');
-		assert: (x _value _function _ctx isKindOf: PyLoad);
-		assert: (x _value _arguments size == 0);
-		assert: (x _value _keywords size == 0);
+		assert: (x.targets size == 1);
+		assert: ((y := x.targets at: 1) isKindOf: PyName);
+		assert: (y.id = 'inst');
+		assert: (y.ctx isKindOf: PyStore);
+		assert: (x.value isKindOf: PyCall);
+		assert: (x.value.function isKindOf: PyName);
+		assert: (x.value.function.id = 'Cls');
+		assert: (x.value.function.ctx isKindOf: PyLoad);
+		assert: (x.value.arguments size == 0);
+		assert: (x.value.keywords size == 0);
 		yourself.
 %
 category: 'other'
@@ -204,17 +204,17 @@ category: 'other'
 method: SimpleStatementsTestCase
 testDelMultiple
 
-	| x |
+	| x y |
 	x := self statementsAt: 14.
 	self 
 		assert: (x isKindOf: PyDelete);
-		assert: (x _targets size == 2);
-		assert: ((x _targets at: 1) isKindOf: PyName);
-		assert: ((x _targets at: 1) _id = 'x');
-		assert: ((x _targets at: 1) _ctx isKindOf: PyDel);
-		assert: ((x _targets at: 2) isKindOf: PyName);
-		assert: ((x _targets at: 2) _id = 'i');
-		assert: ((x _targets at: 2) _ctx isKindOf: PyDel);
+		assert: (x.targets size == 2);
+		assert: ((y := x.targets at: 1) isKindOf: PyName);
+		assert: y.id = 'x';
+		assert: (y.ctx isKindOf: PyDel);
+		assert: ((y := x.targets at: 2) isKindOf: PyName);
+		assert: y.id = 'i';
+		assert: (y.ctx isKindOf: PyDel);
 		yourself.
 %
 category: 'other'
@@ -227,7 +227,7 @@ testDelSingle
 		assert: (x isKindOf: PyDelete);
 		assert: (x.targets size == 1);
 		assert: ((y := x.targets at: 1) isKindOf: PyName);
-		assert: (y.id = 'x');
+		assert: y.id = 'x';
 		assert: (y.ctx isKindOf: PyDel);
 		yourself.
 %
@@ -247,46 +247,46 @@ category: 'other'
 method: SimpleStatementsTestCase
 testImport
 
-	| x |
+	| x y |
 	x := self statementsAt: 23.
 	self 
 		assert: (x isKindOf: PyImport);
 		assert: (x.names size == 1);
-		assert: ((x.names at: 1) isKindOf: PyAlias);
-		assert: ((x.names at: 1) _name = 'foo');
-		assert: ((x.names at: 1) _asName isNil);
+		assert: ((y := x.names at: 1) isKindOf: PyAlias);
+		assert: (y.name = 'foo');
+		assert: (y.asName isNil);
 		yourself.
 %
 category: 'other'
 method: SimpleStatementsTestCase
 testImportFrom
 
-	| x |
+	| x y |
 	x := self statementsAt: 24.
 	self 
 		assert: (x isKindOf: PyImportFrom);
-		assert: (x _module = 'foo');
+		assert: (x.module = 'foo');
 		assert: (x.names size == 1);
-		assert: ((x.names at: 1) isKindOf: PyAlias);
-		assert: ((x.names at: 1) _name = 'attr');
-		assert: ((x.names at: 1) _asName isNil);
-		assert: (x _level = 0);
+		assert: ((y := x.names at: 1) isKindOf: PyAlias);
+		assert: (y.name = 'attr');
+		assert: (y.asName isNil);
+		assert: (x.level = 0);
 		yourself.
 %
 category: 'other'
 method: SimpleStatementsTestCase
 testIndexAssignment
 
-	| x |
+	| x y |
 	x := self statementsAt: 7.
 	self 
 		assert: (x isKindOf: PyAssign);
-		assert: (x _targets size == 1);
-		assert: ((x _targets at: 1) isKindOf: PyName);
-		assert: ((x _targets at: 1) _id = 'i');
-		assert: ((x _targets at: 1) _ctx isKindOf: PyStore);
-		assert: (x _value isKindOf: PyNum);
-		assert: (x _value _n == 0);
+		assert: (x.targets size == 1);
+		assert: ((y := x.targets at: 1) isKindOf: PyName);
+		assert: (y.id = 'i');
+		assert: (y.ctx isKindOf: PyStore);
+		assert: (x.value isKindOf: PyNum);
+		assert: (x.value.n == 0);
 		yourself.
 %
 category: 'other'
@@ -345,41 +345,41 @@ category: 'other'
 method: SimpleStatementsTestCase
 testRaise
 
-	| x |
+	| x y |
 	x := self statementsAt: 19.
 	self 
 		assert: (x isKindOf: PyRaise);
-		assert: (x _exc isKindOf: PyCall);
-		assert: (x _exc _function isKindOf: PyName);
-		assert: (x _exc _function _id = 'RuntimeError');
-		assert: (x _exc _function _ctx isKindOf: PyLoad);
-		assert: (x _exc _arguments size == 1);
-		assert: ((x _exc _arguments at: 1) isKindOf: PyStr);
-		assert: ((x _exc _arguments at: 1) _s = 'Something bad happened');
-		assert: (x _exc _keywords size == 0);
-		assert: (x _exc _function isKindOf: PyName);
-		assert: (x _cause isNil);
+		assert: (x.exc isKindOf: PyCall);
+		assert: (x.exc.function isKindOf: PyName);
+		assert: (x.exc.function.id = 'RuntimeError');
+		assert: (x.exc.function.ctx isKindOf: PyLoad);
+		assert: (x.exc.arguments size == 1);
+		assert: ((y := x.exc.arguments at: 1) isKindOf: PyStr);
+		assert: (y.s = 'Something bad happened');
+		assert: (x.exc.keywords size == 0);
+		assert: (x.exc.function isKindOf: PyName);
+		assert: (x.cause isNil);
 		yourself.
 %
 category: 'other'
 method: SimpleStatementsTestCase
 testRaiseFromNone
 
-	| x |
+	| x y |
 	x := self statementsAt: 20.
 	self 
 		assert: (x isKindOf: PyRaise);
-		assert: (x _exc isKindOf: PyCall);
-		assert: (x _exc _function isKindOf: PyName);
-		assert: (x _exc _function _id = 'RuntimeError');
-		assert: (x _exc _function _ctx isKindOf: PyLoad);
-		assert: (x _exc _arguments size == 1);
-		assert: ((x _exc _arguments at: 1) isKindOf: PyStr);
-		assert: ((x _exc _arguments at: 1) _s = 'Something bad happened');
-		assert: (x _exc _keywords size == 0);
-		assert: (x _exc _function isKindOf: PyName);
-		assert: (x _cause isKindOf: PyNameConstant);
-		assert: (x _cause _value isNil);
+		assert: (x.exc isKindOf: PyCall);
+		assert: (x.exc.function isKindOf: PyName);
+		assert: (x.exc.function.id = 'RuntimeError');
+		assert: (x.exc.function.ctx isKindOf: PyLoad);
+		assert: (x.exc.arguments size == 1);
+		assert: ((y := x.exc.arguments at: 1) isKindOf: PyStr);
+		assert: (y.s = 'Something bad happened');
+		assert: (x.exc.keywords size == 0);
+		assert: (x.exc.function isKindOf: PyName);
+		assert: (x.cause isKindOf: PyNameConstant);
+		assert: (x.cause.value isNil);
 		yourself.
 %
 category: 'other'
@@ -433,28 +433,30 @@ category: 'other'
 method: SimpleStatementsTestCase
 testSwapAssignment
 
-	| x |
+	| x y |
 	x := self statementsAt: 8.
 	self 
 		assert: (x isKindOf: PyAssign);
-		assert: (x _targets size == 1);
-		assert: ((x _targets at: 1) isKindOf: PyTuple);
-		assert: (((x _targets at: 1) _elts at: 1) isKindOf: PyName);
-		assert: (((x _targets at: 1) _elts at: 1) _id = 'i');
-		assert: (((x _targets at: 1) _elts at: 1) _ctx isKindOf: PyStore);
-		assert: (((x _targets at: 1) _elts at: 2) isKindOf: PySubscript);
-		assert: (((x _targets at: 1) _elts at: 2) _value isKindOf: PyName);
-		assert: (((x _targets at: 1) _elts at: 2) _value _id = 'x');
-		assert: (((x _targets at: 1) _elts at: 2) _value _ctx isKindOf: PyLoad);
-		assert: (((x _targets at: 1) _elts at: 2) _ctx isKindOf: PyStore);
-		assert: ((x _targets at: 1) _ctx isKindOf: PyStore);
-		assert: (x _value isKindOf: PyTuple);
-		assert: (x _value _elts size == 2);
-		assert: ((x _value _elts at: 1) isKindOf: PyNum);
-		assert: ((x _value _elts at: 1) _n == 1);
-		assert: ((x _value _elts at: 2) isKindOf: PyNum);
-		assert: ((x _value _elts at: 2) _n == 2);
-		assert: (x _value _ctx isKindOf: PyLoad);
+		assert: (x.targets size == 1);
+		assert: ((y := x.targets at: 1) isKindOf: PyTuple);
+		assert: ((y := y.elts at: 1) isKindOf: PyName);
+		assert: (y.id = 'i');
+		assert: (y.ctx isKindOf: PyStore);
+		assert: (y := x.targets at: 1) notNil;
+		assert: ((y := y.elts at: 2) isKindOf: PySubscript);
+		assert: (y.value isKindOf: PyName);
+		assert: (y.value.id = 'x');
+		assert: (y.value.ctx isKindOf: PyLoad);
+		assert: (y.ctx isKindOf: PyStore);
+		assert: (y := x.targets at: 1) notNil;
+		assert: (y.ctx isKindOf: PyStore);
+		assert: (x.value isKindOf: PyTuple);
+		assert: (x.value.elts size == 2);
+		assert: ((y := x.value.elts at: 1) isKindOf: PyNum);
+		assert: (y.n == 1);
+		assert: ((y := x.value.elts at: 2) isKindOf: PyNum);
+		assert: (y.n == 2);
+		assert: (x.value.ctx isKindOf: PyLoad);
 		yourself.
 %
 category: 'other'

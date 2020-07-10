@@ -3292,7 +3292,6 @@ expectvalue /Class
 doit
 CompoundStatementsTestCase category: 'Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for DelimitersTestCase
 expectvalue /Class
 doit

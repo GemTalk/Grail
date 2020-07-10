@@ -45,7 +45,7 @@ readPositionOnly
 	| stream string |
 	stream := self stream.
 	string := stream upTo: $=.
-	(string = ' lineno' or: [ string = 'lineno'. ]) ifFalse: [self error].
+	string trimBlanks = 'lineno' ifFalse: [self error].
 	line := (stream upTo: $,) asNumber.
 	(string := stream upTo: $=) = ' col_offset' ifFalse: [self error].
 	column := (stream upTo: $)) asNumber.

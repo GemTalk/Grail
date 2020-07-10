@@ -18,12 +18,23 @@ category: 'other'
 method: NumericLiteralsTestCase
 testBinaryInteger
 
+	| x |
 	self
-		assert: (self statementsAt: 6) _value _n == 0;
-		assert: (self statementsAt: 7) _value _n == 1;
-		assert: (self statementsAt: 8) _value _n == 4;
-		assert: (self statementsAt: 9) _value _n == 3;
-		assert: (self statementsAt: 10) _value _n == 16;
+		assert: (x := self statementsAt: 6) notNil;
+		assert: (x := x.value) notNil;
+		assert: x.n == 0;
+
+		assert: (x := self statementsAt: 7) notNil;
+		assert: x.value.n == 1;
+
+		assert: (x := self statementsAt: 8) notNil;
+		assert: x.value.n == 4;
+
+		assert: (x := self statementsAt: 9) notNil;
+		assert: x.value.n == 3;
+
+		assert: (x := self statementsAt: 10) notNil;
+		assert: x.value.n == 16;
 		yourself.
 %
 category: 'other'
@@ -33,53 +44,98 @@ testDecimalInteger
 	| expr num |
 	self
 		assert: ((expr := self statementsAt: 1) isKindOf: PyExpr);
-		assert: ((num := expr _value) isKindOf: PyNum);
-		assert: num _n == 1;
+		assert: ((num := expr.value) isKindOf: PyNum);
+		assert: num.n == 1;
 
-		assert: (self statementsAt: 2) _value _n == 1234;
-		assert: (self statementsAt: 3) _value _n == 12345;
-		assert: (self statementsAt: 4) _value _n == 0;
-		assert: (self statementsAt: 5) _value _n == 0;
+		assert: (expr := self statementsAt: 2) notNil;
+		assert: expr.value.n == 1234;
+
+		assert: (expr := self statementsAt: 3) notNil;
+		assert: expr.value.n == 12345;
+
+		assert: (expr := self statementsAt: 4) notNil;
+		assert: expr.value.n == 0;
+
+		assert: (expr := self statementsAt: 5) notNil;
+		assert: expr.value.n == 0;
 		yourself.
 %
 category: 'other'
 method: NumericLiteralsTestCase
 testExponentFloat
 
+	| x |
 	self
-		assert: (self statementsAt: 30) _value _n == 2e3;
-		assert: (self statementsAt: 31) _value _n == 0.11e2;
-		assert: (self statementsAt: 32) _value _n == 13.2e1;
-		assert: (self statementsAt: 33) _value _n == 0.129e-4;
-		assert: (self statementsAt: 34) _value _n == 3.14e10;
+		assert: (x := self statementsAt: 30) notNil;
+		assert: x.value.n == 2e3;
+
+		assert: (x := self statementsAt: 31) notNil;
+		assert: x.value.n == 0.11e2;
+
+		assert: (x := self statementsAt: 32) notNil;
+		assert: x.value.n == 13.2e1;
+
+		assert: (x := self statementsAt: 33) notNil;
+		assert: x.value.n == 0.129e-4;
+
+		assert: (x := self statementsAt: 34) notNil;
+		assert: x.value.n == 3.14e10;
 		yourself.
 %
 category: 'other'
 method: NumericLiteralsTestCase
 testFloatNumber
 
+	| x |
 	self
-		assert: (self statementsAt: 24) _value _n == 11.0;
-		assert: (self statementsAt: 25) _value _n == 3.14;
-		assert: (self statementsAt: 26) _value _n == 0.11;
-		assert: (self statementsAt: 27) _value _n == 13.2;
-		assert: (self statementsAt: 28) _value _n == 0.129;
-		assert: (self statementsAt: 29) _value _n == 22.41;
+		assert: (x := self statementsAt: 24) notNil;
+		assert: x.value.n == 11.0;
+
+		assert: (x := self statementsAt: 25) notNil;
+		assert: x.value.n == 3.14;
+
+		assert: (x := self statementsAt: 26) notNil;
+		assert: x.value.n == 0.11;
+
+		assert: (x := self statementsAt: 27) notNil;
+		assert: x.value.n == 13.2;
+
+		assert: (x := self statementsAt: 28) notNil;
+		assert: x.value.n == 0.129;
+
+		assert: (x := self statementsAt: 29) notNil;
+		assert: x.value.n == 22.41;
 		yourself.
 %
 category: 'other'
 method: NumericLiteralsTestCase
 testHexadecimalInteger
 
+	| x |
 	self
-		assert: (self statementsAt: 16) _value _n == 1;
-		assert: (self statementsAt: 17) _value _n == 2;
-		assert: (self statementsAt: 18) _value _n == 257;
-		assert: (self statementsAt: 19) _value _n == 10;
-		assert: (self statementsAt: 20) _value _n == 169;
-		assert: (self statementsAt: 21) _value _n == 33;
-		assert: (self statementsAt: 22) _value _n == 144;
-		assert: (self statementsAt: 23) _value _n == 251;
+		assert: (x := self statementsAt: 16) notNil;
+		assert: x.value.n == 1;
+
+		assert: (x := self statementsAt: 17) notNil;
+		assert: x.value.n == 2;
+
+		assert: (x := self statementsAt: 18) notNil;
+		assert: x.value.n == 257;
+
+		assert: (x := self statementsAt: 19) notNil;
+		assert: x.value.n == 10;
+
+		assert: (x := self statementsAt: 20) notNil;
+		assert: x.value.n == 169;
+
+		assert: (x := self statementsAt: 21) notNil;
+		assert: x.value.n == 33;
+
+		assert: (x := self statementsAt: 22) notNil;
+		assert: x.value.n == 144;
+
+		assert: (x := self statementsAt: 23) notNil;
+		assert: x.value.n == 251;
 		yourself.
 %
 category: 'other'
@@ -89,30 +145,47 @@ testImaginaryNumber
 	| expr num complex |
 	self
 		assert: ((expr := self statementsAt: 35) isKindOf: PyExpr);
-		assert: ((num := expr _value) isKindOf: PyNum);
-		assert: ((complex := num _n) isKindOf: Complex);
-		assert: complex real == 0;
-		assert: complex imaginary == 3.14;
+		assert: ((num := expr.value) isKindOf: PyNum);
+		assert: ((complex := num.n) isKindOf: Complex);
+		assert: complex.real == 0;
+		assert: complex.imaginary == 3.14;
 
-		assert: (self statementsAt: 36) _value _n real == 0;
-		assert: (self statementsAt: 36) _value _n imaginary == 2000;
-		assert: (self statementsAt: 37) _value _n real == 0;
-		assert: (self statementsAt: 37) _value _n imaginary == 11;
-		assert: (self statementsAt: 38) _value _n real == 0;
-		assert: (self statementsAt: 38) _value _n imaginary == 132;
-		assert: (self statementsAt: 39) _value _n real == 0;
-		assert: (self statementsAt: 39) _value _n imaginary == 0.129;
+		assert: (expr := self statementsAt: 36) notNil;
+		assert: expr.value.n.real == 0;
+		assert: expr.value.n.imaginary == 2000;
+
+		assert: (expr := self statementsAt: 37) notNil;
+		assert: expr.value.n.real == 0;
+		assert: expr.value.n.imaginary == 11;
+
+		assert: (expr := self statementsAt: 38) notNil;
+		assert: expr.value.n.real == 0;
+		assert: expr.value.n.imaginary == 132;
+
+		assert: (expr := self statementsAt: 39) notNil;
+		assert: expr.value.n.real == 0;
+		assert: expr.value.n.imaginary == 0.129;
 		yourself.
 %
 category: 'other'
 method: NumericLiteralsTestCase
 testOctalInteger
 
+	| x |
 	self
-		assert: (self statementsAt: 11) _value _n == 0;
-		assert: (self statementsAt: 12) _value _n == 7;
-		assert: (self statementsAt: 13) _value _n == 1536;
-		assert: (self statementsAt: 14) _value _n == 17;
-		assert: (self statementsAt: 15) _value _n == 161;
+		assert: (x := self statementsAt: 11) notNil;
+		assert: x.value.n == 0;
+
+		assert: (x := self statementsAt: 12) notNil;
+		assert: x.value.n == 7;
+
+		assert: (x := self statementsAt: 13)  notNil;
+		assert: x.value.n == 1536;
+
+		assert: (x := self statementsAt: 14)  notNil;
+		assert: x.value.n == 17;
+
+		assert: (x := self statementsAt: 15)  notNil;
+		assert: x.value.n == 161;
 		yourself.
 %
