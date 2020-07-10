@@ -3424,6 +3424,33 @@ doit
 StringLiteralsTestCase category: 'Tests'
 %
 set compile_env: 0
+! ------------------- Class definition for PythonTestResource
+expectvalue /Class
+doit
+TestResource subclass: 'PythonTestResource'
+  instVarNames: #( path statements)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PythonTestResource comment: 
+'No class-specific documentation for PythonTestResource, hierarchy is: 
+Object
+  TestAsserter
+    TestResource( name description)
+      PythonTestResource( statements)
+'
+%
+expectvalue /Class
+doit
+PythonTestResource category: 'Tests'
+%
+set compile_env: 0
 ! ------------------- Class definition for UserInteraction
 expectvalue /Class
 doit
@@ -3557,6 +3584,7 @@ input PySub.gs
 input PySubscript.gs
 input PySystem.gs
 input PythonTestCase.gs
+input PythonTestResource.gs
 input PyToken.gs
 input PyTry.gs
 input PyTuple.gs

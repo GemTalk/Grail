@@ -6,6 +6,13 @@ PythonTestCase class removeAllMethods.
 %
 ! ------------------- Class methods for PythonTestCase
 set compile_env: 0
+category: 'other'
+classmethod: PythonTestCase
+resources
+
+	^super resources , (Array with: PythonTestResource)
+%
+set compile_env: 0
 category: 'Testing'
 classmethod: PythonTestCase
 isAbstract
@@ -27,5 +34,5 @@ method: PythonTestCase
 setUp
 
 	super setUp.
-	statements := (PyModule script:  '$HOME/code/Python/GemStoneP/tests/' , self filename) _statements.
+	statements := self resources first current statementsForModuleAtPath: '$HOME/code/Python/GemStoneP/tests/' , self filename.
 %
