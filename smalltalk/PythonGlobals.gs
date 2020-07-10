@@ -3292,6 +3292,7 @@ expectvalue /Class
 doit
 CompoundStatementsTestCase category: 'Tests'
 %
+set compile_env: 0
 ! ------------------- Class definition for DelimitersTestCase
 expectvalue /Class
 doit
@@ -3307,6 +3308,23 @@ PythonTestCase subclass: 'DelimitersTestCase'
 expectvalue /Class
 doit
 DelimitersTestCase category: 'Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for EvaluateTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'EvaluateTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+EvaluateTestCase category: 'Tests'
 %
 set compile_env: 0
 ! ------------------- Class definition for NumericLiteralsTestCase
@@ -3388,6 +3406,23 @@ doit
 StringLiteralsTestCase category: 'Tests'
 %
 set compile_env: 0
+! ------------------- Class definition for VariableTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'VariableTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+VariableTestCase category: 'Tests'
+%
+set compile_env: 0
 ! ------------------- Class definition for PythonTestResource
 expectvalue /Class
 doit
@@ -3440,6 +3475,7 @@ input Complex.gs
 input CompoundStatementsTestCase.gs
 input ContinueNotification.gs
 input DelimitersTestCase.gs
+input EvaluateTestCase.gs
 input NumericLiteralsTestCase.gs
 input OperatorsTestCase.gs
 input Py_List.gs
@@ -3564,3 +3600,4 @@ input PyYieldFrom.gs
 input SimpleStatementsTestCase.gs
 input StringLiteralsTestCase.gs
 input UserInteraction.gs
+input VariableTestCase.gs
