@@ -35,10 +35,3 @@ printOn: aStream
 		print: n;
 		nextPut: $).
 %
-set compile_env: 0
-category: 'testing support'
-method: PyNum
-_n
-
-	^n
-%
