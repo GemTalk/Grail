@@ -51,7 +51,7 @@ initialize
 	stream := self stream.
 	value := self expression.
 	self commaSpace.
-	slice := Pyslice sliceFrom: self.
+	slice := PySliceAbstract sliceFrom: self.
 	self commaSpace.
 	ctx := PyExpressionContext parent: self.
 	self readPosition.

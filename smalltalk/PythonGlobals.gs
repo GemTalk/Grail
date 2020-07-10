@@ -2056,10 +2056,10 @@ doit
 PyWith category: 'Parser'
 %
 set compile_env: 0
-! ------------------- Class definition for PyCmpop
+! ------------------- Class definition for PyCmpOp
 expectvalue /Class
 doit
-PyAstNode subclass: 'PyCmpop'
+PyAstNode subclass: 'PyCmpOp'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -2070,22 +2070,22 @@ PyAstNode subclass: 'PyCmpop'
 %
 expectvalue /Class
 doit
-PyCmpop comment: 
-'No class-specific documentation for PyCmpop, hierarchy is: 
+PyCmpOp comment: 
+'No class-specific documentation for PyCmpOp, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyCmpop
+    PyCmpOp
 '
 %
 expectvalue /Class
 doit
-PyCmpop category: 'Parser'
+PyCmpOp category: 'Parser'
 %
 set compile_env: 0
 ! ------------------- Class definition for PyEq
 expectvalue /Class
 doit
-PyCmpop subclass: 'PyEq'
+PyCmpOp subclass: 'PyEq'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -2100,7 +2100,7 @@ PyEq comment:
 'No class-specific documentation for PyEq, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyCmpop
+    PyCmpOp
       PyEq
 '
 %
@@ -2112,7 +2112,7 @@ set compile_env: 0
 ! ------------------- Class definition for PyGt
 expectvalue /Class
 doit
-PyCmpop subclass: 'PyGt'
+PyCmpOp subclass: 'PyGt'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -2127,7 +2127,7 @@ PyGt comment:
 'No class-specific documentation for PyGt, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyCmpop
+    PyCmpOp
       PyGt
 '
 %
@@ -2139,7 +2139,7 @@ set compile_env: 0
 ! ------------------- Class definition for PyGtE
 expectvalue /Class
 doit
-PyCmpop subclass: 'PyGtE'
+PyCmpOp subclass: 'PyGtE'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -2154,7 +2154,7 @@ PyGtE comment:
 'No class-specific documentation for PyGtE, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyCmpop
+    PyCmpOp
       PyGtE
 '
 %
@@ -2166,7 +2166,7 @@ set compile_env: 0
 ! ------------------- Class definition for PyIn
 expectvalue /Class
 doit
-PyCmpop subclass: 'PyIn'
+PyCmpOp subclass: 'PyIn'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -2181,7 +2181,7 @@ PyIn comment:
 'No class-specific documentation for PyIn, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyCmpop
+    PyCmpOp
       PyIn
 '
 %
@@ -2193,7 +2193,7 @@ set compile_env: 0
 ! ------------------- Class definition for PyIs
 expectvalue /Class
 doit
-PyCmpop subclass: 'PyIs'
+PyCmpOp subclass: 'PyIs'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -2208,7 +2208,7 @@ PyIs comment:
 'No class-specific documentation for PyIs, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyCmpop
+    PyCmpOp
       PyIs
 '
 %
@@ -2220,7 +2220,7 @@ set compile_env: 0
 ! ------------------- Class definition for PyIsNot
 expectvalue /Class
 doit
-PyCmpop subclass: 'PyIsNot'
+PyCmpOp subclass: 'PyIsNot'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -2235,7 +2235,7 @@ PyIsNot comment:
 'No class-specific documentation for PyIsNot, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyCmpop
+    PyCmpOp
       PyIsNot
 '
 %
@@ -2247,7 +2247,7 @@ set compile_env: 0
 ! ------------------- Class definition for PyLt
 expectvalue /Class
 doit
-PyCmpop subclass: 'PyLt'
+PyCmpOp subclass: 'PyLt'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -2262,7 +2262,7 @@ PyLt comment:
 'No class-specific documentation for PyLt, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyCmpop
+    PyCmpOp
       PyLt
 '
 %
@@ -2274,7 +2274,7 @@ set compile_env: 0
 ! ------------------- Class definition for PyLtE
 expectvalue /Class
 doit
-PyCmpop subclass: 'PyLtE'
+PyCmpOp subclass: 'PyLtE'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -2289,7 +2289,7 @@ PyLtE comment:
 'No class-specific documentation for PyLtE, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyCmpop
+    PyCmpOp
       PyLtE
 '
 %
@@ -2301,7 +2301,7 @@ set compile_env: 0
 ! ------------------- Class definition for PyNotEq
 expectvalue /Class
 doit
-PyCmpop subclass: 'PyNotEq'
+PyCmpOp subclass: 'PyNotEq'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -2316,7 +2316,7 @@ PyNotEq comment:
 'No class-specific documentation for PyNotEq, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyCmpop
+    PyCmpOp
       PyNotEq
 '
 %
@@ -2328,7 +2328,7 @@ set compile_env: 0
 ! ------------------- Class definition for PyNotIn
 expectvalue /Class
 doit
-PyCmpop subclass: 'PyNotIn'
+PyCmpOp subclass: 'PyNotIn'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -2343,7 +2343,7 @@ PyNotIn comment:
 'No class-specific documentation for PyNotIn, hierarchy is: 
 Object
   PyAstNode( parent)
-    PyCmpop
+    PyCmpOp
       PyNotIn
 '
 %
@@ -3022,10 +3022,10 @@ doit
 PySub category: 'Parser'
 %
 set compile_env: 0
-! ------------------- Class definition for Pyslice
+! ------------------- Class definition for PySliceAbstract
 expectvalue /Class
 doit
-PyAstNode subclass: 'Pyslice'
+PyAstNode subclass: 'PySliceAbstract'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -3036,22 +3036,22 @@ PyAstNode subclass: 'Pyslice'
 %
 expectvalue /Class
 doit
-Pyslice comment: 
-'No class-specific documentation for Pyslice, hierarchy is: 
+PySliceAbstract comment: 
+'No class-specific documentation for PySliceAbstract, hierarchy is: 
 Object
   PyAstNode( parent)
-    Pyslice
+    PySliceAbstract
 '
 %
 expectvalue /Class
 doit
-Pyslice category: 'Parser'
+PySliceAbstract category: 'Parser'
 %
 set compile_env: 0
 ! ------------------- Class definition for PyExtSlice
 expectvalue /Class
 doit
-Pyslice subclass: 'PyExtSlice'
+PySliceAbstract subclass: 'PyExtSlice'
   instVarNames: #( dims)
   classVars: #()
   classInstVars: #()
@@ -3066,7 +3066,7 @@ PyExtSlice comment:
 'No class-specific documentation for PyExtSlice, hierarchy is: 
 Object
   PyAstNode( parent)
-    Pyslice
+    PySliceAbstract
       PyExtSlice( dims)
 '
 %
@@ -3078,7 +3078,7 @@ set compile_env: 0
 ! ------------------- Class definition for PyIndex
 expectvalue /Class
 doit
-Pyslice subclass: 'PyIndex'
+PySliceAbstract subclass: 'PyIndex'
   instVarNames: #( value)
   classVars: #()
   classInstVars: #()
@@ -3093,7 +3093,7 @@ PyIndex comment:
 'No class-specific documentation for PyIndex, hierarchy is: 
 Object
   PyAstNode( parent)
-    Pyslice
+    PySliceAbstract
       PyIndex( value)
 '
 %
@@ -3105,7 +3105,7 @@ set compile_env: 0
 ! ------------------- Class definition for PySlice
 expectvalue /Class
 doit
-Pyslice subclass: 'PySlice'
+PySliceAbstract subclass: 'PySlice'
   instVarNames: #( lower upper step)
   classVars: #()
   classInstVars: #()
@@ -3120,7 +3120,7 @@ PySlice comment:
 'No class-specific documentation for PySlice, hierarchy is: 
 Object
   PyAstNode( parent)
-    Pyslice
+    PySliceAbstract
       PySlice( lower upper step)
 '
 %
@@ -3439,7 +3439,7 @@ input PyBreak.gs
 input PyBytes.gs
 input PyCall.gs
 input PyClassDef.gs
-input PyCmpop.gs
+input PyCmpOp.gs
 input PyCompare.gs
 input PyComprehension.gs
 input PyConstant.gs
@@ -3504,8 +3504,8 @@ input PyReturn.gs
 input PyRShift.gs
 input PySet.gs
 input PySetComp.gs
-input Pyslice.gs
-input PySlice_.gs
+input PySliceAbstract.gs
+input PySlice.gs
 input PyStarred.gs
 input PyStatement.gs
 input PyStore.gs

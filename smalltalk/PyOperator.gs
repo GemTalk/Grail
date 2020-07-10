@@ -8,22 +8,19 @@ PyOperator class removeAllMethods.
 set compile_env: 0
 category: 'other'
 classmethod: PyOperator
-parent: aNode
-	    "operator = Add | Sub | Mult | MatMult | Div | Mod | Pow | LShift
-                 | RShift | BitOr | BitXor | BitAnd | FloorDiv"
+isAbstract
 
-	self == PyOperator ifTrue: [
-		^self customChildForParent: aNode peekForCloseParenthesis: true.
-	] ifFalse: [
-		^super parent: aNode
-	].
+	^self == PyOperator
 %
 ! ------------------- Instance methods for PyOperator
 set compile_env: 0
 category: 'other'
 method: PyOperator
 initialize
-	"override to do nothing!"
+	    "operator = Add | Sub | Mult | MatMult | Div | Mod | Pow | LShift
+                 | RShift | BitOr | BitXor | BitAnd | FloorDiv"
+
+	(self stream peekFor: $)) ifFalse: [self error].
 %
 category: 'other'
 method: PyOperator

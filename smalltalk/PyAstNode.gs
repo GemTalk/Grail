@@ -8,17 +8,6 @@ PyAstNode class removeAllMethods.
 set compile_env: 0
 category: 'other'
 classmethod: PyAstNode
-customChildForParent: aNode peekForCloseParenthesis: aBoolean
-	"Lookup child by name"
-
-	| symbol class |
-	symbol := ('Py' , (aNode stream upTo: $()) asSymbol.
-	aBoolean ifTrue: [(aNode stream peekFor: $)) ifFalse: [self error]].
-	class := PythonGlobals at: symbol.
-	^class parent: aNode
-%
-category: 'other'
-classmethod: PyAstNode
 escapeCharacters
 
 	escapeCharacters ifNil: [ 
@@ -39,6 +28,12 @@ escapeCharacters
 %
 category: 'other'
 classmethod: PyAstNode
+isAbstract
+
+	^self == PyAstNode
+%
+category: 'other'
+classmethod: PyAstNode
 new
 
 	self error: 'Use #parent: instead'.
@@ -48,9 +43,16 @@ classmethod: PyAstNode
 parent: aNode
 
 	(aNode isKindOf: PyAstNode) ifFalse: [self error: 'Not a valid parent!'].
-	^self basicNew
-		initialize: aNode;
-		yourself
+	^self isAbstract ifTrue: [
+		| symbol class |
+		symbol := ('Py' , (aNode stream upTo: $()) asSymbol.
+		class := PythonGlobals at: symbol.
+		class parent: aNode
+	] ifFalse: [
+		self basicNew
+			initialize: aNode;
+			yourself
+	].
 %
 ! ------------------- Instance methods for PyAstNode
 set compile_env: 0
@@ -128,7 +130,7 @@ category: 'other'
 method: PyAstNode
 expression
 
-	^PyExpression expressionFrom: self
+	^PyExpression parent: self
 %
 category: 'other'
 method: PyAstNode

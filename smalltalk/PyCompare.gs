@@ -54,7 +54,7 @@ initialize
 	stream := self stream.
 	left := self expression.
 	self commaSpace.
-	cmpopList := self collectAst: [PyCmpop parent: self].
+	cmpopList := self collectAst: [PyCmpOp parent: self].
 	self commaSpace.
 	comparatorList := self collectAst: [self expression].
 	self readPosition.

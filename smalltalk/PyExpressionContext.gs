@@ -8,14 +8,9 @@ PyExpressionContext class removeAllMethods.
 set compile_env: 0
 category: 'other'
 classmethod: PyExpressionContext
-parent: aNode
-	"expr_context = Load | Store | Del | AugLoad | AugStore | Param"
+isAbstract
 
-	self == PyExpressionContext ifTrue: [
-		^self customChildForParent: aNode peekForCloseParenthesis: true.
-	] ifFalse: [
-		^super parent: aNode
-	].
+	^self == PyExpressionContext
 %
 ! ------------------- Instance methods for PyExpressionContext
 set compile_env: 0
@@ -42,5 +37,7 @@ assertIsStore
 category: 'other'
 method: PyExpressionContext
 initialize
-	"override to do nothing!"
+	"expr_context = Load | Store | Del | AugLoad | AugStore | Param"
+
+	(self stream peekFor: $)) ifFalse: [self error].
 %

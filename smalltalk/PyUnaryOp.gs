@@ -8,14 +8,9 @@ PyUnaryOp class removeAllMethods.
 set compile_env: 0
 category: 'other'
 classmethod: PyUnaryOp
-parent: aNode
-	"unaryop = Invert | Not | UAdd | USub"
+isAbstract
 
-	self == PyUnaryOp ifTrue: [
-		^self customChildForParent: aNode peekForCloseParenthesis: true.
-	] ifFalse: [
-		^super parent: aNode
-	].
+	^self == PyUnaryOp
 %
 ! ------------------- Instance methods for PyUnaryOp
 set compile_env: 0
@@ -34,7 +29,9 @@ category: 'other'
 method: PyUnaryOp
 initialize
 	"UnaryOp(unaryop op, expr operand)"
+	"unaryop = Invert | Not | UAdd | USub"
 
+	(self stream peekFor: $)) ifFalse: [self error].
 	self commaSpace.
 	operand := self expression.
 	self readPosition.

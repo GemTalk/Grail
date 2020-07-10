@@ -8,14 +8,9 @@ PyBoolOp class removeAllMethods.
 set compile_env: 0
 category: 'other'
 classmethod: PyBoolOp
-parent: aNode
-	"boolop = And | Or"
+isAbstract
 
-	self == PyBoolOp ifTrue: [
-		^self customChildForParent: aNode peekForCloseParenthesis: true.
-	] ifFalse: [
-		^super parent: aNode
-	].
+	^self == PyBoolOp
 %
 ! ------------------- Instance methods for PyBoolOp
 set compile_env: 0
@@ -28,9 +23,11 @@ evaluate
 category: 'other'
 method: PyBoolOp
 initialize
-	"BoolOp(boolop op, expr* values)"
+	"BoolOp(boolop op, expr* values)
+				boolop = And | Or"
 
+	(self stream peekFor: $)) ifFalse: [self error].
 	self commaSpace.
-	values := self collectAst:[self expression].
+	values := self collectAst: [self expression].
 	self readPosition.
 %

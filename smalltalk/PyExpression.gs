@@ -8,13 +8,9 @@ PyExpression class removeAllMethods.
 set compile_env: 0
 category: 'other'
 classmethod: PyExpression
-expressionFrom: aNode
+isAbstract
 
-	self == PyExpression ifTrue: [
-		^self customChildForParent: aNode peekForCloseParenthesis: false.
-	] ifFalse: [
-		^super parent: aNode
-	].
+	^self == PyExpression
 %
 ! ------------------- Instance methods for PyExpression
 set compile_env: 0
