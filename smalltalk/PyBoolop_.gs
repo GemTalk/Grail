@@ -11,11 +11,7 @@ classmethod: PyBoolop
 parent: aNode
 	"boolop = And | Or"
 
-	| symbol class |
-	symbol := ('Py' , (aNode stream upTo: $()) asSymbol.
-	(aNode stream peekFor: $)) ifFalse: [self error].
-	class := PythonGlobals at: symbol.
-	^class basicNew initialize: aNode; yourself
+	^self customChildForParent: aNode peekForCloseParenthesis: true
 %
 ! ------------------- Instance methods for PyBoolop
 set compile_env: 0

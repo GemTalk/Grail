@@ -13,6 +13,7 @@ statementFrom: aNode
 	| symbol class |
 	symbol := ('Py' , (aNode stream upTo: $()) asSymbol.
 	class := PythonGlobals at: symbol.
+	"Pywithitem may return an instance of PyWithItem"
 	^class parent: aNode
 %
 ! ------------------- Instance methods for PyStatement

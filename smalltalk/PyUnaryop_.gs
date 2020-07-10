@@ -11,11 +11,7 @@ classmethod: PyUnaryop
 parent: aNode
 	"unaryop = Invert | Not | UAdd | USub"
 
-	| symbol class |
-	symbol := ('Py' , (aNode stream upTo: $()) asSymbol.
-	(aNode stream peekFor: $)) ifFalse: [self error].
-	class := PythonGlobals at: symbol.
-	^class basicNew initialize: aNode; yourself
+	^self customChildForParent: aNode peekForCloseParenthesis: true
 %
 ! ------------------- Instance methods for PyUnaryop
 set compile_env: 0

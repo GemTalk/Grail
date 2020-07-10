@@ -11,11 +11,7 @@ classmethod: PyExpressionContext
 parent: aNode
 	"expr_context = Load | Store | Del | AugLoad | AugStore | Param"
 
-	| symbol class |
-	symbol := ('Py' , (aNode stream upTo: $()) asSymbol.
-	(aNode stream peekFor: $)) ifFalse: [self error].
-	class := PythonGlobals at: symbol.
-	^class basicNew initialize: aNode; yourself
+	^self customChildForParent: aNode peekForCloseParenthesis: true
 %
 ! ------------------- Instance methods for PyExpressionContext
 set compile_env: 0

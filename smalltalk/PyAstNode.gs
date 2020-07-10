@@ -8,6 +8,17 @@ PyAstNode class removeAllMethods.
 set compile_env: 0
 category: 'other'
 classmethod: PyAstNode
+customChildForParent: aNode peekForCloseParenthesis: aBoolean
+	"Lookup child by name"
+
+	| symbol class |
+	symbol := ('Py' , (aNode stream upTo: $()) asSymbol.
+	aBoolean ifTrue: [(aNode stream peekFor: $)) ifFalse: [self error]].
+	class := PythonGlobals at: symbol.
+	^class basicNew initialize: aNode; yourself
+%
+category: 'other'
+classmethod: PyAstNode
 escapeCharacters
 
 	escapeCharacters ifNil: [ 

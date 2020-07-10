@@ -12,11 +12,7 @@ parent: aNode
 	    "operator = Add | Sub | Mult | MatMult | Div | Mod | Pow | LShift
                  | RShift | BitOr | BitXor | BitAnd | FloorDiv"
 
-	| symbol class |
-	symbol := ('Py' , (aNode stream upTo: $()) asSymbol.
-	(aNode stream peekFor: $)) ifFalse: [self error].
-	class := PythonGlobals at: symbol.
-	^class basicNew initialize: aNode; yourself
+	^self customChildForParent: aNode peekForCloseParenthesis: true
 %
 ! ------------------- Instance methods for PyOperator
 set compile_env: 0

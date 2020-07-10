@@ -11,11 +11,7 @@ classmethod: PyCmpop
 parent: aNode
 	"cmpop = Eq | NotEq | Lt | LtE | Gt | GtE | Is | IsNot | In | NotIn"
 
-	| symbol class |
-	symbol := ('Py' , (aNode stream upTo: $()) asSymbol.
-	(aNode stream peekFor: $)) ifFalse: [self error].
-	class := PythonGlobals at: symbol.
-	^class basicNew initialize: aNode; yourself
+	^self customChildForParent: aNode peekForCloseParenthesis: true
 %
 ! ------------------- Instance methods for PyCmpop
 set compile_env: 0

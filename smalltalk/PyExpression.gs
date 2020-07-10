@@ -10,10 +10,7 @@ category: 'other'
 classmethod: PyExpression
 expressionFrom: aNode
 
-| symbol class |
-	symbol := ('Py' , (aNode stream upTo: $()) asSymbol.
-	class := PythonGlobals at: symbol.
-	^class parent: aNode
+	^self customChildForParent: aNode peekForCloseParenthesis: false
 %
 ! ------------------- Instance methods for PyExpression
 set compile_env: 0

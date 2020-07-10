@@ -8,6 +8,29 @@ PyModule class removeAllMethods.
 set compile_env: 0
 category: 'other'
 classmethod: PyModule
+astForPath: pathString
+
+	| string1 string2 string3 |
+	string1 := '
+import ast
+file=open(''' , pathString , ''',''r'')
+tree=ast.parse(file.read())
+out=ast.dump(tree,annotate_fields=False,include_attributes=True)
+file.close()
+print(out)
+'.
+	string2 := 'echo "' , string1 , '" | ' , self pythonPath.
+	string3 := System performOnServer: string2.
+	^string3
+%
+category: 'other'
+classmethod: PyModule
+pythonPath
+
+	^'/usr/local/bin/python3'
+%
+category: 'other'
+classmethod: PyModule
 script: aString
 "
 PyModule script: '$HOME/code/Python/performance/pyperformance'.
@@ -95,26 +118,9 @@ parseAst
 %
 category: 'other'
 method: PyModule
-pythonPath
-
-	^'/usr/local/bin/python3'
-%
-category: 'other'
-method: PyModule
 readAst
 
-	| string1 string2 string3 |
-	string1 := '
-import ast
-file=open(''' , path , ''',''r'')
-tree=ast.parse(file.read())
-out=ast.dump(tree,annotate_fields=False,include_attributes=True)
-file.close()
-print(out)
-'.
-	string2 := 'echo "' , string1 , '" | ' , self pythonPath.
-	string3 := System performOnServer: string2.
-	^string3
+	^self class astForPath: path
 %
 category: 'other'
 method: PyModule
@@ -130,7 +136,7 @@ method: PyModule
 readTokens
 
 	| string tokens |
-	string := self pythonPath , ' -m tokenize -e ' , path.
+	string := self class pythonPath , ' -m tokenize -e ' , path.
 	tokens := System performOnServer: string.
 	tokens := tokens subStrings: Character lf.
 	tokens := tokens reject: [:each | each isEmpty].
