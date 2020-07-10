@@ -8,6 +8,18 @@ PythonTestCase class removeAllMethods.
 set compile_env: 0
 category: 'other'
 classmethod: PythonTestCase
+ast
+
+	^PyModule astForPath: '$HOME/code/Python/GemStoneP/tests/' , self filename
+%
+category: 'other'
+classmethod: PythonTestCase
+filename
+
+	self subclassResponsibility.
+%
+category: 'other'
+classmethod: PythonTestCase
 resources
 
 	^super resources , (Array with: PythonTestResource)
@@ -27,7 +39,7 @@ category: 'other'
 method: PythonTestCase
 filename
 
-	self subclassResponsibility.
+	^self class filename
 %
 category: 'other'
 method: PythonTestCase

@@ -5,14 +5,15 @@ NumericLiteralsTestCase removeAllMethods.
 NumericLiteralsTestCase class removeAllMethods.
 %
 ! ------------------- Class methods for NumericLiteralsTestCase
-! ------------------- Instance methods for NumericLiteralsTestCase
 set compile_env: 0
 category: 'other'
-method: NumericLiteralsTestCase
+classmethod: NumericLiteralsTestCase
 filename
 
 	^'NumericLiterals.py'
 %
+! ------------------- Instance methods for NumericLiteralsTestCase
+set compile_env: 0
 category: 'other'
 method: NumericLiteralsTestCase
 testBinaryInteger

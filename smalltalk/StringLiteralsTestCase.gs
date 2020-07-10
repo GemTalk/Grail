@@ -5,14 +5,15 @@ StringLiteralsTestCase removeAllMethods.
 StringLiteralsTestCase class removeAllMethods.
 %
 ! ------------------- Class methods for StringLiteralsTestCase
-! ------------------- Instance methods for StringLiteralsTestCase
 set compile_env: 0
 category: 'other'
-method: StringLiteralsTestCase
+classmethod: StringLiteralsTestCase
 filename
 
 	^'StringLiterals.py'
 %
+! ------------------- Instance methods for StringLiteralsTestCase
+set compile_env: 0
 category: 'other'
 method: StringLiteralsTestCase
 testEmbeddedStringDoubleQuotes

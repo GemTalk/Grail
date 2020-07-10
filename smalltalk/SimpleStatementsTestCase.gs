@@ -5,14 +5,15 @@ SimpleStatementsTestCase removeAllMethods.
 SimpleStatementsTestCase class removeAllMethods.
 %
 ! ------------------- Class methods for SimpleStatementsTestCase
-! ------------------- Instance methods for SimpleStatementsTestCase
 set compile_env: 0
 category: 'other'
-method: SimpleStatementsTestCase
+classmethod: SimpleStatementsTestCase
 filename
 
 	^'SimpleStatements.py'
 %
+! ------------------- Instance methods for SimpleStatementsTestCase
+set compile_env: 0
 category: 'other'
 method: SimpleStatementsTestCase
 testSimpleStatementArrayAssignment

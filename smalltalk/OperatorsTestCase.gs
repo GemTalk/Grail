@@ -5,14 +5,15 @@ OperatorsTestCase removeAllMethods.
 OperatorsTestCase class removeAllMethods.
 %
 ! ------------------- Class methods for OperatorsTestCase
-! ------------------- Instance methods for OperatorsTestCase
 set compile_env: 0
 category: 'other'
-method: OperatorsTestCase
+classmethod: OperatorsTestCase
 filename
 
 	^'Operators.py'
 %
+! ------------------- Instance methods for OperatorsTestCase
+set compile_env: 0
 category: 'other'
 method: OperatorsTestCase
 testOperatorAdd

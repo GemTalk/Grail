@@ -5,14 +5,15 @@ CompoundStatementsTestCase removeAllMethods.
 CompoundStatementsTestCase class removeAllMethods.
 %
 ! ------------------- Class methods for CompoundStatementsTestCase
-! ------------------- Instance methods for CompoundStatementsTestCase
 set compile_env: 0
 category: 'other'
-method: CompoundStatementsTestCase
+classmethod: CompoundStatementsTestCase
 filename
 
 	^'CompoundStatements.py'
 %
+! ------------------- Instance methods for CompoundStatementsTestCase
+set compile_env: 0
 category: 'other'
 method: CompoundStatementsTestCase
 testCompoundStatementClass
@@ -158,6 +159,10 @@ testCompoundStatementCoroutineWith
 category: 'other'
 method: CompoundStatementsTestCase
 testCompoundStatementFor
+	"For(
+		Name('_', Store(), lineno=23, col_offset=4), 
+		Call(Name('range', Load(), lineno=23, col_offset=9), [Num(10, lineno=23, col_offset=15)], [], lineno=23, col_offset=9), 
+		[Pass(lineno=24, col_offset=1)], [], lineno=23, col_offset=0)"
 
 	| x name call num |
 	x := statements at: 5.
@@ -182,6 +187,11 @@ testCompoundStatementFor
 category: 'other'
 method: CompoundStatementsTestCase
 testCompoundStatementForElse
+	"For(
+		Name('_', Store(), lineno=26, col_offset=4), 
+		Call(Name('range', Load(), lineno=26, col_offset=9), [Num(10, lineno=26, col_offset=15)], [], lineno=26, col_offset=9), 
+		[Pass(lineno=27, col_offset=1)], 
+		[Pass(lineno=29, col_offset=1)], lineno=26, col_offset=0)"
 
 	| x name call num |
 	x := statements at: 6.
@@ -287,6 +297,7 @@ testCompoundStatementFunctionWithOneDefaultValueParameter
 category: 'other'
 method: CompoundStatementsTestCase
 testCompoundStatementIf
+	"If(NameConstant(True, lineno=5, col_offset=3), [Pass(lineno=6, col_offset=1)], [], lineno=5, col_offset=0)"
 
 	| x |
 	x := statements at: 1.
@@ -302,6 +313,7 @@ testCompoundStatementIf
 category: 'other'
 method: CompoundStatementsTestCase
 testCompoundStatementIfElse
+	"If(NameConstant(False, lineno=8, col_offset=3), [Pass(lineno=9, col_offset=1)], [Pass(lineno=11, col_offset=1)], lineno=8, col_offset=0)"
 
 	| x |
 	x := statements at: 2.
@@ -362,6 +374,16 @@ testCompoundStatementNestedFunction
 category: 'other'
 method: CompoundStatementsTestCase
 testCompoundStatementTry
+	"Try(
+		[Expr(
+			Call(Name('print', Load(), lineno=33, col_offset=4), 
+				[BinOp(Num(1, lineno=33, col_offset=10), Div(), Num(0, lineno=33, col_offset=14), lineno=33, col_offset=10)], 
+				[], lineno=33, col_offset=4), lineno=33, col_offset=4)], 
+		[ExceptHandler(None, None, 
+			[Raise(
+				Call(
+					Name('RuntimeError', Load(), lineno=35, col_offset=10), 
+					[Str('Something bad happened', lineno=35, col_offset=23)], [], lineno=35, col_offset=10), None, lineno=35, col_offset=4)], lineno=34, col_offset=0)], [], [], lineno=32, col_offset=0)"
 
 	| x expr call binOp exceptHandler raise insideCall str |
 	x := statements at: 7.
@@ -401,6 +423,7 @@ testCompoundStatementTry
 category: 'other'
 method: CompoundStatementsTestCase
 testCompoundStatementWhile
+	"While(NameConstant(True, lineno=14, col_offset=6), [Pass(lineno=15, col_offset=1)], [], lineno=14, col_offset=0)"
 
 	| x |
 	x := statements at: 3.
@@ -416,6 +439,7 @@ testCompoundStatementWhile
 category: 'other'
 method: CompoundStatementsTestCase
 testCompoundStatementWhileElse
+	"While(NameConstant(False, lineno=17, col_offset=6), [Pass(lineno=18, col_offset=1)], [Pass(lineno=20, col_offset=1)], lineno=17, col_offset=0)"
 
 	| x |
 	x := statements at: 4.
@@ -432,6 +456,12 @@ testCompoundStatementWhileElse
 category: 'other'
 method: CompoundStatementsTestCase
 testCompoundStatementWith
+	"With([
+		withitem(
+			Call(Name('open', Load(), lineno=41, col_offset=5), 
+				[Str('/etc/passwd', lineno=41, col_offset=10), 
+				Str('r', lineno=41, col_offset=25)], [], lineno=41, col_offset=5), None)], 
+		[Pass(lineno=42, col_offset=4)], lineno=41, col_offset=0)"
 
 	| x withItem call str1 str2 |
 	x := statements at: 9.
@@ -457,6 +487,12 @@ testCompoundStatementWith
 category: 'other'
 method: CompoundStatementsTestCase
 testCompoundStatementWithOptionalVars
+	"With(
+		[withitem(
+			Call(Name('open', Load(), lineno=38, col_offset=5), 
+				[Str('/etc/passwd', lineno=38, col_offset=10), Str('r', lineno=38, col_offset=25)], [], lineno=38, col_offset=5), 
+			Name('f', Store(), lineno=38, col_offset=33))], 
+		[Pass(lineno=39, col_offset=4)], lineno=38, col_offset=0)"
 
 	| x withItem call str1 str2 name |
 	x := statements at: 8.

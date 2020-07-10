@@ -5,14 +5,15 @@ ByteLiteralsTestCase removeAllMethods.
 ByteLiteralsTestCase class removeAllMethods.
 %
 ! ------------------- Class methods for ByteLiteralsTestCase
-! ------------------- Instance methods for ByteLiteralsTestCase
 set compile_env: 0
 category: 'other'
-method: ByteLiteralsTestCase
+classmethod: ByteLiteralsTestCase
 filename
 
 	^'StringLiterals.py'
 %
+! ------------------- Instance methods for ByteLiteralsTestCase
+set compile_env: 0
 category: 'other'
 method: ByteLiteralsTestCase
 testByteLiteralBackspace
