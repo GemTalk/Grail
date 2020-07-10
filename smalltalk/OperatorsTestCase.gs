@@ -23,14 +23,14 @@ testAdd
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.
-	x := x _value.
+	x := x.value.
 	self 
 		assert: (x isKindOf: PyBinOp);
-		assert: (x _op isKindOf: PyAdd);
-		assert: (x _left isKindOf: PyNum);
-		assert: (x _left _n == 1);
-		assert: (x _right isKindOf: PyNum);
-		assert: (x _right _n == 2);
+		assert: (x.op isKindOf: PyAdd);
+		assert: (x.left isKindOf: PyNum);
+		assert: (x.left.n == 1);
+		assert: (x.right isKindOf: PyNum);
+		assert: (x.right.n == 2);
 		yourself.
 %
 category: 'other'
@@ -42,16 +42,17 @@ testEq
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.
-	x := x _value.
+	x := x.value.
 	self 
 		assert: (x isKindOf: PyCompare);
-		assert: (x _left isKindOf: PyNum);
-		assert: (x _left _n == 10);
-		assert: (x _cmpopList size == 1);
-		assert: ((x _cmpopList at: 1) isKindOf: PyEq);
-		assert: (x _comparatorList size == 1);
-		assert: ((x _comparatorList at: 1) isKindOf: PyNum);
-		assert: ((x _comparatorList at: 1) _n == 20);
+		assert: (x.left isKindOf: PyNum);
+		assert: (x.left.n == 10);
+		assert: (x.cmpopList size == 1);
+		assert: ((x.cmpopList at: 1) isKindOf: PyEq);
+		assert: (x.comparatorList size == 1);
+		assert: ((x.comparatorList at: 1) isKindOf: PyNum);
+		assert: (x := x.comparatorList at: 1) notNil;
+		assert: x.n == 20;
 		yourself.
 %
 category: 'other'
@@ -63,16 +64,17 @@ testGtE
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.
-	x := x _value.
+	x := x.value.
 	self 
 		assert: (x isKindOf: PyCompare);
-		assert: (x _left isKindOf: PyNum);
-		assert: (x _left _n == 25);
-		assert: (x _cmpopList size == 1);
-		assert: ((x _cmpopList at: 1) isKindOf: PyGtE);
-		assert: (x _comparatorList size == 1);
-		assert: ((x _comparatorList at: 1) isKindOf: PyNum);
-		assert: ((x _comparatorList at: 1) _n == 15);
+		assert: (x.left isKindOf: PyNum);
+		assert: (x.left.n == 25);
+		assert: (x.cmpopList size == 1);
+		assert: ((x.cmpopList at: 1) isKindOf: PyGtE);
+		assert: (x.comparatorList size == 1);
+		assert: ((x.comparatorList at: 1) isKindOf: PyNum);
+		assert: (x := x.comparatorList at: 1) notNil;
+		assert: x.n == 15;
 		yourself.
 %
 category: 'other'
@@ -84,11 +86,11 @@ testInvert
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.
-	x := x _value.
+	x := x.value.
 	self 
 		assert: (x isKindOf: PyInvert);
-		assert: (x _operand isKindOf: PyNum);
-		assert: (x _operand _n == 200);
+		assert: (x.operand isKindOf: PyNum);
+		assert: (x.operand.n == 200);
 		yourself.
 %
 category: 'other'
@@ -100,14 +102,14 @@ testMod
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.
-	x := x _value.
+	x := x.value.
 	self 
 		assert: (x isKindOf: PyBinOp);
-		assert: (x _op isKindOf: PyMod);
-		assert: (x _left isKindOf: PyNum);
-		assert: (x _left _n == 10);
-		assert: (x _right isKindOf: PyNum);
-		assert: (x _right _n == 5);
+		assert: (x.op isKindOf: PyMod);
+		assert: (x.left isKindOf: PyNum);
+		assert: (x.left.n == 10);
+		assert: (x.right isKindOf: PyNum);
+		assert: (x.right.n == 5);
 		yourself.
 %
 category: 'other'
@@ -119,64 +121,68 @@ testNestedAdd
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.
-	x := x _value.
+	x := x.value.
 	self 
 		assert: (x isKindOf: PyBinOp);
-		assert: (x _op isKindOf: PyAdd);
-		assert: (x _left isKindOf: PyBinOp);
-		assert: (x _left _op isKindOf: PyAdd);
-		assert: (x _left _left isKindOf: PyNum);
-		assert: (x _left _left _n == 2);
-		assert: (x _left _right isKindOf: PyNum);
-		assert: (x _left _right _n == 4);
-		assert: (x _right isKindOf: PyNum);
-		assert: (x _right _n == 6);
+		assert: (x.op isKindOf: PyAdd);
+		assert: (x.left isKindOf: PyBinOp);
+		assert: (x.left.op isKindOf: PyAdd);
+		assert: (x.left.left isKindOf: PyNum);
+		assert: (x.left.left.n == 2);
+		assert: (x.left.right isKindOf: PyNum);
+		assert: (x.left.right.n == 4);
+		assert: (x.right isKindOf: PyNum);
+		assert: (x.right.n == 6);
 		yourself.
 %
 category: 'other'
 method: OperatorsTestCase
 testNestedEq
 
-	| x |
+	| x y |
 	x := statements at: 11.
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.
-	x := x _value.
+	x := x.value.
 	self 
 		assert: (x isKindOf: PyCompare);
-		assert: (x _left isKindOf: PyNum);
-		assert: (x _left _n == 11);
-		assert: (x _cmpopList size == 2);
-		assert: ((x _cmpopList at: 1) isKindOf: PyEq);
-		assert: ((x _cmpopList at: 2) isKindOf: PyEq);
-		assert: (x _comparatorList size == 2);
-		assert: ((x _comparatorList at: 1) isKindOf: PyNum);
-		assert: ((x _comparatorList at: 1) _n == 22);
-		assert: ((x _comparatorList at: 2) _n == 33);
+		assert: (x.left isKindOf: PyNum);
+		assert: (x.left.n == 11);
+		assert: (x.cmpopList size == 2);
+		assert: ((x.cmpopList at: 1) isKindOf: PyEq);
+		assert: ((x.cmpopList at: 2) isKindOf: PyEq);
+		assert: (x.comparatorList size == 2);
+		assert: ((x.comparatorList at: 1) isKindOf: PyNum);
+		assert: (y := x.comparatorList at: 1) notNil;
+		assert: y.n == 22;
+		assert: (y := x.comparatorList at: 2) notNil;
+		assert: y.n == 33;
 		yourself.
 %
 category: 'other'
 method: OperatorsTestCase
 testNestedGtE
 
-	| x |
+	| x y |
 	x := statements at: 12.
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.
-	x := x _value.
+	x := x.value.
 	self 
 		assert: (x isKindOf: PyCompare);
-		assert: (x _left isKindOf: PyNum);
-		assert: (x _left _n == 44);
-		assert: (x _cmpopList size == 2);
-		assert: ((x _cmpopList at: 1) isKindOf: PyGtE);
-		assert: ((x _cmpopList at: 2) isKindOf: PyGtE);
-		assert: (x _comparatorList size == 2);
-		assert: ((x _comparatorList at: 1) isKindOf: PyNum);
-		assert: ((x _comparatorList at: 1) _n == 55);
-		assert: ((x _comparatorList at: 2) _n == 66);
+		assert: (x.left isKindOf: PyNum);
+		assert: (x.left.n == 44);
+		assert: (x.cmpopList size == 2);
+		assert: ((x.cmpopList at: 1) isKindOf: PyGtE);
+		assert: ((x.cmpopList at: 2) isKindOf: PyGtE);
+		assert: (x.comparatorList size == 2);
+		assert: ((x.comparatorList at: 1) isKindOf: PyNum);
+		assert: (y := x _comparatorList at: 1) notNil;
+		assert: y.n == 55;
+		assert: (y := x _comparatorList at: 2) notNil;
+		assert: y.n == 66;
 		yourself.
 %
 category: 'other'
@@ -188,18 +194,18 @@ testNestedMult
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.
-	x := x _value.
+	x := x.value.
 	self 
 		assert: (x isKindOf: PyBinOp);
-		assert: (x _op isKindOf: PyMult);
-		assert: (x _left isKindOf: PyBinOp);
-		assert: (x _left _op isKindOf: PyMult);
-		assert: (x _left _left isKindOf: PyNum);
-		assert: (x _left _left _n == 7);
-		assert: (x _left _right isKindOf: PyNum);
-		assert: (x _left _right _n == 8);
-		assert: (x _right isKindOf: PyNum);
-		assert: (x _right _n == 9);
+		assert: (x.op isKindOf: PyMult);
+		assert: (x.left isKindOf: PyBinOp);
+		assert: (x.left.op isKindOf: PyMult);
+		assert: (x.left.left isKindOf: PyNum);
+		assert: (x.left.left.n == 7);
+		assert: (x.left.right isKindOf: PyNum);
+		assert: (x.left.right.n == 8);
+		assert: (x.right isKindOf: PyNum);
+		assert: (x.right.n == 9);
 		yourself.
 %
 category: 'other'
@@ -211,10 +217,10 @@ testUSub
 	self 
 		assert: (x isKindOf: PyExpr);
 		yourself.
-	x := x _value.
+	x := x.value.
 	self 
 		assert: (x isKindOf: PyUSub);
-		assert: (x _operand isKindOf: PyNum);
-		assert: (x _operand _n == 100);
+		assert: (x.operand isKindOf: PyNum);
+		assert: (x.operand.n == 100);
 		yourself.
 %

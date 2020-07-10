@@ -9,11 +9,6 @@ PyBytes class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyBytes
-_s
-	^s
-%
-category: 'other'
-method: PyBytes
 initialize
 	"Bytes(bytes s)"
 

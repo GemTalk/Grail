@@ -20,10 +20,3 @@ initialize
 	s := self string.
 	self readPosition.
 %
-set compile_env: 0
-category: 'testing support'
-method: PyStr
-_s
-
-	^s
-%
