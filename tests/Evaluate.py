@@ -2,10 +2,3 @@
 
 # add
 1 + 2
-
-# assign
-var = 5
-
-# scope
-def func():
-    insideVar = 1
