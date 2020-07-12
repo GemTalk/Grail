@@ -9,10 +9,6 @@ PyAugAssign class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyAugAssign
-addMissingPositions
-%
-category: 'other'
-method: PyAugAssign
 evaluate
 	
 	| x |

@@ -19,10 +19,6 @@ _value
 %
 category: 'other'
 method: PyAssign
-addMissingPositions
-%
-category: 'other'
-method: PyAssign
 evaluate
 	| x |
 	x := value evaluate.

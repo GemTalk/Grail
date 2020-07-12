@@ -9,10 +9,6 @@ PyAnnAssign class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyAnnAssign
-addMissingPositions
-%
-category: 'other'
-method: PyAnnAssign
 initialize
 	"AnnAssign(expr target, expr annotation, expr? value, int simple)"
 

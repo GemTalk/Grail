@@ -14,13 +14,6 @@ _names
 %
 category: 'other'
 method: PyImport
-addMissingPositions
-
-	super addMissingPositions.
-	names do: [:each | each addMissingPositions].
-%
-category: 'other'
-method: PyImport
 evaluate
 	(names size == 1 and: [names first name = 'random']) ifTrue: [
 		parent variableAt: names first put: PyRandom new.

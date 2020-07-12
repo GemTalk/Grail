@@ -14,10 +14,6 @@ _value
 %
 category: 'other'
 method: PyReturn
-addMissingPositions
-%
-category: 'other'
-method: PyReturn
 initialize
 	"Return(expr? value)"
 	

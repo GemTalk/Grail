@@ -53,13 +53,6 @@ PyModule test
 set compile_env: 0
 category: 'other'
 method: PyModule
-addMissingPositions
-
-	statements addMissingPositions.
-	stream := nil.
-%
-category: 'other'
-method: PyModule
 evaluate
 
 	| result |
@@ -92,8 +85,6 @@ load: aPathString as: aNameString
 	path := aPathString.
 	self
 		parseAst;
-		readTokens;
-		addMissingPositions;
 		readSource;
 		yourself.
 %
@@ -130,18 +121,6 @@ readSource
 	file := GsFile openReadOnServer: path.
 	source := file contentsAsUtf8.
 	file close.
-%
-category: 'other'
-method: PyModule
-readTokens
-
-	| string tokens |
-	string := self class pythonPath , ' -m tokenize -e ' , path.
-	tokens := System performOnServer: string.
-	tokens := tokens subStrings: Character lf.
-	tokens := tokens reject: [:each | each isEmpty].
-	tokens := tokens collect: [:each | PyToken fromString: each].
-	stream := ReadStream on: tokens.
 %
 category: 'other'
 method: PyModule

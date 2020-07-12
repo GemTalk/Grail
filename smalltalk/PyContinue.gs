@@ -9,10 +9,6 @@ PyContinue class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyContinue
-addMissingPositions
-%
-category: 'other'
-method: PyContinue
 evaluate
 	ContinueNotification signal
 %

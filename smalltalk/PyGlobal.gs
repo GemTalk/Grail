@@ -14,10 +14,6 @@ _names
 %
 category: 'other'
 method: PyGlobal
-addMissingPositions
-%
-category: 'other'
-method: PyGlobal
 initialize
 	"Global(identifier* names)"
 

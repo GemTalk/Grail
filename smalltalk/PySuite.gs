@@ -9,12 +9,6 @@ PySuite class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PySuite
-addMissingPositions
-
-	body do: [:each | each addMissingPositions].
-%
-category: 'other'
-method: PySuite
 initialize
 
 	| stream node |

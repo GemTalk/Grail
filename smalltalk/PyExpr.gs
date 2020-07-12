@@ -9,10 +9,6 @@ PyExpr class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyExpr
-addMissingPositions
-%
-category: 'other'
-method: PyExpr
 evaluate
 	^value evaluate
 %

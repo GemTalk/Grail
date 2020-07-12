@@ -24,14 +24,6 @@ _names
 %
 category: 'other'
 method: PyImportFrom
-addMissingPositions
-
-	super addMissingPositions.
-	names do: [:each | each addMissingPositions].
-	"need to handle optional level"
-%
-category: 'other'
-method: PyImportFrom
 evaluate
 	self halt.
 %

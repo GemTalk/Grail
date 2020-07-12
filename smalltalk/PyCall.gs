@@ -40,13 +40,6 @@ _keywords
 %
 category: 'other'
 method: PyCall
-addMissingPositions
-
-	function addMissingPositions.
-	arguments do: [:each | each addMissingPositions].
-%
-category: 'other'
-method: PyCall
 evaluate
 	"https://docs.python.org/3/reference/expressions.html#calls"
 	"We should do an elaborate name lookup, but we'll just start with built-in functions"

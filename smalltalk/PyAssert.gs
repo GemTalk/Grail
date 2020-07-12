@@ -19,10 +19,6 @@ _test
 %
 category: 'other'
 method: PyAssert
-addMissingPositions
-%
-category: 'other'
-method: PyAssert
 initialize
 	"Assert(expr test, expr? msg)"
 

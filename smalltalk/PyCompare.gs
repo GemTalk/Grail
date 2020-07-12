@@ -24,15 +24,6 @@ _left
 %
 category: 'other'
 method: PyCompare
-addMissingPositions
-
-	super addMissingPositions.
-	left addMissingPositions.
-	cmpopList do: [:each | each addMissingPositions].
-	comparatorList do: [:each | each addMissingPositions].
-%
-category: 'other'
-method: PyCompare
 evaluate
 	| temp |
 	temp := left evaluate.

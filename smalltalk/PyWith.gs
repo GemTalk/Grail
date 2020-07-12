@@ -9,10 +9,6 @@ PyWith class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyWith
-addMissingPositions
-%
-category: 'other'
-method: PyWith
 initialize
 	"With(withitem* items, stmt* body)"
 

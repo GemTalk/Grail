@@ -9,10 +9,6 @@ PyAsyncFor class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyAsyncFor
-addMissingPositions
-%
-category: 'other'
-method: PyAsyncFor
 initialize
 	"AsyncFor(expr target, expr iter, stmt* body, stmt* orelse)"
 

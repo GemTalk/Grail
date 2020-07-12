@@ -19,10 +19,6 @@ _exc
 %
 category: 'other'
 method: PyRaise
-addMissingPositions
-%
-category: 'other'
-method: PyRaise
 initialize
 	"Raise(expr? exc, expr? cause)"
 

@@ -14,10 +14,6 @@ _names
 %
 category: 'other'
 method: PyNonlocal
-addMissingPositions
-%
-category: 'other'
-method: PyNonlocal
 initialize
 	"Nonlocal(identifier* names)"
 

@@ -9,10 +9,6 @@ PyTry class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyTry
-addMissingPositions
-%
-category: 'other'
-method: PyTry
 initialize
 	"Try(stmt* body, excepthandler* handlers, stmt* orelse, stmt* finalbody)"
 

@@ -14,10 +14,6 @@ _targets
 %
 category: 'other'
 method: PyDelete
-addMissingPositions
-%
-category: 'other'
-method: PyDelete
 initialize
 	"Delete(expr* targets)"
 

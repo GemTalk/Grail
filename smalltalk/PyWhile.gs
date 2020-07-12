@@ -24,10 +24,6 @@ _test
 %
 category: 'other'
 method: PyWhile
-addMissingPositions
-%
-category: 'other'
-method: PyWhile
 evaluate
 	[
 		[

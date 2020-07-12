@@ -20,19 +20,6 @@ line
 set compile_env: 0
 category: 'other'
 method: PyAstNodeWithLocation
-addMissingPositions
-
-	| token |
-	token := self stream peek.
-	line ifNil: [token halt].
-	[
-		token line < line or: [token line == line and: [token column <= column]].
-	] whileTrue: [
-		token := self stream next; peek.
-	].
-%
-category: 'other'
-method: PyAstNodeWithLocation
 readPosition
 
 	(self stream peekFor: $,) ifFalse: [self error].

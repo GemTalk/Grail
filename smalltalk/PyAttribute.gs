@@ -24,12 +24,6 @@ _value
 %
 category: 'other'
 method: PyAttribute
-addMissingPositions
-
-	value addMissingPositions.
-%
-category: 'other'
-method: PyAttribute
 assertContextIsLoad
 
 	ctx assertIsLoad.

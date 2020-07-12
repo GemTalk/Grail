@@ -29,16 +29,6 @@ _target
 %
 category: 'other'
 method: PyFor
-addMissingPositions
-
-	super addMissingPositions. 
-	target addMissingPositions.
-	iter addMissingPositions.
-	body addMissingPositions.
-	orelse addMissingPositions.
-%
-category: 'other'
-method: PyFor
 evaluate
 
 	[

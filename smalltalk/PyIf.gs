@@ -24,10 +24,6 @@ _test
 %
 category: 'other'
 method: PyIf
-addMissingPositions
-%
-category: 'other'
-method: PyIf
 evaluate
 	test evaluate
 		ifTrue: [body do: [:each | each evaluate]]

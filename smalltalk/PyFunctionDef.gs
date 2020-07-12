@@ -34,10 +34,6 @@ _returns
 %
 category: 'other'
 method: PyFunctionDef
-addMissingPositions
-%
-category: 'other'
-method: PyFunctionDef
 initialize
 	"FunctionDef(identifier name, arguments args, stmt* body, expr* decorator_list, expr? returns)"
 

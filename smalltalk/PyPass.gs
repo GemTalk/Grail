@@ -9,10 +9,6 @@ PyPass class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyPass
-addMissingPositions
-%
-category: 'other'
-method: PyPass
 evaluate
 	"This is a NULL operation"
 %

@@ -9,10 +9,6 @@ PyAsyncWith class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyAsyncWith
-addMissingPositions
-%
-category: 'other'
-method: PyAsyncWith
 initialize
 	"AsyncWith(withitem* items, stmt* body)"
 

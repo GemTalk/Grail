@@ -3206,32 +3206,6 @@ doit
 PySystem category: 'Parser'
 %
 set compile_env: 0
-! ------------------- Class definition for PyToken
-expectvalue /Class
-doit
-Object subclass: 'PyToken'
-  instVarNames: #( startLine startColumn stopLine
-                    stopColumn name string)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: PythonGlobals
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyToken comment: 
-'No class-specific documentation for Token, hierarchy is:
-Object
-  Token( start stop name string)
-'
-%
-expectvalue /Class
-doit
-PyToken category: 'Parser'
-%
-set compile_env: 0
 ! ------------------- Class definition for PythonTestCase
 expectvalue /Class
 doit
@@ -3406,23 +3380,6 @@ doit
 StringLiteralsTestCase category: 'Tests'
 %
 set compile_env: 0
-! ------------------- Class definition for VariableTestCase
-expectvalue /Class
-doit
-PythonTestCase subclass: 'VariableTestCase'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: PythonGlobals
-  options: #()
-
-%
-expectvalue /Class
-doit
-VariableTestCase category: 'Tests'
-%
-set compile_env: 0
 ! ------------------- Class definition for PythonTestResource
 expectvalue /Class
 doit
@@ -3586,7 +3543,6 @@ input PySuite.gs
 input PySystem.gs
 input PythonTestCase.gs
 input PythonTestResource.gs
-input PyToken.gs
 input PyTry.gs
 input PyTuple.gs
 input PyUAdd.gs
@@ -3600,4 +3556,3 @@ input PyYieldFrom.gs
 input SimpleStatementsTestCase.gs
 input StringLiteralsTestCase.gs
 input UserInteraction.gs
-input VariableTestCase.gs

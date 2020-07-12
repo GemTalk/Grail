@@ -34,10 +34,6 @@ _returns
 %
 category: 'other'
 method: PyAsyncFunctionDef
-addMissingPositions
-%
-category: 'other'
-method: PyAsyncFunctionDef
 initialize
 	"AsyncFunctionDef(identifier name, arguments args,
 							  stmt* body, expr* decorator_list, 

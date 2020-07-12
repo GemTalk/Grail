@@ -16,14 +16,6 @@ isAbstract
 set compile_env: 0
 category: 'other'
 method: PyExpressionContext
-addMissingPositions
-
-	| token |
-	token := self stream next.
-self halt.
-%
-category: 'other'
-method: PyExpressionContext
 assertIsLoad
 
 	self error: 'Expression Context should be <Load> but is <' , self class name , '>'.
