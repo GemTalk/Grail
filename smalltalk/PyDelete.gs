@@ -14,9 +14,17 @@ _targets
 %
 category: 'other'
 method: PyDelete
+children
+
+	^super children
+		addAll: targets;
+		yourself
+%
+category: 'other'
+method: PyDelete
 initialize
 	"Delete(expr* targets)"
 
-	targets := self collectAst: [ self expression ].
+	targets := self collectAst: [self expression].
 	self readPosition.
 %

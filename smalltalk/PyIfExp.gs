@@ -9,6 +9,16 @@ PyIfExp class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyIfExp
+children
+
+	^super children
+		add: test;
+		add: body;
+		add: orelse;
+		yourself
+%
+category: 'other'
+method: PyIfExp
 initialize
 	"IfExp(expr test, expr body, expr orelse)"
 

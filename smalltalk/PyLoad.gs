@@ -12,3 +12,10 @@ method: PyLoad
 assertIsLoad
 	"Override to avoid inherited error"
 %
+category: 'other'
+method: PyLoad
+initialize2
+
+	super initialize2.
+	parent saveVariableAssociation.
+%

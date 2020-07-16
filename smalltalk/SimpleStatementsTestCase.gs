@@ -24,7 +24,7 @@ testArrayAssignment
 		assert: (x isKindOf: PyAssign);
 		assert: (x.targets size == 1);
 		assert: ((y := x.targets at: 1) isKindOf: PyName);
-		assert: (y.id = 'x');
+		assert: (y.assoc.key == #'x');
 		assert: (y.ctx isKindOf: PyStore);
 		assert: (x.value isKindOf: PyList);
 		assert: (x.value.elts size == 2);
@@ -43,9 +43,9 @@ testAssertFalse
 	x := self statementsAt: 10.
 	self 
 		assert: (x isKindOf: PyAssert);
-		assert: (x.test isKindOf: PyNameConstant);
-		deny: x.test.value;
-		assert: x.msg isNil;
+		assert: (x.test isKindOf: PyFalse);
+		deny: x.test evaluate;
+		assert: x.msg isNone;
 		yourself.
 %
 category: 'other'
@@ -56,9 +56,9 @@ testAssertTrue
 	x := self statementsAt: 9.
 	self 
 		assert: (x isKindOf: PyAssert);
-		assert: (x.test isKindOf: PyNameConstant);
-		assert: (x.test.value);
-		assert: (x.msg isNil);
+		assert: (x.test isKindOf: PyTrue);
+		assert: (x.test evaluate);
+		assert: (x.msg isNone);
 		yourself.
 %
 category: 'other'
@@ -73,10 +73,10 @@ testAssignMultiple
 		assert: (x.value.n == 2);
 		assert: (x.targets size == 2);
 		assert: ((y := x.targets at: 1) isKindOf: PyName);
-		assert: (y.id = 'var2');
+		assert: (y.assoc.key == #'var2');
 		assert: (y.ctx isKindOf: PyStore);
 		assert: ((y := x.targets at: 2) isKindOf: PyName);
-		assert: (y.id = 'var3');
+		assert: (y.assoc.key == #'var3');
 		assert: (y.ctx isKindOf: PyStore);
 		yourself.
 %
@@ -92,7 +92,7 @@ testAssignSingle
 		assert: (x.value.n == 1);
 		assert: (x.targets size == 1);
 		assert: ((y := x.targets at: 1) isKindOf: PyName);
-		assert: (y.id = 'var1');
+		assert: (y.assoc.key == #'var1');
 		assert: (y.ctx isKindOf: PyStore);
 		yourself.
 %
@@ -105,10 +105,10 @@ testBreak
 	self 
 		assert: (x isKindOf: PyFor);
 		assert: (x.target isKindOf: PyName);
-		assert: (x.target.id = '_');
+		assert: (x.target.assoc.key = #'_');
 		assert: (x.target.ctx isKindOf: PyStore);
 		assert: (x.iter isKindOf: PyName);
-		assert: (x.iter.id = 'x');
+		assert: (x.iter.assoc.key = #'x');
 		assert: (x.iter.ctx isKindOf: PyLoad);
 		assert: (x.body.body size = 1);
 		assert: ((x.body.body at: 1) isKindOf: PyBreak);
@@ -126,14 +126,14 @@ testClassAttributeAssignment
 		assert: (x.targets size == 1);
 		assert: ((y := x.targets at: 1) isKindOf: PyAttribute);
 		assert: (y.value isKindOf: PyName);
-		assert: y.value.id = 'inst';
+		assert: y.value.assoc.key == #'inst';
 		assert: (y.value.ctx isKindOf: PyLoad);
 		assert: (y.attr = 'x');
 		assert: (y.ctx isKindOf: PyStore);
 		assert: (x.value isKindOf: PyBinOp);
 		assert: (x.value.left isKindOf: PyAttribute);
 		assert: (x.value.left.value isKindOf: PyName);
-		assert: (x.value.left.value.id = 'inst');
+		assert: (x.value.left.value.assoc.key == #'inst');
 		assert: (x.value.left.value.ctx isKindOf: PyLoad);
 		assert: (x.value.left.attr = 'x');
 		assert: (x.value.left.ctx isKindOf: PyLoad);
@@ -154,7 +154,7 @@ testClassDefCls
 		assert: ((y := x.body.body at: 1) isKindOf: PyAssign);
 		assert: (y.targets size == 1);
 		assert: ((z := y.targets at: 1) isKindOf: PyName);
-		assert: (z.id = 'x');
+		assert: (z.assoc.key == #'x');
 		assert: (z.ctx isKindOf: PyStore);
 		assert: (y.value isKindOf: PyNum);
 		assert: (y.value.n == 3);
@@ -171,11 +171,11 @@ testClassInstantiation
 		assert: (x isKindOf: PyAssign);
 		assert: (x.targets size == 1);
 		assert: ((y := x.targets at: 1) isKindOf: PyName);
-		assert: (y.id = 'inst');
+		assert: (y.assoc.key == #'inst');
 		assert: (y.ctx isKindOf: PyStore);
 		assert: (x.value isKindOf: PyCall);
 		assert: (x.value.function isKindOf: PyName);
-		assert: (x.value.function.id = 'Cls');
+		assert: (x.value.function.assoc.key == #'Cls');
 		assert: (x.value.function.ctx isKindOf: PyLoad);
 		assert: (x.value.arguments size == 0);
 		assert: (x.value.keywords size == 0);
@@ -190,10 +190,10 @@ testContinue
 	self 
 		assert: (x isKindOf: PyFor);
 		assert: (x.target isKindOf: PyName);
-		assert: (x.target.id = '_');
+		assert: (x.target.assoc.key == #'_');
 		assert: (x.target.ctx isKindOf: PyStore);
 		assert: (x.iter isKindOf: PyName);
-		assert: (x.iter.id = 'x');
+		assert: (x.iter.assoc.key == #'x');
 		assert: (x.iter.ctx isKindOf: PyLoad);
 		assert: (x.body.body size = 1);
 		assert: ((x.body.body at: 1) isKindOf: PyContinue);
@@ -210,10 +210,10 @@ testDelMultiple
 		assert: (x isKindOf: PyDelete);
 		assert: (x.targets size == 2);
 		assert: ((y := x.targets at: 1) isKindOf: PyName);
-		assert: y.id = 'x';
+		assert: y.assoc.key == #'x';
 		assert: (y.ctx isKindOf: PyDel);
 		assert: ((y := x.targets at: 2) isKindOf: PyName);
-		assert: y.id = 'i';
+		assert: y.assoc.key == #'i';
 		assert: (y.ctx isKindOf: PyDel);
 		yourself.
 %
@@ -227,7 +227,7 @@ testDelSingle
 		assert: (x isKindOf: PyDelete);
 		assert: (x.targets size == 1);
 		assert: ((y := x.targets at: 1) isKindOf: PyName);
-		assert: y.id = 'x';
+		assert: y.assoc.key == #'x';
 		assert: (y.ctx isKindOf: PyDel);
 		yourself.
 %
@@ -254,7 +254,7 @@ testImport
 		assert: (x.names size == 1);
 		assert: ((y := x.names at: 1) isKindOf: PyAlias);
 		assert: (y.name = 'foo');
-		assert: (y.asName isNil);
+		assert: (y.asName isNone);
 		yourself.
 %
 category: 'other'
@@ -269,7 +269,7 @@ testImportFrom
 		assert: (x.names size == 1);
 		assert: ((y := x.names at: 1) isKindOf: PyAlias);
 		assert: (y.name = 'attr');
-		assert: (y.asName isNil);
+		assert: (y.asName isNone);
 		assert: (x.level = 0);
 		yourself.
 %
@@ -283,7 +283,7 @@ testIndexAssignment
 		assert: (x isKindOf: PyAssign);
 		assert: (x.targets size == 1);
 		assert: ((y := x.targets at: 1) isKindOf: PyName);
-		assert: (y.id = 'i');
+		assert: (y.assoc.key == #'i');
 		assert: (y.ctx isKindOf: PyStore);
 		assert: (x.value isKindOf: PyNum);
 		assert: (x.value.n == 0);
@@ -329,16 +329,16 @@ testPassFunction
 		assert: (x.args isKindOf: PyArguments);
 		assert: ((y := x.args.args at: 1) isKindOf: PyArg);
 		assert: (y.arg = 'arg');
-		assert: (y.annotation isNil);
-		assert: (x.args.vararg isNil);
+		assert: (y.annotation isNone);
+		assert: (x.args.vararg isNone);
 		assert: (x.args.kwonlyargs size == 0);
 		assert: (x.args.kw_defaults size == 0);
-		assert: (x.args.kwarg isNil);
+		assert: (x.args.kwarg isNone);
 		assert: (x.args.defaults size == 0);
 		assert: (x.body.body size == 1);
 		assert: ((x.body.body at: 1) isKindOf: PyPass);
 		assert: (x.decorator_list size == 0);
-		assert: (x.returns isNil);
+		assert: (x.returns isNone);
 		yourself.
 %
 category: 'other'
@@ -351,14 +351,14 @@ testRaise
 		assert: (x isKindOf: PyRaise);
 		assert: (x.exc isKindOf: PyCall);
 		assert: (x.exc.function isKindOf: PyName);
-		assert: (x.exc.function.id = 'RuntimeError');
+		assert: (x.exc.function.assoc.key == #'RuntimeError');
 		assert: (x.exc.function.ctx isKindOf: PyLoad);
 		assert: (x.exc.arguments size == 1);
 		assert: ((y := x.exc.arguments at: 1) isKindOf: PyStr);
 		assert: (y.s = 'Something bad happened');
 		assert: (x.exc.keywords size == 0);
 		assert: (x.exc.function isKindOf: PyName);
-		assert: (x.cause isNil);
+		assert: (x.cause isNone);
 		yourself.
 %
 category: 'other'
@@ -371,15 +371,15 @@ testRaiseFromNone
 		assert: (x isKindOf: PyRaise);
 		assert: (x.exc isKindOf: PyCall);
 		assert: (x.exc.function isKindOf: PyName);
-		assert: (x.exc.function.id = 'RuntimeError');
+		assert: (x.exc.function.assoc.key == #'RuntimeError');
 		assert: (x.exc.function.ctx isKindOf: PyLoad);
 		assert: (x.exc.arguments size == 1);
 		assert: ((y := x.exc.arguments at: 1) isKindOf: PyStr);
 		assert: (y.s = 'Something bad happened');
 		assert: (x.exc.keywords size == 0);
 		assert: (x.exc.function isKindOf: PyName);
-		assert: (x.cause isKindOf: PyNameConstant);
-		assert: (x.cause.value isNil);
+		assert: (x.cause isKindOf: PyNone);
+		assert: (x.cause isNone);
 		yourself.
 %
 category: 'other'
@@ -393,16 +393,16 @@ testReturnNone
 		assert: (x.name = 'a');
 		assert: (x.args isKindOf: PyArguments);
 		assert: (x.args.args size == 0);
-		assert: (x.args.vararg isNil);
+		assert: (x.args.vararg isNone);
 		assert: (x.args.kwonlyargs size == 0);
 		assert: (x.args.kw_defaults size == 0);
-		assert: (x.args.kwarg isNil);
+		assert: (x.args.kwarg isNone);
 		assert: (x.args.defaults size == 0);
 		assert: (x.body.body size == 1);
 		assert: ((y := x.body.body at: 1) isKindOf: PyReturn);
-		assert: (y.value isNil);
+		assert: (y.value isNone);
 		assert: (x.decorator_list size == 0);
-		assert: (x.returns isNil);
+		assert: (x.returns isNone);
 		yourself.
 %
 category: 'other'
@@ -416,17 +416,17 @@ testReturnTrue
 		assert: (x.name = 'b');
 		assert: (x.args isKindOf: PyArguments);
 		assert: (x.args.args size == 0);
-		assert: (x.args.vararg isNil);
+		assert: (x.args.vararg isNone);
 		assert: (x.args.kwonlyargs size == 0);
 		assert: (x.args.kw_defaults size == 0);
-		assert: (x.args.kwarg isNil);
+		assert: (x.args.kwarg isNone);
 		assert: (x.args.defaults size == 0);
 		assert: (x.body.body size == 1);
 		assert: ((y := x.body.body at: 1) isKindOf: PyReturn);
-		assert: (y.value isKindOf: PyNameConstant);
-		assert: (y.value.value);
+		assert: (y.value isKindOf: PyTrue);
+		assert: (y.value evaluate);
 		assert: (x.decorator_list size == 0);
-		assert: (x.returns isNil);
+		assert: (x.returns isNone);
 		yourself.
 %
 category: 'other'
@@ -440,12 +440,12 @@ testSwapAssignment
 		assert: (x.targets size == 1);
 		assert: ((y := x.targets at: 1) isKindOf: PyTuple);
 		assert: ((y := y.elts at: 1) isKindOf: PyName);
-		assert: (y.id = 'i');
+		assert: (y.assoc.key == #'i');
 		assert: (y.ctx isKindOf: PyStore);
 		assert: (y := x.targets at: 1) notNil;
 		assert: ((y := y.elts at: 2) isKindOf: PySubscript);
 		assert: (y.value isKindOf: PyName);
-		assert: (y.value.id = 'x');
+		assert: (y.value.assoc.key == #'x');
 		assert: (y.value.ctx isKindOf: PyLoad);
 		assert: (y.ctx isKindOf: PyStore);
 		assert: (y := x.targets at: 1) notNil;
@@ -470,10 +470,10 @@ testYield
 		assert: (x.name = 'gen');
 		assert: (x.args isKindOf: PyArguments);
 		assert: (x.args.args size == 0);
-		assert: (x.args.vararg isNil);
+		assert: (x.args.vararg isNone);
 		assert: (x.args.kwonlyargs size == 0);
 		assert: (x.args.kw_defaults size == 0);
-		assert: (x.args.kwarg isNil);
+		assert: (x.args.kwarg isNone);
 		assert: (x.args.defaults size == 0);
 		assert: (x.body.body size == 1);
 		assert: ((y := x.body.body at: 1) isKindOf: PyExpr);
@@ -481,7 +481,7 @@ testYield
 		assert: (y.value.value isKindOf: PyNum);
 		assert: (y.value.value.n == 123);
 		assert: (x.decorator_list size == 0);
-		assert: (x.returns isNil);
+		assert: (x.returns isNone);
 		yourself.
 %
 category: 'other'
@@ -495,10 +495,10 @@ testYieldAsync
 		assert: (x.name = 'agen');
 		assert: (x.args isKindOf: PyArguments);
 		assert: (x.args.args size == 0);
-		assert: (x.args.vararg isNil);
+		assert: (x.args.vararg isNone);
 		assert: (x.args.kwonlyargs size == 0);
 		assert: (x.args.kw_defaults size == 0);
-		assert: (x.args.kwarg isNil);
+		assert: (x.args.kwarg isNone);
 		assert: (x.args.defaults size == 0);
 		assert: (x.body.body size == 1);
 		assert: ((y := x.body.body at: 1) isKindOf: PyExpr);
@@ -506,6 +506,6 @@ testYieldAsync
 		assert: (y.value.value isKindOf: PyNum);
 		assert: (y.value.value.n == 123);
 		assert: (x.decorator_list size == 0);
-		assert: (x.returns isNil);
+		assert: (x.returns isNone);
 		yourself.
 %

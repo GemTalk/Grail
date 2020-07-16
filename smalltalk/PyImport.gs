@@ -14,6 +14,14 @@ _names
 %
 category: 'other'
 method: PyImport
+children
+
+	^super children
+		addAll: names;
+		yourself
+%
+category: 'other'
+method: PyImport
 evaluate
 	(names size == 1 and: [names first name = 'random']) ifTrue: [
 		parent variableAt: names first put: PyRandom new.
@@ -38,6 +46,6 @@ method: PyImport
 initialize
 	"Import(alias* names)"
 
-	names := self collectAst: [ self alias ].
+	names := self collectAst: [self alias].
 	self readPosition.
 %

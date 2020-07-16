@@ -9,6 +9,15 @@ PyStarred class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyStarred
+children
+
+	^super children
+		add: ctx;
+		add: value;
+		yourself
+%
+category: 'other'
+method: PyStarred
 initialize
 	"Starred(expr value, expr_context ctx)"
 

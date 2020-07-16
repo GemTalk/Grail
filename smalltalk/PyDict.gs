@@ -9,6 +9,15 @@ PyDict class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyDict
+children
+
+	^super children
+		addAll: keys;
+		addAll: values;
+		yourself
+%
+category: 'other'
+method: PyDict
 evaluate
 
 	| dict |
@@ -23,8 +32,8 @@ method: PyDict
 initialize
 	"Dict(expr* keys, expr* values)"
 
-	keys := self collectAst:[self expression].
+	keys := self collectAst: [self expression].
 	self commaSpace.
-	values := self collectAst:[self expression].
+	values := self collectAst: [self expression].
 	self readPosition.
 %

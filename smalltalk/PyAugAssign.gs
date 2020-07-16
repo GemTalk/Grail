@@ -9,6 +9,16 @@ PyAugAssign class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyAugAssign
+children
+
+	^super children
+		add: target;
+		add: op;
+		add: value;
+		yourself
+%
+category: 'other'
+method: PyAugAssign
 evaluate
 	
 	| x |

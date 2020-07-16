@@ -14,21 +14,25 @@ _value
 %
 category: 'other'
 method: PyFormattedValue
+children
+
+	^super children
+		add: value;
+		add: format_spec;
+		yourself
+%
+category: 'other'
+method: PyFormattedValue
 initialize
 	"FormattedValue(expr value, int? conversion, expr? format_spec)"
 
-	| stream next |
+	| stream |
 	stream := self stream.
 	value := self expression.
 	self commaSpace.
 	conversion := (stream upTo: $,) asNumber.
 	stream skip: -1.
 	self commaSpace.
-	(stream peekFor: $') ifTrue: [
-		format_spec:= self expression.
-	] ifFalse: [
-		next := stream next: 4.
-		next ~= 'None' ifTrue: [self error.].
-	].
+	format_spec:= self optionalExpression.
 	self readPosition.
 %

@@ -24,6 +24,16 @@ _test
 %
 category: 'other'
 method: PyWhile
+children
+
+	^super children
+		add: test;
+		add: body;
+		add: orelse;
+		yourself
+%
+category: 'other'
+method: PyWhile
 evaluate
 	[
 		[

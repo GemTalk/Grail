@@ -53,11 +53,19 @@ PyModule test
 set compile_env: 0
 category: 'other'
 method: PyModule
+children
+
+	^super children
+		add: body;
+		yourself
+%
+category: 'other'
+method: PyModule
 evaluate
 
 	| result |
 	[
-		statements do: [:each | result := each evaluate].
+		result := body evaluate.
 	] on: CancelNotification do: [:ex |
 		ex return.
 	].
@@ -65,17 +73,9 @@ evaluate
 %
 category: 'other'
 method: PyModule
-globals
-
-self halt.
-	^globals
-%
-category: 'other'
-method: PyModule
 initialize
 
 	parent := PySystem.
-	globals := Dictionary new.
 %
 category: 'other'
 method: PyModule
@@ -90,22 +90,17 @@ load: aPathString as: aNameString
 %
 category: 'other'
 method: PyModule
-module
-
-	^self
-%
-category: 'other'
-method: PyModule
 parseAst
 
 	| string |
 	stream := ReadStream on: self readAst.
 	string := stream upTo: $(.
 	string = 'Module' ifFalse: [self error].
-	statements :=  PySuite parent: self.
+	body :=  GlobalScope parent: self.
 	(stream peekFor: $)) ifFalse: [self error].
 	string := stream upToEnd trimSeparators.
 	string isEmpty ifFalse: [self error: 'Unexpected text at end of AST: ' , string printString].
+	body initialize2.
 %
 category: 'other'
 method: PyModule
@@ -127,23 +122,4 @@ method: PyModule
 stream
 
 	^stream
-%
-category: 'other'
-method: PyModule
-variableAt: aName 
-	
-	^globals at: aName id ifAbsent: [Builtins current variableAt: aName]
-%
-category: 'other'
-method: PyModule
-variableAt: aTarget put: aValue
-	
-	aTarget assign: aValue in: globals
-%
-set compile_env: 0
-category: 'testing support'
-method: PyModule
-_statements
-
-	^statements
 %

@@ -21,6 +21,14 @@ _operand
 %
 category: 'other'
 method: PyUnaryOp
+children
+
+	^super children
+		add: operand;
+		yourself
+%
+category: 'other'
+method: PyUnaryOp
 evaluate
 
 	self subclassResponsibility.

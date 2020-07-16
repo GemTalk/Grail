@@ -24,6 +24,16 @@ _left
 %
 category: 'other'
 method: PyCompare
+children
+
+	^super children
+		addAll: cmpopList;
+		addAll: comparatorList;
+		add: left;
+		yourself
+%
+category: 'other'
+method: PyCompare
 evaluate
 	| temp |
 	temp := left evaluate.

@@ -9,6 +9,14 @@ PySet class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PySet
+children
+
+	^super children
+		addAll: elts;
+		yourself
+%
+category: 'other'
+method: PySet
 evaluate
 	^(elts collect: [:each | each evaluate]) asSet
 %
@@ -17,6 +25,6 @@ method: PySet
 initialize
 	"Set(expr* elts)"
 
-	elts := self collectAst:[self expression].
+	elts := self collectAst: [self expression].
 	self readPosition.
 %

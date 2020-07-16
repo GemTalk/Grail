@@ -25,11 +25,6 @@ asName
 %
 category: 'other'
 method: PyAlias
-assign: aValue in: globals
-	globals at: self name put: aValue.
-%
-category: 'other'
-method: PyAlias
 initialize
 	"alias = (identifier name, identifier? asname)"
 
@@ -45,6 +40,7 @@ initialize
 		| string |
 		string := stream upTo: $).
 		string = 'None' ifFalse: [self error].
+		asName := PyNone singleton.
 	].
 %
 category: 'other'

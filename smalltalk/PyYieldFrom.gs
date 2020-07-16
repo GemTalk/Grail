@@ -9,6 +9,14 @@ PyYieldFrom class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyYieldFrom
+children
+
+	^super children
+		add: value;
+		yourself
+%
+category: 'other'
+method: PyYieldFrom
 initialize
 	"YieldFrom(expr value)"
 

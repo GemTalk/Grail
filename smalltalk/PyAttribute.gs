@@ -47,6 +47,15 @@ call: mySelector arguments: myArguments keywords: myKeywords
 %
 category: 'other'
 method: PyAttribute
+children
+
+	^super children
+		add: ctx;
+		add: value;
+		yourself
+%
+category: 'other'
+method: PyAttribute
 id
 	^attr
 %
@@ -63,4 +72,9 @@ initialize
 	self commaSpace.
 	ctx := PyExpressionContext parent: self.
 	self readPosition.
+%
+category: 'other'
+method: PyAttribute
+saveVariableAssociation
+	"Not really a variable"
 %

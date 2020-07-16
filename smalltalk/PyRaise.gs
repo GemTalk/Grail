@@ -19,23 +19,20 @@ _exc
 %
 category: 'other'
 method: PyRaise
+children
+
+	^super children
+		add: exc;
+		add: cause;
+		yourself
+%
+category: 'other'
+method: PyRaise
 initialize
 	"Raise(expr? exc, expr? cause)"
 
-	| stream next |
-	stream := self stream.
-	next := stream peekN: 4.
-	next ~= 'None' ifTrue: [
-		exc := self expression.
-	] ifFalse: [
-		stream next: 4.
-	].
+	exc := self optionalExpression.
 	self commaSpace.
-	next := stream peekN: 4.
-	next ~= 'None' ifTrue: [
-		cause := self expression.
-	] ifFalse: [
-		stream next: 4.
-	].
+	cause := self optionalExpression.
 	self readPosition.
 %

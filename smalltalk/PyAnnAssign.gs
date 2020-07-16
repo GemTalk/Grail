@@ -9,21 +9,27 @@ PyAnnAssign class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyAnnAssign
+children
+
+	^super children
+		add: annotation;
+		add: simple;
+		add: target;
+		add: value;
+		yourself
+%
+category: 'other'
+method: PyAnnAssign
 initialize
 	"AnnAssign(expr target, expr annotation, expr? value, int simple)"
 
-	| stream next | 
+	| stream | 
 	stream := self stream.
 	target := self expression.
 	self commaSpace.
 	annotation := self expression. 
 	self commaSpace.
-	(stream peekFor: $') ifTrue: [
-		value := self expression.
-	] ifFalse: [
-		next := stream next: 4.
-		next ~= 'None' ifTrue: [self error.].
-	].
+	value := self optionalExpression.
 	self commaSpace.
 	simple := (stream upTo: $,) asNumber.
 	stream skip: -1.

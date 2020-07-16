@@ -12,3 +12,10 @@ method: PyStore
 assertIsStore
 	"Overide to avoid error"
 %
+category: 'other'
+method: PyStore
+initialize
+
+	super initialize.
+	parent saveVariableAssociation.
+%

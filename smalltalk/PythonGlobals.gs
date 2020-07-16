@@ -263,7 +263,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 PyAstNodeWithLocation subclass: 'PyArg'
-  instVarNames: #( arg annotation)
+  instVarNames: #( assoc arg annotation)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -897,7 +897,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 PyExpression subclass: 'PyName'
-  instVarNames: #( id ctx)
+  instVarNames: #( assoc id ctx)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -908,13 +908,22 @@ PyExpression subclass: 'PyName'
 expectvalue /Class
 doit
 PyName comment: 
-'No class-specific documentation for PyName, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PyName( id ctx)
-'
+'Names refer to objects. Names are introduced by name binding operations.
+
+The following constructs bind names: formal parameters to functions, import statements, class and function definitions (these bind the class or function name in the defining block), and targets that are identifiers if occurring in an assignment, for loop header, or after as in a with statement or except clause. The import statement of the form from ... import * binds all names defined in the imported module, except those beginning with an underscore. This form may only be used at the module level.
+
+A target occurring in a del statement is also considered bound for this purpose (though the actual semantics are to unbind the name).
+
+Each assignment or import statement occurs within a block defined by a class or function definition or at the module level (the top-level code block).
+
+If a name is bound in a block, it is a local variable of that block, unless declared as nonlocal or global. If a name is bound at the module level, it is a global variable. (The variables of the module code block are local and global.) If a variable is used in a code block but not defined there, it is a free variable.
+
+Each occurrence of a name in the program text refers to the binding of that name established by certain name resolution rules.
+
+
+
+
+https://docs.python.org/3/reference/executionmodel.html#naming-and-binding'
 %
 expectvalue /Class
 doit
@@ -925,9 +934,9 @@ set compile_env: 0
 expectvalue /Class
 doit
 PyExpression subclass: 'PyNameConstant'
-  instVarNames: #( value)
+  instVarNames: #()
   classVars: #()
-  classInstVars: #()
+  classInstVars: #( singleton)
   poolDictionaries: #()
   inDictionary: PythonGlobals
   options: #()
@@ -947,6 +956,89 @@ Object
 expectvalue /Class
 doit
 PyNameConstant category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for PyFalse
+expectvalue /Class
+doit
+PyNameConstant subclass: 'PyFalse'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyFalse comment: 
+'No class-specific documentation for PyFalse, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyExpression
+        PyNameConstant( value)
+          PyFalse
+'
+%
+expectvalue /Class
+doit
+PyFalse category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for PyNone
+expectvalue /Class
+doit
+PyNameConstant subclass: 'PyNone'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyNone comment: 
+'No class-specific documentation for PyNone, hierarchy is: 
+Object
+  PyNone
+'
+%
+expectvalue /Class
+doit
+PyNone category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for PyTrue
+expectvalue /Class
+doit
+PyNameConstant subclass: 'PyTrue'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyTrue comment: 
+'No class-specific documentation for PyTrue, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PyAstNodeWithLocation( line column)
+      PyExpression
+        PyNameConstant( value)
+          PyTrue
+'
+%
+expectvalue /Class
+doit
+PyTrue category: 'Parser'
 %
 set compile_env: 0
 ! ------------------- Class definition for PyNamedExpr
@@ -1746,8 +1838,8 @@ set compile_env: 0
 expectvalue /Class
 doit
 PyStatement subclass: 'PyFunctionDef'
-  instVarNames: #( name args body
-                    decorator_list returns)
+  instVarNames: #( assoc name args
+                    body decorator_list returns)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -2614,8 +2706,8 @@ set compile_env: 0
 expectvalue /Class
 doit
 PyAstNode subclass: 'PyModule'
-  instVarNames: #( globals name path
-                    source statements stream)
+  instVarNames: #( body name path
+                    source stream)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -3150,7 +3242,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 PyAstNode subclass: 'PySuite'
-  instVarNames: #( body variables)
+  instVarNames: #( body)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -3160,7 +3252,77 @@ PyAstNode subclass: 'PySuite'
 %
 expectvalue /Class
 doit
+PySuite comment: 
+'No class-specific documentation for PySuite, hierarchy is: 
+Object
+  PyAstNode( parent)
+    PySuite( body variables)
+'
+%
+expectvalue /Class
+doit
 PySuite category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for PyBlock
+expectvalue /Class
+doit
+PySuite subclass: 'PyBlock'
+  instVarNames: #( variables)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyBlock comment: 
+'A Python program is constructed from code blocks. A block is a piece of Python program text that is executed as a unit. The following are blocks: a module, a function body, and a class definition. Each command typed interactively is a block. A script file (a file given as standard input to the interpreter or specified as a command line argument to the interpreter) is a code block. A script command (a command specified on the interpreter command line with the -c option) is a code block. The string argument passed to the built-in functions eval() and exec() is a code block.
+
+A code block is executed in an execution frame. A frame contains some administrative information (used for debugging) and determines where and how execution continues after the code block’s execution has completed.
+
+
+https://docs.python.org/3/reference/executionmodel.html'
+%
+expectvalue /Class
+doit
+PyBlock category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for GlobalScope
+expectvalue /Class
+doit
+PyBlock subclass: 'GlobalScope'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+GlobalScope category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for LocalScope
+expectvalue /Class
+doit
+PyBlock subclass: 'LocalScope'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+LocalScope category: 'Parser'
 %
 set compile_env: 0
 ! ------------------- Class definition for PyWithItem
@@ -3380,6 +3542,23 @@ doit
 StringLiteralsTestCase category: 'Tests'
 %
 set compile_env: 0
+! ------------------- Class definition for VariableTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'VariableTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonGlobals
+  options: #()
+
+%
+expectvalue /Class
+doit
+VariableTestCase category: 'Tests'
+%
+set compile_env: 0
 ! ------------------- Class definition for PythonTestResource
 expectvalue /Class
 doit
@@ -3433,6 +3612,8 @@ input CompoundStatementsTestCase.gs
 input ContinueNotification.gs
 input DelimitersTestCase.gs
 input EvaluateTestCase.gs
+input GlobalScope.gs
+input LocalScope.gs
 input NumericLiteralsTestCase.gs
 input OperatorsTestCase.gs
 input Py_List.gs
@@ -3460,6 +3641,7 @@ input PyBinOp.gs
 input PyBitAnd.gs
 input PyBitOr.gs
 input PyBitXor.gs
+input PyBlock.gs
 input PyBoolOp.gs
 input PyBreak.gs
 input PyBytes.gs
@@ -3482,6 +3664,7 @@ input PyExpr.gs
 input PyExpression.gs
 input PyExpressionContext.gs
 input PyExtSlice.gs
+input PyFalse.gs
 input PyFloorDiv.gs
 input PyFor.gs
 input PyFormattedValue.gs
@@ -3515,6 +3698,7 @@ input PyMult.gs
 input PyName.gs
 input PyNameConstant.gs
 input PyNamedExpr.gs
+input PyNone.gs
 input PyNonlocal.gs
 input PyNot.gs
 input PyNotEq.gs
@@ -3543,6 +3727,7 @@ input PySuite.gs
 input PySystem.gs
 input PythonTestCase.gs
 input PythonTestResource.gs
+input PyTrue.gs
 input PyTry.gs
 input PyTuple.gs
 input PyUAdd.gs
@@ -3556,3 +3741,4 @@ input PyYieldFrom.gs
 input SimpleStatementsTestCase.gs
 input StringLiteralsTestCase.gs
 input UserInteraction.gs
+input VariableTestCase.gs

@@ -33,3 +33,9 @@ initialize
 
 	(self stream peekFor: $)) ifFalse: [self error].
 %
+category: 'other'
+method: PyExpressionContext
+isStoreCtx
+
+	^false
+%

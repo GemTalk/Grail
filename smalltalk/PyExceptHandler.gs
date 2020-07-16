@@ -9,13 +9,22 @@ PyExceptHandler class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyExceptHandler
+children
+
+	^super children
+		add: type;
+		add: body;
+		yourself
+%
+category: 'other'
+method: PyExceptHandler
 initialize
 	"ExceptHandler(expr? type, identifier? name, stmt* body)"
 	
 	| stream next |
 	stream := self stream.
 	next := stream upTo: $(.
-	next = 'ExceptHandler' ifFalse: [self error.].
+	next = 'ExceptHandler' ifFalse: [self error].
 	type := self optionalExpression.
 	self commaSpace.
 	(stream peekFor: $') ifTrue: [
@@ -25,6 +34,7 @@ initialize
 		| string |
 		string := stream upTo: $,.
 		string = 'None' ifFalse: [self error].
+		name := PyNone singleton.
 	].
 	stream skip: -1.
 	self commaSpace.

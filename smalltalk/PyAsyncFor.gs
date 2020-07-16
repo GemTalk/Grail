@@ -9,6 +9,17 @@ PyAsyncFor class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyAsyncFor
+children
+
+	^super children
+		add: body;
+		add: iter;
+		add: orelse;
+		add: target;
+		yourself
+%
+category: 'other'
+method: PyAsyncFor
 initialize
 	"AsyncFor(expr target, expr iter, stmt* body, stmt* orelse)"
 

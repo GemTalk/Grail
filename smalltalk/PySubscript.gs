@@ -29,9 +29,13 @@ assertContextIsStore
 %
 category: 'other'
 method: PySubscript
-assign: aValue in: globals 
+children
 
-	slice assign: aValue to: value
+	^super children
+		add: ctx;
+		add: slice;
+		add: value;
+		yourself
 %
 category: 'other'
 method: PySubscript
@@ -51,8 +55,13 @@ initialize
 	stream := self stream.
 	value := self expression.
 	self commaSpace.
-	slice := PySliceAbstract sliceFrom: self.
+	slice := PySliceAbstract parent: self.
 	self commaSpace.
 	ctx := PyExpressionContext parent: self.
 	self readPosition.
+%
+category: 'other'
+method: PySubscript
+saveVariableAssociation
+	"Not really a variable?"
 %

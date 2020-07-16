@@ -34,12 +34,23 @@ _returns
 %
 category: 'other'
 method: PyAsyncFunctionDef
+children
+
+	^super children
+		add: args;
+		add: body;
+		addAll: decorator_list;
+		add: returns;
+		yourself
+%
+category: 'other'
+method: PyAsyncFunctionDef
 initialize
 	"AsyncFunctionDef(identifier name, arguments args,
 							  stmt* body, expr* decorator_list, 
 							  expr? returns)"
 
-	| stream next |
+	| stream |
 	stream := self stream.
 	stream peekFor: $'.
 	name := stream upTo: $'.
@@ -48,13 +59,8 @@ initialize
 	self commaSpace.
 	body := PySuite parent: self.
 	self commaSpace.
-	decorator_list := self collectAst: [ self expression ].
+	decorator_list := self collectAst: [self expression].
 	self commaSpace.
-	(stream peekFor: $') ifTrue: [
-		returns:= self expression.
-	] ifFalse: [
-		next := stream next: 4.
-		next ~= 'None' ifTrue: [self error.].
-	].
+	returns := self optionalExpression.
 	self readPosition.
 %

@@ -9,6 +9,17 @@ PyComprehension class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyComprehension
+children
+
+	^super children
+		add: target;
+		add: iter;
+		addAll: ifs;
+		add: is_async;
+		yourself
+%
+category: 'other'
+method: PyComprehension
 initialize
 	"comprehension = (expr target, expr iter, expr* ifs, int is_async)"
 
