@@ -39,6 +39,19 @@ _vararg
 %
 category: 'other'
 method: PyArguments
+children
+
+	^super children
+		addAll: args;
+		add: vararg;
+		addAll: kwonlyargs;
+		addAll: kw_defaults;
+		add: kwarg;
+		addAll: defaults;
+		yourself
+%
+category: 'other'
+method: PyArguments
 initialize
 "arguments(arg* args, arg? vararg, arg* kwonlyargs, expr* kw_defaults,
                  arg? kwarg, expr* defaults)"
@@ -46,27 +59,27 @@ initialize
 	| next stream|
 	stream := self stream.
 	next := stream next: 10.
-	next ~= 'arguments(' ifTrue: [self error.].
+	next ~= 'arguments(' ifTrue: [self error].
 	args := self collectAst: [self arg].
 	self commaSpace.
-	(stream peekFor: $') ifTrue: [
-		vararg := self arg.
-	] ifFalse: [
-		next := stream next: 4.
-		next ~= 'None' ifTrue: [self error.].
-	].
+	vararg := self optionalArg.
 	self commaSpace.
 	kwonlyargs := self collectAst: [self arg].
 	self commaSpace.
 	kw_defaults := self collectAst: [self expression].
 	self commaSpace.
-	(stream peekFor: $') ifTrue: [
-		kwarg := self arg.
-	] ifFalse: [
-		next := stream next: 4.
-		next ~= 'None' ifTrue: [self error.].
-	].
+	kwarg := self optionalArg.
 	self commaSpace.
 	defaults := self collectAst: [self expression].
 	(stream peekFor: $)) ifFalse: [self error].
+%
+category: 'other'
+method: PyArguments
+setValues: anArray
+
+	1 to: args size do: [:i | 
+		(args at: i ifAbsent: [nil]) ifNotNil: [:param |
+			param value: (anArray at: i ifAbsent: [_remoteNil]).
+		].
+	].
 %

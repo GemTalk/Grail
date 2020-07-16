@@ -9,6 +9,15 @@ PyAsyncWith class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyAsyncWith
+children
+
+	^super children
+		addAll: items;
+		add: body;
+		yourself
+%
+category: 'other'
+method: PyAsyncWith
 initialize
 	"AsyncWith(withitem* items, stmt* body)"
 

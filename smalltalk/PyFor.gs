@@ -29,6 +29,17 @@ _target
 %
 category: 'other'
 method: PyFor
+children
+
+	^super children
+		add: target;
+		add: iter;
+		add: body;
+		add: orelse;
+		yourself
+%
+category: 'other'
+method: PyFor
 evaluate
 
 	[

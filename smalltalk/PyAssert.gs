@@ -19,18 +19,20 @@ _test
 %
 category: 'other'
 method: PyAssert
+children
+
+	^super children
+		add: msg;
+		add: test;
+		yourself
+%
+category: 'other'
+method: PyAssert
 initialize
 	"Assert(expr test, expr? msg)"
 
-	| stream next |
-	stream := self stream.
 	test := self expression. 
 	self commaSpace.
-	(stream peekFor: $') ifTrue: [
-		msg:= self expression.
-	] ifFalse: [
-		next := stream next: 4.
-		next ~= 'None' ifTrue: [self error.].
-	].
+	msg := self optionalExpression.
 	self readPosition.
 %

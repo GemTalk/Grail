@@ -9,6 +9,14 @@ PyKeyword class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyKeyword
+children
+
+	^super children
+		add: value;
+		yourself
+%
+category: 'other'
+method: PyKeyword
 initialize
 	"keyword = (identifier? arg, expr value)"
 	| next stream|

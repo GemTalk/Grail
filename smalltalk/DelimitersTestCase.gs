@@ -136,7 +136,7 @@ testSliceList
 		assert: (x.slice.lower.n == 0);
 		assert: (x.slice.upper isKindOf: PyNum);
 		assert: (x.slice.upper.n == 1);
-		assert: (x.slice.step isNil);
+		assert: (x.slice.step isNone);
 		yourself.
 %
 category: 'other'
@@ -161,9 +161,9 @@ testSliceListEmpty
 		assert: ((y := x.value.elts at: 3) isKindOf: PyNum);
 		assert: y.n == 9;
 		assert: (x.slice isKindOf: PySlice);
-		assert: (x.slice.lower isNil);
-		assert: (x.slice.upper isNil);
-		assert: (x.slice.step isNil);
+		assert: (x.slice.lower isNone);
+		assert: (x.slice.upper isNone);
+		assert: (x.slice.step isNone);
 		yourself.
 %
 category: 'other'
@@ -188,8 +188,8 @@ testSliceTuple
 		assert: ((y := x.value.elts at: 3) isKindOf: PyNum);
 		assert: y.n == 6;
 		assert: (x.slice isKindOf: PySlice);
-		assert: (x.slice.lower isNil);
-		assert: (x.slice.upper isNil);
+		assert: (x.slice.lower isNone);
+		assert: (x.slice.upper isNone);
 		assert: (x.slice.step isKindOf: PyNum);
 		assert: (x.slice.step.n == 2);
 		yourself.

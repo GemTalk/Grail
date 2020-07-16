@@ -9,6 +9,14 @@ PyAwait class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyAwait
+children
+
+	^super children
+		add: value;
+		yourself
+%
+category: 'other'
+method: PyAwait
 initialize
 	"Await(expr value)"
 

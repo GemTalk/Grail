@@ -24,6 +24,14 @@ _names
 %
 category: 'other'
 method: PyImportFrom
+children
+
+	^super children
+		addAll: names;
+		yourself
+%
+category: 'other'
+method: PyImportFrom
 evaluate
 	self halt.
 %
@@ -41,8 +49,9 @@ initialize
 		| string |
 		string := stream upTo: $,.
 		string = 'None' ifFalse: [self error].
+		module := PyNone singleton.
 	].
-	names := self collectAst: [ self alias ].
+	names := self collectAst: [self alias].
 	self commaSpace.
 	level := (stream upTo: $,) asNumber.
 	stream skip: -1.

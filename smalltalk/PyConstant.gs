@@ -9,6 +9,14 @@ PyConstant class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyConstant
+children
+
+	^super children
+		add: value;
+		yourself
+%
+category: 'other'
+method: PyConstant
 intialize
 	"Constant(constant value)"
 %

@@ -14,9 +14,17 @@ _values
 %
 category: 'other'
 method: PyJoinedStr
+children
+
+	^super children
+		addAll: values;
+		yourself
+%
+category: 'other'
+method: PyJoinedStr
 initialize
 	"JoinedStr(expr* values)"
 
-	values := self collectAst:[self expression].
+	values := self collectAst: [self expression].
 	self readPosition.
 %

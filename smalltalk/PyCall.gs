@@ -7,51 +7,24 @@ PyCall class removeAllMethods.
 ! ------------------- Class methods for PyCall
 ! ------------------- Instance methods for PyCall
 set compile_env: 0
-category: 'Accessing'
-method: PyCall
-arguments
-	^arguments
-%
-category: 'Accessing'
-method: PyCall
-functionName
-	^function id
-%
-category: 'Accessing'
-method: PyCall
-keywords
-	^keywords
-%
-set compile_env: 0
 category: 'other'
 method: PyCall
-_arguments
-	^ arguments
-%
-category: 'other'
-method: PyCall
-_function
-	^ function
-%
-category: 'other'
-method: PyCall
-_keywords
-	^ keywords
+children
+
+	^super children
+		addAll: arguments;
+		add: function;
+		addAll: keywords;
+		yourself
 %
 category: 'other'
 method: PyCall
 evaluate
 	"https://docs.python.org/3/reference/expressions.html#calls"
-	"We should do an elaborate name lookup, but we'll just start with built-in functions"
 
-	| myArguments myKeywords mySelector |
-	mySelector := (self functionName , ':keywords:') asSymbol.
-	myArguments := self arguments collect: [:each | each evaluate].
-	myKeywords := Dictionary new.
-	self keywords do: [:each | 
-		myKeywords at: each name put: each value evaluate.
-	].
-	^function call: mySelector arguments: myArguments keywords: myKeywords.
+	^function evaluate 
+		callWith: arguments
+		keywords: keywords
 %
 category: 'other'
 method: PyCall

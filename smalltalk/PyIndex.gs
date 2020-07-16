@@ -17,6 +17,14 @@ assign: aValue to: aVariable
 %
 category: 'other'
 method: PyIndex
+children
+
+	^super children
+		add: value;
+		yourself
+%
+category: 'other'
+method: PyIndex
 evaluate: aList
 	value assertContextIsLoad.
 	^aList at: value evaluate + 1.

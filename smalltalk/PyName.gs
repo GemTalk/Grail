@@ -9,16 +9,6 @@ PyName class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyName
-_ctx
-	^ ctx
-%
-category: 'other'
-method: PyName
-_id
-	^ id
-%
-category: 'other'
-method: PyName
 assertContextIsLoad
 
 	ctx assertIsLoad.
@@ -31,9 +21,10 @@ assertContextIsStore
 %
 category: 'other'
 method: PyName
-assign: aValue in: globals
+assign: aValue
 
-	globals at: self id put: aValue.
+	self assertContextIsStore.
+	^assoc value: aValue
 %
 category: 'other'
 method: PyName
@@ -49,15 +40,18 @@ call: mySelector arguments: myArguments keywords: myKeywords
 %
 category: 'other'
 method: PyName
-evaluate
-	self assertContextIsLoad.
-	^parent variableAt: self
+children
+
+	^super children
+		add: ctx;
+		yourself
 %
 category: 'other'
 method: PyName
-id
+evaluate
 
-	^id
+	self assertContextIsLoad.
+	^assoc value
 %
 category: 'other'
 method: PyName
@@ -73,8 +67,17 @@ initialize
 category: 'other'
 method: PyName
 printOn: aStream
+
 	super printOn: aStream.
-	aStream nextPut: $(; 
-		nextPutAll: id;
-		nextPut: $).
+	assoc ifNotNil: [
+		aStream nextPut: $(; 
+			nextPutAll: assoc key;
+			nextPut: $).
+	].
+%
+category: 'other'
+method: PyName
+saveVariableAssociation
+
+	assoc := self associationAt: id asSymbol.
 %

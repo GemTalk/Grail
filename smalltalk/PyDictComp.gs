@@ -9,6 +9,16 @@ PyDictComp class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyDictComp
+children
+
+	^super children
+		add: key;
+		add: value;
+		addAll: generators;
+		yourself
+%
+category: 'other'
+method: PyDictComp
 initialize
 	"DictComp(expr key, expr value, comprehension* generators)"
 

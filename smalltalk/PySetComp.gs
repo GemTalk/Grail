@@ -9,6 +9,15 @@ PySetComp class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PySetComp
+children
+
+	^super children
+		add: elt;
+		addAll: generators;
+		yourself
+%
+category: 'other'
+method: PySetComp
 initialize
 	"SetComp(expr elt, comprehension* generators)"
 

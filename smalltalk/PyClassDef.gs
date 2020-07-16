@@ -34,6 +34,17 @@ _name
 %
 category: 'other'
 method: PyClassDef
+children
+
+	^super children
+		addAll: bases;
+		addAll: keywords;
+		add: body;
+		addAll: decorator_list;
+		yourself
+%
+category: 'other'
+method: PyClassDef
 initialize
 	"ClassDef(identifier name, expr* bases, 
 		keyword* keywords, stmt* body, expr* decorator_list)"
@@ -43,11 +54,11 @@ initialize
 	(stream peekFor: $') ifFalse: [self error].
 	name := stream upTo: $'.
 	self commaSpace.
-	bases := self collectAst:[self expression].
+	bases := self collectAst: [self expression].
 	self commaSpace.
 	keywords := self collectAst: [PyKeyword parent: self].
 	self commaSpace.
-	body := PySuite parent: self.
+	body := LocalScope parent: self.
 	self commaSpace.
 	decorator_list := self collectAst:[self expression].
 	self readPosition.

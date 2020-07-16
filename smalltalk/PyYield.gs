@@ -14,16 +14,17 @@ _value
 %
 category: 'other'
 method: PyYield
+children
+
+	^super children
+		add: value;
+		yourself
+%
+category: 'other'
+method: PyYield
 initialize
 	"Yield(expr? value)"
 
-	| stream next |
-	stream := self stream.
-	next := stream peekN: 4.
-	next ~= 'None' ifTrue: [
-		value := self expression. 
-	] ifFalse: [
-		stream next: 4.
-	].
+	value := self optionalExpression.
 	self readPosition.
 %

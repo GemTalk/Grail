@@ -19,27 +19,36 @@ _arg
 %
 category: 'other'
 method: PyArg
+children
+
+	^super children
+		add: annotation;
+		yourself
+%
+category: 'other'
+method: PyArg
 initialize
 
 "arg = (identifier arg, expr? annotation)"
 
-	| stream next |
+	| stream |
 	stream := self stream.
 	(stream peekFor: $') ifFalse: [self error].
 	arg := stream upTo: $'.
 	self commaSpace.
-	(stream peekFor: $') ifTrue: [
-		annotation := self expression.
-	] ifFalse: [
-		next := stream next: 4.
-			next ~= 'None' ifTrue: [self error.].
-	].
+	annotation := self optionalExpression.
 	self readPosition.
 %
 category: 'other'
 method: PyArg
-newMethod: argument
-		"Method comment."
+initialize2
 
-	^self yourself.
+	super initialize2.
+	assoc := self associationAt: arg asSymbol.
+%
+category: 'other'
+method: PyArg
+value: anObject
+
+	assoc value: anObject.
 %

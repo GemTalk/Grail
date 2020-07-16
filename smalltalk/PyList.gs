@@ -19,6 +19,15 @@ _elts
 %
 category: 'other'
 method: PyList
+children
+
+	^super children
+		add: ctx;
+		addAll: elts;
+		yourself
+%
+category: 'other'
+method: PyList
 evaluate
 	"May wish to revisit context"
 	^Py_List withAll: (elts collect: [:each | each evaluate])
@@ -28,8 +37,13 @@ method: PyList
 initialize
 	"List(expr* elts, expr_context ctx)"
 	
-	elts := self collectAst:[self expression].
+	elts := self collectAst: [self expression].
 	self commaSpace.
 	ctx := PyExpressionContext parent: self.
 	self readPosition.
+%
+category: 'other'
+method: PyList
+saveVariableAssociation
+	"Not really a variable?"
 %

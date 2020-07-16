@@ -9,6 +9,15 @@ PyWith class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyWith
+children
+
+	^super children
+		addAll: items;
+		add: body;
+		yourself
+%
+category: 'other'
+method: PyWith
 initialize
 	"With(withitem* items, stmt* body)"
 

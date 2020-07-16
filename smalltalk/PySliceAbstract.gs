@@ -8,12 +8,9 @@ PySliceAbstract class removeAllMethods.
 set compile_env: 0
 category: 'other'
 classmethod: PySliceAbstract
-sliceFrom: aNode
+isAbstract
 
-| symbol class |
-	symbol := ('Py' , (aNode stream upTo: $()) asSymbol.
-	class := PythonGlobals at: symbol.
-	^class parent: aNode
+	^self == PySliceAbstract
 %
 ! ------------------- Instance methods for PySliceAbstract
 set compile_env: 0

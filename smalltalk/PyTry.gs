@@ -9,6 +9,17 @@ PyTry class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyTry
+children
+
+	^super children
+		add: body;
+		addAll: handlers;
+		add: orelse;
+		add: finalbody;
+		yourself
+%
+category: 'other'
+method: PyTry
 initialize
 	"Try(stmt* body, excepthandler* handlers, stmt* orelse, stmt* finalbody)"
 

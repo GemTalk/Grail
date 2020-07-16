@@ -9,6 +9,15 @@ PyLambda class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyLambda
+children
+
+	^super children
+		add: args;
+		add: body;
+		yourself
+%
+category: 'other'
+method: PyLambda
 initialize
 	"Lambda(arguments args, expr body)"
 

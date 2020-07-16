@@ -11,8 +11,10 @@ category: 'other'
 method: PythonTestResource
 statementsForModuleAtPath: aPath
 
+	| module |
 	(path = aPath and: [statements notNil]) ifTrue: [^statements].
 	path := aPath.
-	statements := (PyModule script:  aPath) _statements.
+	module := PyModule script:  aPath.
+	statements := module.body.
 	^statements
 %

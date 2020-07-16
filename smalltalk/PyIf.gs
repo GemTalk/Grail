@@ -24,6 +24,16 @@ _test
 %
 category: 'other'
 method: PyIf
+children
+
+	^super children
+		add: test;
+		add: body;
+		add: orelse;
+		yourself
+%
+category: 'other'
+method: PyIf
 evaluate
 	test evaluate
 		ifTrue: [body do: [:each | each evaluate]]

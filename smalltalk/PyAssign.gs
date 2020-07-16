@@ -19,17 +19,28 @@ _value
 %
 category: 'other'
 method: PyAssign
+children
+
+	^super children
+		addAll: targets;
+		add: value;
+		yourself
+%
+category: 'other'
+method: PyAssign
 evaluate
+
 	| x |
 	x := value evaluate.
-	targets do: [:each | parent variableAt: each put: x].
+	targets do: [:each | each assign: x].
+	^x
 %
 category: 'other'
 method: PyAssign
 initialize
 	"Assign(expr* targets, expr value)"
 
-	targets := self collectAst: [ self expression].
+	targets := self collectAst: [self expression].
 	self commaSpace.
 	value := self expression.
 	self readPosition.

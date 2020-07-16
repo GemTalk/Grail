@@ -24,6 +24,16 @@ _upper
 %
 category: 'other'
 method: PySlice
+children
+
+	^super children
+		add: lower;
+		add: step;
+		add: upper;
+		yourself
+%
+category: 'other'
+method: PySlice
 evaluate: aList
 	self halt.
 %
@@ -32,29 +42,10 @@ method: PySlice
 initialize
 	"Slice(expr? lower, expr? upper, expr? step)"
 
-	| stream next |
-	stream := self stream.
-	(stream peekFor: $') ifTrue: [
-		lower:= self expression.
-	] ifFalse: [
-		next := stream peekN: 4.
-		next ~= 'None' ifTrue: [ lower := self expression. ] ifFalse: [ stream next: 4. ].
-	].
+	lower:= self optionalExpression.
 	self commaSpace.
-	(stream peekFor: $') ifTrue: [
-		upper := self expression.
-	] ifFalse: [
-		next := stream peekN: 4.
-		next ~= 'None' ifTrue: [ upper := self expression. ] ifFalse: [ stream next: 4. ].
-	].
+	upper := self optionalExpression.
 	self commaSpace.
-	(stream peekFor: $') ifTrue: [
-		step := self expression.
-	] ifFalse: [
-		next := stream peekN: 4.
-		next ~= 'None' ifTrue: [ 
-			step := self expression. 
-			(stream peekFor: $)) ifFalse: [ self error. ].
-		] ifFalse: [ stream next: 5. ].
-	].
+	step := self optionalExpression.
+	(self stream peekFor: $)) ifFalse: [self error].
 %

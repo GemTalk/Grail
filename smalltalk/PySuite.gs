@@ -9,6 +9,22 @@ PySuite class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PySuite
+children
+
+	^super children
+		addAll: body;
+		yourself
+%
+category: 'other'
+method: PySuite
+evaluate
+
+	| result |
+	body do: [:each | result := each evaluate].
+	^result
+%
+category: 'other'
+method: PySuite
 initialize
 
 	| stream node |
@@ -22,17 +38,4 @@ initialize
 		body add: node.
 		(stream peekFor: $,) ifTrue: [stream peekFor: Character space].
 	].
-	variables := KeyValueDictionary new.
-%
-category: 'other'
-method: PySuite
-variableAt: aKey
-
-	^variables at: aKey
-%
-category: 'other'
-method: PySuite
-variableAt: aKey put: aValue
-
-	^variables at: aKey put: aValue
 %

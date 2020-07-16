@@ -30,6 +30,16 @@ assertContextIsLoad
 %
 category: 'other'
 method: PyBinOp
+children
+
+	^super children
+		add: left;
+		add: op;
+		add: right;
+		yourself
+%
+category: 'other'
+method: PyBinOp
 evaluate
 	^op left: left evaluate right: right evaluate
 %

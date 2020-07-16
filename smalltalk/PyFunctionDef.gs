@@ -9,50 +9,54 @@ PyFunctionDef class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyFunctionDef
-_args
-	^ args
+associationAt: aSymbol
+
+	^body associationAt: aSymbol
 %
 category: 'other'
 method: PyFunctionDef
-_body
-	^ body
+callWith: arguments keywords: keywords
+	"args are the parameters while arguments are the values"
+
+	args setValues: (arguments collect: [:each | each evaluate]).
+	^body evaluate
 %
 category: 'other'
 method: PyFunctionDef
-_decorator_list
-	^ decorator_list
+children
+
+	^super children
+		add: args;
+		add: body;
+		addAll: decorator_list;
+		add: returns;
+		yourself
 %
 category: 'other'
 method: PyFunctionDef
-_name
-	^ name
-%
-category: 'other'
-method: PyFunctionDef
-_returns
-	^ returns
+evaluate
+	"This executes the 'def' command, creating and saving the function with its name.
+	We call super because we want to store the function definition in the parent's scope.
+	Our scope is used to hold local variables."
+
+	 (assoc := super associationAt: name asSymbol) value: self.
 %
 category: 'other'
 method: PyFunctionDef
 initialize
 	"FunctionDef(identifier name, arguments args, stmt* body, expr* decorator_list, expr? returns)"
 
-	| stream next |
+	| stream |
 	stream := self stream.
 	(stream peekFor: $') ifFalse: [self error].
 	name := stream upTo: $'.
 	self commaSpace.
 	args := PyArguments parent: self.
 	self commaSpace.
-	body := PySuite parent: self.
+	body := LocalScope parent: self.
 	self commaSpace.
-	decorator_list :=  self collectAst: [self expression.].
+	decorator_list :=  self collectAst: [self expression].
 	self commaSpace.
-	(stream peekFor: $') ifTrue: [
-		returns := self expression.
-	] ifFalse: [
-		next := stream next: 4.
-		next ~= 'None' ifTrue: [self error.].
-	].
+	returns := self optionalExpression.
 	self readPosition.
 %

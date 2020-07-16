@@ -9,6 +9,14 @@ PyExtSlice class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyExtSlice
+children
+
+	^super children
+		addAll: dims;
+		yourself
+%
+category: 'other'
+method: PyExtSlice
 initialize
 	"ExtSlice(slice* dims)"
 	
