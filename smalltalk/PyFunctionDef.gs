@@ -15,14 +15,6 @@ associationAt: aSymbol
 %
 category: 'other'
 method: PyFunctionDef
-callWith: arguments keywords: keywords
-	"args are the parameters while arguments are the values"
-
-	args setValues: (arguments collect: [:each | each evaluate]).
-	^body evaluate
-%
-category: 'other'
-method: PyFunctionDef
 children
 
 	^super children
@@ -59,4 +51,12 @@ initialize
 	self commaSpace.
 	returns := self optionalExpression.
 	self readPosition.
+%
+category: 'other'
+method: PyFunctionDef
+value: arguments value: keywords
+	"args are the parameters while arguments are the values"
+
+	args setValues: arguments.
+	^body evaluate
 %

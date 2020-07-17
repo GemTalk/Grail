@@ -49,22 +49,12 @@ Python comes with a [regression test package](https://docs.python.org/3/library/
 
 While we could parse source files directly (and may eventually do so), we can take advantage of some built-in Python features to jump ahead to the interesting parts. 
 
-### Tokens
-
-For starters, see Python's *tokenize* command-line option. To see this in action execute the following from a bash command line:
-
-```
-python3 -m tokenize -e $HOME/code/Python/performance/performance/cli.py
-```
-
-This will show you each token in the file on a separate line with details about the token (including where it begins and ends). This may be useful for implementing a debugger, depending on how much detail we get from the AST (described next).
-
 ### Abstract Syntax Tree
 
-Even more helpful is a Python [module](https://docs.python.org/3/library/ast.html) that generates an AST (abstract syntax tree). To see this in action execute the following from a bash command line (or see the output with some pretty-printing in `$HOME/code/Python/GemStoneP/ast.txt`:
+Python has a module [ast](https://docs.python.org/3/library/ast.html) that generates an AST (abstract syntax tree). To see this in action evaluate the following in a workspace:
 
 ```
-python3 $HOME/code/Python/GemStoneP/parse.py
+PyModule astForPath: '$HOME/code/Python/GemStoneP/hello.py'
 ```
 
 ## Next Steps
@@ -79,8 +69,6 @@ Our initial approach is to let Python generate an AST for us and then use the te
           * PyAstNode>>suite constructs statements
               * PyStatement class>>statementFrom: looks for a [statement](https://docs.python.org/3/library/ast.html)
 
-*The current task is to complete the implementation of PyStatement class>>statementFrom: and the nodes that are referenced from that node.*
-
 ### Translate the AST to Smalltalk Code
 
 We should include a reference to the Python source in some way so that we can trace the Smalltalk code back to the Python code. The information should be in such a format that we can eventually build a debugger.
@@ -91,4 +79,4 @@ When we reach an import statement then the process starts over!
 
 ### Automated Tests
 
-One option is to just rely on the Python test suite. So far no effort has been made to build SUnit tests.
+Eventually we will rely on the Python test suite, but for now have started with a number of SUnit tests.

@@ -46,6 +46,8 @@ method: PythonTestCase
 setUp
 
 	super setUp.
+	stdout := WriteStream on: String new.
+	Builtins current stdout: stdout.
 	statements := self resources first current statementsForModuleAtPath: '$HOME/code/Python/GemStoneP/tests/' , self filename.
 %
 category: 'other'
@@ -53,4 +55,11 @@ method: PythonTestCase
 statementsAt: anInteger
 
 	^statements.body at: anInteger
+%
+category: 'other'
+method: PythonTestCase
+tearDown
+
+	Builtins current stdout: nil.
+	super tearDown.
 %

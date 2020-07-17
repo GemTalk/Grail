@@ -1,7 +1,7 @@
 ﻿! ------- Create dictionary if it is not present
 run
 | aSymbol names userProfile |
-aSymbol := #'PythonGlobals'.
+aSymbol := #'Python'.
 userProfile := System myUserProfile.
 names := userProfile symbolList names.
 (names includes: aSymbol) ifFalse: [
@@ -19,7 +19,7 @@ Notification subclass: 'BreakNotification'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #( disallowGciStore)
 
 %
@@ -36,7 +36,7 @@ Notification subclass: 'CancelNotification'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #( disallowGciStore)
 
 %
@@ -53,7 +53,7 @@ Notification subclass: 'ContinueNotification'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #( disallowGciStore)
 
 %
@@ -66,13 +66,21 @@ set compile_env: 0
 expectvalue /Class
 doit
 Object subclass: 'Builtins'
-  instVarNames: #()
+  instVarNames: #( dictionary stdout)
   classVars: #()
-  classInstVars: #( current default)
+  classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
+%
+expectvalue /Class
+doit
+Builtins comment: 
+'No class-specific documentation for Builtins, hierarchy is: 
+Object
+  Builtins
+'
 %
 expectvalue /Class
 doit
@@ -87,7 +95,7 @@ Array subclass: 'Py_List'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -104,7 +112,7 @@ Array subclass: 'Py_Tuple'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -121,7 +129,7 @@ String subclass: 'Py_String'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -138,7 +146,7 @@ Number subclass: 'Complex'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -163,7 +171,7 @@ Object subclass: 'PyAstNode'
   classVars: #( escapeCharacters)
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -188,7 +196,7 @@ PyAstNode subclass: 'PyAlias'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -215,7 +223,7 @@ PyAstNode subclass: 'PyArguments'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -241,7 +249,7 @@ PyAstNode subclass: 'PyAstNodeWithLocation'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -267,7 +275,7 @@ PyAstNodeWithLocation subclass: 'PyArg'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -293,7 +301,7 @@ PyAstNodeWithLocation subclass: 'PyExceptHandler'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -320,7 +328,7 @@ PyAstNodeWithLocation subclass: 'PyExpression'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -346,7 +354,7 @@ PyExpression subclass: 'PyAttribute'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -373,7 +381,7 @@ PyExpression subclass: 'PyAwait'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -401,7 +409,7 @@ PyExpression subclass: 'PyBinOp'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -429,7 +437,7 @@ PyExpression subclass: 'PyBoolOp'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -457,7 +465,7 @@ PyBoolOp subclass: 'PyAnd'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -484,7 +492,7 @@ PyBoolOp subclass: 'PyOr'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -511,7 +519,7 @@ PyExpression subclass: 'PyBytes'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -539,7 +547,7 @@ PyExpression subclass: 'PyCall'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -566,7 +574,7 @@ PyExpression subclass: 'PyCompare'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -593,7 +601,7 @@ PyExpression subclass: 'PyConstant'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -621,7 +629,7 @@ PyExpression subclass: 'PyDict'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -649,7 +657,7 @@ PyExpression subclass: 'PyDictComp'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -677,7 +685,7 @@ PyExpression subclass: 'PyEllipsis'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -705,7 +713,7 @@ PyExpression subclass: 'PyFormattedValue'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -733,7 +741,7 @@ PyExpression subclass: 'PyGeneratorExp'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -761,7 +769,7 @@ PyExpression subclass: 'PyIfExp'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -789,7 +797,7 @@ PyExpression subclass: 'PyJoinedStr'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -817,7 +825,7 @@ PyExpression subclass: 'PyLambda'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -845,7 +853,7 @@ PyExpression subclass: 'PyList'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -873,7 +881,7 @@ PyExpression subclass: 'PyListComp'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -901,7 +909,7 @@ PyExpression subclass: 'PyName'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -938,7 +946,7 @@ PyExpression subclass: 'PyNameConstant'
   classVars: #()
   classInstVars: #( singleton)
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -966,7 +974,7 @@ PyNameConstant subclass: 'PyFalse'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -995,7 +1003,7 @@ PyNameConstant subclass: 'PyNone'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1020,7 +1028,7 @@ PyNameConstant subclass: 'PyTrue'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1049,7 +1057,7 @@ PyExpression subclass: 'PyNamedExpr'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1066,7 +1074,7 @@ PyExpression subclass: 'PyNum'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1094,7 +1102,7 @@ PyExpression subclass: 'PySet'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1122,7 +1130,7 @@ PyExpression subclass: 'PySetComp'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1150,7 +1158,7 @@ PyExpression subclass: 'PyStarred'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1178,7 +1186,7 @@ PyExpression subclass: 'PyStr'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1205,7 +1213,7 @@ PyExpression subclass: 'PySubscript'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1233,7 +1241,7 @@ PyExpression subclass: 'PyTuple'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1261,7 +1269,7 @@ PyExpression subclass: 'PyUnaryOp'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1289,7 +1297,7 @@ PyUnaryOp subclass: 'PyInvert'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1316,7 +1324,7 @@ PyUnaryOp subclass: 'PyNot'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1343,7 +1351,7 @@ PyUnaryOp subclass: 'PyUAdd'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1370,7 +1378,7 @@ PyUnaryOp subclass: 'PyUSub'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1397,7 +1405,7 @@ PyExpression subclass: 'PyYield'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1425,7 +1433,7 @@ PyExpression subclass: 'PyYieldFrom'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1453,7 +1461,7 @@ PyAstNodeWithLocation subclass: 'PyStatement'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1480,7 +1488,7 @@ PyStatement subclass: 'PyAnnAssign'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1507,7 +1515,7 @@ PyStatement subclass: 'PyAssert'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1534,7 +1542,7 @@ PyStatement subclass: 'PyAssign'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1562,7 +1570,7 @@ PyStatement subclass: 'PyAsyncFor'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1591,7 +1599,7 @@ PyStatement subclass: 'PyAsyncFunctionDef'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1619,7 +1627,7 @@ PyStatement subclass: 'PyAsyncWith'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1647,7 +1655,7 @@ PyStatement subclass: 'PyAugAssign'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1675,7 +1683,7 @@ PyStatement subclass: 'PyBreak'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1704,7 +1712,7 @@ PyStatement subclass: 'PyClassDef'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1731,7 +1739,7 @@ PyStatement subclass: 'PyContinue'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1759,7 +1767,7 @@ PyStatement subclass: 'PyDelete'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1786,7 +1794,7 @@ PyStatement subclass: 'PyExpr'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1814,7 +1822,7 @@ PyStatement subclass: 'PyFor'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1843,7 +1851,7 @@ PyStatement subclass: 'PyFunctionDef'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1871,7 +1879,7 @@ PyStatement subclass: 'PyGlobal'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1899,7 +1907,7 @@ PyStatement subclass: 'PyIf'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1925,7 +1933,7 @@ PyStatement subclass: 'PyImport'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1951,7 +1959,7 @@ PyStatement subclass: 'PyImportFrom'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -1978,7 +1986,7 @@ PyStatement subclass: 'PyNonlocal'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2006,7 +2014,7 @@ PyStatement subclass: 'PyPass'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2034,7 +2042,7 @@ PyStatement subclass: 'PyRaise'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2062,7 +2070,7 @@ PyStatement subclass: 'PyReturn'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2090,7 +2098,7 @@ PyStatement subclass: 'PyTry'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2118,7 +2126,7 @@ PyStatement subclass: 'PyWhile'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2145,7 +2153,7 @@ PyStatement subclass: 'PyWith'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2173,7 +2181,7 @@ PyAstNode subclass: 'PyCmpOp'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2199,7 +2207,7 @@ PyCmpOp subclass: 'PyEq'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2226,7 +2234,7 @@ PyCmpOp subclass: 'PyGt'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2253,7 +2261,7 @@ PyCmpOp subclass: 'PyGtE'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2280,7 +2288,7 @@ PyCmpOp subclass: 'PyIn'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2307,7 +2315,7 @@ PyCmpOp subclass: 'PyIs'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2334,7 +2342,7 @@ PyCmpOp subclass: 'PyIsNot'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2361,7 +2369,7 @@ PyCmpOp subclass: 'PyLt'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2388,7 +2396,7 @@ PyCmpOp subclass: 'PyLtE'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2415,7 +2423,7 @@ PyCmpOp subclass: 'PyNotEq'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2442,7 +2450,7 @@ PyCmpOp subclass: 'PyNotIn'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2470,7 +2478,7 @@ PyAstNode subclass: 'PyComprehension'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2496,7 +2504,7 @@ PyAstNode subclass: 'PyExpressionContext'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2522,7 +2530,7 @@ PyExpressionContext subclass: 'PyAugLoad'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2549,7 +2557,7 @@ PyExpressionContext subclass: 'PyAugStore'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2576,7 +2584,7 @@ PyExpressionContext subclass: 'PyDel'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2603,7 +2611,7 @@ PyExpressionContext subclass: 'PyLoad'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2630,7 +2638,7 @@ PyExpressionContext subclass: 'PyParam'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2657,7 +2665,7 @@ PyExpressionContext subclass: 'PyStore'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2684,7 +2692,7 @@ PyAstNode subclass: 'PyKeyword'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2711,14 +2719,14 @@ PyAstNode subclass: 'PyModule'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
 expectvalue /Class
 doit
 PyModule comment: 
-'A Module is a file containing PythonGlobals definitions and statements. When a file (''script'') is executed from the command line, (e.g., ''python myFile.py''), the module global variable `__name__` is set to ''__main__''. A Module can be imported into another module using the `Import` command, and the module global variable `__name__` is then the name of the file.
+'A Module is a file containing Python definitions and statements. When a file (''script'') is executed from the command line, (e.g., ''python myFile.py''), the module global variable `__name__` is set to ''__main__''. A Module can be imported into another module using the `Import` command, and the module global variable `__name__` is then the name of the file.
 
 https://docs.python.org/3/tutorial/modules.html?highlight=module'
 %
@@ -2735,7 +2743,7 @@ PyModule subclass: 'PyRandom'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2762,7 +2770,7 @@ PyAstNode subclass: 'PyOperator'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2788,7 +2796,7 @@ PyOperator subclass: 'PyAdd'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2815,7 +2823,7 @@ PyOperator subclass: 'PyBitAnd'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2842,7 +2850,7 @@ PyOperator subclass: 'PyBitOr'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2869,7 +2877,7 @@ PyOperator subclass: 'PyBitXor'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2896,7 +2904,7 @@ PyOperator subclass: 'PyDiv'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2923,7 +2931,7 @@ PyOperator subclass: 'PyFloorDiv'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2950,7 +2958,7 @@ PyOperator subclass: 'PyLShift'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -2977,7 +2985,7 @@ PyOperator subclass: 'PyMatMult'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -3004,7 +3012,7 @@ PyOperator subclass: 'PyMod'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -3031,7 +3039,7 @@ PyOperator subclass: 'PyMult'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -3058,7 +3066,7 @@ PyOperator subclass: 'PyPow'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -3085,7 +3093,7 @@ PyOperator subclass: 'PyRShift'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -3112,7 +3120,7 @@ PyOperator subclass: 'PySub'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -3139,7 +3147,7 @@ PyAstNode subclass: 'PySliceAbstract'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -3165,7 +3173,7 @@ PySliceAbstract subclass: 'PyExtSlice'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -3192,7 +3200,7 @@ PySliceAbstract subclass: 'PyIndex'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -3219,7 +3227,7 @@ PySliceAbstract subclass: 'PySlice'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -3246,7 +3254,7 @@ PyAstNode subclass: 'PySuite'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -3272,7 +3280,7 @@ PySuite subclass: 'PyBlock'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -3299,7 +3307,7 @@ PyBlock subclass: 'GlobalScope'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -3316,7 +3324,7 @@ PyBlock subclass: 'LocalScope'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -3333,7 +3341,7 @@ PyAstNode subclass: 'PyWithItem'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -3359,7 +3367,7 @@ Object subclass: 'PySystem'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -3372,11 +3380,11 @@ set compile_env: 0
 expectvalue /Class
 doit
 TestCase subclass: 'PythonTestCase'
-  instVarNames: #( statements)
+  instVarNames: #( statements stdout)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -3395,6 +3403,34 @@ doit
 PythonTestCase category: 'Tests'
 %
 set compile_env: 0
+! ------------------- Class definition for BuiltinsTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'BuiltinsTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+BuiltinsTestCase comment: 
+'No class-specific documentation for BuiltinsTestCase, hierarchy is: 
+Object
+  TestAsserter
+    TestCase( testSelector)
+      PythonTestCase( statements)
+        BuiltinsTestCase
+'
+%
+expectvalue /Class
+doit
+BuiltinsTestCase category: 'Tests'
+%
+set compile_env: 0
 ! ------------------- Class definition for ByteLiteralsTestCase
 expectvalue /Class
 doit
@@ -3403,9 +3439,20 @@ PythonTestCase subclass: 'ByteLiteralsTestCase'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
+%
+expectvalue /Class
+doit
+ByteLiteralsTestCase comment: 
+'No class-specific documentation for ByteLiteralsTestCase, hierarchy is: 
+Object
+  TestAsserter
+    TestCase( testSelector)
+      PythonTestCase( statements)
+        ByteLiteralsTestCase
+'
 %
 expectvalue /Class
 doit
@@ -3420,9 +3467,20 @@ PythonTestCase subclass: 'CompoundStatementsTestCase'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
+%
+expectvalue /Class
+doit
+CompoundStatementsTestCase comment: 
+'No class-specific documentation for CompoundStatementsTestCase, hierarchy is: 
+Object
+  TestAsserter
+    TestCase( testSelector)
+      PythonTestCase( statements)
+        CompoundStatementsTestCase
+'
 %
 expectvalue /Class
 doit
@@ -3437,9 +3495,20 @@ PythonTestCase subclass: 'DelimitersTestCase'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
+%
+expectvalue /Class
+doit
+DelimitersTestCase comment: 
+'No class-specific documentation for DelimitersTestCase, hierarchy is: 
+Object
+  TestAsserter
+    TestCase( testSelector)
+      PythonTestCase( statements)
+        DelimitersTestCase
+'
 %
 expectvalue /Class
 doit
@@ -3454,9 +3523,20 @@ PythonTestCase subclass: 'EvaluateTestCase'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
+%
+expectvalue /Class
+doit
+EvaluateTestCase comment: 
+'No class-specific documentation for EvaluateTestCase, hierarchy is: 
+Object
+  TestAsserter
+    TestCase( testSelector)
+      PythonTestCase( statements)
+        EvaluateTestCase
+'
 %
 expectvalue /Class
 doit
@@ -3471,9 +3551,20 @@ PythonTestCase subclass: 'NumericLiteralsTestCase'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
+%
+expectvalue /Class
+doit
+NumericLiteralsTestCase comment: 
+'No class-specific documentation for NumericLiteralsTestCase, hierarchy is: 
+Object
+  TestAsserter
+    TestCase( testSelector)
+      PythonTestCase( statements)
+        NumericLiteralsTestCase
+'
 %
 expectvalue /Class
 doit
@@ -3488,9 +3579,20 @@ PythonTestCase subclass: 'OperatorsTestCase'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
+%
+expectvalue /Class
+doit
+OperatorsTestCase comment: 
+'No class-specific documentation for OperatorsTestCase, hierarchy is: 
+Object
+  TestAsserter
+    TestCase( testSelector)
+      PythonTestCase( statements)
+        OperatorsTestCase
+'
 %
 expectvalue /Class
 doit
@@ -3505,9 +3607,20 @@ PythonTestCase subclass: 'SimpleStatementsTestCase'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
+%
+expectvalue /Class
+doit
+SimpleStatementsTestCase comment: 
+'No class-specific documentation for SimpleStatementsTestCase, hierarchy is: 
+Object
+  TestAsserter
+    TestCase( testSelector)
+      PythonTestCase( statements)
+        SimpleStatementsTestCase
+'
 %
 expectvalue /Class
 doit
@@ -3522,7 +3635,7 @@ PythonTestCase subclass: 'StringLiteralsTestCase'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -3550,9 +3663,20 @@ PythonTestCase subclass: 'VariableTestCase'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
+%
+expectvalue /Class
+doit
+VariableTestCase comment: 
+'No class-specific documentation for VariableTestCase, hierarchy is: 
+Object
+  TestAsserter
+    TestCase( testSelector)
+      PythonTestCase( statements)
+        VariableTestCase
+'
 %
 expectvalue /Class
 doit
@@ -3567,7 +3691,7 @@ TestResource subclass: 'PythonTestResource'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -3594,7 +3718,7 @@ Object subclass: 'UserInteraction'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonGlobals
+  inDictionary: Python
   options: #()
 
 %
@@ -3605,6 +3729,7 @@ UserInteraction category: 'Builtins'
 
 input BreakNotification.gs
 input Builtins.gs
+input BuiltinsTestCase.gs
 input ByteLiteralsTestCase.gs
 input CancelNotification.gs
 input Complex.gs

@@ -46,7 +46,7 @@ parent: aNode
 	^self isAbstract ifTrue: [
 		| symbol class |
 		symbol := ('Py' , (aNode stream upTo: self subclassDelimiter)) asSymbol.
-		class := PythonGlobals at: symbol.
+		class := Python at: symbol.
 		class parent: aNode
 	] ifFalse: [
 		self basicNew
