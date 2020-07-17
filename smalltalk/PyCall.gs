@@ -23,18 +23,22 @@ evaluate
 	"https://docs.python.org/3/reference/expressions.html#calls"
 
 	^function evaluate 
-		callWith: arguments
-		keywords: keywords
+		value: (arguments collect: [:each | each evaluate])
+		value: (keywords collect: [:each | each evaluate])
 %
 category: 'other'
 method: PyCall
 initialize
 	"Call(expr func, expr* args, keyword* keywords)"
-	
+
+	| dict |
 	function := self expression.
 	self commaSpace.
 	arguments := self collectAst: [self expression].
 	self commaSpace.
 	keywords := self collectAst: [PyKeyword parent: self].
+	dict := SymbolDictionary new.
+	keywords do: [:each | dict at: each name asSymbol put: each value].
+	keywords := dict.
 	self readPosition.
 %

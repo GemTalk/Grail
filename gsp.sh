@@ -25,7 +25,18 @@ commit
 logout
 set user DataCurator pass swordfish
 login
-input PythonGlobals.gs
+run
+| aSymbol names userProfile |
+aSymbol := #'Python'.
+userProfile := System myUserProfile.
+names := userProfile symbolList names.
+(names includes: aSymbol) ifFalse: [
+	| symbolDictionary |
+	symbolDictionary := SymbolDictionary new name: aSymbol; yourself.
+	userProfile insertDictionary: symbolDictionary at: 1.
+].
+%
+input Python.gs
 output pop
 errorCount
 commit

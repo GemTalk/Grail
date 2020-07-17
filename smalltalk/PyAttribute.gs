@@ -30,20 +30,11 @@ assertContextIsLoad
 %
 category: 'other'
 method: PyAttribute
-call: aPyCall
-	| receiver |
-	receiver := value evaluate.
-	self halt.
-	self assertContextIsLoad.
-	^Builtins current call: aPyCall
-%
-category: 'other'
-method: PyAttribute
-call: mySelector arguments: myArguments keywords: myKeywords
+call: mySelector arguments: myArguments keywords: keywords
 	| receiver |
 	self assertContextIsLoad.
 	receiver := value evaluate.
-	^receiver perform: mySelector with: myArguments with: myKeywords.
+	^receiver perform: mySelector with: myArguments with: keywords.
 %
 category: 'other'
 method: PyAttribute

@@ -28,18 +28,6 @@ assign: aValue
 %
 category: 'other'
 method: PyName
-call: aPyCall
-	self assertContextIsLoad.
-	^Builtins current call: aPyCall
-%
-category: 'other'
-method: PyName
-call: mySelector arguments: myArguments keywords: myKeywords
-	self assertContextIsLoad.
-	^Builtins current call: mySelector arguments: myArguments keywords: myKeywords
-%
-category: 'other'
-method: PyName
 children
 
 	^super children
@@ -49,6 +37,7 @@ children
 category: 'other'
 method: PyName
 evaluate
+	"If the name refers to a function, return an object that can be sent #'value:value:'"
 
 	self assertContextIsLoad.
 	^assoc value

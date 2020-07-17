@@ -9,28 +9,27 @@ set compile_env: 0
 category: 'other'
 classmethod: Builtins
 current
+"
+	SessionTemps current removeKey: #'Python_Builtins' ifAbsent: [].
+"
 
-	current ifNil: [current := self default].
-	^current
+	^SessionTemps current
+		at: #'Python_Builtins'
+		ifAbsentPut: [self new].
 %
 category: 'other'
 classmethod: Builtins
-current: anObject
+new
 
-	current := anObject.
-%
-category: 'other'
-classmethod: Builtins
-default
-
-	default ifNil: [default := self new].
-	^default
+	^self basicNew
+		initialize;
+		yourself
 %
 ! ------------------- Instance methods for Builtins
 set compile_env: 0
 category: 'functions'
 method: Builtins
-__import__: arguments keywords: keywords
+__import__: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -91,14 +90,14 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-abs: arguments keywords: keywords
+abs: aNumber
 	"https://docs.python.org/3/library/functions.html#abs"
 	
-	^arguments first abs
+	^aNumber abs
 %
 category: 'functions'
 method: Builtins
-all: arguments keywords: keywords
+all: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -115,7 +114,7 @@ def all(iterable):
 %
 category: 'functions'
 method: Builtins
-any: arguments keywords: keywords
+any: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -132,7 +131,7 @@ def any(iterable):
 %
 category: 'functions'
 method: Builtins
-ascii: arguments keywords: keywords
+ascii: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -145,7 +144,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-bin: arguments keywords: keywords
+bin: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -170,7 +169,7 @@ See also format() for more information.
 %
 category: 'functions'
 method: Builtins
-bool: arguments keywords: keywords
+bool: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -187,7 +186,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-breakpoint: arguments keywords: keywords
+breakpoint: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -208,7 +207,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-bytearray: arguments keywords: keywords
+bytearray: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -236,7 +235,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-bytes: arguments keywords: keywords
+bytes: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -257,13 +256,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-call: mySelector arguments: myArguments keywords: myKeywords
-
-	^self perform: mySelector with: myArguments with: myKeywords.
-%
-category: 'functions'
-method: Builtins
-callable: arguments keywords: keywords
+callable: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -281,7 +274,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-chr: arguments keywords: keywords
+chr: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -297,7 +290,7 @@ The valid range for the argument is from 0 through 1,114,111 (0x10FFFF in base 1
 %
 category: 'functions'
 method: Builtins
-classmethod: arguments keywords: keywords
+classmethod: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -325,7 +318,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-compile: arguments keywords: keywords
+compile: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -379,7 +372,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-complex: arguments keywords: keywords
+complex: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -405,7 +398,7 @@ Changed in version 3.6: Grouping digits with underscores as in code literals is 
 %
 category: 'functions'
 method: Builtins
-delattr: arguments keywords: keywords
+delattr: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -447,7 +440,7 @@ For other containers see the built-in list, set, and tuple classes, as well as t
 %
 category: 'functions'
 method: Builtins
-dir: arguments keywords: keywords
+dir: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -501,7 +494,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-divmod: arguments keywords: keywords
+divmod: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -526,7 +519,7 @@ r := a - (b * q).
 %
 category: 'functions'
 method: Builtins
-enumerate: arguments keywords: keywords
+enumerate: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -555,7 +548,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-eval: arguments keywords: keywords
+eval: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -594,7 +587,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-exec: arguments keywords: keywords
+exec: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -636,7 +629,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-filter: arguments keywords: keywords
+filter: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -659,7 +652,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-float: arguments keywords: keywords
+float: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -714,7 +707,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-format: arguments keywords: keywords
+format: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -744,7 +737,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-frozenset: arguments keywords: keywords
+frozenset: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -761,7 +754,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-getattr: arguments keywords: keywords
+getattr: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -777,7 +770,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-globals: arguments keywords: keywords
+globals
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -790,7 +783,13 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-hasattr: arguments keywords: keywords
+globals: arguments
+
+	^self globals
+%
+category: 'functions'
+method: Builtins
+hasattr: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -805,7 +804,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-hash: arguments keywords: keywords
+hash: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -823,7 +822,7 @@ See __hash__() for details.
 %
 category: 'functions'
 method: Builtins
-help: arguments keywords: keywords
+help: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -850,7 +849,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-hex: arguments keywords: keywords
+hex: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -884,7 +883,7 @@ Note To obtain a hexadecimal string representation
 %
 category: 'functions'
 method: Builtins
-id: arguments keywords: keywords
+id: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -899,7 +898,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-input: arguments keywords: keywords
+input: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -924,12 +923,12 @@ If the readline module was loaded, then input() will use it to provide
 	result := UserInteraction new prompt: prompt.
 	result ifNil: [CancelNotification signal].
 	result := result decodeToString.
-	self print: (Array with: arguments first with: (Py_String withAll: result)) keywords: keywords.
+	self print: (Array with: arguments first with: (Py_String withAll: result)).
 	^Py_String withAll: result
 %
 category: 'functions'
 method: Builtins
-int: arguments keywords: keywords
+int: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -989,7 +988,7 @@ Changed in version 3.7: x is now a positional-only parameter.
 %
 category: 'functions'
 method: Builtins
-isinstance: arguments keywords: keywords
+isinstance: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1006,7 +1005,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-issubclass: arguments keywords: keywords
+issubclass: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1020,7 +1019,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-iter: arguments keywords: keywords
+iter: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1052,7 +1051,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-len: arguments keywords: keywords
+len: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1069,7 +1068,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-list: arguments keywords: keywords
+list: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1082,7 +1081,7 @@ Sequence Types — list, tuple, range.
 %
 category: 'functions'
 method: Builtins
-locals: arguments keywords: keywords
+locals
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1100,7 +1099,13 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-map: arguments keywords: keywords
+locals: arguments
+
+	^self locals
+%
+category: 'functions'
+method: Builtins
+map: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1155,7 +1160,7 @@ arguments size == 1 ifTrue: [
 %
 category: 'functions'
 method: Builtins
-memoryview: arguments keywords: keywords
+memoryview: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1207,7 +1212,7 @@ arguments size == 1 ifTrue: [
 %
 category: 'functions'
 method: Builtins
-next: arguments keywords: keywords
+next: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1220,7 +1225,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-object: arguments keywords: keywords
+object: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1236,7 +1241,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-oct: arguments keywords: keywords
+oct: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1264,7 +1269,7 @@ See also format() for more information.
 %
 category: 'functions'
 method: Builtins
-open: arguments keywords: keywords
+open: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1274,7 +1279,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-ord: arguments keywords: keywords
+ord: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1289,7 +1294,7 @@ This is the inverse of chr().
 %
 category: 'functions'
 method: Builtins
-pow: arguments keywords: keywords
+pow: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "	pow(x, y[, z])
@@ -1318,25 +1323,27 @@ method: Builtins
 print: arguments keywords: keywords
 	"https://docs.python.org/3/library/functions.html#print"
 
-	| separator stream terminator |
-	separator := keywords at: 'sep' ifAbsent: [' '].
-	terminator := keywords at: 'end' ifAbsent: [Character lf asString].
+	| separator1 separator2 stream terminator |
+	separator1 := keywords at: #'sep' ifAbsent: [' '].
+	terminator := keywords at: #'end' ifAbsent: [Character lf asString].
 	"We should default to stdout, but Transcript is easier (and more useful) for now"
-	stream := keywords at: 'file' ifAbsent: [Transcript].
+	stream := keywords at: #'file' ifAbsent: [stdout ifNil: [Transcript]].
+	separator2 := ''.
 	arguments do: [:each | 
 		| string |
 		"https://docs.python.org/3/library/stdtypes.html#str"
-		string := (each isKindOf: Py_String) 
-			ifTrue: [String withAll: each]
+		string := (each isKindOf: String) 
+			ifTrue: [each]
 			ifFalse: [each printString].
-		stream nextPutAll: string; nextPutAll: separator.
+		stream nextPutAll: separator2; nextPutAll: string.
+		separator2 := separator1.
 	].
 	stream nextPutAll: terminator.
-	(keywords at: 'flush' ifAbsent: [false]) ifTrue: [stream flush].
+	(keywords at: #'flush' ifAbsent: [false]) ifTrue: [stream flush].
 %
 category: 'functions'
 method: Builtins
-property: arguments keywords: keywords
+property: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1346,7 +1353,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-range: arguments keywords: keywords
+range: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1362,7 +1369,7 @@ arguments size == 2 ifTrue: [^Interval from: arguments first to: arguments secon
 %
 category: 'functions'
 method: Builtins
-repr: arguments keywords: keywords
+repr: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1379,7 +1386,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-reversed: arguments keywords: keywords
+reversed: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1394,7 +1401,7 @@ integer arguments starting at 0).
 %
 category: 'functions'
 method: Builtins
-round: arguments keywords: keywords
+round: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1422,7 +1429,7 @@ See Floating Point Arithmetic: Issues and Limitations for more information.
 %
 category: 'functions'
 method: Builtins
-set: arguments keywords: keywords
+set: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1437,7 +1444,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-setattr: arguments keywords: keywords
+setattr: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1452,7 +1459,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-slice: arguments keywords: keywords
+slice: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1472,7 +1479,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-staticmethod: arguments keywords: keywords
+staticmethod: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1508,7 +1515,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-str: arguments keywords: keywords
+str: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1523,7 +1530,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-sum: arguments keywords: keywords
+sum: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1543,7 +1550,7 @@ To concatenate a series of iterables, consider using itertools.chain().
 %
 category: 'functions'
 method: Builtins
-super: arguments keywords: keywords
+super: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1605,7 +1612,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-tuple: arguments keywords: keywords
+tuple: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1617,7 +1624,7 @@ as documented in Tuples and Sequence Types — list, tuple, range.
 %
 category: 'functions'
 method: Builtins
-type: arguments keywords: keywords
+type: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1651,7 +1658,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-vars: arguments keywords: keywords
+vars: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1672,7 +1679,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-zip: arguments keywords: keywords
+zip: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1731,34 +1738,29 @@ __import__: name _: globals _: locals _: fromList _: level
 %
 category: 'other'
 method: Builtins
-call: aPyCall
+associationAt: aSymbol
 
-	| arguments keywords selector |
-	selector := (aPyCall functionName , ':keywords:') asSymbol.
-	arguments := aPyCall arguments collect: [:each | each evaluate].
-	keywords := Dictionary new.
-	aPyCall keywords do: [:each | 
-		keywords at: each name put: each value evaluate.
-	].
-	^self perform: selector with: arguments with: keywords.
+	^dictionary 
+		associationAt: aSymbol
+		ifAbsent: [nil]
 %
 category: 'other'
 method: Builtins
-variableAt: aName
-	
-	| selector |
-	aName assertContextIsLoad.
-	selector := (aName id , ':keywords:') asSymbol.
-	^[:arguments :keywords | self perform: selector with: arguments with: keywords]
+initialize
+"
+	SessionTemps current removeKey: #'Python_Builtins' ifAbsent: [].
+"
+	dictionary := SymbolDictionary new
+		at: #'None' 	put: nil;
+		at: #'True'		put: true;
+		at: #'False'		put: false;
+		at: #'abs'		put: [:arguments :keywords | self abs: arguments first];
+		at: #'print'		put: [:arguments :keywords | self print: arguments keywords: keywords];
+		yourself.
+%
+category: 'other'
+method: Builtins
+stdout: aStream
 
-"
-	| arguments keywords selector |
-	selector := (aPyCall functionName , ':keywords:') asSymbol.
-	arguments := aPyCall arguments collect: [:each | each evaluate].
-	keywords := Dictionary new.
-	aPyCall keywords do: [:each | 
-		keywords at: each name put: each value evaluate.
-	].
-	^self perform: selector with: arguments with: keywords.
-"
+	stdout := aStream.
 %

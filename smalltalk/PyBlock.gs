@@ -14,9 +14,11 @@ associationAt: aSymbol
 	^variables 
 		associationAt: aSymbol
 		ifAbsent: [ | assoc |
-			assoc := SymbolAssociation newWithKey: aSymbol value: _remoteNil.
-			variables addAssociation: assoc.
-			assoc]
+			assoc := self nonlocalAssociationAt: aSymbol.
+			assoc ifNil: [
+				assoc := SymbolAssociation newWithKey: aSymbol value: _remoteNil.
+				variables addAssociation: assoc.
+				assoc]]
 %
 category: 'other'
 method: PyBlock
@@ -24,4 +26,10 @@ initialize
 
 	variables := SymbolDictionary new.
 	super initialize.
+%
+category: 'other'
+method: PyBlock
+nonlocalAssociationAt: aSymbol
+
+	self subclassResponsibility.
 %
