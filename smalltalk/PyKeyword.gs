@@ -24,7 +24,7 @@ initialize
 	next := stream next: 8.
 	next ~= 'keyword(' ifTrue: [self error.].
 	(stream peekFor: $') ifFalse: [self error].
-	arg := stream upTo: $'.
+	arg := (stream upTo: $') asSymbol.
 	self commaSpace.
 	value := self expression.
 	(stream peekFor: $)) ifFalse: [self error].

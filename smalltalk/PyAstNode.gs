@@ -193,15 +193,15 @@ string
 set compile_env: 0
 category: 'other'
 method: PyAstNode
-associationAt: aName 
+associationAt: aSymbol 
 
-	^parent associationAt: aName
+	^parent associationAt: aSymbol
 %
 category: 'other'
 method: PyAstNode
 children
 
-	^IdentitySet new
+	^Array new
 %
 category: 'other'
 method: PyAstNode

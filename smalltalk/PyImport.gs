@@ -23,23 +23,8 @@ children
 category: 'other'
 method: PyImport
 evaluate
-	(names size == 1 and: [names first name = 'random']) ifTrue: [
-		parent variableAt: names first put: PyRandom new.
-		^self
-	].
-	self halt.
-"
-	names do: [:each |
-		| module |
-		module := Builtins current
-			__import__: each name
-			_: self globals
-			_: self locals
-			_: #()
-			_: 0.
-		module halt.
-	].
-"
+
+	names do: [:each | each evaluate].
 %
 category: 'other'
 method: PyImport

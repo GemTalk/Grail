@@ -38,7 +38,7 @@ initialize
 	self commaSpace.
 	keywords := self collectAst: [PyKeyword parent: self].
 	dict := SymbolDictionary new.
-	keywords do: [:each | dict at: each name asSymbol put: each value].
+	keywords do: [:each | dict at: each name put: each value].
 	keywords := dict.
 	self readPosition.
 %

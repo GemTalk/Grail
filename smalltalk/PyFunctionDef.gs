@@ -31,7 +31,7 @@ evaluate
 	We call super because we want to store the function definition in the parent's scope.
 	Our scope is used to hold local variables."
 
-	 (assoc := super associationAt: name asSymbol) value: self.
+	 (assoc := super associationAt: name) value: self.
 %
 category: 'other'
 method: PyFunctionDef
@@ -41,7 +41,7 @@ initialize
 	| stream |
 	stream := self stream.
 	(stream peekFor: $') ifFalse: [self error].
-	name := stream upTo: $'.
+	name := (stream upTo: $') asSymbol.
 	self commaSpace.
 	args := PyArguments parent: self.
 	self commaSpace.

@@ -47,6 +47,12 @@ children
 %
 category: 'other'
 method: PyAttribute
+evaluate
+
+	^(value associationAt: attr) value
+%
+category: 'other'
+method: PyAttribute
 id
 	^attr
 %
@@ -59,7 +65,7 @@ initialize
 	stream := self stream.
 	value := self expression.
 	self commaSpace.
-	attr := self string.
+	attr := self string asSymbol.
 	self commaSpace.
 	ctx := PyExpressionContext parent: self.
 	self readPosition.
@@ -67,5 +73,6 @@ initialize
 category: 'other'
 method: PyAttribute
 saveVariableAssociation
-	"Not really a variable"
+	"This is the attribute of an object, but the object isn't known till runtime 
+	(since value is an expression), so we can't really bind to it now."
 %

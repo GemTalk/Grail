@@ -128,14 +128,14 @@ testClassAttributeAssignment
 		assert: (y.value isKindOf: PyName);
 		assert: y.value.assoc.key == #'inst';
 		assert: (y.value.ctx isKindOf: PyLoad);
-		assert: (y.attr = 'x');
+		assert: (y.attr == #'x');
 		assert: (y.ctx isKindOf: PyStore);
 		assert: (x.value isKindOf: PyBinOp);
 		assert: (x.value.left isKindOf: PyAttribute);
 		assert: (x.value.left.value isKindOf: PyName);
 		assert: (x.value.left.value.assoc.key == #'inst');
 		assert: (x.value.left.value.ctx isKindOf: PyLoad);
-		assert: (x.value.left.attr = 'x');
+		assert: (x.value.left.attr == #'x');
 		assert: (x.value.left.ctx isKindOf: PyLoad);
 		yourself.
 %
@@ -253,8 +253,8 @@ testImport
 		assert: (x isKindOf: PyImport);
 		assert: (x.names size == 1);
 		assert: ((y := x.names at: 1) isKindOf: PyAlias);
-		assert: (y.name = 'foo');
-		assert: (y.asName isNone);
+		assert: (y.name == #'foo');
+		assert: (y.asName isNil);
 		yourself.
 %
 category: 'other'
@@ -268,8 +268,8 @@ testImportFrom
 		assert: (x.module = 'foo');
 		assert: (x.names size == 1);
 		assert: ((y := x.names at: 1) isKindOf: PyAlias);
-		assert: (y.name = 'attr');
-		assert: (y.asName isNone);
+		assert: (y.name == #'attr');
+		assert: (y.asName isNil);
 		assert: (x.level = 0);
 		yourself.
 %
@@ -325,10 +325,10 @@ testPassFunction
 	x := self statementsAt: 11.
 	self 
 		assert: (x isKindOf: PyFunctionDef);
-		assert: (x.name = 'f');
+		assert: (x.name == #'f');
 		assert: (x.args isKindOf: PyArguments);
 		assert: ((y := x.args.args at: 1) isKindOf: PyArg);
-		assert: (y.arg = 'arg');
+		assert: (y.arg == #'arg');
 		assert: (y.annotation isNone);
 		assert: (x.args.vararg isNone);
 		assert: (x.args.kwonlyargs size == 0);
@@ -390,7 +390,7 @@ testReturnNone
 	x := self statementsAt: 15.
 	self 
 		assert: (x isKindOf: PyFunctionDef);
-		assert: (x.name = 'a');
+		assert: (x.name == #'a');
 		assert: (x.args isKindOf: PyArguments);
 		assert: (x.args.args size == 0);
 		assert: (x.args.vararg isNone);
@@ -413,7 +413,7 @@ testReturnTrue
 	x := self statementsAt: 16.
 	self 
 		assert: (x isKindOf: PyFunctionDef);
-		assert: (x.name = 'b');
+		assert: (x.name == #'b');
 		assert: (x.args isKindOf: PyArguments);
 		assert: (x.args.args size == 0);
 		assert: (x.args.vararg isNone);
@@ -467,7 +467,7 @@ testYield
 	x := self statementsAt: 17.
 	self 
 		assert: (x isKindOf: PyFunctionDef);
-		assert: (x.name = 'gen');
+		assert: (x.name == #'gen');
 		assert: (x.args isKindOf: PyArguments);
 		assert: (x.args.args size == 0);
 		assert: (x.args.vararg isNone);

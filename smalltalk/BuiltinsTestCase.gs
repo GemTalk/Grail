@@ -16,7 +16,7 @@ filename
 set compile_env: 0
 category: 'other'
 method: BuiltinsTestCase
-testAbs
+test_abs
 
 	| x |
 	x := (self statementsAt: 1) evaluate.			"abs(-1)"
@@ -24,7 +24,7 @@ testAbs
 %
 category: 'other'
 method: BuiltinsTestCase
-testPrint
+test_print
 
 	(self statementsAt: 2) evaluate.			"print('hello', 'world', sep = ',')"
 	self assert: stdout contents = ('hello,world' , Character lf asString).

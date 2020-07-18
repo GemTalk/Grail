@@ -34,7 +34,7 @@ initialize
 	| stream |
 	stream := self stream.
 	(stream peekFor: $') ifFalse: [self error].
-	arg := stream upTo: $'.
+	arg := (stream upTo: $') asSymbol.
 	self commaSpace.
 	annotation := self optionalExpression.
 	self readPosition.
@@ -44,7 +44,7 @@ method: PyArg
 initialize2
 
 	super initialize2.
-	assoc := self associationAt: arg asSymbol.
+	assoc := self associationAt: arg.
 %
 category: 'other'
 method: PyArg

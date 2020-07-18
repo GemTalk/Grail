@@ -6,87 +6,15 @@ Builtins class removeAllMethods.
 %
 ! ------------------- Class methods for Builtins
 set compile_env: 0
-category: 'other'
-classmethod: Builtins
-current
-"
-	SessionTemps current removeKey: #'Python_Builtins' ifAbsent: [].
-"
-
-	^SessionTemps current
-		at: #'Python_Builtins'
-		ifAbsentPut: [self new].
-%
-category: 'other'
-classmethod: Builtins
-new
-
-	^self basicNew
-		initialize;
-		yourself
-%
 ! ------------------- Instance methods for Builtins
 set compile_env: 0
 category: 'functions'
 method: Builtins
-__import__: arguments
+__import__: name keywords: keywords
 	"https://docs.python.org/3/library/functions.html"
-	
-"
-__import__(name, globals=None, locals=None, fromlist=(), level=0)
-Note This is an advanced function that is not needed in everyday 
-Python programming, unlike importlib.import_module().
-This function is invoked by the import statement. It can be replaced
- (by importing the builtins module and assigning to builtins.__import__) 
-in order to change semantics of the import statement, but doing so is 
-strongly discouraged as it is usually simpler to use import hooks (see PEP 302)
- to attain the same goals and does not cause issues with code which assumes 
-the default import implementation is in use. Direct use of __import__() is 
-also discouraged in favor of importlib.import_module().
 
-The function imports the module name, potentially using the given globals
- and locals to determine how to interpret the name in a package context.
- The fromlist gives the names of objects or submodules that should be
- imported from the module given by name. The standard implementation
- does not use its locals argument at all, and uses its globals only to determine
-\ the package context of the import statement.
-
-level specifies whether to use absolute or relative imports. 0 (the default) 
-means only perform absolute imports. Positive values for level indicate the 
-number of parent directories to search relative to the directory of the module 
-calling __import__() (see PEP 328 for the details).
-
-
-When the name variable is of the form package.module, normally, the top
--level package (the name up till the first dot) is returned, not the module 
-named by name. However, when a non-empty fromlist argument is given,
- the module named by name is returned.
-
-For example, the statement import spam results in bytecode resembling 
-the following code:
-
-spam = __import__('spam', globals(), locals(), [], 0)
-The statement import spam.ham results in this call:
-
-spam = __import__('spam.ham', globals(), locals(), [], 0)
-Note how __import__() returns the toplevel module here because 
-this is the object that is bound to a name by the import statement.
-
-On the other hand, the statement from spam.ham import eggs, sausage as saus results in
-
-_temp = __import__('spam.ham', globals(), locals(), ['eggs', 'sausage'], 0)
-eggs = _temp.eggs
-saus = _temp.sausage
-Here, the spam.ham module is returned from __import__(). From this 
-object, the names to import are retrieved and assigned to their respective names.
-
-If you simply want to import a module (potentially within a package) 
-by name, use importlib.import_module().
-
-Changed in version 3.3: Negative values for level are no longer 
-supported (which also changes the default value to 0).
-"
-self halt.
+	name = #'sys' ifTrue: [^Sys current].
+	self halt.
 %
 category: 'functions'
 method: Builtins
@@ -1731,31 +1659,18 @@ self halt.
 set compile_env: 0
 category: 'other'
 method: Builtins
-__import__: name _: globals _: locals _: fromList _: level
-	"(name, globals=None, locals=None, fromlist=(), level=0)"
-
-	self halt.
-%
-category: 'other'
-method: Builtins
-associationAt: aSymbol
-
-	^dictionary 
-		associationAt: aSymbol
-		ifAbsent: [nil]
-%
-category: 'other'
-method: Builtins
 initialize
 "
 	SessionTemps current removeKey: #'Python_Builtins' ifAbsent: [].
 "
-	dictionary := SymbolDictionary new
-		at: #'None' 	put: nil;
-		at: #'True'		put: true;
-		at: #'False'		put: false;
-		at: #'abs'		put: [:arguments :keywords | self abs: arguments first];
-		at: #'print'		put: [:arguments :keywords | self print: arguments keywords: keywords];
+	super initialize.
+	dictionary 
+		at: #'None' 			put: nil;
+		at: #'True'				put: true;
+		at: #'False'				put: false;
+		at: #'__import__'		put: [:arguments :keywords | self __import__: arguments first keywords: keywords];
+		at: #'abs'				put: [:arguments :keywords | self abs: arguments first];
+		at: #'print'				put: [:arguments :keywords | self print: arguments keywords: keywords];
 		yourself.
 %
 category: 'other'

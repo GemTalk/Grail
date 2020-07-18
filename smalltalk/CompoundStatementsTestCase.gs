@@ -62,7 +62,7 @@ testCoroutine
 		assert: ((arguments := x.args) isKindOf: PyArguments);
 		assert: (arguments.args size == 1);
 		assert: ((arg := arguments.args at: 1) isKindOf: PyArg);
-		assert: (arg.arg = 'arg');
+		assert: (arg.arg == #'arg');
 		assert: (arg.annotation isNone);
 		assert: (arguments.vararg isNone);
 		assert: (arguments.kwonlyargs size == 0);
@@ -87,7 +87,7 @@ testCoroutineFor
 		assert: ((arguments := x.args) isKindOf: PyArguments);
 		assert: (arguments.args size == 1);
 		assert: ((arg := arguments.args at: 1) isKindOf: PyArg);
-		assert: (arg.arg = 'arg');
+		assert: (arg.arg == #'arg');
 		assert: (arg.annotation isNone);
 		assert: (arguments.vararg isNone);
 		assert: (arguments.kwonlyargs size == 0);
@@ -126,7 +126,7 @@ testCoroutineWith
 		assert: ((arguments := x.args) isKindOf: PyArguments);
 		assert: (arguments.args size == 1);
 		assert: ((arg := arguments.args at: 1) isKindOf: PyArg);
-		assert: (arg.arg = 'arg');
+		assert: (arg.arg == #'arg');
 		assert: (arg.annotation isNone);
 		assert: (arguments.vararg isNone);
 		assert: (arguments.kwonlyargs size == 0);
@@ -222,11 +222,11 @@ testFunctionWithOneArgument
 	x := self statementsAt: 10.
 	self 
 		assert: (x isKindOf: PyFunctionDef);
-		assert: (x.name = 'func');
+		assert: (x.name == #'func');
 		assert: ((arguments := x.args) isKindOf: PyArguments);
 		assert: (arguments.args size == 1);
 		assert: ((arg := arguments.args at: 1) isKindOf: PyArg);
-		assert: (arg.arg = 'arg');
+		assert: (arg.arg == #'arg');
 		assert: (arg.annotation isNone);
 		assert: (arguments.vararg isNone); 
 		assert: (arguments.kwonlyargs size == 0); 
@@ -247,11 +247,11 @@ testFunctionWithOneDecorator
 	x := self statementsAt: 11.
 	self 
 		assert: (x isKindOf: PyFunctionDef);
-		assert: (x.name = 'decoratedFunc');
+		assert: (x.name == #'decoratedFunc');
 		assert: ((arguments := x.args) isKindOf: PyArguments);
 		assert: (arguments.args size == 1);
 		assert: ((arg := arguments.args at: 1) isKindOf: PyArg);
-		assert: (arg.arg = 'arg');
+		assert: (arg.arg == #'arg');
 		assert: (arg.annotation isNone);
 		assert: (arguments.vararg isNone); 
 		assert: (arguments.kwonlyargs size == 0); 
@@ -275,11 +275,11 @@ testFunctionWithOneDefaultValueParameter
 	x := self statementsAt: 12.
 	self 
 		assert: (x isKindOf: PyFunctionDef);
-		assert: (x.name = 'defaultParameterValueFunc');
+		assert: (x.name == #'defaultParameterValueFunc');
 		assert: ((arguments := x.args) isKindOf: PyArguments);
 		assert: (arguments.args size == 1);
 		assert: ((arg := arguments.args at: 1) isKindOf: PyArg);
-		assert: (arg.arg = 'arg');
+		assert: (arg.arg == #'arg');
 		assert: (arg.annotation isNone);
 		assert: (arguments.vararg isNone); 
 		assert: (arguments.kwonlyargs size == 0); 
@@ -337,11 +337,11 @@ testNestedFunction
 	x := self statementsAt: 13.
 	self 
 		assert: (x isKindOf: PyFunctionDef);
-		assert: (x.name = 'nestedFunc');
+		assert: (x.name == #'nestedFunc');
 		assert: ((arguments := x.args) isKindOf: PyArguments);
 		assert: (arguments.args size == 1);
 		assert: ((arg := arguments.args at: 1) isKindOf: PyArg);
-		assert: (arg.arg = 'arg');
+		assert: (arg.arg == #'arg');
 		assert: (arg.annotation isNone);
 		assert: (arguments.vararg isNone); 
 		assert: (arguments.kwonlyargs size == 0); 
@@ -350,11 +350,11 @@ testNestedFunction
 		assert: (arguments.defaults size == 0);
 		assert: (x.body.body size == 2); 
 		assert: ((functionDef := x.body.body at: 1) isKindOf: PyFunctionDef); 
-		assert: (functionDef.name = 'insideFunc'); 
+		assert: (functionDef.name == #'insideFunc'); 
 		assert: ((insideArguments := functionDef.args) isKindOf: PyArguments); 
 		assert: (insideArguments.args size == 1);
 		assert: ((insideArg := insideArguments.args at: 1) isKindOf: PyArg);
-		assert: (insideArg.arg = 'insideArg');
+		assert: (insideArg.arg == #'insideArg');
 		assert: (insideArg.annotation isNone);
 		assert: (insideArguments.vararg isNone); 
 		assert: (insideArguments.kwonlyargs size == 0); 

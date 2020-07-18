@@ -28,6 +28,12 @@ assign: aValue
 %
 category: 'other'
 method: PyName
+associationAt: aSymbol
+
+	^assoc value associationAt: aSymbol
+%
+category: 'other'
+method: PyName
 children
 
 	^super children
@@ -48,7 +54,7 @@ initialize
 	"Name(identifier id, expr_context ctx)"
 
 	self stream peekFor: $(.
-	id := self string.
+	id := self string asSymbol.
 	self commaSpace.
 	ctx := PyExpressionContext parent: self.
 	self readPosition.
@@ -68,5 +74,5 @@ category: 'other'
 method: PyName
 saveVariableAssociation
 
-	assoc := self associationAt: id asSymbol.
+	assoc := parent associationAt: id.
 %

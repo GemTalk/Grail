@@ -62,11 +62,28 @@ doit
 ContinueNotification category: 'Builtins'
 %
 set compile_env: 0
+! ------------------- Class definition for BuiltinModules
+expectvalue /Class
+doit
+Object subclass: 'BuiltinModules'
+  instVarNames: #( dictionary)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+BuiltinModules category: 'Builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for Builtins
 expectvalue /Class
 doit
-Object subclass: 'Builtins'
-  instVarNames: #( dictionary stdout)
+BuiltinModules subclass: 'Builtins'
+  instVarNames: #( stdout)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -85,6 +102,23 @@ Object
 expectvalue /Class
 doit
 Builtins category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for Sys
+expectvalue /Class
+doit
+BuiltinModules subclass: 'Sys'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+Sys category: 'Builtins'
 %
 set compile_env: 0
 ! ------------------- Class definition for Py_List
@@ -192,7 +226,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 PyAstNode subclass: 'PyAlias'
-  instVarNames: #( name asName)
+  instVarNames: #( assoc name asName)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -3655,6 +3689,23 @@ doit
 StringLiteralsTestCase category: 'Tests'
 %
 set compile_env: 0
+! ------------------- Class definition for SysTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'SysTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+SysTestCase category: 'Tests'
+%
+set compile_env: 0
 ! ------------------- Class definition for VariableTestCase
 expectvalue /Class
 doit
@@ -3728,6 +3779,7 @@ UserInteraction category: 'Builtins'
 %
 
 input BreakNotification.gs
+input BuiltinModules.gs
 input Builtins.gs
 input BuiltinsTestCase.gs
 input ByteLiteralsTestCase.gs
@@ -3865,5 +3917,7 @@ input PyYield.gs
 input PyYieldFrom.gs
 input SimpleStatementsTestCase.gs
 input StringLiteralsTestCase.gs
+input Sys.gs
+input SysTestCase.gs
 input UserInteraction.gs
 input VariableTestCase.gs
