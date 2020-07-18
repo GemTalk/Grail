@@ -62,10 +62,10 @@ doit
 ContinueNotification category: 'Builtins'
 %
 set compile_env: 0
-! ------------------- Class definition for BuiltinModules
+! ------------------- Class definition for BuiltinModule
 expectvalue /Class
 doit
-Object subclass: 'BuiltinModules'
+Object subclass: 'BuiltinModule'
   instVarNames: #( dictionary)
   classVars: #()
   classInstVars: #()
@@ -76,13 +76,13 @@ Object subclass: 'BuiltinModules'
 %
 expectvalue /Class
 doit
-BuiltinModules category: 'Builtins'
+BuiltinModule category: 'Builtins'
 %
 set compile_env: 0
 ! ------------------- Class definition for Builtins
 expectvalue /Class
 doit
-BuiltinModules subclass: 'Builtins'
+BuiltinModule subclass: 'Builtins'
   instVarNames: #( stdout)
   classVars: #()
   classInstVars: #()
@@ -107,7 +107,7 @@ set compile_env: 0
 ! ------------------- Class definition for Sys
 expectvalue /Class
 doit
-BuiltinModules subclass: 'Sys'
+BuiltinModule subclass: 'Sys'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -119,6 +119,23 @@ BuiltinModules subclass: 'Sys'
 expectvalue /Class
 doit
 Sys category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for Time
+expectvalue /Class
+doit
+BuiltinModule subclass: 'Time'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+Time category: 'Builtins'
 %
 set compile_env: 0
 ! ------------------- Class definition for Py_List
@@ -3414,7 +3431,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 TestCase subclass: 'PythonTestCase'
-  instVarNames: #( statements stdout)
+  instVarNames: #( module stdout)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -3703,7 +3720,46 @@ PythonTestCase subclass: 'SysTestCase'
 %
 expectvalue /Class
 doit
+SysTestCase comment: 
+'No class-specific documentation for SysTestCase, hierarchy is: 
+Object
+  TestAsserter
+    TestCase( testSelector)
+      PythonTestCase( statements stdout)
+        SysTestCase
+'
+%
+expectvalue /Class
+doit
 SysTestCase category: 'Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for TimeTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'TimeTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+TimeTestCase comment: 
+'No class-specific documentation for TimeTestCase, hierarchy is: 
+Object
+  TestAsserter
+    TestCase( testSelector)
+      PythonTestCase( statements stdout)
+        TimeTestCase
+'
+%
+expectvalue /Class
+doit
+TimeTestCase category: 'Tests'
 %
 set compile_env: 0
 ! ------------------- Class definition for VariableTestCase
@@ -3738,7 +3794,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 TestResource subclass: 'PythonTestResource'
-  instVarNames: #( path statements)
+  instVarNames: #( path module statements)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -3779,7 +3835,7 @@ UserInteraction category: 'Builtins'
 %
 
 input BreakNotification.gs
-input BuiltinModules.gs
+input BuiltinModule.gs
 input Builtins.gs
 input BuiltinsTestCase.gs
 input ByteLiteralsTestCase.gs
@@ -3919,5 +3975,7 @@ input SimpleStatementsTestCase.gs
 input StringLiteralsTestCase.gs
 input Sys.gs
 input SysTestCase.gs
+input Time.gs
+input TimeTestCase.gs
 input UserInteraction.gs
 input VariableTestCase.gs

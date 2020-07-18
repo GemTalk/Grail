@@ -20,6 +20,7 @@ test_byteorder
 
 	| x |
 	x := (self statementsAt: 1) evaluate.			"import sys"
-	x := (self statementsAt: 2) evaluate.			"sys.byteorder"
+	x := (self statementsAt: 2) evaluate.			"s = sys"
+	x := (self statementsAt: 3) evaluate.			"s.byteorder"
 	self assert: x = 'little'.
 %

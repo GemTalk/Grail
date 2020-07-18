@@ -2,4 +2,5 @@
 # https://docs.python.org/3/library/sys.html
 
 import sys      # 1
-sys.byteorder   # 2
+s = sys         # 2
+s.byteorder     # 3

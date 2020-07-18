@@ -9,12 +9,10 @@ PythonTestResource class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PythonTestResource
-statementsForModuleAtPath: aPath
+moduleAtPath: aPath
 
-	| module |
-	(path = aPath and: [statements notNil]) ifTrue: [^statements].
+	(path = aPath and: [module notNil]) ifTrue: [^module].
 	path := aPath.
-	module := PyModule script:  aPath.
-	statements := module.body.
-	^statements
+	module := PyModule script: aPath.
+	^module
 %

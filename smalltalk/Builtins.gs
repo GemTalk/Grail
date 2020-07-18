@@ -13,7 +13,8 @@ method: Builtins
 __import__: name keywords: keywords
 	"https://docs.python.org/3/library/functions.html"
 
-	name = #'sys' ifTrue: [^Sys current].
+	name == #'sys' 	ifTrue: [^Sys current].
+	name == #'time'	ifTrue: [^Time current].
 	self halt.
 %
 category: 'functions'
