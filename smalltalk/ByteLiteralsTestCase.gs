@@ -21,13 +21,13 @@ testBackspace
 	| x |
 	x := self statementsAt: 16.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		assert: x.line == 36;
 		assert: x.column == 0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PyBytes);
+		assert: (x isKindOf: BytesAst);
 		assert: x.line == 36;
 		assert: x.column == 0;
 		yourself.
@@ -42,13 +42,13 @@ testBell
 	| x |
 	x := self statementsAt: 15.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		assert: x.line == 35;
 		assert: x.column == 0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PyBytes);
+		assert: (x isKindOf: BytesAst);
 		assert: x.line == 35;
 		assert: x.column == 0;
 		yourself.
@@ -63,13 +63,13 @@ testHexHigh
 	| x |
 	x := self statementsAt: 20.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		assert: x.line == 44;
 		assert: x.column == 0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PyBytes);
+		assert: (x isKindOf: BytesAst);
 		assert: x.line == 44;
 		assert: x.column == 0;
 		yourself.
@@ -84,13 +84,13 @@ testHexLow
 	| x |
 	x := self statementsAt: 19.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		assert: x.line == 43;
 		assert: x.column == 0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PyBytes);
+		assert: (x isKindOf: BytesAst);
 		assert: x.line == 43;
 		assert: x.column == 0;
 		yourself.
@@ -105,13 +105,13 @@ testNewline
 	| x |
 	x := self statementsAt: 13.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		assert: x.line == 31;
 		assert: x.column == 0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PyBytes);
+		assert: (x isKindOf: BytesAst);
 		assert: x.line == 31;
 		assert: x.column == 0;
 		yourself.
@@ -127,13 +127,13 @@ testOctalHigh
 	| x |
 	x := self statementsAt: 18.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		assert: x.line == 40;
 		assert: x.column == 0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PyBytes);
+		assert: (x isKindOf: BytesAst);
 		assert: x.line == 40;
 		assert: x.column == 0;
 		yourself.
@@ -148,13 +148,13 @@ testOctalLow
 	| x |
 	x := self statementsAt: 17.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		assert: x.line == 39;
 		assert: x.column == 0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PyBytes);
+		assert: (x isKindOf: BytesAst);
 		assert: x.line == 39;
 		assert: x.column == 0;
 		yourself.
@@ -169,13 +169,13 @@ testSlash
 	| x |
 	x := self statementsAt: 14.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		assert: x.line == 32;
 		assert: x.column == 0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PyBytes);
+		assert: (x isKindOf: BytesAst);
 		assert: x.line == 32;
 		assert: x.column == 0;
 		yourself.

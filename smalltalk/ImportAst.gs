@@ -1,0 +1,37 @@
+﻿! ------------------- Remove existing behavior from ImportAst
+expectvalue /Metaclass3       
+doit
+ImportAst removeAllMethods.
+ImportAst class removeAllMethods.
+%
+! ------------------- Class methods for ImportAst
+! ------------------- Instance methods for ImportAst
+set compile_env: 0
+category: 'other'
+method: ImportAst
+_names
+	^ names
+%
+category: 'other'
+method: ImportAst
+children
+
+	^super children
+		addAll: names;
+		yourself
+%
+category: 'other'
+method: ImportAst
+evaluate
+	"each name is an instance of PyAlias and that is where the import occurs"
+
+	names do: [:each | each import].
+%
+category: 'other'
+method: ImportAst
+initialize
+	"Import(alias* names)"
+
+	names := self collectAst: [self alias].
+	self readPosition.
+%

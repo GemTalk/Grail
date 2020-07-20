@@ -10,7 +10,7 @@ category: 'other'
 classmethod: PythonTestCase
 ast
 
-	^PyModule astForPath: '$HOME/code/Python/GemStoneP/tests/' , self filename
+	^ModuleAst astForPath: '$HOME/code/Python/GemStoneP/tests/' , self filename
 %
 category: 'other'
 classmethod: PythonTestCase

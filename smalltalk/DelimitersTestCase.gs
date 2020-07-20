@@ -21,20 +21,20 @@ testCommaList
 	| x y |
 	x := self statementsAt: 3.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PyList);
-		assert: (x.ctx isKindOf: PyLoad);
+		assert: (x isKindOf: ListAst);
+		assert: (x.ctx isKindOf: LoadAst);
 		assert: (x.elts size == 3);
-		assert: ((x.elts at: 1) isKindOf: PyNum);
+		assert: ((x.elts at: 1) isKindOf: NumAst);
 		assert: (y := x.elts at: 1) notNil;
 		assert: y.n == 1;
-		assert: ((x.elts at: 2) isKindOf: PyNum);
+		assert: ((x.elts at: 2) isKindOf: NumAst);
 		assert: (y := x.elts at: 2) notNil;
 		assert: y.n == 2;
-		assert: ((x.elts at: 3) isKindOf: PyNum);
+		assert: ((x.elts at: 3) isKindOf: NumAst);
 		assert: (y := x.elts at: 3) notNil;
 		assert: y.n == 3;
 		yourself.
@@ -46,20 +46,20 @@ testCommaTuple
 	| x y |
 	x := self statementsAt: 4.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PyTuple);
-		assert: (x.ctx isKindOf: PyLoad);
+		assert: (x isKindOf: TupleAst);
+		assert: (x.ctx isKindOf: LoadAst);
 		assert: (x.elts size == 3);
-		assert: ((x.elts at: 1) isKindOf: PyNum);
+		assert: ((x.elts at: 1) isKindOf: NumAst);
 		assert: (y := x.elts at: 1) notNil;
 		assert: y.n == 4;
-		assert: ((x.elts at: 2) isKindOf: PyNum);
+		assert: ((x.elts at: 2) isKindOf: NumAst);
 		assert: (y := x.elts at: 2) notNil;
 		assert: y.n == 5;
-		assert: ((x.elts at: 3) isKindOf: PyNum);
+		assert: ((x.elts at: 3) isKindOf: NumAst);
 		assert: (y := x.elts at: 3) notNil;
 		assert: y.n == 6;
 		yourself.
@@ -71,19 +71,19 @@ testParethesesLeft
 	| x |
 	x := self statementsAt: 1.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PyBinOp);
-		assert: (x.op isKindOf: PyAdd);
-		assert: (x.left isKindOf: PyBinOp);
-		assert: (x.left.left isKindOf: PyNum);
+		assert: (x isKindOf:BinOpAst);
+		assert: (x.op isKindOf: AddAst);
+		assert: (x.left isKindOf: BinOpAst);
+		assert: (x.left.left isKindOf: NumAst);
 		assert: (x.left.left.n == 1);
-		assert: (x.left.op isKindOf: PyAdd);
-		assert: (x.left.right isKindOf: PyNum);
+		assert: (x.left.op isKindOf: AddAst);
+		assert: (x.left.right isKindOf: NumAst);
 		assert: (x.left.right.n == 2);
-		assert: (x.right isKindOf: PyNum);
+		assert: (x.right isKindOf: NumAst);
 		assert: (x.right.n == 3);
 		yourself.
 %
@@ -94,19 +94,19 @@ testParethesesRight
 	| x |
 	x := self statementsAt: 2.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PyBinOp);
-		assert: (x.op isKindOf: PyAdd);
-		assert: (x.left isKindOf: PyNum);
+		assert: (x isKindOf: BinOpAst);
+		assert: (x.op isKindOf: AddAst);
+		assert: (x.left isKindOf: NumAst);
 		assert: (x.left.n == 4);
-		assert: (x.right isKindOf: PyBinOp);
-		assert: (x.right.op isKindOf: PyAdd);
-		assert: (x.right.left isKindOf: PyNum);
+		assert: (x.right isKindOf: BinOpAst);
+		assert: (x.right.op isKindOf: AddAst);
+		assert: (x.right.left isKindOf: NumAst);
 		assert: (x.right.left.n == 5);
-		assert: (x.right.right isKindOf: PyNum);
+		assert: (x.right.right isKindOf: NumAst);
 		assert: (x.right.right.n == 6);
 		yourself.
 %
@@ -117,24 +117,24 @@ testSliceList
 	| x y |
 	x := self statementsAt: 5.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PySubscript);
-		assert: (x.ctx isKindOf: PyLoad);
-		assert: (x.value isKindOf: PyList);
+		assert: (x isKindOf: SubscriptAst);
+		assert: (x.ctx isKindOf: LoadAst);
+		assert: (x.value isKindOf: ListAst);
 		assert: (x.value.elts size == 3);
-		assert: ((y := x.value.elts at: 1) isKindOf: PyNum);
+		assert: ((y := x.value.elts at: 1) isKindOf: NumAst);
 		assert: y.n == 1;
-		assert: ((y := x.value.elts at: 2) isKindOf: PyNum);
+		assert: ((y := x.value.elts at: 2) isKindOf: NumAst);
 		assert: y.n == 2;
-		assert: ((y := x.value.elts at: 3) isKindOf: PyNum);
+		assert: ((y := x.value.elts at: 3) isKindOf: NumAst);
 		assert: y.n == 3;
-		assert: (x.slice isKindOf: PySlice);
-		assert: (x.slice.lower isKindOf: PyNum);
+		assert: (x.slice isKindOf:SliceAst);
+		assert: (x.slice.lower isKindOf: NumAst);
 		assert: (x.slice.lower.n == 0);
-		assert: (x.slice.upper isKindOf: PyNum);
+		assert: (x.slice.upper isKindOf: NumAst);
 		assert: (x.slice.upper.n == 1);
 		assert: (x.slice.step isNone);
 		yourself.
@@ -146,21 +146,21 @@ testSliceListEmpty
 	| x y |
 	x := self statementsAt: 7.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PySubscript);
-		assert: (x.ctx isKindOf: PyLoad);
-		assert: (x.value isKindOf: PyList);
+		assert: (x isKindOf:SubscriptAst);
+		assert: (x.ctx isKindOf: LoadAst);
+		assert: (x.value isKindOf: ListAst);
 		assert: (x.value.elts size == 3);
-		assert: ((y := x.value.elts at: 1) isKindOf: PyNum);
+		assert: ((y := x.value.elts at: 1) isKindOf: NumAst);
 		assert: y.n == 7;
-		assert: ((y := x.value.elts at: 2) isKindOf: PyNum);
+		assert: ((y := x.value.elts at: 2) isKindOf: NumAst);
 		assert: y.n == 8;
-		assert: ((y := x.value.elts at: 3) isKindOf: PyNum);
+		assert: ((y := x.value.elts at: 3) isKindOf: NumAst);
 		assert: y.n == 9;
-		assert: (x.slice isKindOf: PySlice);
+		assert: (x.slice isKindOf: SliceAst);
 		assert: (x.slice.lower isNone);
 		assert: (x.slice.upper isNone);
 		assert: (x.slice.step isNone);
@@ -173,24 +173,24 @@ testSliceTuple
 	| x y |
 	x := self statementsAt: 6.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PySubscript);
-		assert: (x.ctx isKindOf: PyLoad);
-		assert: (x.value isKindOf: PyTuple);
+		assert: (x isKindOf: SubscriptAst);
+		assert: (x.ctx isKindOf: LoadAst);
+		assert: (x.value isKindOf: TupleAst);
 		assert: (x.value.elts size == 3);
-		assert: ((y := x.value.elts at: 1) isKindOf: PyNum);
+		assert: ((y := x.value.elts at: 1) isKindOf: NumAst);
 		assert: y.n == 4;
-		assert: ((y := x.value.elts at: 2) isKindOf: PyNum);
+		assert: ((y := x.value.elts at: 2) isKindOf: NumAst);
 		assert: y.n == 5;
-		assert: ((y := x.value.elts at: 3) isKindOf: PyNum);
+		assert: ((y := x.value.elts at: 3) isKindOf: NumAst);
 		assert: y.n == 6;
-		assert: (x.slice isKindOf: PySlice);
+		assert: (x.slice isKindOf: SliceAst);
 		assert: (x.slice.lower isNone);
 		assert: (x.slice.upper isNone);
-		assert: (x.slice.step isKindOf: PyNum);
+		assert: (x.slice.step isKindOf: NumAst);
 		assert: (x.slice.step.n == 2);
 		yourself.
 %
@@ -201,26 +201,26 @@ testSliceTupleFilled
 	| x y |
 	x := self statementsAt: 8.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PySubscript);
-		assert: (x.ctx isKindOf: PyLoad);
-		assert: (x.value isKindOf: PyTuple);
+		assert: (x isKindOf: SubscriptAst);
+		assert: (x.ctx isKindOf: LoadAst);
+		assert: (x.value isKindOf: TupleAst);
 		assert: (x.value.elts size == 3);
-		assert: ((y := x.value.elts at: 1) isKindOf: PyNum);
+		assert: ((y := x.value.elts at: 1) isKindOf: NumAst);
 		assert: y.n == 10;
-		assert: ((y := x.value.elts at: 2) isKindOf: PyNum);
+		assert: ((y := x.value.elts at: 2) isKindOf: NumAst);
 		assert: y.n == 11;
-		assert: ((y := x.value.elts at: 3) isKindOf: PyNum);
+		assert: ((y := x.value.elts at: 3) isKindOf: NumAst);
 		assert: y.n == 12;
-		assert: (x.slice isKindOf: PySlice);
-		assert: (x.slice.lower isKindOf: PyNum);
+		assert: (x.slice isKindOf: SliceAst);
+		assert: (x.slice.lower isKindOf: NumAst);
 		assert: (x.slice.lower.n == 1);
-		assert: (x.slice.upper isKindOf: PyNum);
+		assert: (x.slice.upper isKindOf: NumAst);
 		assert: (x.slice.upper.n == 2);
-		assert: (x.slice.step isKindOf: PyNum);
+		assert: (x.slice.step isKindOf: NumAst);
 		assert: (x.slice.step.n == 3);
 		yourself.
 %

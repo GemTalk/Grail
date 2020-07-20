@@ -21,12 +21,12 @@ testClass
 	| x |
 	x := self statementsAt: 14.
 	self 
-		assert: (x isKindOf: PyClassDef);
+		assert: (x isKindOf: ClassDefAst);
 		assert: (x.name = 'Foo');
 		assert: (x.bases size == 0);
 		assert: (x.keywords size == 0);
 		assert: (x.body.body size == 1);
-		assert: ((x.body.body at: 1) isKindOf: PyPass);
+		assert: ((x.body.body at: 1) isKindOf: PassAst);
 		assert: (x.bases size == 0);
 		assert: (x.decorator_list size == 0);
 		yourself.
@@ -38,15 +38,15 @@ testClassInheritance
 	| x name |
 	x := self statementsAt: 15.
 	self 
-		assert: (x isKindOf: PyClassDef);
+		assert: (x isKindOf: ClassDefAst);
 		assert: (x.name = 'Bar');
 		assert: (x.bases size == 1);
-		assert: ((name := x.bases at: 1) isKindOf: PyName);
+		assert: ((name := x.bases at: 1) isKindOf: NameAst);
 		assert: (name.assoc.key == #'Foo');
-		assert: (name.ctx isKindOf: PyLoad);
+		assert: (name.ctx isKindOf: LoadAst);
 		assert: (x.keywords size == 0);
 		assert: (x.body.body size == 1);
-		assert: ((x.body.body at: 1) isKindOf: PyPass);
+		assert: ((x.body.body at: 1) isKindOf: PassAst);
 		assert: (x.decorator_list size == 0);
 		yourself.
 %
@@ -57,11 +57,11 @@ testCoroutine
 	| x arguments arg |
 	x := self statementsAt: 16.
 	self 
-		assert: (x isKindOf: PyAsyncFunctionDef);
+		assert: (x isKindOf: AsyncFunctionDefAst);
 		assert: (x.name = 'asyncFunc');
-		assert: ((arguments := x.args) isKindOf: PyArguments);
+		assert: ((arguments := x.args) isKindOf: ArgumentsAst);
 		assert: (arguments.args size == 1);
-		assert: ((arg := arguments.args at: 1) isKindOf: PyArg);
+		assert: ((arg := arguments.args at: 1) isKindOf: ArgAst);
 		assert: (arg.arg == #'arg');
 		assert: (arg.annotation isNone);
 		assert: (arguments.vararg isNone);
@@ -70,7 +70,7 @@ testCoroutine
 		assert: (arguments.kwarg isNone);
 		assert: (arguments.defaults size == 0);
 		assert: (x.body.body size == 1);
-		assert: ((x.body.body at: 1) isKindOf: PyPass);
+		assert: ((x.body.body at: 1) isKindOf: PassAst);
 		assert: (x.decorator_list size == 0);
 		assert: (x.returns isNone);
 		yourself.
@@ -82,11 +82,11 @@ testCoroutineFor
 	| x arguments arg asyncFor call num |
 	x := self statementsAt: 17.
 	self 
-		assert: (x isKindOf: PyAsyncFunctionDef);
+		assert: (x isKindOf: AsyncFunctionDefAst);
 		assert: (x.name = 'asyncForFunc');
-		assert: ((arguments := x.args) isKindOf: PyArguments);
+		assert: ((arguments := x.args) isKindOf: ArgumentsAst);
 		assert: (arguments.args size == 1);
-		assert: ((arg := arguments.args at: 1) isKindOf: PyArg);
+		assert: ((arg := arguments.args at: 1) isKindOf: ArgAst);
 		assert: (arg.arg == #'arg');
 		assert: (arg.annotation isNone);
 		assert: (arguments.vararg isNone);
@@ -95,20 +95,20 @@ testCoroutineFor
 		assert: (arguments.kwarg isNone);
 		assert: (arguments.defaults size == 0);
 		assert: (x.body.body size == 1);
-		assert: ((asyncFor := x.body.body at: 1) isKindOf: PyAsyncFor);
-		assert: (asyncFor.target isKindOf: PyName);
+		assert: ((asyncFor := x.body.body at: 1) isKindOf: AsyncForAst);
+		assert: (asyncFor.target isKindOf: NameAst);
 		assert: (asyncFor.target.assoc.key == #'_');
-		assert: (asyncFor.target.ctx isKindOf: PyStore);
-		assert: ((call := asyncFor.iter) isKindOf: PyCall);
-		assert: (call.function isKindOf: PyName);
+		assert: (asyncFor.target.ctx isKindOf: StoreAst);
+		assert: ((call := asyncFor.iter) isKindOf: CallAst);
+		assert: (call.function isKindOf: NameAst);
 		assert: (call.function.assoc.key == #'range');
-		assert: (call.function.ctx isKindOf: PyLoad);
+		assert: (call.function.ctx isKindOf: LoadAst);
 		assert: (call.arguments size == 1);
-		assert: ((num := call.arguments at: 1) isKindOf: PyNum);
+		assert: ((num := call.arguments at: 1) isKindOf: NumAst);
 		assert: (num.n == 10);
 		assert: (call.keywords size == 0);
 		assert: (asyncFor.body.body size == 1);
-		assert: ((asyncFor.body.body at: 1) isKindOf: PyPass);
+		assert: ((asyncFor.body.body at: 1) isKindOf: PassAst);
 		assert: (asyncFor.orelse.body size == 0);
 		assert: (x.decorator_list size == 0);
 		assert: (x.returns isNone);
@@ -121,11 +121,11 @@ testCoroutineWith
 	| x arguments arg with withItem name call str1 str2 |
 	x := self statementsAt: 18.
 	self 
-		assert: (x isKindOf: PyAsyncFunctionDef);
+		assert: (x isKindOf: AsyncFunctionDefAst);
 		assert: (x.name = 'asyncWithFunc');
-		assert: ((arguments := x.args) isKindOf: PyArguments);
+		assert: ((arguments := x.args) isKindOf: ArgumentsAst);
 		assert: (arguments.args size == 1);
-		assert: ((arg := arguments.args at: 1) isKindOf: PyArg);
+		assert: ((arg := arguments.args at: 1) isKindOf: ArgAst);
 		assert: (arg.arg == #'arg');
 		assert: (arg.annotation isNone);
 		assert: (arguments.vararg isNone);
@@ -134,24 +134,24 @@ testCoroutineWith
 		assert: (arguments.kwarg isNone);
 		assert: (arguments.defaults size == 0);
 		assert: (x.body.body size == 1);		
-		assert: ((with := x.body.body at: 1) isKindOf: PyAsyncWith);
+		assert: ((with := x.body.body at: 1) isKindOf: AsyncWithAst);
 		assert: (with.items size == 1);
-		assert: ((withItem := with.items at: 1) isKindOf: PyWithItem);
-		assert: ((call := withItem.context_expr) isKindOf: PyCall);
-		assert: (call.function isKindOf: PyName);
+		assert: ((withItem := with.items at: 1) isKindOf: WithItemAst);
+		assert: ((call := withItem.context_expr) isKindOf: CallAst);
+		assert: (call.function isKindOf: NameAst);
 		assert: (call.function.assoc.key == #'open');
-		assert: (call.function.ctx isKindOf: PyLoad);
+		assert: (call.function.ctx isKindOf: LoadAst);
 		assert: (call.arguments size = 2);
-		assert: ((str1 := call.arguments at: 1) isKindOf: PyStr);
+		assert: ((str1 := call.arguments at: 1) isKindOf: StrAst);
 		assert: (str1.s = '/etc/passwd');
-		assert: ((str2 := call.arguments at: 2) isKindOf: PyStr);
+		assert: ((str2 := call.arguments at: 2) isKindOf: StrAst);
 		assert: (str2.s = 'r');
 		assert: (call.keywords size == 0);
-		assert: ((name := withItem.optional_vars) isKindOf: PyName);
+		assert: ((name := withItem.optional_vars) isKindOf: NameAst);
 		assert: (name.assoc.key == #'f');
-		assert: (name.ctx isKindOf: PyStore);
+		assert: (name.ctx isKindOf: StoreAst);
 		assert: (with.body.body size == 1);
-		assert: ((with.body.body at: 1) isKindOf: PyPass);
+		assert: ((with.body.body at: 1) isKindOf: PassAst);
 		assert: (x.decorator_list size == 0);
 		assert: (x.returns isNone);
 		yourself.
@@ -167,20 +167,20 @@ testFor
 	| x name call num |
 	x := self statementsAt: 5.
 	self 
-		assert: (x isKindOf: PyFor);
-		assert: ((name := x.target) isKindOf: PyName);
+		assert: (x isKindOf: ForAst);
+		assert: ((name := x.target) isKindOf: NameAst);
 		assert: (name.assoc.key == #'_');
-		assert: (name.ctx isKindOf: PyStore);
-		assert: ((call := x.iter) isKindOf: PyCall);
-		assert: (call.function isKindOf: PyName);
+		assert: (name.ctx isKindOf: StoreAst);
+		assert: ((call := x.iter) isKindOf: CallAst);
+		assert: (call.function isKindOf: NameAst);
 		assert: (call.function.assoc.key == #'range');
-		assert: (call.function.ctx isKindOf: PyLoad);
+		assert: (call.function.ctx isKindOf: LoadAst);
 		assert: (call.arguments size == 1);
-		assert: ((num := call.arguments at: 1) isKindOf: PyNum);
+		assert: ((num := call.arguments at: 1) isKindOf: NumAst);
 		assert: (num.n == 10);
 		assert: (call.keywords size == 0);
 		assert: (x.body.body size == 1);
-		assert: ((x.body.body at: 1) isKindOf: PyPass);
+		assert: ((x.body.body at: 1) isKindOf: PassAst);
 		assert: (x.orelse size == 0);
 		yourself.
 %
@@ -196,22 +196,22 @@ testForElse
 	| x name call num |
 	x := self statementsAt: 6.
 	self 
-		assert: (x isKindOf: PyFor);
-		assert: ((name := x.target) isKindOf: PyName);
+		assert: (x isKindOf: ForAst);
+		assert: ((name := x.target) isKindOf: NameAst);
 		assert: (name.assoc.key == #'_');
-		assert: (name.ctx isKindOf: PyStore);
-		assert: ((call := x.iter) isKindOf: PyCall);
-		assert: (call.function isKindOf: PyName);
+		assert: (name.ctx isKindOf: StoreAst);
+		assert: ((call := x.iter) isKindOf: CallAst);
+		assert: (call.function isKindOf: NameAst);
 		assert: (call.function.assoc.key == #'range');
-		assert: (call.function.ctx isKindOf: PyLoad);
+		assert: (call.function.ctx isKindOf: LoadAst);
 		assert: (call.arguments size == 1);
-		assert: ((num := call.arguments at: 1) isKindOf: PyNum);
+		assert: ((num := call.arguments at: 1) isKindOf: NumAst);
 		assert: (num.n == 10);
 		assert: (call.keywords size == 0);
 		assert: (x.body.body size == 1);
-		assert: ((x.body.body at: 1) isKindOf: PyPass);
+		assert: ((x.body.body at: 1) isKindOf: PassAst);
 		assert: (x.orelse.body size == 1);
-		assert: ((x.orelse.body at: 1) isKindOf: PyPass);
+		assert: ((x.orelse.body at: 1) isKindOf: PassAst);
 		yourself.
 %
 category: 'other'
@@ -221,11 +221,11 @@ testFunctionWithOneArgument
 	| x arguments arg |
 	x := self statementsAt: 10.
 	self 
-		assert: (x isKindOf: PyFunctionDef);
+		assert: (x isKindOf: FunctionDefAst);
 		assert: (x.name == #'func');
-		assert: ((arguments := x.args) isKindOf: PyArguments);
+		assert: ((arguments := x.args) isKindOf: ArgumentsAst);
 		assert: (arguments.args size == 1);
-		assert: ((arg := arguments.args at: 1) isKindOf: PyArg);
+		assert: ((arg := arguments.args at: 1) isKindOf: ArgAst);
 		assert: (arg.arg == #'arg');
 		assert: (arg.annotation isNone);
 		assert: (arguments.vararg isNone); 
@@ -234,7 +234,7 @@ testFunctionWithOneArgument
 		assert: (arguments.kwarg isNone); 
 		assert: (arguments.defaults size == 0); 
 		assert: (x.body.body size == 1); 
-		assert: ((x.body.body at: 1) isKindOf: PyPass); 
+		assert: ((x.body.body at: 1) isKindOf: PassAst); 
 		assert: (x.decorator_list size == 0); 
 		assert: (x.returns isNone); 
 		yourself.
@@ -246,11 +246,11 @@ testFunctionWithOneDecorator
 	| x arguments arg name |
 	x := self statementsAt: 11.
 	self 
-		assert: (x isKindOf: PyFunctionDef);
+		assert: (x isKindOf: FunctionDefAst);
 		assert: (x.name == #'decoratedFunc');
-		assert: ((arguments := x.args) isKindOf: PyArguments);
+		assert: ((arguments := x.args) isKindOf: ArgumentsAst);
 		assert: (arguments.args size == 1);
-		assert: ((arg := arguments.args at: 1) isKindOf: PyArg);
+		assert: ((arg := arguments.args at: 1) isKindOf: ArgAst);
 		assert: (arg.arg == #'arg');
 		assert: (arg.annotation isNone);
 		assert: (arguments.vararg isNone); 
@@ -259,11 +259,11 @@ testFunctionWithOneDecorator
 		assert: (arguments.kwarg isNone); 
 		assert: (arguments.defaults size == 0); 
 		assert: (x.body.body size == 1); 
-		assert: ((x.body.body at: 1) isKindOf: PyPass); 
+		assert: ((x.body.body at: 1) isKindOf: PassAst); 
 		assert: (x.decorator_list size == 1); 
-		assert: ((name := x.decorator_list at: 1) isKindOf: PyName); 
+		assert: ((name := x.decorator_list at: 1) isKindOf: NameAst); 
 		assert: (name.assoc.key == #'func'); 
-		assert: (name.ctx isKindOf: PyLoad); 
+		assert: (name.ctx isKindOf: LoadAst); 
 		assert: (x.returns isNone); 
 		yourself.
 %
@@ -274,11 +274,11 @@ testFunctionWithOneDefaultValueParameter
 	| x arguments arg nameConstant |
 	x := self statementsAt: 12.
 	self 
-		assert: (x isKindOf: PyFunctionDef);
+		assert: (x isKindOf: FunctionDefAst);
 		assert: (x.name == #'defaultParameterValueFunc');
-		assert: ((arguments := x.args) isKindOf: PyArguments);
+		assert: ((arguments := x.args) isKindOf: ArgumentsAst);
 		assert: (arguments.args size == 1);
-		assert: ((arg := arguments.args at: 1) isKindOf: PyArg);
+		assert: ((arg := arguments.args at: 1) isKindOf: ArgAst);
 		assert: (arg.arg == #'arg');
 		assert: (arg.annotation isNone);
 		assert: (arguments.vararg isNone); 
@@ -286,10 +286,10 @@ testFunctionWithOneDefaultValueParameter
 		assert: (arguments.kw_defaults size == 0); 
 		assert: (arguments.kwarg isNone); 
 		assert: (arguments.defaults size == 1);
-		assert: ((nameConstant := arguments.defaults at: 1) isKindOf: PyNone);
+		assert: ((nameConstant := arguments.defaults at: 1) isKindOf: NoneAst);
 		assert: (nameConstant isNone);
 		assert: (x.body.body size == 1); 
-		assert: ((x.body.body at: 1) isKindOf: PyPass); 
+		assert: ((x.body.body at: 1) isKindOf: PassAst); 
 		assert: (x.decorator_list size == 0); 
 		assert: (x.returns isNone); 
 		yourself.
@@ -302,13 +302,13 @@ testIf
 	| x |
 	x := self statementsAt: 1.
 	self 
-		assert: (x isKindOf: PyIf);
-		assert: (x.test isKindOf: PyTrue);
+		assert: (x isKindOf: IfAst);
+		assert: (x.test isKindOf: TrueAst);
 		assert: (x.test evaluate);
-		assert: (x.body isKindOf: PySuite);
+		assert: (x.body isKindOf: SuiteAst);
 		assert: (x.body.body size == 1);
-		assert: ((x.body.body at: 1) isKindOf: PyPass);
-		assert: (x.orelse isKindOf: PySuite);
+		assert: ((x.body.body at: 1) isKindOf: PassAst);
+		assert: (x.orelse isKindOf: SuiteAst);
 		assert: (x.orelse.body size == 0);
 		yourself.
 %
@@ -320,13 +320,13 @@ testIfElse
 	| x |
 	x := self statementsAt: 2.
 	self 
-		assert: (x isKindOf: PyIf);
-		assert: (x.test isKindOf: PyFalse);
+		assert: (x isKindOf: IfAst);
+		assert: (x.test isKindOf: FalseAst);
 		deny: x.test evaluate;
 		assert: (x.body.body size == 1);
-		assert: ((x.body.body at: 1) isKindOf: PyPass);
+		assert: ((x.body.body at: 1) isKindOf: PassAst);
 		assert: (x.orelse.body size == 1);
-		assert: ((x.orelse.body at: 1) isKindOf: PyPass);
+		assert: ((x.orelse.body at: 1) isKindOf: PassAst);
 		yourself.
 %
 category: 'other'
@@ -336,11 +336,11 @@ testNestedFunction
 	| x arguments arg functionDef insideArguments insideArg return |
 	x := self statementsAt: 13.
 	self 
-		assert: (x isKindOf: PyFunctionDef);
+		assert: (x isKindOf: FunctionDefAst);
 		assert: (x.name == #'nestedFunc');
-		assert: ((arguments := x.args) isKindOf: PyArguments);
+		assert: ((arguments := x.args) isKindOf: ArgumentsAst);
 		assert: (arguments.args size == 1);
-		assert: ((arg := arguments.args at: 1) isKindOf: PyArg);
+		assert: ((arg := arguments.args at: 1) isKindOf: ArgAst);
 		assert: (arg.arg == #'arg');
 		assert: (arg.annotation isNone);
 		assert: (arguments.vararg isNone); 
@@ -349,11 +349,11 @@ testNestedFunction
 		assert: (arguments.kwarg isNone); 
 		assert: (arguments.defaults size == 0);
 		assert: (x.body.body size == 2); 
-		assert: ((functionDef := x.body.body at: 1) isKindOf: PyFunctionDef); 
+		assert: ((functionDef := x.body.body at: 1) isKindOf: FunctionDefAst); 
 		assert: (functionDef.name == #'insideFunc'); 
-		assert: ((insideArguments := functionDef.args) isKindOf: PyArguments); 
+		assert: ((insideArguments := functionDef.args) isKindOf: ArgumentsAst); 
 		assert: (insideArguments.args size == 1);
-		assert: ((insideArg := insideArguments.args at: 1) isKindOf: PyArg);
+		assert: ((insideArg := insideArguments.args at: 1) isKindOf: ArgAst);
 		assert: (insideArg.arg == #'insideArg');
 		assert: (insideArg.annotation isNone);
 		assert: (insideArguments.vararg isNone); 
@@ -362,13 +362,13 @@ testNestedFunction
 		assert: (insideArguments.kwarg isNone); 
 		assert: (insideArguments.defaults size == 0);
 		assert: (functionDef.body.body size == 1);
-		assert: ((functionDef.body.body at: 1) isKindOf: PyPass);
+		assert: ((functionDef.body.body at: 1) isKindOf: PassAst);
 		assert: (functionDef.decorator_list size == 0);
 		assert: (functionDef.returns isNone);
-		assert: ((return := x.body.body at: 2) isKindOf: PyReturn);
-		assert: (return.value isKindOf: PyName);
+		assert: ((return := x.body.body at: 2) isKindOf: ReturnAst);
+		assert: (return.value isKindOf: NameAst);
 		assert: (return.value.assoc.key == #'insideFunc');
-		assert: (return.value.ctx isKindOf: PyLoad);
+		assert: (return.value.ctx isKindOf: LoadAst);
 		assert: (x.decorator_list size == 0); 
 		assert: (x.returns isNone); 
 		yourself.
@@ -390,31 +390,31 @@ testTry
 	| x expr call binOp exceptHandler raise insideCall str |
 	x :=self statementsAt: 7.
 	self 
-		assert: (x isKindOf: PyTry);
+		assert: (x isKindOf:TryAst);
 		assert: (x.body.body size == 1);
-		assert: ((expr := x.body.body at: 1) isKindOf: PyExpr);
-		assert: ((call := expr.value) isKindOf: PyCall);
-		assert: (call.function isKindOf: PyName);
+		assert: ((expr := x.body.body at: 1) isKindOf: ExprAst);
+		assert: ((call := expr.value) isKindOf: CallAst);
+		assert: (call.function isKindOf: NameAst);
 		assert: (call.function.assoc.key == #'print');
-		assert: (call.function.ctx isKindOf: PyLoad);
+		assert: (call.function.ctx isKindOf: LoadAst);
 		assert: (call.arguments size == 1);
-		assert: ((binOp := call.arguments at: 1) isKindOf: PyBinOp);
-		assert: (binOp.left isKindOf: PyNum);
+		assert: ((binOp := call.arguments at: 1) isKindOf: BinOpAst);
+		assert: (binOp.left isKindOf: NumAst);
 		assert: (binOp.left.n == 1);
-		assert: (binOp.op isKindOf: PyDiv);
-		assert: (binOp.right isKindOf: PyNum);
+		assert: (binOp.op isKindOf: DivAst);
+		assert: (binOp.right isKindOf: NumAst);
 		assert: (binOp.right.n == 0);
 		assert: (call.keywords size == 0);
 		assert: (x.handlers size == 1);
-		assert: ((exceptHandler := x.handlers at: 1) isKindOf: PyExceptHandler);
+		assert: ((exceptHandler := x.handlers at: 1) isKindOf: ExceptHandlerAst);
 		assert: (exceptHandler.type isNone);
 		assert: (exceptHandler.name isNone);
 		assert: (exceptHandler.body.body size == 1);
-		assert: ((raise := exceptHandler.body.body at: 1) isKindOf: PyRaise);
-		assert: ((insideCall := raise.exc) isKindOf: PyCall);
-		assert: (insideCall.function isKindOf: PyName);
+		assert: ((raise := exceptHandler.body.body at: 1) isKindOf: RaiseAst);
+		assert: ((insideCall := raise.exc) isKindOf: CallAst);
+		assert: (insideCall.function isKindOf: NameAst);
 		assert: (insideCall.arguments size == 1);
-		assert: ((str := insideCall.arguments at: 1) isKindOf: PyStr);
+		assert: ((str := insideCall.arguments at: 1) isKindOf: StrAst);
 		assert: (str.s = 'Something bad happened');
 		assert: (insideCall.keywords size == 0);
 		assert: (raise.cause isNone);
@@ -430,11 +430,11 @@ testWhile
 	| x |
 	x := self statementsAt: 3.
 	self 
-		assert: (x isKindOf: PyWhile);
-		assert: (x.test isKindOf: PyTrue);
+		assert: (x isKindOf: WhileAst);
+		assert: (x.test isKindOf: TrueAst);
 		assert: x.test evaluate;
 		assert: (x.body.body size == 1);
-		assert: ((x.body.body at: 1) isKindOf: PyPass);
+		assert: ((x.body.body at: 1) isKindOf: PassAst);
 		assert: (x.orelse.body size == 0);
 		yourself.
 %
@@ -446,13 +446,13 @@ testWhileElse
 	| x |
 	x := self statementsAt: 4.
 	self 
-		assert: (x isKindOf: PyWhile);
-		assert: (x.test isKindOf: PyFalse);
+		assert: (x isKindOf: WhileAst);
+		assert: (x.test isKindOf: FalseAst);
 		deny: x.test evaluate;
 		assert: (x.body.body size == 1);
-		assert: ((x.body.body at: 1) isKindOf: PyPass);
+		assert: ((x.body.body at: 1) isKindOf: PassAst);
 		assert: (x.orelse.body size == 1);
-		assert: ((x.orelse.body at: 1) isKindOf: PyPass);
+		assert: ((x.orelse.body at: 1) isKindOf: PassAst);
 		yourself.
 %
 category: 'other'
@@ -468,22 +468,22 @@ testWith
 	| x withItem call str1 str2 |
 	x := self statementsAt: 9.
 	self 
-		assert: (x isKindOf: PyWith);
+		assert: (x isKindOf: WithAst);
 		assert: (x.items size == 1);
-		assert: ((withItem := x.items at: 1) isKindOf: PyWithItem);
-		assert: ((call := withItem.context_expr) isKindOf: PyCall);
-		assert: (call.function isKindOf: PyName);
+		assert: ((withItem := x.items at: 1) isKindOf: WithItemAst);
+		assert: ((call := withItem.context_expr) isKindOf: CallAst);
+		assert: (call.function isKindOf: NameAst);
 		assert: (call.function.assoc.key == #'open');
-		assert: (call.function.ctx isKindOf: PyLoad);
+		assert: (call.function.ctx isKindOf: LoadAst);
 		assert: (call.arguments size = 2);
-		assert: ((str1 := call.arguments at: 1) isKindOf: PyStr);
+		assert: ((str1 := call.arguments at: 1) isKindOf: StrAst);
 		assert: (str1.s = '/etc/passwd');
-		assert: ((str2 := call.arguments at: 2) isKindOf: PyStr);
+		assert: ((str2 := call.arguments at: 2) isKindOf: StrAst);
 		assert: (str2.s = 'r');
 		assert: (call.keywords size == 0);
 		assert: (withItem.optional_vars isNone);
 		assert: (x.body.body size == 1);
-		assert: ((x.body.body at: 1) isKindOf: PyPass);
+		assert: ((x.body.body at: 1) isKindOf: PassAst);
 		yourself.
 %
 category: 'other'
@@ -499,23 +499,23 @@ testWithOptionalVars
 	| x withItem call str1 str2 name |
 	x := self statementsAt: 8.
 	self 
-		assert: (x isKindOf: PyWith);
+		assert: (x isKindOf: WithAst);
 		assert: (x.items size == 1);
-		assert: ((withItem := x.items at: 1) isKindOf: PyWithItem);
-		assert: ((call := withItem.context_expr) isKindOf: PyCall);
-		assert: (call.function isKindOf: PyName);
+		assert: ((withItem := x.items at: 1) isKindOf: WithItemAst);
+		assert: ((call := withItem.context_expr) isKindOf: CallAst);
+		assert: (call.function isKindOf: NameAst);
 		assert: (call.function.assoc.key == #'open');
-		assert: (call.function.ctx isKindOf: PyLoad);
+		assert: (call.function.ctx isKindOf: LoadAst);
 		assert: (call.arguments size = 2);
-		assert: ((str1 := call.arguments at: 1) isKindOf: PyStr);
+		assert: ((str1 := call.arguments at: 1) isKindOf: StrAst);
 		assert: (str1.s = '/etc/passwd');
-		assert: ((str2 := call.arguments at: 2) isKindOf: PyStr);
+		assert: ((str2 := call.arguments at: 2) isKindOf: StrAst);
 		assert: (str2.s = 'r');
 		assert: (call.keywords size == 0);
-		assert: ((name := withItem.optional_vars) isKindOf: PyName);
+		assert: ((name := withItem.optional_vars) isKindOf: NameAst);
 		assert: (name.assoc.key == #'f');
-		assert: (name.ctx isKindOf: PyStore);
+		assert: (name.ctx isKindOf: StoreAst);
 		assert: (x.body.body size == 1);
-		assert: ((x.body.body at: 1) isKindOf: PyPass);
+		assert: ((x.body.body at: 1) isKindOf: PassAst);
 		yourself.
 %

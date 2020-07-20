@@ -26,15 +26,15 @@ logout
 set user DataCurator pass swordfish
 login
 run
-| aSymbol names userProfile |
+| aSymbol names userProfile symbolDictionary |
 aSymbol := #'Python'.
 userProfile := System myUserProfile.
 names := userProfile symbolList names.
-(names includes: aSymbol) ifFalse: [
-	| symbolDictionary |
-	symbolDictionary := SymbolDictionary new name: aSymbol; yourself.
-	userProfile insertDictionary: symbolDictionary at: 1.
+(names includes: aSymbol) ifTrue: [
+	userProfile symbolList removeAtIndex: (names indexOf: aSymbol).
 ].
+symbolDictionary := SymbolDictionary new name: aSymbol; yourself.
+userProfile insertDictionary: symbolDictionary at: 1.
 %
 input Python.gs
 output pop

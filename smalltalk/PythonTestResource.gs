@@ -13,6 +13,6 @@ moduleAtPath: aPath
 
 	(path = aPath and: [module notNil]) ifTrue: [^module].
 	path := aPath.
-	module := PyModule script: aPath.
+	module := ModuleAst script: aPath.
 	^module
 %

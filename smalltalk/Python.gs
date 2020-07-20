@@ -33,10 +33,10 @@ doit
 BaseException category: 'Builtins'
 %
 set compile_env: 0
-! ------------------- Class definition for Exception
+! ------------------- Class definition for PyException
 expectvalue /Class
 doit
-BaseException subclass: 'Exception'
+BaseException subclass: 'PyException'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -47,13 +47,13 @@ BaseException subclass: 'Exception'
 %
 expectvalue /Class
 doit
-Exception category: 'Builtins'
+PyException category: 'Builtins'
 %
 set compile_env: 0
 ! ------------------- Class definition for ImportError
 expectvalue /Class
 doit
-Exception subclass: 'ImportError'
+PyException subclass: 'ImportError'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -133,6 +133,3192 @@ Notification subclass: 'ContinueNotification'
 expectvalue /Class
 doit
 ContinueNotification category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for AstNode
+expectvalue /Class
+doit
+Object subclass: 'AstNode'
+  instVarNames: #( parent)
+  classVars: #( escapeCharacters)
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+AstNode comment: 
+'No class-specific documentation for AstNode, hierarchy is:
+Object
+  AstNode
+'
+%
+expectvalue /Class
+doit
+AstNode category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for AliasAst
+expectvalue /Class
+doit
+AstNode subclass: 'AliasAst'
+  instVarNames: #( assoc name asName)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+AliasAst comment: 
+'No class-specific documentation for AliasAst, hierarchy is:
+Object
+  AstNode
+    AliasAst( name asName)
+'
+%
+expectvalue /Class
+doit
+AliasAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for ArgumentsAst
+expectvalue /Class
+doit
+AstNode subclass: 'ArgumentsAst'
+  instVarNames: #( args vararg kwonlyargs
+                    kw_defaults kwarg defaults)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ArgumentsAst comment: 
+'No class-specific documentation for ArgumentsAst, hierarchy is: 
+Object
+  AstNode( parent)
+    ArgumentsAst( args vararg kwonlyargs kw_defaults kwarg defaults)
+'
+%
+expectvalue /Class
+doit
+ArgumentsAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for AstNodeWithLocation
+expectvalue /Class
+doit
+AstNode subclass: 'AstNodeWithLocation'
+  instVarNames: #( line column)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+AstNodeWithLocation comment: 
+'No class-specific documentation for PyAstNodeWithLocation, hierarchy is: 
+Object
+  AstNode( parent line column)
+    PyAstNodeWithLocation
+'
+%
+expectvalue /Class
+doit
+AstNodeWithLocation category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for ArgAst
+expectvalue /Class
+doit
+AstNodeWithLocation subclass: 'ArgAst'
+  instVarNames: #( assoc arg annotation)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ArgAst comment: 
+'No class-specific documentation for ArgAst, hierarchy is: 
+Object
+  AstNode( parent line column)
+    ArgAst( arg annotation)
+'
+%
+expectvalue /Class
+doit
+ArgAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for ExceptHandlerAst
+expectvalue /Class
+doit
+AstNodeWithLocation subclass: 'ExceptHandlerAst'
+  instVarNames: #( type name body)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ExceptHandlerAst comment: 
+'No class-specific documentation for ExceptHandlerAst, hierarchy is: 
+Object
+  AstNode( parent)
+    ExcepthandlerAst
+      ExceptHandlerAst( type name body)
+'
+%
+expectvalue /Class
+doit
+ExceptHandlerAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for ExpressionAst
+expectvalue /Class
+doit
+AstNodeWithLocation subclass: 'ExpressionAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ExpressionAst comment: 
+'No class-specific documentation for ExpressionAst, hierarchy is:
+Object
+  AstNode( line column)
+    ExpressionAst
+'
+%
+expectvalue /Class
+doit
+ExpressionAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for AttributeAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'AttributeAst'
+  instVarNames: #( value attr ctx)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+AttributeAst comment: 
+'No class-specific documentation for PyAttribute, hierarchy is: 
+Object
+  AstNode( parent line column)
+    ExpressionAst
+      PyAttribute( value attribute context)
+'
+%
+expectvalue /Class
+doit
+AttributeAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for AwaitAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'AwaitAst'
+  instVarNames: #( value)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+AwaitAst comment: 
+'No class-specific documentation for PyAwait, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      ExpressionAst
+        PyAwait( value)
+'
+%
+expectvalue /Class
+doit
+AwaitAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for BinOpAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'BinOpAst'
+  instVarNames: #( left op right)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+BinOpAst comment: 
+'No class-specific documentation for PyBinOp, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      ExpressionAst
+        PyBinOp( left op right)
+'
+%
+expectvalue /Class
+doit
+BinOpAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for BoolOpAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'BoolOpAst'
+  instVarNames: #( values)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+BoolOpAst comment: 
+'No class-specific documentation for BoolOpAst, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      ExpressionAst
+        BoolOpAst( op values)
+'
+%
+expectvalue /Class
+doit
+BoolOpAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for AndAst
+expectvalue /Class
+doit
+BoolOpAst subclass: 'AndAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+AndAst comment: 
+'No class-specific documentation for PyAnd, hierarchy is: 
+Object
+  AstNode( parent)
+    PyBoolop
+      PyAnd
+'
+%
+expectvalue /Class
+doit
+AndAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for OrAst
+expectvalue /Class
+doit
+BoolOpAst subclass: 'OrAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+OrAst comment: 
+'No class-specific documentation for PyOr, hierarchy is: 
+Object
+  AstNode( parent)
+    PyBoolop
+      PyOr
+'
+%
+expectvalue /Class
+doit
+OrAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for BytesAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'BytesAst'
+  instVarNames: #( s)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+BytesAst comment: 
+'No class-specific documentation for BytesAst, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      ExpressionAst
+        BytesAst( s)
+'
+%
+expectvalue /Class
+doit
+BytesAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for CallAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'CallAst'
+  instVarNames: #( function arguments keywords)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+CallAst comment: 
+'No class-specific documentation for CallAst, hierarchy is: 
+Object
+  AstNode( parent line column)
+    ExpressionAst
+      CallAst( function arguments keywords)
+'
+%
+expectvalue /Class
+doit
+CallAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for CompareAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'CompareAst'
+  instVarNames: #( left cmpopList comparatorList)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+CompareAst comment: 
+'No class-specific documentation for PyCompare, hierarchy is: 
+Object
+  AstNode( parent line column)
+    ExpressionAst
+      PyCompare( left cmpopList comparatorList)
+'
+%
+expectvalue /Class
+doit
+CompareAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for ConstantAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'ConstantAst'
+  instVarNames: #( value)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ConstantAst comment: 
+'No class-specific documentation for PyConstant, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      ExpressionAst
+        PyConstant( value)
+'
+%
+expectvalue /Class
+doit
+ConstantAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for DictAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'DictAst'
+  instVarNames: #( keys values)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+DictAst comment: 
+'No class-specific documentation for PyDict, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      ExpressionAst
+        PyDict( keys values)
+'
+%
+expectvalue /Class
+doit
+DictAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for DictCompAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'DictCompAst'
+  instVarNames: #( key value generators)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+DictCompAst comment: 
+'No class-specific documentation for PyDictComp, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      ExpressionAst
+        PyDictComp( key value generators)
+'
+%
+expectvalue /Class
+doit
+DictCompAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for EllipsisAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'EllipsisAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+EllipsisAst comment: 
+'No class-specific documentation for PyEllipsis, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      ExpressionAst
+        PyEllipsis
+'
+%
+expectvalue /Class
+doit
+EllipsisAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for FormattedValueAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'FormattedValueAst'
+  instVarNames: #( value conversion format_spec)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+FormattedValueAst comment: 
+'No class-specific documentation for PyFormattedValue, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      ExpressionAst
+        PyFormattedValue( value conversion format_spec)
+'
+%
+expectvalue /Class
+doit
+FormattedValueAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for GeneratorExpAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'GeneratorExpAst'
+  instVarNames: #( elt generators)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+GeneratorExpAst comment: 
+'No class-specific documentation for PyGeneratorExp, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      ExpressionAst
+        PyGeneratorExp( elt generators)
+'
+%
+expectvalue /Class
+doit
+GeneratorExpAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for IfExpAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'IfExpAst'
+  instVarNames: #( test body orelse)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+IfExpAst comment: 
+'No class-specific documentation for PyIfExp, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      ExpressionAst
+        PyIfExp( args body)
+'
+%
+expectvalue /Class
+doit
+IfExpAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for JoinedStrAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'JoinedStrAst'
+  instVarNames: #( values)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+JoinedStrAst comment: 
+'No class-specific documentation for PyJoinedStr, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      ExpressionAst
+        PyJoinedStr( values)
+'
+%
+expectvalue /Class
+doit
+JoinedStrAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for LambdaAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'LambdaAst'
+  instVarNames: #( args body)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+LambdaAst comment: 
+'No class-specific documentation for PyLambda, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      ExpressionAst
+        PyLambda( op values)
+'
+%
+expectvalue /Class
+doit
+LambdaAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for ListAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'ListAst'
+  instVarNames: #( elts ctx)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ListAst comment: 
+'No class-specific documentation for PyList, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      ExpressionAst
+        PyList( elts ctx)
+'
+%
+expectvalue /Class
+doit
+ListAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for ListCompAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'ListCompAst'
+  instVarNames: #( elt generators)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ListCompAst comment: 
+'No class-specific documentation for PyListComp, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      ExpressionAst
+        PyListComp( elt generators)
+'
+%
+expectvalue /Class
+doit
+ListCompAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for NameAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'NameAst'
+  instVarNames: #( assoc id ctx)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+NameAst comment: 
+'Names refer to objects. Names are introduced by name binding operations.
+
+The following constructs bind names: formal parameters to functions, import statements, class and function definitions (these bind the class or function name in the defining block), and targets that are identifiers if occurring in an assignment, for loop header, or after as in a with statement or except clause. The import statement of the form from ... import * binds all names defined in the imported module, except those beginning with an underscore. This form may only be used at the module level.
+
+A target occurring in a del statement is also considered bound for this purpose (though the actual semantics are to unbind the name).
+
+Each assignment or import statement occurs within a block defined by a class or function definition or at the module level (the top-level code block).
+
+If a name is bound in a block, it is a local variable of that block, unless declared as nonlocal or global. If a name is bound at the module level, it is a global variable. (The variables of the module code block are local and global.) If a variable is used in a code block but not defined there, it is a free variable.
+
+Each occurrence of a name in the program text refers to the binding of that name established by certain name resolution rules.
+
+
+
+
+https://docs.python.org/3/reference/executionmodel.html#naming-and-binding'
+%
+expectvalue /Class
+doit
+NameAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for NameConstantAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'NameConstantAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #( singleton)
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+NameConstantAst comment: 
+'No class-specific documentation for NameConstantAst, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      ExpressionAst
+        NameConstantAst( value)
+'
+%
+expectvalue /Class
+doit
+NameConstantAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for FalseAst
+expectvalue /Class
+doit
+NameConstantAst subclass: 'FalseAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+FalseAst comment: 
+'No class-specific documentation for FalseAst, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      ExpressionAst
+        NameConstantAst( value)
+          FalseAst
+'
+%
+expectvalue /Class
+doit
+FalseAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for NoneAst
+expectvalue /Class
+doit
+NameConstantAst subclass: 'NoneAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+NoneAst comment: 
+'No class-specific documentation for NoneAst, hierarchy is: 
+Object
+  NoneAst
+'
+%
+expectvalue /Class
+doit
+NoneAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for TrueAst
+expectvalue /Class
+doit
+NameConstantAst subclass: 'TrueAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+TrueAst comment: 
+'No class-specific documentation for TrueAst, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      ExpressionAst
+        NameConstantAst( value)
+          TrueAst
+'
+%
+expectvalue /Class
+doit
+TrueAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for NamedExprAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'NamedExprAst'
+  instVarNames: #( target value)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+NamedExprAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for NumAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'NumAst'
+  instVarNames: #( n)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+NumAst comment: 
+'No class-specific documentation for NumAst, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      ExpressionAst
+        NumAst( n)
+'
+%
+expectvalue /Class
+doit
+NumAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for SetAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'SetAst'
+  instVarNames: #( elts)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+SetAst comment: 
+'No class-specific documentation for PySet, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      ExpressionAst
+        PySet( elts)
+'
+%
+expectvalue /Class
+doit
+SetAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for SetCompAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'SetCompAst'
+  instVarNames: #( elt generators)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+SetCompAst comment: 
+'No class-specific documentation for PySetComp, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      ExpressionAst
+        PySetComp( elt generators)
+'
+%
+expectvalue /Class
+doit
+SetCompAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for StarredAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'StarredAst'
+  instVarNames: #( value ctx)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+StarredAst comment: 
+'No class-specific documentation for PyStarred, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      ExpressionAst
+        PyStarred( value ctx)
+'
+%
+expectvalue /Class
+doit
+StarredAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for StrAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'StrAst'
+  instVarNames: #( s)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+StrAst comment: 
+'No class-specific documentation for PyString, hierarchy is: 
+Object
+  AstNode( parent line column)
+    ExpressionAst
+      PyString( string)
+'
+%
+expectvalue /Class
+doit
+StrAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for SubscriptAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'SubscriptAst'
+  instVarNames: #( value slice ctx)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+SubscriptAst comment: 
+'No class-specific documentation for PySubscript, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      ExpressionAst
+        PySubscript( value slice ctx)
+'
+%
+expectvalue /Class
+doit
+SubscriptAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for TupleAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'TupleAst'
+  instVarNames: #( elts ctx)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+TupleAst comment: 
+'No class-specific documentation for PyTuple, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      ExpressionAst
+        PyTuple( elts ctx)
+'
+%
+expectvalue /Class
+doit
+TupleAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for UnaryOpAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'UnaryOpAst'
+  instVarNames: #( operand)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+UnaryOpAst comment: 
+'No class-specific documentation for UnaryOpAst, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      ExpressionAst
+        UnaryOpAst( op operand)
+'
+%
+expectvalue /Class
+doit
+UnaryOpAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for InvertAst
+expectvalue /Class
+doit
+UnaryOpAst subclass: 'InvertAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+InvertAst comment: 
+'No class-specific documentation for PyInvert, hierarchy is: 
+Object
+  AstNode( parent)
+    PyUnaryop
+      PyInvert
+'
+%
+expectvalue /Class
+doit
+InvertAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for NotAst
+expectvalue /Class
+doit
+UnaryOpAst subclass: 'NotAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+NotAst comment: 
+'No class-specific documentation for PyNot, hierarchy is: 
+Object
+  AstNode( parent)
+    PyUnaryop
+      PyNot
+'
+%
+expectvalue /Class
+doit
+NotAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for UAddAst
+expectvalue /Class
+doit
+UnaryOpAst subclass: 'UAddAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+UAddAst comment: 
+'No class-specific documentation for PyUAdd, hierarchy is: 
+Object
+  AstNode( parent)
+    PyUnaryop
+      PyUAdd
+'
+%
+expectvalue /Class
+doit
+UAddAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for USubAst
+expectvalue /Class
+doit
+UnaryOpAst subclass: 'USubAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+USubAst comment: 
+'No class-specific documentation for PyUSub, hierarchy is: 
+Object
+  AstNode( parent)
+    PyUnaryop
+      PyUSub
+'
+%
+expectvalue /Class
+doit
+USubAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for YieldAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'YieldAst'
+  instVarNames: #( value)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+YieldAst comment: 
+'No class-specific documentation for PyYield, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      ExpressionAst
+        PyYield( value)
+'
+%
+expectvalue /Class
+doit
+YieldAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for YieldFromAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'YieldFromAst'
+  instVarNames: #( value)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+YieldFromAst comment: 
+'No class-specific documentation for PyYieldFrom, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      ExpressionAst
+        PyYieldFrom( value)
+'
+%
+expectvalue /Class
+doit
+YieldFromAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for StatementAst
+expectvalue /Class
+doit
+AstNodeWithLocation subclass: 'StatementAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+StatementAst comment: 
+'No class-specific documentation for StatementAst, hierarchy is:
+Object
+  AstNode( line column)
+    StatementAst
+'
+%
+expectvalue /Class
+doit
+StatementAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for AnnAssignAst
+expectvalue /Class
+doit
+StatementAst subclass: 'AnnAssignAst'
+  instVarNames: #( target annotation value
+                    simple)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+AnnAssignAst comment: 
+'No class-specific documentation for PyAnnAssign, hierarchy is: 
+Object
+  AstNode( parent line column)
+    StatementAst
+      PyAnnAssign( target annotation value simple)
+'
+%
+expectvalue /Class
+doit
+AnnAssignAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for AssertAst
+expectvalue /Class
+doit
+StatementAst subclass: 'AssertAst'
+  instVarNames: #( test msg)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+AssertAst comment: 
+'No class-specific documentation for PyAssert, hierarchy is: 
+Object
+  AstNode( parent line column)
+    StatementAst
+      PyAssert( test msg)
+'
+%
+expectvalue /Class
+doit
+AssertAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for AssignAst
+expectvalue /Class
+doit
+StatementAst subclass: 'AssignAst'
+  instVarNames: #( targets value)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+AssignAst comment: 
+'No class-specific documentation for PyAssign, hierarchy is: 
+Object
+  AstNode( parent line column)
+    StatementAst
+      PyAssign( target value)
+'
+%
+expectvalue /Class
+doit
+AssignAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for AsyncForAst
+expectvalue /Class
+doit
+StatementAst subclass: 'AsyncForAst'
+  instVarNames: #( target iter body
+                    orelse)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+AsyncForAst comment: 
+'No class-specific documentation for AsyncForAst, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      StatementAst
+        AsyncForAst( target iter body orelse)
+'
+%
+expectvalue /Class
+doit
+AsyncForAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for AsyncFunctionDefAst
+expectvalue /Class
+doit
+StatementAst subclass: 'AsyncFunctionDefAst'
+  instVarNames: #( name args body
+                    decorator_list returns)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+AsyncFunctionDefAst comment: 
+'No class-specific documentation for AsyncFunctionDefAst, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      StatementAst
+        AsyncFunctionDefAst( name args body decorator_list returns)
+'
+%
+expectvalue /Class
+doit
+AsyncFunctionDefAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for AsyncWithAst
+expectvalue /Class
+doit
+StatementAst subclass: 'AsyncWithAst'
+  instVarNames: #( items body)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+AsyncWithAst comment: 
+'No class-specific documentation for AsyncWithAst, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      StatementAst
+        AsyncWithAst( items body)
+'
+%
+expectvalue /Class
+doit
+AsyncWithAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for AugAssignAst
+expectvalue /Class
+doit
+StatementAst subclass: 'AugAssignAst'
+  instVarNames: #( target op value)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+AugAssignAst comment: 
+'No class-specific documentation for PyAugAssign, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      StatementAst
+        PyAugAssign( target op value)
+'
+%
+expectvalue /Class
+doit
+AugAssignAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for BreakAst
+expectvalue /Class
+doit
+StatementAst subclass: 'BreakAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+BreakAst comment: 
+'No class-specific documentation for PyBreak, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      StatementAst
+        PyBreak
+'
+%
+expectvalue /Class
+doit
+BreakAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for ClassDefAst
+expectvalue /Class
+doit
+StatementAst subclass: 'ClassDefAst'
+  instVarNames: #( name bases keywords
+                    body decorator_list)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ClassDefAst comment: 
+'No class-specific documentation for ClassDefAst, hierarchy is: 
+Object
+  AstNode( parent line column)
+    StatementAst
+      ClassDefAst( name bases keywords body decorator_list)
+'
+%
+expectvalue /Class
+doit
+ClassDefAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for ContinueAst
+expectvalue /Class
+doit
+StatementAst subclass: 'ContinueAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ContinueAst comment: 
+'No class-specific documentation for PyContinue, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      StatementAst
+        PyContinue
+'
+%
+expectvalue /Class
+doit
+ContinueAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for DeleteAst
+expectvalue /Class
+doit
+StatementAst subclass: 'DeleteAst'
+  instVarNames: #( targets)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+DeleteAst comment: 
+'No class-specific documentation for PyDelete, hierarchy is: 
+Object
+  AstNode( parent line column)
+    ExpressionContextAst
+      PyDelete
+'
+%
+expectvalue /Class
+doit
+DeleteAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for ExprAst
+expectvalue /Class
+doit
+StatementAst subclass: 'ExprAst'
+  instVarNames: #( value)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ExprAst comment: 
+'No class-specific documentation for ExprAst, hierarchy is: 
+Object
+  AstNode( parent line column)
+    StatementAst
+      ExprAst( expression)
+'
+%
+expectvalue /Class
+doit
+ExprAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for ForAst
+expectvalue /Class
+doit
+StatementAst subclass: 'ForAst'
+  instVarNames: #( target iter body
+                    orelse)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ForAst comment: 
+'No class-specific documentation for ForAst, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      StatementAst
+        ForAst( target iter body orelse)
+'
+%
+expectvalue /Class
+doit
+ForAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for FunctionDefAst
+expectvalue /Class
+doit
+StatementAst subclass: 'FunctionDefAst'
+  instVarNames: #( assoc name args
+                    body decorator_list returns)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+FunctionDefAst comment: 
+'No class-specific documentation for FunctionDefAst, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      StatementAst
+        FunctionDefAst( name args body decorator_list returns)
+'
+%
+expectvalue /Class
+doit
+FunctionDefAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for GlobalAst
+expectvalue /Class
+doit
+StatementAst subclass: 'GlobalAst'
+  instVarNames: #( names)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+GlobalAst comment: 
+'No class-specific documentation for PyGlobal, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      StatementAst
+        PyGlobal( names)
+'
+%
+expectvalue /Class
+doit
+GlobalAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for IfAst
+expectvalue /Class
+doit
+StatementAst subclass: 'IfAst'
+  instVarNames: #( test body orelse)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+IfAst comment: 
+'No class-specific documentation for IfAst, hierarchy is:
+Object
+  AstNode( line column)
+    IfAst( test trueCase falseCase)
+'
+%
+expectvalue /Class
+doit
+IfAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for ImportAst
+expectvalue /Class
+doit
+StatementAst subclass: 'ImportAst'
+  instVarNames: #( names)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ImportAst comment: 
+'No class-specific documentation for PyImport, hierarchy is:
+Object
+  AstNode
+    PyImport( aliases)
+'
+%
+expectvalue /Class
+doit
+ImportAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for ImportFromAst
+expectvalue /Class
+doit
+StatementAst subclass: 'ImportFromAst'
+  instVarNames: #( module names level)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ImportFromAst comment: 
+'No class-specific documentation for PyImportFrom, hierarchy is: 
+Object
+  AstNode( parent line column)
+    StatementAst
+      PyImportFrom( identifier alias int)
+'
+%
+expectvalue /Class
+doit
+ImportFromAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for NonlocalAst
+expectvalue /Class
+doit
+StatementAst subclass: 'NonlocalAst'
+  instVarNames: #( names)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+NonlocalAst comment: 
+'No class-specific documentation for PyNonlocal, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      StatementAst
+        PyNonlocal( names)
+'
+%
+expectvalue /Class
+doit
+NonlocalAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for PassAst
+expectvalue /Class
+doit
+StatementAst subclass: 'PassAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+PassAst comment: 
+'No class-specific documentation for PassAst, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      StatementAst
+        PassAst
+'
+%
+expectvalue /Class
+doit
+PassAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for RaiseAst
+expectvalue /Class
+doit
+StatementAst subclass: 'RaiseAst'
+  instVarNames: #( exc cause)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+RaiseAst comment: 
+'No class-specific documentation for PyRaise, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      StatementAst
+        PyRaise( exc cause)
+'
+%
+expectvalue /Class
+doit
+RaiseAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for ReturnAst
+expectvalue /Class
+doit
+StatementAst subclass: 'ReturnAst'
+  instVarNames: #( value)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ReturnAst comment: 
+'No class-specific documentation for ReturnAst, hierarchy is: 
+Object
+  AstNode( parent line column)
+    StatementAst
+      ReturnAst( value)
+'
+%
+expectvalue /Class
+doit
+ReturnAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for TryAst
+expectvalue /Class
+doit
+StatementAst subclass: 'TryAst'
+  instVarNames: #( body handlers orelse
+                    finalbody)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+TryAst comment: 
+'No class-specific documentation for PyTry, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      StatementAst
+        PyTry( body handlers orelse finalbody)
+'
+%
+expectvalue /Class
+doit
+TryAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for WhileAst
+expectvalue /Class
+doit
+StatementAst subclass: 'WhileAst'
+  instVarNames: #( test body orelse)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+WhileAst comment: 
+'No class-specific documentation for PyWhile, hierarchy is: 
+Object
+  AstNode( parent line column)
+    StatementAst
+      PyWhile( test body orElse)
+'
+%
+expectvalue /Class
+doit
+WhileAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for WithAst
+expectvalue /Class
+doit
+StatementAst subclass: 'WithAst'
+  instVarNames: #( items body)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+WithAst comment: 
+'No class-specific documentation for PyWith, hierarchy is: 
+Object
+  AstNode( parent)
+    PyAstNodeWithLocation( line column)
+      StatementAst
+        PyWith( items body)
+'
+%
+expectvalue /Class
+doit
+WithAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for CmpOpAst
+expectvalue /Class
+doit
+AstNode subclass: 'CmpOpAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+CmpOpAst comment: 
+'No class-specific documentation for CmpOpAst, hierarchy is: 
+Object
+  AstNode( parent)
+    CmpOpAst
+'
+%
+expectvalue /Class
+doit
+CmpOpAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for EqAst
+expectvalue /Class
+doit
+CmpOpAst subclass: 'EqAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+EqAst comment: 
+'No class-specific documentation for PyEq, hierarchy is: 
+Object
+  AstNode( parent)
+    CmpOpAst
+      PyEq
+'
+%
+expectvalue /Class
+doit
+EqAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for GtAst
+expectvalue /Class
+doit
+CmpOpAst subclass: 'GtAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+GtAst comment: 
+'No class-specific documentation for PyGt, hierarchy is: 
+Object
+  AstNode( parent)
+    CmpOpAst
+      PyGt
+'
+%
+expectvalue /Class
+doit
+GtAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for GtEAst
+expectvalue /Class
+doit
+CmpOpAst subclass: 'GtEAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+GtEAst comment: 
+'No class-specific documentation for PyGtE, hierarchy is: 
+Object
+  AstNode( parent)
+    CmpOpAst
+      PyGtE
+'
+%
+expectvalue /Class
+doit
+GtEAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for InAst
+expectvalue /Class
+doit
+CmpOpAst subclass: 'InAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+InAst comment: 
+'No class-specific documentation for PyIn, hierarchy is: 
+Object
+  AstNode( parent)
+    CmpOpAst
+      PyIn
+'
+%
+expectvalue /Class
+doit
+InAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for IsAst
+expectvalue /Class
+doit
+CmpOpAst subclass: 'IsAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+IsAst comment: 
+'No class-specific documentation for PyIs, hierarchy is: 
+Object
+  AstNode( parent)
+    CmpOpAst
+      PyIs
+'
+%
+expectvalue /Class
+doit
+IsAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for IsNotAst
+expectvalue /Class
+doit
+CmpOpAst subclass: 'IsNotAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+IsNotAst comment: 
+'No class-specific documentation for PyIsNot, hierarchy is: 
+Object
+  AstNode( parent)
+    CmpOpAst
+      PyIsNot
+'
+%
+expectvalue /Class
+doit
+IsNotAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for LtAst
+expectvalue /Class
+doit
+CmpOpAst subclass: 'LtAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+LtAst comment: 
+'No class-specific documentation for PyLt, hierarchy is: 
+Object
+  AstNode( parent)
+    CmpOpAst
+      PyLt
+'
+%
+expectvalue /Class
+doit
+LtAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for LtEAst
+expectvalue /Class
+doit
+CmpOpAst subclass: 'LtEAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+LtEAst comment: 
+'No class-specific documentation for PyLtE, hierarchy is: 
+Object
+  AstNode( parent)
+    CmpOpAst
+      PyLtE
+'
+%
+expectvalue /Class
+doit
+LtEAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for NotEqAst
+expectvalue /Class
+doit
+CmpOpAst subclass: 'NotEqAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+NotEqAst comment: 
+'No class-specific documentation for PyNotEq, hierarchy is: 
+Object
+  AstNode( parent)
+    CmpOpAst
+      PyNotEq
+'
+%
+expectvalue /Class
+doit
+NotEqAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for NotInAst
+expectvalue /Class
+doit
+CmpOpAst subclass: 'NotInAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+NotInAst comment: 
+'No class-specific documentation for PyNotIn, hierarchy is: 
+Object
+  AstNode( parent)
+    CmpOpAst
+      PyNotIn
+'
+%
+expectvalue /Class
+doit
+NotInAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for ComprehensionAst
+expectvalue /Class
+doit
+AstNode subclass: 'ComprehensionAst'
+  instVarNames: #( target iter ifs
+                    is_async)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ComprehensionAst comment: 
+'No class-specific documentation for ComprehensionAst, hierarchy is: 
+Object
+  AstNode( parent)
+    ComprehensionAst( target iter ifs is_async)
+'
+%
+expectvalue /Class
+doit
+ComprehensionAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for ExpressionContextAst
+expectvalue /Class
+doit
+AstNode subclass: 'ExpressionContextAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ExpressionContextAst comment: 
+'No class-specific documentation for ExpressionContextAst, hierarchy is:
+Object
+  AstNode( line column)
+    ExpressionContextAst
+'
+%
+expectvalue /Class
+doit
+ExpressionContextAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for AugLoadAst
+expectvalue /Class
+doit
+ExpressionContextAst subclass: 'AugLoadAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+AugLoadAst comment: 
+'No class-specific documentation for PyAugLoad, hierarchy is: 
+Object
+  AstNode( parent)
+    ExpressionContextAst
+      PyAugLoad
+'
+%
+expectvalue /Class
+doit
+AugLoadAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for AugStoreAst
+expectvalue /Class
+doit
+ExpressionContextAst subclass: 'AugStoreAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+AugStoreAst comment: 
+'No class-specific documentation for PyAugStore, hierarchy is: 
+Object
+  AstNode( parent)
+    ExpressionContextAst
+      PyAugStore
+'
+%
+expectvalue /Class
+doit
+AugStoreAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for DelAst
+expectvalue /Class
+doit
+ExpressionContextAst subclass: 'DelAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+DelAst comment: 
+'No class-specific documentation for PyDel, hierarchy is: 
+Object
+  AstNode( parent)
+    ExpressionContextAst
+      PyDel
+'
+%
+expectvalue /Class
+doit
+DelAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for LoadAst
+expectvalue /Class
+doit
+ExpressionContextAst subclass: 'LoadAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+LoadAst comment: 
+'No class-specific documentation for LoadAst, hierarchy is: 
+Object
+  AstNode( parent)
+    ExpressionContextAst
+      LoadAst
+'
+%
+expectvalue /Class
+doit
+LoadAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for ParamAst
+expectvalue /Class
+doit
+ExpressionContextAst subclass: 'ParamAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ParamAst comment: 
+'No class-specific documentation for PyParam, hierarchy is: 
+Object
+  AstNode( parent)
+    ExpressionContextAst
+      PyParam
+'
+%
+expectvalue /Class
+doit
+ParamAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for StoreAst
+expectvalue /Class
+doit
+ExpressionContextAst subclass: 'StoreAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+StoreAst comment: 
+'No class-specific documentation for StoreAst, hierarchy is: 
+Object
+  AstNode( parent)
+    ExpressionContextAst
+      StoreAst
+'
+%
+expectvalue /Class
+doit
+StoreAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for KeywordAst
+expectvalue /Class
+doit
+AstNode subclass: 'KeywordAst'
+  instVarNames: #( arg value)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+KeywordAst comment: 
+'No class-specific documentation for KeywordAst, hierarchy is: 
+Object
+  AstNode( parent)
+    KeywordAst( arg value)
+'
+%
+expectvalue /Class
+doit
+KeywordAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for ModuleAst
+expectvalue /Class
+doit
+AstNode subclass: 'ModuleAst'
+  instVarNames: #( body name path
+                    source stream)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ModuleAst comment: 
+'A Module is a file containing Python definitions and statements. When a file (''script'') is executed from the command line, (e.g., ''python myFile.py''), the module global variable `__name__` is set to ''__main__''. A Module can be imported into another module using the `Import` command, and the module global variable `__name__` is then the name of the file.
+
+https://docs.python.org/3/tutorial/modules.html?highlight=module'
+%
+expectvalue /Class
+doit
+ModuleAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for PyPackage
+expectvalue /Class
+doit
+ModuleAst subclass: 'PyPackage'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyPackage category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for OperatorAst
+expectvalue /Class
+doit
+AstNode subclass: 'OperatorAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+OperatorAst comment: 
+'No class-specific documentation for OperatorAst, hierarchy is: 
+Object
+  AstNode( parent)
+    OperatorAst
+'
+%
+expectvalue /Class
+doit
+OperatorAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for AddAst
+expectvalue /Class
+doit
+OperatorAst subclass: 'AddAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+AddAst comment: 
+'No class-specific documentation for PyAdd, hierarchy is: 
+Object
+  AstNode( parent)
+    OperatorAst
+      PyAdd
+'
+%
+expectvalue /Class
+doit
+AddAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for BitAndAst
+expectvalue /Class
+doit
+OperatorAst subclass: 'BitAndAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+BitAndAst comment: 
+'No class-specific documentation for PyBitAnd, hierarchy is: 
+Object
+  AstNode( parent)
+    OperatorAst
+      PyBitAnd
+'
+%
+expectvalue /Class
+doit
+BitAndAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for BitOrAst
+expectvalue /Class
+doit
+OperatorAst subclass: 'BitOrAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+BitOrAst comment: 
+'No class-specific documentation for PyBitOr, hierarchy is: 
+Object
+  AstNode( parent)
+    OperatorAst
+      PyBitOr
+'
+%
+expectvalue /Class
+doit
+BitOrAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for BitXorAst
+expectvalue /Class
+doit
+OperatorAst subclass: 'BitXorAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+BitXorAst comment: 
+'No class-specific documentation for PyBitXor, hierarchy is: 
+Object
+  AstNode( parent)
+    OperatorAst
+      PyBitXor
+'
+%
+expectvalue /Class
+doit
+BitXorAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for DivAst
+expectvalue /Class
+doit
+OperatorAst subclass: 'DivAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+DivAst comment: 
+'No class-specific documentation for PyDiv, hierarchy is: 
+Object
+  AstNode( parent)
+    OperatorAst
+      PyDiv
+'
+%
+expectvalue /Class
+doit
+DivAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for FloorDivAst
+expectvalue /Class
+doit
+OperatorAst subclass: 'FloorDivAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+FloorDivAst comment: 
+'No class-specific documentation for PyFloorDiv, hierarchy is: 
+Object
+  AstNode( parent)
+    OperatorAst
+      PyFloorDiv
+'
+%
+expectvalue /Class
+doit
+FloorDivAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for LShiftAst
+expectvalue /Class
+doit
+OperatorAst subclass: 'LShiftAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+LShiftAst comment: 
+'No class-specific documentation for PyLShift, hierarchy is: 
+Object
+  AstNode( parent)
+    OperatorAst
+      PyLShift
+'
+%
+expectvalue /Class
+doit
+LShiftAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for MatMultAst
+expectvalue /Class
+doit
+OperatorAst subclass: 'MatMultAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+MatMultAst comment: 
+'No class-specific documentation for PyMatMult, hierarchy is: 
+Object
+  AstNode( parent)
+    OperatorAst
+      PyMatMult
+'
+%
+expectvalue /Class
+doit
+MatMultAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for ModAst
+expectvalue /Class
+doit
+OperatorAst subclass: 'ModAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ModAst comment: 
+'No class-specific documentation for PyMod, hierarchy is: 
+Object
+  AstNode( parent)
+    OperatorAst
+      PyMod
+'
+%
+expectvalue /Class
+doit
+ModAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for MultAst
+expectvalue /Class
+doit
+OperatorAst subclass: 'MultAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+MultAst comment: 
+'No class-specific documentation for PyMult, hierarchy is: 
+Object
+  AstNode( parent)
+    OperatorAst
+      PyMult
+'
+%
+expectvalue /Class
+doit
+MultAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for PowAst
+expectvalue /Class
+doit
+OperatorAst subclass: 'PowAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+PowAst comment: 
+'No class-specific documentation for PyPow, hierarchy is: 
+Object
+  AstNode( parent)
+    OperatorAst
+      PyPow
+'
+%
+expectvalue /Class
+doit
+PowAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for RShiftAst
+expectvalue /Class
+doit
+OperatorAst subclass: 'RShiftAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+RShiftAst comment: 
+'No class-specific documentation for PyRShift, hierarchy is: 
+Object
+  AstNode( parent)
+    OperatorAst
+      PyRShift
+'
+%
+expectvalue /Class
+doit
+RShiftAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for SubAst
+expectvalue /Class
+doit
+OperatorAst subclass: 'SubAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+SubAst comment: 
+'No class-specific documentation for PySub, hierarchy is: 
+Object
+  AstNode( parent)
+    OperatorAst
+      PySub
+'
+%
+expectvalue /Class
+doit
+SubAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for SliceAbstractAst
+expectvalue /Class
+doit
+AstNode subclass: 'SliceAbstractAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+SliceAbstractAst comment: 
+'No class-specific documentation for SliceAbstractAst, hierarchy is: 
+Object
+  AstNode( parent)
+    SliceAbstractAst
+'
+%
+expectvalue /Class
+doit
+SliceAbstractAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for ExtSliceAst
+expectvalue /Class
+doit
+SliceAbstractAst subclass: 'ExtSliceAst'
+  instVarNames: #( dims)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ExtSliceAst comment: 
+'No class-specific documentation for PyExtSlice, hierarchy is: 
+Object
+  AstNode( parent)
+    SliceAbstractAst
+      PyExtSlice( dims)
+'
+%
+expectvalue /Class
+doit
+ExtSliceAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for IndexAst
+expectvalue /Class
+doit
+SliceAbstractAst subclass: 'IndexAst'
+  instVarNames: #( value)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+IndexAst comment: 
+'No class-specific documentation for PyIndex, hierarchy is: 
+Object
+  AstNode( parent)
+    SliceAbstractAst
+      PyIndex( value)
+'
+%
+expectvalue /Class
+doit
+IndexAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for SliceAst
+expectvalue /Class
+doit
+SliceAbstractAst subclass: 'SliceAst'
+  instVarNames: #( lower upper step)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+SliceAst comment: 
+'No class-specific documentation for PySlice, hierarchy is: 
+Object
+  AstNode( parent)
+    SliceAbstractAst
+      PySlice( lower upper step)
+'
+%
+expectvalue /Class
+doit
+SliceAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for SuiteAst
+expectvalue /Class
+doit
+AstNode subclass: 'SuiteAst'
+  instVarNames: #( body)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+SuiteAst comment: 
+'No class-specific documentation for SuiteAst, hierarchy is: 
+Object
+  AstNode( parent)
+    SuiteAst( body variables)
+'
+%
+expectvalue /Class
+doit
+SuiteAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for BlockAst
+expectvalue /Class
+doit
+SuiteAst subclass: 'BlockAst'
+  instVarNames: #( variables)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+BlockAst comment: 
+'A Python program is constructed from code blocks. A block is a piece of Python program text that is executed as a unit. The following are blocks: a module, a function body, and a class definition. Each command typed interactively is a block. A script file (a file given as standard input to the interpreter or specified as a command line argument to the interpreter) is a code block. A script command (a command specified on the interpreter command line with the -c option) is a code block. The string argument passed to the built-in functions eval() and exec() is a code block.
+
+A code block is executed in an execution frame. A frame contains some administrative information (used for debugging) and determines where and how execution continues after the code block’s execution has completed.
+
+
+https://docs.python.org/3/reference/executionmodel.html'
+%
+expectvalue /Class
+doit
+BlockAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for GlobalScope
+expectvalue /Class
+doit
+BlockAst subclass: 'GlobalScope'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+GlobalScope category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for LocalScope
+expectvalue /Class
+doit
+BlockAst subclass: 'LocalScope'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+LocalScope category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for WithItemAst
+expectvalue /Class
+doit
+AstNode subclass: 'WithItemAst'
+  instVarNames: #( context_expr optional_vars)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+WithItemAst comment: 
+'No class-specific documentation for WithItemAst, hierarchy is: 
+Object
+  AstNode( parent)
+    WithItemAst( context_expr optional_vars)
+'
+%
+expectvalue /Class
+doit
+WithItemAst category: 'Parser'
 %
 set compile_env: 0
 ! ------------------- Class definition for BuiltinModule
@@ -225,6 +3411,23 @@ doit
 Builtins category: 'Builtins'
 %
 set compile_env: 0
+! ------------------- Class definition for PyTime
+expectvalue /Class
+doit
+BuiltinModule subclass: 'PyTime'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyTime category: 'Builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for Sys
 expectvalue /Class
 doit
@@ -247,10 +3450,10 @@ doit
 Sys category: 'Builtins'
 %
 set compile_env: 0
-! ------------------- Class definition for Time
+! ------------------- Class definition for List
 expectvalue /Class
 doit
-BuiltinModule subclass: 'Time'
+Array subclass: 'List'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -261,13 +3464,13 @@ BuiltinModule subclass: 'Time'
 %
 expectvalue /Class
 doit
-Time category: 'Builtins'
+List category: 'Builtins'
 %
 set compile_env: 0
-! ------------------- Class definition for Py_List
+! ------------------- Class definition for Tuple
 expectvalue /Class
 doit
-Array subclass: 'Py_List'
+Array subclass: 'Tuple'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -278,13 +3481,13 @@ Array subclass: 'Py_List'
 %
 expectvalue /Class
 doit
-Py_List category: 'Builtins'
+Tuple category: 'Builtins'
 %
 set compile_env: 0
-! ------------------- Class definition for Py_Tuple
+! ------------------- Class definition for PyString
 expectvalue /Class
 doit
-Array subclass: 'Py_Tuple'
+String subclass: 'PyString'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -295,24 +3498,7 @@ Array subclass: 'Py_Tuple'
 %
 expectvalue /Class
 doit
-Py_Tuple category: 'Builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for Py_String
-expectvalue /Class
-doit
-String subclass: 'Py_String'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-Py_String category: 'Builtins'
+PyString category: 'Builtins'
 %
 set compile_env: 0
 ! ------------------- Class definition for Complex
@@ -338,3236 +3524,6 @@ Object
 expectvalue /Class
 doit
 Complex category: 'Builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for PyAstNode
-expectvalue /Class
-doit
-Object subclass: 'PyAstNode'
-  instVarNames: #( parent)
-  classVars: #( escapeCharacters)
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyAstNode comment: 
-'No class-specific documentation for PyAstNode, hierarchy is:
-Object
-  PyAstNode
-'
-%
-expectvalue /Class
-doit
-PyAstNode category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyAlias
-expectvalue /Class
-doit
-PyAstNode subclass: 'PyAlias'
-  instVarNames: #( assoc name asName)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyAlias comment: 
-'No class-specific documentation for PyAlias, hierarchy is:
-Object
-  PyAstNode
-    PyAlias( name asName)
-'
-%
-expectvalue /Class
-doit
-PyAlias category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyArguments
-expectvalue /Class
-doit
-PyAstNode subclass: 'PyArguments'
-  instVarNames: #( args vararg kwonlyargs
-                    kw_defaults kwarg defaults)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyArguments comment: 
-'No class-specific documentation for PyArguments, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyArguments( args vararg kwonlyargs kw_defaults kwarg defaults)
-'
-%
-expectvalue /Class
-doit
-PyArguments category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyAstNodeWithLocation
-expectvalue /Class
-doit
-PyAstNode subclass: 'PyAstNodeWithLocation'
-  instVarNames: #( line column)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyAstNodeWithLocation comment: 
-'No class-specific documentation for PyAstNodeWithLocation, hierarchy is: 
-Object
-  PyAstNode( parent line column)
-    PyAstNodeWithLocation
-'
-%
-expectvalue /Class
-doit
-PyAstNodeWithLocation category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyArg
-expectvalue /Class
-doit
-PyAstNodeWithLocation subclass: 'PyArg'
-  instVarNames: #( assoc arg annotation)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyArg comment: 
-'No class-specific documentation for PyArg, hierarchy is: 
-Object
-  PyAstNode( parent line column)
-    PyArg( arg annotation)
-'
-%
-expectvalue /Class
-doit
-PyArg category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyExceptHandler
-expectvalue /Class
-doit
-PyAstNodeWithLocation subclass: 'PyExceptHandler'
-  instVarNames: #( type name body)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyExceptHandler comment: 
-'No class-specific documentation for PyExceptHandler, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyExcepthandler
-      PyExceptHandler( type name body)
-'
-%
-expectvalue /Class
-doit
-PyExceptHandler category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyExpression
-expectvalue /Class
-doit
-PyAstNodeWithLocation subclass: 'PyExpression'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyExpression comment: 
-'No class-specific documentation for PyExpression, hierarchy is:
-Object
-  PyAstNode( line column)
-    PyExpression
-'
-%
-expectvalue /Class
-doit
-PyExpression category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyAttribute
-expectvalue /Class
-doit
-PyExpression subclass: 'PyAttribute'
-  instVarNames: #( value attr ctx)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyAttribute comment: 
-'No class-specific documentation for PyAttribute, hierarchy is: 
-Object
-  PyAstNode( parent line column)
-    PyExpression
-      PyAttribute( value attribute context)
-'
-%
-expectvalue /Class
-doit
-PyAttribute category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyAwait
-expectvalue /Class
-doit
-PyExpression subclass: 'PyAwait'
-  instVarNames: #( value)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyAwait comment: 
-'No class-specific documentation for PyAwait, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PyAwait( value)
-'
-%
-expectvalue /Class
-doit
-PyAwait category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyBinOp
-expectvalue /Class
-doit
-PyExpression subclass: 'PyBinOp'
-  instVarNames: #( left op right)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyBinOp comment: 
-'No class-specific documentation for PyBinOp, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PyBinOp( left op right)
-'
-%
-expectvalue /Class
-doit
-PyBinOp category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyBoolOp
-expectvalue /Class
-doit
-PyExpression subclass: 'PyBoolOp'
-  instVarNames: #( values)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyBoolOp comment: 
-'No class-specific documentation for PyBoolOp, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PyBoolOp( op values)
-'
-%
-expectvalue /Class
-doit
-PyBoolOp category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyAnd
-expectvalue /Class
-doit
-PyBoolOp subclass: 'PyAnd'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyAnd comment: 
-'No class-specific documentation for PyAnd, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyBoolop
-      PyAnd
-'
-%
-expectvalue /Class
-doit
-PyAnd category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyOr
-expectvalue /Class
-doit
-PyBoolOp subclass: 'PyOr'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyOr comment: 
-'No class-specific documentation for PyOr, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyBoolop
-      PyOr
-'
-%
-expectvalue /Class
-doit
-PyOr category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyBytes
-expectvalue /Class
-doit
-PyExpression subclass: 'PyBytes'
-  instVarNames: #( s)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyBytes comment: 
-'No class-specific documentation for PyBytes, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PyBytes( s)
-'
-%
-expectvalue /Class
-doit
-PyBytes category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyCall
-expectvalue /Class
-doit
-PyExpression subclass: 'PyCall'
-  instVarNames: #( function arguments keywords)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyCall comment: 
-'No class-specific documentation for PyCall, hierarchy is: 
-Object
-  PyAstNode( parent line column)
-    PyExpression
-      PyCall( function arguments keywords)
-'
-%
-expectvalue /Class
-doit
-PyCall category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyCompare
-expectvalue /Class
-doit
-PyExpression subclass: 'PyCompare'
-  instVarNames: #( left cmpopList comparatorList)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyCompare comment: 
-'No class-specific documentation for PyCompare, hierarchy is: 
-Object
-  PyAstNode( parent line column)
-    PyExpression
-      PyCompare( left cmpopList comparatorList)
-'
-%
-expectvalue /Class
-doit
-PyCompare category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyConstant
-expectvalue /Class
-doit
-PyExpression subclass: 'PyConstant'
-  instVarNames: #( value)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyConstant comment: 
-'No class-specific documentation for PyConstant, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PyConstant( value)
-'
-%
-expectvalue /Class
-doit
-PyConstant category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyDict
-expectvalue /Class
-doit
-PyExpression subclass: 'PyDict'
-  instVarNames: #( keys values)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyDict comment: 
-'No class-specific documentation for PyDict, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PyDict( keys values)
-'
-%
-expectvalue /Class
-doit
-PyDict category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyDictComp
-expectvalue /Class
-doit
-PyExpression subclass: 'PyDictComp'
-  instVarNames: #( key value generators)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyDictComp comment: 
-'No class-specific documentation for PyDictComp, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PyDictComp( key value generators)
-'
-%
-expectvalue /Class
-doit
-PyDictComp category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyEllipsis
-expectvalue /Class
-doit
-PyExpression subclass: 'PyEllipsis'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyEllipsis comment: 
-'No class-specific documentation for PyEllipsis, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PyEllipsis
-'
-%
-expectvalue /Class
-doit
-PyEllipsis category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyFormattedValue
-expectvalue /Class
-doit
-PyExpression subclass: 'PyFormattedValue'
-  instVarNames: #( value conversion format_spec)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyFormattedValue comment: 
-'No class-specific documentation for PyFormattedValue, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PyFormattedValue( value conversion format_spec)
-'
-%
-expectvalue /Class
-doit
-PyFormattedValue category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyGeneratorExp
-expectvalue /Class
-doit
-PyExpression subclass: 'PyGeneratorExp'
-  instVarNames: #( elt generators)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyGeneratorExp comment: 
-'No class-specific documentation for PyGeneratorExp, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PyGeneratorExp( elt generators)
-'
-%
-expectvalue /Class
-doit
-PyGeneratorExp category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyIfExp
-expectvalue /Class
-doit
-PyExpression subclass: 'PyIfExp'
-  instVarNames: #( test body orelse)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyIfExp comment: 
-'No class-specific documentation for PyIfExp, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PyIfExp( args body)
-'
-%
-expectvalue /Class
-doit
-PyIfExp category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyJoinedStr
-expectvalue /Class
-doit
-PyExpression subclass: 'PyJoinedStr'
-  instVarNames: #( values)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyJoinedStr comment: 
-'No class-specific documentation for PyJoinedStr, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PyJoinedStr( values)
-'
-%
-expectvalue /Class
-doit
-PyJoinedStr category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyLambda
-expectvalue /Class
-doit
-PyExpression subclass: 'PyLambda'
-  instVarNames: #( args body)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyLambda comment: 
-'No class-specific documentation for PyLambda, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PyLambda( op values)
-'
-%
-expectvalue /Class
-doit
-PyLambda category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyList
-expectvalue /Class
-doit
-PyExpression subclass: 'PyList'
-  instVarNames: #( elts ctx)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyList comment: 
-'No class-specific documentation for PyList, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PyList( elts ctx)
-'
-%
-expectvalue /Class
-doit
-PyList category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyListComp
-expectvalue /Class
-doit
-PyExpression subclass: 'PyListComp'
-  instVarNames: #( elt generators)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyListComp comment: 
-'No class-specific documentation for PyListComp, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PyListComp( elt generators)
-'
-%
-expectvalue /Class
-doit
-PyListComp category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyName
-expectvalue /Class
-doit
-PyExpression subclass: 'PyName'
-  instVarNames: #( assoc id ctx)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyName comment: 
-'Names refer to objects. Names are introduced by name binding operations.
-
-The following constructs bind names: formal parameters to functions, import statements, class and function definitions (these bind the class or function name in the defining block), and targets that are identifiers if occurring in an assignment, for loop header, or after as in a with statement or except clause. The import statement of the form from ... import * binds all names defined in the imported module, except those beginning with an underscore. This form may only be used at the module level.
-
-A target occurring in a del statement is also considered bound for this purpose (though the actual semantics are to unbind the name).
-
-Each assignment or import statement occurs within a block defined by a class or function definition or at the module level (the top-level code block).
-
-If a name is bound in a block, it is a local variable of that block, unless declared as nonlocal or global. If a name is bound at the module level, it is a global variable. (The variables of the module code block are local and global.) If a variable is used in a code block but not defined there, it is a free variable.
-
-Each occurrence of a name in the program text refers to the binding of that name established by certain name resolution rules.
-
-
-
-
-https://docs.python.org/3/reference/executionmodel.html#naming-and-binding'
-%
-expectvalue /Class
-doit
-PyName category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyNameConstant
-expectvalue /Class
-doit
-PyExpression subclass: 'PyNameConstant'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #( singleton)
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyNameConstant comment: 
-'No class-specific documentation for PyNameConstant, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PyNameConstant( value)
-'
-%
-expectvalue /Class
-doit
-PyNameConstant category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyFalse
-expectvalue /Class
-doit
-PyNameConstant subclass: 'PyFalse'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyFalse comment: 
-'No class-specific documentation for PyFalse, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PyNameConstant( value)
-          PyFalse
-'
-%
-expectvalue /Class
-doit
-PyFalse category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyNone
-expectvalue /Class
-doit
-PyNameConstant subclass: 'PyNone'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyNone comment: 
-'No class-specific documentation for PyNone, hierarchy is: 
-Object
-  PyNone
-'
-%
-expectvalue /Class
-doit
-PyNone category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyTrue
-expectvalue /Class
-doit
-PyNameConstant subclass: 'PyTrue'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyTrue comment: 
-'No class-specific documentation for PyTrue, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PyNameConstant( value)
-          PyTrue
-'
-%
-expectvalue /Class
-doit
-PyTrue category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyNamedExpr
-expectvalue /Class
-doit
-PyExpression subclass: 'PyNamedExpr'
-  instVarNames: #( target value)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyNamedExpr category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyNum
-expectvalue /Class
-doit
-PyExpression subclass: 'PyNum'
-  instVarNames: #( n)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyNum comment: 
-'No class-specific documentation for PyNum, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PyNum( n)
-'
-%
-expectvalue /Class
-doit
-PyNum category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PySet
-expectvalue /Class
-doit
-PyExpression subclass: 'PySet'
-  instVarNames: #( elts)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PySet comment: 
-'No class-specific documentation for PySet, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PySet( elts)
-'
-%
-expectvalue /Class
-doit
-PySet category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PySetComp
-expectvalue /Class
-doit
-PyExpression subclass: 'PySetComp'
-  instVarNames: #( elt generators)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PySetComp comment: 
-'No class-specific documentation for PySetComp, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PySetComp( elt generators)
-'
-%
-expectvalue /Class
-doit
-PySetComp category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyStarred
-expectvalue /Class
-doit
-PyExpression subclass: 'PyStarred'
-  instVarNames: #( value ctx)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyStarred comment: 
-'No class-specific documentation for PyStarred, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PyStarred( value ctx)
-'
-%
-expectvalue /Class
-doit
-PyStarred category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyStr
-expectvalue /Class
-doit
-PyExpression subclass: 'PyStr'
-  instVarNames: #( s)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyStr comment: 
-'No class-specific documentation for PyString, hierarchy is: 
-Object
-  PyAstNode( parent line column)
-    PyExpression
-      PyString( string)
-'
-%
-expectvalue /Class
-doit
-PyStr category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PySubscript
-expectvalue /Class
-doit
-PyExpression subclass: 'PySubscript'
-  instVarNames: #( value slice ctx)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PySubscript comment: 
-'No class-specific documentation for PySubscript, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PySubscript( value slice ctx)
-'
-%
-expectvalue /Class
-doit
-PySubscript category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyTuple
-expectvalue /Class
-doit
-PyExpression subclass: 'PyTuple'
-  instVarNames: #( elts ctx)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyTuple comment: 
-'No class-specific documentation for PyTuple, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PyTuple( elts ctx)
-'
-%
-expectvalue /Class
-doit
-PyTuple category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyUnaryOp
-expectvalue /Class
-doit
-PyExpression subclass: 'PyUnaryOp'
-  instVarNames: #( operand)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyUnaryOp comment: 
-'No class-specific documentation for PyUnaryOp, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PyUnaryOp( op operand)
-'
-%
-expectvalue /Class
-doit
-PyUnaryOp category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyInvert
-expectvalue /Class
-doit
-PyUnaryOp subclass: 'PyInvert'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyInvert comment: 
-'No class-specific documentation for PyInvert, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyUnaryop
-      PyInvert
-'
-%
-expectvalue /Class
-doit
-PyInvert category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyNot
-expectvalue /Class
-doit
-PyUnaryOp subclass: 'PyNot'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyNot comment: 
-'No class-specific documentation for PyNot, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyUnaryop
-      PyNot
-'
-%
-expectvalue /Class
-doit
-PyNot category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyUAdd
-expectvalue /Class
-doit
-PyUnaryOp subclass: 'PyUAdd'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyUAdd comment: 
-'No class-specific documentation for PyUAdd, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyUnaryop
-      PyUAdd
-'
-%
-expectvalue /Class
-doit
-PyUAdd category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyUSub
-expectvalue /Class
-doit
-PyUnaryOp subclass: 'PyUSub'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyUSub comment: 
-'No class-specific documentation for PyUSub, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyUnaryop
-      PyUSub
-'
-%
-expectvalue /Class
-doit
-PyUSub category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyYield
-expectvalue /Class
-doit
-PyExpression subclass: 'PyYield'
-  instVarNames: #( value)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyYield comment: 
-'No class-specific documentation for PyYield, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PyYield( value)
-'
-%
-expectvalue /Class
-doit
-PyYield category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyYieldFrom
-expectvalue /Class
-doit
-PyExpression subclass: 'PyYieldFrom'
-  instVarNames: #( value)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyYieldFrom comment: 
-'No class-specific documentation for PyYieldFrom, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyExpression
-        PyYieldFrom( value)
-'
-%
-expectvalue /Class
-doit
-PyYieldFrom category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyStatement
-expectvalue /Class
-doit
-PyAstNodeWithLocation subclass: 'PyStatement'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyStatement comment: 
-'No class-specific documentation for PyStatement, hierarchy is:
-Object
-  PyAstNode( line column)
-    PyStatement
-'
-%
-expectvalue /Class
-doit
-PyStatement category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyAnnAssign
-expectvalue /Class
-doit
-PyStatement subclass: 'PyAnnAssign'
-  instVarNames: #( target annotation value
-                    simple)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyAnnAssign comment: 
-'No class-specific documentation for PyAnnAssign, hierarchy is: 
-Object
-  PyAstNode( parent line column)
-    PyStatement
-      PyAnnAssign( target annotation value simple)
-'
-%
-expectvalue /Class
-doit
-PyAnnAssign category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyAssert
-expectvalue /Class
-doit
-PyStatement subclass: 'PyAssert'
-  instVarNames: #( test msg)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyAssert comment: 
-'No class-specific documentation for PyAssert, hierarchy is: 
-Object
-  PyAstNode( parent line column)
-    PyStatement
-      PyAssert( test msg)
-'
-%
-expectvalue /Class
-doit
-PyAssert category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyAssign
-expectvalue /Class
-doit
-PyStatement subclass: 'PyAssign'
-  instVarNames: #( targets value)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyAssign comment: 
-'No class-specific documentation for PyAssign, hierarchy is: 
-Object
-  PyAstNode( parent line column)
-    PyStatement
-      PyAssign( target value)
-'
-%
-expectvalue /Class
-doit
-PyAssign category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyAsyncFor
-expectvalue /Class
-doit
-PyStatement subclass: 'PyAsyncFor'
-  instVarNames: #( target iter body
-                    orelse)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyAsyncFor comment: 
-'No class-specific documentation for PyAsyncFor, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyStatement
-        PyAsyncFor( target iter body orelse)
-'
-%
-expectvalue /Class
-doit
-PyAsyncFor category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyAsyncFunctionDef
-expectvalue /Class
-doit
-PyStatement subclass: 'PyAsyncFunctionDef'
-  instVarNames: #( name args body
-                    decorator_list returns)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyAsyncFunctionDef comment: 
-'No class-specific documentation for PyAsyncFunctionDef, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyStatement
-        PyAsyncFunctionDef( name args body decorator_list returns)
-'
-%
-expectvalue /Class
-doit
-PyAsyncFunctionDef category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyAsyncWith
-expectvalue /Class
-doit
-PyStatement subclass: 'PyAsyncWith'
-  instVarNames: #( items body)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyAsyncWith comment: 
-'No class-specific documentation for PyAsyncWith, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyStatement
-        PyAsyncWith( items body)
-'
-%
-expectvalue /Class
-doit
-PyAsyncWith category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyAugAssign
-expectvalue /Class
-doit
-PyStatement subclass: 'PyAugAssign'
-  instVarNames: #( target op value)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyAugAssign comment: 
-'No class-specific documentation for PyAugAssign, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyStatement
-        PyAugAssign( target op value)
-'
-%
-expectvalue /Class
-doit
-PyAugAssign category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyBreak
-expectvalue /Class
-doit
-PyStatement subclass: 'PyBreak'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyBreak comment: 
-'No class-specific documentation for PyBreak, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyStatement
-        PyBreak
-'
-%
-expectvalue /Class
-doit
-PyBreak category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyClassDef
-expectvalue /Class
-doit
-PyStatement subclass: 'PyClassDef'
-  instVarNames: #( name bases keywords
-                    body decorator_list)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyClassDef comment: 
-'No class-specific documentation for PyClassDef, hierarchy is: 
-Object
-  PyAstNode( parent line column)
-    PyStatement
-      PyClassDef( name bases keywords body decorator_list)
-'
-%
-expectvalue /Class
-doit
-PyClassDef category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyContinue
-expectvalue /Class
-doit
-PyStatement subclass: 'PyContinue'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyContinue comment: 
-'No class-specific documentation for PyContinue, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyStatement
-        PyContinue
-'
-%
-expectvalue /Class
-doit
-PyContinue category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyDelete
-expectvalue /Class
-doit
-PyStatement subclass: 'PyDelete'
-  instVarNames: #( targets)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyDelete comment: 
-'No class-specific documentation for PyDelete, hierarchy is: 
-Object
-  PyAstNode( parent line column)
-    PyExpressionContext
-      PyDelete
-'
-%
-expectvalue /Class
-doit
-PyDelete category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyExpr
-expectvalue /Class
-doit
-PyStatement subclass: 'PyExpr'
-  instVarNames: #( value)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyExpr comment: 
-'No class-specific documentation for PyExpr, hierarchy is: 
-Object
-  PyAstNode( parent line column)
-    PyStatement
-      PyExpr( expression)
-'
-%
-expectvalue /Class
-doit
-PyExpr category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyFor
-expectvalue /Class
-doit
-PyStatement subclass: 'PyFor'
-  instVarNames: #( target iter body
-                    orelse)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyFor comment: 
-'No class-specific documentation for PyFor, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyStatement
-        PyFor( target iter body orelse)
-'
-%
-expectvalue /Class
-doit
-PyFor category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyFunctionDef
-expectvalue /Class
-doit
-PyStatement subclass: 'PyFunctionDef'
-  instVarNames: #( assoc name args
-                    body decorator_list returns)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyFunctionDef comment: 
-'No class-specific documentation for PyFunctionDef, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyStatement
-        PyFunctionDef( name args body decorator_list returns)
-'
-%
-expectvalue /Class
-doit
-PyFunctionDef category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyGlobal
-expectvalue /Class
-doit
-PyStatement subclass: 'PyGlobal'
-  instVarNames: #( names)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyGlobal comment: 
-'No class-specific documentation for PyGlobal, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyStatement
-        PyGlobal( names)
-'
-%
-expectvalue /Class
-doit
-PyGlobal category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyIf
-expectvalue /Class
-doit
-PyStatement subclass: 'PyIf'
-  instVarNames: #( test body orelse)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyIf comment: 
-'No class-specific documentation for PyIf, hierarchy is:
-Object
-  PyAstNode( line column)
-    PyIf( test trueCase falseCase)
-'
-%
-expectvalue /Class
-doit
-PyIf category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyImport
-expectvalue /Class
-doit
-PyStatement subclass: 'PyImport'
-  instVarNames: #( names)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyImport comment: 
-'No class-specific documentation for PyImport, hierarchy is:
-Object
-  PyAstNode
-    PyImport( aliases)
-'
-%
-expectvalue /Class
-doit
-PyImport category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyImportFrom
-expectvalue /Class
-doit
-PyStatement subclass: 'PyImportFrom'
-  instVarNames: #( module names level)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyImportFrom comment: 
-'No class-specific documentation for PyImportFrom, hierarchy is: 
-Object
-  PyAstNode( parent line column)
-    PyStatement
-      PyImportFrom( identifier alias int)
-'
-%
-expectvalue /Class
-doit
-PyImportFrom category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyNonlocal
-expectvalue /Class
-doit
-PyStatement subclass: 'PyNonlocal'
-  instVarNames: #( names)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyNonlocal comment: 
-'No class-specific documentation for PyNonlocal, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyStatement
-        PyNonlocal( names)
-'
-%
-expectvalue /Class
-doit
-PyNonlocal category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyPass
-expectvalue /Class
-doit
-PyStatement subclass: 'PyPass'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyPass comment: 
-'No class-specific documentation for PyPass, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyStatement
-        PyPass
-'
-%
-expectvalue /Class
-doit
-PyPass category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyRaise
-expectvalue /Class
-doit
-PyStatement subclass: 'PyRaise'
-  instVarNames: #( exc cause)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyRaise comment: 
-'No class-specific documentation for PyRaise, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyStatement
-        PyRaise( exc cause)
-'
-%
-expectvalue /Class
-doit
-PyRaise category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyReturn
-expectvalue /Class
-doit
-PyStatement subclass: 'PyReturn'
-  instVarNames: #( value)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyReturn comment: 
-'No class-specific documentation for PyReturn, hierarchy is: 
-Object
-  PyAstNode( parent line column)
-    PyStatement
-      PyReturn( value)
-'
-%
-expectvalue /Class
-doit
-PyReturn category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyTry
-expectvalue /Class
-doit
-PyStatement subclass: 'PyTry'
-  instVarNames: #( body handlers orelse
-                    finalbody)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyTry comment: 
-'No class-specific documentation for PyTry, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyStatement
-        PyTry( body handlers orelse finalbody)
-'
-%
-expectvalue /Class
-doit
-PyTry category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyWhile
-expectvalue /Class
-doit
-PyStatement subclass: 'PyWhile'
-  instVarNames: #( test body orelse)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyWhile comment: 
-'No class-specific documentation for PyWhile, hierarchy is: 
-Object
-  PyAstNode( parent line column)
-    PyStatement
-      PyWhile( test body orElse)
-'
-%
-expectvalue /Class
-doit
-PyWhile category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyWith
-expectvalue /Class
-doit
-PyStatement subclass: 'PyWith'
-  instVarNames: #( items body)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyWith comment: 
-'No class-specific documentation for PyWith, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyAstNodeWithLocation( line column)
-      PyStatement
-        PyWith( items body)
-'
-%
-expectvalue /Class
-doit
-PyWith category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyCmpOp
-expectvalue /Class
-doit
-PyAstNode subclass: 'PyCmpOp'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyCmpOp comment: 
-'No class-specific documentation for PyCmpOp, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyCmpOp
-'
-%
-expectvalue /Class
-doit
-PyCmpOp category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyEq
-expectvalue /Class
-doit
-PyCmpOp subclass: 'PyEq'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyEq comment: 
-'No class-specific documentation for PyEq, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyCmpOp
-      PyEq
-'
-%
-expectvalue /Class
-doit
-PyEq category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyGt
-expectvalue /Class
-doit
-PyCmpOp subclass: 'PyGt'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyGt comment: 
-'No class-specific documentation for PyGt, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyCmpOp
-      PyGt
-'
-%
-expectvalue /Class
-doit
-PyGt category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyGtE
-expectvalue /Class
-doit
-PyCmpOp subclass: 'PyGtE'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyGtE comment: 
-'No class-specific documentation for PyGtE, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyCmpOp
-      PyGtE
-'
-%
-expectvalue /Class
-doit
-PyGtE category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyIn
-expectvalue /Class
-doit
-PyCmpOp subclass: 'PyIn'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyIn comment: 
-'No class-specific documentation for PyIn, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyCmpOp
-      PyIn
-'
-%
-expectvalue /Class
-doit
-PyIn category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyIs
-expectvalue /Class
-doit
-PyCmpOp subclass: 'PyIs'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyIs comment: 
-'No class-specific documentation for PyIs, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyCmpOp
-      PyIs
-'
-%
-expectvalue /Class
-doit
-PyIs category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyIsNot
-expectvalue /Class
-doit
-PyCmpOp subclass: 'PyIsNot'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyIsNot comment: 
-'No class-specific documentation for PyIsNot, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyCmpOp
-      PyIsNot
-'
-%
-expectvalue /Class
-doit
-PyIsNot category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyLt
-expectvalue /Class
-doit
-PyCmpOp subclass: 'PyLt'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyLt comment: 
-'No class-specific documentation for PyLt, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyCmpOp
-      PyLt
-'
-%
-expectvalue /Class
-doit
-PyLt category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyLtE
-expectvalue /Class
-doit
-PyCmpOp subclass: 'PyLtE'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyLtE comment: 
-'No class-specific documentation for PyLtE, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyCmpOp
-      PyLtE
-'
-%
-expectvalue /Class
-doit
-PyLtE category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyNotEq
-expectvalue /Class
-doit
-PyCmpOp subclass: 'PyNotEq'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyNotEq comment: 
-'No class-specific documentation for PyNotEq, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyCmpOp
-      PyNotEq
-'
-%
-expectvalue /Class
-doit
-PyNotEq category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyNotIn
-expectvalue /Class
-doit
-PyCmpOp subclass: 'PyNotIn'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyNotIn comment: 
-'No class-specific documentation for PyNotIn, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyCmpOp
-      PyNotIn
-'
-%
-expectvalue /Class
-doit
-PyNotIn category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyComprehension
-expectvalue /Class
-doit
-PyAstNode subclass: 'PyComprehension'
-  instVarNames: #( target iter ifs
-                    is_async)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyComprehension comment: 
-'No class-specific documentation for PyComprehension, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyComprehension( target iter ifs is_async)
-'
-%
-expectvalue /Class
-doit
-PyComprehension category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyExpressionContext
-expectvalue /Class
-doit
-PyAstNode subclass: 'PyExpressionContext'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyExpressionContext comment: 
-'No class-specific documentation for PyExpressionContext, hierarchy is:
-Object
-  PyAstNode( line column)
-    PyExpressionContext
-'
-%
-expectvalue /Class
-doit
-PyExpressionContext category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyAugLoad
-expectvalue /Class
-doit
-PyExpressionContext subclass: 'PyAugLoad'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyAugLoad comment: 
-'No class-specific documentation for PyAugLoad, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyExpressionContext
-      PyAugLoad
-'
-%
-expectvalue /Class
-doit
-PyAugLoad category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyAugStore
-expectvalue /Class
-doit
-PyExpressionContext subclass: 'PyAugStore'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyAugStore comment: 
-'No class-specific documentation for PyAugStore, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyExpressionContext
-      PyAugStore
-'
-%
-expectvalue /Class
-doit
-PyAugStore category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyDel
-expectvalue /Class
-doit
-PyExpressionContext subclass: 'PyDel'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyDel comment: 
-'No class-specific documentation for PyDel, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyExpressionContext
-      PyDel
-'
-%
-expectvalue /Class
-doit
-PyDel category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyLoad
-expectvalue /Class
-doit
-PyExpressionContext subclass: 'PyLoad'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyLoad comment: 
-'No class-specific documentation for PyLoad, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyExpressionContext
-      PyLoad
-'
-%
-expectvalue /Class
-doit
-PyLoad category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyParam
-expectvalue /Class
-doit
-PyExpressionContext subclass: 'PyParam'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyParam comment: 
-'No class-specific documentation for PyParam, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyExpressionContext
-      PyParam
-'
-%
-expectvalue /Class
-doit
-PyParam category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyStore
-expectvalue /Class
-doit
-PyExpressionContext subclass: 'PyStore'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyStore comment: 
-'No class-specific documentation for PyStore, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyExpressionContext
-      PyStore
-'
-%
-expectvalue /Class
-doit
-PyStore category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyKeyword
-expectvalue /Class
-doit
-PyAstNode subclass: 'PyKeyword'
-  instVarNames: #( arg value)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyKeyword comment: 
-'No class-specific documentation for PyKeyword, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyKeyword( arg value)
-'
-%
-expectvalue /Class
-doit
-PyKeyword category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyModule
-expectvalue /Class
-doit
-PyAstNode subclass: 'PyModule'
-  instVarNames: #( body name path
-                    source stream)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyModule comment: 
-'A Module is a file containing Python definitions and statements. When a file (''script'') is executed from the command line, (e.g., ''python myFile.py''), the module global variable `__name__` is set to ''__main__''. A Module can be imported into another module using the `Import` command, and the module global variable `__name__` is then the name of the file.
-
-https://docs.python.org/3/tutorial/modules.html?highlight=module'
-%
-expectvalue /Class
-doit
-PyModule category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyPackage
-expectvalue /Class
-doit
-PyModule subclass: 'PyPackage'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyPackage category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyRandom
-expectvalue /Class
-doit
-PyModule subclass: 'PyRandom'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyRandom comment: 
-'No class-specific documentation for PyRandom, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyModule( globals name path source statements stream)
-      PyRandom
-'
-%
-expectvalue /Class
-doit
-PyRandom category: 'Builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for PyOperator
-expectvalue /Class
-doit
-PyAstNode subclass: 'PyOperator'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyOperator comment: 
-'No class-specific documentation for PyOperator, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyOperator
-'
-%
-expectvalue /Class
-doit
-PyOperator category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyAdd
-expectvalue /Class
-doit
-PyOperator subclass: 'PyAdd'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyAdd comment: 
-'No class-specific documentation for PyAdd, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyOperator
-      PyAdd
-'
-%
-expectvalue /Class
-doit
-PyAdd category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyBitAnd
-expectvalue /Class
-doit
-PyOperator subclass: 'PyBitAnd'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyBitAnd comment: 
-'No class-specific documentation for PyBitAnd, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyOperator
-      PyBitAnd
-'
-%
-expectvalue /Class
-doit
-PyBitAnd category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyBitOr
-expectvalue /Class
-doit
-PyOperator subclass: 'PyBitOr'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyBitOr comment: 
-'No class-specific documentation for PyBitOr, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyOperator
-      PyBitOr
-'
-%
-expectvalue /Class
-doit
-PyBitOr category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyBitXor
-expectvalue /Class
-doit
-PyOperator subclass: 'PyBitXor'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyBitXor comment: 
-'No class-specific documentation for PyBitXor, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyOperator
-      PyBitXor
-'
-%
-expectvalue /Class
-doit
-PyBitXor category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyDiv
-expectvalue /Class
-doit
-PyOperator subclass: 'PyDiv'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyDiv comment: 
-'No class-specific documentation for PyDiv, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyOperator
-      PyDiv
-'
-%
-expectvalue /Class
-doit
-PyDiv category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyFloorDiv
-expectvalue /Class
-doit
-PyOperator subclass: 'PyFloorDiv'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyFloorDiv comment: 
-'No class-specific documentation for PyFloorDiv, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyOperator
-      PyFloorDiv
-'
-%
-expectvalue /Class
-doit
-PyFloorDiv category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyLShift
-expectvalue /Class
-doit
-PyOperator subclass: 'PyLShift'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyLShift comment: 
-'No class-specific documentation for PyLShift, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyOperator
-      PyLShift
-'
-%
-expectvalue /Class
-doit
-PyLShift category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyMatMult
-expectvalue /Class
-doit
-PyOperator subclass: 'PyMatMult'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyMatMult comment: 
-'No class-specific documentation for PyMatMult, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyOperator
-      PyMatMult
-'
-%
-expectvalue /Class
-doit
-PyMatMult category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyMod
-expectvalue /Class
-doit
-PyOperator subclass: 'PyMod'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyMod comment: 
-'No class-specific documentation for PyMod, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyOperator
-      PyMod
-'
-%
-expectvalue /Class
-doit
-PyMod category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyMult
-expectvalue /Class
-doit
-PyOperator subclass: 'PyMult'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyMult comment: 
-'No class-specific documentation for PyMult, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyOperator
-      PyMult
-'
-%
-expectvalue /Class
-doit
-PyMult category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyPow
-expectvalue /Class
-doit
-PyOperator subclass: 'PyPow'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyPow comment: 
-'No class-specific documentation for PyPow, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyOperator
-      PyPow
-'
-%
-expectvalue /Class
-doit
-PyPow category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyRShift
-expectvalue /Class
-doit
-PyOperator subclass: 'PyRShift'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyRShift comment: 
-'No class-specific documentation for PyRShift, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyOperator
-      PyRShift
-'
-%
-expectvalue /Class
-doit
-PyRShift category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PySub
-expectvalue /Class
-doit
-PyOperator subclass: 'PySub'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PySub comment: 
-'No class-specific documentation for PySub, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyOperator
-      PySub
-'
-%
-expectvalue /Class
-doit
-PySub category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PySliceAbstract
-expectvalue /Class
-doit
-PyAstNode subclass: 'PySliceAbstract'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PySliceAbstract comment: 
-'No class-specific documentation for PySliceAbstract, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PySliceAbstract
-'
-%
-expectvalue /Class
-doit
-PySliceAbstract category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyExtSlice
-expectvalue /Class
-doit
-PySliceAbstract subclass: 'PyExtSlice'
-  instVarNames: #( dims)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyExtSlice comment: 
-'No class-specific documentation for PyExtSlice, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PySliceAbstract
-      PyExtSlice( dims)
-'
-%
-expectvalue /Class
-doit
-PyExtSlice category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyIndex
-expectvalue /Class
-doit
-PySliceAbstract subclass: 'PyIndex'
-  instVarNames: #( value)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyIndex comment: 
-'No class-specific documentation for PyIndex, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PySliceAbstract
-      PyIndex( value)
-'
-%
-expectvalue /Class
-doit
-PyIndex category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PySlice
-expectvalue /Class
-doit
-PySliceAbstract subclass: 'PySlice'
-  instVarNames: #( lower upper step)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PySlice comment: 
-'No class-specific documentation for PySlice, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PySliceAbstract
-      PySlice( lower upper step)
-'
-%
-expectvalue /Class
-doit
-PySlice category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PySuite
-expectvalue /Class
-doit
-PyAstNode subclass: 'PySuite'
-  instVarNames: #( body)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PySuite comment: 
-'No class-specific documentation for PySuite, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PySuite( body variables)
-'
-%
-expectvalue /Class
-doit
-PySuite category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyBlock
-expectvalue /Class
-doit
-PySuite subclass: 'PyBlock'
-  instVarNames: #( variables)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyBlock comment: 
-'A Python program is constructed from code blocks. A block is a piece of Python program text that is executed as a unit. The following are blocks: a module, a function body, and a class definition. Each command typed interactively is a block. A script file (a file given as standard input to the interpreter or specified as a command line argument to the interpreter) is a code block. A script command (a command specified on the interpreter command line with the -c option) is a code block. The string argument passed to the built-in functions eval() and exec() is a code block.
-
-A code block is executed in an execution frame. A frame contains some administrative information (used for debugging) and determines where and how execution continues after the code block’s execution has completed.
-
-
-https://docs.python.org/3/reference/executionmodel.html'
-%
-expectvalue /Class
-doit
-PyBlock category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for GlobalScope
-expectvalue /Class
-doit
-PyBlock subclass: 'GlobalScope'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-GlobalScope category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for LocalScope
-expectvalue /Class
-doit
-PyBlock subclass: 'LocalScope'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-LocalScope category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PyWithItem
-expectvalue /Class
-doit
-PyAstNode subclass: 'PyWithItem'
-  instVarNames: #( context_expr optional_vars)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyWithItem comment: 
-'No class-specific documentation for PyWithItem, hierarchy is: 
-Object
-  PyAstNode( parent)
-    PyWithItem( context_expr optional_vars)
-'
-%
-expectvalue /Class
-doit
-PyWithItem category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for PySystem
-expectvalue /Class
-doit
-Object subclass: 'PySystem'
-  instVarNames: #( modules)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PySystem category: 'Parser'
 %
 set compile_env: 0
 ! ------------------- Class definition for PythonTestCase
@@ -4000,154 +3956,152 @@ UserInteraction category: 'Builtins'
 %
 
 input _Imp.gs
+input AddAst.gs
+input AliasAst.gs
+input AndAst.gs
+input AnnAssignAst.gs
+input ArgAst.gs
+input ArgumentsAst.gs
+input AssertAst.gs
+input AssignAst.gs
+input AstNode.gs
+input AstNodeWithLocation.gs
+input AsyncForAst.gs
+input AsyncFunctionDefAst.gs
+input AsyncWithAst.gs
+input AttributeAst.gs
+input AugAssignAst.gs
+input AugLoadAst.gs
+input AugStoreAst.gs
+input AwaitAst.gs
 input BaseException.gs
+input BinOpAst.gs
+input BitAndAst.gs
+input BitOrAst.gs
+input BitXorAst.gs
+input BlockAst.gs
+input BoolOpAst.gs
+input BreakAst.gs
 input BreakNotification.gs
 input BuiltinModule.gs
 input Builtins.gs
 input BuiltinsTestCase.gs
 input ByteLiteralsTestCase.gs
+input BytesAst.gs
+input CallAst.gs
 input CancelNotification.gs
+input ClassDefAst.gs
+input CmpOpAst.gs
+input CompareAst.gs
 input Complex.gs
 input CompoundStatementsTestCase.gs
+input ComprehensionAst.gs
+input ConstantAst.gs
+input ContinueAst.gs
 input ContinueNotification.gs
+input DelAst.gs
+input DeleteAst.gs
 input DelimitersTestCase.gs
+input DictAst.gs
+input DictCompAst.gs
+input DivAst.gs
+input EllipsisAst.gs
+input EqAst.gs
 input EvaluateTestCase.gs
-input Exception.gs
+input ExceptHandlerAst.gs
+input ExprAst.gs
+input ExpressionAst.gs
+input ExpressionContextAst.gs
+input ExtSliceAst.gs
+input FalseAst.gs
+input FloorDivAst.gs
+input ForAst.gs
+input FormattedValueAst.gs
+input FunctionDefAst.gs
+input GeneratorExpAst.gs
+input GlobalAst.gs
 input GlobalScope.gs
+input GtAst.gs
+input GtEAst.gs
+input IfAst.gs
+input IfExpAst.gs
+input ImportAst.gs
 input ImportError.gs
+input ImportFromAst.gs
 input ImportTestCase.gs
+input InAst.gs
+input IndexAst.gs
+input InvertAst.gs
+input IsAst.gs
+input IsNotAst.gs
+input JoinedStrAst.gs
+input KeywordAst.gs
+input LambdaAst.gs
+input List.gs
+input ListAst.gs
+input ListCompAst.gs
+input LoadAst.gs
 input LocalScope.gs
+input LShiftAst.gs
+input LtAst.gs
+input LtEAst.gs
+input MatMultAst.gs
+input ModAst.gs
+input ModuleAst.gs
 input ModuleNotFoundError.gs
+input MultAst.gs
+input NameAst.gs
+input NameConstantAst.gs
+input NamedExprAst.gs
+input NoneAst.gs
+input NonlocalAst.gs
+input NotAst.gs
+input NotEqAst.gs
+input NotInAst.gs
+input NumAst.gs
 input NumericLiteralsTestCase.gs
+input OperatorAst.gs
 input OperatorsTestCase.gs
-input Py_List.gs
-input Py_String.gs
-input Py_Tuple.gs
-input PyAdd.gs
-input PyAlias.gs
-input PyAnd.gs
-input PyAnnAssign.gs
-input PyArg.gs
-input PyArguments.gs
-input PyAssert.gs
-input PyAssign.gs
-input PyAstNode.gs
-input PyAstNodeWithLocation.gs
-input PyAsyncFor.gs
-input PyAsyncFunctionDef.gs
-input PyAsyncWith.gs
-input PyAttribute.gs
-input PyAugAssign.gs
-input PyAugLoad.gs
-input PyAugStore.gs
-input PyAwait.gs
-input PyBinOp.gs
-input PyBitAnd.gs
-input PyBitOr.gs
-input PyBitXor.gs
-input PyBlock.gs
-input PyBoolOp.gs
-input PyBreak.gs
-input PyBytes.gs
-input PyCall.gs
-input PyClassDef.gs
-input PyCmpOp.gs
-input PyCompare.gs
-input PyComprehension.gs
-input PyConstant.gs
-input PyContinue.gs
-input PyDel.gs
-input PyDelete.gs
-input PyDict.gs
-input PyDictComp.gs
-input PyDiv.gs
-input PyEllipsis.gs
-input PyEq.gs
-input PyExceptHandler.gs
-input PyExpr.gs
-input PyExpression.gs
-input PyExpressionContext.gs
-input PyExtSlice.gs
-input PyFalse.gs
-input PyFloorDiv.gs
-input PyFor.gs
-input PyFormattedValue.gs
-input PyFunctionDef.gs
-input PyGeneratorExp.gs
-input PyGlobal.gs
-input PyGt.gs
-input PyGtE.gs
-input PyIf.gs
-input PyIfExp.gs
-input PyImport.gs
-input PyImportFrom.gs
-input PyIn.gs
-input PyIndex.gs
-input PyInvert.gs
-input PyIs.gs
-input PyIsNot.gs
-input PyJoinedStr.gs
-input PyKeyword.gs
-input PyLambda.gs
-input PyList.gs
-input PyListComp.gs
-input PyLoad.gs
-input PyLShift.gs
-input PyLt.gs
-input PyLtE.gs
-input PyMatMult.gs
-input PyMod.gs
-input PyModule.gs
-input PyMult.gs
-input PyName.gs
-input PyNameConstant.gs
-input PyNamedExpr.gs
-input PyNone.gs
-input PyNonlocal.gs
-input PyNot.gs
-input PyNotEq.gs
-input PyNotIn.gs
-input PyNum.gs
-input PyOperator.gs
-input PyOr.gs
+input OrAst.gs
+input ParamAst.gs
+input PassAst.gs
+input PowAst.gs
+input PyException.gs
 input PyPackage.gs
-input PyParam.gs
-input PyPass.gs
-input PyPow.gs
-input PyRaise.gs
-input PyRandom.gs
-input PyReturn.gs
-input PyRShift.gs
-input PySet.gs
-input PySetComp.gs
-input PySlice.gs
-input PySliceAbstract.gs
-input PyStarred.gs
-input PyStatement.gs
-input PyStore.gs
-input PyStr.gs
-input PySub.gs
-input PySubscript.gs
-input PySuite.gs
-input PySystem.gs
+input PyString.gs
 input PythonTestCase.gs
 input PythonTestResource.gs
-input PyTrue.gs
-input PyTry.gs
-input PyTuple.gs
-input PyUAdd.gs
-input PyUnaryOp.gs
-input PyUSub.gs
-input PyWhile.gs
-input PyWith.gs
-input PyWithItem.gs
-input PyYield.gs
-input PyYieldFrom.gs
+input PyTime.gs
+input RaiseAst.gs
+input ReturnAst.gs
+input RShiftAst.gs
+input SetAst.gs
+input SetCompAst.gs
 input SimpleStatementsTestCase.gs
+input SliceAbstractAst.gs
+input SliceAst.gs
+input StarredAst.gs
+input StatementAst.gs
+input StoreAst.gs
+input StrAst.gs
 input StringLiteralsTestCase.gs
+input SubAst.gs
+input SubscriptAst.gs
+input SuiteAst.gs
 input Sys.gs
 input SysTestCase.gs
-input Time.gs
 input TimeTestCase.gs
+input TrueAst.gs
+input TryAst.gs
+input Tuple.gs
+input TupleAst.gs
+input UAddAst.gs
+input UnaryOpAst.gs
 input UserInteraction.gs
+input USubAst.gs
 input VariableTestCase.gs
+input WhileAst.gs
+input WithAst.gs
+input WithItemAst.gs
+input YieldAst.gs
+input YieldFromAst.gs

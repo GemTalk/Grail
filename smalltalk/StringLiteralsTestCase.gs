@@ -21,13 +21,13 @@ testEmbeddedStringDoubleQuotes
 	| x |
 	x := self statementsAt: 6.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		assert: x.line == 16;
 		assert: x.column == 0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PyStr);
+		assert: (x isKindOf: StrAst);
 		assert: x.line == 16;
 		assert: x.column == 0;
 		yourself.
@@ -41,13 +41,13 @@ testEmbeddedStringSingleQuotes
 	| x |
 	x := self statementsAt: 5.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		assert: x.line == 15;
 		assert: x.column == 0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PyStr);
+		assert: (x isKindOf: StrAst);
 		assert: x.line == 15;
 		assert: x.column == 0;
 		yourself.
@@ -61,13 +61,13 @@ testEscapeCharacterStringNewline
 	| x |
 	x := self statementsAt: 8.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		assert: x.line == 20;
 		assert: x.column == 0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PyStr);
+		assert: (x isKindOf: StrAst);
 		assert: x.line == 20;
 		assert: x.column == 0;
 		yourself.
@@ -81,13 +81,13 @@ testEscapeCharacterStringSlash
 	| x |
 	x := self statementsAt: 7.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		assert: x.line == 19;
 		assert: x.column == 0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PyStr);
+		assert: (x isKindOf: StrAst);
 		assert: x.line == 19;
 		assert: x.column == 0;
 		yourself.
@@ -101,29 +101,29 @@ testJoinedStrWithFormattedValueNum
 	| x child |
 	x := self statementsAt: 12.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		assert: x.line == 28;
 		assert: x.column == 0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PyJoinedStr);
+		assert: (x isKindOf:JoinedStrAst);
 		assert: x.line == 28;
 		assert: x.column == 0;
 		yourself.
 	child := x.values at: 1.
 	self
-		assert: (child isKindOf: PyStr);
+		assert: (child isKindOf: StrAst);
 		assert: child.s = '123';
 		yourself.
 	child := x.values at: 2.
 	self
-		assert: (child isKindOf: PyFormattedValue);
+		assert: (child isKindOf: FormattedValueAst);
 		assert: child.value.n = 456;
 		yourself.
 	child := x.values at: 3.
 	self
-		assert: (child isKindOf: PyStr);
+		assert: (child isKindOf: StrAst);
 		assert: child.s = '789';
 		yourself.
 	self assert: x.values size = 3.
@@ -135,29 +135,29 @@ testJoinedStrWithFormattedValueStr
 	| x child |
 	x := self statementsAt: 11.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		assert: x.line == 27;
 		assert: x.column == 0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PyJoinedStr);
+		assert: (x isKindOf: JoinedStrAst);
 		assert: x.line == 27;
 		assert: x.column == 0;
 		yourself.
 	child := x.values at: 1.
 	self
-		assert: (child isKindOf: PyStr);
+		assert: (child isKindOf: StrAst);
 		assert: child.s = 'abc';
 		yourself.
 	child := x.values at: 2.
 	self
-		assert: (child isKindOf: PyFormattedValue);
+		assert: (child isKindOf: FormattedValueAst);
 		assert: child.value.s = 'def';
 		yourself.
 	child := x.values at: 3.
 	self
-		assert: (child isKindOf: PyStr);
+		assert: (child isKindOf: StrAst);
 		assert: child.s = 'ghi';
 		yourself.
 	self assert: x.values size = 3.
@@ -169,13 +169,13 @@ testLongStringDoubleQuotes
 	| x |
 	x := self statementsAt: 4.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		assert: x.line == 12;
 		assert: x.column == -1;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PyStr);
+		assert: (x isKindOf: StrAst);
 		assert: x.line == 12;
 		assert: x.column == -1;
 		yourself.
@@ -190,13 +190,13 @@ testLongStringSingleQuotes
 	| x |
 	x := self statementsAt: 3.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		assert: x.line == 10;
 		assert: x.column == -1;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PyStr);
+		assert: (x isKindOf: StrAst);
 		assert: x.line == 10;
 		assert: x.column == -1;
 		yourself.
@@ -211,13 +211,13 @@ testNonEscapeCharacterStringNewline
 	| x |
 	x := self statementsAt: 10.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		assert: x.line == 24;
 		assert: x.column == 0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PyStr);
+		assert: (x isKindOf: StrAst);
 		assert: x.line == 24;
 		assert: x.column == 0;
 		yourself.
@@ -232,13 +232,13 @@ testNonEscapeCharacterStringSlash
 	| x |
 	x := self statementsAt: 9.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		assert: x.line == 23;
 		assert: x.column == 0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PyStr);
+		assert: (x isKindOf: StrAst);
 		assert: x.line == 23;
 		assert: x.column == 0;
 		yourself.
@@ -252,13 +252,13 @@ testShortStringDoubleQuotes
 	| x |
 	x := self statementsAt: 2.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		assert: x.line == 6;
 		assert: x.column == 0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PyStr);
+		assert: (x isKindOf: StrAst);
 		assert: x.line == 6;
 		assert: x.column == 0;
 		yourself.
@@ -272,13 +272,13 @@ testShortStringSingleQuotes
 	| x |
 	x := self statementsAt: 1.
 	self 
-		assert: (x isKindOf: PyExpr);
+		assert: (x isKindOf: ExprAst);
 		assert: x.line == 5;
 		assert: x.column == 0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: PyStr);
+		assert: (x isKindOf: StrAst);
 		assert: x.line == 5;
 		assert: x.column == 0;
 		yourself.

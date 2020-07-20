@@ -88,7 +88,7 @@ method: Complex
 asString
 
 	| stream |
-	stream := WriteStream on: String new.
+	stream := WriteStream on: PyString new.
 	self printOn: stream.
 	^stream contents
 %
