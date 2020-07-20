@@ -1,0 +1,30 @@
+﻿! ------------------- Remove existing behavior from DeleteAst
+expectvalue /Metaclass3       
+doit
+DeleteAst removeAllMethods.
+DeleteAst class removeAllMethods.
+%
+! ------------------- Class methods for DeleteAst
+! ------------------- Instance methods for DeleteAst
+set compile_env: 0
+category: 'other'
+method: DeleteAst
+_targets
+	^ targets
+%
+category: 'other'
+method: DeleteAst
+children
+
+	^super children
+		addAll: targets;
+		yourself
+%
+category: 'other'
+method: DeleteAst
+initialize
+	"Delete(expr* targets)"
+
+	targets := self collectAst: [self expression].
+	self readPosition.
+%

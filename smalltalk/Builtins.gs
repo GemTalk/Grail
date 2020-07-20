@@ -918,13 +918,13 @@ If the readline module was loaded, then input() will use it to provide
 "
 	| prompt result |
 	prompt := arguments notEmpty
-		ifTrue: [String withAll: arguments first]
+		ifTrue: [PyString withAll: arguments first]
 		ifFalse: [''].
 	result := UserInteraction new prompt: prompt.
 	result ifNil: [CancelNotification signal].
 	result := result decodeToString.
-	self print: (Array with: arguments first with: (Py_String withAll: result)).
-	^Py_String withAll: result
+	self print: (Array with: arguments first with: (PyString withAll: result)).
+	^PyString withAll: result
 %
 category: 'functions'
 method: Builtins
@@ -1077,7 +1077,7 @@ Rather than being a function, list is actually a
 mutable sequence type, as documented in Lists and 
 Sequence Types — list, tuple, range.
 "
-	^Py_List withAll: arguments first
+	^List withAll: arguments first
 %
 category: 'functions'
 method: Builtins
@@ -1332,7 +1332,7 @@ print: arguments keywords: keywords
 	arguments do: [:each | 
 		| string |
 		"https://docs.python.org/3/library/stdtypes.html#str"
-		string := (each isKindOf: String) 
+		string := (each isKindOf: PyString) 
 			ifTrue: [each]
 			ifFalse: [each printString].
 		stream nextPutAll: separator2; nextPutAll: string.

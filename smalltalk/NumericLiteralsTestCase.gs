@@ -43,8 +43,8 @@ testDecimalInteger
 
 	| expr num |
 	self
-		assert: ((expr := self statementsAt: 1) isKindOf: PyExpr);
-		assert: ((num := expr.value) isKindOf: PyNum);
+		assert: ((expr := self statementsAt: 1) isKindOf: ExprAst);
+		assert: ((num := expr.value) isKindOf: NumAst);
 		assert: num.n == 1;
 
 		assert: (expr := self statementsAt: 2) notNil;
@@ -144,8 +144,8 @@ testImaginaryNumber
 
 	| expr num complex |
 	self
-		assert: ((expr := self statementsAt: 35) isKindOf: PyExpr);
-		assert: ((num := expr.value) isKindOf: PyNum);
+		assert: ((expr := self statementsAt: 35) isKindOf: ExprAst);
+		assert: ((num := expr.value) isKindOf: NumAst);
 		assert: ((complex := num.n) isKindOf: Complex);
 		assert: complex.real == 0;
 		assert: complex.imaginary == 3.14;

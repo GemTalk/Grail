@@ -14,7 +14,7 @@ statementsForModuleAtPath: aPath
 	| module |
 	(path = aPath and: [statements notNil]) ifTrue: [^statements].
 	path := aPath.
-	module := PyModule script:  aPath.
+	module := ModuleAst script:  aPath.
 	statements := module.body.
 	^statements
 %

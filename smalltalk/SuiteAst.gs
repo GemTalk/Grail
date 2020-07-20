@@ -1,0 +1,41 @@
+﻿! ------------------- Remove existing behavior from SuiteAst
+expectvalue /Metaclass3       
+doit
+SuiteAst removeAllMethods.
+SuiteAst class removeAllMethods.
+%
+! ------------------- Class methods for SuiteAst
+! ------------------- Instance methods for SuiteAst
+set compile_env: 0
+category: 'other'
+method: SuiteAst
+children
+
+	^super children
+		addAll: body;
+		yourself
+%
+category: 'other'
+method: SuiteAst
+evaluate
+
+	| result |
+	body do: [:each | result := each evaluate].
+	^result
+%
+category: 'other'
+method: SuiteAst
+initialize
+
+	| stream node |
+	stream := self stream.
+	(stream peekFor: $[) ifFalse: [self error].
+	body := Array new.
+	[
+		stream peekFor: $]
+	] whileFalse: [
+		node := StatementAst statementFrom: self.
+		body add: node.
+		(stream peekFor: $,) ifTrue: [stream peekFor: Character space].
+	].
+%

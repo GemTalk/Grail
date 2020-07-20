@@ -61,12 +61,12 @@ PyModule astForPath: '$HOME/code/Python/GemStoneP/hello.py'
 
 ### Build an AST using Smalltalk objects
 
-Our initial approach is to let Python generate an AST for us and then use the text representation to build our own AST. We will use the [abstract grammar](https://docs.python.org/3/library/ast.html) as a guide to hand-build subclasses of PyAstNode. 
+Our initial approach is to let Python generate an AST for us and then use the text representation to build our own AST. We will use the [abstract grammar](https://docs.python.org/3/library/ast.html) as a guide to hand-build subclasses of AstNode. 
 
 * PyModule class>>script: is the basic entry point for reading a Python file (module) 
   * PyModule>>load:as: builds an AST for a Module
       * PyModule>>buildStatementsFromAST reads the AST and calls #suite
-          * PyAstNode>>suite constructs statements
+          * AstNode>>suite constructs statements
               * PyStatement class>>statementFrom: looks for a [statement](https://docs.python.org/3/library/ast.html)
 
 ### Translate the AST to Smalltalk Code
