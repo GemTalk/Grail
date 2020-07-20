@@ -223,6 +223,18 @@ collectAst: aBlock
 %
 category: 'other'
 method: PyAstNode
+globals
+
+	^self module globals
+%
+category: 'other'
+method: PyAstNode
+locals
+
+	^self module locals
+%
+category: 'other'
+method: PyAstNode
 module
 
 	^parent module

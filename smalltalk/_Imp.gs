@@ -14,61 +14,98 @@ moduleName
 %
 ! ------------------- Instance methods for _Imp
 set compile_env: 0
-category: 'other'
+category: 'functions'
 method: _Imp
 _fixModule: module code: code filename: path
 
 	self halt.
 %
-category: 'other'
+category: 'functions'
 method: _Imp
  acquireLock: module
 
 	self halt.
 %
-category: 'other'
+category: 'functions'
 method: _Imp
 createBuiltin: module spec: spec
 
 	self halt.
 %
-category: 'other'
+category: 'functions'
 method: _Imp
 createDynamic: module spec: spec file: file
 
 	self halt.
 %
-category: 'other'
+category: 'functions'
 method: _Imp
 execBuiltin: module mod: mod
 
 	self halt.
 %
-category: 'other'
+category: 'functions'
 method: _Imp
 execDynamic: module mod: mod
 
 	self halt.
 %
-category: 'other'
+category: 'functions'
 method: _Imp
 extensionSuffixes: module
 
 	self halt.
 %
-category: 'other'
+category: 'functions'
 method: _Imp
 getFrozen: module name: name
 
 	self halt.
 %
-category: 'other'
+category: 'functions'
 method: _Imp
 initFrozen: module name: name
 
 	self halt.
 %
-category: 'other'
+category: 'functions'
+method: _Imp
+isBuiltin: module name: name
+
+	self halt.
+%
+category: 'functions'
+method: _Imp
+isFrozen: module name: name
+
+	self halt.
+%
+category: 'functions'
+method: _Imp
+isFrozenPackage: module name: name
+
+	self halt.
+%
+category: 'functions'
+method: _Imp
+ lockHeld: module
+
+	self halt.
+%
+category: 'functions'
+method: _Imp
+ releaseLock: module
+
+	self halt.
+%
+category: 'functions'
+method: _Imp
+sourceHash: module key: key source: source
+
+	self halt.
+%
+set compile_env: 0
+category: 'initialization'
 method: _Imp
 initialize
 "
@@ -93,40 +130,4 @@ initialize
 		at: #'release_lock'					put: [:arguments :keywords | self releaseLock: (arguments at: 1)];
 		at: #'source_hash'					put: [:arguments :keywords | self sourceHash: (arguments at: 1) key: (arguments at: 2) source: (arguments at: 3)];
 		yourself.
-%
-category: 'other'
-method: _Imp
-isBuiltin: module name: name
-
-	self halt.
-%
-category: 'other'
-method: _Imp
-isFrozen: module name: name
-
-	self halt.
-%
-category: 'other'
-method: _Imp
-isFrozenPackage: module name: name
-
-	self halt.
-%
-category: 'other'
-method: _Imp
- lockHeld: module
-
-	self halt.
-%
-category: 'other'
-method: _Imp
- releaseLock: module
-
-	self halt.
-%
-category: 'other'
-method: _Imp
-sourceHash: module key: key source: source
-
-	self halt.
 %

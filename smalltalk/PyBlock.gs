@@ -29,6 +29,18 @@ initialize
 %
 category: 'other'
 method: PyBlock
+isGlobalScope
+
+	^false
+%
+category: 'other'
+method: PyBlock
+locals
+
+	^self
+%
+category: 'other'
+method: PyBlock
 nonlocalAssociationAt: aSymbol
 
 	self subclassResponsibility.

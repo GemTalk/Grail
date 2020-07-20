@@ -21,9 +21,15 @@ category: 'other'
 method: PyAlias
 import
 
-	| function |
+	| function keywords |
 	function := (self associationAt: #'__import__') value.
-	assoc value: (function value: (Array with: name) value: SymbolDictionary new).
+	keywords := SymbolDictionary new
+		at: #'globals' 	put: self globals;
+		at: #'locals'	put: self locals;
+		at: #'fromlist'	put: #();
+		at: #'level'		put: 0;
+		yourself.
+	assoc value: (function value: (Array with: name) value: keywords).
 %
 category: 'other'
 method: PyAlias

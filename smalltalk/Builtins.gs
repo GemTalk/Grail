@@ -18,7 +18,12 @@ category: 'functions'
 method: Builtins
 __import__: aSymbol keywords: aSymbolDictionary
 "
-	This function is invoked by the import statement. ... The function imports the module name ...
+	This function is invoked by the import statement. ... 
+	The function imports the module name, potentially using the given globals and locals 
+	to determine how to interpret the name in a package context. The fromlist gives the 
+	names of objects or submodules that should be imported from the module given by 
+	name. The standard implementation does not use its locals argument at all, and uses 
+	its globals only to determine the package context of the import statement.
 	https://docs.python.org/3/library/functions.html#__import__
 
 	A direct call to __import__() performs only the module search and, if found, the module creation operation. 
@@ -28,7 +33,7 @@ __import__: aSymbol keywords: aSymbolDictionary
 
 	This implementation is quite incomplete (no extensible finders and loaders).
 "
-	| importPaths module modules |
+	| importPaths module modules name |
 	modules := Sys current modules.
 	module := modules at: aSymbol ifAbsent: [_remoteNil].
 	module ifNil: [ModuleNotFoundError signal: 'Import of ' , aSymbol , ' failed!'].
@@ -39,7 +44,14 @@ __import__: aSymbol keywords: aSymbolDictionary
 		].
 	].
 	importPaths := Array new.
-	
+	module := (aSymbolDictionary at: #'globals') module.
+	module isPackage ifTrue: [
+		name := (module name , '.' , aSymbol) asSymbol.
+		importPaths add: module path , '/'.
+	] ifFalse: [
+		name := aSymbol.
+		importPaths add: './'.
+	].
 	importPaths add: '$HOME/code/Python/cpython/Lib/'.
 	importPaths do: [:each | 
 		| path |
@@ -47,11 +59,13 @@ __import__: aSymbol keywords: aSymbolDictionary
 		((GsFile existsOnServer: path) and: [GsFile isServerDirectory: path]) ifTrue: [		"Package"
 			module := PyPackage script: path as: aSymbol.
 			module evaluate.
-			^modules at: aSymbol put: module
+			^modules at: name put: module
 		].
 		path := path , '.py'.
 		(GsFile existsOnServer: path) ifTrue: [
-			each halt.
+			module := PyModule script: path as: aSymbol.
+			module evaluate.
+			^modules at: name put: module
 		].
 	].
 	ModuleNotFoundError signal: 'Import of ' , aSymbol , ' failed!'

@@ -79,9 +79,23 @@ evaluate
 %
 category: 'other'
 method: PyModule
+globals
+
+	^body isGlobalScope
+		ifTrue: [body]
+		ifFalse: [super globals]
+%
+category: 'other'
+method: PyModule
 initialize
 
 	parent := PySystem.
+%
+category: 'other'
+method: PyModule
+isPackage
+
+	^false
 %
 category: 'other'
 method: PyModule
@@ -96,9 +110,21 @@ load: aPathString as: aNameString
 %
 category: 'other'
 method: PyModule
+locals
+
+	^body
+%
+category: 'other'
+method: PyModule
 module
 
 	^self
+%
+category: 'other'
+method: PyModule
+name
+
+	^name
 %
 category: 'other'
 method: PyModule
