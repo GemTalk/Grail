@@ -3376,32 +3376,6 @@ doit
 PySystem category: 'Parser'
 %
 set compile_env: 0
-! ------------------- Class definition for PyToken
-expectvalue /Class
-doit
-Object subclass: 'PyToken'
-  instVarNames: #( startLine startColumn stopLine
-                    stopColumn name string)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: PythonGlobals
-  options: #()
-
-%
-expectvalue /Class
-doit
-PyToken comment: 
-'No class-specific documentation for Token, hierarchy is:
-Object
-  Token( start stop name string)
-'
-%
-expectvalue /Class
-doit
-PyToken category: 'Parser'
-%
-set compile_env: 0
 ! ------------------- Class definition for PythonTestCase
 expectvalue /Class
 doit
@@ -3878,11 +3852,7 @@ input PySuite.gs
 input PySystem.gs
 input PythonTestCase.gs
 input PythonTestResource.gs
-<<<<<<< HEAD:smalltalk/PythonGlobals.gs
-input PyToken.gs
-=======
 input PyTrue.gs
->>>>>>> master:smalltalk/Python.gs
 input PyTry.gs
 input PyTuple.gs
 input PyUAdd.gs
