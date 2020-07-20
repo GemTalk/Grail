@@ -10,6 +10,6 @@ set compile_env: 0
 category: 'other'
 method: PyNotIn
 left: leftOperand right: rightOperand
-	self error.
-	^self subclassResponsibility
+
+	^(rightOperand includes: leftOperand) not
 %
