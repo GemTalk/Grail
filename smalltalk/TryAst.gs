@@ -20,6 +20,23 @@ children
 %
 category: 'other'
 method: TryAst
+evaluate
+
+	[
+		[
+			body evaluate.
+		] on: BaseException do: [:ex | 
+			| handler |
+			handler := handlers detect: [:each | each type evaluate handles: ex] ifNone: [ex pass].
+			handler evaluate.
+		].
+		orelse evaluate.
+	] ensure: [
+		finalbody evaluate.
+	].
+%
+category: 'other'
+method: TryAst
 initialize
 	"Try(stmt* body, excepthandler* handlers, stmt* orelse, stmt* finalbody)"
 

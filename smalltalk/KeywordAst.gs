@@ -29,7 +29,7 @@ initialize
 		next := stream peekN: 4.
 		next = 'None' ifTrue: [
 			stream next: 4.
-			arg := NoneAst singleton.
+			arg := nil.
 		] ifFalse: [
 			self error.
 		].

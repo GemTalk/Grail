@@ -424,6 +424,16 @@ testTry
 %
 category: 'other'
 method: CompoundStatementsTestCase
+testVarArgs
+
+	| x |
+	x := self statementsAt: 19.
+	self 
+		halt;
+		yourself.
+%
+category: 'other'
+method: CompoundStatementsTestCase
 testWhile
 	"While(NameConstant(True, lineno=14, col_offset=6), [Pass(lineno=15, col_offset=1)], [], lineno=14, col_offset=0)"
 
