@@ -3,3 +3,4 @@
 
 abs(-1)     # 1
 print('hello', 'world', sep = ',')     # 2
+import noSuchModule     # 3

@@ -5,6 +5,13 @@ Sys removeAllMethods.
 Sys class removeAllMethods.
 %
 ! ------------------- Class methods for Sys
+set compile_env: 0
+category: 'other'
+classmethod: Sys
+moduleName
+
+	^#'sys'
+%
 ! ------------------- Instance methods for Sys
 set compile_env: 0
 category: 'functions'
@@ -14,6 +21,12 @@ byteorder
 	^System gemIsBigEndian
 		ifTrue: ['big']
 		ifFalse: ['little']
+%
+category: 'functions'
+method: Sys
+modules
+
+	^dictionary at: #'modules'
 %
 set compile_env: 0
 category: 'other'
@@ -25,5 +38,6 @@ initialize
 	super initialize.
 	dictionary 
 		at: #'byteorder'	put: self byteorder;
+		at: #'modules'		put: SymbolDictionary new;
 		yourself.
 %

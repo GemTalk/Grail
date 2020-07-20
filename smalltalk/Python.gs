@@ -11,6 +11,79 @@ names := userProfile symbolList names.
 ].
 %
 set compile_env: 0
+! ------------------- Class definition for BaseException
+expectvalue /Class
+doit
+AbstractException subclass: 'BaseException'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+BaseException comment: 
+'https://docs.python.org/3/library/exceptions.html#exception-hierarchy'
+%
+expectvalue /Class
+doit
+BaseException category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for Exception
+expectvalue /Class
+doit
+BaseException subclass: 'Exception'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+Exception category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for ImportError
+expectvalue /Class
+doit
+Exception subclass: 'ImportError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+ImportError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for ModuleNotFoundError
+expectvalue /Class
+doit
+ImportError subclass: 'ModuleNotFoundError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+ModuleNotFoundError category: 'Builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for BreakNotification
 expectvalue /Class
 doit
@@ -79,6 +152,54 @@ doit
 BuiltinModule category: 'Builtins'
 %
 set compile_env: 0
+! ------------------- Class definition for _Imp
+expectvalue /Class
+doit
+BuiltinModule subclass: '_Imp'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+_Imp comment: 
+'https://docs.python.org/3/library/importlib.html
+cpython/Python/import.c
+
+dir(sys.modules[''_imp''])
+[
+    ''__doc__, 
+    ''__loader__, 
+    ''__name__, 
+    ''__package__, 
+    ''__spec__, 
+    ''_fix_co_filename, 
+    ''acquire_lock, 
+    ''check_hash_based_pycs, 
+    ''create_builtin, 
+    ''create_dynamic, 
+    ''exec_builtin, 
+    ''exec_dynamic, 
+    ''extension_suffixes, 
+    ''get_frozen_object, 
+    ''init_frozen, 
+    ''is_builtin, 
+    ''is_frozen, 
+    ''is_frozen_package, 
+    ''lock_held, 
+    ''release_lock, 
+    ''source_hash''
+]'
+%
+expectvalue /Class
+doit
+_Imp category: 'Builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for Builtins
 expectvalue /Class
 doit
@@ -115,6 +236,11 @@ BuiltinModule subclass: 'Sys'
   inDictionary: Python
   options: #()
 
+%
+expectvalue /Class
+doit
+Sys comment: 
+'https://docs.python.org/3/library/sys.html'
 %
 expectvalue /Class
 doit
@@ -3594,6 +3720,28 @@ doit
 EvaluateTestCase category: 'Tests'
 %
 set compile_env: 0
+! ------------------- Class definition for ImportTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'ImportTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ImportTestCase comment: 
+'This is the wrapper for Python''s built-in regression test suite.'
+%
+expectvalue /Class
+doit
+ImportTestCase category: 'Tests'
+%
+set compile_env: 0
 ! ------------------- Class definition for NumericLiteralsTestCase
 expectvalue /Class
 doit
@@ -3834,6 +3982,8 @@ doit
 UserInteraction category: 'Builtins'
 %
 
+input _Imp.gs
+input BaseException.gs
 input BreakNotification.gs
 input BuiltinModule.gs
 input Builtins.gs
@@ -3845,8 +3995,12 @@ input CompoundStatementsTestCase.gs
 input ContinueNotification.gs
 input DelimitersTestCase.gs
 input EvaluateTestCase.gs
+input Exception.gs
 input GlobalScope.gs
+input ImportError.gs
+input ImportTestCase.gs
 input LocalScope.gs
+input ModuleNotFoundError.gs
 input NumericLiteralsTestCase.gs
 input OperatorsTestCase.gs
 input Py_List.gs

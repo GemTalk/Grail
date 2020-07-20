@@ -35,9 +35,15 @@ script: aString
 "
 PyModule script: '$HOME/code/Python/performance/pyperformance'.
 "
+	^self script: aString as: '__main__'
+%
+category: 'other'
+classmethod: PyModule
+script: pathString as: nameString
+
 	^self basicNew
 		initialize;
-		load: aString as: '__main__';
+		load: pathString as: nameString;
 		yourself
 %
 category: 'other'

@@ -19,12 +19,6 @@ _name
 %
 category: 'other'
 method: PyAlias
-asName
-
-	^asName
-%
-category: 'other'
-method: PyAlias
 evaluate
 
 	| function |
@@ -42,7 +36,7 @@ initialize
 	(stream peekFor: $,) ifFalse: [self error].
 	stream skipSeparators.
 	(stream peekFor: $') ifTrue: [
-		(asName := stream upTo: $') asSymbol.
+		asName := (stream upTo: $') asSymbol.
 		(stream peekFor: $)) ifFalse: [self error].
 	] ifFalse: [
 		| string |

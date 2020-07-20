@@ -29,3 +29,17 @@ test_print
 	(self statementsAt: 2) evaluate.			"print('hello', 'world', sep = ',')"
 	self assert: stdout contents = ('hello,world' , Character lf asString).
 %
+category: 'other'
+method: BuiltinsTestCase
+testModuleNotFoundError
+	"https://docs.python.org/3/reference/import.html"
+
+	| x |
+	[
+		Sys current modules at: #'noSuchModule' put: nil.
+		x := (self statementsAt: 3) evaluate.			"import noSuchModule"
+		self assert: false.
+	] on: ModuleNotFoundError do: [:ex | 
+		ex return.
+	].
+%

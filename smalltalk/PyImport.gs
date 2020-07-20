@@ -23,6 +23,7 @@ children
 category: 'other'
 method: PyImport
 evaluate
+	"each name is an instance of PyAlias and that is where the import occurs"
 
 	names do: [:each | each evaluate].
 %

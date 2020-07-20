@@ -5,6 +5,13 @@ Time removeAllMethods.
 Time class removeAllMethods.
 %
 ! ------------------- Class methods for Time
+set compile_env: 0
+category: 'other'
+classmethod: Time
+moduleName
+
+	^#'time'
+%
 ! ------------------- Instance methods for Time
 set compile_env: 0
 category: 'other'

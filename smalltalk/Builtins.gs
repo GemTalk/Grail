@@ -6,16 +6,53 @@ Builtins class removeAllMethods.
 %
 ! ------------------- Class methods for Builtins
 set compile_env: 0
+category: 'other'
+classmethod: Builtins
+moduleName
+
+	^#'builtins'
+%
 ! ------------------- Instance methods for Builtins
 set compile_env: 0
 category: 'functions'
 method: Builtins
-__import__: name keywords: keywords
-	"https://docs.python.org/3/library/functions.html"
+__import__: aSymbol keywords: aSymbolDictionary
+"
+	This function is invoked by the import statement. ... The function imports the module name ...
+	https://docs.python.org/3/library/functions.html#__import__
 
-	name == #'sys' 	ifTrue: [^Sys current].
-	name == #'time'	ifTrue: [^Time current].
-	self halt.
+	A direct call to __import__() performs only the module search and, if found, the module creation operation. 
+	While certain side-effects may occur, such as the importing of parent packages, and the updating of various 
+	caches (including sys.modules), only the import statement performs a name binding operation.
+	https://docs.python.org/3/reference/import.html
+
+	This implementation is quite incomplete (no extensible finders and loaders).
+"
+	| importPaths module modules |
+	modules := Sys current modules.
+	module := modules at: aSymbol ifAbsent: [_remoteNil].
+	module ifNil: [ModuleNotFoundError signal: 'Import of ' , aSymbol , ' failed!'].
+	module ~~ _remoteNil ifTrue: [^modules at: aSymbol put: module].
+	BuiltinModule subclasses do: [:each | 
+		each moduleName == aSymbol ifTrue: [
+			^modules at: aSymbol put: each current
+		].
+	].
+	importPaths := #('./' '$HOME/code/Python/cpython/Lib/').
+	importPaths do: [:each | 
+		| path |
+		path := each , aSymbol.
+		((GsFile existsOnServer: path) and: [GsFile isServerDirectory: path]) ifTrue: [		"Package"
+			module := PyModule script: path , '/__init__.py' as: aSymbol.
+			module evaluate.
+			^modules at: aSymbol put: module
+		].
+		path := path , '.py'.
+		(GsFile existsOnServer: path) ifTrue: [
+			each halt.
+		].
+	].
+	ModuleNotFoundError signal: 'Import of ' , aSymbol , ' failed!'
 %
 category: 'functions'
 method: Builtins
@@ -1669,7 +1706,7 @@ initialize
 		at: #'None' 			put: nil;
 		at: #'True'				put: true;
 		at: #'False'				put: false;
-		at: #'__import__'		put: [:arguments :keywords | self __import__: arguments first keywords: keywords];
+		at: #'__import__'		put: [:arguments :keywords | self __import__: arguments first asSymbol keywords: keywords];
 		at: #'abs'				put: [:arguments :keywords | self abs: arguments first];
 		at: #'print'				put: [:arguments :keywords | self print: arguments keywords: keywords];
 		yourself.
