@@ -18,6 +18,13 @@ children
 %
 category: 'other'
 method: PyExceptHandler
+evaluate
+
+	name evaluate ifNotNil: [:myName | myName halt].
+	^body evaluate
+%
+category: 'other'
+method: PyExceptHandler
 initialize
 	"ExceptHandler(expr? type, identifier? name, stmt* body)"
 	
@@ -40,4 +47,10 @@ initialize
 	self commaSpace.
 	body := PySuite parent: self.
 	self readPosition.
+%
+category: 'other'
+method: PyExceptHandler
+type
+
+	^type
 %

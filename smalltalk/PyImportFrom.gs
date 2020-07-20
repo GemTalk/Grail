@@ -33,7 +33,12 @@ children
 category: 'other'
 method: PyImportFrom
 evaluate
-	self halt.
+
+	(module isKindOf: PyNone) ifTrue: [		"from ."
+		names do: [:each | each import].
+	] ifFalse: [
+		self halt.
+	].
 %
 category: 'other'
 method: PyImportFrom

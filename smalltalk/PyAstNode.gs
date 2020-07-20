@@ -223,6 +223,12 @@ collectAst: aBlock
 %
 category: 'other'
 method: PyAstNode
+module
+
+	^parent module
+%
+category: 'other'
+method: PyAstNode
 sys
 
 	^parent sys

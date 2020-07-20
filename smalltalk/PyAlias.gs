@@ -19,7 +19,7 @@ _name
 %
 category: 'other'
 method: PyAlias
-evaluate
+import
 
 	| function |
 	function := (self associationAt: #'__import__') value.

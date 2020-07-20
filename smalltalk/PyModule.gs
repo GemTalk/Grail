@@ -96,6 +96,12 @@ load: aPathString as: aNameString
 %
 category: 'other'
 method: PyModule
+module
+
+	^self
+%
+category: 'other'
+method: PyModule
 parseAst
 
 	| string |
@@ -107,6 +113,12 @@ parseAst
 	string := stream upToEnd trimSeparators.
 	string isEmpty ifFalse: [self error: 'Unexpected text at end of AST: ' , string printString].
 	body initialize2.
+%
+category: 'other'
+method: PyModule
+path
+
+	^path
 %
 category: 'other'
 method: PyModule

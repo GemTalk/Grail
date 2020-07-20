@@ -38,12 +38,14 @@ __import__: aSymbol keywords: aSymbolDictionary
 			^modules at: aSymbol put: each current
 		].
 	].
-	importPaths := #('./' '$HOME/code/Python/cpython/Lib/').
+	importPaths := Array new.
+	
+	importPaths add: '$HOME/code/Python/cpython/Lib/'.
 	importPaths do: [:each | 
 		| path |
 		path := each , aSymbol.
 		((GsFile existsOnServer: path) and: [GsFile isServerDirectory: path]) ifTrue: [		"Package"
-			module := PyModule script: path , '/__init__.py' as: aSymbol.
+			module := PyPackage script: path as: aSymbol.
 			module evaluate.
 			^modules at: aSymbol put: module
 		].
@@ -1710,6 +1712,9 @@ initialize
 		at: #'abs'				put: [:arguments :keywords | self abs: arguments first];
 		at: #'print'				put: [:arguments :keywords | self print: arguments keywords: keywords];
 		yourself.
+	BaseException allSubclasses do: [:each | 
+		dictionary at: each name put: each.
+	].
 %
 category: 'other'
 method: Builtins

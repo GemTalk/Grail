@@ -2912,6 +2912,23 @@ doit
 PyModule category: 'Parser'
 %
 set compile_env: 0
+! ------------------- Class definition for PyPackage
+expectvalue /Class
+doit
+PyModule subclass: 'PyPackage'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyPackage category: 'Parser'
+%
+set compile_env: 0
 ! ------------------- Class definition for PyRandom
 expectvalue /Class
 doit
@@ -4093,6 +4110,7 @@ input PyNotIn.gs
 input PyNum.gs
 input PyOperator.gs
 input PyOr.gs
+input PyPackage.gs
 input PyParam.gs
 input PyPass.gs
 input PyPow.gs

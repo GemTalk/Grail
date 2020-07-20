@@ -20,8 +20,28 @@ children
 %
 category: 'other'
 method: PyTry
+evaluate
+
+	[
+		[
+			body evaluate.
+		] on: BaseException do: [:ex | 
+			| handler |
+			handler := handlers detect: [:each | each type evaluate handles: ex] ifNone: [ex pass].
+			handler evaluate.
+		].
+		orelse evaluate.
+	] ensure: [
+		finalbody evaluate.
+	].
+%
+category: 'other'
+method: PyTry
 initialize
-	"Try(stmt* body, excepthandler* handlers, stmt* orelse, stmt* finalbody)"
+"
+	Try(stmt* body, excepthandler* handlers, stmt* orelse, stmt* finalbody)
+	https://docs.python.org/3/reference/compound_stmts.html#the-try-statement
+"
 
 	body := PySuite parent: self.
 	self commaSpace.
