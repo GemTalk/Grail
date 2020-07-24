@@ -9,11 +9,6 @@ JoinedStrAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: JoinedStrAst
-_values
-	^ values
-%
-category: 'other'
-method: JoinedStrAst
 children
 
 	^super children

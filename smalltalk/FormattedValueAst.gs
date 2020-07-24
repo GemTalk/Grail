@@ -9,11 +9,6 @@ FormattedValueAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: FormattedValueAst
-_value 
-	^ value
-%
-category: 'other'
-method: FormattedValueAst
 children
 
 	^super children

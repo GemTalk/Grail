@@ -9,11 +9,6 @@ GlobalAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: GlobalAst
-_names
-	^ names
-%
-category: 'other'
-method: GlobalAst
 initialize
 	"Global(identifier* names)"
 

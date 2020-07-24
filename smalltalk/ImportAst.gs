@@ -9,11 +9,6 @@ ImportAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: ImportAst
-_names
-	^ names
-%
-category: 'other'
-method: ImportAst
 children
 
 	^super children

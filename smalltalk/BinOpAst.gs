@@ -9,21 +9,6 @@ BinOpAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: BinOpAst
-_left
-	^ left
-%
-category: 'other'
-method: BinOpAst
-_op
-	^ op
-%
-category: 'other'
-method: BinOpAst
-_right
-	^ right
-%
-category: 'other'
-method: BinOpAst
 assertContextIsLoad
 
 	self halt
