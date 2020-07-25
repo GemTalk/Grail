@@ -9,36 +9,6 @@ ArgumentsAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: ArgumentsAst
-_args
-	^ args
-%
-category: 'other'
-method: ArgumentsAst
-_defaults
-	^ defaults
-%
-category: 'other'
-method: ArgumentsAst
-_kw_defaults
-	^ kw_defaults
-%
-category: 'other'
-method: ArgumentsAst
-_kwarg
-	^ kwarg
-%
-category: 'other'
-method: ArgumentsAst
-_kwonlyargs
-	^ kwonlyargs
-%
-category: 'other'
-method: ArgumentsAst
-_vararg
-	^ vararg
-%
-category: 'other'
-method: ArgumentsAst
 children
 
 	^super children

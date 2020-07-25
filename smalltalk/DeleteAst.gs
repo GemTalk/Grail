@@ -9,11 +9,6 @@ DeleteAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: DeleteAst
-_targets
-	^ targets
-%
-category: 'other'
-method: DeleteAst
 children
 
 	^super children

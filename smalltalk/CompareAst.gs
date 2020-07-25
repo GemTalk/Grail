@@ -9,21 +9,6 @@ CompareAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: CompareAst
-_cmpopList
-	^ cmpopList
-%
-category: 'other'
-method: CompareAst
-_comparatorList
-	^ comparatorList
-%
-category: 'other'
-method: CompareAst
-_left
-	^ left
-%
-category: 'other'
-method: CompareAst
 children
 
 	^super children

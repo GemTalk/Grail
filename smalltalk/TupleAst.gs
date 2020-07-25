@@ -9,16 +9,6 @@ TupleAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: TupleAst
-_ctx
-	^ ctx
-%
-category: 'other'
-method: TupleAst
-_elts
-	^ elts
-%
-category: 'other'
-method: TupleAst
 children
 
 	^super children

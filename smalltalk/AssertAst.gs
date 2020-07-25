@@ -9,16 +9,6 @@ AssertAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: AssertAst
-_msg
-	^ msg
-%
-category: 'other'
-method: AssertAst
-_test
-	^ test
-%
-category: 'other'
-method: AssertAst
 children
 
 	^super children

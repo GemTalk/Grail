@@ -9,31 +9,6 @@ AsyncFunctionDefAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: AsyncFunctionDefAst
-_args
-	^ args
-%
-category: 'other'
-method: AsyncFunctionDefAst
-_body
-	^ body
-%
-category: 'other'
-method: AsyncFunctionDefAst
-_decorator_list
-	^ decorator_list
-%
-category: 'other'
-method: AsyncFunctionDefAst
-_name
-	^ name
-%
-category: 'other'
-method: AsyncFunctionDefAst
-_returns
-	^ returns
-%
-category: 'other'
-method: AsyncFunctionDefAst
 children
 
 	^super children

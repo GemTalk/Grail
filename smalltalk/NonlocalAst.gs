@@ -9,11 +9,6 @@ NonlocalAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: NonlocalAst
-_names
-	^ names
-%
-category: 'other'
-method: NonlocalAst
 initialize
 	"Nonlocal(identifier* names)"
 

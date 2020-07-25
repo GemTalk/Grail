@@ -9,26 +9,6 @@ ForAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: ForAst
-_body
-	^ body
-%
-category: 'other'
-method: ForAst
-_iter
-	^ iter
-%
-category: 'other'
-method: ForAst
-_orelse
-	^ orelse
-%
-category: 'other'
-method: ForAst
-_target
-	^ target
-%
-category: 'other'
-method: ForAst
 children
 
 	^super children

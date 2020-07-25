@@ -9,21 +9,6 @@ SliceAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: SliceAst
-_lower
-	^ lower
-%
-category: 'other'
-method: SliceAst
-_step
-	^ step
-%
-category: 'other'
-method: SliceAst
-_upper
-	^ upper
-%
-category: 'other'
-method: SliceAst
 children
 
 	^super children

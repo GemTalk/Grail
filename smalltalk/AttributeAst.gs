@@ -9,21 +9,6 @@ AttributeAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: AttributeAst
-_attr
-	^ attr
-%
-category: 'other'
-method: AttributeAst
-_ctx
-	^ ctx
-%
-category: 'other'
-method: AttributeAst
-_value
-	^ value
-%
-category: 'other'
-method: AttributeAst
 assertContextIsLoad
 
 	ctx assertIsLoad.

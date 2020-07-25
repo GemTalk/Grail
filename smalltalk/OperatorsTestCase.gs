@@ -179,9 +179,9 @@ testNestedGtE
 		assert: ((x.cmpopList at: 2) isKindOf: GtEAst);
 		assert: (x.comparatorList size == 2);
 		assert: ((x.comparatorList at: 1) isKindOf: NumAst);
-		assert: (y := x _comparatorList at: 1) notNil;
+		assert: (y := x.comparatorList at: 1) notNil;
 		assert: y.n == 55;
-		assert: (y := x _comparatorList at: 2) notNil;
+		assert: (y := x.comparatorList at: 2) notNil;
 		assert: y.n == 66;
 		yourself.
 %
