@@ -29,9 +29,3 @@ initialize
 	self readPosition.
 %
 set compile_env: 0
-category: 'testing support'
-method: ExprAst
-_value
-
-	^value
-%

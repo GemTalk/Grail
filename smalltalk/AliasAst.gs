@@ -9,16 +9,6 @@ AliasAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: AliasAst
-_asName
-	^ asName
-%
-category: 'other'
-method: AliasAst
-_name
-	^ name
-%
-category: 'other'
-method: AliasAst
 asName
 
 	^asName

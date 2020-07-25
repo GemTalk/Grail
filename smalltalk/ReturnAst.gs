@@ -9,11 +9,6 @@ ReturnAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: ReturnAst
-_value
-	^ value
-%
-category: 'other'
-method: ReturnAst
 children
 
 	^super children

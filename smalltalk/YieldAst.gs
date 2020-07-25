@@ -9,11 +9,6 @@ YieldAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: YieldAst
-_value
-	^ value
-%
-category: 'other'
-method: YieldAst
 children
 
 	^super children

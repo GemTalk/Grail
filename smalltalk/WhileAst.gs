@@ -9,21 +9,6 @@ WhileAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: WhileAst
-_body
-	^ body
-%
-category: 'other'
-method: WhileAst
-_orelse
-	^ orelse
-%
-category: 'other'
-method: WhileAst
-_test
-	^ test
-%
-category: 'other'
-method: WhileAst
 children
 
 	^super children
