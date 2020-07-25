@@ -3801,7 +3801,6 @@ input SliceAbstractAst.gs
 input SliceAst.gs
 input StarredAst.gs
 input StatementAst.gs
-input StatementsTestCase.gs
 input StoreAst.gs
 input StrAst.gs
 input StringLiteralsTestCase.gs
