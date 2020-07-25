@@ -16,11 +16,6 @@ isAbstract
 set compile_env: 0
 category: 'other'
 method: UnaryOpAst
-_operand
-	^ operand
-%
-category: 'other'
-method: UnaryOpAst
 children
 
 	^super children

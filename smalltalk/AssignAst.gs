@@ -9,16 +9,6 @@ AssignAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: AssignAst
-_targets
-	^ targets
-%
-category: 'other'
-method: AssignAst
-_value
-	^ value
-%
-category: 'other'
-method: AssignAst
 children
 
 	^super children

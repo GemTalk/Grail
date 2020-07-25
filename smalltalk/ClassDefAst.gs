@@ -9,31 +9,6 @@ ClassDefAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: ClassDefAst
-_bases
-	^ bases
-%
-category: 'other'
-method: ClassDefAst
-_body
-	^ body
-%
-category: 'other'
-method: ClassDefAst
-_decorator_list
-	^ decorator_list
-%
-category: 'other'
-method: ClassDefAst
-_keywords
-	^ keywords
-%
-category: 'other'
-method: ClassDefAst
-_name
-	^ name
-%
-category: 'other'
-method: ClassDefAst
 children
 
 	^super children

@@ -9,16 +9,6 @@ ListAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: ListAst
-_ctx
-	^ ctx
-%
-category: 'other'
-method: ListAst
-_elts
-	^ elts
-%
-category: 'other'
-method: ListAst
 children
 
 	^super children

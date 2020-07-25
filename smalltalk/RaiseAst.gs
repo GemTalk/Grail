@@ -9,16 +9,6 @@ RaiseAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: RaiseAst
-_cause
-	^ cause
-%
-category: 'other'
-method: RaiseAst
-_exc
-	^ exc
-%
-category: 'other'
-method: RaiseAst
 children
 
 	^super children

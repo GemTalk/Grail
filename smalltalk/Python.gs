@@ -3788,6 +3788,7 @@ input OrAst.gs
 input ParamAst.gs
 input PassAst.gs
 input PowAst.gs
+input PyString.gs
 input PythonTestCase.gs
 input PythonTestResource.gs
 input RaiseAst.gs
@@ -3800,9 +3801,9 @@ input SliceAbstractAst.gs
 input SliceAst.gs
 input StarredAst.gs
 input StatementAst.gs
+input StatementsTestCase.gs
 input StoreAst.gs
 input StrAst.gs
-input PyString.gs
 input StringLiteralsTestCase.gs
 input SubAst.gs
 input SubscriptAst.gs

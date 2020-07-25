@@ -9,21 +9,6 @@ SubscriptAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: SubscriptAst
-_ctx
-	^ ctx
-%
-category: 'other'
-method: SubscriptAst
-_slice
-	^ slice
-%
-category: 'other'
-method: SubscriptAst
-_value
-	^ value
-%
-category: 'other'
-method: SubscriptAst
 assertContextIsStore
 	value assertContextIsStore.
 %
