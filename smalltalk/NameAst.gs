@@ -34,6 +34,15 @@ associationAt: aSymbol
 %
 category: 'other'
 method: NameAst
+callWithArguments: anArray keywords: aSymbolDictionary
+
+	self assertContextIsLoad.
+	^assoc value
+		value: anArray
+		value: aSymbolDictionary
+%
+category: 'other'
+method: NameAst
 children
 
 	^super children
@@ -47,6 +56,12 @@ evaluate
 
 	self assertContextIsLoad.
 	^assoc value
+%
+category: 'other'
+method: NameAst
+id
+
+	^id
 %
 category: 'other'
 method: NameAst

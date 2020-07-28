@@ -15,11 +15,19 @@ assertContextIsLoad
 %
 category: 'other'
 method: AttributeAst
-call: mySelector arguments: myArguments keywords: keywords
-	| receiver |
+assign: anObject
+
+	^(value evaluate associationAt: attr) value: anObject
+%
+category: 'other'
+method: AttributeAst
+callWithArguments: anArray keywords: aSymbolDictionary
+
 	self assertContextIsLoad.
-	receiver := value evaluate.
-	^receiver perform: mySelector with: myArguments with: keywords.
+	^value evaluate
+		call: attr
+		withArguments: anArray
+		keywords: aSymbolDictionary
 %
 category: 'other'
 method: AttributeAst
@@ -34,7 +42,7 @@ category: 'other'
 method: AttributeAst
 evaluate
 
-	^(value associationAt: attr) value
+	^(value evaluate associationAt: attr) value
 %
 category: 'other'
 method: AttributeAst

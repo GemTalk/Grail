@@ -10,9 +10,9 @@ category: 'other'
 classmethod: BuiltinModule
 current
 "
-	SessionTemps current 
-		removeKey: #'Python_Builtins' ifAbsent: [];
-		yourself.
+	BuiltinModule subclasses do: [:each | 
+		SessionTemps current removeKey: ('Python_' , each name) asSymbol ifAbsent: [].
+	].
 "
 
 	^SessionTemps current
@@ -36,6 +36,17 @@ associationAt: aSymbol
 	^dictionary 
 		associationAt: aSymbol
 		ifAbsent: [nil]
+%
+category: 'other'
+method: BuiltinModule
+call: aSymbol withArguments: anArray keywords: aSymbolDictionary
+
+	| assoc |
+	assoc := self associationAt: aSymbol.
+	assoc ifNil: [self error: 'method not found!'].
+	^assoc value
+		value: anArray
+		value: aSymbolDictionary
 %
 category: 'other'
 method: BuiltinModule

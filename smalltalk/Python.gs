@@ -84,6 +84,23 @@ doit
 ModuleNotFoundError category: 'Builtins'
 %
 set compile_env: 0
+! ------------------- Class definition for TypeError
+expectvalue /Class
+doit
+PyException subclass: 'TypeError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+TypeError category: 'Builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for BreakNotification
 expectvalue /Class
 doit
@@ -133,6 +150,34 @@ Notification subclass: 'ContinueNotification'
 expectvalue /Class
 doit
 ContinueNotification category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for ReturnNotification
+expectvalue /Class
+doit
+Notification subclass: 'ReturnNotification'
+  instVarNames: #( value)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+ReturnNotification comment: 
+'No class-specific documentation for ReturnNotification, hierarchy is: 
+Object
+  AbstractException( gsResumable gsTrappable gsNumber currGsHandler gsStack gsReason gsDetails tag messageText gsArgs)
+    Exception
+      Notification
+        ReturnNotification
+'
+%
+expectvalue /Class
+doit
+ReturnNotification category: 'Builtins'
 %
 set compile_env: 0
 ! ------------------- Class definition for AstNode
@@ -1696,8 +1741,8 @@ set compile_env: 0
 expectvalue /Class
 doit
 StatementAst subclass: 'ClassDefAst'
-  instVarNames: #( name bases keywords
-                    body decorator_list)
+  instVarNames: #( assoc name bases
+                    keywords body decorator_list)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -1858,6 +1903,52 @@ Object
 expectvalue /Class
 doit
 FunctionDefAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for ClassFunctionDefAst
+expectvalue /Class
+doit
+FunctionDefAst subclass: 'ClassFunctionDefAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ClassFunctionDefAst comment: 
+'No class-specific documentation for ClassFunctionDefAst, hierarchy is: 
+Object
+  AstNode( parent)
+    AstNodeWithLocation( line column)
+      StatementAst
+        FunctionDefAst( assoc name args body decorator_list returns)
+          ClassFunctionDefAst
+'
+%
+expectvalue /Class
+doit
+ClassFunctionDefAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for InstanceFunctionDefAst
+expectvalue /Class
+doit
+FunctionDefAst subclass: 'InstanceFunctionDefAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+InstanceFunctionDefAst category: 'Parser'
 %
 set compile_env: 0
 ! ------------------- Class definition for GlobalAst
@@ -3543,6 +3634,31 @@ doit
 Complex category: 'Builtins'
 %
 set compile_env: 0
+! ------------------- Class definition for PyObject
+expectvalue /Class
+doit
+Object subclass: 'PyObject'
+  instVarNames: #( classAst variables)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyObject comment: 
+'No class-specific documentation for PythonObject, hierarchy is: 
+Object
+  PythonObject( classAst dictionary)
+'
+%
+expectvalue /Class
+doit
+PyObject category: 'Builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for PythonTestCase
 expectvalue /Class
 doit
@@ -3624,6 +3740,69 @@ Object
 expectvalue /Class
 doit
 ByteLiteralsTestCase category: 'Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for ClassesTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'ClassesTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ClassesTestCase comment: 
+'Module([
+	Assign([Name(''g'', Store(), lineno=4, col_offset=0)], Str(''G'', lineno=4, col_offset=4), lineno=4, col_offset=0), 
+	ClassDef(''MyClass'', [], [], [
+		Assign([Name(''iv1'', Store(), lineno=7, col_offset=4)], Str(''1'', lineno=7, col_offset=10), lineno=7, col_offset=4), 
+		FunctionDef(''__init__'', arguments([arg(''self'', None, lineno=9, col_offset=17), arg(''p'', None, lineno=9, col_offset=23)], None, [], [], None, []), [
+			Assign([Attribute(Name(''self'', Load(), lineno=10, col_offset=8), ''iv2'', Store(), lineno=10, col_offset=8)], Name(''p'', Load(), lineno=10, col_offset=19), lineno=10, col_offset=8)], [], None, lineno=9, col_offset=4), 
+		FunctionDef(''foo'', arguments([arg(''self'', None, lineno=12, col_offset=12), arg(''p'', None, lineno=12, col_offset=18)], None, [], [], None, []), [
+			Return(BinOp(BinOp(BinOp(BinOp(BinOp(BinOp(BinOp(Str(''MyClass>>foo('', lineno=13, col_offset=15), Add(), 
+				Call(Name(''str'', Load(), lineno=13, col_offset=33), [Name(''self'', Load(), lineno=13, col_offset=37)], [], lineno=13, col_offset=33), lineno=13, col_offset=15), Add(), 
+				Str('', '', lineno=13, col_offset=45), lineno=13, col_offset=43), Add(), 
+				Name(''p'', Load(), lineno=13, col_offset=52), lineno=13, col_offset=50), Add(), 
+				Str('') - '', lineno=13, col_offset=56), lineno=13, col_offset=54), Add(), 
+				Attribute(Name(''self'', Load(), lineno=13, col_offset=65), ''iv1'', Load(), lineno=13, col_offset=65), lineno=13, col_offset=63), Add(), 
+				Str('' - '', lineno=13, col_offset=76), lineno=13, col_offset=74), Add(), 
+				Attribute(Name(''self'', Load(), lineno=13, col_offset=84), ''iv2'', Load(), lineno=13, col_offset=84), lineno=13, col_offset=82), lineno=13, col_offset=8)], [], None, lineno=12, col_offset=4), 
+		FunctionDef(''bar1'', arguments([arg(''self'', None, lineno=15, col_offset=13), arg(''p'', None, lineno=15, col_offset=19)], None, [], [], None, []), [
+			Return(BinOp(BinOp(BinOp(BinOp(Str(''MyClass>>bar1('', lineno=16, col_offset=15), Add(), 
+				Call(Name(''str'', Load(), lineno=16, col_offset=34), [Name(''self'', Load(), lineno=16, col_offset=38)], [], lineno=16, col_offset=34), lineno=16, col_offset=15), Add(), 
+				Str('', '', lineno=16, col_offset=46), lineno=16, col_offset=44), Add(), Name(''p'', Load(), lineno=16, col_offset=53), lineno=16, col_offset=51), Add(), 
+				Str('')'', lineno=16, col_offset=57), lineno=16, col_offset=55), lineno=16, col_offset=8)], [], None, lineno=15, col_offset=4), 
+		Assign([Name(''bar2'', Store(), lineno=18, col_offset=4)], Call(Name(''classmethod'', Load(), lineno=18, col_offset=11), [Name(''bar1'', Load(), lineno=18, col_offset=23)], [], lineno=18, col_offset=11), lineno=18, col_offset=4), 
+		FunctionDef(''bar3'', arguments([arg(''self'', None, lineno=21, col_offset=13), arg(''p'', None, lineno=21, col_offset=19)], None, [], [], None, []), [
+			Return(BinOp(BinOp(BinOp(BinOp(Str(''MyClass>>bar3('', lineno=22, col_offset=15), Add(), 
+				Call(Name(''str'', Load(), lineno=22, col_offset=34), [Name(''self'', Load(), lineno=22, col_offset=38)], [], lineno=22, col_offset=34), lineno=22, col_offset=15), Add(), 
+				Str('', '', lineno=22, col_offset=46), lineno=22, col_offset=44), Add(), 
+				Name(''p'', Load(), lineno=22, col_offset=53), lineno=22, col_offset=51), Add(), 
+				Str('')'', lineno=22, col_offset=57), lineno=22, col_offset=55), lineno=22, col_offset=8)], 
+			[Name(''classmethod'', Load(), lineno=20, col_offset=5)], None, lineno=20, col_offset=4)
+	], [], lineno=6, col_offset=0), 
+	Assign([Name(''o'', Store(), lineno=24, col_offset=0)], Call(Name(''MyClass'', Load(), lineno=24, col_offset=4), [Str(''A'', lineno=24, col_offset=12)], [], lineno=24, col_offset=4), lineno=24, col_offset=0), 
+	Expr(Call(Name(''print'', Load(), lineno=25, col_offset=0), [
+		Call(Attribute(Name(''o'', Load(), lineno=25, col_offset=6), ''foo'', Load(), lineno=25, col_offset=6), [Str(''B'', lineno=25, col_offset=12)], [], lineno=25, col_offset=6)], [], lineno=25, col_offset=0), lineno=25, col_offset=0), 
+	Expr(Call(Name(''print'', Load(), lineno=26, col_offset=0), [
+		Call(Attribute(Name(''o'', Load(), lineno=26, col_offset=6), ''bar1'', Load(), lineno=26, col_offset=6), [Str(''B'', lineno=26, col_offset=13)], [], lineno=26, col_offset=6)], [], lineno=26, col_offset=0), lineno=26, col_offset=0), 
+	Expr(Call(Name(''print'', Load(), lineno=27, col_offset=0), [
+		Call(Attribute(Name(''o'', Load(), lineno=27, col_offset=6), ''bar2'', Load(), lineno=27, col_offset=6), [Str(''C'', lineno=27, col_offset=13)], [], lineno=27, col_offset=6)], [], lineno=27, col_offset=0), lineno=27, col_offset=0), 
+	Expr(Call(Name(''print'', Load(), lineno=28, col_offset=0), [
+		Call(Attribute(Name(''MyClass'', Load(), lineno=28, col_offset=6), ''bar1'', Load(), lineno=28, col_offset=6), [Str(''C'', lineno=28, col_offset=19), Str(''D'', lineno=28, col_offset=24)], [], lineno=28, col_offset=6)], [], lineno=28, col_offset=0), lineno=28, col_offset=0), 
+	Expr(Call(Name(''print'', Load(), lineno=29, col_offset=0), [
+		Call(Attribute(Name(''MyClass'', Load(), lineno=29, col_offset=6), ''bar2'', Load(), lineno=29, col_offset=6), [Str(''C'', lineno=29, col_offset=19)], [], lineno=29, col_offset=6)], [], lineno=29, col_offset=0), lineno=29, col_offset=0), 
+	Expr(Call(Name(''print'', Load(), lineno=30, col_offset=0), [
+		Call(Attribute(Name(''MyClass'', Load(), lineno=30, col_offset=6), ''bar3'', Load(), lineno=30, col_offset=6), [Str(''C'', lineno=30, col_offset=19)], [], lineno=30, col_offset=6)], [], lineno=30, col_offset=0), lineno=30, col_offset=0)])'
+%
+expectvalue /Class
+doit
+ClassesTestCase category: 'Tests'
 %
 set compile_env: 0
 ! ------------------- Class definition for CompoundStatementsTestCase
@@ -4008,6 +4187,8 @@ input BytesAst.gs
 input CallAst.gs
 input CancelNotification.gs
 input ClassDefAst.gs
+input ClassesTestCase.gs
+input ClassFunctionDefAst.gs
 input CmpOpAst.gs
 input CompareAst.gs
 input Complex.gs
@@ -4048,6 +4229,7 @@ input ImportFromAst.gs
 input ImportTestCase.gs
 input InAst.gs
 input IndexAst.gs
+input InstanceFunctionDefAst.gs
 input InvertAst.gs
 input IsAst.gs
 input IsNotAst.gs
@@ -4085,6 +4267,7 @@ input ParamAst.gs
 input PassAst.gs
 input PowAst.gs
 input PyException.gs
+input PyObject.gs
 input PyPackage.gs
 input PyString.gs
 input PythonTestCase.gs
@@ -4092,6 +4275,7 @@ input PythonTestResource.gs
 input PyTime.gs
 input RaiseAst.gs
 input ReturnAst.gs
+input ReturnNotification.gs
 input RShiftAst.gs
 input SetAst.gs
 input SetCompAst.gs
@@ -4113,6 +4297,7 @@ input TrueAst.gs
 input TryAst.gs
 input Tuple.gs
 input TupleAst.gs
+input TypeError.gs
 input UAddAst.gs
 input UnaryOpAst.gs
 input UserInteraction.gs

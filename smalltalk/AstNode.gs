@@ -241,11 +241,23 @@ module
 %
 category: 'other'
 method: AstNode
+nonlocalAssociationAt: aSymbol
+
+	^parent nonlocalAssociationAt: aSymbol
+%
+category: 'other'
+method: AstNode
 sys
 
 	^parent sys
 %
 set compile_env: 0
+category: 'testing'
+method: AstNode
+isInClass
+
+	^parent isInClass
+%
 category: 'testing'
 method: AstNode
 isNone

@@ -272,7 +272,7 @@ The valid range for the argument is from 0 through 1,114,111 (0x10FFFF in base 1
 %
 category: 'functions'
 method: Builtins
-classmethod: arguments
+classmethod: anInstanceFunctionDefAst
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -296,7 +296,10 @@ Class methods are different than C++ or Java static methods. If you want those, 
 
 For more information on class methods, see The standard type hierarchy.
 "
-self halt.
+	| newMethod |
+	newMethod := anInstanceFunctionDefAst copy.
+	newMethod changeClassTo: ClassFunctionDefAst.
+	^newMethod
 %
 category: 'functions'
 method: Builtins
@@ -1497,8 +1500,8 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-str: arguments
-	"https://docs.python.org/3/library/functions.html"
+str: anObject
+	"https://docs.python.org/3/library/stdtypes.html#str"
 	
 "
 class str(object='')
@@ -1508,7 +1511,7 @@ Return a str version of object. See str() for details.
 str is the built-in string class. For general
  information about strings, see Text Sequence Type — str.
 "
-self halt.
+	^anObject __str__
 %
 category: 'functions'
 method: Builtins
@@ -1724,7 +1727,9 @@ initialize
 		at: #'False'				put: false;
 		at: #'__import__'		put: [:arguments :keywords | self __import__: arguments first asSymbol keywords: keywords];
 		at: #'abs'				put: [:arguments :keywords | self abs: arguments first];
+		at: #'classmethod'	put: [:arguments :keywords | self classmethod: arguments first];
 		at: #'print'				put: [:arguments :keywords | self print: arguments keywords: keywords];
+		at: #'str'				put: [:arguments :keywords | self str: arguments first];
 		yourself.
 	BaseException allSubclasses do: [:each | 
 		dictionary at: each name put: each.

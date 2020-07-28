@@ -5,6 +5,19 @@ FunctionDefAst removeAllMethods.
 FunctionDefAst class removeAllMethods.
 %
 ! ------------------- Class methods for FunctionDefAst
+set compile_env: 0
+category: 'other'
+classmethod: FunctionDefAst
+parent: anAstNode
+
+	| function | 
+	function := super parent: anAstNode.
+	anAstNode isInClass ifFalse: [^function].
+	(function decoratorList includes: #'classmethod')
+		ifTrue: [function changeClassTo: ClassFunctionDefAst]
+		ifFalse: [function changeClassTo: InstanceFunctionDefAst].
+	^function
+%
 ! ------------------- Instance methods for FunctionDefAst
 set compile_env: 0
 category: 'other'
@@ -20,9 +33,15 @@ children
 	^super children
 		add: args;
 		add: body;
-		addAll: decorator_list;
+		"addAll: decorator_list;"	"I think these are all strings (converted to Symbols)"
 		add: returns;
 		yourself
+%
+category: 'other'
+method: FunctionDefAst
+decoratorList
+
+	^decorator_list
 %
 category: 'other'
 method: FunctionDefAst
@@ -47,10 +66,21 @@ initialize
 	self commaSpace.
 	body := LocalScope parent: self.
 	self commaSpace.
-	decorator_list :=  self collectAst: [self expression].
+	decorator_list :=  self collectAst: [self expression id].
 	self commaSpace.
 	returns := self optionalExpression.
 	self readPosition.
+%
+category: 'other'
+method: FunctionDefAst
+printOn: aStream
+
+	super printOn: aStream.
+	aStream
+		nextPut: $(;
+		nextPutAll: name;
+		nextPut: $);
+		yourself.
 %
 category: 'other'
 method: FunctionDefAst

@@ -22,9 +22,9 @@ method: CallAst
 evaluate
 	"https://docs.python.org/3/reference/expressions.html#calls"
 
-	^function evaluate 
-		value: (arguments collect: [:each | each evaluate])
-		value: (keywords collect: [:each | each evaluate])
+	^function
+		callWithArguments: (arguments collect: [:each | each evaluate]) 
+		keywords: (keywords collect: [:each | each evaluate])
 %
 category: 'other'
 method: CallAst

@@ -93,6 +93,12 @@ initialize
 %
 category: 'other'
 method: ModuleAst
+isInClass
+
+	^false
+%
+category: 'other'
+method: ModuleAst
 isPackage
 
 	^false

@@ -19,9 +19,12 @@ category: 'other'
 method: SuiteAst
 evaluate
 
-	| result |
-	body do: [:each | result := each evaluate].
-	^result
+	^[
+		body do: [:each | each evaluate].
+		nil.
+	] on: ReturnNotification do: [:ex | 
+		ex return: ex value.
+	].
 %
 category: 'other'
 method: SuiteAst

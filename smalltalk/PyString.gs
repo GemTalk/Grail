@@ -9,6 +9,12 @@ PyString class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PyString
+__str__
+
+	^self
+%
+category: 'other'
+method: PyString
 split: arguments keywords: keywords
 	"string.split(separator, max)
 

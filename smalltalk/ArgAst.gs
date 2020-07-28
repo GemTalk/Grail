@@ -38,6 +38,17 @@ initialize2
 %
 category: 'other'
 method: ArgAst
+printOn: aStream
+
+	super printOn: aStream.
+	aStream
+		nextPut: $(;
+		nextPutAll: arg;
+		nextPut: $);
+		yourself.
+%
+category: 'other'
+method: ArgAst
 value: anObject
 
 	assoc value: anObject.

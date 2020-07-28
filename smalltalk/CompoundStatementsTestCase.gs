@@ -300,9 +300,7 @@ testFunctionWithOneDecorator
 		assert: (x.body.body size == 1); 
 		assert: ((x.body.body at: 1) isKindOf: PassAst); 
 		assert: (x.decorator_list size == 1); 
-		assert: ((name := x.decorator_list at: 1) isKindOf: NameAst); 
-		assert: (name.assoc.key == #'func'); 
-		assert: (name.ctx isKindOf: LoadAst); 
+		assert: ((name := x.decorator_list at: 1) == #'func'); 
 		assert: (x.returns isNone); 
 		yourself.
 %
