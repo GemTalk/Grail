@@ -9,7 +9,7 @@ AliasAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: AliasAst
-asName
+import
 
 	| function keywords |
 	function := (self associationAt: #'__import__') value.

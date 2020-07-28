@@ -20,6 +20,18 @@ children
 %
 category: 'other'
 method: ClassDefAst
+evaluate
+
+	| result |
+	[
+		result := body evaluate.
+	] on: CancelNotification do: [:ex |
+		ex return.
+	].
+	^result
+%
+category: 'other'
+method: ClassDefAst
 initialize
 	"ClassDef(identifier name, expr* bases, 
 		keyword* keywords, stmt* body, expr* decorator_list)"

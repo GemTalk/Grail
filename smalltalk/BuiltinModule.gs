@@ -41,7 +41,9 @@ category: 'other'
 method: BuiltinModule
 initialize
 "
-	SessionTemps current removeKey: #'Python_Sys' ifAbsent: [].
+	BuiltinModule subclasses do: [:each | 
+		SessionTemps current removeKey: ('Python_' , each name) asSymbol ifAbsent: [].
+	].
 "
 	dictionary := SymbolDictionary new.
 %

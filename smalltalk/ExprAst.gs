@@ -28,4 +28,3 @@ initialize
 	value := self expression.
 	self readPosition.
 %
-set compile_env: 0

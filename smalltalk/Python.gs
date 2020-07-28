@@ -910,6 +910,23 @@ doit
 NameAst category: 'Parser'
 %
 set compile_env: 0
+! ------------------- Class definition for KeywordsAst
+expectvalue /Class
+doit
+NameAst subclass: 'KeywordsAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+KeywordsAst category: 'Parser'
+%
+set compile_env: 0
 ! ------------------- Class definition for NameConstantAst
 expectvalue /Class
 doit
@@ -4036,6 +4053,7 @@ input IsAst.gs
 input IsNotAst.gs
 input JoinedStrAst.gs
 input KeywordAst.gs
+input KeywordsAst.gs
 input LambdaAst.gs
 input List.gs
 input ListAst.gs

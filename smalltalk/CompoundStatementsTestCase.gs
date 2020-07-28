@@ -16,6 +16,14 @@ filename
 set compile_env: 0
 category: 'other'
 method: CompoundStatementsTestCase
+setUp
+"
+ModuleAst astForPath: '$HOME/code/Python/GemStoneP/tests/CompoundStatements.py'.
+"
+	super setUp.
+%
+category: 'other'
+method: CompoundStatementsTestCase
 testClass
 
 	| x |
@@ -49,6 +57,37 @@ testClassInheritance
 		assert: ((x.body.body at: 1) isKindOf: PassAst);
 		assert: (x.decorator_list size == 0);
 		yourself.
+%
+category: 'other'
+method: CompoundStatementsTestCase
+testCompression
+"
+# cpython/Lib/importlib/_bootstrap.py:321
+if any(arg is not None for arg in []):	# 20
+	pass
+
+	If(
+		Call(
+			Name('any', Load(), lineno=84, col_offset=3), 
+			[GeneratorExp(
+				Compare(
+					Name('arg', Load(), lineno=84, col_offset=7), 
+					[IsNot()], 
+					[NameConstant(None, lineno=84, col_offset=18)], 
+				lineno=84, col_offset=7), 
+				[comprehension(
+					Name('arg', Store(), lineno=84, col_offset=27), 
+					List([], Load(), lineno=84, col_offset=34), [], 0
+				)]
+			, lineno=84, col_offset=7)], 
+			[], 
+		lineno=84, col_offset=3), 
+		[Pass( lineno=85, col_offset=1)], 
+		[], 
+	lineno=84, col_offset=0)])
+"
+	| x |
+	x := self statementsAt: 20.
 %
 category: 'other'
 method: CompoundStatementsTestCase
@@ -425,12 +464,42 @@ testTry
 category: 'other'
 method: CompoundStatementsTestCase
 testVarArgs
+"
+    arguments = (
+		arg* posonlyargs, 	# added in 3.8
+		arg* args, 
+		arg? vararg, 
+		arg* kwonlyargs,
+		expr* kw_defaults, 
+		arg? kwarg, 
+		expr* defaults)
 
+	FunctionDef('fun', 
+		arguments(
+			[arg('f', None, lineno=80, col_offset=8)], 
+			arg('args', None, lineno=80, col_offset=12), 
+			[], 
+			[], 
+			arg('kwds', None, lineno=80, col_offset=20), 
+			[]
+		), [
+			Return(
+				Call(
+					Name('f', Load(), lineno=81, col_offset=8), 
+					[
+						Starred(Name('args', Load(), lineno=81, col_offset=11), Load(), lineno=81, col_offset=10)], 
+						[
+							keyword(None, Name('kwds', Load(), lineno=81, col_offset=19))
+						], lineno=81, col_offset=8
+				), lineno=81, col_offset=1
+			)
+		]
+	, [], None, lineno=80, col_offset=0
+	)
+"
 	| x |
 	x := self statementsAt: 19.
-	self 
-		halt;
-		yourself.
+	x := x evaluate.
 %
 category: 'other'
 method: CompoundStatementsTestCase

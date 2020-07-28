@@ -38,8 +38,7 @@ initialize
 	self commaSpace.
 	keywords := self collectAst: [KeywordAst parent: self].
 	(keywords size == 1 and: [keywords first name isNil]) ifTrue: [
-		"This probably isn't right!"
-		keywords := keywords first value.
+		keywords := KeywordsAst from: keywords.
 	] ifFalse: [
 		dict := SymbolDictionary new.
 		keywords do: [:each | dict at: each name put: each value].

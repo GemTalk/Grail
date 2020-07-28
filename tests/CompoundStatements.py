@@ -79,3 +79,7 @@ async def asyncWithFunc(arg):	# 18
 # cpython/Lib/importlib/_bootstrap.py:219
 def fun(f, *args, **kwds):		# 19
 	return f(*args, **kwds)
+
+# cpython/Lib/importlib/_bootstrap.py:321
+if any(arg is not None for arg in []):	# 20
+	pass

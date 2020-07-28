@@ -15,7 +15,6 @@ children
 		add: target;
 		add: iter;
 		addAll: ifs;
-		add: is_async;
 		yourself
 %
 category: 'other'
@@ -33,5 +32,5 @@ initialize
 	self commaSpace.
 	ifs := self collectAst:[self expression].
 	self commaSpace.
-	is_async := (stream upTo: $)) asNumber.
+	is_async := (stream upTo: $)) asNumber == 1.
 %
