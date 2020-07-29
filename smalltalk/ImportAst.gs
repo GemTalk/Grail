@@ -18,7 +18,7 @@ children
 category: 'other'
 method: ImportAst
 evaluate
-	"each name is an instance of PyAlias and that is where the import occurs"
+	"each name is an instance of AliasAst and that is where the import occurs"
 
 	names do: [:each | each import].
 %

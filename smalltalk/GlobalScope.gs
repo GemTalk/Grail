@@ -23,6 +23,15 @@ globals
 %
 category: 'other'
 method: GlobalScope
+initialize
+
+	super initialize.
+	variables
+		at: #'__file__' put: parent name;
+		yourself.
+%
+category: 'other'
+method: GlobalScope
 isGlobalScope
 
 	^true

@@ -774,7 +774,7 @@ globals: arguments
 %
 category: 'functions'
 method: Builtins
-hasattr: arguments
+hasattr: object _: name
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1722,14 +1722,20 @@ initialize
 "
 	super initialize.
 	dictionary 
+		at: #'AttributeError'	put: AttributeError;
+		at: #'DeprecationWarning'	put: DeprecationWarning;
 		at: #'False'				put: false;
+		at: #'KeyError'			put: KeyError;
+		at: #'NameError'		put: PyNameError;
 		at: #'None' 			put: nil;
 		at: #'RuntimeError'	put: RuntimeError;
 		at: #'True'				put: true;
+		at: #'ValueError'		put: ValueError;
 		at: #'__import__'		put: [:arguments :keywords | self __import__: arguments first asSymbol keywords: keywords];
 		at: #'abs'				put: [:arguments :keywords | self abs: arguments first];
 		at: #'any'				put: [:arguments :keywords | self any: arguments first];
 		at: #'classmethod'	put: [:arguments :keywords | self classmethod: arguments first];
+		at: #'hasattr'			put: [:arguments :keywords | self hasattr: arguments first _: arguments second];
 		at: #'open'				put: [:arguments :keywords | self open: arguments keywords: keywords];
 		at: #'print'				put: [:arguments :keywords | self print: arguments keywords: keywords];
 		at: #'range'			put: [:arguments :keywords | self range: arguments];

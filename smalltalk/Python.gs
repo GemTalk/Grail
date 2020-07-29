@@ -50,6 +50,40 @@ doit
 PyException category: 'Builtins'
 %
 set compile_env: 0
+! ------------------- Class definition for AttributeError
+expectvalue /Class
+doit
+PyException subclass: 'AttributeError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+AttributeError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for DeprecationWarning
+expectvalue /Class
+doit
+PyException subclass: 'DeprecationWarning'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+DeprecationWarning category: 'Builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for ImportError
 expectvalue /Class
 doit
@@ -84,6 +118,40 @@ doit
 ModuleNotFoundError category: 'Builtins'
 %
 set compile_env: 0
+! ------------------- Class definition for KeyError
+expectvalue /Class
+doit
+PyException subclass: 'KeyError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+KeyError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for PyNameError
+expectvalue /Class
+doit
+PyException subclass: 'PyNameError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+PyNameError category: 'Builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for RuntimeError
 expectvalue /Class
 doit
@@ -116,6 +184,23 @@ PyException subclass: 'TypeError'
 expectvalue /Class
 doit
 TypeError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for ValueError
+expectvalue /Class
+doit
+PyException subclass: 'ValueError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+ValueError category: 'Builtins'
 %
 set compile_env: 0
 ! ------------------- Class definition for BreakNotification
@@ -4183,6 +4268,7 @@ input AsyncForAst.gs
 input AsyncFunctionDefAst.gs
 input AsyncWithAst.gs
 input AttributeAst.gs
+input AttributeError.gs
 input AugAssignAst.gs
 input AugLoadAst.gs
 input AugStoreAst.gs
@@ -4217,6 +4303,7 @@ input ContinueNotification.gs
 input DelAst.gs
 input DeleteAst.gs
 input DelimitersTestCase.gs
+input DeprecationWarning.gs
 input DictAst.gs
 input DictCompAst.gs
 input DivAst.gs
@@ -4251,6 +4338,7 @@ input InvertAst.gs
 input IsAst.gs
 input IsNotAst.gs
 input JoinedStrAst.gs
+input KeyError.gs
 input KeywordAst.gs
 input KeywordsAst.gs
 input LambdaAst.gs
@@ -4284,6 +4372,7 @@ input ParamAst.gs
 input PassAst.gs
 input PowAst.gs
 input PyException.gs
+input PyNameError.gs
 input PyObject.gs
 input PyPackage.gs
 input PyString.gs
@@ -4320,6 +4409,7 @@ input UAddAst.gs
 input UnaryOpAst.gs
 input UserInteraction.gs
 input USubAst.gs
+input ValueError.gs
 input VariableTestCase.gs
 input WhileAst.gs
 input WithAst.gs
