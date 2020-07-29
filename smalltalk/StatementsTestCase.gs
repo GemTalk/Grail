@@ -21,5 +21,5 @@ test
 	| x |
 	statements evaluate.
 	x := stdout contents.
-	self assert: x = '1,'.
+	self assert: x = '14610'.
 %
