@@ -22,16 +22,22 @@ __str__
 %
 category: 'other'
 method: ClassDefAst
-associationAt: aSymbol otherwise: anObject
+associationForReadAt: aSymbol
 
-	^body associationAt: aSymbol otherwise: anObject
+	^body associationForReadAt: aSymbol
+%
+category: 'other'
+method: ClassDefAst
+associationForReadAt2: aSymbol
+
+	^parent associationForReadAt: aSymbol
 %
 category: 'other'
 method: ClassDefAst
 call: aSymbol withArguments: anArray keywords: aSymbolDictionary
 
 	| methodAssoc |
-	methodAssoc := self associationAt: aSymbol otherwise: nil.
+	methodAssoc := self associationForReadAt: aSymbol.
 	methodAssoc ifNil: [self error: 'method not found!'].
 	^methodAssoc value
 		callFromClass: self
@@ -58,12 +64,8 @@ classAst
 category: 'other'
 method: ClassDefAst
 evaluate
-	"This executes the 'def' command, creating and saving the class with its name.
-	We call super because we want to store the class definition in the parent's scope.
-	Our scope is used to hold local variables."
 
 	body evaluate.
-	(assoc := super associationAt: name) value: self.
 %
 category: 'other'
 method: ClassDefAst
@@ -74,7 +76,7 @@ initialize
 	| stream |
 	stream := self stream.
 	(stream peekFor: $') ifFalse: [self error].
-	name := stream upTo: $'.
+	name := (stream upTo: $') asSymbol.
 	self commaSpace.
 	bases := self collectAst: [self expression].
 	self commaSpace.
@@ -84,6 +86,7 @@ initialize
 	self commaSpace.
 	decorator_list := self collectAst:[self expression].
 	self readPosition.
+	(assoc := super associationForWriteAt: name) value: self.
 %
 category: 'other'
 method: ClassDefAst

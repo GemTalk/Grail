@@ -9,16 +9,33 @@ BlockAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: BlockAst
-associationAt: aSymbol
+associationForArgument: aSymbol
 
 	^variables 
 		associationAt: aSymbol
 		ifAbsent: [ | assoc |
-			assoc := self nonlocalAssociationAt: aSymbol.
-			assoc ifNil: [
-				assoc := SymbolAssociation newWithKey: aSymbol value: _remoteNil.
-				variables addAssociation: assoc.
-				assoc]]
+			assoc := SymbolAssociation newWithKey: aSymbol value: _remoteNil.
+			variables addAssociation: assoc.
+			assoc]
+%
+category: 'other'
+method: BlockAst
+associationForReadAt: aSymbol
+
+	^variables 
+		associationAt: aSymbol
+		ifAbsent: [parent associationForReadAt2: aSymbol]
+%
+category: 'other'
+method: BlockAst
+associationForWriteAt: aSymbol
+
+	^variables 
+		associationAt: aSymbol
+		ifAbsent: [ | assoc |
+			assoc := SymbolAssociation newWithKey: aSymbol value: _remoteNil.
+			variables addAssociation: assoc.
+			assoc]
 %
 category: 'other'
 method: BlockAst
@@ -38,10 +55,4 @@ method: BlockAst
 locals
 
 	^self
-%
-category: 'other'
-method: BlockAst
-nonlocalAssociationAt: aSymbol
-
-	self subclassResponsibility.
 %

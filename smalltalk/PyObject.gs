@@ -33,12 +33,20 @@ __str__
 %
 category: 'other'
 method: PyObject
-associationAt: aSymbol
+associationForReadAt: aSymbol
+
+	^variables 
+		associationAt: aSymbol
+		ifAbsent: [classAst associationForReadAt: aSymbol]
+%
+category: 'other'
+method: PyObject
+associationForWriteAt: aSymbol
 
 	^variables 
 		associationAt: aSymbol
 		ifAbsent: [ | assoc |
-			assoc := classAst associationAt: aSymbol otherwise: nil.
+			assoc := classAst associationForReadAt: aSymbol.
 			assoc ifNil: [
 				assoc := SymbolAssociation newWithKey: aSymbol value: _remoteNil.
 				variables addAssociation: assoc.
@@ -50,7 +58,7 @@ call: aSymbol withArguments: anArray keywords: aSymbolDictionary
 
 	| assoc |
 	assoc := variables associationAt: aSymbol ifAbsent: [
-		classAst associationAt: aSymbol otherwise: nil.
+		classAst associationForReadAt: aSymbol.
 	].
 	assoc ifNil: [self error: 'method not found!'].
 	^assoc value

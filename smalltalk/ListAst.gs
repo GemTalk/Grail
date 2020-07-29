@@ -34,6 +34,11 @@ initialize
 %
 category: 'other'
 method: ListAst
-saveVariableAssociation
+saveVariableAssociationForRead
+	"Not really a variable?"
+%
+category: 'other'
+method: ListAst
+saveVariableAssociationForWrite
 	"Not really a variable?"
 %

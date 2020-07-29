@@ -12,7 +12,7 @@ method: AugStoreAst
 initialize
 
 	super initialize.
-	parent saveVariableAssociation.
+	parent saveVariableAssociationForWrite.
 %
 category: 'other'
 method: AugStoreAst

@@ -30,6 +30,11 @@ initialize
 %
 category: 'other'
 method: StarredAst
-saveVariableAssociation
+saveVariableAssociationForRead
+	"the variable association should have been loaded as part of the arg name"
+%
+category: 'other'
+method: StarredAst
+saveVariableAssociationForWrite
 	"the variable association should have been loaded as part of the arg name"
 %

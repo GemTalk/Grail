@@ -193,9 +193,21 @@ string
 set compile_env: 0
 category: 'other'
 method: AstNode
-associationAt: aSymbol 
+associationForArgument: aSymbol 
 
-	^parent associationAt: aSymbol
+	^parent associationForArgument: aSymbol
+%
+category: 'other'
+method: AstNode
+associationForReadAt: aSymbol 
+
+	^parent associationForReadAt: aSymbol
+%
+category: 'other'
+method: AstNode
+associationForWriteAt: aSymbol 
+
+	^parent associationForWriteAt: aSymbol
 %
 category: 'other'
 method: AstNode
@@ -238,12 +250,6 @@ method: AstNode
 module
 
 	^parent module
-%
-category: 'other'
-method: AstNode
-nonlocalAssociationAt: aSymbol
-
-	^parent nonlocalAssociationAt: aSymbol
 %
 category: 'other'
 method: AstNode

@@ -17,7 +17,7 @@ category: 'other'
 method: AttributeAst
 assign: anObject
 
-	^(value evaluate associationAt: attr) value: anObject
+	^(value evaluate associationForWriteAt: attr) value: anObject
 %
 category: 'other'
 method: AttributeAst
@@ -42,7 +42,7 @@ category: 'other'
 method: AttributeAst
 evaluate
 
-	^(value evaluate associationAt: attr) value
+	^(value evaluate associationForReadAt: attr) value
 %
 category: 'other'
 method: AttributeAst
@@ -65,7 +65,13 @@ initialize
 %
 category: 'other'
 method: AttributeAst
-saveVariableAssociation
+saveVariableAssociationForRead
+	"This is the attribute of an object, but the object isn't known till runtime 
+	(since value is an expression), so we can't really bind to it now."
+%
+category: 'other'
+method: AttributeAst
+saveVariableAssociationForWrite
 	"This is the attribute of an object, but the object isn't known till runtime 
 	(since value is an expression), so we can't really bind to it now."
 %

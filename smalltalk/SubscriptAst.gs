@@ -47,6 +47,11 @@ initialize
 %
 category: 'other'
 method: SubscriptAst
-saveVariableAssociation
+saveVariableAssociationForRead
+	"Not really a variable?"
+%
+category: 'other'
+method: SubscriptAst
+saveVariableAssociationForWrite
 	"Not really a variable?"
 %

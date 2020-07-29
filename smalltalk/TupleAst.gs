@@ -34,6 +34,11 @@ initialize
 %
 category: 'other'
 method: TupleAst
-saveVariableAssociation
-	"Not really a variable?"
+saveVariableAssociationForRead
+	"I believe each element of the tuple already has its variables loaded"
+%
+category: 'other'
+method: TupleAst
+saveVariableAssociationForWrite
+	"I believe each element of the tuple already has its variables loaded"
 %

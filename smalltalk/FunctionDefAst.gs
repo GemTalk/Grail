@@ -22,9 +22,15 @@ parent: anAstNode
 set compile_env: 0
 category: 'other'
 method: FunctionDefAst
-associationAt: aSymbol
+associationForArgument: aSymbol
 
-	^body associationAt: aSymbol
+	^body associationForArgument: aSymbol
+%
+category: 'other'
+method: FunctionDefAst
+associationForReadAt2: aSymbol
+
+	^parent associationForReadAt: aSymbol
 %
 category: 'other'
 method: FunctionDefAst
@@ -46,11 +52,7 @@ decoratorList
 category: 'other'
 method: FunctionDefAst
 evaluate
-	"This executes the 'def' command, creating and saving the function with its name.
-	We call super because we want to store the function definition in the parent's scope.
-	Our scope is used to hold local variables."
-
-	 (assoc := super associationAt: name) value: self.
+	"the function was saved as part of the initialize method"
 %
 category: 'other'
 method: FunctionDefAst
@@ -70,6 +72,7 @@ initialize
 	self commaSpace.
 	returns := self optionalExpression.
 	self readPosition.
+	(assoc := super associationForWriteAt: name) value: self.
 %
 category: 'other'
 method: FunctionDefAst

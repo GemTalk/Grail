@@ -31,7 +31,15 @@ new
 set compile_env: 0
 category: 'other'
 method: BuiltinModule
-associationAt: aSymbol
+associationForReadAt: aSymbol
+
+	^dictionary 
+		associationAt: aSymbol
+		ifAbsent: [nil]
+%
+category: 'other'
+method: BuiltinModule
+associationForWriteAt: aSymbol
 
 	^dictionary 
 		associationAt: aSymbol
@@ -42,7 +50,7 @@ method: BuiltinModule
 call: aSymbol withArguments: anArray keywords: aSymbolDictionary
 
 	| assoc |
-	assoc := self associationAt: aSymbol.
+	assoc := self associationForReadAt: aSymbol.
 	assoc ifNil: [self error: 'method not found!'].
 	^assoc value
 		value: anArray

@@ -12,5 +12,5 @@ method: DelAst
 initialize2
 
 	super initialize2.
-	parent saveVariableAssociation.
+	parent saveVariableAssociationForRead.
 %

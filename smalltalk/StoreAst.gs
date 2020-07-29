@@ -17,5 +17,5 @@ method: StoreAst
 initialize
 
 	super initialize.
-	parent saveVariableAssociation.
+	parent saveVariableAssociationForWrite.
 %

@@ -7,19 +7,3 @@ LocalScope class removeAllMethods.
 ! ------------------- Class methods for LocalScope
 ! ------------------- Instance methods for LocalScope
 set compile_env: 0
-category: 'other'
-method: LocalScope
-associationAt: aSymbol otherwise: anObject
-
-	^variables 
-		associationAt: aSymbol
-		otherwise: anObject
-%
-category: 'other'
-method: LocalScope
-nonlocalAssociationAt: aSymbol
-
-	^variables 
-		associationAt: aSymbol
-		ifAbsent: [parent nonlocalAssociationAt: aSymbol]
-%

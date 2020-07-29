@@ -84,6 +84,23 @@ doit
 ModuleNotFoundError category: 'Builtins'
 %
 set compile_env: 0
+! ------------------- Class definition for RuntimeError
+expectvalue /Class
+doit
+PyException subclass: 'RuntimeError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+RuntimeError category: 'Builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for TypeError
 expectvalue /Class
 doit
@@ -4277,6 +4294,7 @@ input RaiseAst.gs
 input ReturnAst.gs
 input ReturnNotification.gs
 input RShiftAst.gs
+input RuntimeError.gs
 input SetAst.gs
 input SetCompAst.gs
 input SimpleStatementsTestCase.gs

@@ -12,7 +12,7 @@ method: AliasAst
 import
 
 	| function keywords |
-	function := (self associationAt: #'__import__') value.
+	function := (self associationForReadAt: #'__import__') value.
 	keywords := SymbolDictionary new
 		at: #'globals' 	put: self globals;
 		at: #'locals'	put: self locals;
@@ -48,7 +48,7 @@ initialize2
 	| symbol |
 	super initialize2.
 	symbol := asName ifNil: [name].
-	assoc := self associationAt: symbol.
+	assoc := self associationForWriteAt: symbol.
 %
 category: 'other'
 method: AliasAst

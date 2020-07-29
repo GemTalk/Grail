@@ -34,7 +34,7 @@ method: ArgAst
 initialize2
 
 	super initialize2.
-	assoc := self associationAt: arg.
+	assoc := self associationForArgument: arg.
 %
 category: 'other'
 method: ArgAst

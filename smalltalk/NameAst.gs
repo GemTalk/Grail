@@ -28,9 +28,15 @@ assign: aValue
 %
 category: 'other'
 method: NameAst
-associationAt: aSymbol
+associationForReadAt: aSymbol
 
-	^assoc value associationAt: aSymbol
+	^assoc value associationForReadAt: aSymbol
+%
+category: 'other'
+method: NameAst
+associationForWriteAt: aSymbol
+
+	^assoc value associationForWriteAt: aSymbol
 %
 category: 'other'
 method: NameAst
@@ -79,15 +85,20 @@ method: NameAst
 printOn: aStream
 
 	super printOn: aStream.
-	assoc ifNotNil: [
-		aStream nextPut: $(; 
-			nextPutAll: assoc key;
-			nextPut: $).
-	].
+	aStream nextPut: $(; 
+		nextPutAll: id;
+		nextPut: $).
 %
 category: 'other'
 method: NameAst
-saveVariableAssociation
+saveVariableAssociationForRead
 
-	assoc := parent associationAt: id.
+	assoc := parent associationForReadAt: id.
+	assoc ifNil: [self error: 'name not found!'].
+%
+category: 'other'
+method: NameAst
+saveVariableAssociationForWrite
+
+	assoc := parent associationForWriteAt: id.
 %

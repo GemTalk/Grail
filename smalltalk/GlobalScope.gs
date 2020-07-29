@@ -9,6 +9,14 @@ GlobalScope class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: GlobalScope
+associationForReadAt: aSymbol
+
+	^variables 
+		associationAt: aSymbol
+		ifAbsent: [Builtins current associationForReadAt: aSymbol]
+%
+category: 'other'
+method: GlobalScope
 globals
 
 	^self
@@ -18,13 +26,4 @@ method: GlobalScope
 isGlobalScope
 
 	^true
-%
-category: 'other'
-method: GlobalScope
-nonlocalAssociationAt: aSymbol
-	"Since we are a GlobalScope (a Block for a Module), the only 'outer' scope
-	is the 'builtins' module containing a few constants and a number of functions
-	to which we can send the message #'callWith:keywords:'."
-
-	^Builtins current associationAt: aSymbol
 %

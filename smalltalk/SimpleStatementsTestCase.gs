@@ -147,7 +147,7 @@ testClassDefCls
 	x := self statementsAt: 3.
 	self 
 		assert: (x isKindOf: ClassDefAst);
-		assert: (x.name = 'Cls');
+		assert: (x.name == #'Cls');
 		assert: (x.bases size == 0);
 		assert: (x.keywords size == 0);
 		assert: (x.body.body size == 1);
@@ -309,7 +309,7 @@ testPassClass
 	x := self statementsAt: 12.
 	self 
 		assert: (x isKindOf: ClassDefAst);
-		assert: (x.name = 'C');
+		assert: (x.name == #'C');
 		assert: (x.bases size == 0);
 		assert: (x.keywords size == 0);
 		assert: (x.body.body size == 1);

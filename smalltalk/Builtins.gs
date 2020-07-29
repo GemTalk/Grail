@@ -1254,7 +1254,7 @@ See also format() for more information.
 %
 category: 'functions'
 method: Builtins
-open: arguments
+open: arguments keywords: keywords
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1722,13 +1722,17 @@ initialize
 "
 	super initialize.
 	dictionary 
-		at: #'None' 			put: nil;
-		at: #'True'				put: true;
 		at: #'False'				put: false;
+		at: #'None' 			put: nil;
+		at: #'RuntimeError'	put: RuntimeError;
+		at: #'True'				put: true;
 		at: #'__import__'		put: [:arguments :keywords | self __import__: arguments first asSymbol keywords: keywords];
 		at: #'abs'				put: [:arguments :keywords | self abs: arguments first];
+		at: #'any'				put: [:arguments :keywords | self any: arguments first];
 		at: #'classmethod'	put: [:arguments :keywords | self classmethod: arguments first];
+		at: #'open'				put: [:arguments :keywords | self open: arguments keywords: keywords];
 		at: #'print'				put: [:arguments :keywords | self print: arguments keywords: keywords];
+		at: #'range'			put: [:arguments :keywords | self range: arguments];
 		at: #'str'				put: [:arguments :keywords | self str: arguments first];
 		yourself.
 	BaseException allSubclasses do: [:each | 

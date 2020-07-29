@@ -30,7 +30,7 @@ testClass
 	x := self statementsAt: 14.
 	self 
 		assert: (x isKindOf: ClassDefAst);
-		assert: (x.name = 'Foo');
+		assert: (x.name == #'Foo');
 		assert: (x.bases size == 0);
 		assert: (x.keywords size == 0);
 		assert: (x.body.body size == 1);
@@ -47,7 +47,7 @@ testClassInheritance
 	x := self statementsAt: 15.
 	self 
 		assert: (x isKindOf: ClassDefAst);
-		assert: (x.name = 'Bar');
+		assert: (x.name == #'Bar');
 		assert: (x.bases size == 1);
 		assert: ((name := x.bases at: 1) isKindOf: NameAst);
 		assert: (name.assoc.key == #'Foo');
