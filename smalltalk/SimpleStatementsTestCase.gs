@@ -298,7 +298,7 @@ testNonlocal
 	self 
 		assert: (x isKindOf: NonlocalAst);
 		assert: (x.names size == 1);
-		assert: ((x.names at: 1) = 'x');
+		assert: ((x.names at: 1) == #'x');
 		yourself.
 %
 category: 'other'

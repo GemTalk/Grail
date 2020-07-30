@@ -65,3 +65,20 @@ locals
 
 	^self
 %
+category: 'other'
+method: BlockAst
+parent
+
+	^parent
+%
+category: 'other'
+method: BlockAst
+printOn: aStream
+
+	super printOn: aStream.
+	aStream
+		nextPut: $(;
+		nextPutAll: parent name;
+		nextPut: $);
+		yourself.
+%
