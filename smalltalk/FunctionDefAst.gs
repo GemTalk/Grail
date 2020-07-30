@@ -66,13 +66,19 @@ initialize
 	self commaSpace.
 	args := ArgumentsAst parent: self.
 	self commaSpace.
-	body := LocalScope parent: self.
+	LocalScope parent: self.	"calls back to set body"
 	self commaSpace.
 	decorator_list :=  self collectAst: [self expression id].
 	self commaSpace.
 	returns := self optionalExpression.
 	self readPosition.
 	(assoc := super associationForWriteAt: name) value: self.
+%
+category: 'other'
+method: FunctionDefAst
+name
+
+	^name
 %
 category: 'other'
 method: FunctionDefAst
@@ -84,6 +90,12 @@ printOn: aStream
 		nextPutAll: name;
 		nextPut: $);
 		yourself.
+%
+category: 'other'
+method: FunctionDefAst
+setBlock: aBlockAst
+
+	body := aBlockAst.
 %
 category: 'other'
 method: FunctionDefAst

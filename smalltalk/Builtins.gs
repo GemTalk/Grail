@@ -151,7 +151,7 @@ See also format() for more information.
 %
 category: 'functions'
 method: Builtins
-bool: arguments
+bool: anObject
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -739,7 +739,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-getattr: arguments
+getattr: object _: name
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -868,7 +868,7 @@ Note To obtain a hexadecimal string representation
 %
 category: 'functions'
 method: Builtins
-id: arguments
+id: anObject
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -879,7 +879,7 @@ non-overlapping lifetimes may have the same id() value.
 
 CPython implementation detail: This is the address of the object in memory.
 "
-self halt.
+	^anObject asOop
 %
 category: 'functions'
 method: Builtins
@@ -973,7 +973,7 @@ Changed in version 3.7: x is now a positional-only parameter.
 %
 category: 'functions'
 method: Builtins
-isinstance: arguments
+isinstance: object _: classInfo
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1053,7 +1053,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-list: arguments
+list: iterable
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1062,7 +1062,7 @@ Rather than being a function, list is actually a
 mutable sequence type, as documented in Lists and 
 Sequence Types — list, tuple, range.
 "
-	^List withAll: arguments first
+	^List withAll: iterable
 %
 category: 'functions'
 method: Builtins
@@ -1210,7 +1210,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-object: arguments
+object
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1429,7 +1429,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-setattr: arguments
+setattr: object _: name
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1722,28 +1722,36 @@ initialize
 "
 	super initialize.
 	dictionary 
-		at: #'AttributeError'	put: AttributeError;
-		at: #'DeprecationWarning'	put: DeprecationWarning;
 		at: #'False'				put: false;
-		at: #'KeyError'			put: KeyError;
-		at: #'NameError'		put: PyNameError;
 		at: #'None' 			put: nil;
-		at: #'RuntimeError'	put: RuntimeError;
 		at: #'True'				put: true;
-		at: #'ValueError'		put: ValueError;
 		at: #'__import__'		put: [:arguments :keywords | self __import__: arguments first asSymbol keywords: keywords];
 		at: #'abs'				put: [:arguments :keywords | self abs: arguments first];
 		at: #'any'				put: [:arguments :keywords | self any: arguments first];
+		at: #'bool'				put: [:arguments :keywords | self bool: arguments first];
 		at: #'classmethod'	put: [:arguments :keywords | self classmethod: arguments first];
+		at: #'exec'				put: [:arguments :keywords | self exec: arguments];
+		at: #'getattr'			put: [:arguments :keywords | self getattr: arguments first _: arguments second];
 		at: #'hasattr'			put: [:arguments :keywords | self hasattr: arguments first _: arguments second];
+		at: #'id'					put: [:arguments :keywords | self id: arguments first];
+		at: #'isinstance'		put: [:arguments :keywords | self isinstance: arguments first _: arguments second];
+		at: #'len'				put: [:arguments :keywords | self len: arguments first];
+		at: #'list'				put: [:arguments :keywords | self list: arguments first];
+		at: #'object'			put: [:arguments :keywords | self object];
 		at: #'open'				put: [:arguments :keywords | self open: arguments keywords: keywords];
 		at: #'print'				put: [:arguments :keywords | self print: arguments keywords: keywords];
 		at: #'range'			put: [:arguments :keywords | self range: arguments];
+		at: #'setattr'			put: [:arguments :keywords | self setattr: arguments first _: arguments second];
 		at: #'str'				put: [:arguments :keywords | self str: arguments first];
+		at: #'type'				put: [:arguments :keywords | self type: arguments];
 		yourself.
 	BaseException allSubclasses do: [:each | 
 		dictionary at: each name put: each.
 	].
+	dictionary
+		removeKey: #'PyException';
+		at: #'Exception' put: PyException;
+		yourself
 %
 category: 'other'
 method: Builtins

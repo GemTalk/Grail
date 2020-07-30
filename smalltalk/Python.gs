@@ -26,11 +26,110 @@ AbstractException subclass: 'BaseException'
 expectvalue /Class
 doit
 BaseException comment: 
-'https://docs.python.org/3/library/exceptions.html#exception-hierarchy'
+'https://docs.python.org/3/library/exceptions.html#exception-hierarchy
+
+BaseException
+ +-- SystemExit
+ +-- KeyboardInterrupt
+ +-- GeneratorExit
+ +-- Exception
+      +-- StopIteration
+      +-- StopAsyncIteration
+      +-- ArithmeticError
+      |    +-- FloatingPointError
+      |    +-- OverflowError
+      |    +-- ZeroDivisionError
+      +-- AssertionError
+      +-- AttributeError
+      +-- BufferError
+      +-- EOFError
+      +-- ImportError
+      |    +-- ModuleNotFoundError
+      +-- LookupError
+      |    +-- IndexError
+      |    +-- KeyError
+      +-- MemoryError
+      +-- NameError
+      |    +-- UnboundLocalError
+      +-- OSError
+      |    +-- BlockingIOError
+      |    +-- ChildProcessError
+      |    +-- ConnectionError
+      |    |    +-- BrokenPipeError
+      |    |    +-- ConnectionAbortedError
+      |    |    +-- ConnectionRefusedError
+      |    |    +-- ConnectionResetError
+      |    +-- FileExistsError
+      |    +-- FileNotFoundError
+      |    +-- InterruptedError
+      |    +-- IsADirectoryError
+      |    +-- NotADirectoryError
+      |    +-- PermissionError
+      |    +-- ProcessLookupError
+      |    +-- TimeoutError
+      +-- ReferenceError
+      +-- RuntimeError
+      |    +-- NotImplementedError
+      |    +-- RecursionError
+      +-- SyntaxError
+      |    +-- IndentationError
+      |         +-- TabError
+      +-- SystemError
+      +-- TypeError
+      +-- ValueError
+      |    +-- UnicodeError
+      |         +-- UnicodeDecodeError
+      |         +-- UnicodeEncodeError
+      |         +-- UnicodeTranslateError
+      +-- Warning
+           +-- DeprecationWarning
+           +-- PendingDeprecationWarning
+           +-- RuntimeWarning
+           +-- SyntaxWarning
+           +-- UserWarning
+           +-- FutureWarning
+           +-- ImportWarning
+           +-- UnicodeWarning
+           +-- BytesWarning
+           +-- ResourceWarning'
 %
 expectvalue /Class
 doit
 BaseException category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for GeneratorExit
+expectvalue /Class
+doit
+BaseException subclass: 'GeneratorExit'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+GeneratorExit category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for KeyboardInterrupt
+expectvalue /Class
+doit
+BaseException subclass: 'KeyboardInterrupt'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+KeyboardInterrupt category: 'Builtins'
 %
 set compile_env: 0
 ! ------------------- Class definition for PyException
@@ -50,6 +149,91 @@ doit
 PyException category: 'Builtins'
 %
 set compile_env: 0
+! ------------------- Class definition for ArithmeticError
+expectvalue /Class
+doit
+PyException subclass: 'ArithmeticError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+ArithmeticError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for OverflowError
+expectvalue /Class
+doit
+ArithmeticError subclass: 'OverflowError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+OverflowError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for PyFloatingPointError
+expectvalue /Class
+doit
+ArithmeticError subclass: 'PyFloatingPointError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+PyFloatingPointError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for ZeroDivisionError
+expectvalue /Class
+doit
+ArithmeticError subclass: 'ZeroDivisionError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+ZeroDivisionError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for AssertionError
+expectvalue /Class
+doit
+PyException subclass: 'AssertionError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+AssertionError category: 'Builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for AttributeError
 expectvalue /Class
 doit
@@ -67,10 +251,10 @@ doit
 AttributeError category: 'Builtins'
 %
 set compile_env: 0
-! ------------------- Class definition for DeprecationWarning
+! ------------------- Class definition for BufferError
 expectvalue /Class
 doit
-PyException subclass: 'DeprecationWarning'
+PyException subclass: 'BufferError'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -81,7 +265,24 @@ PyException subclass: 'DeprecationWarning'
 %
 expectvalue /Class
 doit
-DeprecationWarning category: 'Builtins'
+BufferError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for EOFError
+expectvalue /Class
+doit
+PyException subclass: 'EOFError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+EOFError category: 'Builtins'
 %
 set compile_env: 0
 ! ------------------- Class definition for ImportError
@@ -118,10 +319,10 @@ doit
 ModuleNotFoundError category: 'Builtins'
 %
 set compile_env: 0
-! ------------------- Class definition for KeyError
+! ------------------- Class definition for MemoryError
 expectvalue /Class
 doit
-PyException subclass: 'KeyError'
+PyException subclass: 'MemoryError'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -129,6 +330,340 @@ PyException subclass: 'KeyError'
   inDictionary: Python
   options: #( disallowGciStore)
 
+%
+expectvalue /Class
+doit
+MemoryError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for OSError
+expectvalue /Class
+doit
+PyException subclass: 'OSError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+OSError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for BlockingIOError
+expectvalue /Class
+doit
+OSError subclass: 'BlockingIOError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+BlockingIOError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for ChildProcessError
+expectvalue /Class
+doit
+OSError subclass: 'ChildProcessError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+ChildProcessError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for ConnectionError
+expectvalue /Class
+doit
+OSError subclass: 'ConnectionError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+ConnectionError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for BrokenPipeError
+expectvalue /Class
+doit
+ConnectionError subclass: 'BrokenPipeError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+BrokenPipeError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for ConnectionAbortedError
+expectvalue /Class
+doit
+ConnectionError subclass: 'ConnectionAbortedError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+ConnectionAbortedError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for ConnectionRefusedError
+expectvalue /Class
+doit
+ConnectionError subclass: 'ConnectionRefusedError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+ConnectionRefusedError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for ConnectionResetError
+expectvalue /Class
+doit
+ConnectionError subclass: 'ConnectionResetError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+ConnectionResetError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for FileExistsError
+expectvalue /Class
+doit
+OSError subclass: 'FileExistsError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+FileExistsError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for FileNotFoundError
+expectvalue /Class
+doit
+OSError subclass: 'FileNotFoundError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+FileNotFoundError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for InterruptedError
+expectvalue /Class
+doit
+OSError subclass: 'InterruptedError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+InterruptedError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for IsADirectoryError
+expectvalue /Class
+doit
+OSError subclass: 'IsADirectoryError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+IsADirectoryError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for NotADirectoryError
+expectvalue /Class
+doit
+OSError subclass: 'NotADirectoryError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+NotADirectoryError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for PermissionError
+expectvalue /Class
+doit
+OSError subclass: 'PermissionError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+PermissionError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for ProcessLookupError
+expectvalue /Class
+doit
+OSError subclass: 'ProcessLookupError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+ProcessLookupError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for TimeoutError
+expectvalue /Class
+doit
+OSError subclass: 'TimeoutError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+TimeoutError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for PyLookupError
+expectvalue /Class
+doit
+PyException subclass: 'PyLookupError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+PyLookupError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for IndexError
+expectvalue /Class
+doit
+PyLookupError subclass: 'IndexError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+IndexError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for KeyError
+expectvalue /Class
+doit
+PyLookupError subclass: 'KeyError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+KeyError comment: 
+'No class-specific documentation for KeyError, hierarchy is: 
+Object
+  AbstractException( gsResumable gsTrappable gsNumber currGsHandler gsStack gsReason gsDetails tag messageText gsArgs)
+    BaseException
+      PyException
+        KeyError
+'
 %
 expectvalue /Class
 doit
@@ -152,6 +687,238 @@ doit
 PyNameError category: 'Builtins'
 %
 set compile_env: 0
+! ------------------- Class definition for UnboundLocalError
+expectvalue /Class
+doit
+PyNameError subclass: 'UnboundLocalError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+UnboundLocalError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for PyWarning
+expectvalue /Class
+doit
+PyException subclass: 'PyWarning'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+PyWarning category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for BytesWarning
+expectvalue /Class
+doit
+PyWarning subclass: 'BytesWarning'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+BytesWarning category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for DeprecationWarning
+expectvalue /Class
+doit
+PyWarning subclass: 'DeprecationWarning'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+DeprecationWarning comment: 
+'No class-specific documentation for DeprecationWarning, hierarchy is: 
+Object
+  AbstractException( gsResumable gsTrappable gsNumber currGsHandler gsStack gsReason gsDetails tag messageText gsArgs)
+    BaseException
+      PyException
+        DeprecationWarning
+'
+%
+expectvalue /Class
+doit
+DeprecationWarning category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for FutureWarning
+expectvalue /Class
+doit
+PyWarning subclass: 'FutureWarning'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+FutureWarning category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for ImportWarning
+expectvalue /Class
+doit
+PyWarning subclass: 'ImportWarning'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+ImportWarning category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for PendingDeprecationWarning
+expectvalue /Class
+doit
+PyWarning subclass: 'PendingDeprecationWarning'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+PendingDeprecationWarning category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for ResourceWarning
+expectvalue /Class
+doit
+PyWarning subclass: 'ResourceWarning'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+ResourceWarning category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for RuntimeWarning
+expectvalue /Class
+doit
+PyWarning subclass: 'RuntimeWarning'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+RuntimeWarning category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for SyntaxWarning
+expectvalue /Class
+doit
+PyWarning subclass: 'SyntaxWarning'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+SyntaxWarning category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for UnicodeWarning
+expectvalue /Class
+doit
+PyWarning subclass: 'UnicodeWarning'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+UnicodeWarning category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for UserWarning
+expectvalue /Class
+doit
+PyWarning subclass: 'UserWarning'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+UserWarning category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for ReferenceError
+expectvalue /Class
+doit
+PyException subclass: 'ReferenceError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+ReferenceError category: 'Builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for RuntimeError
 expectvalue /Class
 doit
@@ -167,6 +934,142 @@ PyException subclass: 'RuntimeError'
 expectvalue /Class
 doit
 RuntimeError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for NotImplementedError
+expectvalue /Class
+doit
+RuntimeError subclass: 'NotImplementedError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+NotImplementedError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for RecursionError
+expectvalue /Class
+doit
+RuntimeError subclass: 'RecursionError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+RecursionError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for StopAsyncIteration
+expectvalue /Class
+doit
+PyException subclass: 'StopAsyncIteration'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+StopAsyncIteration category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for StopIteration
+expectvalue /Class
+doit
+PyException subclass: 'StopIteration'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+StopIteration category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for SyntaxError
+expectvalue /Class
+doit
+PyException subclass: 'SyntaxError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+SyntaxError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for IndentationError
+expectvalue /Class
+doit
+SyntaxError subclass: 'IndentationError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+IndentationError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for TabError
+expectvalue /Class
+doit
+IndentationError subclass: 'TabError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+TabError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for SystemError
+expectvalue /Class
+doit
+PyException subclass: 'SystemError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+SystemError category: 'Builtins'
 %
 set compile_env: 0
 ! ------------------- Class definition for TypeError
@@ -201,6 +1104,91 @@ PyException subclass: 'ValueError'
 expectvalue /Class
 doit
 ValueError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for UnicodeError
+expectvalue /Class
+doit
+ValueError subclass: 'UnicodeError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+UnicodeError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for UnicodeDecodeError
+expectvalue /Class
+doit
+UnicodeError subclass: 'UnicodeDecodeError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+UnicodeDecodeError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for UnicodeEncodeError
+expectvalue /Class
+doit
+UnicodeError subclass: 'UnicodeEncodeError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+UnicodeEncodeError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for UnicodeTranslateError
+expectvalue /Class
+doit
+UnicodeError subclass: 'UnicodeTranslateError'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+UnicodeTranslateError category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for SystemException
+expectvalue /Class
+doit
+BaseException subclass: 'SystemException'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+SystemException category: 'Builtins'
 %
 set compile_env: 0
 ! ------------------- Class definition for BreakNotification
@@ -4260,7 +5248,9 @@ input AndAst.gs
 input AnnAssignAst.gs
 input ArgAst.gs
 input ArgumentsAst.gs
+input ArithmeticError.gs
 input AssertAst.gs
+input AssertionError.gs
 input AssignAst.gs
 input AstNode.gs
 input AstNodeWithLocation.gs
@@ -4279,16 +5269,21 @@ input BitAndAst.gs
 input BitOrAst.gs
 input BitXorAst.gs
 input BlockAst.gs
+input BlockingIOError.gs
 input BoolOpAst.gs
 input BreakAst.gs
 input BreakNotification.gs
+input BrokenPipeError.gs
+input BufferError.gs
 input BuiltinModule.gs
 input Builtins.gs
 input BuiltinsTestCase.gs
 input ByteLiteralsTestCase.gs
 input BytesAst.gs
+input BytesWarning.gs
 input CallAst.gs
 input CancelNotification.gs
+input ChildProcessError.gs
 input ClassDefAst.gs
 input ClassesTestCase.gs
 input ClassFunctionDefAst.gs
@@ -4297,6 +5292,10 @@ input CompareAst.gs
 input Complex.gs
 input CompoundStatementsTestCase.gs
 input ComprehensionAst.gs
+input ConnectionAbortedError.gs
+input ConnectionError.gs
+input ConnectionRefusedError.gs
+input ConnectionResetError.gs
 input ConstantAst.gs
 input ContinueAst.gs
 input ContinueNotification.gs
@@ -4308,6 +5307,7 @@ input DictAst.gs
 input DictCompAst.gs
 input DivAst.gs
 input EllipsisAst.gs
+input EOFError.gs
 input EqAst.gs
 input EvaluateTestCase.gs
 input ExceptHandlerAst.gs
@@ -4316,10 +5316,14 @@ input ExpressionAst.gs
 input ExpressionContextAst.gs
 input ExtSliceAst.gs
 input FalseAst.gs
+input FileExistsError.gs
+input FileNotFoundError.gs
 input FloorDivAst.gs
 input ForAst.gs
 input FormattedValueAst.gs
 input FunctionDefAst.gs
+input FutureWarning.gs
+input GeneratorExit.gs
 input GeneratorExpAst.gs
 input GlobalAst.gs
 input GlobalScope.gs
@@ -4331,13 +5335,19 @@ input ImportAst.gs
 input ImportError.gs
 input ImportFromAst.gs
 input ImportTestCase.gs
+input ImportWarning.gs
 input InAst.gs
+input IndentationError.gs
 input IndexAst.gs
+input IndexError.gs
 input InstanceFunctionDefAst.gs
+input InterruptedError.gs
 input InvertAst.gs
+input IsADirectoryError.gs
 input IsAst.gs
 input IsNotAst.gs
 input JoinedStrAst.gs
+input KeyboardInterrupt.gs
 input KeyError.gs
 input KeywordAst.gs
 input KeywordsAst.gs
@@ -4351,6 +5361,7 @@ input LShiftAst.gs
 input LtAst.gs
 input LtEAst.gs
 input MatMultAst.gs
+input MemoryError.gs
 input ModAst.gs
 input ModuleAst.gs
 input ModuleNotFoundError.gs
@@ -4360,18 +5371,27 @@ input NameConstantAst.gs
 input NamedExprAst.gs
 input NoneAst.gs
 input NonlocalAst.gs
+input NotADirectoryError.gs
 input NotAst.gs
 input NotEqAst.gs
+input NotImplementedError.gs
 input NotInAst.gs
 input NumAst.gs
 input NumericLiteralsTestCase.gs
 input OperatorAst.gs
 input OperatorsTestCase.gs
 input OrAst.gs
+input OSError.gs
+input OverflowError.gs
 input ParamAst.gs
 input PassAst.gs
+input PendingDeprecationWarning.gs
+input PermissionError.gs
 input PowAst.gs
+input ProcessLookupError.gs
 input PyException.gs
+input PyFloatingPointError.gs
+input PyLookupError.gs
 input PyNameError.gs
 input PyObject.gs
 input PyPackage.gs
@@ -4379,11 +5399,16 @@ input PyString.gs
 input PythonTestCase.gs
 input PythonTestResource.gs
 input PyTime.gs
+input PyWarning.gs
 input RaiseAst.gs
+input RecursionError.gs
+input ReferenceError.gs
+input ResourceWarning.gs
 input ReturnAst.gs
 input ReturnNotification.gs
 input RShiftAst.gs
 input RuntimeError.gs
+input RuntimeWarning.gs
 input SetAst.gs
 input SetCompAst.gs
 input SimpleStatementsTestCase.gs
@@ -4391,14 +5416,22 @@ input SliceAbstractAst.gs
 input SliceAst.gs
 input StarredAst.gs
 input StatementAst.gs
+input StopAsyncIteration.gs
+input StopIteration.gs
 input StoreAst.gs
 input StrAst.gs
 input StringLiteralsTestCase.gs
 input SubAst.gs
 input SubscriptAst.gs
 input SuiteAst.gs
+input SyntaxError.gs
+input SyntaxWarning.gs
 input Sys.gs
+input SystemError.gs
+input SystemException.gs
 input SysTestCase.gs
+input TabError.gs
+input TimeoutError.gs
 input TimeTestCase.gs
 input TrueAst.gs
 input TryAst.gs
@@ -4407,7 +5440,14 @@ input TupleAst.gs
 input TypeError.gs
 input UAddAst.gs
 input UnaryOpAst.gs
+input UnboundLocalError.gs
+input UnicodeDecodeError.gs
+input UnicodeEncodeError.gs
+input UnicodeError.gs
+input UnicodeTranslateError.gs
+input UnicodeWarning.gs
 input UserInteraction.gs
+input UserWarning.gs
 input USubAst.gs
 input ValueError.gs
 input VariableTestCase.gs
@@ -4416,3 +5456,4 @@ input WithAst.gs
 input WithItemAst.gs
 input YieldAst.gs
 input YieldFromAst.gs
+input ZeroDivisionError.gs

@@ -82,7 +82,7 @@ initialize
 	self commaSpace.
 	keywords := self collectAst: [KeywordAst parent: self].
 	self commaSpace.
-	body := LocalScope parent: self.
+	LocalScope parent: self.	"calls back to set body"
 	self commaSpace.
 	decorator_list := self collectAst:[self expression].
 	self readPosition.
@@ -110,6 +110,12 @@ printOn: aStream
 		nextPutAll: name;
 		nextPut: $);
 		yourself.
+%
+category: 'other'
+method: ClassDefAst
+setBlock: aBlockAst
+
+	body := aBlockAst.
 %
 category: 'other'
 method: ClassDefAst

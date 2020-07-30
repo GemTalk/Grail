@@ -243,7 +243,7 @@ category: 'other'
 method: AstNode
 locals
 
-	^self module locals
+	^parent locals
 %
 category: 'other'
 method: AstNode

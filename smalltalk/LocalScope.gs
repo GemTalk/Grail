@@ -6,3 +6,4 @@ LocalScope class removeAllMethods.
 %
 ! ------------------- Class methods for LocalScope
 ! ------------------- Instance methods for LocalScope
+set compile_env: 0

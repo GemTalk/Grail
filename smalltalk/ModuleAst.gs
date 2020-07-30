@@ -81,9 +81,7 @@ category: 'other'
 method: ModuleAst
 globals
 
-	^body isGlobalScope
-		ifTrue: [body]
-		ifFalse: [super globals]
+	^body
 %
 category: 'other'
 method: ModuleAst
@@ -140,7 +138,7 @@ parseAst
 	stream := ReadStream on: self readAst.
 	string := stream upTo: $(.
 	string = 'Module' ifFalse: [self error].
-	body :=  GlobalScope parent: self.
+	GlobalScope parent: self.
 	(stream peekFor: $)) ifFalse: [self error].
 	string := stream upToEnd trimSeparators.
 	string isEmpty ifFalse: [self error: 'Unexpected text at end of AST: ' , string printString].
@@ -151,6 +149,17 @@ method: ModuleAst
 path
 
 	^path
+%
+category: 'other'
+method: ModuleAst
+printOn: aStream
+
+	super printOn: aStream.
+	aStream
+		nextPut: $(;
+		nextPutAll: name;
+		nextPut: $);
+		yourself.
 %
 category: 'other'
 method: ModuleAst
@@ -166,6 +175,12 @@ readSource
 	file := GsFile openReadOnServer: path.
 	source := file contentsAsUtf8.
 	file close.
+%
+category: 'other'
+method: ModuleAst
+setBlock: aBlockAst
+
+	body := aBlockAst.
 %
 category: 'other'
 method: ModuleAst

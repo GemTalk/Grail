@@ -94,7 +94,10 @@ method: NameAst
 saveVariableAssociationForRead
 
 	assoc := parent associationForReadAt: id.
-	assoc ifNil: [self error: 'name not found!'].
+	assoc ifNil: [
+		(#(#'_thread' #'_warnings' #'_weakref') includes: id) ifTrue: [^self].
+		self error: 'name not found!'.
+	].
 %
 category: 'other'
 method: NameAst

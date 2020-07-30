@@ -9,6 +9,12 @@ BlockAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: BlockAst
+addAssociation: anAssociation
+
+	variables add: anAssociation.
+%
+category: 'other'
+method: BlockAst
 associationForArgument: aSymbol
 
 	^variables 
@@ -41,7 +47,10 @@ category: 'other'
 method: BlockAst
 initialize
 
-	variables := SymbolDictionary new.
+	parent setBlock: self.
+	variables := SymbolDictionary new
+		at: #'__name__' put: parent name;
+		yourself.
 	super initialize.
 %
 category: 'other'

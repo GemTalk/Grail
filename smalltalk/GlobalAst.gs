@@ -16,6 +16,12 @@ initialize
 	stream := self stream.
 	names := self collectAst: [
 		(stream peekFor: $') ifFalse: [self error].
-		self stream upTo: $'.].
+		(self stream upTo: $') asSymbol
+	].
 	self readPosition.
+	names do: [:each | 
+		| assoc |
+		assoc := self globals associationForWriteAt: each.
+		self locals addAssociation: assoc.
+	].
 %

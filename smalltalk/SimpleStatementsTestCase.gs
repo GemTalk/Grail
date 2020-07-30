@@ -240,7 +240,7 @@ testGlobal
 	self 
 		assert: (x isKindOf: GlobalAst);
 		assert: (x.names size == 1);
-		assert: ((x.names at: 1) = 'g');
+		assert: ((x.names at: 1) == #'g');
 		yourself.
 %
 category: 'other'
