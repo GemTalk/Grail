@@ -18,10 +18,11 @@ children
 %
 category: 'other'
 method: ExceptHandlerAst
-evaluate
+evaluate: aScope
 
-	name evaluate ifNotNil: [:myName | myName halt].
-	^body evaluate
+	self error: 'not called!?'.
+	(name evaluate: aScope) ifNotNil: [:myName | myName halt].
+	^body evaluate: aScope
 %
 category: 'other'
 method: ExceptHandlerAst

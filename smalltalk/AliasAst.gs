@@ -9,17 +9,19 @@ AliasAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: AliasAst
-import
+import: aScope
 
-	| function keywords |
-	function := (self associationForReadAt: #'__import__') value.
+	| function keywords module |
+	function := aScope get: #'__import__'.
 	keywords := SymbolDictionary new
 		at: #'globals' 	put: self globals;
-		at: #'locals'	put: self locals;
+		at: #'locals'	put: aScope;
 		at: #'fromlist'	put: #();
 		at: #'level'		put: 0;
 		yourself.
-	assoc value: (function value: (Array with: name) value: keywords).
+	module := function value: (Array with: name) value: keywords value: aScope.
+	aScope set: name to: module.
+
 %
 category: 'other'
 method: AliasAst
@@ -40,15 +42,6 @@ initialize
 		string = 'None' ifFalse: [self error].
 		asName := nil.
 	].
-%
-category: 'other'
-method: AliasAst
-initialize2
-
-	| symbol |
-	super initialize2.
-	symbol := asName ifNil: [name].
-	assoc := self associationForWriteAt: symbol.
 %
 category: 'other'
 method: AliasAst

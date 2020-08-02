@@ -19,8 +19,8 @@ method: SysTestCase
 test_byteorder
 
 	| x |
-	x := (self statementsAt: 1) evaluate.			"import sys"
-	x := (self statementsAt: 2) evaluate.			"s = sys"
-	x := (self statementsAt: 3) evaluate.			"s.byteorder"
+	x := (self statementsAt: 1) evaluate: aScope.			"import sys"
+	x := (self statementsAt: 2) evaluate: aScope.			"s = sys"
+	x := (self statementsAt: 3) evaluate: aScope.			"s.byteorder"
 	self assert: x = 'little'.
 %

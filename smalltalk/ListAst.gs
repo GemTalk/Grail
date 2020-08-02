@@ -18,9 +18,9 @@ children
 %
 category: 'other'
 method: ListAst
-evaluate
+evaluate: aScope
 	"May wish to revisit context"
-	^List withAll: (elts collect: [:each | each evaluate])
+	^List withAll: (elts collect: [:each | each evaluate: aScope])
 %
 category: 'other'
 method: ListAst
@@ -31,14 +31,4 @@ initialize
 	self commaSpace.
 	ctx := ExpressionContextAst parent: self.
 	self readPosition.
-%
-category: 'other'
-method: ListAst
-saveVariableAssociationForRead
-	"Not really a variable?"
-%
-category: 'other'
-method: ListAst
-saveVariableAssociationForWrite
-	"Not really a variable?"
 %

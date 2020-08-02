@@ -21,6 +21,6 @@ assign: aValue to: aVariable
 %
 category: 'other'
 method: SliceAbstractAst
-evaluate: aList
+evaluate: aScope list: aList
 	self subclassResponsibility
 %

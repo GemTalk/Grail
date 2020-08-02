@@ -19,7 +19,8 @@ children
 %
 category: 'other'
 method: SliceAst
-evaluate: aList
+evaluate: aScope list: aList
+
 	self halt.
 %
 category: 'other'

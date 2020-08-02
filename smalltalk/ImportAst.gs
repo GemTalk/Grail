@@ -17,10 +17,10 @@ children
 %
 category: 'other'
 method: ImportAst
-evaluate
+evaluate: aScope
 	"each name is an instance of AliasAst and that is where the import occurs"
 
-	names do: [:each | each import].
+	names do: [:each | each import: aScope].
 %
 category: 'other'
 method: ImportAst

@@ -9,10 +9,10 @@ IndexAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: IndexAst
-assign: aValue to: aVariable
+assign: aValue to: aVariable scope: aScope
 	| x y |
-	x := value evaluate.
-	y := aVariable evaluate.
+	x := value evaluate: aScope.
+	y := aVariable evaluate: aScope.
 	y at: x + 1 put: aValue.
 %
 category: 'other'
@@ -25,9 +25,10 @@ children
 %
 category: 'other'
 method: IndexAst
-evaluate: aList
+evaluate: aScope list: aList
+
 	value assertContextIsLoad.
-	^aList at: value evaluate + 1.
+	^aList at: (value evaluate: aScope) + 1.
 %
 category: 'other'
 method: IndexAst

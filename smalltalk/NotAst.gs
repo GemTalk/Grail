@@ -9,12 +9,7 @@ NotAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: NotAst
-evaluate
+evaluate: aScope
 
-	^operand evaluate not
-%
-category: 'other'
-method: NotAst
-operand: x
-	^x not
+	^(operand evaluate: aScope) not
 %

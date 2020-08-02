@@ -69,9 +69,10 @@ category: 'other'
 method: ModuleAst
 evaluate
 
-	| result |
+	| scope result |
 	[
-		result := body evaluate.
+		scope := GlobalScope new.
+		result := body evaluate: scope.
 	] on: CancelNotification do: [:ex |
 		ex return.
 	].
@@ -138,11 +139,10 @@ parseAst
 	stream := ReadStream on: self readAst.
 	string := stream upTo: $(.
 	string = 'Module' ifFalse: [self error].
-	GlobalScope parent: self.
+	SuiteAst parent: self.
 	(stream peekFor: $)) ifFalse: [self error].
 	string := stream upToEnd trimSeparators.
 	string isEmpty ifFalse: [self error: 'Unexpected text at end of AST: ' , string printString].
-	body initialize2.
 %
 category: 'other'
 method: ModuleAst

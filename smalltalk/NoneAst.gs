@@ -9,7 +9,7 @@ NoneAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: NoneAst
-evaluate
+evaluate: aScope
 
 	^nil
 %

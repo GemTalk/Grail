@@ -18,8 +18,7 @@ children
 category: 'other'
 method: ArgAst
 initialize
-
-"arg = (identifier arg, expr? annotation)"
+	"arg = (identifier arg, expr? annotation)"
 
 	| stream |
 	stream := self stream.
@@ -28,13 +27,6 @@ initialize
 	self commaSpace.
 	annotation := self optionalExpression.
 	self readPosition.
-%
-category: 'other'
-method: ArgAst
-initialize2
-
-	super initialize2.
-	assoc := self associationForArgument: arg.
 %
 category: 'other'
 method: ArgAst
@@ -49,7 +41,7 @@ printOn: aStream
 %
 category: 'other'
 method: ArgAst
-value: anObject
+setTo: anObject scope: aScope
 
-	assoc value: anObject.
+	aScope set: arg to: anObject.
 %

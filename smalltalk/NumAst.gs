@@ -9,7 +9,7 @@ NumAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: NumAst
-evaluate
+evaluate: aScope
 	^n
 %
 category: 'other'

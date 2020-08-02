@@ -16,7 +16,7 @@ moduleName
 set compile_env: 0
 category: 'functions'
 method: Builtins
-__import__: aSymbol keywords: aSymbolDictionary
+__import__: aSymbol keywords: aSymbolDictionary scope: aScope
 "
 	This function is invoked by the import statement. ... 
 	The function imports the module name, potentially using the given globals and locals 
@@ -58,13 +58,13 @@ __import__: aSymbol keywords: aSymbolDictionary
 		path := each , aSymbol.
 		((GsFile existsOnServer: path) and: [GsFile isServerDirectory: path]) ifTrue: [		"Package"
 			module := PyPackage script: path as: aSymbol.
-			module evaluate.
+			module evaluate: aScope.
 			^modules at: name put: module
 		].
 		path := path , '.py'.
 		(GsFile existsOnServer: path) ifTrue: [
 			module := ModuleAst script: path as: aSymbol.
-			module evaluate.
+			module evaluate: aScope.
 			^modules at: name put: module
 		].
 	].
@@ -272,7 +272,7 @@ The valid range for the argument is from 0 through 1,114,111 (0x10FFFF in base 1
 %
 category: 'functions'
 method: Builtins
-classmethod: anInstanceFunctionDefAst
+classmethod: anInstanceFunctionDefAst scope: aScope
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -318,7 +318,7 @@ pass some recognizable value if it wasn’t read from a file ('<string>' is comm
 The mode argument specifies what kind of code must be compiled; it can be 'exec' 
 if source consists of a sequence of statements, 'eval' if it consists of a single expression, 
 or 'single' if it consists of a single interactive statement (in the latter case, expression 
-statements that evaluate to something other than None will be printed).
+statements that evaluate: aScope to something other than None will be printed).
 
 The optional arguments flags and dont_inherit control which future statements 
 affect the compilation of source. If neither is present (or both are zero) the code 
@@ -397,7 +397,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-dict: arguments keywords: keywords
+dict: arguments keywords: keywords scope: aScope
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -413,7 +413,7 @@ For other containers see the built-in list, set, and tuple classes, as well as t
 	arguments notEmpty ifTrue: [
 		(arguments first isKindOf: Dictionary) ifTrue: [
 			arguments first keysAndValuesDo: [:eachKey :eachValue | 
-				keywords at: eachKey evaluate put: eachValue evaluate.
+				keywords at: eachKey evaluate: aScope put: eachValue evaluate: aScope.
 			]
 		] ifFalse: [
 			arguments first do: [ :each | 
@@ -566,7 +566,7 @@ Hints: dynamic execution of statements is supported by the exec() function.
 The globals() and locals() functions returns the current global and local dictionary, 
 respectively, which may be useful to pass around for use by eval() or exec().
 
-See ast.literal_eval() for a function that can safely evaluate strings with expressions containing only literals.
+See ast.literal_eval() for a function that can safely evaluate: aScope strings with expressions containing only literals.
 "
 self halt.
 %
@@ -1725,25 +1725,25 @@ initialize
 		at: #'False'				put: false;
 		at: #'None' 			put: nil;
 		at: #'True'				put: true;
-		at: #'__import__'		put: [:arguments :keywords | self __import__: arguments first asSymbol keywords: keywords];
-		at: #'abs'				put: [:arguments :keywords | self abs: arguments first];
-		at: #'any'				put: [:arguments :keywords | self any: arguments first];
-		at: #'bool'				put: [:arguments :keywords | self bool: arguments first];
-		at: #'classmethod'	put: [:arguments :keywords | self classmethod: arguments first];
-		at: #'exec'				put: [:arguments :keywords | self exec: arguments];
-		at: #'getattr'			put: [:arguments :keywords | self getattr: arguments first _: arguments second];
-		at: #'hasattr'			put: [:arguments :keywords | self hasattr: arguments first _: arguments second];
-		at: #'id'					put: [:arguments :keywords | self id: arguments first];
-		at: #'isinstance'		put: [:arguments :keywords | self isinstance: arguments first _: arguments second];
-		at: #'len'				put: [:arguments :keywords | self len: arguments first];
-		at: #'list'				put: [:arguments :keywords | self list: arguments first];
-		at: #'object'			put: [:arguments :keywords | self object];
-		at: #'open'				put: [:arguments :keywords | self open: arguments keywords: keywords];
-		at: #'print'				put: [:arguments :keywords | self print: arguments keywords: keywords];
-		at: #'range'			put: [:arguments :keywords | self range: arguments];
-		at: #'setattr'			put: [:arguments :keywords | self setattr: arguments first _: arguments second];
-		at: #'str'				put: [:arguments :keywords | self str: arguments first];
-		at: #'type'				put: [:arguments :keywords | self type: arguments];
+		at: #'__import__'		put: [:arguments :keywords :scope | self __import__: arguments first asSymbol keywords: keywords scope: scope];
+		at: #'abs'				put: [:arguments :keywords :scope | self abs: arguments first];
+		at: #'any'				put: [:arguments :keywords :scope | self any: arguments first];
+		at: #'bool'				put: [:arguments :keywords :scope | self bool: arguments first];
+		at: #'classmethod'	put: [:arguments :keywords :scope | self classmethod: arguments first scope: scope];
+		at: #'exec'				put: [:arguments :keywords :scope | self exec: arguments];
+		at: #'getattr'			put: [:arguments :keywords :scope | self getattr: arguments first _: arguments second];
+		at: #'hasattr'			put: [:arguments :keywords :scope | self hasattr: arguments first _: arguments second];
+		at: #'id'					put: [:arguments :keywords :scope | self id: arguments first];
+		at: #'isinstance'		put: [:arguments :keywords :scope | self isinstance: arguments first _: arguments second];
+		at: #'len'				put: [:arguments :keywords :scope | self len: arguments first];
+		at: #'list'				put: [:arguments :keywords :scope | self list: arguments first];
+		at: #'object'			put: [:arguments :keywords :scope | self object];
+		at: #'open'				put: [:arguments :keywords :scope | self open: arguments keywords: keywords];
+		at: #'print'				put: [:arguments :keywords :scope | self print: arguments keywords: keywords];
+		at: #'range'			put: [:arguments :keywords :scope | self range: arguments];
+		at: #'setattr'			put: [:arguments :keywords :scope | self setattr: arguments first _: arguments second];
+		at: #'str'				put: [:arguments :keywords :scope | self str: arguments first];
+		at: #'type'				put: [:arguments :keywords :scope | self type: arguments];
 		yourself.
 	BaseException allSubclasses do: [:each | 
 		dictionary at: each name put: each.

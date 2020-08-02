@@ -17,8 +17,9 @@ children
 %
 category: 'other'
 method: ExprAst
-evaluate
-	^value evaluate
+evaluate: aScope
+
+	^value evaluate: aScope
 %
 category: 'other'
 method: ExprAst

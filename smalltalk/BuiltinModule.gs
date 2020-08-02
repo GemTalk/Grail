@@ -31,30 +31,22 @@ new
 set compile_env: 0
 category: 'other'
 method: BuiltinModule
-associationForReadAt: aSymbol
+call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
 
-	^dictionary 
-		associationAt: aSymbol
-		ifAbsent: [nil]
-%
-category: 'other'
-method: BuiltinModule
-associationForWriteAt: aSymbol
-
-	^dictionary 
-		associationAt: aSymbol
-		ifAbsent: [nil]
-%
-category: 'other'
-method: BuiltinModule
-call: aSymbol withArguments: anArray keywords: aSymbolDictionary
-
-	| assoc |
-	assoc := self associationForReadAt: aSymbol.
-	assoc ifNil: [self error: 'method not found!'].
-	^assoc value
+	| function |
+	function := self get: aSymbol.
+	^function
 		value: anArray
 		value: aSymbolDictionary
+		value: aScope
+%
+category: 'other'
+method: BuiltinModule
+get: aSymbol
+
+	^dictionary
+		at: aSymbol
+		ifAbsent: [PyNameError signal]
 %
 category: 'other'
 method: BuiltinModule

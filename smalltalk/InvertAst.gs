@@ -9,12 +9,7 @@ InvertAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: InvertAst
-evaluate
+evaluate: aScope
 
-	^operand evaluate bitInvert
-%
-category: 'other'
-method: InvertAst
-operand: x
-	^x bitInvert
+	^(operand evaluate: aScope) bitInvert
 %

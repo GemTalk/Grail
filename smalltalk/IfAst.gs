@@ -9,21 +9,6 @@ IfAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: IfAst
-_body
-	^ body
-%
-category: 'other'
-method: IfAst
-_orelse
-	^ orelse
-%
-category: 'other'
-method: IfAst
-_test
-	^ test
-%
-category: 'other'
-method: IfAst
 children
 
 	^super children
@@ -34,10 +19,11 @@ children
 %
 category: 'other'
 method: IfAst
-evaluate
-	test evaluate
-		ifTrue: [body do: [:each | each evaluate]]
-		ifFalse: [orelse do: [:each | each evaluate]].
+evaluate: aScope
+
+	(test evaluate: aScope)
+		ifTrue: [body do: [:each | each evaluate: aScope]]
+		ifFalse: [orelse do: [:each | each evaluate: aScope]].
 %
 category: 'other'
 method: IfAst

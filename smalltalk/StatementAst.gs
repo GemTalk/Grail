@@ -28,7 +28,7 @@ statementFrom: aNode
 set compile_env: 0
 category: 'other'
 method: StatementAst
-evaluate
+evaluate: aScope
 
 	self subclassResponsibility.
 %

@@ -9,17 +9,19 @@ ClassFunctionDefAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: ClassFunctionDefAst
-callFromClass: receiver arguments: anArray keywords: aSymbolDictionary
+callFromClass: receiver arguments: anArray keywords: aSymbolDictionary scope: aScope
 
 	^self
 		value: (Array with: receiver) , anArray
 		value: aSymbolDictionary
+		value: aScope
 %
 category: 'other'
 method: ClassFunctionDefAst
-callFromObject: receiver arguments: anArray keywords: aSymbolDictionary
+callFromObject: receiver arguments: anArray keywords: aSymbolDictionary scope: aScope
 
 	^self
 		value: (Array with: receiver classAst) , anArray
 		value: aSymbolDictionary
+		value: aScope
 %

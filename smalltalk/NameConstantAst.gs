@@ -38,7 +38,7 @@ subclassDelimiter
 set compile_env: 0
 category: 'other'
 method: NameConstantAst
-evaluate
+evaluate: aScope
 
 	self subclassResponsibility.
 %

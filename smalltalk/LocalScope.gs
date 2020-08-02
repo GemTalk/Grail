@@ -5,5 +5,18 @@ LocalScope removeAllMethods.
 LocalScope class removeAllMethods.
 %
 ! ------------------- Class methods for LocalScope
+set compile_env: 0
+category: 'other'
+classmethod: LocalScope
+new
+
+	self error: 'use #outer:'.
+%
 ! ------------------- Instance methods for LocalScope
 set compile_env: 0
+category: 'other'
+method: LocalScope
+globals
+
+	^outer globals
+%

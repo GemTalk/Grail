@@ -5,34 +5,18 @@ GlobalScope removeAllMethods.
 GlobalScope class removeAllMethods.
 %
 ! ------------------- Class methods for GlobalScope
-! ------------------- Instance methods for GlobalScope
 set compile_env: 0
 category: 'other'
-method: GlobalScope
-associationForReadAt: aSymbol
+classmethod: GlobalScope
+new
 
-	^variables 
-		associationAt: aSymbol
-		ifAbsent: [Builtins current associationForReadAt: aSymbol]
+	^self outer: Builtins current
 %
+! ------------------- Instance methods for GlobalScope
+set compile_env: 0
 category: 'other'
 method: GlobalScope
 globals
 
 	^self
-%
-category: 'other'
-method: GlobalScope
-initialize
-
-	super initialize.
-	variables
-		at: #'__file__' put: parent name;
-		yourself.
-%
-category: 'other'
-method: GlobalScope
-isGlobalScope
-
-	^true
 %
