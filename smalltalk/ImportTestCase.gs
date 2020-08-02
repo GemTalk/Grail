@@ -18,5 +18,5 @@ category: 'other'
 method: ImportTestCase
 test_importlib
 
-	"(self statementsAt: 1) evaluate."
+	"(self statementsAt: 1) evaluate: aScope."
 %

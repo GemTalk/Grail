@@ -28,13 +28,3 @@ initialize
 	ctx := ExpressionContextAst parent: self.
 	self readPosition.
 %
-category: 'other'
-method: StarredAst
-saveVariableAssociationForRead
-	"the variable association should have been loaded as part of the arg name"
-%
-category: 'other'
-method: StarredAst
-saveVariableAssociationForWrite
-	"the variable association should have been loaded as part of the arg name"
-%

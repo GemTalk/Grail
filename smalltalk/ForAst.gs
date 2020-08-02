@@ -20,13 +20,13 @@ children
 %
 category: 'other'
 method: ForAst
-evaluate
+evaluate: aScope
 
 	[
-		iter evaluate do: [:i | 
+		(iter evaluate: aScope) do: [:i | 
 			[
-				parent variableAt: target put: i.
-				body do: [:each | each evaluate].
+				aScope set: target to: i.
+				body evaluate: aScope.
 			] on: ContinueNotification do: [:ex |
 				ex return.
 			].
@@ -34,7 +34,7 @@ evaluate
 	] on: BreakNotification do: [:ex |
 		ex return.
 	].
-	orelse do: [:each | each evaluate].
+	orelse evaluate: aScope.
 %
 category: 'other'
 method: ForAst

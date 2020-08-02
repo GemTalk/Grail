@@ -20,19 +20,19 @@ children
 %
 category: 'other'
 method: TryAst
-evaluate
+evaluate: aScope
 
 	[
 		[
-			body evaluate.
+			body evaluate: aScope.
 		] on: BaseException do: [:ex | 
 			| handler |
-			handler := handlers detect: [:each | each type evaluate handles: ex] ifNone: [ex pass].
-			handler evaluate.
+			handler := handlers detect: [:each | (each type evaluate: aScope) handles: ex] ifNone: [ex pass].
+			handler evaluate: aScope.
 		].
-		orelse evaluate.
+		orelse evaluate: aScope.
 	] ensure: [
-		finalbody evaluate.
+		finalbody evaluate: aScope.
 	].
 %
 category: 'other'

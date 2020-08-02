@@ -15,19 +15,22 @@ assertContextIsLoad
 %
 category: 'other'
 method: AttributeAst
-assign: anObject
+assign: anObject scope: aScope
 
-	^(value evaluate associationForWriteAt: attr) value: anObject
+	(value evaluate: aScope)
+		set: attr
+		to: anObject
 %
 category: 'other'
 method: AttributeAst
-callWithArguments: anArray keywords: aSymbolDictionary
+callWithArguments: anArray keywords: aSymbolDictionary scope: aScope
 
 	self assertContextIsLoad.
-	^value evaluate
+	^(value evaluate: aScope)
 		call: attr
 		withArguments: anArray
 		keywords: aSymbolDictionary
+		scope: aScope
 %
 category: 'other'
 method: AttributeAst
@@ -40,9 +43,9 @@ children
 %
 category: 'other'
 method: AttributeAst
-evaluate
+evaluate: aScope
 
-	^(value evaluate associationForReadAt: attr) value
+	^(value evaluate: aScope) get: attr
 %
 category: 'other'
 method: AttributeAst
@@ -62,16 +65,4 @@ initialize
 	self commaSpace.
 	ctx := ExpressionContextAst parent: self.
 	self readPosition.
-%
-category: 'other'
-method: AttributeAst
-saveVariableAssociationForRead
-	"This is the attribute of an object, but the object isn't known till runtime 
-	(since value is an expression), so we can't really bind to it now."
-%
-category: 'other'
-method: AttributeAst
-saveVariableAssociationForWrite
-	"This is the attribute of an object, but the object isn't known till runtime 
-	(since value is an expression), so we can't really bind to it now."
 %

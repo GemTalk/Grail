@@ -50,7 +50,7 @@ testClassInheritance
 		assert: (x.name == #'Bar');
 		assert: (x.bases size == 1);
 		assert: ((name := x.bases at: 1) isKindOf: NameAst);
-		assert: (name.assoc.key == #'Foo');
+		assert: (name.id == #'Foo');
 		assert: (name.ctx isKindOf: LoadAst);
 		assert: (x.keywords size == 0);
 		assert: (x.body.body size == 1);
@@ -136,11 +136,11 @@ testCoroutineFor
 		assert: (x.body.body size == 1);
 		assert: ((asyncFor := x.body.body at: 1) isKindOf: AsyncForAst);
 		assert: (asyncFor.target isKindOf: NameAst);
-		assert: (asyncFor.target.assoc.key == #'_');
+		assert: (asyncFor.target.id == #'_');
 		assert: (asyncFor.target.ctx isKindOf: StoreAst);
 		assert: ((call := asyncFor.iter) isKindOf: CallAst);
 		assert: (call.function isKindOf: NameAst);
-		assert: (call.function.assoc.key == #'range');
+		assert: (call.function.id == #'range');
 		assert: (call.function.ctx isKindOf: LoadAst);
 		assert: (call.arguments size == 1);
 		assert: ((num := call.arguments at: 1) isKindOf: NumAst);
@@ -178,7 +178,7 @@ testCoroutineWith
 		assert: ((withItem := with.items at: 1) isKindOf: WithItemAst);
 		assert: ((call := withItem.context_expr) isKindOf: CallAst);
 		assert: (call.function isKindOf: NameAst);
-		assert: (call.function.assoc.key == #'open');
+		assert: (call.function.id == #'open');
 		assert: (call.function.ctx isKindOf: LoadAst);
 		assert: (call.arguments size = 2);
 		assert: ((str1 := call.arguments at: 1) isKindOf: StrAst);
@@ -187,7 +187,7 @@ testCoroutineWith
 		assert: (str2.s = 'r');
 		assert: (call.keywords size == 0);
 		assert: ((name := withItem.optional_vars) isKindOf: NameAst);
-		assert: (name.assoc.key == #'f');
+		assert: (name.id == #'f');
 		assert: (name.ctx isKindOf: StoreAst);
 		assert: (with.body.body size == 1);
 		assert: ((with.body.body at: 1) isKindOf: PassAst);
@@ -208,11 +208,11 @@ testFor
 	self 
 		assert: (x isKindOf: ForAst);
 		assert: ((name := x.target) isKindOf: NameAst);
-		assert: (name.assoc.key == #'_');
+		assert: (name.id == #'_');
 		assert: (name.ctx isKindOf: StoreAst);
 		assert: ((call := x.iter) isKindOf: CallAst);
 		assert: (call.function isKindOf: NameAst);
-		assert: (call.function.assoc.key == #'range');
+		assert: (call.function.id == #'range');
 		assert: (call.function.ctx isKindOf: LoadAst);
 		assert: (call.arguments size == 1);
 		assert: ((num := call.arguments at: 1) isKindOf: NumAst);
@@ -237,11 +237,11 @@ testForElse
 	self 
 		assert: (x isKindOf: ForAst);
 		assert: ((name := x.target) isKindOf: NameAst);
-		assert: (name.assoc.key == #'_');
+		assert: (name.id == #'_');
 		assert: (name.ctx isKindOf: StoreAst);
 		assert: ((call := x.iter) isKindOf: CallAst);
 		assert: (call.function isKindOf: NameAst);
-		assert: (call.function.assoc.key == #'range');
+		assert: (call.function.id == #'range');
 		assert: (call.function.ctx isKindOf: LoadAst);
 		assert: (call.arguments size == 1);
 		assert: ((num := call.arguments at: 1) isKindOf: NumAst);
@@ -341,7 +341,7 @@ testIf
 	self 
 		assert: (x isKindOf: IfAst);
 		assert: (x.test isKindOf: TrueAst);
-		assert: (x.test evaluate);
+		assert: (x.test evaluate: aScope);
 		assert: (x.body isKindOf: SuiteAst);
 		assert: (x.body.body size == 1);
 		assert: ((x.body.body at: 1) isKindOf: PassAst);
@@ -359,7 +359,7 @@ testIfElse
 	self 
 		assert: (x isKindOf: IfAst);
 		assert: (x.test isKindOf: FalseAst);
-		deny: x.test evaluate;
+		deny: (x.test evaluate: aScope);
 		assert: (x.body.body size == 1);
 		assert: ((x.body.body at: 1) isKindOf: PassAst);
 		assert: (x.orelse.body size == 1);
@@ -404,7 +404,7 @@ testNestedFunction
 		assert: (functionDef.returns isNone);
 		assert: ((return := x.body.body at: 2) isKindOf: ReturnAst);
 		assert: (return.value isKindOf: NameAst);
-		assert: (return.value.assoc.key == #'insideFunc');
+		assert: (return.value.id == #'insideFunc');
 		assert: (return.value.ctx isKindOf: LoadAst);
 		assert: (x.decorator_list size == 0); 
 		assert: (x.returns isNone); 
@@ -432,7 +432,7 @@ testTry
 		assert: ((expr := x.body.body at: 1) isKindOf: ExprAst);
 		assert: ((call := expr.value) isKindOf: CallAst);
 		assert: (call.function isKindOf: NameAst);
-		assert: (call.function.assoc.key == #'print');
+		assert: (call.function.id == #'print');
 		assert: (call.function.ctx isKindOf: LoadAst);
 		assert: (call.arguments size == 1);
 		assert: ((binOp := call.arguments at: 1) isKindOf: BinOpAst);
@@ -497,7 +497,7 @@ testVarArgs
 "
 	| x |
 	x := self statementsAt: 19.
-	x := x evaluate.
+	x := x evaluate: aScope.
 %
 category: 'other'
 method: CompoundStatementsTestCase
@@ -509,7 +509,7 @@ testWhile
 	self 
 		assert: (x isKindOf: WhileAst);
 		assert: (x.test isKindOf: TrueAst);
-		assert: x.test evaluate;
+		assert: (x.test evaluate: aScope);
 		assert: (x.body.body size == 1);
 		assert: ((x.body.body at: 1) isKindOf: PassAst);
 		assert: (x.orelse.body size == 0);
@@ -525,7 +525,7 @@ testWhileElse
 	self 
 		assert: (x isKindOf: WhileAst);
 		assert: (x.test isKindOf: FalseAst);
-		deny: x.test evaluate;
+		deny:   (x.test evaluate: aScope);
 		assert: (x.body.body size == 1);
 		assert: ((x.body.body at: 1) isKindOf: PassAst);
 		assert: (x.orelse.body size == 1);
@@ -550,7 +550,7 @@ testWith
 		assert: ((withItem := x.items at: 1) isKindOf: WithItemAst);
 		assert: ((call := withItem.context_expr) isKindOf: CallAst);
 		assert: (call.function isKindOf: NameAst);
-		assert: (call.function.assoc.key == #'open');
+		assert: (call.function.id == #'open');
 		assert: (call.function.ctx isKindOf: LoadAst);
 		assert: (call.arguments size = 2);
 		assert: ((str1 := call.arguments at: 1) isKindOf: StrAst);
@@ -581,7 +581,7 @@ testWithOptionalVars
 		assert: ((withItem := x.items at: 1) isKindOf: WithItemAst);
 		assert: ((call := withItem.context_expr) isKindOf: CallAst);
 		assert: (call.function isKindOf: NameAst);
-		assert: (call.function.assoc.key == #'open');
+		assert: (call.function.id == #'open');
 		assert: (call.function.ctx isKindOf: LoadAst);
 		assert: (call.arguments size = 2);
 		assert: ((str1 := call.arguments at: 1) isKindOf: StrAst);
@@ -590,7 +590,7 @@ testWithOptionalVars
 		assert: (str2.s = 'r');
 		assert: (call.keywords size == 0);
 		assert: ((name := withItem.optional_vars) isKindOf: NameAst);
-		assert: (name.assoc.key == #'f');
+		assert: (name.id == #'f');
 		assert: (name.ctx isKindOf: StoreAst);
 		assert: (x.body.body size == 1);
 		assert: ((x.body.body at: 1) isKindOf: PassAst);

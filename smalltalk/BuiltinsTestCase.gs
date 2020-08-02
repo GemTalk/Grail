@@ -19,14 +19,14 @@ method: BuiltinsTestCase
 test_abs
 
 	| x |
-	x := (self statementsAt: 1) evaluate.			"abs(-1)"
+	x := (self statementsAt: 1) evaluate: aScope.			"abs(-1)"
 	self assert: x == 1.
 %
 category: 'other'
 method: BuiltinsTestCase
 test_print
 
-	(self statementsAt: 2) evaluate.			"print('hello', 'world', sep = ',')"
+	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"
 	self assert: stdout contents = ('hello,world' , Character lf asString).
 %
 category: 'other'
@@ -37,7 +37,7 @@ testModuleNotFoundError
 	| x |
 	[
 		Sys current modules at: #'noSuchModule' put: nil.
-		x := (self statementsAt: 3) evaluate.			"import noSuchModule"
+		x := (self statementsAt: 3) evaluate: aScope.			"import noSuchModule"
 		self assert: false.
 	] on: ModuleNotFoundError do: [:ex | 
 		ex return.

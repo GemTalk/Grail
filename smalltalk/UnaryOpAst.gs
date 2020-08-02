@@ -24,7 +24,7 @@ children
 %
 category: 'other'
 method: UnaryOpAst
-evaluate
+evaluate: aScope
 
 	self subclassResponsibility.
 %

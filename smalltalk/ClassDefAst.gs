@@ -22,27 +22,15 @@ __str__
 %
 category: 'other'
 method: ClassDefAst
-associationForReadAt: aSymbol
+call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
 
-	^body associationForReadAt: aSymbol
-%
-category: 'other'
-method: ClassDefAst
-associationForReadAt2: aSymbol
-
-	^parent associationForReadAt: aSymbol
-%
-category: 'other'
-method: ClassDefAst
-call: aSymbol withArguments: anArray keywords: aSymbolDictionary
-
-	| methodAssoc |
-	methodAssoc := self associationForReadAt: aSymbol.
-	methodAssoc ifNil: [self error: 'method not found!'].
-	^methodAssoc value
+	| function |
+	function := self get: aSymbol.
+	^function
 		callFromClass: self
 		arguments: anArray
 		keywords: aSymbolDictionary
+		scope: aScope
 %
 category: 'other'
 method: ClassDefAst
@@ -63,9 +51,17 @@ classAst
 %
 category: 'other'
 method: ClassDefAst
-evaluate
+evaluate: aScope
 
-	body evaluate.
+	aScope set: name to: self.
+	scope := aScope inner.
+	body evaluate: scope.
+%
+category: 'other'
+method: ClassDefAst
+get: aSymbol
+
+	^scope get: aSymbol
 %
 category: 'other'
 method: ClassDefAst
@@ -82,11 +78,10 @@ initialize
 	self commaSpace.
 	keywords := self collectAst: [KeywordAst parent: self].
 	self commaSpace.
-	LocalScope parent: self.	"calls back to set body"
+	SuiteAst parent: self.	"calls back to set body"
 	self commaSpace.
 	decorator_list := self collectAst:[self expression].
 	self readPosition.
-	(assoc := super associationForWriteAt: name) value: self.
 %
 category: 'other'
 method: ClassDefAst
@@ -119,7 +114,7 @@ setBlock: aBlockAst
 %
 category: 'other'
 method: ClassDefAst
-value: posArgs value: keywordArgs
+value: posArgs value: keywordArgs value: aScope
 	"args are the parameters while arguments are the values"
 
 	| object result |
@@ -127,7 +122,8 @@ value: posArgs value: keywordArgs
 	result := object
 		call: #'__init__'
 		withArguments: posArgs
-		keywords: keywordArgs.
+		keywords: keywordArgs
+		scope: aScope.
 	result ifNotNil: [TypeError signal: '__init__() should return None, not ?'].
 	^object
 %

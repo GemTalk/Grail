@@ -19,12 +19,13 @@ children
 %
 category: 'other'
 method: CallAst
-evaluate
+evaluate: aScope
 	"https://docs.python.org/3/reference/expressions.html#calls"
 
 	^function
-		callWithArguments: (arguments collect: [:each | each evaluate]) 
-		keywords: (keywords collect: [:each | each evaluate])
+		callWithArguments: (arguments collect: [:each | each evaluate: aScope]) 
+		keywords: (keywords collect: [:each | each evaluate: aScope])
+		scope: aScope
 %
 category: 'other'
 method: CallAst

@@ -17,10 +17,10 @@ children
 %
 category: 'other'
 method: ImportFromAst
-evaluate
+evaluate: aScope
 
 	(module isKindOf: NoneAst) ifTrue: [		"from ."
-		names do: [:each | each import].
+		names do: [:each | each import: aScope].
 	] ifFalse: [
 		self halt.
 	].

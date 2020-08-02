@@ -21,31 +21,20 @@ assertContextIsStore
 %
 category: 'other'
 method: NameAst
-assign: aValue
+assign: aValue scope: aScope
 
 	self assertContextIsStore.
-	^assoc value: aValue
+	aScope set: id to: aValue.
 %
 category: 'other'
 method: NameAst
-associationForReadAt: aSymbol
-
-	^assoc value associationForReadAt: aSymbol
-%
-category: 'other'
-method: NameAst
-associationForWriteAt: aSymbol
-
-	^assoc value associationForWriteAt: aSymbol
-%
-category: 'other'
-method: NameAst
-callWithArguments: anArray keywords: aSymbolDictionary
+callWithArguments: anArray keywords: aSymbolDictionary scope: aScope
 
 	self assertContextIsLoad.
-	^assoc value
+	^(aScope get: id)
 		value: anArray
 		value: aSymbolDictionary
+		value: aScope
 %
 category: 'other'
 method: NameAst
@@ -57,11 +46,11 @@ children
 %
 category: 'other'
 method: NameAst
-evaluate
-	"If the name refers to a function, return an object that can be sent #'value:value:'"
+evaluate: aScope
+	"If the name refers to a function, return an object that can be sent #'value:value:value:'"
 
 	self assertContextIsLoad.
-	^assoc value
+	^aScope get: id
 %
 category: 'other'
 method: NameAst
@@ -88,20 +77,4 @@ printOn: aStream
 	aStream nextPut: $(; 
 		nextPutAll: id;
 		nextPut: $).
-%
-category: 'other'
-method: NameAst
-saveVariableAssociationForRead
-
-	assoc := parent associationForReadAt: id.
-	assoc ifNil: [
-		(#(#'_thread' #'_warnings' #'_weakref') includes: id) ifTrue: [^self].
-		self error: 'name not found!'.
-	].
-%
-category: 'other'
-method: NameAst
-saveVariableAssociationForWrite
-
-	assoc := parent associationForWriteAt: id.
 %

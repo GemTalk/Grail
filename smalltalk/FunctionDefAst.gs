@@ -22,18 +22,6 @@ parent: anAstNode
 set compile_env: 0
 category: 'other'
 method: FunctionDefAst
-associationForArgument: aSymbol
-
-	^body associationForArgument: aSymbol
-%
-category: 'other'
-method: FunctionDefAst
-associationForReadAt2: aSymbol
-
-	^parent associationForReadAt: aSymbol
-%
-category: 'other'
-method: FunctionDefAst
 children
 
 	^super children
@@ -51,8 +39,9 @@ decoratorList
 %
 category: 'other'
 method: FunctionDefAst
-evaluate
-	"the function was saved as part of the initialize method"
+evaluate: aScope
+
+	aScope set: name to: self.
 %
 category: 'other'
 method: FunctionDefAst
@@ -66,13 +55,12 @@ initialize
 	self commaSpace.
 	args := ArgumentsAst parent: self.
 	self commaSpace.
-	LocalScope parent: self.	"calls back to set body"
+	SuiteAst parent: self.	"calls back to set body"
 	self commaSpace.
 	decorator_list :=  self collectAst: [self expression id].
 	self commaSpace.
 	returns := self optionalExpression.
 	self readPosition.
-	(assoc := super associationForWriteAt: name) value: self.
 %
 category: 'other'
 method: FunctionDefAst
@@ -99,9 +87,14 @@ setBlock: aBlockAst
 %
 category: 'other'
 method: FunctionDefAst
-value: arguments value: keywords
+value: arguments value: keywords value: aScope
 	"args are the parameters while arguments are the values"
 
-	args setValues: arguments.
-	^body evaluate
+	| innerFrame |
+	innerFrame := aScope inner.
+	args
+		arguments: arguments
+		keywords: keywords
+		scope: innerFrame.
+	^body evaluate: innerFrame
 %

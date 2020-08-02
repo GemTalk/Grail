@@ -24,12 +24,13 @@ children
 %
 category: 'other'
 method: SubscriptAst
-evaluate
+evaluate: aScope
+
 	| x |
 	value assertContextIsLoad.
+self halt.
 	x := self variableAt: value.
-	^slice evaluate: x
-	
+	^(slice evaluate: aScope) at: x
 %
 category: 'other'
 method: SubscriptAst
@@ -44,14 +45,4 @@ initialize
 	self commaSpace.
 	ctx := ExpressionContextAst parent: self.
 	self readPosition.
-%
-category: 'other'
-method: SubscriptAst
-saveVariableAssociationForRead
-	"Not really a variable?"
-%
-category: 'other'
-method: SubscriptAst
-saveVariableAssociationForWrite
-	"Not really a variable?"
 %

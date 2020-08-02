@@ -9,14 +9,7 @@ AndAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: AndAst
-evaluate
+evaluate: aScope
 
-	^values allSatisfy: [:each | each evaluate].
-%
-category: 'other'
-method: AndAst
-values: anArray
-
-	self halt.
-	^anArray allSatisfy: [:each | each evaluate].
+	^values allSatisfy: [:each | each evaluate: aScope].
 %

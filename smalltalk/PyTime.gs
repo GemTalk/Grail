@@ -22,8 +22,8 @@ initialize
 "
 	super initialize.
 	dictionary 
-		at: #'sleep'		put: [:arguments :keywords | self sleep: arguments first];
-		at: #'time'		put: [:arguments :keywords | self time];
+		at: #'sleep'		put: [:arguments :keywords :scope | self sleep: arguments first];
+		at: #'time'		put: [:arguments :keywords :scope | self time];
 		yourself.
 %
 category: 'other'

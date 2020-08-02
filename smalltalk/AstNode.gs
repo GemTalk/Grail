@@ -74,6 +74,7 @@ alias
 category: 'initialization'
 method: AstNode
 arg
+
 	| string |
 	string := self stream upTo: $(.
 	string = 'arg' ifFalse: [self error].
@@ -112,12 +113,6 @@ initialize: aNode
 
 	parent := aNode.
 	self initialize.
-%
-category: 'initialization'
-method: AstNode
-initialize2
-
-	self children do: [:each | each initialize2].
 %
 category: 'initialization'
 method: AstNode
@@ -193,24 +188,6 @@ string
 set compile_env: 0
 category: 'other'
 method: AstNode
-associationForArgument: aSymbol 
-
-	^parent associationForArgument: aSymbol
-%
-category: 'other'
-method: AstNode
-associationForReadAt: aSymbol 
-
-	^parent associationForReadAt: aSymbol
-%
-category: 'other'
-method: AstNode
-associationForWriteAt: aSymbol 
-
-	^parent associationForWriteAt: aSymbol
-%
-category: 'other'
-method: AstNode
 children
 
 	^Array new
@@ -253,9 +230,7 @@ module
 %
 category: 'other'
 method: AstNode
-sys
-
-	^parent sys
+setBlock: aBlock
 %
 set compile_env: 0
 category: 'testing'

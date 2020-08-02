@@ -18,9 +18,9 @@ children
 %
 category: 'other'
 method: TupleAst
-evaluate
-	"May wish to revisit context"
-	^Tuple withAll: (elts collect: [:each | each evaluate]) immediateInvariant
+evaluate: aScope
+
+	^Tuple withAll: (elts collect: [:each | each evaluate: aScope]) immediateInvariant
 %
 category: 'other'
 method: TupleAst
@@ -31,14 +31,4 @@ initialize
 	self commaSpace.
 	ctx := ExpressionContextAst parent: self.
 	self readPosition.
-%
-category: 'other'
-method: TupleAst
-saveVariableAssociationForRead
-	"I believe each element of the tuple already has its variables loaded"
-%
-category: 'other'
-method: TupleAst
-saveVariableAssociationForWrite
-	"I believe each element of the tuple already has its variables loaded"
 %

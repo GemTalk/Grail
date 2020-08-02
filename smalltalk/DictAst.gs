@@ -18,7 +18,7 @@ children
 %
 category: 'other'
 method: DictAst
-evaluate
+evaluate: aScope
 
 	| dict |
 	dict := Dictionary new.

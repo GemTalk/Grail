@@ -16,7 +16,7 @@ isAbstract
 set compile_env: 0
 category: 'other'
 method: BoolOpAst
-evaluate
+evaluate: aScope
 
 	self subclassResponsibility.
 %

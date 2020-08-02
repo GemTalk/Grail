@@ -49,6 +49,7 @@ setUp
 	stdout := WriteStream on: String new.
 	Builtins current stdout: stdout.
 	module := self resources first current moduleAtPath: '$HOME/code/Python/GemStoneP/tests/' , self filename.
+	aScope := GlobalScope new.
 %
 category: 'other'
 method: PythonTestCase

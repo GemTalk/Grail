@@ -9,8 +9,9 @@ StrAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: StrAst
-evaluate
-	^PyString withAll: s
+evaluate: aScope
+
+	^s
 %
 category: 'other'
 method: StrAst

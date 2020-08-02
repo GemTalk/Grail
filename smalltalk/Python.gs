@@ -1299,7 +1299,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 AstNode subclass: 'AliasAst'
-  instVarNames: #( assoc name asName)
+  instVarNames: #( name asName)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -1378,7 +1378,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 AstNodeWithLocation subclass: 'ArgAst'
-  instVarNames: #( assoc arg annotation)
+  instVarNames: #( arg annotation)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -2012,7 +2012,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 ExpressionAst subclass: 'NameAst'
-  instVarNames: #( assoc id ctx)
+  instVarNames: #( id ctx)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -2056,6 +2056,18 @@ NameAst subclass: 'KeywordsAst'
   inDictionary: Python
   options: #()
 
+%
+expectvalue /Class
+doit
+KeywordsAst comment: 
+'No class-specific documentation for KeywordsAst, hierarchy is: 
+Object
+  AstNode( parent)
+    AstNodeWithLocation( line column)
+      ExpressionAst
+        NameAst( assoc id ctx)
+          KeywordsAst
+'
 %
 expectvalue /Class
 doit
@@ -2831,8 +2843,8 @@ set compile_env: 0
 expectvalue /Class
 doit
 StatementAst subclass: 'ClassDefAst'
-  instVarNames: #( assoc name bases
-                    keywords body decorator_list)
+  instVarNames: #( name bases keywords
+                    body decorator_list scope)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -2970,8 +2982,8 @@ set compile_env: 0
 expectvalue /Class
 doit
 StatementAst subclass: 'FunctionDefAst'
-  instVarNames: #( assoc name args
-                    body decorator_list returns)
+  instVarNames: #( name args body
+                    decorator_list returns)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -3035,6 +3047,18 @@ FunctionDefAst subclass: 'InstanceFunctionDefAst'
   inDictionary: Python
   options: #()
 
+%
+expectvalue /Class
+doit
+InstanceFunctionDefAst comment: 
+'No class-specific documentation for InstanceFunctionDefAst, hierarchy is: 
+Object
+  AstNode( parent)
+    AstNodeWithLocation( line column)
+      StatementAst
+        FunctionDefAst( assoc name args body decorator_list returns)
+          InstanceFunctionDefAst
+'
 %
 expectvalue /Class
 doit
@@ -4432,67 +4456,6 @@ doit
 SuiteAst category: 'Parser'
 %
 set compile_env: 0
-! ------------------- Class definition for BlockAst
-expectvalue /Class
-doit
-SuiteAst subclass: 'BlockAst'
-  instVarNames: #( variables)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-BlockAst comment: 
-'A Python program is constructed from code blocks. A block is a piece of Python program text that is executed as a unit. The following are blocks: a module, a function body, and a class definition. Each command typed interactively is a block. A script file (a file given as standard input to the interpreter or specified as a command line argument to the interpreter) is a code block. A script command (a command specified on the interpreter command line with the -c option) is a code block. The string argument passed to the built-in functions eval() and exec() is a code block.
-
-A code block is executed in an execution frame. A frame contains some administrative information (used for debugging) and determines where and how execution continues after the code block’s execution has completed.
-
-
-https://docs.python.org/3/reference/executionmodel.html'
-%
-expectvalue /Class
-doit
-BlockAst category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for GlobalScope
-expectvalue /Class
-doit
-BlockAst subclass: 'GlobalScope'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-GlobalScope category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for LocalScope
-expectvalue /Class
-doit
-BlockAst subclass: 'LocalScope'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-LocalScope category: 'Parser'
-%
-set compile_env: 0
 ! ------------------- Class definition for WithItemAst
 expectvalue /Class
 doit
@@ -4749,11 +4712,62 @@ doit
 PyObject category: 'Builtins'
 %
 set compile_env: 0
+! ------------------- Class definition for Scope
+expectvalue /Class
+doit
+Object subclass: 'Scope'
+  instVarNames: #( outer variables)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+Scope category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for GlobalScope
+expectvalue /Class
+doit
+Scope subclass: 'GlobalScope'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+GlobalScope category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for LocalScope
+expectvalue /Class
+doit
+Scope subclass: 'LocalScope'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+LocalScope category: 'Builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for PythonTestCase
 expectvalue /Class
 doit
 TestCase subclass: 'PythonTestCase'
-  instVarNames: #( module stdout)
+  instVarNames: #( module stdout aScope)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -5268,7 +5282,6 @@ input BinOpAst.gs
 input BitAndAst.gs
 input BitOrAst.gs
 input BitXorAst.gs
-input BlockAst.gs
 input BlockingIOError.gs
 input BoolOpAst.gs
 input BreakAst.gs
@@ -5409,6 +5422,7 @@ input ReturnNotification.gs
 input RShiftAst.gs
 input RuntimeError.gs
 input RuntimeWarning.gs
+input Scope.gs
 input SetAst.gs
 input SetCompAst.gs
 input SimpleStatementsTestCase.gs
