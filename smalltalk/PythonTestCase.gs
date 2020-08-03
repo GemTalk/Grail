@@ -48,13 +48,14 @@ setUp
 	super setUp.
 	stdout := WriteStream on: String new.
 	Builtins current stdout: stdout.
-	statements := self resources first current statementsForModuleAtPath: '$HOME/code/Python/GemStoneP/tests/' , self filename.
+	module := self resources first current moduleAtPath: '$HOME/code/Python/GemStoneP/tests/' , self filename.
+	aScope := GlobalScope new.
 %
 category: 'other'
 method: PythonTestCase
 statementsAt: anInteger
 
-	^statements.body at: anInteger
+	^module.body.body at: anInteger
 %
 category: 'other'
 method: PythonTestCase

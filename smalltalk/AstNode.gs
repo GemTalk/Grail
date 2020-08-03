@@ -74,6 +74,7 @@ alias
 category: 'initialization'
 method: AstNode
 arg
+
 	| string |
 	string := self stream upTo: $(.
 	string = 'arg' ifFalse: [self error].
@@ -112,12 +113,6 @@ initialize: aNode
 
 	parent := aNode.
 	self initialize.
-%
-category: 'initialization'
-method: AstNode
-initialize2
-
-	self children do: [:each | each initialize2].
 %
 category: 'initialization'
 method: AstNode
@@ -193,15 +188,9 @@ string
 set compile_env: 0
 category: 'other'
 method: AstNode
-associationAt: aName 
-
-	^parent associationAt: aName
-%
-category: 'other'
-method: AstNode
 children
 
-	^IdentitySet new
+	^Array new
 %
 category: 'other'
 method: AstNode
@@ -223,11 +212,33 @@ collectAst: aBlock
 %
 category: 'other'
 method: AstNode
-sys
+globals
 
-	^parent sys
+	^self module globals
+%
+category: 'other'
+method: AstNode
+locals
+
+	^parent locals
+%
+category: 'other'
+method: AstNode
+module
+
+	^parent module
+%
+category: 'other'
+method: AstNode
+setBlock: aBlock
 %
 set compile_env: 0
+category: 'testing'
+method: AstNode
+isInClass
+
+	^parent isInClass
+%
 category: 'testing'
 method: AstNode
 isNone

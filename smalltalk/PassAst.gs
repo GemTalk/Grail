@@ -9,7 +9,7 @@ PassAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PassAst
-evaluate
+evaluate: aScope
 	"This is a NULL operation"
 %
 category: 'other'

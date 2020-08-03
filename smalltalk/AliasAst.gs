@@ -9,9 +9,23 @@ AliasAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: AliasAst
+<<<<<<< HEAD
 asName
+=======
+import: aScope
 
-	^asName
+	| function keywords module |
+	function := aScope get: #'__import__'.
+	keywords := SymbolDictionary new
+		at: #'globals' 	put: self globals;
+		at: #'locals'	put: aScope;
+		at: #'fromlist'	put: #();
+		at: #'level'		put: 0;
+		yourself.
+	module := function value: (Array with: name) value: keywords value: aScope.
+	aScope set: name to: module.
+>>>>>>> master
+
 %
 category: 'other'
 method: AliasAst
@@ -20,17 +34,17 @@ initialize
 
 	| stream |
 	stream := self stream.
-	name := self string.
+	name := self string asSymbol.
 	(stream peekFor: $,) ifFalse: [self error].
 	stream skipSeparators.
 	(stream peekFor: $') ifTrue: [
-		asName := stream upTo: $'.
+		asName := (stream upTo: $') asSymbol.
 		(stream peekFor: $)) ifFalse: [self error].
 	] ifFalse: [
 		| string |
 		string := stream upTo: $).
 		string = 'None' ifFalse: [self error].
-		asName := NoneAst singleton.
+		asName := nil.
 	].
 %
 category: 'other'

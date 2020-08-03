@@ -9,7 +9,7 @@ FalseAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: FalseAst
-evaluate
+evaluate: aScope
 
 	^false
 %

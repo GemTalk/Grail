@@ -9,14 +9,7 @@ OrAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: OrAst
-evaluate
+evaluate: aScope
 
-	^values anySatisfy: [:each | each evaluate].
-%
-category: 'other'
-method: OrAst
-values: anArray
-
-	self halt.
-	^anArray anySatisfy: [:each | each evaluate].
+	^values anySatisfy: [:each | each evaluate: aScope].
 %

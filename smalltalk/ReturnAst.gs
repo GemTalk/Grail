@@ -17,9 +17,11 @@ children
 %
 category: 'other'
 method: ReturnAst
-evaluate
+evaluate: aScope
+	"Unlike Smalltalk, Python returns None by default, not the result of the last expression.
+	To return something explictly, use the `return` command and give a value."
 
-	^value evaluate
+	ReturnNotification signal: (value evaluate: aScope)
 %
 category: 'other'
 method: ReturnAst

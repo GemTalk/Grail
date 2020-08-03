@@ -9,6 +9,19 @@ ArgumentsAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: ArgumentsAst
+<<<<<<< HEAD
+=======
+arguments: arguments keywords: keywords scope: aScope
+
+	1 to: args size do: [:i | 
+		(args at: i ifAbsent: [nil]) ifNotNil: [:param |
+			param setTo: (arguments at: i ifAbsent: [_remoteNil]) scope: aScope.
+		].
+	].
+%
+category: 'other'
+method: ArgumentsAst
+>>>>>>> master
 children
 
 	^super children
@@ -42,14 +55,4 @@ initialize
 	self commaSpace.
 	defaults := self collectAst: [self expression].
 	(stream peekFor: $)) ifFalse: [self error].
-%
-category: 'other'
-method: ArgumentsAst
-setValues: anArray
-
-	1 to: args size do: [:i | 
-		(args at: i ifAbsent: [nil]) ifNotNil: [:param |
-			param value: (anArray at: i ifAbsent: [_remoteNil]).
-		].
-	].
 %

@@ -65,13 +65,21 @@ class Bar(Foo):
 	pass
 
 # coroutines
-async def asyncFunc(arg):
+async def asyncFunc(arg):		# 16
 	pass
 
-async def asyncForFunc(arg):
+async def asyncForFunc(arg):	# 17
 	async for _ in range(10):
 		pass
 
-async def asyncWithFunc(arg):
+async def asyncWithFunc(arg):	# 18
 	async with open('/etc/passwd', 'r') as f:
 		pass
+
+# cpython/Lib/importlib/_bootstrap.py:219
+def fun(f, *args, **kwds):		# 19
+	return f(*args, **kwds)
+
+# cpython/Lib/importlib/_bootstrap.py:321
+if any(arg is not None for arg in []):	# 20
+	pass

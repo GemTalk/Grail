@@ -18,27 +18,30 @@ children
 category: 'other'
 method: ArgAst
 initialize
-
-"arg = (identifier arg, expr? annotation)"
+	"arg = (identifier arg, expr? annotation)"
 
 	| stream |
 	stream := self stream.
 	(stream peekFor: $') ifFalse: [self error].
-	arg := stream upTo: $'.
+	arg := (stream upTo: $') asSymbol.
 	self commaSpace.
 	annotation := self optionalExpression.
 	self readPosition.
 %
 category: 'other'
 method: ArgAst
-initialize2
+printOn: aStream
 
-	super initialize2.
-	assoc := self associationAt: arg asSymbol.
+	super printOn: aStream.
+	aStream
+		nextPut: $(;
+		nextPutAll: arg;
+		nextPut: $);
+		yourself.
 %
 category: 'other'
 method: ArgAst
-value: anObject
+setTo: anObject scope: aScope
 
-	assoc value: anObject.
+	aScope set: arg to: anObject.
 %

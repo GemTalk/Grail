@@ -21,9 +21,3 @@ initialize
 
 	(self stream peekFor: $)) ifFalse: [self error].
 %
-category: 'other'
-method: CmpOpAst
-left: leftOperand right: rightOperand
-
-	^leftOperand evaluate + rightOperand evaluate
-%

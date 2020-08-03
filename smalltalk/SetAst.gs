@@ -17,8 +17,9 @@ children
 %
 category: 'other'
 method: SetAst
-evaluate
-	^(elts collect: [:each | each evaluate]) asSet
+evaluate: aScope
+
+	^(elts collect: [:each | each evaluate: aScope]) asSet
 %
 category: 'other'
 method: SetAst

@@ -9,7 +9,8 @@ BreakAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: BreakAst
-evaluate
+evaluate: aScope
+
 	BreakNotification signal.
 %
 category: 'other'

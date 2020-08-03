@@ -18,11 +18,11 @@ children
 %
 category: 'other'
 method: AssignAst
-evaluate
+evaluate: aScope
 
 	| x |
-	x := value evaluate.
-	targets do: [:each | each assign: x].
+	x := value evaluate: aScope.
+	targets do: [:each | each assign: x scope: aScope].
 	^x
 %
 category: 'other'

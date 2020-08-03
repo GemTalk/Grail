@@ -19,10 +19,18 @@ children
 %
 category: 'other'
 method: IfAst
+<<<<<<< HEAD
 evaluate
 	test evaluate
 		ifTrue: [body evaluate]
 		ifFalse: [orelse evaluate].
+=======
+evaluate: aScope
+
+	(test evaluate: aScope)
+		ifTrue: [body do: [:each | each evaluate: aScope]]
+		ifFalse: [orelse do: [:each | each evaluate: aScope]].
+>>>>>>> master
 %
 category: 'other'
 method: IfAst

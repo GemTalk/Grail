@@ -9,12 +9,7 @@ UAddAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: UAddAst
-evaluate
+evaluate: aScope
 
-	^operand evaluate
-%
-category: 'other'
-method: UAddAst
-operand: x
-	^x
+	^operand evaluate: aScope
 %

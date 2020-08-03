@@ -19,10 +19,11 @@ children
 %
 category: 'other'
 method: AugAssignAst
-evaluate
+evaluate: aScope
 	
 	| x |
-	x := op left: (parent variableAt: target) right: value evaluate.
+self halt.
+	x := op left: (parent variableAt: target) right: value evaluate: aScope.
 	parent variableAt: target put: x.
 %
 category: 'other'

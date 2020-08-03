@@ -18,6 +18,14 @@ children
 %
 category: 'other'
 method: ExceptHandlerAst
+evaluate: aScope
+
+	self error: 'not called!?'.
+	(name evaluate: aScope) ifNotNil: [:myName | myName halt].
+	^body evaluate: aScope
+%
+category: 'other'
+method: ExceptHandlerAst
 initialize
 	"ExceptHandler(expr? type, identifier? name, stmt* body)"
 	
@@ -40,4 +48,10 @@ initialize
 	self commaSpace.
 	body := SuiteAst parent: self.
 	self readPosition.
+%
+category: 'other'
+method: ExceptHandlerAst
+type
+
+	^type
 %

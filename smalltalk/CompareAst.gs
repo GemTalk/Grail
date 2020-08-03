@@ -19,13 +19,14 @@ children
 %
 category: 'other'
 method: CompareAst
-evaluate
+evaluate: aScope
+
 	| temp |
-	temp := left evaluate.
+	temp := left evaluate: aScope.
 	1 to: cmpopList size do: [:i |
 		| op operand |
 		op := cmpopList at: i.
-		operand := (comparatorList at: i) evaluate.
+		operand := (comparatorList at: i) evaluate: aScope.
 		(op left: temp right: operand) ifFalse: [^false].
 		temp := operand.
 	].

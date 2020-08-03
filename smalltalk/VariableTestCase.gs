@@ -16,32 +16,11 @@ filename
 set compile_env: 0
 category: 'other'
 method: VariableTestCase
-testAssign
+test
+	"test everything with print"
 
 	| x |
-	(self statementsAt: 1) evaluate.			"x = 5"
-	x := (self statementsAt: 2) evaluate.	"x"
-	self assert: x == 5.
-%
-category: 'other'
-method: VariableTestCase
-testFunctionNoArgs
-
-	| y |
-	false ifTrue: [^self].
-	(self statementsAt: 3) evaluate.			"def foo():"
-	y := (self statementsAt: 4) evaluate.	"y = foo()"
-	self assert: y == 6.
-	y := (self statementsAt: 5) evaluate.	"y"
-	self assert: y == 6.
-%
-category: 'other'
-method: VariableTestCase
-testFunctionOneArg
-
-	| x |
-	false ifTrue: [^self].
-	(self statementsAt: 6) evaluate.			"def bar(p):"
-	x := (self statementsAt: 7) evaluate.	"y = bar(3)"
-	self assert: x == 9.
+	module evaluate.
+	x := stdout contents.
+	self assert: x = '5 5 6 5 7 7 local nonlocal '.
 %

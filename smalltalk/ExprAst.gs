@@ -17,8 +17,9 @@ children
 %
 category: 'other'
 method: ExprAst
-evaluate
-	^value evaluate
+evaluate: aScope
+
+	^value evaluate: aScope
 %
 category: 'other'
 method: ExprAst
@@ -28,4 +29,7 @@ initialize
 	value := self expression.
 	self readPosition.
 %
+<<<<<<< HEAD
 set compile_env: 0
+=======
+>>>>>>> master

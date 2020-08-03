@@ -9,12 +9,15 @@ BinOpAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: BinOpAst
+<<<<<<< HEAD
 assertContextIsLoad
 
 	self halt
 %
 category: 'other'
 method: BinOpAst
+=======
+>>>>>>> master
 children
 
 	^super children
@@ -25,8 +28,9 @@ children
 %
 category: 'other'
 method: BinOpAst
-evaluate
-	^op left: left evaluate right: right evaluate
+evaluate: aScope
+
+	^op left: (left evaluate: aScope) right: (right evaluate: aScope)
 %
 category: 'other'
 method: BinOpAst

@@ -8,85 +8,67 @@ Builtins class removeAllMethods.
 set compile_env: 0
 category: 'other'
 classmethod: Builtins
-current
-"
-	SessionTemps current removeKey: #'Python_Builtins' ifAbsent: [].
-"
+moduleName
 
-	^SessionTemps current
-		at: #'Python_Builtins'
-		ifAbsentPut: [self new].
-%
-category: 'other'
-classmethod: Builtins
-new
-
-	^self basicNew
-		initialize;
-		yourself
+	^#'builtins'
 %
 ! ------------------- Instance methods for Builtins
 set compile_env: 0
 category: 'functions'
 method: Builtins
-__import__: arguments
-	"https://docs.python.org/3/library/functions.html"
-	
+__import__: aSymbol keywords: aSymbolDictionary scope: aScope
 "
-__import__(name, globals=None, locals=None, fromlist=(), level=0)
-Note This is an advanced function that is not needed in everyday 
-Python programming, unlike importlib.import_module().
-This function is invoked by the import statement. It can be replaced
- (by importing the builtins module and assigning to builtins.__import__) 
-in order to change semantics of the import statement, but doing so is 
-strongly discouraged as it is usually simpler to use import hooks (see PEP 302)
- to attain the same goals and does not cause issues with code which assumes 
-the default import implementation is in use. Direct use of __import__() is 
-also discouraged in favor of importlib.import_module().
+	This function is invoked by the import statement. ... 
+	The function imports the module name, potentially using the given globals and locals 
+	to determine how to interpret the name in a package context. The fromlist gives the 
+	names of objects or submodules that should be imported from the module given by 
+	name. The standard implementation does not use its locals argument at all, and uses 
+	its globals only to determine the package context of the import statement.
+	https://docs.python.org/3/library/functions.html#__import__
 
-The function imports the module name, potentially using the given globals
- and locals to determine how to interpret the name in a package context.
- The fromlist gives the names of objects or submodules that should be
- imported from the module given by name. The standard implementation
- does not use its locals argument at all, and uses its globals only to determine
-\ the package context of the import statement.
+	A direct call to __import__() performs only the module search and, if found, the module creation operation. 
+	While certain side-effects may occur, such as the importing of parent packages, and the updating of various 
+	caches (including sys.modules), only the import statement performs a name binding operation.
+	https://docs.python.org/3/reference/import.html
 
-level specifies whether to use absolute or relative imports. 0 (the default) 
-means only perform absolute imports. Positive values for level indicate the 
-number of parent directories to search relative to the directory of the module 
-calling __import__() (see PEP 328 for the details).
-
-
-When the name variable is of the form package.module, normally, the top
--level package (the name up till the first dot) is returned, not the module 
-named by name. However, when a non-empty fromlist argument is given,
- the module named by name is returned.
-
-For example, the statement import spam results in bytecode resembling 
-the following code:
-
-spam = __import__('spam', globals(), locals(), [], 0)
-The statement import spam.ham results in this call:
-
-spam = __import__('spam.ham', globals(), locals(), [], 0)
-Note how __import__() returns the toplevel module here because 
-this is the object that is bound to a name by the import statement.
-
-On the other hand, the statement from spam.ham import eggs, sausage as saus results in
-
-_temp = __import__('spam.ham', globals(), locals(), ['eggs', 'sausage'], 0)
-eggs = _temp.eggs
-saus = _temp.sausage
-Here, the spam.ham module is returned from __import__(). From this 
-object, the names to import are retrieved and assigned to their respective names.
-
-If you simply want to import a module (potentially within a package) 
-by name, use importlib.import_module().
-
-Changed in version 3.3: Negative values for level are no longer 
-supported (which also changes the default value to 0).
+	This implementation is quite incomplete (no extensible finders and loaders).
 "
-self halt.
+	| importPaths module modules name |
+	modules := Sys current modules.
+	module := modules at: aSymbol ifAbsent: [_remoteNil].
+	module ifNil: [ModuleNotFoundError signal: 'Import of ' , aSymbol , ' failed!'].
+	module ~~ _remoteNil ifTrue: [^modules at: aSymbol put: module].
+	BuiltinModule subclasses do: [:each | 
+		each moduleName == aSymbol ifTrue: [
+			^modules at: aSymbol put: each current
+		].
+	].
+	importPaths := Array new.
+	module := (aSymbolDictionary at: #'globals') module.
+	module isPackage ifTrue: [
+		name := (module name , '.' , aSymbol) asSymbol.
+		importPaths add: module path , '/'.
+	] ifFalse: [
+		name := aSymbol.
+		importPaths add: './'.
+	].
+	importPaths add: '$HOME/code/Python/cpython/Lib/'.
+	importPaths do: [:each | 
+		| path |
+		path := each , aSymbol.
+		((GsFile existsOnServer: path) and: [GsFile isServerDirectory: path]) ifTrue: [		"Package"
+			module := PyPackage script: path as: aSymbol.
+			module evaluate: aScope.
+			^modules at: name put: module
+		].
+		path := path , '.py'.
+		(GsFile existsOnServer: path) ifTrue: [
+			module := ModuleAst script: path as: aSymbol.
+			module evaluate: aScope.
+			^modules at: name put: module
+		].
+	].
+	ModuleNotFoundError signal: 'Import of ' , aSymbol , ' failed!'
 %
 category: 'functions'
 method: Builtins
@@ -169,7 +151,7 @@ See also format() for more information.
 %
 category: 'functions'
 method: Builtins
-bool: arguments
+bool: anObject
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -290,7 +272,7 @@ The valid range for the argument is from 0 through 1,114,111 (0x10FFFF in base 1
 %
 category: 'functions'
 method: Builtins
-classmethod: arguments
+classmethod: anInstanceFunctionDefAst scope: aScope
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -314,7 +296,10 @@ Class methods are different than C++ or Java static methods. If you want those, 
 
 For more information on class methods, see The standard type hierarchy.
 "
-self halt.
+	| newMethod |
+	newMethod := anInstanceFunctionDefAst copy.
+	newMethod changeClassTo: ClassFunctionDefAst.
+	^newMethod
 %
 category: 'functions'
 method: Builtins
@@ -333,7 +318,7 @@ pass some recognizable value if it wasn’t read from a file ('<string>' is comm
 The mode argument specifies what kind of code must be compiled; it can be 'exec' 
 if source consists of a sequence of statements, 'eval' if it consists of a single expression, 
 or 'single' if it consists of a single interactive statement (in the latter case, expression 
-statements that evaluate to something other than None will be printed).
+statements that evaluate: aScope to something other than None will be printed).
 
 The optional arguments flags and dont_inherit control which future statements 
 affect the compilation of source. If neither is present (or both are zero) the code 
@@ -412,7 +397,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-dict: arguments keywords: keywords
+dict: arguments keywords: keywords scope: aScope
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -428,7 +413,7 @@ For other containers see the built-in list, set, and tuple classes, as well as t
 	arguments notEmpty ifTrue: [
 		(arguments first isKindOf: Dictionary) ifTrue: [
 			arguments first keysAndValuesDo: [:eachKey :eachValue | 
-				keywords at: eachKey evaluate put: eachValue evaluate.
+				keywords at: eachKey evaluate: aScope put: eachValue evaluate: aScope.
 			]
 		] ifFalse: [
 			arguments first do: [ :each | 
@@ -581,7 +566,7 @@ Hints: dynamic execution of statements is supported by the exec() function.
 The globals() and locals() functions returns the current global and local dictionary, 
 respectively, which may be useful to pass around for use by eval() or exec().
 
-See ast.literal_eval() for a function that can safely evaluate strings with expressions containing only literals.
+See ast.literal_eval() for a function that can safely evaluate: aScope strings with expressions containing only literals.
 "
 self halt.
 %
@@ -754,7 +739,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-getattr: arguments
+getattr: object _: name
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -789,7 +774,7 @@ globals: arguments
 %
 category: 'functions'
 method: Builtins
-hasattr: arguments
+hasattr: object _: name
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -883,7 +868,7 @@ Note To obtain a hexadecimal string representation
 %
 category: 'functions'
 method: Builtins
-id: arguments
+id: anObject
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -894,7 +879,7 @@ non-overlapping lifetimes may have the same id() value.
 
 CPython implementation detail: This is the address of the object in memory.
 "
-self halt.
+	^anObject asOop
 %
 category: 'functions'
 method: Builtins
@@ -988,7 +973,7 @@ Changed in version 3.7: x is now a positional-only parameter.
 %
 category: 'functions'
 method: Builtins
-isinstance: arguments
+isinstance: object _: classInfo
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1068,7 +1053,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-list: arguments
+list: iterable
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1077,7 +1062,7 @@ Rather than being a function, list is actually a
 mutable sequence type, as documented in Lists and 
 Sequence Types — list, tuple, range.
 "
-	^List withAll: arguments first
+	^List withAll: iterable
 %
 category: 'functions'
 method: Builtins
@@ -1225,7 +1210,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-object: arguments
+object
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1269,7 +1254,7 @@ See also format() for more information.
 %
 category: 'functions'
 method: Builtins
-open: arguments
+open: arguments keywords: keywords
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1444,7 +1429,7 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-setattr: arguments
+setattr: object _: name
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1515,8 +1500,8 @@ self halt.
 %
 category: 'functions'
 method: Builtins
-str: arguments
-	"https://docs.python.org/3/library/functions.html"
+str: anObject
+	"https://docs.python.org/3/library/stdtypes.html#str"
 	
 "
 class str(object='')
@@ -1526,7 +1511,7 @@ Return a str version of object. See str() for details.
 str is the built-in string class. For general
  information about strings, see Text Sequence Type — str.
 "
-self halt.
+	^anObject __str__
 %
 category: 'functions'
 method: Builtins
@@ -1731,32 +1716,42 @@ self halt.
 set compile_env: 0
 category: 'other'
 method: Builtins
-__import__: name _: globals _: locals _: fromList _: level
-	"(name, globals=None, locals=None, fromlist=(), level=0)"
-
-	self halt.
-%
-category: 'other'
-method: Builtins
-associationAt: aSymbol
-
-	^dictionary 
-		associationAt: aSymbol
-		ifAbsent: [nil]
-%
-category: 'other'
-method: Builtins
 initialize
 "
 	SessionTemps current removeKey: #'Python_Builtins' ifAbsent: [].
 "
-	dictionary := SymbolDictionary new
-		at: #'None' 	put: nil;
-		at: #'True'		put: true;
-		at: #'False'		put: false;
-		at: #'abs'		put: [:arguments :keywords | self abs: arguments first];
-		at: #'print'		put: [:arguments :keywords | self print: arguments keywords: keywords];
+	super initialize.
+	dictionary 
+		at: #'False'				put: false;
+		at: #'None' 			put: nil;
+		at: #'True'				put: true;
+		at: #'__import__'		put: [:arguments :keywords :scope | self __import__: arguments first asSymbol keywords: keywords scope: scope];
+		at: #'abs'				put: [:arguments :keywords :scope | self abs: arguments first];
+		at: #'any'				put: [:arguments :keywords :scope | self any: arguments first];
+		at: #'bool'				put: [:arguments :keywords :scope | self bool: arguments first];
+		at: #'classmethod'	put: [:arguments :keywords :scope | self classmethod: arguments first scope: scope];
+		at: #'exec'				put: [:arguments :keywords :scope | self exec: arguments];
+		at: #'getattr'			put: [:arguments :keywords :scope | self getattr: arguments first _: arguments second];
+		at: #'hasattr'			put: [:arguments :keywords :scope | self hasattr: arguments first _: arguments second];
+		at: #'id'					put: [:arguments :keywords :scope | self id: arguments first];
+		at: #'isinstance'		put: [:arguments :keywords :scope | self isinstance: arguments first _: arguments second];
+		at: #'len'				put: [:arguments :keywords :scope | self len: arguments first];
+		at: #'list'				put: [:arguments :keywords :scope | self list: arguments first];
+		at: #'object'			put: [:arguments :keywords :scope | self object];
+		at: #'open'				put: [:arguments :keywords :scope | self open: arguments keywords: keywords];
+		at: #'print'				put: [:arguments :keywords :scope | self print: arguments keywords: keywords];
+		at: #'range'			put: [:arguments :keywords :scope | self range: arguments];
+		at: #'setattr'			put: [:arguments :keywords :scope | self setattr: arguments first _: arguments second];
+		at: #'str'				put: [:arguments :keywords :scope | self str: arguments first];
+		at: #'type'				put: [:arguments :keywords :scope | self type: arguments];
 		yourself.
+	BaseException allSubclasses do: [:each | 
+		dictionary at: each name put: each.
+	].
+	dictionary
+		removeKey: #'PyException';
+		at: #'Exception' put: PyException;
+		yourself
 %
 category: 'other'
 method: Builtins

@@ -21,10 +21,20 @@ assertContextIsStore
 %
 category: 'other'
 method: NameAst
-assign: aValue
+assign: aValue scope: aScope
 
 	self assertContextIsStore.
-	^assoc value: aValue
+	aScope set: id to: aValue.
+%
+category: 'other'
+method: NameAst
+callWithArguments: anArray keywords: aSymbolDictionary scope: aScope
+
+	self assertContextIsLoad.
+	^(aScope get: id)
+		value: anArray
+		value: aSymbolDictionary
+		value: aScope
 %
 category: 'other'
 method: NameAst
@@ -36,11 +46,17 @@ children
 %
 category: 'other'
 method: NameAst
-evaluate
-	"If the name refers to a function, return an object that can be sent #'value:value:'"
+evaluate: aScope
+	"If the name refers to a function, return an object that can be sent #'value:value:value:'"
 
 	self assertContextIsLoad.
-	^assoc value
+	^aScope get: id
+%
+category: 'other'
+method: NameAst
+id
+
+	^id
 %
 category: 'other'
 method: NameAst
@@ -48,7 +64,7 @@ initialize
 	"Name(identifier id, expr_context ctx)"
 
 	self stream peekFor: $(.
-	id := self string.
+	id := self string asSymbol.
 	self commaSpace.
 	ctx := ExpressionContextAst parent: self.
 	self readPosition.
@@ -58,15 +74,7 @@ method: NameAst
 printOn: aStream
 
 	super printOn: aStream.
-	assoc ifNotNil: [
-		aStream nextPut: $(; 
-			nextPutAll: assoc key;
-			nextPut: $).
-	].
-%
-category: 'other'
-method: NameAst
-saveVariableAssociation
-
-	assoc := self associationAt: id asSymbol.
+	aStream nextPut: $(; 
+		nextPutAll: id;
+		nextPut: $).
 %

@@ -19,13 +19,13 @@ children
 %
 category: 'other'
 method: WhileAst
-evaluate
+evaluate: aScope
 	[
 		[
-			test evaluate.
+			test evaluate: aScope.
 		] whileTrue: [
 			[
-				body do: [:each | each evaluate].
+				body do: [:each | each evaluate: aScope].
 			] on: ContinueNotification do: [:ex |
 				ex return.
 			].
@@ -33,7 +33,7 @@ evaluate
 	] on: BreakNotification do: [:ex | 
 		ex return.
 	].
-	orelse do: [:each | each evaluate].
+	orelse do: [:each | each evaluate: aScope].
 %
 category: 'other'
 method: WhileAst

@@ -24,7 +24,7 @@ testArrayAssignment
 		assert: (x isKindOf:AssignAst);
 		assert: (x.targets size == 1);
 		assert: ((y := x.targets at: 1) isKindOf: NameAst);
-		assert: (y.assoc.key == #'x');
+		assert: (y.id == #'x');
 		assert: (y.ctx isKindOf: StoreAst);
 		assert: (x.value isKindOf: ListAst);
 		assert: (x.value.elts size == 2);
@@ -44,7 +44,7 @@ testAssertFalse
 	self 
 		assert: (x isKindOf: AssertAst);
 		assert: (x.test isKindOf: FalseAst);
-		deny: x.test evaluate;
+		deny:   (x.test evaluate: aScope);
 		assert: x.msg isNone;
 		yourself.
 %
@@ -57,7 +57,7 @@ testAssertTrue
 	self 
 		assert: (x isKindOf: AssertAst);
 		assert: (x.test isKindOf: TrueAst);
-		assert: (x.test evaluate);
+		assert: (x.test evaluate: aScope);
 		assert: (x.msg isNone);
 		yourself.
 %
@@ -73,10 +73,10 @@ testAssignMultiple
 		assert: (x.value.n == 2);
 		assert: (x.targets size == 2);
 		assert: ((y := x.targets at: 1) isKindOf: NameAst);
-		assert: (y.assoc.key == #'var2');
+		assert: (y.id == #'var2');
 		assert: (y.ctx isKindOf: StoreAst);
 		assert: ((y := x.targets at: 2) isKindOf: NameAst);
-		assert: (y.assoc.key == #'var3');
+		assert: (y.id == #'var3');
 		assert: (y.ctx isKindOf: StoreAst);
 		yourself.
 %
@@ -92,7 +92,7 @@ testAssignSingle
 		assert: (x.value.n == 1);
 		assert: (x.targets size == 1);
 		assert: ((y := x.targets at: 1) isKindOf: NameAst);
-		assert: (y.assoc.key == #'var1');
+		assert: (y.id == #'var1');
 		assert: (y.ctx isKindOf: StoreAst);
 		yourself.
 %
@@ -105,10 +105,10 @@ testBreak
 	self 
 		assert: (x isKindOf: ForAst);
 		assert: (x.target isKindOf: NameAst);
-		assert: (x.target.assoc.key = #'_');
+		assert: (x.target.id = #'_');
 		assert: (x.target.ctx isKindOf: StoreAst);
 		assert: (x.iter isKindOf: NameAst);
-		assert: (x.iter.assoc.key = #'x');
+		assert: (x.iter.id = #'x');
 		assert: (x.iter.ctx isKindOf: LoadAst);
 		assert: (x.body.body size = 1);
 		assert: ((x.body.body at: 1) isKindOf: BreakAst);
@@ -126,16 +126,16 @@ testClassAttributeAssignment
 		assert: (x.targets size == 1);
 		assert: ((y := x.targets at: 1) isKindOf: AttributeAst);
 		assert: (y.value isKindOf: NameAst);
-		assert: y.value.assoc.key == #'inst';
+		assert: y.value.id == #'inst';
 		assert: (y.value.ctx isKindOf: LoadAst);
-		assert: (y.attr = 'x');
+		assert: (y.attr == #'x');
 		assert: (y.ctx isKindOf: StoreAst);
 		assert: (x.value isKindOf: BinOpAst);
 		assert: (x.value.left isKindOf: AttributeAst);
 		assert: (x.value.left.value isKindOf: NameAst);
-		assert: (x.value.left.value.assoc.key == #'inst');
+		assert: (x.value.left.value.id == #'inst');
 		assert: (x.value.left.value.ctx isKindOf: LoadAst);
-		assert: (x.value.left.attr = 'x');
+		assert: (x.value.left.attr == #'x');
 		assert: (x.value.left.ctx isKindOf: LoadAst);
 		yourself.
 %
@@ -147,14 +147,14 @@ testClassDefCls
 	x := self statementsAt: 3.
 	self 
 		assert: (x isKindOf: ClassDefAst);
-		assert: (x.name = 'Cls');
+		assert: (x.name == #'Cls');
 		assert: (x.bases size == 0);
 		assert: (x.keywords size == 0);
 		assert: (x.body.body size == 1);
 		assert: ((y := x.body.body at: 1) isKindOf: AssignAst);
 		assert: (y.targets size == 1);
 		assert: ((z := y.targets at: 1) isKindOf: NameAst);
-		assert: (z.assoc.key == #'x');
+		assert: (z.id == #'x');
 		assert: (z.ctx isKindOf: StoreAst);
 		assert: (y.value isKindOf: NumAst);
 		assert: (y.value.n == 3);
@@ -171,11 +171,11 @@ testClassInstantiation
 		assert: (x isKindOf: AssignAst);
 		assert: (x.targets size == 1);
 		assert: ((y := x.targets at: 1) isKindOf: NameAst);
-		assert: (y.assoc.key == #'inst');
+		assert: (y.id == #'inst');
 		assert: (y.ctx isKindOf: StoreAst);
 		assert: (x.value isKindOf: CallAst);
 		assert: (x.value.function isKindOf: NameAst);
-		assert: (x.value.function.assoc.key == #'Cls');
+		assert: (x.value.function.id == #'Cls');
 		assert: (x.value.function.ctx isKindOf: LoadAst);
 		assert: (x.value.arguments size == 0);
 		assert: (x.value.keywords size == 0);
@@ -190,10 +190,10 @@ testContinue
 	self 
 		assert: (x isKindOf: ForAst);
 		assert: (x.target isKindOf: NameAst);
-		assert: (x.target.assoc.key == #'_');
+		assert: (x.target.id == #'_');
 		assert: (x.target.ctx isKindOf: StoreAst);
 		assert: (x.iter isKindOf: NameAst);
-		assert: (x.iter.assoc.key == #'x');
+		assert: (x.iter.id == #'x');
 		assert: (x.iter.ctx isKindOf: LoadAst);
 		assert: (x.body.body size = 1);
 		assert: ((x.body.body at: 1) isKindOf: ContinueAst);
@@ -210,10 +210,10 @@ testDelMultiple
 		assert: (x isKindOf: DeleteAst);
 		assert: (x.targets size == 2);
 		assert: ((y := x.targets at: 1) isKindOf: NameAst);
-		assert: y.assoc.key == #'x';
+		assert: y.id == #'x';
 		assert: (y.ctx isKindOf: DelAst);
 		assert: ((y := x.targets at: 2) isKindOf: NameAst);
-		assert: y.assoc.key == #'i';
+		assert: y.id == #'i';
 		assert: (y.ctx isKindOf: DelAst);
 		yourself.
 %
@@ -227,7 +227,7 @@ testDelSingle
 		assert: (x isKindOf: DeleteAst);
 		assert: (x.targets size == 1);
 		assert: ((y := x.targets at: 1) isKindOf: NameAst);
-		assert: y.assoc.key == #'x';
+		assert: y.id == #'x';
 		assert: (y.ctx isKindOf:DelAst);
 		yourself.
 %
@@ -240,7 +240,7 @@ testGlobal
 	self 
 		assert: (x isKindOf: GlobalAst);
 		assert: (x.names size == 1);
-		assert: ((x.names at: 1) = 'g');
+		assert: ((x.names at: 1) == #'g');
 		yourself.
 %
 category: 'other'
@@ -253,8 +253,8 @@ testImport
 		assert: (x isKindOf: ImportAst);
 		assert: (x.names size == 1);
 		assert: ((y := x.names at: 1) isKindOf: AliasAst);
-		assert: (y.name = 'foo');
-		assert: (y.asName isNone);
+		assert: (y.name == #'foo');
+		assert: (y.asName isNil);
 		yourself.
 %
 category: 'other'
@@ -268,8 +268,8 @@ testImportFrom
 		assert: (x.module = 'foo');
 		assert: (x.names size == 1);
 		assert: ((y := x.names at: 1) isKindOf: AliasAst);
-		assert: (y.name = 'attr');
-		assert: (y.asName isNone);
+		assert: (y.name == #'attr');
+		assert: (y.asName isNil);
 		assert: (x.level = 0);
 		yourself.
 %
@@ -283,7 +283,7 @@ testIndexAssignment
 		assert: (x isKindOf: AssignAst);
 		assert: (x.targets size == 1);
 		assert: ((y := x.targets at: 1) isKindOf: NameAst);
-		assert: (y.assoc.key == #'i');
+		assert: (y.id == #'i');
 		assert: (y.ctx isKindOf: StoreAst);
 		assert: (x.value isKindOf: NumAst);
 		assert: (x.value.n == 0);
@@ -298,7 +298,7 @@ testNonlocal
 	self 
 		assert: (x isKindOf: NonlocalAst);
 		assert: (x.names size == 1);
-		assert: ((x.names at: 1) = 'x');
+		assert: ((x.names at: 1) == #'x');
 		yourself.
 %
 category: 'other'
@@ -309,7 +309,7 @@ testPassClass
 	x := self statementsAt: 12.
 	self 
 		assert: (x isKindOf: ClassDefAst);
-		assert: (x.name = 'C');
+		assert: (x.name == #'C');
 		assert: (x.bases size == 0);
 		assert: (x.keywords size == 0);
 		assert: (x.body.body size == 1);
@@ -325,10 +325,10 @@ testPassFunction
 	x := self statementsAt: 11.
 	self 
 		assert: (x isKindOf: FunctionDefAst);
-		assert: (x.name = 'f');
+		assert: (x.name == #'f');
 		assert: (x.args isKindOf: ArgumentsAst);
 		assert: ((y := x.args.args at: 1) isKindOf: ArgAst);
-		assert: (y.arg = 'arg');
+		assert: (y.arg == #'arg');
 		assert: (y.annotation isNone);
 		assert: (x.args.vararg isNone);
 		assert: (x.args.kwonlyargs size == 0);
@@ -351,7 +351,7 @@ testRaise
 		assert: (x isKindOf: RaiseAst);
 		assert: (x.exc isKindOf: CallAst);
 		assert: (x.exc.function isKindOf: NameAst);
-		assert: (x.exc.function.assoc.key == #'RuntimeError');
+		assert: (x.exc.function.id == #'RuntimeError');
 		assert: (x.exc.function.ctx isKindOf: LoadAst);
 		assert: (x.exc.arguments size == 1);
 		assert: ((y := x.exc.arguments at: 1) isKindOf: StrAst);
@@ -371,7 +371,7 @@ testRaiseFromNone
 		assert: (x isKindOf: RaiseAst);
 		assert: (x.exc isKindOf: CallAst);
 		assert: (x.exc.function isKindOf: NameAst);
-		assert: (x.exc.function.assoc.key == #'RuntimeError');
+		assert: (x.exc.function.id == #'RuntimeError');
 		assert: (x.exc.function.ctx isKindOf: LoadAst);
 		assert: (x.exc.arguments size == 1);
 		assert: ((y := x.exc.arguments at: 1) isKindOf: StrAst);
@@ -390,7 +390,7 @@ testReturnNone
 	x := self statementsAt: 15.
 	self 
 		assert: (x isKindOf: FunctionDefAst);
-		assert: (x.name = 'a');
+		assert: (x.name == #'a');
 		assert: (x.args isKindOf: ArgumentsAst);
 		assert: (x.args.args size == 0);
 		assert: (x.args.vararg isNone);
@@ -413,7 +413,7 @@ testReturnTrue
 	x := self statementsAt: 16.
 	self 
 		assert: (x isKindOf: FunctionDefAst);
-		assert: (x.name = 'b');
+		assert: (x.name == #'b');
 		assert: (x.args isKindOf: ArgumentsAst);
 		assert: (x.args.args size == 0);
 		assert: (x.args.vararg isNone);
@@ -424,7 +424,7 @@ testReturnTrue
 		assert: (x.body.body size == 1);
 		assert: ((y := x.body.body at: 1) isKindOf: ReturnAst);
 		assert: (y.value isKindOf: TrueAst);
-		assert: (y.value evaluate);
+		assert: (y.value evaluate: aScope);
 		assert: (x.decorator_list size == 0);
 		assert: (x.returns isNone);
 		yourself.
@@ -440,12 +440,12 @@ testSwapAssignment
 		assert: (x.targets size == 1);
 		assert: ((y := x.targets at: 1) isKindOf: TupleAst);
 		assert: ((y := y.elts at: 1) isKindOf: NameAst);
-		assert: (y.assoc.key == #'i');
+		assert: (y.id == #'i');
 		assert: (y.ctx isKindOf: StoreAst);
 		assert: (y := x.targets at: 1) notNil;
 		assert: ((y := y.elts at: 2) isKindOf: SubscriptAst);
 		assert: (y.value isKindOf: NameAst);
-		assert: (y.value.assoc.key == #'x');
+		assert: (y.value.id == #'x');
 		assert: (y.value.ctx isKindOf: LoadAst);
 		assert: (y.ctx isKindOf: StoreAst);
 		assert: (y := x.targets at: 1) notNil;
@@ -467,7 +467,7 @@ testYield
 	x := self statementsAt: 17.
 	self 
 		assert: (x isKindOf: FunctionDefAst);
-		assert: (x.name = 'gen');
+		assert: (x.name == #'gen');
 		assert: (x.args isKindOf: ArgumentsAst);
 		assert: (x.args.args size == 0);
 		assert: (x.args.vararg isNone);

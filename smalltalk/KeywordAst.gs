@@ -19,12 +19,21 @@ category: 'other'
 method: KeywordAst
 initialize
 	"keyword = (identifier? arg, expr value)"
-	| next stream|
+	| next stream |
 	stream := self stream.
 	next := stream next: 8.
-	next ~= 'keyword(' ifTrue: [self error.].
-	(stream peekFor: $') ifFalse: [self error].
-	arg := stream upTo: $'.
+	next ~= 'keyword(' ifTrue: [self error].
+	(stream peekFor: $') ifTrue: [
+		arg := (stream upTo: $') asSymbol.
+	] ifFalse: [
+		next := stream peekN: 4.
+		next = 'None' ifTrue: [
+			stream next: 4.
+			arg := nil.
+		] ifFalse: [
+			self error.
+		].
+	].
 	self commaSpace.
 	value := self expression.
 	(stream peekFor: $)) ifFalse: [self error].

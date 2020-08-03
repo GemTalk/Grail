@@ -1,16 +1,46 @@
 #!/usr/local/bin/python3
 
-# assign
-x = 5   #1
-x       #2
+# access global variable in global scope
+x = 5
+print(x, end=' ') # 5
 
-def foo():      #3
-    return 6
+# access global variable in local scope
+def foo():
+    print(x, end=' ')
+    return x
 
-y = foo()       #4
-y               #5
+y = foo() # 5
 
-def bar(p):     #6
-    return p + 3
+# create local variable in local scope
+def bar():
+    x = 6
+    print(x, end=' ')
+    return x
 
-bar(6)          #7
+z = bar() # 6
+print(x, end=' ') # 5
+
+# modify global variable in local scope 
+def rum():
+    global x
+    x = x + 2
+    print(x, end=' ')
+    return x
+
+w = rum() # 7
+print(x, end=' ') # 7
+
+# nonlocal
+def outer():
+    var = "local"
+
+    def inner():
+        nonlocal var
+        var = "nonlocal"
+
+    print(var, end=' ') # local
+    inner()
+    print(var, end=' ') # nonlocal
+    return var
+
+v = outer()

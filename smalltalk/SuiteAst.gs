@@ -17,17 +17,21 @@ children
 %
 category: 'other'
 method: SuiteAst
-evaluate
+evaluate: aScope
 
-	| result |
-	body do: [:each | result := each evaluate].
-	^result
+	^[
+		body do: [:each | each evaluate: aScope].
+		nil.
+	] on: ReturnNotification do: [:ex | 
+		ex return: ex value.
+	].
 %
 category: 'other'
 method: SuiteAst
 initialize
 
 	| stream node |
+	parent setBlock: self.
 	stream := self stream.
 	(stream peekFor: $[) ifFalse: [self error].
 	body := Array new.

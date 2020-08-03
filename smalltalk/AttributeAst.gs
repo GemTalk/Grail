@@ -10,16 +10,30 @@ set compile_env: 0
 category: 'other'
 method: AttributeAst
 assertContextIsLoad
+<<<<<<< HEAD
+=======
 
 	ctx assertIsLoad.
 %
 category: 'other'
 method: AttributeAst
-call: mySelector arguments: myArguments keywords: keywords
-	| receiver |
+assign: anObject scope: aScope
+>>>>>>> master
+
+	(value evaluate: aScope)
+		set: attr
+		to: anObject
+%
+category: 'other'
+method: AttributeAst
+callWithArguments: anArray keywords: aSymbolDictionary scope: aScope
+
 	self assertContextIsLoad.
-	receiver := value evaluate.
-	^receiver perform: mySelector with: myArguments with: keywords.
+	^(value evaluate: aScope)
+		call: attr
+		withArguments: anArray
+		keywords: aSymbolDictionary
+		scope: aScope
 %
 category: 'other'
 method: AttributeAst
@@ -29,6 +43,12 @@ children
 		add: ctx;
 		add: value;
 		yourself
+%
+category: 'other'
+method: AttributeAst
+evaluate: aScope
+
+	^(value evaluate: aScope) get: attr
 %
 category: 'other'
 method: AttributeAst
@@ -44,13 +64,8 @@ initialize
 	stream := self stream.
 	value := self expression.
 	self commaSpace.
-	attr := self string.
+	attr := self string asSymbol.
 	self commaSpace.
 	ctx := ExpressionContextAst parent: self.
 	self readPosition.
-%
-category: 'other'
-method: AttributeAst
-saveVariableAssociation
-	"Not really a variable"
 %

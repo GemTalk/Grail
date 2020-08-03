@@ -19,12 +19,13 @@ children
 %
 category: 'other'
 method: CallAst
-evaluate
+evaluate: aScope
 	"https://docs.python.org/3/reference/expressions.html#calls"
 
-	^function evaluate 
-		value: (arguments collect: [:each | each evaluate])
-		value: (keywords collect: [:each | each evaluate])
+	^function
+		callWithArguments: (arguments collect: [:each | each evaluate: aScope]) 
+		keywords: (keywords collect: [:each | each evaluate: aScope])
+		scope: aScope
 %
 category: 'other'
 method: CallAst
@@ -37,8 +38,12 @@ initialize
 	arguments := self collectAst: [self expression].
 	self commaSpace.
 	keywords := self collectAst: [KeywordAst parent: self].
-	dict := SymbolDictionary new.
-	keywords do: [:each | dict at: each name asSymbol put: each value].
-	keywords := dict.
+	(keywords size == 1 and: [keywords first name isNil]) ifTrue: [
+		keywords := KeywordsAst from: keywords.
+	] ifFalse: [
+		dict := SymbolDictionary new.
+		keywords do: [:each | dict at: each name put: each value].
+		keywords := dict.
+	].
 	self readPosition.
 %

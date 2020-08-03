@@ -17,8 +17,13 @@ children
 %
 category: 'other'
 method: ImportFromAst
-evaluate
-	self halt.
+evaluate: aScope
+
+	(module isKindOf: NoneAst) ifTrue: [		"from ."
+		names do: [:each | each import: aScope].
+	] ifFalse: [
+		self halt.
+	].
 %
 category: 'other'
 method: ImportFromAst

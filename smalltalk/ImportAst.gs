@@ -17,21 +17,10 @@ children
 %
 category: 'other'
 method: ImportAst
-evaluate
+evaluate: aScope
+	"each name is an instance of AliasAst and that is where the import occurs"
 
-	self halt.
-"
-	names do: [:each |
-		| module |
-		module := Builtins current
-			__import__: each name
-			_: self globals
-			_: self locals
-			_: #()
-			_: 0.
-		module halt.
-	].
-"
+	names do: [:each | each import: aScope].
 %
 category: 'other'
 method: ImportAst

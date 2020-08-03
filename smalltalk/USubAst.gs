@@ -9,12 +9,7 @@ USubAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: USubAst
-evaluate
+evaluate: aScope
 
-	^operand evaluate negated
-%
-category: 'other'
-method: USubAst
-operand: x
-	^x evaluate negated
+	^(operand evaluate: aScope) negated
 %
