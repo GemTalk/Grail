@@ -59,6 +59,18 @@ ModuleAst test
 set compile_env: 0
 category: 'other'
 method: ModuleAst
+call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
+	"Should we lookup the function in the current scope or in the module's globals?"
+
+	| function |
+	function := aScope get: aSymbol.
+	^function
+		value: anArray
+		value: aSymbolDictionary
+		value: aScope
+%
+category: 'other'
+method: ModuleAst
 children
 
 	^super children
@@ -69,10 +81,15 @@ category: 'other'
 method: ModuleAst
 evaluate
 
-	| scope result |
+	^self evaluate: GlobalScope new
+%
+category: 'other'
+method: ModuleAst
+evaluate: aScope
+
+	| result |
 	[
-		scope := GlobalScope new.
-		result := body evaluate: scope.
+		result := body evaluate: aScope.
 	] on: CancelNotification do: [:ex |
 		ex return.
 	].
@@ -139,7 +156,7 @@ parseAst
 	stream := ReadStream on: self readAst.
 	string := stream upTo: $(.
 	string = 'Module' ifFalse: [self error].
-	SuiteAst parent: self.
+	BlockAst parent: self.
 	(stream peekFor: $)) ifFalse: [self error].
 	string := stream upToEnd trimSeparators.
 	string isEmpty ifFalse: [self error: 'Unexpected text at end of AST: ' , string printString].

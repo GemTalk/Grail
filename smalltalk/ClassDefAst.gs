@@ -78,7 +78,7 @@ initialize
 	self commaSpace.
 	keywords := self collectAst: [KeywordAst parent: self].
 	self commaSpace.
-	SuiteAst parent: self.	"calls back to set body"
+	BlockAst parent: self.	"calls back to set body"
 	self commaSpace.
 	decorator_list := self collectAst:[self expression].
 	self readPosition.

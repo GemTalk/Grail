@@ -46,6 +46,12 @@ children
 %
 category: 'other'
 method: NameAst
+declareVariable
+
+	parent declareVariable: id.
+%
+category: 'other'
+method: NameAst
 evaluate: aScope
 	"If the name refers to a function, return an object that can be sent #'value:value:value:'"
 

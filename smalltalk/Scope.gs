@@ -49,7 +49,7 @@ method: Scope
 initialize: aScope
 
 	outer := aScope.
-	variables := SymbolDictionary new.
+	variables := PyDictionary new.
 %
 category: 'other'
 method: Scope

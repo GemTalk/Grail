@@ -32,7 +32,7 @@ initialize
 	self commaSpace.
 	args := ArgumentsAst parent: self.
 	self commaSpace.
-	body := SuiteAst parent: self.
+	body := BlockAst parent: self.
 	self commaSpace.
 	decorator_list := self collectAst: [self expression].
 	self commaSpace.

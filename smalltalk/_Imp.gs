@@ -113,6 +113,7 @@ initialize
 "
 	super initialize.
 	dictionary 
+		at: #'__class__'						put: BuiltinModule;
 		at: #'_fix_co_filename'				put: [:arguments :keywords | self _fixModule: (arguments at: 1) code: (arguments at: 2) filename: (arguments at: 3)];
 		at: #'acquire_lock'					put: [:arguments :keywords | self acquireLock: (arguments at: 1)];
 		at: #'check_hash_based_pycs'	put: [:arguments :keywords | 'default'];

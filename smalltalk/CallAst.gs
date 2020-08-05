@@ -41,7 +41,7 @@ initialize
 	(keywords size == 1 and: [keywords first name isNil]) ifTrue: [
 		keywords := KeywordsAst from: keywords.
 	] ifFalse: [
-		dict := SymbolDictionary new.
+		dict := PyDictionary new.
 		keywords do: [:each | dict at: each name put: each value].
 		keywords := dict.
 	].

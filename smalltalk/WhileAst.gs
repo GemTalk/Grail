@@ -25,7 +25,7 @@ evaluate: aScope
 			test evaluate: aScope.
 		] whileTrue: [
 			[
-				body do: [:each | each evaluate: aScope].
+				body evaluate: aScope.
 			] on: ContinueNotification do: [:ex |
 				ex return.
 			].
@@ -33,7 +33,7 @@ evaluate: aScope
 	] on: BreakNotification do: [:ex | 
 		ex return.
 	].
-	orelse do: [:each | each evaluate: aScope].
+	orelse evaluate: aScope.
 %
 category: 'other'
 method: WhileAst

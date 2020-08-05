@@ -4456,6 +4456,23 @@ doit
 SuiteAst category: 'Parser'
 %
 set compile_env: 0
+! ------------------- Class definition for BlockAst
+expectvalue /Class
+doit
+SuiteAst subclass: 'BlockAst'
+  instVarNames: #( variables)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+BlockAst category: 'Parser'
+%
+set compile_env: 0
 ! ------------------- Class definition for WithItemAst
 expectvalue /Class
 doit
@@ -4609,6 +4626,23 @@ Sys comment:
 expectvalue /Class
 doit
 Sys category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for PyDictionary
+expectvalue /Class
+doit
+SymbolDictionary subclass: 'PyDictionary'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+PyDictionary category: 'Builtins'
 %
 set compile_env: 0
 ! ------------------- Class definition for List
@@ -5282,6 +5316,7 @@ input BinOpAst.gs
 input BitAndAst.gs
 input BitOrAst.gs
 input BitXorAst.gs
+input BlockAst.gs
 input BlockingIOError.gs
 input BoolOpAst.gs
 input BreakAst.gs
@@ -5402,6 +5437,7 @@ input PendingDeprecationWarning.gs
 input PermissionError.gs
 input PowAst.gs
 input ProcessLookupError.gs
+input PyDictionary.gs
 input PyException.gs
 input PyFloatingPointError.gs
 input PyLookupError.gs

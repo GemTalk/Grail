@@ -25,8 +25,10 @@ category: 'other'
 method: AttributeAst
 callWithArguments: anArray keywords: aSymbolDictionary scope: aScope
 
+	| object |
 	self assertContextIsLoad.
-	^(value evaluate: aScope)
+	object := value evaluate: aScope.
+	^object
 		call: attr
 		withArguments: anArray
 		keywords: aSymbolDictionary
@@ -40,6 +42,12 @@ children
 		add: ctx;
 		add: value;
 		yourself
+%
+category: 'other'
+method: AttributeAst
+declareVariable
+
+	value declareVariable.
 %
 category: 'other'
 method: AttributeAst

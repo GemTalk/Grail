@@ -37,7 +37,8 @@ initialize
 "
 	super initialize.
 	dictionary 
+		at: #'__class__'	put: BuiltinModule;
 		at: #'byteorder'	put: self byteorder;
-		at: #'modules'		put: SymbolDictionary new;
+		at: #'modules'		put: PyDictionary new;
 		yourself.
 %

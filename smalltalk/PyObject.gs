@@ -62,7 +62,9 @@ method: PyObject
 initialize: aClassDefAst
 
 	classAst := aClassDefAst.
-	variables := SymbolDictionary new.
+	variables := PyDictionary new
+		at: #'__class__' put: aClassDefAst;
+		yourself.
 %
 category: 'other'
 method: PyObject

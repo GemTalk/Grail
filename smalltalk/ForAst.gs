@@ -23,9 +23,9 @@ method: ForAst
 evaluate: aScope
 
 	[
-		(iter evaluate: aScope) do: [:i | 
+		(iter evaluate: aScope) do: [:each | 
 			[
-				aScope set: target to: i.
+				aScope set: target to: each.
 				body evaluate: aScope.
 			] on: ContinueNotification do: [:ex |
 				ex return.

@@ -91,6 +91,18 @@ commaSpace
 %
 category: 'initialization'
 method: AstNode
+declareVariable
+
+	parent declareVariable.
+%
+category: 'initialization'
+method: AstNode
+declareVariable: aSymbol
+
+	parent declareVariable: aSymbol.
+%
+category: 'initialization'
+method: AstNode
 error
 
 	self error: 'Invalid ' , self class name , ' node: ' , (self stream next: 10) printString.
