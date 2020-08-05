@@ -1222,7 +1222,7 @@ This function does not accept any arguments.
 Note object does not have a __dict__, so you can’t assign arbitrary 
 attributes to an instance of the object class.
 "
-self halt.
+	^PyObject new
 %
 category: 'functions'
 method: Builtins
@@ -1639,7 +1639,10 @@ See also Type Objects.
 Changed in version 3.6: Subclasses of type which don’t override
  type.__new__ may no longer use the one-argument form to get the type of an object.
 "
-self halt.
+	| object |
+	arguments size == 1 ifTrue: [^(arguments at: 1) get: #'__class__'].
+	self halt.
+	
 %
 category: 'functions'
 method: Builtins
@@ -1722,6 +1725,7 @@ initialize
 "
 	super initialize.
 	dictionary 
+		at: #'__class__'		put: BuiltinModule;
 		at: #'False'				put: false;
 		at: #'None' 			put: nil;
 		at: #'True'				put: true;

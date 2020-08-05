@@ -20,7 +20,6 @@ category: 'other'
 method: ExceptHandlerAst
 evaluate: aScope
 
-	self error: 'not called!?'.
 	(name evaluate: aScope) ifNotNil: [:myName | myName halt].
 	^body evaluate: aScope
 %

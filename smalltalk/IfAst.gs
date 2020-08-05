@@ -22,8 +22,8 @@ method: IfAst
 evaluate: aScope
 
 	(test evaluate: aScope)
-		ifTrue: [body do: [:each | each evaluate: aScope]]
-		ifFalse: [orelse do: [:each | each evaluate: aScope]].
+		ifTrue: [body evaluate: aScope]
+		ifFalse: [orelse evaluate: aScope].
 %
 category: 'other'
 method: IfAst

@@ -18,6 +18,12 @@ children
 %
 category: 'other'
 method: TupleAst
+declareVariable
+
+	elts do: [:each | each declareVariable].
+%
+category: 'other'
+method: TupleAst
 evaluate: aScope
 
 	^Tuple withAll: (elts collect: [:each | each evaluate: aScope]) immediateInvariant

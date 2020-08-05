@@ -24,12 +24,18 @@ children
 %
 category: 'other'
 method: SubscriptAst
+declareVariable
+
+	value declareVariable.
+%
+category: 'other'
+method: SubscriptAst
 evaluate: aScope
 
 	| x |
 	value assertContextIsLoad.
-self halt.
-	x := self variableAt: value.
+	x := value evaluate: aScope.
+self halt. 
 	^(slice evaluate: aScope) at: x
 %
 category: 'other'

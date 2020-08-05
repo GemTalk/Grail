@@ -56,5 +56,5 @@ initialize
 		SessionTemps current removeKey: ('Python_' , each name) asSymbol ifAbsent: [].
 	].
 "
-	dictionary := SymbolDictionary new.
+	dictionary := PyDictionary new.
 %

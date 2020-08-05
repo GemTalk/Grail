@@ -12,3 +12,10 @@ method: StoreAst
 assertIsStore
 	"Overide to avoid error"
 %
+category: 'other'
+method: StoreAst
+initialize
+
+	super initialize.
+	parent declareVariable.
+%
