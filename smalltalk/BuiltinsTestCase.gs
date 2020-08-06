@@ -50,6 +50,16 @@ test_any
 %
 category: 'other'
 method: BuiltinsTestCase
+test_bin
+
+	| x |
+	x := (self statementsAt: 12) evaluate: aScope.		
+	self assert: x = '0b11'.
+	x := (self statementsAt: 13) evaluate: aScope.		
+	self assert: x = '-0b1010'.
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"

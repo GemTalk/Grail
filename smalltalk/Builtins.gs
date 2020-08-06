@@ -1821,6 +1821,7 @@ initialize
 		at: #'abs'				put: [:arguments :keywords :scope | self abs: arguments first];
 		at: #'all'					put: [:arguments :keywords :scope | self all: arguments first];
 		at: #'any'				put: [:arguments :keywords :scope | self any: arguments first];
+		at: #'bin'				put: [:arguments :keywords :scope | self bin: arguments];
 		at: #'bool'				put: [:arguments :keywords :scope | self bool: arguments first];
 		at: #'classmethod'	put: [:arguments :keywords :scope | self classmethod: arguments first scope: scope];
 		at: #'exec'				put: [:arguments :keywords :scope | self exec: arguments];

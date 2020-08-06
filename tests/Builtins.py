@@ -16,3 +16,11 @@ all([True, True, True]) # 7
 
 any([False, False, True]) # 8
 any([False, False, False]) # 9
+
+# "'\\xf6'"
+ascii("ö") # 10
+# "'G \\xeb \\xea k s f ? r G ? e k s'"
+ascii("G ë ê k s f ? r G ? e k s") # 11
+
+bin(3) # 12
+bin(-10) # 13
