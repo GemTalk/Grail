@@ -159,7 +159,7 @@ def all(iterable):
             return False
     return True
 "
-	^arguments allSatisfy: [:each | each]
+	^ (arguments at: 1) allSatisfy: [:each | each]
 %
 category: 'functions'
 method: builtins
@@ -1819,6 +1819,7 @@ initialize
 		at: #'True'				put: true;
 		at: #'__import__'		put: [:arguments :keywords :scope | self __import__: arguments first asSymbol keywords: keywords scope: scope];
 		at: #'abs'				put: [:arguments :keywords :scope | self abs: arguments first];
+		at: #'all'					put: [:arguments :keywords :scope | self all: arguments first];
 		at: #'any'				put: [:arguments :keywords :scope | self any: arguments first];
 		at: #'bool'				put: [:arguments :keywords :scope | self bool: arguments first];
 		at: #'classmethod'	put: [:arguments :keywords :scope | self classmethod: arguments first scope: scope];

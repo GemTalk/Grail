@@ -30,6 +30,16 @@ test_abs
 %
 category: 'other'
 method: BuiltinsTestCase
+test_all
+
+	| x |
+	x := (self statementsAt: 6) evaluate: aScope.		
+	self deny: x.
+	x := (self statementsAt: 7) evaluate: aScope.		
+	self assert: x.
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"

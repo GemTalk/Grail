@@ -10,3 +10,6 @@ import noSuchModule     # 3
 def _load_module_shim(self, fullname):          # 4
     pass
 load_module = classmethod(_load_module_shim)    # 5
+
+all([True, True, False]) # 6
+all([True, True, True]) # 7
