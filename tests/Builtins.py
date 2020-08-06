@@ -13,3 +13,6 @@ load_module = classmethod(_load_module_shim)    # 5
 
 all([True, True, False]) # 6
 all([True, True, True]) # 7
+
+any([False, False, True]) # 8
+any([False, False, False]) # 9
