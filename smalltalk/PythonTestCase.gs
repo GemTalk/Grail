@@ -48,7 +48,9 @@ setUp
 	super setUp.
 	stdout := WriteStream on: String new.
 	Builtins current stdout: stdout.
-	module := self resources first current moduleAtPath: '$HOME/code/Python/GemStoneP/tests/' , self filename.
+	self filename ifNotNil: [:filename | 
+		module := self resources first current moduleAtPath: self testsPath , filename.
+	].
 	aScope := GlobalScope new.
 %
 category: 'other'
@@ -63,4 +65,10 @@ tearDown
 
 	Builtins current stdout: nil.
 	super tearDown.
+%
+category: 'other'
+method: PythonTestCase
+testsPath
+
+	^'$HOME/code/Python/GemStoneP/tests/'
 %

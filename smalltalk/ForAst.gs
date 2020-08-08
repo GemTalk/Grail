@@ -22,18 +22,33 @@ category: 'other'
 method: ForAst
 evaluate: aScope
 
+	| expression iterator |
+	expression := iter evaluate: aScope.
+	iterator := expression
+		call: #'__iter__' 
+		withArguments: #() 
+		keywords: SymbolDictionary new
+		scope: aScope.
 	[
-		(iter evaluate: aScope) do: [:each | 
+		| each |
+		[
+			each := iterator
+				call: #'__next__' 
+				withArguments: #() 
+				keywords: SymbolDictionary new
+				scope: aScope.
+			true.
+		] whileTrue: [
 			[
-				aScope set: target to: each.
+				target setTo: each in: aScope.
 				body evaluate: aScope.
 			] on: ContinueNotification do: [:ex |
 				ex return.
 			].
 		].
-	] on: BreakNotification do: [:ex |
+	] on: BreakNotification , StopIteration do: [:ex |
 		ex return.
-	].
+	].	
 	orelse evaluate: aScope.
 %
 category: 'other'

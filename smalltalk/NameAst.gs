@@ -84,3 +84,9 @@ printOn: aStream
 		nextPutAll: id;
 		nextPut: $).
 %
+category: 'other'
+method: NameAst
+setTo: aValue in: aScope
+
+	aScope set: id to: aValue.
+%

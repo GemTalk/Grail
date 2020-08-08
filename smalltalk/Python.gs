@@ -4797,6 +4797,23 @@ doit
 LocalScope category: 'Builtins'
 %
 set compile_env: 0
+! ------------------- Class definition for Iterator
+expectvalue /Class
+doit
+ReadStream subclass: 'Iterator'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+Iterator category: 'Builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for PythonTestCase
 expectvalue /Class
 doit
@@ -5025,6 +5042,23 @@ Object
 expectvalue /Class
 doit
 EvaluateTestCase category: 'Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for ExecuteTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'ExecuteTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ExecuteTestCase category: 'Tests'
 %
 set compile_env: 0
 ! ------------------- Class definition for ImportTestCase
@@ -5359,6 +5393,7 @@ input EOFError.gs
 input EqAst.gs
 input EvaluateTestCase.gs
 input ExceptHandlerAst.gs
+input ExecuteTestCase.gs
 input ExprAst.gs
 input ExpressionAst.gs
 input ExpressionContextAst.gs
@@ -5394,6 +5429,7 @@ input InvertAst.gs
 input IsADirectoryError.gs
 input IsAst.gs
 input IsNotAst.gs
+input Iterator.gs
 input JoinedStrAst.gs
 input KeyboardInterrupt.gs
 input KeyError.gs
