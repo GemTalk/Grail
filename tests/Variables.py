@@ -44,3 +44,18 @@ def outer():
     return var
 
 v = outer()
+
+def fa():
+    x = 0
+    def fSet(y):
+        nonlocal x
+        x = y
+    def fGet():
+        return x
+    return (fSet, fGet)
+
+set1, get1 = fa()
+set2, get2 = fa()
+set1(3)
+set2(4)
+print(get1(), get2(), end=' ')

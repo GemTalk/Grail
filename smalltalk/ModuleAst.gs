@@ -60,10 +60,9 @@ set compile_env: 0
 category: 'other'
 method: ModuleAst
 call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
-	"Should we lookup the function in the current scope or in the module's globals?"
 
 	| function |
-	function := aScope get: aSymbol.
+	function := scope get: aSymbol.
 	^function
 		value: anArray
 		value: aSymbolDictionary
@@ -81,19 +80,13 @@ category: 'other'
 method: ModuleAst
 evaluate
 
-	^self evaluate: GlobalScope new
-%
-category: 'other'
-method: ModuleAst
-evaluate: aScope
-
-	| result |
+	scope := GlobalScope newForNode: self.
+	scope set: #'__name__' to: name.
 	[
-		result := body evaluate: aScope.
+		body evaluate: scope.
 	] on: CancelNotification do: [:ex |
-		ex return.
+		^nil
 	].
-	^result
 %
 category: 'other'
 method: ModuleAst
@@ -169,17 +162,6 @@ path
 %
 category: 'other'
 method: ModuleAst
-printOn: aStream
-
-	super printOn: aStream.
-	aStream
-		nextPut: $(;
-		nextPutAll: name;
-		nextPut: $);
-		yourself.
-%
-category: 'other'
-method: ModuleAst
 readAst
 
 	^self class astForPath: path
@@ -195,9 +177,21 @@ readSource
 %
 category: 'other'
 method: ModuleAst
+set: aSymbol to: anObject
+
+	scope set: aSymbol to: anObject
+%
+category: 'other'
+method: ModuleAst
 setBlock: aBlockAst
 
 	body := aBlockAst.
+%
+category: 'other'
+method: ModuleAst
+source
+
+	^source
 %
 category: 'other'
 method: ModuleAst

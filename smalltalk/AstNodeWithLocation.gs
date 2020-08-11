@@ -20,6 +20,16 @@ line
 set compile_env: 0
 category: 'other'
 method: AstNodeWithLocation
+printOn: aStream
+
+	super printOn: aStream.
+	aStream
+		nextPut: $:;
+		print: line;
+		yourself.
+%
+category: 'other'
+method: AstNodeWithLocation
 readPosition
 
 	(self stream peekFor: $,) ifFalse: [self error].
@@ -36,4 +46,16 @@ readPositionOnly
 	line := (stream upTo: $,) asNumber.
 	(string := stream upTo: $=) = ' col_offset' ifFalse: [self error].
 	column := (stream upTo: $)) asNumber.
+%
+category: 'other'
+method: AstNodeWithLocation
+sourceLine
+
+	| i j string |
+	string := self module source decodeToString.
+	i := 0.
+	line - 1 timesRepeat: [i := string indexOf: Character lf startingAt: i + 1].
+	j := string indexOf: Character lf startingAt: i + 1.
+	j == 0 ifTrue: [j := string size].
+	^string copyFrom: i + 1 to: j - 1
 %

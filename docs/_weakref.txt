@@ -1,0 +1,16 @@
+_weakref.__dict__
+{
+    '__name__': '_weakref', 
+    '__doc__': 'Weak-reference support module.', 
+    '__package__': '', 
+    '__loader__': <class '_frozen_importlib.BuiltinImporter'>, 
+    '__spec__': ModuleSpec(name='_weakref', loader=<class '_frozen_importlib.BuiltinImporter'>, origin='built-in'), 
+    'getweakrefcount': <built-in function getweakrefcount>, 
+    '_remove_dead_weakref': <built-in function _remove_dead_weakref>, 
+    'getweakrefs': <built-in function getweakrefs>, 
+    'proxy': <built-in function proxy>, 
+    'ref': <class 'weakref'>, 
+    'ReferenceType': <class 'weakref'>, 
+    'ProxyType': <class 'weakproxy'>, 
+    'CallableProxyType': <class 'weakcallableproxy'>
+}

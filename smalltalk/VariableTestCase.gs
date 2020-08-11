@@ -22,5 +22,5 @@ test
 	| x |
 	module evaluate.
 	x := stdout contents.
-	self assert: x = '5 5 6 5 7 7 local nonlocal '.
+	self assert: x = '5 5 6 5 7 7 local nonlocal 3 4 '.
 %

@@ -26,7 +26,7 @@ category: 'functions'
 method: Sys
 modules
 
-	^dictionary at: #'modules'
+	^globals at: #'modules'
 %
 set compile_env: 0
 category: 'other'
@@ -36,9 +36,10 @@ initialize
 	SessionTemps current removeKey: #'Python_Sys' ifAbsent: [].
 "
 	super initialize.
-	dictionary 
-		at: #'__class__'	put: BuiltinModule;
-		at: #'byteorder'	put: self byteorder;
-		at: #'modules'		put: PyDictionary new;
+	globals 
+		at: #'__class__'					put: BuiltinModule;
+		at: #'builtin_module_names'	put: Tuple new;
+		at: #'byteorder'					put: self byteorder;
+		at: #'modules'						put: PyDictionary new;
 		yourself.
 %

@@ -1,0 +1,31 @@
+>>> sys.modules['_thread'].__dict__
+{
+    '__name__': '_thread', 
+    '__doc__': 
+        "This module provides primitive operations to write multi-threaded programs.
+        The 'threading' module provides a more convenient interface.", 
+    '__package__': '', 
+    '__loader__': <class '_frozen_importlib.BuiltinImporter'>, 
+    '__spec__': ModuleSpec(
+        name='_thread', 
+        loader=<class '_frozen_importlib.BuiltinImporter'>, 
+        origin='built-in'), 
+
+    '_count': <built-in function _count>, 
+    '_local': <class '_thread._local'>
+    '_set_sentinel': <built-in function _set_sentinel>, 
+
+    'allocate': <built-in function allocate>, 
+    'allocate_lock': <built-in function allocate_lock>, 
+    'error': <class 'RuntimeError'>, 
+    'exit': <built-in function exit>, 
+    'exit_thread': <built-in function exit_thread>, 
+    'get_ident': <built-in function get_ident>, 
+    'interrupt_main': <built-in function interrupt_main>, 
+    'LockType': <class '_thread.lock'>, 
+    'RLock': <class '_thread.RLock'>,
+    'start_new': <built-in function start_new>, 
+    'start_new_thread': <built-in function start_new_thread>, 
+    'stack_size': <built-in function stack_size>, 
+    'TIMEOUT_MAX': 9223372036.0, 
+}

@@ -5,6 +5,18 @@ Iterator removeAllMethods.
 Iterator class removeAllMethods.
 %
 ! ------------------- Class methods for Iterator
+set compile_env: 0
+category: 'other'
+classmethod: Iterator
+onDictionary: aPyDictionary
+
+	| sequence |
+	sequence := OrderedCollection new: aPyDictionary size.
+	aPyDictionary keysAndValuesDo: [:eachKey : eachValue |
+		sequence add: (Tuple with: eachKey with: eachValue).
+	].
+	^self on: sequence
+%
 ! ------------------- Instance methods for Iterator
 set compile_env: 0
 category: 'other'

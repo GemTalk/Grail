@@ -242,6 +242,16 @@ module
 %
 category: 'other'
 method: AstNode
+printOn: aStream
+
+	super printOn: aStream.
+	aStream
+		nextPut: $-;
+		nextPutAll: self module name;
+		yourself.
+%
+category: 'other'
+method: AstNode
 setBlock: aBlock
 %
 set compile_env: 0

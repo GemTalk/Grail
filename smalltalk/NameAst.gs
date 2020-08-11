@@ -21,13 +21,6 @@ assertContextIsStore
 %
 category: 'other'
 method: NameAst
-assign: aValue scope: aScope
-
-	self assertContextIsStore.
-	aScope set: id to: aValue.
-%
-category: 'other'
-method: NameAst
 callWithArguments: anArray keywords: aSymbolDictionary scope: aScope
 
 	self assertContextIsLoad.
@@ -86,7 +79,8 @@ printOn: aStream
 %
 category: 'other'
 method: NameAst
-setTo: aValue in: aScope
+setTo: aValue scope: aScope
 
+	self assertContextIsStore.
 	aScope set: id to: aValue.
 %

@@ -14,10 +14,15 @@ current
 		SessionTemps current removeKey: ('Python_' , each name) asSymbol ifAbsent: [].
 	].
 "
-
 	^SessionTemps current
 		at: ('Python_' , self name) asSymbol
-		ifAbsentPut: [self new].
+		ifAbsentPut: [Sys current modules at: self moduleName put: self new]
+%
+category: 'other'
+classmethod: BuiltinModule
+moduleName
+
+	self subclassResponsibility.
 %
 category: 'other'
 classmethod: BuiltinModule
@@ -33,9 +38,7 @@ category: 'other'
 method: BuiltinModule
 call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
 
-	| function |
-	function := self get: aSymbol.
-	^function
+	^(self get: aSymbol)
 		value: anArray
 		value: aSymbolDictionary
 		value: aScope
@@ -44,17 +47,11 @@ category: 'other'
 method: BuiltinModule
 get: aSymbol
 
-	^dictionary
-		at: aSymbol
-		ifAbsent: [PyNameError signal]
+	^globals get: aSymbol
 %
 category: 'other'
 method: BuiltinModule
 initialize
-"
-	BuiltinModule subclasses do: [:each | 
-		SessionTemps current removeKey: ('Python_' , each name) asSymbol ifAbsent: [].
-	].
-"
-	dictionary := PyDictionary new.
+
+	globals := PyDictionary new.
 %

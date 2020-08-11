@@ -49,3 +49,20 @@ name
 
 	^name
 %
+category: 'other'
+method: AliasAst
+printOn: aStream
+
+	super printOn: aStream.
+	aStream
+		nextPut: $(;
+		nextPutAll: name;
+		yourself.
+	asName ifNotNil: [
+		aStream
+			nextPutAll: ' as ';
+			nextPutAll: asName;
+			yourself.
+	].
+	aStream nextPut: $).
+%

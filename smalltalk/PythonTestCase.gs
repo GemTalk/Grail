@@ -43,15 +43,21 @@ filename
 %
 category: 'other'
 method: PythonTestCase
+pathToTests
+
+	^'$HOME/code/Python/GemStoneP/tests/'
+%
+category: 'other'
+method: PythonTestCase
 setUp
 
 	super setUp.
 	stdout := WriteStream on: String new.
-	Builtins current stdout: stdout.
+	(GsCurrentSession currentSession objectNamed: #'Builtins') current stdout: stdout.
 	self filename ifNotNil: [:filename | 
-		module := self resources first current moduleAtPath: self testsPath , filename.
+		module := self resources first current moduleAtPath: self pathToTests , filename.
 	].
-	aScope := GlobalScope new.
+	aScope := GlobalScope newForNode: self.
 %
 category: 'other'
 method: PythonTestCase
@@ -63,12 +69,6 @@ category: 'other'
 method: PythonTestCase
 tearDown
 
-	Builtins current stdout: nil.
+	(GsCurrentSession currentSession objectNamed: #'Builtins') current stdout: nil.
 	super tearDown.
-%
-category: 'other'
-method: PythonTestCase
-testsPath
-
-	^'$HOME/code/Python/GemStoneP/tests/'
 %

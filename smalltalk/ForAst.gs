@@ -40,7 +40,7 @@ evaluate: aScope
 			true.
 		] whileTrue: [
 			[
-				target setTo: each in: aScope.
+				target setTo: each scope: aScope.
 				body evaluate: aScope.
 			] on: ContinueNotification do: [:ex |
 				ex return.

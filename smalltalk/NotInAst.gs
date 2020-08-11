@@ -11,5 +11,5 @@ category: 'other'
 method: NotInAst
 left: leftOperand right: rightOperand
 
-	^(rightOperand includes: leftOperand) not
+	^(rightOperand membershipIncludes: leftOperand) not
 %

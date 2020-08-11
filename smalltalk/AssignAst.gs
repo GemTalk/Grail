@@ -22,7 +22,7 @@ evaluate: aScope
 
 	| x |
 	x := value evaluate: aScope.
-	targets do: [:each | each assign: x scope: aScope].
+	targets do: [:each | each setTo: x scope: aScope].
 	^x
 %
 category: 'other'

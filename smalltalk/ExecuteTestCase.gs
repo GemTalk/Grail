@@ -19,7 +19,7 @@ method: ExecuteTestCase
 testIterator
 
 	| x |
-	module := self resources first current moduleAtPath: self testsPath , 'Iterators.py'.
+	module := self resources first current moduleAtPath: self pathToTests , 'Iterators.py'.
 	module evaluate.
 	self assert: (x := stdout contents) = 
 '1 2 

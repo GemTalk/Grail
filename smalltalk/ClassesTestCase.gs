@@ -45,6 +45,7 @@ MyClass>>bar3(<class '__main__.MyClass'>, C)
 "4"	assert: ((x := stdout nextLine) = 'MyClass>>bar1(C, D)');
 "5"	assert: ((x := stdout nextLine) = 'MyClass>>bar1(<class ''__main__.MyClass''>, C)');
 "6"	assert: ((x := stdout nextLine) = 'MyClass>>bar3(<class ''__main__.MyClass''>, C)');
+"7"	assert: ((x := stdout nextLine) = 'fun foo fun foo 1 1 2 3 4 5');
 		assert: (x := stdout nextLine) isNil;
 		yourself.
 %

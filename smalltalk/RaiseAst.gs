@@ -18,6 +18,15 @@ children
 %
 category: 'other'
 method: RaiseAst
+evaluate: aScope
+
+	| exception from |
+	exception := exc evaluate: aScope.
+	from := cause evaluate: aScope.
+	self halt.
+%
+category: 'other'
+method: RaiseAst
 initialize
 	"Raise(expr? exc, expr? cause)"
 

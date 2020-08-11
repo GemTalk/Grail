@@ -11,5 +11,5 @@ category: 'other'
 method: InAst
 left: leftOperand right: rightOperand
 
-	^rightOperand includes: leftOperand
+	^rightOperand membershipIncludes: leftOperand
 %

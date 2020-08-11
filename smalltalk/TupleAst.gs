@@ -40,12 +40,12 @@ initialize
 %
 category: 'other'
 method: TupleAst
-setTo: aValue in: aScope
+setTo: aValue scope: aScope
 
 	elts size ~~ aValue size ifTrue: [
 		ValueError signal: 'not enough values to unpack (expected ' , elts size printString , ', got ' , aValue size printString , ')'.
 	].
 	1 to: elts size do: [:i | 
-		(elts at: i) setTo: (aValue at: i) in: aScope.
+		(elts at: i) setTo: (aValue at: i) scope: aScope.
 	].
 %
