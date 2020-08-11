@@ -189,7 +189,16 @@ As repr(), return a string containing a printable representation of an object,
 but escape the non-ASCII characters in the string returned by repr() using 
 \x, \u or \U escapes. This generates a string similar to that returned by repr() in Python 2.
 "
-self halt.
+
+	| str |
+	str := String new.
+	arguments doWithIndex: [ :char :i | 
+		char asString _asUnicode7 isNil ifTrue: [
+			str := str, ((arguments codePointAt: i) printStringRadix: 16) asLowercase.
+		] ifFalse: [
+			str := str, char.
+		]
+	].
 %
 category: 'functions'
 method: builtins
@@ -1820,6 +1829,7 @@ initialize
 		at: #'__import__'		put: [:arguments :keywords :scope | self __import__: arguments first asSymbol keywords: keywords scope: scope];
 		at: #'abs'				put: [:arguments :keywords :scope | self abs: arguments first];
 		at: #'all'					put: [:arguments :keywords :scope | self all: arguments first];
+		at: #'ascii'				put: [:arguments :keywords :scope | self ascii: arguments first];
 		at: #'any'				put: [:arguments :keywords :scope | self any: arguments first];
 		at: #'bin'				put: [:arguments :keywords :scope | self bin: arguments first];
 		at: #'bool'				put: [:arguments :keywords :scope | self bool: arguments first];
