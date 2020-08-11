@@ -12,6 +12,21 @@ method: PyDictionary
 call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
 
 	aSymbol == #'items' ifTrue: [^self].
-
+	aSymbol == #'__iter__' ifTrue: [^Iterator onDictionary: self].
 	self halt.
+%
+category: 'other'
+method: PyDictionary
+get: aSymbol
+
+	^self
+		at: aSymbol
+		ifAbsent: [NameError signal]
+%
+category: 'other'
+method: PyDictionary
+membershipIncludes: anObject
+	"Smalltalk checks for values!"
+
+	^self keys includes: anObject asSymbol
 %

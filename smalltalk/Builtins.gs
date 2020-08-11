@@ -8,9 +8,75 @@ Builtins class removeAllMethods.
 set compile_env: 0
 category: 'other'
 classmethod: Builtins
+clearCurrent
+
+	SessionTemps current removeKey: #'Python_Builtins' ifAbsent: [].
+%
+category: 'other'
+classmethod: Builtins
+current
+"
+	Builtins clearCurrent.
+"
+	^SessionTemps current
+		at: #'Python_Builtins'
+		ifAbsentPut: [self new]
+%
+category: 'other'
+classmethod: Builtins
 moduleName
 
 	^#'builtins'
+%
+category: 'other'
+classmethod: Builtins
+stack
+"
+	GsProcess allInstancesInMemory size.
+	GsProcess allInstancesInMemory do: [:each | each become: Object new].
+	Builtins stack.
+"
+	^self stackFor: GsProcess allInstancesInMemory any.
+%
+category: 'other'
+classmethod: Builtins
+stackFor: aGsProcess
+"
+	Builtins stackFor: (Object _objectForOop: 70105089).
+"
+	| astNode nodes priorColumn priorLine priorModule stream |
+	astNode := AstNodeWithLocation.
+	stream := WriteStream on: String new.
+	nodes := Array new.
+	priorColumn := priorLine := -1.
+	priorModule := nil.
+	1 to: aGsProcess localStackDepth do: [:i | 
+		| frame method |
+		frame := aGsProcess _frameContentsAt: i.
+		method := frame at: 1.
+		(method inClass notNil and: [method inClass inheritsFrom: astNode]) ifTrue: [
+			(frame at: 7) ifNil: [
+				| column line module receiver |
+				receiver := frame at: 10.
+				line := receiver line.
+				column := receiver column.
+				module := receiver module.
+				(priorColumn == column and: [priorLine == line and: [priorModule == module]]) ifFalse: [nodes add: Array new].
+				nodes last add: receiver.
+				priorLine := line.
+				priorColumn := column.
+				priorModule := module.
+			].
+		].
+	].
+	nodes do: [:eachArray | 
+		stream lf; nextPutAll: eachArray first module name , ':' , eachArray first line printString , ':' , eachArray first column printString; tab.
+		eachArray reverseDo: [:each | 
+			stream nextPutAll: (each class name copyFrom: 1 to: each class name size - 3); space.
+		].
+		stream tab; nextPutAll: eachArray first sourceLine.
+	].
+	^stream lf; contents.
 %
 ! ------------------- Instance methods for Builtins
 set compile_env: 0
@@ -34,15 +100,13 @@ __import__: aSymbol keywords: aSymbolDictionary scope: aScope
 	This implementation is quite incomplete (no extensible finders and loaders).
 "
 	| importPaths module modules name |
-	modules := Sys current modules.
+	"Check for already imported"
+	modules := sys modules.
 	module := modules at: aSymbol ifAbsent: [_remoteNil].
 	module ifNil: [ModuleNotFoundError signal: 'Import of ' , aSymbol , ' failed!'].
-	module ~~ _remoteNil ifTrue: [^modules at: aSymbol put: module].
-	BuiltinModule subclasses do: [:each | 
-		each moduleName == aSymbol ifTrue: [
-			^modules at: aSymbol put: each current
-		].
-	].
+	module ~~ _remoteNil ifTrue: [^module].
+
+	"Not yet imported; search for it"
 	importPaths := Array new.
 	module := (aSymbolDictionary at: #'globals') module.
 	module isPackage ifTrue: [
@@ -58,14 +122,16 @@ __import__: aSymbol keywords: aSymbolDictionary scope: aScope
 		path := each , aSymbol.
 		((GsFile existsOnServer: path) and: [GsFile isServerDirectory: path]) ifTrue: [		"Package"
 			module := PyPackage script: path as: aSymbol.
-			module evaluate: aScope.
-			^modules at: name put: module
+			modules at: aSymbol put: module.
+			module evaluate.
+			^module
 		].
 		path := path , '.py'.
 		(GsFile existsOnServer: path) ifTrue: [
 			module := ModuleAst script: path as: aSymbol.
-			module evaluate: aScope.
-			^modules at: name put: module
+			modules at: aSymbol put: module.
+			module evaluate.
+			^module
 		].
 	].
 	ModuleNotFoundError signal: 'Import of ' , aSymbol , ' failed!'
@@ -272,7 +338,7 @@ The valid range for the argument is from 0 through 1,114,111 (0x10FFFF in base 1
 %
 category: 'functions'
 method: Builtins
-classmethod: anInstanceFunctionDefAst scope: aScope
+classmethod: aPyFunction scope: aScope
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -296,10 +362,11 @@ Class methods are different than C++ or Java static methods. If you want those, 
 
 For more information on class methods, see The standard type hierarchy.
 "
-	| newMethod |
-	newMethod := anInstanceFunctionDefAst copy.
-	newMethod changeClassTo: ClassFunctionDefAst.
-	^newMethod
+	| newFunction |
+	(aPyFunction isKindOf: PyFunction) ifFalse: [self error: 'Invalid object!'].
+	newFunction := aPyFunction copy.
+	newFunction changeClassTo: PyClassFunction.
+	^newFunction
 %
 category: 'functions'
 method: Builtins
@@ -751,7 +818,11 @@ value of that attribute. For example, getattr(x, 'foobar')
  is equivalent to x.foobar. If the named attribute does not exist, 
 default is returned if provided, otherwise AttributeError is raised.
 "
-self halt.
+	^[
+		object get: name asSymbol.
+	] on: NameError do: [:ex | 
+		AttributeError signal.
+	]
 %
 category: 'functions'
 method: Builtins
@@ -785,7 +856,13 @@ of the object’s attributes, False if not.
  (This is implemented by calling getattr(object, name) 
 and seeing whether it raises an AttributeError or not.)
 "
-self halt.
+
+	^[
+		self getattr: object _: name.
+		true.
+	] on: AttributeError do: [:ex | 
+		ex return: false.
+	].
 %
 category: 'functions'
 method: Builtins
@@ -977,7 +1054,8 @@ isinstance: object _: classInfo
 	"https://docs.python.org/3/library/functions.html"
 	
 "
-isinstance(object, classinfo)¶
+isinstance(object, classinfo)
+
 Return true if the object argument is an instance of the 
 classinfo argument, or of a (direct, indirect or virtual) subclass
  thereof. If object is not an object of the given type, the function
@@ -986,7 +1064,9 @@ classinfo argument, or of a (direct, indirect or virtual) subclass
  instance of any of the types. If classinfo is not a type 
 or tuple of types and such tuples, a TypeError exception is raised.
 "
-self halt.
+
+	^object isKindOf: classInfo
+
 %
 category: 'functions'
 method: Builtins
@@ -1222,7 +1302,7 @@ This function does not accept any arguments.
 Note object does not have a __dict__, so you can’t assign arbitrary 
 attributes to an instance of the object class.
 "
-	^PyObject new
+	^PySimpleObject new
 %
 category: 'functions'
 method: Builtins
@@ -1441,6 +1521,21 @@ provided the object allows it. For example, setattr(x, 'foobar', 123)
 is equivalent to x.foobar = 123.
 "
 self halt.
+%
+category: 'functions'
+method: Builtins
+setattr: object _: name _: value
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+setattr(object, name, value)
+This is the counterpart of getattr(). The arguments are an 
+object, a string and an arbitrary value. The string may name 
+an existing attribute or a new attribute. The function assigns the value to the attribute, 
+provided the object allows it. For example, setattr(x, 'foobar', 123) 
+is equivalent to x.foobar = 123.
+"
+	object set: name asSymbol to: value
 %
 category: 'functions'
 method: Builtins
@@ -1719,12 +1814,19 @@ self halt.
 set compile_env: 0
 category: 'other'
 method: Builtins
+_sys
+
+	^sys
+%
+category: 'other'
+method: Builtins
 initialize
 "
 	SessionTemps current removeKey: #'Python_Builtins' ifAbsent: [].
 "
+	| modules |
 	super initialize.
-	dictionary 
+	globals 
 		at: #'__class__'		put: BuiltinModule;
 		at: #'False'				put: false;
 		at: #'None' 			put: nil;
@@ -1745,17 +1847,25 @@ initialize
 		at: #'open'				put: [:arguments :keywords :scope | self open: arguments keywords: keywords];
 		at: #'print'				put: [:arguments :keywords :scope | self print: arguments keywords: keywords];
 		at: #'range'			put: [:arguments :keywords :scope | self range: arguments];
-		at: #'setattr'			put: [:arguments :keywords :scope | self setattr: arguments first _: arguments second];
+		at: #'setattr'			put: [:arguments :keywords :scope | self setattr: (arguments at: 1) _: (arguments at: 2) _: (arguments at: 3)];
 		at: #'str'				put: [:arguments :keywords :scope | self str: arguments first];
 		at: #'type'				put: [:arguments :keywords :scope | self type: arguments];
 		yourself.
 	BaseException allSubclasses do: [:each | 
-		dictionary at: each name put: each.
+		globals at: each name put: each.
 	].
-	dictionary
+	globals
 		removeKey: #'PyException';
 		at: #'Exception' put: PyException;
-		yourself
+		yourself.
+	sys := Sys new.
+	modules := sys modules
+		at: self class moduleName put: self;
+		at: sys class moduleName put: sys;
+		yourself.
+	BuiltinModule allSubclasses do: [:each | 
+		modules at: each moduleName ifAbsentPut: [each new].
+	].
 %
 category: 'other'
 method: Builtins

@@ -53,15 +53,18 @@ category: 'other'
 method: ClassDefAst
 evaluate: aScope
 
-	aScope set: name to: self.
-	scope := aScope inner.
-	body evaluate: scope.
+	| innerScope newClass |
+	innerScope := aScope innerForNode: self.
+	newClass := PyClass newForNode: self scope: innerScope.
+	aScope  set: name  to: newClass.
+	body evaluate: innerScope.
+
 %
 category: 'other'
 method: ClassDefAst
 get: aSymbol
 
-	^scope get: aSymbol
+	self halt.
 %
 category: 'other'
 method: ClassDefAst
@@ -118,7 +121,7 @@ value: posArgs value: keywordArgs value: aScope
 	"args are the parameters while arguments are the values"
 
 	| object result |
-	object := PyObject new: self.
+	object := PyObject new: aScope copy.
 	result := object
 		call: #'__init__'
 		withArguments: posArgs

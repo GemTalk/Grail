@@ -41,7 +41,9 @@ category: 'other'
 method: FunctionDefAst
 evaluate: aScope
 
-	aScope set: name to: self.
+	aScope 
+		set: name 
+		to: (PyFunction newForNode: self scope: (aScope innerForNode: self))
 %
 category: 'other'
 method: FunctionDefAst
@@ -90,11 +92,9 @@ method: FunctionDefAst
 value: arguments value: keywords value: aScope
 	"args are the parameters while arguments are the values"
 
-	| innerFrame |
-	innerFrame := aScope inner.
 	args
 		arguments: arguments
 		keywords: keywords
-		scope: innerFrame.
-	^body evaluate: innerFrame
+		scope: aScope.
+	^body evaluate: aScope
 %

@@ -13,3 +13,9 @@ append: arguments keywords: keywords
 
 ^self add: arguments first
 %
+category: 'other'
+method: List
+membershipIncludes: anObject
+
+	^self includes: anObject
+%

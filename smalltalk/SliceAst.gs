@@ -19,7 +19,7 @@ children
 %
 category: 'other'
 method: SliceAst
-evaluate: aScope list: aList
+evaluate: aContainer scope: aScope
 
 	self halt.
 %

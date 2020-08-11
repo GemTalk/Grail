@@ -21,7 +21,7 @@ initialize
 	SessionTemps current removeKey: #'Python_Time' ifAbsent: [].
 "
 	super initialize.
-	dictionary 
+	globals 
 		at: #'__class__'	put: BuiltinModule;
 		at: #'sleep'			put: [:arguments :keywords :scope | self sleep: arguments first];
 		at: #'time'			put: [:arguments :keywords :scope | self time];

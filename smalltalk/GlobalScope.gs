@@ -10,7 +10,15 @@ category: 'other'
 classmethod: GlobalScope
 new
 
-	^self outer: Builtins current
+	self error: 'use #newForNode:'.
+%
+category: 'other'
+classmethod: GlobalScope
+newForNode: anAstNode
+
+	^self 
+		outer: (GsCurrentSession currentSession objectNamed: #'Builtins') current
+		node: anAstNode
 %
 ! ------------------- Instance methods for GlobalScope
 set compile_env: 0

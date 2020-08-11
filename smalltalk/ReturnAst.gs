@@ -21,7 +21,9 @@ evaluate: aScope
 	"Unlike Smalltalk, Python returns None by default, not the result of the last expression.
 	To return something explictly, use the `return` command and give a value."
 
-	ReturnNotification signal: (value evaluate: aScope)
+	| result |
+	result := value evaluate: aScope.
+	ReturnNotification signal: result
 %
 category: 'other'
 method: ReturnAst

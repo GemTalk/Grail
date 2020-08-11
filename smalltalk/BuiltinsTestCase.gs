@@ -16,6 +16,12 @@ filename
 set compile_env: 0
 category: 'other'
 method: BuiltinsTestCase
+tearDown
+
+	Builtins current _sys modules removeKey: #'noSuchModule' ifAbsent: [].
+%
+category: 'other'
+method: BuiltinsTestCase
 test_abs
 
 	| x |
@@ -36,7 +42,7 @@ testModuleNotFoundError
 
 	| x |
 	[
-		Sys current modules at: #'noSuchModule' put: nil.
+		Builtins current _sys modules at: #'noSuchModule' put: nil.
 		x := (self statementsAt: 3) evaluate: aScope.			"import noSuchModule"
 		self assert: false.
 	] on: ModuleNotFoundError do: [:ex | 

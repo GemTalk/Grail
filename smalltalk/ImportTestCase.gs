@@ -16,7 +16,7 @@ filename
 set compile_env: 0
 category: 'other'
 method: ImportTestCase
-test_importlib
+tst_importlib
 
-	"(self statementsAt: 1) evaluate: aScope."
+	(self statementsAt: 1) evaluate: aScope.
 %

@@ -25,10 +25,12 @@ children
 %
 category: 'other'
 method: IndexAst
-evaluate: aScope list: aList
+evaluate: aContainer scope: aScope
 
+	| key |
 	value assertContextIsLoad.
-	^aList at: (value evaluate: aScope) + 1.
+	key := value evaluate: aScope.
+	^aContainer at: key.
 %
 category: 'other'
 method: IndexAst

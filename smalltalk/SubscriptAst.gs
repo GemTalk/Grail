@@ -32,11 +32,10 @@ category: 'other'
 method: SubscriptAst
 evaluate: aScope
 
-	| x |
+	| container |
 	value assertContextIsLoad.
-	x := value evaluate: aScope.
-self halt. 
-	^(slice evaluate: aScope) at: x
+	container := value evaluate: aScope.
+	^slice evaluate: container scope: aScope
 %
 category: 'other'
 method: SubscriptAst

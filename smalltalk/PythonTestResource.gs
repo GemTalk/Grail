@@ -16,3 +16,10 @@ moduleAtPath: aPath
 	module := ModuleAst script: aPath.
 	^module
 %
+category: 'other'
+method: PythonTestResource
+setUp
+
+	super setUp.
+	Builtins clearCurrent.
+%

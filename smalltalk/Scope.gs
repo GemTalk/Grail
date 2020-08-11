@@ -8,10 +8,16 @@ Scope class removeAllMethods.
 set compile_env: 0
 category: 'other'
 classmethod: Scope
-outer: aScope
+new
+
+	self error: 'use #outer:node:'.
+%
+category: 'other'
+classmethod: Scope
+outer: aScope node: anAstNode
 
 	^self basicNew
-		initialize: aScope;
+		initializeOuter: aScope node: anAstNode;
 		yourself
 %
 ! ------------------- Instance methods for Scope
@@ -32,6 +38,12 @@ associationAt: aSymbol
 %
 category: 'other'
 method: Scope
+astNode
+
+	^astNode
+%
+category: 'other'
+method: Scope
 get: aSymbol
 
 	^variables 
@@ -46,22 +58,41 @@ globals
 %
 category: 'other'
 method: Scope
-initialize: aScope
+initializeOuter: aScope node: anAstNode
 
+	astNode := anAstNode.
 	outer := aScope.
 	variables := PyDictionary new.
 %
 category: 'other'
 method: Scope
-inner
+innerForNode: anAstNode
 
-	^LocalScope outer: self
+	^LocalScope outer: self node: anAstNode
 %
 category: 'other'
 method: Scope
 outer
 
 	^outer
+%
+category: 'other'
+method: Scope
+postCopy
+
+	super postCopy.
+	variables := variables  copy.
+%
+category: 'other'
+method: Scope
+printOn: aStream
+
+	super printOn: aStream.
+	aStream
+		nextPut: $(;
+		print: astNode;
+		nextPut: $);
+		yourself.
 %
 category: 'other'
 method: Scope

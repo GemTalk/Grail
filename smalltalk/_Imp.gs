@@ -70,15 +70,15 @@ initFrozen: module name: name
 %
 category: 'functions'
 method: _Imp
-isBuiltin: module name: name
+isBuiltin: aSymbol
 
-	self halt.
+	^BuiltinModule subclasses anySatisfy: [:each | each moduleName == aSymbol].
 %
 category: 'functions'
 method: _Imp
-isFrozen: module name: name
+isFrozen: aString
 
-	self halt.
+	^false
 %
 category: 'functions'
 method: _Imp
@@ -112,23 +112,23 @@ initialize
 	SessionTemps current removeKey: #'Python__Imp' ifAbsent: [].
 "
 	super initialize.
-	dictionary 
+	globals 
 		at: #'__class__'						put: BuiltinModule;
-		at: #'_fix_co_filename'				put: [:arguments :keywords | self _fixModule: (arguments at: 1) code: (arguments at: 2) filename: (arguments at: 3)];
-		at: #'acquire_lock'					put: [:arguments :keywords | self acquireLock: (arguments at: 1)];
-		at: #'check_hash_based_pycs'	put: [:arguments :keywords | 'default'];
-		at: #'create_builtin'					put: [:arguments :keywords | self createBuiltin: (arguments at: 1) spec: (arguments at: 2)];
-		at: #'create_dynamic'				put: [:arguments :keywords | self createDynamic: (arguments at: 1) spec: (arguments at: 2) file: (arguments at: 3)];
-		at: #'exec_builtin'					put: [:arguments :keywords | self execBuiltin: (arguments at: 1) mod: (arguments at: 2)];
-		at: #'exec_dynamic'					put: [:arguments :keywords | self execDynamic: (arguments at: 1) mod: (arguments at: 2)];
-		at: #'extension_suffixes'			put: [:arguments :keywords | self extensionSuffixes: (arguments at: 1)];
-		at: #'get_frozen_object'			put: [:arguments :keywords | self getFrozen: (arguments at: 1) name: (arguments at: 2)];
-		at: #'init_frozen'						put: [:arguments :keywords | self initFrozen: (arguments at: 1) name: (arguments at: 2)];
-		at: #'is_builtin'						put: [:arguments :keywords | self isBuiltin: (arguments at: 1) name: (arguments at: 2)];
-		at: #'is_frozen'						put: [:arguments :keywords | self isFrozen: (arguments at: 1) name: (arguments at: 2)];
-		at: #'is_frozen_package'			put: [:arguments :keywords | self isFrozenPackage: (arguments at: 1) name: (arguments at: 2)];
-		at: #'lock_held'						put: [:arguments :keywords | self lockHeld: (arguments at: 1)];
-		at: #'release_lock'					put: [:arguments :keywords | self releaseLock: (arguments at: 1)];
-		at: #'source_hash'					put: [:arguments :keywords | self sourceHash: (arguments at: 1) key: (arguments at: 2) source: (arguments at: 3)];
+		at: #'_fix_co_filename'				put: [:arguments :keywords :scope | self _fixModule: (arguments at: 1) code: (arguments at: 2) filename: (arguments at: 3)];
+		at: #'acquire_lock'					put: [:arguments :keywords :scope | self acquireLock: (arguments at: 1)];
+		at: #'check_hash_based_pycs'	put: [:arguments :keywords :scope | 'default'];
+		at: #'create_builtin'					put: [:arguments :keywords :scope | self createBuiltin: (arguments at: 1) spec: (arguments at: 2)];
+		at: #'create_dynamic'				put: [:arguments :keywords :scope | self createDynamic: (arguments at: 1) spec: (arguments at: 2) file: (arguments at: 3)];
+		at: #'exec_builtin'					put: [:arguments :keywords :scope | self execBuiltin: (arguments at: 1) mod: (arguments at: 2)];
+		at: #'exec_dynamic'					put: [:arguments :keywords :scope | self execDynamic: (arguments at: 1) mod: (arguments at: 2)];
+		at: #'extension_suffixes'			put: [:arguments :keywords :scope | self extensionSuffixes: (arguments at: 1)];
+		at: #'get_frozen_object'			put: [:arguments :keywords :scope | self getFrozen: (arguments at: 1) name: (arguments at: 2)];
+		at: #'init_frozen'						put: [:arguments :keywords :scope | self initFrozen: (arguments at: 1) name: (arguments at: 2)];
+		at: #'is_builtin'						put: [:arguments :keywords :scope | self isBuiltin: (arguments at: 1) asSymbol];
+		at: #'is_frozen'						put: [:arguments :keywords :scope | self isFrozen: (arguments at: 1)];
+		at: #'is_frozen_package'			put: [:arguments :keywords :scope | self isFrozenPackage: (arguments at: 1) name: (arguments at: 2)];
+		at: #'lock_held'						put: [:arguments :keywords :scope | self lockHeld: (arguments at: 1)];
+		at: #'release_lock'					put: [:arguments :keywords :scope | self releaseLock: (arguments at: 1)];
+		at: #'source_hash'					put: [:arguments :keywords :scope | self sourceHash: (arguments at: 1) key: (arguments at: 2) source: (arguments at: 3)];
 		yourself.
 %

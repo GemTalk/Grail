@@ -2844,7 +2844,7 @@ expectvalue /Class
 doit
 StatementAst subclass: 'ClassDefAst'
   instVarNames: #( name bases keywords
-                    body decorator_list scope)
+                    body decorator_list)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -3909,7 +3909,7 @@ expectvalue /Class
 doit
 AstNode subclass: 'ModuleAst'
   instVarNames: #( body name path
-                    source stream)
+                    source stream scope)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -3940,6 +3940,12 @@ ModuleAst subclass: 'PyPackage'
   inDictionary: Python
   options: #()
 
+%
+expectvalue /Class
+doit
+PyPackage comment: 
+'Packages are a way of structuring Python’s module namespace by using “dotted module names”.
+See https://docs.python.org/3/tutorial/modules.html#packages for details.'
 %
 expectvalue /Class
 doit
@@ -4503,13 +4509,18 @@ set compile_env: 0
 expectvalue /Class
 doit
 Object subclass: 'BuiltinModule'
-  instVarNames: #( dictionary)
+  instVarNames: #( globals)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
   options: #()
 
+%
+expectvalue /Class
+doit
+BuiltinModule comment: 
+'BuiltinModule is the abstract superclass for modules coded in Smalltalk.'
 %
 expectvalue /Class
 doit
@@ -4564,11 +4575,111 @@ doit
 _Imp category: 'Builtins'
 %
 set compile_env: 0
+! ------------------- Class definition for _Thread
+expectvalue /Class
+doit
+BuiltinModule subclass: '_Thread'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+_Thread comment: 
+'https://docs.python.org/3/library/_thread.html'
+%
+expectvalue /Class
+doit
+_Thread category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for _Warnings
+expectvalue /Class
+doit
+BuiltinModule subclass: '_Warnings'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+_Warnings comment: 
+'_warnings.__dict__
+{
+    ''__name__'': ''_warnings'', 
+    ''__doc__'': ''_warnings provides basic warning filtering support.\nIt is a helper module to speed up interpreter start-up.'', 
+    ''__package__'': '''', 
+    ''__loader__'': <class ''_frozen_importlib.BuiltinImporter''>, 
+    ''__spec__'': ModuleSpec(name=''_warnings'', loader=<class ''_frozen_importlib.BuiltinImporter''>, origin=''built-in''), 
+    ''warn'': <built-in function warn>, 
+    ''warn_explicit'': <built-in function warn_explicit>, 
+    ''_filters_mutated'': <built-in function _filters_mutated>, 
+    ''filters'': [
+        (''default'', None, <class ''DeprecationWarning''>, ''__main__'', 0), 
+        (''ignore'', None, <class ''DeprecationWarning''>, None, 0), 
+        (''ignore'', None, <class ''PendingDeprecationWarning''>, None, 0), 
+        (''ignore'', None, <class ''ImportWarning''>, None, 0), 
+        (''ignore'', None, <class ''ResourceWarning''>, None, 0)
+    ], 
+    ''_onceregistry'': {}, 
+    ''_defaultaction'': ''default''
+}'
+%
+expectvalue /Class
+doit
+_Warnings category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for _WeakRef
+expectvalue /Class
+doit
+BuiltinModule subclass: '_WeakRef'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+_WeakRef comment: 
+'_weakref.__dict__
+{
+    ''__name__'': ''_weakref'', 
+    ''__doc__'': ''Weak-reference support module.'', 
+    ''__package__'': '''', 
+    ''__loader__'': <class ''_frozen_importlib.BuiltinImporter''>, 
+    ''__spec__'': ModuleSpec(name=''_weakref'', loader=<class ''_frozen_importlib.BuiltinImporter''>, origin=''built-in''), 
+    ''getweakrefcount'': <built-in function getweakrefcount>, 
+    ''_remove_dead_weakref'': <built-in function _remove_dead_weakref>, 
+    ''getweakrefs'': <built-in function getweakrefs>, 
+    ''proxy'': <built-in function proxy>, 
+    ''ref'': <class ''weakref''>, 
+    ''ReferenceType'': <class ''weakref''>, 
+    ''ProxyType'': <class ''weakproxy''>, 
+    ''CallableProxyType'': <class ''weakcallableproxy''>
+}'
+%
+expectvalue /Class
+doit
+_WeakRef category: 'Builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for Builtins
 expectvalue /Class
 doit
 BuiltinModule subclass: 'Builtins'
-  instVarNames: #( stdout)
+  instVarNames: #( stdout sys)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -4579,10 +4690,7 @@ BuiltinModule subclass: 'Builtins'
 expectvalue /Class
 doit
 Builtins comment: 
-'No class-specific documentation for Builtins, hierarchy is: 
-Object
-  Builtins
-'
+'https://docs.python.org/3/library/builtins.html'
 %
 expectvalue /Class
 doit
@@ -4600,6 +4708,11 @@ BuiltinModule subclass: 'PyTime'
   inDictionary: Python
   options: #()
 
+%
+expectvalue /Class
+doit
+PyTime comment: 
+'https://docs.python.org/3/library/time.html'
 %
 expectvalue /Class
 doit
@@ -4721,11 +4834,107 @@ doit
 Complex category: 'Builtins'
 %
 set compile_env: 0
+! ------------------- Class definition for PyClass
+expectvalue /Class
+doit
+Object subclass: 'PyClass'
+  instVarNames: #( astNode scope)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyClass category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for PyFunction
+expectvalue /Class
+doit
+Object subclass: 'PyFunction'
+  instVarNames: #( astNode scope)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyFunction category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for PyClassFunction
+expectvalue /Class
+doit
+PyFunction subclass: 'PyClassFunction'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyClassFunction category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for PyInstanceFunction
+expectvalue /Class
+doit
+PyFunction subclass: 'PyInstanceFunction'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+PyInstanceFunction category: 'Builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for PySimpleObject
+expectvalue /Class
+doit
+Object subclass: 'PySimpleObject'
+  instVarNames: #( classAst)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+PySimpleObject comment: 
+'builtins.object() "Return a new featureless object. object is a base for all classes. 
+It has the methods that are common to all instances of Python classes. 
+This function does not accept any arguments.
+
+Note object does not have a __dict__, so you can’t assign arbitrary attributes to an instance of the object class."
+
+(https://docs.python.org/3/library/functions.html#object)'
+%
+expectvalue /Class
+doit
+PySimpleObject category: 'Builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for PyObject
 expectvalue /Class
 doit
-Object subclass: 'PyObject'
-  instVarNames: #( classAst variables)
+PySimpleObject subclass: 'PyObject'
+  instVarNames: #( variables)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -4750,13 +4959,21 @@ set compile_env: 0
 expectvalue /Class
 doit
 Object subclass: 'Scope'
-  instVarNames: #( outer variables)
+  instVarNames: #( astNode outer variables)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
   options: #()
 
+%
+expectvalue /Class
+doit
+Scope comment: 
+'No class-specific documentation for Scope, hierarchy is: 
+Object
+  Scope( outer variables)
+'
 %
 expectvalue /Class
 doit
@@ -4777,6 +4994,15 @@ Scope subclass: 'GlobalScope'
 %
 expectvalue /Class
 doit
+GlobalScope comment: 
+'No class-specific documentation for GlobalScope, hierarchy is: 
+Object
+  Scope( outer variables)
+    GlobalScope
+'
+%
+expectvalue /Class
+doit
 GlobalScope category: 'Builtins'
 %
 set compile_env: 0
@@ -4791,6 +5017,15 @@ Scope subclass: 'LocalScope'
   inDictionary: Python
   options: #()
 
+%
+expectvalue /Class
+doit
+LocalScope comment: 
+'No class-specific documentation for LocalScope, hierarchy is: 
+Object
+  Scope( outer variables)
+    LocalScope
+'
 %
 expectvalue /Class
 doit
@@ -5324,6 +5559,9 @@ UserInteraction category: 'Builtins'
 %
 
 input _Imp.gs
+input _Thread.gs
+input _Warnings.gs
+input _WeakRef.gs
 input AddAst.gs
 input AliasAst.gs
 input AndAst.gs
@@ -5473,13 +5711,18 @@ input PendingDeprecationWarning.gs
 input PermissionError.gs
 input PowAst.gs
 input ProcessLookupError.gs
+input PyClass.gs
+input PyClassFunction.gs
 input PyDictionary.gs
 input PyException.gs
 input PyFloatingPointError.gs
+input PyFunction.gs
+input PyInstanceFunction.gs
 input PyLookupError.gs
 input PyNameError.gs
 input PyObject.gs
 input PyPackage.gs
+input PySimpleObject.gs
 input PyString.gs
 input PythonTestCase.gs
 input PythonTestResource.gs

@@ -1,0 +1,20 @@
+_warnings.__dict__
+{
+    '__name__': '_warnings', 
+    '__doc__': '_warnings provides basic warning filtering support.\nIt is a helper module to speed up interpreter start-up.', 
+    '__package__': '', 
+    '__loader__': <class '_frozen_importlib.BuiltinImporter'>, 
+    '__spec__': ModuleSpec(name='_warnings', loader=<class '_frozen_importlib.BuiltinImporter'>, origin='built-in'), 
+    'warn': <built-in function warn>, 
+    'warn_explicit': <built-in function warn_explicit>, 
+    '_filters_mutated': <built-in function _filters_mutated>, 
+    'filters': [
+        ('default', None, <class 'DeprecationWarning'>, '__main__', 0), 
+        ('ignore', None, <class 'DeprecationWarning'>, None, 0), 
+        ('ignore', None, <class 'PendingDeprecationWarning'>, None, 0), 
+        ('ignore', None, <class 'ImportWarning'>, None, 0), 
+        ('ignore', None, <class 'ResourceWarning'>, None, 0)
+    ], 
+    '_onceregistry': {}, 
+    '_defaultaction': 'default'
+}

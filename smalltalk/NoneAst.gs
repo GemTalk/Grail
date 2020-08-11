@@ -19,3 +19,9 @@ isNone
 
 	^true
 %
+category: 'other'
+method: NoneAst
+printOn: aStream
+
+	aStream nextPutAll: 'None'.
+%

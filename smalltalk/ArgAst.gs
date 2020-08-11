@@ -30,6 +30,12 @@ initialize
 %
 category: 'other'
 method: ArgAst
+name
+
+	^arg
+%
+category: 'other'
+method: ArgAst
 printOn: aStream
 
 	super printOn: aStream.

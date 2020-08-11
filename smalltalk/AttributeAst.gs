@@ -15,14 +15,6 @@ assertContextIsLoad
 %
 category: 'other'
 method: AttributeAst
-assign: anObject scope: aScope
-
-	(value evaluate: aScope)
-		set: attr
-		to: anObject
-%
-category: 'other'
-method: AttributeAst
 callWithArguments: anArray keywords: aSymbolDictionary scope: aScope
 
 	| object |
@@ -73,4 +65,25 @@ initialize
 	self commaSpace.
 	ctx := ExpressionContextAst parent: self.
 	self readPosition.
+%
+category: 'other'
+method: AttributeAst
+printOn: aStream
+
+	super printOn: aStream.
+	aStream
+		nextPut: $(;
+		nextPutAll: value id;
+		nextPut: $.;
+		nextPutAll: attr;
+		nextPut: $);
+		yourself.
+%
+category: 'other'
+method: AttributeAst
+setTo: anObject scope: aScope
+
+	(value evaluate: aScope)
+		set: attr
+		to: anObject
 %

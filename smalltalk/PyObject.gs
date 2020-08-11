@@ -8,10 +8,10 @@ PyObject class removeAllMethods.
 set compile_env: 0
 category: 'other'
 classmethod: PyObject
-new: aClassDefAst
+new: aLocalScope
 
 	^self basicNew
-		initialize: aClassDefAst;
+		initialize: aLocalScope;
 		yourself
 %
 ! ------------------- Instance methods for PyObject
@@ -53,22 +53,26 @@ category: 'other'
 method: PyObject
 get: aSymbol
 
-	^variables
-		at: aSymbol
-		ifAbsent: [classAst get: aSymbol]
+	^variables get: aSymbol
 %
 category: 'other'
 method: PyObject
-initialize: aClassDefAst
+initialize: aLocalScope
 
-	classAst := aClassDefAst.
-	variables := PyDictionary new
-		at: #'__class__' put: aClassDefAst;
+	classAst := aLocalScope astNode.
+	variables := aLocalScope
+		set: #'__class__' to: classAst;
 		yourself.
 %
 category: 'other'
 method: PyObject
 set: aSymbol to: anObject
 
-	variables at: aSymbol put: anObject.
+	variables set: aSymbol to: anObject.
+%
+category: 'other'
+method: PyObject
+variables
+
+	^variables
 %

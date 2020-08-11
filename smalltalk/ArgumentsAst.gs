@@ -13,8 +13,17 @@ arguments: arguments keywords: keywords scope: aScope
 
 	1 to: args size do: [:i | 
 		(args at: i ifAbsent: [nil]) ifNotNil: [:param |
-			param setTo: (arguments at: i ifAbsent: [_remoteNil]) scope: aScope.
+			param 
+				setTo: (arguments at: i ifAbsent: [_remoteNil]) 
+				scope: aScope.
 		].
+	].
+	1 to: kwonlyargs size do: [:i | 
+		| param |
+		param := kwonlyargs at: i.
+		param
+			setTo: (keywords at: param name ifAbsent: [(kw_defaults at: i) evaluate: aScope])
+			scope: aScope.
 	].
 %
 category: 'other'
