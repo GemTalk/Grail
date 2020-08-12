@@ -8,6 +8,12 @@ str class removeAllMethods.
 set compile_env: 0
 category: 'other'
 classmethod: str
+containerClass
+
+	^Unicode7
+%
+category: 'other'
+classmethod: str
 new
 
 	^self basicNew
@@ -28,13 +34,7 @@ category: 'other'
 method: str
 + other
 
-	^str withAll: s + other.s
-%
-category: 'other'
-method: str
-= anObject
-
-	^((anObject isKindOf: str) and: [s = anObject.s]) or: [(anObject isKindOf: String) and: [s = anObject]]
+	^str withAll: container + other.container
 %
 category: 'other'
 method: str
@@ -42,7 +42,7 @@ asByteArray
 
 	| result |
 	result := ByteArray new.
-	s do: [:each | 
+	container do: [:each | 
 		| value |
 		value := each codePoint.
 		value > 255 ifTrue: [self error: 'Cannot represent string as bytearray'].
@@ -54,50 +54,19 @@ category: 'other'
 method: str
 asInteger
 
-	^s asInteger
+	^container asInteger
 %
 category: 'other'
 method: str
 asSymbol
 
-	^s asSymbol
-%
-category: 'other'
-method: str
-at: anIndex put: aCharacter
-
-	s at: anIndex put: aCharacter.
+	^container asSymbol
 %
 category: 'other'
 method: str
 copyFrom: i to: j
 
-	^str withAll: (s copyFrom: i to: j)
-%
-category: 'other'
-method: str
-do: aBlock
-
-	s do: aBlock.
-%
-category: 'other'
-method: str
-hash
-
-	^s hash
-%
-category: 'other'
-method: str
-initialize
-
-	s := Unicode7 new.
-%
-category: 'other'
-method: str
-initialize: aCollection
-
-
-	s := Unicode7 withAll: aCollection.
+	^str withAll: (container copyFrom: i to: j)
 %
 category: 'other'
 method: str
@@ -115,7 +84,7 @@ split: arguments keywords: keywords
 
 	| result |
 	result := list new.
-	s subStrings do: [:each | result add: (str withAll: each)].
+	container subStrings do: [:each | result add: (str withAll: each)].
 	^result
 %
 set compile_env: 0

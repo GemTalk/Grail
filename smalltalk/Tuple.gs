@@ -8,6 +8,12 @@ tuple class removeAllMethods.
 set compile_env: 0
 category: 'other'
 classmethod: tuple
+containerClass
+
+	^Array
+%
+category: 'other'
+classmethod: tuple
 new
 
 	^self basicNew
@@ -32,40 +38,10 @@ withAll: aCollection
 set compile_env: 0
 category: 'other'
 method: tuple
-at: anIndex
-
-	^t at: anIndex
-%
-category: 'other'
-method: tuple
 call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
 
 	aSymbol == #'__iter__' ifTrue: [^Iterator on: self].
 	self halt.
-%
-category: 'other'
-method: tuple
-initialize
-
-	t := Array new.
-%
-category: 'other'
-method: tuple
-initialize: aCollection
-
-	t := Array withAll: aCollection.
-%
-category: 'other'
-method: tuple
-membershipIncludes: anObject
-
-	^t includes: anObject
-%
-category: 'other'
-method: tuple
-size
-
-	^t size
 %
 set compile_env: 0
 category: 'Python'

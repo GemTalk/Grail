@@ -8,6 +8,12 @@ dict class removeAllMethods.
 set compile_env: 0
 category: 'other'
 classmethod: dict
+containerClass
+
+	^Dictionary
+%
+category: 'other'
+classmethod: dict
 new
 
 	^self basicNew
@@ -18,33 +24,15 @@ new
 set compile_env: 0
 category: 'other'
 method: dict
-add: anAssociation
-
-	^d add: anAssociation
-%
-category: 'other'
-method: dict
 associationAt: aKey
 
-	^d associationAt: aKey
+	^container associationAt: aKey
 %
 category: 'other'
 method: dict
 at: aKey
 
 	^self get: aKey
-%
-category: 'other'
-method: dict
-at: aKey ifAbsent: aBlock
-
-	^d at: aKey ifAbsent: aBlock
-%
-category: 'other'
-method: dict
-at: aKey ifAbsentPut: aBlock
-
-	^d at: aKey ifAbsentPut: aBlock
 %
 category: 'other'
 method: dict
@@ -67,14 +55,14 @@ collect: aBlock
 
 	| result |
 	result := dict new.
-	d keysAndValuesDo: [:eachKey :eachValue | result at: eachKey put: (aBlock value: eachValue)].
+	container keysAndValuesDo: [:eachKey :eachValue | result at: eachKey put: (aBlock value: eachValue)].
 	^result
 %
 category: 'other'
 method: dict
 get: aKey
 
-	^d
+	^container
 		at: aKey
 		ifAbsent: [KeyError signal]
 %
@@ -82,44 +70,32 @@ category: 'other'
 method: dict
 includesKey: aKey
 
-	^d includesKey: aKey
-%
-category: 'other'
-method: dict
-initialize
-
-	d := Dictionary new.
+	^container includesKey: aKey
 %
 category: 'other'
 method: dict
 membershipIncludes: aKey
 	"Smalltalk checks for values!"
 
-	^d includesKey: aKey
-%
-category: 'other'
-method: dict
-postCopy
-
-	d := d copy.
+	^container includesKey: aKey
 %
 category: 'other'
 method: dict
 removeKey: aKey
 
-	^d removeKey: aKey
+	^container removeKey: aKey
 %
 category: 'other'
 method: dict
 removeKey: aKey ifAbsent: aBlock
 
-	^d removeKey: aKey ifAbsent: aBlock
+	^container removeKey: aKey ifAbsent: aBlock
 %
 category: 'other'
 method: dict
 set: aKey to: aValue
 
-	d 
+	container 
 		at: aKey
 		put: aValue.
 %

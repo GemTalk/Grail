@@ -8,6 +8,12 @@ bytearray class removeAllMethods.
 set compile_env: 0
 category: 'other'
 classmethod: bytearray
+containerClass
+
+	^ByteArray
+%
+category: 'other'
+classmethod: bytearray
 new
 
 	^self basicNew
@@ -23,31 +29,6 @@ withAll: aCollection
 		yourself
 %
 ! ------------------- Instance methods for bytearray
-set compile_env: 0
-category: 'other'
-method: bytearray
-= anObject
-
-	^((anObject isKindOf: bytearray) and: [b = anObject.b]) or: [(anObject isKindOf: ByteArray) and: [b = anObject]]
-%
-category: 'other'
-method: bytearray
-hash
-
-	^b hash
-%
-category: 'other'
-method: bytearray
-initialize
-
-	b := ByteArray new.
-%
-category: 'other'
-method: bytearray
-initialize: aCollection
-
-	b := ByteArray withAll: aCollection.
-%
 set compile_env: 0
 category: 'Python'
 method: bytearray

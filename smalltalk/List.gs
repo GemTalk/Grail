@@ -8,6 +8,12 @@ list class removeAllMethods.
 set compile_env: 0
 category: 'other'
 classmethod: list
+containerClass
+
+	^Array
+%
+category: 'other'
+classmethod: list
 new
 
 	^self basicNew
@@ -28,35 +34,17 @@ category: 'other'
 method: list
 append: arguments keywords: keywords
 
-	^l add: arguments first
+	^container add: arguments first
 %
 category: 'other'
 method: list
 at: anIndex
 
 	[
-		^l at: anIndex
-	] on: (Globals at: #'OffsetError') do: [:ex | 
-		IndexError signal: 'list index out of range'.
+		^super at: anIndex
+	] on: OffsetError do: [:ex | 
+		ex resignalAs: (IndexError new details: 'list index out of range'; yourself).
 	]
-%
-category: 'other'
-method: list
-initialize
-
-	l := Array new.
-%
-category: 'other'
-method: list
-initialize: aCollection
-
-	l := Array withAll: aCollection.
-%
-category: 'other'
-method: list
-membershipIncludes: anObject
-
-	^l includes: anObject
 %
 set compile_env: 0
 category: 'Python'
