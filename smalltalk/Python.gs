@@ -4827,7 +4827,7 @@ doit
 int subclass: 'bool'
   instVarNames: #()
   classVars: #()
-  classInstVars: #()
+  classInstVars: #( t f)
   poolDictionaries: #()
   inDictionary: Python
   options: #()
