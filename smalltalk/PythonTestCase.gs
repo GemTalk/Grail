@@ -52,8 +52,8 @@ method: PythonTestCase
 setUp
 
 	super setUp.
-	stdout := WriteStream on: String new.
-	(GsCurrentSession currentSession objectNamed: #'Builtins') current stdout: stdout.
+	stdout := WriteStream on: Unicode7 new.
+	(GsCurrentSession currentSession objectNamed: #'builtins') current stdout: stdout.
 	self filename ifNotNil: [:filename | 
 		module := self resources first current moduleAtPath: self pathToTests , filename.
 	].
@@ -69,6 +69,6 @@ category: 'other'
 method: PythonTestCase
 tearDown
 
-	(GsCurrentSession currentSession objectNamed: #'Builtins') current stdout: nil.
+	(GsCurrentSession currentSession objectNamed: #'builtins') current stdout: nil.
 	super tearDown.
 %

@@ -15,13 +15,13 @@ evaluate: aScope
 category: 'other'
 method: NumAst
 initialize
-	"Num(object n) -- a number as a PyObject."
+	"Num(object n) -- a number as a Object."
 	| stream string |
 	stream := self stream.
 	string := stream upTo: $,.
 	stream skip: -1.
 	n := (string notEmpty and: [string last == $j]) ifTrue: [
-		Complex real: 0 imag: (string copyFrom: 1 to: string size - 1) asNumber.
+		complex real: 0 imag: (string copyFrom: 1 to: string size - 1) asNumber.
 	] ifFalse: [
 		string asNumber.
 	].

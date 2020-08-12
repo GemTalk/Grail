@@ -41,7 +41,6 @@ method: CallAst
 initialize
 	"Call(expr func, expr* args, keyword* keywords)"
 
-	| dict |
 	function := self expression.
 	self commaSpace.
 	arguments := self collectAst: [self expression].
@@ -50,9 +49,10 @@ initialize
 	(keywords size == 1 and: [keywords first name isNil]) ifTrue: [
 		keywords := KeywordsAst from: keywords.
 	] ifFalse: [
-		dict := PyDictionary new.
-		keywords do: [:each | dict at: each name put: each value].
-		keywords := dict.
+		| replacement |
+		replacement := Namespace new.
+		keywords do: [:each | replacement at: each name put: each value].
+		keywords := replacement.
 	].
 	self readPosition.
 %

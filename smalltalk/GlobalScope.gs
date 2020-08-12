@@ -17,7 +17,7 @@ classmethod: GlobalScope
 newForNode: anAstNode
 
 	^self 
-		outer: (GsCurrentSession currentSession objectNamed: #'Builtins') current
+		outer: (GsCurrentSession currentSession objectNamed: #'builtins') current
 		node: anAstNode
 %
 ! ------------------- Instance methods for GlobalScope

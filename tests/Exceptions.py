@@ -1,13 +1,13 @@
 #!/usr/local/bin/python3
 
-# AssertionError
+# 01: AssertionError
 # Raised when an assert statement fails.
 try: 
 	assert False
 except AssertionError:
 	print("AssertionError", end=' ')
 
-# AttributeError
+# 02: AttributeError
 # Raised when an attribute reference or assignment fails. 
 try:
 	class Class:
@@ -33,7 +33,7 @@ except AttributeError:
 # It is also raised when None is found in sys.modules.
 # TODO
 
-# IndexError
+# 03: IndexError
 # Raised when a sequence subscript is out of range.
 try:
 	l = [1, 2, 3]
@@ -41,7 +41,7 @@ try:
 except IndexError:
 	print("IndexError", end=' ')
 
-# KeyError
+# 04: KeyError
 # Raised when a mapping (dictionary) key is not found in the set of existing keys.
 try:
 	d = {1:1}

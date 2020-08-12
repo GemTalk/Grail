@@ -1,25 +1,25 @@
-﻿! ------------------- Remove existing behavior from AstNodeWithLocation
+﻿! ------------------- Remove existing behavior from AbstractLocationNode
 expectvalue /Metaclass3       
 doit
-AstNodeWithLocation removeAllMethods.
-AstNodeWithLocation class removeAllMethods.
+AbstractLocationNode removeAllMethods.
+AbstractLocationNode class removeAllMethods.
 %
-! ------------------- Class methods for AstNodeWithLocation
-! ------------------- Instance methods for AstNodeWithLocation
+! ------------------- Class methods for AbstractLocationNode
+! ------------------- Instance methods for AbstractLocationNode
 set compile_env: 0
 category: 'accessors'
-method: AstNodeWithLocation
+method: AbstractLocationNode
 column
 	^column
 %
 category: 'accessors'
-method: AstNodeWithLocation
+method: AbstractLocationNode
 line
 	^line
 %
 set compile_env: 0
 category: 'other'
-method: AstNodeWithLocation
+method: AbstractLocationNode
 printOn: aStream
 
 	super printOn: aStream.
@@ -29,14 +29,14 @@ printOn: aStream
 		yourself.
 %
 category: 'other'
-method: AstNodeWithLocation
+method: AbstractLocationNode
 readPosition
 
 	(self stream peekFor: $,) ifFalse: [self error].
 	self readPositionOnly
 %
 category: 'other'
-method: AstNodeWithLocation
+method: AbstractLocationNode
 readPositionOnly
 
 	| stream string |
@@ -48,7 +48,7 @@ readPositionOnly
 	column := (stream upTo: $)) asNumber.
 %
 category: 'other'
-method: AstNodeWithLocation
+method: AbstractLocationNode
 sourceLine
 
 	| i j string |

@@ -1,21 +1,205 @@
-﻿! ------------------- Remove existing behavior from List
+﻿! ------------------- Remove existing behavior from list
 expectvalue /Metaclass3       
 doit
-List removeAllMethods.
-List class removeAllMethods.
+list removeAllMethods.
+list class removeAllMethods.
 %
-! ------------------- Class methods for List
-! ------------------- Instance methods for List
+! ------------------- Class methods for list
 set compile_env: 0
 category: 'other'
-method: List
-append: arguments keywords: keywords
+classmethod: list
+new
 
-^self add: arguments first
+	^self basicNew
+		initialize;
+		yourself
 %
 category: 'other'
-method: List
+classmethod: list
+withAll: aCollection
+
+	^self basicNew
+		initialize: aCollection;
+		yourself
+%
+! ------------------- Instance methods for list
+set compile_env: 0
+category: 'other'
+method: list
+append: arguments keywords: keywords
+
+	^l add: arguments first
+%
+category: 'other'
+method: list
+at: anIndex
+
+	[
+		^l at: anIndex
+	] on: (Globals at: #'OffsetError') do: [:ex | 
+		IndexError signal: 'list index out of range'.
+	]
+%
+category: 'other'
+method: list
+initialize
+
+	l := Array new.
+%
+category: 'other'
+method: list
+initialize: aCollection
+
+	l := Array withAll: aCollection.
+%
+category: 'other'
+method: list
 membershipIncludes: anObject
 
-	^self includes: anObject
+	^l includes: anObject
+%
+set compile_env: 0
+category: 'Python'
+method: list
+__add__
+
+	self halt.
+%
+category: 'Python'
+method: list
+__contains__
+
+	self halt.
+%
+category: 'Python'
+method: list
+__delitem__
+
+	self halt.
+%
+category: 'Python'
+method: list
+__getitem__
+
+	self halt.
+%
+category: 'Python'
+method: list
+__iadd__
+
+	self halt.
+%
+category: 'Python'
+method: list
+__imul__
+
+	self halt.
+%
+category: 'Python'
+method: list
+__iter__
+
+	self halt.
+%
+category: 'Python'
+method: list
+__len__
+
+	self halt.
+%
+category: 'Python'
+method: list
+__mul__
+
+	self halt.
+%
+category: 'Python'
+method: list
+__reversed__
+
+	self halt.
+%
+category: 'Python'
+method: list
+__rmul__
+
+	self halt.
+%
+category: 'Python'
+method: list
+__setitem__
+
+	self halt.
+%
+category: 'Python'
+method: list
+__str__
+
+	self halt.
+%
+category: 'Python'
+method: list
+append
+
+	self halt.
+%
+category: 'Python'
+method: list
+clear
+
+	self halt.
+%
+category: 'Python'
+method: list
+copy
+
+	self halt.
+%
+category: 'Python'
+method: list
+count
+
+	self halt.
+%
+category: 'Python'
+method: list
+extend
+
+	self halt.
+%
+category: 'Python'
+method: list
+index
+
+	self halt.
+%
+category: 'Python'
+method: list
+insert
+
+	self halt.
+%
+category: 'Python'
+method: list
+pop
+
+	self halt.
+%
+category: 'Python'
+method: list
+remove
+
+	self halt.
+%
+category: 'Python'
+method: list
+reverse
+
+	self halt.
+%
+category: 'Python'
+method: list
+sort
+
+	self halt.
 %

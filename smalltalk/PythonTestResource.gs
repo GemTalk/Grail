@@ -21,5 +21,5 @@ method: PythonTestResource
 setUp
 
 	super setUp.
-	Builtins clearCurrent.
+	builtins clearCurrent.
 %

@@ -1,21 +1,21 @@
-﻿! ------------------- Remove existing behavior from Sys
+﻿! ------------------- Remove existing behavior from sys
 expectvalue /Metaclass3       
 doit
-Sys removeAllMethods.
-Sys class removeAllMethods.
+sys removeAllMethods.
+sys class removeAllMethods.
 %
-! ------------------- Class methods for Sys
+! ------------------- Class methods for sys
 set compile_env: 0
 category: 'other'
-classmethod: Sys
+classmethod: sys
 moduleName
 
 	^#'sys'
 %
-! ------------------- Instance methods for Sys
+! ------------------- Instance methods for sys
 set compile_env: 0
 category: 'functions'
-method: Sys
+method: sys
 byteorder
 
 	^System gemIsBigEndian
@@ -23,23 +23,23 @@ byteorder
 		ifFalse: ['little']
 %
 category: 'functions'
-method: Sys
+method: sys
 modules
 
 	^globals at: #'modules'
 %
 set compile_env: 0
 category: 'other'
-method: Sys
+method: sys
 initialize
 "
 	SessionTemps current removeKey: #'Python_Sys' ifAbsent: [].
 "
 	super initialize.
 	globals 
-		at: #'__class__'					put: BuiltinModule;
-		at: #'builtin_module_names'	put: Tuple new;
+		at: #'__class__'					put: module;
+		at: #'builtin_module_names'	put: tuple new;
 		at: #'byteorder'					put: self byteorder;
-		at: #'modules'						put: PyDictionary new;
+		at: #'modules'						put: Namespace new;
 		yourself.
 %

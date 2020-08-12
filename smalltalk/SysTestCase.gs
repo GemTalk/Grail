@@ -10,7 +10,7 @@ category: 'other'
 classmethod: SysTestCase
 filename
 
-	^'Sys.py'
+	^'sys.py'
 %
 ! ------------------- Instance methods for SysTestCase
 set compile_env: 0

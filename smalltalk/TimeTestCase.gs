@@ -10,7 +10,7 @@ category: 'other'
 classmethod: TimeTestCase
 filename
 
-	^'Time.py'
+	^'time.py'
 %
 ! ------------------- Instance methods for TimeTestCase
 set compile_env: 0

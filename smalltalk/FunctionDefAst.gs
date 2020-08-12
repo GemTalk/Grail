@@ -43,7 +43,7 @@ evaluate: aScope
 
 	aScope 
 		set: name 
-		to: (PyFunction newForNode: self scope: (aScope innerForNode: self))
+		to: (function newForNode: self scope: (aScope innerForNode: self))
 %
 category: 'other'
 method: FunctionDefAst

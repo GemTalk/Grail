@@ -13,7 +13,7 @@ onDictionary: aPyDictionary
 	| sequence |
 	sequence := OrderedCollection new: aPyDictionary size.
 	aPyDictionary keysAndValuesDo: [:eachKey : eachValue |
-		sequence add: (Tuple with: eachKey with: eachValue).
+		sequence add: (tuple with: eachKey with: eachValue).
 	].
 	^self on: sequence
 %

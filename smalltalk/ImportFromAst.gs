@@ -39,7 +39,7 @@ initialize
 		| string |
 		string := stream upTo: $,.
 		string = 'None' ifFalse: [self error].
-		module := NoneAst singleton.
+		module := None.
 	].
 	names := self collectAst: [self alias].
 	self commaSpace.

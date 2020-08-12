@@ -10,7 +10,8 @@ set compile_env: 0
 category: 'other'
 method: SubscriptAst
 assertContextIsStore
-	value assertContextIsStore.
+
+	ctx assertIsStore.
 %
 category: 'other'
 method: SubscriptAst
@@ -50,4 +51,13 @@ initialize
 	self commaSpace.
 	ctx := ExpressionContextAst parent: self.
 	self readPosition.
+%
+category: 'other'
+method: SubscriptAst
+setTo: anObject scope: aScope
+
+	| container |
+	self assertContextIsStore.
+	container := value evaluate: aScope.
+	slice set: container to: anObject scope: aScope.
 %

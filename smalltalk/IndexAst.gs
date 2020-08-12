@@ -9,14 +9,6 @@ IndexAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: IndexAst
-assign: aValue to: aVariable scope: aScope
-	| x y |
-	x := value evaluate: aScope.
-	y := aVariable evaluate: aScope.
-	y at: x + 1 put: aValue.
-%
-category: 'other'
-method: IndexAst
 children
 
 	^super children
@@ -27,11 +19,7 @@ category: 'other'
 method: IndexAst
 evaluate: aContainer scope: aScope
 
-	| key |
-	key := value evaluate: aScope.
-	^ [ [ aContainer at: key 
-	] on: OffsetError do: [ IndexError signal: 'list index out of range' ]
-	] on: LookupError do: [ KeyError signal: (value evaluate: aScope) asString ]
+	^aContainer at: (value evaluate: aScope)
 %
 category: 'other'
 method: IndexAst
@@ -40,4 +28,12 @@ initialize
 	
 	value := self expression.
 	(self stream peekFor: $)) ifFalse: [self error].
+%
+category: 'other'
+method: IndexAst
+set: container to: anObject scope: aScope
+
+	| index |
+	index := value evaluate: aScope.
+	container set: index to: anObject.
 %

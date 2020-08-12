@@ -1,52 +1,52 @@
-﻿! ------------------- Remove existing behavior from Builtins
+﻿! ------------------- Remove existing behavior from builtins
 expectvalue /Metaclass3       
 doit
-Builtins removeAllMethods.
-Builtins class removeAllMethods.
+builtins removeAllMethods.
+builtins class removeAllMethods.
 %
-! ------------------- Class methods for Builtins
+! ------------------- Class methods for builtins
 set compile_env: 0
 category: 'other'
-classmethod: Builtins
+classmethod: builtins
 clearCurrent
 
 	SessionTemps current removeKey: #'Python_Builtins' ifAbsent: [].
 %
 category: 'other'
-classmethod: Builtins
+classmethod: builtins
 current
 "
-	Builtins clearCurrent.
+	builtins clearCurrent.
 "
 	^SessionTemps current
 		at: #'Python_Builtins'
 		ifAbsentPut: [self new]
 %
 category: 'other'
-classmethod: Builtins
+classmethod: builtins
 moduleName
 
 	^#'builtins'
 %
 category: 'other'
-classmethod: Builtins
+classmethod: builtins
 stack
 "
 	GsProcess allInstancesInMemory size.
 	GsProcess allInstancesInMemory do: [:each | each become: Object new].
-	Builtins stack.
+	builtins stack.
 "
 	^self stackFor: GsProcess allInstancesInMemory any.
 %
 category: 'other'
-classmethod: Builtins
+classmethod: builtins
 stackFor: aGsProcess
 "
-	Builtins stackFor: (Object _objectForOop: 70105089).
+	builtins stackFor: (Object _objectForOop: 70105089).
 "
 	| astNode nodes priorColumn priorLine priorModule stream |
-	astNode := AstNodeWithLocation.
-	stream := WriteStream on: String new.
+	astNode := AbstractLocationNode.
+	stream := WriteStream on: Unicode7 new.
 	nodes := Array new.
 	priorColumn := priorLine := -1.
 	priorModule := nil.
@@ -78,10 +78,10 @@ stackFor: aGsProcess
 	].
 	^stream lf; contents.
 %
-! ------------------- Instance methods for Builtins
+! ------------------- Instance methods for builtins
 set compile_env: 0
 category: 'functions'
-method: Builtins
+method: builtins
 __import__: aSymbol keywords: aSymbolDictionary scope: aScope
 "
 	This function is invoked by the import statement. ... 
@@ -101,8 +101,9 @@ __import__: aSymbol keywords: aSymbolDictionary scope: aScope
 "
 	| importPaths module modules name |
 	"Check for already imported"
-	modules := sys modules.
+	modules := _sys modules.
 	module := modules at: aSymbol ifAbsent: [_remoteNil].
+	"https://docs.python.org/3/reference/import.html#the-module-cache"
 	module ifNil: [ModuleNotFoundError signal: 'Import of ' , aSymbol , ' failed!'].
 	module ~~ _remoteNil ifTrue: [^module].
 
@@ -121,7 +122,7 @@ __import__: aSymbol keywords: aSymbolDictionary scope: aScope
 		| path |
 		path := each , aSymbol.
 		((GsFile existsOnServer: path) and: [GsFile isServerDirectory: path]) ifTrue: [		"Package"
-			module := PyPackage script: path as: aSymbol.
+			module := Package script: path as: aSymbol.
 			modules at: aSymbol put: module.
 			module evaluate.
 			^module
@@ -137,14 +138,14 @@ __import__: aSymbol keywords: aSymbolDictionary scope: aScope
 	ModuleNotFoundError signal: 'Import of ' , aSymbol , ' failed!'
 %
 category: 'functions'
-method: Builtins
+method: builtins
 abs: aNumber
 	"https://docs.python.org/3/library/functions.html#abs"
 	
 	^aNumber abs
 %
 category: 'functions'
-method: Builtins
+method: builtins
 all: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -161,7 +162,7 @@ def all(iterable):
 	^arguments allSatisfy: [:each | each]
 %
 category: 'functions'
-method: Builtins
+method: builtins
 any: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -178,7 +179,7 @@ def any(iterable):
 	^arguments anySatisfy: [:each | each]
 %
 category: 'functions'
-method: Builtins
+method: builtins
 ascii: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -191,7 +192,7 @@ but escape the non-ASCII characters in the string returned by repr() using
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 bin: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -216,7 +217,7 @@ See also format() for more information.
 	^(arguments first negative ifTrue: ['-'] ifFalse: ['']), '0b' , (arguments first abs printStringRadix: 2)
 %
 category: 'functions'
-method: Builtins
+method: builtins
 bool: anObject
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -233,7 +234,7 @@ Changed in version 3.7: x is now a positional-only parameter.
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 breakpoint: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -254,7 +255,7 @@ New in version 3.7.
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 bytearray: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -282,7 +283,7 @@ See also Binary Sequence Types — bytes, bytearray, memoryview and Bytearray Ob
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 bytes: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -303,7 +304,7 @@ See also Binary Sequence Types — bytes, bytearray, memoryview,
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 callable: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -321,7 +322,7 @@ and then brought back in Python 3.2.
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 chr: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -337,7 +338,7 @@ The valid range for the argument is from 0 through 1,114,111 (0x10FFFF in base 1
 	^(Character codePoint: arguments first) asString
 %
 category: 'functions'
-method: Builtins
+method: builtins
 classmethod: aPyFunction scope: aScope
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -363,13 +364,13 @@ Class methods are different than C++ or Java static methods. If you want those, 
 For more information on class methods, see The standard type hierarchy.
 "
 	| newFunction |
-	(aPyFunction isKindOf: PyFunction) ifFalse: [self error: 'Invalid object!'].
+	(aPyFunction isKindOf: function) ifFalse: [self error: 'Invalid object!'].
 	newFunction := aPyFunction copy.
-	newFunction changeClassTo: PyClassFunction.
+	newFunction changeClassTo: ClassFunction.
 	^newFunction
 %
 category: 'functions'
-method: Builtins
+method: builtins
 compile: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -423,7 +424,7 @@ Changed in version 3.5: Previously, TypeError was raised when null bytes were en
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 complex: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -446,10 +447,10 @@ The complex type is described in Numeric Types — int, float, complex.
 Changed in version 3.6: Grouping digits with underscores as in code literals is allowed.
 "
 
-^Complex real: arguments first imag: arguments second.
+^complex real: arguments first imag: arguments second.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 delattr: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -463,7 +464,7 @@ For example, delattr(x, 'foobar') is equivalent to del x.foobar.
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 dict: arguments keywords: keywords scope: aScope
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -478,7 +479,7 @@ For other containers see the built-in list, set, and tuple classes, as well as t
 "
 
 	arguments notEmpty ifTrue: [
-		(arguments first isKindOf: Dictionary) ifTrue: [
+		(arguments first isKindOf: dict) ifTrue: [
 			arguments first keysAndValuesDo: [:eachKey :eachValue | 
 				keywords at: eachKey evaluate: aScope put: eachValue evaluate: aScope.
 			]
@@ -491,7 +492,7 @@ For other containers see the built-in list, set, and tuple classes, as well as t
 	^keywords
 %
 category: 'functions'
-method: Builtins
+method: builtins
 dir: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -545,7 +546,7 @@ when the argument is a class.
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 divmod: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -570,7 +571,7 @@ r := a - (b * q).
 ^(Array with: q with: r) immediateInvariant
 %
 category: 'functions'
-method: Builtins
+method: builtins
 enumerate: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -599,7 +600,7 @@ def enumerate(sequence, start=0):
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 eval: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -638,7 +639,7 @@ See ast.literal_eval() for a function that can safely evaluate: aScope strings w
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 exec: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -680,7 +681,7 @@ below: modifications to the default locals dictionary should not
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 filter: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -703,7 +704,7 @@ returns elements of iterable for which function returns false.
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 float: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -758,7 +759,7 @@ Changed in version 3.7: x is now a positional-only parameter.
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 format: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -788,7 +789,7 @@ Changed in version 3.4: object().__format__(format_spec)
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 frozenset: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -805,7 +806,7 @@ For other containers see the built-in set, list, tuple,
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 getattr: object _: name
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -825,7 +826,7 @@ default is returned if provided, otherwise AttributeError is raised.
 	]
 %
 category: 'functions'
-method: Builtins
+method: builtins
 globals
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -838,13 +839,13 @@ This is always the dictionary of the current module (inside a function or method
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 globals: arguments
 
 	^self globals
 %
 category: 'functions'
-method: Builtins
+method: builtins
 hasattr: object _: name
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -865,7 +866,7 @@ and seeing whether it raises an AttributeError or not.)
 	].
 %
 category: 'functions'
-method: Builtins
+method: builtins
 hash: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -883,7 +884,7 @@ See __hash__() for details.
 	^arguments first hash
 %
 category: 'functions'
-method: Builtins
+method: builtins
 help: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -910,7 +911,7 @@ Changed in version 3.4: Changes to pydoc and inspect mean that
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 hex: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -944,7 +945,7 @@ Note To obtain a hexadecimal string representation
 ^(arguments first negative ifTrue: ['-'] ifFalse: ['']), '0x' , (arguments first abs asHexString)
 %
 category: 'functions'
-method: Builtins
+method: builtins
 id: anObject
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -959,7 +960,7 @@ CPython implementation detail: This is the address of the object in memory.
 	^anObject asOop
 %
 category: 'functions'
-method: Builtins
+method: builtins
 input: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -980,17 +981,17 @@ If the readline module was loaded, then input() will use it to provide
 "
 	| prompt result |
 	prompt := arguments notEmpty
-		ifTrue: [PyString withAll: arguments first]
+		ifTrue: [Unicode7 withAll: arguments first]
 		ifFalse: [''].
 	result := UserInteraction new prompt: prompt.
 	result ifNil: [CancelNotification signal].
 	result := result decodeToString.
-	self print: (Array with: arguments first with: (PyString withAll: result)).
-	^PyString withAll: result
+	self print: (Array with: arguments first with: (str withAll: result)).
+	^str withAll: result
 %
 category: 'functions'
-method: Builtins
-int: arguments
+method: builtins
+int: anObject
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1025,10 +1026,10 @@ Changed in version 3.6: Grouping digits with underscores as in code literals is 
 
 Changed in version 3.7: x is now a positional-only parameter.
 "
-	^ arguments asInteger
+	^ anObject asInteger
 %
 category: 'functions'
-method: Builtins
+method: builtins
 isinstance: object _: classInfo
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1048,7 +1049,7 @@ or tuple of types and such tuples, a TypeError exception is raised.
 
 %
 category: 'functions'
-method: Builtins
+method: builtins
 issubclass: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1062,7 +1063,7 @@ objects, in which case every entry in classinfo will be checked. In any other
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 iter: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1094,7 +1095,7 @@ with open('mydata.db', 'rb') as f:
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 len: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1111,7 +1112,7 @@ type, as documented in Lists and Sequence Types — list, tuple, range.
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 list: iterable
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1121,10 +1122,10 @@ Rather than being a function, list is actually a
 mutable sequence type, as documented in Lists and 
 Sequence Types — list, tuple, range.
 "
-	^List withAll: iterable
+	^list withAll: iterable
 %
 category: 'functions'
-method: Builtins
+method: builtins
 locals
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1142,13 +1143,13 @@ used by the interpreter.
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 locals: arguments
 
 	^self locals
 %
 category: 'functions'
-method: Builtins
+method: builtins
 map: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1161,10 +1162,10 @@ items from all iterables in parallel. With multiple iterables, the iterator
 stops when the shortest iterable is exhausted. For cases where the
  function inputs are already arranged into argument tuples, see itertools.starmap().
 "
-^arguments second collect: [:each | arguments first value: (Array with: each) value: Dictionary new]
+^arguments second collect: [:each | arguments first value: (Array with: each) value: dict new]
 %
 category: 'functions'
-method: Builtins
+method: builtins
 max: arguments keywords: keywords
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1203,7 +1204,7 @@ arguments size == 1 ifTrue: [
 		into: [:last :each | last max: each]
 %
 category: 'functions'
-method: Builtins
+method: builtins
 memoryview: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1215,7 +1216,7 @@ Return a “memory view” object created from the given argument.
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 min: arguments keywords: keywords
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1255,7 +1256,7 @@ arguments size == 1 ifTrue: [
 		into: [:last :each | last min: each]
 %
 category: 'functions'
-method: Builtins
+method: builtins
 next: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1268,7 +1269,7 @@ method. If default is given, it is returned if the iterator is exhausted,
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 object
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1281,10 +1282,10 @@ This function does not accept any arguments.
 Note object does not have a __dict__, so you can’t assign arbitrary 
 attributes to an instance of the object class.
 "
-	^PySimpleObject new
+	^object new
 %
 category: 'functions'
-method: Builtins
+method: builtins
 oct: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1312,7 +1313,7 @@ See also format() for more information.
 ^(arguments first negative ifTrue: ['-'] ifFalse: ['']), '0o' , (arguments first abs printStringRadix: 8)
 %
 category: 'functions'
-method: Builtins
+method: builtins
 open: arguments keywords: keywords
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1322,7 +1323,7 @@ see documentation for more details
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 ord: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1337,7 +1338,7 @@ This is the inverse of chr().
 ^(arguments first _decodeFromUtf8: true maxSize: 1) first codePoint
 %
 category: 'functions'
-method: Builtins
+method: builtins
 pow: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1363,7 +1364,7 @@ For example, 10**2 returns 100, but 10**-2 returns 0.01.
 		ifFalse:[result rem: (arguments at: 3)]
 %
 category: 'functions'
-method: Builtins
+method: builtins
 print: arguments keywords: keywords
 	"https://docs.python.org/3/library/functions.html#print"
 
@@ -1376,7 +1377,7 @@ print: arguments keywords: keywords
 	arguments do: [:each | 
 		| string |
 		"https://docs.python.org/3/library/stdtypes.html#str"
-		string := (each isKindOf: PyString) 
+		string := (each isKindOf: str) 
 			ifTrue: [each]
 			ifFalse: [each printString].
 		stream nextPutAll: separator2; nextPutAll: string.
@@ -1386,7 +1387,7 @@ print: arguments keywords: keywords
 	(keywords at: #'flush' ifAbsent: [false]) ifTrue: [stream flush].
 %
 category: 'functions'
-method: Builtins
+method: builtins
 property: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1396,7 +1397,7 @@ see documentation for more details
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 range: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1412,7 +1413,7 @@ arguments size == 2 ifTrue: [^Interval from: arguments first to: arguments secon
 ^Interval from: arguments first to: arguments second - 1 by: (arguments at: 3).
 %
 category: 'functions'
-method: Builtins
+method: builtins
 repr: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1429,7 +1430,7 @@ A class can control what this function returns for its instances by defining a _
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 reversed: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1444,7 +1445,7 @@ integer arguments starting at 0).
 ^arguments first reverse
 %
 category: 'functions'
-method: Builtins
+method: builtins
 round: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1472,7 +1473,7 @@ See Floating Point Arithmetic: Issues and Limitations for more information.
 	^((arguments first * number) roundedHalfToEven / number) asFloat
 %
 category: 'functions'
-method: Builtins
+method: builtins
 set: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1487,7 +1488,7 @@ dict classes, as well as the collections module.
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 setattr: object _: name
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1502,7 +1503,7 @@ is equivalent to x.foobar = 123.
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 setattr: object _: name _: value
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1517,7 +1518,7 @@ is equivalent to x.foobar = 123.
 	object set: name asSymbol to: value
 %
 category: 'functions'
-method: Builtins
+method: builtins
 slice: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1537,7 +1538,7 @@ also generated when extended indexing syntax is used.
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 staticmethod: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1573,7 +1574,7 @@ For more information on static methods, see The standard type hierarchy.
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 str: anObject
 	"https://docs.python.org/3/library/stdtypes.html#str"
 	
@@ -1588,7 +1589,7 @@ str is the built-in string class. For general
 	^anObject __str__
 %
 category: 'functions'
-method: Builtins
+method: builtins
 sum: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1608,7 +1609,7 @@ To concatenate a series of iterables, consider using itertools.chain().
 		into: [:sum :each | sum + each]
 %
 category: 'functions'
-method: Builtins
+method: builtins
 super: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1670,7 +1671,7 @@ For practical suggestions on how to design cooperative
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 tuple: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1682,7 +1683,7 @@ as documented in Tuples and Sequence Types — list, tuple, range.
 	^arguments first asArray copy immediateInvariant
 %
 category: 'functions'
-method: Builtins
+method: builtins
 type: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1719,7 +1720,7 @@ Changed in version 3.6: Subclasses of type which don’t override
 	
 %
 category: 'functions'
-method: Builtins
+method: builtins
 vars: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1740,7 +1741,7 @@ Without an argument, vars() acts like locals(). Note,
 self halt.
 %
 category: 'functions'
-method: Builtins
+method: builtins
 zip: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -1792,13 +1793,13 @@ self halt.
 %
 set compile_env: 0
 category: 'other'
-method: Builtins
+method: builtins
 _sys
 
-	^sys
+	^_sys
 %
 category: 'other'
-method: Builtins
+method: builtins
 initialize
 "
 	SessionTemps current removeKey: #'Python_Builtins' ifAbsent: [].
@@ -1806,9 +1807,9 @@ initialize
 	| modules |
 	super initialize.
 	globals 
-		at: #'__class__'		put: BuiltinModule;
+		at: #'__class__'		put: module;
 		at: #'False'				put: false;
-		at: #'None' 			put: nil;
+		at: #'None' 			put: None;
 		at: #'True'				put: true;
 		at: #'__import__'		put: [:arguments :keywords :scope | self __import__: arguments first asSymbol keywords: keywords scope: scope];
 		at: #'abs'				put: [:arguments :keywords :scope | self abs: arguments first];
@@ -1835,20 +1836,20 @@ initialize
 		globals at: each name put: each.
 	].
 	globals
-		removeKey: #'PyException';
-		at: #'Exception' put: PyException;
+		removeKey: #'Exception';
+		at: #'Exception' put: Exception;
 		yourself.
-	sys := Sys new.
-	modules := sys modules
+	_sys := sys new.
+	modules := _sys modules
 		at: self class moduleName put: self;
-		at: sys class moduleName put: sys;
+		at: _sys class moduleName put: _sys;
 		yourself.
-	BuiltinModule allSubclasses do: [:each | 
+	module allSubclasses do: [:each | 
 		modules at: each moduleName ifAbsentPut: [each new].
 	].
 %
 category: 'other'
-method: Builtins
+method: builtins
 stdout: aStream
 
 	stdout := aStream.

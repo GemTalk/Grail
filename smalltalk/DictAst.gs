@@ -20,12 +20,12 @@ category: 'other'
 method: DictAst
 evaluate: aScope
 
-	| dict |
-	dict := Dictionary new.
+	| result |
+	result := dict new.
 	1 to: keys size do: [:i | 
-		dict at: (keys at: i) put: (values at: i).
+		result at: ((keys at: i) evaluate: aScope) put: ((values at: i) evaluate: aScope).
 	].
-	^dict
+	^result
 %
 category: 'other'
 method: DictAst

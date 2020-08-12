@@ -12,7 +12,7 @@ method: ClassDefAst
 __str__
 	"<class '__main__.MyClass'>"
 
-	^(WriteStream on: PyString new)
+	^(WriteStream on: str new)
 		nextPutAll: '<class ''';
 		nextPutAll: self module name;
 		nextPut: $.;
@@ -55,7 +55,7 @@ evaluate: aScope
 
 	| innerScope newClass |
 	innerScope := aScope innerForNode: self.
-	newClass := PyClass newForNode: self scope: innerScope.
+	newClass := class newForNode: self scope: innerScope.
 	aScope  set: name  to: newClass.
 	body evaluate: innerScope.
 
@@ -120,13 +120,13 @@ method: ClassDefAst
 value: posArgs value: keywordArgs value: aScope
 	"args are the parameters while arguments are the values"
 
-	| object result |
-	object := PyObject new: aScope copy.
-	result := object
+	| obj result |
+	obj := Instance new: aScope copy.
+	result := obj
 		call: #'__init__'
 		withArguments: posArgs
 		keywords: keywordArgs
 		scope: aScope.
-	result ifNotNil: [TypeError signal: '__init__() should return None, not ?'].
-	^object
+	result == None ifFalse: [TypeError signal: '__init__() should return None, not ?'].
+	^obj
 %

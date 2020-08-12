@@ -379,7 +379,7 @@ testRaiseFromNone
 		assert: (x.exc.keywords size == 0);
 		assert: (x.exc.function isKindOf: NameAst);
 		assert: (x.cause isKindOf: NoneAst);
-		assert: (x.cause isNone);
+		assert: (x.cause isKindOf: NoneAst);
 		yourself.
 %
 category: 'other'

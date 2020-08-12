@@ -1,40 +1,40 @@
-﻿! ------------------- Remove existing behavior from PyTime
+﻿! ------------------- Remove existing behavior from time
 expectvalue /Metaclass3       
 doit
-PyTime removeAllMethods.
-PyTime class removeAllMethods.
+time removeAllMethods.
+time class removeAllMethods.
 %
-! ------------------- Class methods for PyTime
+! ------------------- Class methods for time
 set compile_env: 0
 category: 'other'
-classmethod: PyTime
+classmethod: time
 moduleName
 
 	^#'time'
 %
-! ------------------- Instance methods for PyTime
+! ------------------- Instance methods for time
 set compile_env: 0
 category: 'other'
-method: PyTime
+method: time
 initialize
 "
 	SessionTemps current removeKey: #'Python_Time' ifAbsent: [].
 "
 	super initialize.
 	globals 
-		at: #'__class__'	put: BuiltinModule;
+		at: #'__class__'	put: module;
 		at: #'sleep'			put: [:arguments :keywords :scope | self sleep: arguments first];
 		at: #'time'			put: [:arguments :keywords :scope | self time];
 		yourself.
 %
 category: 'other'
-method: PyTime
+method: time
 sleep: seconds
 
 	(Delay forMilliseconds: (seconds * 1000) ceiling) wait.
 %
 category: 'other'
-method: PyTime
+method: time
 time
 
 	^System _timeGmtFloat

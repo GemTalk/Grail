@@ -1,16 +1,136 @@
-﻿! ------------------- Remove existing behavior from Tuple
+﻿! ------------------- Remove existing behavior from tuple
 expectvalue /Metaclass3       
 doit
-Tuple removeAllMethods.
-Tuple class removeAllMethods.
+tuple removeAllMethods.
+tuple class removeAllMethods.
 %
-! ------------------- Class methods for Tuple
-! ------------------- Instance methods for Tuple
+! ------------------- Class methods for tuple
 set compile_env: 0
 category: 'other'
-method: Tuple
+classmethod: tuple
+new
+
+	^self basicNew
+		initialize;
+		yourself
+%
+category: 'other'
+classmethod: tuple
+with: a with: b
+
+	^self withAll: (Array with: a with: b)
+%
+category: 'other'
+classmethod: tuple
+withAll: aCollection
+
+	^self basicNew
+		initialize: aCollection;
+		yourself
+%
+! ------------------- Instance methods for tuple
+set compile_env: 0
+category: 'other'
+method: tuple
+at: anIndex
+
+	^t at: anIndex
+%
+category: 'other'
+method: tuple
 call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
 
 	aSymbol == #'__iter__' ifTrue: [^Iterator on: self].
+	self halt.
+%
+category: 'other'
+method: tuple
+initialize
+
+	t := Array new.
+%
+category: 'other'
+method: tuple
+initialize: aCollection
+
+	t := Array withAll: aCollection.
+%
+category: 'other'
+method: tuple
+membershipIncludes: anObject
+
+	^t includes: anObject
+%
+category: 'other'
+method: tuple
+size
+
+	^t size
+%
+set compile_env: 0
+category: 'Python'
+method: tuple
+__add__
+
+	self halt.
+%
+category: 'Python'
+method: tuple
+__contains__
+
+	self halt.
+%
+category: 'Python'
+method: tuple
+__getitem__
+
+	self halt.
+%
+category: 'Python'
+method: tuple
+__getnewargs__
+
+	self halt.
+%
+category: 'Python'
+method: tuple
+__iter__
+
+	self halt.
+%
+category: 'Python'
+method: tuple
+__len__
+
+	self halt.
+%
+category: 'Python'
+method: tuple
+__mul__
+
+	self halt.
+%
+category: 'Python'
+method: tuple
+__rmul__
+
+	self halt.
+%
+category: 'Python'
+method: tuple
+__str__
+
+	self halt.
+%
+category: 'Python'
+method: tuple
+count
+
+	self halt.
+%
+category: 'Python'
+method: tuple
+index
+
 	self halt.
 %

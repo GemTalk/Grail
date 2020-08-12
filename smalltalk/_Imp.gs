@@ -1,119 +1,119 @@
-﻿! ------------------- Remove existing behavior from _Imp
+﻿! ------------------- Remove existing behavior from _imp
 expectvalue /Metaclass3       
 doit
-_Imp removeAllMethods.
-_Imp class removeAllMethods.
+_imp removeAllMethods.
+_imp class removeAllMethods.
 %
-! ------------------- Class methods for _Imp
+! ------------------- Class methods for _imp
 set compile_env: 0
 category: 'other'
-classmethod: _Imp
+classmethod: _imp
 moduleName
 
 	^#'_imp'
 %
-! ------------------- Instance methods for _Imp
+! ------------------- Instance methods for _imp
 set compile_env: 0
 category: 'functions'
-method: _Imp
+method: _imp
 _fixModule: module code: code filename: path
 
 	self halt.
 %
 category: 'functions'
-method: _Imp
+method: _imp
  acquireLock: module
 
 	self halt.
 %
 category: 'functions'
-method: _Imp
+method: _imp
 createBuiltin: module spec: spec
 
 	self halt.
 %
 category: 'functions'
-method: _Imp
+method: _imp
 createDynamic: module spec: spec file: file
 
 	self halt.
 %
 category: 'functions'
-method: _Imp
+method: _imp
 execBuiltin: module mod: mod
 
 	self halt.
 %
 category: 'functions'
-method: _Imp
+method: _imp
 execDynamic: module mod: mod
 
 	self halt.
 %
 category: 'functions'
-method: _Imp
+method: _imp
 extensionSuffixes: module
 
 	self halt.
 %
 category: 'functions'
-method: _Imp
+method: _imp
 getFrozen: module name: name
 
 	self halt.
 %
 category: 'functions'
-method: _Imp
+method: _imp
 initFrozen: module name: name
 
 	self halt.
 %
 category: 'functions'
-method: _Imp
+method: _imp
 isBuiltin: aSymbol
 
-	^BuiltinModule subclasses anySatisfy: [:each | each moduleName == aSymbol].
+	^module subclasses anySatisfy: [:each | each moduleName == aSymbol].
 %
 category: 'functions'
-method: _Imp
+method: _imp
 isFrozen: aString
 
 	^false
 %
 category: 'functions'
-method: _Imp
+method: _imp
 isFrozenPackage: module name: name
 
 	self halt.
 %
 category: 'functions'
-method: _Imp
+method: _imp
  lockHeld: module
 
 	self halt.
 %
 category: 'functions'
-method: _Imp
+method: _imp
  releaseLock: module
 
 	self halt.
 %
 category: 'functions'
-method: _Imp
+method: _imp
 sourceHash: module key: key source: source
 
 	self halt.
 %
 set compile_env: 0
 category: 'initialization'
-method: _Imp
+method: _imp
 initialize
 "
 	SessionTemps current removeKey: #'Python__Imp' ifAbsent: [].
 "
 	super initialize.
 	globals 
-		at: #'__class__'						put: BuiltinModule;
+		at: #'__class__'						put: module;
 		at: #'_fix_co_filename'				put: [:arguments :keywords :scope | self _fixModule: (arguments at: 1) code: (arguments at: 2) filename: (arguments at: 3)];
 		at: #'acquire_lock'					put: [:arguments :keywords :scope | self acquireLock: (arguments at: 1)];
 		at: #'check_hash_based_pycs'	put: [:arguments :keywords :scope | 'default'];

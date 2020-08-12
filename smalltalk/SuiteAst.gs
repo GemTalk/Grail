@@ -21,7 +21,7 @@ evaluate: aScope
 
 	^[
 		body do: [:each | each evaluate: aScope].
-		nil.
+		None.
 	] on: ReturnNotification do: [:ex | 
 		ex return: ex value.
 	].
