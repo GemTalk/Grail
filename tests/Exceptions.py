@@ -79,15 +79,6 @@ except NotImplementedError:
 # OSError
 # TODO
 
-# OverflowError
-try:
-	n = 3.0
-	for _ in range(100):
-		n = n ** 2
-except OverflowError:
-	print("OverflowError", end=' ')
-# SMALLTALK TODO: OverflowError: (34, 'Result too large')
-
 # RecursionError
 # It is raised when the interpreter detects that the 
 # maximum recursion depth (see sys.getrecursionlimit()) is exceeded.
