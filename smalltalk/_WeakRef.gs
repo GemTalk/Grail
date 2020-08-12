@@ -1,26 +1,26 @@
-﻿! ------------------- Remove existing behavior from _WeakRef
+﻿! ------------------- Remove existing behavior from _weakref
 expectvalue /Metaclass3       
 doit
-_WeakRef removeAllMethods.
-_WeakRef class removeAllMethods.
+_weakref removeAllMethods.
+_weakref class removeAllMethods.
 %
-! ------------------- Class methods for _WeakRef
+! ------------------- Class methods for _weakref
 set compile_env: 0
 category: 'other'
-classmethod: _WeakRef
+classmethod: _weakref
 moduleName
 
 	^#'_weakref'
 %
-! ------------------- Instance methods for _WeakRef
+! ------------------- Instance methods for _weakref
 set compile_env: 0
 category: 'other'
-method: _WeakRef
+method: _weakref
 initialize
 
 	super initialize.
 	globals 
-		at: #'__class__'						put: BuiltinModule;
+		at: #'__class__'						put: module;
 		at: #'__doc__'							put: 'Weak-reference support module';
 		at: #'__loader__'						put: nil;		"<class '_frozen_importlib.BuiltinImporter'>"
 		at: #'__package__'					put: '';

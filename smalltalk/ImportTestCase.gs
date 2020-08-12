@@ -19,4 +19,5 @@ method: ImportTestCase
 tst_importlib
 
 	(self statementsAt: 1) evaluate: aScope.
+	self halt.
 %

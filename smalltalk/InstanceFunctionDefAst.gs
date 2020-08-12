@@ -13,5 +13,5 @@ evaluate: aScope
 
 	aScope 
 		set: name 
-		to: (PyInstanceFunction newForNode: self scope: (aScope innerForNode: self))
+		to: (InstanceFunction newForNode: self scope: (aScope innerForNode: self))
 %

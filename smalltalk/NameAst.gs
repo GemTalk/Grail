@@ -48,29 +48,15 @@ method: NameAst
 evaluate: aScope
 	"If the name refers to a function, return an object that can be sent #'value:value:value:'"
 
-	| isDeclared |
 	self assertContextIsLoad.
-    isDeclared := self isVariableIsDeclared: id.
-    ^ isDeclared ifTrue: [
-            aScope get: id ifAbsent: [ UnboundLocalError signal: 'local variable ''', id, ''' referenced before assignment' ]
-    ] ifFalse: [
-            aScope get: id 
-    ]
-%
-category: 'other'
-method: NameAst
-evaluateWithPyPrefix: aScope
-	"if a class with the Py- prefix exists, use it; otherwise behaves same as evaluate:"
-
-	| withPrefix |
-	self assertContextIsLoad.
-	withPrefix := ('Py', id asString) asSymbol.
-	[ 
-		"is there any easier way of checking if a Symbol is the name of a class? is this even consistent?"
-		(System myUserProfile symbolList at: 1) at: withPrefix.
-		^ aScope get: withPrefix
-	] on: LookupError do: [
-		^ aScope get: id
+	[
+		^aScope get: id.
+	] on: NameError do: [:ex | 
+		(self isVariableIsDeclared: id) ifTrue: [
+			"How would we resignal this?"
+			UnboundLocalError signal: 'local variable ''', id, ''' referenced before assignment'.
+		].
+		ex pass.
 	]
 %
 category: 'other'

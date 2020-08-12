@@ -70,7 +70,7 @@ initializeOuter: aScope node: anAstNode
 
 	astNode := anAstNode.
 	outer := aScope.
-	variables := PyDictionary new.
+	variables := Namespace new.
 %
 category: 'other'
 method: Scope

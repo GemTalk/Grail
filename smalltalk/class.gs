@@ -1,30 +1,23 @@
-﻿! ------------------- Remove existing behavior from PyClass
+﻿! ------------------- Remove existing behavior from class
 expectvalue /Metaclass3       
 doit
-PyClass removeAllMethods.
-PyClass class removeAllMethods.
+class removeAllMethods.
+class class removeAllMethods.
 %
-! ------------------- Class methods for PyClass
+! ------------------- Class methods for class
 set compile_env: 0
 category: 'other'
-classmethod: PyClass
+classmethod: class
 newForNode: aFunctionDefAst scope: aScope
 
 	^self basicNew
 		initializeNode: aFunctionDefAst scope: aScope;
 		yourself
 %
-! ------------------- Instance methods for PyClass
+! ------------------- Instance methods for class
 set compile_env: 0
 category: 'other'
-method: PyClass
-__str__
-	"<class '__main__.MyClass'>"
-
-	^astNode __str__
-%
-category: 'other'
-method: PyClass
+method: class
 call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
 
 	| function |
@@ -36,20 +29,20 @@ call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
 		scope: aScope
 %
 category: 'other'
-method: PyClass
+method: class
 get: aSymbol
 
 	^scope get: aSymbol
 %
 category: 'other'
-method: PyClass
+method: class
 initializeNode: aFunctionDefAst scope: aScope
 
 	astNode := aFunctionDefAst.
 	scope := aScope.
 %
 category: 'other'
-method: PyClass
+method: class
 printOn: aStream
 
 	super printOn: aStream.
@@ -57,17 +50,43 @@ printOn: aStream
 	astNode printOn: aStream.
 %
 category: 'other'
-method: PyClass
+method: class
 set: aSymbol to: aValue
 
 	scope set: aSymbol to: aValue
 %
 category: 'other'
-method: PyClass
+method: class
 value: arguments value: keywords value: aScope
 
 	^astNode
 		value: arguments
 		value: keywords
 		value: scope copy
+%
+set compile_env: 0
+category: 'Python'
+method: class
+__dict__
+
+	self halt.
+%
+category: 'Python'
+method: class
+__module__
+
+	self halt.
+%
+category: 'Python'
+method: class
+__str__
+	"<class '__main__.MyClass'>"
+
+	^astNode __str__
+%
+category: 'Python'
+method: class
+__weakref__
+
+	self halt.
 %

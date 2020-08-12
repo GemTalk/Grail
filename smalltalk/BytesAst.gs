@@ -15,7 +15,14 @@ initialize
 	| stream char |
 	stream := self stream.
 	char := stream next.
-	(char asUppercase == $B) ifFalse: [ self error. ].
-	s := self string asByteArray.
+	(char asUppercase == $B) ifFalse: [self error].
+	s := ByteArray new.
+	self string do: [:each |
+		| value |
+		value := each codePoint.
+		value > 255 ifTrue: [self error: 'Cannot represent string as bytearray'].
+		s add: value.
+	].
+	s := bytes withAll: s.
 	self readPosition.
 %

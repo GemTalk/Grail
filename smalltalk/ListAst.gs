@@ -20,12 +20,12 @@ category: 'other'
 method: ListAst
 evaluate: aScope
 	"May wish to revisit context"
-	^List withAll: (elts collect: [:each | each evaluate: aScope])
+	^list withAll: (elts collect: [:each | each evaluate: aScope])
 %
 category: 'other'
 method: ListAst
 initialize
-	"List(expr* elts, expr_context ctx)"
+	"list(expr* elts, expr_context ctx)"
 	
 	elts := self collectAst: [self expression].
 	self commaSpace.

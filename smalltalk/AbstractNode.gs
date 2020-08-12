@@ -1,13 +1,13 @@
-﻿! ------------------- Remove existing behavior from AstNode
+﻿! ------------------- Remove existing behavior from AbstractNode
 expectvalue /Metaclass3       
 doit
-AstNode removeAllMethods.
-AstNode class removeAllMethods.
+AbstractNode removeAllMethods.
+AbstractNode class removeAllMethods.
 %
-! ------------------- Class methods for AstNode
+! ------------------- Class methods for AbstractNode
 set compile_env: 0
 category: 'other'
-classmethod: AstNode
+classmethod: AbstractNode
 escapeCharacters
 
 	escapeCharacters ifNil: [ 
@@ -27,22 +27,22 @@ escapeCharacters
 	^ escapeCharacters
 %
 category: 'other'
-classmethod: AstNode
+classmethod: AbstractNode
 isAbstract
 
-	^self == AstNode
+	^self == AbstractNode
 %
 category: 'other'
-classmethod: AstNode
+classmethod: AbstractNode
 new
 
 	self error: 'Use #parent: instead'.
 %
 category: 'other'
-classmethod: AstNode
+classmethod: AbstractNode
 parent: aNode
 
-	(aNode isKindOf: AstNode) ifFalse: [self error: 'Not a valid parent!'].
+	(aNode isKindOf: AbstractNode) ifFalse: [self error: 'Not a valid parent!'].
 	^self isAbstract ifTrue: [
 		| symbol class |
 		symbol := ((aNode stream upTo: self subclassDelimiter) , 'Ast') asSymbol.
@@ -55,15 +55,15 @@ parent: aNode
 	].
 %
 category: 'other'
-classmethod: AstNode
+classmethod: AbstractNode
 subclassDelimiter
 
 	^$(
 %
-! ------------------- Instance methods for AstNode
+! ------------------- Instance methods for AbstractNode
 set compile_env: 0
 category: 'initialization'
-method: AstNode
+method: AbstractNode
 alias
 
 	| string |
@@ -72,7 +72,7 @@ alias
 	^AliasAst parent: self.
 %
 category: 'initialization'
-method: AstNode
+method: AbstractNode
 arg
 
 	| string |
@@ -81,13 +81,7 @@ arg
 	^ArgAst parent: self.
 %
 category: 'initialization'
-method: AstNode
-assertVariableIsDeclared: aSymbol
-
-	^ parent assertVariableIsDeclared: aSymbol.
-%
-category: 'initialization'
-method: AstNode
+method: AbstractNode
 commaSpace
 
 	| stream |
@@ -96,164 +90,161 @@ commaSpace
 	(stream peekFor: Character space) ifFalse: [self error].
 %
 category: 'initialization'
-method: AstNode
+method: AbstractNode
 declareVariable
 
 	parent declareVariable.
 %
 category: 'initialization'
-method: AstNode
+method: AbstractNode
 declareVariable: aSymbol
 
 	parent declareVariable: aSymbol.
 %
 category: 'initialization'
-method: AstNode
+method: AbstractNode
 error
 
 	self error: 'Invalid ' , self class name , ' node: ' , (self stream next: 10) printString.
 %
 category: 'initialization'
-method: AstNode
+method: AbstractNode
 expression
 
 	^ExpressionAst parent: self
 %
 category: 'initialization'
-method: AstNode
+method: AbstractNode
 initialize
 
 	self subclassResponsibility
 %
 category: 'initialization'
-method: AstNode
+method: AbstractNode
 initialize: aNode
 
 	parent := aNode.
 	self initialize.
 %
 category: 'initialization'
-method: AstNode
+method: AbstractNode
 interpretEscapeSequence: aStream
+	"answers a Character"
 
-	| aSymbol | 
-	aSymbol := aStream next.
-	"it seems Python AST never dumps octal values, so this case is useless" 
-	(aSymbol = $o) ifTrue: [
-		^ aSymbol asString, (aStream next: 2)
+	| char | 
+	char := aStream next.
+	(char == $x) ifTrue: [
+		^Character codePoint: ('16r', (aStream next: 2)) asInteger
 	].
-	(aSymbol = $x) ifTrue: [
-		^ (Character withValue: ('16r', (aStream next: 2)) asInteger) asString
-	].
-	^ (Character withValue: (self class escapeCharacters at: aSymbol)) asString.
+	^Character codePoint: (self class escapeCharacters at: char)
 %
 category: 'initialization'
-method: AstNode
+method: AbstractNode
 isVariableIsDeclared: aSymbol
 
 	^ parent isVariableIsDeclared: aSymbol.
 %
 category: 'initialization'
-method: AstNode
+method: AbstractNode
 optionalArg
 
 	| stream |
 	stream := parent stream.
 	^(stream peekN: 4) = 'None' ifTrue: [
 		stream next: 4.
-		NoneAst singleton.
+		None.
 	] ifFalse: [
 		self arg.
 	].
 %
 category: 'initialization'
-method: AstNode
+method: AbstractNode
 optionalExpression
 
 	| stream |
 	stream := parent stream.
 	^(stream peekN: 4) = 'None' ifTrue: [
 		stream next: 4.
-		NoneAst singleton.
+		None.
 	] ifFalse: [
 		self expression.
 	].
 %
 category: 'initialization'
-method: AstNode
+method: AbstractNode
 readPosition
 %
 category: 'initialization'
-method: AstNode
+method: AbstractNode
 stream
 
 	^parent stream
 %
 category: 'initialization'
-method: AstNode
+method: AbstractNode
 string
 
 	| stream char writeStream next |
 	stream := self stream.
 	char := stream next.
 	(char == $' or: [char == $"]) ifFalse: [self error].
-	writeStream := WriteStream on: PyString new.
+	writeStream := WriteStream on: str new.
 	[ 
-		stream peekFor: char.
+		next := stream next.
+		next == char
 	] whileFalse: [
-		next := stream next asString.
-		(next = '\') ifTrue: [
+		next == $\ ifTrue: [
 			next := self interpretEscapeSequence: stream.  
 		].
-		writeStream nextPutAll: next.
+		writeStream nextPut: next.
 	].
-	^ writeStream contents
+	^writeStream contents
 %
 set compile_env: 0
 category: 'other'
-method: AstNode
+method: AbstractNode
 children
 
 	^Array new
 %
 category: 'other'
-method: AstNode
+method: AbstractNode
 collectAst: aBlock
 
-	| list stream char |
+	| result stream char |
 	stream := self stream.
 	stream peekFor: Character space.
 	char := stream peek.
 	(stream peekFor: $[) ifFalse: [self error].
-	list := Array new.
+	result := Array new.
 	[
 		stream peekFor: $]
 	] whileFalse: [
-		list add: aBlock value.
+		result add: aBlock value.
 		(stream peekFor: $,) ifTrue: [stream skipSeparators].
 	].
-	^list
+	^result
 %
 category: 'other'
-method: AstNode
+method: AbstractNode
 globals
 
 	^self module globals
 %
 category: 'other'
-method: AstNode
+method: AbstractNode
 locals
 
 	^parent locals
 %
 category: 'other'
-method: AstNode
+method: AbstractNode
 module
 
 	^parent module
 %
 category: 'other'
-method: AstNode
+method: AbstractNode
 printOn: aStream
 
 	super printOn: aStream.
@@ -263,18 +254,18 @@ printOn: aStream
 		yourself.
 %
 category: 'other'
-method: AstNode
+method: AbstractNode
 setBlock: aBlock
 %
 set compile_env: 0
 category: 'testing'
-method: AstNode
+method: AbstractNode
 isInClass
 
 	^parent isInClass
 %
 category: 'testing'
-method: AstNode
+method: AbstractNode
 isNone
 
 	^false

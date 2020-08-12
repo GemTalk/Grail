@@ -33,10 +33,26 @@ names := userProfile symbolList names.
 (names includes: aSymbol) ifTrue: [
 	userProfile symbolList removeAtIndex: (names indexOf: aSymbol).
 ].
-symbolDictionary := SymbolDictionary new name: aSymbol; yourself.
+symbolDictionary := SymbolDictionary new 
+    name: aSymbol; 
+    at: #'None'             put: nil;
+    at: #'NotImplemented'   put: nil;
+    at: #'Ellipsis'         put: nil;
+    at: #'True'             put: nil;
+    at: #'False'            put: nil;
+    yourself.
 userProfile insertDictionary: symbolDictionary at: 1.
 %
 input Python.gs
+run
+Python 
+    at: #'None'             put: NoneType singleton;
+    at: #'NotImplemented'   put: NotImplementedType singleton;
+    at: #'Ellipsis'         put: ellipsis singleton;
+    at: #'True'             put: true;
+    at: #'False'            put: false;
+    yourself.
+%
 output pop
 errorCount
 commit

@@ -1,14 +1,14 @@
-﻿! ------------------- Remove existing behavior from PyClassFunction
+﻿! ------------------- Remove existing behavior from ClassFunction
 expectvalue /Metaclass3       
 doit
-PyClassFunction removeAllMethods.
-PyClassFunction class removeAllMethods.
+ClassFunction removeAllMethods.
+ClassFunction class removeAllMethods.
 %
-! ------------------- Class methods for PyClassFunction
-! ------------------- Instance methods for PyClassFunction
+! ------------------- Class methods for ClassFunction
+! ------------------- Instance methods for ClassFunction
 set compile_env: 0
 category: 'other'
-method: PyClassFunction
+method: ClassFunction
 callFromClass: receiver arguments: anArray keywords: aSymbolDictionary scope: aScope
 
 	^self
@@ -17,7 +17,7 @@ callFromClass: receiver arguments: anArray keywords: aSymbolDictionary scope: aS
 		value: aScope
 %
 category: 'other'
-method: PyClassFunction
+method: ClassFunction
 callFromObject: receiver arguments: anArray keywords: aSymbolDictionary scope: aScope
 
 	^self

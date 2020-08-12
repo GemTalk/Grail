@@ -32,7 +32,7 @@ testBackspace
 		assert: x.column == 0;
 		yourself.
 	x := x.s.
-	self assert: (x isKindOf: ByteArray).
+	self assert: (x isKindOf: bytes).
 	self assert: x = #[100 101 102 8].
 %
 category: 'other'
@@ -53,7 +53,7 @@ testBell
 		assert: x.column == 0;
 		yourself.
 	x := x.s.
-	self assert: (x isKindOf: ByteArray).
+	self assert: (x isKindOf: bytes).
 	self assert: x = #[ 97 98 99 7 ].
 %
 category: 'other'
@@ -74,7 +74,7 @@ testHexHigh
 		assert: x.column == 0;
 		yourself.
 	x := x.s.
-	self assert: (x isKindOf: ByteArray).
+	self assert: (x isKindOf: bytes).
 	self assert: x = #[100 101 102 255].
 %
 category: 'other'
@@ -95,7 +95,7 @@ testHexLow
 		assert: x.column == 0;
 		yourself.
 	x := x.s.
-	self assert: (x isKindOf: ByteArray).
+	self assert: (x isKindOf: bytes).
 	self assert: x = #[97 98 99 0].
 %
 category: 'other'
@@ -116,7 +116,7 @@ testNewline
 		assert: x.column == 0;
 		yourself.
 	x := x.s.
-	self assert: (x isKindOf: ByteArray).
+	self assert: (x isKindOf: bytes).
 	self assert: x = 'abc
 ' asByteArray.
 %
@@ -138,7 +138,7 @@ testOctalHigh
 		assert: x.column == 0;
 		yourself.
 	x := x.s.
-	self assert: (x isKindOf: ByteArray).
+	self assert: (x isKindOf: bytes).
 	self assert: x = #[100 101 102 255].
 %
 category: 'other'
@@ -159,7 +159,7 @@ testOctalLow
 		assert: x.column == 0;
 		yourself.
 	x := x.s.
-	self assert: (x isKindOf: ByteArray).
+	self assert: (x isKindOf: bytes).
 	self assert: x = #[ 97 98 99 0].
 %
 category: 'other'
@@ -180,6 +180,6 @@ testSlash
 		assert: x.column == 0;
 		yourself.
 	x := x.s.
-	self assert: (x isKindOf: ByteArray).
+	self assert: (x isKindOf: bytes).
 	self assert: x = 'def\' asByteArray.
 %

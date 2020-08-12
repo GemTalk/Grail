@@ -142,13 +142,13 @@ category: 'other'
 method: NumericLiteralsTestCase
 testImaginaryNumber
 
-	| expr num complex |
+	| expr num complexNumber |
 	self
 		assert: ((expr := self statementsAt: 35) isKindOf: ExprAst);
 		assert: ((num := expr.value) isKindOf: NumAst);
-		assert: ((complex := num.n) isKindOf: Complex);
-		assert: complex.real == 0;
-		assert: complex.imaginary == 3.14;
+		assert: ((complexNumber := num.n) isKindOf: complex);
+		assert: complexNumber.real == 0;
+		assert: complexNumber.imaginary == 3.14;
 
 		assert: (expr := self statementsAt: 36) notNil;
 		assert: expr.value.n.real == 0;

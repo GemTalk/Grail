@@ -1,41 +1,42 @@
-﻿! ------------------- Remove existing behavior from BuiltinModule
+﻿! ------------------- Remove existing behavior from module
 expectvalue /Metaclass3       
 doit
-BuiltinModule removeAllMethods.
-BuiltinModule class removeAllMethods.
+module removeAllMethods.
+module class removeAllMethods.
 %
-! ------------------- Class methods for BuiltinModule
+! ------------------- Class methods for module
 set compile_env: 0
 category: 'other'
-classmethod: BuiltinModule
+classmethod: module
 current
 "
-	BuiltinModule subclasses do: [:each | 
+	module subclasses do: [:each | 
 		SessionTemps current removeKey: ('Python_' , each name) asSymbol ifAbsent: [].
 	].
 "
+	self halt.
 	^SessionTemps current
 		at: ('Python_' , self name) asSymbol
-		ifAbsentPut: [Sys current modules at: self moduleName put: self new]
+		ifAbsentPut: [sys current modules at: self moduleName put: self new]
 %
 category: 'other'
-classmethod: BuiltinModule
+classmethod: module
 moduleName
 
 	self subclassResponsibility.
 %
 category: 'other'
-classmethod: BuiltinModule
+classmethod: module
 new
 
 	^self basicNew
 		initialize;
 		yourself
 %
-! ------------------- Instance methods for BuiltinModule
+! ------------------- Instance methods for module
 set compile_env: 0
 category: 'other'
-method: BuiltinModule
+method: module
 call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
 
 	^(self get: aSymbol)
@@ -44,14 +45,27 @@ call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
 		value: aScope
 %
 category: 'other'
-method: BuiltinModule
+method: module
 get: aSymbol
 
 	^globals get: aSymbol
 %
 category: 'other'
-method: BuiltinModule
+method: module
 initialize
 
-	globals := PyDictionary new.
+	globals := Namespace new.
+%
+set compile_env: 0
+category: 'Python'
+method: module
+__dict__
+
+	self halt.
+%
+category: 'Python'
+method: module
+__str__
+
+	self halt.
 %

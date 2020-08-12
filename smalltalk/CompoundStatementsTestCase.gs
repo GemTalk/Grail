@@ -77,7 +77,7 @@ if any(arg is not None for arg in []):	# 20
 				lineno=84, col_offset=7), 
 				[comprehension(
 					Name('arg', Store(), lineno=84, col_offset=27), 
-					List([], Load(), lineno=84, col_offset=34), [], 0
+					list([], Load(), lineno=84, col_offset=34), [], 0
 				)]
 			, lineno=84, col_offset=7)], 
 			[], 
@@ -324,7 +324,6 @@ testFunctionWithOneDefaultValueParameter
 		assert: (arguments.kwarg isNone); 
 		assert: (arguments.defaults size == 1);
 		assert: ((nameConstant := arguments.defaults at: 1) isKindOf: NoneAst);
-		assert: (nameConstant isNone);
 		assert: (x.body.body size == 1); 
 		assert: ((x.body.body at: 1) isKindOf: PassAst); 
 		assert: (x.decorator_list size == 0); 
@@ -424,7 +423,7 @@ testTry
 					Name('RuntimeError', Load(), lineno=35, col_offset=10), 
 					[Str('Something bad happened', lineno=35, col_offset=23)], [], lineno=35, col_offset=10), None, lineno=35, col_offset=4)], lineno=34, col_offset=0)], [], [], lineno=32, col_offset=0)"
 
-	| x expr call binOp exceptHandler raise insideCall str |
+	| x expr call binOp exceptHandler raise insideCall string |
 	x :=self statementsAt: 7.
 	self 
 		assert: (x isKindOf:TryAst);
@@ -445,14 +444,14 @@ testTry
 		assert: (x.handlers size == 1);
 		assert: ((exceptHandler := x.handlers at: 1) isKindOf: ExceptHandlerAst);
 		assert: (exceptHandler.type isNone);
-		assert: (exceptHandler.name isNone);
+		assert: (exceptHandler.name isKindOf: NoneAst);
 		assert: (exceptHandler.body.body size == 1);
 		assert: ((raise := exceptHandler.body.body at: 1) isKindOf: RaiseAst);
 		assert: ((insideCall := raise.exc) isKindOf: CallAst);
 		assert: (insideCall.function isKindOf: NameAst);
 		assert: (insideCall.arguments size == 1);
-		assert: ((str := insideCall.arguments at: 1) isKindOf: StrAst);
-		assert: (str.s = 'Something bad happened');
+		assert: ((string := insideCall.arguments at: 1) isKindOf: StrAst);
+		assert: (string.s = 'Something bad happened');
 		assert: (insideCall.keywords size == 0);
 		assert: (raise.cause isNone);
 		assert: (x.orelse size == 0);

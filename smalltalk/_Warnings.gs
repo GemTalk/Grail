@@ -1,26 +1,26 @@
-﻿! ------------------- Remove existing behavior from _Warnings
+﻿! ------------------- Remove existing behavior from _warnings
 expectvalue /Metaclass3       
 doit
-_Warnings removeAllMethods.
-_Warnings class removeAllMethods.
+_warnings removeAllMethods.
+_warnings class removeAllMethods.
 %
-! ------------------- Class methods for _Warnings
+! ------------------- Class methods for _warnings
 set compile_env: 0
 category: 'other'
-classmethod: _Warnings
+classmethod: _warnings
 moduleName
 
 	^#'_warnings'
 %
-! ------------------- Instance methods for _Warnings
+! ------------------- Instance methods for _warnings
 set compile_env: 0
 category: 'other'
-method: _Warnings
+method: _warnings
 initialize
 
 	super initialize.
 	globals 
-		at: #'__class__'			put: BuiltinModule;
+		at: #'__class__'			put: module;
 		at: #'_defaultaction'		put: 'default';
 		at: #'__doc__'				put: '_warnings provides basic warning filtering support.' , Character lf printString , 'It is a helper module to speed up interpreter start-up.';
 		at: #'__loader__'			put: nil;		"<class '_frozen_importlib.BuiltinImporter'>"
@@ -28,8 +28,8 @@ initialize
 		at: #'__package__'		put: '';
 		at: #'__spec__'			put: nil;		"ModuleSpec(name='_warnings', loader=<class '_frozen_importlib.BuiltinImporter'>, origin='built-in')"
 		at: #'_filters_mutated'	put: [:arguments :keywords :scope | self _filtersMutated];
-		at: #'_onceregistry'		put: PyDictionary new;
-		at: #'filters'				put: List new;
+		at: #'_onceregistry'		put: Namespace new;
+		at: #'filters'				put: list new;
 			"('default', None, <class 'DeprecationWarning'>, '__main__', 0), 
 			('ignore', None, <class 'DeprecationWarning'>, None, 0), 
 			('ignore', None, <class 'PendingDeprecationWarning'>, None, 0), 

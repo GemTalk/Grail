@@ -10,7 +10,7 @@ category: 'other'
 classmethod: BuiltinsTestCase
 filename
 
-	^'Builtins.py'
+	^'builtins.py'
 %
 ! ------------------- Instance methods for BuiltinsTestCase
 set compile_env: 0
@@ -18,7 +18,7 @@ category: 'other'
 method: BuiltinsTestCase
 tearDown
 
-	Builtins current _sys modules removeKey: #'noSuchModule' ifAbsent: [].
+	builtins current _sys modules removeKey: #'noSuchModule' ifAbsent: [].
 %
 category: 'other'
 method: BuiltinsTestCase
@@ -42,7 +42,7 @@ testModuleNotFoundError
 
 	| x |
 	[
-		Builtins current _sys modules at: #'noSuchModule' put: nil.
+		builtins current _sys modules at: #'noSuchModule' put: nil.
 		x := (self statementsAt: 3) evaluate: aScope.			"import noSuchModule"
 		self assert: false.
 	] on: ModuleNotFoundError do: [:ex | 

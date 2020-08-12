@@ -1,28 +1,28 @@
-﻿! ------------------- Remove existing behavior from _Thread
+﻿! ------------------- Remove existing behavior from _thread
 expectvalue /Metaclass3       
 doit
-_Thread removeAllMethods.
-_Thread class removeAllMethods.
+_thread removeAllMethods.
+_thread class removeAllMethods.
 %
-! ------------------- Class methods for _Thread
+! ------------------- Class methods for _thread
 set compile_env: 0
 category: 'other'
-classmethod: _Thread
+classmethod: _thread
 moduleName
 
 	^#'_thread'
 %
-! ------------------- Instance methods for _Thread
+! ------------------- Instance methods for _thread
 set compile_env: 0
 category: 'initialization'
-method: _Thread
+method: _thread
 initialize
 "
 	https://docs.python.org/3.7/library/_thread.html
 "
 	super initialize.
 	globals 
-		at: #'__class__'						put: BuiltinModule;
+		at: #'__class__'						put: module;
 		at: #'error'								put: RuntimeError;
 		at: #'LockType'						put: 'This is the type of lock objects.';
 		at: #'TIMEOUT_MAX'				put: SmallInteger maximumValue;

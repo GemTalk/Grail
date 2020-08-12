@@ -27,7 +27,7 @@ evaluate: aScope
 	iterator := expression
 		call: #'__iter__' 
 		withArguments: #() 
-		keywords: SymbolDictionary new
+		keywords: Namespace new
 		scope: aScope.
 	[
 		| each |
@@ -35,7 +35,7 @@ evaluate: aScope
 			each := iterator
 				call: #'__next__' 
 				withArguments: #() 
-				keywords: SymbolDictionary new
+				keywords: Namespace new
 				scope: aScope.
 			true.
 		] whileTrue: [
