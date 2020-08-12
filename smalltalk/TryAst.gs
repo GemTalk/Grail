@@ -27,7 +27,7 @@ evaluate: aScope
 			body evaluate: aScope.
 		] on: BaseException do: [:ex | 
 			| handler |
-			handler := handlers detect: [:each | (each type evaluate: aScope) handles: ex] ifNone: [ex pass].
+			handler := handlers detect: [:each | (each type evaluateWithPyPrefix: aScope) handles: ex] ifNone: [ex pass].
 			handler evaluate: aScope.
 		].
 		orelse evaluate: aScope.

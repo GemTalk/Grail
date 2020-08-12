@@ -5279,6 +5279,23 @@ doit
 EvaluateTestCase category: 'Tests'
 %
 set compile_env: 0
+! ------------------- Class definition for ExceptionsTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'ExceptionsTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ExceptionsTestCase category: 'Tests'
+%
+set compile_env: 0
 ! ------------------- Class definition for ExecuteTestCase
 expectvalue /Class
 doit
@@ -5631,6 +5648,7 @@ input EOFError.gs
 input EqAst.gs
 input EvaluateTestCase.gs
 input ExceptHandlerAst.gs
+input ExceptionsTestCase.gs
 input ExecuteTestCase.gs
 input ExprAst.gs
 input ExpressionAst.gs

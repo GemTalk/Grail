@@ -53,7 +53,9 @@ category: 'other'
 method: PyObject
 get: aSymbol
 
-	^variables get: aSymbol
+	^ variables 
+		get: aSymbol
+		ifAbsent: [ AttributeError signal: '''', classAst name asString, ''' object has no attribute ''', aSymbol asString, '''' ]
 %
 category: 'other'
 method: PyObject

@@ -1025,28 +1025,7 @@ Changed in version 3.6: Grouping digits with underscores as in code literals is 
 
 Changed in version 3.7: x is now a positional-only parameter.
 "
-	arguments isEmpty ifTrue: [^0].
-	arguments size == 1 ifTrue: [
-		| arg stream int |
-		arg := arguments first.
-		(arg isKindOf: Number) ifTrue: [^arg truncated].
-		stream := ReadStream on: arg trimWhiteSpace.
-		int := Integer fromStream: stream.
-		stream position == stream contents size ifFalse: [self error: 'Invalid Literal'].
-		^int
-	].
-	arguments size == 2 ifTrue: [
-		| num rad |
-		num := arguments first.
-		rad := arguments second.
-		rad == 0 ifTrue: [
-			num first == $0 ifFalse: [self error: 'Number must begin with 0'].
-			rad := #(2 8 16) at: ('BOX' indexOf: num second asUppercase).
-			num := num copyFrom: 3 to: num size.
-		].
-		^Integer fromString: rad asString, 'r', num trimWhiteSpace.
-	].
-	self error: 'Too many arguments'.
+	^ arguments asInteger
 %
 category: 'functions'
 method: Builtins
@@ -1840,6 +1819,7 @@ initialize
 		at: #'getattr'			put: [:arguments :keywords :scope | self getattr: arguments first _: arguments second];
 		at: #'hasattr'			put: [:arguments :keywords :scope | self hasattr: arguments first _: arguments second];
 		at: #'id'					put: [:arguments :keywords :scope | self id: arguments first];
+		at: #'int'				put: [:arguments :keywords :scope | self int: arguments first];
 		at: #'isinstance'		put: [:arguments :keywords :scope | self isinstance: arguments first _: arguments second];
 		at: #'len'				put: [:arguments :keywords :scope | self len: arguments first];
 		at: #'list'				put: [:arguments :keywords :scope | self list: arguments first];

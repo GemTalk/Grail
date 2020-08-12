@@ -21,7 +21,7 @@ get: aSymbol
 
 	^self
 		at: aSymbol
-		ifAbsent: [NameError signal]
+		ifAbsent: [PyNameError signal]
 %
 category: 'other'
 method: PyDictionary

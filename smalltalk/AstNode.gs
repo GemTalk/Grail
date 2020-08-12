@@ -82,6 +82,12 @@ arg
 %
 category: 'initialization'
 method: AstNode
+assertVariableIsDeclared: aSymbol
+
+	^ parent assertVariableIsDeclared: aSymbol.
+%
+category: 'initialization'
+method: AstNode
 commaSpace
 
 	| stream |
@@ -140,6 +146,12 @@ interpretEscapeSequence: aStream
 		^ (Character withValue: ('16r', (aStream next: 2)) asInteger) asString
 	].
 	^ (Character withValue: (self class escapeCharacters at: aSymbol)) asString.
+%
+category: 'initialization'
+method: AstNode
+isVariableIsDeclared: aSymbol
+
+	^ parent isVariableIsDeclared: aSymbol.
 %
 category: 'initialization'
 method: AstNode
