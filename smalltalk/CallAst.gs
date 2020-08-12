@@ -22,10 +22,19 @@ method: CallAst
 evaluate: aScope
 	"https://docs.python.org/3/reference/expressions.html#calls"
 
-	^function
+	^
+	[ [ [
+	function
 		callWithArguments: (arguments collect: [:each | each evaluate: aScope]) 
 		keywords: (keywords collect: [:each | each evaluate: aScope])
 		scope: aScope
+	] on: AlmostOutOfStack do: [ :ex |
+	        ex resignalAs: RecursionError new
+	] ] on: MessageNotUnderstood do: [ :ex |
+	        TypeError signal: 'bad operand type for ', ex selector asString, '(): ', ex receiver asString "could be translated wrong"
+	] ] on: ImproperOperation do: [ :ex |
+	        ValueError signal: 'TODO' "need to specify message"
+	]
 %
 category: 'other'
 method: CallAst

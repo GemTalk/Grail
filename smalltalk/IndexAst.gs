@@ -28,9 +28,10 @@ method: IndexAst
 evaluate: aContainer scope: aScope
 
 	| key |
-	value assertContextIsLoad.
 	key := value evaluate: aScope.
-	^aContainer at: key.
+	^ [ [ aContainer at: key 
+	] on: OffsetError do: [ IndexError signal: 'list index out of range' ]
+	] on: LookupError do: [ KeyError signal: (value evaluate: aScope) asString ]
 %
 category: 'other'
 method: IndexAst

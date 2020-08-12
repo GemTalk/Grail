@@ -11,5 +11,6 @@ category: 'other'
 method: ModAst
 left: leftOperand right: rightOperand
 
+	rightOperand = 0 ifTrue: [ ZeroDivisionError signal: 'modulo by zero' ].
 	^leftOperand rem: rightOperand
 %

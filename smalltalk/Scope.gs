@@ -52,6 +52,14 @@ get: aSymbol
 %
 category: 'other'
 method: Scope
+get: aSymbol ifAbsent: aBlock
+
+	^variables 
+		at: aSymbol
+		ifAbsent: [aBlock value]
+%
+category: 'other'
+method: Scope
 globals
 
 	self subclassResponsibility.

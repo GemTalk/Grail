@@ -82,6 +82,12 @@ arg
 %
 category: 'initialization'
 method: AstNode
+assertVariableIsDeclared: aSymbol
+
+	^ parent assertVariableIsDeclared: aSymbol.
+%
+category: 'initialization'
+method: AstNode
 commaSpace
 
 	| stream |
