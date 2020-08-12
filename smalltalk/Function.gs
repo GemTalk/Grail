@@ -21,7 +21,7 @@ method: function
 get: aSymbol
 
 	| attributes |
-	attributes := Namespace new
+	attributes := SymbolDictionary new
 		set: #'__annotations__'	to: nil;
 		set: #'__closure__'			to: nil;
 		set: #'__code__'				to: nil;

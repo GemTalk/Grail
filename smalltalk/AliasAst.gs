@@ -13,7 +13,7 @@ import: aScope
 
 	| function keywords module |
 	function := aScope get: #'__import__'.
-	keywords := Namespace new
+	keywords := SymbolDictionary new
 		at: #'globals' 	put: self globals;
 		at: #'locals'	put: aScope;
 		at: #'fromlist'	put: #();

@@ -4493,37 +4493,6 @@ doit
 WithItemAst category: 'Parser'
 %
 set compile_env: 0
-! ------------------- Class definition for Namespace
-expectvalue /Class
-doit
-SymbolDictionary subclass: 'Namespace'
-  instVarNames: #( d)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #( disallowGciStore)
-
-%
-expectvalue /Class
-doit
-Namespace comment: 
-'No class-specific documentation for Namespace, hierarchy is: 
-Object
-  Collection
-    AbstractDictionary
-      KeyValueDictionary( numElements numCollisions collisionLimit tableSize)
-        IdentityKeyValueDictionary
-          IdentityDictionary
-            SymbolDictionary
-              Namespace
-'
-%
-expectvalue /Class
-doit
-Namespace category: 'builtins'
-%
-set compile_env: 0
 ! ------------------- Class definition for object
 expectvalue /Class
 doit
@@ -6061,7 +6030,6 @@ input NameAst.gs
 input NameConstantAst.gs
 input NamedExprAst.gs
 input NameError.gs
-input Namespace.gs
 input NoneAst.gs
 input NoneType.gs
 input NonlocalAst.gs

@@ -26,7 +26,9 @@ category: 'functions'
 method: sys
 modules
 
-	^globals at: #'modules'
+	^globals 
+		at: #'modules'
+		ifAbsent: [NameError signal]
 %
 set compile_env: 0
 category: 'other'
@@ -40,6 +42,6 @@ initialize
 		at: #'__class__'					put: module;
 		at: #'builtin_module_names'	put: tuple new;
 		at: #'byteorder'					put: self byteorder;
-		at: #'modules'						put: Namespace new;
+		at: #'modules'						put: SymbolDictionary new;
 		yourself.
 %
