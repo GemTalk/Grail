@@ -9,7 +9,10 @@ set compile_env: 0
 category: 'other'
 classmethod: complex
 real: newValue imag: newImag
-	^self basicNew real: newValue imag: newImag
+
+	^self basicNew 
+		real: newValue 
+		imag: newImag
 %
 ! ------------------- Instance methods for complex
 set compile_env: 0
@@ -86,9 +89,9 @@ category: 'Printing'
 method: complex
 printOn: aStream
 
-	real ~= 0 ifTrue: [
+	number ~= 0 ifTrue: [
 		aStream 
-			print: real;
+			print: number;
 			nextPut: $+.
 	].
 
@@ -268,11 +271,13 @@ imaginary: newValue
 category: 'Updating'
 method: complex
 real: newValue
-	real := newValue
+
+	number := newValue
 %
 category: 'Updating'
 method: complex
 real: newValue imag: newImag
-	real := newValue.
+
+	number := newValue.
 	imaginary := newImag.
 %

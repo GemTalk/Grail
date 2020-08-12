@@ -147,23 +147,23 @@ testImaginaryNumber
 		assert: ((expr := self statementsAt: 35) isKindOf: ExprAst);
 		assert: ((num := expr.value) isKindOf: NumAst);
 		assert: ((complexNumber := num.n) isKindOf: complex);
-		assert: complexNumber.real == 0;
+		assert: complexNumber.number == 0;
 		assert: complexNumber.imaginary == 3.14;
 
 		assert: (expr := self statementsAt: 36) notNil;
-		assert: expr.value.n.real == 0;
+		assert: expr.value.n.number == 0;
 		assert: expr.value.n.imaginary == 2000;
 
 		assert: (expr := self statementsAt: 37) notNil;
-		assert: expr.value.n.real == 0;
+		assert: expr.value.n.number == 0;
 		assert: expr.value.n.imaginary == 11;
 
 		assert: (expr := self statementsAt: 38) notNil;
-		assert: expr.value.n.real == 0;
+		assert: expr.value.n.number == 0;
 		assert: expr.value.n.imaginary == 132;
 
 		assert: (expr := self statementsAt: 39) notNil;
-		assert: expr.value.n.real == 0;
+		assert: expr.value.n.number == 0;
 		assert: expr.value.n.imaginary == 0.129;
 		yourself.
 %
