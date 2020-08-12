@@ -149,6 +149,12 @@ interpretEscapeSequence: aStream
 %
 category: 'initialization'
 method: AstNode
+isVariableIsDeclared: aSymbol
+
+	^ parent isVariableIsDeclared: aSymbol.
+%
+category: 'initialization'
+method: AstNode
 optionalArg
 
 	| stream |

@@ -26,3 +26,9 @@ initialize
 	variables := IdentitySet new.
 	super initialize.
 %
+category: 'other'
+method: BlockAst
+isVariableIsDeclared: aSymbol
+
+	^ variables includes: aSymbol
+%

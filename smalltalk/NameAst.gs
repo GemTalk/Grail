@@ -50,7 +50,7 @@ evaluate: aScope
 
 	| isDeclared |
 	self assertContextIsLoad.
-    isDeclared := self assertVariableIsDeclared: id.
+    isDeclared := self isVariableIsDeclared: id.
     ^ isDeclared ifTrue: [
             aScope get: id ifAbsent: [ UnboundLocalError signal: 'local variable ''', id, ''' referenced before assignment' ]
     ] ifFalse: [
