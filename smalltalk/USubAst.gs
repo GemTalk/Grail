@@ -11,5 +11,7 @@ category: 'other'
 method: USubAst
 evaluate: aScope
 
-	^(operand evaluate: aScope) negated
+	| x |
+	x := operand evaluate: aScope.
+	^x __neg__ value: x
 %

@@ -24,10 +24,10 @@ testAdd
 		assert: (x isKindOf: ExprAst);
 		assert: ((x.value) isKindOf: BinOpAst);
 		assert: ((x.value.left) isKindOf: NumAst);
-		assert: (x.value.left.n == 1);
+		assert: (x.value.left.n.number == 1);
 		assert: ((x.value.op) isKindOf: AddAst);
 		assert: ((x.value.right) isKindOf: NumAst);
-		assert: (x.value.right.n == 2);
+		assert: (x.value.right.n.number == 2);
 		assert: ((x evaluate: aScope) == 3);
 
 		assert: ((x := self statementsAt: 2) isKindOf: ExprAst);			"3 + 2"

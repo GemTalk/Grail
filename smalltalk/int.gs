@@ -11,7 +11,7 @@ category: 'Python'
 method: int
 __abs__
 
-	self halt.
+	^[:n | int with: number abs]
 %
 category: 'Python'
 method: int
@@ -107,7 +107,7 @@ category: 'Python'
 method: int
 __neg__
 
-	self halt.
+	^[:n | int with: number negated]
 %
 category: 'Python'
 method: int
