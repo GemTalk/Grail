@@ -11,5 +11,5 @@ category: 'other'
 method: IsAst
 left: leftOperand right: rightOperand
 
-	^leftOperand == rightOperand
+	^ leftOperand is_ value: rightOperand
 %

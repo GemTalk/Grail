@@ -8,6 +8,12 @@ bytes class removeAllMethods.
 set compile_env: 0
 category: 'other'
 classmethod: bytes
+containerClass
+
+	^ByteArray
+%
+category: 'other'
+classmethod: bytes
 new
 
 	^self basicNew
@@ -23,31 +29,6 @@ withAll: aCollection
 		yourself
 %
 ! ------------------- Instance methods for bytes
-set compile_env: 0
-category: 'other'
-method: bytes
-= anObject
-
-	^((anObject isKindOf: bytes) and: [b = anObject.b]) or: [(anObject isKindOf: ByteArray) and: [b = anObject]]
-%
-category: 'other'
-method: bytes
-hash
-
-	^b hash
-%
-category: 'other'
-method: bytes
-initialize
-
-	b := ByteArray new.
-%
-category: 'other'
-method: bytes
-initialize: aCollection
-
-	b := ByteArray withAll: aCollection.
-%
 set compile_env: 0
 category: 'Python'
 method: bytes

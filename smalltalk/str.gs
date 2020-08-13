@@ -8,6 +8,12 @@ str class removeAllMethods.
 set compile_env: 0
 category: 'other'
 classmethod: str
+containerClass
+
+	^Unicode7
+%
+category: 'other'
+classmethod: str
 new
 
 	^self basicNew
@@ -26,15 +32,21 @@ withAll: aCollection
 set compile_env: 0
 category: 'other'
 method: str
-+ other
+__eq__
 
-	^str withAll: s + other.s
+	^ [ :anObject | ((anObject isKindOf: AbstractContainer) and: [container = anObject.container]) ifTrue: [ True ] ifFalse: [ False ] ]
 %
 category: 'other'
 method: str
-= anObject
+__ne__
 
-	^((anObject isKindOf: str) and: [s = anObject.s]) or: [(anObject isKindOf: String) and: [s = anObject]]
+	^ [ :anObject | ((anObject isKindOf: AbstractContainer) and: [container = anObject.container]) ifTrue: [ False ] ifFalse: [ True ] ]
+%
+category: 'other'
+method: str
++ other
+
+	^str withAll: container + other.container
 %
 category: 'other'
 method: str
@@ -42,7 +54,7 @@ asByteArray
 
 	| result |
 	result := ByteArray new.
-	s do: [:each | 
+	container do: [:each | 
 		| value |
 		value := each codePoint.
 		value > 255 ifTrue: [self error: 'Cannot represent string as bytearray'].
@@ -54,50 +66,19 @@ category: 'other'
 method: str
 asInteger
 
-	^s asInteger
+	^container asInteger
 %
 category: 'other'
 method: str
 asSymbol
 
-	^s asSymbol
-%
-category: 'other'
-method: str
-at: anIndex put: aCharacter
-
-	s at: anIndex put: aCharacter.
+	^container asSymbol
 %
 category: 'other'
 method: str
 copyFrom: i to: j
 
-	^str withAll: (s copyFrom: i to: j)
-%
-category: 'other'
-method: str
-do: aBlock
-
-	s do: aBlock.
-%
-category: 'other'
-method: str
-hash
-
-	^s hash
-%
-category: 'other'
-method: str
-initialize
-
-	s := Unicode7 new.
-%
-category: 'other'
-method: str
-initialize: aCollection
-
-
-	s := Unicode7 withAll: aCollection.
+	^str withAll: (container copyFrom: i to: j)
 %
 category: 'other'
 method: str
@@ -115,8 +96,14 @@ split: arguments keywords: keywords
 
 	| result |
 	result := list new.
-	s subStrings do: [:each | result add: (str withAll: each)].
+	container subStrings do: [:each | result add: (str withAll: each)].
 	^result
+%
+category: 'other'
+method: str
+value: anObject
+
+	self halt
 %
 set compile_env: 0
 category: 'Python'

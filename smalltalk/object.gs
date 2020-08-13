@@ -154,3 +154,15 @@ __subclasshook__
 
 	self halt.
 %
+category: 'Python'
+method: object
+is_
+
+	self subclassResponsibility
+%
+category: 'Python'
+method: object
+is_not
+
+	self subclassResponsibility
+%

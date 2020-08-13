@@ -11,5 +11,5 @@ category: 'other'
 method: MultAst
 left: leftOperand right: rightOperand
 
-	^leftOperand * rightOperand
+	^ leftOperand __mul__ value: rightOperand
 %

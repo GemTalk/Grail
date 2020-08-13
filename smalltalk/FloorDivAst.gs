@@ -10,6 +10,7 @@ set compile_env: 0
 category: 'other'
 method: FloorDivAst
 left: leftOperand right: rightOperand
+"https://docs.python.org/3/library/operator.html#operator.__floordiv__"
 
-	^leftOperand // rightOperand
+	^ leftOperand __floordiv__ value: rightOperand
 %

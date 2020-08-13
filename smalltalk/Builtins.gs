@@ -141,8 +141,8 @@ category: 'functions'
 method: builtins
 abs: aNumber
 	"https://docs.python.org/3/library/functions.html#abs"
-	
-	^aNumber abs
+
+	^aNumber __abs__ value: aNumber
 %
 category: 'functions'
 method: builtins

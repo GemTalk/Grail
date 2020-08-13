@@ -11,5 +11,5 @@ category: 'other'
 method: LShiftAst
 left: leftOperand right: rightOperand
 
-	^leftOperand bitShift: rightOperand
+	^ leftOperand __lshift__ value: rightOperand
 %

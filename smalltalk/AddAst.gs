@@ -11,5 +11,5 @@ category: 'other'
 method: AddAst
 left: leftOperand right: rightOperand
 
-	^leftOperand + rightOperand
+	^ leftOperand __add__ value: rightOperand
 %

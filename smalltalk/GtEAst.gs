@@ -11,5 +11,5 @@ category: 'other'
 method: GtEAst
 left: leftOperand right: rightOperand
 
-	^leftOperand >= rightOperand
+	^ leftOperand __gte__ value: rightOperand
 %

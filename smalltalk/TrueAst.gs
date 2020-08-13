@@ -11,5 +11,5 @@ category: 'other'
 method: TrueAst
 evaluate: aScope
 
-	^true
+	^bool True
 %

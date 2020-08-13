@@ -4549,16 +4549,33 @@ doit
 object category: 'builtins'
 %
 set compile_env: 0
-! ------------------- Class definition for bytearray
+! ------------------- Class definition for AbstractContainer
 expectvalue /Class
 doit
-object subclass: 'bytearray'
-  instVarNames: #( b)
+object subclass: 'AbstractContainer'
+  instVarNames: #( container)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #()
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+AbstractContainer category: 'builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for bytearray
+expectvalue /Class
+doit
+AbstractContainer subclass: 'bytearray'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
 
 %
 expectvalue /Class
@@ -4574,13 +4591,13 @@ set compile_env: 0
 ! ------------------- Class definition for bytes
 expectvalue /Class
 doit
-object subclass: 'bytes'
-  instVarNames: #( b)
+AbstractContainer subclass: 'bytes'
+  instVarNames: #()
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( instancesInvariant)
+  options: #( instancesInvariant disallowGciStore)
 
 %
 expectvalue /Class
@@ -4593,58 +4610,11 @@ doit
 bytes category: 'builtins'
 %
 set compile_env: 0
-! ------------------- Class definition for class
-expectvalue /Class
-doit
-object subclass: 'class'
-  instVarNames: #( astNode scope)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-class comment: 
-'This is the runtime artifact created by a class definition. Note that a class defined in a function will be created anew each time the function is called, so we don''t share the scope (as is done for a module).'
-%
-expectvalue /Class
-doit
-class category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for complex
-expectvalue /Class
-doit
-object subclass: 'complex'
-  instVarNames: #( real imaginary)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-complex comment: 
-'No class-specific documentation for complex, hierarchy is: 
-Object
-  complex( real imaginary)
-'
-%
-expectvalue /Class
-doit
-complex category: 'builtins'
-%
-set compile_env: 0
 ! ------------------- Class definition for dict
 expectvalue /Class
 doit
-object subclass: 'dict'
-  instVarNames: #( d)
+AbstractContainer subclass: 'dict'
+  instVarNames: #()
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -4671,10 +4641,138 @@ doit
 dict category: 'builtins'
 %
 set compile_env: 0
+! ------------------- Class definition for list
+expectvalue /Class
+doit
+AbstractContainer subclass: 'list'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+list comment: 
+'No class-specific documentation for list, hierarchy is: 
+Object
+  Collection
+    SequenceableCollection
+      Array
+        list
+'
+%
+expectvalue /Class
+doit
+list category: 'builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for str
+expectvalue /Class
+doit
+AbstractContainer subclass: 'str'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+str comment: 
+'No class-specific documentation for str, hierarchy is: 
+Object
+  Collection
+    SequenceableCollection
+      CharacterCollection
+        String
+          Unicode7
+            str
+'
+%
+expectvalue /Class
+doit
+str category: 'builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for tuple
+expectvalue /Class
+doit
+AbstractContainer subclass: 'tuple'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+tuple comment: 
+'No class-specific documentation for tuple, hierarchy is: 
+Object
+  Collection
+    SequenceableCollection
+      Array
+        tuple
+'
+%
+expectvalue /Class
+doit
+tuple category: 'builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for AbstractNumber
+expectvalue /Class
+doit
+object subclass: 'AbstractNumber'
+  instVarNames: #( number)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+AbstractNumber category: 'builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for complex
+expectvalue /Class
+doit
+AbstractNumber subclass: 'complex'
+  instVarNames: #( imaginary)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+complex comment: 
+'No class-specific documentation for complex, hierarchy is: 
+Object
+  complex( real imaginary)
+'
+%
+expectvalue /Class
+doit
+complex category: 'builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for float
 expectvalue /Class
 doit
-object subclass: 'float'
+AbstractNumber subclass: 'float'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -4685,7 +4783,91 @@ object subclass: 'float'
 %
 expectvalue /Class
 doit
+float comment: 
+'No class-specific documentation for float, hierarchy is: 
+Object
+  object
+    float
+'
+%
+expectvalue /Class
+doit
 float category: 'builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for int
+expectvalue /Class
+doit
+AbstractNumber subclass: 'int'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+int comment: 
+'No class-specific documentation for int, hierarchy is: 
+Object
+  object
+    int
+'
+%
+expectvalue /Class
+doit
+int category: 'builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for bool
+expectvalue /Class
+doit
+int subclass: 'bool'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #( t f)
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+bool comment: 
+'No class-specific documentation for bool, hierarchy is: 
+Object
+  object
+    int
+      bool
+'
+%
+expectvalue /Class
+doit
+bool category: 'builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for class
+expectvalue /Class
+doit
+object subclass: 'class'
+  instVarNames: #( astNode scope)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+class comment: 
+'This is the runtime artifact created by a class definition. Note that a class defined in a function will be created anew each time the function is called, so we don''t share the scope (as is done for a module).'
+%
+expectvalue /Class
+doit
+class category: 'builtins'
 %
 set compile_env: 0
 ! ------------------- Class definition for function
@@ -4787,68 +4969,6 @@ Object
 expectvalue /Class
 doit
 Instance category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for int
-expectvalue /Class
-doit
-object subclass: 'int'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-int category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for bool
-expectvalue /Class
-doit
-int subclass: 'bool'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-bool category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for list
-expectvalue /Class
-doit
-object subclass: 'list'
-  instVarNames: #( l)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-list comment: 
-'No class-specific documentation for list, hierarchy is: 
-Object
-  Collection
-    SequenceableCollection
-      Array
-        list
-'
-%
-expectvalue /Class
-doit
-list category: 'builtins'
 %
 set compile_env: 0
 ! ------------------- Class definition for module
@@ -5168,64 +5288,6 @@ NotImplementedType comment:
 expectvalue /Class
 doit
 NotImplementedType category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for str
-expectvalue /Class
-doit
-object subclass: 'str'
-  instVarNames: #( s)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-str comment: 
-'No class-specific documentation for str, hierarchy is: 
-Object
-  Collection
-    SequenceableCollection
-      CharacterCollection
-        String
-          Unicode7
-            str
-'
-%
-expectvalue /Class
-doit
-str category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for tuple
-expectvalue /Class
-doit
-object subclass: 'tuple'
-  instVarNames: #( t)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-tuple comment: 
-'No class-specific documentation for tuple, hierarchy is: 
-Object
-  Collection
-    SequenceableCollection
-      Array
-        tuple
-'
-%
-expectvalue /Class
-doit
-tuple category: 'builtins'
 %
 set compile_env: 0
 ! ------------------- Class definition for Scope
@@ -5851,8 +5913,10 @@ input _imp.gs
 input _thread.gs
 input _warnings.gs
 input _weakref.gs
+input AbstractContainer.gs
 input AbstractLocationNode.gs
 input AbstractNode.gs
+input AbstractNumber.gs
 input AddAst.gs
 input AliasAst.gs
 input AndAst.gs

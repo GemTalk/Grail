@@ -11,5 +11,5 @@ category: 'other'
 method: EqAst
 left: leftOperand right: rightOperand
 
-	^leftOperand = rightOperand
+	^ leftOperand __eq__ value: rightOperand
 %

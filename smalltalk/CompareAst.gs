@@ -27,10 +27,11 @@ evaluate: aScope
 		| op operand |
 		op := cmpopList at: i.
 		operand := (comparatorList at: i) evaluate: aScope.
-		(op left: temp right: operand) ifFalse: [^false].
+		(temp := (op left: temp right: operand)).
+		(temp == True) ifFalse: [^False].
 		temp := operand.
 	].
-	^true
+	^True
 %
 category: 'other'
 method: CompareAst

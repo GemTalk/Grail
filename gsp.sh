@@ -49,8 +49,8 @@ Python
     at: #'None'             put: NoneType singleton;
     at: #'NotImplemented'   put: NotImplementedType singleton;
     at: #'Ellipsis'         put: ellipsis singleton;
-    at: #'True'             put: true;
-    at: #'False'            put: false;
+    at: #'True'             put: bool True;
+    at: #'False'            put: bool False;
     yourself.
 %
 output pop

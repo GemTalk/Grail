@@ -44,7 +44,7 @@ testAssertFalse
 	self 
 		assert: (x isKindOf: AssertAst);
 		assert: (x.test isKindOf: FalseAst);
-		deny:   (x.test evaluate: aScope);
+		assert: (x.test evaluate: aScope) == False;
 		assert: x.msg isNone;
 		yourself.
 %
@@ -57,7 +57,7 @@ testAssertTrue
 	self 
 		assert: (x isKindOf: AssertAst);
 		assert: (x.test isKindOf: TrueAst);
-		assert: (x.test evaluate: aScope);
+		assert: (x.test evaluate: aScope) == True;
 		assert: (x.msg isNone);
 		yourself.
 %
@@ -424,7 +424,7 @@ testReturnTrue
 		assert: (x.body.body size == 1);
 		assert: ((y := x.body.body at: 1) isKindOf: ReturnAst);
 		assert: (y.value isKindOf: TrueAst);
-		assert: (y.value evaluate: aScope);
+		assert: (y.value evaluate: aScope) == True;
 		assert: (x.decorator_list size == 0);
 		assert: (x.returns isNone);
 		yourself.

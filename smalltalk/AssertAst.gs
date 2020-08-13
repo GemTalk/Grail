@@ -20,7 +20,7 @@ category: 'other'
 method: AssertAst
 evaluate: aScope
 
-	(test evaluate: aScope) ifFalse: [ AssertionError signal ].
+	(test evaluate: aScope) == True ifFalse: [ AssertionError signal ].
 %
 category: 'other'
 method: AssertAst
