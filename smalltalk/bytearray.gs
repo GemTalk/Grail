@@ -14,6 +14,16 @@ containerClass
 %
 ! ------------------- Instance methods for bytearray
 set compile_env: 0
+category: 'private'
+method: bytearray
+___initialize: aCollection
+
+	| x |
+	x := aCollection.
+	(x isKindOf: CharacterCollection) ifTrue: [x := x asArray collect: [:each | each codePoint]].
+	container := self class containerClass withAll: x.
+%
+set compile_env: 0
 category: 'Python'
 method: bytearray
 __add__

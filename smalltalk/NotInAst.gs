@@ -11,5 +11,5 @@ category: 'other'
 method: NotInAst
 left: leftOperand right: rightOperand
 
-	^rightOperand __not_contains__ value: leftOperand
+	^rightOperand __not_contains__ value: rightOperand value: leftOperand
 %

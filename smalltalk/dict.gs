@@ -5,91 +5,19 @@ dict removeAllMethods.
 dict class removeAllMethods.
 %
 ! ------------------- Class methods for dict
-set compile_env: 0
-category: 'other'
-classmethod: dict
-containerClass
-
-	^Dictionary
-%
 ! ------------------- Instance methods for dict
 set compile_env: 0
 category: 'other'
 method: dict
-associationAt: aKey
-
-	^container associationAt: aKey
-%
-category: 'other'
-method: dict
-at: aKey
-
-	^self get: aKey
-%
-category: 'other'
-method: dict
-at: aKey put: aValue
-
-	self set: aKey to: aValue.
-	^aValue
-%
-category: 'other'
-method: dict
-call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
-
-	aSymbol == #'items' ifTrue: [^self].
-	aSymbol == #'__iter__' ifTrue: [^Iterator onDictionary: self].
-	self halt.
-%
-category: 'other'
-method: dict
-collect: aBlock
-
-	| result |
-	result := dict new.
-	container keysAndValuesDo: [:eachKey :eachValue | result at: eachKey put: (aBlock value: eachValue)].
-	^result
-%
-category: 'other'
-method: dict
-get: aKey
-
-	^container
-		at: aKey
-		ifAbsent: [KeyError signal]
-%
-category: 'other'
-method: dict
-includesKey: aKey
-
-	^container includesKey: aKey
-%
-category: 'other'
-method: dict
-membershipIncludes: aKey
-	"Smalltalk checks for values!"
-
-	^container includesKey: aKey
-%
-category: 'other'
-method: dict
-removeKey: aKey
-
-	^container removeKey: aKey
-%
-category: 'other'
-method: dict
-removeKey: aKey ifAbsent: aBlock
-
-	^container removeKey: aKey ifAbsent: aBlock
-%
-category: 'other'
-method: dict
 set: aKey to: aValue
 
-	container 
-		at: aKey
-		put: aValue.
+	1 to: container size by: 2 do: [:i | 
+		((container at: i) __eq__ value: aKey) == True ifTrue: [
+			container at: i + 1 put: aValue.
+			^self.
+		].
+	].
+	container add: aKey; add: aValue.
 %
 set compile_env: 0
 category: 'Python'
@@ -108,7 +36,20 @@ category: 'Python'
 method: dict
 __getitem__
 
-	self halt.
+	^[:collection :key | 
+		[
+			| array each  |
+			(collection isKindOf: dict) ifFalse: [TypeError signal].
+			array := collection ___container.
+			1 to: array size by: 2 do: [:i | 
+				each := array at: i.
+				(each __eq__ value: each value: key) == True ifTrue: [Notification signal: (array at: i + 1)].
+			].
+			KeyError signal: key.
+		] on: Notification do: [:ex | 
+			ex return: ex details.
+		].
+	]
 %
 category: 'Python'
 method: dict

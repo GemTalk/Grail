@@ -11,5 +11,7 @@ category: 'other'
 method: IsAst
 left: leftOperand right: rightOperand
 
-	^ leftOperand is_ value: rightOperand
+	^((leftOperand isKindOf: AbstractNumber) and: [rightOperand isKindOf: AbstractNumber])
+		ifTrue: [leftOperand.number == rightOperand.number ifTrue: [True] ifFalse: [False]]
+		ifFalse: [leftOperand == rightOperand ifTrue: [True] ifFalse: [False]]
 %

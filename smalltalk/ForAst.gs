@@ -24,19 +24,11 @@ evaluate: aScope
 
 	| expression iterator |
 	expression := iter evaluate: aScope.
-	iterator := expression
-		call: #'__iter__' 
-		withArguments: #() 
-		keywords: SymbolDictionary new
-		scope: aScope.
+	iterator := expression __iter__ value.
 	[
 		| each |
 		[
-			each := iterator
-				call: #'__next__' 
-				withArguments: #() 
-				keywords: SymbolDictionary new
-				scope: aScope.
+			each := iterator __next__ value.
 			true.
 		] whileTrue: [
 			[

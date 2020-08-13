@@ -5,13 +5,6 @@ list removeAllMethods.
 list class removeAllMethods.
 %
 ! ------------------- Class methods for list
-set compile_env: 0
-category: 'other'
-classmethod: list
-containerClass
-
-	^Array
-%
 ! ------------------- Instance methods for list
 set compile_env: 0
 category: 'other'
@@ -22,10 +15,10 @@ append: arguments keywords: keywords
 %
 category: 'other'
 method: list
-at: anIndex
+get: anIndex
 
 	[
-		^super at: anIndex
+		^super ___at: anIndex.number
 	] on: OffsetError do: [:ex | 
 		ex resignalAs: (IndexError new details: 'list index out of range'; yourself).
 	]
@@ -39,19 +32,7 @@ __add__
 %
 category: 'Python'
 method: list
-__contains__
-
-	^ [ :anObject | ( self membershipIncludes: anObject ) ifTrue: [ True ] ifFalse: [ False ] ]
-%
-category: 'Python'
-method: list
 __delitem__
-
-	self halt.
-%
-category: 'Python'
-method: list
-__getitem__
 
 	self halt.
 %
@@ -84,12 +65,6 @@ method: list
 __mul__
 
 	self halt.
-%
-category: 'Python'
-method: list
-__not_contains__
-
-	^ [ :anObject | ( self membershipIncludes: anObject ) ifTrue: [ False ] ifFalse: [ True ] ]
 %
 category: 'Python'
 method: list

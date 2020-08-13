@@ -54,12 +54,6 @@ __divmod__
 %
 category: 'Python'
 method: int
-__eq__
-
-	^ [ :aNumber | number = aNumber.number ifTrue: [ True ] ifFalse: [ False ] ]
-%
-category: 'Python'
-method: int
 __float__
 
 	self halt.

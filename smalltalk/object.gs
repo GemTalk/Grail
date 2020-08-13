@@ -44,7 +44,7 @@ category: 'Python'
 method: object
 __eq__
 
-	self halt.
+	^[:lhs :rhs | lhs == rhs ifTrue: [ True ] ifFalse: [ False ]]
 %
 category: 'Python'
 method: object

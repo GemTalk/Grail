@@ -23,7 +23,7 @@ evaluate: aScope
 	| result |
 	result := dict new.
 	1 to: keys size do: [:i | 
-		result at: ((keys at: i) evaluate: aScope) put: ((values at: i) evaluate: aScope).
+		result set: ((keys at: i) evaluate: aScope) to: ((values at: i) evaluate: aScope).
 	].
 	^result
 %

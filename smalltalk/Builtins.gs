@@ -1369,8 +1369,14 @@ print: arguments keywords: keywords
 	"https://docs.python.org/3/library/functions.html#print"
 
 	| separator1 separator2 stream terminator |
-	separator1 := keywords at: #'sep' ifAbsent: [' '].
-	terminator := keywords at: #'end' ifAbsent: [Character lf asString].
+	separator1 := keywords at: #'sep' ifAbsent: [nil].
+	separator1 := separator1
+		ifNil: [' ']
+		ifNotNil: [separator1.container].
+	terminator := keywords at: #'end' ifAbsent: [nil].
+	terminator := terminator
+		ifNil: [Character lf asString]
+		ifNotNil: [terminator.container].
 	"We should default to stdout, but Transcript is easier (and more useful) for now"
 	stream := keywords at: #'file' ifAbsent: [stdout ifNil: [Transcript]].
 	separator2 := ''.
@@ -1379,7 +1385,7 @@ print: arguments keywords: keywords
 		"https://docs.python.org/3/library/stdtypes.html#str"
 		string := (each isKindOf: str) 
 			ifTrue: [each.container]
-			ifFalse: [each __str__ value].
+			ifFalse: [ | x | x := each __str__ value. x.container].
 		stream nextPutAll: separator2; nextPutAll: string.
 		separator2 := separator1.
 	].
