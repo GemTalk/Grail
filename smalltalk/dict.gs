@@ -126,6 +126,7 @@ __iter__
 
 	iter(d) Return an iterator over the keys of the dictionary. 
 	This is a shortcut for iter(d.keys()).
+	Keys and values are iterated over in insertion order!
 	https://docs.python.org/3.7/library/stdtypes.html#mapping-types-dict"
 	self halt.
 %
