@@ -11,5 +11,5 @@ category: 'other'
 method: RShiftAst
 left: leftOperand right: rightOperand
 
-	^leftOperand bitShift: rightOperand negated
+	^ leftOperand __rshift__ value: rightOperand
 %

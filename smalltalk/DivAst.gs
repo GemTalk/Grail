@@ -11,6 +11,6 @@ category: 'other'
 method: DivAst
 left: leftOperand right: rightOperand
 
-	rightOperand = 0 ifTrue: [ ZeroDivisionError signal: 'division by zero' ].
-	^(leftOperand / rightOperand) asFloat
+	rightOperand.number = 0 ifTrue: [ ZeroDivisionError signal: 'division by zero' ].
+	^ leftOperand __truediv__ value: rightOperand
 %

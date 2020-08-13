@@ -11,5 +11,5 @@ category: 'other'
 method: PowAst
 left: leftOperand right: rightOperand
 
-	^leftOperand raisedTo: rightOperand
+	^ leftOperand __pow__ value: rightOperand
 %

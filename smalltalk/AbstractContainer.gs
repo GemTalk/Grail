@@ -75,6 +75,18 @@ initialize: aCollection
 %
 category: 'other'
 method: AbstractContainer
+is_
+
+	^ [ :anObject | container == anObject.container ifTrue: [ True ] ifFalse: [ False ] ]
+%
+category: 'other'
+method: AbstractContainer
+is_not
+
+	^ [ :anObject | container ~~ anObject.container ifTrue: [ True ] ifFalse: [ False ] ]
+%
+category: 'other'
+method: AbstractContainer
 membershipIncludes: anObject
 
 	^container includes: anObject

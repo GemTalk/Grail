@@ -11,5 +11,5 @@ category: 'other'
 method: BitAndAst
 left: leftOperand right: rightOperand
 
-	^leftOperand bitAnd: rightOperand
+	^ leftOperand __and__ value: rightOperand
 %

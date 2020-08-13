@@ -11,5 +11,5 @@ category: 'other'
 method: InAst
 left: leftOperand right: rightOperand
 
-	^rightOperand membershipIncludes: leftOperand
+	^rightOperand __contains__ value: leftOperand
 %

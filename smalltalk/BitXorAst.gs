@@ -11,5 +11,5 @@ category: 'other'
 method: BitXorAst
 left: leftOperand right: rightOperand
 
-	^leftOperand bitXor: rightOperand 
+	^ leftOperand __xor__ value: rightOperand
 %

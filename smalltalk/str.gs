@@ -32,6 +32,18 @@ withAll: aCollection
 set compile_env: 0
 category: 'other'
 method: str
+__eq__
+
+	^ [ :anObject | ((anObject isKindOf: AbstractContainer) and: [container = anObject.container]) ifTrue: [ True ] ifFalse: [ False ] ]
+%
+category: 'other'
+method: str
+__ne__
+
+	^ [ :anObject | ((anObject isKindOf: AbstractContainer) and: [container = anObject.container]) ifTrue: [ False ] ifFalse: [ True ] ]
+%
+category: 'other'
+method: str
 + other
 
 	^str withAll: container + other.container
@@ -86,6 +98,12 @@ split: arguments keywords: keywords
 	result := list new.
 	container subStrings do: [:each | result add: (str withAll: each)].
 	^result
+%
+category: 'other'
+method: str
+value: anObject
+
+	self halt
 %
 set compile_env: 0
 category: 'Python'
