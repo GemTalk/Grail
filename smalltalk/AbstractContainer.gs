@@ -5,6 +5,23 @@ AbstractContainer removeAllMethods.
 AbstractContainer class removeAllMethods.
 %
 ! ------------------- Class methods for AbstractContainer
+set compile_env: 0
+category: 'other'
+classmethod: AbstractContainer
+new
+
+	^self basicNew
+		initialize;
+		yourself
+%
+category: 'other'
+classmethod: AbstractContainer
+withAll: aCollection
+
+	^self basicNew
+		initialize: aCollection;
+		yourself
+%
 ! ------------------- Instance methods for AbstractContainer
 set compile_env: 0
 category: 'other'

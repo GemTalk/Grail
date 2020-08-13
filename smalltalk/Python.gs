@@ -4594,7 +4594,18 @@ AbstractContainer subclass: 'dict'
 expectvalue /Class
 doit
 dict comment: 
-'https://docs.python.org/3/library/stdtypes.html#mapping-types-dict'
+'A dictonary''s keys must be hashable and are compared using equality (presumably this allows for efficient lookup).
+But a dictionary''s keys and values are iterated over in insertion order, so we we must also keep the insertion order!
+As a first implementation, we will just use an array of keys (odd offsets) and values (even offsets)
+and use a brute force search. Removing a key will leave a gap (no compaction in our first implementation).
+(Make it work, make it right, make it fast!)
+If we use this for a namespace (module, function, or class), then we would need to use Associations
+so that the global and nonlocal commands would work properly. For now they are SymbolDictionary instances.
+
+https://docs.python.org/3/library/stdtypes.html#mapping-types-dict
+
+For an introduction to CPython implementation, see
+https://stackoverflow.com/questions/327311/how-are-pythons-built-in-dictionaries-implemented.'
 %
 expectvalue /Class
 doit

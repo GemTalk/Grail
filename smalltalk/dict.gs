@@ -12,14 +12,6 @@ containerClass
 
 	^Dictionary
 %
-category: 'other'
-classmethod: dict
-new
-
-	^self basicNew
-		initialize;
-		yourself
-%
 ! ------------------- Instance methods for dict
 set compile_env: 0
 category: 'other'

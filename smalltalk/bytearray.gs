@@ -12,22 +12,6 @@ containerClass
 
 	^ByteArray
 %
-category: 'other'
-classmethod: bytearray
-new
-
-	^self basicNew
-		initialize;
-		yourself
-%
-category: 'other'
-classmethod: bytearray
-withAll: aCollection
-
-	^self basicNew
-		initialize: aCollection;
-		yourself
-%
 ! ------------------- Instance methods for bytearray
 set compile_env: 0
 category: 'Python'

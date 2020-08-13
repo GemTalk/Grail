@@ -12,22 +12,6 @@ containerClass
 
 	^Array
 %
-category: 'other'
-classmethod: list
-new
-
-	^self basicNew
-		initialize;
-		yourself
-%
-category: 'other'
-classmethod: list
-withAll: aCollection
-
-	^self basicNew
-		initialize: aCollection;
-		yourself
-%
 ! ------------------- Instance methods for list
 set compile_env: 0
 category: 'other'
