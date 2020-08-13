@@ -15,6 +15,12 @@ method: int
 	res := ((self __eq__ value: anObject) == True).
 	^ res
 %
+category: 'other'
+method: int
+asString
+
+	^ number asString
+%
 set compile_env: 0
 category: 'Python'
 method: int
