@@ -9,14 +9,6 @@ ExprAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: ExprAst
-children
-
-	^super children
-		add: value;
-		yourself
-%
-category: 'other'
-method: ExprAst
 evaluate: aScope
 
 	^value evaluate: aScope

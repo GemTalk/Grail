@@ -9,14 +9,6 @@ YieldFromAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: YieldFromAst
-children
-
-	^super children
-		add: value;
-		yourself
-%
-category: 'other'
-method: YieldFromAst
 initialize
 	"YieldFrom(expr value)"
 

@@ -9,14 +9,6 @@ ConstantAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: ConstantAst
-children
-
-	^super children
-		add: value;
-		yourself
-%
-category: 'other'
-method: ConstantAst
 intialize
 	"Constant(constant value)"
 %

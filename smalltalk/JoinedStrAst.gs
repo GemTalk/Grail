@@ -9,14 +9,6 @@ JoinedStrAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: JoinedStrAst
-children
-
-	^super children
-		addAll: values;
-		yourself
-%
-category: 'other'
-method: JoinedStrAst
 initialize
 	"JoinedStr(expr* values)"
 

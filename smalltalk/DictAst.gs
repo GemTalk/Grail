@@ -9,15 +9,6 @@ DictAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: DictAst
-children
-
-	^super children
-		addAll: keys;
-		addAll: values;
-		yourself
-%
-category: 'other'
-method: DictAst
 evaluate: aScope
 
 	| result |

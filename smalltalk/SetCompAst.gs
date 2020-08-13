@@ -9,15 +9,6 @@ SetCompAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: SetCompAst
-children
-
-	^super children
-		add: elt;
-		addAll: generators;
-		yourself
-%
-category: 'other'
-method: SetCompAst
 initialize
 	"SetComp(expr elt, comprehension* generators)"
 

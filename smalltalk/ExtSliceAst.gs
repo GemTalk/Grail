@@ -9,14 +9,6 @@ ExtSliceAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: ExtSliceAst
-children
-
-	^super children
-		addAll: dims;
-		yourself
-%
-category: 'other'
-method: ExtSliceAst
 initialize
 	"ExtSlice(slice* dims)"
 	

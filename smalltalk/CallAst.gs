@@ -9,16 +9,6 @@ CallAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: CallAst
-children
-
-	^super children
-		addAll: arguments;
-		add: function;
-		addAll: keywords;
-		yourself
-%
-category: 'other'
-method: CallAst
 evaluate: aScope
 	"https://docs.python.org/3/reference/expressions.html#calls"
 

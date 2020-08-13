@@ -9,15 +9,6 @@ ExceptHandlerAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: ExceptHandlerAst
-children
-
-	^super children
-		add: type;
-		add: body;
-		yourself
-%
-category: 'other'
-method: ExceptHandlerAst
 evaluate: aScope
 
 	(name evaluate: aScope) ifNotNil: [:myName | myName halt].

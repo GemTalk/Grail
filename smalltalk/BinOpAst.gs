@@ -9,16 +9,6 @@ BinOpAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: BinOpAst
-children
-
-	^super children
-		add: left;
-		add: op;
-		add: right;
-		yourself
-%
-category: 'other'
-method: BinOpAst
 evaluate: aScope
 
 	^op left: (left evaluate: aScope) right: (right evaluate: aScope)

@@ -9,15 +9,6 @@ AssignAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: AssignAst
-children
-
-	^super children
-		addAll: targets;
-		add: value;
-		yourself
-%
-category: 'other'
-method: AssignAst
 evaluate: aScope
 
 	| x |

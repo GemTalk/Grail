@@ -9,14 +9,6 @@ IndexAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: IndexAst
-children
-
-	^super children
-		add: value;
-		yourself
-%
-category: 'other'
-method: IndexAst
 evaluate: aContainer scope: aScope
 
 	^aContainer __getitem__ value: aContainer value: (value evaluate: aScope)

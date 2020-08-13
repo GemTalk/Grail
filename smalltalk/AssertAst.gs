@@ -9,15 +9,6 @@ AssertAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: AssertAst
-children
-
-	^super children
-		add: msg;
-		add: test;
-		yourself
-%
-category: 'other'
-method: AssertAst
 evaluate: aScope
 
 	(test evaluate: aScope) == True ifFalse: [ AssertionError signal ].

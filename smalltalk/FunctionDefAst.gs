@@ -22,17 +22,6 @@ parent: anAstNode
 set compile_env: 0
 category: 'other'
 method: FunctionDefAst
-children
-
-	^super children
-		add: args;
-		add: body;
-		"addAll: decorator_list;"	"I think these are all strings (converted to Symbols)"
-		add: returns;
-		yourself
-%
-category: 'other'
-method: FunctionDefAst
 decoratorList
 
 	^decorator_list

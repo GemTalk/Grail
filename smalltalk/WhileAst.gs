@@ -9,16 +9,6 @@ WhileAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: WhileAst
-children
-
-	^super children
-		add: test;
-		add: body;
-		add: orelse;
-		yourself
-%
-category: 'other'
-method: WhileAst
 evaluate: aScope
 	[
 		[

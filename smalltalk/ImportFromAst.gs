@@ -9,14 +9,6 @@ ImportFromAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: ImportFromAst
-children
-
-	^super children
-		addAll: names;
-		yourself
-%
-category: 'other'
-method: ImportFromAst
 evaluate: aScope
 
 	(module isKindOf: NoneAst) ifTrue: [		"from ."

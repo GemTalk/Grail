@@ -9,15 +9,6 @@ ListCompAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: ListCompAst
-children
-
-	^super children
-		add: elt;
-		addAll: generators;
-		yourself
-%
-category: 'other'
-method: ListCompAst
 initialize
 	"ListComp(expr elt, comprehension* generators)"
 	| stream |

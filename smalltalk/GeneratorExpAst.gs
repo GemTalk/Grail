@@ -9,15 +9,6 @@ GeneratorExpAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: GeneratorExpAst
-children
-
-	^super children
-		add: elt;
-		addAll: generators;
-		yourself
-%
-category: 'other'
-method: GeneratorExpAst
 initialize
 	"GeneratorExp(expr elt, comprehension* generators)"
 

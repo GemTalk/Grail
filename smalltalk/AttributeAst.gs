@@ -28,15 +28,6 @@ callWithArguments: anArray keywords: aSymbolDictionary scope: aScope
 %
 category: 'other'
 method: AttributeAst
-children
-
-	^super children
-		add: ctx;
-		add: value;
-		yourself
-%
-category: 'other'
-method: AttributeAst
 declareVariable
 
 	value declareVariable.

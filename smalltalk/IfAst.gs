@@ -9,16 +9,6 @@ IfAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: IfAst
-children
-
-	^super children
-		add: test;
-		add: body;
-		add: orelse;
-		yourself
-%
-category: 'other'
-method: IfAst
 evaluate: aScope
 
 	(test evaluate: aScope) == True

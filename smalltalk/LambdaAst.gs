@@ -9,15 +9,6 @@ LambdaAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: LambdaAst
-children
-
-	^super children
-		add: args;
-		add: body;
-		yourself
-%
-category: 'other'
-method: LambdaAst
 initialize
 	"Lambda(arguments args, expr body)"
 

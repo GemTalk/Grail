@@ -31,14 +31,6 @@ callWithArguments: anArray keywords: aSymbolDictionary scope: aScope
 %
 category: 'other'
 method: NameAst
-children
-
-	^super children
-		add: ctx;
-		yourself
-%
-category: 'other'
-method: NameAst
 declareVariable
 
 	parent declareVariable: id.

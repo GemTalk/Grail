@@ -9,15 +9,6 @@ RaiseAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: RaiseAst
-children
-
-	^super children
-		add: exc;
-		add: cause;
-		yourself
-%
-category: 'other'
-method: RaiseAst
 evaluate: aScope
 
 	| exception from |

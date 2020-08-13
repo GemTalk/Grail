@@ -9,17 +9,6 @@ AnnAssignAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: AnnAssignAst
-children
-
-	^super children
-		add: annotation;
-		add: simple;
-		add: target;
-		add: value;
-		yourself
-%
-category: 'other'
-method: AnnAssignAst
 initialize
 	"AnnAssign(expr target, expr annotation, expr? value, int simple)"
 

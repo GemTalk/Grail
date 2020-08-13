@@ -9,17 +9,6 @@ AsyncForAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: AsyncForAst
-children
-
-	^super children
-		add: body;
-		add: iter;
-		add: orelse;
-		add: target;
-		yourself
-%
-category: 'other'
-method: AsyncForAst
 initialize
 	"AsyncFor(expr target, expr iter, stmt* body, stmt* orelse)"
 

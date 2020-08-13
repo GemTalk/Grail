@@ -16,14 +16,6 @@ isAbstract
 set compile_env: 0
 category: 'other'
 method: UnaryOpAst
-children
-
-	^super children
-		add: operand;
-		yourself
-%
-category: 'other'
-method: UnaryOpAst
 evaluate: aScope
 
 	self subclassResponsibility.

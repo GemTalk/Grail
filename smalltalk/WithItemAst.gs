@@ -9,15 +9,6 @@ WithItemAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: WithItemAst
-children
-
-	^super children
-		add: context_expr;
-		add: optional_vars;
-		yourself
-%
-category: 'other'
-method: WithItemAst
 initialize
 	"withitem = (expr context_expr, expr? optional_vars)"
 

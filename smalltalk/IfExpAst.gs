@@ -9,16 +9,6 @@ IfExpAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: IfExpAst
-children
-
-	^super children
-		add: test;
-		add: body;
-		add: orelse;
-		yourself
-%
-category: 'other'
-method: IfExpAst
 evaluate: aScope
 
 	| value |

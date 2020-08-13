@@ -203,12 +203,6 @@ string
 set compile_env: 0
 category: 'other'
 method: AbstractNode
-children
-
-	^Array new
-%
-category: 'other'
-method: AbstractNode
 collectAst: aBlock
 
 	| result stream char |

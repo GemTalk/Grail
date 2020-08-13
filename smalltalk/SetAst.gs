@@ -9,14 +9,6 @@ SetAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: SetAst
-children
-
-	^super children
-		addAll: elts;
-		yourself
-%
-category: 'other'
-method: SetAst
 evaluate: aScope
 
 	^(elts collect: [:each | each evaluate: aScope]) asSet

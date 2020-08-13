@@ -9,16 +9,6 @@ AugAssignAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: AugAssignAst
-children
-
-	^super children
-		add: target;
-		add: op;
-		add: value;
-		yourself
-%
-category: 'other'
-method: AugAssignAst
 evaluate: aScope
 	
 	| x |

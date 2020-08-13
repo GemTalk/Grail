@@ -9,16 +9,6 @@ DictCompAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: DictCompAst
-children
-
-	^super children
-		add: key;
-		add: value;
-		addAll: generators;
-		yourself
-%
-category: 'other'
-method: DictCompAst
 initialize
 	"DictComp(expr key, expr value, comprehension* generators)"
 

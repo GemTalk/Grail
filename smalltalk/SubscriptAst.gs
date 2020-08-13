@@ -15,16 +15,6 @@ assertContextIsStore
 %
 category: 'other'
 method: SubscriptAst
-children
-
-	^super children
-		add: ctx;
-		add: slice;
-		add: value;
-		yourself
-%
-category: 'other'
-method: SubscriptAst
 declareVariable
 
 	value declareVariable.

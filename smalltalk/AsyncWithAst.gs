@@ -9,15 +9,6 @@ AsyncWithAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: AsyncWithAst
-children
-
-	^super children
-		addAll: items;
-		add: body;
-		yourself
-%
-category: 'other'
-method: AsyncWithAst
 initialize
 	"AsyncWith(withitem* items, stmt* body)"
 

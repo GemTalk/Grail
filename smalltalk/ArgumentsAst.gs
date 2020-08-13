@@ -28,19 +28,6 @@ arguments: arguments keywords: keywords scope: aScope
 %
 category: 'other'
 method: ArgumentsAst
-children
-
-	^super children
-		addAll: args;
-		add: vararg;
-		addAll: kwonlyargs;
-		addAll: kw_defaults;
-		add: kwarg;
-		addAll: defaults;
-		yourself
-%
-category: 'other'
-method: ArgumentsAst
 initialize
 "arguments(arg* args, arg? vararg, arg* kwonlyargs, expr* kw_defaults,
                  arg? kwarg, expr* defaults)"

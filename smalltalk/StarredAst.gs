@@ -9,15 +9,6 @@ StarredAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: StarredAst
-children
-
-	^super children
-		add: ctx;
-		add: value;
-		yourself
-%
-category: 'other'
-method: StarredAst
 initialize
 	"Starred(expr value, expr_context ctx)"
 

@@ -9,14 +9,6 @@ KeywordAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: KeywordAst
-children
-
-	^super children
-		add: value;
-		yourself
-%
-category: 'other'
-method: KeywordAst
 initialize
 	"keyword = (identifier? arg, expr value)"
 	| next stream |

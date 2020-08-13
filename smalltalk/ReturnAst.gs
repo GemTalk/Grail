@@ -9,14 +9,6 @@ ReturnAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: ReturnAst
-children
-
-	^super children
-		add: value;
-		yourself
-%
-category: 'other'
-method: ReturnAst
 evaluate: aScope
 	"Unlike Smalltalk, Python returns None by default, not the result of the last expression.
 	To return something explictly, use the `return` command and give a value."

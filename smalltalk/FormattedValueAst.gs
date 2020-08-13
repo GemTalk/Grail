@@ -9,15 +9,6 @@ FormattedValueAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: FormattedValueAst
-children
-
-	^super children
-		add: value;
-		add: format_spec;
-		yourself
-%
-category: 'other'
-method: FormattedValueAst
 initialize
 	"FormattedValue(expr value, int? conversion, expr? format_spec)"
 

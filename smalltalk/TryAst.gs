@@ -9,17 +9,6 @@ TryAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: TryAst
-children
-
-	^super children
-		add: body;
-		addAll: handlers;
-		add: orelse;
-		add: finalbody;
-		yourself
-%
-category: 'other'
-method: TryAst
 evaluate: aScope
 
 	[

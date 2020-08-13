@@ -70,14 +70,6 @@ call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
 %
 category: 'other'
 method: ModuleAst
-children
-
-	^super children
-		add: body;
-		yourself
-%
-category: 'other'
-method: ModuleAst
 evaluate
 
 	scope := GlobalScope newForNode: self.

@@ -9,14 +9,6 @@ DeleteAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: DeleteAst
-children
-
-	^super children
-		addAll: targets;
-		yourself
-%
-category: 'other'
-method: DeleteAst
 initialize
 	"Delete(expr* targets)"
 

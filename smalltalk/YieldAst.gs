@@ -9,14 +9,6 @@ YieldAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: YieldAst
-children
-
-	^super children
-		add: value;
-		yourself
-%
-category: 'other'
-method: YieldAst
 initialize
 	"Yield(expr? value)"
 

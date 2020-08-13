@@ -34,17 +34,6 @@ call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
 %
 category: 'other'
 method: ClassDefAst
-children
-
-	^super children
-		addAll: bases;
-		addAll: keywords;
-		add: body;
-		addAll: decorator_list;
-		yourself
-%
-category: 'other'
-method: ClassDefAst
 classAst
 
 	^self

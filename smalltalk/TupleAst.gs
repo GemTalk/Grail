@@ -9,15 +9,6 @@ TupleAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: TupleAst
-children
-
-	^super children
-		add: ctx;
-		addAll: elts;
-		yourself
-%
-category: 'other'
-method: TupleAst
 declareVariable
 
 	elts do: [:each | each declareVariable].

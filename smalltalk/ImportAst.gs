@@ -9,14 +9,6 @@ ImportAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: ImportAst
-children
-
-	^super children
-		addAll: names;
-		yourself
-%
-category: 'other'
-method: ImportAst
 evaluate: aScope
 	"each name is an instance of AliasAst and that is where the import occurs"
 

@@ -9,16 +9,6 @@ ComprehensionAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: ComprehensionAst
-children
-
-	^super children
-		add: target;
-		add: iter;
-		addAll: ifs;
-		yourself
-%
-category: 'other'
-method: ComprehensionAst
 initialize
 	"comprehension = (expr target, expr iter, expr* ifs, int is_async)"
 

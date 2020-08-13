@@ -9,17 +9,6 @@ ForAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: ForAst
-children
-
-	^super children
-		add: target;
-		add: iter;
-		add: body;
-		add: orelse;
-		yourself
-%
-category: 'other'
-method: ForAst
 evaluate: aScope
 
 	| expression iterator |

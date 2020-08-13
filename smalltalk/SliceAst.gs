@@ -9,16 +9,6 @@ SliceAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: SliceAst
-children
-
-	^super children
-		add: lower;
-		add: step;
-		add: upper;
-		yourself
-%
-category: 'other'
-method: SliceAst
 evaluate: aContainer scope: aScope
 
 	self halt.

@@ -9,14 +9,6 @@ AwaitAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: AwaitAst
-children
-
-	^super children
-		add: value;
-		yourself
-%
-category: 'other'
-method: AwaitAst
 initialize
 	"Await(expr value)"
 

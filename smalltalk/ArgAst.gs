@@ -9,14 +9,6 @@ ArgAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: ArgAst
-children
-
-	^super children
-		add: annotation;
-		yourself
-%
-category: 'other'
-method: ArgAst
 initialize
 	"arg = (identifier arg, expr? annotation)"
 

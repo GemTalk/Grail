@@ -9,17 +9,6 @@ AsyncFunctionDefAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: AsyncFunctionDefAst
-children
-
-	^super children
-		add: args;
-		add: body;
-		addAll: decorator_list;
-		add: returns;
-		yourself
-%
-category: 'other'
-method: AsyncFunctionDefAst
 initialize
 	"AsyncFunctionDef(identifier name, arguments args,
 							  stmt* body, expr* decorator_list, 

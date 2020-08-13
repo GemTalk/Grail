@@ -9,15 +9,6 @@ WithAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: WithAst
-children
-
-	^super children
-		addAll: items;
-		add: body;
-		yourself
-%
-category: 'other'
-method: WithAst
 initialize
 	"With(withitem* items, stmt* body)"
 

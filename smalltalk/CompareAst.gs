@@ -9,16 +9,6 @@ CompareAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: CompareAst
-children
-
-	^super children
-		addAll: cmpopList;
-		addAll: comparatorList;
-		add: left;
-		yourself
-%
-category: 'other'
-method: CompareAst
 evaluate: aScope
 
 	| temp |

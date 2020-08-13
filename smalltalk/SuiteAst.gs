@@ -9,14 +9,6 @@ SuiteAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: SuiteAst
-children
-
-	^super children
-		addAll: body;
-		yourself
-%
-category: 'other'
-method: SuiteAst
 evaluate: aScope
 
 	^[
