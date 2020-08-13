@@ -65,5 +65,5 @@ category: 'Python'
 method: AbstractNumber
 __sub__
 
-	^ [ :aNumber | self class with: (number - aNumber.number) ]
+	^ [ :lhs :rhs | self class with: (lhs.number - rhs.number) ]
 %
