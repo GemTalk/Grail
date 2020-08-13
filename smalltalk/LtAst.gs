@@ -9,7 +9,7 @@ LtAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: LtAst
-left: left right: right
+left: lhs right: rhs
 
-	^ left __lt__ value: right
+	^ lhs __lt__ value: lhs value: rhs
 %

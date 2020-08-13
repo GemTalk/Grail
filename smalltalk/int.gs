@@ -20,19 +20,19 @@ category: 'Python'
 method: int
 __abs__
 
-	^[:n | int with: number abs]
+	^ [ :n | int with: number abs ]
 %
 category: 'Python'
 method: int
 __add__
 
-	^ [ :aNumber | int with: (number + aNumber.number) ]
+	^ [ :lhs :rhs | int with: (lhs.number + rhs.number) ]
 %
 category: 'Python'
 method: int
 __and__
 
-	^ [ :aNumber | int with: (number bitAnd: aNumber.number) ]
+	^ [ :lhs :rhs | int with: ( lhs.number bitAnd: rhs.number ) ]
 %
 category: 'Python'
 method: int
@@ -68,7 +68,7 @@ category: 'Python'
 method: int
 __floordiv__
 
-	^ [ :aNumber | int with: (number // aNumber.number) ]
+	^ [ :lhs :rhs | int with: ( lhs.number // rhs.number ) ]
 %
 category: 'Python'
 method: int
@@ -80,13 +80,13 @@ category: 'Python'
 method: int
 __gt__
 
-	^ [ :aNumber | number > aNumber.number ifTrue: [ True ] ifFalse: [ False ] ]
+	^ [ :lhs :rhs | lhs.number > rhs.number ifTrue: [ True ] ifFalse: [ False ] ]
 %
 category: 'Python'
 method: int
 __gte__
 
-	^ [ :aNumber | number >= aNumber.number ifTrue: [ True ] ifFalse: [ False ] ]
+	^ [ :lhs :rhs | lhs.number >= rhs.number ifTrue: [ True ] ifFalse: [ False ] ]
 %
 category: 'Python'
 method: int
@@ -110,43 +110,45 @@ category: 'Python'
 method: int
 __lshift__
 
-	^ [ :aNumber | int with: (number bitShift: aNumber.number) ]
+	^ [ :lhs :rhs | int with: ( lhs.number bitShift: rhs.number ) ]
 %
 category: 'Python'
 method: int
 __lt__
 
-	^ [ :aNumber | number < aNumber.number ifTrue: [ True ] ifFalse: [ False ] ]
+	^ [ :lhs :rhs | lhs.number < rhs.number ifTrue: [ True ] ifFalse: [ False ] ]
 %
 category: 'Python'
 method: int
 __lte__
 
-	^ [ :aNumber | number <= aNumber.number ifTrue: [ True ] ifFalse: [ False ] ]
+	^ [ :lhs :rhs | lhs.number <= rhs.number ifTrue: [ True ] ifFalse: [ False ] ]
 %
 category: 'Python'
 method: int
 __mod__
 
-	^ [ :aNumber | int with: (number rem: aNumber.number) ]
+	^ [ :lhs :rhs | 
+		rhs.number = 0 ifTrue: [ ZeroDivisionError signal: 'modulo by zero' ].
+		int with: ( lhs.number rem: rhs.number ) ]
 %
 category: 'Python'
 method: int
 __ne__
 
-	^ [ :aNumber | number ~~ aNumber.number ifTrue: [ True ] ifFalse: [ False ] ]
+	^ [ :lhs :rhs | lhs.number ~~ rhs.number ifTrue: [ True ] ifFalse: [ False ] ]
 %
 category: 'Python'
 method: int
 __neg__
 
-	^[:n | int with: number negated]
+	^ [ :n | int with: number negated ]
 %
 category: 'Python'
 method: int
 __or__
 
-	^ [ :aNumber | int with: (number bitOr: aNumber.number) ]
+	^ [ :lhs :rhs | int with: ( lhs.number bitOr: rhs.number ) ]
 %
 category: 'Python'
 method: int
@@ -158,7 +160,7 @@ category: 'Python'
 method: int
 __pow__
 
-	^ [ :aNumber | int with: ( number raisedTo: aNumber.number ) ]
+	^ [ :lhs : rhs | int with: ( lhs.number raisedTo: rhs.number ) ]
 %
 category: 'Python'
 method: int
@@ -230,7 +232,7 @@ category: 'Python'
 method: int
 __rshift__
 
-	^ [ :aNumber | int with: (number bitShift: aNumber.number negated ) ]
+	^ [ :lhs :rhs | int with: (lhs.number bitShift: rhs.number negated ) ]
 %
 category: 'Python'
 method: int
@@ -254,14 +256,16 @@ category: 'Python'
 method: int
 __sub__
 
-	^ [ :aNumber | int with: (number - aNumber.number) ]
+	^ [ :lhs :rhs | int with: ( lhs.number - rhs.number ) ]
 %
 category: 'Python'
 method: int
 __truediv__
 "https://docs.python.org/3/library/operator.html#operator.truediv"
 
-	^ [ :aNumber | float with: ( number / aNumber.number ) ]
+	^ [ :lhs :rhs | 
+			rhs.number = 0 ifTrue: [ ZeroDivisionError signal: 'division by zero' ].
+			float with: ( lhs.number / rhs.number ) ]
 %
 category: 'Python'
 method: int
@@ -273,7 +277,7 @@ category: 'Python'
 method: int
 __xor__
 
-	^ [ :aNumber | int with: (number bitXor: aNumber.number) ]
+	^ [ :lhs :rhs | int with: ( lhs.number bitXor: rhs.number ) ]
 %
 category: 'Python'
 method: int

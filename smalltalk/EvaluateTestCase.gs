@@ -194,22 +194,22 @@ testEq
 		assert: ((x.value.comparatorList) isKindOf: Array);
 		assert: ((y := x.value.comparatorList at: 1) isKindOf: NumAst);
 		assert: (y.n.number == 1);
-		assert: ((x := x evaluate: aScope) == True);
+		assert: (x := x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 25) isKindOf: ExprAst);			"2 == 1"
-		assert: ((x evaluate: aScope) == False);
+		deny: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 26) isKindOf: ExprAst);			"5 == 7"
-		assert: ((x evaluate: aScope) == False);
+		deny: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 27) isKindOf: ExprAst);			"'Hello' == 'Hello'"
-		assert: ((x := x evaluate: aScope) == True);
+		assert: (x := x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 28) isKindOf: ExprAst);			"'World' == 'World!!!'"
-		assert: ((x evaluate: aScope) == False);
+		deny: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 29) isKindOf: ExprAst);			"'FooBar' == 42"
-		assert: ((x evaluate: aScope) == False);
+		deny: (x evaluate: aScope);
 		yourself.
 %
 category: 'other'
@@ -258,19 +258,19 @@ testGt
 		assert: ((x.value.comparatorList) isKindOf: Array);
 		assert: ((y := x.value.comparatorList at: 1) isKindOf: NumAst);
 		assert: (y.n.number == 2);
-		assert: ((x evaluate: aScope) == False);
+		deny: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 20) isKindOf: ExprAst);			"3 > 2"
-		assert: ((x evaluate: aScope) == True);
+		assert: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 21) isKindOf: ExprAst);			"2 > 2"
-		assert: ((x evaluate: aScope) == False);
+		deny: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 22) isKindOf: ExprAst);			"5 > 4"
-		assert: ((x evaluate: aScope) == True);
+		assert: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 23) isKindOf: ExprAst);			"4 > 3 + 1"
-		assert: ((x evaluate: aScope) == False);
+		deny: (x evaluate: aScope);
 		yourself.
 %
 category: 'other'
@@ -292,16 +292,16 @@ testGtE
 		assert: ((x := x evaluate: aScope) == False);
 
 		assert: ((x := self statementsAt: 31) isKindOf: ExprAst);			"3 >= 2"
-		assert: ((x evaluate: aScope) == True);
+		assert: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 32) isKindOf: ExprAst);			"2 >= 2"
-		assert: ((x evaluate: aScope) == True);
+		assert: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 33) isKindOf: ExprAst);			"5 >= 4"
-		assert: ((x evaluate: aScope) == True);
+		assert: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 34) isKindOf: ExprAst);			"4 >= 3 + 2"
-		assert: ((x evaluate: aScope) == False);
+		deny: (x evaluate: aScope);
 		yourself.
 %
 category: 'other'
@@ -324,16 +324,16 @@ testIn
 		assert: ((y.elts at: 2) isKindOf: NumAst);
 		assert: ((y := y.elts at: 3) isKindOf: NumAst);
 		assert: (y.n.number == 3);
-		assert: ((x := x evaluate: aScope) == True);
+		assert: (x := x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 52) isKindOf: ExprAst);			"4 in [1,2,3]"
-		assert: ((x evaluate: aScope) == False);
+		deny: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 53) isKindOf: ExprAst);			"6 in [2,5,9]"
-		assert: ((x evaluate: aScope) == False);
+		deny: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 54) isKindOf: ExprAst);			"2 in [1,2,3]"
-		assert: ((x evaluate: aScope) == True);
+		assert: (x evaluate: aScope);
 		yourself.
 %
 category: 'other'
@@ -352,16 +352,16 @@ testIs
 		assert: ((x.value.comparatorList) isKindOf: Array);
 		assert: ((y := x.value.comparatorList at: 1) isKindOf: NumAst);
 		assert: (y.n.number == 1);
-		assert: ((x := x evaluate: aScope) == True);
+		assert: (x := x evaluate: aScope);
 
-		assert: ((x := self statementsAt: 80) isKindOf: ExprAst);			"'test' is 'test'" "SHOULD BE TRUE"
-		assert: ((x evaluate: aScope) == False);
+		assert: ((x := self statementsAt: 80) isKindOf: ExprAst);			"'test' is 'test'"
+		assert: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 81) isKindOf: ExprAst);			"[1,2] is [1,2]"
-		assert: ((x evaluate: aScope) == False);
+		deny: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 82) isKindOf: ExprAst);			"5 is 5"
-		assert: ((x evaluate: aScope) == True);
+		assert: (x evaluate: aScope);
 		yourself.
 %
 category: 'other'
@@ -380,16 +380,16 @@ testIsNot
 		assert: ((x.value.comparatorList) isKindOf: Array);
 		assert: ((y := x.value.comparatorList at: 1) isKindOf: NumAst);
 		assert: (y.n.number == 1);
-		assert: ((x evaluate: aScope) == False);
+		deny: (x evaluate: aScope);
 
-		assert: ((x := self statementsAt: 84) isKindOf: ExprAst);			"'test' is not 'test'" "SHOULD BE FALSE"
-		assert: ((x evaluate: aScope) == True);
+		assert: ((x := self statementsAt: 84) isKindOf: ExprAst);			"'test' is not 'test'"
+		deny: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 85) isKindOf: ExprAst);			"[1,2] is not [1,2]"
-		assert: ((x evaluate: aScope) == True);
+		assert: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 86) isKindOf: ExprAst);			"5 is not 5"
-		assert: ((x evaluate: aScope) == False);
+		deny: (x evaluate: aScope);
 		yourself.
 %
 category: 'other'
@@ -438,19 +438,19 @@ testLt
 		assert: ((x.value.comparatorList) isKindOf: Array);
 		assert: ((y := x.value.comparatorList at: 1) isKindOf: NumAst);
 		assert: (y.n.number == 2);
-		assert: ((x evaluate: aScope) == True);
+		assert: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 36) isKindOf: ExprAst);			"1 < 1"
-		assert: ((x evaluate: aScope) == False);
+		deny: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 37) isKindOf: ExprAst);			"3 < 2"
-		assert: ((x evaluate: aScope) == False);
+		deny: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 38) isKindOf: ExprAst);			"1 + 1 < 4 -1"
-		assert: ((x evaluate: aScope) == True);
+		assert: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 39) isKindOf: ExprAst);			"1 < 4 < 8"
-		assert: ((x evaluate: aScope) == True);
+		assert: (x evaluate: aScope);
 		yourself.
 %
 category: 'other'
@@ -469,19 +469,19 @@ testLtE
 		assert: ((x.value.comparatorList) isKindOf: Array);
 		assert: ((y := x.value.comparatorList at: 1) isKindOf: NumAst);
 		assert: (y.n.number == 2);
-		assert: ((x evaluate: aScope) == True);
+		assert: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 41) isKindOf: ExprAst);			"1 <= 1"
-		assert: ((x evaluate: aScope) == True);
+		assert: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 42) isKindOf: ExprAst);			"3 <= 2"
-		assert: ((x evaluate: aScope) == False);
+		deny: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 43) isKindOf: ExprAst);			"1 + 1 <= 4 - 1"
-		assert: ((x evaluate: aScope) == True);
+		assert: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 44) isKindOf: ExprAst);			"1 <= 4 <= 8"
-		assert: ((x evaluate: aScope) == True);
+		assert: (x evaluate: aScope);
 		yourself.
 %
 category: 'other'
@@ -560,22 +560,22 @@ testNotEq
 		assert: ((x.value.comparatorList) isKindOf: Array);
 		assert: ((y := x.value.comparatorList at: 1) isKindOf: NumAst);
 		assert: (y.n.number == 1);
-		assert: ((x evaluate: aScope) == False);
+		deny: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 46) isKindOf: ExprAst);			"2 != 1"
-		assert: ((x evaluate: aScope) == True);
+		assert: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 47) isKindOf: ExprAst);			"5 != 7"
-		assert: ((x evaluate: aScope) == True);
+		assert: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 48) isKindOf: ExprAst);			"'hello' != 'hello'"
-		assert: ((x evaluate: aScope) == False);
+		deny: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 49) isKindOf: ExprAst);			"'World' != 'World!!!'"
-		assert: ((x evaluate: aScope) == True);
+		assert: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 50) isKindOf: ExprAst);			"'FooBar' != 42"
-		assert: ((x evaluate: aScope) == True);
+		assert: (x evaluate: aScope);
 		yourself.
 %
 category: 'other'
@@ -598,16 +598,16 @@ testNotIn
 		assert: ((y.elts at: 2) isKindOf: NumAst);
 		assert: ((y := y.elts at: 3) isKindOf: NumAst);
 		assert: (y.n.number == 3);
-		assert: ((x evaluate: aScope) == False);
+		deny: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 56) isKindOf: ExprAst);			"4 not in [1,2,3]"
-		assert: ((x evaluate: aScope) == True);
+		assert: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 57) isKindOf: ExprAst);			"6 not in [2,5,9]"
-		assert: ((x evaluate: aScope) == True);
+		assert: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 58) isKindOf: ExprAst);			"2 not in [1,2,3]"
-		assert: ((x evaluate: aScope) == False);
+		deny: (x evaluate: aScope);
 		yourself.
 %
 category: 'other'

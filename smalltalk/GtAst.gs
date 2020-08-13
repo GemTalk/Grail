@@ -9,7 +9,7 @@ GtAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: GtAst
-left: left right: right
+left: lhs right: rhs
 
-	^ left __gt__ value: right
+	^ lhs __gt__ value: lhs value: rhs
 %

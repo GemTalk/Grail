@@ -9,7 +9,7 @@ AddAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: AddAst
-left: leftOperand right: rightOperand
+pyFunctionFor: lhs
 
-	^ leftOperand __add__ value: rightOperand
+	^ lhs __add__
 %

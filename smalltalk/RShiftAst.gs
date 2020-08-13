@@ -9,7 +9,7 @@ RShiftAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: RShiftAst
-left: leftOperand right: rightOperand
+pyFunctionFor: lhs
 
-	^ leftOperand __rshift__ value: rightOperand
+	^ lhs __rshift__
 %

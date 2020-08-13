@@ -11,15 +11,15 @@ category: 'other'
 method: CompareAst
 evaluate: aScope
 
-	| temp |
-	temp := left evaluate: aScope.
+	| lhs |
+	lhs := left evaluate: aScope.
 	1 to: cmpopList size do: [:i |
 		| op operand |
 		op := cmpopList at: i.
 		operand := (comparatorList at: i) evaluate: aScope.
-		(temp := (op left: temp right: operand)).
-		(temp == True) ifFalse: [^False].
-		temp := operand.
+		(lhs := (op left: lhs right: operand)).
+		(lhs == True) ifFalse: [^False].
+		lhs := operand.
 	].
 	^True
 %

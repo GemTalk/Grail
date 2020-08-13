@@ -44,18 +44,6 @@ hash
 %
 category: 'overrides'
 method: AbstractContainer
-is_
-
-	^ [ :anObject | container == anObject.container ifTrue: [ True ] ifFalse: [ False ] ]
-%
-category: 'overrides'
-method: AbstractContainer
-is_not
-
-	^ [ :anObject | container ~~ anObject.container ifTrue: [ True ] ifFalse: [ False ] ]
-%
-category: 'overrides'
-method: AbstractContainer
 postCopy
 
 	container := container copy.
@@ -145,6 +133,14 @@ __getitem__
 			ex resignalAs: (IndexError new details: 'list index out of range'; yourself).
 		]
 	]
+%
+category: 'Python'
+method: AbstractContainer
+__ne__
+
+	^[:lhs :rhs | ((lhs isKindOf: AbstractContainer) and: [(rhs isKindOf: AbstractContainer) and: [lhs.container = rhs.container]]) 
+		ifTrue: [ False ] 
+		ifFalse: [ True ]]
 %
 category: 'Python'
 method: AbstractContainer

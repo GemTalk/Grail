@@ -340,7 +340,7 @@ testIf
 	self 
 		assert: (x isKindOf: IfAst);
 		assert: (x.test isKindOf: TrueAst);
-		assert: (x.test evaluate: aScope) == True;
+		assert: (x.test evaluate: aScope);
 		assert: (x.body isKindOf: SuiteAst);
 		assert: (x.body.body size == 1);
 		assert: ((x.body.body at: 1) isKindOf: PassAst);
@@ -508,7 +508,7 @@ testWhile
 	self 
 		assert: (x isKindOf: WhileAst);
 		assert: (x.test isKindOf: TrueAst);
-		assert: (x.test evaluate: aScope) == True;
+		assert: (x.test evaluate: aScope);
 		assert: (x.body.body size == 1);
 		assert: ((x.body.body at: 1) isKindOf: PassAst);
 		assert: (x.orelse.body size == 0);

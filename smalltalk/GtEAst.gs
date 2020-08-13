@@ -9,7 +9,7 @@ GtEAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: GtEAst
-left: leftOperand right: rightOperand
+left: lhs right: rhs
 
-	^ leftOperand __gte__ value: rightOperand
+	^ lhs __gte__ value: lhs value: rhs
 %

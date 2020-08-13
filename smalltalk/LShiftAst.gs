@@ -9,7 +9,7 @@ LShiftAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: LShiftAst
-left: leftOperand right: rightOperand
+pyFunctionFor: lhs
 
-	^ leftOperand __lshift__ value: rightOperand
+	^ lhs __lshift__
 %

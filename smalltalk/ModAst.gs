@@ -9,8 +9,7 @@ ModAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: ModAst
-left: leftOperand right: rightOperand
+pyFunctionFor: lhs
 
-	rightOperand.number = 0 ifTrue: [ ZeroDivisionError signal: 'modulo by zero' ].
-	^ leftOperand __mod__ value: rightOperand
+	^ lhs __mod__
 %

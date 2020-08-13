@@ -147,12 +147,6 @@ __set_format__
 %
 category: 'Python'
 method: float
-__sub__
-
-	^[:rhs | float with: number - rhs.number]
-%
-category: 'Python'
-method: float
 __truediv__
 
 	self halt.

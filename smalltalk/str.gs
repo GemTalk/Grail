@@ -16,12 +16,6 @@ containerClass
 set compile_env: 0
 category: 'other'
 method: str
-__ne__
-
-	^ [ :anObject | ((anObject isKindOf: AbstractContainer) and: [container = anObject.container]) ifTrue: [ False ] ifFalse: [ True ] ]
-%
-category: 'other'
-method: str
 + other
 
 	^str withAll: container + other.container
@@ -88,7 +82,10 @@ category: 'Python'
 method: str
 __add__
 
-	^[:rhs | str withAll: container , rhs.container]
+	^[:lhs :rhs | 
+		(lhs isKindOf: str) ifFalse: [TypeError signal: 'descriptor ''__add__'' requires a ''int'' object but received a ' , lhs class name].
+		(rhs isKindOf: str) ifFalse: [TypeError signal: 'descriptor ''__add__'' requires a ''int'' object but received a ' , rhs class name].
+		str withAll: lhs.container , rhs.container]
 %
 category: 'Python'
 method: str

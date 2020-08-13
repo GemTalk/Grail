@@ -9,7 +9,7 @@ EqAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: EqAst
-left: leftOperand right: rightOperand
+left: lhs right: rhs
 
-	^ leftOperand __eq__ value: leftOperand value: rightOperand
+	^ lhs __eq__ value: lhs value: rhs
 %

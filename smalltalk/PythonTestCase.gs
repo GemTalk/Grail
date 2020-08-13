@@ -37,6 +37,18 @@ isAbstract
 set compile_env: 0
 category: 'other'
 method: PythonTestCase
+assert: value
+
+	super assert: (value == True or: [value]).
+%
+category: 'other'
+method: PythonTestCase
+deny: value
+
+	super assert: (value == False or: [value ~= True or: [value not ]]).
+%
+category: 'other'
+method: PythonTestCase
 filename
 
 	^self class filename
