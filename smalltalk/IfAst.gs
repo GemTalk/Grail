@@ -21,7 +21,7 @@ category: 'other'
 method: IfAst
 evaluate: aScope
 
-	(test evaluate: aScope)
+	(test evaluate: aScope) == True
 		ifTrue: [body evaluate: aScope]
 		ifFalse: [orelse evaluate: aScope].
 %

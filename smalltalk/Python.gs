@@ -5911,6 +5911,23 @@ doit
 SimpleStatementsTestCase category: 'Tests'
 %
 set compile_env: 0
+! ------------------- Class definition for StatementsTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'StatementsTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+StatementsTestCase category: 'Tests'
+%
+set compile_env: 0
 ! ------------------- Class definition for StringLiteralsTestCase
 expectvalue /Class
 doit
@@ -6273,6 +6290,7 @@ input SliceAbstractAst.gs
 input SliceAst.gs
 input StarredAst.gs
 input StatementAst.gs
+input StatementsTestCase.gs
 input StopAsyncIteration.gs
 input StopIteration.gs
 input StoreAst.gs
