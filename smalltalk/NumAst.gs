@@ -16,14 +16,17 @@ category: 'other'
 method: NumAst
 initialize
 	"Num(object n) -- a number as a Object."
-	| stream string |
+	| stream string x |
 	stream := self stream.
 	string := stream upTo: $,.
 	stream skip: -1.
-	n := (string notEmpty and: [string last == $j]) ifTrue: [
-		complex real: 0 imag: (string copyFrom: 1 to: string size - 1) asNumber.
+	(string notEmpty and: [string last == $j]) ifTrue: [
+		n := complex real: 0 imag: (string copyFrom: 1 to: string size - 1) asNumber.
 	] ifFalse: [
-		string asNumber.
+		x := string asNumber.
+		n := (x isKindOf: Integer) 
+			ifTrue: [int with: x]
+			ifFalse: [float with: x].
 	].
 	self readPosition.
 %

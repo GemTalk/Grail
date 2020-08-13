@@ -26,7 +26,7 @@ test_abs
 
 	| x |
 	x := (self statementsAt: 1) evaluate: aScope.			"abs(-1)"
-	self assert: x == 1.
+	self assert: x.number == 1.
 %
 category: 'other'
 method: BuiltinsTestCase

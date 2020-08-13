@@ -11,5 +11,5 @@ category: 'other'
 method: SubAst
 left: leftOperand right: rightOperand
 
-	^leftOperand - rightOperand
+	^ leftOperand __sub__ value: rightOperand
 %

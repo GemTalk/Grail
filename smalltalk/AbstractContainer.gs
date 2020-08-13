@@ -40,7 +40,7 @@ category: 'other'
 method: AbstractContainer
 at: anIndex
 
-	^container at: anIndex
+	^container at: ((anIndex isKindOf: int) ifTrue: [anIndex.number] ifFalse: [anIndex])
 %
 category: 'other'
 method: AbstractContainer
@@ -89,6 +89,18 @@ method: AbstractContainer
 initialize: aCollection
 
 	container := self containerClass withAll: aCollection.
+%
+category: 'other'
+method: AbstractContainer
+is_
+
+	^ [ :anObject | container == anObject.container ifTrue: [ True ] ifFalse: [ False ] ]
+%
+category: 'other'
+method: AbstractContainer
+is_not
+
+	^ [ :anObject | container ~~ anObject.container ifTrue: [ True ] ifFalse: [ False ] ]
 %
 category: 'other'
 method: AbstractContainer

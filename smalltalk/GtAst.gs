@@ -10,5 +10,6 @@ set compile_env: 0
 category: 'other'
 method: GtAst
 left: left right: right
-	^left > right
+
+	^ left __gt__ value: right
 %

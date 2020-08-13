@@ -41,7 +41,7 @@ category: 'Python'
 method: list
 __contains__
 
-	self halt.
+	^ [ :anObject | ( self membershipIncludes: anObject ) ifTrue: [ True ] ifFalse: [ False ] ]
 %
 category: 'Python'
 method: list
@@ -84,6 +84,12 @@ method: list
 __mul__
 
 	self halt.
+%
+category: 'Python'
+method: list
+__not_contains__
+
+	^ [ :anObject | ( self membershipIncludes: anObject ) ifTrue: [ False ] ifFalse: [ True ] ]
 %
 category: 'Python'
 method: list

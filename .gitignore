@@ -1,2 +1,3 @@
 .topazini
 *.out
+__pycache__

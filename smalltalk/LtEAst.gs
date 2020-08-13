@@ -11,5 +11,5 @@ category: 'other'
 method: LtEAst
 left: leftOperand right: rightOperand
 
-	^leftOperand <= rightOperand
+	^ leftOperand __lte__ value: rightOperand
 %

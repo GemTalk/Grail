@@ -28,9 +28,9 @@ testAdd
 		assert: (x isKindOf: BinOpAst);
 		assert: (x.op isKindOf: AddAst);
 		assert: (x.left isKindOf: NumAst);
-		assert: (x.left.n == 1);
+		assert: (x.left.n.number == 1);
 		assert: (x.right isKindOf: NumAst);
-		assert: (x.right.n == 2);
+		assert: (x.right.n.number == 2);
 		yourself.
 %
 category: 'other'
@@ -46,13 +46,13 @@ testEq
 	self 
 		assert: (x isKindOf: CompareAst);
 		assert: (x.left isKindOf: NumAst);
-		assert: (x.left.n == 10);
+		assert: (x.left.n.number == 10);
 		assert: (x.cmpopList size == 1);
 		assert: ((x.cmpopList at: 1) isKindOf: EqAst);
 		assert: (x.comparatorList size == 1);
 		assert: ((x.comparatorList at: 1) isKindOf: NumAst);
 		assert: (x := x.comparatorList at: 1) notNil;
-		assert: x.n == 20;
+		assert: x.n.number == 20;
 		yourself.
 %
 category: 'other'
@@ -68,13 +68,13 @@ testGtE
 	self 
 		assert: (x isKindOf: CompareAst);
 		assert: (x.left isKindOf: NumAst);
-		assert: (x.left.n == 25);
+		assert: (x.left.n.number == 25);
 		assert: (x.cmpopList size == 1);
 		assert: ((x.cmpopList at: 1) isKindOf: GtEAst);
 		assert: (x.comparatorList size == 1);
 		assert: ((x.comparatorList at: 1) isKindOf: NumAst);
 		assert: (x := x.comparatorList at: 1) notNil;
-		assert: x.n == 15;
+		assert: x.n.number == 15;
 		yourself.
 %
 category: 'other'
@@ -90,7 +90,7 @@ testInvert
 	self 
 		assert: (x isKindOf: InvertAst);
 		assert: (x.operand isKindOf: NumAst);
-		assert: (x.operand.n == 200);
+		assert: (x.operand.n.number == 200);
 		yourself.
 %
 category: 'other'
@@ -107,9 +107,9 @@ testMod
 		assert: (x isKindOf:BinOpAst);
 		assert: (x.op isKindOf: ModAst);
 		assert: (x.left isKindOf: NumAst);
-		assert: (x.left.n == 10);
+		assert: (x.left.n.number == 10);
 		assert: (x.right isKindOf: NumAst);
-		assert: (x.right.n == 5);
+		assert: (x.right.n.number == 5);
 		yourself.
 %
 category: 'other'
@@ -128,11 +128,11 @@ testNestedAdd
 		assert: (x.left isKindOf: BinOpAst);
 		assert: (x.left.op isKindOf: AddAst);
 		assert: (x.left.left isKindOf: NumAst);
-		assert: (x.left.left.n == 2);
+		assert: (x.left.left.n.number == 2);
 		assert: (x.left.right isKindOf: NumAst);
-		assert: (x.left.right.n == 4);
+		assert: (x.left.right.n.number == 4);
 		assert: (x.right isKindOf: NumAst);
-		assert: (x.right.n == 6);
+		assert: (x.right.n.number == 6);
 		yourself.
 %
 category: 'other'
@@ -148,16 +148,16 @@ testNestedEq
 	self 
 		assert: (x isKindOf: CompareAst);
 		assert: (x.left isKindOf: NumAst);
-		assert: (x.left.n == 11);
+		assert: (x.left.n.number == 11);
 		assert: (x.cmpopList size == 2);
 		assert: ((x.cmpopList at: 1) isKindOf: EqAst);
 		assert: ((x.cmpopList at: 2) isKindOf: EqAst);
 		assert: (x.comparatorList size == 2);
 		assert: ((x.comparatorList at: 1) isKindOf: NumAst);
 		assert: (y := x.comparatorList at: 1) notNil;
-		assert: y.n == 22;
+		assert: y.n.number == 22;
 		assert: (y := x.comparatorList at: 2) notNil;
-		assert: y.n == 33;
+		assert: y.n.number == 33;
 		yourself.
 %
 category: 'other'
@@ -173,16 +173,16 @@ testNestedGtE
 	self 
 		assert: (x isKindOf: CompareAst);
 		assert: (x.left isKindOf: NumAst);
-		assert: (x.left.n == 44);
+		assert: (x.left.n.number == 44);
 		assert: (x.cmpopList size == 2);
 		assert: ((x.cmpopList at: 1) isKindOf: GtEAst);
 		assert: ((x.cmpopList at: 2) isKindOf: GtEAst);
 		assert: (x.comparatorList size == 2);
 		assert: ((x.comparatorList at: 1) isKindOf: NumAst);
 		assert: (y := x.comparatorList at: 1) notNil;
-		assert: y.n == 55;
+		assert: y.n.number == 55;
 		assert: (y := x.comparatorList at: 2) notNil;
-		assert: y.n == 66;
+		assert: y.n.number == 66;
 		yourself.
 %
 category: 'other'
@@ -201,11 +201,11 @@ testNestedMult
 		assert: (x.left isKindOf: BinOpAst);
 		assert: (x.left.op isKindOf: MultAst);
 		assert: (x.left.left isKindOf: NumAst);
-		assert: (x.left.left.n == 7);
+		assert: (x.left.left.n.number == 7);
 		assert: (x.left.right isKindOf: NumAst);
-		assert: (x.left.right.n == 8);
+		assert: (x.left.right.n.number == 8);
 		assert: (x.right isKindOf: NumAst);
-		assert: (x.right.n == 9);
+		assert: (x.right.n.number == 9);
 		yourself.
 %
 category: 'other'
@@ -221,6 +221,6 @@ testUSub
 	self 
 		assert: (x isKindOf: USubAst);
 		assert: (x.operand isKindOf: NumAst);
-		assert: (x.operand.n == 100);
+		assert: (x.operand.n.number == 100);
 		yourself.
 %

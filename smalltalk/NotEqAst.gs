@@ -11,5 +11,5 @@ category: 'other'
 method: NotEqAst
 left: leftOperand right: rightOperand
 
-	^(leftOperand = rightOperand) not
+	^ leftOperand __ne__ value: rightOperand
 %
