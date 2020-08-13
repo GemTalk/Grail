@@ -324,7 +324,7 @@ testIn
 		assert: ((y.elts at: 2) isKindOf: NumAst);
 		assert: ((y := y.elts at: 3) isKindOf: NumAst);
 		assert: (y.n.number == 3);
-		assert: ((x evaluate: aScope) == True);
+		assert: ((x := x evaluate: aScope) == True);
 
 		assert: ((x := self statementsAt: 52) isKindOf: ExprAst);			"4 in [1,2,3]"
 		assert: ((x evaluate: aScope) == False);

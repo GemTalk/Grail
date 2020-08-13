@@ -11,11 +11,18 @@ classmethod: AbstractIterator
 on: anIterable
 
 	^self basicNew
-		initialize: anIterable;
+		___initialize: anIterable;
 		yourself
 %
 ! ------------------- Instance methods for AbstractIterator
 set compile_env: 0
+category: 'other'
+method: AbstractIterator
+___initialize: anIterable
+
+	container := anIterable.
+	index := 0.
+%
 category: 'other'
 method: AbstractIterator
 __iter__
@@ -26,11 +33,5 @@ category: 'other'
 method: AbstractIterator
 __next__
 
-	^[stream atEnd ifTrue: [StopIteration signal]. self next]
-%
-category: 'other'
-method: AbstractIterator
-initialize: anIterable
-
-	stream := ReadStream on: anIterable.
+	^[container ___size <= index ifTrue: [StopIteration signal]. container ___at: (index := index + 1)]
 %

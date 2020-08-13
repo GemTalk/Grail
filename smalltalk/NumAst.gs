@@ -10,6 +10,7 @@ set compile_env: 0
 category: 'other'
 method: NumAst
 evaluate: aScope
+
 	^n
 %
 category: 'other'

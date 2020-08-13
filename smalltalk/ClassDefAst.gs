@@ -12,13 +12,13 @@ method: ClassDefAst
 __str__
 	"<class '__main__.MyClass'>"
 
-	^(WriteStream on: str new)
+	^str withAll: ((WriteStream on: Unicode7 new)
 		nextPutAll: '<class ''';
 		nextPutAll: self module name;
 		nextPut: $.;
 		nextPutAll: name;
 		nextPutAll: '''>';
-		contents
+		contents)
 %
 category: 'other'
 method: ClassDefAst

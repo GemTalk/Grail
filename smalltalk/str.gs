@@ -16,12 +16,6 @@ containerClass
 set compile_env: 0
 category: 'other'
 method: str
-__eq__
-
-	^ [ :anObject | ((anObject isKindOf: AbstractContainer) and: [container = anObject.container]) ifTrue: [ True ] ifFalse: [ False ] ]
-%
-category: 'other'
-method: str
 __ne__
 
 	^ [ :anObject | ((anObject isKindOf: AbstractContainer) and: [container = anObject.container]) ifTrue: [ False ] ifFalse: [ True ] ]

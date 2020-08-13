@@ -188,7 +188,7 @@ string
 	stream := self stream.
 	char := stream next.
 	(char == $' or: [char == $"]) ifFalse: [self error].
-	writeStream := WriteStream on: str new.
+	writeStream := WriteStream on: Unicode7 new.
 	[ 
 		next := stream next.
 		next == char
@@ -198,7 +198,7 @@ string
 		].
 		writeStream nextPut: next.
 	].
-	^writeStream contents
+	^str withAll: writeStream contents
 %
 set compile_env: 0
 category: 'other'

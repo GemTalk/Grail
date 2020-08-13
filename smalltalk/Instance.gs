@@ -12,7 +12,7 @@ method: Instance
 __str__
 	"<__main__.MyClass object at 0x7fe9d8210400>"
 
-	^(WriteStream on: str new)
+	^str withAll: ((WriteStream on: Unicode7 new)
 		nextPut: $<;
 		nextPutAll: __class__ module name;
 		nextPut: $.;
@@ -20,7 +20,7 @@ __str__
 		nextPutAll: ' object at 0x';
 		nextPutAll: (self asOop printStringRadix: 16);
 		nextPut: $>;
-		contents
+		contents)
 %
 category: 'other'
 method: Instance

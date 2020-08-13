@@ -21,3 +21,17 @@ True
 	^t
 %
 ! ------------------- Instance methods for bool
+set compile_env: 0
+category: 'overrides'
+method: bool
+printOn: aStream
+
+	aStream nextPutAll: (number ~~ 0 ifTrue: ['True'] ifFalse: ['False'])
+%
+set compile_env: 0
+category: 'Python'
+method: bool
+__str__
+
+	^[str withAll: (number == 1 ifTrue: ['True'] ifFalse: ['False'])]
+%

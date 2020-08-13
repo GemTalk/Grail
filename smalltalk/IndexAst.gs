@@ -19,7 +19,7 @@ category: 'other'
 method: IndexAst
 evaluate: aContainer scope: aScope
 
-	^aContainer at: (value evaluate: aScope)
+	^aContainer __getitem__ value: aContainer value: (value evaluate: aScope)
 %
 category: 'other'
 method: IndexAst

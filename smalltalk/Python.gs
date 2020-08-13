@@ -2906,13 +2906,7 @@ StatementAst subclass: 'ForAst'
 expectvalue /Class
 doit
 ForAst comment: 
-'No class-specific documentation for ForAst, hierarchy is: 
-Object
-  AbstractNode( parent)
-    PyAstNodeWithLocation( line column)
-      StatementAst
-        ForAst( target iter body orelse)
-'
+'For(expr target, expr iter, stmt* body, stmt* orelse)'
 %
 expectvalue /Class
 doit
@@ -4753,13 +4747,22 @@ set compile_env: 0
 expectvalue /Class
 doit
 object subclass: 'AbstractIterator'
-  instVarNames: #( stream)
+  instVarNames: #( container index)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
   options: #()
 
+%
+expectvalue /Class
+doit
+AbstractIterator comment: 
+'No class-specific documentation for AbstractIterator, hierarchy is: 
+Object
+  object
+    AbstractIterator( stream)
+'
 %
 expectvalue /Class
 doit
@@ -4780,6 +4783,16 @@ AbstractIterator subclass: 'dict_itemiterator'
 %
 expectvalue /Class
 doit
+dict_itemiterator comment: 
+'No class-specific documentation for dict_itemiterator, hierarchy is: 
+Object
+  object
+    AbstractIterator( stream)
+      dict_itemiterator
+'
+%
+expectvalue /Class
+doit
 dict_itemiterator category: 'builtins'
 %
 set compile_env: 0
@@ -4794,6 +4807,16 @@ AbstractIterator subclass: 'dict_keyiterator'
   inDictionary: Python
   options: #()
 
+%
+expectvalue /Class
+doit
+dict_keyiterator comment: 
+'No class-specific documentation for dict_keyiterator, hierarchy is: 
+Object
+  object
+    AbstractIterator( stream)
+      dict_keyiterator
+'
 %
 expectvalue /Class
 doit
@@ -4814,6 +4837,16 @@ AbstractIterator subclass: 'dict_valueiterator'
 %
 expectvalue /Class
 doit
+dict_valueiterator comment: 
+'No class-specific documentation for dict_valueiterator, hierarchy is: 
+Object
+  object
+    AbstractIterator( stream)
+      dict_valueiterator
+'
+%
+expectvalue /Class
+doit
 dict_valueiterator category: 'builtins'
 %
 set compile_env: 0
@@ -4828,6 +4861,16 @@ AbstractIterator subclass: 'list_iterator'
   inDictionary: Python
   options: #()
 
+%
+expectvalue /Class
+doit
+list_iterator comment: 
+'No class-specific documentation for list_iterator, hierarchy is: 
+Object
+  object
+    AbstractIterator( stream)
+      list_iterator
+'
 %
 expectvalue /Class
 doit
@@ -4848,6 +4891,16 @@ AbstractIterator subclass: 'range_iterator'
 %
 expectvalue /Class
 doit
+range_iterator comment: 
+'No class-specific documentation for range_iterator, hierarchy is: 
+Object
+  object
+    AbstractIterator( stream)
+      range_iterator
+'
+%
+expectvalue /Class
+doit
 range_iterator category: 'builtins'
 %
 set compile_env: 0
@@ -4865,6 +4918,16 @@ AbstractIterator subclass: 'set_iterator'
 %
 expectvalue /Class
 doit
+set_iterator comment: 
+'No class-specific documentation for set_iterator, hierarchy is: 
+Object
+  object
+    AbstractIterator( stream)
+      set_iterator
+'
+%
+expectvalue /Class
+doit
 set_iterator category: 'builtins'
 %
 set compile_env: 0
@@ -4879,6 +4942,16 @@ AbstractIterator subclass: 'tuple_iterator'
   inDictionary: Python
   options: #()
 
+%
+expectvalue /Class
+doit
+tuple_iterator comment: 
+'No class-specific documentation for tuple_iterator, hierarchy is: 
+Object
+  object
+    AbstractIterator( stream)
+      tuple_iterator
+'
 %
 expectvalue /Class
 doit
@@ -5525,23 +5598,6 @@ doit
 LocalScope category: 'builtins'
 %
 set compile_env: 0
-! ------------------- Class definition for Iterator
-expectvalue /Class
-doit
-ReadStream subclass: 'Iterator'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-Iterator category: 'builtins'
-%
-set compile_env: 0
 ! ------------------- Class definition for PythonTestCase
 expectvalue /Class
 doit
@@ -5561,6 +5617,7 @@ PythonTestCase comment:
 
 PythonTestCase suite run.
 builtins stackFor: (Object _objectForOop: 71048449).
+mro() - method resolution order
 ImportTestCase debug: #''tst_importlib''.'
 %
 expectvalue /Class
@@ -6216,7 +6273,6 @@ input InvertAst.gs
 input IsADirectoryError.gs
 input IsAst.gs
 input IsNotAst.gs
-input Iterator.gs
 input JoinedStrAst.gs
 input KeyboardInterrupt.gs
 input KeyError.gs
