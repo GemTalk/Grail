@@ -9,7 +9,7 @@ BitOrAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: BitOrAst
-left: leftOperand right: rightOperand
+pyFunctionFor: lhs
 
-	^ leftOperand __or__ value: rightOperand
+	^ lhs __or__
 %

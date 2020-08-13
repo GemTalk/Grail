@@ -9,7 +9,7 @@ NotEqAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: NotEqAst
-left: leftOperand right: rightOperand
+left: lhs right: rhs
 
-	^ leftOperand __ne__ value: rightOperand
+	^ lhs __ne__ value: lhs value: rhs
 %

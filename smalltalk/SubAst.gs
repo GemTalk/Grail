@@ -9,7 +9,7 @@ SubAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: SubAst
-left: leftOperand right: rightOperand
+pyFunctionFor: lhs
 
-	^ leftOperand __sub__ value: rightOperand
+	^ lhs __sub__
 %

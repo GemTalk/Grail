@@ -9,7 +9,7 @@ BitAndAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: BitAndAst
-left: leftOperand right: rightOperand
+pyFunctionFor: lhs
 
-	^ leftOperand __and__ value: rightOperand
+	^ lhs __and__
 %

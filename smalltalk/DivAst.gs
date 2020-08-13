@@ -9,8 +9,7 @@ DivAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: DivAst
-left: leftOperand right: rightOperand
+pyFunctionFor: lhs
 
-	rightOperand.number = 0 ifTrue: [ ZeroDivisionError signal: 'division by zero' ].
-	^ leftOperand __truediv__ value: rightOperand
+	^ lhs __truediv__
 %

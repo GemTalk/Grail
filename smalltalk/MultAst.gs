@@ -9,13 +9,7 @@ MultAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: MultAst
-left: leftOperand right: rightOperand
-
-	^ leftOperand __mul__ value: rightOperand
-%
-category: 'other'
-method: MultAst
 pyFunctionFor: lhs
 
-	^lhs __mul__
+	^ lhs __mul__
 %

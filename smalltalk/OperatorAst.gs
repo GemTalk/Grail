@@ -22,9 +22,3 @@ initialize
 
 	(self stream peekFor: $)) ifFalse: [self error].
 %
-category: 'other'
-method: OperatorAst
-left: leftOperand right: rightOperand
-
-	self subclassResponsibility
-%

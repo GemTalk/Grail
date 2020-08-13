@@ -9,7 +9,7 @@ PowAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: PowAst
-left: leftOperand right: rightOperand
+pyFunctionFor: lhs
 
-	^ leftOperand __pow__ value: rightOperand
+	^ lhs __pow__
 %

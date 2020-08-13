@@ -9,8 +9,7 @@ FloorDivAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: FloorDivAst
-left: leftOperand right: rightOperand
-"https://docs.python.org/3/library/operator.html#operator.__floordiv__"
+pyFunctionFor: lhs
 
-	^ leftOperand __floordiv__ value: rightOperand
+	^ lhs __floordiv__
 %

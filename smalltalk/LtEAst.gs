@@ -9,7 +9,7 @@ LtEAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: LtEAst
-left: leftOperand right: rightOperand
+left: lhs right: rhs
 
-	^ leftOperand __lte__ value: rightOperand
+	^ lhs __lte__ value: lhs value: rhs
 %

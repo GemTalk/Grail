@@ -136,6 +136,14 @@ __getitem__
 %
 category: 'Python'
 method: AbstractContainer
+__ne__
+
+	^[:lhs :rhs | ((lhs isKindOf: AbstractContainer) and: [(rhs isKindOf: AbstractContainer) and: [lhs.container = rhs.container]]) 
+		ifTrue: [ False ] 
+		ifFalse: [ True ]]
+%
+category: 'Python'
+method: AbstractContainer
 __not_contains__
 
 	^[:collection :object |

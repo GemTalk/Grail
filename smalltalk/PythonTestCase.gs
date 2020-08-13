@@ -43,6 +43,12 @@ assert: value
 %
 category: 'other'
 method: PythonTestCase
+deny: value
+
+	super assert: (value == False or: [value ~= True or: [value not ]]).
+%
+category: 'other'
+method: PythonTestCase
 filename
 
 	^self class filename
