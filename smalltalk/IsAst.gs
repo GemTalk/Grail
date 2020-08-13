@@ -9,9 +9,11 @@ IsAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: IsAst
-left: leftOperand right: rightOperand
+left: lhs right: rhs
 
-	^((leftOperand isKindOf: AbstractNumber) and: [rightOperand isKindOf: AbstractNumber])
-		ifTrue: [leftOperand.number == rightOperand.number ifTrue: [True] ifFalse: [False]]
-		ifFalse: [leftOperand == rightOperand ifTrue: [True] ifFalse: [False]]
+	((lhs isKindOf: AbstractNumber) and: [rhs isKindOf: AbstractNumber])
+		ifTrue: [^lhs ___number == rhs ___number ifTrue: [True] ifFalse: [False]].
+	((lhs isKindOf: str) and: [rhs isKindOf: str])
+		ifTrue: [^lhs ___container = rhs ___container ifTrue: [True] ifFalse: [False]].
+	^lhs == rhs ifTrue: [True] ifFalse: [False]
 %

@@ -44,18 +44,6 @@ hash
 %
 category: 'overrides'
 method: AbstractContainer
-is_
-
-	^ [ :anObject | container == anObject.container ifTrue: [ True ] ifFalse: [ False ] ]
-%
-category: 'overrides'
-method: AbstractContainer
-is_not
-
-	^ [ :anObject | container ~~ anObject.container ifTrue: [ True ] ifFalse: [ False ] ]
-%
-category: 'overrides'
-method: AbstractContainer
 postCopy
 
 	container := container copy.

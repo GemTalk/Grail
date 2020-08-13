@@ -354,8 +354,8 @@ testIs
 		assert: (y.n.number == 1);
 		assert: ((x := x evaluate: aScope) == True);
 
-		assert: ((x := self statementsAt: 80) isKindOf: ExprAst);			"'test' is 'test'" "SHOULD BE TRUE"
-		assert: ((x evaluate: aScope) == False);
+		assert: ((x := self statementsAt: 80) isKindOf: ExprAst);			"'test' is 'test'"
+		assert: ((x evaluate: aScope) == True);
 
 		assert: ((x := self statementsAt: 81) isKindOf: ExprAst);			"[1,2] is [1,2]"
 		assert: ((x evaluate: aScope) == False);
@@ -382,8 +382,8 @@ testIsNot
 		assert: (y.n.number == 1);
 		assert: ((x evaluate: aScope) == False);
 
-		assert: ((x := self statementsAt: 84) isKindOf: ExprAst);			"'test' is not 'test'" "SHOULD BE FALSE"
-		assert: ((x evaluate: aScope) == True);
+		assert: ((x := self statementsAt: 84) isKindOf: ExprAst);			"'test' is not 'test'"
+		assert: ((x evaluate: aScope) == False);
 
 		assert: ((x := self statementsAt: 85) isKindOf: ExprAst);			"[1,2] is not [1,2]"
 		assert: ((x evaluate: aScope) == True);

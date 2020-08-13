@@ -26,7 +26,7 @@ category: 'Python'
 method: int
 __add__
 
-	^ [ :aNumber | int with: (number + aNumber.number) ]
+	^ [ :lhs :rhs | int with: (lhs.number + rhs.number) ]
 %
 category: 'Python'
 method: int

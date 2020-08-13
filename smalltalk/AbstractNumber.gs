@@ -53,7 +53,7 @@ category: 'Python'
 method: AbstractNumber
 __mul__
 
-	^ [ :aNumber | self class with: (number * aNumber.number) ]
+	^ [ :lhs :rhs | self class with: (lhs.number * rhs.number) ]
 %
 category: 'Python'
 method: AbstractNumber

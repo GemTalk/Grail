@@ -13,3 +13,9 @@ left: leftOperand right: rightOperand
 
 	^ leftOperand __mul__ value: rightOperand
 %
+category: 'other'
+method: MultAst
+pyFunctionFor: lhs
+
+	^lhs __mul__
+%

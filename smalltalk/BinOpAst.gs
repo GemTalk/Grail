@@ -21,7 +21,9 @@ category: 'other'
 method: BinOpAst
 evaluate: aScope
 
-	^op left: (left evaluate: aScope) right: (right evaluate: aScope)
+	| lhs |
+	lhs := left evaluate: aScope.
+	^(op pyFunctionFor: lhs) value: lhs value: (right evaluate: aScope)
 %
 category: 'other'
 method: BinOpAst
