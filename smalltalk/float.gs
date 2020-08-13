@@ -7,6 +7,7 @@ float class removeAllMethods.
 ! ------------------- Class methods for float
 ! ------------------- Instance methods for float
 set compile_env: 0
+set compile_env: 0
 category: 'Python'
 method: float
 __abs__
@@ -64,12 +65,6 @@ __int__
 category: 'Python'
 method: float
 __mod__
-
-	self halt.
-%
-category: 'Python'
-method: float
-__mul__
 
 	self halt.
 %
@@ -154,12 +149,6 @@ __set_format__
 category: 'Python'
 method: float
 __str__
-
-	self halt.
-%
-category: 'Python'
-method: float
-__sub__
 
 	self halt.
 %

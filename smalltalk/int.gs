@@ -15,12 +15,6 @@ method: int
 	res := ((self __eq__ value: anObject) == True).
 	^ res
 %
-category: 'other'
-method: int
-asString
-
-	^ number asString
-%
 set compile_env: 0
 category: 'Python'
 method: int
@@ -141,12 +135,6 @@ method: int
 __mod__
 
 	^ [ :aNumber | int with: (number rem: aNumber.number) ]
-%
-category: 'Python'
-method: int
-__mul__
-
-	^ [ :aNumber | int with: (number * aNumber.number) ]
 %
 category: 'Python'
 method: int
@@ -273,12 +261,6 @@ method: int
 __str__
 
 	self halt.
-%
-category: 'Python'
-method: int
-__sub__
-
-	^ [ :aNumber | int with: (number - aNumber.number) ]
 %
 category: 'Python'
 method: int

@@ -18,6 +18,24 @@ with: aNumber
 set compile_env: 0
 category: 'other'
 method: AbstractNumber
+__mul__
+
+	^ [ :aNumber | self class with: (number * aNumber.number) ]
+%
+category: 'other'
+method: AbstractNumber
+__sub__
+
+	^ [ :aNumber | self class with: (number - aNumber.number) ]
+%
+category: 'other'
+method: AbstractNumber
+asString
+
+	^ number asString
+%
+category: 'other'
+method: AbstractNumber
 initialize: aNumber
 
 	number := aNumber
