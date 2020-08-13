@@ -110,7 +110,7 @@ category: 'Python'
 method: str
 __add__
 
-	self halt.
+	^[:rhs | str withAll: container , rhs.container]
 %
 category: 'Python'
 method: str

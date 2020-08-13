@@ -264,12 +264,6 @@ __rxor__
 %
 category: 'Python'
 method: int
-__str__
-
-	self halt.
-%
-category: 'Python'
-method: int
 __sub__
 
 	^ [ :aNumber | int with: (number - aNumber.number) ]

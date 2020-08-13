@@ -29,9 +29,9 @@ testArrayAssignment
 		assert: (x.value isKindOf: ListAst);
 		assert: (x.value.elts size == 2);
 		assert: ((y := x.value.elts at: 1) isKindOf: NumAst);
-		assert: (y.n == 0);
+		assert: (y.n.number == 0);
 		assert: ((y := x.value.elts at: 2) isKindOf: NumAst);
-		assert: (y.n == 1);
+		assert: (y.n.number == 1);
 		assert: (x.value.ctx isKindOf: LoadAst);
 		yourself.
 %
@@ -70,7 +70,7 @@ testAssignMultiple
 	self 
 		assert: (x isKindOf: AssignAst);
 		assert: (x.value isKindOf: NumAst);
-		assert: (x.value.n == 2);
+		assert: (x.value.n.number == 2);
 		assert: (x.targets size == 2);
 		assert: ((y := x.targets at: 1) isKindOf: NameAst);
 		assert: (y.id == #'var2');
@@ -89,7 +89,7 @@ testAssignSingle
 	self 
 		assert: (x isKindOf: AssignAst);
 		assert: (x.value isKindOf: NumAst);
-		assert: (x.value.n == 1);
+		assert: (x.value.n.number == 1);
 		assert: (x.targets size == 1);
 		assert: ((y := x.targets at: 1) isKindOf: NameAst);
 		assert: (y.id == #'var1');
@@ -157,7 +157,7 @@ testClassDefCls
 		assert: (z.id == #'x');
 		assert: (z.ctx isKindOf: StoreAst);
 		assert: (y.value isKindOf: NumAst);
-		assert: (y.value.n == 3);
+		assert: (y.value.n.number == 3);
 		assert: (x.decorator_list size == 0);
 		yourself.
 %
@@ -286,7 +286,7 @@ testIndexAssignment
 		assert: (y.id == #'i');
 		assert: (y.ctx isKindOf: StoreAst);
 		assert: (x.value isKindOf: NumAst);
-		assert: (x.value.n == 0);
+		assert: (x.value.n.number == 0);
 		yourself.
 %
 category: 'other'
@@ -453,9 +453,9 @@ testSwapAssignment
 		assert: (x.value isKindOf: TupleAst);
 		assert: (x.value.elts size == 2);
 		assert: ((y := x.value.elts at: 1) isKindOf: NumAst);
-		assert: (y.n == 1);
+		assert: (y.n.number == 1);
 		assert: ((y := x.value.elts at: 2) isKindOf: NumAst);
-		assert: (y.n == 2);
+		assert: (y.n.number == 2);
 		assert: (x.value.ctx isKindOf: LoadAst);
 		yourself.
 %
@@ -479,7 +479,7 @@ testYield
 		assert: ((y := x.body.body at: 1) isKindOf: ExprAst);
 		assert: (y.value isKindOf: YieldAst);
 		assert: (y.value.value isKindOf: NumAst);
-		assert: (y.value.value.n == 123);
+		assert: (y.value.value.n.number == 123);
 		assert: (x.decorator_list size == 0);
 		assert: (x.returns isNone);
 		yourself.
@@ -504,7 +504,7 @@ testYieldAsync
 		assert: ((y := x.body.body at: 1) isKindOf: ExprAst);
 		assert: (y.value isKindOf:YieldAst);
 		assert: (y.value.value isKindOf: NumAst);
-		assert: (y.value.value.n == 123);
+		assert: (y.value.value.n.number == 123);
 		assert: (x.decorator_list size == 0);
 		assert: (x.returns isNone);
 		yourself.

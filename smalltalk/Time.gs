@@ -31,11 +31,11 @@ category: 'other'
 method: time
 sleep: seconds
 
-	(Delay forMilliseconds: (seconds * 1000) ceiling) wait.
+	(Delay forMilliseconds: (seconds.number * 1000) ceiling) wait.
 %
 category: 'other'
 method: time
 time
 
-	^System _timeGmtFloat
+	^float with: System _timeGmtFloat
 %

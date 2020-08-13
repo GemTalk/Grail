@@ -23,7 +23,7 @@ category: 'other'
 method: AbstractContainer
 at: anIndex
 
-	^container at: anIndex
+	^container at: ((anIndex isKindOf: int) ifTrue: [anIndex.number] ifFalse: [anIndex])
 %
 category: 'other'
 method: AbstractContainer

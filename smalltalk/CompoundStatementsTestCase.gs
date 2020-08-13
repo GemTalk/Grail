@@ -144,7 +144,7 @@ testCoroutineFor
 		assert: (call.function.ctx isKindOf: LoadAst);
 		assert: (call.arguments size == 1);
 		assert: ((num := call.arguments at: 1) isKindOf: NumAst);
-		assert: (num.n == 10);
+		assert: (num.n.number == 10);
 		assert: (call.keywords size == 0);
 		assert: (asyncFor.body.body size == 1);
 		assert: ((asyncFor.body.body at: 1) isKindOf: PassAst);
@@ -216,7 +216,7 @@ testFor
 		assert: (call.function.ctx isKindOf: LoadAst);
 		assert: (call.arguments size == 1);
 		assert: ((num := call.arguments at: 1) isKindOf: NumAst);
-		assert: (num.n == 10);
+		assert: (num.n.number == 10);
 		assert: (call.keywords size == 0);
 		assert: (x.body.body size == 1);
 		assert: ((x.body.body at: 1) isKindOf: PassAst);
@@ -245,7 +245,7 @@ testForElse
 		assert: (call.function.ctx isKindOf: LoadAst);
 		assert: (call.arguments size == 1);
 		assert: ((num := call.arguments at: 1) isKindOf: NumAst);
-		assert: (num.n == 10);
+		assert: (num.n.number == 10);
 		assert: (call.keywords size == 0);
 		assert: (x.body.body size == 1);
 		assert: ((x.body.body at: 1) isKindOf: PassAst);
@@ -436,10 +436,10 @@ testTry
 		assert: (call.arguments size == 1);
 		assert: ((binOp := call.arguments at: 1) isKindOf: BinOpAst);
 		assert: (binOp.left isKindOf: NumAst);
-		assert: (binOp.left.n == 1);
+		assert: (binOp.left.n.number == 1);
 		assert: (binOp.op isKindOf: DivAst);
 		assert: (binOp.right isKindOf: NumAst);
-		assert: (binOp.right.n == 0);
+		assert: (binOp.right.n.number == 0);
 		assert: (call.keywords size == 0);
 		assert: (x.handlers size == 1);
 		assert: ((exceptHandler := x.handlers at: 1) isKindOf: ExceptHandlerAst);
