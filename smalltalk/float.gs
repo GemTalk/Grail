@@ -148,9 +148,9 @@ __set_format__
 %
 category: 'Python'
 method: float
-__str__
+__sub__
 
-	self halt.
+	^[:rhs | float with: number - rhs.number]
 %
 category: 'Python'
 method: float

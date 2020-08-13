@@ -37,5 +37,5 @@ category: 'other'
 method: time
 time
 
-	^ float with: System _timeGmtFloat
+	^float with: System _timeGmtFloat
 %

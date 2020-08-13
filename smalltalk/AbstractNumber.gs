@@ -52,3 +52,10 @@ is_not
 
 	^ [ :anObject | number ~~ anObject.number ifTrue: [ True ] ifFalse: [ False ] ]
 %
+set compile_env: 0
+category: 'Python'
+method: AbstractNumber
+__str__
+
+	^[number printString]
+%

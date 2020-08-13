@@ -12,22 +12,6 @@ containerClass
 
 	^Unicode7
 %
-category: 'other'
-classmethod: str
-new
-
-	^self basicNew
-		initialize;
-		yourself
-%
-category: 'other'
-classmethod: str
-withAll: aCollection
-
-	^self basicNew
-		initialize: aCollection;
-		yourself
-%
 ! ------------------- Instance methods for str
 set compile_env: 0
 category: 'other'
@@ -110,7 +94,7 @@ category: 'Python'
 method: str
 __add__
 
-	self halt.
+	^[:rhs | str withAll: container , rhs.container]
 %
 category: 'Python'
 method: str

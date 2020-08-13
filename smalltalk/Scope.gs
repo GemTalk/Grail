@@ -70,7 +70,7 @@ initializeOuter: aScope node: anAstNode
 
 	astNode := anAstNode.
 	outer := aScope.
-	variables := Namespace new.
+	variables := SymbolDictionary new.
 %
 category: 'other'
 method: Scope

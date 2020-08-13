@@ -14,25 +14,11 @@ containerClass
 %
 category: 'other'
 classmethod: tuple
-new
-
-	^self basicNew
-		initialize;
-		yourself
-%
-category: 'other'
-classmethod: tuple
 with: a with: b
+	"Used to implement a dictionary iterator. 
+	Remove when that is refactored!"
 
 	^self withAll: (Array with: a with: b)
-%
-category: 'other'
-classmethod: tuple
-withAll: aCollection
-
-	^self basicNew
-		initialize: aCollection;
-		yourself
 %
 ! ------------------- Instance methods for tuple
 set compile_env: 0

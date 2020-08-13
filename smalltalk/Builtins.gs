@@ -1378,8 +1378,8 @@ print: arguments keywords: keywords
 		| string |
 		"https://docs.python.org/3/library/stdtypes.html#str"
 		string := (each isKindOf: str) 
-			ifTrue: [each]
-			ifFalse: [each printString].
+			ifTrue: [each.container]
+			ifFalse: [each __str__ value].
 		stream nextPutAll: separator2; nextPutAll: string.
 		separator2 := separator1.
 	].

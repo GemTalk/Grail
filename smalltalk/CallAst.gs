@@ -50,7 +50,7 @@ initialize
 		keywords := KeywordsAst from: keywords.
 	] ifFalse: [
 		| replacement |
-		replacement := Namespace new.
+		replacement := SymbolDictionary new.
 		keywords do: [:each | replacement at: each name put: each value].
 		keywords := replacement.
 	].

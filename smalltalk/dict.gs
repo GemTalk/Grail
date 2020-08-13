@@ -12,14 +12,6 @@ containerClass
 
 	^Dictionary
 %
-category: 'other'
-classmethod: dict
-new
-
-	^self basicNew
-		initialize;
-		yourself
-%
 ! ------------------- Instance methods for dict
 set compile_env: 0
 category: 'other'
@@ -121,7 +113,13 @@ __getitem__
 category: 'Python'
 method: dict
 __iter__
+	"The builtin iter() function looks for the __iter__() method.
+	https://docs.python.org/3/library/functions.html#iter
 
+	iter(d) Return an iterator over the keys of the dictionary. 
+	This is a shortcut for iter(d.keys()).
+	Keys and values are iterated over in insertion order!
+	https://docs.python.org/3.7/library/stdtypes.html#mapping-types-dict"
 	self halt.
 %
 category: 'Python'

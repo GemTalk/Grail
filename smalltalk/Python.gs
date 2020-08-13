@@ -4493,37 +4493,6 @@ doit
 WithItemAst category: 'Parser'
 %
 set compile_env: 0
-! ------------------- Class definition for Namespace
-expectvalue /Class
-doit
-SymbolDictionary subclass: 'Namespace'
-  instVarNames: #( d)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #( disallowGciStore)
-
-%
-expectvalue /Class
-doit
-Namespace comment: 
-'No class-specific documentation for Namespace, hierarchy is: 
-Object
-  Collection
-    AbstractDictionary
-      KeyValueDictionary( numElements numCollisions collisionLimit tableSize)
-        IdentityKeyValueDictionary
-          IdentityDictionary
-            SymbolDictionary
-              Namespace
-'
-%
-expectvalue /Class
-doit
-Namespace category: 'builtins'
-%
-set compile_env: 0
 ! ------------------- Class definition for object
 expectvalue /Class
 doit
@@ -4625,20 +4594,73 @@ AbstractContainer subclass: 'dict'
 expectvalue /Class
 doit
 dict comment: 
-'No class-specific documentation for dict, hierarchy is: 
-Object
-  Collection
-    AbstractDictionary
-      KeyValueDictionary( numElements numCollisions collisionLimit tableSize)
-        IdentityKeyValueDictionary
-          IdentityDictionary
-            SymbolDictionary
-              dict
-'
+'A dictonary''s keys must be hashable and are compared using equality (presumably this allows for efficient lookup).
+But a dictionary''s keys and values are iterated over in insertion order, so we we must also keep the insertion order!
+As a first implementation, we will just use an array of keys (odd offsets) and values (even offsets)
+and use a brute force search. Removing a key will leave a gap (no compaction in our first implementation).
+(Make it work, make it right, make it fast!)
+If we use this for a namespace (module, function, or class), then we would need to use Associations
+so that the global and nonlocal commands would work properly. For now they are SymbolDictionary instances.
+
+https://docs.python.org/3/library/stdtypes.html#mapping-types-dict
+
+For an introduction to CPython implementation, see
+https://stackoverflow.com/questions/327311/how-are-pythons-built-in-dictionaries-implemented.'
 %
 expectvalue /Class
 doit
 dict category: 'builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for dict_items
+expectvalue /Class
+doit
+AbstractContainer subclass: 'dict_items'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+dict_items category: 'builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for dict_keys
+expectvalue /Class
+doit
+AbstractContainer subclass: 'dict_keys'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+dict_keys category: 'builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for dict_values
+expectvalue /Class
+doit
+AbstractContainer subclass: 'dict_values'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+dict_values category: 'builtins'
 %
 set compile_env: 0
 ! ------------------- Class definition for list
@@ -4725,6 +4747,142 @@ Object
 expectvalue /Class
 doit
 tuple category: 'builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for AbstractIterator
+expectvalue /Class
+doit
+object subclass: 'AbstractIterator'
+  instVarNames: #( stream)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+AbstractIterator category: 'builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for dict_itemiterator
+expectvalue /Class
+doit
+AbstractIterator subclass: 'dict_itemiterator'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+dict_itemiterator category: 'builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for dict_keyiterator
+expectvalue /Class
+doit
+AbstractIterator subclass: 'dict_keyiterator'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+dict_keyiterator category: 'builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for dict_valueiterator
+expectvalue /Class
+doit
+AbstractIterator subclass: 'dict_valueiterator'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+dict_valueiterator category: 'builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for list_iterator
+expectvalue /Class
+doit
+AbstractIterator subclass: 'list_iterator'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+list_iterator category: 'builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for range_iterator
+expectvalue /Class
+doit
+AbstractIterator subclass: 'range_iterator'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+range_iterator category: 'builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for set_iterator
+expectvalue /Class
+doit
+AbstractIterator subclass: 'set_iterator'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+set_iterator category: 'builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for tuple_iterator
+expectvalue /Class
+doit
+AbstractIterator subclass: 'tuple_iterator'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+tuple_iterator category: 'builtins'
 %
 set compile_env: 0
 ! ------------------- Class definition for AbstractNumber
@@ -5753,6 +5911,23 @@ doit
 SimpleStatementsTestCase category: 'Tests'
 %
 set compile_env: 0
+! ------------------- Class definition for StatementsTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'StatementsTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+StatementsTestCase category: 'Tests'
+%
+set compile_env: 0
 ! ------------------- Class definition for StringLiteralsTestCase
 expectvalue /Class
 doit
@@ -5914,6 +6089,7 @@ input _thread.gs
 input _warnings.gs
 input _weakref.gs
 input AbstractContainer.gs
+input AbstractIterator.gs
 input AbstractLocationNode.gs
 input AbstractNode.gs
 input AbstractNumber.gs
@@ -5981,6 +6157,12 @@ input DeleteAst.gs
 input DelimitersTestCase.gs
 input DeprecationWarning.gs
 input dict.gs
+input dict_itemiterator.gs
+input dict_items.gs
+input dict_keyiterator.gs
+input dict_keys.gs
+input dict_valueiterator.gs
+input dict_values.gs
 input DictAst.gs
 input DictCompAst.gs
 input DivAst.gs
@@ -6042,6 +6224,7 @@ input KeywordAst.gs
 input KeywordsAst.gs
 input LambdaAst.gs
 input list.gs
+input list_iterator.gs
 input ListAst.gs
 input ListCompAst.gs
 input LoadAst.gs
@@ -6061,7 +6244,6 @@ input NameAst.gs
 input NameConstantAst.gs
 input NamedExprAst.gs
 input NameError.gs
-input Namespace.gs
 input NoneAst.gs
 input NoneType.gs
 input NonlocalAst.gs
@@ -6089,6 +6271,7 @@ input ProcessLookupError.gs
 input PythonTestCase.gs
 input PythonTestResource.gs
 input RaiseAst.gs
+input range_iterator.gs
 input RecursionError.gs
 input ReferenceError.gs
 input ResourceWarning.gs
@@ -6098,6 +6281,7 @@ input RShiftAst.gs
 input RuntimeError.gs
 input RuntimeWarning.gs
 input Scope.gs
+input set_iterator.gs
 input SetAst.gs
 input SetCompAst.gs
 input SimpleStatementsTestCase.gs
@@ -6106,6 +6290,7 @@ input SliceAbstractAst.gs
 input SliceAst.gs
 input StarredAst.gs
 input StatementAst.gs
+input StatementsTestCase.gs
 input StopAsyncIteration.gs
 input StopIteration.gs
 input StoreAst.gs
@@ -6128,6 +6313,7 @@ input TimeTestCase.gs
 input TrueAst.gs
 input TryAst.gs
 input tuple.gs
+input tuple_iterator.gs
 input TupleAst.gs
 input TypeError.gs
 input UAddAst.gs

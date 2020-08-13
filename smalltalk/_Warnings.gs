@@ -28,7 +28,7 @@ initialize
 		at: #'__package__'		put: '';
 		at: #'__spec__'			put: nil;		"ModuleSpec(name='_warnings', loader=<class '_frozen_importlib.BuiltinImporter'>, origin='built-in')"
 		at: #'_filters_mutated'	put: [:arguments :keywords :scope | self _filtersMutated];
-		at: #'_onceregistry'		put: Namespace new;
+		at: #'_onceregistry'		put: SymbolDictionary new;
 		at: #'filters'				put: list new;
 			"('default', None, <class 'DeprecationWarning'>, '__main__', 0), 
 			('ignore', None, <class 'DeprecationWarning'>, None, 0), 

@@ -48,13 +48,15 @@ category: 'other'
 method: module
 get: aSymbol
 
-	^globals get: aSymbol
+	^globals 
+		at: aSymbol
+		ifAbsent: [NameError signal]
 %
 category: 'other'
 method: module
 initialize
 
-	globals := Namespace new.
+	globals := SymbolDictionary new.
 %
 set compile_env: 0
 category: 'Python'
