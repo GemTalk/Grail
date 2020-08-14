@@ -10,7 +10,7 @@ set compile_env: 0
 category: 'other'
 method: ArgAst
 initialize
-	"arg = (identifier arg, expr? annotation)"
+	"arg = (identifier arg, expr? annotation, string? type_comment) "
 
 	| stream |
 	stream := self stream.
@@ -18,6 +18,8 @@ initialize
 	arg := (stream upTo: $') asSymbol.
 	self commaSpace.
 	annotation := self optionalExpression.
+	self commaSpace.
+	type_comment := self optionalString.
 	self readPosition.
 %
 category: 'other'

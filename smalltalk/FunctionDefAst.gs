@@ -37,7 +37,9 @@ evaluate: aScope
 category: 'other'
 method: FunctionDefAst
 initialize
-	"FunctionDef(identifier name, arguments args, stmt* body, expr* decorator_list, expr? returns)"
+	"FunctionDef(identifier name, arguments args,
+                       stmt* body, expr* decorator_list, expr? returns,
+                       string? type_comment)"
 
 	| stream |
 	stream := self stream.
@@ -51,6 +53,8 @@ initialize
 	decorator_list :=  self collectAst: [self expression id].
 	self commaSpace.
 	returns := self optionalExpression.
+	self commaSpace.
+	type_comment := self optionalString.
 	self readPosition.
 %
 category: 'other'

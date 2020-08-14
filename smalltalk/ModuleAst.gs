@@ -147,6 +147,8 @@ parseAst
 	string := stream upTo: $(.
 	string = 'Module' ifFalse: [self error].
 	BlockAst parent: self.
+	self commaSpace.
+	type_ignore := self collectAst: [ StatementAst statementFrom: self ].
 	(stream peekFor: $)) ifFalse: [self error].
 	string := stream upToEnd trimSeparators.
 	string isEmpty ifFalse: [self error: 'Unexpected text at end of AST: ' , string printString].

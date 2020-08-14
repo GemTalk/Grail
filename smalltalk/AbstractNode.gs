@@ -84,9 +84,9 @@ category: 'initialization'
 method: AbstractNode
 commaSpace
 
-	| stream |
+	| stream temp |
 	stream := self stream.
-	(stream peekFor: $,) ifFalse: [self error].
+	(temp := stream peekFor: $,) ifFalse: [self error].
 	(stream peekFor: Character space) ifFalse: [self error].
 %
 category: 'initialization'
@@ -148,9 +148,9 @@ category: 'initialization'
 method: AbstractNode
 optionalArg
 
-	| stream |
+	| stream temp |
 	stream := parent stream.
-	^(stream peekN: 4) = 'None' ifTrue: [
+	^(temp := stream peekN: 4) = 'None' ifTrue: [
 		stream next: 4.
 		None.
 	] ifFalse: [
@@ -172,6 +172,19 @@ optionalExpression
 %
 category: 'initialization'
 method: AbstractNode
+optionalString
+
+	| stream |
+	stream := parent stream.
+	^(stream peekN: 4) = 'None' ifTrue: [
+		stream next: 4.
+		None.
+	] ifFalse: [
+		self string.
+	].
+%
+category: 'initialization'
+method: AbstractNode
 readPosition
 %
 category: 'initialization'
@@ -186,6 +199,7 @@ string
 
 	| stream char writeStream next |
 	stream := self stream.
+	stream peekFor: $b. "TODO: deal with byte literal"
 	char := stream next.
 	(char == $' or: [char == $"]) ifFalse: [self error].
 	writeStream := WriteStream on: Unicode7 new.
@@ -236,6 +250,24 @@ method: AbstractNode
 module
 
 	^parent module
+%
+category: 'other'
+method: AbstractNode
+number
+
+	| stream string x num |
+	stream := self stream.
+	string := stream upTo: $,.
+	stream skip: -1.
+	(string notEmpty and: [string last == $j]) ifTrue: [
+		num := complex real: 0 imag: (string copyFrom: 1 to: string size - 1) asNumber.
+	] ifFalse: [
+		x := string asNumber.
+		num := (x isKindOf: Integer) 
+			ifTrue: [int with: x]
+			ifFalse: [float with: x].
+	].
+	^ num
 %
 category: 'other'
 method: AbstractNode

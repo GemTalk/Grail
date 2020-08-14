@@ -19,10 +19,12 @@ evaluate: aScope
 category: 'other'
 method: AssignAst
 initialize
-	"Assign(expr* targets, expr value)"
+	"Assign(expr* targets, expr value, string? type_comment)"
 
 	targets := self collectAst: [self expression].
 	self commaSpace.
 	value := self expression.
+	self commaSpace.
+	type_comment := self optionalString.
 	self readPosition.
 %

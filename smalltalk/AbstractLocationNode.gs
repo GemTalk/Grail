@@ -39,13 +39,14 @@ category: 'other'
 method: AbstractLocationNode
 readPositionOnly
 
-	| stream string |
+	| stream string temp |
 	stream := self stream.
 	string := stream upTo: $=.
 	string trimBlanks = 'lineno' ifFalse: [self error].
 	line := (stream upTo: $,) asNumber.
 	(string := stream upTo: $=) = ' col_offset' ifFalse: [self error].
-	column := (stream upTo: $)) asNumber.
+	column := (temp := stream upTo: $,) asNumber.
+	temp := stream upTo: $).
 %
 category: 'other'
 method: AbstractLocationNode

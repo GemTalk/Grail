@@ -29,13 +29,15 @@ arguments: arguments keywords: keywords scope: aScope
 category: 'other'
 method: ArgumentsAst
 initialize
-"arguments(arg* args, arg? vararg, arg* kwonlyargs, expr* kw_defaults,
-                 arg? kwarg, expr* defaults)"
+"arguments(arg* posonlyargs, arg* args, arg? vararg, arg* kwonlyargs,
+                 expr* kw_defaults, arg? kwarg, expr* defaults)"
 
 	| next stream|
 	stream := self stream.
 	next := stream next: 10.
 	next ~= 'arguments(' ifTrue: [self error].
+	posonlyargs := self collectAst: [self arg].
+	self commaSpace.
 	args := self collectAst: [self arg].
 	self commaSpace.
 	vararg := self optionalArg.

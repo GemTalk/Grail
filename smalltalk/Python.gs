@@ -1325,7 +1325,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 AbstractLocationNode subclass: 'ArgAst'
-  instVarNames: #( arg annotation)
+  instVarNames: #( arg annotation type_comment)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -1651,7 +1651,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 ExpressionAst subclass: 'ConstantAst'
-  instVarNames: #( value)
+  instVarNames: #( value kind)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -2615,7 +2615,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 StatementAst subclass: 'AssignAst'
-  instVarNames: #( targets value)
+  instVarNames: #( targets value type_comment)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -2918,7 +2918,7 @@ expectvalue /Class
 doit
 StatementAst subclass: 'FunctionDefAst'
   instVarNames: #( name args body
-                    decorator_list returns)
+                    decorator_list returns type_comment)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -3326,8 +3326,8 @@ set compile_env: 0
 expectvalue /Class
 doit
 AbstractNode subclass: 'ArgumentsAst'
-  instVarNames: #( args vararg kwonlyargs
-                    kw_defaults kwarg defaults)
+  instVarNames: #( posonlyargs args vararg
+                    kwonlyargs kw_defaults kwarg defaults)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -3891,7 +3891,7 @@ expectvalue /Class
 doit
 AbstractNode subclass: 'ModuleAst'
   instVarNames: #( body name path
-                    source stream scope)
+                    source stream scope type_ignore)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -4459,6 +4459,23 @@ SuiteAst subclass: 'BlockAst'
 expectvalue /Class
 doit
 BlockAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for TypeIgnoreAst
+expectvalue /Class
+doit
+AbstractNode subclass: 'TypeIgnoreAst'
+  instVarNames: #( lineno tag)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+TypeIgnoreAst category: 'Parser'
 %
 set compile_env: 0
 ! ------------------- Class definition for WithItemAst
@@ -6372,6 +6389,7 @@ input tuple.gs
 input tuple_iterator.gs
 input TupleAst.gs
 input TypeError.gs
+input TypeIgnoreAst.gs
 input UAddAst.gs
 input UnaryOpAst.gs
 input UnboundLocalError.gs
