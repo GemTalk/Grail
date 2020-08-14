@@ -359,7 +359,7 @@ and then brought back in Python 3.2.
 %
 category: 'functions'
 method: builtins
-chr: arguments
+chr: anInt
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -371,7 +371,7 @@ This is the inverse of ord().
 The valid range for the argument is from 0 through 1,114,111 (0x10FFFF in base 16).
  ValueError will be raised if i is outside that range.
 "
-	^(Character codePoint: arguments first) asString
+	^ (Character codePoint: anInt ___number) asString
 %
 category: 'functions'
 method: builtins
@@ -1863,6 +1863,7 @@ initialize
 		at: #'bytearray'		put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [self bytearray: arguments] ifFalse: [bytearray withAll: Array new]];
 		at: #'bytes'			put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [self bytes: arguments] ifFalse: [bytes withAll: Array new]];
 		at: #'callable'			put: [:arguments :keywords :scope | self callable: arguments first];
+		at: #'chr'				put: [:arguments :keywords :scope | self chr: arguments first];
 		at: #'classmethod'	put: [:arguments :keywords :scope | self classmethod: arguments first scope: scope];
 		at: #'exec'				put: [:arguments :keywords :scope | self exec: arguments];
 		at: #'getattr'			put: [:arguments :keywords :scope | self getattr: arguments first _: arguments second];

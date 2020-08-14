@@ -52,7 +52,10 @@ bytes() # 28
 # b'a'
 bytes('a', 'utf-8') # 29
 
-callable(True)
-callable(0)
-callable(int)
-callable(callable)
+callable(True) # 30
+callable(0) # 31
+callable(int) # 32
+callable(callable) # 33
+
+chr(32) # 34
+chr(97) # 35

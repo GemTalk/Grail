@@ -126,6 +126,16 @@ test_callable
 %
 category: 'other'
 method: BuiltinsTestCase
+test_chr
+
+	| x |
+	x := (self statementsAt: 34) evaluate: aScope.		
+	self assert: x = ' '.
+	x := (self statementsAt: 35) evaluate: aScope.		
+	self assert: x = 'a'.
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"
