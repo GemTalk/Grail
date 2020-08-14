@@ -35,10 +35,19 @@ bool(0) # 20
 bool() # 21
 
 # bytearray(b'\x00\x00\x00')
-bytearray(3)
+bytearray(3) # 22 
 # bytearray(b'\x01\x02\x03')
-bytearray([1, 2, 3])
+bytearray([1, 2, 3]) # 23
 # bytearray(b'')
-bytearray()
+bytearray() # 24
 # bytearray(b'a')
-bytearray('a', 'utf-8')
+bytearray('a', 'utf-8') # 25
+
+# b'\x00\x00\x00'
+bytes(3) # 26
+# b'\x01\x02\x03'
+bytes([1, 2, 3]) # 27
+# b''
+bytes() # 28
+# b'a'
+bytes('a', 'utf-8') # 29

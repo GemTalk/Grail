@@ -296,15 +296,21 @@ Without an argument, an array of size 0 is created.
 See also Binary Sequence Types — bytes, bytearray, memoryview and Bytearray Objects.
 "
 
+	^ self byteFactory: arguments type: bytearray.
+%
+category: 'functions'
+method: builtins
+byteFactory: arguments type: aByteType
+
 	| source encoding errors |
 	source := arguments first.
 	(source isKindOf: str) ifTrue: [
 		((arguments size > 1) and: [(encoding := arguments second) isKindOf: str]) ifFalse: [ self halt ].
 		(arguments size = 3) ifTrue: [ errors := arguments at: 3 ].
-		^ bytearray withAll: (str encode: source withEncoding: encoding error: errors).
+		^ aByteType withAll: (str encode: source withEncoding: encoding error: errors).
 	].
-	(source isKindOf: int) ifTrue: [ ^ bytearray withAll: (Array new fillFrom: 1 resizeTo: source ___number with: 0) ].
-	(source isKindOf: list) ifTrue: [ ^ bytearray withAll: source asArray ].
+	(source isKindOf: int) ifTrue: [ ^ aByteType withAll: (Array new fillFrom: 1 resizeTo: source ___number with: 0) ].
+	(source isKindOf: list) ifTrue: [ ^ aByteType withAll: source asArray ].
 	self halt.
 %
 category: 'functions'
@@ -326,7 +332,8 @@ Bytes objects can also be created with literals, see String and Bytes literals.
 See also Binary Sequence Types — bytes, bytearray, memoryview,
  Bytes Objects, and Bytes and Bytearray Operations.
 "
-self halt.
+
+	^ self byteFactory: arguments type: bytes.
 %
 category: 'functions'
 method: builtins
@@ -1850,6 +1857,7 @@ initialize
 		at: #'bin'				put: [:arguments :keywords :scope | self bin: arguments first];
 		at: #'bool'				put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [self bool: arguments first] ifFalse: [False]];
 		at: #'bytearray'		put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [self bytearray: arguments] ifFalse: [bytearray withAll: Array new]];
+		at: #'bytes'			put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [self bytes: arguments] ifFalse: [bytes withAll: Array new]];
 		at: #'classmethod'	put: [:arguments :keywords :scope | self classmethod: arguments first scope: scope];
 		at: #'exec'				put: [:arguments :keywords :scope | self exec: arguments];
 		at: #'getattr'			put: [:arguments :keywords :scope | self getattr: arguments first _: arguments second];

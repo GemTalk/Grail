@@ -98,6 +98,20 @@ test_bytearray
 %
 category: 'other'
 method: BuiltinsTestCase
+test_bytes
+
+	| x |
+	x := (self statementsAt: 26) evaluate: aScope.		
+	self assert: x = #[0 0 0].
+	x := (self statementsAt: 27) evaluate: aScope.		
+	self assert: x = #[1 2 3].
+	x := (self statementsAt: 28) evaluate: aScope.		
+	self assert: x = #[].
+	x := (self statementsAt: 29) evaluate: aScope.		
+	self assert: x = #[97].
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"
