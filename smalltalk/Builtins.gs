@@ -159,7 +159,7 @@ def all(iterable):
             return False
     return True
 "
-	^ (arguments at: 1) allSatisfy: [:each | each]
+	^ arguments allSatisfy: [ :each | each == True ]
 %
 category: 'functions'
 method: builtins
@@ -176,7 +176,7 @@ def any(iterable):
             return True
     return False
 "
-	^arguments anySatisfy: [:each | each]
+	^ arguments anySatisfy: [ :each | each == True ]
 %
 category: 'functions'
 method: builtins
