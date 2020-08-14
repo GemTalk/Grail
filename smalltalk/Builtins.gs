@@ -214,7 +214,7 @@ If prefix “0b” is desired or not, you can use either of the following ways.
 ('0b1110', '1110')
 See also format() for more information.
 "
-	^(arguments first negative ifTrue: ['-'] ifFalse: ['']), '0b' , (arguments first abs printStringRadix: 2)
+	^(arguments negative ifTrue: ['-'] ifFalse: ['']), '0b' , (arguments abs printStringRadix: 2)
 %
 category: 'functions'
 method: builtins
@@ -1821,7 +1821,7 @@ initialize
 		at: #'abs'				put: [:arguments :keywords :scope | self abs: arguments first];
 		at: #'all'					put: [:arguments :keywords :scope | self all: arguments first];
 		at: #'any'				put: [:arguments :keywords :scope | self any: arguments first];
-		at: #'bin'				put: [:arguments :keywords :scope | self bin: arguments];
+		at: #'bin'				put: [:arguments :keywords :scope | self bin: arguments first];
 		at: #'bool'				put: [:arguments :keywords :scope | self bool: arguments first];
 		at: #'classmethod'	put: [:arguments :keywords :scope | self classmethod: arguments first scope: scope];
 		at: #'exec'				put: [:arguments :keywords :scope | self exec: arguments];
