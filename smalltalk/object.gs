@@ -24,6 +24,12 @@ __bool__
 %
 category: 'Python'
 method: object
+__call__
+
+	self subclassResponsibility.
+%
+category: 'Python'
+method: object
 __class__
 
 	self halt.

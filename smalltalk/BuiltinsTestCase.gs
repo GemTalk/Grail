@@ -112,6 +112,20 @@ test_bytes
 %
 category: 'other'
 method: BuiltinsTestCase
+test_callable
+
+	| x |
+	x := (self statementsAt: 30) evaluate: aScope.		
+	self deny: x.
+	x := (self statementsAt: 31) evaluate: aScope.		
+	self deny: x.
+	x := (self statementsAt: 32) evaluate: aScope.		
+	self assert: x.
+	x := (self statementsAt: 33) evaluate: aScope.		
+	self assert: x.
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"

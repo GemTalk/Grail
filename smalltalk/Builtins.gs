@@ -337,7 +337,7 @@ See also Binary Sequence Types — bytes, bytearray, memoryview,
 %
 category: 'functions'
 method: builtins
-callable: arguments
+callable: anObject
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -351,7 +351,11 @@ Note that classes are callable (calling a class returns a new instance);
 New in version 3.2: This function was first removed in Python 3.0 
 and then brought back in Python 3.2.
 "
-self halt.
+
+	[((anObject isKindOf: Instance) and: [anObject __call__]) ifTrue: [ True ] ifFalse: [ False ] ] "TODO: test callable instances"
+		on: Error
+		do: [ ].
+	^ (anObject isKindOf: ExecBlock) ifTrue: [ True ] ifFalse: [ False ]
 %
 category: 'functions'
 method: builtins
@@ -1858,6 +1862,7 @@ initialize
 		at: #'bool'				put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [self bool: arguments first] ifFalse: [False]];
 		at: #'bytearray'		put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [self bytearray: arguments] ifFalse: [bytearray withAll: Array new]];
 		at: #'bytes'			put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [self bytes: arguments] ifFalse: [bytes withAll: Array new]];
+		at: #'callable'			put: [:arguments :keywords :scope | self callable: arguments first];
 		at: #'classmethod'	put: [:arguments :keywords :scope | self classmethod: arguments first scope: scope];
 		at: #'exec'				put: [:arguments :keywords :scope | self exec: arguments];
 		at: #'getattr'			put: [:arguments :keywords :scope | self getattr: arguments first _: arguments second];

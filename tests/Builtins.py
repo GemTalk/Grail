@@ -51,3 +51,8 @@ bytes([1, 2, 3]) # 27
 bytes() # 28
 # b'a'
 bytes('a', 'utf-8') # 29
+
+callable(True)
+callable(0)
+callable(int)
+callable(callable)
