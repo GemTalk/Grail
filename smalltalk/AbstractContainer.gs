@@ -30,18 +30,6 @@ withAll: aCollection
 %
 ! ------------------- Instance methods for AbstractContainer
 set compile_env: 0
-category: 'other'
-method: AbstractContainer
-allSatisfy: aBlock
-
-	^ container allSatisfy: aBlock
-%
-category: 'other'
-method: AbstractContainer
-anySatisfy: aBlock
-
-	^ container anySatisfy: aBlock
-%
 set compile_env: 0
 category: 'overrides'
 method: AbstractContainer

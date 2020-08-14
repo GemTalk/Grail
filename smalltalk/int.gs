@@ -20,7 +20,7 @@ category: 'Python'
 method: int
 __abs__
 
-	^ [ :n | int with: number abs ]
+	^ [ :n | int with: n ___number abs ]
 %
 category: 'Python'
 method: int

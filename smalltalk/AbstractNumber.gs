@@ -40,18 +40,6 @@ ___number
 
 	^number
 %
-category: 'private'
-method: AbstractNumber
-abs
-
-	^ number abs
-%
-category: 'private'
-method: AbstractNumber
-negative
-
-	^ number negative
-%
 set compile_env: 0
 category: 'Python'
 method: AbstractNumber

@@ -10,17 +10,22 @@ category: 'other'
 classmethod: ModuleAst
 astForPath: pathString
 
-	| string1 string2 string3 |
+	| string1 string2 string3 file |
 	string1 := '
 import ast
 file=open(''' , pathString , ''',''r'')
 tree=ast.parse(file.read())
 out=ast.dump(tree,annotate_fields=False,include_attributes=True)
 file.close()
-print(out)
+file=open(''' , pathString , '.ast'',''w'')
+file.write(out)
+file.close()
 '.
 	string2 := 'echo "' , string1 , '" | ' , self pythonPath.
-	string3 := System performOnServer: string2.
+	System performOnServer: string2.
+	file := GsFile open: pathString, '.ast' mode: 'rb' onClient: false.
+	string3 := file contentsAsUtf8 decodeToUnicode.
+	GsFile removeServerFile: pathString, '.ast'.
 	^string3
 %
 category: 'other'

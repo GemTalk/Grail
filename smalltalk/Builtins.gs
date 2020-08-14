@@ -159,7 +159,7 @@ def all(iterable):
             return False
     return True
 "
-	^ arguments allSatisfy: [ :each | each == True ]
+	^ arguments ___container allSatisfy: [ :each | each == True ]
 %
 category: 'functions'
 method: builtins
@@ -176,11 +176,11 @@ def any(iterable):
             return True
     return False
 "
-	^ arguments anySatisfy: [ :each | each == True ]
+	^ arguments ___container anySatisfy: [ :each | each == True ]
 %
 category: 'functions'
 method: builtins
-ascii: arguments
+ascii: anObject
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -190,15 +190,14 @@ but escape the non-ASCII characters in the string returned by repr() using
 \x, \u or \U escapes. This generates a string similar to that returned by repr() in Python 2.
 "
 
-	| str |
-	str := String new.
-	arguments doWithIndex: [ :char :i | 
-		char asString _asUnicode7 isNil ifTrue: [
-			str := str, ((arguments codePointAt: i) printStringRadix: 16) asLowercase.
-		] ifFalse: [
-			str := str, char.
-		]
+	| stream |
+	stream := WriteStream on: Unicode7 new.
+	(anObject __str__ value: anObject) ___container do: [ :char | 
+		char codePoint <= 127 
+			ifTrue: [ stream nextPut: char ] 
+			ifFalse: [ stream nextPutAll: '\x'; nextPutAll: (char codePoint printStringRadix: 16) asLowercase ].
 	].
+	^ str withAll: stream contents
 %
 category: 'functions'
 method: builtins
@@ -223,7 +222,7 @@ If prefix “0b” is desired or not, you can use either of the following ways.
 ('0b1110', '1110')
 See also format() for more information.
 "
-	^(arguments negative ifTrue: ['-'] ifFalse: ['']), '0b' , (arguments abs printStringRadix: 2)
+	^(arguments ___number negative ifTrue: ['-'] ifFalse: ['']), '0b' , (arguments ___number abs printStringRadix: 2)
 %
 category: 'functions'
 method: builtins
@@ -951,7 +950,7 @@ Note To obtain a hexadecimal string representation
  for a float, use the float.hex() method.
 "
 
-^(arguments first negative ifTrue: ['-'] ifFalse: ['']), '0x' , (arguments first abs asHexString)
+^(arguments ___number negative ifTrue: ['-'] ifFalse: ['']), '0x' , (arguments ___number abs asHexString)
 %
 category: 'functions'
 method: builtins
@@ -1319,7 +1318,7 @@ with prefix “0o” or not, you can use either of the following ways.
 ('0o12', '12')
 See also format() for more information.
 "
-^(arguments first negative ifTrue: ['-'] ifFalse: ['']), '0o' , (arguments first abs printStringRadix: 8)
+^(arguments ___number negative ifTrue: ['-'] ifFalse: ['']), '0o' , (arguments ___number abs printStringRadix: 8)
 %
 category: 'functions'
 method: builtins

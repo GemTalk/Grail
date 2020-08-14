@@ -50,6 +50,16 @@ test_any
 %
 category: 'other'
 method: BuiltinsTestCase
+test_ascii
+
+	| x |
+	x := (self statementsAt: 10) evaluate: aScope.		
+	self assert: x = '\xf6'.
+	x := (self statementsAt: 11) evaluate: aScope.		
+	self assert: x = 'G \xeb \xea k s f ? r G ? e k s'.
+%
+category: 'other'
+method: BuiltinsTestCase
 test_bin
 
 	| x |

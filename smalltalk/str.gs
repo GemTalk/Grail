@@ -145,7 +145,7 @@ category: 'Python'
 method: str
 __str__
 
-	^self
+	^ [ :rhs | rhs ]
 %
 category: 'Python'
 method: str
