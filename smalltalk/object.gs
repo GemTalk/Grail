@@ -158,7 +158,7 @@ category: 'Python'
 method: object
 __str__
 
-	^'<object object at ' , self asOop printString , '>'
+	^[:obj | '<object object at ' , obj asOop printString , '>']
 %
 category: 'Python'
 method: object

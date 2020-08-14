@@ -39,5 +39,5 @@ category: 'Python'
 method: bool
 __str__
 
-	^[str withAll: (number == 1 ifTrue: ['True'] ifFalse: ['False'])]
+	^[:num | str withAll: (num ___number == 1 ifTrue: ['True'] ifFalse: ['False'])]
 %

@@ -19,6 +19,7 @@ callFromClass: receiver arguments: anArray keywords: aSymbolDictionary scope: aS
 category: 'other'
 method: InstanceFunction
 callFromObject: receiver arguments: anArray keywords: aSymbolDictionary scope: aScope
+	"a function is a callable"
 
 	^self
 		value: (Array with: receiver) , anArray

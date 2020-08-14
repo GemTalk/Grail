@@ -54,6 +54,17 @@ copyFrom: i to: j
 %
 category: 'other'
 method: str
+printOn: aStream
+
+	super printOn: aStream.
+	aStream
+		nextPutAll: '("';
+		nextPutAll: container;
+		nextPutAll: '")';
+		yourself.
+%
+category: 'other'
+method: str
 split: arguments keywords: keywords
 	"string.split(separator, max)
 
@@ -83,8 +94,8 @@ method: str
 __add__
 
 	^[:lhs :rhs | 
-		(lhs isKindOf: str) ifFalse: [TypeError signal: 'descriptor ''__add__'' requires a ''int'' object but received a ' , lhs class name].
-		(rhs isKindOf: str) ifFalse: [TypeError signal: 'descriptor ''__add__'' requires a ''int'' object but received a ' , rhs class name].
+		(lhs isKindOf: str) ifFalse: [TypeError signal: 'descriptor ''__add__'' requires a ''str'' object but received a ' , lhs class name].
+		(rhs isKindOf: str) ifFalse: [TypeError signal: 'descriptor ''__add__'' requires a ''str'' object but received a ' , rhs class name].
 		str withAll: lhs.container , rhs.container]
 %
 category: 'Python'

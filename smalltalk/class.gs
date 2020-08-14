@@ -58,6 +58,7 @@ set: aSymbol to: aValue
 category: 'other'
 method: class
 value: arguments value: keywords value: aScope
+	"A class is a callable object."
 
 	^astNode
 		value: arguments

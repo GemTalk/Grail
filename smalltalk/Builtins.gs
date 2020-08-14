@@ -1400,7 +1400,7 @@ print: arguments keywords: keywords
 		"https://docs.python.org/3/library/stdtypes.html#str"
 		string := (each isKindOf: str) 
 			ifTrue: [each.container]
-			ifFalse: [ | x | x := each __str__ value. x.container].
+			ifFalse: [ | x | x := each __str__ value: each. x.container].
 		stream nextPutAll: separator2; nextPutAll: string.
 		separator2 := separator1.
 	].
@@ -1607,7 +1607,7 @@ Return a str version of object. See str() for details.
 str is the built-in string class. For general
  information about strings, see Text Sequence Type — str.
 "
-	^anObject __str__
+	^anObject __str__ value: anObject
 %
 category: 'functions'
 method: builtins
@@ -1838,7 +1838,7 @@ initialize
 		at: #'ascii'				put: [:arguments :keywords :scope | self ascii: arguments first];
 		at: #'any'				put: [:arguments :keywords :scope | self any: arguments first];
 		at: #'bin'				put: [:arguments :keywords :scope | self bin: arguments first];
-		at: #'bool'				put: [:arguments :keywords :scope | [self bool: arguments first] on: Error do: [ False ]];
+		at: #'bool'				put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [self bool: arguments first] ifFalse: [False]];
 		at: #'classmethod'	put: [:arguments :keywords :scope | self classmethod: arguments first scope: scope];
 		at: #'exec'				put: [:arguments :keywords :scope | self exec: arguments];
 		at: #'getattr'			put: [:arguments :keywords :scope | self getattr: arguments first _: arguments second];

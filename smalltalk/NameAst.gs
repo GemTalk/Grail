@@ -23,8 +23,10 @@ category: 'other'
 method: NameAst
 callWithArguments: anArray keywords: aSymbolDictionary scope: aScope
 
+	| callable |
 	self assertContextIsLoad.
-	^(aScope get: id)
+	callable := aScope get: id.
+	^callable
 		value: anArray
 		value: aSymbolDictionary
 		value: aScope

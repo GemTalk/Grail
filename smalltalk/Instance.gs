@@ -9,26 +9,33 @@ Instance class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: Instance
+__class__
+
+	^__class__
+%
+category: 'other'
+method: Instance
 __str__
 	"<__main__.MyClass object at 0x7fe9d8210400>"
 
-	^str withAll: ((WriteStream on: Unicode7 new)
-		nextPut: $<;
-		nextPutAll: __class__ module name;
-		nextPut: $.;
-		nextPutAll: __class__ name;
-		nextPutAll: ' object at 0x';
-		nextPutAll: (self asOop printStringRadix: 16);
-		nextPut: $>;
-		contents)
+	^[:inst | 
+		str withAll: ((WriteStream on: Unicode7 new)
+			nextPut: $<;
+			nextPutAll: inst __class__ module name;
+			nextPut: $.;
+			nextPutAll: inst __class__ name;
+			nextPutAll: ' object at 0x';
+			nextPutAll: (inst asOop printStringRadix: 16);
+			nextPut: $>;
+			contents)]
 %
 category: 'other'
 method: Instance
 call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
 
-	| function |
-	function := self get: aSymbol.
-	^function
+	| callable |
+	callable := self get: aSymbol.
+	^callable
 		callFromObject: self
 		arguments: anArray
 		keywords: aSymbolDictionary

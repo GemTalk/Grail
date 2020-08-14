@@ -65,7 +65,7 @@ category: 'Python'
 method: AbstractNumber
 __str__
 
-	^[str withAll: number printString]
+	^[:num | str withAll: num ___number printString]
 %
 category: 'Python'
 method: AbstractNumber

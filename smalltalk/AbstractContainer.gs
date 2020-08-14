@@ -30,7 +30,6 @@ withAll: aCollection
 %
 ! ------------------- Instance methods for AbstractContainer
 set compile_env: 0
-set compile_env: 0
 category: 'overrides'
 method: AbstractContainer
 = anObject
