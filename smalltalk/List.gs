@@ -56,12 +56,6 @@ __iter__
 %
 category: 'Python'
 method: list
-__len__
-
-	self halt.
-%
-category: 'Python'
-method: list
 __mul__
 
 	self halt.

@@ -36,12 +36,6 @@ __and__
 %
 category: 'Python'
 method: int
-__bool__
-
-	self halt.
-%
-category: 'Python'
-method: int
 __ceil__
 
 	self halt.

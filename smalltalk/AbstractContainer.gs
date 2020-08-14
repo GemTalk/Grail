@@ -137,6 +137,12 @@ __getitem__
 %
 category: 'Python'
 method: AbstractContainer
+__len__
+
+	^ [ :rhs | rhs ___container size ]
+%
+category: 'Python'
+method: AbstractContainer
 __ne__
 
 	^[:lhs :rhs | ((lhs isKindOf: AbstractContainer) and: [(rhs isKindOf: AbstractContainer) and: [lhs.container = rhs.container]]) 

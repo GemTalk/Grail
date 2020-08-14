@@ -74,12 +74,6 @@ __iter__
 %
 category: 'Python'
 method: bytearray
-__len__
-
-	self halt.
-%
-category: 'Python'
-method: bytearray
 __mod__
 
 	self halt.

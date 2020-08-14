@@ -43,6 +43,12 @@ ___number
 set compile_env: 0
 category: 'Python'
 method: AbstractNumber
+__bool__
+
+	^ [ :rhs | rhs ___number = 0 ifTrue: [ False ] ifFalse: [ True ] ]
+%
+category: 'Python'
+method: AbstractNumber
 __eq__
 
 	^[:lhs :rhs | ((lhs isKindOf: AbstractNumber) and: [(rhs isKindOf: AbstractNumber) and: [lhs.number = rhs.number]]) 

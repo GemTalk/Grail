@@ -46,12 +46,6 @@ __iter__
 %
 category: 'Python'
 method: tuple
-__len__
-
-	self halt.
-%
-category: 'Python'
-method: tuple
 __mul__
 
 	self halt.

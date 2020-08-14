@@ -113,12 +113,6 @@ __iter__
 %
 category: 'Python'
 method: str
-__len__
-
-	self halt.
-%
-category: 'Python'
-method: str
 __mod__
 
 	self halt.

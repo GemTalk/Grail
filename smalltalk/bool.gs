@@ -31,6 +31,12 @@ printOn: aStream
 set compile_env: 0
 category: 'Python'
 method: bool
+__bool__
+
+	^ [ :rhs | rhs ]
+%
+category: 'Python'
+method: bool
 __str__
 
 	^[str withAll: (number == 1 ifTrue: ['True'] ifFalse: ['False'])]

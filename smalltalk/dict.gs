@@ -65,12 +65,6 @@ __iter__
 %
 category: 'Python'
 method: dict
-__len__
-
-	self halt.
-%
-category: 'Python'
-method: dict
 __setitem__
 
 	self halt.

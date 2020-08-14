@@ -239,7 +239,14 @@ It cannot be subclassed further. Its only instances are False and True (see Bool
 
 Changed in version 3.7: x is now a positional-only parameter.
 "
-self halt.
+
+	[ (anObject __bool__ value: anObject) == False ifTrue: [ ^ False ] ]
+		on: Error
+		do: [ ]. "does not define __bool__"
+	[ (anObject __len__ value: anObject) == 0 ifTrue: [ ^ False ] ]
+		on: Error
+		do: [ ]. "does not define __len__"
+	^ True
 %
 category: 'functions'
 method: builtins
@@ -1831,7 +1838,7 @@ initialize
 		at: #'ascii'				put: [:arguments :keywords :scope | self ascii: arguments first];
 		at: #'any'				put: [:arguments :keywords :scope | self any: arguments first];
 		at: #'bin'				put: [:arguments :keywords :scope | self bin: arguments first];
-		at: #'bool'				put: [:arguments :keywords :scope | self bool: arguments first];
+		at: #'bool'				put: [:arguments :keywords :scope | [self bool: arguments first] on: Error do: [ False ]];
 		at: #'classmethod'	put: [:arguments :keywords :scope | self classmethod: arguments first scope: scope];
 		at: #'exec'				put: [:arguments :keywords :scope | self exec: arguments];
 		at: #'getattr'			put: [:arguments :keywords :scope | self getattr: arguments first _: arguments second];

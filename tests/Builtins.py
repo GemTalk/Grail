@@ -24,3 +24,12 @@ ascii("G ë ê k s f ? r G ? e k s") # 11
 
 bin(3) # 12
 bin(-10) # 13
+
+bool(True) # 14
+bool([0]) # 15
+bool(1) # 16
+bool('a') # 17
+bool('') # 18
+bool([]) # 19
+bool(0) # 20
+bool() # 21

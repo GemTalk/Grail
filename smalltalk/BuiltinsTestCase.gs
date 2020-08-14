@@ -70,6 +70,20 @@ test_bin
 %
 category: 'other'
 method: BuiltinsTestCase
+test_bool
+
+	| x |
+	(14 to: 17) do: [ :num | 
+		x := (self statementsAt: num) evaluate: aScope.		
+		self assert: x.
+	].
+	(18 to: 21) do: [ :num | 
+		x := (self statementsAt: num) evaluate: aScope.		
+		self deny: x.
+	].
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"

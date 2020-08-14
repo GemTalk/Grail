@@ -18,6 +18,12 @@ new: aLocalScope
 set compile_env: 0
 category: 'Python'
 method: object
+__bool__
+
+	self subclassResponsibility.
+%
+category: 'Python'
+method: object
 __class__
 
 	self halt.
@@ -93,6 +99,12 @@ method: object
 __le__
 
 	self halt.
+%
+category: 'Python'
+method: object
+__len__
+
+	self subclassResponsibility.
 %
 category: 'Python'
 method: object

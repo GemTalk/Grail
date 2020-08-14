@@ -56,12 +56,6 @@ __iter__
 %
 category: 'Python'
 method: bytes
-__len__
-
-	self halt.
-%
-category: 'Python'
-method: bytes
 __mod__
 
 	self halt.
