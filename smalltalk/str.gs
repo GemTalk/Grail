@@ -12,6 +12,21 @@ containerClass
 
 	^Unicode7
 %
+category: 'other'
+classmethod: str
+encode: aStr withEncoding: anEncodingString error: anErrorString
+
+	| result |
+	(anEncodingString = 'utf-8') ifFalse: [ self halt ].
+	result := ByteArray new.
+	aStr ___container do: [:each | 
+		| value |
+		value := each codePoint.
+		value > 255 ifTrue: [self error: 'Cannot represent string as bytearray'].
+		result add: value.
+	].
+	^result
+%
 ! ------------------- Instance methods for str
 set compile_env: 0
 category: 'other'

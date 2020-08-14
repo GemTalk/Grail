@@ -30,6 +30,13 @@ withAll: aCollection
 %
 ! ------------------- Instance methods for AbstractContainer
 set compile_env: 0
+category: 'other'
+method: AbstractContainer
+asArray
+
+	^ container collect: [ :each | (each isKindOf: AbstractNumber) ifTrue: [ each ___number ] ] "TODO: allow hetergeneous containers"
+%
+set compile_env: 0
 category: 'overrides'
 method: AbstractContainer
 = anObject

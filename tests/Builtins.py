@@ -33,3 +33,12 @@ bool('') # 18
 bool([]) # 19
 bool(0) # 20
 bool() # 21
+
+# bytearray(b'\x00\x00\x00')
+bytearray(3)
+# bytearray(b'\x01\x02\x03')
+bytearray([1, 2, 3])
+# bytearray(b'')
+bytearray()
+# bytearray(b'a')
+bytearray('a', 'utf-8')
