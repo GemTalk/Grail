@@ -16,14 +16,6 @@ filename
 set compile_env: 0
 category: 'other'
 method: CompoundStatementsTestCase
-setUp
-"
-ModuleAst astForPath: '$HOME/code/Python/GemStoneP/tests/CompoundStatements.py'.
-"
-	super setUp.
-%
-category: 'other'
-method: CompoundStatementsTestCase
 testClass
 
 	| x |
@@ -143,8 +135,8 @@ testCoroutineFor
 		assert: (call.function.id == #'range');
 		assert: (call.function.ctx isKindOf: LoadAst);
 		assert: (call.arguments size == 1);
-		assert: ((num := call.arguments at: 1) isKindOf: NumAst);
-		assert: (num.n.number == 10);
+		assert: ((num := call.arguments at: 1) isKindOf: ConstantAst);
+		assert: (num.value.number == 10);
 		assert: (call.keywords size == 0);
 		assert: (asyncFor.body.body size == 1);
 		assert: ((asyncFor.body.body at: 1) isKindOf: PassAst);
@@ -181,10 +173,10 @@ testCoroutineWith
 		assert: (call.function.id == #'open');
 		assert: (call.function.ctx isKindOf: LoadAst);
 		assert: (call.arguments size = 2);
-		assert: ((str1 := call.arguments at: 1) isKindOf: StrAst);
-		assert: (str1.s = '/etc/passwd');
-		assert: ((str2 := call.arguments at: 2) isKindOf: StrAst);
-		assert: (str2.s = 'r');
+		assert: ((str1 := call.arguments at: 1) isKindOf: ConstantAst);
+		assert: (str1.value.container = '/etc/passwd');
+		assert: ((str2 := call.arguments at: 2) isKindOf: ConstantAst);
+		assert: (str2.value.container = 'r');
 		assert: (call.keywords size == 0);
 		assert: ((name := withItem.optional_vars) isKindOf: NameAst);
 		assert: (name.id == #'f');
@@ -215,8 +207,8 @@ testFor
 		assert: (call.function.id == #'range');
 		assert: (call.function.ctx isKindOf: LoadAst);
 		assert: (call.arguments size == 1);
-		assert: ((num := call.arguments at: 1) isKindOf: NumAst);
-		assert: (num.n.number == 10);
+		assert: ((num := call.arguments at: 1) isKindOf: ConstantAst);
+		assert: (num.value.number == 10);
 		assert: (call.keywords size == 0);
 		assert: (x.body.body size == 1);
 		assert: ((x.body.body at: 1) isKindOf: PassAst);
@@ -244,8 +236,8 @@ testForElse
 		assert: (call.function.id == #'range');
 		assert: (call.function.ctx isKindOf: LoadAst);
 		assert: (call.arguments size == 1);
-		assert: ((num := call.arguments at: 1) isKindOf: NumAst);
-		assert: (num.n.number == 10);
+		assert: ((num := call.arguments at: 1) isKindOf: ConstantAst);
+		assert: (num.value.number == 10);
 		assert: (call.keywords size == 0);
 		assert: (x.body.body size == 1);
 		assert: ((x.body.body at: 1) isKindOf: PassAst);
@@ -323,7 +315,8 @@ testFunctionWithOneDefaultValueParameter
 		assert: (arguments.kw_defaults size == 0); 
 		assert: (arguments.kwarg isNone); 
 		assert: (arguments.defaults size == 1);
-		assert: ((nameConstant := arguments.defaults at: 1) isKindOf: NoneAst);
+		assert: ((nameConstant := arguments.defaults at: 1) isKindOf: ConstantAst);
+		assert: (nameConstant.value == None);
 		assert: (x.body.body size == 1); 
 		assert: ((x.body.body at: 1) isKindOf: PassAst); 
 		assert: (x.decorator_list size == 0); 
@@ -339,7 +332,8 @@ testIf
 	x := self statementsAt: 1.
 	self 
 		assert: (x isKindOf: IfAst);
-		assert: (x.test isKindOf: TrueAst);
+		assert: (x.test isKindOf: ConstantAst);
+		assert: (x.test.value == True);
 		assert: (x.test evaluate: aScope);
 		assert: (x.body isKindOf: SuiteAst);
 		assert: (x.body.body size == 1);
@@ -357,7 +351,8 @@ testIfElse
 	x := self statementsAt: 2.
 	self 
 		assert: (x isKindOf: IfAst);
-		assert: (x.test isKindOf: FalseAst);
+		assert: (x.test isKindOf: ConstantAst);
+		assert: (x.test.value == False);
 		assert: (x.test evaluate: aScope) == False;
 		assert: (x.body.body size == 1);
 		assert: ((x.body.body at: 1) isKindOf: PassAst);
@@ -435,11 +430,11 @@ testTry
 		assert: (call.function.ctx isKindOf: LoadAst);
 		assert: (call.arguments size == 1);
 		assert: ((binOp := call.arguments at: 1) isKindOf: BinOpAst);
-		assert: (binOp.left isKindOf: NumAst);
-		assert: (binOp.left.n.number == 1);
+		assert: (binOp.left isKindOf: ConstantAst);
+		assert: (binOp.left.value.number == 1);
 		assert: (binOp.op isKindOf: DivAst);
-		assert: (binOp.right isKindOf: NumAst);
-		assert: (binOp.right.n.number == 0);
+		assert: (binOp.right isKindOf: ConstantAst);
+		assert: (binOp.right.value.number == 0);
 		assert: (call.keywords size == 0);
 		assert: (x.handlers size == 1);
 		assert: ((exceptHandler := x.handlers at: 1) isKindOf: ExceptHandlerAst);
@@ -450,8 +445,8 @@ testTry
 		assert: ((insideCall := raise.exc) isKindOf: CallAst);
 		assert: (insideCall.function isKindOf: NameAst);
 		assert: (insideCall.arguments size == 1);
-		assert: ((string := insideCall.arguments at: 1) isKindOf: StrAst);
-		assert: (string.s = 'Something bad happened');
+		assert: ((string := insideCall.arguments at: 1) isKindOf: ConstantAst);
+		assert: (string.value.container = 'Something bad happened');
 		assert: (insideCall.keywords size == 0);
 		assert: (raise.cause isNone);
 		assert: (x.orelse size == 0);
@@ -507,7 +502,8 @@ testWhile
 	x := self statementsAt: 3.
 	self 
 		assert: (x isKindOf: WhileAst);
-		assert: (x.test isKindOf: TrueAst);
+		assert: (x.test isKindOf: ConstantAst);
+		assert: (x.test.value == True);
 		assert: (x.test evaluate: aScope);
 		assert: (x.body.body size == 1);
 		assert: ((x.body.body at: 1) isKindOf: PassAst);
@@ -523,7 +519,8 @@ testWhileElse
 	x := self statementsAt: 4.
 	self 
 		assert: (x isKindOf: WhileAst);
-		assert: (x.test isKindOf: FalseAst);
+		assert: (x.test isKindOf: ConstantAst);
+		assert: (x.test.value == False);
 		assert:  (x.test evaluate: aScope) == False;
 		assert: (x.body.body size == 1);
 		assert: ((x.body.body at: 1) isKindOf: PassAst);
@@ -552,10 +549,10 @@ testWith
 		assert: (call.function.id == #'open');
 		assert: (call.function.ctx isKindOf: LoadAst);
 		assert: (call.arguments size = 2);
-		assert: ((str1 := call.arguments at: 1) isKindOf: StrAst);
-		assert: (str1.s = '/etc/passwd');
-		assert: ((str2 := call.arguments at: 2) isKindOf: StrAst);
-		assert: (str2.s = 'r');
+		assert: ((str1 := call.arguments at: 1) isKindOf: ConstantAst);
+		assert: (str1.value.container = '/etc/passwd');
+		assert: ((str2 := call.arguments at: 2) isKindOf: ConstantAst);
+		assert: (str2.value.container = 'r');
 		assert: (call.keywords size == 0);
 		assert: (withItem.optional_vars isNone);
 		assert: (x.body.body size == 1);
@@ -583,10 +580,10 @@ testWithOptionalVars
 		assert: (call.function.id == #'open');
 		assert: (call.function.ctx isKindOf: LoadAst);
 		assert: (call.arguments size = 2);
-		assert: ((str1 := call.arguments at: 1) isKindOf: StrAst);
-		assert: (str1.s = '/etc/passwd');
-		assert: ((str2 := call.arguments at: 2) isKindOf: StrAst);
-		assert: (str2.s = 'r');
+		assert: ((str1 := call.arguments at: 1) isKindOf: ConstantAst);
+		assert: (str1.value.container = '/etc/passwd');
+		assert: ((str2 := call.arguments at: 2) isKindOf: ConstantAst);
+		assert: (str2.value.container = 'r');
 		assert: (call.keywords size == 0);
 		assert: ((name := withItem.optional_vars) isKindOf: NameAst);
 		assert: (name.id == #'f');

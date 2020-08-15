@@ -10,10 +10,12 @@ set compile_env: 0
 category: 'other'
 method: WithAst
 initialize
-	"With(withitem* items, stmt* body)"
+	"AsyncWith(withitem* items, stmt* body, string? type_comment)"
 
 	items := self collectAst: [WithItemAst parent: self].
 	self commaSpace.
 	body := SuiteAst parent: self.
+	self commaSpace. 
+	type_comment := self optionalString.
 	self readPosition.
 %

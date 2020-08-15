@@ -28,15 +28,15 @@ testCommaList
 		assert: (x isKindOf: ListAst);
 		assert: (x.ctx isKindOf: LoadAst);
 		assert: (x.elts size == 3);
-		assert: ((x.elts at: 1) isKindOf: NumAst);
+		assert: ((x.elts at: 1) isKindOf: ConstantAst);
 		assert: (y := x.elts at: 1) notNil;
-		assert: y.n.number == 1;
-		assert: ((x.elts at: 2) isKindOf: NumAst);
+		assert: y.value.number == 1;
+		assert: ((x.elts at: 2) isKindOf: ConstantAst);
 		assert: (y := x.elts at: 2) notNil;
-		assert: y.n.number == 2;
-		assert: ((x.elts at: 3) isKindOf: NumAst);
+		assert: y.value.number == 2;
+		assert: ((x.elts at: 3) isKindOf: ConstantAst);
 		assert: (y := x.elts at: 3) notNil;
-		assert: y.n.number == 3;
+		assert: y.value.number == 3;
 		yourself.
 %
 category: 'other'
@@ -53,15 +53,15 @@ testCommaTuple
 		assert: (x isKindOf: TupleAst);
 		assert: (x.ctx isKindOf: LoadAst);
 		assert: (x.elts size == 3);
-		assert: ((x.elts at: 1) isKindOf: NumAst);
+		assert: ((x.elts at: 1) isKindOf: ConstantAst);
 		assert: (y := x.elts at: 1) notNil;
-		assert: y.n.number == 4;
-		assert: ((x.elts at: 2) isKindOf: NumAst);
+		assert: y.value.number == 4;
+		assert: ((x.elts at: 2) isKindOf: ConstantAst);
 		assert: (y := x.elts at: 2) notNil;
-		assert: y.n.number == 5;
-		assert: ((x.elts at: 3) isKindOf: NumAst);
+		assert: y.value.number == 5;
+		assert: ((x.elts at: 3) isKindOf: ConstantAst);
 		assert: (y := x.elts at: 3) notNil;
-		assert: y.n.number == 6;
+		assert: y.value.number == 6;
 		yourself.
 %
 category: 'other'
@@ -78,13 +78,13 @@ testParethesesLeft
 		assert: (x isKindOf:BinOpAst);
 		assert: (x.op isKindOf: AddAst);
 		assert: (x.left isKindOf: BinOpAst);
-		assert: (x.left.left isKindOf: NumAst);
-		assert: (x.left.left.n.number == 1);
+		assert: (x.left.left isKindOf: ConstantAst);
+		assert: (x.left.left.value.number == 1);
 		assert: (x.left.op isKindOf: AddAst);
-		assert: (x.left.right isKindOf: NumAst);
-		assert: (x.left.right.n.number == 2);
-		assert: (x.right isKindOf: NumAst);
-		assert: (x.right.n.number == 3);
+		assert: (x.left.right isKindOf: ConstantAst);
+		assert: (x.left.right.value.number == 2);
+		assert: (x.right isKindOf: ConstantAst);
+		assert: (x.right.value.number == 3);
 		yourself.
 %
 category: 'other'
@@ -100,14 +100,14 @@ testParethesesRight
 	self 
 		assert: (x isKindOf: BinOpAst);
 		assert: (x.op isKindOf: AddAst);
-		assert: (x.left isKindOf: NumAst);
-		assert: (x.left.n.number == 4);
+		assert: (x.left isKindOf: ConstantAst);
+		assert: (x.left.value.number == 4);
 		assert: (x.right isKindOf: BinOpAst);
 		assert: (x.right.op isKindOf: AddAst);
-		assert: (x.right.left isKindOf: NumAst);
-		assert: (x.right.left.n.number == 5);
-		assert: (x.right.right isKindOf: NumAst);
-		assert: (x.right.right.n.number == 6);
+		assert: (x.right.left isKindOf: ConstantAst);
+		assert: (x.right.left.value.number == 5);
+		assert: (x.right.right isKindOf: ConstantAst);
+		assert: (x.right.right.value.number == 6);
 		yourself.
 %
 category: 'other'
@@ -125,17 +125,17 @@ testSliceList
 		assert: (x.ctx isKindOf: LoadAst);
 		assert: (x.value isKindOf: ListAst);
 		assert: (x.value.elts size == 3);
-		assert: ((y := x.value.elts at: 1) isKindOf: NumAst);
-		assert: y.n.number == 1;
-		assert: ((y := x.value.elts at: 2) isKindOf: NumAst);
-		assert: y.n.number == 2;
-		assert: ((y := x.value.elts at: 3) isKindOf: NumAst);
-		assert: y.n.number == 3;
+		assert: ((y := x.value.elts at: 1) isKindOf: ConstantAst);
+		assert: y.value.number == 1;
+		assert: ((y := x.value.elts at: 2) isKindOf: ConstantAst);
+		assert: y.value.number == 2;
+		assert: ((y := x.value.elts at: 3) isKindOf: ConstantAst);
+		assert: y.value.number == 3;
 		assert: (x.slice isKindOf:SliceAst);
-		assert: (x.slice.lower isKindOf: NumAst);
-		assert: (x.slice.lower.n.number == 0);
-		assert: (x.slice.upper isKindOf: NumAst);
-		assert: (x.slice.upper.n.number == 1);
+		assert: (x.slice.lower isKindOf: ConstantAst);
+		assert: (x.slice.lower.value.number == 0);
+		assert: (x.slice.upper isKindOf: ConstantAst);
+		assert: (x.slice.upper.value.number == 1);
 		assert: (x.slice.step isNone);
 		yourself.
 %
@@ -154,12 +154,12 @@ testSliceListEmpty
 		assert: (x.ctx isKindOf: LoadAst);
 		assert: (x.value isKindOf: ListAst);
 		assert: (x.value.elts size == 3);
-		assert: ((y := x.value.elts at: 1) isKindOf: NumAst);
-		assert: y.n.number == 7;
-		assert: ((y := x.value.elts at: 2) isKindOf: NumAst);
-		assert: y.n.number == 8;
-		assert: ((y := x.value.elts at: 3) isKindOf: NumAst);
-		assert: y.n.number == 9;
+		assert: ((y := x.value.elts at: 1) isKindOf: ConstantAst);
+		assert: y.value.number == 7;
+		assert: ((y := x.value.elts at: 2) isKindOf: ConstantAst);
+		assert: y.value.number == 8;
+		assert: ((y := x.value.elts at: 3) isKindOf: ConstantAst);
+		assert: y.value.number == 9;
 		assert: (x.slice isKindOf: SliceAst);
 		assert: (x.slice.lower isNone);
 		assert: (x.slice.upper isNone);
@@ -181,17 +181,17 @@ testSliceTuple
 		assert: (x.ctx isKindOf: LoadAst);
 		assert: (x.value isKindOf: TupleAst);
 		assert: (x.value.elts size == 3);
-		assert: ((y := x.value.elts at: 1) isKindOf: NumAst);
-		assert: y.n.number == 4;
-		assert: ((y := x.value.elts at: 2) isKindOf: NumAst);
-		assert: y.n.number == 5;
-		assert: ((y := x.value.elts at: 3) isKindOf: NumAst);
-		assert: y.n.number == 6;
+		assert: ((y := x.value.elts at: 1) isKindOf: ConstantAst);
+		assert: y.value.number == 4;
+		assert: ((y := x.value.elts at: 2) isKindOf: ConstantAst);
+		assert: y.value.number == 5;
+		assert: ((y := x.value.elts at: 3) isKindOf: ConstantAst);
+		assert: y.value.number == 6;
 		assert: (x.slice isKindOf: SliceAst);
 		assert: (x.slice.lower isNone);
 		assert: (x.slice.upper isNone);
-		assert: (x.slice.step isKindOf: NumAst);
-		assert: (x.slice.step.n.number == 2);
+		assert: (x.slice.step isKindOf: ConstantAst);
+		assert: (x.slice.step.value.number == 2);
 		yourself.
 %
 category: 'other'
@@ -209,18 +209,18 @@ testSliceTupleFilled
 		assert: (x.ctx isKindOf: LoadAst);
 		assert: (x.value isKindOf: TupleAst);
 		assert: (x.value.elts size == 3);
-		assert: ((y := x.value.elts at: 1) isKindOf: NumAst);
-		assert: y.n.number == 10;
-		assert: ((y := x.value.elts at: 2) isKindOf: NumAst);
-		assert: y.n.number == 11;
-		assert: ((y := x.value.elts at: 3) isKindOf: NumAst);
-		assert: y.n.number == 12;
+		assert: ((y := x.value.elts at: 1) isKindOf: ConstantAst);
+		assert: y.value.number == 10;
+		assert: ((y := x.value.elts at: 2) isKindOf: ConstantAst);
+		assert: y.value.number == 11;
+		assert: ((y := x.value.elts at: 3) isKindOf: ConstantAst);
+		assert: y.value.number == 12;
 		assert: (x.slice isKindOf: SliceAst);
-		assert: (x.slice.lower isKindOf: NumAst);
-		assert: (x.slice.lower.n.number == 1);
-		assert: (x.slice.upper isKindOf: NumAst);
-		assert: (x.slice.upper.n.number == 2);
-		assert: (x.slice.step isKindOf: NumAst);
-		assert: (x.slice.step.n.number == 3);
+		assert: (x.slice.lower isKindOf: ConstantAst);
+		assert: (x.slice.lower.value.number == 1);
+		assert: (x.slice.upper isKindOf: ConstantAst);
+		assert: (x.slice.upper.value.number == 2);
+		assert: (x.slice.step isKindOf: ConstantAst);
+		assert: (x.slice.step.value.number == 3);
 		yourself.
 %

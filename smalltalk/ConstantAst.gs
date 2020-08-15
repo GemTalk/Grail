@@ -35,7 +35,7 @@ finalize
 category: 'other'
 method: ConstantAst
 initialize
-	"Constant(constant value)
+	"Constant(constant value, string? kind)
 
 	A constant value. The value attribute of the Constant literal contains the Python object it represents. 
 	The values represented can be simple types such as a number, string or None, but also immutable container types (tuples and frozensets) if all of their elements are constant."
@@ -43,7 +43,11 @@ initialize
 	| stream char next |
 	stream := self stream.
 	char := stream peek.
-	(char == $' or: [char == $" or: [char == $b]]) ifTrue: [ value := self string. "constant is a string"
+	(char == $' or: [char == $"]) ifTrue: [ 
+		value := self string. "constant is a string"
+		^ self finalize ].
+	char == $b ifTrue: [ 
+		value := bytes withAll: self string ___container. "constant is a string"
 		^ self finalize ].
 	[ char asString asInteger. 
 		value := self number. "constant is a number"

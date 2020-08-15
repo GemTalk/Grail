@@ -13,6 +13,7 @@ initialize
 	"Bytes(bytes s)"
 
 	| stream char |
+self error: 'deprecated'.
 	stream := self stream.
 	char := stream next.
 	(char asUppercase == $B) ifFalse: [self error].

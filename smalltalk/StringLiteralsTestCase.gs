@@ -22,16 +22,16 @@ testEmbeddedStringDoubleQuotes
 	x := self statementsAt: 6.
 	self 
 		assert: (x isKindOf: ExprAst);
-		assert: x.line == 16;
-		assert: x.column == 0;
+		assert: x line == 16;
+		assert: x column == 0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: StrAst);
-		assert: x.line == 16;
-		assert: x.column == 0;
+		assert: (x isKindOf: ConstantAst);
+		assert: x line == 16;
+		assert: x column == 0;
 		yourself.
-	x := x.s.
+	x := x.value.container.
 	self assert: x = 'a''bc'.
 %
 category: 'other'
@@ -42,16 +42,16 @@ testEmbeddedStringSingleQuotes
 	x := self statementsAt: 5.
 	self 
 		assert: (x isKindOf: ExprAst);
-		assert: x.line == 15;
-		assert: x.column == 0;
+		assert: x line == 15;
+		assert: x column == 0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: StrAst);
-		assert: x.line == 15;
-		assert: x.column == 0;
+		assert: (x isKindOf: ConstantAst);
+		assert: x line == 15;
+		assert: x column == 0;
 		yourself.
-	x := x.s.
+	x := x.value.container.
 	self assert: x = 'x"yz'.
 %
 category: 'other'
@@ -62,16 +62,16 @@ testEscapeCharacterStringNewline
 	x := self statementsAt: 8.
 	self 
 		assert: (x isKindOf: ExprAst);
-		assert: x.line == 20;
-		assert: x.column == 0;
+		assert: x line == 20;
+		assert: x column == 0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: StrAst);
-		assert: x.line == 20;
-		assert: x.column == 0;
+		assert: (x isKindOf: ConstantAst);
+		assert: x line == 20;
+		assert: x column == 0;
 		yourself.
-	x := x.s.
+	x := x.value.container.
 	self assert: x = 'newline\n'.
 %
 category: 'other'
@@ -82,16 +82,16 @@ testEscapeCharacterStringSlash
 	x := self statementsAt: 7.
 	self 
 		assert: (x isKindOf: ExprAst);
-		assert: x.line == 19;
-		assert: x.column == 0;
+		assert: x line == 19;
+		assert: x column == 0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: StrAst);
-		assert: x.line == 19;
-		assert: x.column == 0;
+		assert: (x isKindOf: ConstantAst);
+		assert: x line == 19;
+		assert: x column == 0;
 		yourself.
-	x := x.s.
+	x := x.value.container.
 	self assert: x = 'slash\\'.
 %
 category: 'other'
@@ -102,29 +102,29 @@ testJoinedStrWithFormattedValueNum
 	x := self statementsAt: 12.
 	self 
 		assert: (x isKindOf: ExprAst);
-		assert: x.line == 28;
-		assert: x.column == 0;
+		assert: x line == 28;
+		assert: x column == 0;
 		yourself.
 	x := x.value.
 	self 
 		assert: (x isKindOf:JoinedStrAst);
-		assert: x.line == 28;
-		assert: x.column == 0;
+		assert: x line == 28;
+		assert: x column == 0;
 		yourself.
 	child := x.values at: 1.
 	self
-		assert: (child isKindOf: StrAst);
-		assert: child.s = '123';
+		assert: (child isKindOf: ConstantAst);
+		assert: child.value.container = '123';
 		yourself.
 	child := x.values at: 2.
 	self
 		assert: (child isKindOf: FormattedValueAst);
-		assert: child.value.n.number = 456;
+		assert: child.value.value.number = 456;
 		yourself.
 	child := x.values at: 3.
 	self
-		assert: (child isKindOf: StrAst);
-		assert: child.s = '789';
+		assert: (child isKindOf: ConstantAst);
+		assert: child.value.container = '789';
 		yourself.
 	self assert: x.values size = 3.
 %
@@ -136,29 +136,31 @@ testJoinedStrWithFormattedValueStr
 	x := self statementsAt: 11.
 	self 
 		assert: (x isKindOf: ExprAst);
-		assert: x.line == 27;
-		assert: x.column == 0;
+		assert: x line == 27;
+		assert: x column == 0;
 		yourself.
 	x := x.value.
 	self 
 		assert: (x isKindOf: JoinedStrAst);
-		assert: x.line == 27;
-		assert: x.column == 0;
+		assert: x line == 27;
+		assert: x column == 0;
 		yourself.
 	child := x.values at: 1.
 	self
-		assert: (child isKindOf: StrAst);
-		assert: child.s = 'abc';
+		assert: (child isKindOf: ConstantAst);
+		assert: child.value.container = 'abc';
 		yourself.
 	child := x.values at: 2.
 	self
 		assert: (child isKindOf: FormattedValueAst);
-		assert: child.value.s = 'def';
+		assert: (child.value isKindOf: ConstantAst);
+		assert: (child.value.value isKindOf: str);
+		assert: child.value.value.container = 'def';
 		yourself.
 	child := x.values at: 3.
 	self
-		assert: (child isKindOf: StrAst);
-		assert: child.s = 'ghi';
+		assert: (child isKindOf: ConstantAst);
+		assert: child.value.container = 'ghi';
 		yourself.
 	self assert: x.values size = 3.
 %
@@ -170,16 +172,16 @@ testLongStringDoubleQuotes
 	x := self statementsAt: 4.
 	self 
 		assert: (x isKindOf: ExprAst);
-		assert: x.line == 12;
-		assert: x.column == -1;
+		assert: x line == 11;
+		assert: x column == 0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: StrAst);
-		assert: x.line == 12;
-		assert: x.column == -1;
+		assert: (x isKindOf: ConstantAst);
+		assert: x line == 11;
+		assert: x column == 0;
 		yourself.
-	x := x.s.
+	x := x.value.container.
 	self assert: x = 'poiu
 ;lkj'.
 %
@@ -191,16 +193,16 @@ testLongStringSingleQuotes
 	x := self statementsAt: 3.
 	self 
 		assert: (x isKindOf: ExprAst);
-		assert: x.line == 10;
-		assert: x.column == -1;
+		assert: x line == 9;
+		assert: x column ==0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: StrAst);
-		assert: x.line == 10;
-		assert: x.column == -1;
+		assert: (x isKindOf: ConstantAst);
+		assert: x line == 9;
+		assert: x column == 0;
 		yourself.
-	x := x.s.
+	x := x.value.container.
 	self assert: x = 'qwer
 asdf'.
 %
@@ -212,16 +214,16 @@ testNonEscapeCharacterStringNewline
 	x := self statementsAt: 10.
 	self 
 		assert: (x isKindOf: ExprAst);
-		assert: x.line == 24;
-		assert: x.column == 0;
+		assert: x line == 24;
+		assert: x column == 0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: StrAst);
-		assert: x.line == 24;
-		assert: x.column == 0;
+		assert: (x isKindOf: ConstantAst);
+		assert: x line == 24;
+		assert: x column == 0;
 		yourself.
-	x := x.s.
+	x := x.value.container.
 	self assert: x = 'newline
 '.
 %
@@ -233,16 +235,16 @@ testNonEscapeCharacterStringSlash
 	x := self statementsAt: 9.
 	self 
 		assert: (x isKindOf: ExprAst);
-		assert: x.line == 23;
-		assert: x.column == 0;
+		assert: x line == 23;
+		assert: x column == 0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: StrAst);
-		assert: x.line == 23;
-		assert: x.column == 0;
+		assert: (x isKindOf: ConstantAst);
+		assert: x line == 23;
+		assert: x column == 0;
 		yourself.
-	x := x.s.
+	x := x.value.container.
 	self assert: x = 'slash\'.
 %
 category: 'other'
@@ -253,16 +255,16 @@ testShortStringDoubleQuotes
 	x := self statementsAt: 2.
 	self 
 		assert: (x isKindOf: ExprAst);
-		assert: x.line == 6;
-		assert: x.column == 0;
+		assert: x line == 6;
+		assert: x column == 0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: StrAst);
-		assert: x.line == 6;
-		assert: x.column == 0;
+		assert: (x isKindOf: ConstantAst);
+		assert: x line == 6;
+		assert: x column == 0;
 		yourself.
-	x := x.s.
+	x := x.value.container.
 	self assert: x = 'vwxyz'.
 %
 category: 'other'
@@ -273,15 +275,15 @@ testShortStringSingleQuotes
 	x := self statementsAt: 1.
 	self 
 		assert: (x isKindOf: ExprAst);
-		assert: x.line == 5;
-		assert: x.column == 0;
+		assert: x line == 5;
+		assert: x column == 0;
 		yourself.
 	x := x.value.
 	self 
-		assert: (x isKindOf: StrAst);
-		assert: x.line == 5;
-		assert: x.column == 0;
+		assert: (x isKindOf: ConstantAst);
+		assert: x line == 5;
+		assert: x column == 0;
 		yourself.
-	x := x.s.
+	x := x.value.container.
 	self assert: x = 'abcde'.
 %

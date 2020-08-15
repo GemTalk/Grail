@@ -18,6 +18,7 @@ method: StrAst
 initialize
 	"Str(string s) -- need to specify raw, unicode, etc?"
 
+self error: 'deprecated'.
 	s := self string.
 	self readPosition.
 %
