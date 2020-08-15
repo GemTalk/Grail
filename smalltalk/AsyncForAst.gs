@@ -19,5 +19,7 @@ initialize
 	body := SuiteAst parent: self.
 	self commaSpace.
 	orelse := SuiteAst parent: self.
+	self commaSpace. 
+	type_comment := self optionalString.
 	self readPosition.
 %

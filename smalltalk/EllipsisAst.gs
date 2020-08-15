@@ -11,4 +11,7 @@ category: 'other'
 method: EllipsisAst
 initialize
 	"Ellipsis"
+
+
+self error: 'deprecated'.
 %

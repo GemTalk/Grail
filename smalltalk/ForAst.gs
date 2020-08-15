@@ -35,7 +35,7 @@ evaluate: aScope
 category: 'other'
 method: ForAst
 initialize
-	"For(expr target, expr iter, stmt* body, stmt* orelse)"
+	"For(expr target, expr iter, stmt* body, stmt* orelse, string? type_comment)"
 
 	target := self expression.
 	self commaSpace. 
@@ -44,5 +44,7 @@ initialize
 	body := SuiteAst parent: self.
 	self commaSpace. 
 	orelse := SuiteAst parent: self.
+	self commaSpace. 
+	type_comment := self optionalString.
 	self readPosition.
 %

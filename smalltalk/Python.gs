@@ -1580,13 +1580,7 @@ ExpressionAst subclass: 'BytesAst'
 expectvalue /Class
 doit
 BytesAst comment: 
-'No class-specific documentation for BytesAst, hierarchy is: 
-Object
-  AbstractNode( parent)
-    PyAstNodeWithLocation( line column)
-      ExpressionAst
-        BytesAst( s)
-'
+'Deprecated since version 3.8: Methods visit_Num(), visit_Str(), visit_Bytes(), visit_NameConstant() and visit_Ellipsis() are deprecated now and will not be called in future Python versions. Add the visit_Constant() method to handle all constant nodes.'
 %
 expectvalue /Class
 doit
@@ -1662,13 +1656,11 @@ ExpressionAst subclass: 'ConstantAst'
 expectvalue /Class
 doit
 ConstantAst comment: 
-'No class-specific documentation for PyConstant, hierarchy is: 
-Object
-  AbstractNode( parent)
-    PyAstNodeWithLocation( line column)
-      ExpressionAst
-        PyConstant( value)
-'
+'Constant(constant value, string? kind)
+
+A constant value. The value attribute of the Constant literal contains the Python object it represents. 
+The values represented can be simple types such as a number, string or None, but also immutable 
+container types (tuples and frozensets) if all of their elements are constant."'
 %
 expectvalue /Class
 doit
@@ -1746,13 +1738,7 @@ ExpressionAst subclass: 'EllipsisAst'
 expectvalue /Class
 doit
 EllipsisAst comment: 
-'No class-specific documentation for PyEllipsis, hierarchy is: 
-Object
-  AbstractNode( parent)
-    PyAstNodeWithLocation( line column)
-      ExpressionAst
-        PyEllipsis
-'
+'Deprecated since version 3.8: Methods visit_Num(), visit_Str(), visit_Bytes(), visit_NameConstant() and visit_Ellipsis() are deprecated now and will not be called in future Python versions. Add the visit_Constant() method to handle all constant nodes.'
 %
 expectvalue /Class
 doit
@@ -2036,13 +2022,7 @@ ExpressionAst subclass: 'NameConstantAst'
 expectvalue /Class
 doit
 NameConstantAst comment: 
-'No class-specific documentation for NameConstantAst, hierarchy is: 
-Object
-  AbstractNode( parent)
-    PyAstNodeWithLocation( line column)
-      ExpressionAst
-        NameConstantAst( value)
-'
+'Deprecated since version 3.8: Methods visit_Num(), visit_Str(), visit_Bytes(), visit_NameConstant() and visit_Ellipsis() are deprecated now and will not be called in future Python versions. Add the visit_Constant() method to handle all constant nodes.'
 %
 expectvalue /Class
 doit
@@ -2164,13 +2144,7 @@ ExpressionAst subclass: 'NumAst'
 expectvalue /Class
 doit
 NumAst comment: 
-'No class-specific documentation for NumAst, hierarchy is: 
-Object
-  AbstractNode( parent)
-    PyAstNodeWithLocation( line column)
-      ExpressionAst
-        NumAst( n)
-'
+'Deprecated since version 3.8: Methods visit_Num(), visit_Str(), visit_Bytes(), visit_NameConstant() and visit_Ellipsis() are deprecated now and will not be called in future Python versions. Add the visit_Constant() method to handle all constant nodes.'
 %
 expectvalue /Class
 doit
@@ -2276,12 +2250,7 @@ ExpressionAst subclass: 'StrAst'
 expectvalue /Class
 doit
 StrAst comment: 
-'No class-specific documentation for str, hierarchy is: 
-Object
-  AbstractNode( parent line column)
-    ExpressionAst
-      str( string)
-'
+'Deprecated since version 3.8: Methods visit_Num(), visit_Str(), visit_Bytes(), visit_NameConstant() and visit_Ellipsis() are deprecated now and will not be called in future Python versions. Add the visit_Constant() method to handle all constant nodes.'
 %
 expectvalue /Class
 doit
@@ -2626,12 +2595,7 @@ StatementAst subclass: 'AssignAst'
 expectvalue /Class
 doit
 AssignAst comment: 
-'No class-specific documentation for PyAssign, hierarchy is: 
-Object
-  AbstractNode( parent line column)
-    StatementAst
-      PyAssign( target value)
-'
+'Assign(expr* targets, expr value, string? type_comment)'
 %
 expectvalue /Class
 doit
@@ -2643,7 +2607,7 @@ expectvalue /Class
 doit
 StatementAst subclass: 'AsyncForAst'
   instVarNames: #( target iter body
-                    orelse)
+                    orelse type_comment)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -2654,13 +2618,7 @@ StatementAst subclass: 'AsyncForAst'
 expectvalue /Class
 doit
 AsyncForAst comment: 
-'No class-specific documentation for AsyncForAst, hierarchy is: 
-Object
-  AbstractNode( parent)
-    PyAstNodeWithLocation( line column)
-      StatementAst
-        AsyncForAst( target iter body orelse)
-'
+'AsyncFor(expr target, expr iter, stmt* body, stmt* orelse, string? type_comment)'
 %
 expectvalue /Class
 doit
@@ -2672,7 +2630,7 @@ expectvalue /Class
 doit
 StatementAst subclass: 'AsyncFunctionDefAst'
   instVarNames: #( name args body
-                    decorator_list returns)
+                    decorator_list returns type_comment)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -2683,13 +2641,9 @@ StatementAst subclass: 'AsyncFunctionDefAst'
 expectvalue /Class
 doit
 AsyncFunctionDefAst comment: 
-'No class-specific documentation for AsyncFunctionDefAst, hierarchy is: 
-Object
-  AbstractNode( parent)
-    PyAstNodeWithLocation( line column)
-      StatementAst
-        AsyncFunctionDefAst( name args body decorator_list returns)
-'
+'AsyncFunctionDef(identifier name, arguments args,
+                             stmt* body, expr* decorator_list, expr? returns,
+                             string? type_comment)'
 %
 expectvalue /Class
 doit
@@ -2700,7 +2654,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 StatementAst subclass: 'AsyncWithAst'
-  instVarNames: #( items body)
+  instVarNames: #( items body type_comment)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -2895,7 +2849,7 @@ expectvalue /Class
 doit
 StatementAst subclass: 'ForAst'
   instVarNames: #( target iter body
-                    orelse)
+                    orelse type_comment)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -2906,7 +2860,8 @@ StatementAst subclass: 'ForAst'
 expectvalue /Class
 doit
 ForAst comment: 
-'For(expr target, expr iter, stmt* body, stmt* orelse)'
+'For(expr target, expr iter, stmt* body, stmt* orelse) 									// 3.7
+For(expr target, expr iter, stmt* body, stmt* orelse, string? type_comment)	// 3.8'
 %
 expectvalue /Class
 doit
@@ -2929,7 +2884,9 @@ StatementAst subclass: 'FunctionDefAst'
 expectvalue /Class
 doit
 FunctionDefAst comment: 
-'FunctionDef(identifier name, arguments args, stmt* body, expr* decorator_list, expr? returns)'
+'FunctionDef(identifier name, arguments args,
+                       stmt* body, expr* decorator_list, expr? returns,
+                       string? type_comment)'
 %
 expectvalue /Class
 doit
@@ -3272,7 +3229,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 StatementAst subclass: 'WithAst'
-  instVarNames: #( items body)
+  instVarNames: #( items body type_comment)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -3283,13 +3240,7 @@ StatementAst subclass: 'WithAst'
 expectvalue /Class
 doit
 WithAst comment: 
-'No class-specific documentation for PyWith, hierarchy is: 
-Object
-  AbstractNode( parent)
-    PyAstNodeWithLocation( line column)
-      StatementAst
-        PyWith( items body)
-'
+'AsyncWith(withitem* items, stmt* body, string? type_comment)'
 %
 expectvalue /Class
 doit
@@ -5713,7 +5664,9 @@ PythonTestCase subclass: 'ClassesTestCase'
 expectvalue /Class
 doit
 ClassesTestCase comment: 
-'Module([
+'ModuleAst astForPath: ''$HOME/code/Python/GemStoneP/tests/Classes.py''.
+
+Module([
 	Assign([Name(''g'', Store(), lineno=4, col_offset=0)], Str(''G'', lineno=4, col_offset=4), lineno=4, col_offset=0), 
 	ClassDef(''MyClass'', [], [], [
 		Assign([Name(''iv1'', Store(), lineno=7, col_offset=4)], Str(''1'', lineno=7, col_offset=10), lineno=7, col_offset=4), 
@@ -5776,13 +5729,7 @@ PythonTestCase subclass: 'CompoundStatementsTestCase'
 expectvalue /Class
 doit
 CompoundStatementsTestCase comment: 
-'No class-specific documentation for CompoundStatementsTestCase, hierarchy is: 
-Object
-  TestAsserter
-    TestCase( testSelector)
-      PythonTestCase( statements)
-        CompoundStatementsTestCase
-'
+'ModuleAst astForPath: ''$HOME/code/Python/GemStoneP/tests/CompoundStatements.py''.'
 %
 expectvalue /Class
 doit

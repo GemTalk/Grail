@@ -23,11 +23,11 @@ testAdd
 	self 
 		assert: (x isKindOf: ExprAst);
 		assert: ((x.value) isKindOf: BinOpAst);
-		assert: ((x.value.left) isKindOf: NumAst);
-		assert: (x.value.left.n.number == 1);
+		assert: ((x.value.left) isKindOf: ConstantAst);
+		assert: (x.value.left.value.number == 1);
 		assert: ((x.value.op) isKindOf: AddAst);
-		assert: ((x.value.right) isKindOf: NumAst);
-		assert: (x.value.right.n.number == 2);
+		assert: ((x.value.right) isKindOf: ConstantAst);
+		assert: (x.value.right.value.number == 2);
 		assert: ((x := x evaluate: aScope) isKindOf: int);
 		assert: (x.number == 3);
 
@@ -53,11 +53,11 @@ testBitAnd
 	self 
 		assert: (x isKindOf: ExprAst);			"0b10 & 0b01"
 		assert: ((x.value) isKindOf: BinOpAst);
-		assert: ((y := x.value.left) isKindOf: NumAst);
-		assert: (y.n.number == 2);
+		assert: ((y := x.value.left) isKindOf: ConstantAst);
+		assert: (y.value.number == 2);
 		assert: ((x.value.op) isKindOf: BitAndAst);
-		assert: ((y := x.value.right) isKindOf: NumAst);
-		assert: (y.n.number == 1);
+		assert: ((y := x.value.right) isKindOf: ConstantAst);
+		assert: (y.value.number == 1);
 		assert: ((x := x evaluate: aScope) isKindOf: int);
 		assert: (x.number == 0);
 
@@ -87,11 +87,11 @@ testBitOr
 	self 
 		assert: (x isKindOf: ExprAst);			"0b10 | 0b01"
 		assert: ((x.value) isKindOf: BinOpAst);
-		assert: ((y := x.value.left) isKindOf: NumAst);
-		assert: (y.n.number == 2);
+		assert: ((y := x.value.left) isKindOf: ConstantAst);
+		assert: (y.value.number == 2);
 		assert: ((x.value.op) isKindOf: BitOrAst);
-		assert: ((y := x.value.right) isKindOf: NumAst);
-		assert: (y.n.number == 1);
+		assert: ((y := x.value.right) isKindOf: ConstantAst);
+		assert: (y.value.number == 1);
 		assert: ((x := x evaluate: aScope) isKindOf: int);
 		assert: (x.number == 3);
 
@@ -121,11 +121,11 @@ testBitXor
 	self 
 		assert: (x isKindOf: ExprAst);			"0b10 ^ 0b01"
 		assert: ((x.value) isKindOf: BinOpAst);
-		assert: ((y := x.value.left) isKindOf: NumAst);
-		assert: (y.n.number == 2);
+		assert: ((y := x.value.left) isKindOf: ConstantAst);
+		assert: (y.value.number == 2);
 		assert: ((x.value.op) isKindOf: BitXorAst);
-		assert: ((y := x.value.right) isKindOf: NumAst);
-		assert: (y.n.number == 1);
+		assert: ((y := x.value.right) isKindOf: ConstantAst);
+		assert: (y.value.number == 1);
 		assert: ((x := x evaluate: aScope) isKindOf: int);
 		assert: (x.number == 3);
 
@@ -155,11 +155,11 @@ testDiv
 	self 
 		assert: (x isKindOf: ExprAst);
 		assert: ((x.value) isKindOf: BinOpAst);
-		assert: ((x.value.left) isKindOf: NumAst);
-		assert: (x.value.left.n.number == 5);
+		assert: ((x.value.left) isKindOf: ConstantAst);
+		assert: (x.value.left.value.number == 5);
 		assert: ((x.value.op) isKindOf: DivAst);
-		assert: ((x.value.right) isKindOf: NumAst);
-		assert: (x.value.right.n.number == 2);
+		assert: ((x.value.right) isKindOf: ConstantAst);
+		assert: (x.value.right.value.number == 2);
 		assert: ((x := x evaluate: aScope) isKindOf: float);
 		assert: (x.number asFloat == 2.5);
 
@@ -187,13 +187,13 @@ testEq
 	self 
 		assert: (x isKindOf: ExprAst);
 		assert: ((x.value) isKindOf: CompareAst);
-		assert: ((x.value.left) isKindOf: NumAst);
-		assert: (x.value.left.n.number == 1);
+		assert: ((x.value.left) isKindOf: ConstantAst);
+		assert: (x.value.left.value.number == 1);
 		assert: ((x.value.cmpopList) isKindOf: Array);
 		assert: ((x.value.cmpopList at: 1) isKindOf: EqAst);
 		assert: ((x.value.comparatorList) isKindOf: Array);
-		assert: ((y := x.value.comparatorList at: 1) isKindOf: NumAst);
-		assert: (y.n.number == 1);
+		assert: ((y := x.value.comparatorList at: 1) isKindOf: ConstantAst);
+		assert: (y.value.number == 1);
 		assert: (x := x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 25) isKindOf: ExprAst);			"2 == 1"
@@ -221,11 +221,11 @@ testFloorDiv
 	self 
 		assert: (x isKindOf: ExprAst);
 		assert: ((x.value) isKindOf: BinOpAst);
-		assert: ((x.value.left) isKindOf: NumAst);
-		assert: (x.value.left.n.number == 5);
+		assert: ((x.value.left) isKindOf: ConstantAst);
+		assert: (x.value.left.value.number == 5);
 		assert: ((x.value.op) isKindOf: FloorDivAst);
-		assert: ((x.value.right) isKindOf: NumAst);
-		assert: (x.value.right.n.number == 2);
+		assert: ((x.value.right) isKindOf: ConstantAst);
+		assert: (x.value.right.value.number == 2);
 		assert: ((x := x evaluate: aScope) isKindOf: int);
 		assert: (x.number == 2);
 
@@ -251,13 +251,13 @@ testGt
 	self 
 		assert: (x isKindOf: ExprAst);
 		assert: ((x.value) isKindOf: CompareAst);
-		assert: ((x.value.left) isKindOf: NumAst);
-		assert: (x.value.left.n.number == 1);
+		assert: ((x.value.left) isKindOf: ConstantAst);
+		assert: (x.value.left.value.number == 1);
 		assert: ((x.value.cmpopList) isKindOf: Array);
 		assert: ((x.value.cmpopList at: 1) isKindOf: GtAst);
 		assert: ((x.value.comparatorList) isKindOf: Array);
-		assert: ((y := x.value.comparatorList at: 1) isKindOf: NumAst);
-		assert: (y.n.number == 2);
+		assert: ((y := x.value.comparatorList at: 1) isKindOf: ConstantAst);
+		assert: (y.value.number == 2);
 		deny: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 20) isKindOf: ExprAst);			"3 > 2"
@@ -282,13 +282,13 @@ testGtE
 	self 
 		assert: (x isKindOf: ExprAst);
 		assert: ((x.value) isKindOf: CompareAst);
-		assert: ((x.value.left) isKindOf: NumAst);
-		assert: (x.value.left.n.number == 1);
+		assert: ((x.value.left) isKindOf: ConstantAst);
+		assert: (x.value.left.value.number == 1);
 		assert: ((x.value.cmpopList) isKindOf: Array);
 		assert: ((x.value.cmpopList at: 1) isKindOf: GtEAst);
 		assert: ((x.value.comparatorList) isKindOf: Array);
-		assert: ((y := x.value.comparatorList at: 1) isKindOf: NumAst);
-		assert: (y.n.number == 2);
+		assert: ((y := x.value.comparatorList at: 1) isKindOf: ConstantAst);
+		assert: (y.value.number == 2);
 		assert: ((x := x evaluate: aScope) == False);
 
 		assert: ((x := self statementsAt: 31) isKindOf: ExprAst);			"3 >= 2"
@@ -313,17 +313,17 @@ testIn
 	self 
 		assert: (x isKindOf: ExprAst);
 		assert: ((x.value) isKindOf: CompareAst);
-		assert: ((x.value.left) isKindOf: NumAst);
-		assert: (x.value.left.n.number == 3);
+		assert: ((x.value.left) isKindOf: ConstantAst);
+		assert: (x.value.left.value.number == 3);
 		assert: ((x.value.cmpopList) isKindOf: Array);
 		assert: ((x.value.cmpopList at: 1) isKindOf: InAst);
 		assert: ((x.value.comparatorList) isKindOf: Array);
 		assert: ((y := x.value.comparatorList at: 1) isKindOf: ListAst);
 		assert: (y.elts isKindOf: Array);
-		assert: ((y.elts at: 1) isKindOf: NumAst);
-		assert: ((y.elts at: 2) isKindOf: NumAst);
-		assert: ((y := y.elts at: 3) isKindOf: NumAst);
-		assert: (y.n.number == 3);
+		assert: ((y.elts at: 1) isKindOf: ConstantAst);
+		assert: ((y.elts at: 2) isKindOf: ConstantAst);
+		assert: ((y := y.elts at: 3) isKindOf: ConstantAst);
+		assert: (y.value.number == 3);
 		assert: (x := x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 52) isKindOf: ExprAst);			"4 in [1,2,3]"
@@ -345,13 +345,13 @@ testIs
 	self 
 		assert: (x isKindOf: ExprAst);
 		assert: ((x.value) isKindOf: CompareAst);
-		assert: ((x.value.left) isKindOf: NumAst);
-		assert: (x.value.left.n.number == 1);
+		assert: ((x.value.left) isKindOf: ConstantAst);
+		assert: (x.value.left.value.number == 1);
 		assert: ((x.value.cmpopList) isKindOf: Array);
 		assert: ((x.value.cmpopList at: 1) isKindOf: IsAst);
 		assert: ((x.value.comparatorList) isKindOf: Array);
-		assert: ((y := x.value.comparatorList at: 1) isKindOf: NumAst);
-		assert: (y.n.number == 1);
+		assert: ((y := x.value.comparatorList at: 1) isKindOf: ConstantAst);
+		assert: (y.value.number == 1);
 		assert: (x := x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 80) isKindOf: ExprAst);			"'test' is 'test'"
@@ -373,13 +373,13 @@ testIsNot
 	self 
 		assert: (x isKindOf: ExprAst);
 		assert: ((x.value) isKindOf: CompareAst);
-		assert: ((x.value.left) isKindOf: NumAst);
-		assert: (x.value.left.n.number == 1);
+		assert: ((x.value.left) isKindOf: ConstantAst);
+		assert: (x.value.left.value.number == 1);
 		assert: ((x.value.cmpopList) isKindOf: Array);
 		assert: ((x.value.cmpopList at: 1) isKindOf: IsNotAst);
 		assert: ((x.value.comparatorList) isKindOf: Array);
-		assert: ((y := x.value.comparatorList at: 1) isKindOf: NumAst);
-		assert: (y.n.number == 1);
+		assert: ((y := x.value.comparatorList at: 1) isKindOf: ConstantAst);
+		assert: (y.value.number == 1);
 		deny: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 84) isKindOf: ExprAst);			"'test' is not 'test'"
@@ -401,11 +401,11 @@ testLShift
 	self 
 		assert: (x isKindOf: ExprAst);
 		assert: ((x.value) isKindOf: BinOpAst);
-		assert: ((x.value.left) isKindOf: NumAst);
-		assert: (x.value.left.n.number == 1);
+		assert: ((x.value.left) isKindOf: ConstantAst);
+		assert: (x.value.left.value.number == 1);
 		assert: ((x.value.op) isKindOf: LShiftAst);
-		assert: ((x.value.right) isKindOf: NumAst);
-		assert: (x.value.right.n.number == 1);
+		assert: ((x.value.right) isKindOf: ConstantAst);
+		assert: (x.value.right.value.number == 1);
 		assert: ((x := x evaluate: aScope) isKindOf: int);
 		assert: (x.number == 2);
 
@@ -431,13 +431,13 @@ testLt
 	self 
 		assert: (x isKindOf: ExprAst);
 		assert: ((x.value) isKindOf: CompareAst);
-		assert: ((x.value.left) isKindOf: NumAst);
-		assert: (x.value.left.n.number == 1);
+		assert: ((x.value.left) isKindOf: ConstantAst);
+		assert: (x.value.left.value.number == 1);
 		assert: ((x.value.cmpopList) isKindOf: Array);
 		assert: ((x.value.cmpopList at: 1) isKindOf: LtAst);
 		assert: ((x.value.comparatorList) isKindOf: Array);
-		assert: ((y := x.value.comparatorList at: 1) isKindOf: NumAst);
-		assert: (y.n.number == 2);
+		assert: ((y := x.value.comparatorList at: 1) isKindOf: ConstantAst);
+		assert: (y.value.number == 2);
 		assert: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 36) isKindOf: ExprAst);			"1 < 1"
@@ -462,13 +462,13 @@ testLtE
 	self 
 		assert: (x isKindOf: ExprAst);
 		assert: ((x.value) isKindOf: CompareAst);
-		assert: ((x.value.left) isKindOf: NumAst);
-		assert: (x.value.left.n.number == 1);
+		assert: ((x.value.left) isKindOf: ConstantAst);
+		assert: (x.value.left.value.number == 1);
 		assert: ((x.value.cmpopList) isKindOf: Array);
 		assert: ((x.value.cmpopList at: 1) isKindOf: LtEAst);
 		assert: ((x.value.comparatorList) isKindOf: Array);
-		assert: ((y := x.value.comparatorList at: 1) isKindOf: NumAst);
-		assert: (y.n.number == 2);
+		assert: ((y := x.value.comparatorList at: 1) isKindOf: ConstantAst);
+		assert: (y.value.number == 2);
 		assert: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 41) isKindOf: ExprAst);			"1 <= 1"
@@ -493,11 +493,11 @@ testMod
 	self 
 		assert: (x isKindOf: ExprAst);
 		assert: ((x.value) isKindOf: BinOpAst);
-		assert: ((x.value.left) isKindOf: NumAst);
-		assert: (x.value.left.n.number == 5);
+		assert: ((x.value.left) isKindOf: ConstantAst);
+		assert: (x.value.left.value.number == 5);
 		assert: ((x.value.op) isKindOf: ModAst);
-		assert: ((x.value.right) isKindOf: NumAst);
-		assert: (x.value.right.n.number == 2);
+		assert: ((x.value.right) isKindOf: ConstantAst);
+		assert: (x.value.right.value.number == 2);
 		assert: ((x := x evaluate: aScope) isKindOf: int);
 		assert: (x.number == 1);
 
@@ -523,11 +523,11 @@ testMult
 	self 
 		assert: (x isKindOf: ExprAst);
 		assert: ((x.value) isKindOf: BinOpAst);
-		assert: ((x.value.left) isKindOf: NumAst);
-		assert: (x.value.left.n.number == 1);
+		assert: ((x.value.left) isKindOf: ConstantAst);
+		assert: (x.value.left.value.number == 1);
 		assert: ((x.value.op) isKindOf: MultAst);
-		assert: ((x.value.right) isKindOf: NumAst);
-		assert: (x.value.right.n.number == 3);
+		assert: ((x.value.right) isKindOf: ConstantAst);
+		assert: (x.value.right.value.number == 3);
 		assert: ((x := x evaluate: aScope) isKindOf: int);
 		assert: (x.number == 3);
 
@@ -553,13 +553,13 @@ testNotEq
 	self 
 		assert: (x isKindOf: ExprAst);
 		assert: ((x.value) isKindOf: CompareAst);
-		assert: ((x.value.left) isKindOf: NumAst);
-		assert: (x.value.left.n.number == 1);
+		assert: ((x.value.left) isKindOf: ConstantAst);
+		assert: (x.value.left.value.number == 1);
 		assert: ((x.value.cmpopList) isKindOf: Array);
 		assert: ((x.value.cmpopList at: 1) isKindOf: NotEqAst);
 		assert: ((x.value.comparatorList) isKindOf: Array);
-		assert: ((y := x.value.comparatorList at: 1) isKindOf: NumAst);
-		assert: (y.n.number == 1);
+		assert: ((y := x.value.comparatorList at: 1) isKindOf: ConstantAst);
+		assert: (y.value.number == 1);
 		deny: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 46) isKindOf: ExprAst);			"2 != 1"
@@ -587,17 +587,17 @@ testNotIn
 	self 
 		assert: (x isKindOf: ExprAst);
 		assert: ((x.value) isKindOf: CompareAst);
-		assert: ((x.value.left) isKindOf: NumAst);
-		assert: (x.value.left.n.number == 3);
+		assert: ((x.value.left) isKindOf: ConstantAst);
+		assert: (x.value.left.value.number == 3);
 		assert: ((x.value.cmpopList) isKindOf: Array);
 		assert: ((x.value.cmpopList at: 1) isKindOf: NotInAst);
 		assert: ((x.value.comparatorList) isKindOf: Array);
 		assert: ((y := x.value.comparatorList at: 1) isKindOf: ListAst);
 		assert: (y.elts isKindOf: Array);
-		assert: ((y.elts at: 1) isKindOf: NumAst);
-		assert: ((y.elts at: 2) isKindOf: NumAst);
-		assert: ((y := y.elts at: 3) isKindOf: NumAst);
-		assert: (y.n.number == 3);
+		assert: ((y.elts at: 1) isKindOf: ConstantAst);
+		assert: ((y.elts at: 2) isKindOf: ConstantAst);
+		assert: ((y := y.elts at: 3) isKindOf: ConstantAst);
+		assert: (y.value.number == 3);
 		deny: (x evaluate: aScope);
 
 		assert: ((x := self statementsAt: 56) isKindOf: ExprAst);			"4 not in [1,2,3]"
@@ -619,11 +619,11 @@ testPow
 	self 
 		assert: (x isKindOf: ExprAst);
 		assert: ((x.value) isKindOf: BinOpAst);
-		assert: ((x.value.left) isKindOf: NumAst);
-		assert: (x.value.left.n.number == 2);
+		assert: ((x.value.left) isKindOf: ConstantAst);
+		assert: (x.value.left.value.number == 2);
 		assert: ((x.value.op) isKindOf: PowAst);
-		assert: ((x.value.right) isKindOf: NumAst);
-		assert: (x.value.right.n.number == 3);
+		assert: ((x.value.right) isKindOf: ConstantAst);
+		assert: (x.value.right.value.number == 3);
 		assert: ((x := x evaluate: aScope) isKindOf: int);
 		assert: (x.number == 8);
 
@@ -649,11 +649,11 @@ testRShift
 	self 
 		assert: (x isKindOf: ExprAst);
 		assert: ((x.value) isKindOf:BinOpAst);
-		assert: ((x.value.left) isKindOf: NumAst);
-		assert: (x.value.left.n.number == 1);
+		assert: ((x.value.left) isKindOf: ConstantAst);
+		assert: (x.value.left.value.number == 1);
 		assert: ((x.value.op) isKindOf: RShiftAst);
-		assert: ((x.value.right) isKindOf: NumAst);
-		assert: (x.value.right.n.number == 1);
+		assert: ((x.value.right) isKindOf: ConstantAst);
+		assert: (x.value.right.value.number == 1);
 		assert: ((x := x evaluate: aScope) isKindOf: int);
 		assert: (x.number == 0);
 
@@ -679,11 +679,11 @@ testSub
 	self 
 		assert: (x isKindOf: ExprAst);
 		assert: ((x.value) isKindOf: BinOpAst);
-		assert: ((x.value.left) isKindOf: NumAst);
-		assert: (x.value.left.n.number == 3);
+		assert: ((x.value.left) isKindOf: ConstantAst);
+		assert: (x.value.left.value.number == 3);
 		assert: ((x.value.op) isKindOf: SubAst);
-		assert: ((x.value.right) isKindOf: NumAst);
-		assert: (x.value.right.n.number == 1);
+		assert: ((x.value.right) isKindOf: ConstantAst);
+		assert: (x.value.right.value.number == 1);
 		assert: ((x := x evaluate: aScope) isKindOf: int);
 		assert: (x.number == 2);
 

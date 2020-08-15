@@ -18,6 +18,7 @@ method: NumAst
 initialize
 	"Num(object n) -- a number as a Object."
 
+self error: 'deprecated'.
 	n := self number. 
 	self readPosition.
 %

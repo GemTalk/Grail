@@ -28,10 +28,10 @@ testArrayAssignment
 		assert: (y.ctx isKindOf: StoreAst);
 		assert: (x.value isKindOf: ListAst);
 		assert: (x.value.elts size == 2);
-		assert: ((y := x.value.elts at: 1) isKindOf: NumAst);
-		assert: (y.n.number == 0);
-		assert: ((y := x.value.elts at: 2) isKindOf: NumAst);
-		assert: (y.n.number == 1);
+		assert: ((y := x.value.elts at: 1) isKindOf: ConstantAst);
+		assert: (y.value.number == 0);
+		assert: ((y := x.value.elts at: 2) isKindOf: ConstantAst);
+		assert: (y.value.number == 1);
 		assert: (x.value.ctx isKindOf: LoadAst);
 		yourself.
 %
@@ -43,7 +43,8 @@ testAssertFalse
 	x := self statementsAt: 10.
 	self 
 		assert: (x isKindOf: AssertAst);
-		assert: (x.test isKindOf: FalseAst);
+		assert: (x.test isKindOf: ConstantAst);
+		assert: (x.test.value == False);
 		assert: (x.test evaluate: aScope) == False;
 		assert: x.msg isNone;
 		yourself.
@@ -56,7 +57,8 @@ testAssertTrue
 	x := self statementsAt: 9.
 	self 
 		assert: (x isKindOf: AssertAst);
-		assert: (x.test isKindOf: TrueAst);
+		assert: (x.test isKindOf: ConstantAst);
+		assert: (x.test.value);
 		assert: (x.test evaluate: aScope);
 		assert: (x.msg isNone);
 		yourself.
@@ -69,8 +71,8 @@ testAssignMultiple
 	x := self statementsAt: 2.
 	self 
 		assert: (x isKindOf: AssignAst);
-		assert: (x.value isKindOf: NumAst);
-		assert: (x.value.n.number == 2);
+		assert: (x.value isKindOf: ConstantAst);
+		assert: (x.value.value.number == 2);
 		assert: (x.targets size == 2);
 		assert: ((y := x.targets at: 1) isKindOf: NameAst);
 		assert: (y.id == #'var2');
@@ -88,8 +90,8 @@ testAssignSingle
 	x := self statementsAt: 1.
 	self 
 		assert: (x isKindOf: AssignAst);
-		assert: (x.value isKindOf: NumAst);
-		assert: (x.value.n.number == 1);
+		assert: (x.value isKindOf: ConstantAst);
+		assert: (x.value.value.number == 1);
 		assert: (x.targets size == 1);
 		assert: ((y := x.targets at: 1) isKindOf: NameAst);
 		assert: (y.id == #'var1');
@@ -156,8 +158,8 @@ testClassDefCls
 		assert: ((z := y.targets at: 1) isKindOf: NameAst);
 		assert: (z.id == #'x');
 		assert: (z.ctx isKindOf: StoreAst);
-		assert: (y.value isKindOf: NumAst);
-		assert: (y.value.n.number == 3);
+		assert: (y.value isKindOf: ConstantAst);
+		assert: (y.value.value.number == 3);
 		assert: (x.decorator_list size == 0);
 		yourself.
 %
@@ -285,8 +287,8 @@ testIndexAssignment
 		assert: ((y := x.targets at: 1) isKindOf: NameAst);
 		assert: (y.id == #'i');
 		assert: (y.ctx isKindOf: StoreAst);
-		assert: (x.value isKindOf: NumAst);
-		assert: (x.value.n.number == 0);
+		assert: (x.value isKindOf: ConstantAst);
+		assert: (x.value.value.number == 0);
 		yourself.
 %
 category: 'other'
@@ -354,8 +356,8 @@ testRaise
 		assert: (x.exc.function.id == #'RuntimeError');
 		assert: (x.exc.function.ctx isKindOf: LoadAst);
 		assert: (x.exc.arguments size == 1);
-		assert: ((y := x.exc.arguments at: 1) isKindOf: StrAst);
-		assert: (y.s = 'Something bad happened');
+		assert: ((y := x.exc.arguments at: 1) isKindOf: ConstantAst);
+		assert: (y.value.container = 'Something bad happened');
 		assert: (x.exc.keywords size == 0);
 		assert: (x.exc.function isKindOf: NameAst);
 		assert: (x.cause isNone);
@@ -374,12 +376,12 @@ testRaiseFromNone
 		assert: (x.exc.function.id == #'RuntimeError');
 		assert: (x.exc.function.ctx isKindOf: LoadAst);
 		assert: (x.exc.arguments size == 1);
-		assert: ((y := x.exc.arguments at: 1) isKindOf: StrAst);
-		assert: (y.s = 'Something bad happened');
+		assert: ((y := x.exc.arguments at: 1) isKindOf: ConstantAst);
+		assert: (y.value.container = 'Something bad happened');
 		assert: (x.exc.keywords size == 0);
 		assert: (x.exc.function isKindOf: NameAst);
-		assert: (x.cause isKindOf: NoneAst);
-		assert: (x.cause isKindOf: NoneAst);
+		assert: (x.cause isKindOf: ConstantAst);
+		assert: (x.cause.value == None);
 		yourself.
 %
 category: 'other'
@@ -423,7 +425,8 @@ testReturnTrue
 		assert: (x.args.defaults size == 0);
 		assert: (x.body.body size == 1);
 		assert: ((y := x.body.body at: 1) isKindOf: ReturnAst);
-		assert: (y.value isKindOf: TrueAst);
+		assert: (y.value isKindOf: ConstantAst);
+		assert: (y.value.value);
 		assert: (y.value evaluate: aScope);
 		assert: (x.decorator_list size == 0);
 		assert: (x.returns isNone);
@@ -452,10 +455,10 @@ testSwapAssignment
 		assert: (y.ctx isKindOf: StoreAst);
 		assert: (x.value isKindOf: TupleAst);
 		assert: (x.value.elts size == 2);
-		assert: ((y := x.value.elts at: 1) isKindOf: NumAst);
-		assert: (y.n.number == 1);
-		assert: ((y := x.value.elts at: 2) isKindOf: NumAst);
-		assert: (y.n.number == 2);
+		assert: ((y := x.value.elts at: 1) isKindOf: ConstantAst);
+		assert: (y.value.number == 1);
+		assert: ((y := x.value.elts at: 2) isKindOf: ConstantAst);
+		assert: (y.value.number == 2);
 		assert: (x.value.ctx isKindOf: LoadAst);
 		yourself.
 %
@@ -478,8 +481,8 @@ testYield
 		assert: (x.body.body size == 1);
 		assert: ((y := x.body.body at: 1) isKindOf: ExprAst);
 		assert: (y.value isKindOf: YieldAst);
-		assert: (y.value.value isKindOf: NumAst);
-		assert: (y.value.value.n.number == 123);
+		assert: (y.value.value isKindOf: ConstantAst);
+		assert: (y.value.value.value.number == 123);
 		assert: (x.decorator_list size == 0);
 		assert: (x.returns isNone);
 		yourself.
@@ -503,8 +506,8 @@ testYieldAsync
 		assert: (x.body.body size == 1);
 		assert: ((y := x.body.body at: 1) isKindOf: ExprAst);
 		assert: (y.value isKindOf:YieldAst);
-		assert: (y.value.value isKindOf: NumAst);
-		assert: (y.value.value.n.number == 123);
+		assert: (y.value.value isKindOf: ConstantAst);
+		assert: (y.value.value.value.number == 123);
 		assert: (x.decorator_list size == 0);
 		assert: (x.returns isNone);
 		yourself.

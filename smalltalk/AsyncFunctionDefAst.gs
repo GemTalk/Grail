@@ -11,8 +11,8 @@ category: 'other'
 method: AsyncFunctionDefAst
 initialize
 	"AsyncFunctionDef(identifier name, arguments args,
-							  stmt* body, expr* decorator_list, 
-							  expr? returns)"
+                             stmt* body, expr* decorator_list, expr? returns,
+                             string? type_comment)"
 
 	| stream |
 	stream := self stream.
@@ -26,5 +26,7 @@ initialize
 	decorator_list := self collectAst: [self expression].
 	self commaSpace.
 	returns := self optionalExpression.
+	self commaSpace. 
+	type_comment := self optionalString.
 	self readPosition.
 %

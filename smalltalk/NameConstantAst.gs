@@ -46,6 +46,7 @@ category: 'other'
 method: NameConstantAst
 initialize
 
+self error: 'deprecated'.
 	self stream skip: -1.
 	self readPosition.
 %

@@ -16,14 +16,6 @@ filename
 set compile_env: 0
 category: 'other'
 method: ClassesTestCase
-setUp
-"
-ModuleAst astForPath: '$HOME/code/Python/GemStoneP/tests/Classes.py'.
-"
-	super setUp.
-%
-category: 'other'
-method: ClassesTestCase
 test
 "
 MyClass>>foo(<__main__.MyClass object at 0x7fd647210438>, B) - 1 - A
