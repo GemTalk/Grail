@@ -57,7 +57,7 @@ __eq__
 		rnum := rhs.
 		(lhs isKindOf: AbstractNumber) ifTrue: [ lnum := lhs ___number ].
 		(rhs isKindOf: AbstractNumber) ifTrue: [ rnum := rhs ___number ].
-		(temp := (lhs == rhs)) ifTrue: [ True ] ifFalse: [ False ]
+		(temp := (lnum == rnum)) ifTrue: [ True ] ifFalse: [ False ]
 	]
 %
 category: 'Python'

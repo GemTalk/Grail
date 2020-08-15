@@ -145,8 +145,7 @@ test_classmethod
 	x := stdout contents.
 	self assert: x = 'TypeError '.
 	x := (self statementsAt: 39) evaluate: aScope.		
-	"self assert: x = 4."											"this does not work, even though AbstractNumber >> __eq__ should work"
-	self assert: x ___number = 4.
+	self assert: x = 4.
 %
 category: 'other'
 method: BuiltinsTestCase
