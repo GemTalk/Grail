@@ -112,11 +112,15 @@ value: posArgs value: keywordArgs value: aScope
 
 	| obj result |
 	obj := Instance new: aScope copy.
-	result := obj
-		call: #'__init__'
-		withArguments: posArgs
-		keywords: keywordArgs
-		scope: aScope.
+	((obj has: #'__init__') == True) ifTrue: [ 
+		result := obj
+			call: #'__init__'
+			withArguments: posArgs
+			keywords: keywordArgs
+			scope: aScope.
+	] ifFalse: [
+		result := None
+	].
 	result == None ifFalse: [TypeError signal: '__init__() should return None, not ?'].
 	^obj
 %

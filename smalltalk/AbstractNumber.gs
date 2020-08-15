@@ -51,9 +51,14 @@ category: 'Python'
 method: AbstractNumber
 __eq__
 
-	^[:lhs :rhs | ((lhs isKindOf: AbstractNumber) and: [(rhs isKindOf: AbstractNumber) and: [lhs.number = rhs.number]]) 
-		ifTrue: [ True ] 
-		ifFalse: [ False ]]
+	^ [ :lhs :rhs |
+		| lnum rnum temp |
+		lnum := lhs.
+		rnum := rhs.
+		(lhs isKindOf: AbstractNumber) ifTrue: [ lnum := lhs ___number ].
+		(rhs isKindOf: AbstractNumber) ifTrue: [ rnum := rhs ___number ].
+		(temp := (lhs == rhs)) ifTrue: [ True ] ifFalse: [ False ]
+	]
 %
 category: 'Python'
 method: AbstractNumber

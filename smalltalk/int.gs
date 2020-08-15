@@ -11,8 +11,8 @@ category: 'other'
 method: int
 = anObject
 "clunky implementation to avoid re-defining Array >> includes:"
-	| res |
-	res := ((self __eq__ value: anObject) == True).
+	| res temp |
+	res := ((temp := self __eq__ value: self value: anObject) == True).
 	^ res
 %
 set compile_env: 0

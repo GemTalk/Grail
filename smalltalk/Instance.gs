@@ -51,9 +51,18 @@ category: 'other'
 method: Instance
 get: aSymbol
 
-	^__dict__ 
+	^ __dict__ 
 		get: aSymbol
 		ifAbsent: [ AttributeError signal: '''', __class__ name asString, ''' object has no attribute ''', aSymbol asString, '''' ]
+%
+category: 'other'
+method: Instance
+has: aSymbol
+
+	__dict__ 
+		get: aSymbol
+		ifAbsent: [ ^ False ].
+	^ True
 %
 category: 'other'
 method: Instance

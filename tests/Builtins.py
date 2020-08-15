@@ -59,3 +59,19 @@ callable(callable) # 33
 
 chr(32) # 34
 chr(97) # 35
+
+class C: # 36
+    def f(cls):
+        return 3
+
+class D: # 37
+    @classmethod
+    def g(cls):
+        return 4
+
+try: # 38
+    C.f()
+except TypeError:
+    print("TypeError", end=' ')
+
+D.g() # 39

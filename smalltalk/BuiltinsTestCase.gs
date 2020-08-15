@@ -136,6 +136,20 @@ test_chr
 %
 category: 'other'
 method: BuiltinsTestCase
+test_classmethod
+
+	| x |
+	x := (self statementsAt: 36) evaluate: aScope.		
+	x := (self statementsAt: 37) evaluate: aScope.		
+	x := (self statementsAt: 38) evaluate: aScope.		
+	x := stdout contents.
+	self assert: x = 'TypeError '.
+	x := (self statementsAt: 39) evaluate: aScope.		
+	"self assert: x = 4."											"this does not work, even though AbstractNumber >> __eq__ should work"
+	self assert: x ___number = 4.
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"

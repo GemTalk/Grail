@@ -11,13 +11,16 @@ category: 'other'
 method: ArgumentsAst
 arguments: arguments keywords: keywords scope: aScope
 
+	| missingArguments |
+	missingArguments := Array new.
 	1 to: args size do: [:i | 
 		(args at: i ifAbsent: [nil]) ifNotNil: [:param |
 			param 
-				setTo: (arguments at: i ifAbsent: [_remoteNil]) 
+				setTo: (arguments at: i ifAbsent: [ missingArguments add: param name asString]) 
 				scope: aScope.
 		].
 	].
+	(missingArguments size > 0) ifTrue: [ TypeError signal: (parent name asString, '() missing ', missingArguments size asString, ' required positional argument: ', ' ' join: missingArguments) ].
 	1 to: kwonlyargs size do: [:i | 
 		| param |
 		param := kwonlyargs at: i.
