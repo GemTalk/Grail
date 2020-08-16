@@ -11,7 +11,7 @@ category: 'other'
 method: ExceptHandlerAst
 evaluate: aScope
 
-	(name evaluate: aScope) ifNotNil: [:myName | myName halt].
+	"(name evaluate: aScope) ifNotNil: [:myName | myName halt]."
 	^body evaluate: aScope
 %
 category: 'other'
@@ -32,7 +32,7 @@ initialize
 		| string |
 		string := stream upTo: $,.
 		string = 'None' ifFalse: [self error].
-		name := NoneAst singleton.
+		name := None.
 	].
 	stream skip: -1.
 	self commaSpace.

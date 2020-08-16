@@ -1565,28 +1565,6 @@ doit
 OrAst category: 'Parser'
 %
 set compile_env: 0
-! ------------------- Class definition for BytesAst
-expectvalue /Class
-doit
-ExpressionAst subclass: 'BytesAst'
-  instVarNames: #( s)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-BytesAst comment: 
-'Deprecated since version 3.8: Methods visit_Num(), visit_Str(), visit_Bytes(), visit_NameConstant() and visit_Ellipsis() are deprecated now and will not be called in future Python versions. Add the visit_Constant() method to handle all constant nodes.'
-%
-expectvalue /Class
-doit
-BytesAst category: 'Parser'
-%
-set compile_env: 0
 ! ------------------- Class definition for CallAst
 expectvalue /Class
 doit
@@ -1721,28 +1699,6 @@ Object
 expectvalue /Class
 doit
 DictCompAst category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for EllipsisAst
-expectvalue /Class
-doit
-ExpressionAst subclass: 'EllipsisAst'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-EllipsisAst comment: 
-'Deprecated since version 3.8: Methods visit_Num(), visit_Str(), visit_Bytes(), visit_NameConstant() and visit_Ellipsis() are deprecated now and will not be called in future Python versions. Add the visit_Constant() method to handle all constant nodes.'
-%
-expectvalue /Class
-doit
-EllipsisAst category: 'Parser'
 %
 set compile_env: 0
 ! ------------------- Class definition for FormattedValueAst
@@ -2007,111 +1963,6 @@ doit
 KeywordsAst category: 'Parser'
 %
 set compile_env: 0
-! ------------------- Class definition for NameConstantAst
-expectvalue /Class
-doit
-ExpressionAst subclass: 'NameConstantAst'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #( singleton)
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-NameConstantAst comment: 
-'Deprecated since version 3.8: Methods visit_Num(), visit_Str(), visit_Bytes(), visit_NameConstant() and visit_Ellipsis() are deprecated now and will not be called in future Python versions. Add the visit_Constant() method to handle all constant nodes.'
-%
-expectvalue /Class
-doit
-NameConstantAst category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for FalseAst
-expectvalue /Class
-doit
-NameConstantAst subclass: 'FalseAst'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-FalseAst comment: 
-'No class-specific documentation for FalseAst, hierarchy is: 
-Object
-  AbstractNode( parent)
-    PyAstNodeWithLocation( line column)
-      ExpressionAst
-        NameConstantAst( value)
-          FalseAst
-'
-%
-expectvalue /Class
-doit
-FalseAst category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for NoneAst
-expectvalue /Class
-doit
-NameConstantAst subclass: 'NoneAst'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-NoneAst comment: 
-'No class-specific documentation for NoneAst, hierarchy is: 
-Object
-  NoneAst
-'
-%
-expectvalue /Class
-doit
-NoneAst category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for TrueAst
-expectvalue /Class
-doit
-NameConstantAst subclass: 'TrueAst'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-TrueAst comment: 
-'No class-specific documentation for TrueAst, hierarchy is: 
-Object
-  AbstractNode( parent)
-    PyAstNodeWithLocation( line column)
-      ExpressionAst
-        NameConstantAst( value)
-          TrueAst
-'
-%
-expectvalue /Class
-doit
-TrueAst category: 'Parser'
-%
-set compile_env: 0
 ! ------------------- Class definition for NamedExprAst
 expectvalue /Class
 doit
@@ -2127,28 +1978,6 @@ ExpressionAst subclass: 'NamedExprAst'
 expectvalue /Class
 doit
 NamedExprAst category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for NumAst
-expectvalue /Class
-doit
-ExpressionAst subclass: 'NumAst'
-  instVarNames: #( n)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-NumAst comment: 
-'Deprecated since version 3.8: Methods visit_Num(), visit_Str(), visit_Bytes(), visit_NameConstant() and visit_Ellipsis() are deprecated now and will not be called in future Python versions. Add the visit_Constant() method to handle all constant nodes.'
-%
-expectvalue /Class
-doit
-NumAst category: 'Parser'
 %
 set compile_env: 0
 ! ------------------- Class definition for SetAst
@@ -2233,28 +2062,6 @@ Object
 expectvalue /Class
 doit
 StarredAst category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for StrAst
-expectvalue /Class
-doit
-ExpressionAst subclass: 'StrAst'
-  instVarNames: #( s)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-StrAst comment: 
-'Deprecated since version 3.8: Methods visit_Num(), visit_Str(), visit_Bytes(), visit_NameConstant() and visit_Ellipsis() are deprecated now and will not be called in future Python versions. Add the visit_Constant() method to handle all constant nodes.'
-%
-expectvalue /Class
-doit
-StrAst category: 'Parser'
 %
 set compile_env: 0
 ! ------------------- Class definition for SubscriptAst
@@ -3289,11 +3096,8 @@ AbstractNode subclass: 'ArgumentsAst'
 expectvalue /Class
 doit
 ArgumentsAst comment: 
-'No class-specific documentation for ArgumentsAst, hierarchy is: 
-Object
-  AbstractNode( parent)
-    ArgumentsAst( args vararg kwonlyargs kw_defaults kwarg defaults)
-'
+'arguments = (arg* posonlyargs, arg* args, arg? vararg, arg* kwonlyargs,
+                 expr* kw_defaults, arg? kwarg, expr* defaults)'
 %
 expectvalue /Class
 doit
@@ -5084,7 +4888,10 @@ object subclass: 'function'
 expectvalue /Class
 doit
 function comment: 
-'Instances of function are created by executing a FunctionDefAst.'
+'Instances of function are created by executing a FunctionDefAst.
+
+https://docs.python.org/3/reference/compound_stmts.html#function-definitions
+https://docs.python.org/3/reference/expressions.html#calls'
 %
 expectvalue /Class
 doit
@@ -5355,7 +5162,10 @@ module subclass: 'builtins'
 expectvalue /Class
 doit
 builtins comment: 
-'https://docs.python.org/3/library/builtins.html'
+'https://docs.python.org/3/library/builtins.html
+
+Note that builtin functions generally bypass the __getattribute__() method.
+https://docs.python.org/3/reference/datamodel.html#special-method-lookup'
 %
 expectvalue /Class
 doit
@@ -6151,7 +5961,6 @@ input BuiltinsTestCase.gs
 input bytearray.gs
 input ByteLiteralsTestCase.gs
 input bytes.gs
-input BytesAst.gs
 input BytesWarning.gs
 input CallAst.gs
 input CancelNotification.gs
@@ -6188,7 +5997,6 @@ input DictAst.gs
 input DictCompAst.gs
 input DivAst.gs
 input ellipsis.gs
-input EllipsisAst.gs
 input EOFError.gs
 input EqAst.gs
 input EvaluateTestCase.gs
@@ -6200,7 +6008,6 @@ input ExprAst.gs
 input ExpressionAst.gs
 input ExpressionContextAst.gs
 input ExtSliceAst.gs
-input FalseAst.gs
 input FileExistsError.gs
 input FileNotFoundError.gs
 input float.gs
@@ -6261,10 +6068,8 @@ input ModuleAst.gs
 input ModuleNotFoundError.gs
 input MultAst.gs
 input NameAst.gs
-input NameConstantAst.gs
 input NamedExprAst.gs
 input NameError.gs
-input NoneAst.gs
 input NoneType.gs
 input NonlocalAst.gs
 input NotADirectoryError.gs
@@ -6273,7 +6078,6 @@ input NotEqAst.gs
 input NotImplementedError.gs
 input NotImplementedType.gs
 input NotInAst.gs
-input NumAst.gs
 input NumericLiteralsTestCase.gs
 input object.gs
 input OperatorAst.gs
@@ -6315,7 +6119,6 @@ input StopAsyncIteration.gs
 input StopIteration.gs
 input StoreAst.gs
 input str.gs
-input StrAst.gs
 input StringLiteralsTestCase.gs
 input SubAst.gs
 input SubscriptAst.gs
@@ -6330,7 +6133,6 @@ input TabError.gs
 input time.gs
 input TimeoutError.gs
 input TimeTestCase.gs
-input TrueAst.gs
 input TryAst.gs
 input tuple.gs
 input tuple_iterator.gs

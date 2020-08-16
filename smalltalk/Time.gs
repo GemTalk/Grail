@@ -17,9 +17,7 @@ set compile_env: 0
 category: 'other'
 method: time
 initialize
-"
-	SessionTemps current removeKey: #'Python_Time' ifAbsent: [].
-"
+
 	super initialize.
 	globals 
 		at: #'__class__'	put: module;

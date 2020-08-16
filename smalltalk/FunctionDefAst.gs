@@ -29,6 +29,12 @@ decoratorList
 category: 'other'
 method: FunctionDefAst
 evaluate: aScope
+	"Executing the 'def' command defines the function, but does not execute it.
+	We do, however, need to provide a scope based on the definition context,
+	not the call context, so that we get the proper outer scope (nonlocals and
+	globals). That is, the scope is based on the definition, not the call. When the
+	function is called, the (inner) scope is copied so that a new namespace is
+	created (changes made during one call are not visible to another call)."
 
 	aScope 
 		set: name 

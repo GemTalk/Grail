@@ -439,7 +439,7 @@ testTry
 		assert: (x.handlers size == 1);
 		assert: ((exceptHandler := x.handlers at: 1) isKindOf: ExceptHandlerAst);
 		assert: (exceptHandler.type isNone);
-		assert: (exceptHandler.name isKindOf: NoneAst);
+		assert: (exceptHandler.name == None);
 		assert: (exceptHandler.body.body size == 1);
 		assert: ((raise := exceptHandler.body.body at: 1) isKindOf: RaiseAst);
 		assert: ((insideCall := raise.exc) isKindOf: CallAst);

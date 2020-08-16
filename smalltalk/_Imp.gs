@@ -108,9 +108,7 @@ set compile_env: 0
 category: 'initialization'
 method: _imp
 initialize
-"
-	SessionTemps current removeKey: #'Python__Imp' ifAbsent: [].
-"
+
 	super initialize.
 	globals 
 		at: #'__class__'						put: module;

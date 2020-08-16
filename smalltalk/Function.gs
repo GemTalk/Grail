@@ -56,6 +56,7 @@ printOn: aStream
 category: 'other'
 method: function
 value: arguments value: keywords value: aScope
+	"The actual execution is done by interpreting the AST nodes."
 
 	^astNode
 		value: arguments
