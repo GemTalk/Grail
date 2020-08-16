@@ -50,6 +50,10 @@ classAst
 category: 'other'
 method: Instance
 get: aSymbol
+	"This should use __getattribute__() to lookup aSymbol.
+	Note, however, that we don't have to use __getattribute__() to lookup __getattribute__!
+	See https://docs.python.org/3/reference/datamodel.html#special-method-lookup.
+	"
 
 	^__dict__ 
 		get: aSymbol

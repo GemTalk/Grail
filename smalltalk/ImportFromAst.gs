@@ -11,7 +11,7 @@ category: 'other'
 method: ImportFromAst
 evaluate: aScope
 
-	(module isKindOf: NoneAst) ifTrue: [		"from ."
+	(module == None) ifTrue: [		"from ."
 		names do: [:each | each import: aScope].
 	] ifFalse: [
 		self halt.

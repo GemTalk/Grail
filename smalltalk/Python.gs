@@ -4888,7 +4888,10 @@ object subclass: 'function'
 expectvalue /Class
 doit
 function comment: 
-'Instances of function are created by executing a FunctionDefAst.'
+'Instances of function are created by executing a FunctionDefAst.
+
+https://docs.python.org/3/reference/compound_stmts.html#function-definitions
+https://docs.python.org/3/reference/expressions.html#calls'
 %
 expectvalue /Class
 doit
@@ -5159,7 +5162,10 @@ module subclass: 'builtins'
 expectvalue /Class
 doit
 builtins comment: 
-'https://docs.python.org/3/library/builtins.html'
+'https://docs.python.org/3/library/builtins.html
+
+Note that builtin functions generally bypass the __getattribute__() method.
+https://docs.python.org/3/reference/datamodel.html#special-method-lookup'
 %
 expectvalue /Class
 doit

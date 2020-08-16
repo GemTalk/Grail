@@ -1822,9 +1822,7 @@ _sys
 category: 'other'
 method: builtins
 initialize
-"
-	SessionTemps current removeKey: #'Python_Builtins' ifAbsent: [].
-"
+
 	| modules |
 	super initialize.
 	globals 
