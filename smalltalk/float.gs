@@ -7,6 +7,19 @@ float class removeAllMethods.
 ! ------------------- Class methods for float
 ! ------------------- Instance methods for float
 set compile_env: 0
+category: 'other'
+method: float
+_coerce: aNumber
+
+	^ float with: aNumber
+%
+category: 'other'
+method: float
+_generality
+
+	^ 100
+%
+set compile_env: 0
 category: 'Python'
 method: float
 __abs__

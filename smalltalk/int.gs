@@ -9,6 +9,18 @@ int class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: int
+_coerce: aNumber
+
+	^ int with: aNumber
+%
+category: 'other'
+method: int
+_generality
+
+	^ 50
+%
+category: 'other'
+method: int
 = anObject
 "clunky implementation to avoid re-defining Array >> includes:"
 	| res temp |

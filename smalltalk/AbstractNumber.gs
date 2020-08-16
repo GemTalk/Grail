@@ -16,6 +16,43 @@ with: aNumber
 %
 ! ------------------- Instance methods for AbstractNumber
 set compile_env: 0
+category: 'Arithmetic'
+method: AbstractNumber
+- aNumber
+
+	(self class == aNumber class) ifTrue: [ ^ self __sub__ value: self value: aNumber ].
+	^ self _retry: #- coercing: aNumber
+%
+category: 'Arithmetic'
+method: AbstractNumber
+* aNumber
+
+	(self class == aNumber class) ifTrue: [ ^ self __mul__ value: self value: aNumber ].
+	^ self _retry: #* coercing: aNumber
+%
+category: 'Arithmetic'
+method: AbstractNumber
+/ aNumber
+
+	(self class == aNumber class) ifTrue: [ ^ self __truediv__ value: self value: aNumber ].
+	^ self _retry: #/ coercing: aNumber
+%
+category: 'Arithmetic'
+method: AbstractNumber
++ aNumber
+
+	(self class == aNumber class) ifTrue: [ ^ self __add__ value: self value: aNumber ].
+	^ self _retry: #+ coercing: aNumber
+%
+category: 'Arithmetic'
+method: AbstractNumber
+= anObject
+
+	| res temp |
+	res := ((temp := self __eq__ value: self value: anObject) == True).
+	^ res
+%
+set compile_env: 0
 category: 'overrides'
 method: AbstractNumber
 printOn: aStream
@@ -77,4 +114,29 @@ method: AbstractNumber
 __sub__
 
 	^ [ :lhs :rhs | self class with: (lhs.number - rhs.number) ]
+%
+category: 'Python'
+method: AbstractNumber
+_retry: aSelector coercing: aNumber
+
+"A difference in representation between the receiver and aNumber has prevented
+ aSelector from being executed.  Coerce either the receiver or aNumber to the
+ higher of their generalities and attempt to execute the method represented by
+ aSelector again. 
+
+ This is the basis of the type coercion logic for all Numbers."
+| gen argGen |
+" numeric primitives #=, #~= check for   (anArg isKindOf: Number)
+  and if that result is  false ,   the compare result is returned
+  directly by those primitives
+"
+gen := self _generality .
+argGen := aNumber _generality .
+(gen < argGen ) ifTrue: [
+  ^ (aNumber _coerce: self) perform: aSelector with: aNumber
+].
+(gen > argGen ) ifTrue: [
+  ^self perform: aSelector with: (self _coerce: aNumber)
+].
+self _uncontinuableError.  "coercion failed"
 %

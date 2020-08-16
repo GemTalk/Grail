@@ -149,6 +149,20 @@ test_classmethod
 %
 category: 'other'
 method: BuiltinsTestCase
+test_complex
+
+	| x |
+	x := (self statementsAt: 40) evaluate: aScope.		
+	self assert: x = (complex real: 0 imag: 0).
+	x := (self statementsAt: 41) evaluate: aScope.		
+	self assert: x = (complex real: 1 imag: 0).
+	x := (self statementsAt: 42) evaluate: aScope.		
+	self assert: x = (complex real: 2 imag: 3).
+	x := (self statementsAt: 43) evaluate: aScope.		
+	self assert: x = (complex real: -7 imag: 5).
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"

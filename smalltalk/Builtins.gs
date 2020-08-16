@@ -483,7 +483,16 @@ The complex type is described in Numeric Types — int, float, complex.
 Changed in version 3.6: Grouping digits with underscores as in code literals is allowed.
 "
 
-^complex real: arguments first imag: arguments second.
+	| real imag |
+	real := arguments first.
+	imag := int with: 0.
+	(real isKindOf: str) ifTrue: [ ]. "deal with string"
+	(real isKindOf: AbstractNumber) ifTrue: [
+		[ imag := (complex with: arguments second) * (complex real: 0 imag: 1) ]
+			on: Error
+			do: [ ].
+		^ complex with: (real + imag)
+	].
 %
 category: 'functions'
 method: builtins
@@ -1865,6 +1874,7 @@ initialize
 		at: #'callable'			put: [:arguments :keywords :scope | self callable: arguments first];
 		at: #'chr'				put: [:arguments :keywords :scope | self chr: arguments first];
 		at: #'classmethod'	put: [:arguments :keywords :scope | self classmethod: arguments first scope: scope];
+		at: #'complex'			put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [self complex: arguments] ifFalse: [complex real: 0 imag: 0 ]];
 		at: #'exec'				put: [:arguments :keywords :scope | self exec: arguments];
 		at: #'getattr'			put: [:arguments :keywords :scope | self getattr: arguments first _: arguments second];
 		at: #'hasattr'			put: [:arguments :keywords :scope | self hasattr: arguments first _: arguments second];

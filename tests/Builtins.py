@@ -75,3 +75,10 @@ except TypeError:
     print("TypeError", end=' ')
 
 D.g() # 39
+
+# TODO: compile
+
+complex() # 40
+complex(1) # 41
+complex(2, 3) # 42
+complex(5j, 7j) # 43
