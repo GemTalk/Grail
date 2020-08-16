@@ -10,6 +10,7 @@ set compile_env: 0
 category: 'other'
 method: ArgumentsAst
 arguments: arguments keywords: keywords scope: aScope
+	"need to handle posonlyargs!"
 
 	1 to: args size do: [:i | 
 		(args at: i ifAbsent: [nil]) ifNotNil: [:param |
