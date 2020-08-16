@@ -49,6 +49,14 @@ classAst
 %
 category: 'other'
 method: Instance
+del: aSymbol
+
+	^ __dict__ 
+		removeKey: aSymbol
+		ifAbsent: [ AttributeError signal: '''', __class__ name asString, ''' object has no attribute ''', aSymbol asString, '''' ]
+%
+category: 'other'
+method: Instance
 get: aSymbol
 
 	^ __dict__ 

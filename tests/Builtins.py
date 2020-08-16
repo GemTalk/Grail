@@ -82,3 +82,15 @@ complex() # 40
 complex(1) # 41
 complex(2, 3) # 42
 complex(5j, 7j) # 43
+
+class E: # 44
+    def __init__(self):
+        self.n = 44
+
+e = E() # 45
+delattr(e, 'n') # 46
+
+try: # 47
+    e.n
+except AttributeError:
+    print("AttributeError", end=' ')

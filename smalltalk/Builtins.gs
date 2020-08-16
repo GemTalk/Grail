@@ -506,7 +506,11 @@ The string must be the name of one of the object’s attributes. The function
 deletes the named attribute, provided the object allows it. 
 For example, delattr(x, 'foobar') is equivalent to del x.foobar.
 "
-self halt.
+
+	| object name |
+	object := arguments first.
+	name := arguments second.
+	object del: name asSymbol.
 %
 category: 'functions'
 method: builtins
@@ -1876,6 +1880,7 @@ initialize
 		at: #'classmethod'	put: [:arguments :keywords :scope | self classmethod: arguments first scope: scope];
 		at: #'complex'			put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [self complex: arguments] ifFalse: [complex real: 0 imag: 0 ]];
 		at: #'exec'				put: [:arguments :keywords :scope | self exec: arguments];
+		at: #'delattr'			put: [:arguments :keywords :scope | self delattr: arguments];
 		at: #'getattr'			put: [:arguments :keywords :scope | self getattr: arguments first _: arguments second];
 		at: #'hasattr'			put: [:arguments :keywords :scope | self hasattr: arguments first _: arguments second];
 		at: #'id'					put: [:arguments :keywords :scope | self id: arguments first];

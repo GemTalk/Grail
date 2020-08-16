@@ -104,6 +104,14 @@ printOn: aStream
 %
 category: 'other'
 method: Scope
+removeKey: aSymbol ifAbsent: aBlock
+
+	^variables 
+		removeKey: aSymbol
+		ifAbsent: aBlock
+%
+category: 'other'
+method: Scope
 set: aSymbol to: aValue
 
 	variables at: aSymbol put: aValue.

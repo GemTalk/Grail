@@ -163,6 +163,18 @@ test_complex
 %
 category: 'other'
 method: BuiltinsTestCase
+test_delattr
+
+	| x |
+	x := (self statementsAt: 44) evaluate: aScope.		
+	x := (self statementsAt: 45) evaluate: aScope.		
+	x := (self statementsAt: 46) evaluate: aScope.
+	x := (self statementsAt: 47) evaluate: aScope.
+	x := stdout contents.
+	self assert: x = 'AttributeError '.
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"
