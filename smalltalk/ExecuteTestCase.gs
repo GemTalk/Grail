@@ -27,3 +27,10 @@ ValueError
 1 2 3 4 
 '.
 %
+category: 'other'
+method: ExecuteTestCase
+tstString
+
+	module := self resources first current moduleAtPath: self pathToTests , 'str.py'.
+	module evaluate.
+%
