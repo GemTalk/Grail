@@ -16,7 +16,7 @@ evaluate: aScope
 	[ [ [
 	function
 		callWithArguments: (arguments collect: [:each | each evaluate: aScope]) 
-		keywords: (keywords collect: [:each | each evaluate: aScope])
+		keywords: keywords
 		scope: aScope
 	] on: AlmostOutOfStack do: [ :ex |
 	        ex resignalAs: RecursionError new
@@ -40,8 +40,8 @@ initialize
 		keywords := KeywordsAst from: keywords.
 	] ifFalse: [
 		| replacement |
-		replacement := SymbolDictionary new.
-		keywords do: [:each | replacement at: each name put: each value].
+		replacement := dict new.
+		keywords do: [:each | replacement set: each name to: each value].
 		keywords := replacement.
 	].
 	self readPosition.

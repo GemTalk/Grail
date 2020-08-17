@@ -527,18 +527,23 @@ Create a new dictionary. The dict object is the dictionary class.
 For other containers see the built-in list, set, and tuple classes, as well as the collections module.
 "
 
+	| result |
+	result := dict new.
 	arguments notEmpty ifTrue: [
 		(arguments first isKindOf: dict) ifTrue: [
 			arguments first keysAndValuesDo: [:eachKey :eachValue | 
-				keywords at: eachKey evaluate: aScope put: eachValue evaluate: aScope.
+				result set: (eachKey evaluate: aScope) to: (eachValue evaluate: aScope).
 			]
 		] ifFalse: [
 			arguments first do: [ :each | 
-				keywords at: (each at: 1) put: (each at: 2).
+				result set: (each at: 1) to: (each at: 2).
 			]
 		].
 	].
-	^keywords
+	keywords keysAndValuesDo: [ :key :value |
+		result set: (str withAll: key) to: value
+	].
+	^ result
 %
 category: 'functions'
 method: builtins
@@ -1879,6 +1884,7 @@ initialize
 		at: #'complex'			put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [self complex: arguments] ifFalse: [complex real: 0 imag: 0 ]];
 		at: #'exec'				put: [:arguments :keywords :scope | self exec: arguments];
 		at: #'delattr'			put: [:arguments :keywords :scope | self delattr: arguments];
+		at: #'dict'				put: [:arguments :keywords :scope | self dict: arguments keywords: keywords scope: scope];
 		at: #'getattr'			put: [:arguments :keywords :scope | self getattr: arguments first _: arguments second];
 		at: #'hasattr'			put: [:arguments :keywords :scope | self hasattr: arguments first _: arguments second];
 		at: #'id'					put: [:arguments :keywords :scope | self id: arguments first];

@@ -24,7 +24,8 @@ category: 'other'
 classmethod: AbstractContainer
 withAll: aCollection
 
-	^self basicNew
+	(aCollection class == self) ifTrue: [ ^ aCollection ].
+	^ self basicNew
 		___initialize: aCollection;
 		yourself
 %
@@ -41,7 +42,9 @@ category: 'overrides'
 method: AbstractContainer
 = anObject
 
-	^((anObject isKindOf: AbstractContainer) and: [container = anObject.container]) or: [container = anObject]
+	| res |
+	res := ((anObject isKindOf: AbstractContainer) and: [container = anObject.container]) or: [container = anObject].
+	^ res
 %
 category: 'overrides'
 method: AbstractContainer

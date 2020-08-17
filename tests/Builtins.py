@@ -94,3 +94,7 @@ try: # 47
     e.n
 except AttributeError:
     print("AttributeError", end=' ')
+
+dict(one=1, two=2, three=3) # 48
+{'one': 1, 'two': 2, 'three': 3} # 49
+dict({'three': 3, 'one': 1, 'two': 2}) # 50

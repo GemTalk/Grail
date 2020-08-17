@@ -16,6 +16,13 @@ new: aLocalScope
 %
 ! ------------------- Instance methods for object
 set compile_env: 0
+category: 'other'
+method: object
+evaluate: aScope
+
+	^ self
+%
+set compile_env: 0
 category: 'Python'
 method: object
 __bool__

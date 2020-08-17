@@ -175,6 +175,22 @@ test_delattr
 %
 category: 'other'
 method: BuiltinsTestCase
+test_dict
+
+	| x s |
+	s := dict new.
+	s set: (str withAll: 'one') to: (int with: 1).
+	s set: (str withAll: 'two') to: (int with: 2).
+	s set: (str withAll: 'three') to: (int with: 3).
+	x := (self statementsAt: 48) evaluate: aScope.	
+	self assert: x = s.
+	x := (self statementsAt: 49) evaluate: aScope.		
+	self assert: x = s.
+	x := (self statementsAt: 50) evaluate: aScope.		
+	self assert: x = s.
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"
