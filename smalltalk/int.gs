@@ -69,7 +69,7 @@ category: 'Python'
 method: int
 __float__
 
-	self halt.
+	^ [ :anObject | float with: anObject ]
 %
 category: 'Python'
 method: int

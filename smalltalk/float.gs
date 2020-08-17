@@ -55,7 +55,7 @@ category: 'Python'
 method: float
 __float__
 
-	self halt.
+	^ [ :anObject | float with: anObject ]
 %
 category: 'Python'
 method: float

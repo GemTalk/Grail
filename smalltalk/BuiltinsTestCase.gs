@@ -238,6 +238,16 @@ test_filter
 %
 category: 'other'
 method: BuiltinsTestCase
+test_float
+
+	| x |
+	x := (self statementsAt: 60) evaluate: aScope.	
+	self assert: x = (float with: 0).
+	x := (self statementsAt: 61) evaluate: aScope.	
+	self assert: x = (float with: 3.14).
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"

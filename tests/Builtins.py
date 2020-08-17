@@ -114,5 +114,8 @@ list(enumerate(seasons, start=1)) # 57
 
 # TODO: exec
 
-list(filter(lambda x:x%2, [1, 2, 3]))
-list(filter(lambda x:x>0, [-10, 0, 10]))
+list(filter(lambda x:x%2, [1, 2, 3])) # 58
+list(filter(lambda x:x>0, [-10, 0, 10])) # 59
+
+float() # 60
+float(3.14) # 61

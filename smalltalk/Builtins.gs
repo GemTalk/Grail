@@ -779,7 +779,7 @@ returns elements of iterable for which function returns false.
 %
 category: 'functions'
 method: builtins
-float: arguments
+float: anObject
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -830,7 +830,9 @@ Changed in version 3.6: Grouping digits with underscores as in code literals is 
 
 Changed in version 3.7: x is now a positional-only parameter.
 "
-self halt.
+
+	(anObject isKindOf: str) ifTrue: [ ]. "TODO: string argument"
+	^ anObject __float__ value: anObject
 %
 category: 'functions'
 method: builtins
@@ -1909,6 +1911,7 @@ initialize
 		at: #'divmod'			put: [:arguments :keywords :scope | self divmod: arguments];
 		at: #'enumerate'		put: [:arguments :keywords :scope | self enumerate: arguments first keywords: keywords];
 		at: #'filter'				put: [:arguments :keywords :scope | self filter: arguments scope: scope];
+		at: #'float'				put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [ self float: arguments first ] ifFalse: [float with: 0]];
 		at: #'getattr'			put: [:arguments :keywords :scope | self getattr: arguments first _: arguments second];
 		at: #'hasattr'			put: [:arguments :keywords :scope | self hasattr: arguments first _: arguments second];
 		at: #'id'					put: [:arguments :keywords :scope | self id: arguments first];
