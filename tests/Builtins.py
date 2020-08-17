@@ -98,3 +98,10 @@ except AttributeError:
 dict(one=1, two=2, three=3) # 48
 {'one': 1, 'two': 2, 'three': 3} # 49
 dict({'three': 3, 'one': 1, 'two': 2}) # 50
+
+# TODO: dir
+
+divmod(5, 5) # 51
+divmod(5, 3) # 52
+divmod(1.5, 1) # 53
+divmod(-1.5, -1) # 54

@@ -8,6 +8,12 @@ complex class removeAllMethods.
 set compile_env: 0
 category: 'other'
 classmethod: complex
+_generality
+
+	^ 150
+%
+category: 'other'
+classmethod: complex
 real: newValue imag: newImag
 
 	^self basicNew 

@@ -10,8 +10,12 @@ category: 'other'
 classmethod: AbstractNumber
 with: aNumber
 
+	| num |
+	num := aNumber.
+	(aNumber class == self) ifTrue: [ ^ aNumber ].
+	((aNumber isKindOf: AbstractNumber) and: [(aNumber _generality < self _generality)]) ifTrue: [ num := aNumber ___number ].
 	^self basicNew
-		___initialize: aNumber;
+		___initialize: num;
 		yourself
 %
 ! ------------------- Instance methods for AbstractNumber
@@ -51,6 +55,13 @@ method: AbstractNumber
 	| res temp |
 	res := ((temp := self __eq__ value: self value: anObject) == True).
 	^ res
+%
+set compile_env: 0
+category: 'other'
+method: AbstractNumber
+floor
+
+	^ number floor
 %
 set compile_env: 0
 category: 'overrides'

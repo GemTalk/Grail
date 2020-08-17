@@ -191,6 +191,20 @@ test_dict
 %
 category: 'other'
 method: BuiltinsTestCase
+test_divmod
+
+	| x |
+	x := (self statementsAt: 51) evaluate: aScope.	
+	self assert: (x = (Array with: (float with: 1) with: (float with: 0))).
+	x := (self statementsAt: 52) evaluate: aScope.	
+	self assert: (x = (Array with: (float with: 1) with: (float with: 2))).
+	x := (self statementsAt: 53) evaluate: aScope.	
+	self assert: (x = (Array with: (float with: 1) with: (float with: 0.5))).
+	x := (self statementsAt: 54) evaluate: aScope.	
+	self assert: (x = (Array with: (float with: 1) with: (float with: -0.5))).
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"

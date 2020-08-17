@@ -5,6 +5,13 @@ int removeAllMethods.
 int class removeAllMethods.
 %
 ! ------------------- Class methods for int
+set compile_env: 0
+category: 'other'
+classmethod: int
+_generality
+
+	^ 50
+%
 ! ------------------- Instance methods for int
 set compile_env: 0
 category: 'other'

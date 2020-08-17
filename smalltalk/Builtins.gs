@@ -547,7 +547,7 @@ For other containers see the built-in list, set, and tuple classes, as well as t
 %
 category: 'functions'
 method: builtins
-dir: arguments
+dir: arguments scope: aScope
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -619,9 +619,11 @@ non-zero it has the same sign as b, and 0 <= abs(a % b) < abs(b).
 "May need some improvements for floating point or negative numbers"
 | a b q r |
 a := arguments first.
+((a isKindOf: AbstractNumber) and: [(a isKindOf: complex) not]) ifFalse: [ TypeError signal: 'can''t take floor or mod of complex number.' ].
 b := arguments second.
-q := (a / b) floor.
-r := a - (b * q).
+((b isKindOf: AbstractNumber) and: [(b isKindOf: complex) not]) ifFalse: [ TypeError signal: 'can''t take floor or mod of complex number.' ].
+q := float with: (a / b) floor.
+r := float with: a - (b * q).
 ^(Array with: q with: r) immediateInvariant
 %
 category: 'functions'
@@ -1885,6 +1887,8 @@ initialize
 		at: #'exec'				put: [:arguments :keywords :scope | self exec: arguments];
 		at: #'delattr'			put: [:arguments :keywords :scope | self delattr: arguments];
 		at: #'dict'				put: [:arguments :keywords :scope | self dict: arguments keywords: keywords scope: scope];
+		at: #'dir'					put: [:arguments :keywords :scope | self dir: arguments scope: scope];
+		at: #'divmod'			put: [:arguments :keywords :scope | self divmod: arguments];
 		at: #'getattr'			put: [:arguments :keywords :scope | self getattr: arguments first _: arguments second];
 		at: #'hasattr'			put: [:arguments :keywords :scope | self hasattr: arguments first _: arguments second];
 		at: #'id'					put: [:arguments :keywords :scope | self id: arguments first];
