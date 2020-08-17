@@ -105,3 +105,7 @@ divmod(5, 5) # 51
 divmod(5, 3) # 52
 divmod(1.5, 1) # 53
 divmod(-1.5, -1) # 54
+
+seasons = ['Spring', 'Summer', 'Fall', 'Winter'] # 55
+list(enumerate(seasons)) # 56
+list(enumerate(seasons, start=1)) # 57

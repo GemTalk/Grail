@@ -205,6 +205,29 @@ test_divmod
 %
 category: 'other'
 method: BuiltinsTestCase
+test_enumerate
+
+	| x l |
+	l := list withAll: { 
+		tuple withAll: {int with: 0 . str withAll: 'Spring' } .
+		tuple withAll: {int with: 1 . str withAll: 'Summer' } .
+		tuple withAll: {int with: 2 . str withAll: 'Fall' } .
+		tuple withAll: {int with: 3 . str withAll: 'Winter' } .
+	}.
+	x := (self statementsAt: 55) evaluate: aScope.	
+	x := (self statementsAt: 56) evaluate: aScope.	
+	self assert: x = l.
+	l := list withAll: { 
+		tuple withAll: {int with: 1 . str withAll: 'Spring' } .
+		tuple withAll: {int with: 2 . str withAll: 'Summer' } .
+		tuple withAll: {int with: 3 . str withAll: 'Fall' } .
+		tuple withAll: {int with: 4 . str withAll: 'Winter' } .
+	}.
+	x := (self statementsAt: 57) evaluate: aScope.	
+	self assert: x = l.
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"

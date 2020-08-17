@@ -38,12 +38,28 @@ method: dict
 %
 category: 'other'
 method: dict
+at: aKey
+
+	| index |
+	index := self indexOfKey: (str withAll: aKey).
+	^ (container at: index + 1) value
+%
+category: 'other'
+method: dict
 at: aKey ifAbsent: aBlock
 
 	| index |
 	index := self indexOfKey: (str withAll: aKey).
 	index = 0 ifTrue: [ ^ aBlock value ].
-	^ container at: index + 1
+	^ (container at: index + 1) value
+%
+category: 'other'
+method: dict
+has: aKey
+
+	| index |
+	index := self indexOfKey: (str withAll: aKey).
+	index = 0 ifTrue: [ ^ False ] ifFalse: [ ^ True ].
 %
 category: 'other'
 method: dict
