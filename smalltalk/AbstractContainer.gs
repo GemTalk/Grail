@@ -106,6 +106,12 @@ ___size
 
 	^container size
 %
+category: 'private'
+method: AbstractContainer
+do: aBlock
+
+	container do: aBlock
+%
 set compile_env: 0
 category: 'Python'
 method: AbstractContainer

@@ -38,6 +38,15 @@ method: dict
 %
 category: 'other'
 method: dict
+at: aKey ifAbsent: aBlock
+
+	| index |
+	index := self indexOfKey: (str withAll: aKey).
+	index = 0 ifTrue: [ ^ aBlock value ].
+	^ container at: index + 1
+%
+category: 'other'
+method: dict
 indexOfKey: aKey
 
 	1 to: container size by: 2 do: [ :i | (container at: i) = aKey ifTrue: [ ^ i ] ].
