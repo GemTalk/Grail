@@ -228,6 +228,16 @@ test_enumerate
 %
 category: 'other'
 method: BuiltinsTestCase
+test_filter
+
+	| x |
+	x := (self statementsAt: 58) evaluate: aScope.	
+	self assert: x = (list withAll: {(int with: 1) . (int with: 3) }).
+	x := (self statementsAt: 59) evaluate: aScope.	
+	self assert: x = (list withAll: { int with: 10 }).
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"

@@ -109,3 +109,10 @@ divmod(-1.5, -1) # 54
 seasons = ['Spring', 'Summer', 'Fall', 'Winter'] # 55
 list(enumerate(seasons)) # 56
 list(enumerate(seasons, start=1)) # 57
+
+# TODO: eval
+
+# TODO: exec
+
+list(filter(lambda x:x%2, [1, 2, 3]))
+list(filter(lambda x:x>0, [-10, 0, 10]))

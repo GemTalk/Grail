@@ -747,7 +747,7 @@ self halt.
 %
 category: 'functions'
 method: builtins
-filter: arguments
+filter: arguments scope: aScope
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -766,7 +766,16 @@ if function is not None and (item for item in iterable if item) if function is N
 See itertools.filterfalse() for the complementary function that 
 returns elements of iterable for which function returns false.
 "
-self halt.
+
+	| function iterable res |
+	function := arguments first.
+	iterable := arguments second.
+	res := Array new.
+	iterable do: [ :each | 
+		((self bool: (function value: (Array with: each) value: (dict withAll: Array new) value: aScope)) == True)
+			ifTrue: [ res add: each ] 
+	].
+	^ list withAll: res.
 %
 category: 'functions'
 method: builtins
@@ -1899,6 +1908,7 @@ initialize
 		at: #'dir'					put: [:arguments :keywords :scope | self dir: arguments scope: scope];
 		at: #'divmod'			put: [:arguments :keywords :scope | self divmod: arguments];
 		at: #'enumerate'		put: [:arguments :keywords :scope | self enumerate: arguments first keywords: keywords];
+		at: #'filter'				put: [:arguments :keywords :scope | self filter: arguments scope: scope];
 		at: #'getattr'			put: [:arguments :keywords :scope | self getattr: arguments first _: arguments second];
 		at: #'hasattr'			put: [:arguments :keywords :scope | self hasattr: arguments first _: arguments second];
 		at: #'id'					put: [:arguments :keywords :scope | self id: arguments first];

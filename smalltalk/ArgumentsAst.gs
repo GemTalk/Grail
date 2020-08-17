@@ -18,9 +18,12 @@ arguments: arguments keywords: keywords scope: aScope
 		(args at: i ifAbsent: [nil]) ifNotNil: [:param |
 			[ param 
 				setTo: (arguments at: i) 
-				scope: aScope. ]
-				on: OffsetError
-				do: [ missingArguments add: param name asString ].
+				scope: aScope. 
+			]	on: OffsetError
+				do: [ ((keywords has: param name) == True) 
+					ifTrue: [ param setTo: (keywords at: param name) scope: aScope ]
+					ifFalse: [ missingArguments add: param name asString ]
+			].
 		].
 	].
 	(missingArguments size > 0) ifTrue: [ TypeError signal: (parent name asString, '() missing ', missingArguments size asString, ' required positional argument: ', ' ' join: missingArguments) ].
