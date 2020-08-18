@@ -105,7 +105,7 @@ method: AbstractContainer
 ___initialize: aCollection
 
 	container := self class containerClass withAll: aCollection.
-	dict := SymbolDictionary new.
+	attributes := SymbolDictionary new.
 %
 category: 'private'
 method: AbstractContainer

@@ -93,7 +93,7 @@ testCoroutine
 		assert: ((arguments := x.args) isKindOf: ArgumentsAst);
 		assert: (arguments.args size == 1);
 		assert: ((arg := arguments.args at: 1) isKindOf: ArgAst);
-		assert: (arg.arg == #'arg');
+		assert: (arg.arg = 'arg');
 		assert: (arg.annotation isNone);
 		assert: (arguments.vararg isNone);
 		assert: (arguments.kwonlyargs size == 0);
@@ -118,7 +118,7 @@ testCoroutineFor
 		assert: ((arguments := x.args) isKindOf: ArgumentsAst);
 		assert: (arguments.args size == 1);
 		assert: ((arg := arguments.args at: 1) isKindOf: ArgAst);
-		assert: (arg.arg == #'arg');
+		assert: (arg.arg = 'arg');
 		assert: (arg.annotation isNone);
 		assert: (arguments.vararg isNone);
 		assert: (arguments.kwonlyargs size == 0);
@@ -157,7 +157,7 @@ testCoroutineWith
 		assert: ((arguments := x.args) isKindOf: ArgumentsAst);
 		assert: (arguments.args size == 1);
 		assert: ((arg := arguments.args at: 1) isKindOf: ArgAst);
-		assert: (arg.arg == #'arg');
+		assert: (arg.arg = 'arg');
 		assert: (arg.annotation isNone);
 		assert: (arguments.vararg isNone);
 		assert: (arguments.kwonlyargs size == 0);
@@ -257,7 +257,7 @@ testFunctionWithOneArgument
 		assert: ((arguments := x.args) isKindOf: ArgumentsAst);
 		assert: (arguments.args size == 1);
 		assert: ((arg := arguments.args at: 1) isKindOf: ArgAst);
-		assert: (arg.arg == #'arg');
+		assert: (arg.arg = 'arg');
 		assert: (arg.annotation isNone);
 		assert: (arguments.vararg isNone); 
 		assert: (arguments.kwonlyargs size == 0); 
@@ -282,7 +282,7 @@ testFunctionWithOneDecorator
 		assert: ((arguments := x.args) isKindOf: ArgumentsAst);
 		assert: (arguments.args size == 1);
 		assert: ((arg := arguments.args at: 1) isKindOf: ArgAst);
-		assert: (arg.arg == #'arg');
+		assert: (arg.arg = 'arg');
 		assert: (arg.annotation isNone);
 		assert: (arguments.vararg isNone); 
 		assert: (arguments.kwonlyargs size == 0); 
@@ -308,7 +308,7 @@ testFunctionWithOneDefaultValueParameter
 		assert: ((arguments := x.args) isKindOf: ArgumentsAst);
 		assert: (arguments.args size == 1);
 		assert: ((arg := arguments.args at: 1) isKindOf: ArgAst);
-		assert: (arg.arg == #'arg');
+		assert: (arg.arg = 'arg');
 		assert: (arg.annotation isNone);
 		assert: (arguments.vararg isNone); 
 		assert: (arguments.kwonlyargs size == 0); 
@@ -372,7 +372,7 @@ testNestedFunction
 		assert: ((arguments := x.args) isKindOf: ArgumentsAst);
 		assert: (arguments.args size == 1);
 		assert: ((arg := arguments.args at: 1) isKindOf: ArgAst);
-		assert: (arg.arg == #'arg');
+		assert: (arg.arg = 'arg');
 		assert: (arg.annotation isNone);
 		assert: (arguments.vararg isNone); 
 		assert: (arguments.kwonlyargs size == 0); 
@@ -385,7 +385,7 @@ testNestedFunction
 		assert: ((insideArguments := functionDef.args) isKindOf: ArgumentsAst); 
 		assert: (insideArguments.args size == 1);
 		assert: ((insideArg := insideArguments.args at: 1) isKindOf: ArgAst);
-		assert: (insideArg.arg == #'insideArg');
+		assert: (insideArg.arg = 'insideArg');
 		assert: (insideArg.annotation isNone);
 		assert: (insideArguments.vararg isNone); 
 		assert: (insideArguments.kwonlyargs size == 0); 

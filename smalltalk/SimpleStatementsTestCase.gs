@@ -330,7 +330,7 @@ testPassFunction
 		assert: (x.name == #'f');
 		assert: (x.args isKindOf: ArgumentsAst);
 		assert: ((y := x.args.args at: 1) isKindOf: ArgAst);
-		assert: (y.arg == #'arg');
+		assert: (y.arg = 'arg');
 		assert: (y.annotation isNone);
 		assert: (x.args.vararg isNone);
 		assert: (x.args.kwonlyargs size == 0);

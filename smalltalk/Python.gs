@@ -4288,7 +4288,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 object subclass: 'AbstractContainer'
-  instVarNames: #( container dict)
+  instVarNames: #( container attributes)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()

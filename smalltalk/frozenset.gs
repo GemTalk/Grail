@@ -18,6 +18,6 @@ category: 'other'
 method: frozenset
 call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
 
-	(dict includesKey: aSymbol) ifFalse: [ AttributeError signal ].
+	(attributes includesKey: aSymbol) ifFalse: [ AttributeError signal ].
 	self halt.
 %
