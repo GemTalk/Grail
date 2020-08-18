@@ -119,3 +119,12 @@ list(filter(lambda x:x>0, [-10, 0, 10])) # 59
 
 float() # 60
 float(3.14) # 61
+
+# TODO: format
+
+fs = frozenset([1, 2, 3]) # 62
+
+try: # 63
+    fs.add(4)
+except AttributeError:
+    print("AttributeError", end=' ')

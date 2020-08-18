@@ -248,6 +248,16 @@ test_float
 %
 category: 'other'
 method: BuiltinsTestCase
+test_frozenset
+
+	| x |
+	x := (self statementsAt: 62) evaluate: aScope.	
+	x := (self statementsAt: 63) evaluate: aScope.
+	x := stdout contents.
+	self assert: x = 'AttributeError '.
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"

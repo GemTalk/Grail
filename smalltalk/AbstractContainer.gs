@@ -33,6 +33,12 @@ withAll: aCollection
 set compile_env: 0
 category: 'other'
 method: AbstractContainer
+add: anObject
+
+	self __add__ value: self value: anObject
+%
+category: 'other'
+method: AbstractContainer
 asArray
 
 	^ container collect: [ :each | (each isKindOf: AbstractNumber) ifTrue: [ each ___number ] ] "TODO: allow hetergeneous containers"
@@ -99,6 +105,7 @@ method: AbstractContainer
 ___initialize: aCollection
 
 	container := self class containerClass withAll: aCollection.
+	dict := SymbolDictionary new.
 %
 category: 'private'
 method: AbstractContainer

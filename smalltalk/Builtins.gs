@@ -99,13 +99,14 @@ __import__: aSymbol keywords: aSymbolDictionary scope: aScope
 
 	This implementation is quite incomplete (no extensible finders and loaders).
 "
-	| importPaths module modules name |
+	| importPaths module modules name notFoundObject |
 	"Check for already imported"
+	notFoundObject := Object new.
 	modules := _sys modules.
-	module := modules at: aSymbol ifAbsent: [_remoteNil].
+	module := modules at: aSymbol ifAbsent: [notFoundObject].
 	"https://docs.python.org/3/reference/import.html#the-module-cache"
 	module ifNil: [ModuleNotFoundError signal: 'Import of ' , aSymbol , ' failed!'].
-	module ~~ _remoteNil ifTrue: [^module].
+	module ~~ notFoundObject ifTrue: [^module].
 
 	"Not yet imported; search for it"
 	importPaths := Array new.
@@ -862,11 +863,18 @@ the value’s __format__() method. A TypeError exception
 Changed in version 3.4: object().__format__(format_spec)
  raises TypeError if format_spec is not an empty string.
 "
-self halt.
+	
+	| value format_spec |
+	value := arguments first.
+	[ format_spec := arguments second ]
+		on: OffsetError
+		do: [ format_spec := '' ].
+	self halt.
+	^ value __format__ value: value value: format_spec "TODO: implement str >> __format__"
 %
 category: 'functions'
 method: builtins
-frozenset: arguments
+frozenset: anIterable
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -879,7 +887,8 @@ set, frozenset for documentation about this class.
 For other containers see the built-in set, list, tuple,
 \ and dict classes, as well as the collections module.
 "
-self halt.
+	
+	^ frozenset withAll: anIterable
 %
 category: 'functions'
 method: builtins
@@ -1912,6 +1921,8 @@ initialize
 		at: #'enumerate'		put: [:arguments :keywords :scope | self enumerate: arguments first keywords: keywords];
 		at: #'filter'				put: [:arguments :keywords :scope | self filter: arguments scope: scope];
 		at: #'float'				put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [ self float: arguments first ] ifFalse: [float with: 0]];
+		at: #'format'			put: [:arguments :keywords :scope | self format: arguments];
+		at: #'frozenset'		put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [ self frozenset: arguments first ] ifFalse: [frozenset with: Set new]];
 		at: #'getattr'			put: [:arguments :keywords :scope | self getattr: arguments first _: arguments second];
 		at: #'hasattr'			put: [:arguments :keywords :scope | self hasattr: arguments first _: arguments second];
 		at: #'id'					put: [:arguments :keywords :scope | self id: arguments first];
