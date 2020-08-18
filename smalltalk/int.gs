@@ -34,6 +34,12 @@ method: int
 	res := ((temp := self __eq__ value: self value: anObject) == True).
 	^ res
 %
+category: 'other'
+method: int
+hash
+
+	^ number
+%
 set compile_env: 0
 category: 'Python'
 method: int
