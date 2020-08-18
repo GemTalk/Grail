@@ -44,7 +44,7 @@ consumeRules: anArray stream: aStream
 		| temp |
 		temp := each value: stream copy upToEnd.
 		temp ifNil: [ ^ nil ].
-		(temp == _remoteNil) ifTrue: [ stream atEnd ifTrue: [ ^ result ] ifFalse: [ ^ nil ] ].
+		(temp == _remoteNil) ifTrue: [ stream atEnd ifTrue: [ ^ result ] ifFalse: [ ^ nil ] ]. "using _remoteNil as an end of production marker"
 		temp := temp asString.
 		stream next: temp size.
 		result := result, temp.
@@ -150,7 +150,7 @@ parseFloatNumber: string
 
 	| stream temp | 
 	stream := ReadStream on: string.
-	temp := self consumeRules: { [ :aString | self parsePointFloat: aString ] . [ :aString | _remoteNil ] } stream: stream copy. "e_e i found a use for _remoteNil lol"
+	temp := self consumeRules: { [ :aString | self parsePointFloat: aString ] . [ :aString | _remoteNil ] } stream: stream copy. "using _remoteNil as an end of production marker"
 	temp ifNotNil: [ ^ temp ].
 	temp := self consumeRules: { [ :aString | self parseExponentFloat: aString ] . [ :aString | _remoteNil ] } stream: stream copy.
 	temp ifNotNil: [ ^ temp ].
