@@ -133,3 +133,22 @@ try: # 68
     fs.add(4)
 except AttributeError:
     print("AttributeError", end=' ')
+
+class F(): # 69
+    yin = "yang"
+    e = 2.71
+
+f = F() # 70
+getattr(f, "yin") # 71
+
+try: # 72
+    getattr(f, "yang")
+except AttributeError:
+    print("AttributeError", end=' ')
+
+globals()
+
+class C:
+    pass
+
+dir(C()) is dir(C) # WRONG??!?

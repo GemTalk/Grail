@@ -268,6 +268,19 @@ test_frozenset
 %
 category: 'other'
 method: BuiltinsTestCase
+test_getattr
+
+	| x |
+	x := (self statementsAt: 69) evaluate: aScope.	
+	x := (self statementsAt: 70) evaluate: aScope.
+	x := (self statementsAt: 71) evaluate: aScope.
+	self assert: x = 'yang'.
+	x := (self statementsAt: 72) evaluate: aScope.
+	x := stdout contents.
+	self assert: x = 'AttributeError '.
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"
