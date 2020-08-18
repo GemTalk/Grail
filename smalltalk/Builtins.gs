@@ -924,9 +924,9 @@ self halt.
 %
 category: 'functions'
 method: builtins
-globals: arguments
+globals: aScope
 
-	^self globals
+	^ aScope globals
 %
 category: 'functions'
 method: builtins
@@ -1924,6 +1924,7 @@ initialize
 		at: #'format'			put: [:arguments :keywords :scope | self format: arguments];
 		at: #'frozenset'		put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [ self frozenset: arguments first ] ifFalse: [frozenset with: Set new]];
 		at: #'getattr'			put: [:arguments :keywords :scope | self getattr: arguments first _: arguments second];
+		at: #'globals'			put: [:arguments :keywords :scope | self globals: scope];
 		at: #'hasattr'			put: [:arguments :keywords :scope | self hasattr: arguments first _: arguments second];
 		at: #'id'					put: [:arguments :keywords :scope | self id: arguments first];
 		at: #'int'				put: [:arguments :keywords :scope | self int: arguments first];

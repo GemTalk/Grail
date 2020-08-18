@@ -281,6 +281,15 @@ test_getattr
 %
 category: 'other'
 method: BuiltinsTestCase
+test_globals
+
+	| x |
+	x := (self statementsAt: 73) evaluate: aScope.	
+	self assert: (x isKindOf: GlobalScope).
+	"are we even ready to implement this?"
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"
