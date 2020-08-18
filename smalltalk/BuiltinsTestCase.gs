@@ -302,6 +302,15 @@ test_hasattr
 %
 category: 'other'
 method: BuiltinsTestCase
+test_hash
+
+	| x y |
+	x := (self statementsAt: 76) evaluate: aScope.	
+	y := (self statementsAt: 77) evaluate: aScope.	
+	self assert: x = y.
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"

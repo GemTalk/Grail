@@ -151,6 +151,9 @@ globals() # 73
 hasattr(f, "yin") # 74
 hasattr(f, "yang") # 75 
 
+hash(1) # 76
+hash(1.) # 77
+
 class C:
     pass
 

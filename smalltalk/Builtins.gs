@@ -951,7 +951,7 @@ and seeing whether it raises an AttributeError or not.)
 %
 category: 'functions'
 method: builtins
-hash: arguments
+hash: anObject
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -965,7 +965,7 @@ Note For objects with custom __hash__() methods, note that hash()
 truncates the return value based on the bit width of the host machine. 
 See __hash__() for details.
 "
-	^arguments first hash
+	^ anObject hash
 %
 category: 'functions'
 method: builtins
@@ -1926,6 +1926,7 @@ initialize
 		at: #'getattr'			put: [:arguments :keywords :scope | self getattr: arguments first _: arguments second];
 		at: #'globals'			put: [:arguments :keywords :scope | self globals: scope];
 		at: #'hasattr'			put: [:arguments :keywords :scope | self hasattr: arguments first _: arguments second];
+		at: #'hash'				put: [:arguments :keywords :scope | self hash: arguments first];
 		at: #'id'					put: [:arguments :keywords :scope | self id: arguments first];
 		at: #'int'				put: [:arguments :keywords :scope | self int: arguments first];
 		at: #'isinstance'		put: [:arguments :keywords :scope | self isinstance: arguments first _: arguments second];
