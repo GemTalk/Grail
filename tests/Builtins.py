@@ -146,7 +146,10 @@ try: # 72
 except AttributeError:
     print("AttributeError", end=' ')
 
-globals()
+globals() # 73
+
+hasattr(f, "yin") # 74
+hasattr(f, "yang") # 75 
 
 class C:
     pass
