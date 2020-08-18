@@ -245,14 +245,18 @@ test_float
 	self assert: x = (float with: 0).
 	x := (self statementsAt: 61) evaluate: aScope.	
 	self assert: x = (float with: 3.14).
+	x := (self statementsAt: 62) evaluate: aScope.	
+	self assert: x = (float with: 1.23).
+	x := (self statementsAt: 63) evaluate: aScope.	
+	self assert: x = (float with: 123000.0).
 %
 category: 'other'
 method: BuiltinsTestCase
 test_frozenset
 
 	| x |
-	x := (self statementsAt: 62) evaluate: aScope.	
-	x := (self statementsAt: 63) evaluate: aScope.
+	x := (self statementsAt: 64) evaluate: aScope.	
+	x := (self statementsAt: 65) evaluate: aScope.
 	x := stdout contents.
 	self assert: x = 'AttributeError '.
 %

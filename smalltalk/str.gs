@@ -8,6 +8,51 @@ str class removeAllMethods.
 set compile_env: 0
 category: 'other'
 classmethod: str
+consumeFrom: anArray stream: aStream
+
+	| temp |
+	anArray do: [ :each | 
+		(((temp := (each size = 1) ifTrue: [ aStream peek ] ifFalse: [ aStream peekN: each size ]) asString) = each) 
+			ifTrue: [ 
+				aStream next: each size. 
+				^ each 
+			]
+	].
+	^ nil
+%
+category: 'other'
+classmethod: str
+consumeFrom: anArray string: aString
+
+	| temp |
+	anArray do: [ :each | 
+		(((temp := aString copyFrom: 1 to: each size) asString) = each) 
+			ifTrue: [ 
+				^ each 
+			]
+	].
+	^ nil
+%
+category: 'other'
+classmethod: str
+consumeRules: anArray stream: aStream
+
+	| stream result |
+	stream := aStream.
+	result := String new.
+	anArray do: [ :each | 
+		| temp |
+		temp := each value: stream copy upToEnd.
+		temp ifNil: [ ^ nil ].
+		(temp == _remoteNil) ifTrue: [ stream atEnd ifTrue: [ ^ result ] ifFalse: [ ^ nil ] ].
+		temp := temp asString.
+		stream next: temp size.
+		result := result, temp.
+	].
+	^ result
+%
+category: 'other'
+classmethod: str
 containerClass
 
 	^Unicode7
@@ -26,6 +71,124 @@ encode: aStr withEncoding: anEncodingString error: anErrorString
 		result add: value.
 	].
 	^result
+%
+category: 'other'
+classmethod: str
+getDigits
+
+	^ (0 to: 9) collect: [ :each | each asString ]
+%
+category: 'other'
+classmethod: str
+parseDigitPart: aString
+	"digitpart     ::=  digit (['_'] digit)*"
+
+	| stream temp result |
+	stream := ReadStream on: aString.
+	result := String new.
+	temp := self consumeFrom: self getDigits stream: stream.
+	temp ifNil: [ ^ nil ].
+	result := result, temp.
+	[ 
+		stream peekFor: $_.
+		temp := self consumeFrom: self getDigits stream: stream.
+		temp isNil not.
+	] whileTrue: [
+		result := result, temp.
+	].
+	^ result
+%
+category: 'other'
+classmethod: str
+parseExponent: aString
+	"exponent      ::=  ('e' | 'E') ['+' | '-'] digitpart"
+
+	| stream temp sign |
+	stream := ReadStream on: aString.
+	sign := '+'.
+	temp := self consumeFrom: { 'e' . 'E' } stream: stream.
+	temp ifNil: [ ^ nil ].
+	temp := self consumeFrom: { '+' . '-' } stream: stream. 
+	temp isNil not ifTrue: [ sign := temp ].
+	temp := (self parseDigitPart: stream upToEnd) asString.
+	^ 'e', sign, temp
+%
+category: 'other'
+classmethod: str
+parseExponentFloat: string
+	"exponentfloat ::=  (digitpart | pointfloat) exponent"
+
+	| stream temp | 
+	stream := ReadStream on: string.
+	temp := self consumeRules: { [ :aString | self parseDigitPart: aString ] . [ :aString | self parseExponent: aString ] } stream: stream copy. 
+	temp ifNotNil: [ ^ temp ].
+	temp := self consumeRules: { [ :aString | self parsePointFloat: aString ] . [ :aString | self parseExponent: aString ] } stream: stream copy. 
+	temp ifNotNil: [ ^ temp ].
+%
+category: 'other'
+classmethod: str
+parseFloat: aString
+
+	| stream sign numeric_value |
+	stream := ReadStream on: aString.
+	sign := 1.
+	sign := self consumeFrom: { '+' . '-' } stream: stream.
+	(sign = '+') ifTrue: [ sign := 1 ].
+	(sign = '-') ifTrue: [ sign := -1 ].
+	sign ifNil: [ sign := 1 ].
+	numeric_value := self consumeFrom: { 'Infinity' . 'inf' . 'nan' } stream: stream.
+	numeric_value ifNil: [ ^ str parseFloatNumber: stream upToEnd ].
+	"otherwise float is nan or inf"
+	(numeric_value = 'Infinity' or: [ numeric_value = 'inf' ]) ifTrue: [ ^ float inf ].
+	(numeric_value = 'nan') ifTrue: [ ^ float nan ].
+	self halt.
+%
+category: 'other'
+classmethod: str
+parseFloatNumber: string
+	"floatnumber   ::=  pointfloat | exponentfloat"
+
+	| stream temp | 
+	stream := ReadStream on: string.
+	temp := self consumeRules: { [ :aString | self parsePointFloat: aString ] . [ :aString | _remoteNil ] } stream: stream copy. "e_e i found a use for _remoteNil lol"
+	temp ifNotNil: [ ^ temp ].
+	temp := self consumeRules: { [ :aString | self parseExponentFloat: aString ] . [ :aString | _remoteNil ] } stream: stream copy.
+	temp ifNotNil: [ ^ temp ].
+%
+category: 'other'
+classmethod: str
+parseFraction: aString
+	"fraction      ::=  '.' digitpart"
+
+	| stream temp result |
+	stream := ReadStream on: aString.
+	result := String new.
+	(stream peekFor: $.) ifFalse: [ ^ nil ].
+	temp := self parseDigitPart: stream upToEnd.
+	temp ifNil: [ ^ nil ].
+	^ '.', temp asString
+%
+category: 'other'
+classmethod: str
+parsePointFloat: string
+	"pointfloat    ::=  [digitpart] fraction | digitpart '.'"
+
+	| stream temp | 
+	stream := ReadStream on: string.
+	temp := self consumeRules: { [ :aString | self parseDigitPart: aString ] . [ :aString | self parseFraction: aString ] } stream: stream copy.
+	temp ifNotNil: [ ^ temp ].
+	temp := self consumeRules: { [ :aString | self parseDigitPart: aString ] . [ :aString | self consumeFrom: { '.' } string: aString ] } stream: stream copy.
+	temp ifNotNil: [ ^ temp ].
+	temp := self consumeRules: { [ :aString | self parseFraction: aString ] } stream: stream copy.
+	temp ifNotNil: [ ^ temp ].
+	temp := self consumeRules: { [ :aString | self parseDigitPart: aString ] . [ :aString | self consumeFrom: { '.' } string: aString ] } stream: stream copy.
+	temp ifNotNil: [ ^ temp ].
+%
+category: 'other'
+classmethod: str
+removeLeadingZero: aString
+
+	^ aString copyFrom: 2 to: aString size.
 %
 ! ------------------- Instance methods for str
 set compile_env: 0
@@ -118,6 +281,12 @@ method: str
 __contains__
 
 	self halt.
+%
+category: 'Python'
+method: str
+__float__
+
+	^ [ :anObject | float with: anObject ]
 %
 category: 'Python'
 method: str

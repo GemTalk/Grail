@@ -12,8 +12,23 @@ _generality
 
 	^ 100
 %
+category: 'other'
+classmethod: float
+withString: anObject
+
+	(anObject isKindOf: str) ifFalse: [ self halt ].
+	^ (str parseFloat: anObject ___container) asFloat
+%
 ! ------------------- Instance methods for float
 set compile_env: 0
+category: 'other'
+method: float
+___initialize: anObject
+
+	(anObject isKindOf: str) 
+		ifTrue: [ number := float withString: anObject ]
+		ifFalse: [ number := anObject ]
+%
 category: 'other'
 method: float
 _coerce: aNumber

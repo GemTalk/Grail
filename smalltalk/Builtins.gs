@@ -832,7 +832,6 @@ Changed in version 3.6: Grouping digits with underscores as in code literals is 
 Changed in version 3.7: x is now a positional-only parameter.
 "
 
-	(anObject isKindOf: str) ifTrue: [ ]. "TODO: string argument"
 	^ anObject __float__ value: anObject
 %
 category: 'functions'

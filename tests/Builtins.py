@@ -119,12 +119,14 @@ list(filter(lambda x:x>0, [-10, 0, 10])) # 59
 
 float() # 60
 float(3.14) # 61
+float("+1.23") # 62
+float("+1.23E5") # 63
 
 # TODO: format
 
-fs = frozenset([1, 2, 3]) # 62
+fs = frozenset([1, 2, 3]) # 64
 
-try: # 63
+try: # 65
     fs.add(4)
 except AttributeError:
     print("AttributeError", end=' ')
