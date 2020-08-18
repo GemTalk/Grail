@@ -125,8 +125,11 @@ float("+1.23E5") # 63
 # TODO: format
 
 fs = frozenset([1, 2, 3]) # 64
+3 in fs # 65
+4 in fs # 66
+len(fs) # 67
 
-try: # 65
+try: # 68
     fs.add(4)
 except AttributeError:
     print("AttributeError", end=' ')

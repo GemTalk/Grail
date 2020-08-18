@@ -257,6 +257,12 @@ test_frozenset
 	| x |
 	x := (self statementsAt: 64) evaluate: aScope.	
 	x := (self statementsAt: 65) evaluate: aScope.
+	self assert: x.
+	x := (self statementsAt: 66) evaluate: aScope.
+	self deny: x.
+	x := (self statementsAt: 67) evaluate: aScope.
+	self assert: x == 3.
+	x := (self statementsAt: 68) evaluate: aScope.
 	x := stdout contents.
 	self assert: x = 'AttributeError '.
 %

@@ -1180,7 +1180,7 @@ self halt.
 %
 category: 'functions'
 method: builtins
-len: arguments
+len: anObject
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1193,7 +1193,8 @@ class list([iterable])
 Rather than being a function, list is actually a mutable sequence 
 type, as documented in Lists and Sequence Types — list, tuple, range.
 "
-self halt.
+
+	^ anObject __len__ value: anObject
 %
 category: 'functions'
 method: builtins
