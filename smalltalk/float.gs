@@ -94,7 +94,7 @@ category: 'Python'
 method: float
 __int__
 
-	self halt.
+	^ [ :obj | obj ___number // 1 ]
 %
 category: 'Python'
 method: float

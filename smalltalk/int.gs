@@ -12,8 +12,39 @@ _generality
 
 	^ 50
 %
+category: 'other'
+classmethod: int
+withString: anObject
+
+	^ self withString: anObject base: 10
+%
+category: 'other'
+classmethod: int
+withString: anObject base: base
+
+	| numberString |
+	(anObject isKindOf: str) ifFalse: [ self halt ].
+	numberString :=  str removePrefix: (str parseInteger: anObject ___container).
+	^ int with: (base asString, 'r', numberString) asInteger
+%
 ! ------------------- Instance methods for int
 set compile_env: 0
+category: 'other'
+method: int
+___initialize: anObject
+
+	(anObject isKindOf: str) 
+		ifTrue: [ number := float withString: anObject ]
+		ifFalse: [ number := anObject ]
+%
+category: 'other'
+method: int
+___initialize: anObject base: base
+
+	(anObject isKindOf: str) 
+		ifTrue: [ number := int withString: anObject base: base ]
+		ifFalse: [ number := anObject ]
+%
 category: 'other'
 method: int
 _coerce: aNumber

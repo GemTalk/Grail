@@ -1065,17 +1065,19 @@ If the readline module was loaded, then input() will use it to provide
 "
 	| prompt result |
 	prompt := arguments notEmpty
-		ifTrue: [Unicode7 withAll: arguments first]
+		ifTrue: [Unicode7 withAll: arguments first ___container]
 		ifFalse: [''].
 	result := UserInteraction new prompt: prompt.
 	result ifNil: [CancelNotification signal].
 	result := result decodeToString.
-	self print: (Array with: arguments first with: (str withAll: result)).
+	arguments notEmpty 
+		ifTrue: [	self print: (Array with: arguments first with: (str withAll: result)) keywords: dict new ]
+		ifFalse: [ self print: (Array with: (str withAll: result)) keywords: dict new ].
 	^str withAll: result
 %
 category: 'functions'
 method: builtins
-int: anObject
+int: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1110,7 +1112,12 @@ Changed in version 3.6: Grouping digits with underscores as in code literals is 
 
 Changed in version 3.7: x is now a positional-only parameter.
 "
-	^ anObject asInteger
+	| x base |
+	x := arguments first.
+	[ base := arguments second ]
+		on: OffsetError
+		do: [ base := 10 ].
+	^ int with: x base: base
 %
 category: 'functions'
 method: builtins
@@ -1929,7 +1936,8 @@ initialize
 		at: #'hash'				put: [:arguments :keywords :scope | self hash: arguments first];
 		at: #'hex'				put: [:arguments :keywords :scope | self hex: arguments first];
 		at: #'id'					put: [:arguments :keywords :scope | self id: arguments first];
-		at: #'int'				put: [:arguments :keywords :scope | self int: arguments first];
+		at: #'input'				put: [:arguments :keywords :scope | self input: arguments];
+		at: #'int'				put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [ self int: arguments ] ifFalse: [int with: 0]];
 		at: #'isinstance'		put: [:arguments :keywords :scope | self isinstance: arguments first _: arguments second];
 		at: #'len'				put: [:arguments :keywords :scope | self len: arguments first];
 		at: #'list'				put: [:arguments :keywords :scope | self list: arguments first];

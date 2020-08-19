@@ -324,6 +324,24 @@ test_hex
 %
 category: 'other'
 method: BuiltinsTestCase
+test_int
+
+	| x |
+	x := (self statementsAt: 80) evaluate: aScope.
+	self assert: x = (int with: 0).
+	x := (self statementsAt: 81) evaluate: aScope.
+	self assert: x = (int with: 1).
+	x := (self statementsAt: 82) evaluate: aScope.
+	self assert: x = (int with: 3).
+	x := (self statementsAt: 83) evaluate: aScope.
+	self assert: x = (int with: 0).
+	x := (self statementsAt: 84) evaluate: aScope.
+	self assert: x = (int with: 511).
+	x := (self statementsAt: 85) evaluate: aScope.
+	self assert: x = (int with: 511).
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"

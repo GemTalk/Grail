@@ -80,6 +80,115 @@ getDigits
 %
 category: 'other'
 classmethod: str
+getHexDigits
+
+	^ ((0 to: 9) collect: [ :each | each asString ]), ((97 to: 102) collect: [ :each | (Character codePoint: each) asString ]), ((65 to: 70) collect: [ :each | (Character codePoint: each) asString ])
+%
+category: 'other'
+classmethod: str
+getNonZeroDigits
+
+	^ (1 to: 9) collect: [ :each | each asString ]
+%
+category: 'other'
+classmethod: str
+getOctDigits
+
+	^ (0 to: 7) collect: [ :each | each asString ]
+%
+category: 'other'
+classmethod: str
+parseBinDigit: string
+	"bindigit        ::=  '0' | '1'"
+
+	| stream temp | 
+	stream := ReadStream on: string.
+	temp := self consumeFrom: { '0' . '1' } string: string.
+	temp ifNotNil: [ ^ temp ].
+	^ nil
+%
+category: 'other'
+classmethod: str
+parseBinInteger: string
+	"bininteger   ::=  '0' ('b' | 'B') (['_'] bindigit)+"
+
+	| stream temp result | 
+	stream := ReadStream on: (self stripUnderscores: string).
+	result := String new.
+	(temp := stream peekFor: $0) ifFalse: [ ^ nil ].
+	result := result, '0'.
+	temp := self consumeFrom: { 'b' . 'B' } stream: stream.
+	temp ifNil: [ ^ nil ].
+	result := result, temp.
+	stream peekFor: $_.
+	temp := self consumeFrom: { '1' . '0' } stream: stream.
+	temp ifNil: [ ^ nil ].
+	result := result, temp.
+	[ 
+		stream peekFor: $_.
+		temp := self consumeFrom: { '1' . '0' } stream: stream.
+		temp isNil not.
+	] whileTrue: [
+		result := result, temp.
+	].
+	^ result
+%
+category: 'other'
+classmethod: str
+parseDecInteger: string
+	"decinteger   ::=  nonzerodigit (['_'] digit)* | '0'+ (['_'] '0')*"
+
+	| stream temp leftRuleBlock rightRuleBlock | 
+	stream := ReadStream on: (self stripUnderscores: string).
+	leftRuleBlock := [ :aString | 
+		| s t r |
+		s := ReadStream on: aString.
+		r := String new.
+		t := self consumeFrom: self getNonZeroDigits stream: s.
+		t ifNil: [ nil ] ifNotNil: [
+			r := r, t.
+			[
+				s peekFor: $_.
+				t := self consumeFrom: self getDigits stream: s.
+				t isNil not.
+			] whileTrue: [ r := r, t ].
+			r
+		].
+	].
+	rightRuleBlock := [ :aString |
+		| s r |
+		s := ReadStream on: aString.
+		r := String new.
+		(s peekFor: $0) 
+			ifTrue: [
+				r := r, '0'.
+				[
+					s peekFor: $_.
+					s peekFor: $0.
+				] whileTrue: [ r := r, '0' ].
+				r
+			]
+			ifFalse: [ nil ].
+	].
+	temp := self consumeRules: { leftRuleBlock . [ :aString | _remoteNil ] } stream: stream copy. "using _remoteNil as an end of production marker"
+	temp ifNotNil: [ ^ temp ].
+	temp := self consumeRules: { rightRuleBlock . [ :aString | _remoteNil ] } stream: stream copy.
+	temp ifNotNil: [ ^ temp ].
+	^ nil
+%
+category: 'other'
+classmethod: str
+parseDigit: string
+	"digit        ::=  '0'...'9'"
+
+	| stream temp | 
+	stream := ReadStream on: string.
+	temp := self consumeFrom: self getDigits string: string.
+	temp ifNotNil: [ ^ temp ].
+	^ nil
+%
+category: 'other'
+classmethod: str
 parseDigitPart: aString
 	"digitpart     ::=  digit (['_'] digit)*"
 
@@ -124,6 +233,7 @@ parseExponentFloat: string
 	temp ifNotNil: [ ^ temp ].
 	temp := self consumeRules: { [ :aString | self parsePointFloat: aString ] . [ :aString | self parseExponent: aString ] } stream: stream copy. 
 	temp ifNotNil: [ ^ temp ].
+	^ nil
 %
 category: 'other'
 classmethod: str
@@ -154,6 +264,7 @@ parseFloatNumber: string
 	temp ifNotNil: [ ^ temp ].
 	temp := self consumeRules: { [ :aString | self parseExponentFloat: aString ] . [ :aString | _remoteNil ] } stream: stream copy.
 	temp ifNotNil: [ ^ temp ].
+	^ nil
 %
 category: 'other'
 classmethod: str
@@ -170,6 +281,97 @@ parseFraction: aString
 %
 category: 'other'
 classmethod: str
+parseHexInteger: string
+	"hexinteger   ::=  '0' ('x' | 'X') (['_'] hexdigit)+"
+
+	| stream temp result | 
+	stream := ReadStream on: (self stripUnderscores: string).
+	result := String new.
+	(temp := stream peekFor: $0) ifFalse: [ ^ nil ].
+	result := result, '0'.
+	temp := self consumeFrom: { 'x' . 'X' } stream: stream.
+	temp ifNil: [ ^ nil ].
+	result := result, temp.
+	stream peekFor: $_.
+	temp := self consumeFrom: self getHexDigits stream: stream.
+	temp ifNil: [ ^ nil ].
+	result := result, temp.
+	[ 
+		stream peekFor: $_.
+		temp := self consumeFrom: self getHexDigits stream: stream.
+		temp isNil not.
+	] whileTrue: [
+		result := result, temp.
+	].
+	^ result
+%
+category: 'other'
+classmethod: str
+parseInteger: string
+	"integer      ::=  decinteger | bininteger | octinteger | hexinteger"
+
+	| stream temp | 
+	stream := ReadStream on: string.
+	temp := self consumeRules: { [ :aString | self parseDecInteger: aString ] . [ :aString | _remoteNil ] } stream: stream copy. "using _remoteNil as an end of production marker"
+	temp ifNotNil: [ ^ temp ].
+	temp := self consumeRules: { [ :aString | self parseBinInteger: aString ] . [ :aString | _remoteNil ] } stream: stream copy.
+	temp ifNotNil: [ ^ temp ].
+	temp := self consumeRules: { [ :aString | self parseOctInteger: aString ] . [ :aString | _remoteNil ] } stream: stream copy.
+	temp ifNotNil: [ ^ temp ].
+	temp := self consumeRules: { [ :aString | self parseHexInteger: aString ] . [ :aString | _remoteNil ] } stream: stream copy.
+	temp ifNotNil: [ ^ temp ].
+	^ nil
+%
+category: 'other'
+classmethod: str
+parseNonZeroDigit: string
+	"nonzerodigit        ::=  '1'...'9'"
+
+	| stream temp | 
+	stream := ReadStream on: string.
+	temp := self consumeFrom: self getNonZeroDigits string: string.
+	temp ifNotNil: [ ^ temp ].
+	^ nil
+%
+category: 'other'
+classmethod: str
+parseOctDigit: string
+	"octdigit        ::=  '0'...'7'"
+
+	| stream temp | 
+	stream := ReadStream on: (self stripUnderscores: string).
+	temp := self consumeFrom: self getOctDigits string: string.
+	temp ifNotNil: [ ^ temp ].
+	^ nil
+%
+category: 'other'
+classmethod: str
+parseOctInteger: string
+	"octinteger   ::=  '0' ('o' | 'O') (['_'] octdigit)+"
+
+	| stream temp result | 
+	stream := ReadStream on: string.
+	result := String new.
+	(temp := stream peekFor: $0) ifFalse: [ ^ nil ].
+	result := result, '0'.
+	temp := self consumeFrom: { 'o' . 'O' } stream: stream.
+	temp ifNil: [ ^ nil ].
+	result := result, temp.
+	stream peekFor: $_.
+	temp := self consumeFrom: self getOctDigits stream: stream.
+	temp ifNil: [ ^ nil ].
+	result := result, temp.
+	[ 
+		stream peekFor: $_.
+		temp := self consumeFrom: self getOctDigits stream: stream.
+		temp isNil not.
+	] whileTrue: [
+		result := result, temp.
+	].
+	^ result
+%
+category: 'other'
+classmethod: str
 parsePointFloat: string
 	"pointfloat    ::=  [digitpart] fraction | digitpart '.'"
 
@@ -183,12 +385,33 @@ parsePointFloat: string
 	temp ifNotNil: [ ^ temp ].
 	temp := self consumeRules: { [ :aString | self parseDigitPart: aString ] . [ :aString | self consumeFrom: { '.' } string: aString ] } stream: stream copy.
 	temp ifNotNil: [ ^ temp ].
+	^ nil
 %
 category: 'other'
 classmethod: str
 removeLeadingZero: aString
 
 	^ aString copyFrom: 2 to: aString size.
+%
+category: 'other'
+classmethod: str
+removePrefix: aString
+
+	| prefix |
+	(aString size > 1)
+		ifTrue: [
+			prefix := aString copyFrom: 1 to: 2.
+			(prefix allSatisfy: [ :each | each codePoint> 47 and: [ each codePoint < 58 ] ]) 
+				ifTrue: [ ^ aString ]
+				ifFalse: [ ^ aString copyFrom: 3 to: aString size ].
+		]
+		ifFalse: [ ^ aString ]
+%
+category: 'other'
+classmethod: str
+stripUnderscores: aString
+
+	^ aString reject: [ :each | each = $_ ]
 %
 ! ------------------- Instance methods for str
 set compile_env: 0

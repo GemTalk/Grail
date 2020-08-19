@@ -13,9 +13,35 @@ with: aNumber
 	| num |
 	num := aNumber.
 	(aNumber class == self) ifTrue: [ ^ aNumber ].
-	((aNumber isKindOf: AbstractNumber) and: [(aNumber _generality < self _generality)]) ifTrue: [ num := aNumber ___number ].
+	(aNumber isKindOf: str) ifTrue: [ ^ self withString: aNumber ].
+	(aNumber isKindOf: AbstractNumber) 
+		ifTrue: [
+			(aNumber _generality < self _generality) 
+				ifTrue: [ num := aNumber ___number ]
+				ifFalse: [ num := aNumber __int__ value: aNumber ].
+		].
 	^self basicNew
 		___initialize: num;
+		yourself
+%
+category: 'other'
+classmethod: AbstractNumber
+with: aNumber base: aBase
+
+	| num base |
+	num := aNumber.
+	base := aBase.
+	(aBase isKindOf: AbstractNumber) ifTrue: [ base := aBase ___number ].
+	(aNumber class == self) ifTrue: [ ^ aNumber ].
+	(aNumber isKindOf: str) ifTrue: [ ^ self withString: aNumber base: base ].
+	(aNumber isKindOf: AbstractNumber) 
+		ifTrue: [
+			(aNumber _generality < self _generality) 
+				ifTrue: [ num := aNumber ___number ]
+				ifFalse: [ num := aNumber __int__ value: aNumber ].
+		].
+	^self basicNew
+		___initialize: num base: base;
 		yourself
 %
 ! ------------------- Instance methods for AbstractNumber

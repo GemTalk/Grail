@@ -159,6 +159,17 @@ hash(1.) # 77
 hex(12648430) # 78
 hex(-16) # 79
 
+# TODO: id (?)
+
+# TODO: input (?)
+
+int() # 80
+int(1.5) # 81
+int("3") # 82
+int("0") # 83
+int("777", 8) # 84
+int("0o777", 8) # 85
+
 class C:
     pass
 
