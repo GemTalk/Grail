@@ -154,6 +154,11 @@ hasattr(f, "yang") # 75
 hash(1) # 76
 hash(1.) # 77
 
+# TODO: help
+
+hex(12648430) # 78
+hex(-16) # 79
+
 class C:
     pass
 

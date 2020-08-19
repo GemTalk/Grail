@@ -214,12 +214,6 @@ fromhex
 %
 category: 'Python'
 method: float
-hash
-
-	^ number
-%
-category: 'Python'
-method: float
 hex
 
 	self halt.

@@ -996,7 +996,7 @@ self halt.
 %
 category: 'functions'
 method: builtins
-hex: arguments
+hex: anInt
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1026,7 +1026,7 @@ Note To obtain a hexadecimal string representation
  for a float, use the float.hex() method.
 "
 
-^(arguments ___number negative ifTrue: ['-'] ifFalse: ['']), '0x' , (arguments ___number abs asHexString)
+^(anInt ___number negative ifTrue: ['-'] ifFalse: ['']), '0x' , (anInt ___number abs asHexString)
 %
 category: 'functions'
 method: builtins
@@ -1927,6 +1927,7 @@ initialize
 		at: #'globals'			put: [:arguments :keywords :scope | self globals: scope];
 		at: #'hasattr'			put: [:arguments :keywords :scope | self hasattr: arguments first _: arguments second];
 		at: #'hash'				put: [:arguments :keywords :scope | self hash: arguments first];
+		at: #'hex'				put: [:arguments :keywords :scope | self hex: arguments first];
 		at: #'id'					put: [:arguments :keywords :scope | self id: arguments first];
 		at: #'int'				put: [:arguments :keywords :scope | self int: arguments first];
 		at: #'isinstance'		put: [:arguments :keywords :scope | self isinstance: arguments first _: arguments second];

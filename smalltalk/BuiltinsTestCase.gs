@@ -304,10 +304,23 @@ category: 'other'
 method: BuiltinsTestCase
 test_hash
 
-	| x y |
-	x := (self statementsAt: 76) evaluate: aScope.	
-	y := (self statementsAt: 77) evaluate: aScope.	
-	self assert: x = y.
+	| x |
+	x := (self statementsAt: 69) evaluate: aScope.	
+	x := (self statementsAt: 70) evaluate: aScope.	
+	x := (self statementsAt: 74) evaluate: aScope.	
+	self assert: x.
+	x := (self statementsAt: 74) evaluate: aScope.	
+	self deny: x.
+%
+category: 'other'
+method: BuiltinsTestCase
+test_hex
+
+	| x |
+	x := (self statementsAt: 78) evaluate: aScope.	
+	self assert: x = '0xc0ffee'.
+	x := (self statementsAt: 79) evaluate: aScope.	
+	self assert: x = '-0x10'.
 %
 category: 'other'
 method: BuiltinsTestCase
