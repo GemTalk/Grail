@@ -17,7 +17,7 @@ classmethod: float
 withString: anObject
 
 	(anObject isKindOf: str) ifFalse: [ self halt ].
-	^ (str parseFloat: anObject ___container) asFloat
+	^ float with: (str parseFloat: anObject ___container) asFloat
 %
 ! ------------------- Instance methods for float
 set compile_env: 0
