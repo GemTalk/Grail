@@ -99,13 +99,14 @@ __import__: aSymbol keywords: aSymbolDictionary scope: aScope
 
 	This implementation is quite incomplete (no extensible finders and loaders).
 "
-	| importPaths module modules name |
+	| importPaths module modules name notFoundObject |
 	"Check for already imported"
+	notFoundObject := Object new.
 	modules := _sys modules.
-	module := modules at: aSymbol ifAbsent: [_remoteNil].
+	module := modules at: aSymbol ifAbsent: [notFoundObject].
 	"https://docs.python.org/3/reference/import.html#the-module-cache"
 	module ifNil: [ModuleNotFoundError signal: 'Import of ' , aSymbol , ' failed!'].
-	module ~~ _remoteNil ifTrue: [^module].
+	module ~~ notFoundObject ifTrue: [^module].
 
 	"Not yet imported; search for it"
 	importPaths := Array new.
@@ -295,7 +296,23 @@ Without an argument, an array of size 0 is created.
 
 See also Binary Sequence Types — bytes, bytearray, memoryview and Bytearray Objects.
 "
-self halt.
+
+	^ self byteFactory: arguments type: bytearray.
+%
+category: 'functions'
+method: builtins
+byteFactory: arguments type: aByteType
+
+	| source encoding errors |
+	source := arguments first.
+	(source isKindOf: str) ifTrue: [
+		((arguments size > 1) and: [(encoding := arguments second) isKindOf: str]) ifFalse: [ self halt ].
+		(arguments size = 3) ifTrue: [ errors := arguments at: 3 ].
+		^ aByteType withAll: (str encode: source withEncoding: encoding error: errors).
+	].
+	(source isKindOf: int) ifTrue: [ ^ aByteType withAll: (Array new fillFrom: 1 resizeTo: source ___number with: 0) ].
+	(source isKindOf: list) ifTrue: [ ^ aByteType withAll: source asArray ].
+	self halt.
 %
 category: 'functions'
 method: builtins
@@ -316,11 +333,12 @@ Bytes objects can also be created with literals, see String and Bytes literals.
 See also Binary Sequence Types — bytes, bytearray, memoryview,
  Bytes Objects, and Bytes and Bytearray Operations.
 "
-self halt.
+
+	^ self byteFactory: arguments type: bytes.
 %
 category: 'functions'
 method: builtins
-callable: arguments
+callable: anObject
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -334,11 +352,15 @@ Note that classes are callable (calling a class returns a new instance);
 New in version 3.2: This function was first removed in Python 3.0 
 and then brought back in Python 3.2.
 "
-self halt.
+
+	[((anObject isKindOf: Instance) and: [anObject __call__]) ifTrue: [ True ] ifFalse: [ False ] ] "TODO: test callable instances"
+		on: Error
+		do: [ ].
+	^ (anObject isKindOf: ExecBlock) ifTrue: [ True ] ifFalse: [ False ]
 %
 category: 'functions'
 method: builtins
-chr: arguments
+chr: anInt
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -350,7 +372,7 @@ This is the inverse of ord().
 The valid range for the argument is from 0 through 1,114,111 (0x10FFFF in base 16).
  ValueError will be raised if i is outside that range.
 "
-	^(Character codePoint: arguments first) asString
+	^ (Character codePoint: anInt ___number) asString
 %
 category: 'functions'
 method: builtins
@@ -462,7 +484,16 @@ The complex type is described in Numeric Types — int, float, complex.
 Changed in version 3.6: Grouping digits with underscores as in code literals is allowed.
 "
 
-^complex real: arguments first imag: arguments second.
+	| real imag |
+	real := arguments first.
+	imag := int with: 0.
+	(real isKindOf: str) ifTrue: [ ]. "deal with string"
+	(real isKindOf: AbstractNumber) ifTrue: [
+		[ imag := (complex with: arguments second) * (complex real: 0 imag: 1) ]
+			on: Error
+			do: [ ].
+		^ complex with: (real + imag)
+	].
 %
 category: 'functions'
 method: builtins
@@ -476,7 +507,11 @@ The string must be the name of one of the object’s attributes. The function
 deletes the named attribute, provided the object allows it. 
 For example, delattr(x, 'foobar') is equivalent to del x.foobar.
 "
-self halt.
+
+	| object name |
+	object := arguments first.
+	name := arguments second.
+	object del: name asSymbol.
 %
 category: 'functions'
 method: builtins
@@ -493,22 +528,27 @@ Create a new dictionary. The dict object is the dictionary class.
 For other containers see the built-in list, set, and tuple classes, as well as the collections module.
 "
 
+	| result |
+	result := dict new.
 	arguments notEmpty ifTrue: [
 		(arguments first isKindOf: dict) ifTrue: [
 			arguments first keysAndValuesDo: [:eachKey :eachValue | 
-				keywords at: eachKey evaluate: aScope put: eachValue evaluate: aScope.
+				result set: (eachKey evaluate: aScope) to: (eachValue evaluate: aScope).
 			]
 		] ifFalse: [
 			arguments first do: [ :each | 
-				keywords at: (each at: 1) put: (each at: 2).
+				result set: (each at: 1) to: (each at: 2).
 			]
 		].
 	].
-	^keywords
+	keywords keysAndValuesDo: [ :key :value |
+		result set: (str withAll: key) to: value
+	].
+	^ result
 %
 category: 'functions'
 method: builtins
-dir: arguments
+dir: arguments scope: aScope
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -580,14 +620,16 @@ non-zero it has the same sign as b, and 0 <= abs(a % b) < abs(b).
 "May need some improvements for floating point or negative numbers"
 | a b q r |
 a := arguments first.
+((a isKindOf: AbstractNumber) and: [(a isKindOf: complex) not]) ifFalse: [ TypeError signal: 'can''t take floor or mod of complex number.' ].
 b := arguments second.
-q := (a / b) floor.
-r := a - (b * q).
+((b isKindOf: AbstractNumber) and: [(b isKindOf: complex) not]) ifFalse: [ TypeError signal: 'can''t take floor or mod of complex number.' ].
+q := float with: (a / b) floor.
+r := float with: a - (b * q).
 ^(Array with: q with: r) immediateInvariant
 %
 category: 'functions'
 method: builtins
-enumerate: arguments
+enumerate: iterable keywords: keywords
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -612,7 +654,16 @@ def enumerate(sequence, start=0):
         yield n, elem
         n += 1
 "
-self halt.
+	
+	| start enum n |
+	((keywords has: #'start') == True) ifTrue: [ start := (keywords at: #'start') ___number ] ifFalse: [ start := 0 ].
+	enum := Array new.
+	n := start.
+	1 to: iterable size do: [ :i | 
+		enum add: (tuple withAll: { int with: n . iterable at: i }).
+		n := n + 1.
+	].
+	^ tuple_iterator on: enum
 %
 category: 'functions'
 method: builtins
@@ -697,7 +748,7 @@ self halt.
 %
 category: 'functions'
 method: builtins
-filter: arguments
+filter: arguments scope: aScope
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -716,11 +767,20 @@ if function is not None and (item for item in iterable if item) if function is N
 See itertools.filterfalse() for the complementary function that 
 returns elements of iterable for which function returns false.
 "
-self halt.
+
+	| function iterable res |
+	function := arguments first.
+	iterable := arguments second.
+	res := Array new.
+	iterable do: [ :each | 
+		((self bool: (function value: (Array with: each) value: (dict withAll: Array new) value: aScope)) == True)
+			ifTrue: [ res add: each ] 
+	].
+	^ list withAll: res.
 %
 category: 'functions'
 method: builtins
-float: arguments
+float: anObject
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -771,7 +831,8 @@ Changed in version 3.6: Grouping digits with underscores as in code literals is 
 
 Changed in version 3.7: x is now a positional-only parameter.
 "
-self halt.
+
+	^ anObject __float__ value: anObject
 %
 category: 'functions'
 method: builtins
@@ -801,11 +862,18 @@ the value’s __format__() method. A TypeError exception
 Changed in version 3.4: object().__format__(format_spec)
  raises TypeError if format_spec is not an empty string.
 "
-self halt.
+	
+	| value format_spec |
+	value := arguments first.
+	[ format_spec := arguments second ]
+		on: OffsetError
+		do: [ format_spec := '' ].
+	self halt.
+	^ value __format__ value: value value: format_spec "TODO: implement str >> __format__"
 %
 category: 'functions'
 method: builtins
-frozenset: arguments
+frozenset: anIterable
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -818,7 +886,8 @@ set, frozenset for documentation about this class.
 For other containers see the built-in set, list, tuple,
 \ and dict classes, as well as the collections module.
 "
-self halt.
+	
+	^ frozenset withAll: anIterable
 %
 category: 'functions'
 method: builtins
@@ -855,9 +924,9 @@ self halt.
 %
 category: 'functions'
 method: builtins
-globals: arguments
+globals: aScope
 
-	^self globals
+	^ aScope globals
 %
 category: 'functions'
 method: builtins
@@ -882,7 +951,7 @@ and seeing whether it raises an AttributeError or not.)
 %
 category: 'functions'
 method: builtins
-hash: arguments
+hash: anObject
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -896,7 +965,7 @@ Note For objects with custom __hash__() methods, note that hash()
 truncates the return value based on the bit width of the host machine. 
 See __hash__() for details.
 "
-	^arguments first hash
+	^ anObject hash
 %
 category: 'functions'
 method: builtins
@@ -927,7 +996,7 @@ self halt.
 %
 category: 'functions'
 method: builtins
-hex: arguments
+hex: anInt
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -957,7 +1026,7 @@ Note To obtain a hexadecimal string representation
  for a float, use the float.hex() method.
 "
 
-^(arguments ___number negative ifTrue: ['-'] ifFalse: ['']), '0x' , (arguments ___number abs asHexString)
+^(anInt ___number negative ifTrue: ['-'] ifFalse: ['']), '0x' , (anInt ___number abs asHexString)
 %
 category: 'functions'
 method: builtins
@@ -996,17 +1065,19 @@ If the readline module was loaded, then input() will use it to provide
 "
 	| prompt result |
 	prompt := arguments notEmpty
-		ifTrue: [Unicode7 withAll: arguments first]
+		ifTrue: [Unicode7 withAll: arguments first ___container]
 		ifFalse: [''].
 	result := UserInteraction new prompt: prompt.
 	result ifNil: [CancelNotification signal].
 	result := result decodeToString.
-	self print: (Array with: arguments first with: (str withAll: result)).
+	arguments notEmpty 
+		ifTrue: [	self print: (Array with: arguments first with: (str withAll: result)) keywords: dict new ]
+		ifFalse: [ self print: (Array with: (str withAll: result)) keywords: dict new ].
 	^str withAll: result
 %
 category: 'functions'
 method: builtins
-int: anObject
+int: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1041,7 +1112,12 @@ Changed in version 3.6: Grouping digits with underscores as in code literals is 
 
 Changed in version 3.7: x is now a positional-only parameter.
 "
-	^ anObject asInteger
+	| x base |
+	x := arguments first.
+	[ base := arguments second ]
+		on: OffsetError
+		do: [ base := 10 ].
+	^ int with: x base: base
 %
 category: 'functions'
 method: builtins
@@ -1111,7 +1187,7 @@ self halt.
 %
 category: 'functions'
 method: builtins
-len: arguments
+len: anObject
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1124,7 +1200,8 @@ class list([iterable])
 Rather than being a function, list is actually a mutable sequence 
 type, as documented in Lists and Sequence Types — list, tuple, range.
 "
-self halt.
+
+	^ anObject __len__ value: anObject
 %
 category: 'functions'
 method: builtins
@@ -1387,11 +1464,11 @@ print: arguments keywords: keywords
 	separator1 := keywords at: #'sep' ifAbsent: [nil].
 	separator1 := separator1
 		ifNil: [' ']
-		ifNotNil: [separator1.container].
+		ifNotNil: [separator1 ___container].
 	terminator := keywords at: #'end' ifAbsent: [nil].
 	terminator := terminator
 		ifNil: [Character lf asString]
-		ifNotNil: [terminator.container].
+		ifNotNil: [terminator ___container].
 	"We should default to stdout, but Transcript is easier (and more useful) for now"
 	stream := keywords at: #'file' ifAbsent: [stdout ifNil: [Transcript]].
 	separator2 := ''.
@@ -1400,7 +1477,7 @@ print: arguments keywords: keywords
 		"https://docs.python.org/3/library/stdtypes.html#str"
 		string := (each isKindOf: str) 
 			ifTrue: [each.container]
-			ifFalse: [ | x | x := each __str__ value: each. x.container].
+			ifFalse: [ | x | x := each __str__ value: each. x ___container].
 		stream nextPutAll: separator2; nextPutAll: string.
 		separator2 := separator1.
 	].
@@ -1837,12 +1914,30 @@ initialize
 		at: #'any'				put: [:arguments :keywords :scope | self any: arguments first];
 		at: #'bin'				put: [:arguments :keywords :scope | self bin: arguments first];
 		at: #'bool'				put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [self bool: arguments first] ifFalse: [False]];
+		at: #'bytearray'		put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [self bytearray: arguments] ifFalse: [bytearray withAll: Array new]];
+		at: #'bytes'			put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [self bytes: arguments] ifFalse: [bytes withAll: Array new]];
+		at: #'callable'			put: [:arguments :keywords :scope | self callable: arguments first];
+		at: #'chr'				put: [:arguments :keywords :scope | self chr: arguments first];
 		at: #'classmethod'	put: [:arguments :keywords :scope | self classmethod: arguments first scope: scope];
+		at: #'complex'			put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [self complex: arguments] ifFalse: [complex real: 0 imag: 0 ]];
 		at: #'exec'				put: [:arguments :keywords :scope | self exec: arguments];
+		at: #'delattr'			put: [:arguments :keywords :scope | self delattr: arguments];
+		at: #'dict'				put: [:arguments :keywords :scope | self dict: arguments keywords: keywords scope: scope];
+		at: #'dir'					put: [:arguments :keywords :scope | self dir: arguments scope: scope];
+		at: #'divmod'			put: [:arguments :keywords :scope | self divmod: arguments];
+		at: #'enumerate'		put: [:arguments :keywords :scope | self enumerate: arguments first keywords: keywords];
+		at: #'filter'				put: [:arguments :keywords :scope | self filter: arguments scope: scope];
+		at: #'float'				put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [ self float: arguments first ] ifFalse: [float with: 0]];
+		at: #'format'			put: [:arguments :keywords :scope | self format: arguments];
+		at: #'frozenset'		put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [ self frozenset: arguments first ] ifFalse: [frozenset with: Set new]];
 		at: #'getattr'			put: [:arguments :keywords :scope | self getattr: arguments first _: arguments second];
+		at: #'globals'			put: [:arguments :keywords :scope | self globals: scope];
 		at: #'hasattr'			put: [:arguments :keywords :scope | self hasattr: arguments first _: arguments second];
+		at: #'hash'				put: [:arguments :keywords :scope | self hash: arguments first];
+		at: #'hex'				put: [:arguments :keywords :scope | self hex: arguments first];
 		at: #'id'					put: [:arguments :keywords :scope | self id: arguments first];
-		at: #'int'				put: [:arguments :keywords :scope | self int: arguments first];
+		at: #'input'				put: [:arguments :keywords :scope | self input: arguments];
+		at: #'int'				put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [ self int: arguments ] ifFalse: [int with: 0]];
 		at: #'isinstance'		put: [:arguments :keywords :scope | self isinstance: arguments first _: arguments second];
 		at: #'len'				put: [:arguments :keywords :scope | self len: arguments first];
 		at: #'list'				put: [:arguments :keywords :scope | self list: arguments first];

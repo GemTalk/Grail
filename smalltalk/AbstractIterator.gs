@@ -35,3 +35,9 @@ __next__
 
 	^[container ___size <= index ifTrue: [StopIteration signal]. container ___at: (index := index + 1)]
 %
+category: 'other'
+method: AbstractIterator
+do: aBlock
+
+	container do: aBlock
+%

@@ -5,7 +5,42 @@ float removeAllMethods.
 float class removeAllMethods.
 %
 ! ------------------- Class methods for float
+set compile_env: 0
+category: 'other'
+classmethod: float
+_generality
+
+	^ 100
+%
+category: 'other'
+classmethod: float
+withString: anObject
+
+	(anObject isKindOf: str) ifFalse: [ self halt ].
+	^ float with: (str parseFloat: anObject ___container) asFloat
+%
 ! ------------------- Instance methods for float
+set compile_env: 0
+category: 'other'
+method: float
+___initialize: anObject
+
+	(anObject isKindOf: str) 
+		ifTrue: [ number := float withString: anObject ]
+		ifFalse: [ number := anObject ]
+%
+category: 'other'
+method: float
+_coerce: aNumber
+
+	^ float with: aNumber
+%
+category: 'other'
+method: float
+_generality
+
+	^ 100
+%
 set compile_env: 0
 category: 'Python'
 method: float
@@ -35,7 +70,7 @@ category: 'Python'
 method: float
 __float__
 
-	self halt.
+	^ [ :anObject | float with: anObject ]
 %
 category: 'Python'
 method: float
@@ -59,7 +94,7 @@ category: 'Python'
 method: float
 __int__
 
-	self halt.
+	^ [ :obj | obj ___number // 1 ]
 %
 category: 'Python'
 method: float
@@ -71,7 +106,7 @@ category: 'Python'
 method: float
 __neg__
 
-	self halt.
+	^ [ :value | float with: value ___number * -1 ]
 %
 category: 'Python'
 method: float
@@ -149,7 +184,9 @@ category: 'Python'
 method: float
 __truediv__
 
-	self halt.
+	^ [ :lhs :rhs | 
+			rhs.number = 0 ifTrue: [ ZeroDivisionError signal: 'division by zero' ].
+			float with: ( lhs.number / rhs.number ) ]
 %
 category: 'Python'
 method: float

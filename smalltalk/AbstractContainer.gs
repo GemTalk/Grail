@@ -24,17 +24,33 @@ category: 'other'
 classmethod: AbstractContainer
 withAll: aCollection
 
-	^self basicNew
+	(aCollection class == self) ifTrue: [ ^ aCollection ].
+	^ self basicNew
 		___initialize: aCollection;
 		yourself
 %
 ! ------------------- Instance methods for AbstractContainer
 set compile_env: 0
+category: 'other'
+method: AbstractContainer
+add: anObject
+
+	self __add__ value: self value: anObject
+%
+category: 'other'
+method: AbstractContainer
+asArray
+
+	^ container collect: [ :each | (each isKindOf: AbstractNumber) ifTrue: [ each ___number ] ] "TODO: allow hetergeneous containers"
+%
+set compile_env: 0
 category: 'overrides'
 method: AbstractContainer
 = anObject
 
-	^((anObject isKindOf: AbstractContainer) and: [container = anObject.container]) or: [container = anObject]
+	| res |
+	res := ((anObject isKindOf: AbstractContainer) and: [container = anObject.container]) or: [container = anObject].
+	^ res
 %
 category: 'overrides'
 method: AbstractContainer
@@ -89,10 +105,29 @@ method: AbstractContainer
 ___initialize: aCollection
 
 	container := self class containerClass withAll: aCollection.
+	attributes := SymbolDictionary new.
 %
 category: 'private'
 method: AbstractContainer
 ___size
+
+	^container size
+%
+category: 'private'
+method: AbstractContainer
+at: anIndex
+
+	^container at: anIndex
+%
+category: 'private'
+method: AbstractContainer
+do: aBlock
+
+	container do: aBlock
+%
+category: 'private'
+method: AbstractContainer
+size
 
 	^container size
 %

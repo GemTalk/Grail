@@ -9,10 +9,77 @@ dict class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: dict
+= aDict
+	"ugly workaround method to prevent ConstantAst from making two otherwise equal dicts unequal
+	current strategy: 
+		check both containers are the same size
+		initialize an IdentityBag to store checked indices
+		iterate through self container keys
+			for each key value pair, 
+				check aDict container has the same key value pair, 
+				check that the key index does not already exist in the IdentityBag,
+				and add the aDict container key index to an IdentitySet"
+
+	| checkedIndices |
+	(container size = aDict ___container size) ifFalse: [ ^ False ].
+	checkedIndices := IdentityBag new.
+	1 to: container size by: 2 do: [ :leftIndex |
+		| leftKey rightKey rightIndex leftValue rightValue |
+		leftKey := container at: leftIndex.
+		rightIndex := aDict indexOfKey: leftKey.
+		(rightIndex == 0 or: [ checkedIndices includes: rightIndex ]) ifTrue: [ ^ False ].
+		rightKey := aDict ___container at: rightIndex.
+		leftValue := ((container at: leftIndex) isKindOf: ConstantAst) ifTrue: [ (container at: leftIndex) value ] ifFalse: [ container at: leftIndex ].
+		rightValue := ((aDict ___container at: rightIndex) isKindOf: ConstantAst) ifTrue: [ (aDict ___container at: rightIndex) value ] ifFalse: [ aDict ___container at: rightIndex ].
+		leftValue = rightValue ifFalse: [ ^ False ].
+		checkedIndices add: rightIndex.
+	].
+	^ True
+%
+category: 'other'
+method: dict
+at: aKey
+
+	| index |
+	index := self indexOfKey: (str withAll: aKey).
+	^ (container at: index + 1) value
+%
+category: 'other'
+method: dict
+at: aKey ifAbsent: aBlock
+
+	| index |
+	index := self indexOfKey: (str withAll: aKey).
+	index = 0 ifTrue: [ ^ aBlock value ].
+	^ (container at: index + 1) value
+%
+category: 'other'
+method: dict
+has: aKey
+
+	| index |
+	index := self indexOfKey: (str withAll: aKey).
+	index = 0 ifTrue: [ ^ False ] ifFalse: [ ^ True ].
+%
+category: 'other'
+method: dict
+indexOfKey: aKey
+
+	1 to: container size by: 2 do: [ :i | (container at: i) = aKey ifTrue: [ ^ i ] ].
+	^ 0
+%
+category: 'other'
+method: dict
+keysAndValuesDo: aDyadicBlock
+
+	^ 1 to: container size by: 2 do: [ :index | aDyadicBlock value: (container at: index) value: (container at: index + 1) ]
+%
+category: 'other'
+method: dict
 set: aKey to: aValue
 
 	1 to: container size by: 2 do: [:i | 
-		((container at: i) __eq__ value: aKey) == True ifTrue: [
+		((container at: i) __eq__ value: (container at: 1) value: aKey) == True ifTrue: [
 			container at: i + 1 put: aValue.
 			^self.
 		].

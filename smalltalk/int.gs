@@ -5,15 +5,71 @@ int removeAllMethods.
 int class removeAllMethods.
 %
 ! ------------------- Class methods for int
+set compile_env: 0
+category: 'other'
+classmethod: int
+_generality
+
+	^ 50
+%
+category: 'other'
+classmethod: int
+withString: anObject
+
+	^ self withString: anObject base: 10
+%
+category: 'other'
+classmethod: int
+withString: anObject base: base
+
+	| numberString |
+	(anObject isKindOf: str) ifFalse: [ self halt ].
+	numberString :=  str removePrefix: (str parseInteger: anObject ___container).
+	^ int with: (base asString, 'r', numberString) asInteger
+%
 ! ------------------- Instance methods for int
 set compile_env: 0
 category: 'other'
 method: int
+___initialize: anObject
+
+	(anObject isKindOf: str) 
+		ifTrue: [ number := float withString: anObject ]
+		ifFalse: [ number := anObject ]
+%
+category: 'other'
+method: int
+___initialize: anObject base: base
+
+	(anObject isKindOf: str) 
+		ifTrue: [ number := int withString: anObject base: base ]
+		ifFalse: [ number := anObject ]
+%
+category: 'other'
+method: int
+_coerce: aNumber
+
+	^ int with: aNumber
+%
+category: 'other'
+method: int
+_generality
+
+	^ 50
+%
+category: 'other'
+method: int
 = anObject
 "clunky implementation to avoid re-defining Array >> includes:"
-	| res |
-	res := ((self __eq__ value: anObject) == True).
+	| res temp |
+	res := ((temp := self __eq__ value: self value: anObject) == True).
 	^ res
+%
+category: 'other'
+method: int
+hash
+
+	^ number
 %
 set compile_env: 0
 category: 'Python'
@@ -50,7 +106,7 @@ category: 'Python'
 method: int
 __float__
 
-	self halt.
+	^ [ :anObject | float with: anObject ]
 %
 category: 'Python'
 method: int

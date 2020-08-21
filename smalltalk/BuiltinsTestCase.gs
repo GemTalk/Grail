@@ -84,6 +84,264 @@ test_bool
 %
 category: 'other'
 method: BuiltinsTestCase
+test_bytearray
+
+	| x |
+	x := (self statementsAt: 22) evaluate: aScope.		
+	self assert: x = #[0 0 0].
+	x := (self statementsAt: 23) evaluate: aScope.		
+	self assert: x = #[1 2 3].
+	x := (self statementsAt: 24) evaluate: aScope.		
+	self assert: x = #[].
+	x := (self statementsAt: 25) evaluate: aScope.		
+	self assert: x = #[97].
+%
+category: 'other'
+method: BuiltinsTestCase
+test_bytes
+
+	| x |
+	x := (self statementsAt: 26) evaluate: aScope.		
+	self assert: x = #[0 0 0].
+	x := (self statementsAt: 27) evaluate: aScope.		
+	self assert: x = #[1 2 3].
+	x := (self statementsAt: 28) evaluate: aScope.		
+	self assert: x = #[].
+	x := (self statementsAt: 29) evaluate: aScope.		
+	self assert: x = #[97].
+%
+category: 'other'
+method: BuiltinsTestCase
+test_callable
+
+	| x |
+	x := (self statementsAt: 30) evaluate: aScope.		
+	self deny: x.
+	x := (self statementsAt: 31) evaluate: aScope.		
+	self deny: x.
+	x := (self statementsAt: 32) evaluate: aScope.		
+	self assert: x.
+	x := (self statementsAt: 33) evaluate: aScope.		
+	self assert: x.
+%
+category: 'other'
+method: BuiltinsTestCase
+test_chr
+
+	| x |
+	x := (self statementsAt: 34) evaluate: aScope.		
+	self assert: x = ' '.
+	x := (self statementsAt: 35) evaluate: aScope.		
+	self assert: x = 'a'.
+%
+category: 'other'
+method: BuiltinsTestCase
+test_classmethod
+
+	| x |
+	x := (self statementsAt: 36) evaluate: aScope.		
+	x := (self statementsAt: 37) evaluate: aScope.		
+	x := (self statementsAt: 38) evaluate: aScope.		
+	x := stdout contents.
+	self assert: x = 'TypeError '.
+	x := (self statementsAt: 39) evaluate: aScope.		
+	self assert: x = 4.
+%
+category: 'other'
+method: BuiltinsTestCase
+test_complex
+
+	| x |
+	x := (self statementsAt: 40) evaluate: aScope.		
+	self assert: x = (complex real: 0 imag: 0).
+	x := (self statementsAt: 41) evaluate: aScope.		
+	self assert: x = (complex real: 1 imag: 0).
+	x := (self statementsAt: 42) evaluate: aScope.		
+	self assert: x = (complex real: 2 imag: 3).
+	x := (self statementsAt: 43) evaluate: aScope.		
+	self assert: x = (complex real: -7 imag: 5).
+%
+category: 'other'
+method: BuiltinsTestCase
+test_delattr
+
+	| x |
+	x := (self statementsAt: 44) evaluate: aScope.		
+	x := (self statementsAt: 45) evaluate: aScope.		
+	x := (self statementsAt: 46) evaluate: aScope.
+	x := (self statementsAt: 47) evaluate: aScope.
+	x := stdout contents.
+	self assert: x = 'AttributeError '.
+%
+category: 'other'
+method: BuiltinsTestCase
+test_dict
+
+	| x s |
+	s := dict new.
+	s set: (str withAll: 'one') to: (int with: 1).
+	s set: (str withAll: 'two') to: (int with: 2).
+	s set: (str withAll: 'three') to: (int with: 3).
+	x := (self statementsAt: 48) evaluate: aScope.	
+	self assert: x = s.
+	x := (self statementsAt: 49) evaluate: aScope.		
+	self assert: x = s.
+	x := (self statementsAt: 50) evaluate: aScope.		
+	self assert: x = s.
+%
+category: 'other'
+method: BuiltinsTestCase
+test_divmod
+
+	| x |
+	x := (self statementsAt: 51) evaluate: aScope.	
+	self assert: (x = (Array with: (float with: 1) with: (float with: 0))).
+	x := (self statementsAt: 52) evaluate: aScope.	
+	self assert: (x = (Array with: (float with: 1) with: (float with: 2))).
+	x := (self statementsAt: 53) evaluate: aScope.	
+	self assert: (x = (Array with: (float with: 1) with: (float with: 0.5))).
+	x := (self statementsAt: 54) evaluate: aScope.	
+	self assert: (x = (Array with: (float with: 1) with: (float with: -0.5))).
+%
+category: 'other'
+method: BuiltinsTestCase
+test_enumerate
+
+	| x l |
+	l := list withAll: { 
+		tuple withAll: {int with: 0 . str withAll: 'Spring' } .
+		tuple withAll: {int with: 1 . str withAll: 'Summer' } .
+		tuple withAll: {int with: 2 . str withAll: 'Fall' } .
+		tuple withAll: {int with: 3 . str withAll: 'Winter' } .
+	}.
+	x := (self statementsAt: 55) evaluate: aScope.	
+	x := (self statementsAt: 56) evaluate: aScope.	
+	self assert: x = l.
+	l := list withAll: { 
+		tuple withAll: {int with: 1 . str withAll: 'Spring' } .
+		tuple withAll: {int with: 2 . str withAll: 'Summer' } .
+		tuple withAll: {int with: 3 . str withAll: 'Fall' } .
+		tuple withAll: {int with: 4 . str withAll: 'Winter' } .
+	}.
+	x := (self statementsAt: 57) evaluate: aScope.	
+	self assert: x = l.
+%
+category: 'other'
+method: BuiltinsTestCase
+test_filter
+
+	| x |
+	x := (self statementsAt: 58) evaluate: aScope.	
+	self assert: x = (list withAll: {(int with: 1) . (int with: 3) }).
+	x := (self statementsAt: 59) evaluate: aScope.	
+	self assert: x = (list withAll: { int with: 10 }).
+%
+category: 'other'
+method: BuiltinsTestCase
+test_float
+
+	| x |
+	x := (self statementsAt: 60) evaluate: aScope.	
+	self assert: x = (float with: 0).
+	x := (self statementsAt: 61) evaluate: aScope.	
+	self assert: x = (float with: 3.14).
+	x := (self statementsAt: 62) evaluate: aScope.	
+	self assert: x = (float with: 1.23).
+	x := (self statementsAt: 63) evaluate: aScope.	
+	self assert: x = (float with: 123000.0).
+%
+category: 'other'
+method: BuiltinsTestCase
+test_frozenset
+
+	| x |
+	x := (self statementsAt: 64) evaluate: aScope.	
+	x := (self statementsAt: 65) evaluate: aScope.
+	self assert: x.
+	x := (self statementsAt: 66) evaluate: aScope.
+	self deny: x.
+	x := (self statementsAt: 67) evaluate: aScope.
+	self assert: x == 3.
+	x := (self statementsAt: 68) evaluate: aScope.
+	x := stdout contents.
+	self assert: x = 'AttributeError '.
+%
+category: 'other'
+method: BuiltinsTestCase
+test_getattr
+
+	| x |
+	x := (self statementsAt: 69) evaluate: aScope.	
+	x := (self statementsAt: 70) evaluate: aScope.
+	x := (self statementsAt: 71) evaluate: aScope.
+	self assert: x = 'yang'.
+	x := (self statementsAt: 72) evaluate: aScope.
+	x := stdout contents.
+	self assert: x = 'AttributeError '.
+%
+category: 'other'
+method: BuiltinsTestCase
+test_globals
+
+	| x |
+	x := (self statementsAt: 73) evaluate: aScope.	
+	self assert: (x isKindOf: GlobalScope).
+	"are we even ready to implement this?"
+%
+category: 'other'
+method: BuiltinsTestCase
+test_hasattr
+
+	| x |
+	x := (self statementsAt: 69) evaluate: aScope.	
+	x := (self statementsAt: 70) evaluate: aScope.	
+	x := (self statementsAt: 74) evaluate: aScope.	
+	self assert: x.
+	x := (self statementsAt: 74) evaluate: aScope.	
+	self deny: x.
+%
+category: 'other'
+method: BuiltinsTestCase
+test_hash
+
+	| x |
+	x := (self statementsAt: 69) evaluate: aScope.	
+	x := (self statementsAt: 70) evaluate: aScope.	
+	x := (self statementsAt: 74) evaluate: aScope.	
+	self assert: x.
+	x := (self statementsAt: 74) evaluate: aScope.	
+	self deny: x.
+%
+category: 'other'
+method: BuiltinsTestCase
+test_hex
+
+	| x |
+	x := (self statementsAt: 78) evaluate: aScope.	
+	self assert: x = '0xc0ffee'.
+	x := (self statementsAt: 79) evaluate: aScope.	
+	self assert: x = '-0x10'.
+%
+category: 'other'
+method: BuiltinsTestCase
+test_int
+
+	| x |
+	x := (self statementsAt: 80) evaluate: aScope.
+	self assert: x = (int with: 0).
+	x := (self statementsAt: 81) evaluate: aScope.
+	self assert: x = (int with: 1).
+	x := (self statementsAt: 82) evaluate: aScope.
+	self assert: x = (int with: 3).
+	x := (self statementsAt: 83) evaluate: aScope.
+	self assert: x = (int with: 0).
+	x := (self statementsAt: 84) evaluate: aScope.
+	self assert: x = (int with: 511).
+	x := (self statementsAt: 85) evaluate: aScope.
+	self assert: x = (int with: 511).
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"

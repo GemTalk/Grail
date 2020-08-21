@@ -66,3 +66,9 @@ initialize
 		stream next: 5.
 		^ self finalize ].
 %
+category: 'other'
+method: ConstantAst
+value
+
+	^ value
+%

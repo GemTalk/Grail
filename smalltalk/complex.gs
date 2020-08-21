@@ -8,11 +8,26 @@ complex class removeAllMethods.
 set compile_env: 0
 category: 'other'
 classmethod: complex
+_generality
+
+	^ 150
+%
+category: 'other'
+classmethod: complex
 real: newValue imag: newImag
 
 	^self basicNew 
 		real: newValue 
 		imag: newImag
+%
+category: 'other'
+classmethod: complex
+with: aNumber
+	
+	| aComplex |
+	aComplex := aNumber.
+	(aNumber isKindOf: complex) ifFalse: [ aComplex := complex real: aNumber imag: 0 ].
+	^ self real: aComplex real imag: aComplex imag
 %
 ! ------------------- Instance methods for complex
 set compile_env: 0
@@ -24,56 +39,30 @@ imaginary
 set compile_env: 0
 category: 'Arithmetic'
 method: complex
-- aNumber
-	(aNumber isKindOf: complex) ifTrue: [
-		^complex real: self real - aNumber real imag: self imaginary - aNumber imaginary
-	].
-	^self _retry: #+ coercing: aNumber
+_retry: aSymbol coercing: aNumber
+
+	^ self perform: aSymbol with: (self _coerce: aNumber)
 %
 category: 'Arithmetic'
 method: complex
-* aNumber
-	(aNumber isKindOf: complex) ifTrue: [
-		^complex real: (self real * aNumber real) + (self imaginary * aNumber imaginary)negated
-		imag: (self real * aNumber imaginary) + (self imaginary * aNumber real)
-	].
-	^self _retry: #* coercing: aNumber
-%
-category: 'Arithmetic'
-method: complex
-/ aNumber
-	(aNumber isKindOf: complex) ifTrue: [
-		^complex real: (self real * aNumber real) + (self imaginary * aNumber imaginary)negated
-		imag: (self real * aNumber imaginary) + (self imaginary * aNumber real)
-	].
-	^self _retry: #/ coercing: aNumber
-%
-category: 'Arithmetic'
-method: complex
-+ aNumber
-	(aNumber isKindOf: complex) ifTrue: [
-		^complex real: self real + aNumber real imag: self imaginary + aNumber imaginary
-	].
-	^self _retry: #+ coercing: aNumber
-%
-category: 'Arithmetic'
-method: complex
-= aNumber
-	(aNumber isKindOf: complex) ifTrue: [
-		^(self real = aNumber real) and: [self imag = aNumber imag]
-	].
-	^self _retry: #= coercing: aNumber
+= anObject
+
+	| res temp |
+	res := ((temp := self __eq__ value: self value: anObject) == True).
+	^ res
 %
 set compile_env: 0
 category: 'other'
 method: complex
 _coerce: aNumber
-	^complex real: aNumber imag: 0
+
+	^ complex real: aNumber imag: 0
 %
 category: 'other'
 method: complex
 _generality
-	^150
+
+	^ 150
 %
 set compile_env: 0
 category: 'Printing'
@@ -110,7 +99,10 @@ category: 'Python'
 method: complex
 __add__
 
-	self halt.
+	^ [ :lhs :rhs | complex 
+		real: lhs real + rhs real
+		imag: lhs imag + rhs imag
+	]
 %
 category: 'Python'
 method: complex
@@ -123,6 +115,23 @@ method: complex
 __divmod__
 
 	self halt.
+%
+category: 'Python'
+method: complex
+__eq__
+	
+	^ [ :lhs :rhs |
+		| lreal rreal limag rimag |
+		lreal := lhs.
+		rreal := rhs.
+		limag := 0.
+		rimag := 0.
+		(lhs isKindOf: complex) ifTrue: [ limag := lhs imag ].
+		(rhs isKindOf: complex) ifTrue: [ rimag := rhs imag ].
+		(lhs isKindOf: AbstractNumber) ifTrue: [ lreal := lhs ___number ].
+		(rhs isKindOf: AbstractNumber) ifTrue: [ rreal := rhs ___number ].
+		(lreal == rreal and: [ limag == rimag ]) ifTrue: [ True ] ifFalse: [ False ] 
+	]
 %
 category: 'Python'
 method: complex
@@ -158,7 +167,10 @@ category: 'Python'
 method: complex
 __mul__
 
-	self halt.
+	^ [ :lhs :rhs |	complex 
+		real: (lhs real * rhs real) + (lhs imaginary * rhs imaginary) negated
+		imag: (lhs real * rhs imaginary) + (lhs imaginary * rhs real)
+	]
 %
 category: 'Python'
 method: complex
@@ -236,13 +248,19 @@ category: 'Python'
 method: complex
 __sub__
 
-	self halt.
+	^ [ :lhs :rhs | complex
+		real: lhs real - rhs real 
+		imag: lhs imaginary - rhs imaginary
+	]
 %
 category: 'Python'
 method: complex
 __truediv__
 
-	self halt.
+	^ [ :lhs :rhs | complex
+		real: (lhs real * rhs real) + (lhs imaginary * rhs imaginary) negated
+		imag: (lhs real * rhs imaginary) + (lhs imaginary * rhs real)
+	]
 %
 category: 'Python'
 method: complex
@@ -254,13 +272,13 @@ category: 'Python'
 method: complex
 imag
 
-	self halt.
+	^ imaginary
 %
 category: 'Python'
 method: complex
 real
 
-	self halt.
+	^ number
 %
 set compile_env: 0
 category: 'Updating'
@@ -278,6 +296,10 @@ category: 'Updating'
 method: complex
 real: newValue imag: newImag
 
-	number := newValue.
-	imaginary := newImag.
+	(newValue isKindOf: AbstractNumber) 
+		ifTrue: [ number := newValue ___number ]
+		ifFalse: [ number := newValue ].
+	(newImag isKindOf: AbstractNumber) 
+		ifTrue: [ imaginary := newImag ___number ]
+		ifFalse: [ imaginary := newImag ].
 %

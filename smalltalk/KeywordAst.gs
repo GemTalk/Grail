@@ -16,7 +16,7 @@ initialize
 	next := stream next: 8.
 	next ~= 'keyword(' ifTrue: [self error].
 	(stream peekFor: $') ifTrue: [
-		arg := (stream upTo: $') asSymbol.
+		arg := str withAll: (stream upTo: $').
 	] ifFalse: [
 		next := stream peekN: 4.
 		next = 'None' ifTrue: [

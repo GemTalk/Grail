@@ -33,3 +33,144 @@ bool('') # 18
 bool([]) # 19
 bool(0) # 20
 bool() # 21
+
+# bytearray(b'\x00\x00\x00')
+bytearray(3) # 22 
+# bytearray(b'\x01\x02\x03')
+bytearray([1, 2, 3]) # 23
+# bytearray(b'')
+bytearray() # 24
+# bytearray(b'a')
+bytearray('a', 'utf-8') # 25
+
+# b'\x00\x00\x00'
+bytes(3) # 26
+# b'\x01\x02\x03'
+bytes([1, 2, 3]) # 27
+# b''
+bytes() # 28
+# b'a'
+bytes('a', 'utf-8') # 29
+
+callable(True) # 30
+callable(0) # 31
+callable(int) # 32
+callable(callable) # 33
+
+chr(32) # 34
+chr(97) # 35
+
+class C: # 36
+    def f(cls):
+        return 3
+
+class D: # 37
+    @classmethod
+    def g(cls):
+        return 4
+
+try: # 38
+    C.f()
+except TypeError:
+    print("TypeError", end=' ')
+
+D.g() # 39
+
+# TODO: compile
+
+complex() # 40
+complex(1) # 41
+complex(2, 3) # 42
+complex(5j, 7j) # 43
+
+class E: # 44
+    def __init__(self):
+        self.n = 44
+
+e = E() # 45
+delattr(e, 'n') # 46
+
+try: # 47
+    e.n
+except AttributeError:
+    print("AttributeError", end=' ')
+
+dict(one=1, two=2, three=3) # 48
+{'one': 1, 'two': 2, 'three': 3} # 49
+dict({'three': 3, 'one': 1, 'two': 2}) # 50
+
+# TODO: dir
+
+divmod(5, 5) # 51
+divmod(5, 3) # 52
+divmod(1.5, 1) # 53
+divmod(-1.5, -1) # 54
+
+seasons = ['Spring', 'Summer', 'Fall', 'Winter'] # 55
+list(enumerate(seasons)) # 56
+list(enumerate(seasons, start=1)) # 57
+
+# TODO: eval
+
+# TODO: exec
+
+list(filter(lambda x:x%2, [1, 2, 3])) # 58
+list(filter(lambda x:x>0, [-10, 0, 10])) # 59
+
+float() # 60
+float(3.14) # 61
+float("+1.23") # 62
+float("+1.23E5") # 63
+
+# TODO: format
+
+fs = frozenset([1, 2, 3]) # 64
+3 in fs # 65
+4 in fs # 66
+len(fs) # 67
+
+try: # 68
+    fs.add(4)
+except AttributeError:
+    print("AttributeError", end=' ')
+
+class F(): # 69
+    yin = "yang"
+    e = 2.71
+
+f = F() # 70
+getattr(f, "yin") # 71
+
+try: # 72
+    getattr(f, "yang")
+except AttributeError:
+    print("AttributeError", end=' ')
+
+globals() # 73
+
+hasattr(f, "yin") # 74
+hasattr(f, "yang") # 75 
+
+hash(1) # 76
+hash(1.) # 77
+
+# TODO: help
+
+hex(12648430) # 78
+hex(-16) # 79
+
+# TODO: id (?)
+
+# TODO: input (?)
+
+int() # 80
+int(1.5) # 81
+int("3") # 82
+int("0") # 83
+int("777", 8) # 84
+int("0o777", 8) # 85
+
+class C:
+    pass
+
+dir(C()) is dir(C) # WRONG??!?

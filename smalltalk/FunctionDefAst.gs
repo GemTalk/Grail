@@ -95,5 +95,5 @@ value: arguments value: keywords value: aScope
 		arguments: arguments
 		keywords: keywords
 		scope: aScope.
-	^body evaluate: aScope
+	^ body evaluate: aScope
 %

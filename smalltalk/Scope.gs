@@ -104,7 +104,18 @@ printOn: aStream
 %
 category: 'other'
 method: Scope
-set: aSymbol to: aValue
+removeKey: aSymbol ifAbsent: aBlock
 
-	variables at: aSymbol put: aValue.
+	^variables 
+		removeKey: aSymbol
+		ifAbsent: aBlock
+%
+category: 'other'
+method: Scope
+set: anObject to: aValue
+
+	| aKey |
+	aKey := anObject.
+	(anObject isKindOf: str) ifTrue: [ aKey := anObject ___container asSymbol ].
+	variables at: aKey put: aValue.
 %

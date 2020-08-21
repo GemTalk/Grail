@@ -4288,13 +4288,22 @@ set compile_env: 0
 expectvalue /Class
 doit
 object subclass: 'AbstractContainer'
-  instVarNames: #( container)
+  instVarNames: #( container attributes)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
   options: #( disallowGciStore)
 
+%
+expectvalue /Class
+doit
+AbstractContainer comment: 
+'No class-specific documentation for AbstractContainer, hierarchy is: 
+Object
+  object
+    AbstractContainer( container)
+'
 %
 expectvalue /Class
 doit
@@ -4392,6 +4401,16 @@ AbstractContainer subclass: 'dict_items'
 %
 expectvalue /Class
 doit
+dict_items comment: 
+'No class-specific documentation for dict_items, hierarchy is: 
+Object
+  object
+    AbstractContainer( container)
+      dict_items
+'
+%
+expectvalue /Class
+doit
 dict_items category: 'builtins'
 %
 set compile_env: 0
@@ -4406,6 +4425,16 @@ AbstractContainer subclass: 'dict_keys'
   inDictionary: Python
   options: #( disallowGciStore)
 
+%
+expectvalue /Class
+doit
+dict_keys comment: 
+'No class-specific documentation for dict_keys, hierarchy is: 
+Object
+  object
+    AbstractContainer( container)
+      dict_keys
+'
 %
 expectvalue /Class
 doit
@@ -4426,7 +4455,44 @@ AbstractContainer subclass: 'dict_values'
 %
 expectvalue /Class
 doit
+dict_values comment: 
+'No class-specific documentation for dict_values, hierarchy is: 
+Object
+  object
+    AbstractContainer( container)
+      dict_values
+'
+%
+expectvalue /Class
+doit
 dict_values category: 'builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for frozenset
+expectvalue /Class
+doit
+AbstractContainer subclass: 'frozenset'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+frozenset comment: 
+'No class-specific documentation for frozenset, hierarchy is: 
+Object
+  object
+    AbstractContainer( container)
+      frozenset
+'
+%
+expectvalue /Class
+doit
+frozenset category: 'builtins'
 %
 set compile_env: 0
 ! ------------------- Class definition for list
@@ -6015,6 +6081,7 @@ input FloatingPointError.gs
 input FloorDivAst.gs
 input ForAst.gs
 input FormattedValueAst.gs
+input frozenset.gs
 input function.gs
 input FunctionDefAst.gs
 input FutureWarning.gs

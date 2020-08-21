@@ -21,3 +21,10 @@ do: aBlock
 
 	aBlock value: self.
 %
+category: 'other'
+method: KeywordsAst
+initialize
+
+	super initialize.
+	self halt.
+%
