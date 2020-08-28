@@ -346,10 +346,35 @@ test_int
 %
 category: 'other'
 method: BuiltinsTestCase
+test_isinstance
+
+	| x |
+	x := (self statementsAt: 89) evaluate: aScope.
+	x := (self statementsAt: 90) evaluate: aScope.
+	x := (self statementsAt: 91) evaluate: aScope.
+	x := (self statementsAt: 92) evaluate: aScope.
+	x := (self statementsAt: 93) evaluate: aScope.
+	self assert: x.
+	x := (self statementsAt: 94) evaluate: aScope.
+	self deny: x.
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"
 	self assert: stdout contents = ('hello,world' , Character lf asString).
+%
+category: 'other'
+method: BuiltinsTestCase
+test_type
+
+	| x |
+	x := (self statementsAt: 89) evaluate: aScope.
+	x := (self statementsAt: 91) evaluate: aScope.
+	x := (self statementsAt: 95) evaluate: aScope.
+	x := (self statementsAt: 96) evaluate: aScope.
+	self assert: x.
 %
 category: 'other'
 method: BuiltinsTestCase

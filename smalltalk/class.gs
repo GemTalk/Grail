@@ -18,6 +18,12 @@ newForNode: aFunctionDefAst scope: aScope
 set compile_env: 0
 category: 'other'
 method: class
+astNode
+
+	^ astNode
+%
+category: 'other'
+method: class
 call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
 
 	| function |

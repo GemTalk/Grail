@@ -1121,7 +1121,7 @@ Changed in version 3.7: x is now a positional-only parameter.
 %
 category: 'functions'
 method: builtins
-isinstance: object _: classInfo
+isinstance: object class: classInfo scope: aScope
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1136,8 +1136,7 @@ classinfo argument, or of a (direct, indirect or virtual) subclass
 or tuple of types and such tuples, a TypeError exception is raised.
 "
 
-	^object isKindOf: classInfo
-
+	^ object __class__ isDerivedFrom: classInfo scope: aScope
 %
 category: 'functions'
 method: builtins
@@ -1938,7 +1937,7 @@ initialize
 		at: #'id'					put: [:arguments :keywords :scope | self id: arguments first];
 		at: #'input'				put: [:arguments :keywords :scope | self input: arguments];
 		at: #'int'				put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [ self int: arguments ] ifFalse: [int with: 0]];
-		at: #'isinstance'		put: [:arguments :keywords :scope | self isinstance: arguments first _: arguments second];
+		at: #'isinstance'		put: [:arguments :keywords :scope | self isinstance: arguments first class: arguments second scope: scope];
 		at: #'len'				put: [:arguments :keywords :scope | self len: arguments first];
 		at: #'list'				put: [:arguments :keywords :scope | self list: arguments first];
 		at: #'object'			put: [:arguments :keywords :scope | self object];

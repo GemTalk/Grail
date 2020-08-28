@@ -9,6 +9,12 @@ ClassDefAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: ClassDefAst
+__eq__
+
+	^ [ :lhs :rhs | (lhs name = rhs name) ifTrue: [ True ] ifFalse: [ False ] ]
+%
+category: 'other'
+method: ClassDefAst
 __str__
 	"<class '__main__.MyClass'>"
 
@@ -75,6 +81,17 @@ initialize
 	self commaSpace.
 	decorator_list := self collectAst:[self expression].
 	self readPosition.
+%
+category: 'other'
+method: ClassDefAst
+isDerivedFrom: aClass scope: aScope
+"distinct from isSubclassOf: because
+1) isDerivedFrom: checks the Python class hierarchy
+2) isSubclassOf: checks the Smalltalk class hierarchy"
+	
+	(aClass name = name) ifTrue: [ ^ true ].
+	bases do: [ :base | ((aScope get: base id) astNode isDerivedFrom: aClass scope: aScope) ifTrue: [ ^ true ] ].
+	^ false
 %
 category: 'other'
 method: ClassDefAst

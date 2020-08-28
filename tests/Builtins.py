@@ -174,6 +174,20 @@ d = {'tri': 'ceratops', 'rect': 'angle'} # 86
 d['rect'] = 'ify' # 87
 len(d) # 88
 
+class Base: # 89
+    pass
+
+class Derived(Base): # 90
+    pass
+
+b = Base() # 91
+d = Derived() # 92
+isinstance(d, type(b)) # 93
+isinstance(b, type(d)) # 94
+
+b2 = Base() # 95
+type(b) == type(b2) # 96
+
 class C:
     pass
 
