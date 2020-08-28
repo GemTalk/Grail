@@ -1140,7 +1140,7 @@ or tuple of types and such tuples, a TypeError exception is raised.
 %
 category: 'functions'
 method: builtins
-issubclass: arguments
+issubclass: aClass1 class: aClass2 scope: aScope
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1150,7 +1150,8 @@ Return true if class is a subclass (direct, indirect or virtual) of classinfo.
 objects, in which case every entry in classinfo will be checked. In any other
  case, a TypeError exception is raised.
 "
-self halt.
+
+	^ aClass1 astNode isDerivedFrom: aClass2 astNode scope: aScope
 %
 category: 'functions'
 method: builtins
@@ -1938,6 +1939,7 @@ initialize
 		at: #'input'				put: [:arguments :keywords :scope | self input: arguments];
 		at: #'int'				put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [ self int: arguments ] ifFalse: [int with: 0]];
 		at: #'isinstance'		put: [:arguments :keywords :scope | self isinstance: arguments first class: arguments second scope: scope];
+		at: #'issubclass'		put: [:arguments :keywords :scope | self issubclass: arguments first class: arguments second scope: scope];
 		at: #'len'				put: [:arguments :keywords :scope | self len: arguments first];
 		at: #'list'				put: [:arguments :keywords :scope | self list: arguments first];
 		at: #'object'			put: [:arguments :keywords :scope | self object];

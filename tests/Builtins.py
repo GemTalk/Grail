@@ -188,6 +188,10 @@ isinstance(b, type(d)) # 94
 b2 = Base() # 95
 type(b) == type(b2) # 96
 
+issubclass(Derived, Base) # 97
+issubclass(Base, Derived) # 98
+issubclass(type(b), type(d)) # 99
+
 class C:
     pass
 

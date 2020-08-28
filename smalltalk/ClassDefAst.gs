@@ -29,6 +29,12 @@ __str__
 %
 category: 'other'
 method: ClassDefAst
+astNode
+
+	^ self
+%
+category: 'other'
+method: ClassDefAst
 call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
 
 	| function |

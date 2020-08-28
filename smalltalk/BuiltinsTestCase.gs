@@ -360,6 +360,22 @@ test_isinstance
 %
 category: 'other'
 method: BuiltinsTestCase
+test_issubclass
+
+	| x |
+	x := (self statementsAt: 89) evaluate: aScope.
+	x := (self statementsAt: 90) evaluate: aScope.
+	x := (self statementsAt: 91) evaluate: aScope.
+	x := (self statementsAt: 92) evaluate: aScope.
+	x := (self statementsAt: 97) evaluate: aScope.
+	self assert: x.
+	x := (self statementsAt: 98) evaluate: aScope.
+	self deny: x.
+	x := (self statementsAt: 99) evaluate: aScope.
+	self deny: x.
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"
