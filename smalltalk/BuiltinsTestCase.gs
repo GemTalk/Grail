@@ -188,6 +188,10 @@ test_dict
 	self assert: x = s.
 	x := (self statementsAt: 50) evaluate: aScope.		
 	self assert: x = s.
+	x := (self statementsAt: 86) evaluate: aScope.
+	x := (self statementsAt: 87) evaluate: aScope.
+	x := (self statementsAt: 88) evaluate: aScope.
+	self assert: x = 2.
 %
 category: 'other'
 method: BuiltinsTestCase

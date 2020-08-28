@@ -170,6 +170,10 @@ int("0") # 83
 int("777", 8) # 84
 int("0o777", 8) # 85
 
+d = {'tri': 'ceratops', 'rect': 'angle'} # 86
+d['rect'] = 'ify' # 87
+len(d) # 88
+
 class C:
     pass
 

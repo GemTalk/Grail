@@ -24,9 +24,11 @@ category: 'other'
 classmethod: AbstractContainer
 withAll: aCollection
 
-	(aCollection class == self) ifTrue: [ ^ aCollection ].
+	| items |
+	items := aCollection.
+	(aCollection isKindOf: AbstractContainer) ifTrue: [ items := aCollection ___container ].
 	^ self basicNew
-		___initialize: aCollection;
+		___initialize: items;
 		yourself
 %
 ! ------------------- Instance methods for AbstractContainer
