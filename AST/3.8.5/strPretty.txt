@@ -1,0 +1,3 @@
+Module(body=[
+    Assert(test=Constant(value=True, kind=None), msg=None),
+  ], type_ignores=[])

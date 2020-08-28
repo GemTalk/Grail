@@ -1,0 +1,341 @@
+Module(body=[
+    Expr(value=BinOp(left=Constant(value=1, kind=None), op=Add(), right=Constant(value=2, kind=None))),
+    Expr(value=BinOp(left=Constant(value=3, kind=None), op=Add(), right=Constant(value=2, kind=None))),
+    Expr(value=BinOp(left=Constant(value=1, kind=None), op=Add(), right=BinOp(left=Constant(value=2, kind=None), op=Mult(), right=Constant(value=3, kind=None)))),
+    Expr(value=BinOp(left=UnaryOp(op=USub(), operand=Constant(value=1, kind=None)), op=Add(), right=Constant(value=3, kind=None))),
+    Expr(value=BinOp(left=Constant(value=3, kind=None), op=Sub(), right=Constant(value=1, kind=None))),
+    Expr(value=BinOp(left=Constant(value=4, kind=None), op=Sub(), right=Constant(value=8, kind=None))),
+    Expr(value=BinOp(left=BinOp(left=Constant(value=5, kind=None), op=Sub(), right=BinOp(left=Constant(value=1, kind=None), op=Mult(), right=Constant(value=2, kind=None))), op=Add(), right=Constant(value=1, kind=None))),
+    Expr(value=BinOp(left=UnaryOp(op=USub(), operand=Constant(value=1, kind=None)), op=Sub(), right=Constant(value=5, kind=None))),
+    Expr(value=BinOp(left=Constant(value=2, kind=None), op=BitAnd(), right=Constant(value=1, kind=None))),
+    Expr(value=BinOp(left=Constant(value=5, kind=None), op=BitAnd(), right=Constant(value=4, kind=None))),
+    Expr(value=BinOp(left=Constant(value=7, kind=None), op=BitAnd(), right=Constant(value=3, kind=None))),
+    Expr(value=BinOp(left=Constant(value=1, kind=None), op=BitAnd(), right=Constant(value=1, kind=None))),
+    Expr(value=BinOp(left=BinOp(left=Constant(value=5, kind=None), op=BitAnd(), right=Constant(value=4, kind=None)), op=BitOr(), right=Constant(value=3, kind=None))),
+    Expr(value=BinOp(left=Constant(value=2, kind=None), op=BitOr(), right=Constant(value=1, kind=None))),
+    Expr(value=BinOp(left=Constant(value=5, kind=None), op=BitOr(), right=Constant(value=4, kind=None))),
+    Expr(value=BinOp(left=Constant(value=7, kind=None), op=BitOr(), right=Constant(value=3, kind=None))),
+    Expr(value=BinOp(left=Constant(value=1, kind=None), op=BitOr(), right=Constant(value=1, kind=None))),
+    Expr(value=BinOp(left=Constant(value=5, kind=None), op=BitOr(), right=BinOp(left=Constant(value=4, kind=None), op=BitAnd(), right=Constant(value=3, kind=None)))),
+    Expr(value=Compare(left=Constant(value=1, kind=None), ops=[
+        Gt(),
+      ], comparators=[
+        Constant(value=2, kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value=3, kind=None), ops=[
+        Gt(),
+      ], comparators=[
+        Constant(value=2, kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value=2, kind=None), ops=[
+        Gt(),
+      ], comparators=[
+        Constant(value=2, kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value=5, kind=None), ops=[
+        Gt(),
+      ], comparators=[
+        Constant(value=4, kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value=4, kind=None), ops=[
+        Gt(),
+      ], comparators=[
+        BinOp(left=Constant(value=3, kind=None), op=Add(), right=Constant(value=1, kind=None)),
+      ])),
+    Expr(value=Compare(left=Constant(value=1, kind=None), ops=[
+        Eq(),
+      ], comparators=[
+        Constant(value=1, kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value=2, kind=None), ops=[
+        Eq(),
+      ], comparators=[
+        Constant(value=1, kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value=5, kind=None), ops=[
+        Eq(),
+      ], comparators=[
+        Constant(value=7, kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value='hello', kind=None), ops=[
+        Eq(),
+      ], comparators=[
+        Constant(value='hello', kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value='World', kind=None), ops=[
+        Eq(),
+      ], comparators=[
+        Constant(value='World!!!', kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value='FooBar', kind=None), ops=[
+        Eq(),
+      ], comparators=[
+        Constant(value=42, kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value=1, kind=None), ops=[
+        GtE(),
+      ], comparators=[
+        Constant(value=2, kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value=3, kind=None), ops=[
+        GtE(),
+      ], comparators=[
+        Constant(value=2, kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value=2, kind=None), ops=[
+        GtE(),
+      ], comparators=[
+        Constant(value=2, kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value=5, kind=None), ops=[
+        GtE(),
+      ], comparators=[
+        Constant(value=4, kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value=4, kind=None), ops=[
+        GtE(),
+      ], comparators=[
+        BinOp(left=Constant(value=3, kind=None), op=Add(), right=Constant(value=2, kind=None)),
+      ])),
+    Expr(value=Compare(left=Constant(value=1, kind=None), ops=[
+        Lt(),
+      ], comparators=[
+        Constant(value=2, kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value=1, kind=None), ops=[
+        Lt(),
+      ], comparators=[
+        Constant(value=1, kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value=3, kind=None), ops=[
+        Lt(),
+      ], comparators=[
+        Constant(value=2, kind=None),
+      ])),
+    Expr(value=Compare(left=BinOp(left=Constant(value=1, kind=None), op=Add(), right=Constant(value=1, kind=None)), ops=[
+        Lt(),
+      ], comparators=[
+        BinOp(left=Constant(value=4, kind=None), op=Sub(), right=Constant(value=1, kind=None)),
+      ])),
+    Expr(value=Compare(left=Constant(value=1, kind=None), ops=[
+        Lt(),
+        Lt(),
+      ], comparators=[
+        Constant(value=4, kind=None),
+        Constant(value=8, kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value=1, kind=None), ops=[
+        LtE(),
+      ], comparators=[
+        Constant(value=2, kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value=1, kind=None), ops=[
+        LtE(),
+      ], comparators=[
+        Constant(value=1, kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value=3, kind=None), ops=[
+        LtE(),
+      ], comparators=[
+        Constant(value=2, kind=None),
+      ])),
+    Expr(value=Compare(left=BinOp(left=Constant(value=1, kind=None), op=Add(), right=Constant(value=1, kind=None)), ops=[
+        LtE(),
+      ], comparators=[
+        BinOp(left=Constant(value=4, kind=None), op=Sub(), right=Constant(value=1, kind=None)),
+      ])),
+    Expr(value=Compare(left=Constant(value=1, kind=None), ops=[
+        LtE(),
+        LtE(),
+      ], comparators=[
+        Constant(value=4, kind=None),
+        Constant(value=8, kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value=1, kind=None), ops=[
+        NotEq(),
+      ], comparators=[
+        Constant(value=1, kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value=2, kind=None), ops=[
+        NotEq(),
+      ], comparators=[
+        Constant(value=1, kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value=5, kind=None), ops=[
+        NotEq(),
+      ], comparators=[
+        Constant(value=7, kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value='hello', kind=None), ops=[
+        NotEq(),
+      ], comparators=[
+        Constant(value='hello', kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value='World', kind=None), ops=[
+        NotEq(),
+      ], comparators=[
+        Constant(value='World!!!', kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value='FooBar', kind=None), ops=[
+        NotEq(),
+      ], comparators=[
+        Constant(value=42, kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value=3, kind=None), ops=[
+        In(),
+      ], comparators=[
+        List(elts=[
+            Constant(value=1, kind=None),
+            Constant(value=2, kind=None),
+            Constant(value=3, kind=None),
+          ], ctx=Load()),
+      ])),
+    Expr(value=Compare(left=Constant(value=4, kind=None), ops=[
+        In(),
+      ], comparators=[
+        List(elts=[
+            Constant(value=1, kind=None),
+            Constant(value=2, kind=None),
+            Constant(value=3, kind=None),
+          ], ctx=Load()),
+      ])),
+    Expr(value=Compare(left=Constant(value=6, kind=None), ops=[
+        In(),
+      ], comparators=[
+        List(elts=[
+            Constant(value=2, kind=None),
+            Constant(value=5, kind=None),
+            Constant(value=9, kind=None),
+          ], ctx=Load()),
+      ])),
+    Expr(value=Compare(left=Constant(value=2, kind=None), ops=[
+        In(),
+      ], comparators=[
+        List(elts=[
+            Constant(value=1, kind=None),
+            Constant(value=2, kind=None),
+            Constant(value=3, kind=None),
+          ], ctx=Load()),
+      ])),
+    Expr(value=Compare(left=Constant(value=3, kind=None), ops=[
+        NotIn(),
+      ], comparators=[
+        List(elts=[
+            Constant(value=1, kind=None),
+            Constant(value=2, kind=None),
+            Constant(value=3, kind=None),
+          ], ctx=Load()),
+      ])),
+    Expr(value=Compare(left=Constant(value=4, kind=None), ops=[
+        NotIn(),
+      ], comparators=[
+        List(elts=[
+            Constant(value=1, kind=None),
+            Constant(value=2, kind=None),
+            Constant(value=3, kind=None),
+          ], ctx=Load()),
+      ])),
+    Expr(value=Compare(left=Constant(value=6, kind=None), ops=[
+        NotIn(),
+      ], comparators=[
+        List(elts=[
+            Constant(value=2, kind=None),
+            Constant(value=5, kind=None),
+            Constant(value=9, kind=None),
+          ], ctx=Load()),
+      ])),
+    Expr(value=Compare(left=Constant(value=2, kind=None), ops=[
+        NotIn(),
+      ], comparators=[
+        List(elts=[
+            Constant(value=1, kind=None),
+            Constant(value=2, kind=None),
+            Constant(value=3, kind=None),
+          ], ctx=Load()),
+      ])),
+    Expr(value=BinOp(left=Constant(value=1, kind=None), op=Mult(), right=Constant(value=3, kind=None))),
+    Expr(value=BinOp(left=Constant(value=1, kind=None), op=Mult(), right=Constant(value=1, kind=None))),
+    Expr(value=BinOp(left=UnaryOp(op=USub(), operand=Constant(value=5, kind=None)), op=Mult(), right=UnaryOp(op=USub(), operand=Constant(value=5, kind=None)))),
+    Expr(value=BinOp(left=Constant(value=3, kind=None), op=Mult(), right=UnaryOp(op=USub(), operand=Constant(value=5, kind=None)))),
+    Expr(value=BinOp(left=Constant(value=5, kind=None), op=Div(), right=Constant(value=2, kind=None))),
+    Expr(value=BinOp(left=Constant(value=1, kind=None), op=Div(), right=Constant(value=1, kind=None))),
+    Expr(value=BinOp(left=Constant(value=4, kind=None), op=Div(), right=Constant(value=2, kind=None))),
+    Expr(value=BinOp(left=Constant(value=2, kind=None), op=Div(), right=Constant(value=8, kind=None))),
+    Expr(value=BinOp(left=Constant(value=5, kind=None), op=FloorDiv(), right=Constant(value=2, kind=None))),
+    Expr(value=BinOp(left=Constant(value=1, kind=None), op=FloorDiv(), right=Constant(value=1, kind=None))),
+    Expr(value=BinOp(left=Constant(value=4, kind=None), op=FloorDiv(), right=Constant(value=2, kind=None))),
+    Expr(value=BinOp(left=Constant(value=2, kind=None), op=FloorDiv(), right=Constant(value=8, kind=None))),
+    Expr(value=BinOp(left=Constant(value=5, kind=None), op=Mod(), right=Constant(value=2, kind=None))),
+    Expr(value=BinOp(left=Constant(value=1, kind=None), op=Mod(), right=Constant(value=1, kind=None))),
+    Expr(value=BinOp(left=Constant(value=4, kind=None), op=Mod(), right=Constant(value=2, kind=None))),
+    Expr(value=BinOp(left=Constant(value=2, kind=None), op=Mod(), right=Constant(value=8, kind=None))),
+    Expr(value=BinOp(left=Constant(value=2, kind=None), op=Pow(), right=Constant(value=3, kind=None))),
+    Expr(value=BinOp(left=Constant(value=1, kind=None), op=Pow(), right=Constant(value=5, kind=None))),
+    Expr(value=BinOp(left=BinOp(left=Constant(value=3, kind=None), op=Pow(), right=Constant(value=3, kind=None)), op=Add(), right=Constant(value=1, kind=None))),
+    Expr(value=BinOp(left=UnaryOp(op=USub(), operand=Constant(value=2, kind=None)), op=Pow(), right=Constant(value=2, kind=None))),
+    Expr(value=Compare(left=Constant(value=1, kind=None), ops=[
+        Is(),
+      ], comparators=[
+        Constant(value=1, kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value='test', kind=None), ops=[
+        Is(),
+      ], comparators=[
+        Constant(value='test', kind=None),
+      ])),
+    Expr(value=Compare(left=List(elts=[
+        Constant(value=1, kind=None),
+        Constant(value=2, kind=None),
+      ], ctx=Load()), ops=[
+        Is(),
+      ], comparators=[
+        List(elts=[
+            Constant(value=1, kind=None),
+            Constant(value=2, kind=None),
+          ], ctx=Load()),
+      ])),
+    Expr(value=Compare(left=Constant(value=5, kind=None), ops=[
+        Is(),
+      ], comparators=[
+        Constant(value=5, kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value=1, kind=None), ops=[
+        IsNot(),
+      ], comparators=[
+        Constant(value=1, kind=None),
+      ])),
+    Expr(value=Compare(left=Constant(value='test', kind=None), ops=[
+        IsNot(),
+      ], comparators=[
+        Constant(value='test', kind=None),
+      ])),
+    Expr(value=Compare(left=List(elts=[
+        Constant(value=1, kind=None),
+        Constant(value=2, kind=None),
+      ], ctx=Load()), ops=[
+        IsNot(),
+      ], comparators=[
+        List(elts=[
+            Constant(value=1, kind=None),
+            Constant(value=2, kind=None),
+          ], ctx=Load()),
+      ])),
+    Expr(value=Compare(left=Constant(value=5, kind=None), ops=[
+        IsNot(),
+      ], comparators=[
+        Constant(value=5, kind=None),
+      ])),
+    Expr(value=BinOp(left=Constant(value=1, kind=None), op=LShift(), right=Constant(value=1, kind=None))),
+    Expr(value=BinOp(left=Constant(value=1, kind=None), op=LShift(), right=Constant(value=2, kind=None))),
+    Expr(value=BinOp(left=Constant(value=2, kind=None), op=LShift(), right=Constant(value=1, kind=None))),
+    Expr(value=BinOp(left=Constant(value=3, kind=None), op=LShift(), right=Constant(value=1, kind=None))),
+    Expr(value=BinOp(left=Constant(value=1, kind=None), op=RShift(), right=Constant(value=1, kind=None))),
+    Expr(value=BinOp(left=Constant(value=2, kind=None), op=RShift(), right=Constant(value=1, kind=None))),
+    Expr(value=BinOp(left=Constant(value=4, kind=None), op=RShift(), right=Constant(value=2, kind=None))),
+    Expr(value=BinOp(left=Constant(value=5, kind=None), op=RShift(), right=Constant(value=1, kind=None))),
+    Expr(value=BinOp(left=Constant(value=2, kind=None), op=BitXor(), right=Constant(value=1, kind=None))),
+    Expr(value=BinOp(left=Constant(value=5, kind=None), op=BitXor(), right=Constant(value=4, kind=None))),
+    Expr(value=BinOp(left=Constant(value=7, kind=None), op=BitXor(), right=Constant(value=3, kind=None))),
+    Expr(value=BinOp(left=Constant(value=1, kind=None), op=BitXor(), right=Constant(value=1, kind=None))),
+    Expr(value=BinOp(left=BinOp(left=Constant(value=5, kind=None), op=BitXor(), right=Constant(value=4, kind=None)), op=BitOr(), right=Constant(value=3, kind=None))),
+  ], type_ignores=[])
