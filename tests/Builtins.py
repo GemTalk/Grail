@@ -204,6 +204,9 @@ try: # 107
 except StopIteration:
     print("StopIteration", end=' ')
 
+len([5, 5, 5, 5]) # 108
+len({5}) # 109
+
 class C:
     pass
 

@@ -397,6 +397,16 @@ test_iter
 %
 category: 'other'
 method: BuiltinsTestCase
+test_len
+
+	| x |
+	x := (self statementsAt: 108) evaluate: aScope.
+	self assert: x = 4.
+	x := (self statementsAt: 109) evaluate: aScope.
+	self assert: x = 0.
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"
