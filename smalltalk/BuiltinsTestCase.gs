@@ -376,6 +376,27 @@ test_issubclass
 %
 category: 'other'
 method: BuiltinsTestCase
+test_iter
+
+	| x |
+	x := (self statementsAt: 100) evaluate: aScope.
+	x := (self statementsAt: 101) evaluate: aScope.
+	x := (self statementsAt: 102) evaluate: aScope.
+	self assert: x = (str withAll: 'a').
+	x := (self statementsAt: 103) evaluate: aScope.
+	self assert: x = (str withAll: 'e').
+	x := (self statementsAt: 104) evaluate: aScope.
+	self assert: x = (str withAll: 'i').
+	x := (self statementsAt: 105) evaluate: aScope.
+	self assert: x = (str withAll: 'o').
+	x := (self statementsAt: 106) evaluate: aScope.
+	self assert: x = (str withAll: 'u').
+	x := (self statementsAt: 107) evaluate: aScope.
+	x := stdout contents.
+	self assert: x = 'StopIteration '.
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"

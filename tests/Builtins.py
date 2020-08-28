@@ -192,6 +192,18 @@ issubclass(Derived, Base) # 97
 issubclass(Base, Derived) # 98
 issubclass(type(b), type(d)) # 99
 
+vowels = ['a', 'e', 'i', 'o', 'u'] # 100
+vowels_iter = iter(vowels) # 101
+next(vowels_iter) # 102
+next(vowels_iter) # 103
+next(vowels_iter) # 104
+next(vowels_iter) # 105
+next(vowels_iter) # 106
+try: # 107
+    next(vowels_iter)
+except StopIteration:
+    print("StopIteration", end=' ')
+
 class C:
     pass
 

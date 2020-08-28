@@ -1183,7 +1183,14 @@ with open('mydata.db', 'rb') as f:
     for block in iter(partial(f.read, 64), b''):
         process_block(block)
 "
-self halt.
+
+	| object sentinel |
+	object := arguments first.
+	(arguments size = 1) ifTrue: [
+		^ list_iterator on: object
+	].
+	sentinel := arguments second.
+	self halt.
 %
 category: 'functions'
 method: builtins
@@ -1358,7 +1365,10 @@ Retrieve the next item from the iterator by calling its __next__()
 method. If default is given, it is returned if the iterator is exhausted,
  otherwise StopIteration is raised.
 "
-self halt.
+	
+	| iterator |
+	iterator := arguments first.
+	^ iterator __next__ value
 %
 category: 'functions'
 method: builtins
@@ -1940,8 +1950,10 @@ initialize
 		at: #'int'				put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [ self int: arguments ] ifFalse: [int with: 0]];
 		at: #'isinstance'		put: [:arguments :keywords :scope | self isinstance: arguments first class: arguments second scope: scope];
 		at: #'issubclass'		put: [:arguments :keywords :scope | self issubclass: arguments first class: arguments second scope: scope];
+		at: #'iter'				put: [:arguments :keywords :scope | self iter: arguments];
 		at: #'len'				put: [:arguments :keywords :scope | self len: arguments first];
 		at: #'list'				put: [:arguments :keywords :scope | self list: arguments first];
+		at: #'next'				put: [:arguments :keywords :scope | self next: arguments];
 		at: #'object'			put: [:arguments :keywords :scope | self object];
 		at: #'open'				put: [:arguments :keywords :scope | self open: arguments keywords: keywords];
 		at: #'print'				put: [:arguments :keywords :scope | self print: arguments keywords: keywords];
