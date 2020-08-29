@@ -210,6 +210,11 @@ len({5}) # 110
 
 list([1, 2, 3]) # 111
 
+# TODO: locals
+
+list(map(lambda x:x+1, [0, 1, 2])) # 112
+list(map(lambda x,y:x+y, [0, 1, 2], [3, 4, 5, 6])) # 113
+
 class C:
     pass
 
