@@ -417,6 +417,16 @@ test_list
 %
 category: 'other'
 method: BuiltinsTestCase
+test_map
+
+	| x |
+	x := (self statementsAt: 112) evaluate: aScope.
+	self assert: x = (list withAll: { int with: 1 . int with: 2 . int with: 3 }).
+	x := (self statementsAt: 113) evaluate: aScope.
+	self assert: x = (list withAll: { int with: 3 . int with: 5 . int with: 7 }).
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"

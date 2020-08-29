@@ -15,6 +15,12 @@ append: arguments keywords: keywords
 %
 category: 'other'
 method: list
+collect: aBlock
+
+	^ container collect: aBlock
+%
+category: 'other'
+method: list
 get: anIndex
 
 	[

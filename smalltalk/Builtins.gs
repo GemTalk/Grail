@@ -1249,7 +1249,7 @@ locals: arguments
 %
 category: 'functions'
 method: builtins
-map: arguments
+map: arguments scope: aScope
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1261,7 +1261,22 @@ items from all iterables in parallel. With multiple iterables, the iterator
 stops when the shortest iterable is exhausted. For cases where the
  function inputs are already arranged into argument tuples, see itertools.starmap().
 "
-^arguments second collect: [:each | arguments first value: (Array with: each) value: dict new]
+	| function iterables min parallelIterables |
+	function := arguments first.
+	iterables := arguments copyFrom: 2 to: arguments size.
+	(iterables size = 1) ifTrue: [ 
+		iterables := iterables first.
+		^ iterables collect: [ :each | function value: (Array with: each) value: dict new value: aScope ] 
+	].
+	min := self min: (iterables collect: [ :each | each size ]) keywords: dict new.
+	parallelIterables := Array new.
+	1 to: min do: [ :i |
+		| tempArray |
+		tempArray := Array new.
+		iterables do: [ :iterable | tempArray add: (iterable at: i) ].
+		parallelIterables add: tempArray.
+	].
+	^ parallelIterables collect: [ :each | function value: each value: dict new value: aScope ]
 %
 category: 'functions'
 method: builtins
@@ -1341,7 +1356,7 @@ sorted(iterable, key=keyfunc)[0] and heapq.nsmallest(1, iterable, key=keyfunc).
 
 New in version 3.4: The default keyword-only argument.
 "
-arguments size == 1 ifTrue: [ 
+(arguments size == 1 and: [(arguments at: 1) isKindOf: AbstractIterator]) ifTrue: [ 
 	"key"
 	arguments first size == 0 ifTrue: [^keywords at: 'default' ifAbsent: [self error: 'value error']].
 	^arguments first
@@ -1953,6 +1968,7 @@ initialize
 		at: #'iter'				put: [:arguments :keywords :scope | self iter: arguments];
 		at: #'len'				put: [:arguments :keywords :scope | self len: arguments first];
 		at: #'list'				put: [:arguments :keywords :scope | self list: arguments first];
+		at: #'map'				put: [:arguments :keywords :scope | self map: arguments scope: scope];
 		at: #'next'				put: [:arguments :keywords :scope | self next: arguments];
 		at: #'object'			put: [:arguments :keywords :scope | self object];
 		at: #'open'				put: [:arguments :keywords :scope | self open: arguments keywords: keywords];
