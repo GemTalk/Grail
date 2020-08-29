@@ -409,6 +409,14 @@ test_len
 %
 category: 'other'
 method: BuiltinsTestCase
+test_list
+
+	| x |
+	x := (self statementsAt: 111) evaluate: aScope.
+	self assert: x = (list withAll: { int with: 1 . int with: 2 . int with: 3 }).
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"
