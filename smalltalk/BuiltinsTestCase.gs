@@ -404,6 +404,8 @@ test_len
 	self assert: x = 4.
 	x := (self statementsAt: 109) evaluate: aScope.
 	self assert: x = 0.
+	x := (self statementsAt: 110) evaluate: aScope.
+	self assert: x = 1.
 %
 category: 'other'
 method: BuiltinsTestCase

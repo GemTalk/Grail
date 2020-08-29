@@ -4495,6 +4495,23 @@ doit
 frozenset category: 'builtins'
 %
 set compile_env: 0
+! ------------------- Class definition for set
+expectvalue /Class
+doit
+frozenset subclass: 'set'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+set category: 'builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for list
 expectvalue /Class
 doit
@@ -6172,6 +6189,7 @@ input RShiftAst.gs
 input RuntimeError.gs
 input RuntimeWarning.gs
 input Scope.gs
+input set.gs
 input set_iterator.gs
 input SetAst.gs
 input SetCompAst.gs
