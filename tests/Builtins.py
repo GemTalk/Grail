@@ -218,8 +218,16 @@ list(map(lambda x,y:x+y, [0, 1, 2], [3, 4, 5, 6])) # 113
 max(5, 0, -5, -111) # 114
 max([6, 8, 10]) # 115
 
+# TODO: memoryview
+
 min(5, 0, -5, -111) # 116
 min([6, 8, 10]) # 117
+
+o = object() # 118
+try: # 119
+    o.__dict__
+except AttributeError:
+    print("AttributeError", end=' ')
 
 class C:
     pass

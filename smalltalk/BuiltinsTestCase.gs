@@ -447,6 +447,16 @@ test_min
 %
 category: 'other'
 method: BuiltinsTestCase
+test_object
+
+	| x |
+	x := (self statementsAt: 118) evaluate: aScope.
+	x := (self statementsAt: 119) evaluate: aScope.
+	x := stdout contents.
+	self assert: x = 'AttributeError '.
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"

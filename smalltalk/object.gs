@@ -49,6 +49,14 @@ __delattr__
 %
 category: 'Python'
 method: object
+__dict__
+"Note object does not have a __dict__, so you can’t assign arbitrary attributes to an instance of the object class.
+https://docs.python.org/3/library/functions.html#object"
+
+	AttributeError signal.
+%
+category: 'Python'
+method: object
 __dir__
 
 	self halt.
@@ -81,7 +89,11 @@ category: 'Python'
 method: object
 __getattribute__
 
-	self halt.
+	^ [ :aSymbol | 
+		self __dict__ 
+			get: aSymbol 
+			ifAbsent: [ AttributeError signal: '''', self __class__ name asString, ''' object has no attribute ''', aSymbol asString, '''' ]
+	]
 %
 category: 'Python'
 method: object
@@ -178,4 +190,10 @@ method: object
 __subclasshook__ 
 
 	self halt.
+%
+category: 'Python'
+method: object
+get: aSymbol
+
+	^ self __getattribute__ value: aSymbol
 %
