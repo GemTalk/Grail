@@ -21,6 +21,12 @@ collect: aBlock
 %
 category: 'other'
 method: list
+first
+
+	^ container first
+%
+category: 'other'
+method: list
 get: anIndex
 
 	[
@@ -28,6 +34,12 @@ get: anIndex
 	] on: OffsetError do: [:ex | 
 		ex resignalAs: (IndexError new details: 'list index out of range'; yourself).
 	]
+%
+category: 'other'
+method: list
+inject: aValue into: aBlock
+
+	^ container inject: aValue into: aBlock
 %
 set compile_env: 0
 category: 'Python'

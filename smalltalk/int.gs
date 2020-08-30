@@ -71,6 +71,12 @@ hash
 
 	^ number
 %
+category: 'other'
+method: int
+max: anInt
+
+	^ (number > anInt ___number) ifTrue: [ self ] ifFalse: [ anInt ]
+%
 set compile_env: 0
 category: 'Python'
 method: int

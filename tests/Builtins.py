@@ -215,6 +215,9 @@ list([1, 2, 3]) # 111
 list(map(lambda x:x+1, [0, 1, 2])) # 112
 list(map(lambda x,y:x+y, [0, 1, 2], [3, 4, 5, 6])) # 113
 
+max(5, 0, -5, -111) # 114
+max([6, 8, 10]) # 115
+
 class C:
     pass
 

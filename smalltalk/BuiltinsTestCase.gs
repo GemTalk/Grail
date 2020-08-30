@@ -427,6 +427,16 @@ test_map
 %
 category: 'other'
 method: BuiltinsTestCase
+test_max
+
+	| x |
+	x := (self statementsAt: 114) evaluate: aScope.
+	self assert: x = 5.
+	x := (self statementsAt: 115) evaluate: aScope.
+	self assert: x = 10.
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"

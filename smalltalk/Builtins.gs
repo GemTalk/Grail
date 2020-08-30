@@ -1969,6 +1969,7 @@ initialize
 		at: #'len'				put: [:arguments :keywords :scope | self len: arguments first];
 		at: #'list'				put: [:arguments :keywords :scope | self list: arguments first];
 		at: #'map'				put: [:arguments :keywords :scope | self map: arguments scope: scope];
+		at: #'max'				put: [:arguments :keywords :scope | self max: arguments keywords: keywords];
 		at: #'next'				put: [:arguments :keywords :scope | self next: arguments];
 		at: #'object'			put: [:arguments :keywords :scope | self object];
 		at: #'open'				put: [:arguments :keywords :scope | self open: arguments keywords: keywords];
