@@ -437,6 +437,16 @@ test_max
 %
 category: 'other'
 method: BuiltinsTestCase
+test_min
+
+	| x |
+	x := (self statementsAt: 116) evaluate: aScope.
+	self assert: x = -111.
+	x := (self statementsAt: 117) evaluate: aScope.
+	self assert: x = 6.
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"

@@ -1304,7 +1304,7 @@ This is consistent with other sort-stability preserving tools such as sorted
 
 New in version 3.4: The default keyword-only argument.
 "
-arguments size == 1 ifTrue: [ 
+(arguments size == 1 and: [(arguments at: 1) isKindOf: AbstractContainer]) ifTrue: [ 
 	"key"
 	arguments first size == 0 ifTrue: [^keywords at: 'default' ifAbsent: [self error: 'value error']].
 	^arguments first
@@ -1356,7 +1356,7 @@ sorted(iterable, key=keyfunc)[0] and heapq.nsmallest(1, iterable, key=keyfunc).
 
 New in version 3.4: The default keyword-only argument.
 "
-(arguments size == 1 and: [(arguments at: 1) isKindOf: AbstractIterator]) ifTrue: [ 
+(arguments size == 1 and: [(arguments at: 1) isKindOf: AbstractContainer]) ifTrue: [ 
 	"key"
 	arguments first size == 0 ifTrue: [^keywords at: 'default' ifAbsent: [self error: 'value error']].
 	^arguments first
@@ -1970,6 +1970,7 @@ initialize
 		at: #'list'				put: [:arguments :keywords :scope | self list: arguments first];
 		at: #'map'				put: [:arguments :keywords :scope | self map: arguments scope: scope];
 		at: #'max'				put: [:arguments :keywords :scope | self max: arguments keywords: keywords];
+		at: #'min'				put: [:arguments :keywords :scope | self min: arguments keywords: keywords];
 		at: #'next'				put: [:arguments :keywords :scope | self next: arguments];
 		at: #'object'			put: [:arguments :keywords :scope | self object];
 		at: #'open'				put: [:arguments :keywords :scope | self open: arguments keywords: keywords];
