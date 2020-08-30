@@ -1463,7 +1463,7 @@ This is the inverse of chr().
 %
 category: 'functions'
 method: builtins
-pow: arguments
+pow: arguments keywords: keywords
 	"https://docs.python.org/3/library/functions.html"
 	
 "	pow(x, y[, z])
@@ -1481,11 +1481,16 @@ For example, 10**2 returns 100, but 10**-2 returns 0.01.
  If z is present, x and y must be of integer types, and y must be non-negative.
 "
 
-	| result |
-	result := arguments first raisedTo: (arguments at: 2).
+	| result x y z |
+	x := (arguments first isKindOf: AbstractNumber) ifTrue: [ arguments first ___number ] ifFalse: [ arguments first ].
+	y := (arguments second isKindOf: AbstractNumber) ifTrue: [ arguments second ___number ] ifFalse: [ arguments second ].
+	[ z := ((arguments at: 3) isKindOf: AbstractNumber) ifTrue: [ (arguments at: 3) ___number ] ifFalse: [ arguments at: 3 ] ]
+		on: OffsetError
+		do: [ ].
+	result := x raisedTo: y.
 	^arguments size == 2
 		ifTrue: [result]
-		ifFalse:[result rem: (arguments at: 3)]
+		ifFalse:[result rem: z]
 %
 category: 'functions'
 method: builtins
@@ -1983,6 +1988,7 @@ initialize
 		at: #'oct'				put: [:arguments :keywords :scope | self oct: arguments first];
 		at: #'open'				put: [:arguments :keywords :scope | self open: arguments keywords: keywords];
 		at: #'ord'				put: [:arguments :keywords :scope | self ord: arguments first];
+		at: #'pow'				put: [:arguments :keywords :scope | self pow: arguments keywords: keywords];
 		at: #'print'				put: [:arguments :keywords :scope | self print: arguments keywords: keywords];
 		at: #'range'			put: [:arguments :keywords :scope | self range: arguments];
 		at: #'setattr'			put: [:arguments :keywords :scope | self setattr: (arguments at: 1) _: (arguments at: 2) _: (arguments at: 3)];

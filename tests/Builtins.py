@@ -238,6 +238,9 @@ f.read() # 123
 ord('a') # 124
 ord('€') # 125
 
+pow(2, 3) # 126
+pow(2, 3, 5) # 127
+
 class C:
     pass
 
