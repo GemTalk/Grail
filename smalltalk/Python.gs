@@ -4956,6 +4956,31 @@ doit
 class category: 'builtins'
 %
 set compile_env: 0
+! ------------------- Class definition for file
+expectvalue /Class
+doit
+object subclass: 'file'
+  instVarNames: #( fileObject)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+file comment: 
+'class io.TextIOWrapper(buffer, encoding=None, errors=None, newline=None, line_buffering=False, write_through=False)
+A buffered text stream over a BufferedIOBase binary stream. It inherits TextIOBase.
+
+https://docs.python.org/3/library/io.html#io.TextIOWrapper'
+%
+expectvalue /Class
+doit
+file category: 'builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for function
 expectvalue /Class
 doit
@@ -6091,6 +6116,7 @@ input ExprAst.gs
 input ExpressionAst.gs
 input ExpressionContextAst.gs
 input ExtSliceAst.gs
+input file.gs
 input FileExistsError.gs
 input FileNotFoundError.gs
 input float.gs

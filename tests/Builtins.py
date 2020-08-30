@@ -232,6 +232,9 @@ except AttributeError:
 oct(8) # 120
 oct(-56) # 121
 
+f = open("/Users/plasmaintec/code/Python/gemstonep/test.txt") # 122
+f.read() # 123
+
 class C:
     pass
 

@@ -91,7 +91,7 @@ __getattribute__
 
 	^ [ :aSymbol | 
 		self __dict__ 
-			get: aSymbol 
+			at: aSymbol 
 			ifAbsent: [ AttributeError signal: '''', self __class__ name asString, ''' object has no attribute ''', aSymbol asString, '''' ]
 	]
 %

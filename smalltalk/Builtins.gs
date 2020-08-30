@@ -1437,7 +1437,12 @@ open: arguments keywords: keywords
 "
 see documentation for more details
 "
-self halt.
+
+	| filePointer path |
+	path := arguments first.
+	(path isKindOf: str) ifTrue: [ path := path ___container ].
+	filePointer := file with: (GsFile open: path mode: 'rb' onClient: false).
+	^ filePointer
 %
 category: 'functions'
 method: builtins
