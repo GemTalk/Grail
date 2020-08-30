@@ -241,6 +241,9 @@ ord('€') # 125
 pow(2, 3) # 126
 pow(2, 3, 5) # 127
 
+print("text", end=" ") # 128
+print("thing1", "thing2", "thing3", sep="+", end=" ") # 129
+
 class C:
     pass
 

@@ -498,8 +498,11 @@ category: 'other'
 method: BuiltinsTestCase
 test_print
 
-	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"
-	self assert: stdout contents = ('hello,world' , Character lf asString).
+	| x |
+	x := (self statementsAt: 128) evaluate: aScope.
+	x := (self statementsAt: 129) evaluate: aScope.
+	x := stdout contents.
+	self assert: x = 'text thing1+thing2+thing3 '.
 %
 category: 'other'
 method: BuiltinsTestCase
