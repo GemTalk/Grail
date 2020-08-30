@@ -229,6 +229,9 @@ try: # 119
 except AttributeError:
     print("AttributeError", end=' ')
 
+oct(8) # 120
+oct(-56) # 121
+
 class C:
     pass
 

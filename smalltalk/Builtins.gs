@@ -1973,6 +1973,7 @@ initialize
 		at: #'min'				put: [:arguments :keywords :scope | self min: arguments keywords: keywords];
 		at: #'next'				put: [:arguments :keywords :scope | self next: arguments];
 		at: #'object'			put: [:arguments :keywords :scope | self object];
+		at: #'oct'				put: [:arguments :keywords :scope | self oct: arguments first];
 		at: #'open'				put: [:arguments :keywords :scope | self open: arguments keywords: keywords];
 		at: #'print'				put: [:arguments :keywords :scope | self print: arguments keywords: keywords];
 		at: #'range'			put: [:arguments :keywords :scope | self range: arguments];
