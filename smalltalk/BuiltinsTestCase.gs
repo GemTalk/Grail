@@ -476,6 +476,16 @@ test_open
 %
 category: 'other'
 method: BuiltinsTestCase
+test_ord
+
+	| x |
+	x := (self statementsAt: 124) evaluate: aScope.
+	self assert: x = 97.
+	x := (self statementsAt: 125) evaluate: aScope.
+	self assert: x = 8364.
+%
+category: 'other'
+method: BuiltinsTestCase
 test_print
 
 	(self statementsAt: 2) evaluate: aScope.			"print('hello', 'world', sep = ',')"

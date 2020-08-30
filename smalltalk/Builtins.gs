@@ -1446,7 +1446,7 @@ see documentation for more details
 %
 category: 'functions'
 method: builtins
-ord: arguments
+ord: aString
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1457,7 +1457,9 @@ For example, ord('a') returns the integer 97 and ord('€') (Euro sign) returns 
 This is the inverse of chr().
 "
 
-^(arguments first _decodeFromUtf8: true maxSize: 1) first codePoint
+	| c |
+	c := (aString isKindOf: str) ifTrue: [ aString ___container ] ifFalse: [ aString ].
+	^ c codePointAt: 1
 %
 category: 'functions'
 method: builtins
@@ -1980,6 +1982,7 @@ initialize
 		at: #'object'			put: [:arguments :keywords :scope | self object];
 		at: #'oct'				put: [:arguments :keywords :scope | self oct: arguments first];
 		at: #'open'				put: [:arguments :keywords :scope | self open: arguments keywords: keywords];
+		at: #'ord'				put: [:arguments :keywords :scope | self ord: arguments first];
 		at: #'print'				put: [:arguments :keywords :scope | self print: arguments keywords: keywords];
 		at: #'range'			put: [:arguments :keywords :scope | self range: arguments];
 		at: #'setattr'			put: [:arguments :keywords :scope | self setattr: (arguments at: 1) _: (arguments at: 2) _: (arguments at: 3)];
