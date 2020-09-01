@@ -277,6 +277,22 @@ except KeyError:
 s = set() # 150
 len(s) # 151
 
+class F(): # 152
+    yin = "yang"
+    e = 2.71
+
+f = F() # 153
+getattr(f, "yin") # 154
+setattr(f, "yin", "wang") # 155
+getattr(f, "yin") # 156
+try: # 157
+    getattr(f, "feng") 
+except AttributeError:
+    print("AttributeError", end=' ')
+
+setattr(f, "feng", "shui") # 158
+getattr(f, "feng") # 159
+
 class C:
     pass
 

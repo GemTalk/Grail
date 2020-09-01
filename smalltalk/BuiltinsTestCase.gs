@@ -570,6 +570,25 @@ test_set
 %
 category: 'other'
 method: BuiltinsTestCase
+test_setattr
+
+	| x |
+	x := (self statementsAt: 152) evaluate: aScope.
+	x := (self statementsAt: 153) evaluate: aScope.
+	x := (self statementsAt: 154) evaluate: aScope.
+	self assert: x = 'yang'.
+	x := (self statementsAt: 155) evaluate: aScope.
+	x := (self statementsAt: 156) evaluate: aScope.
+	self assert: x = 'wang'.
+	x := (self statementsAt: 157) evaluate: aScope.
+	x := stdout contents.
+	self assert: x = 'AttributeError '.
+	x := (self statementsAt: 158) evaluate: aScope.
+	x := (self statementsAt: 159) evaluate: aScope.
+	self assert: x = 'shui'.
+%
+category: 'other'
+method: BuiltinsTestCase
 test_type
 
 	| x |
