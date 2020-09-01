@@ -82,7 +82,7 @@ category: 'Python'
 method: list
 __reversed__
 
-	self halt.
+	^ [ :seq | self class withAll: (seq ___container reverse) ]
 %
 category: 'Python'
 method: list

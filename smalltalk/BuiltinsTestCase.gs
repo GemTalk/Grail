@@ -518,6 +518,16 @@ test_range
 %
 category: 'other'
 method: BuiltinsTestCase
+test_reversed
+
+	| x |
+	x := (self statementsAt: 133) evaluate: aScope.
+	self assert: x = (list withAll: { 3 . 2 . 1 }).
+	x := (self statementsAt: 134) evaluate: aScope.
+	self assert: x = (list withAll: { 100 }).
+%
+category: 'other'
+method: BuiltinsTestCase
 test_type
 
 	| x |

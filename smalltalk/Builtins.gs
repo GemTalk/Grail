@@ -1566,7 +1566,7 @@ self halt.
 %
 category: 'functions'
 method: builtins
-reversed: arguments
+reversed: seq
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1577,7 +1577,7 @@ a __reversed__() method or supports the sequence protocol
 integer arguments starting at 0).
 "
 
-^arguments first reverse
+	^ seq __reversed__ value: seq
 %
 category: 'functions'
 method: builtins
@@ -1991,6 +1991,7 @@ initialize
 		at: #'pow'				put: [:arguments :keywords :scope | self pow: arguments keywords: keywords];
 		at: #'print'				put: [:arguments :keywords :scope | self print: arguments keywords: keywords];
 		at: #'range'			put: [:arguments :keywords :scope | self range: arguments];
+		at: #'reversed'		put: [:arguments :keywords :scope | self reversed: arguments first];
 		at: #'setattr'			put: [:arguments :keywords :scope | self setattr: (arguments at: 1) _: (arguments at: 2) _: (arguments at: 3)];
 		at: #'str'				put: [:arguments :keywords :scope | self str: arguments first];
 		at: #'type'				put: [:arguments :keywords :scope | self type: arguments];

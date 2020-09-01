@@ -250,6 +250,11 @@ list(range(3)) # 130
 list(range(0, 3)) # 131
 list(range(0, 3, 2)) # 132
 
+# TODO: repr
+
+list(reversed([1, 2, 3])) # 133
+list(reversed([100])) # 134
+
 class C:
     pass
 
