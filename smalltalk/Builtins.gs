@@ -1609,7 +1609,7 @@ See Floating Point Arithmetic: Issues and Limitations for more information.
 %
 category: 'functions'
 method: builtins
-set: arguments
+set: iterable
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1620,7 +1620,8 @@ Return a new set object, optionally with elements taken from iterable.
 For other containers see the built-in frozenset, list, tuple, and 
 dict classes, as well as the collections module.
 "
-self halt.
+	
+	^ set withAll: iterable
 %
 category: 'functions'
 method: builtins
@@ -1993,6 +1994,7 @@ initialize
 		at: #'range'			put: [:arguments :keywords :scope | self range: arguments];
 		at: #'reversed'		put: [:arguments :keywords :scope | self reversed: arguments first];
 		at: #'round'			put: [:arguments :keywords :scope | self round: arguments];
+		at: #'set'				put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [ self set: arguments first ] ifFalse: [ set withAll: { } ]];
 		at: #'setattr'			put: [:arguments :keywords :scope | self setattr: (arguments at: 1) _: (arguments at: 2) _: (arguments at: 3)];
 		at: #'str'				put: [:arguments :keywords :scope | self str: arguments first];
 		at: #'type'				put: [:arguments :keywords :scope | self type: arguments];

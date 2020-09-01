@@ -540,6 +540,36 @@ test_round
 %
 category: 'other'
 method: BuiltinsTestCase
+test_set
+
+	| x |
+	x := (self statementsAt: 138) evaluate: aScope.
+	x := (self statementsAt: 139) evaluate: aScope.
+	self assert: x.
+	x := (self statementsAt: 140) evaluate: aScope.
+	self deny: x.
+	x := (self statementsAt: 141) evaluate: aScope.
+	self assert: x = 3.
+	x := (self statementsAt: 142) evaluate: aScope.
+	x := (self statementsAt: 143) evaluate: aScope.
+	self assert: x = 4.
+	x := (self statementsAt: 144) evaluate: aScope.
+	self assert: x.
+	x := (self statementsAt: 145) evaluate: aScope.
+	x := (self statementsAt: 146) evaluate: aScope.
+	self assert: x = 4.
+	x := (self statementsAt: 147) evaluate: aScope.
+	x := (self statementsAt: 148) evaluate: aScope.
+	self deny: x.
+	x := (self statementsAt: 149) evaluate: aScope.
+	x := stdout contents.
+	self assert: x = 'KeyError '.
+	x := (self statementsAt: 150) evaluate: aScope.
+	x := (self statementsAt: 151) evaluate: aScope.
+	self assert: x = 0.
+%
+category: 'other'
+method: BuiltinsTestCase
 test_type
 
 	| x |

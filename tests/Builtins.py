@@ -259,6 +259,24 @@ round(1) # 135
 round(1.111, 2) # 136
 round(-0.5) # 137
 
+s = set([1, 2, 3]) # 138 
+3 in s # 139
+4 in s # 140
+len(s) # 141
+s.add(4) # 142
+len(s) # 143
+4 in s # 144
+s.add(4) # 145
+len(s) # 146
+s.remove(1) # 147
+1 in s # 148
+try: # 149
+    s.remove(1) 
+except KeyError:
+    print("KeyError", end=' ')
+s = set() # 150
+len(s) # 151
+
 class C:
     pass
 
