@@ -255,6 +255,10 @@ list(range(0, 3, 2)) # 132
 list(reversed([1, 2, 3])) # 133
 list(reversed([100])) # 134
 
+round(1) # 135
+round(1.111, 2) # 136
+round(-0.5) # 137
+
 class C:
     pass
 

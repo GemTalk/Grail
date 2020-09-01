@@ -528,6 +528,18 @@ test_reversed
 %
 category: 'other'
 method: BuiltinsTestCase
+test_round
+
+	| x |
+	x := (self statementsAt: 135) evaluate: aScope.
+	self assert: x = 1.
+	x := (self statementsAt: 136) evaluate: aScope.
+	self assert: x = 1.11.
+	x := (self statementsAt: 137) evaluate: aScope.
+	self assert: x = 0.
+%
+category: 'other'
+method: BuiltinsTestCase
 test_type
 
 	| x |

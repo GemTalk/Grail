@@ -1603,9 +1603,9 @@ it’s a result of the fact that most decimal fractions can’t be represented e
 See Floating Point Arithmetic: Issues and Limitations for more information.
 "
 	| number |
-	arguments size == 1 ifTrue: [^arguments first roundedHalfToEven].
-	number := 10 raisedTo: (arguments at: 2).
-	^((arguments first * number) roundedHalfToEven / number) asFloat
+	arguments size == 1 ifTrue: [^arguments first ___number roundedHalfToEven].
+	number := 10 raisedTo: (arguments at: 2) ___number.
+	^((arguments first ___number * number) roundedHalfToEven / number) asFloat
 %
 category: 'functions'
 method: builtins
@@ -1992,6 +1992,7 @@ initialize
 		at: #'print'				put: [:arguments :keywords :scope | self print: arguments keywords: keywords];
 		at: #'range'			put: [:arguments :keywords :scope | self range: arguments];
 		at: #'reversed'		put: [:arguments :keywords :scope | self reversed: arguments first];
+		at: #'round'			put: [:arguments :keywords :scope | self round: arguments];
 		at: #'setattr'			put: [:arguments :keywords :scope | self setattr: (arguments at: 1) _: (arguments at: 2) _: (arguments at: 3)];
 		at: #'str'				put: [:arguments :keywords :scope | self str: arguments first];
 		at: #'type'				put: [:arguments :keywords :scope | self type: arguments];
