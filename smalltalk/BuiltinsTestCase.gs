@@ -607,6 +607,16 @@ test_slice
 %
 category: 'other'
 method: BuiltinsTestCase
+test_sort
+
+	| x |
+	x := (self statementsAt: 167) evaluate: aScope.
+	self assert: x = (list withAll: { int with: 3 . int with: 4 . int with: 5 }).
+	x := (self statementsAt: 168) evaluate: aScope.
+	self assert: x = (list withAll: { float with: 1.11 . float with: 2.22 . float with: 3.33 }).
+%
+category: 'other'
+method: BuiltinsTestCase
 test_type
 
 	| x |

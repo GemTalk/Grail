@@ -166,5 +166,5 @@ category: 'Python'
 method: list
 sort
 
-	self halt.
+	^ self class withAll: (container sortWithBlock: [ :a :b | (a <= b) = True ])
 %

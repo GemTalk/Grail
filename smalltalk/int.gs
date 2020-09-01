@@ -343,6 +343,18 @@ __xor__
 %
 category: 'Python'
 method: int
+<= aNumber
+
+	^ self __lte__ value: self value: aNumber
+%
+category: 'Python'
+method: int
+>= aNumber
+
+	^ self __gte__ value: self value: aNumber
+%
+category: 'Python'
+method: int
 bit_length
 
 	self halt.

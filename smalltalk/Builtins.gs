@@ -1683,6 +1683,23 @@ also generated when extended indexing syntax is used.
 %
 category: 'functions'
 method: builtins
+sorted: iterable
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+Return a new sorted list from the items in iterable.
+Has two optional arguments which must be specified as keyword arguments.
+key specifies a function of one argument that is used to extract a comparison key from each element in iterable (for example, key=str.lower). The default value is None (compare the elements directly).
+reverse is a boolean value. If set to True, then the list elements are sorted as if each comparison were reversed.
+Use functools.cmp_to_key() to convert an old-style cmp function to a key function.
+The built-in sorted() function is guaranteed to be stable. A sort is stable if it guarantees not to change the relative order of elements that compare equal — this is helpful for sorting in multiple passes (for example, sort by department, then by salary grade).
+For sorting examples and a brief sorting tutorial, see Sorting HOW TO.
+"
+	
+	^ iterable sort
+%
+category: 'functions'
+method: builtins
 staticmethod: arguments
 	"https://docs.python.org/3/library/functions.html"
 	
@@ -2005,6 +2022,7 @@ initialize
 		at: #'set'				put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [ self set: arguments first ] ifFalse: [ set withAll: { } ]];
 		at: #'setattr'			put: [:arguments :keywords :scope | self setattr: (arguments at: 1) _: (arguments at: 2) _: (arguments at: 3)];
 		at: #'slice'				put: [:arguments :keywords :scope | self slice: arguments];
+		at: #'sorted'			put: [:arguments :keywords :scope | self sorted: arguments first];
 		at: #'str'				put: [:arguments :keywords :scope | self str: arguments first];
 		at: #'type'				put: [:arguments :keywords :scope | self type: arguments];
 		yourself.

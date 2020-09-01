@@ -92,9 +92,21 @@ __getnewargs__
 %
 category: 'Python'
 method: float
+__gte__
+
+	^ [ :lhs :rhs | lhs.number >= rhs.number ifTrue: [ True ] ifFalse: [ False ] ]
+%
+category: 'Python'
+method: float
 __int__
 
 	^ [ :obj | obj ___number // 1 ]
+%
+category: 'Python'
+method: float
+__lte__
+
+	^ [ :lhs :rhs | lhs.number <= rhs.number ifTrue: [ True ] ifFalse: [ False ] ]
 %
 category: 'Python'
 method: float
@@ -193,6 +205,18 @@ method: float
 __trunc__
 
 	self halt.
+%
+category: 'Python'
+method: float
+<= aNumber
+
+	^ self __lte__ value: self value: aNumber
+%
+category: 'Python'
+method: float
+>= aNumber
+
+	^ self __gte__ value: self value: aNumber
 %
 category: 'Python'
 method: float

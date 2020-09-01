@@ -301,6 +301,10 @@ a[0:2] # 164
 a[0:100] # 165
 a[::2] # 166
 
+sorted([5, 3, 4]) # 167
+sorted([2.22, 1.11, 3.33]) # 168
+# TODO: sorted with keyword arguments
+
 class C:
     pass
 
