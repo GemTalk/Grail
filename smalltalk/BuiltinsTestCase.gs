@@ -506,6 +506,18 @@ test_print
 %
 category: 'other'
 method: BuiltinsTestCase
+test_range
+
+	| x |
+	x := (self statementsAt: 130) evaluate: aScope.
+	self assert: x = (list withAll: { 0 . 1 . 2 }).
+	x := (self statementsAt: 131) evaluate: aScope.
+	self assert: x = (list withAll: { 0 . 1 . 2 }).
+	x := (self statementsAt: 132) evaluate: aScope.
+	self assert: x = (list withAll: { 0 . 2 }).
+%
+category: 'other'
+method: BuiltinsTestCase
 test_type
 
 	| x |

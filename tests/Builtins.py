@@ -244,6 +244,12 @@ pow(2, 3, 5) # 127
 print("text", end=" ") # 128
 print("thing1", "thing2", "thing3", sep="+", end=" ") # 129
 
+# TODO: property
+
+list(range(3)) # 130
+list(range(0, 3)) # 131
+list(range(0, 3, 2)) # 132
+
 class C:
     pass
 

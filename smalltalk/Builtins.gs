@@ -1543,9 +1543,9 @@ Rather than being a function, range is actually an immutable sequence type, as d
 in Ranges and Sequence Types — list, tuple, range.
 "
 
-arguments size == 1 ifTrue: [^Interval from: 0 to: arguments first - 1].
-arguments size == 2 ifTrue: [^Interval from: arguments first to: arguments second - 1].
-^Interval from: arguments first to: arguments second - 1 by: (arguments at: 3).
+	arguments size == 1 ifTrue: [^Interval from: 0 to: arguments first ___number - 1].
+	arguments size == 2 ifTrue: [^Interval from: arguments first ___number to: arguments second ___number - 1].
+	^ Interval from: arguments first ___number to: arguments second ___number - 1 by: (arguments at: 3) ___number.
 %
 category: 'functions'
 method: builtins
