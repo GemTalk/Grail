@@ -11,7 +11,12 @@ category: 'other'
 method: SliceAst
 evaluate: aContainer scope: aScope
 
-	self halt.
+	| sliceObject |
+	sliceObject := slice 
+		start: ((lower isKindOf: ConstantAst) ifTrue: [ lower value ] ifFalse: [ lower ])
+		stop: ((upper isKindOf: ConstantAst) ifTrue: [ upper value ] ifFalse: [ upper ]) 
+		step: ((step isKindOf: ConstantAst) ifTrue: [ step value ] ifFalse: [ step ]).
+	^ aContainer __getitem__ value: aContainer value: sliceObject
 %
 category: 'other'
 method: SliceAst

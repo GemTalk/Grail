@@ -1671,7 +1671,15 @@ also generated when extended indexing syntax is used.
  For example: a[start:stop:step] or a[start:stop, i].
  See itertools.islice() for an alternate version that returns an iterator.
 "
-self halt.
+
+	| start stop step |
+	start := NoneType new.
+	stop := NoneType new.
+	step := NoneType new.
+	(arguments size = 1) ifTrue: [ stop := arguments first. ].
+	(arguments size = 2) ifTrue: [ start := arguments first. stop := arguments second. ].
+	(arguments size = 3) ifTrue: [ start := arguments first. stop := arguments second. step := arguments at: 3. ].
+	^ slice start: start stop: stop step: step
 %
 category: 'functions'
 method: builtins
@@ -1996,6 +2004,7 @@ initialize
 		at: #'round'			put: [:arguments :keywords :scope | self round: arguments];
 		at: #'set'				put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [ self set: arguments first ] ifFalse: [ set withAll: { } ]];
 		at: #'setattr'			put: [:arguments :keywords :scope | self setattr: (arguments at: 1) _: (arguments at: 2) _: (arguments at: 3)];
+		at: #'slice'				put: [:arguments :keywords :scope | self slice: arguments];
 		at: #'str'				put: [:arguments :keywords :scope | self str: arguments first];
 		at: #'type'				put: [:arguments :keywords :scope | self type: arguments];
 		yourself.

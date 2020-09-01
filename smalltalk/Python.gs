@@ -5407,6 +5407,23 @@ doit
 NotImplementedType category: 'builtins'
 %
 set compile_env: 0
+! ------------------- Class definition for slice
+expectvalue /Class
+doit
+object subclass: 'slice'
+  instVarNames: #( start stop step)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+slice category: 'builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for Scope
 expectvalue /Class
 doit
@@ -6221,6 +6238,7 @@ input SetAst.gs
 input SetCompAst.gs
 input SimpleStatementsTestCase.gs
 input Singleton.gs
+input slice.gs
 input SliceAbstractAst.gs
 input SliceAst.gs
 input StarredAst.gs

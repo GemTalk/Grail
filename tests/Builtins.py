@@ -293,6 +293,14 @@ except AttributeError:
 setattr(f, "feng", "shui") # 158
 getattr(f, "feng") # 159
 
+s = slice(2) # 160
+a = ['a', 'b', 'c'] # 161
+a[s] # 162
+a[:2] # 163
+a[0:2] # 164
+a[0:100] # 165
+a[::2] # 166
+
 class C:
     pass
 

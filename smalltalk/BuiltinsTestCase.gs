@@ -589,6 +589,24 @@ test_setattr
 %
 category: 'other'
 method: BuiltinsTestCase
+test_slice
+
+	| x |
+	x := (self statementsAt: 160) evaluate: aScope.
+	x := (self statementsAt: 161) evaluate: aScope.
+	x := (self statementsAt: 162) evaluate: aScope.
+	self assert: x = (list withAll: { str withAll: 'a' . str withAll: 'b' }).
+	x := (self statementsAt: 163) evaluate: aScope.
+	self assert: x = (list withAll: { str withAll: 'a' . str withAll: 'b' }).
+	x := (self statementsAt: 164) evaluate: aScope.
+	self assert: x = (list withAll: { str withAll: 'a' . str withAll: 'b' }).
+	x := (self statementsAt: 165) evaluate: aScope.
+	self assert: x = (list withAll: { str withAll: 'a' . str withAll: 'b' . str withAll: 'c' }).
+	x := (self statementsAt: 166) evaluate: aScope.
+	self assert: x = (list withAll: { str withAll: 'a' . str withAll: 'c' }).
+%
+category: 'other'
+method: BuiltinsTestCase
 test_type
 
 	| x |
