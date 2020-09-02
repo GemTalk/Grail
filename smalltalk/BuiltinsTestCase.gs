@@ -629,6 +629,18 @@ test_staticmethod
 %
 category: 'other'
 method: BuiltinsTestCase
+test_str
+
+	| x |
+	x := (self statementsAt: 173) evaluate: aScope.
+	self assert: x = (str withAll: '').
+	x := (self statementsAt: 174) evaluate: aScope.
+	self assert: x = (str withAll: '1').
+	x := (self statementsAt: 175) evaluate: aScope.
+	self assert: x = (str withAll: 'abc').
+%
+category: 'other'
+method: BuiltinsTestCase
 test_type
 
 	| x |

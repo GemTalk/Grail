@@ -2023,7 +2023,7 @@ initialize
 		at: #'setattr'			put: [:arguments :keywords :scope | self setattr: (arguments at: 1) _: (arguments at: 2) _: (arguments at: 3)];
 		at: #'slice'				put: [:arguments :keywords :scope | self slice: arguments];
 		at: #'sorted'			put: [:arguments :keywords :scope | self sorted: arguments first];
-		at: #'str'				put: [:arguments :keywords :scope | self str: arguments first];
+		at: #'str'				put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [ self str: arguments first ] ifFalse: [ str withAll: '' ]];
 		at: #'type'				put: [:arguments :keywords :scope | self type: arguments];
 		yourself.
 	BaseException allSubclasses do: [:each | 

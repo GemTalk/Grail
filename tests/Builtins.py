@@ -316,6 +316,10 @@ g.h() # 171
 G.h() # 172
 # TODO: staticmethod in function form
 
+str() # 173
+str(1) # 174
+str('abc') # 175
+
 class C:
     pass
 
