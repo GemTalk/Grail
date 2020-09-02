@@ -651,6 +651,18 @@ test_sum
 %
 category: 'other'
 method: BuiltinsTestCase
+test_tuple
+
+	| x |
+	x := (self statementsAt: 178) evaluate: aScope.
+	self assert: x = (tuple withAll: { }).
+	x := (self statementsAt: 179) evaluate: aScope.
+	self assert: x = (tuple withAll: { int with: 7 . int with: 8 . int with: 9 }).
+	x := (self statementsAt: 180) evaluate: aScope.
+	self assert: x = (tuple withAll: { str withAll: 'T' }).
+%
+category: 'other'
+method: BuiltinsTestCase
 test_type
 
 	| x |

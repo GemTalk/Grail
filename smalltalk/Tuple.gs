@@ -9,6 +9,12 @@ tuple class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: tuple
+___initialize: aCollection
+
+	super ___initialize: aCollection immediateInvariant.
+%
+category: 'other'
+method: tuple
 call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
 
 	self halt.

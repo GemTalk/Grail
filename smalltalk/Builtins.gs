@@ -1841,7 +1841,8 @@ tuple([iterable])
 Rather than being a function, tuple is actually an immutable sequence type, 
 as documented in Tuples and Sequence Types — list, tuple, range.
 "
-	^arguments first asArray copy immediateInvariant
+	
+	^ tuple withAll: arguments first
 %
 category: 'functions'
 method: builtins
@@ -2025,6 +2026,7 @@ initialize
 		at: #'sorted'			put: [:arguments :keywords :scope | self sorted: arguments first];
 		at: #'str'				put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [ self str: arguments first ] ifFalse: [ str withAll: '' ]];
 		at: #'sum'				put: [:arguments :keywords :scope | self sum: arguments];
+		at: #'tuple'				put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [ self tuple: arguments ] ifFalse: [ tuple withAll: { } ]];
 		at: #'type'				put: [:arguments :keywords :scope | self type: arguments];
 		yourself.
 	BaseException allSubclasses do: [:each | 

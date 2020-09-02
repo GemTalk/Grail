@@ -323,6 +323,10 @@ str('abc') # 175
 sum([5, 50, 500]) # 176
 sum(range(10)) # 177
 
+tuple() # 178
+tuple([7, 8, 9]) # 179
+tuple(['T']) # 180
+
 class C:
     pass
 
