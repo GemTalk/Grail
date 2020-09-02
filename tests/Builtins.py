@@ -327,6 +327,16 @@ tuple() # 178
 tuple([7, 8, 9]) # 179
 tuple(['T']) # 180
 
+# TODO: vars (do after locals)
+
+x = [1, 2, 3] # 181
+y = [4, 5, 6] # 182
+zipped = zip(x, y) # 183
+list(zipped) # 184
+z = [7] # 185
+zipped = zip(x, y, z) # 186
+list(zipped) # 187
+
 class C:
     pass
 

@@ -1951,7 +1951,17 @@ zip() in conjunction with the * operator can be used to unzip a list:
 >>> x == list(x2) and y == list(y2)
 True
 "
-self halt.
+
+	| max zipped |
+	max := self min: (arguments collect: [ :each | each size ]) keywords: dict new.
+	zipped := Array new.
+	1 to: max do: [ :i |
+		| tup |
+		tup := Array new.
+		arguments do: [ :argument | tup add: (argument at: i) ].
+		zipped add: (tuple withAll: tup).
+	].
+	^ list withAll: zipped
 %
 set compile_env: 0
 category: 'other'
@@ -2028,6 +2038,7 @@ initialize
 		at: #'sum'				put: [:arguments :keywords :scope | self sum: arguments];
 		at: #'tuple'				put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [ self tuple: arguments ] ifFalse: [ tuple withAll: { } ]];
 		at: #'type'				put: [:arguments :keywords :scope | self type: arguments];
+		at: #'zip'				put: [:arguments :keywords :scope | self zip: arguments];
 		yourself.
 	BaseException allSubclasses do: [:each | 
 		globals at: each name put: each.

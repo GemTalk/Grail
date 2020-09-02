@@ -674,6 +674,27 @@ test_type
 %
 category: 'other'
 method: BuiltinsTestCase
+test_zip
+
+	| x |
+	x := (self statementsAt: 181) evaluate: aScope.
+	x := (self statementsAt: 182) evaluate: aScope.
+	x := (self statementsAt: 183) evaluate: aScope.
+	x := (self statementsAt: 184) evaluate: aScope.
+	self assert: x = (list withAll: { 
+		tuple withAll: { 1 . 4 } .
+		tuple withAll: { 2 . 5 } .
+		tuple withAll: { 3 . 6 }
+	}).
+	x := (self statementsAt: 185) evaluate: aScope.
+	x := (self statementsAt: 186) evaluate: aScope.
+	x := (self statementsAt: 187) evaluate: aScope.
+	self assert: x = (list withAll: { 
+		tuple withAll: { 1 . 4 . 7 }
+	}).
+%
+category: 'other'
+method: BuiltinsTestCase
 testModuleNotFoundError
 	"https://docs.python.org/3/reference/import.html"
 
