@@ -13,10 +13,11 @@ parent: anAstNode
 	| function | 
 	function := super parent: anAstNode.
 	anAstNode isInClass ifFalse: [^function].
+	(function decoratorList includes: #'staticmethod')
+		ifTrue: [^ function changeClassTo: StaticFunctionDefAst].
 	(function decoratorList includes: #'classmethod')
-		ifTrue: [function changeClassTo: ClassFunctionDefAst]
-		ifFalse: [function changeClassTo: InstanceFunctionDefAst].
-	^function
+		ifTrue: [^ function changeClassTo: ClassFunctionDefAst].
+	^ function changeClassTo: InstanceFunctionDefAst
 %
 ! ------------------- Instance methods for FunctionDefAst
 set compile_env: 0

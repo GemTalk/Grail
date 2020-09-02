@@ -68,6 +68,7 @@ class D: # 37
     @classmethod
     def g(cls):
         return 4
+# TODO: classmethod in function form
 
 try: # 38
     C.f()
@@ -304,6 +305,16 @@ a[::2] # 166
 sorted([5, 3, 4]) # 167
 sorted([2.22, 1.11, 3.33]) # 168
 # TODO: sorted with keyword arguments
+
+class G: # 169
+    @staticmethod
+    def h():
+        return 9
+
+g = G() # 170
+g.h() # 171
+G.h() # 172
+# TODO: staticmethod in function form
 
 class C:
     pass

@@ -617,6 +617,18 @@ test_sort
 %
 category: 'other'
 method: BuiltinsTestCase
+test_staticmethod
+
+	| x |
+	x := (self statementsAt: 169) evaluate: aScope.
+	x := (self statementsAt: 170) evaluate: aScope.
+	x := (self statementsAt: 171) evaluate: aScope.
+	self assert: x = 9.
+	x := (self statementsAt: 172) evaluate: aScope.
+	self assert: x = 9.
+%
+category: 'other'
+method: BuiltinsTestCase
 test_type
 
 	| x |

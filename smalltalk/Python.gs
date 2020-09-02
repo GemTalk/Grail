@@ -2758,6 +2758,23 @@ doit
 InstanceFunctionDefAst category: 'Parser'
 %
 set compile_env: 0
+! ------------------- Class definition for StaticFunctionDefAst
+expectvalue /Class
+doit
+FunctionDefAst subclass: 'StaticFunctionDefAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+StaticFunctionDefAst category: 'Parser'
+%
+set compile_env: 0
 ! ------------------- Class definition for GlobalAst
 expectvalue /Class
 doit
@@ -5058,6 +5075,23 @@ doit
 InstanceFunction category: 'builtins'
 %
 set compile_env: 0
+! ------------------- Class definition for StaticFunction
+expectvalue /Class
+doit
+function subclass: 'StaticFunction'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+StaticFunction category: 'builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for Instance
 expectvalue /Class
 doit
@@ -6244,6 +6278,8 @@ input SliceAst.gs
 input StarredAst.gs
 input StatementAst.gs
 input StatementsTestCase.gs
+input StaticFunction.gs
+input StaticFunctionDefAst.gs
 input StopAsyncIteration.gs
 input StopIteration.gs
 input StoreAst.gs
