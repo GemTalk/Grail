@@ -2024,6 +2024,7 @@ initialize
 		at: #'slice'				put: [:arguments :keywords :scope | self slice: arguments];
 		at: #'sorted'			put: [:arguments :keywords :scope | self sorted: arguments first];
 		at: #'str'				put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [ self str: arguments first ] ifFalse: [ str withAll: '' ]];
+		at: #'sum'				put: [:arguments :keywords :scope | self sum: arguments];
 		at: #'type'				put: [:arguments :keywords :scope | self type: arguments];
 		yourself.
 	BaseException allSubclasses do: [:each | 

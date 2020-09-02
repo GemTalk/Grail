@@ -320,6 +320,9 @@ str() # 173
 str(1) # 174
 str('abc') # 175
 
+sum([5, 50, 500]) # 176
+sum(range(10)) # 177
+
 class C:
     pass
 

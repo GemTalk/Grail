@@ -641,6 +641,16 @@ test_str
 %
 category: 'other'
 method: BuiltinsTestCase
+test_sum
+
+	| x |
+	x := (self statementsAt: 176) evaluate: aScope.
+	self assert: x = 555.
+	x := (self statementsAt: 177) evaluate: aScope.
+	self assert: x = 45.
+%
+category: 'other'
+method: BuiltinsTestCase
 test_type
 
 	| x |
