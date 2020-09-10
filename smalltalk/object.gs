@@ -39,7 +39,7 @@ category: 'Python'
 method: object
 __class__
 
-	self halt.
+	^ objectClass new
 %
 category: 'Python'
 method: object
@@ -90,9 +90,17 @@ method: object
 __getattribute__
 
 	^ [ :aSymbol | 
-		self __dict__ 
-			at: aSymbol 
-			ifAbsent: [ AttributeError signal: '''', self __class__ name asString, ''' object has no attribute ''', aSymbol asString, '''' ]
+		(aSymbol = #'__class__') 
+			ifTrue: [ self __class__ ]
+			ifFalse: [
+		(aSymbol = #'__mro__') 
+			ifTrue: [ self __mro__ value ] 
+			ifFalse: [
+				self __dict__ 
+					at: aSymbol 
+					ifAbsent: [ AttributeError signal: '''', self __class__ name asString, ''' object has no attribute ''', aSymbol asString, '''' ]
+			]
+		]
 	]
 %
 category: 'Python'
@@ -136,6 +144,12 @@ method: object
 __lt__
 
 	self halt.
+%
+category: 'Python'
+method: object
+__mro__
+
+	^ [ { self } ]
 %
 category: 'Python'
 method: object
@@ -196,4 +210,13 @@ method: object
 get: aSymbol
 
 	^ self __getattribute__ value: aSymbol
+%
+category: 'Python'
+method: object
+printOn: aStream
+
+	super printOn: aStream.
+	aStream
+		nextPutAll: '<class ''object''>';
+		yourself.
 %

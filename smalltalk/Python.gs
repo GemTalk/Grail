@@ -5358,6 +5358,23 @@ doit
 time category: 'builtins'
 %
 set compile_env: 0
+! ------------------- Class definition for objectClass
+expectvalue /Class
+doit
+object subclass: 'objectClass'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+objectClass category: 'builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for Singleton
 expectvalue /Class
 doit
@@ -6241,6 +6258,7 @@ input NotImplementedType.gs
 input NotInAst.gs
 input NumericLiteralsTestCase.gs
 input object.gs
+input objectClass.gs
 input OperatorAst.gs
 input OperatorsTestCase.gs
 input OrAst.gs

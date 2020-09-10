@@ -447,6 +447,49 @@ test_min
 %
 category: 'other'
 method: BuiltinsTestCase
+test_mro
+
+	| x |
+	188 to: 194 do: [ :num |
+		x := (self statementsAt: num) evaluate: aScope.
+	].
+	x := (self statementsAt: 195) evaluate: aScope.
+	x := (self statementsAt: 196) evaluate: aScope.
+	x := (self statementsAt: 197) evaluate: aScope.
+	self assert: x size = 1.
+	self assert: ((x at: 1) isKindOf: objectClass).
+	x := (self statementsAt: 198) evaluate: aScope.
+	self assert: x size = 2.
+	self assert: ((x at: 1) isKindOf: class).
+	self assert: ((x at: 1) astNode name) = #'D'.
+	self assert: ((x at: 2) isKindOf: objectClass).
+	x := (self statementsAt: 199) evaluate: aScope.
+	self assert: x size = 4.
+	self assert: ((x at: 1) isKindOf: class).
+	self assert: ((x at: 1) astNode name) = #'B'.
+	self assert: ((x at: 2) isKindOf: class).
+	self assert: ((x at: 2) astNode name) = #'D'.
+	self assert: ((x at: 3) isKindOf: class).
+	self assert: ((x at: 3) astNode name) = #'E'.
+	self assert: ((x at: 4) isKindOf: objectClass).
+	x := (self statementsAt: 200) evaluate: aScope.
+	self assert: x size = 7.
+	self assert: ((x at: 1) isKindOf: class).
+	self assert: ((x at: 1) astNode name) = #'A'.
+	self assert: ((x at: 2) isKindOf: class).
+	self assert: ((x at: 2) astNode name) = #'B'.
+	self assert: ((x at: 3) isKindOf: class).
+	self assert: ((x at: 3) astNode name) = #'C'.
+	self assert: ((x at: 4) isKindOf: class).
+	self assert: ((x at: 4) astNode name) = #'D'.
+	self assert: ((x at: 5) isKindOf: class).
+	self assert: ((x at: 5) astNode name) = #'E'.
+	self assert: ((x at: 6) isKindOf: class).
+	self assert: ((x at: 6) astNode name) = #'F'.
+	self assert: ((x at: 7) isKindOf: objectClass).
+%
+category: 'other'
+method: BuiltinsTestCase
 test_object
 
 	| x |

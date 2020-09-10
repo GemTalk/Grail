@@ -1399,7 +1399,7 @@ This function does not accept any arguments.
 Note object does not have a __dict__, so you can’t assign arbitrary 
 attributes to an instance of the object class.
 "
-	^object new
+	^ objectClass new
 %
 category: 'functions'
 method: builtins
@@ -2021,7 +2021,7 @@ initialize
 		at: #'max'				put: [:arguments :keywords :scope | self max: arguments keywords: keywords];
 		at: #'min'				put: [:arguments :keywords :scope | self min: arguments keywords: keywords];
 		at: #'next'				put: [:arguments :keywords :scope | self next: arguments];
-		at: #'object'			put: [:arguments :keywords :scope | self object];
+		at: #'object'			put: self object;
 		at: #'oct'				put: [:arguments :keywords :scope | self oct: arguments first];
 		at: #'open'				put: [:arguments :keywords :scope | self open: arguments keywords: keywords];
 		at: #'ord'				put: [:arguments :keywords :scope | self ord: arguments first];

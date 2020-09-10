@@ -418,6 +418,552 @@ Module(body=[
     Expr(value=Call(func=Name(id='len', ctx=Load()), args=[
         Name(id='d', ctx=Load()),
       ], keywords=[])),
+    ClassDef(name='Base', bases=[], keywords=[], body=[
+        Pass(),
+      ], decorator_list=[]),
+    ClassDef(name='Derived', bases=[
+        Name(id='Base', ctx=Load()),
+      ], keywords=[], body=[
+        Pass(),
+      ], decorator_list=[]),
+    Assign(targets=[
+        Name(id='b', ctx=Store()),
+      ], value=Call(func=Name(id='Base', ctx=Load()), args=[], keywords=[]), type_comment=None),
+    Assign(targets=[
+        Name(id='d', ctx=Store()),
+      ], value=Call(func=Name(id='Derived', ctx=Load()), args=[], keywords=[]), type_comment=None),
+    Expr(value=Call(func=Name(id='isinstance', ctx=Load()), args=[
+        Name(id='d', ctx=Load()),
+        Call(func=Name(id='type', ctx=Load()), args=[
+            Name(id='b', ctx=Load()),
+          ], keywords=[]),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='isinstance', ctx=Load()), args=[
+        Name(id='b', ctx=Load()),
+        Call(func=Name(id='type', ctx=Load()), args=[
+            Name(id='d', ctx=Load()),
+          ], keywords=[]),
+      ], keywords=[])),
+    Assign(targets=[
+        Name(id='b2', ctx=Store()),
+      ], value=Call(func=Name(id='Base', ctx=Load()), args=[], keywords=[]), type_comment=None),
+    Expr(value=Compare(left=Call(func=Name(id='type', ctx=Load()), args=[
+        Name(id='b', ctx=Load()),
+      ], keywords=[]), ops=[
+        Eq(),
+      ], comparators=[
+        Call(func=Name(id='type', ctx=Load()), args=[
+            Name(id='b2', ctx=Load()),
+          ], keywords=[]),
+      ])),
+    Expr(value=Call(func=Name(id='issubclass', ctx=Load()), args=[
+        Name(id='Derived', ctx=Load()),
+        Name(id='Base', ctx=Load()),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='issubclass', ctx=Load()), args=[
+        Name(id='Base', ctx=Load()),
+        Name(id='Derived', ctx=Load()),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='issubclass', ctx=Load()), args=[
+        Call(func=Name(id='type', ctx=Load()), args=[
+            Name(id='b', ctx=Load()),
+          ], keywords=[]),
+        Call(func=Name(id='type', ctx=Load()), args=[
+            Name(id='d', ctx=Load()),
+          ], keywords=[]),
+      ], keywords=[])),
+    Assign(targets=[
+        Name(id='vowels', ctx=Store()),
+      ], value=List(elts=[
+        Constant(value='a', kind=None),
+        Constant(value='e', kind=None),
+        Constant(value='i', kind=None),
+        Constant(value='o', kind=None),
+        Constant(value='u', kind=None),
+      ], ctx=Load()), type_comment=None),
+    Assign(targets=[
+        Name(id='vowels_iter', ctx=Store()),
+      ], value=Call(func=Name(id='iter', ctx=Load()), args=[
+        Name(id='vowels', ctx=Load()),
+      ], keywords=[]), type_comment=None),
+    Expr(value=Call(func=Name(id='next', ctx=Load()), args=[
+        Name(id='vowels_iter', ctx=Load()),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='next', ctx=Load()), args=[
+        Name(id='vowels_iter', ctx=Load()),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='next', ctx=Load()), args=[
+        Name(id='vowels_iter', ctx=Load()),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='next', ctx=Load()), args=[
+        Name(id='vowels_iter', ctx=Load()),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='next', ctx=Load()), args=[
+        Name(id='vowels_iter', ctx=Load()),
+      ], keywords=[])),
+    Try(body=[
+        Expr(value=Call(func=Name(id='next', ctx=Load()), args=[
+            Name(id='vowels_iter', ctx=Load()),
+          ], keywords=[])),
+      ], handlers=[
+        ExceptHandler(type=Name(id='StopIteration', ctx=Load()), name=None, body=[
+            Expr(value=Call(func=Name(id='print', ctx=Load()), args=[
+                Constant(value='StopIteration', kind=None),
+              ], keywords=[
+                keyword(arg='end', value=Constant(value=' ', kind=None)),
+              ])),
+          ]),
+      ], orelse=[], finalbody=[]),
+    Expr(value=Call(func=Name(id='len', ctx=Load()), args=[
+        List(elts=[
+            Constant(value=5, kind=None),
+            Constant(value=5, kind=None),
+            Constant(value=5, kind=None),
+            Constant(value=5, kind=None),
+          ], ctx=Load()),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='len', ctx=Load()), args=[
+        Dict(keys=[], values=[]),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='len', ctx=Load()), args=[
+        Set(elts=[
+            Constant(value=5, kind=None),
+          ]),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='list', ctx=Load()), args=[
+        List(elts=[
+            Constant(value=1, kind=None),
+            Constant(value=2, kind=None),
+            Constant(value=3, kind=None),
+          ], ctx=Load()),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='list', ctx=Load()), args=[
+        Call(func=Name(id='map', ctx=Load()), args=[
+            Lambda(args=arguments(posonlyargs=[], args=[
+                arg(arg='x', annotation=None, type_comment=None),
+              ], vararg=None, kwonlyargs=[], kw_defaults=[], kwarg=None, defaults=[]), body=BinOp(left=Name(id='x', ctx=Load()), op=Add(), right=Constant(value=1, kind=None))),
+            List(elts=[
+                Constant(value=0, kind=None),
+                Constant(value=1, kind=None),
+                Constant(value=2, kind=None),
+              ], ctx=Load()),
+          ], keywords=[]),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='list', ctx=Load()), args=[
+        Call(func=Name(id='map', ctx=Load()), args=[
+            Lambda(args=arguments(posonlyargs=[], args=[
+                arg(arg='x', annotation=None, type_comment=None),
+                arg(arg='y', annotation=None, type_comment=None),
+              ], vararg=None, kwonlyargs=[], kw_defaults=[], kwarg=None, defaults=[]), body=BinOp(left=Name(id='x', ctx=Load()), op=Add(), right=Name(id='y', ctx=Load()))),
+            List(elts=[
+                Constant(value=0, kind=None),
+                Constant(value=1, kind=None),
+                Constant(value=2, kind=None),
+              ], ctx=Load()),
+            List(elts=[
+                Constant(value=3, kind=None),
+                Constant(value=4, kind=None),
+                Constant(value=5, kind=None),
+                Constant(value=6, kind=None),
+              ], ctx=Load()),
+          ], keywords=[]),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='max', ctx=Load()), args=[
+        Constant(value=5, kind=None),
+        Constant(value=0, kind=None),
+        UnaryOp(op=USub(), operand=Constant(value=5, kind=None)),
+        UnaryOp(op=USub(), operand=Constant(value=111, kind=None)),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='max', ctx=Load()), args=[
+        List(elts=[
+            Constant(value=6, kind=None),
+            Constant(value=8, kind=None),
+            Constant(value=10, kind=None),
+          ], ctx=Load()),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='min', ctx=Load()), args=[
+        Constant(value=5, kind=None),
+        Constant(value=0, kind=None),
+        UnaryOp(op=USub(), operand=Constant(value=5, kind=None)),
+        UnaryOp(op=USub(), operand=Constant(value=111, kind=None)),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='min', ctx=Load()), args=[
+        List(elts=[
+            Constant(value=6, kind=None),
+            Constant(value=8, kind=None),
+            Constant(value=10, kind=None),
+          ], ctx=Load()),
+      ], keywords=[])),
+    Assign(targets=[
+        Name(id='o', ctx=Store()),
+      ], value=Call(func=Name(id='object', ctx=Load()), args=[], keywords=[]), type_comment=None),
+    Try(body=[
+        Expr(value=Attribute(value=Name(id='o', ctx=Load()), attr='__dict__', ctx=Load())),
+      ], handlers=[
+        ExceptHandler(type=Name(id='AttributeError', ctx=Load()), name=None, body=[
+            Expr(value=Call(func=Name(id='print', ctx=Load()), args=[
+                Constant(value='AttributeError', kind=None),
+              ], keywords=[
+                keyword(arg='end', value=Constant(value=' ', kind=None)),
+              ])),
+          ]),
+      ], orelse=[], finalbody=[]),
+    Expr(value=Call(func=Name(id='oct', ctx=Load()), args=[
+        Constant(value=8, kind=None),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='oct', ctx=Load()), args=[
+        UnaryOp(op=USub(), operand=Constant(value=56, kind=None)),
+      ], keywords=[])),
+    Assign(targets=[
+        Name(id='f', ctx=Store()),
+      ], value=Call(func=Name(id='open', ctx=Load()), args=[
+        Constant(value='/Users/plasmaintec/code/Python/gemstonep/test.txt', kind=None),
+      ], keywords=[]), type_comment=None),
+    Expr(value=Call(func=Attribute(value=Name(id='f', ctx=Load()), attr='read', ctx=Load()), args=[], keywords=[])),
+    Expr(value=Call(func=Name(id='ord', ctx=Load()), args=[
+        Constant(value='a', kind=None),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='ord', ctx=Load()), args=[
+        Constant(value='€', kind=None),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='pow', ctx=Load()), args=[
+        Constant(value=2, kind=None),
+        Constant(value=3, kind=None),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='pow', ctx=Load()), args=[
+        Constant(value=2, kind=None),
+        Constant(value=3, kind=None),
+        Constant(value=5, kind=None),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='print', ctx=Load()), args=[
+        Constant(value='text', kind=None),
+      ], keywords=[
+        keyword(arg='end', value=Constant(value=' ', kind=None)),
+      ])),
+    Expr(value=Call(func=Name(id='print', ctx=Load()), args=[
+        Constant(value='thing1', kind=None),
+        Constant(value='thing2', kind=None),
+        Constant(value='thing3', kind=None),
+      ], keywords=[
+        keyword(arg='sep', value=Constant(value='+', kind=None)),
+        keyword(arg='end', value=Constant(value=' ', kind=None)),
+      ])),
+    Expr(value=Call(func=Name(id='list', ctx=Load()), args=[
+        Call(func=Name(id='range', ctx=Load()), args=[
+            Constant(value=3, kind=None),
+          ], keywords=[]),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='list', ctx=Load()), args=[
+        Call(func=Name(id='range', ctx=Load()), args=[
+            Constant(value=0, kind=None),
+            Constant(value=3, kind=None),
+          ], keywords=[]),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='list', ctx=Load()), args=[
+        Call(func=Name(id='range', ctx=Load()), args=[
+            Constant(value=0, kind=None),
+            Constant(value=3, kind=None),
+            Constant(value=2, kind=None),
+          ], keywords=[]),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='list', ctx=Load()), args=[
+        Call(func=Name(id='reversed', ctx=Load()), args=[
+            List(elts=[
+                Constant(value=1, kind=None),
+                Constant(value=2, kind=None),
+                Constant(value=3, kind=None),
+              ], ctx=Load()),
+          ], keywords=[]),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='list', ctx=Load()), args=[
+        Call(func=Name(id='reversed', ctx=Load()), args=[
+            List(elts=[
+                Constant(value=100, kind=None),
+              ], ctx=Load()),
+          ], keywords=[]),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='round', ctx=Load()), args=[
+        Constant(value=1, kind=None),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='round', ctx=Load()), args=[
+        Constant(value=1.111, kind=None),
+        Constant(value=2, kind=None),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='round', ctx=Load()), args=[
+        UnaryOp(op=USub(), operand=Constant(value=0.5, kind=None)),
+      ], keywords=[])),
+    Assign(targets=[
+        Name(id='s', ctx=Store()),
+      ], value=Call(func=Name(id='set', ctx=Load()), args=[
+        List(elts=[
+            Constant(value=1, kind=None),
+            Constant(value=2, kind=None),
+            Constant(value=3, kind=None),
+          ], ctx=Load()),
+      ], keywords=[]), type_comment=None),
+    Expr(value=Compare(left=Constant(value=3, kind=None), ops=[
+        In(),
+      ], comparators=[
+        Name(id='s', ctx=Load()),
+      ])),
+    Expr(value=Compare(left=Constant(value=4, kind=None), ops=[
+        In(),
+      ], comparators=[
+        Name(id='s', ctx=Load()),
+      ])),
+    Expr(value=Call(func=Name(id='len', ctx=Load()), args=[
+        Name(id='s', ctx=Load()),
+      ], keywords=[])),
+    Expr(value=Call(func=Attribute(value=Name(id='s', ctx=Load()), attr='add', ctx=Load()), args=[
+        Constant(value=4, kind=None),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='len', ctx=Load()), args=[
+        Name(id='s', ctx=Load()),
+      ], keywords=[])),
+    Expr(value=Compare(left=Constant(value=4, kind=None), ops=[
+        In(),
+      ], comparators=[
+        Name(id='s', ctx=Load()),
+      ])),
+    Expr(value=Call(func=Attribute(value=Name(id='s', ctx=Load()), attr='add', ctx=Load()), args=[
+        Constant(value=4, kind=None),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='len', ctx=Load()), args=[
+        Name(id='s', ctx=Load()),
+      ], keywords=[])),
+    Expr(value=Call(func=Attribute(value=Name(id='s', ctx=Load()), attr='remove', ctx=Load()), args=[
+        Constant(value=1, kind=None),
+      ], keywords=[])),
+    Expr(value=Compare(left=Constant(value=1, kind=None), ops=[
+        In(),
+      ], comparators=[
+        Name(id='s', ctx=Load()),
+      ])),
+    Try(body=[
+        Expr(value=Call(func=Attribute(value=Name(id='s', ctx=Load()), attr='remove', ctx=Load()), args=[
+            Constant(value=1, kind=None),
+          ], keywords=[])),
+      ], handlers=[
+        ExceptHandler(type=Name(id='KeyError', ctx=Load()), name=None, body=[
+            Expr(value=Call(func=Name(id='print', ctx=Load()), args=[
+                Constant(value='KeyError', kind=None),
+              ], keywords=[
+                keyword(arg='end', value=Constant(value=' ', kind=None)),
+              ])),
+          ]),
+      ], orelse=[], finalbody=[]),
+    Assign(targets=[
+        Name(id='s', ctx=Store()),
+      ], value=Call(func=Name(id='set', ctx=Load()), args=[], keywords=[]), type_comment=None),
+    Expr(value=Call(func=Name(id='len', ctx=Load()), args=[
+        Name(id='s', ctx=Load()),
+      ], keywords=[])),
+    ClassDef(name='F', bases=[], keywords=[], body=[
+        Assign(targets=[
+            Name(id='yin', ctx=Store()),
+          ], value=Constant(value='yang', kind=None), type_comment=None),
+        Assign(targets=[
+            Name(id='e', ctx=Store()),
+          ], value=Constant(value=2.71, kind=None), type_comment=None),
+      ], decorator_list=[]),
+    Assign(targets=[
+        Name(id='f', ctx=Store()),
+      ], value=Call(func=Name(id='F', ctx=Load()), args=[], keywords=[]), type_comment=None),
+    Expr(value=Call(func=Name(id='getattr', ctx=Load()), args=[
+        Name(id='f', ctx=Load()),
+        Constant(value='yin', kind=None),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='setattr', ctx=Load()), args=[
+        Name(id='f', ctx=Load()),
+        Constant(value='yin', kind=None),
+        Constant(value='wang', kind=None),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='getattr', ctx=Load()), args=[
+        Name(id='f', ctx=Load()),
+        Constant(value='yin', kind=None),
+      ], keywords=[])),
+    Try(body=[
+        Expr(value=Call(func=Name(id='getattr', ctx=Load()), args=[
+            Name(id='f', ctx=Load()),
+            Constant(value='feng', kind=None),
+          ], keywords=[])),
+      ], handlers=[
+        ExceptHandler(type=Name(id='AttributeError', ctx=Load()), name=None, body=[
+            Expr(value=Call(func=Name(id='print', ctx=Load()), args=[
+                Constant(value='AttributeError', kind=None),
+              ], keywords=[
+                keyword(arg='end', value=Constant(value=' ', kind=None)),
+              ])),
+          ]),
+      ], orelse=[], finalbody=[]),
+    Expr(value=Call(func=Name(id='setattr', ctx=Load()), args=[
+        Name(id='f', ctx=Load()),
+        Constant(value='feng', kind=None),
+        Constant(value='shui', kind=None),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='getattr', ctx=Load()), args=[
+        Name(id='f', ctx=Load()),
+        Constant(value='feng', kind=None),
+      ], keywords=[])),
+    Assign(targets=[
+        Name(id='s', ctx=Store()),
+      ], value=Call(func=Name(id='slice', ctx=Load()), args=[
+        Constant(value=2, kind=None),
+      ], keywords=[]), type_comment=None),
+    Assign(targets=[
+        Name(id='a', ctx=Store()),
+      ], value=List(elts=[
+        Constant(value='a', kind=None),
+        Constant(value='b', kind=None),
+        Constant(value='c', kind=None),
+      ], ctx=Load()), type_comment=None),
+    Expr(value=Subscript(value=Name(id='a', ctx=Load()), slice=Index(value=Name(id='s', ctx=Load())), ctx=Load())),
+    Expr(value=Subscript(value=Name(id='a', ctx=Load()), slice=Slice(lower=None, upper=Constant(value=2, kind=None), step=None), ctx=Load())),
+    Expr(value=Subscript(value=Name(id='a', ctx=Load()), slice=Slice(lower=Constant(value=0, kind=None), upper=Constant(value=2, kind=None), step=None), ctx=Load())),
+    Expr(value=Subscript(value=Name(id='a', ctx=Load()), slice=Slice(lower=Constant(value=0, kind=None), upper=Constant(value=100, kind=None), step=None), ctx=Load())),
+    Expr(value=Subscript(value=Name(id='a', ctx=Load()), slice=Slice(lower=None, upper=None, step=Constant(value=2, kind=None)), ctx=Load())),
+    Expr(value=Call(func=Name(id='sorted', ctx=Load()), args=[
+        List(elts=[
+            Constant(value=5, kind=None),
+            Constant(value=3, kind=None),
+            Constant(value=4, kind=None),
+          ], ctx=Load()),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='sorted', ctx=Load()), args=[
+        List(elts=[
+            Constant(value=2.22, kind=None),
+            Constant(value=1.11, kind=None),
+            Constant(value=3.33, kind=None),
+          ], ctx=Load()),
+      ], keywords=[])),
+    ClassDef(name='G', bases=[], keywords=[], body=[
+        FunctionDef(name='h', args=arguments(posonlyargs=[], args=[], vararg=None, kwonlyargs=[], kw_defaults=[], kwarg=None, defaults=[]), body=[
+            Return(value=Constant(value=9, kind=None)),
+          ], decorator_list=[
+            Name(id='staticmethod', ctx=Load()),
+          ], returns=None, type_comment=None),
+      ], decorator_list=[]),
+    Assign(targets=[
+        Name(id='g', ctx=Store()),
+      ], value=Call(func=Name(id='G', ctx=Load()), args=[], keywords=[]), type_comment=None),
+    Expr(value=Call(func=Attribute(value=Name(id='g', ctx=Load()), attr='h', ctx=Load()), args=[], keywords=[])),
+    Expr(value=Call(func=Attribute(value=Name(id='G', ctx=Load()), attr='h', ctx=Load()), args=[], keywords=[])),
+    Expr(value=Call(func=Name(id='str', ctx=Load()), args=[], keywords=[])),
+    Expr(value=Call(func=Name(id='str', ctx=Load()), args=[
+        Constant(value=1, kind=None),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='str', ctx=Load()), args=[
+        Constant(value='abc', kind=None),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='sum', ctx=Load()), args=[
+        List(elts=[
+            Constant(value=5, kind=None),
+            Constant(value=50, kind=None),
+            Constant(value=500, kind=None),
+          ], ctx=Load()),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='sum', ctx=Load()), args=[
+        Call(func=Name(id='range', ctx=Load()), args=[
+            Constant(value=10, kind=None),
+          ], keywords=[]),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='tuple', ctx=Load()), args=[], keywords=[])),
+    Expr(value=Call(func=Name(id='tuple', ctx=Load()), args=[
+        List(elts=[
+            Constant(value=7, kind=None),
+            Constant(value=8, kind=None),
+            Constant(value=9, kind=None),
+          ], ctx=Load()),
+      ], keywords=[])),
+    Expr(value=Call(func=Name(id='tuple', ctx=Load()), args=[
+        List(elts=[
+            Constant(value='T', kind=None),
+          ], ctx=Load()),
+      ], keywords=[])),
+    Assign(targets=[
+        Name(id='x', ctx=Store()),
+      ], value=List(elts=[
+        Constant(value=1, kind=None),
+        Constant(value=2, kind=None),
+        Constant(value=3, kind=None),
+      ], ctx=Load()), type_comment=None),
+    Assign(targets=[
+        Name(id='y', ctx=Store()),
+      ], value=List(elts=[
+        Constant(value=4, kind=None),
+        Constant(value=5, kind=None),
+        Constant(value=6, kind=None),
+      ], ctx=Load()), type_comment=None),
+    Assign(targets=[
+        Name(id='zipped', ctx=Store()),
+      ], value=Call(func=Name(id='zip', ctx=Load()), args=[
+        Name(id='x', ctx=Load()),
+        Name(id='y', ctx=Load()),
+      ], keywords=[]), type_comment=None),
+    Expr(value=Call(func=Name(id='list', ctx=Load()), args=[
+        Name(id='zipped', ctx=Load()),
+      ], keywords=[])),
+    Assign(targets=[
+        Name(id='z', ctx=Store()),
+      ], value=List(elts=[
+        Constant(value=7, kind=None),
+      ], ctx=Load()), type_comment=None),
+    Assign(targets=[
+        Name(id='zipped', ctx=Store()),
+      ], value=Call(func=Name(id='zip', ctx=Load()), args=[
+        Name(id='x', ctx=Load()),
+        Name(id='y', ctx=Load()),
+        Name(id='z', ctx=Load()),
+      ], keywords=[]), type_comment=None),
+    Expr(value=Call(func=Name(id='list', ctx=Load()), args=[
+        Name(id='zipped', ctx=Load()),
+      ], keywords=[])),
+    Assign(targets=[
+        Name(id='O', ctx=Store()),
+      ], value=Name(id='object', ctx=Load()), type_comment=None),
+    ClassDef(name='F', bases=[
+        Name(id='O', ctx=Load()),
+      ], keywords=[], body=[
+        Pass(),
+      ], decorator_list=[]),
+    ClassDef(name='E', bases=[
+        Name(id='O', ctx=Load()),
+      ], keywords=[], body=[
+        Pass(),
+      ], decorator_list=[]),
+    ClassDef(name='D', bases=[
+        Name(id='O', ctx=Load()),
+      ], keywords=[], body=[
+        Pass(),
+      ], decorator_list=[]),
+    ClassDef(name='C', bases=[
+        Name(id='D', ctx=Load()),
+        Name(id='F', ctx=Load()),
+      ], keywords=[], body=[
+        Pass(),
+      ], decorator_list=[]),
+    ClassDef(name='B', bases=[
+        Name(id='D', ctx=Load()),
+        Name(id='E', ctx=Load()),
+      ], keywords=[], body=[
+        Pass(),
+      ], decorator_list=[]),
+    ClassDef(name='A', bases=[
+        Name(id='B', ctx=Load()),
+        Name(id='C', ctx=Load()),
+      ], keywords=[], body=[
+        Pass(),
+      ], decorator_list=[]),
+    Assign(targets=[
+        Name(id='o', ctx=Store()),
+      ], value=Call(func=Name(id='O', ctx=Load()), args=[], keywords=[]), type_comment=None),
+    Expr(value=Attribute(value=Call(func=Name(id='type', ctx=Load()), args=[
+        Name(id='o', ctx=Load()),
+      ], keywords=[]), attr='__mro__', ctx=Load())),
+    Expr(value=Attribute(value=Name(id='O', ctx=Load()), attr='__mro__', ctx=Load())),
+    Expr(value=Attribute(value=Name(id='D', ctx=Load()), attr='__mro__', ctx=Load())),
+    Expr(value=Attribute(value=Name(id='B', ctx=Load()), attr='__mro__', ctx=Load())),
+    Expr(value=Attribute(value=Name(id='A', ctx=Load()), attr='__mro__', ctx=Load())),
     ClassDef(name='C', bases=[], keywords=[], body=[
         Pass(),
       ], decorator_list=[]),

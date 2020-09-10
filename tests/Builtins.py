@@ -337,6 +337,36 @@ z = [7] # 185
 zipped = zip(x, y, z) # 186
 list(zipped) # 187
 
+#####################################################
+# MRO                                               #
+# https://www.python.org/download/releases/2.3/mro/ #
+#####################################################
+
+O = object # 188
+
+class F(O): pass # 189
+
+class E(O): pass # 190
+
+class D(O): pass # 191
+
+class C(D,F): pass # 192
+
+class B(D,E): pass # 193
+
+class A(B,C): pass # 194
+
+# can't do object.__mro__ due to ExecBlock not being a first class citizen in Smalltalk
+o = O()
+type(o).__mro__
+
+# fixed by introducing objectClass class
+O.__mro__ # (<class 'object'>,)
+
+D.__mro__ # (<class '__main__.D'>, <class 'object'>)
+B.__mro__ # (<class '__main__.B'>, <class '__main__.D'>, <class '__main__.E'>, <class 'object'>)
+A.__mro__ # (<class '__main__.A'>, <class '__main__.B'>, <class '__main__.C'>, <class '__main__.D'>, <class '__main__.E'>, <class '__main__.F'>, <class 'object'>)
+
 class C:
     pass
 

@@ -35,6 +35,12 @@ astNode
 %
 category: 'other'
 method: ClassDefAst
+bases 
+
+	^ bases
+%
+category: 'other'
+method: ClassDefAst
 call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
 
 	| function |
