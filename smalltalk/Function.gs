@@ -61,7 +61,7 @@ value: arguments value: keywords value: aScope
 	^astNode
 		value: arguments
 		value: keywords
-		value: scope copy
+		value: (scope copy superInfo: aScope superInfo)
 %
 set compile_env: 0
 category: 'Python'

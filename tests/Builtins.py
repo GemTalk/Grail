@@ -357,15 +357,84 @@ class B(D,E): pass # 193
 class A(B,C): pass # 194
 
 # can't do object.__mro__ due to ExecBlock not being a first class citizen in Smalltalk
-o = O()
-type(o).__mro__
+o = O() # 195
+type(o).__mro__ # 196
 
 # fixed by introducing objectClass class
-O.__mro__ # (<class 'object'>,)
+O.__mro__ # 197
+# (<class 'object'>,)
 
-D.__mro__ # (<class '__main__.D'>, <class 'object'>)
-B.__mro__ # (<class '__main__.B'>, <class '__main__.D'>, <class '__main__.E'>, <class 'object'>)
-A.__mro__ # (<class '__main__.A'>, <class '__main__.B'>, <class '__main__.C'>, <class '__main__.D'>, <class '__main__.E'>, <class '__main__.F'>, <class 'object'>)
+D.__mro__ # 198
+# (<class '__main__.D'>, <class 'object'>)
+B.__mro__ # 199
+# (<class '__main__.B'>, <class '__main__.D'>, <class '__main__.E'>, <class 'object'>)
+A.__mro__ # 200
+# (<class '__main__.A'>, <class '__main__.B'>, <class '__main__.C'>, <class '__main__.D'>, <class '__main__.E'>, <class '__main__.F'>, <class 'object'>)
+
+#########################################################################
+# SUPER                                                                 #
+# https://rhettinger.wordpress.com/2011/05/26/super-considered-super/   #
+#########################################################################
+
+# PROBLEM
+# need to call from Instance instances, not class instances
+# which means the return from __mro__ needs to be an array of 
+# Instance instances, so we need to watch how Instance instances
+# are initialized
+# SOLVED
+
+# PROBLEM
+# calling callWithArgument:keywords:scope: from an AttributeAst
+# means the receiver is not passed in the arguments list, so we 
+# need to inject the object manually
+# SOLVED
+
+# PROBLEM
+# method lookup currently only looks inside an instance's __dict__
+# but we need to ascend the class hierarchy
+
+# PROBLEM
+# something finicky is going on with the setting of the #'self' 
+# variable, which is affecting which class super() retrieves
+# we circumvent this by using Scope's superInfo
+
+# PROBLEM
+# super() is caller-dependent!!!
+# invoking super() by calling method() from a Tower instance
+# will cause the super() evaluation in Base.method to proxy
+# Ground, rather than proxying Bedrock 
+# SOLUTION
+# use both the type and object parameters of super()
+
+# PROBLEM
+# when do we set and reset Scope's superInfo?
+# we call setSuperInfo on Instance objects to set the 
+# objectOrType parameter, assuming the elements
+# in an mro are class objects,
+# then we set the type parameter upon each call of evaluate
+# inside AttributeAst 
+
+class Bedrock: # 201
+    def method(self):
+        print("calling from Bedrock")
+
+class Base(Bedrock): # 202
+    def method(self):
+        print("calling from Base")
+        super().method()
+
+class Ground(Bedrock): # 203
+    def method(self):
+        print("calling from Ground")
+        super().method()
+
+class Tower(Base, Ground): # 204
+    pass
+
+base = Base() # 205
+base.method() # 206
+tower = Tower() # 207
+tower.method() # 208
 
 class C:
     pass

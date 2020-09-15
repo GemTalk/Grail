@@ -18,9 +18,13 @@ method: AttributeAst
 callWithArguments: anArray keywords: aSymbolDictionary scope: aScope
 
 	| object |
-	self assertContextIsLoad.
+	self assertContextIsLoad.	
+	((value isKindOf: CallAst) and: [ value function id = #'super']) ifTrue: [ 
+		self setSuperInfo: aScope.
+		anArray add: object 
+	].
 	object := value evaluate: aScope.
-	^object
+	^ object
 		call: attr
 		withArguments: anArray
 		keywords: aSymbolDictionary
@@ -69,6 +73,12 @@ printOn: aStream
 		nextPutAll: attr;
 		nextPut: $);
 		yourself.
+%
+category: 'other'
+method: AttributeAst
+setSuperInfo: aScope
+
+	aScope superInfo at: #'type' put: aScope outer astNode
 %
 category: 'other'
 method: AttributeAst

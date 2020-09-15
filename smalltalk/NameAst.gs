@@ -5,6 +5,15 @@ NameAst removeAllMethods.
 NameAst class removeAllMethods.
 %
 ! ------------------- Class methods for NameAst
+set compile_env: 0
+category: 'other'
+classmethod: NameAst
+with: aSymbol
+
+	^ self basicNew 
+		id: aSymbol;
+		yourself
+%
 ! ------------------- Instance methods for NameAst
 set compile_env: 0
 category: 'other'
@@ -26,7 +35,8 @@ callWithArguments: anArray keywords: aSymbolDictionary scope: aScope
 	| callable |
 	self assertContextIsLoad.
 	callable := aScope get: id.
-	^callable
+	self injectSuperArguments: anArray scope: aScope.
+	^ callable
 		value: anArray
 		value: aSymbolDictionary
 		value: aScope
@@ -61,6 +71,12 @@ id
 %
 category: 'other'
 method: NameAst
+id: aSymbol
+
+	id := aSymbol
+%
+category: 'other'
+method: NameAst
 initialize
 	"Name(identifier id, expr_context ctx)"
 
@@ -69,6 +85,22 @@ initialize
 	self commaSpace.
 	ctx := ExpressionContextAst parent: self.
 	self readPosition.
+%
+category: 'other'
+method: NameAst
+injectSuperArguments: anArray scope: aScope
+
+	| type objectOrType |
+	type := aScope superInfo 
+		at: #'type'
+		ifAbsent: [ ].
+	objectOrType := aScope superInfo 
+		at: #'objectOrType'
+		ifAbsent: [ ].
+	(((type isNil not) and: [ objectOrType isNil not ]) and: [ id = #'super' ]) ifTrue: [ "in case of calling super"
+		anArray add: type.
+		anArray add: objectOrType.
+	].
 %
 category: 'other'
 method: NameAst

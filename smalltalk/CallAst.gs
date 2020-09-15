@@ -7,6 +7,22 @@ CallAst class removeAllMethods.
 ! ------------------- Class methods for CallAst
 ! ------------------- Instance methods for CallAst
 set compile_env: 0
+category: 'Accessing'
+method: CallAst
+arguments
+	^arguments
+%
+category: 'Accessing'
+method: CallAst
+function
+	^function
+%
+category: 'Accessing'
+method: CallAst
+keywords
+	^keywords
+%
+set compile_env: 0
 category: 'other'
 method: CallAst
 evaluate: aScope
@@ -45,4 +61,20 @@ initialize
 		keywords := replacement.
 	].
 	self readPosition.
+%
+set compile_env: 0
+category: 'Updating'
+method: CallAst
+arguments: newValue
+	arguments := newValue
+%
+category: 'Updating'
+method: CallAst
+function: newValue
+	function := newValue
+%
+category: 'Updating'
+method: CallAst
+keywords: newValue
+	keywords := newValue
 %

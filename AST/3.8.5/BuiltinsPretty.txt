@@ -964,6 +964,53 @@ Module(body=[
     Expr(value=Attribute(value=Name(id='D', ctx=Load()), attr='__mro__', ctx=Load())),
     Expr(value=Attribute(value=Name(id='B', ctx=Load()), attr='__mro__', ctx=Load())),
     Expr(value=Attribute(value=Name(id='A', ctx=Load()), attr='__mro__', ctx=Load())),
+    ClassDef(name='Bedrock', bases=[], keywords=[], body=[
+        FunctionDef(name='method', args=arguments(posonlyargs=[], args=[
+            arg(arg='self', annotation=None, type_comment=None),
+          ], vararg=None, kwonlyargs=[], kw_defaults=[], kwarg=None, defaults=[]), body=[
+            Expr(value=Call(func=Name(id='print', ctx=Load()), args=[
+                Constant(value='calling from Bedrock', kind=None),
+              ], keywords=[])),
+          ], decorator_list=[], returns=None, type_comment=None),
+      ], decorator_list=[]),
+    ClassDef(name='Base', bases=[
+        Name(id='Bedrock', ctx=Load()),
+      ], keywords=[], body=[
+        FunctionDef(name='method', args=arguments(posonlyargs=[], args=[
+            arg(arg='self', annotation=None, type_comment=None),
+          ], vararg=None, kwonlyargs=[], kw_defaults=[], kwarg=None, defaults=[]), body=[
+            Expr(value=Call(func=Name(id='print', ctx=Load()), args=[
+                Constant(value='calling from Base', kind=None),
+              ], keywords=[])),
+            Expr(value=Call(func=Attribute(value=Call(func=Name(id='super', ctx=Load()), args=[], keywords=[]), attr='method', ctx=Load()), args=[], keywords=[])),
+          ], decorator_list=[], returns=None, type_comment=None),
+      ], decorator_list=[]),
+    ClassDef(name='Ground', bases=[
+        Name(id='Bedrock', ctx=Load()),
+      ], keywords=[], body=[
+        FunctionDef(name='method', args=arguments(posonlyargs=[], args=[
+            arg(arg='self', annotation=None, type_comment=None),
+          ], vararg=None, kwonlyargs=[], kw_defaults=[], kwarg=None, defaults=[]), body=[
+            Expr(value=Call(func=Name(id='print', ctx=Load()), args=[
+                Constant(value='calling from Ground', kind=None),
+              ], keywords=[])),
+            Expr(value=Call(func=Attribute(value=Call(func=Name(id='super', ctx=Load()), args=[], keywords=[]), attr='method', ctx=Load()), args=[], keywords=[])),
+          ], decorator_list=[], returns=None, type_comment=None),
+      ], decorator_list=[]),
+    ClassDef(name='Tower', bases=[
+        Name(id='Base', ctx=Load()),
+        Name(id='Ground', ctx=Load()),
+      ], keywords=[], body=[
+        Pass(),
+      ], decorator_list=[]),
+    Assign(targets=[
+        Name(id='base', ctx=Store()),
+      ], value=Call(func=Name(id='Base', ctx=Load()), args=[], keywords=[]), type_comment=None),
+    Expr(value=Call(func=Attribute(value=Name(id='base', ctx=Load()), attr='method', ctx=Load()), args=[], keywords=[])),
+    Assign(targets=[
+        Name(id='tower', ctx=Store()),
+      ], value=Call(func=Name(id='Tower', ctx=Load()), args=[], keywords=[]), type_comment=None),
+    Expr(value=Call(func=Attribute(value=Name(id='tower', ctx=Load()), attr='method', ctx=Load()), args=[], keywords=[])),
     ClassDef(name='C', bases=[], keywords=[], body=[
         Pass(),
       ], decorator_list=[]),

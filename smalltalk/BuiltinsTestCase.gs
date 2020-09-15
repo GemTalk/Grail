@@ -694,6 +694,26 @@ test_sum
 %
 category: 'other'
 method: BuiltinsTestCase
+test_super
+
+	| x |
+	201 to: 204 do: [ :num |
+		x := (self statementsAt: num) evaluate: aScope.
+	].
+	x := (self statementsAt: 205) evaluate: aScope.
+	x := (self statementsAt: 206) evaluate: aScope.
+	x := (self statementsAt: 207) evaluate: aScope.
+	x := (self statementsAt: 208) evaluate: aScope.
+	x := stdout contents.
+	self assert: x = 'calling from Base
+calling from Bedrock
+calling from Base
+calling from Ground
+calling from Bedrock
+'.
+%
+category: 'other'
+method: BuiltinsTestCase
 test_tuple
 
 	| x |

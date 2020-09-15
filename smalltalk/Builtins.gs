@@ -1771,7 +1771,7 @@ To concatenate a series of iterables, consider using itertools.chain().
 %
 category: 'functions'
 method: builtins
-super: arguments
+super: arguments keywords: keywords scope: scope
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1829,7 +1829,24 @@ current instance for ordinary methods.
 For practical suggestions on how to design cooperative
  classes using super(), see guide to using super().
 "
-self halt.
+
+	| selfObject mro type objectOrType parent |
+	(arguments size = 0) ifTrue: [
+		selfObject := scope outer astNode.
+		mro := selfObject __mro__ value: scope.
+		^ mro at: 2
+	].
+	(arguments size = 2) ifTrue: [
+		type := arguments first.
+		objectOrType := arguments second.
+		mro := objectOrType __mro__ value: scope.
+		1 to: mro size do: [ :i | 
+			parent := ((mro at: i) isKindOf: class) ifTrue: [ (mro at: i) __class__ ] ifFalse: [ mro at: i ].
+			(parent = type) ifTrue: [ ^ mro at: i + 1 ].
+		].
+		self halt.
+	].
+	self halt.
 %
 category: 'functions'
 method: builtins
@@ -2036,6 +2053,7 @@ initialize
 		at: #'sorted'			put: [:arguments :keywords :scope | self sorted: arguments first];
 		at: #'str'				put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [ self str: arguments first ] ifFalse: [ str withAll: '' ]];
 		at: #'sum'				put: [:arguments :keywords :scope | self sum: arguments];
+		at: #'super'				put: [:arguments :keywords :scope | self super: arguments keywords: keywords scope: scope];
 		at: #'tuple'				put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [ self tuple: arguments ] ifFalse: [ tuple withAll: { } ]];
 		at: #'type'				put: [:arguments :keywords :scope | self type: arguments];
 		at: #'zip'				put: [:arguments :keywords :scope | self zip: arguments];

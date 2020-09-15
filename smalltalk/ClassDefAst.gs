@@ -15,6 +15,21 @@ __eq__
 %
 category: 'other'
 method: ClassDefAst
+__mro__
+
+	^ [ :scope | 
+		| linearization parentLinearizations parentList mergeLinearizations |
+		linearization := Array with: (scope get: self name).
+		parentLinearizations := self bases collect: [ :base | (scope get: base id) __mro__ value ].
+		parentList := self bases collect: [ :base | (scope get: base id) ].		
+		mergeLinearizations := Array withAll: parentLinearizations.
+		mergeLinearizations add: parentList.
+		linearization addAll: (Linearization merge: mergeLinearizations).
+		linearization.
+	]
+%
+category: 'other'
+method: ClassDefAst
 __str__
 	"<class '__main__.MyClass'>"
 
@@ -86,6 +101,7 @@ initialize
 	name := (stream upTo: $') asSymbol.
 	self commaSpace.
 	bases := self collectAst: [self expression].
+	(bases size = 0) ifTrue: [ bases add: (NameAst with: #'object') ].
 	self commaSpace.
 	keywords := self collectAst: [KeywordAst parent: self].
 	self commaSpace.

@@ -4276,6 +4276,23 @@ doit
 WithItemAst category: 'Parser'
 %
 set compile_env: 0
+! ------------------- Class definition for Linearization
+expectvalue /Class
+doit
+Object subclass: 'Linearization'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+Linearization category: 'builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for object
 expectvalue /Class
 doit
@@ -5479,7 +5496,8 @@ set compile_env: 0
 expectvalue /Class
 doit
 Object subclass: 'Scope'
-  instVarNames: #( astNode outer variables)
+  instVarNames: #( astNode outer variables
+                    superInfo)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -6228,6 +6246,7 @@ input KeyError.gs
 input KeywordAst.gs
 input KeywordsAst.gs
 input LambdaAst.gs
+input Linearization.gs
 input list.gs
 input list_iterator.gs
 input ListAst.gs
