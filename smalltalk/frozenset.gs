@@ -31,5 +31,5 @@ method: frozenset
 call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
 
 	(attributes includesKey: aSymbol) ifFalse: [ AttributeError signal ].
-	self halt.
+	(attributes at: aSymbol) value: anArray value: aSymbolDictionary value: aScope.
 %

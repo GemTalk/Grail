@@ -11,7 +11,7 @@ category: 'other'
 method: SetAst
 evaluate: aScope
 
-	^(elts collect: [:each | each evaluate: aScope]) asSet
+	^ set withAll: (elts collect: [:each | each evaluate: aScope])
 %
 category: 'other'
 method: SetAst

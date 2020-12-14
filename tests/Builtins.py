@@ -68,6 +68,7 @@ class D: # 37
     @classmethod
     def g(cls):
         return 4
+# TODO: classmethod in function form
 
 try: # 38
     C.f()
@@ -169,6 +170,271 @@ int("3") # 82
 int("0") # 83
 int("777", 8) # 84
 int("0o777", 8) # 85
+
+d = {'tri': 'ceratops', 'rect': 'angle'} # 86
+d['rect'] = 'ify' # 87
+len(d) # 88
+
+class Base: # 89
+    pass
+
+class Derived(Base): # 90
+    pass
+
+b = Base() # 91
+d = Derived() # 92
+isinstance(d, type(b)) # 93
+isinstance(b, type(d)) # 94
+
+b2 = Base() # 95
+type(b) == type(b2) # 96
+
+issubclass(Derived, Base) # 97
+issubclass(Base, Derived) # 98
+issubclass(type(b), type(d)) # 99
+
+vowels = ['a', 'e', 'i', 'o', 'u'] # 100
+vowels_iter = iter(vowels) # 101
+next(vowels_iter) # 102
+next(vowels_iter) # 103
+next(vowels_iter) # 104
+next(vowels_iter) # 105
+next(vowels_iter) # 106
+try: # 107
+    next(vowels_iter)
+except StopIteration:
+    print("StopIteration", end=' ')
+
+len([5, 5, 5, 5]) # 108
+len({}) # 109
+len({5}) # 110
+
+list([1, 2, 3]) # 111
+
+# TODO: locals
+
+list(map(lambda x:x+1, [0, 1, 2])) # 112
+list(map(lambda x,y:x+y, [0, 1, 2], [3, 4, 5, 6])) # 113
+
+max(5, 0, -5, -111) # 114
+max([6, 8, 10]) # 115
+
+# TODO: memoryview
+
+min(5, 0, -5, -111) # 116
+min([6, 8, 10]) # 117
+
+o = object() # 118
+try: # 119
+    o.__dict__
+except AttributeError:
+    print("AttributeError", end=' ')
+
+oct(8) # 120
+oct(-56) # 121
+
+f = open("/Users/plasmaintec/code/Python/gemstonep/test.txt") # 122
+f.read() # 123
+
+ord('a') # 124
+ord('€') # 125
+
+pow(2, 3) # 126
+pow(2, 3, 5) # 127
+
+print("text", end=" ") # 128
+print("thing1", "thing2", "thing3", sep="+", end=" ") # 129
+
+# TODO: property
+
+list(range(3)) # 130
+list(range(0, 3)) # 131
+list(range(0, 3, 2)) # 132
+
+# TODO: repr
+
+list(reversed([1, 2, 3])) # 133
+list(reversed([100])) # 134
+
+round(1) # 135
+round(1.111, 2) # 136
+round(-0.5) # 137
+
+s = set([1, 2, 3]) # 138 
+3 in s # 139
+4 in s # 140
+len(s) # 141
+s.add(4) # 142
+len(s) # 143
+4 in s # 144
+s.add(4) # 145
+len(s) # 146
+s.remove(1) # 147
+1 in s # 148
+try: # 149
+    s.remove(1) 
+except KeyError:
+    print("KeyError", end=' ')
+s = set() # 150
+len(s) # 151
+
+class F(): # 152
+    yin = "yang"
+    e = 2.71
+
+f = F() # 153
+getattr(f, "yin") # 154
+setattr(f, "yin", "wang") # 155
+getattr(f, "yin") # 156
+try: # 157
+    getattr(f, "feng") 
+except AttributeError:
+    print("AttributeError", end=' ')
+
+setattr(f, "feng", "shui") # 158
+getattr(f, "feng") # 159
+
+s = slice(2) # 160
+a = ['a', 'b', 'c'] # 161
+a[s] # 162
+a[:2] # 163
+a[0:2] # 164
+a[0:100] # 165
+a[::2] # 166
+
+sorted([5, 3, 4]) # 167
+sorted([2.22, 1.11, 3.33]) # 168
+# TODO: sorted with keyword arguments
+
+class G: # 169
+    @staticmethod
+    def h():
+        return 9
+
+g = G() # 170
+g.h() # 171
+G.h() # 172
+# TODO: staticmethod in function form
+
+str() # 173
+str(1) # 174
+str('abc') # 175
+
+sum([5, 50, 500]) # 176
+sum(range(10)) # 177
+
+tuple() # 178
+tuple([7, 8, 9]) # 179
+tuple(['T']) # 180
+
+# TODO: vars (do after locals)
+
+x = [1, 2, 3] # 181
+y = [4, 5, 6] # 182
+zipped = zip(x, y) # 183
+list(zipped) # 184
+z = [7] # 185
+zipped = zip(x, y, z) # 186
+list(zipped) # 187
+
+#####################################################
+# MRO                                               #
+# https://www.python.org/download/releases/2.3/mro/ #
+#####################################################
+
+O = object # 188
+
+class F(O): pass # 189
+
+class E(O): pass # 190
+
+class D(O): pass # 191
+
+class C(D,F): pass # 192
+
+class B(D,E): pass # 193
+
+class A(B,C): pass # 194
+
+# can't do object.__mro__ due to ExecBlock not being a first class citizen in Smalltalk
+o = O() # 195
+type(o).__mro__ # 196
+
+# fixed by introducing objectClass class
+O.__mro__ # 197
+# (<class 'object'>,)
+
+D.__mro__ # 198
+# (<class '__main__.D'>, <class 'object'>)
+B.__mro__ # 199
+# (<class '__main__.B'>, <class '__main__.D'>, <class '__main__.E'>, <class 'object'>)
+A.__mro__ # 200
+# (<class '__main__.A'>, <class '__main__.B'>, <class '__main__.C'>, <class '__main__.D'>, <class '__main__.E'>, <class '__main__.F'>, <class 'object'>)
+
+#########################################################################
+# SUPER                                                                 #
+# https://rhettinger.wordpress.com/2011/05/26/super-considered-super/   #
+#########################################################################
+
+# PROBLEM
+# need to call from Instance instances, not class instances
+# which means the return from __mro__ needs to be an array of 
+# Instance instances, so we need to watch how Instance instances
+# are initialized
+# SOLVED
+
+# PROBLEM
+# calling callWithArgument:keywords:scope: from an AttributeAst
+# means the receiver is not passed in the arguments list, so we 
+# need to inject the object manually
+# SOLVED
+
+# PROBLEM
+# method lookup currently only looks inside an instance's __dict__
+# but we need to ascend the class hierarchy
+
+# PROBLEM
+# something finicky is going on with the setting of the #'self' 
+# variable, which is affecting which class super() retrieves
+# we circumvent this by using Scope's superInfo
+
+# PROBLEM
+# super() is caller-dependent!!!
+# invoking super() by calling method() from a Tower instance
+# will cause the super() evaluation in Base.method to proxy
+# Ground, rather than proxying Bedrock 
+# SOLUTION
+# use both the type and object parameters of super()
+
+# PROBLEM
+# when do we set and reset Scope's superInfo?
+# we call setSuperInfo on Instance objects to set the 
+# objectOrType parameter, assuming the elements
+# in an mro are class objects,
+# then we set the type parameter upon each call of evaluate
+# inside AttributeAst 
+
+class Bedrock: # 201
+    def method(self):
+        print("calling from Bedrock")
+
+class Base(Bedrock): # 202
+    def method(self):
+        print("calling from Base")
+        super().method()
+
+class Ground(Bedrock): # 203
+    def method(self):
+        print("calling from Ground")
+        super().method()
+
+class Tower(Base, Ground): # 204
+    pass
+
+base = Base() # 205
+base.method() # 206
+tower = Tower() # 207
+tower.method() # 208
 
 class C:
     pass

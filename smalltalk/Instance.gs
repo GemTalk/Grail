@@ -34,7 +34,7 @@ method: Instance
 call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
 
 	| callable |
-	callable := self get: aSymbol.
+	callable := self get: aSymbol scope: aScope.
 	^callable
 		callFromObject: self
 		arguments: anArray
@@ -65,7 +65,37 @@ get: aSymbol
 
 	^ __dict__ 
 		get: aSymbol
-		ifAbsent: [ AttributeError signal: '''', __class__ name asString, ''' object has no attribute ''', aSymbol asString, '''' ]
+		ifAbsent: [ 
+			| mro |
+			mro := self __class__ __mro__ value.
+			self halt.
+			AttributeError signal: '''', __class__ name asString, ''' object has no attribute ''', aSymbol asString, ''''.
+		]
+%
+category: 'other'
+method: Instance
+get: aSymbol scope: aScope
+	"This should use __getattribute__() to lookup aSymbol.
+	Note, however, that we don't have to use __getattribute__() to lookup __getattribute__!
+	See https://docs.python.org/3/reference/datamodel.html#special-method-lookup.
+	"
+
+	self setSuperInfo: aScope.
+	^ __dict__ 
+		get: aSymbol
+		ifAbsent: [ 
+			| mro callable parent |
+			mro := self __class__ __mro__ value: aScope.
+			2 to: mro size do: [ :i | 
+				parent := mro at: i.
+				[ callable := parent get: aSymbol ]
+					on: NameError
+					do: [ self halt ].
+				^ callable
+			].
+			self halt.
+			AttributeError signal: '''', __class__ name asString, ''' object has no attribute ''', aSymbol asString, ''''.
+		]
 %
 category: 'other'
 method: Instance
@@ -87,7 +117,22 @@ initialize: aLocalScope
 %
 category: 'other'
 method: Instance
+printOn: aStream
+
+	aStream
+		nextPutAll: '<__main__.', self __class__ name asString, ' object at ', self asOop asString, '>';
+		yourself.
+%
+category: 'other'
+method: Instance
 set: aSymbol to: anObject
 
 	__dict__ set: aSymbol to: anObject.
+%
+category: 'other'
+method: Instance
+setSuperInfo: aScope
+
+	aScope superInfo at: #'type' put: self __class__.
+	aScope superInfo at: #'objectOrType' put: self __class__.
 %

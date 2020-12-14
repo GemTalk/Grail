@@ -22,6 +22,17 @@ outer: aScope node: anAstNode
 %
 ! ------------------- Instance methods for Scope
 set compile_env: 0
+category: 'Accessing'
+method: Scope
+superInfo
+	^superInfo
+%
+category: 'Accessing'
+method: Scope
+variables
+	^variables
+%
+set compile_env: 0
 category: 'other'
 method: Scope
 addAssociation: anAssociation
@@ -71,6 +82,7 @@ initializeOuter: aScope node: anAstNode
 	astNode := anAstNode.
 	outer := aScope.
 	variables := SymbolDictionary new.
+	superInfo := SymbolDictionary new.
 %
 category: 'other'
 method: Scope
@@ -90,6 +102,7 @@ postCopy
 
 	super postCopy.
 	variables := variables  copy.
+	superInfo := superInfo  copy.
 %
 category: 'other'
 method: Scope
@@ -118,4 +131,25 @@ set: anObject to: aValue
 	aKey := anObject.
 	(anObject isKindOf: str) ifTrue: [ aKey := anObject ___container asSymbol ].
 	variables at: aKey put: aValue.
+%
+set compile_env: 0
+category: 'Updating'
+method: Scope
+astNode: newValue
+	astNode := newValue
+%
+category: 'Updating'
+method: Scope
+outer: newValue
+	outer := newValue
+%
+category: 'Updating'
+method: Scope
+superInfo: newValue
+	superInfo := newValue
+%
+category: 'Updating'
+method: Scope
+variables: newValue
+	variables := newValue
 %

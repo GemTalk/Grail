@@ -71,6 +71,18 @@ hash
 
 	^ number
 %
+category: 'other'
+method: int
+max: anInt
+
+	^ (number > anInt ___number) ifTrue: [ self ] ifFalse: [ anInt ]
+%
+category: 'other'
+method: int
+min: anInt
+
+	^ (number < anInt ___number) ifTrue: [ self ] ifFalse: [ anInt ]
+%
 set compile_env: 0
 category: 'Python'
 method: int
@@ -328,6 +340,18 @@ method: int
 __xor__
 
 	^ [ :lhs :rhs | int with: ( lhs.number bitXor: rhs.number ) ]
+%
+category: 'Python'
+method: int
+<= aNumber
+
+	^ self __lte__ value: self value: aNumber
+%
+category: 'Python'
+method: int
+>= aNumber
+
+	^ self __gte__ value: self value: aNumber
 %
 category: 'Python'
 method: int

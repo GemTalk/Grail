@@ -18,6 +18,26 @@ newForNode: aFunctionDefAst scope: aScope
 set compile_env: 0
 category: 'other'
 method: class
+__mro__
+
+	^ [ | linearization parentLinearizations parentList mergeLinearizations |
+		linearization := Array with: self.
+		parentLinearizations := self astNode bases collect: [ :base | (scope get: base id) __mro__ value ].
+		parentList := self astNode bases collect: [ :base | (scope get: base id) ].		
+		mergeLinearizations := Array withAll: parentLinearizations.
+		mergeLinearizations add: parentList.
+		linearization addAll: (Linearization merge: mergeLinearizations).
+		linearization.
+	]
+%
+category: 'other'
+method: class
+astNode
+
+	^ astNode
+%
+category: 'other'
+method: class
 call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
 
 	| function |
@@ -32,7 +52,8 @@ category: 'other'
 method: class
 get: aSymbol
 
-	^scope get: aSymbol
+	(aSymbol = #'__mro__') ifTrue: [ ^ self __mro__ value ].
+	^ scope get: aSymbol
 %
 category: 'other'
 method: class
@@ -66,6 +87,12 @@ value: arguments value: keywords value: aScope
 		value: scope copy
 %
 set compile_env: 0
+category: 'Python'
+method: class
+__class__
+
+	^ astNode
+%
 category: 'Python'
 method: class
 __dict__

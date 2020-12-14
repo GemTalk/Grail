@@ -1,0 +1,17 @@
+Module(body=[
+    Import(names=[
+        alias(name='time', asname=None),
+      ]),
+    Assign(targets=[
+        Name(id='t1', ctx=Store()),
+      ], value=Call(func=Attribute(value=Name(id='time', ctx=Load()), attr='time', ctx=Load()), args=[], keywords=[]), type_comment=None),
+    Expr(value=Call(func=Attribute(value=Name(id='time', ctx=Load()), attr='sleep', ctx=Load()), args=[
+        Constant(value=0.01, kind=None),
+      ], keywords=[])),
+    Assign(targets=[
+        Name(id='t2', ctx=Store()),
+      ], value=Call(func=Attribute(value=Name(id='time', ctx=Load()), attr='time', ctx=Load()), args=[], keywords=[]), type_comment=None),
+    Expr(value=Call(func=Name(id='print', ctx=Load()), args=[
+        BinOp(left=Name(id='t2', ctx=Load()), op=Sub(), right=Name(id='t1', ctx=Load())),
+      ], keywords=[])),
+  ], type_ignores=[])

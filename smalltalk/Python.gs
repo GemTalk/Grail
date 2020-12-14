@@ -2758,6 +2758,23 @@ doit
 InstanceFunctionDefAst category: 'Parser'
 %
 set compile_env: 0
+! ------------------- Class definition for StaticFunctionDefAst
+expectvalue /Class
+doit
+FunctionDefAst subclass: 'StaticFunctionDefAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+StaticFunctionDefAst category: 'Parser'
+%
+set compile_env: 0
 ! ------------------- Class definition for GlobalAst
 expectvalue /Class
 doit
@@ -4259,6 +4276,23 @@ doit
 WithItemAst category: 'Parser'
 %
 set compile_env: 0
+! ------------------- Class definition for Linearization
+expectvalue /Class
+doit
+Object subclass: 'Linearization'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+Linearization category: 'builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for object
 expectvalue /Class
 doit
@@ -4493,6 +4527,23 @@ Object
 expectvalue /Class
 doit
 frozenset category: 'builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for set
+expectvalue /Class
+doit
+frozenset subclass: 'set'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( disallowGciStore)
+
+%
+expectvalue /Class
+doit
+set category: 'builtins'
 %
 set compile_env: 0
 ! ------------------- Class definition for list
@@ -4939,6 +4990,31 @@ doit
 class category: 'builtins'
 %
 set compile_env: 0
+! ------------------- Class definition for file
+expectvalue /Class
+doit
+object subclass: 'file'
+  instVarNames: #( fileObject)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+file comment: 
+'class io.TextIOWrapper(buffer, encoding=None, errors=None, newline=None, line_buffering=False, write_through=False)
+A buffered text stream over a BufferedIOBase binary stream. It inherits TextIOBase.
+
+https://docs.python.org/3/library/io.html#io.TextIOWrapper'
+%
+expectvalue /Class
+doit
+file category: 'builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for function
 expectvalue /Class
 doit
@@ -5014,6 +5090,23 @@ Object
 expectvalue /Class
 doit
 InstanceFunction category: 'builtins'
+%
+set compile_env: 0
+! ------------------- Class definition for StaticFunction
+expectvalue /Class
+doit
+function subclass: 'StaticFunction'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+StaticFunction category: 'builtins'
 %
 set compile_env: 0
 ! ------------------- Class definition for Instance
@@ -5282,6 +5375,23 @@ doit
 time category: 'builtins'
 %
 set compile_env: 0
+! ------------------- Class definition for objectClass
+expectvalue /Class
+doit
+object subclass: 'objectClass'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+objectClass category: 'builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for Singleton
 expectvalue /Class
 doit
@@ -5365,11 +5475,29 @@ doit
 NotImplementedType category: 'builtins'
 %
 set compile_env: 0
+! ------------------- Class definition for slice
+expectvalue /Class
+doit
+object subclass: 'slice'
+  instVarNames: #( start stop step)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+slice category: 'builtins'
+%
+set compile_env: 0
 ! ------------------- Class definition for Scope
 expectvalue /Class
 doit
 Object subclass: 'Scope'
-  instVarNames: #( astNode outer variables)
+  instVarNames: #( astNode outer variables
+                    superInfo)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -6074,6 +6202,7 @@ input ExprAst.gs
 input ExpressionAst.gs
 input ExpressionContextAst.gs
 input ExtSliceAst.gs
+input file.gs
 input FileExistsError.gs
 input FileNotFoundError.gs
 input float.gs
@@ -6117,6 +6246,7 @@ input KeyError.gs
 input KeywordAst.gs
 input KeywordsAst.gs
 input LambdaAst.gs
+input Linearization.gs
 input list.gs
 input list_iterator.gs
 input ListAst.gs
@@ -6147,6 +6277,7 @@ input NotImplementedType.gs
 input NotInAst.gs
 input NumericLiteralsTestCase.gs
 input object.gs
+input objectClass.gs
 input OperatorAst.gs
 input OperatorsTestCase.gs
 input OrAst.gs
@@ -6172,16 +6303,20 @@ input RShiftAst.gs
 input RuntimeError.gs
 input RuntimeWarning.gs
 input Scope.gs
+input set.gs
 input set_iterator.gs
 input SetAst.gs
 input SetCompAst.gs
 input SimpleStatementsTestCase.gs
 input Singleton.gs
+input slice.gs
 input SliceAbstractAst.gs
 input SliceAst.gs
 input StarredAst.gs
 input StatementAst.gs
 input StatementsTestCase.gs
+input StaticFunction.gs
+input StaticFunctionDefAst.gs
 input StopAsyncIteration.gs
 input StopIteration.gs
 input StoreAst.gs

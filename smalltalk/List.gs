@@ -15,6 +15,18 @@ append: arguments keywords: keywords
 %
 category: 'other'
 method: list
+collect: aBlock
+
+	^ container collect: aBlock
+%
+category: 'other'
+method: list
+first
+
+	^ container first
+%
+category: 'other'
+method: list
 get: anIndex
 
 	[
@@ -22,6 +34,12 @@ get: anIndex
 	] on: OffsetError do: [:ex | 
 		ex resignalAs: (IndexError new details: 'list index out of range'; yourself).
 	]
+%
+category: 'other'
+method: list
+inject: aValue into: aBlock
+
+	^ container inject: aValue into: aBlock
 %
 set compile_env: 0
 category: 'Python'
@@ -64,7 +82,7 @@ category: 'Python'
 method: list
 __reversed__
 
-	self halt.
+	^ [ :seq | self class withAll: (seq ___container reverse) ]
 %
 category: 'Python'
 method: list
@@ -148,5 +166,5 @@ category: 'Python'
 method: list
 sort
 
-	self halt.
+	^ self class withAll: (container sortWithBlock: [ :a :b | (a <= b) = True ])
 %

@@ -9,6 +9,27 @@ ClassDefAst class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: ClassDefAst
+__eq__
+
+	^ [ :lhs :rhs | (lhs name = rhs name) ifTrue: [ True ] ifFalse: [ False ] ]
+%
+category: 'other'
+method: ClassDefAst
+__mro__
+
+	^ [ :scope | 
+		| linearization parentLinearizations parentList mergeLinearizations |
+		linearization := Array with: (scope get: self name).
+		parentLinearizations := self bases collect: [ :base | (scope get: base id) __mro__ value ].
+		parentList := self bases collect: [ :base | (scope get: base id) ].		
+		mergeLinearizations := Array withAll: parentLinearizations.
+		mergeLinearizations add: parentList.
+		linearization addAll: (Linearization merge: mergeLinearizations).
+		linearization.
+	]
+%
+category: 'other'
+method: ClassDefAst
 __str__
 	"<class '__main__.MyClass'>"
 
@@ -20,6 +41,18 @@ __str__
 			nextPutAll: name;
 			nextPutAll: '''>';
 			contents)]
+%
+category: 'other'
+method: ClassDefAst
+astNode
+
+	^ self
+%
+category: 'other'
+method: ClassDefAst
+bases 
+
+	^ bases
 %
 category: 'other'
 method: ClassDefAst
@@ -68,6 +101,7 @@ initialize
 	name := (stream upTo: $') asSymbol.
 	self commaSpace.
 	bases := self collectAst: [self expression].
+	(bases size = 0) ifTrue: [ bases add: (NameAst with: #'object') ].
 	self commaSpace.
 	keywords := self collectAst: [KeywordAst parent: self].
 	self commaSpace.
@@ -75,6 +109,17 @@ initialize
 	self commaSpace.
 	decorator_list := self collectAst:[self expression].
 	self readPosition.
+%
+category: 'other'
+method: ClassDefAst
+isDerivedFrom: aClass scope: aScope
+"distinct from isSubclassOf: because
+1) isDerivedFrom: checks the Python class hierarchy
+2) isSubclassOf: checks the Smalltalk class hierarchy"
+	
+	(aClass name = name) ifTrue: [ ^ true ].
+	bases do: [ :base | ((aScope get: base id) astNode isDerivedFrom: aClass scope: aScope) ifTrue: [ ^ true ] ].
+	^ false
 %
 category: 'other'
 method: ClassDefAst

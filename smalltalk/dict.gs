@@ -9,6 +9,12 @@ dict class removeAllMethods.
 set compile_env: 0
 category: 'other'
 method: dict
+__len__
+
+	^ [ :rhs | rhs ___container size // 2 ]
+%
+category: 'other'
+method: dict
 = aDict
 	"ugly workaround method to prevent ConstantAst from making two otherwise equal dicts unequal
 	current strategy: 
@@ -79,7 +85,7 @@ method: dict
 set: aKey to: aValue
 
 	1 to: container size by: 2 do: [:i | 
-		((container at: i) __eq__ value: (container at: 1) value: aKey) == True ifTrue: [
+		((container at: i) __eq__ value: (container at: i) value: aKey) == True ifTrue: [
 			container at: i + 1 put: aValue.
 			^self.
 		].

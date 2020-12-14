@@ -24,9 +24,11 @@ category: 'other'
 classmethod: AbstractContainer
 withAll: aCollection
 
-	(aCollection class == self) ifTrue: [ ^ aCollection ].
+	| items |
+	items := aCollection.
+	(aCollection isKindOf: AbstractContainer) ifTrue: [ items := aCollection ___container ].
 	^ self basicNew
-		___initialize: aCollection;
+		___initialize: items;
 		yourself
 %
 ! ------------------- Instance methods for AbstractContainer
@@ -161,11 +163,26 @@ category: 'Python'
 method: AbstractContainer
 __getitem__
 
-	^[:collection :index | 
-		[
-			collection ___container at: index ___number
-		] on: OffsetError do: [:ex | 
-			ex resignalAs: (IndexError new details: 'list index out of range'; yourself).
+	^[:collection :subscript | 
+		(subscript isKindOf: slice) ifTrue: [
+			| start stop step return |
+			start := (subscript start isKindOf: NoneType) ifTrue: [ 0 ] ifFalse: [ subscript start ___number ].
+			stop := (subscript stop isKindOf: NoneType) ifTrue: [ collection size ] ifFalse: [ subscript stop ___number ].
+			(stop > collection size) ifTrue: [ stop := collection size ].
+			step := (subscript step isKindOf: NoneType) ifTrue: [ 1 ] ifFalse: [ subscript step ___number ].
+			return := collection ___container class new.
+			collection ___container from: start+1 to: stop doWithIndex: [ :item :i |
+				(((i - start - 1) rem: step) = 0) ifTrue: [ return add: item ]
+			].
+			self class withAll: return.
+		] ifFalse: [
+			| index |
+			index := subscript.
+			[
+				collection ___container at: index ___number
+			] on: OffsetError do: [:ex | 
+				ex resignalAs: (IndexError new details: 'list index out of range'; yourself).
+			]
 		]
 	]
 %

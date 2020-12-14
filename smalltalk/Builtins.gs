@@ -1121,7 +1121,7 @@ Changed in version 3.7: x is now a positional-only parameter.
 %
 category: 'functions'
 method: builtins
-isinstance: object _: classInfo
+isinstance: object class: classInfo scope: aScope
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1136,12 +1136,11 @@ classinfo argument, or of a (direct, indirect or virtual) subclass
 or tuple of types and such tuples, a TypeError exception is raised.
 "
 
-	^object isKindOf: classInfo
-
+	^ object __class__ isDerivedFrom: classInfo scope: aScope
 %
 category: 'functions'
 method: builtins
-issubclass: arguments
+issubclass: aClass1 class: aClass2 scope: aScope
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1151,7 +1150,8 @@ Return true if class is a subclass (direct, indirect or virtual) of classinfo.
 objects, in which case every entry in classinfo will be checked. In any other
  case, a TypeError exception is raised.
 "
-self halt.
+
+	^ aClass1 astNode isDerivedFrom: aClass2 astNode scope: aScope
 %
 category: 'functions'
 method: builtins
@@ -1183,7 +1183,14 @@ with open('mydata.db', 'rb') as f:
     for block in iter(partial(f.read, 64), b''):
         process_block(block)
 "
-self halt.
+
+	| object sentinel |
+	object := arguments first.
+	(arguments size = 1) ifTrue: [
+		^ list_iterator on: object
+	].
+	sentinel := arguments second.
+	self halt.
 %
 category: 'functions'
 method: builtins
@@ -1242,7 +1249,7 @@ locals: arguments
 %
 category: 'functions'
 method: builtins
-map: arguments
+map: arguments scope: aScope
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1254,7 +1261,22 @@ items from all iterables in parallel. With multiple iterables, the iterator
 stops when the shortest iterable is exhausted. For cases where the
  function inputs are already arranged into argument tuples, see itertools.starmap().
 "
-^arguments second collect: [:each | arguments first value: (Array with: each) value: dict new]
+	| function iterables min parallelIterables |
+	function := arguments first.
+	iterables := arguments copyFrom: 2 to: arguments size.
+	(iterables size = 1) ifTrue: [ 
+		iterables := iterables first.
+		^ iterables collect: [ :each | function value: (Array with: each) value: dict new value: aScope ] 
+	].
+	min := self min: (iterables collect: [ :each | each size ]) keywords: dict new.
+	parallelIterables := Array new.
+	1 to: min do: [ :i |
+		| tempArray |
+		tempArray := Array new.
+		iterables do: [ :iterable | tempArray add: (iterable at: i) ].
+		parallelIterables add: tempArray.
+	].
+	^ parallelIterables collect: [ :each | function value: each value: dict new value: aScope ]
 %
 category: 'functions'
 method: builtins
@@ -1282,7 +1304,7 @@ This is consistent with other sort-stability preserving tools such as sorted
 
 New in version 3.4: The default keyword-only argument.
 "
-arguments size == 1 ifTrue: [ 
+(arguments size == 1 and: [(arguments at: 1) isKindOf: AbstractContainer]) ifTrue: [ 
 	"key"
 	arguments first size == 0 ifTrue: [^keywords at: 'default' ifAbsent: [self error: 'value error']].
 	^arguments first
@@ -1334,7 +1356,7 @@ sorted(iterable, key=keyfunc)[0] and heapq.nsmallest(1, iterable, key=keyfunc).
 
 New in version 3.4: The default keyword-only argument.
 "
-arguments size == 1 ifTrue: [ 
+(arguments size == 1 and: [(arguments at: 1) isKindOf: AbstractContainer]) ifTrue: [ 
 	"key"
 	arguments first size == 0 ifTrue: [^keywords at: 'default' ifAbsent: [self error: 'value error']].
 	^arguments first
@@ -1358,7 +1380,10 @@ Retrieve the next item from the iterator by calling its __next__()
 method. If default is given, it is returned if the iterator is exhausted,
  otherwise StopIteration is raised.
 "
-self halt.
+	
+	| iterator |
+	iterator := arguments first.
+	^ iterator __next__ value
 %
 category: 'functions'
 method: builtins
@@ -1374,7 +1399,7 @@ This function does not accept any arguments.
 Note object does not have a __dict__, so you can’t assign arbitrary 
 attributes to an instance of the object class.
 "
-	^object new
+	^ objectClass new
 %
 category: 'functions'
 method: builtins
@@ -1412,11 +1437,16 @@ open: arguments keywords: keywords
 "
 see documentation for more details
 "
-self halt.
+
+	| filePointer path |
+	path := arguments first.
+	(path isKindOf: str) ifTrue: [ path := path ___container ].
+	filePointer := file with: (GsFile open: path mode: 'rb' onClient: false).
+	^ filePointer
 %
 category: 'functions'
 method: builtins
-ord: arguments
+ord: aString
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1427,11 +1457,13 @@ For example, ord('a') returns the integer 97 and ord('€') (Euro sign) returns 
 This is the inverse of chr().
 "
 
-^(arguments first _decodeFromUtf8: true maxSize: 1) first codePoint
+	| c |
+	c := (aString isKindOf: str) ifTrue: [ aString ___container ] ifFalse: [ aString ].
+	^ c codePointAt: 1
 %
 category: 'functions'
 method: builtins
-pow: arguments
+pow: arguments keywords: keywords
 	"https://docs.python.org/3/library/functions.html"
 	
 "	pow(x, y[, z])
@@ -1449,11 +1481,16 @@ For example, 10**2 returns 100, but 10**-2 returns 0.01.
  If z is present, x and y must be of integer types, and y must be non-negative.
 "
 
-	| result |
-	result := arguments first raisedTo: (arguments at: 2).
+	| result x y z |
+	x := (arguments first isKindOf: AbstractNumber) ifTrue: [ arguments first ___number ] ifFalse: [ arguments first ].
+	y := (arguments second isKindOf: AbstractNumber) ifTrue: [ arguments second ___number ] ifFalse: [ arguments second ].
+	[ z := ((arguments at: 3) isKindOf: AbstractNumber) ifTrue: [ (arguments at: 3) ___number ] ifFalse: [ arguments at: 3 ] ]
+		on: OffsetError
+		do: [ ].
+	result := x raisedTo: y.
 	^arguments size == 2
 		ifTrue: [result]
-		ifFalse:[result rem: (arguments at: 3)]
+		ifFalse:[result rem: z]
 %
 category: 'functions'
 method: builtins
@@ -1506,9 +1543,9 @@ Rather than being a function, range is actually an immutable sequence type, as d
 in Ranges and Sequence Types — list, tuple, range.
 "
 
-arguments size == 1 ifTrue: [^Interval from: 0 to: arguments first - 1].
-arguments size == 2 ifTrue: [^Interval from: arguments first to: arguments second - 1].
-^Interval from: arguments first to: arguments second - 1 by: (arguments at: 3).
+	arguments size == 1 ifTrue: [^Interval from: 0 to: arguments first ___number - 1].
+	arguments size == 2 ifTrue: [^Interval from: arguments first ___number to: arguments second ___number - 1].
+	^ Interval from: arguments first ___number to: arguments second ___number - 1 by: (arguments at: 3) ___number.
 %
 category: 'functions'
 method: builtins
@@ -1529,7 +1566,7 @@ self halt.
 %
 category: 'functions'
 method: builtins
-reversed: arguments
+reversed: seq
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1540,7 +1577,7 @@ a __reversed__() method or supports the sequence protocol
 integer arguments starting at 0).
 "
 
-^arguments first reverse
+	^ seq __reversed__ value: seq
 %
 category: 'functions'
 method: builtins
@@ -1566,13 +1603,13 @@ it’s a result of the fact that most decimal fractions can’t be represented e
 See Floating Point Arithmetic: Issues and Limitations for more information.
 "
 	| number |
-	arguments size == 1 ifTrue: [^arguments first roundedHalfToEven].
-	number := 10 raisedTo: (arguments at: 2).
-	^((arguments first * number) roundedHalfToEven / number) asFloat
+	arguments size == 1 ifTrue: [^arguments first ___number roundedHalfToEven].
+	number := 10 raisedTo: (arguments at: 2) ___number.
+	^((arguments first ___number * number) roundedHalfToEven / number) asFloat
 %
 category: 'functions'
 method: builtins
-set: arguments
+set: iterable
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1583,7 +1620,8 @@ Return a new set object, optionally with elements taken from iterable.
 For other containers see the built-in frozenset, list, tuple, and 
 dict classes, as well as the collections module.
 "
-self halt.
+	
+	^ set withAll: iterable
 %
 category: 'functions'
 method: builtins
@@ -1633,7 +1671,32 @@ also generated when extended indexing syntax is used.
  For example: a[start:stop:step] or a[start:stop, i].
  See itertools.islice() for an alternate version that returns an iterator.
 "
-self halt.
+
+	| start stop step |
+	start := NoneType new.
+	stop := NoneType new.
+	step := NoneType new.
+	(arguments size = 1) ifTrue: [ stop := arguments first. ].
+	(arguments size = 2) ifTrue: [ start := arguments first. stop := arguments second. ].
+	(arguments size = 3) ifTrue: [ start := arguments first. stop := arguments second. step := arguments at: 3. ].
+	^ slice start: start stop: stop step: step
+%
+category: 'functions'
+method: builtins
+sorted: iterable
+	"https://docs.python.org/3/library/functions.html"
+	
+"
+Return a new sorted list from the items in iterable.
+Has two optional arguments which must be specified as keyword arguments.
+key specifies a function of one argument that is used to extract a comparison key from each element in iterable (for example, key=str.lower). The default value is None (compare the elements directly).
+reverse is a boolean value. If set to True, then the list elements are sorted as if each comparison were reversed.
+Use functools.cmp_to_key() to convert an old-style cmp function to a key function.
+The built-in sorted() function is guaranteed to be stable. A sort is stable if it guarantees not to change the relative order of elements that compare equal — this is helpful for sorting in multiple passes (for example, sort by department, then by salary grade).
+For sorting examples and a brief sorting tutorial, see Sorting HOW TO.
+"
+	
+	^ iterable sort
 %
 category: 'functions'
 method: builtins
@@ -1708,7 +1771,7 @@ To concatenate a series of iterables, consider using itertools.chain().
 %
 category: 'functions'
 method: builtins
-super: arguments
+super: arguments keywords: keywords scope: scope
 	"https://docs.python.org/3/library/functions.html"
 	
 "
@@ -1766,7 +1829,24 @@ current instance for ordinary methods.
 For practical suggestions on how to design cooperative
  classes using super(), see guide to using super().
 "
-self halt.
+
+	| selfObject mro type objectOrType parent |
+	(arguments size = 0) ifTrue: [
+		selfObject := scope outer astNode.
+		mro := selfObject __mro__ value: scope.
+		^ mro at: 2
+	].
+	(arguments size = 2) ifTrue: [
+		type := arguments first.
+		objectOrType := arguments second.
+		mro := objectOrType __mro__ value: scope.
+		1 to: mro size do: [ :i | 
+			parent := ((mro at: i) isKindOf: class) ifTrue: [ (mro at: i) __class__ ] ifFalse: [ mro at: i ].
+			(parent = type) ifTrue: [ ^ mro at: i + 1 ].
+		].
+		self halt.
+	].
+	self halt.
 %
 category: 'functions'
 method: builtins
@@ -1778,7 +1858,8 @@ tuple([iterable])
 Rather than being a function, tuple is actually an immutable sequence type, 
 as documented in Tuples and Sequence Types — list, tuple, range.
 "
-	^arguments first asArray copy immediateInvariant
+	
+	^ tuple withAll: arguments first
 %
 category: 'functions'
 method: builtins
@@ -1887,7 +1968,17 @@ zip() in conjunction with the * operator can be used to unzip a list:
 >>> x == list(x2) and y == list(y2)
 True
 "
-self halt.
+
+	| max zipped |
+	max := self min: (arguments collect: [ :each | each size ]) keywords: dict new.
+	zipped := Array new.
+	1 to: max do: [ :i |
+		| tup |
+		tup := Array new.
+		arguments do: [ :argument | tup add: (argument at: i) ].
+		zipped add: (tuple withAll: tup).
+	].
+	^ list withAll: zipped
 %
 set compile_env: 0
 category: 'other'
@@ -1938,16 +2029,34 @@ initialize
 		at: #'id'					put: [:arguments :keywords :scope | self id: arguments first];
 		at: #'input'				put: [:arguments :keywords :scope | self input: arguments];
 		at: #'int'				put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [ self int: arguments ] ifFalse: [int with: 0]];
-		at: #'isinstance'		put: [:arguments :keywords :scope | self isinstance: arguments first _: arguments second];
+		at: #'isinstance'		put: [:arguments :keywords :scope | self isinstance: arguments first class: arguments second scope: scope];
+		at: #'issubclass'		put: [:arguments :keywords :scope | self issubclass: arguments first class: arguments second scope: scope];
+		at: #'iter'				put: [:arguments :keywords :scope | self iter: arguments];
 		at: #'len'				put: [:arguments :keywords :scope | self len: arguments first];
 		at: #'list'				put: [:arguments :keywords :scope | self list: arguments first];
-		at: #'object'			put: [:arguments :keywords :scope | self object];
+		at: #'map'				put: [:arguments :keywords :scope | self map: arguments scope: scope];
+		at: #'max'				put: [:arguments :keywords :scope | self max: arguments keywords: keywords];
+		at: #'min'				put: [:arguments :keywords :scope | self min: arguments keywords: keywords];
+		at: #'next'				put: [:arguments :keywords :scope | self next: arguments];
+		at: #'object'			put: self object;
+		at: #'oct'				put: [:arguments :keywords :scope | self oct: arguments first];
 		at: #'open'				put: [:arguments :keywords :scope | self open: arguments keywords: keywords];
+		at: #'ord'				put: [:arguments :keywords :scope | self ord: arguments first];
+		at: #'pow'				put: [:arguments :keywords :scope | self pow: arguments keywords: keywords];
 		at: #'print'				put: [:arguments :keywords :scope | self print: arguments keywords: keywords];
 		at: #'range'			put: [:arguments :keywords :scope | self range: arguments];
+		at: #'reversed'		put: [:arguments :keywords :scope | self reversed: arguments first];
+		at: #'round'			put: [:arguments :keywords :scope | self round: arguments];
+		at: #'set'				put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [ self set: arguments first ] ifFalse: [ set withAll: { } ]];
 		at: #'setattr'			put: [:arguments :keywords :scope | self setattr: (arguments at: 1) _: (arguments at: 2) _: (arguments at: 3)];
-		at: #'str'				put: [:arguments :keywords :scope | self str: arguments first];
+		at: #'slice'				put: [:arguments :keywords :scope | self slice: arguments];
+		at: #'sorted'			put: [:arguments :keywords :scope | self sorted: arguments first];
+		at: #'str'				put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [ self str: arguments first ] ifFalse: [ str withAll: '' ]];
+		at: #'sum'				put: [:arguments :keywords :scope | self sum: arguments];
+		at: #'super'				put: [:arguments :keywords :scope | self super: arguments keywords: keywords scope: scope];
+		at: #'tuple'				put: [:arguments :keywords :scope | arguments notEmpty ifTrue: [ self tuple: arguments ] ifFalse: [ tuple withAll: { } ]];
 		at: #'type'				put: [:arguments :keywords :scope | self type: arguments];
+		at: #'zip'				put: [:arguments :keywords :scope | self zip: arguments];
 		yourself.
 	BaseException allSubclasses do: [:each | 
 		globals at: each name put: each.
