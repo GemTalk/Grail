@@ -10,7 +10,7 @@ Checkout this Git project to `$HOME/code/Python/GemStoneP` (or to some other pla
 
 ### GemStone/S
 
-[GemStone/S](https://gemtalksystems.com/products/gs64/) can be most easily run on macOS using the free, open source [GemStone.app](https://github.com/jgfoster/GemStoneApp). From the Setup tab, click `Authenticate` and give your password (as an administrator) to allow the helper tool to be installed. Then, from the Versions tab, click `Update` to get a list of available GemStone versions. Check the box for a recent version (3.4.3 at the time of this writing) to download that version. Then, from the Databases tab, click the `+` button to create a new database and click `Start` to start the database. 
+[GemStone/S](https://gemtalksystems.com/products/gs64/) can be most easily run on macOS using the free, open source [GemStone.app](https://github.com/jgfoster/GemStoneApp). From the Setup tab, click `Authenticate` and give your password (as an administrator) to allow the helper tool to be installed. Then, from the Versions tab, click `Update` to get a list of available GemStone versions. Check the box for a recent version (3.6.0 at the time of this writing) to download that version. Then, from the Databases tab, click the `+` button to create a new database and click `Start` to start the database. 
 
 When you have a database running, from the Databases tab select the Login subtab and click the `Terminal` button. In the new Terminal navigate to this directory (e.g., `cd ~/code/Python/GemStoneP`). 
 
@@ -18,7 +18,7 @@ Copy the provided `topazini` to `.topazini` and edit `gs64stone` to show the nam
 
 ### Python 3
 
-Install [Python 3.7.2](https://www.python.org/downloads/release/python-372/). When you open a new terminal and enter `which python3` it should show you `/Library/Frameworks/Python.framework/Versions/3.7/bin/python3` and when you enter `python3 --version` it should show you 3.7.2.
+Install [Python 3.9.1](https://www.python.org/downloads/release/python-391/). When you enter `python3 --version` it should show you 3.9.1.
 
 ## Sample Code
 
@@ -26,20 +26,20 @@ Install [Python 3.7.2](https://www.python.org/downloads/release/python-372/). Wh
 Our first task is a "Hello World!" program (`hello.py`). From [Jade](https://github.com/jgfoster/Jade) (or another GemStone/S IDE), log in to GemStone and evalute the following expression:
 
 ```
-PyModule script: '$HOME/code/Python/GemStoneP/hello.py'.
+ModuleAst script: '$HOME/code/Python/GemStoneP/hello.py'.
 ```
 
 ### Benchmark
 Next is a [Python Benchmark Suite](https://github.com/python/performance) that "is intended to be an authoritative source of benchmarks for all Python implementations." This seems like a good target for our work and could be in a directory adjacent to this Git project. Clone this Git project to `~/code/python/performance` and then evaluate the following expression:
 
 ```
-PyModule script: '$HOME/code/Python/performance/pyperformance'.
+ModuleAst script: '$HOME/code/Python/performance/pyperformance'.
 ```
 
 This is a trivial script that consists mostly of importing another script that can be examined with the following expression:
 
 ```
-PyModule script: '$HOME/code/Python/performance/performance/cli.py'.
+ModuleAst script: '$HOME/code/Python/performance/performance/cli.py'.
 ```
 
 ### Regression Tests
@@ -54,7 +54,7 @@ While we could parse source files directly (and may eventually do so), we can ta
 Python has a module [ast](https://docs.python.org/3/library/ast.html) that generates an AST (abstract syntax tree). To see this in action evaluate the following in a workspace:
 
 ```
-PyModule astForPath: '$HOME/code/Python/GemStoneP/hello.py'
+ModuleAst astForPath: '$HOME/code/Python/GemStoneP/hello.py'
 ```
 
 ## Next Steps
@@ -63,11 +63,11 @@ PyModule astForPath: '$HOME/code/Python/GemStoneP/hello.py'
 
 Our initial approach is to let Python generate an AST for us and then use the text representation to build our own AST. We will use the [abstract grammar](https://docs.python.org/3/library/ast.html) as a guide to hand-build subclasses of AstNode. 
 
-* PyModule class>>script: is the basic entry point for reading a Python file (module) 
-  * PyModule>>load:as: builds an AST for a Module
-      * PyModule>>buildStatementsFromAST reads the AST and calls #suite
-          * AstNode>>suite constructs statements
-              * PyStatement class>>statementFrom: looks for a [statement](https://docs.python.org/3/library/ast.html)
+* ModuleAst class>>script: is the basic entry point for reading a Python file (module) 
+  * ModuleAst>>load:as: builds an AST for a Module
+      * ModuleAst>>buildStatementsFromAST reads the AST and calls #suite
+          * ModuleAst>>suite constructs statements
+              * StatementAst class>>statementFrom: looks for a [statement](https://docs.python.org/3/library/ast.html)
 
 ### Translate the AST to Smalltalk Code
 
