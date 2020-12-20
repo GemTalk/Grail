@@ -7,29 +7,7 @@ category: 'other'
 classmethod: ModuleAst
 astForPath: pathString
 
-	| string1 string2 string3 file |
-	string1 := '
-import ast
-file=open(''' , pathString , ''',''r'')
-tree=ast.parse(file.read())
-out=ast.dump(tree,annotate_fields=False,include_attributes=True)
-file.close()
-file=open(''' , pathString , '.ast'',''w'')
-file.write(out)
-file.close()
-'.
-	string2 := 'echo "' , string1 , '" | ' , self pythonPath.
-	System performOnServer: string2.
-	file := GsFile open: pathString, '.ast' mode: 'rb' onClient: false.
-	string3 := file contentsAsUtf8 decodeToUnicode.
-	GsFile removeServerFile: pathString, '.ast'.
-	^string3
-%
-category: 'other'
-classmethod: ModuleAst
-pythonPath
-
-	^'/usr/local/bin/python3'
+	^System performOnServer: '/usr/local/bin/pprintast -a -t ' , pathString
 %
 category: 'other'
 classmethod: ModuleAst
@@ -55,7 +33,7 @@ test
 ModuleAst test
 "
 
-	^ModuleAst script: '$HOME/code/Python/GemStoneP/mastermind.py'.
+	^ModuleAst script: '$HOME/Code/Python/Grail/hello.py'.
 %
 ! ------------------- Instance methods for ModuleAst
 set compile_env: 0
@@ -193,5 +171,6 @@ category: 'other'
 method: ModuleAst
 stream
 
+	stream skipSeparators.
 	^stream
 %

@@ -1299,7 +1299,8 @@ set compile_env: 0
 expectvalue /Class
 doit
 AbstractNode subclass: 'AbstractLocationNode'
-  instVarNames: #( line column)
+  instVarNames: #( beginLine
+                    beginColumn endLine endColumn)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()

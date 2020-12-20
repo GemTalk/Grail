@@ -25,10 +25,10 @@ initialize
 	(stream peekFor: $[) ifFalse: [self error].
 	body := Array new.
 	[
-		stream peekFor: $]
+		stream skipSeparators; peekFor: $]
 	] whileFalse: [
 		node := StatementAst statementFrom: self.
 		body add: node.
-		(stream peekFor: $,) ifTrue: [stream peekFor: Character space].
+		(stream peekFor: $,) ifFalse: [self error].
 	].
 %
