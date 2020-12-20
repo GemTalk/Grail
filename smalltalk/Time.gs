@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from time
-expectvalue /Metaclass3       
-doit
-time removeAllMethods.
-time class removeAllMethods.
-%
+removeAllMethods time
+removeAllClassMethods time
 ! ------------------- Class methods for time
 set compile_env: 0
 category: 'other'

@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from Exception
-expectvalue /Metaclass3       
-doit
-Exception removeAllMethods.
-Exception class removeAllMethods.
-%
+removeAllMethods Exception
+removeAllClassMethods Exception
 ! ------------------- Class methods for Exception
 ! ------------------- Instance methods for Exception

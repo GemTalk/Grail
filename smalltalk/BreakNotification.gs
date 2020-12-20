@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from BreakNotification
-expectvalue /Metaclass3       
-doit
-BreakNotification removeAllMethods.
-BreakNotification class removeAllMethods.
-%
+removeAllMethods BreakNotification
+removeAllClassMethods BreakNotification
 ! ------------------- Class methods for BreakNotification
 ! ------------------- Instance methods for BreakNotification

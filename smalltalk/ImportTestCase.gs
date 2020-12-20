@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from ImportTestCase
-expectvalue /Metaclass3       
-doit
-ImportTestCase removeAllMethods.
-ImportTestCase class removeAllMethods.
-%
+removeAllMethods ImportTestCase
+removeAllClassMethods ImportTestCase
 ! ------------------- Class methods for ImportTestCase
 set compile_env: 0
 category: 'other'

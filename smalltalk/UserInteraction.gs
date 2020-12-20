@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from UserInteraction
-expectvalue /Metaclass3       
-doit
-UserInteraction removeAllMethods.
-UserInteraction class removeAllMethods.
-%
+removeAllMethods UserInteraction
+removeAllClassMethods UserInteraction
 ! ------------------- Class methods for UserInteraction
 ! ------------------- Instance methods for UserInteraction
 set compile_env: 0

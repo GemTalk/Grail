@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from InvertAst
-expectvalue /Metaclass3       
-doit
-InvertAst removeAllMethods.
-InvertAst class removeAllMethods.
-%
+removeAllMethods InvertAst
+removeAllClassMethods InvertAst
 ! ------------------- Class methods for InvertAst
 ! ------------------- Instance methods for InvertAst
 set compile_env: 0

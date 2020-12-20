@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from ClassesTestCase
-expectvalue /Metaclass3       
-doit
-ClassesTestCase removeAllMethods.
-ClassesTestCase class removeAllMethods.
-%
+removeAllMethods ClassesTestCase
+removeAllClassMethods ClassesTestCase
 ! ------------------- Class methods for ClassesTestCase
 set compile_env: 0
 category: 'other'

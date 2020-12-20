@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from TypeIgnoreAst
-expectvalue /Metaclass3       
-doit
-TypeIgnoreAst removeAllMethods.
-TypeIgnoreAst class removeAllMethods.
-%
+removeAllMethods TypeIgnoreAst
+removeAllClassMethods TypeIgnoreAst
 ! ------------------- Class methods for TypeIgnoreAst
 ! ------------------- Instance methods for TypeIgnoreAst
 set compile_env: 0

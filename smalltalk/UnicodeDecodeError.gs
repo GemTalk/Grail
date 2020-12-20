@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from UnicodeDecodeError
-expectvalue /Metaclass3       
-doit
-UnicodeDecodeError removeAllMethods.
-UnicodeDecodeError class removeAllMethods.
-%
+removeAllMethods UnicodeDecodeError
+removeAllClassMethods UnicodeDecodeError
 ! ------------------- Class methods for UnicodeDecodeError
 ! ------------------- Instance methods for UnicodeDecodeError

@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from LookupError
-expectvalue /Metaclass3       
-doit
-LookupError removeAllMethods.
-LookupError class removeAllMethods.
-%
+removeAllMethods LookupError
+removeAllClassMethods LookupError
 ! ------------------- Class methods for LookupError
 ! ------------------- Instance methods for LookupError

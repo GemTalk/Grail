@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from PassAst
-expectvalue /Metaclass3       
-doit
-PassAst removeAllMethods.
-PassAst class removeAllMethods.
-%
+removeAllMethods PassAst
+removeAllClassMethods PassAst
 ! ------------------- Class methods for PassAst
 ! ------------------- Instance methods for PassAst
 set compile_env: 0

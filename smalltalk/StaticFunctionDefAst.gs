@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from StaticFunctionDefAst
-expectvalue /Metaclass3       
-doit
-StaticFunctionDefAst removeAllMethods.
-StaticFunctionDefAst class removeAllMethods.
-%
+removeAllMethods StaticFunctionDefAst
+removeAllClassMethods StaticFunctionDefAst
 ! ------------------- Class methods for StaticFunctionDefAst
 ! ------------------- Instance methods for StaticFunctionDefAst
 set compile_env: 0

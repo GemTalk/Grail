@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from bool
-expectvalue /Metaclass3       
-doit
-bool removeAllMethods.
-bool class removeAllMethods.
-%
+removeAllMethods bool
+removeAllClassMethods bool
 ! ------------------- Class methods for bool
 set compile_env: 0
 category: 'other'

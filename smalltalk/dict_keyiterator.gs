@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from dict_keyiterator
-expectvalue /Metaclass3       
-doit
-dict_keyiterator removeAllMethods.
-dict_keyiterator class removeAllMethods.
-%
+removeAllMethods dict_keyiterator
+removeAllClassMethods dict_keyiterator
 ! ------------------- Class methods for dict_keyiterator
 set compile_env: 0
 category: 'other'

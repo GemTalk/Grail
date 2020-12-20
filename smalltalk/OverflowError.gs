@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from OverflowError
-expectvalue /Metaclass3       
-doit
-OverflowError removeAllMethods.
-OverflowError class removeAllMethods.
-%
+removeAllMethods OverflowError
+removeAllClassMethods OverflowError
 ! ------------------- Class methods for OverflowError
 ! ------------------- Instance methods for OverflowError

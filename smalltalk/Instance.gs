@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from Instance
-expectvalue /Metaclass3       
-doit
-Instance removeAllMethods.
-Instance class removeAllMethods.
-%
+removeAllMethods Instance
+removeAllClassMethods Instance
 ! ------------------- Class methods for Instance
 ! ------------------- Instance methods for Instance
 set compile_env: 0

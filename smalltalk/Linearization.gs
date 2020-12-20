@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from Linearization
-expectvalue /Metaclass3       
-doit
-Linearization removeAllMethods.
-Linearization class removeAllMethods.
-%
+removeAllMethods Linearization
+removeAllClassMethods Linearization
 ! ------------------- Class methods for Linearization
 set compile_env: 0
 category: 'other'
@@ -81,4 +78,3 @@ removeHead: head from: linearizations
 	^ heads
 %
 ! ------------------- Instance methods for Linearization
-set compile_env: 0

@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from GtEAst
-expectvalue /Metaclass3       
-doit
-GtEAst removeAllMethods.
-GtEAst class removeAllMethods.
-%
+removeAllMethods GtEAst
+removeAllClassMethods GtEAst
 ! ------------------- Class methods for GtEAst
 ! ------------------- Instance methods for GtEAst
 set compile_env: 0

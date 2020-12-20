@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from ClassDefAst
-expectvalue /Metaclass3       
-doit
-ClassDefAst removeAllMethods.
-ClassDefAst class removeAllMethods.
-%
+removeAllMethods ClassDefAst
+removeAllClassMethods ClassDefAst
 ! ------------------- Class methods for ClassDefAst
 ! ------------------- Instance methods for ClassDefAst
 set compile_env: 0

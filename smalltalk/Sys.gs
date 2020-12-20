@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from sys
-expectvalue /Metaclass3       
-doit
-sys removeAllMethods.
-sys class removeAllMethods.
-%
+removeAllMethods sys
+removeAllClassMethods sys
 ! ------------------- Class methods for sys
 set compile_env: 0
 category: 'other'

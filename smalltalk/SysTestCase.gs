@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from SysTestCase
-expectvalue /Metaclass3       
-doit
-SysTestCase removeAllMethods.
-SysTestCase class removeAllMethods.
-%
+removeAllMethods SysTestCase
+removeAllClassMethods SysTestCase
 ! ------------------- Class methods for SysTestCase
 set compile_env: 0
 category: 'other'

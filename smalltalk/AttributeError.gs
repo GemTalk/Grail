@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from AttributeError
-expectvalue /Metaclass3       
-doit
-AttributeError removeAllMethods.
-AttributeError class removeAllMethods.
-%
+removeAllMethods AttributeError
+removeAllClassMethods AttributeError
 ! ------------------- Class methods for AttributeError
 ! ------------------- Instance methods for AttributeError

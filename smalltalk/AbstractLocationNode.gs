@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from AbstractLocationNode
-expectvalue /Metaclass3       
-doit
-AbstractLocationNode removeAllMethods.
-AbstractLocationNode class removeAllMethods.
-%
+removeAllMethods AbstractLocationNode
+removeAllClassMethods AbstractLocationNode
 ! ------------------- Class methods for AbstractLocationNode
 ! ------------------- Instance methods for AbstractLocationNode
 set compile_env: 0

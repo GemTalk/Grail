@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from UnboundLocalError
-expectvalue /Metaclass3       
-doit
-UnboundLocalError removeAllMethods.
-UnboundLocalError class removeAllMethods.
-%
+removeAllMethods UnboundLocalError
+removeAllClassMethods UnboundLocalError
 ! ------------------- Class methods for UnboundLocalError
 ! ------------------- Instance methods for UnboundLocalError

@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from ContinueNotification
-expectvalue /Metaclass3       
-doit
-ContinueNotification removeAllMethods.
-ContinueNotification class removeAllMethods.
-%
+removeAllMethods ContinueNotification
+removeAllClassMethods ContinueNotification
 ! ------------------- Class methods for ContinueNotification
 ! ------------------- Instance methods for ContinueNotification

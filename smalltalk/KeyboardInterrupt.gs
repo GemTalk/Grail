@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from KeyboardInterrupt
-expectvalue /Metaclass3       
-doit
-KeyboardInterrupt removeAllMethods.
-KeyboardInterrupt class removeAllMethods.
-%
+removeAllMethods KeyboardInterrupt
+removeAllClassMethods KeyboardInterrupt
 ! ------------------- Class methods for KeyboardInterrupt
 ! ------------------- Instance methods for KeyboardInterrupt

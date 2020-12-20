@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from AugStoreAst
-expectvalue /Metaclass3       
-doit
-AugStoreAst removeAllMethods.
-AugStoreAst class removeAllMethods.
-%
+removeAllMethods AugStoreAst
+removeAllClassMethods AugStoreAst
 ! ------------------- Class methods for AugStoreAst
 ! ------------------- Instance methods for AugStoreAst
 set compile_env: 0

@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from LtEAst
-expectvalue /Metaclass3       
-doit
-LtEAst removeAllMethods.
-LtEAst class removeAllMethods.
-%
+removeAllMethods LtEAst
+removeAllClassMethods LtEAst
 ! ------------------- Class methods for LtEAst
 ! ------------------- Instance methods for LtEAst
 set compile_env: 0

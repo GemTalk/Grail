@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from AbstractNumber
-expectvalue /Metaclass3       
-doit
-AbstractNumber removeAllMethods.
-AbstractNumber class removeAllMethods.
-%
+removeAllMethods AbstractNumber
+removeAllClassMethods AbstractNumber
 ! ------------------- Class methods for AbstractNumber
 set compile_env: 0
 category: 'other'

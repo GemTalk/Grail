@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from slice
-expectvalue /Metaclass3       
-doit
-slice removeAllMethods.
-slice class removeAllMethods.
-%
+removeAllMethods slice
+removeAllClassMethods slice
 ! ------------------- Class methods for slice
 set compile_env: 0
 category: 'other'

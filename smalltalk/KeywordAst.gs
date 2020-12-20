@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from KeywordAst
-expectvalue /Metaclass3       
-doit
-KeywordAst removeAllMethods.
-KeywordAst class removeAllMethods.
-%
+removeAllMethods KeywordAst
+removeAllClassMethods KeywordAst
 ! ------------------- Class methods for KeywordAst
 ! ------------------- Instance methods for KeywordAst
 set compile_env: 0

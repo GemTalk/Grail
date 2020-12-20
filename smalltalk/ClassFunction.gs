@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from ClassFunction
-expectvalue /Metaclass3       
-doit
-ClassFunction removeAllMethods.
-ClassFunction class removeAllMethods.
-%
+removeAllMethods ClassFunction
+removeAllClassMethods ClassFunction
 ! ------------------- Class methods for ClassFunction
 ! ------------------- Instance methods for ClassFunction
 set compile_env: 0

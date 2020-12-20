@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from set_iterator
-expectvalue /Metaclass3       
-doit
-set_iterator removeAllMethods.
-set_iterator class removeAllMethods.
-%
+removeAllMethods set_iterator
+removeAllClassMethods set_iterator
 ! ------------------- Class methods for set_iterator
 ! ------------------- Instance methods for set_iterator

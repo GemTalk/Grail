@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from dict_values
-expectvalue /Metaclass3       
-doit
-dict_values removeAllMethods.
-dict_values class removeAllMethods.
-%
+removeAllMethods dict_values
+removeAllClassMethods dict_values
 ! ------------------- Class methods for dict_values
 ! ------------------- Instance methods for dict_values

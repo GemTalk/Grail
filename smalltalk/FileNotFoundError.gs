@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from FileNotFoundError
-expectvalue /Metaclass3       
-doit
-FileNotFoundError removeAllMethods.
-FileNotFoundError class removeAllMethods.
-%
+removeAllMethods FileNotFoundError
+removeAllClassMethods FileNotFoundError
 ! ------------------- Class methods for FileNotFoundError
 ! ------------------- Instance methods for FileNotFoundError

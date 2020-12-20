@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from ComprehensionAst
-expectvalue /Metaclass3       
-doit
-ComprehensionAst removeAllMethods.
-ComprehensionAst class removeAllMethods.
-%
+removeAllMethods ComprehensionAst
+removeAllClassMethods ComprehensionAst
 ! ------------------- Class methods for ComprehensionAst
 ! ------------------- Instance methods for ComprehensionAst
 set compile_env: 0

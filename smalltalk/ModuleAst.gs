@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from ModuleAst
-expectvalue /Metaclass3       
-doit
-ModuleAst removeAllMethods.
-ModuleAst class removeAllMethods.
-%
+removeAllMethods ModuleAst
+removeAllClassMethods ModuleAst
 ! ------------------- Class methods for ModuleAst
 set compile_env: 0
 category: 'other'

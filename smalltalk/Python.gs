@@ -20,7 +20,7 @@ AbstractException subclass: 'BaseException'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -107,7 +107,7 @@ BaseException subclass: 'Exception'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -124,7 +124,7 @@ Exception subclass: 'ArithmeticError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -141,7 +141,7 @@ ArithmeticError subclass: 'FloatingPointError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -158,7 +158,7 @@ ArithmeticError subclass: 'OverflowError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -175,7 +175,7 @@ ArithmeticError subclass: 'ZeroDivisionError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -192,7 +192,7 @@ Exception subclass: 'AssertionError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -209,7 +209,7 @@ Exception subclass: 'AttributeError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -226,7 +226,7 @@ Exception subclass: 'BufferError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -243,7 +243,7 @@ Exception subclass: 'EOFError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -260,7 +260,7 @@ Exception subclass: 'ImportError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -277,7 +277,7 @@ ImportError subclass: 'ModuleNotFoundError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -294,7 +294,7 @@ Exception subclass: 'LookupError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -311,7 +311,7 @@ LookupError subclass: 'IndexError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -328,7 +328,7 @@ LookupError subclass: 'KeyError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -356,7 +356,7 @@ Exception subclass: 'MemoryError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -373,7 +373,7 @@ Exception subclass: 'NameError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -390,7 +390,7 @@ NameError subclass: 'UnboundLocalError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -407,7 +407,7 @@ Exception subclass: 'OSError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -424,7 +424,7 @@ OSError subclass: 'BlockingIOError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -441,7 +441,7 @@ OSError subclass: 'ChildProcessError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -458,7 +458,7 @@ OSError subclass: 'ConnectionError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -475,7 +475,7 @@ ConnectionError subclass: 'BrokenPipeError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -492,7 +492,7 @@ ConnectionError subclass: 'ConnectionAbortedError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -509,7 +509,7 @@ ConnectionError subclass: 'ConnectionRefusedError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -526,7 +526,7 @@ ConnectionError subclass: 'ConnectionResetError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -543,7 +543,7 @@ OSError subclass: 'FileExistsError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -560,7 +560,7 @@ OSError subclass: 'FileNotFoundError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -577,7 +577,7 @@ OSError subclass: 'InterruptedError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -594,7 +594,7 @@ OSError subclass: 'IsADirectoryError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -611,7 +611,7 @@ OSError subclass: 'NotADirectoryError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -628,7 +628,7 @@ OSError subclass: 'PermissionError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -645,7 +645,7 @@ OSError subclass: 'ProcessLookupError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -662,7 +662,7 @@ OSError subclass: 'TimeoutError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -679,7 +679,7 @@ Exception subclass: 'ReferenceError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -696,7 +696,7 @@ Exception subclass: 'RuntimeError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -713,7 +713,7 @@ RuntimeError subclass: 'NotImplementedError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -730,7 +730,7 @@ RuntimeError subclass: 'RecursionError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -747,7 +747,7 @@ Exception subclass: 'StopAsyncIteration'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -764,7 +764,7 @@ Exception subclass: 'StopIteration'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -781,7 +781,7 @@ Exception subclass: 'SyntaxError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -798,7 +798,7 @@ SyntaxError subclass: 'IndentationError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -815,7 +815,7 @@ IndentationError subclass: 'TabError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -832,7 +832,7 @@ Exception subclass: 'SystemError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -849,7 +849,7 @@ Exception subclass: 'TypeError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -866,7 +866,7 @@ Exception subclass: 'ValueError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -883,7 +883,7 @@ ValueError subclass: 'UnicodeError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -900,7 +900,7 @@ UnicodeError subclass: 'UnicodeDecodeError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -917,7 +917,7 @@ UnicodeError subclass: 'UnicodeEncodeError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -934,7 +934,7 @@ UnicodeError subclass: 'UnicodeTranslateError'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -951,7 +951,7 @@ Exception subclass: 'Warning'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -968,7 +968,7 @@ Warning subclass: 'BytesWarning'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -985,7 +985,7 @@ Warning subclass: 'DeprecationWarning'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -1013,7 +1013,7 @@ Warning subclass: 'FutureWarning'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -1030,7 +1030,7 @@ Warning subclass: 'ImportWarning'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -1047,7 +1047,7 @@ Warning subclass: 'PendingDeprecationWarning'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -1064,7 +1064,7 @@ Warning subclass: 'ResourceWarning'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -1081,7 +1081,7 @@ Warning subclass: 'RuntimeWarning'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -1098,7 +1098,7 @@ Warning subclass: 'SyntaxWarning'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -1115,7 +1115,7 @@ Warning subclass: 'UnicodeWarning'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -1132,7 +1132,7 @@ Warning subclass: 'UserWarning'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -1149,7 +1149,7 @@ BaseException subclass: 'GeneratorExit'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -1166,7 +1166,7 @@ BaseException subclass: 'KeyboardInterrupt'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -1183,7 +1183,7 @@ BaseException subclass: 'SystemException'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -1200,7 +1200,7 @@ Notification subclass: 'BreakNotification'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -1217,7 +1217,7 @@ Notification subclass: 'CancelNotification'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -1234,7 +1234,7 @@ Notification subclass: 'ContinueNotification'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -1251,7 +1251,7 @@ Notification subclass: 'ReturnNotification'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -4353,7 +4353,7 @@ AbstractContainer subclass: 'bytearray'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -4375,7 +4375,7 @@ AbstractContainer subclass: 'bytes'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( instancesInvariant disallowGciStore)
+  options: #( instancesInvariant)
 
 %
 expectvalue /Class
@@ -4397,7 +4397,7 @@ AbstractContainer subclass: 'dict'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -4430,7 +4430,7 @@ AbstractContainer subclass: 'dict_items'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -4457,7 +4457,7 @@ AbstractContainer subclass: 'dict_keys'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -4484,7 +4484,7 @@ AbstractContainer subclass: 'dict_values'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -4511,7 +4511,7 @@ AbstractContainer subclass: 'frozenset'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -4538,7 +4538,7 @@ frozenset subclass: 'set'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -4555,7 +4555,7 @@ AbstractContainer subclass: 'list'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -4583,7 +4583,7 @@ AbstractContainer subclass: 'str'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
@@ -4613,7 +4613,7 @@ AbstractContainer subclass: 'tuple'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class

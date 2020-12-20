@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from CallAst
-expectvalue /Metaclass3       
-doit
-CallAst removeAllMethods.
-CallAst class removeAllMethods.
-%
+removeAllMethods CallAst
+removeAllClassMethods CallAst
 ! ------------------- Class methods for CallAst
 ! ------------------- Instance methods for CallAst
 set compile_env: 0

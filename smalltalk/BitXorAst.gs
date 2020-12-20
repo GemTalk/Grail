@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from BitXorAst
-expectvalue /Metaclass3       
-doit
-BitXorAst removeAllMethods.
-BitXorAst class removeAllMethods.
-%
+removeAllMethods BitXorAst
+removeAllClassMethods BitXorAst
 ! ------------------- Class methods for BitXorAst
 ! ------------------- Instance methods for BitXorAst
 set compile_env: 0

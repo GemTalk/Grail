@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from TupleAst
-expectvalue /Metaclass3       
-doit
-TupleAst removeAllMethods.
-TupleAst class removeAllMethods.
-%
+removeAllMethods TupleAst
+removeAllClassMethods TupleAst
 ! ------------------- Class methods for TupleAst
 ! ------------------- Instance methods for TupleAst
 set compile_env: 0

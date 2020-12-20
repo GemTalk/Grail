@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from _imp
-expectvalue /Metaclass3       
-doit
-_imp removeAllMethods.
-_imp class removeAllMethods.
-%
+removeAllMethods _imp
+removeAllClassMethods _imp
 ! ------------------- Class methods for _imp
 set compile_env: 0
 category: 'other'

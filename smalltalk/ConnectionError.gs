@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from ConnectionError
-expectvalue /Metaclass3       
-doit
-ConnectionError removeAllMethods.
-ConnectionError class removeAllMethods.
-%
+removeAllMethods ConnectionError
+removeAllClassMethods ConnectionError
 ! ------------------- Class methods for ConnectionError
 ! ------------------- Instance methods for ConnectionError

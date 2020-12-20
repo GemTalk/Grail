@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from ReturnNotification
-expectvalue /Metaclass3       
-doit
-ReturnNotification removeAllMethods.
-ReturnNotification class removeAllMethods.
-%
+removeAllMethods ReturnNotification
+removeAllClassMethods ReturnNotification
 ! ------------------- Class methods for ReturnNotification
 ! ------------------- Instance methods for ReturnNotification
 set compile_env: 0

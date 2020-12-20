@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from bytearray
-expectvalue /Metaclass3       
-doit
-bytearray removeAllMethods.
-bytearray class removeAllMethods.
-%
+removeAllMethods bytearray
+removeAllClassMethods bytearray
 ! ------------------- Class methods for bytearray
 set compile_env: 0
 category: 'other'

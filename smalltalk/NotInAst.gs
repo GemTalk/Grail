@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from NotInAst
-expectvalue /Metaclass3       
-doit
-NotInAst removeAllMethods.
-NotInAst class removeAllMethods.
-%
+removeAllMethods NotInAst
+removeAllClassMethods NotInAst
 ! ------------------- Class methods for NotInAst
 ! ------------------- Instance methods for NotInAst
 set compile_env: 0

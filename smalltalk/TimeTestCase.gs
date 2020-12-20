@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from TimeTestCase
-expectvalue /Metaclass3       
-doit
-TimeTestCase removeAllMethods.
-TimeTestCase class removeAllMethods.
-%
+removeAllMethods TimeTestCase
+removeAllClassMethods TimeTestCase
 ! ------------------- Class methods for TimeTestCase
 set compile_env: 0
 category: 'other'

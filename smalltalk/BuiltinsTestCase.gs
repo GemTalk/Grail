@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from BuiltinsTestCase
-expectvalue /Metaclass3       
-doit
-BuiltinsTestCase removeAllMethods.
-BuiltinsTestCase class removeAllMethods.
-%
+removeAllMethods BuiltinsTestCase
+removeAllClassMethods BuiltinsTestCase
 ! ------------------- Class methods for BuiltinsTestCase
 set compile_env: 0
 category: 'other'

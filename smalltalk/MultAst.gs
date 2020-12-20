@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from MultAst
-expectvalue /Metaclass3       
-doit
-MultAst removeAllMethods.
-MultAst class removeAllMethods.
-%
+removeAllMethods MultAst
+removeAllClassMethods MultAst
 ! ------------------- Class methods for MultAst
 ! ------------------- Instance methods for MultAst
 set compile_env: 0

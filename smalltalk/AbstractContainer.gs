@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from AbstractContainer
-expectvalue /Metaclass3       
-doit
-AbstractContainer removeAllMethods.
-AbstractContainer class removeAllMethods.
-%
+removeAllMethods AbstractContainer
+removeAllClassMethods AbstractContainer
 ! ------------------- Class methods for AbstractContainer
 set compile_env: 0
 category: 'other'

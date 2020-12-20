@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from ExpressionContextAst
-expectvalue /Metaclass3       
-doit
-ExpressionContextAst removeAllMethods.
-ExpressionContextAst class removeAllMethods.
-%
+removeAllMethods ExpressionContextAst
+removeAllClassMethods ExpressionContextAst
 ! ------------------- Class methods for ExpressionContextAst
 set compile_env: 0
 category: 'other'

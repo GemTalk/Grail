@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from CmpOpAst
-expectvalue /Metaclass3       
-doit
-CmpOpAst removeAllMethods.
-CmpOpAst class removeAllMethods.
-%
+removeAllMethods CmpOpAst
+removeAllClassMethods CmpOpAst
 ! ------------------- Class methods for CmpOpAst
 set compile_env: 0
 category: 'other'

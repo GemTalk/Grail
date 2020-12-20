@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from IsADirectoryError
-expectvalue /Metaclass3       
-doit
-IsADirectoryError removeAllMethods.
-IsADirectoryError class removeAllMethods.
-%
+removeAllMethods IsADirectoryError
+removeAllClassMethods IsADirectoryError
 ! ------------------- Class methods for IsADirectoryError
 ! ------------------- Instance methods for IsADirectoryError

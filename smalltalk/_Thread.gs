@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from _thread
-expectvalue /Metaclass3       
-doit
-_thread removeAllMethods.
-_thread class removeAllMethods.
-%
+removeAllMethods _thread
+removeAllClassMethods _thread
 ! ------------------- Class methods for _thread
 set compile_env: 0
 category: 'other'

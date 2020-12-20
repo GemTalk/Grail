@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from UnicodeWarning
-expectvalue /Metaclass3       
-doit
-UnicodeWarning removeAllMethods.
-UnicodeWarning class removeAllMethods.
-%
+removeAllMethods UnicodeWarning
+removeAllClassMethods UnicodeWarning
 ! ------------------- Class methods for UnicodeWarning
 ! ------------------- Instance methods for UnicodeWarning

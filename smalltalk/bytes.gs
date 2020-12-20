@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from bytes
-expectvalue /Metaclass3       
-doit
-bytes removeAllMethods.
-bytes class removeAllMethods.
-%
+removeAllMethods bytes
+removeAllClassMethods bytes
 ! ------------------- Class methods for bytes
 set compile_env: 0
 category: 'other'

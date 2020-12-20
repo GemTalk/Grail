@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from PythonTestResource
-expectvalue /Metaclass3       
-doit
-PythonTestResource removeAllMethods.
-PythonTestResource class removeAllMethods.
-%
+removeAllMethods PythonTestResource
+removeAllClassMethods PythonTestResource
 ! ------------------- Class methods for PythonTestResource
 ! ------------------- Instance methods for PythonTestResource
 set compile_env: 0

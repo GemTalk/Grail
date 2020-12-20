@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from AwaitAst
-expectvalue /Metaclass3       
-doit
-AwaitAst removeAllMethods.
-AwaitAst class removeAllMethods.
-%
+removeAllMethods AwaitAst
+removeAllClassMethods AwaitAst
 ! ------------------- Class methods for AwaitAst
 ! ------------------- Instance methods for AwaitAst
 set compile_env: 0

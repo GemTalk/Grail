@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from AbstractIterator
-expectvalue /Metaclass3       
-doit
-AbstractIterator removeAllMethods.
-AbstractIterator class removeAllMethods.
-%
+removeAllMethods AbstractIterator
+removeAllClassMethods AbstractIterator
 ! ------------------- Class methods for AbstractIterator
 set compile_env: 0
 category: 'other'

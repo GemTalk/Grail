@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from OperatorAst
-expectvalue /Metaclass3       
-doit
-OperatorAst removeAllMethods.
-OperatorAst class removeAllMethods.
-%
+removeAllMethods OperatorAst
+removeAllClassMethods OperatorAst
 ! ------------------- Class methods for OperatorAst
 set compile_env: 0
 category: 'other'

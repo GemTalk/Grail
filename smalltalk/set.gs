@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from set
-expectvalue /Metaclass3       
-doit
-set removeAllMethods.
-set class removeAllMethods.
-%
+removeAllMethods set
+removeAllClassMethods set
 ! ------------------- Class methods for set
 ! ------------------- Instance methods for set
 set compile_env: 0

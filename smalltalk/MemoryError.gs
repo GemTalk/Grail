@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from MemoryError
-expectvalue /Metaclass3       
-doit
-MemoryError removeAllMethods.
-MemoryError class removeAllMethods.
-%
+removeAllMethods MemoryError
+removeAllClassMethods MemoryError
 ! ------------------- Class methods for MemoryError
 ! ------------------- Instance methods for MemoryError

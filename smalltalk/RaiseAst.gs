@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from RaiseAst
-expectvalue /Metaclass3       
-doit
-RaiseAst removeAllMethods.
-RaiseAst class removeAllMethods.
-%
+removeAllMethods RaiseAst
+removeAllClassMethods RaiseAst
 ! ------------------- Class methods for RaiseAst
 ! ------------------- Instance methods for RaiseAst
 set compile_env: 0

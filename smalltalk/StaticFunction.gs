@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from StaticFunction
-expectvalue /Metaclass3       
-doit
-StaticFunction removeAllMethods.
-StaticFunction class removeAllMethods.
-%
+removeAllMethods StaticFunction
+removeAllClassMethods StaticFunction
 ! ------------------- Class methods for StaticFunction
 ! ------------------- Instance methods for StaticFunction
 set compile_env: 0

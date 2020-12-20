@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from _weakref
-expectvalue /Metaclass3       
-doit
-_weakref removeAllMethods.
-_weakref class removeAllMethods.
-%
+removeAllMethods _weakref
+removeAllClassMethods _weakref
 ! ------------------- Class methods for _weakref
 set compile_env: 0
 category: 'other'

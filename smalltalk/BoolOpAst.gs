@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from BoolOpAst
-expectvalue /Metaclass3       
-doit
-BoolOpAst removeAllMethods.
-BoolOpAst class removeAllMethods.
-%
+removeAllMethods BoolOpAst
+removeAllClassMethods BoolOpAst
 ! ------------------- Class methods for BoolOpAst
 set compile_env: 0
 category: 'other'

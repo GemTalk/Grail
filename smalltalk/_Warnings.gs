@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from _warnings
-expectvalue /Metaclass3       
-doit
-_warnings removeAllMethods.
-_warnings class removeAllMethods.
-%
+removeAllMethods _warnings
+removeAllClassMethods _warnings
 ! ------------------- Class methods for _warnings
 set compile_env: 0
 category: 'other'

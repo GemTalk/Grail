@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from objectClass
-expectvalue /Metaclass3       
-doit
-objectClass removeAllMethods.
-objectClass class removeAllMethods.
-%
+removeAllMethods objectClass
+removeAllClassMethods objectClass
 ! ------------------- Class methods for objectClass
 ! ------------------- Instance methods for objectClass
 set compile_env: 0

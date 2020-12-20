@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from DeprecationWarning
-expectvalue /Metaclass3       
-doit
-DeprecationWarning removeAllMethods.
-DeprecationWarning class removeAllMethods.
-%
+removeAllMethods DeprecationWarning
+removeAllClassMethods DeprecationWarning
 ! ------------------- Class methods for DeprecationWarning
 ! ------------------- Instance methods for DeprecationWarning

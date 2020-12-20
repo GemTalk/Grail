@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from Scope
-expectvalue /Metaclass3       
-doit
-Scope removeAllMethods.
-Scope class removeAllMethods.
-%
+removeAllMethods Scope
+removeAllClassMethods Scope
 ! ------------------- Class methods for Scope
 set compile_env: 0
 category: 'other'

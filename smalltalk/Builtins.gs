@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from builtins
-expectvalue /Metaclass3       
-doit
-builtins removeAllMethods.
-builtins class removeAllMethods.
-%
+removeAllMethods builtins
+removeAllClassMethods builtins
 ! ------------------- Class methods for builtins
 set compile_env: 0
 category: 'other'

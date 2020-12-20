@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from IfExpAst
-expectvalue /Metaclass3       
-doit
-IfExpAst removeAllMethods.
-IfExpAst class removeAllMethods.
-%
+removeAllMethods IfExpAst
+removeAllClassMethods IfExpAst
 ! ------------------- Class methods for IfExpAst
 ! ------------------- Instance methods for IfExpAst
 set compile_env: 0

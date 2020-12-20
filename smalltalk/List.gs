@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from list
-expectvalue /Metaclass3       
-doit
-list removeAllMethods.
-list class removeAllMethods.
-%
+removeAllMethods list
+removeAllClassMethods list
 ! ------------------- Class methods for list
 ! ------------------- Instance methods for list
 set compile_env: 0

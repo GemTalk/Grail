@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from NumericLiteralsTestCase
-expectvalue /Metaclass3       
-doit
-NumericLiteralsTestCase removeAllMethods.
-NumericLiteralsTestCase class removeAllMethods.
-%
+removeAllMethods NumericLiteralsTestCase
+removeAllClassMethods NumericLiteralsTestCase
 ! ------------------- Class methods for NumericLiteralsTestCase
 set compile_env: 0
 category: 'other'

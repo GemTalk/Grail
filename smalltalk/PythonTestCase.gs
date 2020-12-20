@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from PythonTestCase
-expectvalue /Metaclass3       
-doit
-PythonTestCase removeAllMethods.
-PythonTestCase class removeAllMethods.
-%
+removeAllMethods PythonTestCase
+removeAllClassMethods PythonTestCase
 ! ------------------- Class methods for PythonTestCase
 set compile_env: 0
 category: 'other'

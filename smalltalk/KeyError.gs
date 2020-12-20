@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from KeyError
-expectvalue /Metaclass3       
-doit
-KeyError removeAllMethods.
-KeyError class removeAllMethods.
-%
+removeAllMethods KeyError
+removeAllClassMethods KeyError
 ! ------------------- Class methods for KeyError
 ! ------------------- Instance methods for KeyError

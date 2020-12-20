@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from int
-expectvalue /Metaclass3       
-doit
-int removeAllMethods.
-int class removeAllMethods.
-%
+removeAllMethods int
+removeAllClassMethods int
 ! ------------------- Class methods for int
 set compile_env: 0
 category: 'other'

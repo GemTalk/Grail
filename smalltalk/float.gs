@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from float
-expectvalue /Metaclass3       
-doit
-float removeAllMethods.
-float class removeAllMethods.
-%
+removeAllMethods float
+removeAllClassMethods float
 ! ------------------- Class methods for float
 set compile_env: 0
 category: 'other'

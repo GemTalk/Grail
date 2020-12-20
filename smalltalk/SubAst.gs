@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from SubAst
-expectvalue /Metaclass3       
-doit
-SubAst removeAllMethods.
-SubAst class removeAllMethods.
-%
+removeAllMethods SubAst
+removeAllClassMethods SubAst
 ! ------------------- Class methods for SubAst
 ! ------------------- Instance methods for SubAst
 set compile_env: 0

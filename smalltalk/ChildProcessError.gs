@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from ChildProcessError
-expectvalue /Metaclass3       
-doit
-ChildProcessError removeAllMethods.
-ChildProcessError class removeAllMethods.
-%
+removeAllMethods ChildProcessError
+removeAllClassMethods ChildProcessError
 ! ------------------- Class methods for ChildProcessError
 ! ------------------- Instance methods for ChildProcessError

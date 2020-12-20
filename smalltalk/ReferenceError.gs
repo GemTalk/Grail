@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from ReferenceError
-expectvalue /Metaclass3       
-doit
-ReferenceError removeAllMethods.
-ReferenceError class removeAllMethods.
-%
+removeAllMethods ReferenceError
+removeAllClassMethods ReferenceError
 ! ------------------- Class methods for ReferenceError
 ! ------------------- Instance methods for ReferenceError

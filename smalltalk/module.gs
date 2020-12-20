@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from module
-expectvalue /Metaclass3       
-doit
-module removeAllMethods.
-module class removeAllMethods.
-%
+removeAllMethods module
+removeAllClassMethods module
 ! ------------------- Class methods for module
 set compile_env: 0
 category: 'other'

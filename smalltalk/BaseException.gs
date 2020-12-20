@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from BaseException
-expectvalue /Metaclass3       
-doit
-BaseException removeAllMethods.
-BaseException class removeAllMethods.
-%
+removeAllMethods BaseException
+removeAllClassMethods BaseException
 ! ------------------- Class methods for BaseException
 set compile_env: 0
 category: 'other'

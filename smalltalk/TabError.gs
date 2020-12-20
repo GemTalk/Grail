@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from TabError
-expectvalue /Metaclass3       
-doit
-TabError removeAllMethods.
-TabError class removeAllMethods.
-%
+removeAllMethods TabError
+removeAllClassMethods TabError
 ! ------------------- Class methods for TabError
 ! ------------------- Instance methods for TabError

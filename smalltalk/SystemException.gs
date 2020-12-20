@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from SystemException
-expectvalue /Metaclass3       
-doit
-SystemException removeAllMethods.
-SystemException class removeAllMethods.
-%
+removeAllMethods SystemException
+removeAllClassMethods SystemException
 ! ------------------- Class methods for SystemException
 ! ------------------- Instance methods for SystemException

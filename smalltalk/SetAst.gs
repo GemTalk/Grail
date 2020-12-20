@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from SetAst
-expectvalue /Metaclass3       
-doit
-SetAst removeAllMethods.
-SetAst class removeAllMethods.
-%
+removeAllMethods SetAst
+removeAllClassMethods SetAst
 ! ------------------- Class methods for SetAst
 ! ------------------- Instance methods for SetAst
 set compile_env: 0

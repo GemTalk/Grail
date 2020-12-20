@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from SliceAbstractAst
-expectvalue /Metaclass3       
-doit
-SliceAbstractAst removeAllMethods.
-SliceAbstractAst class removeAllMethods.
-%
+removeAllMethods SliceAbstractAst
+removeAllClassMethods SliceAbstractAst
 ! ------------------- Class methods for SliceAbstractAst
 set compile_env: 0
 category: 'other'

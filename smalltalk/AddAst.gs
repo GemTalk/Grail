@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from AddAst
-expectvalue /Metaclass3       
-doit
-AddAst removeAllMethods.
-AddAst class removeAllMethods.
-%
+removeAllMethods AddAst
+removeAllClassMethods AddAst
 ! ------------------- Class methods for AddAst
 ! ------------------- Instance methods for AddAst
 set compile_env: 0

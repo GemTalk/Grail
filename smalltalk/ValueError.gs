@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from ValueError
-expectvalue /Metaclass3       
-doit
-ValueError removeAllMethods.
-ValueError class removeAllMethods.
-%
+removeAllMethods ValueError
+removeAllClassMethods ValueError
 ! ------------------- Class methods for ValueError
 ! ------------------- Instance methods for ValueError

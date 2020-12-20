@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from GlobalAst
-expectvalue /Metaclass3       
-doit
-GlobalAst removeAllMethods.
-GlobalAst class removeAllMethods.
-%
+removeAllMethods GlobalAst
+removeAllClassMethods GlobalAst
 ! ------------------- Class methods for GlobalAst
 ! ------------------- Instance methods for GlobalAst
 set compile_env: 0

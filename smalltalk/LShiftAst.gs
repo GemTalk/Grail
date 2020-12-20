@@ -1,9 +1,6 @@
 ﻿! ------------------- Remove existing behavior from LShiftAst
-expectvalue /Metaclass3       
-doit
-LShiftAst removeAllMethods.
-LShiftAst class removeAllMethods.
-%
+removeAllMethods LShiftAst
+removeAllClassMethods LShiftAst
 ! ------------------- Class methods for LShiftAst
 ! ------------------- Instance methods for LShiftAst
 set compile_env: 0
