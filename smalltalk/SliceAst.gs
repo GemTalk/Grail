@@ -25,5 +25,5 @@ initialize
 	upper := self optionalExpression.
 	self commaSpace.
 	step := self optionalExpression.
-	(self stream peekFor: $)) ifFalse: [self error].
+	self readPosition.
 %

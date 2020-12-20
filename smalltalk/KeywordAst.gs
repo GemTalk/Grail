@@ -25,7 +25,7 @@ initialize
 	].
 	self commaSpace.
 	value := self expression.
-	(stream peekFor: $)) ifFalse: [self error].
+	self readPosition.
 %
 category: 'other'
 method: KeywordAst

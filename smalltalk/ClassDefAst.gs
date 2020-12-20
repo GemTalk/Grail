@@ -98,7 +98,7 @@ initialize
 	name := (stream upTo: $') asSymbol.
 	self commaSpace.
 	bases := self collectAst: [self expression].
-	(bases size = 0) ifTrue: [ bases add: (NameAst with: #'object') ].
+	"(bases size == 0) ifTrue: [ bases add: (NameAst with: #'object') ]."
 	self commaSpace.
 	keywords := self collectAst: [KeywordAst parent: self].
 	self commaSpace.

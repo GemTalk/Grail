@@ -55,8 +55,8 @@ testHexHigh
 		assert: x line == 44;
 		assert: x column == 0;
 		assert: ((x := x.value) isKindOf: ConstantAst);
-		assert: x.line == 44;
-		assert: x.column == 0;
+		assert: x line == 44;
+		assert: x column == 0;
 		assert: ((x := x.value) isKindOf: bytes);
 		assert: ((x := x ___container) isKindOf: ByteArray);
 		assert: x = #[100 101 102 255];

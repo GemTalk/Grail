@@ -7,13 +7,19 @@ category: 'other'
 classmethod: PythonTestCase
 ast
 
-	^ModuleAst astForPath: '$HOME/code/Python/GemStoneP/tests/' , self filename
+	^ModuleAst astForPath: self pathToTests , self filename
 %
 category: 'other'
 classmethod: PythonTestCase
 filename
 
 	self subclassResponsibility.
+%
+category: 'other'
+classmethod: PythonTestCase
+pathToTests
+
+	^'$HOME/Code/Python/Grail/tests/'
 %
 category: 'other'
 classmethod: PythonTestCase
@@ -52,19 +58,13 @@ filename
 %
 category: 'other'
 method: PythonTestCase
-pathToTests
-
-	^'$HOME/code/Python/GemStoneP/tests/'
-%
-category: 'other'
-method: PythonTestCase
 setUp
 
 	super setUp.
 	stdout := WriteStream on: Unicode7 new.
 	(GsCurrentSession currentSession objectNamed: #'builtins') current stdout: stdout.
 	self filename ifNotNil: [:filename | 
-		module := self resources first current moduleAtPath: self pathToTests , filename.
+		module := self resources first current moduleAtPath: self class pathToTests , filename.
 	].
 	aScope := GlobalScope newForNode: self.
 %

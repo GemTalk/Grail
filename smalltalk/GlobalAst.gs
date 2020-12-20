@@ -22,7 +22,7 @@ initialize
 	| stream |
 	stream := self stream.
 	names := self collectAst: [
-		(stream peekFor: $') ifFalse: [self error].
+		(stream skipSeparators; peekFor: $') ifFalse: [self error].
 		(self stream upTo: $') asSymbol
 	].
 	self readPosition.

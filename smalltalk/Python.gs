@@ -1299,8 +1299,8 @@ set compile_env: 0
 expectvalue /Class
 doit
 AbstractNode subclass: 'AbstractLocationNode'
-  instVarNames: #( beginLine
-                    beginColumn endLine endColumn)
+  instVarNames: #( beginLine beginColumn endLine
+                    endColumn)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -2305,6 +2305,139 @@ Object
 expectvalue /Class
 doit
 YieldFromAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for KeywordAst
+expectvalue /Class
+doit
+AbstractLocationNode subclass: 'KeywordAst'
+  instVarNames: #( arg value)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+KeywordAst comment: 
+'No class-specific documentation for KeywordAst, hierarchy is: 
+Object
+  AbstractNode( parent)
+    KeywordAst( arg value)
+'
+%
+expectvalue /Class
+doit
+KeywordAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for SliceAbstractAst
+expectvalue /Class
+doit
+AbstractLocationNode subclass: 'SliceAbstractAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+SliceAbstractAst comment: 
+'No class-specific documentation for SliceAbstractAst, hierarchy is: 
+Object
+  AbstractNode( parent)
+    SliceAbstractAst
+'
+%
+expectvalue /Class
+doit
+SliceAbstractAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for ExtSliceAst
+expectvalue /Class
+doit
+SliceAbstractAst subclass: 'ExtSliceAst'
+  instVarNames: #( dims)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ExtSliceAst comment: 
+'No class-specific documentation for PyExtSlice, hierarchy is: 
+Object
+  AbstractNode( parent)
+    SliceAbstractAst
+      PyExtSlice( dims)
+'
+%
+expectvalue /Class
+doit
+ExtSliceAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for IndexAst
+expectvalue /Class
+doit
+SliceAbstractAst subclass: 'IndexAst'
+  instVarNames: #( value)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+IndexAst comment: 
+'No class-specific documentation for PyIndex, hierarchy is: 
+Object
+  AbstractNode( parent)
+    SliceAbstractAst
+      PyIndex( value)
+'
+%
+expectvalue /Class
+doit
+IndexAst category: 'Parser'
+%
+set compile_env: 0
+! ------------------- Class definition for SliceAst
+expectvalue /Class
+doit
+SliceAbstractAst subclass: 'SliceAst'
+  instVarNames: #( lower upper step)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+SliceAst comment: 
+'No class-specific documentation for PySlice, hierarchy is: 
+Object
+  AbstractNode( parent)
+    SliceAbstractAst
+      PySlice( lower upper step)
+'
+%
+expectvalue /Class
+doit
+SliceAst category: 'Parser'
 %
 set compile_env: 0
 ! ------------------- Class definition for StatementAst
@@ -3633,32 +3766,6 @@ doit
 StoreAst category: 'Parser'
 %
 set compile_env: 0
-! ------------------- Class definition for KeywordAst
-expectvalue /Class
-doit
-AbstractNode subclass: 'KeywordAst'
-  instVarNames: #( arg value)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-KeywordAst comment: 
-'No class-specific documentation for KeywordAst, hierarchy is: 
-Object
-  AbstractNode( parent)
-    KeywordAst( arg value)
-'
-%
-expectvalue /Class
-doit
-KeywordAst category: 'Parser'
-%
-set compile_env: 0
 ! ------------------- Class definition for ModuleAst
 expectvalue /Class
 doit
@@ -4082,113 +4189,6 @@ Object
 expectvalue /Class
 doit
 SubAst category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for SliceAbstractAst
-expectvalue /Class
-doit
-AbstractNode subclass: 'SliceAbstractAst'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-SliceAbstractAst comment: 
-'No class-specific documentation for SliceAbstractAst, hierarchy is: 
-Object
-  AbstractNode( parent)
-    SliceAbstractAst
-'
-%
-expectvalue /Class
-doit
-SliceAbstractAst category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for ExtSliceAst
-expectvalue /Class
-doit
-SliceAbstractAst subclass: 'ExtSliceAst'
-  instVarNames: #( dims)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-ExtSliceAst comment: 
-'No class-specific documentation for PyExtSlice, hierarchy is: 
-Object
-  AbstractNode( parent)
-    SliceAbstractAst
-      PyExtSlice( dims)
-'
-%
-expectvalue /Class
-doit
-ExtSliceAst category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for IndexAst
-expectvalue /Class
-doit
-SliceAbstractAst subclass: 'IndexAst'
-  instVarNames: #( value)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-IndexAst comment: 
-'No class-specific documentation for PyIndex, hierarchy is: 
-Object
-  AbstractNode( parent)
-    SliceAbstractAst
-      PyIndex( value)
-'
-%
-expectvalue /Class
-doit
-IndexAst category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for SliceAst
-expectvalue /Class
-doit
-SliceAbstractAst subclass: 'SliceAst'
-  instVarNames: #( lower upper step)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-SliceAst comment: 
-'No class-specific documentation for PySlice, hierarchy is: 
-Object
-  AbstractNode( parent)
-    SliceAbstractAst
-      PySlice( lower upper step)
-'
-%
-expectvalue /Class
-doit
-SliceAst category: 'Parser'
 %
 set compile_env: 0
 ! ------------------- Class definition for SuiteAst
