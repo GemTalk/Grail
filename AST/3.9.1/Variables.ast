@@ -1,0 +1,136 @@
+Module([
+    Assign([
+        Name('x', Store(), 4, 0, 4, 1),
+      ], Constant(5, None, 4, 4, 4, 5), None, 4, 0, 4, 5),
+    Expr(Call(Name('print', Load(), 5, 0, 5, 5), [
+        Name('x', Load(), 5, 6, 5, 7),
+      ], [
+        keyword('end', Constant(' ', None, 5, 13, 5, 16), 5, 9, 5, 16),
+      ], 5, 0, 5, 17), 5, 0, 5, 17),
+    FunctionDef('foo', arguments([], [], None, [], [], None, []), [
+        Expr(Call(Name('print', Load(), 9, 4, 9, 9), [
+            Name('x', Load(), 9, 10, 9, 11),
+          ], [
+            keyword('end', Constant(' ', None, 9, 17, 9, 20), 9, 13, 9, 20),
+          ], 9, 4, 9, 21), 9, 4, 9, 21),
+        Return(Name('x', Load(), 10, 11, 10, 12), 10, 4, 10, 12),
+      ], [], None, None, 8, 0, 10, 12),
+    Assign([
+        Name('y', Store(), 12, 0, 12, 1),
+      ], Call(Name('foo', Load(), 12, 4, 12, 7), [], [], 12, 4, 12, 9), None, 12, 0, 12, 9),
+    FunctionDef('bar', arguments([], [], None, [], [], None, []), [
+        Assign([
+            Name('x', Store(), 16, 4, 16, 5),
+          ], Constant(6, None, 16, 8, 16, 9), None, 16, 4, 16, 9),
+        Expr(Call(Name('print', Load(), 17, 4, 17, 9), [
+            Name('x', Load(), 17, 10, 17, 11),
+          ], [
+            keyword('end', Constant(' ', None, 17, 17, 17, 20), 17, 13, 17, 20),
+          ], 17, 4, 17, 21), 17, 4, 17, 21),
+        Return(Name('x', Load(), 18, 11, 18, 12), 18, 4, 18, 12),
+      ], [], None, None, 15, 0, 18, 12),
+    Assign([
+        Name('z', Store(), 20, 0, 20, 1),
+      ], Call(Name('bar', Load(), 20, 4, 20, 7), [], [], 20, 4, 20, 9), None, 20, 0, 20, 9),
+    Expr(Call(Name('print', Load(), 21, 0, 21, 5), [
+        Name('x', Load(), 21, 6, 21, 7),
+      ], [
+        keyword('end', Constant(' ', None, 21, 13, 21, 16), 21, 9, 21, 16),
+      ], 21, 0, 21, 17), 21, 0, 21, 17),
+    FunctionDef('rum', arguments([], [], None, [], [], None, []), [
+        Global([
+            'x',
+          ], 25, 4, 25, 12),
+        Assign([
+            Name('x', Store(), 26, 4, 26, 5),
+          ], BinOp(Name('x', Load(), 26, 8, 26, 9), Add(), Constant(2, None, 26, 12, 26, 13), 26, 8, 26, 13), None, 26, 4, 26, 13),
+        Expr(Call(Name('print', Load(), 27, 4, 27, 9), [
+            Name('x', Load(), 27, 10, 27, 11),
+          ], [
+            keyword('end', Constant(' ', None, 27, 17, 27, 20), 27, 13, 27, 20),
+          ], 27, 4, 27, 21), 27, 4, 27, 21),
+        Return(Name('x', Load(), 28, 11, 28, 12), 28, 4, 28, 12),
+      ], [], None, None, 24, 0, 28, 12),
+    Assign([
+        Name('w', Store(), 30, 0, 30, 1),
+      ], Call(Name('rum', Load(), 30, 4, 30, 7), [], [], 30, 4, 30, 9), None, 30, 0, 30, 9),
+    Expr(Call(Name('print', Load(), 31, 0, 31, 5), [
+        Name('x', Load(), 31, 6, 31, 7),
+      ], [
+        keyword('end', Constant(' ', None, 31, 13, 31, 16), 31, 9, 31, 16),
+      ], 31, 0, 31, 17), 31, 0, 31, 17),
+    FunctionDef('outer', arguments([], [], None, [], [], None, []), [
+        Assign([
+            Name('var', Store(), 35, 4, 35, 7),
+          ], Constant('local', None, 35, 10, 35, 17), None, 35, 4, 35, 17),
+        FunctionDef('inner', arguments([], [], None, [], [], None, []), [
+            Nonlocal([
+                'var',
+              ], 38, 8, 38, 20),
+            Assign([
+                Name('var', Store(), 39, 8, 39, 11),
+              ], Constant('nonlocal', None, 39, 14, 39, 24), None, 39, 8, 39, 24),
+          ], [], None, None, 37, 4, 39, 24),
+        Expr(Call(Name('print', Load(), 41, 4, 41, 9), [
+            Name('var', Load(), 41, 10, 41, 13),
+          ], [
+            keyword('end', Constant(' ', None, 41, 19, 41, 22), 41, 15, 41, 22),
+          ], 41, 4, 41, 23), 41, 4, 41, 23),
+        Expr(Call(Name('inner', Load(), 42, 4, 42, 9), [], [], 42, 4, 42, 11), 42, 4, 42, 11),
+        Expr(Call(Name('print', Load(), 43, 4, 43, 9), [
+            Name('var', Load(), 43, 10, 43, 13),
+          ], [
+            keyword('end', Constant(' ', None, 43, 19, 43, 22), 43, 15, 43, 22),
+          ], 43, 4, 43, 23), 43, 4, 43, 23),
+        Return(Name('var', Load(), 44, 11, 44, 14), 44, 4, 44, 14),
+      ], [], None, None, 34, 0, 44, 14),
+    Assign([
+        Name('v', Store(), 46, 0, 46, 1),
+      ], Call(Name('outer', Load(), 46, 4, 46, 9), [], [], 46, 4, 46, 11), None, 46, 0, 46, 11),
+    FunctionDef('fa', arguments([], [], None, [], [], None, []), [
+        Assign([
+            Name('x', Store(), 49, 4, 49, 5),
+          ], Constant(0, None, 49, 8, 49, 9), None, 49, 4, 49, 9),
+        FunctionDef('fSet', arguments([], [
+            arg('y', None, None, 50, 13, 50, 14),
+          ], None, [], [], None, []), [
+            Nonlocal([
+                'x',
+              ], 51, 8, 51, 18),
+            Assign([
+                Name('x', Store(), 52, 8, 52, 9),
+              ], Name('y', Load(), 52, 12, 52, 13), None, 52, 8, 52, 13),
+          ], [], None, None, 50, 4, 52, 13),
+        FunctionDef('fGet', arguments([], [], None, [], [], None, []), [
+            Return(Name('x', Load(), 54, 15, 54, 16), 54, 8, 54, 16),
+          ], [], None, None, 53, 4, 54, 16),
+        Return(Tuple([
+            Name('fSet', Load(), 55, 12, 55, 16),
+            Name('fGet', Load(), 55, 18, 55, 22),
+          ], Load(), 55, 11, 55, 23), 55, 4, 55, 23),
+      ], [], None, None, 48, 0, 55, 23),
+    Assign([
+        Tuple([
+            Name('set1', Store(), 57, 0, 57, 4),
+            Name('get1', Store(), 57, 6, 57, 10),
+          ], Store(), 57, 0, 57, 10),
+      ], Call(Name('fa', Load(), 57, 13, 57, 15), [], [], 57, 13, 57, 17), None, 57, 0, 57, 17),
+    Assign([
+        Tuple([
+            Name('set2', Store(), 58, 0, 58, 4),
+            Name('get2', Store(), 58, 6, 58, 10),
+          ], Store(), 58, 0, 58, 10),
+      ], Call(Name('fa', Load(), 58, 13, 58, 15), [], [], 58, 13, 58, 17), None, 58, 0, 58, 17),
+    Expr(Call(Name('set1', Load(), 59, 0, 59, 4), [
+        Constant(3, None, 59, 5, 59, 6),
+      ], [], 59, 0, 59, 7), 59, 0, 59, 7),
+    Expr(Call(Name('set2', Load(), 60, 0, 60, 4), [
+        Constant(4, None, 60, 5, 60, 6),
+      ], [], 60, 0, 60, 7), 60, 0, 60, 7),
+    Expr(Call(Name('print', Load(), 61, 0, 61, 5), [
+        Call(Name('get1', Load(), 61, 6, 61, 10), [], [], 61, 6, 61, 12),
+        Call(Name('get2', Load(), 61, 14, 61, 18), [], [], 61, 14, 61, 20),
+      ], [
+        keyword('end', Constant(' ', None, 61, 26, 61, 29), 61, 22, 61, 29),
+      ], 61, 0, 61, 30), 61, 0, 61, 30),
+  ], [])

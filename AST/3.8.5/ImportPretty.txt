@@ -1,5 +1,0 @@
-Module(body=[
-    Import(names=[
-        alias(name='importlib', asname=None),
-      ]),
-  ], type_ignores=[])

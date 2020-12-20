@@ -1,0 +1,70 @@
+Module([
+    If(Constant(True, None, 3, 4, 3, 8), [
+        Expr(Call(Name('print', Load(), 4, 4, 4, 9), [
+            Constant(1, None, 4, 10, 4, 11),
+          ], [
+            keyword('end', Constant('', None, 4, 17, 4, 19), 4, 13, 4, 19),
+          ], 4, 4, 4, 20), 4, 4, 4, 20),
+      ], [
+        Expr(Call(Name('print', Load(), 6, 4, 6, 9), [
+            Constant(2, None, 6, 10, 6, 11),
+          ], [
+            keyword('end', Constant('', None, 6, 17, 6, 19), 6, 13, 6, 19),
+          ], 6, 4, 6, 20), 6, 4, 6, 20),
+      ], 3, 0, 6, 20),
+    If(Constant(False, None, 8, 4, 8, 9), [
+        Expr(Call(Name('print', Load(), 9, 4, 9, 9), [
+            Constant(3, None, 9, 10, 9, 11),
+          ], [
+            keyword('end', Constant('', None, 9, 17, 9, 19), 9, 13, 9, 19),
+          ], 9, 4, 9, 20), 9, 4, 9, 20),
+      ], [
+        Expr(Call(Name('print', Load(), 11, 4, 11, 9), [
+            Constant(4, None, 11, 10, 11, 11),
+          ], [
+            keyword('end', Constant('', None, 11, 17, 11, 19), 11, 13, 11, 19),
+          ], 11, 4, 11, 20), 11, 4, 11, 20),
+      ], 8, 0, 11, 20),
+    If(Constant(False, None, 13, 4, 13, 9), [
+        Expr(Call(Name('print', Load(), 14, 4, 14, 9), [
+            Constant(5, None, 14, 10, 14, 11),
+          ], [
+            keyword('end', Constant('', None, 14, 17, 14, 19), 14, 13, 14, 19),
+          ], 14, 4, 14, 20), 14, 4, 14, 20),
+      ], [
+        If(Constant(True, None, 15, 6, 15, 10), [
+            Expr(Call(Name('print', Load(), 16, 4, 16, 9), [
+                Constant(6, None, 16, 10, 16, 11),
+              ], [
+                keyword('end', Constant('', None, 16, 17, 16, 19), 16, 13, 16, 19),
+              ], 16, 4, 16, 20), 16, 4, 16, 20),
+          ], [
+            Expr(Call(Name('print', Load(), 18, 4, 18, 9), [
+                Constant(7, None, 18, 10, 18, 11),
+              ], [
+                keyword('end', Constant('', None, 18, 17, 18, 19), 18, 13, 18, 19),
+              ], 18, 4, 18, 20), 18, 4, 18, 20),
+          ], 15, 0, 18, 20),
+      ], 13, 0, 18, 20),
+    If(Constant(False, None, 20, 4, 20, 9), [
+        Expr(Call(Name('print', Load(), 21, 4, 21, 9), [
+            Constant(8, None, 21, 10, 21, 11),
+          ], [
+            keyword('end', Constant('', None, 21, 17, 21, 19), 21, 13, 21, 19),
+          ], 21, 4, 21, 20), 21, 4, 21, 20),
+      ], [
+        If(Constant(False, None, 22, 6, 22, 11), [
+            Expr(Call(Name('print', Load(), 23, 4, 23, 9), [
+                Constant(9, None, 23, 10, 23, 11),
+              ], [
+                keyword('end', Constant('', None, 23, 17, 23, 19), 23, 13, 23, 19),
+              ], 23, 4, 23, 20), 23, 4, 23, 20),
+          ], [
+            Expr(Call(Name('print', Load(), 25, 4, 25, 9), [
+                Constant(10, None, 25, 10, 25, 12),
+              ], [
+                keyword('end', Constant('', None, 25, 18, 25, 20), 25, 14, 25, 20),
+              ], 25, 4, 25, 21), 25, 4, 25, 21),
+          ], 22, 0, 25, 21),
+      ], 20, 0, 25, 21),
+  ], [])

@@ -1,0 +1,34 @@
+Module([
+    Expr(BinOp(Constant(1, None, 5, 0, 5, 1), Add(), Constant(2, None, 5, 4, 5, 5), 5, 0, 5, 5), 5, 0, 5, 5),
+    Expr(BinOp(Constant(10, None, 6, 0, 6, 2), Mod(), Constant(5, None, 6, 5, 6, 6), 6, 0, 6, 6), 6, 0, 6, 6),
+    Expr(BinOp(BinOp(Constant(2, None, 9, 0, 9, 1), Add(), Constant(4, None, 9, 4, 9, 5), 9, 0, 9, 5), Add(), Constant(6, None, 9, 8, 9, 9), 9, 0, 9, 9), 9, 0, 9, 9),
+    Expr(BinOp(BinOp(Constant(7, None, 10, 0, 10, 1), Mult(), Constant(8, None, 10, 4, 10, 5), 10, 0, 10, 5), Mult(), Constant(9, None, 10, 8, 10, 9), 10, 0, 10, 9), 10, 0, 10, 9),
+    Expr(UnaryOp(USub(), Constant(100, None, 13, 1, 13, 4), 13, 0, 13, 4), 13, 0, 13, 4),
+    Expr(UnaryOp(Invert(), Constant(200, None, 14, 1, 14, 4), 14, 0, 14, 4), 14, 0, 14, 4),
+    Expr(UnaryOp(USub(), UnaryOp(UAdd(), Constant(300, None, 17, 2, 17, 5), 17, 1, 17, 5), 17, 0, 17, 5), 17, 0, 17, 5),
+    Expr(UnaryOp(Invert(), UnaryOp(Invert(), Constant(400, None, 18, 2, 18, 5), 18, 1, 18, 5), 18, 0, 18, 5), 18, 0, 18, 5),
+    Expr(Compare(Constant(10, None, 21, 0, 21, 2), [
+        Eq(),
+      ], [
+        Constant(20, None, 21, 6, 21, 8),
+      ], 21, 0, 21, 8), 21, 0, 21, 8),
+    Expr(Compare(Constant(25, None, 22, 0, 22, 2), [
+        GtE(),
+      ], [
+        Constant(15, None, 22, 6, 22, 8),
+      ], 22, 0, 22, 8), 22, 0, 22, 8),
+    Expr(Compare(Constant(11, None, 25, 0, 25, 2), [
+        Eq(),
+        Eq(),
+      ], [
+        Constant(22, None, 25, 6, 25, 8),
+        Constant(33, None, 25, 12, 25, 14),
+      ], 25, 0, 25, 14), 25, 0, 25, 14),
+    Expr(Compare(Constant(44, None, 26, 0, 26, 2), [
+        GtE(),
+        GtE(),
+      ], [
+        Constant(55, None, 26, 6, 26, 8),
+        Constant(66, None, 26, 12, 26, 14),
+      ], 26, 0, 26, 14), 26, 0, 26, 14),
+  ], [])
