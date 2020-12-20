@@ -7,7 +7,13 @@ category: 'other'
 classmethod: ModuleAst
 astForPath: pathString
 
-	^System performOnServer: '/usr/local/bin/pprintast -a -t ' , pathString
+	| file path string |
+	path := '/tmp/grail.ast'.
+	System performOnServer: '/usr/local/bin/pprintast -a -t ' , pathString , ' > ' , path.
+	file := GsFile open: path mode: 'rb' onClient: false.
+	string := file contentsAsUtf8 decodeToUnicode.
+	GsFile removeServerFile: path.
+	^string
 %
 category: 'other'
 classmethod: ModuleAst
