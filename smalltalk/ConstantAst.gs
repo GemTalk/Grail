@@ -65,6 +65,14 @@ initialize
 %
 category: 'other'
 method: ConstantAst
+set: container to: anObject scope: aScope
+
+	container 
+		set: value
+		to: anObject.
+%
+category: 'other'
+method: ConstantAst
 value
 
 	^ value

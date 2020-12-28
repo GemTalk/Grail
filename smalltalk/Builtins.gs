@@ -1439,6 +1439,7 @@ see documentation for more details
 	path := arguments first.
 	(path isKindOf: str) ifTrue: [ path := path ___container ].
 	filePointer := file with: (GsFile open: path mode: 'rb' onClient: false).
+	filePointer ifNil: [self error: GsFile serverErrorString].
 	^ filePointer
 %
 category: 'functions'

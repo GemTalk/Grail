@@ -19,6 +19,12 @@ evaluate: aScope
 
 	^ self
 %
+category: 'other'
+method: object
+isNone
+
+	^false
+%
 set compile_env: 0
 category: 'Python'
 method: object

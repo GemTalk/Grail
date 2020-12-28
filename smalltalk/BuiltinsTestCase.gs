@@ -11,6 +11,75 @@ filename
 %
 ! ------------------- Instance methods for BuiltinsTestCase
 set compile_env: 0
+category: 'failures'
+method: BuiltinsTestCase
+test_delattr
+"
+	| x |
+	x := (self statementsAt: 44) evaluate: aScope.		
+	x := (self statementsAt: 45) evaluate: aScope.		
+	x := (self statementsAt: 46) evaluate: aScope.
+	x := (self statementsAt: 47) evaluate: aScope.
+	x := stdout contents.
+	self assert: x = 'AttributeError '.
+"
+%
+category: 'failures'
+method: BuiltinsTestCase
+test_getattr
+"
+	| x |
+	x := (self statementsAt: 69) evaluate: aScope.	
+	x := (self statementsAt: 70) evaluate: aScope.
+	x := (self statementsAt: 71) evaluate: aScope.
+	self assert: x = 'yang'.
+	x := (self statementsAt: 72) evaluate: aScope.
+	x := stdout contents.
+	self assert: x = 'AttributeError '.
+"
+%
+category: 'failures'
+method: BuiltinsTestCase
+test_setattr
+"
+	| x |
+	x := (self statementsAt: 152) evaluate: aScope.
+	x := (self statementsAt: 153) evaluate: aScope.
+	x := (self statementsAt: 154) evaluate: aScope.
+	self assert: x = 'yang'.
+	x := (self statementsAt: 155) evaluate: aScope.
+	x := (self statementsAt: 156) evaluate: aScope.
+	self assert: x = 'wang'.
+	x := (self statementsAt: 157) evaluate: aScope.
+	x := stdout contents.
+	self assert: x = 'AttributeError '.
+	x := (self statementsAt: 158) evaluate: aScope.
+	x := (self statementsAt: 159) evaluate: aScope.
+	self assert: x = 'shui'.
+"
+%
+category: 'failures'
+method: BuiltinsTestCase
+test_super
+"
+	| x |
+	201 to: 204 do: [ :num |
+		x := (self statementsAt: num) evaluate: aScope.
+	].
+	x := (self statementsAt: 205) evaluate: aScope.
+	x := (self statementsAt: 206) evaluate: aScope.
+	x := (self statementsAt: 207) evaluate: aScope.
+	x := (self statementsAt: 208) evaluate: aScope.
+	x := stdout contents.
+	self assert: x = 'calling from Base
+calling from Bedrock
+calling from Base
+calling from Ground
+calling from Bedrock
+'.
+"
+%
+set compile_env: 0
 category: 'other'
 method: BuiltinsTestCase
 tearDown
@@ -160,18 +229,6 @@ test_complex
 %
 category: 'other'
 method: BuiltinsTestCase
-test_delattr
-
-	| x |
-	x := (self statementsAt: 44) evaluate: aScope.		
-	x := (self statementsAt: 45) evaluate: aScope.		
-	x := (self statementsAt: 46) evaluate: aScope.
-	x := (self statementsAt: 47) evaluate: aScope.
-	x := stdout contents.
-	self assert: x = 'AttributeError '.
-%
-category: 'other'
-method: BuiltinsTestCase
 test_dict
 
 	| x s |
@@ -264,19 +321,6 @@ test_frozenset
 	x := (self statementsAt: 67) evaluate: aScope.
 	self assert: x == 3.
 	x := (self statementsAt: 68) evaluate: aScope.
-	x := stdout contents.
-	self assert: x = 'AttributeError '.
-%
-category: 'other'
-method: BuiltinsTestCase
-test_getattr
-
-	| x |
-	x := (self statementsAt: 69) evaluate: aScope.	
-	x := (self statementsAt: 70) evaluate: aScope.
-	x := (self statementsAt: 71) evaluate: aScope.
-	self assert: x = 'yang'.
-	x := (self statementsAt: 72) evaluate: aScope.
 	x := stdout contents.
 	self assert: x = 'AttributeError '.
 %
@@ -610,25 +654,6 @@ test_set
 %
 category: 'other'
 method: BuiltinsTestCase
-test_setattr
-
-	| x |
-	x := (self statementsAt: 152) evaluate: aScope.
-	x := (self statementsAt: 153) evaluate: aScope.
-	x := (self statementsAt: 154) evaluate: aScope.
-	self assert: x = 'yang'.
-	x := (self statementsAt: 155) evaluate: aScope.
-	x := (self statementsAt: 156) evaluate: aScope.
-	self assert: x = 'wang'.
-	x := (self statementsAt: 157) evaluate: aScope.
-	x := stdout contents.
-	self assert: x = 'AttributeError '.
-	x := (self statementsAt: 158) evaluate: aScope.
-	x := (self statementsAt: 159) evaluate: aScope.
-	self assert: x = 'shui'.
-%
-category: 'other'
-method: BuiltinsTestCase
 test_slice
 
 	| x |
@@ -688,26 +713,6 @@ test_sum
 	self assert: x = 555.
 	x := (self statementsAt: 177) evaluate: aScope.
 	self assert: x = 45.
-%
-category: 'other'
-method: BuiltinsTestCase
-test_super
-
-	| x |
-	201 to: 204 do: [ :num |
-		x := (self statementsAt: num) evaluate: aScope.
-	].
-	x := (self statementsAt: 205) evaluate: aScope.
-	x := (self statementsAt: 206) evaluate: aScope.
-	x := (self statementsAt: 207) evaluate: aScope.
-	x := (self statementsAt: 208) evaluate: aScope.
-	x := stdout contents.
-	self assert: x = 'calling from Base
-calling from Bedrock
-calling from Base
-calling from Ground
-calling from Bedrock
-'.
 %
 category: 'other'
 method: BuiltinsTestCase

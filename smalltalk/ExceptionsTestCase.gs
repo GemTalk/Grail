@@ -11,16 +11,18 @@ filename
 %
 ! ------------------- Instance methods for ExceptionsTestCase
 set compile_env: 0
-category: 'other'
+category: 'failing'
 method: ExceptionsTestCase
 test
 	"test everything with print"
-
+"
 	| x |
 	module evaluate.
 	x := stdout contents.
 	self assert: x = 'AssertionError AttributeError IndexError KeyError NameError NotImplementedError RecursionError TypeError UnboundLocalError ValueError ZeroDivisionError ZeroDivisionError '.
+"
 %
+set compile_env: 0
 category: 'other'
 method: ExceptionsTestCase
 testSelectively

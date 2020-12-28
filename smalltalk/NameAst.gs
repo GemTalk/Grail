@@ -62,6 +62,24 @@ evaluate: aScope
 %
 category: 'other'
 method: NameAst
+evaluate: container scope: aScope
+
+	| slice |
+	self assertContextIsLoad.
+	[
+		slice := aScope get: id.
+	] on: NameError do: [:ex | 
+		(self isVariableIsDeclared: id) ifTrue: [
+			"How would we resignal this?"
+			UnboundLocalError signal: 'local variable ''', id, ''' referenced before assignment'.
+		].
+		ex pass.
+	].
+	^slice evaluate: container scope: aScope
+
+%
+category: 'other'
+method: NameAst
 id
 
 	^id
