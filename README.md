@@ -1,24 +1,24 @@
-# GemStone/P
+# Grail
 
-Run [Python](https://docs.python.org/3/reference/index.html) on GemStone/S 64 Bit. 
+Run [Python](https://docs.python.org/3/reference/index.html) on GemStone/S 64 Bit.
 
 ## macOS Installation
 
 ### Git Checkout
 
-Checkout this Git project to `$HOME/code/Python/GemStoneP` (or to some other place and be prepared to edit things to match your path).
+Checkout this Git project to `$HOME/code/Python/Grail` (or to some other place and be prepared to edit things to match your path).
 
 ### GemStone/S
 
-[GemStone/S](https://gemtalksystems.com/products/gs64/) can be most easily run on macOS using the free, open source [GemStone.app](https://github.com/jgfoster/GemStoneApp). From the Setup tab, click `Authenticate` and give your password (as an administrator) to allow the helper tool to be installed. Then, from the Versions tab, click `Update` to get a list of available GemStone versions. Check the box for a recent version (3.6.0 at the time of this writing) to download that version. Then, from the Databases tab, click the `+` button to create a new database and click `Start` to start the database. 
+[GemStone/S](https://gemtalksystems.com/products/gs64/) can be most easily run on macOS using the free, open source [GemStone.app](https://github.com/jgfoster/GemStoneApp). From the Setup tab, click `Authenticate` and give your password (as an administrator) to allow the helper tool to be installed. Then, from the Versions tab, click `Update` to get a list of available GemStone versions. Check the box for a recent version (3.6.0 at the time of this writing) to download that version. Then, from the Databases tab, click the `+` button to create a new database and click `Start` to start the database.
 
-When you have a database running, from the Databases tab select the Login subtab and click the `Terminal` button. In the new Terminal navigate to this directory (e.g., `cd ~/code/Python/GemStoneP`). 
+When you have a database running, from the Databases tab select the Login subtab and click the `Terminal` button. In the new Terminal navigate to this directory (e.g., `cd ~/code/Python/Grail`).
 
 Copy the provided `topazini` to `.topazini` and edit `gs64stone` to show the name of your database (e.g., `gs64stone1`). Then from a commmand prompt run `./gsp.sh`. If this finishes without errors then you may proceed to the next step.
 
 ### Python 3
 
-Install [Python 3.9.1](https://www.python.org/downloads/release/python-391/). When you enter `python3 --version` it should show you 3.9.1.
+Install [Python 3.9.7](https://www.python.org/downloads/release/python-391/). When you enter `python3 --version` it should show you 3.9.7.
 
 ## Sample Code
 
@@ -26,7 +26,7 @@ Install [Python 3.9.1](https://www.python.org/downloads/release/python-391/). Wh
 Our first task is a "Hello World!" program (`hello.py`). From [Jade](https://github.com/jgfoster/Jade) (or another GemStone/S IDE), log in to GemStone and evalute the following expression:
 
 ```
-ModuleAst script: '$HOME/code/Python/GemStoneP/hello.py'.
+ModuleAst script: '$HOME/code/Python/Grail/hello.py'.
 ```
 
 ### Benchmark
@@ -47,23 +47,23 @@ Python comes with a [regression test package](https://docs.python.org/3/library/
 
 ## Process
 
-While we could parse source files directly (and may eventually do so), we can take advantage of some built-in Python features to jump ahead to the interesting parts. 
+While we could parse source files directly (and may eventually do so), we can take advantage of some built-in Python features to jump ahead to the interesting parts.
 
 ### Abstract Syntax Tree
 
 Python has a module [ast](https://docs.python.org/3/library/ast.html) that generates an AST (abstract syntax tree). To see this in action evaluate the following in a workspace:
 
 ```
-ModuleAst astForPath: '$HOME/code/Python/GemStoneP/hello.py'
+ModuleAst astForPath: '$HOME/code/Python/Grail/hello.py'
 ```
 
 ## Next Steps
 
 ### Build an AST using Smalltalk objects
 
-Our initial approach is to let Python generate an AST for us and then use the text representation to build our own AST. We will use the [abstract grammar](https://docs.python.org/3/library/ast.html) as a guide to hand-build subclasses of AstNode. 
+Our initial approach is to let Python generate an AST for us and then use the text representation to build our own AST. We will use the [abstract grammar](https://docs.python.org/3/library/ast.html) as a guide to hand-build subclasses of AstNode.
 
-* ModuleAst class>>script: is the basic entry point for reading a Python file (module) 
+* ModuleAst class>>script: is the basic entry point for reading a Python file (module)
   * ModuleAst>>load:as: builds an AST for a Module
       * ModuleAst>>buildStatementsFromAST reads the AST and calls #suite
           * ModuleAst>>suite constructs statements

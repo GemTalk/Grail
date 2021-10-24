@@ -15,7 +15,7 @@ iferr 4 abort
 iferr 5 logout
 iferr 6 exit
 errorCount
-output push ../GSP.out only
+output push ../install.out only
 fileformat utf8
 set user SystemUser pass swordfish
 login
@@ -33,8 +33,8 @@ names := userProfile symbolList names.
 (names includes: aSymbol) ifTrue: [
 	userProfile symbolList removeAtIndex: (names indexOf: aSymbol).
 ].
-symbolDictionary := SymbolDictionary new 
-    name: aSymbol; 
+symbolDictionary := SymbolDictionary new
+    name: aSymbol;
     at: #'None'             put: nil;
     at: #'NotImplemented'   put: nil;
     at: #'Ellipsis'         put: nil;
@@ -45,7 +45,7 @@ userProfile insertDictionary: symbolDictionary at: 1.
 %
 input Python.gs
 run
-Python 
+Python
     at: #'None'             put: NoneType singleton;
     at: #'NotImplemented'   put: NotImplementedType singleton;
     at: #'Ellipsis'         put: ellipsis singleton;
