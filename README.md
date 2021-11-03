@@ -14,11 +14,15 @@ Checkout this Git project to `$HOME/code/Python/Grail` (or to some other place a
 
 When you have a database running, from the Databases tab select the Login subtab and click the `Terminal` button. In the new Terminal navigate to this directory (e.g., `cd ~/code/Python/Grail`).
 
-Copy the provided `topazini` to `.topazini` and edit `gs64stone` to show the name of your database (e.g., `gs64stone1`). Then from a commmand prompt run `./gsp.sh`. If this finishes without errors then you may proceed to the next step.
+Copy the provided `topazini` to `.topazini` and edit `gs64stone` to show the name of your database (e.g., `gs64stone1`). Then from a commmand prompt run `./install.sh`. If this finishes without errors then you may proceed to the next step.
 
 ### Python 3
 
-Install [Python 3.9.7](https://www.python.org/downloads/release/python-391/). When you enter `python3 --version` it should show you 3.9.7.
+Install the following:
+
+  * [Python 3.10](https://www.python.org/downloads/release/python-3100/). When you enter `python3 --version` it should show you 3.10 or later. 
+  * [pip](https://docs.python.org/3/installing/index.html) is used to install Python packages. When you enter `pip --version` it should show you 21.2.4 or later.
+  * [pprintast](https://pypi.org/project/pprintast/) is used to parse Python source files. When you enter `pprintast --version` it should show you 1.2.1 or later.
 
 ## Sample Code
 
