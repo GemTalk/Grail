@@ -22,25 +22,6 @@ keywords
 set compile_env: 0
 category: 'other'
 method: CallAst
-evaluate: aScope
-	"https://docs.python.org/3/reference/expressions.html#calls"
-
-	^
-	[ [ [
-	function
-		callWithArguments: (arguments collect: [:each | each evaluate: aScope]) 
-		keywords: keywords
-		scope: aScope
-	] on: AlmostOutOfStack do: [ :ex |
-	        ex resignalAs: RecursionError new
-	] ] on: MessageNotUnderstood do: [ :ex |
-	        TypeError signal: 'bad operand type for ', ex selector asString, '(): ', ex receiver asString "could be translated wrong"
-	] ] on: ImproperOperation do: [ :ex |
-	        ValueError signal: 'TODO' "need to specify message"
-	]
-%
-category: 'other'
-method: CallAst
 initialize
 	"Call(expr func, expr* args, keyword* keywords)"
 
@@ -60,18 +41,3 @@ initialize
 	self readPosition.
 %
 set compile_env: 0
-category: 'Updating'
-method: CallAst
-arguments: newValue
-	arguments := newValue
-%
-category: 'Updating'
-method: CallAst
-function: newValue
-	function := newValue
-%
-category: 'Updating'
-method: CallAst
-keywords: newValue
-	keywords := newValue
-%

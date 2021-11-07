@@ -13,12 +13,6 @@ isAbstract
 set compile_env: 0
 category: 'other'
 method: BoolOpAst
-evaluate: aScope
-
-	self subclassResponsibility.
-%
-category: 'other'
-method: BoolOpAst
 initialize
 	"BoolOp(boolop op, expr* values)
 				boolop = And | Or"

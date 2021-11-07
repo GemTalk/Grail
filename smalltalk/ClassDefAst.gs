@@ -71,17 +71,6 @@ classAst
 %
 category: 'other'
 method: ClassDefAst
-evaluate: aScope
-
-	| innerScope newClass |
-	innerScope := aScope innerForNode: self.
-	newClass := class newForNode: self scope: innerScope.
-	aScope  set: name  to: newClass.
-	body evaluate: innerScope.
-
-%
-category: 'other'
-method: ClassDefAst
 get: aSymbol
 
 	self halt.

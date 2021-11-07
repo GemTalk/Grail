@@ -13,12 +13,6 @@ isAbstract
 set compile_env: 0
 category: 'other'
 method: UnaryOpAst
-evaluate: aScope
-
-	self subclassResponsibility.
-%
-category: 'other'
-method: UnaryOpAst
 initialize
 	"UnaryOp(unaryop op, expr operand)"
 	"unaryop = Invert | Not | UAdd | USub"

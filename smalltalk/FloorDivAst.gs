@@ -4,9 +4,3 @@ removeAllClassMethods FloorDivAst
 ! ------------------- Class methods for FloorDivAst
 ! ------------------- Instance methods for FloorDivAst
 set compile_env: 0
-category: 'other'
-method: FloorDivAst
-pyFunctionFor: lhs
-
-	^ lhs __floordiv__
-%

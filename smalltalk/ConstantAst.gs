@@ -15,12 +15,6 @@ parent: aNode
 set compile_env: 0
 category: 'other'
 method: ConstantAst
-evaluate: aScope
-
-	^ value
-%
-category: 'other'
-method: ConstantAst
 finalize
 
 	| stream |

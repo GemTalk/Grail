@@ -6,12 +6,6 @@ removeAllClassMethods BreakAst
 set compile_env: 0
 category: 'other'
 method: BreakAst
-evaluate: aScope
-
-	BreakNotification signal.
-%
-category: 'other'
-method: BreakAst
 initialize
 
 self readPositionOnly

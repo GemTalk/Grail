@@ -12,12 +12,6 @@ declareVariable
 %
 category: 'other'
 method: TupleAst
-evaluate: aScope
-
-	^tuple withAll: (elts collect: [:each | each evaluate: aScope]) immediateInvariant
-%
-category: 'other'
-method: TupleAst
 initialize
 	"tuple(expr* elts, expr_context ctx)"
 

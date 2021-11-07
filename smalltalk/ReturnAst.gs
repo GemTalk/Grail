@@ -6,16 +6,6 @@ removeAllClassMethods ReturnAst
 set compile_env: 0
 category: 'other'
 method: ReturnAst
-evaluate: aScope
-	"Unlike Smalltalk, Python returns None by default, not the result of the last expression.
-	To return something explictly, use the `return` command and give a value."
-
-	| result |
-	result := value evaluate: aScope.
-	ReturnNotification signal: result
-%
-category: 'other'
-method: ReturnAst
 initialize
 	"Return(expr? value)"
 	

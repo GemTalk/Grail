@@ -6,24 +6,6 @@ removeAllClassMethods WhileAst
 set compile_env: 0
 category: 'other'
 method: WhileAst
-evaluate: aScope
-	[
-		[
-			test evaluate: aScope.
-		] whileTrue: [
-			[
-				body evaluate: aScope.
-			] on: ContinueNotification do: [:ex |
-				ex return.
-			].
-		].
-	] on: BreakNotification do: [:ex | 
-		ex return.
-	].
-	orelse evaluate: aScope.
-%
-category: 'other'
-method: WhileAst
 initialize
 	"While(expr test, stmt* body, stmt* orelse)"
 

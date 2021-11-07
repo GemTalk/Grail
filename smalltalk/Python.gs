@@ -25,7 +25,7 @@ AbstractException subclass: 'BaseException'
 %
 expectvalue /Class
 doit
-BaseException comment: 
+BaseException comment:
 'https://docs.python.org/3/library/exceptions.html#exception-hierarchy
 
 BaseException
@@ -333,8 +333,8 @@ LookupError subclass: 'KeyError'
 %
 expectvalue /Class
 doit
-KeyError comment: 
-'No class-specific documentation for KeyError, hierarchy is: 
+KeyError comment:
+'No class-specific documentation for KeyError, hierarchy is:
 Object
   AbstractException( gsResumable gsTrappable gsNumber currGsHandler gsStack gsReason gsDetails tag messageText gsArgs)
     BaseException
@@ -990,8 +990,8 @@ Warning subclass: 'DeprecationWarning'
 %
 expectvalue /Class
 doit
-DeprecationWarning comment: 
-'No class-specific documentation for DeprecationWarning, hierarchy is: 
+DeprecationWarning comment:
+'No class-specific documentation for DeprecationWarning, hierarchy is:
 Object
   AbstractException( gsResumable gsTrappable gsNumber currGsHandler gsStack gsReason gsDetails tag messageText gsArgs)
     BaseException
@@ -1256,8 +1256,8 @@ Notification subclass: 'ReturnNotification'
 %
 expectvalue /Class
 doit
-ReturnNotification comment: 
-'No class-specific documentation for ReturnNotification, hierarchy is: 
+ReturnNotification comment:
+'No class-specific documentation for ReturnNotification, hierarchy is:
 Object
   AbstractException( gsResumable gsTrappable gsNumber currGsHandler gsStack gsReason gsDetails tag messageText gsArgs)
     Exception
@@ -1284,7 +1284,7 @@ Object subclass: 'AbstractNode'
 %
 expectvalue /Class
 doit
-AbstractNode comment: 
+AbstractNode comment:
 'No class-specific documentation for AbstractNode, hierarchy is:
 Object
   AbstractNode
@@ -1310,8 +1310,8 @@ AbstractNode subclass: 'AbstractLocationNode'
 %
 expectvalue /Class
 doit
-AbstractLocationNode comment: 
-'No class-specific documentation for PyAstNodeWithLocation, hierarchy is: 
+AbstractLocationNode comment:
+'No class-specific documentation for PyAstNodeWithLocation, hierarchy is:
 Object
   AbstractNode( parent line column)
     PyAstNodeWithLocation
@@ -1336,8 +1336,8 @@ AbstractLocationNode subclass: 'ArgAst'
 %
 expectvalue /Class
 doit
-ArgAst comment: 
-'No class-specific documentation for ArgAst, hierarchy is: 
+ArgAst comment:
+'No class-specific documentation for ArgAst, hierarchy is:
 Object
   AbstractNode( parent line column)
     ArgAst( arg annotation)
@@ -1362,8 +1362,8 @@ AbstractLocationNode subclass: 'ExceptHandlerAst'
 %
 expectvalue /Class
 doit
-ExceptHandlerAst comment: 
-'No class-specific documentation for ExceptHandlerAst, hierarchy is: 
+ExceptHandlerAst comment:
+'No class-specific documentation for ExceptHandlerAst, hierarchy is:
 Object
   AbstractNode( parent)
     ExcepthandlerAst
@@ -1389,7 +1389,7 @@ AbstractLocationNode subclass: 'ExpressionAst'
 %
 expectvalue /Class
 doit
-ExpressionAst comment: 
+ExpressionAst comment:
 'No class-specific documentation for ExpressionAst, hierarchy is:
 Object
   AbstractNode( line column)
@@ -1415,8 +1415,8 @@ ExpressionAst subclass: 'AttributeAst'
 %
 expectvalue /Class
 doit
-AttributeAst comment: 
-'No class-specific documentation for PyAttribute, hierarchy is: 
+AttributeAst comment:
+'No class-specific documentation for PyAttribute, hierarchy is:
 Object
   AbstractNode( parent line column)
     ExpressionAst
@@ -1442,8 +1442,8 @@ ExpressionAst subclass: 'AwaitAst'
 %
 expectvalue /Class
 doit
-AwaitAst comment: 
-'No class-specific documentation for PyAwait, hierarchy is: 
+AwaitAst comment:
+'No class-specific documentation for PyAwait, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -1470,8 +1470,8 @@ ExpressionAst subclass: 'BinOpAst'
 %
 expectvalue /Class
 doit
-BinOpAst comment: 
-'No class-specific documentation for PyBinOp, hierarchy is: 
+BinOpAst comment:
+'No class-specific documentation for PyBinOp, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -1498,8 +1498,8 @@ ExpressionAst subclass: 'BoolOpAst'
 %
 expectvalue /Class
 doit
-BoolOpAst comment: 
-'No class-specific documentation for BoolOpAst, hierarchy is: 
+BoolOpAst comment:
+'No class-specific documentation for BoolOpAst, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -1526,8 +1526,8 @@ BoolOpAst subclass: 'AndAst'
 %
 expectvalue /Class
 doit
-AndAst comment: 
-'No class-specific documentation for PyAnd, hierarchy is: 
+AndAst comment:
+'No class-specific documentation for PyAnd, hierarchy is:
 Object
   AbstractNode( parent)
     PyBoolop
@@ -1553,8 +1553,8 @@ BoolOpAst subclass: 'OrAst'
 %
 expectvalue /Class
 doit
-OrAst comment: 
-'No class-specific documentation for PyOr, hierarchy is: 
+OrAst comment:
+'No class-specific documentation for PyOr, hierarchy is:
 Object
   AbstractNode( parent)
     PyBoolop
@@ -1580,8 +1580,8 @@ ExpressionAst subclass: 'CallAst'
 %
 expectvalue /Class
 doit
-CallAst comment: 
-'No class-specific documentation for CallAst, hierarchy is: 
+CallAst comment:
+'No class-specific documentation for CallAst, hierarchy is:
 Object
   AbstractNode( parent line column)
     ExpressionAst
@@ -1607,8 +1607,8 @@ ExpressionAst subclass: 'CompareAst'
 %
 expectvalue /Class
 doit
-CompareAst comment: 
-'No class-specific documentation for PyCompare, hierarchy is: 
+CompareAst comment:
+'No class-specific documentation for PyCompare, hierarchy is:
 Object
   AbstractNode( parent line column)
     ExpressionAst
@@ -1634,11 +1634,11 @@ ExpressionAst subclass: 'ConstantAst'
 %
 expectvalue /Class
 doit
-ConstantAst comment: 
+ConstantAst comment:
 'Constant(constant value, string? kind)
 
-A constant value. The value attribute of the Constant literal contains the Python object it represents. 
-The values represented can be simple types such as a number, string or None, but also immutable 
+A constant value. The value attribute of the Constant literal contains the Python object it represents.
+The values represented can be simple types such as a number, string or None, but also immutable
 container types (tuples and frozensets) if all of their elements are constant."'
 %
 expectvalue /Class
@@ -1660,8 +1660,8 @@ ExpressionAst subclass: 'DictAst'
 %
 expectvalue /Class
 doit
-DictAst comment: 
-'No class-specific documentation for PyDict, hierarchy is: 
+DictAst comment:
+'No class-specific documentation for PyDict, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -1688,8 +1688,8 @@ ExpressionAst subclass: 'DictCompAst'
 %
 expectvalue /Class
 doit
-DictCompAst comment: 
-'No class-specific documentation for PyDictComp, hierarchy is: 
+DictCompAst comment:
+'No class-specific documentation for PyDictComp, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -1716,8 +1716,8 @@ ExpressionAst subclass: 'FormattedValueAst'
 %
 expectvalue /Class
 doit
-FormattedValueAst comment: 
-'No class-specific documentation for PyFormattedValue, hierarchy is: 
+FormattedValueAst comment:
+'No class-specific documentation for PyFormattedValue, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -1744,8 +1744,8 @@ ExpressionAst subclass: 'GeneratorExpAst'
 %
 expectvalue /Class
 doit
-GeneratorExpAst comment: 
-'No class-specific documentation for PyGeneratorExp, hierarchy is: 
+GeneratorExpAst comment:
+'No class-specific documentation for PyGeneratorExp, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -1772,8 +1772,8 @@ ExpressionAst subclass: 'IfExpAst'
 %
 expectvalue /Class
 doit
-IfExpAst comment: 
-'No class-specific documentation for PyIfExp, hierarchy is: 
+IfExpAst comment:
+'No class-specific documentation for PyIfExp, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -1800,8 +1800,8 @@ ExpressionAst subclass: 'JoinedStrAst'
 %
 expectvalue /Class
 doit
-JoinedStrAst comment: 
-'No class-specific documentation for PyJoinedStr, hierarchy is: 
+JoinedStrAst comment:
+'No class-specific documentation for PyJoinedStr, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -1828,8 +1828,8 @@ ExpressionAst subclass: 'LambdaAst'
 %
 expectvalue /Class
 doit
-LambdaAst comment: 
-'No class-specific documentation for PyLambda, hierarchy is: 
+LambdaAst comment:
+'No class-specific documentation for PyLambda, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -1856,8 +1856,8 @@ ExpressionAst subclass: 'ListAst'
 %
 expectvalue /Class
 doit
-ListAst comment: 
-'No class-specific documentation for PyList, hierarchy is: 
+ListAst comment:
+'No class-specific documentation for PyList, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -1884,8 +1884,8 @@ ExpressionAst subclass: 'ListCompAst'
 %
 expectvalue /Class
 doit
-ListCompAst comment: 
-'No class-specific documentation for PyListComp, hierarchy is: 
+ListCompAst comment:
+'No class-specific documentation for PyListComp, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -1912,7 +1912,7 @@ ExpressionAst subclass: 'NameAst'
 %
 expectvalue /Class
 doit
-NameAst comment: 
+NameAst comment:
 'Names refer to objects. Names are introduced by name binding operations.
 
 The following constructs bind names: formal parameters to functions, import statements, class and function definitions (these bind the class or function name in the defining block), and targets that are identifiers if occurring in an assignment, for loop header, or after as in a with statement or except clause. The import statement of the form from ... import * binds all names defined in the imported module, except those beginning with an underscore. This form may only be used at the module level.
@@ -1949,8 +1949,8 @@ NameAst subclass: 'KeywordsAst'
 %
 expectvalue /Class
 doit
-KeywordsAst comment: 
-'No class-specific documentation for KeywordsAst, hierarchy is: 
+KeywordsAst comment:
+'No class-specific documentation for KeywordsAst, hierarchy is:
 Object
   AbstractNode( parent)
     AbstractLocationNode( line column)
@@ -1995,8 +1995,8 @@ ExpressionAst subclass: 'SetAst'
 %
 expectvalue /Class
 doit
-SetAst comment: 
-'No class-specific documentation for PySet, hierarchy is: 
+SetAst comment:
+'No class-specific documentation for PySet, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -2023,8 +2023,8 @@ ExpressionAst subclass: 'SetCompAst'
 %
 expectvalue /Class
 doit
-SetCompAst comment: 
-'No class-specific documentation for PySetComp, hierarchy is: 
+SetCompAst comment:
+'No class-specific documentation for PySetComp, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -2051,8 +2051,8 @@ ExpressionAst subclass: 'StarredAst'
 %
 expectvalue /Class
 doit
-StarredAst comment: 
-'No class-specific documentation for PyStarred, hierarchy is: 
+StarredAst comment:
+'No class-specific documentation for PyStarred, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -2079,7 +2079,7 @@ ExpressionAst subclass: 'SubscriptAst'
 %
 expectvalue /Class
 doit
-SubscriptAst comment: 
+SubscriptAst comment:
 'Subscript(expr value, slice slice, expr_context ctx)'
 %
 expectvalue /Class
@@ -2101,8 +2101,8 @@ ExpressionAst subclass: 'TupleAst'
 %
 expectvalue /Class
 doit
-TupleAst comment: 
-'No class-specific documentation for PyTuple, hierarchy is: 
+TupleAst comment:
+'No class-specific documentation for PyTuple, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -2129,8 +2129,8 @@ ExpressionAst subclass: 'UnaryOpAst'
 %
 expectvalue /Class
 doit
-UnaryOpAst comment: 
-'No class-specific documentation for UnaryOpAst, hierarchy is: 
+UnaryOpAst comment:
+'No class-specific documentation for UnaryOpAst, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -2157,8 +2157,8 @@ UnaryOpAst subclass: 'InvertAst'
 %
 expectvalue /Class
 doit
-InvertAst comment: 
-'No class-specific documentation for PyInvert, hierarchy is: 
+InvertAst comment:
+'No class-specific documentation for PyInvert, hierarchy is:
 Object
   AbstractNode( parent)
     PyUnaryop
@@ -2184,8 +2184,8 @@ UnaryOpAst subclass: 'NotAst'
 %
 expectvalue /Class
 doit
-NotAst comment: 
-'No class-specific documentation for PyNot, hierarchy is: 
+NotAst comment:
+'No class-specific documentation for PyNot, hierarchy is:
 Object
   AbstractNode( parent)
     PyUnaryop
@@ -2211,8 +2211,8 @@ UnaryOpAst subclass: 'UAddAst'
 %
 expectvalue /Class
 doit
-UAddAst comment: 
-'No class-specific documentation for PyUAdd, hierarchy is: 
+UAddAst comment:
+'No class-specific documentation for PyUAdd, hierarchy is:
 Object
   AbstractNode( parent)
     PyUnaryop
@@ -2238,8 +2238,8 @@ UnaryOpAst subclass: 'USubAst'
 %
 expectvalue /Class
 doit
-USubAst comment: 
-'No class-specific documentation for PyUSub, hierarchy is: 
+USubAst comment:
+'No class-specific documentation for PyUSub, hierarchy is:
 Object
   AbstractNode( parent)
     PyUnaryop
@@ -2265,8 +2265,8 @@ ExpressionAst subclass: 'YieldAst'
 %
 expectvalue /Class
 doit
-YieldAst comment: 
-'No class-specific documentation for PyYield, hierarchy is: 
+YieldAst comment:
+'No class-specific documentation for PyYield, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -2293,8 +2293,8 @@ ExpressionAst subclass: 'YieldFromAst'
 %
 expectvalue /Class
 doit
-YieldFromAst comment: 
-'No class-specific documentation for PyYieldFrom, hierarchy is: 
+YieldFromAst comment:
+'No class-specific documentation for PyYieldFrom, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -2321,8 +2321,8 @@ AbstractLocationNode subclass: 'KeywordAst'
 %
 expectvalue /Class
 doit
-KeywordAst comment: 
-'No class-specific documentation for KeywordAst, hierarchy is: 
+KeywordAst comment:
+'No class-specific documentation for KeywordAst, hierarchy is:
 Object
   AbstractNode( parent)
     KeywordAst( arg value)
@@ -2347,8 +2347,8 @@ AbstractLocationNode subclass: 'SliceAbstractAst'
 %
 expectvalue /Class
 doit
-SliceAbstractAst comment: 
-'No class-specific documentation for SliceAbstractAst, hierarchy is: 
+SliceAbstractAst comment:
+'No class-specific documentation for SliceAbstractAst, hierarchy is:
 Object
   AbstractNode( parent)
     SliceAbstractAst
@@ -2373,8 +2373,8 @@ SliceAbstractAst subclass: 'ExtSliceAst'
 %
 expectvalue /Class
 doit
-ExtSliceAst comment: 
-'No class-specific documentation for PyExtSlice, hierarchy is: 
+ExtSliceAst comment:
+'No class-specific documentation for PyExtSlice, hierarchy is:
 Object
   AbstractNode( parent)
     SliceAbstractAst
@@ -2400,8 +2400,8 @@ SliceAbstractAst subclass: 'IndexAst'
 %
 expectvalue /Class
 doit
-IndexAst comment: 
-'No class-specific documentation for PyIndex, hierarchy is: 
+IndexAst comment:
+'No class-specific documentation for PyIndex, hierarchy is:
 Object
   AbstractNode( parent)
     SliceAbstractAst
@@ -2427,8 +2427,8 @@ SliceAbstractAst subclass: 'SliceAst'
 %
 expectvalue /Class
 doit
-SliceAst comment: 
-'No class-specific documentation for PySlice, hierarchy is: 
+SliceAst comment:
+'No class-specific documentation for PySlice, hierarchy is:
 Object
   AbstractNode( parent)
     SliceAbstractAst
@@ -2454,7 +2454,7 @@ AbstractLocationNode subclass: 'StatementAst'
 %
 expectvalue /Class
 doit
-StatementAst comment: 
+StatementAst comment:
 'No class-specific documentation for StatementAst, hierarchy is:
 Object
   AbstractNode( line column)
@@ -2481,8 +2481,8 @@ StatementAst subclass: 'AnnAssignAst'
 %
 expectvalue /Class
 doit
-AnnAssignAst comment: 
-'No class-specific documentation for PyAnnAssign, hierarchy is: 
+AnnAssignAst comment:
+'No class-specific documentation for PyAnnAssign, hierarchy is:
 Object
   AbstractNode( parent line column)
     StatementAst
@@ -2508,8 +2508,8 @@ StatementAst subclass: 'AssertAst'
 %
 expectvalue /Class
 doit
-AssertAst comment: 
-'No class-specific documentation for PyAssert, hierarchy is: 
+AssertAst comment:
+'No class-specific documentation for PyAssert, hierarchy is:
 Object
   AbstractNode( parent line column)
     StatementAst
@@ -2535,7 +2535,7 @@ StatementAst subclass: 'AssignAst'
 %
 expectvalue /Class
 doit
-AssignAst comment: 
+AssignAst comment:
 'Assign(expr* targets, expr value, string? type_comment)'
 %
 expectvalue /Class
@@ -2558,7 +2558,7 @@ StatementAst subclass: 'AsyncForAst'
 %
 expectvalue /Class
 doit
-AsyncForAst comment: 
+AsyncForAst comment:
 'AsyncFor(expr target, expr iter, stmt* body, stmt* orelse, string? type_comment)'
 %
 expectvalue /Class
@@ -2581,7 +2581,7 @@ StatementAst subclass: 'AsyncFunctionDefAst'
 %
 expectvalue /Class
 doit
-AsyncFunctionDefAst comment: 
+AsyncFunctionDefAst comment:
 'AsyncFunctionDef(identifier name, arguments args,
                              stmt* body, expr* decorator_list, expr? returns,
                              string? type_comment)'
@@ -2605,8 +2605,8 @@ StatementAst subclass: 'AsyncWithAst'
 %
 expectvalue /Class
 doit
-AsyncWithAst comment: 
-'No class-specific documentation for AsyncWithAst, hierarchy is: 
+AsyncWithAst comment:
+'No class-specific documentation for AsyncWithAst, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -2633,8 +2633,8 @@ StatementAst subclass: 'AugAssignAst'
 %
 expectvalue /Class
 doit
-AugAssignAst comment: 
-'No class-specific documentation for PyAugAssign, hierarchy is: 
+AugAssignAst comment:
+'No class-specific documentation for PyAugAssign, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -2661,8 +2661,8 @@ StatementAst subclass: 'BreakAst'
 %
 expectvalue /Class
 doit
-BreakAst comment: 
-'No class-specific documentation for PyBreak, hierarchy is: 
+BreakAst comment:
+'No class-specific documentation for PyBreak, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -2690,8 +2690,8 @@ StatementAst subclass: 'ClassDefAst'
 %
 expectvalue /Class
 doit
-ClassDefAst comment: 
-'No class-specific documentation for ClassDefAst, hierarchy is: 
+ClassDefAst comment:
+'No class-specific documentation for ClassDefAst, hierarchy is:
 Object
   AbstractNode( parent line column)
     StatementAst
@@ -2717,8 +2717,8 @@ StatementAst subclass: 'ContinueAst'
 %
 expectvalue /Class
 doit
-ContinueAst comment: 
-'No class-specific documentation for PyContinue, hierarchy is: 
+ContinueAst comment:
+'No class-specific documentation for PyContinue, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -2745,8 +2745,8 @@ StatementAst subclass: 'DeleteAst'
 %
 expectvalue /Class
 doit
-DeleteAst comment: 
-'No class-specific documentation for PyDelete, hierarchy is: 
+DeleteAst comment:
+'No class-specific documentation for PyDelete, hierarchy is:
 Object
   AbstractNode( parent line column)
     ExpressionContextAst
@@ -2772,8 +2772,8 @@ StatementAst subclass: 'ExprAst'
 %
 expectvalue /Class
 doit
-ExprAst comment: 
-'No class-specific documentation for ExprAst, hierarchy is: 
+ExprAst comment:
+'No class-specific documentation for ExprAst, hierarchy is:
 Object
   AbstractNode( parent line column)
     StatementAst
@@ -2800,7 +2800,7 @@ StatementAst subclass: 'ForAst'
 %
 expectvalue /Class
 doit
-ForAst comment: 
+ForAst comment:
 'For(expr target, expr iter, stmt* body, stmt* orelse) 									// 3.7
 For(expr target, expr iter, stmt* body, stmt* orelse, string? type_comment)	// 3.8'
 %
@@ -2824,7 +2824,7 @@ StatementAst subclass: 'FunctionDefAst'
 %
 expectvalue /Class
 doit
-FunctionDefAst comment: 
+FunctionDefAst comment:
 'FunctionDef(identifier name, arguments args,
                        stmt* body, expr* decorator_list, expr? returns,
                        string? type_comment)'
@@ -2848,8 +2848,8 @@ FunctionDefAst subclass: 'ClassFunctionDefAst'
 %
 expectvalue /Class
 doit
-ClassFunctionDefAst comment: 
-'No class-specific documentation for ClassFunctionDefAst, hierarchy is: 
+ClassFunctionDefAst comment:
+'No class-specific documentation for ClassFunctionDefAst, hierarchy is:
 Object
   AbstractNode( parent)
     AbstractLocationNode( line column)
@@ -2877,8 +2877,8 @@ FunctionDefAst subclass: 'InstanceFunctionDefAst'
 %
 expectvalue /Class
 doit
-InstanceFunctionDefAst comment: 
-'No class-specific documentation for InstanceFunctionDefAst, hierarchy is: 
+InstanceFunctionDefAst comment:
+'No class-specific documentation for InstanceFunctionDefAst, hierarchy is:
 Object
   AbstractNode( parent)
     AbstractLocationNode( line column)
@@ -2923,8 +2923,8 @@ StatementAst subclass: 'GlobalAst'
 %
 expectvalue /Class
 doit
-GlobalAst comment: 
-'No class-specific documentation for PyGlobal, hierarchy is: 
+GlobalAst comment:
+'No class-specific documentation for PyGlobal, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -2951,7 +2951,7 @@ StatementAst subclass: 'IfAst'
 %
 expectvalue /Class
 doit
-IfAst comment: 
+IfAst comment:
 'No class-specific documentation for IfAst, hierarchy is:
 Object
   AbstractNode( line column)
@@ -2977,7 +2977,7 @@ StatementAst subclass: 'ImportAst'
 %
 expectvalue /Class
 doit
-ImportAst comment: 
+ImportAst comment:
 'No class-specific documentation for PyImport, hierarchy is:
 Object
   AbstractNode
@@ -3003,8 +3003,8 @@ StatementAst subclass: 'ImportFromAst'
 %
 expectvalue /Class
 doit
-ImportFromAst comment: 
-'No class-specific documentation for PyImportFrom, hierarchy is: 
+ImportFromAst comment:
+'No class-specific documentation for PyImportFrom, hierarchy is:
 Object
   AbstractNode( parent line column)
     StatementAst
@@ -3030,8 +3030,8 @@ StatementAst subclass: 'NonlocalAst'
 %
 expectvalue /Class
 doit
-NonlocalAst comment: 
-'No class-specific documentation for PyNonlocal, hierarchy is: 
+NonlocalAst comment:
+'No class-specific documentation for PyNonlocal, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -3058,8 +3058,8 @@ StatementAst subclass: 'PassAst'
 %
 expectvalue /Class
 doit
-PassAst comment: 
-'No class-specific documentation for PassAst, hierarchy is: 
+PassAst comment:
+'No class-specific documentation for PassAst, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -3086,8 +3086,8 @@ StatementAst subclass: 'RaiseAst'
 %
 expectvalue /Class
 doit
-RaiseAst comment: 
-'No class-specific documentation for PyRaise, hierarchy is: 
+RaiseAst comment:
+'No class-specific documentation for PyRaise, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -3114,8 +3114,8 @@ StatementAst subclass: 'ReturnAst'
 %
 expectvalue /Class
 doit
-ReturnAst comment: 
-'No class-specific documentation for ReturnAst, hierarchy is: 
+ReturnAst comment:
+'No class-specific documentation for ReturnAst, hierarchy is:
 Object
   AbstractNode( parent line column)
     StatementAst
@@ -3142,8 +3142,8 @@ StatementAst subclass: 'TryAst'
 %
 expectvalue /Class
 doit
-TryAst comment: 
-'No class-specific documentation for PyTry, hierarchy is: 
+TryAst comment:
+'No class-specific documentation for PyTry, hierarchy is:
 Object
   AbstractNode( parent)
     PyAstNodeWithLocation( line column)
@@ -3170,8 +3170,8 @@ StatementAst subclass: 'WhileAst'
 %
 expectvalue /Class
 doit
-WhileAst comment: 
-'No class-specific documentation for PyWhile, hierarchy is: 
+WhileAst comment:
+'No class-specific documentation for PyWhile, hierarchy is:
 Object
   AbstractNode( parent line column)
     StatementAst
@@ -3197,7 +3197,7 @@ StatementAst subclass: 'WithAst'
 %
 expectvalue /Class
 doit
-WithAst comment: 
+WithAst comment:
 'AsyncWith(withitem* items, stmt* body, string? type_comment)'
 %
 expectvalue /Class
@@ -3219,7 +3219,7 @@ AbstractNode subclass: 'AliasAst'
 %
 expectvalue /Class
 doit
-AliasAst comment: 
+AliasAst comment:
 'No class-specific documentation for AliasAst, hierarchy is:
 Object
   AbstractNode
@@ -3246,7 +3246,7 @@ AbstractNode subclass: 'ArgumentsAst'
 %
 expectvalue /Class
 doit
-ArgumentsAst comment: 
+ArgumentsAst comment:
 'arguments = (arg* posonlyargs, arg* args, arg? vararg, arg* kwonlyargs,
                  expr* kw_defaults, arg? kwarg, expr* defaults)'
 %
@@ -3269,8 +3269,8 @@ AbstractNode subclass: 'CmpOpAst'
 %
 expectvalue /Class
 doit
-CmpOpAst comment: 
-'No class-specific documentation for CmpOpAst, hierarchy is: 
+CmpOpAst comment:
+'No class-specific documentation for CmpOpAst, hierarchy is:
 Object
   AbstractNode( parent)
     CmpOpAst
@@ -3295,8 +3295,8 @@ CmpOpAst subclass: 'EqAst'
 %
 expectvalue /Class
 doit
-EqAst comment: 
-'No class-specific documentation for PyEq, hierarchy is: 
+EqAst comment:
+'No class-specific documentation for PyEq, hierarchy is:
 Object
   AbstractNode( parent)
     CmpOpAst
@@ -3322,8 +3322,8 @@ CmpOpAst subclass: 'GtAst'
 %
 expectvalue /Class
 doit
-GtAst comment: 
-'No class-specific documentation for PyGt, hierarchy is: 
+GtAst comment:
+'No class-specific documentation for PyGt, hierarchy is:
 Object
   AbstractNode( parent)
     CmpOpAst
@@ -3349,8 +3349,8 @@ CmpOpAst subclass: 'GtEAst'
 %
 expectvalue /Class
 doit
-GtEAst comment: 
-'No class-specific documentation for PyGtE, hierarchy is: 
+GtEAst comment:
+'No class-specific documentation for PyGtE, hierarchy is:
 Object
   AbstractNode( parent)
     CmpOpAst
@@ -3376,8 +3376,8 @@ CmpOpAst subclass: 'InAst'
 %
 expectvalue /Class
 doit
-InAst comment: 
-'No class-specific documentation for PyIn, hierarchy is: 
+InAst comment:
+'No class-specific documentation for PyIn, hierarchy is:
 Object
   AbstractNode( parent)
     CmpOpAst
@@ -3403,8 +3403,8 @@ CmpOpAst subclass: 'IsAst'
 %
 expectvalue /Class
 doit
-IsAst comment: 
-'No class-specific documentation for PyIs, hierarchy is: 
+IsAst comment:
+'No class-specific documentation for PyIs, hierarchy is:
 Object
   AbstractNode( parent)
     CmpOpAst
@@ -3430,8 +3430,8 @@ CmpOpAst subclass: 'IsNotAst'
 %
 expectvalue /Class
 doit
-IsNotAst comment: 
-'No class-specific documentation for PyIsNot, hierarchy is: 
+IsNotAst comment:
+'No class-specific documentation for PyIsNot, hierarchy is:
 Object
   AbstractNode( parent)
     CmpOpAst
@@ -3457,8 +3457,8 @@ CmpOpAst subclass: 'LtAst'
 %
 expectvalue /Class
 doit
-LtAst comment: 
-'No class-specific documentation for PyLt, hierarchy is: 
+LtAst comment:
+'No class-specific documentation for PyLt, hierarchy is:
 Object
   AbstractNode( parent)
     CmpOpAst
@@ -3484,8 +3484,8 @@ CmpOpAst subclass: 'LtEAst'
 %
 expectvalue /Class
 doit
-LtEAst comment: 
-'No class-specific documentation for PyLtE, hierarchy is: 
+LtEAst comment:
+'No class-specific documentation for PyLtE, hierarchy is:
 Object
   AbstractNode( parent)
     CmpOpAst
@@ -3511,8 +3511,8 @@ CmpOpAst subclass: 'NotEqAst'
 %
 expectvalue /Class
 doit
-NotEqAst comment: 
-'No class-specific documentation for PyNotEq, hierarchy is: 
+NotEqAst comment:
+'No class-specific documentation for PyNotEq, hierarchy is:
 Object
   AbstractNode( parent)
     CmpOpAst
@@ -3538,8 +3538,8 @@ CmpOpAst subclass: 'NotInAst'
 %
 expectvalue /Class
 doit
-NotInAst comment: 
-'No class-specific documentation for PyNotIn, hierarchy is: 
+NotInAst comment:
+'No class-specific documentation for PyNotIn, hierarchy is:
 Object
   AbstractNode( parent)
     CmpOpAst
@@ -3566,8 +3566,8 @@ AbstractNode subclass: 'ComprehensionAst'
 %
 expectvalue /Class
 doit
-ComprehensionAst comment: 
-'No class-specific documentation for ComprehensionAst, hierarchy is: 
+ComprehensionAst comment:
+'No class-specific documentation for ComprehensionAst, hierarchy is:
 Object
   AbstractNode( parent)
     ComprehensionAst( target iter ifs is_async)
@@ -3592,7 +3592,7 @@ AbstractNode subclass: 'ExpressionContextAst'
 %
 expectvalue /Class
 doit
-ExpressionContextAst comment: 
+ExpressionContextAst comment:
 'No class-specific documentation for ExpressionContextAst, hierarchy is:
 Object
   AbstractNode( line column)
@@ -3618,8 +3618,8 @@ ExpressionContextAst subclass: 'AugLoadAst'
 %
 expectvalue /Class
 doit
-AugLoadAst comment: 
-'No class-specific documentation for PyAugLoad, hierarchy is: 
+AugLoadAst comment:
+'No class-specific documentation for PyAugLoad, hierarchy is:
 Object
   AbstractNode( parent)
     ExpressionContextAst
@@ -3645,8 +3645,8 @@ ExpressionContextAst subclass: 'AugStoreAst'
 %
 expectvalue /Class
 doit
-AugStoreAst comment: 
-'No class-specific documentation for PyAugStore, hierarchy is: 
+AugStoreAst comment:
+'No class-specific documentation for PyAugStore, hierarchy is:
 Object
   AbstractNode( parent)
     ExpressionContextAst
@@ -3672,8 +3672,8 @@ ExpressionContextAst subclass: 'DelAst'
 %
 expectvalue /Class
 doit
-DelAst comment: 
-'No class-specific documentation for PyDel, hierarchy is: 
+DelAst comment:
+'No class-specific documentation for PyDel, hierarchy is:
 Object
   AbstractNode( parent)
     ExpressionContextAst
@@ -3699,8 +3699,8 @@ ExpressionContextAst subclass: 'LoadAst'
 %
 expectvalue /Class
 doit
-LoadAst comment: 
-'No class-specific documentation for LoadAst, hierarchy is: 
+LoadAst comment:
+'No class-specific documentation for LoadAst, hierarchy is:
 Object
   AbstractNode( parent)
     ExpressionContextAst
@@ -3726,8 +3726,8 @@ ExpressionContextAst subclass: 'ParamAst'
 %
 expectvalue /Class
 doit
-ParamAst comment: 
-'No class-specific documentation for PyParam, hierarchy is: 
+ParamAst comment:
+'No class-specific documentation for PyParam, hierarchy is:
 Object
   AbstractNode( parent)
     ExpressionContextAst
@@ -3753,8 +3753,8 @@ ExpressionContextAst subclass: 'StoreAst'
 %
 expectvalue /Class
 doit
-StoreAst comment: 
-'No class-specific documentation for StoreAst, hierarchy is: 
+StoreAst comment:
+'No class-specific documentation for StoreAst, hierarchy is:
 Object
   AbstractNode( parent)
     ExpressionContextAst
@@ -3781,7 +3781,7 @@ AbstractNode subclass: 'ModuleAst'
 %
 expectvalue /Class
 doit
-ModuleAst comment: 
+ModuleAst comment:
 'A Module is a file containing Python definitions and statements. When a file (''script'') is executed from the command line, (e.g., ''python myFile.py''), the module global variable `__name__` is set to ''__main__''. A Module can be imported into another module using the `Import` command, and the module global variable `__name__` is then the name of the file.
 
 https://docs.python.org/3/tutorial/modules.html?highlight=module'
@@ -3805,7 +3805,7 @@ ModuleAst subclass: 'Package'
 %
 expectvalue /Class
 doit
-Package comment: 
+Package comment:
 'Packages are a way of structuring Python’s module namespace by using “dotted module names”.
 See https://docs.python.org/3/tutorial/modules.html#packages for details.'
 %
@@ -3828,8 +3828,8 @@ AbstractNode subclass: 'OperatorAst'
 %
 expectvalue /Class
 doit
-OperatorAst comment: 
-'No class-specific documentation for OperatorAst, hierarchy is: 
+OperatorAst comment:
+'No class-specific documentation for OperatorAst, hierarchy is:
 Object
   AbstractNode( parent)
     OperatorAst
@@ -3854,8 +3854,8 @@ OperatorAst subclass: 'AddAst'
 %
 expectvalue /Class
 doit
-AddAst comment: 
-'No class-specific documentation for PyAdd, hierarchy is: 
+AddAst comment:
+'No class-specific documentation for PyAdd, hierarchy is:
 Object
   AbstractNode( parent)
     OperatorAst
@@ -3881,8 +3881,8 @@ OperatorAst subclass: 'BitAndAst'
 %
 expectvalue /Class
 doit
-BitAndAst comment: 
-'No class-specific documentation for PyBitAnd, hierarchy is: 
+BitAndAst comment:
+'No class-specific documentation for PyBitAnd, hierarchy is:
 Object
   AbstractNode( parent)
     OperatorAst
@@ -3908,8 +3908,8 @@ OperatorAst subclass: 'BitOrAst'
 %
 expectvalue /Class
 doit
-BitOrAst comment: 
-'No class-specific documentation for PyBitOr, hierarchy is: 
+BitOrAst comment:
+'No class-specific documentation for PyBitOr, hierarchy is:
 Object
   AbstractNode( parent)
     OperatorAst
@@ -3935,8 +3935,8 @@ OperatorAst subclass: 'BitXorAst'
 %
 expectvalue /Class
 doit
-BitXorAst comment: 
-'No class-specific documentation for PyBitXor, hierarchy is: 
+BitXorAst comment:
+'No class-specific documentation for PyBitXor, hierarchy is:
 Object
   AbstractNode( parent)
     OperatorAst
@@ -3962,8 +3962,8 @@ OperatorAst subclass: 'DivAst'
 %
 expectvalue /Class
 doit
-DivAst comment: 
-'No class-specific documentation for PyDiv, hierarchy is: 
+DivAst comment:
+'No class-specific documentation for PyDiv, hierarchy is:
 Object
   AbstractNode( parent)
     OperatorAst
@@ -3989,8 +3989,8 @@ OperatorAst subclass: 'FloorDivAst'
 %
 expectvalue /Class
 doit
-FloorDivAst comment: 
-'No class-specific documentation for PyFloorDiv, hierarchy is: 
+FloorDivAst comment:
+'No class-specific documentation for PyFloorDiv, hierarchy is:
 Object
   AbstractNode( parent)
     OperatorAst
@@ -4016,8 +4016,8 @@ OperatorAst subclass: 'LShiftAst'
 %
 expectvalue /Class
 doit
-LShiftAst comment: 
-'No class-specific documentation for PyLShift, hierarchy is: 
+LShiftAst comment:
+'No class-specific documentation for PyLShift, hierarchy is:
 Object
   AbstractNode( parent)
     OperatorAst
@@ -4043,8 +4043,8 @@ OperatorAst subclass: 'MatMultAst'
 %
 expectvalue /Class
 doit
-MatMultAst comment: 
-'No class-specific documentation for PyMatMult, hierarchy is: 
+MatMultAst comment:
+'No class-specific documentation for PyMatMult, hierarchy is:
 Object
   AbstractNode( parent)
     OperatorAst
@@ -4070,8 +4070,8 @@ OperatorAst subclass: 'ModAst'
 %
 expectvalue /Class
 doit
-ModAst comment: 
-'No class-specific documentation for PyMod, hierarchy is: 
+ModAst comment:
+'No class-specific documentation for PyMod, hierarchy is:
 Object
   AbstractNode( parent)
     OperatorAst
@@ -4097,8 +4097,8 @@ OperatorAst subclass: 'MultAst'
 %
 expectvalue /Class
 doit
-MultAst comment: 
-'No class-specific documentation for PyMult, hierarchy is: 
+MultAst comment:
+'No class-specific documentation for PyMult, hierarchy is:
 Object
   AbstractNode( parent)
     OperatorAst
@@ -4124,8 +4124,8 @@ OperatorAst subclass: 'PowAst'
 %
 expectvalue /Class
 doit
-PowAst comment: 
-'No class-specific documentation for PyPow, hierarchy is: 
+PowAst comment:
+'No class-specific documentation for PyPow, hierarchy is:
 Object
   AbstractNode( parent)
     OperatorAst
@@ -4151,8 +4151,8 @@ OperatorAst subclass: 'RShiftAst'
 %
 expectvalue /Class
 doit
-RShiftAst comment: 
-'No class-specific documentation for PyRShift, hierarchy is: 
+RShiftAst comment:
+'No class-specific documentation for PyRShift, hierarchy is:
 Object
   AbstractNode( parent)
     OperatorAst
@@ -4178,8 +4178,8 @@ OperatorAst subclass: 'SubAst'
 %
 expectvalue /Class
 doit
-SubAst comment: 
-'No class-specific documentation for PySub, hierarchy is: 
+SubAst comment:
+'No class-specific documentation for PySub, hierarchy is:
 Object
   AbstractNode( parent)
     OperatorAst
@@ -4205,8 +4205,8 @@ AbstractNode subclass: 'SuiteAst'
 %
 expectvalue /Class
 doit
-SuiteAst comment: 
-'No class-specific documentation for SuiteAst, hierarchy is: 
+SuiteAst comment:
+'No class-specific documentation for SuiteAst, hierarchy is:
 Object
   AbstractNode( parent)
     SuiteAst( body variables)
@@ -4265,8 +4265,8 @@ AbstractNode subclass: 'WithItemAst'
 %
 expectvalue /Class
 doit
-WithItemAst comment: 
-'No class-specific documentation for WithItemAst, hierarchy is: 
+WithItemAst comment:
+'No class-specific documentation for WithItemAst, hierarchy is:
 Object
   AbstractNode( parent)
     WithItemAst( context_expr optional_vars)
@@ -4308,8 +4308,8 @@ Object subclass: 'object'
 %
 expectvalue /Class
 doit
-object comment: 
-'No class-specific documentation for PythonObject, hierarchy is: 
+object comment:
+'No class-specific documentation for PythonObject, hierarchy is:
 object
   PythonObject( classAst dictionary)
 '
@@ -4333,8 +4333,8 @@ object subclass: 'AbstractContainer'
 %
 expectvalue /Class
 doit
-AbstractContainer comment: 
-'No class-specific documentation for AbstractContainer, hierarchy is: 
+AbstractContainer comment:
+'No class-specific documentation for AbstractContainer, hierarchy is:
 Object
   object
     AbstractContainer( container)
@@ -4359,7 +4359,7 @@ AbstractContainer subclass: 'bytearray'
 %
 expectvalue /Class
 doit
-bytearray comment: 
+bytearray comment:
 'https://docs.python.org/3/library/stdtypes.html#bytearray'
 %
 expectvalue /Class
@@ -4381,7 +4381,7 @@ AbstractContainer subclass: 'bytes'
 %
 expectvalue /Class
 doit
-bytes comment: 
+bytes comment:
 'https://docs.python.org/3/library/stdtypes.html#bytes-objects'
 %
 expectvalue /Class
@@ -4403,7 +4403,7 @@ AbstractContainer subclass: 'dict'
 %
 expectvalue /Class
 doit
-dict comment: 
+dict comment:
 'A dictonary''s keys must be hashable and are compared using equality (presumably this allows for efficient lookup).
 But a dictionary''s keys and values are iterated over in insertion order, so we we must also keep the insertion order!
 As a first implementation, we will just use an array of keys (odd offsets) and values (even offsets)
@@ -4436,8 +4436,8 @@ AbstractContainer subclass: 'dict_items'
 %
 expectvalue /Class
 doit
-dict_items comment: 
-'No class-specific documentation for dict_items, hierarchy is: 
+dict_items comment:
+'No class-specific documentation for dict_items, hierarchy is:
 Object
   object
     AbstractContainer( container)
@@ -4463,8 +4463,8 @@ AbstractContainer subclass: 'dict_keys'
 %
 expectvalue /Class
 doit
-dict_keys comment: 
-'No class-specific documentation for dict_keys, hierarchy is: 
+dict_keys comment:
+'No class-specific documentation for dict_keys, hierarchy is:
 Object
   object
     AbstractContainer( container)
@@ -4490,8 +4490,8 @@ AbstractContainer subclass: 'dict_values'
 %
 expectvalue /Class
 doit
-dict_values comment: 
-'No class-specific documentation for dict_values, hierarchy is: 
+dict_values comment:
+'No class-specific documentation for dict_values, hierarchy is:
 Object
   object
     AbstractContainer( container)
@@ -4517,8 +4517,8 @@ AbstractContainer subclass: 'frozenset'
 %
 expectvalue /Class
 doit
-frozenset comment: 
-'No class-specific documentation for frozenset, hierarchy is: 
+frozenset comment:
+'No class-specific documentation for frozenset, hierarchy is:
 Object
   object
     AbstractContainer( container)
@@ -4561,8 +4561,8 @@ AbstractContainer subclass: 'list'
 %
 expectvalue /Class
 doit
-list comment: 
-'No class-specific documentation for list, hierarchy is: 
+list comment:
+'No class-specific documentation for list, hierarchy is:
 Object
   Collection
     SequenceableCollection
@@ -4589,8 +4589,8 @@ AbstractContainer subclass: 'str'
 %
 expectvalue /Class
 doit
-str comment: 
-'No class-specific documentation for str, hierarchy is: 
+str comment:
+'No class-specific documentation for str, hierarchy is:
 Object
   Collection
     SequenceableCollection
@@ -4619,8 +4619,8 @@ AbstractContainer subclass: 'tuple'
 %
 expectvalue /Class
 doit
-tuple comment: 
-'No class-specific documentation for tuple, hierarchy is: 
+tuple comment:
+'No class-specific documentation for tuple, hierarchy is:
 Object
   Collection
     SequenceableCollection
@@ -4647,8 +4647,8 @@ object subclass: 'AbstractIterator'
 %
 expectvalue /Class
 doit
-AbstractIterator comment: 
-'No class-specific documentation for AbstractIterator, hierarchy is: 
+AbstractIterator comment:
+'No class-specific documentation for AbstractIterator, hierarchy is:
 Object
   object
     AbstractIterator( stream)
@@ -4673,8 +4673,8 @@ AbstractIterator subclass: 'dict_itemiterator'
 %
 expectvalue /Class
 doit
-dict_itemiterator comment: 
-'No class-specific documentation for dict_itemiterator, hierarchy is: 
+dict_itemiterator comment:
+'No class-specific documentation for dict_itemiterator, hierarchy is:
 Object
   object
     AbstractIterator( stream)
@@ -4700,8 +4700,8 @@ AbstractIterator subclass: 'dict_keyiterator'
 %
 expectvalue /Class
 doit
-dict_keyiterator comment: 
-'No class-specific documentation for dict_keyiterator, hierarchy is: 
+dict_keyiterator comment:
+'No class-specific documentation for dict_keyiterator, hierarchy is:
 Object
   object
     AbstractIterator( stream)
@@ -4727,8 +4727,8 @@ AbstractIterator subclass: 'dict_valueiterator'
 %
 expectvalue /Class
 doit
-dict_valueiterator comment: 
-'No class-specific documentation for dict_valueiterator, hierarchy is: 
+dict_valueiterator comment:
+'No class-specific documentation for dict_valueiterator, hierarchy is:
 Object
   object
     AbstractIterator( stream)
@@ -4754,8 +4754,8 @@ AbstractIterator subclass: 'list_iterator'
 %
 expectvalue /Class
 doit
-list_iterator comment: 
-'No class-specific documentation for list_iterator, hierarchy is: 
+list_iterator comment:
+'No class-specific documentation for list_iterator, hierarchy is:
 Object
   object
     AbstractIterator( stream)
@@ -4781,8 +4781,8 @@ AbstractIterator subclass: 'range_iterator'
 %
 expectvalue /Class
 doit
-range_iterator comment: 
-'No class-specific documentation for range_iterator, hierarchy is: 
+range_iterator comment:
+'No class-specific documentation for range_iterator, hierarchy is:
 Object
   object
     AbstractIterator( stream)
@@ -4808,8 +4808,8 @@ AbstractIterator subclass: 'set_iterator'
 %
 expectvalue /Class
 doit
-set_iterator comment: 
-'No class-specific documentation for set_iterator, hierarchy is: 
+set_iterator comment:
+'No class-specific documentation for set_iterator, hierarchy is:
 Object
   object
     AbstractIterator( stream)
@@ -4835,8 +4835,8 @@ AbstractIterator subclass: 'tuple_iterator'
 %
 expectvalue /Class
 doit
-tuple_iterator comment: 
-'No class-specific documentation for tuple_iterator, hierarchy is: 
+tuple_iterator comment:
+'No class-specific documentation for tuple_iterator, hierarchy is:
 Object
   object
     AbstractIterator( stream)
@@ -4879,8 +4879,8 @@ AbstractNumber subclass: 'complex'
 %
 expectvalue /Class
 doit
-complex comment: 
-'No class-specific documentation for complex, hierarchy is: 
+complex comment:
+'No class-specific documentation for complex, hierarchy is:
 Object
   complex( real imaginary)
 '
@@ -4904,8 +4904,8 @@ AbstractNumber subclass: 'float'
 %
 expectvalue /Class
 doit
-float comment: 
-'No class-specific documentation for float, hierarchy is: 
+float comment:
+'No class-specific documentation for float, hierarchy is:
 Object
   object
     float
@@ -4930,8 +4930,8 @@ AbstractNumber subclass: 'int'
 %
 expectvalue /Class
 doit
-int comment: 
-'No class-specific documentation for int, hierarchy is: 
+int comment:
+'No class-specific documentation for int, hierarchy is:
 Object
   object
     int
@@ -4956,8 +4956,8 @@ int subclass: 'bool'
 %
 expectvalue /Class
 doit
-bool comment: 
-'No class-specific documentation for bool, hierarchy is: 
+bool comment:
+'No class-specific documentation for bool, hierarchy is:
 Object
   object
     int
@@ -4983,7 +4983,7 @@ object subclass: 'class'
 %
 expectvalue /Class
 doit
-class comment: 
+class comment:
 'This is the runtime artifact created by a class definition. Note that a class defined in a function will be created anew each time the function is called, so we don''t share the scope (as is done for a module).'
 %
 expectvalue /Class
@@ -5005,7 +5005,7 @@ object subclass: 'file'
 %
 expectvalue /Class
 doit
-file comment: 
+file comment:
 'class io.TextIOWrapper(buffer, encoding=None, errors=None, newline=None, line_buffering=False, write_through=False)
 A buffered text stream over a BufferedIOBase binary stream. It inherits TextIOBase.
 
@@ -5030,7 +5030,7 @@ object subclass: 'function'
 %
 expectvalue /Class
 doit
-function comment: 
+function comment:
 'Instances of function are created by executing a FunctionDefAst.
 
 https://docs.python.org/3/reference/compound_stmts.html#function-definitions
@@ -5055,8 +5055,8 @@ function subclass: 'ClassFunction'
 %
 expectvalue /Class
 doit
-ClassFunction comment: 
-'No class-specific documentation for ClassFunction, hierarchy is: 
+ClassFunction comment:
+'No class-specific documentation for ClassFunction, hierarchy is:
 Object
   function( astNode scope)
     ClassFunction
@@ -5081,8 +5081,8 @@ function subclass: 'InstanceFunction'
 %
 expectvalue /Class
 doit
-InstanceFunction comment: 
-'No class-specific documentation for InstanceFunction, hierarchy is: 
+InstanceFunction comment:
+'No class-specific documentation for InstanceFunction, hierarchy is:
 Object
   function( astNode scope)
     InstanceFunction
@@ -5124,8 +5124,8 @@ object subclass: 'Instance'
 %
 expectvalue /Class
 doit
-Instance comment: 
-'No class-specific documentation for Instance, hierarchy is: 
+Instance comment:
+'No class-specific documentation for Instance, hierarchy is:
 Object
   SimpleObject( classAst)
     object( variables)
@@ -5151,7 +5151,7 @@ object subclass: 'module'
 %
 expectvalue /Class
 doit
-module comment: 
+module comment:
 'module is the abstract superclass for modules coded in Smalltalk.'
 %
 expectvalue /Class
@@ -5173,32 +5173,32 @@ module subclass: '_imp'
 %
 expectvalue /Class
 doit
-_imp comment: 
+_imp comment:
 'https://docs.python.org/3/library/importlib.html
 cpython/Python/import.c
 
 dir(sys.modules[''_imp''])
 [
-    ''__doc__, 
-    ''__loader__, 
-    ''__name__, 
-    ''__package__, 
-    ''__spec__, 
-    ''_fix_co_filename, 
-    ''acquire_lock, 
-    ''check_hash_based_pycs, 
-    ''create_builtin, 
-    ''create_dynamic, 
-    ''exec_builtin, 
-    ''exec_dynamic, 
-    ''extension_suffixes, 
-    ''get_frozen_object, 
-    ''init_frozen, 
-    ''is_builtin, 
-    ''is_frozen, 
-    ''is_frozen_package, 
-    ''lock_held, 
-    ''release_lock, 
+    ''__doc__,
+    ''__loader__,
+    ''__name__,
+    ''__package__,
+    ''__spec__,
+    ''_fix_co_filename,
+    ''acquire_lock,
+    ''check_hash_based_pycs,
+    ''create_builtin,
+    ''create_dynamic,
+    ''exec_builtin,
+    ''exec_dynamic,
+    ''extension_suffixes,
+    ''get_frozen_object,
+    ''init_frozen,
+    ''is_builtin,
+    ''is_frozen,
+    ''is_frozen_package,
+    ''lock_held,
+    ''release_lock,
     ''source_hash''
 ]'
 %
@@ -5221,7 +5221,7 @@ module subclass: '_thread'
 %
 expectvalue /Class
 doit
-_thread comment: 
+_thread comment:
 'https://docs.python.org/3/library/_thread.html'
 %
 expectvalue /Class
@@ -5243,25 +5243,25 @@ module subclass: '_warnings'
 %
 expectvalue /Class
 doit
-_warnings comment: 
+_warnings comment:
 '_warnings.__dict__
 {
-    ''__name__'': ''_warnings'', 
-    ''__doc__'': ''_warnings provides basic warning filtering support.\nIt is a helper module to speed up interpreter start-up.'', 
-    ''__package__'': '''', 
-    ''__loader__'': <class ''_frozen_importlib.BuiltinImporter''>, 
-    ''__spec__'': ModuleSpec(name=''_warnings'', loader=<class ''_frozen_importlib.BuiltinImporter''>, origin=''built-in''), 
-    ''warn'': <built-in function warn>, 
-    ''warn_explicit'': <built-in function warn_explicit>, 
-    ''_filters_mutated'': <built-in function _filters_mutated>, 
+    ''__name__'': ''_warnings'',
+    ''__doc__'': ''_warnings provides basic warning filtering support.\nIt is a helper module to speed up interpreter start-up.'',
+    ''__package__'': '''',
+    ''__loader__'': <class ''_frozen_importlib.BuiltinImporter''>,
+    ''__spec__'': ModuleSpec(name=''_warnings'', loader=<class ''_frozen_importlib.BuiltinImporter''>, origin=''built-in''),
+    ''warn'': <built-in function warn>,
+    ''warn_explicit'': <built-in function warn_explicit>,
+    ''_filters_mutated'': <built-in function _filters_mutated>,
     ''filters'': [
-        (''default'', None, <class ''DeprecationWarning''>, ''__main__'', 0), 
-        (''ignore'', None, <class ''DeprecationWarning''>, None, 0), 
-        (''ignore'', None, <class ''PendingDeprecationWarning''>, None, 0), 
-        (''ignore'', None, <class ''ImportWarning''>, None, 0), 
+        (''default'', None, <class ''DeprecationWarning''>, ''__main__'', 0),
+        (''ignore'', None, <class ''DeprecationWarning''>, None, 0),
+        (''ignore'', None, <class ''PendingDeprecationWarning''>, None, 0),
+        (''ignore'', None, <class ''ImportWarning''>, None, 0),
         (''ignore'', None, <class ''ResourceWarning''>, None, 0)
-    ], 
-    ''_onceregistry'': {}, 
+    ],
+    ''_onceregistry'': {},
     ''_defaultaction'': ''default''
 }'
 %
@@ -5284,21 +5284,21 @@ module subclass: '_weakref'
 %
 expectvalue /Class
 doit
-_weakref comment: 
+_weakref comment:
 '_weakref.__dict__
 {
-    ''__name__'': ''_weakref'', 
-    ''__doc__'': ''Weak-reference support module.'', 
-    ''__package__'': '''', 
-    ''__loader__'': <class ''_frozen_importlib.BuiltinImporter''>, 
-    ''__spec__'': ModuleSpec(name=''_weakref'', loader=<class ''_frozen_importlib.BuiltinImporter''>, origin=''built-in''), 
-    ''getweakrefcount'': <built-in function getweakrefcount>, 
-    ''_remove_dead_weakref'': <built-in function _remove_dead_weakref>, 
-    ''getweakrefs'': <built-in function getweakrefs>, 
-    ''proxy'': <built-in function proxy>, 
-    ''ref'': <class ''weakref''>, 
-    ''ReferenceType'': <class ''weakref''>, 
-    ''ProxyType'': <class ''weakproxy''>, 
+    ''__name__'': ''_weakref'',
+    ''__doc__'': ''Weak-reference support module.'',
+    ''__package__'': '''',
+    ''__loader__'': <class ''_frozen_importlib.BuiltinImporter''>,
+    ''__spec__'': ModuleSpec(name=''_weakref'', loader=<class ''_frozen_importlib.BuiltinImporter''>, origin=''built-in''),
+    ''getweakrefcount'': <built-in function getweakrefcount>,
+    ''_remove_dead_weakref'': <built-in function _remove_dead_weakref>,
+    ''getweakrefs'': <built-in function getweakrefs>,
+    ''proxy'': <built-in function proxy>,
+    ''ref'': <class ''weakref''>,
+    ''ReferenceType'': <class ''weakref''>,
+    ''ProxyType'': <class ''weakproxy''>,
     ''CallableProxyType'': <class ''weakcallableproxy''>
 }'
 %
@@ -5321,7 +5321,7 @@ module subclass: 'builtins'
 %
 expectvalue /Class
 doit
-builtins comment: 
+builtins comment:
 'https://docs.python.org/3/library/builtins.html
 
 Note that builtin functions generally bypass the __getattribute__() method.
@@ -5346,7 +5346,7 @@ module subclass: 'sys'
 %
 expectvalue /Class
 doit
-sys comment: 
+sys comment:
 'https://docs.python.org/3/library/sys.html'
 %
 expectvalue /Class
@@ -5368,7 +5368,7 @@ module subclass: 'time'
 %
 expectvalue /Class
 doit
-time comment: 
+time comment:
 'https://docs.python.org/3/library/time.html'
 %
 expectvalue /Class
@@ -5424,7 +5424,7 @@ Singleton subclass: 'ellipsis'
 %
 expectvalue /Class
 doit
-ellipsis comment: 
+ellipsis comment:
 'https://docs.python.org/3/reference/datamodel.html'
 %
 expectvalue /Class
@@ -5446,7 +5446,7 @@ Singleton subclass: 'NoneType'
 %
 expectvalue /Class
 doit
-NoneType comment: 
+NoneType comment:
 'https://docs.python.org/3/reference/datamodel.html'
 %
 expectvalue /Class
@@ -5468,7 +5468,7 @@ Singleton subclass: 'NotImplementedType'
 %
 expectvalue /Class
 doit
-NotImplementedType comment: 
+NotImplementedType comment:
 'https://docs.python.org/3/reference/datamodel.html'
 %
 expectvalue /Class
@@ -5508,8 +5508,8 @@ Object subclass: 'Scope'
 %
 expectvalue /Class
 doit
-Scope comment: 
-'No class-specific documentation for Scope, hierarchy is: 
+Scope comment:
+'No class-specific documentation for Scope, hierarchy is:
 Object
   Scope( outer variables)
 '
@@ -5533,8 +5533,8 @@ Scope subclass: 'GlobalScope'
 %
 expectvalue /Class
 doit
-GlobalScope comment: 
-'No class-specific documentation for GlobalScope, hierarchy is: 
+GlobalScope comment:
+'No class-specific documentation for GlobalScope, hierarchy is:
 Object
   Scope( outer variables)
     GlobalScope
@@ -5559,8 +5559,8 @@ Scope subclass: 'LocalScope'
 %
 expectvalue /Class
 doit
-LocalScope comment: 
-'No class-specific documentation for LocalScope, hierarchy is: 
+LocalScope comment:
+'No class-specific documentation for LocalScope, hierarchy is:
 Object
   Scope( outer variables)
     LocalScope
@@ -5585,7 +5585,7 @@ TestCase subclass: 'PythonTestCase'
 %
 expectvalue /Class
 doit
-PythonTestCase comment: 
+PythonTestCase comment:
 'Abstract superclass for all Python tests.
 
 PythonTestCase suite run.
@@ -5596,34 +5596,6 @@ ImportTestCase debug: #''tst_importlib''.'
 expectvalue /Class
 doit
 PythonTestCase category: 'Tests'
-%
-set compile_env: 0
-! ------------------- Class definition for BuiltinsTestCase
-expectvalue /Class
-doit
-PythonTestCase subclass: 'BuiltinsTestCase'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-BuiltinsTestCase comment: 
-'No class-specific documentation for BuiltinsTestCase, hierarchy is: 
-Object
-  TestAsserter
-    TestCase( testSelector)
-      PythonTestCase( statements)
-        BuiltinsTestCase
-'
-%
-expectvalue /Class
-doit
-BuiltinsTestCase category: 'Tests'
 %
 set compile_env: 0
 ! ------------------- Class definition for ByteLiteralsTestCase
@@ -5640,8 +5612,8 @@ PythonTestCase subclass: 'ByteLiteralsTestCase'
 %
 expectvalue /Class
 doit
-ByteLiteralsTestCase comment: 
-'No class-specific documentation for ByteLiteralsTestCase, hierarchy is: 
+ByteLiteralsTestCase comment:
+'No class-specific documentation for ByteLiteralsTestCase, hierarchy is:
 Object
   TestAsserter
     TestCase( testSelector)
@@ -5652,71 +5624,6 @@ Object
 expectvalue /Class
 doit
 ByteLiteralsTestCase category: 'Tests'
-%
-set compile_env: 0
-! ------------------- Class definition for ClassesTestCase
-expectvalue /Class
-doit
-PythonTestCase subclass: 'ClassesTestCase'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-ClassesTestCase comment: 
-'ModuleAst astForPath: ''$HOME/code/Python/GemStoneP/tests/Classes.py''.
-
-Module([
-	Assign([Name(''g'', Store(), lineno=4, col_offset=0)], Str(''G'', lineno=4, col_offset=4), lineno=4, col_offset=0), 
-	ClassDef(''MyClass'', [], [], [
-		Assign([Name(''iv1'', Store(), lineno=7, col_offset=4)], Str(''1'', lineno=7, col_offset=10), lineno=7, col_offset=4), 
-		FunctionDef(''__init__'', arguments([arg(''self'', None, lineno=9, col_offset=17), arg(''p'', None, lineno=9, col_offset=23)], None, [], [], None, []), [
-			Assign([Attribute(Name(''self'', Load(), lineno=10, col_offset=8), ''iv2'', Store(), lineno=10, col_offset=8)], Name(''p'', Load(), lineno=10, col_offset=19), lineno=10, col_offset=8)], [], None, lineno=9, col_offset=4), 
-		FunctionDef(''foo'', arguments([arg(''self'', None, lineno=12, col_offset=12), arg(''p'', None, lineno=12, col_offset=18)], None, [], [], None, []), [
-			Return(BinOp(BinOp(BinOp(BinOp(BinOp(BinOp(BinOp(Str(''MyClass>>foo('', lineno=13, col_offset=15), Add(), 
-				Call(Name(''str'', Load(), lineno=13, col_offset=33), [Name(''self'', Load(), lineno=13, col_offset=37)], [], lineno=13, col_offset=33), lineno=13, col_offset=15), Add(), 
-				Str('', '', lineno=13, col_offset=45), lineno=13, col_offset=43), Add(), 
-				Name(''p'', Load(), lineno=13, col_offset=52), lineno=13, col_offset=50), Add(), 
-				Str('') - '', lineno=13, col_offset=56), lineno=13, col_offset=54), Add(), 
-				Attribute(Name(''self'', Load(), lineno=13, col_offset=65), ''iv1'', Load(), lineno=13, col_offset=65), lineno=13, col_offset=63), Add(), 
-				Str('' - '', lineno=13, col_offset=76), lineno=13, col_offset=74), Add(), 
-				Attribute(Name(''self'', Load(), lineno=13, col_offset=84), ''iv2'', Load(), lineno=13, col_offset=84), lineno=13, col_offset=82), lineno=13, col_offset=8)], [], None, lineno=12, col_offset=4), 
-		FunctionDef(''bar1'', arguments([arg(''self'', None, lineno=15, col_offset=13), arg(''p'', None, lineno=15, col_offset=19)], None, [], [], None, []), [
-			Return(BinOp(BinOp(BinOp(BinOp(Str(''MyClass>>bar1('', lineno=16, col_offset=15), Add(), 
-				Call(Name(''str'', Load(), lineno=16, col_offset=34), [Name(''self'', Load(), lineno=16, col_offset=38)], [], lineno=16, col_offset=34), lineno=16, col_offset=15), Add(), 
-				Str('', '', lineno=16, col_offset=46), lineno=16, col_offset=44), Add(), Name(''p'', Load(), lineno=16, col_offset=53), lineno=16, col_offset=51), Add(), 
-				Str('')'', lineno=16, col_offset=57), lineno=16, col_offset=55), lineno=16, col_offset=8)], [], None, lineno=15, col_offset=4), 
-		Assign([Name(''bar2'', Store(), lineno=18, col_offset=4)], Call(Name(''classmethod'', Load(), lineno=18, col_offset=11), [Name(''bar1'', Load(), lineno=18, col_offset=23)], [], lineno=18, col_offset=11), lineno=18, col_offset=4), 
-		FunctionDef(''bar3'', arguments([arg(''self'', None, lineno=21, col_offset=13), arg(''p'', None, lineno=21, col_offset=19)], None, [], [], None, []), [
-			Return(BinOp(BinOp(BinOp(BinOp(Str(''MyClass>>bar3('', lineno=22, col_offset=15), Add(), 
-				Call(Name(''str'', Load(), lineno=22, col_offset=34), [Name(''self'', Load(), lineno=22, col_offset=38)], [], lineno=22, col_offset=34), lineno=22, col_offset=15), Add(), 
-				Str('', '', lineno=22, col_offset=46), lineno=22, col_offset=44), Add(), 
-				Name(''p'', Load(), lineno=22, col_offset=53), lineno=22, col_offset=51), Add(), 
-				Str('')'', lineno=22, col_offset=57), lineno=22, col_offset=55), lineno=22, col_offset=8)], 
-			[Name(''classmethod'', Load(), lineno=20, col_offset=5)], None, lineno=20, col_offset=4)
-	], [], lineno=6, col_offset=0), 
-	Assign([Name(''o'', Store(), lineno=24, col_offset=0)], Call(Name(''MyClass'', Load(), lineno=24, col_offset=4), [Str(''A'', lineno=24, col_offset=12)], [], lineno=24, col_offset=4), lineno=24, col_offset=0), 
-	Expr(Call(Name(''print'', Load(), lineno=25, col_offset=0), [
-		Call(Attribute(Name(''o'', Load(), lineno=25, col_offset=6), ''foo'', Load(), lineno=25, col_offset=6), [Str(''B'', lineno=25, col_offset=12)], [], lineno=25, col_offset=6)], [], lineno=25, col_offset=0), lineno=25, col_offset=0), 
-	Expr(Call(Name(''print'', Load(), lineno=26, col_offset=0), [
-		Call(Attribute(Name(''o'', Load(), lineno=26, col_offset=6), ''bar1'', Load(), lineno=26, col_offset=6), [Str(''B'', lineno=26, col_offset=13)], [], lineno=26, col_offset=6)], [], lineno=26, col_offset=0), lineno=26, col_offset=0), 
-	Expr(Call(Name(''print'', Load(), lineno=27, col_offset=0), [
-		Call(Attribute(Name(''o'', Load(), lineno=27, col_offset=6), ''bar2'', Load(), lineno=27, col_offset=6), [Str(''C'', lineno=27, col_offset=13)], [], lineno=27, col_offset=6)], [], lineno=27, col_offset=0), lineno=27, col_offset=0), 
-	Expr(Call(Name(''print'', Load(), lineno=28, col_offset=0), [
-		Call(Attribute(Name(''MyClass'', Load(), lineno=28, col_offset=6), ''bar1'', Load(), lineno=28, col_offset=6), [Str(''C'', lineno=28, col_offset=19), Str(''D'', lineno=28, col_offset=24)], [], lineno=28, col_offset=6)], [], lineno=28, col_offset=0), lineno=28, col_offset=0), 
-	Expr(Call(Name(''print'', Load(), lineno=29, col_offset=0), [
-		Call(Attribute(Name(''MyClass'', Load(), lineno=29, col_offset=6), ''bar2'', Load(), lineno=29, col_offset=6), [Str(''C'', lineno=29, col_offset=19)], [], lineno=29, col_offset=6)], [], lineno=29, col_offset=0), lineno=29, col_offset=0), 
-	Expr(Call(Name(''print'', Load(), lineno=30, col_offset=0), [
-		Call(Attribute(Name(''MyClass'', Load(), lineno=30, col_offset=6), ''bar3'', Load(), lineno=30, col_offset=6), [Str(''C'', lineno=30, col_offset=19)], [], lineno=30, col_offset=6)], [], lineno=30, col_offset=0), lineno=30, col_offset=0)])'
-%
-expectvalue /Class
-doit
-ClassesTestCase category: 'Tests'
 %
 set compile_env: 0
 ! ------------------- Class definition for CompoundStatementsTestCase
@@ -5733,7 +5640,7 @@ PythonTestCase subclass: 'CompoundStatementsTestCase'
 %
 expectvalue /Class
 doit
-CompoundStatementsTestCase comment: 
+CompoundStatementsTestCase comment:
 'ModuleAst astForPath: ''$HOME/code/Python/GemStoneP/tests/CompoundStatements.py''.'
 %
 expectvalue /Class
@@ -5755,8 +5662,8 @@ PythonTestCase subclass: 'DelimitersTestCase'
 %
 expectvalue /Class
 doit
-DelimitersTestCase comment: 
-'No class-specific documentation for DelimitersTestCase, hierarchy is: 
+DelimitersTestCase comment:
+'No class-specific documentation for DelimitersTestCase, hierarchy is:
 Object
   TestAsserter
     TestCase( testSelector)
@@ -5767,90 +5674,6 @@ Object
 expectvalue /Class
 doit
 DelimitersTestCase category: 'Tests'
-%
-set compile_env: 0
-! ------------------- Class definition for EvaluateTestCase
-expectvalue /Class
-doit
-PythonTestCase subclass: 'EvaluateTestCase'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-EvaluateTestCase comment: 
-'No class-specific documentation for EvaluateTestCase, hierarchy is: 
-Object
-  TestAsserter
-    TestCase( testSelector)
-      PythonTestCase( statements)
-        EvaluateTestCase
-'
-%
-expectvalue /Class
-doit
-EvaluateTestCase category: 'Tests'
-%
-set compile_env: 0
-! ------------------- Class definition for ExceptionsTestCase
-expectvalue /Class
-doit
-PythonTestCase subclass: 'ExceptionsTestCase'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-ExceptionsTestCase category: 'Tests'
-%
-set compile_env: 0
-! ------------------- Class definition for ExecuteTestCase
-expectvalue /Class
-doit
-PythonTestCase subclass: 'ExecuteTestCase'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-ExecuteTestCase category: 'Tests'
-%
-set compile_env: 0
-! ------------------- Class definition for ImportTestCase
-expectvalue /Class
-doit
-PythonTestCase subclass: 'ImportTestCase'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-ImportTestCase comment: 
-'This is the wrapper for Python''s built-in regression test suite.'
-%
-expectvalue /Class
-doit
-ImportTestCase category: 'Tests'
 %
 set compile_env: 0
 ! ------------------- Class definition for NumericLiteralsTestCase
@@ -5867,8 +5690,8 @@ PythonTestCase subclass: 'NumericLiteralsTestCase'
 %
 expectvalue /Class
 doit
-NumericLiteralsTestCase comment: 
-'No class-specific documentation for NumericLiteralsTestCase, hierarchy is: 
+NumericLiteralsTestCase comment:
+'No class-specific documentation for NumericLiteralsTestCase, hierarchy is:
 Object
   TestAsserter
     TestCase( testSelector)
@@ -5895,8 +5718,8 @@ PythonTestCase subclass: 'OperatorsTestCase'
 %
 expectvalue /Class
 doit
-OperatorsTestCase comment: 
-'No class-specific documentation for OperatorsTestCase, hierarchy is: 
+OperatorsTestCase comment:
+'No class-specific documentation for OperatorsTestCase, hierarchy is:
 Object
   TestAsserter
     TestCase( testSelector)
@@ -5923,8 +5746,8 @@ PythonTestCase subclass: 'SimpleStatementsTestCase'
 %
 expectvalue /Class
 doit
-SimpleStatementsTestCase comment: 
-'No class-specific documentation for SimpleStatementsTestCase, hierarchy is: 
+SimpleStatementsTestCase comment:
+'No class-specific documentation for SimpleStatementsTestCase, hierarchy is:
 Object
   TestAsserter
     TestCase( testSelector)
@@ -5935,23 +5758,6 @@ Object
 expectvalue /Class
 doit
 SimpleStatementsTestCase category: 'Tests'
-%
-set compile_env: 0
-! ------------------- Class definition for StatementsTestCase
-expectvalue /Class
-doit
-PythonTestCase subclass: 'StatementsTestCase'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-StatementsTestCase category: 'Tests'
 %
 set compile_env: 0
 ! ------------------- Class definition for StringLiteralsTestCase
@@ -5968,8 +5774,8 @@ PythonTestCase subclass: 'StringLiteralsTestCase'
 %
 expectvalue /Class
 doit
-StringLiteralsTestCase comment: 
-'No class-specific documentation for StringLiteralsTestCase, hierarchy is: 
+StringLiteralsTestCase comment:
+'No class-specific documentation for StringLiteralsTestCase, hierarchy is:
 Object
   TestAsserter
     TestCase( testSelector)
@@ -5980,90 +5786,6 @@ Object
 expectvalue /Class
 doit
 StringLiteralsTestCase category: 'Tests'
-%
-set compile_env: 0
-! ------------------- Class definition for SysTestCase
-expectvalue /Class
-doit
-PythonTestCase subclass: 'SysTestCase'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-SysTestCase comment: 
-'No class-specific documentation for SysTestCase, hierarchy is: 
-Object
-  TestAsserter
-    TestCase( testSelector)
-      PythonTestCase( statements stdout)
-        SysTestCase
-'
-%
-expectvalue /Class
-doit
-SysTestCase category: 'Tests'
-%
-set compile_env: 0
-! ------------------- Class definition for TimeTestCase
-expectvalue /Class
-doit
-PythonTestCase subclass: 'TimeTestCase'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-TimeTestCase comment: 
-'No class-specific documentation for TimeTestCase, hierarchy is: 
-Object
-  TestAsserter
-    TestCase( testSelector)
-      PythonTestCase( statements stdout)
-        TimeTestCase
-'
-%
-expectvalue /Class
-doit
-TimeTestCase category: 'Tests'
-%
-set compile_env: 0
-! ------------------- Class definition for VariableTestCase
-expectvalue /Class
-doit
-PythonTestCase subclass: 'VariableTestCase'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-VariableTestCase comment: 
-'No class-specific documentation for VariableTestCase, hierarchy is: 
-Object
-  TestAsserter
-    TestCase( testSelector)
-      PythonTestCase( statements)
-        VariableTestCase
-'
-%
-expectvalue /Class
-doit
-VariableTestCase category: 'Tests'
 %
 set compile_env: 0
 ! ------------------- Class definition for PythonTestResource
@@ -6080,8 +5802,8 @@ TestResource subclass: 'PythonTestResource'
 %
 expectvalue /Class
 doit
-PythonTestResource comment: 
-'No class-specific documentation for PythonTestResource, hierarchy is: 
+PythonTestResource comment:
+'No class-specific documentation for PythonTestResource, hierarchy is:
 Object
   TestAsserter
     TestResource( name description)
@@ -6152,7 +5874,6 @@ input BreakNotification.gs
 input BrokenPipeError.gs
 input BufferError.gs
 input builtins.gs
-input BuiltinsTestCase.gs
 input bytearray.gs
 input ByteLiteralsTestCase.gs
 input bytes.gs
@@ -6162,7 +5883,6 @@ input CancelNotification.gs
 input ChildProcessError.gs
 input class.gs
 input ClassDefAst.gs
-input ClassesTestCase.gs
 input ClassFunction.gs
 input ClassFunctionDefAst.gs
 input CmpOpAst.gs
@@ -6194,11 +5914,8 @@ input DivAst.gs
 input ellipsis.gs
 input EOFError.gs
 input EqAst.gs
-input EvaluateTestCase.gs
 input ExceptHandlerAst.gs
 input Exception.gs
-input ExceptionsTestCase.gs
-input ExecuteTestCase.gs
 input ExprAst.gs
 input ExpressionAst.gs
 input ExpressionContextAst.gs
@@ -6226,7 +5943,6 @@ input IfExpAst.gs
 input ImportAst.gs
 input ImportError.gs
 input ImportFromAst.gs
-input ImportTestCase.gs
 input ImportWarning.gs
 input InAst.gs
 input IndentationError.gs
@@ -6315,7 +6031,6 @@ input SliceAbstractAst.gs
 input SliceAst.gs
 input StarredAst.gs
 input StatementAst.gs
-input StatementsTestCase.gs
 input StaticFunction.gs
 input StaticFunctionDefAst.gs
 input StopAsyncIteration.gs
@@ -6331,11 +6046,9 @@ input SyntaxWarning.gs
 input sys.gs
 input SystemError.gs
 input SystemException.gs
-input SysTestCase.gs
 input TabError.gs
 input time.gs
 input TimeoutError.gs
-input TimeTestCase.gs
 input TryAst.gs
 input tuple.gs
 input tuple_iterator.gs
@@ -6354,7 +6067,6 @@ input UserInteraction.gs
 input UserWarning.gs
 input USubAst.gs
 input ValueError.gs
-input VariableTestCase.gs
 input Warning.gs
 input WhileAst.gs
 input WithAst.gs

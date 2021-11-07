@@ -6,16 +6,6 @@ removeAllClassMethods ImportFromAst
 set compile_env: 0
 category: 'other'
 method: ImportFromAst
-evaluate: aScope
-
-	(module == None) ifTrue: [		"from ."
-		names do: [:each | each import: aScope].
-	] ifFalse: [
-		self halt.
-	].
-%
-category: 'other'
-method: ImportFromAst
 initialize
 	"ImportFrom(identifier? module, alias* names, int? level)"
 

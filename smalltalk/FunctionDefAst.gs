@@ -26,20 +26,6 @@ decoratorList
 %
 category: 'other'
 method: FunctionDefAst
-evaluate: aScope
-	"Executing the 'def' command defines the function, but does not execute it.
-	We do, however, need to provide a scope based on the definition context,
-	not the call context, so that we get the proper outer scope (nonlocals and
-	globals). That is, the scope is based on the definition, not the call. When the
-	function is called, the (inner) scope is copied so that a new namespace is
-	created (changes made during one call are not visible to another call)."
-
-	aScope 
-		set: name 
-		to: (function newForNode: self scope: (aScope innerForNode: self))
-%
-category: 'other'
-method: FunctionDefAst
 initialize
 	"FunctionDef(identifier name, arguments args,
                        stmt* body, expr* decorator_list, expr? returns,
@@ -83,15 +69,4 @@ method: FunctionDefAst
 setBlock: aBlockAst
 
 	body := aBlockAst.
-%
-category: 'other'
-method: FunctionDefAst
-value: arguments value: keywords value: aScope
-	"args are the parameters while arguments are the values"
-
-	args
-		arguments: arguments
-		keywords: keywords
-		scope: aScope.
-	^ body evaluate: aScope
 %

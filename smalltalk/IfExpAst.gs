@@ -6,17 +6,6 @@ removeAllClassMethods IfExpAst
 set compile_env: 0
 category: 'other'
 method: IfExpAst
-evaluate: aScope
-
-	| value |
-	value := test evaluate: aScope.
-	(value isKindOf: Boolean) ifFalse: [value halt].
-	value
-		ifTrue: [body evaluate: aScope]
-		ifFalse: [orelse evaluate: aScope].
-%
-category: 'other'
-method: IfExpAst
 initialize
 	"IfExp(expr test, expr body, expr orelse)"
 

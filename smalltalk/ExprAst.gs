@@ -6,12 +6,6 @@ removeAllClassMethods ExprAst
 set compile_env: 0
 category: 'other'
 method: ExprAst
-evaluate: aScope
-
-	^value evaluate: aScope
-%
-category: 'other'
-method: ExprAst
 initialize
 	"Expr(expr value)"
 

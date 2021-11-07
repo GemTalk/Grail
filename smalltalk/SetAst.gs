@@ -6,12 +6,6 @@ removeAllClassMethods SetAst
 set compile_env: 0
 category: 'other'
 method: SetAst
-evaluate: aScope
-
-	^ set withAll: (elts collect: [:each | each evaluate: aScope])
-%
-category: 'other'
-method: SetAst
 initialize
 	"Set(expr* elts)"
 

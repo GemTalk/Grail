@@ -11,9 +11,3 @@ isAbstract
 %
 ! ------------------- Instance methods for ExpressionAst
 set compile_env: 0
-category: 'other'
-method: ExpressionAst
-evaluate: aScope
-
-	self subclassResponsibility.
-%

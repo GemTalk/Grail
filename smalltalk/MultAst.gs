@@ -4,9 +4,3 @@ removeAllClassMethods MultAst
 ! ------------------- Class methods for MultAst
 ! ------------------- Instance methods for MultAst
 set compile_env: 0
-category: 'other'
-method: MultAst
-pyFunctionFor: lhs
-
-	^ lhs __mul__
-%

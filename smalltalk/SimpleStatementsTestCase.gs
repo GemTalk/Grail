@@ -34,34 +34,6 @@ testArrayAssignment
 %
 category: 'other'
 method: SimpleStatementsTestCase
-testAssertFalse
-
-	| x |
-	x := self statementsAt: 10.
-	self 
-		assert: (x isKindOf: AssertAst);
-		assert: (x.test isKindOf: ConstantAst);
-		assert: (x.test.value == False);
-		assert: (x.test evaluate: aScope) == False;
-		assert: x.msg isNone;
-		yourself.
-%
-category: 'other'
-method: SimpleStatementsTestCase
-testAssertTrue
-
-	| x |
-	x := self statementsAt: 9.
-	self 
-		assert: (x isKindOf: AssertAst);
-		assert: (x.test isKindOf: ConstantAst);
-		assert: (x.test.value);
-		assert: (x.test evaluate: aScope);
-		assert: (x.msg isNone);
-		yourself.
-%
-category: 'other'
-method: SimpleStatementsTestCase
 testAssignMultiple
 
 	| x y |
@@ -400,31 +372,6 @@ testReturnNone
 		assert: (x.body.body size == 1);
 		assert: ((y := x.body.body at: 1) isKindOf: ReturnAst);
 		assert: (y.value isNone);
-		assert: (x.decorator_list size == 0);
-		assert: (x.returns isNone);
-		yourself.
-%
-category: 'other'
-method: SimpleStatementsTestCase
-testReturnTrue
-
-	| x y |
-	x := self statementsAt: 16.
-	self 
-		assert: (x isKindOf: FunctionDefAst);
-		assert: (x.name == #'b');
-		assert: (x.args isKindOf: ArgumentsAst);
-		assert: (x.args.args size == 0);
-		assert: (x.args.vararg isNone);
-		assert: (x.args.kwonlyargs size == 0);
-		assert: (x.args.kw_defaults size == 0);
-		assert: (x.args.kwarg isNone);
-		assert: (x.args.defaults size == 0);
-		assert: (x.body.body size == 1);
-		assert: ((y := x.body.body at: 1) isKindOf: ReturnAst);
-		assert: (y.value isKindOf: ConstantAst);
-		assert: (y.value.value);
-		assert: (y.value evaluate: aScope);
 		assert: (x.decorator_list size == 0);
 		assert: (x.returns isNone);
 		yourself.

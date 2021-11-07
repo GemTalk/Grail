@@ -6,12 +6,6 @@ removeAllClassMethods ListAst
 set compile_env: 0
 category: 'other'
 method: ListAst
-evaluate: aScope
-	"May wish to revisit context"
-	^list withAll: (elts collect: [:each | each evaluate: aScope])
-%
-category: 'other'
-method: ListAst
 initialize
 	"list(expr* elts, expr_context ctx)"
 	

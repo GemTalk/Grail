@@ -4,9 +4,3 @@ removeAllClassMethods SubAst
 ! ------------------- Class methods for SubAst
 ! ------------------- Instance methods for SubAst
 set compile_env: 0
-category: 'other'
-method: SubAst
-pyFunctionFor: lhs
-
-	^ lhs __sub__
-%

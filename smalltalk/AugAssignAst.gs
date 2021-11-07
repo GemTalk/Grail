@@ -6,15 +6,6 @@ removeAllClassMethods AugAssignAst
 set compile_env: 0
 category: 'other'
 method: AugAssignAst
-evaluate: aScope
-	
-	| x |
-self halt.
-	x := op left: (parent variableAt: target) right: value evaluate: aScope.
-	parent variableAt: target put: x.
-%
-category: 'other'
-method: AugAssignAst
 initialize
 	"AugAssign(expr target, operator op, expr value)"
 

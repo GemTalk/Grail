@@ -15,12 +15,6 @@ new: aLocalScope
 set compile_env: 0
 category: 'other'
 method: object
-evaluate: aScope
-
-	^ self
-%
-category: 'other'
-method: object
 isNone
 
 	^false

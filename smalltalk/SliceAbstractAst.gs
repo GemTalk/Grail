@@ -11,14 +11,3 @@ isAbstract
 %
 ! ------------------- Instance methods for SliceAbstractAst
 set compile_env: 0
-category: 'other'
-method: SliceAbstractAst
-assign: aValue to: aVariable
-	self subclassResponsibility.
-%
-category: 'other'
-method: SliceAbstractAst
-evaluate: aContainer scope: aScope
-
-	self subclassResponsibility
-%

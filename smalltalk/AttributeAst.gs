@@ -12,32 +12,9 @@ assertContextIsLoad
 %
 category: 'other'
 method: AttributeAst
-callWithArguments: anArray keywords: aSymbolDictionary scope: aScope
-
-	| object |
-	self assertContextIsLoad.	
-	((value isKindOf: CallAst) and: [ value function id = #'super']) ifTrue: [ 
-		self setSuperInfo: aScope.
-		anArray add: object 
-	].
-	object := value evaluate: aScope.
-	^ object
-		call: attr
-		withArguments: anArray
-		keywords: aSymbolDictionary
-		scope: aScope
-%
-category: 'other'
-method: AttributeAst
 declareVariable
 
 	value declareVariable.
-%
-category: 'other'
-method: AttributeAst
-evaluate: aScope
-
-	^(value evaluate: aScope) get: attr
 %
 category: 'other'
 method: AttributeAst
@@ -76,12 +53,4 @@ method: AttributeAst
 setSuperInfo: aScope
 
 	aScope superInfo at: #'type' put: aScope outer astNode
-%
-category: 'other'
-method: AttributeAst
-setTo: anObject scope: aScope
-
-	(value evaluate: aScope)
-		set: attr
-		to: anObject
 %

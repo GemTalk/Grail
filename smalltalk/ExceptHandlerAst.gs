@@ -6,13 +6,6 @@ removeAllClassMethods ExceptHandlerAst
 set compile_env: 0
 category: 'other'
 method: ExceptHandlerAst
-evaluate: aScope
-
-	"(name evaluate: aScope) ifNotNil: [:myName | myName halt]."
-	^body evaluate: aScope
-%
-category: 'other'
-method: ExceptHandlerAst
 initialize
 	"ExceptHandler(expr? type, identifier? name, stmt* body)"
 	

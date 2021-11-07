@@ -6,15 +6,6 @@ removeAllClassMethods AssignAst
 set compile_env: 0
 category: 'other'
 method: AssignAst
-evaluate: aScope
-
-	| x |
-	x := value evaluate: aScope.
-	targets do: [:each | each setTo: x scope: aScope].
-	^x
-%
-category: 'other'
-method: AssignAst
 initialize
 	"Assign(expr* targets, expr value, string? type_comment)"
 

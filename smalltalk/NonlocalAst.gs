@@ -6,16 +6,6 @@ removeAllClassMethods NonlocalAst
 set compile_env: 0
 category: 'other'
 method: NonlocalAst
-evaluate: aScope
-
-	names do: [:each | 
-		| assoc |
-		assoc := aScope outer associationAt: each.
-		aScope addAssociation: assoc.
-	].
-%
-category: 'other'
-method: NonlocalAst
 initialize
 	"Nonlocal(identifier* names)"
 

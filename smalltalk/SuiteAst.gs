@@ -6,17 +6,6 @@ removeAllClassMethods SuiteAst
 set compile_env: 0
 category: 'other'
 method: SuiteAst
-evaluate: aScope
-
-	^[
-		body do: [:each | each evaluate: aScope].
-		None.
-	] on: ReturnNotification do: [:ex | 
-		ex return: ex value.
-	].
-%
-category: 'other'
-method: SuiteAst
 initialize
 
 	| stream node |

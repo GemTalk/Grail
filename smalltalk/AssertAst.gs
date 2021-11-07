@@ -6,12 +6,6 @@ removeAllClassMethods AssertAst
 set compile_env: 0
 category: 'other'
 method: AssertAst
-evaluate: aScope
-
-	(test evaluate: aScope) == True ifFalse: [ AssertionError signal ].
-%
-category: 'other'
-method: AssertAst
 initialize
 	"Assert(expr test, expr? msg)"
 

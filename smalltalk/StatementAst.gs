@@ -23,9 +23,3 @@ statementFrom: aNode
 %
 ! ------------------- Instance methods for StatementAst
 set compile_env: 0
-category: 'other'
-method: StatementAst
-evaluate: aScope
-
-	self subclassResponsibility.
-%

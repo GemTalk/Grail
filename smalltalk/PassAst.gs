@@ -6,11 +6,6 @@ removeAllClassMethods PassAst
 set compile_env: 0
 category: 'other'
 method: PassAst
-evaluate: aScope
-	"This is a NULL operation"
-%
-category: 'other'
-method: PassAst
 initialize
 	"pass"
 

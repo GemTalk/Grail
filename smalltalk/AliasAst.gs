@@ -6,22 +6,6 @@ removeAllClassMethods AliasAst
 set compile_env: 0
 category: 'other'
 method: AliasAst
-import: aScope
-
-	| function keywords module |
-	function := aScope get: #'__import__'.
-	keywords := SymbolDictionary new
-		at: #'globals' 	put: self globals;
-		at: #'locals'	put: aScope;
-		at: #'fromlist'	put: #();
-		at: #'level'		put: 0;
-		yourself.
-	module := function value: (Array with: name) value: keywords value: aScope.
-	aScope set: name to: module.
-
-%
-category: 'other'
-method: AliasAst
 initialize
 	"alias = (identifier name, identifier? asname)"
 

@@ -6,12 +6,6 @@ removeAllClassMethods ContinueAst
 set compile_env: 0
 category: 'other'
 method: ContinueAst
-evaluate: aScope
-
-	ContinueNotification signal
-%
-category: 'other'
-method: ContinueAst
 initialize
 "continue"
 

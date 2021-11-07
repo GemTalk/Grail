@@ -27,56 +27,9 @@ assertContextIsStore
 %
 category: 'other'
 method: NameAst
-callWithArguments: anArray keywords: aSymbolDictionary scope: aScope
-
-	| callable |
-	self assertContextIsLoad.
-	callable := aScope get: id.
-	self injectSuperArguments: anArray scope: aScope.
-	^ callable
-		value: anArray
-		value: aSymbolDictionary
-		value: aScope
-%
-category: 'other'
-method: NameAst
 declareVariable
 
 	parent declareVariable: id.
-%
-category: 'other'
-method: NameAst
-evaluate: aScope
-	"If the name refers to a function, return an object that can be sent #'value:value:value:'"
-
-	self assertContextIsLoad.
-	[
-		^aScope get: id.
-	] on: NameError do: [:ex | 
-		(self isVariableIsDeclared: id) ifTrue: [
-			"How would we resignal this?"
-			UnboundLocalError signal: 'local variable ''', id, ''' referenced before assignment'.
-		].
-		ex pass.
-	]
-%
-category: 'other'
-method: NameAst
-evaluate: container scope: aScope
-
-	| slice |
-	self assertContextIsLoad.
-	[
-		slice := aScope get: id.
-	] on: NameError do: [:ex | 
-		(self isVariableIsDeclared: id) ifTrue: [
-			"How would we resignal this?"
-			UnboundLocalError signal: 'local variable ''', id, ''' referenced before assignment'.
-		].
-		ex pass.
-	].
-	^slice evaluate: container scope: aScope
-
 %
 category: 'other'
 method: NameAst

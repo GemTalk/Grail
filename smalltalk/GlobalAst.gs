@@ -6,16 +6,6 @@ removeAllClassMethods GlobalAst
 set compile_env: 0
 category: 'other'
 method: GlobalAst
-evaluate: aScope
-
-	names do: [:each | 
-		| assoc |
-		assoc := aScope globals associationAt: each.
-		aScope addAssociation: assoc.
-	].
-%
-category: 'other'
-method: GlobalAst
 initialize
 	"Global(identifier* names)"
 

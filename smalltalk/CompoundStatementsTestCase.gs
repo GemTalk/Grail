@@ -322,43 +322,6 @@ testFunctionWithOneDefaultValueParameter
 %
 category: 'other'
 method: CompoundStatementsTestCase
-testIf
-	"If(NameConstant(True, lineno=5, col_offset=3), [Pass(lineno=6, col_offset=1)], [], lineno=5, col_offset=0)"
-
-	| x |
-	x := self statementsAt: 1.
-	self 
-		assert: (x isKindOf: IfAst);
-		assert: (x.test isKindOf: ConstantAst);
-		assert: (x.test.value == True);
-		assert: (x.test evaluate: aScope);
-		assert: (x.body isKindOf: SuiteAst);
-		assert: (x.body.body size == 1);
-		assert: ((x.body.body at: 1) isKindOf: PassAst);
-		assert: (x.orelse isKindOf: SuiteAst);
-		assert: (x.orelse.body size == 0);
-		yourself.
-%
-category: 'other'
-method: CompoundStatementsTestCase
-testIfElse
-	"If(NameConstant(False, lineno=8, col_offset=3), [Pass(lineno=9, col_offset=1)], [Pass(lineno=11, col_offset=1)], lineno=8, col_offset=0)"
-
-	| x |
-	x := self statementsAt: 2.
-	self 
-		assert: (x isKindOf: IfAst);
-		assert: (x.test isKindOf: ConstantAst);
-		assert: (x.test.value == False);
-		assert: (x.test evaluate: aScope) == False;
-		assert: (x.body.body size == 1);
-		assert: ((x.body.body at: 1) isKindOf: PassAst);
-		assert: (x.orelse.body size == 1);
-		assert: ((x.orelse.body at: 1) isKindOf: PassAst);
-		yourself.
-%
-category: 'other'
-method: CompoundStatementsTestCase
 testNestedFunction
 
 	| x arguments arg functionDef insideArguments insideArg return |
@@ -448,81 +411,6 @@ testTry
 		assert: (raise.cause isNone);
 		assert: (x.orelse size == 0);
 		assert: (x.finalbody size == 0);
-		yourself.
-%
-category: 'other'
-method: CompoundStatementsTestCase
-testVarArgs
-"
-    arguments = (
-		arg* posonlyargs, 	# added in 3.8
-		arg* args, 
-		arg? vararg, 
-		arg* kwonlyargs,
-		expr* kw_defaults, 
-		arg? kwarg, 
-		expr* defaults)
-
-	FunctionDef('fun', 
-		arguments(
-			[arg('f', None, lineno=80, col_offset=8)], 
-			arg('args', None, lineno=80, col_offset=12), 
-			[], 
-			[], 
-			arg('kwds', None, lineno=80, col_offset=20), 
-			[]
-		), [
-			Return(
-				Call(
-					Name('f', Load(), lineno=81, col_offset=8), 
-					[
-						Starred(Name('args', Load(), lineno=81, col_offset=11), Load(), lineno=81, col_offset=10)], 
-						[
-							keyword(None, Name('kwds', Load(), lineno=81, col_offset=19))
-						], lineno=81, col_offset=8
-				), lineno=81, col_offset=1
-			)
-		]
-	, [], None, lineno=80, col_offset=0
-	)
-"
-	| x |
-	x := self statementsAt: 19.
-	x := x evaluate: aScope.
-%
-category: 'other'
-method: CompoundStatementsTestCase
-testWhile
-	"While(NameConstant(True, lineno=14, col_offset=6), [Pass(lineno=15, col_offset=1)], [], lineno=14, col_offset=0)"
-
-	| x |
-	x := self statementsAt: 3.
-	self 
-		assert: (x isKindOf: WhileAst);
-		assert: (x.test isKindOf: ConstantAst);
-		assert: (x.test.value == True);
-		assert: (x.test evaluate: aScope);
-		assert: (x.body.body size == 1);
-		assert: ((x.body.body at: 1) isKindOf: PassAst);
-		assert: (x.orelse.body size == 0);
-		yourself.
-%
-category: 'other'
-method: CompoundStatementsTestCase
-testWhileElse
-	"While(NameConstant(False, lineno=17, col_offset=6), [Pass(lineno=18, col_offset=1)], [Pass(lineno=20, col_offset=1)], lineno=17, col_offset=0)"
-
-	| x |
-	x := self statementsAt: 4.
-	self 
-		assert: (x isKindOf: WhileAst);
-		assert: (x.test isKindOf: ConstantAst);
-		assert: (x.test.value == False);
-		assert:  (x.test evaluate: aScope) == False;
-		assert: (x.body.body size == 1);
-		assert: ((x.body.body at: 1) isKindOf: PassAst);
-		assert: (x.orelse.body size == 1);
-		assert: ((x.orelse.body at: 1) isKindOf: PassAst);
 		yourself.
 %
 category: 'other'

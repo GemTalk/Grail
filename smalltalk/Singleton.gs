@@ -12,9 +12,3 @@ singleton
 %
 ! ------------------- Instance methods for Singleton
 set compile_env: 0
-category: 'other'
-method: Singleton
-evaluate: aScope
-
-	^self
-%

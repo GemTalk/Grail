@@ -6,14 +6,6 @@ removeAllClassMethods BinOpAst
 set compile_env: 0
 category: 'other'
 method: BinOpAst
-evaluate: aScope
-
-	| lhs |
-	lhs := left evaluate: aScope.
-	^(op pyFunctionFor: lhs) value: lhs value: (right evaluate: aScope)
-%
-category: 'other'
-method: BinOpAst
 initialize
 	"BinOp(expr left, operator op, expr right)"
 	"If BinOp were the only use of operator, then we would replace it with a subclass of operator.

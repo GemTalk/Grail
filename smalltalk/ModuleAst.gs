@@ -56,18 +56,6 @@ call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
 %
 category: 'other'
 method: ModuleAst
-evaluate
-
-	scope := GlobalScope newForNode: self.
-	scope set: #'__name__' to: name.
-	[
-		body evaluate: scope.
-	] on: CancelNotification do: [:ex |
-		^nil
-	].
-%
-category: 'other'
-method: ModuleAst
 globals
 
 	^body
