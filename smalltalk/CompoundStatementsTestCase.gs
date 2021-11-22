@@ -17,7 +17,7 @@ testClass
 
 	| x |
 	x := self statementsAt: 14.
-	self 
+	self
 		assert: (x isKindOf: ClassDefAst);
 		assert: (x.name == #'Foo');
 		assert: (x.bases size == 0);
@@ -34,7 +34,7 @@ testClassInheritance
 
 	| x name |
 	x := self statementsAt: 15.
-	self 
+	self
 		assert: (x isKindOf: ClassDefAst);
 		assert: (x.name == #'Bar');
 		assert: (x.bases size == 1);
@@ -57,22 +57,22 @@ if any(arg is not None for arg in []):	# 20
 
 	If(
 		Call(
-			Name('any', Load(), lineno=84, col_offset=3), 
+			Name('any', Load(), lineno=84, col_offset=3),
 			[GeneratorExp(
 				Compare(
-					Name('arg', Load(), lineno=84, col_offset=7), 
-					[IsNot()], 
-					[NameConstant(None, lineno=84, col_offset=18)], 
-				lineno=84, col_offset=7), 
+					Name('arg', Load(), lineno=84, col_offset=7),
+					[IsNot()],
+					[NameConstant(None, lineno=84, col_offset=18)],
+				lineno=84, col_offset=7),
 				[comprehension(
-					Name('arg', Store(), lineno=84, col_offset=27), 
+					Name('arg', Store(), lineno=84, col_offset=27),
 					list([], Load(), lineno=84, col_offset=34), [], 0
 				)]
-			, lineno=84, col_offset=7)], 
-			[], 
-		lineno=84, col_offset=3), 
-		[Pass( lineno=85, col_offset=1)], 
-		[], 
+			, lineno=84, col_offset=7)],
+			[],
+		lineno=84, col_offset=3),
+		[Pass(lineno=85, col_offset=1)],
+		[],
 	lineno=84, col_offset=0)])
 "
 	| x |
@@ -84,7 +84,7 @@ testCoroutine
 
 	| x arguments arg |
 	x := self statementsAt: 16.
-	self 
+	self
 		assert: (x isKindOf: AsyncFunctionDefAst);
 		assert: (x.name = 'asyncFunc');
 		assert: ((arguments := x.args) isKindOf: ArgumentsAst);
@@ -109,7 +109,7 @@ testCoroutineFor
 
 	| x arguments arg asyncFor call num |
 	x := self statementsAt: 17.
-	self 
+	self
 		assert: (x isKindOf: AsyncFunctionDefAst);
 		assert: (x.name = 'asyncForFunc');
 		assert: ((arguments := x.args) isKindOf: ArgumentsAst);
@@ -148,7 +148,7 @@ testCoroutineWith
 
 	| x arguments arg with withItem name call str1 str2 |
 	x := self statementsAt: 18.
-	self 
+	self
 		assert: (x isKindOf: AsyncFunctionDefAst);
 		assert: (x.name = 'asyncWithFunc');
 		assert: ((arguments := x.args) isKindOf: ArgumentsAst);
@@ -161,7 +161,7 @@ testCoroutineWith
 		assert: (arguments.kw_defaults size == 0);
 		assert: (arguments.kwarg isNone);
 		assert: (arguments.defaults size == 0);
-		assert: (x.body.body size == 1);		
+		assert: (x.body.body size == 1);
 		assert: ((with := x.body.body at: 1) isKindOf: AsyncWithAst);
 		assert: (with.items size == 1);
 		assert: ((withItem := with.items at: 1) isKindOf: WithItemAst);
@@ -188,13 +188,13 @@ category: 'other'
 method: CompoundStatementsTestCase
 testFor
 	"For(
-		Name('_', Store(), lineno=23, col_offset=4), 
-		Call(Name('range', Load(), lineno=23, col_offset=9), [Num(10, lineno=23, col_offset=15)], [], lineno=23, col_offset=9), 
+		Name('_', Store(), lineno=23, col_offset=4),
+		Call(Name('range', Load(), lineno=23, col_offset=9), [Num(10, lineno=23, col_offset=15)], [], lineno=23, col_offset=9),
 		[Pass(lineno=24, col_offset=1)], [], lineno=23, col_offset=0)"
 
 	| x name call num |
 	x := self statementsAt: 5.
-	self 
+	self
 		assert: (x isKindOf: ForAst);
 		assert: ((name := x.target) isKindOf: NameAst);
 		assert: (name.id == #'_');
@@ -216,14 +216,14 @@ category: 'other'
 method: CompoundStatementsTestCase
 testForElse
 	"For(
-		Name('_', Store(), lineno=26, col_offset=4), 
-		Call(Name('range', Load(), lineno=26, col_offset=9), [Num(10, lineno=26, col_offset=15)], [], lineno=26, col_offset=9), 
-		[Pass(lineno=27, col_offset=1)], 
+		Name('_', Store(), lineno=26, col_offset=4),
+		Call(Name('range', Load(), lineno=26, col_offset=9), [Num(10, lineno=26, col_offset=15)], [], lineno=26, col_offset=9),
+		[Pass(lineno=27, col_offset=1)],
 		[Pass(lineno=29, col_offset=1)], lineno=26, col_offset=0)"
 
 	| x name call num |
 	x := self statementsAt: 6.
-	self 
+	self
 		assert: (x isKindOf: ForAst);
 		assert: ((name := x.target) isKindOf: NameAst);
 		assert: (name.id == #'_');
@@ -248,7 +248,7 @@ testFunctionWithOneArgument
 
 	| x arguments arg |
 	x := self statementsAt: 10.
-	self 
+	self
 		assert: (x isKindOf: FunctionDefAst);
 		assert: (x.name == #'func');
 		assert: ((arguments := x.args) isKindOf: ArgumentsAst);
@@ -256,15 +256,15 @@ testFunctionWithOneArgument
 		assert: ((arg := arguments.args at: 1) isKindOf: ArgAst);
 		assert: (arg.arg = 'arg');
 		assert: (arg.annotation isNone);
-		assert: (arguments.vararg isNone); 
-		assert: (arguments.kwonlyargs size == 0); 
-		assert: (arguments.kw_defaults size == 0); 
-		assert: (arguments.kwarg isNone); 
-		assert: (arguments.defaults size == 0); 
-		assert: (x.body.body size == 1); 
-		assert: ((x.body.body at: 1) isKindOf: PassAst); 
-		assert: (x.decorator_list size == 0); 
-		assert: (x.returns isNone); 
+		assert: (arguments.vararg isNone);
+		assert: (arguments.kwonlyargs size == 0);
+		assert: (arguments.kw_defaults size == 0);
+		assert: (arguments.kwarg isNone);
+		assert: (arguments.defaults size == 0);
+		assert: (x.body.body size == 1);
+		assert: ((x.body.body at: 1) isKindOf: PassAst);
+		assert: (x.decorator_list size == 0);
+		assert: (x.returns isNone);
 		yourself.
 %
 category: 'other'
@@ -273,7 +273,7 @@ testFunctionWithOneDecorator
 
 	| x arguments arg name |
 	x := self statementsAt: 11.
-	self 
+	self
 		assert: (x isKindOf: FunctionDefAst);
 		assert: (x.name == #'decoratedFunc');
 		assert: ((arguments := x.args) isKindOf: ArgumentsAst);
@@ -281,16 +281,16 @@ testFunctionWithOneDecorator
 		assert: ((arg := arguments.args at: 1) isKindOf: ArgAst);
 		assert: (arg.arg = 'arg');
 		assert: (arg.annotation isNone);
-		assert: (arguments.vararg isNone); 
-		assert: (arguments.kwonlyargs size == 0); 
-		assert: (arguments.kw_defaults size == 0); 
-		assert: (arguments.kwarg isNone); 
-		assert: (arguments.defaults size == 0); 
-		assert: (x.body.body size == 1); 
-		assert: ((x.body.body at: 1) isKindOf: PassAst); 
-		assert: (x.decorator_list size == 1); 
-		assert: ((name := x.decorator_list at: 1) == #'func'); 
-		assert: (x.returns isNone); 
+		assert: (arguments.vararg isNone);
+		assert: (arguments.kwonlyargs size == 0);
+		assert: (arguments.kw_defaults size == 0);
+		assert: (arguments.kwarg isNone);
+		assert: (arguments.defaults size == 0);
+		assert: (x.body.body size == 1);
+		assert: ((x.body.body at: 1) isKindOf: PassAst);
+		assert: (x.decorator_list size == 1);
+		assert: ((name := x.decorator_list at: 1) == #'func');
+		assert: (x.returns isNone);
 		yourself.
 %
 category: 'other'
@@ -299,7 +299,7 @@ testFunctionWithOneDefaultValueParameter
 
 	| x arguments arg nameConstant |
 	x := self statementsAt: 12.
-	self 
+	self
 		assert: (x isKindOf: FunctionDefAst);
 		assert: (x.name == #'defaultParameterValueFunc');
 		assert: ((arguments := x.args) isKindOf: ArgumentsAst);
@@ -307,17 +307,17 @@ testFunctionWithOneDefaultValueParameter
 		assert: ((arg := arguments.args at: 1) isKindOf: ArgAst);
 		assert: (arg.arg = 'arg');
 		assert: (arg.annotation isNone);
-		assert: (arguments.vararg isNone); 
-		assert: (arguments.kwonlyargs size == 0); 
-		assert: (arguments.kw_defaults size == 0); 
-		assert: (arguments.kwarg isNone); 
+		assert: (arguments.vararg isNone);
+		assert: (arguments.kwonlyargs size == 0);
+		assert: (arguments.kw_defaults size == 0);
+		assert: (arguments.kwarg isNone);
 		assert: (arguments.defaults size == 1);
 		assert: ((nameConstant := arguments.defaults at: 1) isKindOf: ConstantAst);
 		assert: (nameConstant.value == None);
-		assert: (x.body.body size == 1); 
-		assert: ((x.body.body at: 1) isKindOf: PassAst); 
-		assert: (x.decorator_list size == 0); 
-		assert: (x.returns isNone); 
+		assert: (x.body.body size == 1);
+		assert: ((x.body.body at: 1) isKindOf: PassAst);
+		assert: (x.decorator_list size == 0);
+		assert: (x.returns isNone);
 		yourself.
 %
 category: 'other'
@@ -326,7 +326,7 @@ testNestedFunction
 
 	| x arguments arg functionDef insideArguments insideArg return |
 	x := self statementsAt: 13.
-	self 
+	self
 		assert: (x isKindOf: FunctionDefAst);
 		assert: (x.name == #'nestedFunc');
 		assert: ((arguments := x.args) isKindOf: ArgumentsAst);
@@ -334,23 +334,23 @@ testNestedFunction
 		assert: ((arg := arguments.args at: 1) isKindOf: ArgAst);
 		assert: (arg.arg = 'arg');
 		assert: (arg.annotation isNone);
-		assert: (arguments.vararg isNone); 
-		assert: (arguments.kwonlyargs size == 0); 
-		assert: (arguments.kw_defaults size == 0); 
-		assert: (arguments.kwarg isNone); 
+		assert: (arguments.vararg isNone);
+		assert: (arguments.kwonlyargs size == 0);
+		assert: (arguments.kw_defaults size == 0);
+		assert: (arguments.kwarg isNone);
 		assert: (arguments.defaults size == 0);
-		assert: (x.body.body size == 2); 
-		assert: ((functionDef := x.body.body at: 1) isKindOf: FunctionDefAst); 
-		assert: (functionDef.name == #'insideFunc'); 
-		assert: ((insideArguments := functionDef.args) isKindOf: ArgumentsAst); 
+		assert: (x.body.body size == 2);
+		assert: ((functionDef := x.body.body at: 1) isKindOf: FunctionDefAst);
+		assert: (functionDef.name == #'insideFunc');
+		assert: ((insideArguments := functionDef.args) isKindOf: ArgumentsAst);
 		assert: (insideArguments.args size == 1);
 		assert: ((insideArg := insideArguments.args at: 1) isKindOf: ArgAst);
 		assert: (insideArg.arg = 'insideArg');
 		assert: (insideArg.annotation isNone);
-		assert: (insideArguments.vararg isNone); 
-		assert: (insideArguments.kwonlyargs size == 0); 
-		assert: (insideArguments.kw_defaults size == 0); 
-		assert: (insideArguments.kwarg isNone); 
+		assert: (insideArguments.vararg isNone);
+		assert: (insideArguments.kwonlyargs size == 0);
+		assert: (insideArguments.kw_defaults size == 0);
+		assert: (insideArguments.kwarg isNone);
 		assert: (insideArguments.defaults size == 0);
 		assert: (functionDef.body.body size == 1);
 		assert: ((functionDef.body.body at: 1) isKindOf: PassAst);
@@ -360,8 +360,8 @@ testNestedFunction
 		assert: (return.value isKindOf: NameAst);
 		assert: (return.value.id == #'insideFunc');
 		assert: (return.value.ctx isKindOf: LoadAst);
-		assert: (x.decorator_list size == 0); 
-		assert: (x.returns isNone); 
+		assert: (x.decorator_list size == 0);
+		assert: (x.returns isNone);
 		yourself.
 %
 category: 'other'
@@ -369,18 +369,18 @@ method: CompoundStatementsTestCase
 testTry
 	"Try(
 		[Expr(
-			Call(Name('print', Load(), lineno=33, col_offset=4), 
-				[BinOp(Num(1, lineno=33, col_offset=10), Div(), Num(0, lineno=33, col_offset=14), lineno=33, col_offset=10)], 
-				[], lineno=33, col_offset=4), lineno=33, col_offset=4)], 
-		[ExceptHandler(None, None, 
+			Call(Name('print', Load(), lineno=33, col_offset=4),
+				[BinOp(Num(1, lineno=33, col_offset=10), Div(), Num(0, lineno=33, col_offset=14), lineno=33, col_offset=10)],
+				[], lineno=33, col_offset=4), lineno=33, col_offset=4)],
+		[ExceptHandler(None, None,
 			[Raise(
 				Call(
-					Name('RuntimeError', Load(), lineno=35, col_offset=10), 
+					Name('RuntimeError', Load(), lineno=35, col_offset=10),
 					[Str('Something bad happened', lineno=35, col_offset=23)], [], lineno=35, col_offset=10), None, lineno=35, col_offset=4)], lineno=34, col_offset=0)], [], [], lineno=32, col_offset=0)"
 
 	| x expr call binOp exceptHandler raise insideCall string |
 	x :=self statementsAt: 7.
-	self 
+	self
 		assert: (x isKindOf:TryAst);
 		assert: (x.body.body size == 1);
 		assert: ((expr := x.body.body at: 1) isKindOf: ExprAst);
@@ -418,14 +418,14 @@ method: CompoundStatementsTestCase
 testWith
 	"With([
 		withitem(
-			Call(Name('open', Load(), lineno=41, col_offset=5), 
-				[Str('/etc/passwd', lineno=41, col_offset=10), 
-				Str('r', lineno=41, col_offset=25)], [], lineno=41, col_offset=5), None)], 
+			Call(Name('open', Load(), lineno=41, col_offset=5),
+				[Str('/etc/passwd', lineno=41, col_offset=10),
+				Str('r', lineno=41, col_offset=25)], [], lineno=41, col_offset=5), None)],
 		[Pass(lineno=42, col_offset=4)], lineno=41, col_offset=0)"
 
 	| x withItem call str1 str2 |
 	x := self statementsAt: 9.
-	self 
+	self
 		assert: (x isKindOf: WithAst);
 		assert: (x.items size == 1);
 		assert: ((withItem := x.items at: 1) isKindOf: WithItemAst);
@@ -449,14 +449,14 @@ method: CompoundStatementsTestCase
 testWithOptionalVars
 	"With(
 		[withitem(
-			Call(Name('open', Load(), lineno=38, col_offset=5), 
-				[Str('/etc/passwd', lineno=38, col_offset=10), Str('r', lineno=38, col_offset=25)], [], lineno=38, col_offset=5), 
-			Name('f', Store(), lineno=38, col_offset=33))], 
+			Call(Name('open', Load(), lineno=38, col_offset=5),
+				[Str('/etc/passwd', lineno=38, col_offset=10), Str('r', lineno=38, col_offset=25)], [], lineno=38, col_offset=5),
+			Name('f', Store(), lineno=38, col_offset=33))],
 		[Pass(lineno=39, col_offset=4)], lineno=38, col_offset=0)"
 
 	| x withItem call str1 str2 name |
 	x := self statementsAt: 8.
-	self 
+	self
 		assert: (x isKindOf: WithAst);
 		assert: (x.items size == 1);
 		assert: ((withItem := x.items at: 1) isKindOf: WithItemAst);

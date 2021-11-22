@@ -8,50 +8,50 @@ category: 'done'
 method: intTest
 test__abs__
 
-   self 
-		assert: ( self targetInstance: 3 ) __abs__ equals: ( self targetInstance: 3 );
-        assert: ( self targetInstance: -3 ) __abs__ equals: ( self targetInstance: 3 );
+   self
+		assert: (self targetInstance: 3) __abs__ equals: (self targetInstance: 3);
+        assert: (self targetInstance: -3) __abs__ equals: (self targetInstance: 3);
 		yourself.
 %
 category: 'done'
 method: intTest
 test__add__
 
-   self 
-        assert: ( ( self targetInstance:  3 ) __add__: ( self targetInstance: 1 ) ) equals: ( self targetInstance: 4 );
-        assert: ( ( self targetInstance: -3 ) __add__: ( self targetInstance: 1 ) ) equals: ( self targetInstance: -2 );
+   self
+        assert: ((self targetInstance:  3) __add__: (self targetInstance: 1)) equals: (self targetInstance: 4);
+        assert: ((self targetInstance: -3) __add__: (self targetInstance: 1)) equals: (self targetInstance: -2);
 		yourself.
 %
 category: 'done'
 method: intTest
 test__and__
 
-   self 
-		assert: ( ( self targetInstance:  3 ) __and__: ( self targetInstance: 1 ) ) equals: ( self targetInstance: 1 );
-        assert: ( ( self targetInstance: -3 ) __and__: ( self targetInstance: 1 ) ) equals: ( self targetInstance: 1 );
-        assert: ( ( self targetInstance:  3 ) __and__: ( self targetInstance: 2 ) ) equals: ( self targetInstance: 2 );
-        assert: ( ( self targetInstance: -3 ) __and__: ( self targetInstance: 2 ) ) equals: ( self targetInstance: 0 );
+   self
+		assert: ((self targetInstance:  3) __and__: (self targetInstance: 1)) equals: (self targetInstance: 1);
+        assert: ((self targetInstance: -3) __and__: (self targetInstance: 1)) equals: (self targetInstance: 1);
+        assert: ((self targetInstance:  3) __and__: (self targetInstance: 2)) equals: (self targetInstance: 2);
+        assert: ((self targetInstance: -3) __and__: (self targetInstance: 2)) equals: (self targetInstance: 0);
 		yourself.
 %
 category: 'done'
 method: intTest
 test__bool__
 
-	self 
-		assert: ( self targetInstance:  3 ) __bool__;
-        assert: ( self targetInstance: -3 ) __bool__;
-        assert: ( self targetInstance: -1 ) __bool__;
-        assert: ( self targetInstance:  1 ) __bool__;
-        deny:   ( self targetInstance:  0 ) __bool__;
+	self
+		assert: (self targetInstance:  3) __bool__;
+        assert: (self targetInstance: -3) __bool__;
+        assert: (self targetInstance: -1) __bool__;
+        assert: (self targetInstance:  1) __bool__;
+        deny:   (self targetInstance:  0) __bool__;
 		yourself
 %
 category: 'done'
 method: intTest
 test__ceil__
 
-   self 
-		assert: ( self targetInstance:  3 ) __ceil__ equals:  ( self targetInstance: 3 );
-        assert: ( self targetInstance: -3 ) __ceil__ equals: ( self targetInstance: -3 );
+   self
+		assert: (self targetInstance:  3) __ceil__ equals:  (self targetInstance: 3);
+        assert: (self targetInstance: -3) __ceil__ equals: (self targetInstance: -3);
 		yourself.
 %
 category: 'done'
@@ -59,13 +59,13 @@ method: intTest
 test__divmod__
 
 	self
-		assert: ( tuple ___new__init__: { 0. 3 } ) equals: ( ( self targetInstance: 3 ) __divmod__: ( self targetInstance: 4 ) );
-		assert: ( tuple ___new__init__: {-1.-1 } ) equals: ( ( self targetInstance: 3 ) __divmod__: ( self targetInstance: -4 ) );
-		assert: ( tuple ___new__init__: { 0.-3 } ) equals: ( ( self targetInstance:-3 ) __divmod__: ( self targetInstance: -4 ) );
-		assert: ( tuple ___new__init__: { 1. 1 } ) equals: ( ( self targetInstance: 4 ) __divmod__: ( self targetInstance: 3 ) );
-		assert: ( tuple ___new__init__: {-2.-2 } ) equals: ( ( self targetInstance: 4 ) __divmod__: ( self targetInstance: -3 ) );
-		assert: ( tuple ___new__init__: { 1.-1 } ) equals: ( ( self targetInstance:-4 ) __divmod__: ( self targetInstance: -3 ) );
-		assert: ( tuple ___new__init__: {-2. 2 } ) equals: ( ( self targetInstance:-4 ) __divmod__: ( self targetInstance: 3 ) );
+		assert: (tuple ___new__init__: { 0. 3 }) equals: ((self targetInstance: 3) __divmod__: (self targetInstance: 4));
+		assert: (tuple ___new__init__: {-1.-1 }) equals: ((self targetInstance: 3) __divmod__: (self targetInstance: -4));
+		assert: (tuple ___new__init__: { 0.-3 }) equals: ((self targetInstance:-3) __divmod__: (self targetInstance: -4));
+		assert: (tuple ___new__init__: { 1. 1 }) equals: ((self targetInstance: 4) __divmod__: (self targetInstance: 3));
+		assert: (tuple ___new__init__: {-2.-2 }) equals: ((self targetInstance: 4) __divmod__: (self targetInstance: -3));
+		assert: (tuple ___new__init__: { 1.-1 }) equals: ((self targetInstance:-4) __divmod__: (self targetInstance: -3));
+		assert: (tuple ___new__init__: {-2. 2 }) equals: ((self targetInstance:-4) __divmod__: (self targetInstance: 3));
 		yourself
 %
 category: 'done'
@@ -87,19 +87,19 @@ category: 'done'
 method: intTest
 test__float__
 
-   self 
-		assert: ( self targetInstance:  3 ) __float__ __class__ equals: float;
-		assert: ( ( self targetInstance:  3 ) __float__ __eq__: ( self targetInstance:  3 ) );
-        assert: ( ( self targetInstance: -3 ) __float__ __eq__: ( self targetInstance: -3 ) );
+   self
+		assert: (self targetInstance:  3) __float__ __class__ equals: float;
+		assert: ((self targetInstance:  3) __float__ __eq__: (self targetInstance:  3));
+        assert: ((self targetInstance: -3) __float__ __eq__: (self targetInstance: -3));
 		yourself.
 %
 category: 'done'
 method: intTest
 test__floor__
 
-   self 
-		assert: ( self targetInstance:  3 ) __floor__ equals: ( self targetInstance: 3 );
-        assert: ( self targetInstance: -3 ) __floor__ equals: ( self targetInstance: -3 );
+   self
+		assert: (self targetInstance:  3) __floor__ equals: (self targetInstance: 3);
+        assert: (self targetInstance: -3) __floor__ equals: (self targetInstance: -3);
 		yourself.
 %
 category: 'done'
@@ -107,9 +107,9 @@ method: intTest
 test__floordiv__
 
 	self
-		assert: ( ( self targetInstance: 3 ) __floordiv__: ( self targetInstance: 4 ) ) equals: ( self targetInstance: 0 );
-		assert: ( ( self targetInstance: 3 ) __floordiv__: ( self targetInstance: 2 ) ) equals: ( self targetInstance: 1 );
-		assert: ( ( self targetInstance: 4 ) __floordiv__: ( self targetInstance: 2 ) ) equals: ( self targetInstance: 2 );
+		assert: ((self targetInstance: 3) __floordiv__: (self targetInstance: 4)) equals: (self targetInstance: 0);
+		assert: ((self targetInstance: 3) __floordiv__: (self targetInstance: 2)) equals: (self targetInstance: 1);
+		assert: ((self targetInstance: 4) __floordiv__: (self targetInstance: 2)) equals: (self targetInstance: 2);
 		yourself
 %
 category: 'done'
@@ -117,9 +117,9 @@ method: intTest
 test__ge__
 
 	self
-		deny:   ( ( self targetInstance: 2 ) __ge__: ( self targetInstance: 3 ) );
-		assert: ( ( self targetInstance: 3 ) __ge__: ( self targetInstance: 3 ) );
-		assert: ( ( self targetInstance: 4 ) __ge__: ( self targetInstance: 3 ) );
+		deny:   ((self targetInstance: 2) __ge__: (self targetInstance: 3));
+		assert: ((self targetInstance: 3) __ge__: (self targetInstance: 3));
+		assert: ((self targetInstance: 4) __ge__: (self targetInstance: 3));
 		yourself
 %
 category: 'done'
@@ -127,38 +127,38 @@ method: intTest
 test__gt__
 
 	self
-		deny:   ( ( self targetInstance: 2 ) __gt__: ( self targetInstance: 3 ) );
-		deny:   ( ( self targetInstance: 3 ) __gt__: ( self targetInstance: 3 ) );
-		assert: ( ( self targetInstance: 4 ) __gt__: ( self targetInstance: 3 ) );
+		deny:   ((self targetInstance: 2) __gt__: (self targetInstance: 3));
+		deny:   ((self targetInstance: 3) __gt__: (self targetInstance: 3));
+		assert: ((self targetInstance: 4) __gt__: (self targetInstance: 3));
 		yourself
 %
 category: 'done'
 method: intTest
 test__index__
 
-   self 
-		assert: ( self targetInstance:  3 ) __index__ equals: ( self targetInstance: 3 );
-        assert: ( self targetInstance: -3 ) __index__ equals: ( self targetInstance: -3 );
+   self
+		assert: (self targetInstance:  3) __index__ equals: (self targetInstance: 3);
+        assert: (self targetInstance: -3) __index__ equals: (self targetInstance: -3);
 		yourself
 %
 category: 'done'
 method: intTest
 test__int__
 
-   self 
-		assert: ( self targetInstance: 3 ) __int__ equals: ( self targetInstance: 3 );
-        assert: ( self targetInstance: -3 ) __int__ equals: ( self targetInstance: -3 );
+   self
+		assert: (self targetInstance: 3) __int__ equals: (self targetInstance: 3);
+        assert: (self targetInstance: -3) __int__ equals: (self targetInstance: -3);
 		yourself.
 %
 category: 'done'
 method: intTest
 test__invert__
 
-   self 
-		assert: ( self targetInstance:  3 ) __invert__ equals: ( self targetInstance: -4 );
-        assert: ( self targetInstance: -3 ) __invert__ equals: ( self targetInstance:  2 );
-        assert: ( self targetInstance:  0 ) __invert__ equals: ( self targetInstance: -1 );
-        assert: ( self targetInstance:  1 ) __invert__ equals: ( self targetInstance: -2 );
+   self
+		assert: (self targetInstance:  3) __invert__ equals: (self targetInstance: -4);
+        assert: (self targetInstance: -3) __invert__ equals: (self targetInstance:  2);
+        assert: (self targetInstance:  0) __invert__ equals: (self targetInstance: -1);
+        assert: (self targetInstance:  1) __invert__ equals: (self targetInstance: -2);
 		yourself.
 %
 category: 'done'
@@ -166,20 +166,20 @@ method: intTest
 test__le__
 
 	self
-		assert: ( ( self targetInstance: 2 ) __le__: ( self targetInstance: 3 ) );
-		assert: ( ( self targetInstance: 3 ) __le__: ( self targetInstance: 3 ) );
-		deny:   ( ( self targetInstance: 4 ) __le__: ( self targetInstance: 3 ) );
+		assert: ((self targetInstance: 2) __le__: (self targetInstance: 3));
+		assert: ((self targetInstance: 3) __le__: (self targetInstance: 3));
+		deny:   ((self targetInstance: 4) __le__: (self targetInstance: 3));
 		yourself
 %
 category: 'done'
 method: intTest
 test__lshift__
 
-	self 
-		assert: ( ( self targetInstance:  3 ) __lshift__: 1 ) equals: ( self targetInstance:  6 );
-        assert: ( ( self targetInstance:  3 ) __lshift__: 2 ) equals: ( self targetInstance: 12 );
-        assert: ( ( self targetInstance: -3 ) __lshift__: 1 ) equals: ( self targetInstance: -6 );
-		assert: ( ( self targetInstance: -3 ) __lshift__: 2 ) equals: ( self targetInstance: -12 );
+	self
+		assert: ((self targetInstance:  3) __lshift__: 1) equals: (self targetInstance:  6);
+        assert: ((self targetInstance:  3) __lshift__: 2) equals: (self targetInstance: 12);
+        assert: ((self targetInstance: -3) __lshift__: 1) equals: (self targetInstance: -6);
+		assert: ((self targetInstance: -3) __lshift__: 2) equals: (self targetInstance: -12);
 		yourself
 %
 category: 'done'
@@ -187,9 +187,9 @@ method: intTest
 test__lt__
 
 	self
-		assert: ( ( self targetInstance: 2 ) __lt__: ( self targetInstance: 3 ) );
-		deny:   ( ( self targetInstance: 3 ) __lt__: ( self targetInstance: 3 ) );
-		deny:   ( ( self targetInstance: 4 ) __lt__: ( self targetInstance: 3 ) );
+		assert: ((self targetInstance: 2) __lt__: (self targetInstance: 3));
+		deny:   ((self targetInstance: 3) __lt__: (self targetInstance: 3));
+		deny:   ((self targetInstance: 4) __lt__: (self targetInstance: 3));
 		yourself
 %
 category: 'done'
@@ -197,18 +197,18 @@ method: intTest
 test__mod__
 
 	self
-		assert: ( ( ( self targetInstance: 3 ) __mod__: ( self targetInstance: 4 ) ) __eq__: ( self targetInstance: 3 ) );
-		assert: ( ( ( self targetInstance: 3 ) __mod__: ( self targetInstance: 2 ) ) __eq__: ( self targetInstance: 1 ) );
-		assert: ( ( ( self targetInstance: 4 ) __mod__: ( self targetInstance: 2 ) ) __eq__: ( self targetInstance: 0 ) );
+		assert: (((self targetInstance: 3) __mod__: (self targetInstance: 4)) __eq__: (self targetInstance: 3));
+		assert: (((self targetInstance: 3) __mod__: (self targetInstance: 2)) __eq__: (self targetInstance: 1));
+		assert: (((self targetInstance: 4) __mod__: (self targetInstance: 2)) __eq__: (self targetInstance: 0));
 		yourself
 %
 category: 'done'
 method: intTest
 test__mul__
 
-   self 
-        assert: ( ( ( self targetInstance:  3 ) __mul__: ( self targetInstance: 2 ) ) __eq__: ( self targetInstance: 6 ) );
-        assert: ( ( ( self targetInstance: -3 ) __mul__: ( self targetInstance: 2 ) ) __eq__: ( self targetInstance: -6 ) );
+   self
+        assert: (((self targetInstance:  3) __mul__: (self targetInstance: 2)) __eq__: (self targetInstance: 6));
+        assert: (((self targetInstance: -3) __mul__: (self targetInstance: 2)) __eq__: (self targetInstance: -6));
 		yourself.
 %
 category: 'done'
@@ -229,9 +229,9 @@ category: 'done'
 method: intTest
 test__neg__
 
-   self 
-		assert: ( self targetInstance: 3 ) __neg__ equals: ( self targetInstance: -3 );
-        assert: ( self targetInstance: -3 ) __neg__ equals: ( self targetInstance: 3 );
+   self
+		assert: (self targetInstance: 3) __neg__ equals: (self targetInstance: -3);
+        assert: (self targetInstance: -3) __neg__ equals: (self targetInstance: 3);
 		yourself.
 %
 category: 'done'
@@ -239,16 +239,16 @@ method: intTest
 test__new__onString
 
 	self
-		assert: (self targetInstance:  '1' )	__repr__ equals: '1';
-		assert: (self targetInstance: '+1' )	__repr__ equals: '1';
-	   	assert: (self targetInstance:  '0' )	__repr__ equals: '0';
-		assert: (self targetInstance: '-1' )	__repr__ equals: '-1';
-		assert: (self targetInstance: '33' )	__repr__ equals: '33';
+		assert: (self targetInstance:  '1')	__repr__ equals: '1';
+		assert: (self targetInstance: '+1')	__repr__ equals: '1';
+	   	assert: (self targetInstance:  '0')	__repr__ equals: '0';
+		assert: (self targetInstance: '-1')	__repr__ equals: '-1';
+		assert: (self targetInstance: '33')	__repr__ equals: '33';
 		yourself.
 	[
 		self targetInstance: 'j'.
 		self assert: false.
-	] on: ValueError do: [:ex | 
+	] on: ValueError do: [:ex |
 		self assert: ex messageText equals: 'int() arg is a malformed string'.
 	].
 %
@@ -256,20 +256,20 @@ category: 'done'
 method: intTest
 test__or__
 
-	self 
-		assert: ( ( self targetInstance:  3 ) __or__: 1 ) equals: ( self targetInstance: 3 );
-        assert: ( ( self targetInstance: -3 ) __or__: 1 ) equals: ( self targetInstance: -3 );
-        assert: ( ( self targetInstance:  3 ) __or__: 2 ) equals: ( self targetInstance: 3 );
-        assert: ( ( self targetInstance: -3 ) __or__: 2 ) equals: ( self targetInstance: -1 );
+	self
+		assert: ((self targetInstance:  3) __or__: 1) equals: (self targetInstance: 3);
+        assert: ((self targetInstance: -3) __or__: 1) equals: (self targetInstance: -3);
+        assert: ((self targetInstance:  3) __or__: 2) equals: (self targetInstance: 3);
+        assert: ((self targetInstance: -3) __or__: 2) equals: (self targetInstance: -1);
 		yourself.
 %
 category: 'done'
 method: intTest
 test__pos__
 
-   self 
-		assert: ( self targetInstance: 3 ) __pos__ equals: ( self targetInstance: 3 );
-        assert: ( self targetInstance: -3 ) __pos__ equals: ( self targetInstance: 3 );
+   self
+		assert: (self targetInstance: 3) __pos__ equals: (self targetInstance: 3);
+        assert: (self targetInstance: -3) __pos__ equals: (self targetInstance: 3);
 		yourself.
 %
 category: 'done'
@@ -277,28 +277,28 @@ method: intTest
 test__pow__
 
 	self
-		assert: ( ( self targetInstance: 3 ) __pow__: ( self targetInstance: 2 ) ) equals: ( self targetInstance: 9 );
-		assert: ( ( self targetInstance: 4 ) __pow__: ( self targetInstance: 3 ) ) equals: ( self targetInstance: 64 );
+		assert: ((self targetInstance: 3) __pow__: (self targetInstance: 2)) equals: (self targetInstance: 9);
+		assert: ((self targetInstance: 4) __pow__: (self targetInstance: 3)) equals: (self targetInstance: 64);
 		yourself.
 %
 category: 'done'
 method: intTest
 test__radd__
 
-   self 
-        assert: ( ( self targetInstance:  3 ) __radd__: ( self targetInstance: 1 ) ) equals: ( self targetInstance: 4 );
-        assert: ( ( self targetInstance: -3 ) __radd__: ( self targetInstance: 1 ) ) equals: ( self targetInstance: -2 );
+   self
+        assert: ((self targetInstance:  3) __radd__: (self targetInstance: 1)) equals: (self targetInstance: 4);
+        assert: ((self targetInstance: -3) __radd__: (self targetInstance: 1)) equals: (self targetInstance: -2);
 		yourself.
 %
 category: 'done'
 method: intTest
 test__rand__
 
-	self 
-		assert: ( ( self targetInstance:  3 ) __rand__: ( self targetInstance: 1 ) ) equals: ( self targetInstance: 1 );
-        assert: ( ( self targetInstance: -3 ) __rand__: ( self targetInstance: 1 ) ) equals: ( self targetInstance: 1 );
-        assert: ( ( self targetInstance:  3 ) __rand__: ( self targetInstance: 2 ) ) equals: ( self targetInstance: 2 );
-        assert: ( ( self targetInstance: -3 ) __rand__: ( self targetInstance: 2 ) ) equals: ( self targetInstance: 0 );
+	self
+		assert: ((self targetInstance:  3) __rand__: (self targetInstance: 1)) equals: (self targetInstance: 1);
+        assert: ((self targetInstance: -3) __rand__: (self targetInstance: 1)) equals: (self targetInstance: 1);
+        assert: ((self targetInstance:  3) __rand__: (self targetInstance: 2)) equals: (self targetInstance: 2);
+        assert: ((self targetInstance: -3) __rand__: (self targetInstance: 2)) equals: (self targetInstance: 0);
 		yourself.
 %
 category: 'done'
@@ -306,13 +306,13 @@ method: intTest
 test__rdivmod__
 
 	self
-		assert: ( tuple ___new__init__: { 0. 3 } ) equals: ( ( self targetInstance: 4 ) __rdivmod__: ( self targetInstance: 3 ) );
-		assert: ( tuple ___new__init__: {-1.-1 } ) equals: ( ( self targetInstance:-4 ) __rdivmod__: ( self targetInstance: 3)  );
-		assert: ( tuple ___new__init__: { 0.-3 } ) equals: ( ( self targetInstance:-4 ) __rdivmod__: ( self targetInstance: -3 ) );
-		assert: ( tuple ___new__init__: { 1. 1 } ) equals: ( ( self targetInstance: 3 ) __rdivmod__: ( self targetInstance: 4 ) );
-		assert: ( tuple ___new__init__: {-2.-2 } ) equals: ( ( self targetInstance:-3 ) __rdivmod__: ( self targetInstance: 4 ) );
-		assert: ( tuple ___new__init__: { 1.-1 } ) equals: ( ( self targetInstance:-3 ) __rdivmod__: ( self targetInstance: -4 ) );
-		assert: ( tuple ___new__init__: {-2. 2 } ) equals: ( ( self targetInstance: 3 ) __rdivmod__: ( self targetInstance: -4 ) );
+		assert: (tuple ___new__init__: { 0. 3 }) equals: ((self targetInstance: 4) __rdivmod__: (self targetInstance: 3));
+		assert: (tuple ___new__init__: {-1.-1 }) equals: ((self targetInstance:-4) __rdivmod__: (self targetInstance: 3) );
+		assert: (tuple ___new__init__: { 0.-3 }) equals: ((self targetInstance:-4) __rdivmod__: (self targetInstance: -3));
+		assert: (tuple ___new__init__: { 1. 1 }) equals: ((self targetInstance: 3) __rdivmod__: (self targetInstance: 4));
+		assert: (tuple ___new__init__: {-2.-2 }) equals: ((self targetInstance:-3) __rdivmod__: (self targetInstance: 4));
+		assert: (tuple ___new__init__: { 1.-1 }) equals: ((self targetInstance:-3) __rdivmod__: (self targetInstance: -4));
+		assert: (tuple ___new__init__: {-2. 2 }) equals: ((self targetInstance: 3) __rdivmod__: (self targetInstance: -4));
 		yourself
 %
 category: 'done'
@@ -320,20 +320,20 @@ method: intTest
 test__rfloordiv__
 
 	self
-		assert: ( ( self targetInstance: 4 ) __rfloordiv__: ( self targetInstance: 3 ) ) equals: ( self targetInstance: 0 );
-		assert: ( ( self targetInstance: 2 ) __rfloordiv__: ( self targetInstance: 3 ) ) equals: ( self targetInstance: 1 );
-		assert: ( ( self targetInstance: 2 ) __rfloordiv__: ( self targetInstance: 4 ) ) equals: ( self targetInstance: 2 );
+		assert: ((self targetInstance: 4) __rfloordiv__: (self targetInstance: 3)) equals: (self targetInstance: 0);
+		assert: ((self targetInstance: 2) __rfloordiv__: (self targetInstance: 3)) equals: (self targetInstance: 1);
+		assert: ((self targetInstance: 2) __rfloordiv__: (self targetInstance: 4)) equals: (self targetInstance: 2);
 		yourself
 %
 category: 'done'
 method: intTest
 test__rlshift__
 
-	self 
-		assert: ( ( self targetInstance: 1 ) __rlshift__:  ( self targetInstance: 3 ) ) equals: ( self targetInstance:  6 );
-        assert: ( ( self targetInstance: 2 ) __rlshift__:  ( self targetInstance: 3 ) ) equals: ( self targetInstance: 12 );
-        assert: ( ( self targetInstance: 1 ) __rlshift__: ( self targetInstance: -3 ) ) equals: ( self targetInstance: -6 );
-		assert: ( ( self targetInstance: 2 ) __rlshift__: ( self targetInstance: -3 ) ) equals: ( self targetInstance: -12 );
+	self
+		assert: ((self targetInstance: 1) __rlshift__:  (self targetInstance: 3)) equals: (self targetInstance:  6);
+        assert: ((self targetInstance: 2) __rlshift__:  (self targetInstance: 3)) equals: (self targetInstance: 12);
+        assert: ((self targetInstance: 1) __rlshift__: (self targetInstance: -3)) equals: (self targetInstance: -6);
+		assert: ((self targetInstance: 2) __rlshift__: (self targetInstance: -3)) equals: (self targetInstance: -12);
 		yourself.
 %
 category: 'done'
@@ -341,38 +341,38 @@ method: intTest
 test__rmod__
 
 	self
-		assert: ( ( ( self targetInstance: 4 ) __rmod__: ( self targetInstance: 3 ) ) __eq__: ( self targetInstance: 3 ) );
-		assert: ( ( ( self targetInstance: 2 ) __rmod__: ( self targetInstance: 3 ) ) __eq__: ( self targetInstance: 1 ) );
-		assert: ( ( ( self targetInstance: 2 ) __rmod__: ( self targetInstance: 4 ) ) __eq__: ( self targetInstance: 0 ) );
+		assert: (((self targetInstance: 4) __rmod__: (self targetInstance: 3)) __eq__: (self targetInstance: 3));
+		assert: (((self targetInstance: 2) __rmod__: (self targetInstance: 3)) __eq__: (self targetInstance: 1));
+		assert: (((self targetInstance: 2) __rmod__: (self targetInstance: 4)) __eq__: (self targetInstance: 0));
 		yourself
 %
 category: 'done'
 method: intTest
 test__rmul__
 
-	self 
-        assert: ( ( ( self targetInstance:  3 ) __rmul__: ( self targetInstance: 2 ) ) __eq__: ( self targetInstance: 6 ) );
-        assert: ( ( ( self targetInstance: -3 ) __rmul__: ( self targetInstance: 2 ) ) __eq__: ( self targetInstance: -6 ) );
+	self
+        assert: (((self targetInstance:  3) __rmul__: (self targetInstance: 2)) __eq__: (self targetInstance: 6));
+        assert: (((self targetInstance: -3) __rmul__: (self targetInstance: 2)) __eq__: (self targetInstance: -6));
 		yourself.
 %
 category: 'done'
 method: intTest
 test__ror__
 
-	self 
-		assert: ( ( self targetInstance: 1 ) __or__: ( self targetInstance: 3 ) ) equals: ( self targetInstance: 3 );
-        assert: ( ( self targetInstance: 1 ) __or__: ( self targetInstance: -3 ) ) equals: ( self targetInstance: -3 );
-        assert: ( ( self targetInstance: 2 ) __or__: ( self targetInstance: 3 ) ) equals: ( self targetInstance: 3 );
-        assert: ( ( self targetInstance: 2 ) __or__: ( self targetInstance: -3 ) ) equals: ( self targetInstance: -1 );
+	self
+		assert: ((self targetInstance: 1) __or__: (self targetInstance: 3)) equals: (self targetInstance: 3);
+        assert: ((self targetInstance: 1) __or__: (self targetInstance: -3)) equals: (self targetInstance: -3);
+        assert: ((self targetInstance: 2) __or__: (self targetInstance: 3)) equals: (self targetInstance: 3);
+        assert: ((self targetInstance: 2) __or__: (self targetInstance: -3)) equals: (self targetInstance: -1);
 		yourself.
 %
 category: 'done'
 method: intTest
 test__round__
 
-   self 
-		assert: ( self targetInstance:  3 ) __round__ equals: ( self targetInstance:  3 );
-        assert: ( self targetInstance: -3 ) __round__ equals: ( self targetInstance: -3 );
+   self
+		assert: (self targetInstance:  3) __round__ equals: (self targetInstance:  3);
+        assert: (self targetInstance: -3) __round__ equals: (self targetInstance: -3);
 		yourself.
 %
 category: 'done'
@@ -380,99 +380,99 @@ method: intTest
 test__rpow__
 
 	self
-		assert: ( ( self targetInstance: 2 ) __rpow__: ( self targetInstance: 3 ) ) equals: ( self targetInstance: 9 );
-		assert: ( ( self targetInstance: 3 ) __rpow__: ( self targetInstance: 4 ) ) equals: ( self targetInstance: 64 );
+		assert: ((self targetInstance: 2) __rpow__: (self targetInstance: 3)) equals: (self targetInstance: 9);
+		assert: ((self targetInstance: 3) __rpow__: (self targetInstance: 4)) equals: (self targetInstance: 64);
 		yourself.
 %
 category: 'done'
 method: intTest
 test__rrshift__
 
-	self 
-		assert: ( ( self targetInstance: 1 ) __rrshift__: ( self targetInstance:  3 ) ) equals: ( self targetInstance:  1 );
-        assert: ( ( self targetInstance: 2 ) __rrshift__: ( self targetInstance:  3 ) ) equals: ( self targetInstance:   0 );
-        assert: ( ( self targetInstance: 1 ) __rrshift__: ( self targetInstance: -3 ) ) equals: ( self targetInstance: -2 );
-		assert: ( ( self targetInstance: 2 ) __rrshift__: ( self targetInstance: -3 ) ) equals: ( self targetInstance: -1 );
+	self
+		assert: ((self targetInstance: 1) __rrshift__: (self targetInstance:  3)) equals: (self targetInstance:  1);
+        assert: ((self targetInstance: 2) __rrshift__: (self targetInstance:  3)) equals: (self targetInstance:   0);
+        assert: ((self targetInstance: 1) __rrshift__: (self targetInstance: -3)) equals: (self targetInstance: -2);
+		assert: ((self targetInstance: 2) __rrshift__: (self targetInstance: -3)) equals: (self targetInstance: -1);
 		yourself.
 %
 category: 'done'
 method: intTest
 test__rshift__
 
-	self 
-		assert: ( ( self targetInstance:  3 ) __rshift__: ( self targetInstance: 1 ) ) equals: ( self targetInstance:  1 );
-        assert: ( ( self targetInstance:  3 ) __rshift__: ( self targetInstance: 2 ) ) equals: ( self targetInstance:  0 );
-        assert: ( ( self targetInstance: -3 ) __rshift__: ( self targetInstance: 1 ) ) equals: ( self targetInstance: -2 );
-		assert: ( ( self targetInstance: -3 ) __rshift__: ( self targetInstance: 2 ) ) equals: ( self targetInstance: -1 );
+	self
+		assert: ((self targetInstance:  3) __rshift__: (self targetInstance: 1)) equals: (self targetInstance:  1);
+        assert: ((self targetInstance:  3) __rshift__: (self targetInstance: 2)) equals: (self targetInstance:  0);
+        assert: ((self targetInstance: -3) __rshift__: (self targetInstance: 1)) equals: (self targetInstance: -2);
+		assert: ((self targetInstance: -3) __rshift__: (self targetInstance: 2)) equals: (self targetInstance: -1);
 		yourself.
 %
 category: 'done'
 method: intTest
 test__rsub__
 
-	self 
-        assert: ( ( self targetInstance:  3 ) __rsub__: ( self targetInstance: 1 ) ) equals: ( self targetInstance: -2 );
-        assert: ( ( self targetInstance: -3 ) __rsub__: ( self targetInstance: 1 ) ) equals: ( self targetInstance:  4 );
+	self
+        assert: ((self targetInstance:  3) __rsub__: (self targetInstance: 1)) equals: (self targetInstance: -2);
+        assert: ((self targetInstance: -3) __rsub__: (self targetInstance: 1)) equals: (self targetInstance:  4);
 		yourself.
 %
 category: 'done'
 method: intTest
 test__rtruediv__
 
-	self 
-		assert: ( ( self targetInstance: 1 ) __rtruediv__: ( self targetInstance: 3 ) ) __class__ equals: float;
-    	assert: ( ( self targetInstance: 1 ) __rtruediv__: ( self targetInstance: 3 ) ) equals: ( self targetInstance: 3 );
-        assert: ( ( self targetInstance: 2 ) __rtruediv__: ( self targetInstance: -4 ) ) equals: ( self targetInstance: -2 );
+	self
+		assert: ((self targetInstance: 1) __rtruediv__: (self targetInstance: 3)) __class__ equals: float;
+    	assert: ((self targetInstance: 1) __rtruediv__: (self targetInstance: 3)) equals: (self targetInstance: 3);
+        assert: ((self targetInstance: 2) __rtruediv__: (self targetInstance: -4)) equals: (self targetInstance: -2);
 		yourself.
 %
 category: 'done'
 method: intTest
 test__rxor__
 
-   self 
-		assert: ( ( self targetInstance:  3 ) __rxor__: ( self targetInstance: 1 ) ) equals: ( self targetInstance: 2 );
-        assert: ( ( self targetInstance: -3 ) __rxor__: ( self targetInstance: 1 ) ) equals: ( self targetInstance: -4 );
-        assert: ( ( self targetInstance:  3 ) __rxor__: ( self targetInstance: 2 ) ) equals: ( self targetInstance: 1 );
-        assert: ( ( self targetInstance: -3 ) __rxor__: ( self targetInstance: 2 ) ) equals: ( self targetInstance: -1 );
+   self
+		assert: ((self targetInstance:  3) __rxor__: (self targetInstance: 1)) equals: (self targetInstance: 2);
+        assert: ((self targetInstance: -3) __rxor__: (self targetInstance: 1)) equals: (self targetInstance: -4);
+        assert: ((self targetInstance:  3) __rxor__: (self targetInstance: 2)) equals: (self targetInstance: 1);
+        assert: ((self targetInstance: -3) __rxor__: (self targetInstance: 2)) equals: (self targetInstance: -1);
 		yourself.
 %
 category: 'done'
 method: intTest
 test__sub__
 
-   self 
-        assert: ( ( self targetInstance:  3 ) __sub__: ( self targetInstance: 1 ) ) equals: ( self targetInstance: 2 );
-        assert: ( ( self targetInstance: -3 ) __sub__: ( self targetInstance: 1 ) ) equals: ( self targetInstance: -4 );
+   self
+        assert: ((self targetInstance:  3) __sub__: (self targetInstance: 1)) equals: (self targetInstance: 2);
+        assert: ((self targetInstance: -3) __sub__: (self targetInstance: 1)) equals: (self targetInstance: -4);
 		yourself
 %
 category: 'done'
 method: intTest
 test__truediv__
 
-	self 
-		assert: ( ( self targetInstance:  3 ) __truediv__: ( self targetInstance: 1 ) ) __class__ equals: float;
-    	assert: ( ( self targetInstance:  3 ) __truediv__: ( self targetInstance: 1 ) ) equals: ( self targetInstance: 3 );
-        assert: ( ( self targetInstance: -4 ) __truediv__: ( self targetInstance: 2 ) ) equals: ( self targetInstance: -2 );
+	self
+		assert: ((self targetInstance:  3) __truediv__: (self targetInstance: 1)) __class__ equals: float;
+    	assert: ((self targetInstance:  3) __truediv__: (self targetInstance: 1)) equals: (self targetInstance: 3);
+        assert: ((self targetInstance: -4) __truediv__: (self targetInstance: 2)) equals: (self targetInstance: -2);
 		yourself.
 %
 category: 'done'
 method: intTest
 test__trunc__
 
-	self 
-		assert: ( self targetInstance:  3 ) __trunc__ equals: ( self targetInstance:  3 );
-        assert: ( self targetInstance: -3 ) __trunc__ equals: ( self targetInstance: -3 );
+	self
+		assert: (self targetInstance:  3) __trunc__ equals: (self targetInstance:  3);
+        assert: (self targetInstance: -3) __trunc__ equals: (self targetInstance: -3);
 		yourself.
 %
 category: 'done'
 method: intTest
 test__xor__
 
-	self 
-		assert: ( ( self targetInstance:  3 ) __xor__: ( self targetInstance: 1 ) ) equals: ( self targetInstance: 2 );
-        assert: ( ( self targetInstance: -3 ) __xor__: ( self targetInstance: 1 ) ) equals: ( self targetInstance: -4 );
-        assert: ( ( self targetInstance:  3 ) __xor__: ( self targetInstance: 2 ) ) equals: ( self targetInstance: 1 );
-        assert: ( ( self targetInstance: -3 ) __xor__: ( self targetInstance: 2 ) ) equals: ( self targetInstance: -1 );
+	self
+		assert: ((self targetInstance:  3) __xor__: (self targetInstance: 1)) equals: (self targetInstance: 2);
+        assert: ((self targetInstance: -3) __xor__: (self targetInstance: 1)) equals: (self targetInstance: -4);
+        assert: ((self targetInstance:  3) __xor__: (self targetInstance: 2)) equals: (self targetInstance: 1);
+        assert: ((self targetInstance: -3) __xor__: (self targetInstance: 2)) equals: (self targetInstance: -1);
 		yourself.
 %
 category: 'done'
@@ -480,68 +480,68 @@ method: intTest
 testas_integer_ratio
 
 	self
-		assert: ( tuple ___new__init__: { 3. 1 } ) equals: ( ( self targetInstance: 3 ) as_integer_ratio );
-		assert: ( tuple ___new__init__: {-3. 1 } ) equals: ( ( self targetInstance:-3 ) as_integer_ratio );
-		assert: ( tuple ___new__init__: { 0. 1 } ) equals: ( ( self targetInstance: 0 ) as_integer_ratio );
+		assert: (tuple ___new__init__: { 3. 1 }) equals: ((self targetInstance: 3) as_integer_ratio);
+		assert: (tuple ___new__init__: {-3. 1 }) equals: ((self targetInstance:-3) as_integer_ratio);
+		assert: (tuple ___new__init__: { 0. 1 }) equals: ((self targetInstance: 0) as_integer_ratio);
 		yourself
 %
 category: 'done'
 method: intTest
 testbit_length
 
-	self 
-		assert: ( ( self targetInstance:  7 ) bit_length __eq__: ( self targetInstance: 3 ) );
-        assert: ( ( self targetInstance:  4 ) bit_length __eq__: ( self targetInstance: 3 ) );
-        assert: ( ( self targetInstance:  3 ) bit_length __eq__: ( self targetInstance: 2 ) );
-        assert: ( ( self targetInstance: -3 ) bit_length __eq__: ( self targetInstance: 2 ) );
-        assert: ( ( self targetInstance: -1 ) bit_length __eq__: ( self targetInstance: 1 ) );
-        assert: ( ( self targetInstance:  1 ) bit_length __eq__: ( self targetInstance: 1 ) );
-        assert: ( ( self targetInstance:  0 ) bit_length __eq__: ( self targetInstance: 0 ) );
+	self
+		assert: ((self targetInstance:  7) bit_length __eq__: (self targetInstance: 3));
+        assert: ((self targetInstance:  4) bit_length __eq__: (self targetInstance: 3));
+        assert: ((self targetInstance:  3) bit_length __eq__: (self targetInstance: 2));
+        assert: ((self targetInstance: -3) bit_length __eq__: (self targetInstance: 2));
+        assert: ((self targetInstance: -1) bit_length __eq__: (self targetInstance: 1));
+        assert: ((self targetInstance:  1) bit_length __eq__: (self targetInstance: 1));
+        assert: ((self targetInstance:  0) bit_length __eq__: (self targetInstance: 0));
 		yourself.
 %
 category: 'done'
 method: intTest
 testconjugate
 
-	self 
-		assert: ( self targetInstance:  3 ) conjugate equals: ( self targetInstance:  3 );
-        assert: ( self targetInstance: -3 ) conjugate equals: ( self targetInstance: -3 );
+	self
+		assert: (self targetInstance:  3) conjugate equals: (self targetInstance:  3);
+        assert: (self targetInstance: -3) conjugate equals: (self targetInstance: -3);
 		yourself.
 %
 category: 'done'
 method: intTest
 testdenominator
 
-	self 
-		assert: ( ( self targetInstance:  3 ) denominator __eq__: ( self targetInstance: 1 ) );
-        assert: ( ( self targetInstance: -3 ) denominator __eq__: ( self targetInstance: 1 ) );
+	self
+		assert: ((self targetInstance:  3) denominator __eq__: (self targetInstance: 1));
+        assert: ((self targetInstance: -3) denominator __eq__: (self targetInstance: 1));
 		yourself
 %
 category: 'done'
 method: intTest
 testimag
 
-	self 
-		assert: ( self targetInstance: 3 ) imag  equals: ( self targetInstance: 0 );
-        assert: ( self targetInstance: -3 ) imag equals: ( self targetInstance: 0 );
+	self
+		assert: (self targetInstance: 3) imag  equals: (self targetInstance: 0);
+        assert: (self targetInstance: -3) imag equals: (self targetInstance: 0);
 		yourself.
 %
 category: 'done'
 method: intTest
 testnumerator
 
-	self 
-		assert: ( self targetInstance: 3 ) numerator equals: ( self targetInstance: 3 );
-        assert: ( self targetInstance: -3 ) numerator equals: ( self targetInstance: -3 );
+	self
+		assert: (self targetInstance: 3) numerator equals: (self targetInstance: 3);
+        assert: (self targetInstance: -3) numerator equals: (self targetInstance: -3);
 		yourself.
 %
 category: 'done'
 method: intTest
 testreal
 
-	self 
-		assert: ( self targetInstance: 3 ) real equals: ( self targetInstance: 3 );
-        assert: ( self targetInstance: -3 ) real equals: ( self targetInstance: -3 );
+	self
+		assert: (self targetInstance: 3) real equals: (self targetInstance: 3);
+        assert: (self targetInstance: -3) real equals: (self targetInstance: -3);
 		yourself.
 %
 set compile_env: 0
@@ -556,76 +556,76 @@ test__dir__
 	self assert: dir __class__ equals: list.
 
    #pyTodo. "self assert: dir __len__ equals: 71.
-"   self assert: ( dir __contains__: (self str: '__abs__')).
-   self assert: ( dir __contains__: (self str: '__add__')).
-   self assert: ( dir __contains__: (self str: '__and__')).
-   self assert: ( dir __contains__: (self str: '__bool__')).
-   self assert: ( dir __contains__: (self str: '__ceil__')).
-   self assert: ( dir __contains__: (self str: '__class__')).
-   self assert: ( dir __contains__: (self str: '__delattr__')).
-   self assert: ( dir __contains__: (self str: '__dir__')).
-   self assert: ( dir __contains__: (self str: '__divmod__')).
-   self assert: ( dir __contains__: (self str: '__doc__')).
-   self assert: ( dir __contains__: (self str: '__eq__')).
-   self assert: ( dir __contains__: (self str: '__float__')).
-   self assert: ( dir __contains__: (self str: '__floor__')).
-   self assert: ( dir __contains__: (self str: '__floordiv__')).
-   self assert: ( dir __contains__: (self str: '__format__')).
-   self assert: ( dir __contains__: (self str: '__ge__')).
-   self assert: ( dir __contains__: (self str: '__getattribute__')).
-   #pyTodo. "self assert: ( dir __contains__: (self str: '__getnewargs__')).
-"   self assert: ( dir __contains__: (self str: '__gt__')).
-   self assert: ( dir __contains__: (self str: '__hash__')).
-   self assert: ( dir __contains__: (self str: '__index__')).
-   self assert: ( dir __contains__: (self str: '__init__')).
-   #pyTodo. "self assert: ( dir __contains__: (self str: '__init_subclass__')).
-"   self assert: ( dir __contains__: (self str: '__int__')).
-   self assert: ( dir __contains__: (self str: '__invert__')).
-   self assert: ( dir __contains__: (self str: '__le__')).
-   self assert: ( dir __contains__: (self str: '__lshift__')).
-   self assert: ( dir __contains__: (self str: '__lt__')).
-   self assert: ( dir __contains__: (self str: '__mod__')).
-   self assert: ( dir __contains__: (self str: '__mul__')).
-   self assert: ( dir __contains__: (self str: '__ne__')).
-   self assert: ( dir __contains__: (self str: '__neg__')).
-   self assert: ( dir __contains__: (self str: '__new__')).
-   self assert: ( dir __contains__: (self str: '__or__')).
-   self assert: ( dir __contains__: (self str: '__pos__')).
-   self assert: ( dir __contains__: (self str: '__pow__')).
-   self assert: ( dir __contains__: (self str: '__radd__')).
-   self assert: ( dir __contains__: (self str: '__rand__')).
-   self assert: ( dir __contains__: (self str: '__rdivmod__')).
-   #pyTodo. "self assert: ( dir __contains__: (self str: '__reduce__')).
-"   #pyTodo. "self assert: ( dir __contains__: (self str: '__reduce_ex__')).
-"   self assert: ( dir __contains__: (self str: '__repr__')).
-   self assert: ( dir __contains__: (self str: '__rfloordiv__')).
-   self assert: ( dir __contains__: (self str: '__rlshift__')).
-   self assert: ( dir __contains__: (self str: '__rmod__')).
-   self assert: ( dir __contains__: (self str: '__rmul__')).
-   self assert: ( dir __contains__: (self str: '__ror__')).
-   self assert: ( dir __contains__: (self str: '__round__')).
-   self assert: ( dir __contains__: (self str: '__rpow__')).
-   self assert: ( dir __contains__: (self str: '__rrshift__')).
-   self assert: ( dir __contains__: (self str: '__rshift__')).
-   self assert: ( dir __contains__: (self str: '__rsub__')).
-   self assert: ( dir __contains__: (self str: '__rtruediv__')).
-   self assert: ( dir __contains__: (self str: '__rxor__')).
-   self assert: ( dir __contains__: (self str: '__setattr__')).
-   self assert: ( dir __contains__: (self str: '__sizeof__')).
-   self assert: ( dir __contains__: (self str: '__str__')).
-   self assert: ( dir __contains__: (self str: '__sub__')).
-   self assert: ( dir __contains__: (self str: '__subclasshook__')).
-   self assert: ( dir __contains__: (self str: '__truediv__')).
-   self assert: ( dir __contains__: (self str: '__trunc__')).
-   self assert: ( dir __contains__: (self str: '__xor__')).
-   #pyTodo. "self assert: ( dir __contains__: (self str: 'as_integer_ratio ).
-"   self assert: ( dir __contains__: (self str: 'bit_length')).
-    self assert: ( dir __contains__: (self str: 'conjugate')).
-    self assert: ( dir __contains__: (self str: 'denominator')).
-   #pyTodo. "self assert: ( dir __contains__: (self str: 'from_bytes')).
-"   self assert: ( dir __contains__: (self str: 'imag')).
-    self assert: ( dir __contains__: (self str: 'numerator')).
-   self assert: ( dir __contains__: (self str: 'real')).
-   #pyTodo. "self assert: ( dir __contains__: (self str: 'to_bytes')).
+"   self assert: (dir __contains__: (self str: '__abs__')).
+   self assert: (dir __contains__: (self str: '__add__')).
+   self assert: (dir __contains__: (self str: '__and__')).
+   self assert: (dir __contains__: (self str: '__bool__')).
+   self assert: (dir __contains__: (self str: '__ceil__')).
+   self assert: (dir __contains__: (self str: '__class__')).
+   self assert: (dir __contains__: (self str: '__delattr__')).
+   self assert: (dir __contains__: (self str: '__dir__')).
+   self assert: (dir __contains__: (self str: '__divmod__')).
+   self assert: (dir __contains__: (self str: '__doc__')).
+   self assert: (dir __contains__: (self str: '__eq__')).
+   self assert: (dir __contains__: (self str: '__float__')).
+   self assert: (dir __contains__: (self str: '__floor__')).
+   self assert: (dir __contains__: (self str: '__floordiv__')).
+   self assert: (dir __contains__: (self str: '__format__')).
+   self assert: (dir __contains__: (self str: '__ge__')).
+   self assert: (dir __contains__: (self str: '__getattribute__')).
+   #pyTodo. "self assert: (dir __contains__: (self str: '__getnewargs__')).
+"   self assert: (dir __contains__: (self str: '__gt__')).
+   self assert: (dir __contains__: (self str: '__hash__')).
+   self assert: (dir __contains__: (self str: '__index__')).
+   self assert: (dir __contains__: (self str: '__init__')).
+   #pyTodo. "self assert: (dir __contains__: (self str: '__init_subclass__')).
+"   self assert: (dir __contains__: (self str: '__int__')).
+   self assert: (dir __contains__: (self str: '__invert__')).
+   self assert: (dir __contains__: (self str: '__le__')).
+   self assert: (dir __contains__: (self str: '__lshift__')).
+   self assert: (dir __contains__: (self str: '__lt__')).
+   self assert: (dir __contains__: (self str: '__mod__')).
+   self assert: (dir __contains__: (self str: '__mul__')).
+   self assert: (dir __contains__: (self str: '__ne__')).
+   self assert: (dir __contains__: (self str: '__neg__')).
+   self assert: (dir __contains__: (self str: '__new__')).
+   self assert: (dir __contains__: (self str: '__or__')).
+   self assert: (dir __contains__: (self str: '__pos__')).
+   self assert: (dir __contains__: (self str: '__pow__')).
+   self assert: (dir __contains__: (self str: '__radd__')).
+   self assert: (dir __contains__: (self str: '__rand__')).
+   self assert: (dir __contains__: (self str: '__rdivmod__')).
+   #pyTodo. "self assert: (dir __contains__: (self str: '__reduce__')).
+"   #pyTodo. "self assert: (dir __contains__: (self str: '__reduce_ex__')).
+"   self assert: (dir __contains__: (self str: '__repr__')).
+   self assert: (dir __contains__: (self str: '__rfloordiv__')).
+   self assert: (dir __contains__: (self str: '__rlshift__')).
+   self assert: (dir __contains__: (self str: '__rmod__')).
+   self assert: (dir __contains__: (self str: '__rmul__')).
+   self assert: (dir __contains__: (self str: '__ror__')).
+   self assert: (dir __contains__: (self str: '__round__')).
+   self assert: (dir __contains__: (self str: '__rpow__')).
+   self assert: (dir __contains__: (self str: '__rrshift__')).
+   self assert: (dir __contains__: (self str: '__rshift__')).
+   self assert: (dir __contains__: (self str: '__rsub__')).
+   self assert: (dir __contains__: (self str: '__rtruediv__')).
+   self assert: (dir __contains__: (self str: '__rxor__')).
+   self assert: (dir __contains__: (self str: '__setattr__')).
+   self assert: (dir __contains__: (self str: '__sizeof__')).
+   self assert: (dir __contains__: (self str: '__str__')).
+   self assert: (dir __contains__: (self str: '__sub__')).
+   self assert: (dir __contains__: (self str: '__subclasshook__')).
+   self assert: (dir __contains__: (self str: '__truediv__')).
+   self assert: (dir __contains__: (self str: '__trunc__')).
+   self assert: (dir __contains__: (self str: '__xor__')).
+   #pyTodo. "self assert: (dir __contains__: (self str: 'as_integer_ratio).
+"   self assert: (dir __contains__: (self str: 'bit_length')).
+    self assert: (dir __contains__: (self str: 'conjugate')).
+    self assert: (dir __contains__: (self str: 'denominator')).
+   #pyTodo. "self assert: (dir __contains__: (self str: 'from_bytes')).
+"   self assert: (dir __contains__: (self str: 'imag')).
+    self assert: (dir __contains__: (self str: 'numerator')).
+   self assert: (dir __contains__: (self str: 'real')).
+   #pyTodo. "self assert: (dir __contains__: (self str: 'to_bytes')).
 "
 %

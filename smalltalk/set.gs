@@ -7,17 +7,17 @@ category: 'Smalltalk'
 classmethod: set
 ___containerClass
 
-	^ Set
+	^Set
 %
 category: 'Smalltalk'
 classmethod: set
 ___endChar
-	^ $}
+	^$}
 %
 category: 'Smalltalk'
 classmethod: set
 ___startChar
-	^ ${
+	^${
 %
 ! ------------------- Instance methods for set
 set compile_env: 0
@@ -25,101 +25,101 @@ category: 'Python'
 method: set
 __and__: aSet
 
-	^ self intersection: aSet
+	^self intersection: aSet
 %
 category: 'Python'
 method: set
 __eq__: otherCollection
 
-	^ self ___container = otherCollection ___container
+	^self ___container = otherCollection ___container
 %
 category: 'Python'
 method: set
 __ge__: otherCollection
-	^ self issuperset: otherCollection
+	^self issuperset: otherCollection
 %
 category: 'Python'
 method: set
 __gt__: otherCollection
 
-	^ ( self __ge__: otherCollection ) and: [ self __ne__: otherCollection ]
+	^(self __ge__: otherCollection) and: [self __ne__: otherCollection]
 %
 category: 'Python'
 method: set
 __iand__: aSet
 
-	^ self intersection_update: aSet
+	^self intersection_update: aSet
 %
 category: 'Python'
 method: set
 __ior__: aSet
 
-	^ self update: aSet
+	^self update: aSet
 %
 category: 'Python'
 method: set
 __isub__: aSet
 
-	^ self difference_update: aSet
+	^self difference_update: aSet
 %
 category: 'Python'
 method: set
 __ixor__: aSet
 
-	^ self symmetric_difference_update: aSet
+	^self symmetric_difference_update: aSet
 %
 category: 'Python'
 method: set
 __le__: otherCollection
-	^ self issubset: otherCollection
+	^self issubset: otherCollection
 %
 category: 'Python'
 method: set
 __lt__: otherCollection
 
-	^ ( self __le__: otherCollection ) and: [ self __ne__: otherCollection ]
+	^(self __le__: otherCollection) and: [self __ne__: otherCollection]
 %
 category: 'Python'
 method: set
 __or__: aSet
 
-	^ self union: aSet
+	^self union: aSet
 %
 category: 'Python'
 method: set
 __rand__: aSet
 
-	^ aSet intersection: self
+	^aSet intersection: self
 %
 category: 'Python'
 method: set
 __ror__: aSet
 
-	^ aSet union: self
+	^aSet union: self
 %
 category: 'Python'
 method: set
 __rsub__: aSet
 
-	^ aSet difference: self
+	^aSet difference: self
 %
 category: 'Python'
 method: set
 __rxor__: aSet
 
-	^ aSet symmetric_difference: self
+	^aSet symmetric_difference: self
 %
 category: 'Python'
 method: set
 __sub__: aSet
 
-	^ self difference: aSet
+	^self difference: aSet
 %
 category: 'Python'
 method: set
 __xor__: aSet
 
-	^ self symmetric_difference: aSet
+	^self symmetric_difference: aSet
 %
 category: 'Python'
 method: set
@@ -131,19 +131,19 @@ category: 'Python'
 method: set
 difference_update: aSet
 
-	self ___initialize: ( self ___container difference: aSet ___container )
+	self ___initialize: (self ___container difference: aSet ___container)
 %
 category: 'Python'
 method: set
 difference: aSet
 
-	^ self copy difference_update: aSet
+	^self copy difference_update: aSet
 %
 category: 'Python'
 method: set
 discard: anElement
 
-	^ self ___container
+	^self ___container
 		remove: anElement
 		ifAbsent: [].
 %
@@ -151,64 +151,64 @@ category: 'Python'
 method: set
 intersection_update: aSet
 
-	self ___initialize: ( self ___container intersection: aSet ___container )
+	self ___initialize: (self ___container intersection: aSet ___container)
 %
 category: 'Python'
 method: set
 intersection: aSet
 
-	^ self copy intersection_update: aSet
+	^self copy intersection_update: aSet
 %
 category: 'Python'
 method: set
 isdisjoint: aSet
 
-	^ ( self intersection: aSet ) __len__ = 0
+	^(self intersection: aSet) __len__ = 0
 %
 category: 'Python'
 method: set
 issubset: aSet
 
-	^ aSet ___container includesAll: self ___container
+	^aSet ___container includesAll: self ___container
 %
 category: 'Python'
 method: set
 issuperset: aSet
 
-	^ self ___container includesAll: aSet ___container
+	^self ___container includesAll: aSet ___container
 %
 category: 'Python'
 method: set
 pop
-	^ self remove: self ___container atRandom
+	^self remove: self ___container atRandom
 %
 category: 'Python'
 method: set
 remove: anElement
 
-	^ self ___container
+	^self ___container
 		remove: anElement
-		ifAbsent: [ KeyError signal: anElement printString  ].
+		ifAbsent: [KeyError signal: anElement printString ].
 %
 category: 'Python'
 method: set
 symmetric_difference_update: aSet
 	"A + B - (AxB)
 	"
-	self ___initialize: ( self symmetric_difference: aSet ) ___container
+	self ___initialize: (self symmetric_difference: aSet) ___container
 %
 category: 'Python'
 method: set
 symmetric_difference: aSet
 	"A + B - (AxB)
 	"
-	^ ( self union: aSet ) difference: ( self intersection: aSet )
+	^(self union: aSet) difference: (self intersection: aSet)
 %
 category: 'Python'
 method: set
 union: aSet
 
-	^ self copy update: aSet
+	^self copy update: aSet
 %
 category: 'Python'
 method: set

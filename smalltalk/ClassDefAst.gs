@@ -8,17 +8,17 @@ category: 'other'
 method: ClassDefAst
 __eq__
 
-	^ [ :lhs :rhs | (lhs name = rhs name) ifTrue: [ True ] ifFalse: [ False ] ]
+	^[:lhs :rhs | (lhs name = rhs name) ifTrue: [True] ifFalse: [False]]
 %
 category: 'other'
 method: ClassDefAst
 __mro__
 
-	^ [ :scope | 
+	^[:scope |
 		| linearization parentLinearizations parentList mergeLinearizations |
 		linearization := Array with: (scope get: self name).
-		parentLinearizations := self bases collect: [ :base | (scope get: base id) __mro__ value ].
-		parentList := self bases collect: [ :base | (scope get: base id) ].		
+		parentLinearizations := self bases collect: [:base | (scope get: base id) __mro__ value].
+		parentList := self bases collect: [:base | (scope get: base id)].
 		mergeLinearizations := Array withAll: parentLinearizations.
 		mergeLinearizations add: parentList.
 		linearization addAll: (Linearization merge: mergeLinearizations).
@@ -30,7 +30,7 @@ method: ClassDefAst
 __str__
 	"<class '__main__.MyClass'>"
 
-	^[:inst | 
+	^[:inst |
 		str withAll: ((WriteStream on: Unicode7 new)
 			nextPutAll: '<class ''';
 			nextPutAll: self module name;
@@ -43,13 +43,13 @@ category: 'other'
 method: ClassDefAst
 astNode
 
-	^ self
+	^self
 %
 category: 'other'
 method: ClassDefAst
-bases 
+bases
 
-	^ bases
+	^bases
 %
 category: 'other'
 method: ClassDefAst
@@ -78,7 +78,7 @@ get: aSymbol
 category: 'other'
 method: ClassDefAst
 initialize
-	"ClassDef(identifier name, expr* bases, 
+	"ClassDef(identifier name, expr* bases,
 		keyword* keywords, stmt* body, expr* decorator_list)"
 
 	| stream |
@@ -87,7 +87,7 @@ initialize
 	name := (stream upTo: $') asSymbol.
 	self commaSpace.
 	bases := self collectAst: [self expression].
-	"(bases size == 0) ifTrue: [ bases add: (NameAst with: #'object') ]."
+	"(bases size == 0) ifTrue: [bases add: (NameAst with: #'object')]."
 	self commaSpace.
 	keywords := self collectAst: [KeywordAst parent: self].
 	self commaSpace.
@@ -102,10 +102,10 @@ isDerivedFrom: aClass scope: aScope
 "distinct from isSubclassOf: because
 1) isDerivedFrom: checks the Python class hierarchy
 2) isSubclassOf: checks the Smalltalk class hierarchy"
-	
-	(aClass name = name) ifTrue: [ ^ true ].
-	bases do: [ :base | ((aScope get: base id) astNode isDerivedFrom: aClass scope: aScope) ifTrue: [ ^ true ] ].
-	^ false
+
+	(aClass name = name) ifTrue: [^true].
+	bases do: [:base | ((aScope get: base id) astNode isDerivedFrom: aClass scope: aScope) ifTrue: [^true]].
+	^false
 %
 category: 'other'
 method: ClassDefAst
@@ -143,7 +143,7 @@ value: posArgs value: keywordArgs value: aScope
 
 	| obj result |
 	obj := Instance new: aScope copy.
-	((obj has: #'__init__') == True) ifTrue: [ 
+	((obj has: #'__init__') == True) ifTrue: [
 		result := obj
 			call: #'__init__'
 			withArguments: posArgs

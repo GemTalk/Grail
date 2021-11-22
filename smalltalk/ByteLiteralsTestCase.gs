@@ -16,7 +16,7 @@ method: ByteLiteralsTestCase
 testBackspace
 
 	| x |
-	self 
+	self
 		assert: ((x := self statementsAt: 16) isKindOf: ExprAst);
 		assert: x line == 36;
 		assert: x column == 0;
@@ -33,7 +33,7 @@ method: ByteLiteralsTestCase
 testBell
 
 	| x |
-	self 
+	self
 		assert: ((x := self statementsAt: 15) isKindOf: ExprAst);
 		assert: x line == 35;
 		assert: x column == 0;
@@ -42,7 +42,7 @@ testBell
 		assert: x column == 0;
 		assert: ((x := x.value) isKindOf: bytes);
 		assert: ((x := x ___container) isKindOf: ByteArray);
-		assert: x = #[ 97 98 99 7];
+		assert: x = #[97 98 99 7];
 		yourself.
 %
 category: 'other'
@@ -50,7 +50,7 @@ method: ByteLiteralsTestCase
 testHexHigh
 
 	| x |
-	self 
+	self
 		assert: ((x := self statementsAt: 20) isKindOf: ExprAst);
 		assert: x line == 44;
 		assert: x column == 0;
@@ -67,7 +67,7 @@ method: ByteLiteralsTestCase
 testHexLow
 
 	| x |
-	self 
+	self
 		assert: ((x := self statementsAt: 19) isKindOf: ExprAst);
 		assert: x line == 43;
 		assert: x column == 0;
@@ -84,7 +84,7 @@ method: ByteLiteralsTestCase
 testNewline
 
 	| x |
-	self 
+	self
 		assert: ((x := self statementsAt: 13) isKindOf: ExprAst);
 		assert: x line == 31;
 		assert: x column == 0;
@@ -102,7 +102,7 @@ method: ByteLiteralsTestCase
 testOctalHigh
 
 	| x |
-	self 
+	self
 		assert: ((x := self statementsAt: 18) isKindOf: ExprAst);
 		assert: x line == 40;
 		assert: x column == 0;
@@ -119,7 +119,7 @@ method: ByteLiteralsTestCase
 testOctalLow
 
 	| x |
-	self 
+	self
 		assert: ((x := self statementsAt: 17) isKindOf: ExprAst);
 		assert: x line == 39;
 		assert: x column == 0;
@@ -128,7 +128,7 @@ testOctalLow
 		assert: x column == 0;
 		assert: ((x := x.value) isKindOf: bytes);
 		assert: ((x := x ___container) isKindOf: ByteArray);
-		assert: x = #[ 97 98 99 0];
+		assert: x = #[97 98 99 0];
 		yourself.
 %
 category: 'other'
@@ -136,7 +136,7 @@ method: ByteLiteralsTestCase
 testSlash
 
 	| x |
-	self 
+	self
 		assert: ((x := self statementsAt: 14) isKindOf: ExprAst);
 		assert: x line == 32;
 		assert: x column == 0;

@@ -13,82 +13,82 @@ __abs__
 category: 'Python'
 method: float
 __ceil__
-	^ int ___new__init__: value ceiling
+	^int ___new__init__: value ceiling
 %
 category: 'Python'
 method: float
 __divmod__: anObject
 	| val |
-	val := ( anObject isKindOf: Number )
-	   ifTrue: [ anObject ]
-		ifFalse: [ anObject ___value ].
+	val := (anObject isKindOf: Number)
+	   ifTrue: [anObject]
+		ifFalse: [anObject ___value].
 
-	^ tuple  ___new__init__: { value // val. value \\ val }
+	^tuple  ___new__init__: { value // val. value \\ val }
 %
 category: 'Python'
 method: float
 __float__
-	^ self
+	^self
 %
 category: 'Python'
 method: float
 __floor__
-	^ int ___new__init__: value floor
+	^int ___new__init__: value floor
 %
 category: 'Python'
 method: float
 __gt__: anObject
 	| val |
-	val := ( anObject isKindOf: Number )
-	   ifTrue: [ anObject ]
-		ifFalse: [ anObject ___value ].
+	val := (anObject isKindOf: Number)
+	   ifTrue: [anObject]
+		ifFalse: [anObject ___value].
 
-	^ value > val
+	^value > val
 %
 category: 'Python'
 method: float
 __int__
-	^ self __trunc__
+	^self __trunc__
 %
 category: 'Python'
 method: float
 __mod__: anObject
 	| val |
-	val := ( anObject isKindOf: Number )
-	   ifTrue: [ anObject ]
-		ifFalse: [ anObject ___value ].
+	val := (anObject isKindOf: Number)
+	   ifTrue: [anObject]
+		ifFalse: [anObject ___value].
 
-	^ self class ___new__init__: ( value rem: val )
+	^self class ___new__init__: (value rem: val)
 %
 category: 'Python'
 method: float
 __mul__: anObject
 	| val |
-	val := ( anObject isKindOf: Number )
-	   ifTrue: [ anObject ]
-		ifFalse: [ anObject ___value ].
+	val := (anObject isKindOf: Number)
+	   ifTrue: [anObject]
+		ifFalse: [anObject ___value].
 
-	^ self class ___new__init__: value * val _: 10
+	^self class ___new__init__: value * val _: 10
 %
 category: 'Python'
 method: float
 __neg__
-	^ self class ___new__init__: value negated
+	^self class ___new__init__: value negated
 %
 category: 'Python'
 method: float
 __pos__
-	^ self __abs__
+	^self __abs__
 %
 category: 'Python'
 method: float
 __pow__: anObject
 	| val |
-	val := ( anObject isKindOf: Number )
-	   ifTrue: [ anObject ]
-		ifFalse: [ anObject ___value ].
+	val := (anObject isKindOf: Number)
+	   ifTrue: [anObject]
+		ifFalse: [anObject ___value].
 
-	^ self class ___new__init__: (value raisedTo: val)
+	^self class ___new__init__: (value raisedTo: val)
 %
 category: 'Python'
 method: float
@@ -100,39 +100,39 @@ __rmul__: any
 category: 'Python'
 method: float
 __round__
-	^ int ___new__init__: value rounded
+	^int ___new__init__: value rounded
 %
 category: 'Python'
 method: float
 __rtruediv__: any
-	( any isKindOf: Magnitude )
-		ifFalse: [ ^ self __rtruediv__: ( self class ___new__init__: any ) ].
-	^ any __truediv__: self
+	(any isKindOf: Magnitude)
+		ifFalse: [^self __rtruediv__: (self class ___new__init__: any)].
+	^any __truediv__: self
 %
 category: 'Python'
 method: float
 __sub__: anObject
 	| val |
-	val := ( anObject isKindOf: Number )
-	   ifTrue: [ anObject ]
-		ifFalse: [ anObject ___value ].
+	val := (anObject isKindOf: Number)
+	   ifTrue: [anObject]
+		ifFalse: [anObject ___value].
 
-	^ self class ___new__init__: value - val
+	^self class ___new__init__: value - val
 %
 category: 'Python'
 method: float
 __truediv__: anObject
 	| val |
-	val := ( anObject isKindOf: Number )
-	   ifTrue: [ anObject ]
-		ifFalse: [ anObject ___value ].
+	val := (anObject isKindOf: Number)
+	   ifTrue: [anObject]
+		ifFalse: [anObject ___value].
 
-	^ float ___new__init__: ( value / val )
+	^float ___new__init__: (value / val)
 %
 category: 'Python'
 method: float
 __trunc__
-	^ int ___new__init__: value truncated
+	^int ___new__init__: value truncated
 %
 category: 'Python'
 method: float
@@ -140,35 +140,35 @@ as_integer_ratio
 	| val |
 
 	val := value asFraction.
-   ^ tuple ___new__init__: { val numerator. val denominator }
+   ^tuple ___new__init__: { val numerator. val denominator }
 %
 category: 'Python'
 method: float
 conjugate
-	^ self
+	^self
 %
 category: 'Python'
 method: float
 imag
-	^ self class ___new__init__: 0
+	^self class ___new__init__: 0
 %
 category: 'Python'
 method: float
 is_integer
-	^ self __trunc__ __eq__: self
+	^self __trunc__ __eq__: self
 %
 category: 'Python'
 method: float
 real
-	^ self
+	^self
 %
 set compile_env: 0
 category: 'Smalltalk'
 method: float
 ___initArgs: args
 
-	args  isEmpty ifTrue: [ ^ self ___initialize: 0 ].
-   ^  self ___initialize: args first
+	args  isEmpty ifTrue: [^self ___initialize: 0].
+   ^self ___initialize: args first
 %
 category: 'Smalltalk'
 method: float

@@ -21,5 +21,5 @@ category: 'other'
 method: BlockAst
 isVariableIsDeclared: aSymbol
 
-	^ variables includes: aSymbol
+	^variables includes: aSymbol
 %

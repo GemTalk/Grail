@@ -7,30 +7,30 @@ category: 'Smalltalk'
 classmethod: list
 ___containerClass
 
-	^ OrderedCollection
+	^OrderedCollection
 %
 category: 'Smalltalk'
 classmethod: list
 ___endChar
-	^ $]
+	^$]
 %
 category: 'Smalltalk'
 classmethod: list
 ___startChar
-	^ $[
+	^$[
 %
 ! ------------------- Instance methods for list
 set compile_env: 0
 category: 'Python'
 method: list
 __delitem__: anIndex
-	^ self ___remove: anIndex ifFail: 'list assignment index out of range'.
+	^self ___remove: anIndex ifFail: 'list assignment index out of range'.
 %
 category: 'Python'
 method: list
 __reversed__
 
-	^ self class ___new__init__: self ___container reverse.
+	^self class ___new__init__: self ___container reverse.
 %
 category: 'Python'
 method: list
@@ -38,11 +38,11 @@ __setitem__: anElement _: anIndex
 	"https://docs.python.org/3/reference/datamodel.html#object.__setitem__"
 
 	| index |
-	index := anIndex < 0 ifTrue: [ self __len__ + anIndex ] ifFalse: [ anIndex ].
-	( index < 0 or: [ 	index >= self __len__ ] )
-		ifTrue: [ IndexError signal: 'list assignment index out of range' ].
+	index := anIndex < 0 ifTrue: [self __len__ + anIndex] ifFalse: [anIndex].
+	(index < 0 or: [	index >= self __len__])
+		ifTrue: [IndexError signal: 'list assignment index out of range'].
 
-	^ self ___container at: index + 1 put: anElement
+	^self ___container at: index + 1 put: anElement
 %
 category: 'Python'
 method: list
@@ -54,73 +54,73 @@ category: 'Python'
 method: list
 extend: aList
 
-	( aList isKindOf: Container ) ifTrue: [
+	(aList isKindOf: Container) ifTrue: [
 		self ___container addAll: aList ___container.
 	] ifFalse: [
 		self append: aList
 	].
 
-	^ self
+	^self
 %
 category: 'Python'
 method: list
 insert: anIndex _: anElement
 	| index |
-	index := anIndex < 0 ifTrue: [ self __len__ + anIndex ] ifFalse: [ anIndex ].
+	index := anIndex < 0 ifTrue: [self __len__ + anIndex] ifFalse: [anIndex].
 
 	index <= 0
-		ifTrue: [ ^ self ___container addFirst: anElement ].
+		ifTrue: [^self ___container addFirst: anElement].
 	index >= self __len__
-		ifTrue: [ ^ self ___container addLast: anElement ].
+		ifTrue: [^self ___container addLast: anElement].
 
 	self ___container add: anElement beforeIndex: index + 1.
 
-	^ self.
+	^self.
 
- "#( 'a' 'b' 'c' 'd' ) asOrderedCollection insert: 'y' before: 2; yourself
+ "#('a' 'b' 'c' 'd') asOrderedCollection insert: 'y' before: 2; yourself
 "
 %
 category: 'Python'
 method: list
 pop
-	^ self pop: self __len__ - 1
+	^self pop: self __len__ - 1
 %
 category: 'Python'
 method: list
 pop: anIndex
-	^ self ___remove: anIndex ifFail: 'pop index out of range'.
+	^self ___remove: anIndex ifFail: 'pop index out of range'.
 %
 category: 'Python'
 method: list
 remove: anElement
 
-	^ self ___container
+	^self ___container
 		remove: anElement
-		ifAbsent: [ ValueError signal: 'list.remove(x): x not in list'  ].
+		ifAbsent: [ValueError signal: 'list.remove(x): x not in list' ].
 %
 category: 'Python'
 method: list
 reverse
 
-	^ self ___initialize: self ___container reverse.
+	^self ___initialize: self ___container reverse.
 %
 category: 'Python'
 method: list
 sort
 
-	^ self ___initialize: self ___container sort.
+	^self ___initialize: self ___container sort.
 %
 category: 'Python'
 method: list
 sort: aDict
 	| sortBlock reverse |
 	sortBlock := aDict at: #key
-							ifPresent: [ :sortFunc | [ :a :b | (sortFunc value: a ) < (sortFunc value: b ) ]  ]
-							ifAbsent: [ [ :a :b | a < b ] ].
+							ifPresent: [:sortFunc | [:a :b | (sortFunc value: a) < (sortFunc value: b)] ]
+							ifAbsent: [[:a :b | a < b]].
 
-	^ self ___initialize: ( ( aDict at: #reverse ifAbsent: [ false ] )
-									ifTrue: [ ( self ___container sort: sortBlock ) reverse ]
-									ifFalse: [ self ___container sort: sortBlock ] ).
+	^self ___initialize: ((aDict at: #reverse ifAbsent: [false])
+									ifTrue: [(self ___container sort: sortBlock) reverse]
+									ifFalse: [self ___container sort: sortBlock]).
 %
 set compile_env: 0
 category: 'Python 2.7'
@@ -131,10 +131,10 @@ __delslice__: start _: end
 	| newlist  |
 
 	newlist := self ___container removeFirst: start.
-	self ___container removeFirst: (end - start ).
+	self ___container removeFirst: (end - start).
 	self ___container addAllFirst: newlist.
 
-	^ self
+	^self
 %
 category: 'Python 2.7'
 method: list
@@ -143,7 +143,7 @@ __setslice__: start _: end _: anElement
 
 	self __delslice__: start _: end.
 	self insert: start _: anElement.
-	^ self
+	^self
 %
 set compile_env: 0
 category: 'Smalltalk'
@@ -153,14 +153,14 @@ ___remove: anIndex ifFail: message
 	"  a b c   removoving b is -2 =>   3 -2 -> 1    "
 	"  a b c   removoving c is -3 =>   3 -3 -> 0    "
 	| index |
-	index := anIndex < 0 ifTrue: [ self __len__ + anIndex ] ifFalse: [ anIndex ].
-	( index < 0 or: [ 	index >= self __len__ ] )
-		ifTrue: [ IndexError signal: message ].
+	index := anIndex < 0 ifTrue: [self __len__ + anIndex] ifFalse: [anIndex].
+	(index < 0 or: [	index >= self __len__])
+		ifTrue: [IndexError signal: message].
 
-	^ self ___container removeAt: index + 1
+	^self ___container removeAt: index + 1
 %
 category: 'Smalltalk'
 method: list
 ___typeName
-	^ 'list'
+	^'list'
 %

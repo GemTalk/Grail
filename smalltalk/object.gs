@@ -7,15 +7,15 @@ category: 'Python'
 classmethod: object
 __new__
 
-	^ self __new__: self
+	^self __new__: self
 %
 category: 'Python'
 classmethod: object
 __new__: aPyClass
 
-	( ( self = aPyClass) or: [ self subclasses includes: aPyClass ] )
-		ifFalse: [ TypeError signal: self name, '.__new__(', aPyClass name,') is not safe, use ', aPyClass name,'.__new__()' ].
-	^ self basicNew
+	((self = aPyClass) or: [self subclasses includes: aPyClass])
+		ifFalse: [TypeError signal: self name, '.__new__(', aPyClass name,') is not safe, use ', aPyClass name,'.__new__()'].
+	^self basicNew
 %
 set compile_env: 0
 category: 'Smalltalk'
@@ -32,25 +32,25 @@ ___dir
 category: 'Smalltalk'
 classmethod: object
 ___new__init__
-	^ self __new__
+	^self __new__
 			__init__
 %
 category: 'Smalltalk'
 classmethod: object
 ___new__init__: firstParam
-	^ self __new__
+	^self __new__
 			__init__: firstParam
 %
 category: 'Smalltalk'
 classmethod: object
 ___new__init__: firstParam _: secondParam
-	^ self __new__
+	^self __new__
 			__init__: firstParam _: secondParam
 %
 category: 'Smalltalk'
 classmethod: object
 ___new__init__: firstParam _: secondParam _: thirdParam
-	^ self __new__
+	^self __new__
 			__init__: firstParam _: secondParam  _: thirdParam
 %
 category: 'Smalltalk'
@@ -58,7 +58,7 @@ classmethod: object
 ___pyProtocol
 
 	| set |
-	set := self == object 
+	set := self == object
 		ifTrue: [Set new]
 		ifFalse: [self superclass ___pyProtocol].
 	(self includesCategory: #'Python') ifTrue: [set addAll: ((self selectorsIn: #'Python') collect: [:each | each asString])].
@@ -68,7 +68,7 @@ ___pyProtocol
 category: 'Smalltalk'
 classmethod: object
 new
-	^ self __new__
+	^self __new__
 %
 ! ------------------- Instance methods for object
 set compile_env: 0
@@ -88,7 +88,7 @@ category: 'Python'
 method: object
 __dir__
 
- 	^ list ___new__init__: self class ___dir
+ 	^list ___new__init__: self class ___dir
 %
 category: 'Python'
 method: object
@@ -105,7 +105,7 @@ __eq__: anObject
 
 " 	<primitive: 110>
 	self primitiveFailed"
-	^ self == anObject
+	^self == anObject
 %
 category: 'Python'
 method: object
@@ -143,7 +143,7 @@ category: 'Python'
 method: object
 __hash__
 
-	^ self identityHash printString
+	^self identityHash printString
 %
 category: 'Python'
 method: object
@@ -191,7 +191,7 @@ category: 'Python'
 method: object
 __repr__
 
-	^ '<', self class name, ' object at ' , self identityHash printString , '>'
+	^'<', self class name, ' object at ' , self identityHash printString , '>'
 %
 category: 'Python'
 method: object
@@ -199,9 +199,9 @@ __setattr__: aKey _: aValue
 
 	| symbol |
 	symbol := aKey ___string asSymbol.
-	( self __dir__ __contains__: aKey ) ifTrue: [
+	(self __dir__ __contains__: aKey) ifTrue: [
       	AttributeError signal: self __class__ name asString printString, ' object attribute ', aKey ___string printString , ' is read-only'.
-   ].
+  ].
 
 	AttributeError signal: self __class__ name asString printString, ' object has no attribute ', aKey ___string printString .
 %
@@ -209,13 +209,13 @@ category: 'Python'
 method: object
 __sizeof__
 
-	^ 16
+	^16
 %
 category: 'Python'
 method: object
 __str__
 
-	^ self __repr__
+	^self __repr__
 %
 category: 'Python'
 method: object
@@ -237,7 +237,7 @@ ___perform: aSymbol
 
 	<reflective: #object:performMessageWith:>
 	"<primitive: 83>"
-	^ self ___perform: aSymbol withArguments: (Array new: 0)
+	^self ___perform: aSymbol withArguments: (Array new: 0)
 %
 category: 'Smalltalk'
 method: object
@@ -252,7 +252,7 @@ ___yourself
 category: 'Smalltalk'
 method: object
 = other
-	^ self __eq__: other
+	^self __eq__: other
 %
 category: 'Smalltalk'
 method: object
@@ -263,12 +263,12 @@ method: object
 asString
 	"Answer a string that represents the receiver."
 
-	^ self printString
+	^self printString
 %
 category: 'Smalltalk'
 method: object
 basicInspect
-	^ Smalltalk tools basicInspector inspect: self
+	^self error: 'inspect not supported'
 %
 category: 'Smalltalk'
 method: object
@@ -290,21 +290,21 @@ method: object
 fullPrintString
 	"Answer a String whose characters are a description of the receiver."
 
-	^ String streamContents: [:s | self printOn: s]
+	^String streamContents: [:s | self printOn: s]
 %
 category: 'Smalltalk'
 method: object
 gtDebuggerSUnitPrint
 	"I return a textual representation of the object that is used by the SUnit debugger to compare objects using a textual diff."
 
-	^ self printString
+	^self printString
 %
 category: 'Smalltalk'
 method: object
 gtDisplayString
 	"I return a textual representation of the object that is used by the SUnit debugger to compare objects using a textual diff."
 
-	^ self printString
+	^self printString
 %
 category: 'Smalltalk'
 method: object
@@ -312,13 +312,13 @@ hash
 	"Answer a SmallInteger whose value is related to the receiver's identity.
 	May be overridden, and should be overridden in any classes that define = "
 
-	^ self identityHash
+	^self identityHash
 %
 category: 'Smalltalk'
 method: object
 inspect
 	"Create and schedule an Inspector in which the user can examine the receiver's variables."
-	^ Smalltalk tools inspector inspect: self
+	^self error: 'inspect not supported'
 %
 category: 'Smalltalk'
 method: object

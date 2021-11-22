@@ -18,5 +18,5 @@ category: 'other'
 method: LambdaAst
 name
 
-	^ '<lambda>'
+	^'<lambda>'
 %

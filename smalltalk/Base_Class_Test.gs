@@ -41,25 +41,25 @@ targetClass
 category: 'setup'
 method: Base_Class_Test
 targetInstance
-	^ self targetClass ___new__init__
+	^self targetClass ___new__init__
 %
 category: 'setup'
 method: Base_Class_Test
 targetInstance: firstArg
-	^ self targetClass ___new__init__: firstArg
+	^self targetClass ___new__init__: firstArg
 %
 category: 'setup'
 method: Base_Class_Test
 targetInstance: firstArg _: secondArg
-	^ self targetClass ___new__init__: firstArg _: secondArg
+	^self targetClass ___new__init__: firstArg _: secondArg
 %
 category: 'setup'
 method: Base_Class_Test
 targetInstance: firstArg _: secondArg _: thirdParam
-	^ self targetClass ___new__init__: firstArg _: secondArg _: thirdParam
+	^self targetClass ___new__init__: firstArg _: secondArg _: thirdParam
 %
 category: 'setup'
 method: Base_Class_Test
 writeDirTestOn: methodList
-	^ Scripter writeFor: self targetClass dirTestOn: methodList
+	^Scripter writeFor: self targetClass dirTestOn: methodList
 %

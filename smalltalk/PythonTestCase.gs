@@ -48,7 +48,7 @@ category: 'other'
 method: PythonTestCase
 deny: value
 
-	super assert: (value == False or: [value ~= True or: [value not ]]).
+	super assert: (value == False or: [value ~= True or: [value not]]).
 %
 category: 'other'
 method: PythonTestCase
@@ -63,7 +63,7 @@ setUp
 	super setUp.
 	stdout := WriteStream on: Unicode7 new.
 	(GsCurrentSession currentSession objectNamed: #'builtins') current stdout: stdout.
-	self filename ifNotNil: [:filename | 
+	self filename ifNotNil: [:filename |
 		module := self resources first current moduleAtPath: self class pathToTests , filename.
 	].
 	aScope := GlobalScope newForNode: self.

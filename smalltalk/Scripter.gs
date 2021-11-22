@@ -9,12 +9,12 @@ writeFor: aPyClass dirTestOn: methodList
 	" builds test__dir for aPyClass considering methodList
 			only inplemented methods get active assertions
 	try me
-		self writeFor: object dirTestOn:  #( 'issuperset', 'symmetric_difference', 'union')
+		self writeFor: object dirTestOn:  #('issuperset', 'symmetric_difference', 'union')
 	"
 
 	| list |
-	list := ( methodList asSet remove: #, ifAbsent:[]; yourself ) asSortedCollection.
-	^ String streamContents: [ :source |
+	list := (methodList asSet remove: #, ifAbsent:[]; yourself) asSortedCollection.
+	^String streamContents: [:source |
 		source nextPutAll: 'test__dir__
 	" please inspect
 	self new writeDirTestOn: ';
@@ -29,17 +29,17 @@ writeFor: aPyClass dirTestOn: methodList
 				 nextPutAll: list size printString;
 				 nextPutAll: '.
 "'.
-		list do: [ :each |
-			source nextPutAll: ( ( aPyClass ___dir includes: each )
-											ifTrue: [ '   ' ]
-	 										ifFalse: [ '   #pyTodo. "' ] );
-			       nextPutAll: 'self assert: ( dir __contains__: #';
+		list do: [:each |
+			source nextPutAll: ((aPyClass ___dir includes: each)
+											ifTrue: ['   ']
+	 										ifFalse: ['   #pyTodo. "']);
+			       nextPutAll: 'self assert: (dir __contains__: #';
 			       nextPutAll: each;
-			       nextPutAll:  ' ).';
+			       nextPutAll:  ').';
 			       cr;
-			       nextPutAll: ( ( aPyClass ___dir includes: each )
-											ifTrue: [ '' ]
-	 										ifFalse: [ '"' ] )
+			       nextPutAll: ((aPyClass ___dir includes: each)
+											ifTrue: ['']
+	 										ifFalse: ['"'])
  		]
  	]
 %

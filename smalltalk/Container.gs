@@ -12,18 +12,18 @@ ___containerClass
 category: 'Smalltalk'
 classmethod: Container
 ___endChar
-	^ $#
+	^$#
 %
 category: 'Smalltalk'
 classmethod: Container
 ___startChar
-	^ $#
+	^$#
 %
 category: 'Smalltalk'
 classmethod: Container
 __new__: aPyClass
 
-	^ ( super __new__: aPyClass )
+	^(super __new__: aPyClass)
 		__init__
 %
 ! ------------------- Instance methods for Container
@@ -34,17 +34,17 @@ method: Container
 	"Answer whether the receiver and anObject represent the same object."
 
 	self == anObject
-		ifTrue: [ ^ true ].
+		ifTrue: [^true].
 	self class = anObject class
-		ifFalse: [ ^ false ].
-	^ container = anObject ___container
+		ifFalse: [^false].
+	^container = anObject ___container
 %
 category: 'comparing'
 method: Container
 hash
 	"Answer an integer value that is related to the identity of the receiver."
 
-	^ container hash
+	^container hash
 %
 set compile_env: 0
 category: 'Python'
@@ -53,47 +53,47 @@ __add__: aList
 	| newlist |
 
 	{ Container. Collection }
-		detect: [ :each | aList isKindOf: each ]
-		ifNone: [ TypeError signal: 'can only concatenate ', self ___typeName , ' (not "', aList class name,'") to ', self ___typeName ].
+		detect: [:each | aList isKindOf: each]
+		ifNone: [TypeError signal: 'can only concatenate ', self ___typeName , ' (not "', aList class name,'") to ', self ___typeName].
 
 	newlist := self class ___new__init__: self.
 	"We don't know yet what aList might be"
-	newlist ___container addAll: (( aList isKindOf: Container )
-											 ifTrue: [ aList ___container ] ifFalse: [ aList ]).
+	newlist ___container addAll: ((aList isKindOf: Container)
+											 ifTrue: [aList ___container] ifFalse: [aList]).
 
-	^ newlist
+	^newlist
 %
 category: 'Python'
 method: Container
 __contains__: anElement
 
-	^ self ___container includes: anElement
+	^self ___container includes: anElement
 %
 category: 'Python'
 method: Container
 __eq__: otherCollection
 	| size |
 
-	( size := self __len__ ) = otherCollection __len__ ifFalse: [^ false].
+	(size := self __len__) = otherCollection __len__ ifFalse: [^false].
 
 	1 to: size do: [:index |
-		(self ___container at: index) = (otherCollection ___container at: index) ifFalse: [^ false]].
-	^ true
+		(self ___container at: index) = (otherCollection ___container at: index) ifFalse: [^false]].
+	^true
 %
 category: 'Python'
 method: Container
 __ge__: otherCollection
-	^ ( self __gt__: otherCollection ) or: [ self __eq__: otherCollection  ]
+	^(self __gt__: otherCollection) or: [self __eq__: otherCollection ]
 %
 category: 'Python'
 method: Container
 __getitem__: anIndex
 	| index |
-	index := anIndex < 0 ifTrue: [ self __len__ + anIndex ] ifFalse: [ anIndex ].
-	( index < 0 or: [ 	index >= self __len__ ] )
-		ifTrue: [ IndexError signal: self ___typeName, ' index out of range' ].
+	index := anIndex < 0 ifTrue: [self __len__ + anIndex] ifFalse: [anIndex].
+	(index < 0 or: [	index >= self __len__])
+		ifTrue: [IndexError signal: self ___typeName, ' index out of range'].
 
-	^ self ___container at: index + 1
+	^self ___container at: index + 1
 %
 category: 'Python'
 method: Container
@@ -103,11 +103,11 @@ __gt__: otherCollection
 	size := self ___container size min: otherCollection ___container size.
 
 	1 to: size do: 	[:index |
-			(self ___container at: index) > (otherCollection ___container at: index) ifTrue: [^ true].
-			(self ___container at: index) < (otherCollection ___container at: index) ifTrue: [^ false]
+			(self ___container at: index) > (otherCollection ___container at: index) ifTrue: [^true].
+			(self ___container at: index) < (otherCollection ___container at: index) ifTrue: [^false]
 		].
 
-	^ self ___container size > otherCollection ___container size
+	^self ___container size > otherCollection ___container size
 %
 category: 'Python'
 method: Container
@@ -115,14 +115,14 @@ __iadd__: aList
 	| newlist |
 
 	{ Container. Collection }
-		detect: [ :each | aList isKindOf: each ]
-		ifNone: [ TypeError signal: 'can only concatenate ', self ___typeName , ' (not "', aList class name,'") to ', self ___typeName ].
+		detect: [:each | aList isKindOf: each]
+		ifNone: [TypeError signal: 'can only concatenate ', self ___typeName , ' (not "', aList class name,'") to ', self ___typeName].
 
 	"We don't know yet what aList might be"
-	self ___container addAll: (( aList isKindOf: Container )
-											 ifTrue: [ aList ___container ] ifFalse: [ aList ]).
+	self ___container addAll: ((aList isKindOf: Container)
+											 ifTrue: [aList ___container] ifFalse: [aList]).
 
-	^ self
+	^self
 %
 category: 'Python'
 method: Container
@@ -130,27 +130,27 @@ __imul__: aMultiplier
 	| newList |
 	 newList := self.
 
-	( aMultiplier -1 ) timesRepeat: [
+	(aMultiplier -1) timesRepeat: [
 		newList ___container addAll: self ___container
-   ].
+  ].
 
-	^ newList
+	^newList
 %
 category: 'Python'
 method: Container
 __le__: otherCollection
-	^ ( self __gt__: otherCollection ) not
+	^(self __gt__: otherCollection) not
 %
 category: 'Python'
 method: Container
 __len__
 
-	^ self ___size
+	^self ___size
 %
 category: 'Python'
 method: Container
 __lt__: otherCollection
-	^ ( self __gt__: otherCollection ) not and: [ self __ne__: otherCollection]
+	^(self __gt__: otherCollection) not and: [self __ne__: otherCollection]
 %
 category: 'Python'
 method: Container
@@ -160,61 +160,61 @@ __mul__: aMultiplier
 
 	aMultiplier timesRepeat: [
 		newList addAll: self ___container
-   ].
+  ].
 
-	^ self class new ___initialize: newList
+	^self class new ___initialize: newList
 %
 category: 'Python'
 method: Container
 __ne__: otherCollection
-	^ ( self __eq__: otherCollection ) not
+	^(self __eq__: otherCollection) not
 %
 category: 'Python'
 method: Container
 __repr__
 
-	^ self printString
+	^self printString
 %
 category: 'Python'
 method: Container
 __rmul__: aMultiplier
-	^ self __mul__: aMultiplier
+	^self __mul__: aMultiplier
 %
 category: 'Python'
 method: Container
 clear
 
-	^ self ___container removeAll.
+	^self ___container removeAll.
 %
 category: 'Python'
 method: Container
 copy
 
-	^ self class ___new__init__: self.
+	^self class ___new__init__: self.
 %
 category: 'Python'
 method: Container
 count: anElement
 
-	^ ( self ___container select: [ :each | each == anElement ] ) size
+	^(self ___container select: [:each | each == anElement]) size
 %
 category: 'Python'
 method: Container
 index: anElement
-	^ self index: anElement from: 0.
+	^self index: anElement from: 0.
 %
 category: 'Python'
 method: Container
 index: anElement from: start
-	^ self index: anElement from: start to: self __len__
+	^self index: anElement from: start to: self __len__
 %
 category: 'Python'
 method: Container
 index: anElement from: start to: end
 
-	^ ( ( self ___getslice: start _: end )
+	^((self ___getslice: start _: end)
 		indexOf: anElement
-		ifAbsent: [ ValueError signal: anElement printString, ' is not in ', self ___typeName ]
+		ifAbsent: [ValueError signal: anElement printString, ' is not in ', self ___typeName]
 				) - 1 + start
 %
 set compile_env: 0
@@ -222,13 +222,13 @@ category: 'Python 2.7'
 method: Container
 __getslice__: start _: end
 
-	^ self class ___new__init__: ( self ___getslice: start _: end )
+	^self class ___new__init__: (self ___getslice: start _: end)
 %
 set compile_env: 0
 category: 'Smalltalk'
 method: Container
 ___container
-	^ container
+	^container
 %
 category: 'Smalltalk'
 method: Container
@@ -237,14 +237,14 @@ ___getslice: start _: end
 	| subset |
 	subset := self ___container copy.
 	subset removeFirst: start.
-	subset removeLast: ( self __len__ - (self __len__ min: end ) ).
-	^ subset
+	subset removeLast: (self __len__ - (self __len__ min: end)).
+	^subset
 %
 category: 'Smalltalk'
 method: Container
 ___initArgs: args
 
-	self ___initialize: ( args isEmpty ifTrue: [ {} ] ifFalse: [ args first ] )
+	self ___initialize: (args isEmpty ifTrue: [{}] ifFalse: [args first])
 %
 category: 'Smalltalk'
 method: Container
@@ -267,7 +267,7 @@ category: 'Smalltalk'
 method: Container
 gtDebuggerSUnitPrint
 
-	^ self ___container gtDebuggerSUnitPrint
+	^self ___container gtDebuggerSUnitPrint
 %
 category: 'Smalltalk'
 method: Container
@@ -276,7 +276,7 @@ printElementsOn: aStream
 	 and we don't really need it."
 
 	aStream nextPut: self class ___startChar.
-	self ___container do: [:element | aStream print: element] separatedBy: [aStream nextPutAll: ', ' ].
+	self ___container do: [:element | aStream print: element] separatedBy: [aStream nextPutAll: ', '].
 	aStream nextPut: self class ___endChar.
 %
 category: 'Smalltalk'

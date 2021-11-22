@@ -7,7 +7,7 @@ category: 'other'
 classmethod: ConstantAst
 parent: aNode
 
-	^ self basicNew
+	^self basicNew
 		initialize: aNode;
 		yourself
 %
@@ -28,40 +28,40 @@ method: ConstantAst
 initialize
 	"Constant(constant value, string? kind)
 
-	A constant value. The value attribute of the Constant literal contains the Python object it represents. 
+	A constant value. The value attribute of the Constant literal contains the Python object it represents.
 	The values represented can be simple types such as a number, string or None, but also immutable container types (tuples and frozensets) if all of their elements are constant."
 
 	| stream char next |
 	stream := self stream.
 	char := stream peek.
-	(char == $' or: [char == $"]) ifTrue: [ 
+	(char == $' or: [char == $"]) ifTrue: [
 		value := self string. "constant is a string"
-		^ self finalize ].
-	char == $b ifTrue: [ 
+		^self finalize].
+	char == $b ifTrue: [
 		value := bytes withAll: self string ___container. "constant is a string"
-		^ self finalize ].
-	[ char asString asInteger. 
+		^self finalize].
+	[char asString asInteger.
 		value := self number. "constant is a number"
-		^ self finalize ]	
+		^self finalize]
 		on: ImproperOperation
-		do: [ ]. 
+		do: [].
 	next := stream peekN: 4.
-	next = 'None' ifTrue: [ value := None. "constant is None"
+	next = 'None' ifTrue: [value := None. "constant is None"
 		stream next: 4.
-		^ self finalize ]. 
-	next = 'True' ifTrue: [ value := True. "constant is True"
+		^self finalize].
+	next = 'True' ifTrue: [value := True. "constant is True"
 		stream next: 4.
-		^ self finalize ]. 
+		^self finalize].
 	next := stream peekN: 5.
-	next = 'False' ifTrue: [ value := False. "constant is False"
+	next = 'False' ifTrue: [value := False. "constant is False"
 		stream next: 5.
-		^ self finalize ].
+		^self finalize].
 %
 category: 'other'
 method: ConstantAst
 set: container to: anObject scope: aScope
 
-	container 
+	container
 		set: value
 		to: anObject.
 %
@@ -69,5 +69,5 @@ category: 'other'
 method: ConstantAst
 value
 
-	^ value
+	^value
 %

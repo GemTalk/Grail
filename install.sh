@@ -40,8 +40,6 @@ symbolDictionary := SymbolDictionary new
     at: #'Ellipsis'         put: nil;
     at: #'True'             put: nil;
     at: #'False'            put: nil;
-    at: #'NumberParser'     put: nil;
-    at: #'Smalltalk'        put: nil;
     at: #'Linearization'    put: nil;
     at: #'Instance'         put: nil;
     at: #'GlobalScope'      put: nil;
@@ -49,7 +47,6 @@ symbolDictionary := SymbolDictionary new
     yourself.
 userProfile insertDictionary: symbolDictionary at: 1.
 %
-input /Users/jfoster/Desktop/pharo.tpz
 input Python.gs
 run
 Python

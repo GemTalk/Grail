@@ -7,7 +7,7 @@ category: 'other'
 classmethod: NameAst
 with: aSymbol
 
-	^ self basicNew 
+	^self basicNew
 		id: aSymbol;
 		yourself
 %
@@ -59,13 +59,13 @@ method: NameAst
 injectSuperArguments: anArray scope: aScope
 
 	| type objectOrType |
-	type := aScope superInfo 
+	type := aScope superInfo
 		at: #'type'
-		ifAbsent: [ ].
-	objectOrType := aScope superInfo 
+		ifAbsent: [].
+	objectOrType := aScope superInfo
 		at: #'objectOrType'
-		ifAbsent: [ ].
-	(((type isNil not) and: [ objectOrType isNil not ]) and: [ id = #'super' ]) ifTrue: [ "in case of calling super"
+		ifAbsent: [].
+	(((type isNil not) and: [objectOrType isNil not]) and: [id = #'super']) ifTrue: ["in case of calling super"
 		anArray add: type.
 		anArray add: objectOrType.
 	].
@@ -75,7 +75,7 @@ method: NameAst
 printOn: aStream
 
 	super printOn: aStream.
-	aStream nextPut: $(; 
+	aStream nextPut: $(;
 		nextPutAll: id;
 		nextPut: $).
 %

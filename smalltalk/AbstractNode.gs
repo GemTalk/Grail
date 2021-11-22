@@ -7,7 +7,7 @@ category: 'other'
 classmethod: AbstractNode
 escapeCharacters
 
-	escapeCharacters ifNil: [ 
+	escapeCharacters ifNil: [
 		escapeCharacters := IdentityKeyValueDictionary new
 			at: $\		put: 92;
 			at: $'		put: 39;
@@ -19,9 +19,9 @@ escapeCharacters
 			at: $r		put: 13;
 			at: $t		put: 9;
 			at: $v		put: 11;
-			yourself. 
+			yourself.
 	].
-	^ escapeCharacters
+	^escapeCharacters
 %
 category: 'other'
 classmethod: AbstractNode
@@ -128,7 +128,7 @@ method: AbstractNode
 interpretEscapeSequence: aStream
 	"answers a Character"
 
-	| char | 
+	| char |
 	char := aStream next.
 	(char == $x) ifTrue: [
 		^Character codePoint: ('16r', (aStream next: 2)) asInteger
@@ -139,7 +139,7 @@ category: 'initialization'
 method: AbstractNode
 isVariableIsDeclared: aSymbol
 
-	^ parent isVariableIsDeclared: aSymbol.
+	^parent isVariableIsDeclared: aSymbol.
 %
 category: 'initialization'
 method: AbstractNode
@@ -200,12 +200,12 @@ string
 	char := stream next.
 	(char == $' or: [char == $"]) ifFalse: [self error].
 	writeStream := WriteStream on: Unicode7 new.
-	[ 
+	[
 		next := stream next.
 		next == char
 	] whileFalse: [
 		next == $\ ifTrue: [
-			next := self interpretEscapeSequence: stream.  
+			next := self interpretEscapeSequence: stream.
 		].
 		writeStream nextPut: next.
 	].
@@ -260,11 +260,11 @@ number
 		num := complex real: 0 imag: (string copyFrom: 1 to: string size - 1) asNumber.
 	] ifFalse: [
 		x := string asNumber.
-		num := (x isKindOf: Integer) 
+		num := (x isKindOf: Integer)
 			ifTrue: [int with: x]
 			ifFalse: [float with: x].
 	].
-	^ num
+	^num
 %
 category: 'other'
 method: AbstractNode

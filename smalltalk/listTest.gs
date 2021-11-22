@@ -13,10 +13,10 @@ test__add__
 	lost := self targetInstance __add__: { '1'. '2' }.
 
 	self
-		assert: ( list __add__: self targetInstance ) __len__ equals: 1;
-		assert: ( list __add__: lost ) __len__ equals: 3;
-		assert: ( list __add__: lost ) __len__ equals: 3;   " still the same lenght"
- 		assert: ( ( list __add__: lost ) __getitem__: -1 ) equals: '2';
+		assert: (list __add__: self targetInstance) __len__ equals: 1;
+		assert: (list __add__: lost) __len__ equals: 3;
+		assert: (list __add__: lost) __len__ equals: 3;   " still the same lenght"
+ 		assert: ((list __add__: lost) __getitem__: -1) equals: '2';
 		yourself
 %
 category: 'done'
@@ -24,17 +24,17 @@ method: listTest
 test__add__anElement
 
 	self
-		should: [ self targetInstance __add__: 23 ]
+		should: [self targetInstance __add__: 23]
 		raise: TypeError
-		withExceptionDo: [ :exception |
-			self assert: exception messageText equals: 'can only concatenate list (not "SmallInteger") to list' ];
+		withExceptionDo: [:exception |
+			self assert: exception messageText equals: 'can only concatenate list (not "SmallInteger") to list'];
 		yourself.
 %
 category: 'done'
 method: listTest
 test__contains__onEmptyList
    	self
-		deny: ( self targetInstance __contains__: 'x' );
+		deny: (self targetInstance __contains__: 'x');
 		yourself.
 %
 category: 'done'
@@ -45,7 +45,7 @@ test__delitem__
 	list __delitem__: 0.
 
 	self
-		deny:( list __contains__: 'o' );
+		deny:(list __contains__: 'o');
 		assert: list __len__ equals: 0;
 		yourself
 %
@@ -58,7 +58,7 @@ test__delitem__negative
 
 	self
 		assert: list __len__ equals: 0;
-		deny: ( list __contains__: 'o' );
+		deny: (list __contains__: 'o');
 		yourself
 %
 category: 'done'
@@ -66,10 +66,10 @@ method: listTest
 test__delitem__outOfRange
 
 	self
-		should: [ self targetInstance __delitem__: 0 ]
+		should: [self targetInstance __delitem__: 0]
 		raise: IndexError
-		withExceptionDo: [ :exception |
-			self assert: exception messageText equals: 'list assignment index out of range' ];
+		withExceptionDo: [:exception |
+			self assert: exception messageText equals: 'list assignment index out of range'];
 		yourself.
 %
 category: 'done'
@@ -82,9 +82,9 @@ test__delslice__
 
 	self
 		assert: list __len__ equals: 3;
-		assert: ( list __getitem__: 0 ) equals: 'a';
-		assert: ( list __getitem__: 1 ) equals: 'c';
-		assert: ( list __getitem__: 2 ) equals: 'd';
+		assert: (list __getitem__: 0) equals: 'a';
+		assert: (list __getitem__: 1) equals: 'c';
+		assert: (list __getitem__: 2) equals: 'd';
 		yourself
 %
 category: 'done'
@@ -98,53 +98,53 @@ test__dir__
 	self assert: dir __class__ equals: list.
 
    #pyTodo. "self assert: dir __len__ equals: 47.
-"   self assert: ( dir __contains__: #__add__ ).
-   self assert: ( dir __contains__: #__class__ ).
-   #pyTodo. "self assert: ( dir __contains__: #__class_getitem__ ).
-"   self assert: ( dir __contains__: #__contains__ ).
-   self assert: ( dir __contains__: #__delattr__ ).
-   self assert: ( dir __contains__: #__delitem__ ).
-   self assert: ( dir __contains__: #__dir__ ).
-   self assert: ( dir __contains__: #__doc__ ).
-   self assert: ( dir __contains__: #__eq__ ).
-   self assert: ( dir __contains__: #__format__ ).
-   self assert: ( dir __contains__: #__ge__ ).
-   self assert: ( dir __contains__: #__getattribute__ ).
-   self assert: ( dir __contains__: #__getitem__ ).
-   self assert: ( dir __contains__: #__gt__ ).
-   self assert: ( dir __contains__: #__hash__ ).
-   #pyTodo. "self assert: ( dir __contains__: #__iadd__ ).
-"   self assert: ( dir __contains__: #__imul__ ).
-   #pyTodo. "self assert: ( dir __contains__: #__init__ ).
-"   #pyTodo. "self assert: ( dir __contains__: #__init_subclass__ ).
-"   #pyTodo. "self assert: ( dir __contains__: #__iter__ ).
-"   self assert: ( dir __contains__: #__le__ ).
-   self assert: ( dir __contains__: #__len__ ).
-   self assert: ( dir __contains__: #__lt__ ).
-   self assert: ( dir __contains__: #__mul__ ).
-   self assert: ( dir __contains__: #__ne__ ).
-   self assert: ( dir __contains__: #__new__ ).
-   #pyTodo. "self assert: ( dir __contains__: #__reduce__ ).
-"   #pyTodo. "self assert: ( dir __contains__: #__reduce_ex__ ).
-"   self assert: ( dir __contains__: #__repr__ ).
-   self assert: ( dir __contains__: #__reversed__ ).
-   #pyTodo. "self assert: ( dir __contains__: #__rmul__ ).
-"   self assert: ( dir __contains__: #__setattr__ ).
-   self assert: ( dir __contains__: #__setitem__ ).
-   self assert: ( dir __contains__: #__sizeof__ ).
-   self assert: ( dir __contains__: #__str__ ).
-   self assert: ( dir __contains__: #__subclasshook__ ).
-   self assert: ( dir __contains__: #append ).
-   self assert: ( dir __contains__: #clear ).
-   self assert: ( dir __contains__: #copy ).
-   self assert: ( dir __contains__: #count ).
-   self assert: ( dir __contains__: #extend ).
-   self assert: ( dir __contains__: #index ).
-   self assert: ( dir __contains__: #insert ).
-   self assert: ( dir __contains__: #pop ).
-   self assert: ( dir __contains__: #remove ).
-   self assert: ( dir __contains__: #reverse ).
-   self assert: ( dir __contains__: #sort ).
+"   self assert: (dir __contains__: #__add__).
+   self assert: (dir __contains__: #__class__).
+   #pyTodo. "self assert: (dir __contains__: #__class_getitem__).
+"   self assert: (dir __contains__: #__contains__).
+   self assert: (dir __contains__: #__delattr__).
+   self assert: (dir __contains__: #__delitem__).
+   self assert: (dir __contains__: #__dir__).
+   self assert: (dir __contains__: #__doc__).
+   self assert: (dir __contains__: #__eq__).
+   self assert: (dir __contains__: #__format__).
+   self assert: (dir __contains__: #__ge__).
+   self assert: (dir __contains__: #__getattribute__).
+   self assert: (dir __contains__: #__getitem__).
+   self assert: (dir __contains__: #__gt__).
+   self assert: (dir __contains__: #__hash__).
+   #pyTodo. "self assert: (dir __contains__: #__iadd__).
+"   self assert: (dir __contains__: #__imul__).
+   #pyTodo. "self assert: (dir __contains__: #__init__).
+"   #pyTodo. "self assert: (dir __contains__: #__init_subclass__).
+"   #pyTodo. "self assert: (dir __contains__: #__iter__).
+"   self assert: (dir __contains__: #__le__).
+   self assert: (dir __contains__: #__len__).
+   self assert: (dir __contains__: #__lt__).
+   self assert: (dir __contains__: #__mul__).
+   self assert: (dir __contains__: #__ne__).
+   self assert: (dir __contains__: #__new__).
+   #pyTodo. "self assert: (dir __contains__: #__reduce__).
+"   #pyTodo. "self assert: (dir __contains__: #__reduce_ex__).
+"   self assert: (dir __contains__: #__repr__).
+   self assert: (dir __contains__: #__reversed__).
+   #pyTodo. "self assert: (dir __contains__: #__rmul__).
+"   self assert: (dir __contains__: #__setattr__).
+   self assert: (dir __contains__: #__setitem__).
+   self assert: (dir __contains__: #__sizeof__).
+   self assert: (dir __contains__: #__str__).
+   self assert: (dir __contains__: #__subclasshook__).
+   self assert: (dir __contains__: #append).
+   self assert: (dir __contains__: #clear).
+   self assert: (dir __contains__: #copy).
+   self assert: (dir __contains__: #count).
+   self assert: (dir __contains__: #extend).
+   self assert: (dir __contains__: #index).
+   self assert: (dir __contains__: #insert).
+   self assert: (dir __contains__: #pop).
+   self assert: (dir __contains__: #remove).
+   self assert: (dir __contains__: #reverse).
+   self assert: (dir __contains__: #sort).
 %
 category: 'done'
 method: listTest
@@ -153,9 +153,9 @@ test__eq__
 	list := self targetInstance __add__: { '1'. '2'. '3' }.
 
 	self
-		deny:   ( list __eq__: (self targetInstance __add__: { '1'. '2' } ) );
-		assert: ( list __eq__: (self targetInstance __add__: { '1'. '2'. '3' } ) );
-		deny:   ( list __eq__: (self targetInstance __add__: { '1'. '2'. '3'. '0' } ) );
+		deny:   (list __eq__: (self targetInstance __add__: { '1'. '2' }));
+		assert: (list __eq__: (self targetInstance __add__: { '1'. '2'. '3' }));
+		deny:   (list __eq__: (self targetInstance __add__: { '1'. '2'. '3'. '0' }));
 		yourself
 %
 category: 'done'
@@ -165,11 +165,11 @@ test__ge__
 	list := self targetInstance __add__: { '1'. '2'. '3' }.
 
 	self
-		assert: ( list __ge__: (self targetInstance __add__: { '1'. '2' } ) );
-		assert: ( list __ge__: (self targetInstance __add__: { '1'. '2'. '3' } ) );
-		deny:   ( list __ge__: (self targetInstance __add__: { '1'. '2'. '3'. '0' } ) );
-		assert: ( list __ge__: (self targetInstance __add__: { '1'. '2'. '2' } ) );
-		deny:   ( list __ge__: (self targetInstance __add__: { '1'. '2'. '4' } ) );
+		assert: (list __ge__: (self targetInstance __add__: { '1'. '2' }));
+		assert: (list __ge__: (self targetInstance __add__: { '1'. '2'. '3' }));
+		deny:   (list __ge__: (self targetInstance __add__: { '1'. '2'. '3'. '0' }));
+		assert: (list __ge__: (self targetInstance __add__: { '1'. '2'. '2' }));
+		deny:   (list __ge__: (self targetInstance __add__: { '1'. '2'. '4' }));
 		yourself
 %
 category: 'done'
@@ -179,7 +179,7 @@ test__getitem__negative
 	list := self targetInstance __add__: { 'o' }.
 
 	self
-		assert: ( list __getitem__: -1 ) equals: 'o';
+		assert: (list __getitem__: -1) equals: 'o';
 		yourself
 %
 category: 'done'
@@ -187,10 +187,10 @@ method: listTest
 test__getitem__outOfRange
 
 	self
-		should: [ self targetInstance __getitem__: 0 ]
+		should: [self targetInstance __getitem__: 0]
 		raise: IndexError
-		withExceptionDo: [ :exception |
-			self assert: exception messageText equals: 'list index out of range' ];
+		withExceptionDo: [:exception |
+			self assert: exception messageText equals: 'list index out of range'];
 		yourself.
 %
 category: 'done'
@@ -200,11 +200,11 @@ test__getslice__
 	list := self targetInstance __add__: { 'a'. 'b'. 'c'. 'd' }.
 
 	self
-		assert: ( list __getslice__: 1 _: 2 ) __len__ equals: 1;
-		assert: ( ( list __getslice__: 1 _: 2 ) __getitem__: 0 )equals: 'b';
-		assert: ( list __getslice__: 1 _: 3) __len__ equals: 2;
-		assert: ( ( list __getslice__: 1 _: 3 ) __getitem__: 1 )equals: 'c';
-		assert: ( list __getslice__: 1 _: 10) __len__ equals: 3;
+		assert: (list __getslice__: 1 _: 2) __len__ equals: 1;
+		assert: ((list __getslice__: 1 _: 2) __getitem__: 0)equals: 'b';
+		assert: (list __getslice__: 1 _: 3) __len__ equals: 2;
+		assert: ((list __getslice__: 1 _: 3) __getitem__: 1)equals: 'c';
+		assert: (list __getslice__: 1 _: 10) __len__ equals: 3;
 		yourself
 %
 category: 'done'
@@ -214,11 +214,11 @@ test__gt__
 	list := self targetInstance __add__: { '1'. '2'. '3' }.
 
 	self
-		assert: ( list __gt__: (self targetInstance __add__: { '1'. '2' } ) );
-		deny:   ( list __gt__: (self targetInstance __add__: { '1'. '2'. '3' } ) );
-		deny:   ( list __gt__: (self targetInstance __add__: { '1'. '2'. '3'. '0' } ) );
-		assert: ( list __gt__: (self targetInstance __add__: { '1'. '2'. '2' } ) );
-		deny:   ( list __gt__: (self targetInstance __add__: { '1'. '2'. '4' } ) );
+		assert: (list __gt__: (self targetInstance __add__: { '1'. '2' }));
+		deny:   (list __gt__: (self targetInstance __add__: { '1'. '2'. '3' }));
+		deny:   (list __gt__: (self targetInstance __add__: { '1'. '2'. '3'. '0' }));
+		assert: (list __gt__: (self targetInstance __add__: { '1'. '2'. '2' }));
+		deny:   (list __gt__: (self targetInstance __add__: { '1'. '2'. '4' }));
 		yourself
 %
 category: 'done'
@@ -230,9 +230,9 @@ test__iadd__
 	lost := self targetInstance: { '1'. '2' }.
 
 	self
-		assert: ( list __iadd__: lost ) __len__ equals: 3;
+		assert: (list __iadd__: lost) __len__ equals: 3;
 		assert: list __len__ equals: 3;
-		assert: ( list __getitem__: -1 ) equals: '2';
+		assert: (list __getitem__: -1) equals: '2';
 		yourself
 %
 category: 'done'
@@ -242,9 +242,9 @@ test__imul__
 	list := self targetInstance __add__: { 'a'. 'b' }.
 
 	self
-		assert: ( list __imul__: 1 ) equals: ( self targetInstance __add__: { 'a'. 'b' } );
-		assert: ( list __imul__: 2 ) equals: ( self targetInstance __add__: { 'a'. 'b'. 'a'. 'b'  } );
-		assert: ( list __imul__: 2 ) equals: list;
+		assert: (list __imul__: 1) equals: (self targetInstance __add__: { 'a'. 'b' });
+		assert: (list __imul__: 2) equals: (self targetInstance __add__: { 'a'. 'b'. 'a'. 'b'  });
+		assert: (list __imul__: 2) equals: list;
 		yourself
 %
 category: 'done'
@@ -254,11 +254,11 @@ test__le__
 	list := self targetInstance __add__: { '1'. '2'. '3' }.
 
 	self
-		deny:   ( list __le__: (self targetInstance __add__: { '1'. '2' } ) );
-		assert: ( list __le__: (self targetInstance __add__: { '1'. '2'. '3' } ) );
-		assert: ( list __le__: (self targetInstance __add__: { '1'. '2'. '3'. '0' } ) );
-		deny:   ( list __le__: (self targetInstance __add__: { '1'. '2'. '2' } ) );
-		assert: ( list __le__: (self targetInstance __add__: { '1'. '2'. '4' } ) );
+		deny:   (list __le__: (self targetInstance __add__: { '1'. '2' }));
+		assert: (list __le__: (self targetInstance __add__: { '1'. '2'. '3' }));
+		assert: (list __le__: (self targetInstance __add__: { '1'. '2'. '3'. '0' }));
+		deny:   (list __le__: (self targetInstance __add__: { '1'. '2'. '2' }));
+		assert: (list __le__: (self targetInstance __add__: { '1'. '2'. '4' }));
 		yourself
 %
 category: 'done'
@@ -275,11 +275,11 @@ test__lt__
 	list := self targetInstance __add__: { '1'. '2'. '3' }.
 
 	self
-		deny:   ( list __lt__: (self targetInstance __add__: { '1'. '2' } ) );
-		deny:   ( list __lt__: (self targetInstance __add__: { '1'. '2'. '3' } ) );
-		assert: ( list __lt__: (self targetInstance __add__: { '1'. '2'. '3'. '0' } ) );
-		deny:   ( list __lt__: (self targetInstance __add__: { '1'. '2'. '2' } ) );
-		assert: ( list __lt__: (self targetInstance __add__: { '1'. '2'. '4' } ) );
+		deny:   (list __lt__: (self targetInstance __add__: { '1'. '2' }));
+		deny:   (list __lt__: (self targetInstance __add__: { '1'. '2'. '3' }));
+		assert: (list __lt__: (self targetInstance __add__: { '1'. '2'. '3'. '0' }));
+		deny:   (list __lt__: (self targetInstance __add__: { '1'. '2'. '2' }));
+		assert: (list __lt__: (self targetInstance __add__: { '1'. '2'. '4' }));
 		yourself
 %
 category: 'done'
@@ -289,9 +289,9 @@ test__mul__
 	list := self targetInstance __add__: { 'a'. 'b' }.
 
 	self
-		assert: ( list __mul__: 1 ) equals: ( self targetInstance __add__: { 'a'. 'b' } );
-		assert: ( list __mul__: 2 ) equals: ( self targetInstance __add__: { 'a'. 'b'. 'a'. 'b'  } );
-		deny:   ( list __mul__: 2 ) equals: list;
+		assert: (list __mul__: 1) equals: (self targetInstance __add__: { 'a'. 'b' });
+		assert: (list __mul__: 2) equals: (self targetInstance __add__: { 'a'. 'b'. 'a'. 'b'  });
+		deny:   (list __mul__: 2) equals: list;
 		yourself
 %
 category: 'done'
@@ -301,9 +301,9 @@ test__ne__
 	list := self targetInstance __add__: { '1'. '2'. '3' }.
 
 	self
-		assert: ( list __ne__: (self targetInstance __add__: { '1'. '2' } ) );
-		deny:   ( list __ne__: (self targetInstance __add__: { '1'. '2'. '3' } ) );
-		assert: ( list __ne__: (self targetInstance __add__: { '1'. '2'. '3'. '0' } ) );
+		assert: (list __ne__: (self targetInstance __add__: { '1'. '2' }));
+		deny:   (list __ne__: (self targetInstance __add__: { '1'. '2'. '3' }));
+		assert: (list __ne__: (self targetInstance __add__: { '1'. '2'. '3'. '0' }));
 		yourself
 %
 category: 'done'
@@ -326,10 +326,10 @@ test__reversed__
 
 	self
 		assert: list __reversed__ __len__ equals: 3;
-		assert: ( list __reversed__ __getitem__:  0 ) equals: 'c';
-		assert: ( list __reversed__ __getitem__: -1 ) equals: 'a';
-		assert: ( list __getitem__:  0 ) equals: 'a';
-		assert: ( list __getitem__: -1 ) equals: 'c';
+		assert: (list __reversed__ __getitem__:  0) equals: 'c';
+		assert: (list __reversed__ __getitem__: -1) equals: 'a';
+		assert: (list __getitem__:  0) equals: 'a';
+		assert: (list __getitem__: -1) equals: 'c';
 		yourself
 %
 category: 'done'
@@ -339,9 +339,9 @@ test__rmul__
 	list := self targetInstance: { 'a'. 'b' }.
 
 	self
-		assert: ( list __rmul__: 1 ) equals: ( self targetInstance: { 'a'. 'b' } );
-		assert: ( list __rmul__: 2 ) equals: ( self targetInstance: { 'a'. 'b'. 'a'. 'b'  } );
-		deny:   ( list __rmul__: 2 ) equals: list;
+		assert: (list __rmul__: 1) equals: (self targetInstance: { 'a'. 'b' });
+		assert: (list __rmul__: 2) equals: (self targetInstance: { 'a'. 'b'. 'a'. 'b'  });
+		deny:   (list __rmul__: 2) equals: list;
 		yourself
 %
 category: 'done'
@@ -352,8 +352,8 @@ test__setitem__
 	list __setitem__: 'u' _: 0.
 
 	self
-		deny:( list __contains__: 'o' );
-		assert:( list __contains__: 'u' );
+		deny:(list __contains__: 'o');
+		assert:(list __contains__: 'u');
 		assert: list __len__ equals: 1;
 		yourself
 %
@@ -365,8 +365,8 @@ test__setitem__negative
 	list __setitem__: 'u' _: -1.
 
 	self
-		deny:( list __contains__: 'o' );
-		assert:( list __contains__: 'u' );
+		deny:(list __contains__: 'o');
+		assert:(list __contains__: 'u');
 		assert: list __len__ equals: 1;
 		yourself
 %
@@ -423,8 +423,8 @@ testappend
 
 	self
 		assert: list __len__ equals: 4;
-		assert: ( list __contains__: 'o' );
-		assert: ( list __getitem__: -1 ) equals: 'o';
+		assert: (list __contains__: 'o');
+		assert: (list __getitem__: -1) equals: 'o';
 		yourself
 %
 category: 'done'
@@ -447,8 +447,8 @@ testcopy
    list __delitem__: 0.
 	self
 		assert: lost __len__ equals: 3;
-		assert: ( lost __getitem__:  0 ) equals: 'a';
-		assert: ( lost __getitem__: -1 ) equals: 'c';
+		assert: (lost __getitem__:  0) equals: 'a';
+		assert: (lost __getitem__: -1) equals: 'c';
 		yourself
 %
 category: 'done'
@@ -458,9 +458,9 @@ testcount
 	list := self targetInstance __add__: { 'a'. 'b'. 'c'. 'b' }.
 
 	self
-		assert: ( list count: 'a' ) equals: 1;
-		assert: ( list count: 'b' ) equals: 2;
-		assert: ( list count: 'z' ) equals: 0;
+		assert: (list count: 'a') equals: 1;
+		assert: (list count: 'b') equals: 2;
+		assert: (list count: 'z') equals: 0;
 		yourself
 %
 category: 'done'
@@ -470,9 +470,9 @@ testextendWithElement
 	list := self targetInstance __add__: { 'o' }.
 
 	self
-		assert: ( list extend: self targetInstance ) __len__ equals: 1;
-		assert: ( list extend: '2' ) __len__ equals: 2;
-		assert: ( list extend: 'lost' ) __len__ equals: 3;
+		assert: (list extend: self targetInstance) __len__ equals: 1;
+		assert: (list extend: '2') __len__ equals: 2;
+		assert: (list extend: 'lost') __len__ equals: 3;
 		yourself
 %
 category: 'done'
@@ -484,9 +484,9 @@ testextendWithList
 	lost := self targetInstance __add__: { '1'. '2' }.
 
 	self
-		assert: ( list extend: self targetInstance ) __len__ equals: 1;
-		assert: ( list extend: lost ) __len__ equals: 3;
-		assert: ( list extend: lost ) __len__ equals: 5;
+		assert: (list extend: self targetInstance) __len__ equals: 1;
+		assert: (list extend: lost) __len__ equals: 3;
+		assert: (list extend: lost) __len__ equals: 5;
 		yourself
 %
 category: 'done'
@@ -496,17 +496,17 @@ testindex
 	list := self targetInstance __add__: { 'a'. 'b'. 'c'. 'b' }.
 
 	self
-		assert: ( list index: 'b' ) equals: 1;
-		assert: ( list index: 'b' from: 2 ) equals: 3;
-		assert: ( list index: 'b' from: 3 ) equals: 3;
-		should: [ list index: 'b' from: 2 to: 2 ]
+		assert: (list index: 'b') equals: 1;
+		assert: (list index: 'b' from: 2) equals: 3;
+		assert: (list index: 'b' from: 3) equals: 3;
+		should: [list index: 'b' from: 2 to: 2]
 		raise: ValueError
-		withExceptionDo: [ :exception |
-			self assert: exception messageText equals: '''b'' is not in list' ];
-		should: [ list index: 'b' from: 3 to: 3 ]
+		withExceptionDo: [:exception |
+			self assert: exception messageText equals: '''b'' is not in list'];
+		should: [list index: 'b' from: 3 to: 3]
 		raise: ValueError
-		withExceptionDo: [ :exception |
-			self assert: exception messageText equals: '''b'' is not in list' ];
+		withExceptionDo: [:exception |
+			self assert: exception messageText equals: '''b'' is not in list'];
 		yourself
 %
 category: 'done'
@@ -565,7 +565,7 @@ testpop
 	list := self targetInstance __add__: { 'a'. 'b'. 'c' }.
 
 	self
-		assert: ( list pop ) equals: 'c';
+		assert: (list pop) equals: 'c';
 		assert: list __len__ equals: 2;
 		yourself
 %
@@ -576,7 +576,7 @@ testpopNegaive
 	list := self targetInstance __add__: { 'a'. 'b'. 'c' }.
 
 	self
-		assert: ( list pop: -1 ) equals: 'c';
+		assert: (list pop: -1) equals: 'c';
 		assert: list __len__ equals: 2;
 		yourself
 %
@@ -587,10 +587,10 @@ testpopPassNegative
 	list := self targetInstance __add__: { 'a' }.
 
 	self
-		should: [ list pop: -2 ]
+		should: [list pop: -2]
 		raise: IndexError
-		withExceptionDo: [ :exception |
-			self assert: exception messageText equals: 'pop index out of range' ];
+		withExceptionDo: [:exception |
+			self assert: exception messageText equals: 'pop index out of range'];
 		yourself
 %
 category: 'done'
@@ -600,10 +600,10 @@ testpopPassPositive
 	list := self targetInstance __add__: { 'a' }.
 
 	self
-		should: [ list pop: 2 ]
+		should: [list pop: 2]
 		raise: IndexError
-		withExceptionDo: [ :exception |
-			self assert: exception messageText equals: 'pop index out of range' ];
+		withExceptionDo: [:exception |
+			self assert: exception messageText equals: 'pop index out of range'];
 		yourself
 %
 category: 'done'
@@ -613,7 +613,7 @@ testpopPositive
 	list := self targetInstance __add__: { 'a'. 'b'. 'c' }.
 
 	self
-		assert: ( list pop: 0 ) equals: 'a';
+		assert: (list pop: 0) equals: 'a';
 		assert: list __len__ equals: 2;
 		yourself
 %
@@ -626,9 +626,9 @@ testremove
 
 	self
 		assert: list __len__ equals: 3;
-		assert: ( list __getitem__: 0 ) equals: 'a';
-		assert: ( list __getitem__: 1 ) equals: 'c';
-		assert: ( list __getitem__: 2 ) equals: 'b';
+		assert: (list __getitem__: 0) equals: 'a';
+		assert: (list __getitem__: 1) equals: 'c';
+		assert: (list __getitem__: 2) equals: 'b';
 		yourself
 %
 category: 'done'
@@ -638,10 +638,10 @@ testremoveIfAbsent
 	list := self targetInstance.
 
 	self
-		should: [ list remove: 'e' ]
+		should: [list remove: 'e']
 		raise: ValueError
-		withExceptionDo: [ :exception |
-			self assert: exception messageText equals: 'list.remove(x): x not in list' ];
+		withExceptionDo: [:exception |
+			self assert: exception messageText equals: 'list.remove(x): x not in list'];
 		yourself
 %
 category: 'done'
@@ -653,8 +653,8 @@ testreverse
 
 	self
 		assert: list __len__ equals: 3;
-		assert: ( list __getitem__: 0 ) equals: 'c';
-		assert: ( list __getitem__: -1 ) equals: 'a';
+		assert: (list __getitem__: 0) equals: 'c';
+		assert: (list __getitem__: -1) equals: 'a';
 		yourself
 %
 category: 'done'
@@ -666,8 +666,8 @@ testsort
 
 	self
 		assert: list __len__ equals: 3;
-		assert: ( list __getitem__: 0 ) equals: 'a';
-		assert: ( list __getitem__: -1 ) equals: 'c';
+		assert: (list __getitem__: 0) equals: 'a';
+		assert: (list __getitem__: -1) equals: 'c';
 		yourself
 %
 category: 'done'
@@ -675,13 +675,13 @@ method: listTest
 testsortWithDict
    | list |
 	list := self targetInstance __add__: { 'c'. 'bb'. 'aaa' }.
-	list sort: ( Dictionary with: #key -> [ :each | each size]
-								  with: #reverse -> true ).
+	list sort: (Dictionary with: #key -> [:each | each size]
+								  with: #reverse -> true).
 
 	self
 		assert: list __len__ equals: 3;
-		assert: ( list __getitem__:  0 ) equals: 'aaa';
-		assert: ( list __getitem__: -1 ) equals: 'c';
+		assert: (list __getitem__:  0) equals: 'aaa';
+		assert: (list __getitem__: -1) equals: 'c';
 		yourself
 %
 category: 'done'
@@ -689,12 +689,12 @@ method: listTest
 testsortWithKey
    | list |
 	list := self targetClass new __add__: { 'c'. 'bb'. 'aaa' }.
-	list sort: ( Dictionary with: #key -> [ :each | each size] ).
+	list sort: (Dictionary with: #key -> [:each | each size]).
 
 	self
 		assert: list __len__ equals: 3;
-		assert: ( list __getitem__:  0 ) equals: 'c';
-		assert: ( list __getitem__: -1 ) equals: 'aaa';
+		assert: (list __getitem__:  0) equals: 'c';
+		assert: (list __getitem__: -1) equals: 'aaa';
 		yourself
 %
 set compile_env: 0

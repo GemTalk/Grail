@@ -16,7 +16,7 @@ category: 'tests'
 method: objectTest
 test__delattr__
 
-	
+
 	[
 		self targetInstance __delattr__: (self str: '__class__').
 		self assert: false.
@@ -35,37 +35,37 @@ test__dir__
 	self assert: dir __class__ equals: list.
 
    #pyTodo. "self assert: dir __len__ equals: 23.
-"   self assert: ( dir __contains__: (self str: '__class__')).
-   self assert: ( dir __contains__: (self str: '__delattr__')).
-   self assert: ( dir __contains__: (self str: '__dir__')).
-   self assert: ( dir __contains__: (self str: '__doc__')).
-   self assert: ( dir __contains__: (self str: '__eq__')).
-   self assert: ( dir __contains__: (self str: '__format__')).
-   self assert: ( dir __contains__: (self str: '__ge__')).
-   self assert: ( dir __contains__: (self str: '__getattribute__')).
-   self assert: ( dir __contains__: (self str: '__gt__')).
-   self assert: ( dir __contains__: (self str: '__hash__')).
-   "self assert: ( dir __contains__: (self str: '__init__'))."
-   "self assert: ( dir __contains__: (self str: '__init_subclass__'))."
-   self assert: ( dir __contains__: (self str: '__le__')).
-   self assert: ( dir __contains__: (self str: '__lt__')).
-   self assert: ( dir __contains__: (self str: '__ne__')).
-   self assert: ( dir __contains__: (self str: '__new__')).
-   "self assert: ( dir __contains__: (self str: '__reduce__'))."
-   "self assert: ( dir __contains__: (self str: '__reduce_ex__'))."
-   self assert: ( dir __contains__: (self str: '__repr__')).
-   self assert: ( dir __contains__: (self str: '__setattr__')).
-   self assert: ( dir __contains__: (self str: '__sizeof__')).
-   self assert: ( dir __contains__: (self str: '__str__')).
-   self assert: ( dir __contains__: (self str: '__subclasshook__')).
+"   self assert: (dir __contains__: (self str: '__class__')).
+   self assert: (dir __contains__: (self str: '__delattr__')).
+   self assert: (dir __contains__: (self str: '__dir__')).
+   self assert: (dir __contains__: (self str: '__doc__')).
+   self assert: (dir __contains__: (self str: '__eq__')).
+   self assert: (dir __contains__: (self str: '__format__')).
+   self assert: (dir __contains__: (self str: '__ge__')).
+   self assert: (dir __contains__: (self str: '__getattribute__')).
+   self assert: (dir __contains__: (self str: '__gt__')).
+   self assert: (dir __contains__: (self str: '__hash__')).
+   "self assert: (dir __contains__: (self str: '__init__'))."
+   "self assert: (dir __contains__: (self str: '__init_subclass__'))."
+   self assert: (dir __contains__: (self str: '__le__')).
+   self assert: (dir __contains__: (self str: '__lt__')).
+   self assert: (dir __contains__: (self str: '__ne__')).
+   self assert: (dir __contains__: (self str: '__new__')).
+   "self assert: (dir __contains__: (self str: '__reduce__'))."
+   "self assert: (dir __contains__: (self str: '__reduce_ex__'))."
+   self assert: (dir __contains__: (self str: '__repr__')).
+   self assert: (dir __contains__: (self str: '__setattr__')).
+   self assert: (dir __contains__: (self str: '__sizeof__')).
+   self assert: (dir __contains__: (self str: '__str__')).
+   self assert: (dir __contains__: (self str: '__subclasshook__')).
 %
 category: 'tests'
 method: objectTest
 test__doc__
 
 	| doc |
-	doc := 'The base class of the class hierarchy.\n\n' , 
-		'When called, it accepts no arguments and returns a new featureless\n' , 
+	doc := 'The base class of the class hierarchy.\n\n' ,
+		'When called, it accepts no arguments and returns a new featureless\n' ,
 		'instance that has no instance attributes and cannot be given any.\n'.
 
 	self
@@ -91,7 +91,7 @@ method: objectTest
 test__ge__
 
 	self
-	   assert: ( self targetInstance __ge__: (self str: 'x')) == NotImplementedType singleton;
+	   assert: (self targetInstance __ge__: (self str: 'x')) == NotImplementedType singleton;
 		yourself.
 %
 category: 'tests'
@@ -99,14 +99,14 @@ method: objectTest
 test__gt__
 
 	self
-		assert: ( self targetInstance __gt__: (self str: 'x')) == NotImplementedType singleton;
+		assert: (self targetInstance __gt__: (self str: 'x')) == NotImplementedType singleton;
 		yourself.
 %
 category: 'tests'
 method: objectTest
 test__hash__
 
-	self 
+	self
 		deny: self targetInstance __hash__ equals: self targetInstance __hash__;
 		yourself.
 %
@@ -115,7 +115,7 @@ method: objectTest
 test__le__
 
 	self
-	   assert: ( self targetInstance __le__: (self str: 'x')) == NotImplementedType singleton;
+	   assert: (self targetInstance __le__: (self str: 'x')) == NotImplementedType singleton;
 		yourself.
 %
 category: 'tests'
@@ -123,7 +123,7 @@ method: objectTest
 test__lt__
 
 	self
-	   assert: ( self targetInstance __lt__: (self str: 'x')) == NotImplementedType singleton;
+	   assert: (self targetInstance __lt__: (self str: 'x')) == NotImplementedType singleton;
 		yourself.
 %
 category: 'tests'
@@ -131,7 +131,7 @@ method: objectTest
 test__ne__
 
 	self
-	   assert: ( self targetInstance __ne__: ('x')) == NotImplementedType singleton;
+	   assert: (self targetInstance __ne__: ('x')) == NotImplementedType singleton;
 		yourself.
 %
 category: 'tests'
@@ -139,7 +139,7 @@ method: objectTest
 test__new__
 
 	self
-		assert: ( self targetClass __new__: object ) __class__ equals: self targetClass;
+		assert: (self targetClass __new__: object) __class__ equals: self targetClass;
 		yourself.
 %
 category: 'tests'
@@ -149,7 +149,7 @@ test__new__onBaseExeption
 	[
 		self targetClass __new__: BaseException.
 		self assert: false.
-	] on: TypeError do: [:ex | 
+	] on: TypeError do: [:ex |
 		self assert: ex messageText equals: 'object.__new__(BaseException) is not safe, use BaseException.__new__()'.
 	].
 %
@@ -160,7 +160,7 @@ test__new__onList
 	[
 		self targetClass __new__: list.
 		self assert: false.
-	] on: TypeError do: [:ex | 
+	] on: TypeError do: [:ex |
 		self assert: ex messageText equals: 'object.__new__(list) is not safe, use list.__new__()'.
 	].
 %
@@ -168,8 +168,8 @@ category: 'tests'
 method: objectTest
 test__repr__
 
-   self 
-		assert: ( self targetInstance __repr__ copyFrom: 1 to: 18 )
+   self
+		assert: (self targetInstance __repr__ copyFrom: 1 to: 18)
 		  equals: '<', self targetClass name, ' object at '.
 %
 category: 'tests'
@@ -199,8 +199,8 @@ category: 'tests'
 method: objectTest
 test__str__
 
-	self 
-		assert: ( self targetInstance __str__ copyFrom: 1 to: 18 )
+	self
+		assert: (self targetInstance __str__ copyFrom: 1 to: 18)
 		  equals: '<', self targetClass name, ' object at '.
 %
 category: 'tests'
@@ -217,7 +217,7 @@ method: objectTest
 test__format__
 
 	self
-		should: [ self targetInstance __format__: (self str: 'x')] raise: TypeError;
+		should: [self targetInstance __format__: (self str: 'x')] raise: TypeError;
 		assert: ((self targetInstance __format__: (self str: '')) isKindOf: String);
 		yourself.
 		#pyElaborate
