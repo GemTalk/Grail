@@ -3,15 +3,6 @@ removeAllMethods object
 removeAllClassMethods object
 ! ------------------- Class methods for object
 set compile_env: 0
-category: 'done'
-classmethod: object
-___dir
-	^ self ___pyProtocol
-		collect: [ :each |
-			( each truncateTo: ( each indexOf: $: ifAbsent: [ each size  + 1] ) - 1 ) asString.
-		]
-%
-set compile_env: 0
 category: 'Python'
 classmethod: object
 __new__
@@ -27,6 +18,17 @@ __new__: aPyClass
 	^ self basicNew
 %
 set compile_env: 0
+category: 'Smalltalk'
+classmethod: object
+___dir
+
+	^self ___pyProtocol collect: [:each |
+		| index |
+		index := each indexOf: $:.
+		index == 0 ifTrue: [index := each size + 1].
+		str ___new__init__: (each copyFrom: 1 to: index - 1) asString.
+	]
+%
 category: 'Smalltalk'
 classmethod: object
 ___new__init__
@@ -54,11 +56,14 @@ ___new__init__: firstParam _: secondParam _: thirdParam
 category: 'Smalltalk'
 classmethod: object
 ___pyProtocol
-	^ ( self == object ifTrue: [  Set new ]
-								ifFalse: [ self superclass ___pyProtocol ] )
-		addAll: ( ( self methodsInProtocol: #Python ) collect: [ :each | each selector ] );
-		addAll: ( ( self class methodsInProtocol: #Python ) collect: [ :each | each selector ] );
-		yourself
+
+	| set |
+	set := self == object 
+		ifTrue: [Set new]
+		ifFalse: [self superclass ___pyProtocol].
+	(self includesCategory: #'Python') ifTrue: [set addAll: ((self selectorsIn: #'Python') collect: [:each | each asString])].
+	(self class includesCategory: #'Python') ifTrue: [set addAll: ((self class selectorsIn: #'Python') collect: [:each | each asString])].
+	^set
 %
 category: 'Smalltalk'
 classmethod: object
@@ -77,7 +82,7 @@ category: 'Python'
 method: object
 __delattr__: name
 
-	TypeError signal: 'can''t delete ' , name , ' attribute'.
+	TypeError signal: 'can''t delete ' , name ___string , ' attribute'.
 %
 category: 'Python'
 method: object
@@ -106,7 +111,7 @@ category: 'Python'
 method: object
 __format__: aString
 
-	aString notEmpty ifTrue: [
+	aString ___string notEmpty ifTrue: [
 		TypeError signal: 'unsupported format string passed to object.__format__'.
 	].
 	^self __str__
@@ -122,11 +127,11 @@ method: object
 __getattribute__: aString
 
 	| symbol |
-	symbol := aString asSymbol.
-	(self class selectors includes: aString asSymbol) ifTrue: [
+	symbol := aString ___string asSymbol.
+	(self class selectors includes: aString ___string asSymbol) ifTrue: [
 		^self ___perform: symbol
 	].
-	AttributeError signal: self __class__ name asString, ' object has no attribute ', aString.
+	AttributeError signal: self __class__ name asString, ' object has no attribute ', aString ___string.
 %
 category: 'Python'
 method: object
@@ -193,12 +198,12 @@ method: object
 __setattr__: aKey _: aValue
 
 	| symbol |
-	symbol := aKey asSymbol.
+	symbol := aKey ___string asSymbol.
 	( self __dir__ __contains__: aKey ) ifTrue: [
-      	AttributeError signal: self __class__ name asString printString, ' object attribute ', aKey printString , ' is read-only'.
+      	AttributeError signal: self __class__ name asString printString, ' object attribute ', aKey ___string printString , ' is read-only'.
    ].
 
-	AttributeError signal: self __class__ name asString printString, ' object has no attribute ', aKey printString .
+	AttributeError signal: self __class__ name asString printString, ' object has no attribute ', aKey ___string printString .
 %
 category: 'Python'
 method: object
@@ -237,14 +242,8 @@ ___perform: aSymbol
 category: 'Smalltalk'
 method: object
 ___perform: selector withArguments: argArray
-	"Send the selector, aSymbol, to the receiver with arguments in argArray.
-	Fail if the number of arguments expected by the selector
-	does not match the size of argArray.
-	Primitive. Optional. See Object documentation whatIsAPrimitive."
 
-	<reflective: #object:performMessageWithArgs:>
-	"<primitive: 84>"
-	^ self perform: selector withArguments: argArray inSuperclass: self class
+	^self perform: selector withArguments: argArray
 %
 category: 'Smalltalk'
 method: object

@@ -4826,7 +4826,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 object subclass: 'str'
-  instVarNames: #()
+  instVarNames: #( string)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()

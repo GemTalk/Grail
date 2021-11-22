@@ -59,42 +59,42 @@ test__dir__
 	self assert: dir __class__ equals: list.
 
    #pyTodo. "self assert: dir __len__ equals: 36.
-"   self assert: ( dir __contains__: #__abs__ ).
-   self assert: ( dir __contains__: #__add__ ).
-   self assert: ( dir __contains__: #__bool__ ).
-   self assert: ( dir __contains__: #__ceil__ ).
-   self assert: ( dir __contains__: #__divmod__ ).
-   self assert: ( dir __contains__: #__float__ ).
-   self assert: ( dir __contains__: #__floor__ ).
-   self assert: ( dir __contains__: #__floordiv__ ).
-   #pyTodo. "self assert: ( dir __contains__: #__getformat__ ).
-"   #pyTodo. "self assert: ( dir __contains__: #__getnewargs__ ).
-"   self assert: ( dir __contains__: #__int__ ).
-   self assert: ( dir __contains__: #__mod__ ).
-   self assert: ( dir __contains__: #__mul__ ).
-   self assert: ( dir __contains__: #__neg__ ).
-   self assert: ( dir __contains__: #__pos__ ).
-   self assert: ( dir __contains__: #__pow__ ).
-   self assert: ( dir __contains__: #__radd__ ).
-   self assert: ( dir __contains__: #__rdivmod__ ).
-   self assert: ( dir __contains__: #__rfloordiv__ ).
-   self assert: ( dir __contains__: #__rmod__ ).
-   self assert: ( dir __contains__: #__rmul__ ).
-   #pyTodo. "self assert: ( dir __contains__: #__round__ ).
-"   self assert: ( dir __contains__: #__rpow__ ).
-   self assert: ( dir __contains__: #__rsub__ ).
-   self assert: ( dir __contains__: #__rtruediv__ ).
-   #pyTodo. "self assert: ( dir __contains__: #__set_format__ ).
-"   self assert: ( dir __contains__: #__sub__ ).
-   self assert: ( dir __contains__: #__truediv__ ).
-   self assert: ( dir __contains__: #__trunc__ ).
-   self assert: ( dir __contains__: #as_integer_ratio ).
-   self assert: ( dir __contains__: #conjugate ).
+"   self assert: ( dir __contains__: (self str: '__abs__')).
+   self assert: ( dir __contains__: (self str: '__add__')).
+   self assert: ( dir __contains__: (self str: '__bool__')).
+   self assert: ( dir __contains__: (self str: '__ceil__')).
+   self assert: ( dir __contains__: (self str: '__divmod__')).
+   self assert: ( dir __contains__: (self str: '__float__')).
+   self assert: ( dir __contains__: (self str: '__floor__')).
+   self assert: ( dir __contains__: (self str: '__floordiv__')).
+   #pyTodo. "self assert: ( dir __contains__: (self str: '__getformat__')).
+"   #pyTodo. "self assert: ( dir __contains__: (self str: '__getnewargs__')).
+"   self assert: ( dir __contains__: (self str: '__int__')).
+   self assert: ( dir __contains__: (self str: '__mod__')).
+   self assert: ( dir __contains__: (self str: '__mul__')).
+   self assert: ( dir __contains__: (self str: '__neg__')).
+   self assert: ( dir __contains__: (self str: '__pos__')).
+   self assert: ( dir __contains__: (self str: '__pow__')).
+   self assert: ( dir __contains__: (self str: '__radd__')).
+   self assert: ( dir __contains__: (self str: '__rdivmod__')).
+   self assert: ( dir __contains__: (self str: '__rfloordiv__')).
+   self assert: ( dir __contains__: (self str: '__rmod__')).
+   self assert: ( dir __contains__: (self str: '__rmul__')).
+   #pyTodo. "self assert: ( dir __contains__: (self str: '__round__')).
+"   self assert: ( dir __contains__: (self str: '__rpow__')).
+   self assert: ( dir __contains__: (self str: '__rsub__')).
+   self assert: ( dir __contains__: (self str: '__rtruediv__')).
+   #pyTodo. "self assert: ( dir __contains__: (self str: '__set_format__')).
+"   self assert: ( dir __contains__: (self str: '__sub__')).
+   self assert: ( dir __contains__: (self str: '__truediv__')).
+   self assert: ( dir __contains__: (self str: '__trunc__')).
+   self assert: ( dir __contains__: (self str: 'as_integer_ratio')).
+   self assert: ( dir __contains__: (self str: 'conjugate')).
    #pyTodo. "self assert: ( dir __contains__: #fromhex ).
 "   #pyTodo. "self assert: ( dir __contains__: #hex ).
-"   self assert: ( dir __contains__: #imag ).
-   self assert: ( dir __contains__: #is_integer ).
-   self assert: ( dir __contains__: #real ).
+"   self assert: ( dir __contains__: (self str: 'imag')).
+   self assert: ( dir __contains__: (self str: 'is_integer')).
+   self assert: ( dir __contains__: (self str: 'real')).
 %
 category: 'done'
 method: floatTest

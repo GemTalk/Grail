@@ -25,6 +25,12 @@ int: anInteger
 %
 category: 'setup'
 method: Base_Class_Test
+str: aString
+
+	^str ___new__init__: aString
+%
+category: 'setup'
+method: Base_Class_Test
 targetClass
 
 	| string |

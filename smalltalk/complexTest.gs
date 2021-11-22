@@ -45,55 +45,55 @@ test__dir__
 	self assert: dir __class__ equals: list.
 
    #pyTodo. "self assert: dir __len__ equals: 49.
-"   self assert: ( dir __contains__: #__abs__ ).
-   self assert: ( dir __contains__: #__add__ ).
-   self assert: ( dir __contains__: #__bool__ ).
-   self assert: ( dir __contains__: #__class__ ).
-   self assert: ( dir __contains__: #__delattr__ ).
-   self assert: ( dir __contains__: #__dir__ ).
-   self assert: ( dir __contains__: #__divmod__ ).
-   self assert: ( dir __contains__: #__doc__ ).
-   self assert: ( dir __contains__: #__eq__ ).
-   self assert: ( dir __contains__: #__float__ ).
-   self assert: ( dir __contains__: #__floordiv__ ).
-   self assert: ( dir __contains__: #__format__ ).
-   self assert: ( dir __contains__: #__ge__ ).
-   self assert: ( dir __contains__: #__getattribute__ ).
-   #pyTodo. "self assert: ( dir __contains__: #__getnewargs__ ).
-"   self assert: ( dir __contains__: #__gt__ ).
-   self assert: ( dir __contains__: #__hash__ ).
-   self assert: ( dir __contains__: #__init__ ).
-   #pyTodo. "self assert: ( dir __contains__: #__init_subclass__ ).
-"   self assert: ( dir __contains__: #__int__ ).
-   self assert: ( dir __contains__: #__le__ ).
-   self assert: ( dir __contains__: #__lt__ ).
-   self assert: ( dir __contains__: #__mod__ ).
-   self assert: ( dir __contains__: #__mul__ ).
-   self assert: ( dir __contains__: #__ne__ ).
-   self assert: ( dir __contains__: #__neg__ ).
-   self assert: ( dir __contains__: #__new__ ).
-   self assert: ( dir __contains__: #__pos__ ).
-   self assert: ( dir __contains__: #__pow__ ).
-   self assert: ( dir __contains__: #__radd__ ).
-   self assert: ( dir __contains__: #__rdivmod__ ).
-   #pyTodo. "self assert: ( dir __contains__: #__reduce__ ).
-"   #pyTodo. "self assert: ( dir __contains__: #__reduce_ex__ ).
-"   self assert: ( dir __contains__: #__repr__ ).
-   self assert: ( dir __contains__: #__rfloordiv__ ).
-   self assert: ( dir __contains__: #__rmod__ ).
-   self assert: ( dir __contains__: #__rmul__ ).
-   self assert: ( dir __contains__: #__rpow__ ).
-   self assert: ( dir __contains__: #__rsub__ ).
-   self assert: ( dir __contains__: #__rtruediv__ ).
-   self assert: ( dir __contains__: #__setattr__ ).
-   self assert: ( dir __contains__: #__sizeof__ ).
-   self assert: ( dir __contains__: #__str__ ).
-   self assert: ( dir __contains__: #__sub__ ).
-   self assert: ( dir __contains__: #__subclasshook__ ).
-   self assert: ( dir __contains__: #__truediv__ ).
-   self assert: ( dir __contains__: #conjugate ).
-   self assert: ( dir __contains__: #imag ).
-   self assert: ( dir __contains__: #real ).
+"   self assert: ( dir __contains__: (self str: '__abs__')).
+   self assert: ( dir __contains__: (self str: '__add__')).
+   self assert: ( dir __contains__: (self str: '__bool__')).
+   self assert: ( dir __contains__: (self str: '__class__')).
+   self assert: ( dir __contains__: (self str: '__delattr__')).
+   self assert: ( dir __contains__: (self str: '__dir__')).
+   self assert: ( dir __contains__: (self str: '__divmod__')).
+   self assert: ( dir __contains__: (self str: '__doc__')).
+   self assert: ( dir __contains__: (self str: '__eq__')).
+   self assert: ( dir __contains__: (self str: '__float__')).
+   self assert: ( dir __contains__: (self str: '__floordiv__')).
+   self assert: ( dir __contains__: (self str: '__format__')).
+   self assert: ( dir __contains__: (self str: '__ge__')).
+   self assert: ( dir __contains__: (self str: '__getattribute__')).
+   #pyTodo. "self assert: ( dir __contains__: (self str: '__getnewargs__')).
+"   self assert: ( dir __contains__: (self str: '__gt__')).
+   self assert: ( dir __contains__: (self str: '__hash__')).
+   self assert: ( dir __contains__: (self str: '__init__')).
+   #pyTodo. "self assert: ( dir __contains__: (self str: '__init_subclass__')).
+"   self assert: ( dir __contains__: (self str: '__int__')).
+   self assert: ( dir __contains__: (self str: '__le__')).
+   self assert: ( dir __contains__: (self str: '__lt__')).
+   self assert: ( dir __contains__: (self str: '__mod__')).
+   self assert: ( dir __contains__: (self str: '__mul__')).
+   self assert: ( dir __contains__: (self str: '__ne__')).
+   self assert: ( dir __contains__: (self str: '__neg__')).
+   self assert: ( dir __contains__: (self str: '__new__')).
+   self assert: ( dir __contains__: (self str: '__pos__')).
+   self assert: ( dir __contains__: (self str: '__pow__')).
+   self assert: ( dir __contains__: (self str: '__radd__')).
+   self assert: ( dir __contains__: (self str: '__rdivmod__')).
+   #pyTodo. "self assert: ( dir __contains__: (self str: '__reduce__')).
+"   #pyTodo. "self assert: ( dir __contains__: (self str: '__reduce_ex__')).
+"   self assert: ( dir __contains__: (self str: '__repr__')).
+   self assert: ( dir __contains__: (self str: '__rfloordiv__')).
+   self assert: ( dir __contains__: (self str: '__rmod__')).
+   self assert: ( dir __contains__: (self str: '__rmul__')).
+   self assert: ( dir __contains__: (self str: '__rpow__')).
+   self assert: ( dir __contains__: (self str: '__rsub__')).
+   self assert: ( dir __contains__: (self str: '__rtruediv__')).
+   self assert: ( dir __contains__: (self str: '__setattr__')).
+   self assert: ( dir __contains__: (self str: '__sizeof__')).
+   self assert: ( dir __contains__: (self str: '__str__')).
+   self assert: ( dir __contains__: (self str: '__sub__')).
+   self assert: ( dir __contains__: (self str: '__subclasshook__')).
+   self assert: ( dir __contains__: (self str: '__truediv__')).
+   self assert: ( dir __contains__: (self str: 'conjugate')).
+   self assert: ( dir __contains__: (self str: 'imag')).
+   self assert: ( dir __contains__: (self str: 'real')).
 %
 category: 'done'
 method: complexTest
