@@ -3,4 +3,3 @@ removeAllMethods LtEAst
 removeAllClassMethods LtEAst
 ! ------------------- Class methods for LtEAst
 ! ------------------- Instance methods for LtEAst
-set compile_env: 0

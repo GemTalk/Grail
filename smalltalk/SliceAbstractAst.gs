@@ -10,4 +10,3 @@ isAbstract
 	^self == SliceAbstractAst
 %
 ! ------------------- Instance methods for SliceAbstractAst
-set compile_env: 0

@@ -2,166 +2,165 @@
 removeAllMethods list
 removeAllClassMethods list
 ! ------------------- Class methods for list
+set compile_env: 0
+category: 'Smalltalk'
+classmethod: list
+___containerClass
+
+	^ OrderedCollection
+%
+category: 'Smalltalk'
+classmethod: list
+___endChar
+	^ $]
+%
+category: 'Smalltalk'
+classmethod: list
+___startChar
+	^ $[
+%
 ! ------------------- Instance methods for list
 set compile_env: 0
-category: 'other'
-method: list
-append: arguments keywords: keywords
-
-	^container add: arguments first
-%
-category: 'other'
-method: list
-collect: aBlock
-
-	^ container collect: aBlock
-%
-category: 'other'
-method: list
-first
-
-	^ container first
-%
-category: 'other'
-method: list
-get: anIndex
-
-	[
-		^super ___at: anIndex.number
-	] on: OffsetError do: [:ex | 
-		ex resignalAs: (IndexError new details: 'list index out of range'; yourself).
-	]
-%
-category: 'other'
-method: list
-inject: aValue into: aBlock
-
-	^ container inject: aValue into: aBlock
-%
-set compile_env: 0
 category: 'Python'
 method: list
-__add__
-
-	self halt.
-%
-category: 'Python'
-method: list
-__delitem__
-
-	self halt.
-%
-category: 'Python'
-method: list
-__iadd__
-
-	self halt.
-%
-category: 'Python'
-method: list
-__imul__
-
-	self halt.
-%
-category: 'Python'
-method: list
-__iter__
-
-	self halt.
-%
-category: 'Python'
-method: list
-__mul__
-
-	self halt.
+__delitem__: anIndex
+	^ self ___remove: anIndex ifFail: 'list assignment index out of range'.
 %
 category: 'Python'
 method: list
 __reversed__
 
-	^ [ :seq | self class withAll: (seq ___container reverse) ]
+	^ self class ___new__init__: self ___container reverse.
 %
 category: 'Python'
 method: list
-__rmul__
+__setitem__: anElement _: anIndex
+	"https://docs.python.org/3/reference/datamodel.html#object.__setitem__"
 
-	self halt.
+	| index |
+	index := anIndex < 0 ifTrue: [ self __len__ + anIndex ] ifFalse: [ anIndex ].
+	( index < 0 or: [ 	index >= self __len__ ] )
+		ifTrue: [ IndexError signal: 'list assignment index out of range' ].
+
+	^ self ___container at: index + 1 put: anElement
 %
 category: 'Python'
 method: list
-__setitem__
+append: anElement
 
-	self halt.
+	self ___container add: anElement
 %
 category: 'Python'
 method: list
-__str__
+extend: aList
 
-	self halt.
+	( aList isKindOf: Container ) ifTrue: [
+		self ___container addAll: aList ___container.
+	] ifFalse: [
+		self append: aList
+	].
+
+	^ self
 %
 category: 'Python'
 method: list
-append
+insert: anIndex _: anElement
+	| index |
+	index := anIndex < 0 ifTrue: [ self __len__ + anIndex ] ifFalse: [ anIndex ].
 
-	self halt.
-%
-category: 'Python'
-method: list
-clear
+	index <= 0
+		ifTrue: [ ^ self ___container addFirst: anElement ].
+	index >= self __len__
+		ifTrue: [ ^ self ___container addLast: anElement ].
 
-	self halt.
-%
-category: 'Python'
-method: list
-copy
+	self ___container add: anElement beforeIndex: index + 1.
 
-	self halt.
-%
-category: 'Python'
-method: list
-count
+	^ self.
 
-	self halt.
-%
-category: 'Python'
-method: list
-extend
-
-	self halt.
-%
-category: 'Python'
-method: list
-index
-
-	self halt.
-%
-category: 'Python'
-method: list
-insert
-
-	self halt.
+ "#( 'a' 'b' 'c' 'd' ) asOrderedCollection insert: 'y' before: 2; yourself
+"
 %
 category: 'Python'
 method: list
 pop
-
-	self halt.
+	^ self pop: self __len__ - 1
 %
 category: 'Python'
 method: list
-remove
+pop: anIndex
+	^ self ___remove: anIndex ifFail: 'pop index out of range'.
+%
+category: 'Python'
+method: list
+remove: anElement
 
-	self halt.
+	^ self ___container
+		remove: anElement
+		ifAbsent: [ ValueError signal: 'list.remove(x): x not in list'  ].
 %
 category: 'Python'
 method: list
 reverse
 
-	self halt.
+	^ self ___initialize: self ___container reverse.
 %
 category: 'Python'
 method: list
 sort
 
-	^ self class withAll: (container sortWithBlock: [ :a :b | (a <= b) = True ])
+	^ self ___initialize: self ___container sort.
+%
+category: 'Python'
+method: list
+sort: aDict
+	| sortBlock reverse |
+	sortBlock := aDict at: #key
+							ifPresent: [ :sortFunc | [ :a :b | (sortFunc value: a ) < (sortFunc value: b ) ]  ]
+							ifAbsent: [ [ :a :b | a < b ] ].
+
+	^ self ___initialize: ( ( aDict at: #reverse ifAbsent: [ false ] )
+									ifTrue: [ ( self ___container sort: sortBlock ) reverse ]
+									ifFalse: [ self ___container sort: sortBlock ] ).
+%
+set compile_env: 0
+category: 'Python 2.7'
+method: list
+__delslice__: start _: end
+	"I don't find this in Python 3.9.2"
+
+	| newlist  |
+
+	newlist := self ___container removeFirst: start.
+	self ___container removeFirst: (end - start ).
+	self ___container addAllFirst: newlist.
+
+	^ self
+%
+category: 'Python 2.7'
+method: list
+__setslice__: start _: end _: anElement
+	"I don't find this in Python 3.9.2"
+
+	self __delslice__: start _: end.
+	self insert: start _: anElement.
+	^ self
+%
+set compile_env: 0
+category: 'Smalltalk'
+method: list
+___remove: anIndex ifFail: message
+	"  a b c   removoving c is -1 =>   3 -1 -> 2    "
+	"  a b c   removoving b is -2 =>   3 -2 -> 1    "
+	"  a b c   removoving c is -3 =>   3 -3 -> 0    "
+	| index |
+	index := anIndex < 0 ifTrue: [ self __len__ + anIndex ] ifFalse: [ anIndex ].
+	( index < 0 or: [ 	index >= self __len__ ] )
+		ifTrue: [ IndexError signal: message ].
+
+	^ self ___container removeAt: index + 1
+%
+category: 'Smalltalk'
+method: list
+___typeName
+	^ 'list'
 %

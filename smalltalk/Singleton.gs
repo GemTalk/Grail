@@ -3,7 +3,7 @@ removeAllMethods Singleton
 removeAllClassMethods Singleton
 ! ------------------- Class methods for Singleton
 set compile_env: 0
-category: 'other'
+category: 'accessing'
 classmethod: Singleton
 singleton
 
@@ -11,4 +11,3 @@ singleton
 	^singleton
 %
 ! ------------------- Instance methods for Singleton
-set compile_env: 0

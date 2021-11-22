@@ -2,212 +2,157 @@
 removeAllMethods dict
 removeAllClassMethods dict
 ! ------------------- Class methods for dict
+set compile_env: 0
+category: 'Smalltalk'
+classmethod: dict
+___containerClass
+
+	^ Dictionary
+%
+category: 'Smalltalk'
+classmethod: dict
+___endChar
+	^ $}
+%
+category: 'Smalltalk'
+classmethod: dict
+___startChar
+	^ ${
+%
 ! ------------------- Instance methods for dict
 set compile_env: 0
-category: 'other'
+category: 'Python'
 method: dict
-__len__
+__contains__: anElement
 
-	^ [ :rhs | rhs ___container size // 2 ]
+	^ self ___container includesKey: anElement
 %
-category: 'other'
+category: 'Python'
 method: dict
-= aDict
-	"ugly workaround method to prevent ConstantAst from making two otherwise equal dicts unequal
-	current strategy: 
-		check both containers are the same size
-		initialize an IdentityBag to store checked indices
-		iterate through self container keys
-			for each key value pair, 
-				check aDict container has the same key value pair, 
-				check that the key index does not already exist in the IdentityBag,
-				and add the aDict container key index to an IdentitySet"
-
-	| checkedIndices |
-	(container size = aDict ___container size) ifFalse: [ ^ False ].
-	checkedIndices := IdentityBag new.
-	1 to: container size by: 2 do: [ :leftIndex |
-		| leftKey rightKey rightIndex leftValue rightValue |
-		leftKey := container at: leftIndex.
-		rightIndex := aDict indexOfKey: leftKey.
-		(rightIndex == 0 or: [ checkedIndices includes: rightIndex ]) ifTrue: [ ^ False ].
-		rightKey := aDict ___container at: rightIndex.
-		leftValue := ((container at: leftIndex) isKindOf: ConstantAst) ifTrue: [ (container at: leftIndex) value ] ifFalse: [ container at: leftIndex ].
-		rightValue := ((aDict ___container at: rightIndex) isKindOf: ConstantAst) ifTrue: [ (aDict ___container at: rightIndex) value ] ifFalse: [ aDict ___container at: rightIndex ].
-		leftValue = rightValue ifFalse: [ ^ False ].
-		checkedIndices add: rightIndex.
-	].
-	^ True
+__delitem__: aKey
+	^ self ___container
+		removeKey: aKey
+		ifAbsent: [ KeyError signal: aKey printString  ].
 %
-category: 'other'
+category: 'Python'
 method: dict
-at: aKey
-
-	| index |
-	index := self indexOfKey: (str withAll: aKey).
-	^ (container at: index + 1) value
+__ge__: otherCollection
+	^ ( self __gt__: otherCollection ) or: [ self __eq__: otherCollection  ]
 %
-category: 'other'
+category: 'Python'
 method: dict
-at: aKey ifAbsent: aBlock
-
-	| index |
-	index := self indexOfKey: (str withAll: aKey).
-	index = 0 ifTrue: [ ^ aBlock value ].
-	^ (container at: index + 1) value
+__getitem__: aKey
+	^ self ___container
+		at: aKey
+		ifAbsent: [ KeyError signal: aKey printString  ].
 %
-category: 'other'
+category: 'Python'
 method: dict
-has: aKey
+__gt__: otherDict
+	"https://stackoverflow.com/questions/29916585/dictionary-gt-and-lt-implementation"
+	#pyElaborate. "this is an aproximated implementation"
 
-	| index |
-	index := self indexOfKey: (str withAll: aKey).
-	index = 0 ifTrue: [ ^ False ] ifFalse: [ ^ True ].
-%
-category: 'other'
-method: dict
-indexOfKey: aKey
-
-	1 to: container size by: 2 do: [ :i | (container at: i) = aKey ifTrue: [ ^ i ] ].
-	^ 0
-%
-category: 'other'
-method: dict
-keysAndValuesDo: aDyadicBlock
-
-	^ 1 to: container size by: 2 do: [ :index | aDyadicBlock value: (container at: index) value: (container at: index + 1) ]
-%
-category: 'other'
-method: dict
-set: aKey to: aValue
-
-	1 to: container size by: 2 do: [:i | 
-		((container at: i) __eq__ value: (container at: i) value: aKey) == True ifTrue: [
-			container at: i + 1 put: aValue.
-			^self.
+	^ ( self ___container size > otherDict ___container size ) or: [
+		 ( self ___container size = otherDict ___container size ) and: [
+			self ___container keys sorted do: [ :key |
+				(self ___container at: key) > (otherDict ___container at: key ifAbsent: [ ^ true ] )
+					ifTrue: [ ^ true ].
+				(self ___container at: key) < (otherDict ___container at: key )
+				   ifTrue: [ ^ false ]
+			]
 		].
-	].
-	container add: aKey; add: aValue.
-%
-set compile_env: 0
-category: 'Python'
-method: dict
-__contains__
-
-	self halt.
-%
-category: 'Python'
-method: dict
-__delitem__
-
-	self halt.
-%
-category: 'Python'
-method: dict
-__getitem__
-
-	^[:collection :key | 
-		[
-			| array each  |
-			(collection isKindOf: dict) ifFalse: [TypeError signal].
-			array := collection ___container.
-			1 to: array size by: 2 do: [:i | 
-				each := array at: i.
-				(each __eq__ value: each value: key) == True ifTrue: [Notification signal: (array at: i + 1)].
-			].
-			KeyError signal: key.
-		] on: Notification do: [:ex | 
-			ex return: ex details.
-		].
+		false
 	]
 %
 category: 'Python'
 method: dict
-__iter__
-	"The builtin iter() function looks for the __iter__() method.
-	https://docs.python.org/3/library/functions.html#iter
-
-	iter(d) Return an iterator over the keys of the dictionary. 
-	This is a shortcut for iter(d.keys()).
-	Keys and values are iterated over in insertion order!
-	https://docs.python.org/3.7/library/stdtypes.html#mapping-types-dict"
-	self halt.
+__ior__: aDict
+	self ___container addAll: aDict ___container.
 %
 category: 'Python'
 method: dict
-__setitem__
-
-	self halt.
+__le__: otherCollection
+	^ ( self __gt__: otherCollection ) not
 %
 category: 'Python'
 method: dict
-__str__
-
-	self halt.
+__lt__: otherCollection
+	^ ( self __gt__: otherCollection ) not and: [ self __ne__: otherCollection]
 %
 category: 'Python'
 method: dict
-clear
-
-	self halt.
+__ne__: otherCollection
+	^ ( self __eq__: otherCollection ) not
+%
+category: 'Python'
+method: dict
+__or__: aDict
+	^ self copy __ior__: aDict
+%
+category: 'Python'
+method: dict
+__ror__: aDict
+   ^ aDict __or__: self
+%
+category: 'Python'
+method: dict
+__setitem__: aKey _: aValue
+	^ self ___container
+		at: aKey
+		put: aValue.
 %
 category: 'Python'
 method: dict
 copy
 
-	^super copy
+	^ self class ___new__init__: self ___container associations.
 %
 category: 'Python'
 method: dict
-fromkeys
-
-	self halt.
-%
-category: 'Python'
-method: dict
-get
-
-	self halt.
+get: aKey
+	^ self __getitem__: aKey
 %
 category: 'Python'
 method: dict
 items
 
-	self halt.
+	^ frozenset ___new__init__:
+		( self ___container associations
+			collect: [ :association | list ___new__init__: { association key. association value } ] )
 %
 category: 'Python'
 method: dict
 keys
 
-	self halt.
+	^ frozenset ___new__init__: ( self ___container keys )
 %
 category: 'Python'
 method: dict
-pop
-
-	self halt.
-%
-category: 'Python'
-method: dict
-popitem
-
-	self halt.
-%
-category: 'Python'
-method: dict
-setdefault
-
-	self halt.
-%
-category: 'Python'
-method: dict
-update
-
-	self halt.
+pop: aKey
+	^ self __delitem__: aKey.
 %
 category: 'Python'
 method: dict
 values
 
-	self halt.
+	^ frozenset ___new__init__: ( self ___container values )
+%
+set compile_env: 0
+category: 'Smalltalk'
+method: dict
+___initialize: aCollection
+
+	container := self class ___containerClass new.
+	aCollection do: [ :association |
+		container add: association ]
+%
+category: 'Smalltalk'
+method: dict
+printElementsOn: aStream
+	"The original code used #skip:, but some streams do not support that,
+	 and we don't really need it."
+
+	aStream nextPut: self class ___startChar.
+	self ___container keys do: [:key | aStream print: key; nextPut: $:; space; print: ( self ___container at: key ) ] separatedBy: [aStream nextPutAll: ', ' ].
+	aStream nextPut: self class ___endChar.
 %

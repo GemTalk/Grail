@@ -3,321 +3,492 @@ removeAllMethods bytes
 removeAllClassMethods bytes
 ! ------------------- Class methods for bytes
 set compile_env: 0
-category: 'other'
+category: 'Smalltalk'
 classmethod: bytes
-containerClass
+___containerClass
 
-	^ByteArray
+	^ ByteArray
 %
 ! ------------------- Instance methods for bytes
 set compile_env: 0
-category: 'private'
-method: bytes
-___initialize: aCollection
-
-	| x |
-	x := aCollection.
-	(x isKindOf: CharacterCollection) ifTrue: [x := x asArray collect: [:each | each codePoint]].
-	container := self class containerClass withAll: x.
-%
-set compile_env: 0
 category: 'Python'
 method: bytes
-__add__
-
-	self halt.
+__add__: anArgument
+	TypeError signal: 'can''t concat', anArgument class name.
 %
 category: 'Python'
 method: bytes
-__contains__
-
-	self halt.
+__contains__: someBytes
+	^ ( self ___container indexOfSubCollection: someBytes ___container
+		startingAt: 1
+		ifAbsent: [0] ) > 0
 %
 category: 'Python'
 method: bytes
-__getitem__
-
-	self halt.
+__getitem__: anIndex
+	^ ( super __getitem__: anIndex ) asCharacter asString
 %
 category: 'Python'
 method: bytes
-__getnewargs__
-
-	self halt.
+__mod__: anArgument
+	TypeError signal: 'not all arguments converted during bytes formatting'.
 %
 category: 'Python'
 method: bytes
-__iter__
-
-	self halt.
-%
-category: 'Python'
-method: bytes
-__mod__
-
-	self halt.
-%
-category: 'Python'
-method: bytes
-__mul__
-
-	self halt.
-%
-category: 'Python'
-method: bytes
-__rmod__
-
-	self halt.
-%
-category: 'Python'
-method: bytes
-__rmul__
-
-	self halt.
-%
-category: 'Python'
-method: bytes
-__str__
-
-	self halt.
+__rmod__: anArgument
+	^ NotImplementedType singleton
 %
 category: 'Python'
 method: bytes
 capitalize
-
-	self halt.
+	^ self class new ___initialize: self ___container asString asLowercase capitalized
 %
 category: 'Python'
 method: bytes
-center
-
-	self halt.
+center: with
+	^ self center: with _: $ .
 %
 category: 'Python'
 method: bytes
-count
+center: width _: fillchar
+	| oddLen |
+	oddLen := self __len__ + (self __len__ \\ 2).
 
-	self halt.
+	^ self class  new ___initialize:
+		( ( self ___container asString padRightTo: (((width - oddLen)//2)+oddLen) with: fillchar )
+		          padLeftTo: width with: fillchar ) .
 %
 category: 'Python'
 method: bytes
-decode
+copy
 
-	self halt.
+	^ self class new ___initialize: self ___container
 %
 category: 'Python'
 method: bytes
-endswith
+count: aSublist
+	^ self count: aSublist _: 0
+%
+category: 'Python'
+method: bytes
+count: aSublist _: aStart
 
-	self halt.
+
+	^ self count: aSublist _: aStart _: self __len__
+%
+category: 'Python'
+method: bytes
+count: aSublist _: aStart _: anEnd
+
+	| count start idx |
+	count := 0.
+	start := aStart.
+	[ ( idx := self find: aSublist _: start _: anEnd ) >= 0 ] whileTrue: [
+		count := count + 1.
+		start := idx + aSublist size.
+	].
+
+	^ count
+%
+category: 'Python'
+method: bytes
+endswith: aSublist
+
+	^ self endswith: aSublist _: 0
+%
+category: 'Python'
+method: bytes
+endswith: aSublist _: aStart
+
+	^ self endswith: aSublist _: aStart _: self __len__
+%
+category: 'Python'
+method: bytes
+endswith: aSublist _: aStart _: anEnd
+	| idx |
+	idx := anEnd - aSublist size.
+	^ ( self find: aSublist _: idx _:anEnd ) = idx
 %
 category: 'Python'
 method: bytes
 expandtabs
-
-	self halt.
+	^ self expandtabs: 8
 %
 category: 'Python'
 method: bytes
-find
-
-	self halt.
+expandtabs: tabsize
+	^ self replace: String tab _: (String space repeat: tabsize)
 %
 category: 'Python'
 method: bytes
-fromhex
+find: aSublist
 
-	self halt.
+	^ self find: aSublist _: 0
 %
 category: 'Python'
 method: bytes
-hex
+find: aSublist _: aStart
 
-	self halt.
+	^ self find: aSublist _: aStart _: self __len__
 %
 category: 'Python'
 method: bytes
-index
+find: aSublist _: aStart _: anEnd
 
-	self halt.
+	^ ( ( self ___container asString takeFirst: anEnd )
+			indexOfSubCollection: aSublist startingAt: aStart + 1 ) - 1
+%
+category: 'Python'
+method: bytes
+index: aSublist
+
+	^ self index: aSublist _: 0
+%
+category: 'Python'
+method: bytes
+index: aSublist _: aStart
+
+	^ self index: aSublist _: aStart _: self __len__
+%
+category: 'Python'
+method: bytes
+index: aSublist _: aStart _: anEnd
+	| idx |
+
+	idx := self find: aSublist _: aStart _: anEnd.
+	idx > -1
+		ifTrue: [ ^ idx ]
+		ifFalse: [ ValueError signal ]
 %
 category: 'Python'
 method: bytes
 isalnum
-
-	self halt.
+	^ self __len__ > 0 and: [
+		self ___container asString allSatisfy: [ :e | e isAlphaNumeric ]
+	]
 %
 category: 'Python'
 method: bytes
 isalpha
-
-	self halt.
+	^ self __len__ > 0 and: [
+		self ___container asString allSatisfy: [ :e | e isLetter ]
+	]
 %
 category: 'Python'
 method: bytes
 isascii
-
-	self halt.
+	^ self __len__ = 0 or: [
+		self ___container asString isAsciiString
+	]
 %
 category: 'Python'
 method: bytes
 isdigit
-
-	self halt.
+	^ self __len__ > 0 and: [
+		self ___container asString allSatisfy: [ :e | e isDigit ]
+	]
 %
 category: 'Python'
 method: bytes
 islower
-
-	self halt.
+	^ self __len__ > 0 and: [
+		self ___container asString allSatisfy: [ :e | e isLowercase ]
+	]
 %
 category: 'Python'
 method: bytes
 isspace
-
-	self halt.
+	^ self __len__ > 0 and: [
+		self ___container asString allSatisfy: [ :e | e isSpaceSeparator ]
+	]
 %
 category: 'Python'
 method: bytes
 istitle
-
-	self halt.
+	^ self __len__ > 0 and: [
+		self = self title
+	]
 %
 category: 'Python'
 method: bytes
 isupper
-
-	self halt.
+	^ self __len__ > 0 and: [
+		self ___container asString allSatisfy: [ :e | e isUppercase ]
+	]
 %
 category: 'Python'
 method: bytes
-join
-
-	self halt.
+ljust: width
+	^ self ljust: width _: Character space
 %
 category: 'Python'
 method: bytes
-ljust
-
-	self halt.
+ljust: width _: fillchar
+	^ self class new ___initialize:
+		(self ___container asString padRightTo: width with: fillchar )
 %
 category: 'Python'
 method: bytes
 lower
-
-	self halt.
+	^ self class new ___initialize: self ___container asString asLowercase
 %
 category: 'Python'
 method: bytes
 lstrip
-
-	self halt.
+	^ self lstrip: Character separators
 %
 category: 'Python'
 method: bytes
-maketrans
+lstrip: stripset
 
-	self halt.
+	^ self class new ___initialize:
+		(self ___container asString trimLeft: [ :char | stripset includes: char ] )
 %
 category: 'Python'
 method: bytes
-partition
+partition: sep
+	| idx |
+	idx := self find: sep.
+	idx < 0 ifTrue: [
+		^ tuple ___new__init__: { self copy. self class new. self class new }
+	].
 
-	self halt.
+	^ tuple ___new__init__: {
+		self class new ___initialize: (self ___container asString  takeFirst: idx ).
+		self class new ___initialize: sep.
+		self class new ___initialize: (self ___container asString  last: (self __len__ - idx - sep size) )
+	}
 %
 category: 'Python'
 method: bytes
-replace
-
-	self halt.
+removeprefix: heading
+	^ self class new ___initialize: (self ___container asString withoutPrefix: heading)
 %
 category: 'Python'
 method: bytes
-rfind
-
-	self halt.
+removesuffix: leading
+	^ self class new ___initialize: (self ___container asString withoutSuffix: leading)
 %
 category: 'Python'
 method: bytes
-rindex
-
-	self halt.
+replace: old _: new
+	^ self class new ___initialize:
+		(self ___container asString copyReplaceAll: old with: new )
 %
 category: 'Python'
 method: bytes
-rjust
+rfind: aSublist
 
-	self halt.
+	^ self rfind: aSublist _: 0
 %
 category: 'Python'
 method: bytes
-rpartition
+rfind: aSublist _: start
 
-	self halt.
+	^ self rfind: aSublist _: start _: self __len__
 %
 category: 'Python'
 method: bytes
-rsplit
+rfind: aSublist _: aStart _: anEnd
+	| idx |
+	idx := ( ( self ___container asString takeFirst: anEnd )
+				reverse takeFirst: (anEnd - aStart) )
+					indexOfSubCollection: aSublist reverse.
 
-	self halt.
+	idx = 0 ifTrue: [ ^ -1 ].
+
+	^ anEnd - idx - aSublist size + 1
+%
+category: 'Python'
+method: bytes
+rindex: aSublist
+
+	^ self rindex: aSublist _: 0
+%
+category: 'Python'
+method: bytes
+rindex: aSublist _: aStart
+
+	^ self rindex: aSublist _: aStart _: self __len__
+%
+category: 'Python'
+method: bytes
+rindex: aSublist _: aStart _: anEnd
+	| idx |
+
+	idx := self rfind: aSublist _: aStart _: anEnd.
+	idx > -1
+		ifTrue: [ ^ idx ]
+		ifFalse: [ ValueError signal ]
+%
+category: 'Python'
+method: bytes
+rjust: width
+	^ self rjust: width _: Character space
+%
+category: 'Python'
+method: bytes
+rjust: width _: fillchar
+	^ self class new ___initialize:
+		(self ___container asString padLeftTo: width with: fillchar )
+%
+category: 'Python'
+method: bytes
+rpartition: sep
+	| idx |
+	idx := self rfind: sep.
+	idx < 0 ifTrue: [
+		^ tuple ___new__init__: { self class new. self class new. self copy }
+	].
+
+	^ tuple ___new__init__: {
+		self class new ___initialize: (self ___container asString  takeFirst: idx ).
+		self class new ___initialize: sep.
+		self class new ___initialize: (self ___container asString  last: (self __len__ - idx - sep size) )
+	}
+%
+category: 'Python'
+method: bytes
+rsplit: sep
+	^ self rsplit: sep _: -1
+%
+category: 'Python'
+method: bytes
+rsplit: sep _: limit
+	| idx splits |
+	idx := self rfind: sep.
+	idx < 0 ifTrue: [
+		^ tuple ___new__init__: { self copy }
+	].
+	limit == 0 ifTrue: [
+		^ tuple ___new__init__: { self copy }
+	].
+
+	splits := OrderedCollection new.
+	splits addAll: ( (self class new ___initialize:
+	  						(self ___container asString  takeFirst: idx )) rsplit: sep _: limit - 1 ) ___container.
+	splits add: (self ___container asString  last: (self __len__ - idx - sep size) ).
+
+
+	^ tuple ___new__init__: (splits collect: [ :each | self class new ___initialize: each ] )
 %
 category: 'Python'
 method: bytes
 rstrip
-
-	self halt.
+	^ self rstrip: Character separators
 %
 category: 'Python'
 method: bytes
-split
-
-	self halt.
+rstrip: stripset
+	^ self class new ___initialize:
+		(self ___container asString trimRight: [ :char | stripset includes: char ] )
 %
 category: 'Python'
 method: bytes
-splitlines
-
-	self halt.
+split: sep
+	^ self split: sep _: -1
 %
 category: 'Python'
 method: bytes
-startswith
+split: sep _: limit
+	| idx splits |
+	idx := self find: sep.
+	idx < 0 ifTrue: [
+		^ tuple ___new__init__: { self copy }
+	].
+	limit == 0 ifTrue: [
+		^ tuple ___new__init__: { self copy }
+	].
 
-	self halt.
+	splits := OrderedCollection new.
+	splits add: (self ___container asString  takeFirst: idx ).
+	splits addAll: ( (self class new ___initialize:
+	  						(self ___container asString  last: (self __len__ - idx - sep size) )) split: sep _: limit - 1 ) ___container.
+
+
+	^ tuple ___new__init__: (splits collect: [ :each | self class new ___initialize: each ] )
+%
+category: 'Python'
+method: bytes
+startswith: aSublist
+
+	^ self startswith: aSublist _: 0
+%
+category: 'Python'
+method: bytes
+startswith: aSublist _: aStart
+
+	^ self startswith: aSublist _: aStart _: self __len__
+%
+category: 'Python'
+method: bytes
+startswith: aSublist _: aStart _: anEnd
+
+	^ ( self find: aSublist _: aStart _:anEnd ) = aStart
 %
 category: 'Python'
 method: bytes
 strip
+	^ self strip: String space
+%
+category: 'Python'
+method: bytes
+strip: stripset
 
-	self halt.
+	^ ( self rstrip: stripset ) lstrip: stripset
 %
 category: 'Python'
 method: bytes
 swapcase
+	| answer |
 
-	self halt.
+	answer := self ___container asString.
+	1 to: answer size do: [:i |
+		(answer at: i) isUppercase ifTrue: [ answer at: i put: (answer at: i)asLowercase
+		] ifFalse: [ (answer at: i) isLowercase ifTrue: [ answer at: i put: (answer at: i) asUppercase ]
+			]
+		].
+
+	^ self class new ___initialize: answer.
 %
 category: 'Python'
 method: bytes
 title
-
-	self halt.
-%
-category: 'Python'
-method: bytes
-translate
-
-	self halt.
+	^ self class new ___initialize:
+	( String streamContents: [:stream |
+               self ___container asString substrings do: [:sub |
+                       stream nextPutAll: sub capitalized]
+					separatedBy: [ stream space ]  ] )
 %
 category: 'Python'
 method: bytes
 upper
-
-	self halt.
+	^ self class new ___initialize: self ___container asString asUppercase
 %
-category: 'Python'
+set compile_env: 0
+category: 'Smalltalk'
 method: bytes
-zfill
+___initArgs: args
 
-	self halt.
+	args isEmpty ifTrue: [
+		container := ByteArray new.
+		^ self
+	].
+	( ( args first isKindOf: Integer ) or: [  args first isKindOf: int ] ) ifTrue: [
+		container := ByteArray new asByteArrayOfSize: args first.
+		^ self
+	].
+
+	container := args first asByteArray.
+	^ self
+%
+category: 'Smalltalk'
+method: bytes
+printElementsOn: aStream
+	"The original code used #skip:, but some streams do not support that,
+	 and we don't really need it."
+
+	"aStream nextPut: self class ___startChar."
+	self ___container do: [:element | aStream nextPut: element asCharacter ].
+	"aStream nextPut: self class ___endChar."
 %

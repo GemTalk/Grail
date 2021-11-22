@@ -14,7 +14,7 @@ set compile_env: 0
 ! ------------------- Class definition for BaseException
 expectvalue /Class
 doit
-AbstractException subclass: 'BaseException'
+Exception subclass: 'BaseException'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -25,77 +25,7 @@ AbstractException subclass: 'BaseException'
 %
 expectvalue /Class
 doit
-BaseException comment:
-'https://docs.python.org/3/library/exceptions.html#exception-hierarchy
-
-BaseException
- +-- SystemExit
- +-- KeyboardInterrupt
- +-- GeneratorExit
- +-- Exception
-      +-- StopIteration
-      +-- StopAsyncIteration
-      +-- ArithmeticError
-      |    +-- FloatingPointError
-      |    +-- OverflowError
-      |    +-- ZeroDivisionError
-      +-- AssertionError
-      +-- AttributeError
-      +-- BufferError
-      +-- EOFError
-      +-- ImportError
-      |    +-- ModuleNotFoundError
-      +-- LookupError
-      |    +-- IndexError
-      |    +-- KeyError
-      +-- MemoryError
-      +-- NameError
-      |    +-- UnboundLocalError
-      +-- OSError
-      |    +-- BlockingIOError
-      |    +-- ChildProcessError
-      |    +-- ConnectionError
-      |    |    +-- BrokenPipeError
-      |    |    +-- ConnectionAbortedError
-      |    |    +-- ConnectionRefusedError
-      |    |    +-- ConnectionResetError
-      |    +-- FileExistsError
-      |    +-- FileNotFoundError
-      |    +-- InterruptedError
-      |    +-- IsADirectoryError
-      |    +-- NotADirectoryError
-      |    +-- PermissionError
-      |    +-- ProcessLookupError
-      |    +-- TimeoutError
-      +-- ReferenceError
-      +-- RuntimeError
-      |    +-- NotImplementedError
-      |    +-- RecursionError
-      +-- SyntaxError
-      |    +-- IndentationError
-      |         +-- TabError
-      +-- SystemError
-      +-- TypeError
-      +-- ValueError
-      |    +-- UnicodeError
-      |         +-- UnicodeDecodeError
-      |         +-- UnicodeEncodeError
-      |         +-- UnicodeTranslateError
-      +-- Warning
-           +-- DeprecationWarning
-           +-- PendingDeprecationWarning
-           +-- RuntimeWarning
-           +-- SyntaxWarning
-           +-- UserWarning
-           +-- FutureWarning
-           +-- ImportWarning
-           +-- UnicodeWarning
-           +-- BytesWarning
-           +-- ResourceWarning'
-%
-expectvalue /Class
-doit
-BaseException category: 'builtins'
+BaseException category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for Exception
@@ -112,7 +42,7 @@ BaseException subclass: 'Exception'
 %
 expectvalue /Class
 doit
-Exception category: 'builtins'
+Exception category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for ArithmeticError
@@ -129,7 +59,7 @@ Exception subclass: 'ArithmeticError'
 %
 expectvalue /Class
 doit
-ArithmeticError category: 'builtins'
+ArithmeticError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for FloatingPointError
@@ -146,7 +76,7 @@ ArithmeticError subclass: 'FloatingPointError'
 %
 expectvalue /Class
 doit
-FloatingPointError category: 'builtins'
+FloatingPointError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for OverflowError
@@ -163,7 +93,7 @@ ArithmeticError subclass: 'OverflowError'
 %
 expectvalue /Class
 doit
-OverflowError category: 'builtins'
+OverflowError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for ZeroDivisionError
@@ -180,7 +110,7 @@ ArithmeticError subclass: 'ZeroDivisionError'
 %
 expectvalue /Class
 doit
-ZeroDivisionError category: 'builtins'
+ZeroDivisionError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for AssertionError
@@ -197,7 +127,7 @@ Exception subclass: 'AssertionError'
 %
 expectvalue /Class
 doit
-AssertionError category: 'builtins'
+AssertionError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for AttributeError
@@ -214,7 +144,7 @@ Exception subclass: 'AttributeError'
 %
 expectvalue /Class
 doit
-AttributeError category: 'builtins'
+AttributeError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for BufferError
@@ -231,7 +161,7 @@ Exception subclass: 'BufferError'
 %
 expectvalue /Class
 doit
-BufferError category: 'builtins'
+BufferError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for EOFError
@@ -248,7 +178,7 @@ Exception subclass: 'EOFError'
 %
 expectvalue /Class
 doit
-EOFError category: 'builtins'
+EOFError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for ImportError
@@ -265,7 +195,7 @@ Exception subclass: 'ImportError'
 %
 expectvalue /Class
 doit
-ImportError category: 'builtins'
+ImportError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for ModuleNotFoundError
@@ -282,7 +212,7 @@ ImportError subclass: 'ModuleNotFoundError'
 %
 expectvalue /Class
 doit
-ModuleNotFoundError category: 'builtins'
+ModuleNotFoundError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for LookupError
@@ -299,7 +229,7 @@ Exception subclass: 'LookupError'
 %
 expectvalue /Class
 doit
-LookupError category: 'builtins'
+LookupError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for IndexError
@@ -316,7 +246,7 @@ LookupError subclass: 'IndexError'
 %
 expectvalue /Class
 doit
-IndexError category: 'builtins'
+IndexError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for KeyError
@@ -333,18 +263,7 @@ LookupError subclass: 'KeyError'
 %
 expectvalue /Class
 doit
-KeyError comment:
-'No class-specific documentation for KeyError, hierarchy is:
-Object
-  AbstractException( gsResumable gsTrappable gsNumber currGsHandler gsStack gsReason gsDetails tag messageText gsArgs)
-    BaseException
-      Exception
-        KeyError
-'
-%
-expectvalue /Class
-doit
-KeyError category: 'builtins'
+KeyError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for MemoryError
@@ -361,7 +280,7 @@ Exception subclass: 'MemoryError'
 %
 expectvalue /Class
 doit
-MemoryError category: 'builtins'
+MemoryError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for NameError
@@ -378,7 +297,7 @@ Exception subclass: 'NameError'
 %
 expectvalue /Class
 doit
-NameError category: 'builtins'
+NameError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for UnboundLocalError
@@ -395,7 +314,7 @@ NameError subclass: 'UnboundLocalError'
 %
 expectvalue /Class
 doit
-UnboundLocalError category: 'builtins'
+UnboundLocalError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for OSError
@@ -412,7 +331,7 @@ Exception subclass: 'OSError'
 %
 expectvalue /Class
 doit
-OSError category: 'builtins'
+OSError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for BlockingIOError
@@ -429,7 +348,7 @@ OSError subclass: 'BlockingIOError'
 %
 expectvalue /Class
 doit
-BlockingIOError category: 'builtins'
+BlockingIOError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for ChildProcessError
@@ -446,7 +365,7 @@ OSError subclass: 'ChildProcessError'
 %
 expectvalue /Class
 doit
-ChildProcessError category: 'builtins'
+ChildProcessError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for ConnectionError
@@ -463,7 +382,7 @@ OSError subclass: 'ConnectionError'
 %
 expectvalue /Class
 doit
-ConnectionError category: 'builtins'
+ConnectionError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for BrokenPipeError
@@ -480,7 +399,7 @@ ConnectionError subclass: 'BrokenPipeError'
 %
 expectvalue /Class
 doit
-BrokenPipeError category: 'builtins'
+BrokenPipeError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for ConnectionAbortedError
@@ -497,7 +416,7 @@ ConnectionError subclass: 'ConnectionAbortedError'
 %
 expectvalue /Class
 doit
-ConnectionAbortedError category: 'builtins'
+ConnectionAbortedError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for ConnectionRefusedError
@@ -514,7 +433,7 @@ ConnectionError subclass: 'ConnectionRefusedError'
 %
 expectvalue /Class
 doit
-ConnectionRefusedError category: 'builtins'
+ConnectionRefusedError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for ConnectionResetError
@@ -531,7 +450,7 @@ ConnectionError subclass: 'ConnectionResetError'
 %
 expectvalue /Class
 doit
-ConnectionResetError category: 'builtins'
+ConnectionResetError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for FileExistsError
@@ -548,7 +467,7 @@ OSError subclass: 'FileExistsError'
 %
 expectvalue /Class
 doit
-FileExistsError category: 'builtins'
+FileExistsError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for FileNotFoundError
@@ -565,7 +484,7 @@ OSError subclass: 'FileNotFoundError'
 %
 expectvalue /Class
 doit
-FileNotFoundError category: 'builtins'
+FileNotFoundError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for InterruptedError
@@ -582,7 +501,7 @@ OSError subclass: 'InterruptedError'
 %
 expectvalue /Class
 doit
-InterruptedError category: 'builtins'
+InterruptedError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for IsADirectoryError
@@ -599,7 +518,7 @@ OSError subclass: 'IsADirectoryError'
 %
 expectvalue /Class
 doit
-IsADirectoryError category: 'builtins'
+IsADirectoryError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for NotADirectoryError
@@ -616,7 +535,7 @@ OSError subclass: 'NotADirectoryError'
 %
 expectvalue /Class
 doit
-NotADirectoryError category: 'builtins'
+NotADirectoryError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for PermissionError
@@ -633,7 +552,7 @@ OSError subclass: 'PermissionError'
 %
 expectvalue /Class
 doit
-PermissionError category: 'builtins'
+PermissionError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for ProcessLookupError
@@ -650,7 +569,7 @@ OSError subclass: 'ProcessLookupError'
 %
 expectvalue /Class
 doit
-ProcessLookupError category: 'builtins'
+ProcessLookupError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for TimeoutError
@@ -667,7 +586,7 @@ OSError subclass: 'TimeoutError'
 %
 expectvalue /Class
 doit
-TimeoutError category: 'builtins'
+TimeoutError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for ReferenceError
@@ -684,7 +603,7 @@ Exception subclass: 'ReferenceError'
 %
 expectvalue /Class
 doit
-ReferenceError category: 'builtins'
+ReferenceError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for RuntimeError
@@ -701,7 +620,7 @@ Exception subclass: 'RuntimeError'
 %
 expectvalue /Class
 doit
-RuntimeError category: 'builtins'
+RuntimeError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for NotImplementedError
@@ -718,7 +637,7 @@ RuntimeError subclass: 'NotImplementedError'
 %
 expectvalue /Class
 doit
-NotImplementedError category: 'builtins'
+NotImplementedError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for RecursionError
@@ -735,7 +654,7 @@ RuntimeError subclass: 'RecursionError'
 %
 expectvalue /Class
 doit
-RecursionError category: 'builtins'
+RecursionError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for StopAsyncIteration
@@ -752,7 +671,7 @@ Exception subclass: 'StopAsyncIteration'
 %
 expectvalue /Class
 doit
-StopAsyncIteration category: 'builtins'
+StopAsyncIteration category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for StopIteration
@@ -769,7 +688,7 @@ Exception subclass: 'StopIteration'
 %
 expectvalue /Class
 doit
-StopIteration category: 'builtins'
+StopIteration category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for SyntaxError
@@ -786,7 +705,7 @@ Exception subclass: 'SyntaxError'
 %
 expectvalue /Class
 doit
-SyntaxError category: 'builtins'
+SyntaxError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for IndentationError
@@ -803,7 +722,7 @@ SyntaxError subclass: 'IndentationError'
 %
 expectvalue /Class
 doit
-IndentationError category: 'builtins'
+IndentationError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for TabError
@@ -820,7 +739,7 @@ IndentationError subclass: 'TabError'
 %
 expectvalue /Class
 doit
-TabError category: 'builtins'
+TabError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for SystemError
@@ -837,7 +756,7 @@ Exception subclass: 'SystemError'
 %
 expectvalue /Class
 doit
-SystemError category: 'builtins'
+SystemError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for TypeError
@@ -854,7 +773,7 @@ Exception subclass: 'TypeError'
 %
 expectvalue /Class
 doit
-TypeError category: 'builtins'
+TypeError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for ValueError
@@ -871,7 +790,7 @@ Exception subclass: 'ValueError'
 %
 expectvalue /Class
 doit
-ValueError category: 'builtins'
+ValueError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for UnicodeError
@@ -888,7 +807,7 @@ ValueError subclass: 'UnicodeError'
 %
 expectvalue /Class
 doit
-UnicodeError category: 'builtins'
+UnicodeError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for UnicodeDecodeError
@@ -905,7 +824,7 @@ UnicodeError subclass: 'UnicodeDecodeError'
 %
 expectvalue /Class
 doit
-UnicodeDecodeError category: 'builtins'
+UnicodeDecodeError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for UnicodeEncodeError
@@ -922,7 +841,7 @@ UnicodeError subclass: 'UnicodeEncodeError'
 %
 expectvalue /Class
 doit
-UnicodeEncodeError category: 'builtins'
+UnicodeEncodeError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for UnicodeTranslateError
@@ -939,7 +858,7 @@ UnicodeError subclass: 'UnicodeTranslateError'
 %
 expectvalue /Class
 doit
-UnicodeTranslateError category: 'builtins'
+UnicodeTranslateError category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for Warning
@@ -956,7 +875,7 @@ Exception subclass: 'Warning'
 %
 expectvalue /Class
 doit
-Warning category: 'builtins'
+Warning category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for BytesWarning
@@ -973,7 +892,7 @@ Warning subclass: 'BytesWarning'
 %
 expectvalue /Class
 doit
-BytesWarning category: 'builtins'
+BytesWarning category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for DeprecationWarning
@@ -990,18 +909,7 @@ Warning subclass: 'DeprecationWarning'
 %
 expectvalue /Class
 doit
-DeprecationWarning comment:
-'No class-specific documentation for DeprecationWarning, hierarchy is:
-Object
-  AbstractException( gsResumable gsTrappable gsNumber currGsHandler gsStack gsReason gsDetails tag messageText gsArgs)
-    BaseException
-      Exception
-        DeprecationWarning
-'
-%
-expectvalue /Class
-doit
-DeprecationWarning category: 'builtins'
+DeprecationWarning category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for FutureWarning
@@ -1018,7 +926,7 @@ Warning subclass: 'FutureWarning'
 %
 expectvalue /Class
 doit
-FutureWarning category: 'builtins'
+FutureWarning category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for ImportWarning
@@ -1035,7 +943,7 @@ Warning subclass: 'ImportWarning'
 %
 expectvalue /Class
 doit
-ImportWarning category: 'builtins'
+ImportWarning category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for PendingDeprecationWarning
@@ -1052,7 +960,7 @@ Warning subclass: 'PendingDeprecationWarning'
 %
 expectvalue /Class
 doit
-PendingDeprecationWarning category: 'builtins'
+PendingDeprecationWarning category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for ResourceWarning
@@ -1069,7 +977,7 @@ Warning subclass: 'ResourceWarning'
 %
 expectvalue /Class
 doit
-ResourceWarning category: 'builtins'
+ResourceWarning category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for RuntimeWarning
@@ -1086,7 +994,7 @@ Warning subclass: 'RuntimeWarning'
 %
 expectvalue /Class
 doit
-RuntimeWarning category: 'builtins'
+RuntimeWarning category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for SyntaxWarning
@@ -1103,7 +1011,7 @@ Warning subclass: 'SyntaxWarning'
 %
 expectvalue /Class
 doit
-SyntaxWarning category: 'builtins'
+SyntaxWarning category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for UnicodeWarning
@@ -1120,7 +1028,7 @@ Warning subclass: 'UnicodeWarning'
 %
 expectvalue /Class
 doit
-UnicodeWarning category: 'builtins'
+UnicodeWarning category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for UserWarning
@@ -1137,7 +1045,7 @@ Warning subclass: 'UserWarning'
 %
 expectvalue /Class
 doit
-UserWarning category: 'builtins'
+UserWarning category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for GeneratorExit
@@ -1154,7 +1062,7 @@ BaseException subclass: 'GeneratorExit'
 %
 expectvalue /Class
 doit
-GeneratorExit category: 'builtins'
+GeneratorExit category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for KeyboardInterrupt
@@ -1171,13 +1079,13 @@ BaseException subclass: 'KeyboardInterrupt'
 %
 expectvalue /Class
 doit
-KeyboardInterrupt category: 'builtins'
+KeyboardInterrupt category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
-! ------------------- Class definition for SystemException
+! ------------------- Class definition for SystemExit
 expectvalue /Class
 doit
-BaseException subclass: 'SystemException'
+BaseException subclass: 'SystemExit'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -1188,86 +1096,7 @@ BaseException subclass: 'SystemException'
 %
 expectvalue /Class
 doit
-SystemException category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for BreakNotification
-expectvalue /Class
-doit
-Notification subclass: 'BreakNotification'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-BreakNotification category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for CancelNotification
-expectvalue /Class
-doit
-Notification subclass: 'CancelNotification'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-CancelNotification category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for ContinueNotification
-expectvalue /Class
-doit
-Notification subclass: 'ContinueNotification'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-ContinueNotification category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for ReturnNotification
-expectvalue /Class
-doit
-Notification subclass: 'ReturnNotification'
-  instVarNames: #( value)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-ReturnNotification comment:
-'No class-specific documentation for ReturnNotification, hierarchy is:
-Object
-  AbstractException( gsResumable gsTrappable gsNumber currGsHandler gsStack gsReason gsDetails tag messageText gsArgs)
-    Exception
-      Notification
-        ReturnNotification
-'
-%
-expectvalue /Class
-doit
-ReturnNotification category: 'builtins'
+SystemExit category: 'BuiltIns-Exceptions'
 %
 set compile_env: 0
 ! ------------------- Class definition for AbstractNode
@@ -1284,7 +1113,7 @@ Object subclass: 'AbstractNode'
 %
 expectvalue /Class
 doit
-AbstractNode comment:
+AbstractNode comment: 
 'No class-specific documentation for AbstractNode, hierarchy is:
 Object
   AbstractNode
@@ -1310,7 +1139,7 @@ AbstractNode subclass: 'AbstractLocationNode'
 %
 expectvalue /Class
 doit
-AbstractLocationNode comment:
+AbstractLocationNode comment: 
 'No class-specific documentation for PyAstNodeWithLocation, hierarchy is:
 Object
   AbstractNode( parent line column)
@@ -1336,7 +1165,7 @@ AbstractLocationNode subclass: 'ArgAst'
 %
 expectvalue /Class
 doit
-ArgAst comment:
+ArgAst comment: 
 'No class-specific documentation for ArgAst, hierarchy is:
 Object
   AbstractNode( parent line column)
@@ -1362,7 +1191,7 @@ AbstractLocationNode subclass: 'ExceptHandlerAst'
 %
 expectvalue /Class
 doit
-ExceptHandlerAst comment:
+ExceptHandlerAst comment: 
 'No class-specific documentation for ExceptHandlerAst, hierarchy is:
 Object
   AbstractNode( parent)
@@ -1389,7 +1218,7 @@ AbstractLocationNode subclass: 'ExpressionAst'
 %
 expectvalue /Class
 doit
-ExpressionAst comment:
+ExpressionAst comment: 
 'No class-specific documentation for ExpressionAst, hierarchy is:
 Object
   AbstractNode( line column)
@@ -1415,7 +1244,7 @@ ExpressionAst subclass: 'AttributeAst'
 %
 expectvalue /Class
 doit
-AttributeAst comment:
+AttributeAst comment: 
 'No class-specific documentation for PyAttribute, hierarchy is:
 Object
   AbstractNode( parent line column)
@@ -1442,7 +1271,7 @@ ExpressionAst subclass: 'AwaitAst'
 %
 expectvalue /Class
 doit
-AwaitAst comment:
+AwaitAst comment: 
 'No class-specific documentation for PyAwait, hierarchy is:
 Object
   AbstractNode( parent)
@@ -1470,7 +1299,7 @@ ExpressionAst subclass: 'BinOpAst'
 %
 expectvalue /Class
 doit
-BinOpAst comment:
+BinOpAst comment: 
 'No class-specific documentation for PyBinOp, hierarchy is:
 Object
   AbstractNode( parent)
@@ -1498,7 +1327,7 @@ ExpressionAst subclass: 'BoolOpAst'
 %
 expectvalue /Class
 doit
-BoolOpAst comment:
+BoolOpAst comment: 
 'No class-specific documentation for BoolOpAst, hierarchy is:
 Object
   AbstractNode( parent)
@@ -1526,7 +1355,7 @@ BoolOpAst subclass: 'AndAst'
 %
 expectvalue /Class
 doit
-AndAst comment:
+AndAst comment: 
 'No class-specific documentation for PyAnd, hierarchy is:
 Object
   AbstractNode( parent)
@@ -1553,7 +1382,7 @@ BoolOpAst subclass: 'OrAst'
 %
 expectvalue /Class
 doit
-OrAst comment:
+OrAst comment: 
 'No class-specific documentation for PyOr, hierarchy is:
 Object
   AbstractNode( parent)
@@ -1580,7 +1409,7 @@ ExpressionAst subclass: 'CallAst'
 %
 expectvalue /Class
 doit
-CallAst comment:
+CallAst comment: 
 'No class-specific documentation for CallAst, hierarchy is:
 Object
   AbstractNode( parent line column)
@@ -1607,7 +1436,7 @@ ExpressionAst subclass: 'CompareAst'
 %
 expectvalue /Class
 doit
-CompareAst comment:
+CompareAst comment: 
 'No class-specific documentation for PyCompare, hierarchy is:
 Object
   AbstractNode( parent line column)
@@ -1634,7 +1463,7 @@ ExpressionAst subclass: 'ConstantAst'
 %
 expectvalue /Class
 doit
-ConstantAst comment:
+ConstantAst comment: 
 'Constant(constant value, string? kind)
 
 A constant value. The value attribute of the Constant literal contains the Python object it represents.
@@ -1660,7 +1489,7 @@ ExpressionAst subclass: 'DictAst'
 %
 expectvalue /Class
 doit
-DictAst comment:
+DictAst comment: 
 'No class-specific documentation for PyDict, hierarchy is:
 Object
   AbstractNode( parent)
@@ -1688,7 +1517,7 @@ ExpressionAst subclass: 'DictCompAst'
 %
 expectvalue /Class
 doit
-DictCompAst comment:
+DictCompAst comment: 
 'No class-specific documentation for PyDictComp, hierarchy is:
 Object
   AbstractNode( parent)
@@ -1716,7 +1545,7 @@ ExpressionAst subclass: 'FormattedValueAst'
 %
 expectvalue /Class
 doit
-FormattedValueAst comment:
+FormattedValueAst comment: 
 'No class-specific documentation for PyFormattedValue, hierarchy is:
 Object
   AbstractNode( parent)
@@ -1744,7 +1573,7 @@ ExpressionAst subclass: 'GeneratorExpAst'
 %
 expectvalue /Class
 doit
-GeneratorExpAst comment:
+GeneratorExpAst comment: 
 'No class-specific documentation for PyGeneratorExp, hierarchy is:
 Object
   AbstractNode( parent)
@@ -1772,7 +1601,7 @@ ExpressionAst subclass: 'IfExpAst'
 %
 expectvalue /Class
 doit
-IfExpAst comment:
+IfExpAst comment: 
 'No class-specific documentation for PyIfExp, hierarchy is:
 Object
   AbstractNode( parent)
@@ -1800,7 +1629,7 @@ ExpressionAst subclass: 'JoinedStrAst'
 %
 expectvalue /Class
 doit
-JoinedStrAst comment:
+JoinedStrAst comment: 
 'No class-specific documentation for PyJoinedStr, hierarchy is:
 Object
   AbstractNode( parent)
@@ -1828,7 +1657,7 @@ ExpressionAst subclass: 'LambdaAst'
 %
 expectvalue /Class
 doit
-LambdaAst comment:
+LambdaAst comment: 
 'No class-specific documentation for PyLambda, hierarchy is:
 Object
   AbstractNode( parent)
@@ -1856,7 +1685,7 @@ ExpressionAst subclass: 'ListAst'
 %
 expectvalue /Class
 doit
-ListAst comment:
+ListAst comment: 
 'No class-specific documentation for PyList, hierarchy is:
 Object
   AbstractNode( parent)
@@ -1884,7 +1713,7 @@ ExpressionAst subclass: 'ListCompAst'
 %
 expectvalue /Class
 doit
-ListCompAst comment:
+ListCompAst comment: 
 'No class-specific documentation for PyListComp, hierarchy is:
 Object
   AbstractNode( parent)
@@ -1912,7 +1741,7 @@ ExpressionAst subclass: 'NameAst'
 %
 expectvalue /Class
 doit
-NameAst comment:
+NameAst comment: 
 'Names refer to objects. Names are introduced by name binding operations.
 
 The following constructs bind names: formal parameters to functions, import statements, class and function definitions (these bind the class or function name in the defining block), and targets that are identifiers if occurring in an assignment, for loop header, or after as in a with statement or except clause. The import statement of the form from ... import * binds all names defined in the imported module, except those beginning with an underscore. This form may only be used at the module level.
@@ -1949,7 +1778,7 @@ NameAst subclass: 'KeywordsAst'
 %
 expectvalue /Class
 doit
-KeywordsAst comment:
+KeywordsAst comment: 
 'No class-specific documentation for KeywordsAst, hierarchy is:
 Object
   AbstractNode( parent)
@@ -1995,7 +1824,7 @@ ExpressionAst subclass: 'SetAst'
 %
 expectvalue /Class
 doit
-SetAst comment:
+SetAst comment: 
 'No class-specific documentation for PySet, hierarchy is:
 Object
   AbstractNode( parent)
@@ -2023,7 +1852,7 @@ ExpressionAst subclass: 'SetCompAst'
 %
 expectvalue /Class
 doit
-SetCompAst comment:
+SetCompAst comment: 
 'No class-specific documentation for PySetComp, hierarchy is:
 Object
   AbstractNode( parent)
@@ -2051,7 +1880,7 @@ ExpressionAst subclass: 'StarredAst'
 %
 expectvalue /Class
 doit
-StarredAst comment:
+StarredAst comment: 
 'No class-specific documentation for PyStarred, hierarchy is:
 Object
   AbstractNode( parent)
@@ -2079,7 +1908,7 @@ ExpressionAst subclass: 'SubscriptAst'
 %
 expectvalue /Class
 doit
-SubscriptAst comment:
+SubscriptAst comment: 
 'Subscript(expr value, slice slice, expr_context ctx)'
 %
 expectvalue /Class
@@ -2101,7 +1930,7 @@ ExpressionAst subclass: 'TupleAst'
 %
 expectvalue /Class
 doit
-TupleAst comment:
+TupleAst comment: 
 'No class-specific documentation for PyTuple, hierarchy is:
 Object
   AbstractNode( parent)
@@ -2129,7 +1958,7 @@ ExpressionAst subclass: 'UnaryOpAst'
 %
 expectvalue /Class
 doit
-UnaryOpAst comment:
+UnaryOpAst comment: 
 'No class-specific documentation for UnaryOpAst, hierarchy is:
 Object
   AbstractNode( parent)
@@ -2157,7 +1986,7 @@ UnaryOpAst subclass: 'InvertAst'
 %
 expectvalue /Class
 doit
-InvertAst comment:
+InvertAst comment: 
 'No class-specific documentation for PyInvert, hierarchy is:
 Object
   AbstractNode( parent)
@@ -2184,7 +2013,7 @@ UnaryOpAst subclass: 'NotAst'
 %
 expectvalue /Class
 doit
-NotAst comment:
+NotAst comment: 
 'No class-specific documentation for PyNot, hierarchy is:
 Object
   AbstractNode( parent)
@@ -2211,7 +2040,7 @@ UnaryOpAst subclass: 'UAddAst'
 %
 expectvalue /Class
 doit
-UAddAst comment:
+UAddAst comment: 
 'No class-specific documentation for PyUAdd, hierarchy is:
 Object
   AbstractNode( parent)
@@ -2238,7 +2067,7 @@ UnaryOpAst subclass: 'USubAst'
 %
 expectvalue /Class
 doit
-USubAst comment:
+USubAst comment: 
 'No class-specific documentation for PyUSub, hierarchy is:
 Object
   AbstractNode( parent)
@@ -2265,7 +2094,7 @@ ExpressionAst subclass: 'YieldAst'
 %
 expectvalue /Class
 doit
-YieldAst comment:
+YieldAst comment: 
 'No class-specific documentation for PyYield, hierarchy is:
 Object
   AbstractNode( parent)
@@ -2293,7 +2122,7 @@ ExpressionAst subclass: 'YieldFromAst'
 %
 expectvalue /Class
 doit
-YieldFromAst comment:
+YieldFromAst comment: 
 'No class-specific documentation for PyYieldFrom, hierarchy is:
 Object
   AbstractNode( parent)
@@ -2321,7 +2150,7 @@ AbstractLocationNode subclass: 'KeywordAst'
 %
 expectvalue /Class
 doit
-KeywordAst comment:
+KeywordAst comment: 
 'No class-specific documentation for KeywordAst, hierarchy is:
 Object
   AbstractNode( parent)
@@ -2347,7 +2176,7 @@ AbstractLocationNode subclass: 'SliceAbstractAst'
 %
 expectvalue /Class
 doit
-SliceAbstractAst comment:
+SliceAbstractAst comment: 
 'No class-specific documentation for SliceAbstractAst, hierarchy is:
 Object
   AbstractNode( parent)
@@ -2373,7 +2202,7 @@ SliceAbstractAst subclass: 'ExtSliceAst'
 %
 expectvalue /Class
 doit
-ExtSliceAst comment:
+ExtSliceAst comment: 
 'No class-specific documentation for PyExtSlice, hierarchy is:
 Object
   AbstractNode( parent)
@@ -2400,7 +2229,7 @@ SliceAbstractAst subclass: 'IndexAst'
 %
 expectvalue /Class
 doit
-IndexAst comment:
+IndexAst comment: 
 'No class-specific documentation for PyIndex, hierarchy is:
 Object
   AbstractNode( parent)
@@ -2427,7 +2256,7 @@ SliceAbstractAst subclass: 'SliceAst'
 %
 expectvalue /Class
 doit
-SliceAst comment:
+SliceAst comment: 
 'No class-specific documentation for PySlice, hierarchy is:
 Object
   AbstractNode( parent)
@@ -2454,7 +2283,7 @@ AbstractLocationNode subclass: 'StatementAst'
 %
 expectvalue /Class
 doit
-StatementAst comment:
+StatementAst comment: 
 'No class-specific documentation for StatementAst, hierarchy is:
 Object
   AbstractNode( line column)
@@ -2481,7 +2310,7 @@ StatementAst subclass: 'AnnAssignAst'
 %
 expectvalue /Class
 doit
-AnnAssignAst comment:
+AnnAssignAst comment: 
 'No class-specific documentation for PyAnnAssign, hierarchy is:
 Object
   AbstractNode( parent line column)
@@ -2508,7 +2337,7 @@ StatementAst subclass: 'AssertAst'
 %
 expectvalue /Class
 doit
-AssertAst comment:
+AssertAst comment: 
 'No class-specific documentation for PyAssert, hierarchy is:
 Object
   AbstractNode( parent line column)
@@ -2535,7 +2364,7 @@ StatementAst subclass: 'AssignAst'
 %
 expectvalue /Class
 doit
-AssignAst comment:
+AssignAst comment: 
 'Assign(expr* targets, expr value, string? type_comment)'
 %
 expectvalue /Class
@@ -2558,7 +2387,7 @@ StatementAst subclass: 'AsyncForAst'
 %
 expectvalue /Class
 doit
-AsyncForAst comment:
+AsyncForAst comment: 
 'AsyncFor(expr target, expr iter, stmt* body, stmt* orelse, string? type_comment)'
 %
 expectvalue /Class
@@ -2581,7 +2410,7 @@ StatementAst subclass: 'AsyncFunctionDefAst'
 %
 expectvalue /Class
 doit
-AsyncFunctionDefAst comment:
+AsyncFunctionDefAst comment: 
 'AsyncFunctionDef(identifier name, arguments args,
                              stmt* body, expr* decorator_list, expr? returns,
                              string? type_comment)'
@@ -2605,7 +2434,7 @@ StatementAst subclass: 'AsyncWithAst'
 %
 expectvalue /Class
 doit
-AsyncWithAst comment:
+AsyncWithAst comment: 
 'No class-specific documentation for AsyncWithAst, hierarchy is:
 Object
   AbstractNode( parent)
@@ -2633,7 +2462,7 @@ StatementAst subclass: 'AugAssignAst'
 %
 expectvalue /Class
 doit
-AugAssignAst comment:
+AugAssignAst comment: 
 'No class-specific documentation for PyAugAssign, hierarchy is:
 Object
   AbstractNode( parent)
@@ -2661,7 +2490,7 @@ StatementAst subclass: 'BreakAst'
 %
 expectvalue /Class
 doit
-BreakAst comment:
+BreakAst comment: 
 'No class-specific documentation for PyBreak, hierarchy is:
 Object
   AbstractNode( parent)
@@ -2690,7 +2519,7 @@ StatementAst subclass: 'ClassDefAst'
 %
 expectvalue /Class
 doit
-ClassDefAst comment:
+ClassDefAst comment: 
 'No class-specific documentation for ClassDefAst, hierarchy is:
 Object
   AbstractNode( parent line column)
@@ -2717,7 +2546,7 @@ StatementAst subclass: 'ContinueAst'
 %
 expectvalue /Class
 doit
-ContinueAst comment:
+ContinueAst comment: 
 'No class-specific documentation for PyContinue, hierarchy is:
 Object
   AbstractNode( parent)
@@ -2745,7 +2574,7 @@ StatementAst subclass: 'DeleteAst'
 %
 expectvalue /Class
 doit
-DeleteAst comment:
+DeleteAst comment: 
 'No class-specific documentation for PyDelete, hierarchy is:
 Object
   AbstractNode( parent line column)
@@ -2772,7 +2601,7 @@ StatementAst subclass: 'ExprAst'
 %
 expectvalue /Class
 doit
-ExprAst comment:
+ExprAst comment: 
 'No class-specific documentation for ExprAst, hierarchy is:
 Object
   AbstractNode( parent line column)
@@ -2800,7 +2629,7 @@ StatementAst subclass: 'ForAst'
 %
 expectvalue /Class
 doit
-ForAst comment:
+ForAst comment: 
 'For(expr target, expr iter, stmt* body, stmt* orelse) 									// 3.7
 For(expr target, expr iter, stmt* body, stmt* orelse, string? type_comment)	// 3.8'
 %
@@ -2824,7 +2653,7 @@ StatementAst subclass: 'FunctionDefAst'
 %
 expectvalue /Class
 doit
-FunctionDefAst comment:
+FunctionDefAst comment: 
 'FunctionDef(identifier name, arguments args,
                        stmt* body, expr* decorator_list, expr? returns,
                        string? type_comment)'
@@ -2848,7 +2677,7 @@ FunctionDefAst subclass: 'ClassFunctionDefAst'
 %
 expectvalue /Class
 doit
-ClassFunctionDefAst comment:
+ClassFunctionDefAst comment: 
 'No class-specific documentation for ClassFunctionDefAst, hierarchy is:
 Object
   AbstractNode( parent)
@@ -2877,7 +2706,7 @@ FunctionDefAst subclass: 'InstanceFunctionDefAst'
 %
 expectvalue /Class
 doit
-InstanceFunctionDefAst comment:
+InstanceFunctionDefAst comment: 
 'No class-specific documentation for InstanceFunctionDefAst, hierarchy is:
 Object
   AbstractNode( parent)
@@ -2923,7 +2752,7 @@ StatementAst subclass: 'GlobalAst'
 %
 expectvalue /Class
 doit
-GlobalAst comment:
+GlobalAst comment: 
 'No class-specific documentation for PyGlobal, hierarchy is:
 Object
   AbstractNode( parent)
@@ -2951,7 +2780,7 @@ StatementAst subclass: 'IfAst'
 %
 expectvalue /Class
 doit
-IfAst comment:
+IfAst comment: 
 'No class-specific documentation for IfAst, hierarchy is:
 Object
   AbstractNode( line column)
@@ -2977,7 +2806,7 @@ StatementAst subclass: 'ImportAst'
 %
 expectvalue /Class
 doit
-ImportAst comment:
+ImportAst comment: 
 'No class-specific documentation for PyImport, hierarchy is:
 Object
   AbstractNode
@@ -3003,7 +2832,7 @@ StatementAst subclass: 'ImportFromAst'
 %
 expectvalue /Class
 doit
-ImportFromAst comment:
+ImportFromAst comment: 
 'No class-specific documentation for PyImportFrom, hierarchy is:
 Object
   AbstractNode( parent line column)
@@ -3030,7 +2859,7 @@ StatementAst subclass: 'NonlocalAst'
 %
 expectvalue /Class
 doit
-NonlocalAst comment:
+NonlocalAst comment: 
 'No class-specific documentation for PyNonlocal, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3058,7 +2887,7 @@ StatementAst subclass: 'PassAst'
 %
 expectvalue /Class
 doit
-PassAst comment:
+PassAst comment: 
 'No class-specific documentation for PassAst, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3086,7 +2915,7 @@ StatementAst subclass: 'RaiseAst'
 %
 expectvalue /Class
 doit
-RaiseAst comment:
+RaiseAst comment: 
 'No class-specific documentation for PyRaise, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3114,7 +2943,7 @@ StatementAst subclass: 'ReturnAst'
 %
 expectvalue /Class
 doit
-ReturnAst comment:
+ReturnAst comment: 
 'No class-specific documentation for ReturnAst, hierarchy is:
 Object
   AbstractNode( parent line column)
@@ -3142,7 +2971,7 @@ StatementAst subclass: 'TryAst'
 %
 expectvalue /Class
 doit
-TryAst comment:
+TryAst comment: 
 'No class-specific documentation for PyTry, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3170,7 +2999,7 @@ StatementAst subclass: 'WhileAst'
 %
 expectvalue /Class
 doit
-WhileAst comment:
+WhileAst comment: 
 'No class-specific documentation for PyWhile, hierarchy is:
 Object
   AbstractNode( parent line column)
@@ -3197,7 +3026,7 @@ StatementAst subclass: 'WithAst'
 %
 expectvalue /Class
 doit
-WithAst comment:
+WithAst comment: 
 'AsyncWith(withitem* items, stmt* body, string? type_comment)'
 %
 expectvalue /Class
@@ -3219,7 +3048,7 @@ AbstractNode subclass: 'AliasAst'
 %
 expectvalue /Class
 doit
-AliasAst comment:
+AliasAst comment: 
 'No class-specific documentation for AliasAst, hierarchy is:
 Object
   AbstractNode
@@ -3246,7 +3075,7 @@ AbstractNode subclass: 'ArgumentsAst'
 %
 expectvalue /Class
 doit
-ArgumentsAst comment:
+ArgumentsAst comment: 
 'arguments = (arg* posonlyargs, arg* args, arg? vararg, arg* kwonlyargs,
                  expr* kw_defaults, arg? kwarg, expr* defaults)'
 %
@@ -3269,7 +3098,7 @@ AbstractNode subclass: 'CmpOpAst'
 %
 expectvalue /Class
 doit
-CmpOpAst comment:
+CmpOpAst comment: 
 'No class-specific documentation for CmpOpAst, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3295,7 +3124,7 @@ CmpOpAst subclass: 'EqAst'
 %
 expectvalue /Class
 doit
-EqAst comment:
+EqAst comment: 
 'No class-specific documentation for PyEq, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3322,7 +3151,7 @@ CmpOpAst subclass: 'GtAst'
 %
 expectvalue /Class
 doit
-GtAst comment:
+GtAst comment: 
 'No class-specific documentation for PyGt, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3349,7 +3178,7 @@ CmpOpAst subclass: 'GtEAst'
 %
 expectvalue /Class
 doit
-GtEAst comment:
+GtEAst comment: 
 'No class-specific documentation for PyGtE, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3376,7 +3205,7 @@ CmpOpAst subclass: 'InAst'
 %
 expectvalue /Class
 doit
-InAst comment:
+InAst comment: 
 'No class-specific documentation for PyIn, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3403,7 +3232,7 @@ CmpOpAst subclass: 'IsAst'
 %
 expectvalue /Class
 doit
-IsAst comment:
+IsAst comment: 
 'No class-specific documentation for PyIs, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3430,7 +3259,7 @@ CmpOpAst subclass: 'IsNotAst'
 %
 expectvalue /Class
 doit
-IsNotAst comment:
+IsNotAst comment: 
 'No class-specific documentation for PyIsNot, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3457,7 +3286,7 @@ CmpOpAst subclass: 'LtAst'
 %
 expectvalue /Class
 doit
-LtAst comment:
+LtAst comment: 
 'No class-specific documentation for PyLt, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3484,7 +3313,7 @@ CmpOpAst subclass: 'LtEAst'
 %
 expectvalue /Class
 doit
-LtEAst comment:
+LtEAst comment: 
 'No class-specific documentation for PyLtE, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3511,7 +3340,7 @@ CmpOpAst subclass: 'NotEqAst'
 %
 expectvalue /Class
 doit
-NotEqAst comment:
+NotEqAst comment: 
 'No class-specific documentation for PyNotEq, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3538,7 +3367,7 @@ CmpOpAst subclass: 'NotInAst'
 %
 expectvalue /Class
 doit
-NotInAst comment:
+NotInAst comment: 
 'No class-specific documentation for PyNotIn, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3566,7 +3395,7 @@ AbstractNode subclass: 'ComprehensionAst'
 %
 expectvalue /Class
 doit
-ComprehensionAst comment:
+ComprehensionAst comment: 
 'No class-specific documentation for ComprehensionAst, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3592,7 +3421,7 @@ AbstractNode subclass: 'ExpressionContextAst'
 %
 expectvalue /Class
 doit
-ExpressionContextAst comment:
+ExpressionContextAst comment: 
 'No class-specific documentation for ExpressionContextAst, hierarchy is:
 Object
   AbstractNode( line column)
@@ -3618,7 +3447,7 @@ ExpressionContextAst subclass: 'AugLoadAst'
 %
 expectvalue /Class
 doit
-AugLoadAst comment:
+AugLoadAst comment: 
 'No class-specific documentation for PyAugLoad, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3645,7 +3474,7 @@ ExpressionContextAst subclass: 'AugStoreAst'
 %
 expectvalue /Class
 doit
-AugStoreAst comment:
+AugStoreAst comment: 
 'No class-specific documentation for PyAugStore, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3672,7 +3501,7 @@ ExpressionContextAst subclass: 'DelAst'
 %
 expectvalue /Class
 doit
-DelAst comment:
+DelAst comment: 
 'No class-specific documentation for PyDel, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3699,7 +3528,7 @@ ExpressionContextAst subclass: 'LoadAst'
 %
 expectvalue /Class
 doit
-LoadAst comment:
+LoadAst comment: 
 'No class-specific documentation for LoadAst, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3726,7 +3555,7 @@ ExpressionContextAst subclass: 'ParamAst'
 %
 expectvalue /Class
 doit
-ParamAst comment:
+ParamAst comment: 
 'No class-specific documentation for PyParam, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3753,7 +3582,7 @@ ExpressionContextAst subclass: 'StoreAst'
 %
 expectvalue /Class
 doit
-StoreAst comment:
+StoreAst comment: 
 'No class-specific documentation for StoreAst, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3781,7 +3610,7 @@ AbstractNode subclass: 'ModuleAst'
 %
 expectvalue /Class
 doit
-ModuleAst comment:
+ModuleAst comment: 
 'A Module is a file containing Python definitions and statements. When a file (''script'') is executed from the command line, (e.g., ''python myFile.py''), the module global variable `__name__` is set to ''__main__''. A Module can be imported into another module using the `Import` command, and the module global variable `__name__` is then the name of the file.
 
 https://docs.python.org/3/tutorial/modules.html?highlight=module'
@@ -3805,7 +3634,7 @@ ModuleAst subclass: 'Package'
 %
 expectvalue /Class
 doit
-Package comment:
+Package comment: 
 'Packages are a way of structuring Python’s module namespace by using “dotted module names”.
 See https://docs.python.org/3/tutorial/modules.html#packages for details.'
 %
@@ -3828,7 +3657,7 @@ AbstractNode subclass: 'OperatorAst'
 %
 expectvalue /Class
 doit
-OperatorAst comment:
+OperatorAst comment: 
 'No class-specific documentation for OperatorAst, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3854,7 +3683,7 @@ OperatorAst subclass: 'AddAst'
 %
 expectvalue /Class
 doit
-AddAst comment:
+AddAst comment: 
 'No class-specific documentation for PyAdd, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3881,7 +3710,7 @@ OperatorAst subclass: 'BitAndAst'
 %
 expectvalue /Class
 doit
-BitAndAst comment:
+BitAndAst comment: 
 'No class-specific documentation for PyBitAnd, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3908,7 +3737,7 @@ OperatorAst subclass: 'BitOrAst'
 %
 expectvalue /Class
 doit
-BitOrAst comment:
+BitOrAst comment: 
 'No class-specific documentation for PyBitOr, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3935,7 +3764,7 @@ OperatorAst subclass: 'BitXorAst'
 %
 expectvalue /Class
 doit
-BitXorAst comment:
+BitXorAst comment: 
 'No class-specific documentation for PyBitXor, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3962,7 +3791,7 @@ OperatorAst subclass: 'DivAst'
 %
 expectvalue /Class
 doit
-DivAst comment:
+DivAst comment: 
 'No class-specific documentation for PyDiv, hierarchy is:
 Object
   AbstractNode( parent)
@@ -3989,7 +3818,7 @@ OperatorAst subclass: 'FloorDivAst'
 %
 expectvalue /Class
 doit
-FloorDivAst comment:
+FloorDivAst comment: 
 'No class-specific documentation for PyFloorDiv, hierarchy is:
 Object
   AbstractNode( parent)
@@ -4016,7 +3845,7 @@ OperatorAst subclass: 'LShiftAst'
 %
 expectvalue /Class
 doit
-LShiftAst comment:
+LShiftAst comment: 
 'No class-specific documentation for PyLShift, hierarchy is:
 Object
   AbstractNode( parent)
@@ -4043,7 +3872,7 @@ OperatorAst subclass: 'MatMultAst'
 %
 expectvalue /Class
 doit
-MatMultAst comment:
+MatMultAst comment: 
 'No class-specific documentation for PyMatMult, hierarchy is:
 Object
   AbstractNode( parent)
@@ -4070,7 +3899,7 @@ OperatorAst subclass: 'ModAst'
 %
 expectvalue /Class
 doit
-ModAst comment:
+ModAst comment: 
 'No class-specific documentation for PyMod, hierarchy is:
 Object
   AbstractNode( parent)
@@ -4097,7 +3926,7 @@ OperatorAst subclass: 'MultAst'
 %
 expectvalue /Class
 doit
-MultAst comment:
+MultAst comment: 
 'No class-specific documentation for PyMult, hierarchy is:
 Object
   AbstractNode( parent)
@@ -4124,7 +3953,7 @@ OperatorAst subclass: 'PowAst'
 %
 expectvalue /Class
 doit
-PowAst comment:
+PowAst comment: 
 'No class-specific documentation for PyPow, hierarchy is:
 Object
   AbstractNode( parent)
@@ -4151,7 +3980,7 @@ OperatorAst subclass: 'RShiftAst'
 %
 expectvalue /Class
 doit
-RShiftAst comment:
+RShiftAst comment: 
 'No class-specific documentation for PyRShift, hierarchy is:
 Object
   AbstractNode( parent)
@@ -4178,7 +4007,7 @@ OperatorAst subclass: 'SubAst'
 %
 expectvalue /Class
 doit
-SubAst comment:
+SubAst comment: 
 'No class-specific documentation for PySub, hierarchy is:
 Object
   AbstractNode( parent)
@@ -4205,7 +4034,7 @@ AbstractNode subclass: 'SuiteAst'
 %
 expectvalue /Class
 doit
-SuiteAst comment:
+SuiteAst comment: 
 'No class-specific documentation for SuiteAst, hierarchy is:
 Object
   AbstractNode( parent)
@@ -4265,7 +4094,7 @@ AbstractNode subclass: 'WithItemAst'
 %
 expectvalue /Class
 doit
-WithItemAst comment:
+WithItemAst comment: 
 'No class-specific documentation for WithItemAst, hierarchy is:
 Object
   AbstractNode( parent)
@@ -4275,23 +4104,6 @@ Object
 expectvalue /Class
 doit
 WithItemAst category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for Linearization
-expectvalue /Class
-doit
-Object subclass: 'Linearization'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-Linearization category: 'builtins'
 %
 set compile_env: 0
 ! ------------------- Class definition for object
@@ -4308,47 +4120,60 @@ Object subclass: 'object'
 %
 expectvalue /Class
 doit
-object comment:
-'No class-specific documentation for PythonObject, hierarchy is:
-object
-  PythonObject( classAst dictionary)
+object comment: 
 '
+I implement the behavior found in Python''s object. From Python, we find the following attributes:
+
+>>> dir(object())
+[''__class__'', ''__delattr__'', ''__dir__'', ''__doc__'', ''__eq__'', ''__format__'', ''__ge__'', ''__getattribute__'', ''__gt__'', ''__hash__'', ''__init__'', ''__init_subclass__'', ''__le__'', ''__lt__'', ''__ne__'', ''__new__'', ''__reduce__'', ''__reduce_ex__'', ''__repr__'', ''__setattr__'', ''__sizeof__'', ''__str__'', ''__subclasshook__'']
+
+These should be implemented in the "Python" method category and follow the Python name (with parameters added as needed; see below). Smalltalk methods added to support the Python implementation will have a ''___'' prefix (but nothing extra at the end). In a few rare cases we will have Smalltalk names (including #printOn:). We will see if this becomes an issue.
+
+Attributes such as ''__doc__'' that return something other than a function or method simply return the correct item. Attributes such as ''__dir__'' that in Python return a function or method are implemented as if they were called so return the result of their execution. This is done to make the code cleaner and look more like Smalltalk. We should add a way to distinguish the two cases (perhaps a pragma?), and then if the Python code retrieves a function-style attribute but does not call it, we should find a way to return a callable (a block?) instead. This makes the common case (calling a function) fast and simple, while making the uncommon case still workable. Note also that the Smalltalk functions have names that include an indication of the number of arguments. We will not bother to create Smalltalk methods for ''__eq__'' but just go ahead and make one for ''__eq__:''. Also, if a Python method takes multiple parameters, we will simply append ''_:'' rather than trying to be creative with the name.'
 %
 expectvalue /Class
 doit
-object category: 'builtins'
+object category: 'BuiltIns-Kernel'
 %
 set compile_env: 0
-! ------------------- Class definition for AbstractContainer
+! ------------------- Class definition for builtin_function_or_method
 expectvalue /Class
 doit
-object subclass: 'AbstractContainer'
-  instVarNames: #( container attributes)
+object subclass: 'builtin_function_or_method'
+  instVarNames: #()
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( disallowGciStore)
+  options: #()
 
 %
 expectvalue /Class
 doit
-AbstractContainer comment:
-'No class-specific documentation for AbstractContainer, hierarchy is:
-Object
-  object
-    AbstractContainer( container)
-'
+builtin_function_or_method category: 'BuiltIns-Kernel'
+%
+set compile_env: 0
+! ------------------- Class definition for BuiltinImporter
+expectvalue /Class
+doit
+object subclass: 'BuiltinImporter'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
 %
 expectvalue /Class
 doit
-AbstractContainer category: 'builtins'
+BuiltinImporter category: 'BuiltIns-Kernel'
 %
 set compile_env: 0
 ! ------------------- Class definition for bytearray
 expectvalue /Class
 doit
-AbstractContainer subclass: 'bytearray'
+object subclass: 'bytearray'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -4359,40 +4184,103 @@ AbstractContainer subclass: 'bytearray'
 %
 expectvalue /Class
 doit
-bytearray comment:
-'https://docs.python.org/3/library/stdtypes.html#bytearray'
+bytearray category: 'BuiltIns-Kernel'
+%
+set compile_env: 0
+! ------------------- Class definition for classmethod
+expectvalue /Class
+doit
+object subclass: 'classmethod'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
 %
 expectvalue /Class
 doit
-bytearray category: 'builtins'
+classmethod category: 'BuiltIns-Kernel'
+%
+set compile_env: 0
+! ------------------- Class definition for Container
+expectvalue /Class
+doit
+object subclass: 'Container'
+  instVarNames: #( container)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+Container comment: 
+'
+I am an abstract superclass for Python containers and implement what would otherwise be duplicate code. This includes the following (listed here so it can be copied to subclass comments):
+
+self ___dir
+a Set(''__gt__'' ''__ge__'' ''__eq__'' ''__imul__'' ''__add__'' ''__contains__'' ''__format__'' ''__str__'' ''__delattr__'' ''index'' ''__setattr__'' ''__getattribute__'' ''__subclasshook__'' ''__ne__'' ''__sizeof__'' ''__dir__'' ''__mul__'' ''__class__'' ''clear'' ''__doc__'' ''__repr__'' ''copy'' ''__new__'' ''__lt__'' ''__le__'' ''count'' ''__hash__'' ''__len__'' ''__getitem__'')
+'
+%
+expectvalue /Class
+doit
+Container category: 'BuiltIns-Containers'
 %
 set compile_env: 0
 ! ------------------- Class definition for bytes
 expectvalue /Class
 doit
-AbstractContainer subclass: 'bytes'
+Container subclass: 'bytes'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #( instancesInvariant)
+  options: #()
 
 %
 expectvalue /Class
 doit
-bytes comment:
-'https://docs.python.org/3/library/stdtypes.html#bytes-objects'
+bytes comment: 
+'
+bytes() method returns a bytes object which is an immutable (cannot be modified) sequence of integers in the range 0 <=x < 256.
+
+class bytes(object)
+ |  bytes(iterable_of_ints) -> bytes
+ |  bytes(string, encoding[, errors]) -> bytes
+ |  bytes(bytes_or_buffer) -> immutable copy of bytes_or_buffer
+ |  bytes(int) -> bytes object of size given by the parameter initialized with null bytes
+ |  bytes() -> empty bytes object
+ |
+ |  Construct an immutable array of bytes from:
+ |    - an iterable yielding integers in range(256)
+ |    - a text string encoded using the specified encoding
+ |    - any object implementing the buffer API.
+ |    - an integer
+
+
+>>> dir( bytes )
+[''__add__'', ''__class__'', ''__contains__'', ''__delattr__'', ''__dir__'', ''__doc__'', ''__eq__'', ''__format__'', ''__ge__'', ''__getattribute__'', ''__getitem__'', ''__getnewargs__'', ''__gt__'', ''__hash__'', ''__init__'', ''__init_subclass__'', ''__iter__'', ''__le__'', ''__len__'', ''__lt__'', ''__mod__'', ''__mul__'', ''__ne__'', ''__new__'', ''__reduce__'', ''__reduce_ex__'', ''__repr__'', ''__rmod__'', ''__rmul__'', ''__setattr__'', ''__sizeof__'', ''__str__'', ''__subclasshook__'', ''capitalize'', ''center'', ''count'', ''decode'', ''endswith'', ''expandtabs'', ''find'', ''fromhex'', ''hex'', ''index'', ''isalnum'', ''isalpha'', ''isascii'', ''isdigit'', ''islower'', ''isspace'', ''istitle'', ''isupper'', ''join'', ''ljust'', ''lower'', ''lstrip'', ''maketrans'', ''partition'', ''removeprefix'', ''removesuffix'', ''replace'', ''rfind'', ''rindex'', ''rjust'', ''rpartition'', ''rsplit'', ''rstrip'', ''split'', ''splitlines'', ''startswith'', ''strip'', ''swapcase'', ''title'', ''translate'', ''upper'', ''zfill'']
+
+>>> bytes.mro()
+[<class ''bytes''>, <class ''object''>]
+
+https://www.programiz.com/python-programming/methods/built-in/bytes
+https://docs.python.org/3/library/stdtypes.html#binary-sequence-types-bytes-bytearray-memoryview'
 %
 expectvalue /Class
 doit
-bytes category: 'builtins'
+bytes category: 'BuiltIns-Containers'
 %
 set compile_env: 0
 ! ------------------- Class definition for dict
 expectvalue /Class
 doit
-AbstractContainer subclass: 'dict'
+Container subclass: 'dict'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -4403,110 +4291,40 @@ AbstractContainer subclass: 'dict'
 %
 expectvalue /Class
 doit
-dict comment:
-'A dictonary''s keys must be hashable and are compared using equality (presumably this allows for efficient lookup).
-But a dictionary''s keys and values are iterated over in insertion order, so we we must also keep the insertion order!
-As a first implementation, we will just use an array of keys (odd offsets) and values (even offsets)
-and use a brute force search. Removing a key will leave a gap (no compaction in our first implementation).
-(Make it work, make it right, make it fast!)
-If we use this for a namespace (module, function, or class), then we would need to use Associations
-so that the global and nonlocal commands would work properly. For now they are SymbolDictionary instances.
-
-https://docs.python.org/3/library/stdtypes.html#mapping-types-dict
-
-For an introduction to CPython implementation, see
-https://stackoverflow.com/questions/327311/how-are-pythons-built-in-dictionaries-implemented.'
-%
-expectvalue /Class
-doit
-dict category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for dict_items
-expectvalue /Class
-doit
-AbstractContainer subclass: 'dict_items'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-dict_items comment:
-'No class-specific documentation for dict_items, hierarchy is:
-Object
-  object
-    AbstractContainer( container)
-      dict_items
+dict comment: 
 '
-%
-expectvalue /Class
-doit
-dict_items category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for dict_keys
-expectvalue /Class
-doit
-AbstractContainer subclass: 'dict_keys'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
+|  dict() -> new empty dictionary
+ |  dict(mapping) -> new dictionary initialized from a mapping object''s
+ |      (key, value) pairs
+ |  dict(iterable) -> new dictionary initialized as if via:
+ |      d = {}
+ |      for k, v in iterable:
+ |          d[k] = v
+ |  dict(**kwargs) -> new dictionary initialized with the name=value pairs
+ |      in the keyword argument list.  For example:  dict(one=1, two=2)
+ |
 
-%
-expectvalue /Class
-doit
-dict_keys comment:
-'No class-specific documentation for dict_keys, hierarchy is:
-Object
-  object
-    AbstractContainer( container)
-      dict_keys
-'
-%
-expectvalue /Class
-doit
-dict_keys category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for dict_values
-expectvalue /Class
-doit
-AbstractContainer subclass: 'dict_values'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
+>>> dict.mro()
+[<class ''dict''>, <class ''object''>]
+>>> sorted(set(dir(dict)) - set(dir(object)))
+[''__class_getitem__'', ''__contains__'', ''__delitem__'', ''__getitem__'', ''__ior__'', ''__iter__'', ''__len__'', ''__or__'', ''__reversed__'', ''__ror__'', ''__setitem__'', ''clear'', ''copy'', ''fromkeys'', ''get'', ''items'', ''keys'', ''pop'', ''popitem'', ''setdefault'', ''update'', ''values'']
 
+The following are implemented in Container:
+Container ___dir
+ a Set(''__gt__'' ''__ge__'' ''__eq__'' ''__imul__'' ''__add__'' ''__contains__'' ''__format__'' ''__str__'' ''__delattr__'' ''index'' ''__setattr__'' ''__getattribute__'' ''__subclasshook__'' ''__ne__'' ''__sizeof__'' ''__dir__'' ''__mul__'' ''__class__'' ''clear'' ''__doc__'' ''__repr__'' ''copy'' ''__new__'' ''__lt__'' ''__le__'' ''count'' ''__hash__'' ''__len__'' ''__getitem__'')
+
+https://www.programiz.com/python-programming/methods/built-in/dict
+https://docs.python.org/3/tutorial/datastructures.html#dictionaries'
 %
 expectvalue /Class
 doit
-dict_values comment:
-'No class-specific documentation for dict_values, hierarchy is:
-Object
-  object
-    AbstractContainer( container)
-      dict_values
-'
-%
-expectvalue /Class
-doit
-dict_values category: 'builtins'
+dict category: 'BuiltIns-Containers'
 %
 set compile_env: 0
 ! ------------------- Class definition for frozenset
 expectvalue /Class
 doit
-AbstractContainer subclass: 'frozenset'
+Container subclass: 'frozenset'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -4517,40 +4335,30 @@ AbstractContainer subclass: 'frozenset'
 %
 expectvalue /Class
 doit
-frozenset comment:
-'No class-specific documentation for frozenset, hierarchy is:
-Object
-  object
-    AbstractContainer( container)
-      frozenset
+frozenset comment: 
 '
-%
-expectvalue /Class
-doit
-frozenset category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for set
-expectvalue /Class
-doit
-frozenset subclass: 'set'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
+Build an immutable unordered collection of unique elements.
 
+>>> frozenset.mro()
+[<class ''frozenset''>, <class ''object''>]
+>>> sorted(set(dir(frozenset)) - set(dir(object)))
+[''__and__'', ''__class_getitem__'', ''__contains__'', ''__iter__'', ''__len__'', ''__or__'', ''__rand__'', ''__ror__'', ''__rsub__'', ''__rxor__'', ''__sub__'', ''__xor__'', ''copy'', ''difference'', ''intersection'', ''isdisjoint'', ''issubset'', ''issuperset'', ''symmetric_difference'', ''union'']
+
+The following are implemented in Container:
+Container ___dir
+ a Set(''__gt__'' ''__ge__'' ''__eq__'' ''__imul__'' ''__add__'' ''__contains__'' ''__format__'' ''__str__'' ''__delattr__'' ''index'' ''__setattr__'' ''__getattribute__'' ''__subclasshook__'' ''__ne__'' ''__sizeof__'' ''__dir__'' ''__mul__'' ''__class__'' ''clear'' ''__doc__'' ''__repr__'' ''copy'' ''__new__'' ''__lt__'' ''__le__'' ''count'' ''__hash__'' ''__len__'' ''__getitem__'')
+
+https://docs.python.org/3/tutorial/datastructures.html'
 %
 expectvalue /Class
 doit
-set category: 'builtins'
+frozenset category: 'BuiltIns-Containers'
 %
 set compile_env: 0
 ! ------------------- Class definition for list
 expectvalue /Class
 doit
-AbstractContainer subclass: 'list'
+Container subclass: 'list'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -4561,24 +4369,31 @@ AbstractContainer subclass: 'list'
 %
 expectvalue /Class
 doit
-list comment:
-'No class-specific documentation for list, hierarchy is:
-Object
-  Collection
-    SequenceableCollection
-      Array
-        list
+list comment: 
 '
+I am a mutable sequence of arbitrary Python objects.
+
+>>> list.mro()
+[<class ''list''>, <class ''object''>]
+>>> sorted(set(dir(list)) - set(dir(object)))
+[''__add__'', ''__class_getitem__'', ''__contains__'', ''__delitem__'', ''__getitem__'', ''__iadd__'', ''__imul__'', ''__iter__'', ''__len__'', ''__mul__'', ''__reversed__'', ''__rmul__'', ''__setitem__'', ''append'', ''clear'', ''copy'', ''count'', ''extend'', ''index'', ''insert'', ''pop'', ''remove'', ''reverse'', ''sort'']
+>>>
+
+The following are implemented in Container:
+Container ___dir
+ a Set(''__gt__'' ''__ge__'' ''__eq__'' ''__imul__'' ''__add__'' ''__contains__'' ''__format__'' ''__str__'' ''__setattr__'' ''index'' ''__delattr__'' ''__getattribute__'' ''__subclasshook__'' ''__ne__'' ''__sizeof__'' ''__dir__'' ''__mul__'' ''__class__'' ''__doc__'' ''__repr__'' ''__new__'' ''__lt__'' ''__le__'' ''count'' ''__hash__'' ''__len__'' ''__getitem__'')
+
+https://docs.python.org/3/tutorial/datastructures.html'
 %
 expectvalue /Class
 doit
-list category: 'builtins'
+list category: 'BuiltIns-Containers'
 %
 set compile_env: 0
-! ------------------- Class definition for str
+! ------------------- Class definition for set
 expectvalue /Class
 doit
-AbstractContainer subclass: 'str'
+Container subclass: 'set'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -4589,26 +4404,33 @@ AbstractContainer subclass: 'str'
 %
 expectvalue /Class
 doit
-str comment:
-'No class-specific documentation for str, hierarchy is:
-Object
-  Collection
-    SequenceableCollection
-      CharacterCollection
-        String
-          Unicode7
-            str
+set comment: 
 '
+Python also includes a data type for sets. A set is an unordered collection with no duplicate elements. Basic uses include membership testing and eliminating duplicate entries. Set objects also support mathematical operations like union, intersection, difference, and symmetric difference.
+
+
+>>> set.mro()
+[<class ''set''>, <class ''object''>]
+>>> sorted(set(dir(set)) - set(dir(object)))
+[''__and__'', ''__class_getitem__'', ''__contains__'', ''__iand__'', ''__ior__'', ''__isub__'', ''__iter__'', ''__ixor__'', ''__len__'', ''__or__'', ''__rand__'', ''__ror__'', ''__rsub__'', ''__rxor__'', ''__sub__'', ''__xor__'', ''add'', ''clear'', ''copy'', ''difference'', ''difference_update'', ''discard'', ''intersection'', ''intersection_update'', ''isdisjoint'', ''issubset'', ''issuperset'', ''pop'', ''remove'', ''symmetric_difference'', ''symmetric_difference_update'', ''union'', ''update'']
+
+
+The following are implemented in Container:
+Container ___dir
+ a Set(''__gt__'' ''__ge__'' ''__eq__'' ''__imul__'' ''__add__'' ''__contains__'' ''__format__'' ''__str__'' ''__delattr__'' ''index'' ''__setattr__'' ''__getattribute__'' ''__subclasshook__'' ''__ne__'' ''__sizeof__'' ''__dir__'' ''__mul__'' ''__class__'' ''clear'' ''__doc__'' ''__repr__'' ''copy'' ''__new__'' ''__lt__'' ''__le__'' ''count'' ''__hash__'' ''__len__'' ''__getitem__'')
+
+https://docs.python.org/3/tutorial/datastructures.html#tuples-and-sequences
+https://docs.python.org/3/tutorial/datastructures.html'
 %
 expectvalue /Class
 doit
-str category: 'builtins'
+set category: 'BuiltIns-Containers'
 %
 set compile_env: 0
 ! ------------------- Class definition for tuple
 expectvalue /Class
 doit
-AbstractContainer subclass: 'tuple'
+Container subclass: 'tuple'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -4619,50 +4441,31 @@ AbstractContainer subclass: 'tuple'
 %
 expectvalue /Class
 doit
-tuple comment:
-'No class-specific documentation for tuple, hierarchy is:
-Object
-  Collection
-    SequenceableCollection
-      Array
-        tuple
+tuple comment: 
 '
-%
-expectvalue /Class
-doit
-tuple category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for AbstractIterator
-expectvalue /Class
-doit
-object subclass: 'AbstractIterator'
-  instVarNames: #( container index)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
+I am an immutable sequence of arbitrary Python objects.
 
+>>> tuple.mro()
+[<class ''tuple''>, <class ''object''>]
+>>> sorted(set(dir(tuple)) - set(dir(object)))
+[''__add__'', ''__class_getitem__'', ''__contains__'', ''__getitem__'', ''__getnewargs__'', ''__iter__'', ''__len__'', ''__mul__'', ''__rmul__'', ''count'', ''index'']
+>>>
+
+The following are implemented in Container:
+Container ___dir
+ a Set(''__gt__'' ''__ge__'' ''__eq__'' ''__imul__'' ''__add__'' ''__contains__'' ''__format__'' ''__str__'' ''__setattr__'' ''index'' ''__delattr__'' ''__getattribute__'' ''__subclasshook__'' ''__ne__'' ''__sizeof__'' ''__dir__'' ''__mul__'' ''__class__'' ''__doc__'' ''__repr__'' ''__new__'' ''__lt__'' ''__le__'' ''count'' ''__hash__'' ''__len__'' ''__getitem__'')
+
+https://docs.python.org/3/tutorial/datastructures.html#tuples-and-sequences'
 %
 expectvalue /Class
 doit
-AbstractIterator comment:
-'No class-specific documentation for AbstractIterator, hierarchy is:
-Object
-  object
-    AbstractIterator( stream)
-'
-%
-expectvalue /Class
-doit
-AbstractIterator category: 'builtins'
+tuple category: 'BuiltIns-Containers'
 %
 set compile_env: 0
-! ------------------- Class definition for dict_itemiterator
+! ------------------- Class definition for enumerate
 expectvalue /Class
 doit
-AbstractIterator subclass: 'dict_itemiterator'
+object subclass: 'enumerate'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -4673,23 +4476,13 @@ AbstractIterator subclass: 'dict_itemiterator'
 %
 expectvalue /Class
 doit
-dict_itemiterator comment:
-'No class-specific documentation for dict_itemiterator, hierarchy is:
-Object
-  object
-    AbstractIterator( stream)
-      dict_itemiterator
-'
-%
-expectvalue /Class
-doit
-dict_itemiterator category: 'builtins'
+enumerate category: 'BuiltIns-Kernel'
 %
 set compile_env: 0
-! ------------------- Class definition for dict_keyiterator
+! ------------------- Class definition for filter
 expectvalue /Class
 doit
-AbstractIterator subclass: 'dict_keyiterator'
+object subclass: 'filter'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -4700,23 +4493,13 @@ AbstractIterator subclass: 'dict_keyiterator'
 %
 expectvalue /Class
 doit
-dict_keyiterator comment:
-'No class-specific documentation for dict_keyiterator, hierarchy is:
-Object
-  object
-    AbstractIterator( stream)
-      dict_keyiterator
-'
-%
-expectvalue /Class
-doit
-dict_keyiterator category: 'builtins'
+filter category: 'BuiltIns-Kernel'
 %
 set compile_env: 0
-! ------------------- Class definition for dict_valueiterator
+! ------------------- Class definition for function
 expectvalue /Class
 doit
-AbstractIterator subclass: 'dict_valueiterator'
+object subclass: 'function'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -4727,24 +4510,14 @@ AbstractIterator subclass: 'dict_valueiterator'
 %
 expectvalue /Class
 doit
-dict_valueiterator comment:
-'No class-specific documentation for dict_valueiterator, hierarchy is:
-Object
-  object
-    AbstractIterator( stream)
-      dict_valueiterator
-'
-%
-expectvalue /Class
-doit
-dict_valueiterator category: 'builtins'
+function category: 'BuiltIns-Kernel'
 %
 set compile_env: 0
-! ------------------- Class definition for list_iterator
+! ------------------- Class definition for Magnitude
 expectvalue /Class
 doit
-AbstractIterator subclass: 'list_iterator'
-  instVarNames: #()
+object subclass: 'Magnitude'
+  instVarNames: #( value)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -4754,121 +4527,20 @@ AbstractIterator subclass: 'list_iterator'
 %
 expectvalue /Class
 doit
-list_iterator comment:
-'No class-specific documentation for list_iterator, hierarchy is:
-Object
-  object
-    AbstractIterator( stream)
-      list_iterator
+Magnitude comment: 
+'
+https://docs.python.org/3/library/operator.html
 '
 %
 expectvalue /Class
 doit
-list_iterator category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for range_iterator
-expectvalue /Class
-doit
-AbstractIterator subclass: 'range_iterator'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-range_iterator comment:
-'No class-specific documentation for range_iterator, hierarchy is:
-Object
-  object
-    AbstractIterator( stream)
-      range_iterator
-'
-%
-expectvalue /Class
-doit
-range_iterator category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for set_iterator
-expectvalue /Class
-doit
-AbstractIterator subclass: 'set_iterator'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-set_iterator comment:
-'No class-specific documentation for set_iterator, hierarchy is:
-Object
-  object
-    AbstractIterator( stream)
-      set_iterator
-'
-%
-expectvalue /Class
-doit
-set_iterator category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for tuple_iterator
-expectvalue /Class
-doit
-AbstractIterator subclass: 'tuple_iterator'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-tuple_iterator comment:
-'No class-specific documentation for tuple_iterator, hierarchy is:
-Object
-  object
-    AbstractIterator( stream)
-      tuple_iterator
-'
-%
-expectvalue /Class
-doit
-tuple_iterator category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for AbstractNumber
-expectvalue /Class
-doit
-object subclass: 'AbstractNumber'
-  instVarNames: #( number)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-AbstractNumber category: 'builtins'
+Magnitude category: 'BuiltIns-Magnitudes'
 %
 set compile_env: 0
 ! ------------------- Class definition for complex
 expectvalue /Class
 doit
-AbstractNumber subclass: 'complex'
+Magnitude subclass: 'complex'
   instVarNames: #( imaginary)
   classVars: #()
   classInstVars: #()
@@ -4879,21 +4551,23 @@ AbstractNumber subclass: 'complex'
 %
 expectvalue /Class
 doit
-complex comment:
-'No class-specific documentation for complex, hierarchy is:
-Object
-  complex( real imaginary)
+complex comment: 
+'
+>>> complex.mro()
+[<class ''complex''>, <class ''object''>]
+>>> sorted(set(dir(complex)) - set(dir(object)))
+[''__abs__'', ''__add__'', ''__bool__'', ''__divmod__'', ''__float__'', ''__floordiv__'', ''__getnewargs__'', ''__int__'', ''__mod__'', ''__mul__'', ''__neg__'', ''__pos__'', ''__pow__'', ''__radd__'', ''__rdivmod__'', ''__rfloordiv__'', ''__rmod__'', ''__rmul__'', ''__rpow__'', ''__rsub__'', ''__rtruediv__'', ''__sub__'', ''__truediv__'', ''conjugate'', ''imag'', ''real'']
 '
 %
 expectvalue /Class
 doit
-complex category: 'builtins'
+complex category: 'BuiltIns-Magnitudes'
 %
 set compile_env: 0
 ! ------------------- Class definition for float
 expectvalue /Class
 doit
-AbstractNumber subclass: 'float'
+Magnitude subclass: 'float'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -4904,22 +4578,24 @@ AbstractNumber subclass: 'float'
 %
 expectvalue /Class
 doit
-float comment:
-'No class-specific documentation for float, hierarchy is:
-Object
-  object
-    float
+float comment: 
+'
+>>> float.mro()
+[<class ''float''>, <class ''object''>]
+
+>>> sorted(set(dir(float)) - set(dir(object)))
+[''__abs__'', ''__add__'', ''__bool__'', ''__ceil__'', ''__divmod__'', ''__float__'', ''__floor__'', ''__floordiv__'', ''__getformat__'', ''__getnewargs__'', ''__int__'', ''__mod__'', ''__mul__'', ''__neg__'', ''__pos__'', ''__pow__'', ''__radd__'', ''__rdivmod__'', ''__rfloordiv__'', ''__rmod__'', ''__rmul__'', ''__round__'', ''__rpow__'', ''__rsub__'', ''__rtruediv__'', ''__set_format__'', ''__sub__'', ''__truediv__'', ''__trunc__'', ''as_integer_ratio'', ''conjugate'', ''fromhex'', ''hex'', ''imag'', ''is_integer'', ''real'']
 '
 %
 expectvalue /Class
 doit
-float category: 'builtins'
+float category: 'BuiltIns-Magnitudes'
 %
 set compile_env: 0
 ! ------------------- Class definition for int
 expectvalue /Class
 doit
-AbstractNumber subclass: 'int'
+Magnitude subclass: 'int'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -4930,16 +4606,20 @@ AbstractNumber subclass: 'int'
 %
 expectvalue /Class
 doit
-int comment:
-'No class-specific documentation for int, hierarchy is:
-Object
-  object
-    int
+int comment: 
+'
+>>> int.mro()
+[<class ''int''>, <class ''object''>]
+
+>>> sorted(set(dir(int)) - set(dir(object)))
+[''__abs__'', ''__add__'', ''__and__'', ''__bool__'', ''__ceil__'', ''__divmod__'', ''__float__'', ''__floor__'', ''__floordiv__'', ''__getnewargs__'', ''__index__'', ''__int__'', ''__invert__'', ''__lshift__'', ''__mod__'', ''__mul__'', ''__neg__'', ''__or__'', ''__pos__'', ''__pow__'', ''__radd__'', ''__rand__'', ''__rdivmod__'', ''__rfloordiv__'', ''__rlshift__'', ''__rmod__'', ''__rmul__'', ''__ror__'', ''__round__'', ''__rpow__'', ''__rrshift__'', ''__rshift__'', ''__rsub__'', ''__rtruediv__'', ''__rxor__'', ''__sub__'', ''__truediv__'', ''__trunc__'', ''__xor__'', ''as_integer_ratio'', ''bit_length'', ''conjugate'', ''denominator'', ''from_bytes'', ''imag'', ''numerator'', ''real'', ''to_bytes'']
+
+
 '
 %
 expectvalue /Class
 doit
-int category: 'builtins'
+int category: 'BuiltIns-Magnitudes'
 %
 set compile_env: 0
 ! ------------------- Class definition for bool
@@ -4948,33 +4628,6 @@ doit
 int subclass: 'bool'
   instVarNames: #()
   classVars: #()
-  classInstVars: #( t f)
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-bool comment:
-'No class-specific documentation for bool, hierarchy is:
-Object
-  object
-    int
-      bool
-'
-%
-expectvalue /Class
-doit
-bool category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for class
-expectvalue /Class
-doit
-object subclass: 'class'
-  instVarNames: #( astNode scope)
-  classVars: #()
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
@@ -4983,68 +4636,13 @@ object subclass: 'class'
 %
 expectvalue /Class
 doit
-class comment:
-'This is the runtime artifact created by a class definition. Note that a class defined in a function will be created anew each time the function is called, so we don''t share the scope (as is done for a module).'
-%
-expectvalue /Class
-doit
-class category: 'builtins'
+bool category: 'BuiltIns-Magnitudes'
 %
 set compile_env: 0
-! ------------------- Class definition for file
+! ------------------- Class definition for map
 expectvalue /Class
 doit
-object subclass: 'file'
-  instVarNames: #( fileObject)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-file comment:
-'class io.TextIOWrapper(buffer, encoding=None, errors=None, newline=None, line_buffering=False, write_through=False)
-A buffered text stream over a BufferedIOBase binary stream. It inherits TextIOBase.
-
-https://docs.python.org/3/library/io.html#io.TextIOWrapper'
-%
-expectvalue /Class
-doit
-file category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for function
-expectvalue /Class
-doit
-object subclass: 'function'
-  instVarNames: #( astNode scope)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-function comment:
-'Instances of function are created by executing a FunctionDefAst.
-
-https://docs.python.org/3/reference/compound_stmts.html#function-definitions
-https://docs.python.org/3/reference/expressions.html#calls'
-%
-expectvalue /Class
-doit
-function category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for ClassFunction
-expectvalue /Class
-doit
-function subclass: 'ClassFunction'
+object subclass: 'map'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -5055,22 +4653,13 @@ function subclass: 'ClassFunction'
 %
 expectvalue /Class
 doit
-ClassFunction comment:
-'No class-specific documentation for ClassFunction, hierarchy is:
-Object
-  function( astNode scope)
-    ClassFunction
-'
-%
-expectvalue /Class
-doit
-ClassFunction category: 'builtins'
+map category: 'BuiltIns-Kernel'
 %
 set compile_env: 0
-! ------------------- Class definition for InstanceFunction
+! ------------------- Class definition for memoryview
 expectvalue /Class
 doit
-function subclass: 'InstanceFunction'
+object subclass: 'memoryview'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -5081,88 +4670,13 @@ function subclass: 'InstanceFunction'
 %
 expectvalue /Class
 doit
-InstanceFunction comment:
-'No class-specific documentation for InstanceFunction, hierarchy is:
-Object
-  function( astNode scope)
-    InstanceFunction
-'
-%
-expectvalue /Class
-doit
-InstanceFunction category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for StaticFunction
-expectvalue /Class
-doit
-function subclass: 'StaticFunction'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-StaticFunction category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for Instance
-expectvalue /Class
-doit
-object subclass: 'Instance'
-  instVarNames: #( __class__ __dict__)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-Instance comment:
-'No class-specific documentation for Instance, hierarchy is:
-Object
-  SimpleObject( classAst)
-    object( variables)
-      Instance( attributes)
-'
-%
-expectvalue /Class
-doit
-Instance category: 'builtins'
+memoryview category: 'BuiltIns-Kernel'
 %
 set compile_env: 0
 ! ------------------- Class definition for module
 expectvalue /Class
 doit
 object subclass: 'module'
-  instVarNames: #( globals)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-module comment:
-'module is the abstract superclass for modules coded in Smalltalk.'
-%
-expectvalue /Class
-doit
-module category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for _imp
-expectvalue /Class
-doit
-module subclass: '_imp'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -5173,44 +4687,13 @@ module subclass: '_imp'
 %
 expectvalue /Class
 doit
-_imp comment:
-'https://docs.python.org/3/library/importlib.html
-cpython/Python/import.c
-
-dir(sys.modules[''_imp''])
-[
-    ''__doc__,
-    ''__loader__,
-    ''__name__,
-    ''__package__,
-    ''__spec__,
-    ''_fix_co_filename,
-    ''acquire_lock,
-    ''check_hash_based_pycs,
-    ''create_builtin,
-    ''create_dynamic,
-    ''exec_builtin,
-    ''exec_dynamic,
-    ''extension_suffixes,
-    ''get_frozen_object,
-    ''init_frozen,
-    ''is_builtin,
-    ''is_frozen,
-    ''is_frozen_package,
-    ''lock_held,
-    ''release_lock,
-    ''source_hash''
-]'
-%
-expectvalue /Class
-doit
-_imp category: 'builtins'
+module category: 'BuiltIns-Kernel'
 %
 set compile_env: 0
-! ------------------- Class definition for _thread
+! ------------------- Class definition for property
 expectvalue /Class
 doit
-module subclass: '_thread'
+object subclass: 'property'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -5221,18 +4704,43 @@ module subclass: '_thread'
 %
 expectvalue /Class
 doit
-_thread comment:
-'https://docs.python.org/3/library/_thread.html'
-%
-expectvalue /Class
-doit
-_thread category: 'builtins'
+property category: 'BuiltIns-Kernel'
 %
 set compile_env: 0
-! ------------------- Class definition for _warnings
+! ------------------- Class definition for range
 expectvalue /Class
 doit
-module subclass: '_warnings'
+object subclass: 'range'
+  instVarNames: #( container)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+range comment: 
+'
+https://pynative.com/python-range-function/
+
+>>> range.mro()
+[<class ''range''>, <class ''object''>]
+
+>>> sorted(set(dir(range)) - set(dir(object)))
+[''__bool__'', ''__contains__'', ''__getitem__'', ''__iter__'', ''__len__'', ''__reversed__'', ''count'', ''index'', ''start'', ''step'', ''stop'']
+'
+%
+expectvalue /Class
+doit
+range category: 'BuiltIns-Containers'
+%
+set compile_env: 0
+! ------------------- Class definition for reversed
+expectvalue /Class
+doit
+object subclass: 'reversed'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -5243,154 +4751,7 @@ module subclass: '_warnings'
 %
 expectvalue /Class
 doit
-_warnings comment:
-'_warnings.__dict__
-{
-    ''__name__'': ''_warnings'',
-    ''__doc__'': ''_warnings provides basic warning filtering support.\nIt is a helper module to speed up interpreter start-up.'',
-    ''__package__'': '''',
-    ''__loader__'': <class ''_frozen_importlib.BuiltinImporter''>,
-    ''__spec__'': ModuleSpec(name=''_warnings'', loader=<class ''_frozen_importlib.BuiltinImporter''>, origin=''built-in''),
-    ''warn'': <built-in function warn>,
-    ''warn_explicit'': <built-in function warn_explicit>,
-    ''_filters_mutated'': <built-in function _filters_mutated>,
-    ''filters'': [
-        (''default'', None, <class ''DeprecationWarning''>, ''__main__'', 0),
-        (''ignore'', None, <class ''DeprecationWarning''>, None, 0),
-        (''ignore'', None, <class ''PendingDeprecationWarning''>, None, 0),
-        (''ignore'', None, <class ''ImportWarning''>, None, 0),
-        (''ignore'', None, <class ''ResourceWarning''>, None, 0)
-    ],
-    ''_onceregistry'': {},
-    ''_defaultaction'': ''default''
-}'
-%
-expectvalue /Class
-doit
-_warnings category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for _weakref
-expectvalue /Class
-doit
-module subclass: '_weakref'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-_weakref comment:
-'_weakref.__dict__
-{
-    ''__name__'': ''_weakref'',
-    ''__doc__'': ''Weak-reference support module.'',
-    ''__package__'': '''',
-    ''__loader__'': <class ''_frozen_importlib.BuiltinImporter''>,
-    ''__spec__'': ModuleSpec(name=''_weakref'', loader=<class ''_frozen_importlib.BuiltinImporter''>, origin=''built-in''),
-    ''getweakrefcount'': <built-in function getweakrefcount>,
-    ''_remove_dead_weakref'': <built-in function _remove_dead_weakref>,
-    ''getweakrefs'': <built-in function getweakrefs>,
-    ''proxy'': <built-in function proxy>,
-    ''ref'': <class ''weakref''>,
-    ''ReferenceType'': <class ''weakref''>,
-    ''ProxyType'': <class ''weakproxy''>,
-    ''CallableProxyType'': <class ''weakcallableproxy''>
-}'
-%
-expectvalue /Class
-doit
-_weakref category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for builtins
-expectvalue /Class
-doit
-module subclass: 'builtins'
-  instVarNames: #( stdout _sys)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-builtins comment:
-'https://docs.python.org/3/library/builtins.html
-
-Note that builtin functions generally bypass the __getattribute__() method.
-https://docs.python.org/3/reference/datamodel.html#special-method-lookup'
-%
-expectvalue /Class
-doit
-builtins category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for sys
-expectvalue /Class
-doit
-module subclass: 'sys'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-sys comment:
-'https://docs.python.org/3/library/sys.html'
-%
-expectvalue /Class
-doit
-sys category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for time
-expectvalue /Class
-doit
-module subclass: 'time'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-time comment:
-'https://docs.python.org/3/library/time.html'
-%
-expectvalue /Class
-doit
-time category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for objectClass
-expectvalue /Class
-doit
-object subclass: 'objectClass'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-objectClass category: 'builtins'
+reversed category: 'BuiltIns-Kernel'
 %
 set compile_env: 0
 ! ------------------- Class definition for Singleton
@@ -5407,51 +4768,7 @@ object subclass: 'Singleton'
 %
 expectvalue /Class
 doit
-Singleton category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for ellipsis
-expectvalue /Class
-doit
-Singleton subclass: 'ellipsis'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-ellipsis comment:
-'https://docs.python.org/3/reference/datamodel.html'
-%
-expectvalue /Class
-doit
-ellipsis category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for NoneType
-expectvalue /Class
-doit
-Singleton subclass: 'NoneType'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #( instancesInvariant)
-
-%
-expectvalue /Class
-doit
-NoneType comment:
-'https://docs.python.org/3/reference/datamodel.html'
-%
-expectvalue /Class
-doit
-NoneType category: 'builtins'
+Singleton category: 'BuiltIns-Kernel'
 %
 set compile_env: 0
 ! ------------------- Class definition for NotImplementedType
@@ -5468,61 +4785,13 @@ Singleton subclass: 'NotImplementedType'
 %
 expectvalue /Class
 doit
-NotImplementedType comment:
-'https://docs.python.org/3/reference/datamodel.html'
-%
-expectvalue /Class
-doit
-NotImplementedType category: 'builtins'
+NotImplementedType category: 'BuiltIns-Kernel'
 %
 set compile_env: 0
 ! ------------------- Class definition for slice
 expectvalue /Class
 doit
 object subclass: 'slice'
-  instVarNames: #( start stop step)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-slice category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for Scope
-expectvalue /Class
-doit
-Object subclass: 'Scope'
-  instVarNames: #( astNode outer variables
-                    superInfo)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-Scope comment:
-'No class-specific documentation for Scope, hierarchy is:
-Object
-  Scope( outer variables)
-'
-%
-expectvalue /Class
-doit
-Scope category: 'builtins'
-%
-set compile_env: 0
-! ------------------- Class definition for GlobalScope
-expectvalue /Class
-doit
-Scope subclass: 'GlobalScope'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -5533,22 +4802,13 @@ Scope subclass: 'GlobalScope'
 %
 expectvalue /Class
 doit
-GlobalScope comment:
-'No class-specific documentation for GlobalScope, hierarchy is:
-Object
-  Scope( outer variables)
-    GlobalScope
-'
-%
-expectvalue /Class
-doit
-GlobalScope category: 'builtins'
+slice category: 'BuiltIns-Kernel'
 %
 set compile_env: 0
-! ------------------- Class definition for LocalScope
+! ------------------- Class definition for staticmethod
 expectvalue /Class
 doit
-Scope subclass: 'LocalScope'
+object subclass: 'staticmethod'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -5559,16 +4819,789 @@ Scope subclass: 'LocalScope'
 %
 expectvalue /Class
 doit
-LocalScope comment:
-'No class-specific documentation for LocalScope, hierarchy is:
-Object
-  Scope( outer variables)
-    LocalScope
-'
+staticmethod category: 'BuiltIns-Kernel'
+%
+set compile_env: 0
+! ------------------- Class definition for str
+expectvalue /Class
+doit
+object subclass: 'str'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
 %
 expectvalue /Class
 doit
-LocalScope category: 'builtins'
+str category: 'BuiltIns-Kernel'
+%
+set compile_env: 0
+! ------------------- Class definition for super
+expectvalue /Class
+doit
+object subclass: 'super'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+super category: 'BuiltIns-Kernel'
+%
+set compile_env: 0
+! ------------------- Class definition for type
+expectvalue /Class
+doit
+object subclass: 'type'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+type category: 'BuiltIns-Kernel'
+%
+set compile_env: 0
+! ------------------- Class definition for zip
+expectvalue /Class
+doit
+object subclass: 'zip'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+zip category: 'BuiltIns-Kernel'
+%
+set compile_env: 0
+! ------------------- Class definition for Scripter
+expectvalue /Class
+doit
+Object subclass: 'Scripter'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+Scripter category: 'BuiltIns-Extras'
+%
+set compile_env: 0
+! ------------------- Class definition for Base_Class_Test
+expectvalue /Class
+doit
+TestCase subclass: 'Base_Class_Test'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+Base_Class_Test category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for bytearrayTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'bytearrayTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+bytearrayTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for bytesTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'bytesTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+bytesTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for complexTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'complexTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+complexTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for dictTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'dictTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+dictTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for floatTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'floatTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+floatTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for frozensetTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'frozensetTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+frozensetTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for intTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'intTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+intTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for listTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'listTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+listTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for memoryviewTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'memoryviewTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+memoryviewTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for objectTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'objectTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+objectTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for rangeTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'rangeTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+rangeTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for setTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'setTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+setTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for strTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'strTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+strTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for tupleTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'tupleTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+tupleTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for Base_Exception_Test
+expectvalue /Class
+doit
+TestCase subclass: 'Base_Exception_Test'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+Base_Exception_Test category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for BaseExceptionTest
+expectvalue /Class
+doit
+Base_Exception_Test subclass: 'BaseExceptionTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+BaseExceptionTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for ImportErrorTest
+expectvalue /Class
+doit
+Base_Exception_Test subclass: 'ImportErrorTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ImportErrorTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for OSErrorTest
+expectvalue /Class
+doit
+Base_Exception_Test subclass: 'OSErrorTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+OSErrorTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for StopIterationTest
+expectvalue /Class
+doit
+Base_Exception_Test subclass: 'StopIterationTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+StopIterationTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for SyntaxErrorTest
+expectvalue /Class
+doit
+Base_Exception_Test subclass: 'SyntaxErrorTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+SyntaxErrorTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for SystemExitTest
+expectvalue /Class
+doit
+Base_Exception_Test subclass: 'SystemExitTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+SystemExitTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for UnicodeDecodeErrorTest
+expectvalue /Class
+doit
+Base_Exception_Test subclass: 'UnicodeDecodeErrorTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+UnicodeDecodeErrorTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for UnicodeEncodeErrorTest
+expectvalue /Class
+doit
+Base_Exception_Test subclass: 'UnicodeEncodeErrorTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+UnicodeEncodeErrorTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for UnicodeTranslateErrorTest
+expectvalue /Class
+doit
+Base_Exception_Test subclass: 'UnicodeTranslateErrorTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+UnicodeTranslateErrorTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for BuiltinImporterTest
+expectvalue /Class
+doit
+TestCase subclass: 'BuiltinImporterTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+BuiltinImporterTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for Other_Test
+expectvalue /Class
+doit
+TestCase subclass: 'Other_Test'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+Other_Test category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for builtin_function_or_methodTest
+expectvalue /Class
+doit
+Other_Test subclass: 'builtin_function_or_methodTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+builtin_function_or_methodTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for classmethodTest
+expectvalue /Class
+doit
+Other_Test subclass: 'classmethodTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+classmethodTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for enumerateTest
+expectvalue /Class
+doit
+Other_Test subclass: 'enumerateTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+enumerateTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for filterTest
+expectvalue /Class
+doit
+Other_Test subclass: 'filterTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+filterTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for functionTest
+expectvalue /Class
+doit
+Other_Test subclass: 'functionTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+functionTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for mapTest
+expectvalue /Class
+doit
+Other_Test subclass: 'mapTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+mapTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for moduleTest
+expectvalue /Class
+doit
+Other_Test subclass: 'moduleTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+moduleTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for propertyTest
+expectvalue /Class
+doit
+Other_Test subclass: 'propertyTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+propertyTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for reversedTest
+expectvalue /Class
+doit
+Other_Test subclass: 'reversedTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+reversedTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for sliceTest
+expectvalue /Class
+doit
+Other_Test subclass: 'sliceTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+sliceTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for staticmethodTest
+expectvalue /Class
+doit
+Other_Test subclass: 'staticmethodTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+staticmethodTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for superTest
+expectvalue /Class
+doit
+Other_Test subclass: 'superTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+superTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for typeTest
+expectvalue /Class
+doit
+Other_Test subclass: 'typeTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+typeTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for zipTest
+expectvalue /Class
+doit
+Other_Test subclass: 'zipTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+zipTest category: 'BuiltIns-Tests'
 %
 set compile_env: 0
 ! ------------------- Class definition for PythonTestCase
@@ -5585,7 +5618,7 @@ TestCase subclass: 'PythonTestCase'
 %
 expectvalue /Class
 doit
-PythonTestCase comment:
+PythonTestCase comment: 
 'Abstract superclass for all Python tests.
 
 PythonTestCase suite run.
@@ -5612,7 +5645,7 @@ PythonTestCase subclass: 'ByteLiteralsTestCase'
 %
 expectvalue /Class
 doit
-ByteLiteralsTestCase comment:
+ByteLiteralsTestCase comment: 
 'No class-specific documentation for ByteLiteralsTestCase, hierarchy is:
 Object
   TestAsserter
@@ -5640,7 +5673,7 @@ PythonTestCase subclass: 'CompoundStatementsTestCase'
 %
 expectvalue /Class
 doit
-CompoundStatementsTestCase comment:
+CompoundStatementsTestCase comment: 
 'ModuleAst astForPath: ''$HOME/code/Python/GemStoneP/tests/CompoundStatements.py''.'
 %
 expectvalue /Class
@@ -5662,7 +5695,7 @@ PythonTestCase subclass: 'DelimitersTestCase'
 %
 expectvalue /Class
 doit
-DelimitersTestCase comment:
+DelimitersTestCase comment: 
 'No class-specific documentation for DelimitersTestCase, hierarchy is:
 Object
   TestAsserter
@@ -5690,7 +5723,7 @@ PythonTestCase subclass: 'NumericLiteralsTestCase'
 %
 expectvalue /Class
 doit
-NumericLiteralsTestCase comment:
+NumericLiteralsTestCase comment: 
 'No class-specific documentation for NumericLiteralsTestCase, hierarchy is:
 Object
   TestAsserter
@@ -5718,7 +5751,7 @@ PythonTestCase subclass: 'OperatorsTestCase'
 %
 expectvalue /Class
 doit
-OperatorsTestCase comment:
+OperatorsTestCase comment: 
 'No class-specific documentation for OperatorsTestCase, hierarchy is:
 Object
   TestAsserter
@@ -5746,7 +5779,7 @@ PythonTestCase subclass: 'SimpleStatementsTestCase'
 %
 expectvalue /Class
 doit
-SimpleStatementsTestCase comment:
+SimpleStatementsTestCase comment: 
 'No class-specific documentation for SimpleStatementsTestCase, hierarchy is:
 Object
   TestAsserter
@@ -5774,7 +5807,7 @@ PythonTestCase subclass: 'StringLiteralsTestCase'
 %
 expectvalue /Class
 doit
-StringLiteralsTestCase comment:
+StringLiteralsTestCase comment: 
 'No class-specific documentation for StringLiteralsTestCase, hierarchy is:
 Object
   TestAsserter
@@ -5802,7 +5835,7 @@ TestResource subclass: 'PythonTestResource'
 %
 expectvalue /Class
 doit
-PythonTestResource comment:
+PythonTestResource comment: 
 'No class-specific documentation for PythonTestResource, hierarchy is:
 Object
   TestAsserter
@@ -5814,33 +5847,9 @@ expectvalue /Class
 doit
 PythonTestResource category: 'Tests'
 %
-set compile_env: 0
-! ------------------- Class definition for UserInteraction
-expectvalue /Class
-doit
-Object subclass: 'UserInteraction'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
 
-%
-expectvalue /Class
-doit
-UserInteraction category: 'builtins'
-%
-
-input _imp.gs
-input _thread.gs
-input _warnings.gs
-input _weakref.gs
-input AbstractContainer.gs
-input AbstractIterator.gs
 input AbstractLocationNode.gs
 input AbstractNode.gs
-input AbstractNumber.gs
 input AddAst.gs
 input AliasAst.gs
 input AndAst.gs
@@ -5860,7 +5869,10 @@ input AugAssignAst.gs
 input AugLoadAst.gs
 input AugStoreAst.gs
 input AwaitAst.gs
+input Base_Class_Test.gs
+input Base_Exception_Test.gs
 input BaseException.gs
+input BaseExceptionTest.gs
 input BinOpAst.gs
 input BitAndAst.gs
 input BitOrAst.gs
@@ -5870,24 +5882,28 @@ input BlockingIOError.gs
 input bool.gs
 input BoolOpAst.gs
 input BreakAst.gs
-input BreakNotification.gs
 input BrokenPipeError.gs
 input BufferError.gs
-input builtins.gs
+input builtin_function_or_method.gs
+input builtin_function_or_methodTest.gs
+input BuiltinImporter.gs
+input BuiltinImporterTest.gs
 input bytearray.gs
+input bytearrayTest.gs
 input ByteLiteralsTestCase.gs
 input bytes.gs
+input bytesTest.gs
 input BytesWarning.gs
 input CallAst.gs
-input CancelNotification.gs
 input ChildProcessError.gs
-input class.gs
 input ClassDefAst.gs
-input ClassFunction.gs
 input ClassFunctionDefAst.gs
+input classmethod.gs
+input classmethodTest.gs
 input CmpOpAst.gs
 input CompareAst.gs
 input complex.gs
+input complexTest.gs
 input CompoundStatementsTestCase.gs
 input ComprehensionAst.gs
 input ConnectionAbortedError.gs
@@ -5895,23 +5911,19 @@ input ConnectionError.gs
 input ConnectionRefusedError.gs
 input ConnectionResetError.gs
 input ConstantAst.gs
+input Container.gs
 input ContinueAst.gs
-input ContinueNotification.gs
 input DelAst.gs
 input DeleteAst.gs
 input DelimitersTestCase.gs
 input DeprecationWarning.gs
 input dict.gs
-input dict_itemiterator.gs
-input dict_items.gs
-input dict_keyiterator.gs
-input dict_keys.gs
-input dict_valueiterator.gs
-input dict_values.gs
 input DictAst.gs
 input DictCompAst.gs
+input dictTest.gs
 input DivAst.gs
-input ellipsis.gs
+input enumerate.gs
+input enumerateTest.gs
 input EOFError.gs
 input EqAst.gs
 input ExceptHandlerAst.gs
@@ -5920,39 +5932,42 @@ input ExprAst.gs
 input ExpressionAst.gs
 input ExpressionContextAst.gs
 input ExtSliceAst.gs
-input file.gs
 input FileExistsError.gs
 input FileNotFoundError.gs
+input filter.gs
+input filterTest.gs
 input float.gs
 input FloatingPointError.gs
+input floatTest.gs
 input FloorDivAst.gs
 input ForAst.gs
 input FormattedValueAst.gs
 input frozenset.gs
+input frozensetTest.gs
 input function.gs
 input FunctionDefAst.gs
+input functionTest.gs
 input FutureWarning.gs
 input GeneratorExit.gs
 input GeneratorExpAst.gs
 input GlobalAst.gs
-input GlobalScope.gs
 input GtAst.gs
 input GtEAst.gs
 input IfAst.gs
 input IfExpAst.gs
 input ImportAst.gs
 input ImportError.gs
+input ImportErrorTest.gs
 input ImportFromAst.gs
 input ImportWarning.gs
 input InAst.gs
 input IndentationError.gs
 input IndexAst.gs
 input IndexError.gs
-input Instance.gs
-input InstanceFunction.gs
 input InstanceFunctionDefAst.gs
 input int.gs
 input InterruptedError.gs
+input intTest.gs
 input InvertAst.gs
 input IsADirectoryError.gs
 input IsAst.gs
@@ -5963,28 +5978,31 @@ input KeyError.gs
 input KeywordAst.gs
 input KeywordsAst.gs
 input LambdaAst.gs
-input Linearization.gs
 input list.gs
-input list_iterator.gs
 input ListAst.gs
 input ListCompAst.gs
+input listTest.gs
 input LoadAst.gs
-input LocalScope.gs
 input LookupError.gs
 input LShiftAst.gs
 input LtAst.gs
 input LtEAst.gs
+input Magnitude.gs
+input map.gs
+input mapTest.gs
 input MatMultAst.gs
 input MemoryError.gs
+input memoryview.gs
+input memoryviewTest.gs
 input ModAst.gs
 input module.gs
 input ModuleAst.gs
 input ModuleNotFoundError.gs
+input moduleTest.gs
 input MultAst.gs
 input NameAst.gs
 input NamedExprAst.gs
 input NameError.gs
-input NoneType.gs
 input NonlocalAst.gs
 input NotADirectoryError.gs
 input NotAst.gs
@@ -5994,11 +6012,13 @@ input NotImplementedType.gs
 input NotInAst.gs
 input NumericLiteralsTestCase.gs
 input object.gs
-input objectClass.gs
+input objectTest.gs
 input OperatorAst.gs
 input OperatorsTestCase.gs
 input OrAst.gs
 input OSError.gs
+input OSErrorTest.gs
+input Other_Test.gs
 input OverflowError.gs
 input Package.gs
 input ParamAst.gs
@@ -6007,63 +6027,77 @@ input PendingDeprecationWarning.gs
 input PermissionError.gs
 input PowAst.gs
 input ProcessLookupError.gs
+input property.gs
+input propertyTest.gs
 input PythonTestCase.gs
 input PythonTestResource.gs
 input RaiseAst.gs
-input range_iterator.gs
+input range.gs
+input rangeTest.gs
 input RecursionError.gs
 input ReferenceError.gs
 input ResourceWarning.gs
 input ReturnAst.gs
-input ReturnNotification.gs
+input reversed.gs
+input reversedTest.gs
 input RShiftAst.gs
 input RuntimeError.gs
 input RuntimeWarning.gs
-input Scope.gs
+input Scripter.gs
 input set.gs
-input set_iterator.gs
 input SetAst.gs
 input SetCompAst.gs
+input setTest.gs
 input SimpleStatementsTestCase.gs
 input Singleton.gs
 input slice.gs
 input SliceAbstractAst.gs
 input SliceAst.gs
+input sliceTest.gs
 input StarredAst.gs
 input StatementAst.gs
-input StaticFunction.gs
 input StaticFunctionDefAst.gs
+input staticmethod.gs
+input staticmethodTest.gs
 input StopAsyncIteration.gs
 input StopIteration.gs
+input StopIterationTest.gs
 input StoreAst.gs
 input str.gs
 input StringLiteralsTestCase.gs
+input strTest.gs
 input SubAst.gs
 input SubscriptAst.gs
 input SuiteAst.gs
+input super.gs
+input superTest.gs
 input SyntaxError.gs
+input SyntaxErrorTest.gs
 input SyntaxWarning.gs
-input sys.gs
 input SystemError.gs
-input SystemException.gs
+input SystemExit.gs
+input SystemExitTest.gs
 input TabError.gs
-input time.gs
 input TimeoutError.gs
 input TryAst.gs
 input tuple.gs
-input tuple_iterator.gs
 input TupleAst.gs
+input tupleTest.gs
+input type.gs
 input TypeError.gs
 input TypeIgnoreAst.gs
+input typeTest.gs
 input UAddAst.gs
 input UnaryOpAst.gs
 input UnboundLocalError.gs
 input UnicodeDecodeError.gs
+input UnicodeDecodeErrorTest.gs
 input UnicodeEncodeError.gs
+input UnicodeEncodeErrorTest.gs
 input UnicodeError.gs
 input UnicodeTranslateError.gs
+input UnicodeTranslateErrorTest.gs
 input UnicodeWarning.gs
-input UserInteraction.gs
 input UserWarning.gs
 input USubAst.gs
 input ValueError.gs
@@ -6074,3 +6108,5 @@ input WithItemAst.gs
 input YieldAst.gs
 input YieldFromAst.gs
 input ZeroDivisionError.gs
+input zip.gs
+input zipTest.gs

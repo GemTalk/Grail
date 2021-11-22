@@ -40,4 +40,3 @@ initialize
 	].
 	self readPosition.
 %
-set compile_env: 0

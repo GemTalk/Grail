@@ -40,17 +40,24 @@ symbolDictionary := SymbolDictionary new
     at: #'Ellipsis'         put: nil;
     at: #'True'             put: nil;
     at: #'False'            put: nil;
+    at: #'NumberParser'     put: nil;
+    at: #'Smalltalk'        put: nil;
+    at: #'Linearization'    put: nil;
+    at: #'Instance'         put: nil;
+    at: #'GlobalScope'      put: nil;
+    at: #'builtins'         put: nil;
     yourself.
 userProfile insertDictionary: symbolDictionary at: 1.
 %
+input /Users/jfoster/Desktop/pharo.tpz
 input Python.gs
 run
 Python
-    at: #'None'             put: NoneType singleton;
     at: #'NotImplemented'   put: NotImplementedType singleton;
-    at: #'Ellipsis'         put: ellipsis singleton;
-    at: #'True'             put: bool True;
+    "at: #'True'             put: bool True;
     at: #'False'            put: bool False;
+    at: #'None'             put: NoneType singleton;
+    at: #'Ellipsis'         put: ellipsis singleton;"
     yourself.
 %
 output pop

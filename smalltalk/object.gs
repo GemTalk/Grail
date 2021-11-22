@@ -3,217 +3,334 @@ removeAllMethods object
 removeAllClassMethods object
 ! ------------------- Class methods for object
 set compile_env: 0
-category: 'other'
+category: 'done'
 classmethod: object
-new: aLocalScope
+___dir
+	^ self ___pyProtocol
+		collect: [ :each |
+			( each truncateTo: ( each indexOf: $: ifAbsent: [ each size  + 1] ) - 1 ) asString.
+		]
+%
+set compile_env: 0
+category: 'Python'
+classmethod: object
+__new__
 
-	^self basicNew
-		initialize: aLocalScope;
+	^ self __new__: self
+%
+category: 'Python'
+classmethod: object
+__new__: aPyClass
+
+	( ( self = aPyClass) or: [ self subclasses includes: aPyClass ] )
+		ifFalse: [ TypeError signal: self name, '.__new__(', aPyClass name,') is not safe, use ', aPyClass name,'.__new__()' ].
+	^ self basicNew
+%
+set compile_env: 0
+category: 'Smalltalk'
+classmethod: object
+___new__init__
+	^ self __new__
+			__init__
+%
+category: 'Smalltalk'
+classmethod: object
+___new__init__: firstParam
+	^ self __new__
+			__init__: firstParam
+%
+category: 'Smalltalk'
+classmethod: object
+___new__init__: firstParam _: secondParam
+	^ self __new__
+			__init__: firstParam _: secondParam
+%
+category: 'Smalltalk'
+classmethod: object
+___new__init__: firstParam _: secondParam _: thirdParam
+	^ self __new__
+			__init__: firstParam _: secondParam  _: thirdParam
+%
+category: 'Smalltalk'
+classmethod: object
+___pyProtocol
+	^ ( self == object ifTrue: [  Set new ]
+								ifFalse: [ self superclass ___pyProtocol ] )
+		addAll: ( ( self methodsInProtocol: #Python ) collect: [ :each | each selector ] );
+		addAll: ( ( self class methodsInProtocol: #Python ) collect: [ :each | each selector ] );
 		yourself
+%
+category: 'Smalltalk'
+classmethod: object
+new
+	^ self __new__
 %
 ! ------------------- Instance methods for object
 set compile_env: 0
-category: 'other'
-method: object
-isNone
-
-	^false
-%
-set compile_env: 0
-category: 'Python'
-method: object
-__bool__
-
-	self subclassResponsibility.
-%
-category: 'Python'
-method: object
-__call__
-
-	self subclassResponsibility.
-%
 category: 'Python'
 method: object
 __class__
 
-	^ objectClass new
+	^self class
 %
 category: 'Python'
 method: object
-__delattr__
+__delattr__: name
 
-	self halt.
-%
-category: 'Python'
-method: object
-__dict__
-"Note object does not have a __dict__, so you can’t assign arbitrary attributes to an instance of the object class.
-https://docs.python.org/3/library/functions.html#object"
-
-	AttributeError signal.
+	TypeError signal: 'can''t delete ' , name , ' attribute'.
 %
 category: 'Python'
 method: object
 __dir__
 
-	self halt.
+ 	^ list ___new__init__: self class ___dir
 %
 category: 'Python'
 method: object
 __doc__
 
-	self halt.
+	^'The base class of the class hierarchy.\n' ,
+		'\n' ,
+		'When called, it accepts no arguments and returns a new featureless\n' ,
+		'instance that has no instance attributes and cannot be given any.\n'
 %
 category: 'Python'
 method: object
-__eq__
+__eq__: anObject
 
-	^[:lhs :rhs | lhs == rhs ifTrue: [ True ] ifFalse: [ False ]]
+" 	<primitive: 110>
+	self primitiveFailed"
+	^ self == anObject
 %
 category: 'Python'
 method: object
-__format__
+__format__: aString
 
-	self halt.
+	aString notEmpty ifTrue: [
+		TypeError signal: 'unsupported format string passed to object.__format__'.
+	].
+	^self __str__
 %
 category: 'Python'
 method: object
-__ge__
+__ge__: anObject
 
-	self halt.
+	^NotImplementedType singleton
 %
 category: 'Python'
 method: object
-__getattribute__
+__getattribute__: aString
 
-	^ [ :aSymbol | 
-		(aSymbol = #'__class__') 
-			ifTrue: [ self __class__ ]
-			ifFalse: [
-		(aSymbol = #'__mro__') 
-			ifTrue: [ self __mro__ value ] 
-			ifFalse: [
-				self __dict__ 
-					at: aSymbol 
-					ifAbsent: [ AttributeError signal: '''', self __class__ name asString, ''' object has no attribute ''', aSymbol asString, '''' ]
-			]
-		]
-	]
+	| symbol |
+	symbol := aString asSymbol.
+	(self class selectors includes: aString asSymbol) ifTrue: [
+		^self ___perform: symbol
+	].
+	AttributeError signal: self __class__ name asString, ' object has no attribute ', aString.
 %
 category: 'Python'
 method: object
-__gt__
+__gt__: anObject
 
-	self halt.
+	^NotImplementedType singleton
 %
 category: 'Python'
 method: object
 __hash__
 
-	self halt.
+	^ self identityHash printString
 %
 category: 'Python'
 method: object
 __init__
 
-	self halt.
+	self ___initArgs: {}
 %
 category: 'Python'
 method: object
-__init_subclass__
+__init__: firstArg
 
-	self halt.
+	self ___initArgs: { firstArg }
 %
 category: 'Python'
 method: object
-__le__
+__init__: firstArg _: secondArg
 
-	self halt.
+	self ___initArgs: { firstArg. secondArg }
 %
 category: 'Python'
 method: object
-__len__
+__init__: firstArg _: secondArg _: thirdArg
 
-	self subclassResponsibility.
+	self ___initArgs: { firstArg. secondArg. thirdArg }
 %
 category: 'Python'
 method: object
-__lt__
+__le__: anObject
 
-	self halt.
+	^NotImplementedType singleton
 %
 category: 'Python'
 method: object
-__mro__
+__lt__: anObject
 
-	^ [ { self } ]
+	^NotImplementedType singleton
 %
 category: 'Python'
 method: object
-__ne__
+__ne__: anObject
 
-	self halt.
-%
-category: 'Python'
-method: object
-__new__
-
-	self halt.
-%
-category: 'Python'
-method: object
-__reduce__
-
-	self halt.
-%
-category: 'Python'
-method: object
-__reduce_ex__
-
-	self halt.
+	^NotImplementedType singleton
 %
 category: 'Python'
 method: object
 __repr__
 
-	self halt.
+	^ '<', self class name, ' object at ' , self identityHash printString , '>'
 %
 category: 'Python'
 method: object
-__setattr__
+__setattr__: aKey _: aValue
 
-	self halt.
+	| symbol |
+	symbol := aKey asSymbol.
+	( self __dir__ __contains__: aKey ) ifTrue: [
+      	AttributeError signal: self __class__ name asString printString, ' object attribute ', aKey printString , ' is read-only'.
+   ].
+
+	AttributeError signal: self __class__ name asString printString, ' object has no attribute ', aKey printString .
 %
 category: 'Python'
 method: object
 __sizeof__
 
-	self halt.
+	^ 16
 %
 category: 'Python'
 method: object
 __str__
 
-	^[:obj | '<object object at ' , obj asOop printString , '>']
+	^ self __repr__
 %
 category: 'Python'
 method: object
-__subclasshook__ 
+__subclasshook__
 
-	self halt.
+	^NotImplementedType singleton
 %
-category: 'Python'
+set compile_env: 0
+category: 'Smalltalk'
 method: object
-get: aSymbol
-
-	^ self __getattribute__ value: aSymbol
+___initArgs: args
 %
-category: 'Python'
+category: 'Smalltalk'
+method: object
+___perform: aSymbol
+	"Send the unary selector, aSymbol, to the receiver.
+	Fail if the number of arguments expected by the selector is not zero.
+	Primitive. Optional. See Object documentation whatIsAPrimitive."
+
+	<reflective: #object:performMessageWith:>
+	"<primitive: 83>"
+	^ self ___perform: aSymbol withArguments: (Array new: 0)
+%
+category: 'Smalltalk'
+method: object
+___perform: selector withArguments: argArray
+	"Send the selector, aSymbol, to the receiver with arguments in argArray.
+	Fail if the number of arguments expected by the selector
+	does not match the size of argArray.
+	Primitive. Optional. See Object documentation whatIsAPrimitive."
+
+	<reflective: #object:performMessageWithArgs:>
+	"<primitive: 84>"
+	^ self perform: selector withArguments: argArray inSuperclass: self class
+%
+category: 'Smalltalk'
+method: object
+___yourself
+%
+category: 'Smalltalk'
+method: object
+= other
+	^ self __eq__: other
+%
+category: 'Smalltalk'
+method: object
+asCollectionElement
+%
+category: 'Smalltalk'
+method: object
+asString
+	"Answer a string that represents the receiver."
+
+	^ self printString
+%
+category: 'Smalltalk'
+method: object
+basicInspect
+	^ Smalltalk tools basicInspector inspect: self
+%
+category: 'Smalltalk'
+method: object
+basicSize
+	"Primitive. Answer the number of indexable variables in the receiver.
+	This value is the same as the largest legal subscript. Essential. Do not
+	override in any subclass. See Object documentation whatIsAPrimitive."
+
+	"<primitive: 62>"
+	"The number of indexable fields of fixed-length objects is 0"
+	^0
+%
+category: 'Smalltalk'
+method: object
+enclosedElement
+%
+category: 'Smalltalk'
+method: object
+fullPrintString
+	"Answer a String whose characters are a description of the receiver."
+
+	^ String streamContents: [:s | self printOn: s]
+%
+category: 'Smalltalk'
+method: object
+gtDebuggerSUnitPrint
+	"I return a textual representation of the object that is used by the SUnit debugger to compare objects using a textual diff."
+
+	^ self printString
+%
+category: 'Smalltalk'
+method: object
+gtDisplayString
+	"I return a textual representation of the object that is used by the SUnit debugger to compare objects using a textual diff."
+
+	^ self printString
+%
+category: 'Smalltalk'
+method: object
+hash
+	"Answer a SmallInteger whose value is related to the receiver's identity.
+	May be overridden, and should be overridden in any classes that define = "
+
+	^ self identityHash
+%
+category: 'Smalltalk'
+method: object
+inspect
+	"Create and schedule an Inspector in which the user can examine the receiver's variables."
+	^ Smalltalk tools inspector inspect: self
+%
+category: 'Smalltalk'
 method: object
 printOn: aStream
+	"Append to the argument, aStream, a sequence of characters that
+	identifies the receiver."
 
-	super printOn: aStream.
+	| title |
+	title := self class name.
 	aStream
-		nextPutAll: '<class ''object''>';
-		yourself.
+		nextPutAll: (title first isVowel ifTrue: ['an '] ifFalse: ['a ']);
+		nextPutAll: title;
+		nextPutAll: self __repr__
 %

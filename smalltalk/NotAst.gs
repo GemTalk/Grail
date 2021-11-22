@@ -3,4 +3,3 @@ removeAllMethods NotAst
 removeAllClassMethods NotAst
 ! ------------------- Class methods for NotAst
 ! ------------------- Instance methods for NotAst
-set compile_env: 0

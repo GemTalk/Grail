@@ -3,4 +3,3 @@ removeAllMethods MatMultAst
 removeAllClassMethods MatMultAst
 ! ------------------- Class methods for MatMultAst
 ! ------------------- Instance methods for MatMultAst
-set compile_env: 0

@@ -22,4 +22,3 @@ statementFrom: aNode
 "
 %
 ! ------------------- Instance methods for StatementAst
-set compile_env: 0
