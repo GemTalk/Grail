@@ -8,20 +8,26 @@ category: 'Python'
 method: str
 __eq__: anObject
 
-	^(anObject isKindOf: str) and: [string = anObject ___string]
+	^(anObject isKindOf: str) and: [value = anObject ___value]
 %
 category: 'Python'
 method: str
 __init__: aString
 
-	string := aString.
+	value := aString.
 %
 set compile_env: 0
 category: 'Smalltalk'
 method: str
 ___string
 
-	^string
+	^value
+%
+category: 'Smalltalk'
+method: str
+___value
+
+	^value
 %
 category: 'Smalltalk'
 method: str
@@ -29,7 +35,7 @@ printOn: aStream
 
 	aStream
 		nextPutAll: 'str(';
-		print: string;
+		print: value;
 		nextPut: $);
 		yourself.
 %

@@ -2,7 +2,6 @@
 removeAllMethods Magnitude
 removeAllClassMethods Magnitude
 ! ------------------- Class methods for Magnitude
-set compile_env: 0
 ! ------------------- Instance methods for Magnitude
 set compile_env: 0
 category: 'Python'

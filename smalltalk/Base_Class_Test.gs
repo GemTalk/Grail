@@ -21,7 +21,7 @@ category: 'setup'
 method: Base_Class_Test
 int: anInteger
 
-	^int ___new__init__: anInteger
+	^int ___value: anInteger
 %
 category: 'setup'
 method: Base_Class_Test
@@ -41,12 +41,14 @@ targetClass
 category: 'setup'
 method: Base_Class_Test
 targetInstance
-	^self targetClass ___new__init__
+
+	^int ___value: 0
 %
 category: 'setup'
 method: Base_Class_Test
 targetInstance: firstArg
-	^self targetClass ___new__init__: firstArg
+
+	^int ___value: firstArg
 %
 category: 'setup'
 method: Base_Class_Test
@@ -62,4 +64,29 @@ category: 'setup'
 method: Base_Class_Test
 writeDirTestOn: methodList
 	^Scripter writeFor: self targetClass dirTestOn: methodList
+%
+set compile_env: 0
+category: 'testing'
+method: Base_Class_Test
+assert: anObject
+
+	(anObject isKindOf: bool)
+		ifTrue: [super assert: anObject ___value == 1]
+		ifFalse: [super assert: anObject]
+%
+category: 'testing'
+method: Base_Class_Test
+assert: x equals: y
+
+	((x isKindOf: object) and: [y isKindOf: object])
+		ifTrue: [super assert: x ___value equals: y ___value]
+		ifFalse: [super assert: x equals: y]
+%
+category: 'testing'
+method: Base_Class_Test
+deny: anObject
+
+	(anObject isKindOf: bool)
+		ifTrue: [super deny: anObject ___value == 1]
+		ifFalse: [super deny: anObject]
 %
