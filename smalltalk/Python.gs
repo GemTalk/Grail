@@ -4496,6 +4496,34 @@ doit
 filter category: 'BuiltIns-Kernel'
 %
 set compile_env: 0
+! ------------------- Class definition for float
+expectvalue /Class
+doit
+object subclass: 'float'
+  instVarNames: #( value)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+float comment: 
+'
+>>> float.mro()
+[<class ''float''>, <class ''object''>]
+
+>>> sorted(set(dir(float)) - set(dir(object)))
+[''__abs__'', ''__add__'', ''__bool__'', ''__ceil__'', ''__divmod__'', ''__float__'', ''__floor__'', ''__floordiv__'', ''__getformat__'', ''__getnewargs__'', ''__int__'', ''__mod__'', ''__mul__'', ''__neg__'', ''__pos__'', ''__pow__'', ''__radd__'', ''__rdivmod__'', ''__rfloordiv__'', ''__rmod__'', ''__rmul__'', ''__round__'', ''__rpow__'', ''__rsub__'', ''__rtruediv__'', ''__set_format__'', ''__sub__'', ''__truediv__'', ''__trunc__'', ''as_integer_ratio'', ''conjugate'', ''fromhex'', ''hex'', ''imag'', ''is_integer'', ''real'']
+'
+%
+expectvalue /Class
+doit
+float category: 'BuiltIns-Magnitudes'
+%
+set compile_env: 0
 ! ------------------- Class definition for function
 expectvalue /Class
 doit
@@ -4609,34 +4637,6 @@ complex comment:
 expectvalue /Class
 doit
 complex category: 'BuiltIns-Magnitudes'
-%
-set compile_env: 0
-! ------------------- Class definition for float
-expectvalue /Class
-doit
-Magnitude subclass: 'float'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-float comment: 
-'
->>> float.mro()
-[<class ''float''>, <class ''object''>]
-
->>> sorted(set(dir(float)) - set(dir(object)))
-[''__abs__'', ''__add__'', ''__bool__'', ''__ceil__'', ''__divmod__'', ''__float__'', ''__floor__'', ''__floordiv__'', ''__getformat__'', ''__getnewargs__'', ''__int__'', ''__mod__'', ''__mul__'', ''__neg__'', ''__pos__'', ''__pow__'', ''__radd__'', ''__rdivmod__'', ''__rfloordiv__'', ''__rmod__'', ''__rmul__'', ''__round__'', ''__rpow__'', ''__rsub__'', ''__rtruediv__'', ''__set_format__'', ''__sub__'', ''__truediv__'', ''__trunc__'', ''as_integer_ratio'', ''conjugate'', ''fromhex'', ''hex'', ''imag'', ''is_integer'', ''real'']
-'
-%
-expectvalue /Class
-doit
-float category: 'BuiltIns-Magnitudes'
 %
 set compile_env: 0
 ! ------------------- Class definition for map

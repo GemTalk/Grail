@@ -15,7 +15,7 @@ category: 'setup'
 method: Base_Class_Test
 float: aFloat
 
-	^float ___new__init__: aFloat
+	^float ___value: aFloat
 %
 category: 'setup'
 method: Base_Class_Test

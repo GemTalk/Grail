@@ -141,7 +141,7 @@ method: int
 __mul__: anObject
 
 	^(anObject isKindOf: float) ifTrue: [
-		float ___new__init__: value * anObject ___value
+		float ___value: value * anObject ___value
 	] ifFalse: [
 		int ___value: value * anObject ___value
 	].
@@ -292,7 +292,7 @@ category: 'Python'
 method: int
 __truediv__: anObject
 
-	^float ___new__init__: value / anObject ___value
+	^float ___value: value / anObject ___value
 %
 category: 'Python'
 method: int
@@ -335,6 +335,12 @@ method: int
 imag
 
 	^int ___value: 0
+%
+category: 'Python'
+method: int
+is_integer
+
+	^bool ___value: true
 %
 category: 'Python'
 method: int
