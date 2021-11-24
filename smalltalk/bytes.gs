@@ -250,10 +250,10 @@ partition: sep
 	| idx |
 	idx := self find: sep.
 	idx < 0 ifTrue: [
-		^tuple ___new__init__: { self copy. self class new. self class new }
+		^tuple ___value: { self copy. self class new. self class new }
 	].
 
-	^tuple ___new__init__: {
+	^tuple ___value: {
 		self class new ___initialize: (self ___container asString  takeFirst: idx).
 		self class new ___initialize: sep.
 		self class new ___initialize: (self ___container asString  last: (self __len__ - idx - sep size))
@@ -338,10 +338,10 @@ rpartition: sep
 	| idx |
 	idx := self rfind: sep.
 	idx < 0 ifTrue: [
-		^tuple ___new__init__: { self class new. self class new. self copy }
+		^tuple ___value: { self class new. self class new. self copy }
 	].
 
-	^tuple ___new__init__: {
+	^tuple ___value: {
 		self class new ___initialize: (self ___container asString  takeFirst: idx).
 		self class new ___initialize: sep.
 		self class new ___initialize: (self ___container asString  last: (self __len__ - idx - sep size))
@@ -358,10 +358,10 @@ rsplit: sep _: limit
 	| idx splits |
 	idx := self rfind: sep.
 	idx < 0 ifTrue: [
-		^tuple ___new__init__: { self copy }
+		^tuple __call__: { self copy }
 	].
 	limit == 0 ifTrue: [
-		^tuple ___new__init__: { self copy }
+		^tuple __call__: { self copy }
 	].
 
 	splits := OrderedCollection new.
@@ -370,7 +370,7 @@ rsplit: sep _: limit
 	splits add: (self ___container asString  last: (self __len__ - idx - sep size)).
 
 
-	^tuple ___new__init__: (splits collect: [:each | self class new ___initialize: each])
+	^tuple ___value: (splits collect: [:each | self class new ___initialize: each])
 %
 category: 'Python'
 method: bytes
@@ -394,10 +394,10 @@ split: sep _: limit
 	| idx splits |
 	idx := self find: sep.
 	idx < 0 ifTrue: [
-		^tuple ___new__init__: { self copy }
+		^tuple __call__: { self copy }
 	].
 	limit == 0 ifTrue: [
-		^tuple ___new__init__: { self copy }
+		^tuple __call__: { self copy }
 	].
 
 	splits := OrderedCollection new.
@@ -406,7 +406,7 @@ split: sep _: limit
 	  						(self ___container asString  last: (self __len__ - idx - sep size))) split: sep _: limit - 1) ___container.
 
 
-	^tuple ___new__init__: (splits collect: [:each | self class new ___initialize: each])
+	^tuple ___value: (splits collect: [:each | self class new ___initialize: each])
 %
 category: 'Python'
 method: bytes

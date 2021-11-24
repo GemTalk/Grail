@@ -310,7 +310,7 @@ testitems
 	self
 		assert: list __len__ equals: 2;
 		assert: list __class__ equals: frozenset;
-		assert: (list __contains__: (list ___new__init__: { #a. 1 }));
+		assert: (list __contains__: (list ___value: { #a. 1 }));
 		yourself
 %
 category: 'done'
@@ -321,7 +321,7 @@ testkeys
 
 	self
 		assert: list keys __class__ equals: frozenset;
-		assert: (list keys __eq__: (set ___new__init__: { 1. 2. 3 }));
+		assert: (list keys __eq__: (set ___value: { 1. 2. 3 }));
 		yourself
 %
 category: 'done'
@@ -346,7 +346,7 @@ testvalues
 
 	self
 		assert: list values __class__ equals: frozenset;
-		assert: (list values __eq__: (set ___new__init__: { 'a'. 'b'. 'c' }));
+		assert: (list values __eq__: (set ___value: { 'a'. 'b'. 'c' }));
 		yourself
 %
 set compile_env: 0

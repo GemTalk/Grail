@@ -77,14 +77,14 @@ category: 'Python'
 method: frozenset
 difference: aSet
 
-	^self class ___new__init__:
-	  (self ___container difference: (aSet intersection: self) ___container)
+	^self class ___value:
+	  (container difference: (aSet intersection: self) ___container)
 %
 category: 'Python'
 method: frozenset
 intersection: aSet
 
-	^self class ___new__init__: (self ___container intersection: aSet ___container).
+	^self class ___value: (container intersection: aSet ___container).
 %
 category: 'Python'
 method: frozenset

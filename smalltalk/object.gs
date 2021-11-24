@@ -5,13 +5,21 @@ removeAllClassMethods object
 set compile_env: 0
 category: 'Python'
 classmethod: object
-__new__
+__call__
+	"In Python the first parameter is the class, but in Smalltalk we are in the class already.
+	To require the class here would imply that we should pass in the object as the first
+	parameter to every instance method, and that seems silly. So, part of translating
+	Python to Smalltalk is to remove that parameter (if it is called explicitly).
 
-	^self __new__: None
+	What we really want is the argument passed to the class as a constructor."
+
+	^self basicNew
+		__init__;
+		yourself
 %
 category: 'Python'
 classmethod: object
-__new__: anObject
+__call__: anObject
 	"In Python the first parameter is the class, but in Smalltalk we are in the class already.
 	To require the class here would imply that we should pass in the object as the first
 	parameter to every instance method, and that seems silly. So, part of translating
@@ -23,6 +31,22 @@ __new__: anObject
 		__init__: anObject;
 		yourself
 %
+category: 'Python'
+classmethod: object
+__call__: p1 _: p2
+
+	^self basicNew
+		__init__: p1
+		_: p2
+%
+category: 'Python'
+classmethod: object
+__new__
+
+	^self basicNew
+		__init__;
+		yourself
+%
 set compile_env: 0
 category: 'Smalltalk'
 classmethod: object
@@ -32,32 +56,8 @@ ___dir
 		| index |
 		index := each indexOf: $:.
 		index == 0 ifTrue: [index := each size + 1].
-		str ___new__init__: (each copyFrom: 1 to: index - 1) asString.
+		str ___value: (each copyFrom: 1 to: index - 1) asString.
 	]
-%
-category: 'Smalltalk'
-classmethod: object
-___new__init__
-	^self __new__
-			__init__
-%
-category: 'Smalltalk'
-classmethod: object
-___new__init__: firstParam
-	^self __new__
-			__init__: firstParam
-%
-category: 'Smalltalk'
-classmethod: object
-___new__init__: firstParam _: secondParam
-	^self __new__
-			__init__: firstParam _: secondParam
-%
-category: 'Smalltalk'
-classmethod: object
-___new__init__: firstParam _: secondParam _: thirdParam
-	^self __new__
-			__init__: firstParam _: secondParam  _: thirdParam
 %
 category: 'Smalltalk'
 classmethod: object
@@ -67,14 +67,17 @@ ___pyProtocol
 	set := self == object
 		ifTrue: [Set new]
 		ifFalse: [self superclass ___pyProtocol].
-	(self includesCategory: #'Python') ifTrue: [set addAll: ((self selectorsIn: #'Python') collect: [:each | each asString])].
-	(self class includesCategory: #'Python') ifTrue: [set addAll: ((self class selectorsIn: #'Python') collect: [:each | each asString])].
+	self categorysDo: [:catName :catMethods |
+		(catName beginsWith: 'Python') ifTrue: [
+			set addAll: catMethods.
+		].
+	].
+	self class categorysDo: [:catName :catMethods |
+		(catName beginsWith: 'Python') ifTrue: [
+			set addAll: catMethods.
+		].
+	].
 	^set
-%
-category: 'Smalltalk'
-classmethod: object
-new
-	^self __new__
 %
 ! ------------------- Instance methods for object
 set compile_env: 0
@@ -94,7 +97,7 @@ category: 'Python'
 method: object
 __dir__
 
- 	^list ___new__init__: self class ___dir
+ 	^list ___value: self class ___dir
 %
 category: 'Python'
 method: object

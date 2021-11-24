@@ -21,10 +21,11 @@ ___startChar
 %
 category: 'Smalltalk'
 classmethod: Container
-__new__: aPyClass
+___value: aCollection
 
-	^(super __new__: aPyClass)
-		__init__
+	^self basicNew
+		___value: aCollection;
+		yourself
 %
 ! ------------------- Instance methods for Container
 set compile_env: 0
@@ -56,7 +57,7 @@ __add__: aList
 		detect: [:each | aList isKindOf: each]
 		ifNone: [TypeError signal: 'can only concatenate ', self ___typeName , ' (not "', aList class name,'") to ', self ___typeName].
 
-	newlist := self class ___new__init__: self.
+	newlist := self class __call__: self.
 	"We don't know yet what aList might be"
 	newlist ___container addAll: ((aList isKindOf: Container)
 											 ifTrue: [aList ___container] ifFalse: [aList]).
@@ -190,7 +191,7 @@ category: 'Python'
 method: Container
 copy
 
-	^self class ___new__init__: self.
+	^self class ___value: container copy
 %
 category: 'Python'
 method: Container
@@ -222,7 +223,7 @@ category: 'Python 2.7'
 method: Container
 __getslice__: start _: end
 
-	^self class ___new__init__: (self ___getslice: start _: end)
+	^self class ___value: (self ___getslice: start _: end)
 %
 set compile_env: 0
 category: 'Smalltalk'
@@ -262,6 +263,12 @@ method: Container
 ___size
 
 	^self ___container size
+%
+category: 'Smalltalk'
+method: Container
+___value: aCollection
+
+	container := aCollection.
 %
 category: 'Smalltalk'
 method: Container

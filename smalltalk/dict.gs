@@ -105,7 +105,7 @@ category: 'Python'
 method: dict
 copy
 
-	^self class ___new__init__: self ___container associations.
+	^self class ___value: container copy
 %
 category: 'Python'
 method: dict
@@ -116,15 +116,18 @@ category: 'Python'
 method: dict
 items
 
-	^frozenset ___new__init__:
-		(self ___container associations
-			collect: [:association | list ___new__init__: { association key. association value }])
+	| s |
+	s := Set new.
+	container keysAndValuesDo: [:eachKey :eachValue |
+		s add: (list ___value: (Array with: eachKey with: eachValue)).
+	].
+	^frozenset ___value: s
 %
 category: 'Python'
 method: dict
 keys
 
-	^frozenset ___new__init__: (self ___container keys)
+	^frozenset ___value: container keys
 %
 category: 'Python'
 method: dict
@@ -135,7 +138,7 @@ category: 'Python'
 method: dict
 values
 
-	^frozenset ___new__init__: (self ___container values)
+	^frozenset ___value: container values
 %
 set compile_env: 0
 category: 'Smalltalk'

@@ -685,13 +685,13 @@ testpartition
 
 	self
 		assert: ((self targetInstance: '  bcd') partition: 'a')
-		equals: (tuple ___new__init__: { self targetInstance: '  bcd'. self targetInstance. self targetInstance });
+		equals: (tuple ___value: { self targetInstance: '  bcd'. self targetInstance. self targetInstance });
 		assert: ((self targetInstance: '  bcd') partition: '  ')
-		equals: (tuple ___new__init__: { self targetInstance. self targetInstance: '  '. self targetInstance: 'bcd' });
+		equals: (tuple ___value: { self targetInstance. self targetInstance: '  '. self targetInstance: 'bcd' });
 		assert: ((self targetInstance: '  bcd') partition: 'bc')
-		equals: (tuple ___new__init__: { self targetInstance: '  '. self targetInstance: 'bc'. self targetInstance: 'd' });
+		equals: (tuple ___value: { self targetInstance: '  '. self targetInstance: 'bc'. self targetInstance: 'd' });
 		assert: ((self targetInstance: '  bcbcd') partition: 'bc')
-		equals: (tuple ___new__init__: { self targetInstance: '  '. self targetInstance: 'bc'. self targetInstance: 'bcd' });
+		equals: (tuple ___value: { self targetInstance: '  '. self targetInstance: 'bc'. self targetInstance: 'bcd' });
 		yourself
 %
 category: 'done'
@@ -868,13 +868,13 @@ testrpartition
 
 	self
 		assert: ((self targetInstance: '  bcd') rpartition: 'a')
-		equals: (tuple ___new__init__: { self targetInstance. self targetInstance. self targetInstance: '  bcd' });
+		equals: (tuple ___value: { self targetInstance. self targetInstance. self targetInstance: '  bcd' });
 		assert: ((self targetInstance: '  bcd') rpartition: '  ')
-		equals: (tuple ___new__init__: { self targetInstance. self targetInstance: '  '. self targetInstance: 'bcd' });
+		equals: (tuple ___value: { self targetInstance. self targetInstance: '  '. self targetInstance: 'bcd' });
 		assert: ((self targetInstance: '  bcd') rpartition: 'bc')
-		equals: (tuple ___new__init__: { self targetInstance: '  '. self targetInstance: 'bc'. self targetInstance: 'd' });
+		equals: (tuple ___value: { self targetInstance: '  '. self targetInstance: 'bc'. self targetInstance: 'd' });
 		assert: ((self targetInstance: '  bcbcd') rpartition: 'bc')
-		equals: (tuple ___new__init__: { self targetInstance: '  bc'. self targetInstance: 'bc'. self targetInstance: 'd' });
+		equals: (tuple ___value: { self targetInstance: '  bc'. self targetInstance: 'bc'. self targetInstance: 'd' });
 		yourself
 %
 category: 'done'
@@ -883,15 +883,15 @@ testrsplitOnSep
 
 	self
 		assert: ((self targetInstance: '  bcd') rsplit: 'a')
-		equals: (tuple ___new__init__: { self targetInstance: '  bcd' });
+		equals: (tuple ___value: { self targetInstance: '  bcd' });
 		assert: ((self targetInstance: '  bcd') rsplit: ' ')
-		equals: (tuple ___new__init__: { self targetInstance. self targetInstance. self targetInstance: 'bcd' });
+		equals: (tuple ___value: { self targetInstance. self targetInstance. self targetInstance: 'bcd' });
 		assert: ((self targetInstance: '  bcd') rsplit: '  ')
-		equals: (tuple ___new__init__: { self targetInstance. self targetInstance: 'bcd' });
+		equals: (tuple ___value: { self targetInstance. self targetInstance: 'bcd' });
 		assert: ((self targetInstance: '  bcd') rsplit: 'bc')
-		equals: (tuple ___new__init__: { self targetInstance: '  '. self targetInstance: 'd' });
+		equals: (tuple ___value: { self targetInstance: '  '. self targetInstance: 'd' });
 		assert: ((self targetInstance: '  bcbcd') rsplit: 'bc')
-		equals: (tuple ___new__init__: { self targetInstance: '  '. self targetInstance. self targetInstance: 'd' });
+		equals: (tuple ___value: { self targetInstance: '  '. self targetInstance. self targetInstance: 'd' });
 		yourself
 %
 category: 'done'
@@ -900,11 +900,11 @@ testrsplitOnSepAndMaxSplit
 
 	self
 		assert: ((self targetInstance: '  bcbcd') rsplit: 'bc' _: 2)
-		equals: (tuple ___new__init__: { self targetInstance: '  '. self targetInstance. self targetInstance: 'd' });
+		equals: (tuple ___value: { self targetInstance: '  '. self targetInstance. self targetInstance: 'd' });
 		assert: ((self targetInstance: '  bcbcd') rsplit: 'bc' _: 1)
-		equals: (tuple ___new__init__: { self targetInstance: '  bc'. self targetInstance: 'd' });
+		equals: (tuple ___value: { self targetInstance: '  bc'. self targetInstance: 'd' });
 		assert: ((self targetInstance: '  bcbcd') rsplit: 'bc' _: 0)
-		equals: (tuple ___new__init__: { self targetInstance: '  bcbcd' });
+		equals: (tuple ___value: { self targetInstance: '  bcbcd' });
 		yourself
 %
 category: 'done'
@@ -928,15 +928,15 @@ testsplitOnSep
 
 	self
 		assert: ((self targetInstance: '  bcd') split: 'a')
-		equals: (tuple ___new__init__: { self targetInstance: '  bcd' });
+		equals: (tuple ___value: { self targetInstance: '  bcd' });
 		assert: ((self targetInstance: '  bcd') split: ' ')
-		equals: (tuple ___new__init__: { self targetInstance. self targetInstance. self targetInstance: 'bcd' });
+		equals: (tuple ___value: { self targetInstance. self targetInstance. self targetInstance: 'bcd' });
 		assert: ((self targetInstance: '  bcd') split: '  ')
-		equals: (tuple ___new__init__: { self targetInstance. self targetInstance: 'bcd' });
+		equals: (tuple ___value: { self targetInstance. self targetInstance: 'bcd' });
 		assert: ((self targetInstance: '  bcd') split: 'bc')
-		equals: (tuple ___new__init__: { self targetInstance: '  '. self targetInstance: 'd' });
+		equals: (tuple ___value: { self targetInstance: '  '. self targetInstance: 'd' });
 		assert: ((self targetInstance: '  bcbcd') split: 'bc')
-		equals: (tuple ___new__init__: { self targetInstance: '  '. self targetInstance. self targetInstance: 'd' });
+		equals: (tuple ___value: { self targetInstance: '  '. self targetInstance. self targetInstance: 'd' });
 		yourself
 %
 category: 'done'
@@ -945,11 +945,11 @@ testsplitOnSepAndMaxSplit
 
 	self
 		assert: ((self targetInstance: '  bcbcd') split: 'bc' _: 2)
-		equals: (tuple ___new__init__: { self targetInstance: '  '. self targetInstance. self targetInstance: 'd' });
+		equals: (tuple ___value: { self targetInstance: '  '. self targetInstance. self targetInstance: 'd' });
 		assert: ((self targetInstance: '  bcbcd') split: 'bc' _: 1)
-		equals: (tuple ___new__init__: { self targetInstance: '  '. self targetInstance: 'bcd' });
+		equals: (tuple ___value: { self targetInstance: '  '. self targetInstance: 'bcd' });
 		assert: ((self targetInstance: '  bcbcd') split: 'bc' _: 0)
-		equals: (tuple ___new__init__: { self targetInstance: '  bcbcd' });
+		equals: (tuple ___value: { self targetInstance: '  bcbcd' });
 		yourself
 %
 category: 'done'

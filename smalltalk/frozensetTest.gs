@@ -27,7 +27,7 @@ method: frozensetTest
 test__and__Set
 	| a b c |
 	a := self targetInstance: { 'a'. 'b'. 'c'. 'd' }.
-	b := set ___new__init__: { 'b'. 'c'. 'd'. 'e' }.
+	b := set ___value: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a __and__: b.
 
@@ -117,10 +117,10 @@ test__eq__Set
 	list := self targetInstance: { '1'. '2'. '3' }.
 
 	self
-		deny:   (list __eq__: (set ___new__init__: { '1'. '2' }));
-		assert: (list __eq__: (set ___new__init__: { '1'. '2'. '3' }));
-		assert: (list __eq__: (set ___new__init__: { '1'. '2'. '3'. '1' }));
-		deny:   (list __eq__: (set ___new__init__: { '1'. '2'. '3'. '0' }));
+		deny:   (list __eq__: (set ___value: { '1'. '2' }));
+		assert: (list __eq__: (set ___value: { '1'. '2'. '3' }));
+		assert: (list __eq__: (set ___value: { '1'. '2'. '3'. '1' }));
+		deny:   (list __eq__: (set ___value: { '1'. '2'. '3'. '0' }));
 		yourself
 %
 category: 'done'
@@ -227,10 +227,10 @@ test__ne__Set
 	list := self targetInstance: { '1'. '2'. '3' }.
 
 	self
-		assert: (list __ne__: (set ___new__init__: { '1'. '2' }));
-		deny:   (list __ne__: (set ___new__init__: { '1'. '2'. '3' }));
-		deny:   (list __ne__: (set ___new__init__: { '1'. '2'. '3'. '2' }));
-		assert: (list __ne__: (set ___new__init__: { '1'. '2'. '3'. '0' }));
+		assert: (list __ne__: (set ___value: { '1'. '2' }));
+		deny:   (list __ne__: (set ___value: { '1'. '2'. '3' }));
+		deny:   (list __ne__: (set ___value: { '1'. '2'. '3'. '2' }));
+		assert: (list __ne__: (set ___value: { '1'. '2'. '3'. '0' }));
 		yourself
 %
 category: 'done'
@@ -255,7 +255,7 @@ method: frozensetTest
 test__or__Set
 	| a b c |
 	a := self targetInstance: { 'a'. 'b'. 'c'. 'd' }.
-	b := set ___new__init__: { 'b'. 'c'. 'd'. 'e' }.
+	b := set ___value: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a __or__: b.
 
@@ -286,7 +286,7 @@ method: frozensetTest
 test__rand__Set
 	| a b c |
 	a := self targetInstance: { 'a'. 'b'. 'c'. 'd' }.
-	b := set ___new__init__:  { 'b'. 'c'. 'd'. 'e' }.
+	b := set ___value:  { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a __rand__: b.
 
@@ -316,7 +316,7 @@ method: frozensetTest
 test__ror__Set
 	| a b c |
 	a := self targetInstance: { 'a'. 'b'. 'c'. 'd' }.
-	b := set ___new__init__:  { 'b'. 'c'. 'd'. 'e' }.
+	b := set ___value:  { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a __ror__: b.
 
@@ -348,7 +348,7 @@ method: frozensetTest
 test__rsub__Set
 	| a b c |
 	a := self targetInstance: { 'a'. 'b'. 'c'. 'd' }.
-	b := set ___new__init__:  { 'b'. 'c'. 'd'. 'e' }.
+	b := set ___value:  { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a __rsub__: b.
 
@@ -381,7 +381,7 @@ method: frozensetTest
 test__rxor__Set
 	| a b |
 	a := self targetInstance: { 'a'. 'b'. 'c' }.
-	b := set ___new__init__: { 'b'. 'c' }.
+	b := set ___value: { 'b'. 'c' }.
 
 	self
 		assert: (a __rxor__: b) __class__ equals: set;
@@ -422,7 +422,7 @@ method: frozensetTest
 test__sub__Set
 	| a b c |
 	a := self targetInstance: { 'a'. 'b'. 'c'. 'd' }.
-	b := set ___new__init__: { 'b'. 'c'. 'd'. 'e' }.
+	b := set ___value: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a __sub__: b.
 
@@ -461,7 +461,7 @@ method: frozensetTest
 test__xor__Set
 	| a b |
 	a := self targetInstance: { 'a'. 'b'. 'c' }.
-	b := set ___new__init__: { 'b'. 'c' }.
+	b := set ___value: { 'b'. 'c' }.
 
 	self
 		assert: (a __xor__: b) __class__ equals: self targetClass;
@@ -504,7 +504,7 @@ method: frozensetTest
 testdifferenceSet
 	| a b c |
 	a := self targetInstance: { 'a'. 'b'. 'c'. 'd' }.
-	b := set ___new__init__: { 'b'. 'c'. 'd'. 'e' }.
+	b := set ___value: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a difference: b.
 
@@ -540,7 +540,7 @@ method: frozensetTest
 testintersectionSet
 	| a b c |
 	a := self targetInstance: { 'a'. 'b'. 'c'. 'd' }.
-	b := set ___new__init__: { 'b'. 'c'. 'd'. 'e' }.
+	b := set ___value: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a intersection: b.
 
@@ -635,7 +635,7 @@ method: frozensetTest
 testsymmetric_differenceSet
 	| a b |
 	a := self targetInstance: { 'a'. 'b'. 'c' }.
-	b := set ___new__init__: { 'b'. 'c' }.
+	b := set ___value: { 'b'. 'c' }.
 
 	self
 		assert: (a symmetric_difference: b) __class__ equals: self targetClass;
@@ -663,7 +663,7 @@ method: frozensetTest
 testunionSet
 	| a b c |
 	a := self targetInstance: { 'a'. 'b'. 'c'. 'd' }.
-	b := set ___new__init__: { 'b'. 'c'. 'd'. 'e' }.
+	b := set ___value: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a union: b.
 

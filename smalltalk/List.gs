@@ -30,7 +30,7 @@ category: 'Python'
 method: list
 __reversed__
 
-	^self class ___new__init__: self ___container reverse.
+	^self class ___value: container
 %
 category: 'Python'
 method: list

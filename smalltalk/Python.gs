@@ -4225,11 +4225,14 @@ complex comment:
 [<class ''complex''>, <class ''object''>]
 
 >>> sorted(set(dir(complex)) - set(dir(object)))
-[''__abs__'', ''__add__'', ''__bool__'', ''__divmod__'', ''__float__'', ''__floordiv__'', ''__getnewargs__'', ''__int__'', ''__mod__'', ''__mul__'', ''__neg__'', ''__pos__'', ''__pow__'', ''__radd__'', ''__rdivmod__'', ''__rfloordiv__'', ''__rmod__'', ''__rmul__'', ''__rpow__'', ''__rsub__'', ''__rtruediv__'', ''__sub__'', ''__truediv__'', ''conjugate'', ''imag'', ''real'']'
+[''__abs__'', ''__add__'', ''__bool__'', ''__getnewargs__'', ''__mul__'', ''__neg__'', ''__pos__'', ''__pow__'', ''__radd__'', ''__rmul__'', ''__rpow__'', ''__rsub__'', ''__rtruediv__'', ''__sub__'', ''__truediv__'', ''conjugate'', ''imag'', ''real'']
+
+>>> dir(object)
+[''__class__'', ''__delattr__'', ''__dir__'', ''__doc__'', ''__eq__'', ''__format__'', ''__ge__'', ''__getattribute__'', ''__gt__'', ''__hash__'', ''__init__'', ''__init_subclass__'', ''__le__'', ''__lt__'', ''__ne__'', ''__new__'', ''__reduce__'', ''__reduce_ex__'', ''__repr__'', ''__setattr__'', ''__sizeof__'', ''__str__'', ''__subclasshook__'']'
 %
 expectvalue /Class
 doit
-complex category: 'BuiltIns-Magnitudes'
+complex category: 'BuiltIns-Numbers'
 %
 set compile_env: 0
 ! ------------------- Class definition for Container
@@ -4539,17 +4542,18 @@ object subclass: 'float'
 expectvalue /Class
 doit
 float comment: 
-'
->>> float.mro()
+'>>> float.mro()
 [<class ''float''>, <class ''object''>]
 
 >>> sorted(set(dir(float)) - set(dir(object)))
 [''__abs__'', ''__add__'', ''__bool__'', ''__ceil__'', ''__divmod__'', ''__float__'', ''__floor__'', ''__floordiv__'', ''__getformat__'', ''__getnewargs__'', ''__int__'', ''__mod__'', ''__mul__'', ''__neg__'', ''__pos__'', ''__pow__'', ''__radd__'', ''__rdivmod__'', ''__rfloordiv__'', ''__rmod__'', ''__rmul__'', ''__round__'', ''__rpow__'', ''__rsub__'', ''__rtruediv__'', ''__set_format__'', ''__sub__'', ''__truediv__'', ''__trunc__'', ''as_integer_ratio'', ''conjugate'', ''fromhex'', ''hex'', ''imag'', ''is_integer'', ''real'']
-'
+
+>>> dir(object)
+[''__class__'', ''__delattr__'', ''__dir__'', ''__doc__'', ''__eq__'', ''__format__'', ''__ge__'', ''__getattribute__'', ''__gt__'', ''__hash__'', ''__init__'', ''__init_subclass__'', ''__le__'', ''__lt__'', ''__ne__'', ''__new__'', ''__reduce__'', ''__reduce_ex__'', ''__repr__'', ''__setattr__'', ''__sizeof__'', ''__str__'', ''__subclasshook__'']'
 %
 expectvalue /Class
 doit
-float category: 'BuiltIns-Magnitudes'
+float category: 'BuiltIns-Numbers'
 %
 set compile_env: 0
 ! ------------------- Class definition for function
@@ -4584,19 +4588,18 @@ object subclass: 'int'
 expectvalue /Class
 doit
 int comment: 
-'
->>> int.mro()
+'>>> int.mro()
 [<class ''int''>, <class ''object''>]
 
 >>> sorted(set(dir(int)) - set(dir(object)))
 [''__abs__'', ''__add__'', ''__and__'', ''__bool__'', ''__ceil__'', ''__divmod__'', ''__float__'', ''__floor__'', ''__floordiv__'', ''__getnewargs__'', ''__index__'', ''__int__'', ''__invert__'', ''__lshift__'', ''__mod__'', ''__mul__'', ''__neg__'', ''__or__'', ''__pos__'', ''__pow__'', ''__radd__'', ''__rand__'', ''__rdivmod__'', ''__rfloordiv__'', ''__rlshift__'', ''__rmod__'', ''__rmul__'', ''__ror__'', ''__round__'', ''__rpow__'', ''__rrshift__'', ''__rshift__'', ''__rsub__'', ''__rtruediv__'', ''__rxor__'', ''__sub__'', ''__truediv__'', ''__trunc__'', ''__xor__'', ''as_integer_ratio'', ''bit_length'', ''conjugate'', ''denominator'', ''from_bytes'', ''imag'', ''numerator'', ''real'', ''to_bytes'']
 
-
-'
+>>> dir(object)
+[''__class__'', ''__delattr__'', ''__dir__'', ''__doc__'', ''__eq__'', ''__format__'', ''__ge__'', ''__getattribute__'', ''__gt__'', ''__hash__'', ''__init__'', ''__init_subclass__'', ''__le__'', ''__lt__'', ''__ne__'', ''__new__'', ''__reduce__'', ''__reduce_ex__'', ''__repr__'', ''__setattr__'', ''__sizeof__'', ''__str__'', ''__subclasshook__'']'
 %
 expectvalue /Class
 doit
-int category: 'BuiltIns-Magnitudes'
+int category: 'BuiltIns-Numbers'
 %
 set compile_env: 0
 ! ------------------- Class definition for bool
@@ -4613,31 +4616,19 @@ int subclass: 'bool'
 %
 expectvalue /Class
 doit
-bool category: 'BuiltIns-Magnitudes'
-%
-set compile_env: 0
-! ------------------- Class definition for Magnitude
-expectvalue /Class
-doit
-object subclass: 'Magnitude'
-  instVarNames: #( value)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
+bool comment: 
+'>>> bool.mro()
+[<class ''bool''>, <class ''int''>, <class ''object''>]
 
+>>> sorted(set(dir(bool)) - set(dir(int)))
+[]
+
+>>> dir(int)
+[''__abs__'', ''__add__'', ''__and__'', ''__bool__'', ''__ceil__'', ''__class__'', ''__delattr__'', ''__dir__'', ''__divmod__'', ''__doc__'', ''__eq__'', ''__float__'', ''__floor__'', ''__floordiv__'', ''__format__'', ''__ge__'', ''__getattribute__'', ''__getnewargs__'', ''__gt__'', ''__hash__'', ''__index__'', ''__init__'', ''__init_subclass__'', ''__int__'', ''__invert__'', ''__le__'', ''__lshift__'', ''__lt__'', ''__mod__'', ''__mul__'', ''__ne__'', ''__neg__'', ''__new__'', ''__or__'', ''__pos__'', ''__pow__'', ''__radd__'', ''__rand__'', ''__rdivmod__'', ''__reduce__'', ''__reduce_ex__'', ''__repr__'', ''__rfloordiv__'', ''__rlshift__'', ''__rmod__'', ''__rmul__'', ''__ror__'', ''__round__'', ''__rpow__'', ''__rrshift__'', ''__rshift__'', ''__rsub__'', ''__rtruediv__'', ''__rxor__'', ''__setattr__'', ''__sizeof__'', ''__str__'', ''__sub__'', ''__subclasshook__'', ''__truediv__'', ''__trunc__'', ''__xor__'', ''as_integer_ratio'', ''bit_count'', ''bit_length'', ''conjugate'', ''denominator'', ''from_bytes'', ''imag'', ''numerator'', ''real'', ''to_bytes'']'
 %
 expectvalue /Class
 doit
-Magnitude comment: 
-'
-https://docs.python.org/3/library/operator.html
-'
-%
-expectvalue /Class
-doit
-Magnitude category: 'BuiltIns-Magnitudes'
+bool category: 'BuiltIns-Numbers'
 %
 set compile_env: 0
 ! ------------------- Class definition for map
@@ -6005,7 +5996,6 @@ input LookupError.gs
 input LShiftAst.gs
 input LtAst.gs
 input LtEAst.gs
-input Magnitude.gs
 input map.gs
 input mapTest.gs
 input MatMultAst.gs

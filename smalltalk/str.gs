@@ -21,6 +21,12 @@ __eq__: anObject
 %
 category: 'Python'
 method: str
+__hash__
+
+	^value hash
+%
+category: 'Python'
+method: str
 __init__: aString
 
 	value := aString.

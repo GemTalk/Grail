@@ -69,7 +69,7 @@ test__doc__
 		'instance that has no instance attributes and cannot be given any.\n'.
 
 	self
-		assert: self targetInstance __doc__ equals: doc;
+		assert: object __call__ __doc__ equals: doc;
 		yourself.
 %
 category: 'tests'
@@ -139,7 +139,7 @@ method: objectTest
 test__new__
 
 	self
-		assert: (self targetClass __new__: object) __class__ equals: self targetClass;
+		assert: self targetClass __new__ __class__ equals: self targetClass;
 		yourself.
 %
 category: 'tests'

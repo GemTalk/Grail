@@ -25,6 +25,12 @@ ___assertMagnitudeAsSecondAgumentOn: args
 %
 category: 'Smalltalk'
 classmethod: complex
+___real: r
+
+	^self ___real: r imaginary: 0
+%
+category: 'Smalltalk'
+classmethod: complex
 ___real: r imaginary: i
 
 	^self basicNew
@@ -33,13 +39,13 @@ ___real: r imaginary: i
 %
 ! ------------------- Instance methods for complex
 set compile_env: 0
-category: 'Python'
+category: 'Python-complex'
 method: complex
 __abs__
 
 	^float ___value: ((real raisedTo: 2) + (imaginary raisedTo: 2)) sqrt
 %
-category: 'Python'
+category: 'Python-complex'
 method: complex
 __add__: anObject
 
@@ -47,70 +53,21 @@ __add__: anObject
 		___real: real + anObject real ___value
 		imaginary: imaginary + anObject imag ___value
 %
-category: 'Python'
+category: 'Python-complex'
 method: complex
 __bool__
 
 	^bool ___value: (real ~= 0 or: [imaginary ~= 0])
 %
-category: 'Python'
+category: 'Python-complex'
 method: complex
-__divmod__: any
+__getnewargs__
+	"https://docs.python.org/3/library/pickle.html#object.__getnewargs__"
 
-	^TypeError signal: 'can''t take floor or mod of complex numbers'
+	#pyTodo.
+	self error: 'Not yet implemented!'.
 %
-category: 'Python'
-method: complex
-__eq__: anObject
-
-	^bool ___value: (real = anObject real ___value and: [imaginary = anObject imag ___value])
-%
-category: 'Python'
-method: complex
-__ge__: anObject
-
-	TypeError signal: 'TypeError: ''>='' not supported between instances of ''complex'' and ' , anObject class asString printString.
-%
-category: 'Python'
-method: complex
-__gt__: anObject
-
-	TypeError signal: 'TypeError: ''>'' not supported between instances of ''complex'' and ' , anObject class asString printString.
-%
-category: 'Python'
-method: complex
-__init__: anObject
-	"https://docs.python.org/3/library/functions.html#complex"
-
-	(anObject isKindOf: str) ifTrue: [^self ___parse: anObject ___value].
-	real := anObject real ___value.
-	imaginary := anObject imag ___value.
-%
-category: 'Python'
-method: complex
-__int__
-
-	^TypeError signal: 'can''t convert complex to int'
-%
-category: 'Python'
-method: complex
-__le__: anObject
-
-	TypeError signal: 'TypeError: ''<='' not supported between instances of ''complex'' and ' , anObject class asString printString.
-%
-category: 'Python'
-method: complex
-__lt__: anObject
-
-	TypeError signal: 'TypeError: ''<'' not supported between instances of ''complex'' and ' , anObject class asString printString.
-%
-category: 'Python'
-method: complex
-__mod__: any
-
-	^TypeError signal: 'can''t mod complex numbers'
-%
-category: 'Python'
+category: 'Python-complex'
 method: complex
 __mul__: any
 	"https://mathworld.wolfram.com/ComplexMultiplication.html"
@@ -125,13 +82,7 @@ __mul__: any
 		___real: ((a * c) - (b * d))
 		imaginary: ((a * d) + (b * c))
 %
-category: 'Python'
-method: complex
-__ne__: other
-
-	^bool ___value: ((self __eq__: other) ___value == 0 ifTrue: [1] ifFalse: [0])
-%
-category: 'Python'
+category: 'Python-complex'
 method: complex
 __neg__
 
@@ -139,13 +90,13 @@ __neg__
 		___real: real negated 
 		imaginary: imaginary negated
 %
-category: 'Python'
+category: 'Python-complex'
 method: complex
 __pos__
 
 		^self
 %
-category: 'Python'
+category: 'Python-complex'
 method: complex
 __pow__: exponent
 	"https://byjus.com/complex-number-power-formula/"
@@ -158,72 +109,39 @@ __pow__: exponent
 	].
 	^newValue
 %
-category: 'Python'
+category: 'Python-complex'
 method: complex
 __radd__: any
 
 	^any __add__: self
 %
-category: 'Python'
-method: complex
-__rand__: any
-
-	^any __and__: self
-%
-category: 'Python'
-method: complex
-__rdivmod__: any
-
-	^any __divmod__: self
-%
-category: 'Python'
-method: complex
-__repr__
-
-	^str ___value: (String streamContents: [:s |
-		real = 0 ifFalse: [
-			s nextPut: $(.
-			((real rem: 1) = 0 ifTrue: [real asInteger] ifFalse: [real]) printOn: s.
-			imaginary positive ifTrue: [s nextPut: $+]
-		].
-		((imaginary rem: 1) = 0 ifTrue: [imaginary asInteger] ifFalse: [imaginary]) printOn: s.
-		s nextPut: $j.
-		real = 0 ifFalse: [s nextPut: $)]
-	])
-%
-category: 'Python'
-method: complex
-__rmod__: any
-
-	^any __mod__: self
-%
-category: 'Python'
+category: 'Python-complex'
 method: complex
 __rmul__: any
 
 	^any __mul__: self
 %
-category: 'Python'
+category: 'Python-complex'
 method: complex
 __rpow__: any
 
 	^any __pow__: self
 %
-category: 'Python'
+category: 'Python-complex'
 method: complex
 __rsub__: any
 
 	^any __sub__: self
 %
-category: 'Python'
+category: 'Python-complex'
 method: complex
 __rtruediv__: any
 	"https://mathworld.wolfram.com/ComplexDivision.html"
 
 	(any isKindOf: complex) ifTrue: [^any __truediv__: self].
-	^(complex ___new__init__: any ___value _: 0) __truediv__: self.
+	^(complex ___value: any ___value) __truediv__: self
 %
-category: 'Python'
+category: 'Python-complex'
 method: complex
 __sub__: any
 	"https://mathworld.wolfram.com/ComplexMultiplication.html"
@@ -237,7 +155,7 @@ __sub__: any
 		___real: a - c
 		imaginary: b - d
 %
-category: 'Python'
+category: 'Python-complex'
 method: complex
 __truediv__: any
 	"https://mathworld.wolfram.com/ComplexDivision.html"
@@ -252,7 +170,7 @@ __truediv__: any
 		___real: (a * c) + (b * d) / denominator
 		imaginary: (b * c) - (a * d) / denominator
 %
-category: 'Python'
+category: 'Python-complex'
 method: complex
 conjugate
 
@@ -260,37 +178,103 @@ conjugate
 		___real: real 
 		imaginary: imaginary negated.
 %
-category: 'Python'
+category: 'Python-complex'
 method: complex
 imag
 
 	^float ___value: imaginary
 %
-category: 'Python'
+category: 'Python-complex'
 method: complex
 real
 
 	^float ___value: real
 %
 set compile_env: 0
-category: 'Smalltalk'
+category: 'Python-object'
 method: complex
-___initArgs: args
+__eq__: anObject
 
-	self error: 'use another constructor'.
-	args isEmpty ifTrue: [^self ___initialize: 0 _: 0].
-
-	self class ___assertJustOneStringArgumentOn: args.
-	((args first isKindOf: String) or: [args first  isKindOf: str])
-		ifTrue: [^self ___parse: args first].
-
-	self class ___assertMagnitudeAsFirstAgumentOn: args.
-	(args size == 1)
-		ifTrue: [^self ___initialize: args first _: 0].
-
-	self class ___assertMagnitudeAsSecondAgumentOn: args.
-   ^self ___initialize: args first _: args second.
+	^bool ___value: (real = anObject real ___value and: [imaginary = anObject imag ___value])
 %
+category: 'Python-object'
+method: complex
+__ge__: anObject
+
+	TypeError signal: 'TypeError: ''>='' not supported between instances of ''complex'' and ' , anObject class asString printString.
+%
+category: 'Python-object'
+method: complex
+__gt__: anObject
+
+	TypeError signal: 'TypeError: ''>'' not supported between instances of ''complex'' and ' , anObject class asString printString.
+%
+category: 'Python-object'
+method: complex
+__init__: anObject
+	"https://docs.python.org/3/library/functions.html#complex"
+
+	(anObject isKindOf: str) ifTrue: [^self ___parse: anObject ___value].
+	[
+		real := anObject real ___value.
+		imaginary := anObject imag ___value.
+	] on: Error do: [:ex | 
+		TypeError signal: 'complex() first argument must be a string or a number, not ' , anObject class name asString printString 
+	].
+%
+category: 'Python-object'
+method: complex
+__init__: p1 _: p2
+	"https://docs.python.org/3/library/functions.html#complex"
+
+	(p1 isKindOf: str) ifTrue: [
+		TypeError signal: 'complex() can''t take second arg if first is a string'.
+	].
+	[
+		real := p1 ___value.
+	] on: Error do: [:ex | 
+		TypeError signal: 'complex() first argument must be a number, not ' , p1 class name asString printString.
+	].
+	[
+		imaginary := p2 ___value.
+	] on: Error do: [:ex | 
+		TypeError signal: 'complex() second argument must be a number, not ' , p2 class name asString printString.
+	].
+%
+category: 'Python-object'
+method: complex
+__le__: anObject
+
+	TypeError signal: 'TypeError: ''<='' not supported between instances of ''complex'' and ' , anObject class asString printString.
+%
+category: 'Python-object'
+method: complex
+__lt__: anObject
+
+	TypeError signal: 'TypeError: ''<'' not supported between instances of ''complex'' and ' , anObject class asString printString.
+%
+category: 'Python-object'
+method: complex
+__ne__: other
+
+	^bool ___value: ((self __eq__: other) ___value == 0 ifTrue: [1] ifFalse: [0])
+%
+category: 'Python-object'
+method: complex
+__repr__
+
+	^str ___value: (String streamContents: [:s |
+		real = 0 ifFalse: [
+			s nextPut: $(.
+			((real rem: 1) = 0 ifTrue: [real asInteger] ifFalse: [real]) printOn: s.
+			imaginary positive ifTrue: [s nextPut: $+]
+		].
+		((imaginary rem: 1) = 0 ifTrue: [imaginary asInteger] ifFalse: [imaginary]) printOn: s.
+		s nextPut: $j.
+		real = 0 ifFalse: [s nextPut: $)]
+	])
+%
+set compile_env: 0
 category: 'Smalltalk'
 method: complex
 ___initialize: r1 _: r2

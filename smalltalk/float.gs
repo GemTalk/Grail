@@ -16,235 +16,272 @@ ___value: aNumber
 %
 ! ------------------- Instance methods for float
 set compile_env: 0
-category: 'Python'
+category: 'Python-float'
 method: float
 __abs__
 
 	^float ___value: value abs
 %
-category: 'Python'
+category: 'Python-float'
 method: float
 __add__: anObject
 
 	^float ___value: value + anObject ___value
 %
-category: 'Python'
+category: 'Python-float'
 method: float
 __bool__
 
 	^bool ___value: value ~= 0
 %
-category: 'Python'
+category: 'Python-float'
 method: float
 __ceil__
 
 	^int ___value: value ceiling
 %
-category: 'Python'
+category: 'Python-float'
 method: float
 __divmod__: anObject
 
-	^tuple  ___new__init__: { value // anObject ___value. value \\ anObject ___value }
+	^tuple  ___value: { value // anObject ___value. value \\ anObject ___value }
 %
-category: 'Python'
-method: float
-__eq__: anObject
-
-	^bool ___value: value = anObject ___value
-%
-category: 'Python'
+category: 'Python-float'
 method: float
 __float__
 
 	^self
 %
-category: 'Python'
+category: 'Python-float'
 method: float
 __floor__
 
 	^int ___value: value floor
 %
-category: 'Python'
+category: 'Python-float'
 method: float
 __floordiv__: anObject
 
 	^int ___value: value // anObject ___value
 %
-category: 'Python'
+category: 'Python-float'
 method: float
-__ge__: anObject
+__fromhex__
 
-	^bool ___value: value >= anObject ___value
+	self error: #pyTodo
 %
-category: 'Python'
+category: 'Python-float'
 method: float
-__gt__: anObject
+__getformat__
 
-	^bool ___value: value > anObject ___value
+	self error: #pyTodo
 %
-category: 'Python'
+category: 'Python-float'
+method: float
+__getnewargs__
+
+	self error: #pyTodo
+%
+category: 'Python-float'
+method: float
+__hex__
+
+	self error: #pyTodo
+%
+category: 'Python-float'
 method: float
 __int__
 
 	^self __trunc__
 %
-category: 'Python'
-method: float
-__le__: anObject
-
-	^bool ___value: value <= anObject ___value
-%
-category: 'Python'
-method: float
-__lt__: anObject
-
-	^bool ___value: value < anObject ___value
-%
-category: 'Python'
+category: 'Python-float'
 method: float
 __mod__: anObject
 
 	^float ___value: (value rem: anObject ___value)
 %
-category: 'Python'
+category: 'Python-float'
 method: float
 __mul__: anObject
 
 	^float ___value: value * anObject ___value
 %
-category: 'Python'
-method: float
-__ne__: anObject
-
-	^bool ___value: value ~= anObject ___value
-%
-category: 'Python'
+category: 'Python-float'
 method: float
 __neg__
 
 	^float ___value: value negated
 %
-category: 'Python'
+category: 'Python-float'
 method: float
 __pos__
 
 	^self __abs__
 %
-category: 'Python'
+category: 'Python-float'
 method: float
 __pow__: anObject
 
 	^float ___value: (value raisedTo: anObject ___value)
 %
-category: 'Python'
+category: 'Python-float'
 method: float
 __radd__: any
 
 	^any __add__: self
 %
-category: 'Python'
-method: float
-__rand__: any
-
-	^any __and__: self
-%
-category: 'Python'
+category: 'Python-float'
 method: float
 __rdivmod__: any
 
 	^any __divmod__: self
 %
-category: 'Python'
+category: 'Python-float'
 method: float
 __rfloordiv__: any
 
 	^any __floordiv__: self
 %
-category: 'Python'
+category: 'Python-float'
 method: float
 __rmod__: any
 
 	^any __mod__: self
 %
-category: 'Python'
+category: 'Python-float'
 method: float
 __rmul__: any
 
 	^any __mul__: self
 %
-category: 'Python'
+category: 'Python-float'
 method: float
 __round__
 
 	^int ___value: value rounded
 %
-category: 'Python'
+category: 'Python-float'
 method: float
 __rpow__: any
 
 	^any __pow__: self
 %
-category: 'Python'
+category: 'Python-float'
 method: float
 __rsub__: any
 
 	^any __sub__: self
 %
-category: 'Python'
+category: 'Python-float'
 method: float
 __rtruediv__: any
 
 	^any __truediv__: self
 %
-category: 'Python'
+category: 'Python-float'
+method: float
+__setformat__
+
+	self error: #pyTodo
+%
+category: 'Python-float'
 method: float
 __sub__: anObject
 
 	^float ___value: value - anObject ___value
 %
-category: 'Python'
+category: 'Python-float'
 method: float
 __truediv__: anObject
 
 	^float ___value: value / anObject ___value
 %
-category: 'Python'
+category: 'Python-float'
 method: float
 __trunc__
 
 	^int ___value: value truncated
 %
-category: 'Python'
+category: 'Python-float'
 method: float
 as_integer_ratio
 
 	| val |
 	val := value asFraction.
-   ^tuple ___new__init__: { val numerator. val denominator }
+   ^tuple ___value: { val numerator. val denominator }
 %
-category: 'Python'
+category: 'Python-float'
 method: float
 conjugate
 
 	^self
 %
-category: 'Python'
+category: 'Python-float'
 method: float
 imag
 
 	^float ___value: 0
 %
-category: 'Python'
+category: 'Python-float'
 method: float
 is_integer
 
 	^self __trunc__ __eq__: self
 %
-category: 'Python'
+category: 'Python-float'
 method: float
 real
 
 	^self
+%
+set compile_env: 0
+category: 'Python-object'
+method: float
+__eq__: anObject
+
+	^bool ___value: value = anObject ___value
+%
+category: 'Python-object'
+method: float
+__ge__: anObject
+
+	^bool ___value: value >= anObject ___value
+%
+category: 'Python-object'
+method: float
+__gt__: anObject
+
+	^bool ___value: value > anObject ___value
+%
+category: 'Python-object'
+method: float
+__init__
+
+	value := 0.0.
+%
+category: 'Python-object'
+method: float
+__init__: aNumber
+
+	value := aNumber asFloat.
+%
+category: 'Python-object'
+method: float
+__le__: anObject
+
+	^bool ___value: value <= anObject ___value
+%
+category: 'Python-object'
+method: float
+__lt__: anObject
+
+	^bool ___value: value < anObject ___value
+%
+category: 'Python-object'
+method: float
+__ne__: anObject
+
+	^bool ___value: value ~= anObject ___value
 %
 set compile_env: 0
 category: 'Smalltalk'
