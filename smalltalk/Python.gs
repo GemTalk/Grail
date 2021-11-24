@@ -4204,6 +4204,34 @@ doit
 classmethod category: 'BuiltIns-Kernel'
 %
 set compile_env: 0
+! ------------------- Class definition for complex
+expectvalue /Class
+doit
+object subclass: 'complex'
+  instVarNames: #( value real imaginary)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+complex comment: 
+'https://docs.python.org/3/library/functions.html#complex
+
+>>> complex.mro()
+[<class ''complex''>, <class ''object''>]
+
+>>> sorted(set(dir(complex)) - set(dir(object)))
+[''__abs__'', ''__add__'', ''__bool__'', ''__divmod__'', ''__float__'', ''__floordiv__'', ''__getnewargs__'', ''__int__'', ''__mod__'', ''__mul__'', ''__neg__'', ''__pos__'', ''__pow__'', ''__radd__'', ''__rdivmod__'', ''__rfloordiv__'', ''__rmod__'', ''__rmul__'', ''__rpow__'', ''__rsub__'', ''__rtruediv__'', ''__sub__'', ''__truediv__'', ''conjugate'', ''imag'', ''real'']'
+%
+expectvalue /Class
+doit
+complex category: 'BuiltIns-Magnitudes'
+%
+set compile_env: 0
 ! ------------------- Class definition for Container
 expectvalue /Class
 doit
@@ -4612,33 +4640,6 @@ doit
 Magnitude category: 'BuiltIns-Magnitudes'
 %
 set compile_env: 0
-! ------------------- Class definition for complex
-expectvalue /Class
-doit
-Magnitude subclass: 'complex'
-  instVarNames: #( imaginary)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-complex comment: 
-'
->>> complex.mro()
-[<class ''complex''>, <class ''object''>]
->>> sorted(set(dir(complex)) - set(dir(object)))
-[''__abs__'', ''__add__'', ''__bool__'', ''__divmod__'', ''__float__'', ''__floordiv__'', ''__getnewargs__'', ''__int__'', ''__mod__'', ''__mul__'', ''__neg__'', ''__pos__'', ''__pow__'', ''__radd__'', ''__rdivmod__'', ''__rfloordiv__'', ''__rmod__'', ''__rmul__'', ''__rpow__'', ''__rsub__'', ''__rtruediv__'', ''__sub__'', ''__truediv__'', ''conjugate'', ''imag'', ''real'']
-'
-%
-expectvalue /Class
-doit
-complex category: 'BuiltIns-Magnitudes'
-%
-set compile_env: 0
 ! ------------------- Class definition for map
 expectvalue /Class
 doit
@@ -4769,6 +4770,23 @@ object subclass: 'Singleton'
 expectvalue /Class
 doit
 Singleton category: 'BuiltIns-Kernel'
+%
+set compile_env: 0
+! ------------------- Class definition for NoneType
+expectvalue /Class
+doit
+Singleton subclass: 'NoneType'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+NoneType category: 'BuiltIns-Kernel'
 %
 set compile_env: 0
 ! ------------------- Class definition for NotImplementedType
@@ -6003,6 +6021,7 @@ input MultAst.gs
 input NameAst.gs
 input NamedExprAst.gs
 input NameError.gs
+input NoneType.gs
 input NonlocalAst.gs
 input NotADirectoryError.gs
 input NotAst.gs

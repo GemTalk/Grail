@@ -49,7 +49,8 @@ __and__: anObject
 category: 'Python'
 method: int
 __bool__
-	^value ~= 0
+
+	^bool ___value: value ~= 0
 %
 category: 'Python'
 method: int
@@ -71,7 +72,8 @@ __eq__: anObject
 category: 'Python'
 method: int
 __float__
-	^float ___new__init__: value
+
+	^float ___value: value
 %
 category: 'Python'
 method: int

@@ -21,3 +21,13 @@ ___value: anObject
 	#todo
 %
 ! ------------------- Instance methods for bool
+set compile_env: 0
+category: 'Smalltalk'
+method: bool
+printOn: aStream
+
+	aStream
+		nextPutAll: 'bool(';
+		print: (value ~= 0 ifTrue: ['True'] ifFalse: ['False']);
+		nextPut: $).
+%

@@ -3,6 +3,7 @@ removeAllMethods complex
 removeAllClassMethods complex
 ! ------------------- Class methods for complex
 set compile_env: 0
+set compile_env: 0
 category: 'Smalltalk'
 classmethod: complex
 ___assertJustOneStringArgumentOn: args
@@ -22,27 +23,35 @@ ___assertMagnitudeAsSecondAgumentOn: args
 	((args second isKindOf: (Globals at: #'Magnitude')) or: [args second isKindOf: Magnitude])
 		ifFalse: [TypeError signal: self name, '() second argument must be a number, not ''', args second class name,''''].
 %
+category: 'Smalltalk'
+classmethod: complex
+___real: r imaginary: i
+
+	^self basicNew
+		___real: r imaginary: i;
+		yourself
+%
 ! ------------------- Instance methods for complex
 set compile_env: 0
 category: 'Python'
 method: complex
 __abs__
 
-	^float ___new__init__: ((value raisedTo: 2) + (imaginary raisedTo: 2)) sqrt
+	^float ___value: ((real raisedTo: 2) + (imaginary raisedTo: 2)) sqrt
 %
 category: 'Python'
 method: complex
-__add__: other
+__add__: anObject
 
-	^self class
-		___new__init__: value + other ___value
-		_: ((other isKindOf: complex) ifTrue: [imaginary + other imag ___value] ifFalse: [imaginary])
+	^complex
+		___real: real + anObject real ___value
+		imaginary: imaginary + anObject imag ___value
 %
 category: 'Python'
 method: complex
 __bool__
 
-	^self __abs__ ~= 0
+	^bool ___value: (real ~= 0 or: [imaginary ~= 0])
 %
 category: 'Python'
 method: complex
@@ -52,39 +61,30 @@ __divmod__: any
 %
 category: 'Python'
 method: complex
-__eq__: other
+__eq__: anObject
 
-	(other isKindOf: complex) ifTrue: [
-		^value = other real ___value and: [imaginary = other imag ___value]
-	].
-	((other isKindOf: Magnitude) and: [imaginary = 0]) ifTrue: [
-		^value = other ___value
-	].
-	^false
-%
-category: 'Python'
-method: complex
-__float__
-
-	^TypeError signal: 'can''t convert complex to float'
-%
-category: 'Python'
-method: complex
-__floordiv__: any
-
-	^TypeError signal: 'can''t take floor of complex numbers'
+	^bool ___value: (real = anObject real ___value and: [imaginary = anObject imag ___value])
 %
 category: 'Python'
 method: complex
 __ge__: anObject
 
-	^NotImplementedType singleton
+	TypeError signal: 'TypeError: ''>='' not supported between instances of ''complex'' and ' , anObject class asString printString.
 %
 category: 'Python'
 method: complex
 __gt__: anObject
 
-	^NotImplementedType singleton
+	TypeError signal: 'TypeError: ''>'' not supported between instances of ''complex'' and ' , anObject class asString printString.
+%
+category: 'Python'
+method: complex
+__init__: anObject
+	"https://docs.python.org/3/library/functions.html#complex"
+
+	(anObject isKindOf: str) ifTrue: [^self ___parse: anObject ___value].
+	real := anObject real ___value.
+	imaginary := anObject imag ___value.
 %
 category: 'Python'
 method: complex
@@ -96,13 +96,13 @@ category: 'Python'
 method: complex
 __le__: anObject
 
-	^NotImplementedType singleton
+	TypeError signal: 'TypeError: ''<='' not supported between instances of ''complex'' and ' , anObject class asString printString.
 %
 category: 'Python'
 method: complex
 __lt__: anObject
 
-	^NotImplementedType singleton
+	TypeError signal: 'TypeError: ''<'' not supported between instances of ''complex'' and ' , anObject class asString printString.
 %
 category: 'Python'
 method: complex
@@ -114,82 +114,112 @@ category: 'Python'
 method: complex
 __mul__: any
 	"https://mathworld.wolfram.com/ComplexMultiplication.html"
-	| a b c d |
-	(any isKindOf: Magnitude)
-		ifFalse: [^self __mul__: (self class ___new__init__: any)].
 
+	| a b c d |
 	a := self real ___value.
 	b := self imag ___value.
 	c := any real ___value.
 	d := any imag ___value.
 
-	^self class ___new__init__: ((a * c) - (b * d))
-				                 _: ((a * d) + (b * c))
+	^complex
+		___real: ((a * c) - (b * d))
+		imaginary: ((a * d) + (b * c))
+%
+category: 'Python'
+method: complex
+__ne__: other
+
+	^bool ___value: ((self __eq__: other) ___value == 0 ifTrue: [1] ifFalse: [0])
 %
 category: 'Python'
 method: complex
 __neg__
-	^self class ___new__init__: value negated _: imaginary negated.
+
+	^complex 
+		___real: real negated 
+		imaginary: imaginary negated
 %
 category: 'Python'
 method: complex
 __pos__
+
 		^self
 %
 category: 'Python'
 method: complex
-__pow__: other
-	| newValue repeats |
-	repeats := (other isKindOf: Magnitude)
-						ifTrue: [other ___value]
-						ifFalse: [other].
+__pow__: exponent
+	"https://byjus.com/complex-number-power-formula/"
 
+	| newValue  |
 	#pyElaborate.
-	newValue := 1.
-	repeats timesRepeat: [
+	newValue := int ___value: 1.
+	exponent ___value timesRepeat: [
 		newValue := self __mul__: newValue
-		].
+	].
 	^newValue
+%
+category: 'Python'
+method: complex
+__radd__: any
+
+	^any __add__: self
+%
+category: 'Python'
+method: complex
+__rand__: any
+
+	^any __and__: self
 %
 category: 'Python'
 method: complex
 __rdivmod__: any
 
-	^TypeError signal: 'can''t take floor or mod of complex numbers'
+	^any __divmod__: self
 %
 category: 'Python'
 method: complex
 __repr__
 
-	^String streamContents: [:s |
-		value = 0 ifFalse: [
+	^str ___value: (String streamContents: [:s |
+		real = 0 ifFalse: [
 			s nextPut: $(.
-			((value rem: 1) = 0 ifTrue: [value asInteger] ifFalse: [value]) printOn: s.
+			((real rem: 1) = 0 ifTrue: [real asInteger] ifFalse: [real]) printOn: s.
 			imaginary positive ifTrue: [s nextPut: $+]
 		].
 		((imaginary rem: 1) = 0 ifTrue: [imaginary asInteger] ifFalse: [imaginary]) printOn: s.
 		s nextPut: $j.
-		value = 0 ifFalse: [s nextPut: $)]
-	]
+		real = 0 ifFalse: [s nextPut: $)]
+	])
 %
 category: 'Python'
 method: complex
-__rfloordiv__: any
+__rmod__: any
 
-	^TypeError signal: 'can''t take floor of complex numbers'
+	^any __mod__: self
 %
 category: 'Python'
 method: complex
-__rpow__: other
-	^self __pow__: other
+__rmul__: any
+
+	^any __mul__: self
+%
+category: 'Python'
+method: complex
+__rpow__: any
+
+	^any __pow__: self
+%
+category: 'Python'
+method: complex
+__rsub__: any
+
+	^any __sub__: self
 %
 category: 'Python'
 method: complex
 __rtruediv__: any
 	"https://mathworld.wolfram.com/ComplexDivision.html"
 
-	(any isKindOf: Magnitude)
-		ifFalse: [^self __rtruediv__: (self class ___new__init__: any)].
 	(any isKindOf: complex) ifTrue: [^any __truediv__: self].
 	^(complex ___new__init__: any ___value _: 0) __truediv__: self.
 %
@@ -197,57 +227,57 @@ category: 'Python'
 method: complex
 __sub__: any
 	"https://mathworld.wolfram.com/ComplexMultiplication.html"
-	| a b c d |
-	(any isKindOf: Magnitude)
-		ifFalse: [^self __sub__: (self class ___new__init__: any)].
 
+	| a b c d |
 	a := self real ___value.
 	b := self imag ___value.
 	c := any real ___value.
 	d := any imag ___value.
-
-	^self class ___new__init__: (a - c) _: (b - d)
+	^complex
+		___real: a - c
+		imaginary: b - d
 %
 category: 'Python'
 method: complex
 __truediv__: any
 	"https://mathworld.wolfram.com/ComplexDivision.html"
-	| a b c d denominator |
-	(any isKindOf: Magnitude)
-		ifFalse: [^self __truediv__: (self class ___new__init__: any)].
 
+	| a b c d denominator |
 	a := self real ___value.
 	b := self imag ___value.
 	c := any real ___value.
 	d := any imag ___value.
-
 	denominator := (c raisedTo: 2) + (d raisedTo: 2).
-
-	^self class ___new__init__: ((a * c) + (b * d) / denominator)
-				                 _: ((b * c) - (a * d) / denominator)
+	^complex
+		___real: (a * c) + (b * d) / denominator
+		imaginary: (b * c) - (a * d) / denominator
 %
 category: 'Python'
 method: complex
 conjugate
-	^self class ___new__init__: value _: imaginary negated.
+
+	^complex 
+		___real: real 
+		imaginary: imaginary negated.
 %
 category: 'Python'
 method: complex
 imag
 
-	^float ___new__init__: imaginary
+	^float ___value: imaginary
 %
 category: 'Python'
 method: complex
 real
 
-	^float ___new__init__: value
+	^float ___value: real
 %
 set compile_env: 0
 category: 'Smalltalk'
 method: complex
 ___initArgs: args
 
+	self error: 'use another constructor'.
 	args isEmpty ifTrue: [^self ___initialize: 0 _: 0].
 
 	self class ___assertJustOneStringArgumentOn: args.
@@ -265,37 +295,52 @@ category: 'Smalltalk'
 method: complex
 ___initialize: r1 _: r2
 
+	self error: 'use another constructor'.
  	(r1 isKindOf: complex) ifTrue: [
-		value := r1 real ___value.
+		real := r1 real ___value.
 		imaginary := r1 imag ___value.
 	] ifFalse: [
-		value := r1 asFloat.
+		real := r1 asFloat.
 		imaginary := r2 asFloat.
 	].
 %
 category: 'Smalltalk'
 method: complex
 ___parse: stringArg
-
+ 
 	[
-		| stream r1 r2 |
+		| stream |
 		stream := ReadStream on: stringArg.
-		stream peek == $(ifTrue: [
+		stream peek == $( ifTrue: [
 			stream next.
-			r1 := Float fromStream: stream.
-			r2 := Float fromStream: stream.
+			real := Float fromStream: stream.
+			imaginary := Float fromStream: stream.
 			stream next == $j ifFalse: [ValueError signal].
 			stream next == $) ifFalse: [ValueError signal].
 			stream atEnd ifFalse: [ValueError signal].
-			^self ___initialize: r1 _: r2.
+			^self
 		] ifFalse: [
-			r2 := Float fromStream: stream.
+			real := 0.
+			imaginary := Float fromStream: stream.
 			stream next == $j ifFalse: [ValueError signal].
 			stream atEnd ifFalse: [ValueError signal].
-			^self ___initialize: 0 _: r2.
+			^self
 		].
 	] on: Error , ValueError do: [:ex | ex return].
 	ValueError signal: 'complex() arg is a malformed string'.
+%
+category: 'Smalltalk'
+method: complex
+___real: r imaginary: i
+
+	real := r.
+	imaginary := i.
+%
+category: 'Smalltalk'
+method: complex
+___value
+
+	^real
 %
 category: 'Smalltalk'
 method: complex
@@ -303,7 +348,7 @@ printOn: aStream
 
 	aStream
 		nextPutAll: 'complex(';
-		print: value;
+		print: real;
 		nextPut: $,;
 		print: imaginary;
 		nextPut: $).

@@ -8,7 +8,7 @@ classmethod: float
 ___value: aNumber
 
 	(aNumber isKindOf: Number) ifFalse: [
-		ValueError signal: 'int() arg is a malformed string'.
+		ValueError signal: 'float() arg is a malformed string'.
 	].
 	^self basicNew
 		___value: aNumber asFloat;

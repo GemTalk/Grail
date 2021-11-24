@@ -474,11 +474,11 @@ test__getnewargs__
 %
 category: 'todo'
 method: floatTest
-testfromhex
+test_fromhex
    #pyTodo
 %
 category: 'todo'
 method: floatTest
-testhex
+test_hex
    #pyTodo
 %

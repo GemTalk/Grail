@@ -7,15 +7,21 @@ category: 'Python'
 classmethod: object
 __new__
 
-	^self __new__: self
+	^self __new__: None
 %
 category: 'Python'
 classmethod: object
-__new__: aPyClass
+__new__: anObject
+	"In Python the first parameter is the class, but in Smalltalk we are in the class already.
+	To require the class here would imply that we should pass in the object as the first
+	parameter to every instance method, and that seems silly. So, part of translating
+	Python to Smalltalk is to remove that parameter (if it is called explicitly).
 
-	((self = aPyClass) or: [self subclasses includes: aPyClass])
-		ifFalse: [TypeError signal: self name, '.__new__(', aPyClass name,') is not safe, use ', aPyClass name,'.__new__()'].
+	What we really want is the argument passed to the class as a constructor."
+
 	^self basicNew
+		__init__: anObject;
+		yourself
 %
 set compile_env: 0
 category: 'Smalltalk'

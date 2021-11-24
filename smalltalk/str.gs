@@ -2,6 +2,15 @@
 removeAllMethods str
 removeAllClassMethods str
 ! ------------------- Class methods for str
+set compile_env: 0
+category: 'other'
+classmethod: str
+___value: aString
+
+	^self basicNew
+		___value: aString;
+		yourself
+%
 ! ------------------- Instance methods for str
 set compile_env: 0
 category: 'Python'
@@ -28,6 +37,12 @@ method: str
 ___value
 
 	^value
+%
+category: 'Smalltalk'
+method: str
+___value: aString
+
+	value := aString.
 %
 category: 'Smalltalk'
 method: str

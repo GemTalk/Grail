@@ -6,7 +6,7 @@ if [ ! -f smalltalk/.topazini ]; then
     cp topazini smalltalk/.topazini
 fi
 cd smalltalk
-topaz -l << EOF
+topaz -lq << EOF
 logout
 iferr 1 stk
 iferr 2 output pop
@@ -50,8 +50,9 @@ userProfile insertDictionary: symbolDictionary at: 1.
 input Python.gs
 run
 Python
+    at: #'None'             put: NoneType singletone;
     at: #'NotImplemented'   put: NotImplementedType singleton;
-    "at: #'True'             put: bool True;
+    "at: #'True'            put: bool True;
     at: #'False'            put: bool False;
     at: #'None'             put: NoneType singleton;
     at: #'Ellipsis'         put: ellipsis singleton;"

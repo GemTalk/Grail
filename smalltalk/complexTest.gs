@@ -9,19 +9,21 @@ method: complexTest
 test__abs__
 
 	self
-		assert: (self targetInstance: 3 _: 4) __abs__ equals: (self int: 5);
+		assert: (complex ___real: 3 imaginary: 4) __abs__ ___value equals: 5;
 		yourself.
 %
 category: 'done'
 method: complexTest
 test__add__
 
-	| a |
-	a := self targetInstance: 1 _: 2.
+	| a b |
+	a := complex ___real: 1 imaginary: 2.
+	b := a __add__: a.
 	self
-		assert: (a __add__: a) equals: (self targetInstance: 2 _: 4);
-		assert: (a __add__: (self int: 2)) real equals: (self int: 3);
-		assert: (a __add__: (self int: 2)) imag equals: (self int:2);
+		assert: b real ___value equals: 2;
+		assert: b imag ___value equals: 4;
+		assert: (a __add__: (self int: 2)) real ___value equals: 3;
+		assert: (a __add__: (self int: 2)) imag ___value equals: 2;
 		yourself.
 %
 category: 'done'
@@ -29,9 +31,9 @@ method: complexTest
 test__bool__
 
 	self
-		assert: (self targetInstance: 1 _: 0) __bool__;
-		assert: (self targetInstance: 0 _: 1) __bool__;
-		deny:   (self targetInstance: 0 _: 0) __bool__;
+		assert: (complex ___real: 1 imaginary: 0) __bool__;
+		assert: (complex ___real: 0 imaginary: 1) __bool__;
+		deny:   (complex ___real: 0 imaginary: 0) __bool__;
 		yourself.
 %
 category: 'done'
@@ -111,8 +113,8 @@ method: complexTest
 test__eq__
 
 	| a b |
-	a := self targetInstance: 1 _: 2.
-	b := self targetInstance: 2 _: 1.
+	a := complex ___real: 1 imaginary: 2.
+	b := complex ___real: 2 imaginary: 1.
 	self
 		assert: (a __eq__: a);
 		assert: (b __eq__: b);
@@ -122,32 +124,10 @@ test__eq__
 %
 category: 'done'
 method: complexTest
-test__float__
-
-	[
-		self targetInstance __float__.
-		self should: false.
-	] on: TypeError do: [:ex |
-		self assert: ex messageText equals: 'can''t convert complex to float'.
-	].
-%
-category: 'done'
-method: complexTest
-test__floordiv__
-
-	[
-		self targetInstance __floordiv__: (self int: 2).
-		self assert: false.
-	] on: TypeError do: [:ex |
-		self assert: ex messageText equals: 'can''t take floor of complex numbers'.
-	].
-%
-category: 'done'
-method: complexTest
 test__ge__
 
 	self
-		assert: (self targetInstance __le__: 'x') == NotImplementedType singleton;
+		should: [self targetInstance __ge__: 0] raise: TypeError;
 		yourself.
 %
 category: 'done'
@@ -155,7 +135,7 @@ method: complexTest
 test__gt__
 
 	self
-		assert: (self targetInstance __le__: 'x') == NotImplementedType singleton;
+		should: [self targetInstance __gt__: 0] raise: TypeError;
 		yourself.
 %
 category: 'done'
@@ -174,7 +154,7 @@ method: complexTest
 test__le__
 
 	self
-		assert: (self targetInstance __le__: 'x') == NotImplementedType singleton;
+		should: [self targetInstance __le__: 0] raise: TypeError;
 		yourself.
 %
 category: 'done'
@@ -182,7 +162,7 @@ method: complexTest
 test__lt__
 
 	self
-		assert: (self targetInstance __le__: 'x') == NotImplementedType singleton;
+		should: [self targetInstance __lt__: 0] raise: TypeError;
 		yourself.
 %
 category: 'done'
@@ -201,11 +181,11 @@ method: complexTest
 test__mul__
 
 	| a |
-	a := self targetInstance: 3 _: 4.
+	a := complex ___real: 3 imaginary: 4.
 	self
-		assert: (a __mul__: (self int: 2)) equals: (self targetInstance: 6 _: 8);
-		assert: (a __mul__: (self targetInstance: 1 _: 2)) real equals: (self int: -5);
-		assert: (a __mul__: (self targetInstance: 1 _: 2)) imag equals: (self int: 10);
+		assert: ((a __mul__: (self int: 2)) __eq__: (complex ___real: 6 imaginary: 8));
+		assert: (a __mul__: (complex ___real: 1 imaginary: 2)) real ___value equals: -5;
+		assert: (a __mul__: (complex ___real: 1 imaginary: 2)) imag ___value equals: 10;
 		yourself.
 %
 category: 'done'
@@ -213,8 +193,8 @@ method: complexTest
 test__ne__
 
 	| a b |
-	a := self targetInstance: 1 _: 2.
-	b := self targetInstance: 2 _: 1.
+	a := complex ___real: 1 imaginary: 2.
+	b := complex ___real: 2 imaginary: 1.
 	self
 		deny:   (a __ne__: a);
 		deny:   (b __ne__: b);
@@ -227,9 +207,9 @@ method: complexTest
 test__neg__
 
 	self
-		assert: (self targetInstance:  1 _:  2) __neg__ equals: (self targetInstance: -1 _: -2);
-		assert: (self targetInstance: -1 _:  2) __neg__ equals: (self targetInstance:  1 _: -2);
-		assert: (self targetInstance:  1 _: -2) __neg__ equals: (self targetInstance: -1 _:  2);
+		assert: ((complex ___real:  1 imaginary:  2) __neg__ __eq__: (complex ___real: -1 imaginary: -2));
+		assert: ((complex ___real: -1 imaginary:  2) __neg__ __eq__: (complex ___real:  1 imaginary: -2));
+		assert: ((complex ___real:  1 imaginary: -2) __neg__ __eq__: (complex ___real: -1 imaginary:  2));
 		yourself.
 %
 category: 'done'
@@ -237,9 +217,9 @@ method: complexTest
 test__new__onComplex
 
 	| a |
-	a := self targetInstance: 1 _: 2.
+	a := complex ___real: 1 imaginary: 2.
 	self
-		assert: (complex ___new__init__: a) equals: a;
+		assert: ((complex ___new__init__: a) __eq__: a);
 		yourself.
 %
 category: 'done'
@@ -264,16 +244,16 @@ method: complexTest
 test__new__onString
 
 	self
-		assert: (self targetInstance: '(1+3j)') __repr__ equals: '(1+3j)';
-		assert: (self targetInstance: '(1-3j)') __repr__ equals: '(1-3j)';
-	   	assert: (self targetInstance:'(+1+0j)') __repr__ equals: '(1+0j)';
-		assert: (self targetInstance:'(-1+0j)') __repr__ equals:'(-1+0j)';
-		assert: (self targetInstance:   '-3j') __repr__ equals:   '-3j';
-		assert: (self targetInstance:   '+3j') __repr__ equals:    '3j';
-		assert: (self targetInstance:    '3j') __repr__ equals:    '3j';
+		assert: (complex __new__: (str ___value: '(1+3j)'	)) __repr__ ___value equals: '(1+3j)';
+		assert: (complex __new__: (str ___value: '(1-3j)'	)) __repr__ ___value equals: '(1-3j)';
+	   	assert: (complex __new__: (str ___value: '(+1+0j)')) __repr__ ___value equals: '(1+0j)';
+		assert: (complex __new__: (str ___value: '(-1+0j)')) __repr__ ___value equals: '(-1+0j)';
+		assert: (complex __new__: (str ___value: '-3j'		)) __repr__ ___value equals: '-3j';
+		assert: (complex __new__: (str ___value: '+3j'		)) __repr__ ___value equals: '3j';
+		assert: (complex __new__: (str ___value: '3j'		)) __repr__ ___value equals:  '3j';
 		yourself.
 	[
-		self targetInstance: '(1-3j'.
+		complex __new__: (str ___value: '(1-3j').
 		self assert: false.
 	] on: ValueError do: [:ex |
 		self assert: ex messageText equals: 'complex() arg is a malformed string'.
@@ -301,31 +281,33 @@ method: complexTest
 test__pos__
 
 	| a |
-	a := self targetInstance: 3 _: 4.
+	a := complex ___real: 3 imaginary: 4.
 	self
-		assert: a __pos__ equals: a;
+		assert: (a __pos__ __eq__: a);
 		yourself.
 %
 category: 'done'
 method: complexTest
 test__pow__
 
-	| a |
-	a := self targetInstance: 3 _: 4.
+	| a b c |
+	a := complex ___real: 3 imaginary: 4.
+	b := a __pow__: (self int: 2).
+	c := a __pow__: (self int: 3).
 	self
-		assert: (a __mul__: a) equals: ((self targetInstance: 3 _: 4) __pow__: (self int: 2));
-		assert: ((a __mul__: a) __mul__: a) equals: ((self targetInstance: 3 _: 4) __pow__: (self int: 3));
+		assert: ((a __mul__: a) __eq__: b);
+		assert: (((a __mul__: a) __mul__: a) __eq__: c);
 		yourself.
 %
 category: 'done'
 method: complexTest
 test__radd__
-	| a |
-	a := self targetInstance: 1 _: 2.
 
+	| a |
+	a := complex ___real: 1 imaginary: 2.
 	self
-		assert: (a __radd__: a) equals: (self targetInstance: 2 _: 4);
-		assert: (a __radd__: (self int: 2)) equals: (self targetInstance: 3 _: 2);
+		assert: ((a __radd__: a) __eq__: (complex ___real: 2 imaginary: 4));
+		assert: ((a __radd__: (self int: 2)) __eq__: (complex ___real: 3 imaginary: 2));
 		yourself.
 %
 category: 'done'
@@ -343,23 +325,12 @@ method: complexTest
 test__repr__
 
 	self
-		assert: (self targetInstance: 1 _: 3) __repr__ equals: '(1+3j)';
-		assert: (self targetInstance: 1 _:-3) __repr__ equals: '(1-3j)';
-	   	assert: (self targetInstance: 0 _:-3) __repr__ equals:   '-3j';
-		assert: (self targetInstance: 1 _: 0) __repr__ equals: '(1+0j)';
-		assert: (self targetInstance:-1 _: 0) __repr__ equals:'(-1+0j)';
+		assert: (complex ___real: 1 imaginary: 3) __repr__ ___string equals: '(1+3j)';
+		assert: (complex ___real: 1 imaginary: -3) __repr__ ___string equals: '(1-3j)';
+	   	assert: (complex ___real: 0 imaginary: -3) __repr__ ___string equals:   '-3j';
+		assert: (complex ___real: 1 imaginary: 0) __repr__ ___string equals: '(1+0j)';
+		assert: (complex ___real: -1 imaginary: 0) __repr__ ___string equals:'(-1+0j)';
 		yourself.
-%
-category: 'done'
-method: complexTest
-test__rfloordiv__
-
-	[
-		self targetInstance __rfloordiv__: (self int: 2).
-		self assert: false.
-	] on: TypeError do: [:ex |
-		self assert: ex messageText equals: 'can''t take floor of complex numbers'.
-	].
 %
 category: 'done'
 method: complexTest
@@ -377,22 +348,11 @@ method: complexTest
 test__rmul__
 
 	| a |
-	a := self targetInstance: 3 _: 4.
+	a := complex ___real: 3 imaginary: 4.
 	self
-		assert: (a __rmul__: (self int: 2)) equals: (self targetInstance: 6 _: 8);
-		assert: (a __rmul__: (self targetInstance: 1 _: 2)) real equals: (self int: -5);
-		assert: (a __rmul__: (self targetInstance: 1 _: 2)) imag equals: (self int: 10);
-		yourself.
-%
-category: 'done'
-method: complexTest
-test__rpow__
-
-	| a |
-	a := self targetInstance: 3 _: 4.
-	self
-		assert: (a __mul__: a) equals: ((self targetInstance: 3 _: 4) __rpow__: (self int: 2));
-		assert: ((a __mul__: a) __mul__: a) equals: ((self targetInstance: 3 _: 4) __rpow__: (self int: 3));
+		assert: ((a __rmul__: (self int: 2)) __eq__: (complex ___real: 6 imaginary: 8));
+		assert: (a __rmul__: (complex ___real: 1 imaginary: 2)) real ___value equals: -5;
+		assert: (a __rmul__: (complex ___real: 1 imaginary: 2)) imag ___value equals: 10;
 		yourself.
 %
 category: 'done'
@@ -400,11 +360,11 @@ method: complexTest
 test__rsub__
 
 	| a |
-	a := self targetInstance: 3 _: 4.
+	a := complex ___real: 3 imaginary: 4.
 	self
-		assert: (a __rsub__: (self int: 2)) equals: (self targetInstance: -1 _: -4);
-		assert: (a __rsub__: (self targetInstance: 1 _: 2)) real equals: (self int: -2);
-		assert: (a __rsub__: (self targetInstance: 1 _: 2)) imag equals: (self int: -2);
+		assert: ((a __rsub__: (self int: 2)) __eq__: (complex ___real: -1 imaginary: -4));
+		assert: (a __rsub__: (complex ___real: 1 imaginary: 2)) real ___value equals: -2;
+		assert: (a __rsub__: (complex ___real: 1 imaginary: 2)) imag ___value equals: -2;
 		yourself.
 %
 category: 'done'
@@ -412,16 +372,16 @@ method: complexTest
 test__rtruediv__
 
 	| a b |
-	a := self targetInstance: 1 _: 2.
-	b := self targetInstance: 2 _: 1.
+	a := complex ___real: 1 imaginary: 2.
+	b := complex ___real: 2 imaginary: 1.
 	self
-		assert: (a __rtruediv__: (self int: 3)) real equals: (self float: 3.0 / 5.0);
-		assert: (a __rtruediv__: (self int: 3)) imag equals: (self float: -6.0 / 5.0);
-		assert: (a __rtruediv__: b) real equals: (self float: 4.0 / 5.0);
-		assert: (a __rtruediv__: b) imag equals: (self float: -3.0 / 5.0);
-		assert: (b __rtruediv__: a) real equals: (self float: 4.0 / 5.0);
-		assert: (b __rtruediv__: a) imag equals: (self float: 3.0 / 5.0);
-		assert: (b __rtruediv__: b) equals: (self targetInstance: 1 _: 0);
+		assert: (a __rtruediv__: (self int: 3)) real ___value equals: 3.0 / 5.0;
+		assert: (a __rtruediv__: (self int: 3)) imag ___value equals: -6.0 / 5.0;
+		assert: (a __rtruediv__: b) real ___value equals: 4.0 / 5.0;
+		assert: (a __rtruediv__: b) imag ___value equals: -3.0 / 5.0;
+		assert: (b __rtruediv__: a) real ___value equals: 4.0 / 5.0;
+		assert: (b __rtruediv__: a) imag ___value equals: 3.0 / 5.0;
+		assert: ((b __rtruediv__: b) __eq__: (complex ___real: 1 imaginary: 0));
 		yourself.
 %
 category: 'done'
@@ -429,11 +389,11 @@ method: complexTest
 test__sub__
 
 	| a |
-	a := self targetInstance: 3 _: 4.
+	a := complex ___real: 3 imaginary: 4.
 	self
-		assert: (a __sub__: (self int: 2)) equals: (self targetInstance: 1 _: 4);
-		assert: (a __sub__: (self targetInstance: 1 _: 2)) real equals: (self int: 2);
-		assert: (a __sub__: (self targetInstance: 1 _: 2)) imag equals: (self int: 2);
+		assert: ((a __sub__: (self int: 2)) __eq__: (complex ___real: 1 imaginary: 4));
+		assert: (a __sub__: (complex ___real: 1 imaginary: 2)) real ___value equals: 2;
+		assert: (a __sub__: (complex ___real: 1 imaginary: 2)) imag ___value equals: 2;
 		yourself.
 %
 category: 'done'
@@ -441,61 +401,85 @@ method: complexTest
 test__truediv__
 
 	| a b |
-	a := self targetInstance: 1 _: 2.
-	b := self targetInstance: 2 _: 1.
+	a := complex ___real: 1 imaginary: 2.
+	b := complex ___real: 2 imaginary: 1.
 	self
-		assert: (a __truediv__: (self int: 3)) real equals: (self float: 1.0 / 3.0);
-		assert: (a __truediv__: (self int: 3)) imag equals: (self float: 2.0 / 3.0);
-		assert: (a __truediv__: b) real equals: (self float: 4.0 / 5.0);
-		assert: (a __truediv__: b) imag equals: (self float: 3.0 / 5.0);
-		assert: (b __truediv__: a) real equals: (self float: 4.0 / 5.0);
-		assert: (b __truediv__: a) imag equals: (self float: -3.0 / 5.0);
-		assert: (b __truediv__: b) equals: (self targetInstance: 1 _: 0);
+		assert: (a __truediv__: (self int: 3)) real ___value equals: 1.0 / 3.0;
+		assert: (a __truediv__: (self int: 3)) imag ___value equals: 2.0 / 3.0;
+		assert: (a __truediv__: b) real ___value equals: 4.0 / 5.0;
+		assert: (a __truediv__: b) imag ___value equals: 3.0 / 5.0;
+		assert: (b __truediv__: a) real ___value equals: 4.0 / 5.0;
+		assert: (b __truediv__: a) imag ___value equals: -3.0 / 5.0;
+		assert: ((b __truediv__: b) __eq__: (complex ___real: 1 imaginary: 0));
 		yourself.
 %
 category: 'done'
 method: complexTest
-testconjugate
+test_conjugate
 
 	| a b |
-	a := self targetInstance: 1 _: 2.
-	b := self targetInstance: 2 _: 1.
+	a := complex ___real: 1 imaginary: 2.
+	b := complex ___real: 2 imaginary: 1.
 	self
-		assert: a conjugate real equals: (self int: 1);
-		assert: a conjugate imag equals: (self int: -2);
-		assert: b conjugate real equals: (self int: 2);
-		assert: b conjugate imag equals: (self int: -1);
+		assert: a conjugate real ___value equals: 1;
+		assert: a conjugate imag ___value equals: -2;
+		assert: b conjugate real ___value equals: 2;
+		assert: b conjugate imag ___value equals: -1;
 		yourself.
 %
 category: 'done'
 method: complexTest
-testimag
+test_imag
 
 	self
-		assert: (self targetInstance:  1 _:  2) imag equals: (self int:  2) ;
-		assert: (self targetInstance: -1 _:  2) imag equals: (self int:  2);
-		assert: (self targetInstance:  1 _: -2) imag equals: (self int: -2);
-		assert: (self targetInstance:  1) imag equals: (self int: 0);
-		assert: (self targetInstance: -1) imag equals: (self int: 0);
-		assert: self targetInstance imag equals: (self int: 0);
+		assert: (complex ___real:  1 imaginary:  2) imag ___value equals: 2;
+		assert: (complex ___real: -1 imaginary:  2) imag ___value equals: 2;
+		assert: (complex ___real:  1 imaginary: -2) imag ___value equals: -2;
+		assert: (complex ___real:  1) imag ___value equals: 0;
+		assert: (complex ___real: -1) imag ___value equals: 0;
+		assert: self targetInstance imag ___value equals: 0;
 		yourself.
 %
 category: 'done'
 method: complexTest
-testreal
+test_real
 
 	self
-		assert: self targetInstance real equals: (self int: 0);
-		assert: (self targetInstance:  1 _:  2) real equals: (self int:  1);
-		assert: (self targetInstance: -1 _:  2) real equals: (self int: -1);
-		assert: (self targetInstance:  1 _: -2) real equals: (self int:  1);
-		assert: (self targetInstance:  1) real equals: (self int:  1);
-		assert: (self targetInstance: -1) real equals: (self int: -1);
+		assert: self targetInstance real ___value equals: 0;
+		assert: (complex ___real:  1 imaginary:  2) real ___value equals: 1;
+		assert: (complex ___real: -1 imaginary:  2) real ___value equals: -1;
+		assert: (complex ___real:  1 imaginary: -2) real ___value equals: 1;
+		assert: (complex ___real:  1) real ___value equals: 1;
+		assert: (complex ___real: -1) real ___value equals: -1;
 		yourself.
+%
+set compile_env: 0
+category: 'other'
+method: complexTest
+targetInstance
+
+	^complex
+		___real: 0
+		imaginary: 0
 %
 set compile_env: 0
 category: 'todo'
 method: complexTest
 test__getnewargs__
    #pyTodo
+%
+category: 'todo'
+method: complexTest
+test__rpow__
+	#pyTodo
+"
+	| a b c |
+	a := complex ___real: 3 imaginary: 4.
+	b := a __rpow__: (self int: 2).
+	c := a __rpow__: (self int: 3).
+	self
+		assert: ((a __mul__: a) __eq__: b);
+		assert: (((a __mul__: a) __mul__: a) __eq__: c);
+		yourself.
+"
 %
