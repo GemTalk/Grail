@@ -5832,10 +5832,10 @@ doit
 UserInteraction category: 'builtins'
 %
 
-input _imp.gs
-input _thread.gs
-input _warnings.gs
-input _weakref.gs
+input _Imp.gs
+input _Thread.gs
+input _Warnings.gs
+input _WeakRef.gs
 input AbstractContainer.gs
 input AbstractIterator.gs
 input AbstractLocationNode.gs
@@ -5873,7 +5873,7 @@ input BreakAst.gs
 input BreakNotification.gs
 input BrokenPipeError.gs
 input BufferError.gs
-input builtins.gs
+input Builtins.gs
 input bytearray.gs
 input ByteLiteralsTestCase.gs
 input bytes.gs
@@ -5929,7 +5929,7 @@ input FloorDivAst.gs
 input ForAst.gs
 input FormattedValueAst.gs
 input frozenset.gs
-input function.gs
+input Function.gs
 input FunctionDefAst.gs
 input FutureWarning.gs
 input GeneratorExit.gs
@@ -5964,7 +5964,7 @@ input KeywordAst.gs
 input KeywordsAst.gs
 input LambdaAst.gs
 input Linearization.gs
-input list.gs
+input List.gs
 input list_iterator.gs
 input ListAst.gs
 input ListCompAst.gs
@@ -6043,14 +6043,14 @@ input SubscriptAst.gs
 input SuiteAst.gs
 input SyntaxError.gs
 input SyntaxWarning.gs
-input sys.gs
+input Sys.gs
 input SystemError.gs
 input SystemException.gs
 input TabError.gs
-input time.gs
+input Time.gs
 input TimeoutError.gs
 input TryAst.gs
-input tuple.gs
+input Tuple.gs
 input tuple_iterator.gs
 input TupleAst.gs
 input TypeError.gs

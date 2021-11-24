@@ -41,6 +41,17 @@ ModuleAst test
 
 	^ModuleAst script: '$HOME/Code/Python/Grail/hello.py'.
 %
+category: 'other'
+classmethod: ModuleAst
+testWrite
+
+| module fileStream |
+
+module := ModuleAst script: '/home/will/Grail/hello.py'.
+fileStream := GsFile openWriteOnServer: '/home/will/Grail/hello.gs'.
+[ module writeSmalltalkOn: fileStream. ]
+ensure: [ fileStream close ].
+%
 ! ------------------- Instance methods for ModuleAst
 set compile_env: 0
 category: 'other'
