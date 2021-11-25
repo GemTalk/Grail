@@ -68,7 +68,7 @@ category: 'Python'
 method: Container
 __contains__: anElement
 
-	^self ___container includes: anElement
+	^container includes: anElement
 %
 category: 'Python'
 method: Container

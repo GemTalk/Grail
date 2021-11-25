@@ -42,7 +42,7 @@ category: 'setup'
 method: Base_Class_Test
 targetInstance
 
-	^int ___value: 0
+	^self targetClass __new__
 %
 category: 'setup'
 method: Base_Class_Test

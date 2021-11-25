@@ -50,7 +50,7 @@ userProfile insertDictionary: symbolDictionary at: 1.
 input Python.gs
 run
 Python
-    at: #'None'             put: NoneType singletone;
+    at: #'None'             put: NoneType singleton;
     at: #'NotImplemented'   put: NotImplementedType singleton;
     "at: #'True'            put: bool True;
     at: #'False'            put: bool False;

@@ -31,11 +31,11 @@ test__dir__
 	self new writeDirTestOn: #('__class__' '__delattr__' '__dir__' '__doc__' '__eq__' '__format__' '__ge__' '__getattribute__' '__gt__' '__hash__' '__init__' '__init_subclass__' '__le__' '__lt__' '__ne__' '__new__' '__reduce__' '__reduce_ex__' '__repr__' '__setattr__' '__sizeof__' '__str__' '__subclasshook__')
 	"
 	| dir |
-		dir := self targetInstance __dir__.
+	dir := self targetInstance __dir__.
 	self assert: dir __class__ equals: list.
 
-   #pyTodo. "self assert: dir __len__ equals: 23.
-"   self assert: (dir __contains__: (self str: '__class__')).
+   #pyTodo. "self assert: dir __len__ equals: 23."
+   self assert: (dir __contains__: (self str: '__class__')).
    self assert: (dir __contains__: (self str: '__delattr__')).
    self assert: (dir __contains__: (self str: '__dir__')).
    self assert: (dir __contains__: (self str: '__doc__')).

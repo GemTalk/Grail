@@ -47,12 +47,18 @@ __new__
 		__init__;
 		yourself
 %
+category: 'Python'
+classmethod: object
+__new__: anObject
+
+	TypeError signal: 'object.__new__(' , anObject name , ') is not safe, use ' , anObject name , '.__new__()'.
+%
 set compile_env: 0
 category: 'Smalltalk'
 classmethod: object
 ___dir
 
-	^self ___pyProtocol collect: [:each |
+	^self ___pyProtocol asSortedCollection asArray collect: [:each |
 		| index |
 		index := each indexOf: $:.
 		index == 0 ifTrue: [index := each size + 1].

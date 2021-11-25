@@ -3,7 +3,6 @@ removeAllMethods complex
 removeAllClassMethods complex
 ! ------------------- Class methods for complex
 set compile_env: 0
-set compile_env: 0
 category: 'Smalltalk'
 classmethod: complex
 ___assertJustOneStringArgumentOn: args

@@ -179,3 +179,9 @@ stream
 	stream skipSeparators.
 	^stream
 %
+category: 'other'
+method: ModuleAst
+writeSmalltalkOn: aStream
+
+	self halt.
+%
