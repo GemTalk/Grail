@@ -98,6 +98,12 @@ __getitem__: anIndex
 %
 category: 'Python'
 method: Container
+__getslice__: start _: end
+
+	^self class ___value: (self ___getslice: start _: end)
+%
+category: 'Python'
+method: Container
 __gt__: otherCollection
 	| size |
 
@@ -160,8 +166,8 @@ __mul__: aMultiplier
 	 newList := OrderedCollection new.
 
 	aMultiplier timesRepeat: [
-		newList addAll: self ___container
-  ].
+		newList addAll: container
+	].
 
 	^self class new ___initialize: newList
 %
@@ -202,7 +208,7 @@ count: anElement
 category: 'Python'
 method: Container
 index: anElement
-	^self index: anElement from: 0.
+	^self index: anElement from: 1.
 %
 category: 'Python'
 method: Container
@@ -219,13 +225,6 @@ index: anElement from: start to: end
 				) - 1 + start
 %
 set compile_env: 0
-category: 'Python 2.7'
-method: Container
-__getslice__: start _: end
-
-	^self class ___value: (self ___getslice: start _: end)
-%
-set compile_env: 0
 category: 'Smalltalk'
 method: Container
 ___container
@@ -237,8 +236,10 @@ ___getslice: start _: end
 
 	| subset |
 	subset := self ___container copy.
-	subset removeFirst: start.
-	subset removeLast: (self __len__ - (self __len__ min: end)).
+	(end < subset size) ifTrue: [
+		subset removeFrom: end + 1 to: subset size.
+	].
+	subset removeFrom: 1 to: start.
 	^subset
 %
 category: 'Smalltalk'
@@ -263,6 +264,11 @@ method: Container
 ___size
 
 	^self ___container size
+%
+category: 'Smalltalk'
+method: Container
+___value
+	^container
 %
 category: 'Smalltalk'
 method: Container

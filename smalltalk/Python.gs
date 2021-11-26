@@ -5120,6 +5120,23 @@ doit
 objectTest category: 'BuiltIns-Tests'
 %
 set compile_env: 0
+! ------------------- Class definition for tupleTest
+expectvalue /Class
+doit
+passing subclass: 'tupleTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+tupleTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
 ! ------------------- Class definition for rangeTest
 expectvalue /Class
 doit
@@ -5169,23 +5186,6 @@ Base_Class_Test subclass: 'strTest'
 expectvalue /Class
 doit
 strTest category: 'BuiltIns-Tests'
-%
-set compile_env: 0
-! ------------------- Class definition for tupleTest
-expectvalue /Class
-doit
-Base_Class_Test subclass: 'tupleTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-tupleTest category: 'BuiltIns-Tests'
 %
 set compile_env: 0
 ! ------------------- Class definition for Base_Exception_Test

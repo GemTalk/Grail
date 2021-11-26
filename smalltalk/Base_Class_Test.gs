@@ -48,7 +48,7 @@ category: 'setup'
 method: Base_Class_Test
 targetInstance: firstArg
 
-	^int ___value: firstArg
+	^self targetClass ___value: firstArg
 %
 category: 'setup'
 method: Base_Class_Test
@@ -89,4 +89,13 @@ deny: anObject
 	(anObject isKindOf: bool)
 		ifTrue: [super deny: anObject ___value == 1]
 		ifFalse: [super deny: anObject]
+%
+category: 'testing'
+method: Base_Class_Test
+should: shouldBlock raise: anException withExceptionDo: exceptBlock
+
+	[
+		shouldBlock value.
+		self assert: false.
+	] on: anException do: exceptBlock.
 %

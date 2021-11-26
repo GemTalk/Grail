@@ -559,8 +559,8 @@ test__dir__
 		dir := self targetInstance __dir__.
 	self assert: dir __class__ equals: list.
 
-   #pyTodo. "self assert: dir __len__ equals: 71.
-"   self assert: (dir __contains__: (self str: '__abs__')).
+   #pyTodo. "self assert: dir __len__ equals: 71."
+   self assert: (dir __contains__: (self str: '__abs__')).
    self assert: (dir __contains__: (self str: '__add__')).
    self assert: (dir __contains__: (self str: '__and__')).
    self assert: (dir __contains__: (self str: '__bool__')).
@@ -577,13 +577,13 @@ test__dir__
    self assert: (dir __contains__: (self str: '__format__')).
    self assert: (dir __contains__: (self str: '__ge__')).
    self assert: (dir __contains__: (self str: '__getattribute__')).
-   #pyTodo. "self assert: (dir __contains__: (self str: '__getnewargs__')).
-"   self assert: (dir __contains__: (self str: '__gt__')).
+   #pyTodo. "self assert: (dir __contains__: (self str: '__getnewargs__'))."
+   self assert: (dir __contains__: (self str: '__gt__')).
    self assert: (dir __contains__: (self str: '__hash__')).
    self assert: (dir __contains__: (self str: '__index__')).
    self assert: (dir __contains__: (self str: '__init__')).
-   #pyTodo. "self assert: (dir __contains__: (self str: '__init_subclass__')).
-"   self assert: (dir __contains__: (self str: '__int__')).
+   #pyTodo. "self assert: (dir __contains__: (self str: '__init_subclass__'))."
+   self assert: (dir __contains__: (self str: '__int__')).
    self assert: (dir __contains__: (self str: '__invert__')).
    self assert: (dir __contains__: (self str: '__le__')).
    self assert: (dir __contains__: (self str: '__lshift__')).
@@ -599,9 +599,9 @@ test__dir__
    self assert: (dir __contains__: (self str: '__radd__')).
    self assert: (dir __contains__: (self str: '__rand__')).
    self assert: (dir __contains__: (self str: '__rdivmod__')).
-   #pyTodo. "self assert: (dir __contains__: (self str: '__reduce__')).
-"   #pyTodo. "self assert: (dir __contains__: (self str: '__reduce_ex__')).
-"   self assert: (dir __contains__: (self str: '__repr__')).
+   #pyTodo. "self assert: (dir __contains__: (self str: '__reduce__'))."
+   #pyTodo. "self assert: (dir __contains__: (self str: '__reduce_ex__'))."
+   self assert: (dir __contains__: (self str: '__repr__')).
    self assert: (dir __contains__: (self str: '__rfloordiv__')).
    self assert: (dir __contains__: (self str: '__rlshift__')).
    self assert: (dir __contains__: (self str: '__rmod__')).
@@ -622,15 +622,14 @@ test__dir__
    self assert: (dir __contains__: (self str: '__truediv__')).
    self assert: (dir __contains__: (self str: '__trunc__')).
    self assert: (dir __contains__: (self str: '__xor__')).
-   #pyTodo. "self assert: (dir __contains__: (self str: 'as_integer_ratio).
-"   self assert: (dir __contains__: (self str: 'bit_length')).
+   #pyTodo. "self assert: (dir __contains__: (self str: 'as_integer_ratio)."
+   self assert: (dir __contains__: (self str: 'bit_length')).
     self assert: (dir __contains__: (self str: 'conjugate')).
     self assert: (dir __contains__: (self str: 'denominator')).
-   #pyTodo. "self assert: (dir __contains__: (self str: 'from_bytes')).
-"   self assert: (dir __contains__: (self str: 'imag')).
+   #pyTodo. "self assert: (dir __contains__: (self str: 'from_bytes'))."
+   self assert: (dir __contains__: (self str: 'imag')).
     self assert: (dir __contains__: (self str: 'numerator')).
    self assert: (dir __contains__: (self str: 'real')).
-   #pyTodo. "self assert: (dir __contains__: (self str: 'to_bytes')).
-"
+   #pyTodo. "self assert: (dir __contains__: (self str: 'to_bytes'))."
 	]
 %

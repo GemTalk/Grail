@@ -7,7 +7,7 @@ category: 'Smalltalk'
 classmethod: tuple
 ___containerClass
 
-	^OrderedCollection
+	^Array
 %
 category: 'Smalltalk'
 classmethod: tuple

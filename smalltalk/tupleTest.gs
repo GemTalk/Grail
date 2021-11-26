@@ -36,41 +36,41 @@ test__dir__
 		dir := self targetInstance __dir__.
 	self assert: dir __class__ equals: list.
 
-   #pyTodo. "self assert: dir __len__ equals: 34.
-"   self assert: (dir __contains__: #__add__).
-   self assert: (dir __contains__: #__class__).
-   #pyTodo. "self assert: (dir __contains__: #__class_getitem__).
-"   self assert: (dir __contains__: #__contains__).
-   self assert: (dir __contains__: #__delattr__).
-   self assert: (dir __contains__: #__dir__).
-   self assert: (dir __contains__: #__doc__).
-   self assert: (dir __contains__: #__eq__).
-   self assert: (dir __contains__: #__format__).
-   self assert: (dir __contains__: #__ge__).
-   self assert: (dir __contains__: #__getattribute__).
-   self assert: (dir __contains__: #__getitem__).
-   #pyTodo. "self assert: (dir __contains__: #__getnewargs__).
-"   self assert: (dir __contains__: #__gt__).
-   self assert: (dir __contains__: #__hash__).
-   #pyTodo. "self assert: (dir __contains__: #__init__).
-"   #pyTodo. "self assert: (dir __contains__: #__init_subclass__).
-"   #pyTodo. "self assert: (dir __contains__: #__iter__).
-"   self assert: (dir __contains__: #__le__).
-   self assert: (dir __contains__: #__len__).
-   self assert: (dir __contains__: #__lt__).
-   self assert: (dir __contains__: #__mul__).
-   self assert: (dir __contains__: #__ne__).
-   self assert: (dir __contains__: #__new__).
-   #pyTodo. "self assert: (dir __contains__: #__reduce__).
-"   #pyTodo. "self assert: (dir __contains__: #__reduce_ex__).
-"   self assert: (dir __contains__: #__repr__).
-   #pyTodo. "self assert: (dir __contains__: #__rmul__).
-"   self assert: (dir __contains__: #__setattr__).
-   self assert: (dir __contains__: #__sizeof__).
-   self assert: (dir __contains__: #__str__).
-   self assert: (dir __contains__: #__subclasshook__).
-   self assert: (dir __contains__: #count).
-   self assert: (dir __contains__: #index).
+   #pyTodo. "self assert: dir __len__ equals: 34."
+   self assert: (dir __contains__: (self str: '__add__')).
+   self assert: (dir __contains__: (self str: '__class__')).
+   #pyTodo. "self assert: (dir __contains__: #__class_getitem__)."
+   self assert: (dir __contains__: (self str: '__contains__')).
+   self assert: (dir __contains__: (self str: '__delattr__')).
+   self assert: (dir __contains__: (self str: '__dir__')).
+   self assert: (dir __contains__: (self str: '__doc__')).
+   self assert: (dir __contains__: (self str: '__eq__')).
+   self assert: (dir __contains__: (self str: '__format__')).
+   self assert: (dir __contains__: (self str: '__ge__')).
+   self assert: (dir __contains__: (self str: '__getattribute__')).
+   self assert: (dir __contains__: (self str: '__getitem__')).
+   #pyTodo. "self assert: (dir __contains__: #__getnewargs__)."
+   self assert: (dir __contains__: (self str: '__gt__')).
+   self assert: (dir __contains__: (self str: '__hash__')).
+   #pyTodo. "self assert: (dir __contains__: #__init__)."
+   #pyTodo. "self assert: (dir __contains__: #__init_subclass__)."
+   #pyTodo. "self assert: (dir __contains__: #__iter__)."
+   self assert: (dir __contains__: (self str: '__le__')).
+   self assert: (dir __contains__: (self str: '__len__')).
+   self assert: (dir __contains__: (self str: '__lt__')).
+   self assert: (dir __contains__: (self str: '__mul__')).
+   self assert: (dir __contains__: (self str: '__ne__')).
+   self assert: (dir __contains__: (self str: '__new__')).
+   #pyTodo. "self assert: (dir __contains__: #__reduce__)."
+   #pyTodo. "self assert: (dir __contains__: #__reduce_ex__)."
+   self assert: (dir __contains__: (self str: '__repr__')).
+   #pyTodo. "self assert: (dir __contains__: #__rmul__)."
+   self assert: (dir __contains__: (self str: '__setattr__')).
+   self assert: (dir __contains__: (self str: '__sizeof__')).
+   self assert: (dir __contains__: (self str: '__str__')).
+   self assert: (dir __contains__: (self str: '__subclasshook__')).
+   self assert: (dir __contains__: (self str: 'count')).
+   self assert: (dir __contains__: (self str: 'index')).
 %
 category: 'done'
 method: tupleTest
@@ -137,28 +137,28 @@ category: 'done'
 method: tupleTest
 test__gt__
    | list |
-	list := self targetInstance __add__: { '1'. '2'. '3' }.
+	list := tuple ___value: { '1'. '2'. '3' }.
 
 	self
-		assert: (list __gt__: (self targetClass new __add__: { '1'. '2' }));
-		deny:   (list __gt__: (self targetClass new __add__: { '1'. '2'. '3' }));
-		deny:   (list __gt__: (self targetClass new __add__: { '1'. '2'. '3'. '0' }));
-		assert: (list __gt__: (self targetClass new __add__: { '1'. '2'. '2' }));
-		deny:   (list __gt__: (self targetClass new __add__: { '1'. '2'. '4' }));
+		assert: (list __gt__: (tuple ___value: { '1'. '2' }));
+		deny:   (list __gt__: (tuple ___value: { '1'. '2'. '3' }));
+		deny:   (list __gt__: (tuple ___value: { '1'. '2'. '3'. '0' }));
+		assert: (list __gt__: (tuple ___value: { '1'. '2'. '2' }));
+		deny:   (list __gt__: (tuple ___value: { '1'. '2'. '4' }));
 		yourself
 %
 category: 'done'
 method: tupleTest
 test__le__
-   | list |
-	list := self targetInstance __add__: { '1'. '2'. '3' }.
+   | x |
+	x := tuple ___value: { '1'. '2'. '3' }.
 
 	self
-		deny:   (list __le__: (self targetClass new __add__: { '1'. '2' }));
-		assert: (list __le__: (self targetClass new __add__: { '1'. '2'. '3' }));
-		assert: (list __le__: (self targetClass new __add__: { '1'. '2'. '3'. '0' }));
-		deny:   (list __le__: (self targetClass new __add__: { '1'. '2'. '2' }));
-		assert: (list __le__: (self targetClass new __add__: { '1'. '2'. '4' }));
+		deny:   (x __le__: (tuple ___value: { '1'. '2' }));
+		assert: (x __le__: (tuple ___value: { '1'. '2'. '3' }));
+		assert: (x __le__: (tuple ___value: { '1'. '2'. '3'. '0' }));
+		deny:   (x __le__: (tuple ___value: { '1'. '2'. '2' }));
+		assert: (x __le__: (tuple ___value: { '1'. '2'. '4' }));
 		yourself
 %
 category: 'done'
@@ -171,27 +171,27 @@ test__len__onEmptyList
 category: 'done'
 method: tupleTest
 test__lt__
-   | list |
-	list := self targetInstance __add__: { '1'. '2'. '3' }.
+   | x |
+	x := tuple ___value: { '1'. '2'. '3' }.
 
 	self
-		deny:   (list __lt__: (self targetClass new __add__: { '1'. '2' }));
-		deny:   (list __lt__: (self targetClass new __add__: { '1'. '2'. '3' }));
-		assert: (list __lt__: (self targetClass new __add__: { '1'. '2'. '3'. '0' }));
-		deny:   (list __lt__: (self targetClass new __add__: { '1'. '2'. '2' }));
-		assert: (list __lt__: (self targetClass new __add__: { '1'. '2'. '4' }));
+		deny:   (x __lt__: (tuple ___value: { '1'. '2' }));
+		deny:   (x __lt__: (tuple ___value: { '1'. '2'. '3' }));
+		assert: (x __lt__: (tuple ___value: { '1'. '2'. '3'. '0' }));
+		deny:   (x __lt__: (tuple ___value: { '1'. '2'. '2' }));
+		assert: (x __lt__: (tuple ___value: { '1'. '2'. '4' }));
 		yourself
 %
 category: 'done'
 method: tupleTest
 test__mul__
-   | list |
-	list := self targetInstance: { 'a'. 'b' }.
+   | x |
+	x := tuple ___value: { 'a'. 'b' }.
 
 	self
-		assert: (list __mul__: 1) equals: (self targetInstance __add__: { 'a'. 'b' });
-		assert: (list __mul__: 2) equals: (self targetInstance __add__: { 'a'. 'b'. 'a'. 'b'  });
-		deny:   (list __mul__: 2) equals: list;
+		assert: (x __mul__: 1) equals: (tuple ___value: { 'a'. 'b' });
+		assert: (x __mul__: 2) equals: (tuple ___value: { 'a'. 'b'. 'a'. 'b'  });
+		deny:   (x __mul__: 2) equals: x;
 		yourself
 %
 category: 'done'
@@ -254,18 +254,18 @@ testcount
 category: 'done'
 method: tupleTest
 testindex
-   | list |
-	list := self targetClass new __add__: { 'a'. 'b'. 'c'. 'b' }.
+   | x |
+	x := tuple ___value: { 'a'. 'b'. 'c'. 'b' }.
 
 	self
-		assert: (list index: 'b') equals: 1;
-		assert: (list index: 'b' from: 2) equals: 3;
-		assert: (list index: 'b' from: 3) equals: 3;
-		should: [list index: 'b' from: 2 to: 2]
+		assert: (x index: 'b') equals: 1;
+		assert: (x index: 'b' from: 2) equals: 3;
+		assert: (x index: 'b' from: 3) equals: 3;
+		should: [x index: 'b' from: 2 to: 2]
 		raise: ValueError
 		withExceptionDo: [:exception |
 			self assert: exception messageText equals: '''b'' is not in tuple'];
-		should: [list index: 'b' from: 3 to: 3]
+		should: [x index: 'b' from: 3 to: 3]
 		raise: ValueError
 		withExceptionDo: [:exception |
 			self assert: exception messageText equals: '''b'' is not in tuple'];
