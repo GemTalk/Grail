@@ -97,54 +97,54 @@ test__dir__
 		dir := self targetInstance __dir__.
 	self assert: dir __class__ equals: list.
 
-   #pyTodo. "self assert: dir __len__ equals: 47.
-"   self assert: (dir __contains__: #__add__).
-   self assert: (dir __contains__: #__class__).
-   #pyTodo. "self assert: (dir __contains__: #__class_getitem__).
-"   self assert: (dir __contains__: #__contains__).
-   self assert: (dir __contains__: #__delattr__).
-   self assert: (dir __contains__: #__delitem__).
-   self assert: (dir __contains__: #__dir__).
-   self assert: (dir __contains__: #__doc__).
-   self assert: (dir __contains__: #__eq__).
-   self assert: (dir __contains__: #__format__).
-   self assert: (dir __contains__: #__ge__).
-   self assert: (dir __contains__: #__getattribute__).
-   self assert: (dir __contains__: #__getitem__).
-   self assert: (dir __contains__: #__gt__).
-   self assert: (dir __contains__: #__hash__).
-   #pyTodo. "self assert: (dir __contains__: #__iadd__).
-"   self assert: (dir __contains__: #__imul__).
-   #pyTodo. "self assert: (dir __contains__: #__init__).
-"   #pyTodo. "self assert: (dir __contains__: #__init_subclass__).
-"   #pyTodo. "self assert: (dir __contains__: #__iter__).
-"   self assert: (dir __contains__: #__le__).
-   self assert: (dir __contains__: #__len__).
-   self assert: (dir __contains__: #__lt__).
-   self assert: (dir __contains__: #__mul__).
-   self assert: (dir __contains__: #__ne__).
-   self assert: (dir __contains__: #__new__).
-   #pyTodo. "self assert: (dir __contains__: #__reduce__).
-"   #pyTodo. "self assert: (dir __contains__: #__reduce_ex__).
-"   self assert: (dir __contains__: #__repr__).
-   self assert: (dir __contains__: #__reversed__).
-   #pyTodo. "self assert: (dir __contains__: #__rmul__).
-"   self assert: (dir __contains__: #__setattr__).
-   self assert: (dir __contains__: #__setitem__).
-   self assert: (dir __contains__: #__sizeof__).
-   self assert: (dir __contains__: #__str__).
-   self assert: (dir __contains__: #__subclasshook__).
-   self assert: (dir __contains__: #append).
-   self assert: (dir __contains__: #clear).
-   self assert: (dir __contains__: #copy).
-   self assert: (dir __contains__: #count).
-   self assert: (dir __contains__: #extend).
-   self assert: (dir __contains__: #index).
-   self assert: (dir __contains__: #insert).
-   self assert: (dir __contains__: #pop).
-   self assert: (dir __contains__: #remove).
-   self assert: (dir __contains__: #reverse).
-   self assert: (dir __contains__: #sort).
+   #pyTodo. "self assert: dir __len__ equals: 47."
+   self assert: (dir __contains__: (self str: '__add__')).
+   self assert: (dir __contains__: (self str: '__class__')).
+   #pyTodo. "self assert: (dir __contains__: #__class_getitem__)."
+   self assert: (dir __contains__: (self str: '__contains__')).
+   self assert: (dir __contains__: (self str: '__delattr__')).
+   self assert: (dir __contains__: (self str: '__delitem__')).
+   self assert: (dir __contains__: (self str: '__dir__')).
+   self assert: (dir __contains__: (self str: '__doc__')).
+   self assert: (dir __contains__: (self str: '__eq__')).
+   self assert: (dir __contains__: (self str: '__format__')).
+   self assert: (dir __contains__: (self str: '__ge__')).
+   self assert: (dir __contains__: (self str: '__getattribute__')).
+   self assert: (dir __contains__: (self str: '__getitem__')).
+   self assert: (dir __contains__: (self str: '__gt__')).
+   self assert: (dir __contains__: (self str: '__hash__')).
+   #pyTodo. "self assert: (dir __contains__: #__iadd__)."
+   self assert: (dir __contains__: (self str: '__imul__')).
+   #pyTodo. "self assert: (dir __contains__: #__init__)."
+   #pyTodo. "self assert: (dir __contains__: #__init_subclass__)."
+   #pyTodo. "self assert: (dir __contains__: #__iter__)."
+   self assert: (dir __contains__: (self str: '__le__')).
+   self assert: (dir __contains__: (self str: '__len__')).
+   self assert: (dir __contains__: (self str: '__lt__')).
+   self assert: (dir __contains__: (self str: '__mul__')).
+   self assert: (dir __contains__: (self str: '__ne__')).
+   self assert: (dir __contains__: (self str: '__new__')).
+   #pyTodo. "self assert: (dir __contains__: #__reduce__)."
+   #pyTodo. "self assert: (dir __contains__: #__reduce_ex__)."
+   self assert: (dir __contains__: (self str: '__repr__')).
+   self assert: (dir __contains__: (self str: '__reversed__')).
+   #pyTodo. "self assert: (dir __contains__: #__rmul__)."
+   self assert: (dir __contains__: (self str: '__setattr__')).
+   self assert: (dir __contains__: (self str: '__setitem__')).
+   self assert: (dir __contains__: (self str: '__sizeof__')).
+   self assert: (dir __contains__: (self str: '__str__')).
+   self assert: (dir __contains__: (self str: '__subclasshook__')).
+   self assert: (dir __contains__: (self str: 'append')).
+   self assert: (dir __contains__: (self str: 'clear')).
+   self assert: (dir __contains__: (self str: 'copy')).
+   self assert: (dir __contains__: (self str: 'count')).
+   self assert: (dir __contains__: (self str: 'extend')).
+   self assert: (dir __contains__: (self str: 'index')).
+   self assert: (dir __contains__: (self str: 'insert')).
+   self assert: (dir __contains__: (self str: 'pop')).
+   self assert: (dir __contains__: (self str: 'remove')).
+   self assert: (dir __contains__: (self str: 'reverse')).
+   self assert: (dir __contains__: (self str: 'sort')).
 %
 category: 'done'
 method: listTest
@@ -321,27 +321,27 @@ test__repr__
 category: 'done'
 method: listTest
 test__reversed__
-   | list |
-	list := self targetInstance __add__: { 'a'. 'b'. 'c' }.
+   | x |
+	x := list ___value: { 'a'. 'b'. 'c' }.
 
 	self
-		assert: list __reversed__ __len__ equals: 3;
-		assert: (list __reversed__ __getitem__:  0) equals: 'c';
-		assert: (list __reversed__ __getitem__: -1) equals: 'a';
-		assert: (list __getitem__:  0) equals: 'a';
-		assert: (list __getitem__: -1) equals: 'c';
+		assert: x __reversed__ __len__ equals: 3;
+		assert: (x __reversed__ __getitem__:  0) equals: 'c';
+		assert: (x __reversed__ __getitem__: -1) equals: 'a';
+		assert: (x __getitem__:  0) equals: 'a';
+		assert: (x __getitem__: -1) equals: 'c';
 		yourself
 %
 category: 'done'
 method: listTest
 test__rmul__
-   | list |
-	list := self targetInstance: { 'a'. 'b' }.
+   | x |
+	x := list ___value: { 'a'. 'b' }.
 
 	self
-		assert: (list __rmul__: 1) equals: (self targetInstance: { 'a'. 'b' });
-		assert: (list __rmul__: 2) equals: (self targetInstance: { 'a'. 'b'. 'a'. 'b'  });
-		deny:   (list __rmul__: 2) equals: list;
+		assert: (x __rmul__: 1) equals: (list ___value: { 'a'. 'b' });
+		assert: (x __rmul__: 2) equals: (list ___value: { 'a'. 'b'. 'a'. 'b' });
+		deny:   (x __rmul__: 2) equals: x;
 		yourself
 %
 category: 'done'
@@ -670,33 +670,6 @@ testsort
 		assert: (list __getitem__: -1) equals: 'c';
 		yourself
 %
-category: 'done'
-method: listTest
-testsortWithDict
-   | list |
-	list := self targetInstance __add__: { 'c'. 'bb'. 'aaa' }.
-	list sort: (Dictionary with: #key -> [:each | each size]
-								  with: #reverse -> true).
-
-	self
-		assert: list __len__ equals: 3;
-		assert: (list __getitem__:  0) equals: 'aaa';
-		assert: (list __getitem__: -1) equals: 'c';
-		yourself
-%
-category: 'done'
-method: listTest
-testsortWithKey
-   | list |
-	list := self targetClass new __add__: { 'c'. 'bb'. 'aaa' }.
-	list sort: (Dictionary with: #key -> [:each | each size]).
-
-	self
-		assert: list __len__ equals: 3;
-		assert: (list __getitem__:  0) equals: 'c';
-		assert: (list __getitem__: -1) equals: 'aaa';
-		yourself
-%
 set compile_env: 0
 category: 'todo'
 method: listTest
@@ -727,4 +700,37 @@ category: 'todo'
 method: listTest
 test__sizeof__
    #pyTodo
+%
+category: 'todo'
+method: listTest
+testsortWithDict
+#pyTodo
+"
+   | x |
+	x := list ___value: { 'c'. 'bb'. 'aaa' }.
+	x sort: (Dictionary with: #key -> [:each | each size]
+								  with: #reverse -> true).
+
+	self
+		assert: x __len__ equals: 3;
+		assert: (x __getitem__:  0) equals: 'aaa';
+		assert: (x __getitem__: -1) equals: 'c';
+		yourself
+"
+%
+category: 'todo'
+method: listTest
+testsortWithKey
+#pyTodo
+"
+   | x |
+	x := list ___value: { 'c'. 'bb'. 'aaa' }.
+	x sort: (Dictionary with: #key -> [:each | each size]).
+
+	self
+		assert: x __len__ equals: 3;
+		assert: (x __getitem__:  0) equals: 'c';
+		assert: (x __getitem__: -1) equals: 'aaa';
+		yourself
+"
 %

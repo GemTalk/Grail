@@ -30,7 +30,7 @@ category: 'Python'
 method: list
 __reversed__
 
-	^self class ___value: container
+	^self class ___value: container reverse
 %
 category: 'Python'
 method: list
@@ -112,6 +112,20 @@ sort
 %
 category: 'Python'
 method: list
+sort_key: aFunction reverse: aBool
+"
+	| sortBlock reverse |
+	sortBlock := aDict at: #key
+							ifPresent: [:sortFunc | [:a :b | (sortFunc value: a) < (sortFunc value: b)] ]
+							ifAbsent: [[:a :b | a < b]].
+
+	^self ___initialize: (aBool ___value)
+									ifTrue: [(self ___container sort: sortBlock) reverse]
+									ifFalse: [self ___container sort: sortBlock]).
+"
+%
+category: 'Python'
+method: list
 sort: aDict
 	| sortBlock reverse |
 	sortBlock := aDict at: #key
@@ -128,11 +142,9 @@ method: list
 __delslice__: start _: end
 	"I don't find this in Python 3.9.2"
 
-	| newlist  |
-
-	newlist := self ___container removeFirst: start.
-	self ___container removeFirst: (end - start).
-	self ___container addAllFirst: newlist.
+	(end > start) ifTrue: [
+		self ___container removeFrom: (start + 1) to: (end - start + 1).
+	].
 
 	^self
 %
@@ -157,7 +169,7 @@ ___remove: anIndex ifFail: message
 	(index < 0 or: [	index >= self __len__])
 		ifTrue: [IndexError signal: message].
 
-	^self ___container removeAt: index + 1
+	^self ___container removeAtIndex: index + 1
 %
 category: 'Smalltalk'
 method: list

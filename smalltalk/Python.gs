@@ -5001,23 +5001,6 @@ doit
 frozensetTest category: 'BuiltIns-Tests'
 %
 set compile_env: 0
-! ------------------- Class definition for listTest
-expectvalue /Class
-doit
-Base_Class_Test subclass: 'listTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-listTest category: 'BuiltIns-Tests'
-%
-set compile_env: 0
 ! ------------------- Class definition for memoryviewTest
 expectvalue /Class
 doit
@@ -5101,6 +5084,23 @@ passing subclass: 'intTest'
 expectvalue /Class
 doit
 intTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for listTest
+expectvalue /Class
+doit
+passing subclass: 'listTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+listTest category: 'BuiltIns-Tests'
 %
 set compile_env: 0
 ! ------------------- Class definition for objectTest

@@ -191,7 +191,7 @@ category: 'Python'
 method: Container
 clear
 
-	^self ___container removeAll.
+	^self ___container removeFrom: 1 to: self ___container size.
 %
 category: 'Python'
 method: Container
@@ -274,7 +274,7 @@ category: 'Smalltalk'
 method: Container
 ___value: aCollection
 
-	container := aCollection.
+	container := (self class ___containerClass withAll: aCollection).
 %
 category: 'Smalltalk'
 method: Container
