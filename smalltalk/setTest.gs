@@ -8,8 +8,8 @@ category: 'done'
 method: setTest
 test__and__
 	| a b c |
-	a := self targetInstance __add__: { 'a'. 'b'. 'c'. 'd' }.
-	b := self targetInstance __add__: { 'b'. 'c'. 'd'. 'e' }.
+	a := set ___value: { 'a'. 'b'. 'c'. 'd' }.
+	b := set ___value: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a __and__: b.
 
@@ -38,63 +38,63 @@ test__dir__
 		dir := self targetInstance __dir__.
 	self assert: dir __class__ equals: list.
 
-   #pyTodo. "self assert: dir __len__ equals: 56.
-"   self assert: (dir __contains__: #__and__).
-   self assert: (dir __contains__: #__class__).
-   #pyTodo. "self assert: (dir __contains__: #__class_getitem__).
-"   self assert: (dir __contains__: #__contains__).
-   self assert: (dir __contains__: #__delattr__).
-   self assert: (dir __contains__: #__dir__).
-   self assert: (dir __contains__: #__doc__).
-   self assert: (dir __contains__: #__eq__).
-   self assert: (dir __contains__: #__format__).
-   self assert: (dir __contains__: #__ge__).
-   self assert: (dir __contains__: #__getattribute__).
-   self assert: (dir __contains__: #__gt__).
-   self assert: (dir __contains__: #__hash__).
-   self assert: (dir __contains__: #__iand__).
-   #pyTodo. "self assert: (dir __contains__: #__init__).
-"   #pyTodo. "self assert: (dir __contains__: #__init_subclass__).
-"   self assert: (dir __contains__: #__ior__).
-   self assert: (dir __contains__: #__isub__).
-   #pyTodo. "self assert: (dir __contains__: #__iter__).
-"   self assert: (dir __contains__: #__ixor__).
-   self assert: (dir __contains__: #__le__).
-   self assert: (dir __contains__: #__len__).
-   self assert: (dir __contains__: #__lt__).
-   self assert: (dir __contains__: #__ne__).
-   self assert: (dir __contains__: #__new__).
-   self assert: (dir __contains__: #__or__).
-   self assert: (dir __contains__: #__rand__).
-   #pyTodo. "self assert: (dir __contains__: #__reduce__).
-"   #pyTodo. "self assert: (dir __contains__: #__reduce_ex__).
-"   self assert: (dir __contains__: #__repr__).
-   self assert: (dir __contains__: #__ror__).
-   self assert: (dir __contains__: #__rsub__).
-   self assert: (dir __contains__: #__rxor__).
-   self assert: (dir __contains__: #__setattr__).
-   self assert: (dir __contains__: #__sizeof__).
-   self assert: (dir __contains__: #__str__).
-   self assert: (dir __contains__: #__sub__).
-   self assert: (dir __contains__: #__subclasshook__).
-   self assert: (dir __contains__: #__xor__).
-   self assert: (dir __contains__: #add).
-   self assert: (dir __contains__: #clear).
-   self assert: (dir __contains__: #copy).
-   self assert: (dir __contains__: #difference).
-   self assert: (dir __contains__: #difference_update).
-   self assert: (dir __contains__: #discard).
-   self assert: (dir __contains__: #intersection).
-   self assert: (dir __contains__: #intersection_update).
-   self assert: (dir __contains__: #isdisjoint).
-   self assert: (dir __contains__: #issubset).
-   self assert: (dir __contains__: #issuperset).
-   self assert: (dir __contains__: #pop).
-   self assert: (dir __contains__: #remove).
-   self assert: (dir __contains__: #symmetric_difference).
-   self assert: (dir __contains__: #symmetric_difference_update).
-   self assert: (dir __contains__: #union).
-   self assert: (dir __contains__: #update).
+   #pyTodo. "self assert: dir __len__ equals: 56."
+   self assert: (dir __contains__: (self str: '__and__')).
+   self assert: (dir __contains__: (self str: '__class__')).
+   #pyTodo. "self assert: (dir __contains__: #__class_getitem__)."
+   self assert: (dir __contains__: (self str: '__contains__')).
+   self assert: (dir __contains__: (self str: '__delattr__')).
+   self assert: (dir __contains__: (self str: '__dir__')).
+   self assert: (dir __contains__: (self str: '__doc__')).
+   self assert: (dir __contains__: (self str: '__eq__')).
+   self assert: (dir __contains__: (self str: '__format__')).
+   self assert: (dir __contains__: (self str: '__ge__')).
+   self assert: (dir __contains__: (self str: '__getattribute__')).
+   self assert: (dir __contains__: (self str: '__gt__')).
+   self assert: (dir __contains__: (self str: '__hash__')).
+   self assert: (dir __contains__: (self str: '__iand__')).
+   #pyTodo. "self assert: (dir __contains__: #__init__)."
+   #pyTodo. "self assert: (dir __contains__: #__init_subclass__)."
+   self assert: (dir __contains__: (self str: '__ior__')).
+   self assert: (dir __contains__: (self str: '__isub__')).
+   #pyTodo. "self assert: (dir __contains__: #__iter__)."
+   self assert: (dir __contains__: (self str: '__ixor__')).
+   self assert: (dir __contains__: (self str: '__le__')).
+   self assert: (dir __contains__: (self str: '__len__')).
+   self assert: (dir __contains__: (self str: '__lt__')).
+   self assert: (dir __contains__: (self str: '__ne__')).
+   self assert: (dir __contains__: (self str: '__new__')).
+   self assert: (dir __contains__: (self str: '__or__')).
+   self assert: (dir __contains__: (self str: '__rand__')).
+   #pyTodo. "self assert: (dir __contains__: #__reduce__)."
+   #pyTodo. "self assert: (dir __contains__: #__reduce_ex__)."
+   self assert: (dir __contains__: (self str: '__repr__')).
+   self assert: (dir __contains__: (self str: '__ror__')).
+   self assert: (dir __contains__: (self str: '__rsub__')).
+   self assert: (dir __contains__: (self str: '__rxor__')).
+   self assert: (dir __contains__: (self str: '__setattr__')).
+   self assert: (dir __contains__: (self str: '__sizeof__')).
+   self assert: (dir __contains__: (self str: '__str__')).
+   self assert: (dir __contains__: (self str: '__sub__')).
+   self assert: (dir __contains__: (self str: '__subclasshook__')).
+   self assert: (dir __contains__: (self str: '__xor__')).
+   self assert: (dir __contains__: (self str: 'add')).
+   self assert: (dir __contains__: (self str: 'clear')).
+   self assert: (dir __contains__: (self str: 'copy')).
+   self assert: (dir __contains__: (self str: 'difference')).
+   self assert: (dir __contains__: (self str: 'difference_update')).
+   self assert: (dir __contains__: (self str: 'discard')).
+   self assert: (dir __contains__: (self str: 'intersection')).
+   self assert: (dir __contains__: (self str: 'intersection_update')).
+   self assert: (dir __contains__: (self str: 'isdisjoint')).
+   self assert: (dir __contains__: (self str: 'issubset')).
+   self assert: (dir __contains__: (self str: 'issuperset')).
+   self assert: (dir __contains__: (self str: 'pop')).
+   self assert: (dir __contains__: (self str: 'remove')).
+   self assert: (dir __contains__: (self str: 'symmetric_difference')).
+   self assert: (dir __contains__: (self str: 'symmetric_difference_update')).
+   self assert: (dir __contains__: (self str: 'union')).
+   self assert: (dir __contains__: (self str: 'update')).
 %
 category: 'done'
 method: setTest
@@ -113,10 +113,10 @@ category: 'done'
 method: setTest
 test__ge__
 	| a b c bb |
-	a := self targetInstance __add__: { 'a'. 'b'. 'c' }.
-	b := self targetInstance __add__: { 'b'. 'c' }.
-	bb := self targetInstance __add__: { 'b'. 'c' }.
-	c := self targetInstance __add__: { 'a' }.
+	a := set ___value: { 'a'. 'b'. 'c' }.
+	b := set ___value: { 'b'. 'c' }.
+	bb := set ___value: { 'b'. 'c' }.
+	c := set ___value: { 'a' }.
 
 
 	self

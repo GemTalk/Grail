@@ -25,7 +25,10 @@ category: 'Python'
 method: set
 __and__: aSet
 
-	^self intersection: aSet
+	| x |
+	x := set ___value: Set new.
+	aSet ___value do: [ :each | (container includesValue: each) ifTrue: [ x add: each ] ].
+	^x
 %
 category: 'Python'
 method: set
@@ -175,7 +178,8 @@ category: 'Python'
 method: set
 issuperset: aSet
 
-	^self ___container includesAll: aSet ___container
+	aSet ___container do: [ :each | (self ___container includesValue: each) ifFalse: [ ^false ] ].
+	^true
 %
 category: 'Python'
 method: set
