@@ -191,7 +191,7 @@ category: 'Python'
 method: Container
 clear
 
-	^self ___container removeFrom: 1 to: self ___container size.
+	^self ___container removeAll: self ___container.
 %
 category: 'Python'
 method: Container

@@ -151,8 +151,8 @@ category: 'done'
 method: setTest
 test__iand__
 	| a b c |
-	a := self targetInstance __add__: { 'a'. 'b'. 'c'. 'd' }.
-	b := self targetInstance __add__: { 'b'. 'c'. 'd'. 'e' }.
+	a := set ___value: { 'a'. 'b'. 'c'. 'd' }.
+	b := set ___value: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a __iand__: b.
 
@@ -182,8 +182,8 @@ category: 'done'
 method: setTest
 test__isub__
 	| a b c |
-	a := self targetInstance __add__: { 'a'. 'b'. 'c'. 'd' }.
-	b := self targetInstance __add__: { 'b'. 'c'. 'd'. 'e' }.
+	a := set ___value: { 'a'. 'b'. 'c'. 'd' }.
+	b := set ___value: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a __isub__: b.
 
@@ -198,10 +198,10 @@ category: 'done'
 method: setTest
 test__ixor__
 	| a b c bb |
-	a := self targetInstance __add__: { 'a'. 'b'. 'c' }.
-	b := self targetInstance __add__: { 'b'. 'c' }.
-	bb := self targetInstance __add__: { 'b'. 'c' }.
-	c := self targetInstance __add__: { 'a' }.
+	a := set ___value: { 'a'. 'b'. 'c' }.
+	b := set ___value: { 'b'. 'c' }.
+	bb := set ___value: { 'b'. 'c' }.
+	c := set ___value: { 'a' }.
 
 	self
 		assert: (a copy __ixor__: b) __len__ equals: 1;
@@ -218,10 +218,10 @@ category: 'done'
 method: setTest
 test__le__
 	| a b c bb |
-	a := self targetInstance __add__: { 'a'. 'b'. 'c' }.
-	b := self targetInstance __add__: { 'b'. 'c' }.
-	bb := self targetInstance __add__: { 'b'. 'c' }.
-	c := self targetInstance __add__: { 'a' }.
+	a := set ___value: { 'a'. 'b'. 'c' }.
+	b := set ___value: { 'b'. 'c' }.
+	bb := set ___value: { 'b'. 'c' }.
+	c := set ___value: { 'a' }.
 
 
 	self
@@ -244,10 +244,10 @@ category: 'done'
 method: setTest
 test__lt__
 	| a b c bb |
-	a := self targetInstance __add__: { 'a'. 'b'. 'c' }.
-	b := self targetInstance __add__: { 'b'. 'c' }.
-	bb := self targetInstance __add__: { 'b'. 'c' }.
-	c := self targetInstance __add__: { 'a' }.
+	a := set ___value: { 'a'. 'b'. 'c' }.
+	b := set ___value: { 'b'. 'c' }.
+	bb := set ___value: { 'b'. 'c' }.
+	c := set ___value: { 'a' }.
 
 
 	self
@@ -292,8 +292,8 @@ category: 'done'
 method: setTest
 test__rand__
 	| a b c |
-	a := self targetInstance __add__: { 'a'. 'b'. 'c'. 'd' }.
-	b := self targetInstance __add__: { 'b'. 'c'. 'd'. 'e' }.
+	a := set ___value: { 'a'. 'b'. 'c'. 'd' }.
+	b := set ___value: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a __rand__: b.
 
@@ -325,8 +325,8 @@ category: 'done'
 method: setTest
 test__rsub__
 	| a b c |
-	a := self targetInstance __add__: { 'a'. 'b'. 'c'. 'd' }.
-	b := self targetInstance __add__: { 'b'. 'c'. 'd'. 'e' }.
+	a := set ___value: { 'a'. 'b'. 'c'. 'd' }.
+	b := set ___value: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a __rsub__: b.
 
@@ -343,10 +343,10 @@ category: 'done'
 method: setTest
 test__rxor__
 	| a b c bb |
-	a := self targetInstance __add__: { 'a'. 'b'. 'c' }.
-	b := self targetInstance __add__: { 'b'. 'c' }.
-	bb := self targetInstance __add__: { 'b'. 'c' }.
-	c := self targetInstance __add__: { 'a' }.
+	a := set ___value: { 'a'. 'b'. 'c' }.
+	b := set ___value: { 'b'. 'c' }.
+	bb := set ___value: { 'b'. 'c' }.
+	c := set ___value: { 'a' }.
 
 	self
 		assert: (a __rxor__: b) __len__ equals: 1;
@@ -372,8 +372,8 @@ category: 'done'
 method: setTest
 test__sub__
 	| a b c |
-	a := self targetInstance __add__: { 'a'. 'b'. 'c'. 'd' }.
-	b := self targetInstance __add__: { 'b'. 'c'. 'd'. 'e' }.
+	a := set ___value: { 'a'. 'b'. 'c'. 'd' }.
+	b := set ___value: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a __sub__: b.
 
@@ -390,10 +390,10 @@ category: 'done'
 method: setTest
 test__xor__
 	| a b c bb |
-	a := self targetInstance __add__: { 'a'. 'b'. 'c' }.
-	b := self targetInstance __add__: { 'b'. 'c' }.
-	bb := self targetInstance __add__: { 'b'. 'c' }.
-	c := self targetInstance __add__: { 'a' }.
+	a := set ___value: { 'a'. 'b'. 'c' }.
+	b := set ___value: { 'b'. 'c' }.
+	bb := set ___value: { 'b'. 'c' }.
+	c := set ___value: { 'a' }.
 
 	self
 		assert: (a __xor__: b) __len__ equals: 1;

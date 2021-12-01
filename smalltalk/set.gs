@@ -134,7 +134,7 @@ category: 'Python'
 method: set
 difference_update: aSet
 
-	self ___initialize: (self ___container difference: aSet ___container)
+	self ___initialize: (self ___difference: aSet ___container)
 %
 category: 'Python'
 method: set
@@ -154,7 +154,7 @@ category: 'Python'
 method: set
 intersection_update: aSet
 
-	self ___initialize: (self ___container intersection: aSet ___container)
+	self ___initialize: (self ___intersection: aSet ___container)
 %
 category: 'Python'
 method: set
@@ -172,7 +172,8 @@ category: 'Python'
 method: set
 issubset: aSet
 
-	^aSet ___container includesAll: self ___container
+	self ___container do: [ :each | (aSet ___container includesValue: each) ifFalse: [ ^false ] ].
+	^true
 %
 category: 'Python'
 method: set
@@ -184,7 +185,7 @@ issuperset: aSet
 category: 'Python'
 method: set
 pop
-	^self remove: self ___container atRandom
+	^self remove: (self ___container asOrderedCollection last).
 %
 category: 'Python'
 method: set
@@ -219,4 +220,24 @@ method: set
 update: aSet
 
 	self ___container addAll: aSet ___container
+%
+set compile_env: 0
+category: 'Smalltalk'
+method: set
+___difference: aSet
+
+	| difference intersection |
+	intersection := self ___intersection: aSet.
+	difference := container copy.
+	difference removeAll: intersection.
+	^difference
+%
+category: 'Smalltalk'
+method: set
+___intersection: aSet
+
+	| intersection |
+	intersection := Set new.
+	self ___container do: [ :each | (aSet includesValue: each) ifTrue: [ intersection add: each ] ].
+	^intersection
 %
