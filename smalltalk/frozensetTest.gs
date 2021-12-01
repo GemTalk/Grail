@@ -8,8 +8,8 @@ category: 'done'
 method: frozensetTest
 test__and__
 	| a b c |
-	a := self targetInstance: { 'a'. 'b'. 'c'. 'd' }.
-	b := self targetInstance: { 'b'. 'c'. 'd'. 'e' }.
+	a := frozenset ___value: { 'a'. 'b'. 'c'. 'd' }.
+	b := frozenset ___value: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a __and__: b.
 
@@ -26,7 +26,7 @@ category: 'done'
 method: frozensetTest
 test__and__Set
 	| a b c |
-	a := self targetInstance: { 'a'. 'b'. 'c'. 'd' }.
+	a := frozenset ___value: { 'a'. 'b'. 'c'. 'd' }.
 	b := set ___value: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a __and__: b.
@@ -52,50 +52,50 @@ test__dir__
 		dir := self targetInstance __dir__.
 	self assert: dir __class__ equals: list.
 
-   #pyTodo. "self assert: dir __len__ equals: 43.
-"   self assert: (dir __contains__: #__and__).
-   self assert: (dir __contains__: #__class__).
-   #pyTodo. "self assert: (dir __contains__: #__class_getitem__).
-"   self assert: (dir __contains__: #__contains__).
-   self assert: (dir __contains__: #__delattr__).
-   self assert: (dir __contains__: #__dir__).
-   self assert: (dir __contains__: #__doc__).
-   self assert: (dir __contains__: #__eq__).
-   self assert: (dir __contains__: #__format__).
-   self assert: (dir __contains__: #__ge__).
-   self assert: (dir __contains__: #__getattribute__).
-   self assert: (dir __contains__: #__gt__).
-   self assert: (dir __contains__: #__hash__).
-   #pyTodo. "self assert: (dir __contains__: #__init__).
-"   #pyTodo. "self assert: (dir __contains__: #__init_subclass__).
-"   #pyTodo. "self assert: (dir __contains__: #__iter__).
-"   self assert: (dir __contains__: #__le__).
-   self assert: (dir __contains__: #__len__).
-   self assert: (dir __contains__: #__lt__).
-   self assert: (dir __contains__: #__ne__).
-   self assert: (dir __contains__: #__new__).
-   self assert: (dir __contains__: #__or__).
-   #pyTodo. "self assert: (dir __contains__: #__rand__).
-"   #pyTodo. "self assert: (dir __contains__: #__reduce__).
-"   #pyTodo. "self assert: (dir __contains__: #__reduce_ex__).
-"   self assert: (dir __contains__: #__repr__).
-   #pyTodo. "self assert: (dir __contains__: #__ror__).
-"   #pyTodo. "self assert: (dir __contains__: #__rsub__).
-"   #pyTodo. "self assert: (dir __contains__: #__rxor__).
-"   self assert: (dir __contains__: #__setattr__).
-   self assert: (dir __contains__: #__sizeof__).
-   self assert: (dir __contains__: #__str__).
-   self assert: (dir __contains__: #__sub__).
-   self assert: (dir __contains__: #__subclasshook__).
-   self assert: (dir __contains__: #__xor__).
-   self assert: (dir __contains__: #copy).
-   self assert: (dir __contains__: #difference).
-   self assert: (dir __contains__: #intersection).
-   self assert: (dir __contains__: #isdisjoint).
-   self assert: (dir __contains__: #issubset).
-   self assert: (dir __contains__: #issuperset).
-   self assert: (dir __contains__: #symmetric_difference).
-   self assert: (dir __contains__: #union).
+   #pyTodo. "self assert: dir __len__ equals: 43."
+   self assert: (dir __contains__: (self str: '__and__')).
+   self assert: (dir __contains__: (self str: '__class__')).
+   #pyTodo. "self assert: (dir __contains__: #__class_getitem__)."
+   self assert: (dir __contains__: (self str: '__contains__')).
+   self assert: (dir __contains__: (self str: '__delattr__')).
+   self assert: (dir __contains__: (self str: '__dir__')).
+   self assert: (dir __contains__: (self str: '__doc__')).
+   self assert: (dir __contains__: (self str: '__eq__')).
+   self assert: (dir __contains__: (self str: '__format__')).
+   self assert: (dir __contains__: (self str: '__ge__')).
+   self assert: (dir __contains__: (self str: '__getattribute__')).
+   self assert: (dir __contains__: (self str: '__gt__')).
+   self assert: (dir __contains__: (self str: '__hash__')).
+   #pyTodo. "self assert: (dir __contains__: #__init__)."
+   #pyTodo. "self assert: (dir __contains__: #__init_subclass__)."
+   #pyTodo. "self assert: (dir __contains__: #__iter__)."
+   self assert: (dir __contains__: (self str: '__le__')).
+   self assert: (dir __contains__: (self str: '__len__')).
+   self assert: (dir __contains__: (self str: '__lt__')).
+   self assert: (dir __contains__: (self str: '__ne__')).
+   self assert: (dir __contains__: (self str: '__new__')).
+   self assert: (dir __contains__: (self str: '__or__')).
+   #pyTodo. "self assert: (dir __contains__: #__rand__)."
+   #pyTodo. "self assert: (dir __contains__: #__reduce__)."
+   #pyTodo. "self assert: (dir __contains__: #__reduce_ex__)."
+   self assert: (dir __contains__: (self str: '__repr__')).
+   #pyTodo. "self assert: (dir __contains__: #__ror__)."
+   #pyTodo. "self assert: (dir __contains__: #__rsub__)."
+   #pyTodo. "self assert: (dir __contains__: #__rxor__)."
+   self assert: (dir __contains__: (self str: '__setattr__')).
+   self assert: (dir __contains__: (self str: '__sizeof__')).
+   self assert: (dir __contains__: (self str: '__str__')).
+   self assert: (dir __contains__: (self str: '__sub__')).
+   self assert: (dir __contains__: (self str: '__subclasshook__')).
+   self assert: (dir __contains__: (self str: '__xor__')).
+   self assert: (dir __contains__: (self str: 'copy')).
+   self assert: (dir __contains__: (self str: 'difference')).
+   self assert: (dir __contains__: (self str: 'intersection')).
+   self assert: (dir __contains__: (self str: 'isdisjoint')).
+   self assert: (dir __contains__: (self str: 'issubset')).
+   self assert: (dir __contains__: (self str: 'issuperset')).
+   self assert: (dir __contains__: (self str: 'symmetric_difference')).
+   self assert: (dir __contains__: (self str: 'union')).
 %
 category: 'done'
 method: frozensetTest
@@ -127,10 +127,10 @@ category: 'done'
 method: frozensetTest
 test__ge__
 	| a b c bb |
-	a := self targetInstance: { 'a'. 'b'. 'c' }.
-	b := self targetInstance: { 'b'. 'c' }.
-	bb := self targetInstance: { 'b'. 'c' }.
-	c := self targetInstance: { 'a' }.
+	a := frozenset ___value: { 'a'. 'b'. 'c' }.
+	b := frozenset ___value: { 'b'. 'c' }.
+	bb := frozenset ___value: { 'b'. 'c' }.
+	c := frozenset ___value: { 'a' }.
 
 
 	self
@@ -147,10 +147,10 @@ method: frozensetTest
 test__gt__
 	"{ 'a', 'b', 'c' }.__gt__({ 'b', 'c' })"
 	| a b c bb |
-	a := self targetInstance: { 'a'. 'b'. 'c' }.
-	b := self targetInstance: { 'b'. 'c' }.
-	bb := self targetInstance: { 'b'. 'c' }.
-	c := self targetInstance: { 'a' }.
+	a := frozenset ___value: { 'a'. 'b'. 'c' }.
+	b := frozenset ___value: { 'b'. 'c' }.
+	bb := frozenset ___value: { 'b'. 'c' }.
+	c := frozenset ___value: { 'a' }.
 
 
 	self
@@ -166,10 +166,10 @@ category: 'done'
 method: frozensetTest
 test__le__
 	| a b c bb |
-	a := self targetInstance: { 'a'. 'b'. 'c' }.
-	b := self targetInstance: { 'b'. 'c' }.
-	bb := self targetInstance: { 'b'. 'c' }.
-	c := self targetInstance: { 'a' }.
+	a := frozenset ___value: { 'a'. 'b'. 'c' }.
+	b := frozenset ___value: { 'b'. 'c' }.
+	bb := frozenset ___value: { 'b'. 'c' }.
+	c := frozenset ___value: { 'a' }.
 
 
 	self
@@ -192,10 +192,10 @@ category: 'done'
 method: frozensetTest
 test__lt__
 	| a b c bb |
-	a := self targetInstance: { 'a'. 'b'. 'c' }.
-	b := self targetInstance: { 'b'. 'c' }.
-	bb := self targetInstance: { 'b'. 'c' }.
-	c := self targetInstance: { 'a' }.
+	a := frozenset ___value: { 'a'. 'b'. 'c' }.
+	b := frozenset ___value: { 'b'. 'c' }.
+	bb := frozenset ___value: { 'b'. 'c' }.
+	c := frozenset ___value: { 'a' }.
 
 
 	self
@@ -267,8 +267,8 @@ category: 'done'
 method: frozensetTest
 test__rand__
 	| a b c |
-	a := self targetInstance: { 'a'. 'b'. 'c'. 'd' }.
-	b := self targetInstance: { 'b'. 'c'. 'd'. 'e' }.
+	a := frozenset ___value: { 'a'. 'b'. 'c'. 'd' }.
+	b := frozenset ___value: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a __rand__: b.
 
@@ -328,8 +328,8 @@ category: 'done'
 method: frozensetTest
 test__rsub__
 	| a b c |
-	a := self targetInstance: { 'a'. 'b'. 'c'. 'd' }.
-	b := self targetInstance: { 'b'. 'c'. 'd'. 'e' }.
+	a := frozenset ___value: { 'a'. 'b'. 'c'. 'd' }.
+	b := frozenset ___value: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a __rsub__: b.
 
@@ -360,10 +360,10 @@ category: 'done'
 method: frozensetTest
 test__rxor__
 	| a b c bb |
-	a := self targetInstance: { 'a'. 'b'. 'c' }.
-	b := self targetInstance: { 'b'. 'c' }.
-	bb := self targetInstance: { 'b'. 'c' }.
-	c := self targetInstance: { 'a' }.
+	a := frozenset ___value: { 'a'. 'b'. 'c' }.
+	b := frozenset ___value: { 'b'. 'c' }.
+	bb := frozenset ___value: { 'b'. 'c' }.
+	c := frozenset ___value: { 'a' }.
 
 	self
 		assert: (a __rxor__: b) __class__ equals: self targetClass;
@@ -380,7 +380,7 @@ category: 'done'
 method: frozensetTest
 test__rxor__Set
 	| a b |
-	a := self targetInstance: { 'a'. 'b'. 'c' }.
+	a := frozenset ___value: { 'a'. 'b'. 'c' }.
 	b := set ___value: { 'b'. 'c' }.
 
 	self
@@ -402,8 +402,8 @@ category: 'done'
 method: frozensetTest
 test__sub__
 	| a b c |
-	a := self targetInstance: { 'a'. 'b'. 'c'. 'd' }.
-	b := self targetInstance: { 'b'. 'c'. 'd'. 'e' }.
+	a := frozenset ___value: { 'a'. 'b'. 'c'. 'd' }.
+	b := frozenset ___value: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a __sub__: b.
 
@@ -421,7 +421,7 @@ category: 'done'
 method: frozensetTest
 test__sub__Set
 	| a b c |
-	a := self targetInstance: { 'a'. 'b'. 'c'. 'd' }.
+	a := frozenset ___value: { 'a'. 'b'. 'c'. 'd' }.
 	b := set ___value: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a __sub__: b.
@@ -440,10 +440,10 @@ category: 'done'
 method: frozensetTest
 test__xor__
 	| a b c bb |
-	a := self targetInstance: { 'a'. 'b'. 'c' }.
-	b := self targetInstance: { 'b'. 'c' }.
-	bb := self targetInstance: { 'b'. 'c' }.
-	c := self targetInstance: { 'a' }.
+	a := frozenset ___value: { 'a'. 'b'. 'c' }.
+	b := frozenset ___value: { 'b'. 'c' }.
+	bb := frozenset ___value: { 'b'. 'c' }.
+	c := frozenset ___value: { 'a' }.
 
 	self
 		assert: (a __rxor__: b) __class__ equals: self targetClass;
@@ -460,7 +460,7 @@ category: 'done'
 method: frozensetTest
 test__xor__Set
 	| a b |
-	a := self targetInstance: { 'a'. 'b'. 'c' }.
+	a := frozenset ___value: { 'a'. 'b'. 'c' }.
 	b := set ___value: { 'b'. 'c' }.
 
 	self
@@ -485,8 +485,8 @@ category: 'done'
 method: frozensetTest
 testdifference
 	| a b c |
-	a := self targetInstance: { 'a'. 'b'. 'c'. 'd' }.
-	b := self targetInstance: { 'b'. 'c'. 'd'. 'e' }.
+	a := frozenset ___value: { 'a'. 'b'. 'c'. 'd' }.
+	b := frozenset ___value: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a difference: b.
 
@@ -503,7 +503,7 @@ category: 'done'
 method: frozensetTest
 testdifferenceSet
 	| a b c |
-	a := self targetInstance: { 'a'. 'b'. 'c'. 'd' }.
+	a := frozenset ___value: { 'a'. 'b'. 'c'. 'd' }.
 	b := set ___value: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a difference: b.
@@ -521,8 +521,8 @@ category: 'done'
 method: frozensetTest
 testintersection
 	| a b c |
-	a := self targetInstance: { 'a'. 'b'. 'c'. 'd' }.
-	b := self targetInstance: { 'b'. 'c'. 'd'. 'e' }.
+	a := frozenset ___value: { 'a'. 'b'. 'c'. 'd' }.
+	b := frozenset ___value: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a intersection: b.
 
@@ -539,7 +539,7 @@ category: 'done'
 method: frozensetTest
 testintersectionSet
 	| a b c |
-	a := self targetInstance: { 'a'. 'b'. 'c'. 'd' }.
+	a := frozenset ___value: { 'a'. 'b'. 'c'. 'd' }.
 	b := set ___value: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a intersection: b.
@@ -557,10 +557,10 @@ category: 'done'
 method: frozensetTest
 testisdisjoint
 	| a b c bb |
-	a := self targetInstance: { 'a'. 'b'. 'c' }.
-	b := self targetInstance: { 'b'. 'c' }.
-	bb := self targetInstance: { 'b'. 'c' }.
-	c := self targetInstance: { 'a' }.
+	a := frozenset ___value: { 'a'. 'b'. 'c' }.
+	b := frozenset ___value: { 'b'. 'c' }.
+	bb := frozenset ___value: { 'b'. 'c' }.
+	c := frozenset ___value: { 'a' }.
 
 
 	self
@@ -576,10 +576,10 @@ category: 'done'
 method: frozensetTest
 testissubset
 	| a b c bb |
-	a := self targetInstance: { 'a'. 'b'. 'c' }.
-	b := self targetInstance: { 'b'. 'c' }.
-	bb := self targetInstance: { 'b'. 'c' }.
-	c := self targetInstance: { 'a' }.
+	a := frozenset ___value: { 'a'. 'b'. 'c' }.
+	b := frozenset ___value: { 'b'. 'c' }.
+	bb := frozenset ___value: { 'b'. 'c' }.
+	c := frozenset ___value: { 'a' }.
 
 
 	self
@@ -595,10 +595,10 @@ category: 'done'
 method: frozensetTest
 testissuperset
 	| a b c bb |
-	a := self targetInstance: { 'a'. 'b'. 'c' }.
-	b := self targetInstance: { 'b'. 'c' }.
-	bb := self targetInstance: { 'b'. 'c' }.
-	c := self targetInstance: { 'a' }.
+	a := frozenset ___value: { 'a'. 'b'. 'c' }.
+	b := frozenset ___value: { 'b'. 'c' }.
+	bb := frozenset ___value: { 'b'. 'c' }.
+	c := frozenset ___value: { 'a' }.
 
 
 	self
@@ -614,10 +614,10 @@ category: 'done'
 method: frozensetTest
 testsymmetric_difference
 	| a b c bb |
-	a := self targetInstance: { 'a'. 'b'. 'c' }.
-	b := self targetInstance: { 'b'. 'c' }.
-	bb := self targetInstance: { 'b'. 'c' }.
-	c := self targetInstance: { 'a' }.
+	a := frozenset ___value: { 'a'. 'b'. 'c' }.
+	b := frozenset ___value: { 'b'. 'c' }.
+	bb := frozenset ___value: { 'b'. 'c' }.
+	c := frozenset ___value: { 'a' }.
 
 	self
 		assert: (a symmetric_difference: b) __class__ equals: self targetClass;
@@ -634,7 +634,7 @@ category: 'done'
 method: frozensetTest
 testsymmetric_differenceSet
 	| a b |
-	a := self targetInstance: { 'a'. 'b'. 'c' }.
+	a := frozenset ___value: { 'a'. 'b'. 'c' }.
 	b := set ___value: { 'b'. 'c' }.
 
 	self
@@ -645,8 +645,8 @@ category: 'done'
 method: frozensetTest
 testunion
 	| a b c |
-	a := self targetInstance: { 'a'. 'b'. 'c'. 'd' }.
-	b := self targetInstance: { 'b'. 'c'. 'd'. 'e' }.
+	a := frozenset ___value: { 'a'. 'b'. 'c'. 'd' }.
+	b := frozenset ___value: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a union: b.
 
@@ -662,7 +662,7 @@ category: 'done'
 method: frozensetTest
 testunionSet
 	| a b c |
-	a := self targetInstance: { 'a'. 'b'. 'c'. 'd' }.
+	a := frozenset ___value: { 'a'. 'b'. 'c'. 'd' }.
 	b := set ___value: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a union: b.
