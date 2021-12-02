@@ -587,16 +587,21 @@ testissuperset
 category: 'done'
 method: setTest
 testpop
-   | list lost element |
-	list := self targetInstance __add__: { 'a'. 'b'. 'c' }.
-	lost := list copy.
-	element :=  list pop.
+   | set lost element |
+	set := self targetInstance __add__: { 'a'. 'b'. 'c' }.
+	lost := set copy.
+	element :=  set pop.
 
 	self
 		assert: (lost __contains__: element);
-		deny:   (list __contains__: element);
-		assert: list __len__ equals: 2;
-		yourself
+		deny:   (set __contains__: element);
+		assert: set __len__ equals: 2;
+		yourself.
+
+	"Remove the rest of the items"
+	set pop; pop.
+
+	self should: [ set pop ] raise: KeyError.
 %
 category: 'done'
 method: setTest

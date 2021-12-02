@@ -21,6 +21,7 @@ ___startChar
 %
 ! ------------------- Instance methods for dict
 set compile_env: 0
+set compile_env: 0
 category: 'Python'
 method: dict
 __contains__: anElement
@@ -54,7 +55,7 @@ __gt__: otherDict
 
 	^(self ___container size > otherDict ___container size) or: [
 		 (self ___container size = otherDict ___container size) and: [
-			self ___container keys sorted do: [:key |
+			self ___container keys do: [:key |
 				(self ___container at: key) > (otherDict ___container at: key ifAbsent: [^true])
 					ifTrue: [^true].
 				(self ___container at: key) < (otherDict ___container at: key)
@@ -103,6 +104,12 @@ __setitem__: aKey _: aValue
 %
 category: 'Python'
 method: dict
+clear
+
+	^self ___container removeAllKeys: self ___container keys
+%
+category: 'Python'
+method: dict
 copy
 
 	^self class ___value: container copy
@@ -117,10 +124,11 @@ method: dict
 items
 
 	| s |
-	s := Set new.
+	s := OrderedCollection new.
 	container keysAndValuesDo: [:eachKey :eachValue |
-		s add: (list ___value: (Array with: eachKey with: eachValue)).
+		s add: (tuple ___value: (Array with: eachKey with: eachValue)).
 	].
+	#pyTodo "We should actually be returning dict_items".
 	^frozenset ___value: s
 %
 category: 'Python'

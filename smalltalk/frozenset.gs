@@ -77,14 +77,13 @@ category: 'Python'
 method: frozenset
 difference: aSet
 
-	^self class ___value:
-	  (self ___difference: (aSet ___intersection: self ___container))
+	^self class ___value: container - aSet ___container
 %
 category: 'Python'
 method: frozenset
 intersection: aSet
 
-	^self class ___value: (self ___intersection: aSet ___container).
+	^self class ___value: container * aSet ___container
 %
 category: 'Python'
 method: frozenset
@@ -122,25 +121,6 @@ union: aSet
 	^newSet
 %
 set compile_env: 0
-category: 'Smalltalk'
-method: frozenset
-___difference: aSet
-
-	| difference intersection |
-	intersection := self ___intersection: aSet.
-	difference := container copy.
-	difference removeAll: intersection.
-	^difference
-%
-category: 'Smalltalk'
-method: frozenset
-___intersection: aSet
-
-	| intersection |
-	intersection := Set new.
-	self ___container do: [ :each | (aSet includesValue: each) ifTrue: [ intersection add: each ] ].
-	^intersection
-%
 category: 'Smalltalk'
 method: frozenset
 __rand__: aSet

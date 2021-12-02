@@ -47,53 +47,52 @@ test__dir__
 		dir := self targetInstance __dir__.
 	self assert: dir __class__ equals: list.
 
-   #pyTodo. "self assert: dir __len__ equals: 45.
-"   self assert: (dir __contains__: #__class__).
-   #pyTodo. "self assert: (dir __contains__: #__class_getitem__).
-"   #pyTodo. "self assert: (dir __contains__: #__contains__).
-"   self assert: (dir __contains__: #__delattr__).
-   #pyTodo. "self assert: (dir __contains__: #__delitem__).
-"   self assert: (dir __contains__: #__dir__).
-   self assert: (dir __contains__: #__doc__).
-   self assert: (dir __contains__: #__eq__).
-   self assert: (dir __contains__: #__format__).
-   self assert: (dir __contains__: #__ge__).
-   self assert: (dir __contains__: #__getattribute__).
-   #pyTodo. "self assert: (dir __contains__: #__getitem__).
-"   self assert: (dir __contains__: #__gt__).
-   self assert: (dir __contains__: #__hash__).
-   #pyTodo. "self assert: (dir __contains__: #__init__).
-"   #pyTodo. "self assert: (dir __contains__: #__init_subclass__).
-"   #pyTodo. "self assert: (dir __contains__: #__ior__).
-"   #pyTodo. "self assert: (dir __contains__: #__iter__).
-"   self assert: (dir __contains__: #__le__).
-   #pyTodo. "self assert: (dir __contains__: #__len__).
-"   self assert: (dir __contains__: #__lt__).
-   self assert: (dir __contains__: #__ne__).
-   self assert: (dir __contains__: #__new__).
-   #pyTodo. "self assert: (dir __contains__: #__or__).
-"   #pyTodo. "self assert: (dir __contains__: #__reduce__).
-"   #pyTodo. "self assert: (dir __contains__: #__reduce_ex__).
-"   self assert: (dir __contains__: #__repr__).
-   #pyTodo. "self assert: (dir __contains__: #__reversed__).
-"   #pyTodo. "self assert: (dir __contains__: #__ror__).
-"   self assert: (dir __contains__: #__setattr__).
-   #pyTodo. "self assert: (dir __contains__: #__setitem__).
-"   self assert: (dir __contains__: #__sizeof__).
-   self assert: (dir __contains__: #__str__).
-   self assert: (dir __contains__: #__subclasshook__).
-   #pyTodo. "self assert: (dir __contains__: #clear).
-"   #pyTodo. "self assert: (dir __contains__: #copy).
-"   #pyTodo. "self assert: (dir __contains__: #fromkeys).
-"   #pyTodo. "self assert: (dir __contains__: #get).
-"   #pyTodo. "self assert: (dir __contains__: #items).
-"   #pyTodo. "self assert: (dir __contains__: #keys).
-"   #pyTodo. "self assert: (dir __contains__: #pop).
-"   #pyTodo. "self assert: (dir __contains__: #popitem).
-"   #pyTodo. "self assert: (dir __contains__: #setdefault).
-"   #pyTodo. "self assert: (dir __contains__: #update).
-"   #pyTodo. "self assert: (dir __contains__: #values).
-"
+   #pyTodo. "self assert: dir __len__ equals: 45."
+   self assert: (dir __contains__: (self str: '__class__')).
+   #pyTodo. "self assert: (dir __contains__: #__class_getitem__)."
+   #pyTodo. "self assert: (dir __contains__: #__contains__)."
+   self assert: (dir __contains__: (self str: '__delattr__')).
+   #pyTodo. "self assert: (dir __contains__: #__delitem__)."
+   self assert: (dir __contains__: (self str: '__dir__')).
+   self assert: (dir __contains__: (self str: '__doc__')).
+   self assert: (dir __contains__: (self str: '__eq__')).
+   self assert: (dir __contains__: (self str: '__format__')).
+   self assert: (dir __contains__: (self str: '__ge__')).
+   self assert: (dir __contains__: (self str: '__getattribute__')).
+   #pyTodo. "self assert: (dir __contains__: #__getitem__)."
+   self assert: (dir __contains__: (self str: '__gt__')).
+   self assert: (dir __contains__: (self str: '__hash__')).
+   #pyTodo. "self assert: (dir __contains__: #__init__)."
+   #pyTodo. "self assert: (dir __contains__: #__init_subclass__)."
+   #pyTodo. "self assert: (dir __contains__: #__ior__)."
+   #pyTodo. "self assert: (dir __contains__: #__iter__)."
+   self assert: (dir __contains__: (self str: '__le__')).
+   #pyTodo. "self assert: (dir __contains__: #__len__)."
+   self assert: (dir __contains__: (self str: '__lt__')).
+   self assert: (dir __contains__: (self str: '__ne__')).
+   self assert: (dir __contains__: (self str: '__new__')).
+   #pyTodo. "self assert: (dir __contains__: #__or__)."
+   #pyTodo. "self assert: (dir __contains__: #__reduce__)."
+   #pyTodo. "self assert: (dir __contains__: #__reduce_ex__)."
+   self assert: (dir __contains__: (self str: '__repr__')).
+   #pyTodo. "self assert: (dir __contains__: #__reversed__)."
+   #pyTodo. "self assert: (dir __contains__: #__ror__)."
+   self assert: (dir __contains__: (self str: '__setattr__')).
+   #pyTodo. "self assert: (dir __contains__: #__setitem__)."
+   self assert: (dir __contains__: (self str: '__sizeof__')).
+   self assert: (dir __contains__: (self str: '__str__')).
+   self assert: (dir __contains__: (self str: '__subclasshook__')).
+   #pyTodo. "self assert: (dir __contains__: #clear)."
+   #pyTodo. "self assert: (dir __contains__: #copy)."
+   #pyTodo. "self assert: (dir __contains__: #fromkeys)."
+   #pyTodo. "self assert: (dir __contains__: #get)."
+   #pyTodo. "self assert: (dir __contains__: #items)."
+   #pyTodo. "self assert: (dir __contains__: #keys)."
+   #pyTodo. "self assert: (dir __contains__: #pop)."
+   #pyTodo. "self assert: (dir __contains__: #popitem)."
+   #pyTodo. "self assert: (dir __contains__: #setdefault)."
+   #pyTodo. "self assert: (dir __contains__: #update)."
+   #pyTodo. "self assert: (dir __contains__: #values)."
 %
 category: 'done'
 method: dictTest
@@ -304,13 +303,13 @@ testget
 category: 'done'
 method: dictTest
 testitems
-   | list |
-	list := (self targetInstance: { #a -> 1. #b -> 2 }) items.
+   | x |
+	x := (dict ___value: { #a -> 1. #b -> 2 }) items.
 
 	self
-		assert: list __len__ equals: 2;
-		assert: list __class__ equals: frozenset;
-		assert: (list __contains__: (list ___value: { #a. 1 }));
+		assert: x __len__ equals: 2;
+		assert: x __class__ equals: frozenset;
+		assert: (x __contains__: (tuple ___value: (Array with: #a with: 1)));
 		yourself
 %
 category: 'done'

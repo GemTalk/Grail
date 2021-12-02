@@ -4967,23 +4967,6 @@ doit
 bytesTest category: 'BuiltIns-Tests'
 %
 set compile_env: 0
-! ------------------- Class definition for dictTest
-expectvalue /Class
-doit
-Base_Class_Test subclass: 'dictTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-dictTest category: 'BuiltIns-Tests'
-%
-set compile_env: 0
 ! ------------------- Class definition for memoryviewTest
 expectvalue /Class
 doit
@@ -5033,6 +5016,23 @@ passing subclass: 'complexTest'
 expectvalue /Class
 doit
 complexTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for dictTest
+expectvalue /Class
+doit
+passing subclass: 'dictTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+dictTest category: 'BuiltIns-Tests'
 %
 set compile_env: 0
 ! ------------------- Class definition for floatTest
