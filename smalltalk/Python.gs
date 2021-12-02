@@ -4933,23 +4933,6 @@ doit
 Base_Class_Test category: 'BuiltIns-Tests'
 %
 set compile_env: 0
-! ------------------- Class definition for bytearrayTest
-expectvalue /Class
-doit
-Base_Class_Test subclass: 'bytearrayTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-bytearrayTest category: 'BuiltIns-Tests'
-%
-set compile_env: 0
 ! ------------------- Class definition for bytesTest
 expectvalue /Class
 doit
@@ -4967,23 +4950,6 @@ doit
 bytesTest category: 'BuiltIns-Tests'
 %
 set compile_env: 0
-! ------------------- Class definition for memoryviewTest
-expectvalue /Class
-doit
-Base_Class_Test subclass: 'memoryviewTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-memoryviewTest category: 'BuiltIns-Tests'
-%
-set compile_env: 0
 ! ------------------- Class definition for passing
 expectvalue /Class
 doit
@@ -4999,6 +4965,23 @@ Base_Class_Test subclass: 'passing'
 expectvalue /Class
 doit
 passing category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for bytearrayTest
+expectvalue /Class
+doit
+passing subclass: 'bytearrayTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+bytearrayTest category: 'BuiltIns-Tests'
 %
 set compile_env: 0
 ! ------------------- Class definition for complexTest
@@ -5101,6 +5084,23 @@ passing subclass: 'listTest'
 expectvalue /Class
 doit
 listTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for memoryviewTest
+expectvalue /Class
+doit
+passing subclass: 'memoryviewTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+memoryviewTest category: 'BuiltIns-Tests'
 %
 set compile_env: 0
 ! ------------------- Class definition for objectTest
