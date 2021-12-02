@@ -36,8 +36,16 @@ classmethod: object
 __call__: p1 _: p2
 
 	^self basicNew
-		__init__: p1
-		_: p2
+		__init__: p1 _: p2;
+		yourself
+%
+category: 'Python'
+classmethod: object
+__call__: p1 _: p2 _: p3
+
+	^self basicNew
+		__init__: p1 _: p2 _: p3;
+		yourself
 %
 category: 'Python'
 classmethod: object

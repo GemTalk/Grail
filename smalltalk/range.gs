@@ -11,6 +11,7 @@ ___containerClass
 %
 ! ------------------- Instance methods for range
 set compile_env: 0
+set compile_env: 0
 category: 'Python'
 method: range
 __bool__
@@ -21,7 +22,7 @@ category: 'Python'
 method: range
 __contains__: anElement
 
-	^container rangeIncludes: anElement
+	^container includes: anElement
 %
 category: 'Python'
 method: range

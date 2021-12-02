@@ -35,18 +35,18 @@ test__dir__
 		dir := self targetInstance __dir__.
 	self assert: dir __class__ equals: list.
 
-   #pyTodo. "self assert: dir __len__ equals: 11.
-"   self assert: (dir __contains__: #__bool__).
-   #pyTodo. "self assert: (dir __contains__: #__contains__).
-"   #pyTodo. "self assert: (dir __contains__: #__getitem__).
-"   #pyTodo. "self assert: (dir __contains__: #__iter__).
-"   self assert: (dir __contains__: #__len__).
-   #pyTodo. "self assert: (dir __contains__: #__reversed__).
-"   #pyTodo. "self assert: (dir __contains__: #count).
-"   #pyTodo. "self assert: (dir __contains__: #index).
-"   self assert: (dir __contains__: #start).
-   self assert: (dir __contains__: #step).
-   self assert: (dir __contains__: #stop).
+   #pyTodo. "self assert: dir __len__ equals: 11."
+   self assert: (dir __contains__: (self str: '__bool__')).
+   #pyTodo. "self assert: (dir __contains__: #__contains__)."
+   #pyTodo. "self assert: (dir __contains__: #__getitem__)."
+   #pyTodo. "self assert: (dir __contains__: #__iter__)."
+   self assert: (dir __contains__: (self str: '__len__')).
+   #pyTodo. "self assert: (dir __contains__: #__reversed__)."
+   #pyTodo. "self assert: (dir __contains__: #count)."
+   #pyTodo. "self assert: (dir __contains__: #index)."
+   self assert: (dir __contains__: (self str: 'start')).
+   self assert: (dir __contains__: (self str: 'step')).
+   self assert: (dir __contains__: (self str: 'stop')).
 %
 category: 'done'
 method: rangeTest
