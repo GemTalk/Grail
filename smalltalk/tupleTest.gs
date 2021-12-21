@@ -8,9 +8,9 @@ category: 'done'
 method: tupleTest
 test__add__
    | list lost |
-	list := self targetInstance __add__: { 'o' }.
+	list := self targetInstance __add__: (tuple ___value: { 'o' }).
 
-	lost := self targetInstance __add__: { '1'. '2' }.
+	lost := self targetInstance __add__: (tuple ___value: { '1'. '2' }).
 
 	self
 		assert: (list __add__: self targetInstance) __len__ equals: 1;

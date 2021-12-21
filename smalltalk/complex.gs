@@ -3,6 +3,31 @@ removeAllMethods complex
 removeAllClassMethods complex
 ! ------------------- Class methods for complex
 set compile_env: 0
+category: 'other'
+classmethod: complex
+__call__: p1
+
+	^(self __new__: p1) __init__: p1; yourself
+%
+category: 'other'
+classmethod: complex
+__call__: p1 _: p2
+
+	^(self __new__: p1 _: p2) __init__: p1 _: p2; yourself
+%
+category: 'other'
+classmethod: complex
+__new__: p1
+
+	^self basicNew
+%
+category: 'other'
+classmethod: complex
+__new__: p1 _: p2
+
+	^self basicNew
+%
+set compile_env: 0
 category: 'Smalltalk'
 classmethod: complex
 ___assertJustOneStringArgumentOn: args

@@ -19,7 +19,20 @@ classmethod: set
 ___startChar
 	^${
 %
+category: 'Smalltalk'
+classmethod: set
+__call__: aSet
+
+	^(self __new__: aSet) __init__: aSet; yourself
+%
+category: 'Smalltalk'
+classmethod: set
+__new__: aSet
+
+	^self basicNew
+%
 ! ------------------- Instance methods for set
+set compile_env: 0
 set compile_env: 0
 category: 'Python'
 method: set
@@ -52,6 +65,17 @@ method: set
 __iand__: aSet
 
 	^self intersection_update: aSet
+%
+category: 'Python'
+method: set
+__init__: aCollection
+	| items |
+	items := aCollection.
+	(aCollection isKindOf: Container) ifTrue: [
+		items := aCollection ___container.
+	].
+
+	container := self class ___containerClass withAll: items copy.
 %
 category: 'Python'
 method: set
@@ -201,7 +225,7 @@ method: set
 symmetric_difference_update: aSet
 	"A + B - (AxB)
 	"
-	self ___initialize: (self symmetric_difference: aSet) ___container
+	self ___value: (self symmetric_difference: aSet) ___container
 %
 category: 'Python'
 method: set

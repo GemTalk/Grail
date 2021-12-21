@@ -48,6 +48,7 @@ hash
 	^container hash
 %
 set compile_env: 0
+set compile_env: 0
 category: 'Python'
 method: Container
 __add__: aList
@@ -145,6 +146,12 @@ __imul__: aMultiplier
 %
 category: 'Python'
 method: Container
+__init__
+
+	container := self class ___containerClass new.
+%
+category: 'Python'
+method: Container
 __le__: otherCollection
 	^(self __gt__: otherCollection) not
 %
@@ -169,7 +176,7 @@ __mul__: aMultiplier
 		newList addAll: container
 	].
 
-	^self class new ___initialize: newList
+	^self class new ___value: newList
 %
 category: 'Python'
 method: Container
@@ -241,23 +248,6 @@ ___getslice: start _: end
 	].
 	subset removeFrom: 1 to: start.
 	^subset
-%
-category: 'Smalltalk'
-method: Container
-___initArgs: args
-
-	self ___initialize: (args isEmpty ifTrue: [{}] ifFalse: [args first])
-%
-category: 'Smalltalk'
-method: Container
-___initialize: aCollection
-	| items |
-	items := aCollection.
-	(aCollection isKindOf: Container) ifTrue: [
-		items := aCollection ___container.
-	].
-
-	container := self class ___containerClass withAll: items copy.
 %
 category: 'Smalltalk'
 method: Container

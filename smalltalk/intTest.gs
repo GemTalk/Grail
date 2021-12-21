@@ -144,6 +144,19 @@ test__index__
 %
 category: 'done'
 method: intTest
+test__init__
+
+   self assert: int new __init__ ___value equals: nil.
+
+	[
+		int new __init__: 1.
+		self assert: false.
+	] on: TypeError do: [:ex |
+		self assert: ex messageText equals: 'object.__init__() takes exactly one argument (the instance to initialize)'
+	]
+%
+category: 'done'
+method: intTest
 test__int__
 
    self
@@ -247,7 +260,7 @@ test__new__onString
 		assert: (int __call__: (self str: '33'	))	__repr__ equals: '33';
 		yourself.
 	[
-		int __call__: 'j'.
+		int __call__: (self str: 'j').
 		self assert: false.
 	] on: ValueError do: [:ex |
 		self assert: ex messageText equals: 'int() arg is a malformed string'.
@@ -544,6 +557,12 @@ test_real
 		assert: (self int: 3) real ___value equals: 3;
         assert: (self int: -3) real ___value equals: -3;
 		yourself.
+%
+category: 'done'
+method: intTest
+zero
+
+	^int ___value: 0
 %
 set compile_env: 0
 category: 'todo'

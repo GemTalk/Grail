@@ -647,27 +647,27 @@ testremoveIfAbsent
 category: 'done'
 method: listTest
 testreverse
-   | list |
-	list := self targetInstance __add__: { 'a'. 'b'. 'c' }.
-	list reverse.
+   | x |
+	x := self targetInstance __add__: (list ___value: { 'a'. 'b'. 'c' }).
+	x reverse.
 
 	self
-		assert: list __len__ equals: 3;
-		assert: (list __getitem__: 0) equals: 'c';
-		assert: (list __getitem__: -1) equals: 'a';
+		assert: x __len__ equals: 3;
+		assert: (x __getitem__: 0) equals: 'c';
+		assert: (x __getitem__: -1) equals: 'a';
 		yourself
 %
 category: 'done'
 method: listTest
 testsort
-   | list |
-	list := self targetInstance __add__: { 'c'. 'b'. 'a' }.
-	list sort.
+   | x |
+	x := self targetInstance __add__: (list ___value: { 'c'. 'b'. 'a' }).
+	x sort.
 
 	self
-		assert: list __len__ equals: 3;
-		assert: (list __getitem__: 0) equals: 'a';
-		assert: (list __getitem__: -1) equals: 'c';
+		assert: x __len__ equals: 3;
+		assert: (x __getitem__: 0) equals: 'a';
+		assert: (x __getitem__: -1) equals: 'c';
 		yourself
 %
 set compile_env: 0

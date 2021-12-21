@@ -7,7 +7,7 @@ category: 'Smalltalk'
 classmethod: bytes
 ___containerClass
 
-	^ByteArray
+	^Array
 %
 ! ------------------- Instance methods for bytes
 set compile_env: 0

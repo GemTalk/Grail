@@ -3,6 +3,32 @@ removeAllMethods int
 removeAllClassMethods int
 ! ------------------- Class methods for int
 set compile_env: 0
+category: 'Python'
+classmethod: int
+__call__: aPythonObject
+	^(self __new__: aPythonObject) __init__; yourself
+%
+category: 'Python'
+classmethod: int
+__new__: aPythonObject
+
+	| instance |
+	(aPythonObject isKindOf: int) ifTrue: [instance := aPythonObject. ^instance].
+	(aPythonObject isKindOf: float) ifTrue: [instance := self basicNew ___value: aPythonObject ___value asInteger. ^instance].
+	(aPythonObject isKindOf: str) ifTrue: [
+		| value |
+		value := [ 
+			Integer fromString: aPythonObject ___value 
+		] on: ImproperOperation do: [:ex |
+			ValueError signal: 'int() arg is a malformed string'.
+		].
+		instance := self basicNew ___value: value. 
+		^instance
+	]. 
+ 	TypeError signal: 'TypeError: can''t convert ' , aPythonObject class name , ' to int'.
+	^instance
+%
+set compile_env: 0
 category: 'Smalltalk'
 classmethod: int
 ___assertMagnitudeAsFirstAgumentOn: args
@@ -342,17 +368,6 @@ method: int
 __gt__: anObject
 
 	^bool ___value: value > anObject ___value
-%
-category: 'Python-object'
-method: int
-__init__: anObject
-
-	(anObject isKindOf: str) ifTrue: [^self ___parse: anObject].
-	[
-		value := anObject ___value asNumber.
-	] on: Error do: [:ex | 
-		ValueError signal: 'int() arg is a malformed string'.
-	].
 %
 category: 'Python-object'
 method: int

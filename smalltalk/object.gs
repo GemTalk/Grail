@@ -13,38 +13,8 @@ __call__
 
 	What we really want is the argument passed to the class as a constructor."
 
-	^self basicNew
+	^self __new__
 		__init__;
-		yourself
-%
-category: 'Python'
-classmethod: object
-__call__: anObject
-	"In Python the first parameter is the class, but in Smalltalk we are in the class already.
-	To require the class here would imply that we should pass in the object as the first
-	parameter to every instance method, and that seems silly. So, part of translating
-	Python to Smalltalk is to remove that parameter (if it is called explicitly).
-
-	What we really want is the argument passed to the class as a constructor."
-
-	^self basicNew
-		__init__: anObject;
-		yourself
-%
-category: 'Python'
-classmethod: object
-__call__: p1 _: p2
-
-	^self basicNew
-		__init__: p1 _: p2;
-		yourself
-%
-category: 'Python'
-classmethod: object
-__call__: p1 _: p2 _: p3
-
-	^self basicNew
-		__init__: p1 _: p2 _: p3;
 		yourself
 %
 category: 'Python'
@@ -52,8 +22,6 @@ classmethod: object
 __new__
 
 	^self basicNew
-		__init__;
-		yourself
 %
 category: 'Python'
 classmethod: object
@@ -93,7 +61,32 @@ ___pyProtocol
 	].
 	^set
 %
+category: 'Smalltalk'
+classmethod: object
+doesNotUnderstand: aMessageDescriptor
+"
+If you pass in too many arguments, python will ignore the extra ones.
+In Smalltalk we don't have optional arguments, so we just keep cutting off the end
+of the keyword selector until we find a method that exists.
+"
+
+	| args index selector |
+
+	selector := aMessageDescriptor selector.
+	selector == #'compileMethod:category:using:environmentId:' ifTrue: [
+		^super doesNotUnderstand: aMessageDescriptor
+	].
+	selector := selector asString reverse.
+	args := aMessageDescriptor arguments.
+	index := selector indexOf: $:.
+	index = 0 ifTrue: [ ^super doesNotUnderstand: aMessageDescriptor ].
+	index := selector indexOf: $: startingAt: 2.
+	^self 
+		perform: ((selector copyFrom: index to: selector size) reverse asSymbol) 
+		withArguments: (args copyFrom: 1 to: args size - 1).
+%
 ! ------------------- Instance methods for object
+set compile_env: 0
 set compile_env: 0
 category: 'Python'
 method: object
@@ -171,26 +164,13 @@ __hash__
 category: 'Python'
 method: object
 __init__
-
-	self ___initArgs: {}
 %
 category: 'Python'
 method: object
 __init__: firstArg
 
-	self ___initArgs: { firstArg }
-%
-category: 'Python'
-method: object
-__init__: firstArg _: secondArg
-
-	self ___initArgs: { firstArg. secondArg }
-%
-category: 'Python'
-method: object
-__init__: firstArg _: secondArg _: thirdArg
-
-	self ___initArgs: { firstArg. secondArg. thirdArg }
+	"self ___initArgs: { firstArg }"
+	TypeError signal: 'object.__init__() takes exactly one argument (the instance to initialize)'
 %
 category: 'Python'
 method: object
@@ -249,10 +229,6 @@ __subclasshook__
 set compile_env: 0
 category: 'Smalltalk'
 method: object
-___initArgs: args
-%
-category: 'Smalltalk'
-method: object
 ___perform: aSymbol
 	"Send the unary selector, aSymbol, to the receiver.
 	Fail if the number of arguments expected by the selector is not zero.
@@ -303,6 +279,26 @@ basicSize
 	"<primitive: 62>"
 	"The number of indexable fields of fixed-length objects is 0"
 	^0
+%
+category: 'Smalltalk'
+method: object
+doesNotUnderstand: aMessageDescriptor
+"
+If you pass in too many arguments, python will ignore the extra ones.
+In Smalltalk we don't have optional arguments, so we just keep cutting off the end
+of the keyword selector until we find a method that exists.
+"
+
+	| args index selector |
+
+	selector := aMessageDescriptor selector asString reverse.
+	args := aMessageDescriptor arguments.
+	index := selector indexOf: $:.
+	index = 0 ifTrue: [ ^super doesNotUnderstand: aMessageDescriptor ].
+	index := selector indexOf: $: startingAt: 2.
+	^self 
+		perform: ((selector copyFrom: index to: selector size) reverse asSymbol) 
+		withArguments: (args copyFrom: 1 to: args size - 1).
 %
 category: 'Smalltalk'
 method: object

@@ -3,3 +3,4 @@ removeAllMethods TypeError
 removeAllClassMethods TypeError
 ! ------------------- Class methods for TypeError
 ! ------------------- Instance methods for TypeError
+set compile_env: 0

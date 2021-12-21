@@ -152,6 +152,20 @@ test__new__onBaseExeption
 	] on: TypeError do: [:ex |
 		self assert: ex messageText equals: 'object.__new__(BaseException) is not safe, use BaseException.__new__()'.
 	].
+
+	[
+		self targetClass __new__: BaseException _: BaseException.
+		self assert: false.
+	] on: TypeError do: [:ex |
+		self assert: ex messageText equals: 'object.__new__(BaseException) is not safe, use BaseException.__new__()'.
+	].
+
+	[
+		self targetClass __new__: BaseException _: BaseException _: BaseException.
+		self assert: false.
+	] on: TypeError do: [:ex |
+		self assert: ex messageText equals: 'object.__new__(BaseException) is not safe, use BaseException.__new__()'.
+	].
 %
 category: 'tests'
 method: objectTest
@@ -209,6 +223,17 @@ test__subclasshook__
 
 	self
 		assert: self targetInstance __subclasshook__ == NotImplementedType singleton;
+		yourself.
+%
+category: 'tests'
+method: objectTest
+testIgnoreExtraArgs
+
+	| a b |
+	a := self targetInstance.
+	b := self targetInstance.
+	self
+		assert: (a __eq__: a _: b);
 		yourself.
 %
 set compile_env: 0

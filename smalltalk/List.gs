@@ -3,6 +3,19 @@ removeAllMethods list
 removeAllClassMethods list
 ! ------------------- Class methods for list
 set compile_env: 0
+category: 'other'
+classmethod: list
+__call__: aList
+
+	^(self __new__: aList) __init__: aList; yourself
+%
+category: 'other'
+classmethod: list
+__new__: aList
+
+	^self basicNew.
+%
+set compile_env: 0
 category: 'Smalltalk'
 classmethod: list
 ___containerClass
@@ -21,10 +34,23 @@ ___startChar
 %
 ! ------------------- Instance methods for list
 set compile_env: 0
+set compile_env: 0
 category: 'Python'
 method: list
 __delitem__: anIndex
 	^self ___remove: anIndex ifFail: 'list assignment index out of range'.
+%
+category: 'Python'
+method: list
+__init__
+
+	container := OrderedCollection new
+%
+category: 'Python'
+method: list
+__init__: aList
+
+	container := aList ___container copy
 %
 category: 'Python'
 method: list
@@ -102,13 +128,13 @@ category: 'Python'
 method: list
 reverse
 
-	^self ___initialize: self ___container reverse.
+	^self ___value: self ___container reverse.
 %
 category: 'Python'
 method: list
 sort
 
-	^self ___initialize: self ___container sort.
+	^self ___value: self ___container sort.
 %
 category: 'Python'
 method: list
