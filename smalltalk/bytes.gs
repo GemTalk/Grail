@@ -375,8 +375,7 @@ category: 'Python'
 method: bytes
 ljust: pyIntWidth _: pyByte
 	| new |
-	" TODO put pyByte type in error not just 'bytes'"
-	(pyByte class ~= bytes or: [pyByte ___value size > 1]) ifTrue: [TypeError signal: 'ljust() argument 2 must be a byte string of length 1, not bytes'].
+	(pyByte class ~= bytes or: [pyByte ___value size > 1]) ifTrue: [TypeError signal: 'ljust() argument 2 must be a byte string of length 1, not ', pyByte class name].
 	
 	new := Array withAll: container.
 	(1 to: (pyIntWidth ___value - container size)) do: [ :each | new add: pyByte ___value first].

@@ -391,7 +391,7 @@ category: 'Python-object'
 method: int
 __repr__
 
-	^value printString
+	^str ___value: value printString
 %
 set compile_env: 0
 category: 'Smalltalk'

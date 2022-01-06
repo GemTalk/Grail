@@ -253,11 +253,11 @@ method: intTest
 test__new__onString
 
 	self
-		assert: (int __call__: (self str: '1'	))	__repr__ equals: '1';
-		assert: (int __call__: (self str: '+1'	))	__repr__ equals: '1';
-	   	assert: (int __call__: (self str: '0'	))	__repr__ equals: '0';
-		assert: (int __call__: (self str: '-1'	))	__repr__ equals: '-1';
-		assert: (int __call__: (self str: '33'	))	__repr__ equals: '33';
+		assert: (int __call__: (self str: '1'	))	__repr__ equals: (self str: '1');
+		assert: (int __call__: (self str: '+1'	))	__repr__ equals: (self str: '1');
+	   	assert: (int __call__: (self str: '0'	))	__repr__ equals: (self str: '0');
+		assert: (int __call__: (self str: '-1'	))	__repr__ equals: (self str: '-1');
+		assert: (int __call__: (self str: '33'	))	__repr__ equals: (self str: '33');
 		yourself.
 	[
 		int __call__: (self str: 'j').
