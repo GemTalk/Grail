@@ -20,10 +20,10 @@ method: bytesTest
 test__contains__
 
 	| ab |
-	ab := self targetInstance: 'ab' _: 'utf-8'.
-	self deny: (self targetInstance __contains__: ab).
-	self deny: ((self targetInstance: 3) __contains__: ab).
-	self assert: ((self targetInstance: 'aba' _: 'utf-8') __contains__: ab)
+	ab := bytes __call__: (str ___value: 'ab') _: (str ___value: 'ascii').
+	self deny: (bytes __call__ __contains__: ab).
+	self deny: ((bytes __call__: (int ___value: 3)) __contains__: ab).
+	self assert: ((bytes __call__: (str ___value: 'aba') _: (str ___value: 'ascii')) __contains__: ab)
 %
 category: 'done'
 method: bytesTest
@@ -35,83 +35,82 @@ test__dir__
 		dir := self targetInstance __dir__.
 	self assert: dir __class__ equals: list.
 
-   #pyTodo. "self assert: dir __len__ equals: 75.
-"   self assert: (dir __contains__: #__add__).
-   self assert: (dir __contains__: #__class__).
-   self assert: (dir __contains__: #__contains__).
-   self assert: (dir __contains__: #__delattr__).
-   self assert: (dir __contains__: #__dir__).
-   self assert: (dir __contains__: #__doc__).
-   self assert: (dir __contains__: #__eq__).
-   self assert: (dir __contains__: #__format__).
-   self assert: (dir __contains__: #__ge__).
-   self assert: (dir __contains__: #__getattribute__).
-   self assert: (dir __contains__: #__getitem__).
-   #pyTodo. "self assert: (dir __contains__: #__getnewargs__).
-"   self assert: (dir __contains__: #__gt__).
-   self assert: (dir __contains__: #__hash__).
-   self assert: (dir __contains__: #__init__).
-   #pyTodo. "self assert: (dir __contains__: #__init_subclass__).
-"   #pyTodo. "self assert: (dir __contains__: #__iter__).
-"   self assert: (dir __contains__: #__le__).
-   self assert: (dir __contains__: #__len__).
-   self assert: (dir __contains__: #__lt__).
-   self assert: (dir __contains__: #__mod__).
-   self assert: (dir __contains__: #__mul__).
-   self assert: (dir __contains__: #__ne__).
-   self assert: (dir __contains__: #__new__).
-   #pyTodo. "self assert: (dir __contains__: #__reduce__).
-"   #pyTodo. "self assert: (dir __contains__: #__reduce_ex__).
-"   self assert: (dir __contains__: #__repr__).
-   self assert: (dir __contains__: #__rmod__).
-   self assert: (dir __contains__: #__rmul__).
-   self assert: (dir __contains__: #__setattr__).
-   self assert: (dir __contains__: #__sizeof__).
-   self assert: (dir __contains__: #__str__).
-   self assert: (dir __contains__: #__subclasshook__).
-   self assert: (dir __contains__: #capitalize).
-   self assert: (dir __contains__: #center).
-   self assert: (dir __contains__: #count).
-   #pyTodo. "self assert: (dir __contains__: #decode).
-"   self assert: (dir __contains__: #endswith).
-   self assert: (dir __contains__: #expandtabs).
-   self assert: (dir __contains__: #find).
-   #pyTodo. "self assert: (dir __contains__: #fromhex).
-"   #pyTodo. "self assert: (dir __contains__: #hex).
-"   self assert: (dir __contains__: #index).
-   self assert: (dir __contains__: #isalnum).
-   self assert: (dir __contains__: #isalpha).
-   self assert: (dir __contains__: #isascii).
-   self assert: (dir __contains__: #isdigit).
-   self assert: (dir __contains__: #islower).
-   self assert: (dir __contains__: #isspace).
-   self assert: (dir __contains__: #istitle).
-   self assert: (dir __contains__: #isupper).
-   #pyTodo. "self assert: (dir __contains__: #join).
-"   self assert: (dir __contains__: #ljust).
-   self assert: (dir __contains__: #lower).
-   self assert: (dir __contains__: #lstrip).
-   #pyTodo. "self assert: (dir __contains__: #maketrans).
-"   self assert: (dir __contains__: #partition).
-   self assert: (dir __contains__: #removeprefix).
-   self assert: (dir __contains__: #removesuffix).
-   self assert: (dir __contains__: #replace).
-   self assert: (dir __contains__: #rfind).
-   #pyTodo. "self assert: (dir __contains__: #rindex).
-"   #pyTodo. "self assert: (dir __contains__: #rjust).
-"   #pyTodo. "self assert: (dir __contains__: #rpartition).
-"   #pyTodo. "self assert: (dir __contains__: #rsplit).
-"   #pyTodo. "self assert: (dir __contains__: #rstrip).
-"   #pyTodo. "self assert: (dir __contains__: #split).
-"   #pyTodo. "self assert: (dir __contains__: #splitlines).
-"   self assert: (dir __contains__: #startswith).
-   #pyTodo. "self assert: (dir __contains__: #strip).
-"   #pyTodo. "self assert: (dir __contains__: #swapcase).
-"   self assert: (dir __contains__: #title).
-   #pyTodo. "self assert: (dir __contains__: #translate).
-"   self assert: (dir __contains__: #upper).
-   #pyTodo. "self assert: (dir __contains__: #zfill).
-"
+	#pyTodo. "self assert: dir __len__ equals: 75."
+	self assert: (dir __contains__: (str ___value: '__add__')).
+	self assert: (dir __contains__: (str ___value: '__class__')).
+	self assert: (dir __contains__: (str ___value: '__contains__')).
+	self assert: (dir __contains__: (str ___value: '__delattr__')).
+	self assert: (dir __contains__: (str ___value: '__dir__')).
+	self assert: (dir __contains__: (str ___value: '__doc__')).
+	self assert: (dir __contains__: (str ___value: '__eq__')).
+	self assert: (dir __contains__: (str ___value: '__format__')).
+	self assert: (dir __contains__: (str ___value: '__ge__')).
+	self assert: (dir __contains__: (str ___value: '__getattribute__')).
+	self assert: (dir __contains__: (str ___value: '__getitem__')).
+	#pyTodo. "self assert: (dir __contains__: #__getnewargs__)."
+	self assert: (dir __contains__: (str ___value: '__gt__')).
+	self assert: (dir __contains__: (str ___value: '__hash__')).
+	self assert: (dir __contains__: (str ___value: '__init__')).
+	#pyTodo. "self assert: (dir __contains__: #__init_subclass__)."
+	#pyTodo. "self assert: (dir __contains__: #__iter__)."
+	self assert: (dir __contains__: (str ___value: '__le__')).
+	self assert: (dir __contains__: (str ___value: '__len__')).
+	self assert: (dir __contains__: (str ___value: '__lt__')).
+	self assert: (dir __contains__: (str ___value: '__mod__')).
+	self assert: (dir __contains__: (str ___value: '__mul__')).
+	self assert: (dir __contains__: (str ___value: '__ne__')).
+	self assert: (dir __contains__: (str ___value: '__new__')).
+	#pyTodo. "self assert: (dir __contains__: #__reduce__)."
+	#pyTodo. "self assert: (dir __contains__: #__reduce_ex__)."
+	self assert: (dir __contains__: (str ___value: '__repr__')).
+	self assert: (dir __contains__: (str ___value: '__rmod__')).
+	self assert: (dir __contains__: (str ___value: '__rmul__')).
+	self assert: (dir __contains__: (str ___value: '__setattr__')).
+	self assert: (dir __contains__: (str ___value: '__sizeof__')).
+	self assert: (dir __contains__: (str ___value: '__str__')).
+	self assert: (dir __contains__: (str ___value: '__subclasshook__')).
+	self assert: (dir __contains__: (str ___value: 'capitalize')).
+	self assert: (dir __contains__: (str ___value: 'center')).
+	self assert: (dir __contains__: (str ___value: 'count')).
+	#pyTodo. "self assert: (dir __contains__: #decode)."
+	self assert: (dir __contains__: (str ___value: 'endswith')).
+	self assert: (dir __contains__: (str ___value: 'expandtabs')).
+	self assert: (dir __contains__: (str ___value: 'find')).
+	#pyTodo. "self assert: (dir __contains__: #fromhex)."
+	#pyTodo. "self assert: (dir __contains__: #hex)."
+	self assert: (dir __contains__: (str ___value: 'index')).
+	self assert: (dir __contains__: (str ___value: 'isalnum')).
+	self assert: (dir __contains__: (str ___value: 'isalpha')).
+	self assert: (dir __contains__: (str ___value: 'isascii')).
+	self assert: (dir __contains__: (str ___value: 'isdigit')).
+	self assert: (dir __contains__: (str ___value: 'islower')).
+	self assert: (dir __contains__: (str ___value: 'isspace')).
+	self assert: (dir __contains__: (str ___value: 'istitle')).
+	self assert: (dir __contains__: (str ___value: 'isupper')).
+	#pyTodo. "self assert: (dir __contains__: #join)."
+	self assert: (dir __contains__: (str ___value: 'ljust')).
+	self assert: (dir __contains__: (str ___value: 'lower')).
+	self assert: (dir __contains__: (str ___value: 'lstrip')).
+	#pyTodo. "self assert: (dir __contains__: #maketrans)."
+	self assert: (dir __contains__: (str ___value: 'partition')).
+	self assert: (dir __contains__: (str ___value: 'removeprefix')).
+	self assert: (dir __contains__: (str ___value: 'removesuffix')).
+	self assert: (dir __contains__: (str ___value: 'replace')).
+	self assert: (dir __contains__: (str ___value: 'rfind')).
+	#pyTodo. "self assert: (dir __contains__: #rindex)."
+	#pyTodo. "self assert: (dir __contains__: #rjust)."
+	#pyTodo. "self assert: (dir __contains__: #rpartition)."
+	#pyTodo. "self assert: (dir __contains__: #rsplit)."
+	#pyTodo. "self assert: (dir __contains__: #rstrip)."
+	#pyTodo. "self assert: (dir __contains__: #split)."
+	#pyTodo. "self assert: (dir __contains__: #splitlines)."
+	self assert: (dir __contains__: (str ___value: 'startswith')).
+	#pyTodo. "self assert: (dir __contains__: #strip).'"
+	#pyTodo. "self assert: (dir __contains__: #swapcase)."
+	self assert: (dir __contains__: (str ___value: 'title')).
+	#pyTodo. "self assert: (dir __contains__: #translate)."
+	self assert: (dir __contains__: (str ___value: 'upper')).
+	#pyTodo. "self assert: (dir __contains__: #zfill)."
 %
 category: 'done'
 method: bytesTest
@@ -169,6 +168,35 @@ test__getitem__negative
 %
 category: 'done'
 method: bytesTest
+test__init__
+
+	| w x y z |
+
+	w := bytes __call__: (range __call__: (int ___value: 0) _: (int ___value: 10)).
+	x := bytes __call__: (int ___value: 3).
+	y := bytes __call__: (str ___value: 'abc') _: (str ___value: 'ascii').
+	z := bytes __call__: (list ___value: { 0. 10. 9 }).
+
+	self 
+		assert: w ___value size equals: 10;
+		assert: w ___value equals: { 0. 1. 2. 3. 4. 5. 6. 7. 8. 9 };
+		assert: x ___value size equals: 3;
+		assert: x ___value equals: { 0. 0. 0 };
+		assert: y ___value size equals: 3;
+		assert: y ___value equals: {	97. 98. 99 };
+		assert: z ___value size equals: 3;
+		assert: z ___value equals: { 0. 10. 9 };
+		yourself.
+
+	w := bytes __call__: (str ___value: 'abc') _: (str ___value: 'ascii').
+
+	self 
+		assert: w ___value size equals: 3;
+		assert: w ___value equals: { 97. 98. 99. };
+		yourself.
+%
+category: 'done'
+method: bytesTest
 test__le__
    | list |
 	#pyElaborate. "this is an aproximated implementation"
@@ -186,10 +214,10 @@ test__le__
 category: 'done'
 method: bytesTest
 test__len__
-   self assert: self targetInstance __len__ equals: 0.
-	self assert: (self targetInstance: 3) __len__ equals: 3.
+	self assert: bytes __call__ __len__ equals: 0.
+	self assert: (bytes __call__: (int ___value: 3)) __len__ equals: 3.
 
-	self assert: (self targetInstance: 'aba' _: 'utf-8') __len__ equals: 3.
+	self assert: (bytes __call__: (str ___value: 'aba') _: (str ___value: 'ascii')) __len__ equals: 3.
 %
 category: 'done'
 method: bytesTest
@@ -264,11 +292,18 @@ test__rmul__
 category: 'done'
 method: bytesTest
 test__str__
-   | list |
-	list := self targetInstance: 'abcd'.
-
+   | bytes1 bytes2 bytes3 string1 string2 string3 |
+	bytes1 := bytes new ___value: #(97 98 99 100).
+	bytes2 := bytes new ___value: (0 to: 30) asArray.
+	bytes3 := bytes new ___value: (128 to: 139) asArray.
+	string1 := bytes1 __str__.
+	string2 := bytes2 __str__.
+	string3 := bytes3 __str__.
 	self
-		assert: list __str__ equals: 'abcd';
+		assert: string1 class equals: str;
+		assert: string1 ___value equals: 'b''abcd''';
+		assert: string2 ___value equals: 'b''\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\x0c\r\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e''';
+		assert: string3 ___value equals: 'b''\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8a\x8b''';
 		yourself
 %
 category: 'done'
@@ -300,9 +335,9 @@ r'abcd'.center(5)  >> ' abcd'
 	abcd := self targetInstance: 'abcd'.
 
 	self
-		assert: (abc center: 2) equals: (self targetInstance: 'abc');
+		"assert: (abc center: 2) equals: (self targetInstance: 'abc');
 		assert: (abc center: 3) equals: (self targetInstance: 'abc');
-		assert: (abc center: 4) equals: (self targetInstance: 'abc ');
+		assert: (abc center: 4) equals: (self targetInstance: 'abc ');"
 		assert: (abc center: 5) equals: (self targetInstance: ' abc ');
 		assert: (abcd center: 5) equals: (self targetInstance: ' abcd');
 		assert: (abcd center: 6) equals: (self targetInstance: ' abcd ');
@@ -396,14 +431,14 @@ testendswithWithStart
 category: 'done'
 method: bytesTest
 testexpandtabs
-   | list |
-	list := self targetInstance: 'cb', String tab, 'e'.
+   | x |
+	x := bytes __call__: (str ___value: ('cb', (String with: Character tab), 'e')) _: (str ___value: 'ascii').
 
 	self
-		assert: list __len__ equals: 4;
-		assert: list expandtabs __len__ equals: 11;
-		assert: list expandtabs equals: (self targetInstance: 'cb        e');
-		assert: (list expandtabs: 4) equals: (self targetInstance: 'cb    e');
+		assert: x __len__ equals: 4;
+		assert: x expandtabs __len__ equals: 9;
+		assert: x expandtabs equals: (bytes __call__: (str ___value: 'cb      e') _: (str ___value: 'ascii'));
+		assert: (x expandtabs: (int ___value: 4)) equals: (bytes __call__: (str ___value: 'cb  e') _: (str ___value: 'ascii'));
 		yourself
 %
 category: 'done'
@@ -549,15 +584,15 @@ method: bytesTest
 testisascii
 
 	self
-		assert:  self targetInstance isascii;
-		assert: (self targetInstance: '12') isascii;
-		assert: (self targetInstance: '  ') isascii;
-		assert: (self targetInstance: 'HO') isascii;
-		assert: (self targetInstance: 'hO ') isascii;
-		assert: (self targetInstance: ' a2') isascii;
-		assert: (self targetInstance: '12.') isascii;
-		assert: (self targetInstance: ',12') isascii;
-		assert: (self targetInstance: '1:2') isascii;
+		assert:  bytes __call__ isascii;
+		assert: (bytes __call__: (str ___value: '12') _: (str ___value: 'ascii')) isascii;
+		assert: (bytes __call__: (str ___value: '  ') _: (str ___value: 'ascii')) isascii;
+		assert: (bytes __call__: (str ___value: 'HO') _: (str ___value: 'ascii')) isascii;
+		assert: (bytes __call__: (str ___value: 'hO') _: (str ___value: 'ascii')) isascii;
+		assert: (bytes __call__: (str ___value: ' a2') _: (str ___value: 'ascii')) isascii;
+		assert: (bytes __call__: (str ___value: '12.') _: (str ___value: 'ascii')) isascii;
+		assert: (bytes __call__: (str ___value: ',12') _: (str ___value: 'ascii')) isascii;
+		assert: (bytes __call__: (str ___value: '1:2') _: (str ___value: 'ascii')) isascii;
 		yourself
 %
 category: 'done'
@@ -611,10 +646,10 @@ method: bytesTest
 testistitle
 
 	self
-		assert: (self targetInstance: 'A man, a plan, a canal, panama') title istitle;
-		deny:   (self targetInstance: 'A man') istitle;
-		assert: (self targetInstance: 'A Man') istitle;
-		deny:     self targetInstance istitle;
+		assert: (bytes __call__: (str ___value: 'A man, a plan, a canal, panama') _: (str ___value: 'ascii')) title istitle;
+		deny: (bytes __call__: (str ___value: 'A man') _: (str ___value: 'ascii')) istitle;
+		assert: (bytes __call__: (str ___value: 'A Man') _: (str ___value: 'ascii')) istitle;
+		deny: bytes __call__ title istitle;
 		yourself
 %
 category: 'done'
@@ -640,14 +675,19 @@ testljust
 r'abc'.ljust(2)  >> 'abc'
 "
 	| abc |
-	abc  := self targetInstance: 'abc'.
+	abc  := bytes __call__: (str ___value: 'abc') _: (str ___value: 'ascii').
 
 	self
-		assert: (abc ljust: 2) equals: abc;
-		assert: (abc ljust: 3) equals: abc;
-		assert: (abc ljust: 4) equals: (self targetInstance: 'abc ');
-		assert: (abc ljust: 4 _: $*) equals: (self targetInstance: 'abc*');
-		yourself
+		assert: (abc ljust: (int ___value: 2)) equals: abc;
+		assert: (abc ljust: (int ___value: 3)) equals: abc;
+		assert: (abc ljust: (int ___value: 4)) equals: (bytes __call__: (str ___value: 'abc ') _: (str ___value: 'ascii'));
+		assert: (abc ljust: (int ___value: 4) _: (bytes __call__: (str ___value: '*') _: (str ___value: 'ascii'))) equals: (bytes __call__: (str ___value: 'abc*') _: (str ___value: 'ascii'));
+		yourself.
+
+   self should: [abc ljust: (int ___value: 2) _: (bytes __call__: (str ___value: '12') _: (str ___value: 'ascii'))]
+		raise: TypeError
+		withExceptionDo: [:exception |
+			self assert: exception messageText equals: 'ljust() argument 2 must be a byte string of length 1, not bytes'].
 %
 category: 'done'
 method: bytesTest
@@ -665,7 +705,7 @@ testlower
 category: 'done'
 method: bytesTest
 testlstrip
-
+"https://docs.python.org/3/library/stdtypes.html?highlight=lstrip#bytes.lstrip"
 	self
 		assert: self targetInstance lstrip equals: (self targetInstance: '');
 		assert: (self targetInstance: '') lstrip equals: (self targetInstance: '');
@@ -684,10 +724,10 @@ method: bytesTest
 testpartition
 
 	self
-		assert: ((self targetInstance: '  bcd') partition: 'a')
-		equals: (tuple ___value: { self targetInstance: '  bcd'. self targetInstance. self targetInstance });
-		assert: ((self targetInstance: '  bcd') partition: '  ')
-		equals: (tuple ___value: { self targetInstance. self targetInstance: '  '. self targetInstance: 'bcd' });
+		assert: ((bytes __call__: (str ___value: '  bcd') _: (str ___value: 'ascii')) partition: (bytes __call__: (str ___value: ' a') _: (str ___value: 'ascii')))
+		equals: (tuple ___value: { bytes __call__: (str ___value: '  bcd') _: (str ___value: 'ascii'). bytes __call__. bytes __call__ });
+		assert: ((bytes ___value: '  bcd') partition: (bytes ___value: '  '))
+		equals: (tuple ___value: { bytes new. bytes ___value: '  '. bytes ___value: '  bcd' });
 		assert: ((self targetInstance: '  bcd') partition: 'bc')
 		equals: (tuple ___value: { self targetInstance: '  '. self targetInstance: 'bc'. self targetInstance: 'd' });
 		assert: ((self targetInstance: '  bcbcd') partition: 'bc')
@@ -1027,8 +1067,14 @@ category: 'done'
 method: bytesTest
 testtitle
 
-	self assert: (self targetInstance: 'A man, a plan, a canal, panama') title
-		equals: ( self targetInstance: 'A Man, A Plan, A Canal, Panama')
+	self 
+		assert: (bytes __call__: (str ___value: 'A man, a plan, a canal, panama') _: (str ___value: 'ascii')) title
+			equals: (bytes __call__: (str ___value: 'A Man, A Plan, A Canal, Panama') _: (str ___value: 'ascii'));
+		assert: (bytes __call__: (str ___value: 'test Test :test $test') _: (str ___value: 'ascii')) title
+			equals: (bytes __call__: (str ___value: 'Test Test :Test $Test') _: (str ___value: 'ascii'));
+		assert: (bytes __call__: (str ___value: 'they''re bill''s friends from the UK') _: (str ___value: 'ascii')) title
+			equals: (bytes __call__: (str ___value: 'They''Re Bill''S Friends From The Uk') _: (str ___value: 'ascii'));
+		yourself.
 %
 category: 'done'
 method: bytesTest

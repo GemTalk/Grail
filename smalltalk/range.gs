@@ -162,3 +162,8 @@ ___size
 
 	^self ___container size
 %
+category: 'Smalltalk'
+method: range
+___value
+	^container
+%

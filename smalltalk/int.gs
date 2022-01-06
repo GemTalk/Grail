@@ -396,15 +396,6 @@ __repr__
 set compile_env: 0
 category: 'Smalltalk'
 method: int
-___initialize: val _: base
-	"https://docs.python.org/3/library/functions.html#int"
-
-	(val isKindOf: int) ifTrue: [value := val ___value. ^self].
-	(val isKindOf: float) ifTrue: [value := val ___value asInteger. ^self].
- 	TypeError signal: 'TypeError: can''t convert ' , val class name , ' to int'.
-%
-category: 'Smalltalk'
-method: int
 ___parse: stringArg
 
 	| integer stream |

@@ -29,17 +29,14 @@ category: 'Smalltalk'
 classmethod: tuple
 __new__: aPythonTuple
 
-	^self basicNew
+	^self basicNew ___value: aPythonTuple ___container copy immediateInvariant.
 %
 ! ------------------- Instance methods for tuple
 set compile_env: 0
-category: '(as yet unclassified)'
+category: 'Python'
 method: tuple
 __init__: aPythonTuple
-
-	container := self class ___containerClass withAll: aPythonTuple ___container copy.
 %
-set compile_env: 0
 set compile_env: 0
 category: 'Smalltalk'
 method: tuple

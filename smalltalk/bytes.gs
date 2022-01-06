@@ -3,6 +3,86 @@ removeAllMethods bytes
 removeAllClassMethods bytes
 ! ------------------- Class methods for bytes
 set compile_env: 0
+category: 'Python'
+classmethod: bytes
+__call__
+
+	^(self __new__) __init__; yourself
+%
+category: 'Python'
+classmethod: bytes
+__call__: pythonObject
+
+	^(self __new__: pythonObject) __init__: pythonObject; yourself.
+%
+category: 'Python'
+classmethod: bytes
+__call__: pythonString _: encoding
+
+	^(self __new__: pythonString _: encoding) __init__: pythonString _: encoding; yourself.
+%
+category: 'Python'
+classmethod: bytes
+__call__: pythonBytes _: encoding _: errors
+
+	^(self __new__: pythonBytes _: encoding _: errors) __init__: pythonBytes _: encoding _: errors; yourself.
+%
+category: 'Python'
+classmethod: bytes
+__new__
+
+	^self basicNew
+%
+category: 'Python'
+classmethod: bytes
+__new__: pythonObject
+
+" 
+	pythonBytes can be:
+		literal - byte string
+		int - fill a bytearray of length pythonBytes with 0
+		iterable - fill bytearray with an iterable of integers
+	
+"
+	(pythonObject isKindOf: int) ifTrue: [
+		^self basicNew ___value: (self ___containerClass new fillFrom: 1 resizeTo: pythonObject ___value with: 0) immediateInvariant
+	].
+	" TODO should throw error if iterable contains non-int value "
+	((pythonObject isKindOf: range) | (pythonObject isKindOf: list) | (pythonObject isKindOf: set) | (pythonObject isKindOf: tuple)) ifTrue: [
+		^self basicNew ___value: (pythonObject ___value asArray) immediateInvariant
+	].
+	(pythonObject isKindOf: str) ifTrue: [
+		TypeError signal: 'string argument without an encoding'
+	].
+
+
+	UnicodeEncodeError signal: '''ascii'' codec can''t encode character ''\x80'' in position 0: ordinal not in range(128)'
+%
+category: 'Python'
+classmethod: bytes
+__new__: pythonString _: encoding
+
+	" TODO support more encodings "
+	(encoding ___value = 'ascii') ifTrue: [
+		(pythonString ___value isKindOf: Unicode7) ifTrue: [
+			^self basicNew ___value: (self ___containerClass new addAll: (pythonString ___value asArray collect: [:each | each codePoint])) immediateInvariant
+		].
+	].
+%
+category: 'Python'
+classmethod: bytes
+__new__: pythonBytes _: encoding _: errors
+
+"
+String Error Handlers : 
+	strict : Raises the default UnicodeDecodeError in case of encode failure.
+	ignore : Ignores the unencodable character and encodes the remaining string.
+	replace : Replaces the unencodable character with a ‘?’.
+"
+
+	^self __new__: pythonBytes _: encoding.
+%
+set compile_env: 0
 category: 'Smalltalk'
 classmethod: bytes
 ___containerClass
@@ -30,6 +110,20 @@ __getitem__: anIndex
 %
 category: 'Python'
 method: bytes
+__init__
+
+		container := self class ___containerClass new.
+%
+category: 'Python'
+method: bytes
+__init__: pythonBytes
+%
+category: 'Python'
+method: bytes
+__init__: pythonString _: encoding
+%
+category: 'Python'
+method: bytes
 __mod__: anArgument
 	TypeError signal: 'not all arguments converted during bytes formatting'.
 %
@@ -40,8 +134,39 @@ __rmod__: anArgument
 %
 category: 'Python'
 method: bytes
+__str__
+
+	| code1 code2 stream |
+	
+	code1 := #(9 10 13).
+	code2 := #($t $n $r).
+	stream := WriteStream on: String new.
+	stream nextPutAll: 'b'''.
+	container do: [ :each |
+		(each >= 32 and: [ each <= 127 ]) ifTrue: [
+			stream nextPut: (Character codePoint: each).
+		] ifFalse: [
+			| index |
+			index := code1 indexOf: each.
+			index > 0 ifTrue: [ stream nextPut: $\; nextPut: (code2 at: index) ] ifFalse: [
+				stream nextPutAll: '\x'.
+				each < 16 ifTrue: [ stream nextPut: $0 ].
+				stream nextPutAll: (each printStringRadix: 16) asLowercase.
+			].
+		].
+	].
+	stream nextPut: $'.
+
+	^str new ___value: stream contents
+%
+category: 'Python'
+method: bytes
 capitalize
-	^self class new ___initialize: self ___container asString asLowercase capitalized
+	| contents |
+	contents := (String withAll: self ___value copy) asLowercase.
+	contents at: 1 put: contents first asUppercase.
+
+	^self class ___value: contents asArray.
 %
 category: 'Python'
 method: bytes
@@ -51,18 +176,21 @@ center: with
 category: 'Python'
 method: bytes
 center: width _: fillchar
-	| oddLen |
+	| leftPad leftPadSize rightPad rightPadSize oddLen |
 	oddLen := self __len__ + (self __len__ \\ 2).
 
-	^self class  new ___initialize:
-		((self ___container asString padRightTo: (((width - oddLen)//2)+oddLen) with: fillchar)
-		          padLeftTo: width with: fillchar) .
+	rightPadSize := (((width - oddLen)//2)+oddLen) - self __len__.
+	rightPad := (String new: rightPadSize) replaceFrom: 1 to: rightPadSize withObject: fillchar; yourself.
+	leftPadSize := width - self __len__ - rightPadSize.
+	leftPad := (String new: leftPadSize) replaceFrom: 1 to: leftPadSize withObject: fillchar; yourself.
+
+	^self class basicNew ___value: (String new add: leftPad; add: (String withAll: self ___container); add: rightPad; yourself) asArray.
 %
 category: 'Python'
 method: bytes
 copy
 
-	^self class new ___initialize: self ___container
+	^self class new ___value: self ___container
 %
 category: 'Python'
 method: bytes
@@ -112,12 +240,35 @@ endswith: aSublist _: aStart _: anEnd
 category: 'Python'
 method: bytes
 expandtabs
-	^self expandtabs: 8
+	^self expandtabs: (int ___value: 8)
 %
 category: 'Python'
 method: bytes
-expandtabs: tabsize
-	^self replace: String tab _: (String space repeat: tabsize)
+expandtabs: pythonInt
+	| columnIndex new tabsize|
+	tabsize := pythonInt ___value.
+	new := WriteStream on: container class new.
+	columnIndex := 0.
+	container do: [ :each | 
+		each == 9 ifTrue: [
+			| gap |
+			gap := tabsize - (columnIndex \\ tabsize).
+			gap == 0 ifTrue: [gap := tabsize].
+			gap timesRepeat: [
+				new nextPut: 32.
+				columnIndex := columnIndex + 1.
+			].
+		] ifFalse: [
+			new nextPut: each.
+			(each == 10 or: [ each == 13 ]) ifTrue: [
+				columnIndex := 0.
+			] ifFalse: [
+				columnIndex := columnIndex + 1.
+			].
+		]
+	].
+
+	^bytes ___value: new contents
 %
 category: 'Python'
 method: bytes
@@ -135,8 +286,7 @@ category: 'Python'
 method: bytes
 find: aSublist _: aStart _: anEnd
 
-	^((self ___container asString takeFirst: anEnd)
-			indexOfSubCollection: aSublist startingAt: aStart + 1) - 1
+	^(((String withAll: self ___container) copyFrom: 1 to: anEnd) indexOfSubCollection: aSublist startingAt: aStart + 1) - 1
 %
 category: 'Python'
 method: bytes
@@ -164,42 +314,42 @@ category: 'Python'
 method: bytes
 isalnum
 	^self __len__ > 0 and: [
-		self ___container asString allSatisfy: [:e | e isAlphaNumeric]
+		(String withAll: self ___container) allSatisfy: [:e | e isAlphaNumeric]
 	]
 %
 category: 'Python'
 method: bytes
 isalpha
 	^self __len__ > 0 and: [
-		self ___container asString allSatisfy: [:e | e isLetter]
+		(String withAll: self ___container) allSatisfy: [:e | e isLetter]
 	]
 %
 category: 'Python'
 method: bytes
 isascii
 	^self __len__ = 0 or: [
-		self ___container asString isAsciiString
+		self ___container allSatisfy: [ :each | each <= 127 ]
 	]
 %
 category: 'Python'
 method: bytes
 isdigit
 	^self __len__ > 0 and: [
-		self ___container asString allSatisfy: [:e | e isDigit]
+		(String withAll: self ___container) allSatisfy: [:e | e isDigit]
 	]
 %
 category: 'Python'
 method: bytes
 islower
 	^self __len__ > 0 and: [
-		self ___container asString allSatisfy: [:e | e isLowercase]
+		(String withAll: self ___container) allSatisfy: [:e | e isLowercase]
 	]
 %
 category: 'Python'
 method: bytes
 isspace
 	^self __len__ > 0 and: [
-		self ___container asString allSatisfy: [:e | e isSpaceSeparator]
+		(String withAll: self ___container) allSatisfy: [:e | e codePoint = 32 ]
 	]
 %
 category: 'Python'
@@ -213,24 +363,29 @@ category: 'Python'
 method: bytes
 isupper
 	^self __len__ > 0 and: [
-		self ___container asString allSatisfy: [:e | e isUppercase]
+		(String withAll: self ___container) allSatisfy: [:e | e isUppercase]
 	]
 %
 category: 'Python'
 method: bytes
-ljust: width
-	^self ljust: width _: Character space
+ljust: pyIntWidth
+	^self ljust: pyIntWidth _: (bytes ___value: (Array with: 32))
 %
 category: 'Python'
 method: bytes
-ljust: width _: fillchar
-	^self class new ___initialize:
-		(self ___container asString padRightTo: width with: fillchar)
+ljust: pyIntWidth _: pyByte
+	| new |
+	" TODO put pyByte type in error not just 'bytes'"
+	(pyByte class ~= bytes or: [pyByte ___value size > 1]) ifTrue: [TypeError signal: 'ljust() argument 2 must be a byte string of length 1, not bytes'].
+	
+	new := Array withAll: container.
+	(1 to: (pyIntWidth ___value - container size)) do: [ :each | new add: pyByte ___value first].
+	^bytes ___value: new.
 %
 category: 'Python'
 method: bytes
 lower
-	^self class new ___initialize: self ___container asString asLowercase
+	^self class basicNew ___value: (String withAll: self ___container) asLowercase
 %
 category: 'Python'
 method: bytes
@@ -272,8 +427,8 @@ removesuffix: leading
 category: 'Python'
 method: bytes
 replace: old _: new
-	^self class new ___initialize:
-		(self ___container asString copyReplaceAll: old with: new)
+	^self class basicNew ___value:
+		((String withAll: self ___container) copyReplaceAll: old with: new)
 %
 category: 'Python'
 method: bytes
@@ -442,23 +597,38 @@ method: bytes
 swapcase
 	| answer |
 
-	answer := self ___container asString.
+	answer := (String withAll: self ___container).
 	1 to: answer size do: [:i |
 		(answer at: i) isUppercase ifTrue: [answer at: i put: (answer at: i)asLowercase
 		] ifFalse: [(answer at: i) isLowercase ifTrue: [answer at: i put: (answer at: i) asUppercase]
 			]
 		].
 
-	^self class new ___initialize: answer.
+	^self class basicNew ___value: answer.
 %
 category: 'Python'
 method: bytes
 title
-	^self class new ___initialize:
-	(String streamContents: [:stream |
-               self ___container asString substrings do: [:sub |
-                       stream nextPutAll: sub capitalized]
-					separatedBy: [stream space] ])
+	| new previous |
+	new := Array new.
+	previous := -1.
+	container do: [ :each |
+		((previous between: 65 and: 90) or: [(previous between: 97 and: 122)]) ifTrue: [
+			(each between: 65 and: 90) ifTrue: [
+				new add: each + 32.
+			] ifFalse: [
+				new add: each.
+			].
+		] ifFalse: [
+			(each between: 97 and: 122) ifTrue: [
+				new add: each - 32.
+			] ifFalse: [
+				new add: each.
+			].
+		].
+		previous := new last.
+	].
+	^bytes ___value: new.
 %
 category: 'Python'
 method: bytes
