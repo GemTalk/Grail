@@ -13,9 +13,9 @@ test__add__
 	lost := self targetInstance __add__: (tuple ___value: { '1'. '2' }).
 
 	self
-		assert: (list __add__: self targetInstance) __len__ equals: 1;
-		assert: (list __add__: lost) __len__ equals: 3;
-		assert: (list __add__: lost) __len__ equals: 3;   " still the same lenght"
+		assert: (list __add__: self targetInstance) __len__ equals: (self int: 1);
+		assert: (list __add__: lost) __len__ equals: (self int: 3);
+		assert: (list __add__: lost) __len__ equals: (self int: 3);   " still the same lenght"
  		assert: ((list __add__: lost) __getitem__: -1) equals: '2';
 		yourself
 %
@@ -36,7 +36,7 @@ test__dir__
 		dir := self targetInstance __dir__.
 	self assert: dir __class__ equals: list.
 
-   #pyTodo. "self assert: dir __len__ equals: 34."
+   #pyTodo. "self assert: dir __len__ equals: (self int: 34)."
    self assert: (dir __contains__: (self str: '__add__')).
    self assert: (dir __contains__: (self str: '__class__')).
    #pyTodo. "self assert: (dir __contains__: #__class_getitem__)."
@@ -126,11 +126,11 @@ test__getslice__
 	list := self targetInstance __add__: { 'a'. 'b'. 'c'. 'd' }.
 
 	self
-		assert: (  list __getslice__: 1 _: 2) __len__          equals: 1;
+		assert: (  list __getslice__: 1 _: 2) __len__ equals: (self int: 1);
 		assert: ((list __getslice__: 1 _: 2) __getitem__: 0) equals: 'b';
-		assert: (  list __getslice__: 1 _: 3) __len__          equals: 2;
+		assert: (  list __getslice__: 1 _: 3) __len__ equals: (self int: 2);
 		assert: ((list __getslice__: 1 _: 3) __getitem__: 1) equals: 'c';
-		assert: (  list __getslice__: 1 _: 10) __len__          equals: 3;
+		assert: (  list __getslice__: 1 _: 10) __len__ equals: (self int: 3);
 		yourself
 %
 category: 'done'
@@ -165,7 +165,7 @@ category: 'done'
 method: tupleTest
 test__len__onEmptyList
    	self
-		assert: self targetInstance __len__ equals: 0;
+		assert: self targetInstance __len__ equals: (self int: 0);
 		yourself.
 %
 category: 'done'

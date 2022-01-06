@@ -64,8 +64,8 @@ __setitem__: anElement _: anIndex
 	"https://docs.python.org/3/reference/datamodel.html#object.__setitem__"
 
 	| index |
-	index := anIndex < 0 ifTrue: [self __len__ + anIndex] ifFalse: [anIndex].
-	(index < 0 or: [	index >= self __len__])
+	index := anIndex < 0 ifTrue: [self __len__ ___value + anIndex] ifFalse: [anIndex].
+	(index < 0 or: [	index >= self __len__ ___value])
 		ifTrue: [IndexError signal: 'list assignment index out of range'].
 
 	^self ___container at: index + 1 put: anElement
@@ -92,11 +92,11 @@ category: 'Python'
 method: list
 insert: anIndex _: anElement
 	| index |
-	index := anIndex < 0 ifTrue: [self __len__ + anIndex] ifFalse: [anIndex].
+	index := anIndex < 0 ifTrue: [self __len__ ___value + anIndex] ifFalse: [anIndex].
 
 	index <= 0
 		ifTrue: [^self ___container addFirst: anElement].
-	index >= self __len__
+	index >= self __len__ ___value
 		ifTrue: [^self ___container addLast: anElement].
 
 	self ___container add: anElement beforeIndex: index + 1.
@@ -109,7 +109,7 @@ insert: anIndex _: anElement
 category: 'Python'
 method: list
 pop
-	^self pop: self __len__ - 1
+	^self pop: self __len__ ___value - 1
 %
 category: 'Python'
 method: list
@@ -191,8 +191,8 @@ ___remove: anIndex ifFail: message
 	"  a b c   removoving b is -2 =>   3 -2 -> 1    "
 	"  a b c   removoving c is -3 =>   3 -3 -> 0    "
 	| index |
-	index := anIndex < 0 ifTrue: [self __len__ + anIndex] ifFalse: [anIndex].
-	(index < 0 or: [	index >= self __len__])
+	index := anIndex < 0 ifTrue: [self __len__ ___value + anIndex] ifFalse: [anIndex].
+	(index < 0 or: [	index >= self __len__ ___value])
 		ifTrue: [IndexError signal: message].
 
 	^self ___container removeAtIndex: index + 1

@@ -19,7 +19,7 @@ test__delitem__
 	list __delitem__: #b.
 
 	self
-		assert: list __len__ equals: 2;
+		assert: list __len__ equals: (self int: 2);
 		assert: (list __contains__: #a);
 		assert: (list __contains__: #c);
 		yourself
@@ -130,7 +130,7 @@ test__getitem__
 	list := self targetInstance: { #a -> 1. #b -> 2. #c -> 3. #b -> 4 }.
 
 	self
-		assert: list __len__ equals: 3;
+		assert: list __len__ equals: (self int: 3);
 		assert: (list __contains__: #a);
 		assert: (list __getitem__: #a) equals: 1;
 		yourself
@@ -162,7 +162,7 @@ test__ior__
 
 	self
 		assert: a == c;
-		assert: c __len__ equals: 5;
+		assert: c __len__ equals: (self int: 5);
 		assert: (c __contains__: 5);
 		yourself
 %
@@ -186,7 +186,7 @@ category: 'done'
 method: dictTest
 test__len__onEmptyList
    	self
-		assert: self targetInstance __len__ equals: 0;
+		assert: self targetInstance __len__ equals: (self int: 0);
 		yourself.
 %
 category: 'done'
@@ -228,9 +228,9 @@ test__or__
 	c := a __or__: b.
 
 	self
-		assert: a __len__ equals: 4;
+		assert: a __len__ equals: (self int: 4);
 		deny:   (a __contains__: 5);
-		assert: c __len__ equals: 5;
+		assert: c __len__ equals: (self int: 5);
 		assert: (c __contains__: 5);
 		yourself
 %
@@ -244,9 +244,9 @@ test__ror__
 	c := a __ror__: b.
 
 	self
-		assert: a __len__ equals: 4;
+		assert: a __len__ equals: (self int: 4);
 		deny:   (a __contains__: 5);
-		assert: c __len__ equals: 5;
+		assert: c __len__ equals: (self int: 5);
 		assert: (c __contains__: 5);
 		yourself
 %
@@ -257,7 +257,7 @@ test__setitem__
 	list := self targetInstance: { #a -> 1. #b -> 2. #c -> 3. #b -> 4 }.
 
 	self
-		assert: list __len__ equals: 3;
+		assert: list __len__ equals: (self int: 3);
 		assert: (list __contains__: #a);
 		assert: (list __getitem__: #a) equals: 1;
 		assert: (list __setitem__: #a _: 'x') equals: 'x';
@@ -271,7 +271,7 @@ testclear
 	list := self targetInstance: { 1 -> 'a'. 2 -> 'b'. 3 -> 'c' }.
 	list clear.
 	self
-		assert: list __len__ equals: 0;
+		assert: list __len__ equals: (self int: 0);
 		yourself
 %
 category: 'done'
@@ -283,7 +283,7 @@ testcopy
 	lost := list copy.
    list __delitem__: 2.
 	self
-		assert: lost __len__ equals: 3;
+		assert: lost __len__ equals: (self int: 3);
 		assert: (lost __contains__: 1);
 		assert: (lost __contains__: 3);
 		yourself
@@ -295,7 +295,7 @@ testget
 	list := self targetInstance: { #a -> 1. #b -> 2. #c -> 3. #b -> 4 }.
 
 	self
-		assert: list __len__ equals: 3;
+		assert: list __len__ equals: (self int: 3);
 		assert: (list __contains__: #a);
 		assert: (list get: #a) equals: 1;
 		yourself
@@ -307,7 +307,7 @@ testitems
 	x := (dict ___value: { #a -> 1. #b -> 2 }) items.
 
 	self
-		assert: x __len__ equals: 2;
+		assert: x __len__ equals: (self int: 2);
 		assert: x __class__ equals: frozenset;
 		assert: (x __contains__: (tuple ___value: (Array with: #a with: 1)));
 		yourself
@@ -330,10 +330,10 @@ testpop
 	list := self targetInstance: { #a -> 1. #b -> 2. #c -> 3. #b -> 4 }.
 
 	self
-		assert: list __len__ equals: 3;
+		assert: list __len__ equals: (self int: 3);
 		assert: (list __contains__: #a);
-		assert: (list pop: #a) equals: 1;
-		assert: list __len__ equals: 2;
+		assert: (list pop: #a) equals: 1; 
+		assert: list __len__ equals: (self int: 2);
 		deny: (list __contains__: #a);
 		yourself
 %

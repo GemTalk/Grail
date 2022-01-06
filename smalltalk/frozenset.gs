@@ -89,7 +89,7 @@ category: 'Python'
 method: frozenset
 isdisjoint: aSet
 
-	^(self intersection: aSet) __len__ = 0
+	^(self intersection: aSet) __len__ ___value = 0
 %
 category: 'Python'
 method: frozenset

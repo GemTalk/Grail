@@ -162,11 +162,13 @@ __str__
 category: 'Python'
 method: bytes
 capitalize
-	| contents |
-	contents := (String withAll: self ___value copy) asLowercase.
+	| contents new |
+	contents := (String withAll: (self ___value copy collect: [ :each | Character codePoint: each ])) asLowercase.
 	contents at: 1 put: contents first asUppercase.
+	new := Array new.
+	contents do: [ :each | new add: each codePoint ].
 
-	^self class ___value: contents asArray.
+	^bytes ___value: new.
 %
 category: 'Python'
 method: bytes
@@ -177,11 +179,11 @@ category: 'Python'
 method: bytes
 center: width _: fillchar
 	| leftPad leftPadSize rightPad rightPadSize oddLen |
-	oddLen := self __len__ + (self __len__ \\ 2).
+	oddLen := self __len__ ___value + (self __len__ ___value \\ 2).
 
-	rightPadSize := (((width - oddLen)//2)+oddLen) - self __len__.
+	rightPadSize := (((width - oddLen)//2)+oddLen) - self __len__ ___value.
 	rightPad := (String new: rightPadSize) replaceFrom: 1 to: rightPadSize withObject: fillchar; yourself.
-	leftPadSize := width - self __len__ - rightPadSize.
+	leftPadSize := width - self __len__ ___value - rightPadSize.
 	leftPad := (String new: leftPadSize) replaceFrom: 1 to: leftPadSize withObject: fillchar; yourself.
 
 	^self class basicNew ___value: (String new add: leftPad; add: (String withAll: self ___container); add: rightPad; yourself) asArray.
@@ -202,7 +204,7 @@ method: bytes
 count: aSublist _: aStart
 
 
-	^self count: aSublist _: aStart _: self __len__
+	^self count: aSublist _: aStart _: self __len__ ___value
 %
 category: 'Python'
 method: bytes
@@ -228,7 +230,7 @@ category: 'Python'
 method: bytes
 endswith: aSublist _: aStart
 
-	^self endswith: aSublist _: aStart _: self __len__
+	^self endswith: aSublist _: aStart _: self __len__ ___value
 %
 category: 'Python'
 method: bytes
@@ -280,7 +282,7 @@ category: 'Python'
 method: bytes
 find: aSublist _: aStart
 
-	^self find: aSublist _: aStart _: self __len__
+	^self find: aSublist _: aStart _: self __len__ ___value
 %
 category: 'Python'
 method: bytes
@@ -298,7 +300,7 @@ category: 'Python'
 method: bytes
 index: aSublist _: aStart
 
-	^self index: aSublist _: aStart _: self __len__
+	^self index: aSublist _: aStart _: self __len__ ___value
 %
 category: 'Python'
 method: bytes
@@ -313,56 +315,56 @@ index: aSublist _: aStart _: anEnd
 category: 'Python'
 method: bytes
 isalnum
-	^self __len__ > 0 and: [
+	^self __len__ ___value > 0 and: [
 		(String withAll: self ___container) allSatisfy: [:e | e isAlphaNumeric]
 	]
 %
 category: 'Python'
 method: bytes
 isalpha
-	^self __len__ > 0 and: [
+	^self __len__ ___value > 0 and: [
 		(String withAll: self ___container) allSatisfy: [:e | e isLetter]
 	]
 %
 category: 'Python'
 method: bytes
 isascii
-	^self __len__ = 0 or: [
+	^self __len__ ___value = 0 or: [
 		self ___container allSatisfy: [ :each | each <= 127 ]
 	]
 %
 category: 'Python'
 method: bytes
 isdigit
-	^self __len__ > 0 and: [
+	^self __len__ ___value > 0 and: [
 		(String withAll: self ___container) allSatisfy: [:e | e isDigit]
 	]
 %
 category: 'Python'
 method: bytes
 islower
-	^self __len__ > 0 and: [
+	^self __len__ ___value > 0 and: [
 		(String withAll: self ___container) allSatisfy: [:e | e isLowercase]
 	]
 %
 category: 'Python'
 method: bytes
 isspace
-	^self __len__ > 0 and: [
+	^self __len__ ___value > 0 and: [
 		(String withAll: self ___container) allSatisfy: [:e | e codePoint = 32 ]
 	]
 %
 category: 'Python'
 method: bytes
 istitle
-	^self __len__ > 0 and: [
+	^self __len__ ___value > 0 and: [
 		self = self title
 	]
 %
 category: 'Python'
 method: bytes
 isupper
-	^self __len__ > 0 and: [
+	^self __len__ ___value > 0 and: [
 		(String withAll: self ___container) allSatisfy: [:e | e isUppercase]
 	]
 %
@@ -410,7 +412,7 @@ partition: sep
 	^tuple ___value: {
 		self class new ___initialize: (self ___container asString  takeFirst: idx).
 		self class new ___initialize: sep.
-		self class new ___initialize: (self ___container asString  last: (self __len__ - idx - sep size))
+		self class new ___initialize: (self ___container asString  last: (self __len__ ___value - idx - sep size))
 	}
 %
 category: 'Python'
@@ -439,7 +441,7 @@ category: 'Python'
 method: bytes
 rfind: aSublist _: start
 
-	^self rfind: aSublist _: start _: self __len__
+	^self rfind: aSublist _: start _: self __len__ ___value
 %
 category: 'Python'
 method: bytes
@@ -463,7 +465,7 @@ category: 'Python'
 method: bytes
 rindex: aSublist _: aStart
 
-	^self rindex: aSublist _: aStart _: self __len__
+	^self rindex: aSublist _: aStart _: self __len__ ___value
 %
 category: 'Python'
 method: bytes
@@ -498,7 +500,7 @@ rpartition: sep
 	^tuple ___value: {
 		self class new ___initialize: (self ___container asString  takeFirst: idx).
 		self class new ___initialize: sep.
-		self class new ___initialize: (self ___container asString  last: (self __len__ - idx - sep size))
+		self class new ___initialize: (self ___container asString  last: (self __len__ ___value - idx - sep size))
 	}
 %
 category: 'Python'
@@ -521,7 +523,7 @@ rsplit: sep _: limit
 	splits := OrderedCollection new.
 	splits addAll: ((self class new ___initialize:
 	  						(self ___container asString  takeFirst: idx)) rsplit: sep _: limit - 1) ___container.
-	splits add: (self ___container asString  last: (self __len__ - idx - sep size)).
+	splits add: (self ___container asString  last: (self __len__ ___value - idx - sep size)).
 
 
 	^tuple ___value: (splits collect: [:each | self class new ___initialize: each])
@@ -557,7 +559,7 @@ split: sep _: limit
 	splits := OrderedCollection new.
 	splits add: (self ___container asString  takeFirst: idx).
 	splits addAll: ((self class new ___initialize:
-	  						(self ___container asString  last: (self __len__ - idx - sep size))) split: sep _: limit - 1) ___container.
+	  						(self ___container asString  last: (self __len__ ___value - idx - sep size))) split: sep _: limit - 1) ___container.
 
 
 	^tuple ___value: (splits collect: [:each | self class new ___initialize: each])
@@ -572,7 +574,7 @@ category: 'Python'
 method: bytes
 startswith: aSublist _: aStart
 
-	^self startswith: aSublist _: aStart _: self __len__
+	^self startswith: aSublist _: aStart _: self __len__ ___value
 %
 category: 'Python'
 method: bytes

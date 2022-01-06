@@ -9,7 +9,7 @@ method: bytesTest
 test__add__
 
 	[
-		(self targetInstance: 'j') __add__: 3.
+		(self bytes: 'j') __add__: 3.
 		self assert: false.
 	] on: TypeError do: [:ex |
 		self assert: (ex messageText beginsWith: 'can''t concat').
@@ -20,10 +20,10 @@ method: bytesTest
 test__contains__
 
 	| ab |
-	ab := bytes __call__: (str ___value: 'ab') _: (str ___value: 'ascii').
+	ab := self bytes: 'ab'.
 	self deny: (bytes __call__ __contains__: ab).
 	self deny: ((bytes __call__: (int ___value: 3)) __contains__: ab).
-	self assert: ((bytes __call__: (str ___value: 'aba') _: (str ___value: 'ascii')) __contains__: ab)
+	self assert: ((self bytes: 'aba') __contains__: ab)
 %
 category: 'done'
 method: bytesTest
@@ -32,10 +32,10 @@ test__dir__
 	self new writeDirTestOn: #('__add__' '__class__' '__contains__' '__delattr__' '__dir__' '__doc__' '__eq__' '__format__' '__ge__' '__getattribute__' '__getitem__' '__getnewargs__' '__gt__' '__hash__' '__init__' '__init_subclass__' '__iter__' '__le__' '__len__' '__lt__' '__mod__' '__mul__' '__ne__' '__new__' '__reduce__' '__reduce_ex__' '__repr__' '__rmod__' '__rmul__' '__setattr__' '__sizeof__' '__str__' '__subclasshook__' 'capitalize' 'center' 'count' 'decode' 'endswith' 'expandtabs' 'find' 'fromhex' 'hex' 'index' 'isalnum' 'isalpha' 'isascii' 'isdigit' 'islower' 'isspace' 'istitle' 'isupper' 'join' 'ljust' 'lower' 'lstrip' 'maketrans' 'partition' 'removeprefix' 'removesuffix' 'replace' 'rfind' 'rindex' 'rjust' 'rpartition' 'rsplit' 'rstrip' 'split' 'splitlines' 'startswith' 'strip' 'swapcase' 'title' 'translate' 'upper' 'zfill')
 	"
 	| dir |
-		dir := self targetInstance __dir__.
+		dir := bytes __call__ __dir__.
 	self assert: dir __class__ equals: list.
 
-	#pyTodo. "self assert: dir __len__ equals: 75."
+	#pyTodo. "self assert: dir __len__ equals: (self int: 75)."
 	self assert: (dir __contains__: (str ___value: '__add__')).
 	self assert: (dir __contains__: (str ___value: '__class__')).
 	self assert: (dir __contains__: (str ___value: '__contains__')).
@@ -116,13 +116,13 @@ category: 'done'
 method: bytesTest
 test__eq__
    | list |
-	list := self targetInstance: '123'.
+	list := self bytes: '123'.
 
 	self
-		deny:   (list __eq__: (self targetInstance: '12'));
-		assert: (list __eq__: (self targetInstance: '123'));
-		deny:   (list __eq__: (self targetInstance: '1231'));
-		deny:   (list __eq__: (self targetInstance: '1230'));
+		deny:   (list __eq__: (self bytes: '12'));
+		assert: (list __eq__: (self bytes: '123'));
+		deny:   (list __eq__: (self bytes: '1231'));
+		deny:   (list __eq__: (self bytes: '1230'));
 		yourself
 %
 category: 'done'
@@ -130,10 +130,10 @@ method: bytesTest
 test__ge__
 	"r'abc'.__ge__(r'bc')"
 	| a b c bb |
-	a := self targetInstance:  'abc'.
-	b := self targetInstance:  'bc'.
-	bb := self targetInstance: 'bc'.
-	c := self targetInstance:  'a'.
+	a := self bytes:  'abc'.
+	b := self bytes:  'bc'.
+	bb := self bytes: 'bc'.
+	c := self bytes:  'a'.
 
 
 	self
@@ -149,10 +149,10 @@ category: 'done'
 method: bytesTest
 test__getitem__
    | list |
-	list := self targetInstance: '1234'.
+	list := self bytes: '1234'.
 
 	self
-		assert: list __len__ equals: 4;
+		assert: list __len__ equals: (self int: 4);
 		assert: (list __getitem__: 0) equals: '1';
 		yourself
 %
@@ -160,7 +160,7 @@ category: 'done'
 method: bytesTest
 test__getitem__negative
    | list |
-	list := self targetInstance: 'o'.
+	list := self bytes: 'o'.
 
 	self
 		assert: (list __getitem__: -1) equals: 'o';
@@ -174,7 +174,7 @@ test__init__
 
 	w := bytes __call__: (range __call__: (int ___value: 0) _: (int ___value: 10)).
 	x := bytes __call__: (int ___value: 3).
-	y := bytes __call__: (str ___value: 'abc') _: (str ___value: 'ascii').
+	y := self bytes: 'abc'.
 	z := bytes __call__: (list ___value: { 0. 10. 9 }).
 
 	self 
@@ -188,7 +188,7 @@ test__init__
 		assert: z ___value equals: { 0. 10. 9 };
 		yourself.
 
-	w := bytes __call__: (str ___value: 'abc') _: (str ___value: 'ascii').
+	w := self bytes: 'abc'.
 
 	self 
 		assert: w ___value size equals: 3;
@@ -201,23 +201,23 @@ test__le__
    | list |
 	#pyElaborate. "this is an aproximated implementation"
 
-	list := self targetInstance: '123'.
+	list := self bytes: '123'.
 
 	self
-		deny:   (list __le__: (self targetInstance: '12'));
-		assert: (list __le__: (self targetInstance: '123'));
-		assert: (list __le__: (self targetInstance: '1230'));
-		deny:   (list __le__: (self targetInstance: '122'));
-		assert: (list __le__: (self targetInstance: '124'));
+		deny:   (list __le__: (self bytes: '12'));
+		assert: (list __le__: (self bytes: '123'));
+		assert: (list __le__: (self bytes: '1230'));
+		deny:   (list __le__: (self bytes: '122'));
+		assert: (list __le__: (self bytes: '124'));
 		yourself
 %
 category: 'done'
 method: bytesTest
 test__len__
-	self assert: bytes __call__ __len__ equals: 0.
-	self assert: (bytes __call__: (int ___value: 3)) __len__ equals: 3.
+	self assert: bytes __call__ __len__ equals: (self int: 0).
+	self assert: (bytes __call__: (int ___value: 3)) __len__ equals: (self int: 3).
 
-	self assert: (bytes __call__: (str ___value: 'aba') _: (str ___value: 'ascii')) __len__ equals: 3.
+	self assert: (self bytes: 'aba') __len__ equals: (self int: 3).
 %
 category: 'done'
 method: bytesTest
@@ -225,20 +225,20 @@ test__lt__
    | list |
 	#pyElaborate. "this is an aproximated implementation"
 
-	list := self targetInstance: '123'.
+	list := self bytes: '123'.
 
 	self
-		deny:   (list __lt__: (self targetInstance: '12'));
-		deny:   (list __lt__: (self targetInstance: '123'));
-		assert: (list __lt__: (self targetInstance: '1230'));
-		deny:   (list __lt__: (self targetInstance: '122'));
-		assert: (list __lt__: (self targetInstance: '124'));
+		deny:   (list __lt__: (self bytes: '12'));
+		deny:   (list __lt__: (self bytes: '123'));
+		assert: (list __lt__: (self bytes: '1230'));
+		deny:   (list __lt__: (self bytes: '122'));
+		assert: (list __lt__: (self bytes: '124'));
 		yourself
 %
 category: 'done'
 method: bytesTest
 test__mod__
-   self should: [(self targetInstance: 'j') __mod__: 3 ]
+   self should: [(self bytes: 'j') __mod__: 3 ]
 			raise: TypeError
 			withExceptionDo: [:exception |
 				self assert: exception messageText equals: 'not all arguments converted during bytes formatting'].
@@ -247,27 +247,27 @@ category: 'done'
 method: bytesTest
 test__mul__
 	| j ja |
-	j :=  self targetInstance: 'j'.
-	ja :=  self targetInstance: 'ja'.
+	j :=  self bytes: 'j'.
+	ja :=  self bytes: 'ja'.
 
-   self assert: (j __mul__: 3) __len__ equals: 3.
-   self assert: (ja __mul__: 3) __len__ equals: 6.
+   self assert: (j __mul__: 3) __len__ equals: (self int: 3).
+   self assert: (ja __mul__: 3) __len__ equals: (self int: 6).
 
-   self assert: ((j __mul__: 3) __contains__: (self targetInstance: 'jj')).
-   self assert: ((j __mul__: 3) __contains__: (self targetInstance: 'jjj')).
-	self assert: ((ja __mul__: 3) __contains__: (self targetInstance: 'aja')).
+   self assert: ((j __mul__: 3) __contains__: (self bytes: 'jj')).
+   self assert: ((j __mul__: 3) __contains__: (self bytes: 'jjj')).
+	self assert: ((ja __mul__: 3) __contains__: (self bytes: 'aja')).
 %
 category: 'done'
 method: bytesTest
 test__ne__
    | list |
-	list := self targetInstance: 'abc'.
+	list := self bytes: 'abc'.
 
 	self
-		assert: (list __ne__: (self targetInstance: 'ab'));
-		deny:   (list __ne__: (self targetInstance: 'abc'));
-		assert: (list __ne__: (self targetInstance: 'abe'));
-		assert: (list __ne__: (self targetInstance: 'abc0'));
+		assert: (list __ne__: (self bytes: 'ab'));
+		deny:   (list __ne__: (self bytes: 'abc'));
+		assert: (list __ne__: (self bytes: 'abe'));
+		assert: (list __ne__: (self bytes: 'abc0'));
 		yourself
 %
 category: 'done'
@@ -279,15 +279,15 @@ category: 'done'
 method: bytesTest
 test__rmul__
 	| j ja |
-	j :=  self targetInstance: 'j'.
-	ja :=  self targetInstance: 'ja'.
+	j :=  self bytes: 'j'.
+	ja :=  self bytes: 'ja'.
 
-   self assert: (j __rmul__: 3) __len__ equals: 3.
-   self assert: (ja __rmul__: 3) __len__ equals: 6.
+   self assert: (j __rmul__: 3) __len__ equals: (self int: 3).
+   self assert: (ja __rmul__: 3) __len__ equals: (self int: 6).
 
-   self assert: ((j __rmul__: 3) __contains__: (self targetInstance: 'jj')).
-   self assert: ((j __rmul__: 3) __contains__: (self targetInstance: 'jjj')).
-	self assert: ((ja __rmul__: 3) __contains__: (self targetInstance: 'aja')).
+   self assert: ((j __rmul__: 3) __contains__: (self bytes: 'jj')).
+   self assert: ((j __rmul__: 3) __contains__: (self bytes: 'jjj')).
+	self assert: ((ja __rmul__: 3) __contains__: (self bytes: 'aja')).
 %
 category: 'done'
 method: bytesTest
@@ -310,13 +310,13 @@ category: 'done'
 method: bytesTest
 testcapitalize
 	| Abcd |
-	Abcd := self targetInstance: 'Abcd'.
+	Abcd := self bytes: 'Abcd'.
 
 	self
-		assert: (self targetInstance: 'abcd') capitalize equals: Abcd ;
-		assert: (self targetInstance: 'ABCD') capitalize equals: Abcd ;
-		assert: (self targetInstance: 'aBCD') capitalize equals: Abcd ;
-		assert: (self targetInstance: 'Abcd') capitalize equals: Abcd ;
+		assert: (self bytes: 'abcd') capitalize equals: Abcd ;
+		assert: (self bytes: 'ABCD') capitalize equals: Abcd ;
+		assert: (self bytes: 'aBCD') capitalize equals: Abcd ;
+		assert: (self bytes: 'Abcd') capitalize equals: Abcd ;
 		yourself
 %
 category: 'done'
@@ -331,25 +331,25 @@ r'abcd'.center(5)  >> ' abcd'
 "
 
 	| abc abcd |
-	abc  := self targetInstance: 'abc'.
-	abcd := self targetInstance: 'abcd'.
+	abc  := self bytes: 'abc'.
+	abcd := self bytes: 'abcd'.
 
 	self
-		"assert: (abc center: 2) equals: (self targetInstance: 'abc');
-		assert: (abc center: 3) equals: (self targetInstance: 'abc');
-		assert: (abc center: 4) equals: (self targetInstance: 'abc ');"
-		assert: (abc center: 5) equals: (self targetInstance: ' abc ');
-		assert: (abcd center: 5) equals: (self targetInstance: ' abcd');
-		assert: (abcd center: 6) equals: (self targetInstance: ' abcd ');
-		assert: (abcd center: 5 _: $*) equals: (self targetInstance: '*abcd');
-		assert: (abcd center: 6 _: $*) equals: (self targetInstance: '*abcd*');
+		"assert: (abc center: 2) equals: (self bytes: 'abc');
+		assert: (abc center: 3) equals: (self bytes: 'abc');
+		assert: (abc center: 4) equals: (self bytes: 'abc ');"
+		assert: (abc center: 5) equals: (self bytes: ' abc ');
+		assert: (abcd center: 5) equals: (self bytes: ' abcd');
+		assert: (abcd center: 6) equals: (self bytes: ' abcd ');
+		assert: (abcd center: 5 _: $*) equals: (self bytes: '*abcd');
+		assert: (abcd center: 6 _: $*) equals: (self bytes: '*abcd*');
 		yourself
 %
 category: 'done'
 method: bytesTest
 testcount
    | list |
-	list := self targetInstance: 'abcb'.
+	list := self bytes: 'abcb'.
 
 	self
 		assert: (list count: 'a') equals: 1;
@@ -357,7 +357,7 @@ testcount
 		assert: (list count: 'z') equals: 0;
 		yourself.
 
-	list := self targetInstance: 'aaaa'.
+	list := self bytes: 'aaaa'.
 
 	self
 		assert: (list count: 'a') equals: 4;
@@ -367,7 +367,7 @@ category: 'done'
 method: bytesTest
 testcountWithEnd
    | list |
-	list := self targetInstance: 'abcbabcb'.
+	list := self bytes: 'abcbabcb'.
 
 	self
 		assert: (list count: 'ab' _: 1 _: 5) equals: 0;
@@ -378,7 +378,7 @@ category: 'done'
 method: bytesTest
 testcountWithStart
    | list |
-	list := self targetInstance: 'abcbabcb'.
+	list := self bytes: 'abcbabcb'.
 
 	self
 		assert: (list count: 'ab' _: 0) equals: 2;
@@ -391,7 +391,7 @@ category: 'done'
 method: bytesTest
 testendswith
    | list |
-	list := self targetInstance: 'abcb'.
+	list := self bytes: 'abcb'.
 
 	self
 		assert: (list endswith: 'a') equals: false;
@@ -399,7 +399,7 @@ testendswith
 		assert: (list endswith: 'z') equals: false;
 		yourself.
 
-	list := self targetInstance: 'aaaa'.
+	list := self bytes: 'aaaa'.
 
 	self
 		assert: (list endswith: 'a') equals: true;
@@ -409,7 +409,7 @@ category: 'done'
 method: bytesTest
 testendswithWithEnd
    | list |
-	list := self targetInstance: 'abcbabcb'.
+	list := self bytes: 'abcbabcb'.
 
 	self
 		assert: (list endswith: 'ab' _: 0 _: 2) equals: true;
@@ -420,7 +420,7 @@ category: 'done'
 method: bytesTest
 testendswithWithStart
    | list |
-	list := self targetInstance: 'abcbabcb'.
+	list := self bytes: 'abcbabcb'.
 
 	self
 		assert: (list endswith: 'cb' _: 1) equals: true;
@@ -435,8 +435,8 @@ testexpandtabs
 	x := bytes __call__: (str ___value: ('cb', (String with: Character tab), 'e')) _: (str ___value: 'ascii').
 
 	self
-		assert: x __len__ equals: 4;
-		assert: x expandtabs __len__ equals: 9;
+		assert: x __len__ equals: (self int: 4);
+		assert: x expandtabs __len__ equals: (self int: 9);
 		assert: x expandtabs equals: (bytes __call__: (str ___value: 'cb      e') _: (str ___value: 'ascii'));
 		assert: (x expandtabs: (int ___value: 4)) equals: (bytes __call__: (str ___value: 'cb  e') _: (str ___value: 'ascii'));
 		yourself
@@ -455,7 +455,7 @@ category: 'done'
 method: bytesTest
 testfindByOne
    | list |
-	list := self targetInstance: 'abcb'.
+	list := self bytes: 'abcb'.
 
 	self
 		assert: (list find: 'a') equals: 0;
@@ -467,7 +467,7 @@ category: 'done'
 method: bytesTest
 testfindByTwo
    | list |
-	list := self targetInstance: 'abcb'.
+	list := self bytes: 'abcb'.
 
 	self
 		assert: (list find: 'ab') equals: 0;
@@ -482,7 +482,7 @@ category: 'done'
 method: bytesTest
 testfindWithEnd
    | list |
-	list := self targetInstance: 'abcbabcb'.
+	list := self bytes: 'abcbabcb'.
 
 	self
 		assert: (list find: 'ab' _: 1 _: 5) equals: -1;
@@ -493,7 +493,7 @@ category: 'done'
 method: bytesTest
 testfindWithStart
    | list |
-	list := self targetInstance: 'abcbabcb'.
+	list := self bytes: 'abcbabcb'.
 
 	self
 		assert: (list find: 'ab' _: 1) equals: 4;
@@ -505,7 +505,7 @@ category: 'done'
 method: bytesTest
 testindexByOne
    | list |
-	list := self targetInstance: 'abcb'.
+	list := self bytes: 'abcb'.
 
 	self
 		assert: (list index: 'a') equals: 0;
@@ -517,7 +517,7 @@ category: 'done'
 method: bytesTest
 testindexByTwo
    | list |
-	list := self targetInstance: 'abcb'.
+	list := self bytes: 'abcb'.
 
 	self
 		assert: (list index: 'ab') equals: 0;
@@ -532,7 +532,7 @@ category: 'done'
 method: bytesTest
 testindexWithEnd
    | list |
-	list := self targetInstance: 'abcbabcb'.
+	list := self bytes: 'abcbabcb'.
 
 	self
 		should: [list index: 'ab' _: 1 _: 5] raise: ValueError;
@@ -543,7 +543,7 @@ category: 'done'
 method: bytesTest
 testindexWithStart
    | list |
-	list := self targetInstance: 'abcbabcb'.
+	list := self bytes: 'abcbabcb'.
 
 	self
 		assert: (list index: 'ab' _: 1) equals: 4;
@@ -557,12 +557,12 @@ testisalnum
 
 	self
 		deny:    self targetInstance isalnum;
-		assert: (self targetInstance: '12') isalnum;
-		assert: (self targetInstance: 'ho') isalnum;
-		assert: (self targetInstance: 'a2') isalnum;
-		deny:   (self targetInstance: '12.') isalnum;
-		deny:   (self targetInstance: ',12') isalnum;
-		deny:   (self targetInstance: '1:2') isalnum;
+		assert: (self bytes: '12') isalnum;
+		assert: (self bytes: 'ho') isalnum;
+		assert: (self bytes: 'a2') isalnum;
+		deny:   (self bytes: '12.') isalnum;
+		deny:   (self bytes: ',12') isalnum;
+		deny:   (self bytes: '1:2') isalnum;
 		yourself
 %
 category: 'done'
@@ -571,12 +571,12 @@ testisalpha
 
 	self
 		deny:    self targetInstance isalpha;
-		deny:   (self targetInstance: '12') isalpha;
-		assert: (self targetInstance: 'ho') isalpha;
-		deny:   (self targetInstance: 'a2') isalpha;
-		deny:   (self targetInstance: '12.') isalpha;
-		deny:   (self targetInstance: ',12') isalpha;
-		deny:   (self targetInstance: '1:2') isalpha;
+		deny:   (self bytes: '12') isalpha;
+		assert: (self bytes: 'ho') isalpha;
+		deny:   (self bytes: 'a2') isalpha;
+		deny:   (self bytes: '12.') isalpha;
+		deny:   (self bytes: ',12') isalpha;
+		deny:   (self bytes: '1:2') isalpha;
 		yourself
 %
 category: 'done'
@@ -601,12 +601,12 @@ testisdigit
 
 	self
 		deny:    self targetInstance isdigit;
-		assert: (self targetInstance: '12') isdigit;
-		deny:   (self targetInstance: 'ho') isdigit;
-		deny:   (self targetInstance: 'a2') isdigit;
-		deny:   (self targetInstance: '12.') isdigit;
-		deny:   (self targetInstance: ',12') isdigit;
-		deny:   (self targetInstance: '1:2') isdigit;
+		assert: (self bytes: '12') isdigit;
+		deny:   (self bytes: 'ho') isdigit;
+		deny:   (self bytes: 'a2') isdigit;
+		deny:   (self bytes: '12.') isdigit;
+		deny:   (self bytes: ',12') isdigit;
+		deny:   (self bytes: '1:2') isdigit;
 		yourself
 %
 category: 'done'
@@ -615,14 +615,14 @@ testislower
 
 	self
 		deny:    self targetInstance islower;
-		deny:   (self targetInstance: '12') islower;
-		assert: (self targetInstance: 'ho') islower;
-		deny:   (self targetInstance: 'HO') islower;
-		deny:   (self targetInstance: 'hO') islower;
-		deny:   (self targetInstance: 'a2') islower;
-		deny:   (self targetInstance: '12.') islower;
-		deny:   (self targetInstance: ',12') islower;
-		deny:   (self targetInstance: '1:2') islower;
+		deny:   (self bytes: '12') islower;
+		assert: (self bytes: 'ho') islower;
+		deny:   (self bytes: 'HO') islower;
+		deny:   (self bytes: 'hO') islower;
+		deny:   (self bytes: 'a2') islower;
+		deny:   (self bytes: '12.') islower;
+		deny:   (self bytes: ',12') islower;
+		deny:   (self bytes: '1:2') islower;
 		yourself
 %
 category: 'done'
@@ -631,14 +631,14 @@ testisspace
 
 	self
 		deny:    self targetInstance isspace;
-		deny:   (self targetInstance: '12') isspace;
-		assert: (self targetInstance: '  ') isspace;
-		deny:   (self targetInstance: 'HO') isspace;
-		deny:   (self targetInstance: 'hO ') isspace;
-		deny:   (self targetInstance: ' a2') isspace;
-		deny:   (self targetInstance: '12.') isspace;
-		deny:   (self targetInstance: ',12') isspace;
-		deny:   (self targetInstance: '1:2') isspace;
+		deny:   (self bytes: '12') isspace;
+		assert: (self bytes: '  ') isspace;
+		deny:   (self bytes: 'HO') isspace;
+		deny:   (self bytes: 'hO ') isspace;
+		deny:   (self bytes: ' a2') isspace;
+		deny:   (self bytes: '12.') isspace;
+		deny:   (self bytes: ',12') isspace;
+		deny:   (self bytes: '1:2') isspace;
 		yourself
 %
 category: 'done'
@@ -658,14 +658,14 @@ testisupper
 
 	self
 		deny:    self targetInstance isupper;
-		deny:   (self targetInstance: '12') isupper;
-		deny:   (self targetInstance: '  ') isupper;
-		assert: (self targetInstance: 'HO') isupper;
-		deny:   (self targetInstance: 'hO ') isupper;
-		deny:   (self targetInstance: ' a2') isupper;
-		deny:   (self targetInstance: '12.') isupper;
-		deny:   (self targetInstance: ',12') isupper;
-		deny:   (self targetInstance: '1:2') isupper;
+		deny:   (self bytes: '12') isupper;
+		deny:   (self bytes: '  ') isupper;
+		assert: (self bytes: 'HO') isupper;
+		deny:   (self bytes: 'hO ') isupper;
+		deny:   (self bytes: ' a2') isupper;
+		deny:   (self bytes: '12.') isupper;
+		deny:   (self bytes: ',12') isupper;
+		deny:   (self bytes: '1:2') isupper;
 		yourself
 %
 category: 'done'
@@ -693,13 +693,13 @@ category: 'done'
 method: bytesTest
 testlower
 	| abcd |
-	abcd := self targetInstance: 'abcd'.
+	abcd := self bytes: 'abcd'.
 
 	self
-		assert: (self targetInstance: 'abcd') lower equals: abcd ;
-		assert: (self targetInstance: 'ABCD') lower equals: abcd ;
-		assert: (self targetInstance: 'aBCD') lower equals: abcd ;
-		assert: (self targetInstance: 'Abcd') lower equals: abcd ;
+		assert: (self bytes: 'abcd') lower equals: abcd ;
+		assert: (self bytes: 'ABCD') lower equals: abcd ;
+		assert: (self bytes: 'aBCD') lower equals: abcd ;
+		assert: (self bytes: 'Abcd') lower equals: abcd ;
 		yourself
 %
 category: 'done'
@@ -707,16 +707,16 @@ method: bytesTest
 testlstrip
 "https://docs.python.org/3/library/stdtypes.html?highlight=lstrip#bytes.lstrip"
 	self
-		assert: self targetInstance lstrip equals: (self targetInstance: '');
-		assert: (self targetInstance: '') lstrip equals: (self targetInstance: '');
-		assert: (self targetInstance: '  bcd') lstrip equals: (self targetInstance: 'bcd');
-		assert: (self targetInstance: 'abcd') lstrip equals: (self targetInstance: 'abcd');
-		assert: ((self targetInstance: 'aabcd') lstrip: 'a') equals: (self targetInstance: 'bcd');
-		assert: ((self targetInstance: 'aabcd') lstrip: 'ba') equals: (self targetInstance: 'cd');
-		assert: ((self targetInstance: 'aabcd') lstrip: 'ab') equals: (self targetInstance: 'cd');
-		assert: ((self targetInstance: 'aabcd') lstrip: 'ca') equals: (self targetInstance: 'bcd');
-		assert: ((self targetInstance: 'aabcd') lstrip: 'ac') equals: (self targetInstance: 'bcd');
-		assert: ((self targetInstance: 'aabcd') lstrip: 'c') equals: (self targetInstance: 'aabcd');
+		assert: self targetInstance lstrip equals: (self bytes: '');
+		assert: (self bytes: '') lstrip equals: (self bytes: '');
+		assert: (self bytes: '  bcd') lstrip equals: (self bytes: 'bcd');
+		assert: (self bytes: 'abcd') lstrip equals: (self bytes: 'abcd');
+		assert: ((self bytes: 'aabcd') lstrip: 'a') equals: (self bytes: 'bcd');
+		assert: ((self bytes: 'aabcd') lstrip: 'ba') equals: (self bytes: 'cd');
+		assert: ((self bytes: 'aabcd') lstrip: 'ab') equals: (self bytes: 'cd');
+		assert: ((self bytes: 'aabcd') lstrip: 'ca') equals: (self bytes: 'bcd');
+		assert: ((self bytes: 'aabcd') lstrip: 'ac') equals: (self bytes: 'bcd');
+		assert: ((self bytes: 'aabcd') lstrip: 'c') equals: (self bytes: 'aabcd');
 		yourself
 %
 category: 'done'
@@ -728,10 +728,10 @@ testpartition
 		equals: (tuple ___value: { bytes __call__: (str ___value: '  bcd') _: (str ___value: 'ascii'). bytes __call__. bytes __call__ });
 		assert: ((bytes ___value: '  bcd') partition: (bytes ___value: '  '))
 		equals: (tuple ___value: { bytes new. bytes ___value: '  '. bytes ___value: '  bcd' });
-		assert: ((self targetInstance: '  bcd') partition: 'bc')
-		equals: (tuple ___value: { self targetInstance: '  '. self targetInstance: 'bc'. self targetInstance: 'd' });
-		assert: ((self targetInstance: '  bcbcd') partition: 'bc')
-		equals: (tuple ___value: { self targetInstance: '  '. self targetInstance: 'bc'. self targetInstance: 'bcd' });
+		assert: ((self bytes: '  bcd') partition: 'bc')
+		equals: (tuple ___value: { self bytes: '  '. self bytes: 'bc'. self bytes: 'd' });
+		assert: ((self bytes: '  bcbcd') partition: 'bc')
+		equals: (tuple ___value: { self bytes: '  '. self bytes: 'bc'. self bytes: 'bcd' });
 		yourself
 %
 category: 'done'
@@ -739,10 +739,10 @@ method: bytesTest
 testremoveprefix
 
 	self
-		assert: ((self targetInstance: 'aabcd') removeprefix: 'a') equals: (self targetInstance: 'abcd');
-		assert: ((self targetInstance: 'aabcd') removeprefix: 'aa') equals: (self targetInstance: 'bcd');
-		assert: ((self targetInstance: 'aabcd') removeprefix: 'ab') equals: (self targetInstance: 'aabcd');
-		assert: ((self targetInstance: 'aabcd') removeprefix: 'c') equals: (self targetInstance: 'aabcd');
+		assert: ((self bytes: 'aabcd') removeprefix: 'a') equals: (self bytes: 'abcd');
+		assert: ((self bytes: 'aabcd') removeprefix: 'aa') equals: (self bytes: 'bcd');
+		assert: ((self bytes: 'aabcd') removeprefix: 'ab') equals: (self bytes: 'aabcd');
+		assert: ((self bytes: 'aabcd') removeprefix: 'c') equals: (self bytes: 'aabcd');
 		yourself
 %
 category: 'done'
@@ -750,10 +750,10 @@ method: bytesTest
 testremovesuffix
 
 	self
-		assert: ((self targetInstance: 'aabcd') removesuffix: 'd') equals: (self targetInstance: 'aabc');
-		assert: ((self targetInstance: 'aabcd') removesuffix: 'cd') equals: (self targetInstance: 'aab');
-		assert: ((self targetInstance: 'aabcd') removesuffix: 'dc') equals: (self targetInstance: 'aabcd');
-		assert: ((self targetInstance: 'aabcd') removesuffix: 'c') equals: (self targetInstance: 'aabcd');
+		assert: ((self bytes: 'aabcd') removesuffix: 'd') equals: (self bytes: 'aabc');
+		assert: ((self bytes: 'aabcd') removesuffix: 'cd') equals: (self bytes: 'aab');
+		assert: ((self bytes: 'aabcd') removesuffix: 'dc') equals: (self bytes: 'aabcd');
+		assert: ((self bytes: 'aabcd') removesuffix: 'c') equals: (self bytes: 'aabcd');
 		yourself
 %
 category: 'done'
@@ -761,8 +761,8 @@ method: bytesTest
 testreplace
 
 	self
-		assert: ((self targetInstance: 'aabcd') replace: 'a' _: 'x') equals: (self targetInstance: 'xxbcd');
-		assert: ((self targetInstance: 'aabcd') replace: 'z' _: 'x') equals: (self targetInstance: 'aabcd');
+		assert: ((self bytes: 'aabcd') replace: 'a' _: 'x') equals: (self bytes: 'xxbcd');
+		assert: ((self bytes: 'aabcd') replace: 'z' _: 'x') equals: (self bytes: 'aabcd');
 		yourself
 %
 category: 'done'
@@ -779,7 +779,7 @@ category: 'done'
 method: bytesTest
 testrfindByOne
    | list |
-	list := self targetInstance: 'abcb'.
+	list := self bytes: 'abcb'.
 
 	self
 		assert: (list rfind: 'a') equals: 0;
@@ -791,7 +791,7 @@ category: 'done'
 method: bytesTest
 testrfindByTwo
    | list |
-	list := self targetInstance: 'abcb'.
+	list := self bytes: 'abcb'.
 
 	self
 		assert: (list rfind: 'ab') equals: 0;
@@ -806,7 +806,7 @@ category: 'done'
 method: bytesTest
 testrfindWithEnd
    | list |
-	list := self targetInstance: 'abceabcb'.
+	list := self bytes: 'abceabcb'.
 
 	self
 		assert: (list rfind: 'ab' _: 1 _: 5) equals: -1;
@@ -818,7 +818,7 @@ category: 'done'
 method: bytesTest
 testrfindWithStart
    | list |
-	list := self targetInstance: 'abcbabcb'.
+	list := self bytes: 'abcbabcb'.
 
 	self
 		assert: (list rfind: 'ab' _: 1) equals: 4;
@@ -840,7 +840,7 @@ category: 'done'
 method: bytesTest
 testrindexByOne
    | list |
-	list := self targetInstance: 'bcba'.
+	list := self bytes: 'bcba'.
 
 	self
 		assert: (list rindex: 'a') equals: 3;
@@ -852,7 +852,7 @@ category: 'done'
 method: bytesTest
 testrindexByTwo
    | list |
-	list := self targetInstance: 'abcb'.
+	list := self bytes: 'abcb'.
 
 	self
 		assert: (list rindex: 'ab') equals: 0;
@@ -867,7 +867,7 @@ category: 'done'
 method: bytesTest
 testrindexWithEnd
    | list |
-	list := self targetInstance: 'abcbabcb'.
+	list := self bytes: 'abcbabcb'.
 
 	self
 		should: [list rindex: 'ab' _: 1 _: 5] raise: ValueError;
@@ -878,7 +878,7 @@ category: 'done'
 method: bytesTest
 testrindexWithStart
    | list |
-	list := self targetInstance: 'abcbabcb'.
+	list := self bytes: 'abcbabcb'.
 
 	self
 		assert: (list rindex: 'ab' _: 1) equals: 4;
@@ -893,13 +893,13 @@ testrjust
 r'abc'.ljust(2)  >> 'abc'
 "
 	| abc |
-	abc  := self targetInstance: 'abc'.
+	abc  := self bytes: 'abc'.
 
 	self
 		assert: (abc rjust: 2) equals: abc;
 		assert: (abc rjust: 3) equals: abc;
-		assert: (abc rjust: 4) equals: (self targetInstance: ' abc');
-		assert: (abc rjust: 4 _: $*) equals: (self targetInstance: '*abc');
+		assert: (abc rjust: 4) equals: (self bytes: ' abc');
+		assert: (abc rjust: 4 _: $*) equals: (self bytes: '*abc');
 		yourself
 %
 category: 'done'
@@ -907,14 +907,14 @@ method: bytesTest
 testrpartition
 
 	self
-		assert: ((self targetInstance: '  bcd') rpartition: 'a')
-		equals: (tuple ___value: { self targetInstance. self targetInstance. self targetInstance: '  bcd' });
-		assert: ((self targetInstance: '  bcd') rpartition: '  ')
-		equals: (tuple ___value: { self targetInstance. self targetInstance: '  '. self targetInstance: 'bcd' });
-		assert: ((self targetInstance: '  bcd') rpartition: 'bc')
-		equals: (tuple ___value: { self targetInstance: '  '. self targetInstance: 'bc'. self targetInstance: 'd' });
-		assert: ((self targetInstance: '  bcbcd') rpartition: 'bc')
-		equals: (tuple ___value: { self targetInstance: '  bc'. self targetInstance: 'bc'. self targetInstance: 'd' });
+		assert: ((self bytes: '  bcd') rpartition: 'a')
+		equals: (tuple ___value: { self targetInstance. self targetInstance. self bytes: '  bcd' });
+		assert: ((self bytes: '  bcd') rpartition: '  ')
+		equals: (tuple ___value: { self targetInstance. self bytes: '  '. self bytes: 'bcd' });
+		assert: ((self bytes: '  bcd') rpartition: 'bc')
+		equals: (tuple ___value: { self bytes: '  '. self bytes: 'bc'. self bytes: 'd' });
+		assert: ((self bytes: '  bcbcd') rpartition: 'bc')
+		equals: (tuple ___value: { self bytes: '  bc'. self bytes: 'bc'. self bytes: 'd' });
 		yourself
 %
 category: 'done'
@@ -922,16 +922,16 @@ method: bytesTest
 testrsplitOnSep
 
 	self
-		assert: ((self targetInstance: '  bcd') rsplit: 'a')
-		equals: (tuple ___value: { self targetInstance: '  bcd' });
-		assert: ((self targetInstance: '  bcd') rsplit: ' ')
-		equals: (tuple ___value: { self targetInstance. self targetInstance. self targetInstance: 'bcd' });
-		assert: ((self targetInstance: '  bcd') rsplit: '  ')
-		equals: (tuple ___value: { self targetInstance. self targetInstance: 'bcd' });
-		assert: ((self targetInstance: '  bcd') rsplit: 'bc')
-		equals: (tuple ___value: { self targetInstance: '  '. self targetInstance: 'd' });
-		assert: ((self targetInstance: '  bcbcd') rsplit: 'bc')
-		equals: (tuple ___value: { self targetInstance: '  '. self targetInstance. self targetInstance: 'd' });
+		assert: ((self bytes: '  bcd') rsplit: 'a')
+		equals: (tuple ___value: { self bytes: '  bcd' });
+		assert: ((self bytes: '  bcd') rsplit: ' ')
+		equals: (tuple ___value: { self targetInstance. self targetInstance. self bytes: 'bcd' });
+		assert: ((self bytes: '  bcd') rsplit: '  ')
+		equals: (tuple ___value: { self targetInstance. self bytes: 'bcd' });
+		assert: ((self bytes: '  bcd') rsplit: 'bc')
+		equals: (tuple ___value: { self bytes: '  '. self bytes: 'd' });
+		assert: ((self bytes: '  bcbcd') rsplit: 'bc')
+		equals: (tuple ___value: { self bytes: '  '. self targetInstance. self bytes: 'd' });
 		yourself
 %
 category: 'done'
@@ -939,12 +939,12 @@ method: bytesTest
 testrsplitOnSepAndMaxSplit
 
 	self
-		assert: ((self targetInstance: '  bcbcd') rsplit: 'bc' _: 2)
-		equals: (tuple ___value: { self targetInstance: '  '. self targetInstance. self targetInstance: 'd' });
-		assert: ((self targetInstance: '  bcbcd') rsplit: 'bc' _: 1)
-		equals: (tuple ___value: { self targetInstance: '  bc'. self targetInstance: 'd' });
-		assert: ((self targetInstance: '  bcbcd') rsplit: 'bc' _: 0)
-		equals: (tuple ___value: { self targetInstance: '  bcbcd' });
+		assert: ((self bytes: '  bcbcd') rsplit: 'bc' _: 2)
+		equals: (tuple ___value: { self bytes: '  '. self targetInstance. self bytes: 'd' });
+		assert: ((self bytes: '  bcbcd') rsplit: 'bc' _: 1)
+		equals: (tuple ___value: { self bytes: '  bc'. self bytes: 'd' });
+		assert: ((self bytes: '  bcbcd') rsplit: 'bc' _: 0)
+		equals: (tuple ___value: { self bytes: '  bcbcd' });
 		yourself
 %
 category: 'done'
@@ -952,14 +952,14 @@ method: bytesTest
 testrstrip
 
 	self
-		assert: (self targetInstance: 'bcd  ') rstrip equals: (self targetInstance: 'bcd');
-		assert: (self targetInstance: 'abcd') rstrip equals: (self targetInstance: 'abcd');
-		assert: ((self targetInstance: 'bcdaa') rstrip: 'a') equals: (self targetInstance: 'bcd');
-		assert: ((self targetInstance: 'bcdaa') rstrip: 'ad') equals: (self targetInstance: 'bc');
-		assert: ((self targetInstance: 'bcdaa') rstrip: 'da') equals: (self targetInstance: 'bc');
-		assert: ((self targetInstance: 'bcdaa') rstrip: 'ac') equals: (self targetInstance: 'bcd');
-		assert: ((self targetInstance: 'bcdaa') rstrip: 'ca') equals: (self targetInstance: 'bcd');
-		assert: ((self targetInstance: 'aabcd') rstrip: 'c') equals: (self targetInstance: 'aabcd');
+		assert: (self bytes: 'bcd  ') rstrip equals: (self bytes: 'bcd');
+		assert: (self bytes: 'abcd') rstrip equals: (self bytes: 'abcd');
+		assert: ((self bytes: 'bcdaa') rstrip: 'a') equals: (self bytes: 'bcd');
+		assert: ((self bytes: 'bcdaa') rstrip: 'ad') equals: (self bytes: 'bc');
+		assert: ((self bytes: 'bcdaa') rstrip: 'da') equals: (self bytes: 'bc');
+		assert: ((self bytes: 'bcdaa') rstrip: 'ac') equals: (self bytes: 'bcd');
+		assert: ((self bytes: 'bcdaa') rstrip: 'ca') equals: (self bytes: 'bcd');
+		assert: ((self bytes: 'aabcd') rstrip: 'c') equals: (self bytes: 'aabcd');
 		yourself
 %
 category: 'done'
@@ -967,16 +967,16 @@ method: bytesTest
 testsplitOnSep
 
 	self
-		assert: ((self targetInstance: '  bcd') split: 'a')
-		equals: (tuple ___value: { self targetInstance: '  bcd' });
-		assert: ((self targetInstance: '  bcd') split: ' ')
-		equals: (tuple ___value: { self targetInstance. self targetInstance. self targetInstance: 'bcd' });
-		assert: ((self targetInstance: '  bcd') split: '  ')
-		equals: (tuple ___value: { self targetInstance. self targetInstance: 'bcd' });
-		assert: ((self targetInstance: '  bcd') split: 'bc')
-		equals: (tuple ___value: { self targetInstance: '  '. self targetInstance: 'd' });
-		assert: ((self targetInstance: '  bcbcd') split: 'bc')
-		equals: (tuple ___value: { self targetInstance: '  '. self targetInstance. self targetInstance: 'd' });
+		assert: ((self bytes: '  bcd') split: 'a')
+		equals: (tuple ___value: { self bytes: '  bcd' });
+		assert: ((self bytes: '  bcd') split: ' ')
+		equals: (tuple ___value: { self targetInstance. self targetInstance. self bytes: 'bcd' });
+		assert: ((self bytes: '  bcd') split: '  ')
+		equals: (tuple ___value: { self targetInstance. self bytes: 'bcd' });
+		assert: ((self bytes: '  bcd') split: 'bc')
+		equals: (tuple ___value: { self bytes: '  '. self bytes: 'd' });
+		assert: ((self bytes: '  bcbcd') split: 'bc')
+		equals: (tuple ___value: { self bytes: '  '. self targetInstance. self bytes: 'd' });
 		yourself
 %
 category: 'done'
@@ -984,19 +984,19 @@ method: bytesTest
 testsplitOnSepAndMaxSplit
 
 	self
-		assert: ((self targetInstance: '  bcbcd') split: 'bc' _: 2)
-		equals: (tuple ___value: { self targetInstance: '  '. self targetInstance. self targetInstance: 'd' });
-		assert: ((self targetInstance: '  bcbcd') split: 'bc' _: 1)
-		equals: (tuple ___value: { self targetInstance: '  '. self targetInstance: 'bcd' });
-		assert: ((self targetInstance: '  bcbcd') split: 'bc' _: 0)
-		equals: (tuple ___value: { self targetInstance: '  bcbcd' });
+		assert: ((self bytes: '  bcbcd') split: 'bc' _: 2)
+		equals: (tuple ___value: { self bytes: '  '. self targetInstance. self bytes: 'd' });
+		assert: ((self bytes: '  bcbcd') split: 'bc' _: 1)
+		equals: (tuple ___value: { self bytes: '  '. self bytes: 'bcd' });
+		assert: ((self bytes: '  bcbcd') split: 'bc' _: 0)
+		equals: (tuple ___value: { self bytes: '  bcbcd' });
 		yourself
 %
 category: 'done'
 method: bytesTest
 teststartswith
    | list |
-	list := self targetInstance: 'abcb'.
+	list := self bytes: 'abcb'.
 
 	self
 		assert: (list startswith: 'a') equals: true;
@@ -1004,7 +1004,7 @@ teststartswith
 		assert: (list startswith: 'z') equals: false;
 		yourself.
 
-	list := self targetInstance: 'aaaa'.
+	list := self bytes: 'aaaa'.
 
 	self
 		assert: (list startswith: 'a') equals: true;
@@ -1014,7 +1014,7 @@ category: 'done'
 method: bytesTest
 teststartswithWithEnd
    | list |
-	list := self targetInstance: 'abcbabcb'.
+	list := self bytes: 'abcbabcb'.
 
 	self
 		assert: (list startswith: 'ab' _: 1 _: 5) equals: false;
@@ -1026,7 +1026,7 @@ category: 'done'
 method: bytesTest
 teststartswithWithStart
    | list |
-	list := self targetInstance: 'abcbabcb'.
+	list := self bytes: 'abcbabcb'.
 
 	self
 		assert: (list startswith: 'ab' _: 1) equals: false;
@@ -1039,19 +1039,19 @@ method: bytesTest
 teststrip
 
 	self
-		assert: self targetInstance strip equals: (self targetInstance: '');
-		assert: (self targetInstance: '') strip equals: (self targetInstance: '');
-		assert: (self targetInstance: 'bcd  ') strip equals: (self targetInstance: 'bcd');
-		assert: (self targetInstance: 'abcd') strip equals: (self targetInstance: 'abcd');
-		assert: ((self targetInstance: 'bcdaa') strip: 'a') equals: (self targetInstance: 'bcd');
-		assert: ((self targetInstance: 'bcdaa') strip: 'ad') equals: (self targetInstance: 'bc');
-		assert: ((self targetInstance: 'aabcd') strip: 'c') equals: (self targetInstance: 'aabcd');
-		assert: (self targetInstance: '  bcd') strip equals: (self targetInstance: 'bcd');
-		assert: (self targetInstance: 'abcd') strip equals: (self targetInstance: 'abcd');
-		assert: ((self targetInstance: 'aabcd') strip: 'a') equals: (self targetInstance: 'bcd');
-		assert: ((self targetInstance: 'aabcd') strip: 'ba') equals: (self targetInstance: 'cd');
-		assert: ((self targetInstance: 'aabcd') strip: 'ac') equals: (self targetInstance: 'bcd');
-		assert: ((self targetInstance: 'aabcd') strip: 'ad') equals: (self targetInstance: 'bc');
+		assert: self targetInstance strip equals: (self bytes: '');
+		assert: (self bytes: '') strip equals: (self bytes: '');
+		assert: (self bytes: 'bcd  ') strip equals: (self bytes: 'bcd');
+		assert: (self bytes: 'abcd') strip equals: (self bytes: 'abcd');
+		assert: ((self bytes: 'bcdaa') strip: 'a') equals: (self bytes: 'bcd');
+		assert: ((self bytes: 'bcdaa') strip: 'ad') equals: (self bytes: 'bc');
+		assert: ((self bytes: 'aabcd') strip: 'c') equals: (self bytes: 'aabcd');
+		assert: (self bytes: '  bcd') strip equals: (self bytes: 'bcd');
+		assert: (self bytes: 'abcd') strip equals: (self bytes: 'abcd');
+		assert: ((self bytes: 'aabcd') strip: 'a') equals: (self bytes: 'bcd');
+		assert: ((self bytes: 'aabcd') strip: 'ba') equals: (self bytes: 'cd');
+		assert: ((self bytes: 'aabcd') strip: 'ac') equals: (self bytes: 'bcd');
+		assert: ((self bytes: 'aabcd') strip: 'ad') equals: (self bytes: 'bc');
 		yourself
 %
 category: 'done'
@@ -1059,8 +1059,8 @@ method: bytesTest
 testswapcase
 
 	self
-		assert: (self targetInstance: 'aAbCd') swapcase equals: (self targetInstance: 'AaBcD');
-		assert: (self targetInstance: 'aA#b;Cd') swapcase equals: (self targetInstance: 'Aa#B;cD');
+		assert: (self bytes: 'aAbCd') swapcase equals: (self bytes: 'AaBcD');
+		assert: (self bytes: 'aA#b;Cd') swapcase equals: (self bytes: 'Aa#B;cD');
 		yourself
 %
 category: 'done'
@@ -1080,14 +1080,20 @@ category: 'done'
 method: bytesTest
 testupper
 	| abcd |
-	abcd := self targetInstance: 'ABCD'.
+	abcd := self bytes: 'ABCD'.
 
 	self
-		assert: (self targetInstance: 'abcd') upper equals: abcd ;
-		assert: (self targetInstance: 'ABCD') upper equals: abcd ;
-		assert: (self targetInstance: 'aBCD') upper equals: abcd ;
-		assert: (self targetInstance: 'Abcd') upper equals: abcd ;
+		assert: (self bytes: 'abcd') upper equals: abcd ;
+		assert: (self bytes: 'ABCD') upper equals: abcd ;
+		assert: (self bytes: 'aBCD') upper equals: abcd ;
+		assert: (self bytes: 'Abcd') upper equals: abcd ;
 		yourself
+%
+set compile_env: 0
+category: 'setup'
+method: bytesTest
+bytes: aString
+   ^bytes __call__: (str ___value: aString) _: (str ___value: 'ascii').
 %
 set compile_env: 0
 category: 'todo'
@@ -1135,10 +1141,10 @@ method: bytesTest
 testsplit
    #pyTodo.
 	self
-"		assert: ((self targetInstance: '  bcd') split)
-		equals: (tuple ___new__init__: { self targetInstance: 'bcd' });
-		assert: ((self targetInstance: '  bcb cd') split)
-		equals: (tuple ___new__init__: { self targetInstance: 'bcb'. self targetInstance: 'cd' });
+"		assert: ((self bytes: '  bcd') split)
+		equals: (tuple ___new__init__: { self bytes: 'bcd' });
+		assert: ((self bytes: '  bcb cd') split)
+		equals: (tuple ___new__init__: { self bytes: 'bcb'. self bytes: 'cd' });
 "		yourself
 %
 category: 'todo'

@@ -48,7 +48,6 @@ hash
 	^container hash
 %
 set compile_env: 0
-set compile_env: 0
 category: 'Python'
 method: Container
 __add__: aList
@@ -76,7 +75,7 @@ method: Container
 __eq__: otherCollection
 	| size |
 
-	(size := self __len__) = otherCollection __len__ ifFalse: [^false].
+	(size := self __len__ ___value) = otherCollection __len__ ___value ifFalse: [^false].
 
 	1 to: size do: [:index |
 		(self ___container at: index) = (otherCollection ___container at: index) ifFalse: [^false]].
@@ -91,8 +90,8 @@ category: 'Python'
 method: Container
 __getitem__: anIndex
 	| index |
-	index := anIndex < 0 ifTrue: [self __len__ + anIndex] ifFalse: [anIndex].
-	(index < 0 or: [	index >= self __len__])
+	index := anIndex < 0 ifTrue: [self __len__ ___value + anIndex] ifFalse: [anIndex].
+	(index < 0 or: [	index >= self __len__ ___value])
 		ifTrue: [IndexError signal: self ___typeName, ' index out of range'].
 
 	^self ___container at: index + 1
@@ -159,7 +158,7 @@ category: 'Python'
 method: Container
 __len__
 
-	^self ___size
+	^(int ___value: self ___size)
 %
 category: 'Python'
 method: Container
@@ -220,7 +219,7 @@ index: anElement
 category: 'Python'
 method: Container
 index: anElement from: start
-	^self index: anElement from: start to: self __len__
+	^self index: anElement from: start to: self __len__ ___value
 %
 category: 'Python'
 method: Container

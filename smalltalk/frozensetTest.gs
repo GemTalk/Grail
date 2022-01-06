@@ -15,9 +15,9 @@ test__and__
 
 	self
 		assert: c __class__ equals: self targetClass;
-		assert: a __len__ equals: 4;
+		assert: a __len__ equals: (self int: 4);
 		deny:   (a __contains__: 'e');
-		assert: c __len__ equals: 3;
+		assert: c __len__ equals: (self int: 3);
 		deny:   (c __contains__: 'e');
 		assert: (c __contains__: 'd');
 		yourself
@@ -185,7 +185,7 @@ category: 'done'
 method: frozensetTest
 test__len__onEmptyList
    	self
-		assert: self targetInstance __len__ equals: 0;
+		assert: self targetInstance __len__ equals: (self int: 0);
 		yourself.
 %
 category: 'done'
@@ -244,9 +244,9 @@ test__or__
 
 	self
 		assert: c __class__ equals: self targetClass;
-		assert: a __len__ equals: 4;
+		assert: a __len__ equals: (self int: 4);
 		deny:   (a __contains__: 'e');
-		assert: c __len__ equals: 5;
+		assert: c __len__ equals: (self int: 5);
 		assert: (c __contains__: 'e');
 		yourself
 %
@@ -274,9 +274,9 @@ test__rand__
 
 	self
 		assert: c __class__ equals: self targetClass;
-		assert: a __len__ equals: 4;
+		assert: a __len__ equals: (self int: 4);
 		deny:   (a __contains__: 'e');
-		assert: c __len__ equals: 3;
+		assert: c __len__ equals: (self int: 3);
 		deny:   (c __contains__: 'e');
 		assert: (c __contains__: 'd');
 		yourself
@@ -305,9 +305,9 @@ test__ror__
 
 	self
 		assert: c __class__ equals: self targetClass;
-		assert: a __len__ equals: 4;
+		assert: a __len__ equals: (self int: 4);
 		deny:   (a __contains__: 'e');
-		assert: c __len__ equals: 5;
+		assert: c __len__ equals: (self int: 5);
 		assert: (c __contains__: 'e');
 		yourself
 %
@@ -335,10 +335,10 @@ test__rsub__
 
 	self
 		assert: c __class__ equals: self targetClass;
-		assert: b __len__ equals: 4;
+		assert: b __len__ equals: (self int: 4);
 		deny:   (b __contains__: 'a');
 		assert: (b __contains__: 'e');
-		assert: c __len__ equals: 1;
+		assert: c __len__ equals: (self int: 1);
 		deny:   (c __contains__: 'a');
 		assert: (c __contains__: 'e');
 		yourself
@@ -367,12 +367,12 @@ test__rxor__
 
 	self
 		assert: (a __rxor__: b) __class__ equals: self targetClass;
-		assert: (a __rxor__: b) __len__ equals: 1;
+		assert: (a __rxor__: b) __len__ equals: (self int: 1);
 		assert: ((a __rxor__: b) __contains__: 'a');
-		assert: (b __rxor__: a) __len__ equals: 1;
+		assert: (b __rxor__: a) __len__ equals: (self int: 1);
 		assert: ((b __rxor__: a) __contains__: 'a');
-		assert: (b __rxor__: bb) __len__ equals: 0;
-		assert: (bb __rxor__: b) __len__ equals: 0;
+		assert: (b __rxor__: bb) __len__ equals: (self int: 0);
+		assert: (bb __rxor__: b) __len__ equals: (self int: 0);
 		assert: (b __rxor__: c) equals: (b union: c);
 		yourself
 %
@@ -409,10 +409,10 @@ test__sub__
 
 	self
 		assert: c __class__ equals: self targetClass;
-		assert: a __len__ equals: 4;
+		assert: a __len__ equals: (self int: 4);
 		deny:   (a __contains__: 'e');
 		assert: (a __contains__: 'b');
-		assert: c __len__ equals: 1;
+		assert: c __len__ equals: (self int: 1);
 		deny:   (c __contains__: 'e');
 		assert: (c __contains__: 'a');
 		yourself
@@ -428,10 +428,10 @@ test__sub__Set
 
 	self
 		assert: c __class__ equals: self targetClass;
-		assert: a __len__ equals: 4;
+		assert: a __len__ equals: (self int: 4);
 		deny:   (a __contains__: 'e');
 		assert: (a __contains__: 'b');
-		assert: c __len__ equals: 1;
+		assert: c __len__ equals: (self int: 1);
 		deny:   (c __contains__: 'e');
 		assert: (c __contains__: 'a');
 		yourself
@@ -447,12 +447,12 @@ test__xor__
 
 	self
 		assert: (a __rxor__: b) __class__ equals: self targetClass;
-		assert: (a __xor__: b) __len__ equals: 1;
+		assert: (a __xor__: b) __len__ equals: (self int: 1);
 		assert: ((a __xor__: b) __contains__: 'a');
-		assert: (b __xor__: a) __len__ equals: 1;
+		assert: (b __xor__: a) __len__ equals: (self int: 1);
 		assert: ((b __xor__: a) __contains__: 'a');
-		assert: (b __xor__: bb) __len__ equals: 0;
-		assert: (bb __xor__: b) __len__ equals: 0;
+		assert: (b __xor__: bb) __len__ equals: (self int: 0);
+		assert: (bb __xor__: b) __len__ equals: (self int: 0);
 		assert: (b __xor__: c) equals: (b union: c);
 		yourself
 %
@@ -476,7 +476,7 @@ testcopy
 	lost := list copy.
 	self
 		assert: lost __class__ equals: self targetClass;
-		assert: lost __len__ equals: 3;
+		assert: lost __len__ equals: (self int: 3);
 		assert: (lost __contains__: 'a');
 		assert: (lost __contains__: 'c');
 		yourself
@@ -492,10 +492,10 @@ testdifference
 
 	self
 		assert: c __class__ equals: self targetClass;
-		assert: a __len__ equals: 4;
+		assert: a __len__ equals: (self int: 4);
 		deny:   (a __contains__: 'e');
 		assert: (a __contains__: 'b');
-		assert: c __len__ equals: 1;
+		assert: c __len__ equals: (self int: 1);
 		assert: (c __contains__: 'a');
 		yourself
 %
@@ -510,10 +510,10 @@ testdifferenceSet
 
 	self
 		assert: c __class__ equals: self targetClass;
-		assert: a __len__ equals: 4;
+		assert: a __len__ equals: (self int: 4);
 		deny:   (a __contains__: 'e');
 		assert: (a __contains__: 'b');
-		assert: c __len__ equals: 1;
+		assert: c __len__ equals: (self int: 1);
 		assert: (c __contains__: 'a');
 		yourself
 %
@@ -528,9 +528,9 @@ testintersection
 
 	self
 		assert: c __class__ equals: self targetClass;
-		assert: a __len__ equals: 4;
+		assert: a __len__ equals: (self int: 4);
 		deny:   (a __contains__: 'e');
-		assert: c __len__ equals: 3;
+		assert: c __len__ equals: (self int: 3);
 		deny:   (c __contains__: 'e');
 		assert: (c __contains__: 'd');
 		yourself
@@ -546,9 +546,9 @@ testintersectionSet
 
 	self
 		assert: c __class__ equals: self targetClass;
-		assert: a __len__ equals: 4;
+		assert: a __len__ equals: (self int: 4);
 		deny:   (a __contains__: 'e');
-		assert: c __len__ equals: 3;
+		assert: c __len__ equals: (self int: 3);
 		deny:   (c __contains__: 'e');
 		assert: (c __contains__: 'd');
 		yourself
@@ -621,12 +621,12 @@ testsymmetric_difference
 
 	self
 		assert: (a symmetric_difference: b) __class__ equals: self targetClass;
-		assert: (a symmetric_difference: b) __len__ equals: 1;
+		assert: (a symmetric_difference: b) __len__ equals: (self int: 1);
 		assert: ((a symmetric_difference: b) __contains__: 'a');
-		assert: (b symmetric_difference: a) __len__ equals: 1;
+		assert: (b symmetric_difference: a) __len__ equals: (self int: 1);
 		assert: ((b symmetric_difference: a) __contains__: 'a');
-		assert: (b symmetric_difference: bb) __len__ equals: 0;
-		assert: (bb symmetric_difference: b) __len__ equals: 0;
+		assert: (b symmetric_difference: bb) __len__ equals: (self int: 0);
+		assert: (bb symmetric_difference: b) __len__ equals: (self int: 0);
 		assert: (b symmetric_difference: c) equals: (b union: c);
 		yourself
 %
@@ -652,9 +652,9 @@ testunion
 
 	self
 		assert: c __class__ equals: self targetClass;
-		assert: a __len__ equals: 4;
+		assert: a __len__ equals: (self int: 4);
 		deny:   (a __contains__: 'e');
-		assert: c __len__ equals: 5;
+		assert: c __len__ equals: (self int: 5);
 		assert: (c __contains__: 'e');
 		yourself
 %
