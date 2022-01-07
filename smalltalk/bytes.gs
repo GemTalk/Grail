@@ -200,48 +200,70 @@ copy
 %
 category: 'Python'
 method: bytes
-count: aSublist
-	^self count: aSublist _: 0
+count: aPyObject
+	^self count: aPyObject _: (int ___value: 0)
 %
 category: 'Python'
 method: bytes
-count: aSublist _: aStart
+count: aPyObject _: aPyIntStart
 
 
-	^self count: aSublist _: aStart _: self __len__ ___value
+	^self count: aPyObject _: aPyIntStart _: self __len__
 %
 category: 'Python'
 method: bytes
-count: aSublist _: aStart _: anEnd
+count: aPyObject _: aPyIntStart _: aPyIntEnd
 
 	| count start idx |
+	
+	(aPyObject class == bytes or: [aPyObject class == int]) ifFalse: [TypeError signal: 'argument should be integer or bytes-like object, not ''', aPyObject class name, ''''].
+
 	count := 0.
-	start := aStart.
-	[(idx := self find: aSublist _: start _: anEnd) >= 0] whileTrue: [
+	start := aPyIntStart ___value.
+	[(idx := (self find: aPyObject _: (int ___value: start) _: aPyIntEnd) ___value) >= 0] whileTrue: [
 		count := count + 1.
-		start := idx + aSublist size.
+		start := idx + aPyObject ___value size.
 	].
 
-	^count
+	^int ___value: count
 %
 category: 'Python'
 method: bytes
-endswith: aSublist
+endswith: aPyBytes
 
-	^self endswith: aSublist _: 0
+	^self endswith: aPyBytes _: (int ___value: 0)
 %
 category: 'Python'
 method: bytes
-endswith: aSublist _: aStart
+endswith: aPyBytes _: aPyIntStart
 
-	^self endswith: aSublist _: aStart _: self __len__ ___value
+	^self endswith: aPyBytes _: aPyIntStart _: self __len__
 %
 category: 'Python'
 method: bytes
-endswith: aSublist _: aStart _: anEnd
+endswith: aPyBytes _: aPyIntStart _: aPyIntEnd
 	| idx |
-	idx := anEnd - aSublist size.
-	^(self find: aSublist _: idx _:anEnd) = idx
+	
+	"TODO there is also a case where all elements in the tuple are not bytes objects: 
+		b'aaa'.endswith(('aa', 'a'))
+		TypeError: a bytes-like object is required, not 'str'
+	"
+	(aPyBytes class == bytes or: [aPyBytes class == tuple]) ifFalse: [TypeError signal: 'TypeError: endswith first arg must be bytes or a tuple of bytes, not ', aPyBytes class name].
+
+	aPyBytes class == bytes ifTrue: [
+		idx := aPyIntEnd ___value - aPyBytes ___value size.
+		^bool ___value: (self find: aPyBytes _: (int ___value: idx) _: aPyIntEnd) ___value = idx
+	].
+
+	aPyBytes class == tuple ifTrue: [
+		aPyBytes ___value do: [:each |
+			"Python bool implemented as a Python int which is implemented as a Smalltalk integer, meaning we have this odd test for equality with Smalltalk Booleans"
+			(self endswith: each _: aPyIntStart _: aPyIntEnd) ___value == 1 ifTrue: [
+				^bool ___value: true
+			].
+		].
+		^bool ___value: false
+	].
 %
 category: 'Python'
 method: bytes

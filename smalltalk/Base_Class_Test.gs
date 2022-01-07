@@ -13,6 +13,12 @@ isAbstract
 set compile_env: 0
 category: 'setup'
 method: Base_Class_Test
+bool: aBoolean
+
+	^bool ___value: aBoolean
+%
+category: 'setup'
+method: Base_Class_Test
 float: aFloat
 
 	^float ___value: aFloat

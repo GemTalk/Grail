@@ -357,16 +357,21 @@ testcount
 	list := self bytes: 'abcb'.
 
 	self
-		assert: (list count: 'a') equals: 1;
-		assert: (list count: 'b') equals: 2;
-		assert: (list count: 'z') equals: 0;
+		assert: (list count: (self bytes: 'a')) equals: (self int: 1);
+		assert: (list count: (self bytes: 'b')) equals: (self int: 2);
+		assert: (list count: (self bytes: 'z')) equals: (self int: 0);
 		yourself.
 
 	list := self bytes: 'aaaa'.
 
 	self
-		assert: (list count: 'a') equals: 4;
-		yourself
+		assert: (list count: (self bytes: 'a')) equals: (self int: 4);
+		yourself.
+
+	self
+		should: [list endswith: (self str: 'a')]
+		raise: TypeError
+		withExceptionDo: [ :exception | self assert: exception messageText equals: 'argument should be integer or bytes-like object, not ''str''']
 %
 category: 'done'
 method: bytesTest
@@ -375,8 +380,8 @@ testcountWithEnd
 	list := self bytes: 'abcbabcb'.
 
 	self
-		assert: (list count: 'ab' _: 1 _: 5) equals: 0;
-		assert: (list count: 'ab' _: 1 _: 6) equals: 1;
+		assert: (list count: (self bytes: 'ab') _: (self int: 1) _: (self int: 5)) equals: (self int: 0);
+		assert: (list count: (self bytes: 'ab') _: (self int: 1) _: (self int: 6)) equals: (self int: 1);
 		yourself
 %
 category: 'done'
@@ -386,10 +391,10 @@ testcountWithStart
 	list := self bytes: 'abcbabcb'.
 
 	self
-		assert: (list count: 'ab' _: 0) equals: 2;
-		assert: (list count: 'ab' _: 1) equals: 1;
-		assert: (list count: 'ab' _: 4) equals: 1;
-		assert: (list count: 'ab' _: 5) equals: 0;
+		assert: (list count: (self bytes: 'ab') _: (self int: 0)) equals: (self int: 2);
+		assert: (list count: (self bytes: 'ab') _: (self int: 1)) equals: (self int: 1);
+		assert: (list count: (self bytes: 'ab') _: (self int: 4)) equals: (self int: 1);
+		assert: (list count: (self bytes: 'ab') _: (self int: 5)) equals: (self int: 0);
 		yourself
 %
 category: 'done'
@@ -399,16 +404,28 @@ testendswith
 	list := self bytes: 'abcb'.
 
 	self
-		assert: (list endswith: 'a') equals: false;
-		assert: (list endswith: 'b') equals: true;
-		assert: (list endswith: 'z') equals: false;
+		assert: (list endswith: (self bytes: 'a')) equals: (self bool: false);
+		assert: (list endswith: (self bytes: 'b')) equals: (self bool: true);
+		assert: (list endswith: (self bytes: 'z')) equals: (self bool: false);
 		yourself.
 
 	list := self bytes: 'aaaa'.
 
 	self
-		assert: (list endswith: 'a') equals: true;
-		yourself
+		assert: (list endswith: (self bytes: 'a')) equals: (self bool: true);
+		yourself.
+
+	self
+		assert: (list endswith: (tuple ___value: {self bytes: 'aa'. self bytes: 'a'})) equals: (self bool: true);
+		assert: (list endswith: (tuple ___value: {self bytes: 'bb'. self bytes: 'a'})) equals: (self bool: true);		
+		assert: (list endswith: (tuple ___value: {self bytes: 'aa'. self bytes: 'b'})) equals: (self bool: true);
+		assert: (list endswith: (tuple ___value: {self bytes: 'bb'. self bytes: 'b'})) equals: (self bool: false);
+		yourself.
+
+	self
+		should: [list endswith: (self str: 'a')]
+		raise: TypeError
+		withExceptionDo: [:exception | self assert: exception messageText equals: 'TypeError: endswith first arg must be bytes or a tuple of bytes, not str']
 %
 category: 'done'
 method: bytesTest
@@ -417,8 +434,8 @@ testendswithWithEnd
 	list := self bytes: 'abcbabcb'.
 
 	self
-		assert: (list endswith: 'ab' _: 0 _: 2) equals: true;
-		assert: (list endswith: 'ab' _: 0 _: 3) equals: false;
+		assert: (list endswith: (self bytes: 'ab') _: (self int: 0) _: (self int: 2)) equals: (self bool: true);
+		assert: (list endswith: (self bytes: 'ab') _: (self int: 0) _: (self int: 3)) equals: (self bool: false);
 		yourself
 %
 category: 'done'
@@ -428,9 +445,9 @@ testendswithWithStart
 	list := self bytes: 'abcbabcb'.
 
 	self
-		assert: (list endswith: 'cb' _: 1) equals: true;
-		assert: (list endswith: 'ab' _: 4) equals: false;
-		assert: (list endswith: 'cb' _: 5) equals: true;
+		assert: (list endswith: (self bytes: 'cb') _: (self int: 1)) equals: (self bool: true);
+		assert: (list endswith: (self bytes: 'ab') _: (self int: 4)) equals: (self bool: false);
+		assert: (list endswith: (self bytes: 'cb') _: (self int: 5)) equals: (self bool: true);
 		yourself
 %
 category: 'done'
