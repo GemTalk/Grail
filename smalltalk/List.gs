@@ -34,7 +34,6 @@ ___startChar
 %
 ! ------------------- Instance methods for list
 set compile_env: 0
-set compile_env: 0
 category: 'Python'
 method: list
 __delitem__: anIndex

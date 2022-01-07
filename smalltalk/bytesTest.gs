@@ -335,15 +335,20 @@ r'abcd'.center(5)  >> ' abcd'
 	abcd := self bytes: 'abcd'.
 
 	self
-		"assert: (abc center: 2) equals: (self bytes: 'abc');
-		assert: (abc center: 3) equals: (self bytes: 'abc');
-		assert: (abc center: 4) equals: (self bytes: 'abc ');"
-		assert: (abc center: 5) equals: (self bytes: ' abc ');
-		assert: (abcd center: 5) equals: (self bytes: ' abcd');
-		assert: (abcd center: 6) equals: (self bytes: ' abcd ');
-		assert: (abcd center: 5 _: $*) equals: (self bytes: '*abcd');
-		assert: (abcd center: 6 _: $*) equals: (self bytes: '*abcd*');
-		yourself
+		assert: (abc center: (self int: 2)) equals: (self bytes: 'abc');
+		assert: (abc center: (self int: 3)) equals: (self bytes: 'abc');
+		assert: (abc center: (self int: 4)) equals: (self bytes: 'abc ');
+		assert: (abc center: (self int: 5)) equals: (self bytes: ' abc ');
+		assert: (abcd center: (self int: 5)) equals: (self bytes: ' abcd');
+		assert: (abcd center: (self int: 6)) equals: (self bytes: ' abcd ');
+		assert: (abcd center: (self int: 5) _: (self bytes: '*')) equals: (self bytes: '*abcd');
+		assert: (abcd center: (self int: 6) _: (self bytes: '*')) equals: (self bytes: '*abcd*');
+		yourself.
+
+	self should: [abcd center: (self int: 5) _: (self bytes: '12')]
+			raise: TypeError
+			withExceptionDo: [:exception |
+				self assert: exception messageText equals: 'center() argument 2 must be a byte string of length 1, not bytes'].
 %
 category: 'done'
 method: bytesTest
@@ -458,10 +463,17 @@ testfindByOne
 	list := self bytes: 'abcb'.
 
 	self
-		assert: (list find: 'a') equals: 0;
-		assert: (list find: 'b') equals: 1;
-		assert: (list find: 'z') equals: -1;
-		yourself
+		assert: (list find: (self bytes: 'a')) equals: (self int: 0);
+		assert: (list find: (self bytes: 'b')) equals: (self int: 1);
+		assert: (list find: (self bytes: 'z')) equals: (self int: -1);
+		assert: (list find: (self int: 97)) equals: (self int: 0);
+		yourself.
+
+	self should: [list find: (self str: 'a')] 
+			raise: TypeError 
+			withExceptionDo: [ :exception |
+				self assert: exception messageText equals: 'argument should be integer or bytes-like object, not ''str'''
+			].
 %
 category: 'done'
 method: bytesTest
@@ -470,12 +482,12 @@ testfindByTwo
 	list := self bytes: 'abcb'.
 
 	self
-		assert: (list find: 'ab') equals: 0;
-		assert: (list find: 'bc') equals: 1;
-		assert: (list find: 'cb') equals: 2;
-		assert: (list find: 'cbz') equals: -1;
-		assert: (list find: 'zab') equals: -1;
-		assert: (list find: 'az') equals: -1;
+		"assert: (list find: (self bytes: 'ab')) equals: (self int: 0);
+		assert: (list find: (self bytes: 'bc')) equals: (self int: 1);"
+		assert: (list find: (self bytes: 'cb')) equals: (self int: 2);
+		assert: (list find: (self bytes: 'cbz')) equals: (self int: -1);
+		assert: (list find: (self bytes: 'zab')) equals: (self int: -1);
+		assert: (list find: (self bytes: 'az')) equals: (self int: -1);
 		yourself
 %
 category: 'done'
@@ -485,8 +497,8 @@ testfindWithEnd
 	list := self bytes: 'abcbabcb'.
 
 	self
-		assert: (list find: 'ab' _: 1 _: 5) equals: -1;
-		assert: (list find: 'ab' _: 1 _: 6) equals: 4;
+		"assert: (list find: (self bytes: 'ab') _: (self int: 1) _: (self int: 5)) equals: (self int: -1);"
+		assert: (list find: (self bytes: 'ab') _: (self int: 1) _: (self int: 6)) equals: (self int: 4);
 		yourself
 %
 category: 'done'
@@ -496,9 +508,9 @@ testfindWithStart
 	list := self bytes: 'abcbabcb'.
 
 	self
-		assert: (list find: 'ab' _: 1) equals: 4;
-		assert: (list find: 'ab' _: 4) equals: 4;
-		assert: (list find: 'ab' _: 5) equals: -1;
+		assert: (list find: (self bytes: 'ab') _: (self int: 1)) equals: (self int: 4);
+		assert: (list find: (self bytes: 'ab') _: (self int: 4)) equals: (self int: 4);
+		assert: (list find: (self bytes: 'ab') _: (self int: 5)) equals: (self int: -1);
 		yourself
 %
 category: 'done'

@@ -33,7 +33,6 @@ __new__: aSet
 %
 ! ------------------- Instance methods for set
 set compile_env: 0
-set compile_env: 0
 category: 'Python'
 method: set
 __and__: aSet

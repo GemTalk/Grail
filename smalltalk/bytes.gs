@@ -173,20 +173,24 @@ capitalize
 category: 'Python'
 method: bytes
 center: with
-	^self center: with _: $ .
+	^self center: with _: (bytes ___value: { 32 }).
 %
 category: 'Python'
 method: bytes
-center: width _: fillchar
+center: pyIntWidth _: pyFillByte
 	| leftPad leftPadSize rightPad rightPadSize oddLen |
+
+	(pyFillByte class ~= bytes or: [pyFillByte ___value size > 1]) ifTrue: [TypeError signal: 'center() argument 2 must be a byte string of length 1, not ', pyFillByte class name].
+	
 	oddLen := self __len__ ___value + (self __len__ ___value \\ 2).
 
-	rightPadSize := (((width - oddLen)//2)+oddLen) - self __len__ ___value.
-	rightPad := (String new: rightPadSize) replaceFrom: 1 to: rightPadSize withObject: fillchar; yourself.
-	leftPadSize := width - self __len__ ___value - rightPadSize.
-	leftPad := (String new: leftPadSize) replaceFrom: 1 to: leftPadSize withObject: fillchar; yourself.
+	rightPadSize := (((pyIntWidth ___value - oddLen)//2)+oddLen) - self __len__ ___value.
+	rightPad := Array new replaceFrom: 1 to: rightPadSize withObject: pyFillByte ___value first; yourself.
 
-	^self class basicNew ___value: (String new add: leftPad; add: (String withAll: self ___container); add: rightPad; yourself) asArray.
+	leftPadSize := pyIntWidth ___value - self __len__ ___value - rightPadSize.
+	leftPad := Array new replaceFrom: 1 to: leftPadSize withObject: pyFillByte ___value first; yourself.
+
+	^bytes ___value: (Array new addAll: leftPad; addAll: (Array withAll: self ___container); addAll: rightPad; yourself) asArray.
 %
 category: 'Python'
 method: bytes
@@ -274,21 +278,36 @@ expandtabs: pythonInt
 %
 category: 'Python'
 method: bytes
-find: aSublist
+find: aPyObjectSublist
 
-	^self find: aSublist _: 0
+	^self find: aPyObjectSublist _: (int ___value: 0)
 %
 category: 'Python'
 method: bytes
-find: aSublist _: aStart
+find: aPyObjectSublist _: aPyIntStart
 
-	^self find: aSublist _: aStart _: self __len__ ___value
+	^self find: aPyObjectSublist _: aPyIntStart _: (int ___value: self __len__ ___value)
 %
 category: 'Python'
 method: bytes
-find: aSublist _: aStart _: anEnd
+find: aPyObjectSublist _: aPyIntStart _: aPyIntEnd
 
-	^(((String withAll: self ___container) copyFrom: 1 to: anEnd) indexOfSubCollection: aSublist startingAt: aStart + 1) - 1
+	| searchBounds searchResult x |
+	
+	aPyObjectSublist class == int ifTrue: [
+		x := bytes ___value: { aPyObjectSublist ___value }.
+	] ifFalse: [
+		aPyObjectSublist class == bytes ifTrue: [
+			x := aPyObjectSublist.
+		] ifFalse: [
+			TypeError signal: 'argument should be integer or bytes-like object, not ''', aPyObjectSublist class name, ''''.
+		].
+	].
+
+	searchBounds := container copyFrom: 1 to: aPyIntEnd ___value.
+	searchResult := (searchBounds indexOfSubCollection: x ___value startingAt: aPyIntStart ___value + 1) - 1.
+
+	^int ___value: searchResult
 %
 category: 'Python'
 method: bytes
