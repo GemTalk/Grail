@@ -168,6 +168,20 @@ test__getitem__negative
 %
 category: 'done'
 method: bytesTest
+test__getslice__
+
+	| x |
+	x := self bytes: 'abcdefg'.
+
+	self
+		assert: (x __getslice__: (self int: 0) _: (self int: 2)) equals: (self bytes: ('ab'));
+		assert: (x __getslice__: (self int: 2) _: (self int: 3)) equals: (self bytes: ('c'));
+		assert: (x __getslice__: (self int: 2) _: (self int: 2)) equals: (self bytes: (''));
+		assert: (x __getslice__: (self int: -3) _: (self int: -2)) equals: (self bytes: ('e'));
+		yourself.
+%
+category: 'done'
+method: bytesTest
 test__init__
 
 	| w x y z |
@@ -371,7 +385,7 @@ testcount
 	self
 		should: [list endswith: (self str: 'a')]
 		raise: TypeError
-		withExceptionDo: [ :exception | self assert: exception messageText equals: 'argument should be integer or bytes-like object, not ''str''']
+		withExceptionDo: [ :exception | self assert: exception messageText equals: 'endswith first arg must be bytes or a tuple of bytes, not str']
 %
 category: 'done'
 method: bytesTest
@@ -499,8 +513,8 @@ testfindByTwo
 	list := self bytes: 'abcb'.
 
 	self
-		"assert: (list find: (self bytes: 'ab')) equals: (self int: 0);
-		assert: (list find: (self bytes: 'bc')) equals: (self int: 1);"
+		assert: (list find: (self bytes: 'ab')) equals: (self int: 0);
+		assert: (list find: (self bytes: 'bc')) equals: (self int: 1);
 		assert: (list find: (self bytes: 'cb')) equals: (self int: 2);
 		assert: (list find: (self bytes: 'cbz')) equals: (self int: -1);
 		assert: (list find: (self bytes: 'zab')) equals: (self int: -1);
@@ -514,8 +528,9 @@ testfindWithEnd
 	list := self bytes: 'abcbabcb'.
 
 	self
-		"assert: (list find: (self bytes: 'ab') _: (self int: 1) _: (self int: 5)) equals: (self int: -1);"
+		assert: (list find: (self bytes: 'ab') _: (self int: 1) _: (self int: 5)) equals: (self int: -1);
 		assert: (list find: (self bytes: 'ab') _: (self int: 1) _: (self int: 6)) equals: (self int: 4);
+		assert: (list find: (self bytes: 'ab') _: (self int: 1) _: (self int: -2)) equals: (self int: 4);
 		yourself
 %
 category: 'done'
@@ -527,6 +542,7 @@ testfindWithStart
 	self
 		assert: (list find: (self bytes: 'ab') _: (self int: 1)) equals: (self int: 4);
 		assert: (list find: (self bytes: 'ab') _: (self int: 4)) equals: (self int: 4);
+		assert: (list find: (self bytes: 'ab') _: (self int: -4)) equals: (self int: 4);
 		assert: (list find: (self bytes: 'ab') _: (self int: 5)) equals: (self int: -1);
 		yourself
 %
@@ -537,10 +553,15 @@ testindexByOne
 	list := self bytes: 'abcb'.
 
 	self
-		assert: (list index: 'a') equals: 0;
-		assert: (list index: 'b') equals: 1;
-		should: [list index: 'z'] raise: ValueError;
-		yourself
+		assert: (list index: (self bytes: 'a')) equals: (self int: 0);
+		assert: (list index: (self bytes: 'b')) equals: (self int: 1);
+		should: [list index: (self bytes: 'z')] raise: ValueError;
+		yourself.
+
+	self
+		should: [list index: (self str: 'a')]
+		raise: TypeError
+		withExceptionDo: [:exception | self assert: exception messageText equals: 'argument should be integer or bytes-like object, not ''str''']
 %
 category: 'done'
 method: bytesTest
@@ -549,12 +570,12 @@ testindexByTwo
 	list := self bytes: 'abcb'.
 
 	self
-		assert: (list index: 'ab') equals: 0;
-		assert: (list index: 'bc') equals: 1;
-		assert: (list index: 'cb') equals: 2;
-		should: [list index: 'cbz'] raise: ValueError;
-		should: [list index: 'zab'] raise: ValueError;
-		should: [list index: 'az'] raise: ValueError;
+		assert: (list index: (self bytes: 'ab')) equals: (self int: 0);
+		assert: (list index: (self bytes: 'bc')) equals: (self int: 1);
+		assert: (list index: (self bytes: 'cb')) equals: (self int: 2);
+		should: [list index: (self bytes: 'cbz')] raise: ValueError;
+		should: [list index: (self bytes: 'zab')] raise: ValueError;
+		should: [list index: (self bytes: 'az')] raise: ValueError;
 		yourself
 %
 category: 'done'
@@ -564,8 +585,8 @@ testindexWithEnd
 	list := self bytes: 'abcbabcb'.
 
 	self
-		should: [list index: 'ab' _: 1 _: 5] raise: ValueError;
-		assert: (list index: 'ab' _: 1 _: 6) equals: 4;
+		should: [list index: (self bytes: 'ab') _: (self int: 1) _: (self int: 5)] raise: ValueError;
+		assert: (list index: (self bytes: 'ab') _: (self int: 1) _: (self int: 6)) equals: (self int: 4);
 		yourself
 %
 category: 'done'
@@ -575,9 +596,9 @@ testindexWithStart
 	list := self bytes: 'abcbabcb'.
 
 	self
-		assert: (list index: 'ab' _: 1) equals: 4;
-		assert: (list index: 'ab' _: 4) equals: 4;
-		should: [list index: 'ab' _: 5] raise: ValueError;
+		assert: (list index: (self bytes: 'ab') _: (self int: 1)) equals: (self int: 4);
+		assert: (list index: (self bytes: 'ab') _: (self int: 4)) equals: (self int: 4);
+		should: [list index: (self bytes: 'ab') _: (self int: 5)] raise: ValueError;
 		yourself
 %
 category: 'done'
@@ -753,13 +774,13 @@ method: bytesTest
 testpartition
 
 	self
-		assert: ((bytes __call__: (str ___value: '  bcd') _: (str ___value: 'ascii')) partition: (bytes __call__: (str ___value: ' a') _: (str ___value: 'ascii')))
-		equals: (tuple ___value: { bytes __call__: (str ___value: '  bcd') _: (str ___value: 'ascii'). bytes __call__. bytes __call__ });
-		assert: ((bytes ___value: '  bcd') partition: (bytes ___value: '  '))
-		equals: (tuple ___value: { bytes new. bytes ___value: '  '. bytes ___value: '  bcd' });
-		assert: ((self bytes: '  bcd') partition: 'bc')
+		assert: ((self bytes: '  bcd') partition: (self bytes: ' a'))
+		equals: (tuple ___value: { self bytes: '  bcd'. bytes __call__. bytes __call__ });
+		assert: ((self bytes: '  bcd') partition: (self bytes: '  '))
+		equals: (tuple ___value: { bytes __call__. self bytes: '  '. self bytes: 'bcd' });
+		assert: ((self bytes: '  bcd') partition: (self bytes: 'bc'))
 		equals: (tuple ___value: { self bytes: '  '. self bytes: 'bc'. self bytes: 'd' });
-		assert: ((self bytes: '  bcbcd') partition: 'bc')
+		assert: ((self bytes: '  bcbcd') partition: (self bytes: 'bc'))
 		equals: (tuple ___value: { self bytes: '  '. self bytes: 'bc'. self bytes: 'bcd' });
 		yourself
 %
@@ -811,9 +832,14 @@ testrfindByOne
 	list := self bytes: 'abcb'.
 
 	self
-		assert: (list rfind: 'a') equals: 0;
-		assert: (list rfind: 'b') equals: 3;
-		assert: (list rfind: 'z') equals: -1;
+		assert: (list rfind: (self bytes: 'a')) equals: (self int: 0);
+		assert: (list rfind: (self bytes: 'b')) equals: (self int: 3);
+		assert: (list rfind: (self bytes: 'z')) equals: (self int: -1);
+		should: [list rfind: (self str: 'a')] 
+			raise: TypeError 
+			withExceptionDo: [ :exception | 
+				self assert: exception messageText equals: 'argument should be integer or bytes-like object, not ''str'''
+			];
 		yourself
 %
 category: 'done'
@@ -823,12 +849,12 @@ testrfindByTwo
 	list := self bytes: 'abcb'.
 
 	self
-		assert: (list rfind: 'ab') equals: 0;
-		assert: (list rfind: 'bc') equals: 1;
-		assert: (list rfind: 'cb') equals: 2;
-		assert: (list rfind: 'cbz') equals: -1;
-		assert: (list rfind: 'zab') equals: -1;
-		assert: (list rfind: 'az') equals: -1;
+		assert: (list rfind: (self bytes: 'ab')) equals: (self int: 0);
+		assert: (list rfind: (self bytes: 'bc')) equals: (self int: 1);
+		assert: (list rfind: (self bytes: 'cb')) equals: (self int: 2);
+		assert: (list rfind: (self bytes: 'cbz')) equals: (self int: -1);
+		assert: (list rfind: (self bytes: 'zab')) equals: (self int: -1);
+		assert: (list rfind: (self bytes: 'az')) equals: (self int: -1);
 		yourself
 %
 category: 'done'
@@ -838,9 +864,9 @@ testrfindWithEnd
 	list := self bytes: 'abceabcb'.
 
 	self
-		assert: (list rfind: 'ab' _: 1 _: 5) equals: -1;
-		assert: (list rfind: 'ab' _: 1 _: 5) equals: -1;
-		assert: (list rfind: 'ab' _: 1 _: 6) equals: 4;
+		assert: (list rfind: (self bytes: 'ab') _: (self int: 1) _: (self int: 5)) equals: (self int: -1);
+		assert: (list rfind: (self bytes: 'ab') _: (self int: 1) _: (self int: 5)) equals: (self int: -1);
+		assert: (list rfind: (self bytes: 'ab') _: (self int: 1) _: (self int: 6)) equals: (self int: 4);
 		yourself
 %
 category: 'done'
@@ -850,9 +876,9 @@ testrfindWithStart
 	list := self bytes: 'abcbabcb'.
 
 	self
-		assert: (list rfind: 'ab' _: 1) equals: 4;
-		assert: (list rfind: 'ab' _: 4) equals: 4;
-		assert: (list rfind: 'ab' _: 5) equals: -1;
+		assert: (list rfind: (self bytes: 'ab') _: (self int: 1)) equals: (self int: 4);
+		assert: (list rfind: (self bytes: 'ab') _: (self int: 4)) equals: (self int: 4);
+		assert: (list rfind: (self bytes: 'ab') _: (self int: 5)) equals: (self int: -1);
 		yourself
 %
 category: 'done'
@@ -872,9 +898,9 @@ testrindexByOne
 	list := self bytes: 'bcba'.
 
 	self
-		assert: (list rindex: 'a') equals: 3;
-		assert: (list rindex: 'b') equals: 2;
-		should: [list rindex: 'z'] raise: ValueError;
+		assert: (list rindex: (self bytes: 'a')) equals: (self int: 3);
+		assert: (list rindex: (self bytes: 'b')) equals: (self int: 2);
+		should: [list rindex: (self bytes: 'z')] raise: ValueError withExceptionDo: [ :exception | self assert: exception messageText == 'subsection not found'];
 		yourself
 %
 category: 'done'
@@ -884,12 +910,12 @@ testrindexByTwo
 	list := self bytes: 'abcb'.
 
 	self
-		assert: (list rindex: 'ab') equals: 0;
-		assert: (list rindex: 'bc') equals: 1;
-		assert: (list rindex: 'cb') equals: 2;
-		should: [list rindex: 'cbz'] raise: ValueError;
-		should: [list rindex: 'zab'] raise: ValueError;
-		should: [list rindex: 'az'] raise: ValueError;
+		assert: (list rindex: (self bytes: 'ab')) equals: (self int: 0);
+		assert: (list rindex: (self bytes: 'bc')) equals: (self int: 1);
+		assert: (list rindex: (self bytes: 'cb')) equals: (self int: 2);
+		should: [list rindex: (self bytes: 'cbz')] raise: ValueError;
+		should: [list rindex: (self bytes: 'zab')] raise: ValueError;
+		should: [list rindex: (self bytes: 'az')] raise: ValueError;
 		yourself
 %
 category: 'done'
@@ -899,8 +925,8 @@ testrindexWithEnd
 	list := self bytes: 'abcbabcb'.
 
 	self
-		should: [list rindex: 'ab' _: 1 _: 5] raise: ValueError;
-		assert: (list rindex: 'ab' _: 1 _: 6) equals: 4;
+		should: [list rindex: (self bytes: 'ab') _: (self int: 1) _: (self int: 5)] raise: ValueError;
+		assert: (list rindex: (self bytes: 'ab') _: (self int: 1) _: (self int: 6)) equals: (self int: 4);
 		yourself
 %
 category: 'done'
@@ -910,9 +936,9 @@ testrindexWithStart
 	list := self bytes: 'abcbabcb'.
 
 	self
-		assert: (list rindex: 'ab' _: 1) equals: 4;
-		assert: (list rindex: 'ab' _: 4) equals: 4;
-		should: [list rindex: 'ab' _: 5] raise: ValueError;
+		assert: (list rindex: (self bytes: 'ab') _: (self int: 1)) equals: (self int: 4);
+		assert: (list rindex: (self bytes: 'ab') _: (self int: 4)) equals: (self int: 4);
+		should: [list rindex: (self bytes: 'ab') _: (self int: 5)] raise: ValueError;
 		yourself
 %
 category: 'done'
@@ -936,13 +962,15 @@ method: bytesTest
 testrpartition
 
 	self
-		assert: ((self bytes: '  bcd') rpartition: 'a')
-		equals: (tuple ___value: { self targetInstance. self targetInstance. self bytes: '  bcd' });
-		assert: ((self bytes: '  bcd') rpartition: '  ')
-		equals: (tuple ___value: { self targetInstance. self bytes: '  '. self bytes: 'bcd' });
-		assert: ((self bytes: '  bcd') rpartition: 'bc')
+		assert: ((self bytes: 'aabcd') rpartition: (self bytes: 'aa'))
+		equals: (tuple ___value: { bytes __call__. self bytes: 'aa'. self bytes: 'bcd' });
+		assert: ((self bytes: '  bcd') rpartition: (self bytes: 'a'))
+		equals: (tuple ___value: { bytes __call__. bytes __call__. self bytes: '  bcd' });
+		assert: ((self bytes: '  bcd') rpartition: (self bytes: '  '))
+		equals: (tuple ___value: { bytes __call__. self bytes: '  '. self bytes: 'bcd' });
+		assert: ((self bytes: '  bcd') rpartition: (self bytes: 'bc'))
 		equals: (tuple ___value: { self bytes: '  '. self bytes: 'bc'. self bytes: 'd' });
-		assert: ((self bytes: '  bcbcd') rpartition: 'bc')
+		assert: ((self bytes: '  bcbcd') rpartition: (self bytes: 'bc'))
 		equals: (tuple ___value: { self bytes: '  bc'. self bytes: 'bc'. self bytes: 'd' });
 		yourself
 %
@@ -951,16 +979,16 @@ method: bytesTest
 testrsplitOnSep
 
 	self
-		assert: ((self bytes: '  bcd') rsplit: 'a')
+		assert: ((self bytes: '  bcd') rsplit: (self bytes: 'a'))
 		equals: (tuple ___value: { self bytes: '  bcd' });
-		assert: ((self bytes: '  bcd') rsplit: ' ')
-		equals: (tuple ___value: { self targetInstance. self targetInstance. self bytes: 'bcd' });
-		assert: ((self bytes: '  bcd') rsplit: '  ')
-		equals: (tuple ___value: { self targetInstance. self bytes: 'bcd' });
-		assert: ((self bytes: '  bcd') rsplit: 'bc')
+		assert: ((self bytes: '  bcd') rsplit: (self bytes: ' '))
+		equals: (tuple ___value: { bytes __call__. bytes __call__. self bytes: 'bcd' });
+		assert: ((self bytes: '  bcd') rsplit: (self bytes: '  '))
+		equals: (tuple ___value: { bytes __call__. self bytes: 'bcd' });
+		assert: ((self bytes: '  bcd') rsplit: (self bytes: 'bc'))
 		equals: (tuple ___value: { self bytes: '  '. self bytes: 'd' });
-		assert: ((self bytes: '  bcbcd') rsplit: 'bc')
-		equals: (tuple ___value: { self bytes: '  '. self targetInstance. self bytes: 'd' });
+		assert: ((self bytes: '  bcbcd') rsplit: (self bytes: 'bc'))
+		equals: (tuple ___value: { self bytes: '  '. bytes __call__. self bytes: 'd' });
 		yourself
 %
 category: 'done'
@@ -968,11 +996,11 @@ method: bytesTest
 testrsplitOnSepAndMaxSplit
 
 	self
-		assert: ((self bytes: '  bcbcd') rsplit: 'bc' _: 2)
-		equals: (tuple ___value: { self bytes: '  '. self targetInstance. self bytes: 'd' });
-		assert: ((self bytes: '  bcbcd') rsplit: 'bc' _: 1)
+		assert: ((self bytes: '  bcbcd') rsplit: (self bytes: 'bc') _: (self int: 2))
+		equals: (tuple ___value: { self bytes: '  '. bytes __call__. self bytes: 'd' });
+		assert: ((self bytes: '  bcbcd') rsplit: (self bytes: 'bc') _: (self int: 1))
 		equals: (tuple ___value: { self bytes: '  bc'. self bytes: 'd' });
-		assert: ((self bytes: '  bcbcd') rsplit: 'bc' _: 0)
+		assert: ((self bytes: '  bcbcd') rsplit: (self bytes: 'bc') _: (self int: 0))
 		equals: (tuple ___value: { self bytes: '  bcbcd' });
 		yourself
 %
@@ -996,16 +1024,16 @@ method: bytesTest
 testsplitOnSep
 
 	self
-		assert: ((self bytes: '  bcd') split: 'a')
+		assert: ((self bytes: '  bcd') split: (self bytes: 'a'))
 		equals: (tuple ___value: { self bytes: '  bcd' });
-		assert: ((self bytes: '  bcd') split: ' ')
-		equals: (tuple ___value: { self targetInstance. self targetInstance. self bytes: 'bcd' });
-		assert: ((self bytes: '  bcd') split: '  ')
-		equals: (tuple ___value: { self targetInstance. self bytes: 'bcd' });
-		assert: ((self bytes: '  bcd') split: 'bc')
+		assert: ((self bytes: '  bcd') split: (self bytes: ' '))
+		equals: (tuple ___value: { bytes __call__. bytes __call__. self bytes: 'bcd' });
+		assert: ((self bytes: '  bcd') split: (self bytes: '  '))
+		equals: (tuple ___value: { bytes __call__. self bytes: 'bcd' });
+		assert: ((self bytes: '  bcd') split: (self bytes: 'bc'))
 		equals: (tuple ___value: { self bytes: '  '. self bytes: 'd' });
-		assert: ((self bytes: '  bcbcd') split: 'bc')
-		equals: (tuple ___value: { self bytes: '  '. self targetInstance. self bytes: 'd' });
+		assert: ((self bytes: '  bcbcd') split: (self bytes: 'bc'))
+		equals: (tuple ___value: { self bytes: '  '. bytes __call__. self bytes: 'd' });
 		yourself
 %
 category: 'done'
@@ -1013,11 +1041,11 @@ method: bytesTest
 testsplitOnSepAndMaxSplit
 
 	self
-		assert: ((self bytes: '  bcbcd') split: 'bc' _: 2)
-		equals: (tuple ___value: { self bytes: '  '. self targetInstance. self bytes: 'd' });
-		assert: ((self bytes: '  bcbcd') split: 'bc' _: 1)
+		assert: ((self bytes: '  bcbcd') split: (self bytes: 'bc') _: (self int: 2))
+		equals: (tuple ___value: { self bytes: '  '. bytes __call__. self bytes: 'd' });
+		assert: ((self bytes: '  bcbcd') split: (self bytes: 'bc') _: (self int: 1))
 		equals: (tuple ___value: { self bytes: '  '. self bytes: 'bcd' });
-		assert: ((self bytes: '  bcbcd') split: 'bc' _: 0)
+		assert: ((self bytes: '  bcbcd') split: (self bytes: 'bc') _: (self int: 0))
 		equals: (tuple ___value: { self bytes: '  bcbcd' });
 		yourself
 %

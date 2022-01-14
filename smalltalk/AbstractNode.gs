@@ -209,7 +209,7 @@ string
 		].
 		writeStream nextPut: next.
 	].
-	^str withAll: writeStream contents
+	^writeStream contents
 %
 set compile_env: 0
 category: 'other'
@@ -259,10 +259,10 @@ number
 	(string notEmpty and: [string last == $j]) ifTrue: [
 		num := complex real: 0 imag: (string copyFrom: 1 to: string size - 1) asNumber.
 	] ifFalse: [
-		x := string asNumber.
-		num := (x isKindOf: Integer)
+		num := string asNumber.
+		"num := (x isKindOf: Integer)
 			ifTrue: [int with: x]
-			ifFalse: [float with: x].
+			ifFalse: [float with: x]."
 	].
 	^num
 %

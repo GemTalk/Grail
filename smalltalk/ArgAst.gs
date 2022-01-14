@@ -12,7 +12,7 @@ initialize
 	| stream |
 	stream := self stream.
 	(stream peekFor: $') ifFalse: [self error].
-	arg := str withAll: (stream upTo: $').
+	arg := stream upTo: $'.
 	self commaSpace.
 	annotation := self optionalExpression.
 	self commaSpace.

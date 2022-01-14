@@ -240,12 +240,25 @@ category: 'Smalltalk'
 method: Container
 ___getslice: start _: end
 
-	| subset |
-	subset := self ___container copy.
-	(end < subset size) ifTrue: [
-		subset removeFrom: end + 1 to: subset size.
+	| subset x y |
+	x := start ___value.
+	y := end ___value.
+
+	x < 0 ifTrue: [
+		x := container size + x.
 	].
-	subset removeFrom: 1 to: start.
+
+	y < 0 ifTrue: [
+		y := container size + y.
+	].
+
+	subset := self ___container copy.
+	(y < subset size) ifTrue: [
+		subset removeFrom: y + 1 to: subset size.
+	].
+	x > 0 ifTrue: [
+		subset removeFrom: 1 to: x.
+	].
 	^subset
 %
 category: 'Smalltalk'

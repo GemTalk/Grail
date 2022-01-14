@@ -248,7 +248,7 @@ endswith: aPyBytes _: aPyIntStart _: aPyIntEnd
 		b'aaa'.endswith(('aa', 'a'))
 		TypeError: a bytes-like object is required, not 'str'
 	"
-	(aPyBytes class == bytes or: [aPyBytes class == tuple]) ifFalse: [TypeError signal: 'TypeError: endswith first arg must be bytes or a tuple of bytes, not ', aPyBytes class name].
+	(aPyBytes class == bytes or: [aPyBytes class == tuple]) ifFalse: [TypeError signal: 'endswith first arg must be bytes or a tuple of bytes, not ', aPyBytes class name].
 
 	aPyBytes class == bytes ifTrue: [
 		idx := aPyIntEnd ___value - aPyBytes ___value size.
@@ -308,13 +308,14 @@ category: 'Python'
 method: bytes
 find: aPyObjectSublist _: aPyIntStart
 
-	^self find: aPyObjectSublist _: aPyIntStart _: (int ___value: self __len__ ___value)
+	^self find: aPyObjectSublist _: aPyIntStart _: self __len__
 %
 category: 'Python'
 method: bytes
 find: aPyObjectSublist _: aPyIntStart _: aPyIntEnd
 
-	| searchBounds searchResult x |
+	| searchBounds searchResult start x |
+	start := aPyIntStart ___value.
 	
 	aPyObjectSublist class == int ifTrue: [
 		x := bytes ___value: { aPyObjectSublist ___value }.
@@ -326,45 +327,49 @@ find: aPyObjectSublist _: aPyIntStart _: aPyIntEnd
 		].
 	].
 
-	searchBounds := container copyFrom: 1 to: aPyIntEnd ___value.
-	searchResult := (searchBounds indexOfSubCollection: x ___value startingAt: aPyIntStart ___value + 1) - 1.
+	start < 0 ifTrue: [ start := container size - start abs ].
+
+	searchBounds := self ___getslice: (int ___value: 0) _: aPyIntEnd.
+	searchResult := (searchBounds indexOfSubCollection: x ___value startingAt: start + 1) - 1.
 
 	^int ___value: searchResult
 %
 category: 'Python'
 method: bytes
-index: aSublist
+index: aPyObject
 
-	^self index: aSublist _: 0
+	^self index: aPyObject _: (int ___value: 0)
 %
 category: 'Python'
 method: bytes
-index: aSublist _: aStart
+index: aPyObject _: aPyIntStart
 
-	^self index: aSublist _: aStart _: self __len__ ___value
+	^self index: aPyObject _: aPyIntStart _: self __len__
 %
 category: 'Python'
 method: bytes
-index: aSublist _: aStart _: anEnd
+index: aPyObject _: aPyIntStart _: aPyIntEnd
 	| idx |
 
-	idx := self find: aSublist _: aStart _: anEnd.
-	idx > -1
+	(aPyObject class == bytes or: [aPyObject class == int]) ifFalse: [TypeError signal: 'argument should be integer or bytes-like object, not ''', aPyObject class name, ''''].
+
+	idx := self find: aPyObject _: aPyIntStart _: aPyIntEnd.
+	idx ___value > -1
 		ifTrue: [^idx]
-		ifFalse: [ValueError signal]
+		ifFalse: [ValueError signal: 'subsection not found']
 %
 category: 'Python'
 method: bytes
 isalnum
 	^self __len__ ___value > 0 and: [
-		(String withAll: self ___container) allSatisfy: [:e | e isAlphaNumeric]
+		(String withAll: (self ___container collect: [ :x | Character codePoint: x])) allSatisfy: [:e | e isAlphaNumeric]
 	]
 %
 category: 'Python'
 method: bytes
 isalpha
 	^self __len__ ___value > 0 and: [
-		(String withAll: self ___container) allSatisfy: [:e | e isLetter]
+		(String withAll: (self ___container collect: [ :x | Character codePoint: x])) allSatisfy: [:e | e isLetter]
 	]
 %
 category: 'Python'
@@ -378,21 +383,21 @@ category: 'Python'
 method: bytes
 isdigit
 	^self __len__ ___value > 0 and: [
-		(String withAll: self ___container) allSatisfy: [:e | e isDigit]
+		(String withAll: (self ___container collect: [ :x | Character codePoint: x])) allSatisfy: [:e | e isDigit]
 	]
 %
 category: 'Python'
 method: bytes
 islower
 	^self __len__ ___value > 0 and: [
-		(String withAll: self ___container) allSatisfy: [:e | e isLowercase]
+		(String withAll: (self ___container collect: [ :x | Character codePoint: x])) allSatisfy: [:e | e isLowercase]
 	]
 %
 category: 'Python'
 method: bytes
 isspace
 	^self __len__ ___value > 0 and: [
-		(String withAll: self ___container) allSatisfy: [:e | e codePoint = 32 ]
+		self ___container allSatisfy: [:e | e = 32 ]
 	]
 %
 category: 'Python'
@@ -406,7 +411,7 @@ category: 'Python'
 method: bytes
 isupper
 	^self __len__ ___value > 0 and: [
-		(String withAll: self ___container) allSatisfy: [:e | e isUppercase]
+		(String withAll: (self ___container collect: [ :x | Character codePoint: x])) allSatisfy: [:e | e isUppercase]
 	]
 %
 category: 'Python'
@@ -427,12 +432,15 @@ ljust: pyIntWidth _: pyByte
 category: 'Python'
 method: bytes
 lower
-	^self class basicNew ___value: (String withAll: self ___container) asLowercase
+	| lowerString |
+	lowerString := Array withAll: (String withAll: (self ___container collect: [ :x | Character codePoint: x])) asLowercase.
+	
+	^bytes ___value: (lowerString collect: [ :x | x codePoint ]).
 %
 category: 'Python'
 method: bytes
 lstrip
-	^self lstrip: Character separators
+	^self lstrip: Character space
 %
 category: 'Python'
 method: bytes
@@ -444,16 +452,21 @@ lstrip: stripset
 category: 'Python'
 method: bytes
 partition: sep
-	| idx |
+	| element1 idx |
 	idx := self find: sep.
-	idx < 0 ifTrue: [
-		^tuple ___value: { self copy. self class new. self class new }
+	idx ___value < 0 ifTrue: [
+		^tuple ___value: { self copy. bytes __call__. bytes __call__ }
+	].
+
+	element1 := bytes __call__.
+	idx ___value > 0 ifTrue: [
+		element1 := bytes ___value: (container copyFrom: 1 to: idx ___value).
 	].
 
 	^tuple ___value: {
-		self class new ___initialize: (self ___container asString  takeFirst: idx).
-		self class new ___initialize: sep.
-		self class new ___initialize: (self ___container asString  last: (self __len__ ___value - idx - sep size))
+		element1.
+		sep.
+		bytes ___value: (container copyFrom: idx ___value + 1 + sep ___value size to: container size).
 	}
 %
 category: 'Python'
@@ -476,47 +489,57 @@ category: 'Python'
 method: bytes
 rfind: aSublist
 
-	^self rfind: aSublist _: 0
+	^self rfind: aSublist _: (int ___value: 0)
 %
 category: 'Python'
 method: bytes
 rfind: aSublist _: start
 
-	^self rfind: aSublist _: start _: self __len__ ___value
+	^self rfind: aSublist _: start _: self __len__
 %
 category: 'Python'
 method: bytes
-rfind: aSublist _: aStart _: anEnd
+rfind: aPyObjectSublist _: aPyIntStart _: aPyIntEnd
+	| searchResult start end x|
+	
+	aPyObjectSublist class == int ifTrue: [
+		x := bytes ___value: { aPyObjectSublist ___value }.
+	] ifFalse: [
+		aPyObjectSublist class == bytes ifTrue: [
+			x := bytes ___value: aPyObjectSublist ___value reverse.
+		] ifFalse: [
+			TypeError signal: 'argument should be integer or bytes-like object, not ''', aPyObjectSublist class name, ''''.
+		].
+	].
+	
+	start := int ___value: container size - aPyIntEnd ___value.
+	end := int ___value: container size - aPyIntStart ___value.
+
+	searchResult := (bytes ___value: container reverse) find: x _: start _: end.
+	searchResult ___value == -1 ifTrue: [ ^searchResult ].
+	^int ___value: container size - x ___value size - searchResult ___value
+%
+category: 'Python'
+method: bytes
+rindex: aPyObjectSublist
+
+	^self rindex: aPyObjectSublist _: (int ___value: 0)
+%
+category: 'Python'
+method: bytes
+rindex: aPyObjectSublist _: aPyIntStart
+
+	^self rindex: aPyObjectSublist _: aPyIntStart _: self __len__
+%
+category: 'Python'
+method: bytes
+rindex: aPyObjectSublist _: aPyIntStart _: aPyIntEnd
 	| idx |
-	idx := ((self ___container asString takeFirst: anEnd)
-				reverse takeFirst: (anEnd - aStart))
-					indexOfSubCollection: aSublist reverse.
 
-	idx = 0 ifTrue: [^-1].
-
-	^anEnd - idx - aSublist size + 1
-%
-category: 'Python'
-method: bytes
-rindex: aSublist
-
-	^self rindex: aSublist _: 0
-%
-category: 'Python'
-method: bytes
-rindex: aSublist _: aStart
-
-	^self rindex: aSublist _: aStart _: self __len__ ___value
-%
-category: 'Python'
-method: bytes
-rindex: aSublist _: aStart _: anEnd
-	| idx |
-
-	idx := self rfind: aSublist _: aStart _: anEnd.
-	idx > -1
+	idx := self rfind: aPyObjectSublist _: aPyIntStart _: aPyIntEnd.
+	idx ___value > -1
 		ifTrue: [^idx]
-		ifFalse: [ValueError signal]
+		ifFalse: [ValueError signal: 'subsection not found']
 %
 category: 'Python'
 method: bytes
@@ -531,43 +554,48 @@ rjust: width _: fillchar
 %
 category: 'Python'
 method: bytes
-rpartition: sep
-	| idx |
-	idx := self rfind: sep.
-	idx < 0 ifTrue: [
-		^tuple ___value: { self class new. self class new. self copy }
+rpartition: aPyObjectSep
+	| element1 idx |
+	idx := self rfind: aPyObjectSep.
+	idx ___value < 0 ifTrue: [
+		^tuple ___value: { bytes __call__. bytes __call__. self copy }
+	].
+
+	element1 := bytes __call__.
+	idx ___value > 0 ifTrue: [
+		element1 := bytes ___value: (container copyFrom: 1 to: idx ___value).
 	].
 
 	^tuple ___value: {
-		self class new ___initialize: (self ___container asString  takeFirst: idx).
-		self class new ___initialize: sep.
-		self class new ___initialize: (self ___container asString  last: (self __len__ ___value - idx - sep size))
+		element1.
+		aPyObjectSep.
+		bytes ___value: (container copyFrom: idx ___value + 1 + aPyObjectSep ___value size to: container size).
 	}
 %
 category: 'Python'
 method: bytes
 rsplit: sep
-	^self rsplit: sep _: -1
+	^self rsplit: sep _: (int ___value: -1)
 %
 category: 'Python'
 method: bytes
-rsplit: sep _: limit
-	| idx splits |
-	idx := self rfind: sep.
-	idx < 0 ifTrue: [
-		^tuple __call__: { self copy }
+rsplit: pyBytesSep _: pyIntLimit
+	| idx newLimit remaining splits |
+	idx := (self rfind: pyBytesSep) ___value + 1.
+	idx < 1 ifTrue: [
+		^tuple ___value: { self copy }.
 	].
-	limit == 0 ifTrue: [
-		^tuple __call__: { self copy }
+	pyIntLimit ___value == 0 ifTrue: [
+		^tuple ___value: { self copy }.
 	].
 
 	splits := OrderedCollection new.
-	splits addAll: ((self class new ___initialize:
-	  						(self ___container asString  takeFirst: idx)) rsplit: sep _: limit - 1) ___container.
-	splits add: (self ___container asString  last: (self __len__ ___value - idx - sep size)).
+	splits add: (bytes ___value: (container copyFrom: idx + pyBytesSep ___value size to: container size)).
+	remaining := container copyFrom: 1 to: idx - 1.
+	newLimit := int ___value: pyIntLimit ___value - 1.
+	splits addAll: ((bytes ___value: remaining) rsplit: pyBytesSep _: newLimit) ___container.
 
-
-	^tuple ___value: (splits collect: [:each | self class new ___initialize: each])
+	^tuple ___value: (Array withAll: splits) reverse
 %
 category: 'Python'
 method: bytes
@@ -582,28 +610,29 @@ rstrip: stripset
 %
 category: 'Python'
 method: bytes
-split: sep
-	^self split: sep _: -1
+split: pyBytesSep
+	^self split: pyBytesSep _: (int ___value: -1)
 %
 category: 'Python'
 method: bytes
-split: sep _: limit
-	| idx splits |
-	idx := self find: sep.
-	idx < 0 ifTrue: [
-		^tuple __call__: { self copy }
+split: pyBytesSep _: pyIntLimit
+	| idx newLimit remaining splits |
+	idx := (self find: pyBytesSep) ___value + 1.
+	idx < 1 ifTrue: [
+		^tuple ___value: { self copy }.
 	].
-	limit == 0 ifTrue: [
-		^tuple __call__: { self copy }
+	pyIntLimit ___value == 0 ifTrue: [
+		^tuple ___value: { self copy }.
 	].
 
 	splits := OrderedCollection new.
-	splits add: (self ___container asString  takeFirst: idx).
-	splits addAll: ((self class new ___initialize:
-	  						(self ___container asString  last: (self __len__ ___value - idx - sep size))) split: sep _: limit - 1) ___container.
+	splits add: (bytes ___value: (container copyFrom: 1 to: idx - 1)).
+	remaining := container copyFrom: (idx + pyBytesSep ___value size) to: container size.
+	newLimit := int ___value: pyIntLimit ___value - 1.
+	splits addAll: ((bytes ___value: remaining) split: pyBytesSep _: newLimit) ___container.
 
 
-	^tuple ___value: (splits collect: [:each | self class new ___initialize: each])
+	^tuple ___value: (Array withAll: splits)
 %
 category: 'Python'
 method: bytes
@@ -639,14 +668,14 @@ method: bytes
 swapcase
 	| answer |
 
-	answer := (String withAll: self ___container).
+	answer := (String withAll: (self ___container collect: [ :x | Character codePoint: x ])).
 	1 to: answer size do: [:i |
 		(answer at: i) isUppercase ifTrue: [answer at: i put: (answer at: i)asLowercase
 		] ifFalse: [(answer at: i) isLowercase ifTrue: [answer at: i put: (answer at: i) asUppercase]
 			]
 		].
 
-	^self class basicNew ___value: answer.
+	^bytes ___value: ((Array withAll: answer) collect: [ :x | x codePoint ]).
 %
 category: 'Python'
 method: bytes
@@ -675,7 +704,10 @@ title
 category: 'Python'
 method: bytes
 upper
-	^self class new ___initialize: self ___container asString asUppercase
+	| upperString |
+	upperString := Array withAll: (String withAll: (self ___container collect: [ :x | Character codePoint: x])) asUppercase.
+	
+	^bytes ___value: (upperString collect: [ :x | x codePoint ]).
 %
 set compile_env: 0
 category: 'Smalltalk'
