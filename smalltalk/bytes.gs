@@ -3,6 +3,7 @@ removeAllMethods bytes
 removeAllClassMethods bytes
 ! ------------------- Class methods for bytes
 set compile_env: 0
+set compile_env: 0
 category: 'Python'
 classmethod: bytes
 __call__
@@ -88,6 +89,12 @@ classmethod: bytes
 ___containerClass
 
 	^Array
+%
+category: 'Smalltalk'
+classmethod: bytes
+___whiteSpace
+
+	^self ___value: { 9. 10. 11. 12. 13. 32 }
 %
 ! ------------------- Instance methods for bytes
 set compile_env: 0
@@ -440,14 +447,21 @@ lower
 category: 'Python'
 method: bytes
 lstrip
-	^self lstrip: Character space
+	^self lstrip: bytes ___whiteSpace
 %
 category: 'Python'
 method: bytes
-lstrip: stripset
+lstrip: aPyBytesStripset
 
-	^self class new ___initialize:
-		(self ___container asString trimLeft: [:char | stripset includes: char])
+	| left |
+	left := 1.
+	
+	1 to: container size do: [ :i |
+		(aPyBytesStripset ___value includes: (container at: i)) ifFalse: [
+			^bytes ___value: (container copyFrom: left to: container size).
+		].
+		left := left + 1.
+	]
 %
 category: 'Python'
 method: bytes
@@ -471,19 +485,31 @@ partition: sep
 %
 category: 'Python'
 method: bytes
-removeprefix: heading
-	^self class new ___initialize: (self ___container asString withoutPrefix: heading)
+removeprefix: pyBytesPrefix
+
+	| new |
+	pyBytesPrefix class == bytes ifFalse: [TypeError signal: 'a bytes-like object is required, not ''str'''].
+
+	new := container copy.
+	(container beginsWith: pyBytesPrefix ___value) ifTrue: [new := container copyFrom: 1 + pyBytesPrefix ___value size to: container size].
+
+	^bytes ___value: new
 %
 category: 'Python'
 method: bytes
-removesuffix: leading
-	^self class new ___initialize: (self ___container asString withoutSuffix: leading)
+removesuffix: pyBytesSuffix
+	| new |
+	pyBytesSuffix class == bytes ifFalse: [TypeError signal: 'a bytes-like object is required, not ''str'''].
+	
+	new := container copy.
+	(self endswith: pyBytesSuffix) ___value == 1 ifTrue: [ new := container copyFrom: 1 to: container size - pyBytesSuffix ___value size].
+
+	^bytes ___value: new
 %
 category: 'Python'
 method: bytes
-replace: old _: new
-	^self class basicNew ___value:
-		((String withAll: self ___container) copyReplaceAll: old with: new)
+replace: pyBytesOld _: pyBytesNew
+	^bytes ___value: (container copyReplaceAll: pyBytesOld ___value with: pyBytesNew ___value)
 %
 category: 'Python'
 method: bytes
@@ -543,14 +569,14 @@ rindex: aPyObjectSublist _: aPyIntStart _: aPyIntEnd
 %
 category: 'Python'
 method: bytes
-rjust: width
-	^self rjust: width _: Character space
+rjust: aPyIntWidth
+	^self rjust: aPyIntWidth _: (bytes ___value: { 32 })
 %
 category: 'Python'
 method: bytes
-rjust: width _: fillchar
-	^self class new ___initialize:
-		(self ___container asString padLeftTo: width with: fillchar)
+rjust: aPyIntWidth _: aPyBytesFillChar
+
+	^bytes ___value: ((bytes ___value: container reverse) ljust: aPyIntWidth _: aPyBytesFillChar) ___value reverse
 %
 category: 'Python'
 method: bytes
@@ -600,13 +626,21 @@ rsplit: pyBytesSep _: pyIntLimit
 category: 'Python'
 method: bytes
 rstrip
-	^self rstrip: Character separators
+	^self rstrip: bytes ___whiteSpace
 %
 category: 'Python'
 method: bytes
-rstrip: stripset
-	^self class new ___initialize:
-		(self ___container asString trimRight: [:char | stripset includes: char])
+rstrip: aPyBytesStripset
+
+	| left |
+	left := 1.
+	
+	1 to: container size do: [ :i |
+		(aPyBytesStripset ___value includes: (container reverse at: i)) ifFalse: [
+			^bytes ___value: (container reverse copyFrom: left to: container size) reverse.
+		].
+		left := left + 1.
+	]
 %
 category: 'Python'
 method: bytes
@@ -636,26 +670,26 @@ split: pyBytesSep _: pyIntLimit
 %
 category: 'Python'
 method: bytes
-startswith: aSublist
+startswith: aPyBytesSublist
 
-	^self startswith: aSublist _: 0
+	^self startswith: aPyBytesSublist _: (int ___value: 0)
 %
 category: 'Python'
 method: bytes
-startswith: aSublist _: aStart
+startswith: aPyBytesSublist _: aPyIntStart
 
-	^self startswith: aSublist _: aStart _: self __len__ ___value
+	^self startswith: aPyBytesSublist _: aPyIntStart _: self __len__
 %
 category: 'Python'
 method: bytes
-startswith: aSublist _: aStart _: anEnd
+startswith: aPyBytesSublist _: aPyIntStart _: aPyBytesEnd
 
-	^(self find: aSublist _: aStart _:anEnd) = aStart
+	^(self find: aPyBytesSublist _: aPyIntStart _:aPyBytesEnd) = aPyIntStart
 %
 category: 'Python'
 method: bytes
 strip
-	^self strip: String space
+	^self strip: bytes ___whiteSpace
 %
 category: 'Python'
 method: bytes

@@ -439,7 +439,7 @@ testendswith
 	self
 		should: [list endswith: (self str: 'a')]
 		raise: TypeError
-		withExceptionDo: [:exception | self assert: exception messageText equals: 'TypeError: endswith first arg must be bytes or a tuple of bytes, not str']
+		withExceptionDo: [:exception | self assert: exception messageText equals: 'endswith first arg must be bytes or a tuple of bytes, not str']
 %
 category: 'done'
 method: bytesTest
@@ -761,12 +761,12 @@ testlstrip
 		assert: (self bytes: '') lstrip equals: (self bytes: '');
 		assert: (self bytes: '  bcd') lstrip equals: (self bytes: 'bcd');
 		assert: (self bytes: 'abcd') lstrip equals: (self bytes: 'abcd');
-		assert: ((self bytes: 'aabcd') lstrip: 'a') equals: (self bytes: 'bcd');
-		assert: ((self bytes: 'aabcd') lstrip: 'ba') equals: (self bytes: 'cd');
-		assert: ((self bytes: 'aabcd') lstrip: 'ab') equals: (self bytes: 'cd');
-		assert: ((self bytes: 'aabcd') lstrip: 'ca') equals: (self bytes: 'bcd');
-		assert: ((self bytes: 'aabcd') lstrip: 'ac') equals: (self bytes: 'bcd');
-		assert: ((self bytes: 'aabcd') lstrip: 'c') equals: (self bytes: 'aabcd');
+		assert: ((self bytes: 'aabcd') lstrip: (self bytes: 'a')) equals: (self bytes: 'bcd');
+		assert: ((self bytes: 'aabcd') lstrip: (self bytes: 'ba')) equals: (self bytes: 'cd');
+		assert: ((self bytes: 'aabcd') lstrip: (self bytes: 'ab')) equals: (self bytes: 'cd');
+		assert: ((self bytes: 'aabcd') lstrip: (self bytes: 'ca')) equals: (self bytes: 'bcd');
+		assert: ((self bytes: 'aabcd') lstrip: (self bytes: 'ac')) equals: (self bytes: 'bcd');
+		assert: ((self bytes: 'aabcd') lstrip: (self bytes: 'c')) equals: (self bytes: 'aabcd');
 		yourself
 %
 category: 'done'
@@ -789,10 +789,13 @@ method: bytesTest
 testremoveprefix
 
 	self
-		assert: ((self bytes: 'aabcd') removeprefix: 'a') equals: (self bytes: 'abcd');
-		assert: ((self bytes: 'aabcd') removeprefix: 'aa') equals: (self bytes: 'bcd');
-		assert: ((self bytes: 'aabcd') removeprefix: 'ab') equals: (self bytes: 'aabcd');
-		assert: ((self bytes: 'aabcd') removeprefix: 'c') equals: (self bytes: 'aabcd');
+		assert: ((self bytes: 'aabcd') removeprefix: (self bytes: 'a')) equals: (self bytes: 'abcd');
+		assert: ((self bytes: 'aabcd') removeprefix: (self bytes: 'aa')) equals: (self bytes: 'bcd');
+		assert: ((self bytes: 'aabcd') removeprefix: (self bytes: 'ab')) equals: (self bytes: 'aabcd');
+		assert: ((self bytes: 'aabcd') removeprefix: (self bytes: 'c')) equals: (self bytes: 'aabcd');
+		should: [(self bytes: 'aabcd') removeprefix: (self str: 'a')]
+			raise: TypeError
+			withExceptionDo: [ :exception | self assert: exception messageText equals: 'a bytes-like object is required, not ''str'''];
 		yourself
 %
 category: 'done'
@@ -800,10 +803,13 @@ method: bytesTest
 testremovesuffix
 
 	self
-		assert: ((self bytes: 'aabcd') removesuffix: 'd') equals: (self bytes: 'aabc');
-		assert: ((self bytes: 'aabcd') removesuffix: 'cd') equals: (self bytes: 'aab');
-		assert: ((self bytes: 'aabcd') removesuffix: 'dc') equals: (self bytes: 'aabcd');
-		assert: ((self bytes: 'aabcd') removesuffix: 'c') equals: (self bytes: 'aabcd');
+		assert: ((self bytes: 'aabcd') removesuffix: (self bytes: 'd')) equals: (self bytes: 'aabc');
+		assert: ((self bytes: 'aabcd') removesuffix: (self bytes: 'cd')) equals: (self bytes: 'aab');
+		assert: ((self bytes: 'aabcd') removesuffix: (self bytes: 'dc')) equals: (self bytes: 'aabcd');
+		assert: ((self bytes: 'aabcd') removesuffix: (self bytes: 'c')) equals: (self bytes: 'aabcd');
+		should: [(self bytes: 'aabcd') removesuffix: (self str: 'd')]
+			raise: TypeError
+			withExceptionDo: [ :exception | self assert: exception messageText equals: 'a bytes-like object is required, not ''str'''];
 		yourself
 %
 category: 'done'
@@ -811,8 +817,8 @@ method: bytesTest
 testreplace
 
 	self
-		assert: ((self bytes: 'aabcd') replace: 'a' _: 'x') equals: (self bytes: 'xxbcd');
-		assert: ((self bytes: 'aabcd') replace: 'z' _: 'x') equals: (self bytes: 'aabcd');
+		assert: ((self bytes: 'aabcd') replace: (self bytes: 'a') _: (self bytes: 'x')) equals: (self bytes: 'xxbcd');
+		assert: ((self bytes: 'aabcd') replace: (self bytes: 'z') _: (self bytes: 'x')) equals: (self bytes: 'aabcd');
 		yourself
 %
 category: 'done'
@@ -900,7 +906,7 @@ testrindexByOne
 	self
 		assert: (list rindex: (self bytes: 'a')) equals: (self int: 3);
 		assert: (list rindex: (self bytes: 'b')) equals: (self int: 2);
-		should: [list rindex: (self bytes: 'z')] raise: ValueError withExceptionDo: [ :exception | self assert: exception messageText == 'subsection not found'];
+		should: [list rindex: (self bytes: 'z')] raise: ValueError withExceptionDo: [ :exception | self assert: exception messageText equals: 'subsection not found'];
 		yourself
 %
 category: 'done'
@@ -951,10 +957,10 @@ r'abc'.ljust(2)  >> 'abc'
 	abc  := self bytes: 'abc'.
 
 	self
-		assert: (abc rjust: 2) equals: abc;
-		assert: (abc rjust: 3) equals: abc;
-		assert: (abc rjust: 4) equals: (self bytes: ' abc');
-		assert: (abc rjust: 4 _: $*) equals: (self bytes: '*abc');
+		assert: (abc rjust: (self int: 2)) equals: abc;
+		assert: (abc rjust: (self int: 3)) equals: abc;
+		assert: (abc rjust: (self int: 4)) equals: (self bytes: ' abc');
+		assert: (abc rjust: (self int: 4) _: (self bytes: '*')) equals: (self bytes: '*abc');
 		yourself
 %
 category: 'done'
@@ -1011,12 +1017,12 @@ testrstrip
 	self
 		assert: (self bytes: 'bcd  ') rstrip equals: (self bytes: 'bcd');
 		assert: (self bytes: 'abcd') rstrip equals: (self bytes: 'abcd');
-		assert: ((self bytes: 'bcdaa') rstrip: 'a') equals: (self bytes: 'bcd');
-		assert: ((self bytes: 'bcdaa') rstrip: 'ad') equals: (self bytes: 'bc');
-		assert: ((self bytes: 'bcdaa') rstrip: 'da') equals: (self bytes: 'bc');
-		assert: ((self bytes: 'bcdaa') rstrip: 'ac') equals: (self bytes: 'bcd');
-		assert: ((self bytes: 'bcdaa') rstrip: 'ca') equals: (self bytes: 'bcd');
-		assert: ((self bytes: 'aabcd') rstrip: 'c') equals: (self bytes: 'aabcd');
+		assert: ((self bytes: 'bcdaa') rstrip: (self bytes: 'a')) equals: (self bytes: 'bcd');
+		assert: ((self bytes: 'bcdaa') rstrip: (self bytes:'ad')) equals: (self bytes: 'bc');
+		assert: ((self bytes: 'bcdaa') rstrip: (self bytes:'da')) equals: (self bytes: 'bc');
+		assert: ((self bytes: 'bcdaa') rstrip: (self bytes:'ac')) equals: (self bytes: 'bcd');
+		assert: ((self bytes: 'bcdaa') rstrip: (self bytes:'ca')) equals: (self bytes: 'bcd');
+		assert: ((self bytes: 'aabcd') rstrip: (self bytes:'c')) equals: (self bytes: 'aabcd');
 		yourself
 %
 category: 'done'
@@ -1056,15 +1062,15 @@ teststartswith
 	list := self bytes: 'abcb'.
 
 	self
-		assert: (list startswith: 'a') equals: true;
-		assert: (list startswith: 'b') equals: false;
-		assert: (list startswith: 'z') equals: false;
+		assert: (list startswith: (self bytes: 'a')) equals: (self bool: true);
+		assert: (list startswith: (self bytes: 'b')) equals: (self bool: false);
+		assert: (list startswith: (self bytes: 'z')) equals: (self bool: false);
 		yourself.
 
 	list := self bytes: 'aaaa'.
 
 	self
-		assert: (list startswith: 'a') equals: true;
+		assert: (list startswith: (self bytes: 'a')) equals: (self bool: true);
 		yourself
 %
 category: 'done'
@@ -1074,9 +1080,9 @@ teststartswithWithEnd
 	list := self bytes: 'abcbabcb'.
 
 	self
-		assert: (list startswith: 'ab' _: 1 _: 5) equals: false;
-		assert: (list startswith: 'ab' _: 4 _: 5) equals: false;
-		assert: (list startswith: 'ab' _: 4 _: 6) equals: true;
+		assert: (list startswith: (self bytes: 'ab') _: (self int: 1) _: (self int: 5)) equals: (self bool: false);
+		assert: (list startswith: (self bytes: 'ab') _: (self int: 4) _: (self int: 5)) equals: (self bool: false);
+		assert: (list startswith: (self bytes: 'ab') _: (self int: 4) _: (self int: 6)) equals: (self bool: true);
 		yourself
 %
 category: 'done'
@@ -1086,9 +1092,9 @@ teststartswithWithStart
 	list := self bytes: 'abcbabcb'.
 
 	self
-		assert: (list startswith: 'ab' _: 1) equals: false;
-		assert: (list startswith: 'ab' _: 4) equals: true;
-		assert: (list startswith: 'ab' _: 5) equals: false;
+		assert: (list startswith: (self bytes: 'ab') _: (self int: 1)) equals: (self bool: false);
+		assert: (list startswith: (self bytes: 'ab') _: (self int: 4)) equals: (self bool: true);
+		assert: (list startswith: (self bytes: 'ab') _: (self int: 5)) equals: (self bool: false);
 		yourself
 %
 category: 'done'
@@ -1100,15 +1106,15 @@ teststrip
 		assert: (self bytes: '') strip equals: (self bytes: '');
 		assert: (self bytes: 'bcd  ') strip equals: (self bytes: 'bcd');
 		assert: (self bytes: 'abcd') strip equals: (self bytes: 'abcd');
-		assert: ((self bytes: 'bcdaa') strip: 'a') equals: (self bytes: 'bcd');
-		assert: ((self bytes: 'bcdaa') strip: 'ad') equals: (self bytes: 'bc');
-		assert: ((self bytes: 'aabcd') strip: 'c') equals: (self bytes: 'aabcd');
+		assert: ((self bytes: 'bcdaa') strip: (self bytes: 'a')) equals: (self bytes: 'bcd');
+		assert: ((self bytes: 'bcdaa') strip: (self bytes: 'ad')) equals: (self bytes: 'bc');
+		assert: ((self bytes: 'aabcd') strip: (self bytes: 'c')) equals: (self bytes: 'aabcd');
 		assert: (self bytes: '  bcd') strip equals: (self bytes: 'bcd');
 		assert: (self bytes: 'abcd') strip equals: (self bytes: 'abcd');
-		assert: ((self bytes: 'aabcd') strip: 'a') equals: (self bytes: 'bcd');
-		assert: ((self bytes: 'aabcd') strip: 'ba') equals: (self bytes: 'cd');
-		assert: ((self bytes: 'aabcd') strip: 'ac') equals: (self bytes: 'bcd');
-		assert: ((self bytes: 'aabcd') strip: 'ad') equals: (self bytes: 'bc');
+		assert: ((self bytes: 'aabcd') strip: (self bytes: 'a')) equals: (self bytes: 'bcd');
+		assert: ((self bytes: 'aabcd') strip: (self bytes: 'ba')) equals: (self bytes: 'cd');
+		assert: ((self bytes: 'aabcd') strip: (self bytes: 'ac')) equals: (self bytes: 'bcd');
+		assert: ((self bytes: 'aabcd') strip: (self bytes: 'ad')) equals: (self bytes: 'bc');
 		yourself
 %
 category: 'done'
