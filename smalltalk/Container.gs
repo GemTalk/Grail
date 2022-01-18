@@ -213,22 +213,22 @@ count: anElement
 %
 category: 'Python'
 method: Container
-index: anElement
-	^self index: anElement from: 1.
+index: aPythonObject
+	^self index: aPythonObject from: (int ___value: 1).
 %
 category: 'Python'
 method: Container
-index: anElement from: start
-	^self index: anElement from: start to: self __len__ ___value
+index: aPythonObject from: aPyIntStart
+	^self index: aPythonObject from: aPyIntStart to: self __len__
 %
 category: 'Python'
 method: Container
-index: anElement from: start to: end
+index: aPythonObject from: aPyIntStart to: aPyIntEnd
 
-	^((self ___getslice: start _: end)
-		indexOf: anElement
-		ifAbsent: [ValueError signal: anElement printString, ' is not in ', self ___typeName]
-				) - 1 + start
+	^int ___value: (((self ___getslice: aPyIntStart _: aPyIntEnd)
+		indexOf: aPythonObject
+		ifAbsent: [ValueError signal: aPythonObject ___value printString, ' is not in ', self ___typeName]
+				) - 1 + aPyIntStart ___value)
 %
 set compile_env: 0
 category: 'Smalltalk'

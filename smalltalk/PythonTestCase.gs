@@ -61,23 +61,13 @@ method: PythonTestCase
 setUp
 
 	super setUp.
-	stdout := WriteStream on: Unicode7 new.
-	(GsCurrentSession currentSession objectNamed: #'builtins') current stdout: stdout.
 	self filename ifNotNil: [:filename |
 		module := self resources first current moduleAtPath: self class pathToTests , filename.
 	].
-	aScope := GlobalScope newForNode: self.
 %
 category: 'other'
 method: PythonTestCase
 statementsAt: anInteger
 
 	^module.body.body at: anInteger
-%
-category: 'other'
-method: PythonTestCase
-tearDown
-
-	(GsCurrentSession currentSession objectNamed: #'builtins') current stdout: nil.
-	super tearDown.
 %

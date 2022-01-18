@@ -35,10 +35,10 @@ initialize
 	stream := self stream.
 	char := stream peek.
 	(char == $' or: [char == $"]) ifTrue: [
-		value := self string. "constant is a string"
+		value := '(str ___value: ', self string printString, ')'. "constant is a string"
 		^self finalize].
 	char == $b ifTrue: [
-		value := bytes withAll: self string ___container. "constant is a string"
+		value := '(bytes ___fromAsciiString: ', self string printString, ')'."constant is a string"
 		^self finalize].
 	[char asString asInteger.
 		value := self number. "constant is a number"
@@ -46,14 +46,14 @@ initialize
 		on: ImproperOperation
 		do: [].
 	next := stream peekN: 4.
-	next = 'None' ifTrue: [value := None. "constant is None"
+	next = 'None' ifTrue: [value := 'None'. "constant is None"
 		stream next: 4.
 		^self finalize].
-	next = 'True' ifTrue: [value := True. "constant is True"
+	next = 'True' ifTrue: [value := 'True'. "constant is True"
 		stream next: 4.
 		^self finalize].
 	next := stream peekN: 5.
-	next = 'False' ifTrue: [value := False. "constant is False"
+	next = 'False' ifTrue: [value := 'False'. "constant is False"
 		stream next: 5.
 		^self finalize].
 %

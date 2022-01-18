@@ -200,11 +200,11 @@ test__getslice__
 	list := self targetInstance __add__: { 'a'. 'b'. 'c'. 'd' }.
 
 	self
-		assert: (list __getslice__: 1 _: 2) __len__ equals: (self int: 1);
-		assert: ((list __getslice__: 1 _: 2) __getitem__: 0)equals: 'b';
-		assert: (list __getslice__: 1 _: 3) __len__ equals: (self int: 2);
-		assert: ((list __getslice__: 1 _: 3) __getitem__: 1)equals: 'c';
-		assert: (list __getslice__: 1 _: 10) __len__ equals: (self int: 3);
+		assert: (list __getslice__: (self int: 1) _: (self int: 2)) __len__ equals: (self int: 1);
+		assert: ((list __getslice__: (self int: 1) _: (self int: 2)) __getitem__: 0)equals: 'b';
+		assert: (list __getslice__: (self int: 1) _: (self int: 3)) __len__ equals: (self int: 2);
+		assert: ((list __getslice__: (self int: 1) _: (self int: 3)) __getitem__: 1)equals: 'c';
+		assert: (list __getslice__: (self int: 1) _: (self int: 10)) __len__ equals: (self int: 3);
 		yourself
 %
 category: 'done'
@@ -493,17 +493,17 @@ category: 'done'
 method: listTest
 testindex
    | list |
-	list := self targetInstance __add__: { 'a'. 'b'. 'c'. 'b' }.
+	list := self targetInstance __add__: { (self str: 'a'). (self str: 'b'). (self str: 'c'). (self str: 'b') }.
 
 	self
-		assert: (list index: 'b') equals: 1;
-		assert: (list index: 'b' from: 2) equals: 3;
-		assert: (list index: 'b' from: 3) equals: 3;
-		should: [list index: 'b' from: 2 to: 2]
+		assert: (list index: (self str: 'b')) equals: (self int: 1);
+		assert: (list index: (self str: 'b') from: (self int: 2)) equals: (self int: 3);
+		assert: (list index: (self str: 'b') from: (self int: 3)) equals: (self int: 3);
+		should: [list index: (self str: 'b') from: (self int: 2) to: (self int: 2)]
 		raise: ValueError
 		withExceptionDo: [:exception |
 			self assert: exception messageText equals: '''b'' is not in list'];
-		should: [list index: 'b' from: 3 to: 3]
+		should: [list index: (self str: 'b') from: (self int: 3) to: (self int: 3)]
 		raise: ValueError
 		withExceptionDo: [:exception |
 			self assert: exception messageText equals: '''b'' is not in list'];

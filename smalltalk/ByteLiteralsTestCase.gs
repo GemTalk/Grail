@@ -23,9 +23,8 @@ testBackspace
 		assert: ((x := x.value) isKindOf: ConstantAst);
 		assert: x line == 36;
 		assert: x column == 0;
-		assert: ((x := x.value) isKindOf: bytes);
-		assert: ((x := x ___container) isKindOf: ByteArray);
-		assert: x = #[100 101 102 8];
+		assert: ((x := x.value) isKindOf: Unicode7);
+		assert: x equals: '(bytes ___fromAsciiString: ''def'')';
 		yourself.
 %
 category: 'other'
@@ -40,9 +39,8 @@ testBell
 		assert: ((x := x.value) isKindOf: ConstantAst);
 		assert: x line == 35;
 		assert: x column == 0;
-		assert: ((x := x.value) isKindOf: bytes);
-		assert: ((x := x ___container) isKindOf: ByteArray);
-		assert: x = #[97 98 99 7];
+		assert: ((x := x.value) isKindOf: Unicode7);
+		assert: x equals: '(bytes ___fromAsciiString: ''abc'')';
 		yourself.
 %
 category: 'other'
@@ -57,9 +55,8 @@ testHexHigh
 		assert: ((x := x.value) isKindOf: ConstantAst);
 		assert: x line == 44;
 		assert: x column == 0;
-		assert: ((x := x.value) isKindOf: bytes);
-		assert: ((x := x ___container) isKindOf: ByteArray);
-		assert: x = #[100 101 102 255];
+		assert: ((x := x.value) isKindOf: Unicode16);
+		assert: x equals: '(bytes ___fromAsciiString: ''defÿ'')';
 		yourself.
 %
 category: 'other'
@@ -74,9 +71,8 @@ testHexLow
 		assert: ((x := x.value) isKindOf: ConstantAst);
 		assert: x line == 43;
 		assert: x column == 0;
-		assert: ((x := x.value) isKindOf: bytes);
-		assert: ((x := x ___container) isKindOf: ByteArray);
-		assert: x = #[97 98 99 0];
+		assert: ((x := x.value) isKindOf: Unicode7);
+		assert: x equals: ('(bytes ___fromAsciiString: ''abc', (Unicode7 new add: (Character codePoint: 0); yourself) , ''')');
 		yourself.
 %
 category: 'other'
@@ -91,10 +87,9 @@ testNewline
 		assert: ((x := x.value) isKindOf: ConstantAst);
 		assert: x line == 31;
 		assert: x column == 0;
-		assert: ((x := x.value) isKindOf: bytes);
-		assert: ((x := x ___container) isKindOf: ByteArray);
-		assert: x = 'abc
-' asByteArray;
+		assert: ((x := x.value) isKindOf: Unicode7);
+		assert: x equals: '(bytes ___fromAsciiString: ''abc
+'')';
 		yourself.
 %
 category: 'other'
@@ -109,9 +104,8 @@ testOctalHigh
 		assert: ((x := x.value) isKindOf: ConstantAst);
 		assert: x line == 40;
 		assert: x column == 0;
-		assert: ((x := x.value) isKindOf: bytes);
-		assert: ((x := x ___container) isKindOf: ByteArray);
-		assert: x = #[100 101 102 255];
+		assert: ((x := x.value) isKindOf: Unicode16);
+		assert: x equals: '(bytes ___fromAsciiString: ''defÿ'')';
 		yourself.
 %
 category: 'other'
@@ -126,9 +120,8 @@ testOctalLow
 		assert: ((x := x.value) isKindOf: ConstantAst);
 		assert: x line == 39;
 		assert: x column == 0;
-		assert: ((x := x.value) isKindOf: bytes);
-		assert: ((x := x ___container) isKindOf: ByteArray);
-		assert: x = #[97 98 99 0];
+		assert: ((x := x.value) isKindOf: Unicode7);
+		assert: x equals: '(bytes ___fromAsciiString: ''abc' , (Unicode7 new add: (Character codePoint: 0); yourself) , ''')';
 		yourself.
 %
 category: 'other'
@@ -143,8 +136,7 @@ testSlash
 		assert: ((x := x.value) isKindOf: ConstantAst);
 		assert: x line == 32;
 		assert: x column == 0;
-		assert: ((x := x.value) isKindOf: bytes);
-		assert: ((x := x ___container) isKindOf: ByteArray);
-		assert: x = 'def\' asByteArray;
+		assert: ((x := x.value) isKindOf: Unicode7);
+		assert: x = '(bytes ___fromAsciiString: ''def\'')';
 		yourself.
 %

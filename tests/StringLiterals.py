@@ -42,3 +42,4 @@ b"""def\777"""
 # byte prefix with hex
 b"""abc\x00"""
 b"""def\xff"""
+

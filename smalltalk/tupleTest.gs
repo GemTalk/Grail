@@ -126,11 +126,11 @@ test__getslice__
 	list := self targetInstance __add__: { 'a'. 'b'. 'c'. 'd' }.
 
 	self
-		assert: (  list __getslice__: 1 _: 2) __len__ equals: (self int: 1);
-		assert: ((list __getslice__: 1 _: 2) __getitem__: 0) equals: 'b';
-		assert: (  list __getslice__: 1 _: 3) __len__ equals: (self int: 2);
-		assert: ((list __getslice__: 1 _: 3) __getitem__: 1) equals: 'c';
-		assert: (  list __getslice__: 1 _: 10) __len__ equals: (self int: 3);
+		assert: (  list __getslice__: (self int: 1) _: (self int: 2)) __len__ equals: (self int: 1);
+		assert: ((list __getslice__: (self int: 1) _: (self int: 2)) __getitem__: 0) equals: 'b';
+		assert: (  list __getslice__: (self int: 1) _: (self int: 3)) __len__ equals: (self int: 2);
+		assert: ((list __getslice__: (self int: 1) _: (self int: 3)) __getitem__: 1) equals: 'c';
+		assert: (  list __getslice__: (self int: 1) _: (self int: 10)) __len__ equals: (self int: 3);
 		yourself
 %
 category: 'done'
@@ -255,17 +255,17 @@ category: 'done'
 method: tupleTest
 testindex
    | x |
-	x := tuple ___value: { 'a'. 'b'. 'c'. 'b' }.
+	x := tuple ___value: { (self str: 'a'). (self str: 'b'). (self str: 'c'). (self str: 'b') }.
 
 	self
-		assert: (x index: 'b') equals: 1;
-		assert: (x index: 'b' from: 2) equals: 3;
-		assert: (x index: 'b' from: 3) equals: 3;
-		should: [x index: 'b' from: 2 to: 2]
+		assert: (x index: (self str: 'b')) equals: (self int: 1);
+		assert: (x index: (self str: 'b') from: (self int: 2)) equals: (self int: 3);
+		assert: (x index: (self str: 'b') from: (self int: 3)) equals: (self int: 3);
+		should: [x index: (self str: 'b') from: (self int: 2) to: (self int: 2)]
 		raise: ValueError
 		withExceptionDo: [:exception |
 			self assert: exception messageText equals: '''b'' is not in tuple'];
-		should: [x index: 'b' from: 3 to: 3]
+		should: [x index: (self str: 'b') from: (self int: 3) to: (self int: 3)]
 		raise: ValueError
 		withExceptionDo: [:exception |
 			self assert: exception messageText equals: '''b'' is not in tuple'];

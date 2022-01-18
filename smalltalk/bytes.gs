@@ -92,6 +92,12 @@ ___containerClass
 %
 category: 'Smalltalk'
 classmethod: bytes
+___fromAsciiString: aString   
+
+	^bytes __call__: (str ___value: aString) _: (str ___value: 'ascii').
+%
+category: 'Smalltalk'
+classmethod: bytes
 ___whiteSpace
 
 	^self ___value: { 9. 10. 11. 12. 13. 32 }
