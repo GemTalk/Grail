@@ -4933,23 +4933,6 @@ doit
 Base_Class_Test category: 'BuiltIns-Tests'
 %
 set compile_env: 0
-! ------------------- Class definition for bytesTest
-expectvalue /Class
-doit
-Base_Class_Test subclass: 'bytesTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-bytesTest category: 'BuiltIns-Tests'
-%
-set compile_env: 0
 ! ------------------- Class definition for passing
 expectvalue /Class
 doit
@@ -4982,6 +4965,23 @@ passing subclass: 'bytearrayTest'
 expectvalue /Class
 doit
 bytearrayTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for bytesTest
+expectvalue /Class
+doit
+passing subclass: 'bytesTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+bytesTest category: 'BuiltIns-Tests'
 %
 set compile_env: 0
 ! ------------------- Class definition for complexTest

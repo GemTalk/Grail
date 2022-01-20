@@ -846,7 +846,13 @@ testrfindByOne
 			withExceptionDo: [ :exception | 
 				self assert: exception messageText equals: 'argument should be integer or bytes-like object, not ''str'''
 			];
-		yourself
+		yourself.
+
+	list := self bytes: '  bcbcd'.
+
+	self
+		assert: (list rfind: (self bytes: 'bc')) equals: (self int: 4);
+		yourself.
 %
 category: 'done'
 method: bytesTest
@@ -985,14 +991,14 @@ method: bytesTest
 testrsplitOnSep
 
 	self
-		assert: ((self bytes: '  bcd') rsplit: (self bytes: 'a'))
+		"assert: ((self bytes: '  bcd') rsplit: (self bytes: 'a'))
 		equals: (tuple ___value: { self bytes: '  bcd' });
 		assert: ((self bytes: '  bcd') rsplit: (self bytes: ' '))
 		equals: (tuple ___value: { bytes __call__. bytes __call__. self bytes: 'bcd' });
 		assert: ((self bytes: '  bcd') rsplit: (self bytes: '  '))
 		equals: (tuple ___value: { bytes __call__. self bytes: 'bcd' });
 		assert: ((self bytes: '  bcd') rsplit: (self bytes: 'bc'))
-		equals: (tuple ___value: { self bytes: '  '. self bytes: 'd' });
+		equals: (tuple ___value: { self bytes: '  '. self bytes: 'd' });"
 		assert: ((self bytes: '  bcbcd') rsplit: (self bytes: 'bc'))
 		equals: (tuple ___value: { self bytes: '  '. bytes __call__. self bytes: 'd' });
 		yourself

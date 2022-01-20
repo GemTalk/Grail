@@ -612,7 +612,7 @@ rsplit: sep
 category: 'Python'
 method: bytes
 rsplit: pyBytesSep _: pyIntLimit
-	| idx newLimit remaining splits |
+	| idx newLimit remaining splits splitsIndex |
 	idx := (self rfind: pyBytesSep) ___value + 1.
 	idx < 1 ifTrue: [
 		^tuple ___value: { self copy }.
@@ -622,12 +622,17 @@ rsplit: pyBytesSep _: pyIntLimit
 	].
 
 	splits := OrderedCollection new.
-	splits add: (bytes ___value: (container copyFrom: idx + pyBytesSep ___value size to: container size)).
+	splitsIndex := idx + pyBytesSep ___value size.
+	splitsIndex > container size ifTrue: [
+		splits add: bytes __call__.
+	] ifFalse: [
+		splits add: (bytes ___value: (container copyFrom: splitsIndex to: container size)).
+	].
 	remaining := container copyFrom: 1 to: idx - 1.
 	newLimit := int ___value: pyIntLimit ___value - 1.
-	splits addAll: ((bytes ___value: remaining) rsplit: pyBytesSep _: newLimit) ___container.
+	splits addAllFirst: ((bytes ___value: remaining) rsplit: pyBytesSep _: newLimit) ___container.
 
-	^tuple ___value: (Array withAll: splits) reverse
+	^tuple ___value: (Array withAll: splits)
 %
 category: 'Python'
 method: bytes
