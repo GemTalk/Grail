@@ -44,7 +44,7 @@ initialize
 		value := self number. "constant is a number"
 		^self finalize]
 		on: ImproperOperation
-		do: [].
+		do: [ ].
 	next := stream peekN: 4.
 	next = 'None' ifTrue: [value := 'None'. "constant is None"
 		stream next: 4.
@@ -56,6 +56,24 @@ initialize
 	next = 'False' ifTrue: [value := 'False'. "constant is False"
 		stream next: 5.
 		^self finalize].
+%
+category: 'other'
+method: ConstantAst
+number
+
+	| stream string x num |
+	stream := self stream.
+	string := stream upTo: $,.
+	stream skip: -1.
+	(string notEmpty and: [string last == $j]) ifTrue: [
+		num := complex ___real: 0 imaginary: (string copyFrom: 1 to: string size - 1) asNumber.
+	] ifFalse: [
+		num := string asNumber.
+		"num := (x isKindOf: Integer)
+			ifTrue: [int with: x]
+			ifFalse: [float with: x]."
+	].
+	^num
 %
 category: 'other'
 method: ConstantAst

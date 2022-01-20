@@ -257,7 +257,7 @@ number
 	string := stream upTo: $,.
 	stream skip: -1.
 	(string notEmpty and: [string last == $j]) ifTrue: [
-		num := complex real: 0 imag: (string copyFrom: 1 to: string size - 1) asNumber.
+		num := complex ___real: 0 imaginary: (string copyFrom: 1 to: string size - 1) asNumber.
 	] ifFalse: [
 		num := string asNumber.
 		"num := (x isKindOf: Integer)

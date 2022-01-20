@@ -26,9 +26,9 @@ testArrayAssignment
 		assert: (x.value isKindOf: ListAst);
 		assert: (x.value.elts size == 2);
 		assert: ((y := x.value.elts at: 1) isKindOf: ConstantAst);
-		assert: (y.value.number == 0);
+		assert: (y.value == 0);
 		assert: ((y := x.value.elts at: 2) isKindOf: ConstantAst);
-		assert: (y.value.number == 1);
+		assert: (y.value == 1);
 		assert: (x.value.ctx isKindOf: LoadAst);
 		yourself.
 %
@@ -41,7 +41,7 @@ testAssignMultiple
 	self 
 		assert: (x isKindOf: AssignAst);
 		assert: (x.value isKindOf: ConstantAst);
-		assert: (x.value.value.number == 2);
+		assert: (x.value.value == 2);
 		assert: (x.targets size == 2);
 		assert: ((y := x.targets at: 1) isKindOf: NameAst);
 		assert: (y.id == #'var2');
@@ -60,7 +60,7 @@ testAssignSingle
 	self 
 		assert: (x isKindOf: AssignAst);
 		assert: (x.value isKindOf: ConstantAst);
-		assert: (x.value.value.number == 1);
+		assert: (x.value.value == 1);
 		assert: (x.targets size == 1);
 		assert: ((y := x.targets at: 1) isKindOf: NameAst);
 		assert: (y.id == #'var1');
@@ -128,7 +128,7 @@ testClassDefCls
 		assert: (z.id == #'x');
 		assert: (z.ctx isKindOf: StoreAst);
 		assert: (y.value isKindOf: ConstantAst);
-		assert: (y.value.value.number == 3);
+		assert: (y.value.value == 3);
 		assert: (x.decorator_list size == 0);
 		yourself.
 %
@@ -257,7 +257,7 @@ testIndexAssignment
 		assert: (y.id == #'i');
 		assert: (y.ctx isKindOf: StoreAst);
 		assert: (x.value isKindOf: ConstantAst);
-		assert: (x.value.value.number == 0);
+		assert: (x.value.value == 0);
 		yourself.
 %
 category: 'other'
@@ -300,16 +300,16 @@ testPassFunction
 		assert: (x.args isKindOf: ArgumentsAst);
 		assert: ((y := x.args.args at: 1) isKindOf: ArgAst);
 		assert: (y.arg = 'arg');
-		assert: (y.annotation isNone);
-		assert: (x.args.vararg isNone);
+		assert: (y.annotation = 'None');
+		assert: (x.args.vararg = 'None');
 		assert: (x.args.kwonlyargs size == 0);
 		assert: (x.args.kw_defaults size == 0);
-		assert: (x.args.kwarg isNone);
+		assert: (x.args.kwarg = 'None');
 		assert: (x.args.defaults size == 0);
 		assert: (x.body.body size == 1);
 		assert: ((x.body.body at: 1) isKindOf: PassAst);
 		assert: (x.decorator_list size == 0);
-		assert: (x.returns isNone);
+		assert: (x.returns = 'None');
 		yourself.
 %
 category: 'other'
@@ -326,10 +326,10 @@ testRaise
 		assert: (x.exc.function.ctx isKindOf: LoadAst);
 		assert: (x.exc.arguments size == 1);
 		assert: ((y := x.exc.arguments at: 1) isKindOf: ConstantAst);
-		assert: (y.value.container = 'Something bad happened');
+		assert: (y.value = '(str ___value: ''Something bad happened'')');
 		assert: (x.exc.keywords size == 0);
 		assert: (x.exc.function isKindOf: NameAst);
-		assert: (x.cause isNone);
+		assert: (x.cause = 'None');
 		yourself.
 %
 category: 'other'
@@ -346,11 +346,11 @@ testRaiseFromNone
 		assert: (x.exc.function.ctx isKindOf: LoadAst);
 		assert: (x.exc.arguments size == 1);
 		assert: ((y := x.exc.arguments at: 1) isKindOf: ConstantAst);
-		assert: (y.value.container = 'Something bad happened');
+		assert: (y.value = '(str ___value: ''Something bad happened'')');
 		assert: (x.exc.keywords size == 0);
 		assert: (x.exc.function isKindOf: NameAst);
 		assert: (x.cause isKindOf: ConstantAst);
-		assert: (x.cause.value == None);
+		assert: (x.cause.value = 'None');
 		yourself.
 %
 category: 'other'
@@ -364,16 +364,16 @@ testReturnNone
 		assert: (x.name == #'a');
 		assert: (x.args isKindOf: ArgumentsAst);
 		assert: (x.args.args size == 0);
-		assert: (x.args.vararg isNone);
+		assert: (x.args.vararg = 'None');
 		assert: (x.args.kwonlyargs size == 0);
 		assert: (x.args.kw_defaults size == 0);
-		assert: (x.args.kwarg isNone);
+		assert: (x.args.kwarg = 'None');
 		assert: (x.args.defaults size == 0);
 		assert: (x.body.body size == 1);
 		assert: ((y := x.body.body at: 1) isKindOf: ReturnAst);
-		assert: (y.value isNone);
+		assert: (y.value = 'None');
 		assert: (x.decorator_list size == 0);
-		assert: (x.returns isNone);
+		assert: (x.returns = 'None');
 		yourself.
 %
 category: 'other'
@@ -400,9 +400,9 @@ testSwapAssignment
 		assert: (x.value isKindOf: TupleAst);
 		assert: (x.value.elts size == 2);
 		assert: ((y := x.value.elts at: 1) isKindOf: ConstantAst);
-		assert: (y.value.number == 1);
+		assert: (y.value == 1);
 		assert: ((y := x.value.elts at: 2) isKindOf: ConstantAst);
-		assert: (y.value.number == 2);
+		assert: (y.value == 2);
 		assert: (x.value.ctx isKindOf: LoadAst);
 		yourself.
 %
@@ -417,18 +417,18 @@ testYield
 		assert: (x.name == #'gen');
 		assert: (x.args isKindOf: ArgumentsAst);
 		assert: (x.args.args size == 0);
-		assert: (x.args.vararg isNone);
+		assert: (x.args.vararg = 'None');
 		assert: (x.args.kwonlyargs size == 0);
 		assert: (x.args.kw_defaults size == 0);
-		assert: (x.args.kwarg isNone);
+		assert: (x.args.kwarg = 'None');
 		assert: (x.args.defaults size == 0);
 		assert: (x.body.body size == 1);
 		assert: ((y := x.body.body at: 1) isKindOf: ExprAst);
 		assert: (y.value isKindOf: YieldAst);
 		assert: (y.value.value isKindOf: ConstantAst);
-		assert: (y.value.value.value.number == 123);
+		assert: (y.value.value.value == 123);
 		assert: (x.decorator_list size == 0);
-		assert: (x.returns isNone);
+		assert: (x.returns = 'None');
 		yourself.
 %
 category: 'other'
@@ -442,17 +442,17 @@ testYieldAsync
 		assert: (x.name = 'agen');
 		assert: (x.args isKindOf: ArgumentsAst);
 		assert: (x.args.args size == 0);
-		assert: (x.args.vararg isNone);
+		assert: (x.args.vararg = 'None');
 		assert: (x.args.kwonlyargs size == 0);
 		assert: (x.args.kw_defaults size == 0);
-		assert: (x.args.kwarg isNone);
+		assert: (x.args.kwarg = 'None');
 		assert: (x.args.defaults size == 0);
 		assert: (x.body.body size == 1);
 		assert: ((y := x.body.body at: 1) isKindOf: ExprAst);
 		assert: (y.value isKindOf:YieldAst);
 		assert: (y.value.value isKindOf: ConstantAst);
-		assert: (y.value.value.value.number == 123);
+		assert: (y.value.value.value == 123);
 		assert: (x.decorator_list size == 0);
-		assert: (x.returns isNone);
+		assert: (x.returns = 'None');
 		yourself.
 %
