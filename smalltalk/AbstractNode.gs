@@ -149,7 +149,7 @@ optionalArg
 	stream := parent stream.
 	^(temp := stream peekN: 4) = 'None' ifTrue: [
 		stream next: 4.
-		None.
+		'None'
 	] ifFalse: [
 		self arg.
 	].
@@ -162,7 +162,7 @@ optionalExpression
 	stream := parent stream.
 	^(stream peekN: 4) = 'None' ifTrue: [
 		stream next: 4.
-		None.
+		'None'.
 	] ifFalse: [
 		self expression.
 	].
