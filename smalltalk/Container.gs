@@ -66,9 +66,9 @@ __add__: aList
 %
 category: 'Python'
 method: Container
-__contains__: anElement
+__contains__: aPyObject
 
-	^container includes: anElement
+	^container includes: aPyObject
 %
 category: 'Python'
 method: Container
@@ -88,9 +88,9 @@ __ge__: otherCollection
 %
 category: 'Python'
 method: Container
-__getitem__: anIndex
+__getitem__: aPyIndex
 	| index |
-	index := anIndex < 0 ifTrue: [self __len__ ___value + anIndex] ifFalse: [anIndex].
+	index := aPyIndex ___value < 0 ifTrue: [self __len__ ___value + aPyIndex ___value] ifFalse: [aPyIndex ___value].
 	(index < 0 or: [	index >= self __len__ ___value])
 		ifTrue: [IndexError signal: self ___typeName, ' index out of range'].
 
@@ -98,9 +98,9 @@ __getitem__: anIndex
 %
 category: 'Python'
 method: Container
-__getslice__: start _: end
+__getslice__: aPyIntStart _: aPyIntEnd
 
-	^self class ___value: (self ___getslice: start _: end)
+	^self class ___value: (self ___getslice: aPyIntStart _: aPyIntEnd)
 %
 category: 'Python'
 method: Container
@@ -119,9 +119,8 @@ __gt__: otherCollection
 category: 'Python'
 method: Container
 __iadd__: aList
-	| newlist |
 
-	{ Container. Collection }
+	{ Container }
 		detect: [:each | aList isKindOf: each]
 		ifNone: [TypeError signal: 'can only concatenate ', self ___typeName , ' (not "', aList class name,'") to ', self ___typeName].
 
@@ -167,11 +166,11 @@ __lt__: otherCollection
 %
 category: 'Python'
 method: Container
-__mul__: aMultiplier
+__mul__: aPyIntMultiplier
 	| newList |
 	 newList := OrderedCollection new.
 
-	aMultiplier timesRepeat: [
+	aPyIntMultiplier ___value timesRepeat: [
 		newList addAll: container
 	].
 
@@ -190,8 +189,8 @@ __repr__
 %
 category: 'Python'
 method: Container
-__rmul__: aMultiplier
-	^self __mul__: aMultiplier
+__rmul__: aPyIntMultiplier
+	^self __mul__: aPyIntMultiplier
 %
 category: 'Python'
 method: Container
@@ -207,9 +206,9 @@ copy
 %
 category: 'Python'
 method: Container
-count: anElement
+count: aPyObject
 
-	^(self ___container select: [:each | each == anElement]) size
+	^(self ___container select: [:each | each == aPyObject]) size
 %
 category: 'Python'
 method: Container
@@ -238,11 +237,11 @@ ___container
 %
 category: 'Smalltalk'
 method: Container
-___getslice: start _: end
+___getslice: aPyIntStart _: aPyIntEnd
 
 	| subset x y |
-	x := start ___value.
-	y := end ___value.
+	x := aPyIntStart ___value.
+	y := aPyIntEnd ___value.
 
 	x < 0 ifTrue: [
 		x := container size + x.

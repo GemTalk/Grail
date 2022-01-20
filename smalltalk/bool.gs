@@ -22,6 +22,13 @@ ___value: anObject
 %
 ! ------------------- Instance methods for bool
 set compile_env: 0
+category: 'other'
+method: bool
+___value
+
+	^value
+%
+set compile_env: 0
 category: 'Smalltalk'
 method: bool
 printOn: aStream

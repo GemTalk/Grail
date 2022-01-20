@@ -132,32 +132,6 @@ ___container
 %
 category: 'Smalltalk'
 method: range
-___initArgs: args
-
-	self ___initialize: args
-%
-category: 'Smalltalk'
-method: range
-___initialize: aCollection
-
-	aCollection size == 1 ifTrue: [
-		container  := self class ___containerClass from: 0 to: aCollection first.
-	].
-
-	aCollection size == 2 ifTrue: [
-		container  := self class ___containerClass from: aCollection first to: (aCollection second -1)
-	].
-
-	aCollection size == 3 ifTrue: [
-
-		container  := self class ___containerClass
-			from: aCollection first
-			to: aCollection second + (aCollection third > 0 ifTrue: [-1] ifFalse: [1])
-			by: aCollection third
-	].
-%
-category: 'Smalltalk'
-method: range
 ___size
 
 	^self ___container size

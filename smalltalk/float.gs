@@ -286,21 +286,6 @@ __ne__: anObject
 set compile_env: 0
 category: 'Smalltalk'
 method: float
-___initArgs: args
-
-	self error: 'We should use another initialization method'.
-	args  isEmpty ifTrue: [^self ___initialize: 0].
-   ^self ___initialize: args first
-%
-category: 'Smalltalk'
-method: float
-___initialize: val
-
-	self error: 'We should use another initialization method'.
-	value := val asFloat
-%
-category: 'Smalltalk'
-method: float
 ___value
 
 	^value

@@ -16,7 +16,7 @@ test__add__
 		assert: (list __add__: self targetInstance) __len__ equals: (self int: 1);
 		assert: (list __add__: lost) __len__ equals: (self int: 3);
 		assert: (list __add__: lost) __len__ equals: (self int: 3);   " still the same lenght"
- 		assert: ((list __add__: lost) __getitem__: -1) equals: '2';
+ 		assert: ((list __add__: lost) __getitem__: (self int: -1)) equals: '2';
 		yourself
 %
 category: 'done'
@@ -105,7 +105,7 @@ test__getitem__negative
 	list := self targetInstance __add__: { 'o' }.
 
 	self
-		assert: (list __getitem__: -1) equals: 'o';
+		assert: (list __getitem__: (self int: -1)) equals: 'o';
 		yourself
 %
 category: 'done'
@@ -113,7 +113,7 @@ method: tupleTest
 test__getitem__outOfRange
 
 	self
-		should: [self targetInstance __getitem__: 0]
+		should: [self targetInstance __getitem__: (self int: 0)]
 		raise: IndexError
 		withExceptionDo: [:exception |
 			self assert: exception messageText equals: 'tuple index out of range'];
@@ -127,9 +127,9 @@ test__getslice__
 
 	self
 		assert: (  list __getslice__: (self int: 1) _: (self int: 2)) __len__ equals: (self int: 1);
-		assert: ((list __getslice__: (self int: 1) _: (self int: 2)) __getitem__: 0) equals: 'b';
+		assert: ((list __getslice__: (self int: 1) _: (self int: 2)) __getitem__: (self int: 0)) equals: 'b';
 		assert: (  list __getslice__: (self int: 1) _: (self int: 3)) __len__ equals: (self int: 2);
-		assert: ((list __getslice__: (self int: 1) _: (self int: 3)) __getitem__: 1) equals: 'c';
+		assert: ((list __getslice__: (self int: 1) _: (self int: 3)) __getitem__: (self int: 1)) equals: 'c';
 		assert: (  list __getslice__: (self int: 1) _: (self int: 10)) __len__ equals: (self int: 3);
 		yourself
 %
@@ -189,9 +189,9 @@ test__mul__
 	x := tuple ___value: { 'a'. 'b' }.
 
 	self
-		assert: (x __mul__: 1) equals: (tuple ___value: { 'a'. 'b' });
-		assert: (x __mul__: 2) equals: (tuple ___value: { 'a'. 'b'. 'a'. 'b'  });
-		deny:   (x __mul__: 2) equals: x;
+		assert: (x __mul__: (self int: 1)) equals: (tuple ___value: { 'a'. 'b' });
+		assert: (x __mul__: (self int: 2)) equals: (tuple ___value: { 'a'. 'b'. 'a'. 'b'  });
+		deny:   (x __mul__: (self int: 2)) equals: x;
 		yourself
 %
 category: 'done'
@@ -224,9 +224,9 @@ test__rmul__
 	list := self targetInstance __add__: { 'a'. 'b' }.
 
 	self
-		assert: (list __rmul__: 1) equals: (self targetInstance __add__: { 'a'. 'b' });
-		assert: (list __rmul__: 2) equals: (self targetInstance __add__: { 'a'. 'b'. 'a'. 'b'  });
-		deny:   (list __rmul__: 2) equals: list;
+		assert: (list __rmul__: (self int: 1)) equals: (self targetInstance __add__: { 'a'. 'b' });
+		assert: (list __rmul__: (self int: 2)) equals: (self targetInstance __add__: { 'a'. 'b'. 'a'. 'b'  });
+		deny:   (list __rmul__: (self int: 3)) equals: list;
 		yourself
 %
 category: 'done'

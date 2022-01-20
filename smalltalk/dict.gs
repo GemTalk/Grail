@@ -150,14 +150,6 @@ values
 set compile_env: 0
 category: 'Smalltalk'
 method: dict
-___initialize: aCollection
-
-	container := self class ___containerClass new.
-	aCollection do: [:association |
-		container add: association]
-%
-category: 'Smalltalk'
-method: dict
 printElementsOn: aStream
 	"The original code used #skip:, but some streams do not support that,
 	 and we don't really need it."

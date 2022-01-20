@@ -16,7 +16,7 @@ test__add__
 		assert: (list __add__: self targetInstance) __len__ equals: (self int: 1);
 		assert: (list __add__: lost) __len__ equals: (self int: 3);
 		assert: (list __add__: lost) __len__ equals: (self int: 3);   " still the same lenght"
- 		assert: ((list __add__: lost) __getitem__: -1) equals: '2';
+ 		assert: ((list __add__: lost) __getitem__: (self int: -1)) equals: '2';
 		yourself
 %
 category: 'done'
@@ -82,9 +82,9 @@ test__delslice__
 
 	self
 		assert: list __len__ equals: (self int: 3);
-		assert: (list __getitem__: 0) equals: 'a';
-		assert: (list __getitem__: 1) equals: 'c';
-		assert: (list __getitem__: 2) equals: 'd';
+		assert: (list __getitem__: (self int: 0)) equals: 'a';
+		assert: (list __getitem__: (self int: 1)) equals: 'c';
+		assert: (list __getitem__: (self int: 2)) equals: 'd';
 		yourself
 %
 category: 'done'
@@ -179,7 +179,7 @@ test__getitem__negative
 	list := self targetInstance __add__: { 'o' }.
 
 	self
-		assert: (list __getitem__: -1) equals: 'o';
+		assert: (list __getitem__: (self int: -1)) equals: 'o';
 		yourself
 %
 category: 'done'
@@ -187,7 +187,7 @@ method: listTest
 test__getitem__outOfRange
 
 	self
-		should: [self targetInstance __getitem__: 0]
+		should: [self targetInstance __getitem__: (self int: 0)]
 		raise: IndexError
 		withExceptionDo: [:exception |
 			self assert: exception messageText equals: 'list index out of range'];
@@ -201,9 +201,9 @@ test__getslice__
 
 	self
 		assert: (list __getslice__: (self int: 1) _: (self int: 2)) __len__ equals: (self int: 1);
-		assert: ((list __getslice__: (self int: 1) _: (self int: 2)) __getitem__: 0)equals: 'b';
+		assert: ((list __getslice__: (self int: 1) _: (self int: 2)) __getitem__: (self int: 0)) equals: 'b';
 		assert: (list __getslice__: (self int: 1) _: (self int: 3)) __len__ equals: (self int: 2);
-		assert: ((list __getslice__: (self int: 1) _: (self int: 3)) __getitem__: 1)equals: 'c';
+		assert: ((list __getslice__: (self int: 1) _: (self int: 3)) __getitem__: (self int: 1)) equals: 'c';
 		assert: (list __getslice__: (self int: 1) _: (self int: 10)) __len__ equals: (self int: 3);
 		yourself
 %
@@ -232,7 +232,7 @@ test__iadd__
 	self
 		assert: (list __iadd__: lost) __len__ equals: (self int: 3);
 		assert: list __len__ equals: (self int: 3);
-		assert: (list __getitem__: -1) equals: '2';
+		assert: (list __getitem__: (self int: -1)) equals: '2';
 		yourself
 %
 category: 'done'
@@ -289,9 +289,9 @@ test__mul__
 	list := self targetInstance __add__: { 'a'. 'b' }.
 
 	self
-		assert: (list __mul__: 1) equals: (self targetInstance __add__: { 'a'. 'b' });
-		assert: (list __mul__: 2) equals: (self targetInstance __add__: { 'a'. 'b'. 'a'. 'b'  });
-		deny:   (list __mul__: 2) equals: list;
+		assert: (list __mul__: (self int: 1)) equals: (self targetInstance __add__: { 'a'. 'b' });
+		assert: (list __mul__: (self int: 2)) equals: (self targetInstance __add__: { 'a'. 'b'. 'a'. 'b'  });
+		deny:   (list __mul__: (self int: 3)) equals: list;
 		yourself
 %
 category: 'done'
@@ -326,10 +326,10 @@ test__reversed__
 
 	self
 		assert: x __reversed__ __len__ equals: (self int: 3);
-		assert: (x __reversed__ __getitem__:  0) equals: 'c';
-		assert: (x __reversed__ __getitem__: -1) equals: 'a';
-		assert: (x __getitem__:  0) equals: 'a';
-		assert: (x __getitem__: -1) equals: 'c';
+		assert: (x __reversed__ __getitem__:  (self int: 0)) equals: 'c';
+		assert: (x __reversed__ __getitem__: (self int: -1)) equals: 'a';
+		assert: (x __getitem__:  (self int: 0)) equals: 'a';
+		assert: (x __getitem__: (self int: -1)) equals: 'c';
 		yourself
 %
 category: 'done'
@@ -339,9 +339,9 @@ test__rmul__
 	x := list ___value: { 'a'. 'b' }.
 
 	self
-		assert: (x __rmul__: 1) equals: (list ___value: { 'a'. 'b' });
-		assert: (x __rmul__: 2) equals: (list ___value: { 'a'. 'b'. 'a'. 'b' });
-		deny:   (x __rmul__: 2) equals: x;
+		assert: (x __rmul__: (self int: 1)) equals: (list ___value: { 'a'. 'b' });
+		assert: (x __rmul__: (self int: 2)) equals: (list ___value: { 'a'. 'b'. 'a'. 'b' });
+		deny:   (x __rmul__: (self int: 2)) equals: x;
 		yourself
 %
 category: 'done'
@@ -378,7 +378,7 @@ test__setslice__replacing
 	list __setslice__: 1 _: 2 _: 'y'.
 	self
 		assert: list __len__ equals: (self int: 4);
-		assert: (list __getitem__: 1) equals: 'y';
+		assert: (list __getitem__: (self int: 1)) equals: 'y';
 		yourself
 %
 category: 'done'
@@ -389,7 +389,7 @@ test__setslice__withOneSpot
 	list __setslice__: 1 _: 1 _: 'y'.
 	self
 		assert: list __len__ equals: (self int: 5);
-		assert: (list __getitem__: 1) equals: 'y';
+		assert: (list __getitem__: (self int: 1)) equals: 'y';
 		yourself
 %
 category: 'done'
@@ -400,7 +400,7 @@ test__setslice__zipping
 	list __setslice__: 1 _: 3 _: 'y'.
 	self
 		assert: list __len__ equals: (self int: 3);
-		assert: (list __getitem__: 1) equals: 'y';
+		assert: (list __getitem__: (self int: 1)) equals: 'y';
 		yourself
 %
 category: 'done'
@@ -424,7 +424,7 @@ testappend
 	self
 		assert: list __len__ equals: (self int: 4);
 		assert: (list __contains__: 'o');
-		assert: (list __getitem__: -1) equals: 'o';
+		assert: (list __getitem__: (self int: -1)) equals: 'o';
 		yourself
 %
 category: 'done'
@@ -447,8 +447,8 @@ testcopy
    list __delitem__: 0.
 	self
 		assert: lost __len__ equals: (self int: 3);
-		assert: (lost __getitem__:  0) equals: 'a';
-		assert: (lost __getitem__: -1) equals: 'c';
+		assert: (lost __getitem__:  (self int: 0)) equals: 'a';
+		assert: (lost __getitem__: (self int: -1)) equals: 'c';
 		yourself
 %
 category: 'done'
@@ -517,8 +517,8 @@ testinsertBeforeLast
 	list insert: -1 _: 'c'.
 	self
 		assert: list __len__ equals: (self int: 2);
-		assert: (list __getitem__: 0) equals: 'c';
-		assert: (list __getitem__: 1) equals: 'a';
+		assert: (list __getitem__: (self int: 0)) equals: 'c';
+		assert: (list __getitem__: (self int: 1)) equals: 'a';
 		yourself
 %
 category: 'done'
@@ -529,8 +529,8 @@ testinsertBeforeRange
 	list insert: -5 _: 'c'.
 	self
 		assert: list __len__ equals: (self int: 2);
-		assert: (list __getitem__: 0) equals: 'c';
-		assert: (list __getitem__: 1) equals: 'a';
+		assert: (list __getitem__: (self int: 0)) equals: 'c';
+		assert: (list __getitem__: (self int: 1)) equals: 'a';
 		yourself
 %
 category: 'done'
@@ -541,9 +541,9 @@ testinsertInRange
 	list insert: 1 _: 'c'.
 	self
 		assert: list __len__ equals: (self int: 3);
-		assert: (list __getitem__: 0) equals: 'a';
-		assert: (list __getitem__: 1) equals: 'c';
-		assert: (list __getitem__: 2) equals: 'b';
+		assert: (list __getitem__: (self int: 0)) equals: 'a';
+		assert: (list __getitem__: (self int: 1)) equals: 'c';
+		assert: (list __getitem__: (self int: 2)) equals: 'b';
 		yourself
 %
 category: 'done'
@@ -554,8 +554,8 @@ testinsertPassRange
 	list insert: 5 _: 'c'.
 	self
 		assert: list __len__ equals: (self int: 2);
-		assert: (list __getitem__: 0) equals: 'a';
-		assert: (list __getitem__: 1) equals: 'c';
+		assert: (list __getitem__: (self int: 0)) equals: 'a';
+		assert: (list __getitem__: (self int: 1)) equals: 'c';
 		yourself
 %
 category: 'done'
@@ -626,9 +626,9 @@ testremove
 
 	self
 		assert: list __len__ equals: (self int: 3);
-		assert: (list __getitem__: 0) equals: 'a';
-		assert: (list __getitem__: 1) equals: 'c';
-		assert: (list __getitem__: 2) equals: 'b';
+		assert: (list __getitem__: (self int: 0)) equals: 'a';
+		assert: (list __getitem__: (self int: 1)) equals: 'c';
+		assert: (list __getitem__: (self int: 2)) equals: 'b';
 		yourself
 %
 category: 'done'
@@ -653,8 +653,8 @@ testreverse
 
 	self
 		assert: x __len__ equals: (self int: 3);
-		assert: (x __getitem__: 0) equals: 'c';
-		assert: (x __getitem__: -1) equals: 'a';
+		assert: (x __getitem__: (self int: 0)) equals: 'c';
+		assert: (x __getitem__: (self int: -1)) equals: 'a';
 		yourself
 %
 category: 'done'
@@ -666,8 +666,8 @@ testsort
 
 	self
 		assert: x __len__ equals: (self int: 3);
-		assert: (x __getitem__: 0) equals: 'a';
-		assert: (x __getitem__: -1) equals: 'c';
+		assert: (x __getitem__: (self int: 0)) equals: 'a';
+		assert: (x __getitem__: (self int: -1)) equals: 'c';
 		yourself
 %
 set compile_env: 0

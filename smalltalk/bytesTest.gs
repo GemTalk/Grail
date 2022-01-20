@@ -153,7 +153,7 @@ test__getitem__
 
 	self
 		assert: list __len__ equals: (self int: 4);
-		assert: (list __getitem__: 0) equals: '1';
+		assert: (list __getitem__: (self int: 0)) equals: '1';
 		yourself
 %
 category: 'done'
@@ -163,7 +163,7 @@ test__getitem__negative
 	list := self bytes: 'o'.
 
 	self
-		assert: (list __getitem__: -1) equals: 'o';
+		assert: (list __getitem__: (self int: -1)) equals: 'o';
 		yourself
 %
 category: 'done'
@@ -264,12 +264,12 @@ test__mul__
 	j :=  self bytes: 'j'.
 	ja :=  self bytes: 'ja'.
 
-   self assert: (j __mul__: 3) __len__ equals: (self int: 3).
-   self assert: (ja __mul__: 3) __len__ equals: (self int: 6).
+   self assert: (j __mul__: (self int: 3)) __len__ equals: (self int: 3).
+   self assert: (ja __mul__: (self int: 3)) __len__ equals: (self int: 6).
 
-   self assert: ((j __mul__: 3) __contains__: (self bytes: 'jj')).
-   self assert: ((j __mul__: 3) __contains__: (self bytes: 'jjj')).
-	self assert: ((ja __mul__: 3) __contains__: (self bytes: 'aja')).
+   self assert: ((j __mul__: (self int: 3)) __contains__: (self bytes: 'jj')).
+   self assert: ((j __mul__: (self int: 3)) __contains__: (self bytes: 'jjj')).
+	self assert: ((ja __mul__: (self int: 3)) __contains__: (self bytes: 'aja')).
 %
 category: 'done'
 method: bytesTest
@@ -296,12 +296,12 @@ test__rmul__
 	j :=  self bytes: 'j'.
 	ja :=  self bytes: 'ja'.
 
-   self assert: (j __rmul__: 3) __len__ equals: (self int: 3).
-   self assert: (ja __rmul__: 3) __len__ equals: (self int: 6).
+   self assert: (j __rmul__: (self int: 3)) __len__ equals: (self int: 3).
+   self assert: (ja __rmul__: (self int: 3)) __len__ equals: (self int: 6).
 
-   self assert: ((j __rmul__: 3) __contains__: (self bytes: 'jj')).
-   self assert: ((j __rmul__: 3) __contains__: (self bytes: 'jjj')).
-	self assert: ((ja __rmul__: 3) __contains__: (self bytes: 'aja')).
+   self assert: ((j __rmul__: (self int: 3)) __contains__: (self bytes: 'jj')).
+   self assert: ((j __rmul__: (self int: 3)) __contains__: (self bytes: 'jjj')).
+	self assert: ((ja __rmul__: (self int: 3)) __contains__: (self bytes: 'aja')).
 %
 category: 'done'
 method: bytesTest
@@ -991,14 +991,14 @@ method: bytesTest
 testrsplitOnSep
 
 	self
-		"assert: ((self bytes: '  bcd') rsplit: (self bytes: 'a'))
+		assert: ((self bytes: '  bcd') rsplit: (self bytes: 'a'))
 		equals: (tuple ___value: { self bytes: '  bcd' });
 		assert: ((self bytes: '  bcd') rsplit: (self bytes: ' '))
 		equals: (tuple ___value: { bytes __call__. bytes __call__. self bytes: 'bcd' });
 		assert: ((self bytes: '  bcd') rsplit: (self bytes: '  '))
 		equals: (tuple ___value: { bytes __call__. self bytes: 'bcd' });
 		assert: ((self bytes: '  bcd') rsplit: (self bytes: 'bc'))
-		equals: (tuple ___value: { self bytes: '  '. self bytes: 'd' });"
+		equals: (tuple ___value: { self bytes: '  '. self bytes: 'd' });
 		assert: ((self bytes: '  bcbcd') rsplit: (self bytes: 'bc'))
 		equals: (tuple ___value: { self bytes: '  '. bytes __call__. self bytes: 'd' });
 		yourself

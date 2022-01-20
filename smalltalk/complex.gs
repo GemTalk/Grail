@@ -301,19 +301,6 @@ __repr__
 set compile_env: 0
 category: 'Smalltalk'
 method: complex
-___initialize: r1 _: r2
-
-	self error: 'use another constructor'.
- 	(r1 isKindOf: complex) ifTrue: [
-		real := r1 real ___value.
-		imaginary := r1 imag ___value.
-	] ifFalse: [
-		real := r1 asFloat.
-		imaginary := r2 asFloat.
-	].
-%
-category: 'Smalltalk'
-method: complex
 ___parse: stringArg
  
 	[
