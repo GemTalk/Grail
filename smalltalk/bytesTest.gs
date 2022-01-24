@@ -1178,7 +1178,11 @@ test__iter__
 category: 'todo'
 method: bytesTest
 testdecode
-   #pyTodo
+   
+	| x |
+	x := self bytes: 'abcde'.
+
+	self assert: x decode equals: (self str: 'abcde')
 %
 category: 'todo'
 method: bytesTest

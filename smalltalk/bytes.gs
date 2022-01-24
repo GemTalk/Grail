@@ -3,7 +3,6 @@ removeAllMethods bytes
 removeAllClassMethods bytes
 ! ------------------- Class methods for bytes
 set compile_env: 0
-set compile_env: 0
 category: 'Python'
 classmethod: bytes
 __call__
@@ -239,6 +238,20 @@ count: aPyObject _: aPyIntStart _: aPyIntEnd
 	].
 
 	^int ___value: count
+%
+category: 'Python'
+method: bytes
+decode
+
+	^self decode: (str ___value: 'utf-8') _: (str ___value: 'strict')
+%
+category: 'Python'
+method: bytes
+decode: pyStrEncoding _: pyStrErrors
+
+	#PyTodo"Handle encoding and error handlers".
+
+	^str ___value: (String withAll: (container collect: [ :x | Character codePoint: x ]))
 %
 category: 'Python'
 method: bytes
@@ -755,22 +768,6 @@ upper
 	^bytes ___value: (upperString collect: [ :x | x codePoint ]).
 %
 set compile_env: 0
-category: 'Smalltalk'
-method: bytes
-___initArgs: args
-
-	args isEmpty ifTrue: [
-		container := ByteArray new.
-		^self
-	].
-	((args first isKindOf: Integer) or: [ args first isKindOf: int]) ifTrue: [
-		container := ByteArray new asByteArrayOfSize: args first.
-		^self
-	].
-
-	container := args first asByteArray.
-	^self
-%
 category: 'Smalltalk'
 method: bytes
 printElementsOn: aStream

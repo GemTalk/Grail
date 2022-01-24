@@ -18,3 +18,17 @@ initialize
 	right := self expression.
 	self readPosition.
 %
+category: 'other'
+method: BinOpAst
+messagePrecedence
+
+	^2
+%
+category: 'other'
+method: BinOpAst
+printSmalltalkOn: aStream
+
+	self smalltalkSourceFor: left parenthesisIf: 3 on: aStream.
+	op printSmalltalkOn: aStream.
+	self smalltalkSourceFor: right parenthesisIf: 2 on: aStream.
+%

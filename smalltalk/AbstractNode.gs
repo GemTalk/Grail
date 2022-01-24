@@ -244,6 +244,12 @@ locals
 %
 category: 'other'
 method: AbstractNode
+messagePrecedence
+
+	^0
+%
+category: 'other'
+method: AbstractNode
 module
 
 	^parent module
@@ -278,7 +284,24 @@ printOn: aStream
 %
 category: 'other'
 method: AbstractNode
+printSmalltalkOn: aStream
+
+	self subclassResponsibility.
+%
+category: 'other'
+method: AbstractNode
 setBlock: aBlock
+%
+category: 'other'
+method: AbstractNode
+smalltalkSourceFor: aNode parenthesisIf: anInteger on: aStream
+
+	| flag |
+
+	flag := aNode messagePrecedence >= anInteger.
+	flag ifTrue: [aStream nextPut: $(].
+	aNode printSmalltalkOn: aStream.
+	flag ifTrue: [aStream nextPut: $)].
 %
 set compile_env: 0
 category: 'testing'

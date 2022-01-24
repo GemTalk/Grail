@@ -29,7 +29,7 @@ testEmbeddedStringDoubleQuotes
 		assert: x column == 0;
 		yourself.
 	x := x.value.
-	self assert: x = '(str ___value: ''a''''bc'')'.
+	self assert: x = 'str ___value: ''a''''bc'''.
 %
 category: 'other'
 method: StringLiteralsTestCase
@@ -49,7 +49,7 @@ testEmbeddedStringSingleQuotes
 		assert: x column == 0;
 		yourself.
 	x := x.value.
-	self assert: x = '(str ___value: ''x"yz'')'.
+	self assert: x = 'str ___value: ''x"yz'''.
 %
 category: 'other'
 method: StringLiteralsTestCase
@@ -69,7 +69,7 @@ testEscapeCharacterStringNewline
 		assert: x column == 0;
 		yourself.
 	x := x.value.
-	self assert: x = '(str ___value: ''newline\n'')'.
+	self assert: x = 'str ___value: ''newline\n'''.
 %
 category: 'other'
 method: StringLiteralsTestCase
@@ -89,7 +89,7 @@ testEscapeCharacterStringSlash
 		assert: x column == 0;
 		yourself.
 	x := x.value.
-	self assert: x = '(str ___value: ''slash\\'')'.
+	self assert: x = 'str ___value: ''slash\\'''.
 %
 category: 'other'
 method: StringLiteralsTestCase
@@ -111,17 +111,17 @@ testJoinedStrWithFormattedValueNum
 	child := x.values at: 1.
 	self
 		assert: (child isKindOf: ConstantAst);
-		assert: child.value = '(str ___value: ''123'')';
+		assert: child.value = 'str ___value: ''123''';
 		yourself.
 	child := x.values at: 2.
 	self
 		assert: (child isKindOf: FormattedValueAst);
-		assert: child.value.value = 456;
+		assert: child.value.value = 'int with: 456';
 		yourself.
 	child := x.values at: 3.
 	self
 		assert: (child isKindOf: ConstantAst);
-		assert: child.value = '(str ___value: ''789'')';
+		assert: child.value = 'str ___value: ''789''';
 		yourself.
 	self assert: x.values size = 3.
 %
@@ -145,19 +145,19 @@ testJoinedStrWithFormattedValueStr
 	child := x.values at: 1.
 	self
 		assert: (child isKindOf: ConstantAst);
-		assert: child.value = '(str ___value: ''abc'')';
+		assert: child.value = 'str ___value: ''abc''';
 		yourself.
 	child := x.values at: 2.
 	self
 		assert: (child isKindOf: FormattedValueAst);
 		assert: (child.value isKindOf: ConstantAst);
 		assert: (child.value.value isKindOf: Unicode7);
-		assert: child.value.value = '(str ___value: ''def'')';
+		assert: child.value.value = 'str ___value: ''def''';
 		yourself.
 	child := x.values at: 3.
 	self
 		assert: (child isKindOf: ConstantAst);
-		assert: child.value = '(str ___value: ''ghi'')';
+		assert: child.value = 'str ___value: ''ghi''';
 		yourself.
 	self assert: x.values size = 3.
 %
@@ -179,8 +179,8 @@ testLongStringDoubleQuotes
 		assert: x column == 0;
 		yourself.
 	x := x.value.
-	self assert: x = '(str ___value: ''poiu
-;lkj'')'.
+	self assert: x = 'str ___value: ''poiu
+;lkj'''.
 %
 category: 'other'
 method: StringLiteralsTestCase
@@ -200,8 +200,8 @@ testLongStringSingleQuotes
 		assert: x column == 0;
 		yourself.
 	x := x.value.
-	self assert: x = '(str ___value: ''qwer
-asdf'')'.
+	self assert: x = 'str ___value: ''qwer
+asdf'''.
 %
 category: 'other'
 method: StringLiteralsTestCase
@@ -221,8 +221,8 @@ testNonEscapeCharacterStringNewline
 		assert: x column == 0;
 		yourself.
 	x := x.value.
-	self assert: x = '(str ___value: ''newline
-'')'.
+	self assert: x = 'str ___value: ''newline
+'''.
 %
 category: 'other'
 method: StringLiteralsTestCase
@@ -242,7 +242,7 @@ testNonEscapeCharacterStringSlash
 		assert: x column == 0;
 		yourself.
 	x := x.value.
-	self assert: x = '(str ___value: ''slash\'')'.
+	self assert: x = 'str ___value: ''slash\'''.
 %
 category: 'other'
 method: StringLiteralsTestCase
@@ -262,7 +262,7 @@ testShortStringDoubleQuotes
 		assert: x column == 0;
 		yourself.
 	x := x.value.
-	self assert: x = '(str ___value: ''vwxyz'')'.
+	self assert: x = 'str ___value: ''vwxyz'''.
 %
 category: 'other'
 method: StringLiteralsTestCase
@@ -282,5 +282,5 @@ testShortStringSingleQuotes
 		assert: x column == 0;
 		yourself.
 	x := x.value.
-	self assert: x = '(str ___value: ''abcde'')'.
+	self assert: x = 'str ___value: ''abcde'''.
 %

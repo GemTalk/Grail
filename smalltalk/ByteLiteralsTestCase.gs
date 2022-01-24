@@ -24,7 +24,7 @@ testBackspace
 		assert: x line == 36;
 		assert: x column == 0;
 		assert: ((x := x.value) isKindOf: Unicode7);
-		assert: x equals: '(bytes ___fromAsciiString: ''def'')';
+		assert: x equals: 'bytes ___fromAsciiString: ''def''';
 		yourself.
 %
 category: 'other'
@@ -40,7 +40,7 @@ testBell
 		assert: x line == 35;
 		assert: x column == 0;
 		assert: ((x := x.value) isKindOf: Unicode7);
-		assert: x equals: '(bytes ___fromAsciiString: ''abc'')';
+		assert: x equals: 'bytes ___fromAsciiString: ''abc''';
 		yourself.
 %
 category: 'other'
@@ -56,7 +56,7 @@ testHexHigh
 		assert: x line == 44;
 		assert: x column == 0;
 		assert: ((x := x.value) isKindOf: Unicode16);
-		assert: x equals: '(bytes ___fromAsciiString: ''defÿ'')';
+		assert: x equals: 'bytes ___fromAsciiString: ''defÿ''';
 		yourself.
 %
 category: 'other'
@@ -72,7 +72,7 @@ testHexLow
 		assert: x line == 43;
 		assert: x column == 0;
 		assert: ((x := x.value) isKindOf: Unicode7);
-		assert: x equals: ('(bytes ___fromAsciiString: ''abc', (Unicode7 new add: (Character codePoint: 0); yourself) , ''')');
+		assert: x equals: ('bytes ___fromAsciiString: ''abc', (Unicode7 new add: (Character codePoint: 0); yourself) , '''');
 		yourself.
 %
 category: 'other'
@@ -88,8 +88,8 @@ testNewline
 		assert: x line == 31;
 		assert: x column == 0;
 		assert: ((x := x.value) isKindOf: Unicode7);
-		assert: x equals: '(bytes ___fromAsciiString: ''abc
-'')';
+		assert: x equals: 'bytes ___fromAsciiString: ''abc
+''';
 		yourself.
 %
 category: 'other'
@@ -105,7 +105,7 @@ testOctalHigh
 		assert: x line == 40;
 		assert: x column == 0;
 		assert: ((x := x.value) isKindOf: Unicode16);
-		assert: x equals: '(bytes ___fromAsciiString: ''defÿ'')';
+		assert: x equals: 'bytes ___fromAsciiString: ''defÿ''';
 		yourself.
 %
 category: 'other'
@@ -121,7 +121,7 @@ testOctalLow
 		assert: x line == 39;
 		assert: x column == 0;
 		assert: ((x := x.value) isKindOf: Unicode7);
-		assert: x equals: '(bytes ___fromAsciiString: ''abc' , (Unicode7 new add: (Character codePoint: 0); yourself) , ''')';
+		assert: x equals: 'bytes ___fromAsciiString: ''abc' , (Unicode7 new add: (Character codePoint: 0); yourself) , '''';
 		yourself.
 %
 category: 'other'
@@ -137,6 +137,6 @@ testSlash
 		assert: x line == 32;
 		assert: x column == 0;
 		assert: ((x := x.value) isKindOf: Unicode7);
-		assert: x = '(bytes ___fromAsciiString: ''def\'')';
+		assert: x = 'bytes ___fromAsciiString: ''def\''';
 		yourself.
 %

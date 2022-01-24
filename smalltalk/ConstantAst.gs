@@ -20,7 +20,7 @@ finalize
 	| stream |
 	stream := self stream.
 	self commaSpace.
-	kind := self optionalString.
+	kind := self optionalString. "https://bugs.python.org/issue36280"
 	self readPosition.
 %
 category: 'other'
@@ -32,13 +32,16 @@ initialize
 	The values represented can be simple types such as a number, string or None, but also immutable container types (tuples and frozensets) if all of their elements are constant."
 
 	| stream char next |
+	messagePrecedence := 0.
 	stream := self stream.
 	char := stream peek.
 	(char == $' or: [char == $"]) ifTrue: [
-		value := '(str ___value: ', self string printString, ')'. "constant is a string"
+		value := 'str ___value: ', self string printString. "constant is a string"
+		messagePrecedence := 3.
 		^self finalize].
 	char == $b ifTrue: [
-		value := '(bytes ___fromAsciiString: ', self string printString, ')'."constant is a string"
+		value := 'bytes ___fromAsciiString: ', self string printString."constant is a string"
+		messagePrecedence := 3.
 		^self finalize].
 	[char asString asInteger.
 		value := self number. "constant is a number"
@@ -59,21 +62,33 @@ initialize
 %
 category: 'other'
 method: ConstantAst
+messagePrecedence
+
+	^messagePrecedence
+%
+category: 'other'
+method: ConstantAst
 number
 
-	| stream string x num |
+	| stream string x |
+	messagePrecedence := 3.
 	stream := self stream.
 	string := stream upTo: $,.
 	stream skip: -1.
-	(string notEmpty and: [string last == $j]) ifTrue: [
-		num := complex ___real: 0 imaginary: (string copyFrom: 1 to: string size - 1) asNumber.
+	^(string notEmpty and: [string last == $j]) ifTrue: [
+		'complex ___real: 0 imaginary: ' , (string copyFrom: 1 to: string size - 1) asNumber printString.
 	] ifFalse: [
-		num := string asNumber.
-		"num := (x isKindOf: Integer)
-			ifTrue: [int with: x]
-			ifFalse: [float with: x]."
-	].
-	^num
+		x := string asNumber.
+		(x isKindOf: Integer)
+			ifTrue: ['int with: ', x printString]
+			ifFalse: ['float with: ' , x printString].
+	]
+%
+category: 'other'
+method: ConstantAst
+printSmalltalkOn: aStream
+
+	aStream nextPutAll: value.
 %
 category: 'other'
 method: ConstantAst

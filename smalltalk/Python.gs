@@ -1453,7 +1453,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 ExpressionAst subclass: 'ConstantAst'
-  instVarNames: #( value kind)
+  instVarNames: #( value kind messagePrecedence)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
