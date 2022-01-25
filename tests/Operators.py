@@ -3,7 +3,16 @@
 
 # binary operators
 1 + 2
+1 & 1
+1 | 1
+1 ^ 0
+1 << 2
+4 >> 2
 10 % 5
+10 / 5
+3 // 2
+2 - 1
+2 ** 4
 
 # nested binary operators
 2 + 4 + 6

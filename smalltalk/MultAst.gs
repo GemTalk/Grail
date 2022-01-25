@@ -8,9 +8,5 @@ category: 'other'
 method: MultAst
 printSmalltalkOn: aStream
 
-	aStream
-		space: 1;
-		nextPut: $*;
-		space: 1;
-		yourself.
+	aStream nextPutAll: ' __mul__: '.
 %

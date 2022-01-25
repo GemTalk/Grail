@@ -8,9 +8,5 @@ category: 'other'
 method: AddAst
 printSmalltalkOn: aStream
 
-	aStream
-		space: 1;
-		nextPut: $+;
-		space: 1;
-		yourself.
+	aStream nextPutAll: ' __add__: '.
 %

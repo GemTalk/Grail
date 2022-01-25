@@ -5847,6 +5847,40 @@ doit
 StringLiteralsTestCase category: 'Tests'
 %
 set compile_env: 0
+! ------------------- Class definition for TranslatorTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'TranslatorTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+TranslatorTestCase category: 'Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for TranslateOperatorsTestCase
+expectvalue /Class
+doit
+TranslatorTestCase subclass: 'TranslateOperatorsTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+TranslateOperatorsTestCase category: 'Tests'
+%
+set compile_env: 0
 ! ------------------- Class definition for PythonTestResource
 expectvalue /Class
 doit
@@ -6106,6 +6140,8 @@ input SystemExit.gs
 input SystemExitTest.gs
 input TabError.gs
 input TimeoutError.gs
+input TranslateOperatorsTestCase.gs
+input TranslatorTestCase.gs
 input TryAst.gs
 input tuple.gs
 input TupleAst.gs

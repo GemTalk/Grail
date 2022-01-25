@@ -22,7 +22,7 @@ category: 'other'
 method: BinOpAst
 messagePrecedence
 
-	^2
+	^3
 %
 category: 'other'
 method: BinOpAst

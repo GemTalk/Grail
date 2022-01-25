@@ -35,7 +35,7 @@ method: OperatorsTestCase
 testEq
 
 	| x |
-	x := self statementsAt: 9.
+	x := self statementsAt: 18.
 	self 
 		assert: (x isKindOf: ExprAst);
 		yourself.
@@ -57,7 +57,7 @@ method: OperatorsTestCase
 testGtE
 
 	| x |
-	x := self statementsAt: 10.
+	x := self statementsAt: 19.
 	self 
 		assert: (x isKindOf: ExprAst);
 		yourself.
@@ -79,7 +79,7 @@ method: OperatorsTestCase
 testInvert
 
 	| x |
-	x := self statementsAt: 6.
+	x := self statementsAt: 15.
 	self 
 		assert: (x isKindOf: ExprAst);
 		yourself.
@@ -95,7 +95,7 @@ method: OperatorsTestCase
 testMod
 
 	| x |
-	x := self statementsAt: 2.
+	x := self statementsAt: 7.
 	self 
 		assert: (x isKindOf: ExprAst);
 		yourself.
@@ -114,7 +114,7 @@ method: OperatorsTestCase
 testNestedAdd
 
 	| x |
-	x := self statementsAt: 3.
+	x := self statementsAt: 12.
 	self 
 		assert: (x isKindOf: ExprAst);
 		yourself.
@@ -137,7 +137,7 @@ method: OperatorsTestCase
 testNestedEq
 
 	| x y |
-	x := self statementsAt: 11.
+	x := self statementsAt: 20.
 	self 
 		assert: (x isKindOf: ExprAst);
 		yourself.
@@ -162,7 +162,7 @@ method: OperatorsTestCase
 testNestedGtE
 
 	| x y |
-	x := self statementsAt: 12.
+	x := self statementsAt: 21.
 	self 
 		assert: (x isKindOf: ExprAst);
 		yourself.
@@ -187,7 +187,7 @@ method: OperatorsTestCase
 testNestedMult
 
 	| x |
-	x := self statementsAt: 4.
+	x := self statementsAt: 13.
 	self 
 		assert: (x isKindOf: ExprAst);
 		yourself.
@@ -210,7 +210,7 @@ method: OperatorsTestCase
 testUSub
 
 	| x |
-	x := self statementsAt: 5.
+	x := self statementsAt: 14.
 	self 
 		assert: (x isKindOf: ExprAst);
 		yourself.

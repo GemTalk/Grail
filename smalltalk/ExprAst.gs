@@ -12,3 +12,9 @@ initialize
 	value := self expression.
 	self readPosition.
 %
+category: 'other'
+method: ExprAst
+printSmalltalkOn: aStream
+
+	self smalltalkSourceFor: value parenthesisIf: 3 on: aStream
+%
