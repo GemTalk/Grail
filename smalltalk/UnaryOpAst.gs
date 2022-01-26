@@ -22,3 +22,15 @@ initialize
 	operand := self expression.
 	self readPosition.
 %
+category: 'other'
+method: UnaryOpAst
+messagePrecedence
+
+	^2
+%
+category: 'other'
+method: UnaryOpAst
+printSmalltalkOn: aStream
+
+	self smalltalkSourceFor: operand parenthesisIf: 3 on: aStream.
+%

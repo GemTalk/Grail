@@ -5864,10 +5864,10 @@ doit
 TranslatorTestCase category: 'Tests'
 %
 set compile_env: 0
-! ------------------- Class definition for TranslateOperatorsTestCase
+! ------------------- Class definition for TranslateBinaryOperatorsTestCase
 expectvalue /Class
 doit
-TranslatorTestCase subclass: 'TranslateOperatorsTestCase'
+TranslatorTestCase subclass: 'TranslateBinaryOperatorsTestCase'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -5878,7 +5878,41 @@ TranslatorTestCase subclass: 'TranslateOperatorsTestCase'
 %
 expectvalue /Class
 doit
-TranslateOperatorsTestCase category: 'Tests'
+TranslateBinaryOperatorsTestCase category: 'Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for TranslateComparisonOperatorsTestCase
+expectvalue /Class
+doit
+TranslatorTestCase subclass: 'TranslateComparisonOperatorsTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+TranslateComparisonOperatorsTestCase category: 'Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for TranslateUnaryOperatorsTestCase
+expectvalue /Class
+doit
+TranslatorTestCase subclass: 'TranslateUnaryOperatorsTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+TranslateUnaryOperatorsTestCase category: 'Tests'
 %
 set compile_env: 0
 ! ------------------- Class definition for PythonTestResource
@@ -6140,7 +6174,9 @@ input SystemExit.gs
 input SystemExitTest.gs
 input TabError.gs
 input TimeoutError.gs
-input TranslateOperatorsTestCase.gs
+input TranslateBinaryOperatorsTestCase.gs
+input TranslateComparisonOperatorsTestCase.gs
+input TranslateUnaryOperatorsTestCase.gs
 input TranslatorTestCase.gs
 input TryAst.gs
 input tuple.gs

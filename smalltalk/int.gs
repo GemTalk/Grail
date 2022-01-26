@@ -52,6 +52,17 @@ ___value: aNumber
 		___value: aNumber asInteger;
 		yourself
 %
+category: 'Smalltalk'
+classmethod: int
+with: aNumber
+
+	(aNumber isKindOf: Number) ifFalse: [
+		ValueError signal: 'int() arg is a malformed string'.
+	].
+	^self basicNew
+		___value: aNumber asInteger;
+		yourself
+%
 ! ------------------- Instance methods for int
 set compile_env: 0
 category: 'Python-int'

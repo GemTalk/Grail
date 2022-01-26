@@ -35,7 +35,7 @@ method: OperatorsTestCase
 testEq
 
 	| x |
-	x := self statementsAt: 18.
+	x := self statementsAt: 20.
 	self 
 		assert: (x isKindOf: ExprAst);
 		yourself.
@@ -57,7 +57,7 @@ method: OperatorsTestCase
 testGtE
 
 	| x |
-	x := self statementsAt: 19.
+	x := self statementsAt: 21.
 	self 
 		assert: (x isKindOf: ExprAst);
 		yourself.
@@ -137,7 +137,7 @@ method: OperatorsTestCase
 testNestedEq
 
 	| x y |
-	x := self statementsAt: 20.
+	x := self statementsAt: 30.
 	self 
 		assert: (x isKindOf: ExprAst);
 		yourself.
@@ -162,7 +162,7 @@ method: OperatorsTestCase
 testNestedGtE
 
 	| x y |
-	x := self statementsAt: 21.
+	x := self statementsAt: 31.
 	self 
 		assert: (x isKindOf: ExprAst);
 		yourself.

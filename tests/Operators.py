@@ -21,6 +21,8 @@
 # unary operators
 -100
 ~200
++100
+not False
 
 # nested unary operators
 -+300
@@ -29,6 +31,15 @@
 # comparison operators
 10 == 20
 25 >= 15
+25 > 15
+25 < 15
+15 <= 25
+15 != 15
+False is True
+False is not True
+3 in [1, 2, 3]
+3 not in [1, 2, 3]
+
 
 # nested comparison operators
 11 == 22 == 33
