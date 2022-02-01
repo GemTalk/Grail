@@ -45,11 +45,13 @@ category: 'other'
 method: TranslateComparisonOperatorsTestCase
 testTranslateInExpr
 
+	"TODO"
+
 	| stream x |
 	x := (self statementsAt: 28).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = '(False is_not: True)'.
+	self assert: stream contents = '((list ___value: { (int with: 1). (int with: 2). (int with: 3). }) __contains__: (int with: 3))'.
 %
 category: 'other'
 method: TranslateComparisonOperatorsTestCase
@@ -109,16 +111,34 @@ testTranslateNestedComparisonExpr
 	x := (self statementsAt: 30).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = '(((int with: 11) __eq__: (int with: 22)) __eq__: (int with: 33))'.
+	self assert: stream contents equals: '([
+	| lhs rhs |
+	((int with: 11) __eq__: (rhs := int with: 22)) __and__: [(rhs __eq__: (rhs := int with: 33)) __and__: [rhs __eq__: (int with: 44)]]
+] value)'.
 
 	x := (self statementsAt: 31).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = '(((int with: 44) __gt__: (int with: 55)) __gt__: (int with: 66))'.
+	self assert: stream contents equals: '([
+	| lhs rhs |
+	((int with: 44) __ge__: (rhs := int with: 55)) __and__: [rhs __ge__: (int with: 66)]
+] value)'.
+
+	x := (self statementsAt: 32).
+	stream := WriteStream on: String new.
+	x printSmalltalkOn: stream.
+	self assert: stream contents equals: '([
+	| lhs rhs |
+	(((lhs := str ___value: ''hello'') __contains__: (str ___value: ''he'')) ___ignore: (rhs := lhs)) __and__: [(((lhs := str ___value: ''hello world'') __contains__: rhs) ___ignore: (rhs := lhs)) __and__: [rhs __eq__: (str ___value: ''hello world'')]]
+] value)'.
+
+	self assert: stream contents evaluate ___value equals: 1
 %
 category: 'other'
 method: TranslateComparisonOperatorsTestCase
 testTranslateNotInExpr
+	
+	"TODO"
 
 	| stream x |
 	x := (self statementsAt: 29).

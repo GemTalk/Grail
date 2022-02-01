@@ -24,6 +24,15 @@ ___value: anObject
 set compile_env: 0
 category: 'other'
 method: bool
+___ignore: anObject
+
+	"See InAst >> printSmalltalkOn:left:rightList:"
+
+
+	^self
+%
+category: 'other'
+method: bool
 ___value
 
 	^value

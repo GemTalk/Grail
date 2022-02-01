@@ -13,11 +13,18 @@ ___value: aString
 %
 ! ------------------- Instance methods for str
 set compile_env: 0
+set compile_env: 0
+category: 'Python'
+method: str
+__contains__: aPyStr
+
+	^bool ___value: (value includesString: aPyStr ___value)
+%
 category: 'Python'
 method: str
 __eq__: anObject
 
-	^(anObject isKindOf: str) and: [value = anObject ___value]
+	^bool ___value: ((anObject isKindOf: str) and: [value = anObject ___value])
 %
 category: 'Python'
 method: str
@@ -30,6 +37,12 @@ method: str
 __init__: aString
 
 	value := aString.
+%
+category: 'Python'
+method: str
+hash
+
+	^value hash
 %
 set compile_env: 0
 category: 'Smalltalk'

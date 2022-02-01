@@ -14,3 +14,20 @@ initialize
 	ctx := ExpressionContextAst parent: self.
 	self readPosition.
 %
+category: 'other'
+method: ListAst
+messagePrecedence
+	
+	^3
+%
+category: 'other'
+method: ListAst
+printSmalltalkOn: aStream
+
+	aStream nextPutAll: 'list ___value: { '.
+	elts do: [ :elt |
+		self smalltalkSourceFor: elt parenthesisIf: 1 on: aStream.
+		aStream nextPutAll: '. '.
+	].
+	aStream nextPut: $}.
+%

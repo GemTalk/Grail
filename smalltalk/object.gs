@@ -120,7 +120,7 @@ __eq__: anObject
 
 " 	<primitive: 110>
 	self primitiveFailed"
-	^self == anObject
+	^bool ___value: self == anObject
 %
 category: 'Python'
 method: object
@@ -201,7 +201,7 @@ __setattr__: aKey _: aValue
 
 	| symbol |
 	symbol := aKey ___string asSymbol.
-	(self __dir__ __contains__: aKey) ifTrue: [
+	(self __dir__ __contains__: aKey) ___value == 1 ifTrue: [
       	AttributeError signal: self __class__ name asString printString, ' object attribute ', aKey ___string printString , ' is read-only'.
   ].
 
@@ -250,7 +250,10 @@ ___yourself
 category: 'Smalltalk'
 method: object
 = other
-	^self __eq__: other
+	(self __eq__: other) ___value == 1 ifTrue: [
+		^true
+	].
+	^false
 %
 category: 'Smalltalk'
 method: object

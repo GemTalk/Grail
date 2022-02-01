@@ -8,18 +8,18 @@ category: 'done'
 method: frozensetTest
 test__and__
 	| a b c |
-	a := frozenset ___value: { 'a'. 'b'. 'c'. 'd' }.
-	b := frozenset ___value: { 'b'. 'c'. 'd'. 'e' }.
+	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
+	b := frozenset ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
 
 	c := a __and__: b.
 
 	self
 		assert: c __class__ equals: self targetClass;
 		assert: a __len__ equals: (self int: 4);
-		deny:   (a __contains__: 'e');
+		deny:   (a __contains__: (self str: 'e'));
 		assert: c __len__ equals: (self int: 3);
-		deny:   (c __contains__: 'e');
-		assert: (c __contains__: 'd');
+		deny:   (c __contains__: (self str: 'e'));
+		assert: (c __contains__: (self str: 'd'));
 		yourself
 %
 category: 'done'
@@ -237,17 +237,17 @@ category: 'done'
 method: frozensetTest
 test__or__
 	| a b c |
-	a := self targetInstance: { 'a'. 'b'. 'c'. 'd' }.
-	b := self targetInstance: { 'b'. 'c'. 'd'. 'e' }.
+	a := self targetInstance: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
+	b := self targetInstance: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
 
 	c := a __or__: b.
 
 	self
 		assert: c __class__ equals: self targetClass;
 		assert: a __len__ equals: (self int: 4);
-		deny:   (a __contains__: 'e');
+		deny:   (a __contains__: (self str: 'e'));
 		assert: c __len__ equals: (self int: 5);
-		assert: (c __contains__: 'e');
+		assert: (c __contains__: (self str: 'e'));
 		yourself
 %
 category: 'done'
@@ -267,18 +267,18 @@ category: 'done'
 method: frozensetTest
 test__rand__
 	| a b c |
-	a := frozenset ___value: { 'a'. 'b'. 'c'. 'd' }.
-	b := frozenset ___value: { 'b'. 'c'. 'd'. 'e' }.
+	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
+	b := frozenset ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
 
 	c := a __rand__: b.
 
 	self
 		assert: c __class__ equals: self targetClass;
 		assert: a __len__ equals: (self int: 4);
-		deny:   (a __contains__: 'e');
+		deny:   (a __contains__: (self str: 'e'));
 		assert: c __len__ equals: (self int: 3);
-		deny:   (c __contains__: 'e');
-		assert: (c __contains__: 'd');
+		deny:   (c __contains__: (self str: 'e'));
+		assert: (c __contains__: (self str: 'd'));
 		yourself
 %
 category: 'done'
@@ -298,17 +298,17 @@ category: 'done'
 method: frozensetTest
 test__ror__
 	| a b c |
-	a := self targetInstance: { 'a'. 'b'. 'c'. 'd' }.
-	b := self targetInstance: { 'b'. 'c'. 'd'. 'e' }.
+	a := self targetInstance: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
+	b := self targetInstance: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
 
 	c := a __ror__: b.
 
 	self
 		assert: c __class__ equals: self targetClass;
 		assert: a __len__ equals: (self int: 4);
-		deny:   (a __contains__: 'e');
+		deny:   (a __contains__: (self str: 'e'));
 		assert: c __len__ equals: (self int: 5);
-		assert: (c __contains__: 'e');
+		assert: (c __contains__: (self str: 'e'));
 		yourself
 %
 category: 'done'
@@ -328,19 +328,19 @@ category: 'done'
 method: frozensetTest
 test__rsub__
 	| a b c |
-	a := frozenset ___value: { 'a'. 'b'. 'c'. 'd' }.
-	b := frozenset ___value: { 'b'. 'c'. 'd'. 'e' }.
+	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
+	b := frozenset ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
 
 	c := a __rsub__: b.
 
 	self
 		assert: c __class__ equals: self targetClass;
 		assert: b __len__ equals: (self int: 4);
-		deny:   (b __contains__: 'a');
-		assert: (b __contains__: 'e');
+		deny:   (b __contains__: (self str: 'a'));
+		assert: (b __contains__: (self str: 'e'));
 		assert: c __len__ equals: (self int: 1);
-		deny:   (c __contains__: 'a');
-		assert: (c __contains__: 'e');
+		deny:   (c __contains__: (self str: 'a'));
+		assert: (c __contains__: (self str: 'e'));
 		yourself
 %
 category: 'done'
@@ -360,17 +360,17 @@ category: 'done'
 method: frozensetTest
 test__rxor__
 	| a b c bb |
-	a := frozenset ___value: { 'a'. 'b'. 'c' }.
-	b := frozenset ___value: { 'b'. 'c' }.
-	bb := frozenset ___value: { 'b'. 'c' }.
-	c := frozenset ___value: { 'a' }.
+	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c' }.
+	b := frozenset ___value: { self str: 'b'. self str: 'c' }.
+	bb := frozenset ___value: { self str: 'b'. self str: 'c' }.
+	c := frozenset ___value: { self str: 'a' }.
 
 	self
 		assert: (a __rxor__: b) __class__ equals: self targetClass;
 		assert: (a __rxor__: b) __len__ equals: (self int: 1);
-		assert: ((a __rxor__: b) __contains__: 'a');
+		assert: ((a __rxor__: b) __contains__: (self str: 'a'));
 		assert: (b __rxor__: a) __len__ equals: (self int: 1);
-		assert: ((b __rxor__: a) __contains__: 'a');
+		assert: ((b __rxor__: a) __contains__: (self str: 'a'));
 		assert: (b __rxor__: bb) __len__ equals: (self int: 0);
 		assert: (bb __rxor__: b) __len__ equals: (self int: 0);
 		assert: (b __rxor__: c) equals: (b union: c);
@@ -402,55 +402,55 @@ category: 'done'
 method: frozensetTest
 test__sub__
 	| a b c |
-	a := frozenset ___value: { 'a'. 'b'. 'c'. 'd' }.
-	b := frozenset ___value: { 'b'. 'c'. 'd'. 'e' }.
+	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
+	b := frozenset ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
 
 	c := a __sub__: b.
 
 	self
 		assert: c __class__ equals: self targetClass;
 		assert: a __len__ equals: (self int: 4);
-		deny:   (a __contains__: 'e');
-		assert: (a __contains__: 'b');
+		deny:   (a __contains__: (self str: 'e'));
+		assert: (a __contains__: (self str: 'b'));
 		assert: c __len__ equals: (self int: 1);
-		deny:   (c __contains__: 'e');
-		assert: (c __contains__: 'a');
+		deny:   (c __contains__: (self str: 'e'));
+		assert: (c __contains__: (self str: 'a'));
 		yourself
 %
 category: 'done'
 method: frozensetTest
 test__sub__Set
 	| a b c |
-	a := frozenset ___value: { 'a'. 'b'. 'c'. 'd' }.
-	b := set ___value: { 'b'. 'c'. 'd'. 'e' }.
+	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
+	b := set ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
 
 	c := a __sub__: b.
 
 	self
 		assert: c __class__ equals: self targetClass;
 		assert: a __len__ equals: (self int: 4);
-		deny:   (a __contains__: 'e');
-		assert: (a __contains__: 'b');
+		deny:   (a __contains__: (self str: 'e'));
+		assert: (a __contains__: (self str: 'b'));
 		assert: c __len__ equals: (self int: 1);
-		deny:   (c __contains__: 'e');
-		assert: (c __contains__: 'a');
+		deny:   (c __contains__: (self str: 'e'));
+		assert: (c __contains__: (self str: 'a'));
 		yourself
 %
 category: 'done'
 method: frozensetTest
 test__xor__
 	| a b c bb |
-	a := frozenset ___value: { 'a'. 'b'. 'c' }.
-	b := frozenset ___value: { 'b'. 'c' }.
-	bb := frozenset ___value: { 'b'. 'c' }.
-	c := frozenset ___value: { 'a' }.
+	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c' }.
+	b := frozenset ___value: { self str: 'b'. self str: 'c' }.
+	bb := frozenset ___value: { self str: 'b'. self str: 'c' }.
+	c := frozenset ___value: { self str: 'a' }.
 
 	self
 		assert: (a __rxor__: b) __class__ equals: self targetClass;
 		assert: (a __xor__: b) __len__ equals: (self int: 1);
-		assert: ((a __xor__: b) __contains__: 'a');
+		assert: ((a __xor__: b) __contains__: (self str: 'a'));
 		assert: (b __xor__: a) __len__ equals: (self int: 1);
-		assert: ((b __xor__: a) __contains__: 'a');
+		assert: ((b __xor__: a) __contains__: (self str: 'a'));
 		assert: (b __xor__: bb) __len__ equals: (self int: 0);
 		assert: (bb __xor__: b) __len__ equals: (self int: 0);
 		assert: (b __xor__: c) equals: (b union: c);
@@ -471,86 +471,86 @@ category: 'done'
 method: frozensetTest
 testcopy
    | list lost |
-	list := self targetInstance: { 'a'. 'b'. 'c' }.
+	list := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c' }.
 
 	lost := list copy.
 	self
 		assert: lost __class__ equals: self targetClass;
 		assert: lost __len__ equals: (self int: 3);
-		assert: (lost __contains__: 'a');
-		assert: (lost __contains__: 'c');
+		assert: (lost __contains__: (self str: 'a'));
+		assert: (lost __contains__: (self str: 'c'));
 		yourself
 %
 category: 'done'
 method: frozensetTest
 testdifference
 	| a b c |
-	a := frozenset ___value: { 'a'. 'b'. 'c'. 'd' }.
-	b := frozenset ___value: { 'b'. 'c'. 'd'. 'e' }.
+	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
+	b := frozenset ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
 
 	c := a difference: b.
 
 	self
 		assert: c __class__ equals: self targetClass;
 		assert: a __len__ equals: (self int: 4);
-		deny:   (a __contains__: 'e');
-		assert: (a __contains__: 'b');
+		deny:   (a __contains__: (self str: 'e'));
+		assert: (a __contains__: (self str: 'b'));
 		assert: c __len__ equals: (self int: 1);
-		assert: (c __contains__: 'a');
+		assert: (c __contains__: (self str: 'a'));
 		yourself
 %
 category: 'done'
 method: frozensetTest
 testdifferenceSet
 	| a b c |
-	a := frozenset ___value: { 'a'. 'b'. 'c'. 'd' }.
-	b := set ___value: { 'b'. 'c'. 'd'. 'e' }.
+	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
+	b := set ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
 
 	c := a difference: b.
 
 	self
 		assert: c __class__ equals: self targetClass;
 		assert: a __len__ equals: (self int: 4);
-		deny:   (a __contains__: 'e');
-		assert: (a __contains__: 'b');
+		deny:   (a __contains__: (self str: 'e'));
+		assert: (a __contains__: (self str: 'b'));
 		assert: c __len__ equals: (self int: 1);
-		assert: (c __contains__: 'a');
+		assert: (c __contains__: (self str: 'a'));
 		yourself
 %
 category: 'done'
 method: frozensetTest
 testintersection
 	| a b c |
-	a := frozenset ___value: { 'a'. 'b'. 'c'. 'd' }.
-	b := frozenset ___value: { 'b'. 'c'. 'd'. 'e' }.
+	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
+	b := frozenset ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
 
 	c := a intersection: b.
 
 	self
 		assert: c __class__ equals: self targetClass;
 		assert: a __len__ equals: (self int: 4);
-		deny:   (a __contains__: 'e');
+		deny:   (a __contains__: (self str: 'e'));
 		assert: c __len__ equals: (self int: 3);
-		deny:   (c __contains__: 'e');
-		assert: (c __contains__: 'd');
+		deny:   (c __contains__: (self str: 'e'));
+		assert: (c __contains__: (self str: 'd'));
 		yourself
 %
 category: 'done'
 method: frozensetTest
 testintersectionSet
 	| a b c |
-	a := frozenset ___value: { 'a'. 'b'. 'c'. 'd' }.
-	b := set ___value: { 'b'. 'c'. 'd'. 'e' }.
+	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
+	b := set ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
 
 	c := a intersection: b.
 
 	self
 		assert: c __class__ equals: self targetClass;
 		assert: a __len__ equals: (self int: 4);
-		deny:   (a __contains__: 'e');
+		deny:   (a __contains__: (self str: 'e'));
 		assert: c __len__ equals: (self int: 3);
-		deny:   (c __contains__: 'e');
-		assert: (c __contains__: 'd');
+		deny:   (c __contains__: (self str: 'e'));
+		assert: (c __contains__: (self str: 'd'));
 		yourself
 %
 category: 'done'
@@ -614,17 +614,17 @@ category: 'done'
 method: frozensetTest
 testsymmetric_difference
 	| a b c bb |
-	a := frozenset ___value: { 'a'. 'b'. 'c' }.
-	b := frozenset ___value: { 'b'. 'c' }.
-	bb := frozenset ___value: { 'b'. 'c' }.
-	c := frozenset ___value: { 'a' }.
+	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c' }.
+	b := frozenset ___value: { self str: 'b'. self str: 'c' }.
+	bb := frozenset ___value: { self str: 'b'. self str: 'c' }.
+	c := frozenset ___value: { self str: 'a' }.
 
 	self
 		assert: (a symmetric_difference: b) __class__ equals: self targetClass;
 		assert: (a symmetric_difference: b) __len__ equals: (self int: 1);
-		assert: ((a symmetric_difference: b) __contains__: 'a');
+		assert: ((a symmetric_difference: b) __contains__: (self str: 'a'));
 		assert: (b symmetric_difference: a) __len__ equals: (self int: 1);
-		assert: ((b symmetric_difference: a) __contains__: 'a');
+		assert: ((b symmetric_difference: a) __contains__: (self str: 'a'));
 		assert: (b symmetric_difference: bb) __len__ equals: (self int: 0);
 		assert: (bb symmetric_difference: b) __len__ equals: (self int: 0);
 		assert: (b symmetric_difference: c) equals: (b union: c);
@@ -645,17 +645,17 @@ category: 'done'
 method: frozensetTest
 testunion
 	| a b c |
-	a := frozenset ___value: { 'a'. 'b'. 'c'. 'd' }.
-	b := frozenset ___value: { 'b'. 'c'. 'd'. 'e' }.
+	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
+	b := frozenset ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
 
 	c := a union: b.
 
 	self
 		assert: c __class__ equals: self targetClass;
 		assert: a __len__ equals: (self int: 4);
-		deny:   (a __contains__: 'e');
+		deny:   (a __contains__: (self str: 'e'));
 		assert: c __len__ equals: (self int: 5);
-		assert: (c __contains__: 'e');
+		assert: (c __contains__: (self str: 'e'));
 		yourself
 %
 category: 'done'

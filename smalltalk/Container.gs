@@ -68,7 +68,12 @@ category: 'Python'
 method: Container
 __contains__: aPyObject
 
-	^container includes: aPyObject
+	container do: [ :each |
+		(each __eq__: aPyObject) ___value == 1 ifTrue: [
+			^bool ___value: true
+		].
+	].
+	^bool ___value: false
 %
 category: 'Python'
 method: Container

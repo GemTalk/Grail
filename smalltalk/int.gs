@@ -81,7 +81,13 @@ category: 'Python-int'
 method: int
 __and__: anObject
 
-	^int ___value: (value bitAnd: anObject ___value)
+	| other |
+	other := anObject.
+	(other isKindOf: ExecBlock) ifTrue: [
+		other := other value. "Evaluate the block"
+	].
+
+	^bool ___value: (value bitAnd: other ___value)
 %
 category: 'Python-int'
 method: int

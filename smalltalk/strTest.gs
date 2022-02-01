@@ -12,7 +12,15 @@ test__add__
 category: 'todo'
 method: strTest
 test__contains__
-   #pyTodo
+   
+	| x |
+
+	x := str ___value: 'hello world'.
+
+	self
+		assert: (x __contains__: (str ___value: 'hello')) ___value equals: 1;
+		assert: (x __contains__: (str ___value: 'x')) ___value equals: 0;
+		yourself.
 %
 category: 'todo'
 method: strTest

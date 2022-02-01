@@ -26,11 +26,18 @@ category: 'done'
 method: intTest
 test__and__
 
-   self
+	| x |
+
+	self
 		assert: ((self int:  3) __and__: (self int: 1)) ___value equals: 1;
         assert: ((self int: -3) __and__: (self int: 1)) ___value equals: 1;
         assert: ((self int:  3) __and__: (self int: 2)) ___value equals: 2;
         assert: ((self int: -3) __and__: (self int: 2)) ___value equals: 0;
+		yourself.
+
+	self
+		assert: (((self int: 1) __lt__: (x := self int: 2)) __and__: [ (x __lt__: (x := self int: 3)) __and__: [ x __lt__: (x := self int: 4) ]]) equals: (self int: 1);
+		assert: (((self int: 1) __lt__: (x := self int: 2)) __and__: [ (x __lt__: (x := self int: 3)) __and__: [ x __lt__: (x := self int: 2) ]]) equals: (self int: 0);
 		yourself.
 %
 category: 'done'
