@@ -63,11 +63,11 @@ __setitem__: anElement _: anIndex
 	"https://docs.python.org/3/reference/datamodel.html#object.__setitem__"
 
 	| index |
-	index := anIndex < 0 ifTrue: [self __len__ ___value + anIndex] ifFalse: [anIndex].
+	index := anIndex ___value < 0 ifTrue: [self __len__ ___value + anIndex ___value] ifFalse: [anIndex ___value].
 	(index < 0 or: [	index >= self __len__ ___value])
 		ifTrue: [IndexError signal: 'list assignment index out of range'].
 
-	^self ___container at: index + 1 put: anElement
+	^container at: index + 1 put: anElement
 %
 category: 'Python'
 method: list

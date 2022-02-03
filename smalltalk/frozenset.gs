@@ -31,7 +31,7 @@ category: 'Python'
 method: frozenset
 __eq__: otherCollection
 
-	^self ___container = otherCollection ___container
+	^bool ___value: (self ___container = otherCollection ___container)
 %
 category: 'Python'
 method: frozenset

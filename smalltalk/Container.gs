@@ -80,11 +80,11 @@ method: Container
 __eq__: otherCollection
 	| size |
 
-	(size := self __len__ ___value) = otherCollection __len__ ___value ifFalse: [^false].
+	(size := self __len__ ___value) = otherCollection __len__ ___value ifFalse: [^bool ___value: false].
 
 	1 to: size do: [:index |
-		(self ___container at: index) = (otherCollection ___container at: index) ifFalse: [^false]].
-	^true
+		(self ___container at: index) = (otherCollection ___container at: index) ifFalse: [^bool ___value: false]].
+	^bool ___value: true
 %
 category: 'Python'
 method: Container
@@ -184,7 +184,7 @@ __mul__: aPyIntMultiplier
 category: 'Python'
 method: Container
 __ne__: otherCollection
-	^(self __eq__: otherCollection) not
+	^bool ___value: ((self __eq__: otherCollection) ___value bitXor: 1)
 %
 category: 'Python'
 method: Container

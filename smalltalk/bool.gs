@@ -12,6 +12,11 @@ ___value: anObject
 			___value: (anObject ifTrue: [1] ifFalse: [0]);
 			yourself
 	].
+	(anObject isKindOf: int) ifTrue: [
+		^self basicNew
+			___value: (anObject ___value ~= 0 ifTrue: [1] ifFalse: [0]);
+			yourself
+	].
 	(anObject isKindOf: Number) ifTrue: [
 		^self basicNew
 			___value: (anObject ~= 0 ifTrue: [1] ifFalse: [0]);
@@ -36,6 +41,12 @@ method: bool
 ___value
 
 	^value
+%
+category: 'other'
+method: bool
+__and__: anObject
+
+	^bool ___value: (super __and__: anObject)
 %
 set compile_env: 0
 category: 'Smalltalk'

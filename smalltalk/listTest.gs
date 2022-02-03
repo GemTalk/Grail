@@ -347,26 +347,26 @@ test__rmul__
 category: 'done'
 method: listTest
 test__setitem__
-   | list |
-	list := self targetInstance __add__: { 'o' }.
-	list __setitem__: 'u' _: 0.
+   | x |
+	x := list ___value: { self str: 'o' }.
+	x __setitem__: (self str: 'u') _: (self int: 0).
 
 	self
-		deny:(list __contains__: 'o');
-		assert:(list __contains__: 'u');
-		assert: list __len__ equals: (self int: 1);
+		deny:(x __contains__: (self str: 'o'));
+		assert:(x __contains__: (self str: 'u'));
+		assert: x __len__ equals: (self int: 1);
 		yourself
 %
 category: 'done'
 method: listTest
 test__setitem__negative
    | list |
-	list := self targetInstance __add__: { 'o' }.
-	list __setitem__: 'u' _: -1.
+	list := self targetInstance __add__: { self str:'o' }.
+	list __setitem__: (self str: 'u') _: (self int: -1).
 
 	self
-		deny:(list __contains__: 'o');
-		assert:(list __contains__: 'u');
+		deny:(list __contains__: (self str: 'o'));
+		assert:(list __contains__: (self str: 'u'));
 		assert: list __len__ equals: (self int: 1);
 		yourself
 %
@@ -417,14 +417,14 @@ category: 'done'
 method: listTest
 testappend
    | list |
-	list := self targetInstance __add__: { 'a'. 'b'. 'c' }.
+	list := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c' }.
 
-	list append: 'o'.
+	list append: (self str: 'o').
 
 	self
 		assert: list __len__ equals: (self int: 4);
-		assert: (list __contains__: 'o');
-		assert: (list __getitem__: (self int: -1)) equals: 'o';
+		assert: (list __contains__: (self str: 'o'));
+		assert: (list __getitem__: (self int: -1)) equals: (self str: 'o');
 		yourself
 %
 category: 'done'

@@ -87,7 +87,7 @@ __and__: anObject
 		other := other value. "Evaluate the block"
 	].
 
-	^bool ___value: (value bitAnd: other ___value)
+	^int ___value: (value bitAnd: other ___value)
 %
 category: 'Python-int'
 method: int

@@ -82,7 +82,7 @@ __lt__: otherCollection
 category: 'Python'
 method: dict
 __ne__: otherCollection
-	^(self __eq__: otherCollection) not
+	^bool ___value: ((self __eq__: otherCollection) ___value bitXor: 1)
 %
 category: 'Python'
 method: dict
