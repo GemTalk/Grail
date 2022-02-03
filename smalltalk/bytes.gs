@@ -708,7 +708,7 @@ category: 'Python'
 method: bytes
 startswith: aPyBytesSublist _: aPyIntStart _: aPyBytesEnd
 
-	^(self find: aPyBytesSublist _: aPyIntStart _:aPyBytesEnd) = aPyIntStart
+	^bool ___value: (self find: aPyBytesSublist _: aPyIntStart _:aPyBytesEnd) = aPyIntStart
 %
 category: 'Python'
 method: bytes

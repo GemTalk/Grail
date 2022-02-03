@@ -10,4 +10,3 @@ isAbstract
 	^self == ExpressionAst
 %
 ! ------------------- Instance methods for ExpressionAst
-set compile_env: 0

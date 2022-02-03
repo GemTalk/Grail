@@ -46,18 +46,18 @@ category: 'Python'
 method: set
 __eq__: otherCollection
 
-	^self ___container = otherCollection ___container
+	^bool ___value: (self ___container = otherCollection ___container)
 %
 category: 'Python'
 method: set
 __ge__: otherCollection
-	^self issuperset: otherCollection
+	^bool ___value: (self issuperset: otherCollection)
 %
 category: 'Python'
 method: set
 __gt__: otherCollection
 
-	^(self __ge__: otherCollection) and: [self __ne__: otherCollection]
+	^bool ___value: ((self __ge__: otherCollection) ___value == 1 and: [(self __ne__: otherCollection) ___value == 1])
 %
 category: 'Python'
 method: set
@@ -134,6 +134,24 @@ method: set
 __rxor__: aSet
 
 	^aSet symmetric_difference: self
+%
+category: 'Python'
+method: set
+__str__
+
+	| index stream |
+	stream := WriteStream on: String new.
+	index := 1.
+	stream nextPut: ${.
+	container do: [ :each |
+		stream nextPutAll: each ___value printString.
+		index ~= container size ifTrue: [
+			stream nextPutAll: ', '.
+		].
+		index := index + 1.
+	].
+	stream nextPut: $}.
+	^stream contents
 %
 category: 'Python'
 method: set
@@ -217,7 +235,7 @@ remove: anElement
 
 	^self ___container
 		remove: anElement
-		ifAbsent: [KeyError signal: anElement printString ].
+		ifAbsent: [KeyError signal: anElement ___value printString ].
 %
 category: 'Python'
 method: set

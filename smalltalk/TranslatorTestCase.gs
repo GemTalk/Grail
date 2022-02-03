@@ -10,4 +10,3 @@ filename
 	self subclassResponsibility
 %
 ! ------------------- Instance methods for TranslatorTestCase
-set compile_env: 0
