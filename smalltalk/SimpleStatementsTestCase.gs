@@ -26,9 +26,9 @@ testArrayAssignment
 		assert: (x.value isKindOf: ListAst);
 		assert: (x.value.elts size == 2);
 		assert: ((y := x.value.elts at: 1) isKindOf: ConstantAst);
-		assert: (y.value = 'int with: 0');
+		assert: (y.value = 'int ___value: 0');
 		assert: ((y := x.value.elts at: 2) isKindOf: ConstantAst);
-		assert: (y.value = 'int with: 1');
+		assert: (y.value = 'int ___value: 1');
 		assert: (x.value.ctx isKindOf: LoadAst);
 		yourself.
 %
@@ -41,7 +41,7 @@ testAssignMultiple
 	self 
 		assert: (x isKindOf: AssignAst);
 		assert: (x.value isKindOf: ConstantAst);
-		assert: (x.value.value = 'int with: 2');
+		assert: (x.value.value = 'int ___value: 2');
 		assert: (x.targets size == 2);
 		assert: ((y := x.targets at: 1) isKindOf: NameAst);
 		assert: (y.id == #'var2');
@@ -60,7 +60,7 @@ testAssignSingle
 	self 
 		assert: (x isKindOf: AssignAst);
 		assert: (x.value isKindOf: ConstantAst);
-		assert: (x.value.value = 'int with: 1');
+		assert: (x.value.value = 'int ___value: 1');
 		assert: (x.targets size == 1);
 		assert: ((y := x.targets at: 1) isKindOf: NameAst);
 		assert: (y.id == #'var1');
@@ -128,7 +128,7 @@ testClassDefCls
 		assert: (z.id == #'x');
 		assert: (z.ctx isKindOf: StoreAst);
 		assert: (y.value isKindOf: ConstantAst);
-		assert: (y.value.value = 'int with: 3');
+		assert: (y.value.value = 'int ___value: 3');
 		assert: (x.decorator_list size == 0);
 		yourself.
 %
@@ -257,7 +257,7 @@ testIndexAssignment
 		assert: (y.id == #'i');
 		assert: (y.ctx isKindOf: StoreAst);
 		assert: (x.value isKindOf: ConstantAst);
-		assert: (x.value.value = 'int with: 0');
+		assert: (x.value.value = 'int ___value: 0');
 		yourself.
 %
 category: 'other'
@@ -400,9 +400,9 @@ testSwapAssignment
 		assert: (x.value isKindOf: TupleAst);
 		assert: (x.value.elts size == 2);
 		assert: ((y := x.value.elts at: 1) isKindOf: ConstantAst);
-		assert: (y.value = 'int with: 1');
+		assert: (y.value = 'int ___value: 1');
 		assert: ((y := x.value.elts at: 2) isKindOf: ConstantAst);
-		assert: (y.value = 'int with: 2');
+		assert: (y.value = 'int ___value: 2');
 		assert: (x.value.ctx isKindOf: LoadAst);
 		yourself.
 %
@@ -426,7 +426,7 @@ testYield
 		assert: ((y := x.body.body at: 1) isKindOf: ExprAst);
 		assert: (y.value isKindOf: YieldAst);
 		assert: (y.value.value isKindOf: ConstantAst);
-		assert: (y.value.value.value = 'int with: 123');
+		assert: (y.value.value.value = 'int ___value: 123');
 		assert: (x.decorator_list size == 0);
 		assert: (x.returns = 'None');
 		yourself.
@@ -451,7 +451,7 @@ testYieldAsync
 		assert: ((y := x.body.body at: 1) isKindOf: ExprAst);
 		assert: (y.value isKindOf:YieldAst);
 		assert: (y.value.value isKindOf: ConstantAst);
-		assert: (y.value.value.value = 'int with: 123');
+		assert: (y.value.value.value = 'int ___value: 123');
 		assert: (x.decorator_list size == 0);
 		assert: (x.returns = 'None');
 		yourself.

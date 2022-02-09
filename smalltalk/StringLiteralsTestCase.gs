@@ -116,7 +116,7 @@ testJoinedStrWithFormattedValueNum
 	child := x.values at: 2.
 	self
 		assert: (child isKindOf: FormattedValueAst);
-		assert: child.value.value = 'int with: 456';
+		assert: child.value.value = 'int ___value: 456';
 		yourself.
 	child := x.values at: 3.
 	self
