@@ -19,7 +19,8 @@ testTranslateAddExpr
 	x := (self statementsAt: 1).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = '((int with: 1) __add__: (int with: 2))'.
+	self assert: stream contents = '((int ___value: 1) __add__: (int ___value: 2))'.
+	self assert: stream contents evaluate equals: (int ___value: 3).
 %
 category: 'other'
 method: TranslateBinaryOperatorsTestCase
@@ -29,7 +30,8 @@ testTranslateBitAndExpr
 	x := (self statementsAt: 2).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = '((int with: 1) __and__: (int with: 1))'.
+	self assert: stream contents = '((int ___value: 1) __and__: (int ___value: 1))'.
+	self assert: stream contents evaluate equals: (int ___value: 1).
 %
 category: 'other'
 method: TranslateBinaryOperatorsTestCase
@@ -39,7 +41,8 @@ testTranslateBitLshiftExpr
 	x := (self statementsAt: 5).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = '((int with: 1) __lshift__: (int with: 2))'.
+	self assert: stream contents = '((int ___value: 1) __lshift__: (int ___value: 2))'.
+	self assert: stream contents evaluate equals: (int ___value: 4).
 %
 category: 'other'
 method: TranslateBinaryOperatorsTestCase
@@ -49,7 +52,8 @@ testTranslateBitOrExpr
 	x := (self statementsAt: 3).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = '((int with: 1) __or__: (int with: 1))'.
+	self assert: stream contents = '((int ___value: 1) __or__: (int ___value: 1))'.
+	self assert: stream contents evaluate equals: (int ___value: 1).
 %
 category: 'other'
 method: TranslateBinaryOperatorsTestCase
@@ -59,7 +63,8 @@ testTranslateBitRshiftExpr
 	x := (self statementsAt: 6).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = '((int with: 4) __rshift__: (int with: 2))'.
+	self assert: stream contents = '((int ___value: 4) __rshift__: (int ___value: 2))'.
+	self assert: stream contents evaluate equals: (int ___value: 1).
 %
 category: 'other'
 method: TranslateBinaryOperatorsTestCase
@@ -69,7 +74,8 @@ testTranslateBitXorExpr
 	x := (self statementsAt: 4).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = '((int with: 1) __xor__: (int with: 0))'.
+	self assert: stream contents = '((int ___value: 1) __xor__: (int ___value: 0))'.
+	self assert: stream contents evaluate equals: (int ___value: 1).
 %
 category: 'other'
 method: TranslateBinaryOperatorsTestCase
@@ -79,7 +85,8 @@ testTranslateFloorDivExpr
 	x := (self statementsAt: 9).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = '((int with: 3) __floordiv__: (int with: 2))'.
+	self assert: stream contents = '((int ___value: 3) __floordiv__: (int ___value: 2))'.
+	self assert: stream contents evaluate equals: (int ___value: 1).
 %
 category: 'other'
 method: TranslateBinaryOperatorsTestCase
@@ -89,7 +96,8 @@ testTranslateModExpr
 	x := (self statementsAt: 7).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = '((int with: 10) __mod__: (int with: 5))'.
+	self assert: stream contents = '((int ___value: 10) __mod__: (int ___value: 5))'.
+	self assert: stream contents evaluate equals: (int ___value: 0).
 %
 category: 'other'
 method: TranslateBinaryOperatorsTestCase
@@ -99,7 +107,8 @@ testTranslateNestedAddExpr
 	x := (self statementsAt: 12).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = '(((int with: 2) __add__: (int with: 4)) __add__: (int with: 6))'.
+	self assert: stream contents = '(((int ___value: 2) __add__: (int ___value: 4)) __add__: (int ___value: 6))'.
+	self assert: stream contents evaluate equals: (int ___value: 12).
 %
 category: 'other'
 method: TranslateBinaryOperatorsTestCase
@@ -109,7 +118,8 @@ testTranslateNestedMultExpr
 	x := (self statementsAt: 13).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = '(((int with: 7) __mul__: (int with: 8)) __mul__: (int with: 9))'.
+	self assert: stream contents = '(((int ___value: 7) __mul__: (int ___value: 8)) __mul__: (int ___value: 9))'.
+	self assert: stream contents evaluate equals: (int ___value: 504).
 %
 category: 'other'
 method: TranslateBinaryOperatorsTestCase
@@ -119,7 +129,8 @@ testTranslatePowExpr
 	x := (self statementsAt: 11).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = '((int with: 2) __pow__: (int with: 4))'.
+	self assert: stream contents = '((int ___value: 2) __pow__: (int ___value: 4))'.
+	self assert: stream contents evaluate equals: (int ___value: 16).
 %
 category: 'other'
 method: TranslateBinaryOperatorsTestCase
@@ -129,7 +140,8 @@ testTranslateSubExpr
 	x := (self statementsAt: 10).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = '((int with: 2) __sub__: (int with: 1))'.
+	self assert: stream contents = '((int ___value: 2) __sub__: (int ___value: 1))'.
+	self assert: stream contents evaluate equals: (int ___value: 1).
 %
 category: 'other'
 method: TranslateBinaryOperatorsTestCase
@@ -139,5 +151,6 @@ testTranslateTrueDivExpr
 	x := (self statementsAt: 8).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = '((int with: 10) __truediv__: (int with: 5))'.
+	self assert: stream contents = '((int ___value: 10) __truediv__: (int ___value: 5))'.
+	self assert: stream contents evaluate equals: (int ___value: 2).
 %

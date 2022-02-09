@@ -87,6 +87,7 @@ of the keyword selector until we find a method that exists.
 %
 ! ------------------- Instance methods for object
 set compile_env: 0
+set compile_env: 0
 category: 'Python'
 method: object
 __class__
@@ -224,6 +225,18 @@ method: object
 __subclasshook__
 
 	^NotImplementedType singleton
+%
+category: 'Python'
+method: object
+is_: anObject
+
+	^bool ___value: self ___value == anObject ___value.
+%
+category: 'Python'
+method: object
+is_not: anObject
+
+	^bool ___value: (self ___value == anObject ___value) not
 %
 set compile_env: 0
 category: 'Smalltalk'

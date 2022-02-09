@@ -4950,6 +4950,23 @@ doit
 passing category: 'BuiltIns-Tests'
 %
 set compile_env: 0
+! ------------------- Class definition for boolTest
+expectvalue /Class
+doit
+passing subclass: 'boolTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+boolTest category: 'BuiltIns-Tests'
+%
+set compile_env: 0
 ! ------------------- Class definition for bytearrayTest
 expectvalue /Class
 doit
@@ -5975,6 +5992,7 @@ input BlockAst.gs
 input BlockingIOError.gs
 input bool.gs
 input BoolOpAst.gs
+input boolTest.gs
 input BreakAst.gs
 input BrokenPipeError.gs
 input BufferError.gs

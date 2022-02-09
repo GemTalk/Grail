@@ -48,6 +48,12 @@ __and__: anObject
 
 	^bool ___value: (super __and__: anObject)
 %
+category: 'other'
+method: bool
+__not__
+
+	^bool ___value: (value bitXor: 1)
+%
 set compile_env: 0
 category: 'Smalltalk'
 method: bool

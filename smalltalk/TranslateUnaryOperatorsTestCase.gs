@@ -19,7 +19,8 @@ testTranslateInvertExpr
 	x := (self statementsAt: 15).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = '(int with: 200) __invert__'.
+	self assert: stream contents = '(int ___value: 200) __invert__'.
+	self assert: stream contents evaluate equals: (int ___value: -201).
 %
 category: 'other'
 method: TranslateUnaryOperatorsTestCase
@@ -29,12 +30,14 @@ testTranslateNestedUnary
 	x := (self statementsAt: 18).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = '(int with: 300) __pos__ __neg__'.
+	self assert: stream contents = '(int ___value: 300) __pos__ __neg__'.
+	self assert: stream contents evaluate equals: (int ___value: -300).
 
 	x := (self statementsAt: 19).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = '(int with: 400) __invert__ __invert__'.
+	self assert: stream contents = '(int ___value: 400) __invert__ __invert__'.
+	self assert: stream contents evaluate equals: (int ___value: 400).
 %
 category: 'other'
 method: TranslateUnaryOperatorsTestCase
@@ -44,7 +47,8 @@ testTranslateNotExpr
 	x := (self statementsAt: 17).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = 'False __not__'.
+	self assert: stream contents = '(bool ___value: false) __not__'.
+	self assert: stream contents evaluate equals: (bool ___value: true).
 %
 category: 'other'
 method: TranslateUnaryOperatorsTestCase
@@ -54,7 +58,8 @@ testTranslateUAddExpr
 	x := (self statementsAt: 16).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = '(int with: 100) __pos__'.
+	self assert: stream contents = '(int ___value: 100) __pos__'.
+	self assert: stream contents evaluate equals: (int ___value: 100).
 %
 category: 'other'
 method: TranslateUnaryOperatorsTestCase
@@ -64,5 +69,6 @@ testTranslateUSubExpr
 	x := (self statementsAt: 14).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = '(int with: 100) __neg__'.
+	self assert: stream contents = '(int ___value: 100) __neg__'.
+	self assert: stream contents evaluate equals: (int ___value: -100).
 %
