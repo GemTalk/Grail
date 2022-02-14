@@ -5915,6 +5915,23 @@ doit
 TranslateComparisonOperatorsTestCase category: 'Tests'
 %
 set compile_env: 0
+! ------------------- Class definition for TranslateStatementsTestCase
+expectvalue /Class
+doit
+TranslatorTestCase subclass: 'TranslateStatementsTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+TranslateStatementsTestCase category: 'Tests'
+%
+set compile_env: 0
 ! ------------------- Class definition for TranslateUnaryOperatorsTestCase
 expectvalue /Class
 doit
@@ -6194,6 +6211,7 @@ input TabError.gs
 input TimeoutError.gs
 input TranslateBinaryOperatorsTestCase.gs
 input TranslateComparisonOperatorsTestCase.gs
+input TranslateStatementsTestCase.gs
 input TranslateUnaryOperatorsTestCase.gs
 input TranslatorTestCase.gs
 input TryAst.gs

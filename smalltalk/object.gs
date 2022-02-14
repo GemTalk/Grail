@@ -194,7 +194,7 @@ category: 'Python'
 method: object
 __repr__
 
-	^'<', self class name, ' object at ' , self identityHash printString , '>'
+	^str ___value: '<', self class name, ' object at ' , self identityHash printString , '>'
 %
 category: 'Python'
 method: object

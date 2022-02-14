@@ -34,9 +34,48 @@ initialize
 		keywords := KeywordsAst from: keywords.
 	] ifFalse: [
 		| replacement |
-		replacement := dict new.
-		keywords do: [:each | replacement set: each name to: each value].
+		replacement := Dictionary new.
+		keywords do: [:each | replacement at: each name put: each value].
 		keywords := replacement.
 	].
 	self readPosition.
+%
+category: 'other'
+method: CallAst
+printSmalltalkOn: aStream
+
+	aStream 
+		nextPutAll: function id asString;
+		nextPutAll: ' value: { ';
+		yourself.
+
+	arguments do: [ :each | 
+		self smalltalkSourceFor: each parenthesisIf: 3 on: aStream.
+		aStream nextPutAll: '. '.
+	].
+
+	aStream nextPutAll: '} value: '.
+
+	keywords size > 0 ifTrue: [
+
+		aStream nextPutAll: '(Dictionary new'.
+
+		keywords keysAndValuesDo: [ :eachKey :eachValue |
+			aStream 
+				nextPutAll: ' at: #''';
+				nextPutAll: eachKey;
+				nextPut: $';
+				nextPutAll: ' put: ';
+				yourself.
+
+			self smalltalkSourceFor: eachValue parenthesisIf: 3 on: aStream.
+
+			aStream nextPutAll: '; '.
+		].
+
+		aStream nextPutAll: 'yourself).'
+
+	] ifFalse: [
+		aStream nextPutAll: 'Dictionary new.'.
+	].
 %

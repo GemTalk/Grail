@@ -6,6 +6,12 @@ removeAllClassMethods SuiteAst
 set compile_env: 0
 category: 'other'
 method: SuiteAst
+body
+
+	^body
+%
+category: 'other'
+method: SuiteAst
 initialize
 
 	| stream node |
@@ -20,4 +26,15 @@ initialize
 		body add: node.
 		(stream peekFor: $,) ifFalse: [self error].
 	].
+%
+category: 'other'
+method: SuiteAst
+printSmalltalkOn: aStream
+
+	body do: [ :each |
+		aStream lf; tab; yourself.
+		each printSmalltalkOn: aStream.
+	].
+
+	aStream lf.
 %

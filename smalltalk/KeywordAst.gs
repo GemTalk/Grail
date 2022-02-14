@@ -12,7 +12,12 @@ initialize
 	stream := self stream.
 	next := stream next: 8.
 	next ~= 'keyword(' ifTrue: [self error].
-	(stream peekFor: $') ifTrue: [
+	arg := self string asSymbol.
+	" TODO test this using a keyword with no arg "
+	arg == #'None' ifTrue: [
+		arg := nil
+	].
+	"(stream peekFor: $') ifTrue: [
 		arg := str withAll: (stream upTo: $').
 	] ifFalse: [
 		next := stream peekN: 4.
@@ -22,7 +27,7 @@ initialize
 		] ifFalse: [
 			self error.
 		].
-	].
+	]."
 	self commaSpace.
 	value := self expression.
 	self readPosition.

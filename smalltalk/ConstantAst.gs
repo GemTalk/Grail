@@ -52,13 +52,11 @@ initialize
 	next = 'None' ifTrue: [value := 'None'. "constant is None"
 		stream next: 4.
 		^self finalize].
-	next = 'True' ifTrue: [value := 'bool ___value: true'. "constant is True"
-		messagePrecedence := 3.
+	next = 'True' ifTrue: [value := 'True'. "constant is True"
 		stream next: 4.
 		^self finalize].
 	next := stream peekN: 5.
-	next = 'False' ifTrue: [value := 'bool ___value: false'. "constant is False"
-		messagePrecedence := 3.
+	next = 'False' ifTrue: [value := 'False'. "constant is False"
 		stream next: 5.
 		^self finalize].
 %
