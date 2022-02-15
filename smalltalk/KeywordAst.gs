@@ -12,10 +12,12 @@ initialize
 	stream := self stream.
 	next := stream next: 8.
 	next ~= 'keyword(' ifTrue: [self error].
-	arg := self string asSymbol.
-	" TODO test this using a keyword with no arg "
-	arg == #'None' ifTrue: [
-		arg := nil
+	next := stream peekN: 4.
+	next = 'None' ifTrue: [
+		stream next: 4.
+		arg := nil.
+	] ifFalse: [
+		arg := self string asSymbol.
 	].
 	"(stream peekFor: $') ifTrue: [
 		arg := str withAll: (stream upTo: $').

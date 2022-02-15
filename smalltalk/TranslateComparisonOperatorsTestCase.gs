@@ -65,8 +65,8 @@ testTranslateIsExpr
 	x := (self statementsAt: 26).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = '((bool ___value: false) is_: (bool ___value: true))'.
-	self assert: stream contents evaluate equals: (bool ___value: false).
+	self assert: stream contents = '(False is_: True)'.
+	self assert: stream contents evaluate equals: False.
 %
 category: 'other'
 method: TranslateComparisonOperatorsTestCase
@@ -76,8 +76,8 @@ testTranslateIsNotExpr
 	x := (self statementsAt: 27).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = '((bool ___value: false) is_not: (bool ___value: true))'.
-	self assert: stream contents evaluate equals: (bool ___value: true).
+	self assert: stream contents = '(False is_not: True)'.
+	self assert: stream contents evaluate equals: True.
 %
 category: 'other'
 method: TranslateComparisonOperatorsTestCase

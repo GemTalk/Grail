@@ -47,8 +47,8 @@ testTranslateNotExpr
 	x := (self statementsAt: 17).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = '(bool ___value: false) __not__'.
-	self assert: stream contents evaluate equals: (bool ___value: true).
+	self assert: stream contents = 'False __not__'.
+	self assert: stream contents evaluate equals: True.
 %
 category: 'other'
 method: TranslateUnaryOperatorsTestCase
