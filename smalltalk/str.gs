@@ -13,6 +13,13 @@ ___value: aString
 %
 ! ------------------- Instance methods for str
 set compile_env: 0
+category: 'other'
+method: str
+__str__
+	
+	^self
+%
+set compile_env: 0
 category: 'Python'
 method: str
 __contains__: aPyStr

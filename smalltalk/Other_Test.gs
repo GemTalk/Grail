@@ -3,3 +3,13 @@ removeAllMethods Other_Test
 removeAllClassMethods Other_Test
 ! ------------------- Class methods for Other_Test
 ! ------------------- Instance methods for Other_Test
+set compile_env: 0
+category: 'testing'
+method: Other_Test
+should: shouldBlock raise: anException withExceptionDo: exceptBlock
+
+	[
+		shouldBlock value.
+		self assert: false.
+	] on: anException do: exceptBlock.
+%

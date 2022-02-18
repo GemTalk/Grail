@@ -42,8 +42,23 @@ category: 'other'
 method: builtin_function_or_method
 print: positionalParameters _: namedParameters
 
+	"https://docs.python.org/3/library/functions.html#print"
+
+	| sep end file flush |
+	sep := namedParameters at: #'sep' ifAbsent: [ str ___value: Character space asString ].
+	end := namedParameters at: #'end' ifAbsent: [ str ___value: Character lf asString ].
+	" TODO file should be a python object that has a write(string) method. By default, Python uses sys.stdout. Currently just needs to be a WriteStream or a GsFile. "
+	file := namedParameters at: #'file' ifAbsent: [ GsFile stdoutServer ].
+	flush := namedParameters at: #'flush' ifAbsent: [ False ].
+
+	(sep class ~= str and: [ sep class ~= NoneType ]) ifTrue: [ TypeError signal: 'sep must be None or a string, not ', sep class name ].
+	(end class ~= str and: [ end class ~= NoneType ]) ifTrue: [ TypeError signal: 'end must be None or a string, not ', end class name ].
+	" TODO verify file is an object that has a 'write' method. AttributeError: 'str' object has no attribute 'write' "
+	" TODO implicitly convert flush to a bool "
+	
+	file nextPutAll: positionalParameters removeFirst ___value.
 	positionalParameters do: [ :each |
-		GsFile stdoutServer nextPutAll: each __str__ ___value; space.
+		file nextPutAll: sep ___value; nextPutAll: each __str__ ___value.
 	].
-	GsFile stdoutServer nextPutAll: (namedParameters at: #'end' ifAbsent: [ str ___value: Character lf asString ]) ___value.
+	file nextPutAll: end ___value.
 %
