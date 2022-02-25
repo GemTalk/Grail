@@ -40,7 +40,8 @@ category: 'other'
 method: bool
 ___value
 
-	^value
+	value == 1 ifTrue: [ ^true ].
+	^false
 %
 category: 'other'
 method: bool

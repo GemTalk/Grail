@@ -67,6 +67,15 @@ setUp
 %
 category: 'other'
 method: PythonTestCase
+should: shouldBlock raise: anException withExceptionDo: exceptBlock
+
+	[
+		shouldBlock value.
+		self assert: false.
+	] on: anException do: exceptBlock.
+%
+category: 'other'
+method: PythonTestCase
 statementsAt: anInteger
 
 	^module.body.body at: anInteger

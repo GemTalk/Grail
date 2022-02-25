@@ -14,3 +14,16 @@ initialize
 	msg := self optionalExpression.
 	self readPosition.
 %
+category: 'other'
+method: AssertAst
+printSmalltalkOn: aStream
+
+	self smalltalkSourceFor: test parenthesisIf: 3 on: aStream.
+	aStream nextPutAll: ' ___value ifFalse: [ AssertionError signal'.
+	msg = 'None' ifFalse: [
+		aStream nextPutAll: ': '.
+		self smalltalkSourceFor: msg parenthesisIf: 3 on: aStream.
+		aStream nextPutAll: ' ___value'.
+	].
+	aStream nextPutAll: ' ].'
+%

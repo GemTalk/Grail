@@ -2,23 +2,24 @@
 # https://docs.python.org/3/reference/simple_stmts.html
 
 # assignment 
-var1 = 1
-var2 = var3 = 2
+var1 = 1 # 1
+var2 = var3 = 2 # 1
 
 # attribute assignment
-class Cls:
+class Cls: # 3
     x = 3             # class variable
-inst = Cls()
-inst.x = inst.x + 1   # writes inst.x as 4 leaving Cls.x as 3
+inst = Cls() # 4
+inst.x = inst.x + 1  # 5 # writes inst.x as 4 leaving Cls.x as 3
 
 # array assignment 
-x = [0, 1]
-i = 0
-i, x[i] = 1, 2         # i is updated, then x[i] is updated
+x = [0, 1] # 6
+i = 0 # 7
+i, x[i] = 1, 2 # 8         # i is updated, then x[i] is updated
 
 # assert 
-assert True
-assert False
+assert True # 9
+assert False # 10
+assert False, "Assert failed" # 11
 
 # pass 
 def f(arg): pass    # a function that does nothing (yet)
