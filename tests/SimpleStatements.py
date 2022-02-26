@@ -22,30 +22,33 @@ assert False # 10
 assert False, "Assert failed" # 11
 
 # pass 
-def f(arg): pass    # a function that does nothing (yet)
-class C: pass       # a class with no methods (yet)
+def f(arg): pass  # 12  # a function that does nothing (yet)
+class C: pass  # 13     # a class with no methods (yet)
 
 # del 
-del x
-del x, i
+del x # 14
+del x, i # 15
 
 # return
-def a():
+def a(): # 16
     return
 
-def b():
+def b(): # 17
     return True
 
 # yield
-def gen():  # defines a generator function
+def gen(): # 18 # defines a generator function
     yield 123
 
-async def agen(): # defines an asynchronous generator function
+async def agen(): #19 # defines an asynchronous generator function
     yield 123
 
 # raise
-raise RuntimeError("Something bad happened")
-raise RuntimeError("Something bad happened") from None
+raise RuntimeError # 20
+raise RuntimeError("Something bad happened") # 21
+raise RuntimeError("Something bad happened") from None # 22
+raise RuntimeError("Something bad happened") from RuntimeError("Caused by me") # 23
+
 
 # break
 for _ in x:

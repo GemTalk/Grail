@@ -40,3 +40,30 @@ testTranslateAssert
 		raise: AssertionError
 		withExceptionDo: [ :exc | self assert: exc messageText equals: 'Assert failed' ].
 %
+category: 'other'
+method: TranslateSimpleStatementsTestCase
+testTranslateRaise
+
+	| stream x |
+	x := (self statementsAt: 20).
+	stream := WriteStream on: String new.
+	x printSmalltalkOn: stream.
+
+	self assert: stream contents equals: 'RuntimeError signal.'.
+	self 
+		should: [ stream contents evaluate ] 
+		raise: RuntimeError.
+
+
+	x := (self statementsAt: 21).
+	stream := WriteStream on: String new.
+	x printSmalltalkOn: stream.
+
+	self assert: stream contents equals: 'RuntimeError signal: (str ___value: ''Something bad happened'') ___value.'.
+	self 
+		should: [ stream contents evaluate ] 
+		raise: RuntimeError
+		withExceptionDo: [ :exc | self assert: exc messageText equals: 'Something bad happened' ].
+	
+	" TODO cause "
+%
