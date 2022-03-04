@@ -6,6 +6,12 @@ removeAllClassMethods ExceptHandlerAst
 set compile_env: 0
 category: 'other'
 method: ExceptHandlerAst
+body
+
+	^body
+%
+category: 'other'
+method: ExceptHandlerAst
 initialize
 	"ExceptHandler(expr? type, identifier? name, stmt* body)"
 	

@@ -34,6 +34,31 @@ try:
 except:
     raise RuntimeError("Something bad happened")
 
+try:
+	print(1 / 0)
+except ZeroDivisionError:
+	raise RuntimeError("Something bad happened")
+
+try:
+	print(2 + 2)
+except:
+	raise RuntimeError("Something bad happened")
+finally:
+	print(3 * 2)
+
+
+try:
+	print(2 + 2)
+except ZeroDivisionError:
+	pass 
+except:
+	raise RuntimeError("Something bad happened")
+finally:
+	print(3 * 2)
+
+
+
+
 # with
 with open('/etc/passwd', 'r') as f:
     pass

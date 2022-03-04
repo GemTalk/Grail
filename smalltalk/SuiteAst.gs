@@ -30,11 +30,15 @@ initialize
 category: 'other'
 method: SuiteAst
 printSmalltalkOn: aStream
+	
+	body size == 1 ifTrue: [
+		(body at: 1) printSmalltalkOn: aStream.
+	] ifFalse: [
+		body do: [ :each |
+			aStream lf; tab; yourself.
+			each printSmalltalkOn: aStream.
+		].
 
-	body do: [ :each |
-		aStream lf; tab; yourself.
-		each printSmalltalkOn: aStream.
+		aStream lf.
 	].
-
-	aStream lf.
 %

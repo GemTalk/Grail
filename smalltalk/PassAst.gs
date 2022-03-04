@@ -11,3 +11,7 @@ initialize
 
 	self readPositionOnly.
 %
+category: 'other'
+method: PassAst
+printSmalltalkOn: aStream
+%
