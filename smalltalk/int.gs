@@ -361,7 +361,7 @@ category: 'Python-object'
 method: int
 __eq__: anObject
 
-	^bool ___value: value = anObject ___value
+	^bool ___value: (self ___value == anObject ___value)
 %
 category: 'Python-object'
 method: int

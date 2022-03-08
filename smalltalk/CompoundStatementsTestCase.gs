@@ -16,7 +16,7 @@ method: CompoundStatementsTestCase
 testClass
 
 	| x |
-	x := self statementsAt: 14.
+	x := self statementsAt: 17.
 	self
 		assert: (x isKindOf: ClassDefAst);
 		assert: (x.name == #'Foo');
@@ -33,7 +33,7 @@ method: CompoundStatementsTestCase
 testClassInheritance
 
 	| x name |
-	x := self statementsAt: 15.
+	x := self statementsAt: 18.
 	self
 		assert: (x isKindOf: ClassDefAst);
 		assert: (x.name == #'Bar');
@@ -76,14 +76,14 @@ if any(arg is not None for arg in []):	# 20
 	lineno=84, col_offset=0)])
 "
 	| x |
-	x := self statementsAt: 20.
+	x := self statementsAt: 23.
 %
 category: 'other'
 method: CompoundStatementsTestCase
 testCoroutine
 
 	| x arguments arg |
-	x := self statementsAt: 16.
+	x := self statementsAt: 19.
 	self
 		assert: (x isKindOf: AsyncFunctionDefAst);
 		assert: (x.name = 'asyncFunc');
@@ -108,7 +108,7 @@ method: CompoundStatementsTestCase
 testCoroutineFor
 
 	| x arguments arg asyncFor call num |
-	x := self statementsAt: 17.
+	x := self statementsAt: 20.
 	self
 		assert: (x isKindOf: AsyncFunctionDefAst);
 		assert: (x.name = 'asyncForFunc');
@@ -147,7 +147,7 @@ method: CompoundStatementsTestCase
 testCoroutineWith
 
 	| x arguments arg with withItem name call str1 str2 |
-	x := self statementsAt: 18.
+	x := self statementsAt: 21.
 	self
 		assert: (x isKindOf: AsyncFunctionDefAst);
 		assert: (x.name = 'asyncWithFunc');
@@ -247,7 +247,7 @@ method: CompoundStatementsTestCase
 testFunctionWithOneArgument
 
 	| x arguments arg |
-	x := self statementsAt: 10.
+	x := self statementsAt: 13.
 	self
 		assert: (x isKindOf: FunctionDefAst);
 		assert: (x.name == #'func');
@@ -272,7 +272,7 @@ method: CompoundStatementsTestCase
 testFunctionWithOneDecorator
 
 	| x arguments arg name |
-	x := self statementsAt: 11.
+	x := self statementsAt: 14.
 	self
 		assert: (x isKindOf: FunctionDefAst);
 		assert: (x.name == #'decoratedFunc');
@@ -298,7 +298,7 @@ method: CompoundStatementsTestCase
 testFunctionWithOneDefaultValueParameter
 
 	| x arguments arg nameConstant |
-	x := self statementsAt: 12.
+	x := self statementsAt: 15.
 	self
 		assert: (x isKindOf: FunctionDefAst);
 		assert: (x.name == #'defaultParameterValueFunc');
@@ -325,7 +325,7 @@ method: CompoundStatementsTestCase
 testNestedFunction
 
 	| x arguments arg functionDef insideArguments insideArg return |
-	x := self statementsAt: 13.
+	x := self statementsAt: 16.
 	self
 		assert: (x isKindOf: FunctionDefAst);
 		assert: (x.name == #'nestedFunc');
@@ -424,7 +424,7 @@ testWith
 		[Pass(lineno=42, col_offset=4)], lineno=41, col_offset=0)"
 
 	| x withItem call str1 str2 |
-	x := self statementsAt: 9.
+	x := self statementsAt: 12.
 	self
 		assert: (x isKindOf: WithAst);
 		assert: (x.items size == 1);
@@ -455,7 +455,7 @@ testWithOptionalVars
 		[Pass(lineno=39, col_offset=4)], lineno=38, col_offset=0)"
 
 	| x withItem call str1 str2 name |
-	x := self statementsAt: 8.
+	x := self statementsAt: 11.
 	self
 		assert: (x isKindOf: WithAst);
 		assert: (x.items size == 1);

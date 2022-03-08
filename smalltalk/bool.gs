@@ -47,7 +47,13 @@ category: 'other'
 method: bool
 __and__: anObject
 
-	^bool ___value: (super __and__: anObject)
+	| other |
+	other := anObject.
+	(other isKindOf: ExecBlock) ifTrue: [
+		other := other value. "Evaluate the block"
+	].
+
+	^bool ___value: (self ___value and: [ other ___value ])
 %
 category: 'other'
 method: bool

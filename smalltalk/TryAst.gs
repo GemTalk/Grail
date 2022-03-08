@@ -22,36 +22,18 @@ category: 'other'
 method: TryAst
 printSmalltalkOn: aStream
 
-	| currentTabIndex |
-	currentTabIndex := 0.
-
 	1 to: handlers size do: [ :i |
-		1 to: currentTabIndex do: [ :j |
-			aStream tab.
-		].
-		aStream nextPutAll: '[';
-			lf; yourself.
-		currentTabIndex := currentTabIndex + 1.
+		aStream nextPutAll: '['; lf; yourself.
+		aStream increaseIndent.
 	].
 	finalbody body size > 0 ifTrue: [
-		1 to: currentTabIndex do: [ :j |
-			aStream tab.
-		].
-		aStream nextPutAll: '[';
-			lf; yourself.
-		currentTabIndex := currentTabIndex + 1.
-	].
-	1 to: currentTabIndex do: [ :j |
-		aStream tab.
+		aStream nextPutAll: '['; lf; yourself.
+		aStream increaseIndent.
 	].
 	self smalltalkSourceFor: body parenthesisIf: 4 on: aStream. " Doesn't need parenthesis "
 	handlers do: [ :handler |
-		currentTabIndex := currentTabIndex - 1.
-		aStream lf.
-		1 to: currentTabIndex do: [ :j |
-			aStream tab.
-		].
-		aStream nextPutAll: '] on: '.
+		aStream decreaseIndent.
+		aStream lf; nextPutAll: '] on: '; yourself.
 
 		handler type = 'None' ifTrue: [
 			aStream nextPutAll: 'Exception'.
@@ -59,33 +41,22 @@ printSmalltalkOn: aStream
 			aStream nextPutAll: handler type id asString.
 		].
 
-		aStream nextPutAll: ' do: [';
-			lf; yourself.
+		aStream nextPutAll: ' do: ['; lf; yourself.
 
-		currentTabIndex := currentTabIndex + 1.
-		1 to: currentTabIndex do: [ :j |
-			aStream tab.
-		].
+		aStream increaseIndent.
 		self smalltalkSourceFor: handler body parenthesisIf: 4 on: aStream. " Doesn't need parenthesis "
-		currentTabIndex := currentTabIndex - 1.
-		aStream lf.
-		1 to: currentTabIndex do: [ :j |
-			aStream tab.
-		].
-		aStream nextPutAll: ']'.
+		aStream decreaseIndent.
+		aStream lf; nextPutAll: ']'; yourself.
 	].
 	
-	currentTabIndex := currentTabIndex - 1.
+	aStream decreaseIndent.
 
 	finalbody body size > 0 ifTrue: [
 		aStream lf; nextPutAll: '] ensure: ['; lf; yourself.
-		currentTabIndex := currentTabIndex + 1.
-		1 to: currentTabIndex do: [ :j |
-			aStream tab.
-		].
+		aStream increaseIndent.
 		self smalltalkSourceFor: finalbody parenthesisIf: 4 on: aStream. " Doesn't need parenthesis "
+		aStream decreaseIndent.
 		aStream lf; nextPutAll: '].'; yourself.
-		currentTabIndex := currentTabIndex - 1.
 	] ifFalse: [
 		aStream nextPut: $..
 	].

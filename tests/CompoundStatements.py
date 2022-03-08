@@ -2,44 +2,44 @@
 # https://docs.python.org/3/reference/compound_stmts.html
 
 # if
-if True:
+if True: # 1
 	pass 
 
-if False:
+if False: # 2
 	pass
 else:
 	pass
 
 # while
-while True:
+while True: # 3
 	pass
 
-while False:
+while False: # 4
 	pass
 else:
 	pass
 
 # for
-for _ in range(10):
+for _ in range(10): # 5
 	pass
 
-for _ in range(10):
+for _ in range(10): # 6
 	pass
 else:
 	pass
 
 # try
-try:
+try: # 7
     print(1 / 0)
 except:
     raise RuntimeError("Something bad happened")
 
-try:
+try: # 8
 	print(1 / 0)
 except ZeroDivisionError:
 	raise RuntimeError("Something bad happened")
 
-try:
+try: # 9
 	print(2 + 2)
 except:
 	raise RuntimeError("Something bad happened")
@@ -47,7 +47,7 @@ finally:
 	print(3 * 2)
 
 
-try:
+try: # 10
 	print(2 + 2)
 except ZeroDivisionError:
 	pass 
@@ -60,51 +60,51 @@ finally:
 
 
 # with
-with open('/etc/passwd', 'r') as f:
+with open('/etc/passwd', 'r') as f: # 11
     pass
 
-with open('/etc/passwd', 'r'):
+with open('/etc/passwd', 'r'): # 12
     pass
 
 # function definitions
-def func(arg):
+def func(arg): # 13
 	pass
 
 @func
-def decoratedFunc(arg):
+def decoratedFunc(arg): # 14
 	pass
 
-def defaultParameterValueFunc(arg=None):
+def defaultParameterValueFunc(arg=None): # 15
 	pass
 
-def nestedFunc(arg):
+def nestedFunc(arg): # 16
 	def insideFunc(insideArg):
 		pass
 	return insideFunc
 
 # class definitions
-class Foo:
+class Foo: # 17
 	pass
 
-class Bar(Foo):
+class Bar(Foo): # 18
 	pass
 
 # coroutines
-async def asyncFunc(arg):		# 16
+async def asyncFunc(arg):		# 19
 	pass
 
-async def asyncForFunc(arg):	# 17
+async def asyncForFunc(arg):	# 20
 	async for _ in range(10):
 		pass
 
-async def asyncWithFunc(arg):	# 18
+async def asyncWithFunc(arg):	# 21
 	async with open('/etc/passwd', 'r') as f:
 		pass
 
 # cpython/Lib/importlib/_bootstrap.py:219
-def fun(f, *args, **kwds):		# 19
+def fun(f, *args, **kwds):		# 22
 	return f(*args, **kwds)
 
 # cpython/Lib/importlib/_bootstrap.py:321
-if any(arg is not None for arg in []):	# 20
+if any(arg is not None for arg in []):	# 23
 	pass

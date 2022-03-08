@@ -20,7 +20,7 @@ if (True):
 "
 	| stream x |
 	x := (self statementsAt: 2).
-	stream := WriteStream on: String new.
+	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 
 	self assert: stream contents equals: 
@@ -50,7 +50,7 @@ else:
 "
 	| stream x |
 	x := (self statementsAt: 5).
-	stream := WriteStream on: String new.
+	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 
 	self assert: stream contents equals: 
@@ -58,16 +58,16 @@ else:
 	print value: { (int ___value: 5). } value: (Dictionary new at: #''end'' put: (str ___value: '' ''); yourself).
 ] ifFalse: [
 	True ___value ifTrue: [
-	print value: { (int ___value: 6). } value: (Dictionary new at: #''end'' put: (str ___value: '' ''); yourself).
-] ifFalse: [
-	print value: { (int ___value: 7). } value: (Dictionary new at: #''end'' put: (str ___value: '' ''); yourself).
-].
+		print value: { (int ___value: 6). } value: (Dictionary new at: #''end'' put: (str ___value: '' ''); yourself).
+	] ifFalse: [
+		print value: { (int ___value: 7). } value: (Dictionary new at: #''end'' put: (str ___value: '' ''); yourself).
+	].
 
 ].
 '.
 
 	x := (self statementsAt: 6).
-	stream := WriteStream on: String new.
+	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 
 	self assert: stream contents equals: 
@@ -75,10 +75,10 @@ else:
 	print value: { (int ___value: 8). } value: (Dictionary new at: #''end'' put: (str ___value: '' ''); yourself).
 ] ifFalse: [
 	False ___value ifTrue: [
-	print value: { (int ___value: 9). } value: (Dictionary new at: #''end'' put: (str ___value: '' ''); yourself).
-] ifFalse: [
-	print value: { (int ___value: 10). } value: (Dictionary new at: #''end'' put: (str ___value: '' ''); yourself).
-].
+		print value: { (int ___value: 9). } value: (Dictionary new at: #''end'' put: (str ___value: '' ''); yourself).
+	] ifFalse: [
+		print value: { (int ___value: 10). } value: (Dictionary new at: #''end'' put: (str ___value: '' ''); yourself).
+	].
 
 ].
 '
@@ -100,7 +100,7 @@ else:
 "
 	| stream x |
 	x := (self statementsAt: 3).
-	stream := WriteStream on: String new.
+	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 
 	self assert: stream contents equals: 
@@ -112,7 +112,7 @@ else:
 '.
 
 	x := (self statementsAt: 4).
-	stream := WriteStream on: String new.
+	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 
 	self assert: stream contents equals: 
@@ -129,8 +129,8 @@ testTranslatePrint
 
 	| stream x |
 	x := (self statementsAt: 1).
-	stream := WriteStream on: String new.
+	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 
-	self assert: stream contents equals: 'print value: { (str ___value: ''Hello world''). } value: Dictionary new.'.
+	self assert: stream contents equals: 'print value: { (str ___value: ''Hello world''). } value: Dictionary new'.
 %

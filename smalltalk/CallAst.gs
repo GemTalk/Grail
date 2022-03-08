@@ -2,6 +2,7 @@
 removeAllMethods CallAst
 removeAllClassMethods CallAst
 ! ------------------- Class methods for CallAst
+set compile_env: 0
 ! ------------------- Instance methods for CallAst
 set compile_env: 0
 category: 'Accessing'
@@ -42,6 +43,12 @@ initialize
 %
 category: 'other'
 method: CallAst
+messagePrecendence
+
+	^3
+%
+category: 'other'
+method: CallAst
 printSmalltalkOn: aStream
 
 	aStream 
@@ -76,6 +83,6 @@ printSmalltalkOn: aStream
 		aStream nextPutAll: 'yourself).'
 
 	] ifFalse: [
-		aStream nextPutAll: 'Dictionary new.'.
+		aStream nextPutAll: 'Dictionary new'.
 	].
 %

@@ -69,7 +69,7 @@ method: Container
 __contains__: aPyObject
 
 	container do: [ :each |
-		(each __eq__: aPyObject) ___value == 1 ifTrue: [
+		(each __eq__: aPyObject) ___value ifTrue: [
 			^bool ___value: true
 		].
 	].

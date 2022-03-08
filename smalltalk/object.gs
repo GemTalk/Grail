@@ -263,7 +263,7 @@ ___yourself
 category: 'Smalltalk'
 method: object
 = other
-	(self __eq__: other) ___value == 1 ifTrue: [
+	(self __eq__: other) ___value ifTrue: [
 		^true
 	].
 	^false

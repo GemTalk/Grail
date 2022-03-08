@@ -21,13 +21,17 @@ method: IfAst
 printSmalltalkOn: aStream
 
 	self smalltalkSourceFor: test parenthesisIf: 3 on: aStream.
-	aStream nextPutAll: ' ___value ifTrue: ['.
+	aStream nextPutAll: ' ___value ifTrue: ['; lf; yourself.
+	aStream increaseIndent.
 	body printSmalltalkOn: aStream.
+	aStream decreaseIndent.
 	orelse body size > 0 ifTrue: [
-		aStream nextPutAll: '] ifFalse: ['.
+		aStream lf; nextPutAll: '] ifFalse: ['; lf; yourself.
+		aStream increaseIndent.
 		orelse printSmalltalkOn: aStream.
-		aStream nextPutAll: '].'; lf; yourself.
+		aStream decreaseIndent.
+		aStream lf; nextPutAll: '].'; lf; yourself.
 	] ifFalse: [
-		aStream nextPutAll: '].'; lf; yourself.
+		aStream lf; nextPutAll: '].'; lf; yourself.
 	].
 %

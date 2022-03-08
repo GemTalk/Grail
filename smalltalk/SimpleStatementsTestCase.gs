@@ -72,7 +72,7 @@ method: SimpleStatementsTestCase
 testBreak
 
 	| x |
-	x := self statementsAt: 21.
+	x := self statementsAt: 24.
 	self 
 		assert: (x isKindOf: ForAst);
 		assert: (x.target isKindOf: NameAst);
@@ -157,7 +157,7 @@ method: SimpleStatementsTestCase
 testContinue
 
 	| x |
-	x := self statementsAt: 22.
+	x := self statementsAt: 25.
 	self 
 		assert: (x isKindOf: ForAst);
 		assert: (x.target isKindOf: NameAst);
@@ -176,7 +176,7 @@ method: SimpleStatementsTestCase
 testDelMultiple
 
 	| x y |
-	x := self statementsAt: 14.
+	x := self statementsAt: 15.
 	self 
 		assert: (x isKindOf: DeleteAst);
 		assert: (x.targets size == 2);
@@ -193,7 +193,7 @@ method: SimpleStatementsTestCase
 testDelSingle
 
 	| x y |
-	x := self statementsAt: 13.
+	x := self statementsAt: 14.
 	self 
 		assert: (x isKindOf: DeleteAst);
 		assert: (x.targets size == 1);
@@ -207,7 +207,7 @@ method: SimpleStatementsTestCase
 testGlobal
 
 	| x |
-	x := self statementsAt: 25.
+	x := self statementsAt: 28.
 	self 
 		assert: (x isKindOf: GlobalAst);
 		assert: (x.names size == 1);
@@ -219,7 +219,7 @@ method: SimpleStatementsTestCase
 testImport
 
 	| x y |
-	x := self statementsAt: 23.
+	x := self statementsAt: 26.
 	self 
 		assert: (x isKindOf: ImportAst);
 		assert: (x.names size == 1);
@@ -233,7 +233,7 @@ method: SimpleStatementsTestCase
 testImportFrom
 
 	| x y |
-	x := self statementsAt: 24.
+	x := self statementsAt: 27.
 	self 
 		assert: (x isKindOf: ImportFromAst);
 		assert: (x.module = 'foo');
@@ -265,7 +265,7 @@ method: SimpleStatementsTestCase
 testNonlocal
 
 	| x |
-	x := self statementsAt: 26.
+	x := self statementsAt: 29.
 	self 
 		assert: (x isKindOf: NonlocalAst);
 		assert: (x.names size == 1);
@@ -277,7 +277,7 @@ method: SimpleStatementsTestCase
 testPassClass
 
 	| x |
-	x := self statementsAt: 12.
+	x := self statementsAt: 13.
 	self 
 		assert: (x isKindOf: ClassDefAst);
 		assert: (x.name == #'C');
@@ -293,7 +293,7 @@ method: SimpleStatementsTestCase
 testPassFunction
 
 	| x y |
-	x := self statementsAt: 11.
+	x := self statementsAt: 12.
 	self 
 		assert: (x isKindOf: FunctionDefAst);
 		assert: (x.name == #'f');
@@ -317,7 +317,7 @@ method: SimpleStatementsTestCase
 testRaise
 
 	| x y |
-	x := self statementsAt: 19.
+	x := self statementsAt: 21.
 	self 
 		assert: (x isKindOf: RaiseAst);
 		assert: (x.exc isKindOf: CallAst);
@@ -337,7 +337,7 @@ method: SimpleStatementsTestCase
 testRaiseFromNone
 
 	| x y |
-	x := self statementsAt: 20.
+	x := self statementsAt: 22.
 	self 
 		assert: (x isKindOf: RaiseAst);
 		assert: (x.exc isKindOf: CallAst);
@@ -358,7 +358,7 @@ method: SimpleStatementsTestCase
 testReturnNone
 
 	| x y |
-	x := self statementsAt: 15.
+	x := self statementsAt: 16.
 	self 
 		assert: (x isKindOf: FunctionDefAst);
 		assert: (x.name == #'a');
@@ -411,7 +411,7 @@ method: SimpleStatementsTestCase
 testYield
 
 	| x y |
-	x := self statementsAt: 17.
+	x := self statementsAt: 18.
 	self 
 		assert: (x isKindOf: FunctionDefAst);
 		assert: (x.name == #'gen');
@@ -436,7 +436,7 @@ method: SimpleStatementsTestCase
 testYieldAsync
 
 	| x y |
-	x := self statementsAt: 18.
+	x := self statementsAt: 19.
 	self 
 		assert: (x isKindOf: AsyncFunctionDefAst);
 		assert: (x.name = 'agen');

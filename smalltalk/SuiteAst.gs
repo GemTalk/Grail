@@ -35,7 +35,7 @@ printSmalltalkOn: aStream
 		(body at: 1) printSmalltalkOn: aStream.
 	] ifFalse: [
 		body do: [ :each |
-			aStream lf; tab; yourself.
+			aStream nextPut: $.; lf; tab; yourself.
 			each printSmalltalkOn: aStream.
 		].
 

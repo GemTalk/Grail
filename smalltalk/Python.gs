@@ -4916,6 +4916,23 @@ doit
 Scripter category: 'BuiltIns-Extras'
 %
 set compile_env: 0
+! ------------------- Class definition for PrettyWriteStream
+expectvalue /Class
+doit
+WriteStream subclass: 'PrettyWriteStream'
+  instVarNames: #( indentCount)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+PrettyWriteStream category: 'Tools'
+%
+set compile_env: 0
 ! ------------------- Class definition for Base_Class_Test
 expectvalue /Class
 doit
@@ -6190,6 +6207,7 @@ input passing.gs
 input PendingDeprecationWarning.gs
 input PermissionError.gs
 input PowAst.gs
+input PrettyWriteStream.gs
 input ProcessLookupError.gs
 input property.gs
 input propertyTest.gs

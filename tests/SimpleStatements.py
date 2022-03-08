@@ -3,7 +3,7 @@
 
 # assignment 
 var1 = 1 # 1
-var2 = var3 = 2 # 1
+var2 = var3 = 2 # 2
 
 # attribute assignment
 class Cls: # 3
@@ -51,19 +51,19 @@ raise RuntimeError("Something bad happened") from RuntimeError("Caused by me") #
 
 
 # break
-for _ in x:
+for _ in x: # 24
     break
 
 # continue
-for _ in x:
+for _ in x: # 25
     continue
 
 # import
-import foo                 # foo imported and bound locally
-from foo import attr       # foo imported and foo.attr bound as attr
+import foo      # 26           # foo imported and bound locally
+from foo import attr   # 27    # foo imported and foo.attr bound as attr
 
 # global
-global g
+global g # 28
 
 # nonlocal
-nonlocal x
+nonlocal x # 29
