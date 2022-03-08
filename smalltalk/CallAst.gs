@@ -43,7 +43,7 @@ initialize
 %
 category: 'other'
 method: CallAst
-messagePrecendence
+messagePrecedence
 
 	^3
 %

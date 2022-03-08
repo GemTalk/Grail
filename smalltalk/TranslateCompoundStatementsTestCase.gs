@@ -22,7 +22,7 @@ testTranslateFor
 
 	self assert: stream contents equals:
 '(range value: { (int ___value: 10). } value: Dictionary new) ___value do: [ :i |
-	
+
 ].'
 %
 category: 'other'
