@@ -80,7 +80,7 @@ printSmalltalkOn: aStream
 			aStream nextPutAll: '; '.
 		].
 
-		aStream nextPutAll: 'yourself).'
+		aStream nextPutAll: 'yourself)'
 
 	] ifFalse: [
 		aStream nextPutAll: 'Dictionary new'.

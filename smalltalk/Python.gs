@@ -4106,6 +4106,23 @@ doit
 WithItemAst category: 'Parser'
 %
 set compile_env: 0
+! ------------------- Class definition for Variable
+expectvalue /Class
+doit
+SymbolDictionary subclass: 'Variable'
+  instVarNames: #( parent)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+Variable category: 'Tools'
+%
+set compile_env: 0
 ! ------------------- Class definition for object
 expectvalue /Class
 doit
@@ -6000,6 +6017,23 @@ doit
 TranslateUnaryOperatorsTestCase category: 'Tests'
 %
 set compile_env: 0
+! ------------------- Class definition for TranslateVariablesTestCase
+expectvalue /Class
+doit
+TranslatorTestCase subclass: 'TranslateVariablesTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+TranslateVariablesTestCase category: 'Tests'
+%
+set compile_env: 0
 ! ------------------- Class definition for PythonTestResource
 expectvalue /Class
 doit
@@ -6267,6 +6301,7 @@ input TranslateCompoundStatementsTestCase.gs
 input TranslateSimpleStatementsTestCase.gs
 input TranslateStatementsTestCase.gs
 input TranslateUnaryOperatorsTestCase.gs
+input TranslateVariablesTestCase.gs
 input TranslatorTestCase.gs
 input TryAst.gs
 input tuple.gs
@@ -6290,6 +6325,7 @@ input UnicodeWarning.gs
 input UserWarning.gs
 input USubAst.gs
 input ValueError.gs
+input Variable.gs
 input Warning.gs
 input WhileAst.gs
 input WithAst.gs

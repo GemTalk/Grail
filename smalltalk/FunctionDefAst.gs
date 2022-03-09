@@ -66,6 +66,30 @@ printOn: aStream
 %
 category: 'other'
 method: FunctionDefAst
+printSmalltalkOn: aStream
+
+	aStream
+		nextPutAll: 'currentScope at: ';
+		nextPut: $#;
+		nextPutAll: name asString;
+		nextPutAll: ' put: [ :_ |';
+		lf;
+		increaseIndent;
+		nextPutAll: 'currentScope := currentScope createChildScope';
+		yourself.
+
+	self smalltalkSourceFor: body parenthesisIf: 4 on: aStream.
+
+	aStream decreaseIndent.
+
+	aStream
+		nextPutAll: '].'; " Allow indentation "
+		lf;
+		nextPutAll: 'currentScope := currentScope.parent';
+		yourself.
+%
+category: 'other'
+method: FunctionDefAst
 setBlock: aBlockAst
 
 	body := aBlockAst.

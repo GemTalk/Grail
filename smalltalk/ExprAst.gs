@@ -14,7 +14,13 @@ initialize
 %
 category: 'other'
 method: ExprAst
+messagePrecendence
+	
+	^3
+%
+category: 'other'
+method: ExprAst
 printSmalltalkOn: aStream
 
-	self smalltalkSourceFor: value parenthesisIf: 3 on: aStream
+	self smalltalkSourceFor: value parenthesisIf: 4 on: aStream
 %

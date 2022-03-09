@@ -72,12 +72,31 @@ injectSuperArguments: anArray scope: aScope
 %
 category: 'other'
 method: NameAst
+messagePrecedence
+	^3
+%
+category: 'other'
+method: NameAst
 printOn: aStream
 
 	super printOn: aStream.
 	aStream nextPut: $(;
 		nextPutAll: id;
 		nextPut: $).
+%
+category: 'other'
+method: NameAst
+printSmalltalkOn: aStream
+
+	aStream 
+		nextPutAll: 'currentScope at: ';
+		nextPut: $#;
+		nextPutAll: id asString;
+		yourself.
+
+	ctx class == StoreAst ifTrue: [
+		aStream nextPutAll: ' put: '.
+	].
 %
 category: 'other'
 method: NameAst

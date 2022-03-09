@@ -141,6 +141,20 @@ path
 %
 category: 'other'
 method: ModuleAst
+printSmalltalkOn: aStream
+
+	aStream
+		increaseIndent;
+		lf;
+		nextPutAll: '| currentScope |';
+		lf;
+		nextPutAll: 'currentScope := Variables new';
+		yourself.
+	self smalltalkSourceFor: body parenthesisIf: 4 on: aStream. " Doesn't need parenthesis "
+	aStream lf.
+%
+category: 'other'
+method: ModuleAst
 readAst
 
 	^self class astForPath: path
@@ -178,10 +192,4 @@ stream
 
 	stream skipSeparators.
 	^stream
-%
-category: 'other'
-method: ModuleAst
-writeSmalltalkOn: aStream
-
-	self halt.
 %
