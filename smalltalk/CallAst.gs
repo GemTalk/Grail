@@ -52,8 +52,10 @@ method: CallAst
 printSmalltalkOn: aStream
 
 	aStream 
-		nextPutAll: function id asString;
-		nextPutAll: ' value: { ';
+		nextPutAll: '(currentScope at: #';
+		nextPutAll: function id;
+		nextPut: $);
+		nextPutAll: ' scope: currentScope positional: { ';
 		yourself.
 
 	arguments do: [ :each | 
@@ -61,7 +63,7 @@ printSmalltalkOn: aStream
 		aStream nextPutAll: '. '.
 	].
 
-	aStream nextPutAll: '} value: '.
+	aStream nextPutAll: '} named: '.
 
 	keywords size > 0 ifTrue: [
 

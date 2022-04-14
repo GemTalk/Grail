@@ -132,5 +132,5 @@ testTranslatePrint
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 
-	self assert: stream contents equals: 'print value: { (str ___value: ''Hello world''). } value: Dictionary new'.
+	self assert: stream contents equals: '(currentScope at: #print) value: { (str ___value: ''Hello world''). } value: Dictionary new'.
 %

@@ -35,9 +35,10 @@ printSmalltalkOn: aStream
 		self smalltalkSourceFor: (body at: 1) parenthesisIf: 4 on: aStream.
 	] ifFalse: [
 		body do: [ :each |
-			aStream nextPut: $.; lf; yourself.
 			self smalltalkSourceFor: each parenthesisIf: 4 on: aStream.
+			aStream nextPut: $.; lf; yourself.
 		].
+		aStream position: aStream position - 1.
 
 		aStream lf.
 	].

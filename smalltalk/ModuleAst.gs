@@ -148,7 +148,8 @@ printSmalltalkOn: aStream
 		lf;
 		nextPutAll: '| currentScope |';
 		lf;
-		nextPutAll: 'currentScope := Variables new';
+		nextPutAll: 'currentScope := Variables new.';
+		lf;
 		yourself.
 	self smalltalkSourceFor: body parenthesisIf: 4 on: aStream. " Doesn't need parenthesis "
 	aStream lf.

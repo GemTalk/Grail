@@ -6,6 +6,18 @@ removeAllClassMethods ArgumentsAst
 set compile_env: 0
 category: 'other'
 method: ArgumentsAst
+args
+
+	^args
+%
+category: 'other'
+method: ArgumentsAst
+defaults
+
+	^defaults
+%
+category: 'other'
+method: ArgumentsAst
 initialize
 "arguments(arg* posonlyargs, arg* args, arg? vararg, arg* kwonlyargs,
                  expr* kw_defaults, arg? kwarg, expr* defaults)"
@@ -28,4 +40,34 @@ initialize
 	self commaSpace.
 	defaults := self collectAst: [self expression].
 	(stream peekFor: $)) ifFalse: [self error].
+%
+category: 'other'
+method: ArgumentsAst
+kw_defaults
+
+	^kw_defaults
+%
+category: 'other'
+method: ArgumentsAst
+kwarg
+
+	^kwarg
+%
+category: 'other'
+method: ArgumentsAst
+kwonlyargs
+
+	^kwonlyargs
+%
+category: 'other'
+method: ArgumentsAst
+posonlyargs
+
+	^posonlyargs
+%
+category: 'other'
+method: ArgumentsAst
+vararg
+
+	^vararg
 %

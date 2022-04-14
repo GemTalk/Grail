@@ -21,5 +21,7 @@ testTranslateGlobalScope
 
 	module printSmalltalkOn: stream.
 
+	stream contents evaluate.
+
 	self halt.
 %

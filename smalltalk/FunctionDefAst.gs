@@ -55,6 +55,36 @@ name
 %
 category: 'other'
 method: FunctionDefAst
+printArgList: anArray on: aStream
+	
+	aStream nextPutAll: '#( '.
+	anArray do: [ :arg |
+		aStream
+			nextPutAll: arg name;
+			nextPut: $ ;
+			yourself.
+	].
+	aStream nextPut: $).
+%
+category: 'other'
+method: FunctionDefAst
+printDefaultsList: anArray on: aStream
+	
+	aStream nextPutAll: '#( '.
+	anArray do: [ :arg |
+		arg class = NoneType ifTrue: [
+			aStream nextPutAll: 'None '.
+		] ifFalse: [
+			aStream
+				nextPutAll: arg value;
+				nextPut: $ ;
+				yourself.
+		].
+	].
+	aStream nextPut: $).
+%
+category: 'other'
+method: FunctionDefAst
 printOn: aStream
 
 	super printOn: aStream.
@@ -72,10 +102,28 @@ printSmalltalkOn: aStream
 		nextPutAll: 'currentScope at: ';
 		nextPut: $#;
 		nextPutAll: name asString;
-		nextPutAll: ' put: [ :_ |';
+		nextPutAll: ' put: (FunctionDef new args: ';
+		yourself.
+
+	self printArgList: args args on: aStream.
+	aStream nextPutAll: ' kwonlyargs: '.
+	self printArgList: args kwonlyargs on: aStream.
+	aStream 
+		nextPutAll: ' vararg: '; 
+		nextPutAll: args vararg name;
+		nextPutAll: ' kwarg: ';
+		nextPutAll: args kwarg name;
+		nextPutAll: ' kw_defaults: ';
+		yourself.
+
+	self printDefaultsList: args kw_defaults on: aStream.
+	aStream nextPutAll: ' defaults: '.
+	self printDefaultsList: args defaults on: aStream.
+
+	aStream
+		nextPutAll: ' block: [ :currentScope |';
 		lf;
 		increaseIndent;
-		nextPutAll: 'currentScope := currentScope createChildScope';
 		yourself.
 
 	self smalltalkSourceFor: body parenthesisIf: 4 on: aStream.
@@ -83,9 +131,7 @@ printSmalltalkOn: aStream
 	aStream decreaseIndent.
 
 	aStream
-		nextPutAll: '].'; " Allow indentation "
-		lf;
-		nextPutAll: 'currentScope := currentScope.parent';
+		nextPutAll: '])';
 		yourself.
 %
 category: 'other'

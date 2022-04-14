@@ -42,7 +42,13 @@ parent: aNode
 	(aNode isKindOf: AbstractNode) ifFalse: [self error: 'Not a valid parent!'].
 	^self isAbstract ifTrue: [
 		| symbol class |
-		symbol := ((aNode stream upTo: self subclassDelimiter) , 'Ast') asSymbol.
+		symbol := aNode stream peekN: 4.
+		symbol = 'None' ifTrue: [
+			aNode stream skip: 4.
+			^None.
+		] ifFalse: [
+			symbol := ((aNode stream upTo: self subclassDelimiter) , 'Ast') asSymbol.
+		].
 		class := Python at: symbol.
 		class parent: aNode
 	] ifFalse: [

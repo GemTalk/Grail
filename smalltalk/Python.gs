@@ -4106,10 +4106,10 @@ doit
 WithItemAst category: 'Parser'
 %
 set compile_env: 0
-! ------------------- Class definition for Variable
+! ------------------- Class definition for Variables
 expectvalue /Class
 doit
-SymbolDictionary subclass: 'Variable'
+SymbolDictionary subclass: 'Variables'
   instVarNames: #( parent)
   classVars: #()
   classInstVars: #()
@@ -4120,7 +4120,38 @@ SymbolDictionary subclass: 'Variable'
 %
 expectvalue /Class
 doit
-Variable category: 'Tools'
+Variables category: 'Tools'
+%
+set compile_env: 0
+! ------------------- Class definition for FunctionDef
+expectvalue /Class
+doit
+Object subclass: 'FunctionDef'
+  instVarNames: #( block args vararg
+                    kwonlyargs kw_defaults kwarg defaults)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+FunctionDef comment: 
+'See following for a discussion on arguments: https://docs.python.org/3/library/ast.html#ast.arg
+
+Notes:
+	We are ignoring posonlyargs (For now!)
+	
+
+hierarchy is:
+Object
+  FunctionDef( block args vararg kwonlyargs kw_defaults kwarg defaults)'
+%
+expectvalue /Class
+doit
+FunctionDef category: 'Tools'
 %
 set compile_env: 0
 ! ------------------- Class definition for object
@@ -5898,6 +5929,23 @@ doit
 StringLiteralsTestCase category: 'Tests'
 %
 set compile_env: 0
+! ------------------- Class definition for ToolsTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'ToolsTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ToolsTestCase category: 'Tests'
+%
+set compile_env: 0
 ! ------------------- Class definition for TranslatorTestCase
 expectvalue /Class
 doit
@@ -6159,6 +6207,7 @@ input FormattedValueAst.gs
 input frozenset.gs
 input frozensetTest.gs
 input function.gs
+input FunctionDef.gs
 input FunctionDefAst.gs
 input functionTest.gs
 input FutureWarning.gs
@@ -6295,6 +6344,7 @@ input SystemExit.gs
 input SystemExitTest.gs
 input TabError.gs
 input TimeoutError.gs
+input ToolsTestCase.gs
 input TranslateBinaryOperatorsTestCase.gs
 input TranslateComparisonOperatorsTestCase.gs
 input TranslateCompoundStatementsTestCase.gs
@@ -6325,7 +6375,7 @@ input UnicodeWarning.gs
 input UserWarning.gs
 input USubAst.gs
 input ValueError.gs
-input Variable.gs
+input Variables.gs
 input Warning.gs
 input WhileAst.gs
 input WithAst.gs
