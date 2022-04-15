@@ -57,7 +57,7 @@ category: 'other'
 method: FunctionDefAst
 printArgList: anArray on: aStream
 	
-	aStream nextPutAll: '#( '.
+	aStream nextPutAll: '{ '.
 	anArray do: [ :arg |
 		aStream
 			nextPut: $#;
@@ -65,13 +65,13 @@ printArgList: anArray on: aStream
 			nextPut: $ ;
 			yourself.
 	].
-	aStream nextPut: $).
+	aStream nextPut: $}.
 %
 category: 'other'
 method: FunctionDefAst
 printDefaultsList: anArray on: aStream
 	
-	aStream nextPutAll: '#( '.
+	aStream nextPutAll: '{ '.
 	anArray do: [ :arg |
 		arg class = NoneType ifTrue: [
 			aStream nextPutAll: 'None '.
@@ -82,7 +82,7 @@ printDefaultsList: anArray on: aStream
 				yourself.
 		].
 	].
-	aStream nextPut: $).
+	aStream nextPut: $}.
 %
 category: 'other'
 method: FunctionDefAst

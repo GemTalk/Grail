@@ -19,6 +19,5 @@ category: 'other'
 method: ReturnAst
 printSmalltalkOn: aStream
 
-	aStream nextPutAll: '^'. " Allow indentation "
 	self smalltalkSourceFor: value parenthesisIf: 4 on: aStream.
 %

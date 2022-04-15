@@ -44,12 +44,25 @@ category: 'other'
 method: FunctionDef
 scope: aVariables positional: anArray named: aDictionary
 
-	| myScope |
+	| myScope defaultsOffset |
 	myScope := aVariables createChildScope.
-	myScope at: #positional put: anArray.
+
+	myScope at: vararg put: anArray.
 	
-	aDictionary do: [ :eachKey :eachValue |
+	aDictionary keysAndValuesDo: [ :eachKey :eachValue |
 		myScope at: eachKey put: eachValue.
+	].
+	
+	defaultsOffset := args size - defaults size.
+
+	(1 to: args size) do: [ :i |
+		myScope at: (args at: i) ifAbsent: [
+			defaultsOffset + i <= defaults size ifTrue: [
+				myScope at: (args at: i) put: (defaults at: i).
+			] ifFalse: [
+				" Error! "
+			].
+		].
 	].
 
 	^block value: myScope.
