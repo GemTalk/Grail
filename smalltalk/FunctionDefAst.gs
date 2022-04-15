@@ -60,6 +60,7 @@ printArgList: anArray on: aStream
 	aStream nextPutAll: '#( '.
 	anArray do: [ :arg |
 		aStream
+			nextPut: $#;
 			nextPutAll: arg name;
 			nextPut: $ ;
 			yourself.
@@ -75,8 +76,8 @@ printDefaultsList: anArray on: aStream
 		arg class = NoneType ifTrue: [
 			aStream nextPutAll: 'None '.
 		] ifFalse: [
+			self smalltalkSourceFor: arg parenthesisIf: 3 on:aStream.
 			aStream
-				nextPutAll: arg value;
 				nextPut: $ ;
 				yourself.
 		].
@@ -106,22 +107,22 @@ printSmalltalkOn: aStream
 		yourself.
 
 	self printArgList: args args on: aStream.
-	aStream nextPutAll: ' kwonlyargs: '.
+	aStream nextPutAll: '; kwonlyargs: '.
 	self printArgList: args kwonlyargs on: aStream.
 	aStream 
-		nextPutAll: ' vararg: '; 
-		nextPutAll: args vararg name;
-		nextPutAll: ' kwarg: ';
-		nextPutAll: args kwarg name;
-		nextPutAll: ' kw_defaults: ';
+		nextPutAll: '; vararg: #'; 
+		nextPutAll: ((args vararg class == NoneType) ifTrue: [ 'None' ] ifFalse: [ args vararg name ]);
+		nextPutAll: '; kwarg: #';
+		nextPutAll: ((args vararg class == NoneType) ifTrue: [ 'None' ] ifFalse: [ args vararg name ]);
+		nextPutAll: '; kw_defaults: ';
 		yourself.
 
 	self printDefaultsList: args kw_defaults on: aStream.
-	aStream nextPutAll: ' defaults: '.
+	aStream nextPutAll: '; defaults: '.
 	self printDefaultsList: args defaults on: aStream.
 
 	aStream
-		nextPutAll: ' block: [ :currentScope |';
+		nextPutAll: '; block: [ :currentScope |';
 		lf;
 		increaseIndent;
 		yourself.
@@ -131,7 +132,7 @@ printSmalltalkOn: aStream
 	aStream decreaseIndent.
 
 	aStream
-		nextPutAll: '])';
+		nextPutAll: ']; yourself)';
 		yourself.
 %
 category: 'other'
