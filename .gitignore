@@ -1,3 +1,4 @@
 .topazini
 *.out
 __pycache__
+stdout.txt
