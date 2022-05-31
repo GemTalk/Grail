@@ -15,6 +15,18 @@ ___value: aString
 set compile_env: 0
 category: 'other'
 method: str
+__add__: pythonObject
+
+	" Note that techinically this should be __concat__, but the translator uses __add__
+		See: https://docs.python.org/3/library/operator.html?highlight=string%20concat#mapping-operators-to-functions
+	"
+	
+	pythonObject class ~= str ifTrue: [ TypeError signal: 'must a string, not ', pythonObject class name ].
+
+	^str ___value: value + pythonObject ___value
+%
+category: 'other'
+method: str
 __str__
 	
 	^self

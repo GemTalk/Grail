@@ -62,7 +62,7 @@ printArgList: anArray on: aStream
 		aStream
 			nextPut: $#;
 			nextPutAll: arg name;
-			nextPut: $ ;
+			nextPutAll: '. ';
 			yourself.
 	].
 	aStream nextPut: $}.
@@ -74,11 +74,11 @@ printDefaultsList: anArray on: aStream
 	aStream nextPutAll: '{ '.
 	anArray do: [ :arg |
 		arg class = NoneType ifTrue: [
-			aStream nextPutAll: 'None '.
+			aStream nextPutAll: 'None. '.
 		] ifFalse: [
 			self smalltalkSourceFor: arg parenthesisIf: 3 on:aStream.
 			aStream
-				nextPut: $ ;
+				nextPutAll: '. ';
 				yourself.
 		].
 	].

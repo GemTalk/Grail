@@ -30,8 +30,8 @@ printSmalltalkOn: aStream
 		aStream increaseIndent.
 		orelse printSmalltalkOn: aStream.
 		aStream decreaseIndent.
-		aStream lf; nextPutAll: '].'; lf; yourself.
+		aStream lf; nextPutAll: ']'; yourself.
 	] ifFalse: [
-		aStream lf; nextPutAll: '].'; lf; yourself.
+		aStream lf; nextPutAll: ']'; yourself.
 	].
 %

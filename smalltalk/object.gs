@@ -365,5 +365,5 @@ printOn: aStream
 	aStream
 		nextPutAll: (title first isVowel ifTrue: ['an '] ifFalse: ['a ']);
 		nextPutAll: title;
-		nextPutAll: self __repr__
+		nextPutAll: self __repr__ ___value
 %

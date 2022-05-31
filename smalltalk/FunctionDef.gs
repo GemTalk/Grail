@@ -46,8 +46,14 @@ scope: aVariables positional: anArray named: aDictionary
 
 	| myScope defaultsOffset |
 	myScope := aVariables createChildScope.
-
-	myScope at: vararg put: anArray.
+	
+	vararg = #'None' ifFalse: [
+		myScope at: vararg put: anArray.
+	] ifTrue: [
+		(1 to: args size) do: [ :i |
+			myScope at: (args at: i) put: (anArray at: i).
+		].
+	].
 	
 	aDictionary keysAndValuesDo: [ :eachKey :eachValue |
 		myScope at: eachKey put: eachValue.
