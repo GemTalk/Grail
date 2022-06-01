@@ -67,24 +67,23 @@ printSmalltalkOn: aStream
 
 	keywords size > 0 ifTrue: [
 
-		aStream nextPutAll: '(Dictionary new'.
+		aStream nextPutAll: '{'.
 
 		keywords keysAndValuesDo: [ :eachKey :eachValue |
 			aStream 
-				nextPutAll: ' at: #''';
+				nextPutAll: ' #';
 				nextPutAll: eachKey;
-				nextPut: $';
-				nextPutAll: ' put: ';
+				nextPutAll: '->';
 				yourself.
 
 			self smalltalkSourceFor: eachValue parenthesisIf: 3 on: aStream.
 
-			aStream nextPutAll: '; '.
+			aStream nextPutAll: '. '.
 		].
 
-		aStream nextPutAll: 'yourself)'
+		aStream nextPutAll: '}'
 
 	] ifFalse: [
-		aStream nextPutAll: 'Dictionary new'.
+		aStream nextPutAll: 'Array new'.
 	].
 %

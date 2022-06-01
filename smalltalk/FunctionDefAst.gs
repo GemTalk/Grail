@@ -113,7 +113,7 @@ printSmalltalkOn: aStream
 		nextPutAll: '; vararg: #'; 
 		nextPutAll: ((args vararg class == NoneType) ifTrue: [ 'None' ] ifFalse: [ args vararg name ]);
 		nextPutAll: '; kwarg: #';
-		nextPutAll: ((args vararg class == NoneType) ifTrue: [ 'None' ] ifFalse: [ args vararg name ]);
+		nextPutAll: ((args kwarg class == NoneType) ifTrue: [ 'None' ] ifFalse: [ args kwarg name ]);
 		nextPutAll: '; kw_defaults: ';
 		yourself.
 
