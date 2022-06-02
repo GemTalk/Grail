@@ -7,7 +7,14 @@ set compile_env: 0
 category: 'todo'
 method: strTest
 test__add__
-   #pyTodo
+   
+	| object |
+	object := self str: 'hello '.
+
+	self 
+		assert: (object __add__: (self str: 'world')) equals: (self str: 'hello world');
+		assert: object ___value equals: 'hello ';
+		yourself.
 %
 category: 'todo'
 method: strTest
@@ -15,47 +22,95 @@ test__contains__
    
 	| x |
 
-	x := str ___value: 'hello world'.
+	x := self str: 'hello world'.
 
 	self
-		assert: (x __contains__: (str ___value: 'hello')) ___value equals: true;
-		assert: (x __contains__: (str ___value: 'x')) ___value equals: false;
+		assert: (x __contains__: (self str: 'hello')) ___value equals: true;
+		assert: (x __contains__: (self str: 'x')) ___value equals: false;
 		yourself.
 %
 category: 'todo'
 method: strTest
 test__eq__
-   #pyTodo
+
+	| object1 object2 |
+	object1 := self str: 'abc'.
+	object2 := self str:'abc'.
+	
+	self assert: (object1 __eq__: object2).
+	object2 := self str: 'def'.
+	self deny: (object1 __eq__: object2).
 %
 category: 'todo'
 method: strTest
 test__ge__
-   #pyTodo
+   
+	self 
+		assert: ((self str: 'abc') __ge__: (self str: 'abc'));
+		assert: ((self str: 'abd') __ge__: (self str: 'abc'));
+		assert: ((self str: 'abc') __ge__: (self str: 'Abc'));
+		deny: ((self str: 'Abc') __ge__: (self str: 'abc'));
+		deny: ((self str: 'abc') __ge__: (self str: '{bc'));
+		assert: ((self str: 'abc') __ge__: (self str: '.bc'));
+		yourself.
 %
 category: 'todo'
 method: strTest
 test__getitem__
-   #pyTodo
+
+	| object |
+	object := self str: 'hello world'.
+
+	self 
+		assert: (object __getitem__: (int ___value: 0)) equals: (self str: 'h');
+		assert: (object __getitem__: (int ___value: 10)) equals: (self str: 'd');
+		assert: (object __getitem__: (int ___value: 5)) equals: (self str: ' ');
+		yourself.
 %
 category: 'todo'
 method: strTest
 test__getnewargs__
-   #pyTodo
+   
+	self assert: (self str: 'hello world') __getnewargs__ equals: (tuple ___value: { self str: 'hello world'. }).
 %
 category: 'todo'
 method: strTest
 test__getslice__
-   #pyTodo
+	| object |
+	object := self str: 'abcdefg'.
+
+	self
+		assert: (object __getslice__: (self int: 0) _: (self int: 2)) equals: (self str: ('ab'));
+		assert: (object __getslice__: (self int: 2) _: (self int: 3)) equals: (self str: ('c'));
+		assert: (object __getslice__: (self int: 2) _: (self int: 2)) equals: (self str: (''));
+		assert: (object __getslice__: (self int: -3) _: (self int: -2)) equals: (self str: ('e'));
+		yourself.
 %
 category: 'todo'
 method: strTest
 test__gt__
-   #pyTodo
+
+   	self 
+		deny: ((self str: 'abc') __gt__: (self str: 'abc'));
+		assert: ((self str: 'abd') __gt__: (self str: 'abc'));
+		assert: ((self str: 'abc') __gt__: (self str: 'Abc'));
+		deny: ((self str: 'Abc') __gt__: (self str: 'abc'));
+		deny: ((self str: 'abc') __gt__: (self str: '{bc'));
+		assert: ((self str: 'abc') __gt__: (self str: '.bc'));
+		yourself.
 %
 category: 'todo'
 method: strTest
 test__le__
-   #pyTodo
+
+	self 
+		assert: ((self str: 'abc') __le__: (self str: 'abc'));
+		assert: ((self str: 'abc') __le__: (self str: 'abd'));
+		deny: ((self str: 'abc') __le__: (self str: 'Abc'));
+		assert: ((self str: 'Abc') __le__: (self str: 'abc'));
+		deny: ((self str: '{bc') __le__:(self str: 'abc'));
+		assert: ((self str: '.bc') __le__: (self str: 'abc'));
+		yourself.
 %
 category: 'todo'
 method: strTest
