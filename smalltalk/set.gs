@@ -57,7 +57,7 @@ category: 'Python'
 method: set
 __gt__: otherCollection
 
-	^bool ___value: ((self __ge__: otherCollection) ___value == 1 and: [(self __ne__: otherCollection) ___value == 1])
+	^bool ___value: ((self __ge__: otherCollection) ___value and: [(self __ne__: otherCollection) ___value])
 %
 category: 'Python'
 method: set

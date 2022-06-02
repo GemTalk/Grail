@@ -202,7 +202,7 @@ __setattr__: aKey _: aValue
 
 	| symbol |
 	symbol := aKey ___string asSymbol.
-	(self __dir__ __contains__: aKey) ___value == 1 ifTrue: [
+	(self __dir__ __contains__: aKey) ___value ifTrue: [
       	AttributeError signal: self __class__ name asString printString, ' object attribute ', aKey ___string printString , ' is read-only'.
   ].
 

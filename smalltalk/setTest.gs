@@ -132,10 +132,10 @@ category: 'done'
 method: setTest
 test__gt__
 	| a b c bb |
-	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c' }.
-	b := self targetInstance __add__: { self str: 'b'. self str: 'c' }.
-	bb := self targetInstance __add__: { self str: 'b'. self str: 'c' }.
-	c := self targetInstance __add__: { self str: 'a' }.
+	a := set ___value: { self str: 'a'. self str: 'b'. self str: 'c' }.
+	b := set ___value: { self str: 'b'. self str: 'c' }.
+	bb := set ___value: { self str: 'b'. self str: 'c' }.
+	c := set ___value: { self str: 'a' }.
 
 
 	self
