@@ -36,8 +36,8 @@ test__and__
 		yourself.
 
 	self
-		assert: (((self int: 1) __lt__: (x := self int: 2)) __and__: [ (x __lt__: (x := self int: 3)) __and__: [ x __lt__: (x := self int: 4) ]]) equals: (self int: 1);
-		assert: (((self int: 1) __lt__: (x := self int: 2)) __and__: [ (x __lt__: (x := self int: 3)) __and__: [ x __lt__: (x := self int: 2) ]]) equals: (self int: 0);
+		assert: (((self int: 1) __lt__: (x := self int: 2)) __and__: [ (x __lt__: (x := self int: 3)) __and__: [ x __lt__: (x := self int: 4) ]]) equals: (self bool: true);
+		assert: (((self int: 1) __lt__: (x := self int: 2)) __and__: [ (x __lt__: (x := self int: 3)) __and__: [ x __lt__: (x := self int: 2) ]]) equals: (self bool: false);
 		yourself.
 %
 category: 'done'

@@ -183,7 +183,7 @@ method: objectTest
 test__repr__
 
    self
-		assert: (self targetInstance __repr__ copyFrom: 1 to: 18)
+		assert: (self targetInstance __repr__ ___value copyFrom: 1 to: 18)
 		  equals: '<', self targetClass name, ' object at '.
 %
 category: 'tests'
@@ -214,7 +214,7 @@ method: objectTest
 test__str__
 
 	self
-		assert: (self targetInstance __str__ copyFrom: 1 to: 18)
+		assert: (self targetInstance __str__ ___value copyFrom: 1 to: 18)
 		  equals: '<', self targetClass name, ' object at '.
 %
 category: 'tests'
@@ -243,7 +243,7 @@ test__format__
 
 	self
 		should: [self targetInstance __format__: (self str: 'x')] raise: TypeError;
-		assert: ((self targetInstance __format__: (self str: '')) isKindOf: String);
+		assert: ((self targetInstance __format__: (self str: '')) ___value isKindOf: String);
 		yourself.
 		#pyElaborate
 %

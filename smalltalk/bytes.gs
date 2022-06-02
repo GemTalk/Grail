@@ -284,7 +284,7 @@ endswith: aPyBytes _: aPyIntStart _: aPyIntEnd
 	aPyBytes class == tuple ifTrue: [
 		aPyBytes ___value do: [:each |
 			"Python bool implemented as a Python int which is implemented as a Smalltalk integer, meaning we have this odd test for equality with Smalltalk Booleans"
-			(self endswith: each _: aPyIntStart _: aPyIntEnd) ___value == 1 ifTrue: [
+			(self endswith: each _: aPyIntStart _: aPyIntEnd) ___value ifTrue: [
 				^bool ___value: true
 			].
 		].
@@ -521,7 +521,7 @@ removesuffix: pyBytesSuffix
 	pyBytesSuffix class == bytes ifFalse: [TypeError signal: 'a bytes-like object is required, not ''str'''].
 	
 	new := container copy.
-	(self endswith: pyBytesSuffix) ___value == 1 ifTrue: [ new := container copyFrom: 1 to: container size - pyBytesSuffix ___value size].
+	(self endswith: pyBytesSuffix) ___value ifTrue: [ new := container copyFrom: 1 to: container size - pyBytesSuffix ___value size].
 
 	^bytes ___value: new
 %

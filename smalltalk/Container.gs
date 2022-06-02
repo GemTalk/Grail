@@ -184,7 +184,7 @@ __mul__: aPyIntMultiplier
 category: 'Python'
 method: Container
 __ne__: otherCollection
-	^bool ___value: ((self __eq__: otherCollection) ___value bitXor: 1)
+	^(self __eq__: otherCollection) __not__
 %
 category: 'Python'
 method: Container

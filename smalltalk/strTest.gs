@@ -18,8 +18,8 @@ test__contains__
 	x := str ___value: 'hello world'.
 
 	self
-		assert: (x __contains__: (str ___value: 'hello')) ___value equals: 1;
-		assert: (x __contains__: (str ___value: 'x')) ___value equals: 0;
+		assert: (x __contains__: (str ___value: 'hello')) ___value equals: true;
+		assert: (x __contains__: (str ___value: 'x')) ___value equals: false;
 		yourself.
 %
 category: 'todo'

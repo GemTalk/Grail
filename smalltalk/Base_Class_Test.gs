@@ -77,7 +77,7 @@ method: Base_Class_Test
 assert: anObject
 
 	(anObject isKindOf: bool)
-		ifTrue: [super assert: anObject ___value == 1]
+		ifTrue: [super assert: anObject ___value]
 		ifFalse: [super assert: anObject]
 %
 category: 'testing'

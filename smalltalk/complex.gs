@@ -281,7 +281,7 @@ category: 'Python-object'
 method: complex
 __ne__: other
 
-	^bool ___value: ((self __eq__: other) ___value == 0 ifTrue: [1] ifFalse: [0])
+	^(self __eq__: other) __not__
 %
 category: 'Python-object'
 method: complex
