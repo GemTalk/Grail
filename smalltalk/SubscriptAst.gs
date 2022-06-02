@@ -30,3 +30,16 @@ initialize
 	ctx := ExpressionContextAst parent: self.
 	self readPosition.
 %
+category: 'other'
+method: SubscriptAst
+printSmalltalkOn: aStream
+
+	self smalltalkSourceFor: value parenthesisIf: 3 on: aStream.
+
+	slice class = ConstantAst ifTrue: [
+		aStream nextPutAll: ' __getitem__: '.
+		self smalltalkSourceFor: slice parenthesisIf: 3 on: aStream.
+	].
+
+	"self halt."
+%

@@ -126,13 +126,18 @@ test__ge__
 category: 'done'
 method: dictTest
 test__getitem__
-   | list |
-	list := self targetInstance: { #a -> 1. #b -> 2. #c -> 3. #b -> 4 }.
+   | object |
+	object := dict ___value: (Dictionary new
+		at: (self str: 'a') put: (self int: 1);
+		at: (self str: 'b') put: (self int: 2);
+		at: (self str: 'c') put: (self int: 3); 
+		at: (self str: 'd') put: (self int: 4);
+		yourself).
 
 	self
-		assert: list __len__ equals: (self int: 3);
-		assert: (list __contains__: #a);
-		assert: (list __getitem__: #a) equals: 1;
+		assert: object keys __len__ equals: (self int: 4);
+		assert: (object keys __contains__: (str ___value: 'a'));
+		assert: (object __getitem__: (str ___value: 'a')) equals: (int ___value: 1);
 		yourself
 %
 category: 'done'

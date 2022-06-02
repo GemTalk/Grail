@@ -48,7 +48,7 @@ scope: aVariables positional: positionalArray named: namedArray
 	myScope := aVariables createChildScope.
 
 	vararg = #'None' ifFalse: [
-		myScope at: vararg put: (Array new).
+		myScope at: vararg put: (list ___value: OrderedCollection new).
 	].
 
 	defaultsOffset := args size - defaults size.
@@ -60,7 +60,7 @@ scope: aVariables positional: positionalArray named: namedArray
 			defaultsOffset + i <= defaults size ifTrue: [
 				myScope at: (args at: i) put: (defaults at: i).
 			] ifFalse: [
-				(myScope at: vararg) add: (positionalArray at: i).
+				(myScope at: vararg) append: (positionalArray at: i).
 			].
 		].
 	].
@@ -86,10 +86,10 @@ scope: aVariables positional: positionalArray named: namedArray
 
 	kwarg notNil ifTrue: [
 
-		myScope at: kwarg put: Dictionary new.
+		myScope at: kwarg put: (dict ___value: Dictionary new).
 
 		namedArray do: [ :var |
-			(myScope at: kwarg) add: var.
+			(myScope at: kwarg) __setitem__: (str ___value: var key asString) _: var value.
 		].
 	].
 	

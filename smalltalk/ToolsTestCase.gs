@@ -52,13 +52,13 @@ testFunctionDefScopePositionalNamed
 			assert: (currentScope at: #a) equals: (int ___value: 1);
 			assert: (currentScope at: #b) equals: (int ___value: 2);
 			assert: (currentScope at: #c) equals: (int ___value: 3);
-			assert: (currentScope at: #vararg) size equals: 3;
-			assert: ((currentScope at: #vararg) includes: (int ___value: 4)) equals: true;
-			assert: ((currentScope at: #vararg) includes: (int ___value: 5)) equals: true;
-			assert: ((currentScope at: #vararg) includes: (int ___value: 6)) equals: true;
-			assert: ((currentScope at: #kwarg) at: #d) equals: (int ___value: 7);
-			assert: ((currentScope at: #kwarg) at: #e) equals: (int ___value: 8);
-			assert: ((currentScope at: #kwarg) at: #f) equals: (int ___value: 9);
+			assert: (currentScope at: #vararg) ___value size equals: 3;
+			assert: ((currentScope at: #vararg) ___value includes: (int ___value: 4)) equals: true;
+			assert: ((currentScope at: #vararg)  ___value includes: (int ___value: 5)) equals: true;
+			assert: ((currentScope at: #vararg)  ___value includes: (int ___value: 6)) equals: true;
+			assert: ((currentScope at: #kwarg) __getitem__: (str ___value: 'd')) equals: (int ___value: 7);
+			assert: ((currentScope at: #kwarg) __getitem__: (str ___value: 'e')) equals: (int ___value: 8);
+			assert: ((currentScope at: #kwarg) __getitem__: (str ___value: 'f')) equals: (int ___value: 9);
 			yourself.
 	].
 
