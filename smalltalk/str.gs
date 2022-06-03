@@ -125,9 +125,67 @@ __le__: other
 %
 category: 'Python'
 method: str
+__len__
+
+	^value size
+%
+category: 'Python'
+method: str
+__lt__: other
+
+	(1 to: value size) do: [ :i |
+		| myValue otherValue |
+		myValue := (value at: i) asciiValue.
+		otherValue := (other ___value at: i) asciiValue.
+		myValue < otherValue ifTrue: [
+			^true
+		] ifFalse: [
+			myValue < otherValue ifTrue: [
+				^false
+			].
+		].
+	].
+
+	^false
+%
+category: 'Python'
+method: str
+__mul__: pyInt
+
+	| stream |
+	stream := WriteStream on: String new.
+
+	(1 to: pyInt ___value) do: [:_|
+		stream nextPutAll: value.
+	].
+
+	^str ___value: stream contents
+%
+category: 'Python'
+method: str
+__ne__: anObject
+
+	^bool ___value: ((anObject isKindOf: str) and: [value = anObject ___value]) not
+%
+category: 'Python'
+method: str
 __str__
 	
 	^self
+%
+category: 'Python'
+method: str
+capitalize
+
+	| stream |
+	
+	stream := WriteStream on: String new.
+	stream nextPut: (value at: 1) asUppercase.
+	(value copyFrom: 2 to: value size) do: [ :elem | 
+		stream nextPut: elem asLowercase.
+	].
+
+	^str ___value: stream contents.
 %
 category: 'Python'
 method: str

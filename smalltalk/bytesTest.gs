@@ -229,7 +229,7 @@ category: 'done'
 method: bytesTest
 test__len__
 	self assert: bytes __call__ __len__ equals: (self int: 0).
-	self assert: (bytes __call__: (int ___value: 3)) __len__ equals: (self int: 3).
+	self assert: (bytes __call__: (self int: 3)) __len__ equals: (self int: 3).
 
 	self assert: (self bytes: 'aba') __len__ equals: (self int: 3).
 %

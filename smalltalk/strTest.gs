@@ -115,27 +115,53 @@ test__le__
 category: 'todo'
 method: strTest
 test__len__
-   #pyTodo
+   
+	self 
+		assert: (self str: 'hello world') __len__ equals: 11;
+		assert: (self str: '') __len__ equals: 0;
+		yourself.
 %
 category: 'todo'
 method: strTest
 test__lt__
-   #pyTodo
+
+	self 
+		deny: ((self str: 'abc') __lt__: (self str: 'abc'));
+		assert: ((self str: 'abc') __lt__: (self str: 'abd'));
+		deny: ((self str: 'abc') __lt__: (self str: 'Abc'));
+		assert: ((self str: 'Abc') __lt__: (self str: 'abc'));
+		deny: ((self str: '{bc') __lt__:(self str: 'abc'));
+		assert: ((self str: '.bc') __lt__: (self str: 'abc'));
+		yourself.
 %
 category: 'todo'
 method: strTest
 test__mod__
+
+	" See 'printf-style String Formatting': https://docs.python.org/3/library/stdtypes.html?#printf-style-string-formatting"
    #pyTodo
 %
 category: 'todo'
 method: strTest
 test__mul__
-   #pyTodo
+   
+	self 
+		assert: ((self str: 'abc') __mul__: (self int: 3)) equals: (self str: 'abcabcabc');
+		assert: ((self str: '') __mul__: (self int: 3)) equals: (self str: '');
+		assert: ((self str: 'abc') __mul__: (self int: 0)) equals: (self str: '');
+		yourself.
 %
 category: 'todo'
 method: strTest
 test__ne__
-   #pyTodo
+   
+	| object1 object2 |
+	object1 := self str: 'abc'.
+	object2 := self str:'abc'.
+	
+	self deny: (object1 __ne__: object2).
+	object2 := self str: 'def'.
+	self assert: (object1 __ne__: object2).
 %
 category: 'todo'
 method: strTest
@@ -160,7 +186,8 @@ test_formatter_parser
 category: 'todo'
 method: strTest
 testcapitalize
-   #pyTodo
+   
+	self assert: (self str: 'hello World') capitalize equals: (self str: 'Hello world').
 %
 category: 'todo'
 method: strTest
@@ -170,12 +197,6 @@ testcenter
 category: 'todo'
 method: strTest
 testcount
-   #pyTodo
-%
-category: 'todo'
-method: strTest
-testdecode
-	"Does this method exist!!?"
    #pyTodo
 %
 category: 'todo'
