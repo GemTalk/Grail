@@ -21,7 +21,7 @@ print: currentScope
 	sep := currentScope at: #sep.
 	end := currentScope at: #end.
 	" TODO file should be a python object that has a write(string) method. By default, Python uses sys.stdout. Currently just needs to be a WriteStream or a GsFile. "
-	file := (currentScope at: #file) ifNil: [ "GsFile stdoutServer" GsFile openAppendOnServer: '/home/will/Code/Python/Grail/stdout.txt' ].
+	file := (currentScope at: #file) ifNil: [ GsFile stdoutServer ].
 	flush := currentScope at: #flush.
 
 	(sep class ~= str and: [ sep class ~= NoneType ]) ifTrue: [ TypeError signal: 'sep must be None or a string, not ', sep class name ].
