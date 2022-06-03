@@ -23,8 +23,10 @@ set file=%pyCodeDir%%filename%
 
 
 echo Translating Python into Smalltalk...
+echo.
 :: Run topaz script
 (
+    echo output push tmp/grail.out only & ^
     echo set gemn %gemn% & ^
     echo set gems %gems% & ^
     echo set u DataCurator & ^
@@ -37,11 +39,13 @@ echo Translating Python into Smalltalk...
     echo module printSmalltalkOn: stream. & ^
     echo stream contents evaluate. & ^
     echo %% & ^
+    echo output pop & ^
     echo exit
-) | topaz
+) | topaz -rq
 
 
 :: Output the results
+echo.
 echo Translation complete.
 echo.
 echo ** START OF PROGRAM OUTPUT **

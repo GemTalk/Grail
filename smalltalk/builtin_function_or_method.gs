@@ -21,7 +21,7 @@ print: currentScope
 	sep := currentScope at: #sep.
 	end := currentScope at: #end.
 	" TODO file should be a python object that has a write(string) method. By default, Python uses sys.stdout. Currently just needs to be a WriteStream or a GsFile. "
-	file := (currentScope at: #file) ifNil: [ GsFile stdoutServer ].
+	file := (currentScope at: #file) ifNil: [ "GsFile stdoutServer" GsFile openAppendOnServer: '/home/will/Code/Python/Grail/stdout.txt' ].
 	flush := currentScope at: #flush.
 
 	(sep class ~= str and: [ sep class ~= NoneType ]) ifTrue: [ TypeError signal: 'sep must be None or a string, not ', sep class name ].
@@ -29,8 +29,8 @@ print: currentScope
 	" TODO verify file is an object that has a 'write' method. AttributeError: 'str' object has no attribute 'write' "
 	" TODO implicitly convert flush to a bool "
 	
-	file nextPutAll: (currentScope at: #objects) removeFirst __str__ ___value.
-	(currentScope at: #objects) do: [ :each |
+	file nextPutAll: (currentScope at: #objects) ___value removeFirst __str__ ___value.
+	(currentScope at: #objects) ___value do: [ :each |
 		file nextPutAll: sep ___value; nextPutAll: each __str__ ___value.
 	].
 	file nextPutAll: end ___value.
