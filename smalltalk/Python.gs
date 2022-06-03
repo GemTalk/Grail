@@ -4713,23 +4713,6 @@ doit
 memoryview category: 'BuiltIns-Kernel'
 %
 set compile_env: 0
-! ------------------- Class definition for module
-expectvalue /Class
-doit
-object subclass: 'module'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-module category: 'BuiltIns-Kernel'
-%
-set compile_env: 0
 ! ------------------- Class definition for property
 expectvalue /Class
 doit
@@ -6257,7 +6240,6 @@ input MemoryError.gs
 input memoryview.gs
 input memoryviewTest.gs
 input ModAst.gs
-input module.gs
 input ModuleAst.gs
 input ModuleNotFoundError.gs
 input moduleTest.gs

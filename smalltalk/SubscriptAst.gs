@@ -39,6 +39,8 @@ printSmalltalkOn: aStream
 	slice class = ConstantAst ifTrue: [
 		aStream nextPutAll: ' __getitem__: '.
 		self smalltalkSourceFor: slice parenthesisIf: 3 on: aStream.
+	] ifFalse: [
+		self smalltalkSourceFor: slice parenthesisIf: 3 on: aStream.
 	].
 
 	"self halt."

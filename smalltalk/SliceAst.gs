@@ -16,3 +16,23 @@ initialize
 	step := self optionalExpression.
 	self readPosition.
 %
+category: 'other'
+method: SliceAst
+printSmalltalkOn: aStream
+
+	aStream nextPutAll: ' __getslice__: '.
+
+	lower class = NoneType ifTrue: [
+		aStream nextPutAll: '(int ___value: 0)'.
+	] ifFalse: [
+		self smalltalkSourceFor: lower parenthesisIf: 3 on: aStream.
+	].
+
+	aStream nextPutAll: ' _: '.
+
+	upper class = NoneType ifTrue: [
+		aStream nextPutAll: 'None'.
+	] ifFalse: [
+		self smalltalkSourceFor: upper parenthesisIf: 3 on: aStream.
+	].
+%

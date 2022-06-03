@@ -21,6 +21,7 @@ ___startChar
 %
 ! ------------------- Instance methods for dict
 set compile_env: 0
+set compile_env: 0
 category: 'Python'
 method: dict
 __contains__: anElement
@@ -45,6 +46,12 @@ __getitem__: aKey
 	^self ___container
 		at: aKey
 		ifAbsent: [KeyError signal: aKey printString ].
+%
+category: 'Python'
+method: dict
+__getslice__: aPyIntStart _: aPyIntEnd
+
+	TypeError signal:  'unhashable type: slice'
 %
 category: 'Python'
 method: dict

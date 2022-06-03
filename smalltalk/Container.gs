@@ -105,7 +105,14 @@ category: 'Python'
 method: Container
 __getslice__: aPyIntStart _: aPyIntEnd
 
-	^self class ___value: (self ___getslice: aPyIntStart _: aPyIntEnd)
+	| end |
+	end := aPyIntEnd.
+
+	end = None ifTrue: [
+		end := int ___value: container size
+	].
+
+	^self class ___value: (self ___getslice: aPyIntStart _: end)
 %
 category: 'Python'
 method: Container
@@ -190,7 +197,20 @@ category: 'Python'
 method: Container
 __repr__
 
-	^self printString
+	| stream |
+
+	stream := WriteStream on: String new.
+	stream nextPut: $[.
+	stream nextPutAll: container removeFirst __repr__ ___value.
+	container do: [ :elem |
+		stream 
+			nextPutAll: ', ';
+			nextPutAll: elem __repr__ ___value;
+			yourself.
+	].
+	stream nextPut: $].
+
+	^str ___value: stream contents.
 %
 category: 'Python'
 method: Container
