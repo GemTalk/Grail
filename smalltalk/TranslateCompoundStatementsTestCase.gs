@@ -37,8 +37,7 @@ testTranslateIf
 	self assert: stream contents equals: 
 'True ___value ifTrue: [
 
-].
-'.
+]'.
 
 	x := self statementsAt: 2.
 	stream := PrettyWriteStream on: String new.
@@ -49,8 +48,7 @@ testTranslateIf
 
 ] ifFalse: [
 
-].
-'.
+]'.
 %
 category: 'other'
 method: TranslateCompoundStatementsTestCase
@@ -63,7 +61,7 @@ testTranslateTryExcept
 
 	self assert: stream contents equals: 
 '[
-	print value: { ((int ___value: 1) __truediv__: (int ___value: 0)). } value: Dictionary new
+	(currentScope at: #print) scope: currentScope positional: { ((int ___value: 1) __truediv__: (int ___value: 0)). } named: Array new
 ] on: Exception do: [
 	RuntimeError signal: (str ___value: ''Something bad happened'') ___value.
 ].'.
@@ -74,7 +72,7 @@ testTranslateTryExcept
 
 	self assert: stream contents equals: 
 '[
-	print value: { ((int ___value: 1) __truediv__: (int ___value: 0)). } value: Dictionary new
+	(currentScope at: #print) scope: currentScope positional: { ((int ___value: 1) __truediv__: (int ___value: 0)). } named: Array new
 ] on: ZeroDivisionError do: [
 	RuntimeError signal: (str ___value: ''Something bad happened'') ___value.
 ].'.
@@ -86,12 +84,12 @@ testTranslateTryExcept
 	self assert: stream contents equals: 
 '[
 	[
-		print value: { ((int ___value: 2) __add__: (int ___value: 2)). } value: Dictionary new
+		(currentScope at: #print) scope: currentScope positional: { ((int ___value: 2) __add__: (int ___value: 2)). } named: Array new
 	] on: Exception do: [
 		RuntimeError signal: (str ___value: ''Something bad happened'') ___value.
 	]
 ] ensure: [
-	print value: { ((int ___value: 3) __mul__: (int ___value: 2)). } value: Dictionary new
+	(currentScope at: #print) scope: currentScope positional: { ((int ___value: 3) __mul__: (int ___value: 2)). } named: Array new
 ].'.
 
 	x := self statementsAt: 10.
@@ -102,7 +100,7 @@ testTranslateTryExcept
 '[
 	[
 		[
-			print value: { ((int ___value: 2) __add__: (int ___value: 2)). } value: Dictionary new
+			(currentScope at: #print) scope: currentScope positional: { ((int ___value: 2) __add__: (int ___value: 2)). } named: Array new
 		] on: ZeroDivisionError do: [
 
 		]
@@ -110,7 +108,7 @@ testTranslateTryExcept
 		RuntimeError signal: (str ___value: ''Something bad happened'') ___value.
 	]
 ] ensure: [
-	print value: { ((int ___value: 3) __mul__: (int ___value: 2)). } value: Dictionary new
+	(currentScope at: #print) scope: currentScope positional: { ((int ___value: 3) __mul__: (int ___value: 2)). } named: Array new
 ].'
 %
 category: 'other'

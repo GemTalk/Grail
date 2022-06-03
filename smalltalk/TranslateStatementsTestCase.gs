@@ -25,9 +25,8 @@ if (True):
 
 	self assert: stream contents equals: 
 'True ___value ifTrue: [
-	print value: { (int ___value: 0). } value: (Dictionary new at: #''end'' put: (str ___value: '' ''); yourself).
-].
-'
+	(currentScope at: #print) scope: currentScope positional: { (int ___value: 0). } named: { #end->(str ___value: '' ''). }
+]'
 %
 category: 'other'
 method: TranslateStatementsTestCase
@@ -55,16 +54,13 @@ else:
 
 	self assert: stream contents equals: 
 'False ___value ifTrue: [
-	print value: { (int ___value: 5). } value: (Dictionary new at: #''end'' put: (str ___value: '' ''); yourself).
-] ifFalse: [
+	(currentScope at: #print) scope: currentScope positional: { (int ___value: 5). } named: { #end->(str ___value: '' ''). }] ifFalse: [
 	True ___value ifTrue: [
-		print value: { (int ___value: 6). } value: (Dictionary new at: #''end'' put: (str ___value: '' ''); yourself).
+		(currentScope at: #print) scope: currentScope positional: { (int ___value: 6). } named: { #end->(str ___value: '' ''). }
 	] ifFalse: [
-		print value: { (int ___value: 7). } value: (Dictionary new at: #''end'' put: (str ___value: '' ''); yourself).
-	].
-
-].
-'.
+		(currentScope at: #print) scope: currentScope positional: { (int ___value: 7). } named: { #end->(str ___value: '' ''). }
+	]
+]'.
 
 	x := (self statementsAt: 6).
 	stream := PrettyWriteStream on: String new.
@@ -132,5 +128,5 @@ testTranslatePrint
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 
-	self assert: stream contents equals: '(currentScope at: #print) value: { (str ___value: ''Hello world''). } value: Dictionary new'.
+	self assert: stream contents equals: '(currentScope at: #print) scope: currentScope positional: { (str ___value: ''Hello world''). } named: Array new'.
 %
