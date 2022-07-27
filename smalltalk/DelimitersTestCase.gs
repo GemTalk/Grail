@@ -133,7 +133,7 @@ testSliceList
 		assert: (x.slice.lower.value = 'int ___value: 0');
 		assert: (x.slice.upper isKindOf: ConstantAst);
 		assert: (x.slice.upper.value = 'int ___value: 1');
-		assert: (x.slice.step = 'None');
+		assert: (x.slice.step = None);
 		yourself.
 %
 category: 'other'
@@ -158,9 +158,9 @@ testSliceListEmpty
 		assert: ((y := x.value.elts at: 3) isKindOf: ConstantAst);
 		assert: y.value = 'int ___value: 9';
 		assert: (x.slice isKindOf: SliceAst);
-		assert: (x.slice.lower = 'None');
-		assert: (x.slice.upper = 'None');
-		assert: (x.slice.step = 'None');
+		assert: (x.slice.lower = None);
+		assert: (x.slice.upper = None);
+		assert: (x.slice.step = None);
 		yourself.
 %
 category: 'other'
@@ -185,8 +185,8 @@ testSliceTuple
 		assert: ((y := x.value.elts at: 3) isKindOf: ConstantAst);
 		assert: y.value = 'int ___value: 6';
 		assert: (x.slice isKindOf: SliceAst);
-		assert: (x.slice.lower = 'None');
-		assert: (x.slice.upper = 'None');
+		assert: (x.slice.lower = None);
+		assert: (x.slice.upper = None);
 		assert: (x.slice.step isKindOf: ConstantAst);
 		assert: (x.slice.step.value = 'int ___value: 2');
 		yourself.

@@ -91,7 +91,7 @@ testCoroutine
 		assert: (arguments.args size == 1);
 		assert: ((arg := arguments.args at: 1) isKindOf: ArgAst);
 		assert: (arg.arg = 'arg');
-		assert: (arg.annotation = 'None');
+		assert: (arg.annotation = None);
 		assert: (arguments.vararg = None);
 		assert: (arguments.kwonlyargs size == 0);
 		assert: (arguments.kw_defaults size == 0);
@@ -100,7 +100,7 @@ testCoroutine
 		assert: (x.body.body size == 1);
 		assert: ((x.body.body at: 1) isKindOf: PassAst);
 		assert: (x.decorator_list size == 0);
-		assert: (x.returns = 'None');
+		assert: (x.returns = None);
 		yourself.
 %
 category: 'other'
@@ -116,7 +116,7 @@ testCoroutineFor
 		assert: (arguments.args size == 1);
 		assert: ((arg := arguments.args at: 1) isKindOf: ArgAst);
 		assert: (arg.arg = 'arg');
-		assert: (arg.annotation = 'None');
+		assert: (arg.annotation = None);
 		assert: (arguments.vararg = None);
 		assert: (arguments.kwonlyargs size == 0);
 		assert: (arguments.kw_defaults size == 0);
@@ -139,7 +139,7 @@ testCoroutineFor
 		assert: ((asyncFor.body.body at: 1) isKindOf: PassAst);
 		assert: (asyncFor.orelse.body size == 0);
 		assert: (x.decorator_list size == 0);
-		assert: (x.returns = 'None');
+		assert: (x.returns = None);
 		yourself.
 %
 category: 'other'
@@ -155,7 +155,7 @@ testCoroutineWith
 		assert: (arguments.args size == 1);
 		assert: ((arg := arguments.args at: 1) isKindOf: ArgAst);
 		assert: (arg.arg = 'arg');
-		assert: (arg.annotation = 'None');
+		assert: (arg.annotation = None);
 		assert: (arguments.vararg = None);
 		assert: (arguments.kwonlyargs size == 0);
 		assert: (arguments.kw_defaults size == 0);
@@ -181,7 +181,7 @@ testCoroutineWith
 		assert: (with.body.body size == 1);
 		assert: ((with.body.body at: 1) isKindOf: PassAst);
 		assert: (x.decorator_list size == 0);
-		assert: (x.returns = 'None');
+		assert: (x.returns = None);
 		yourself.
 %
 category: 'other'
@@ -255,7 +255,7 @@ testFunctionWithOneArgument
 		assert: (arguments.args size == 1);
 		assert: ((arg := arguments.args at: 1) isKindOf: ArgAst);
 		assert: (arg.arg = 'arg');
-		assert: (arg.annotation = 'None');
+		assert: (arg.annotation = None);
 		assert: (arguments.vararg = None);
 		assert: (arguments.kwonlyargs size == 0);
 		assert: (arguments.kw_defaults size == 0);
@@ -264,7 +264,7 @@ testFunctionWithOneArgument
 		assert: (x.body.body size == 1);
 		assert: ((x.body.body at: 1) isKindOf: PassAst);
 		assert: (x.decorator_list size == 0);
-		assert: (x.returns = 'None');
+		assert: (x.returns = None);
 		yourself.
 %
 category: 'other'
@@ -280,7 +280,7 @@ testFunctionWithOneDecorator
 		assert: (arguments.args size == 1);
 		assert: ((arg := arguments.args at: 1) isKindOf: ArgAst);
 		assert: (arg.arg = 'arg');
-		assert: (arg.annotation = 'None');
+		assert: (arg.annotation = None);
 		assert: (arguments.vararg = None);
 		assert: (arguments.kwonlyargs size == 0);
 		assert: (arguments.kw_defaults size == 0);
@@ -290,7 +290,7 @@ testFunctionWithOneDecorator
 		assert: ((x.body.body at: 1) isKindOf: PassAst);
 		assert: (x.decorator_list size == 1);
 		assert: ((name := x.decorator_list at: 1) == #'func');
-		assert: (x.returns = 'None');
+		assert: (x.returns = None);
 		yourself.
 %
 category: 'other'
@@ -306,7 +306,7 @@ testFunctionWithOneDefaultValueParameter
 		assert: (arguments.args size == 1);
 		assert: ((arg := arguments.args at: 1) isKindOf: ArgAst);
 		assert: (arg.arg = 'arg');
-		assert: (arg.annotation = 'None');
+		assert: (arg.annotation = None);
 		assert: (arguments.vararg = None);
 		assert: (arguments.kwonlyargs size == 0);
 		assert: (arguments.kw_defaults size == 0);
@@ -317,7 +317,7 @@ testFunctionWithOneDefaultValueParameter
 		assert: (x.body.body size == 1);
 		assert: ((x.body.body at: 1) isKindOf: PassAst);
 		assert: (x.decorator_list size == 0);
-		assert: (x.returns = 'None');
+		assert: (x.returns = None);
 		yourself.
 %
 category: 'other'
@@ -333,7 +333,7 @@ testNestedFunction
 		assert: (arguments.args size == 1);
 		assert: ((arg := arguments.args at: 1) isKindOf: ArgAst);
 		assert: (arg.arg = 'arg');
-		assert: (arg.annotation = 'None');
+		assert: (arg.annotation = None);
 		assert: (arguments.vararg = None);
 		assert: (arguments.kwonlyargs size == 0);
 		assert: (arguments.kw_defaults size == 0);
@@ -346,7 +346,7 @@ testNestedFunction
 		assert: (insideArguments.args size == 1);
 		assert: ((insideArg := insideArguments.args at: 1) isKindOf: ArgAst);
 		assert: (insideArg.arg = 'insideArg');
-		assert: (insideArg.annotation = 'None');
+		assert: (insideArg.annotation = None);
 		assert: (insideArguments.vararg = None);
 		assert: (insideArguments.kwonlyargs size == 0);
 		assert: (insideArguments.kw_defaults size == 0);
@@ -355,13 +355,13 @@ testNestedFunction
 		assert: (functionDef.body.body size == 1);
 		assert: ((functionDef.body.body at: 1) isKindOf: PassAst);
 		assert: (functionDef.decorator_list size == 0);
-		assert: (functionDef.returns = 'None');
+		assert: (functionDef.returns = None);
 		assert: ((return := x.body.body at: 2) isKindOf: ReturnAst);
 		assert: (return.value isKindOf: NameAst);
 		assert: (return.value.id == #'insideFunc');
 		assert: (return.value.ctx isKindOf: LoadAst);
 		assert: (x.decorator_list size == 0);
-		assert: (x.returns = 'None');
+		assert: (x.returns = None);
 		yourself.
 %
 category: 'other'
@@ -398,7 +398,7 @@ testTry
 		assert: (call.keywords size == 0);
 		assert: (x.handlers size == 1);
 		assert: ((exceptHandler := x.handlers at: 1) isKindOf: ExceptHandlerAst);
-		assert: (exceptHandler.type = 'None');
+		assert: (exceptHandler.type = None);
 		assert: (exceptHandler.name == None);
 		assert: (exceptHandler.body.body size == 1);
 		assert: ((raise := exceptHandler.body.body at: 1) isKindOf: RaiseAst);
@@ -408,7 +408,7 @@ testTry
 		assert: ((string := insideCall.arguments at: 1) isKindOf: ConstantAst);
 		assert: (string.value = 'str ___value: ''Something bad happened''');
 		assert: (insideCall.keywords size == 0);
-		assert: (raise.cause = 'None');
+		assert: (raise.cause = None);
 		assert: (x.orelse size == 0);
 		assert: (x.finalbody size == 0);
 		yourself.
@@ -439,7 +439,7 @@ testWith
 		assert: ((str2 := call.arguments at: 2) isKindOf: ConstantAst);
 		assert: (str2.value = 'str ___value: ''r''');
 		assert: (call.keywords size == 0);
-		assert: (withItem.optional_vars = 'None');
+		assert: (withItem.optional_vars = None);
 		assert: (x.body.body size == 1);
 		assert: ((x.body.body at: 1) isKindOf: PassAst);
 		yourself.

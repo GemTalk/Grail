@@ -1,0 +1,3 @@
+# edit to path to GemStone product directory
+export GEMSTONE='/Users/jfoster/Library/GemStone/GemStone64Bit3.6.3-i386.Darwin'
+export PATH="$GEMSTONE/bin:$PATH"

@@ -17,9 +17,18 @@ filename
 %
 category: 'other'
 classmethod: PythonTestCase
+setPath
+
+	| path |
+	path := System performOnServer: 'cd ..; pwd'.
+	path := path copyFrom: 1 to: path size - 1.
+	Path := path , '/tests/'.
+%
+category: 'other'
+classmethod: PythonTestCase
 pathToTests
 
-	^'$HOME/Code/Python/Grail/tests/'
+	^Path
 %
 category: 'other'
 classmethod: PythonTestCase

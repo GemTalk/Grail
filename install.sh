@@ -1,21 +1,27 @@
+#!/bin/bash
 
 echo "This will reload your GemStone environment."
 echo "Make sure you have saved all your edits!"
 read -n 1 -s -r -p "Press any key to continue"
+echo
+echo
+if [ ! -f .setenv ]; then
+    cp setenv .setenv
+fi
+source .setenv
 if [ ! -f smalltalk/.topazini ]; then
     cp topazini smalltalk/.topazini
 fi
 cd smalltalk
 topaz -lq << EOF
-logout
+errorCount
+output push ../install.out only
 iferr 1 stk
 iferr 2 output pop
 iferr 3 stk
 iferr 4 abort
 iferr 5 logout
 iferr 6 exit
-errorCount
-output push ../install.out only
 fileformat utf8
 set user SystemUser pass swordfish
 login
@@ -49,6 +55,7 @@ userProfile insertDictionary: symbolDictionary at: 1.
 %
 input Python.gs
 run
+PythonTestCase setPath.
 Python
     at: #'None'             put: NoneType singleton;
     at: #'NotImplemented'   put: NotImplementedType singleton;

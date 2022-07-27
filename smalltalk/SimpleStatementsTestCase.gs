@@ -300,7 +300,7 @@ testPassFunction
 		assert: (x.args isKindOf: ArgumentsAst);
 		assert: ((y := x.args.args at: 1) isKindOf: ArgAst);
 		assert: (y.arg = 'arg');
-		assert: (y.annotation = 'None');
+		assert: (y.annotation = None);
 		assert: (x.args.vararg = None);
 		assert: (x.args.kwonlyargs size == 0);
 		assert: (x.args.kw_defaults size == 0);
@@ -309,7 +309,7 @@ testPassFunction
 		assert: (x.body.body size == 1);
 		assert: ((x.body.body at: 1) isKindOf: PassAst);
 		assert: (x.decorator_list size == 0);
-		assert: (x.returns = 'None');
+		assert: (x.returns = None);
 		yourself.
 %
 category: 'other'
@@ -329,7 +329,7 @@ testRaise
 		assert: (y.value = 'str ___value: ''Something bad happened''');
 		assert: (x.exc.keywords size == 0);
 		assert: (x.exc.function isKindOf: NameAst);
-		assert: (x.cause = 'None');
+		assert: (x.cause = None);
 		yourself.
 %
 category: 'other'
@@ -371,9 +371,9 @@ testReturnNone
 		assert: (x.args.defaults size == 0);
 		assert: (x.body.body size == 1);
 		assert: ((y := x.body.body at: 1) isKindOf: ReturnAst);
-		assert: (y.value = 'None');
+		assert: (y.value = None);
 		assert: (x.decorator_list size == 0);
-		assert: (x.returns = 'None');
+		assert: (x.returns = None);
 		yourself.
 %
 category: 'other'
@@ -428,7 +428,7 @@ testYield
 		assert: (y.value.value isKindOf: ConstantAst);
 		assert: (y.value.value.value = 'int ___value: 123');
 		assert: (x.decorator_list size == 0);
-		assert: (x.returns = 'None');
+		assert: (x.returns = None);
 		yourself.
 %
 category: 'other'
@@ -453,6 +453,6 @@ testYieldAsync
 		assert: (y.value.value isKindOf: ConstantAst);
 		assert: (y.value.value.value = 'int ___value: 123');
 		assert: (x.decorator_list size == 0);
-		assert: (x.returns = 'None');
+		assert: (x.returns = None);
 		yourself.
 %
