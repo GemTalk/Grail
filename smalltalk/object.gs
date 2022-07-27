@@ -87,7 +87,6 @@ of the keyword selector until we find a method that exists.
 %
 ! ------------------- Instance methods for object
 set compile_env: 0
-set compile_env: 0
 category: 'Python'
 method: object
 __class__

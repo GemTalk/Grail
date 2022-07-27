@@ -17,15 +17,6 @@ filename
 %
 category: 'other'
 classmethod: PythonTestCase
-setPath
-
-	| path |
-	path := System performOnServer: 'cd ..; pwd'.
-	path := path copyFrom: 1 to: path size - 1.
-	Path := path , '/tests/'.
-%
-category: 'other'
-classmethod: PythonTestCase
 pathToTests
 
 	^Path
@@ -35,6 +26,15 @@ classmethod: PythonTestCase
 resources
 
 	^super resources , (Array with: PythonTestResource)
+%
+category: 'other'
+classmethod: PythonTestCase
+setPath
+
+	| path |
+	path := System performOnServer: 'cd ..; pwd'.
+	path := path copyFrom: 1 to: path size - 1.
+	Path := path , '/tests/'.
 %
 set compile_env: 0
 category: 'Testing'

@@ -5700,7 +5700,7 @@ expectvalue /Class
 doit
 TestCase subclass: 'PythonTestCase'
   instVarNames: #( module stdout aScope)
-  classVars: #(Path)
+  classVars: #( Path)
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python

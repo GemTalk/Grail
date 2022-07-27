@@ -151,7 +151,7 @@ testJoinedStrWithFormattedValueStr
 	self
 		assert: (child isKindOf: FormattedValueAst);
 		assert: (child.value isKindOf: ConstantAst);
-		assert: (child.value.value isKindOf: Unicode7);
+		assert: (child.value.value isKindOf: String);
 		assert: child.value.value = 'str ___value: ''def''';
 		yourself.
 	child := x.values at: 3.

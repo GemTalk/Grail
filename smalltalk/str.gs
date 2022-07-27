@@ -13,7 +13,6 @@ ___value: aString
 %
 ! ------------------- Instance methods for str
 set compile_env: 0
-set compile_env: 0
 category: 'Python'
 method: str
 __add__: pythonObject

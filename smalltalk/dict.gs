@@ -21,7 +21,6 @@ ___startChar
 %
 ! ------------------- Instance methods for dict
 set compile_env: 0
-set compile_env: 0
 category: 'Python'
 method: dict
 __contains__: anElement

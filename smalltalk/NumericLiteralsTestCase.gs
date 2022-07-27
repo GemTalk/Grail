@@ -43,7 +43,7 @@ testDecimalInteger
 	self
 		assert: ((expr := self statementsAt: 1) isKindOf: ExprAst);
 		assert: ((num := expr.value) isKindOf: ConstantAst);
-		assert: ((num := num.value) isKindOf: Unicode7);
+		assert: ((num := num.value) isKindOf: String);
 		assert: num = 'int ___value: 1';
 
 		assert: (expr := self statementsAt: 2) notNil;
@@ -145,7 +145,7 @@ testImaginaryNumber
 	self
 		assert: ((expr := self statementsAt: 35) isKindOf: ExprAst);
 		assert: ((num := expr.value) isKindOf: ConstantAst);
-		assert: ((complexNumber := num.value) isKindOf: Unicode7);
+		assert: ((complexNumber := num.value) isKindOf: String);
 		assert: complexNumber = 'complex ___real: 0 imaginary: 3.14';
 
 		assert: (expr := self statementsAt: 36) notNil;

@@ -2,7 +2,6 @@
 removeAllMethods CallAst
 removeAllClassMethods CallAst
 ! ------------------- Class methods for CallAst
-set compile_env: 0
 ! ------------------- Instance methods for CallAst
 set compile_env: 0
 category: 'Accessing'

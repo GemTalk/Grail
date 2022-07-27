@@ -23,7 +23,7 @@ testBackspace
 		assert: ((x := x.value) isKindOf: ConstantAst);
 		assert: x line == 36;
 		assert: x column == 0;
-		assert: ((x := x.value) isKindOf: Unicode7);
+		assert: ((x := x.value) isKindOf: String);
 		assert: x equals: 'bytes ___fromAsciiString: ''def''';
 		yourself.
 %
@@ -39,7 +39,7 @@ testBell
 		assert: ((x := x.value) isKindOf: ConstantAst);
 		assert: x line == 35;
 		assert: x column == 0;
-		assert: ((x := x.value) isKindOf: Unicode7);
+		assert: ((x := x.value) isKindOf: String);
 		assert: x equals: 'bytes ___fromAsciiString: ''abc''';
 		yourself.
 %
@@ -55,7 +55,7 @@ testHexHigh
 		assert: ((x := x.value) isKindOf: ConstantAst);
 		assert: x line == 44;
 		assert: x column == 0;
-		assert: ((x := x.value) isKindOf: Unicode16);
+		assert: ((x := x.value) isKindOf: String);
 		assert: x equals: 'bytes ___fromAsciiString: ''defÿ''';
 		yourself.
 %
@@ -71,7 +71,7 @@ testHexLow
 		assert: ((x := x.value) isKindOf: ConstantAst);
 		assert: x line == 43;
 		assert: x column == 0;
-		assert: ((x := x.value) isKindOf: Unicode7);
+		assert: ((x := x.value) isKindOf: String);
 		assert: x equals: ('bytes ___fromAsciiString: ''abc', (Unicode7 new add: (Character codePoint: 0); yourself) , '''');
 		yourself.
 %
@@ -87,7 +87,7 @@ testNewline
 		assert: ((x := x.value) isKindOf: ConstantAst);
 		assert: x line == 31;
 		assert: x column == 0;
-		assert: ((x := x.value) isKindOf: Unicode7);
+		assert: ((x := x.value) isKindOf: String);
 		assert: x equals: 'bytes ___fromAsciiString: ''abc
 ''';
 		yourself.
@@ -104,7 +104,7 @@ testOctalHigh
 		assert: ((x := x.value) isKindOf: ConstantAst);
 		assert: x line == 40;
 		assert: x column == 0;
-		assert: ((x := x.value) isKindOf: Unicode16);
+		assert: ((x := x.value) isKindOf: String);
 		assert: x equals: 'bytes ___fromAsciiString: ''defÿ''';
 		yourself.
 %
@@ -120,7 +120,7 @@ testOctalLow
 		assert: ((x := x.value) isKindOf: ConstantAst);
 		assert: x line == 39;
 		assert: x column == 0;
-		assert: ((x := x.value) isKindOf: Unicode7);
+		assert: ((x := x.value) isKindOf: String);
 		assert: x equals: 'bytes ___fromAsciiString: ''abc' , (Unicode7 new add: (Character codePoint: 0); yourself) , '''';
 		yourself.
 %
@@ -136,7 +136,7 @@ testSlash
 		assert: ((x := x.value) isKindOf: ConstantAst);
 		assert: x line == 32;
 		assert: x column == 0;
-		assert: ((x := x.value) isKindOf: Unicode7);
+		assert: ((x := x.value) isKindOf: String);
 		assert: x = 'bytes ___fromAsciiString: ''def\''';
 		yourself.
 %
