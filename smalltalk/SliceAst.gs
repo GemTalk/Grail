@@ -14,7 +14,7 @@ initialize
 	upper := self optionalExpression.
 	self commaSpace.
 	step := self optionalExpression.
-	self readPosition.
+	(self stream peekFor: $)) ifFalse: [self error].
 %
 category: 'other'
 method: SliceAst
