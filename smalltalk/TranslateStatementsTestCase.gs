@@ -54,7 +54,8 @@ else:
 
 	self assert: stream contents equals: 
 'False ___value ifTrue: [
-	(currentScope at: #print) scope: currentScope positional: { (int ___value: 5). } named: { #end->(str ___value: '' ''). }] ifFalse: [
+	(currentScope at: #print) scope: currentScope positional: { (int ___value: 5). } named: { #end->(str ___value: '' ''). }
+] ifFalse: [
 	True ___value ifTrue: [
 		(currentScope at: #print) scope: currentScope positional: { (int ___value: 6). } named: { #end->(str ___value: '' ''). }
 	] ifFalse: [
