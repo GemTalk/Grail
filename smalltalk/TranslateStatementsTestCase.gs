@@ -69,16 +69,14 @@ else:
 
 	self assert: stream contents equals: 
 'False ___value ifTrue: [
-	print value: { (int ___value: 8). } value: (Dictionary new at: #''end'' put: (str ___value: '' ''); yourself).
+	(currentScope at: #print) scope: currentScope positional: { (int ___value: 8). } named: { #end->(str ___value: '' ''). }
 ] ifFalse: [
 	False ___value ifTrue: [
-		print value: { (int ___value: 9). } value: (Dictionary new at: #''end'' put: (str ___value: '' ''); yourself).
+		(currentScope at: #print) scope: currentScope positional: { (int ___value: 9). } named: { #end->(str ___value: '' ''). }
 	] ifFalse: [
-		print value: { (int ___value: 10). } value: (Dictionary new at: #''end'' put: (str ___value: '' ''); yourself).
-	].
-
-].
-'
+		(currentScope at: #print) scope: currentScope positional: { (int ___value: 10). } named: { #end->(str ___value: '' ''). }
+	]
+]'
 %
 category: 'other'
 method: TranslateStatementsTestCase
@@ -102,11 +100,10 @@ else:
 
 	self assert: stream contents equals: 
 'True ___value ifTrue: [
-	print value: { (int ___value: 1). } value: (Dictionary new at: #''end'' put: (str ___value: '' ''); yourself).
+	(currentScope at: #print) scope: currentScope positional: { (int ___value: 1). } named: { #end->(str ___value: '' ''). }
 ] ifFalse: [
-	print value: { (int ___value: 2). } value: (Dictionary new at: #''end'' put: (str ___value: '' ''); yourself).
-].
-'.
+	(currentScope at: #print) scope: currentScope positional: { (int ___value: 2). } named: { #end->(str ___value: '' ''). }
+]'.
 
 	x := (self statementsAt: 4).
 	stream := PrettyWriteStream on: String new.
@@ -114,11 +111,10 @@ else:
 
 	self assert: stream contents equals: 
 'False ___value ifTrue: [
-	print value: { (int ___value: 3). } value: (Dictionary new at: #''end'' put: (str ___value: '' ''); yourself).
+	(currentScope at: #print) scope: currentScope positional: { (int ___value: 3). } named: { #end->(str ___value: '' ''). }
 ] ifFalse: [
-	print value: { (int ___value: 4). } value: (Dictionary new at: #''end'' put: (str ___value: '' ''); yourself).
-].
-'.
+	(currentScope at: #print) scope: currentScope positional: { (int ___value: 4). } named: { #end->(str ___value: '' ''). }
+]'.
 %
 category: 'other'
 method: TranslateStatementsTestCase

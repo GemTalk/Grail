@@ -59,10 +59,9 @@ PythonTestCase setPath.
 Python
     at: #'None'             put: NoneType singleton;
     at: #'NotImplemented'   put: NotImplementedType singleton;
-    "at: #'True'            put: bool True;
-    at: #'False'            put: bool False;
-    at: #'None'             put: NoneType singleton;
-    at: #'Ellipsis'         put: ellipsis singleton;"
+    at: #'True'             put: (bool ___value: true);
+    at: #'False'            put: (bool ___value: false);
+    at: #'builtins'         put: Dictionary new; 
     yourself.
 %
 output pop
