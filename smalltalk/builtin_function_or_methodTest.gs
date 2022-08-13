@@ -12,9 +12,8 @@ testprint
 
 	stream := WriteStream with: String new.
 	
-	builtin_function_or_method new print: { str ___value: 'abc'. } _: (Dictionary new at: #'file' put: stream; yourself).
-	self assert: stream contents equals: 'abc
-'.
+	builtin_function_or_method new print: (Dictionary new at:#'objects' put:{ str ___value: 'abc'. }; at: #'file' put: stream; yourself).
+	self assert: stream contents equals: ('abc', Character cr).
 
 	stream reset.
 	builtin_function_or_method new print: { str ___value: 'a'. str ___value: 'b'. str ___value: 'c' } _: (Dictionary new at: #'file' put: stream; yourself).
