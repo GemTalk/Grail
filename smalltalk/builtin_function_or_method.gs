@@ -14,6 +14,12 @@ set compile_env: 0
 category: 'other'
 method: builtin_function_or_method
 print: currentScope
+	"currentScope is a dictionary where these keys have functionality
+			objects	- a list containing each item you want to print
+			sep		- the string that you want each element in objects separated by
+			end		- the final string you want to end with
+			file		- the place this string will be output
+			flush		- put true to ensure it is printed and not stored in a buffer"
 
 	"https://docs.python.org/3/library/functions.html#print"
 
