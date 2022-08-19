@@ -23,7 +23,7 @@ print: currentScope
 	end := currentScope at: #end ifAbsent: (str ___value: Character cr).
 	" TODO file should be a python object that has a write(string) method. By default, Python uses sys.stdout. Currently just needs to be a WriteStream or a GsFile. "
 	file := currentScope at: #file ifAbsent: GsFile stdoutServer.
-	flush := currentScope at: #flush ifAbsent: false.
+	flush := currentScope at: #flush ifAbsent: (bool ___value: False).
 
 	(sep class ~= str) ifTrue: [ TypeError signal: 'sep must be a str, not ', sep class name ].
 	(end class ~= str) ifTrue: [ TypeError signal: 'end must be a str, not ', end class name ].
@@ -35,5 +35,6 @@ print: currentScope
 			   separatedBy: [file nextPutAll: (sep __str__ ___value).].
 
 	file nextPutAll: (end __str__ ___value).
+	flush __value ifTrue: [file flush].
 	(currentScope at: #file) ifNil: [ file close ].
 %
