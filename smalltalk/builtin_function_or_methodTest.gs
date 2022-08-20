@@ -13,11 +13,13 @@ testprint
 	stream := WriteStream with: String new.
 	
 	builtin_function_or_method new print: (Dictionary new at:#'objects' put:{ str ___value: 'abc'. }; at: #'file' put: stream; yourself).
-	self assert: stream contents equals: ('abc', Character cr).
+	self assert: stream contents equals: 'abc
+'.
 
 	stream := WriteStream with: String new.
 	builtin_function_or_method new print: (Dictionary new at:#'objects' put:{ str ___value: 'a'. str ___value: 'b'. str ___value: 'c' }; at: #'file' put: stream; yourself).
-	self assert: stream contents equals: ('abc', Character cr).
+	self assert: stream contents equals: 'abc
+'.
 
 	stream := WriteStream with: String new.
 	builtin_function_or_method new print: (Dictionary new at:#'objects' put:{ str ___value: 'a'. str ___value: 'b'. str ___value: 'c' }; at: #'end' put: (str ___value: ''); at: #'file' put: stream; yourself).
@@ -25,7 +27,8 @@ testprint
 
 	stream := WriteStream with: String new.
 	builtin_function_or_method new print: (Dictionary new at:#'objects' put:{ str ___value: 'a'. str ___value: 'b'. str ___value: 'c' }; at: #'sep' put: (str ___value: '*'); at: #'file' put: stream; yourself).
-	self assert: stream contents equals: ('a*b*c', Character cr).
+	self assert: stream contents equals: 'a*b*c
+'.
 
 	stream := WriteStream with: String new.
 	self 

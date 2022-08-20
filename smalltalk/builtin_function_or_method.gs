@@ -26,7 +26,7 @@ print: currentScope
 	| objects sep end file flush|
 	objects := currentScope at: #objects ifAbsent: {str ___value: ''.}.
 	sep := currentScope at: #sep ifAbsent: (str ___value: '').
-	end := currentScope at: #end ifAbsent: (str ___value: Character cr).
+	end := currentScope at: #end ifAbsent: (str ___value: Character lf).
 	" TODO file should be a python object that has a write(string) method. By default, Python uses sys.stdout. Currently just needs to be a WriteStream or a GsFile. "
 	file := currentScope at: #file ifAbsent: GsFile stdoutServer.
 	flush := currentScope at: #flush ifAbsent: (bool ___value: False).
@@ -41,6 +41,6 @@ print: currentScope
 			   separatedBy: [file nextPutAll: (sep __str__ ___value).].
 
 	file nextPutAll: (end __str__ ___value).
-	flush __value ifTrue: [file flush].
-	(currentScope at: #file) ifNil: [ file close ].
+	flush ___value ifTrue: [file flush].
+	file close.
 %

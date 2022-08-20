@@ -51,10 +51,11 @@ method: CallAst
 printSmalltalkOn: aStream
 
 	aStream 
-		nextPutAll: '(currentScope at: #';
-		nextPutAll: function id;
-		nextPut: $);
-		nextPutAll: ' scope: currentScope positional: { ';
+		nextPutAll: 'builtin_function_or_method new ';
+		nextPutAll: function id.
+	(arguments size > 0 or: [keywords size > 0]) ifTrue:[
+	aStream
+		nextPutAll: ': (Dictionary new at:#''objects'' put:{';
 		yourself.
 
 	arguments do: [ :each | 
@@ -62,27 +63,24 @@ printSmalltalkOn: aStream
 		aStream nextPutAll: '. '.
 	].
 
-	aStream nextPutAll: '} named: '.
-
-	keywords size > 0 ifTrue: [
-
-		aStream nextPutAll: '{'.
+	aStream nextPutAll: '}; '.
 
 		keywords keysAndValuesDo: [ :eachKey :eachValue |
 			aStream 
-				nextPutAll: ' #';
+				nextPutAll: 'at: #''';
 				nextPutAll: eachKey;
-				nextPutAll: '->';
+				nextPutAll: ''' put: ';
 				yourself.
 
 			self smalltalkSourceFor: eachValue parenthesisIf: 3 on: aStream.
 
-			aStream nextPutAll: '. '.
+			aStream nextPutAll: '; '.
 		].
 
-		aStream nextPutAll: '}'
-
-	] ifFalse: [
-		aStream nextPutAll: 'Array new'.
-	].
+		aStream nextPutAll: 'yourself).'
+] ifFalse: [
+	aStream
+		nextPutAll: ': (Dictionary new)';
+		yourself.
+].
 %

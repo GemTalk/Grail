@@ -25,7 +25,7 @@ if (True):
 
 	self assert: stream contents equals: 
 'True ___value ifTrue: [
-	(currentScope at: #print) scope: currentScope positional: { (int ___value: 0). } named: { #end->(str ___value: '' ''). }
+	builtin_function_or_method new print: (Dictionary new at:#''objects'' put:{(int ___value: 0). }; at: #''end'' put: (str ___value: '' ''); yourself).
 ]'
 %
 category: 'other'
@@ -54,12 +54,12 @@ else:
 
 	self assert: stream contents equals: 
 'False ___value ifTrue: [
-	(currentScope at: #print) scope: currentScope positional: { (int ___value: 5). } named: { #end->(str ___value: '' ''). }
+	builtin_function_or_method new print: (Dictionary new at:#''objects'' put:{(int ___value: 5). }; at: #''end'' put: (str ___value: '' ''); yourself).
 ] ifFalse: [
 	True ___value ifTrue: [
-		(currentScope at: #print) scope: currentScope positional: { (int ___value: 6). } named: { #end->(str ___value: '' ''). }
+		builtin_function_or_method new print: (Dictionary new at:#''objects'' put:{(int ___value: 6). }; at: #''end'' put: (str ___value: '' ''); yourself).
 	] ifFalse: [
-		(currentScope at: #print) scope: currentScope positional: { (int ___value: 7). } named: { #end->(str ___value: '' ''). }
+		builtin_function_or_method new print: (Dictionary new at:#''objects'' put:{(int ___value: 7). }; at: #''end'' put: (str ___value: '' ''); yourself).
 	]
 ]'.
 
@@ -69,12 +69,12 @@ else:
 
 	self assert: stream contents equals: 
 'False ___value ifTrue: [
-	(currentScope at: #print) scope: currentScope positional: { (int ___value: 8). } named: { #end->(str ___value: '' ''). }
+	builtin_function_or_method new print: (Dictionary new at:#''objects'' put:{(int ___value: 8). }; at: #''end'' put: (str ___value: '' ''); yourself).
 ] ifFalse: [
 	False ___value ifTrue: [
-		(currentScope at: #print) scope: currentScope positional: { (int ___value: 9). } named: { #end->(str ___value: '' ''). }
+		builtin_function_or_method new print: (Dictionary new at:#''objects'' put:{(int ___value: 9). }; at: #''end'' put: (str ___value: '' ''); yourself).
 	] ifFalse: [
-		(currentScope at: #print) scope: currentScope positional: { (int ___value: 10). } named: { #end->(str ___value: '' ''). }
+		builtin_function_or_method new print: (Dictionary new at:#''objects'' put:{(int ___value: 10). }; at: #''end'' put: (str ___value: '' ''); yourself).
 	]
 ]'
 %
@@ -100,9 +100,9 @@ else:
 
 	self assert: stream contents equals: 
 'True ___value ifTrue: [
-	(currentScope at: #print) scope: currentScope positional: { (int ___value: 1). } named: { #end->(str ___value: '' ''). }
+	builtin_function_or_method new print: (Dictionary new at:#''objects'' put:{(int ___value: 1). }; at: #''end'' put: (str ___value: '' ''); yourself).
 ] ifFalse: [
-	(currentScope at: #print) scope: currentScope positional: { (int ___value: 2). } named: { #end->(str ___value: '' ''). }
+	builtin_function_or_method new print: (Dictionary new at:#''objects'' put:{(int ___value: 2). }; at: #''end'' put: (str ___value: '' ''); yourself).
 ]'.
 
 	x := (self statementsAt: 4).
@@ -111,9 +111,9 @@ else:
 
 	self assert: stream contents equals: 
 'False ___value ifTrue: [
-	(currentScope at: #print) scope: currentScope positional: { (int ___value: 3). } named: { #end->(str ___value: '' ''). }
+	builtin_function_or_method new print: (Dictionary new at:#''objects'' put:{(int ___value: 3). }; at: #''end'' put: (str ___value: '' ''); yourself).
 ] ifFalse: [
-	(currentScope at: #print) scope: currentScope positional: { (int ___value: 4). } named: { #end->(str ___value: '' ''). }
+	builtin_function_or_method new print: (Dictionary new at:#''objects'' put:{(int ___value: 4). }; at: #''end'' put: (str ___value: '' ''); yourself).
 ]'.
 %
 category: 'other'
@@ -125,5 +125,5 @@ testTranslatePrint
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 
-	self assert: stream contents equals: '(currentScope at: #print) scope: currentScope positional: { (str ___value: ''Hello world''). } named: Array new'.
+	self assert: stream contents equals: 'builtin_function_or_method new print: (Dictionary new at:#''objects'' put:{(str ___value: ''Hello world''). }; yourself).'.
 %
