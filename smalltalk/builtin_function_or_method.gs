@@ -13,34 +13,35 @@ instance
 set compile_env: 0
 category: 'other'
 method: builtin_function_or_method
-print: currentScope
-	"currentScope is a dictionary where these keys have functionality
-			objects	- a list containing each item you want to print
-			sep		- the string that you want each element in objects separated by
-			end		- the final string you want to end with
-			file		- the place this string will be output
-			flush		- put true to ensure it is printed and not stored in a buffer"
+print
+	| printFunction |
+	printFunction := FunctionDef new
+						vararg: #vararg;
+						kwonlyargs: { #sep. #end. #file. #flush };
+						kw_defaults: {str ___value: ''. str ___value: Character lf. GsFile stdoutServer. bool ___value: False};
+						yourself.
+	printFunction block: [ :currentScope |
+			| objects sep end file flush |
+			objects := (currentScope at: #vararg) ___value.
+			sep := currentScope at: #sep ifAbsent: (str ___value: '').
+			end := currentScope at: #end ifAbsent: (str ___value: Character lf).
+			" TODO file should be a python object that has a write(string) method. By default, Python uses sys.stdout. Currently just needs to be a WriteStream or a GsFile. "
+			file := currentScope at: #file ifAbsent: GsFile stdoutServer.
+			flush := currentScope at: #flush ifAbsent: (bool ___value: False).
 
-	"https://docs.python.org/3/library/functions.html#print"
-
-	| objects sep end file flush|
-	objects := currentScope at: #objects ifAbsent: {str ___value: ''.}.
-	sep := currentScope at: #sep ifAbsent: (str ___value: '').
-	end := currentScope at: #end ifAbsent: (str ___value: Character lf).
-	" TODO file should be a python object that has a write(string) method. By default, Python uses sys.stdout. Currently just needs to be a WriteStream or a GsFile. "
-	file := currentScope at: #file ifAbsent: GsFile stdoutServer.
-	flush := currentScope at: #flush ifAbsent: (bool ___value: False).
-
-	(sep class ~= str) ifTrue: [ TypeError signal: 'sep must be a str, not ', sep class name ].
-	(end class ~= str) ifTrue: [ TypeError signal: 'end must be a str, not ', end class name ].
-	" TODO verify file is an object that has a 'write' method. AttributeError: 'str' object has no attribute 'write' "
-	" TODO implicitly convert flush to a bool "
+			(sep class ~= str) ifTrue: [ TypeError signal: 'sep must be a str, not ', sep class name ].
+			(end class ~= str) ifTrue: [ TypeError signal: 'end must be a str, not ', end class name ].
+			" TODO verify file is an object that has a 'write' method. AttributeError: 'str' object has no attribute 'write' "
+			" TODO implicitly convert flush to a bool "
 	
-	"file nextPutAll: (currentScope at: #objects) ___value removeFirst __str__ ___value."
-	objects do: [ :element | file nextPutAll: (element __str__ ___value).]
-			   separatedBy: [file nextPutAll: (sep __str__ ___value).].
-
-	file nextPutAll: (end __str__ ___value).
-	flush ___value ifTrue: [file flush].
-	file close.
+			"file nextPutAll: (currentScope at: #objects) ___value removeFirst __str__ ___value."
+			"objects do: [ :element | file nextPutAll: (element __str__ ___value).]
+					separatedBy: [file nextPutAll: (sep __str__ ___value).]."
+			(1 to: (objects size-1)) do: [:index | file nextPutAll: ((objects at:index) __str__ ___value); nextPutAll: (sep __str__ ___value).].
+			file nextPutAll: (objects at:objects size) __str__ ___value.
+			file nextPutAll: (end __str__ ___value).
+			flush ___value ifTrue: [file flush].
+			file close.
+		].
+	builtins at: #print put: printFunction
 %

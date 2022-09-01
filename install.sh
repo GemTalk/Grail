@@ -61,10 +61,9 @@ Python
     at: #'NotImplemented'   put: NotImplementedType singleton;
     at: #'True'             put: (bool ___value: true);
     at: #'False'            put: (bool ___value: false);
-    at: #'builtins'         put: (Dictionary new
-                                      at: #print put: 'builtin_function_or_method new print:';
-                                      yourself); 
+    at: #'builtins'         put: (Dictionary new); 
     yourself.
+builtin_function_or_method new print.
 %
 output pop
 errorCount
