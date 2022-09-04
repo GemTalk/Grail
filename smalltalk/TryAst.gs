@@ -34,8 +34,8 @@ printSmalltalkOn: aStream
 	handlers do: [ :handler |
 		aStream decreaseIndent.
 		aStream lf; nextPutAll: '] on: '; yourself.
-
-		handler type = 'None' ifTrue: [
+		
+		handler type = None ifTrue: [
 			aStream nextPutAll: 'Exception'.
 		] ifFalse: [
 			aStream nextPutAll: handler type id asString.

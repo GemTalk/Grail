@@ -33,10 +33,7 @@ print
 			(end class ~= str) ifTrue: [ TypeError signal: 'end must be a str, not ', end class name ].
 			" TODO verify file is an object that has a 'write' method. AttributeError: 'str' object has no attribute 'write' "
 			" TODO implicitly convert flush to a bool "
-	
-			"file nextPutAll: (currentScope at: #objects) ___value removeFirst __str__ ___value."
-			"objects do: [ :element | file nextPutAll: (element __str__ ___value).]
-					separatedBy: [file nextPutAll: (sep __str__ ___value).]."
+
 			(1 to: (objects size-1)) do: [:index | file nextPutAll: ((objects at:index) __str__ ___value); nextPutAll: (sep __str__ ___value).].
 			file nextPutAll: (objects at:objects size) __str__ ___value.
 			file nextPutAll: (end __str__ ___value).

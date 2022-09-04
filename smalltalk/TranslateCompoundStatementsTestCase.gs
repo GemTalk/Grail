@@ -61,7 +61,7 @@ testTranslateTryExcept
 
 	self assert: stream contents equals: 
 '[
-	(currentScope at: #print) scope: currentScope positional: { ((int ___value: 1) __truediv__: (int ___value: 0)). } named: Array new
+	(currentScope at: #print) scope: currentScope positional: { ((int ___value: 1) __truediv__: (int ___value: 0)). } named: {}
 ] on: Exception do: [
 	RuntimeError signal: (str ___value: ''Something bad happened'') ___value.
 ].'.
@@ -72,7 +72,7 @@ testTranslateTryExcept
 
 	self assert: stream contents equals: 
 '[
-	(currentScope at: #print) scope: currentScope positional: { ((int ___value: 1) __truediv__: (int ___value: 0)). } named: Array new
+	(currentScope at: #print) scope: currentScope positional: { ((int ___value: 1) __truediv__: (int ___value: 0)). } named: {}
 ] on: ZeroDivisionError do: [
 	RuntimeError signal: (str ___value: ''Something bad happened'') ___value.
 ].'.
@@ -84,12 +84,12 @@ testTranslateTryExcept
 	self assert: stream contents equals: 
 '[
 	[
-		(currentScope at: #print) scope: currentScope positional: { ((int ___value: 2) __add__: (int ___value: 2)). } named: Array new
+		(currentScope at: #print) scope: currentScope positional: { ((int ___value: 2) __add__: (int ___value: 2)). } named: {}
 	] on: Exception do: [
 		RuntimeError signal: (str ___value: ''Something bad happened'') ___value.
 	]
 ] ensure: [
-	(currentScope at: #print) scope: currentScope positional: { ((int ___value: 3) __mul__: (int ___value: 2)). } named: Array new
+	(currentScope at: #print) scope: currentScope positional: { ((int ___value: 3) __mul__: (int ___value: 2)). } named: {}
 ].'.
 
 	x := self statementsAt: 10.
@@ -100,7 +100,7 @@ testTranslateTryExcept
 '[
 	[
 		[
-			(currentScope at: #print) scope: currentScope positional: { ((int ___value: 2) __add__: (int ___value: 2)). } named: Array new
+			(currentScope at: #print) scope: currentScope positional: { ((int ___value: 2) __add__: (int ___value: 2)). } named: {}
 		] on: ZeroDivisionError do: [
 
 		]
@@ -108,7 +108,7 @@ testTranslateTryExcept
 		RuntimeError signal: (str ___value: ''Something bad happened'') ___value.
 	]
 ] ensure: [
-	(currentScope at: #print) scope: currentScope positional: { ((int ___value: 3) __mul__: (int ___value: 2)). } named: Array new
+	(currentScope at: #print) scope: currentScope positional: { ((int ___value: 3) __mul__: (int ___value: 2)). } named: {}
 ].'
 %
 category: 'other'
