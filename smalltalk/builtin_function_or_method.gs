@@ -14,6 +14,12 @@ set compile_env: 0
 category: 'other'
 method: builtin_function_or_method
 print
+	"this function prints the items stored in vararg
+	vararg	- items to be printed
+	sep		- character seperating each printed item
+	end		- character at the end of the printed items
+	file		- the file or stream where the elements are printed
+	flush		- a boolean, on True the printing cache is flushed"
 	| printFunction |
 	printFunction := FunctionDef new
 						vararg: #vararg;

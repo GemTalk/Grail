@@ -17,7 +17,6 @@ initialize
 category: 'other'
 method: RaiseAst
 printSmalltalkOn: aStream
-
 	aStream 
 		nextPutAll: (exc class == CallAst ifTrue: [ exc function id ] ifFalse: [ exc id ]);
 		nextPutAll: ' signal';
@@ -29,7 +28,7 @@ printSmalltalkOn: aStream
 		aStream nextPutAll: ' ___value'.
 	].
 
-	cause = 'None' ifFalse: [
+	cause class = NoneType ifFalse: [
 		self halt.
 	].
 
