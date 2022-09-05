@@ -21,7 +21,7 @@ testTranslateFor
 	x printSmalltalkOn: stream.
 
 	self assert: stream contents equals:
-'(range value: { (int ___value: 10). } value: Dictionary new) ___value do: [ :i |
+'((currentScope at: #range) scope: currentScope positional: { (int ___value: 10). } named: {}) ___value do: [ :i |
 
 ].'
 %

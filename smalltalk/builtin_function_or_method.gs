@@ -13,6 +13,11 @@ instance
 set compile_env: 0
 category: 'other'
 method: builtin_function_or_method
+initialize
+	self print range.
+%
+category: 'other'
+method: builtin_function_or_method
 print
 	"this function prints the items stored in vararg
 	vararg	- items to be printed
@@ -20,13 +25,13 @@ print
 	end		- character at the end of the printed items
 	file		- the file or stream where the elements are printed
 	flush		- a boolean, on True the printing cache is flushed"
-	| printFunction |
-	printFunction := FunctionDef new
+	| print |
+	print := FunctionDef new
 						vararg: #vararg;
 						kwonlyargs: { #sep. #end. #file. #flush };
 						kw_defaults: {str ___value: ''. str ___value: Character lf. GsFile stdoutServer. bool ___value: False};
 						yourself.
-	printFunction block: [ :currentScope |
+	print block: [ :currentScope |
 			| objects sep end file flush |
 			objects := (currentScope at: #vararg) ___value.
 			sep := currentScope at: #sep ifAbsent: (str ___value: '').
@@ -46,5 +51,23 @@ print
 			flush ___value ifTrue: [file flush].
 			file close.
 		].
-	builtins at: #print put: printFunction
+	builtins at: #print put: print
+%
+category: 'other'
+method: builtin_function_or_method
+range
+	| rangeFunction |
+	rangeFunction := FunctionDef new
+						vararg: #vararg;
+						yourself.
+	rangeFunction block: [ :currentScope |
+		|varargSize returnObject|
+		varargSize := (currentScope at:#vararg) ___value size.
+		varargSize = 1 ifTrue: [returnObject := (range new __init__:((currentScope at:#vararg) ___value at: 1))].
+		varargSize = 2 ifTrue: [returnObject := (range new __init__:((currentScope at:#vararg) ___value at: 1) _: ((currentScope at:#vararg) ___value at: 2))].
+		varargSize = 3 ifTrue: [returnObject := (range new __init__:((currentScope at:#vararg) ___value at: 1) _: ((currentScope at:#vararg) ___value at: 2) _: ((currentScope at:#vararg) ___value at: 3))].
+		varargSize > 3 ifTrue: [TypeError signal: 'range expected at most 3 arguments, got '.].
+		returnObject
+	].
+	builtins at: #range put: rangeFunction
 %

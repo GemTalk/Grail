@@ -63,7 +63,7 @@ Python
     at: #'False'            put: (bool ___value: false);
     at: #'builtins'         put: (Dictionary new); 
     yourself.
-builtin_function_or_method new print.
+builtin_function_or_method new initialize.
 %
 output pop
 errorCount

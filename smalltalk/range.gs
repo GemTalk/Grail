@@ -80,7 +80,7 @@ category: 'Python'
 method: range
 __init__: aPythonInt
 
-	container  := self class ___containerClass from: 0 to: aPythonInt ___value.
+	container  := self class ___containerClass from: 0 to: aPythonInt ___value -1.
 %
 category: 'Python'
 method: range
