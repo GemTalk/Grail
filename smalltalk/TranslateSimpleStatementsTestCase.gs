@@ -66,4 +66,23 @@ testTranslateRaise
 		withExceptionDo: [ :exc | self assert: exc messageText equals: 'Something bad happened' ].
 	
 	" TODO cause "
+	x := (self statementsAt: 22).
+	stream := WriteStream on: String new.
+	x printSmalltalkOn: stream.
+
+	self assert: stream contents equals: 'RuntimeError signal: (str ___value: ''Something bad happened'') ___value.'.
+	self 
+		should: [ stream contents evaluate ] 
+		raise: RuntimeError
+		withExceptionDo: [ :exc | self assert: exc messageText equals: 'Something bad happened' ].
+
+	x := (self statementsAt: 23).
+	stream := WriteStream on: String new.
+	x printSmalltalkOn: stream.
+
+	self assert: stream contents equals: 'RuntimeError signal: ((str ___value: ''Something bad happened'') ___value, '' The above exception was the direct cause of the following exception: '', ((RuntimeError new addText: (str ___value: ''Caused by me'')  ___value) describe)).'.
+	self 
+		should: [ stream contents evaluate ] 
+		raise: RuntimeError
+		withExceptionDo: [ :exc | self assert: exc messageText equals: 'Something bad happened The above exception was the direct cause of the following exception: a RuntimeError occurred (error 2702), Caused by me' ].
 %

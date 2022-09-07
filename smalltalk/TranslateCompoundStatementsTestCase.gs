@@ -62,7 +62,7 @@ testTranslateTryExcept
 	self assert: stream contents equals: 
 '[
 	(currentScope at: #print) scope: currentScope positional: { ((int ___value: 1) __truediv__: (int ___value: 0)). } named: {}
-] on: Exception do: [
+] on: Error, Exception do: [
 	RuntimeError signal: (str ___value: ''Something bad happened'') ___value.
 ].'.
 
@@ -85,7 +85,7 @@ testTranslateTryExcept
 '[
 	[
 		(currentScope at: #print) scope: currentScope positional: { ((int ___value: 2) __add__: (int ___value: 2)). } named: {}
-	] on: Exception do: [
+	] on: Error, Exception do: [
 		RuntimeError signal: (str ___value: ''Something bad happened'') ___value.
 	]
 ] ensure: [
@@ -104,7 +104,7 @@ testTranslateTryExcept
 		] on: ZeroDivisionError do: [
 
 		]
-	] on: Exception do: [
+	] on: Error, Exception do: [
 		RuntimeError signal: (str ___value: ''Something bad happened'') ___value.
 	]
 ] ensure: [
@@ -119,4 +119,9 @@ testTranslateWhile
 	x := self statementsAt: 3.
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
+
+	self assert: stream contents equals:
+'[True] whileTrue: [
+
+].'
 %

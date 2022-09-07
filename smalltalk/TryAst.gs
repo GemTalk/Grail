@@ -36,7 +36,7 @@ printSmalltalkOn: aStream
 		aStream lf; nextPutAll: '] on: '; yourself.
 		
 		handler type = None ifTrue: [
-			aStream nextPutAll: 'Exception'.
+			aStream nextPutAll: 'Error, Exception'.
 		] ifFalse: [
 			aStream nextPutAll: handler type id asString.
 		].
