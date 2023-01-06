@@ -53,6 +53,9 @@ initialize
 	self commaSpace.
 	ctx := ExpressionContextAst parent: self.
 	self readPosition.
+	"TO DO
+		if ctx == write:
+		add id to block variable list"
 %
 category: 'other'
 method: NameAst
@@ -87,7 +90,10 @@ printOn: aStream
 category: 'other'
 method: NameAst
 printSmalltalkOn: aStream
-
+	"TO DO
+		if ctx is read && this id is in block as writeable but has not been written
+			give UnboundLocalError
+		if ctx is write change flag in block to true aka has been written"
 	aStream 
 		nextPutAll: 'currentScope at: ';
 		nextPut: $#;
