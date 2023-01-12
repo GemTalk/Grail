@@ -50,6 +50,7 @@ category: 'other'
 method: CallAst
 printSmalltalkOn: aStream
 
+		"throw namedefbefore error here"
 		aStream 
 		nextPutAll: '(currentScope at: #';
 		nextPutAll: function id;

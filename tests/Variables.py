@@ -7,6 +7,7 @@ print(x, end=' ') # 5
 # access global variable in local scope
 def foo():
     print(x, end=' ')
+    x = 2
     return x
 
 y = foo() # 5

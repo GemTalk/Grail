@@ -53,9 +53,7 @@ initialize
 	self commaSpace.
 	ctx := ExpressionContextAst parent: self.
 	self readPosition.
-	"TO DO
-		if ctx == write:
-		add id to block variable list"
+	ctx isStoreCtx ifTrue: [self parent declareVariable: id]
 %
 category: 'other'
 method: NameAst

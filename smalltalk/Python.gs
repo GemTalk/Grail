@@ -4106,6 +4106,23 @@ doit
 WithItemAst category: 'Parser'
 %
 set compile_env: 0
+! ------------------- Class definition for VariableHelper
+expectvalue /Class
+doit
+SymbolDictionary subclass: 'VariableHelper'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+VariableHelper category: 'Tools'
+%
+set compile_env: 0
 ! ------------------- Class definition for Variables
 expectvalue /Class
 doit
@@ -6357,6 +6374,7 @@ input UnicodeWarning.gs
 input UserWarning.gs
 input USubAst.gs
 input ValueError.gs
+input VariableHelper.gs
 input Variables.gs
 input Warning.gs
 input WhileAst.gs
