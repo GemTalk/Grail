@@ -10,12 +10,23 @@ readVariable: aVarName withHelperSymbols: aIdentitySet
 	"read a variable from the AllVariables global but throw an error if it isn't in aIdentitySet"
 	
 	(aIdentitySet includes: aVarName)
-		ifTrue: [^(AllVariables last at: aVarName)]
-		ifFalse: [self error].
+		ifTrue: [self error]
+		ifFalse: [^((Python at: #'AllVariables') reverseDo: [:each |
+			|holder|
+			holder := each at: aVarName ifAbsent: [].
+			holder notNil ifTrue: [^holder].
+		])].
+"(Python at: #'AllVariables') reverseDo: [:each |
+			|holder|
+			holder := each at: aVarName ifAbsent: [].
+			holder notNil ifFalse: [^holder].
+		]"
+"(Python at: #'AllVariables') last at: aVarName"
 %
 category: 'other'
 method: VariableHelper
 writeVariable: aString value: aValue
 	"add a variable to the current level of the variables scopes"
-	AllVariables last at: aString put: aValue.
+
+	(Python at: #'AllVariables') last at: aString put: aValue.
 %

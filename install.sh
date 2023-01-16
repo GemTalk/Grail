@@ -63,14 +63,19 @@ Python
     at: #'False'            put: (bool ___value: false);
     at: #'builtins'         put: (Dictionary new);
     at: #'AllVariables'     put: (OrderedCollection new: 0);
+    at: #'accessVariable'   put: (VariableHelper new);
     yourself.
+
 builtin_function_or_method new initialize.
+
 "builtin variable layer"
 (Python at: #'AllVariables') add: (Python at: #'builtins').
 "imports variable layer"
 (Python at: #'AllVariables') add: (Dictionary new).
 "globals variable layer"
 (Python at: #'AllVariables') add: (Dictionary new).
+
+Python 
 %
 output pop
 errorCount

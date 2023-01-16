@@ -44,7 +44,11 @@ category: 'other'
 method: FunctionDef
 scope: aVariables positional: positionalArray named: namedArray
 
-	| myScope defaultsOffset |
+	| myScope defaultsOffset result|
+
+	"for later"
+	AllVariables add: (Dictionary new).
+
 	myScope := aVariables createChildScope.
 
 	vararg = #'None' ifFalse: [
@@ -92,9 +96,10 @@ scope: aVariables positional: positionalArray named: namedArray
 			(myScope at: kwarg) __setitem__: (str ___value: var key asString) _: var value.
 		].
 	].
-	
 
-	^block value: myScope.
+	result := (block value: myScope).
+	AllVariables remove: (AllVariables last).
+	^result.
 %
 category: 'other'
 method: FunctionDef

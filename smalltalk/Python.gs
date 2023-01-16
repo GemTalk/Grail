@@ -4106,23 +4106,6 @@ doit
 WithItemAst category: 'Parser'
 %
 set compile_env: 0
-! ------------------- Class definition for VariableHelper
-expectvalue /Class
-doit
-SymbolDictionary subclass: 'VariableHelper'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-VariableHelper category: 'Tools'
-%
-set compile_env: 0
 ! ------------------- Class definition for Variables
 expectvalue /Class
 doit
@@ -6107,6 +6090,23 @@ Object
 expectvalue /Class
 doit
 PythonTestResource category: 'Tests'
+%
+set compile_env: 0
+! ------------------- Class definition for VariableHelper
+expectvalue /Class
+doit
+Object subclass: 'VariableHelper'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+VariableHelper category: 'Tools'
 %
 
 input AbstractLocationNode.gs

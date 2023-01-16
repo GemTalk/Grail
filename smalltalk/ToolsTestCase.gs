@@ -60,16 +60,39 @@ testFunctionDefScopePositionalNamed
 			assert: ((currentScope at: #kwarg) __getitem__: (str ___value: 'e')) equals: (int ___value: 8);
 			assert: ((currentScope at: #kwarg) __getitem__: (str ___value: 'f')) equals: (int ___value: 9);
 			yourself.
+	^2.
 	].
 
-	function 
+	self assert: (function 
 		scope: scope 
 		positional: { int ___value: 1. int ___value: 2. int ___value: 4. int ___value: 5. int ___value: 6. } 
 		named: {
 			#d -> (int ___value: 7).
 			#e -> (int ___value: 8).
 			#f -> (int ___value: 9).
-		}.
+		}) equals: 2.
+%
+category: 'other'
+method: ToolsTestCase
+testVariableHelperReadVariable
+	"test that the variable helper object method for reading reads properly"
+
+	(AllVariables last) at:#'testVar1' put: 1.
+
+	self assert: (accessVariable readVariable: #'testVar1' withHelperSymbols: (IdentitySet new)) equals: 1.
+
+	(AllVariables at: 2) at:#'testVar2' put: 2.
+
+	self assert: (accessVariable readVariable: #'testVar2' withHelperSymbols: (IdentitySet new)) equals: 2.
+%
+category: 'other'
+method: ToolsTestCase
+testVariableHelperWriteVariable
+	"test that the variable helper object method for writting reads properly"
+
+	accessVariable writeVariable: #'testVar' value: 2.
+
+	self assert: (AllVariables last at: #'testVar') equals: 2.
 %
 category: 'other'
 method: ToolsTestCase
