@@ -32,7 +32,8 @@ print
 						kw_defaults: {str ___value: ''. str ___value: Character lf. nil. bool ___value: False};
 						yourself.
 	print block: [ :currentScope |
-			| objects sep end file flush |
+			| objects sep end file flush vars|
+			vars := #(x objects sep end file flush) asIdentitySet.
 			(currentScope at: #file) = nil ifTrue: [currentScope at: #file put:GsFile stdoutServer ].
 			objects := (currentScope at: #vararg) ___value.
 			sep := currentScope at: #sep.
@@ -58,15 +59,28 @@ category: 'other'
 method: builtin_function_or_method
 range
 	| rangeFunction |
+	"On startup this creates a builtin range function to convert an interval in to a range object"
 	rangeFunction := FunctionDef new
 						vararg: #vararg;
 						yourself.
 	rangeFunction block: [ :currentScope |
-		|varargSize returnObject|
+		|varargSize returnObject vars|
+		"varargSize is the length of the varargs the function was passed in with."
+		vars := #(varargSize returnObject) asIdentitySet.
+		vars remove: varargSize ifAbsent: [].
 		varargSize := (currentScope at:#vararg) ___value size.
-		varargSize = 1 ifTrue: [returnObject := (range new __init__:((currentScope at:#vararg) ___value at: 1))].
-		varargSize = 2 ifTrue: [returnObject := (range new __init__:((currentScope at:#vararg) ___value at: 1) _: ((currentScope at:#vararg) ___value at: 2))].
-		varargSize = 3 ifTrue: [returnObject := (range new __init__:((currentScope at:#vararg) ___value at: 1) _: ((currentScope at:#vararg) ___value at: 2) _: ((currentScope at:#vararg) ___value at: 3))].
+		varargSize = 1 ifTrue: [
+			vars remove: returnObject ifAbsent: [].
+			returnObject := (range new __init__:((currentScope at:#vararg) ___value at: 1))
+		].
+		varargSize = 2 ifTrue: [
+			vars remove: returnObject ifAbsent: [].
+			returnObject := (range new __init__:((currentScope at:#vararg) ___value at: 1) _: ((currentScope at:#vararg) ___value at: 2))
+		].
+		varargSize = 3 ifTrue: [
+			vars remove: returnObject ifAbsent: [].
+			returnObject := (range new __init__:((currentScope at:#vararg) ___value at: 1) _: ((currentScope at:#vararg) ___value at: 2) _: ((currentScope at:#vararg) ___value at: 3))
+		].
 		varargSize > 3 ifTrue: [TypeError signal: 'range expected at most 3 arguments, got '.].
 		returnObject
 	].

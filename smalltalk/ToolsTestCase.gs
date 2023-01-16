@@ -74,7 +74,7 @@ testFunctionDefScopePositionalNamed
 %
 category: 'other'
 method: ToolsTestCase
-testVariableHelperReadVariable
+testVariableHelperAt
 	"test that the variable helper object method for reading reads properly"
 
 	(AllVariables last) at:#'testVar1' put: 1.
@@ -87,7 +87,7 @@ testVariableHelperReadVariable
 %
 category: 'other'
 method: ToolsTestCase
-testVariableHelperWriteVariable
+testVariableHelperAtPut
 	"test that the variable helper object method for writting reads properly"
 
 	accessVariable writeVariable: #'testVar' value: 2.

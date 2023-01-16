@@ -54,3 +54,25 @@ testprint
 						  named: {#file -> stream. #sep -> False}.
 		] raise: TypeError withExceptionDo: [ :ex | self assert: ex messageText equals: 'sep must be a str, not bool' ].
 %
+category: 'other'
+method: builtin_function_or_methodTest
+testrange
+
+	| rangeHolder variables|
+	variables := Variables new.
+	
+	rangeHolder := ((variables at:#range) scope: variables
+						  positional: { int ___value: 5.}
+						  named: {}).
+	self assert: (rangeHolder ___value) equals: (Interval from: 0 to: 4).
+
+	rangeHolder := ((variables at:#range) scope: variables
+						  positional: { int ___value: 5. int ___value: 7.}
+						  named: {}).
+	self assert: (rangeHolder ___value) equals: (Interval from: 5 to: 6).
+
+	rangeHolder := ((variables at:#range) scope: variables
+						  positional: { int ___value: 5. int ___value: 10. int ___value: 2.}
+						  named: {}).
+	self assert: (rangeHolder ___value) equals: (Interval from: 5 to: 9 by: 2).
+%
