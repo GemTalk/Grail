@@ -79,18 +79,18 @@ testVariableHelperAt
 
 	(AllVariables last) at:#'testVar1' put: 1.
 
-	self assert: (accessVariable readVariable: #'testVar1' withHelperSymbols: (IdentitySet new)) equals: 1.
+	self assert: (accessVariable at: #'testVar1' withHelperSymbols: (IdentitySet new)) equals: 1.
 
 	(AllVariables at: 2) at:#'testVar2' put: 2.
 
-	self assert: (accessVariable readVariable: #'testVar2' withHelperSymbols: (IdentitySet new)) equals: 2.
+	self assert: (accessVariable at: #'testVar2' withHelperSymbols: (IdentitySet new)) equals: 2.
 %
 category: 'other'
 method: ToolsTestCase
 testVariableHelperAtPut
 	"test that the variable helper object method for writting reads properly"
 
-	accessVariable writeVariable: #'testVar' value: 2.
+	accessVariable at: #'testVar' put: 2.
 
 	self assert: (AllVariables last at: #'testVar') equals: 2.
 %
