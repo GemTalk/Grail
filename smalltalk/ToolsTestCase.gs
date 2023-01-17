@@ -85,8 +85,9 @@ testVariableHelperAt
 
 	self assert: (accessVariable at: #'testVar1' withHelperSymbols: (IdentitySet new)) equals: 1.
 
-	AllVariables removeLast.
-	AllVariables removeLast.
+	AllVariables := OrderedCollection new.
+	AllVariables add: builtins.
+	AllVariables add: Dictionary new.
 	AllVariables add: Dictionary new.
 %
 category: 'other'
@@ -98,7 +99,9 @@ testVariableHelperAtPut
 
 	self assert: (AllVariables last at: #'testVar') equals: 2.
 
-	AllVariables removeLast.
+	AllVariables := OrderedCollection new.
+	AllVariables add: builtins.
+	AllVariables add: Dictionary new.
 	AllVariables add: Dictionary new.
 %
 category: 'other'
