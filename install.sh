@@ -50,6 +50,8 @@ symbolDictionary := SymbolDictionary new
     at: #'Instance'         put: nil;
     at: #'GlobalScope'      put: nil;
     at: #'builtins'         put: nil;
+    at: #'AllVariables'     put: nil;
+    at: #'accessVariable'   put: nil;
     yourself.
 userProfile insertDictionary: symbolDictionary at: 1.
 %
