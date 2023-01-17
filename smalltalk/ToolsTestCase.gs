@@ -81,9 +81,13 @@ testVariableHelperAt
 
 	self assert: (accessVariable at: #'testVar1' withHelperSymbols: (IdentitySet new)) equals: 1.
 
-	(AllVariables at: 2) at:#'testVar2' put: 2.
+	AllVariables add: Dictionary new.
 
-	self assert: (accessVariable at: #'testVar2' withHelperSymbols: (IdentitySet new)) equals: 2.
+	self assert: (accessVariable at: #'testVar1' withHelperSymbols: (IdentitySet new)) equals: 1.
+
+	AllVariables removeLast.
+	AllVariables removeLast.
+	AllVariables add: Dictionary new.
 %
 category: 'other'
 method: ToolsTestCase
@@ -93,6 +97,9 @@ testVariableHelperAtPut
 	accessVariable at: #'testVar' put: 2.
 
 	self assert: (AllVariables last at: #'testVar') equals: 2.
+
+	AllVariables removeLast.
+	AllVariables add: Dictionary new.
 %
 category: 'other'
 method: ToolsTestCase

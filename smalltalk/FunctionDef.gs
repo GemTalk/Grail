@@ -98,7 +98,7 @@ scope: aVariables positional: positionalArray named: namedArray
 	].
 
 	result := (block value: myScope).
-	AllVariables remove: (AllVariables last).
+	AllVariables removeLast.
 	^result.
 %
 category: 'other'
