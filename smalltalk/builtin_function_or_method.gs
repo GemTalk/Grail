@@ -31,16 +31,16 @@ print
 						kwonlyargs: { #sep. #end. #file. #flush };
 						kw_defaults: {str ___value: ''. str ___value: Character lf. nil. bool ___value: False};
 						yourself.
-	print block: [ 
+	print block: [ :currentScope |
 			| objects sep end file flush vars|
-			vars := #() asIdentitySet.
-			(accessVariable at: #file withHelperSymbols: vars) = nil ifTrue: [accessVariable at: #file put:GsFile stdoutServer ].
-			objects := (accessVariable at: #vararg withHelperSymbols: vars) ___value.
-			sep := accessVariable at: #sep withHelperSymbols: vars.
-			end := accessVariable at: #end withHelperSymbols: vars.
+			vars := #(x objects sep end file flush) asIdentitySet.
+			(currentScope at: #file) = nil ifTrue: [currentScope at: #file put:GsFile stdoutServer ].
+			objects := (currentScope at: #vararg) ___value.
+			sep := currentScope at: #sep.
+			end := currentScope at: #end.
 			" TODO file should be a python object that has a write(string) method. By default, Python uses sys.stdout. Currently just needs to be a WriteStream or a GsFile. "
-			file := accessVariable at: #file withHelperSymbols: vars.
-			flush := accessVariable at: #flush withHelperSymbols: vars.
+			file := currentScope at: #file.
+			flush := currentScope at: #flush.
 
 			(sep class ~= str) ifTrue: [ TypeError signal: 'sep must be a str, not ', sep class name ].
 			(end class ~= str) ifTrue: [ TypeError signal: 'end must be a str, not ', end class name ].
@@ -63,23 +63,23 @@ range
 	rangeFunction := FunctionDef new
 						vararg: #vararg;
 						yourself.
-	rangeFunction block: [
+	rangeFunction block: [ :currentScope |
 		|varargSize returnObject vars|
 		"varargSize is the length of the varargs the function was passed in with."
 		vars := #(varargSize returnObject) asIdentitySet.
 		vars remove: varargSize ifAbsent: [].
-		varargSize := (accessVariable at:#vararg withHelperSymbols: vars) ___value size.
+		varargSize := (currentScope at:#vararg) ___value size.
 		varargSize = 1 ifTrue: [
 			vars remove: returnObject ifAbsent: [].
-			returnObject := (range new __init__:((accessVariable at:#vararg withHelperSymbols: vars) ___value at: 1))
+			returnObject := (range new __init__:((currentScope at:#vararg) ___value at: 1))
 		].
 		varargSize = 2 ifTrue: [
 			vars remove: returnObject ifAbsent: [].
-			returnObject := (range new __init__:((accessVariable at:#vararg withHelperSymbols: vars) ___value at: 1) _: ((accessVariable at:#vararg withHelperSymbols: vars) ___value at: 2))
+			returnObject := (range new __init__:((currentScope at:#vararg) ___value at: 1) _: ((currentScope at:#vararg) ___value at: 2))
 		].
 		varargSize = 3 ifTrue: [
 			vars remove: returnObject ifAbsent: [].
-			returnObject := (range new __init__:((accessVariable at:#vararg withHelperSymbols: vars) ___value at: 1) _: ((accessVariable at:#vararg withHelperSymbols: vars) ___value at: 2) _: ((accessVariable at:#vararg withHelperSymbols: vars) ___value at: 3))
+			returnObject := (range new __init__:((currentScope at:#vararg) ___value at: 1) _: ((currentScope at:#vararg) ___value at: 2) _: ((currentScope at:#vararg) ___value at: 3))
 		].
 		varargSize > 3 ifTrue: [TypeError signal: 'range expected at most 3 arguments, got '.].
 		returnObject

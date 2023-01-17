@@ -42,28 +42,29 @@ kwonlyargs: anArray
 %
 category: 'other'
 method: FunctionDef
-positional: positionalArray named: namedArray
+scope: aVariables positional: positionalArray named: namedArray
 
-	| defaultsOffset result vars|
+	| myScope defaultsOffset result|
 
 	"for later"
-	vars := IdentitySet new.
 	AllVariables add: (Dictionary new).
 
+	myScope := aVariables createChildScope.
+
 	vararg = #'None' ifFalse: [
-		accessVariable at: vararg put: (list ___value: OrderedCollection new).
+		myScope at: vararg put: (list ___value: OrderedCollection new).
 	].
 
 	defaultsOffset := args size - defaults size.
 
 	(1 to: positionalArray size) do: [ :i |
 		i <= args size ifTrue: [
-			accessVariable at: (args at: i) put: (positionalArray at: i).
+			myScope at: (args at: i) put: (positionalArray at: i).
 		] ifFalse: [
 			defaultsOffset + i <= defaults size ifTrue: [
-				accessVariable at: (args at: i) put: (defaults at: i).
+				myScope at: (args at: i) put: (defaults at: i).
 			] ifFalse: [
-				(accessVariable at: vararg withHelperSymbols: vars) append: (positionalArray at: i).
+				(myScope at: vararg) append: (positionalArray at: i).
 			].
 		].
 	].
@@ -76,27 +77,27 @@ positional: positionalArray named: namedArray
 		(namedKeys includes: (kwonlyargs at: i)) ifTrue: [
 			| namedValue |
 			namedValue := namedArray at: (namedKeys indexOf: (kwonlyargs at: i)).
-			accessVariable at: (kwonlyargs at: i) put: namedValue value.
+			myScope at: (kwonlyargs at: i) put: namedValue value.
 			namedArray removeValue: namedValue.
 		] ifFalse: [
 			(kw_defaults at: i) class = NoneType ifTrue: [
 				"Error"
 			] ifFalse: [
-				accessVariable at: (kwonlyargs at: i) put: (kw_defaults at: i).
+				myScope at: (kwonlyargs at: i) put: (kw_defaults at: i).
 			].
 		].
 	].
 
 	kwarg notNil ifTrue: [
 
-		accessVariable at: kwarg put: (dict ___value: Dictionary new).
+		myScope at: kwarg put: (dict ___value: Dictionary new).
 
 		namedArray do: [ :var |
-			(accessVariable at: kwarg withHelperSymbols: vars) __setitem__: (str ___value: var key asString) _: var value.
+			(myScope at: kwarg) __setitem__: (str ___value: var key asString) _: var value.
 		].
 	].
 
-	result := (block value).
+	result := (block value: myScope).
 	AllVariables remove: (AllVariables last).
 	^result.
 %

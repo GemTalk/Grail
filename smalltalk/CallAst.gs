@@ -52,9 +52,10 @@ printSmalltalkOn: aStream
 
 		"throw namedefbefore error here"
 		aStream 
-		nextPutAll: '(accessVariable at: #';
+		nextPutAll: '(currentScope at: #';
 		nextPutAll: function id;
-		nextPutAll: ' withHelperSymbols: vars) positional: { ';
+		nextPut: $);
+		nextPutAll: ' scope: currentScope positional: { ';
 		yourself.
 
 	arguments do: [ :each | 
