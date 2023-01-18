@@ -14,7 +14,10 @@ set compile_env: 0
 category: 'other'
 method: builtin_function_or_method
 initialize
-	self print range.
+	self
+		print ;
+		range ;
+		yourself.
 %
 category: 'other'
 method: builtin_function_or_method
@@ -33,14 +36,14 @@ print
 						yourself.
 	print block: [ :currentScope |
 			| objects sep end file flush vars|
-			vars := #(x objects sep end file flush) asIdentitySet.
-			(currentScope at: #file) = nil ifTrue: [currentScope at: #file put:GsFile stdoutServer ].
-			objects := (currentScope at: #vararg) ___value.
-			sep := currentScope at: #sep.
-			end := currentScope at: #end.
+			vars := #() asIdentitySet.
+			(currentScope at: #file withHelperSymbols: vars) = nil ifTrue: [currentScope at: #file put:GsFile stdoutServer ].
+			objects := (currentScope at: #vararg withHelperSymbols: vars) ___value.
+			sep := currentScope at: #sep withHelperSymbols: vars.
+			end := currentScope at: #end withHelperSymbols: vars.
 			" TODO file should be a python object that has a write(string) method. By default, Python uses sys.stdout. Currently just needs to be a WriteStream or a GsFile. "
-			file := currentScope at: #file.
-			flush := currentScope at: #flush.
+			file := currentScope at: #file withHelperSymbols: vars.
+			flush := currentScope at: #flush withHelperSymbols: vars.
 
 			(sep class ~= str) ifTrue: [ TypeError signal: 'sep must be a str, not ', sep class name ].
 			(end class ~= str) ifTrue: [ TypeError signal: 'end must be a str, not ', end class name ].
@@ -53,7 +56,7 @@ print
 			flush ___value ifTrue: [file flush].
 			file close.
 		].
-	builtins at: #print put: print
+	Builtins singleton at: #print put: print
 %
 category: 'other'
 method: builtin_function_or_method
@@ -84,5 +87,5 @@ range
 		varargSize > 3 ifTrue: [TypeError signal: 'range expected at most 3 arguments, got '.].
 		returnObject
 	].
-	builtins at: #range put: rangeFunction
+	Builtins singleton at: #range put: rangeFunction
 %

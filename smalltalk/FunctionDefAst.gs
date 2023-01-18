@@ -122,7 +122,7 @@ printSmalltalkOn: aStream
 	self printDefaultsList: args defaults on: aStream.
 
 	aStream
-		nextPutAll: '; block: [ :currentScope |';
+		nextPutAll: '; block: [ :currentScope | |vars|';
 		lf;
 		increaseIndent;
 		yourself.

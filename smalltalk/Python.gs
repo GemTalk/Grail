@@ -4106,23 +4106,6 @@ doit
 WithItemAst category: 'Parser'
 %
 set compile_env: 0
-! ------------------- Class definition for Variables
-expectvalue /Class
-doit
-SymbolDictionary subclass: 'Variables'
-  instVarNames: #( parent)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-Variables category: 'Tools'
-%
-set compile_env: 0
 ! ------------------- Class definition for FunctionDef
 expectvalue /Class
 doit
@@ -6092,10 +6075,44 @@ doit
 PythonTestResource category: 'Tests'
 %
 set compile_env: 0
-! ------------------- Class definition for VariableHelper
+! ------------------- Class definition for Variables
 expectvalue /Class
 doit
-Object subclass: 'VariableHelper'
+Object subclass: 'Variables'
+  instVarNames: #( parent dict)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+Variables category: 'Tools'
+%
+set compile_env: 0
+! ------------------- Class definition for Builtins
+expectvalue /Class
+doit
+Variables subclass: 'Builtins'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #( singleton)
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+Builtins category: 'Tools'
+%
+set compile_env: 0
+! ------------------- Class definition for PyGlobals
+expectvalue /Class
+doit
+Variables subclass: 'PyGlobals'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -6106,7 +6123,7 @@ Object subclass: 'VariableHelper'
 %
 expectvalue /Class
 doit
-VariableHelper category: 'Tools'
+PyGlobals category: 'Tools'
 %
 
 input AbstractLocationNode.gs
@@ -6150,6 +6167,7 @@ input builtin_function_or_method.gs
 input builtin_function_or_methodTest.gs
 input BuiltinImporter.gs
 input BuiltinImporterTest.gs
+input Builtins.gs
 input bytearray.gs
 input bytearrayTest.gs
 input ByteLiteralsTestCase.gs
@@ -6293,6 +6311,7 @@ input PrettyWriteStream.gs
 input ProcessLookupError.gs
 input property.gs
 input propertyTest.gs
+input PyGlobals.gs
 input PythonTestCase.gs
 input PythonTestResource.gs
 input RaiseAst.gs
@@ -6374,7 +6393,6 @@ input UnicodeWarning.gs
 input UserWarning.gs
 input USubAst.gs
 input ValueError.gs
-input VariableHelper.gs
 input Variables.gs
 input Warning.gs
 input WhileAst.gs

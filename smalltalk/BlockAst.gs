@@ -22,7 +22,7 @@ method: BlockAst
 printSmalltalkOn: aStream
 	
 	"initialize a set of written variables in the block"
-	aStream nextPutAll: '|vars|'; lf.
+
 	aStream nextPutAll: 'vars := #('.
 	(body class == Array)
 		ifTrue: [

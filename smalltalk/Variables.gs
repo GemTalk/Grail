@@ -7,13 +7,16 @@ category: 'other'
 classmethod: Variables
 new
 
-	^super new initialize.
+	^self newWithParent: (Builtins singleton).
 %
 category: 'other'
 classmethod: Variables
 newWithParent: aVariables
 
-	^super new parent: aVariables; yourself.
+	^super new 
+		initialize;
+		parent: aVariables;
+		yourself.
 %
 ! ------------------- Instance methods for Variables
 set compile_env: 0
@@ -22,42 +25,57 @@ method: Variables
 associationAt: aKey otherwise: anObject
 
 | assoc |
-assoc := super associationAt: aKey otherwise: nil .
+assoc := dict associationAt: aKey otherwise: nil .
 assoc == nil ifTrue:[ 
-	parent ifNil: [ ^super associationAt: aKey otherwise: anObject ].
+	parent ifNil: [ ^dict associationAt: aKey otherwise: anObject ].
 	^parent associationAt: aKey otherwise: anObject
 ].
 ^ assoc
 %
 category: 'other'
 method: Variables
+at: aKey
+
+	^self at: aKey ifAbsent:[self error]
+%
+category: 'other'
+method: Variables
 at: aKey ifAbsent: aBlock
 
-	parent ifNil: [ ^super at: aKey ifAbsent: aBlock ].
-	^super at: aKey ifAbsent: [ parent at: aKey ifAbsent: aBlock ]
+	parent ifNil: [ ^dict at: aKey ifAbsent: aBlock ].
+	^dict at: aKey ifAbsent: [ parent at: aKey ifAbsent: aBlock ]
 %
 category: 'other'
 method: Variables
 at: aKey put: aValue
 
-"If the receiver already contains a SymbolAssociation with the given key, this
- makes aValue the value of that SymbolAssociation.  Otherwise, this creates a
- new SymbolAssociation with the given key and value and adds it to the
- receiver.  aKey must be a Symbol.   Returns aValue."
-
 | anAssoc |
-(self _validatePrivilegeOld: (self at: aKey otherwise: nil) new: aValue) ifTrue:[
-  anAssoc:= super associationAt: aKey otherwise: nil .
+(dict _validatePrivilegeOld: (dict at: aKey otherwise: nil) new: aValue) ifTrue:[
+  anAssoc:= dict associationAt: aKey otherwise: nil .
   anAssoc == nil ifTrue:[
-       self _at: aKey put:
+       dict _at: aKey put:
        (SymbolAssociation newWithKey: aKey value: aValue).
        ^aValue
   ].
 
-  tableSize := tableSize.  "make sure SymbolDictionary is dirty, not just Association (#42383)"
   anAssoc value: aValue.
   ^aValue
 ].
+%
+category: 'other'
+method: Variables
+at: aKey withHelperSymbols: aIdentitySet
+
+	"self at: aKey ifAbsent:[self error]."
+	(aIdentitySet includes: aKey)
+		ifTrue: [self error: 'read before write error']
+		ifFalse: [^self at: aKey ifAbsent:[self error]].
+%
+category: 'other'
+method: Variables
+builtins
+
+	^parent builtins
 %
 category: 'other'
 method: Variables
@@ -67,11 +85,28 @@ createChildScope
 %
 category: 'other'
 method: Variables
+globals
+
+	^parent globals
+%
+category: 'other'
+method: Variables
 initialize
 
-	builtins keysAndValuesDo: [ :key :value |
-		self at: key put: value.
-	].
+	dict := SymbolDictionary new.
+	super initialize.
+%
+category: 'other'
+method: Variables
+isBuiltins
+
+	^false
+%
+category: 'other'
+method: Variables
+isGlobals
+
+	^false
 %
 category: 'other'
 method: Variables

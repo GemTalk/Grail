@@ -10,7 +10,7 @@ def foo():
     x = 2
     return x
 
-y = foo() # 5
+foo() # 5
 
 # create local variable in local scope
 def bar():

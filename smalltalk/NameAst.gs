@@ -100,6 +100,8 @@ printSmalltalkOn: aStream
 
 	ctx class == StoreAst ifTrue: [
 		aStream nextPutAll: ' put: '.
+	] ifFalse: [
+		aStream nextPutAll: ' withHelperSymbols: vars'
 	].
 %
 category: 'other'

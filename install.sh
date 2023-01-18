@@ -50,8 +50,6 @@ symbolDictionary := SymbolDictionary new
     at: #'Instance'         put: nil;
     at: #'GlobalScope'      put: nil;
     at: #'builtins'         put: nil;
-    at: #'AllVariables'     put: nil;
-    at: #'accessVariable'   put: nil;
     yourself.
 userProfile insertDictionary: symbolDictionary at: 1.
 %
@@ -63,19 +61,8 @@ Python
     at: #'NotImplemented'   put: NotImplementedType singleton;
     at: #'True'             put: (bool ___value: true);
     at: #'False'            put: (bool ___value: false);
-    at: #'builtins'         put: (Dictionary new);
-    at: #'AllVariables'     put: (OrderedCollection new: 0);
-    at: #'accessVariable'   put: (VariableHelper new);
+    at: #'builtins'         put: (Builtins singleton);
     yourself.
-
-builtin_function_or_method new initialize.
-
-"builtin variable layer"
-(Python at: #'AllVariables') add: (Python at: #'builtins').
-"imports variable layer"
-(Python at: #'AllVariables') add: (Dictionary new).
-"globals variable layer"
-(Python at: #'AllVariables') add: (Dictionary new).
 
 Python 
 %

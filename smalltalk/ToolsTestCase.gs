@@ -74,38 +74,6 @@ testFunctionDefScopePositionalNamed
 %
 category: 'other'
 method: ToolsTestCase
-testVariableHelperAt
-	"test that the variable helper object method for reading reads properly"
-
-	(AllVariables last) at:#'testVar1' put: 1.
-
-	self assert: (accessVariable at: #'testVar1' withHelperSymbols: (IdentitySet new)) equals: 1.
-
-	AllVariables add: Dictionary new.
-
-	self assert: (accessVariable at: #'testVar1' withHelperSymbols: (IdentitySet new)) equals: 1.
-
-	AllVariables := OrderedCollection new.
-	AllVariables add: builtins.
-	AllVariables add: Dictionary new.
-	AllVariables add: Dictionary new.
-%
-category: 'other'
-method: ToolsTestCase
-testVariableHelperAtPut
-	"test that the variable helper object method for writting reads properly"
-
-	accessVariable at: #'testVar' put: 2.
-
-	self assert: (AllVariables last at: #'testVar') equals: 2.
-
-	AllVariables := OrderedCollection new.
-	AllVariables add: builtins.
-	AllVariables add: Dictionary new.
-	AllVariables add: Dictionary new.
-%
-category: 'other'
-method: ToolsTestCase
 testVariablesNew
 
 	| myScope |

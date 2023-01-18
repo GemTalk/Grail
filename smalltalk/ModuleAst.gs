@@ -146,9 +146,9 @@ printSmalltalkOn: aStream
 	aStream
 		increaseIndent;
 		lf;
-		nextPutAll: '| currentScope |';
+		nextPutAll: '| currentScope vars|';
 		lf;
-		nextPutAll: 'currentScope := Variables new.';
+		nextPutAll: 'currentScope := PyGlobals new.';
 		lf;
 		yourself.
 	self smalltalkSourceFor: body parenthesisIf: 4 on: aStream. " Doesn't need parenthesis "
