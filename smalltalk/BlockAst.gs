@@ -23,7 +23,7 @@ printSmalltalkOn: aStream
 	
 	"initialize a set of written variables in the block"
 
-	aStream nextPutAll: 'vars := #('.
+	aStream nextPutAll: 'currentScope setHelperSymbols: #('.
 	(body class == Array)
 		ifTrue: [
 			body do: [:each | (each class == AssignAst) ifTrue: [aStream nextPutAll: (each target id); space].
@@ -39,10 +39,6 @@ printSmalltalkOn: aStream
 		self smalltalkSourceFor: (body at: 1) parenthesisIf: 4 on: aStream.
 	] ifFalse: [
 		body do: [ :each |
-			"remove the assigned variable or function name from the set"
-			(each class == AssignAst) ifTrue: [aStream nextPutAll: 'vars remove: '; nextPut: $# ; nextPutAll: (each target id) ; nextPutAll: ' ifAbsent: []'; nextPut: $. ; lf].
-			(each class == FunctionDefAst) ifTrue: [aStream nextPutAll: 'vars remove: '; nextPut: $' ; nextPutAll: (each name); nextPut: $' ; nextPutAll: ' ifAbsent: []'; nextPut: $. ; lf].
-			
 			"print the instruction"
 			self smalltalkSourceFor: each parenthesisIf: 4 on: aStream.
 			aStream nextPut: $.; lf; yourself.

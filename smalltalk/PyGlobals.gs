@@ -6,7 +6,10 @@ set compile_env: 0
 category: 'other'
 classmethod: PyGlobals
 new
-	^Builtins singleton createChildScope.
+	^super new 
+		initialize;
+		parent: builtins;
+		yourself.
 %
 ! ------------------- Instance methods for PyGlobals
 set compile_env: 0

@@ -44,10 +44,7 @@ category: 'other'
 method: FunctionDef
 scope: aVariables positional: positionalArray named: namedArray
 
-	| myScope defaultsOffset result|
-
-	"for later"
-	AllVariables add: (Dictionary new).
+	| myScope defaultsOffset |
 
 	myScope := aVariables createChildScope.
 
@@ -97,9 +94,7 @@ scope: aVariables positional: positionalArray named: namedArray
 		].
 	].
 
-	result := (block value: myScope).
-	AllVariables removeLast.
-	^result.
+	^block value: myScope.
 %
 category: 'other'
 method: FunctionDef

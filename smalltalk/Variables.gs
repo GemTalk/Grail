@@ -36,7 +36,9 @@ category: 'other'
 method: Variables
 at: aKey
 
-	^self at: aKey ifAbsent:[self error]
+	(helperSymbols includes: aKey)
+		ifTrue: [self error: 'read before write error']
+		ifFalse: [^self at: aKey ifAbsent:[self error]].
 %
 category: 'other'
 method: Variables
@@ -50,6 +52,7 @@ method: Variables
 at: aKey put: aValue
 
 | anAssoc |
+helperSymbols remove: aKey ifAbsent: [].
 (dict _validatePrivilegeOld: (dict at: aKey otherwise: nil) new: aValue) ifTrue:[
   anAssoc:= dict associationAt: aKey otherwise: nil .
   anAssoc == nil ifTrue:[
@@ -61,15 +64,6 @@ at: aKey put: aValue
   anAssoc value: aValue.
   ^aValue
 ].
-%
-category: 'other'
-method: Variables
-at: aKey withHelperSymbols: aIdentitySet
-
-	"self at: aKey ifAbsent:[self error]."
-	(aIdentitySet includes: aKey)
-		ifTrue: [self error: 'read before write error']
-		ifFalse: [^self at: aKey ifAbsent:[self error]].
 %
 category: 'other'
 method: Variables
@@ -93,6 +87,7 @@ category: 'other'
 method: Variables
 initialize
 
+	helperSymbols := IdentitySet new.
 	dict := SymbolDictionary new.
 	super initialize.
 %
@@ -119,4 +114,10 @@ method: Variables
 parent: aVariables
 
 	parent := aVariables
+%
+category: 'other'
+method: Variables
+setHelperSymbols: aIdentitySet
+
+	helperSymbols := aIdentitySet.
 %

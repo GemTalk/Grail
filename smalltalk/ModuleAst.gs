@@ -146,7 +146,7 @@ printSmalltalkOn: aStream
 	aStream
 		increaseIndent;
 		lf;
-		nextPutAll: '| currentScope vars|';
+		nextPutAll: '| currentScope |';
 		lf;
 		nextPutAll: 'currentScope := PyGlobals new.';
 		lf;

@@ -6079,7 +6079,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 Object subclass: 'Variables'
-  instVarNames: #( parent dict)
+  instVarNames: #( parent dict helperSymbols)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
