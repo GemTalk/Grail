@@ -17,3 +17,16 @@ initialize
 	].
 	self readPosition.
 %
+category: 'other'
+method: GlobalAst
+printSmalltalkOn: aStream
+
+	aStream nextPutAll: 'currentScope setGlobal: #('.
+	names do: [:each |
+		aStream
+			nextPutAll: each;
+			space;
+			yourself.
+	].
+	aStream nextPutAll: ') asArray'.
+%

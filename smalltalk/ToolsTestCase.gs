@@ -74,6 +74,19 @@ testFunctionDefScopePositionalNamed
 %
 category: 'other'
 method: ToolsTestCase
+testSetGlobals
+
+	|currScope localScope|
+	currScope := PyGlobals new.
+	localScope := currScope createChildScope.
+	localScope setGlobal: #x.
+	localScope at: #x put: 1.
+
+	self assert: (localScope at: #x) equals: 1.
+	self assert: (currScope at: #x) equals: 1.
+%
+category: 'other'
+method: ToolsTestCase
 testVariablesNew
 
 	| myScope |

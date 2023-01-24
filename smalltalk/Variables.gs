@@ -22,13 +22,13 @@ newWithParent: aVariables
 set compile_env: 0
 category: 'other'
 method: Variables
-associationAt: aKey otherwise: anObject
+associationAt: aKey
 
 | assoc |
 assoc := dict associationAt: aKey otherwise: nil .
 assoc == nil ifTrue:[ 
-	parent ifNil: [ ^dict associationAt: aKey otherwise: anObject ].
-	^parent associationAt: aKey otherwise: anObject
+	dict at: aKey put: nil.
+	assoc := dict associationAt: aKey.
 ].
 ^ assoc
 %
@@ -38,7 +38,7 @@ at: aKey
 
 	(helperSymbols includes: aKey)
 		ifTrue: [self error: 'read before write error']
-		ifFalse: [^self at: aKey ifAbsent:[self error]].
+		ifFalse: [^self at: aKey ifAbsent:[self error: 'variable not declared']].
 %
 category: 'other'
 method: Variables
@@ -114,6 +114,22 @@ method: Variables
 parent: aVariables
 
 	parent := aVariables
+%
+category: 'other'
+method: Variables
+setGlobal: aArray
+
+	"create a global variable for each key in the array by creating a new variable in
+	PyGlobals if one doesn't already exist by the name aKey and then adding the
+	association from PyGlobals to this Variables"
+	aArray do: [:aKey |
+		dict at: aKey ifAbsent: [
+				helperSymbols remove: aKey ifAbsent: [].
+				dict add: ((self globals) associationAt: aKey).
+				^nil.
+			].
+		self error: ('SyntaxError: name ''' , aKey asString , ''' is assigned to before global declaration').
+	]
 %
 category: 'other'
 method: Variables

@@ -6,6 +6,7 @@ print(x, end=' ') # 5
 
 # access global variable in local scope
 def foo():
+    global y, z
     print(x, end=' ')
     return x
 
