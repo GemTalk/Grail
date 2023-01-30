@@ -13,6 +13,15 @@ filename
 set compile_env: 0
 category: 'other'
 method: ToolsTestCase
+testBuiltinsSingleton
+	|g1 g2|
+
+	g1 := PyGlobals new.
+	g2 := PyGlobals new.
+	self assert: g1 builtins == g2 builtins.
+%
+category: 'other'
+method: ToolsTestCase
 testFunctionDefScopePositionalNamed
 
 "
@@ -74,16 +83,48 @@ testFunctionDefScopePositionalNamed
 %
 category: 'other'
 method: ToolsTestCase
-testSetGlobals
+testSetAsGlobals
 
 	|currScope localScope|
 	currScope := PyGlobals new.
 	localScope := currScope createChildScope.
-	localScope setGlobal: #x.
+	localScope setAsGlobals: #(x).
 	localScope at: #x put: 1.
 
 	self assert: (localScope at: #x) equals: 1.
 	self assert: (currScope at: #x) equals: 1.
+
+	currScope := PyGlobals new.
+	localScope := currScope createChildScope.
+	localScope at: #x put: 1.
+	[localScope setAsGlobals: #(x)] on: SyntaxError do:[^nil].
+	self error: 'SyntaxError not thrown'.
+%
+category: 'other'
+method: ToolsTestCase
+testSetAsNonlocals
+
+	|currScope localScope nonlocalScope|
+	currScope := PyGlobals new.
+	localScope := currScope createChildScope.
+	nonlocalScope := localScope createChildScope.
+	currScope at: #x put: 1.
+	localScope at: #x put: 1.
+	nonlocalScope setAsNonlocals: #(x).
+	nonlocalScope at: #x put: 2.
+	
+	self assert: (nonlocalScope at: #x) equals: 2.
+	self assert: (localScope at: #x) equals: 2.
+	self assert: (currScope at: #x) equals: 1.
+
+	currScope := PyGlobals new.
+	localScope := currScope createChildScope.
+	nonlocalScope := localScope createChildScope.
+	currScope at: #x put: 1.
+	localScope at: #x put: 1.
+	nonlocalScope at: #x put: 2.
+	[nonlocalScope setAsNonlocals: #(x).] on: SyntaxError do:[^nil].
+	self error: 'SyntaxError not thrown'.
 %
 category: 'other'
 method: ToolsTestCase

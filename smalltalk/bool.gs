@@ -22,7 +22,7 @@ ___value: anObject
 			___value: (anObject ~= 0 ifTrue: [1] ifFalse: [0]);
 			yourself
 	].
-	self error: 'Boolean value not supported'.
+	NotImplementedError signal: 'Boolean value not supported'.
 	#todo
 %
 ! ------------------- Instance methods for bool

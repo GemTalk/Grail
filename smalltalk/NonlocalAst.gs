@@ -17,3 +17,16 @@ initialize
 	].
 	self readPosition.
 %
+category: 'other'
+method: NonlocalAst
+printSmalltalkOn: aStream
+
+	aStream nextPutAll: 'currentScope setAsNonlocals: #('.
+	names do: [:each |
+		aStream
+			nextPutAll: each;
+			space;
+			yourself.
+	].
+	aStream nextPut: $).
+%

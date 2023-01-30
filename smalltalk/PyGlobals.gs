@@ -8,17 +8,11 @@ classmethod: PyGlobals
 new
 	^super new 
 		initialize;
-		parent: builtins;
+		parent: Builtins singleton;
 		yourself.
 %
 ! ------------------- Instance methods for PyGlobals
 set compile_env: 0
-category: 'other'
-method: PyGlobals
-createChildScope
-
-	^Variables newWithParent: self.
-%
 category: 'other'
 method: PyGlobals
 globals

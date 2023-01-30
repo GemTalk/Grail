@@ -13,8 +13,23 @@ instance
 set compile_env: 0
 category: 'other'
 method: builtin_function_or_method
+abs
+	| absFunction |
+	"On startup this creates a builtin abs function to find the absolute value of a object"
+	absFunction := FunctionDef new
+						vararg: #vararg;
+						yourself.
+	absFunction block: [ :currentScope |
+
+		((currentScope at:#vararg) ___value at: 1)  __abs__.
+	].
+	Builtins singleton at: #abs put: absFunction
+%
+category: 'other'
+method: builtin_function_or_method
 initialize
 	self
+		abs ;
 		print ;
 		range ;
 		yourself.

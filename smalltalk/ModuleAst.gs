@@ -131,7 +131,7 @@ parseAst
 	type_ignore := self collectAst: [StatementAst statementFrom: self].
 	(stream peekFor: $)) ifFalse: [self error].
 	string := stream upToEnd trimSeparators.
-	string isEmpty ifFalse: [self error: 'Unexpected text at end of AST: ' , string printString].
+	string isEmpty ifFalse: [SyntaxError signal: 'Unexpected text at end of AST: ' , string printString].
 %
 category: 'other'
 method: ModuleAst

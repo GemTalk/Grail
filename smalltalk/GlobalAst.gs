@@ -21,12 +21,12 @@ category: 'other'
 method: GlobalAst
 printSmalltalkOn: aStream
 
-	aStream nextPutAll: 'currentScope setGlobal: #('.
+	aStream nextPutAll: 'currentScope setAsGlobals: #('.
 	names do: [:each |
 		aStream
 			nextPutAll: each;
 			space;
 			yourself.
 	].
-	aStream nextPutAll: ') asArray'.
+	aStream nextPut: $).
 %

@@ -6,6 +6,27 @@ removeAllClassMethods builtin_function_or_methodTest
 set compile_env: 0
 category: 'other'
 method: builtin_function_or_methodTest
+testAbs
+
+	| rangeHolder variables|
+	variables := Variables new.
+	
+	rangeHolder := ((variables at:#abs) scope: variables
+						  positional: { int ___value: 5.}
+						  named: {}).
+	self assert: (rangeHolder ___value) equals: (5).
+
+	rangeHolder := ((variables at:#abs) scope: variables
+						  positional: { int ___value: -5.}
+						  named: {}).
+	self assert: (rangeHolder ___value) equals: (5).
+
+	[rangeHolder := ((variables at:#abs) scope: variables
+						  positional: { str ___value: 'a'.}
+						  named: {}).] on: Error do: [^nil].
+%
+category: 'other'
+method: builtin_function_or_methodTest
 testprint
 
 	| stream variables|
