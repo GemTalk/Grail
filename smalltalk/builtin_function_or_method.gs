@@ -17,11 +17,12 @@ abs
 	| absFunction |
 	"On startup this creates a builtin abs function to find the absolute value of a object"
 	absFunction := FunctionDef new
-						vararg: #vararg;
+						args: { #number };
+						vararg: #'None';
 						yourself.
 	absFunction block: [ :currentScope |
 
-		((currentScope at:#vararg) ___value at: 1)  __abs__.
+		(currentScope at:#number) __abs__.
 	].
 	Builtins singleton at: #abs put: absFunction
 %
@@ -31,8 +32,25 @@ initialize
 	self
 		abs ;
 		print ;
+		len;
 		range ;
+		type ;
 		yourself.
+%
+category: 'other'
+method: builtin_function_or_method
+len
+	| lenFunction |
+	"On startup this creates a builtin abs function to find the absolute value of a object"
+	lenFunction := FunctionDef new
+						args: { #object };
+						vararg: #'None';
+						yourself.
+	lenFunction block: [ :currentScope |
+
+		(currentScope at:#object) __len__.
+	].
+	Builtins singleton at: #len put: lenFunction
 %
 category: 'other'
 method: builtin_function_or_method
@@ -94,8 +112,27 @@ range
 		varargSize = 3 ifTrue: [
 			returnObject := (range new __init__:((currentScope at:#vararg) ___value at: 1) _: ((currentScope at:#vararg) ___value at: 2) _: ((currentScope at:#vararg) ___value at: 3))
 		].
-		varargSize > 3 ifTrue: [TypeError signal: 'range expected at most 3 arguments, got '.].
+		varargSize > 3 ifTrue: [TypeError signal: 'range expected at most 3 arguments, got ', varargSize.].
 		returnObject
 	].
 	Builtins singleton at: #range put: rangeFunction
+%
+category: 'other'
+method: builtin_function_or_method
+type
+	| typeFunction |
+	"On startup this creates a builtin abs function to find the absolute value of a object"
+	typeFunction := FunctionDef new
+						vararg: #vararg;
+						yourself.
+	typeFunction block: [ :currentScope |
+		|varargSize result|
+		varargSize := (currentScope at:#vararg) ___value size.
+		varargSize = 1 ifTrue: [result := ((currentScope at:#vararg)  ___value at: 1) class].
+		varargSize = 2 ifTrue: [TypeError signal: 'TypeError: type() takes 1 or 3 arguments'].
+		varargSize = 3 ifTrue: [self error: 'Should return a new class with name first arg, inheritence second arg, and writeables is the thrid argument'].
+		varargSize > 3 ifTrue: [TypeError signal: 'TypeError: type() takes 1 or 3 arguments'].
+		result
+	].
+	Builtins singleton at: #type put: typeFunction
 %

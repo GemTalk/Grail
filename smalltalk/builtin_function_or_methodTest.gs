@@ -8,26 +8,49 @@ category: 'other'
 method: builtin_function_or_methodTest
 testAbs
 
-	| rangeHolder variables|
+	| absHolder variables |
 	variables := Variables new.
-	
-	rangeHolder := ((variables at:#abs) scope: variables
+	absHolder := ((variables at:#abs) scope: variables
 						  positional: { int ___value: 5.}
 						  named: {}).
-	self assert: (rangeHolder ___value) equals: (5).
+	self assert: (absHolder ___value) equals: (5).
 
-	rangeHolder := ((variables at:#abs) scope: variables
+	absHolder := ((variables at:#abs) scope: variables
 						  positional: { int ___value: -5.}
 						  named: {}).
-	self assert: (rangeHolder ___value) equals: (5).
+	self assert: (absHolder ___value) equals: (5).
 
-	[rangeHolder := ((variables at:#abs) scope: variables
+	absHolder := [((variables at:#abs) scope: variables
 						  positional: { str ___value: 'a'.}
-						  named: {}).] on: Error do: [^nil].
+						  named: {})] on: Error do: [^1].
+	self assert: (absHolder ___value) equals: (1).
+
+	absHolder := [((variables at:#abs) scope: variables
+						  positional: { int ___value: '1'.  int ___value: '2'.}
+						  named: {})] on: Error do: [^2].
+	self assert: (absHolder ___value) equals: (2).
 %
 category: 'other'
 method: builtin_function_or_methodTest
-testprint
+testLen
+
+	| listHolder variables alist|
+	variables := Variables new.
+	alist := list ___value: { 'c'. 'b'. 'a' }.
+	listHolder := ((variables at:#len) scope: variables
+						  positional: { alist.}
+						  named: {}).
+	self assert: (listHolder ___value) equals: (3).
+
+	alist := int ___value: 1.
+	listHolder := [((variables at:#len) scope: variables
+						  positional: { alist.}
+						  named: {})] on: Error do: [^-1].
+	self assert: (listHolder ___value) equals: (-1).
+%
+category: 'other'
+method: builtin_function_or_methodTest
+testPrint
 
 	| stream variables|
 	variables := Variables new.
@@ -77,7 +100,7 @@ testprint
 %
 category: 'other'
 method: builtin_function_or_methodTest
-testrange
+testRange
 
 	| rangeHolder variables|
 	variables := Variables new.
@@ -96,4 +119,26 @@ testrange
 						  positional: { int ___value: 5. int ___value: 10. int ___value: 2.}
 						  named: {}).
 	self assert: (rangeHolder ___value) equals: (Interval from: 5 to: 9 by: 2).
+%
+category: 'other'
+method: builtin_function_or_methodTest
+testType
+
+	| typeHolder variables|
+	variables := Variables new.
+	
+	typeHolder := ((variables at:#type) scope: variables
+						  positional: { int ___value: 5.}
+						  named: {}).
+	self assert: (typeHolder) equals: (int).
+
+	typeHolder := ((variables at:#type) scope: variables
+						  positional: { (variables at:#type)}
+						  named: {}).
+	self assert: (typeHolder) equals: (FunctionDef).
+
+	typeHolder := [((variables at:#type) scope: variables
+						  positional: { int ___value: 5. tuple ___value: #(h)}
+						  named: {})] on: TypeError do: [^1].
+	self assert: (typeHolder) equals: (1).
 %
