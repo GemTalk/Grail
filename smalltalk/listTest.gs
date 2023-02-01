@@ -310,7 +310,7 @@ category: 'done'
 method: listTest
 test__repr__
    | list |
-	list := self targetInstance __add__: { 'a'. 'b'. 'c'. 'd' }.
+	list := self targetInstance __add__: {str ___value: 'a'. str ___value: 'b'. str ___value: 'c'. str ___value: 'd' }.
 
 	self
 		assert: list __str__ equals: '[''a'', ''b'', ''c'', ''d'']';

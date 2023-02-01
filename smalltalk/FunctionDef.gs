@@ -61,7 +61,9 @@ scope: aVariables positional: positionalArray named: namedArray
 			defaultsOffset + i <= defaults size ifTrue: [
 				myScope at: (args at: i) put: (defaults at: i).
 			] ifFalse: [
-				(myScope at: vararg) append: (positionalArray at: i).
+				[(myScope at: vararg) append: (positionalArray at: i)]
+					on: NameError
+					do:[ TypeError signal: 'takes ', (args size) asString, ' positional arguements but ', (positionalArray size) asString, ' was given'].
 			].
 		].
 	].

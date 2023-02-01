@@ -21,8 +21,9 @@ abs
 						vararg: #'None';
 						yourself.
 	absFunction block: [ :currentScope |
-
-		(currentScope at:#number) __abs__.
+		|value|
+		value := (currentScope at:#number).
+		[value  __abs__] on: MessageNotUnderstood do: [TypeError signal.].
 	].
 	Builtins singleton at: #abs put: absFunction
 %
@@ -48,7 +49,9 @@ len
 						yourself.
 	lenFunction block: [ :currentScope |
 
-		(currentScope at:#object) __len__.
+		[(currentScope at:#object) __len__]
+			on: MessageNotUnderstood
+			do: [TypeError signal: 'TypeError: object of type ''', (currentScope at:#object) class asString, ''' has no len()'].
 	].
 	Builtins singleton at: #len put: lenFunction
 %

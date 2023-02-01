@@ -97,8 +97,8 @@ testSetAsGlobals
 	currScope := PyGlobals new.
 	localScope := currScope createChildScope.
 	localScope at: #x put: 1.
-	[localScope setAsGlobals: #(x)] on: SyntaxError do:[^nil].
-	self error: 'SyntaxError not thrown'.
+	[localScope setAsGlobals: #(x)] on: SyntaxError do:[^self].
+	self assert: false.
 %
 category: 'other'
 method: ToolsTestCase
@@ -123,8 +123,8 @@ testSetAsNonlocals
 	currScope at: #x put: 1.
 	localScope at: #x put: 1.
 	nonlocalScope at: #x put: 2.
-	[nonlocalScope setAsNonlocals: #(x).] on: SyntaxError do:[^nil].
-	self error: 'SyntaxError not thrown'.
+	[nonlocalScope setAsNonlocals: #(x).] on: SyntaxError do:[^self].
+	self assert: false.
 %
 category: 'other'
 method: ToolsTestCase

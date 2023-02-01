@@ -201,7 +201,7 @@ __repr__
 
 	stream := WriteStream on: String new.
 	stream nextPut: $[.
-	stream nextPutAll: container removeFirst __repr__ ___value.
+	stream nextPutAll: container removeFirst __repr__.
 	container do: [ :elem |
 		stream 
 			nextPutAll: ', ';

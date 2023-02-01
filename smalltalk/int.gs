@@ -93,7 +93,9 @@ category: 'Python-int'
 method: int
 __divmod__: anObject
 
-	^tuple  ___value: { value // anObject ___value. value \\ anObject ___value }
+	^[tuple  ___value: { value // anObject ___value. value \\ anObject ___value }]
+		on: ZeroDivide
+		do: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero']
 %
 category: 'Python-int'
 method: int
@@ -110,7 +112,9 @@ category: 'Python-int'
 method: int
 __floordiv__: anObject
 
-	^int ___value: value // anObject ___value
+	^[int ___value: value // anObject ___value]
+		on: ZeroDivide
+		do: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero']
 %
 category: 'Python-int'
 method: int
@@ -137,7 +141,7 @@ __invert__
 category: 'Python-int'
 method: int
 __lshift__: anIndex
-
+	(anIndex ___value) < 0 ifTrue:[ValueError signal: 'ValueError: negative shift count'].
 	^int ___value: (value bitShift: anIndex ___value)
 %
 category: 'Python-int'
@@ -206,7 +210,7 @@ __rfloordiv__: any
 category: 'Python-int'
 method: int
 __rlshift__: any
-
+	(any ___value) < 0 ifTrue:[ValueError signal: 'ValueError: negative shift count'].
 	^any __lshift__: self
 %
 category: 'Python-int'
@@ -251,7 +255,7 @@ __rrshift__: any
 category: 'Python-int'
 method: int
 __rshift__: anIndex
-
+	(anIndex ___value) < 0 ifTrue:[ValueError signal: 'ValueError: negative shift count'].
 	^int ___value: (value bitShift: anIndex ___value negated)
 %
 category: 'Python-int'
@@ -288,7 +292,9 @@ category: 'Python-int'
 method: int
 __truediv__: anObject
 
-	^float ___value: value / anObject ___value
+	^[float ___value: value / anObject ___value]
+		on: ZeroDivide
+		do: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero']
 %
 category: 'Python-int'
 method: int
@@ -353,7 +359,7 @@ category: 'Python-int'
 method: int
 to_bytes
 	"https://docs.python.org/3/library/stdtypes.html#int.to_bytes"
-
+	
 	self error: #pyTodo
 %
 set compile_env: 0

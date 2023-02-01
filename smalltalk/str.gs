@@ -168,9 +168,15 @@ __ne__: anObject
 %
 category: 'Python'
 method: str
+__repr__
+	
+	^self ___value printString
+%
+category: 'Python'
+method: str
 __str__
 	
-	^self
+	^self ___value.
 %
 category: 'Python'
 method: str

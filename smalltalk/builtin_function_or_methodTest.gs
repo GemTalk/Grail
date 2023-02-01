@@ -22,13 +22,13 @@ testAbs
 
 	absHolder := [((variables at:#abs) scope: variables
 						  positional: { str ___value: 'a'.}
-						  named: {})] on: Error do: [^1].
-	self assert: (absHolder ___value) equals: (1).
+						  named: {})] on: TypeError do: [1].
+	self assert: (absHolder) equals: (1).
 
 	absHolder := [((variables at:#abs) scope: variables
-						  positional: { int ___value: '1'.  int ___value: '2'.}
-						  named: {})] on: Error do: [^2].
-	self assert: (absHolder ___value) equals: (2).
+						  positional: { int ___value: 1.  int ___value: 2.}
+						  named: {})] on: TypeError do: [2].
+	self assert: (absHolder) equals: (2).
 %
 category: 'other'
 method: builtin_function_or_methodTest
@@ -45,8 +45,8 @@ testLen
 	alist := int ___value: 1.
 	listHolder := [((variables at:#len) scope: variables
 						  positional: { alist.}
-						  named: {})] on: Error do: [^-1].
-	self assert: (listHolder ___value) equals: (-1).
+						  named: {})] on: TypeError do: [-1].
+	self assert: (listHolder) equals: (-1).
 %
 category: 'other'
 method: builtin_function_or_methodTest
@@ -139,6 +139,6 @@ testType
 
 	typeHolder := [((variables at:#type) scope: variables
 						  positional: { int ___value: 5. tuple ___value: #(h)}
-						  named: {})] on: TypeError do: [^1].
+						  named: {})] on: TypeError do: [1].
 	self assert: (typeHolder) equals: (1).
 %

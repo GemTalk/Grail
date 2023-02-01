@@ -41,6 +41,19 @@ __delitem__: anIndex
 %
 category: 'Python'
 method: list
+__getslice__: aPyIntStart _: aPyIntEnd
+
+	| end |
+	end := aPyIntEnd.
+
+	end class = NoneType ifTrue: [
+		end := int ___value: container size
+	].
+
+	^self class ___value: (self ___getslice: aPyIntStart _: end)
+%
+category: 'Python'
+method: list
 __init__
 
 	container := OrderedCollection new
@@ -50,6 +63,25 @@ method: list
 __init__: aList
 
 	container := aList ___container copy
+%
+category: 'Python'
+method: list
+__repr__
+
+	| stream |
+
+	stream := WriteStream on: String new.
+	stream nextPut: $[.
+	stream nextPutAll: container removeFirst __repr__.
+	container do: [ :elem |
+		stream 
+			nextPutAll: ', ';
+			nextPutAll: elem __repr__;
+			yourself.
+	].
+	stream nextPut: $].
+
+	^stream contents.
 %
 category: 'Python'
 method: list

@@ -62,7 +62,7 @@ category: 'Python-float'
 method: float
 __floordiv__: anObject
 
-	^int ___value: value // anObject ___value
+	^[int ___value: value // anObject ___value]on: ZeroDivide do: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero']
 %
 category: 'Python-float'
 method: float
@@ -194,7 +194,7 @@ category: 'Python-float'
 method: float
 __truediv__: anObject
 
-	^float ___value: value / anObject ___value
+	^[float ___value: value / anObject ___value] on: ZeroDivide do: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero']
 %
 category: 'Python-float'
 method: float
