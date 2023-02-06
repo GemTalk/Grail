@@ -165,6 +165,15 @@ test__ne__
 %
 category: 'todo'
 method: strTest
+test__repr__
+   
+	| object |
+	object := self str: 'hello '.
+
+	self assert: object __repr__ ___value equals: '''hello '''.
+%
+category: 'todo'
+method: strTest
 test__rmod__
    #pyTodo
 %
@@ -172,6 +181,15 @@ category: 'todo'
 method: strTest
 test__rmul__
    #pyTodo
+%
+category: 'todo'
+method: strTest
+test__str__
+   
+	| object |
+	object := self str: 'hello '.
+
+	self assert: object __str__ ___value equals: 'hello '.
 %
 category: 'todo'
 method: strTest

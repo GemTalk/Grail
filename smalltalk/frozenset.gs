@@ -63,6 +63,27 @@ __or__: aSet
 %
 category: 'Python'
 method: frozenset
+__repr__
+
+	| stream index|
+	index := 1.
+	stream := WriteStream on: String new.
+	stream nextPutAll: 'frozenset({'.
+	container do: [ :each |
+		stream nextPutAll: each __repr__ ___value.
+		index ~= container size ifTrue: [
+			stream nextPutAll: ', '.
+		].
+		index := index + 1.
+	].
+	stream nextPut: $};
+		nextPut: $);
+		yourself.
+
+	^(str ___value: (stream contents)).
+%
+category: 'Python'
+method: frozenset
 __sub__: aSet
 
 	^self difference: aSet

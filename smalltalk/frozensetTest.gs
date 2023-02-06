@@ -296,6 +296,16 @@ test__rand__Set
 %
 category: 'done'
 method: frozensetTest
+test__repr__
+   | list |
+	list := self targetInstance: { str ___value: 'a' }.
+
+	self
+		assert: list __repr__ ___value equals: 'frozenset({''a''})';
+		yourself
+%
+category: 'done'
+method: frozensetTest
 test__ror__
 	| a b c |
 	a := self targetInstance: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
@@ -392,10 +402,10 @@ category: 'done'
 method: frozensetTest
 test__str__
    | list |
-	list := self targetInstance: { 'a' }.
+	list := self targetInstance: { str ___value: 'a' }.
 
 	self
-		assert: list __str__ equals: 'frozenset({''a''})';
+		assert: list __str__ ___value equals: 'frozenset({''a''})';
 		yourself
 %
 category: 'done'

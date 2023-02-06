@@ -210,7 +210,7 @@ __rfloordiv__: any
 category: 'Python-int'
 method: int
 __rlshift__: any
-	(any ___value) < 0 ifTrue:[ValueError signal: 'ValueError: negative shift count'].
+	(self ___value) < 0 ifTrue:[ValueError signal: 'ValueError: negative shift count'].
 	^any __lshift__: self
 %
 category: 'Python-int'
@@ -247,7 +247,7 @@ __rpow__: any
 category: 'Python-int'
 method: int
 __rrshift__: any
-
+	(self ___value) < 0 ifTrue:[ValueError signal: 'ValueError: negative shift count'].
 	(any isKindOf: Magnitude)
 		ifTrue: [^self __rrshift__: (int ___value: any)].
 	^any __rshift__: self

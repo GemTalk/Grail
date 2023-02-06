@@ -119,6 +119,26 @@ __rand__: aSet
 %
 category: 'Python'
 method: set
+__repr__
+
+	| stream index|
+	
+	index := 1.
+	stream := WriteStream on: String new.
+	stream nextPut: ${.
+	container do: [ :elem |
+		stream nextPutAll: elem __repr__ ___value.
+		index ~= container size ifTrue: [
+			stream nextPutAll: ', '.
+		].
+		index := index + 1.
+	].
+	stream nextPut: $}.
+
+	^(str ___value: (stream contents)).
+%
+category: 'Python'
+method: set
 __ror__: aSet
 
 	^aSet union: self
@@ -134,24 +154,6 @@ method: set
 __rxor__: aSet
 
 	^aSet symmetric_difference: self
-%
-category: 'Python'
-method: set
-__str__
-
-	| index stream |
-	stream := WriteStream on: String new.
-	index := 1.
-	stream nextPut: ${.
-	container do: [ :each |
-		stream nextPutAll: each ___value printString.
-		index ~= container size ifTrue: [
-			stream nextPutAll: ', '.
-		].
-		index := index + 1.
-	].
-	stream nextPut: $}.
-	^stream contents
 %
 category: 'Python'
 method: set

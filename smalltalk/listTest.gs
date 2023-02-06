@@ -313,7 +313,7 @@ test__repr__
 	list := self targetInstance __add__: {str ___value: 'a'. str ___value: 'b'. str ___value: 'c'. str ___value: 'd' }.
 
 	self
-		assert: list __str__ equals: '[''a'', ''b'', ''c'', ''d'']';
+		assert: list __repr__ ___value equals: '[''a'', ''b'', ''c'', ''d'']';
 		yourself.
 
 	#pyElaborate  " should be somesthing like 'list new __add__: { ''a''. ''b''. ''c''. ''d'' }' ?"
@@ -407,10 +407,10 @@ category: 'done'
 method: listTest
 test__str__
    | list |
-	list := self targetInstance __add__: { 'a'. 'b'. 'c'. 'd' }.
+	list := self targetInstance __add__: {str ___value: 'a'. str ___value: 'b'. str ___value: 'c'. str ___value: 'd' }.
 
 	self
-		assert: list __str__ equals: '[''a'', ''b'', ''c'', ''d'']';
+		assert: list __str__ ___value equals: '[''a'', ''b'', ''c'', ''d'']';
 		yourself
 %
 category: 'done'

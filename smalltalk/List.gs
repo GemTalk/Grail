@@ -72,16 +72,16 @@ __repr__
 
 	stream := WriteStream on: String new.
 	stream nextPut: $[.
-	stream nextPutAll: container removeFirst __repr__.
+	stream nextPutAll: container removeFirst __repr__ ___value.
 	container do: [ :elem |
 		stream 
 			nextPutAll: ', ';
-			nextPutAll: elem __repr__;
+			nextPutAll: elem __repr__ ___value;
 			yourself.
 	].
 	stream nextPut: $].
 
-	^stream contents.
+	^(str ___value: (stream contents)).
 %
 category: 'Python'
 method: list

@@ -35,7 +35,39 @@ __new__: aPythonTuple
 set compile_env: 0
 category: 'Python'
 method: tuple
+__getslice__: aPyIntStart _: aPyIntEnd
+
+	| end |
+	end := aPyIntEnd.
+
+	end class = NoneType ifTrue: [
+		end := int ___value: container size
+	].
+
+	^self class ___value: (self ___getslice: aPyIntStart _: end)
+%
+category: 'Python'
+method: tuple
 __init__: aPythonTuple
+%
+category: 'Python'
+method: tuple
+__repr__
+
+	| stream |
+
+	stream := WriteStream on: String new.
+	stream nextPut: $(.
+	stream nextPutAll: container removeFirst __repr__ ___value.
+	container do: [ :elem |
+		stream 
+			nextPutAll: ', ';
+			nextPutAll: elem __repr__ ___value;
+			yourself.
+	].
+	stream nextPut: $).
+
+	^(str ___value: (stream contents)).
 %
 set compile_env: 0
 category: 'Smalltalk'

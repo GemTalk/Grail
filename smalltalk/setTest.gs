@@ -307,6 +307,16 @@ test__rand__
 %
 category: 'done'
 method: setTest
+test__repr__
+   | list |
+	list := self targetInstance __add__: { self str: 'a' }.
+
+	self
+		assert: list __repr__ ___value equals: '{''a''}';
+		yourself
+%
+category: 'done'
+method: setTest
 test__ror__
 	| a b c |
 	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
@@ -365,7 +375,7 @@ test__str__
 	list := self targetInstance __add__: { self str: 'a' }.
 
 	self
-		assert: list __str__ equals: '{''a''}';
+		assert: list __str__ ___value equals: '{''a''}';
 		yourself
 %
 category: 'done'

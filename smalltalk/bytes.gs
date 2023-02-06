@@ -122,6 +122,19 @@ __getitem__: anIndex
 %
 category: 'Python'
 method: bytes
+__getslice__: aPyIntStart _: aPyIntEnd
+
+	| end |
+	end := aPyIntEnd.
+
+	end class = NoneType ifTrue: [
+		end := int ___value: container size
+	].
+
+	^self class ___value: (self ___getslice: aPyIntStart _: end)
+%
+category: 'Python'
+method: bytes
 __init__
 
 		container := self class ___containerClass new.

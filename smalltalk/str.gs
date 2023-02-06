@@ -170,13 +170,13 @@ category: 'Python'
 method: str
 __repr__
 	
-	^self ___value printString
+	^str ___value: self ___value printString
 %
 category: 'Python'
 method: str
 __str__
 	
-	^self ___value.
+	^self.
 %
 category: 'Python'
 method: str
