@@ -32,6 +32,62 @@ testAbs
 %
 category: 'other'
 method: builtin_function_or_methodTest
+testFloat
+
+	| floatHolder variables |
+	variables := Variables new.
+	floatHolder := ((variables at:#float) scope: variables
+						  positional: { float ___value: 1.1.}
+						  named: {}).
+	self assert: (floatHolder ___value) equals: (1.1).
+
+	floatHolder := ((variables at:#float) scope: variables
+						  positional: { int ___value: 2.}
+						  named: {}).
+	self assert: (floatHolder class) equals: (float).
+	self assert: (floatHolder ___value) equals: (2).
+
+	floatHolder := ((variables at:#float) scope: variables
+						  positional: { str ___value: '3.1'.}
+						  named: {}).
+	self assert: (floatHolder class) equals: (float).
+	self assert: (floatHolder ___value) equals: (3.1).
+
+	floatHolder := ((variables at:#float) scope: variables
+						  positional: { str ___value: '4'.}
+						  named: {}).
+	self assert: (floatHolder class) equals: (float).
+	self assert: (floatHolder ___value) equals: (4).
+
+	floatHolder := [((variables at:#float) scope: variables
+						  positional: { str ___value: 'a'}
+						  named: {})] on: ValueError do: [2].
+	self assert: (floatHolder) equals: (2).
+
+	floatHolder := [((variables at:#float) scope: variables
+						  positional: { list ___value: {int ___value: 1}}
+						  named: {})] on: TypeError do: [3].
+	self assert: (floatHolder) equals: (3).
+%
+category: 'other'
+method: builtin_function_or_methodTest
+testInt
+
+	| intHolder variables |
+	variables := Variables new.
+	intHolder := ((variables at:#int) scope: variables
+						  positional: { int ___value: 3.}
+						  named: {}).
+	self assert: (intHolder ___value) equals: (3).
+
+	intHolder := ((variables at:#int) scope: variables
+						  positional: { float ___value: 4.1.}
+						  named: {}).
+	self assert: (intHolder class) equals: (int).
+	self assert: (intHolder ___value) equals: (4).
+%
+category: 'other'
+method: builtin_function_or_methodTest
 testLen
 
 	| listHolder variables alist|

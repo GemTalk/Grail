@@ -35,6 +35,12 @@ __eq__: anObject
 %
 category: 'Python'
 method: str
+__float__
+	
+	^float ___value: self ___value asNumber.
+%
+category: 'Python'
+method: str
 __ge__: other
 
 	(1 to: value size) do: [ :i |

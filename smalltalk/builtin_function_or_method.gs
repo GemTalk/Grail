@@ -29,14 +29,74 @@ abs
 %
 category: 'other'
 method: builtin_function_or_method
+float
+	| floatFunction |
+	"On startup this creates a builtin abs function to find the absolute value of a object"
+	floatFunction := FunctionDef new
+						args: { #object.};
+						vararg: #'None';
+						yourself.
+	floatFunction block: [ :currentScope |
+		[ (currentScope at:#object) __float__.]
+			on: (MessageNotUnderstood, ImproperOperation)
+			do: [
+				(currentScope at:#object) class = str ifTrue: [
+					ValueError signal:
+						'ValueError: could not convert string to float: ',
+						(currentScope at:#object) __repr__ ___value.
+				] ifFalse: [
+				TypeError signal:
+					'TypeError: float argument must be a string or a real number, not ''',
+					(currentScope at:#object) class asString, ''''
+				].
+			].
+	].
+	Builtins singleton at: #float put: floatFunction
+%
+category: 'other'
+method: builtin_function_or_method
 initialize
 	self
 		abs ;
+		float ;
+		int ;
+		len ;
 		print ;
-		len;
 		range ;
 		type ;
 		yourself.
+%
+category: 'other'
+method: builtin_function_or_method
+int
+	| intFunction |
+	"On startup this creates a builtin abs function to find the absolute value of a object"
+	intFunction := FunctionDef new
+						args: { #object. #base };
+						defaults: {int ___value: 10};
+						vararg: #'None';
+						yourself.
+	intFunction block: [ :currentScope |
+		| return |
+		(currentScope at:#object) class = str ifTrue:[
+			Error signal: 'not implemented'.
+			ValueError signal:
+					'ValueError: invalid literal for int() with base ',
+					(currentScope at:#base) __repr__ ___value,
+					': ',
+					(currentScope at:#object) __repr__ ___value.
+		] ifFalse: [
+			return := [(currentScope at:#object) __int__]
+				on: MessageNotUnderstood
+				do: [
+					TypeError signal:
+						'TypeError: int() argument must be a string, a bytes-like object or a real number, not ''',
+						(currentScope at:#object) class asString, ''''
+				].
+		].
+		return
+	].
+	Builtins singleton at: #int put: intFunction
 %
 category: 'other'
 method: builtin_function_or_method
