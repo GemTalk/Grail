@@ -29,6 +29,45 @@ abs
 %
 category: 'other'
 method: builtin_function_or_method
+bool
+	| boolFunction |
+	"On startup this creates a builtin abs function to find the absolute value of a object"
+	boolFunction := FunctionDef new
+						args: { #object.};
+						vararg: #'None';
+						yourself.
+	boolFunction block: [ :currentScope |
+		[ (currentScope at:#object) __bool__.]
+			on: MessageNotUnderstood
+			do: [
+				[bool ___value: (currentScope at:#object) __len__ ___value  ~= 0]
+					on: MessageNotUnderstood
+					do: [True]
+			].
+	].
+	Builtins singleton at: #bool put: boolFunction
+%
+category: 'other'
+method: builtin_function_or_method
+chr
+	| chrFunction |
+	"On startup this creates a builtin abs function to find the absolute value of a object"
+	chrFunction := FunctionDef new
+						args: { #object.};
+						vararg: #'None';
+						yourself.
+	chrFunction block: [ :currentScope |
+		(currentScope at:#object) class = int
+			ifFalse: [
+				TypeError signal: 'TypeError: ', (currentScope at:#object) class asString,
+					'object cannot be interpreted as an integer'.
+			].
+		str ___value: (currentScope at:#object) ___value asCharacter asString.
+	].
+	Builtins singleton at: #chr put: chrFunction
+%
+category: 'other'
+method: builtin_function_or_method
 float
 	| floatFunction |
 	"On startup this creates a builtin abs function to find the absolute value of a object"
@@ -58,9 +97,12 @@ method: builtin_function_or_method
 initialize
 	self
 		abs ;
+		bool ;
+		chr ;
 		float ;
 		int ;
 		len ;
+		ord ;
 		print ;
 		range ;
 		type ;
@@ -114,6 +156,33 @@ len
 			do: [TypeError signal: 'TypeError: object of type ''', (currentScope at:#object) class asString, ''' has no len()'].
 	].
 	Builtins singleton at: #len put: lenFunction
+%
+category: 'other'
+method: builtin_function_or_method
+ord
+	| ordFunction |
+	"On startup this creates a builtin abs function to find the absolute value of a object"
+	ordFunction := FunctionDef new
+						args: { #object.};
+						vararg: #'None';
+						yourself.
+	ordFunction block: [ :currentScope |
+		(currentScope at:#object) class = str
+			ifFalse: [
+				TypeError signal:
+					'TypeError: ord() expected string of length 1, but ',
+					(currentScope at:#object) class asString,
+					' found'.
+			].
+		(currentScope at:#object) __len__ = 1 ifFalse:[
+				TypeError signal:
+					'TypeError: ord() expected a character, but string of length ',
+					(currentScope at:#object) __len__ asString,
+					' found'.
+		].
+		int ___value: (currentScope at:#object) ___value first codePoint.
+	].
+	Builtins singleton at: #ord put: ordFunction
 %
 category: 'other'
 method: builtin_function_or_method

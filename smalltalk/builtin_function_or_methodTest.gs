@@ -32,6 +32,93 @@ testAbs
 %
 category: 'other'
 method: builtin_function_or_methodTest
+testBool
+
+	| boolHolder variables |
+	variables := Variables new.
+	boolHolder := ((variables at:#bool) scope: variables
+						  positional: { True.}
+						  named: {}).
+	self assert: (boolHolder) equals: (True).
+
+	boolHolder := ((variables at:#bool) scope: variables
+						  positional: { False.}
+						  named: {}).
+	self assert: (boolHolder) equals: (False).
+
+	boolHolder := ((variables at:#bool) scope: variables
+						  positional: { int ___value: 2.}
+						  named: {}).
+	self assert: (boolHolder class) equals: (bool).
+	self assert: (boolHolder) equals: (True).
+
+	boolHolder := ((variables at:#bool) scope: variables
+						  positional: { int ___value: 0.}
+						  named: {}).
+	self assert: (boolHolder class) equals: (bool).
+	self assert: (boolHolder) equals: (False).
+
+	boolHolder := ((variables at:#bool) scope: variables
+						  positional: { float ___value: 3.1.}
+						  named: {}).
+	self assert: (boolHolder class) equals: (bool).
+	self assert: (boolHolder) equals: (True).
+
+	boolHolder := ((variables at:#bool) scope: variables
+						  positional: { float ___value: 0.0.}
+						  named: {}).
+	self assert: (boolHolder class) equals: (bool).
+	self assert: (boolHolder) equals: (False).
+
+	boolHolder := ((variables at:#bool) scope: variables
+						  positional: { str ___value: '4'.}
+						  named: {}).
+	self assert: (boolHolder class) equals: (bool).
+	self assert: (boolHolder) equals: (True).
+
+	boolHolder := ((variables at:#bool) scope: variables
+						  positional: { str ___value: ''.}
+						  named: {}).
+	self assert: (boolHolder class) equals: (bool).
+	self assert: (boolHolder) equals: (False).
+
+	boolHolder := ((variables at:#bool) scope: variables
+						  positional: { (variables at:#bool)}
+						  named: {}).
+	self assert: (boolHolder class) equals: (bool).
+	self assert: (boolHolder) equals: (True).
+
+	boolHolder := ((variables at:#bool) scope: variables
+						  positional: { list ___value: {int ___value: 1}}
+						  named: {}).
+	self assert: (boolHolder class) equals: (bool).
+	self assert: (boolHolder) equals: (True).
+
+	boolHolder := ((variables at:#bool) scope: variables
+						  positional: { list ___value: {}}
+						  named: {}).
+	self assert: (boolHolder class) equals: (bool).
+	self assert: (boolHolder) equals: (False).
+%
+category: 'other'
+method: builtin_function_or_methodTest
+testChr
+
+	| chrHolder variables |
+	variables := Variables new.
+	chrHolder := ((variables at:#chr) scope: variables
+						  positional: { int ___value: 97.}
+						  named: {}).
+	self assert: (chrHolder ___value) equals: ('a').
+
+	chrHolder := [((variables at:#chr) scope: variables
+						  positional: { float ___value: 4.1.}
+						  named: {}).] on: TypeError do: [1].
+	
+	self assert: (chrHolder) equals: (1).
+%
+category: 'other'
+method: builtin_function_or_methodTest
 testFloat
 
 	| floatHolder variables |
@@ -103,6 +190,27 @@ testLen
 						  positional: { alist.}
 						  named: {})] on: TypeError do: [-1].
 	self assert: (listHolder) equals: (-1).
+%
+category: 'other'
+method: builtin_function_or_methodTest
+testOrd
+
+	| ordHolder variables |
+	variables := Variables new.
+	ordHolder := ((variables at:#ord) scope: variables
+						  positional: { str ___value: 'a'.}
+						  named: {}).
+	self assert: (ordHolder ___value) equals: (97).
+
+	ordHolder := [((variables at:#ord) scope: variables
+						  positional: { str ___value: 'aa'.}
+						  named: {})] on: TypeError do: [1].
+	self assert: (ordHolder) equals: (1).
+
+	ordHolder := [((variables at:#ord) scope: variables
+						  positional: { int ___value: 1.}
+						  named: {})] on: TypeError do: [2].
+	self assert: (ordHolder) equals: (2).
 %
 category: 'other'
 method: builtin_function_or_methodTest

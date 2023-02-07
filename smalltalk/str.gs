@@ -23,6 +23,12 @@ __add__: pythonObject
 %
 category: 'Python'
 method: str
+__bool__
+
+	^bool ___value: value ~= ''
+%
+category: 'Python'
+method: str
 __contains__: aPyStr
 
 	^bool ___value: (value includesString: aPyStr ___value)
