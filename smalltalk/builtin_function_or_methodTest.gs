@@ -286,6 +286,44 @@ testRange
 %
 category: 'other'
 method: builtin_function_or_methodTest
+testRepr
+
+	| variables |
+	variables := Variables new.
+	
+	self assert: (((variables at:#repr) scope: variables
+						  positional: { int ___value: 3.}
+						  named: {})) equals: (str ___value: '3').
+
+	self assert: (((variables at:#repr) scope: variables
+						  positional: { str ___value: 'a'.}
+						  named: {})) equals: (str ___value: '''a''').
+""
+	self assert: (((variables at:#repr) scope: variables
+						  positional: {list ___value: { str ___value: 'c'. str ___value: 'b'. str ___value:  'a' }}
+						  named: {})) equals: (str ___value: '[''c'', ''b'', ''a'']').
+%
+category: 'other'
+method: builtin_function_or_methodTest
+testStr
+
+	| variables |
+	variables := Variables new.
+	
+	self assert: (((variables at:#str) scope: variables
+						  positional: { int ___value: 3.}
+						  named: {})) equals: (str ___value: '3').
+
+	self assert: (((variables at:#str) scope: variables
+						  positional: { str ___value: 'a'.}
+						  named: {})) equals: (str ___value: 'a').
+""
+	self assert: (((variables at:#str) scope: variables
+						  positional: {list ___value: { str ___value: 'c'. str ___value: 'b'. str ___value:  'a' }}
+						  named: {})) equals: (str ___value: '[''c'', ''b'', ''a'']').
+%
+category: 'other'
+method: builtin_function_or_methodTest
 testType
 
 	| typeHolder variables|

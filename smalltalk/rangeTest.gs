@@ -69,6 +69,21 @@ test__len__
 %
 category: 'done'
 method: rangeTest
+test__repr__
+	|currentScope|
+	currentScope := Variables new.
+	self
+		assert: (((currentScope at:#range) scope: currentScope positional: { int ___value: -2.} named: {})) __repr__ equals: (str ___value: 'range(-2)');
+		assert: (self targetInstance: (int ___value: 1) _: (int ___value: 1)) __repr__ equals: (str ___value: 'range(1, 1)');
+		assert: (self targetInstance: (int ___value: 0) _: (int ___value: 0)) __repr__ equals: (str ___value: 'range(0, 0)');
+		assert: (self targetInstance: (int ___value: 0) _: (int ___value: 1)) __repr__ equals: (str ___value: 'range(0, 1)');
+		assert: (self targetInstance: (int ___value: -5) _: (int ___value: -2)) __repr__ equals: (str ___value: 'range(-5, -2)');
+		assert: (self targetInstance: (int ___value: -5) _: (int ___value: -2) _: (int ___value: 2)) __repr__ equals: (str ___value: 'range(-5, -2, 2)');
+		assert: (self targetInstance: (int ___value: -1) _: (int ___value: -3) _: (int ___value: -1)) __repr__ equals: (str ___value: 'range(-1, -3, -1)');
+		yourself.
+%
+category: 'done'
+method: rangeTest
 testcount
 
 	self assert: ((self targetInstance: (int ___value: 1) _: (int ___value: 10)) count: 3)       equals: 1.

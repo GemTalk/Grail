@@ -4717,7 +4717,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 object subclass: 'range'
-  instVarNames: #( container)
+  instVarNames: #( begin end container)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()

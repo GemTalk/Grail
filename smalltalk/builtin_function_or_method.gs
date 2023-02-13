@@ -105,6 +105,8 @@ initialize
 		ord ;
 		print ;
 		range ;
+		repr ;
+		str ;
 		type ;
 		yourself.
 %
@@ -248,6 +250,36 @@ range
 		returnObject
 	].
 	Builtins singleton at: #range put: rangeFunction
+%
+category: 'other'
+method: builtin_function_or_method
+repr
+	| reprFunction |
+	"On startup this creates a builtin abs function to find the absolute value of a object"
+	reprFunction := FunctionDef new
+						args: { #object };
+						vararg: #'None';
+						yourself.
+	reprFunction block: [ :currentScope |
+
+		(currentScope at:#object) __repr__
+	].
+	Builtins singleton at: #repr put: reprFunction
+%
+category: 'other'
+method: builtin_function_or_method
+str
+	| strFunction |
+	"On startup this creates a builtin abs function to find the absolute value of a object"
+	strFunction := FunctionDef new
+						args: { #object };
+						vararg: #'None';
+						yourself.
+	strFunction block: [ :currentScope |
+
+		(currentScope at:#object) __str__
+	].
+	Builtins singleton at: #str put: strFunction
 %
 category: 'other'
 method: builtin_function_or_method

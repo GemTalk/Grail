@@ -55,7 +55,9 @@ __init__: aPythonInt1 _: aPythonInt2 _: aPythonInt3
 	container  := self class ___containerClass
 		from: aPythonInt1 ___value
 		to: aPythonInt2 ___value + (aPythonInt3 ___value > 0 ifTrue: [-1] ifFalse: [1])
-		by: aPythonInt3 ___value
+		by: aPythonInt3 ___value.
+	begin := aPythonInt1.
+	end := aPythonInt2.
 %
 set compile_env: 0
 category: 'Python'
@@ -81,12 +83,16 @@ method: range
 __init__: aPythonInt
 
 	container  := self class ___containerClass from: 0 to: aPythonInt ___value -1.
+	begin := None.
+	end := aPythonInt.
 %
 category: 'Python'
 method: range
 __init__: aPythonInt1 _: aPythonInt2
 
-	container  := self class ___containerClass from: aPythonInt1 ___value to: (aPythonInt2 ___value - 1)
+	container  := self class ___containerClass from: aPythonInt1 ___value to: (aPythonInt2 ___value - 1).
+	begin := aPythonInt1.
+	end := aPythonInt2.
 %
 category: 'Python'
 method: range
@@ -96,9 +102,21 @@ __len__
 %
 category: 'Python'
 method: range
+begin
+
+	^begin
+%
+category: 'Python'
+method: range
 count: anElement
 
 	^(self __contains__: anElement) ifTrue: [1] ifFalse: [0]
+%
+category: 'Python'
+method: range
+end
+
+	^end
 %
 category: 'Python'
 method: range
@@ -140,4 +158,38 @@ category: 'Smalltalk'
 method: range
 ___value
 	^container
+%
+category: 'Smalltalk'
+method: range
+__repr__
+
+	| stream |
+
+	stream := WriteStream on: String new.
+	
+	stream nextPutAll: 'range('.
+	self begin class = NoneType
+		ifTrue:[
+			stream nextPutAll: self end ___value asString.
+		]
+		ifFalse:[
+			stream
+				nextPutAll: self begin ___value asString;
+				nextPut: $, ;
+				space ;
+				nextPutAll: self end ___value asString;
+			yourself.
+		
+
+			self ___value increment = 1 ifFalse: [
+				stream 
+					nextPut: $, ;
+					space ;
+					nextPutAll: self ___value increment asString;
+					yourself.
+			].
+		].
+	stream nextPut: $).
+
+	^(str ___value: (stream contents)).
 %
