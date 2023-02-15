@@ -17,6 +17,22 @@ astForPath: pathString
 %
 category: 'other'
 classmethod: ModuleAst
+evaluate: aString
+"
+ModuleAst script: '1 == 1'.
+"
+	| file path module stream|
+	path := '/tmp/grail.py'.
+	file := GsFile open: path mode: 'w' onClient: false.
+	file nextPutAll: aString.
+	module := self script: path.
+	GsFile removeServerFile: path.
+	stream := PrettyWriteStream on: String new.
+	module printSmalltalkOn: stream.
+	^stream contents evaluate.
+%
+category: 'other'
+classmethod: ModuleAst
 script: aString
 "
 ModuleAst script: '$HOME/code/Python/performance/pyperformance'.

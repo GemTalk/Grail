@@ -31,7 +31,7 @@ category: 'other'
 method: builtin_function_or_method
 bool
 	| boolFunction |
-	"On startup this creates a builtin abs function to find the absolute value of a object"
+	"On startup this creates a builtin bool function to turn any object into a boolean value"
 	boolFunction := FunctionDef new
 						args: { #object.};
 						vararg: #'None';
@@ -51,7 +51,7 @@ category: 'other'
 method: builtin_function_or_method
 chr
 	| chrFunction |
-	"On startup this creates a builtin abs function to find the absolute value of a object"
+	"On startup this creates a builtin chr function to change an integer into a character"
 	chrFunction := FunctionDef new
 						args: { #object.};
 						vararg: #'None';
@@ -70,7 +70,8 @@ category: 'other'
 method: builtin_function_or_method
 float
 	| floatFunction |
-	"On startup this creates a builtin abs function to find the absolute value of a object"
+	"On startup this creates a builtin float function to change strings and anything
+		with a float method to a float."
 	floatFunction := FunctionDef new
 						args: { #object.};
 						vararg: #'None';
@@ -102,6 +103,7 @@ initialize
 		float ;
 		int ;
 		len ;
+		list ;
 		ord ;
 		print ;
 		range ;
@@ -114,10 +116,11 @@ category: 'other'
 method: builtin_function_or_method
 int
 	| intFunction |
-	"On startup this creates a builtin abs function to find the absolute value of a object"
+	"On startup this creates a builtin int function to turn anything with a __int__ method
+		or that is a string into an int"
 	intFunction := FunctionDef new
 						args: { #object. #base };
-						defaults: {int ___value: 10};
+						defaults: {None};
 						vararg: #'None';
 						yourself.
 	intFunction block: [ :currentScope |
@@ -146,7 +149,7 @@ category: 'other'
 method: builtin_function_or_method
 len
 	| lenFunction |
-	"On startup this creates a builtin abs function to find the absolute value of a object"
+	"On startup this creates a builtin len function to return the length of anything that has a __len method"
 	lenFunction := FunctionDef new
 						args: { #object };
 						vararg: #'None';
@@ -161,9 +164,42 @@ len
 %
 category: 'other'
 method: builtin_function_or_method
+list
+	| listFunction |
+	"On startup this creates a builtin list function to turn one iterable object into another"
+	listFunction := FunctionDef new
+						args: { #object.};
+						defaults: { None };
+						vararg: #'None';
+						yourself.
+	listFunction block: [ :currentScope |
+		[
+			| return |
+			return := list ___value: {}.
+			(currentScope at: object) = None
+				ifFalse:[
+					(currentScope at: object) class = str
+						ifTrue: [
+							((currentScope at: object) ___value)
+								do: [ :each | list add: (str ___value: (each asString)).].
+						]
+						ifFalse: [
+							((currentScope at: object) ___container)
+								do: [ :each | list add: each.].
+						].
+				].
+			return
+		]
+		on: MessageNotUnderstood
+		do: [ TypeError signal: 'TypeError: ''', (currentScope at: object) class asString, ''' object is not iterable' ].
+	].
+	Builtins singleton at: #list put: listFunction
+%
+category: 'other'
+method: builtin_function_or_method
 ord
 	| ordFunction |
-	"On startup this creates a builtin abs function to find the absolute value of a object"
+	"On startup this creates a builtin ord function to turn a character into its unicode integer"
 	ordFunction := FunctionDef new
 						args: { #object.};
 						vararg: #'None';
@@ -255,7 +291,7 @@ category: 'other'
 method: builtin_function_or_method
 repr
 	| reprFunction |
-	"On startup this creates a builtin abs function to find the absolute value of a object"
+	"On startup this creates a builtin repr function to return the value of something's __repr method"
 	reprFunction := FunctionDef new
 						args: { #object };
 						vararg: #'None';
@@ -270,7 +306,7 @@ category: 'other'
 method: builtin_function_or_method
 str
 	| strFunction |
-	"On startup this creates a builtin abs function to find the absolute value of a object"
+	"On startup this creates a builtin str function to return anything with a __str__ method"
 	strFunction := FunctionDef new
 						args: { #object };
 						vararg: #'None';
@@ -285,7 +321,7 @@ category: 'other'
 method: builtin_function_or_method
 type
 	| typeFunction |
-	"On startup this creates a builtin abs function to find the absolute value of a object"
+	"On startup this creates a builtin type function to return the type of a function or create a new type"
 	typeFunction := FunctionDef new
 						vararg: #vararg;
 						yourself.

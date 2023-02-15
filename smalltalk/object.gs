@@ -3,6 +3,19 @@ removeAllMethods object
 removeAllClassMethods object
 ! ------------------- Class methods for object
 set compile_env: 0
+category: 'other'
+classmethod: object
+__str__
+	"<class '__main__.MyClass'>"
+	| stream |
+	stream := (WriteStream on: Unicode7 new)
+		nextPutAll: '<class ''';
+		nextPutAll: name;
+		nextPutAll: '''>';
+		yourself.
+	^str ___value: stream contents
+%
+set compile_env: 0
 category: 'Python'
 classmethod: object
 __call__
