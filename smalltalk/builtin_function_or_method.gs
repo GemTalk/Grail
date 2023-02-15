@@ -95,12 +95,46 @@ float
 %
 category: 'other'
 method: builtin_function_or_method
+frozenset
+	| frozensetFunction |
+	"On startup this creates a builtin frozenset function to turn one iterable object into a frozenset"
+	frozensetFunction := FunctionDef new
+						args: { #object.};
+						defaults: { None };
+						vararg: #'None';
+						yourself.
+	frozensetFunction block: [ :currentScope |
+		[
+			| return |
+			return := {}.
+			(currentScope at: #object) = None
+				ifFalse:[
+					(currentScope at: #object) class = str
+						ifTrue: [
+							((currentScope at: #object) ___value)
+								do: [ :each | return add: (str ___value: (each asString)).].
+						]
+						ifFalse: [
+							((currentScope at: #object) ___container)
+								do: [ :each | return add: each.].
+						].
+				].
+			frozenset ___value: return
+		]
+		on: MessageNotUnderstood
+		do: [ TypeError signal: 'TypeError: ''', (currentScope at: #object) class asString, ''' object is not iterable' ].
+	].
+	Builtins singleton at: #frozenset put: frozensetFunction
+%
+category: 'other'
+method: builtin_function_or_method
 initialize
 	self
 		abs ;
 		bool ;
 		chr ;
 		float ;
+		frozenset ;
 		int ;
 		len ;
 		list ;
@@ -108,6 +142,7 @@ initialize
 		print ;
 		range ;
 		repr ;
+		set ;
 		str ;
 		type ;
 		yourself.
@@ -166,7 +201,7 @@ category: 'other'
 method: builtin_function_or_method
 list
 	| listFunction |
-	"On startup this creates a builtin list function to turn one iterable object into another"
+	"On startup this creates a builtin list function to turn one iterable object into a list"
 	listFunction := FunctionDef new
 						args: { #object.};
 						defaults: { None };
@@ -176,22 +211,22 @@ list
 		[
 			| return |
 			return := list ___value: {}.
-			(currentScope at: object) = None
+			(currentScope at: #object) = None
 				ifFalse:[
-					(currentScope at: object) class = str
+					(currentScope at: #object) class = str
 						ifTrue: [
-							((currentScope at: object) ___value)
-								do: [ :each | list add: (str ___value: (each asString)).].
+							((currentScope at: #object) ___value)
+								do: [ :each | return append: (str ___value: (each asString)).].
 						]
 						ifFalse: [
-							((currentScope at: object) ___container)
-								do: [ :each | list add: each.].
+							((currentScope at: #object) ___container)
+								do: [ :each | return append: each.].
 						].
 				].
 			return
 		]
 		on: MessageNotUnderstood
-		do: [ TypeError signal: 'TypeError: ''', (currentScope at: object) class asString, ''' object is not iterable' ].
+		do: [ TypeError signal: 'TypeError: ''', (currentScope at: #object) class asString, ''' object is not iterable' ].
 	].
 	Builtins singleton at: #list put: listFunction
 %
@@ -301,6 +336,39 @@ repr
 		(currentScope at:#object) __repr__
 	].
 	Builtins singleton at: #repr put: reprFunction
+%
+category: 'other'
+method: builtin_function_or_method
+set
+	| setFunction |
+	"On startup this creates a builtin set function to turn one iterable object into a set"
+	setFunction := FunctionDef new
+						args: { #object.};
+						defaults: { None };
+						vararg: #'None';
+						yourself.
+	setFunction block: [ :currentScope |
+		[
+			| return |
+			return := set ___value: {}.
+			(currentScope at: #object) = None
+				ifFalse:[
+					(currentScope at: #object) class = str
+						ifTrue: [
+							((currentScope at: #object) ___value)
+								do: [ :each | return add: (str ___value: (each asString)).].
+						]
+						ifFalse: [
+							((currentScope at: #object) ___container)
+								do: [ :each | return add: each.].
+						].
+				].
+			return
+		]
+		on: MessageNotUnderstood
+		do: [ TypeError signal: 'TypeError: ''', (currentScope at: #object) class asString, ''' object is not iterable' ].
+	].
+	Builtins singleton at: #set put: setFunction
 %
 category: 'other'
 method: builtin_function_or_method

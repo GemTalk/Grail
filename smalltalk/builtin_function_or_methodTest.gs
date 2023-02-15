@@ -158,6 +158,28 @@ testFloat
 %
 category: 'other'
 method: builtin_function_or_methodTest
+testFrozenset
+
+	| frozensetHolder variables afrozenset|
+	variables := Variables new.
+	afrozenset := frozenset ___value: { 'c'. 'b'. 'a'.}.
+	frozensetHolder := ((variables at:#frozenset) scope: variables
+						  positional: { afrozenset.}
+						  named: {}).
+	self assert: (frozensetHolder) equals: (afrozenset).
+
+	frozensetHolder := ((variables at:#frozenset) scope: variables
+						  positional: { str ___value: 'abca'.}
+						  named: {}).
+	self assert: (frozensetHolder) equals: (frozenset ___value: { str ___value: 'a'. str ___value: 'b'. str ___value: 'c' }).
+
+	frozensetHolder := ((variables at:#frozenset) scope: variables
+						  positional: { list ___value: { 'c'. 'b'. 'a'. 'a' }}
+						  named: {}).
+	self assert: (frozensetHolder) equals: (afrozenset).
+%
+category: 'other'
+method: builtin_function_or_methodTest
 testInt
 
 	| intHolder variables |
@@ -190,6 +212,28 @@ testLen
 						  positional: { alist.}
 						  named: {})] on: TypeError do: [-1].
 	self assert: (listHolder) equals: (-1).
+%
+category: 'other'
+method: builtin_function_or_methodTest
+testList
+
+	| listHolder variables alist|
+	variables := Variables new.
+	alist := list ___value: { 'c'. 'b'. 'a' }.
+	listHolder := ((variables at:#list) scope: variables
+						  positional: { alist.}
+						  named: {}).
+	self assert: (listHolder) equals: (alist).
+
+	listHolder := ((variables at:#list) scope: variables
+						  positional: { str ___value: 'abc'.}
+						  named: {}).
+	self assert: (listHolder) equals: (list ___value: { str ___value: 'a'. str ___value: 'b'. str ___value: 'c' }).
+
+	listHolder := ((variables at:#list) scope: variables
+						  positional: { set ___value: { 'c'. 'b'. 'a' }}
+						  named: {}).
+	self assert: (listHolder) equals: (alist).
 %
 category: 'other'
 method: builtin_function_or_methodTest
@@ -302,6 +346,28 @@ testRepr
 	self assert: (((variables at:#repr) scope: variables
 						  positional: {list ___value: { str ___value: 'c'. str ___value: 'b'. str ___value:  'a' }}
 						  named: {})) equals: (str ___value: '[''c'', ''b'', ''a'']').
+%
+category: 'other'
+method: builtin_function_or_methodTest
+testSet
+
+	| setHolder variables aset|
+	variables := Variables new.
+	aset := set ___value: { 'c'. 'b'. 'a'.}.
+	setHolder := ((variables at:#set) scope: variables
+						  positional: { aset.}
+						  named: {}).
+	self assert: (setHolder) equals: (aset).
+
+	setHolder := ((variables at:#set) scope: variables
+						  positional: { str ___value: 'abca'.}
+						  named: {}).
+	self assert: (setHolder) equals: (set ___value: { str ___value: 'a'. str ___value: 'b'. str ___value: 'c' }).
+
+	setHolder := ((variables at:#set) scope: variables
+						  positional: { list ___value: { 'c'. 'b'. 'a'. 'a' }}
+						  named: {}).
+	self assert: (setHolder) equals: (aset).
 %
 category: 'other'
 method: builtin_function_or_methodTest
