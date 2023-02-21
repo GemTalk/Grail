@@ -138,7 +138,7 @@ category: 'Python'
 method: str
 __len__
 
-	^value size
+	^int ___value: value size
 %
 category: 'Python'
 method: str

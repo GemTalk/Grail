@@ -344,6 +344,55 @@ testpop
 %
 category: 'done'
 method: dictTest
+testUpdate
+   | dict1 dict2 dict3|
+	dict1 := (dict ___value: { (str ___value: 'a') -> (int ___value: 1).  (str ___value: 'b') -> (int ___value: 2) } asDictionary).
+	dict2 := (dict ___value: { (str ___value: 'c') -> (int ___value: 3). (str ___value: 'd') -> (int ___value: 4) } asDictionary).
+	dict3 := dict1 update: dict2.
+	self
+		assert: dict1 __len__ equals: (self int: 4);
+		assert: dict1 == dict3;
+		assert: ((dict1 get: (str ___value: 'c'))) equals: (int ___value: 3);
+		assert: dict2 __len__ equals: (self int: 2);
+		yourself.
+
+	dict1 := (dict ___value: { (str ___value: 'a') -> (int ___value: 1).  (str ___value: 'b') -> (int ___value: 2) } asDictionary).
+	dict2 := (dict ___value: {} asDictionary).
+	dict3 := dict1 update: dict2.
+	self
+		assert: dict1 __len__ equals: (self int: 2);
+		assert: dict1 == dict3;
+		assert: dict2 __len__ equals: (self int: 0);
+		yourself.
+
+	dict1 := (dict ___value: { (str ___value: 'a') -> (int ___value: 1).  (str ___value: 'b') -> (int ___value: 2) } asDictionary).
+	dict2 := list ___value: {tuple ___value: {str ___value: 'c'. int ___value: 3} asArray }.
+	dict3 := dict1 update: dict2.
+	self
+		assert: dict1 __len__ equals: (self int: 3);
+		assert: dict1 == dict3;
+		assert: ((dict1 get: (str ___value: 'c'))) equals: (int ___value: 3);		
+		assert: dict2 __len__ equals: (self int: 1);
+		yourself.
+
+
+	dict1 := (dict ___value: { (str ___value: 'a') -> (int ___value: 1).  (str ___value: 'b') -> (int ___value: 2) } asDictionary).
+	dict2 := list ___value: {str ___value: 'ca'. }.
+	dict3 := dict1 update: dict2.
+	self
+		assert: dict1 __len__ equals: (self int: 3);
+		assert: dict1 == dict3;
+		assert: ((dict1 get: (str ___value: 'c'))) equals: (str ___value: 'a');		
+		assert: dict2 __len__ equals: (self int: 1);
+		yourself.
+
+	dict1 := (dict ___value: { (str ___value: 'a') -> (int ___value: 1).  (str ___value: 'b') -> (int ___value: 2) } asDictionary).
+	dict2 := list ___value: {tuple ___value: {str ___value: 'c'.} asArray }.
+	dict3 := [dict1 update: dict2.] on: ValueError do: [1].
+	self assert: dict3 equals: 1.
+%
+category: 'done'
+method: dictTest
 testvalues
    | list |
 	list := self targetInstance: { 1 -> 'a'. 2 -> 'b'. 3 -> 'c' }.
@@ -388,10 +437,5 @@ testpopitem
 category: 'todo'
 method: dictTest
 testsetdefault
-   #pyTodo
-%
-category: 'todo'
-method: dictTest
-testupdate
    #pyTodo
 %

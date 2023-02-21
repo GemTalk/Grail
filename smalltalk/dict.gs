@@ -149,6 +149,45 @@ pop: aKey
 %
 category: 'Python'
 method: dict
+update: anObject
+	"update the dictionary with the new key, value pairs in anObject,
+		this can be done with another dictionary or nested data structures"
+	| index KeyAndValue|
+	anObject class = dict
+		ifTrue:[
+			anObject ___container keysAndValuesDo: [:key :val | self ___container at: key put: val].
+		]
+		ifFalse: [
+			anObject __len__ ___value = 0 ifFalse:[
+				anObject class = str ifTrue: [
+					ValueError signal: 'ValueError: dictionary update sequence element #0 has length 1; 2 is required'.
+				].
+				index := 0.
+				KeyAndValue := OrderedCollection new.
+				anObject ___container do: [ :each |
+					each __len__ ___value = 2 ifFalse: [
+						ValueError signal:
+							'TypeError: dictionary update sequence element #',
+							index asString,
+							' has a length ',
+							each __len__ ___value asString, 
+							'; 2 is required'.
+					].
+					each class = str
+						ifTrue: [
+							each ___value do: [:elem | KeyAndValue add: (str ___value: elem asString) ].
+						]
+						ifFalse: [
+							each ___container do: [:elem | KeyAndValue add: elem].
+							
+						].
+					self ___container add: ((KeyAndValue at: 1) -> (KeyAndValue at: 2))
+				].
+			].
+		].
+%
+category: 'Python'
+method: dict
 values
 
 	^frozenset ___value: container values

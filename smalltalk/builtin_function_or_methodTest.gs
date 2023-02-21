@@ -119,6 +119,42 @@ testChr
 %
 category: 'other'
 method: builtin_function_or_methodTest
+testDict
+   | containerHolder variables|
+	variables := Variables new.
+	
+	containerHolder := list ___value: {}.
+	containerHolder := (variables at: #dict) scope: variables
+								positional: {containerHolder}
+								named: {}.
+	self assert: containerHolder equals: (dict ___value: {} asDictionary).
+
+	containerHolder := dict ___value: {(str ___value: 'd') -> (int ___value: 7)} asDictionary.
+	containerHolder := (variables at: #dict) scope: variables
+								positional: {containerHolder}
+								named: {}.
+	self assert: containerHolder equals: (dict ___value: {(str ___value: 'd') -> (int ___value: 7)} asDictionary).
+
+	containerHolder := list ___value: {tuple ___value: {str ___value: 'c'. int ___value: 3} asArray }.
+	containerHolder := (variables at: #dict) scope: variables
+								positional: {containerHolder}
+								named: {}.
+	self assert: containerHolder equals: (dict ___value: {(str ___value: 'c') -> (int ___value: 3)} asDictionary).
+
+	containerHolder := list ___value: {}.
+	containerHolder := (variables at: #dict) scope: variables
+								positional: {containerHolder}
+								named: {(str ___value: 'd') -> (int ___value: 7)}.
+	self assert: containerHolder equals: (dict ___value: {(str ___value: 'd') -> (int ___value: 7)} asDictionary).
+
+	containerHolder := list ___value: {tuple ___value: {str ___value: 'c'. int ___value: 3} asArray }.
+	containerHolder := (variables at: #dict) scope: variables
+								positional: {containerHolder}
+								named: {(str ___value: 'd') -> (int ___value: 7)}.
+	self assert: containerHolder equals: (dict ___value: {(str ___value: 'c') -> (int ___value: 3). (str ___value: 'd') -> (int ___value: 7)} asDictionary).
+%
+category: 'other'
+method: builtin_function_or_methodTest
 testFloat
 
 	| floatHolder variables |
@@ -409,4 +445,21 @@ testType
 						  positional: { int ___value: 5. tuple ___value: #(h)}
 						  named: {})] on: TypeError do: [1].
 	self assert: (typeHolder) equals: (1).
+%
+category: 'other'
+method: builtin_function_or_methodTest
+testUpdate
+   | containerHolder variables|
+	variables := Variables new.
+	
+	containerHolder := list ___value: {}.
+	containerHolder := (variables at: #dict) scope: variables
+								positional: {containerHolder}
+								named: {}.
+	self assert: containerHolder equals: (dict ___value: {} asDictionary).
+	containerHolder := list ___value: {}.
+	containerHolder := (variables at: #dict) scope: variables
+								positional: {containerHolder}
+								named: {(str ___value: 'd') -> (int ___value: 7)}.
+	self assert: containerHolder equals: (dict ___value: {(str ___value: 'd') -> (int ___value: 7)} asDictionary).
 %

@@ -68,6 +68,30 @@ chr
 %
 category: 'other'
 method: builtin_function_or_method
+dict
+	| dictFunction |
+	"On startup this creates a builtin dict function to turn a list of kwargs into a dictionary"
+	dictFunction := FunctionDef new
+						args: { #object };
+						defaults: { nil };
+						vararg: #'None';
+						kwarg: #'kwarg';
+						yourself.
+	dictFunction block: [ :currentScope |
+		|return|
+		return :=  dict ___value: Dictionary new.
+		(currentScope at: #object) = nil ifFalse:[
+			return update: (currentScope at: #object).
+		].
+		[(currentScope at: #kwarg) __len__ ___value = 0 ifFalse: [
+			return update: (currentScope at: #kwarg).
+		].] on: NameError do: [].
+		return.
+	].
+	Builtins singleton at: #dict put: dictFunction
+%
+category: 'other'
+method: builtin_function_or_method
 float
 	| floatFunction |
 	"On startup this creates a builtin float function to change strings and anything
@@ -100,14 +124,14 @@ frozenset
 	"On startup this creates a builtin frozenset function to turn one iterable object into a frozenset"
 	frozensetFunction := FunctionDef new
 						args: { #object.};
-						defaults: { None };
+						defaults: { nil };
 						vararg: #'None';
 						yourself.
 	frozensetFunction block: [ :currentScope |
 		[
 			| return |
 			return := {}.
-			(currentScope at: #object) = None
+			(currentScope at: #object) = nil
 				ifFalse:[
 					(currentScope at: #object) class = str
 						ifTrue: [
@@ -133,6 +157,7 @@ initialize
 		abs ;
 		bool ;
 		chr ;
+		dict ;
 		float ;
 		frozenset ;
 		int ;
@@ -155,12 +180,15 @@ int
 		or that is a string into an int"
 	intFunction := FunctionDef new
 						args: { #object. #base };
-						defaults: {None};
+						defaults: { nil };
 						vararg: #'None';
 						yourself.
 	intFunction block: [ :currentScope |
 		| return |
 		(currentScope at:#object) class = str ifTrue:[
+			(currentScope at:#base) = nil
+				ifTrue: [ currentScope at:#base put: (int ___value: 10)].
+			
 			Error signal: 'not implemented'.
 			ValueError signal:
 					'ValueError: invalid literal for int() with base ',
@@ -204,14 +232,14 @@ list
 	"On startup this creates a builtin list function to turn one iterable object into a list"
 	listFunction := FunctionDef new
 						args: { #object.};
-						defaults: { None };
+						defaults: { nil };
 						vararg: #'None';
 						yourself.
 	listFunction block: [ :currentScope |
 		[
 			| return |
 			return := list ___value: {}.
-			(currentScope at: #object) = None
+			(currentScope at: #object) = nil
 				ifFalse:[
 					(currentScope at: #object) class = str
 						ifTrue: [
@@ -247,7 +275,7 @@ ord
 					(currentScope at:#object) class asString,
 					' found'.
 			].
-		(currentScope at:#object) __len__ = 1 ifFalse:[
+		(currentScope at:#object) __len__ ___value = 1 ifFalse:[
 				TypeError signal:
 					'TypeError: ord() expected a character, but string of length ',
 					(currentScope at:#object) __len__ asString,
@@ -344,14 +372,14 @@ set
 	"On startup this creates a builtin set function to turn one iterable object into a set"
 	setFunction := FunctionDef new
 						args: { #object.};
-						defaults: { None };
+						defaults: { nil };
 						vararg: #'None';
 						yourself.
 	setFunction block: [ :currentScope |
 		[
 			| return |
 			return := set ___value: {}.
-			(currentScope at: #object) = None
+			(currentScope at: #object) = nil
 				ifFalse:[
 					(currentScope at: #object) class = str
 						ifTrue: [

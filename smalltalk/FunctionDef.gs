@@ -92,7 +92,7 @@ scope: aVariables positional: positionalArray named: namedArray
 		myScope at: kwarg put: (dict ___value: Dictionary new).
 
 		namedArray do: [ :var |
-			(myScope at: kwarg) __setitem__: (str ___value: var key asString) _: var value.
+			(myScope at: kwarg) __setitem__: (var key) _: var value.
 		].
 	].
 

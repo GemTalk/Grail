@@ -76,9 +76,9 @@ testFunctionDefScopePositionalNamed
 		scope: scope 
 		positional: { int ___value: 1. int ___value: 2. int ___value: 4. int ___value: 5. int ___value: 6. } 
 		named: {
-			#d -> (int ___value: 7).
-			#e -> (int ___value: 8).
-			#f -> (int ___value: 9).
+			 (str ___value: 'd') -> (int ___value: 7).
+			(str ___value: 'e') -> (int ___value: 8).
+			 (str ___value: 'f') -> (int ___value: 9).
 		}) equals: 2.
 %
 category: 'other'
