@@ -123,7 +123,7 @@ testJoinedStrWithFormattedValueNum
 		assert: (child isKindOf: ConstantAst);
 		assert: child.value = 'str ___value: ''789''';
 		yourself.
-	self assert: x.values size = 3.
+	self assert: x.values size == 3.
 %
 category: 'other'
 method: StringLiteralsTestCase

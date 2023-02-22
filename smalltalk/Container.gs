@@ -108,7 +108,7 @@ __getslice__: aPyIntStart _: aPyIntEnd
 	| end |
 	end := aPyIntEnd.
 
-	end = None ifTrue: [
+	end == None ifTrue: [
 		end := int ___value: container size
 	].
 

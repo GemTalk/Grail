@@ -6,12 +6,6 @@ removeAllClassMethods FunctionDef
 set compile_env: 0
 category: 'other'
 method: FunctionDef
-args: anArray
-
-	args := anArray
-%
-category: 'other'
-method: FunctionDef
 block: aBlock
 
 	block := aBlock
@@ -42,44 +36,64 @@ kwonlyargs: anArray
 %
 category: 'other'
 method: FunctionDef
-scope: aVariables positional: positionalArray named: namedArray
+params: anArray
+
+	params := anArray
+%
+category: 'other'
+method: FunctionDef
+scope: aVariables positional: positionalArgsArray named: namedArgsArray
+
 
 	| myScope defaultsOffset |
 
 	myScope := aVariables createChildScope.
+	
+	defaultsOffset := params size - defaults size.
 
-	vararg = #'None' ifFalse: [
+	vararg == #'None' ifFalse: [
 		myScope at: vararg put: (list ___value: OrderedCollection new).
+	] ifTrue: [
+		 positionalArgsArray size < defaultsOffset
+			ifTrue: [
+				| errorString |
+				errorString := ''.
+				(positionalArgsArray size + 1) to: (params size) do: [:i | errorString := errorString, ' ', ((params at: i) asString)].
+				TypeError signal:
+					'TypeError: missing ', (defaultsOffset - positionalArgsArray size) asString,
+					' required positional arguments:', errorString.
+			].
 	].
 
-	defaultsOffset := args size - defaults size.
-
-	(1 to: positionalArray size) do: [ :i |
-		i <= args size ifTrue: [
-			myScope at: (args at: i) put: (positionalArray at: i).
+	(1 to: positionalArgsArray size) do: [ :i |
+		i <= params size ifTrue: [
+			myScope at: (params at: i) put: (positionalArgsArray at: i).
 		] ifFalse: [
-			defaultsOffset + i <= defaults size ifTrue: [
-				myScope at: (args at: i) put: (defaults at: i).
-			] ifFalse: [
-				[(myScope at: vararg) append: (positionalArray at: i)]
-					on: NameError
-					do:[ TypeError signal: 'takes ', (args size) asString, ' positional arguements but ', (positionalArray size) asString, ' was given'].
-			].
+			[(myScope at: vararg) append: (positionalArgsArray at: i)]
+				on: NameError
+				do:[ TypeError signal: 'TypeError: takes ', (params size) asString, ' positional arguements but ', (positionalArgsArray size) asString, ' was given'].
 		].
 	].
 
+	positionalArgsArray size < params size ifTrue: [
+		| indexOfFirstDefaultNeeded|
+		indexOfFirstDefaultNeeded := positionalArgsArray size + defaults size - params size + 1.
+		indexOfFirstDefaultNeeded to: defaults size do: [ :i |
+			myScope at: (params at: (defaultsOffset + i)) put: (defaults at: i).
+		]
+	].
 
 	(1 to: kwonlyargs size) do: [ :i |
 		| namedKeys |
-		namedKeys := namedArray collect: [ :elem | elem key ].
+		namedKeys := namedArgsArray collect: [ :elem | elem key ].
 
 		(namedKeys includes: (kwonlyargs at: i)) ifTrue: [
 			| namedValue |
-			namedValue := namedArray at: (namedKeys indexOf: (kwonlyargs at: i)).
+			namedValue := namedArgsArray at: (namedKeys indexOf: (kwonlyargs at: i)).
 			myScope at: (kwonlyargs at: i) put: namedValue value.
-			namedArray removeValue: namedValue.
+			namedArgsArray removeValue: namedValue.
 		] ifFalse: [
-			(kw_defaults at: i) class = NoneType ifTrue: [
+			(kw_defaults at: i) class == NoneType ifTrue: [
 				"Error"
 			] ifFalse: [
 				myScope at: (kwonlyargs at: i) put: (kw_defaults at: i).
@@ -91,7 +105,7 @@ scope: aVariables positional: positionalArray named: namedArray
 
 		myScope at: kwarg put: (dict ___value: Dictionary new).
 
-		namedArray do: [ :var |
+		namedArgsArray do: [ :var |
 			(myScope at: kwarg) __setitem__: (var key) _: var value.
 		].
 	].

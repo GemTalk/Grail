@@ -66,7 +66,7 @@ injectSuperArguments: anArray scope: aScope
 	objectOrType := aScope superInfo
 		at: #'objectOrType'
 		ifAbsent: [].
-	(((type isNil not) and: [objectOrType isNil not]) and: [id = #'super']) ifTrue: ["in case of calling super"
+	(((type isNil not) and: [objectOrType isNil not]) and: [id == #'super']) ifTrue: ["in case of calling super"
 		anArray add: type.
 		anArray add: objectOrType.
 	].

@@ -190,7 +190,7 @@ __truediv__: any
 	c := any real ___value.
 	d := any imag ___value.
 	denominator := (c raisedTo: 2) + (d raisedTo: 2).
-	denominator = 0 ifTrue: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero'].
+	denominator == 0 ifTrue: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero'].
 	^complex
 		___real: (a * c) + (b * d) / denominator
 		imaginary: (b * c) - (a * d) / denominator

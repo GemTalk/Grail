@@ -48,7 +48,7 @@ testFunctionDefScopePositionalNamed
 	| scope function |
 	scope := Variables new.
 	function := FunctionDef new
-						args: { #a. #b };
+						params: { #a. #b };
 						vararg: #vararg;
 						kwonlyargs: { #c };
 						kw_defaults: { int ___value: 3 };

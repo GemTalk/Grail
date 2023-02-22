@@ -168,7 +168,7 @@ __repr__
 	stream := WriteStream on: String new.
 	
 	stream nextPutAll: 'range('.
-	self begin class = NoneType
+	self begin class == NoneType
 		ifTrue:[
 			stream nextPutAll: self end ___value asString.
 		]
@@ -181,7 +181,7 @@ __repr__
 			yourself.
 		
 
-			self ___value increment = 1 ifFalse: [
+			self ___value increment == 1 ifFalse: [
 				stream 
 					nextPut: $, ;
 					space ;

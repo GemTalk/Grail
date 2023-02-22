@@ -209,7 +209,7 @@ category: 'Python'
 method: set
 isdisjoint: aSet
 
-	^(self intersection: aSet) __len__ ___value = 0
+	^(self intersection: aSet) __len__ ___value == 0
 %
 category: 'Python'
 method: set

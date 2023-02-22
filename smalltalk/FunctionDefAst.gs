@@ -73,7 +73,7 @@ printDefaultsList: anArray on: aStream
 	
 	aStream nextPutAll: '{ '.
 	anArray do: [ :arg |
-		arg class = NoneType ifTrue: [
+		arg class == NoneType ifTrue: [
 			aStream nextPutAll: 'None. '.
 		] ifFalse: [
 			self smalltalkSourceFor: arg parenthesisIf: 3 on:aStream.
@@ -103,7 +103,7 @@ printSmalltalkOn: aStream
 		nextPutAll: 'currentScope at: ';
 		nextPut: $#;
 		nextPutAll: name asString;
-		nextPutAll: ' put: (FunctionDef new args: ';
+		nextPutAll: ' put: (FunctionDef new params: ';
 		yourself.
 
 	self printArgList: args args on: aStream.

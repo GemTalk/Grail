@@ -117,8 +117,8 @@ method: strTest
 test__len__
    
 	self 
-		assert: (self str: 'hello world') __len__ equals: 11;
-		assert: (self str: '') __len__ equals: 0;
+		assert: (self str: 'hello world') __len__ ___value equals: 11;
+		assert: (self str: '') __len__ ___value equals: 0;
 		yourself.
 %
 category: 'todo'

@@ -92,7 +92,7 @@ of the keyword selector until we find a method that exists.
 	selector := selector asString reverse.
 	args := aMessageDescriptor arguments.
 	index := selector indexOf: $:.
-	index = 0 ifTrue: [ ^super doesNotUnderstand: aMessageDescriptor ].
+	index == 0 ifTrue: [ ^super doesNotUnderstand: aMessageDescriptor ].
 	index := selector indexOf: $: startingAt: 2.
 	^self 
 		perform: ((selector copyFrom: index to: selector size) reverse asSymbol) 
@@ -321,7 +321,7 @@ of the keyword selector until we find a method that exists.
 	selector := aMessageDescriptor selector asString reverse.
 	args := aMessageDescriptor arguments.
 	index := selector indexOf: $:.
-	index = 0 ifTrue: [ ^super doesNotUnderstand: aMessageDescriptor ].
+	index == 0 ifTrue: [ ^super doesNotUnderstand: aMessageDescriptor ].
 	index := selector indexOf: $: startingAt: 2.
 	^self 
 		perform: ((selector copyFrom: index to: selector size) reverse asSymbol) 

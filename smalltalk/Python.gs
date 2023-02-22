@@ -4110,7 +4110,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 Object subclass: 'FunctionDef'
-  instVarNames: #( block args vararg
+  instVarNames: #( block params vararg
                     kwonlyargs kw_defaults kwarg defaults)
   classVars: #()
   classInstVars: #()

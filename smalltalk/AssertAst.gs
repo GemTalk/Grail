@@ -20,7 +20,7 @@ printSmalltalkOn: aStream
 
 	self smalltalkSourceFor: test parenthesisIf: 3 on: aStream.
 	aStream nextPutAll: ' ___value ifFalse: [ AssertionError signal'.
-	msg class = NoneType ifFalse: [
+	msg class == NoneType ifFalse: [
 		aStream nextPutAll: ': '.
 		self smalltalkSourceFor: msg parenthesisIf: 3 on: aStream.
 		aStream nextPutAll: ' ___value'.

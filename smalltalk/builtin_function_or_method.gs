@@ -17,7 +17,7 @@ abs
 	| absFunction |
 	"On startup this creates a builtin abs function to find the absolute value of a object"
 	absFunction := FunctionDef new
-						args: { #number };
+						params: { #number };
 						vararg: #'None';
 						yourself.
 	absFunction block: [ :currentScope |
@@ -33,7 +33,7 @@ bool
 	| boolFunction |
 	"On startup this creates a builtin bool function to turn any object into a boolean value"
 	boolFunction := FunctionDef new
-						args: { #object.};
+						params: { #object.};
 						vararg: #'None';
 						yourself.
 	boolFunction block: [ :currentScope |
@@ -53,11 +53,11 @@ chr
 	| chrFunction |
 	"On startup this creates a builtin chr function to change an integer into a character"
 	chrFunction := FunctionDef new
-						args: { #object.};
+						params: { #object.};
 						vararg: #'None';
 						yourself.
 	chrFunction block: [ :currentScope |
-		(currentScope at:#object) class = int
+		(currentScope at:#object) class == int
 			ifFalse: [
 				TypeError signal: 'TypeError: ', (currentScope at:#object) class asString,
 					'object cannot be interpreted as an integer'.
@@ -72,7 +72,7 @@ dict
 	| dictFunction |
 	"On startup this creates a builtin dict function to turn a list of kwargs into a dictionary"
 	dictFunction := FunctionDef new
-						args: { #object };
+						params: { #object };
 						defaults: { nil };
 						vararg: #'None';
 						kwarg: #'kwarg';
@@ -80,10 +80,10 @@ dict
 	dictFunction block: [ :currentScope |
 		|return|
 		return :=  dict ___value: Dictionary new.
-		(currentScope at: #object) = nil ifFalse:[
+		(currentScope at: #object) class == UndefinedObject ifFalse:[
 			return update: (currentScope at: #object).
 		].
-		[(currentScope at: #kwarg) __len__ ___value = 0 ifFalse: [
+		[(currentScope at: #kwarg) __len__ ___value == 0 ifFalse: [
 			return update: (currentScope at: #kwarg).
 		].] on: NameError do: [].
 		return.
@@ -97,14 +97,14 @@ float
 	"On startup this creates a builtin float function to change strings and anything
 		with a float method to a float."
 	floatFunction := FunctionDef new
-						args: { #object.};
+						params: { #object.};
 						vararg: #'None';
 						yourself.
 	floatFunction block: [ :currentScope |
 		[ (currentScope at:#object) __float__.]
 			on: (MessageNotUnderstood, ImproperOperation)
 			do: [
-				(currentScope at:#object) class = str ifTrue: [
+				(currentScope at:#object) class == str ifTrue: [
 					ValueError signal:
 						'ValueError: could not convert string to float: ',
 						(currentScope at:#object) __repr__ ___value.
@@ -123,7 +123,7 @@ frozenset
 	| frozensetFunction |
 	"On startup this creates a builtin frozenset function to turn one iterable object into a frozenset"
 	frozensetFunction := FunctionDef new
-						args: { #object.};
+						params: { #object.};
 						defaults: { nil };
 						vararg: #'None';
 						yourself.
@@ -131,16 +131,23 @@ frozenset
 		[
 			| return |
 			return := {}.
-			(currentScope at: #object) = nil
+			(currentScope at: #object) class == UndefinedObject
 				ifFalse:[
-					(currentScope at: #object) class = str
+					(currentScope at: #object) class == str
 						ifTrue: [
 							((currentScope at: #object) ___value)
 								do: [ :each | return add: (str ___value: (each asString)).].
 						]
 						ifFalse: [
-							((currentScope at: #object) ___container)
-								do: [ :each | return add: each.].
+							(currentScope at: #object) class == dict
+								ifTrue: [
+									((currentScope at: #object) keys ___container)
+										do: [ :each | return add: each.].
+								]
+								ifFalse: [
+									((currentScope at: #object) ___container)
+										do: [ :each | return add: each.].
+								].
 						].
 				].
 			frozenset ___value: return
@@ -179,22 +186,69 @@ int
 	"On startup this creates a builtin int function to turn anything with a __int__ method
 		or that is a string into an int"
 	intFunction := FunctionDef new
-						args: { #object. #base };
+						params: { #object. #base };
 						defaults: { nil };
 						vararg: #'None';
 						yourself.
 	intFunction block: [ :currentScope |
 		| return |
-		(currentScope at:#object) class = str ifTrue:[
-			(currentScope at:#base) = nil
-				ifTrue: [ currentScope at:#base put: (int ___value: 10)].
-			
-			Error signal: 'not implemented'.
-			ValueError signal:
-					'ValueError: invalid literal for int() with base ',
-					(currentScope at:#base) __repr__ ___value,
-					': ',
-					(currentScope at:#object) __repr__ ___value.
+		(currentScope at:#base) class == UndefinedObject
+			ifTrue: [ currentScope at:#base put: (int ___value: 10).]
+			ifFalse: [
+				(currentScope at:#object) class == str
+					ifFalse: [
+						TypeError signal: 'TypeError: int() can''t convert non-string with explicit base'.
+					].
+			].
+		(currentScope at:#object) class == str ifTrue:[
+			| baseConverter |
+			((currentScope at:#object) ___value at: 2) isLetter 
+				ifTrue:[
+					((currentScope at:#object) ___value at:1) == 0
+						ifFalse: [
+							ValueError signal:
+								'Value Error: invalid literal for int() with base ',
+								(currentScope at:#base) ___value asString,
+								': ',
+								(currentScope at:#object) value.
+						].
+					(((currentScope at:#object) ___value at:2) == $b) & ((currentScope at:#base) ___value == 2)
+						ifFalse:[
+							ValueError signal:
+								'Value Error: invalid literal for int() with base ',
+								(currentScope at:#base) ___value asString,
+								': ',
+								(currentScope at:#object) value.
+						].
+					(((currentScope at:#object) ___value at:2) == $o) & ((currentScope at:#base) ___value == 8)
+						ifFalse:[
+							ValueError signal:
+								'Value Error: invalid literal for int() with base ',
+								(currentScope at:#base) ___value asString,
+								': ',
+								(currentScope at:#object) value.
+						].
+					(((currentScope at:#object) ___value at:2) == $h) & ((currentScope at:#base) ___value == 16)
+						ifFalse:[
+							ValueError signal:
+								'Value Error: invalid literal for int() with base ',
+								(currentScope at:#base) ___value asString,
+								': ',
+								(currentScope at:#object) value.
+						].
+				]
+				ifFalse: [
+					baseConverter := (currentScope at:#base) ___value asString, 'r', (currentScope at:#object) ___value.
+					[return := int ___value: baseConverter evaluate.]
+						on: Error
+						do: [
+							ValueError signal:
+								'Value Error: invalid literal for int() with base ',
+								(currentScope at:#base) ___value asString,
+								': ',
+								(currentScope at:#object) value.
+						].
+				].
 		] ifFalse: [
 			return := [(currentScope at:#object) __int__]
 				on: MessageNotUnderstood
@@ -214,7 +268,7 @@ len
 	| lenFunction |
 	"On startup this creates a builtin len function to return the length of anything that has a __len method"
 	lenFunction := FunctionDef new
-						args: { #object };
+						params: { #object };
 						vararg: #'None';
 						yourself.
 	lenFunction block: [ :currentScope |
@@ -231,7 +285,7 @@ list
 	| listFunction |
 	"On startup this creates a builtin list function to turn one iterable object into a list"
 	listFunction := FunctionDef new
-						args: { #object.};
+						params: { #object.};
 						defaults: { nil };
 						vararg: #'None';
 						yourself.
@@ -239,16 +293,23 @@ list
 		[
 			| return |
 			return := list ___value: {}.
-			(currentScope at: #object) = nil
+			(currentScope at: #object) class == UndefinedObject
 				ifFalse:[
-					(currentScope at: #object) class = str
+					(currentScope at: #object) class == str
 						ifTrue: [
 							((currentScope at: #object) ___value)
 								do: [ :each | return append: (str ___value: (each asString)).].
 						]
 						ifFalse: [
-							((currentScope at: #object) ___container)
-								do: [ :each | return append: each.].
+							(currentScope at: #object) class == dict
+								ifTrue: [
+									((currentScope at: #object) keys ___container)
+										do: [ :each | return append: each.].
+								]
+								ifFalse: [
+									((currentScope at: #object) ___container)
+										do: [ :each | return append: each.].
+								].
 						].
 				].
 			return
@@ -264,18 +325,18 @@ ord
 	| ordFunction |
 	"On startup this creates a builtin ord function to turn a character into its unicode integer"
 	ordFunction := FunctionDef new
-						args: { #object.};
+						params: { #object.};
 						vararg: #'None';
 						yourself.
 	ordFunction block: [ :currentScope |
-		(currentScope at:#object) class = str
+		(currentScope at:#object) class == str
 			ifFalse: [
 				TypeError signal:
 					'TypeError: ord() expected string of length 1, but ',
 					(currentScope at:#object) class asString,
 					' found'.
 			].
-		(currentScope at:#object) __len__ ___value = 1 ifFalse:[
+		(currentScope at:#object) __len__ ___value == 1 ifFalse:[
 				TypeError signal:
 					'TypeError: ord() expected a character, but string of length ',
 					(currentScope at:#object) __len__ asString,
@@ -303,7 +364,7 @@ print
 	print block: [ :currentScope |
 			| objects sep end file flush |
 
-			(currentScope at: #file) = nil ifTrue: [currentScope at: #file put:GsFile stdoutServer ].
+			(currentScope at: #file) class == UndefinedObject ifTrue: [currentScope at: #file put:GsFile stdoutServer ].
 			objects := (currentScope at: #vararg) ___value.
 			sep := currentScope at: #sep.
 			end := currentScope at: #end.
@@ -336,13 +397,13 @@ range
 		|varargSize returnObject|
 		"varargSize is the length of the varargs the function was passed in with."
 		varargSize := (currentScope at:#vararg) ___value size.
-		varargSize = 1 ifTrue: [
+		varargSize == 1 ifTrue: [
 			returnObject := (range new __init__:((currentScope at:#vararg) ___value at: 1))
 		].
-		varargSize = 2 ifTrue: [
+		varargSize == 2 ifTrue: [
 			returnObject := (range new __init__:((currentScope at:#vararg) ___value at: 1) _: ((currentScope at:#vararg) ___value at: 2))
 		].
-		varargSize = 3 ifTrue: [
+		varargSize == 3 ifTrue: [
 			returnObject := (range new __init__:((currentScope at:#vararg) ___value at: 1) _: ((currentScope at:#vararg) ___value at: 2) _: ((currentScope at:#vararg) ___value at: 3))
 		].
 		varargSize > 3 ifTrue: [TypeError signal: 'range expected at most 3 arguments, got ', varargSize.].
@@ -356,7 +417,7 @@ repr
 	| reprFunction |
 	"On startup this creates a builtin repr function to return the value of something's __repr method"
 	reprFunction := FunctionDef new
-						args: { #object };
+						params: { #object };
 						vararg: #'None';
 						yourself.
 	reprFunction block: [ :currentScope |
@@ -371,7 +432,7 @@ set
 	| setFunction |
 	"On startup this creates a builtin set function to turn one iterable object into a set"
 	setFunction := FunctionDef new
-						args: { #object.};
+						params: { #object.};
 						defaults: { nil };
 						vararg: #'None';
 						yourself.
@@ -379,16 +440,23 @@ set
 		[
 			| return |
 			return := set ___value: {}.
-			(currentScope at: #object) = nil
+			(currentScope at: #object) class == UndefinedObject
 				ifFalse:[
-					(currentScope at: #object) class = str
+					(currentScope at: #object) class == str
 						ifTrue: [
 							((currentScope at: #object) ___value)
 								do: [ :each | return add: (str ___value: (each asString)).].
 						]
 						ifFalse: [
-							((currentScope at: #object) ___container)
-								do: [ :each | return add: each.].
+							(currentScope at: #object) class == dict
+								ifTrue: [
+									((currentScope at: #object) keys ___container)
+										do: [ :each | return add: each.].
+								]
+								ifFalse: [
+									((currentScope at: #object) ___container)
+										do: [ :each | return add: each.].
+								].
 						].
 				].
 			return
@@ -404,7 +472,7 @@ str
 	| strFunction |
 	"On startup this creates a builtin str function to return anything with a __str__ method"
 	strFunction := FunctionDef new
-						args: { #object };
+						params: { #object };
 						vararg: #'None';
 						yourself.
 	strFunction block: [ :currentScope |
@@ -424,9 +492,9 @@ type
 	typeFunction block: [ :currentScope |
 		|varargSize result|
 		varargSize := (currentScope at:#vararg) ___value size.
-		varargSize = 1 ifTrue: [result := ((currentScope at:#vararg)  ___value at: 1) class].
-		varargSize = 2 ifTrue: [TypeError signal: 'TypeError: type() takes 1 or 3 arguments'].
-		varargSize = 3 ifTrue: [self error: 'Should return a new class with name first arg, inheritence second arg, and writeables is the thrid argument'].
+		varargSize == 1 ifTrue: [result := ((currentScope at:#vararg)  ___value at: 1) class].
+		varargSize == 2 ifTrue: [TypeError signal: 'TypeError: type() takes 1 or 3 arguments'].
+		varargSize == 3 ifTrue: [self error: 'Should return a new class with name first arg, inheritence second arg, and writeables is the thrid argument'].
 		varargSize > 3 ifTrue: [TypeError signal: 'TypeError: type() takes 1 or 3 arguments'].
 		result
 	].

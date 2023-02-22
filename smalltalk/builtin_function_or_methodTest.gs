@@ -213,6 +213,11 @@ testFrozenset
 						  positional: { list ___value: { 'c'. 'b'. 'a'. 'a' }}
 						  named: {}).
 	self assert: (frozensetHolder) equals: (afrozenset).
+
+	frozensetHolder := ((variables at:#frozenset) scope: variables
+						  positional: {dict ___value: {(str ___value: 'd') -> (int ___value: 7)} asDictionary.}
+						  named: {}).
+	self assert: (frozensetHolder) equals: (frozenset ___value: {str ___value: 'd'}).
 %
 category: 'other'
 method: builtin_function_or_methodTest
@@ -230,6 +235,18 @@ testInt
 						  named: {}).
 	self assert: (intHolder class) equals: (int).
 	self assert: (intHolder ___value) equals: (4).
+
+	variables := Variables new.
+	intHolder := ((variables at:#int) scope: variables
+						  positional: { str ___value: '11'.}
+						  named: {}).
+	self assert: (intHolder ___value) equals: (11).
+
+	variables := Variables new.
+	intHolder := ((variables at:#int) scope: variables
+						  positional: { str ___value: '11'. int ___value: 2}
+						  named: {}).
+	self assert: (intHolder ___value) equals: (3).
 %
 category: 'other'
 method: builtin_function_or_methodTest
@@ -270,6 +287,11 @@ testList
 						  positional: { set ___value: { 'c'. 'b'. 'a' }}
 						  named: {}).
 	self assert: (listHolder) equals: (alist).
+
+	listHolder := ((variables at:#list) scope: variables
+						  positional: {dict ___value: {(str ___value: 'd') -> (int ___value: 7)} asDictionary.}
+						  named: {}).
+	self assert: (listHolder) equals: (list ___value: {str ___value: 'd'}).
 %
 category: 'other'
 method: builtin_function_or_methodTest
@@ -404,6 +426,12 @@ testSet
 						  positional: { list ___value: { 'c'. 'b'. 'a'. 'a' }}
 						  named: {}).
 	self assert: (setHolder) equals: (aset).
+
+
+	setHolder := ((variables at:#set) scope: variables
+						  positional: {dict ___value: {(str ___value: 'd') -> (int ___value: 7)} asDictionary.}
+						  named: {}).
+	self assert: (setHolder) equals: (set ___value: {str ___value: 'd'}).
 %
 category: 'other'
 method: builtin_function_or_methodTest

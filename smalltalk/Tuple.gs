@@ -40,7 +40,7 @@ __getslice__: aPyIntStart _: aPyIntEnd
 	| end |
 	end := aPyIntEnd.
 
-	end class = NoneType ifTrue: [
+	end class == NoneType ifTrue: [
 		end := int ___value: container size
 	].
 

@@ -127,7 +127,7 @@ __getslice__: aPyIntStart _: aPyIntEnd
 	| end |
 	end := aPyIntEnd.
 
-	end class = NoneType ifTrue: [
+	end class == NoneType ifTrue: [
 		end := int ___value: container size
 	].
 
@@ -414,7 +414,7 @@ isalpha
 category: 'Python'
 method: bytes
 isascii
-	^self __len__ ___value = 0 or: [
+	^self __len__ ___value == 0 or: [
 		self ___container allSatisfy: [ :each | each <= 127 ]
 	]
 %
@@ -436,7 +436,7 @@ category: 'Python'
 method: bytes
 isspace
 	^self __len__ ___value > 0 and: [
-		self ___container allSatisfy: [:e | e = 32 ]
+		self ___container allSatisfy: [:e | e == 32 ]
 	]
 %
 category: 'Python'

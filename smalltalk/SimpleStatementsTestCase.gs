@@ -76,14 +76,14 @@ testBreak
 	self 
 		assert: (x isKindOf: ForAst);
 		assert: (x.target isKindOf: NameAst);
-		assert: (x.target.id = #'_');
+		assert: (x.target.id == #'_');
 		assert: (x.target.ctx isKindOf: StoreAst);
 		assert: (x.iter isKindOf: NameAst);
-		assert: (x.iter.id = #'x');
+		assert: (x.iter.id == #'x');
 		assert: (x.iter.ctx isKindOf: LoadAst);
-		assert: (x.body.body size = 1);
+		assert: (x.body.body size == 1);
 		assert: ((x.body.body at: 1) isKindOf: BreakAst);
-		assert: (x.orelse.body size = 0);
+		assert: (x.orelse.body size == 0);
 		yourself.
 %
 category: 'other'
@@ -166,9 +166,9 @@ testContinue
 		assert: (x.iter isKindOf: NameAst);
 		assert: (x.iter.id == #'x');
 		assert: (x.iter.ctx isKindOf: LoadAst);
-		assert: (x.body.body size = 1);
+		assert: (x.body.body size == 1);
 		assert: ((x.body.body at: 1) isKindOf: ContinueAst);
-		assert: (x.orelse size = 0);
+		assert: (x.orelse size == 0);
 		yourself.
 %
 category: 'other'
@@ -241,7 +241,7 @@ testImportFrom
 		assert: ((y := x.names at: 1) isKindOf: AliasAst);
 		assert: (y.name == #'attr');
 		assert: (y.asName isNil);
-		assert: (x.level = 0);
+		assert: (x.level == 0);
 		yourself.
 %
 category: 'other'
@@ -300,8 +300,8 @@ testPassFunction
 		assert: (x.args isKindOf: ArgumentsAst);
 		assert: ((y := x.args.args at: 1) isKindOf: ArgAst);
 		assert: (y.arg = 'arg');
-		assert: (y.annotation = None);
-		assert: (x.args.vararg = None);
+		assert: (y.annotation == None);
+		assert: (x.args.vararg == None);
 		assert: (x.args.kwonlyargs size == 0);
 		assert: (x.args.kw_defaults size == 0);
 		assert: (x.args.kwarg = None);
@@ -309,7 +309,7 @@ testPassFunction
 		assert: (x.body.body size == 1);
 		assert: ((x.body.body at: 1) isKindOf: PassAst);
 		assert: (x.decorator_list size == 0);
-		assert: (x.returns = None);
+		assert: (x.returns == None);
 		yourself.
 %
 category: 'other'
@@ -329,7 +329,7 @@ testRaise
 		assert: (y.value = 'str ___value: ''Something bad happened''');
 		assert: (x.exc.keywords size == 0);
 		assert: (x.exc.function isKindOf: NameAst);
-		assert: (x.cause = None);
+		assert: (x.cause == None);
 		yourself.
 %
 category: 'other'
@@ -364,16 +364,16 @@ testReturnNone
 		assert: (x.name == #'a');
 		assert: (x.args isKindOf: ArgumentsAst);
 		assert: (x.args.args size == 0);
-		assert: (x.args.vararg = None);
+		assert: (x.args.vararg == None);
 		assert: (x.args.kwonlyargs size == 0);
 		assert: (x.args.kw_defaults size == 0);
-		assert: (x.args.kwarg = None);
+		assert: (x.args.kwarg == None);
 		assert: (x.args.defaults size == 0);
 		assert: (x.body.body size == 1);
 		assert: ((y := x.body.body at: 1) isKindOf: ReturnAst);
 		assert: (y.value = None);
 		assert: (x.decorator_list size == 0);
-		assert: (x.returns = None);
+		assert: (x.returns == None);
 		yourself.
 %
 category: 'other'
@@ -417,10 +417,10 @@ testYield
 		assert: (x.name == #'gen');
 		assert: (x.args isKindOf: ArgumentsAst);
 		assert: (x.args.args size == 0);
-		assert: (x.args.vararg = None);
+		assert: (x.args.vararg == None);
 		assert: (x.args.kwonlyargs size == 0);
 		assert: (x.args.kw_defaults size == 0);
-		assert: (x.args.kwarg = None);
+		assert: (x.args.kwarg == None);
 		assert: (x.args.defaults size == 0);
 		assert: (x.body.body size == 1);
 		assert: ((y := x.body.body at: 1) isKindOf: ExprAst);
@@ -428,7 +428,7 @@ testYield
 		assert: (y.value.value isKindOf: ConstantAst);
 		assert: (y.value.value.value = 'int ___value: 123');
 		assert: (x.decorator_list size == 0);
-		assert: (x.returns = None);
+		assert: (x.returns == None);
 		yourself.
 %
 category: 'other'
@@ -442,10 +442,10 @@ testYieldAsync
 		assert: (x.name = 'agen');
 		assert: (x.args isKindOf: ArgumentsAst);
 		assert: (x.args.args size == 0);
-		assert: (x.args.vararg = None);
+		assert: (x.args.vararg == None);
 		assert: (x.args.kwonlyargs size == 0);
 		assert: (x.args.kw_defaults size == 0);
-		assert: (x.args.kwarg = None);
+		assert: (x.args.kwarg == None);
 		assert: (x.args.defaults size == 0);
 		assert: (x.body.body size == 1);
 		assert: ((y := x.body.body at: 1) isKindOf: ExprAst);
@@ -453,6 +453,6 @@ testYieldAsync
 		assert: (y.value.value isKindOf: ConstantAst);
 		assert: (y.value.value.value = 'int ___value: 123');
 		assert: (x.decorator_list size == 0);
-		assert: (x.returns = None);
+		assert: (x.returns == None);
 		yourself.
 %
