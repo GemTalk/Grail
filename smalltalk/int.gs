@@ -64,19 +64,35 @@ category: 'Python-int'
 method: int
 __add__: anObject
 
-	^int ___value: value + anObject ___value
+	^[
+		|temp|
+		anObject class == int
+			ifTrue:[
+				temp := int ___value: value + anObject ___value
+			]
+			ifFalse: [
+				temp := anObject __add__: self.
+			].
+		temp
+	]
+	on: MessageNotUnderstood
+	do: [ TypeError signal: 'TypeError: unsupported operand type(s) for +: ''int'' and ''', anObject class asString,'''' ].
 %
 category: 'Python-int'
 method: int
 __and__: anObject
 
-	| other |
-	other := anObject.
-	(other isKindOf: ExecBlock) ifTrue: [
-		other := other value. "Evaluate the block"
-	].
+	[
+		| other |
+		other := anObject.
+		(other isKindOf: ExecBlock) ifTrue: [
+			other := other value. "Evaluate the block"
+		].
 
-	^int ___value: (value bitAnd: other ___value)
+		^int ___value: (value bitAnd: other ___value)
+	]
+	on: MessageNotUnderstood
+	do: [ TypeError signal: 'TypeError: unsupported operand type(s) for +: ''int'' and ''', anObject class asString,'''' ].
 %
 category: 'Python-int'
 method: int
@@ -154,11 +170,19 @@ category: 'Python-int'
 method: int
 __mul__: anObject
 
-	^(anObject isKindOf: float) ifTrue: [
-		float ___value: value * anObject ___value
-	] ifFalse: [
-		int ___value: value * anObject ___value
-	].
+	^[
+		|temp|
+		anObject class == int
+			ifTrue:[
+				temp := int ___value: value * anObject ___value
+			]
+			ifFalse:[
+				temp := anObject __mul__: self
+			].
+		temp
+	]
+	on: MessageNotUnderstood
+	do: [ TypeError signal: 'TypeError: unsupported operand type(s) for *: ''int'' and ''', anObject class asString,'''' ].
 %
 category: 'Python-int'
 method: int

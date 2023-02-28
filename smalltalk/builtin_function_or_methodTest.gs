@@ -244,9 +244,15 @@ testInt
 
 	variables := Variables new.
 	intHolder := ((variables at:#int) scope: variables
-						  positional: { str ___value: '11'. int ___value: 2}
+						  positional: { str ___value: '-11'.}
 						  named: {}).
-	self assert: (intHolder ___value) equals: (3).
+	self assert: (intHolder ___value) equals: (-11).
+
+	variables := Variables new.
+	intHolder := ((variables at:#int) scope: variables
+						  positional: { str ___value: '-11'. int ___value: 2}
+						  named: {}).
+	self assert: (intHolder ___value) equals: (-3).
 %
 category: 'other'
 method: builtin_function_or_methodTest
@@ -269,7 +275,6 @@ testLen
 category: 'other'
 method: builtin_function_or_methodTest
 testList
-
 	| listHolder variables alist|
 	variables := Variables new.
 	alist := list ___value: { 'c'. 'b'. 'a' }.
@@ -451,6 +456,41 @@ testStr
 	self assert: (((variables at:#str) scope: variables
 						  positional: {list ___value: { str ___value: 'c'. str ___value: 'b'. str ___value:  'a' }}
 						  named: {})) equals: (str ___value: '[''c'', ''b'', ''a'']').
+%
+category: 'other'
+method: builtin_function_or_methodTest
+testSum
+	| listHolder variables alist|
+	variables := Variables new.
+	alist := list ___value: { int ___value: 1. int ___value: 2. int ___value: 3 }.
+	listHolder := ((variables at:#sum) scope: variables
+						  positional: { alist.}
+						  named: {}).
+	self assert: (listHolder) equals: (int ___value: 6).
+
+	alist := list ___value: { int ___value: 1. float ___value: 2. int ___value: 3 }.
+	listHolder := ((variables at:#sum) scope: variables
+						  positional: { alist.}
+						  named: {}).
+	self assert: (listHolder) equals: (float ___value: 6).
+
+	alist := list ___value: { complex ___real: 1 imaginary: 1. float ___value: 2. int ___value: 3 }.
+	listHolder := ((variables at:#sum) scope: variables
+						  positional: { alist.}
+						  named: {}).
+	self assert: (listHolder) equals: (complex ___real: 6 imaginary: 1).
+
+	alist := list ___value: { int ___value: 1. str ___value: 'a'. int ___value: 3 }.
+	listHolder := [((variables at:#sum) scope: variables
+						  positional: { alist.}
+						  named: {}).] on: TypeError do: [1].
+	self assert: (listHolder) equals: (1).
+
+	alist := str ___value: '123'.
+	listHolder := [((variables at:#sum) scope: variables
+						  positional: { alist.}
+						  named: {}).] on: TypeError do: [2].
+	self assert: (listHolder) equals: (2).
 %
 category: 'other'
 method: builtin_function_or_methodTest

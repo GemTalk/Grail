@@ -26,7 +26,17 @@ category: 'Python-float'
 method: float
 __add__: anObject
 
-	^float ___value: value + anObject ___value
+	^[
+		|temp|
+		anObject class == complex ifTrue:[
+			temp := anObject __add__: self
+		] ifFalse: [
+			temp := float ___value: value + anObject ___value
+		].
+		float ___value: value + anObject ___value
+	]
+	on: MessageNotUnderstood
+	do: [ TypeError signal: 'TypeError: unsupported operand type(s) for +: ''float'' and ''', anObject class asString,'''' ].
 %
 category: 'Python-float'
 method: float
@@ -104,7 +114,17 @@ category: 'Python-float'
 method: float
 __mul__: anObject
 
-	^float ___value: value * anObject ___value
+	^[
+		|temp|
+		anObject class == complex ifTrue:[
+			temp := anObject __mul__: self
+		] ifFalse: [
+			temp := float ___value: value * anObject ___value
+		].
+		temp
+	]
+	on: MessageNotUnderstood
+	do: [ TypeError signal: 'TypeError: unsupported operand type(s) for *: ''float'' and ''', anObject class asString,'''' ].
 %
 category: 'Python-float'
 method: float

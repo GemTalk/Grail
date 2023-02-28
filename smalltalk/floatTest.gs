@@ -241,7 +241,7 @@ method: floatTest
 test__radd__
 
 	self
-		assert: (((self float:  3) __radd__: (self int: 1)) __class__ ) equals: int;
+		assert: (((self float:  3) __radd__: (self int: 1)) __class__ ) equals: float;
         assert: ((self float:  3) __radd__: (self int: 1)) ___value equals: 4;
         assert: ((self float: -3) __radd__: (self int: 1)) ___value equals: -2;
         assert: ((self float:  3) __radd__: (self float: 1)) ___value equals: 4;

@@ -176,6 +176,7 @@ initialize
 		repr ;
 		set ;
 		str ;
+		sum ;
 		type ;
 		yourself.
 %
@@ -480,6 +481,45 @@ str
 		(currentScope at:#object) __str__
 	].
 	Builtins singleton at: #str put: strFunction
+%
+category: 'other'
+method: builtin_function_or_method
+sum
+	| sumFunction |
+	"On startup this creates a builtin int function to turn anything with a __int__ method
+		or that is a string into an int"
+	sumFunction := FunctionDef new
+						params: { #object. #start };
+						defaults: { int ___value: 0 };
+						vararg: #'None';
+						yourself.
+	sumFunction block: [ :currentScope |
+		| sum integer summer|
+		sum := (complex ___real: 0 imaginary: 0).
+		summer := (currentScope at: #list) scope: currentScope
+										 positional: {(currentScope at: #object)}
+										 named: {}.
+		integer := true.
+		((currentScope at: #start) ___value) to: (summer  ___size - 1)
+			do: [ :element |
+				|holder|
+				holder := (summer __getitem__: (int ___value: element)).
+				holder class = float
+					ifTrue:[
+						integer := false.
+					].
+				sum := sum __add__: holder.
+			].
+		sum imag ___value == 0
+			ifTrue:[
+				sum := sum real.
+				integer ifTrue: [
+						sum := int ___value: (sum ___value).
+					].
+			].
+		sum
+	].
+	Builtins singleton at: #sum put: sumFunction
 %
 category: 'other'
 method: builtin_function_or_method

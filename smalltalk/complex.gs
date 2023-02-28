@@ -73,9 +73,12 @@ category: 'Python-complex'
 method: complex
 __add__: anObject
 
-	^complex
+	^[complex
 		___real: real + anObject real ___value
 		imaginary: imaginary + anObject imag ___value
+	]
+	on: MessageNotUnderstood
+	do: [ TypeError signal: 'TypeError: unsupported operand type(s) for +: ''complex'' and ''', anObject class asString,'''' ].
 %
 category: 'Python-complex'
 method: complex
@@ -95,16 +98,19 @@ category: 'Python-complex'
 method: complex
 __mul__: any
 	"https://mathworld.wolfram.com/ComplexMultiplication.html"
+	[
+		| a b c d |
+		a := self real ___value.
+		b := self imag ___value.
+		c := any real ___value.
+		d := any imag ___value.
 
-	| a b c d |
-	a := self real ___value.
-	b := self imag ___value.
-	c := any real ___value.
-	d := any imag ___value.
-
-	^complex
-		___real: ((a * c) - (b * d))
-		imaginary: ((a * d) + (b * c))
+		^complex
+			___real: ((a * c) - (b * d))
+			imaginary: ((a * d) + (b * c))
+	]
+	on: MessageNotUnderstood
+	do: [ TypeError signal: 'TypeError: unsupported operand type(s) for *: ''complex'' and ''', any class asString,'''' ].
 %
 category: 'Python-complex'
 method: complex
