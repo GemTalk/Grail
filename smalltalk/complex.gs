@@ -226,7 +226,7 @@ category: 'Python-object'
 method: complex
 __eq__: anObject
 
-	^bool ___value: (real = anObject real ___value and: [imaginary = anObject imag ___value])
+	^bool ___value: (real = (anObject real ___value) and: [imaginary = (anObject imag ___value)])
 %
 category: 'Python-object'
 method: complex
@@ -308,6 +308,14 @@ __repr__
 set compile_env: 0
 category: 'Smalltalk'
 method: complex
+___addInt: anInteger
+
+	^complex
+		___real: (anInteger + real)
+		imaginary: imaginary.
+%
+category: 'Smalltalk'
+method: complex
 ___parse: stringArg
  
 	[
@@ -330,6 +338,12 @@ ___parse: stringArg
 		].
 	] on: Error , ValueError do: [:ex | ex return].
 	ValueError signal: 'complex() arg is a malformed string'.
+%
+category: 'Smalltalk'
+method: complex
+ ___pow: anObject
+
+	^anObject ___powReal: real imag: imaginary.
 %
 category: 'Smalltalk'
 method: complex

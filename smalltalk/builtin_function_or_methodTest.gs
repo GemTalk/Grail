@@ -221,6 +221,25 @@ testFrozenset
 %
 category: 'other'
 method: builtin_function_or_methodTest
+testGlobals
+
+	| globalsHolder variables |
+	variables := PyGlobals new.
+
+	globalsHolder := ((variables at:#globals) scope: variables
+						  positional: {}
+						  named: {}).
+	self assert: (globalsHolder) equals: (dict ___value: {}).
+
+	variables at: #x put: 3.
+
+	globalsHolder := ((variables at:#globals) scope: variables
+						  positional: {}
+						  named: {}).
+	self assert: (globalsHolder) equals: (dict ___value: {#'x'->3}).
+%
+category: 'other'
+method: builtin_function_or_methodTest
 testInt
 
 	| intHolder variables |
@@ -300,24 +319,101 @@ testList
 %
 category: 'other'
 method: builtin_function_or_methodTest
+testLocals
+
+	| localsHolder variables |
+	variables := Variables new.
+
+	localsHolder := ((variables at:#locals) scope: variables
+						  positional: {}
+						  named: {}).
+	self assert: (localsHolder) equals: (dict ___value: {}).
+
+	variables at: #x put: 3.
+
+	localsHolder := ((variables at:#locals) scope: variables
+						  positional: {}
+						  named: {}).
+	self assert: (localsHolder) equals: (dict ___value: {#'x'->3}).
+%
+category: 'other'
+method: builtin_function_or_methodTest
 testOrd
 
-	| ordHolder variables |
+	| roundHolder variables |
 	variables := Variables new.
-	ordHolder := ((variables at:#ord) scope: variables
-						  positional: { str ___value: 'a'.}
+	roundHolder := ((variables at:#round) scope: variables
+						  positional: { int ___value: 3.}
 						  named: {}).
-	self assert: (ordHolder ___value) equals: (97).
+	self assert: (roundHolder ___value) equals: (3).
+%
+category: 'other'
+method: builtin_function_or_methodTest
+testPow
 
-	ordHolder := [((variables at:#ord) scope: variables
-						  positional: { str ___value: 'aa'.}
-						  named: {})] on: TypeError do: [1].
-	self assert: (ordHolder) equals: (1).
+	| powHolder variables |
+	variables := Variables new.
 
-	ordHolder := [((variables at:#ord) scope: variables
-						  positional: { int ___value: 1.}
-						  named: {})] on: TypeError do: [2].
-	self assert: (ordHolder) equals: (2).
+	powHolder := ((variables at:#pow) scope: variables
+						  positional: { int ___value: 3. int ___value: 2.}
+						  named: {}).
+	self assert: (powHolder) equals: (int ___value: 9).
+
+	powHolder := ((variables at:#pow) scope: variables
+						  positional: { int ___value: 3. int ___value: -2.}
+						  named: {}).
+	self assert: (powHolder) equals: (float ___value: 1/9).
+
+	powHolder := ((variables at:#pow) scope: variables
+						  positional: { int ___value: -3. int ___value: -2.}
+						  named: {}).
+	self assert: (powHolder) equals: (float ___value: 1/9).
+
+	powHolder := ((variables at:#pow) scope: variables
+						  positional: { int ___value: -3. int ___value: -3.}
+						  named: {}).
+	self assert: (powHolder) equals: (float ___value: -1/27).
+
+	powHolder := ((variables at:#pow) scope: variables
+						  positional: { float ___value: 0.5. int ___value: 2.}
+						  named: {}).
+	self assert: (powHolder) equals: (float ___value: 0.25).
+
+	powHolder := ((variables at:#pow) scope: variables
+						  positional: { float ___value: 0.5. int ___value: -2.}
+						  named: {}).
+	self assert: (powHolder) equals: (float ___value: 4).
+
+	powHolder := ((variables at:#pow) scope: variables
+						  positional: { (complex ___real: 0 imaginary: 1). int ___value: 2.}
+						  named: {}).
+	self assert: (powHolder real) equals: (float ___value: -1).
+	self assert: (powHolder imag ___value roundTo: 0.1) equals: (0.0).
+
+	powHolder := ((variables at:#pow) scope: variables
+						  positional: { (complex ___real: 1 imaginary: 1). int ___value: 2.}
+						  named: {}).
+	self assert: (powHolder real ___value roundTo: 0.1) equals: (0.0).
+	self assert: (powHolder imag ___value roundTo: 0.1) equals: ( 2.0).
+
+
+	powHolder := ((variables at:#pow) scope: variables
+						  positional: { (complex ___real: 1 imaginary: 1). int ___value: -2.}
+						  named: {}).
+	self assert: (powHolder real ___value roundTo: 0.1) equals: (0.0).
+	self assert: (powHolder imag ___value roundTo: 0.1) equals: (-0.5).
+
+	powHolder := ((variables at:#pow) scope: variables
+						  positional: { (complex ___real: 2 imaginary: 3). int ___value: 3.}
+						  named: {}).
+	self assert: (powHolder real ___value roundTo: 0.1) equals: (-46.0).
+	self assert: (powHolder imag ___value roundTo: 0.1) equals: (9.0).
+
+	powHolder := ((variables at:#pow) scope: variables
+						  positional: { (complex ___real: 2 imaginary: 3). int ___value: -3.}
+						  named: {}).
+	self assert: (powHolder real ___value roundTo: 0.01) equals: (-0.02).
+	self assert: (powHolder imag ___value roundTo: 0.001) equals: (-0.004).
 %
 category: 'other'
 method: builtin_function_or_methodTest
@@ -409,6 +505,50 @@ testRepr
 	self assert: (((variables at:#repr) scope: variables
 						  positional: {list ___value: { str ___value: 'c'. str ___value: 'b'. str ___value:  'a' }}
 						  named: {})) equals: (str ___value: '[''c'', ''b'', ''a'']').
+%
+category: 'other'
+method: builtin_function_or_methodTest
+testRound
+
+	| roundHolder variables |
+	variables := Variables new.
+
+	roundHolder := ((variables at:#round) scope: variables
+						  positional: { int ___value: 3. int ___value: 2.}
+						  named: {}).
+	self assert: (roundHolder) equals: (float ___value: 3.0).
+
+
+	roundHolder := ((variables at:#round) scope: variables
+						  positional: { float ___value: 3.1}
+						  named: {}).
+	self assert: (roundHolder) equals: (int ___value: 3.0).
+
+	roundHolder := ((variables at:#round) scope: variables
+						  positional: { float ___value: 3.1. int ___value: 0.}
+						  named: {}).
+	self assert: (roundHolder) equals: (int ___value: 3.0).
+
+
+	roundHolder := ((variables at:#round) scope: variables
+						  positional: { float ___value: 3.01. int ___value: 1.}
+						  named: {}).
+	self assert: (roundHolder) equals: (float ___value: 3.0).
+
+	roundHolder := ((variables at:#round) scope: variables
+						  positional: { float ___value: 3.05. int ___value: 1.}
+						  named: {}).
+	self assert: (roundHolder) equals: (float ___value: 3.1).
+
+	roundHolder := ((variables at:#round) scope: variables
+						  positional: { float ___value: 3.06. int ___value: 1.}
+						  named: {}).
+	self assert: (roundHolder) equals: (float ___value: 3.1).
+
+	roundHolder := [((variables at:#round) scope: variables
+						  positional: { str ___value: 'a'}
+						  named: {}).] on: TypeError do: [1].
+	self assert: (roundHolder) equals: (1).
 %
 category: 'other'
 method: builtin_function_or_methodTest

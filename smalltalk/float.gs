@@ -33,7 +33,7 @@ __add__: anObject
 		] ifFalse: [
 			temp := float ___value: value + anObject ___value
 		].
-		float ___value: value + anObject ___value
+		temp
 	]
 	on: MessageNotUnderstood
 	do: [ TypeError signal: 'TypeError: unsupported operand type(s) for +: ''float'' and ''', anObject class asString,'''' ].
@@ -304,6 +304,43 @@ __ne__: anObject
 	^bool ___value: value ~= anObject ___value
 %
 set compile_env: 0
+category: 'Smalltalk'
+method: float
+___addInt: anInteger
+
+	^float ___value:  anInteger + value.
+%
+category: 'Smalltalk'
+method: float
+___pow: anObject
+
+	^ anObject ___powFloat: value.
+%
+category: 'Smalltalk'
+method: float
+___powFloat: aFloat
+	
+	| return |
+
+	return := float ___value: (aFloat  raisedTo: value).
+	return asString = 'MinusQuietNaN'
+		ifTrue: [
+			return := ((complex ___real: (float ___value: 0) imaginary: ((aFloat*(-1)) sqrt)) ___pow: (2*value)).
+		].
+	^return
+%
+category: 'Smalltalk'
+method: float
+___powInt: anInteger
+	| return |
+
+	return := float ___value: (anInteger  raisedTo: value).
+	return asString = 'MinusQuietNaN'
+		ifTrue: [
+			return := ((complex ___real: (float ___value: 0) imaginary: ((anInteger*(-1)) sqrt)) ___pow: (2*value)).
+		].
+	^return
+%
 category: 'Smalltalk'
 method: float
 ___value

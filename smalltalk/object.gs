@@ -100,6 +100,31 @@ of the keyword selector until we find a method that exists.
 %
 ! ------------------- Instance methods for object
 set compile_env: 0
+category: 'other'
+method: object
+___addComplex: anObject
+
+	TypeError signal: 'TypeError: unsupported operand type(s) for +: ''complex'' and ''', anObject class asString,''''.
+%
+category: 'other'
+method: object
+___addFloat: anObject
+
+	TypeError signal: 'TypeError: unsupported operand type(s) for +: ''float'' and ''', anObject class asString,''''.
+%
+category: 'other'
+method: object
+___addInt: anObject
+
+	TypeError signal: 'TypeError: unsupported operand type(s) for +: ''int'' and ''', anObject class asString,''''.
+%
+category: 'other'
+method: object
+__round__
+
+	TypeError signal: 'TypeError: type ', self class asString , ' doesn''t define __round__ method'
+%
+set compile_env: 0
 category: 'Python'
 method: object
 __class__

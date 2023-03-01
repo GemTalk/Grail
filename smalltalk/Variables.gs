@@ -79,6 +79,12 @@ createChildScope
 %
 category: 'other'
 method: Variables
+dict
+
+^ dict
+%
+category: 'other'
+method: Variables
 find: aKey
 
 	"locates a variable in the current dictionary or if it isn't present searches its parent for it"

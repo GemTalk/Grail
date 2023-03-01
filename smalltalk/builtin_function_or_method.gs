@@ -78,15 +78,28 @@ dict
 						kwarg: #'kwarg';
 						yourself.
 	dictFunction block: [ :currentScope |
-		|return|
-		return :=  dict ___value: Dictionary new.
-		(currentScope at: #object) class == UndefinedObject ifFalse:[
-			return update: (currentScope at: #object).
-		].
-		[(currentScope at: #kwarg) __len__ ___value == 0 ifFalse: [
-			return update: (currentScope at: #kwarg).
-		].] on: NameError do: [].
-		return.
+			| return |
+			return := set ___value: {}.
+			(currentScope at: #object) class == UndefinedObject
+				ifFalse:[
+					(currentScope at: #object) class == str
+						ifTrue: [
+							((currentScope at: #object) ___value)
+								do: [ :each | return add: (str ___value: (each asString)).].
+						]
+						ifFalse: [
+							(currentScope at: #object) class == dict
+								ifTrue: [
+									((currentScope at: #object) keys ___container)
+										do: [ :each | return add: each.].
+								]
+								ifFalse: [
+									((currentScope at: #object) ___container)
+										do: [ :each | return add: each.].
+								].
+						].
+				].
+			return
 	].
 	Builtins singleton at: #dict put: dictFunction
 %
@@ -159,6 +172,20 @@ frozenset
 %
 category: 'other'
 method: builtin_function_or_method
+globals
+	| globalsFunction |
+	"On startup this creates a builtin repr function to return the value of something's __repr method"
+	globalsFunction := FunctionDef new
+						params: {};
+						vararg: #'None';
+						yourself.
+	globalsFunction block: [ :currentScope |
+		dict ___value: (currentScope globals dict)
+	].
+	Builtins singleton at: #globals put: globalsFunction
+%
+category: 'other'
+method: builtin_function_or_method
 initialize
 	self
 		abs ;
@@ -167,13 +194,17 @@ initialize
 		dict ;
 		float ;
 		frozenset ;
+		globals ;
 		int ;
 		len ;
 		list ;
+		locals ;
 		ord ;
+		pow ;
 		print ;
 		range ;
 		repr ;
+		round ;
 		set ;
 		str ;
 		sum ;
@@ -322,6 +353,20 @@ list
 %
 category: 'other'
 method: builtin_function_or_method
+locals
+	| localsFunction |
+	"On startup this creates a builtin repr function to return the value of something's __repr method"
+	localsFunction := FunctionDef new
+						params: {};
+						vararg: #'None';
+						yourself.
+	localsFunction block: [ :currentScope |
+		dict ___value: (currentScope parent dict)
+	].
+	Builtins singleton at: #locals put: localsFunction
+%
+category: 'other'
+method: builtin_function_or_method
 ord
 	| ordFunction |
 	"On startup this creates a builtin ord function to turn a character into its unicode integer"
@@ -346,6 +391,34 @@ ord
 		int ___value: (currentScope at:#object) ___value first codePoint.
 	].
 	Builtins singleton at: #ord put: ordFunction
+%
+category: 'other'
+method: builtin_function_or_method
+pow
+
+	"On startup this creates a builtin pow function to return base raised to the pow of exp
+	This should work for ints, floats, and complex numbers in any combination"
+
+	| powFunction |
+	powFunction := FunctionDef new
+						params: {#base. #exp. #mod};
+						defaults: {nil};
+						vararg: #'None';
+						yourself.
+
+	powFunction block: [ :currentScope |
+		| result base exp |
+
+		base := (currentScope at: #base).
+		exp := (currentScope at: #exp).
+		result := base ___pow: exp.
+		(currentScope at: #mod) class == UndefinedObject
+			ifFalse: [result := result __mod__: (currentScope at: #mod)].
+
+		result.
+	].
+
+	Builtins singleton at: #pow put: powFunction
 %
 category: 'other'
 method: builtin_function_or_method
@@ -426,6 +499,31 @@ repr
 		(currentScope at:#object) __repr__
 	].
 	Builtins singleton at: #repr put: reprFunction
+%
+category: 'other'
+method: builtin_function_or_method
+round
+	| roundFunction |
+	"On startup this creates a builtin repr function to return the value of something's __repr method"
+	roundFunction := FunctionDef new
+						params: { #object. #ndigits};
+						defaults: { int ___value: 0 };
+						vararg: #'None';
+						yourself.
+	roundFunction block: [ :currentScope |
+		| result |
+
+		(currentScope at: #ndigits) ___value == 0
+			ifTrue: [
+				result := (currentScope at: #object) __round__
+			]
+			ifFalse: [
+				result := float ___value: (((currentScope at: #object) ___value * (10 raisedTo: (currentScope at: #ndigits) ___value)) rounded) / (10 raisedTo: (currentScope at: #ndigits) ___value) asFloat.
+
+			].
+		result.
+	].
+	Builtins singleton at: #round put: roundFunction
 %
 category: 'other'
 method: builtin_function_or_method

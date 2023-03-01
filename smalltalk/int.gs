@@ -56,6 +56,63 @@ ___value: aNumber
 set compile_env: 0
 category: 'Python-int'
 method: int
+___addInt: anInteger
+
+	^int ___value: anInteger + value .
+%
+category: 'Python-int'
+method: int
+ ___pow: anObject
+
+	^anObject ___powInt: value.
+%
+category: 'Python-int'
+method: int
+___powFloat: aFloat
+
+	^float ___value: (aFloat raisedTo: value)
+%
+category: 'Python-int'
+method: int
+___powInt: anInteger
+
+	| return |
+
+	return := float ___value: (anInteger raisedTo: value).
+
+	return = return __ceil__ ifTrue:[ return := int ___value: (return ___value)].
+	
+	^return
+%
+category: 'Python-int'
+method: int
+___powReal: aFloatReal imag: aFloatImag
+		
+	| radius radians result|
+
+
+	radius := ((aFloatReal raisedTo: 2) + (aFloatImag raisedTo: 2)) sqrt.
+	aFloatReal asFloat == 0.0
+		ifTrue: [
+			radians := (Float pi) / 2.
+			aFloatImag < 0 ifTrue:[radians := radians + Float pi / 2].
+		] ifFalse: [
+			radians := ( aFloatImag / aFloatReal ) arcTan .
+		].
+			
+
+	aFloatReal < 0
+		ifTrue:[
+			radians := radians + Float pi
+		].
+
+	result := complex
+		___real: ((radius raisedTo: value) * ( (value * radians) cos))
+		imaginary: ((radius raisedTo: value) * ( (value * radians) sin)).
+	^result
+%
+category: 'Python-int'
+method: int
 __abs__
 
 	^int ___value: value abs
@@ -64,19 +121,7 @@ category: 'Python-int'
 method: int
 __add__: anObject
 
-	^[
-		|temp|
-		anObject class == int
-			ifTrue:[
-				temp := int ___value: value + anObject ___value
-			]
-			ifFalse: [
-				temp := anObject __add__: self.
-			].
-		temp
-	]
-	on: MessageNotUnderstood
-	do: [ TypeError signal: 'TypeError: unsupported operand type(s) for +: ''int'' and ''', anObject class asString,'''' ].
+	^anObject ___addInt: value.
 %
 category: 'Python-int'
 method: int
