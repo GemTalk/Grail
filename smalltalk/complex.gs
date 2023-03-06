@@ -347,6 +347,44 @@ method: complex
 %
 category: 'Smalltalk'
 method: complex
+___powFloat: aFloat
+	^complex
+		___real: (aFloat raisedTo: real) * ((imaginary *( aFloat ln )) cos)
+		imaginary: (aFloat raisedTo: real) * ((imaginary *( aFloat ln )) sin)
+%
+category: 'Smalltalk'
+method: complex
+___powInt: anInteger
+	^complex
+		___real: (anInteger raisedTo: real) * ((imaginary *( anInteger ln )) cos)
+		imaginary: (anInteger raisedTo: real) * ((imaginary *( anInteger ln )) sin)
+%
+category: 'Smalltalk'
+method: complex
+___powReal: aFloatReal imag: aFloatImag
+	
+	|radius radians EulerTranslationExp originalExp combinationExp|
+	
+
+	originalExp := complex ___real: aFloatReal imaginary: aFloatImag.
+	radius := ((aFloatReal raisedTo: 2) + (aFloatImag raisedTo: 2)) sqrt.
+	aFloatReal asFloat == 0.0
+		ifTrue: [
+			radians := (Float pi) / 2.
+			aFloatImag < 0 ifTrue: [ radians := radians + Float pi / 2 ].
+		] ifFalse: [
+			radians := ( aFloatImag / aFloatReal ) arcTan .
+		].
+	EulerTranslationExp := complex
+										___real:  (radius ln)
+										imaginary: radians.
+	
+	combinationExp := EulerTranslationExp __mul__: originalExp.
+
+	^(float ___value: (Float e)) ___pow: combinationExp
+%
+category: 'Smalltalk'
+method: complex
 ___real: r imaginary: i
 
 	real := r.

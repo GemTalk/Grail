@@ -88,27 +88,43 @@ category: 'Python-int'
 method: int
 ___powReal: aFloatReal imag: aFloatImag
 		
-	| radius radians result|
+	| negative complexHolder exponent result|
 
+	value = 0 ifTrue: [ ^1 ].
 
-	radius := ((aFloatReal raisedTo: 2) + (aFloatImag raisedTo: 2)) sqrt.
-	aFloatReal asFloat == 0.0
-		ifTrue: [
-			radians := (Float pi) / 2.
-			aFloatImag < 0 ifTrue:[radians := radians + Float pi / 2].
-		] ifFalse: [
-			radians := ( aFloatImag / aFloatReal ) arcTan .
+	negative := value < 0.
+
+	complexHolder := complex ___real: aFloatReal imaginary: aFloatImag.
+	exponent := value abs.
+
+	"shift the exponent until we get to the first set bit"
+	[(exponent bitAnd: 1) = 0] whileTrue: [
+		complexHolder := complexHolder __mul__: complexHolder.
+		exponent := exponent bitShift: -1.
+	].
+
+	result := complexHolder.
+	exponent := exponent bitShift: -1.
+	"multiply the result by original complex number raised that specific bit number"
+	[exponent > 0] whileTrue: [
+		complexHolder := complexHolder __mul__: complexHolder.
+
+		(exponent bitAnd: 1) = 1 ifTrue: [
+			result := result __mul__: complexHolder.
 		].
-			
 
-	aFloatReal < 0
-		ifTrue:[
-			radians := radians + Float pi
-		].
+		exponent := exponent bitShift: -1.
+	].
 
-	result := complex
-		___real: ((radius raisedTo: value) * ( (value * radians) cos))
-		imaginary: ((radius raisedTo: value) * ( (value * radians) sin)).
+	"if the exponent was negative at the beginning then rationalize the denominator"
+	negative ifTrue: [
+		| conjugate |
+		conjugate := result conjugate.
+		result := complex
+			___real: ((conjugate real ___value) / ((result __mul__: conjugate) real ___value))
+			imaginary: ((conjugate imag ___value) / ((result __mul__: conjugate) real ___value))
+	].
+
 	^result
 %
 category: 'Python-int'

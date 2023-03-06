@@ -343,6 +343,35 @@ ___powInt: anInteger
 %
 category: 'Smalltalk'
 method: float
+___powReal: aFloatReal imag: aFloatImag
+		
+	| radius radians |
+	value = (value asInteger) ifTrue: [
+		^ ((complex ___real: aFloatReal imaginary: aFloatImag) ___pow: (int ___value: (value asInteger)))
+
+	].
+
+	radius := ((aFloatReal raisedTo: 2) + (aFloatImag raisedTo: 2)) sqrt.
+	aFloatReal asFloat == 0.0
+		ifTrue: [
+			radians := (Float pi) / 2.
+			aFloatImag < 0 ifTrue: [ radians := radians + Float pi / 2 ].
+		] ifFalse: [
+			radians := ( aFloatImag / aFloatReal ) arcTan .
+		].
+			
+
+	aFloatReal < 0
+		ifTrue:[
+			radians := radians + Float pi
+		].
+
+	^complex
+		___real: ((radius raisedTo: value) * ( (value * radians) cos))
+		imaginary: ((radius raisedTo: value) * ( (value * radians) sin)).
+%
+category: 'Smalltalk'
+method: float
 ___value
 
 	^value

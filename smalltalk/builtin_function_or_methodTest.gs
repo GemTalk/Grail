@@ -393,27 +393,51 @@ testPow
 	powHolder := ((variables at:#pow) scope: variables
 						  positional: { (complex ___real: 1 imaginary: 1). int ___value: 2.}
 						  named: {}).
-	self assert: (powHolder real ___value roundTo: 0.1) equals: (0.0).
-	self assert: (powHolder imag ___value roundTo: 0.1) equals: ( 2.0).
+	self assert: (powHolder real ___value) equals: (0.0).
+	self assert: (powHolder imag ___value) equals: ( 2.0).
 
 
 	powHolder := ((variables at:#pow) scope: variables
 						  positional: { (complex ___real: 1 imaginary: 1). int ___value: -2.}
 						  named: {}).
-	self assert: (powHolder real ___value roundTo: 0.1) equals: (0.0).
-	self assert: (powHolder imag ___value roundTo: 0.1) equals: (-0.5).
+	self assert: (powHolder real ___value) equals: (0.0).
+	self assert: (powHolder imag ___value) equals: (-0.5).
 
 	powHolder := ((variables at:#pow) scope: variables
 						  positional: { (complex ___real: 2 imaginary: 3). int ___value: 3.}
 						  named: {}).
-	self assert: (powHolder real ___value roundTo: 0.1) equals: (-46.0).
-	self assert: (powHolder imag ___value roundTo: 0.1) equals: (9.0).
+	self assert: (powHolder real ___value) equals: (-46.0).
+	self assert: (powHolder imag ___value) equals: (9.0).
 
 	powHolder := ((variables at:#pow) scope: variables
 						  positional: { (complex ___real: 2 imaginary: 3). int ___value: -3.}
 						  named: {}).
-	self assert: (powHolder real ___value roundTo: 0.01) equals: (-0.02).
-	self assert: (powHolder imag ___value roundTo: 0.001) equals: (-0.004).
+	self assert: (powHolder real ___value roundTo: 0.00001) equals: (-0.02094).
+	self assert: (powHolder imag ___value roundTo: 0.00001) equals: (-0.00410).
+
+	powHolder := ((variables at:#pow) scope: variables
+						  positional: { (complex ___real: 1 imaginary: 1). float ___value: 2.0.}
+						  named: {}).
+	self assert: (powHolder real ___value) equals: (0.0).
+	self assert: (powHolder imag ___value) equals: ( 2.0).
+
+	powHolder := ((variables at:#pow) scope: variables
+						  positional: { (complex ___real: 4 imaginary: 0). float ___value: 0.5.}
+						  named: {}).
+	self assert: (powHolder real ___value) equals: (2.0).
+	self assert: (powHolder imag ___value) equals: ( 0.0).
+
+	powHolder := ((variables at:#pow) scope: variables
+						  positional: { (complex ___real: 0 imaginary: 4). float ___value: 0.5.}
+						  named: {}).
+	self assert: (powHolder real ___value roundTo: 0.000001) equals: (2 sqrt roundTo: 0.000001).
+	self assert: (powHolder imag ___value roundTo: 0.000001) equals: ( 2 sqrt roundTo: 0.000001).
+
+	powHolder := ((variables at:#pow) scope: variables
+						  positional: { (complex ___real: 1 imaginary: 1). (complex ___real: 1 imaginary: 1)}
+						  named: {}).
+	self assert: (powHolder real ___value roundTo: 0.000001) equals: (0.273957).
+	self assert: (powHolder imag ___value roundTo: 0.000001) equals: ( 0.583701).
 %
 category: 'other'
 method: builtin_function_or_methodTest
