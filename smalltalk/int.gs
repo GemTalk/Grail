@@ -118,11 +118,14 @@ ___powReal: aFloatReal imag: aFloatImag
 
 	"if the exponent was negative at the beginning then rationalize the denominator"
 	negative ifTrue: [
-		| conjugate |
+		| conjugate denominator realPart imagPart|
 		conjugate := result conjugate.
+		realPart := conjugate real ___value.
+		imagPart := conjugate imag ___value.
+		denominator := (realPart * realPart) + (imagPart * imagPart).
 		result := complex
-			___real: ((conjugate real ___value) / ((result __mul__: conjugate) real ___value))
-			imaginary: ((conjugate imag ___value) / ((result __mul__: conjugate) real ___value))
+			___real: (realPart / denominator)
+			imaginary: (imagPart / denominator)
 	].
 
 	^result
