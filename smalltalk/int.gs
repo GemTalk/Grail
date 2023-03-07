@@ -262,12 +262,6 @@ __mul__: anObject
 %
 category: 'Python-int'
 method: int
-__mulFloat: aFloat
-
-	^float ___value: (value * aFloat).
-%
-category: 'Python-int'
-method: int
 __neg__
 
 	^int ___value: value negated
