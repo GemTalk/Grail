@@ -230,10 +230,18 @@ test__pos__
 category: 'done'
 method: floatTest
 test__pow__
-
+	|powHolder|
 	self
 		assert: ((self float: 3.5) __pow__: (self int: 2)) ___value equals: 12.25;
 		assert: ((self float: 4) __pow__: (self int: 3)) ___value equals: 64;
+		assert: ((self float: 4) __pow__: (self float: 3.0)) ___value equals: 64;
+		assert: ((self float: -1) __pow__: (self float: 0.5)) equals: (complex ___real: 0 imaginary: 1);
+		yourself.
+
+	powHolder := ((self float: 2) __pow__: (complex ___real: 0 imaginary: 1)).
+	self
+		assert: (powHolder real ___value roundTo: 0.000001) equals: (0.769239);
+		assert: (powHolder imag ___value roundTo: 0.000001) equals: (0.638961);
 		yourself.
 %
 category: 'done'

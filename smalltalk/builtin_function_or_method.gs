@@ -78,28 +78,17 @@ dict
 						kwarg: #'kwarg';
 						yourself.
 	dictFunction block: [ :currentScope |
-			| return |
-			return := set ___value: {}.
-			(currentScope at: #object) class == UndefinedObject
-				ifFalse:[
-					(currentScope at: #object) class == str
-						ifTrue: [
-							((currentScope at: #object) ___value)
-								do: [ :each | return add: (str ___value: (each asString)).].
-						]
-						ifFalse: [
-							(currentScope at: #object) class == dict
-								ifTrue: [
-									((currentScope at: #object) keys ___container)
-										do: [ :each | return add: each.].
-								]
-								ifFalse: [
-									((currentScope at: #object) ___container)
-										do: [ :each | return add: each.].
-								].
-						].
-				].
-			return
+		|return|
+		return :=  dict ___value: Dictionary new.
+		(currentScope at: #object) class == UndefinedObject ifFalse:[
+			return update: (currentScope at: #object).
+		].
+		[(currentScope at: #kwarg) __len__ ___value == 0
+			ifFalse: [
+				return update: (currentScope at: #kwarg).
+			].
+		] on: NameError do: [].
+		return.
 	].
 	Builtins singleton at: #dict put: dictFunction
 %
@@ -411,7 +400,7 @@ pow
 
 		base := (currentScope at: #base).
 		exp := (currentScope at: #exp).
-		result := base ___pow: exp.
+		result := base __pow__: exp.
 		(currentScope at: #mod) class == UndefinedObject
 			ifFalse: [result := result __mod__: (currentScope at: #mod)].
 

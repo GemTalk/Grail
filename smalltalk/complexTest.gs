@@ -196,7 +196,7 @@ category: 'done'
 method: complexTest
 test__pow__
 
-	| a b c |
+	| a b c powHolder|
 	a := complex ___real: 3 imaginary: 4.
 	b := a __pow__: (self int: 2).
 	c := a __pow__: (self int: 3).
@@ -204,6 +204,46 @@ test__pow__
 		assert: ((a __mul__: a) __eq__: b);
 		assert: (((a __mul__: a) __mul__: a) __eq__: c);
 		yourself.
+
+	powHolder := (complex ___real: 0 imaginary: 1) __pow__: (int ___value: 2).
+
+	self assert: (powHolder real) equals: (float ___value: -1).
+	self assert: (powHolder imag ___value roundTo: 0.1) equals: (0.0).
+
+	powHolder := (complex ___real: 1 imaginary: 1) __pow__: (int ___value: 2).
+
+	self assert: (powHolder) equals: (complex ___real: 0.0 imaginary: 2.0).
+
+	powHolder := (complex ___real: 1 imaginary: 1) __pow__: (int ___value: -2).
+
+	self assert: (powHolder) equals: (complex ___real: 0.0 imaginary: -0.5).
+
+	powHolder := (complex ___real: 2 imaginary: 3) __pow__: (int ___value: 3).
+
+	self assert: (powHolder) equals: (complex ___real: -46.0 imaginary: 9.0).
+
+	powHolder := (complex ___real: 2 imaginary: 3) __pow__: (int ___value: -3).
+
+	self assert: (powHolder real ___value roundTo: 0.00001) equals: (-0.02094).
+	self assert: (powHolder imag ___value roundTo: 0.00001) equals: (-0.00410).
+
+	powHolder := (complex ___real: 1 imaginary: 1) __pow__: (float ___value: 2.0).
+						  
+	self assert: (powHolder) equals: (complex ___real: 0.0 imaginary: 2.0).
+
+	powHolder := (complex ___real: 4 imaginary: 0) __pow__: (float ___value: 0.5).
+
+	self assert: (powHolder) equals: (complex ___real: 2.0 imaginary: 0.0).
+
+	powHolder := (complex ___real: 0 imaginary: 4) __pow__: (float ___value: 0.5).
+
+	self assert: (powHolder real ___value roundTo: 0.000001) equals: (2 sqrt roundTo: 0.000001).
+	self assert: (powHolder imag ___value roundTo: 0.000001) equals: ( 2 sqrt roundTo: 0.000001).
+
+	powHolder := (complex ___real: 1 imaginary: 1) __pow__: (complex ___real: 1 imaginary: 1).
+
+	self assert: (powHolder real ___value roundTo: 0.000001) equals: (0.273957).
+	self assert: (powHolder imag ___value roundTo: 0.000001) equals: ( 0.583701).
 %
 category: 'done'
 method: complexTest

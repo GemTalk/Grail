@@ -73,12 +73,7 @@ category: 'Python-complex'
 method: complex
 __add__: anObject
 
-	^[complex
-		___real: real + anObject real ___value
-		imaginary: imaginary + anObject imag ___value
-	]
-	on: MessageNotUnderstood
-	do: [ TypeError signal: 'TypeError: unsupported operand type(s) for +: ''complex'' and ''', anObject class asString,'''' ].
+	^anObject ___addReal: real imag: imaginary.
 %
 category: 'Python-complex'
 method: complex
@@ -96,21 +91,9 @@ __getnewargs__
 %
 category: 'Python-complex'
 method: complex
-__mul__: any
+__mul__: anObject
 	"https://mathworld.wolfram.com/ComplexMultiplication.html"
-	[
-		| a b c d |
-		a := self real ___value.
-		b := self imag ___value.
-		c := any real ___value.
-		d := any imag ___value.
-
-		^complex
-			___real: ((a * c) - (b * d))
-			imaginary: ((a * d) + (b * c))
-	]
-	on: MessageNotUnderstood
-	do: [ TypeError signal: 'TypeError: unsupported operand type(s) for *: ''complex'' and ''', any class asString,'''' ].
+	^anObject ___mulReal: real imag: imaginary
 %
 category: 'Python-complex'
 method: complex
@@ -128,19 +111,6 @@ __pos__
 %
 category: 'Python-complex'
 method: complex
-__pow__: exponent
-	"https://byjus.com/complex-number-power-formula/"
-
-	| newValue  |
-	#pyElaborate.
-	newValue := int ___value: 1.
-	exponent ___value timesRepeat: [
-		newValue := self __mul__: newValue
-	].
-	^newValue
-%
-category: 'Python-complex'
-method: complex
 __radd__: any
 
 	^any __add__: self
@@ -150,12 +120,6 @@ method: complex
 __rmul__: any
 
 	^any __mul__: self
-%
-category: 'Python-complex'
-method: complex
-__rpow__: any
-
-	^any __pow__: self
 %
 category: 'Python-complex'
 method: complex
@@ -308,11 +272,43 @@ __repr__
 set compile_env: 0
 category: 'Smalltalk'
 method: complex
+___addFloat: aFloat
+
+	^complex ___real: (real + aFloat) imaginary: imaginary.
+%
+category: 'Smalltalk'
+method: complex
 ___addInt: anInteger
 
 	^complex
 		___real: (anInteger + real)
 		imaginary: imaginary.
+%
+category: 'Smalltalk'
+method: complex
+___addReal: aFloatReal imag: aFloatImag
+
+	^complex ___real: (real + aFloatReal) imaginary: (imaginary + aFloatImag).
+%
+category: 'Smalltalk'
+method: complex
+___mulFloat: aFloat
+
+	^complex ___real: (aFloat * real) imaginary: (aFloat * imaginary) .
+%
+category: 'Smalltalk'
+method: complex
+___mulInt: anInteger
+
+	^complex ___real: (anInteger * real) imaginary: (anInteger * imaginary) .
+%
+category: 'Smalltalk'
+method: complex
+___mulReal: aFloatReal imag: aFloatImag
+
+	^complex
+		___real: ((real * aFloatReal ) - (imaginary * aFloatImag))
+		imaginary: ((real * aFloatImag) + (imaginary * aFloatReal)).
 %
 category: 'Smalltalk'
 method: complex
@@ -338,12 +334,6 @@ ___parse: stringArg
 		].
 	] on: Error , ValueError do: [:ex | ex return].
 	ValueError signal: 'complex() arg is a malformed string'.
-%
-category: 'Smalltalk'
-method: complex
- ___pow: anObject
-
-	^anObject ___powReal: real imag: imaginary.
 %
 category: 'Smalltalk'
 method: complex
@@ -381,7 +371,7 @@ ___powReal: aFloatReal imag: aFloatImag
 	
 	combinationExp := EulerTranslationExp __mul__: originalExp.
 
-	^(float ___value: (Float e)) ___pow: combinationExp
+	^(float ___value: (Float e)) __pow__: combinationExp
 %
 category: 'Smalltalk'
 method: complex
@@ -395,6 +385,18 @@ method: complex
 ___value
 
 	^real
+%
+category: 'Smalltalk'
+method: complex
+ __pow__: anObject
+
+	^anObject ___powReal: real imag: imaginary.
+%
+category: 'Smalltalk'
+method: complex
+__rpow__: anObject
+
+	^anObject __pow__: self.
 %
 category: 'Smalltalk'
 method: complex

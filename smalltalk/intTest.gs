@@ -296,10 +296,19 @@ test__pos__
 category: 'done'
 method: intTest
 test__pow__
-
+	|powHolder|
 	self
 		assert: ((self int: 3) __pow__: (self int: 2)) ___value equals: 9;
 		assert: ((self int: 4) __pow__: (self int: 3)) ___value equals: 64;
+		assert: ((self int: 3) __pow__: (self int: -2)) ___value equals: 1/9;
+		assert: ((self int: 4) __pow__: (self int: -3)) ___value equals: 1/64;
+		assert: ((self int: -1) __pow__: (self float: 0.5)) equals: (complex ___real: 0 imaginary: 1);
+		yourself.
+
+	powHolder := ((self int: 2) __pow__: (complex ___real: 0 imaginary: 1)).
+	self
+		assert: (powHolder real ___value roundTo: 0.000001) equals: (0.769239);
+		assert: (powHolder imag ___value roundTo: 0.000001) equals: (0.638961);
 		yourself.
 %
 category: 'done'

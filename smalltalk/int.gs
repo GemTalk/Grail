@@ -56,15 +56,39 @@ ___value: aNumber
 set compile_env: 0
 category: 'Python-int'
 method: int
-___addInt: anInteger
+___addFloat: aFloat
 
-	^int ___value: anInteger + value .
+	^float ___value: (value + aFloat).
 %
 category: 'Python-int'
 method: int
- ___pow: anObject
+___addInt: anInteger
 
-	^anObject ___powInt: value.
+	^int ___value: (anInteger + value).
+%
+category: 'Python-int'
+method: int
+___addReal: aFloatReal imag: aFloatImag
+
+	^complex ___real: (value + aFloatReal) imaginary: (aFloatImag).
+%
+category: 'Python-int'
+method: int
+___mulFloat: aFloat
+
+	^float ___value: (aFloat * value).
+%
+category: 'Python-int'
+method: int
+___mulInt: anInteger
+
+	^int ___value: (anInteger * value).
+%
+category: 'Python-int'
+method: int
+___mulReal: aFloatReal imag: aFloatImag
+
+	^complex ___real: (aFloatReal * value) imaginary: (aFloatImag * value) .
 %
 category: 'Python-int'
 method: int
@@ -234,19 +258,13 @@ category: 'Python-int'
 method: int
 __mul__: anObject
 
-	^[
-		|temp|
-		anObject class == int
-			ifTrue:[
-				temp := int ___value: value * anObject ___value
-			]
-			ifFalse:[
-				temp := anObject __mul__: self
-			].
-		temp
-	]
-	on: MessageNotUnderstood
-	do: [ TypeError signal: 'TypeError: unsupported operand type(s) for *: ''int'' and ''', anObject class asString,'''' ].
+	^anObject ___mulInt: value.
+%
+category: 'Python-int'
+method: int
+__mulFloat: aFloat
+
+	^float ___value: (value * aFloat).
 %
 category: 'Python-int'
 method: int
@@ -269,7 +287,7 @@ category: 'Python-int'
 method: int
 __pow__: anObject
 
-	^int ___value: (value raisedTo: anObject ___value)
+	^anObject ___powInt: value.
 %
 category: 'Python-int'
 method: int
@@ -323,14 +341,6 @@ category: 'Python-int'
 method: int
 __round__
 	^self
-%
-category: 'Python-int'
-method: int
-__rpow__: any
-
-	(any isKindOf: Magnitude)
-		ifTrue: [^self __rpow__: (int ___value: any)].
-	^any __pow__: self
 %
 category: 'Python-int'
 method: int
@@ -492,6 +502,12 @@ method: int
 __repr__
 
 	^str ___value: value printString
+%
+category: 'Python-object'
+method: int
+__rpow__: anObject
+
+	^anObject __pow__: self.
 %
 set compile_env: 0
 category: 'Smalltalk'

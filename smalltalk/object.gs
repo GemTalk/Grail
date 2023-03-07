@@ -102,21 +102,39 @@ of the keyword selector until we find a method that exists.
 set compile_env: 0
 category: 'other'
 method: object
-___addComplex: anObject
+___addFloat: aFloat
 
-	TypeError signal: 'TypeError: unsupported operand type(s) for +: ''complex'' and ''', anObject class asString,''''.
+	TypeError signal: 'TypeError: unsupported operand type(s) for +: ''float'' and ''', self class asString,''''.
 %
 category: 'other'
 method: object
-___addFloat: anObject
+___addInt: anInteger
 
-	TypeError signal: 'TypeError: unsupported operand type(s) for +: ''float'' and ''', anObject class asString,''''.
+	TypeError signal: 'TypeError: unsupported operand type(s) for +: ''int'' and ''', self class asString,''''.
 %
 category: 'other'
 method: object
-___addInt: anObject
+___addReal: aFloatReal imag: aFloatImag
 
-	TypeError signal: 'TypeError: unsupported operand type(s) for +: ''int'' and ''', anObject class asString,''''.
+	TypeError signal: 'TypeError: unsupported operand type(s) for +: ''complex'' and ''', self class asString,''''.
+%
+category: 'other'
+method: object
+___mulFloat: anObject
+
+	TypeError signal: 'TypeError: unsupported operand type(s) for *: ''float'' and ''', anObject class asString,''''.
+%
+category: 'other'
+method: object
+___mulInt: anObject
+
+	TypeError signal: 'TypeError: unsupported operand type(s) for *: ''int'' and ''', anObject class asString,''''.
+%
+category: 'other'
+method: object
+___mulReal: aFloatReal imag: aFloatImag
+
+	TypeError signal: 'TypeError: unsupported operand type(s) for *: ''complex'' and ''', self class asString,''''.
 %
 category: 'other'
 method: object

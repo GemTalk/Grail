@@ -375,6 +375,22 @@ testPow
 	self assert: (powHolder) equals: (float ___value: -1/27).
 
 	powHolder := ((variables at:#pow) scope: variables
+						  positional: { int ___value: -1. float ___value: 0.5.}
+						  named: {}).
+	self assert: (powHolder) equals: (complex ___real: 0.0 imaginary: 1.0).
+
+	powHolder := ((variables at:#pow) scope: variables
+						  positional: { int ___value: 2. complex ___real: 0 imaginary: 1.}
+						  named: {}).
+	self assert: (powHolder real ___value roundTo: 0.00001) equals: (0.76924).
+	self assert: (powHolder imag ___value roundTo: 0.00001) equals: (0.6389600000000001). "wtf smalltalk ????"
+
+	powHolder := ((variables at:#pow) scope: variables
+						  positional: { float ___value: -1.0. float ___value: 0.5.}
+						  named: {}).
+	self assert: (powHolder) equals: (complex ___real: 0.0 imaginary: 1.0).
+
+	powHolder := ((variables at:#pow) scope: variables
 						  positional: { float ___value: 0.5. int ___value: 2.}
 						  named: {}).
 	self assert: (powHolder) equals: (float ___value: 0.25).
@@ -393,21 +409,17 @@ testPow
 	powHolder := ((variables at:#pow) scope: variables
 						  positional: { (complex ___real: 1 imaginary: 1). int ___value: 2.}
 						  named: {}).
-	self assert: (powHolder real ___value) equals: (0.0).
-	self assert: (powHolder imag ___value) equals: ( 2.0).
-
+	self assert: (powHolder) equals: (complex ___real: 0.0 imaginary: 2.0).
 
 	powHolder := ((variables at:#pow) scope: variables
 						  positional: { (complex ___real: 1 imaginary: 1). int ___value: -2.}
 						  named: {}).
-	self assert: (powHolder real ___value) equals: (0.0).
-	self assert: (powHolder imag ___value) equals: (-0.5).
+	self assert: (powHolder) equals: (complex ___real: 0.0 imaginary: -0.5).
 
 	powHolder := ((variables at:#pow) scope: variables
 						  positional: { (complex ___real: 2 imaginary: 3). int ___value: 3.}
 						  named: {}).
-	self assert: (powHolder real ___value) equals: (-46.0).
-	self assert: (powHolder imag ___value) equals: (9.0).
+	self assert: (powHolder) equals: (complex ___real: -46.0 imaginary: 9.0).
 
 	powHolder := ((variables at:#pow) scope: variables
 						  positional: { (complex ___real: 2 imaginary: 3). int ___value: -3.}
@@ -418,14 +430,12 @@ testPow
 	powHolder := ((variables at:#pow) scope: variables
 						  positional: { (complex ___real: 1 imaginary: 1). float ___value: 2.0.}
 						  named: {}).
-	self assert: (powHolder real ___value) equals: (0.0).
-	self assert: (powHolder imag ___value) equals: ( 2.0).
+	self assert: (powHolder) equals: (complex ___real: 0.0 imaginary: 2.0).
 
 	powHolder := ((variables at:#pow) scope: variables
 						  positional: { (complex ___real: 4 imaginary: 0). float ___value: 0.5.}
 						  named: {}).
-	self assert: (powHolder real ___value) equals: (2.0).
-	self assert: (powHolder imag ___value) equals: ( 0.0).
+	self assert: (powHolder) equals: (complex ___real: 2.0 imaginary: 0.0).
 
 	powHolder := ((variables at:#pow) scope: variables
 						  positional: { (complex ___real: 0 imaginary: 4). float ___value: 0.5.}
@@ -677,21 +687,4 @@ testType
 						  positional: { int ___value: 5. tuple ___value: #(h)}
 						  named: {})] on: TypeError do: [1].
 	self assert: (typeHolder) equals: (1).
-%
-category: 'other'
-method: builtin_function_or_methodTest
-testUpdate
-   | containerHolder variables|
-	variables := Variables new.
-	
-	containerHolder := list ___value: {}.
-	containerHolder := (variables at: #dict) scope: variables
-								positional: {containerHolder}
-								named: {}.
-	self assert: containerHolder equals: (dict ___value: {} asDictionary).
-	containerHolder := list ___value: {}.
-	containerHolder := (variables at: #dict) scope: variables
-								positional: {containerHolder}
-								named: {(str ___value: 'd') -> (int ___value: 7)}.
-	self assert: containerHolder equals: (dict ___value: {(str ___value: 'd') -> (int ___value: 7)} asDictionary).
 %

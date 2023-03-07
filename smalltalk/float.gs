@@ -18,6 +18,30 @@ ___value: aNumber
 set compile_env: 0
 category: 'Python-float'
 method: float
+___addFloat: aFloat
+
+	^float ___value: (value + aFloat).
+%
+category: 'Python-float'
+method: float
+___mulFloat: aFloat
+
+	^float ___value: (aFloat * value).
+%
+category: 'Python-float'
+method: float
+___mulInt: anInteger
+
+	^float ___value: (anInteger * value).
+%
+category: 'Python-float'
+method: float
+___mulReal: aFloatReal imag: aFloatImag
+
+	^complex ___real: (aFloatReal * value) imaginary: (aFloatImag * value) .
+%
+category: 'Python-float'
+method: float
 __abs__
 
 	^float ___value: value abs
@@ -26,17 +50,7 @@ category: 'Python-float'
 method: float
 __add__: anObject
 
-	^[
-		|temp|
-		anObject class == complex ifTrue:[
-			temp := anObject __add__: self
-		] ifFalse: [
-			temp := float ___value: value + anObject ___value
-		].
-		temp
-	]
-	on: MessageNotUnderstood
-	do: [ TypeError signal: 'TypeError: unsupported operand type(s) for +: ''float'' and ''', anObject class asString,'''' ].
+	^anObject ___addFloat: value.
 %
 category: 'Python-float'
 method: float
@@ -114,17 +128,7 @@ category: 'Python-float'
 method: float
 __mul__: anObject
 
-	^[
-		|temp|
-		anObject class == complex ifTrue:[
-			temp := anObject __mul__: self
-		] ifFalse: [
-			temp := float ___value: value * anObject ___value
-		].
-		temp
-	]
-	on: MessageNotUnderstood
-	do: [ TypeError signal: 'TypeError: unsupported operand type(s) for *: ''float'' and ''', anObject class asString,'''' ].
+	^anObject ___mulFloat: value.
 %
 category: 'Python-float'
 method: float
@@ -137,12 +141,6 @@ method: float
 __pos__
 
 	^self __abs__
-%
-category: 'Python-float'
-method: float
-__pow__: anObject
-
-	^float ___value: (value raisedTo: anObject ___value)
 %
 category: 'Python-float'
 method: float
@@ -182,9 +180,9 @@ __round__
 %
 category: 'Python-float'
 method: float
-__rpow__: any
+__rpow__: anObject
 
-	^any __pow__: self
+	^anObject __pow__: self.
 %
 category: 'Python-float'
 method: float
@@ -308,13 +306,13 @@ category: 'Smalltalk'
 method: float
 ___addInt: anInteger
 
-	^float ___value:  anInteger + value.
+	^float ___value:  (anInteger + value).
 %
 category: 'Smalltalk'
 method: float
-___pow: anObject
+___addReal: aFloatReal imag: aFloatImag
 
-	^ anObject ___powFloat: value.
+	^complex ___real: (value + aFloatReal) imaginary: (aFloatImag).
 %
 category: 'Smalltalk'
 method: float
@@ -323,9 +321,9 @@ ___powFloat: aFloat
 	| return |
 
 	return := float ___value: (aFloat  raisedTo: value).
-	return asString = 'MinusQuietNaN'
+	return ___value asString = 'MinusQuietNaN'
 		ifTrue: [
-			return := ((complex ___real: (float ___value: 0) imaginary: ((aFloat*(-1)) sqrt)) ___pow: (2*value)).
+			^((complex ___real: 0 imaginary: ((aFloat*(-1)) sqrt)) __pow__: (float ___value: (2*value))).
 		].
 	^return
 %
@@ -335,9 +333,9 @@ ___powInt: anInteger
 	| return |
 
 	return := float ___value: (anInteger  raisedTo: value).
-	return asString = 'MinusQuietNaN'
+	return ___value asString = 'MinusQuietNaN'
 		ifTrue: [
-			return := ((complex ___real: (float ___value: 0) imaginary: ((anInteger*(-1)) sqrt)) ___pow: (2*value)).
+			^((complex ___real: 0 imaginary: ((anInteger*(-1)) sqrt)) __pow__: (float ___value: (2*value))).
 		].
 	^return
 %
@@ -347,7 +345,7 @@ ___powReal: aFloatReal imag: aFloatImag
 		
 	| radius radians |
 	value = (value asInteger) ifTrue: [
-		^ ((complex ___real: aFloatReal imaginary: aFloatImag) ___pow: (int ___value: (value asInteger)))
+		^ ((complex ___real: aFloatReal imaginary: aFloatImag) __pow__: (int ___value: (value asInteger)))
 
 	].
 
@@ -381,6 +379,12 @@ method: float
 ___value: anInteger
 
 	value := anInteger
+%
+category: 'Smalltalk'
+method: float
+__pow__: anObject
+
+	^ anObject ___powFloat: value.
 %
 category: 'Smalltalk'
 method: float
