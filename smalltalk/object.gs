@@ -120,6 +120,18 @@ ___addReal: aFloatReal imag: aFloatImag
 %
 category: 'other'
 method: object
+___modFloat: aFloat
+
+	TypeError signal: 'TypeError: unsupported operand type(s) for %: ''float'' and ''', self class asString,''''.
+%
+category: 'other'
+method: object
+___modInt: anInteger
+
+	TypeError signal: 'TypeError: unsupported operand type(s) for %: ''int'' and ''', self class asString,''''.
+%
+category: 'other'
+method: object
 ___mulFloat: anObject
 
 	TypeError signal: 'TypeError: unsupported operand type(s) for *: ''float'' and ''', anObject class asString,''''.

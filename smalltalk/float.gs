@@ -24,6 +24,18 @@ ___addFloat: aFloat
 %
 category: 'Python-float'
 method: float
+___modFloat: aFloat
+
+	^float ___value: (aFloat rem: value)
+%
+category: 'Python-float'
+method: float
+___modInt: anInteger
+
+	^float ___value: (anInteger rem: value)
+%
+category: 'Python-float'
+method: float
 ___mulFloat: aFloat
 
 	^float ___value: (aFloat * value).

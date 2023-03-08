@@ -161,6 +161,74 @@ __lt__: other
 %
 category: 'Python'
 method: str
+__mod__: anObject
+	|countPercents indexHolder characterAfter conversions|
+	countPercents := 0.
+	indexHolder := 0.
+	conversions := ({
+				$d->[:object| object __floor__ ___value asString.].
+				$i->[:object| object __floor__ ___value asString.].
+				$o->[].
+				$u->[].
+				$x->[].
+				$X->[].
+				$e->[:object| object ___value asStringUsingFormat: #(0 6 true).].
+				$E->[:object| (object ___value asStringUsingFormat: #(0 6 true)) asUppercase.].
+				$f->[:object| (object ___value asDecimalFloat asStringUsingFormat: #(0 6 false)).].
+				$F->[:object| (object ___value asDecimalFloat asStringUsingFormat: #(0 6 false)) asUppercase.].
+				$g->[].
+				$G->[].
+				$c->[].
+				$r->[].
+				$s->[].
+				$a->[].
+			} asDictionary)
+	"count the number of %"
+	value do: [:element |
+		element = $%
+			ifTrue:[
+				countPercents := countPercents + 1
+			].
+	].
+	anObject class = tuple
+		ifTrue:[
+			"if it is a tuple then check that there are enough places to put each value in the tuple"
+			
+			countPercents > (anObject __len__)
+				ifTrue: [
+					TypeError signal: 'TypeError: not enough arguments for format string'
+				].
+			countPercents < (anObject __len__)
+				ifTrue: [
+					TypeError signal: 'TypeError: not all arguments converted during string formatting'
+				].
+			
+		]
+		ifFalse:[
+			"if it is not tuple the number of arguments must be 1"
+			countPercents > 1
+				ifTrue: [
+					TypeError signal: 'TypeError: not enough arguments for format string'
+				].
+			countPercents <= 0
+				ifTrue: [
+					TypeError signal: 'TypeError: not all arguments converted during string formatting'
+				].
+			indexHolder := value indexOf: $% startingAt: 0.
+			characterAfter := value at: (indexHolder + 1).
+
+			 (conversions
+				at:characterAfter
+				ifAbsent:[
+					ValueError signal:
+						'ValueError: unsupported format character ''',
+						characterAfter asString,''' (0x', (characterAfter asciiValue printStringRadix: 16) ,') at ', (indexHolder + 1) asString.
+				]
+			) value: (anObject ___value).
+		].
+%
+category: 'Python'
+method: str
 __mul__: pyInt
 
 	| stream |

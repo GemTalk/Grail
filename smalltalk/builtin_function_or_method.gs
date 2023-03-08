@@ -68,6 +68,20 @@ chr
 %
 category: 'other'
 method: builtin_function_or_method
+complex
+	| complexFunction |
+	"On startup this creates a builtin chr function to change an integer into a character"
+	complexFunction := FunctionDef new
+						params: { #real. #imag};
+						vararg: #'None';
+						yourself.
+	complexFunction block: [ :currentScope |
+		complex ___real: ((currentScope at: #real) ___value) imaginary: ((currentScope at: #imag) ___value)
+	].
+	Builtins singleton at: #complex put: complexFunction
+%
+category: 'other'
+method: builtin_function_or_method
 dict
 	| dictFunction |
 	"On startup this creates a builtin dict function to turn a list of kwargs into a dictionary"
@@ -180,6 +194,7 @@ initialize
 		abs ;
 		bool ;
 		chr ;
+		complex ;
 		dict ;
 		float ;
 		frozenset ;
@@ -421,7 +436,13 @@ pow
 		exp := (currentScope at: #exp).
 		result := base __pow__: exp.
 		(currentScope at: #mod) class == UndefinedObject
-			ifFalse: [result := result __mod__: (currentScope at: #mod)].
+			ifFalse: [
+				(result class = complex) | ((currentScope at: #mod) class = complex)
+					ifTrue: [
+						TypeError signal: 'TypeError: complex modulo'.
+					].
+				result := result __mod__: (currentScope at: #mod)
+			].
 
 		result.
 	].

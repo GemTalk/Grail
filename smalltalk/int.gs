@@ -74,6 +74,17 @@ ___addReal: aFloatReal imag: aFloatImag
 %
 category: 'Python-int'
 method: int
+___modFloat: aFloat
+
+	^float ___value: (aFloat rem: value)
+%
+category: 'Python-int'
+method: int
+___modInt: anInteger
+	^int ___value: (anInteger rem: value)
+%
+category: 'Python-int'
+method: int
 ___mulFloat: aFloat
 
 	^float ___value: (aFloat * value).
@@ -277,7 +288,7 @@ category: 'Python-int'
 method: int
 __mod__: anObject
 
-	^int ___value: (value rem: anObject ___value)
+	^anObject ___modInt: value
 %
 category: 'Python-int'
 method: int
