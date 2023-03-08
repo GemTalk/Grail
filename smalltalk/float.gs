@@ -42,6 +42,31 @@ ___mulReal: aFloatReal imag: aFloatImag
 %
 category: 'Python-float'
 method: float
+___truedivFloat: aFloat
+
+	^[float ___value: (aFloat / value)]
+		on: ZeroDivide
+		do: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero']
+%
+category: 'Python-float'
+method: float
+___truedivInt: anInteger
+
+	^[float ___value: (anInteger / value)]
+		on: ZeroDivide
+		do: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero']
+%
+category: 'Python-float'
+method: float
+___truedivReal: aFloatReal imag: aFloatImag
+
+	
+	^[complex ___real: (aFloatReal / value) imaginary:(aFloatImag / value)]
+		on: ZeroDivide
+		do: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero']
+%
+category: 'Python-float'
+method: float
 __abs__
 
 	^float ___value: value abs
@@ -212,7 +237,7 @@ category: 'Python-float'
 method: float
 __truediv__: anObject
 
-	^[float ___value: value / anObject ___value] on: ZeroDivide do: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero']
+	^(anObject ___truedivFloat: value).
 %
 category: 'Python-float'
 method: float

@@ -184,6 +184,7 @@ initialize
 		float ;
 		frozenset ;
 		globals ;
+		input ;
 		int ;
 		len ;
 		list ;
@@ -199,6 +200,24 @@ initialize
 		sum ;
 		type ;
 		yourself.
+%
+category: 'other'
+method: builtin_function_or_method
+input
+	| inputFunction |
+	"On startup this creates a builtin int function to turn anything with a __int__ method
+		or that is a string into an int"
+	inputFunction := FunctionDef new
+						params: { #object.};
+						defaults: { str ___value: '' };
+						vararg: #'None';
+						yourself.
+	inputFunction block: [ :currentScope |
+		str ___value: (((System __sessionStateAt: 3)
+			prompt: ( ((currentScope at: #object) ___value))
+			caption: 'Input') decodeToString)
+	].
+	Builtins singleton at: #input put: inputFunction
 %
 category: 'other'
 method: builtin_function_or_method
@@ -422,12 +441,12 @@ print
 	print := FunctionDef new
 						vararg: #vararg;
 						kwonlyargs: { #sep. #end. #file. #flush };
-						kw_defaults: {str ___value: ''. str ___value: Character lf. nil. bool ___value: False};
+						kw_defaults: {str ___value: ''. str ___value: (Character lf asString). nil. bool ___value: False};
 						yourself.
 	print block: [ :currentScope |
 			| objects sep end file flush |
 
-			(currentScope at: #file) class == UndefinedObject ifTrue: [currentScope at: #file put:GsFile stdoutServer ].
+			(currentScope at: #file) class == UndefinedObject ifTrue: [currentScope at: #file put: Transcript ].
 			objects := (currentScope at: #vararg) ___value.
 			sep := currentScope at: #sep.
 			end := currentScope at: #end.

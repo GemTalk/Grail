@@ -240,6 +240,33 @@ testGlobals
 %
 category: 'other'
 method: builtin_function_or_methodTest
+testInput
+
+	"This is a test designed to make the input test work. It should not be run with all the other tests
+	because it is not automatice. If you would like to run this test please uncomment the code below."
+
+	"| resultHolder variables|
+	variables := Variables new.
+
+	
+	resultHolder := (variables at:#input) scope: variables
+						  positional: { str ___value: 'Please input the word ''hi'' into the textbox'.}
+						  named: {}.
+
+	""Please input the word ''hi'' into the textbox""
+
+	self assert: resultHolder equals: (str ___value: 'hi').
+
+	resultHolder := (variables at:#input) scope: variables
+						  positional: { str ___value: 'Please input the number ''1'' into the textbox'.}
+						  named: {}.
+
+	""Please input the number ''1'' into the textbox""
+
+	self assert: resultHolder equals: (str ___value: '1')."
+%
+category: 'other'
+method: builtin_function_or_methodTest
 testInt
 
 	| intHolder variables |
@@ -383,7 +410,7 @@ testPow
 						  positional: { int ___value: 2. complex ___real: 0 imaginary: 1.}
 						  named: {}).
 	self assert: (powHolder real ___value roundTo: 0.00001) equals: (0.76924).
-	self assert: (powHolder imag ___value roundTo: 0.00001) equals: (0.6389600000000001). "wtf smalltalk ????"
+	self assert: (powHolder imag ___value roundTo: 0.00001) equals: (0.6389600000000001).
 
 	powHolder := ((variables at:#pow) scope: variables
 						  positional: { float ___value: -1.0. float ___value: 0.5.}
@@ -453,7 +480,7 @@ category: 'other'
 method: builtin_function_or_methodTest
 testPrint
 
-	| stream variables|
+	| stream variables transcript|
 	variables := Variables new.
 	stream := WriteStream with: String new.
 	
@@ -462,6 +489,16 @@ testPrint
 						  named: {#'file' -> stream}.
 	self assert: stream contents equals: 'abc
 '.
+	transcript := Transcript.
+	[
+		stream := WriteStream with: String new.
+		Transcript := stream.
+		(variables at:#print) scope: variables
+						  positional: { str ___value: 'abcd'.}
+						  named: {}.
+		self assert: Transcript contents equals: 'abcd
+'.
+	] ensure: [Transcript := transcript.].
 
 	stream := WriteStream with: String new.
 	(variables at:#print) scope: variables

@@ -319,6 +319,9 @@ test__truediv__
 		assert: (b __truediv__: a) real ___value equals: 4.0 / 5.0;
 		assert: (b __truediv__: a) imag ___value equals: -3.0 / 5.0;
 		assert: ((b __truediv__: b) __eq__: (complex ___real: 1 imaginary: 0));
+		assert: ((complex ___real: 1 imaginary:1) __truediv__: (complex ___real: 1 imaginary:1)) equals: (complex ___real: 1 imaginary:0);
+		assert: ((complex ___real: 2 imaginary:2) __truediv__: (float ___value: 2)) equals: (complex ___real: 1 imaginary:1);
+		assert: ((complex ___real: 2 imaginary:2) __truediv__: (int ___value: 2)) equals: (complex ___real: 1 imaginary:1);
 		yourself.
 %
 category: 'done'

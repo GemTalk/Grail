@@ -364,6 +364,13 @@ test__truediv__
 		assert: ((self float:  3) __truediv__: (self int: 1)) __class__ equals: float;
     	assert: ((self float:  3) __truediv__: (self int: 1)) ___value equals: 3;
         assert: ((self float: -4) __truediv__: (self int: 2)) ___value equals: -2;
+
+		assert: ((self float:  3) __truediv__: (self float: 1)) __class__ equals: float;
+    	assert: ((self float:  3) __truediv__: (self float: 1)) ___value equals: 3;
+        assert: ((self float: -4) __truediv__: (self float: 2)) ___value equals: -2;
+
+		assert: ((self float:  1) __truediv__: (complex ___real: 1 imaginary:1)) __class__ equals: complex;
+    	assert: ((self float:  1) __truediv__: (complex ___real: 1 imaginary:1)) equals: (complex ___real: 0.5 imaginary:-0.5);
 		yourself.
 %
 category: 'done'

@@ -156,6 +156,31 @@ ___powReal: aFloatReal imag: aFloatImag
 %
 category: 'Python-int'
 method: int
+___truedivFloat: aFloat
+
+	^[float ___value: (aFloat / value)]
+		on: ZeroDivide
+		do: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero']
+%
+category: 'Python-int'
+method: int
+___truedivInt: anInteger
+
+	^[float ___value: (anInteger / value)]
+		on: ZeroDivide
+		do: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero']
+%
+category: 'Python-int'
+method: int
+___truedivReal: aFloatReal imag: aFloatImag
+
+	
+	^[complex ___real: (aFloatReal / value) imaginary:(aFloatImag / value)]
+		on: ZeroDivide
+		do: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero']
+%
+category: 'Python-int'
+method: int
 __abs__
 
 	^int ___value: value abs
@@ -362,8 +387,6 @@ category: 'Python-int'
 method: int
 __rtruediv__: any
 
-	(any isKindOf: Magnitude)
-		ifTrue: [^self __rtruediv__: (int ___value: any)].
 	^any __truediv__: self
 %
 category: 'Python-int'
@@ -384,9 +407,7 @@ category: 'Python-int'
 method: int
 __truediv__: anObject
 
-	^[float ___value: value / anObject ___value]
-		on: ZeroDivide
-		do: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero']
+	^(anObject ___truedivInt: value).
 %
 category: 'Python-int'
 method: int

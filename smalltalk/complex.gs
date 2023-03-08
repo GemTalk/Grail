@@ -132,8 +132,7 @@ method: complex
 __rtruediv__: any
 	"https://mathworld.wolfram.com/ComplexDivision.html"
 
-	(any isKindOf: complex) ifTrue: [^any __truediv__: self].
-	^(complex ___value: any ___value) __truediv__: self
+	^any __truediv__: self
 %
 category: 'Python-complex'
 method: complex
@@ -151,19 +150,9 @@ __sub__: any
 %
 category: 'Python-complex'
 method: complex
-__truediv__: any
-	"https://mathworld.wolfram.com/ComplexDivision.html"
+__truediv__: anObject
 
-	| a b c d denominator |
-	a := self real ___value.
-	b := self imag ___value.
-	c := any real ___value.
-	d := any imag ___value.
-	denominator := (c raisedTo: 2) + (d raisedTo: 2).
-	denominator == 0 ifTrue: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero'].
-	^complex
-		___real: (a * c) + (b * d) / denominator
-		imaginary: (b * c) - (a * d) / denominator
+	^(anObject ___truedivReal: real imag: imaginary).
 %
 category: 'Python-complex'
 method: complex
@@ -353,7 +342,7 @@ category: 'Smalltalk'
 method: complex
 ___powReal: aFloatReal imag: aFloatImag
 	
-	|radius radians EulerTranslationExp originalExp combinationExp|
+	|radius radians eulerTranslationExp originalExp combinationExp|
 	
 
 	originalExp := complex ___real: aFloatReal imaginary: aFloatImag.
@@ -365,11 +354,11 @@ ___powReal: aFloatReal imag: aFloatImag
 		] ifFalse: [
 			radians := ( aFloatImag / aFloatReal ) arcTan .
 		].
-	EulerTranslationExp := complex
+	eulerTranslationExp := complex
 										___real:  (radius ln)
 										imaginary: radians.
 	
-	combinationExp := EulerTranslationExp __mul__: originalExp.
+	combinationExp := eulerTranslationExp __mul__: originalExp.
 
 	^(float ___value: (Float e)) __pow__: combinationExp
 %
@@ -379,6 +368,43 @@ ___real: r imaginary: i
 
 	real := r.
 	imaginary := i.
+%
+category: 'Smalltalk'
+method: complex
+___truedivFloat: aFloat
+	|numerator denominator|
+
+	(real = 0) & (imaginary = 0) 
+		ifTrue: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero'].
+	
+	numerator := (float ___value: aFloat) __mul__: (self conjugate).
+	denominator := (real*real) + (imaginary*imaginary).
+	^numerator __truediv__: (float ___value: denominator)
+%
+category: 'Smalltalk'
+method: complex
+___truedivInt: anInteger
+	|numerator denominator|
+
+	(real = 0) & (imaginary = 0) 
+		ifTrue: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero'].
+	
+	numerator := (float ___value: anInteger) __mul__: (self conjugate).
+	denominator := (real*real) + (imaginary*imaginary).
+	^numerator __truediv__: (float ___value: denominator).
+%
+category: 'Smalltalk'
+method: complex
+___truedivReal: aFloatReal imag: aFloatImag
+	|numerator denominator|
+	(real = 0) & (imaginary = 0) 
+		ifTrue: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero'].
+
+	numerator := complex ___real: aFloatReal imaginary: aFloatImag.
+
+	numerator := numerator __mul__: (self conjugate).
+	denominator := (real*real) + (imaginary*imaginary).
+	^(numerator __truediv__: (float ___value: denominator))
 %
 category: 'Smalltalk'
 method: complex

@@ -138,6 +138,42 @@ ___mulReal: aFloatReal imag: aFloatImag
 %
 category: 'other'
 method: object
+___powFloat: aFloat
+
+	TypeError signal: 'TypeError: unsupported operand type(s) for **: ''float'' and ''', self class asString,''''.
+%
+category: 'other'
+method: object
+___powInt: anInteger
+
+	TypeError signal: 'TypeError: unsupported operand type(s) for **: ''int'' and ''', self class asString,''''.
+%
+category: 'other'
+method: object
+___powReal: aFloatReal imag: aFloatImag
+
+	TypeError signal: 'TypeError: unsupported operand type(s) for **: ''complex'' and ''', self class asString,''''.
+%
+category: 'other'
+method: object
+___truedivFloat: aFloat
+
+	TypeError signal: 'TypeError: unsupported operand type(s) for /: ''float'' and ''', self class asString,''''.
+%
+category: 'other'
+method: object
+___truedivInt: anInteger
+
+	TypeError signal: 'TypeError: unsupported operand type(s) for /: ''int'' and ''', self class asString,''''.
+%
+category: 'other'
+method: object
+___truedivReal: aFloatReal imag: aFloatImag
+
+	TypeError signal: 'TypeError: unsupported operand type(s) for /: ''complex'' and ''', self class asString,''''.
+%
+category: 'other'
+method: object
 __round__
 
 	TypeError signal: 'TypeError: type ', self class asString , ' doesn''t define __round__ method'
