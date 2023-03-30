@@ -15,6 +15,74 @@ ___value: aString
 set compile_env: 0
 category: 'Python'
 method: str
+___modString: aUnicode7 parameters: anInteger
+
+	"a string is the string to be formated and anInteger is the number of % that need an argument"
+	|stringOutput indexHolder characterAfter conversions percentIndexes counter|
+
+	anInteger < 1 ifTrue: [TypeError signal: 'TypeError: not all arguments converted during string formatting'].
+	anInteger > 1 ifTrue: [TypeError signal: 'TypeError: not enough arguments for format string'].
+	
+	"toDo replace 1 %s with our string and perform formating on it"
+
+	conversions := conversions := ({
+				$d->[:object :string :index | TypeError signal: 'TypeError: %d format: a real number is required, not str'].
+				$i->[:object :string :index | TypeError signal: 'TypeError: %i format: a real number is required, not str'].
+				$o->[:object :string :index | TypeError signal: 'TypeError: %o format: a real number is required, not str'].
+				$u->[:object :string :index | TypeError signal: 'TypeError: %u format: a real number is required, not str'].
+				$x->[:object :string :index | TypeError signal: 'TypeError: %x format: a real number is required, not str'].
+				$X->[:object :string :index | TypeError signal: 'TypeError: %X format: a real number is required, not str'].
+				$e->[:object :string :index | TypeError signal: 'TypeError: %e format: a real number is required, not str'].
+				$E->[:object :string :index | TypeError signal: 'TypeError: %i format: a real number is required, not str'].
+				$f->[:object :string :index | TypeError signal: 'TypeError: %i format: a real number is required, not str'].
+				$F->[:object :string :index | TypeError signal: 'TypeError: %i format: a real number is required, not str'].
+				$g->[:object :string :index | TypeError signal: 'TypeError: must be real number, not str'].
+				$G->[:object :string :index | TypeError signal: 'TypeError: must be real number, not str'].
+				$c->
+					[:object :string :index |
+						(object __len__ ___value) = 1 ifFalse: [TypeError signal: 'TypeError: %c requires int or char'].
+						
+					].
+				$r->[].
+				$s->[].
+				$a->[].
+			} asDictionary).
+
+	(aUnicode7 at: (aUnicode7 size)) = $% ifTrue: [ ValueError signal: 'ValueError: incomplete format'].
+
+	percentIndexes := OrderedCollection new.
+	
+	counter := 1.
+	stringOutput := aUnicode7 asString.
+
+	[counter < stringOutput size] whileTrue: [
+		((stringOutput at: counter) = $%)
+			ifTrue: [
+				((stringOutput at: (counter + 1)) = $%)
+					ifTrue:[stringOutput removeFrom: counter to: counter.]
+					ifFalse:[percentIndexes add: counter]
+			].
+		counter := counter + 1.	
+	].
+
+	counter := percentIndexes at: 1.
+	[(stringOutput at: counter) isLetter] whileFalse: [
+		counter := counter + 1.
+	].
+
+	(conversions
+		at:characterAfter ifAbsent:[
+			ValueError signal:
+				'ValueError: unsupported format character ''',
+				characterAfter asString,''' (0x', (characterAfter asciiValue printStringRadix: 16) ,') at ', (indexHolder + 1) asString.
+		]
+	) value: (value, stringOutput, indexHolder).
+
+
+	^str ___value: stringOutput.
+%
+category: 'Python'
+method: str
 __add__: pythonObject
 	
 	pythonObject class ~= str ifTrue: [ TypeError signal: 'must a string, not ', pythonObject class name ].
@@ -162,10 +230,11 @@ __lt__: other
 category: 'Python'
 method: str
 __mod__: anObject
-	|countPercents indexHolder characterAfter conversions|
+	|incrementor countPercents indexHolder|
+	incrementor := 1.
 	countPercents := 0.
 	indexHolder := 0.
-	conversions := ({
+"	conversions := ({
 				$d->[:object| object __floor__ ___value asString.].
 				$i->[:object| object __floor__ ___value asString.].
 				$o->[].
@@ -182,38 +251,25 @@ __mod__: anObject
 				$r->[].
 				$s->[].
 				$a->[].
-			} asDictionary)
-	"count the number of %"
-	value do: [:element |
-		element = $%
+			} asDictionary)."
+	"count the number of % but if there are double %s it shouldn't count for the total"
+	[incrementor <= (value size)] whileTrue: [
+		(value at: incrementor) = $%
 			ifTrue:[
-				countPercents := countPercents + 1
+				countPercents := countPercents + 1.
+				incrementor := incrementor + 1.
+				(value at: incrementor) = $%
+					ifTrue:[ countPercents := countPercents - 1 ]
+					ifFalse:[ incrementor := incrementor - 1 ].
 			].
+		incrementor := incrementor + 1.
 	].
-	anObject class = tuple
-		ifTrue:[
-			"if it is a tuple then check that there are enough places to put each value in the tuple"
-			
-			countPercents > (anObject __len__)
-				ifTrue: [
-					TypeError signal: 'TypeError: not enough arguments for format string'
-				].
-			countPercents < (anObject __len__)
-				ifTrue: [
-					TypeError signal: 'TypeError: not all arguments converted during string formatting'
-				].
-			
-		]
+
+	
+
+	"anObject class = tuple
 		ifFalse:[
-			"if it is not tuple the number of arguments must be 1"
-			countPercents > 1
-				ifTrue: [
-					TypeError signal: 'TypeError: not enough arguments for format string'
-				].
-			countPercents <= 0
-				ifTrue: [
-					TypeError signal: 'TypeError: not all arguments converted during string formatting'
-				].
+
 			indexHolder := value indexOf: $% startingAt: 0.
 			characterAfter := value at: (indexHolder + 1).
 
@@ -225,7 +281,9 @@ __mod__: anObject
 						characterAfter asString,''' (0x', (characterAfter asciiValue printStringRadix: 16) ,') at ', (indexHolder + 1) asString.
 				]
 			) value: (anObject ___value).
-		].
+		]."
+
+	^anObject ___modString: value parameters: countPercents.
 %
 category: 'Python'
 method: str

@@ -22,6 +22,17 @@ initialize
 %
 category: 'other'
 method: TupleAst
+printSmalltalkOn: aStream
+
+	aStream nextPutAll: 'tuple ___value: { '.
+	elts do: [ :elt |
+		self smalltalkSourceFor: elt parenthesisIf: 1 on: aStream.
+		aStream nextPutAll: '. '.
+	].
+	aStream nextPut: $}.
+%
+category: 'other'
+method: TupleAst
 setTo: aValue scope: aScope
 
 	elts size ~~ aValue ___size ifTrue: [

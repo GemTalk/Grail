@@ -35,6 +35,20 @@ __new__: aPythonTuple
 set compile_env: 0
 category: 'Python'
 method: tuple
+___modString: aString parameters: anInteger
+
+	"a string is the string to be formated and anInteger is the number of % that need an argument"
+
+	anInteger < (container size) ifTrue: [TypeError signal: 'TypeError: not all arguments converted during string formatting'].
+	anInteger > (container size) ifTrue: [TypeError signal: 'TypeError: not enough arguments for format string'].
+	
+	"toDo find () and look up its contents as a string in the dictionary then look at the trailing
+	character and use that to put it into the string."
+
+	^str ___value: aString.
+%
+category: 'Python'
+method: tuple
 __getslice__: aPyIntStart _: aPyIntEnd
 
 	| end |

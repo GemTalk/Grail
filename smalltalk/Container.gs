@@ -80,6 +80,8 @@ method: Container
 __eq__: otherCollection
 	| size |
 
+	(self class = otherCollection class) ifFalse: [^bool ___value: false].
+
 	(size := self __len__ ___value) = otherCollection __len__ ___value ifFalse: [^bool ___value: false].
 
 	1 to: size do: [:index |

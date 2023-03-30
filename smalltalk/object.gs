@@ -132,6 +132,14 @@ ___modInt: anInteger
 %
 category: 'other'
 method: object
+___modString: aString parameters: anInteger
+
+	"a string is the string to be formated and anInteger is the number of % that need an argument"
+	anInteger = 0 ifTrue: [^str ___value: aString].
+	TypeError signal: 'TypeError: %i format: a real number is required, not list'
+%
+category: 'other'
+method: object
 ___mulFloat: anObject
 
 	TypeError signal: 'TypeError: unsupported operand type(s) for *: ''float'' and ''', anObject class asString,''''.

@@ -85,6 +85,19 @@ ___modInt: anInteger
 %
 category: 'Python-int'
 method: int
+___modString: aString parameters: anInteger
+
+	"a string is the string to be formated and anInteger is the number of % that need an argument"
+
+	anInteger < 1 ifTrue: [TypeError signal: 'TypeError: not all arguments converted during string formatting'].
+	anInteger > 1 ifTrue: [TypeError signal: 'TypeError: not enough arguments for format string'].
+	
+	"toDo replace 1 %i %d and other appriates with our integer and perform formating on it"
+
+	^str ___value: aString.
+%
+category: 'Python-int'
+method: int
 ___mulFloat: aFloat
 
 	^float ___value: (aFloat * value).
