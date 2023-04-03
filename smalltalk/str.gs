@@ -15,69 +15,100 @@ ___value: aString
 set compile_env: 0
 category: 'Python'
 method: str
-___modString: aUnicode7 parameters: anInteger
+___modString: aString parameters: anOrderedCollection
 
 	"a string is the string to be formated and anInteger is the number of % that need an argument"
-	|stringOutput indexHolder characterAfter conversions percentIndexes counter|
+	|stringOutput flags types resultString insertString offset tempSize|
 
-	anInteger < 1 ifTrue: [TypeError signal: 'TypeError: not all arguments converted during string formatting'].
-	anInteger > 1 ifTrue: [TypeError signal: 'TypeError: not enough arguments for format string'].
+	(anOrderedCollection size) < 1 ifTrue: [TypeError signal: 'TypeError: not all arguments converted during string formatting'].
+	(anOrderedCollection size) > 1 ifTrue: [TypeError signal: 'TypeError: not enough arguments for format string'].
 	
 	"toDo replace 1 %s with our string and perform formating on it"
+	flags := (#'#', #'0', #'-', #'+', #' ') asSet.
+	types := (#'c', #'s', #'r', #'a') asSet.
 
-	conversions := conversions := ({
-				$d->[:object :string :index | TypeError signal: 'TypeError: %d format: a real number is required, not str'].
-				$i->[:object :string :index | TypeError signal: 'TypeError: %i format: a real number is required, not str'].
-				$o->[:object :string :index | TypeError signal: 'TypeError: %o format: a real number is required, not str'].
-				$u->[:object :string :index | TypeError signal: 'TypeError: %u format: a real number is required, not str'].
-				$x->[:object :string :index | TypeError signal: 'TypeError: %x format: a real number is required, not str'].
-				$X->[:object :string :index | TypeError signal: 'TypeError: %X format: a real number is required, not str'].
-				$e->[:object :string :index | TypeError signal: 'TypeError: %e format: a real number is required, not str'].
-				$E->[:object :string :index | TypeError signal: 'TypeError: %i format: a real number is required, not str'].
-				$f->[:object :string :index | TypeError signal: 'TypeError: %i format: a real number is required, not str'].
-				$F->[:object :string :index | TypeError signal: 'TypeError: %i format: a real number is required, not str'].
-				$g->[:object :string :index | TypeError signal: 'TypeError: must be real number, not str'].
-				$G->[:object :string :index | TypeError signal: 'TypeError: must be real number, not str'].
-				$c->
-					[:object :string :index |
-						(object __len__ ___value) = 1 ifFalse: [TypeError signal: 'TypeError: %c requires int or char'].
-						
-					].
-				$r->[].
-				$s->[].
-				$a->[].
-			} asDictionary).
+	offset := 0.
+	tempSize := aString size.
+	resultString := aString.
 
-	(aUnicode7 at: (aUnicode7 size)) = $% ifTrue: [ ValueError signal: 'ValueError: incomplete format'].
+	[(anOrderedCollection size) = 0] whileFalse: [
+		|percentIndex padding flag width precision type counter|
 
-	percentIndexes := OrderedCollection new.
-	
-	counter := 1.
-	stringOutput := aUnicode7 asString.
+		percentIndex := (anOrderedCollection first) + offset.
+		counter := percentIndex + 1.
+		flag := nil.
+		width := ''.
+		precision := ''.
+		type := nil.
+		
+		"find the flags so they can be properly saved and skipped"
+		(flags includes: (resultString at: counter)) ifTrue:[
+			flag := resultString at: counter.
+			counter := counter + 1.
+		].
+		
+		"ensures that * result in an error because they require a second parameter"
+		(resultString at: counter) = $* ifTrue:[ TypeError signal: 'TypeError: * wants int'].
 
-	[counter < stringOutput size] whileTrue: [
-		((stringOutput at: counter) = $%)
-			ifTrue: [
-				((stringOutput at: (counter + 1)) = $%)
-					ifTrue:[stringOutput removeFrom: counter to: counter.]
-					ifFalse:[percentIndexes add: counter]
+		"saves the width component and if none exists preserves the empty string"
+		[(resultString at: counter) isNumber] whileTrue: [
+			width := width + (resultString at: counter).
+			counter := counter + 1.
+		].
+		
+		"covert to a number for later string length formating"
+		(width = '') ifFalse: [width := width asNumber.].
+		
+		"if there is a . it indicates that the string will have a precision"
+		(resultString at: counter) = $. ifTrue:[
+			counter := counter + 1.
+
+			"if the character is a * then fail because it needs another parameter"
+			(resultString at: counter) = $* ifTrue:[ TypeError signal: 'TypeError: * wants int'].
+
+			[(resultString at: counter) isNumber] whileTrue: [
+				precision := precision + (resultString at: counter).
+				counter := counter + 1.
 			].
-		counter := counter + 1.	
+		].
+
+		"covert to a number for later value length formating"
+		(precision = '') ifFalse: [precision := precision asNumber.].
+
+		(types includes: (resultString at: counter)) ifFalse: [
+				"change to real error message(s)"
+				ValueError signal:
+					'ValueError: unsupported format character ''',
+					(resultString at: counter) asString,''' (0x', ((resultString at: counter) asciiValue printStringRadix: 16),
+					') at ', (percentIndex + 1) asString.
+		].
+
+		(((resultString at: counter) = $c) and: [value size > 1]) ifTrue:[
+			TypeError signal: 'TypeError: %c requires int or char'
+		].
+
+		(((resultString at: counter) = $r) or:[(resultString at: counter) = $a])
+			ifTrue:[
+				insertString := self __repr__ value
+			]
+			ifFalse:[
+				insertString := self __str__ value
+			].
+		(precision = '') ifFalse: [insertString := insertString copyFrom: 1 to: precision].
+		(width = '') ifFalse: [
+				padding := ''.
+				1 to: (width - (insertString size)) do: [:i | padding := padding + ' '].
+		].
+
+		flag = $- ifTrue:[insertString := insertString + padding].
+		flag = $+ ifTrue:[insertString := padding + insertString].
+
+		resultString removeFrom: percentIndex to: counter.
+		resultString insertAll: insertString at: percentIndex.
+
+		anOrderedCollection removeAtIndex: 1.
+		offset := (resultString size) - tempSize.
 	].
-
-	counter := percentIndexes at: 1.
-	[(stringOutput at: counter) isLetter] whileFalse: [
-		counter := counter + 1.
-	].
-
-	(conversions
-		at:characterAfter ifAbsent:[
-			ValueError signal:
-				'ValueError: unsupported format character ''',
-				characterAfter asString,''' (0x', (characterAfter asciiValue printStringRadix: 16) ,') at ', (indexHolder + 1) asString.
-		]
-	) value: (value, stringOutput, indexHolder).
-
 
 	^str ___value: stringOutput.
 %
@@ -230,9 +261,9 @@ __lt__: other
 category: 'Python'
 method: str
 __mod__: anObject
-	|incrementor countPercents indexHolder|
+	|incrementor indexHolder percentIndexes counter stringOutput|
 	incrementor := 1.
-	countPercents := 0.
+	counter := 0.
 	indexHolder := 0.
 "	conversions := ({
 				$d->[:object| object __floor__ ___value asString.].
@@ -253,16 +284,21 @@ __mod__: anObject
 				$a->[].
 			} asDictionary)."
 	"count the number of % but if there are double %s it shouldn't count for the total"
-	[incrementor <= (value size)] whileTrue: [
-		(value at: incrementor) = $%
-			ifTrue:[
-				countPercents := countPercents + 1.
-				incrementor := incrementor + 1.
-				(value at: incrementor) = $%
-					ifTrue:[ countPercents := countPercents - 1 ]
-					ifFalse:[ incrementor := incrementor - 1 ].
+	(value at: (value size)) = $% ifTrue: [ ValueError signal: 'ValueError: incomplete format'].
+
+	percentIndexes := OrderedCollection new.
+	
+	counter := 1.
+	stringOutput := value asString.
+
+	[counter < stringOutput size] whileTrue: [
+		((stringOutput at: counter) = $%)
+			ifTrue: [
+				((stringOutput at: (counter + 1)) = $%)
+					ifTrue:[stringOutput removeFrom: counter to: counter.]
+					ifFalse:[percentIndexes add: counter]
 			].
-		incrementor := incrementor + 1.
+		counter := counter + 1.	
 	].
 
 	
@@ -283,7 +319,7 @@ __mod__: anObject
 			) value: (anObject ___value).
 		]."
 
-	^anObject ___modString: value parameters: countPercents.
+	^anObject ___modString: stringOutput parameters: percentIndexes.
 %
 category: 'Python'
 method: str

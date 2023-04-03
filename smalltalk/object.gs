@@ -132,10 +132,10 @@ ___modInt: anInteger
 %
 category: 'other'
 method: object
-___modString: aString parameters: anInteger
+___modString: aString parameters: anOrderedCollection
 
 	"a string is the string to be formated and anInteger is the number of % that need an argument"
-	anInteger = 0 ifTrue: [^str ___value: aString].
+	(anOrderedCollection size) = 0 ifTrue: [^str ___value: aString].
 	TypeError signal: 'TypeError: %i format: a real number is required, not list'
 %
 category: 'other'

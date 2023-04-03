@@ -23,12 +23,12 @@ ___startChar
 set compile_env: 0
 category: 'Python'
 method: dict
-___modString: aString parameters: anInteger
+___modString: aString parameters: anOrderedCollection
 
 	"a string is the string to be formated and anInteger is the number of % that need an argument"
 
-	anInteger < 1 ifTrue: [TypeError signal: 'TypeError: not all arguments converted during string formatting'].
-	anInteger > 1 ifTrue: [TypeError signal: 'TypeError: not enough arguments for format string'].
+	(anOrderedCollection size) < 1 ifTrue: [TypeError signal: 'TypeError: not all arguments converted during string formatting'].
+	(anOrderedCollection size) > 1 ifTrue: [TypeError signal: 'TypeError: not enough arguments for format string'].
 	
 	"toDo find () and look up its contents as a string in the dictionary then look at the trailing
 	character and use that to put it into the string."
