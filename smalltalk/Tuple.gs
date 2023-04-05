@@ -35,6 +35,38 @@ __new__: aPythonTuple
 set compile_env: 0
 category: 'Python'
 method: tuple
+___modString: aString
+	
+	|readStream writeStream pieces piece|
+
+	readStream := ReadStream on: aString.
+	piece := ''.
+	pieces := OrderedCollection new.
+	[readStream notEmpty] whileTrue:[
+		|char|
+		char := readStream next.
+		char == $% ifFalse:[
+			piece := piece, char asString.
+		] ifTrue: [
+			pieces add: piece.
+			piece := ''.
+			pieces add: (FormatTag new initializeFrom: readStream).
+		]. 
+	].
+	readStream := ReadStream on: self ___value.
+	writeStream := WriteStream on: (String new).
+	pieces do:[ :each | 
+		||
+		(each isKindOf: String) ifTrue: [
+			writeStream nextPutAll: each.
+		] ifFalse:[
+			writeStream nextPutAll: (each tupleForParameters: readStream).
+		].
+	].
+	^writeStream contents.
+%
+category: 'Python'
+method: tuple
 ___modString: aString parameters: anOrderedCollection
 
 	"a string is the string to be formated and anInteger is the number of % that need an argument"

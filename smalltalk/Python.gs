@@ -4106,6 +4106,24 @@ doit
 WithItemAst category: 'Parser'
 %
 set compile_env: 0
+! ------------------- Class definition for FormatTag
+expectvalue /Class
+doit
+Object subclass: 'FormatTag'
+  instVarNames: #( flag width precision
+                    type)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+FormatTag category: 'Kernel'
+%
+set compile_env: 0
 ! ------------------- Class definition for FunctionDef
 expectvalue /Class
 doit
@@ -6221,6 +6239,7 @@ input FloatingPointError.gs
 input floatTest.gs
 input FloorDivAst.gs
 input ForAst.gs
+input FormatTag.gs
 input FormattedValueAst.gs
 input frozenset.gs
 input frozensetTest.gs

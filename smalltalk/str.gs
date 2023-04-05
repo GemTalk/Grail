@@ -15,10 +15,16 @@ ___value: aString
 set compile_env: 0
 category: 'Python'
 method: str
+___modString: aString
+	
+	^ (tuple ___value: {self}) ___modString: aString.
+%
+category: 'Python'
+method: str
 ___modString: aString parameters: anOrderedCollection
 
 	"a string is the string to be formated and anInteger is the number of % that need an argument"
-	|stringOutput flags types resultString insertString offset tempSize|
+	|stringOutput flags types resultString insertString tempSize|
 
 	(anOrderedCollection size) < 1 ifTrue: [TypeError signal: 'TypeError: not all arguments converted during string formatting'].
 	(anOrderedCollection size) > 1 ifTrue: [TypeError signal: 'TypeError: not enough arguments for format string'].
@@ -27,14 +33,12 @@ ___modString: aString parameters: anOrderedCollection
 	flags := (#'#', #'0', #'-', #'+', #' ') asSet.
 	types := (#'c', #'s', #'r', #'a') asSet.
 
-	offset := 0.
 	tempSize := aString size.
 	resultString := aString.
 
-	[(anOrderedCollection size) = 0] whileFalse: [
-		|percentIndex padding flag width precision type counter|
+	anOrderedCollection reverseDo: [ :percentIndex |
+		|padding flag width precision type counter|
 
-		percentIndex := (anOrderedCollection first) + offset.
 		counter := percentIndex + 1.
 		flag := nil.
 		width := ''.
@@ -94,6 +98,7 @@ ___modString: aString parameters: anOrderedCollection
 			ifFalse:[
 				insertString := self __str__ value
 			].
+
 		(precision = '') ifFalse: [insertString := insertString copyFrom: 1 to: precision].
 		(width = '') ifFalse: [
 				padding := ''.
@@ -106,8 +111,6 @@ ___modString: aString parameters: anOrderedCollection
 		resultString removeFrom: percentIndex to: counter.
 		resultString insertAll: insertString at: percentIndex.
 
-		anOrderedCollection removeAtIndex: 1.
-		offset := (resultString size) - tempSize.
 	].
 
 	^str ___value: stringOutput.
@@ -261,10 +264,8 @@ __lt__: other
 category: 'Python'
 method: str
 __mod__: anObject
-	|incrementor indexHolder percentIndexes counter stringOutput|
-	incrementor := 1.
-	counter := 0.
-	indexHolder := 0.
+	|stringOutput|
+
 "	conversions := ({
 				$d->[:object| object __floor__ ___value asString.].
 				$i->[:object| object __floor__ ___value asString.].
@@ -286,20 +287,7 @@ __mod__: anObject
 	"count the number of % but if there are double %s it shouldn't count for the total"
 	(value at: (value size)) = $% ifTrue: [ ValueError signal: 'ValueError: incomplete format'].
 
-	percentIndexes := OrderedCollection new.
-	
-	counter := 1.
 	stringOutput := value asString.
-
-	[counter < stringOutput size] whileTrue: [
-		((stringOutput at: counter) = $%)
-			ifTrue: [
-				((stringOutput at: (counter + 1)) = $%)
-					ifTrue:[stringOutput removeFrom: counter to: counter.]
-					ifFalse:[percentIndexes add: counter]
-			].
-		counter := counter + 1.	
-	].
 
 	
 
@@ -319,7 +307,7 @@ __mod__: anObject
 			) value: (anObject ___value).
 		]."
 
-	^anObject ___modString: stringOutput parameters: percentIndexes.
+	^anObject ___modString: stringOutput.
 %
 category: 'Python'
 method: str
@@ -371,6 +359,12 @@ method: str
 hash
 
 	^value hash
+%
+category: 'Python'
+method: str
+tagFrom: aReadStream
+
+	^FormatTag new initializeFrom: aReadStream.
 %
 set compile_env: 0
 category: 'Smalltalk'
