@@ -587,13 +587,13 @@ testRound
 	roundHolder := ((variables at:#round) scope: variables
 						  positional: { int ___value: 3. int ___value: 2.}
 						  named: {}).
-	self assert: (roundHolder) equals: (float ___value: 3.0).
+	self assert: (roundHolder) equals: (int ___value: 3).
 
 
 	roundHolder := ((variables at:#round) scope: variables
 						  positional: { float ___value: 3.1}
 						  named: {}).
-	self assert: (roundHolder) equals: (int ___value: 3.0).
+	self assert: (roundHolder) equals: (int ___value: 3).
 
 	roundHolder := ((variables at:#round) scope: variables
 						  positional: { float ___value: 3.1. int ___value: 0.}
@@ -609,17 +609,32 @@ testRound
 	roundHolder := ((variables at:#round) scope: variables
 						  positional: { float ___value: 3.05. int ___value: 1.}
 						  named: {}).
-	self assert: (roundHolder) equals: (float ___value: 3.1).
+	self assert: (roundHolder) equals: (int ___value: 3.0).
 
 	roundHolder := ((variables at:#round) scope: variables
 						  positional: { float ___value: 3.06. int ___value: 1.}
 						  named: {}).
 	self assert: (roundHolder) equals: (float ___value: 3.1).
 
+	roundHolder := ((variables at:#round) scope: variables
+						  positional: { float ___value: 4.5.}
+						  named: {}).
+	self assert: (roundHolder) equals: (int ___value: 4).
+
+	roundHolder := ((variables at:#round) scope: variables
+						  positional: { float ___value: 5.5.}
+						  named: {}).
+	self assert: (roundHolder) equals: (int ___value: 6).
+
 	roundHolder := [((variables at:#round) scope: variables
 						  positional: { str ___value: 'a'}
 						  named: {}).] on: TypeError do: [1].
 	self assert: (roundHolder) equals: (1).
+
+	roundHolder := [((variables at:#round) scope: variables
+						  positional: { int ___value: 6. float ___value: 1.0}
+						  named: {}).] on: TypeError do: [2].
+	self assert: (roundHolder) equals: (2).
 %
 category: 'other'
 method: builtin_function_or_methodTest

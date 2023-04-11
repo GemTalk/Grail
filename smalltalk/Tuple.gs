@@ -35,6 +35,12 @@ __new__: aPythonTuple
 set compile_env: 0
 category: 'Python'
 method: tuple
+___convertWithFlags: aSet precision: anObject andType: aCharacter
+
+	Error signal: 'PAAAAAAAAAAAAAAAAIN'
+%
+category: 'Python'
+method: tuple
 ___modString: aString
 	
 	|readStream writeStream pieces piece|
@@ -56,7 +62,6 @@ ___modString: aString
 	readStream := ReadStream on: self ___value.
 	writeStream := WriteStream on: (String new).
 	pieces do:[ :each | 
-		||
 		(each isKindOf: String) ifTrue: [
 			writeStream nextPutAll: each.
 		] ifFalse:[

@@ -35,6 +35,47 @@ __new__: aSet
 set compile_env: 0
 category: 'Python'
 method: set
+___convertWithFlags: aSet precision: anObject andType: aCharacter
+
+	"
+	aSet contains the flags that are set for the input that are not used here
+	anObject contains an empty string if there was no precision or an Integer if it was
+	aCharacter contains the Type which will match one of the validTypes or invalidTypes
+	"
+
+	|validTypes invalidTypes return|
+	validTypes := {$a. $s. $r. $c} asSet.
+	invalidTypes := {
+			$d->[TypeError signal: 'TypeError: %d format: a real number is required, not str'].
+			$i->[TypeError signal: 'TypeError: %i format: a real number is required, not str'].
+			$u->[TypeError signal: 'TypeError: %u format: a real number is required, not str'].
+			$x->[TypeError signal: 'TypeError: %x format: an integer is required, not str'].
+			$X->[TypeError signal: 'TypeError: %X format: an integer is required, not str'].
+			$o->[TypeError signal: 'TypeError: %o format: an integer is required, not str'].
+			$f->[TypeError signal: 'TypeError: must be real number, not str'].
+			$F->[TypeError signal: 'TypeError: must be real number, not str'].
+			$e->[TypeError signal: 'TypeError: must be real number, not str'].
+			$E->[TypeError signal: 'TypeError: must be real number, not str'].
+			$g->[TypeError signal: 'TypeError: must be real number, not str'].
+			$G->[TypeError signal: 'TypeError: must be real number, not str'].
+		} asDictionary.
+
+	(validTypes includes: aCharacter) ifFalse:[
+		(invalidTypes at: aCharacter) value.
+	].
+
+	(aCharacter == $r or:[aCharacter == $a])
+		ifTrue:[
+			return := self __repr__ ___value
+		]
+		ifFalse:[
+			return := self __str__ ___value
+		].
+	(anObject ~= '' and: [anObject < (return size)]) ifFalse:[ return := return copyFrom: 1 to: return size].
+	^return
+%
+category: 'Python'
+method: set
 __and__: aSet
 
 	| x |

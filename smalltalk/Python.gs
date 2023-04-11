@@ -4110,7 +4110,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 Object subclass: 'FormatTag'
-  instVarNames: #( flag width precision
+  instVarNames: #( flags width precision
                     type)
   classVars: #()
   classInstVars: #()
@@ -4121,7 +4121,7 @@ Object subclass: 'FormatTag'
 %
 expectvalue /Class
 doit
-FormatTag category: 'Kernel'
+FormatTag category: 'Tools'
 %
 set compile_env: 0
 ! ------------------- Class definition for FunctionDef

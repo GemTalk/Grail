@@ -74,6 +74,25 @@ ___addReal: aFloatReal imag: aFloatImag
 %
 category: 'Python-int'
 method: int
+___convertWithFlags: aSet precision: anObject andType: aCharacter
+	|floats strs|
+	strs := {$s. $c. $a. $r.} asSet.
+	(strs includes: aCharacter) ifTrue:[
+		(aCharacter == $c and: [value > 1114109]) ifTrue:[
+			OverflowError signal: 'OverflowError: %c arg not in range(0x110000)'
+		].
+		aCharacter == $c ifTrue:[
+			^(str ___value: (value asCharacter) asString) ___convertWithFlags: aSet precision: anObject andType: aCharacter.
+		].
+		^(str ___value: (value) asString) ___convertWithFlags: aSet precision: anObject andType: aCharacter.
+	].
+	floats := {$f. $F. $e. $E. $g. $G.} asSet.
+	(floats includes: aCharacter) ifTrue:[
+		^(float ___value: value) ___convertWithFlags: aSet precision: anObject andType: aCharacter.
+	].
+%
+category: 'Python-int'
+method: int
 ___modFloat: aFloat
 
 	^float ___value: (aFloat rem: value)
@@ -384,6 +403,15 @@ category: 'Python-int'
 method: int
 __round__
 	^self
+%
+category: 'Python-int'
+method: int
+__round__: anInt
+
+	anInt class == int ifFalse:[
+		TypeError signal: 'TypeError: ', anInt class asString,' object cannot be interpreted as an integer'
+	].
+	^self.
 %
 category: 'Python-int'
 method: int

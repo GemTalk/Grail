@@ -536,21 +536,18 @@ round
 	"On startup this creates a builtin repr function to return the value of something's __repr method"
 	roundFunction := FunctionDef new
 						params: { #object. #ndigits};
-						defaults: { int ___value: 0 };
+						defaults: { nil };
 						vararg: #'None';
 						yourself.
 	roundFunction block: [ :currentScope |
-		| result |
+		|result|
+		(currentScope at: #ndigits) == nil
+			ifTrue:[result := (currentScope at: #object) __round__]
+			ifFalse:[
 
-		(currentScope at: #ndigits) ___value == 0
-			ifTrue: [
-				result := (currentScope at: #object) __round__
-			]
-			ifFalse: [
-				result := float ___value: (((currentScope at: #object) ___value * (10 raisedTo: (currentScope at: #ndigits) ___value)) rounded) / (10 raisedTo: (currentScope at: #ndigits) ___value) asFloat.
-
+				result := (currentScope at: #object) __round__: (currentScope at: #ndigits)
 			].
-		result.
+		result
 	].
 	Builtins singleton at: #round put: roundFunction
 %

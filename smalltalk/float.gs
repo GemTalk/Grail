@@ -24,6 +24,13 @@ ___addFloat: aFloat
 %
 category: 'Python-float'
 method: float
+___convertWithFlags: aSet andType: aCharacter
+	|result|
+	result := ''.
+	^result
+%
+category: 'Python-float'
+method: float
 ___modFloat: aFloat
 
 	^float ___value: (aFloat rem: value)
@@ -225,8 +232,38 @@ __rmul__: any
 category: 'Python-float'
 method: float
 __round__
+	
+	"Python uses Gaussian rounding so it which Smalltalk does not do"
 
-	^int ___value: value rounded
+	|result|
+	((value * 2) odd and:[value floor even]) ifTrue:[
+		result := int ___value: (value floor).
+	] ifFalse: [
+		result := int ___value: value rounded
+	].
+	^result
+%
+category: 'Python-float'
+method: float
+__round__: anInt
+	
+	"Python uses Gaussian rounding so it which Smalltalk does not do"
+
+	|result|
+
+	anInt class == int ifFalse:[
+		TypeError signal: 'TypeError: ', anInt class asString,' object cannot be interpreted as an integer'.
+	].
+
+	result := value * (10 raisedTo: anInt ___value).
+
+	((result * 2) odd and:[result floor even])
+		ifTrue:[
+			result := result floor.
+		] ifFalse:[
+			result := result rounded.
+		].
+	^float ___value: result / (10 raisedTo: anInt ___value).
 %
 category: 'Python-float'
 method: float

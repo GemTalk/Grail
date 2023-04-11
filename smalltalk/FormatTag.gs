@@ -14,6 +14,9 @@ method: FormatTag
 initializeFrom: aReadStream
 
 	"aReadStream is at the character after a single %"
+	aReadStream peek == $% ifTrue:[
+		^'%'.
+	].
 	self setFlag: aReadStream.
 	self setWidth: aReadStream.
 	self setPrecision: aReadStream.
@@ -31,27 +34,25 @@ numberForParameters: aReadStream
 category: 'other'
 method: FormatTag
 setFlag: aReadStream
-		"Method comment"
-	| flags |
-	flags := (#'#', #'0', #'-', #'+', #' ') asSet.
-	flag := ''.
-	(flags includes: aReadStream peek) ifTrue:[
-		flag := aReadStream next.
+	| flagSet |
+	flagSet := (#'#', #'0', #'-', #'+', #' ') asSet.
+	flags := Set new.
+	[flagSet includes: aReadStream peek] whileTrue:[
+		flags add: aReadStream next.
 	].
 %
 category: 'other'
 method: FormatTag
 setPrecision: aReadStream
 
-	
+	precision := ''.
 	aReadStream peek == $. ifTrue:[
 		aReadStream next.
-		precision := '0'.
 		aReadStream peek == $* ifTrue:[
 			precision := aReadStream next.
 			^nil.
 		].
-		[aReadStream peek isNumber] whileTrue: [
+		[aReadStream peek isNumeric] whileTrue: [
 			precision := precision + aReadStream next.
 			
 		].
@@ -61,7 +62,20 @@ setPrecision: aReadStream
 category: 'other'
 method: FormatTag
 setType: aReadStream
-	aReadStream position isCharacter ifTrue:[]
+	|validTypes|
+
+	aReadStream peek isAlphabetic
+		ifTrue:[type := aReadStream next]
+		ifFalse:[ValueError signal: 'ValueError: incomplete format'].
+
+	validTypes := {$d. $i. $u. $x. $X. $o. $f. $F. $e. $E. $g. $G. $c. $s. $r. $a} asSet.
+	
+	(validTypes includes: type) ifFalse:[
+		ValueError signal:
+			'ValueError: unsupported format character ''',
+			type asString,''' (0x', (type asciiValue printStringRadix: 16) ,
+			') at ', (aReadStream position + 1) asString.
+	].
 %
 category: 'other'
 method: FormatTag
@@ -73,7 +87,7 @@ setWidth: aReadStream
 		width := aReadStream next.
 		^nil.
 	].
-	[aReadStream peek isNumber]
+	[aReadStream peek isNumeric]
 		whileTrue: [
 			width := width + (aReadStream next).
 		].
@@ -81,25 +95,9 @@ setWidth: aReadStream
 %
 category: 'other'
 method: FormatTag
-strForParameters: aReadStream
-	"return a formated string based on hash, width, precision, and type"
-	|returnString|
-	self halt.
-	^self adjustWidth: returnString.
-%
-category: 'other'
-method: FormatTag
-stringForParameters: aReadStream
-	"return a formated string based on hash, width, precision, and type"
-	|returnString|
-	self halt.
-	^self adjustWidth: returnString.
-%
-category: 'other'
-method: FormatTag
 tupleForParameters: aReadStream
 	
-	|insertString padding conversion|
+	|insertString padding|
 	insertString := ''.
 	width == $* ifTrue:[
 		aReadStream peek class = int ifFalse:[
@@ -114,15 +112,15 @@ tupleForParameters: aReadStream
 		precision := aReadStream next ___value.
 	].
 
-	insertString := conversion at: (aReadStream next class asString).
+	insertString := aReadStream next ___convertWithFlags: flags precision: precision andType: type.
 
-	(precision = '') ifFalse: [insertString := insertString copyFrom: 1 to: precision].
 	(width = '') ifFalse: [
 			padding := ''.
 			1 to: (width - (insertString size)) do: [:i | padding := padding + ' '].
 	].
 
-	flag = $-
+	(flags includes: $-)
 		ifTrue:[insertString := insertString + padding]
 		ifFalse:[insertString := padding + insertString].
+	^insertString
 %

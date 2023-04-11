@@ -313,6 +313,7 @@ test__round__
         assert: (self float:  3.49)	__round__ ___value equals: 3;
         assert: (self float: -3.5) 	__round__ ___value equals: -4;
         assert: (self float: -3.49) 	__round__ ___value equals: -3;
+		assert: (self float:  2.5) 	__round__ ___value equals: 2;
 	    yourself
 %
 category: 'done'
