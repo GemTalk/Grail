@@ -75,21 +75,86 @@ ___addReal: aFloatReal imag: aFloatImag
 category: 'Python-int'
 method: int
 ___convertWithFlags: aSet precision: anObject andType: aCharacter
-	|floats strs|
-	strs := {$s. $c. $a. $r.} asSet.
-	(strs includes: aCharacter) ifTrue:[
+
+	"
+	aSet contains the flags that are set for the input that are not used here
+	anObject contains an empty string if there was no precision or an Integer if it was
+	aCharacter contains the Type which will match one of the validTypes or invalidTypes
+	"
+
+	|resultString|
+	(({$s. $c. $a. $r.} asSet) includes: aCharacter) ifTrue:[
+		"if it uses string type indicator then it should change to a string or character and then use that
+		class's implementation"
 		(aCharacter == $c and: [value > 1114109]) ifTrue:[
 			OverflowError signal: 'OverflowError: %c arg not in range(0x110000)'
 		].
 		aCharacter == $c ifTrue:[
-			^(str ___value: (value asCharacter) asString) ___convertWithFlags: aSet precision: anObject andType: aCharacter.
+			^(str ___value: (value asCharacter) asString)
+				___convertWithFlags: aSet
+				precision: anObject
+				andType: aCharacter.
 		].
-		^(str ___value: (value) asString) ___convertWithFlags: aSet precision: anObject andType: aCharacter.
+		^(str ___value: (value) asString)
+			___convertWithFlags: aSet
+			precision: anObject
+			andType: aCharacter.
 	].
-	floats := {$f. $F. $e. $E. $g. $G.} asSet.
-	(floats includes: aCharacter) ifTrue:[
-		^(float ___value: value) ___convertWithFlags: aSet precision: anObject andType: aCharacter.
+
+	(({$f. $F. $e. $E. $g. $G.} asSet) includes: aCharacter) ifTrue:[
+		"if it uses float type indicator then it should change to a float and then use that
+		class's implementation"
+		^(float ___value: value)
+			___convertWithFlags: aSet
+			precision: anObject
+			andType: aCharacter.
 	].
+
+	resultString := WriteStream on: String new.
+	(({$d. $i. $u} asSet) includes: aCharacter) ifTrue:[
+		resultString := value abs asString.
+	].
+
+	(({$x. $X} asSet) includes: aCharacter) ifTrue:[
+		value abs printOn: resultString base: 16.
+		resultString := resultString contents removeFrom: 1 to: 3.
+		
+	].
+
+	aCharacter == $o ifTrue:[
+		value abs printOn: resultString base: 8.
+		resultString := resultString contents removeFrom: 1 to: 2.
+	].
+
+	anObject ~= '' ifTrue: [
+		"If this object has a precision set then it needs to have that many zeros infront of it.
+		precision cannot decrease the length of an int"
+		[resultString size < anObject] whileTrue:[
+			resultString := $0 + resultString.
+		].
+	].
+	(aSet includes: $#) ifTrue:[
+		"add the base information"
+		(({$x. $X} asSet) includes: aCharacter) ifTrue:[
+			resultString := '0X' + resultString.
+		].
+		aCharacter == $o ifTrue:[
+			resultString := '0o' + resultString.
+		].
+	].
+
+	aCharacter == $x ifTrue:[ resultString asLowercase.].
+
+	"readd the sign if needed or appropriate"
+	value < 0 ifTrue:[
+		resultString := '-' + resultString.
+	] ifFalse:[
+		(aSet includes: $+) ifTrue:[
+			resultString := '+' + resultString.
+		].
+	].
+
+	^resultString.
 %
 category: 'Python-int'
 method: int
