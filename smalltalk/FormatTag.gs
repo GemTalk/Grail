@@ -97,7 +97,7 @@ category: 'other'
 method: FormatTag
 tupleForParameters: aReadStream
 	
-	|insertString padding numClassHolder|
+	|insertString padding numClassHolder displacement|
 	insertString := ''.
 	"stars indicate that a number is required to specify that value"
 	width == $* ifTrue:[
@@ -117,39 +117,36 @@ tupleForParameters: aReadStream
 	"convert the next value in the ReadStream to a string matching its type converter"
 	insertString := aReadStream next ___convertWithFlags: flags precision: precision andType: type.
 
+	padding := ''.
 	(width = '') ifFalse: [
-		padding := ''.
 		1 to: (width - (insertString size)) do: [:i | padding := padding + ' '].
 
 	].
 	
 	
 	(flags includes: $-)
-		ifTrue:[^insertString + padding]
+		ifTrue: [ ^insertString + padding ].
+
+	"if the flag does not have a - but does have 0 then the padding must be all 0s and it
+	must happen after any signs or numeric bases."
+	((flags includes: $0) and:[ (numClassHolder = int) or: [(numClassHolder = float)]])
 		ifFalse:[
-			"if the flag does not have a - but does have 0 then the padding must be all 0s and it
-			must happen after any signs or numeric bases."
-			((flags includes: $0) and:[ (numClassHolder = int) or: [(numClassHolder = float)]])
-				ifTrue:[
-					|displacement|
-					displacement := 0.
-					padding := ''.
-
-					1 to: (width - (insertString size)) do: [:i | padding := padding + '0'].
-
-					"adding a displacement do determin how far into the string you must go
-					go get to the first actual number."
-					(({Character space. $-. $+} asSet) includes: insertString first)
-						ifTrue:[ displacement := displacement + 1].
-
-					((({$x. $X. $o} asSet) includes: type) and:[flags includes: $#])
-						ifTrue:[ displacement := displacement + 2].
-
-					^((insertString copyFrom: 1 to: displacement) +
-						padding +
-						(insertString copyFrom: displacement +1 to: insertString size))
-				].
 			^padding + insertString
-
 		].
+	displacement := 0.
+	padding := ''.
+
+	1 to: (width - (insertString size)) do: [:i | padding := padding + '0'].
+
+	"adding a displacement do determin how far into the string you must go
+	go get to the first actual number."
+	({Character space. $-. $+} includes: insertString first)
+		ifTrue:[ displacement := displacement + 1].
+
+	(({$x. $X. $o} includes: type) and:[flags includes: $#])
+		ifTrue:[ displacement := displacement + 2].
+
+	^((insertString copyFrom: 1 to: displacement) +
+		padding +
+		(insertString copyFrom: displacement +1 to: insertString size))
 %

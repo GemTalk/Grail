@@ -15,12 +15,6 @@ ___value: aString
 set compile_env: 0
 category: 'Python'
 method: str
-___modString: aString
-	
-	^ (tuple ___value: {self}) ___modString: aString.
-%
-category: 'Python'
-method: str
 ___modString: aString parameters: anOrderedCollection
 
 	"a string is the string to be formated and anInteger is the number of % that need an argument"
@@ -284,30 +278,10 @@ __mod__: anObject
 				$s->[].
 				$a->[].
 			} asDictionary)."
-	"count the number of % but if there are double %s it shouldn't count for the total"
-	(value at: (value size)) = $% ifTrue: [ ValueError signal: 'ValueError: incomplete format'].
 
 	stringOutput := value asString.
 
-	
-
-	"anObject class = tuple
-		ifFalse:[
-
-			indexHolder := value indexOf: $% startingAt: 0.
-			characterAfter := value at: (indexHolder + 1).
-
-			 (conversions
-				at:characterAfter
-				ifAbsent:[
-					ValueError signal:
-						'ValueError: unsupported format character ''',
-						characterAfter asString,''' (0x', (characterAfter asciiValue printStringRadix: 16) ,') at ', (indexHolder + 1) asString.
-				]
-			) value: (anObject ___value).
-		]."
-
-	^anObject ___modString: stringOutput.
+	^str ___value: (anObject ___modString: stringOutput).
 %
 category: 'Python'
 method: str
@@ -377,8 +351,8 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 	aCharacter contains the Type which will match one of the validTypes or invalidTypes
 	"
 
-	|validTypes invalidTypes return|
-	validTypes := {$a. $s. $r. $c} asSet.
+	|invalidTypes return|
+
 	invalidTypes := {
 			$d->[TypeError signal: 'TypeError: %d format: a real number is required, not str'].
 			$i->[TypeError signal: 'TypeError: %i format: a real number is required, not str'].
@@ -394,18 +368,21 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 			$G->[TypeError signal: 'TypeError: must be real number, not str'].
 		} asDictionary.
 
-	(validTypes includes: aCharacter) ifFalse:[
+	(invalidTypes includes: aCharacter) ifTrue:[
 		(invalidTypes at: aCharacter) value.
 	].
 
+	return := value.
 	(aCharacter == $r or:[aCharacter == $a])
 		ifTrue:[
 			return := self __repr__ ___value
-		]
-		ifFalse:[
-			return := value
 		].
-	(anObject ~= '' and: [anObject < (return size)]) ifFalse:[ return := return copyFrom: 1 to: return size].
+	
+	((aCharacter == $c) and:[ return size > 1]) ifTrue:[
+		TypeError signal: 'TypeError: %c requires int or char'
+	].
+
+	(anObject ~= '' and: [anObject < (return size)]) ifTrue:[ return := return copyFrom: 1 to: anObject].
 	^return
 %
 category: 'Smalltalk'

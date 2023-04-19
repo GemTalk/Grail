@@ -22,6 +22,12 @@ initialize
 %
 category: 'other'
 method: TupleAst
+messagePrecedence
+	
+	^3
+%
+category: 'other'
+method: TupleAst
 printSmalltalkOn: aStream
 
 	aStream nextPutAll: 'tuple ___value: { '.

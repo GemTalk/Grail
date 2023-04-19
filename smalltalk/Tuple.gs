@@ -48,7 +48,7 @@ ___modString: aString
 	readStream := ReadStream on: aString.
 	piece := ''.
 	pieces := OrderedCollection new.
-	[readStream notEmpty] whileTrue:[
+	[readStream atEnd] whileFalse:[
 		|char|
 		char := readStream next.
 		char == $% ifFalse:[

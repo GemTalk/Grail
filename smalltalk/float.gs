@@ -24,10 +24,148 @@ ___addFloat: aFloat
 %
 category: 'Python-float'
 method: float
-___convertWithFlags: aSet andType: aCharacter
-	|result|
-	result := ''.
-	^result
+___convertWithFlags: aSet precision: anObject andType: aCharacter
+
+	"
+	aSet contains the flags that are set for the input that are not used here
+	anObject contains an empty string if there was no precision or an Integer if it was
+	aCharacter contains the Type which will match one of the validTypes or invalidTypes
+	"
+
+	|resultString tempNumber invalidTypes characterUsed exponent precisionHolder decimalIndex|
+	resultString := ''.
+
+	invalidTypes := {
+			$x->[TypeError signal: 'TypeError: %x format: an integer is required, not str'].
+			$X->[TypeError signal: 'TypeError: %X format: an integer is required, not str'].
+			$o->[TypeError signal: 'TypeError: %o format: an integer is required, not str'].
+			$c->[TypeError signal: 'TypeError: %c requires int or char'].
+		} asDictionary.
+
+	(invalidTypes includes: aCharacter) ifTrue:[
+		(invalidTypes at: aCharacter) value.
+	].
+
+	({$d. $i. $u} includes: aCharacter) ifTrue:[
+		^ (int ___value: value floor)
+			___convertWithFlags: aSet
+			precision: anObject
+			andType: aCharacter
+	].
+
+	({$s. $a. $r.} includes: aCharacter) ifTrue:[
+		"if it uses string type indicator then it should change to a string or character and then use that
+		class's implementation"
+		^(str ___value: (value) asString)
+			___convertWithFlags: aSet
+			precision: anObject
+			andType: aCharacter.
+	].
+
+	characterUsed := aCharacter asLowercase.
+
+	"us floating points for everything between those two numbers"
+
+	characterUsed == $g ifTrue:[
+		((value abs < 0.0001) or: [value abs >= 999999.5]) ifTrue:[
+			characterUsed := $e.
+		].
+	].
+
+	tempNumber := value abs.
+	"convert to the correct decimal for scientific form and track the exponent needed"
+	characterUsed == $e ifTrue:[
+		exponent := 0.
+		tempNumber >= 10 ifTrue:[
+			[tempNumber >= 10] whileTrue:[
+				tempNumber := tempNumber / 10.
+				exponent := exponent + 1.
+			].
+		] ifFalse: [
+			tempNumber < 1 ifTrue:[
+				[tempNumber < 1] whileTrue:[
+					tempNumber := tempNumber * 10.
+					exponent := exponent - 1.
+				].
+			].
+		].
+	].
+
+	precisionHolder := anObject.
+	resultString := tempNumber asString.
+
+	aCharacter asLowercase == $g
+		ifTrue:[
+			precisionHolder = '' ifFalse:[
+				|counter|
+				counter := 1.
+				[counter <= (resultString size)] whileTrue:[
+					(precisionHolder <= 0 and:[(resultString at: counter) isAlphaNumeric])
+						ifTrue:[resultString at: counter put: $0].
+					(resultString at: counter) isAlphaNumeric ifTrue:[
+						precisionHolder := precisionHolder -1.
+					].
+					counter := counter + 1.
+				].
+				counter < resultString size ifTrue:[
+					resultString := resultString copyFrom: 1 to: counter.
+				].
+				
+			].
+			(resultString asNumber) = (resultString asNumber floor) ifTrue:[
+				resultString := resultString asNumber floor asString.
+			].
+		]
+		ifFalse: [
+			anObject = '' ifTrue: [
+				precisionHolder := 6.
+			].
+
+			decimalIndex := resultString indexOf: $..
+			"add trailing zeros, this is based on the precision or 6 if there is no precision"
+			"ToDo: if aCharacter is g then precision should track significant figures, not decimals"
+			(precisionHolder + decimalIndex) <= (resultString size)
+				ifTrue:[
+					resultString := resultString copyFrom: 1 to: (precisionHolder + decimalIndex).
+					resultString last == $. ifTrue:[
+						resultString := resultString copyFrom: 1 to: (resultString size -1).
+					].
+				] ifFalse:[
+					[resultString size < (precisionHolder + decimalIndex)] whileTrue:[
+						resultString := resultString + '0'.
+					].
+				].
+
+			"add exponential for onto the string if required"
+			characterUsed == $e ifTrue:[
+				resultString := resultString + 'e'.
+				exponent negative ifTrue:[
+					resultString := resultString + '-'.
+				] ifFalse:[
+					resultString := resultString + '+'.
+				].
+				exponent abs < 10 ifTrue:[
+					resultString := resultString + '0'.
+				].
+				resultString := resultString + (exponent asString).
+				aCharacter isUppercase ifTrue:[
+					resultString := resultString asUppercase.
+				].
+		].
+	].
+	value < 0 ifTrue:[
+		resultString := '-' + resultString.
+	] ifFalse:[
+		(aSet includes: $+) ifTrue:[
+			resultString := '+' + resultString.
+		] ifFalse: [
+			(aSet includes: Character space) ifTrue:[
+				resultString := ' ' + resultString.
+			].
+		].
+	].
+	
+	^resultString
 %
 category: 'Python-float'
 method: float

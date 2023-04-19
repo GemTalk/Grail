@@ -48,6 +48,7 @@ hash
 	^container hash
 %
 set compile_env: 0
+set compile_env: 0
 category: 'Python'
 method: Container
 __add__: aList

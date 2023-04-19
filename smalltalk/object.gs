@@ -149,13 +149,16 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 		(invalidTypes at: aCharacter) value.
 	].
 
+	return := self __str__ ___value.
 	(aCharacter == $r or:[aCharacter == $a])
 		ifTrue:[
 			return := self __repr__ ___value
-		]
-		ifFalse:[
-			return := self __str__ ___value
 		].
+
+	((aCharacter == $c) and:[ return size > 1]) ifTrue:[
+		TypeError signal: 'TypeError: %c requires int or char'
+	].
+
 	(anObject ~= '' and: [anObject < (return size)]) ifFalse:[ return := return copyFrom: 1 to: return size].
 	^return
 %
@@ -170,6 +173,12 @@ method: object
 ___modInt: anInteger
 
 	TypeError signal: 'TypeError: unsupported operand type(s) for %: ''int'' and ''', self class asString,''''.
+%
+category: 'other'
+method: object
+___modString: aString
+	
+	^ (tuple ___value: {self}) ___modString: aString.
 %
 category: 'other'
 method: object
