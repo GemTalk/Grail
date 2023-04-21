@@ -4110,8 +4110,8 @@ set compile_env: 0
 expectvalue /Class
 doit
 Object subclass: 'FormatTag'
-  instVarNames: #( flags width precision
-                    type)
+  instVarNames: #( mapValue flags width
+                    precision type)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()

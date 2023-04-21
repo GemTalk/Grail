@@ -35,12 +35,6 @@ __new__: aSet
 set compile_env: 0
 category: 'Python'
 method: set
-___modString: aString
-	
-	^ (tuple ___value: {self}) ___modString: aString.
-%
-category: 'Python'
-method: set
 __and__: aSet
 
 	| x |

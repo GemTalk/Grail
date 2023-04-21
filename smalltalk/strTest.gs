@@ -139,7 +139,48 @@ method: strTest
 test__mod__
 
 	" See 'printf-style String Formatting': https://docs.python.org/3/library/stdtypes.html?#printf-style-string-formatting"
-   #pyTodo
+	self
+		assert: (ModuleAst evaluate: '''%(language)s has %(number)03d quote types.'' % {''language'': ''Python'', ''number'': 2}')
+		equals: (str ___value: 'Python has 002 quote types.');
+
+		assert: (ModuleAst evaluate: '"%d %s cost $%.2f" % (12, "apples", 3.44)')
+		equals: (str ___value: '12 apples cost $3.44');
+
+		assert: (ModuleAst evaluate: '"%e" % 10.23')
+		equals: (str ___value: '1.023000e+01');
+
+		assert: (ModuleAst evaluate: '"%g" % 10.23')
+		equals: (str ___value: '10.23');
+
+		assert: (ModuleAst evaluate: '"%g" % 10.2312343')
+		equals: (str ___value: '10.2312');
+
+		assert: (ModuleAst evaluate: '"%.7g" % 10.2312343')
+		equals: (str ___value: '10.23123');
+
+		assert: (ModuleAst evaluate: '"%.7g" % 10.2312')
+		equals: (str ___value: '10.2312');
+
+		assert: (ModuleAst evaluate: '"%.7g" % 0.0000002')
+		equals: (str ___value: '2e-07');
+
+		assert: (ModuleAst evaluate: '"%.7g" % 1.0000002')
+		equals: (str ___value: '1');
+
+		assert: (ModuleAst evaluate: '"%.7e" % 0.0000002')
+		equals: (str ___value: '2.0000000e-07');
+
+		assert: (ModuleAst evaluate: '"%.6f" % 0.0000002')
+		equals: (str ___value: '0.000000');
+
+		assert: (ModuleAst evaluate: '"%s" % [1]')
+		equals: (str ___value: '[1]');
+
+		assert: (ModuleAst evaluate: '"%s" % {1}')
+		equals: (str ___value: '{1}');
+
+		assert: (ModuleAst evaluate: '"%s" % (1)')
+		equals: (str ___value: '1').
 %
 category: 'todo'
 method: strTest

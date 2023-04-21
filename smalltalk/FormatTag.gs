@@ -17,19 +17,12 @@ initializeFrom: aReadStream
 	aReadStream peek == $% ifTrue:[
 		^'%'.
 	].
+	self setMapValue: aReadStream.
 	self setFlag: aReadStream.
 	self setWidth: aReadStream.
 	self setPrecision: aReadStream.
 	self setType: aReadStream.
 	^self.
-%
-category: 'other'
-method: FormatTag
-numberForParameters: aReadStream
-	"return a formated string based on hash, width, precision, and type"
-	|returnString|
-	self halt.
-	^self adjustWidth: returnString.
 %
 category: 'other'
 method: FormatTag
@@ -40,6 +33,21 @@ setFlag: aReadStream
 	[flagSet includes: aReadStream peek] whileTrue:[
 		flags add: aReadStream next.
 	].
+%
+category: 'other'
+method: FormatTag
+setMapValue: aReadStream
+
+	mapValue := nil.
+	aReadStream peek == $( ifTrue:[
+		mapValue := ''.
+		aReadStream next.
+		[(aReadStream peek) ~~ $)] whileTrue:[
+			mapValue := mapValue + aReadStream next.
+		].
+		mapValue := str ___value: mapValue.
+		aReadStream next.
+	]
 %
 category: 'other'
 method: FormatTag
@@ -97,25 +105,55 @@ category: 'other'
 method: FormatTag
 tupleForParameters: aReadStream
 	
-	|insertString padding numClassHolder displacement|
+	|insertString padding numClassHolder toBeConverted displacement |
+
+	"if the format string has a mapping value and "
+	mapValue ~~ nil ifTrue:[
+		aReadStream size ~~ 1 ifTrue:[
+			TypeError signal: 'TypeError: format requires a mapping'.
+		].
+		aReadStream peek class = list ifTrue:[
+			TypeError signal: 'TypeError: list indices must be integers or slices, not str'.
+		].
+		aReadStream peek class ~= dict ifTrue:[
+			TypeError signal: 'TypeError: format requires a mapping'.
+		].
+	].
+
 	insertString := ''.
 	"stars indicate that a number is required to specify that value"
 	width == $* ifTrue:[
+		aReadStream peek == nil ifTrue:[
+			TypeError signal: 'TypeError: not enough arguments for format string'.
+		].
+
 		aReadStream peek class = int ifFalse:[
 			TypeError signal: 'TypeError: * wants int'
 		].
 		width := aReadStream next ___value.
 	].
 	precision == $* ifTrue:[
+		aReadStream peek == nil ifTrue:[
+			TypeError signal: 'TypeError: not enough arguments for format string'.
+		].
+
 		aReadStream peek class = int ifFalse:[
 			TypeError signal: 'TypeError: * wants int'
 		].
 		precision := aReadStream next ___value.
 	].
-	numClassHolder := aReadStream peek class.
+	
 
+	aReadStream peek == nil ifTrue:[
+		TypeError signal: 'TypeError: not enough arguments for format string'.
+	].
+	mapValue ~~ nil
+		ifTrue:[ toBeConverted := (aReadStream peek) __getitem__: mapValue.]
+		ifFalse:[ toBeConverted := aReadStream next.].
+
+	numClassHolder := toBeConverted class.
 	"convert the next value in the ReadStream to a string matching its type converter"
-	insertString := aReadStream next ___convertWithFlags: flags precision: precision andType: type.
+	insertString := toBeConverted ___convertWithFlags: flags precision: precision andType: type.
 
 	padding := ''.
 	(width = '') ifFalse: [

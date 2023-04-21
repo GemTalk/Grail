@@ -35,19 +35,14 @@ __new__: aPythonTuple
 set compile_env: 0
 category: 'Python'
 method: tuple
-___convertWithFlags: aSet precision: anObject andType: aCharacter
-
-	Error signal: 'PAAAAAAAAAAAAAAAAIN'
-%
-category: 'Python'
-method: tuple
 ___modString: aString
 	
-	|readStream writeStream pieces piece|
+	|readStream writeStream pieces piece counter|
 
 	readStream := ReadStream on: aString.
 	piece := ''.
 	pieces := OrderedCollection new.
+	counter := 0.
 	[readStream atEnd] whileFalse:[
 		|char|
 		char := readStream next.
@@ -57,9 +52,16 @@ ___modString: aString
 			pieces add: piece.
 			piece := ''.
 			pieces add: (FormatTag new initializeFrom: readStream).
+			counter := counter + 1.
 		]. 
 	].
+	pieces add: piece.
 	readStream := ReadStream on: self ___value.
+
+	readStream size > counter ifTrue:[
+		TypeError signal: 'TypeError: not all arguments converted during string formatting'.
+	].
+
 	writeStream := WriteStream on: (String new).
 	pieces do:[ :each | 
 		(each isKindOf: String) ifTrue: [
@@ -69,20 +71,6 @@ ___modString: aString
 		].
 	].
 	^writeStream contents.
-%
-category: 'Python'
-method: tuple
-___modString: aString parameters: anOrderedCollection
-
-	"a string is the string to be formated and anInteger is the number of % that need an argument"
-
-	( anOrderedCollection size) < (container size) ifTrue: [TypeError signal: 'TypeError: not all arguments converted during string formatting'].
-	( anOrderedCollection size) > (container size) ifTrue: [TypeError signal: 'TypeError: not enough arguments for format string'].
-	
-	"toDo find () and look up its contents as a string in the dictionary then look at the trailing
-	character and use that to put it into the string."
-
-	^str ___value: aString.
 %
 category: 'Python'
 method: tuple

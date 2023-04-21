@@ -104,7 +104,7 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 	({$f. $F. $e. $E. $g. $G.} includes: aCharacter) ifTrue:[
 		"if it uses float type indicator then it should change to a float and then use that
 		class's implementation"
-		^(float ___value: value asFloat)
+		^(float ___value: value)
 			___convertWithFlags: aSet
 			precision: anObject
 			andType: aCharacter.
@@ -170,19 +170,6 @@ category: 'Python-int'
 method: int
 ___modInt: anInteger
 	^int ___value: (anInteger rem: value)
-%
-category: 'Python-int'
-method: int
-___modString: aString parameters:  anOrderedCollection
-
-	"a string is the string to be formated and anInteger is the number of % that need an argument"
-
-	( anOrderedCollection size) < 1 ifTrue: [TypeError signal: 'TypeError: not all arguments converted during string formatting'].
-	( anOrderedCollection size) > 1 ifTrue: [TypeError signal: 'TypeError: not enough arguments for format string'].
-	
-	"toDo replace 1 %i %d and other appriates with our integer and perform formating on it"
-
-	^str ___value: aString.
 %
 category: 'Python-int'
 method: int

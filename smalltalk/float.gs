@@ -31,7 +31,8 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 	anObject contains an empty string if there was no precision or an Integer if it was
 	aCharacter contains the Type which will match one of the validTypes or invalidTypes
 	"
-
+	"There is definitely a way to make this more efficient. If you would like to make this
+	more efficient go ahead."
 	|resultString tempNumber invalidTypes characterUsed exponent precisionHolder decimalIndex|
 	resultString := ''.
 
@@ -92,38 +93,44 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 	].
 
 	precisionHolder := anObject.
-	resultString := tempNumber asString.
+	precisionHolder = '' ifTrue: [
+		precisionHolder := 6.
+	].
+	resultString := tempNumber asStringUsingFormat: {10. precisionHolder. false}.
 
-	aCharacter asLowercase == $g
+	characterUsed == $g
 		ifTrue:[
-			precisionHolder = '' ifFalse:[
-				|counter|
-				counter := 1.
-				[counter <= (resultString size)] whileTrue:[
-					(precisionHolder <= 0 and:[(resultString at: counter) isAlphaNumeric])
-						ifTrue:[resultString at: counter put: $0].
-					(resultString at: counter) isAlphaNumeric ifTrue:[
-						precisionHolder := precisionHolder -1.
-					].
-					counter := counter + 1.
+			|tempHolder index|
+			tempHolder := ''.
+			index := 1.
+			"Collect only significant digits"
+			[precisionHolder > 0 and:[index <= (resultString size)]] whileTrue:[
+					
+				(resultString at: index) isAlphaNumeric ifTrue:[
+					precisionHolder := precisionHolder -1.
 				].
-				counter < resultString size ifTrue:[
-					resultString := resultString copyFrom: 1 to: counter.
-				].
-				
+				tempHolder := tempHolder + (resultString at: index).
+				index := index + 1.
 			].
-			(resultString asNumber) = (resultString asNumber floor) ifTrue:[
-				resultString := resultString asNumber floor asString.
+			"remove trailing zeros"
+			resultString := tempHolder.
+			aCharacter asLowercase == $g ifTrue:[
+				|reverseIndex|
+				reverseIndex := resultString size.
+				[(resultString at: reverseIndex) == $0] whileTrue:[
+					reverseIndex := reverseIndex -1.
+				].
+				(resultString at: reverseIndex) == $. ifTrue:[
+					reverseIndex := reverseIndex -1.
+				].
+				resultString := resultString copyFrom: 1 to: reverseIndex.
+				
 			].
 		]
 		ifFalse: [
-			anObject = '' ifTrue: [
-				precisionHolder := 6.
-			].
 
 			decimalIndex := resultString indexOf: $..
 			"add trailing zeros, this is based on the precision or 6 if there is no precision"
-			"ToDo: if aCharacter is g then precision should track significant figures, not decimals"
 			(precisionHolder + decimalIndex) <= (resultString size)
 				ifTrue:[
 					resultString := resultString copyFrom: 1 to: (precisionHolder + decimalIndex).
@@ -131,11 +138,25 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 						resultString := resultString copyFrom: 1 to: (resultString size -1).
 					].
 				] ifFalse:[
-					[resultString size < (precisionHolder + decimalIndex)] whileTrue:[
-						resultString := resultString + '0'.
+					aCharacter asLowercase == $g ifFalse:[
+						[resultString size < (precisionHolder + decimalIndex)] whileTrue:[
+							resultString := resultString + '0'.
+						].
 					].
 				].
 
+			aCharacter asLowercase == $g ifTrue:[
+				|reverseIndex|
+				reverseIndex := resultString size.
+				[(resultString at: reverseIndex) == $0] whileTrue:[
+					reverseIndex := reverseIndex -1.
+				].
+				(resultString at: reverseIndex) == $. ifTrue:[
+					reverseIndex := reverseIndex -1.
+				].
+				resultString := resultString copyFrom: 1 to: reverseIndex.
+				
+			].
 			"add exponential for onto the string if required"
 			characterUsed == $e ifTrue:[
 				resultString := resultString + 'e'.
@@ -147,12 +168,14 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 				exponent abs < 10 ifTrue:[
 					resultString := resultString + '0'.
 				].
-				resultString := resultString + (exponent asString).
+				resultString := resultString + (exponent abs asString).
 				aCharacter isUppercase ifTrue:[
 					resultString := resultString asUppercase.
 				].
 		].
 	].
+
+	"add the appropriate sign or a space to the number"
 	value < 0 ifTrue:[
 		resultString := '-' + resultString.
 	] ifFalse:[
@@ -178,19 +201,6 @@ method: float
 ___modInt: anInteger
 
 	^float ___value: (anInteger rem: value)
-%
-category: 'Python-float'
-method: float
-___modString: aString parameters: anOrderedCollection
-
-	"a string is the string to be formated and anInteger is the number of % that need an argument"
-
-	( anOrderedCollection size) < 1 ifTrue: [TypeError signal: 'TypeError: not all arguments converted during string formatting'].
-	( anOrderedCollection size)  > 1 ifTrue: [TypeError signal: 'TypeError: not enough arguments for format string'].
-	
-	"toDo replace 1 %i %d and other appriates with our float and perform formating on it"
-
-	^str ___value: aString.
 %
 category: 'Python-float'
 method: float

@@ -15,102 +15,6 @@ ___value: aString
 set compile_env: 0
 category: 'Python'
 method: str
-___modString: aString parameters: anOrderedCollection
-
-	"a string is the string to be formated and anInteger is the number of % that need an argument"
-	|stringOutput flags types resultString insertString tempSize|
-
-	(anOrderedCollection size) < 1 ifTrue: [TypeError signal: 'TypeError: not all arguments converted during string formatting'].
-	(anOrderedCollection size) > 1 ifTrue: [TypeError signal: 'TypeError: not enough arguments for format string'].
-	
-	"toDo replace 1 %s with our string and perform formating on it"
-	flags := (#'#', #'0', #'-', #'+', #' ') asSet.
-	types := (#'c', #'s', #'r', #'a') asSet.
-
-	tempSize := aString size.
-	resultString := aString.
-
-	anOrderedCollection reverseDo: [ :percentIndex |
-		|padding flag width precision type counter|
-
-		counter := percentIndex + 1.
-		flag := nil.
-		width := ''.
-		precision := ''.
-		type := nil.
-		
-		"find the flags so they can be properly saved and skipped"
-		(flags includes: (resultString at: counter)) ifTrue:[
-			flag := resultString at: counter.
-			counter := counter + 1.
-		].
-		
-		"ensures that * result in an error because they require a second parameter"
-		(resultString at: counter) = $* ifTrue:[ TypeError signal: 'TypeError: * wants int'].
-
-		"saves the width component and if none exists preserves the empty string"
-		[(resultString at: counter) isNumber] whileTrue: [
-			width := width + (resultString at: counter).
-			counter := counter + 1.
-		].
-		
-		"covert to a number for later string length formating"
-		(width = '') ifFalse: [width := width asNumber.].
-		
-		"if there is a . it indicates that the string will have a precision"
-		(resultString at: counter) = $. ifTrue:[
-			counter := counter + 1.
-
-			"if the character is a * then fail because it needs another parameter"
-			(resultString at: counter) = $* ifTrue:[ TypeError signal: 'TypeError: * wants int'].
-
-			[(resultString at: counter) isNumber] whileTrue: [
-				precision := precision + (resultString at: counter).
-				counter := counter + 1.
-			].
-		].
-
-		"covert to a number for later value length formating"
-		(precision = '') ifFalse: [precision := precision asNumber.].
-
-		(types includes: (resultString at: counter)) ifFalse: [
-				"change to real error message(s)"
-				ValueError signal:
-					'ValueError: unsupported format character ''',
-					(resultString at: counter) asString,''' (0x', ((resultString at: counter) asciiValue printStringRadix: 16),
-					') at ', (percentIndex + 1) asString.
-		].
-
-		(((resultString at: counter) = $c) and: [value size > 1]) ifTrue:[
-			TypeError signal: 'TypeError: %c requires int or char'
-		].
-
-		(((resultString at: counter) = $r) or:[(resultString at: counter) = $a])
-			ifTrue:[
-				insertString := self __repr__ value
-			]
-			ifFalse:[
-				insertString := self __str__ value
-			].
-
-		(precision = '') ifFalse: [insertString := insertString copyFrom: 1 to: precision].
-		(width = '') ifFalse: [
-				padding := ''.
-				1 to: (width - (insertString size)) do: [:i | padding := padding + ' '].
-		].
-
-		flag = $- ifTrue:[insertString := insertString + padding].
-		flag = $+ ifTrue:[insertString := padding + insertString].
-
-		resultString removeFrom: percentIndex to: counter.
-		resultString insertAll: insertString at: percentIndex.
-
-	].
-
-	^str ___value: stringOutput.
-%
-category: 'Python'
-method: str
 __add__: pythonObject
 	
 	pythonObject class ~= str ifTrue: [ TypeError signal: 'must a string, not ', pythonObject class name ].
@@ -260,25 +164,6 @@ method: str
 __mod__: anObject
 	|stringOutput|
 
-"	conversions := ({
-				$d->[:object| object __floor__ ___value asString.].
-				$i->[:object| object __floor__ ___value asString.].
-				$o->[].
-				$u->[].
-				$x->[].
-				$X->[].
-				$e->[:object| object ___value asStringUsingFormat: #(0 6 true).].
-				$E->[:object| (object ___value asStringUsingFormat: #(0 6 true)) asUppercase.].
-				$f->[:object| (object ___value asDecimalFloat asStringUsingFormat: #(0 6 false)).].
-				$F->[:object| (object ___value asDecimalFloat asStringUsingFormat: #(0 6 false)) asUppercase.].
-				$g->[].
-				$G->[].
-				$c->[].
-				$r->[].
-				$s->[].
-				$a->[].
-			} asDictionary)."
-
 	stringOutput := value asString.
 
 	^str ___value: (anObject ___modString: stringOutput).
@@ -307,6 +192,12 @@ method: str
 __repr__
 	
 	^str ___value: self ___value printString
+%
+category: 'Python'
+method: str
+__rmod__: any
+
+	^any __mod__: self
 %
 category: 'Python'
 method: str

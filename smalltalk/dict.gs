@@ -23,20 +23,6 @@ ___startChar
 set compile_env: 0
 category: 'Python'
 method: dict
-___modString: aString parameters: anOrderedCollection
-
-	"a string is the string to be formated and anInteger is the number of % that need an argument"
-
-	(anOrderedCollection size) < 1 ifTrue: [TypeError signal: 'TypeError: not all arguments converted during string formatting'].
-	(anOrderedCollection size) > 1 ifTrue: [TypeError signal: 'TypeError: not enough arguments for format string'].
-	
-	"toDo find () and look up its contents as a string in the dictionary then look at the trailing
-	character and use that to put it into the string."
-
-	^str ___value: aString.
-%
-category: 'Python'
-method: dict
 __contains__: anElement
 
 	^self ___container includesKey: anElement
@@ -58,7 +44,7 @@ method: dict
 __getitem__: aKey
 	^self ___container
 		at: aKey
-		ifAbsent: [KeyError signal: aKey printString ].
+		ifAbsent: [KeyError signal: 'KeyError: ' + aKey __repr__ ___value ].
 %
 category: 'Python'
 method: dict
@@ -108,6 +94,30 @@ category: 'Python'
 method: dict
 __or__: aDict
 	^self copy __ior__: aDict
+%
+category: 'Python'
+method: dict
+__repr__
+
+	| stream index|
+	
+	index := 1.
+	stream := WriteStream on: String new.
+	stream nextPut: ${.
+	container associationsDo: [ :elem |
+		stream
+			nextPutAll: elem key __repr__ ___value;
+			nextPutAll: ': ';
+			nextPutAll: elem value __repr__ ___value.
+		index ~= container size ifTrue: [
+			stream nextPutAll: ', '.
+		].
+		index := index + 1.
+	].
+
+	stream nextPut: $}.
+
+	^(str ___value: (stream contents)).
 %
 category: 'Python'
 method: dict
