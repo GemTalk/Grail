@@ -19,7 +19,6 @@ initialize
 category: 'other'
 method: IfAst
 printSmalltalkOn: aStream
-
 	self smalltalkSourceFor: test parenthesisIf: 3 on: aStream.
 	aStream nextPutAll: ' ___value ifTrue: ['; lf; yourself.
 	aStream increaseIndent.

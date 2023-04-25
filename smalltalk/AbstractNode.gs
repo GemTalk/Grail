@@ -303,8 +303,8 @@ method: AbstractNode
 smalltalkSourceFor: aNode parenthesisIf: anInteger on: aStream
 
 	| flag |
-
 	flag := aNode messagePrecedence >= anInteger.
+	aStream nextPutAll: ''.
 	flag ifTrue: [aStream nextPut: $(].
 	aNode printSmalltalkOn: aStream.
 	flag ifTrue: [aStream nextPut: $)].

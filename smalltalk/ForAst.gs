@@ -25,7 +25,7 @@ method: ForAst
 printSmalltalkOn: aStream
 
 	self smalltalkSourceFor: iter parenthesisIf: 3 on: aStream.
-	aStream nextPutAll: ' ___value do: [ :i |'; lf; yourself.
+	aStream nextPutAll: ' ___value do: [ :i |'; increaseIndent; lf; yourself.
 	self smalltalkSourceFor: body parenthesisIf: 4 on: aStream. " Doesn't need parenthesis "
-	aStream lf; nextPutAll: '].'.
+	aStream decreaseIndent; lf; nextPutAll: '].'.
 %

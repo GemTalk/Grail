@@ -67,6 +67,11 @@ __add__: aList
 %
 category: 'Python'
 method: Container
+__bool__
+	^bool ___value: (self ___container size) ~= 0.
+%
+category: 'Python'
+method: Container
 __contains__: aPyObject
 
 	container do: [ :each |

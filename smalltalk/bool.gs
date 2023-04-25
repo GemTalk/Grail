@@ -61,7 +61,25 @@ __not__
 
 	^bool ___value: (value bitXor: 1)
 %
+category: 'other'
+method: bool
+__or__: anObject
+
+	| other |
+	other := anObject.
+	(other isKindOf: ExecBlock) ifTrue: [
+		other := other value. "Evaluate the block"
+	].
+
+	^bool ___value: (self ___value or: [ other ___value ])
+%
 set compile_env: 0
+category: 'Smalltalk'
+method: bool
+__bool__
+
+	^self
+%
 category: 'Smalltalk'
 method: bool
 printOn: aStream

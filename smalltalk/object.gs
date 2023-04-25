@@ -120,6 +120,12 @@ ___addReal: aFloatReal imag: aFloatImag
 %
 category: 'other'
 method: object
+___and: aPythonObject
+
+	^(self __bool__) __and__: aPythonObject __bool__
+%
+category: 'other'
+method: object
 ___convertWithFlags: aSet precision: anObject andType: aCharacter
 
 	"
@@ -200,6 +206,12 @@ ___mulReal: aFloatReal imag: aFloatImag
 %
 category: 'other'
 method: object
+___or: aPythonObject
+
+	^(self __bool__) __or__: aPythonObject __bool__
+%
+category: 'other'
+method: object
 ___powFloat: aFloat
 
 	TypeError signal: 'TypeError: unsupported operand type(s) for **: ''float'' and ''', self class asString,''''.
@@ -233,6 +245,12 @@ method: object
 ___truedivReal: aFloatReal imag: aFloatImag
 
 	TypeError signal: 'TypeError: unsupported operand type(s) for /: ''complex'' and ''', self class asString,''''.
+%
+category: 'other'
+method: object
+__not__
+
+	^(self __bool__) __not__
 %
 category: 'other'
 method: object
