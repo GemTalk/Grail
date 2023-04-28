@@ -37,6 +37,7 @@ printSmalltalkOn: aStream
 	"print all the instructions in the block"
 	body size == 1 ifTrue: [
 		self smalltalkSourceFor: (body at: 1) parenthesisIf: 4 on: aStream.
+		aStream nextPut: $..
 	] ifFalse: [
 		body do: [ :each |
 			"print the instruction"

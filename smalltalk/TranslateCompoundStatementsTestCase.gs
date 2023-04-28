@@ -22,8 +22,8 @@ testTranslateFor
 
 	self assert: stream contents equals:
 '((currentScope at: #range) scope: currentScope positional: { (int ___value: 10). } named: {}) ___value do: [ :i |
-
-].'
+	currentScope at: #_ put: i.
+]'
 %
 category: 'other'
 method: TranslateCompoundStatementsTestCase
@@ -36,7 +36,7 @@ testTranslateIf
 
 	self assert: stream contents equals: 
 'True ___value ifTrue: [
-
+	
 ]'.
 
 	x := self statementsAt: 2.
@@ -45,9 +45,9 @@ testTranslateIf
 
 	self assert: stream contents equals: 
 'False ___value ifTrue: [
-
+	
 ] ifFalse: [
-
+	
 ]'.
 %
 category: 'other'
@@ -102,7 +102,7 @@ testTranslateTryExcept
 		[
 			(currentScope at: #print) scope: currentScope positional: { ((int ___value: 2) __add__: (int ___value: 2)). } named: {}
 		] on: ZeroDivisionError do: [
-
+			
 		]
 	] on: Error, Exception do: [
 		RuntimeError signal: (str ___value: ''Something bad happened'') ___value.
