@@ -12,9 +12,7 @@ Checkout this Git project to `$HOME/code/Python/Grail` (or to some other place a
 
 [GemStone/S](https://gemtalksystems.com/products/gs64/) can be most easily run on macOS using the free, open source [GemStone.app](https://github.com/jgfoster/GemStoneApp). From the Setup tab, click `Authenticate` and give your password (as an administrator) to allow the helper tool to be installed. Then, from the Versions tab, click `Update` to get a list of available GemStone versions. Check the box for a recent version (3.6.0 at the time of this writing) to download that version. Then, from the Databases tab, click the `+` button to create a new database and click `Start` to start the database.
 
-When you have a database running, from the Databases tab select the Login subtab and click the `Terminal` button. In the new Terminal navigate to this directory (e.g., `cd ~/code/Python/Grail`).
-
-Copy the provided `topazini` to `.topazini` and edit `gs64stone` to show the name of your database (e.g., `gs64stone1`). Then from a commmand prompt run `./install.sh`. If this finishes without errors then you may proceed to the next step.
+Copy the provided `topazini` to `.topazini` and edit `gs64stone` to show the name of your database (e.g., `gs64stone1`). Copy the provided `setenv` to `.setenv` and edit the path to point to your GemStone install. Then open a terminal in this directory and run `./install.sh`. If this finishes without errors then you may proceed to the next step.
 
 ### Python 3
 
