@@ -1151,6 +1151,32 @@ doit
 AbstractLocationNode category: 'Parser'
 %
 set compile_env: 0
+! ------------------- Class definition for AliasAst
+expectvalue /Class
+doit
+AbstractLocationNode subclass: 'AliasAst'
+  instVarNames: #( name asName)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+AliasAst comment: 
+'No class-specific documentation for AliasAst, hierarchy is:
+Object
+  AbstractNode
+    AliasAst(name asName)
+'
+%
+expectvalue /Class
+doit
+AliasAst category: 'Parser'
+%
+set compile_env: 0
 ! ------------------- Class definition for ArgAst
 expectvalue /Class
 doit
@@ -3032,32 +3058,6 @@ WithAst comment:
 expectvalue /Class
 doit
 WithAst category: 'Parser'
-%
-set compile_env: 0
-! ------------------- Class definition for AliasAst
-expectvalue /Class
-doit
-AbstractNode subclass: 'AliasAst'
-  instVarNames: #( name asName)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-AliasAst comment: 
-'No class-specific documentation for AliasAst, hierarchy is:
-Object
-  AbstractNode
-    AliasAst(name asName)
-'
-%
-expectvalue /Class
-doit
-AliasAst category: 'Parser'
 %
 set compile_env: 0
 ! ------------------- Class definition for ArgumentsAst

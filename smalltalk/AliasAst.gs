@@ -19,13 +19,13 @@ initialize
 	stream skipSeparators.
 	(stream peekFor: $') ifTrue: [
 		asName := (stream upTo: $') asSymbol.
-		(stream peekFor: $)) ifFalse: [self error].
 	] ifFalse: [
 		| string |
-		string := stream upTo: $).
+		string := stream upTo: $,.
 		string = 'None' ifFalse: [self error].
 		asName := nil.
 	].
+	self readPositionOnly.
 %
 category: 'other'
 method: AliasAst
