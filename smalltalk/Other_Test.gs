@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from Other_Test
-removeAllMethods Other_Test
-removeAllClassMethods Other_Test
+expectvalue /Metaclass3
+doit
+Other_Test removeAllMethods.
+Other_Test class removeAllMethods.
+%
 ! ------------------- Class methods for Other_Test
 ! ------------------- Instance methods for Other_Test
 set compile_env: 0

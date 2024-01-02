@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from propertyTest
-removeAllMethods propertyTest
-removeAllClassMethods propertyTest
+expectvalue /Metaclass3
+doit
+propertyTest removeAllMethods.
+propertyTest class removeAllMethods.
+%
 ! ------------------- Class methods for propertyTest
 ! ------------------- Instance methods for propertyTest
 set compile_env: 0

@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from list
-removeAllMethods list
-removeAllClassMethods list
+expectvalue /Metaclass3
+doit
+list removeAllMethods.
+list class removeAllMethods.
+%
 ! ------------------- Class methods for list
 set compile_env: 0
 category: 'other'

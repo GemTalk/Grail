@@ -1,5 +1,8 @@
 ﻿! ------------------- Remove existing behavior from StopIteration
-removeAllMethods StopIteration
-removeAllClassMethods StopIteration
+expectvalue /Metaclass3
+doit
+StopIteration removeAllMethods.
+StopIteration class removeAllMethods.
+%
 ! ------------------- Class methods for StopIteration
 ! ------------------- Instance methods for StopIteration

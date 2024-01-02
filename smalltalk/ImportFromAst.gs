@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from ImportFromAst
-removeAllMethods ImportFromAst
-removeAllClassMethods ImportFromAst
+expectvalue /Metaclass3
+doit
+ImportFromAst removeAllMethods.
+ImportFromAst class removeAllMethods.
+%
 ! ------------------- Class methods for ImportFromAst
 ! ------------------- Instance methods for ImportFromAst
 set compile_env: 0

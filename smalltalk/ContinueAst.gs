@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from ContinueAst
-removeAllMethods ContinueAst
-removeAllClassMethods ContinueAst
+expectvalue /Metaclass3
+doit
+ContinueAst removeAllMethods.
+ContinueAst class removeAllMethods.
+%
 ! ------------------- Class methods for ContinueAst
 ! ------------------- Instance methods for ContinueAst
 set compile_env: 0

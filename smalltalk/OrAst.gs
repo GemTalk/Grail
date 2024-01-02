@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from OrAst
-removeAllMethods OrAst
-removeAllClassMethods OrAst
+expectvalue /Metaclass3
+doit
+OrAst removeAllMethods.
+OrAst class removeAllMethods.
+%
 ! ------------------- Class methods for OrAst
 ! ------------------- Instance methods for OrAst
 set compile_env: 0

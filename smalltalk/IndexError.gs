@@ -1,5 +1,8 @@
 ﻿! ------------------- Remove existing behavior from IndexError
-removeAllMethods IndexError
-removeAllClassMethods IndexError
+expectvalue /Metaclass3
+doit
+IndexError removeAllMethods.
+IndexError class removeAllMethods.
+%
 ! ------------------- Class methods for IndexError
 ! ------------------- Instance methods for IndexError

@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from IfAst
-removeAllMethods IfAst
-removeAllClassMethods IfAst
+expectvalue /Metaclass3
+doit
+IfAst removeAllMethods.
+IfAst class removeAllMethods.
+%
 ! ------------------- Class methods for IfAst
 ! ------------------- Instance methods for IfAst
 set compile_env: 0

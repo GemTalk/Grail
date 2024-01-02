@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from EqAst
-removeAllMethods EqAst
-removeAllClassMethods EqAst
+expectvalue /Metaclass3
+doit
+EqAst removeAllMethods.
+EqAst class removeAllMethods.
+%
 ! ------------------- Class methods for EqAst
 ! ------------------- Instance methods for EqAst
 set compile_env: 0

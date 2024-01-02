@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from typeTest
-removeAllMethods typeTest
-removeAllClassMethods typeTest
+expectvalue /Metaclass3
+doit
+typeTest removeAllMethods.
+typeTest class removeAllMethods.
+%
 ! ------------------- Class methods for typeTest
 ! ------------------- Instance methods for typeTest
 set compile_env: 0

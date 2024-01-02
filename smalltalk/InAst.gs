@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from InAst
-removeAllMethods InAst
-removeAllClassMethods InAst
+expectvalue /Metaclass3
+doit
+InAst removeAllMethods.
+InAst class removeAllMethods.
+%
 ! ------------------- Class methods for InAst
 ! ------------------- Instance methods for InAst
 set compile_env: 0

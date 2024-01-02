@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from SubscriptAst
-removeAllMethods SubscriptAst
-removeAllClassMethods SubscriptAst
+expectvalue /Metaclass3
+doit
+SubscriptAst removeAllMethods.
+SubscriptAst class removeAllMethods.
+%
 ! ------------------- Class methods for SubscriptAst
 ! ------------------- Instance methods for SubscriptAst
 set compile_env: 0

@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from reversedTest
-removeAllMethods reversedTest
-removeAllClassMethods reversedTest
+expectvalue /Metaclass3
+doit
+reversedTest removeAllMethods.
+reversedTest class removeAllMethods.
+%
 ! ------------------- Class methods for reversedTest
 ! ------------------- Instance methods for reversedTest
 set compile_env: 0

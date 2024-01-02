@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from object
-removeAllMethods object
-removeAllClassMethods object
+expectvalue /Metaclass3
+doit
+object removeAllMethods.
+object class removeAllMethods.
+%
 ! ------------------- Class methods for object
 set compile_env: 0
 category: 'other'

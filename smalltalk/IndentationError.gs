@@ -1,5 +1,8 @@
 ﻿! ------------------- Remove existing behavior from IndentationError
-removeAllMethods IndentationError
-removeAllClassMethods IndentationError
+expectvalue /Metaclass3
+doit
+IndentationError removeAllMethods.
+IndentationError class removeAllMethods.
+%
 ! ------------------- Class methods for IndentationError
 ! ------------------- Instance methods for IndentationError

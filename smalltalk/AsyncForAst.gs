@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from AsyncForAst
-removeAllMethods AsyncForAst
-removeAllClassMethods AsyncForAst
+expectvalue /Metaclass3
+doit
+AsyncForAst removeAllMethods.
+AsyncForAst class removeAllMethods.
+%
 ! ------------------- Class methods for AsyncForAst
 ! ------------------- Instance methods for AsyncForAst
 set compile_env: 0

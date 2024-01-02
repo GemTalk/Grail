@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from floatTest
-removeAllMethods floatTest
-removeAllClassMethods floatTest
+expectvalue /Metaclass3
+doit
+floatTest removeAllMethods.
+floatTest class removeAllMethods.
+%
 ! ------------------- Class methods for floatTest
 ! ------------------- Instance methods for floatTest
 set compile_env: 0

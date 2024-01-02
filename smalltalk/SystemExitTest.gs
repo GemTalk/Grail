@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from SystemExitTest
-removeAllMethods SystemExitTest
-removeAllClassMethods SystemExitTest
+expectvalue /Metaclass3
+doit
+SystemExitTest removeAllMethods.
+SystemExitTest class removeAllMethods.
+%
 ! ------------------- Class methods for SystemExitTest
 ! ------------------- Instance methods for SystemExitTest
 set compile_env: 0

@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from UAddAst
-removeAllMethods UAddAst
-removeAllClassMethods UAddAst
+expectvalue /Metaclass3
+doit
+UAddAst removeAllMethods.
+UAddAst class removeAllMethods.
+%
 ! ------------------- Class methods for UAddAst
 ! ------------------- Instance methods for UAddAst
 set compile_env: 0

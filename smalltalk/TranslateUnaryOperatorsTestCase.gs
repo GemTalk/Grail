@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from TranslateUnaryOperatorsTestCase
-removeAllMethods TranslateUnaryOperatorsTestCase
-removeAllClassMethods TranslateUnaryOperatorsTestCase
+expectvalue /Metaclass3
+doit
+TranslateUnaryOperatorsTestCase removeAllMethods.
+TranslateUnaryOperatorsTestCase class removeAllMethods.
+%
 ! ------------------- Class methods for TranslateUnaryOperatorsTestCase
 set compile_env: 0
 category: 'other'

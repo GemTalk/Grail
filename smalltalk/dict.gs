@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from dict
-removeAllMethods dict
-removeAllClassMethods dict
+expectvalue /Metaclass3
+doit
+dict removeAllMethods.
+dict class removeAllMethods.
+%
 ! ------------------- Class methods for dict
 set compile_env: 0
 category: 'Smalltalk'

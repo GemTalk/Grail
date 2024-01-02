@@ -1,5 +1,8 @@
 ﻿! ------------------- Remove existing behavior from EOFError
-removeAllMethods EOFError
-removeAllClassMethods EOFError
+expectvalue /Metaclass3
+doit
+EOFError removeAllMethods.
+EOFError class removeAllMethods.
+%
 ! ------------------- Class methods for EOFError
 ! ------------------- Instance methods for EOFError

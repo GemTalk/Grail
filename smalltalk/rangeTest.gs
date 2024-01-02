@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from rangeTest
-removeAllMethods rangeTest
-removeAllClassMethods rangeTest
+expectvalue /Metaclass3
+doit
+rangeTest removeAllMethods.
+rangeTest class removeAllMethods.
+%
 ! ------------------- Class methods for rangeTest
 ! ------------------- Instance methods for rangeTest
 set compile_env: 0

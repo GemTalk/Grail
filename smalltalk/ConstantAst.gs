@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from ConstantAst
-removeAllMethods ConstantAst
-removeAllClassMethods ConstantAst
+expectvalue /Metaclass3
+doit
+ConstantAst removeAllMethods.
+ConstantAst class removeAllMethods.
+%
 ! ------------------- Class methods for ConstantAst
 set compile_env: 0
 category: 'other'

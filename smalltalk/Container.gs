@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from Container
-removeAllMethods Container
-removeAllClassMethods Container
+expectvalue /Metaclass3
+doit
+Container removeAllMethods.
+Container class removeAllMethods.
+%
 ! ------------------- Class methods for Container
 set compile_env: 0
 category: 'Smalltalk'
@@ -47,7 +50,6 @@ hash
 
 	^container hash
 %
-set compile_env: 0
 set compile_env: 0
 category: 'Python'
 method: Container

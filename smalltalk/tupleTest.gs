@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from tupleTest
-removeAllMethods tupleTest
-removeAllClassMethods tupleTest
+expectvalue /Metaclass3
+doit
+tupleTest removeAllMethods.
+tupleTest class removeAllMethods.
+%
 ! ------------------- Class methods for tupleTest
 ! ------------------- Instance methods for tupleTest
 set compile_env: 0

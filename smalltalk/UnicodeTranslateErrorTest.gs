@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from UnicodeTranslateErrorTest
-removeAllMethods UnicodeTranslateErrorTest
-removeAllClassMethods UnicodeTranslateErrorTest
+expectvalue /Metaclass3
+doit
+UnicodeTranslateErrorTest removeAllMethods.
+UnicodeTranslateErrorTest class removeAllMethods.
+%
 ! ------------------- Class methods for UnicodeTranslateErrorTest
 ! ------------------- Instance methods for UnicodeTranslateErrorTest
 set compile_env: 0

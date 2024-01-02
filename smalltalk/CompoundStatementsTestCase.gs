@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from CompoundStatementsTestCase
-removeAllMethods CompoundStatementsTestCase
-removeAllClassMethods CompoundStatementsTestCase
+expectvalue /Metaclass3
+doit
+CompoundStatementsTestCase removeAllMethods.
+CompoundStatementsTestCase class removeAllMethods.
+%
 ! ------------------- Class methods for CompoundStatementsTestCase
 set compile_env: 0
 category: 'other'

@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from setTest
-removeAllMethods setTest
-removeAllClassMethods setTest
+expectvalue /Metaclass3
+doit
+setTest removeAllMethods.
+setTest class removeAllMethods.
+%
 ! ------------------- Class methods for setTest
 ! ------------------- Instance methods for setTest
 set compile_env: 0

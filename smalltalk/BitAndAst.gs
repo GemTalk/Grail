@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from BitAndAst
-removeAllMethods BitAndAst
-removeAllClassMethods BitAndAst
+expectvalue /Metaclass3
+doit
+BitAndAst removeAllMethods.
+BitAndAst class removeAllMethods.
+%
 ! ------------------- Class methods for BitAndAst
 ! ------------------- Instance methods for BitAndAst
 set compile_env: 0

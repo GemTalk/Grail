@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from SyntaxErrorTest
-removeAllMethods SyntaxErrorTest
-removeAllClassMethods SyntaxErrorTest
+expectvalue /Metaclass3
+doit
+SyntaxErrorTest removeAllMethods.
+SyntaxErrorTest class removeAllMethods.
+%
 ! ------------------- Class methods for SyntaxErrorTest
 ! ------------------- Instance methods for SyntaxErrorTest
 set compile_env: 0

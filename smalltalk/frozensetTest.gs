@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from frozensetTest
-removeAllMethods frozensetTest
-removeAllClassMethods frozensetTest
+expectvalue /Metaclass3
+doit
+frozensetTest removeAllMethods.
+frozensetTest class removeAllMethods.
+%
 ! ------------------- Class methods for frozensetTest
 ! ------------------- Instance methods for frozensetTest
 set compile_env: 0

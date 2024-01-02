@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from ReturnAst
-removeAllMethods ReturnAst
-removeAllClassMethods ReturnAst
+expectvalue /Metaclass3
+doit
+ReturnAst removeAllMethods.
+ReturnAst class removeAllMethods.
+%
 ! ------------------- Class methods for ReturnAst
 ! ------------------- Instance methods for ReturnAst
 set compile_env: 0

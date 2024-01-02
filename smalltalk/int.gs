@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from int
-removeAllMethods int
-removeAllClassMethods int
+expectvalue /Metaclass3
+doit
+int removeAllMethods.
+int class removeAllMethods.
+%
 ! ------------------- Class methods for int
 set compile_env: 0
 category: 'Python'

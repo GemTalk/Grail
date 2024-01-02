@@ -1,5 +1,8 @@
 ﻿! ------------------- Remove existing behavior from PermissionError
-removeAllMethods PermissionError
-removeAllClassMethods PermissionError
+expectvalue /Metaclass3
+doit
+PermissionError removeAllMethods.
+PermissionError class removeAllMethods.
+%
 ! ------------------- Class methods for PermissionError
 ! ------------------- Instance methods for PermissionError

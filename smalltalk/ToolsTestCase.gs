@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from ToolsTestCase
-removeAllMethods ToolsTestCase
-removeAllClassMethods ToolsTestCase
+expectvalue /Metaclass3
+doit
+ToolsTestCase removeAllMethods.
+ToolsTestCase class removeAllMethods.
+%
 ! ------------------- Class methods for ToolsTestCase
 set compile_env: 0
 category: 'other'

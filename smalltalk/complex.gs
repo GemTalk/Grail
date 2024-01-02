@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from complex
-removeAllMethods complex
-removeAllClassMethods complex
+expectvalue /Metaclass3
+doit
+complex removeAllMethods.
+complex class removeAllMethods.
+%
 ! ------------------- Class methods for complex
 set compile_env: 0
 category: 'other'

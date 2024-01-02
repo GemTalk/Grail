@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from FormattedValueAst
-removeAllMethods FormattedValueAst
-removeAllClassMethods FormattedValueAst
+expectvalue /Metaclass3
+doit
+FormattedValueAst removeAllMethods.
+FormattedValueAst class removeAllMethods.
+%
 ! ------------------- Class methods for FormattedValueAst
 ! ------------------- Instance methods for FormattedValueAst
 set compile_env: 0

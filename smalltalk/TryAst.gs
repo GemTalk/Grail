@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from TryAst
-removeAllMethods TryAst
-removeAllClassMethods TryAst
+expectvalue /Metaclass3
+doit
+TryAst removeAllMethods.
+TryAst class removeAllMethods.
+%
 ! ------------------- Class methods for TryAst
 ! ------------------- Instance methods for TryAst
 set compile_env: 0

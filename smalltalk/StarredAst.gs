@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from StarredAst
-removeAllMethods StarredAst
-removeAllClassMethods StarredAst
+expectvalue /Metaclass3
+doit
+StarredAst removeAllMethods.
+StarredAst class removeAllMethods.
+%
 ! ------------------- Class methods for StarredAst
 ! ------------------- Instance methods for StarredAst
 set compile_env: 0

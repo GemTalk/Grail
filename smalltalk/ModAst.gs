@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from ModAst
-removeAllMethods ModAst
-removeAllClassMethods ModAst
+expectvalue /Metaclass3
+doit
+ModAst removeAllMethods.
+ModAst class removeAllMethods.
+%
 ! ------------------- Class methods for ModAst
 ! ------------------- Instance methods for ModAst
 set compile_env: 0

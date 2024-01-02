@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from StringLiteralsTestCase
-removeAllMethods StringLiteralsTestCase
-removeAllClassMethods StringLiteralsTestCase
+expectvalue /Metaclass3
+doit
+StringLiteralsTestCase removeAllMethods.
+StringLiteralsTestCase class removeAllMethods.
+%
 ! ------------------- Class methods for StringLiteralsTestCase
 set compile_env: 0
 category: 'other'

@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from DeleteAst
-removeAllMethods DeleteAst
-removeAllClassMethods DeleteAst
+expectvalue /Metaclass3
+doit
+DeleteAst removeAllMethods.
+DeleteAst class removeAllMethods.
+%
 ! ------------------- Class methods for DeleteAst
 ! ------------------- Instance methods for DeleteAst
 set compile_env: 0

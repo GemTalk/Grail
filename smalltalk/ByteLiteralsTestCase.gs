@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from ByteLiteralsTestCase
-removeAllMethods ByteLiteralsTestCase
-removeAllClassMethods ByteLiteralsTestCase
+expectvalue /Metaclass3
+doit
+ByteLiteralsTestCase removeAllMethods.
+ByteLiteralsTestCase class removeAllMethods.
+%
 ! ------------------- Class methods for ByteLiteralsTestCase
 set compile_env: 0
 category: 'other'

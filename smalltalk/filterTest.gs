@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from filterTest
-removeAllMethods filterTest
-removeAllClassMethods filterTest
+expectvalue /Metaclass3
+doit
+filterTest removeAllMethods.
+filterTest class removeAllMethods.
+%
 ! ------------------- Class methods for filterTest
 ! ------------------- Instance methods for filterTest
 set compile_env: 0

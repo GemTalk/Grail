@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from SetCompAst
-removeAllMethods SetCompAst
-removeAllClassMethods SetCompAst
+expectvalue /Metaclass3
+doit
+SetCompAst removeAllMethods.
+SetCompAst class removeAllMethods.
+%
 ! ------------------- Class methods for SetCompAst
 ! ------------------- Instance methods for SetCompAst
 set compile_env: 0

@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from ExceptHandlerAst
-removeAllMethods ExceptHandlerAst
-removeAllClassMethods ExceptHandlerAst
+expectvalue /Metaclass3
+doit
+ExceptHandlerAst removeAllMethods.
+ExceptHandlerAst class removeAllMethods.
+%
 ! ------------------- Class methods for ExceptHandlerAst
 ! ------------------- Instance methods for ExceptHandlerAst
 set compile_env: 0

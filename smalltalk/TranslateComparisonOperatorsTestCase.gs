@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from TranslateComparisonOperatorsTestCase
-removeAllMethods TranslateComparisonOperatorsTestCase
-removeAllClassMethods TranslateComparisonOperatorsTestCase
+expectvalue /Metaclass3
+doit
+TranslateComparisonOperatorsTestCase removeAllMethods.
+TranslateComparisonOperatorsTestCase class removeAllMethods.
+%
 ! ------------------- Class methods for TranslateComparisonOperatorsTestCase
 set compile_env: 0
 category: 'other'

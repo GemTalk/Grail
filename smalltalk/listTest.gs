@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from listTest
-removeAllMethods listTest
-removeAllClassMethods listTest
+expectvalue /Metaclass3
+doit
+listTest removeAllMethods.
+listTest class removeAllMethods.
+%
 ! ------------------- Class methods for listTest
 ! ------------------- Instance methods for listTest
 set compile_env: 0

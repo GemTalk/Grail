@@ -1,5 +1,8 @@
 ﻿! ------------------- Remove existing behavior from MatMultAst
-removeAllMethods MatMultAst
-removeAllClassMethods MatMultAst
+expectvalue /Metaclass3
+doit
+MatMultAst removeAllMethods.
+MatMultAst class removeAllMethods.
+%
 ! ------------------- Class methods for MatMultAst
 ! ------------------- Instance methods for MatMultAst

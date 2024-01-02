@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from dictTest
-removeAllMethods dictTest
-removeAllClassMethods dictTest
+expectvalue /Metaclass3
+doit
+dictTest removeAllMethods.
+dictTest class removeAllMethods.
+%
 ! ------------------- Class methods for dictTest
 ! ------------------- Instance methods for dictTest
 set compile_env: 0

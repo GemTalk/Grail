@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from DelimitersTestCase
-removeAllMethods DelimitersTestCase
-removeAllClassMethods DelimitersTestCase
+expectvalue /Metaclass3
+doit
+DelimitersTestCase removeAllMethods.
+DelimitersTestCase class removeAllMethods.
+%
 ! ------------------- Class methods for DelimitersTestCase
 set compile_env: 0
 category: 'other'

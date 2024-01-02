@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from OSErrorTest
-removeAllMethods OSErrorTest
-removeAllClassMethods OSErrorTest
+expectvalue /Metaclass3
+doit
+OSErrorTest removeAllMethods.
+OSErrorTest class removeAllMethods.
+%
 ! ------------------- Class methods for OSErrorTest
 ! ------------------- Instance methods for OSErrorTest
 set compile_env: 0

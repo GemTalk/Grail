@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from superTest
-removeAllMethods superTest
-removeAllClassMethods superTest
+expectvalue /Metaclass3
+doit
+superTest removeAllMethods.
+superTest class removeAllMethods.
+%
 ! ------------------- Class methods for superTest
 ! ------------------- Instance methods for superTest
 set compile_env: 0

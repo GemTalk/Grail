@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from BaseExceptionTest
-removeAllMethods BaseExceptionTest
-removeAllClassMethods BaseExceptionTest
+expectvalue /Metaclass3
+doit
+BaseExceptionTest removeAllMethods.
+BaseExceptionTest class removeAllMethods.
+%
 ! ------------------- Class methods for BaseExceptionTest
 ! ------------------- Instance methods for BaseExceptionTest
 set compile_env: 0

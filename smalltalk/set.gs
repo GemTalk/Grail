@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from set
-removeAllMethods set
-removeAllClassMethods set
+expectvalue /Metaclass3
+doit
+set removeAllMethods.
+set class removeAllMethods.
+%
 ! ------------------- Class methods for set
 set compile_env: 0
 category: 'Smalltalk'

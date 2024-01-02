@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from boolTest
-removeAllMethods boolTest
-removeAllClassMethods boolTest
+expectvalue /Metaclass3
+doit
+boolTest removeAllMethods.
+boolTest class removeAllMethods.
+%
 ! ------------------- Class methods for boolTest
 ! ------------------- Instance methods for boolTest
 set compile_env: 0

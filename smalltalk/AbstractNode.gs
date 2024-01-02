@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from AbstractNode
-removeAllMethods AbstractNode
-removeAllClassMethods AbstractNode
+expectvalue /Metaclass3
+doit
+AbstractNode removeAllMethods.
+AbstractNode class removeAllMethods.
+%
 ! ------------------- Class methods for AbstractNode
 set compile_env: 0
 category: 'other'

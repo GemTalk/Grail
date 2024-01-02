@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from IndexAst
-removeAllMethods IndexAst
-removeAllClassMethods IndexAst
+expectvalue /Metaclass3
+doit
+IndexAst removeAllMethods.
+IndexAst class removeAllMethods.
+%
 ! ------------------- Class methods for IndexAst
 ! ------------------- Instance methods for IndexAst
 set compile_env: 0

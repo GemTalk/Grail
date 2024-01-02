@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from TranslateStatementsTestCase
-removeAllMethods TranslateStatementsTestCase
-removeAllClassMethods TranslateStatementsTestCase
+expectvalue /Metaclass3
+doit
+TranslateStatementsTestCase removeAllMethods.
+TranslateStatementsTestCase class removeAllMethods.
+%
 ! ------------------- Class methods for TranslateStatementsTestCase
 set compile_env: 0
 category: 'other'

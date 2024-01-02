@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from str
-removeAllMethods str
-removeAllClassMethods str
+expectvalue /Metaclass3
+doit
+str removeAllMethods.
+str class removeAllMethods.
+%
 ! ------------------- Class methods for str
 set compile_env: 0
 category: 'other'

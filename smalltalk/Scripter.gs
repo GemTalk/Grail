@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from Scripter
-removeAllMethods Scripter
-removeAllClassMethods Scripter
+expectvalue /Metaclass3
+doit
+Scripter removeAllMethods.
+Scripter class removeAllMethods.
+%
 ! ------------------- Class methods for Scripter
 set compile_env: 0
 category: 'scripting'

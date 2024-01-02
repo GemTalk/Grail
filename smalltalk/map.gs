@@ -1,5 +1,8 @@
 ﻿! ------------------- Remove existing behavior from map
-removeAllMethods map
-removeAllClassMethods map
+expectvalue /Metaclass3
+doit
+map removeAllMethods.
+map class removeAllMethods.
+%
 ! ------------------- Class methods for map
 ! ------------------- Instance methods for map

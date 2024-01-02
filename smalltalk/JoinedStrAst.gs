@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from JoinedStrAst
-removeAllMethods JoinedStrAst
-removeAllClassMethods JoinedStrAst
+expectvalue /Metaclass3
+doit
+JoinedStrAst removeAllMethods.
+JoinedStrAst class removeAllMethods.
+%
 ! ------------------- Class methods for JoinedStrAst
 ! ------------------- Instance methods for JoinedStrAst
 set compile_env: 0

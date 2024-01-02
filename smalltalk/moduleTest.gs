@@ -1,5 +1,8 @@
 ﻿! ------------------- Remove existing behavior from moduleTest
-removeAllMethods moduleTest
-removeAllClassMethods moduleTest
+expectvalue /Metaclass3
+doit
+moduleTest removeAllMethods.
+moduleTest class removeAllMethods.
+%
 ! ------------------- Class methods for moduleTest
 ! ------------------- Instance methods for moduleTest

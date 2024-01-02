@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from ListCompAst
-removeAllMethods ListCompAst
-removeAllClassMethods ListCompAst
+expectvalue /Metaclass3
+doit
+ListCompAst removeAllMethods.
+ListCompAst class removeAllMethods.
+%
 ! ------------------- Class methods for ListCompAst
 ! ------------------- Instance methods for ListCompAst
 set compile_env: 0

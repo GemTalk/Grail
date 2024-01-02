@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from DivAst
-removeAllMethods DivAst
-removeAllClassMethods DivAst
+expectvalue /Metaclass3
+doit
+DivAst removeAllMethods.
+DivAst class removeAllMethods.
+%
 ! ------------------- Class methods for DivAst
 ! ------------------- Instance methods for DivAst
 set compile_env: 0

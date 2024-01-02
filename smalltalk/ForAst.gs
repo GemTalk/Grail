@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from ForAst
-removeAllMethods ForAst
-removeAllClassMethods ForAst
+expectvalue /Metaclass3
+doit
+ForAst removeAllMethods.
+ForAst class removeAllMethods.
+%
 ! ------------------- Class methods for ForAst
 ! ------------------- Instance methods for ForAst
 set compile_env: 0

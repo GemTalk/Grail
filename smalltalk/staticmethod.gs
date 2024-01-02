@@ -1,5 +1,8 @@
 ﻿! ------------------- Remove existing behavior from staticmethod
-removeAllMethods staticmethod
-removeAllClassMethods staticmethod
+expectvalue /Metaclass3
+doit
+staticmethod removeAllMethods.
+staticmethod class removeAllMethods.
+%
 ! ------------------- Class methods for staticmethod
 ! ------------------- Instance methods for staticmethod

@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from AsyncFunctionDefAst
-removeAllMethods AsyncFunctionDefAst
-removeAllClassMethods AsyncFunctionDefAst
+expectvalue /Metaclass3
+doit
+AsyncFunctionDefAst removeAllMethods.
+AsyncFunctionDefAst class removeAllMethods.
+%
 ! ------------------- Class methods for AsyncFunctionDefAst
 ! ------------------- Instance methods for AsyncFunctionDefAst
 set compile_env: 0

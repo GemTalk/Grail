@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from bytes
-removeAllMethods bytes
-removeAllClassMethods bytes
+expectvalue /Metaclass3
+doit
+bytes removeAllMethods.
+bytes class removeAllMethods.
+%
 ! ------------------- Class methods for bytes
 set compile_env: 0
 category: 'Python'

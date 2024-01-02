@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from Package
-removeAllMethods Package
-removeAllClassMethods Package
+expectvalue /Metaclass3
+doit
+Package removeAllMethods.
+Package class removeAllMethods.
+%
 ! ------------------- Class methods for Package
 ! ------------------- Instance methods for Package
 set compile_env: 0

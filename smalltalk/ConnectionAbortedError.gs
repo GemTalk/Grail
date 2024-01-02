@@ -1,5 +1,8 @@
 ﻿! ------------------- Remove existing behavior from ConnectionAbortedError
-removeAllMethods ConnectionAbortedError
-removeAllClassMethods ConnectionAbortedError
+expectvalue /Metaclass3
+doit
+ConnectionAbortedError removeAllMethods.
+ConnectionAbortedError class removeAllMethods.
+%
 ! ------------------- Class methods for ConnectionAbortedError
 ! ------------------- Instance methods for ConnectionAbortedError

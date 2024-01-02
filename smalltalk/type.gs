@@ -1,5 +1,8 @@
 ﻿! ------------------- Remove existing behavior from type
-removeAllMethods type
-removeAllClassMethods type
+expectvalue /Metaclass3
+doit
+type removeAllMethods.
+type class removeAllMethods.
+%
 ! ------------------- Class methods for type
 ! ------------------- Instance methods for type

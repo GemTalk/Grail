@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from objectTest
-removeAllMethods objectTest
-removeAllClassMethods objectTest
+expectvalue /Metaclass3
+doit
+objectTest removeAllMethods.
+objectTest class removeAllMethods.
+%
 ! ------------------- Class methods for objectTest
 ! ------------------- Instance methods for objectTest
 set compile_env: 0

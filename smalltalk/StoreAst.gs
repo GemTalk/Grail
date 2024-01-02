@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from StoreAst
-removeAllMethods StoreAst
-removeAllClassMethods StoreAst
+expectvalue /Metaclass3
+doit
+StoreAst removeAllMethods.
+StoreAst class removeAllMethods.
+%
 ! ------------------- Class methods for StoreAst
 ! ------------------- Instance methods for StoreAst
 set compile_env: 0

@@ -1,5 +1,8 @@
 ﻿! ------------------- Remove existing behavior from StopAsyncIteration
-removeAllMethods StopAsyncIteration
-removeAllClassMethods StopAsyncIteration
+expectvalue /Metaclass3
+doit
+StopAsyncIteration removeAllMethods.
+StopAsyncIteration class removeAllMethods.
+%
 ! ------------------- Class methods for StopAsyncIteration
 ! ------------------- Instance methods for StopAsyncIteration

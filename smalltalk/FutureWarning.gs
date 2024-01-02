@@ -1,5 +1,8 @@
 ﻿! ------------------- Remove existing behavior from FutureWarning
-removeAllMethods FutureWarning
-removeAllClassMethods FutureWarning
+expectvalue /Metaclass3
+doit
+FutureWarning removeAllMethods.
+FutureWarning class removeAllMethods.
+%
 ! ------------------- Class methods for FutureWarning
 ! ------------------- Instance methods for FutureWarning

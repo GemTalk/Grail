@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from LambdaAst
-removeAllMethods LambdaAst
-removeAllClassMethods LambdaAst
+expectvalue /Metaclass3
+doit
+LambdaAst removeAllMethods.
+LambdaAst class removeAllMethods.
+%
 ! ------------------- Class methods for LambdaAst
 ! ------------------- Instance methods for LambdaAst
 set compile_env: 0

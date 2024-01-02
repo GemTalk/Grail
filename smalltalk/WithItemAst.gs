@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from WithItemAst
-removeAllMethods WithItemAst
-removeAllClassMethods WithItemAst
+expectvalue /Metaclass3
+doit
+WithItemAst removeAllMethods.
+WithItemAst class removeAllMethods.
+%
 ! ------------------- Class methods for WithItemAst
 ! ------------------- Instance methods for WithItemAst
 set compile_env: 0

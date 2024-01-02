@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from Variables
-removeAllMethods Variables
-removeAllClassMethods Variables
+expectvalue /Metaclass3
+doit
+Variables removeAllMethods.
+Variables class removeAllMethods.
+%
 ! ------------------- Class methods for Variables
 set compile_env: 0
 category: 'other'

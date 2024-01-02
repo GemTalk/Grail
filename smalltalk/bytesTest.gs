@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from bytesTest
-removeAllMethods bytesTest
-removeAllClassMethods bytesTest
+expectvalue /Metaclass3
+doit
+bytesTest removeAllMethods.
+bytesTest class removeAllMethods.
+%
 ! ------------------- Class methods for bytesTest
 ! ------------------- Instance methods for bytesTest
 set compile_env: 0

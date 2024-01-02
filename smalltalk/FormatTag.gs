@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from FormatTag
-removeAllMethods FormatTag
-removeAllClassMethods FormatTag
+expectvalue /Metaclass3
+doit
+FormatTag removeAllMethods.
+FormatTag class removeAllMethods.
+%
 ! ------------------- Class methods for FormatTag
 ! ------------------- Instance methods for FormatTag
 set compile_env: 0

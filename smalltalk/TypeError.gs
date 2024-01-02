@@ -1,5 +1,8 @@
 ﻿! ------------------- Remove existing behavior from TypeError
-removeAllMethods TypeError
-removeAllClassMethods TypeError
+expectvalue /Metaclass3
+doit
+TypeError removeAllMethods.
+TypeError class removeAllMethods.
+%
 ! ------------------- Class methods for TypeError
 ! ------------------- Instance methods for TypeError

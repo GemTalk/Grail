@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from strTest
-removeAllMethods strTest
-removeAllClassMethods strTest
+expectvalue /Metaclass3
+doit
+strTest removeAllMethods.
+strTest class removeAllMethods.
+%
 ! ------------------- Class methods for strTest
 ! ------------------- Instance methods for strTest
 set compile_env: 0

@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from SliceAst
-removeAllMethods SliceAst
-removeAllClassMethods SliceAst
+expectvalue /Metaclass3
+doit
+SliceAst removeAllMethods.
+SliceAst class removeAllMethods.
+%
 ! ------------------- Class methods for SliceAst
 ! ------------------- Instance methods for SliceAst
 set compile_env: 0

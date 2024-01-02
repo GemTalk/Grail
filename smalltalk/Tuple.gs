@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from tuple
-removeAllMethods tuple
-removeAllClassMethods tuple
+expectvalue /Metaclass3
+doit
+tuple removeAllMethods.
+tuple class removeAllMethods.
+%
 ! ------------------- Class methods for tuple
 set compile_env: 0
 category: 'Smalltalk'

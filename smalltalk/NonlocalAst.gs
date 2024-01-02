@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from NonlocalAst
-removeAllMethods NonlocalAst
-removeAllClassMethods NonlocalAst
+expectvalue /Metaclass3
+doit
+NonlocalAst removeAllMethods.
+NonlocalAst class removeAllMethods.
+%
 ! ------------------- Class methods for NonlocalAst
 ! ------------------- Instance methods for NonlocalAst
 set compile_env: 0

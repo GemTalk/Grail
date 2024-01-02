@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from frozenset
-removeAllMethods frozenset
-removeAllClassMethods frozenset
+expectvalue /Metaclass3
+doit
+frozenset removeAllMethods.
+frozenset class removeAllMethods.
+%
 ! ------------------- Class methods for frozenset
 set compile_env: 0
 category: 'Smalltalk'

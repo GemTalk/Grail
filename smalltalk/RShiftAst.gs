@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from RShiftAst
-removeAllMethods RShiftAst
-removeAllClassMethods RShiftAst
+expectvalue /Metaclass3
+doit
+RShiftAst removeAllMethods.
+RShiftAst class removeAllMethods.
+%
 ! ------------------- Class methods for RShiftAst
 ! ------------------- Instance methods for RShiftAst
 set compile_env: 0

@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from CompareAst
-removeAllMethods CompareAst
-removeAllClassMethods CompareAst
+expectvalue /Metaclass3
+doit
+CompareAst removeAllMethods.
+CompareAst class removeAllMethods.
+%
 ! ------------------- Class methods for CompareAst
 ! ------------------- Instance methods for CompareAst
 set compile_env: 0

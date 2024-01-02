@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from SimpleStatementsTestCase
-removeAllMethods SimpleStatementsTestCase
-removeAllClassMethods SimpleStatementsTestCase
+expectvalue /Metaclass3
+doit
+SimpleStatementsTestCase removeAllMethods.
+SimpleStatementsTestCase class removeAllMethods.
+%
 ! ------------------- Class methods for SimpleStatementsTestCase
 set compile_env: 0
 category: 'other'

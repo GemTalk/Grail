@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from AndAst
-removeAllMethods AndAst
-removeAllClassMethods AndAst
+expectvalue /Metaclass3
+doit
+AndAst removeAllMethods.
+AndAst class removeAllMethods.
+%
 ! ------------------- Class methods for AndAst
 ! ------------------- Instance methods for AndAst
 set compile_env: 0

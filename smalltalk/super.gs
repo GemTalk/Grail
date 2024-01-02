@@ -1,5 +1,8 @@
 ﻿! ------------------- Remove existing behavior from super
-removeAllMethods super
-removeAllClassMethods super
+expectvalue /Metaclass3
+doit
+super removeAllMethods.
+super class removeAllMethods.
+%
 ! ------------------- Class methods for super
 ! ------------------- Instance methods for super

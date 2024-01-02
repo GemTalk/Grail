@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from GeneratorExpAst
-removeAllMethods GeneratorExpAst
-removeAllClassMethods GeneratorExpAst
+expectvalue /Metaclass3
+doit
+GeneratorExpAst removeAllMethods.
+GeneratorExpAst class removeAllMethods.
+%
 ! ------------------- Class methods for GeneratorExpAst
 ! ------------------- Instance methods for GeneratorExpAst
 set compile_env: 0

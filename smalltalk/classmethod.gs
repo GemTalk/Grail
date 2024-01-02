@@ -1,5 +1,8 @@
 ﻿! ------------------- Remove existing behavior from classmethod
-removeAllMethods classmethod
-removeAllClassMethods classmethod
+expectvalue /Metaclass3
+doit
+classmethod removeAllMethods.
+classmethod class removeAllMethods.
+%
 ! ------------------- Class methods for classmethod
 ! ------------------- Instance methods for classmethod

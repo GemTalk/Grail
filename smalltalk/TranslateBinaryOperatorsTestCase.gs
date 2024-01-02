@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from TranslateBinaryOperatorsTestCase
-removeAllMethods TranslateBinaryOperatorsTestCase
-removeAllClassMethods TranslateBinaryOperatorsTestCase
+expectvalue /Metaclass3
+doit
+TranslateBinaryOperatorsTestCase removeAllMethods.
+TranslateBinaryOperatorsTestCase class removeAllMethods.
+%
 ! ------------------- Class methods for TranslateBinaryOperatorsTestCase
 set compile_env: 0
 category: 'other'

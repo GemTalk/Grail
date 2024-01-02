@@ -1,5 +1,8 @@
 ﻿! ------------------- Remove existing behavior from BrokenPipeError
-removeAllMethods BrokenPipeError
-removeAllClassMethods BrokenPipeError
+expectvalue /Metaclass3
+doit
+BrokenPipeError removeAllMethods.
+BrokenPipeError class removeAllMethods.
+%
 ! ------------------- Class methods for BrokenPipeError
 ! ------------------- Instance methods for BrokenPipeError

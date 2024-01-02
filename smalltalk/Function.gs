@@ -1,5 +1,8 @@
 ﻿! ------------------- Remove existing behavior from function
-removeAllMethods function
-removeAllClassMethods function
+expectvalue /Metaclass3
+doit
+function removeAllMethods.
+function class removeAllMethods.
+%
 ! ------------------- Class methods for function
 ! ------------------- Instance methods for function

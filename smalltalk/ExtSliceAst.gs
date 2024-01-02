@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from ExtSliceAst
-removeAllMethods ExtSliceAst
-removeAllClassMethods ExtSliceAst
+expectvalue /Metaclass3
+doit
+ExtSliceAst removeAllMethods.
+ExtSliceAst class removeAllMethods.
+%
 ! ------------------- Class methods for ExtSliceAst
 ! ------------------- Instance methods for ExtSliceAst
 set compile_env: 0

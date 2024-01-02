@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from AliasAst
-removeAllMethods AliasAst
-removeAllClassMethods AliasAst
+expectvalue /Metaclass3
+doit
+AliasAst removeAllMethods.
+AliasAst class removeAllMethods.
+%
 ! ------------------- Class methods for AliasAst
 ! ------------------- Instance methods for AliasAst
 set compile_env: 0

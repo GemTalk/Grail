@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from staticmethodTest
-removeAllMethods staticmethodTest
-removeAllClassMethods staticmethodTest
+expectvalue /Metaclass3
+doit
+staticmethodTest removeAllMethods.
+staticmethodTest class removeAllMethods.
+%
 ! ------------------- Class methods for staticmethodTest
 ! ------------------- Instance methods for staticmethodTest
 set compile_env: 0

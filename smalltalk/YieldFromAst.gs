@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from YieldFromAst
-removeAllMethods YieldFromAst
-removeAllClassMethods YieldFromAst
+expectvalue /Metaclass3
+doit
+YieldFromAst removeAllMethods.
+YieldFromAst class removeAllMethods.
+%
 ! ------------------- Class methods for YieldFromAst
 ! ------------------- Instance methods for YieldFromAst
 set compile_env: 0

@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from range
-removeAllMethods range
-removeAllClassMethods range
+expectvalue /Metaclass3
+doit
+range removeAllMethods.
+range class removeAllMethods.
+%
 ! ------------------- Class methods for range
 set compile_env: 0
 category: 'Python'

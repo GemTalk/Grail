@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from Base_Class_Test
-removeAllMethods Base_Class_Test
-removeAllClassMethods Base_Class_Test
+expectvalue /Metaclass3
+doit
+Base_Class_Test removeAllMethods.
+Base_Class_Test class removeAllMethods.
+%
 ! ------------------- Class methods for Base_Class_Test
 set compile_env: 0
 category: 'testing'

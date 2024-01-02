@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from OperatorsTestCase
-removeAllMethods OperatorsTestCase
-removeAllClassMethods OperatorsTestCase
+expectvalue /Metaclass3
+doit
+OperatorsTestCase removeAllMethods.
+OperatorsTestCase class removeAllMethods.
+%
 ! ------------------- Class methods for OperatorsTestCase
 set compile_env: 0
 category: 'other'

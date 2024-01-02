@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from complexTest
-removeAllMethods complexTest
-removeAllClassMethods complexTest
+expectvalue /Metaclass3
+doit
+complexTest removeAllMethods.
+complexTest class removeAllMethods.
+%
 ! ------------------- Class methods for complexTest
 ! ------------------- Instance methods for complexTest
 set compile_env: 0

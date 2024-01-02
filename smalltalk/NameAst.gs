@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from NameAst
-removeAllMethods NameAst
-removeAllClassMethods NameAst
+expectvalue /Metaclass3
+doit
+NameAst removeAllMethods.
+NameAst class removeAllMethods.
+%
 ! ------------------- Class methods for NameAst
 set compile_env: 0
 category: 'other'

@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from AttributeAst
-removeAllMethods AttributeAst
-removeAllClassMethods AttributeAst
+expectvalue /Metaclass3
+doit
+AttributeAst removeAllMethods.
+AttributeAst class removeAllMethods.
+%
 ! ------------------- Class methods for AttributeAst
 ! ------------------- Instance methods for AttributeAst
 set compile_env: 0

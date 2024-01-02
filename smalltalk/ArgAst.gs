@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from ArgAst
-removeAllMethods ArgAst
-removeAllClassMethods ArgAst
+expectvalue /Metaclass3
+doit
+ArgAst removeAllMethods.
+ArgAst class removeAllMethods.
+%
 ! ------------------- Class methods for ArgAst
 ! ------------------- Instance methods for ArgAst
 set compile_env: 0

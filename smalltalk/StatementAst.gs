@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from StatementAst
-removeAllMethods StatementAst
-removeAllClassMethods StatementAst
+expectvalue /Metaclass3
+doit
+StatementAst removeAllMethods.
+StatementAst class removeAllMethods.
+%
 ! ------------------- Class methods for StatementAst
 set compile_env: 0
 category: 'other'

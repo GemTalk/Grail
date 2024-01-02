@@ -1,6 +1,9 @@
 ﻿! ------------------- Remove existing behavior from PrettyWriteStream
-removeAllMethods PrettyWriteStream
-removeAllClassMethods PrettyWriteStream
+expectvalue /Metaclass3
+doit
+PrettyWriteStream removeAllMethods.
+PrettyWriteStream class removeAllMethods.
+%
 ! ------------------- Class methods for PrettyWriteStream
 ! ------------------- Instance methods for PrettyWriteStream
 set compile_env: 0
