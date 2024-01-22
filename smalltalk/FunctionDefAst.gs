@@ -61,7 +61,7 @@ method: FunctionDefAst
 printArgList: anArray on: aStream
 	
 	aStream nextPutAll: '{ '.
-	anArray do: [ :arg |
+	anArray do: [:arg |
 		aStream
 			nextPut: $#;
 			nextPutAll: arg name;
@@ -75,7 +75,7 @@ method: FunctionDefAst
 printDefaultsList: anArray on: aStream
 	
 	aStream nextPutAll: '{ '.
-	anArray do: [ :arg |
+	anArray do: [:arg |
 		arg class == NoneType ifTrue: [
 			aStream nextPutAll: 'None. '.
 		] ifFalse: [
@@ -114,9 +114,9 @@ printSmalltalkOn: aStream
 	self printArgList: args kwonlyargs on: aStream.
 	aStream 
 		nextPutAll: '; vararg: #'; 
-		nextPutAll: ((args vararg class == NoneType) ifTrue: [ 'None' ] ifFalse: [ args vararg name ]);
+		nextPutAll: ((args vararg class == NoneType) ifTrue: ['None'] ifFalse: [args vararg name]);
 		nextPutAll: '; kwarg: #';
-		nextPutAll: ((args kwarg class == NoneType) ifTrue: [ 'None' ] ifFalse: [ args kwarg name ]);
+		nextPutAll: ((args kwarg class == NoneType) ifTrue: ['None'] ifFalse: [args kwarg name]);
 		nextPutAll: '; kw_defaults: ';
 		yourself.
 
@@ -125,7 +125,7 @@ printSmalltalkOn: aStream
 	self printDefaultsList: args defaults on: aStream.
 
 	aStream
-		nextPutAll: '; block: [ :currentScope |';
+		nextPutAll: '; block: [:currentScope |';
 		lf;
 		increaseIndent;
 		yourself.

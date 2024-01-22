@@ -73,7 +73,7 @@ test__len__
 category: 'done'
 method: rangeTest
 test__repr__
-	|currentScope|
+	| currentScope |
 	currentScope := Variables new.
 	self
 		assert: (((currentScope at:#range) scope: currentScope positional: { int ___value: -2.} named: {})) __repr__ equals: (str ___value: 'range(-2)');

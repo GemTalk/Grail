@@ -17,7 +17,7 @@ set compile_env: 0
 category: 'other'
 method: ToolsTestCase
 testBuiltinsSingleton
-	|g1 g2|
+	| g1 g2|
 
 	g1 := PyGlobals new.
 	g2 := PyGlobals new.
@@ -59,7 +59,7 @@ testFunctionDefScopePositionalNamed
 						defaults: { int ___value: 2 };
 						yourself.
 
-	function block: [ :currentScope |
+	function block: [:currentScope |
 		self 
 			assert: (currentScope at: #a) equals: (int ___value: 1);
 			assert: (currentScope at: #b) equals: (int ___value: 2);
@@ -88,7 +88,7 @@ category: 'other'
 method: ToolsTestCase
 testSetAsGlobals
 
-	|currScope localScope|
+	| currScope localScope |
 	currScope := PyGlobals new.
 	localScope := currScope createChildScope.
 	localScope setAsGlobals: #(x).
@@ -100,14 +100,14 @@ testSetAsGlobals
 	currScope := PyGlobals new.
 	localScope := currScope createChildScope.
 	localScope at: #x put: 1.
-	[localScope setAsGlobals: #(x)] on: SyntaxError do:[^self].
+	[localScope setAsGlobals: #(x)] on: SyntaxError do: [^self].
 	self assert: false.
 %
 category: 'other'
 method: ToolsTestCase
 testSetAsNonlocals
 
-	|currScope localScope nonlocalScope|
+	| currScope localScope nonlocalScope |
 	currScope := PyGlobals new.
 	localScope := currScope createChildScope.
 	nonlocalScope := localScope createChildScope.
@@ -126,7 +126,7 @@ testSetAsNonlocals
 	currScope at: #x put: 1.
 	localScope at: #x put: 1.
 	nonlocalScope at: #x put: 2.
-	[nonlocalScope setAsNonlocals: #(x).] on: SyntaxError do:[^self].
+	[nonlocalScope setAsNonlocals: #(x).] on: SyntaxError do: [^self].
 	self assert: false.
 %
 category: 'other'

@@ -34,7 +34,7 @@ method: TupleAst
 printSmalltalkOn: aStream
 
 	aStream nextPutAll: 'tuple ___value: { '.
-	elts do: [ :elt |
+	elts do: [:elt |
 		self smalltalkSourceFor: elt parenthesisIf: 1 on: aStream.
 		aStream nextPutAll: '. '.
 	].

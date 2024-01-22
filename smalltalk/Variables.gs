@@ -29,11 +29,11 @@ associationAt: aKey
 
 | assoc |
 assoc := dict associationAt: aKey otherwise: nil .
-assoc == nil ifTrue:[ 
+assoc == nil ifTrue: [
 	dict at: aKey put: nil.
 	assoc := dict associationAt: aKey.
 ].
-^ assoc
+^assoc
 %
 category: 'other'
 method: Variables
@@ -41,7 +41,7 @@ at: aKey
 
 	"Checks for a local variable read before write error and then checks the current scope
 	and all previous scopes for the variable in questions."
-	(self isGlobals) ifFalse:[
+	(self isGlobals) ifFalse: [
 		(helperSymbols includes: aKey)
 			ifTrue: [
 				UnboundLocalError signal: 'UnboundLocalError: local variable ''' , aKey asString , ''' referenced before assignment'.
@@ -56,13 +56,13 @@ at: aKey put: aValue
 
 | anAssoc |
 helperSymbols remove: aKey ifAbsent: [].
-(dict _validatePrivilegeOld: (dict at: aKey otherwise: nil) new: aValue) ifTrue:[
+(dict _validatePrivilegeOld: (dict at: aKey otherwise: nil) new: aValue) ifTrue: [
   anAssoc:= dict associationAt: aKey otherwise: nil .
-  anAssoc == nil ifTrue:[
+  anAssoc == nil ifTrue: [
        dict _at: aKey put:
        (SymbolAssociation newWithKey: aKey value: aValue).
        ^aValue
-  ].
+ ].
 
   anAssoc value: aValue.
   ^aValue
@@ -84,7 +84,7 @@ category: 'other'
 method: Variables
 dict
 
-^ dict
+^dict
 %
 category: 'other'
 method: Variables
@@ -92,15 +92,15 @@ find: aKey
 
 	"locates a variable in the current dictionary or if it isn't present searches its parent for it"
 
-	parent ifNil: [ ^dict at: aKey ifAbsent: [NameError signal: 'NameError: name ''' , aKey asString , ''' is not defined'.]].
-	^dict at: aKey ifAbsent: [ parent find: aKey]
+	parent ifNil: [^dict at: aKey ifAbsent: [NameError signal: 'NameError: name ''' , aKey asString , ''' is not defined'.]].
+	^dict at: aKey ifAbsent: [parent find: aKey]
 %
 category: 'other'
 method: Variables
 findNonlocal: aKey
 	"to do"
-	(self isGlobals) ifTrue: [ SyntaxError signal: 'SyntaxError: no binding for nonlocal ', aKey asString,' found'].
-	dict at: aKey ifAbsent: [ ^parent findNonlocal: aKey ].
+	(self isGlobals) ifTrue: [SyntaxError signal: 'SyntaxError: no binding for nonlocal ', aKey asString,' found'].
+	dict at: aKey ifAbsent: [^parent findNonlocal: aKey].
 	^self.
 %
 category: 'other'

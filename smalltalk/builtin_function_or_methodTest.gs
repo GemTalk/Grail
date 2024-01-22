@@ -123,7 +123,7 @@ testChr
 category: 'other'
 method: builtin_function_or_methodTest
 testDict
-   | containerHolder variables|
+   | containerHolder variables |
 	variables := Variables new.
 	
 	containerHolder := list ___value: {}.
@@ -199,7 +199,7 @@ category: 'other'
 method: builtin_function_or_methodTest
 testFrozenset
 
-	| frozensetHolder variables afrozenset|
+	| frozensetHolder variables afrozenset |
 	variables := Variables new.
 	afrozenset := frozenset ___value: { 'c'. 'b'. 'a'.}.
 	frozensetHolder := ((variables at:#frozenset) scope: variables
@@ -248,7 +248,7 @@ testInput
 	"This is a test designed to make the input test work. It should not be run with all the other tests
 	because it is not automatice. If you would like to run this test please uncomment the code below."
 
-	"| resultHolder variables|
+	"| resultHolder variables |
 	variables := Variables new.
 
 	
@@ -307,7 +307,7 @@ category: 'other'
 method: builtin_function_or_methodTest
 testLen
 
-	| listHolder variables alist|
+	| listHolder variables alist |
 	variables := Variables new.
 	alist := list ___value: { 'c'. 'b'. 'a' }.
 	listHolder := ((variables at:#len) scope: variables
@@ -324,7 +324,7 @@ testLen
 category: 'other'
 method: builtin_function_or_methodTest
 testList
-	| listHolder variables alist|
+	| listHolder variables alist |
 	variables := Variables new.
 	alist := list ___value: { 'c'. 'b'. 'a' }.
 	listHolder := ((variables at:#list) scope: variables
@@ -483,7 +483,7 @@ category: 'other'
 method: builtin_function_or_methodTest
 testPrint
 
-	| stream variables transcript|
+	| stream variables transcript |
 	variables := Variables new.
 	stream := WriteStream with: String new.
 	
@@ -525,25 +525,25 @@ testPrint
 
 	stream := WriteStream with: String new.
 	self 
-		should: [ 
+		should: [
 			(variables at:#print) scope: variables
 						  positional: { str ___value: 'a'. str ___value: 'b'. str ___value: 'c' }
 						  named: {#file -> stream. #end -> False}.
-		] raise: TypeError withExceptionDo: [ :ex | self assert: ex messageText equals: 'end must be a str, not bool' ].
+		] raise: TypeError withExceptionDo: [:ex | self assert: ex messageText equals: 'end must be a str, not bool'].
 
 	stream := WriteStream with: String new.
 	self 
-		should: [ 
+		should: [
 			(variables at:#print) scope: variables
 						  positional: { str ___value: 'a'. str ___value: 'b'. str ___value: 'c' }
 						  named: {#file -> stream. #sep -> False}.
-		] raise: TypeError withExceptionDo: [ :ex | self assert: ex messageText equals: 'sep must be a str, not bool' ].
+		] raise: TypeError withExceptionDo: [:ex | self assert: ex messageText equals: 'sep must be a str, not bool'].
 %
 category: 'other'
 method: builtin_function_or_methodTest
 testRange
 
-	| rangeHolder variables|
+	| rangeHolder variables |
 	variables := Variables new.
 	
 	rangeHolder := ((variables at:#range) scope: variables
@@ -643,7 +643,7 @@ category: 'other'
 method: builtin_function_or_methodTest
 testSet
 
-	| setHolder variables aset|
+	| setHolder variables aset |
 	variables := Variables new.
 	aset := set ___value: { 'c'. 'b'. 'a'.}.
 	setHolder := ((variables at:#set) scope: variables
@@ -689,7 +689,7 @@ testStr
 category: 'other'
 method: builtin_function_or_methodTest
 testSum
-	| listHolder variables alist|
+	| listHolder variables alist |
 	variables := Variables new.
 	alist := list ___value: { int ___value: 1. int ___value: 2. int ___value: 3 }.
 	listHolder := ((variables at:#sum) scope: variables
@@ -725,7 +725,7 @@ category: 'other'
 method: builtin_function_or_methodTest
 testType
 
-	| typeHolder variables|
+	| typeHolder variables |
 	variables := Variables new.
 	
 	typeHolder := ((variables at:#type) scope: variables

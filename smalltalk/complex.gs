@@ -345,7 +345,7 @@ category: 'Smalltalk'
 method: complex
 ___powReal: aFloatReal imag: aFloatImag
 	
-	|radius radians eulerTranslationExp originalExp combinationExp|
+	| radius radians eulerTranslationExp originalExp combinationExp |
 	
 
 	originalExp := complex ___real: aFloatReal imaginary: aFloatImag.
@@ -353,7 +353,7 @@ ___powReal: aFloatReal imag: aFloatImag
 	aFloatReal asFloat == 0.0
 		ifTrue: [
 			radians := (Float pi) / 2.
-			aFloatImag < 0 ifTrue: [ radians := radians + Float pi / 2 ].
+			aFloatImag < 0 ifTrue: [radians := radians + Float pi / 2].
 		] ifFalse: [
 			radians := ( aFloatImag / aFloatReal ) arcTan .
 		].
@@ -375,7 +375,7 @@ ___real: r imaginary: i
 category: 'Smalltalk'
 method: complex
 ___truedivFloat: aFloat
-	|numerator denominator|
+	| numerator denominator |
 
 	(real = 0) & (imaginary = 0) 
 		ifTrue: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero'].
@@ -387,7 +387,7 @@ ___truedivFloat: aFloat
 category: 'Smalltalk'
 method: complex
 ___truedivInt: anInteger
-	|numerator denominator|
+	| numerator denominator |
 
 	(real = 0) & (imaginary = 0) 
 		ifTrue: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero'].
@@ -399,7 +399,7 @@ ___truedivInt: anInteger
 category: 'Smalltalk'
 method: complex
 ___truedivReal: aFloatReal imag: aFloatImag
-	|numerator denominator|
+	| numerator denominator |
 	(real = 0) & (imaginary = 0) 
 		ifTrue: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero'].
 

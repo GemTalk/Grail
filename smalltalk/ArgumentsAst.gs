@@ -25,7 +25,7 @@ initialize
 "arguments(arg* posonlyargs, arg* args, arg? vararg, arg* kwonlyargs,
                  expr* kw_defaults, arg? kwarg, expr* defaults)"
 
-	| next stream|
+	| next stream |
 	stream := self stream.
 	next := stream next: 10.
 	next ~= 'arguments(' ifTrue: [self error].

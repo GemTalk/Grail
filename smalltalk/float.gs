@@ -36,7 +36,7 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 	"
 	"There is definitely a way to make this more efficient. If you would like to make this
 	more efficient go ahead."
-	|resultString tempNumber invalidTypes characterUsed exponent precisionHolder decimalIndex|
+	| resultString tempNumber invalidTypes characterUsed exponent precisionHolder decimalIndex |
 	resultString := ''.
 
 	invalidTypes := {
@@ -46,18 +46,18 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 			$c->[TypeError signal: 'TypeError: %c requires int or char'].
 		} asDictionary.
 
-	(invalidTypes includes: aCharacter) ifTrue:[
+	(invalidTypes includes: aCharacter) ifTrue: [
 		(invalidTypes at: aCharacter) value.
 	].
 
-	({$d. $i. $u} includes: aCharacter) ifTrue:[
-		^ (int ___value: value floor)
+	({$d. $i. $u} includes: aCharacter) ifTrue: [
+		^(int ___value: value floor)
 			___convertWithFlags: aSet
 			precision: anObject
 			andType: aCharacter
 	].
 
-	({$s. $a. $r.} includes: aCharacter) ifTrue:[
+	({$s. $a. $r.} includes: aCharacter) ifTrue: [
 		"if it uses string type indicator then it should change to a string or character and then use that
 		class's implementation"
 		^(str ___value: (value) asString)
@@ -70,24 +70,24 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 
 	"us floating points for everything between those two numbers"
 
-	characterUsed == $g ifTrue:[
-		((value abs < 0.0001) or: [value abs >= 999999.5]) ifTrue:[
+	characterUsed == $g ifTrue: [
+		((value abs < 0.0001) or: [value abs >= 999999.5]) ifTrue: [
 			characterUsed := $e.
 		].
 	].
 
 	tempNumber := value abs.
 	"convert to the correct decimal for scientific form and track the exponent needed"
-	characterUsed == $e ifTrue:[
+	characterUsed == $e ifTrue: [
 		exponent := 0.
-		tempNumber >= 10 ifTrue:[
-			[tempNumber >= 10] whileTrue:[
+		tempNumber >= 10 ifTrue: [
+			[tempNumber >= 10] whileTrue: [
 				tempNumber := tempNumber / 10.
 				exponent := exponent + 1.
 			].
 		] ifFalse: [
-			tempNumber < 1 ifTrue:[
-				[tempNumber < 1] whileTrue:[
+			tempNumber < 1 ifTrue: [
+				[tempNumber < 1] whileTrue: [
 					tempNumber := tempNumber * 10.
 					exponent := exponent - 1.
 				].
@@ -102,14 +102,14 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 	resultString := tempNumber asStringUsingFormat: {10. precisionHolder. false}.
 
 	characterUsed == $g
-		ifTrue:[
-			|tempHolder index|
+		ifTrue: [
+			| tempHolder index |
 			tempHolder := ''.
 			index := 1.
 			"Collect only significant digits"
-			[precisionHolder > 0 and:[index <= (resultString size)]] whileTrue:[
+			[precisionHolder > 0 and: [index <= (resultString size)]] whileTrue: [
 					
-				(resultString at: index) isAlphaNumeric ifTrue:[
+				(resultString at: index) isAlphaNumeric ifTrue: [
 					precisionHolder := precisionHolder -1.
 				].
 				tempHolder := tempHolder + (resultString at: index).
@@ -117,13 +117,13 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 			].
 			"remove trailing zeros"
 			resultString := tempHolder.
-			aCharacter asLowercase == $g ifTrue:[
-				|reverseIndex|
+			aCharacter asLowercase == $g ifTrue: [
+				| reverseIndex |
 				reverseIndex := resultString size.
-				[(resultString at: reverseIndex) == $0] whileTrue:[
+				[(resultString at: reverseIndex) == $0] whileTrue: [
 					reverseIndex := reverseIndex -1.
 				].
-				(resultString at: reverseIndex) == $. ifTrue:[
+				(resultString at: reverseIndex) == $. ifTrue: [
 					reverseIndex := reverseIndex -1.
 				].
 				resultString := resultString copyFrom: 1 to: reverseIndex.
@@ -135,57 +135,57 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 			decimalIndex := resultString indexOf: $..
 			"add trailing zeros, this is based on the precision or 6 if there is no precision"
 			(precisionHolder + decimalIndex) <= (resultString size)
-				ifTrue:[
+				ifTrue: [
 					resultString := resultString copyFrom: 1 to: (precisionHolder + decimalIndex).
-					resultString last == $. ifTrue:[
+					resultString last == $. ifTrue: [
 						resultString := resultString copyFrom: 1 to: (resultString size -1).
 					].
-				] ifFalse:[
-					aCharacter asLowercase == $g ifFalse:[
-						[resultString size < (precisionHolder + decimalIndex)] whileTrue:[
+				] ifFalse: [
+					aCharacter asLowercase == $g ifFalse: [
+						[resultString size < (precisionHolder + decimalIndex)] whileTrue: [
 							resultString := resultString + '0'.
 						].
 					].
 				].
 
-			aCharacter asLowercase == $g ifTrue:[
-				|reverseIndex|
+			aCharacter asLowercase == $g ifTrue: [
+				| reverseIndex |
 				reverseIndex := resultString size.
-				[(resultString at: reverseIndex) == $0] whileTrue:[
+				[(resultString at: reverseIndex) == $0] whileTrue: [
 					reverseIndex := reverseIndex -1.
 				].
-				(resultString at: reverseIndex) == $. ifTrue:[
+				(resultString at: reverseIndex) == $. ifTrue: [
 					reverseIndex := reverseIndex -1.
 				].
 				resultString := resultString copyFrom: 1 to: reverseIndex.
 				
 			].
 			"add exponential for onto the string if required"
-			characterUsed == $e ifTrue:[
+			characterUsed == $e ifTrue: [
 				resultString := resultString + 'e'.
-				exponent negative ifTrue:[
+				exponent negative ifTrue: [
 					resultString := resultString + '-'.
-				] ifFalse:[
+				] ifFalse: [
 					resultString := resultString + '+'.
 				].
-				exponent abs < 10 ifTrue:[
+				exponent abs < 10 ifTrue: [
 					resultString := resultString + '0'.
 				].
 				resultString := resultString + (exponent abs asString).
-				aCharacter isUppercase ifTrue:[
+				aCharacter isUppercase ifTrue: [
 					resultString := resultString asUppercase.
 				].
 		].
 	].
 
 	"add the appropriate sign or a space to the number"
-	value < 0 ifTrue:[
+	value < 0 ifTrue: [
 		resultString := '-' + resultString.
-	] ifFalse:[
-		(aSet includes: $+) ifTrue:[
+	] ifFalse: [
+		(aSet includes: $+) ifTrue: [
 			resultString := '+' + resultString.
 		] ifFalse: [
-			(aSet includes: Character space) ifTrue:[
+			(aSet includes: Character space) ifTrue: [
 				resultString := ' ' + resultString.
 			].
 		].
@@ -386,8 +386,8 @@ __round__
 	
 	"Python uses Gaussian rounding so it which Smalltalk does not do"
 
-	|result|
-	((value * 2) odd and:[value floor even]) ifTrue:[
+	| result |
+	((value * 2) odd and: [value floor even]) ifTrue: [
 		result := int ___value: (value floor).
 	] ifFalse: [
 		result := int ___value: value rounded
@@ -400,18 +400,18 @@ __round__: anInt
 	
 	"Python uses Gaussian rounding so it which Smalltalk does not do"
 
-	|result|
+	| result |
 
-	anInt class == int ifFalse:[
+	anInt class == int ifFalse: [
 		TypeError signal: 'TypeError: ', anInt class asString,' object cannot be interpreted as an integer'.
 	].
 
 	result := value * (10 raisedTo: anInt ___value).
 
-	((result * 2) odd and:[result floor even])
-		ifTrue:[
+	((result * 2) odd and: [result floor even])
+		ifTrue: [
 			result := result floor.
-		] ifFalse:[
+		] ifFalse: [
 			result := result rounded.
 		].
 	^float ___value: result / (10 raisedTo: anInt ___value).
@@ -583,7 +583,7 @@ ___powReal: aFloatReal imag: aFloatImag
 		
 	| radius radians |
 	value = (value asInteger) ifTrue: [
-		^ ((complex ___real: aFloatReal imaginary: aFloatImag) __pow__: (int ___value: (value asInteger)))
+		^((complex ___real: aFloatReal imaginary: aFloatImag) __pow__: (int ___value: (value asInteger)))
 
 	].
 
@@ -591,14 +591,14 @@ ___powReal: aFloatReal imag: aFloatImag
 	aFloatReal asFloat == 0.0
 		ifTrue: [
 			radians := (Float pi) / 2.
-			aFloatImag < 0 ifTrue: [ radians := radians + Float pi / 2 ].
+			aFloatImag < 0 ifTrue: [radians := radians + Float pi / 2].
 		] ifFalse: [
 			radians := ( aFloatImag / aFloatReal ) arcTan .
 		].
 			
 
 	aFloatReal < 0
-		ifTrue:[
+		ifTrue: [
 			radians := radians + Float pi
 		].
 
@@ -622,7 +622,7 @@ category: 'Smalltalk'
 method: float
 __pow__: anObject
 
-	^ anObject ___powFloat: value.
+	^anObject ___powFloat: value.
 %
 category: 'Smalltalk'
 method: float

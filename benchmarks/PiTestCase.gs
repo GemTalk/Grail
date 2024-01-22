@@ -14,17 +14,17 @@ calculatePi: n
 
 	| pi |
 	pi := 0.
-	0 to: n do: [ :k |
+	0 to: n do: [:k |
 		pi := pi + ((2 raisedTo: k) * (k factorial raisedTo: 2) / (2*k + 1) factorial).
 	].
 	pi := 2 * pi.
-	^ pi
+	^pi
 %
 category: 'other'
 method: PiTestCase
 operationBlock
 
-	^ [ | n |
+	^[| n |
 		n := 100.
 		self calculatePi: n.
 	]

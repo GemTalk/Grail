@@ -28,7 +28,7 @@ method: DictAst
 printSmalltalkOn: aStream
 
 	aStream nextPutAll: 'dict ___value: { '.
-	keys with: values do: [ :key :value |
+	keys with: values do: [:key :value |
 		self smalltalkSourceFor: key parenthesisIf: 1 on: aStream.
 		aStream nextPutAll: '->'.
 		self smalltalkSourceFor: value parenthesisIf: 1 on: aStream.

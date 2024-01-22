@@ -19,7 +19,7 @@ at: aVarName withHelperSymbols: aIdentitySet
 	(aIdentitySet includes: aVarName)
 		ifTrue: [self error]
 		ifFalse: [^((Python at: #'AllVariables') reverseDo: [:each |
-			|holder|
+			| holder |
 			holder := each at: aVarName ifAbsent: [].
 			holder notNil ifTrue: [^holder].
 		])].

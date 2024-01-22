@@ -255,7 +255,7 @@ test__lt__
 category: 'done'
 method: bytesTest
 test__mod__
-   self should: [(self bytes: 'j') __mod__: 3 ]
+   self should: [(self bytes: 'j') __mod__: 3]
 			raise: TypeError
 			withExceptionDo: [:exception |
 				self assert: exception messageText equals: 'not all arguments converted during bytes formatting'].
@@ -388,7 +388,7 @@ testcount
 	self
 		should: [list endswith: (self str: 'a')]
 		raise: TypeError
-		withExceptionDo: [ :exception | self assert: exception messageText equals: 'endswith first arg must be bytes or a tuple of bytes, not str']
+		withExceptionDo: [:exception | self assert: exception messageText equals: 'endswith first arg must be bytes or a tuple of bytes, not str']
 %
 category: 'done'
 method: bytesTest
@@ -505,7 +505,7 @@ testfindByOne
 
 	self should: [list find: (self str: 'a')] 
 			raise: TypeError 
-			withExceptionDo: [ :exception |
+			withExceptionDo: [:exception |
 				self assert: exception messageText equals: 'argument should be integer or bytes-like object, not ''str'''
 			].
 %
@@ -798,7 +798,7 @@ testremoveprefix
 		assert: ((self bytes: 'aabcd') removeprefix: (self bytes: 'c')) equals: (self bytes: 'aabcd');
 		should: [(self bytes: 'aabcd') removeprefix: (self str: 'a')]
 			raise: TypeError
-			withExceptionDo: [ :exception | self assert: exception messageText equals: 'a bytes-like object is required, not ''str'''];
+			withExceptionDo: [:exception | self assert: exception messageText equals: 'a bytes-like object is required, not ''str'''];
 		yourself
 %
 category: 'done'
@@ -812,7 +812,7 @@ testremovesuffix
 		assert: ((self bytes: 'aabcd') removesuffix: (self bytes: 'c')) equals: (self bytes: 'aabcd');
 		should: [(self bytes: 'aabcd') removesuffix: (self str: 'd')]
 			raise: TypeError
-			withExceptionDo: [ :exception | self assert: exception messageText equals: 'a bytes-like object is required, not ''str'''];
+			withExceptionDo: [:exception | self assert: exception messageText equals: 'a bytes-like object is required, not ''str'''];
 		yourself
 %
 category: 'done'
@@ -846,7 +846,7 @@ testrfindByOne
 		assert: (list rfind: (self bytes: 'z')) equals: (self int: -1);
 		should: [list rfind: (self str: 'a')] 
 			raise: TypeError 
-			withExceptionDo: [ :exception | 
+			withExceptionDo: [:exception | 
 				self assert: exception messageText equals: 'argument should be integer or bytes-like object, not ''str'''
 			];
 		yourself.
@@ -915,7 +915,7 @@ testrindexByOne
 	self
 		assert: (list rindex: (self bytes: 'a')) equals: (self int: 3);
 		assert: (list rindex: (self bytes: 'b')) equals: (self int: 2);
-		should: [list rindex: (self bytes: 'z')] raise: ValueError withExceptionDo: [ :exception | self assert: exception messageText equals: 'subsection not found'];
+		should: [list rindex: (self bytes: 'z')] raise: ValueError withExceptionDo: [:exception | self assert: exception messageText equals: 'subsection not found'];
 		yourself
 %
 category: 'done'

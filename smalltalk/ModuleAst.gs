@@ -24,7 +24,7 @@ evaluate: aString
 "
 ModuleAst script: '1 == 1'.
 "
-	| file path module stream|
+	| file path module stream |
 	path := '/tmp/grail.py'.
 	file := GsFile open: path mode: 'w' onClient: false.
 	file nextPutAll: aString.
@@ -68,8 +68,8 @@ testWrite
 
 module := ModuleAst script: '/home/will/Grail/hello.py'.
 fileStream := GsFile openWriteOnServer: '/home/will/Grail/hello.gs'.
-[ module writeSmalltalkOn: fileStream. ]
-ensure: [ fileStream close ].
+[module writeSmalltalkOn: fileStream.]
+ensure: [fileStream close].
 %
 ! ------------------- Instance methods for ModuleAst
 set compile_env: 0

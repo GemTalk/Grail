@@ -161,7 +161,7 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 	aCharacter contains the Type which will match one of the validTypes or invalidTypes
 	"
 
-	|validTypes invalidTypes return|
+	| validTypes invalidTypes return |
 	validTypes := {$a. $s. $r. $c} asSet.
 	invalidTypes := {
 			$d->[TypeError signal: 'TypeError: %d format: a real number is required, not str'].
@@ -178,18 +178,18 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 			$G->[TypeError signal: 'TypeError: must be real number, not str'].
 		} asDictionary.
 
-	(validTypes includes: aCharacter) ifFalse:[
+	(validTypes includes: aCharacter) ifFalse: [
 		(invalidTypes at: aCharacter) value.
 	].
 
-	(aCharacter == $r or:[aCharacter == $a])
-		ifTrue:[
+	(aCharacter == $r or: [aCharacter == $a])
+		ifTrue: [
 			return := self __repr__ ___value
 		]
-		ifFalse:[
+		ifFalse: [
 			return := self __str__ ___value
 		].
-	(anObject ~= '' and: [anObject < (return size)]) ifFalse:[ return := return copyFrom: 1 to: return size].
+	(anObject ~= '' and: [anObject < (return size)]) ifFalse: [return := return copyFrom: 1 to: return size].
 	^return
 %
 category: 'Smalltalk'
@@ -213,10 +213,10 @@ __repr__
 	
 	stream nextPutAll: 'range('.
 	self begin class == NoneType
-		ifTrue:[
+		ifTrue: [
 			stream nextPutAll: self end ___value asString.
 		]
-		ifFalse:[
+		ifFalse: [
 			stream
 				nextPutAll: self begin ___value asString;
 				nextPut: $, ;

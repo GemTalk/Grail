@@ -37,7 +37,7 @@ printSmalltalkOn: aStream
 	body size == 1 ifTrue: [
 		self smalltalkSourceFor: (body at: 1) parenthesisIf: 4 on: aStream.
 	] ifFalse: [
-		body do: [ :each |
+		body do: [:each |
 			self smalltalkSourceFor: each parenthesisIf: 4 on: aStream.
 			aStream nextPut: $.; lf; yourself.
 		].

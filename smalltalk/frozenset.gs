@@ -68,11 +68,11 @@ category: 'Python'
 method: frozenset
 __repr__
 
-	| stream index|
+	| stream index |
 	index := 1.
 	stream := WriteStream on: String new.
 	stream nextPutAll: 'frozenset({'.
-	container do: [ :each |
+	container do: [:each |
 		stream nextPutAll: each __repr__ ___value.
 		index ~= container size ifTrue: [
 			stream nextPutAll: ', '.
@@ -119,14 +119,14 @@ category: 'Python'
 method: frozenset
 issubset: aSet
 
-	self ___container do: [ :each | (aSet ___container includesValue: each) ifFalse: [ ^false ] ].
+	self ___container do: [:each | (aSet ___container includesValue: each) ifFalse: [^false]].
 	^true
 %
 category: 'Python'
 method: frozenset
 issuperset: aSet
 
-	aSet ___container do: [ :each | (self ___container includesValue: each) ifFalse: [ ^false ] ].
+	aSet ___container do: [:each | (self ___container includesValue: each) ifFalse: [^false]].
 	^true
 %
 category: 'Python'

@@ -16,7 +16,7 @@ writeFor: aPyClass dirTestOn: methodList
 	"
 
 	| list |
-	list := (methodList asSet remove: #, ifAbsent:[]; yourself) asSortedCollection.
+	list := (methodList asSet remove: #, ifAbsent: []; yourself) asSortedCollection.
 	^String streamContents: [:source |
 		source nextPutAll: 'test__dir__
 	" please inspect

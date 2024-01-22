@@ -233,7 +233,7 @@ test__pos__
 category: 'done'
 method: floatTest
 test__pow__
-	|powHolder|
+	| powHolder |
 	self
 		assert: ((self float: 3.5) __pow__: (self int: 2)) ___value equals: 12.25;
 		assert: ((self float: 4) __pow__: (self int: 3)) ___value equals: 64;

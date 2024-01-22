@@ -61,7 +61,7 @@ printSmalltalkOn: aStream
 		nextPutAll: ' scope: currentScope positional: { ';
 		yourself.
 
-	arguments do: [ :each | 
+	arguments do: [:each | 
 		self smalltalkSourceFor: each parenthesisIf: 3 on: aStream.
 		aStream nextPutAll: '. '.
 	].
@@ -72,7 +72,7 @@ printSmalltalkOn: aStream
 
 		aStream nextPutAll: '{'.
 
-		keywords keysAndValuesDo: [ :eachKey :eachValue |
+		keywords keysAndValuesDo: [:eachKey :eachValue |
 			aStream 
 				nextPutAll: ' #';
 				nextPutAll: eachKey;

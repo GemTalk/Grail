@@ -20,7 +20,7 @@ category: 'Python'
 method: str
 __add__: pythonObject
 	
-	pythonObject class ~= str ifTrue: [ TypeError signal: 'must a string, not ', pythonObject class name ].
+	pythonObject class ~= str ifTrue: [TypeError signal: 'must a string, not ', pythonObject class name].
 
 	^str ___value: value + pythonObject ___value
 %
@@ -52,7 +52,7 @@ category: 'Python'
 method: str
 __ge__: other
 
-	(1 to: value size) do: [ :i |
+	(1 to: value size) do: [:i |
 		| myValue otherValue |
 		myValue := (value at: i) asciiValue.
 		otherValue := (other ___value at: i) asciiValue.
@@ -91,7 +91,7 @@ category: 'Python'
 method: str
 __gt__: other
 
-	(1 to: value size) do: [ :i |
+	(1 to: value size) do: [:i |
 		| myValue otherValue |
 		myValue := (value at: i) asciiValue.
 		otherValue := (other ___value at: i) asciiValue.
@@ -122,7 +122,7 @@ category: 'Python'
 method: str
 __le__: other
 
-	(1 to: value size) do: [ :i |
+	(1 to: value size) do: [:i |
 		| myValue otherValue |
 		myValue := (value at: i) asciiValue.
 		otherValue := (other ___value at: i) asciiValue.
@@ -147,7 +147,7 @@ category: 'Python'
 method: str
 __lt__: other
 
-	(1 to: value size) do: [ :i |
+	(1 to: value size) do: [:i |
 		| myValue otherValue |
 		myValue := (value at: i) asciiValue.
 		otherValue := (other ___value at: i) asciiValue.
@@ -165,7 +165,7 @@ __lt__: other
 category: 'Python'
 method: str
 __mod__: anObject
-	|stringOutput|
+	| stringOutput |
 
 	stringOutput := value asString.
 
@@ -216,7 +216,7 @@ capitalize
 	
 	stream := WriteStream on: String new.
 	stream nextPut: (value at: 1) asUppercase.
-	(value copyFrom: 2 to: value size) do: [ :elem | 
+	(value copyFrom: 2 to: value size) do: [:elem | 
 		stream nextPut: elem asLowercase.
 	].
 
@@ -245,7 +245,7 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 	aCharacter contains the Type which will match one of the validTypes or invalidTypes
 	"
 
-	|invalidTypes return|
+	| invalidTypes return |
 
 	invalidTypes := {
 			$d->[TypeError signal: 'TypeError: %d format: a real number is required, not str'].
@@ -262,21 +262,21 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 			$G->[TypeError signal: 'TypeError: must be real number, not str'].
 		} asDictionary.
 
-	(invalidTypes includes: aCharacter) ifTrue:[
+	(invalidTypes includes: aCharacter) ifTrue: [
 		(invalidTypes at: aCharacter) value.
 	].
 
 	return := value.
-	(aCharacter == $r or:[aCharacter == $a])
-		ifTrue:[
+	(aCharacter == $r or: [aCharacter == $a])
+		ifTrue: [
 			return := self __repr__ ___value
 		].
 	
-	((aCharacter == $c) and:[ return size > 1]) ifTrue:[
+	((aCharacter == $c) and: [return size > 1]) ifTrue: [
 		TypeError signal: 'TypeError: %c requires int or char'
 	].
 
-	(anObject ~= '' and: [anObject < (return size)]) ifTrue:[ return := return copyFrom: 1 to: anObject].
+	(anObject ~= '' and: [anObject < (return size)]) ifTrue: [return := return copyFrom: 1 to: anObject].
 	^return
 %
 category: 'Smalltalk'

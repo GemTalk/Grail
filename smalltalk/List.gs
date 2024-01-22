@@ -76,7 +76,7 @@ __repr__
 	stream := WriteStream on: String new.
 	stream nextPut: $[.
 	stream nextPutAll: container removeFirst __repr__ ___value.
-	container do: [ :elem |
+	container do: [:elem |
 		stream 
 			nextPutAll: ', ';
 			nextPutAll: elem __repr__ ___value;
@@ -156,7 +156,7 @@ remove: anElement
 
 	^self ___container
 		remove: anElement
-		ifAbsent: [ValueError signal: 'list.remove(x): x not in list' ].
+		ifAbsent: [ValueError signal: 'list.remove(x): x not in list'].
 %
 category: 'Python'
 method: list
@@ -176,7 +176,7 @@ sort_key: aFunction reverse: aBool
 "
 	| sortBlock reverse |
 	sortBlock := aDict at: #key
-							ifPresent: [:sortFunc | [:a :b | (sortFunc value: a) < (sortFunc value: b)] ]
+							ifPresent: [:sortFunc | [:a :b | (sortFunc value: a) < (sortFunc value: b)]]
 							ifAbsent: [[:a :b | a < b]].
 
 	^self ___initialize: (aBool ___value)
@@ -189,7 +189,7 @@ method: list
 sort: aDict
 	| sortBlock reverse |
 	sortBlock := aDict at: #key
-							ifPresent: [:sortFunc | [:a :b | (sortFunc value: a) < (sortFunc value: b)] ]
+							ifPresent: [:sortFunc | [:a :b | (sortFunc value: a) < (sortFunc value: b)]]
 							ifAbsent: [[:a :b | a < b]].
 
 	^self ___initialize: ((aDict at: #reverse ifAbsent: [false])

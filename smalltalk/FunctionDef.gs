@@ -68,27 +68,27 @@ scope: aVariables positional: positionalArgsArray named: namedArgsArray
 			].
 	].
 
-	(1 to: positionalArgsArray size) do: [ :i |
+	(1 to: positionalArgsArray size) do: [:i |
 		i <= params size ifTrue: [
 			myScope at: (params at: i) put: (positionalArgsArray at: i).
 		] ifFalse: [
 			[(myScope at: vararg) append: (positionalArgsArray at: i)]
 				on: NameError
-				do:[ TypeError signal: 'TypeError: takes ', (params size) asString, ' positional arguements but ', (positionalArgsArray size) asString, ' was given'].
+				do: [TypeError signal: 'TypeError: takes ', (params size) asString, ' positional arguements but ', (positionalArgsArray size) asString, ' was given'].
 		].
 	].
 
 	positionalArgsArray size < params size ifTrue: [
-		| indexOfFirstDefaultNeeded|
+		| indexOfFirstDefaultNeeded |
 		indexOfFirstDefaultNeeded := positionalArgsArray size + defaults size - params size + 1.
-		indexOfFirstDefaultNeeded to: defaults size do: [ :i |
+		indexOfFirstDefaultNeeded to: defaults size do: [:i |
 			myScope at: (params at: (defaultsOffset + i)) put: (defaults at: i).
 		]
 	].
 
-	(1 to: kwonlyargs size) do: [ :i |
+	(1 to: kwonlyargs size) do: [:i |
 		| namedKeys |
-		namedKeys := namedArgsArray collect: [ :elem | elem key ].
+		namedKeys := namedArgsArray collect: [:elem | elem key].
 
 		(namedKeys includes: (kwonlyargs at: i)) ifTrue: [
 			| namedValue |
@@ -108,7 +108,7 @@ scope: aVariables positional: positionalArgsArray named: namedArgsArray
 
 		myScope at: kwarg put: (dict ___value: Dictionary new).
 
-		namedArgsArray do: [ :var |
+		namedArgsArray do: [:var |
 			(myScope at: kwarg) __setitem__: (var key) _: var value.
 		].
 	].

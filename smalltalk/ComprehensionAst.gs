@@ -20,7 +20,7 @@ initialize
 	self commaSpace.
 	iter := self expression.
 	self commaSpace.
-	ifs := self collectAst:[self expression].
+	ifs := self collectAst: [self expression].
 	self commaSpace.
 	is_async := (stream upTo: $)) asNumber == 1.
 %

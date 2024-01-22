@@ -23,8 +23,8 @@ abs
 						params: { #number };
 						vararg: #'None';
 						yourself.
-	absFunction block: [ :currentScope |
-		|value|
+	absFunction block: [:currentScope |
+		| value |
 		value := (currentScope at:#number).
 		[value  __abs__] on: MessageNotUnderstood do: [TypeError signal.].
 	].
@@ -39,8 +39,8 @@ bool
 						params: { #object.};
 						vararg: #'None';
 						yourself.
-	boolFunction block: [ :currentScope |
-		[ (currentScope at:#object) __bool__.]
+	boolFunction block: [:currentScope |
+		[(currentScope at:#object) __bool__.]
 			on: MessageNotUnderstood
 			do: [
 				[bool ___value: (currentScope at:#object) __len__ ___value  ~= 0]
@@ -59,7 +59,7 @@ chr
 						params: { #object.};
 						vararg: #'None';
 						yourself.
-	chrFunction block: [ :currentScope |
+	chrFunction block: [:currentScope |
 		(currentScope at:#object) class == int
 			ifFalse: [
 				TypeError signal: 'TypeError: ', (currentScope at:#object) class asString,
@@ -78,7 +78,7 @@ complex
 						params: { #real. #imag};
 						vararg: #'None';
 						yourself.
-	complexFunction block: [ :currentScope |
+	complexFunction block: [:currentScope |
 		complex ___real: ((currentScope at: #real) ___value) imaginary: ((currentScope at: #imag) ___value)
 	].
 	Builtins singleton at: #complex put: complexFunction
@@ -94,10 +94,10 @@ dict
 						vararg: #'None';
 						kwarg: #'kwarg';
 						yourself.
-	dictFunction block: [ :currentScope |
-		|return|
+	dictFunction block: [:currentScope |
+		| return |
 		return :=  dict ___value: Dictionary new.
-		(currentScope at: #object) class == UndefinedObject ifFalse:[
+		(currentScope at: #object) class == UndefinedObject ifFalse: [
 			return update: (currentScope at: #object).
 		].
 		[(currentScope at: #kwarg) __len__ ___value == 0
@@ -119,8 +119,8 @@ float
 						params: { #object.};
 						vararg: #'None';
 						yourself.
-	floatFunction block: [ :currentScope |
-		[ (currentScope at:#object) __float__.]
+	floatFunction block: [:currentScope |
+		[(currentScope at:#object) __float__.]
 			on: (MessageNotUnderstood, ImproperOperation)
 			do: [
 				(currentScope at:#object) class == str ifTrue: [
@@ -146,33 +146,33 @@ frozenset
 						defaults: { nil };
 						vararg: #'None';
 						yourself.
-	frozensetFunction block: [ :currentScope |
+	frozensetFunction block: [:currentScope |
 		[
 			| return |
 			return := {}.
 			(currentScope at: #object) class == UndefinedObject
-				ifFalse:[
+				ifFalse: [
 					(currentScope at: #object) class == str
 						ifTrue: [
 							((currentScope at: #object) ___value)
-								do: [ :each | return add: (str ___value: (each asString)).].
+								do: [:each | return add: (str ___value: (each asString)).].
 						]
 						ifFalse: [
 							(currentScope at: #object) class == dict
 								ifTrue: [
 									((currentScope at: #object) keys ___container)
-										do: [ :each | return add: each.].
+										do: [:each | return add: each.].
 								]
 								ifFalse: [
 									((currentScope at: #object) ___container)
-										do: [ :each | return add: each.].
+										do: [:each | return add: each.].
 								].
 						].
 				].
 			frozenset ___value: return
 		]
 		on: MessageNotUnderstood
-		do: [ TypeError signal: 'TypeError: ''', (currentScope at: #object) class asString, ''' object is not iterable' ].
+		do: [TypeError signal: 'TypeError: ''', (currentScope at: #object) class asString, ''' object is not iterable'].
 	].
 	Builtins singleton at: #frozenset put: frozensetFunction
 %
@@ -185,7 +185,7 @@ globals
 						params: {};
 						vararg: #'None';
 						yourself.
-	globalsFunction block: [ :currentScope |
+	globalsFunction block: [:currentScope |
 		dict ___value: (currentScope globals dict)
 	].
 	Builtins singleton at: #globals put: globalsFunction
@@ -230,7 +230,7 @@ input
 						defaults: { str ___value: '' };
 						vararg: #'None';
 						yourself.
-	inputFunction block: [ :currentScope |
+	inputFunction block: [:currentScope |
 		str ___value: (((System __sessionStateAt: 3)
 			prompt: ( ((currentScope at: #object) ___value))
 			caption: 'Input') decodeToString)
@@ -248,20 +248,20 @@ int
 						defaults: { nil };
 						vararg: #'None';
 						yourself.
-	intFunction block: [ :currentScope |
+	intFunction block: [:currentScope |
 		| return |
 		(currentScope at:#base) class == UndefinedObject
-			ifTrue: [ currentScope at:#base put: (int ___value: 10).]
+			ifTrue: [currentScope at:#base put: (int ___value: 10).]
 			ifFalse: [
 				(currentScope at:#object) class == str
 					ifFalse: [
 						TypeError signal: 'TypeError: int() can''t convert non-string with explicit base'.
 					].
 			].
-		(currentScope at:#object) class == str ifTrue:[
+		(currentScope at:#object) class == str ifTrue: [
 			| baseConverter |
 			((currentScope at:#object) ___value at: 2) isLetter 
-				ifTrue:[
+				ifTrue: [
 					((currentScope at:#object) ___value at:1) == 0
 						ifFalse: [
 							ValueError signal:
@@ -271,7 +271,7 @@ int
 								(currentScope at:#object) value.
 						].
 					(((currentScope at:#object) ___value at:2) == $b) & ((currentScope at:#base) ___value == 2)
-						ifFalse:[
+						ifFalse: [
 							ValueError signal:
 								'Value Error: invalid literal for int() with base ',
 								(currentScope at:#base) ___value asString,
@@ -279,7 +279,7 @@ int
 								(currentScope at:#object) value.
 						].
 					(((currentScope at:#object) ___value at:2) == $o) & ((currentScope at:#base) ___value == 8)
-						ifFalse:[
+						ifFalse: [
 							ValueError signal:
 								'Value Error: invalid literal for int() with base ',
 								(currentScope at:#base) ___value asString,
@@ -287,7 +287,7 @@ int
 								(currentScope at:#object) value.
 						].
 					(((currentScope at:#object) ___value at:2) == $h) & ((currentScope at:#base) ___value == 16)
-						ifFalse:[
+						ifFalse: [
 							ValueError signal:
 								'Value Error: invalid literal for int() with base ',
 								(currentScope at:#base) ___value asString,
@@ -329,7 +329,7 @@ len
 						params: { #object };
 						vararg: #'None';
 						yourself.
-	lenFunction block: [ :currentScope |
+	lenFunction block: [:currentScope |
 
 		[(currentScope at:#object) __len__]
 			on: MessageNotUnderstood
@@ -347,33 +347,33 @@ list
 						defaults: { nil };
 						vararg: #'None';
 						yourself.
-	listFunction block: [ :currentScope |
+	listFunction block: [:currentScope |
 		[
 			| return |
 			return := list ___value: {}.
 			(currentScope at: #object) class == UndefinedObject
-				ifFalse:[
+				ifFalse: [
 					(currentScope at: #object) class == str
 						ifTrue: [
 							((currentScope at: #object) ___value)
-								do: [ :each | return append: (str ___value: (each asString)).].
+								do: [:each | return append: (str ___value: (each asString)).].
 						]
 						ifFalse: [
 							(currentScope at: #object) class == dict
 								ifTrue: [
 									((currentScope at: #object) keys ___container)
-										do: [ :each | return append: each.].
+										do: [:each | return append: each.].
 								]
 								ifFalse: [
 									((currentScope at: #object) ___container)
-										do: [ :each | return append: each.].
+										do: [:each | return append: each.].
 								].
 						].
 				].
 			return
 		]
 		on: MessageNotUnderstood
-		do: [ TypeError signal: 'TypeError: ''', (currentScope at: #object) class asString, ''' object is not iterable' ].
+		do: [TypeError signal: 'TypeError: ''', (currentScope at: #object) class asString, ''' object is not iterable'].
 	].
 	Builtins singleton at: #list put: listFunction
 %
@@ -386,7 +386,7 @@ locals
 						params: {};
 						vararg: #'None';
 						yourself.
-	localsFunction block: [ :currentScope |
+	localsFunction block: [:currentScope |
 		dict ___value: (currentScope parent dict)
 	].
 	Builtins singleton at: #locals put: localsFunction
@@ -400,7 +400,7 @@ ord
 						params: { #object.};
 						vararg: #'None';
 						yourself.
-	ordFunction block: [ :currentScope |
+	ordFunction block: [:currentScope |
 		(currentScope at:#object) class == str
 			ifFalse: [
 				TypeError signal:
@@ -408,7 +408,7 @@ ord
 					(currentScope at:#object) class asString,
 					' found'.
 			].
-		(currentScope at:#object) __len__ ___value == 1 ifFalse:[
+		(currentScope at:#object) __len__ ___value == 1 ifFalse: [
 				TypeError signal:
 					'TypeError: ord() expected a character, but string of length ',
 					(currentScope at:#object) __len__ asString,
@@ -432,7 +432,7 @@ pow
 						vararg: #'None';
 						yourself.
 
-	powFunction block: [ :currentScope |
+	powFunction block: [:currentScope |
 		| result base exp |
 
 		base := (currentScope at: #base).
@@ -467,10 +467,10 @@ print
 						kwonlyargs: { #sep. #end. #file. #flush };
 						kw_defaults: {str ___value: ''. str ___value: (Character lf asString). nil. bool ___value: False};
 						yourself.
-	print block: [ :currentScope |
+	print block: [:currentScope |
 			| objects sep end file flush |
 
-			(currentScope at: #file) class == UndefinedObject ifTrue: [currentScope at: #file put: Transcript ].
+			(currentScope at: #file) class == UndefinedObject ifTrue: [currentScope at: #file put: Transcript].
 			objects := (currentScope at: #vararg) ___value.
 			sep := currentScope at: #sep.
 			end := currentScope at: #end.
@@ -478,8 +478,8 @@ print
 			file := currentScope at: #file.
 			flush := currentScope at: #flush.
 
-			(sep class ~= str) ifTrue: [ TypeError signal: 'sep must be a str, not ', sep class name ].
-			(end class ~= str) ifTrue: [ TypeError signal: 'end must be a str, not ', end class name ].
+			(sep class ~= str) ifTrue: [TypeError signal: 'sep must be a str, not ', sep class name].
+			(end class ~= str) ifTrue: [TypeError signal: 'end must be a str, not ', end class name].
 			" TODO verify file is an object that has a 'write' method. AttributeError: 'str' object has no attribute 'write' "
 			" TODO implicitly convert flush to a bool "
 
@@ -499,8 +499,8 @@ range
 	rangeFunction := FunctionDef new
 						vararg: #vararg;
 						yourself.
-	rangeFunction block: [ :currentScope |
-		|varargSize returnObject|
+	rangeFunction block: [:currentScope |
+		| varargSize returnObject |
 		"varargSize is the length of the varargs the function was passed in with."
 		varargSize := (currentScope at:#vararg) ___value size.
 		varargSize == 1 ifTrue: [
@@ -526,7 +526,7 @@ repr
 						params: { #object };
 						vararg: #'None';
 						yourself.
-	reprFunction block: [ :currentScope |
+	reprFunction block: [:currentScope |
 
 		(currentScope at:#object) __repr__
 	].
@@ -542,11 +542,11 @@ round
 						defaults: { nil };
 						vararg: #'None';
 						yourself.
-	roundFunction block: [ :currentScope |
-		|result|
+	roundFunction block: [:currentScope |
+		| result |
 		(currentScope at: #ndigits) == nil
-			ifTrue:[result := (currentScope at: #object) __round__]
-			ifFalse:[
+			ifTrue: [result := (currentScope at: #object) __round__]
+			ifFalse: [
 
 				result := (currentScope at: #object) __round__: (currentScope at: #ndigits)
 			].
@@ -564,33 +564,33 @@ set
 						defaults: { nil };
 						vararg: #'None';
 						yourself.
-	setFunction block: [ :currentScope |
+	setFunction block: [:currentScope |
 		[
 			| return |
 			return := set ___value: {}.
 			(currentScope at: #object) class == UndefinedObject
-				ifFalse:[
+				ifFalse: [
 					(currentScope at: #object) class == str
 						ifTrue: [
 							((currentScope at: #object) ___value)
-								do: [ :each | return add: (str ___value: (each asString)).].
+								do: [:each | return add: (str ___value: (each asString)).].
 						]
 						ifFalse: [
 							(currentScope at: #object) class == dict
 								ifTrue: [
 									((currentScope at: #object) keys ___container)
-										do: [ :each | return add: each.].
+										do: [:each | return add: each.].
 								]
 								ifFalse: [
 									((currentScope at: #object) ___container)
-										do: [ :each | return add: each.].
+										do: [:each | return add: each.].
 								].
 						].
 				].
 			return
 		]
 		on: MessageNotUnderstood
-		do: [ TypeError signal: 'TypeError: ''', (currentScope at: #object) class asString, ''' object is not iterable' ].
+		do: [TypeError signal: 'TypeError: ''', (currentScope at: #object) class asString, ''' object is not iterable'].
 	].
 	Builtins singleton at: #set put: setFunction
 %
@@ -603,7 +603,7 @@ str
 						params: { #object };
 						vararg: #'None';
 						yourself.
-	strFunction block: [ :currentScope |
+	strFunction block: [:currentScope |
 
 		(currentScope at:#object) __str__
 	].
@@ -620,25 +620,25 @@ sum
 						defaults: { int ___value: 0 };
 						vararg: #'None';
 						yourself.
-	sumFunction block: [ :currentScope |
-		| sum integer summer|
+	sumFunction block: [:currentScope |
+		| sum integer summer |
 		sum := (complex ___real: 0 imaginary: 0).
 		summer := (currentScope at: #list) scope: currentScope
 										 positional: {(currentScope at: #object)}
 										 named: {}.
 		integer := true.
 		((currentScope at: #start) ___value) to: (summer  ___size - 1)
-			do: [ :element |
-				|holder|
+			do: [:element |
+				| holder |
 				holder := (summer __getitem__: (int ___value: element)).
 				holder class = float
-					ifTrue:[
+					ifTrue: [
 						integer := false.
 					].
 				sum := sum __add__: holder.
 			].
 		sum imag ___value == 0
-			ifTrue:[
+			ifTrue: [
 				sum := sum real.
 				integer ifTrue: [
 						sum := int ___value: (sum ___value).
@@ -656,8 +656,8 @@ type
 	typeFunction := FunctionDef new
 						vararg: #vararg;
 						yourself.
-	typeFunction block: [ :currentScope |
-		|varargSize result|
+	typeFunction block: [:currentScope |
+		| varargSize result |
 		varargSize := (currentScope at:#vararg) ___value size.
 		varargSize == 1 ifTrue: [result := ((currentScope at:#vararg)  ___value at: 1) class].
 		varargSize == 2 ifTrue: [TypeError signal: 'TypeError: type() takes 1 or 3 arguments'].

@@ -43,7 +43,7 @@ category: 'other'
 method: bool
 ___value
 
-	value == 1 ifTrue: [ ^true ].
+	value == 1 ifTrue: [^true].
 	^false
 %
 category: 'other'
@@ -56,7 +56,7 @@ __and__: anObject
 		other := other value. "Evaluate the block"
 	].
 
-	^bool ___value: (self ___value and: [ other ___value ])
+	^bool ___value: (self ___value and: [other ___value])
 %
 category: 'other'
 method: bool
@@ -74,7 +74,7 @@ __or__: anObject
 		other := other value. "Evaluate the block"
 	].
 
-	^bool ___value: (self ___value or: [ other ___value ])
+	^bool ___value: (self ___value or: [other ___value])
 %
 set compile_env: 0
 category: 'Smalltalk'

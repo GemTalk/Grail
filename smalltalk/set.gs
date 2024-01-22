@@ -42,7 +42,7 @@ __and__: aSet
 
 	| x |
 	x := set ___value: Set new.
-	aSet ___value do: [ :each | (container includesValue: each) ifTrue: [ x add: each ] ].
+	aSet ___value do: [:each | (container includesValue: each) ifTrue: [x add: each]].
 	^x
 %
 category: 'Python'
@@ -124,12 +124,12 @@ category: 'Python'
 method: set
 __repr__
 
-	| stream index|
+	| stream index |
 	
 	index := 1.
 	stream := WriteStream on: String new.
 	stream nextPut: ${.
-	container do: [ :elem |
+	container do: [:elem |
 		stream nextPutAll: elem __repr__ ___value.
 		index ~= container size ifTrue: [
 			stream nextPutAll: ', '.
@@ -218,20 +218,20 @@ category: 'Python'
 method: set
 issubset: aSet
 
-	self ___container do: [ :each | (aSet ___container includesValue: each) ifFalse: [ ^false ] ].
+	self ___container do: [:each | (aSet ___container includesValue: each) ifFalse: [^false]].
 	^true
 %
 category: 'Python'
 method: set
 issuperset: aSet
 
-	aSet ___container do: [ :each | (self ___container includesValue: each) ifFalse: [ ^false ] ].
+	aSet ___container do: [:each | (self ___container includesValue: each) ifFalse: [^false]].
 	^true
 %
 category: 'Python'
 method: set
 pop
- 	container isEmpty ifTrue: [ KeyError signal ].
+ 	container isEmpty ifTrue: [KeyError signal].
 	^self remove: container any.
 %
 category: 'Python'
@@ -240,7 +240,7 @@ remove: anElement
 
 	^self ___container
 		remove: anElement
-		ifAbsent: [KeyError signal: anElement ___value printString ].
+		ifAbsent: [KeyError signal: anElement ___value printString].
 %
 category: 'Python'
 method: set

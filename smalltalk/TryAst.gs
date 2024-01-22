@@ -25,7 +25,7 @@ category: 'other'
 method: TryAst
 printSmalltalkOn: aStream
 
-	1 to: handlers size do: [ :i |
+	1 to: handlers size do: [:i |
 		aStream nextPutAll: '['; lf; yourself.
 		aStream increaseIndent.
 	].
@@ -34,7 +34,7 @@ printSmalltalkOn: aStream
 		aStream increaseIndent.
 	].
 	self smalltalkSourceFor: body parenthesisIf: 4 on: aStream. " Doesn't need parenthesis "
-	handlers do: [ :handler |
+	handlers do: [:handler |
 		aStream decreaseIndent.
 		aStream lf; nextPutAll: '] on: '; yourself.
 		

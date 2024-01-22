@@ -50,7 +50,7 @@ initialize
 		value := self number. "constant is a number"
 		^self finalize]
 		on: ImproperOperation
-		do: [ ].
+		do: [].
 	next := stream peekN: 4.
 	next = 'None' ifTrue: [value := 'None'. "constant is None"
 		stream next: 4.

@@ -13,13 +13,13 @@ buildMatrix: n
 
 	| t m |
 	t := 1 / n / n.
-	m := (Array new: n) collect: [ :each | Array new: n ].
-	0 to: n - 1 do: [ :i |
-		0 to: n - 1 do: [ :j |
+	m := (Array new: n) collect: [:each | Array new: n].
+	0 to: n - 1 do: [:i |
+		0 to: n - 1 do: [:j |
 			(m at: i + 1) at: j + 1 put: t * (i - j) * (i + j).
 		].
 	].
-	^ m
+	^m
 %
 category: 'other'
 method: MatMulTestCase
@@ -27,26 +27,26 @@ matMul: a _: b
 
 	| c d |
 	c := self transposeMatrix: b.
-	d := (Array new: a size) collect: [ :each | Array new: (b at: 1) size ].
-	1 to: a size do: [ :i |
-		1 to: (b at: 1) size do: [ :j |
+	d := (Array new: a size) collect: [:each | Array new: (b at: 1) size].
+	1 to: a size do: [:i |
+		1 to: (b at: 1) size do: [:j |
 			| s ai cj |
 			s := 0.
 			ai := a at: i.
 			cj := c at: j.
-			1 to: b size do: [ :k |
+			1 to: b size do: [:k |
 				s := s + ((ai at: k) * (cj at: k)).
 			].
 			(d at: i) at: j put: s.
 		].
 	].
-	^ d
+	^d
 %
 category: 'other'
 method: MatMulTestCase
 operationBlock
 
-	^ [ | n a b |
+	^[| n a b |
 		n := 100.
 		a := self buildMatrix: n.
 		b := self buildMatrix: n.
@@ -57,7 +57,7 @@ category: 'other'
 method: MatMulTestCase
 testMatMul
 
-	^ self operationBlock value
+	^self operationBlock value
 %
 category: 'other'
 method: MatMulTestCase
@@ -80,11 +80,11 @@ method: MatMulTestCase
 transposeMatrix: n
 
 	| m |
-	m := (Array new: (n at: 1) size) collect: [ :each | Array new: n size ].
-	0 to: (n at: 1) size - 1 do: [ :i |
-		0 to: n size - 1 do: [ :j |
+	m := (Array new: (n at: 1) size) collect: [:each | Array new: n size].
+	0 to: (n at: 1) size - 1 do: [:i |
+		0 to: n size - 1 do: [:j |
 			(m at: i + 1) at: j + 1 put: ((n at: j + 1) at: i + 1).
 		].
 	].
-	^ m
+	^m
 %

@@ -76,7 +76,7 @@ category: 'Python'
 method: Container
 __contains__: aPyObject
 
-	container do: [ :each |
+	container do: [:each |
 		(each __eq__: aPyObject) ___value ifTrue: [
 			^bool ___value: true
 		].
@@ -99,7 +99,7 @@ __eq__: otherCollection
 category: 'Python'
 method: Container
 __ge__: otherCollection
-	^(self __gt__: otherCollection) or: [self __eq__: otherCollection ]
+	^(self __gt__: otherCollection) or: [self __eq__: otherCollection]
 %
 category: 'Python'
 method: Container
@@ -160,7 +160,7 @@ __imul__: aMultiplier
 
 	(aMultiplier -1) timesRepeat: [
 		newList ___container addAll: self ___container
-  ].
+ ].
 
 	^newList
 %
@@ -212,7 +212,7 @@ __repr__
 	stream := WriteStream on: String new.
 	stream nextPut: $[.
 	stream nextPutAll: container removeFirst __repr__.
-	container do: [ :elem |
+	container do: [:elem |
 		stream 
 			nextPutAll: ', ';
 			nextPutAll: elem __repr__ ___value;

@@ -614,7 +614,7 @@ testpop
 	"Remove the rest of the items"
 	set pop; pop.
 
-	self should: [ set pop ] raise: KeyError.
+	self should: [set pop] raise: KeyError.
 %
 category: 'done'
 method: setTest

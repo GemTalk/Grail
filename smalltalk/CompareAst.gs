@@ -48,14 +48,14 @@ printSmalltalkOn: aStream
 		yourself.
 
 	(cmpopList at: 1) printSmalltalkOn: aStream left: left rightList: comparatorList.
-	2 to: cmpopList size do: [ :i |
+	2 to: cmpopList size do: [:i |
 		aStream nextPutAll: ') __and__: ['.
 		(cmpopList at: i) printSmalltalkOn: aStream left: nil rightList: (comparatorList copyFrom: i to: comparatorList size).
 	].
 
 	"aStream nextPut: $)." "Used to balance line 21 for last comparison"
 
-	1 to: cmpopList size - 1 do: [ :i |
+	1 to: cmpopList size - 1 do: [:i |
 		aStream nextPut: $].
 	].
 

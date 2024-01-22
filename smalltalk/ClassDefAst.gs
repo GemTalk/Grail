@@ -96,7 +96,7 @@ initialize
 	self commaSpace.
 	BlockAst parent: self.	"calls back to set body"
 	self commaSpace.
-	decorator_list := self collectAst:[self expression].
+	decorator_list := self collectAst: [self expression].
 	self readPosition.
 %
 category: 'other'

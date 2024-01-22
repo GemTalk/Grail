@@ -42,7 +42,7 @@ printSmalltalkOn: aStream
 		self smalltalkSourceFor: (body at: 1) parenthesisIf: 4 on: aStream.
 		aStream nextPut: $..
 	] ifFalse: [
-		body do: [ :each |
+		body do: [:each |
 			"print the instruction"
 			self smalltalkSourceFor: each parenthesisIf: 4 on: aStream.
 			aStream nextPut: $.; lf; yourself.

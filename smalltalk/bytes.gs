@@ -170,15 +170,15 @@ __str__
 	code2 := #($t $n $r).
 	stream := WriteStream on: String new.
 	stream nextPutAll: 'b'''.
-	container do: [ :each |
-		(each >= 32 and: [ each <= 127 ]) ifTrue: [
+	container do: [:each |
+		(each >= 32 and: [each <= 127]) ifTrue: [
 			stream nextPut: (Character codePoint: each).
 		] ifFalse: [
 			| index |
 			index := code1 indexOf: each.
-			index > 0 ifTrue: [ stream nextPut: $\; nextPut: (code2 at: index) ] ifFalse: [
+			index > 0 ifTrue: [stream nextPut: $\; nextPut: (code2 at: index)] ifFalse: [
 				stream nextPutAll: '\x'.
-				each < 16 ifTrue: [ stream nextPut: $0 ].
+				each < 16 ifTrue: [stream nextPut: $0].
 				stream nextPutAll: (each printStringRadix: 16) asLowercase.
 			].
 		].
@@ -191,10 +191,10 @@ category: 'Python'
 method: bytes
 capitalize
 	| contents new |
-	contents := (String withAll: (self ___value copy collect: [ :each | Character codePoint: each ])) asLowercase.
+	contents := (String withAll: (self ___value copy collect: [:each | Character codePoint: each])) asLowercase.
 	contents at: 1 put: contents first asUppercase.
 	new := Array new.
-	contents do: [ :each | new add: each codePoint ].
+	contents do: [:each | new add: each codePoint].
 
 	^bytes ___value: new.
 %
@@ -267,7 +267,7 @@ decode: pyStrEncoding _: pyStrErrors
 
 	#PyTodo"Handle encoding and error handlers".
 
-	^str ___value: (String withAll: (container collect: [ :x | Character codePoint: x ]))
+	^str ___value: (String withAll: (container collect: [:x | Character codePoint: x]))
 %
 category: 'Python'
 method: bytes
@@ -315,11 +315,11 @@ expandtabs
 category: 'Python'
 method: bytes
 expandtabs: pythonInt
-	| columnIndex new tabsize|
+	| columnIndex new tabsize |
 	tabsize := pythonInt ___value.
 	new := WriteStream on: container class new.
 	columnIndex := 0.
-	container do: [ :each | 
+	container do: [:each | 
 		each == 9 ifTrue: [
 			| gap |
 			gap := tabsize - (columnIndex \\ tabsize).
@@ -330,7 +330,7 @@ expandtabs: pythonInt
 			].
 		] ifFalse: [
 			new nextPut: each.
-			(each == 10 or: [ each == 13 ]) ifTrue: [
+			(each == 10 or: [each == 13]) ifTrue: [
 				columnIndex := 0.
 			] ifFalse: [
 				columnIndex := columnIndex + 1.
@@ -369,7 +369,7 @@ find: aPyObjectSublist _: aPyIntStart _: aPyIntEnd
 		].
 	].
 
-	start < 0 ifTrue: [ start := container size - start abs ].
+	start < 0 ifTrue: [start := container size - start abs].
 
 	searchBounds := self ___getslice: (int ___value: 0) _: aPyIntEnd.
 	searchResult := (searchBounds indexOfSubCollection: x ___value startingAt: start + 1) - 1.
@@ -404,42 +404,42 @@ category: 'Python'
 method: bytes
 isalnum
 	^self __len__ ___value > 0 and: [
-		(String withAll: (self ___container collect: [ :x | Character codePoint: x])) allSatisfy: [:e | e isAlphaNumeric]
+		(String withAll: (self ___container collect: [:x | Character codePoint: x])) allSatisfy: [:e | e isAlphaNumeric]
 	]
 %
 category: 'Python'
 method: bytes
 isalpha
 	^self __len__ ___value > 0 and: [
-		(String withAll: (self ___container collect: [ :x | Character codePoint: x])) allSatisfy: [:e | e isLetter]
+		(String withAll: (self ___container collect: [:x | Character codePoint: x])) allSatisfy: [:e | e isLetter]
 	]
 %
 category: 'Python'
 method: bytes
 isascii
 	^self __len__ ___value == 0 or: [
-		self ___container allSatisfy: [ :each | each <= 127 ]
+		self ___container allSatisfy: [:each | each <= 127]
 	]
 %
 category: 'Python'
 method: bytes
 isdigit
 	^self __len__ ___value > 0 and: [
-		(String withAll: (self ___container collect: [ :x | Character codePoint: x])) allSatisfy: [:e | e isDigit]
+		(String withAll: (self ___container collect: [:x | Character codePoint: x])) allSatisfy: [:e | e isDigit]
 	]
 %
 category: 'Python'
 method: bytes
 islower
 	^self __len__ ___value > 0 and: [
-		(String withAll: (self ___container collect: [ :x | Character codePoint: x])) allSatisfy: [:e | e isLowercase]
+		(String withAll: (self ___container collect: [:x | Character codePoint: x])) allSatisfy: [:e | e isLowercase]
 	]
 %
 category: 'Python'
 method: bytes
 isspace
 	^self __len__ ___value > 0 and: [
-		self ___container allSatisfy: [:e | e == 32 ]
+		self ___container allSatisfy: [:e | e == 32]
 	]
 %
 category: 'Python'
@@ -453,7 +453,7 @@ category: 'Python'
 method: bytes
 isupper
 	^self __len__ ___value > 0 and: [
-		(String withAll: (self ___container collect: [ :x | Character codePoint: x])) allSatisfy: [:e | e isUppercase]
+		(String withAll: (self ___container collect: [:x | Character codePoint: x])) allSatisfy: [:e | e isUppercase]
 	]
 %
 category: 'Python'
@@ -468,16 +468,16 @@ ljust: pyIntWidth _: pyByte
 	(pyByte class ~= bytes or: [pyByte ___value size > 1]) ifTrue: [TypeError signal: 'ljust() argument 2 must be a byte string of length 1, not ', pyByte class name].
 	
 	new := Array withAll: container.
-	(1 to: (pyIntWidth ___value - container size)) do: [ :each | new add: pyByte ___value first].
+	(1 to: (pyIntWidth ___value - container size)) do: [:each | new add: pyByte ___value first].
 	^bytes ___value: new.
 %
 category: 'Python'
 method: bytes
 lower
 	| lowerString |
-	lowerString := Array withAll: (String withAll: (self ___container collect: [ :x | Character codePoint: x])) asLowercase.
+	lowerString := Array withAll: (String withAll: (self ___container collect: [:x | Character codePoint: x])) asLowercase.
 	
-	^bytes ___value: (lowerString collect: [ :x | x codePoint ]).
+	^bytes ___value: (lowerString collect: [:x | x codePoint]).
 %
 category: 'Python'
 method: bytes
@@ -491,7 +491,7 @@ lstrip: aPyBytesStripset
 	| left |
 	left := 1.
 	
-	1 to: container size do: [ :i |
+	1 to: container size do: [:i |
 		(aPyBytesStripset ___value includes: (container at: i)) ifFalse: [
 			^bytes ___value: (container copyFrom: left to: container size).
 		].
@@ -537,7 +537,7 @@ removesuffix: pyBytesSuffix
 	pyBytesSuffix class == bytes ifFalse: [TypeError signal: 'a bytes-like object is required, not ''str'''].
 	
 	new := container copy.
-	(self endswith: pyBytesSuffix) ___value ifTrue: [ new := container copyFrom: 1 to: container size - pyBytesSuffix ___value size].
+	(self endswith: pyBytesSuffix) ___value ifTrue: [new := container copyFrom: 1 to: container size - pyBytesSuffix ___value size].
 
 	^bytes ___value: new
 %
@@ -561,7 +561,7 @@ rfind: aSublist _: start
 category: 'Python'
 method: bytes
 rfind: aPyObjectSublist _: aPyIntStart _: aPyIntEnd
-	| searchResult start end x|
+	| searchResult start end x |
 	
 	aPyObjectSublist class == int ifTrue: [
 		x := bytes ___value: { aPyObjectSublist ___value }.
@@ -577,7 +577,7 @@ rfind: aPyObjectSublist _: aPyIntStart _: aPyIntEnd
 	end := int ___value: container size - aPyIntStart ___value.
 
 	searchResult := (bytes ___value: container reverse) find: x _: start _: end.
-	searchResult ___value == -1 ifTrue: [ ^searchResult ].
+	searchResult ___value == -1 ifTrue: [^searchResult].
 	^int ___value: container size - x ___value size - searchResult ___value
 %
 category: 'Python'
@@ -675,7 +675,7 @@ rstrip: aPyBytesStripset
 	| left |
 	left := 1.
 	
-	1 to: container size do: [ :i |
+	1 to: container size do: [:i |
 		(aPyBytesStripset ___value includes: (container reverse at: i)) ifFalse: [
 			^bytes ___value: (container reverse copyFrom: left to: container size) reverse.
 		].
@@ -742,14 +742,14 @@ method: bytes
 swapcase
 	| answer |
 
-	answer := (String withAll: (self ___container collect: [ :x | Character codePoint: x ])).
+	answer := (String withAll: (self ___container collect: [:x | Character codePoint: x])).
 	1 to: answer size do: [:i |
 		(answer at: i) isUppercase ifTrue: [answer at: i put: (answer at: i)asLowercase
 		] ifFalse: [(answer at: i) isLowercase ifTrue: [answer at: i put: (answer at: i) asUppercase]
 			]
 		].
 
-	^bytes ___value: ((Array withAll: answer) collect: [ :x | x codePoint ]).
+	^bytes ___value: ((Array withAll: answer) collect: [:x | x codePoint]).
 %
 category: 'Python'
 method: bytes
@@ -757,7 +757,7 @@ title
 	| new previous |
 	new := Array new.
 	previous := -1.
-	container do: [ :each |
+	container do: [:each |
 		((previous between: 65 and: 90) or: [(previous between: 97 and: 122)]) ifTrue: [
 			(each between: 65 and: 90) ifTrue: [
 				new add: each + 32.
@@ -779,9 +779,9 @@ category: 'Python'
 method: bytes
 upper
 	| upperString |
-	upperString := Array withAll: (String withAll: (self ___container collect: [ :x | Character codePoint: x])) asUppercase.
+	upperString := Array withAll: (String withAll: (self ___container collect: [:x | Character codePoint: x])) asUppercase.
 	
-	^bytes ___value: (upperString collect: [ :x | x codePoint ]).
+	^bytes ___value: (upperString collect: [:x | x codePoint]).
 %
 set compile_env: 0
 category: 'Smalltalk'

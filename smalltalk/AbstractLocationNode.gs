@@ -10,16 +10,19 @@ set compile_env: 0
 category: 'accessors'
 method: AbstractLocationNode
 beginLine
+
 	^beginLine
 %
 category: 'accessors'
 method: AbstractLocationNode
 column
+
 	^beginColumn
 %
 category: 'accessors'
 method: AbstractLocationNode
 line
+
 	^beginLine
 %
 set compile_env: 0

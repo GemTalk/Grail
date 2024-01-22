@@ -20,7 +20,7 @@ __new__: aPythonObject
 	(aPythonObject isKindOf: float) ifTrue: [instance := self basicNew ___value: aPythonObject ___value asInteger. ^instance].
 	(aPythonObject isKindOf: str) ifTrue: [
 		| value |
-		value := [ 
+		value := [
 			Integer fromString: aPythonObject ___value 
 		] on: ImproperOperation do: [:ex |
 			ValueError signal: 'int() arg is a malformed string'.
@@ -85,14 +85,14 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 	aCharacter contains the Type which will match one of the validTypes or invalidTypes
 	"
 
-	|resultString|
-	({$s. $c. $a. $r.} includes: aCharacter) ifTrue:[
+	| resultString |
+	({$s. $c. $a. $r.} includes: aCharacter) ifTrue: [
 		"if it uses string type indicator then it should change to a string or character and then use that
 		class's implementation"
-		(aCharacter == $c and: [value > Character maximumCodePoint]) ifTrue:[
+		(aCharacter == $c and: [value > Character maximumCodePoint]) ifTrue: [
 			OverflowError signal: 'OverflowError: %c arg not in range(0x110000)'
 		].
-		aCharacter == $c ifTrue:[
+		aCharacter == $c ifTrue: [
 			^(str ___value: (value asCharacter) asString)
 				___convertWithFlags: aSet
 				precision: anObject
@@ -104,7 +104,7 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 			andType: aCharacter.
 	].
 
-	({$f. $F. $e. $E. $g. $G.} includes: aCharacter) ifTrue:[
+	({$f. $F. $e. $E. $g. $G.} includes: aCharacter) ifTrue: [
 		"if it uses float type indicator then it should change to a float and then use that
 		class's implementation"
 		^(float ___value: value)
@@ -114,17 +114,17 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 	].
 
 	resultString := WriteStream on: String new.
-	({$d. $i. $u} includes: aCharacter) ifTrue:[
+	({$d. $i. $u} includes: aCharacter) ifTrue: [
 		resultString := value abs asString.
 	].
 
-	({$x. $X} includes: aCharacter) ifTrue:[
+	({$x. $X} includes: aCharacter) ifTrue: [
 		value abs printOn: resultString base: 16.
 		resultString := resultString contents removeFrom: 1 to: 3.
 		
 	].
 
-	aCharacter == $o ifTrue:[
+	aCharacter == $o ifTrue: [
 		value abs printOn: resultString base: 8.
 		resultString := resultString contents removeFrom: 1 to: 2.
 	].
@@ -132,30 +132,30 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 	anObject ~= '' ifTrue: [
 		"If this object has a precision set then it needs to have that many zeros infront of it.
 		precision cannot decrease the length of an int"
-		[resultString size < anObject] whileTrue:[
+		[resultString size < anObject] whileTrue: [
 			resultString := $0 + resultString.
 		].
 	].
-	(aSet includes: $#) ifTrue:[
+	(aSet includes: $#) ifTrue: [
 		"add the base information"
-		(({$x. $X} asSet) includes: aCharacter) ifTrue:[
+		(({$x. $X} asSet) includes: aCharacter) ifTrue: [
 			resultString := '0X' + resultString.
 		].
-		aCharacter == $o ifTrue:[
+		aCharacter == $o ifTrue: [
 			resultString := '0o' + resultString.
 		].
 	].
 
-	aCharacter == $x ifTrue:[ resultString asLowercase.].
+	aCharacter == $x ifTrue: [resultString asLowercase.].
 
 	"readd the sign if needed or appropriate"
-	value < 0 ifTrue:[
+	value < 0 ifTrue: [
 		resultString := '-' + resultString.
-	] ifFalse:[
-		(aSet includes: $+) ifTrue:[
+	] ifFalse: [
+		(aSet includes: $+) ifTrue: [
 			resultString := '+' + resultString.
 		] ifFalse: [
-			(aSet includes: Character space) ifTrue:[
+			(aSet includes: Character space) ifTrue: [
 				resultString := ' ' + resultString.
 			].
 		].
@@ -206,7 +206,7 @@ ___powInt: anInteger
 
 	return := float ___value: (anInteger raisedTo: value).
 
-	return = return __ceil__ ifTrue:[ return := int ___value: (return ___value)].
+	return = return __ceil__ ifTrue: [return := int ___value: (return ___value)].
 	
 	^return
 %
@@ -214,9 +214,9 @@ category: 'Python-int'
 method: int
 ___powReal: aFloatReal imag: aFloatImag
 		
-	| negative complexHolder exponent result|
+	| negative complexHolder exponent result |
 
-	value = 0 ifTrue: [ ^1 ].
+	value = 0 ifTrue: [^1].
 
 	negative := value < 0.
 
@@ -244,7 +244,7 @@ ___powReal: aFloatReal imag: aFloatImag
 
 	"if the exponent was negative at the beginning then rationalize the denominator"
 	negative ifTrue: [
-		| conjugate denominator realPart imagPart|
+		| conjugate denominator realPart imagPart |
 		conjugate := result conjugate.
 		realPart := conjugate real ___value.
 		imagPart := conjugate imag ___value.
@@ -307,7 +307,7 @@ __and__: anObject
 		^int ___value: (value bitAnd: other ___value)
 	]
 	on: MessageNotUnderstood
-	do: [ TypeError signal: 'TypeError: unsupported operand type(s) for +: ''int'' and ''', anObject class asString,'''' ].
+	do: [TypeError signal: 'TypeError: unsupported operand type(s) for +: ''int'' and ''', anObject class asString,''''].
 %
 category: 'Python-int'
 method: int
@@ -372,7 +372,7 @@ __invert__
 category: 'Python-int'
 method: int
 __lshift__: anIndex
-	(anIndex ___value) < 0 ifTrue:[ValueError signal: 'ValueError: negative shift count'].
+	(anIndex ___value) < 0 ifTrue: [ValueError signal: 'ValueError: negative shift count'].
 	^int ___value: (value bitShift: anIndex ___value)
 %
 category: 'Python-int'
@@ -437,7 +437,7 @@ __rfloordiv__: any
 category: 'Python-int'
 method: int
 __rlshift__: any
-	(self ___value) < 0 ifTrue:[ValueError signal: 'ValueError: negative shift count'].
+	(self ___value) < 0 ifTrue: [ValueError signal: 'ValueError: negative shift count'].
 	^any __lshift__: self
 %
 category: 'Python-int'
@@ -467,7 +467,7 @@ category: 'Python-int'
 method: int
 __round__: anInt
 
-	anInt class == int ifFalse:[
+	anInt class == int ifFalse: [
 		TypeError signal: 'TypeError: ', anInt class asString,' object cannot be interpreted as an integer'
 	].
 	^self.
@@ -475,7 +475,7 @@ __round__: anInt
 category: 'Python-int'
 method: int
 __rrshift__: any
-	(self ___value) < 0 ifTrue:[ValueError signal: 'ValueError: negative shift count'].
+	(self ___value) < 0 ifTrue: [ValueError signal: 'ValueError: negative shift count'].
 	(any isKindOf: Magnitude)
 		ifTrue: [^self __rrshift__: (int ___value: any)].
 	^any __rshift__: self
@@ -483,7 +483,7 @@ __rrshift__: any
 category: 'Python-int'
 method: int
 __rshift__: anIndex
-	(anIndex ___value) < 0 ifTrue:[ValueError signal: 'ValueError: negative shift count'].
+	(anIndex ___value) < 0 ifTrue: [ValueError signal: 'ValueError: negative shift count'].
 	^int ___value: (value bitShift: anIndex ___value negated)
 %
 category: 'Python-int'

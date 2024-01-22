@@ -199,7 +199,7 @@ category: 'done'
 method: complexTest
 test__pow__
 
-	| a b c powHolder|
+	| a b c powHolder |
 	a := complex ___real: 3 imaginary: 4.
 	b := a __pow__: (self int: 2).
 	c := a __pow__: (self int: 3).

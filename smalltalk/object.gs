@@ -95,7 +95,7 @@ of the keyword selector until we find a method that exists.
 	selector := selector asString reverse.
 	args := aMessageDescriptor arguments.
 	index := selector indexOf: $:.
-	index == 0 ifTrue: [ ^super doesNotUnderstand: aMessageDescriptor ].
+	index == 0 ifTrue: [^super doesNotUnderstand: aMessageDescriptor].
 	index := selector indexOf: $: startingAt: 2.
 	^self 
 		perform: ((selector copyFrom: index to: selector size) reverse asSymbol) 
@@ -137,7 +137,7 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 	aCharacter contains the Type which will match one of the validTypes or invalidTypes
 	"
 
-	|validTypes invalidTypes return|
+	| validTypes invalidTypes return |
 	validTypes := {$a. $s. $r. $c} asSet.
 	invalidTypes := {
 			$d->[TypeError signal: 'TypeError: %d format: a real number is required, not str'].
@@ -154,21 +154,21 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 			$G->[TypeError signal: 'TypeError: must be real number, not str'].
 		} asDictionary.
 
-	(validTypes includes: aCharacter) ifFalse:[
+	(validTypes includes: aCharacter) ifFalse: [
 		(invalidTypes at: aCharacter) value.
 	].
 
 	return := self __str__ ___value.
-	(aCharacter == $r or:[aCharacter == $a])
-		ifTrue:[
+	(aCharacter == $r or: [aCharacter == $a])
+		ifTrue: [
 			return := self __repr__ ___value
 		].
 
-	((aCharacter == $c) and:[ return size > 1]) ifTrue:[
+	((aCharacter == $c) and: [return size > 1]) ifTrue: [
 		TypeError signal: 'TypeError: %c requires int or char'
 	].
 
-	(anObject ~= '' and: [anObject < (return size)]) ifFalse:[ return := return copyFrom: 1 to: return size].
+	(anObject ~= '' and: [anObject < (return size)]) ifFalse: [return := return copyFrom: 1 to: return size].
 	^return
 %
 category: 'other'
@@ -187,7 +187,7 @@ category: 'other'
 method: object
 ___modString: aString
 	
-	^ (tuple ___value: {self}) ___modString: aString.
+	^(tuple ___value: {self}) ___modString: aString.
 %
 category: 'other'
 method: object
@@ -378,7 +378,7 @@ __setattr__: aKey _: aValue
 	symbol := aKey ___string asSymbol.
 	(self __dir__ __contains__: aKey) ___value ifTrue: [
       	AttributeError signal: self __class__ name asString printString, ' object attribute ', aKey ___string printString , ' is read-only'.
-  ].
+ ].
 
 	AttributeError signal: self __class__ name asString printString, ' object has no attribute ', aKey ___string printString .
 %
@@ -483,7 +483,7 @@ of the keyword selector until we find a method that exists.
 	selector := aMessageDescriptor selector asString reverse.
 	args := aMessageDescriptor arguments.
 	index := selector indexOf: $:.
-	index == 0 ifTrue: [ ^super doesNotUnderstand: aMessageDescriptor ].
+	index == 0 ifTrue: [^super doesNotUnderstand: aMessageDescriptor].
 	index := selector indexOf: $: startingAt: 2.
 	^self 
 		perform: ((selector copyFrom: index to: selector size) reverse asSymbol) 

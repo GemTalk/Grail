@@ -39,8 +39,8 @@ test__and__
 		yourself.
 
 	self
-		assert: (((self int: 1) __lt__: (x := self int: 2)) __and__: [ (x __lt__: (x := self int: 3)) __and__: [ x __lt__: (x := self int: 4) ]]) equals: (self bool: true);
-		assert: (((self int: 1) __lt__: (x := self int: 2)) __and__: [ (x __lt__: (x := self int: 3)) __and__: [ x __lt__: (x := self int: 2) ]]) equals: (self bool: false);
+		assert: (((self int: 1) __lt__: (x := self int: 2)) __and__: [(x __lt__: (x := self int: 3)) __and__: [x __lt__: (x := self int: 4)]]) equals: (self bool: true);
+		assert: (((self int: 1) __lt__: (x := self int: 2)) __and__: [(x __lt__: (x := self int: 3)) __and__: [x __lt__: (x := self int: 2)]]) equals: (self bool: false);
 		yourself.
 %
 category: 'done'
@@ -299,7 +299,7 @@ test__pos__
 category: 'done'
 method: intTest
 test__pow__
-	|powHolder|
+	| powHolder |
 	self
 		assert: ((self int: 3) __pow__: (self int: 2)) ___value equals: 9;
 		assert: ((self int: 4) __pow__: (self int: 3)) ___value equals: 64;

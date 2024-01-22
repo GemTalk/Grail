@@ -21,8 +21,8 @@ category: 'other'
 method: PrettyWriteStream
 nextPutAll: aString
 
-	(self contents notEmpty and: [ self contents last == Character lf ]) ifTrue: [
-		indentCount timesRepeat: [ self tab ].
+	(self contents notEmpty and: [self contents last == Character lf]) ifTrue: [
+		indentCount timesRepeat: [self tab].
 	].
 
 	super nextPutAll: aString

@@ -35,19 +35,19 @@ method: dict
 __delitem__: aKey
 	^self ___container
 		removeKey: aKey
-		ifAbsent: [KeyError signal: aKey printString ].
+		ifAbsent: [KeyError signal: aKey printString].
 %
 category: 'Python'
 method: dict
 __ge__: otherCollection
-	^(self __gt__: otherCollection) or: [self __eq__: otherCollection ]
+	^(self __gt__: otherCollection) or: [self __eq__: otherCollection]
 %
 category: 'Python'
 method: dict
 __getitem__: aKey
 	^self ___container
 		at: aKey
-		ifAbsent: [KeyError signal: 'KeyError: ' + aKey __repr__ ___value ].
+		ifAbsent: [KeyError signal: 'KeyError: ' + aKey __repr__ ___value].
 %
 category: 'Python'
 method: dict
@@ -102,12 +102,12 @@ category: 'Python'
 method: dict
 __repr__
 
-	| stream index|
+	| stream index |
 	
 	index := 1.
 	stream := WriteStream on: String new.
 	stream nextPut: ${.
-	container associationsDo: [ :elem |
+	container associationsDo: [:elem |
 		stream
 			nextPutAll: elem key __repr__ ___value;
 			nextPutAll: ': ';
@@ -179,19 +179,19 @@ method: dict
 update: anObject
 	"update the dictionary with the new key, value pairs in anObject,
 		this can be done with another dictionary or nested data structures"
-	| index KeyAndValue|
+	| index KeyAndValue |
 	anObject class == dict
-		ifTrue:[
+		ifTrue: [
 			anObject ___container keysAndValuesDo: [:key :val | self ___container at: key put: val].
 		]
 		ifFalse: [
-			anObject __len__ ___value == 0 ifFalse:[
+			anObject __len__ ___value == 0 ifFalse: [
 				anObject class == str ifTrue: [
 					ValueError signal: 'ValueError: dictionary update sequence element #0 has length 1; 2 is required'.
 				].
 				index := 0.
 				KeyAndValue := OrderedCollection new.
-				anObject ___container do: [ :each |
+				anObject ___container do: [:each |
 					each __len__ ___value == 2 ifFalse: [
 						ValueError signal:
 							'TypeError: dictionary update sequence element #',
@@ -202,7 +202,7 @@ update: anObject
 					].
 					each class == str
 						ifTrue: [
-							each ___value do: [:elem | KeyAndValue add: (str ___value: elem asString) ].
+							each ___value do: [:elem | KeyAndValue add: (str ___value: elem asString)].
 						]
 						ifFalse: [
 							each ___container do: [:elem | KeyAndValue add: elem].

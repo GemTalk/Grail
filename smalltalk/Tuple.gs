@@ -40,16 +40,16 @@ category: 'Python'
 method: tuple
 ___modString: aString
 	
-	|readStream writeStream pieces piece counter|
+	| readStream writeStream pieces piece counter |
 
 	readStream := ReadStream on: aString.
 	piece := ''.
 	pieces := OrderedCollection new.
 	counter := 0.
-	[readStream atEnd] whileFalse:[
-		|char|
+	[readStream atEnd] whileFalse: [
+		| char |
 		char := readStream next.
-		char == $% ifFalse:[
+		char == $% ifFalse: [
 			piece := piece, char asString.
 		] ifTrue: [
 			pieces add: piece.
@@ -61,15 +61,15 @@ ___modString: aString
 	pieces add: piece.
 	readStream := ReadStream on: self ___value.
 
-	readStream size > counter ifTrue:[
+	readStream size > counter ifTrue: [
 		TypeError signal: 'TypeError: not all arguments converted during string formatting'.
 	].
 
 	writeStream := WriteStream on: (String new).
-	pieces do:[ :each | 
+	pieces do: [:each | 
 		(each isKindOf: String) ifTrue: [
 			writeStream nextPutAll: each.
-		] ifFalse:[
+		] ifFalse: [
 			writeStream nextPutAll: (each tupleForParameters: readStream).
 		].
 	].
@@ -101,7 +101,7 @@ __repr__
 	stream := WriteStream on: String new.
 	stream nextPut: $(.
 	stream nextPutAll: container removeFirst __repr__ ___value.
-	container do: [ :elem |
+	container do: [:elem |
 		stream 
 			nextPutAll: ', ';
 			nextPutAll: elem __repr__ ___value;
