@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from UnicodeEncodeErrorTest
-expectvalue /Metaclass3
-doit
-UnicodeEncodeErrorTest removeAllMethods.
-UnicodeEncodeErrorTest class removeAllMethods.
-%
+removeallmethods UnicodeEncodeErrorTest
+removeallclassmethods UnicodeEncodeErrorTest
 ! ------------------- Class methods for UnicodeEncodeErrorTest
 ! ------------------- Instance methods for UnicodeEncodeErrorTest
-set compile_env: 0
 category: 'todo'
 method: UnicodeEncodeErrorTest
 testencoding

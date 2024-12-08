@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from PythonTestCase
-expectvalue /Metaclass3
-doit
-PythonTestCase removeAllMethods.
-PythonTestCase class removeAllMethods.
-%
+removeallmethods PythonTestCase
+removeallclassmethods PythonTestCase
 ! ------------------- Class methods for PythonTestCase
-set compile_env: 0
 category: 'other'
 classmethod: PythonTestCase
 ast
@@ -39,7 +35,6 @@ setPath
 	path := path copyFrom: 1 to: path size - 1.
 	Path := path , '/tests/'.
 %
-set compile_env: 0
 category: 'Testing'
 classmethod: PythonTestCase
 isAbstract
@@ -49,7 +44,6 @@ isAbstract
 	^self sunitName == #PythonTestCase
 %
 ! ------------------- Instance methods for PythonTestCase
-set compile_env: 0
 category: 'other'
 method: PythonTestCase
 assert: value

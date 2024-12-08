@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from ConnectionResetError
-expectvalue /Metaclass3
-doit
-ConnectionResetError removeAllMethods.
-ConnectionResetError class removeAllMethods.
-%
+removeallmethods ConnectionResetError
+removeallclassmethods ConnectionResetError
 ! ------------------- Class methods for ConnectionResetError
 ! ------------------- Instance methods for ConnectionResetError

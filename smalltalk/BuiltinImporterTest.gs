@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from BuiltinImporterTest
-expectvalue /Metaclass3
-doit
-BuiltinImporterTest removeAllMethods.
-BuiltinImporterTest class removeAllMethods.
-%
+removeallmethods BuiltinImporterTest
+removeallclassmethods BuiltinImporterTest
 ! ------------------- Class methods for BuiltinImporterTest
 ! ------------------- Instance methods for BuiltinImporterTest

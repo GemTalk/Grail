@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from OSError
-expectvalue /Metaclass3
-doit
-OSError removeAllMethods.
-OSError class removeAllMethods.
-%
+removeallmethods OSError
+removeallclassmethods OSError
 ! ------------------- Class methods for OSError
 ! ------------------- Instance methods for OSError

@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from builtin_function_or_methodTest
-expectvalue /Metaclass3
-doit
-builtin_function_or_methodTest removeAllMethods.
-builtin_function_or_methodTest class removeAllMethods.
-%
+removeallmethods builtin_function_or_methodTest
+removeallclassmethods builtin_function_or_methodTest
 ! ------------------- Class methods for builtin_function_or_methodTest
 ! ------------------- Instance methods for builtin_function_or_methodTest
-set compile_env: 0
 category: 'other'
 method: builtin_function_or_methodTest
 testAbs

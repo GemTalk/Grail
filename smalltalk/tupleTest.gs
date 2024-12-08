@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from tupleTest
-expectvalue /Metaclass3
-doit
-tupleTest removeAllMethods.
-tupleTest class removeAllMethods.
-%
+removeallmethods tupleTest
+removeallclassmethods tupleTest
 ! ------------------- Class methods for tupleTest
 ! ------------------- Instance methods for tupleTest
-set compile_env: 0
 category: 'done'
 method: tupleTest
 test__add__
@@ -274,7 +270,6 @@ testindex
 			self assert: exception messageText equals: '''b'' is not in tuple'];
 		yourself
 %
-set compile_env: 0
 category: 'todo'
 method: tupleTest
 test__class_getitem__

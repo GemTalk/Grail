@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from NumericLiteralsTestCase
-expectvalue /Metaclass3
-doit
-NumericLiteralsTestCase removeAllMethods.
-NumericLiteralsTestCase class removeAllMethods.
-%
+removeallmethods NumericLiteralsTestCase
+removeallclassmethods NumericLiteralsTestCase
 ! ------------------- Class methods for NumericLiteralsTestCase
-set compile_env: 0
 category: 'other'
 classmethod: NumericLiteralsTestCase
 filename
@@ -13,7 +9,6 @@ filename
 	^'NumericLiterals.py'
 %
 ! ------------------- Instance methods for NumericLiteralsTestCase
-set compile_env: 0
 category: 'other'
 method: NumericLiteralsTestCase
 testBinaryInteger

@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from float
-expectvalue /Metaclass3
-doit
-float removeAllMethods.
-float class removeAllMethods.
-%
+removeallmethods float
+removeallclassmethods float
 ! ------------------- Class methods for float
-set compile_env: 0
 category: 'Smalltalk'
 classmethod: float
 ___value: aNumber
@@ -18,7 +14,6 @@ ___value: aNumber
 		yourself
 %
 ! ------------------- Instance methods for float
-set compile_env: 0
 category: 'Python-float'
 method: float
 ___addFloat: aFloat
@@ -490,7 +485,6 @@ real
 
 	^self
 %
-set compile_env: 0
 category: 'Python-object'
 method: float
 __eq__: anObject
@@ -539,7 +533,6 @@ __ne__: anObject
 
 	^bool ___value: value ~= anObject ___value
 %
-set compile_env: 0
 category: 'Smalltalk'
 method: float
 ___addInt: anInteger

@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from PyGlobals
-expectvalue /Metaclass3
-doit
-PyGlobals removeAllMethods.
-PyGlobals class removeAllMethods.
-%
+removeallmethods PyGlobals
+removeallclassmethods PyGlobals
 ! ------------------- Class methods for PyGlobals
-set compile_env: 0
 category: 'other'
 classmethod: PyGlobals
 new
@@ -15,7 +11,6 @@ new
 		yourself.
 %
 ! ------------------- Instance methods for PyGlobals
-set compile_env: 0
 category: 'other'
 method: PyGlobals
 globals

@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from ImportErrorTest
-expectvalue /Metaclass3
-doit
-ImportErrorTest removeAllMethods.
-ImportErrorTest class removeAllMethods.
-%
+removeallmethods ImportErrorTest
+removeallclassmethods ImportErrorTest
 ! ------------------- Class methods for ImportErrorTest
 ! ------------------- Instance methods for ImportErrorTest

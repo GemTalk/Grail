@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from propertyTest
-expectvalue /Metaclass3
-doit
-propertyTest removeAllMethods.
-propertyTest class removeAllMethods.
-%
+removeallmethods propertyTest
+removeallclassmethods propertyTest
 ! ------------------- Class methods for propertyTest
 ! ------------------- Instance methods for propertyTest
-set compile_env: 0
 category: 'todo'
 method: propertyTest
 test__delete__

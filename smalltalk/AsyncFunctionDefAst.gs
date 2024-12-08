@@ -1,18 +1,14 @@
 ﻿! ------------------- Remove existing behavior from AsyncFunctionDefAst
-expectvalue /Metaclass3
-doit
-AsyncFunctionDefAst removeAllMethods.
-AsyncFunctionDefAst class removeAllMethods.
-%
+removeallmethods AsyncFunctionDefAst
+removeallclassmethods AsyncFunctionDefAst
 ! ------------------- Class methods for AsyncFunctionDefAst
 ! ------------------- Instance methods for AsyncFunctionDefAst
-set compile_env: 0
 category: 'other'
 method: AsyncFunctionDefAst
 initialize
 	"AsyncFunctionDef(identifier name, arguments args,
                              stmt* body, expr* decorator_list, expr? returns,
-                             string? type_comment)"
+                             string? type_comment, type_param* type_params)"
 
 	| stream |
 	stream := self stream.
@@ -28,5 +24,7 @@ initialize
 	returns := self optionalExpression.
 	self commaSpace. 
 	type_comment := self optionalString.
+	self commaSpace.
+	type_params := self collectAst: [self typeParams].
 	self readPosition.
 %

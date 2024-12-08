@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from bool
-expectvalue /Metaclass3
-doit
-bool removeAllMethods.
-bool class removeAllMethods.
-%
+removeallmethods bool
+removeallclassmethods bool
 ! ------------------- Class methods for bool
-set compile_env: 0
 category: 'Smalltalk'
 classmethod: bool
 ___value: anObject
@@ -29,7 +25,6 @@ ___value: anObject
 	#todo
 %
 ! ------------------- Instance methods for bool
-set compile_env: 0
 category: 'other'
 method: bool
 ___ignore: anObject
@@ -76,7 +71,6 @@ __or__: anObject
 
 	^bool ___value: (self ___value or: [other ___value])
 %
-set compile_env: 0
 category: 'Smalltalk'
 method: bool
 __bool__

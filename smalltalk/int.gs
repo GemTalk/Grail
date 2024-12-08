@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from int
-expectvalue /Metaclass3
-doit
-int removeAllMethods.
-int class removeAllMethods.
-%
+removeallmethods int
+removeallclassmethods int
 ! ------------------- Class methods for int
-set compile_env: 0
 category: 'Python'
 classmethod: int
 __call__: aPythonObject
@@ -31,7 +27,6 @@ __new__: aPythonObject
  	TypeError signal: 'TypeError: can''t convert ' , aPythonObject class name , ' to int'.
 	^instance
 %
-set compile_env: 0
 category: 'Smalltalk'
 classmethod: int
 ___assertMagnitudeAsFirstAgumentOn: args
@@ -56,7 +51,6 @@ ___value: aNumber
 		yourself
 %
 ! ------------------- Instance methods for int
-set compile_env: 0
 category: 'Python-int'
 method: int
 ___addFloat: aFloat
@@ -586,7 +580,6 @@ to_bytes
 	
 	self error: #pyTodo
 %
-set compile_env: 0
 category: 'Python-object'
 method: int
 __eq__: anObject
@@ -635,7 +628,6 @@ __rpow__: anObject
 
 	^anObject __pow__: self.
 %
-set compile_env: 0
 category: 'Smalltalk'
 method: int
 ___parse: stringArg

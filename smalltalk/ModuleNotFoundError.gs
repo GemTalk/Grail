@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from ModuleNotFoundError
-expectvalue /Metaclass3
-doit
-ModuleNotFoundError removeAllMethods.
-ModuleNotFoundError class removeAllMethods.
-%
+removeallmethods ModuleNotFoundError
+removeallclassmethods ModuleNotFoundError
 ! ------------------- Class methods for ModuleNotFoundError
 ! ------------------- Instance methods for ModuleNotFoundError

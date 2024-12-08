@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from ExpressionContextAst
-expectvalue /Metaclass3
-doit
-ExpressionContextAst removeAllMethods.
-ExpressionContextAst class removeAllMethods.
-%
+removeallmethods ExpressionContextAst
+removeallclassmethods ExpressionContextAst
 ! ------------------- Class methods for ExpressionContextAst
-set compile_env: 0
 category: 'other'
 classmethod: ExpressionContextAst
 isAbstract
@@ -13,7 +9,6 @@ isAbstract
 	^self == ExpressionContextAst
 %
 ! ------------------- Instance methods for ExpressionContextAst
-set compile_env: 0
 category: 'other'
 method: ExpressionContextAst
 assertIsLoad

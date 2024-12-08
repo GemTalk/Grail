@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from setTest
-expectvalue /Metaclass3
-doit
-setTest removeAllMethods.
-setTest class removeAllMethods.
-%
+removeallmethods setTest
+removeallclassmethods setTest
 ! ------------------- Class methods for setTest
 ! ------------------- Instance methods for setTest
-set compile_env: 0
 category: 'done'
 method: setTest
 test__and__
@@ -712,7 +708,6 @@ testupdate
 		assert: (c __contains__: (self str: 'e'));
 		yourself
 %
-set compile_env: 0
 category: 'todo'
 method: setTest
 test__class_getitem__

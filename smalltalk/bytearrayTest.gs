@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from bytearrayTest
-expectvalue /Metaclass3
-doit
-bytearrayTest removeAllMethods.
-bytearrayTest class removeAllMethods.
-%
+removeallmethods bytearrayTest
+removeallclassmethods bytearrayTest
 ! ------------------- Class methods for bytearrayTest
 ! ------------------- Instance methods for bytearrayTest
-set compile_env: 0
 category: 'todo'
 method: bytearrayTest
 test__add__

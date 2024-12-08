@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from OrAst
-expectvalue /Metaclass3
-doit
-OrAst removeAllMethods.
-OrAst class removeAllMethods.
-%
+removeallmethods OrAst
+removeallclassmethods OrAst
 ! ------------------- Class methods for OrAst
 ! ------------------- Instance methods for OrAst
-set compile_env: 0
 category: 'other'
 method: OrAst
 printSmalltalkOn: aStream

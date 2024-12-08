@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from list
-expectvalue /Metaclass3
-doit
-list removeAllMethods.
-list class removeAllMethods.
-%
+removeallmethods list
+removeallclassmethods list
 ! ------------------- Class methods for list
-set compile_env: 0
 category: 'other'
 classmethod: list
 __call__: aList
@@ -18,7 +14,6 @@ __new__: aList
 
 	^self basicNew.
 %
-set compile_env: 0
 category: 'Smalltalk'
 classmethod: list
 ___containerClass
@@ -36,7 +31,6 @@ ___startChar
 	^$[
 %
 ! ------------------- Instance methods for list
-set compile_env: 0
 category: 'Python'
 method: list
 __delitem__: anIndex
@@ -196,7 +190,6 @@ sort: aDict
 									ifTrue: [(self ___container sort: sortBlock) reverse]
 									ifFalse: [self ___container sort: sortBlock]).
 %
-set compile_env: 0
 category: 'Python 2.7'
 method: list
 __delslice__: start _: end
@@ -217,7 +210,6 @@ __setslice__: start _: end _: anElement
 	self insert: start _: anElement.
 	^self
 %
-set compile_env: 0
 category: 'Smalltalk'
 method: list
 ___remove: anIndex ifFail: message

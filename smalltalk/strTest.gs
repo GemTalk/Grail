@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from strTest
-expectvalue /Metaclass3
-doit
-strTest removeAllMethods.
-strTest class removeAllMethods.
-%
+removeallmethods strTest
+removeallclassmethods strTest
 ! ------------------- Class methods for strTest
 ! ------------------- Instance methods for strTest
-set compile_env: 0
 category: 'todo'
 method: strTest
 test__add__

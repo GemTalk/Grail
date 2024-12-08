@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from frozenset
-expectvalue /Metaclass3
-doit
-frozenset removeAllMethods.
-frozenset class removeAllMethods.
-%
+removeallmethods frozenset
+removeallclassmethods frozenset
 ! ------------------- Class methods for frozenset
-set compile_env: 0
 category: 'Smalltalk'
 classmethod: frozenset
 ___containerClass
@@ -23,7 +19,6 @@ ___startChar
 	^${
 %
 ! ------------------- Instance methods for frozenset
-set compile_env: 0
 category: 'Python'
 method: frozenset
 __and__: aSet
@@ -144,7 +139,6 @@ union: aSet
 	newSet ___container addAll: aSet ___container.
 	^newSet
 %
-set compile_env: 0
 category: 'Smalltalk'
 method: frozenset
 __rand__: aSet

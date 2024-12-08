@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from FormatTag
-expectvalue /Metaclass3
-doit
-FormatTag removeAllMethods.
-FormatTag class removeAllMethods.
-%
+removeallmethods FormatTag
+removeallclassmethods FormatTag
 ! ------------------- Class methods for FormatTag
 ! ------------------- Instance methods for FormatTag
-set compile_env: 0
 category: 'other'
 method: FormatTag
 adjustWidth: aReadStream

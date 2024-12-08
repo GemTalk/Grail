@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from SimpleStatementsTestCase
-expectvalue /Metaclass3
-doit
-SimpleStatementsTestCase removeAllMethods.
-SimpleStatementsTestCase class removeAllMethods.
-%
+removeallmethods SimpleStatementsTestCase
+removeallclassmethods SimpleStatementsTestCase
 ! ------------------- Class methods for SimpleStatementsTestCase
-set compile_env: 0
 category: 'other'
 classmethod: SimpleStatementsTestCase
 filename
@@ -13,7 +9,6 @@ filename
 	^'SimpleStatements.py'
 %
 ! ------------------- Instance methods for SimpleStatementsTestCase
-set compile_env: 0
 category: 'other'
 method: SimpleStatementsTestCase
 testArrayAssignment

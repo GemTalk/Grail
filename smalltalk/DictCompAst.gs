@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from DictCompAst
-expectvalue /Metaclass3
-doit
-DictCompAst removeAllMethods.
-DictCompAst class removeAllMethods.
-%
+removeallmethods DictCompAst
+removeallclassmethods DictCompAst
 ! ------------------- Class methods for DictCompAst
 ! ------------------- Instance methods for DictCompAst
-set compile_env: 0
 category: 'other'
 method: DictCompAst
 initialize

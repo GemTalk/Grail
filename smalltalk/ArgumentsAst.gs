@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from ArgumentsAst
-expectvalue /Metaclass3
-doit
-ArgumentsAst removeAllMethods.
-ArgumentsAst class removeAllMethods.
-%
+removeallmethods ArgumentsAst
+removeallclassmethods ArgumentsAst
 ! ------------------- Class methods for ArgumentsAst
 ! ------------------- Instance methods for ArgumentsAst
-set compile_env: 0
 category: 'other'
 method: ArgumentsAst
 args

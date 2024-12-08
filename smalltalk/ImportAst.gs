@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from ImportAst
-expectvalue /Metaclass3
-doit
-ImportAst removeAllMethods.
-ImportAst class removeAllMethods.
-%
+removeallmethods ImportAst
+removeallclassmethods ImportAst
 ! ------------------- Class methods for ImportAst
 ! ------------------- Instance methods for ImportAst
-set compile_env: 0
 category: 'other'
 method: ImportAst
 initialize

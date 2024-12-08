@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from str
-expectvalue /Metaclass3
-doit
-str removeAllMethods.
-str class removeAllMethods.
-%
+removeallmethods str
+removeallclassmethods str
 ! ------------------- Class methods for str
-set compile_env: 0
 category: 'other'
 classmethod: str
 ___value: aString
@@ -15,7 +11,6 @@ ___value: aString
 		yourself
 %
 ! ------------------- Instance methods for str
-set compile_env: 0
 category: 'Python'
 method: str
 __add__: pythonObject
@@ -234,7 +229,6 @@ tagFrom: aReadStream
 
 	^FormatTag new initializeFrom: aReadStream.
 %
-set compile_env: 0
 category: 'Smalltalk'
 method: str
 ___convertWithFlags: aSet precision: anObject andType: aCharacter

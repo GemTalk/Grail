@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from SyntaxError
-expectvalue /Metaclass3
-doit
-SyntaxError removeAllMethods.
-SyntaxError class removeAllMethods.
-%
+removeallmethods SyntaxError
+removeallclassmethods SyntaxError
 ! ------------------- Class methods for SyntaxError
 ! ------------------- Instance methods for SyntaxError

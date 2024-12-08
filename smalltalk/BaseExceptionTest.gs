@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from BaseExceptionTest
-expectvalue /Metaclass3
-doit
-BaseExceptionTest removeAllMethods.
-BaseExceptionTest class removeAllMethods.
-%
+removeallmethods BaseExceptionTest
+removeallclassmethods BaseExceptionTest
 ! ------------------- Class methods for BaseExceptionTest
 ! ------------------- Instance methods for BaseExceptionTest
-set compile_env: 0
 category: 'todo'
 method: BaseExceptionTest
 test__dict__

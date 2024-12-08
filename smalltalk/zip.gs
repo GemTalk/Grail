@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from zip
-expectvalue /Metaclass3
-doit
-zip removeAllMethods.
-zip class removeAllMethods.
-%
+removeallmethods zip
+removeallclassmethods zip
 ! ------------------- Class methods for zip
 ! ------------------- Instance methods for zip

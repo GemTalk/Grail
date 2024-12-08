@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from ByteLiteralsTestCase
-expectvalue /Metaclass3
-doit
-ByteLiteralsTestCase removeAllMethods.
-ByteLiteralsTestCase class removeAllMethods.
-%
+removeallmethods ByteLiteralsTestCase
+removeallclassmethods ByteLiteralsTestCase
 ! ------------------- Class methods for ByteLiteralsTestCase
-set compile_env: 0
 category: 'other'
 classmethod: ByteLiteralsTestCase
 filename
@@ -13,7 +9,6 @@ filename
 	^'StringLiterals.py'
 %
 ! ------------------- Instance methods for ByteLiteralsTestCase
-set compile_env: 0
 category: 'other'
 method: ByteLiteralsTestCase
 testBackspace

@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from MultAst
-expectvalue /Metaclass3
-doit
-MultAst removeAllMethods.
-MultAst class removeAllMethods.
-%
+removeallmethods MultAst
+removeallclassmethods MultAst
 ! ------------------- Class methods for MultAst
 ! ------------------- Instance methods for MultAst
-set compile_env: 0
 category: 'other'
 method: MultAst
 printSmalltalkOn: aStream

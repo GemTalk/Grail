@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from BuiltinImporter
-expectvalue /Metaclass3
-doit
-BuiltinImporter removeAllMethods.
-BuiltinImporter class removeAllMethods.
-%
+removeallmethods BuiltinImporter
+removeallclassmethods BuiltinImporter
 ! ------------------- Class methods for BuiltinImporter
 ! ------------------- Instance methods for BuiltinImporter

@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from AttributeAst
-expectvalue /Metaclass3
-doit
-AttributeAst removeAllMethods.
-AttributeAst class removeAllMethods.
-%
+removeallmethods AttributeAst
+removeallclassmethods AttributeAst
 ! ------------------- Class methods for AttributeAst
 ! ------------------- Instance methods for AttributeAst
-set compile_env: 0
 category: 'other'
 method: AttributeAst
 assertContextIsLoad

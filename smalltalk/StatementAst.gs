@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from StatementAst
-expectvalue /Metaclass3
-doit
-StatementAst removeAllMethods.
-StatementAst class removeAllMethods.
-%
+removeallmethods StatementAst
+removeallclassmethods StatementAst
 ! ------------------- Class methods for StatementAst
-set compile_env: 0
 category: 'other'
 classmethod: StatementAst
 statementFrom: aNode

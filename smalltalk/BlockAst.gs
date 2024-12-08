@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from BlockAst
-expectvalue /Metaclass3
-doit
-BlockAst removeAllMethods.
-BlockAst class removeAllMethods.
-%
+removeallmethods BlockAst
+removeallclassmethods BlockAst
 ! ------------------- Class methods for BlockAst
 ! ------------------- Instance methods for BlockAst
-set compile_env: 0
 category: 'other'
 method: BlockAst
 declareVariable: aSymbol

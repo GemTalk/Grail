@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from AddAst
-expectvalue /Metaclass3
-doit
-AddAst removeAllMethods.
-AddAst class removeAllMethods.
-%
+removeallmethods AddAst
+removeallclassmethods AddAst
 ! ------------------- Class methods for AddAst
 ! ------------------- Instance methods for AddAst
-set compile_env: 0
 category: 'other'
 method: AddAst
 printSmalltalkOn: aStream

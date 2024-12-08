@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from ExprAst
-expectvalue /Metaclass3
-doit
-ExprAst removeAllMethods.
-ExprAst class removeAllMethods.
-%
+removeallmethods ExprAst
+removeallclassmethods ExprAst
 ! ------------------- Class methods for ExprAst
 ! ------------------- Instance methods for ExprAst
-set compile_env: 0
 category: 'other'
 method: ExprAst
 initialize

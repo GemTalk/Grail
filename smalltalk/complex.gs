@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from complex
-expectvalue /Metaclass3
-doit
-complex removeAllMethods.
-complex class removeAllMethods.
-%
+removeallmethods complex
+removeallclassmethods complex
 ! ------------------- Class methods for complex
-set compile_env: 0
 category: 'other'
 classmethod: complex
 __call__: p1
@@ -30,7 +26,6 @@ __new__: p1 _: p2
 
 	^self basicNew
 %
-set compile_env: 0
 category: 'Smalltalk'
 classmethod: complex
 ___assertJustOneStringArgumentOn: args
@@ -65,7 +60,6 @@ ___real: r imaginary: i
 		yourself
 %
 ! ------------------- Instance methods for complex
-set compile_env: 0
 category: 'Python-complex'
 method: complex
 __abs__
@@ -177,7 +171,6 @@ real
 
 	^float ___value: real
 %
-set compile_env: 0
 category: 'Python-object'
 method: complex
 __eq__: anObject
@@ -261,7 +254,6 @@ __repr__
 		real = 0 ifFalse: [s nextPut: $)]
 	])
 %
-set compile_env: 0
 category: 'Smalltalk'
 method: complex
 ___addFloat: aFloat

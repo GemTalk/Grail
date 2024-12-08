@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from range
-expectvalue /Metaclass3
-doit
-range removeAllMethods.
-range class removeAllMethods.
-%
+removeallmethods range
+removeallclassmethods range
 ! ------------------- Class methods for range
-set compile_env: 0
 category: 'Python'
 classmethod: range
 __call__: aPythonInt
@@ -42,7 +38,6 @@ __new__: aPythonInt1 _: aPythonInt2 _: aPythonInt3
 
 	^self basicNew
 %
-set compile_env: 0
 category: 'Smalltalk'
 classmethod: range
 ___containerClass
@@ -50,7 +45,6 @@ ___containerClass
 	^Interval
 %
 ! ------------------- Instance methods for range
-set compile_env: 0
 category: '(as yet unclassified)'
 method: range
 __init__: aPythonInt1 _: aPythonInt2 _: aPythonInt3
@@ -62,7 +56,6 @@ __init__: aPythonInt1 _: aPythonInt2 _: aPythonInt3
 	begin := aPythonInt1.
 	end := aPythonInt2.
 %
-set compile_env: 0
 category: 'Python'
 method: range
 __bool__
@@ -145,7 +138,6 @@ stop
 
 	^container last + 1
 %
-set compile_env: 0
 category: 'Smalltalk'
 method: range
 ___container

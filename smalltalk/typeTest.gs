@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from typeTest
-expectvalue /Metaclass3
-doit
-typeTest removeAllMethods.
-typeTest class removeAllMethods.
-%
+removeallmethods typeTest
+removeallclassmethods typeTest
 ! ------------------- Class methods for typeTest
 ! ------------------- Instance methods for typeTest
-set compile_env: 0
 category: 'todo'
 method: typeTest
 test__abstractmethods__

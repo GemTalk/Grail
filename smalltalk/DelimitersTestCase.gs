@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from DelimitersTestCase
-expectvalue /Metaclass3
-doit
-DelimitersTestCase removeAllMethods.
-DelimitersTestCase class removeAllMethods.
-%
+removeallmethods DelimitersTestCase
+removeallclassmethods DelimitersTestCase
 ! ------------------- Class methods for DelimitersTestCase
-set compile_env: 0
 category: 'other'
 classmethod: DelimitersTestCase
 filename
@@ -13,7 +9,6 @@ filename
 	^'Delimiters.py'
 %
 ! ------------------- Instance methods for DelimitersTestCase
-set compile_env: 0
 category: 'other'
 method: DelimitersTestCase
 testCommaList

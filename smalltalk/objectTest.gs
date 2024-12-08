@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from objectTest
-expectvalue /Metaclass3
-doit
-objectTest removeAllMethods.
-objectTest class removeAllMethods.
-%
+removeallmethods objectTest
+removeallclassmethods objectTest
 ! ------------------- Class methods for objectTest
 ! ------------------- Instance methods for objectTest
-set compile_env: 0
 category: 'tests'
 method: objectTest
 test__class__
@@ -239,7 +235,6 @@ testIgnoreExtraArgs
 		assert: (a __eq__: a _: b);
 		yourself.
 %
-set compile_env: 0
 category: 'todo'
 method: objectTest
 test__format__

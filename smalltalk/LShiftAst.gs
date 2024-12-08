@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from LShiftAst
-expectvalue /Metaclass3
-doit
-LShiftAst removeAllMethods.
-LShiftAst class removeAllMethods.
-%
+removeallmethods LShiftAst
+removeallclassmethods LShiftAst
 ! ------------------- Class methods for LShiftAst
 ! ------------------- Instance methods for LShiftAst
-set compile_env: 0
 category: 'other'
 method: LShiftAst
 printSmalltalkOn: aStream

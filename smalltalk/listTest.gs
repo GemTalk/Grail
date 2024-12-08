@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from listTest
-expectvalue /Metaclass3
-doit
-listTest removeAllMethods.
-listTest class removeAllMethods.
-%
+removeallmethods listTest
+removeallclassmethods listTest
 ! ------------------- Class methods for listTest
 ! ------------------- Instance methods for listTest
-set compile_env: 0
 category: 'done'
 method: listTest
 test__add__
@@ -673,7 +669,6 @@ testsort
 		assert: (x __getitem__: (self int: -1)) equals: 'c';
 		yourself
 %
-set compile_env: 0
 category: 'todo'
 method: listTest
 test__class_getitem__

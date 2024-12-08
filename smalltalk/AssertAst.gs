@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from AssertAst
-expectvalue /Metaclass3
-doit
-AssertAst removeAllMethods.
-AssertAst class removeAllMethods.
-%
+removeallmethods AssertAst
+removeallclassmethods AssertAst
 ! ------------------- Class methods for AssertAst
 ! ------------------- Instance methods for AssertAst
-set compile_env: 0
 category: 'other'
 method: AssertAst
 initialize

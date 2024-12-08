@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from BinOpAst
-expectvalue /Metaclass3
-doit
-BinOpAst removeAllMethods.
-BinOpAst class removeAllMethods.
-%
+removeallmethods BinOpAst
+removeallclassmethods BinOpAst
 ! ------------------- Class methods for BinOpAst
 ! ------------------- Instance methods for BinOpAst
-set compile_env: 0
 category: 'other'
 method: BinOpAst
 initialize
