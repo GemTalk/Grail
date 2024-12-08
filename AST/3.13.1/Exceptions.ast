@@ -16,8 +16,8 @@ Module([
                 arg('self', None, None, 14, 15, 14, 19),
               ], None, [], [], None, []), [
                 Pass(15, 3, 15, 7),
-              ], [], None, None, 14, 2, 15, 7),
-          ], [], 13, 1, 15, 7),
+              ], [], None, None, [], 14, 2, 15, 7),
+          ], [], [], 13, 1, 15, 7),
         Assign([
             Name('obj', Store(), 16, 1, 16, 4),
           ], Call(Name('Class', Load(), 16, 7, 16, 12), [], [], 16, 7, 16, 14), None, 16, 1, 16, 14),
@@ -86,15 +86,15 @@ Module([
                 arg('self', None, None, 69, 15, 69, 19),
               ], None, [], [], None, []), [
                 Pass(70, 3, 70, 7),
-              ], [], None, None, 69, 2, 70, 7),
+              ], [], None, None, [], 69, 2, 70, 7),
             FunctionDef('abstract', arguments([], [
                 arg('self', None, None, 71, 15, 71, 19),
               ], None, [], [], None, []), [
                 Raise(Call(Name('NotImplementedError', Load(), 72, 9, 72, 28), [
                     Constant('subclass responsibility', None, 72, 29, 72, 54),
                   ], [], 72, 9, 72, 55), None, 72, 3, 72, 55),
-              ], [], None, None, 71, 2, 72, 55),
-          ], [], 68, 1, 72, 55),
+              ], [], None, None, [], 71, 2, 72, 55),
+          ], [], [], 68, 1, 72, 55),
         Assign([
             Name('obj', Store(), 73, 1, 73, 4),
           ], Call(Name('Class', Load(), 73, 7, 73, 12), [], [], 73, 7, 73, 14), None, 73, 1, 73, 14),
@@ -111,7 +111,7 @@ Module([
     Try([
         FunctionDef('rec', arguments([], [], None, [], [], None, []), [
             Expr(Call(Name('rec', Load(), 87, 2, 87, 5), [], [], 87, 2, 87, 7), 87, 2, 87, 7),
-          ], [], None, None, 86, 1, 87, 7),
+          ], [], None, None, [], 86, 1, 87, 7),
         Expr(Call(Name('rec', Load(), 88, 1, 88, 4), [], [], 88, 1, 88, 6), 88, 1, 88, 6),
       ], [
         ExceptHandler(Name('RecursionError', Load(), 89, 7, 89, 21), None, [
@@ -143,7 +143,7 @@ Module([
             Assign([
                 Name('x', Store(), 129, 2, 129, 3),
               ], Constant(1, None, 129, 6, 129, 7), None, 129, 2, 129, 7),
-          ], [], None, None, 127, 1, 129, 7),
+          ], [], None, None, [], 127, 1, 129, 7),
         Expr(Call(Name('ule', Load(), 130, 1, 130, 4), [], [], 130, 1, 130, 6), 130, 1, 130, 6),
       ], [
         ExceptHandler(Name('UnboundLocalError', Load(), 131, 7, 131, 24), None, [
