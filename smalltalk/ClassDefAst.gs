@@ -77,8 +77,12 @@ get: aSymbol
 category: 'other'
 method: ClassDefAst
 initialize
-	"ClassDef(identifier name, expr* bases,
-		keyword* keywords, stmt* body, expr* decorator_list)"
+	"ClassDef(identifier name,
+		 expr* bases,
+		 keyword* keywords,
+		 stmt* body,
+		 expr* decorator_list,
+		 type_param* type_params)"
 
 	| stream |
 	stream := self stream.
@@ -93,6 +97,8 @@ initialize
 	BlockAst parent: self.	"calls back to set body"
 	self commaSpace.
 	decorator_list := self collectAst: [self expression].
+	self commaSpace.
+	type_params := self collectAst: [self typeParams].
 	self readPosition.
 %
 category: 'other'

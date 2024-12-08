@@ -8,7 +8,8 @@ astForPath: pathString
 
 	| file path string |
 	path := '/tmp/grail.ast'.
-	System performOnServer: '/usr/local/bin/pprintast -a -t ' , pathString , ' > ' , path.
+	pprintast ifNil: [self error: 'Please run `ModuleAst pprintast: aPathString`!'].
+	System performOnServer: pprintast , ' -a -t ' , pathString , ' > ' , path.
 	file := GsFile open: path mode: 'rb' onClient: false.
 	string := file contentsAsUtf8 decodeToUnicode.
 	GsFile removeServerFile: path.
@@ -32,6 +33,14 @@ ModuleAst script: '1 == 1'.
 %
 category: 'other'
 classmethod: ModuleAst
+pprintast: aString
+"
+	ModuleAst pprintast: '/Users/jfoster/.venv/bin/pprintast'.
+"
+	pprintast := aString.
+%
+category: 'other'
+classmethod: ModuleAst
 script: aString
 "
 ModuleAst script: '$HOME/code/Python/performance/pyperformance'.
@@ -46,26 +55,6 @@ script: pathString as: nameString
 		initialize;
 		load: pathString as: nameString;
 		yourself
-%
-category: 'other'
-classmethod: ModuleAst
-test
-"
-ModuleAst test
-"
-
-	^ModuleAst script: '$HOME/Code/Python/Grail/hello.py'.
-%
-category: 'other'
-classmethod: ModuleAst
-testWrite
-
-| module fileStream |
-
-module := ModuleAst script: '/home/will/Grail/hello.py'.
-fileStream := GsFile openWriteOnServer: '/home/will/Grail/hello.gs'.
-[module writeSmalltalkOn: fileStream.]
-ensure: [fileStream close].
 %
 ! ------------------- Instance methods for ModuleAst
 category: 'other'

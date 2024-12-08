@@ -215,6 +215,12 @@ string
 	].
 	^writeStream contents
 %
+category: 'initialization'
+method: AbstractNode
+typeParams
+
+	^TypeParamAst parent: self
+%
 category: 'other'
 method: AbstractNode
 collectAst: aBlock

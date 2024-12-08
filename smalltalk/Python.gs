@@ -2313,7 +2313,7 @@ expectvalue /Class
 doit
 StatementAst subclass: 'AsyncFunctionDefAst'
   instVarNames: #( name args body
-                    decorator_list returns type_comment)
+                    decorator_list returns type_comment type_params)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -2418,7 +2418,7 @@ expectvalue /Class
 doit
 StatementAst subclass: 'ClassDefAst'
   instVarNames: #( name bases keywords
-                    body decorator_list)
+                    body decorator_list type_params)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -2429,12 +2429,12 @@ StatementAst subclass: 'ClassDefAst'
 expectvalue /Class
 doit
 ClassDefAst comment: 
-'No class-specific documentation for ClassDefAst, hierarchy is:
-Object
-  AbstractNode(parent line column)
-    StatementAst
-      ClassDefAst(name bases keywords body decorator_list)
-'
+'ClassDef(identifier name,
+		 expr* bases,
+		 keyword* keywords,
+		 stmt* body,
+		 expr* decorator_list,
+		 type_param* type_params)'
 %
 expectvalue /Class
 doit
@@ -2547,7 +2547,7 @@ expectvalue /Class
 doit
 StatementAst subclass: 'FunctionDefAst'
   instVarNames: #( name args body
-                    decorator_list returns type_comment)
+                    decorator_list returns type_comment type_params)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -3445,7 +3445,7 @@ AbstractNode subclass: 'ModuleAst'
   instVarNames: #( body name path
                     source stream scope type_ignore)
   classVars: #()
-  classInstVars: #()
+  classInstVars: #( pprintast)
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -3903,6 +3903,22 @@ AbstractNode subclass: 'TypeIgnoreAst'
 expectvalue /Class
 doit
 TypeIgnoreAst category: 'Parser'
+%
+! ------------------- Class definition for TypeParamAst
+expectvalue /Class
+doit
+AbstractNode subclass: 'TypeParamAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+TypeParamAst category: 'Parser'
 %
 ! ------------------- Class definition for WithItemAst
 expectvalue /Class
@@ -6120,6 +6136,7 @@ input tupleTest.gs
 input type.gs
 input TypeError.gs
 input TypeIgnoreAst.gs
+input TypeParamAst.gs
 input typeTest.gs
 input UAddAst.gs
 input UnaryOpAst.gs
