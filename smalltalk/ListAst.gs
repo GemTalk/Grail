@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from ListAst
-expectvalue /Metaclass3
-doit
-ListAst removeAllMethods.
-ListAst class removeAllMethods.
-%
+removeallmethods ListAst
+removeallclassmethods ListAst
 ! ------------------- Class methods for ListAst
 ! ------------------- Instance methods for ListAst
-set compile_env: 0
 category: 'other'
 method: ListAst
 initialize

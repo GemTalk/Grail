@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from enumerate
-expectvalue /Metaclass3
-doit
-enumerate removeAllMethods.
-enumerate class removeAllMethods.
-%
+removeallmethods enumerate
+removeallclassmethods enumerate
 ! ------------------- Class methods for enumerate
 ! ------------------- Instance methods for enumerate

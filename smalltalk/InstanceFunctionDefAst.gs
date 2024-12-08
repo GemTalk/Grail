@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from InstanceFunctionDefAst
-expectvalue /Metaclass3
-doit
-InstanceFunctionDefAst removeAllMethods.
-InstanceFunctionDefAst class removeAllMethods.
-%
+removeallmethods InstanceFunctionDefAst
+removeallclassmethods InstanceFunctionDefAst
 ! ------------------- Class methods for InstanceFunctionDefAst
 ! ------------------- Instance methods for InstanceFunctionDefAst

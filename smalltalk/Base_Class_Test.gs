@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from Base_Class_Test
-expectvalue /Metaclass3
-doit
-Base_Class_Test removeAllMethods.
-Base_Class_Test class removeAllMethods.
-%
+removeallmethods Base_Class_Test
+removeallclassmethods Base_Class_Test
 ! ------------------- Class methods for Base_Class_Test
-set compile_env: 0
 category: 'testing'
 classmethod: Base_Class_Test
 isAbstract
@@ -13,7 +9,6 @@ isAbstract
 	^self == Base_Class_Test
 %
 ! ------------------- Instance methods for Base_Class_Test
-set compile_env: 0
 category: 'setup'
 method: Base_Class_Test
 bool: aBoolean
@@ -74,7 +69,6 @@ method: Base_Class_Test
 writeDirTestOn: methodList
 	^Scripter writeFor: self targetClass dirTestOn: methodList
 %
-set compile_env: 0
 category: 'testing'
 method: Base_Class_Test
 assert: anObject

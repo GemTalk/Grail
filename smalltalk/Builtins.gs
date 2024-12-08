@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from Builtins
-expectvalue /Metaclass3
-doit
-Builtins removeAllMethods.
-Builtins class removeAllMethods.
-%
+removeallmethods Builtins
+removeallclassmethods Builtins
 ! ------------------- Class methods for Builtins
-set compile_env: 0
 category: 'other'
 classmethod: Builtins
 new
@@ -29,7 +25,6 @@ singleton
 	^singleton
 %
 ! ------------------- Instance methods for Builtins
-set compile_env: 0
 category: 'other'
 method: Builtins
 builtins

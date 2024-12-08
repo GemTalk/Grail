@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from Container
-expectvalue /Metaclass3
-doit
-Container removeAllMethods.
-Container class removeAllMethods.
-%
+removeallmethods Container
+removeallclassmethods Container
 ! ------------------- Class methods for Container
-set compile_env: 0
 category: 'Smalltalk'
 classmethod: Container
 ___containerClass
@@ -31,7 +27,6 @@ ___value: aCollection
 		yourself
 %
 ! ------------------- Instance methods for Container
-set compile_env: 0
 category: 'comparing'
 method: Container
 = anObject
@@ -50,7 +45,6 @@ hash
 
 	^container hash
 %
-set compile_env: 0
 category: 'Python'
 method: Container
 __add__: aList
@@ -264,7 +258,6 @@ index: aPythonObject from: aPyIntStart to: aPyIntEnd
 		ifAbsent: [ValueError signal: aPythonObject ___value printString, ' is not in ', self ___typeName]
 				) - 1 + aPyIntStart ___value)
 %
-set compile_env: 0
 category: 'Smalltalk'
 method: Container
 ___container

@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from Variables
-expectvalue /Metaclass3
-doit
-Variables removeAllMethods.
-Variables class removeAllMethods.
-%
+removeallmethods Variables
+removeallclassmethods Variables
 ! ------------------- Class methods for Variables
-set compile_env: 0
 category: 'other'
 classmethod: Variables
 new
@@ -22,7 +18,6 @@ newWithParent: aVariables
 		yourself.
 %
 ! ------------------- Instance methods for Variables
-set compile_env: 0
 category: 'other'
 method: Variables
 associationAt: aKey

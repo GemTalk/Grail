@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from sliceTest
-expectvalue /Metaclass3
-doit
-sliceTest removeAllMethods.
-sliceTest class removeAllMethods.
-%
+removeallmethods sliceTest
+removeallclassmethods sliceTest
 ! ------------------- Class methods for sliceTest
 ! ------------------- Instance methods for sliceTest
-set compile_env: 0
 category: 'todo'
 method: sliceTest
 test__cmp__

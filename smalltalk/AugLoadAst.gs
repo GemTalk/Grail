@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from AugLoadAst
-expectvalue /Metaclass3
-doit
-AugLoadAst removeAllMethods.
-AugLoadAst class removeAllMethods.
-%
+removeallmethods AugLoadAst
+removeallclassmethods AugLoadAst
 ! ------------------- Class methods for AugLoadAst
 ! ------------------- Instance methods for AugLoadAst

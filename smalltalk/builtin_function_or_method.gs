@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from builtin_function_or_method
-expectvalue /Metaclass3
-doit
-builtin_function_or_method removeAllMethods.
-builtin_function_or_method class removeAllMethods.
-%
+removeallmethods builtin_function_or_method
+removeallclassmethods builtin_function_or_method
 ! ------------------- Class methods for builtin_function_or_method
-set compile_env: 0
 category: 'other'
 classmethod: builtin_function_or_method
 instance
@@ -13,7 +9,6 @@ instance
 	^self new
 %
 ! ------------------- Instance methods for builtin_function_or_method
-set compile_env: 0
 category: 'other'
 method: builtin_function_or_method
 abs

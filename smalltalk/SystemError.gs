@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from SystemError
-expectvalue /Metaclass3
-doit
-SystemError removeAllMethods.
-SystemError class removeAllMethods.
-%
+removeallmethods SystemError
+removeallclassmethods SystemError
 ! ------------------- Class methods for SystemError
 ! ------------------- Instance methods for SystemError

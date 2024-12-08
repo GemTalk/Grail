@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from StringLiteralsTestCase
-expectvalue /Metaclass3
-doit
-StringLiteralsTestCase removeAllMethods.
-StringLiteralsTestCase class removeAllMethods.
-%
+removeallmethods StringLiteralsTestCase
+removeallclassmethods StringLiteralsTestCase
 ! ------------------- Class methods for StringLiteralsTestCase
-set compile_env: 0
 category: 'other'
 classmethod: StringLiteralsTestCase
 filename
@@ -13,7 +9,6 @@ filename
 	^'StringLiterals.py'
 %
 ! ------------------- Instance methods for StringLiteralsTestCase
-set compile_env: 0
 category: 'other'
 method: StringLiteralsTestCase
 testEmbeddedStringDoubleQuotes

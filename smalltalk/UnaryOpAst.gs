@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from UnaryOpAst
-expectvalue /Metaclass3
-doit
-UnaryOpAst removeAllMethods.
-UnaryOpAst class removeAllMethods.
-%
+removeallmethods UnaryOpAst
+removeallclassmethods UnaryOpAst
 ! ------------------- Class methods for UnaryOpAst
-set compile_env: 0
 category: 'other'
 classmethod: UnaryOpAst
 isAbstract
@@ -13,7 +9,6 @@ isAbstract
 	^self == UnaryOpAst
 %
 ! ------------------- Instance methods for UnaryOpAst
-set compile_env: 0
 category: 'other'
 method: UnaryOpAst
 initialize

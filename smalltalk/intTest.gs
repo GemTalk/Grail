@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from intTest
-expectvalue /Metaclass3
-doit
-intTest removeAllMethods.
-intTest class removeAllMethods.
-%
+removeallmethods intTest
+removeallclassmethods intTest
 ! ------------------- Class methods for intTest
 ! ------------------- Instance methods for intTest
-set compile_env: 0
 category: 'done'
 method: intTest
 test__abs__
@@ -590,7 +586,6 @@ zero
 
 	^int ___value: 0
 %
-set compile_env: 0
 category: 'todo'
 method: intTest
 test__dir__

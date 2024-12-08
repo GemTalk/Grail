@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from SubscriptAst
-expectvalue /Metaclass3
-doit
-SubscriptAst removeAllMethods.
-SubscriptAst class removeAllMethods.
-%
+removeallmethods SubscriptAst
+removeallclassmethods SubscriptAst
 ! ------------------- Class methods for SubscriptAst
 ! ------------------- Instance methods for SubscriptAst
-set compile_env: 0
 category: 'other'
 method: SubscriptAst
 assertContextIsStore

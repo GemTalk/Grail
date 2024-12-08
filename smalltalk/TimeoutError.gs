@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from TimeoutError
-expectvalue /Metaclass3
-doit
-TimeoutError removeAllMethods.
-TimeoutError class removeAllMethods.
-%
+removeallmethods TimeoutError
+removeallclassmethods TimeoutError
 ! ------------------- Class methods for TimeoutError
 ! ------------------- Instance methods for TimeoutError

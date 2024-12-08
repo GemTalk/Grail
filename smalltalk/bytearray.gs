@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from bytearray
-expectvalue /Metaclass3
-doit
-bytearray removeAllMethods.
-bytearray class removeAllMethods.
-%
+removeallmethods bytearray
+removeallclassmethods bytearray
 ! ------------------- Class methods for bytearray
 ! ------------------- Instance methods for bytearray

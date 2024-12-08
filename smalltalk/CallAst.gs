@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from CallAst
-expectvalue /Metaclass3
-doit
-CallAst removeAllMethods.
-CallAst class removeAllMethods.
-%
+removeallmethods CallAst
+removeallclassmethods CallAst
 ! ------------------- Class methods for CallAst
 ! ------------------- Instance methods for CallAst
-set compile_env: 0
 category: 'Accessing'
 method: CallAst
 arguments
@@ -22,7 +18,6 @@ method: CallAst
 keywords
 	^keywords
 %
-set compile_env: 0
 category: 'other'
 method: CallAst
 initialize

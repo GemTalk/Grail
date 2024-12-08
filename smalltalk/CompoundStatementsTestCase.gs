@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from CompoundStatementsTestCase
-expectvalue /Metaclass3
-doit
-CompoundStatementsTestCase removeAllMethods.
-CompoundStatementsTestCase class removeAllMethods.
-%
+removeallmethods CompoundStatementsTestCase
+removeallclassmethods CompoundStatementsTestCase
 ! ------------------- Class methods for CompoundStatementsTestCase
-set compile_env: 0
 category: 'other'
 classmethod: CompoundStatementsTestCase
 filename
@@ -13,7 +9,6 @@ filename
 	^'CompoundStatements.py'
 %
 ! ------------------- Instance methods for CompoundStatementsTestCase
-set compile_env: 0
 category: 'other'
 method: CompoundStatementsTestCase
 testClass

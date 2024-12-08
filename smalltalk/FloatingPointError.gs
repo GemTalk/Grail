@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from FloatingPointError
-expectvalue /Metaclass3
-doit
-FloatingPointError removeAllMethods.
-FloatingPointError class removeAllMethods.
-%
+removeallmethods FloatingPointError
+removeallclassmethods FloatingPointError
 ! ------------------- Class methods for FloatingPointError
 ! ------------------- Instance methods for FloatingPointError

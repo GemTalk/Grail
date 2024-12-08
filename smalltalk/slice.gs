@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from slice
-expectvalue /Metaclass3
-doit
-slice removeAllMethods.
-slice class removeAllMethods.
-%
+removeallmethods slice
+removeallclassmethods slice
 ! ------------------- Class methods for slice
 ! ------------------- Instance methods for slice

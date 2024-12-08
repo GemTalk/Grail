@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from DelAst
-expectvalue /Metaclass3
-doit
-DelAst removeAllMethods.
-DelAst class removeAllMethods.
-%
+removeallmethods DelAst
+removeallclassmethods DelAst
 ! ------------------- Class methods for DelAst
 ! ------------------- Instance methods for DelAst

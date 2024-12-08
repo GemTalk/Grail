@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from floatTest
-expectvalue /Metaclass3
-doit
-floatTest removeAllMethods.
-floatTest class removeAllMethods.
-%
+removeallmethods floatTest
+removeallclassmethods floatTest
 ! ------------------- Class methods for floatTest
 ! ------------------- Instance methods for floatTest
-set compile_env: 0
 category: 'done'
 method: floatTest
 test__abs__
@@ -426,7 +422,6 @@ test_real
         assert: (self float: -3) real ___value equals: -3;
 		yourself.
 %
-set compile_env: 0
 category: 'todo'
 method: floatTest
 test__dir__

@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from IsNotAst
-expectvalue /Metaclass3
-doit
-IsNotAst removeAllMethods.
-IsNotAst class removeAllMethods.
-%
+removeallmethods IsNotAst
+removeallclassmethods IsNotAst
 ! ------------------- Class methods for IsNotAst
 ! ------------------- Instance methods for IsNotAst
-set compile_env: 0
 category: 'other'
 method: IsNotAst
 printSmalltalkOn: aStream

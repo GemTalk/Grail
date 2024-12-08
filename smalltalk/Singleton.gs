@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from Singleton
-expectvalue /Metaclass3
-doit
-Singleton removeAllMethods.
-Singleton class removeAllMethods.
-%
+removeallmethods Singleton
+removeallclassmethods Singleton
 ! ------------------- Class methods for Singleton
-set compile_env: 0
 category: 'accessing'
 classmethod: Singleton
 singleton

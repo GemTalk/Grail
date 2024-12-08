@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from complexTest
-expectvalue /Metaclass3
-doit
-complexTest removeAllMethods.
-complexTest class removeAllMethods.
-%
+removeallmethods complexTest
+removeallclassmethods complexTest
 ! ------------------- Class methods for complexTest
 ! ------------------- Instance methods for complexTest
-set compile_env: 0
 category: 'done'
 method: complexTest
 test__abs__
@@ -367,7 +363,6 @@ test_real
 		assert: (complex ___real: -1) real ___value equals: -1;
 		yourself.
 %
-set compile_env: 0
 category: 'overrides'
 method: complexTest
 targetInstance
@@ -376,7 +371,6 @@ targetInstance
 		___real: 0
 		imaginary: 0
 %
-set compile_env: 0
 category: 'todo'
 method: complexTest
 test__dir__

@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from zipTest
-expectvalue /Metaclass3
-doit
-zipTest removeAllMethods.
-zipTest class removeAllMethods.
-%
+removeallmethods zipTest
+removeallclassmethods zipTest
 ! ------------------- Class methods for zipTest
 ! ------------------- Instance methods for zipTest
-set compile_env: 0
 category: 'todo'
 method: zipTest
 test__iter__

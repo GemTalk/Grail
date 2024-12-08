@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from FunctionDefAst
-expectvalue /Metaclass3
-doit
-FunctionDefAst removeAllMethods.
-FunctionDefAst class removeAllMethods.
-%
+removeallmethods FunctionDefAst
+removeallclassmethods FunctionDefAst
 ! ------------------- Class methods for FunctionDefAst
-set compile_env: 0
 category: 'other'
 classmethod: FunctionDefAst
 parent: anAstNode
@@ -20,7 +16,6 @@ parent: anAstNode
 	^function changeClassTo: InstanceFunctionDefAst
 %
 ! ------------------- Instance methods for FunctionDefAst
-set compile_env: 0
 category: 'other'
 method: FunctionDefAst
 decoratorList

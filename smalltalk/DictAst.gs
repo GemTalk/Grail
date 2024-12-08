@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from DictAst
-expectvalue /Metaclass3
-doit
-DictAst removeAllMethods.
-DictAst class removeAllMethods.
-%
+removeallmethods DictAst
+removeallclassmethods DictAst
 ! ------------------- Class methods for DictAst
 ! ------------------- Instance methods for DictAst
-set compile_env: 0
 category: 'other'
 method: DictAst
 initialize

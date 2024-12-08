@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from SystemExit
-expectvalue /Metaclass3
-doit
-SystemExit removeAllMethods.
-SystemExit class removeAllMethods.
-%
+removeallmethods SystemExit
+removeallclassmethods SystemExit
 ! ------------------- Class methods for SystemExit
 ! ------------------- Instance methods for SystemExit

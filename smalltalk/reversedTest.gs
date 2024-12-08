@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from reversedTest
-expectvalue /Metaclass3
-doit
-reversedTest removeAllMethods.
-reversedTest class removeAllMethods.
-%
+removeallmethods reversedTest
+removeallclassmethods reversedTest
 ! ------------------- Class methods for reversedTest
 ! ------------------- Instance methods for reversedTest
-set compile_env: 0
 category: 'todo'
 method: reversedTest
 test__iter__

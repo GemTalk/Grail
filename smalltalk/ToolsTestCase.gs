@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from ToolsTestCase
-expectvalue /Metaclass3
-doit
-ToolsTestCase removeAllMethods.
-ToolsTestCase class removeAllMethods.
-%
+removeallmethods ToolsTestCase
+removeallclassmethods ToolsTestCase
 ! ------------------- Class methods for ToolsTestCase
-set compile_env: 0
 category: 'other'
 classmethod: ToolsTestCase
 filename
@@ -13,7 +9,6 @@ filename
 	^nil
 %
 ! ------------------- Instance methods for ToolsTestCase
-set compile_env: 0
 category: 'other'
 method: ToolsTestCase
 testBuiltinsSingleton

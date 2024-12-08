@@ -27,7 +27,6 @@ expectvalue /Class
 doit
 BaseException category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for Exception
 expectvalue /Class
 doit
@@ -44,7 +43,6 @@ expectvalue /Class
 doit
 Exception category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for ArithmeticError
 expectvalue /Class
 doit
@@ -61,7 +59,6 @@ expectvalue /Class
 doit
 ArithmeticError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for FloatingPointError
 expectvalue /Class
 doit
@@ -78,7 +75,6 @@ expectvalue /Class
 doit
 FloatingPointError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for OverflowError
 expectvalue /Class
 doit
@@ -95,7 +91,6 @@ expectvalue /Class
 doit
 OverflowError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for ZeroDivisionError
 expectvalue /Class
 doit
@@ -112,7 +107,6 @@ expectvalue /Class
 doit
 ZeroDivisionError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for AssertionError
 expectvalue /Class
 doit
@@ -129,7 +123,6 @@ expectvalue /Class
 doit
 AssertionError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for AttributeError
 expectvalue /Class
 doit
@@ -146,7 +139,6 @@ expectvalue /Class
 doit
 AttributeError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for BufferError
 expectvalue /Class
 doit
@@ -163,7 +155,6 @@ expectvalue /Class
 doit
 BufferError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for EOFError
 expectvalue /Class
 doit
@@ -180,7 +171,6 @@ expectvalue /Class
 doit
 EOFError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for ImportError
 expectvalue /Class
 doit
@@ -197,7 +187,6 @@ expectvalue /Class
 doit
 ImportError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for ModuleNotFoundError
 expectvalue /Class
 doit
@@ -214,7 +203,6 @@ expectvalue /Class
 doit
 ModuleNotFoundError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for LookupError
 expectvalue /Class
 doit
@@ -231,7 +219,6 @@ expectvalue /Class
 doit
 LookupError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for IndexError
 expectvalue /Class
 doit
@@ -248,7 +235,6 @@ expectvalue /Class
 doit
 IndexError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for KeyError
 expectvalue /Class
 doit
@@ -265,7 +251,6 @@ expectvalue /Class
 doit
 KeyError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for MemoryError
 expectvalue /Class
 doit
@@ -282,7 +267,6 @@ expectvalue /Class
 doit
 MemoryError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for NameError
 expectvalue /Class
 doit
@@ -299,7 +283,6 @@ expectvalue /Class
 doit
 NameError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for UnboundLocalError
 expectvalue /Class
 doit
@@ -316,7 +299,6 @@ expectvalue /Class
 doit
 UnboundLocalError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for OSError
 expectvalue /Class
 doit
@@ -333,7 +315,6 @@ expectvalue /Class
 doit
 OSError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for BlockingIOError
 expectvalue /Class
 doit
@@ -350,7 +331,6 @@ expectvalue /Class
 doit
 BlockingIOError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for ChildProcessError
 expectvalue /Class
 doit
@@ -367,7 +347,6 @@ expectvalue /Class
 doit
 ChildProcessError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for ConnectionError
 expectvalue /Class
 doit
@@ -384,7 +363,6 @@ expectvalue /Class
 doit
 ConnectionError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for BrokenPipeError
 expectvalue /Class
 doit
@@ -401,7 +379,6 @@ expectvalue /Class
 doit
 BrokenPipeError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for ConnectionAbortedError
 expectvalue /Class
 doit
@@ -418,7 +395,6 @@ expectvalue /Class
 doit
 ConnectionAbortedError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for ConnectionRefusedError
 expectvalue /Class
 doit
@@ -435,7 +411,6 @@ expectvalue /Class
 doit
 ConnectionRefusedError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for ConnectionResetError
 expectvalue /Class
 doit
@@ -452,7 +427,6 @@ expectvalue /Class
 doit
 ConnectionResetError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for FileExistsError
 expectvalue /Class
 doit
@@ -469,7 +443,6 @@ expectvalue /Class
 doit
 FileExistsError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for FileNotFoundError
 expectvalue /Class
 doit
@@ -486,7 +459,6 @@ expectvalue /Class
 doit
 FileNotFoundError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for InterruptedError
 expectvalue /Class
 doit
@@ -503,7 +475,6 @@ expectvalue /Class
 doit
 InterruptedError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for IsADirectoryError
 expectvalue /Class
 doit
@@ -520,7 +491,6 @@ expectvalue /Class
 doit
 IsADirectoryError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for NotADirectoryError
 expectvalue /Class
 doit
@@ -537,7 +507,6 @@ expectvalue /Class
 doit
 NotADirectoryError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for PermissionError
 expectvalue /Class
 doit
@@ -554,7 +523,6 @@ expectvalue /Class
 doit
 PermissionError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for ProcessLookupError
 expectvalue /Class
 doit
@@ -571,7 +539,6 @@ expectvalue /Class
 doit
 ProcessLookupError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for TimeoutError
 expectvalue /Class
 doit
@@ -588,7 +555,6 @@ expectvalue /Class
 doit
 TimeoutError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for ReferenceError
 expectvalue /Class
 doit
@@ -605,7 +571,6 @@ expectvalue /Class
 doit
 ReferenceError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for RuntimeError
 expectvalue /Class
 doit
@@ -622,7 +587,6 @@ expectvalue /Class
 doit
 RuntimeError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for NotImplementedError
 expectvalue /Class
 doit
@@ -639,7 +603,6 @@ expectvalue /Class
 doit
 NotImplementedError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for RecursionError
 expectvalue /Class
 doit
@@ -656,7 +619,6 @@ expectvalue /Class
 doit
 RecursionError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for StopAsyncIteration
 expectvalue /Class
 doit
@@ -673,7 +635,6 @@ expectvalue /Class
 doit
 StopAsyncIteration category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for StopIteration
 expectvalue /Class
 doit
@@ -690,7 +651,6 @@ expectvalue /Class
 doit
 StopIteration category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for SyntaxError
 expectvalue /Class
 doit
@@ -707,7 +667,6 @@ expectvalue /Class
 doit
 SyntaxError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for IndentationError
 expectvalue /Class
 doit
@@ -724,7 +683,6 @@ expectvalue /Class
 doit
 IndentationError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for TabError
 expectvalue /Class
 doit
@@ -741,7 +699,6 @@ expectvalue /Class
 doit
 TabError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for SystemError
 expectvalue /Class
 doit
@@ -758,7 +715,6 @@ expectvalue /Class
 doit
 SystemError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for TypeError
 expectvalue /Class
 doit
@@ -775,7 +731,6 @@ expectvalue /Class
 doit
 TypeError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for ValueError
 expectvalue /Class
 doit
@@ -792,7 +747,6 @@ expectvalue /Class
 doit
 ValueError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for UnicodeError
 expectvalue /Class
 doit
@@ -809,7 +763,6 @@ expectvalue /Class
 doit
 UnicodeError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for UnicodeDecodeError
 expectvalue /Class
 doit
@@ -826,7 +779,6 @@ expectvalue /Class
 doit
 UnicodeDecodeError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for UnicodeEncodeError
 expectvalue /Class
 doit
@@ -843,7 +795,6 @@ expectvalue /Class
 doit
 UnicodeEncodeError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for UnicodeTranslateError
 expectvalue /Class
 doit
@@ -860,7 +811,6 @@ expectvalue /Class
 doit
 UnicodeTranslateError category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for Warning
 expectvalue /Class
 doit
@@ -877,7 +827,6 @@ expectvalue /Class
 doit
 Warning category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for BytesWarning
 expectvalue /Class
 doit
@@ -894,7 +843,6 @@ expectvalue /Class
 doit
 BytesWarning category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for DeprecationWarning
 expectvalue /Class
 doit
@@ -911,7 +859,6 @@ expectvalue /Class
 doit
 DeprecationWarning category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for FutureWarning
 expectvalue /Class
 doit
@@ -928,7 +875,6 @@ expectvalue /Class
 doit
 FutureWarning category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for ImportWarning
 expectvalue /Class
 doit
@@ -945,7 +891,6 @@ expectvalue /Class
 doit
 ImportWarning category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for PendingDeprecationWarning
 expectvalue /Class
 doit
@@ -962,7 +907,6 @@ expectvalue /Class
 doit
 PendingDeprecationWarning category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for ResourceWarning
 expectvalue /Class
 doit
@@ -979,7 +923,6 @@ expectvalue /Class
 doit
 ResourceWarning category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for RuntimeWarning
 expectvalue /Class
 doit
@@ -996,7 +939,6 @@ expectvalue /Class
 doit
 RuntimeWarning category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for SyntaxWarning
 expectvalue /Class
 doit
@@ -1013,7 +955,6 @@ expectvalue /Class
 doit
 SyntaxWarning category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for UnicodeWarning
 expectvalue /Class
 doit
@@ -1030,7 +971,6 @@ expectvalue /Class
 doit
 UnicodeWarning category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for UserWarning
 expectvalue /Class
 doit
@@ -1047,7 +987,6 @@ expectvalue /Class
 doit
 UserWarning category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for GeneratorExit
 expectvalue /Class
 doit
@@ -1064,7 +1003,6 @@ expectvalue /Class
 doit
 GeneratorExit category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for KeyboardInterrupt
 expectvalue /Class
 doit
@@ -1081,7 +1019,6 @@ expectvalue /Class
 doit
 KeyboardInterrupt category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for SystemExit
 expectvalue /Class
 doit
@@ -1098,7 +1035,6 @@ expectvalue /Class
 doit
 SystemExit category: 'BuiltIns-Exceptions'
 %
-set compile_env: 0
 ! ------------------- Class definition for AbstractNode
 expectvalue /Class
 doit
@@ -1123,7 +1059,6 @@ expectvalue /Class
 doit
 AbstractNode category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for AbstractLocationNode
 expectvalue /Class
 doit
@@ -1150,7 +1085,6 @@ expectvalue /Class
 doit
 AbstractLocationNode category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for AliasAst
 expectvalue /Class
 doit
@@ -1176,7 +1110,6 @@ expectvalue /Class
 doit
 AliasAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for ArgAst
 expectvalue /Class
 doit
@@ -1202,7 +1135,6 @@ expectvalue /Class
 doit
 ArgAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for ExceptHandlerAst
 expectvalue /Class
 doit
@@ -1229,7 +1161,6 @@ expectvalue /Class
 doit
 ExceptHandlerAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for ExpressionAst
 expectvalue /Class
 doit
@@ -1255,7 +1186,6 @@ expectvalue /Class
 doit
 ExpressionAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for AttributeAst
 expectvalue /Class
 doit
@@ -1282,7 +1212,6 @@ expectvalue /Class
 doit
 AttributeAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for AwaitAst
 expectvalue /Class
 doit
@@ -1310,7 +1239,6 @@ expectvalue /Class
 doit
 AwaitAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for BinOpAst
 expectvalue /Class
 doit
@@ -1338,7 +1266,6 @@ expectvalue /Class
 doit
 BinOpAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for BoolOpAst
 expectvalue /Class
 doit
@@ -1366,7 +1293,6 @@ expectvalue /Class
 doit
 BoolOpAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for AndAst
 expectvalue /Class
 doit
@@ -1393,7 +1319,6 @@ expectvalue /Class
 doit
 AndAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for OrAst
 expectvalue /Class
 doit
@@ -1420,7 +1345,6 @@ expectvalue /Class
 doit
 OrAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for CallAst
 expectvalue /Class
 doit
@@ -1447,7 +1371,6 @@ expectvalue /Class
 doit
 CallAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for CompareAst
 expectvalue /Class
 doit
@@ -1474,7 +1397,6 @@ expectvalue /Class
 doit
 CompareAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for ConstantAst
 expectvalue /Class
 doit
@@ -1500,7 +1422,6 @@ expectvalue /Class
 doit
 ConstantAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for DictAst
 expectvalue /Class
 doit
@@ -1528,7 +1449,6 @@ expectvalue /Class
 doit
 DictAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for DictCompAst
 expectvalue /Class
 doit
@@ -1556,7 +1476,6 @@ expectvalue /Class
 doit
 DictCompAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for FormattedValueAst
 expectvalue /Class
 doit
@@ -1584,7 +1503,6 @@ expectvalue /Class
 doit
 FormattedValueAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for GeneratorExpAst
 expectvalue /Class
 doit
@@ -1612,7 +1530,6 @@ expectvalue /Class
 doit
 GeneratorExpAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for IfExpAst
 expectvalue /Class
 doit
@@ -1640,7 +1557,6 @@ expectvalue /Class
 doit
 IfExpAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for JoinedStrAst
 expectvalue /Class
 doit
@@ -1668,7 +1584,6 @@ expectvalue /Class
 doit
 JoinedStrAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for LambdaAst
 expectvalue /Class
 doit
@@ -1696,7 +1611,6 @@ expectvalue /Class
 doit
 LambdaAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for ListAst
 expectvalue /Class
 doit
@@ -1724,7 +1638,6 @@ expectvalue /Class
 doit
 ListAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for ListCompAst
 expectvalue /Class
 doit
@@ -1752,7 +1665,6 @@ expectvalue /Class
 doit
 ListCompAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for NameAst
 expectvalue /Class
 doit
@@ -1789,7 +1701,6 @@ expectvalue /Class
 doit
 NameAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for KeywordsAst
 expectvalue /Class
 doit
@@ -1818,7 +1729,6 @@ expectvalue /Class
 doit
 KeywordsAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for NamedExprAst
 expectvalue /Class
 doit
@@ -1835,7 +1745,6 @@ expectvalue /Class
 doit
 NamedExprAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for SetAst
 expectvalue /Class
 doit
@@ -1863,7 +1772,6 @@ expectvalue /Class
 doit
 SetAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for SetCompAst
 expectvalue /Class
 doit
@@ -1891,7 +1799,6 @@ expectvalue /Class
 doit
 SetCompAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for StarredAst
 expectvalue /Class
 doit
@@ -1919,7 +1826,6 @@ expectvalue /Class
 doit
 StarredAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for SubscriptAst
 expectvalue /Class
 doit
@@ -1941,7 +1847,6 @@ expectvalue /Class
 doit
 SubscriptAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for TupleAst
 expectvalue /Class
 doit
@@ -1969,7 +1874,6 @@ expectvalue /Class
 doit
 TupleAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for UnaryOpAst
 expectvalue /Class
 doit
@@ -1997,7 +1901,6 @@ expectvalue /Class
 doit
 UnaryOpAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for InvertAst
 expectvalue /Class
 doit
@@ -2024,7 +1927,6 @@ expectvalue /Class
 doit
 InvertAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for NotAst
 expectvalue /Class
 doit
@@ -2051,7 +1953,6 @@ expectvalue /Class
 doit
 NotAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for UAddAst
 expectvalue /Class
 doit
@@ -2078,7 +1979,6 @@ expectvalue /Class
 doit
 UAddAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for USubAst
 expectvalue /Class
 doit
@@ -2105,7 +2005,6 @@ expectvalue /Class
 doit
 USubAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for YieldAst
 expectvalue /Class
 doit
@@ -2133,7 +2032,6 @@ expectvalue /Class
 doit
 YieldAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for YieldFromAst
 expectvalue /Class
 doit
@@ -2161,7 +2059,6 @@ expectvalue /Class
 doit
 YieldFromAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for KeywordAst
 expectvalue /Class
 doit
@@ -2187,7 +2084,6 @@ expectvalue /Class
 doit
 KeywordAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for SliceAbstractAst
 expectvalue /Class
 doit
@@ -2213,7 +2109,6 @@ expectvalue /Class
 doit
 SliceAbstractAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for ExtSliceAst
 expectvalue /Class
 doit
@@ -2240,7 +2135,6 @@ expectvalue /Class
 doit
 ExtSliceAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for IndexAst
 expectvalue /Class
 doit
@@ -2267,7 +2161,6 @@ expectvalue /Class
 doit
 IndexAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for SliceAst
 expectvalue /Class
 doit
@@ -2294,7 +2187,6 @@ expectvalue /Class
 doit
 SliceAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for StatementAst
 expectvalue /Class
 doit
@@ -2320,7 +2212,6 @@ expectvalue /Class
 doit
 StatementAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for AnnAssignAst
 expectvalue /Class
 doit
@@ -2348,7 +2239,6 @@ expectvalue /Class
 doit
 AnnAssignAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for AssertAst
 expectvalue /Class
 doit
@@ -2375,7 +2265,6 @@ expectvalue /Class
 doit
 AssertAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for AssignAst
 expectvalue /Class
 doit
@@ -2397,7 +2286,6 @@ expectvalue /Class
 doit
 AssignAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for AsyncForAst
 expectvalue /Class
 doit
@@ -2420,7 +2308,6 @@ expectvalue /Class
 doit
 AsyncForAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for AsyncFunctionDefAst
 expectvalue /Class
 doit
@@ -2445,7 +2332,6 @@ expectvalue /Class
 doit
 AsyncFunctionDefAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for AsyncWithAst
 expectvalue /Class
 doit
@@ -2473,7 +2359,6 @@ expectvalue /Class
 doit
 AsyncWithAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for AugAssignAst
 expectvalue /Class
 doit
@@ -2501,7 +2386,6 @@ expectvalue /Class
 doit
 AugAssignAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for BreakAst
 expectvalue /Class
 doit
@@ -2529,7 +2413,6 @@ expectvalue /Class
 doit
 BreakAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for ClassDefAst
 expectvalue /Class
 doit
@@ -2557,7 +2440,6 @@ expectvalue /Class
 doit
 ClassDefAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for ContinueAst
 expectvalue /Class
 doit
@@ -2585,7 +2467,6 @@ expectvalue /Class
 doit
 ContinueAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for DeleteAst
 expectvalue /Class
 doit
@@ -2612,7 +2493,6 @@ expectvalue /Class
 doit
 DeleteAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for ExprAst
 expectvalue /Class
 doit
@@ -2639,7 +2519,6 @@ expectvalue /Class
 doit
 ExprAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for ForAst
 expectvalue /Class
 doit
@@ -2663,7 +2542,6 @@ expectvalue /Class
 doit
 ForAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for FunctionDefAst
 expectvalue /Class
 doit
@@ -2688,7 +2566,6 @@ expectvalue /Class
 doit
 FunctionDefAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for ClassFunctionDefAst
 expectvalue /Class
 doit
@@ -2717,7 +2594,6 @@ expectvalue /Class
 doit
 ClassFunctionDefAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for InstanceFunctionDefAst
 expectvalue /Class
 doit
@@ -2746,7 +2622,6 @@ expectvalue /Class
 doit
 InstanceFunctionDefAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for StaticFunctionDefAst
 expectvalue /Class
 doit
@@ -2763,7 +2638,6 @@ expectvalue /Class
 doit
 StaticFunctionDefAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for GlobalAst
 expectvalue /Class
 doit
@@ -2791,7 +2665,6 @@ expectvalue /Class
 doit
 GlobalAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for IfAst
 expectvalue /Class
 doit
@@ -2817,7 +2690,6 @@ expectvalue /Class
 doit
 IfAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for ImportAst
 expectvalue /Class
 doit
@@ -2843,7 +2715,6 @@ expectvalue /Class
 doit
 ImportAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for ImportFromAst
 expectvalue /Class
 doit
@@ -2870,7 +2741,6 @@ expectvalue /Class
 doit
 ImportFromAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for NonlocalAst
 expectvalue /Class
 doit
@@ -2898,7 +2768,6 @@ expectvalue /Class
 doit
 NonlocalAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PassAst
 expectvalue /Class
 doit
@@ -2926,7 +2795,6 @@ expectvalue /Class
 doit
 PassAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for RaiseAst
 expectvalue /Class
 doit
@@ -2954,7 +2822,6 @@ expectvalue /Class
 doit
 RaiseAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for ReturnAst
 expectvalue /Class
 doit
@@ -2981,7 +2848,6 @@ expectvalue /Class
 doit
 ReturnAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for TryAst
 expectvalue /Class
 doit
@@ -3010,7 +2876,6 @@ expectvalue /Class
 doit
 TryAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for WhileAst
 expectvalue /Class
 doit
@@ -3037,7 +2902,6 @@ expectvalue /Class
 doit
 WhileAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for WithAst
 expectvalue /Class
 doit
@@ -3059,7 +2923,6 @@ expectvalue /Class
 doit
 WithAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for ArgumentsAst
 expectvalue /Class
 doit
@@ -3083,7 +2946,6 @@ expectvalue /Class
 doit
 ArgumentsAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for CmpOpAst
 expectvalue /Class
 doit
@@ -3109,7 +2971,6 @@ expectvalue /Class
 doit
 CmpOpAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for EqAst
 expectvalue /Class
 doit
@@ -3136,7 +2997,6 @@ expectvalue /Class
 doit
 EqAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for GtAst
 expectvalue /Class
 doit
@@ -3163,7 +3023,6 @@ expectvalue /Class
 doit
 GtAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for GtEAst
 expectvalue /Class
 doit
@@ -3190,7 +3049,6 @@ expectvalue /Class
 doit
 GtEAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for InAst
 expectvalue /Class
 doit
@@ -3217,7 +3075,6 @@ expectvalue /Class
 doit
 InAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for IsAst
 expectvalue /Class
 doit
@@ -3244,7 +3101,6 @@ expectvalue /Class
 doit
 IsAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for IsNotAst
 expectvalue /Class
 doit
@@ -3271,7 +3127,6 @@ expectvalue /Class
 doit
 IsNotAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for LtAst
 expectvalue /Class
 doit
@@ -3298,7 +3153,6 @@ expectvalue /Class
 doit
 LtAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for LtEAst
 expectvalue /Class
 doit
@@ -3325,7 +3179,6 @@ expectvalue /Class
 doit
 LtEAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for NotEqAst
 expectvalue /Class
 doit
@@ -3352,7 +3205,6 @@ expectvalue /Class
 doit
 NotEqAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for NotInAst
 expectvalue /Class
 doit
@@ -3379,7 +3231,6 @@ expectvalue /Class
 doit
 NotInAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for ComprehensionAst
 expectvalue /Class
 doit
@@ -3406,7 +3257,6 @@ expectvalue /Class
 doit
 ComprehensionAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for ExpressionContextAst
 expectvalue /Class
 doit
@@ -3432,7 +3282,6 @@ expectvalue /Class
 doit
 ExpressionContextAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for AugLoadAst
 expectvalue /Class
 doit
@@ -3459,7 +3308,6 @@ expectvalue /Class
 doit
 AugLoadAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for AugStoreAst
 expectvalue /Class
 doit
@@ -3486,7 +3334,6 @@ expectvalue /Class
 doit
 AugStoreAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for DelAst
 expectvalue /Class
 doit
@@ -3513,7 +3360,6 @@ expectvalue /Class
 doit
 DelAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for LoadAst
 expectvalue /Class
 doit
@@ -3540,7 +3386,6 @@ expectvalue /Class
 doit
 LoadAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for ParamAst
 expectvalue /Class
 doit
@@ -3567,7 +3412,6 @@ expectvalue /Class
 doit
 ParamAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for StoreAst
 expectvalue /Class
 doit
@@ -3594,7 +3438,6 @@ expectvalue /Class
 doit
 StoreAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for ModuleAst
 expectvalue /Class
 doit
@@ -3619,7 +3462,6 @@ expectvalue /Class
 doit
 ModuleAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for Package
 expectvalue /Class
 doit
@@ -3642,7 +3484,6 @@ expectvalue /Class
 doit
 Package category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for OperatorAst
 expectvalue /Class
 doit
@@ -3668,7 +3509,6 @@ expectvalue /Class
 doit
 OperatorAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for AddAst
 expectvalue /Class
 doit
@@ -3695,7 +3535,6 @@ expectvalue /Class
 doit
 AddAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for BitAndAst
 expectvalue /Class
 doit
@@ -3722,7 +3561,6 @@ expectvalue /Class
 doit
 BitAndAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for BitOrAst
 expectvalue /Class
 doit
@@ -3749,7 +3587,6 @@ expectvalue /Class
 doit
 BitOrAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for BitXorAst
 expectvalue /Class
 doit
@@ -3776,7 +3613,6 @@ expectvalue /Class
 doit
 BitXorAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for DivAst
 expectvalue /Class
 doit
@@ -3803,7 +3639,6 @@ expectvalue /Class
 doit
 DivAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for FloorDivAst
 expectvalue /Class
 doit
@@ -3830,7 +3665,6 @@ expectvalue /Class
 doit
 FloorDivAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for LShiftAst
 expectvalue /Class
 doit
@@ -3857,7 +3691,6 @@ expectvalue /Class
 doit
 LShiftAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for MatMultAst
 expectvalue /Class
 doit
@@ -3884,7 +3717,6 @@ expectvalue /Class
 doit
 MatMultAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for ModAst
 expectvalue /Class
 doit
@@ -3911,7 +3743,6 @@ expectvalue /Class
 doit
 ModAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for MultAst
 expectvalue /Class
 doit
@@ -3938,7 +3769,6 @@ expectvalue /Class
 doit
 MultAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for PowAst
 expectvalue /Class
 doit
@@ -3965,7 +3795,6 @@ expectvalue /Class
 doit
 PowAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for RShiftAst
 expectvalue /Class
 doit
@@ -3992,7 +3821,6 @@ expectvalue /Class
 doit
 RShiftAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for SubAst
 expectvalue /Class
 doit
@@ -4019,7 +3847,6 @@ expectvalue /Class
 doit
 SubAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for SuiteAst
 expectvalue /Class
 doit
@@ -4045,7 +3872,6 @@ expectvalue /Class
 doit
 SuiteAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for BlockAst
 expectvalue /Class
 doit
@@ -4062,7 +3888,6 @@ expectvalue /Class
 doit
 BlockAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for TypeIgnoreAst
 expectvalue /Class
 doit
@@ -4079,7 +3904,6 @@ expectvalue /Class
 doit
 TypeIgnoreAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for WithItemAst
 expectvalue /Class
 doit
@@ -4105,7 +3929,6 @@ expectvalue /Class
 doit
 WithItemAst category: 'Parser'
 %
-set compile_env: 0
 ! ------------------- Class definition for FormatTag
 expectvalue /Class
 doit
@@ -4123,7 +3946,6 @@ expectvalue /Class
 doit
 FormatTag category: 'Tools'
 %
-set compile_env: 0
 ! ------------------- Class definition for FunctionDef
 expectvalue /Class
 doit
@@ -4154,7 +3976,6 @@ expectvalue /Class
 doit
 FunctionDef category: 'Tools'
 %
-set compile_env: 0
 ! ------------------- Class definition for object
 expectvalue /Class
 doit
@@ -4184,7 +4005,6 @@ expectvalue /Class
 doit
 object category: 'BuiltIns-Kernel'
 %
-set compile_env: 0
 ! ------------------- Class definition for builtin_function_or_method
 expectvalue /Class
 doit
@@ -4201,7 +4021,6 @@ expectvalue /Class
 doit
 builtin_function_or_method category: 'BuiltIns-Kernel'
 %
-set compile_env: 0
 ! ------------------- Class definition for BuiltinImporter
 expectvalue /Class
 doit
@@ -4218,7 +4037,6 @@ expectvalue /Class
 doit
 BuiltinImporter category: 'BuiltIns-Kernel'
 %
-set compile_env: 0
 ! ------------------- Class definition for bytearray
 expectvalue /Class
 doit
@@ -4235,7 +4053,6 @@ expectvalue /Class
 doit
 bytearray category: 'BuiltIns-Kernel'
 %
-set compile_env: 0
 ! ------------------- Class definition for classmethod
 expectvalue /Class
 doit
@@ -4252,7 +4069,6 @@ expectvalue /Class
 doit
 classmethod category: 'BuiltIns-Kernel'
 %
-set compile_env: 0
 ! ------------------- Class definition for complex
 expectvalue /Class
 doit
@@ -4283,7 +4099,6 @@ expectvalue /Class
 doit
 complex category: 'BuiltIns-Numbers'
 %
-set compile_env: 0
 ! ------------------- Class definition for Container
 expectvalue /Class
 doit
@@ -4310,7 +4125,6 @@ expectvalue /Class
 doit
 Container category: 'BuiltIns-Containers'
 %
-set compile_env: 0
 ! ------------------- Class definition for bytes
 expectvalue /Class
 doit
@@ -4356,7 +4170,6 @@ expectvalue /Class
 doit
 bytes category: 'BuiltIns-Containers'
 %
-set compile_env: 0
 ! ------------------- Class definition for dict
 expectvalue /Class
 doit
@@ -4400,7 +4213,6 @@ expectvalue /Class
 doit
 dict category: 'BuiltIns-Containers'
 %
-set compile_env: 0
 ! ------------------- Class definition for frozenset
 expectvalue /Class
 doit
@@ -4434,7 +4246,6 @@ expectvalue /Class
 doit
 frozenset category: 'BuiltIns-Containers'
 %
-set compile_env: 0
 ! ------------------- Class definition for list
 expectvalue /Class
 doit
@@ -4469,7 +4280,6 @@ expectvalue /Class
 doit
 list category: 'BuiltIns-Containers'
 %
-set compile_env: 0
 ! ------------------- Class definition for set
 expectvalue /Class
 doit
@@ -4506,7 +4316,6 @@ expectvalue /Class
 doit
 set category: 'BuiltIns-Containers'
 %
-set compile_env: 0
 ! ------------------- Class definition for tuple
 expectvalue /Class
 doit
@@ -4541,7 +4350,6 @@ expectvalue /Class
 doit
 tuple category: 'BuiltIns-Containers'
 %
-set compile_env: 0
 ! ------------------- Class definition for enumerate
 expectvalue /Class
 doit
@@ -4558,7 +4366,6 @@ expectvalue /Class
 doit
 enumerate category: 'BuiltIns-Kernel'
 %
-set compile_env: 0
 ! ------------------- Class definition for filter
 expectvalue /Class
 doit
@@ -4575,7 +4382,6 @@ expectvalue /Class
 doit
 filter category: 'BuiltIns-Kernel'
 %
-set compile_env: 0
 ! ------------------- Class definition for float
 expectvalue /Class
 doit
@@ -4604,7 +4410,6 @@ expectvalue /Class
 doit
 float category: 'BuiltIns-Numbers'
 %
-set compile_env: 0
 ! ------------------- Class definition for function
 expectvalue /Class
 doit
@@ -4621,7 +4426,6 @@ expectvalue /Class
 doit
 function category: 'BuiltIns-Kernel'
 %
-set compile_env: 0
 ! ------------------- Class definition for int
 expectvalue /Class
 doit
@@ -4650,7 +4454,6 @@ expectvalue /Class
 doit
 int category: 'BuiltIns-Numbers'
 %
-set compile_env: 0
 ! ------------------- Class definition for bool
 expectvalue /Class
 doit
@@ -4679,7 +4482,6 @@ expectvalue /Class
 doit
 bool category: 'BuiltIns-Numbers'
 %
-set compile_env: 0
 ! ------------------- Class definition for map
 expectvalue /Class
 doit
@@ -4696,7 +4498,6 @@ expectvalue /Class
 doit
 map category: 'BuiltIns-Kernel'
 %
-set compile_env: 0
 ! ------------------- Class definition for memoryview
 expectvalue /Class
 doit
@@ -4713,7 +4514,6 @@ expectvalue /Class
 doit
 memoryview category: 'BuiltIns-Kernel'
 %
-set compile_env: 0
 ! ------------------- Class definition for property
 expectvalue /Class
 doit
@@ -4730,7 +4530,6 @@ expectvalue /Class
 doit
 property category: 'BuiltIns-Kernel'
 %
-set compile_env: 0
 ! ------------------- Class definition for range
 expectvalue /Class
 doit
@@ -4760,7 +4559,6 @@ expectvalue /Class
 doit
 range category: 'BuiltIns-Containers'
 %
-set compile_env: 0
 ! ------------------- Class definition for reversed
 expectvalue /Class
 doit
@@ -4777,7 +4575,6 @@ expectvalue /Class
 doit
 reversed category: 'BuiltIns-Kernel'
 %
-set compile_env: 0
 ! ------------------- Class definition for Singleton
 expectvalue /Class
 doit
@@ -4794,7 +4591,6 @@ expectvalue /Class
 doit
 Singleton category: 'BuiltIns-Kernel'
 %
-set compile_env: 0
 ! ------------------- Class definition for NoneType
 expectvalue /Class
 doit
@@ -4811,7 +4607,6 @@ expectvalue /Class
 doit
 NoneType category: 'BuiltIns-Kernel'
 %
-set compile_env: 0
 ! ------------------- Class definition for NotImplementedType
 expectvalue /Class
 doit
@@ -4828,7 +4623,6 @@ expectvalue /Class
 doit
 NotImplementedType category: 'BuiltIns-Kernel'
 %
-set compile_env: 0
 ! ------------------- Class definition for slice
 expectvalue /Class
 doit
@@ -4845,7 +4639,6 @@ expectvalue /Class
 doit
 slice category: 'BuiltIns-Kernel'
 %
-set compile_env: 0
 ! ------------------- Class definition for staticmethod
 expectvalue /Class
 doit
@@ -4862,7 +4655,6 @@ expectvalue /Class
 doit
 staticmethod category: 'BuiltIns-Kernel'
 %
-set compile_env: 0
 ! ------------------- Class definition for str
 expectvalue /Class
 doit
@@ -4879,7 +4671,6 @@ expectvalue /Class
 doit
 str category: 'BuiltIns-Kernel'
 %
-set compile_env: 0
 ! ------------------- Class definition for super
 expectvalue /Class
 doit
@@ -4896,7 +4687,6 @@ expectvalue /Class
 doit
 super category: 'BuiltIns-Kernel'
 %
-set compile_env: 0
 ! ------------------- Class definition for type
 expectvalue /Class
 doit
@@ -4913,7 +4703,6 @@ expectvalue /Class
 doit
 type category: 'BuiltIns-Kernel'
 %
-set compile_env: 0
 ! ------------------- Class definition for zip
 expectvalue /Class
 doit
@@ -4930,7 +4719,6 @@ expectvalue /Class
 doit
 zip category: 'BuiltIns-Kernel'
 %
-set compile_env: 0
 ! ------------------- Class definition for Scripter
 expectvalue /Class
 doit
@@ -4947,7 +4735,6 @@ expectvalue /Class
 doit
 Scripter category: 'BuiltIns-Extras'
 %
-set compile_env: 0
 ! ------------------- Class definition for PrettyWriteStream
 expectvalue /Class
 doit
@@ -4964,7 +4751,6 @@ expectvalue /Class
 doit
 PrettyWriteStream category: 'Tools'
 %
-set compile_env: 0
 ! ------------------- Class definition for Base_Class_Test
 expectvalue /Class
 doit
@@ -4981,7 +4767,6 @@ expectvalue /Class
 doit
 Base_Class_Test category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for passing
 expectvalue /Class
 doit
@@ -4998,7 +4783,6 @@ expectvalue /Class
 doit
 passing category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for boolTest
 expectvalue /Class
 doit
@@ -5015,7 +4799,6 @@ expectvalue /Class
 doit
 boolTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for bytearrayTest
 expectvalue /Class
 doit
@@ -5032,7 +4815,6 @@ expectvalue /Class
 doit
 bytearrayTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for bytesTest
 expectvalue /Class
 doit
@@ -5049,7 +4831,6 @@ expectvalue /Class
 doit
 bytesTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for complexTest
 expectvalue /Class
 doit
@@ -5066,7 +4847,6 @@ expectvalue /Class
 doit
 complexTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for dictTest
 expectvalue /Class
 doit
@@ -5083,7 +4863,6 @@ expectvalue /Class
 doit
 dictTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for floatTest
 expectvalue /Class
 doit
@@ -5100,7 +4879,6 @@ expectvalue /Class
 doit
 floatTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for frozensetTest
 expectvalue /Class
 doit
@@ -5117,7 +4895,6 @@ expectvalue /Class
 doit
 frozensetTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for intTest
 expectvalue /Class
 doit
@@ -5134,7 +4911,6 @@ expectvalue /Class
 doit
 intTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for listTest
 expectvalue /Class
 doit
@@ -5151,7 +4927,6 @@ expectvalue /Class
 doit
 listTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for memoryviewTest
 expectvalue /Class
 doit
@@ -5168,7 +4943,6 @@ expectvalue /Class
 doit
 memoryviewTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for objectTest
 expectvalue /Class
 doit
@@ -5185,7 +4959,6 @@ expectvalue /Class
 doit
 objectTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for rangeTest
 expectvalue /Class
 doit
@@ -5202,7 +4975,6 @@ expectvalue /Class
 doit
 rangeTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for setTest
 expectvalue /Class
 doit
@@ -5219,7 +4991,6 @@ expectvalue /Class
 doit
 setTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for strTest
 expectvalue /Class
 doit
@@ -5236,7 +5007,6 @@ expectvalue /Class
 doit
 strTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for tupleTest
 expectvalue /Class
 doit
@@ -5253,7 +5023,6 @@ expectvalue /Class
 doit
 tupleTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for Base_Exception_Test
 expectvalue /Class
 doit
@@ -5270,7 +5039,6 @@ expectvalue /Class
 doit
 Base_Exception_Test category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for BaseExceptionTest
 expectvalue /Class
 doit
@@ -5287,7 +5055,6 @@ expectvalue /Class
 doit
 BaseExceptionTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for ImportErrorTest
 expectvalue /Class
 doit
@@ -5304,7 +5071,6 @@ expectvalue /Class
 doit
 ImportErrorTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for OSErrorTest
 expectvalue /Class
 doit
@@ -5321,7 +5087,6 @@ expectvalue /Class
 doit
 OSErrorTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for StopIterationTest
 expectvalue /Class
 doit
@@ -5338,7 +5103,6 @@ expectvalue /Class
 doit
 StopIterationTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for SyntaxErrorTest
 expectvalue /Class
 doit
@@ -5355,7 +5119,6 @@ expectvalue /Class
 doit
 SyntaxErrorTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for SystemExitTest
 expectvalue /Class
 doit
@@ -5372,7 +5135,6 @@ expectvalue /Class
 doit
 SystemExitTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for UnicodeDecodeErrorTest
 expectvalue /Class
 doit
@@ -5389,7 +5151,6 @@ expectvalue /Class
 doit
 UnicodeDecodeErrorTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for UnicodeEncodeErrorTest
 expectvalue /Class
 doit
@@ -5406,7 +5167,6 @@ expectvalue /Class
 doit
 UnicodeEncodeErrorTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for UnicodeTranslateErrorTest
 expectvalue /Class
 doit
@@ -5423,7 +5183,6 @@ expectvalue /Class
 doit
 UnicodeTranslateErrorTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for BuiltinImporterTest
 expectvalue /Class
 doit
@@ -5440,7 +5199,6 @@ expectvalue /Class
 doit
 BuiltinImporterTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for Other_Test
 expectvalue /Class
 doit
@@ -5457,7 +5215,6 @@ expectvalue /Class
 doit
 Other_Test category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for builtin_function_or_methodTest
 expectvalue /Class
 doit
@@ -5474,7 +5231,6 @@ expectvalue /Class
 doit
 builtin_function_or_methodTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for classmethodTest
 expectvalue /Class
 doit
@@ -5491,7 +5247,6 @@ expectvalue /Class
 doit
 classmethodTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for enumerateTest
 expectvalue /Class
 doit
@@ -5508,7 +5263,6 @@ expectvalue /Class
 doit
 enumerateTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for filterTest
 expectvalue /Class
 doit
@@ -5525,7 +5279,6 @@ expectvalue /Class
 doit
 filterTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for functionTest
 expectvalue /Class
 doit
@@ -5542,7 +5295,6 @@ expectvalue /Class
 doit
 functionTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for mapTest
 expectvalue /Class
 doit
@@ -5559,7 +5311,6 @@ expectvalue /Class
 doit
 mapTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for moduleTest
 expectvalue /Class
 doit
@@ -5576,7 +5327,6 @@ expectvalue /Class
 doit
 moduleTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for propertyTest
 expectvalue /Class
 doit
@@ -5593,7 +5343,6 @@ expectvalue /Class
 doit
 propertyTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for reversedTest
 expectvalue /Class
 doit
@@ -5610,7 +5359,6 @@ expectvalue /Class
 doit
 reversedTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for sliceTest
 expectvalue /Class
 doit
@@ -5627,7 +5375,6 @@ expectvalue /Class
 doit
 sliceTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for staticmethodTest
 expectvalue /Class
 doit
@@ -5644,7 +5391,6 @@ expectvalue /Class
 doit
 staticmethodTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for superTest
 expectvalue /Class
 doit
@@ -5661,7 +5407,6 @@ expectvalue /Class
 doit
 superTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for typeTest
 expectvalue /Class
 doit
@@ -5678,7 +5423,6 @@ expectvalue /Class
 doit
 typeTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for zipTest
 expectvalue /Class
 doit
@@ -5695,7 +5439,6 @@ expectvalue /Class
 doit
 zipTest category: 'BuiltIns-Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for PythonTestCase
 expectvalue /Class
 doit
@@ -5722,7 +5465,6 @@ expectvalue /Class
 doit
 PythonTestCase category: 'Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for ByteLiteralsTestCase
 expectvalue /Class
 doit
@@ -5750,7 +5492,6 @@ expectvalue /Class
 doit
 ByteLiteralsTestCase category: 'Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for CompoundStatementsTestCase
 expectvalue /Class
 doit
@@ -5772,7 +5513,6 @@ expectvalue /Class
 doit
 CompoundStatementsTestCase category: 'Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for DelimitersTestCase
 expectvalue /Class
 doit
@@ -5800,7 +5540,6 @@ expectvalue /Class
 doit
 DelimitersTestCase category: 'Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for NumericLiteralsTestCase
 expectvalue /Class
 doit
@@ -5828,7 +5567,6 @@ expectvalue /Class
 doit
 NumericLiteralsTestCase category: 'Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for OperatorsTestCase
 expectvalue /Class
 doit
@@ -5856,7 +5594,6 @@ expectvalue /Class
 doit
 OperatorsTestCase category: 'Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for SimpleStatementsTestCase
 expectvalue /Class
 doit
@@ -5884,7 +5621,6 @@ expectvalue /Class
 doit
 SimpleStatementsTestCase category: 'Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for StringLiteralsTestCase
 expectvalue /Class
 doit
@@ -5912,7 +5648,6 @@ expectvalue /Class
 doit
 StringLiteralsTestCase category: 'Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for ToolsTestCase
 expectvalue /Class
 doit
@@ -5929,7 +5664,6 @@ expectvalue /Class
 doit
 ToolsTestCase category: 'Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for TranslatorTestCase
 expectvalue /Class
 doit
@@ -5946,7 +5680,6 @@ expectvalue /Class
 doit
 TranslatorTestCase category: 'Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for TranslateBinaryOperatorsTestCase
 expectvalue /Class
 doit
@@ -5963,7 +5696,6 @@ expectvalue /Class
 doit
 TranslateBinaryOperatorsTestCase category: 'Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for TranslateComparisonOperatorsTestCase
 expectvalue /Class
 doit
@@ -5980,7 +5712,6 @@ expectvalue /Class
 doit
 TranslateComparisonOperatorsTestCase category: 'Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for TranslateCompoundStatementsTestCase
 expectvalue /Class
 doit
@@ -5997,7 +5728,6 @@ expectvalue /Class
 doit
 TranslateCompoundStatementsTestCase category: 'Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for TranslateSimpleStatementsTestCase
 expectvalue /Class
 doit
@@ -6014,7 +5744,6 @@ expectvalue /Class
 doit
 TranslateSimpleStatementsTestCase category: 'Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for TranslateStatementsTestCase
 expectvalue /Class
 doit
@@ -6031,7 +5760,6 @@ expectvalue /Class
 doit
 TranslateStatementsTestCase category: 'Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for TranslateUnaryOperatorsTestCase
 expectvalue /Class
 doit
@@ -6048,7 +5776,6 @@ expectvalue /Class
 doit
 TranslateUnaryOperatorsTestCase category: 'Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for TranslateVariablesTestCase
 expectvalue /Class
 doit
@@ -6065,7 +5792,6 @@ expectvalue /Class
 doit
 TranslateVariablesTestCase category: 'Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for PythonTestResource
 expectvalue /Class
 doit
@@ -6092,7 +5818,6 @@ expectvalue /Class
 doit
 PythonTestResource category: 'Tests'
 %
-set compile_env: 0
 ! ------------------- Class definition for Variables
 expectvalue /Class
 doit
@@ -6109,7 +5834,6 @@ expectvalue /Class
 doit
 Variables category: 'Tools'
 %
-set compile_env: 0
 ! ------------------- Class definition for Builtins
 expectvalue /Class
 doit
@@ -6126,7 +5850,6 @@ expectvalue /Class
 doit
 Builtins category: 'Tools'
 %
-set compile_env: 0
 ! ------------------- Class definition for PyGlobals
 expectvalue /Class
 doit

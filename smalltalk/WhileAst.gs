@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from WhileAst
-expectvalue /Metaclass3
-doit
-WhileAst removeAllMethods.
-WhileAst class removeAllMethods.
-%
+removeallmethods WhileAst
+removeallclassmethods WhileAst
 ! ------------------- Class methods for WhileAst
 ! ------------------- Instance methods for WhileAst
-set compile_env: 0
 category: 'other'
 method: WhileAst
 initialize

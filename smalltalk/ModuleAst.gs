@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from ModuleAst
-expectvalue /Metaclass3
-doit
-ModuleAst removeAllMethods.
-ModuleAst class removeAllMethods.
-%
+removeallmethods ModuleAst
+removeallclassmethods ModuleAst
 ! ------------------- Class methods for ModuleAst
-set compile_env: 0
 category: 'other'
 classmethod: ModuleAst
 astForPath: pathString
@@ -72,7 +68,6 @@ fileStream := GsFile openWriteOnServer: '/home/will/Grail/hello.gs'.
 ensure: [fileStream close].
 %
 ! ------------------- Instance methods for ModuleAst
-set compile_env: 0
 category: 'other'
 method: ModuleAst
 call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope

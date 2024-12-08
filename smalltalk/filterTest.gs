@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from filterTest
-expectvalue /Metaclass3
-doit
-filterTest removeAllMethods.
-filterTest class removeAllMethods.
-%
+removeallmethods filterTest
+removeallclassmethods filterTest
 ! ------------------- Class methods for filterTest
 ! ------------------- Instance methods for filterTest
-set compile_env: 0
 category: 'todo'
 method: filterTest
 test__call__

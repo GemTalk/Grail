@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from memoryview
-expectvalue /Metaclass3
-doit
-memoryview removeAllMethods.
-memoryview class removeAllMethods.
-%
+removeallmethods memoryview
+removeallclassmethods memoryview
 ! ------------------- Class methods for memoryview
 ! ------------------- Instance methods for memoryview

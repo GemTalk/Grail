@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from TranslateStatementsTestCase
-expectvalue /Metaclass3
-doit
-TranslateStatementsTestCase removeAllMethods.
-TranslateStatementsTestCase class removeAllMethods.
-%
+removeallmethods TranslateStatementsTestCase
+removeallclassmethods TranslateStatementsTestCase
 ! ------------------- Class methods for TranslateStatementsTestCase
-set compile_env: 0
 category: 'other'
 classmethod: TranslateStatementsTestCase
 filename
@@ -13,7 +9,6 @@ filename
 	^'Statements.py'
 %
 ! ------------------- Instance methods for TranslateStatementsTestCase
-set compile_env: 0
 category: 'other'
 method: TranslateStatementsTestCase
 testTranslateIf

@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from tuple
-expectvalue /Metaclass3
-doit
-tuple removeAllMethods.
-tuple class removeAllMethods.
-%
+removeallmethods tuple
+removeallclassmethods tuple
 ! ------------------- Class methods for tuple
-set compile_env: 0
 category: 'Smalltalk'
 classmethod: tuple
 ___containerClass
@@ -35,7 +31,6 @@ __new__: aPythonTuple
 	^self basicNew ___value: aPythonTuple ___container copy immediateInvariant.
 %
 ! ------------------- Instance methods for tuple
-set compile_env: 0
 category: 'Python'
 method: tuple
 ___modString: aString
@@ -111,7 +106,6 @@ __repr__
 
 	^(str ___value: (stream contents)).
 %
-set compile_env: 0
 category: 'Smalltalk'
 method: tuple
 ___typeName

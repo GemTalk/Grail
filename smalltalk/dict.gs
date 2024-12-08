@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from dict
-expectvalue /Metaclass3
-doit
-dict removeAllMethods.
-dict class removeAllMethods.
-%
+removeallmethods dict
+removeallclassmethods dict
 ! ------------------- Class methods for dict
-set compile_env: 0
 category: 'Smalltalk'
 classmethod: dict
 ___containerClass
@@ -23,7 +19,6 @@ ___startChar
 	^${
 %
 ! ------------------- Instance methods for dict
-set compile_env: 0
 category: 'Python'
 method: dict
 __contains__: anElement
@@ -219,7 +214,6 @@ values
 
 	^frozenset ___value: container values
 %
-set compile_env: 0
 category: 'Smalltalk'
 method: dict
 printElementsOn: aStream

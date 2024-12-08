@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from TranslateSimpleStatementsTestCase
-expectvalue /Metaclass3
-doit
-TranslateSimpleStatementsTestCase removeAllMethods.
-TranslateSimpleStatementsTestCase class removeAllMethods.
-%
+removeallmethods TranslateSimpleStatementsTestCase
+removeallclassmethods TranslateSimpleStatementsTestCase
 ! ------------------- Class methods for TranslateSimpleStatementsTestCase
-set compile_env: 0
 category: 'other'
 classmethod: TranslateSimpleStatementsTestCase
 filename
@@ -13,7 +9,6 @@ filename
 	^'SimpleStatements.py'
 %
 ! ------------------- Instance methods for TranslateSimpleStatementsTestCase
-set compile_env: 0
 category: 'other'
 method: TranslateSimpleStatementsTestCase
 testTranslateAssert

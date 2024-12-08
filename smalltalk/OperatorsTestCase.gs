@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from OperatorsTestCase
-expectvalue /Metaclass3
-doit
-OperatorsTestCase removeAllMethods.
-OperatorsTestCase class removeAllMethods.
-%
+removeallmethods OperatorsTestCase
+removeallclassmethods OperatorsTestCase
 ! ------------------- Class methods for OperatorsTestCase
-set compile_env: 0
 category: 'other'
 classmethod: OperatorsTestCase
 filename
@@ -13,7 +9,6 @@ filename
 	^'Operators.py'
 %
 ! ------------------- Instance methods for OperatorsTestCase
-set compile_env: 0
 category: 'other'
 method: OperatorsTestCase
 testAdd
