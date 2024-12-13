@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from KeywordsAst
-expectvalue /Metaclass3
-doit
-KeywordsAst removeAllMethods.
-KeywordsAst class removeAllMethods.
-%
+removeallmethods KeywordsAst
+removeallclassmethods KeywordsAst
 ! ------------------- Class methods for KeywordsAst
-set compile_env: 0
 category: 'other'
 classmethod: KeywordsAst
 from: anArray
@@ -13,7 +9,6 @@ from: anArray
 	^anArray first value changeClassTo: self
 %
 ! ------------------- Instance methods for KeywordsAst
-set compile_env: 0
 category: 'other'
 method: KeywordsAst
 do: aBlock

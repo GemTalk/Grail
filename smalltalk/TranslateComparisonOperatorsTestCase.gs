@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from TranslateComparisonOperatorsTestCase
-expectvalue /Metaclass3
-doit
-TranslateComparisonOperatorsTestCase removeAllMethods.
-TranslateComparisonOperatorsTestCase class removeAllMethods.
-%
+removeallmethods TranslateComparisonOperatorsTestCase
+removeallclassmethods TranslateComparisonOperatorsTestCase
 ! ------------------- Class methods for TranslateComparisonOperatorsTestCase
-set compile_env: 0
 category: 'other'
 classmethod: TranslateComparisonOperatorsTestCase
 filename
@@ -13,7 +9,6 @@ filename
 	^'Operators.py'
 %
 ! ------------------- Instance methods for TranslateComparisonOperatorsTestCase
-set compile_env: 0
 category: 'other'
 method: TranslateComparisonOperatorsTestCase
 testTranslateEqExpr

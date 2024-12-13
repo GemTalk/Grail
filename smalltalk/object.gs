@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from object
-expectvalue /Metaclass3
-doit
-object removeAllMethods.
-object class removeAllMethods.
-%
+removeallmethods object
+removeallclassmethods object
 ! ------------------- Class methods for object
-set compile_env: 0
 category: 'other'
 classmethod: object
 __str__
@@ -18,7 +14,6 @@ __str__
 		yourself.
 	^str ___value: stream contents
 %
-set compile_env: 0
 category: 'Python'
 classmethod: object
 __call__
@@ -45,7 +40,6 @@ __new__: anObject
 
 	TypeError signal: 'object.__new__(' , anObject name , ') is not safe, use ' , anObject name , '.__new__()'.
 %
-set compile_env: 0
 category: 'Smalltalk'
 classmethod: object
 ___dir
@@ -102,7 +96,6 @@ of the keyword selector until we find a method that exists.
 		withArguments: (args copyFrom: 1 to: args size - 1).
 %
 ! ------------------- Instance methods for object
-set compile_env: 0
 category: 'other'
 method: object
 ___addFloat: aFloat
@@ -261,7 +254,6 @@ __round__
 
 	TypeError signal: 'TypeError: type ', self class asString , ' doesn''t define __round__ method'
 %
-set compile_env: 0
 category: 'Python'
 method: object
 __class__
@@ -412,7 +404,6 @@ is_not: anObject
 
 	^bool ___value: (self ___value == anObject ___value) not
 %
-set compile_env: 0
 category: 'Smalltalk'
 method: object
 ___perform: aSymbol

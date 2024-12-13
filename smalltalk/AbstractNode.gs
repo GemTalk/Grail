@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from AbstractNode
-expectvalue /Metaclass3
-doit
-AbstractNode removeAllMethods.
-AbstractNode class removeAllMethods.
-%
+removeallmethods AbstractNode
+removeallclassmethods AbstractNode
 ! ------------------- Class methods for AbstractNode
-set compile_env: 0
 category: 'other'
 classmethod: AbstractNode
 escapeCharacters
@@ -67,7 +63,6 @@ subclassDelimiter
 	^$(
 %
 ! ------------------- Instance methods for AbstractNode
-set compile_env: 0
 category: 'initialization'
 method: AbstractNode
 alias
@@ -220,7 +215,12 @@ string
 	].
 	^writeStream contents
 %
-set compile_env: 0
+category: 'initialization'
+method: AbstractNode
+typeParams
+
+	^TypeParamAst parent: self
+%
 category: 'other'
 method: AbstractNode
 collectAst: aBlock
@@ -312,7 +312,6 @@ smalltalkSourceFor: aNode parenthesisIf: anInteger on: aStream
 	aNode printSmalltalkOn: aStream.
 	flag ifTrue: [aStream nextPut: $)].
 %
-set compile_env: 0
 category: 'testing'
 method: AbstractNode
 isInClass

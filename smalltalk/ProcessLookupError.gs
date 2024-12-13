@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from ProcessLookupError
-expectvalue /Metaclass3
-doit
-ProcessLookupError removeAllMethods.
-ProcessLookupError class removeAllMethods.
-%
+removeallmethods ProcessLookupError
+removeallclassmethods ProcessLookupError
 ! ------------------- Class methods for ProcessLookupError
 ! ------------------- Instance methods for ProcessLookupError

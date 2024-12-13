@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from Scripter
-expectvalue /Metaclass3
-doit
-Scripter removeAllMethods.
-Scripter class removeAllMethods.
-%
+removeallmethods Scripter
+removeallclassmethods Scripter
 ! ------------------- Class methods for Scripter
-set compile_env: 0
 category: 'scripting'
 classmethod: Scripter
 writeFor: aPyClass dirTestOn: methodList

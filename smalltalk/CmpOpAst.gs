@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from CmpOpAst
-expectvalue /Metaclass3
-doit
-CmpOpAst removeAllMethods.
-CmpOpAst class removeAllMethods.
-%
+removeallmethods CmpOpAst
+removeallclassmethods CmpOpAst
 ! ------------------- Class methods for CmpOpAst
-set compile_env: 0
 category: 'other'
 classmethod: CmpOpAst
 isAbstract
@@ -13,7 +9,6 @@ isAbstract
 	^self == CmpOpAst
 %
 ! ------------------- Instance methods for CmpOpAst
-set compile_env: 0
 category: 'other'
 method: CmpOpAst
 initialize

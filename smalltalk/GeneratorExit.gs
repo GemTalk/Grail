@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from GeneratorExit
-expectvalue /Metaclass3
-doit
-GeneratorExit removeAllMethods.
-GeneratorExit class removeAllMethods.
-%
+removeallmethods GeneratorExit
+removeallclassmethods GeneratorExit
 ! ------------------- Class methods for GeneratorExit
 ! ------------------- Instance methods for GeneratorExit

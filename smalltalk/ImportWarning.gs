@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from ImportWarning
-expectvalue /Metaclass3
-doit
-ImportWarning removeAllMethods.
-ImportWarning class removeAllMethods.
-%
+removeallmethods ImportWarning
+removeallclassmethods ImportWarning
 ! ------------------- Class methods for ImportWarning
 ! ------------------- Instance methods for ImportWarning

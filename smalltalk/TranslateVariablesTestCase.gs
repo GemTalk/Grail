@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from TranslateVariablesTestCase
-expectvalue /Metaclass3
-doit
-TranslateVariablesTestCase removeAllMethods.
-TranslateVariablesTestCase class removeAllMethods.
-%
+removeallmethods TranslateVariablesTestCase
+removeallclassmethods TranslateVariablesTestCase
 ! ------------------- Class methods for TranslateVariablesTestCase
-set compile_env: 0
 category: 'other'
 classmethod: TranslateVariablesTestCase
 filename
@@ -13,7 +9,6 @@ filename
 	^'Variables.py'
 %
 ! ------------------- Instance methods for TranslateVariablesTestCase
-set compile_env: 0
 category: 'other'
 method: TranslateVariablesTestCase
 testTranslateGlobalScope

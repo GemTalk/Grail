@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from passing
-expectvalue /Metaclass3
-doit
-passing removeAllMethods.
-passing class removeAllMethods.
-%
+removeallmethods passing
+removeallclassmethods passing
 ! ------------------- Class methods for passing
-set compile_env: 0
 category: 'Testing'
 classmethod: passing
 isAbstract

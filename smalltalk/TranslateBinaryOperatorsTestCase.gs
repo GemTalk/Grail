@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from TranslateBinaryOperatorsTestCase
-expectvalue /Metaclass3
-doit
-TranslateBinaryOperatorsTestCase removeAllMethods.
-TranslateBinaryOperatorsTestCase class removeAllMethods.
-%
+removeallmethods TranslateBinaryOperatorsTestCase
+removeallclassmethods TranslateBinaryOperatorsTestCase
 ! ------------------- Class methods for TranslateBinaryOperatorsTestCase
-set compile_env: 0
 category: 'other'
 classmethod: TranslateBinaryOperatorsTestCase
 filename
@@ -13,7 +9,6 @@ filename
 	^'Operators.py'
 %
 ! ------------------- Instance methods for TranslateBinaryOperatorsTestCase
-set compile_env: 0
 category: 'other'
 method: TranslateBinaryOperatorsTestCase
 testTranslateAddExpr

@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from NotAst
-expectvalue /Metaclass3
-doit
-NotAst removeAllMethods.
-NotAst class removeAllMethods.
-%
+removeallmethods NotAst
+removeallclassmethods NotAst
 ! ------------------- Class methods for NotAst
 ! ------------------- Instance methods for NotAst
-set compile_env: 0
 category: 'other'
 method: NotAst
 printSmalltalkOn: aStream

@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from TranslateCompoundStatementsTestCase
-expectvalue /Metaclass3
-doit
-TranslateCompoundStatementsTestCase removeAllMethods.
-TranslateCompoundStatementsTestCase class removeAllMethods.
-%
+removeallmethods TranslateCompoundStatementsTestCase
+removeallclassmethods TranslateCompoundStatementsTestCase
 ! ------------------- Class methods for TranslateCompoundStatementsTestCase
-set compile_env: 0
 category: 'other'
 classmethod: TranslateCompoundStatementsTestCase
 filename
@@ -13,7 +9,6 @@ filename
 	^'CompoundStatements.py'
 %
 ! ------------------- Instance methods for TranslateCompoundStatementsTestCase
-set compile_env: 0
 category: 'other'
 method: TranslateCompoundStatementsTestCase
 testTranslateFor

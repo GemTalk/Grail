@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from AugAssignAst
-expectvalue /Metaclass3
-doit
-AugAssignAst removeAllMethods.
-AugAssignAst class removeAllMethods.
-%
+removeallmethods AugAssignAst
+removeallclassmethods AugAssignAst
 ! ------------------- Class methods for AugAssignAst
 ! ------------------- Instance methods for AugAssignAst
-set compile_env: 0
 category: 'other'
 method: AugAssignAst
 initialize

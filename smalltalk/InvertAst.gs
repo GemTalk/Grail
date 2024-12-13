@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from InvertAst
-expectvalue /Metaclass3
-doit
-InvertAst removeAllMethods.
-InvertAst class removeAllMethods.
-%
+removeallmethods InvertAst
+removeallclassmethods InvertAst
 ! ------------------- Class methods for InvertAst
 ! ------------------- Instance methods for InvertAst
-set compile_env: 0
 category: 'other'
 method: InvertAst
 printSmalltalkOn: aStream

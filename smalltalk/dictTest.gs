@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from dictTest
-expectvalue /Metaclass3
-doit
-dictTest removeAllMethods.
-dictTest class removeAllMethods.
-%
+removeallmethods dictTest
+removeallclassmethods dictTest
 ! ------------------- Class methods for dictTest
 ! ------------------- Instance methods for dictTest
-set compile_env: 0
 category: 'done'
 method: dictTest
 test__contains__onEmptyList
@@ -405,7 +401,6 @@ testvalues
 		assert: (list values __eq__: (set ___value: { 'a'. 'b'. 'c' }));
 		yourself
 %
-set compile_env: 0
 category: 'todo'
 method: dictTest
 test__class_getitem__

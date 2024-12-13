@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from TranslateUnaryOperatorsTestCase
-expectvalue /Metaclass3
-doit
-TranslateUnaryOperatorsTestCase removeAllMethods.
-TranslateUnaryOperatorsTestCase class removeAllMethods.
-%
+removeallmethods TranslateUnaryOperatorsTestCase
+removeallclassmethods TranslateUnaryOperatorsTestCase
 ! ------------------- Class methods for TranslateUnaryOperatorsTestCase
-set compile_env: 0
 category: 'other'
 classmethod: TranslateUnaryOperatorsTestCase
 filename
@@ -13,7 +9,6 @@ filename
 	^'Operators.py'
 %
 ! ------------------- Instance methods for TranslateUnaryOperatorsTestCase
-set compile_env: 0
 category: 'other'
 method: TranslateUnaryOperatorsTestCase
 testTranslateInvertExpr

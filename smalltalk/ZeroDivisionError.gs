@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from ZeroDivisionError
-expectvalue /Metaclass3
-doit
-ZeroDivisionError removeAllMethods.
-ZeroDivisionError class removeAllMethods.
-%
+removeallmethods ZeroDivisionError
+removeallclassmethods ZeroDivisionError
 ! ------------------- Class methods for ZeroDivisionError
 ! ------------------- Instance methods for ZeroDivisionError

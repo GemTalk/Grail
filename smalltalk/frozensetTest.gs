@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from frozensetTest
-expectvalue /Metaclass3
-doit
-frozensetTest removeAllMethods.
-frozensetTest class removeAllMethods.
-%
+removeallmethods frozensetTest
+removeallclassmethods frozensetTest
 ! ------------------- Class methods for frozensetTest
 ! ------------------- Instance methods for frozensetTest
-set compile_env: 0
 category: 'done'
 method: frozensetTest
 test__and__
@@ -684,7 +680,6 @@ testunionSet
 		assert: c __class__ equals: self targetClass;
 		yourself
 %
-set compile_env: 0
 category: 'todo'
 method: frozensetTest
 test__class_getitem__

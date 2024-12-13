@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from FunctionDef
-expectvalue /Metaclass3
-doit
-FunctionDef removeAllMethods.
-FunctionDef class removeAllMethods.
-%
+removeallmethods FunctionDef
+removeallclassmethods FunctionDef
 ! ------------------- Class methods for FunctionDef
 ! ------------------- Instance methods for FunctionDef
-set compile_env: 0
 category: 'other'
 method: FunctionDef
 block: aBlock

@@ -10,7 +10,7 @@ Checkout this Git project to `$HOME/code/Python/Grail` (or to some other place a
 
 ### GemStone/S
 
-[GemStone/S](https://gemtalksystems.com/products/gs64/) can be most easily run on macOS using the free, open source [GemStone.app](https://github.com/jgfoster/GemStoneApp). From the Setup tab, click `Authenticate` and give your password (as an administrator) to allow the helper tool to be installed. Then, from the Versions tab, click `Update` to get a list of available GemStone versions. Check the box for a recent version (3.6.0 at the time of this writing) to download that version. Then, from the Databases tab, click the `+` button to create a new database and click `Start` to start the database.
+[GemStone/S](https://gemtalksystems.com/products/gs64/) can be most easily run on macOS using the free, open source [GemStone.app](https://github.com/jgfoster/GemStoneApp). From the Setup tab, click `Authenticate` and give your password (as an administrator) to allow the helper tool to be installed. Then, from the Versions tab, click `Update` to get a list of available GemStone versions. Check the box for a recent version (3.7.1 at the time of this writing) to download that version. Then, from the Databases tab, click the `+` button to create a new database and click `Start` to start the database.
 
 Copy the provided `topazini` to `.topazini` and edit `gs64stone` to show the name of your database (e.g., `gs64stone1`). Copy the provided `setenv` to `.setenv` and edit the path to point to your GemStone install. Then open a terminal in this directory and run `./install.sh`. If this finishes without errors then you may proceed to the next step.
 
@@ -18,8 +18,8 @@ Copy the provided `topazini` to `.topazini` and edit `gs64stone` to show the nam
 
 Install the following:
 
-  * [Python](https://www.python.org/downloads/). When you enter `python3 --version` it should show you 3.11.6 or later. 
-  * [pip](https://docs.python.org/3/installing/index.html) is used to install Python packages. When you enter `pip --version` it should show you 23.3.1 or later.
+  * [Python](https://www.python.org/downloads/). When you enter `python3 --version` it should show you 3.12.4 or later. 
+  * [pip](https://docs.python.org/3/installing/index.html) is used to install Python packages. When you enter `pip --version` it should show you 24.1.2 or later.
   * [pprintast](https://pypi.org/project/pprintast/) is used to parse Python source files. When you enter `pprintast --version` it should show you 1.2.1 or later.
 
 ## Sample Code
@@ -28,7 +28,7 @@ Install the following:
 Our first task is a "Hello World!" program (`hello.py`). From [Jade](https://github.com/jgfoster/Jade) (or another GemStone/S IDE), log in to GemStone and evalute the following expression:
 
 ```
-ModuleAst script: '$HOME/code/Python/Grail/hello.py'.
+ModuleAst script: '$HOME/code/Python/Grail/tests/hello.py'.
 ```
 
 ### Benchmark

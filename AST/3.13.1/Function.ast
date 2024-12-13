@@ -1,0 +1,42 @@
+Module([
+    FunctionDef('my_function', arguments([], [
+        arg('a', None, None, 2, 16, 2, 17),
+        arg('b', None, None, 2, 19, 2, 20),
+      ], arg('args', None, None, 2, 25, 2, 29), [
+        arg('g', None, None, 2, 31, 2, 32),
+        arg('c', None, None, 2, 34, 2, 35),
+      ], [
+        None,
+        Constant(3, None, 2, 36, 2, 37),
+      ], arg('kargs', None, None, 2, 41, 2, 46), [
+        Constant(2, None, 2, 21, 2, 22),
+      ]), [
+        Expr(Call(Name('print', Load(), 3, 4, 3, 9), [
+            Subscript(Name('args', Load(), 3, 10, 3, 14), Slice(Constant(0, None, 3, 15, 3, 16), None, None, 3, 15, 3, 17), Load(), 3, 10, 3, 18),
+          ], [], 3, 4, 3, 19), 3, 4, 3, 19),
+        Expr(Call(Name('print', Load(), 4, 4, 4, 9), [
+            Name('a', Load(), 4, 10, 4, 11),
+            Name('b', Load(), 4, 13, 4, 14),
+            Name('c', Load(), 4, 16, 4, 17),
+            Subscript(Name('args', Load(), 4, 19, 4, 23), Constant(0, None, 4, 24, 4, 25), Load(), 4, 19, 4, 26),
+            Subscript(Name('args', Load(), 4, 28, 4, 32), Constant(1, None, 4, 33, 4, 34), Load(), 4, 28, 4, 35),
+            Subscript(Name('args', Load(), 4, 37, 4, 41), Constant(2, None, 4, 42, 4, 43), Load(), 4, 37, 4, 44),
+            Subscript(Name('kargs', Load(), 4, 46, 4, 51), Constant('d', None, 4, 52, 4, 55), Load(), 4, 46, 4, 56),
+            Subscript(Name('kargs', Load(), 4, 58, 4, 63), Constant('e', None, 4, 64, 4, 67), Load(), 4, 58, 4, 68),
+            Subscript(Name('kargs', Load(), 4, 70, 4, 75), Constant('f', None, 4, 76, 4, 79), Load(), 4, 70, 4, 80),
+            Name('g', Load(), 4, 82, 4, 83),
+          ], [], 4, 4, 4, 84), 4, 4, 4, 84),
+      ], [], None, None, [], 2, 0, 4, 84),
+    Expr(Call(Name('my_function', Load(), 6, 0, 6, 11), [
+        Constant(1, None, 6, 12, 6, 13),
+        Constant(2, None, 6, 14, 6, 15),
+        Constant(4, None, 6, 16, 6, 17),
+        Constant(5, None, 6, 18, 6, 19),
+        Constant(6, None, 6, 20, 6, 21),
+      ], [
+        keyword('d', Constant(7, None, 6, 24, 6, 25), 6, 22, 6, 25),
+        keyword('e', Constant(8, None, 6, 28, 6, 29), 6, 26, 6, 29),
+        keyword('f', Constant(9, None, 6, 32, 6, 33), 6, 30, 6, 33),
+        keyword('g', Constant(10, None, 6, 36, 6, 38), 6, 34, 6, 38),
+      ], 6, 0, 6, 39), 6, 0, 6, 39),
+  ], [])

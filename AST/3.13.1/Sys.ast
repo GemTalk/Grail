@@ -1,6 +1,6 @@
 Module([
     Import([
-        alias('sys', None),
+        alias('sys', None, 4, 7, 4, 10),
       ], 4, 0, 4, 10),
     Assign([
         Name('s', Store(), 5, 0, 5, 1),

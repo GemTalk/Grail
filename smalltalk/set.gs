@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from set
-expectvalue /Metaclass3
-doit
-set removeAllMethods.
-set class removeAllMethods.
-%
+removeallmethods set
+removeallclassmethods set
 ! ------------------- Class methods for set
-set compile_env: 0
 category: 'Smalltalk'
 classmethod: set
 ___containerClass
@@ -35,7 +31,6 @@ __new__: aSet
 	^self basicNew
 %
 ! ------------------- Instance methods for set
-set compile_env: 0
 category: 'Python'
 method: set
 __and__: aSet

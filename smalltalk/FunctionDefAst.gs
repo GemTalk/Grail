@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from FunctionDefAst
-expectvalue /Metaclass3
-doit
-FunctionDefAst removeAllMethods.
-FunctionDefAst class removeAllMethods.
-%
+removeallmethods FunctionDefAst
+removeallclassmethods FunctionDefAst
 ! ------------------- Class methods for FunctionDefAst
-set compile_env: 0
 category: 'other'
 classmethod: FunctionDefAst
 parent: anAstNode
@@ -20,7 +16,6 @@ parent: anAstNode
 	^function changeClassTo: InstanceFunctionDefAst
 %
 ! ------------------- Instance methods for FunctionDefAst
-set compile_env: 0
 category: 'other'
 method: FunctionDefAst
 decoratorList
@@ -32,7 +27,7 @@ method: FunctionDefAst
 initialize
 	"FunctionDef(identifier name, arguments args,
                        stmt* body, expr* decorator_list, expr? returns,
-                       string? type_comment)"
+                       string? type_comment, type_param* type_params)"
 
 	| stream |
 	stream := self stream.
@@ -48,6 +43,8 @@ initialize
 	returns := self optionalExpression.
 	self commaSpace.
 	type_comment := self optionalString.
+	self commaSpace.
+	type_params := self collectAst: [self typeParams].
 	self readPosition.
 %
 category: 'other'

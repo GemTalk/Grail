@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from bytesTest
-expectvalue /Metaclass3
-doit
-bytesTest removeAllMethods.
-bytesTest class removeAllMethods.
-%
+removeallmethods bytesTest
+removeallclassmethods bytesTest
 ! ------------------- Class methods for bytesTest
 ! ------------------- Instance methods for bytesTest
-set compile_env: 0
 category: 'done'
 method: bytesTest
 test__add__
@@ -1161,13 +1157,11 @@ testupper
 		assert: (self bytes: 'Abcd') upper equals: abcd ;
 		yourself
 %
-set compile_env: 0
 category: 'setup'
 method: bytesTest
 bytes: aString
    ^bytes __call__: (str ___value: aString) _: (str ___value: 'ascii').
 %
-set compile_env: 0
 category: 'todo'
 method: bytesTest
 test__getnewargs__

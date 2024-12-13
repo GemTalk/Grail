@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from rangeTest
-expectvalue /Metaclass3
-doit
-rangeTest removeAllMethods.
-rangeTest class removeAllMethods.
-%
+removeallmethods rangeTest
+removeallclassmethods rangeTest
 ! ------------------- Class methods for rangeTest
 ! ------------------- Instance methods for rangeTest
-set compile_env: 0
 category: 'done'
 method: rangeTest
 test__bool__
@@ -115,7 +111,6 @@ testSSS
 		assert: (self targetInstance: (int ___value: -1) _: (int ___value: 1) _: (int ___value: -1)) step equals: -1;
 		yourself.
 %
-set compile_env: 0
 category: 'todo'
 method: rangeTest
 test__iter__

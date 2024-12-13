@@ -1,6 +1,6 @@
 Module([
     Import([
-        alias('time', None),
+        alias('time', None, 4, 7, 4, 11),
       ], 4, 0, 4, 11),
     Assign([
         Name('t1', Store(), 5, 0, 5, 2),

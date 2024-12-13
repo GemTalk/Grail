@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from memoryviewTest
-expectvalue /Metaclass3
-doit
-memoryviewTest removeAllMethods.
-memoryviewTest class removeAllMethods.
-%
+removeallmethods memoryviewTest
+removeallclassmethods memoryviewTest
 ! ------------------- Class methods for memoryviewTest
 ! ------------------- Instance methods for memoryviewTest
-set compile_env: 0
 category: 'todo'
 method: memoryviewTest
 test__delitem__

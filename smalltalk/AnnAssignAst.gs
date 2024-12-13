@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from AnnAssignAst
-expectvalue /Metaclass3
-doit
-AnnAssignAst removeAllMethods.
-AnnAssignAst class removeAllMethods.
-%
+removeallmethods AnnAssignAst
+removeallclassmethods AnnAssignAst
 ! ------------------- Class methods for AnnAssignAst
 ! ------------------- Instance methods for AnnAssignAst
-set compile_env: 0
 category: 'other'
 method: AnnAssignAst
 initialize

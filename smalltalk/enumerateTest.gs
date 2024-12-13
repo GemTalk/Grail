@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from enumerateTest
-expectvalue /Metaclass3
-doit
-enumerateTest removeAllMethods.
-enumerateTest class removeAllMethods.
-%
+removeallmethods enumerateTest
+removeallclassmethods enumerateTest
 ! ------------------- Class methods for enumerateTest
 ! ------------------- Instance methods for enumerateTest
-set compile_env: 0
 category: 'todo'
 method: enumerateTest
 test__class_getitem__

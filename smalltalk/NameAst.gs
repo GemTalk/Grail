@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from NameAst
-expectvalue /Metaclass3
-doit
-NameAst removeAllMethods.
-NameAst class removeAllMethods.
-%
+removeallmethods NameAst
+removeallclassmethods NameAst
 ! ------------------- Class methods for NameAst
-set compile_env: 0
 category: 'other'
 classmethod: NameAst
 with: aSymbol
@@ -15,7 +11,6 @@ with: aSymbol
 		yourself
 %
 ! ------------------- Instance methods for NameAst
-set compile_env: 0
 category: 'other'
 method: NameAst
 assertContextIsLoad

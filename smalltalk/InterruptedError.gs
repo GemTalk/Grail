@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from InterruptedError
-expectvalue /Metaclass3
-doit
-InterruptedError removeAllMethods.
-InterruptedError class removeAllMethods.
-%
+removeallmethods InterruptedError
+removeallclassmethods InterruptedError
 ! ------------------- Class methods for InterruptedError
 ! ------------------- Instance methods for InterruptedError

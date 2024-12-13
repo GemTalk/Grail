@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from BreakAst
-expectvalue /Metaclass3
-doit
-BreakAst removeAllMethods.
-BreakAst class removeAllMethods.
-%
+removeallmethods BreakAst
+removeallclassmethods BreakAst
 ! ------------------- Class methods for BreakAst
 ! ------------------- Instance methods for BreakAst
-set compile_env: 0
 category: 'other'
 method: BreakAst
 initialize

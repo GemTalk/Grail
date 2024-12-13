@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from WithAst
-expectvalue /Metaclass3
-doit
-WithAst removeAllMethods.
-WithAst class removeAllMethods.
-%
+removeallmethods WithAst
+removeallclassmethods WithAst
 ! ------------------- Class methods for WithAst
 ! ------------------- Instance methods for WithAst
-set compile_env: 0
 category: 'other'
 method: WithAst
 initialize

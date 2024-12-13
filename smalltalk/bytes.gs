@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from bytes
-expectvalue /Metaclass3
-doit
-bytes removeAllMethods.
-bytes class removeAllMethods.
-%
+removeallmethods bytes
+removeallclassmethods bytes
 ! ------------------- Class methods for bytes
-set compile_env: 0
 category: 'Python'
 classmethod: bytes
 __call__
@@ -85,7 +81,6 @@ String Error Handlers :
 
 	^self __new__: pythonBytes _: encoding.
 %
-set compile_env: 0
 category: 'Smalltalk'
 classmethod: bytes
 ___containerClass
@@ -105,7 +100,6 @@ ___whiteSpace
 	^self ___value: { 9. 10. 11. 12. 13. 32 }
 %
 ! ------------------- Instance methods for bytes
-set compile_env: 0
 category: 'Python'
 method: bytes
 __add__: anArgument
@@ -783,7 +777,6 @@ upper
 	
 	^bytes ___value: (upperString collect: [:x | x codePoint]).
 %
-set compile_env: 0
 category: 'Smalltalk'
 method: bytes
 printElementsOn: aStream

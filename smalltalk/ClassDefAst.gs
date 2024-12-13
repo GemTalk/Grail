@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from ClassDefAst
-expectvalue /Metaclass3
-doit
-ClassDefAst removeAllMethods.
-ClassDefAst class removeAllMethods.
-%
+removeallmethods ClassDefAst
+removeallclassmethods ClassDefAst
 ! ------------------- Class methods for ClassDefAst
 ! ------------------- Instance methods for ClassDefAst
-set compile_env: 0
 category: 'other'
 method: ClassDefAst
 __eq__
@@ -81,8 +77,12 @@ get: aSymbol
 category: 'other'
 method: ClassDefAst
 initialize
-	"ClassDef(identifier name, expr* bases,
-		keyword* keywords, stmt* body, expr* decorator_list)"
+	"ClassDef(identifier name,
+		 expr* bases,
+		 keyword* keywords,
+		 stmt* body,
+		 expr* decorator_list,
+		 type_param* type_params)"
 
 	| stream |
 	stream := self stream.
@@ -97,6 +97,8 @@ initialize
 	BlockAst parent: self.	"calls back to set body"
 	self commaSpace.
 	decorator_list := self collectAst: [self expression].
+	self commaSpace.
+	type_params := self collectAst: [self typeParams].
 	self readPosition.
 %
 category: 'other'

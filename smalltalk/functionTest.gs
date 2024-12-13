@@ -1,8 +1,5 @@
 ﻿! ------------------- Remove existing behavior from functionTest
-expectvalue /Metaclass3
-doit
-functionTest removeAllMethods.
-functionTest class removeAllMethods.
-%
+removeallmethods functionTest
+removeallclassmethods functionTest
 ! ------------------- Class methods for functionTest
 ! ------------------- Instance methods for functionTest

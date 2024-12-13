@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from OperatorAst
-expectvalue /Metaclass3
-doit
-OperatorAst removeAllMethods.
-OperatorAst class removeAllMethods.
-%
+removeallmethods OperatorAst
+removeallclassmethods OperatorAst
 ! ------------------- Class methods for OperatorAst
-set compile_env: 0
 category: 'other'
 classmethod: OperatorAst
 isAbstract
@@ -13,7 +9,6 @@ isAbstract
 	^self == OperatorAst
 %
 ! ------------------- Instance methods for OperatorAst
-set compile_env: 0
 category: 'other'
 method: OperatorAst
 initialize

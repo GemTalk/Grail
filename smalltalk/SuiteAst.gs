@@ -1,12 +1,8 @@
 ﻿! ------------------- Remove existing behavior from SuiteAst
-expectvalue /Metaclass3
-doit
-SuiteAst removeAllMethods.
-SuiteAst class removeAllMethods.
-%
+removeallmethods SuiteAst
+removeallclassmethods SuiteAst
 ! ------------------- Class methods for SuiteAst
 ! ------------------- Instance methods for SuiteAst
-set compile_env: 0
 category: 'other'
 method: SuiteAst
 body

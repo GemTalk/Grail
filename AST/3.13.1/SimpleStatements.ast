@@ -10,7 +10,7 @@ Module([
         Assign([
             Name('x', Store(), 10, 4, 10, 5),
           ], Constant(3, None, 10, 8, 10, 9), None, 10, 4, 10, 9),
-      ], [], 9, 0, 10, 9),
+      ], [], [], 9, 0, 10, 9),
     Assign([
         Name('inst', Store(), 11, 0, 11, 4),
       ], Call(Name('Cls', Load(), 11, 7, 11, 10), [], [], 11, 7, 11, 12), None, 11, 0, 11, 12),
@@ -37,55 +37,62 @@ Module([
       ], Load(), 17, 10, 17, 14), None, 17, 0, 17, 14),
     Assert(Constant(True, None, 20, 7, 20, 11), None, 20, 0, 20, 11),
     Assert(Constant(False, None, 21, 7, 21, 12), None, 21, 0, 21, 12),
+    Assert(Constant(False, None, 22, 7, 22, 12), Constant('Assert failed', None, 22, 14, 22, 29), 22, 0, 22, 29),
     FunctionDef('f', arguments([], [
-        arg('arg', None, None, 24, 6, 24, 9),
+        arg('arg', None, None, 25, 6, 25, 9),
       ], None, [], [], None, []), [
-        Pass(24, 12, 24, 16),
-      ], [], None, None, 24, 0, 24, 16),
+        Pass(25, 12, 25, 16),
+      ], [], None, None, [], 25, 0, 25, 16),
     ClassDef('C', [], [], [
-        Pass(25, 9, 25, 13),
-      ], [], 25, 0, 25, 13),
-    Delete([
-        Name('x', Del(), 28, 4, 28, 5),
-      ], 28, 0, 28, 5),
+        Pass(26, 9, 26, 13),
+      ], [], [], 26, 0, 26, 13),
     Delete([
         Name('x', Del(), 29, 4, 29, 5),
-        Name('i', Del(), 29, 7, 29, 8),
-      ], 29, 0, 29, 8),
+      ], 29, 0, 29, 5),
+    Delete([
+        Name('x', Del(), 30, 4, 30, 5),
+        Name('i', Del(), 30, 7, 30, 8),
+      ], 30, 0, 30, 8),
     FunctionDef('a', arguments([], [], None, [], [], None, []), [
-        Return(None, 33, 4, 33, 10),
-      ], [], None, None, 32, 0, 33, 10),
+        Return(None, 34, 4, 34, 10),
+      ], [], None, None, [], 33, 0, 34, 10),
     FunctionDef('b', arguments([], [], None, [], [], None, []), [
-        Return(Constant(True, None, 36, 11, 36, 15), 36, 4, 36, 15),
-      ], [], None, None, 35, 0, 36, 15),
+        Return(Constant(True, None, 37, 11, 37, 15), 37, 4, 37, 15),
+      ], [], None, None, [], 36, 0, 37, 15),
     FunctionDef('gen', arguments([], [], None, [], [], None, []), [
-        Expr(Yield(Constant(123, None, 40, 10, 40, 13), 40, 4, 40, 13), 40, 4, 40, 13),
-      ], [], None, None, 39, 0, 40, 13),
+        Expr(Yield(Constant(123, None, 41, 10, 41, 13), 41, 4, 41, 13), 41, 4, 41, 13),
+      ], [], None, None, [], 40, 0, 41, 13),
     AsyncFunctionDef('agen', arguments([], [], None, [], [], None, []), [
-        Expr(Yield(Constant(123, None, 43, 10, 43, 13), 43, 4, 43, 13), 43, 4, 43, 13),
-      ], [], None, None, 42, 0, 43, 13),
-    Raise(Call(Name('RuntimeError', Load(), 46, 6, 46, 18), [
-        Constant('Something bad happened', None, 46, 19, 46, 43),
-      ], [], 46, 6, 46, 44), None, 46, 0, 46, 44),
-    Raise(Call(Name('RuntimeError', Load(), 47, 6, 47, 18), [
-        Constant('Something bad happened', None, 47, 19, 47, 43),
-      ], [], 47, 6, 47, 44), Constant(None, None, 47, 50, 47, 54), 47, 0, 47, 54),
-    For(Name('_', Store(), 50, 4, 50, 5), Name('x', Load(), 50, 9, 50, 10), [
-        Break(51, 4, 51, 9),
-      ], [], None, 50, 0, 51, 9),
+        Expr(Yield(Constant(123, None, 44, 10, 44, 13), 44, 4, 44, 13), 44, 4, 44, 13),
+      ], [], None, None, [], 43, 0, 44, 13),
+    Raise(Name('RuntimeError', Load(), 47, 6, 47, 18), None, 47, 0, 47, 18),
+    Raise(Call(Name('RuntimeError', Load(), 48, 6, 48, 18), [
+        Constant('Something bad happened', None, 48, 19, 48, 43),
+      ], [], 48, 6, 48, 44), None, 48, 0, 48, 44),
+    Raise(Call(Name('RuntimeError', Load(), 49, 6, 49, 18), [
+        Constant('Something bad happened', None, 49, 19, 49, 43),
+      ], [], 49, 6, 49, 44), Constant(None, None, 49, 50, 49, 54), 49, 0, 49, 54),
+    Raise(Call(Name('RuntimeError', Load(), 50, 6, 50, 18), [
+        Constant('Something bad happened', None, 50, 19, 50, 43),
+      ], [], 50, 6, 50, 44), Call(Name('RuntimeError', Load(), 50, 50, 50, 62), [
+        Constant('Caused by me', None, 50, 63, 50, 77),
+      ], [], 50, 50, 50, 78), 50, 0, 50, 78),
     For(Name('_', Store(), 54, 4, 54, 5), Name('x', Load(), 54, 9, 54, 10), [
-        Continue(55, 4, 55, 12),
-      ], [], None, 54, 0, 55, 12),
+        Break(55, 4, 55, 9),
+      ], [], None, 54, 0, 55, 9),
+    For(Name('_', Store(), 58, 4, 58, 5), Name('x', Load(), 58, 9, 58, 10), [
+        Continue(59, 4, 59, 12),
+      ], [], None, 58, 0, 59, 12),
     Import([
-        alias('foo', None),
-      ], 58, 0, 58, 10),
+        alias('foo', None, 62, 7, 62, 10),
+      ], 62, 0, 62, 10),
     ImportFrom('foo', [
-        alias('attr', None),
-      ], 0, 59, 0, 59, 20),
+        alias('attr', None, 63, 16, 63, 20),
+      ], 0, 63, 0, 63, 20),
     Global([
         'g',
-      ], 62, 0, 62, 8),
+      ], 66, 0, 66, 8),
     Nonlocal([
         'x',
-      ], 65, 0, 65, 10),
+      ], 69, 0, 69, 10),
   ], [])

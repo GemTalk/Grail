@@ -1,11 +1,7 @@
 ﻿! ------------------- Remove existing behavior from ConstantAst
-expectvalue /Metaclass3
-doit
-ConstantAst removeAllMethods.
-ConstantAst class removeAllMethods.
-%
+removeallmethods ConstantAst
+removeallclassmethods ConstantAst
 ! ------------------- Class methods for ConstantAst
-set compile_env: 0
 category: 'other'
 classmethod: ConstantAst
 parent: aNode
@@ -15,7 +11,6 @@ parent: aNode
 		yourself
 %
 ! ------------------- Instance methods for ConstantAst
-set compile_env: 0
 category: 'other'
 method: ConstantAst
 finalize
