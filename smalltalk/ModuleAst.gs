@@ -56,6 +56,18 @@ script: pathString as: nameString
 		load: pathString as: nameString;
 		yourself
 %
+category: 'other'
+classmethod: ModuleAst
+smalltalkForModulePath: aString
+"
+ModuleAst smalltalkForModulePath: '/Users/jfoster/code/Python/Grail/tests/hello.py'.
+"
+	| module stream |
+	module := self script: aString.
+	stream := PrettyWriteStream on: String new.
+	module printSmalltalkOn: stream.
+	^stream contents
+%
 ! ------------------- Instance methods for ModuleAst
 category: 'other'
 method: ModuleAst
