@@ -80,7 +80,14 @@ category: 'Python'
 method: str
 __getslice__: aPyIntStart _: aPyIntEnd
 
-	^self class ___value: (self ___getslice: aPyIntStart _: aPyIntEnd)
+	| end |
+	end := aPyIntEnd.
+
+	end == None ifTrue: [
+		end := int ___value: value size
+	].
+
+	^self class ___value: (self ___getslice: aPyIntStart _: end)
 %
 category: 'Python'
 method: str

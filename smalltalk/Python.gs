@@ -5637,6 +5637,22 @@ expectvalue /Class
 doit
 SimpleStatementsTestCase category: 'Tests'
 %
+! ------------------- Class definition for SliceTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'SliceTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+SliceTestCase category: 'Tests'
+%
 ! ------------------- Class definition for StringLiteralsTestCase
 expectvalue /Class
 doit
@@ -6095,6 +6111,7 @@ input slice.gs
 input SliceAbstractAst.gs
 input SliceAst.gs
 input sliceTest.gs
+input SliceTestCase.gs
 input StarredAst.gs
 input StatementAst.gs
 input StaticFunctionDefAst.gs

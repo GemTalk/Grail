@@ -30,7 +30,7 @@ printSmalltalkOn: aStream
 	aStream nextPutAll: ' _: '.
 
 	upper class == NoneType ifTrue: [
-		aStream nextPutAll: NoneType.
+		aStream nextPutAll: 'None'.
 	] ifFalse: [
 		self smalltalkSourceFor: upper parenthesisIf: 3 on: aStream.
 	].
