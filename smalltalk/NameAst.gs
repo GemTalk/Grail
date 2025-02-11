@@ -71,11 +71,6 @@ injectSuperArguments: anArray scope: aScope
 %
 category: 'other'
 method: NameAst
-messagePrecedence
-	^3
-%
-category: 'other'
-method: NameAst
 printOn: aStream
 
 	super printOn: aStream.

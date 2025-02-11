@@ -166,7 +166,7 @@ printSmalltalkOn: aStream
 		nextPutAll: 'currentScope := PyGlobals new.';
 		lf;
 		yourself.
-	self smalltalkSourceFor: body parenthesisIf: 4 on: aStream. " Doesn't need parenthesis "
+	body printSmalltalkOn: aStream. " Doesn't need parenthesis "
 	aStream lf.
 %
 category: 'other'

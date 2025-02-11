@@ -23,24 +23,24 @@ printSmalltalkOn: aStream
 	"initialize a set of written variables in the block"
 
 	aStream nextPutAll: 'currentScope setHelperSymbols: #('.
-	(body class == Array)
-		ifTrue: [
-			body do: [:each | (each class == AssignAst) ifTrue: [aStream nextPutAll: (each target id); space].
-									 (each class == FunctionDefAst) ifTrue: [aStream nextPutAll: (each name); space].
-			]
-		]
-		ifFalse: [body variables do: [:each | aStream nextPutAll: each; space].].
-
+	body class == Array ifTrue: [
+		body do: [:each | 
+			(each class == AssignAst) ifTrue: [aStream nextPutAll: (each target id); space].
+			(each class == FunctionDefAst) ifTrue: [aStream nextPutAll: (each name); space].
+		].
+	] ifFalse: [
+		body variables do: [:each | aStream nextPutAll: each; space].
+	].
 	aStream nextPutAll: ') asIdentitySet.'; lf .
 
 	"print all the instructions in the block"
 	body size == 1 ifTrue: [
-		self smalltalkSourceFor: (body at: 1) parenthesisIf: 4 on: aStream.
+		(body at: 1) printSmalltalkOn: aStream.
 		aStream nextPut: $..
 	] ifFalse: [
 		body do: [:each |
 			"print the instruction"
-			self smalltalkSourceFor: each parenthesisIf: 4 on: aStream.
+			each printSmalltalkOn: aStream.
 			aStream nextPut: $.; lf; yourself.
 		].
 		aStream position: aStream position - 1.

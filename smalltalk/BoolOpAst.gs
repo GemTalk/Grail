@@ -20,9 +20,3 @@ initialize
 	values := self collectAst: [self expression].
 	self readPosition.
 %
-category: 'other'
-method: BoolOpAst
-messagePrecedence
-
-	^3
-%

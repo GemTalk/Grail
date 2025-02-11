@@ -19,8 +19,8 @@ category: 'other'
 method: AssignAst
 printSmalltalkOn: aStream
 
-	self smalltalkSourceFor: (targets at: 1) parenthesisIf: 4 on: aStream.
-	self smalltalkSourceFor: value parenthesisIf: 3 on: aStream.
+	(targets at: 1) printSmalltalkOn: aStream.
+	value printSmalltalkWithParenthesisOn: aStream.
 %
 category: 'other'
 method: AssignAst

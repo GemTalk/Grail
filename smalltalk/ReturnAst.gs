@@ -18,5 +18,5 @@ category: 'other'
 method: ReturnAst
 printSmalltalkOn: aStream
 
-	self smalltalkSourceFor: value parenthesisIf: 4 on: aStream.
+	value printSmalltalkOn: aStream.
 %

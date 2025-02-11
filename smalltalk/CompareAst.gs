@@ -19,12 +19,6 @@ initialize
 %
 category: 'other'
 method: CompareAst
-messagePrecedence
-
-	^3
-%
-category: 'other'
-method: CompareAst
 printSmalltalkOn: aStream
 	comparatorList size == cmpopList size ifFalse: [
 		"Something bad happens"

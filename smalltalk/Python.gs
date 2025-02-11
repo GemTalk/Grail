@@ -1401,7 +1401,7 @@ CompareAst category: 'Parser'
 expectvalue /Class
 doit
 ExpressionAst subclass: 'ConstantAst'
-  instVarNames: #( value kind messagePrecedence)
+  instVarNames: #( value kind)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()

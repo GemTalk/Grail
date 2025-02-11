@@ -31,10 +31,10 @@ method: SuiteAst
 printSmalltalkOn: aStream
 	
 	body size == 1 ifTrue: [
-		self smalltalkSourceFor: (body at: 1) parenthesisIf: 4 on: aStream.
+		 (body at: 1) printSmalltalkOn: aStream.
 	] ifFalse: [
 		body do: [:each |
-			self smalltalkSourceFor: each parenthesisIf: 4 on: aStream.
+			each printSmalltalkOn: aStream.
 			aStream nextPut: $.; lf; yourself.
 		].
 		aStream position: aStream position - 1.

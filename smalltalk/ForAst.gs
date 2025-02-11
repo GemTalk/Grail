@@ -23,12 +23,12 @@ category: 'other'
 method: ForAst
 printSmalltalkOn: aStream
 
-	self smalltalkSourceFor: iter parenthesisIf: 3 on: aStream.
+	iter printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' ___value do: [:i |'; increaseIndent; lf; yourself.
 	aStream nextPutAll: 'currentScope at: #'; nextPutAll: target id; nextPutAll: ' put: i.'.
 	body size > 0 ifTrue: [
 		aStream lf.
 	].
-	self smalltalkSourceFor: body parenthesisIf: 4 on: aStream. " Doesn't need parenthesis "
+	body printSmalltalkOn: aStream. " Doesn't need parenthesis "
 	aStream decreaseIndent; lf; nextPutAll: ']'.
 %

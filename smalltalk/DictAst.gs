@@ -15,19 +15,13 @@ initialize
 %
 category: 'other'
 method: DictAst
-messagePrecedence
-	
-	^3
-%
-category: 'other'
-method: DictAst
 printSmalltalkOn: aStream
 
 	aStream nextPutAll: 'dict ___value: { '.
 	keys with: values do: [:key :value |
-		self smalltalkSourceFor: key parenthesisIf: 1 on: aStream.
+		key printSmalltalkWithParenthesisOn: aStream.
 		aStream nextPutAll: '->'.
-		self smalltalkSourceFor: value parenthesisIf: 1 on: aStream.
+		value printSmalltalkWithParenthesisOn: aStream.
 		aStream nextPutAll: '. '.
 	].
 	aStream nextPutAll: '} asDictionary'.
