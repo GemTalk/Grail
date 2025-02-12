@@ -21,17 +21,11 @@ initialize
 %
 category: 'other'
 method: TupleAst
-messagePrecedence
-	
-	^3
-%
-category: 'other'
-method: TupleAst
 printSmalltalkOn: aStream
 
 	aStream nextPutAll: 'tuple ___value: { '.
-	elts do: [:elt |
-		self smalltalkSourceFor: elt parenthesisIf: 1 on: aStream.
+	elts do: [:each |
+		each printSmalltalkWithParenthesisOn: aStream.
 		aStream nextPutAll: '. '.
 	].
 	aStream nextPut: $}.

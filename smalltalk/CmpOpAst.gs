@@ -27,15 +27,15 @@ printSmalltalkOn: aStream left: left rightList: right
 	left ifNil: [
 		aStream nextPutAll: 'rhs'.
 	] ifNotNil: [
-		self smalltalkSourceFor: left parenthesisIf: 3 on: aStream.
+		 left printSmalltalkWithParenthesisOn: aStream.
 	].
 
 	self printSmalltalkOn: aStream.
 	right size == 1 ifTrue: [
-		self smalltalkSourceFor: (right at: 1) parenthesisIf: 3 on: aStream.
+		right first printSmalltalkWithParenthesisOn: aStream.
 	] ifFalse: [
 		aStream nextPutAll: '(rhs := '.
-		self smalltalkSourceFor: (right at: 1) parenthesisIf: 4 on: aStream.
+		right first printSmalltalkOn: aStream.
 		aStream nextPutAll: ')'.
 	].
 %

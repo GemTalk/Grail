@@ -30,16 +30,13 @@ initialize
 	The values represented can be simple types such as a number, string or None, but also immutable container types (tuples and frozensets) if all of their elements are constant."
 
 	| stream char next |
-	messagePrecedence := 0.
 	stream := self stream.
 	char := stream peek.
 	(char == $' or: [char == $"]) ifTrue: [
 		value := 'str ___value: ', self string printString. "constant is a string"
-		messagePrecedence := 3.
 		^self finalize].
 	char == $b ifTrue: [
 		value := 'bytes ___fromAsciiString: ', self string printString."constant is a string"
-		messagePrecedence := 3.
 		^self finalize].
 	[char asString asInteger.
 		value := self number. "constant is a number"
@@ -60,16 +57,9 @@ initialize
 %
 category: 'other'
 method: ConstantAst
-messagePrecedence
-
-	^messagePrecedence
-%
-category: 'other'
-method: ConstantAst
 number
 
 	| stream string x |
-	messagePrecedence := 3.
 	stream := self stream.
 	string := stream upTo: $,.
 	stream skip: -1.

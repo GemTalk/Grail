@@ -29,7 +29,7 @@ printSmalltalkOn: aStream
 		aStream nextPutAll: '['; lf; yourself.
 		aStream increaseIndent.
 	].
-	self smalltalkSourceFor: body parenthesisIf: 4 on: aStream. " Doesn't need parenthesis "
+	body printSmalltalkOn: aStream. " Doesn't need parenthesis "
 	handlers do: [:handler |
 		aStream decreaseIndent.
 		aStream lf; nextPutAll: '] on: '; yourself.
@@ -39,11 +39,10 @@ printSmalltalkOn: aStream
 		] ifFalse: [
 			aStream nextPutAll: handler type id asString.
 		].
-
 		aStream nextPutAll: ' do: ['; lf; yourself.
-
 		aStream increaseIndent.
-		self smalltalkSourceFor: handler body parenthesisIf: 4 on: aStream. " Doesn't need parenthesis "
+		aStream nextPutAll: ''. 	"This adds an indent before proceeding."
+		handler body printSmalltalkOn: aStream. " Doesn't need parenthesis "
 		aStream decreaseIndent.
 		aStream lf; nextPutAll: ']'; yourself.
 	].
@@ -53,7 +52,7 @@ printSmalltalkOn: aStream
 	finalbody body size > 0 ifTrue: [
 		aStream lf; nextPutAll: '] ensure: ['; lf; yourself.
 		aStream increaseIndent.
-		self smalltalkSourceFor: finalbody parenthesisIf: 4 on: aStream. " Doesn't need parenthesis "
+		finalbody printSmalltalkOn: aStream. " Doesn't need parenthesis "
 		aStream decreaseIndent.
 		aStream lf; nextPutAll: '].'; yourself.
 	] ifFalse: [

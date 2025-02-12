@@ -63,7 +63,7 @@ testTranslateIsExpr
 	x := (self statementsAt: 26).
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = 'False is_: True'.
+	self assert: stream contents = '(False) is_: (True)'.
 	self assert: stream contents evaluate equals: False.
 %
 category: 'other'
@@ -74,7 +74,7 @@ testTranslateIsNotExpr
 	x := (self statementsAt: 27).
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = 'False is_not: True'.
+	self assert: stream contents = '(False) is_not: (True)'.
 	self assert: stream contents evaluate equals: True.
 %
 category: 'other'

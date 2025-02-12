@@ -33,7 +33,7 @@ testTranslateIf
 	x printSmalltalkOn: stream.
 
 	self assert: stream contents equals: 
-'True ___value ifTrue: [
+'(True) ___value ifTrue: [
 	
 ]'.
 
@@ -42,7 +42,7 @@ testTranslateIf
 	x printSmalltalkOn: stream.
 
 	self assert: stream contents equals: 
-'False ___value ifTrue: [
+'(False) ___value ifTrue: [
 	
 ] ifFalse: [
 	

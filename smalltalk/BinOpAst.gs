@@ -19,15 +19,9 @@ initialize
 %
 category: 'other'
 method: BinOpAst
-messagePrecedence
-
-	^3
-%
-category: 'other'
-method: BinOpAst
 printSmalltalkOn: aStream
 
-	self smalltalkSourceFor: left parenthesisIf: 3 on: aStream.
+	left printSmalltalkWithParenthesisOn: aStream.
 	op printSmalltalkOn: aStream.
-	self smalltalkSourceFor: right parenthesisIf: 2 on: aStream.
+	right printSmalltalkWithParenthesisOn: aStream.
 %

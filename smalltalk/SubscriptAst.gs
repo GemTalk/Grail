@@ -33,14 +33,12 @@ category: 'other'
 method: SubscriptAst
 printSmalltalkOn: aStream
 
-	self smalltalkSourceFor: value parenthesisIf: 3 on: aStream.
+	value printSmalltalkWithParenthesisOn: aStream.
 
 	slice class == ConstantAst ifTrue: [
 		aStream nextPutAll: ' __getitem__: '.
-		self smalltalkSourceFor: slice parenthesisIf: 3 on: aStream.
+		slice printSmalltalkWithParenthesisOn: aStream.
 	] ifFalse: [
-		self smalltalkSourceFor: slice parenthesisIf: 3 on: aStream.
+		slice printSmalltalkWithParenthesisOn: aStream.
 	].
-
-	"self halt."
 %

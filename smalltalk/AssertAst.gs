@@ -17,11 +17,11 @@ category: 'other'
 method: AssertAst
 printSmalltalkOn: aStream
 
-	self smalltalkSourceFor: test parenthesisIf: 3 on: aStream.
+	test printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' ___value ifFalse: [AssertionError signal'.
 	msg class == NoneType ifFalse: [
 		aStream nextPutAll: ': '.
-		self smalltalkSourceFor: msg parenthesisIf: 3 on: aStream.
+		msg printSmalltalkWithParenthesisOn: aStream.
 		aStream nextPutAll: ' ___value'.
 	].
 	aStream nextPutAll: '].'

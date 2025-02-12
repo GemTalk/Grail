@@ -24,7 +24,7 @@ printSmalltalkOn: aStream
 	lower class == NoneType ifTrue: [
 		aStream nextPutAll: '(int ___value: 0)'.
 	] ifFalse: [
-		self smalltalkSourceFor: lower parenthesisIf: 3 on: aStream.
+		lower printSmalltalkWithParenthesisOn: aStream.
 	].
 
 	aStream nextPutAll: ' _: '.
@@ -32,6 +32,6 @@ printSmalltalkOn: aStream
 	upper class == NoneType ifTrue: [
 		aStream nextPutAll: 'None'.
 	] ifFalse: [
-		self smalltalkSourceFor: upper parenthesisIf: 3 on: aStream.
+		upper printSmalltalkWithParenthesisOn: aStream.
 	].
 %

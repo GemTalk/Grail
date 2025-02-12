@@ -76,7 +76,7 @@ printDefaultsList: anArray on: aStream
 		arg class == NoneType ifTrue: [
 			aStream nextPutAll: 'None. '.
 		] ifFalse: [
-			self smalltalkSourceFor: arg parenthesisIf: 3 on:aStream.
+			arg printSmalltalkWithParenthesisOn: aStream.
 			aStream
 				nextPutAll: '. ';
 				yourself.
@@ -127,7 +127,7 @@ printSmalltalkOn: aStream
 		increaseIndent;
 		yourself.
 
-	self smalltalkSourceFor: body parenthesisIf: 4 on: aStream.
+	body printSmalltalkOn: aStream.
 
 	aStream decreaseIndent.
 

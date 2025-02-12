@@ -253,12 +253,6 @@ locals
 %
 category: 'other'
 method: AbstractNode
-messagePrecedence
-
-	^0
-%
-category: 'other'
-method: AbstractNode
 module
 
 	^parent module
@@ -299,18 +293,15 @@ printSmalltalkOn: aStream
 %
 category: 'other'
 method: AbstractNode
-setBlock: aBlock
+printSmalltalkWithParenthesisOn: aStream
+
+	aStream nextPut: $(.
+	self printSmalltalkOn: aStream.
+	aStream nextPut: $).
 %
 category: 'other'
 method: AbstractNode
-smalltalkSourceFor: aNode parenthesisIf: anInteger on: aStream
-
-	| flag |
-	flag := aNode messagePrecedence >= anInteger.
-	aStream nextPutAll: ''.
-	flag ifTrue: [aStream nextPut: $(].
-	aNode printSmalltalkOn: aStream.
-	flag ifTrue: [aStream nextPut: $)].
+setBlock: aBlock
 %
 category: 'testing'
 method: AbstractNode

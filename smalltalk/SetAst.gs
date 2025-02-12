@@ -13,17 +13,11 @@ initialize
 %
 category: 'other'
 method: SetAst
-messagePrecedence
-	
-	^3
-%
-category: 'other'
-method: SetAst
 printSmalltalkOn: aStream
 
 	aStream nextPutAll: 'set ___value: { '.
-	elts do: [:elt |
-		self smalltalkSourceFor: elt parenthesisIf: 1 on: aStream.
+	elts do: [:each |
+		each printSmalltalkWithParenthesisOn: aStream.
 		aStream nextPutAll: '. '.
 	].
 	aStream nextPut: '} asSet'.

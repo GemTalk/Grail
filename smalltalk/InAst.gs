@@ -14,11 +14,11 @@ method: InAst
 printSmalltalkOn: aStream left: left rightList: right
 
 	right size == 1 ifTrue: [
-		self smalltalkSourceFor: (right at: 1) parenthesisIf: 3 on: aStream.
+		right first printSmalltalkWithParenthesisOn: aStream.
 	] ifFalse: [
 		aStream nextPut: $(.
 		aStream nextPutAll: '((lhs := '.
-		self smalltalkSourceFor: (right at: 1) parenthesisIf: 4 on: aStream.
+		(right at: 1) printSmalltalkOn: aStream.
 		aStream nextPutAll: ')'.
 	].
 
@@ -27,7 +27,7 @@ printSmalltalkOn: aStream left: left rightList: right
 	left ifNil: [
 		aStream nextPutAll: 'rhs'.
 	] ifNotNil: [
-		self smalltalkSourceFor: left parenthesisIf: 3 on: aStream.
+		left printSmalltalkWithParenthesisOn: aStream.
 	].
 
 	right size ~= 1 ifTrue: [

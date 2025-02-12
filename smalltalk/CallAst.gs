@@ -40,12 +40,6 @@ initialize
 %
 category: 'other'
 method: CallAst
-messagePrecedence
-
-	^3
-%
-category: 'other'
-method: CallAst
 printSmalltalkOn: aStream
 
 		"throw namedefbefore error here"
@@ -57,7 +51,7 @@ printSmalltalkOn: aStream
 		yourself.
 
 	arguments do: [:each | 
-		self smalltalkSourceFor: each parenthesisIf: 3 on: aStream.
+		each printSmalltalkWithParenthesisOn: aStream.
 		aStream nextPutAll: '. '.
 	].
 
@@ -74,7 +68,7 @@ printSmalltalkOn: aStream
 				nextPutAll: '->';
 				yourself.
 
-			self smalltalkSourceFor: eachValue parenthesisIf: 3 on: aStream.
+			eachValue printSmalltalkWithParenthesisOn: aStream.
 
 			aStream nextPutAll: '. '.
 		].

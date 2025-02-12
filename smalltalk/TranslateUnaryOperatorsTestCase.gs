@@ -28,13 +28,13 @@ testTranslateNestedUnary
 	x := (self statementsAt: 18).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = '(int ___value: 300) __pos__ __neg__'.
+	self assert: stream contents = '((int ___value: 300) __pos__) __neg__'.
 	self assert: stream contents evaluate equals: (int ___value: -300).
 
 	x := (self statementsAt: 19).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = '(int ___value: 400) __invert__ __invert__'.
+	self assert: stream contents = '((int ___value: 400) __invert__) __invert__'.
 	self assert: stream contents evaluate equals: (int ___value: 400).
 %
 category: 'other'
@@ -45,7 +45,7 @@ testTranslateNotExpr
 	x := (self statementsAt: 17).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
-	self assert: stream contents = 'False __not__'.
+	self assert: stream contents = '(False) __not__'.
 	self assert: stream contents evaluate equals: True.
 %
 category: 'other'

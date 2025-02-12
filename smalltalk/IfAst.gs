@@ -18,14 +18,17 @@ initialize
 category: 'other'
 method: IfAst
 printSmalltalkOn: aStream
-	self smalltalkSourceFor: test parenthesisIf: 3 on: aStream.
+
+	test printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' ___value ifTrue: ['; lf; yourself.
 	aStream increaseIndent.
+	aStream nextPutAll: ''.	"This adds an indent before proceeding."
 	body printSmalltalkOn: aStream.
 	aStream decreaseIndent.
 	orelse body size > 0 ifTrue: [
 		aStream lf; nextPutAll: '] ifFalse: ['; lf; yourself.
 		aStream increaseIndent.
+		aStream nextPutAll: ''.	"This adds an indent before proceeding."
 		orelse printSmalltalkOn: aStream.
 		aStream decreaseIndent.
 		aStream lf; nextPutAll: ']'; yourself.

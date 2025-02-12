@@ -18,21 +18,21 @@ testTranslateAssert
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
 
-	self assert: stream contents equals: 'True ___value ifFalse: [AssertionError signal].'.
+	self assert: stream contents equals: '(True) ___value ifFalse: [AssertionError signal].'.
 	self assert: stream contents evaluate equals: nil.
 
 	x := (self statementsAt: 10).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
 
-	self assert: stream contents equals: 'False ___value ifFalse: [AssertionError signal].'.
+	self assert: stream contents equals: '(False) ___value ifFalse: [AssertionError signal].'.
 	self should: [stream contents evaluate] raise: AssertionError.
 
 	x := (self statementsAt: 11).
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
 
-	self assert: stream contents equals: 'False ___value ifFalse: [AssertionError signal: (str ___value: ''Assert failed'') ___value].'.
+	self assert: stream contents equals: '(False) ___value ifFalse: [AssertionError signal: (str ___value: ''Assert failed'') ___value].'.
 	self 
 		should: [stream contents evaluate] 
 		raise: AssertionError
