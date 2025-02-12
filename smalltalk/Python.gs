@@ -5481,6 +5481,22 @@ expectvalue /Class
 doit
 PythonTestCase category: 'Tests'
 %
+! ------------------- Class definition for AugTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'AugTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+AugTestCase category: 'Tests'
+%
 ! ------------------- Class definition for ByteLiteralsTestCase
 expectvalue /Class
 doit
@@ -5555,6 +5571,22 @@ Object
 expectvalue /Class
 doit
 DelimitersTestCase category: 'Tests'
+%
+! ------------------- Class definition for MyNewSubclass
+expectvalue /Class
+doit
+PythonTestCase subclass: 'MyNewSubclass'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+MyNewSubclass category: 'Tests'
 %
 ! ------------------- Class definition for NumericLiteralsTestCase
 expectvalue /Class
@@ -5824,6 +5856,22 @@ expectvalue /Class
 doit
 TranslateVariablesTestCase category: 'Tests'
 %
+! ------------------- Class definition for TupleTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'TupleTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+TupleTestCase category: 'Tests'
+%
 ! ------------------- Class definition for PythonTestResource
 expectvalue /Class
 doit
@@ -5919,6 +5967,7 @@ input AttributeError.gs
 input AugAssignAst.gs
 input AugLoadAst.gs
 input AugStoreAst.gs
+input AugTestCase.gs
 input AwaitAst.gs
 input Base_Class_Test.gs
 input Base_Exception_Test.gs
@@ -6053,6 +6102,7 @@ input ModuleAst.gs
 input ModuleNotFoundError.gs
 input moduleTest.gs
 input MultAst.gs
+input MyNewSubclass.gs
 input NameAst.gs
 input NamedExprAst.gs
 input NameError.gs
@@ -6150,6 +6200,7 @@ input TryAst.gs
 input tuple.gs
 input TupleAst.gs
 input tupleTest.gs
+input TupleTestCase.gs
 input type.gs
 input TypeError.gs
 input TypeIgnoreAst.gs
