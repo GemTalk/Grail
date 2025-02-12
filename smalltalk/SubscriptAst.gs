@@ -39,6 +39,6 @@ printSmalltalkOn: aStream
 		aStream nextPutAll: ' __getitem__: '.
 		slice printSmalltalkWithParenthesisOn: aStream.
 	] ifFalse: [
-		slice printSmalltalkWithParenthesisOn: aStream.
+		slice printSmalltalkOn: aStream.
 	].
 %

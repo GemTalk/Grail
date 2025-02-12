@@ -5572,22 +5572,6 @@ expectvalue /Class
 doit
 DelimitersTestCase category: 'Tests'
 %
-! ------------------- Class definition for MyNewSubclass
-expectvalue /Class
-doit
-PythonTestCase subclass: 'MyNewSubclass'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-MyNewSubclass category: 'Tests'
-%
 ! ------------------- Class definition for NumericLiteralsTestCase
 expectvalue /Class
 doit
@@ -6102,7 +6086,6 @@ input ModuleAst.gs
 input ModuleNotFoundError.gs
 input moduleTest.gs
 input MultAst.gs
-input MyNewSubclass.gs
 input NameAst.gs
 input NamedExprAst.gs
 input NameError.gs

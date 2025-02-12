@@ -91,6 +91,22 @@ __getslice__: aPyIntStart _: aPyIntEnd
 %
 category: 'Python'
 method: str
+__getslice__: aPyIntStart _: aPyIntEnd _: aPyIntStep
+
+	| end step |
+	end := aPyIntEnd.
+	end == None ifTrue: [
+		end := int ___value: value size.
+	].
+	step := aPyIntStep.
+	step == None ifTrue: [
+		step := int ___value: 1.
+	].
+
+	^self class ___value: (self ___getslice: aPyIntStart _: end _: step)
+%
+category: 'Python'
+method: str
 __gt__: other
 
 	(1 to: value size) do: [:i |
@@ -304,6 +320,29 @@ ___getslice: aPyIntStart _: aPyIntEnd
 		subset removeFrom: 1 to: x.
 	].
 	^subset
+%
+category: 'Smalltalk'
+method: str
+___getslice: aPyIntStart _: aPyIntEnd _: aPyIntStep
+
+	| stream start stop step |
+	start := aPyIntStart ___value.
+	stop := aPyIntEnd ___value.
+	step := aPyIntStep ___value.
+
+	start < 0 ifTrue: [
+		start := value size + start.
+	].
+
+	stop < 0 ifTrue: [
+		stop := value size + stop.
+	].
+
+	stream := WriteStream on: String new.
+	start to: stop by: step do: [:i |
+		stream nextPut: (value at: i + 1).
+	].
+	^stream contents
 %
 category: 'Smalltalk'
 method: str
