@@ -55,19 +55,19 @@ category: 'Python-int'
 method: int
 ___addFloat: aFloat
 
-	^float ___value: (value + aFloat).
+	^float ___value: value + aFloat
 %
 category: 'Python-int'
 method: int
 ___addInt: anInteger
 
-	^int ___value: (anInteger + value).
+	^int ___value: anInteger + value
 %
 category: 'Python-int'
 method: int
 ___addReal: aFloatReal imag: aFloatImag
 
-	^complex ___real: (value + aFloatReal) imaginary: (aFloatImag).
+	^complex ___real: value + aFloatReal imaginary: (aFloatImag)
 %
 category: 'Python-int'
 method: int
@@ -87,7 +87,7 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 			OverflowError signal: 'OverflowError: %c arg not in range(0x110000)'
 		].
 		aCharacter == $c ifTrue: [
-			^(str ___value: (value asCharacter) asString)
+			^(str ___value: value asCharacter asString)
 				___convertWithFlags: aSet
 				precision: anObject
 				andType: aCharacter.
@@ -155,7 +155,7 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 		].
 	].
 
-	^resultString.
+	^resultString
 %
 category: 'Python-int'
 method: int
@@ -172,19 +172,19 @@ category: 'Python-int'
 method: int
 ___mulFloat: aFloat
 
-	^float ___value: (aFloat * value).
+	^float ___value: aFloat * value
 %
 category: 'Python-int'
 method: int
 ___mulInt: anInteger
 
-	^int ___value: (anInteger * value).
+	^int ___value: anInteger * value
 %
 category: 'Python-int'
 method: int
 ___mulReal: aFloatReal imag: aFloatImag
 
-	^complex ___real: (aFloatReal * value) imaginary: (aFloatImag * value) .
+	^complex ___real: aFloatReal * value imaginary: aFloatImag * value
 %
 category: 'Python-int'
 method: int
@@ -200,7 +200,7 @@ ___powInt: anInteger
 
 	return := float ___value: (anInteger raisedTo: value).
 
-	return = return __ceil__ ifTrue: [return := int ___value: (return ___value)].
+	return = return __ceil__ ifTrue: [return := int ___value: return ___value].
 	
 	^return
 %
@@ -244,8 +244,8 @@ ___powReal: aFloatReal imag: aFloatImag
 		imagPart := conjugate imag ___value.
 		denominator := (realPart * realPart) + (imagPart * imagPart).
 		result := complex
-			___real: (realPart / denominator)
-			imaginary: (imagPart / denominator)
+			___real: realPart / denominator
+			imaginary: imagPart / denominator
 	].
 
 	^result
@@ -254,7 +254,7 @@ category: 'Python-int'
 method: int
 ___truedivFloat: aFloat
 
-	^[float ___value: (aFloat / value)]
+	^[float ___value: aFloat / value]
 		on: ZeroDivide
 		do: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero']
 %
@@ -262,7 +262,7 @@ category: 'Python-int'
 method: int
 ___truedivInt: anInteger
 
-	^[float ___value: (anInteger / value)]
+	^[float ___value: anInteger / value]
 		on: ZeroDivide
 		do: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero']
 %
@@ -271,7 +271,7 @@ method: int
 ___truedivReal: aFloatReal imag: aFloatImag
 
 	
-	^[complex ___real: (aFloatReal / value) imaginary:(aFloatImag / value)]
+	^[complex ___real: aFloatReal / value imaginary:aFloatImag / value]
 		on: ZeroDivide
 		do: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero']
 %
@@ -285,7 +285,7 @@ category: 'Python-int'
 method: int
 __add__: anObject
 
-	^anObject ___addInt: value.
+	^anObject ___addInt: value
 %
 category: 'Python-int'
 method: int
@@ -366,7 +366,7 @@ __invert__
 category: 'Python-int'
 method: int
 __lshift__: anIndex
-	(anIndex ___value) < 0 ifTrue: [ValueError signal: 'ValueError: negative shift count'].
+	anIndex ___value < 0 ifTrue: [ValueError signal: 'ValueError: negative shift count'].
 	^int ___value: (value bitShift: anIndex ___value)
 %
 category: 'Python-int'
@@ -379,7 +379,7 @@ category: 'Python-int'
 method: int
 __mul__: anObject
 
-	^anObject ___mulInt: value.
+	^anObject ___mulInt: value
 %
 category: 'Python-int'
 method: int
@@ -402,7 +402,7 @@ category: 'Python-int'
 method: int
 __pow__: anObject
 
-	^anObject ___powInt: value.
+	^anObject ___powInt: value
 %
 category: 'Python-int'
 method: int
@@ -431,7 +431,7 @@ __rfloordiv__: any
 category: 'Python-int'
 method: int
 __rlshift__: any
-	(self ___value) < 0 ifTrue: [ValueError signal: 'ValueError: negative shift count'].
+	self ___value < 0 ifTrue: [ValueError signal: 'ValueError: negative shift count'].
 	^any __lshift__: self
 %
 category: 'Python-int'
@@ -464,12 +464,12 @@ __round__: anInt
 	anInt class == int ifFalse: [
 		TypeError signal: 'TypeError: ', anInt class asString,' object cannot be interpreted as an integer'
 	].
-	^self.
+	^self
 %
 category: 'Python-int'
 method: int
 __rrshift__: any
-	(self ___value) < 0 ifTrue: [ValueError signal: 'ValueError: negative shift count'].
+	self ___value < 0 ifTrue: [ValueError signal: 'ValueError: negative shift count'].
 	(any isKindOf: Magnitude)
 		ifTrue: [^self __rrshift__: (int ___value: any)].
 	^any __rshift__: self
@@ -477,7 +477,7 @@ __rrshift__: any
 category: 'Python-int'
 method: int
 __rshift__: anIndex
-	(anIndex ___value) < 0 ifTrue: [ValueError signal: 'ValueError: negative shift count'].
+	anIndex ___value < 0 ifTrue: [ValueError signal: 'ValueError: negative shift count'].
 	^int ___value: (value bitShift: anIndex ___value negated)
 %
 category: 'Python-int'
@@ -512,7 +512,7 @@ category: 'Python-int'
 method: int
 __truediv__: anObject
 
-	^(anObject ___truedivInt: value).
+	^(anObject ___truedivInt: value)
 %
 category: 'Python-int'
 method: int
@@ -626,7 +626,7 @@ category: 'Python-object'
 method: int
 __rpow__: anObject
 
-	^anObject __pow__: self.
+	^anObject __pow__: self
 %
 category: 'Smalltalk'
 method: int

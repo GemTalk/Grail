@@ -57,7 +57,7 @@ scope: aVariables positional: positionalArgsArray named: namedArgsArray
 			ifTrue: [
 				| errorString |
 				errorString := ''.
-				(positionalArgsArray size + 1) to: (params size) do: [:i | errorString := errorString, ' ', ((params at: i) asString)].
+				(positionalArgsArray size + 1) to: params size do: [:i | errorString := errorString, ' ', ((params at: i) asString)].
 				TypeError signal:
 					'TypeError: missing ', (defaultsOffset - positionalArgsArray size) asString,
 					' required positional arguments:', errorString.
@@ -70,7 +70,7 @@ scope: aVariables positional: positionalArgsArray named: namedArgsArray
 		] ifFalse: [
 			[(myScope at: vararg) append: (positionalArgsArray at: i)]
 				on: NameError
-				do: [TypeError signal: 'TypeError: takes ', (params size) asString, ' positional arguements but ', (positionalArgsArray size) asString, ' was given'].
+				do: [TypeError signal: 'TypeError: takes ', params size asString, ' positional arguements but ', positionalArgsArray size asString, ' was given'].
 		].
 	].
 
@@ -78,7 +78,7 @@ scope: aVariables positional: positionalArgsArray named: namedArgsArray
 		| indexOfFirstDefaultNeeded |
 		indexOfFirstDefaultNeeded := positionalArgsArray size + defaults size - params size + 1.
 		indexOfFirstDefaultNeeded to: defaults size do: [:i |
-			myScope at: (params at: (defaultsOffset + i)) put: (defaults at: i).
+			myScope at: (params at: defaultsOffset + i) put: (defaults at: i).
 		]
 	].
 
@@ -105,11 +105,11 @@ scope: aVariables positional: positionalArgsArray named: namedArgsArray
 		myScope at: kwarg put: (dict ___value: Dictionary new).
 
 		namedArgsArray do: [:var |
-			(myScope at: kwarg) __setitem__: (var key) _: var value.
+			(myScope at: kwarg) __setitem__: var key _: var value.
 		].
 	].
 
-	^block value: myScope.
+	^block value: myScope
 %
 category: 'other'
 method: FunctionDef

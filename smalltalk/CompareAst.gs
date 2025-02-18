@@ -26,7 +26,7 @@ printSmalltalkOn: aStream
 
 	comparatorList size == 1 ifTrue: [
 		(cmpopList at: 1) printSmalltalkOn: aStream left: left rightList: comparatorList.
-		^self.
+		^self
 	].
 
 	aStream

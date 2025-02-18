@@ -26,12 +26,12 @@ printSmalltalkOn: aStream
 	body class == Array ifTrue: [
 		body do: [:each | 
 			(each class == AssignAst) ifTrue: [aStream nextPutAll: (each target id); space].
-			(each class == FunctionDefAst) ifTrue: [aStream nextPutAll: (each name); space].
+			(each class == FunctionDefAst) ifTrue: [aStream nextPutAll: each name; space].
 		].
 	] ifFalse: [
 		body variables do: [:each | aStream nextPutAll: each; space].
 	].
-	aStream nextPutAll: ') asIdentitySet.'; lf .
+	aStream nextPutAll: ') asIdentitySet.'; lf.
 
 	"print all the instructions in the block"
 	body size == 1 ifTrue: [
@@ -52,5 +52,5 @@ category: 'other'
 method: BlockAst
 variables
 
-	^variables.
+	^variables
 %

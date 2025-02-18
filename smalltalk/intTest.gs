@@ -65,13 +65,13 @@ method: intTest
 test__divmod__
 
 	self
-		assert: ((self int: 3	) __divmod__: (self int: 4	)) ___container asArray equals: #(0 3		);
-		assert: ((self int: 3	) __divmod__: (self int: -4	)) ___container asArray equals: #(-1 -1	);
-		assert: ((self int: -3	) __divmod__: (self int: -4	)) ___container asArray equals: #(0 -3	);
-		assert: ((self int: 4	) __divmod__: (self int: 3	)) ___container asArray equals: #(1 1		);
-		assert: ((self int: 4	) __divmod__: (self int: -3	)) ___container asArray equals: #(-2 -2	);
-		assert: ((self int: -4	) __divmod__: (self int: -3	)) ___container asArray equals: #(1 -1	);
-		assert: ((self int: -4	) __divmod__: (self int: 3	)) ___container asArray equals: #(-2 2	);
+		assert: ((self int: 3) __divmod__: (self int: 4)) ___container asArray equals: #(0 3);
+		assert: ((self int: 3) __divmod__: (self int: -4)) ___container asArray equals: #(-1 -1);
+		assert: ((self int: -3) __divmod__: (self int: -4)) ___container asArray equals: #(0 -3);
+		assert: ((self int: 4) __divmod__: (self int: 3)) ___container asArray equals: #(1 1);
+		assert: ((self int: 4) __divmod__: (self int: -3)) ___container asArray equals: #(-2 -2);
+		assert: ((self int: -4) __divmod__: (self int: -3)) ___container asArray equals: #(1 -1);
+		assert: ((self int: -4) __divmod__: (self int: 3)) ___container asArray equals: #(-2 2);
 		yourself
 %
 category: 'done'
@@ -259,11 +259,11 @@ method: intTest
 test__new__onString
 
 	self
-		assert: (int __call__: (self str: '1'	))	__repr__ equals: (self str: '1');
-		assert: (int __call__: (self str: '+1'	))	__repr__ equals: (self str: '1');
-	   	assert: (int __call__: (self str: '0'	))	__repr__ equals: (self str: '0');
-		assert: (int __call__: (self str: '-1'	))	__repr__ equals: (self str: '-1');
-		assert: (int __call__: (self str: '33'	))	__repr__ equals: (self str: '33');
+		assert: (int __call__: (self str: '1'))	__repr__ equals: (self str: '1');
+		assert: (int __call__: (self str: '+1'))	__repr__ equals: (self str: '1');
+	   	assert: (int __call__: (self str: '0'))	__repr__ equals: (self str: '0');
+		assert: (int __call__: (self str: '-1'))	__repr__ equals: (self str: '-1');
+		assert: (int __call__: (self str: '33'))	__repr__ equals: (self str: '33');
 		yourself.
 	[
 		int __call__: (self str: 'j').
@@ -335,13 +335,13 @@ method: intTest
 test__rdivmod__
 
 	self
-		assert: ((self int: 4	) __rdivmod__: (self int: 3		)) ___container asArray equals: #(0 3		);
-		assert: ((self int: -4	) __rdivmod__: (self int: 3		)) ___container asArray equals: #(-1 -1	);
-		assert: ((self int: -4	) __rdivmod__: (self int: -3	)) ___container asArray equals: #(0 -3	);
-		assert: ((self int: 3	) __rdivmod__: (self int: 4		)) ___container asArray equals: #(1 1		);
-		assert: ((self int: -3	) __rdivmod__: (self int: 4		)) ___container asArray equals: #(-2 -2	);
-		assert: ((self int: -3	) __rdivmod__: (self int: -4	)) ___container asArray equals: #(1 -1	);
-		assert: ((self int: 3	) __rdivmod__: (self int: -4	)) ___container asArray equals: #(-2 2	);
+		assert: ((self int: 4) __rdivmod__: (self int: 3)) ___container asArray equals: #(0 3);
+		assert: ((self int: -4) __rdivmod__: (self int: 3)) ___container asArray equals: #(-1 -1);
+		assert: ((self int: -4) __rdivmod__: (self int: -3)) ___container asArray equals: #(0 -3);
+		assert: ((self int: 3) __rdivmod__: (self int: 4)) ___container asArray equals: #(1 1);
+		assert: ((self int: -3) __rdivmod__: (self int: 4)) ___container asArray equals: #(-2 -2);
+		assert: ((self int: -3) __rdivmod__: (self int: -4)) ___container asArray equals: #(1 -1);
+		assert: ((self int: 3) __rdivmod__: (self int: -4)) ___container asArray equals: #(-2 2);
 		yourself
 %
 category: 'done'
@@ -516,9 +516,9 @@ method: intTest
 test_as_integer_ratio
 
 	self
-		assert: ((self int: 3	) as_integer_ratio) ___container asArray equals: #(3 1	);
-		assert: ((self int: -3	) as_integer_ratio) ___container asArray equals: #(-3 1	);
-		assert: ((self int: 0	) as_integer_ratio) ___container asArray equals: #(0 1	);
+		assert: ((self int: 3) as_integer_ratio) ___container asArray equals: #(3 1);
+		assert: ((self int: -3) as_integer_ratio) ___container asArray equals: #(-3 1);
+		assert: ((self int: 0) as_integer_ratio) ___container asArray equals: #(0 1);
 		yourself.
 %
 category: 'done'

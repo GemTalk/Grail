@@ -18,7 +18,7 @@ category: 'Python-float'
 method: float
 ___addFloat: aFloat
 
-	^float ___value: (value + aFloat).
+	^float ___value: value + aFloat
 %
 category: 'Python-float'
 method: float
@@ -102,7 +102,7 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 			tempHolder := ''.
 			index := 1.
 			"Collect only significant digits"
-			[precisionHolder > 0 and: [index <= (resultString size)]] whileTrue: [
+			[precisionHolder > 0 and: [index <= resultString size]] whileTrue: [
 					
 				(resultString at: index) isAlphaNumeric ifTrue: [
 					precisionHolder := precisionHolder -1.
@@ -129,9 +129,9 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 
 			decimalIndex := resultString indexOf: $..
 			"add trailing zeros, this is based on the precision or 6 if there is no precision"
-			(precisionHolder + decimalIndex) <= (resultString size)
+			precisionHolder + decimalIndex <= resultString size
 				ifTrue: [
-					resultString := resultString copyFrom: 1 to: (precisionHolder + decimalIndex).
+					resultString := resultString copyFrom: 1 to: precisionHolder + decimalIndex.
 					resultString last == $. ifTrue: [
 						resultString := resultString copyFrom: 1 to: (resultString size -1).
 					].
@@ -204,25 +204,25 @@ category: 'Python-float'
 method: float
 ___mulFloat: aFloat
 
-	^float ___value: (aFloat * value).
+	^float ___value: aFloat * value
 %
 category: 'Python-float'
 method: float
 ___mulInt: anInteger
 
-	^float ___value: (anInteger * value).
+	^float ___value: anInteger * value
 %
 category: 'Python-float'
 method: float
 ___mulReal: aFloatReal imag: aFloatImag
 
-	^complex ___real: (aFloatReal * value) imaginary: (aFloatImag * value) .
+	^complex ___real: aFloatReal * value imaginary: aFloatImag * value
 %
 category: 'Python-float'
 method: float
 ___truedivFloat: aFloat
 
-	^[float ___value: (aFloat / value)]
+	^[float ___value: aFloat / value]
 		on: ZeroDivide
 		do: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero']
 %
@@ -230,7 +230,7 @@ category: 'Python-float'
 method: float
 ___truedivInt: anInteger
 
-	^[float ___value: (anInteger / value)]
+	^[float ___value: anInteger / value]
 		on: ZeroDivide
 		do: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero']
 %
@@ -239,7 +239,7 @@ method: float
 ___truedivReal: aFloatReal imag: aFloatImag
 
 	
-	^[complex ___real: (aFloatReal / value) imaginary:(aFloatImag / value)]
+	^[complex ___real: aFloatReal / value imaginary:aFloatImag / value]
 		on: ZeroDivide
 		do: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero']
 %
@@ -253,7 +253,7 @@ category: 'Python-float'
 method: float
 __add__: anObject
 
-	^anObject ___addFloat: value.
+	^anObject ___addFloat: value
 %
 category: 'Python-float'
 method: float
@@ -331,7 +331,7 @@ category: 'Python-float'
 method: float
 __mul__: anObject
 
-	^anObject ___mulFloat: value.
+	^anObject ___mulFloat: value
 %
 category: 'Python-float'
 method: float
@@ -383,7 +383,7 @@ __round__
 
 	| result |
 	((value * 2) odd and: [value floor even]) ifTrue: [
-		result := int ___value: (value floor).
+		result := int ___value: value floor.
 	] ifFalse: [
 		result := int ___value: value rounded
 	].
@@ -409,13 +409,13 @@ __round__: anInt
 		] ifFalse: [
 			result := result rounded.
 		].
-	^float ___value: result / (10 raisedTo: anInt ___value).
+	^float ___value: result / (10 raisedTo: anInt ___value)
 %
 category: 'Python-float'
 method: float
 __rpow__: anObject
 
-	^anObject __pow__: self.
+	^anObject __pow__: self
 %
 category: 'Python-float'
 method: float
@@ -445,7 +445,7 @@ category: 'Python-float'
 method: float
 __truediv__: anObject
 
-	^(anObject ___truedivFloat: value).
+	^(anObject ___truedivFloat: value)
 %
 category: 'Python-float'
 method: float
@@ -537,13 +537,13 @@ category: 'Smalltalk'
 method: float
 ___addInt: anInteger
 
-	^float ___value:  (anInteger + value).
+	^float ___value:  anInteger + value
 %
 category: 'Smalltalk'
 method: float
 ___addReal: aFloatReal imag: aFloatImag
 
-	^complex ___real: (value + aFloatReal) imaginary: (aFloatImag).
+	^complex ___real: value + aFloatReal imaginary: (aFloatImag)
 %
 category: 'Smalltalk'
 method: float
@@ -554,7 +554,7 @@ ___powFloat: aFloat
 	return := float ___value: (aFloat  raisedTo: value).
 	return ___value asString = 'MinusQuietNaN'
 		ifTrue: [
-			^((complex ___real: 0 imaginary: ((aFloat*(-1)) sqrt)) __pow__: (float ___value: (2*value))).
+			^((complex ___real: 0 imaginary: ((aFloat*(-1)) sqrt)) __pow__: (float ___value: 2*value))
 		].
 	^return
 %
@@ -566,7 +566,7 @@ ___powInt: anInteger
 	return := float ___value: (anInteger  raisedTo: value).
 	return ___value asString = 'MinusQuietNaN'
 		ifTrue: [
-			^((complex ___real: 0 imaginary: ((anInteger*(-1)) sqrt)) __pow__: (float ___value: (2*value))).
+			^((complex ___real: 0 imaginary: ((anInteger*(-1)) sqrt)) __pow__: (float ___value: 2*value))
 		].
 	^return
 %
@@ -575,18 +575,18 @@ method: float
 ___powReal: aFloatReal imag: aFloatImag
 		
 	| radius radians |
-	value = (value asInteger) ifTrue: [
-		^((complex ___real: aFloatReal imaginary: aFloatImag) __pow__: (int ___value: (value asInteger)))
+	value = value asInteger ifTrue: [
+		^((complex ___real: aFloatReal imaginary: aFloatImag) __pow__: (int ___value: value asInteger))
 
 	].
 
 	radius := ((aFloatReal raisedTo: 2) + (aFloatImag raisedTo: 2)) sqrt.
 	aFloatReal asFloat == 0.0
 		ifTrue: [
-			radians := (Float pi) / 2.
+			radians := Float pi / 2.
 			aFloatImag < 0 ifTrue: [radians := radians + Float pi / 2].
 		] ifFalse: [
-			radians := ( aFloatImag / aFloatReal ) arcTan .
+			radians := (aFloatImag / aFloatReal) arcTan.
 		].
 			
 
@@ -596,8 +596,8 @@ ___powReal: aFloatReal imag: aFloatImag
 		].
 
 	^complex
-		___real: ((radius raisedTo: value) * ( (value * radians) cos))
-		imaginary: ((radius raisedTo: value) * ( (value * radians) sin)).
+		___real: ((radius raisedTo: value) * ((value * radians) cos))
+		imaginary: ((radius raisedTo: value) * ((value * radians) sin)).
 %
 category: 'Smalltalk'
 method: float
@@ -615,7 +615,7 @@ category: 'Smalltalk'
 method: float
 __pow__: anObject
 
-	^anObject ___powFloat: value.
+	^anObject ___powFloat: value
 %
 category: 'Smalltalk'
 method: float

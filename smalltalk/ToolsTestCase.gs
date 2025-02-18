@@ -67,7 +67,7 @@ testFunctionDefScopePositionalNamed
 			assert: ((currentScope at: #kwarg) __getitem__: (str ___value: 'e')) equals: (int ___value: 8);
 			assert: ((currentScope at: #kwarg) __getitem__: (str ___value: 'f')) equals: (int ___value: 9);
 			yourself.
-	^2.
+	^2
 	].
 
 	self assert: (function 

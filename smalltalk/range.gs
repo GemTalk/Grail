@@ -181,7 +181,7 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 		ifFalse: [
 			return := self __str__ ___value
 		].
-	(anObject ~= '' and: [anObject < (return size)]) ifFalse: [return := return copyFrom: 1 to: return size].
+	(anObject ~= '' and: [anObject < return size]) ifFalse: [return := return copyFrom: 1 to: return size].
 	^return
 %
 category: 'Smalltalk'
@@ -227,5 +227,5 @@ __repr__
 		].
 	stream nextPut: $).
 
-	^(str ___value: (stream contents)).
+	^(str ___value: stream contents)
 %

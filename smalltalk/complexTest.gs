@@ -149,13 +149,13 @@ method: complexTest
 test__new__onString
 
 	self
-		assert: (complex __call__: (str ___value: '(1+3j)'	)) __repr__ ___value equals: '(1+3j)';
-		assert: (complex __call__: (str ___value: '(1-3j)'	)) __repr__ ___value equals: '(1-3j)';
+		assert: (complex __call__: (str ___value: '(1+3j)')) __repr__ ___value equals: '(1+3j)';
+		assert: (complex __call__: (str ___value: '(1-3j)')) __repr__ ___value equals: '(1-3j)';
 	   	assert: (complex __call__: (str ___value: '(+1+0j)')) __repr__ ___value equals: '(1+0j)';
 		assert: (complex __call__: (str ___value: '(-1+0j)')) __repr__ ___value equals: '(-1+0j)';
-		assert: (complex __call__: (str ___value: '-3j'		)) __repr__ ___value equals: '-3j';
-		assert: (complex __call__: (str ___value: '+3j'		)) __repr__ ___value equals: '3j';
-		assert: (complex __call__: (str ___value: '3j'		)) __repr__ ___value equals:  '3j';
+		assert: (complex __call__: (str ___value: '-3j'	)) __repr__ ___value equals: '-3j';
+		assert: (complex __call__: (str ___value: '+3j'	)) __repr__ ___value equals: '3j';
+		assert: (complex __call__: (str ___value: '3j'	)) __repr__ ___value equals:  '3j';
 		yourself.
 	[
 		complex __call__: (str ___value: '(1-3j').
@@ -206,7 +206,7 @@ test__pow__
 
 	powHolder := (complex ___real: 0 imaginary: 1) __pow__: (int ___value: 2).
 
-	self assert: (powHolder real) equals: (float ___value: -1).
+	self assert: powHolder real equals: (float ___value: -1).
 	self assert: (powHolder imag ___value roundTo: 0.1) equals: (0.0).
 
 	powHolder := (complex ___real: 1 imaginary: 1) __pow__: (int ___value: 2).
@@ -237,12 +237,12 @@ test__pow__
 	powHolder := (complex ___real: 0 imaginary: 4) __pow__: (float ___value: 0.5).
 
 	self assert: (powHolder real ___value roundTo: 0.000001) equals: (2 sqrt roundTo: 0.000001).
-	self assert: (powHolder imag ___value roundTo: 0.000001) equals: ( 2 sqrt roundTo: 0.000001).
+	self assert: (powHolder imag ___value roundTo: 0.000001) equals: (2 sqrt roundTo: 0.000001).
 
 	powHolder := (complex ___real: 1 imaginary: 1) __pow__: (complex ___real: 1 imaginary: 1).
 
 	self assert: (powHolder real ___value roundTo: 0.000001) equals: (0.273957).
-	self assert: (powHolder imag ___value roundTo: 0.000001) equals: ( 0.583701).
+	self assert: (powHolder imag ___value roundTo: 0.000001) equals: (0.583701).
 %
 category: 'done'
 method: complexTest

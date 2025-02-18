@@ -82,20 +82,20 @@ test__not__
 
 	self
 		deny: b __not__;
-		assert: (b __not__) __not__;
+		assert: b __not__ __not__;
 		yourself.
 
 	b := str ___value: 'represent all non-empty strings'.
 
 	self
 		deny: b __not__;
-		assert: (b __not__) __not__;
+		assert: b __not__ __not__;
 		yourself.
 
 	b := list ___value: {'represent all non-empty lists'}.
 
 	self
 		deny: b __not__;
-		assert: (b __not__) __not__;
+		assert: b __not__ __not__;
 		yourself.
 %

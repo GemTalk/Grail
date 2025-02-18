@@ -44,7 +44,7 @@ parent: aNode
 		symbol := aNode stream peekN: 4.
 		symbol = 'None' ifTrue: [
 			aNode stream skip: 4.
-			^None.
+			^None
 		] ifFalse: [
 			symbol := ((aNode stream upTo: self subclassDelimiter) , 'Ast') asSymbol.
 		].
@@ -70,7 +70,7 @@ alias
 	| string |
 	string := self stream upTo: $(.
 	string = 'alias' ifFalse: [self error].
-	^AliasAst parent: self.
+	^AliasAst parent: self
 %
 category: 'initialization'
 method: AbstractNode
@@ -79,7 +79,7 @@ arg
 	| string |
 	string := self stream upTo: $(.
 	string = 'arg' ifFalse: [self error].
-	^ArgAst parent: self.
+	^ArgAst parent: self
 %
 category: 'initialization'
 method: AbstractNode
@@ -143,7 +143,7 @@ category: 'initialization'
 method: AbstractNode
 isVariableIsDeclared: aSymbol
 
-	^parent isVariableIsDeclared: aSymbol.
+	^parent isVariableIsDeclared: aSymbol
 %
 category: 'initialization'
 method: AbstractNode

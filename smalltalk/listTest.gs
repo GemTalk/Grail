@@ -564,7 +564,7 @@ testpop
 	list := self targetInstance __add__: { 'a'. 'b'. 'c' }.
 
 	self
-		assert: (list pop) equals: 'c';
+		assert: list pop equals: 'c';
 		assert: list __len__ equals: (self int: 2);
 		yourself
 %

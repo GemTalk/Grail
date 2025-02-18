@@ -29,7 +29,7 @@ ModuleAst script: '1 == 1'.
 	GsFile removeServerFile: path.
 	stream := PrettyWriteStream on: String new.
 	module printSmalltalkOn: stream.
-	^stream contents evaluate.
+	^stream contents evaluate
 %
 category: 'other'
 classmethod: ModuleAst

@@ -6,25 +6,25 @@ category: 'Python'
 classmethod: bytes
 __call__
 
-	^(self __new__) __init__; yourself
+	^self __new__ __init__; yourself
 %
 category: 'Python'
 classmethod: bytes
 __call__: pythonObject
 
-	^(self __new__: pythonObject) __init__: pythonObject; yourself.
+	^(self __new__: pythonObject) __init__: pythonObject; yourself
 %
 category: 'Python'
 classmethod: bytes
 __call__: pythonString _: encoding
 
-	^(self __new__: pythonString _: encoding) __init__: pythonString _: encoding; yourself.
+	^(self __new__: pythonString _: encoding) __init__: pythonString _: encoding; yourself
 %
 category: 'Python'
 classmethod: bytes
 __call__: pythonBytes _: encoding _: errors
 
-	^(self __new__: pythonBytes _: encoding _: errors) __init__: pythonBytes _: encoding _: errors; yourself.
+	^(self __new__: pythonBytes _: encoding _: errors) __init__: pythonBytes _: encoding _: errors; yourself
 %
 category: 'Python'
 classmethod: bytes
@@ -79,7 +79,7 @@ String Error Handlers :
 	replace : Replaces the unencodable character with a ‘?’.
 "
 
-	^self __new__: pythonBytes _: encoding.
+	^self __new__: pythonBytes _: encoding
 %
 category: 'Smalltalk'
 classmethod: bytes
@@ -91,7 +91,7 @@ category: 'Smalltalk'
 classmethod: bytes
 ___fromAsciiString: aString   
 
-	^bytes __call__: (str ___value: aString) _: (str ___value: 'ascii').
+	^bytes __call__: (str ___value: aString) _: (str ___value: 'ascii')
 %
 category: 'Smalltalk'
 classmethod: bytes
@@ -190,12 +190,12 @@ capitalize
 	new := Array new.
 	contents do: [:each | new add: each codePoint].
 
-	^bytes ___value: new.
+	^bytes ___value: new
 %
 category: 'Python'
 method: bytes
 center: with
-	^self center: with _: (bytes ___value: { 32 }).
+	^self center: with _: (bytes ___value: { 32 })
 %
 category: 'Python'
 method: bytes
@@ -212,7 +212,7 @@ center: pyIntWidth _: pyFillByte
 	leftPadSize := pyIntWidth ___value - self __len__ ___value - rightPadSize.
 	leftPad := Array new replaceFrom: 1 to: leftPadSize withObject: pyFillByte ___value first; yourself.
 
-	^bytes ___value: (Array new addAll: leftPad; addAll: (Array withAll: self ___container); addAll: rightPad; yourself) asArray.
+	^bytes ___value: (Array new addAll: leftPad; addAll: (Array withAll: self ___container); addAll: rightPad; yourself) asArray
 %
 category: 'Python'
 method: bytes
@@ -463,7 +463,7 @@ ljust: pyIntWidth _: pyByte
 	
 	new := Array withAll: container.
 	(1 to: (pyIntWidth ___value - container size)) do: [:each | new add: pyByte ___value first].
-	^bytes ___value: new.
+	^bytes ___value: new
 %
 category: 'Python'
 method: bytes
@@ -471,7 +471,7 @@ lower
 	| lowerString |
 	lowerString := Array withAll: (String withAll: (self ___container collect: [:x | Character codePoint: x])) asLowercase.
 	
-	^bytes ___value: (lowerString collect: [:x | x codePoint]).
+	^bytes ___value: (lowerString collect: [:x | x codePoint])
 %
 category: 'Python'
 method: bytes
@@ -487,7 +487,7 @@ lstrip: aPyBytesStripset
 	
 	1 to: container size do: [:i |
 		(aPyBytesStripset ___value includes: (container at: i)) ifFalse: [
-			^bytes ___value: (container copyFrom: left to: container size).
+			^bytes ___value: (container copyFrom: left to: container size)
 		].
 		left := left + 1.
 	]
@@ -638,10 +638,10 @@ rsplit: pyBytesSep _: pyIntLimit
 	| idx newLimit remaining splits splitsIndex |
 	idx := (self rfind: pyBytesSep) ___value + 1.
 	idx < 1 ifTrue: [
-		^tuple ___value: { self copy }.
+		^tuple ___value: { self copy }
 	].
 	pyIntLimit ___value == 0 ifTrue: [
-		^tuple ___value: { self copy }.
+		^tuple ___value: { self copy }
 	].
 
 	splits := OrderedCollection new.
@@ -671,7 +671,7 @@ rstrip: aPyBytesStripset
 	
 	1 to: container size do: [:i |
 		(aPyBytesStripset ___value includes: (container reverse at: i)) ifFalse: [
-			^bytes ___value: (container reverse copyFrom: left to: container size) reverse.
+			^bytes ___value: (container reverse copyFrom: left to: container size) reverse
 		].
 		left := left + 1.
 	]
@@ -687,10 +687,10 @@ split: pyBytesSep _: pyIntLimit
 	| idx newLimit remaining splits |
 	idx := (self find: pyBytesSep) ___value + 1.
 	idx < 1 ifTrue: [
-		^tuple ___value: { self copy }.
+		^tuple ___value: { self copy }
 	].
 	pyIntLimit ___value == 0 ifTrue: [
-		^tuple ___value: { self copy }.
+		^tuple ___value: { self copy }
 	].
 
 	splits := OrderedCollection new.
@@ -743,7 +743,7 @@ swapcase
 			]
 		].
 
-	^bytes ___value: ((Array withAll: answer) collect: [:x | x codePoint]).
+	^bytes ___value: ((Array withAll: answer) collect: [:x | x codePoint])
 %
 category: 'Python'
 method: bytes
@@ -767,7 +767,7 @@ title
 		].
 		previous := new last.
 	].
-	^bytes ___value: new.
+	^bytes ___value: new
 %
 category: 'Python'
 method: bytes
@@ -775,7 +775,7 @@ upper
 	| upperString |
 	upperString := Array withAll: (String withAll: (self ___container collect: [:x | Character codePoint: x])) asUppercase.
 	
-	^bytes ___value: (upperString collect: [:x | x codePoint]).
+	^bytes ___value: (upperString collect: [:x | x codePoint])
 %
 category: 'Smalltalk'
 method: bytes

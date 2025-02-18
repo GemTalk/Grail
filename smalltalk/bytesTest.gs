@@ -1160,7 +1160,7 @@ testupper
 category: 'setup'
 method: bytesTest
 bytes: aString
-   ^bytes __call__: (str ___value: aString) _: (str ___value: 'ascii').
+   ^bytes __call__: (str ___value: aString) _: (str ___value: 'ascii')
 %
 category: 'todo'
 method: bytesTest

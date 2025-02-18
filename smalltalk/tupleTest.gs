@@ -125,11 +125,11 @@ test__getslice__
 	list := self targetInstance __add__: { 'a'. 'b'. 'c'. 'd' }.
 
 	self
-		assert: (  list __getslice__: (self int: 1) _: (self int: 2)) __len__ equals: (self int: 1);
+		assert: (list __getslice__: (self int: 1) _: (self int: 2)) __len__ equals: (self int: 1);
 		assert: ((list __getslice__: (self int: 1) _: (self int: 2)) __getitem__: (self int: 0)) equals: 'b';
-		assert: (  list __getslice__: (self int: 1) _: (self int: 3)) __len__ equals: (self int: 2);
+		assert: (list __getslice__: (self int: 1) _: (self int: 3)) __len__ equals: (self int: 2);
 		assert: ((list __getslice__: (self int: 1) _: (self int: 3)) __getitem__: (self int: 1)) equals: 'c';
-		assert: (  list __getslice__: (self int: 1) _: (self int: 10)) __len__ equals: (self int: 3);
+		assert: (list __getslice__: (self int: 1) _: (self int: 10)) __len__ equals: (self int: 3);
 		yourself
 %
 category: 'done'

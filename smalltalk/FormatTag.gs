@@ -14,14 +14,14 @@ initializeFrom: aReadStream
 
 	"aReadStream is at the character after a single %"
 	aReadStream peek == $% ifTrue: [
-		^'%'.
+		^'%'
 	].
 	self setMapValue: aReadStream.
 	self setFlag: aReadStream.
 	self setWidth: aReadStream.
 	self setPrecision: aReadStream.
 	self setType: aReadStream.
-	^self.
+	^self
 %
 category: 'other'
 method: FormatTag
@@ -41,7 +41,7 @@ setMapValue: aReadStream
 	aReadStream peek == $( ifTrue: [
 		mapValue := ''.
 		aReadStream next.
-		[(aReadStream peek) ~~ $)] whileTrue: [
+		[aReadStream peek ~~ $)] whileTrue: [
 			mapValue := mapValue + aReadStream next.
 		].
 		mapValue := str ___value: mapValue.
@@ -57,7 +57,7 @@ setPrecision: aReadStream
 		aReadStream next.
 		aReadStream peek == $* ifTrue: [
 			precision := aReadStream next.
-			^nil.
+			^nil
 		].
 		[aReadStream peek isNumeric] whileTrue: [
 			precision := precision + aReadStream next.
@@ -92,11 +92,11 @@ setWidth: aReadStream
 	width := ''.
 	aReadStream peek == $* ifTrue: [
 		width := aReadStream next.
-		^nil.
+		^nil
 	].
 	[aReadStream peek isNumeric]
 		whileTrue: [
-			width := width + (aReadStream next).
+			width := width + aReadStream next.
 		].
 	width = '' ifFalse: [width := width asNumber].
 %
@@ -147,7 +147,7 @@ tupleForParameters: aReadStream
 		TypeError signal: 'TypeError: not enough arguments for format string'.
 	].
 	mapValue ~~ nil
-		ifTrue: [toBeConverted := (aReadStream peek) __getitem__: mapValue.]
+		ifTrue: [toBeConverted := aReadStream peek __getitem__: mapValue.]
 		ifFalse: [toBeConverted := aReadStream next.].
 
 	numClassHolder := toBeConverted class.
@@ -156,7 +156,7 @@ tupleForParameters: aReadStream
 
 	padding := ''.
 	(width = '') ifFalse: [
-		1 to: (width - (insertString size)) do: [:i | padding := padding + ' '].
+		1 to: (width - insertString size) do: [:i | padding := padding + ' '].
 
 	].
 	
@@ -173,7 +173,7 @@ tupleForParameters: aReadStream
 	displacement := 0.
 	padding := ''.
 
-	1 to: (width - (insertString size)) do: [:i | padding := padding + '0'].
+	1 to: (width - insertString size) do: [:i | padding := padding + '0'].
 
 	"adding a displacement do determin how far into the string you must go
 	go get to the first actual number."

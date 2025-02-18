@@ -150,7 +150,7 @@ frozenset
 					(currentScope at: #object) class == str
 						ifTrue: [
 							((currentScope at: #object) ___value)
-								do: [:each | return add: (str ___value: (each asString)).].
+								do: [:each | return add: (str ___value: each asString).].
 						]
 						ifFalse: [
 							(currentScope at: #object) class == dict
@@ -227,7 +227,7 @@ input
 						yourself.
 	inputFunction block: [:currentScope |
 		str ___value: (((System __sessionStateAt: 3)
-			prompt: ( ((currentScope at: #object) ___value))
+			prompt: (((currentScope at: #object) ___value))
 			caption: 'Input') decodeToString)
 	].
 	Builtins singleton at: #input put: inputFunction
@@ -351,7 +351,7 @@ list
 					(currentScope at: #object) class == str
 						ifTrue: [
 							((currentScope at: #object) ___value)
-								do: [:each | return append: (str ___value: (each asString)).].
+								do: [:each | return append: (str ___value: each asString).].
 						]
 						ifFalse: [
 							(currentScope at: #object) class == dict
@@ -568,7 +568,7 @@ set
 					(currentScope at: #object) class == str
 						ifTrue: [
 							((currentScope at: #object) ___value)
-								do: [:each | return add: (str ___value: (each asString)).].
+								do: [:each | return add: (str ___value: each asString).].
 						]
 						ifFalse: [
 							(currentScope at: #object) class == dict
@@ -636,7 +636,7 @@ sum
 			ifTrue: [
 				sum := sum real.
 				integer ifTrue: [
-						sum := int ___value: (sum ___value).
+						sum := int ___value: sum ___value.
 					].
 			].
 		sum

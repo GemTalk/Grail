@@ -118,7 +118,7 @@ category: 'other'
 method: object
 ___and: aPythonObject
 
-	^(self __bool__) __and__: aPythonObject __bool__
+	^self __bool__ __and__: aPythonObject __bool__
 %
 category: 'other'
 method: object
@@ -161,7 +161,7 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 		TypeError signal: 'TypeError: %c requires int or char'
 	].
 
-	(anObject ~= '' and: [anObject < (return size)]) ifFalse: [return := return copyFrom: 1 to: return size].
+	(anObject ~= '' and: [anObject < return size]) ifFalse: [return := return copyFrom: 1 to: return size].
 	^return
 %
 category: 'other'
@@ -180,7 +180,7 @@ category: 'other'
 method: object
 ___modString: aString
 	
-	^(tuple ___value: {self}) ___modString: aString.
+	^(tuple ___value: {self}) ___modString: aString
 %
 category: 'other'
 method: object
@@ -204,7 +204,7 @@ category: 'other'
 method: object
 ___or: aPythonObject
 
-	^(self __bool__) __or__: aPythonObject __bool__
+	^self __bool__ __or__: aPythonObject __bool__
 %
 category: 'other'
 method: object
@@ -246,7 +246,7 @@ category: 'other'
 method: object
 __not__
 
-	^(self __bool__) __not__
+	^self __bool__ __not__
 %
 category: 'other'
 method: object
@@ -372,7 +372,7 @@ __setattr__: aKey _: aValue
       	AttributeError signal: self __class__ name asString printString, ' object attribute ', aKey ___string printString , ' is read-only'.
  ].
 
-	AttributeError signal: self __class__ name asString printString, ' object has no attribute ', aKey ___string printString .
+	AttributeError signal: self __class__ name asString printString, ' object has no attribute ', aKey ___string printString.
 %
 category: 'Python'
 method: object
@@ -396,7 +396,7 @@ category: 'Python'
 method: object
 is_: anObject
 
-	^bool ___value: self ___value == anObject ___value.
+	^bool ___value: self ___value == anObject ___value
 %
 category: 'Python'
 method: object

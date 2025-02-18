@@ -12,7 +12,7 @@ category: 'other'
 classmethod: list
 __new__: aList
 
-	^self basicNew.
+	^self basicNew
 %
 category: 'Smalltalk'
 classmethod: list
@@ -34,7 +34,7 @@ ___startChar
 category: 'Python'
 method: list
 __delitem__: anIndex
-	^self ___remove: anIndex ifFail: 'list assignment index out of range'.
+	^self ___remove: anIndex ifFail: 'list assignment index out of range'
 %
 category: 'Python'
 method: list
@@ -78,7 +78,7 @@ __repr__
 	].
 	stream nextPut: $].
 
-	^(str ___value: (stream contents)).
+	^(str ___value: stream contents)
 %
 category: 'Python'
 method: list
@@ -129,7 +129,7 @@ insert: anIndex _: anElement
 
 	self ___container add: anElement beforeIndex: index + 1.
 
-	^self.
+	^self
 
  "#('a' 'b' 'c' 'd') asOrderedCollection insert: 'y' before: 2; yourself
 "
@@ -142,7 +142,7 @@ pop
 category: 'Python'
 method: list
 pop: anIndex
-	^self ___remove: anIndex ifFail: 'pop index out of range'.
+	^self ___remove: anIndex ifFail: 'pop index out of range'
 %
 category: 'Python'
 method: list
@@ -156,13 +156,13 @@ category: 'Python'
 method: list
 reverse
 
-	^self ___value: self ___container reverse.
+	^self ___value: self ___container reverse
 %
 category: 'Python'
 method: list
 sort
 
-	^self ___value: self ___container sort.
+	^self ___value: self ___container sort
 %
 category: 'Python'
 method: list
@@ -173,7 +173,7 @@ sort_key: aFunction reverse: aBool
 							ifPresent: [:sortFunc | [:a :b | (sortFunc value: a) < (sortFunc value: b)]]
 							ifAbsent: [[:a :b | a < b]].
 
-	^self ___initialize: (aBool ___value)
+	^self ___initialize: aBool ___value
 									ifTrue: [(self ___container sort: sortBlock) reverse]
 									ifFalse: [self ___container sort: sortBlock]).
 "
@@ -196,7 +196,7 @@ __delslice__: start _: end
 	"I don't find this in Python 3.9.2"
 
 	(end > start) ifTrue: [
-		self ___container removeFrom: (start + 1) to: (end - start + 1).
+		self ___container removeFrom: start + 1 to: (end - start + 1).
 	].
 
 	^self

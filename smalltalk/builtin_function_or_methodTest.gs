@@ -12,12 +12,12 @@ testAbs
 	absHolder := ((variables at:#abs) scope: variables
 						  positional: { int ___value: 5.}
 						  named: {}).
-	self assert: (absHolder ___value) equals: (5).
+	self assert: absHolder ___value equals: (5).
 
 	absHolder := ((variables at:#abs) scope: variables
 						  positional: { int ___value: -5.}
 						  named: {}).
-	self assert: (absHolder ___value) equals: (5).
+	self assert: absHolder ___value equals: (5).
 
 	absHolder := [((variables at:#abs) scope: variables
 						  positional: { str ___value: 'a'.}
@@ -48,55 +48,55 @@ testBool
 	boolHolder := ((variables at:#bool) scope: variables
 						  positional: { int ___value: 2.}
 						  named: {}).
-	self assert: (boolHolder class) equals: (bool).
+	self assert: boolHolder class equals: (bool).
 	self assert: (boolHolder) equals: (True).
 
 	boolHolder := ((variables at:#bool) scope: variables
 						  positional: { int ___value: 0.}
 						  named: {}).
-	self assert: (boolHolder class) equals: (bool).
+	self assert: boolHolder class equals: (bool).
 	self assert: (boolHolder) equals: (False).
 
 	boolHolder := ((variables at:#bool) scope: variables
 						  positional: { float ___value: 3.1.}
 						  named: {}).
-	self assert: (boolHolder class) equals: (bool).
+	self assert: boolHolder class equals: (bool).
 	self assert: (boolHolder) equals: (True).
 
 	boolHolder := ((variables at:#bool) scope: variables
 						  positional: { float ___value: 0.0.}
 						  named: {}).
-	self assert: (boolHolder class) equals: (bool).
+	self assert: boolHolder class equals: (bool).
 	self assert: (boolHolder) equals: (False).
 
 	boolHolder := ((variables at:#bool) scope: variables
 						  positional: { str ___value: '4'.}
 						  named: {}).
-	self assert: (boolHolder class) equals: (bool).
+	self assert: boolHolder class equals: (bool).
 	self assert: (boolHolder) equals: (True).
 
 	boolHolder := ((variables at:#bool) scope: variables
 						  positional: { str ___value: ''.}
 						  named: {}).
-	self assert: (boolHolder class) equals: (bool).
+	self assert: boolHolder class equals: (bool).
 	self assert: (boolHolder) equals: (False).
 
 	boolHolder := ((variables at:#bool) scope: variables
 						  positional: { (variables at:#bool)}
 						  named: {}).
-	self assert: (boolHolder class) equals: (bool).
+	self assert: boolHolder class equals: (bool).
 	self assert: (boolHolder) equals: (True).
 
 	boolHolder := ((variables at:#bool) scope: variables
 						  positional: { list ___value: {int ___value: 1}}
 						  named: {}).
-	self assert: (boolHolder class) equals: (bool).
+	self assert: boolHolder class equals: (bool).
 	self assert: (boolHolder) equals: (True).
 
 	boolHolder := ((variables at:#bool) scope: variables
 						  positional: { list ___value: {}}
 						  named: {}).
-	self assert: (boolHolder class) equals: (bool).
+	self assert: boolHolder class equals: (bool).
 	self assert: (boolHolder) equals: (False).
 %
 category: 'other'
@@ -108,7 +108,7 @@ testChr
 	chrHolder := ((variables at:#chr) scope: variables
 						  positional: { int ___value: 97.}
 						  named: {}).
-	self assert: (chrHolder ___value) equals: ('a').
+	self assert: chrHolder ___value equals: ('a').
 
 	chrHolder := [((variables at:#chr) scope: variables
 						  positional: { float ___value: 4.1.}
@@ -161,25 +161,25 @@ testFloat
 	floatHolder := ((variables at:#float) scope: variables
 						  positional: { float ___value: 1.1.}
 						  named: {}).
-	self assert: (floatHolder ___value) equals: (1.1).
+	self assert: floatHolder ___value equals: (1.1).
 
 	floatHolder := ((variables at:#float) scope: variables
 						  positional: { int ___value: 2.}
 						  named: {}).
-	self assert: (floatHolder class) equals: (float).
-	self assert: (floatHolder ___value) equals: (2).
+	self assert: floatHolder class equals: (float).
+	self assert: floatHolder ___value equals: (2).
 
 	floatHolder := ((variables at:#float) scope: variables
 						  positional: { str ___value: '3.1'.}
 						  named: {}).
-	self assert: (floatHolder class) equals: (float).
-	self assert: (floatHolder ___value) equals: (3.1).
+	self assert: floatHolder class equals: (float).
+	self assert: floatHolder ___value equals: (3.1).
 
 	floatHolder := ((variables at:#float) scope: variables
 						  positional: { str ___value: '4'.}
 						  named: {}).
-	self assert: (floatHolder class) equals: (float).
-	self assert: (floatHolder ___value) equals: (4).
+	self assert: floatHolder class equals: (float).
+	self assert: floatHolder ___value equals: (4).
 
 	floatHolder := [((variables at:#float) scope: variables
 						  positional: { str ___value: 'a'}
@@ -273,31 +273,31 @@ testInt
 	intHolder := ((variables at:#int) scope: variables
 						  positional: { int ___value: 3.}
 						  named: {}).
-	self assert: (intHolder ___value) equals: (3).
+	self assert: intHolder ___value equals: (3).
 
 	intHolder := ((variables at:#int) scope: variables
 						  positional: { float ___value: 4.1.}
 						  named: {}).
-	self assert: (intHolder class) equals: (int).
-	self assert: (intHolder ___value) equals: (4).
+	self assert: intHolder class equals: (int).
+	self assert: intHolder ___value equals: (4).
 
 	variables := Variables new.
 	intHolder := ((variables at:#int) scope: variables
 						  positional: { str ___value: '11'.}
 						  named: {}).
-	self assert: (intHolder ___value) equals: (11).
+	self assert: intHolder ___value equals: (11).
 
 	variables := Variables new.
 	intHolder := ((variables at:#int) scope: variables
 						  positional: { str ___value: '-11'.}
 						  named: {}).
-	self assert: (intHolder ___value) equals: (-11).
+	self assert: intHolder ___value equals: (-11).
 
 	variables := Variables new.
 	intHolder := ((variables at:#int) scope: variables
 						  positional: { str ___value: '-11'. int ___value: 2}
 						  named: {}).
-	self assert: (intHolder ___value) equals: (-3).
+	self assert: intHolder ___value equals: (-3).
 %
 category: 'other'
 method: builtin_function_or_methodTest
@@ -309,7 +309,7 @@ testLen
 	listHolder := ((variables at:#len) scope: variables
 						  positional: { alist.}
 						  named: {}).
-	self assert: (listHolder ___value) equals: (3).
+	self assert: listHolder ___value equals: (3).
 
 	alist := int ___value: 1.
 	listHolder := [((variables at:#len) scope: variables
@@ -371,7 +371,7 @@ testOrd
 	roundHolder := ((variables at:#round) scope: variables
 						  positional: { int ___value: 3.}
 						  named: {}).
-	self assert: (roundHolder ___value) equals: (3).
+	self assert: roundHolder ___value equals: (3).
 %
 category: 'other'
 method: builtin_function_or_methodTest
@@ -429,7 +429,7 @@ testPow
 	powHolder := ((variables at:#pow) scope: variables
 						  positional: { (complex ___real: 0 imaginary: 1). int ___value: 2.}
 						  named: {}).
-	self assert: (powHolder real) equals: (float ___value: -1).
+	self assert: powHolder real equals: (float ___value: -1).
 	self assert: (powHolder imag ___value roundTo: 0.1) equals: (0.0).
 
 	powHolder := ((variables at:#pow) scope: variables
@@ -467,13 +467,13 @@ testPow
 						  positional: { (complex ___real: 0 imaginary: 4). float ___value: 0.5.}
 						  named: {}).
 	self assert: (powHolder real ___value roundTo: 0.000001) equals: (2 sqrt roundTo: 0.000001).
-	self assert: (powHolder imag ___value roundTo: 0.000001) equals: ( 2 sqrt roundTo: 0.000001).
+	self assert: (powHolder imag ___value roundTo: 0.000001) equals: (2 sqrt roundTo: 0.000001).
 
 	powHolder := ((variables at:#pow) scope: variables
 						  positional: { (complex ___real: 1 imaginary: 1). (complex ___real: 1 imaginary: 1)}
 						  named: {}).
 	self assert: (powHolder real ___value roundTo: 0.000001) equals: (0.273957).
-	self assert: (powHolder imag ___value roundTo: 0.000001) equals: ( 0.583701).
+	self assert: (powHolder imag ___value roundTo: 0.000001) equals: (0.583701).
 %
 category: 'other'
 method: builtin_function_or_methodTest
@@ -545,17 +545,17 @@ testRange
 	rangeHolder := ((variables at:#range) scope: variables
 						  positional: { int ___value: 5.}
 						  named: {}).
-	self assert: (rangeHolder ___value) equals: (Interval from: 0 to: 4).
+	self assert: rangeHolder ___value equals: (Interval from: 0 to: 4).
 
 	rangeHolder := ((variables at:#range) scope: variables
 						  positional: { int ___value: 5. int ___value: 7.}
 						  named: {}).
-	self assert: (rangeHolder ___value) equals: (Interval from: 5 to: 6).
+	self assert: rangeHolder ___value equals: (Interval from: 5 to: 6).
 
 	rangeHolder := ((variables at:#range) scope: variables
 						  positional: { int ___value: 5. int ___value: 10. int ___value: 2.}
 						  named: {}).
-	self assert: (rangeHolder ___value) equals: (Interval from: 5 to: 9 by: 2).
+	self assert: rangeHolder ___value equals: (Interval from: 5 to: 9 by: 2).
 %
 category: 'other'
 method: builtin_function_or_methodTest

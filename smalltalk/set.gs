@@ -133,7 +133,7 @@ __repr__
 	].
 	stream nextPut: $}.
 
-	^(str ___value: (stream contents)).
+	^(str ___value: stream contents)
 %
 category: 'Python'
 method: set
@@ -227,7 +227,7 @@ category: 'Python'
 method: set
 pop
  	container isEmpty ifTrue: [KeyError signal].
-	^self remove: container any.
+	^self remove: container any
 %
 category: 'Python'
 method: set
