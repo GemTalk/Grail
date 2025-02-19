@@ -147,8 +147,8 @@ tupleForParameters: aReadStream
 		TypeError signal: 'TypeError: not enough arguments for format string'.
 	].
 	mapValue ~~ nil
-		ifTrue: [toBeConverted := aReadStream peek __getitem__: mapValue.]
-		ifFalse: [toBeConverted := aReadStream next.].
+		ifTrue: [toBeConverted := aReadStream peek __getitem__: mapValue]
+		ifFalse: [toBeConverted := aReadStream next].
 
 	numClassHolder := toBeConverted class.
 	"convert the next value in the ReadStream to a string matching its type converter"

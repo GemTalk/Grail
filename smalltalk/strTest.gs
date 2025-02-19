@@ -178,7 +178,7 @@ test__mod__
 		assert: (ModuleAst evaluate: '"%s" % {1}')
 		equals: (str ___value: '{1}');
 
-		assert: (ModuleAst evaluate: '"%s" % (1)')
+		assert: (ModuleAst evaluate: '"%s" % 1')
 		equals: (str ___value: '1').
 %
 category: 'todo'

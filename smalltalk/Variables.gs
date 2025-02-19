@@ -87,7 +87,7 @@ find: aKey
 
 	"locates a variable in the current dictionary or if it isn't present searches its parent for it"
 
-	parent ifNil: [^dict at: aKey ifAbsent: [NameError signal: 'NameError: name ''' , aKey asString , ''' is not defined'.]].
+	parent ifNil: [^dict at: aKey ifAbsent: [NameError signal: 'NameError: name ''' , aKey asString , ''' is not defined']].
 	^dict at: aKey ifAbsent: [parent find: aKey]
 %
 category: 'other'

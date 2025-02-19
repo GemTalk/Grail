@@ -386,8 +386,8 @@ testUpdate
 		yourself.
 
 	dict1 := (dict ___value: { (str ___value: 'a') -> (int ___value: 1).  (str ___value: 'b') -> (int ___value: 2) } asDictionary).
-	dict2 := list ___value: {tuple ___value: {str ___value: 'c'.} asArray }.
-	dict3 := [dict1 update: dict2.] on: ValueError do: [1].
+	dict2 := list ___value: {tuple ___value: {str ___value: 'c' } asArray }.
+	dict3 := [dict1 update: dict2] on: ValueError do: [1].
 	self assert: dict3 equals: 1.
 %
 category: 'done'

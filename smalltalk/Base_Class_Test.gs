@@ -61,8 +61,8 @@ targetInstance: firstArg _: secondArg
 %
 category: 'setup'
 method: Base_Class_Test
-targetInstance: firstArg _: secondArg _: thirdParam
-	^self targetClass __call__: firstArg _: secondArg _: thirdParam
+targetInstance: firstArg _: secondArg _: thirdArg
+	^self targetClass __call__: firstArg _: secondArg _: thirdArg
 %
 category: 'setup'
 method: Base_Class_Test

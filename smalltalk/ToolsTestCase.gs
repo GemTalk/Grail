@@ -121,7 +121,7 @@ testSetAsNonlocals
 	currScope at: #x put: 1.
 	localScope at: #x put: 1.
 	nonlocalScope at: #x put: 2.
-	[nonlocalScope setAsNonlocals: #(x).] on: SyntaxError do: [^self].
+	[nonlocalScope setAsNonlocals: #(x)] on: SyntaxError do: [^self].
 	self assert: false.
 %
 category: 'other'

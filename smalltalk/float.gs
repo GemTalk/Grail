@@ -52,10 +52,10 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 			andType: aCharacter
 	].
 
-	({$s. $a. $r.} includes: aCharacter) ifTrue: [
+	({$s. $a. $r } includes: aCharacter) ifTrue: [
 		"if it uses string type indicator then it should change to a string or character and then use that
 		class's implementation"
-		^(str ___value: (value) asString)
+		^(str ___value: value asString)
 			___convertWithFlags: aSet
 			precision: anObject
 			andType: aCharacter.
@@ -543,7 +543,7 @@ category: 'Smalltalk'
 method: float
 ___addReal: aFloatReal imag: aFloatImag
 
-	^complex ___real: value + aFloatReal imaginary: (aFloatImag)
+	^complex ___real: value + aFloatReal imaginary: aFloatImag
 %
 category: 'Smalltalk'
 method: float

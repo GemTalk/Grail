@@ -211,16 +211,16 @@ __repr__
 		ifFalse: [
 			stream
 				nextPutAll: self begin ___value asString;
-				nextPut: $, ;
-				space ;
+				nextPut: $,;
+				space;
 				nextPutAll: self end ___value asString;
 			yourself.
 		
 
 			self ___value increment == 1 ifFalse: [
 				stream 
-					nextPut: $, ;
-					space ;
+					nextPut: $,;
+					space;
 					nextPutAll: self ___value increment asString;
 					yourself.
 			].

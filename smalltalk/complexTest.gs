@@ -207,19 +207,19 @@ test__pow__
 	powHolder := (complex ___real: 0 imaginary: 1) __pow__: (int ___value: 2).
 
 	self assert: powHolder real equals: (float ___value: -1).
-	self assert: (powHolder imag ___value roundTo: 0.1) equals: (0.0).
+	self assert: (powHolder imag ___value roundTo: 0.1) equals: 0.0.
 
 	powHolder := (complex ___real: 1 imaginary: 1) __pow__: (int ___value: 2).
 
-	self assert: (powHolder) equals: (complex ___real: 0.0 imaginary: 2.0).
+	self assert: powHolder equals: (complex ___real: 0.0 imaginary: 2.0).
 
 	powHolder := (complex ___real: 1 imaginary: 1) __pow__: (int ___value: -2).
 
-	self assert: (powHolder) equals: (complex ___real: 0.0 imaginary: -0.5).
+	self assert: powHolder equals: (complex ___real: 0.0 imaginary: -0.5).
 
 	powHolder := (complex ___real: 2 imaginary: 3) __pow__: (int ___value: 3).
 
-	self assert: (powHolder) equals: (complex ___real: -46.0 imaginary: 9.0).
+	self assert: powHolder equals: (complex ___real: -46.0 imaginary: 9.0).
 
 	powHolder := (complex ___real: 2 imaginary: 3) __pow__: (int ___value: -3).
 
@@ -228,11 +228,11 @@ test__pow__
 
 	powHolder := (complex ___real: 1 imaginary: 1) __pow__: (float ___value: 2.0).
 						  
-	self assert: (powHolder) equals: (complex ___real: 0.0 imaginary: 2.0).
+	self assert: powHolder equals: (complex ___real: 0.0 imaginary: 2.0).
 
 	powHolder := (complex ___real: 4 imaginary: 0) __pow__: (float ___value: 0.5).
 
-	self assert: (powHolder) equals: (complex ___real: 2.0 imaginary: 0.0).
+	self assert: powHolder equals: (complex ___real: 2.0 imaginary: 0.0).
 
 	powHolder := (complex ___real: 0 imaginary: 4) __pow__: (float ___value: 0.5).
 
@@ -241,8 +241,8 @@ test__pow__
 
 	powHolder := (complex ___real: 1 imaginary: 1) __pow__: (complex ___real: 1 imaginary: 1).
 
-	self assert: (powHolder real ___value roundTo: 0.000001) equals: (0.273957).
-	self assert: (powHolder imag ___value roundTo: 0.000001) equals: (0.583701).
+	self assert: (powHolder real ___value roundTo: 0.000001) equals: 0.273957.
+	self assert: (powHolder imag ___value roundTo: 0.000001) equals: 0.583701.
 %
 category: 'done'
 method: complexTest

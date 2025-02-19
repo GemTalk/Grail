@@ -67,7 +67,7 @@ category: 'Python-int'
 method: int
 ___addReal: aFloatReal imag: aFloatImag
 
-	^complex ___real: value + aFloatReal imaginary: (aFloatImag)
+	^complex ___real: value + aFloatReal imaginary: aFloatImag
 %
 category: 'Python-int'
 method: int
@@ -80,7 +80,7 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 	"
 
 	| resultString |
-	({$s. $c. $a. $r.} includes: aCharacter) ifTrue: [
+	({$s. $c. $a. $r } includes: aCharacter) ifTrue: [
 		"if it uses string type indicator then it should change to a string or character and then use that
 		class's implementation"
 		(aCharacter == $c and: [value > Character maximumCodePoint]) ifTrue: [
@@ -92,13 +92,13 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 				precision: anObject
 				andType: aCharacter.
 		].
-		^(str ___value: (value) asString)
+		^(str ___value: value asString)
 			___convertWithFlags: aSet
 			precision: anObject
 			andType: aCharacter.
 	].
 
-	({$f. $F. $e. $E. $g. $G.} includes: aCharacter) ifTrue: [
+	({$f. $F. $e. $E. $g. $G } includes: aCharacter) ifTrue: [
 		"if it uses float type indicator then it should change to a float and then use that
 		class's implementation"
 		^(float ___value: value)
@@ -140,7 +140,7 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 		].
 	].
 
-	aCharacter == $x ifTrue: [resultString asLowercase.].
+	aCharacter == $x ifTrue: [resultString asLowercase].
 
 	"readd the sign if needed or appropriate"
 	value < 0 ifTrue: [

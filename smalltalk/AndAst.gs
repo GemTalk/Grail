@@ -7,7 +7,9 @@ category: 'other'
 method: AndAst
 printSmalltalkOn: aStream
 
-	1 to: values size - 2 do: [:each | aStream nextPutAll: '('].
+	values size - 2 timesRepeat: [
+		aStream nextPutAll: '('
+	].
 	values first printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' ___and: '.
 	2 to: values size - 1 do: [:each |
@@ -16,5 +18,4 @@ printSmalltalkOn: aStream
 		aStream nextPutAll: ' ___and: '.
 	].
 	values last printSmalltalkWithParenthesisOn: aStream.
-
 %

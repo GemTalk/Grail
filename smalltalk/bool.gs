@@ -28,11 +28,7 @@ ___value: anObject
 category: 'other'
 method: bool
 ___ignore: anObject
-
 	"See InAst >> printSmalltalkOn:left:rightList:"
-
-
-	^self
 %
 category: 'other'
 method: bool
@@ -49,7 +45,6 @@ __and__: anObject
 	(other isKindOf: ExecBlock) ifTrue: [
 		other := other value. "Evaluate the block"
 	].
-
 	^bool ___value: (self ___value and: [other ___value])
 %
 category: 'other'

@@ -24,7 +24,7 @@ printSmalltalkOn: aStream
 
 	exc class == CallAst ifTrue: [
 		aStream nextPutAll: ': '.
-		(cause ~= None and: [cause value ~= nil and: [cause value ~= 'None']]) ifTrue: [aStream nextPut: '('.].
+		(cause ~= None and: [cause value ~= nil and: [cause value ~= 'None']]) ifTrue: [aStream nextPut: '('].
 		exc arguments first printSmalltalkWithParenthesisOn: aStream.
 		aStream nextPutAll: ' ___value'.
 		(cause ~= None and: [cause value ~= nil and: [cause value ~= 'None']]) ifTrue: [
