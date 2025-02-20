@@ -14,7 +14,7 @@ statementFrom: aNode
 
 "
 	self == StatementAst ifTrue: [
-		^self customChildForParent: aNode peekForCloseParenthesis: true.
+		^self customChildForParent: aNode peekForCloseParenthesis: true
 	] ifFalse: [
 		^super parent: aNode
 	].

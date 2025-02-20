@@ -251,8 +251,8 @@ test__getattribute__
 
 	self
 		should: [	self targetInstance __getattribute__: (self str: 'x')] raise: AttributeError;
-		assert: ((	self targetInstance __getattribute__: (self str: '__doc__')) isKindOf: String);
-		assert: (	self targetInstance __getattribute__: (self str: '__class__')) equals: object;
+		assert: ((self targetInstance __getattribute__: (self str: '__doc__')) isKindOf: String);
+		assert: (self targetInstance __getattribute__: (self str: '__class__')) equals: object;
 		yourself.
 		#pyElaborate
 %

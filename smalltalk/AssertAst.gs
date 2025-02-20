@@ -19,7 +19,7 @@ printSmalltalkOn: aStream
 
 	test printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' ___value ifFalse: [AssertionError signal'.
-	msg class == NoneType ifFalse: [
+	msg ~~ None ifTrue: [
 		aStream nextPutAll: ': '.
 		msg printSmalltalkWithParenthesisOn: aStream.
 		aStream nextPutAll: ' ___value'.

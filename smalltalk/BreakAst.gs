@@ -7,5 +7,5 @@ category: 'other'
 method: BreakAst
 initialize
 
-self readPositionOnly
+  self readPositionOnly.
 %

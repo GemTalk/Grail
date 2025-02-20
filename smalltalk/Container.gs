@@ -64,7 +64,7 @@ __add__: aList
 category: 'Python'
 method: Container
 __bool__
-	^bool ___value: (self ___container size) ~= 0.
+	^bool ___value: (self ___container size) ~= 0
 %
 category: 'Python'
 method: Container
@@ -152,7 +152,7 @@ __imul__: aMultiplier
 	| newList |
 	 newList := self.
 
-	(aMultiplier -1) timesRepeat: [
+	aMultiplier -1 timesRepeat: [
 		newList ___container addAll: self ___container
  ].
 
@@ -214,7 +214,7 @@ __repr__
 	].
 	stream nextPut: $].
 
-	^str ___value: stream contents.
+	^str ___value: stream contents
 %
 category: 'Python'
 method: Container
@@ -225,7 +225,7 @@ category: 'Python'
 method: Container
 clear
 
-	^self ___container removeAll: self ___container.
+	^self ___container removeAll: self ___container
 %
 category: 'Python'
 method: Container
@@ -242,7 +242,7 @@ count: aPyObject
 category: 'Python'
 method: Container
 index: aPythonObject
-	^self index: aPythonObject from: (int ___value: 1).
+	^self index: aPythonObject from: (int ___value: 1)
 %
 category: 'Python'
 method: Container

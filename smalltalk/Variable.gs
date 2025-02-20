@@ -8,7 +8,7 @@ category: 'other'
 method: Variable
 createChildScope
 
-	^self new; parent: self; yourself.
+	^self new; parent: self; yourself
 %
 category: 'other'
 method: Variable

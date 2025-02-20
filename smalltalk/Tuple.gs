@@ -28,7 +28,7 @@ category: 'Smalltalk'
 classmethod: tuple
 __new__: aPythonTuple
 
-	^self basicNew ___value: aPythonTuple ___container copy immediateInvariant.
+	^self basicNew ___value: aPythonTuple ___container copy immediateInvariant
 %
 ! ------------------- Instance methods for tuple
 category: 'Python'
@@ -60,7 +60,7 @@ ___modString: aString
 		TypeError signal: 'TypeError: not all arguments converted during string formatting'.
 	].
 
-	writeStream := WriteStream on: (String new).
+	writeStream := WriteStream on: String new.
 	pieces do: [:each | 
 		(each isKindOf: String) ifTrue: [
 			writeStream nextPutAll: each.
@@ -68,7 +68,7 @@ ___modString: aString
 			writeStream nextPutAll: (each tupleForParameters: readStream).
 		].
 	].
-	^writeStream contents.
+	^writeStream contents
 %
 category: 'Python'
 method: tuple
@@ -104,7 +104,7 @@ __repr__
 	].
 	stream nextPut: $).
 
-	^(str ___value: (stream contents)).
+	^(str ___value: stream contents)
 %
 category: 'Smalltalk'
 method: tuple

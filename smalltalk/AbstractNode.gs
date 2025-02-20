@@ -11,12 +11,12 @@ escapeCharacters
 			at: $\		put: 92;
 			at: $'		put: 39;
 			at: $"		put: 34;
-			at: $a		put: 7;
-			at: $b		put: 8;
+			at: $a		put:  7;
+			at: $b		put:  8;
 			at: $f		put: 12;
 			at: $n		put: 10;
 			at: $r		put: 13;
-			at: $t		put: 9;
+			at: $t		put:  9;
 			at: $v		put: 11;
 			yourself.
 	].
@@ -39,22 +39,20 @@ classmethod: AbstractNode
 parent: aNode
 
 	(aNode isKindOf: AbstractNode) ifFalse: [self error: 'Not a valid parent!'].
-	^self isAbstract ifTrue: [
+	self isAbstract ifTrue: [
 		| symbol class |
 		symbol := aNode stream peekN: 4.
 		symbol = 'None' ifTrue: [
 			aNode stream skip: 4.
-			^None.
-		] ifFalse: [
-			symbol := ((aNode stream upTo: self subclassDelimiter) , 'Ast') asSymbol.
+			^None
 		].
+		symbol := ((aNode stream upTo: self subclassDelimiter) , 'Ast') asSymbol.
 		class := Python at: symbol.
-		class parent: aNode
-	] ifFalse: [
-		self basicNew
-			initialize: aNode;
-			yourself
+		^class parent: aNode.
 	].
+	^self basicNew
+		initialize: aNode;
+		yourself
 %
 category: 'other'
 classmethod: AbstractNode
@@ -70,7 +68,7 @@ alias
 	| string |
 	string := self stream upTo: $(.
 	string = 'alias' ifFalse: [self error].
-	^AliasAst parent: self.
+	^AliasAst parent: self
 %
 category: 'initialization'
 method: AbstractNode
@@ -79,7 +77,7 @@ arg
 	| string |
 	string := self stream upTo: $(.
 	string = 'arg' ifFalse: [self error].
-	^ArgAst parent: self.
+	^ArgAst parent: self
 %
 category: 'initialization'
 method: AbstractNode
@@ -118,7 +116,7 @@ category: 'initialization'
 method: AbstractNode
 initialize
 
-	self subclassResponsibility
+	self subclassResponsibility.
 %
 category: 'initialization'
 method: AbstractNode
@@ -143,20 +141,19 @@ category: 'initialization'
 method: AbstractNode
 isVariableIsDeclared: aSymbol
 
-	^parent isVariableIsDeclared: aSymbol.
+	^parent isVariableIsDeclared: aSymbol
 %
 category: 'initialization'
 method: AbstractNode
 optionalArg
 
-	| stream temp |
+	| stream |
 	stream := parent stream.
-	^(temp := stream peekN: 4) = 'None' ifTrue: [
+	(stream peekN: 4) = 'None' ifTrue: [
 		stream next: 4.
-		None
-	] ifFalse: [
-		self arg.
+		^None
 	].
+	^self arg
 %
 category: 'initialization'
 method: AbstractNode
@@ -164,12 +161,11 @@ optionalExpression
 
 	| stream |
 	stream := parent stream.
-	^(stream peekN: 4) = 'None' ifTrue: [
+	(stream peekN: 4) = 'None' ifTrue: [
 		stream next: 4.
-		None.
-	] ifFalse: [
-		self expression.
+		^None
 	].
+	^self expression
 %
 category: 'initialization'
 method: AbstractNode
@@ -177,16 +173,16 @@ optionalString
 
 	| stream |
 	stream := parent stream.
-	^(stream peekN: 4) = 'None' ifTrue: [
+	(stream peekN: 4) = 'None' ifTrue: [
 		stream next: 4.
-		None.
-	] ifFalse: [
-		self string.
+		^None
 	].
+	^self string
 %
 category: 'initialization'
 method: AbstractNode
 readPosition
+	"nothing to read"
 %
 category: 'initialization'
 method: AbstractNode

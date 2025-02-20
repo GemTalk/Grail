@@ -154,7 +154,7 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 	"
 
 	| validTypes invalidTypes return |
-	validTypes := {$a. $s. $r. $c} asSet.
+	validTypes := { $a. $s. $r. $c } asSet.
 	invalidTypes := {
 			$d->[TypeError signal: 'TypeError: %d format: a real number is required, not str'].
 			$i->[TypeError signal: 'TypeError: %i format: a real number is required, not str'].
@@ -181,7 +181,7 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 		ifFalse: [
 			return := self __str__ ___value
 		].
-	(anObject ~= '' and: [anObject < (return size)]) ifFalse: [return := return copyFrom: 1 to: return size].
+	(anObject ~= '' and: [anObject < return size]) ifFalse: [return := return copyFrom: 1 to: return size].
 	^return
 %
 category: 'Smalltalk'
@@ -211,21 +211,21 @@ __repr__
 		ifFalse: [
 			stream
 				nextPutAll: self begin ___value asString;
-				nextPut: $, ;
-				space ;
+				nextPut: $,;
+				space;
 				nextPutAll: self end ___value asString;
 			yourself.
 		
 
 			self ___value increment == 1 ifFalse: [
 				stream 
-					nextPut: $, ;
-					space ;
+					nextPut: $,;
+					space;
 					nextPutAll: self ___value increment asString;
 					yourself.
 			].
 		].
 	stream nextPut: $).
 
-	^(str ___value: (stream contents)).
+	^(str ___value: stream contents)
 %

@@ -28,7 +28,7 @@ test___and
 		assert: (a ___and: a);
 		yourself.
 
-	a := list ___value: {'represent all non-empty lists'}.
+	a := list ___value: { 'represent all non-empty lists' }.
 	b := list ___value: {}.
 
 	self
@@ -63,7 +63,7 @@ test___or
 		assert: (a ___or: a);
 		yourself.
 
-	a := list ___value: {'represent all non-empty lists'}.
+	a := list ___value: { 'represent all non-empty lists' }.
 	b := list ___value: {}.
 
 	self
@@ -82,20 +82,20 @@ test__not__
 
 	self
 		deny: b __not__;
-		assert: (b __not__) __not__;
+		assert: b __not__ __not__;
 		yourself.
 
 	b := str ___value: 'represent all non-empty strings'.
 
 	self
 		deny: b __not__;
-		assert: (b __not__) __not__;
+		assert: b __not__ __not__;
 		yourself.
 
-	b := list ___value: {'represent all non-empty lists'}.
+	b := list ___value: { 'represent all non-empty lists' }.
 
 	self
 		deny: b __not__;
-		assert: (b __not__) __not__;
+		assert: b __not__ __not__;
 		yourself.
 %

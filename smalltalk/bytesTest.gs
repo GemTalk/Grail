@@ -326,10 +326,10 @@ testcapitalize
 	Abcd := self bytes: 'Abcd'.
 
 	self
-		assert: (self bytes: 'abcd') capitalize equals: Abcd ;
-		assert: (self bytes: 'ABCD') capitalize equals: Abcd ;
-		assert: (self bytes: 'aBCD') capitalize equals: Abcd ;
-		assert: (self bytes: 'Abcd') capitalize equals: Abcd ;
+		assert: (self bytes: 'abcd') capitalize equals: Abcd;
+		assert: (self bytes: 'ABCD') capitalize equals: Abcd;
+		assert: (self bytes: 'aBCD') capitalize equals: Abcd;
+		assert: (self bytes: 'Abcd') capitalize equals: Abcd;
 		yourself
 %
 category: 'done'
@@ -429,10 +429,10 @@ testendswith
 		yourself.
 
 	self
-		assert: (list endswith: (tuple ___value: {self bytes: 'aa'. self bytes: 'a'})) equals: (self bool: true);
-		assert: (list endswith: (tuple ___value: {self bytes: 'bb'. self bytes: 'a'})) equals: (self bool: true);		
-		assert: (list endswith: (tuple ___value: {self bytes: 'aa'. self bytes: 'b'})) equals: (self bool: true);
-		assert: (list endswith: (tuple ___value: {self bytes: 'bb'. self bytes: 'b'})) equals: (self bool: false);
+		assert: (list endswith: (tuple ___value: { self bytes: 'aa'. self bytes: 'a' })) equals: (self bool: true);
+		assert: (list endswith: (tuple ___value: { self bytes: 'bb'. self bytes: 'a' })) equals: (self bool: true);		
+		assert: (list endswith: (tuple ___value: { self bytes: 'aa'. self bytes: 'b' })) equals: (self bool: true);
+		assert: (list endswith: (tuple ___value: { self bytes: 'bb'. self bytes: 'b' })) equals: (self bool: false);
 		yourself.
 
 	self
@@ -745,10 +745,10 @@ testlower
 	abcd := self bytes: 'abcd'.
 
 	self
-		assert: (self bytes: 'abcd') lower equals: abcd ;
-		assert: (self bytes: 'ABCD') lower equals: abcd ;
-		assert: (self bytes: 'aBCD') lower equals: abcd ;
-		assert: (self bytes: 'Abcd') lower equals: abcd ;
+		assert: (self bytes: 'abcd') lower equals: abcd;
+		assert: (self bytes: 'ABCD') lower equals: abcd;
+		assert: (self bytes: 'aBCD') lower equals: abcd;
+		assert: (self bytes: 'Abcd') lower equals: abcd;
 		yourself
 %
 category: 'done'
@@ -1151,16 +1151,16 @@ testupper
 	abcd := self bytes: 'ABCD'.
 
 	self
-		assert: (self bytes: 'abcd') upper equals: abcd ;
-		assert: (self bytes: 'ABCD') upper equals: abcd ;
-		assert: (self bytes: 'aBCD') upper equals: abcd ;
-		assert: (self bytes: 'Abcd') upper equals: abcd ;
+		assert: (self bytes: 'abcd') upper equals: abcd;
+		assert: (self bytes: 'ABCD') upper equals: abcd;
+		assert: (self bytes: 'aBCD') upper equals: abcd;
+		assert: (self bytes: 'Abcd') upper equals: abcd;
 		yourself
 %
 category: 'setup'
 method: bytesTest
 bytes: aString
-   ^bytes __call__: (str ___value: aString) _: (str ___value: 'ascii').
+   ^bytes __call__: (str ___value: aString) _: (str ___value: 'ascii')
 %
 category: 'todo'
 method: bytesTest

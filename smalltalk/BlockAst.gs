@@ -25,17 +25,17 @@ printSmalltalkOn: aStream
 	aStream nextPutAll: 'currentScope setHelperSymbols: #('.
 	body class == Array ifTrue: [
 		body do: [:each | 
-			(each class == AssignAst) ifTrue: [aStream nextPutAll: (each target id); space].
-			(each class == FunctionDefAst) ifTrue: [aStream nextPutAll: (each name); space].
+			each class == AssignAst ifTrue: [aStream nextPutAll: each target id; space].
+			each class == FunctionDefAst ifTrue: [aStream nextPutAll: each name; space].
 		].
 	] ifFalse: [
 		body variables do: [:each | aStream nextPutAll: each; space].
 	].
-	aStream nextPutAll: ') asIdentitySet.'; lf .
+	aStream nextPutAll: ') asIdentitySet.'; lf.
 
 	"print all the instructions in the block"
 	body size == 1 ifTrue: [
-		(body at: 1) printSmalltalkOn: aStream.
+		body first printSmalltalkOn: aStream.
 		aStream nextPut: $..
 	] ifFalse: [
 		body do: [:each |
@@ -44,7 +44,6 @@ printSmalltalkOn: aStream
 			aStream nextPut: $.; lf; yourself.
 		].
 		aStream position: aStream position - 1.
-
 		aStream lf.
 	].
 %
@@ -52,5 +51,5 @@ category: 'other'
 method: BlockAst
 variables
 
-	^variables.
+	^variables
 %

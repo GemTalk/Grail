@@ -56,7 +56,9 @@ sourceLine
 	| i j string |
 	string := self module source decodeToString.
 	i := 0.
-	beginLine - 1 timesRepeat: [i := string indexOf: Character lf startingAt: i + 1].
+	beginLine - 1 timesRepeat: [
+		i := string indexOf: Character lf startingAt: i + 1.
+	].
 	j := string indexOf: Character lf startingAt: i + 1.
 	j == 0 ifTrue: [j := string size].
 	^string copyFrom: i + 1 to: j - 1

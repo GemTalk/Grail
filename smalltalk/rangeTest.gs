@@ -72,7 +72,7 @@ test__repr__
 	| currentScope |
 	currentScope := Variables new.
 	self
-		assert: (((currentScope at:#range) scope: currentScope positional: { int ___value: -2.} named: {})) __repr__ equals: (str ___value: 'range(-2)');
+		assert: (((currentScope at: #range) scope: currentScope positional: { int ___value: -2 } named: {})) __repr__ equals: (str ___value: 'range(-2)');
 		assert: (self targetInstance: (int ___value: 1) _: (int ___value: 1)) __repr__ equals: (str ___value: 'range(1, 1)');
 		assert: (self targetInstance: (int ___value: 0) _: (int ___value: 0)) __repr__ equals: (str ___value: 'range(0, 0)');
 		assert: (self targetInstance: (int ___value: 0) _: (int ___value: 1)) __repr__ equals: (str ___value: 'range(0, 1)');

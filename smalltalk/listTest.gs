@@ -309,7 +309,7 @@ category: 'done'
 method: listTest
 test__repr__
    | list |
-	list := self targetInstance __add__: {str ___value: 'a'. str ___value: 'b'. str ___value: 'c'. str ___value: 'd' }.
+	list := self targetInstance __add__: { str ___value: 'a'. str ___value: 'b'. str ___value: 'c'. str ___value: 'd' }.
 
 	self
 		assert: list __repr__ ___value equals: '[''a'', ''b'', ''c'', ''d'']';
@@ -406,7 +406,7 @@ category: 'done'
 method: listTest
 test__str__
    | list |
-	list := self targetInstance __add__: {str ___value: 'a'. str ___value: 'b'. str ___value: 'c'. str ___value: 'd' }.
+	list := self targetInstance __add__: { str ___value: 'a'. str ___value: 'b'. str ___value: 'c'. str ___value: 'd' }.
 
 	self
 		assert: list __str__ ___value equals: '[''a'', ''b'', ''c'', ''d'']';
@@ -564,7 +564,7 @@ testpop
 	list := self targetInstance __add__: { 'a'. 'b'. 'c' }.
 
 	self
-		assert: (list pop) equals: 'c';
+		assert: list pop equals: 'c';
 		assert: list __len__ equals: (self int: 2);
 		yourself
 %

@@ -115,7 +115,7 @@ __repr__
 
 	stream nextPut: $}.
 
-	^(str ___value: (stream contents)).
+	^(str ___value: stream contents)
 %
 category: 'Python'
 method: dict
@@ -167,7 +167,7 @@ keys
 category: 'Python'
 method: dict
 pop: aKey
-	^self __delitem__: aKey.
+	^self __delitem__: aKey
 %
 category: 'Python'
 method: dict

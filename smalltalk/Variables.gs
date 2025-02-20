@@ -6,7 +6,7 @@ category: 'other'
 classmethod: Variables
 new
 
-	^self newWithParent: (Builtins singleton).
+	^self newWithParent: Builtins singleton
 %
 category: 'other'
 classmethod: Variables
@@ -23,7 +23,7 @@ method: Variables
 associationAt: aKey
 
 | assoc |
-assoc := dict associationAt: aKey otherwise: nil .
+assoc := dict associationAt: aKey otherwise: nil.
 assoc == nil ifTrue: [
 	dict at: aKey put: nil.
 	assoc := dict associationAt: aKey.
@@ -36,14 +36,14 @@ at: aKey
 
 	"Checks for a local variable read before write error and then checks the current scope
 	and all previous scopes for the variable in questions."
-	(self isGlobals) ifFalse: [
+	self isGlobals ifFalse: [
 		(helperSymbols includes: aKey)
 			ifTrue: [
 				UnboundLocalError signal: 'UnboundLocalError: local variable ''' , aKey asString , ''' referenced before assignment'.
 			]
 		].
 
-	^self find: aKey.
+	^self find: aKey
 %
 category: 'other'
 method: Variables
@@ -52,7 +52,7 @@ at: aKey put: aValue
 | anAssoc |
 helperSymbols remove: aKey ifAbsent: [].
 (dict _validatePrivilegeOld: (dict at: aKey otherwise: nil) new: aValue) ifTrue: [
-  anAssoc:= dict associationAt: aKey otherwise: nil .
+  anAssoc:= dict associationAt: aKey otherwise: nil.
   anAssoc == nil ifTrue: [
        dict _at: aKey put:
        (SymbolAssociation newWithKey: aKey value: aValue).
@@ -73,7 +73,7 @@ category: 'other'
 method: Variables
 createChildScope
 
-	^Variables newWithParent: self.
+	^Variables newWithParent: self
 %
 category: 'other'
 method: Variables
@@ -87,16 +87,16 @@ find: aKey
 
 	"locates a variable in the current dictionary or if it isn't present searches its parent for it"
 
-	parent ifNil: [^dict at: aKey ifAbsent: [NameError signal: 'NameError: name ''' , aKey asString , ''' is not defined'.]].
+	parent ifNil: [^dict at: aKey ifAbsent: [NameError signal: 'NameError: name ''' , aKey asString , ''' is not defined']].
 	^dict at: aKey ifAbsent: [parent find: aKey]
 %
 category: 'other'
 method: Variables
 findNonlocal: aKey
 	"to do"
-	(self isGlobals) ifTrue: [SyntaxError signal: 'SyntaxError: no binding for nonlocal ', aKey asString,' found'].
+	self isGlobals ifTrue: [SyntaxError signal: 'SyntaxError: no binding for nonlocal ', aKey asString,' found'].
 	dict at: aKey ifAbsent: [^parent findNonlocal: aKey].
-	^self.
+	^self
 %
 category: 'other'
 method: Variables
@@ -147,8 +147,8 @@ setAsGlobals: aArray
 	aArray do: [:aKey |
 		dict at: aKey ifAbsent: [
 				helperSymbols remove: aKey ifAbsent: [].
-				dict add: ((self globals) associationAt: aKey).
-				^nil.
+				dict add: (self globals associationAt: aKey).
+				^nil
 			].
 		SyntaxError signal: ('SyntaxError: name ''' , aKey asString , ''' is assigned to before global declaration').
 	]
@@ -166,7 +166,7 @@ setAsNonlocals: aArray
 		dict at: aKey ifAbsent: [
 				helperSymbols remove: aKey ifAbsent: [].
 				dict add: ((self findNonlocal: aKey) associationAt: aKey).
-				^nil.
+				^nil
 			].
 		SyntaxError signal: ('SyntaxError: name ''' , aKey asString , ''' is assigned to before nonlocal declaration').
 	]

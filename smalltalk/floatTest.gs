@@ -8,10 +8,10 @@ method: floatTest
 test__abs__
 
 	self
-		assert: (self float: 3.5	) __abs__ ___value equals: 3.5;
-        assert: (self float: -3.5	) __abs__ ___value equals: 3.5;
-		assert: (self float: 3		) __abs__ ___value equals: 3;
-        assert: (self float: -3	) __abs__ ___value equals: 3;
+		assert: (self float: 3.5) __abs__ ___value equals: 3.5;
+        assert: (self float: -3.5) __abs__ ___value equals: 3.5;
+		assert: (self float: 3) __abs__ ___value equals: 3;
+        assert: (self float: -3) __abs__ ___value equals: 3;
 		yourself
 %
 category: 'done'
@@ -19,10 +19,10 @@ method: floatTest
 test__add__
 
 	self
-        assert: ((self float:  3	) __add__: (self int: 	1)) ___value equals: 4;
-        assert: ((self float: -3	) __add__: (self int: 	1)) ___value equals: -2;
-        assert: ((self float:  3	) __add__: (self float: 	1)) ___value equals: 4;
-        assert: ((self float: -3	) __add__: (self float: 	1)) ___value equals: -2;
+        assert: ((self float:  3) __add__: (self int: 	1)) ___value equals: 4;
+        assert: ((self float: -3) __add__: (self int: 	1)) ___value equals: -2;
+        assert: ((self float:  3) __add__: (self float: 	1)) ___value equals: 4;
+        assert: ((self float: -3) __add__: (self float: 	1)) ___value equals: -2;
 		yourself.
 %
 category: 'done'
@@ -52,13 +52,13 @@ method: floatTest
 test__divmod__
 
 	self
-		assert: ((self float: 3	) __divmod__: (self int: 4	)) ___container asArray equals: #(0 3		);
-		assert: ((self float: 3	) __divmod__: (self int: -4	)) ___container asArray equals: #(-1 -1	);
-		assert: ((self float:-3	) __divmod__: (self int: -4	)) ___container asArray equals: #(0 -3	);
-		assert: ((self float: 4	) __divmod__: (self int: 3	)) ___container asArray equals: #(1 1		);
-		assert: ((self float: 4	) __divmod__: (self int: -3	)) ___container asArray equals: #(-2 -2	);
-		assert: ((self float:-4	) __divmod__: (self int: -3	)) ___container asArray equals: #(1 -1	);
-		assert: ((self float:-4	) __divmod__: (self int: 3	)) ___container asArray equals: #(-2 2	);
+		assert: ((self float: 3) __divmod__: (self int: 4)) ___container asArray equals: #(0 3);
+		assert: ((self float: 3) __divmod__: (self int: -4)) ___container asArray equals: #(-1 -1);
+		assert: ((self float:-3) __divmod__: (self int: -4)) ___container asArray equals: #(0 -3);
+		assert: ((self float: 4) __divmod__: (self int: 3)) ___container asArray equals: #(1 1);
+		assert: ((self float: 4) __divmod__: (self int: -3)) ___container asArray equals: #(-2 -2);
+		assert: ((self float:-4) __divmod__: (self int: -3)) ___container asArray equals: #(1 -1);
+		assert: ((self float:-4) __divmod__: (self int: 3)) ___container asArray equals: #(-2 2);
 		yourself
 %
 category: 'done'
@@ -94,7 +94,7 @@ method: floatTest
 test__floor__
 
 	self
-		assert: (self float:  3.5) __floor__ __class__ equals: int ;
+		assert: (self float:  3.5) __floor__ __class__ equals: int;
         assert: (self float:  3.5) __floor__ ___value equals: 3;
         assert: (self float: -3.5) __floor__ ___value equals: -4;
 	    yourself
@@ -239,8 +239,8 @@ test__pow__
 
 	powHolder := ((self float: 2) __pow__: (complex ___real: 0 imaginary: 1)).
 	self
-		assert: (powHolder real ___value roundTo: 0.000001) equals: (0.769239);
-		assert: (powHolder imag ___value roundTo: 0.000001) equals: (0.638961);
+		assert: (powHolder real ___value roundTo: 0.000001) equals: 0.769239;
+		assert: (powHolder imag ___value roundTo: 0.000001) equals: 0.638961;
 		yourself.
 %
 category: 'done'
@@ -248,7 +248,7 @@ method: floatTest
 test__radd__
 
 	self
-		assert: (((self float:  3) __radd__: (self int: 1)) __class__ ) equals: float;
+		assert: (((self float:  3) __radd__: (self int: 1)) __class__) equals: float;
         assert: ((self float:  3) __radd__: (self int: 1)) ___value equals: 4;
         assert: ((self float: -3) __radd__: (self int: 1)) ___value equals: -2;
         assert: ((self float:  3) __radd__: (self float: 1)) ___value equals: 4;
@@ -307,7 +307,7 @@ method: floatTest
 test__round__
 
 	self
-		assert: (self float:  3.5) 	__round__ __class__ equals: int ;
+		assert: (self float:  3.5) 	__round__ __class__ equals: int;
         assert: (self float:  3.5) 	__round__ ___value equals: 4;
         assert: (self float:  3.49)	__round__ ___value equals: 3;
         assert: (self float: -3.5) 	__round__ ___value equals: -4;

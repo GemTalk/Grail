@@ -61,7 +61,7 @@ Python
     at: #'NotImplemented'   put: NotImplementedType singleton;
     at: #'True'             put: (bool ___value: true);
     at: #'False'            put: (bool ___value: false);
-    at: #'builtins'         put: (Builtins singleton);
+    at: #'builtins'         put: Builtins singleton;
     yourself.
 
 Python 

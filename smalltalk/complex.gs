@@ -70,7 +70,7 @@ category: 'Python-complex'
 method: complex
 __add__: anObject
 
-	^anObject ___addReal: real imag: imaginary.
+	^anObject ___addReal: real imag: imaginary
 %
 category: 'Python-complex'
 method: complex
@@ -149,7 +149,7 @@ category: 'Python-complex'
 method: complex
 __truediv__: anObject
 
-	^(anObject ___truedivReal: real imag: imaginary).
+	^(anObject ___truedivReal: real imag: imaginary)
 %
 category: 'Python-complex'
 method: complex
@@ -258,40 +258,40 @@ category: 'Smalltalk'
 method: complex
 ___addFloat: aFloat
 
-	^complex ___real: (real + aFloat) imaginary: imaginary.
+	^complex ___real: real + aFloat imaginary: imaginary
 %
 category: 'Smalltalk'
 method: complex
 ___addInt: anInteger
 
 	^complex
-		___real: (anInteger + real)
+		___real: anInteger + real
 		imaginary: imaginary.
 %
 category: 'Smalltalk'
 method: complex
 ___addReal: aFloatReal imag: aFloatImag
 
-	^complex ___real: (real + aFloatReal) imaginary: (imaginary + aFloatImag).
+	^complex ___real: real + aFloatReal imaginary: imaginary + aFloatImag
 %
 category: 'Smalltalk'
 method: complex
 ___mulFloat: aFloat
 
-	^complex ___real: (aFloat * real) imaginary: (aFloat * imaginary) .
+	^complex ___real: aFloat * real imaginary: aFloat * imaginary
 %
 category: 'Smalltalk'
 method: complex
 ___mulInt: anInteger
 
-	^complex ___real: (anInteger * real) imaginary: (anInteger * imaginary) .
+	^complex ___real: anInteger * real imaginary: anInteger * imaginary
 %
 category: 'Smalltalk'
 method: complex
 ___mulReal: aFloatReal imag: aFloatImag
 
 	^complex
-		___real: ((real * aFloatReal ) - (imaginary * aFloatImag))
+		___real: ((real * aFloatReal) - (imaginary * aFloatImag))
 		imaginary: ((real * aFloatImag) + (imaginary * aFloatReal)).
 %
 category: 'Smalltalk'
@@ -323,15 +323,15 @@ category: 'Smalltalk'
 method: complex
 ___powFloat: aFloat
 	^complex
-		___real: (aFloat raisedTo: real) * ((imaginary *( aFloat ln )) cos)
-		imaginary: (aFloat raisedTo: real) * ((imaginary *( aFloat ln )) sin)
+		___real: (aFloat raisedTo: real) * ((imaginary *(aFloat ln)) cos)
+		imaginary: (aFloat raisedTo: real) * ((imaginary *(aFloat ln)) sin)
 %
 category: 'Smalltalk'
 method: complex
 ___powInt: anInteger
 	^complex
-		___real: (anInteger raisedTo: real) * ((imaginary *( anInteger ln )) cos)
-		imaginary: (anInteger raisedTo: real) * ((imaginary *( anInteger ln )) sin)
+		___real: (anInteger raisedTo: real) * ((imaginary *(anInteger ln)) cos)
+		imaginary: (anInteger raisedTo: real) * ((imaginary *(anInteger ln)) sin)
 %
 category: 'Smalltalk'
 method: complex
@@ -344,18 +344,18 @@ ___powReal: aFloatReal imag: aFloatImag
 	radius := ((aFloatReal raisedTo: 2) + (aFloatImag raisedTo: 2)) sqrt.
 	aFloatReal asFloat == 0.0
 		ifTrue: [
-			radians := (Float pi) / 2.
+			radians := Float pi / 2.
 			aFloatImag < 0 ifTrue: [radians := radians + Float pi / 2].
 		] ifFalse: [
-			radians := ( aFloatImag / aFloatReal ) arcTan .
+			radians := (aFloatImag / aFloatReal) arcTan.
 		].
 	eulerTranslationExp := complex
-										___real:  (radius ln)
+										___real:  radius ln
 										imaginary: radians.
 	
 	combinationExp := eulerTranslationExp __mul__: originalExp.
 
-	^(float ___value: (Float e)) __pow__: combinationExp
+	^(float ___value: Float e) __pow__: combinationExp
 %
 category: 'Smalltalk'
 method: complex
@@ -372,7 +372,7 @@ ___truedivFloat: aFloat
 	(real = 0) & (imaginary = 0) 
 		ifTrue: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero'].
 	
-	numerator := (float ___value: aFloat) __mul__: (self conjugate).
+	numerator := (float ___value: aFloat) __mul__: self conjugate.
 	denominator := (real*real) + (imaginary*imaginary).
 	^numerator __truediv__: (float ___value: denominator)
 %
@@ -384,9 +384,9 @@ ___truedivInt: anInteger
 	(real = 0) & (imaginary = 0) 
 		ifTrue: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero'].
 	
-	numerator := (float ___value: anInteger) __mul__: (self conjugate).
+	numerator := (float ___value: anInteger) __mul__: self conjugate.
 	denominator := (real*real) + (imaginary*imaginary).
-	^numerator __truediv__: (float ___value: denominator).
+	^numerator __truediv__: (float ___value: denominator)
 %
 category: 'Smalltalk'
 method: complex
@@ -397,7 +397,7 @@ ___truedivReal: aFloatReal imag: aFloatImag
 
 	numerator := complex ___real: aFloatReal imaginary: aFloatImag.
 
-	numerator := numerator __mul__: (self conjugate).
+	numerator := numerator __mul__: self conjugate.
 	denominator := (real*real) + (imaginary*imaginary).
 	^(numerator __truediv__: (float ___value: denominator))
 %
@@ -411,13 +411,13 @@ category: 'Smalltalk'
 method: complex
  __pow__: anObject
 
-	^anObject ___powReal: real imag: imaginary.
+	^anObject ___powReal: real imag: imaginary
 %
 category: 'Smalltalk'
 method: complex
 __rpow__: anObject
 
-	^anObject __pow__: self.
+	^anObject __pow__: self
 %
 category: 'Smalltalk'
 method: complex

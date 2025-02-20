@@ -78,7 +78,7 @@ __repr__
 		nextPut: $);
 		yourself.
 
-	^(str ___value: (stream contents)).
+	^(str ___value: stream contents)
 %
 category: 'Python'
 method: frozenset

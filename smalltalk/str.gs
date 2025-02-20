@@ -41,7 +41,7 @@ category: 'Python'
 method: str
 __float__
 	
-	^float ___value: self ___value asNumber.
+	^float ___value: self ___value asNumber
 %
 category: 'Python'
 method: str
@@ -66,7 +66,7 @@ category: 'Python'
 method: str
 __getitem__: pyInt
 
-	^str ___value: (value at: pyInt ___value + 1) asString.
+	^str ___value: (value at: pyInt ___value + 1) asString
 %
 category: 'Python'
 method: str
@@ -187,7 +187,7 @@ __mod__: anObject
 
 	stringOutput := value asString.
 
-	^str ___value: (anObject ___modString: stringOutput).
+	^str ___value: (anObject ___modString: stringOutput)
 %
 category: 'Python'
 method: str
@@ -224,7 +224,7 @@ category: 'Python'
 method: str
 __str__
 	
-	^self.
+	^self
 %
 category: 'Python'
 method: str
@@ -238,7 +238,7 @@ capitalize
 		stream nextPut: elem asLowercase.
 	].
 
-	^str ___value: stream contents.
+	^str ___value: stream contents
 %
 category: 'Python'
 method: str
@@ -250,7 +250,7 @@ category: 'Python'
 method: str
 tagFrom: aReadStream
 
-	^FormatTag new initializeFrom: aReadStream.
+	^FormatTag new initializeFrom: aReadStream
 %
 category: 'Smalltalk'
 method: str
@@ -293,7 +293,7 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 		TypeError signal: 'TypeError: %c requires int or char'
 	].
 
-	(anObject ~= '' and: [anObject < (return size)]) ifTrue: [return := return copyFrom: 1 to: anObject].
+	(anObject ~= '' and: [anObject < return size]) ifTrue: [return := return copyFrom: 1 to: anObject].
 	^return
 %
 category: 'Smalltalk'
