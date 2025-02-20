@@ -9,24 +9,32 @@ testAbs
 
 	| absHolder variables |
 	variables := Variables new.
-	absHolder := (variables at: #abs) scope: variables
-						  positional: { int ___value: 5 }
-						  named: {}.
+	absHolder := (variables at: #abs) 
+		scope: variables
+		positional: { int ___value: 5 }
+		named: {}.
 	self assert: absHolder ___value equals: 5.
 
-	absHolder := (variables at: #abs) scope: variables
-						  positional: { int ___value: -5 }
-						  named: {}.
+	absHolder := (variables at: #abs) 
+		scope: variables
+		positional: { int ___value: -5 }
+		named: {}.
 	self assert: absHolder ___value equals: 5.
 
-	absHolder := [(variables at: #abs) scope: variables
-						  positional: { str ___value: 'a' }
-						  named: {}] on: TypeError do: [1].
+	absHolder := [
+		(variables at: #abs) 
+			scope: variables
+			positional: { str ___value: 'a' }
+			named: {}
+		] on: TypeError do: [1].
 	self assert: absHolder equals: 1.
 
-	absHolder := [(variables at: #abs) scope: variables
-						  positional: { int ___value: 1.  int ___value: 2 }
-						  named: {}] on: TypeError do: [2].
+	absHolder := [
+		(variables at: #abs) 
+			scope: variables
+			positional: { int ___value: 1.  int ___value: 2 }
+			named: {}
+		] on: TypeError do: [2].
 	self assert: absHolder equals: 2.
 %
 category: 'other'
@@ -35,67 +43,78 @@ testBool
 
 	| boolHolder variables |
 	variables := Variables new.
-	boolHolder := (variables at: #bool) scope: variables
-						  positional: { True }
-						  named: {}.
+	boolHolder := (variables at: #bool) 
+		scope: variables
+		positional: { True }
+		named: {}.
 	self assert: boolHolder equals: True.
 
-	boolHolder := (variables at: #bool) scope: variables
-						  positional: { False }
-						  named: {}.
+	boolHolder := (variables at: #bool) 
+		scope: variables
+		positional: { False }
+		named: {}.
 	self assert: boolHolder equals: False.
 
-	boolHolder := ((variables at: #bool) scope: variables
-						  positional: { int ___value: 2 }
-						  named: {}).
+	boolHolder := ((variables at: #bool) 
+		scope: variables
+		positional: { int ___value: 2 }
+		named: {}).
 	self assert: boolHolder class equals: bool.
 	self assert: boolHolder equals: True.
 
-	boolHolder := (variables at: #bool) scope: variables
-						  positional: { int ___value: 0 }
-						  named: {}.
-	self assert: boolHolder class equals: bool.
-	self assert: boolHolder equals: False.
-
-	boolHolder := (variables at: #bool) scope: variables
-						  positional: { float ___value: 3.1 }
-						  named: {}.
-	self assert: boolHolder class equals: bool.
-	self assert: boolHolder equals: True.
-
-	boolHolder := (variables at: #bool) scope: variables
-						  positional: { float ___value: 0.0 }
-						  named: {}.
+	boolHolder := (variables at: #bool) 
+		scope: variables
+		positional: { int ___value: 0 }
+		named: {}.
 	self assert: boolHolder class equals: bool.
 	self assert: boolHolder equals: False.
 
-	boolHolder := (variables at: #bool) scope: variables
-						  positional: { str ___value: '4' }
-						  named: {}.
+	boolHolder := (variables at: #bool) 
+		scope: variables
+		positional: { float ___value: 3.1 }
+		named: {}.
 	self assert: boolHolder class equals: bool.
 	self assert: boolHolder equals: True.
 
-	boolHolder := (variables at: #bool) scope: variables
-						  positional: { str ___value: '' }
-						  named: {}.
+	boolHolder := (variables at: #bool) 
+		scope: variables
+		positional: { float ___value: 0.0 }
+		named: {}.
 	self assert: boolHolder class equals: bool.
 	self assert: boolHolder equals: False.
 
-	boolHolder := (variables at: #bool) scope: variables
-						  positional: { (variables at: #bool) }
-						  named: {}.
+	boolHolder := (variables at: #bool) 
+		scope: variables
+		positional: { str ___value: '4' }
+		named: {}.
 	self assert: boolHolder class equals: bool.
 	self assert: boolHolder equals: True.
 
-	boolHolder := (variables at: #bool) scope: variables
-						  positional: { list ___value: { int ___value: 1 } }
-						  named: {}.
+	boolHolder := (variables at: #bool) 
+		scope: variables
+		positional: { str ___value: '' }
+		named: {}.
+	self assert: boolHolder class equals: bool.
+	self assert: boolHolder equals: False.
+
+	boolHolder := (variables at: #bool) 
+		scope: variables
+		positional: { (variables at: #bool) }
+		named: {}.
 	self assert: boolHolder class equals: bool.
 	self assert: boolHolder equals: True.
 
-	boolHolder := (variables at: #bool) scope: variables
-						  positional: { list ___value: {} }
-						  named: {}.
+	boolHolder := (variables at: #bool) 
+		scope: variables
+		positional: { list ___value: { int ___value: 1 } }
+		named: {}.
+	self assert: boolHolder class equals: bool.
+	self assert: boolHolder equals: True.
+
+	boolHolder := (variables at: #bool) 
+		scope: variables
+		positional: { list ___value: {} }
+		named: {}.
 	self assert: boolHolder class equals: bool.
 	self assert: boolHolder equals: False.
 %
@@ -105,15 +124,18 @@ testChr
 
 	| chrHolder variables |
 	variables := Variables new.
-	chrHolder := (variables at: #chr) scope: variables
-						  positional: { int ___value: 97 }
-						  named: {}.
+	chrHolder := (variables at: #chr) 
+		scope: variables
+		positional: { int ___value: 97 }
+		named: {}.
 	self assert: chrHolder ___value equals: 'a'.
 
-	chrHolder := [(variables at: #chr) scope: variables
-						  positional: { float ___value: 4.1 }
-						  named: {}] on: TypeError do: [1].
-	
+	chrHolder := [
+		(variables at: #chr) 
+			scope: variables
+			positional: { float ___value: 4.1 }
+			named: {}.
+	] on: TypeError do: [1].
 	self assert: chrHolder equals: 1.
 %
 category: 'other'
@@ -123,34 +145,39 @@ testDict
 	variables := Variables new.
 	
 	containerHolder := list ___value: {}.
-	containerHolder := (variables at: #dict) scope: variables
-								positional: {containerHolder}
-								named: {}.
+	containerHolder := (variables at: #dict) 
+		scope: variables
+		positional: { containerHolder }
+		named: {}.
 	self assert: containerHolder equals: (dict ___value: {} asDictionary).
 
-	containerHolder := dict ___value: {(str ___value: 'd') -> (int ___value: 7)} asDictionary.
-	containerHolder := (variables at: #dict) scope: variables
-								positional: {containerHolder}
-								named: {}.
-	self assert: containerHolder equals: (dict ___value: {(str ___value: 'd') -> (int ___value: 7)} asDictionary).
+	containerHolder := dict ___value: { (str ___value: 'd') -> (int ___value: 7) } asDictionary.
+	containerHolder := (variables at: #dict) 
+		scope: variables
+		positional: { containerHolder }
+		named: {}.
+	self assert: containerHolder equals: (dict ___value: { (str ___value: 'd') -> (int ___value: 7) } asDictionary).
 
-	containerHolder := list ___value: {tuple ___value: {str ___value: 'c'. int ___value: 3} asArray }.
-	containerHolder := (variables at: #dict) scope: variables
-								positional: {containerHolder}
-								named: {}.
-	self assert: containerHolder equals: (dict ___value: {(str ___value: 'c') -> (int ___value: 3)} asDictionary).
+	containerHolder := list ___value: { tuple ___value: { str ___value: 'c'. int ___value: 3 } asArray }.
+	containerHolder := (variables at: #dict)
+		scope: variables
+		positional: { containerHolder }
+		named: {}.
+	self assert: containerHolder equals: (dict ___value: { (str ___value: 'c') -> (int ___value: 3) } asDictionary).
 
 	containerHolder := list ___value: {}.
-	containerHolder := (variables at: #dict) scope: variables
-								positional: {containerHolder}
-								named: {(str ___value: 'd') -> (int ___value: 7)}.
-	self assert: containerHolder equals: (dict ___value: {(str ___value: 'd') -> (int ___value: 7)} asDictionary).
+	containerHolder := (variables at: #dict) 
+		scope: variables
+		positional: { containerHolder }
+		named: { (str ___value: 'd') -> (int ___value: 7) }.
+	self assert: containerHolder equals: (dict ___value: { (str ___value: 'd') -> (int ___value: 7) } asDictionary).
 
-	containerHolder := list ___value: {tuple ___value: {str ___value: 'c'. int ___value: 3} asArray }.
-	containerHolder := (variables at: #dict) scope: variables
-								positional: {containerHolder}
-								named: {(str ___value: 'd') -> (int ___value: 7)}.
-	self assert: containerHolder equals: (dict ___value: {(str ___value: 'c') -> (int ___value: 3). (str ___value: 'd') -> (int ___value: 7)} asDictionary).
+	containerHolder := list ___value: { tuple ___value: { str ___value: 'c'. int ___value: 3 } asArray }.
+	containerHolder := (variables at: #dict) 
+		scope: variables
+		positional: { containerHolder }
+		named: { (str ___value: 'd') -> (int ___value: 7) }.
+	self assert: containerHolder equals: (dict ___value: { (str ___value: 'c') -> (int ___value: 3). (str ___value: 'd') -> (int ___value: 7) } asDictionary).
 %
 category: 'other'
 method: builtin_function_or_methodTest
@@ -158,37 +185,47 @@ testFloat
 
 	| floatHolder variables |
 	variables := Variables new.
-	floatHolder := ((variables at: #float) scope: variables
-						  positional: { float ___value: 1.1 }
-						  named: {}).
+	floatHolder := (variables at: #float) 
+		scope: variables
+		positional: { float ___value: 1.1 }
+		named: {}.
 	self assert: floatHolder ___value equals: 1.1.
 
-	floatHolder := ((variables at: #float) scope: variables
-						  positional: { int ___value: 2 }
-						  named: {}).
+	floatHolder := (variables at: #float) 
+		scope: variables
+		positional: { int ___value: 2 }
+		named: {}.
 	self assert: floatHolder class equals: float.
 	self assert: floatHolder ___value equals: 2.
 
-	floatHolder := ((variables at: #float) scope: variables
-						  positional: { str ___value: '3.1' }
-						  named: {}).
+	floatHolder := (variables at: #float) 
+		scope: variables
+		positional: { str ___value: '3.1' }
+		named: {}.
 	self assert: floatHolder class equals: float.
 	self assert: floatHolder ___value equals: 3.1.
 
-	floatHolder := ((variables at: #float) scope: variables
-						  positional: { str ___value: '4' }
-						  named: {}).
+	floatHolder := (variables at: #float) 
+		scope: variables
+		positional: { str ___value: '4' }
+		named: {}.
 	self assert: floatHolder class equals: float.
 	self assert: floatHolder ___value equals: 4.
 
-	floatHolder := [((variables at: #float) scope: variables
-						  positional: { str ___value: 'a'}
-						  named: {})] on: ValueError do: [2].
+	floatHolder := [
+		(variables at: #float) 
+			scope: variables
+			positional: { str ___value: 'a' }
+			named: {}.
+	] on: ValueError do: [2].
 	self assert: floatHolder equals: 2.
 
-	floatHolder := [((variables at: #float) scope: variables
-						  positional: { list ___value: {int ___value: 1}}
-						  named: {})] on: TypeError do: [3].
+	floatHolder := [
+		(variables at: #float) 
+			scope: variables
+			positional: { list ___value: { int ___value: 1 } }
+			named: {}.
+		] on: TypeError do: [3].
 	self assert: floatHolder equals: 3.
 %
 category: 'other'
@@ -209,14 +246,14 @@ testFrozenset
 	self assert: frozensetHolder equals: (frozenset ___value: { str ___value: 'a'. str ___value: 'b'. str ___value: 'c' }).
 
 	frozensetHolder := ((variables at: #frozenset) scope: variables
-						  positional: { list ___value: { 'c'. 'b'. 'a'. 'a' }}
+						  positional: { list ___value: { 'c'. 'b'. 'a'. 'a' } }
 						  named: {}).
 	self assert: frozensetHolder equals: afrozenset.
 
 	frozensetHolder := ((variables at: #frozenset) scope: variables
-						  positional: {dict ___value: {(str ___value: 'd') -> (int ___value: 7)} asDictionary }
+						  positional: { dict ___value: { (str ___value: 'd') -> (int ___value: 7) } asDictionary }
 						  named: {}).
-	self assert: frozensetHolder equals: (frozenset ___value: {str ___value: 'd'}).
+	self assert: frozensetHolder equals: (frozenset ___value: { str ___value: 'd' }).
 %
 category: 'other'
 method: builtin_function_or_methodTest
@@ -235,7 +272,7 @@ testGlobals
 	globalsHolder := ((variables at: #globals) scope: variables
 						  positional: {}
 						  named: {}).
-	self assert: globalsHolder equals: (dict ___value: {#'x'->3}).
+	self assert: globalsHolder equals: (dict ___value: { #'x'->3 }).
 %
 category: 'other'
 method: builtin_function_or_methodTest
@@ -295,7 +332,7 @@ testInt
 
 	variables := Variables new.
 	intHolder := ((variables at: #int) scope: variables
-						  positional: { str ___value: '-11'. int ___value: 2}
+						  positional: { str ___value: '-11'. int ___value: 2 }
 						  named: {}).
 	self assert: intHolder ___value equals: (-3).
 %
@@ -334,14 +371,14 @@ testList
 	self assert: listHolder equals: (list ___value: { str ___value: 'a'. str ___value: 'b'. str ___value: 'c' }).
 
 	listHolder := ((variables at: #list) scope: variables
-						  positional: { set ___value: { 'c'. 'b'. 'a' }}
+						  positional: { set ___value: { 'c'. 'b'. 'a' } }
 						  named: {}).
 	self assert: listHolder equals: alist.
 
 	listHolder := ((variables at: #list) scope: variables
-						  positional: {dict ___value: {(str ___value: 'd') -> (int ___value: 7)} asDictionary }
+						  positional: { dict ___value: { (str ___value: 'd') -> (int ___value: 7) } asDictionary }
 						  named: {}).
-	self assert: listHolder equals: (list ___value: {str ___value: 'd'}).
+	self assert: listHolder equals: (list ___value: { str ___value: 'd' }).
 %
 category: 'other'
 method: builtin_function_or_methodTest
@@ -360,7 +397,7 @@ testLocals
 	localsHolder := ((variables at: #locals) scope: variables
 						  positional: {}
 						  named: {}).
-	self assert: localsHolder equals: (dict ___value: {#'x'->3}).
+	self assert: localsHolder equals: (dict ___value: { #'x'->3 }).
 %
 category: 'other'
 method: builtin_function_or_methodTest
@@ -470,7 +507,7 @@ testPow
 	self assert: (powHolder imag ___value roundTo: 0.000001) equals: (2 sqrt roundTo: 0.000001).
 
 	powHolder := ((variables at: #pow) scope: variables
-						  positional: { (complex ___real: 1 imaginary: 1). (complex ___real: 1 imaginary: 1)}
+						  positional: { (complex ___real: 1 imaginary: 1). (complex ___real: 1 imaginary: 1) }
 						  named: {}).
 	self assert: (powHolder real ___value roundTo: 0.000001) equals: 0.273957.
 	self assert: (powHolder imag ___value roundTo: 0.000001) equals: 0.583701.
@@ -485,7 +522,7 @@ testPrint
 	
 	(variables at: #print) scope: variables
 						  positional: { str ___value: 'abc' }
-						  named: {#'file' -> stream}.
+						  named: { #'file' -> stream }.
 	self assert: stream contents equals: 'abc
 '.
 	transcript := Transcript.
@@ -502,20 +539,20 @@ testPrint
 	stream := WriteStream with: String new.
 	(variables at: #print) scope: variables
 						  positional: { str ___value: 'a'. str ___value: 'b'. str ___value: 'c' }
-						  named: {#'file' -> stream}.
+						  named: { #'file' -> stream }.
 	self assert: stream contents equals: 'abc
 '.
 
 	stream := WriteStream with: String new.
 	(variables at: #print) scope: variables
 						  positional: { str ___value: 'a'. str ___value: 'b'. str ___value: 'c' }
-						  named: {#file -> stream. #end -> (str ___value: '')}.
+						  named: { #file -> stream. #end -> (str ___value: '') }.
 	self assert: stream contents equals: 'abc'.
 
 	stream := WriteStream with: String new.
 	(variables at: #print) scope: variables
 						  positional: { str ___value: 'a'. str ___value: 'b'. str ___value: 'c' }
-						  named: {#file -> stream. #sep -> (str ___value: '*')}.
+						  named: { #file -> stream. #sep -> (str ___value: '*') }.
 	self assert: stream contents equals: 'a*b*c
 '.
 
@@ -524,7 +561,7 @@ testPrint
 		should: [
 			(variables at: #print) scope: variables
 						  positional: { str ___value: 'a'. str ___value: 'b'. str ___value: 'c' }
-						  named: {#file -> stream. #end -> False}.
+						  named: { #file -> stream. #end -> False }.
 		] raise: TypeError withExceptionDo: [:ex | self assert: ex messageText equals: 'end must be a str, not bool'].
 
 	stream := WriteStream with: String new.
@@ -532,7 +569,7 @@ testPrint
 		should: [
 			(variables at: #print) scope: variables
 						  positional: { str ___value: 'a'. str ___value: 'b'. str ___value: 'c' }
-						  named: {#file -> stream. #sep -> False}.
+						  named: { #file -> stream. #sep -> False }.
 		] raise: TypeError withExceptionDo: [:ex | self assert: ex messageText equals: 'sep must be a str, not bool'].
 %
 category: 'other'
@@ -573,7 +610,7 @@ testRepr
 						  named: {})) equals: (str ___value: '''a''').
 ""
 	self assert: (((variables at: #repr) scope: variables
-						  positional: {list ___value: { str ___value: 'c'. str ___value: 'b'. str ___value:  'a' }}
+						  positional: { list ___value: { str ___value: 'c'. str ___value: 'b'. str ___value:  'a' } }
 						  named: {})) equals: (str ___value: '[''c'', ''b'', ''a'']').
 %
 category: 'other'
@@ -590,7 +627,7 @@ testRound
 
 
 	roundHolder := ((variables at: #round) scope: variables
-						  positional: { float ___value: 3.1}
+						  positional: { float ___value: 3.1 }
 						  named: {}).
 	self assert: roundHolder equals: (int ___value: 3).
 
@@ -626,12 +663,12 @@ testRound
 	self assert: roundHolder equals: (int ___value: 6).
 
 	roundHolder := [((variables at: #round) scope: variables
-						  positional: { str ___value: 'a'}
+						  positional: { str ___value: 'a' }
 						  named: {})] on: TypeError do: [1].
 	self assert: roundHolder equals: 1.
 
 	roundHolder := [((variables at: #round) scope: variables
-						  positional: { int ___value: 6. float ___value: 1.0}
+						  positional: { int ___value: 6. float ___value: 1.0 }
 						  named: {})] on: TypeError do: [2].
 	self assert: roundHolder equals: 2.
 %
@@ -653,15 +690,15 @@ testSet
 	self assert: setHolder equals: (set ___value: { str ___value: 'a'. str ___value: 'b'. str ___value: 'c' }).
 
 	setHolder := ((variables at: #set) scope: variables
-						  positional: { list ___value: { 'c'. 'b'. 'a'. 'a' }}
+						  positional: { list ___value: { 'c'. 'b'. 'a'. 'a' } }
 						  named: {}).
 	self assert: setHolder equals: aset.
 
 
 	setHolder := ((variables at: #set) scope: variables
-						  positional: {dict ___value: {(str ___value: 'd') -> (int ___value: 7)} asDictionary }
+						  positional: { dict ___value: { (str ___value: 'd') -> (int ___value: 7) } asDictionary }
 						  named: {}).
-	self assert: setHolder equals: (set ___value: {str ___value: 'd'}).
+	self assert: setHolder equals: (set ___value: { str ___value: 'd' }).
 %
 category: 'other'
 method: builtin_function_or_methodTest
@@ -679,7 +716,7 @@ testStr
 						  named: {})) equals: (str ___value: 'a').
 ""
 	self assert: (((variables at: #str) scope: variables
-						  positional: {list ___value: { str ___value: 'c'. str ___value: 'b'. str ___value:  'a' }}
+						  positional: { list ___value: { str ___value: 'c'. str ___value: 'b'. str ___value:  'a' } }
 						  named: {})) equals: (str ___value: '[''c'', ''b'', ''a'']').
 %
 category: 'other'
@@ -730,12 +767,12 @@ testType
 	self assert: typeHolder equals: int.
 
 	typeHolder := ((variables at: #type) scope: variables
-						  positional: { (variables at: #type)}
+						  positional: { (variables at: #type) }
 						  named: {}).
 	self assert: typeHolder equals: FunctionDef.
 
 	typeHolder := [((variables at: #type) scope: variables
-						  positional: { int ___value: 5. tuple ___value: #(h)}
+						  positional: { int ___value: 5. tuple ___value: #(h) }
 						  named: {})] on: TypeError do: [1].
 	self assert: typeHolder equals: 1.
 %

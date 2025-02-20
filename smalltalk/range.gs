@@ -154,7 +154,7 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 	"
 
 	| validTypes invalidTypes return |
-	validTypes := {$a. $s. $r. $c} asSet.
+	validTypes := { $a. $s. $r. $c } asSet.
 	invalidTypes := {
 			$d->[TypeError signal: 'TypeError: %d format: a real number is required, not str'].
 			$i->[TypeError signal: 'TypeError: %i format: a real number is required, not str'].

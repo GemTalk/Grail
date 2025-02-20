@@ -365,7 +365,7 @@ testUpdate
 		yourself.
 
 	dict1 := (dict ___value: { (str ___value: 'a') -> (int ___value: 1).  (str ___value: 'b') -> (int ___value: 2) } asDictionary).
-	dict2 := list ___value: {tuple ___value: {str ___value: 'c'. int ___value: 3} asArray }.
+	dict2 := list ___value: { tuple ___value: { str ___value: 'c'. int ___value: 3 } asArray }.
 	dict3 := dict1 update: dict2.
 	self
 		assert: dict1 __len__ equals: (self int: 3);
@@ -376,7 +376,7 @@ testUpdate
 
 
 	dict1 := (dict ___value: { (str ___value: 'a') -> (int ___value: 1).  (str ___value: 'b') -> (int ___value: 2) } asDictionary).
-	dict2 := list ___value: {str ___value: 'ca'. }.
+	dict2 := list ___value: { str ___value: 'ca'. }.
 	dict3 := dict1 update: dict2.
 	self
 		assert: dict1 __len__ equals: (self int: 3);
@@ -386,7 +386,7 @@ testUpdate
 		yourself.
 
 	dict1 := (dict ___value: { (str ___value: 'a') -> (int ___value: 1).  (str ___value: 'b') -> (int ___value: 2) } asDictionary).
-	dict2 := list ___value: {tuple ___value: {str ___value: 'c' } asArray }.
+	dict2 := list ___value: { tuple ___value: { str ___value: 'c' } asArray }.
 	dict3 := [dict1 update: dict2] on: ValueError do: [1].
 	self assert: dict3 equals: 1.
 %

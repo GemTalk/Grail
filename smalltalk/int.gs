@@ -80,7 +80,7 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 	"
 
 	| resultString |
-	({$s. $c. $a. $r } includes: aCharacter) ifTrue: [
+	({ $s. $c. $a. $r } includes: aCharacter) ifTrue: [
 		"if it uses string type indicator then it should change to a string or character and then use that
 		class's implementation"
 		(aCharacter == $c and: [value > Character maximumCodePoint]) ifTrue: [
@@ -98,7 +98,7 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 			andType: aCharacter.
 	].
 
-	({$f. $F. $e. $E. $g. $G } includes: aCharacter) ifTrue: [
+	({ $f. $F. $e. $E. $g. $G } includes: aCharacter) ifTrue: [
 		"if it uses float type indicator then it should change to a float and then use that
 		class's implementation"
 		^(float ___value: value)
@@ -108,11 +108,11 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 	].
 
 	resultString := WriteStream on: String new.
-	({$d. $i. $u} includes: aCharacter) ifTrue: [
+	({ $d. $i. $u } includes: aCharacter) ifTrue: [
 		resultString := value abs asString.
 	].
 
-	({$x. $X} includes: aCharacter) ifTrue: [
+	({ $x. $X } includes: aCharacter) ifTrue: [
 		value abs printOn: resultString base: 16.
 		resultString := resultString contents removeFrom: 1 to: 3.
 		
@@ -132,7 +132,7 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 	].
 	(aSet includes: $#) ifTrue: [
 		"add the base information"
-		(({$x. $X} asSet) includes: aCharacter) ifTrue: [
+		(({ $x. $X } asSet) includes: aCharacter) ifTrue: [
 			resultString := '0X' + resultString.
 		].
 		aCharacter == $o ifTrue: [

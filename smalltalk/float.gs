@@ -45,14 +45,14 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 		(invalidTypes at: aCharacter) value.
 	].
 
-	({$d. $i. $u} includes: aCharacter) ifTrue: [
+	({ $d. $i. $u } includes: aCharacter) ifTrue: [
 		^(int ___value: value floor)
 			___convertWithFlags: aSet
 			precision: anObject
 			andType: aCharacter
 	].
 
-	({$s. $a. $r } includes: aCharacter) ifTrue: [
+	({ $s. $a. $r } includes: aCharacter) ifTrue: [
 		"if it uses string type indicator then it should change to a string or character and then use that
 		class's implementation"
 		^(str ___value: value asString)
@@ -94,7 +94,7 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 	precisionHolder = '' ifTrue: [
 		precisionHolder := 6.
 	].
-	resultString := tempNumber asStringUsingFormat: {10. precisionHolder. false}.
+	resultString := tempNumber asStringUsingFormat: { 10. precisionHolder. false }.
 
 	characterUsed == $g
 		ifTrue: [

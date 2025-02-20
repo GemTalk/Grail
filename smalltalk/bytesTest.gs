@@ -429,10 +429,10 @@ testendswith
 		yourself.
 
 	self
-		assert: (list endswith: (tuple ___value: {self bytes: 'aa'. self bytes: 'a'})) equals: (self bool: true);
-		assert: (list endswith: (tuple ___value: {self bytes: 'bb'. self bytes: 'a'})) equals: (self bool: true);		
-		assert: (list endswith: (tuple ___value: {self bytes: 'aa'. self bytes: 'b'})) equals: (self bool: true);
-		assert: (list endswith: (tuple ___value: {self bytes: 'bb'. self bytes: 'b'})) equals: (self bool: false);
+		assert: (list endswith: (tuple ___value: { self bytes: 'aa'. self bytes: 'a' })) equals: (self bool: true);
+		assert: (list endswith: (tuple ___value: { self bytes: 'bb'. self bytes: 'a' })) equals: (self bool: true);		
+		assert: (list endswith: (tuple ___value: { self bytes: 'aa'. self bytes: 'b' })) equals: (self bool: true);
+		assert: (list endswith: (tuple ___value: { self bytes: 'bb'. self bytes: 'b' })) equals: (self bool: false);
 		yourself.
 
 	self

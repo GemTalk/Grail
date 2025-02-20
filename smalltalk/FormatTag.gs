@@ -75,7 +75,7 @@ setType: aReadStream
 		ifTrue: [type := aReadStream next]
 		ifFalse: [ValueError signal: 'ValueError: incomplete format'].
 
-	validTypes := {$d. $i. $u. $x. $X. $o. $f. $F. $e. $E. $g. $G. $c. $s. $r. $a} asSet.
+	validTypes := { $d. $i. $u. $x. $X. $o. $f. $F. $e. $E. $g. $G. $c. $s. $r. $a } asSet.
 	
 	(validTypes includes: type) ifFalse: [
 		ValueError signal:
@@ -177,10 +177,10 @@ tupleForParameters: aReadStream
 
 	"adding a displacement do determin how far into the string you must go
 	go get to the first actual number."
-	({Character space. $-. $+} includes: insertString first)
+	({ Character space. $-. $+ } includes: insertString first)
 		ifTrue: [displacement := displacement + 1].
 
-	(({$x. $X. $o} includes: type) and: [flags includes: $#])
+	(({ $x. $X. $o } includes: type) and: [flags includes: $#])
 		ifTrue: [displacement := displacement + 2].
 
 	^((insertString copyFrom: 1 to: displacement) +

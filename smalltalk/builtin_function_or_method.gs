@@ -70,7 +70,7 @@ complex
 	| complexFunction |
 	"On startup this creates a builtin chr function to change an integer into a character"
 	complexFunction := FunctionDef new
-		params: { #real. #imag};
+		params: { #real. #imag };
 		vararg: #'None';
 		yourself.
 	complexFunction block: [:currentScope |
@@ -417,8 +417,8 @@ pow
 
 	| powFunction |
 	powFunction := FunctionDef new
-		params: {#base. #exp. #mod};
-		defaults: {nil};
+		params: { #base. #exp. #mod };
+		defaults: { nil };
 		vararg: #'None';
 		yourself.
 
@@ -453,7 +453,7 @@ print
 	print := FunctionDef new
 		vararg: #vararg;
 		kwonlyargs: { #sep. #end. #file. #flush };
-		kw_defaults: {str ___value: ''. str ___value: (Character lf asString). nil. bool ___value: False};
+		kw_defaults: { str ___value: ''. str ___value: (Character lf asString). nil. bool ___value: False };
 		yourself.
 	print block: [:currentScope |
 		| objects sep end file flush |
@@ -535,7 +535,7 @@ round
 	| roundFunction |
 	"On startup this creates a builtin repr function to return the value of something's __repr method"
 	roundFunction := FunctionDef new
-		params: { #object. #ndigits};
+		params: { #object. #ndigits };
 		defaults: { nil };
 		vararg: #'None';
 		yourself.
