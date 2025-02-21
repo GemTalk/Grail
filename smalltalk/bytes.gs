@@ -66,7 +66,11 @@ __new__: pythonString _: encoding
 		(pythonString ___value isKindOf: Unicode7) ifTrue: [
 			^self basicNew ___value: (self ___containerClass new addAll: (pythonString ___value asArray collect: [:each | each codePoint])) immediateInvariant
 		].
+		(pythonString ___value isKindOf: String) ifTrue: [
+			^self basicNew ___value: (self ___containerClass new addAll: (pythonString ___value asArray collect: [:each | each codePoint])) immediateInvariant
+		].
 	].
+	self error: 'we only support ascii for now'
 %
 category: 'Python'
 classmethod: bytes

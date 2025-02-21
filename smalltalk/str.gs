@@ -339,7 +339,7 @@ ___getslice: aPyIntStart _: aPyIntEnd _: aPyIntStep
 	].
 
 	stream := WriteStream on: String new.
-	start to: stop by: step do: [:i |
+	start to: stop - 1 by: step do: [:i |
 		stream nextPut: (value at: i + 1).
 	].
 	^stream contents
