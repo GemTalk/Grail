@@ -445,9 +445,11 @@ testWith
 category: 'other'
 method: CompoundStatementsTestCase
 testWithFile
+"
   | pyString result |
-  pyString := 'with open("file.txt", "r") as f: pass'.
+  pyString := 'with open(""file.txt"", ""r"") as f: pass'.
   result := ModuleAst evaluate: pyString.
+"
 %
 category: 'other'
 method: CompoundStatementsTestCase
