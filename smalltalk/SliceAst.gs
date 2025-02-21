@@ -30,8 +30,17 @@ printSmalltalkOn: aStream
 	aStream nextPutAll: ' _: '.
 
 	upper class == NoneType ifTrue: [
-		aStream nextPutAll: NoneType.
+		aStream nextPutAll: 'None'.
 	] ifFalse: [
 		upper printSmalltalkWithParenthesisOn: aStream.
+	].
+	
+
+	aStream nextPutAll: ' _: '.
+
+	step class == NoneType ifTrue: [
+		aStream nextPutAll: 'None'.
+	] ifFalse: [
+		step printSmalltalkWithParenthesisOn: aStream.
 	].
 %

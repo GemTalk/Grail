@@ -52,6 +52,19 @@ testEq
 %
 category: 'other'
 method: OperatorsTestCase
+testEvalEq
+
+	| pyString result |
+	pyString :=  '5 == 5'.
+	result := ModuleAst evaluate: pyString.
+	self assert: result ___value.
+	
+	pyString :=  '"five" == "five"'.
+	result := ModuleAst evaluate: pyString.
+	self assert: result ___value.
+%
+category: 'other'
+method: OperatorsTestCase
 testGtE
 
 	| x |
