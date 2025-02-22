@@ -15,3 +15,14 @@ initialize
 	value := self expression.
 	self readPosition.
 %
+category: 'other'
+method: AugAssignAst
+printSmalltalkOn: aStream
+
+	| var rhs |
+	var :=  NameAst with: target id.
+	var ctx: LoadAst.
+	rhs := BinOpAst left: var operand: op right: value. 
+	target printSmalltalkOn: aStream.
+	rhs printSmalltalkWithParenthesisOn: aStream.
+%

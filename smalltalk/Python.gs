@@ -3282,58 +3282,6 @@ expectvalue /Class
 doit
 ExpressionContextAst category: 'Parser'
 %
-! ------------------- Class definition for AugLoadAst
-expectvalue /Class
-doit
-ExpressionContextAst subclass: 'AugLoadAst'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-AugLoadAst comment: 
-'No class-specific documentation for PyAugLoad, hierarchy is:
-Object
-  AbstractNode(parent)
-    ExpressionContextAst
-      PyAugLoad
-'
-%
-expectvalue /Class
-doit
-AugLoadAst category: 'Parser'
-%
-! ------------------- Class definition for AugStoreAst
-expectvalue /Class
-doit
-ExpressionContextAst subclass: 'AugStoreAst'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-AugStoreAst comment: 
-'No class-specific documentation for PyAugStore, hierarchy is:
-Object
-  AbstractNode(parent)
-    ExpressionContextAst
-      PyAugStore
-'
-%
-expectvalue /Class
-doit
-AugStoreAst category: 'Parser'
-%
 ! ------------------- Class definition for DelAst
 expectvalue /Class
 doit
@@ -5949,8 +5897,6 @@ input AsyncWithAst.gs
 input AttributeAst.gs
 input AttributeError.gs
 input AugAssignAst.gs
-input AugLoadAst.gs
-input AugStoreAst.gs
 input AugTestCase.gs
 input AwaitAst.gs
 input Base_Class_Test.gs
