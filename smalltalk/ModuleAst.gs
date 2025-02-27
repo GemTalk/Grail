@@ -17,6 +17,26 @@ astForPath: pathString
 %
 category: 'other'
 classmethod: ModuleAst
+astForSource: aString
+"
+ModuleAst astForSource: '1 == 1'.
+"
+	| file pathPy pathAst string |
+	pathPy := '/tmp/grail.py'.
+	pathAst := '/tmp/grail.ast'.
+	file := GsFile open: pathPy mode: 'w' onClient: false.
+	file nextPutAll: aString.
+	file close.
+	pprintast ifNil: [self error: 'Please run `ModuleAst pprintast: aPathString`!'].
+	System performOnServer: pprintast , ' -a -t ' , pathPy , ' > ' , pathAst.
+	file := GsFile open: pathAst mode: 'rb' onClient: false.
+	string := file contentsAsUtf8 decodeToUnicode.
+	GsFile removeServerFile: pathAst. 
+	GsFile removeServerFile: pathPy.
+	^string
+%
+category: 'other'
+classmethod: ModuleAst
 evaluate: aString
 "
 ModuleAst script: '1 == 1'.
@@ -64,6 +84,22 @@ ModuleAst smalltalkForModulePath: '/Users/jfoster/code/Python/Grail/tests/hello.
 "
 	| module stream |
 	module := self script: aString.
+	stream := PrettyWriteStream on: String new.
+	module printSmalltalkOn: stream.
+	^stream contents
+%
+category: 'other'
+classmethod: ModuleAst
+smalltalkForSource: aString
+"
+ModuleAst smalltalkForSource: '1 == 1'.
+"
+	| file module pathPy stream |
+	pathPy := '/tmp/grail.py'.
+	file := GsFile open: pathPy mode: 'w' onClient: false.
+	file nextPutAll: aString.
+	file close.
+	module := self script: pathPy.
 	stream := PrettyWriteStream on: String new.
 	module printSmalltalkOn: stream.
 	^stream contents
