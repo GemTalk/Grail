@@ -20,34 +20,46 @@ x += 5
 x == 15'.
 	result := ModuleAst evaluate: pyString. 
 	self assert: result ___value.
-	"
 
-x = 10
-x += 5   # Equivalent to: x = x + 5
-print(x)  # Output: 15
+	pyString :=  
+'x = 20
+x -= 3
+x == 17'.
+	result := ModuleAst evaluate: pyString. 
+	self assert: result ___value.
 
-y = 20
-y -= 3   # Equivalent to: y = y - 3
-print(y)  # Output: 17
+	pyString :=  
+'x = 4
+x *= 2
+x == 8'.
+	result := ModuleAst evaluate: pyString. 
+	self assert: result ___value.
 
-z = 4
-z *= 2   # Equivalent to: z = z * 2
-print(z)  # Output: 8
+	pyString :=  
+'x = 10
+x /= 2
+x == 5'.
+	result := ModuleAst evaluate: pyString. 
+	self assert: result ___value.
 
-a = 10
-a /= 2   # Equivalent to: a = a / 2
-print(a)  # Output: 5.0
+	pyString :=  
+'x = 10
+x //= 3
+x == 3'.
+	result := ModuleAst evaluate: pyString. 
+	self assert: result ___value.
 
-b = 10
-b //= 3  # Equivalent to: b = b // 3
-print(b)  # Output: 3
+	pyString :=  
+'x = 5
+x **= 2
+x == 25'.
+	result := ModuleAst evaluate: pyString. 
+	self assert: result ___value.
 
-c = 5
-c **= 2  # Equivalent to: c = c ** 2
-print(c)  # Output: 25
-
-d = 10
-d %= 3   # Equivalent to: d = d % 3
-print(d)  # Output: 1
-"
+	pyString :=  
+'x = 10
+x %= 3
+x == 1'.
+	result := ModuleAst evaluate: pyString. 
+	self assert: result ___value.
 %
