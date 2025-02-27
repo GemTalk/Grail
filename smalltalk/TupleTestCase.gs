@@ -23,6 +23,25 @@ testJoinedStr
 %
 category: 'other'
 method: TupleTestCase
+testTuple
+	| pyString result |
+
+	pyString := 
+'t = (1, 2, 3)
+x = t[0]
+x == 1'.
+result := ModuleAst evaluate: pyString.
+self assert: result ___value.
+
+	pyString := 
+'t = (1, 2, 3)
+w = t[-1]
+w == 3'.
+result := ModuleAst evaluate: pyString.
+self assert: result ___value.
+%
+category: 'other'
+method: TupleTestCase
 testTupleAssignment
 "
   | pyString result |

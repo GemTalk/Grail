@@ -34,11 +34,6 @@ method: SubscriptAst
 printSmalltalkOn: aStream
 
 	value printSmalltalkWithParenthesisOn: aStream.
-
-	slice class == ConstantAst ifTrue: [
-		aStream nextPutAll: ' __getitem__: '.
-		slice printSmalltalkWithParenthesisOn: aStream.
-	] ifFalse: [
-		slice printSmalltalkOn: aStream.
-	].
+	aStream nextPutAll: ' __getitem__: '.
+	slice printSmalltalkWithParenthesisOn: aStream.
 %
