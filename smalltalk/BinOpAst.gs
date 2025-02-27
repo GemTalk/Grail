@@ -2,6 +2,15 @@
 removeallmethods BinOpAst
 removeallclassmethods BinOpAst
 ! ------------------- Class methods for BinOpAst
+category: 'other'
+classmethod: BinOpAst
+left: newLeft operand: operand right: newRight
+
+	^self basicNew 
+		initializeLeft: newLeft
+		operand: operand
+		right: newRight.
+%
 ! ------------------- Instance methods for BinOpAst
 category: 'other'
 method: BinOpAst
@@ -16,6 +25,14 @@ initialize
 	self commaSpace.
 	right := self expression.
 	self readPosition.
+%
+category: 'other'
+method: BinOpAst
+initializeLeft: newLeft operand: operand right: newRight
+
+	left := newLeft.
+	op := operand.
+	right := newRight.
 %
 category: 'other'
 method: BinOpAst

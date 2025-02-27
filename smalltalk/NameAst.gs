@@ -25,6 +25,12 @@ assertContextIsStore
 %
 category: 'other'
 method: NameAst
+ctx: aContext
+
+	ctx := aContext.
+%
+category: 'other'
+method: NameAst
 declareVariable
 
 	parent declareVariable: id.
