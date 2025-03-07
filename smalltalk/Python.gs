@@ -2084,87 +2084,10 @@ expectvalue /Class
 doit
 KeywordAst category: 'Parser'
 %
-! ------------------- Class definition for SliceAbstractAst
-expectvalue /Class
-doit
-AbstractLocationNode subclass: 'SliceAbstractAst'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-SliceAbstractAst comment: 
-'No class-specific documentation for SliceAbstractAst, hierarchy is:
-Object
-  AbstractNode(parent)
-    SliceAbstractAst
-'
-%
-expectvalue /Class
-doit
-SliceAbstractAst category: 'Parser'
-%
-! ------------------- Class definition for ExtSliceAst
-expectvalue /Class
-doit
-SliceAbstractAst subclass: 'ExtSliceAst'
-  instVarNames: #( dims)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-ExtSliceAst comment: 
-'No class-specific documentation for PyExtSlice, hierarchy is:
-Object
-  AbstractNode(parent)
-    SliceAbstractAst
-      PyExtSlice(dims)
-'
-%
-expectvalue /Class
-doit
-ExtSliceAst category: 'Parser'
-%
-! ------------------- Class definition for IndexAst
-expectvalue /Class
-doit
-SliceAbstractAst subclass: 'IndexAst'
-  instVarNames: #( value)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-IndexAst comment: 
-'No class-specific documentation for PyIndex, hierarchy is:
-Object
-  AbstractNode(parent)
-    SliceAbstractAst
-      PyIndex(value)
-'
-%
-expectvalue /Class
-doit
-IndexAst category: 'Parser'
-%
 ! ------------------- Class definition for SliceAst
 expectvalue /Class
 doit
-SliceAbstractAst subclass: 'SliceAst'
+AbstractLocationNode subclass: 'SliceAst'
   instVarNames: #( lower upper step)
   classVars: #()
   classInstVars: #()
@@ -5963,7 +5886,6 @@ input Exception.gs
 input ExprAst.gs
 input ExpressionAst.gs
 input ExpressionContextAst.gs
-input ExtSliceAst.gs
 input FileExistsError.gs
 input FileNotFoundError.gs
 input filter.gs
@@ -5996,7 +5918,6 @@ input ImportFromAst.gs
 input ImportWarning.gs
 input InAst.gs
 input IndentationError.gs
-input IndexAst.gs
 input IndexError.gs
 input InstanceFunctionDefAst.gs
 input int.gs
@@ -6087,7 +6008,6 @@ input setTest.gs
 input SimpleStatementsTestCase.gs
 input Singleton.gs
 input slice.gs
-input SliceAbstractAst.gs
 input SliceAst.gs
 input sliceTest.gs
 input SliceTestCase.gs

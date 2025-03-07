@@ -24,7 +24,7 @@ initialize
 	stream := self stream.
 	value := self expression.
 	self commaSpace.
-	slice := SliceAbstractAst parent: self.
+	slice := self expression.
 	self commaSpace.
 	ctx := ExpressionContextAst parent: self.
 	self readPosition.
@@ -34,6 +34,10 @@ method: SubscriptAst
 printSmalltalkOn: aStream
 
 	value printSmalltalkWithParenthesisOn: aStream.
-	aStream nextPutAll: ' __getitem__: '.
-	slice printSmalltalkWithParenthesisOn: aStream.
+	slice class == SliceAst ifTrue: [
+		slice printSmalltalkOn: aStream.
+	] ifFalse: [
+		aStream nextPutAll: ' __getitem__: '.
+		slice printSmalltalkWithParenthesisOn: aStream.
+	].
 %
