@@ -15,6 +15,16 @@ increaseIndent
 %
 category: 'other'
 method: PrettyWriteStream
+nextPut: aChar
+
+	(self contents notEmpty and: [self contents last == Character lf]) ifTrue: [
+		indentCount timesRepeat: [self tab].
+	].
+
+	super nextPut: aChar
+%
+category: 'other'
+method: PrettyWriteStream
 nextPutAll: aString
 
 	(self contents notEmpty and: [self contents last == Character lf]) ifTrue: [
@@ -29,4 +39,10 @@ on: aCollection
 
 	super on: aCollection.
 	indentCount := 0
+%
+category: 'other'
+method: PrettyWriteStream
+tab
+  "Adds a tab to the output stream."
+  super nextPut: Tab
 %
