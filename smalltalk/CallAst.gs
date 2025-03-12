@@ -42,40 +42,43 @@ category: 'other'
 method: CallAst
 printSmalltalkOn: aStream
 
-		"throw namedefbefore error here"
-		aStream 
+	"throw namedefbefore error here"
+	aStream 
 		nextPutAll: '(currentScope at: #';
 		nextPutAll: function id;
 		nextPut: $);
 		nextPutAll: ' scope: currentScope positional: { ';
 		yourself.
-
 	arguments do: [:each | 
 		each printSmalltalkWithParenthesisOn: aStream.
 		aStream nextPutAll: '. '.
 	].
-
 	aStream nextPutAll: '} named: '.
-
 	keywords size > 0 ifTrue: [
-
 		aStream nextPutAll: '{'.
-
 		keywords keysAndValuesDo: [:eachKey :eachValue |
 			aStream 
 				nextPutAll: ' #';
 				nextPutAll: eachKey;
 				nextPutAll: '->';
 				yourself.
-
 			eachValue printSmalltalkWithParenthesisOn: aStream.
-
 			aStream nextPutAll: '. '.
 		].
-
 		aStream nextPutAll: '}'
-
 	] ifFalse: [
 		aStream nextPutAll: '{}'.
 	].
+%
+category: 'other'
+method: CallAst
+printSmalltalkOnY: aStream
+
+	"throw namedefbefore error here"
+	aStream 
+		nextPutAll: '(currentScope at: #';
+		nextPutAll: function id;
+		nextPut: $);
+		nextPutAll: ' scope: currentScope';
+		yourself.
 %

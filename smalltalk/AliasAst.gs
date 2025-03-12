@@ -5,6 +5,12 @@ removeallclassmethods AliasAst
 ! ------------------- Instance methods for AliasAst
 category: 'other'
 method: AliasAst
+asName
+
+	^asName
+%
+category: 'other'
+method: AliasAst
 initialize
 	"alias = (identifier name, identifier? asname)"
 

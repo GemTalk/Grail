@@ -45,12 +45,9 @@ scope: aVariables positional: positionalArgsArray named: namedArgsArray
 
 
 	| myScope defaultsOffset |
-
 	myScope := aVariables createChildScope.
-	
 	defaultsOffset := params size - defaults size.
-
-	vararg == #'None' ifFalse: [
+	vararg isNil ifFalse: [
 		myScope at: vararg put: (list ___value: OrderedCollection new).
 	] ifTrue: [
 		 positionalArgsArray size < defaultsOffset
@@ -63,7 +60,6 @@ scope: aVariables positional: positionalArgsArray named: namedArgsArray
 					' required positional arguments:', errorString.
 			].
 	].
-
 	(1 to: positionalArgsArray size) do: [:i |
 		i <= params size ifTrue: [
 			myScope at: (params at: i) put: (positionalArgsArray at: i).
@@ -73,7 +69,6 @@ scope: aVariables positional: positionalArgsArray named: namedArgsArray
 				do: [TypeError signal: 'TypeError: takes ', params size asString, ' positional arguements but ', positionalArgsArray size asString, ' was given'].
 		].
 	].
-
 	positionalArgsArray size < params size ifTrue: [
 		| indexOfFirstDefaultNeeded |
 		indexOfFirstDefaultNeeded := positionalArgsArray size + defaults size - params size + 1.
@@ -81,11 +76,9 @@ scope: aVariables positional: positionalArgsArray named: namedArgsArray
 			myScope at: (params at: defaultsOffset + i) put: (defaults at: i).
 		]
 	].
-
 	(1 to: kwonlyargs size) do: [:i |
 		| namedKeys |
 		namedKeys := namedArgsArray collect: [:elem | elem key].
-
 		(namedKeys includes: (kwonlyargs at: i)) ifTrue: [
 			| namedValue |
 			namedValue := namedArgsArray at: (namedKeys indexOf: (kwonlyargs at: i)).
@@ -99,16 +92,12 @@ scope: aVariables positional: positionalArgsArray named: namedArgsArray
 			].
 		].
 	].
-
 	kwarg notNil ifTrue: [
-
 		myScope at: kwarg put: (dict ___value: Dictionary new).
-
 		namedArgsArray do: [:var |
 			(myScope at: kwarg) __setitem__: var key _: var value.
 		].
 	].
-
 	^block value: myScope
 %
 category: 'other'

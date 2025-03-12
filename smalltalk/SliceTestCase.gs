@@ -2,12 +2,6 @@
 removeallmethods SliceTestCase
 removeallclassmethods SliceTestCase
 ! ------------------- Class methods for SliceTestCase
-category: 'other'
-classmethod: SliceTestCase
-filename
-
-	^nil
-%
 ! ------------------- Instance methods for SliceTestCase
 category: 'other'
 method: SliceTestCase

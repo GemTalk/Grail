@@ -2,12 +2,6 @@
 removeallmethods ToolsTestCase
 removeallclassmethods ToolsTestCase
 ! ------------------- Class methods for ToolsTestCase
-category: 'other'
-classmethod: ToolsTestCase
-filename
-
-	^nil
-%
 ! ------------------- Instance methods for ToolsTestCase
 category: 'other'
 method: ToolsTestCase

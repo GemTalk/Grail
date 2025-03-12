@@ -12,7 +12,7 @@ category: 'other'
 classmethod: PythonTestCase
 filename
 
-	self subclassResponsibility.
+	^nil
 %
 category: 'other'
 classmethod: PythonTestCase

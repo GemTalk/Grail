@@ -3908,6 +3908,38 @@ expectvalue /Class
 doit
 builtin_function_or_method category: 'BuiltIns-Kernel'
 %
+! ------------------- Class definition for builtins
+expectvalue /Class
+doit
+builtin_function_or_method subclass: 'builtins'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+builtins category: 'BuiltIns-Kernel'
+%
+! ------------------- Class definition for sys
+expectvalue /Class
+doit
+builtin_function_or_method subclass: 'sys'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+sys category: 'BuiltIns-Kernel'
+%
 ! ------------------- Class definition for BuiltinImporter
 expectvalue /Class
 doit
@@ -5443,6 +5475,22 @@ expectvalue /Class
 doit
 DelimitersTestCase category: 'Tests'
 %
+! ------------------- Class definition for ImportTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'ImportTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ImportTestCase category: 'Tests'
+%
 ! ------------------- Class definition for NumericLiteralsTestCase
 expectvalue /Class
 doit
@@ -5842,7 +5890,8 @@ input builtin_function_or_method.gs
 input builtin_function_or_methodTest.gs
 input BuiltinImporter.gs
 input BuiltinImporterTest.gs
-input Builtins.gs
+input builtins.gs
+input Builtins_.gs
 input bytearray.gs
 input bytearrayTest.gs
 input ByteLiteralsTestCase.gs
@@ -5915,6 +5964,7 @@ input ImportAst.gs
 input ImportError.gs
 input ImportErrorTest.gs
 input ImportFromAst.gs
+input ImportTestCase.gs
 input ImportWarning.gs
 input InAst.gs
 input IndentationError.gs
@@ -6031,6 +6081,7 @@ input superTest.gs
 input SyntaxError.gs
 input SyntaxErrorTest.gs
 input SyntaxWarning.gs
+input sys.gs
 input SystemError.gs
 input SystemExit.gs
 input SystemExitTest.gs

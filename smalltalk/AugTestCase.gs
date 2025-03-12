@@ -2,12 +2,6 @@
 removeallmethods AugTestCase
 removeallclassmethods AugTestCase
 ! ------------------- Class methods for AugTestCase
-category: 'other'
-classmethod: AugTestCase
-filename
-
-	^nil
-%
 ! ------------------- Instance methods for AugTestCase
 category: 'other'
 method: AugTestCase

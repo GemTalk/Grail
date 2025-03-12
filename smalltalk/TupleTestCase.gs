@@ -2,12 +2,6 @@
 removeallmethods TupleTestCase
 removeallclassmethods TupleTestCase
 ! ------------------- Class methods for TupleTestCase
-category: 'other'
-classmethod: TupleTestCase
-filename
-
-	^nil
-%
 ! ------------------- Instance methods for TupleTestCase
 category: 'other'
 method: TupleTestCase
