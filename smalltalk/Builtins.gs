@@ -215,6 +215,7 @@ initialize
 		len;
 		list;
 		locals;
+		open;
 		ord;
 		pow;
 		print;
@@ -396,6 +397,31 @@ locals
 		dict ___value: currentScope parent dict.
 	].
 	Builtins singleton at: #locals put: function.
+%
+category: 'other'
+method: builtins
+open
+	"open(file, mode='r', buffering=-1, encoding=None, errors=None, newline=None, closefd=True, opener=None)"
+
+	| function |
+	"On startup this creates a builtin open function to open a file."
+	function := FunctionDef new
+		params: { #file. #mode. #buffering. #encoding. #errors. #newline. #closefd. #opener. };
+		defaults: { None. 'r'. -1. None. None. None. True. None. };
+		vararg: #'None';
+		yourself.
+	function block: [:currentScope |
+		TextIOWrapper 
+			file: (currentScope at: #file)
+			mode: (currentScope at: #mode)
+			buffering: (currentScope at: #buffering)
+			encoding: (currentScope at: #encoding)
+			errors: (currentScope at: #errors)
+			newline: (currentScope at: #newline)
+			closefd: (currentScope at: #closefd)
+			opener: (currentScope at: #opener).
+	].
+	Builtins singleton at: #open put: function.
 %
 category: 'other'
 method: builtins

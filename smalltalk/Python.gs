@@ -4606,6 +4606,24 @@ expectvalue /Class
 doit
 super category: 'BuiltIns-Kernel'
 %
+! ------------------- Class definition for TextIOWrapper
+expectvalue /Class
+doit
+object subclass: 'TextIOWrapper'
+  instVarNames: #( file mode buffering
+                    encoding errors newline closefd
+                    opener gsFile)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+TextIOWrapper category: 'BuiltIns-IO'
+%
 ! ------------------- Class definition for type
 expectvalue /Class
 doit
@@ -5475,6 +5493,22 @@ expectvalue /Class
 doit
 DelimitersTestCase category: 'Tests'
 %
+! ------------------- Class definition for FileTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'FileTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+FileTestCase category: 'Tests'
+%
 ! ------------------- Class definition for ImportTestCase
 expectvalue /Class
 doit
@@ -5937,6 +5971,7 @@ input ExpressionAst.gs
 input ExpressionContextAst.gs
 input FileExistsError.gs
 input FileNotFoundError.gs
+input FileTestCase.gs
 input filter.gs
 input filterTest.gs
 input float.gs
@@ -6086,6 +6121,7 @@ input SystemError.gs
 input SystemExit.gs
 input SystemExitTest.gs
 input TabError.gs
+input TextIOWrapper.gs
 input TimeoutError.gs
 input ToolsTestCase.gs
 input TranslateBinaryOperatorsTestCase.gs

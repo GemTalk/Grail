@@ -49,6 +49,24 @@ printOn: aStream
 %
 category: 'other'
 method: AttributeAst
+printSmalltalkOn: aStream
+	"TO DO
+		if ctx is read && this id is in block as writeable but has not been written
+			give UnboundLocalError
+		if ctx is write change flag in block to true aka has been written"
+	value printSmalltalkWithParenthesisOn: aStream.
+	aStream 
+		space;
+		nextPutAll: attr asString;
+		yourself.
+
+	ctx class == StoreAst ifTrue: [
+		self halt. 
+		aStream nextPutAll: ' put: '.
+	].
+%
+category: 'other'
+method: AttributeAst
 setSuperInfo: aScope
 
 	aScope superInfo at: #'type' put: aScope outer astNode

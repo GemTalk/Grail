@@ -42,11 +42,9 @@ category: 'other'
 method: CallAst
 printSmalltalkOn: aStream
 
-	"throw namedefbefore error here"
+		"throw namedefbefore error here"
+	function printSmalltalkWithParenthesisOn: aStream.
 	aStream 
-		nextPutAll: '(currentScope at: #';
-		nextPutAll: function id;
-		nextPut: $);
 		nextPutAll: ' scope: currentScope positional: { ';
 		yourself.
 	arguments do: [:each | 

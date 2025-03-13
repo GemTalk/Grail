@@ -81,6 +81,7 @@ classmethod: ModuleAst
 smalltalkForModulePath: aString
 "
 ModuleAst smalltalkForModulePath: '/Users/jfoster/code/Python/Grail/tests/hello.py'.
+ModuleAst smalltalkForModulePath: '/Users/acaraveo/ORA.py'.
 "
 	| module stream |
 	module := self script: aString.
