@@ -49,5 +49,4 @@ printSmalltalkOn: aStream
 				aStream nextPutAll: ') describe))'.
 			].
 	].
-	aStream nextPut: $..
 %

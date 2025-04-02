@@ -12,6 +12,31 @@ file: fileString mode: modeString buffering: bufferingInt encoding: anEncoding e
 ! ------------------- Instance methods for TextIOWrapper
 category: 'other'
 method: TextIOWrapper
+__enter__
+	"https://docs.python.org/3/reference/datamodel.html#object.__enter__"
+
+	^FunctionDef new
+		block: [:currentScope |
+			self.
+		];
+		yourself.
+%
+category: 'other'
+method: TextIOWrapper
+__exit__
+	"https://docs.python.org/3/reference/datamodel.html#object.__exit__
+	self, exc_type, exc_value, traceback"
+
+	^FunctionDef new
+		block: [:currentScope |
+			gsFile close.
+		];
+		params: { #exc_type. #exc_value. #traceback.};
+		defaults: { None. None. None. };
+		yourself.
+%
+category: 'other'
+method: TextIOWrapper
 close
 
 	^FunctionDef new

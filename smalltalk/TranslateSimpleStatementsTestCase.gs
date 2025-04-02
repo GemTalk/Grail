@@ -47,7 +47,7 @@ testTranslateRaise
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
 
-	self assert: stream contents equals: 'RuntimeError signal.'.
+	self assert: stream contents equals: 'RuntimeError signal'.
 	self 
 		should: [stream contents evaluate] 
 		raise: RuntimeError.
@@ -57,7 +57,7 @@ testTranslateRaise
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
 
-	self assert: stream contents equals: 'RuntimeError signal: (str ___value: ''Something bad happened'') ___value.'.
+	self assert: stream contents equals: 'RuntimeError signal: (str ___value: ''Something bad happened'') ___value'.
 	self 
 		should: [stream contents evaluate] 
 		raise: RuntimeError
@@ -68,7 +68,7 @@ testTranslateRaise
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
 
-	self assert: stream contents equals: 'RuntimeError signal: (str ___value: ''Something bad happened'') ___value.'.
+	self assert: stream contents equals: 'RuntimeError signal: (str ___value: ''Something bad happened'') ___value'.
 	self 
 		should: [stream contents evaluate] 
 		raise: RuntimeError
@@ -78,7 +78,7 @@ testTranslateRaise
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
 
-	self assert: stream contents equals: 'RuntimeError signal: ((str ___value: ''Something bad happened'') ___value, '' The above exception was the direct cause of the following exception: '', ((RuntimeError new addText: (str ___value: ''Caused by me'')  ___value) describe)).'.
+	self assert: stream contents equals: 'RuntimeError signal: ((str ___value: ''Something bad happened'') ___value, '' The above exception was the direct cause of the following exception: '', ((RuntimeError new addText: (str ___value: ''Caused by me'')  ___value) describe))'.
 	self 
 		should: [stream contents evaluate] 
 		raise: RuntimeError

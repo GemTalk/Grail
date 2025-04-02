@@ -32,13 +32,17 @@ printSmalltalkOn: aStream
 	
 	body size == 1 ifTrue: [
 		 (body at: 1) printSmalltalkOn: aStream.
+		aStream nextPut: $..
 	] ifFalse: [
 		body do: [:each |
 			each printSmalltalkOn: aStream.
 			aStream nextPut: $.; lf; yourself.
 		].
-		aStream position: aStream position - 1.
-
-		aStream lf.
 	].
+%
+category: 'other'
+method: SuiteAst
+size 
+	
+	^body size
 %

@@ -3,6 +3,16 @@ removeallmethods WithItemAst
 removeallclassmethods WithItemAst
 ! ------------------- Class methods for WithItemAst
 ! ------------------- Instance methods for WithItemAst
+category: 'Accessing'
+method: WithItemAst
+context_expr
+	^context_expr
+%
+category: 'Accessing'
+method: WithItemAst
+optional_vars
+	^optional_vars
+%
 category: 'other'
 method: WithItemAst
 initialize

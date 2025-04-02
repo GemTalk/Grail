@@ -13,4 +13,6 @@ initialize
 category: 'other'
 method: PassAst
 printSmalltalkOn: aStream
+
+	aStream nextPutAll: 'self yourself'.
 %

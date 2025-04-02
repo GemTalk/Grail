@@ -21,7 +21,7 @@ printSmalltalkOn: aStream
 
 	aStream nextPut: $[.
 	test printSmalltalkOn: aStream. " Doesn't need parenthesis "
-	aStream nextPutAll: '] whileTrue: ['; lf; yourself.
+	aStream nextPutAll: '] whileTrue: ['; lf; increaseIndent; yourself.
 	body printSmalltalkOn: aStream. " Doesn't need parenthesis "
-	aStream lf; nextPutAll: '].'.
+	aStream lf; decreaseIndent; nextPutAll: '].'.
 %

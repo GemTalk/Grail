@@ -445,11 +445,18 @@ testWith
 category: 'other'
 method: CompoundStatementsTestCase
 testWithFile
-"
-  | pyString result |
-  pyString := 'with open(""file.txt"", ""r"") as f: pass'.
-  result := ModuleAst evaluate: pyString.
-"
+
+	| pyString result |
+	pyString := '
+with open("/tmp/file.txt", "w") as f:
+    f.write("Hello, World!")
+
+with open("/tmp/file.txt", "r") as f:
+    content = f.read()
+    content
+'.
+	result := ModuleAst evaluate: pyString.
+	self assert: result ___value equals: 'Hello, World!'.
 %
 category: 'other'
 method: CompoundStatementsTestCase

@@ -23,7 +23,7 @@ if (True):
 
 	self assert: stream contents equals: 
 '(True) ___value ifTrue: [
-	(currentScope at: #print) scope: currentScope positional: { (int ___value: 0). } named: { #end->(str ___value: '' ''). }
+	(currentScope at: #print) scope: currentScope positional: { (int ___value: 0). } named: { #end->(str ___value: '' ''). }.
 ]'
 %
 category: 'other'
@@ -52,13 +52,13 @@ else:
 
 	self assert: stream contents equals: 
 '(False) ___value ifTrue: [
-	(currentScope at: #print) scope: currentScope positional: { (int ___value: 5). } named: { #end->(str ___value: '' ''). }
+	(currentScope at: #print) scope: currentScope positional: { (int ___value: 5). } named: { #end->(str ___value: '' ''). }.
 ] ifFalse: [
 	(True) ___value ifTrue: [
-		(currentScope at: #print) scope: currentScope positional: { (int ___value: 6). } named: { #end->(str ___value: '' ''). }
+		(currentScope at: #print) scope: currentScope positional: { (int ___value: 6). } named: { #end->(str ___value: '' ''). }.
 	] ifFalse: [
-		(currentScope at: #print) scope: currentScope positional: { (int ___value: 7). } named: { #end->(str ___value: '' ''). }
-	]
+		(currentScope at: #print) scope: currentScope positional: { (int ___value: 7). } named: { #end->(str ___value: '' ''). }.
+	].
 ]'.
 
 	x := (self statementsAt: 6).
@@ -67,13 +67,13 @@ else:
 
 	self assert: stream contents equals: 
 '(False) ___value ifTrue: [
-	(currentScope at: #print) scope: currentScope positional: { (int ___value: 8). } named: { #end->(str ___value: '' ''). }
+	(currentScope at: #print) scope: currentScope positional: { (int ___value: 8). } named: { #end->(str ___value: '' ''). }.
 ] ifFalse: [
 	(False) ___value ifTrue: [
-		(currentScope at: #print) scope: currentScope positional: { (int ___value: 9). } named: { #end->(str ___value: '' ''). }
+		(currentScope at: #print) scope: currentScope positional: { (int ___value: 9). } named: { #end->(str ___value: '' ''). }.
 	] ifFalse: [
-		(currentScope at: #print) scope: currentScope positional: { (int ___value: 10). } named: { #end->(str ___value: '' ''). }
-	]
+		(currentScope at: #print) scope: currentScope positional: { (int ___value: 10). } named: { #end->(str ___value: '' ''). }.
+	].
 ]'
 %
 category: 'other'
@@ -98,9 +98,9 @@ else:
 
 	self assert: stream contents equals: 
 '(True) ___value ifTrue: [
-	(currentScope at: #print) scope: currentScope positional: { (int ___value: 1). } named: { #end->(str ___value: '' ''). }
+	(currentScope at: #print) scope: currentScope positional: { (int ___value: 1). } named: { #end->(str ___value: '' ''). }.
 ] ifFalse: [
-	(currentScope at: #print) scope: currentScope positional: { (int ___value: 2). } named: { #end->(str ___value: '' ''). }
+	(currentScope at: #print) scope: currentScope positional: { (int ___value: 2). } named: { #end->(str ___value: '' ''). }.
 ]'.
 
 	x := (self statementsAt: 4).
@@ -109,9 +109,9 @@ else:
 
 	self assert: stream contents equals: 
 '(False) ___value ifTrue: [
-	(currentScope at: #print) scope: currentScope positional: { (int ___value: 3). } named: { #end->(str ___value: '' ''). }
+	(currentScope at: #print) scope: currentScope positional: { (int ___value: 3). } named: { #end->(str ___value: '' ''). }.
 ] ifFalse: [
-	(currentScope at: #print) scope: currentScope positional: { (int ___value: 4). } named: { #end->(str ___value: '' ''). }
+	(currentScope at: #print) scope: currentScope positional: { (int ___value: 4). } named: { #end->(str ___value: '' ''). }.
 ]'.
 %
 category: 'other'
