@@ -18,6 +18,12 @@ parent: anAstNode
 ! ------------------- Instance methods for FunctionDefAst
 category: 'other'
 method: FunctionDefAst
+addVariableNamesTo: aStream
+
+	aStream nextPutAll: name; space
+%
+category: 'other'
+method: FunctionDefAst
 decoratorList
 
 	^decorator_list

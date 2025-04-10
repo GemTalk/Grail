@@ -5,6 +5,14 @@ removeallclassmethods AssignAst
 ! ------------------- Instance methods for AssignAst
 category: 'other'
 method: AssignAst
+addVariableNamesTo: aStream
+
+	targets do: [:each | 
+		each addVariableNamesTo: aStream.
+	].
+%
+category: 'other'
+method: AssignAst
 initialize
 	"Assign(expr* targets, expr value, string? type_comment)"
 
@@ -19,8 +27,10 @@ category: 'other'
 method: AssignAst
 printSmalltalkOn: aStream
 
-	(targets at: 1) printSmalltalkOn: aStream.
-	value printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: 'value := '.
+	value printSmalltalkOn: aStream.
+	aStream nextPutAll: '.'; lf. 
+	(targets at: 1) printSmalltalkAssignmentOn: aStream.
 %
 category: 'other'
 method: AssignAst

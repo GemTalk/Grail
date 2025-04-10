@@ -5,6 +5,14 @@ removeallclassmethods TupleAst
 ! ------------------- Instance methods for TupleAst
 category: 'other'
 method: TupleAst
+addVariableNamesTo: aStream
+
+	elts do: [:each | 
+		each addVariableNamesTo: aStream.
+	].
+%
+category: 'other'
+method: TupleAst
 declareVariable
 
 	elts do: [:each | each declareVariable].
@@ -18,6 +26,19 @@ initialize
 	self commaSpace.
 	ctx := ExpressionContextAst parent: self.
 	self readPosition.
+%
+category: 'other'
+method: TupleAst
+printSmalltalkAssignmentOn: aStream 
+
+	1 to: elts size do: [:i | 
+		(elts at: i) printSmalltalkOn: aStream.
+		aStream 
+			nextPutAll: '(value ___value at: ';
+			print: i;
+			nextPutAll: ').'; lf.
+	].
+	aStream skip: -2.
 %
 category: 'other'
 method: TupleAst

@@ -13,6 +13,12 @@ with: aSymbol
 ! ------------------- Instance methods for NameAst
 category: 'other'
 method: NameAst
+addVariableNamesTo: aStream
+	
+	aStream nextPutAll: id; space.
+%
+category: 'other'
+method: NameAst
 assertContextIsLoad
 
 	ctx assertIsLoad.
@@ -83,6 +89,13 @@ printOn: aStream
 	aStream nextPut: $(;
 		nextPutAll: id;
 		nextPut: $).
+%
+category: 'other'
+method: NameAst
+printSmalltalkAssignmentOn: aStream
+
+	self printSmalltalkOn: aStream.
+	aStream nextPutAll: 'value'.
 %
 category: 'other'
 method: NameAst

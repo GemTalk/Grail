@@ -42,6 +42,14 @@ testTupleAssignment
   pyString := 'for a, b in [(1, 2)]: pass'.
   result := ModuleAst evaluate: pyString.
 "
+	| pyString result |
+
+	pyString := 
+'a, b, c = (11, 12, 13)
+x = a + b + c
+x == 36'.
+result := ModuleAst evaluate: pyString.
+self assert: result ___value.
 %
 category: 'other'
 method: TupleTestCase

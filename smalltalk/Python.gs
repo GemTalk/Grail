@@ -5509,6 +5509,22 @@ expectvalue /Class
 doit
 FileTestCase category: 'Tests'
 %
+! ------------------- Class definition for ForTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'ForTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ForTestCase category: 'Tests'
+%
 ! ------------------- Class definition for ImportTestCase
 expectvalue /Class
 doit
@@ -5981,6 +5997,7 @@ input FloorDivAst.gs
 input ForAst.gs
 input FormatTag.gs
 input FormattedValueAst.gs
+input ForTestCase.gs
 input frozenset.gs
 input frozensetTest.gs
 input function.gs

@@ -21,3 +21,7 @@ statementFrom: aNode
 "
 %
 ! ------------------- Instance methods for StatementAst
+category: 'other'
+method: StatementAst
+addVariableNamesTo: aStream
+%

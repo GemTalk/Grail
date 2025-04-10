@@ -53,6 +53,18 @@ ModuleAst script: '1 == 1'.
 %
 category: 'other'
 classmethod: ModuleAst
+evaluateScript: aPath
+"
+ModuleAst evaluateScript: '/Users/acaraveo/ORA.py'.
+"
+	| module stream |
+	module := self script: aPath.
+	stream := PrettyWriteStream on: String new.
+	module printSmalltalkOn: stream.
+	^stream contents evaluate
+%
+category: 'other'
+classmethod: ModuleAst
 pprintast: aString
 "
 	ModuleAst pprintast: '/Users/jfoster/.venv/bin/pprintast'.
@@ -198,7 +210,7 @@ printSmalltalkOn: aStream
 	aStream
 		increaseIndent;
 		lf;
-		nextPutAll: '| currentScope |';
+		nextPutAll: '| currentScope value |';
 		lf;
 		nextPutAll: 'currentScope := PyGlobals new.';
 		lf;
