@@ -260,6 +260,12 @@ index: aPythonObject from: aPyIntStart to: aPyIntEnd
 %
 category: 'Smalltalk'
 method: Container
+___asIterableForFor
+
+	^container
+%
+category: 'Smalltalk'
+method: Container
 ___container
 	^container
 %

@@ -20,15 +20,14 @@ self assert: result ___value.
 category: 'other'
 method: ForTestCase
 testTuple
-"
+
 	| pyString result |
 	pyString := 
-'d = {""one"": 1, ""two"": 2}
+'d = {"one": 1, "two": 2}
 total = 0
 for key, value in d: 
 	total += value
 total == 3'.
 result := ModuleAst evaluate: pyString.
 self assert: result ___value.
-"
 %

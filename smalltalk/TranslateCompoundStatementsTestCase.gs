@@ -11,21 +11,6 @@ filename
 ! ------------------- Instance methods for TranslateCompoundStatementsTestCase
 category: 'other'
 method: TranslateCompoundStatementsTestCase
-testTranslateFor
-
-	| stream x |
-	x := self statementsAt: 5.
-	stream := PrettyWriteStream on: String new.
-	x printSmalltalkOn: stream.
-
-	self assert: stream contents equals:
-'((currentScope at: #range) scope: currentScope positional: { (int ___value: 10). } named: {}) ___value do: [:i |
-	currentScope at: #_ put: i.
-	self yourself.
-]'
-%
-category: 'other'
-method: TranslateCompoundStatementsTestCase
 testTranslateIf
 
 	| stream x |

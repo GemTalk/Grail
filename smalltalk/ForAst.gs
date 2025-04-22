@@ -24,8 +24,9 @@ method: ForAst
 printSmalltalkOn: aStream
 
 	iter printSmalltalkWithParenthesisOn: aStream.
-	aStream nextPutAll: ' ___value do: [:i |'; increaseIndent; lf; yourself.
-	aStream nextPutAll: 'currentScope at: #'; nextPutAll: target id; nextPutAll: ' put: i.'.
+	aStream nextPutAll: ' ___asIterableForFor do: [:value |'; increaseIndent; lf; yourself.
+	target printSmalltalkAssignmentOn: aStream.
+	aStream nextPutAll: '.'.
 	body size > 0 ifTrue: [
 		aStream lf.
 	].

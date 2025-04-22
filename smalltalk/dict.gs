@@ -216,6 +216,18 @@ values
 %
 category: 'Smalltalk'
 method: dict
+___asIterableForFor
+
+	| result l |
+	result := Array new.
+	container keysAndValuesDo: [:key :value |
+		l := list ___value: (Array with: key with: value).
+		result add: l.
+	].
+	^result
+%
+category: 'Smalltalk'
+method: dict
 printElementsOn: aStream
 	"The original code used #skip:, but some streams do not support that,
 	 and we don't really need it."
