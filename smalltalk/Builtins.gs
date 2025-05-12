@@ -21,7 +21,10 @@ __import__
 		defaults: { nil. None. None. list ___value: #(). 0. };
 		yourself.
 	function block: [:currentScope |
-		"self halt."
+		| name class |
+		name := currentScope at: #'name'.
+		class := Python at: name ifAbsent: [nil].
+		class ifNil: [None] ifNotNil: [class instance].
 	].
 	Builtins singleton at: #'__import__' put: function.
 %

@@ -10,8 +10,8 @@ test_sys
 	| pyString result |
 	pyString :=  '
 import sys
-# sys.is_stack_trampoline_active() == False
+sys.is_stack_trampoline_active() == False
 '.
 	result := ModuleAst evaluate: pyString.
-	"self assert: result ___value"
+	self assert: result ___value.
 %

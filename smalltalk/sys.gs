@@ -25,7 +25,7 @@ is_stack_trampoline_active
 		params: {};
 		yourself.
 	function block: [:currentScope |
-		self halt.
+		False.
 	].
-	Builtins singleton at: #abs put: function.
+	^function
 %
