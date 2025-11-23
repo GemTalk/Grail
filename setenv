@@ -1,15 +1,17 @@
+# source ./setenv
+
 # edit to path to GemStone product directory
-export GEMSTONE_EXE_CONF='/Users/acaraveo/Library/GemStone/db1/conf'
-export GEMSTONE_SYS_CONF='/Users/acaraveo/Library/GemStone/db1/conf'
-export GEMSTONE_GLOBAL_DIR='/Users/acaraveo/Library/GemStone/db1'
-export GEMSTONE_LOG='/Users/acaraveo/Library/GemStone/db1/log/gs64stone.log'
-export GEMSTONE='/Users/acaraveo/Library/GemStone/GemStone64Bit3.7.1-i386.Darwin'
-export GEMSTONE_NRS_ALL='#netldi:50377#dir:/Users/acaraveo/Library/GemStone/db1#log:/Users/acaraveo/Library/GemStone/db1/log/%N_%P.log'
+export GEMSTONE_EXE_CONF='/Users/jfoster/Documents/GemStone/db-1/conf'
+export GEMSTONE_SYS_CONF='/Users/jfoster/Documents/GemStone/db-1/conf'
+export GEMSTONE_GLOBAL_DIR='/Users/jfoster/Documents/GemStone'
+export GEMSTONE_LOG='/Users/jfoster/Documents/GemStone/db-1/log/gs64stone.log'
+export GEMSTONE='/Users/jfoster/Documents/GemStone/GemStone64Bit3.7.4.3-arm64.Darwin'
+export GEMSTONE_NRS_ALL='#netldi:50377#dir:/Users/jfoster/Documents/GemStone/db-1#log:/Users/jfoster/Documents/GemStone/db-1/log/%N_%P.log'
 export PATH="$GEMSTONE/bin:$GEMSTONE/seaside/bin:$PATH"
 export DYLD_LIBRARY_PATH="$GEMSTONE/lib:$DYLD_LIBRARY_PATH"
 export MANPATH="$GEMSTONE/doc:$MANPATH"
 # from $GEMSTONE/seaside/etc/gemstone.conf
-export GEMSTONE_USER="acaraveo"
+export GEMSTONE_USER="jfoster"
 export GEMSTONE_NAME="gs64stone"
-export GEMSTONE_LOGDIR="/Users/acaraveo/Library/GemStone/db1/log"
-export GEMSTONE_DATADIR="/Users/acaraveo/Library/GemStone/db1/data"
+export GEMSTONE_LOGDIR="/Users/jfoster/Documents/GemStone/db-1/log"
+export GEMSTONE_DATADIR="/Users/jfoster/Documents/GemStone/db-1/data"

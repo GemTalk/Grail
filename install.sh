@@ -9,8 +9,8 @@ if [ ! -f .setenv ]; then
     cp setenv .setenv
 fi
 source .setenv
-if [ ! -f smalltalk/.topazini ]; then
-    cp topazini smalltalk/.topazini
+if [ ! -f ~/.topazini ]; then
+    cp topazini ~/.topazini
 fi
 cd smalltalk
 topaz -lq << EOF

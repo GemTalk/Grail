@@ -37,7 +37,7 @@ b"def\b"
 
 # byte prefix with octal
 b"""abc\000"""
-b"""def\777"""
+b"""def\377"""
 
 # byte prefix with hex
 b"""abc\x00"""

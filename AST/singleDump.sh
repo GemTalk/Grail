@@ -6,4 +6,4 @@ if [ ! -d $VERSION ]; then
 	mkdir $VERSION
 fi
 
-pprintast -a -t "../tests/${OUTPUT}.py" >> "${VERSION}/${OUTPUT}.ast"
+pprintast -a -t "../tests/${OUTPUT}.py" > "${VERSION}/${OUTPUT}.ast"

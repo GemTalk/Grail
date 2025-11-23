@@ -17,7 +17,7 @@ __add__: pythonObject
 	
 	pythonObject class ~= str ifTrue: [TypeError signal: 'must a string, not ', pythonObject class name].
 
-	^str ___value: value + pythonObject ___value
+	^str ___value: value , pythonObject ___value
 %
 category: 'Python'
 method: str

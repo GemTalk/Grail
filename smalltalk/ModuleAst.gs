@@ -67,7 +67,7 @@ category: 'other'
 classmethod: ModuleAst
 pprintast: aString
 "
-	ModuleAst pprintast: '/Users/jfoster/.venv/bin/pprintast'.
+	ModuleAst pprintast: '/Users/jfoster/code/GemStone/Grail/.venv/bin/pprintast'.
 "
 	pprintast := aString.
 %
