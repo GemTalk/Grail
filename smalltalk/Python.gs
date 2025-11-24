@@ -3924,6 +3924,27 @@ expectvalue /Class
 doit
 builtins category: 'BuiltIns-Kernel'
 %
+! ------------------- Class definition for math
+expectvalue /Class
+doit
+builtin_function_or_method subclass: 'math'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+math comment: 
+'https://docs.python.org/3/library/math.html'
+%
+expectvalue /Class
+doit
+math category: 'BuiltIns-Kernel'
+%
 ! ------------------- Class definition for sys
 expectvalue /Class
 doit
@@ -5541,6 +5562,22 @@ expectvalue /Class
 doit
 ImportTestCase category: 'Tests'
 %
+! ------------------- Class definition for MathTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'MathTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+MathTestCase category: 'Tests'
+%
 ! ------------------- Class definition for NumericLiteralsTestCase
 expectvalue /Class
 doit
@@ -6046,6 +6083,8 @@ input LtAst.gs
 input LtEAst.gs
 input map.gs
 input mapTest.gs
+input math.gs
+input MathTestCase.gs
 input MatMultAst.gs
 input MemoryError.gs
 input memoryview.gs

@@ -61,7 +61,7 @@ ModuleAst evaluateScript: '/Users/acaraveo/ORA.py'.
 	module := self script: aPath.
 	stream := PrettyWriteStream on: String new.
 	module printSmalltalkOn: stream.
-	^stream contents evaluate
+	stream contents evaluate
 %
 category: 'other'
 classmethod: ModuleAst

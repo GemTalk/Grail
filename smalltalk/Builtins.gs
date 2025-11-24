@@ -2,12 +2,6 @@
 removeallmethods builtins
 removeallclassmethods builtins
 ! ------------------- Class methods for builtins
-category: 'other'
-classmethod: builtins
-instance
-	
-	^self new
-%
 ! ------------------- Instance methods for builtins
 category: 'other'
 method: builtins
@@ -502,7 +496,7 @@ print
 		yourself.
 	function block: [:currentScope |
 		| objects sep end file flush |
-		(currentScope at: #file) == nil ifTrue: [currentScope at: #file put: Transcript].
+		(currentScope at: #file) == nil ifTrue: [currentScope at: #file put: GsFile stdoutServer].
 		objects := (currentScope at: #vararg) ___value.
 		sep := currentScope at: #sep.
 		end := currentScope at: #end.

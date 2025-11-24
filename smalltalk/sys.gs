@@ -2,16 +2,11 @@
 removeallmethods sys
 removeallclassmethods sys
 ! ------------------- Class methods for sys
-category: 'other'
-classmethod: sys
-instance
-	
-	^self new
-%
 ! ------------------- Instance methods for sys
 category: 'other'
 method: sys
 initialize
+
 	self
 		is_stack_trampoline_active;
 		yourself.
