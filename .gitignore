@@ -4,3 +4,4 @@ __pycache__
 stdout.txt
 tmp/
 .setenv
+pyperf*

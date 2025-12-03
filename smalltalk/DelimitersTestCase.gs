@@ -2,24 +2,20 @@
 removeallmethods DelimitersTestCase
 removeallclassmethods DelimitersTestCase
 ! ------------------- Class methods for DelimitersTestCase
-category: 'other'
-classmethod: DelimitersTestCase
-filename
-
-	^'Delimiters.py'
-%
 ! ------------------- Instance methods for DelimitersTestCase
 category: 'other'
 method: DelimitersTestCase
 testCommaList
 
-	| x y |
-	x := self statementsAt: 3.
-	self 
+	| pyString ast x y |
+	pyString := '[1, 2, 3]'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf: ListAst);
 		assert: (x.ctx isKindOf: LoadAst);
 		assert: (x.elts size == 3);
@@ -38,13 +34,15 @@ category: 'other'
 method: DelimitersTestCase
 testCommaTuple
 
-	| x y |
-	x := self statementsAt: 4.
-	self 
+	| pyString ast x y |
+	pyString := '(4, 5, 6)'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf: TupleAst);
 		assert: (x.ctx isKindOf: LoadAst);
 		assert: (x.elts size == 3);
@@ -63,13 +61,15 @@ category: 'other'
 method: DelimitersTestCase
 testParethesesLeft
 
-	| x |
-	x := self statementsAt: 1.
-	self 
+	| pyString ast x |
+	pyString := '(1 + 2) + 3'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf:BinOpAst);
 		assert: (x.op isKindOf: AddAst);
 		assert: (x.left isKindOf: BinOpAst);
@@ -86,13 +86,15 @@ category: 'other'
 method: DelimitersTestCase
 testParethesesRight
 
-	| x |
-	x := self statementsAt: 2.
-	self 
+	| pyString ast x |
+	pyString := '4 + (5 + 6)'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf: BinOpAst);
 		assert: (x.op isKindOf: AddAst);
 		assert: (x.left isKindOf: ConstantAst);
@@ -109,13 +111,15 @@ category: 'other'
 method: DelimitersTestCase
 testSliceList
 
-	| x y |
-	x := self statementsAt: 5.
-	self 
+	| pyString ast x y |
+	pyString := '[1, 2, 3][0:1]'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf: SubscriptAst);
 		assert: (x.ctx isKindOf: LoadAst);
 		assert: (x.value isKindOf: ListAst);
@@ -138,13 +142,15 @@ category: 'other'
 method: DelimitersTestCase
 testSliceListEmpty
 
-	| x y |
-	x := self statementsAt: 7.
-	self 
+	| pyString ast x y |
+	pyString := '[7, 8, 9][::]'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf:SubscriptAst);
 		assert: (x.ctx isKindOf: LoadAst);
 		assert: (x.value isKindOf: ListAst);
@@ -165,13 +171,15 @@ category: 'other'
 method: DelimitersTestCase
 testSliceTuple
 
-	| x y |
-	x := self statementsAt: 6.
-	self 
+	| pyString ast x y |
+	pyString := '(4, 5, 6)[::2]'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf: SubscriptAst);
 		assert: (x.ctx isKindOf: LoadAst);
 		assert: (x.value isKindOf: TupleAst);
@@ -193,13 +201,15 @@ category: 'other'
 method: DelimitersTestCase
 testSliceTupleFilled
 
-	| x y |
-	x := self statementsAt: 8.
-	self 
+	| pyString ast x y |
+	pyString := '(10, 11, 12)[1:2:3]'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf: SubscriptAst);
 		assert: (x.ctx isKindOf: LoadAst);
 		assert: (x.value isKindOf: TupleAst);

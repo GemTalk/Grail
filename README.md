@@ -25,14 +25,14 @@ Install the following:
 ## Sample Code
 
 ### Hello World
-Our first task is a "Hello World!" program (`hello.py`). From [Jade](https://github.com/jgfoster/Jade) (or another GemStone/S IDE), log in to GemStone and evalute the following expression:
+Our first task is a "Hello World!" program (`tests/hello.py`). From a command line execute:
 
 ```
-ModuleAst script: '$HOME/code/GemStone/Grail/tests/hello.py'.
+./grail tests/hello.py
 ```
 
 ### Benchmark
-Next is a [Python Benchmark Suite](https://github.com/python/performance) that "is intended to be an authoritative source of benchmarks for all Python implementations." This seems like a good target for our work.
+There is a [Python Benchmark Suite](https://github.com/python/performance) that "is intended to be an authoritative source of benchmarks for all Python implementations." This seems like a good target for our work.
 
 ### Regression Tests
 Python comes with a [regression test package](https://docs.python.org/3/library/test.html) that can be launched with `python3 -m test`. This generates a number of errors and even some crashes on macOS, so before trying to get it to run we would need to understand more about what it does and how it is expected to work.
@@ -73,4 +73,4 @@ When we reach an import statement then the process starts over!
 
 ### Automated Tests
 
-Eventually we will rely on the Python test suite, but for now have started with a number of SUnit tests.
+Eventually we will rely on the Python test suite, but for now we have started with a number of SUnit tests.

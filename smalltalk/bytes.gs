@@ -36,15 +36,18 @@ category: 'Python'
 classmethod: bytes
 __new__: pythonObject
 
-" 
+"
 	pythonBytes can be:
 		literal - byte string
 		int - fill a bytearray of length pythonBytes with 0
 		iterable - fill bytearray with an iterable of integers
-	
+
 "
 	(pythonObject isKindOf: int) ifTrue: [
-		^self basicNew ___value: (self ___containerClass new fillFrom: 1 resizeTo: pythonObject ___value with: 0) immediateInvariant
+		| newArray |
+		newArray := self ___containerClass new: pythonObject ___value.
+		newArray fillFrom: 1 to: pythonObject ___value with: 0.
+		^self basicNew ___value: newArray immediateInvariant
 	].
 	" TODO should throw error if iterable contains non-int value "
 	((pythonObject isKindOf: range) | (pythonObject isKindOf: list) | (pythonObject isKindOf: set) | (pythonObject isKindOf: tuple)) ifTrue: [
@@ -740,7 +743,7 @@ method: bytes
 swapcase
 	| answer |
 
-	answer := (String withAll: (self ___container collect: [:x | Character codePoint: x])).
+	answer := String withAll: (self ___container collect: [:x | Character codePoint: x]).
 	1 to: answer size do: [:i |
 		(answer at: i) isUppercase ifTrue: [answer at: i put: (answer at: i)asLowercase
 		] ifFalse: [(answer at: i) isLowercase ifTrue: [answer at: i put: (answer at: i) asUppercase]

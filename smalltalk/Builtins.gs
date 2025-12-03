@@ -33,10 +33,92 @@ abs
 		yourself.
 	function block: [:currentScope |
 		| value |
-		value := (currentScope at: #number).
+		value := currentScope at: #number.
 		[value  __abs__] on: MessageNotUnderstood do: [TypeError signal].
 	].
 	Builtins singleton at: #abs put: function.
+%
+category: 'other'
+method: builtins
+all
+	"On startup this creates a builtin all function to check if all elements are truthy"
+
+	| function |
+	function := FunctionDef new
+		params: { #iterable };
+		yourself.
+	function block: [:currentScope |
+		| iterable result |
+		iterable := currentScope at: #iterable.
+		result := true.
+		[
+			iterable ___container do: [:each |
+				[(each __bool__) ___value ifFalse: [result := false]]
+					on: MessageNotUnderstood
+					do: [
+						[(each __len__) ___value == 0 ifTrue: [result := false]]
+							on: MessageNotUnderstood
+							do: [].
+					].
+			].
+		] on: MessageNotUnderstood do: [
+			TypeError signal: 'TypeError: ''', iterable class asString, ''' object is not iterable'.
+		].
+		bool ___value: result.
+	].
+	Builtins singleton at: #all put: function.
+%
+category: 'other'
+method: builtins
+any
+	"On startup this creates a builtin any function to check if any element is truthy"
+
+	| function |
+	function := FunctionDef new
+		params: { #iterable };
+		yourself.
+	function block: [:currentScope |
+		| iterable result |
+		iterable := currentScope at: #iterable.
+		result := false.
+		[
+			iterable ___container do: [:each |
+				[(each __bool__) ___value ifTrue: [result := true]]
+					on: MessageNotUnderstood
+					do: [
+						[(each __len__) ___value ~= 0 ifTrue: [result := true]]
+							on: MessageNotUnderstood
+							do: [result := true].
+					].
+			].
+		] on: MessageNotUnderstood do: [
+			TypeError signal: 'TypeError: ''', iterable class asString, ''' object is not iterable'.
+		].
+		bool ___value: result.
+	].
+	Builtins singleton at: #any put: function.
+%
+category: 'other'
+method: builtins
+bin
+	"On startup this creates a builtin bin function to convert an integer to a binary string"
+
+	| function |
+	function := FunctionDef new
+		params: { #number };
+		yourself.
+	function block: [:currentScope |
+		| number value |
+		number := currentScope at: #number.
+		number class == int ifFalse: [
+			TypeError signal: 'TypeError: ''', number class asString, ''' object cannot be interpreted as an integer'.
+		].
+		value := number ___value.
+		value < 0
+			ifTrue: [str ___value: '-0b', (value negated printStringRadix: 2)]
+			ifFalse: [str ___value: '0b', (value printStringRadix: 2)].
+	].
+	Builtins singleton at: #bin put: function.
 %
 category: 'other'
 method: builtins
@@ -57,6 +139,22 @@ bool
 			].
 	].
 	Builtins singleton at: #bool put: function.
+%
+category: 'other'
+method: builtins
+callable
+	"On startup this creates a builtin callable function to check if an object is callable"
+
+	| function |
+	function := FunctionDef new
+		params: { #object };
+		yourself.
+	function block: [:currentScope |
+		| obj |
+		obj := currentScope at: #object.
+		bool ___value: (obj class == FunctionDef or: [obj class includesBehavior: builtin_function_or_method]).
+	].
+	Builtins singleton at: #callable put: function.
 %
 category: 'other'
 method: builtins
@@ -116,6 +214,71 @@ dict
 		return.
 	].
 	Builtins singleton at: #dict put: function.
+%
+category: 'other'
+method: builtins
+dir
+	"On startup this creates a builtin dir function to list attributes of an object"
+
+	| function |
+	function := FunctionDef new
+		params: { #object };
+		defaults: { nil };
+		yourself.
+	function block: [:currentScope |
+		| obj result |
+		obj := currentScope at: #object.
+		result := list ___value: {}.
+		obj == nil
+			ifTrue: [
+				currentScope dict keysDo: [:key | result append: (str ___value: key asString)].
+			]
+			ifFalse: [
+				obj class allInstVarNames do: [:name | result append: (str ___value: name asString)].
+				obj class selectors do: [:sel | result append: (str ___value: sel asString)].
+			].
+		result.
+	].
+	Builtins singleton at: #dir put: function.
+%
+category: 'other'
+method: builtins
+divmod
+	"On startup this creates a builtin divmod function to return quotient and remainder"
+
+	| function |
+	function := FunctionDef new
+		params: { #a. #b };
+		yourself.
+	function block: [:currentScope |
+		| a b quotient remainder |
+		a := currentScope at: #a.
+		b := currentScope at: #b.
+		quotient := a __floordiv__: b.
+		remainder := a __mod__: b.
+		tuple ___value: { quotient. remainder }.
+	].
+	Builtins singleton at: #divmod put: function.
+%
+category: 'other'
+method: builtins
+exit
+	"On startup this creates a builtin exit function to exit the REPL (alias for quit)"
+
+	| function |
+	function := FunctionDef new
+		params: { #code };
+		defaults: { int ___value: 0 };
+		yourself.
+	function block: [:currentScope |
+		| code status |
+		code := currentScope at: #code.
+		status := code class == int
+			ifTrue: [code ___value]
+			ifFalse: [0].
+		ExitClientError signal: 'exit() called' status: status.
+	].
+	Builtins singleton at: #exit put: function.
 %
 category: 'other'
 method: builtins
@@ -196,32 +359,70 @@ globals
 %
 category: 'other'
 method: builtins
+hex
+	"On startup this creates a builtin hex function to convert an integer to a hexadecimal string"
+
+	| function |
+	function := FunctionDef new
+		params: { #number };
+		yourself.
+	function block: [:currentScope |
+		| number value |
+		number := currentScope at: #number.
+		number class == int ifFalse: [
+			TypeError signal: 'TypeError: ''', number class asString, ''' object cannot be interpreted as an integer'.
+		].
+		value := number ___value.
+		value < 0
+			ifTrue: [str ___value: '-0x', (value negated printStringRadix: 16) asLowercase]
+			ifFalse: [str ___value: '0x', (value printStringRadix: 16) asLowercase].
+	].
+	Builtins singleton at: #hex put: function.
+%
+category: 'other'
+method: builtins
 initialize
 	self
 		__import__;
 		abs;
+		all;
+		any;
+		bin;
 		bool;
+		callable;
 		chr;
 		complex;
 		dict;
+		dir;
+		divmod;
+		exit;
 		float;
 		frozenset;
 		globals;
+		hex;
 		input;
 		int;
+		isinstance;
+		issubclass;
 		len;
 		list;
 		locals;
+		max;
+		min;
+		oct;
 		open;
 		ord;
 		pow;
 		print;
+		quit;
 		range;
 		repr;
 		round;
 		set;
+		sorted;
 		str;
 		sum;
+		tuple;
 		type;
 		yourself.
 %
@@ -327,6 +528,40 @@ int
 %
 category: 'other'
 method: builtins
+isinstance
+	"On startup this creates a builtin isinstance function to check if an object is an instance of a class"
+
+	| function |
+	function := FunctionDef new
+		params: { #object. #classinfo };
+		yourself.
+	function block: [:currentScope |
+		| obj classinfo |
+		obj := currentScope at: #object.
+		classinfo := currentScope at: #classinfo.
+		bool ___value: (obj class == classinfo or: [obj class includesBehavior: classinfo]).
+	].
+	Builtins singleton at: #isinstance put: function.
+%
+category: 'other'
+method: builtins
+issubclass
+	"On startup this creates a builtin issubclass function to check if a class is a subclass of another"
+
+	| function |
+	function := FunctionDef new
+		params: { #class. #classinfo };
+		yourself.
+	function block: [:currentScope |
+		| cls classinfo |
+		cls := currentScope at: #class.
+		classinfo := currentScope at: #classinfo.
+		bool ___value: (cls == classinfo or: [cls includesBehavior: classinfo]).
+	].
+	Builtins singleton at: #issubclass put: function.
+%
+category: 'other'
+method: builtins
 len
 	"On startup this creates a builtin len function to return the length of anything that has a __len method"
 
@@ -394,6 +629,132 @@ locals
 		dict ___value: currentScope parent dict.
 	].
 	Builtins singleton at: #locals put: function.
+%
+category: 'other'
+method: builtins
+max
+	"On startup this creates a builtin max function to find the maximum value"
+
+	| function |
+	function := FunctionDef new
+		vararg: #vararg;
+		kwonlyargs: { #key. #default };
+		kw_defaults: { nil. nil };
+		yourself.
+	function block: [:currentScope |
+		| args maxVal keyFunc hasDefault defaultVal result |
+		args := (currentScope at: #vararg) ___value.
+		keyFunc := currentScope at: #key.
+		defaultVal := currentScope at: #default.
+		hasDefault := defaultVal ~~ nil.
+
+		args size == 0 ifTrue: [
+			ValueError signal: 'ValueError: max expected at least 1 argument, got 0'.
+		].
+
+		args size == 1 ifTrue: [
+			args := (args at: 1) ___container.
+			args size == 0 ifTrue: [
+				hasDefault
+					ifTrue: [result := defaultVal]
+					ifFalse: [ValueError signal: 'ValueError: max() arg is an empty sequence'].
+			].
+		].
+
+		result ifNil: [
+			maxVal := args at: 1.
+			args do: [:each |
+				| compareVal maxCompareVal |
+				keyFunc == nil
+					ifTrue: [
+						compareVal := each.
+						maxCompareVal := maxVal.
+					]
+					ifFalse: [
+						compareVal := keyFunc ___call: { each } keywords: Dictionary new scope: currentScope.
+						maxCompareVal := keyFunc ___call: { maxVal } keywords: Dictionary new scope: currentScope.
+					].
+				((compareVal __gt__: maxCompareVal) ___value) ifTrue: [maxVal := each].
+			].
+			result := maxVal.
+		].
+		result.
+	].
+	Builtins singleton at: #max put: function.
+%
+category: 'other'
+method: builtins
+min
+	"On startup this creates a builtin min function to find the minimum value"
+
+	| function |
+	function := FunctionDef new
+		vararg: #vararg;
+		kwonlyargs: { #key. #default };
+		kw_defaults: { nil. nil };
+		yourself.
+	function block: [:currentScope |
+		| args minVal keyFunc hasDefault defaultVal result |
+		args := (currentScope at: #vararg) ___value.
+		keyFunc := currentScope at: #key.
+		defaultVal := currentScope at: #default.
+		hasDefault := defaultVal ~~ nil.
+
+		args size == 0 ifTrue: [
+			ValueError signal: 'ValueError: min expected at least 1 argument, got 0'.
+		].
+
+		args size == 1 ifTrue: [
+			args := (args at: 1) ___container.
+			args size == 0 ifTrue: [
+				hasDefault
+					ifTrue: [result := defaultVal]
+					ifFalse: [ValueError signal: 'ValueError: min() arg is an empty sequence'].
+			].
+		].
+
+		result ifNil: [
+			minVal := args at: 1.
+			args do: [:each |
+				| compareVal minCompareVal |
+				keyFunc == nil
+					ifTrue: [
+						compareVal := each.
+						minCompareVal := minVal.
+					]
+					ifFalse: [
+						compareVal := keyFunc ___call: { each } keywords: Dictionary new scope: currentScope.
+						minCompareVal := keyFunc ___call: { minVal } keywords: Dictionary new scope: currentScope.
+					].
+				((compareVal __lt__: minCompareVal) ___value) ifTrue: [minVal := each].
+			].
+			result := minVal.
+		].
+		result.
+	].
+	Builtins singleton at: #min put: function.
+%
+category: 'other'
+method: builtins
+oct
+	"On startup this creates a builtin oct function to convert an integer to an octal string"
+
+	| function |
+	function := FunctionDef new
+		params: { #number };
+		yourself.
+	function block: [:currentScope |
+		| number value |
+		number := currentScope at: #number.
+		number class == int ifFalse: [
+			TypeError signal: 'TypeError: ''', number class asString, ''' object cannot be interpreted as an integer'.
+		].
+		value := number ___value.
+		value < 0
+			ifTrue: [str ___value: '-0o', (value negated printStringRadix: 8)]
+			ifFalse: [str ___value: '0o', (value printStringRadix: 8)].
+	].
+	Builtins singleton at: #oct put: function.
 %
 category: 'other'
 method: builtins
@@ -496,7 +857,12 @@ print
 		yourself.
 	function block: [:currentScope |
 		| objects sep end file flush |
-		(currentScope at: #file) == nil ifTrue: [currentScope at: #file put: GsFile stdoutServer].
+		(currentScope at: #file) == nil ifTrue: [
+			| defaultFile |
+			defaultFile := Builtins printFile.
+			defaultFile ifNil: [defaultFile := GsFile stdout].
+			currentScope at: #file put: defaultFile
+		].
 		objects := (currentScope at: #vararg) ___value.
 		sep := currentScope at: #sep.
 		end := currentScope at: #end.
@@ -521,6 +887,26 @@ print
 		file close.
 	].
 	Builtins singleton at: #print put: function.
+%
+category: 'other'
+method: builtins
+quit
+	"On startup this creates a builtin quit function to exit the REPL"
+
+	| function |
+	function := FunctionDef new
+		params: { #code };
+		defaults: { int ___value: 0 };
+		yourself.
+	function block: [:currentScope |
+		| code status |
+		code := currentScope at: #code.
+		status := code class == int
+			ifTrue: [code ___value]
+			ifFalse: [0].
+		ExitClientError signal: 'quit() called' status: status.
+	].
+	Builtins singleton at: #quit put: function.
 %
 category: 'other'
 method: builtins
@@ -624,6 +1010,45 @@ set
 %
 category: 'other'
 method: builtins
+sorted
+	"On startup this creates a builtin sorted function to return a sorted list"
+
+	| function |
+	function := FunctionDef new
+		params: { #iterable };
+		kwonlyargs: { #key. #reverse };
+		kw_defaults: { nil. bool ___value: false };
+		yourself.
+	function block: [:currentScope |
+		| iterable keyFunc reverse result sortedArray |
+		iterable := currentScope at: #iterable.
+		keyFunc := currentScope at: #key.
+		reverse := (currentScope at: #reverse) ___value.
+
+		result := list ___value: {}.
+		iterable ___container do: [:each | result append: each].
+
+		sortedArray := keyFunc == nil
+			ifTrue: [
+				result ___container asSortedCollection: [:a :b | (a __lt__: b) ___value].
+			]
+			ifFalse: [
+				result ___container asSortedCollection: [:a :b |
+					| keyA keyB |
+					keyA := keyFunc ___call: { a } keywords: Dictionary new scope: currentScope.
+					keyB := keyFunc ___call: { b } keywords: Dictionary new scope: currentScope.
+					(keyA __lt__: keyB) ___value.
+				].
+			].
+
+		result := list ___value: sortedArray asArray.
+		reverse ifTrue: [result reverse].
+		result.
+	].
+	Builtins singleton at: #sorted put: function.
+%
+category: 'other'
+method: builtins
 str
 	"On startup this creates a builtin str function to return anything with a __str__ method"
 
@@ -675,6 +1100,42 @@ sum
 		sum.
 	].
 	Builtins singleton at: #sum put: function.
+%
+category: 'other'
+method: builtins
+tuple
+	"On startup this creates a builtin tuple function to convert an iterable to a tuple"
+
+	| function |
+	function := FunctionDef new
+		params: { #iterable };
+		defaults: { nil };
+		yourself.
+	function block: [:currentScope |
+		| iterable result finalResult |
+		iterable := currentScope at: #iterable.
+		iterable == nil
+			ifTrue: [
+				finalResult := tuple ___value: #().
+			]
+			ifFalse: [
+				result := {}.
+				[
+					iterable class == str
+						ifTrue: [
+							iterable ___value do: [:each | result add: (str ___value: each asString)].
+						]
+						ifFalse: [
+							iterable ___container do: [:each | result add: each].
+						].
+				] on: MessageNotUnderstood do: [
+					TypeError signal: 'TypeError: ''', iterable class asString, ''' object is not iterable'.
+				].
+				finalResult := tuple ___value: result.
+			].
+		finalResult.
+	].
+	Builtins singleton at: #tuple put: function.
 %
 category: 'other'
 method: builtins

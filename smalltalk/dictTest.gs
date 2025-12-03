@@ -356,7 +356,7 @@ testUpdate
 		yourself.
 
 	dict1 := (dict ___value: { (str ___value: 'a') -> (int ___value: 1).  (str ___value: 'b') -> (int ___value: 2) } asDictionary).
-	dict2 := (dict ___value: {} asDictionary).
+	dict2 := dict ___value: {} asDictionary.
 	dict3 := dict1 update: dict2.
 	self
 		assert: dict1 __len__ equals: (self int: 2);

@@ -5,7 +5,7 @@ removeallclassmethods builtin_function_or_methodTest
 ! ------------------- Instance methods for builtin_function_or_methodTest
 category: 'other'
 method: builtin_function_or_methodTest
-testAbs
+test_abs
 
 	| absHolder variables |
 	variables := Variables new.
@@ -39,7 +39,76 @@ testAbs
 %
 category: 'other'
 method: builtin_function_or_methodTest
-testBool
+test_all
+
+	| result variables |
+	variables := Variables new.
+
+	result := (variables at: #all)
+		scope: variables
+		positional: { list ___value: { bool ___value: true. bool ___value: true } }
+		named: {}.
+	self assert: result ___value.
+
+	result := (variables at: #all)
+		scope: variables
+		positional: { list ___value: { bool ___value: true. bool ___value: false } }
+		named: {}.
+	self deny: result ___value.
+
+	result := (variables at: #all)
+		scope: variables
+		positional: { list ___value: {} }
+		named: {}.
+	self assert: result ___value.
+%
+category: 'other'
+method: builtin_function_or_methodTest
+test_any
+
+	| result variables |
+	variables := Variables new.
+
+	result := (variables at: #any)
+		scope: variables
+		positional: { list ___value: { bool ___value: false. bool ___value: true } }
+		named: {}.
+	self assert: result ___value.
+
+	result := (variables at: #any)
+		scope: variables
+		positional: { list ___value: { bool ___value: false. bool ___value: false } }
+		named: {}.
+	self deny: result ___value.
+
+	result := (variables at: #any)
+		scope: variables
+		positional: { list ___value: {} }
+		named: {}.
+	self deny: result ___value.
+%
+category: 'other'
+method: builtin_function_or_methodTest
+test_bin
+
+	| result variables |
+	variables := Variables new.
+
+	result := (variables at: #bin)
+		scope: variables
+		positional: { int ___value: 10 }
+		named: {}.
+	self assert: result ___value equals: '0b1010'.
+
+	result := (variables at: #bin)
+		scope: variables
+		positional: { int ___value: -10 }
+		named: {}.
+	self assert: result ___value equals: '-0b1010'.
+%
+category: 'other'
+method: builtin_function_or_methodTest
+test_bool
 
 	| boolHolder variables |
 	variables := Variables new.
@@ -120,7 +189,27 @@ testBool
 %
 category: 'other'
 method: builtin_function_or_methodTest
-testChr
+test_callable
+
+	| result variables func |
+	variables := Variables new.
+	func := FunctionDef new.
+
+	result := (variables at: #callable)
+		scope: variables
+		positional: { func }
+		named: {}.
+	self assert: result ___value.
+
+	result := (variables at: #callable)
+		scope: variables
+		positional: { int ___value: 5 }
+		named: {}.
+	self deny: result ___value.
+%
+category: 'other'
+method: builtin_function_or_methodTest
+test_chr
 
 	| chrHolder variables |
 	variables := Variables new.
@@ -140,7 +229,7 @@ testChr
 %
 category: 'other'
 method: builtin_function_or_methodTest
-testDict
+test_dict
    | containerHolder variables |
 	variables := Variables new.
 	
@@ -181,7 +270,35 @@ testDict
 %
 category: 'other'
 method: builtin_function_or_methodTest
-testFloat
+test_dir
+
+	| result variables |
+	variables := Variables new.
+
+	result := (variables at: #dir)
+		scope: variables
+		positional: {}
+		named: {}.
+	self assert: result class equals: list.
+%
+category: 'other'
+method: builtin_function_or_methodTest
+test_divmod
+
+	| result variables |
+	variables := Variables new.
+
+	result := (variables at: #divmod)
+		scope: variables
+		positional: { int ___value: 10. int ___value: 3 }
+		named: {}.
+	self assert: result class equals: tuple.
+	self assert: (result __getitem__: (int ___value: 0)) ___value equals: 3.
+	self assert: (result __getitem__: (int ___value: 1)) ___value equals: 1.
+%
+category: 'other'
+method: builtin_function_or_methodTest
+test_float
 
 	| floatHolder variables |
 	variables := Variables new.
@@ -230,7 +347,7 @@ testFloat
 %
 category: 'other'
 method: builtin_function_or_methodTest
-testFrozenset
+test_frozenset
 
 	| frozensetHolder variables afrozenset |
 	variables := Variables new.
@@ -257,7 +374,7 @@ testFrozenset
 %
 category: 'other'
 method: builtin_function_or_methodTest
-testGlobals
+test_globals
 
 	| globalsHolder variables |
 	variables := PyGlobals new.
@@ -276,7 +393,26 @@ testGlobals
 %
 category: 'other'
 method: builtin_function_or_methodTest
-testInput
+test_hex
+
+	| result variables |
+	variables := Variables new.
+
+	result := (variables at: #hex)
+		scope: variables
+		positional: { int ___value: 255 }
+		named: {}.
+	self assert: result ___value equals: '0xff'.
+
+	result := (variables at: #hex)
+		scope: variables
+		positional: { int ___value: -255 }
+		named: {}.
+	self assert: result ___value equals: '-0xff'.
+%
+category: 'other'
+method: builtin_function_or_methodTest
+test_input
 
 	"This is a test designed to make the input test work. It should not be run with all the other tests
 	because it is not automatice. If you would like to run this test please uncomment the code below."
@@ -303,7 +439,7 @@ testInput
 %
 category: 'other'
 method: builtin_function_or_methodTest
-testInt
+test_int
 
 	| intHolder variables |
 	variables := Variables new.
@@ -338,7 +474,45 @@ testInt
 %
 category: 'other'
 method: builtin_function_or_methodTest
-testLen
+test_isinstance
+
+	| result variables |
+	variables := Variables new.
+
+	result := (variables at: #isinstance)
+		scope: variables
+		positional: { int ___value: 5. int }
+		named: {}.
+	self assert: result ___value.
+
+	result := (variables at: #isinstance)
+		scope: variables
+		positional: { int ___value: 5. str }
+		named: {}.
+	self deny: result ___value.
+%
+category: 'other'
+method: builtin_function_or_methodTest
+test_issubclass
+
+	| result variables |
+	variables := Variables new.
+
+	result := (variables at: #issubclass)
+		scope: variables
+		positional: { int. int }
+		named: {}.
+	self assert: result ___value.
+
+	result := (variables at: #issubclass)
+		scope: variables
+		positional: { int. str }
+		named: {}.
+	self deny: result ___value.
+%
+category: 'other'
+method: builtin_function_or_methodTest
+test_len
 
 	| listHolder variables alist |
 	variables := Variables new.
@@ -356,7 +530,7 @@ testLen
 %
 category: 'other'
 method: builtin_function_or_methodTest
-testList
+test_list
 	| listHolder variables alist |
 	variables := Variables new.
 	alist := list ___value: { 'c'. 'b'. 'a' }.
@@ -382,7 +556,7 @@ testList
 %
 category: 'other'
 method: builtin_function_or_methodTest
-testLocals
+test_locals
 
 	| localsHolder variables |
 	variables := Variables new.
@@ -401,7 +575,64 @@ testLocals
 %
 category: 'other'
 method: builtin_function_or_methodTest
-testOrd
+test_max
+
+	| result variables |
+	variables := Variables new.
+
+	result := (variables at: #max)
+		scope: variables
+		positional: { int ___value: 1. int ___value: 5. int ___value: 3 }
+		named: {}.
+	self assert: result ___value equals: 5.
+
+	result := (variables at: #max)
+		scope: variables
+		positional: { list ___value: { int ___value: 1. int ___value: 5. int ___value: 3 } }
+		named: {}.
+	self assert: result ___value equals: 5.
+%
+category: 'other'
+method: builtin_function_or_methodTest
+test_min
+
+	| result variables |
+	variables := Variables new.
+
+	result := (variables at: #min)
+		scope: variables
+		positional: { int ___value: 1. int ___value: 5. int ___value: 3 }
+		named: {}.
+	self assert: result ___value equals: 1.
+
+	result := (variables at: #min)
+		scope: variables
+		positional: { list ___value: { int ___value: 1. int ___value: 5. int ___value: 3 } }
+		named: {}.
+	self assert: result ___value equals: 1.
+%
+category: 'other'
+method: builtin_function_or_methodTest
+test_oct
+
+	| result variables |
+	variables := Variables new.
+
+	result := (variables at: #oct)
+		scope: variables
+		positional: { int ___value: 8 }
+		named: {}.
+	self assert: result ___value equals: '0o10'.
+
+	result := (variables at: #oct)
+		scope: variables
+		positional: { int ___value: -8 }
+		named: {}.
+	self assert: result ___value equals: '-0o10'.
+%
+category: 'other'
+method: builtin_function_or_methodTest
+test_ord
 
 	| roundHolder variables |
 	variables := Variables new.
@@ -412,7 +643,7 @@ testOrd
 %
 category: 'other'
 method: builtin_function_or_methodTest
-testPow
+test_pow
 
 	| powHolder variables |
 	variables := Variables new.
@@ -514,7 +745,7 @@ testPow
 %
 category: 'other'
 method: builtin_function_or_methodTest
-testPrint
+test_print
 
 	| stream variables transcript |
 	variables := Variables new.
@@ -574,7 +805,7 @@ testPrint
 %
 category: 'other'
 method: builtin_function_or_methodTest
-testRange
+test_range
 
 	| rangeHolder variables |
 	variables := Variables new.
@@ -596,7 +827,7 @@ testRange
 %
 category: 'other'
 method: builtin_function_or_methodTest
-testRepr
+test_repr
 
 	| variables |
 	variables := Variables new.
@@ -615,7 +846,7 @@ testRepr
 %
 category: 'other'
 method: builtin_function_or_methodTest
-testRound
+test_round
 
 	| roundHolder variables |
 	variables := Variables new.
@@ -674,7 +905,7 @@ testRound
 %
 category: 'other'
 method: builtin_function_or_methodTest
-testSet
+test_set
 
 	| setHolder variables aset |
 	variables := Variables new.
@@ -702,7 +933,23 @@ testSet
 %
 category: 'other'
 method: builtin_function_or_methodTest
-testStr
+test_sorted
+
+	| result variables |
+	variables := Variables new.
+
+	result := (variables at: #sorted)
+		scope: variables
+		positional: { list ___value: { int ___value: 3. int ___value: 1. int ___value: 2 } }
+		named: {}.
+	self assert: result class equals: list.
+	self assert: (result __getitem__: (int ___value: 0)) ___value equals: 1.
+	self assert: (result __getitem__: (int ___value: 1)) ___value equals: 2.
+	self assert: (result __getitem__: (int ___value: 2)) ___value equals: 3.
+%
+category: 'other'
+method: builtin_function_or_methodTest
+test_str
 
 	| variables |
 	variables := Variables new.
@@ -721,7 +968,7 @@ testStr
 %
 category: 'other'
 method: builtin_function_or_methodTest
-testSum
+test_sum
 	| listHolder variables alist |
 	variables := Variables new.
 	alist := list ___value: { int ___value: 1. int ___value: 2. int ___value: 3 }.
@@ -756,7 +1003,30 @@ testSum
 %
 category: 'other'
 method: builtin_function_or_methodTest
-testType
+test_tuple
+
+	| result variables |
+	variables := Variables new.
+
+	result := (variables at: #tuple)
+		scope: variables
+		positional: { list ___value: { int ___value: 1. int ___value: 2. int ___value: 3 } }
+		named: {}.
+	self assert: result class equals: tuple.
+	self assert: (result __getitem__: (int ___value: 0)) ___value equals: 1.
+	self assert: (result __getitem__: (int ___value: 1)) ___value equals: 2.
+	self assert: (result __getitem__: (int ___value: 2)) ___value equals: 3.
+
+	result := (variables at: #tuple)
+		scope: variables
+		positional: {}
+		named: {}.
+	self assert: result class equals: tuple.
+	self assert: result __len__ ___value equals: 0.
+%
+category: 'other'
+method: builtin_function_or_methodTest
+test_type
 
 	| typeHolder variables |
 	variables := Variables new.

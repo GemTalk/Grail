@@ -5834,7 +5834,7 @@ TranslateUnaryOperatorsTestCase category: 'Tests'
 expectvalue /Class
 doit
 TranslatorTestCase subclass: 'TranslateVariablesTestCase'
-  instVarNames: #()
+  instVarNames: #( outputStream)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -5910,7 +5910,7 @@ doit
 Variables subclass: 'Builtins'
   instVarNames: #()
   classVars: #()
-  classInstVars: #( singleton)
+  classInstVars: #( singleton printFile)
   poolDictionaries: #()
   inDictionary: Python
   options: #()

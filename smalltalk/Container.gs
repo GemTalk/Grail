@@ -309,7 +309,7 @@ category: 'Smalltalk'
 method: Container
 ___value: aCollection
 
-	container := (self class ___containerClass withAll: aCollection).
+	container := self class ___containerClass withAll: aCollection.
 %
 category: 'Smalltalk'
 method: Container

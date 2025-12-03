@@ -2,20 +2,16 @@
 removeallmethods SimpleStatementsTestCase
 removeallclassmethods SimpleStatementsTestCase
 ! ------------------- Class methods for SimpleStatementsTestCase
-category: 'other'
-classmethod: SimpleStatementsTestCase
-filename
-
-	^'SimpleStatements.py'
-%
 ! ------------------- Instance methods for SimpleStatementsTestCase
 category: 'other'
 method: SimpleStatementsTestCase
 testArrayAssignment
 
-	| x y |
-	x := self statementsAt: 6.
-	self 
+	| pyString ast x y |
+	pyString := 'x = [0, 1]'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf:AssignAst);
 		assert: (x.targets size == 1);
 		assert: ((y := x.targets at: 1) isKindOf: NameAst);
@@ -34,9 +30,11 @@ category: 'other'
 method: SimpleStatementsTestCase
 testAssignMultiple
 
-	| x y |
-	x := self statementsAt: 2.
-	self 
+	| pyString ast x y |
+	pyString := 'var2 = var3 = 2'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: AssignAst);
 		assert: (x.value isKindOf: ConstantAst);
 		assert: (x.value.value = 'int ___value: 2');
@@ -53,9 +51,11 @@ category: 'other'
 method: SimpleStatementsTestCase
 testAssignSingle
 
-	| x y |
-	x := self statementsAt: 1.
-	self 
+	| pyString ast x y |
+	pyString := 'var1 = 1'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: AssignAst);
 		assert: (x.value isKindOf: ConstantAst);
 		assert: (x.value.value = 'int ___value: 1');
@@ -69,9 +69,12 @@ category: 'other'
 method: SimpleStatementsTestCase
 testBreak
 
-	| x |
-	x := self statementsAt: 24.
-	self 
+	| pyString ast x |
+	pyString := 'for _ in x:
+    break'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ForAst);
 		assert: (x.target isKindOf: NameAst);
 		assert: (x.target.id == #'_');
@@ -88,9 +91,14 @@ category: 'other'
 method: SimpleStatementsTestCase
 testClassAttributeAssignment
 
-	| x y |
-	x := self statementsAt: 5.
-	self 
+	| pyString ast x y |
+	pyString := 'class Cls:
+    x = 3
+inst = Cls()
+inst.x = inst.x + 1'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 3.
+	self
 		assert: (x isKindOf: AssignAst);
 		assert: (x.targets size == 1);
 		assert: ((y := x.targets at: 1) isKindOf: AttributeAst);
@@ -112,9 +120,12 @@ category: 'other'
 method: SimpleStatementsTestCase
 testClassDefCls
 
-	| x y z |
-	x := self statementsAt: 3.
-	self 
+	| pyString ast x y z |
+	pyString := 'class Cls:
+    x = 3'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ClassDefAst);
 		assert: (x.name == #'Cls');
 		assert: (x.bases size == 0);
@@ -134,9 +145,13 @@ category: 'other'
 method: SimpleStatementsTestCase
 testClassInstantiation
 
-	| x y |
-	x := self statementsAt: 4.
-	self 
+	| pyString ast x y |
+	pyString := 'class Cls:
+    x = 3
+inst = Cls()'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 2.
+	self
 		assert: (x isKindOf: AssignAst);
 		assert: (x.targets size == 1);
 		assert: ((y := x.targets at: 1) isKindOf: NameAst);
@@ -154,9 +169,12 @@ category: 'other'
 method: SimpleStatementsTestCase
 testContinue
 
-	| x |
-	x := self statementsAt: 25.
-	self 
+	| pyString ast x |
+	pyString := 'for _ in x:
+    continue'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ForAst);
 		assert: (x.target isKindOf: NameAst);
 		assert: (x.target.id == #'_');
@@ -173,9 +191,11 @@ category: 'other'
 method: SimpleStatementsTestCase
 testDelMultiple
 
-	| x y |
-	x := self statementsAt: 15.
-	self 
+	| pyString ast x y |
+	pyString := 'del x, i'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: DeleteAst);
 		assert: (x.targets size == 2);
 		assert: ((y := x.targets at: 1) isKindOf: NameAst);
@@ -190,9 +210,11 @@ category: 'other'
 method: SimpleStatementsTestCase
 testDelSingle
 
-	| x y |
-	x := self statementsAt: 14.
-	self 
+	| pyString ast x y |
+	pyString := 'del x'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: DeleteAst);
 		assert: (x.targets size == 1);
 		assert: ((y := x.targets at: 1) isKindOf: NameAst);
@@ -204,9 +226,11 @@ category: 'other'
 method: SimpleStatementsTestCase
 testGlobal
 
-	| x |
-	x := self statementsAt: 28.
-	self 
+	| pyString ast x |
+	pyString := 'global g'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: GlobalAst);
 		assert: (x.names size == 1);
 		assert: ((x.names at: 1) == #'g');
@@ -216,9 +240,11 @@ category: 'other'
 method: SimpleStatementsTestCase
 testImport
 
-	| x y |
-	x := self statementsAt: 26.
-	self 
+	| pyString ast x y |
+	pyString := 'import foo'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ImportAst);
 		assert: (x.names size == 1);
 		assert: ((y := x.names at: 1) isKindOf: AliasAst);
@@ -230,9 +256,11 @@ category: 'other'
 method: SimpleStatementsTestCase
 testImportFrom
 
-	| x y |
-	x := self statementsAt: 27.
-	self 
+	| pyString ast x y |
+	pyString := 'from foo import attr'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ImportFromAst);
 		assert: (x.module = 'foo');
 		assert: (x.names size == 1);
@@ -246,9 +274,11 @@ category: 'other'
 method: SimpleStatementsTestCase
 testIndexAssignment
 
-	| x y |
-	x := self statementsAt: 7.
-	self 
+	| pyString ast x y |
+	pyString := 'i = 0'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: AssignAst);
 		assert: (x.targets size == 1);
 		assert: ((y := x.targets at: 1) isKindOf: NameAst);
@@ -262,9 +292,11 @@ category: 'other'
 method: SimpleStatementsTestCase
 testNonlocal
 
-	| x |
-	x := self statementsAt: 29.
-	self 
+	| pyString ast x |
+	pyString := 'nonlocal x'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: NonlocalAst);
 		assert: (x.names size == 1);
 		assert: ((x.names at: 1) == #'x');
@@ -274,9 +306,11 @@ category: 'other'
 method: SimpleStatementsTestCase
 testPassClass
 
-	| x |
-	x := self statementsAt: 13.
-	self 
+	| pyString ast x |
+	pyString := 'class C: pass'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ClassDefAst);
 		assert: (x.name == #'C');
 		assert: (x.bases size == 0);
@@ -290,9 +324,11 @@ category: 'other'
 method: SimpleStatementsTestCase
 testPassFunction
 
-	| x y |
-	x := self statementsAt: 12.
-	self 
+	| pyString ast x y |
+	pyString := 'def f(arg): pass'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: FunctionDefAst);
 		assert: (x.name == #'f');
 		assert: (x.args isKindOf: ArgumentsAst);
@@ -314,9 +350,11 @@ category: 'other'
 method: SimpleStatementsTestCase
 testRaise
 
-	| x y |
-	x := self statementsAt: 21.
-	self 
+	| pyString ast x y |
+	pyString := 'raise RuntimeError("Something bad happened")'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: RaiseAst);
 		assert: (x.exc isKindOf: CallAst);
 		assert: (x.exc.function isKindOf: NameAst);
@@ -334,9 +372,11 @@ category: 'other'
 method: SimpleStatementsTestCase
 testRaiseFromNone
 
-	| x y |
-	x := self statementsAt: 22.
-	self 
+	| pyString ast x y |
+	pyString := 'raise RuntimeError("Something bad happened") from None'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: RaiseAst);
 		assert: (x.exc isKindOf: CallAst);
 		assert: (x.exc.function isKindOf: NameAst);
@@ -355,9 +395,12 @@ category: 'other'
 method: SimpleStatementsTestCase
 testReturnNone
 
-	| x y |
-	x := self statementsAt: 16.
-	self 
+	| pyString ast x y |
+	pyString := 'def a():
+    return'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: FunctionDefAst);
 		assert: (x.name == #'a');
 		assert: (x.args isKindOf: ArgumentsAst);
@@ -378,9 +421,11 @@ category: 'other'
 method: SimpleStatementsTestCase
 testSwapAssignment
 
-	| x y |
-	x := self statementsAt: 8.
-	self 
+	| pyString ast x y |
+	pyString := 'i, x[i] = 1, 2'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: AssignAst);
 		assert: (x.targets size == 1);
 		assert: ((y := x.targets at: 1) isKindOf: TupleAst);
@@ -408,9 +453,12 @@ category: 'other'
 method: SimpleStatementsTestCase
 testYield
 
-	| x y |
-	x := self statementsAt: 18.
-	self 
+	| pyString ast x y |
+	pyString := 'def gen():
+    yield 123'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: FunctionDefAst);
 		assert: (x.name == #'gen');
 		assert: (x.args isKindOf: ArgumentsAst);
@@ -433,9 +481,12 @@ category: 'other'
 method: SimpleStatementsTestCase
 testYieldAsync
 
-	| x y |
-	x := self statementsAt: 19.
-	self 
+	| pyString ast x y |
+	pyString := 'async def agen():
+    yield 123'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: AsyncFunctionDefAst);
 		assert: (x.name = 'agen');
 		assert: (x.args isKindOf: ArgumentsAst);

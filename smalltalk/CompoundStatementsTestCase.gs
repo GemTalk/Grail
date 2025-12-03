@@ -2,19 +2,18 @@
 removeallmethods CompoundStatementsTestCase
 removeallclassmethods CompoundStatementsTestCase
 ! ------------------- Class methods for CompoundStatementsTestCase
-category: 'other'
-classmethod: CompoundStatementsTestCase
-filename
-
-	^'CompoundStatements.py'
-%
 ! ------------------- Instance methods for CompoundStatementsTestCase
 category: 'other'
 method: CompoundStatementsTestCase
 testClass
 
-	| x |
-	x := self statementsAt: 17.
+	| pyString ast x |
+	pyString := '# class definitions
+class Foo: # 17
+	pass
+'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	self
 		assert: (x isKindOf: ClassDefAst);
 		assert: (x.name == #'Foo');
@@ -30,8 +29,16 @@ category: 'other'
 method: CompoundStatementsTestCase
 testClassInheritance
 
-	| x name |
-	x := self statementsAt: 18.
+	| pyString ast x name |
+	pyString := '# class definitions
+class Foo:
+	pass
+
+class Bar(Foo): # 18
+	pass
+'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 2.
 	self
 		assert: (x isKindOf: ClassDefAst);
 		assert: (x.name == #'Bar');
@@ -50,7 +57,7 @@ method: CompoundStatementsTestCase
 testCompression
 "
 # cpython/Lib/importlib/_bootstrap.py:321
-if any(arg is not None for arg in []):	# 20
+if any(arg is not None for arg in []):	# 23
 	pass
 
 	If(
@@ -73,15 +80,25 @@ if any(arg is not None for arg in []):	# 20
 		[],
 	lineno=84, col_offset=0)])
 "
-	| x |
-	x := self statementsAt: 23.
+	| pyString ast x |
+	pyString := '# cpython/Lib/importlib/_bootstrap.py:321
+if any(arg is not None for arg in []):	# 23
+	pass
+'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 %
 category: 'other'
 method: CompoundStatementsTestCase
 testCoroutine
 
-	| x arguments arg |
-	x := self statementsAt: 19.
+	| pyString ast x arguments arg |
+	pyString := '# coroutines
+async def asyncFunc(arg):		# 19
+	pass
+'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	self
 		assert: (x isKindOf: AsyncFunctionDefAst);
 		assert: (x.name = 'asyncFunc');
@@ -105,8 +122,13 @@ category: 'other'
 method: CompoundStatementsTestCase
 testCoroutineFor
 
-	| x arguments arg asyncFor call num |
-	x := self statementsAt: 20.
+	| pyString ast x arguments arg asyncFor call num |
+	pyString := 'async def asyncForFunc(arg):	# 20
+	async for _ in range(10):
+		pass
+'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	self
 		assert: (x isKindOf: AsyncFunctionDefAst);
 		assert: (x.name = 'asyncForFunc');
@@ -144,8 +166,13 @@ category: 'other'
 method: CompoundStatementsTestCase
 testCoroutineWith
 
-	| x arguments arg with withItem name call str1 str2 |
-	x := self statementsAt: 21.
+	| pyString ast x arguments arg with withItem name call str1 str2 |
+	pyString := 'async def asyncWithFunc(arg):	# 21
+	async with open(''/etc/passwd'', ''r'') as f:
+		pass
+'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	self
 		assert: (x isKindOf: AsyncFunctionDefAst);
 		assert: (x.name = 'asyncWithFunc');
@@ -190,8 +217,13 @@ testFor
 		Call(Name('range', Load(), lineno=23, col_offset=9), [Num(10, lineno=23, col_offset=15)], [], lineno=23, col_offset=9),
 		[Pass(lineno=24, col_offset=1)], [], lineno=23, col_offset=0)"
 
-	| x name call num |
-	x := self statementsAt: 5.
+	| pyString ast x name call num |
+	pyString := '# for
+for _ in range(10): # 5
+	pass
+'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	self
 		assert: (x isKindOf: ForAst);
 		assert: ((name := x.target) isKindOf: NameAst);
@@ -219,8 +251,14 @@ testForElse
 		[Pass(lineno=27, col_offset=1)],
 		[Pass(lineno=29, col_offset=1)], lineno=26, col_offset=0)"
 
-	| x name call num |
-	x := self statementsAt: 6.
+	| pyString ast x name call num |
+	pyString := 'for _ in range(10): # 6
+	pass
+else:
+	pass
+'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	self
 		assert: (x isKindOf: ForAst);
 		assert: ((name := x.target) isKindOf: NameAst);
@@ -244,8 +282,13 @@ category: 'other'
 method: CompoundStatementsTestCase
 testFunctionWithOneArgument
 
-	| x arguments arg |
-	x := self statementsAt: 13.
+	| pyString ast x arguments arg |
+	pyString := '# function definitions
+def func(arg): # 13
+	pass
+'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	self
 		assert: (x isKindOf: FunctionDefAst);
 		assert: (x.name == #'func');
@@ -269,8 +312,16 @@ category: 'other'
 method: CompoundStatementsTestCase
 testFunctionWithOneDecorator
 
-	| x arguments arg name |
-	x := self statementsAt: 14.
+	| pyString ast x arguments arg name |
+	pyString := 'def func(arg):
+	pass
+
+@func
+def decoratedFunc(arg): # 14
+	pass
+'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 2.
 	self
 		assert: (x isKindOf: FunctionDefAst);
 		assert: (x.name == #'decoratedFunc');
@@ -295,8 +346,12 @@ category: 'other'
 method: CompoundStatementsTestCase
 testFunctionWithOneDefaultValueParameter
 
-	| x arguments arg nameConstant |
-	x := self statementsAt: 15.
+	| pyString ast x arguments arg nameConstant |
+	pyString := 'def defaultParameterValueFunc(arg=None): # 15
+	pass
+'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	self
 		assert: (x isKindOf: FunctionDefAst);
 		assert: (x.name == #'defaultParameterValueFunc');
@@ -322,8 +377,14 @@ category: 'other'
 method: CompoundStatementsTestCase
 testNestedFunction
 
-	| x arguments arg functionDef insideArguments insideArg return |
-	x := self statementsAt: 16.
+	| pyString ast x arguments arg functionDef insideArguments insideArg return |
+	pyString := 'def nestedFunc(arg): # 16
+	def insideFunc(insideArg):
+		pass
+	return insideFunc
+'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	self
 		assert: (x isKindOf: FunctionDefAst);
 		assert: (x.name == #'nestedFunc');
@@ -376,8 +437,15 @@ testTry
 					Name('RuntimeError', Load(), lineno=35, col_offset=10),
 					[Str('Something bad happened', lineno=35, col_offset=23)], [], lineno=35, col_offset=10), None, lineno=35, col_offset=4)], lineno=34, col_offset=0)], [], [], lineno=32, col_offset=0)"
 
-	| x expr call binOp exceptHandler raise insideCall string |
-	x :=self statementsAt: 7.
+	| pyString ast x expr call binOp exceptHandler raise insideCall string |
+	pyString := '# try
+try: # 7
+    print(1 / 0)
+except:
+    raise RuntimeError("Something bad happened")
+'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	self
 		assert: (x isKindOf:TryAst);
 		assert: (x.body.body size == 1);
@@ -421,8 +489,13 @@ testWith
 				Str('r', lineno=41, col_offset=25)], [], lineno=41, col_offset=5), None)],
 		[Pass(lineno=42, col_offset=4)], lineno=41, col_offset=0)"
 
-	| x withItem call str1 str2 |
-	x := self statementsAt: 12.
+	| pyString ast x withItem call str1 str2 |
+	pyString := '# with
+with open(''/etc/passwd'', ''r''): # 12
+    pass
+'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	self
 		assert: (x isKindOf: WithAst);
 		assert: (x.items size == 1);
@@ -468,8 +541,12 @@ testWithOptionalVars
 			Name('f', Store(), lineno=38, col_offset=33))],
 		[Pass(lineno=39, col_offset=4)], lineno=38, col_offset=0)"
 
-	| x withItem call str1 str2 name |
-	x := self statementsAt: 11.
+	| pyString ast x withItem call str1 str2 name |
+	pyString := 'with open(''/etc/passwd'', ''r'') as f: # 11
+    pass
+'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	self
 		assert: (x isKindOf: WithAst);
 		assert: (x.items size == 1);

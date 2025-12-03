@@ -2,29 +2,21 @@
 removeallmethods StringLiteralsTestCase
 removeallclassmethods StringLiteralsTestCase
 ! ------------------- Class methods for StringLiteralsTestCase
-category: 'other'
-classmethod: StringLiteralsTestCase
-filename
-
-	^'StringLiterals.py'
-%
 ! ------------------- Instance methods for StringLiteralsTestCase
 category: 'other'
 method: StringLiteralsTestCase
 testEmbeddedStringDoubleQuotes
 
-	| x |
-	x := self statementsAt: 6.
-	self 
+	| x pyString ast |
+	pyString := '"a''bc"'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
-		assert: x line == 16;
-		assert: x column == 0;
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf: ConstantAst);
-		assert: x line == 16;
-		assert: x column == 0;
 		yourself.
 	x := x.value.
 	self assert: x = 'str ___value: ''a''''bc'''.
@@ -33,18 +25,16 @@ category: 'other'
 method: StringLiteralsTestCase
 testEmbeddedStringSingleQuotes
 
-	| x |
-	x := self statementsAt: 5.
-	self 
+	| x pyString ast |
+	pyString := '''x"yz'''.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
-		assert: x line == 15;
-		assert: x column == 0;
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf: ConstantAst);
-		assert: x line == 15;
-		assert: x column == 0;
 		yourself.
 	x := x.value.
 	self assert: x = 'str ___value: ''x"yz'''.
@@ -53,18 +43,16 @@ category: 'other'
 method: StringLiteralsTestCase
 testEscapeCharacterStringNewline
 
-	| x |
-	x := self statementsAt: 8.
-	self 
+	| x pyString ast |
+	pyString := 'r"newline\n"'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
-		assert: x line == 20;
-		assert: x column == 0;
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf: ConstantAst);
-		assert: x line == 20;
-		assert: x column == 0;
 		yourself.
 	x := x.value.
 	self assert: x = 'str ___value: ''newline\n'''.
@@ -73,18 +61,16 @@ category: 'other'
 method: StringLiteralsTestCase
 testEscapeCharacterStringSlash
 
-	| x |
-	x := self statementsAt: 7.
-	self 
+	| x pyString ast |
+	pyString := 'r''slash\\'''.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
-		assert: x line == 19;
-		assert: x column == 0;
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf: ConstantAst);
-		assert: x line == 19;
-		assert: x column == 0;
 		yourself.
 	x := x.value.
 	self assert: x = 'str ___value: ''slash\\'''.
@@ -93,18 +79,16 @@ category: 'other'
 method: StringLiteralsTestCase
 testJoinedStrWithFormattedValueNum
 
-	| x child |
-	x := self statementsAt: 12.
-	self 
+	| x child pyString ast |
+	pyString := 'f"123{456}789"'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
-		assert: x line == 28;
-		assert: x column == 0;
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf:JoinedStrAst);
-		assert: x line == 28;
-		assert: x column == 0;
 		yourself.
 	child := x.values at: 1.
 	self
@@ -127,18 +111,16 @@ category: 'other'
 method: StringLiteralsTestCase
 testJoinedStrWithFormattedValueStr
 
-	| x child |
-	x := self statementsAt: 11.
-	self 
+	| x child pyString ast |
+	pyString := 'f"abc{''def''}ghi"'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
-		assert: x line == 27;
-		assert: x column == 0;
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf: JoinedStrAst);
-		assert: x line == 27;
-		assert: x column == 0;
 		yourself.
 	child := x.values at: 1.
 	self
@@ -163,18 +145,17 @@ category: 'other'
 method: StringLiteralsTestCase
 testLongStringDoubleQuotes
 
-	| x |
-	x := self statementsAt: 4.
-	self 
+	| x pyString ast |
+	pyString := '"""poiu
+;lkj"""'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
-		assert: x line == 11;
-		assert: x column == 0;
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf: ConstantAst);
-		assert: x line == 11;
-		assert: x column == 0;
 		yourself.
 	x := x.value.
 	self assert: x = 'str ___value: ''poiu
@@ -184,18 +165,17 @@ category: 'other'
 method: StringLiteralsTestCase
 testLongStringSingleQuotes
 
-	| x |
-	x := self statementsAt: 3.
-	self 
+	| x pyString ast |
+	pyString := '''''''qwer
+asdf'''''''.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
-		assert: x line == 9;
-		assert: x column ==0;
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf: ConstantAst);
-		assert: x line == 9;
-		assert: x column == 0;
 		yourself.
 	x := x.value.
 	self assert: x = 'str ___value: ''qwer
@@ -205,18 +185,16 @@ category: 'other'
 method: StringLiteralsTestCase
 testNonEscapeCharacterStringNewline
 
-	| x |
-	x := self statementsAt: 10.
-	self 
+	| x pyString ast |
+	pyString := '"newline\n"'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
-		assert: x line == 24;
-		assert: x column == 0;
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf: ConstantAst);
-		assert: x line == 24;
-		assert: x column == 0;
 		yourself.
 	x := x.value.
 	self assert: x = 'str ___value: ''newline
@@ -226,18 +204,16 @@ category: 'other'
 method: StringLiteralsTestCase
 testNonEscapeCharacterStringSlash
 
-	| x |
-	x := self statementsAt: 9.
-	self 
+	| x pyString ast |
+	pyString := '''slash\\'''.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
-		assert: x line == 23;
-		assert: x column == 0;
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf: ConstantAst);
-		assert: x line == 23;
-		assert: x column == 0;
 		yourself.
 	x := x.value.
 	self assert: x = 'str ___value: ''slash\'''.
@@ -246,18 +222,16 @@ category: 'other'
 method: StringLiteralsTestCase
 testShortStringDoubleQuotes
 
-	| x |
-	x := self statementsAt: 2.
-	self 
+	| x pyString ast |
+	pyString := '"vwxyz"'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
-		assert: x line == 6;
-		assert: x column == 0;
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf: ConstantAst);
-		assert: x line == 6;
-		assert: x column == 0;
 		yourself.
 	x := x.value.
 	self assert: x = 'str ___value: ''vwxyz'''.
@@ -266,18 +240,16 @@ category: 'other'
 method: StringLiteralsTestCase
 testShortStringSingleQuotes
 
-	| x |
-	x := self statementsAt: 1.
-	self 
+	| x pyString ast |
+	pyString := '''abcde'''.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
-		assert: x line == 5;
-		assert: x column == 0;
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf: ConstantAst);
-		assert: x line == 5;
-		assert: x column == 0;
 		yourself.
 	x := x.value.
 	self assert: x = 'str ___value: ''abcde'''.

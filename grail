@@ -8,25 +8,4 @@ if [ ! -f ~/.topazini ]; then
     cp topazini ~/.topazini
 fi
 
-topaz -lq -- $1 <<EOF
-output push /dev/null only
-iferr 1 exit 1
-login
-run
-| args path |
-args := System commandLineArguments.
-args size ~= 4 ifTrue: [
-    GsFile stderr nextPutAll: 'Usage: grail /path/to/python/file'; lf; flush.
-    Error signal: 'Please provide a Python file!'.
-].
-path := args at: 4.
-(GsFile exists: path) ifFalse: [
-    GsFile stderr nextPutAll: '"' , path , '" not found!'; lf; flush.
-    Error signal: 'Path not found!'.
-].
-GsFile stdoutServer nextPutAll: '====== Grail ======'; lf; flush.
-ModuleAst evaluateScript: path.
-%
-logout
-exit 0
-EOF
+topaz -lq -S grail.topaz -- $1

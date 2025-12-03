@@ -5,19 +5,32 @@ removeallclassmethods Builtins
 category: 'other'
 classmethod: Builtins
 new
-	
+
 	self error: 'use singleton'
+%
+category: 'other'
+classmethod: Builtins
+printFile
+
+	^printFile
+%
+category: 'other'
+classmethod: Builtins
+printFile: aStreamOrNil
+
+	printFile := aStreamOrNil
 %
 category: 'other'
 classmethod: Builtins
 reset
 
 	singleton := nil.
+	printFile := nil.
 %
 category: 'other'
 classmethod: Builtins
 singleton
-	
+
 	singleton ifNil: [
 		singleton := self basicNew.
 		singleton initialize.

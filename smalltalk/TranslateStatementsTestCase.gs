@@ -2,12 +2,6 @@
 removeallmethods TranslateStatementsTestCase
 removeallclassmethods TranslateStatementsTestCase
 ! ------------------- Class methods for TranslateStatementsTestCase
-category: 'other'
-classmethod: TranslateStatementsTestCase
-filename
-
-	^'Statements.py'
-%
 ! ------------------- Instance methods for TranslateStatementsTestCase
 category: 'other'
 method: TranslateStatementsTestCase
@@ -16,12 +10,15 @@ testTranslateIf
 if (True):
     print(0, end='')
 "
-	| stream x |
-	x := (self statementsAt: 2).
+	| pyString ast stream x |
+	pyString := 'if(True):
+    print(0, end='' '')'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 
-	self assert: stream contents equals: 
+	self assert: stream contents equals:
 '(True) ___value ifTrue: [
 	(currentScope at: #print) scope: currentScope positional: { (int ___value: 0). } named: { #end->(str ___value: '' ''). }.
 ]'
@@ -45,12 +42,19 @@ else:
     print(10, end=' ')
 
 "
-	| stream x |
-	x := (self statementsAt: 5).
+	| pyString ast stream x |
+	pyString := 'if (False):
+    print(5, end='' '')
+elif (True):
+    print(6, end='' '')
+else:
+    print(7, end='' '')'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 
-	self assert: stream contents equals: 
+	self assert: stream contents equals:
 '(False) ___value ifTrue: [
 	(currentScope at: #print) scope: currentScope positional: { (int ___value: 5). } named: { #end->(str ___value: '' ''). }.
 ] ifFalse: [
@@ -61,11 +65,18 @@ else:
 	].
 ]'.
 
-	x := (self statementsAt: 6).
+	pyString := 'if (False):
+    print(8, end='' '')
+elif (False):
+    print(9, end='' '')
+else:
+    print(10, end='' '')'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 
-	self assert: stream contents equals: 
+	self assert: stream contents equals:
 '(False) ___value ifTrue: [
 	(currentScope at: #print) scope: currentScope positional: { (int ___value: 8). } named: { #end->(str ___value: '' ''). }.
 ] ifFalse: [
@@ -91,23 +102,33 @@ else:
     print(4, end=' ')
 
 "
-	| stream x |
-	x := (self statementsAt: 3).
+	| pyString ast stream x |
+	pyString := 'if (True):
+    print(1, end='' '')
+else:
+    print(2, end='' '')'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 
-	self assert: stream contents equals: 
+	self assert: stream contents equals:
 '(True) ___value ifTrue: [
 	(currentScope at: #print) scope: currentScope positional: { (int ___value: 1). } named: { #end->(str ___value: '' ''). }.
 ] ifFalse: [
 	(currentScope at: #print) scope: currentScope positional: { (int ___value: 2). } named: { #end->(str ___value: '' ''). }.
 ]'.
 
-	x := (self statementsAt: 4).
+	pyString := 'if (False):
+    print(3, end='' '')
+else:
+    print(4, end='' '')'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 
-	self assert: stream contents equals: 
+	self assert: stream contents equals:
 '(False) ___value ifTrue: [
 	(currentScope at: #print) scope: currentScope positional: { (int ___value: 3). } named: { #end->(str ___value: '' ''). }.
 ] ifFalse: [
@@ -118,10 +139,12 @@ category: 'other'
 method: TranslateStatementsTestCase
 testTranslatePrint
 
-	| stream x |
-	x := (self statementsAt: 1).
+	| pyString ast stream x |
+	pyString := 'print(''Hello world'')'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
-	
+
 	self assert: stream contents equals: '(currentScope at: #print) scope: currentScope positional: { (str ___value: ''Hello world''). } named: {}'.
 %

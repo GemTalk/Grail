@@ -42,7 +42,7 @@ setMapValue: aReadStream
 		mapValue := ''.
 		aReadStream next.
 		[aReadStream peek ~~ $)] whileTrue: [
-			mapValue := mapValue + aReadStream next.
+			mapValue := mapValue , aReadStream next.
 		].
 		mapValue := str ___value: mapValue.
 		aReadStream next.
@@ -60,8 +60,7 @@ setPrecision: aReadStream
 			^nil
 		].
 		[aReadStream peek isNumeric] whileTrue: [
-			precision := precision + aReadStream next.
-			
+			precision := precision , aReadStream next.
 		].
 		precision := precision asNumber.
 	].
@@ -96,7 +95,7 @@ setWidth: aReadStream
 	].
 	[aReadStream peek isNumeric]
 		whileTrue: [
-			width := width + aReadStream next.
+			width := width , aReadStream next.
 		].
 	width = '' ifFalse: [width := width asNumber].
 %
@@ -156,24 +155,24 @@ tupleForParameters: aReadStream
 
 	padding := ''.
 	(width = '') ifFalse: [
-		1 to: (width - insertString size) do: [:i | padding := padding + ' '].
+		1 to: (width - insertString size) do: [:i | padding := padding , ' '].
 
 	].
-	
-	
+
+
 	(flags includes: $-)
-		ifTrue: [^insertString + padding].
+		ifTrue: [^insertString , padding].
 
 	"if the flag does not have a - but does have 0 then the padding must be all 0s and it
 	must happen after any signs or numeric bases."
 	((flags includes: $0) and: [(numClassHolder = int) or: [(numClassHolder = float)]])
 		ifFalse: [
-			^padding + insertString
+			^padding , insertString
 		].
 	displacement := 0.
 	padding := ''.
 
-	1 to: (width - insertString size) do: [:i | padding := padding + '0'].
+	1 to: (width - insertString size) do: [:i | padding := padding , '0'].
 
 	"adding a displacement do determin how far into the string you must go
 	go get to the first actual number."
@@ -183,7 +182,7 @@ tupleForParameters: aReadStream
 	(({ $x. $X. $o } includes: type) and: [flags includes: $#])
 		ifTrue: [displacement := displacement + 2].
 
-	^((insertString copyFrom: 1 to: displacement) +
-		padding +
+	^((insertString copyFrom: 1 to: displacement) ,
+		padding ,
 		(insertString copyFrom: displacement +1 to: insertString size))
 %

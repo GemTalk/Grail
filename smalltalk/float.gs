@@ -103,11 +103,10 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 			index := 1.
 			"Collect only significant digits"
 			[precisionHolder > 0 and: [index <= resultString size]] whileTrue: [
-					
 				(resultString at: index) isAlphaNumeric ifTrue: [
-					precisionHolder := precisionHolder -1.
+					precisionHolder := precisionHolder - 1.
 				].
-				tempHolder := tempHolder + (resultString at: index).
+				tempHolder := tempHolder , (resultString at: index).
 				index := index + 1.
 			].
 			"remove trailing zeros"
@@ -116,13 +115,12 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 				| reverseIndex |
 				reverseIndex := resultString size.
 				[(resultString at: reverseIndex) == $0] whileTrue: [
-					reverseIndex := reverseIndex -1.
+					reverseIndex := reverseIndex - 1.
 				].
 				(resultString at: reverseIndex) == $. ifTrue: [
-					reverseIndex := reverseIndex -1.
+					reverseIndex := reverseIndex - 1.
 				].
 				resultString := resultString copyFrom: 1 to: reverseIndex.
-				
 			].
 		]
 		ifFalse: [
@@ -138,7 +136,7 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 				] ifFalse: [
 					aCharacter asLowercase == $g ifFalse: [
 						[resultString size < (precisionHolder + decimalIndex)] whileTrue: [
-							resultString := resultString + '0'.
+							resultString := resultString , '0'.
 						].
 					].
 				].
@@ -147,26 +145,26 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 				| reverseIndex |
 				reverseIndex := resultString size.
 				[(resultString at: reverseIndex) == $0] whileTrue: [
-					reverseIndex := reverseIndex -1.
+					reverseIndex := reverseIndex - 1.
 				].
 				(resultString at: reverseIndex) == $. ifTrue: [
-					reverseIndex := reverseIndex -1.
+					reverseIndex := reverseIndex - 1.
 				].
 				resultString := resultString copyFrom: 1 to: reverseIndex.
-				
+
 			].
 			"add exponential for onto the string if required"
 			characterUsed == $e ifTrue: [
-				resultString := resultString + 'e'.
+				resultString := resultString , 'e'.
 				exponent negative ifTrue: [
-					resultString := resultString + '-'.
+					resultString := resultString , '-'.
 				] ifFalse: [
-					resultString := resultString + '+'.
+					resultString := resultString , '+'.
 				].
 				exponent abs < 10 ifTrue: [
-					resultString := resultString + '0'.
+					resultString := resultString , '0'.
 				].
-				resultString := resultString + (exponent abs asString).
+				resultString := resultString , (exponent abs asString).
 				aCharacter isUppercase ifTrue: [
 					resultString := resultString asUppercase.
 				].
@@ -549,25 +547,25 @@ category: 'Smalltalk'
 method: float
 ___powFloat: aFloat
 	
-	| return |
+	| return asString |
 
 	return := float ___value: (aFloat  raisedTo: value).
-	return ___value asString = 'MinusQuietNaN'
-		ifTrue: [
-			^((complex ___real: 0 imaginary: ((aFloat*(-1)) sqrt)) __pow__: (float ___value: 2*value))
-		].
+	asString := return ___value asString.
+	(asString = 'MinusQuietNaN' or: [asString = 'PlusQuietNaN']) ifTrue: [
+		^((complex ___real: 0 imaginary: ((aFloat*(-1)) sqrt)) __pow__: (float ___value: 2*value))
+	].
 	^return
 %
 category: 'Smalltalk'
 method: float
 ___powInt: anInteger
-	| return |
+	| return asString |
 
 	return := float ___value: (anInteger  raisedTo: value).
-	return ___value asString = 'MinusQuietNaN'
-		ifTrue: [
-			^((complex ___real: 0 imaginary: ((anInteger*(-1)) sqrt)) __pow__: (float ___value: 2*value))
-		].
+	asString := return ___value asString.
+	(asString = 'MinusQuietNaN' or: [asString = 'PlusQuietNaN']) ifTrue: [
+		^((complex ___real: 0 imaginary: ((anInteger*(-1)) sqrt)) __pow__: (float ___value: 2*value))
+	].
 	^return
 %
 category: 'Smalltalk'

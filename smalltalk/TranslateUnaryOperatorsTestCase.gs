@@ -2,19 +2,15 @@
 removeallmethods TranslateUnaryOperatorsTestCase
 removeallclassmethods TranslateUnaryOperatorsTestCase
 ! ------------------- Class methods for TranslateUnaryOperatorsTestCase
-category: 'other'
-classmethod: TranslateUnaryOperatorsTestCase
-filename
-
-	^'Operators.py'
-%
 ! ------------------- Instance methods for TranslateUnaryOperatorsTestCase
 category: 'other'
 method: TranslateUnaryOperatorsTestCase
 testTranslateInvertExpr
 
-	| stream x |
-	x := (self statementsAt: 15).
+	| pyString ast stream x |
+	pyString := '~200'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '(int ___value: 200) __invert__'.
@@ -24,14 +20,18 @@ category: 'other'
 method: TranslateUnaryOperatorsTestCase
 testTranslateNestedUnary
 
-	| stream x |
-	x := (self statementsAt: 18).
+	| pyString ast stream x |
+	pyString := '-+300'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '((int ___value: 300) __pos__) __neg__'.
 	self assert: stream contents evaluate equals: (int ___value: -300).
 
-	x := (self statementsAt: 19).
+	pyString := '~~400'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '((int ___value: 400) __invert__) __invert__'.
@@ -41,8 +41,10 @@ category: 'other'
 method: TranslateUnaryOperatorsTestCase
 testTranslateNotExpr
 
-	| stream x |
-	x := (self statementsAt: 17).
+	| pyString ast stream x |
+	pyString := 'not False'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '(False) __not__'.
@@ -52,8 +54,10 @@ category: 'other'
 method: TranslateUnaryOperatorsTestCase
 testTranslateUAddExpr
 
-	| stream x |
-	x := (self statementsAt: 16).
+	| pyString ast stream x |
+	pyString := '+100'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '(int ___value: 100) __pos__'.
@@ -63,8 +67,10 @@ category: 'other'
 method: TranslateUnaryOperatorsTestCase
 testTranslateUSubExpr
 
-	| stream x |
-	x := (self statementsAt: 14).
+	| pyString ast stream x |
+	pyString := '-100'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '(int ___value: 100) __neg__'.

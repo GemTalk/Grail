@@ -190,7 +190,13 @@ category: 'Python-int'
 method: int
 ___powFloat: aFloat
 
-	^float ___value: (aFloat raisedTo: value)
+	| return |
+	return := float ___value: (aFloat raisedTo: value).
+	(return ___value asString = 'PlusQuietNaN' or: [return ___value asString = 'MinusQuietNaN'])
+		ifTrue: [
+			^((complex ___real: 0 imaginary: ((aFloat abs) sqrt)) __pow__: (float ___value: 2 * value))
+		].
+	^return
 %
 category: 'Python-int'
 method: int

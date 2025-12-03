@@ -2,19 +2,15 @@
 removeallmethods TranslateBinaryOperatorsTestCase
 removeallclassmethods TranslateBinaryOperatorsTestCase
 ! ------------------- Class methods for TranslateBinaryOperatorsTestCase
-category: 'other'
-classmethod: TranslateBinaryOperatorsTestCase
-filename
-
-	^'Operators.py'
-%
 ! ------------------- Instance methods for TranslateBinaryOperatorsTestCase
 category: 'other'
 method: TranslateBinaryOperatorsTestCase
 testTranslateAddExpr
 
-	| stream x |
-	x := (self statementsAt: 1).
+	| pyString ast stream x |
+	pyString := '1 + 2'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '(int ___value: 1) __add__: (int ___value: 2)'.
@@ -24,8 +20,10 @@ category: 'other'
 method: TranslateBinaryOperatorsTestCase
 testTranslateBitAndExpr
 
-	| stream x |
-	x := (self statementsAt: 2).
+	| pyString ast stream x |
+	pyString := '1 & 1'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '(int ___value: 1) __and__: (int ___value: 1)'.
@@ -35,8 +33,10 @@ category: 'other'
 method: TranslateBinaryOperatorsTestCase
 testTranslateBitLshiftExpr
 
-	| stream x |
-	x := (self statementsAt: 5).
+	| pyString ast stream x |
+	pyString := '1 << 2'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '(int ___value: 1) __lshift__: (int ___value: 2)'.
@@ -46,8 +46,10 @@ category: 'other'
 method: TranslateBinaryOperatorsTestCase
 testTranslateBitOrExpr
 
-	| stream x |
-	x := (self statementsAt: 3).
+	| pyString ast stream x |
+	pyString := '1 | 1'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '(int ___value: 1) __or__: (int ___value: 1)'.
@@ -57,8 +59,10 @@ category: 'other'
 method: TranslateBinaryOperatorsTestCase
 testTranslateBitRshiftExpr
 
-	| stream x |
-	x := (self statementsAt: 6).
+	| pyString ast stream x |
+	pyString := '4 >> 2'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '(int ___value: 4) __rshift__: (int ___value: 2)'.
@@ -68,8 +72,10 @@ category: 'other'
 method: TranslateBinaryOperatorsTestCase
 testTranslateBitXorExpr
 
-	| stream x |
-	x := (self statementsAt: 4).
+	| pyString ast stream x |
+	pyString := '1 ^ 0'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '(int ___value: 1) __xor__: (int ___value: 0)'.
@@ -79,8 +85,10 @@ category: 'other'
 method: TranslateBinaryOperatorsTestCase
 testTranslateFloorDivExpr
 
-	| stream x |
-	x := (self statementsAt: 9).
+	| pyString ast stream x |
+	pyString := '3 // 2'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '(int ___value: 3) __floordiv__: (int ___value: 2)'.
@@ -90,8 +98,10 @@ category: 'other'
 method: TranslateBinaryOperatorsTestCase
 testTranslateModExpr
 
-	| stream x |
-	x := (self statementsAt: 7).
+	| pyString ast stream x |
+	pyString := '10 % 5'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '(int ___value: 10) __mod__: (int ___value: 5)'.
@@ -101,8 +111,10 @@ category: 'other'
 method: TranslateBinaryOperatorsTestCase
 testTranslateNestedAddExpr
 
-	| stream x |
-	x := (self statementsAt: 12).
+	| pyString ast stream x |
+	pyString := '2 + 4 + 6'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '((int ___value: 2) __add__: (int ___value: 4)) __add__: (int ___value: 6)'.
@@ -112,8 +124,10 @@ category: 'other'
 method: TranslateBinaryOperatorsTestCase
 testTranslateNestedMultExpr
 
-	| stream x |
-	x := (self statementsAt: 13).
+	| pyString ast stream x |
+	pyString := '7 * 8 * 9'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '((int ___value: 7) __mul__: (int ___value: 8)) __mul__: (int ___value: 9)'.
@@ -123,8 +137,10 @@ category: 'other'
 method: TranslateBinaryOperatorsTestCase
 testTranslatePowExpr
 
-	| stream x |
-	x := (self statementsAt: 11).
+	| pyString ast stream x |
+	pyString := '2 ** 4'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '(int ___value: 2) __pow__: (int ___value: 4)'.
@@ -134,8 +150,10 @@ category: 'other'
 method: TranslateBinaryOperatorsTestCase
 testTranslateSubExpr
 
-	| stream x |
-	x := (self statementsAt: 10).
+	| pyString ast stream x |
+	pyString := '2 - 1'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '(int ___value: 2) __sub__: (int ___value: 1)'.
@@ -145,8 +163,10 @@ category: 'other'
 method: TranslateBinaryOperatorsTestCase
 testTranslateTrueDivExpr
 
-	| stream x |
-	x := (self statementsAt: 8).
+	| pyString ast stream x |
+	pyString := '10 / 5'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '(int ___value: 10) __truediv__: (int ___value: 5)'.

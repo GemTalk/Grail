@@ -2,24 +2,20 @@
 removeallmethods OperatorsTestCase
 removeallclassmethods OperatorsTestCase
 ! ------------------- Class methods for OperatorsTestCase
-category: 'other'
-classmethod: OperatorsTestCase
-filename
-
-	^'Operators.py'
-%
 ! ------------------- Instance methods for OperatorsTestCase
 category: 'other'
 method: OperatorsTestCase
 testAdd
 
-	| x |
-	x := self statementsAt: 1.
-	self 
+	| pyString ast x |
+	pyString := '1 + 2'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf: BinOpAst);
 		assert: (x.op isKindOf: AddAst);
 		assert: (x.left isKindOf: ConstantAst);
@@ -32,13 +28,15 @@ category: 'other'
 method: OperatorsTestCase
 testEq
 
-	| x |
-	x := self statementsAt: 20.
-	self 
+	| pyString ast x |
+	pyString := '10 == 20'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf: CompareAst);
 		assert: (x.left isKindOf: ConstantAst);
 		assert: (x.left.value = 'int ___value: 10');
@@ -58,7 +56,7 @@ testEvalEq
 	pyString :=  '5 == 5'.
 	result := ModuleAst evaluate: pyString.
 	self assert: result ___value.
-	
+
 	pyString :=  '"five" == "five"'.
 	result := ModuleAst evaluate: pyString.
 	self assert: result ___value.
@@ -67,13 +65,15 @@ category: 'other'
 method: OperatorsTestCase
 testGtE
 
-	| x |
-	x := self statementsAt: 21.
-	self 
+	| pyString ast x |
+	pyString := '25 >= 15'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf: CompareAst);
 		assert: (x.left isKindOf: ConstantAst);
 		assert: (x.left.value = 'int ___value: 25');
@@ -89,13 +89,15 @@ category: 'other'
 method: OperatorsTestCase
 testInvert
 
-	| x |
-	x := self statementsAt: 15.
-	self 
+	| pyString ast x |
+	pyString := '~200'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf: InvertAst);
 		assert: (x.operand isKindOf: ConstantAst);
 		assert: (x.operand.value = 'int ___value: 200');
@@ -105,13 +107,15 @@ category: 'other'
 method: OperatorsTestCase
 testMod
 
-	| x |
-	x := self statementsAt: 7.
-	self 
+	| pyString ast x |
+	pyString := '10 % 5'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf:BinOpAst);
 		assert: (x.op isKindOf: ModAst);
 		assert: (x.left isKindOf: ConstantAst);
@@ -124,13 +128,15 @@ category: 'other'
 method: OperatorsTestCase
 testNestedAdd
 
-	| x |
-	x := self statementsAt: 12.
-	self 
+	| pyString ast x |
+	pyString := '2 + 4 + 6'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf: BinOpAst);
 		assert: (x.op isKindOf: AddAst);
 		assert: (x.left isKindOf: BinOpAst);
@@ -147,13 +153,15 @@ category: 'other'
 method: OperatorsTestCase
 testNestedEq
 
-	| x y |
-	x := self statementsAt: 30.
-	self 
+	| pyString ast x y |
+	pyString := '11 == 22 == 33 == 44'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf: CompareAst);
 		assert: (x.left isKindOf: ConstantAst);
 		assert: (x.left.value = 'int ___value: 11');
@@ -172,13 +180,15 @@ category: 'other'
 method: OperatorsTestCase
 testNestedGtE
 
-	| x y |
-	x := self statementsAt: 31.
-	self 
+	| pyString ast x y |
+	pyString := '44 >= 55 >= 66'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf: CompareAst);
 		assert: (x.left isKindOf: ConstantAst);
 		assert: (x.left.value = 'int ___value: 44');
@@ -197,13 +207,15 @@ category: 'other'
 method: OperatorsTestCase
 testNestedMult
 
-	| x |
-	x := self statementsAt: 13.
-	self 
+	| pyString ast x |
+	pyString := '7 * 8 * 9'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf: BinOpAst);
 		assert: (x.op isKindOf: MultAst);
 		assert: (x.left isKindOf: BinOpAst);
@@ -220,13 +232,15 @@ category: 'other'
 method: OperatorsTestCase
 testUSub
 
-	| x |
-	x := self statementsAt: 14.
-	self 
+	| pyString ast x |
+	pyString := '-100'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
+	self
 		assert: (x isKindOf: ExprAst);
 		yourself.
 	x := x.value.
-	self 
+	self
 		assert: (x isKindOf: USubAst);
 		assert: (x.operand isKindOf: ConstantAst);
 		assert: (x.operand.value = 'int ___value: 100');

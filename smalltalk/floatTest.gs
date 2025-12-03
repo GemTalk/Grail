@@ -237,7 +237,7 @@ test__pow__
 		assert: ((self float: -1) __pow__: (self float: 0.5)) equals: (complex ___real: 0 imaginary: 1);
 		yourself.
 
-	powHolder := ((self float: 2) __pow__: (complex ___real: 0 imaginary: 1)).
+	powHolder := (self float: 2) __pow__: (complex ___real: 0 imaginary: 1).
 	self
 		assert: (powHolder real ___value roundTo: 0.000001) equals: 0.769239;
 		assert: (powHolder imag ___value roundTo: 0.000001) equals: 0.638961;

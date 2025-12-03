@@ -5,15 +5,10 @@ removeallclassmethods ModuleAst
 category: 'other'
 classmethod: ModuleAst
 astForPath: pathString
-
-	| file path string |
-	path := '/tmp/grail.ast'.
-	pprintast ifNil: [self error: 'Please run `ModuleAst pprintast: aPathString`!'].
-	System performOnServer: pprintast , ' -a -t ' , pathString , ' > ' , path.
-	file := GsFile open: path mode: 'rb' onClient: false.
-	string := file contentsAsUtf8 decodeToUnicode.
-	GsFile removeServerFile: path.
-	^string
+"
+ModuleAst astForPath: '/path/to/file.py'.
+"
+	^self script: pathString
 %
 category: 'other'
 classmethod: ModuleAst
@@ -21,18 +16,75 @@ astForSource: aString
 "
 ModuleAst astForSource: '1 == 1'.
 "
-	| file pathPy pathAst string |
+	| file pathPy module |
+	pathPy := '/tmp/grail.py'.
+	file := GsFile open: pathPy mode: 'w' onClient: false.
+	file nextPutAll: aString.
+	file close.
+	module := self script: pathPy.
+	GsFile removeServerFile: pathPy.
+	^module
+%
+category: 'other'
+classmethod: ModuleAst
+astStringForPath: pathString
+
+	| file path string exitCode errPath errFile errMsg |
+	path := '/tmp/grail.ast'.
+	errPath := '/tmp/grail.err'.
+	pprintast ifNil: [self error: 'Please run `ModuleAst pprintast: aPathString`!'].
+	exitCode := System performOnServer: pprintast , ' -a -t ' , pathString , ' > ' , path , ' 2> ' , errPath , '; echo $?'.
+
+	"Check if pprintast failed"
+	(Integer fromString: exitCode) ~= 0 ifTrue: [
+		errFile := GsFile open: errPath mode: 'rb' onClient: false.
+		errMsg := errFile contentsAsUtf8 decodeToUnicode.
+		errFile close.
+		GsFile removeServerFile: path.
+		GsFile removeServerFile: errPath.
+		SyntaxError signal: errMsg.
+	].
+
+	file := GsFile open: path mode: 'rb' onClient: false.
+	string := file contentsAsUtf8 decodeToUnicode.
+	file close.
+	GsFile removeServerFile: path.
+	GsFile removeServerFile: errPath.
+	^string
+%
+category: 'other'
+classmethod: ModuleAst
+astStringForSource: aString
+"
+ModuleAst astStringForSource: '1 == 1'.
+"
+	| file pathPy pathAst string exitCode errPath errFile errMsg |
 	pathPy := '/tmp/grail.py'.
 	pathAst := '/tmp/grail.ast'.
+	errPath := '/tmp/grail.err'.
 	file := GsFile open: pathPy mode: 'w' onClient: false.
 	file nextPutAll: aString.
 	file close.
 	pprintast ifNil: [self error: 'Please run `ModuleAst pprintast: aPathString`!'].
-	System performOnServer: pprintast , ' -a -t ' , pathPy , ' > ' , pathAst.
+	exitCode := System performOnServer: pprintast , ' -a -t ' , pathPy , ' > ' , pathAst , ' 2> ' , errPath , '; echo $?'.
+
+	"Check if pprintast failed"
+	(Integer fromString: exitCode) ~= 0 ifTrue: [
+		errFile := GsFile open: errPath mode: 'rb' onClient: false.
+		errMsg := errFile contentsAsUtf8 decodeToUnicode.
+		errFile close.
+		GsFile removeServerFile: pathAst.
+		GsFile removeServerFile: pathPy.
+		GsFile removeServerFile: errPath.
+		SyntaxError signal: errMsg.
+	].
+
 	file := GsFile open: pathAst mode: 'rb' onClient: false.
 	string := file contentsAsUtf8 decodeToUnicode.
-	GsFile removeServerFile: pathAst. 
+	file close.
+	GsFile removeServerFile: pathAst.
 	GsFile removeServerFile: pathPy.
+	GsFile removeServerFile: errPath.
 	^string
 %
 category: 'other'
@@ -41,6 +93,14 @@ evaluate: aString
 "
 ModuleAst script: '1 == 1'.
 "
+	^self evaluate: aString withScope: nil
+%
+category: 'other'
+classmethod: ModuleAst
+evaluate: aString withScope: aScope
+"
+ModuleAst evaluate: 'x = 5' withScope: PyGlobals new.
+"
 	| file path module stream |
 	path := '/tmp/grail.py'.
 	file := GsFile open: path mode: 'w' onClient: false.
@@ -48,7 +108,7 @@ ModuleAst script: '1 == 1'.
 	module := self script: path.
 	GsFile removeServerFile: path.
 	stream := PrettyWriteStream on: String new.
-	module printSmalltalkOn: stream.
+	module printSmalltalkOn: stream withScope: aScope.
 	^stream contents evaluate
 %
 category: 'other'
@@ -61,7 +121,7 @@ ModuleAst evaluateScript: '/Users/acaraveo/ORA.py'.
 	module := self script: aPath.
 	stream := PrettyWriteStream on: String new.
 	module printSmalltalkOn: stream.
-	stream contents evaluate
+	^stream contents evaluate
 %
 category: 'other'
 classmethod: ModuleAst
@@ -207,14 +267,28 @@ category: 'other'
 method: ModuleAst
 printSmalltalkOn: aStream
 
+	self printSmalltalkOn: aStream withScope: nil
+%
+category: 'other'
+method: ModuleAst
+printSmalltalkOn: aStream withScope: aScope
+
 	aStream
 		increaseIndent;
 		lf;
 		nextPutAll: '| currentScope value |';
-		lf;
-		nextPutAll: 'currentScope := PyGlobals new.';
-		lf;
-		yourself.
+		lf.
+	aScope ifNil: [
+		aStream
+			nextPutAll: 'currentScope := PyGlobals new.';
+			lf.
+	] ifNotNil: [
+		aStream
+			nextPutAll: 'currentScope := Object _objectForOop: ';
+			nextPutAll: (aScope asOop printString);
+			nextPutAll: '.';
+			lf.
+	].
 	body printSmalltalkOn: aStream. " Doesn't need parenthesis "
 	aStream lf.
 %
@@ -222,7 +296,7 @@ category: 'other'
 method: ModuleAst
 readAst
 
-	^self class astForPath: path
+	^self class astStringForPath: path
 %
 category: 'other'
 method: ModuleAst

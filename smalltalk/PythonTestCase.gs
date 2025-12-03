@@ -10,12 +10,6 @@ ast
 %
 category: 'other'
 classmethod: PythonTestCase
-filename
-
-	^nil
-%
-category: 'other'
-classmethod: PythonTestCase
 pathToTests
 
 	^Path
@@ -58,31 +52,10 @@ deny: value
 %
 category: 'other'
 method: PythonTestCase
-filename
-
-	^self class filename
-%
-category: 'other'
-method: PythonTestCase
-setUp
-
-	super setUp.
-	self filename ifNotNil: [:filename |
-		module := self resources first current moduleAtPath: self class pathToTests , filename.
-	].
-%
-category: 'other'
-method: PythonTestCase
 should: shouldBlock raise: anException withExceptionDo: exceptBlock
 
 	[
 		shouldBlock value.
 		self assert: false.
 	] on: anException do: exceptBlock.
-%
-category: 'other'
-method: PythonTestCase
-statementsAt: anInteger
-
-	^module.body.body at: anInteger
 %

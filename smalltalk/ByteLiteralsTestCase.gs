@@ -2,25 +2,18 @@
 removeallmethods ByteLiteralsTestCase
 removeallclassmethods ByteLiteralsTestCase
 ! ------------------- Class methods for ByteLiteralsTestCase
-category: 'other'
-classmethod: ByteLiteralsTestCase
-filename
-
-	^'StringLiterals.py'
-%
 ! ------------------- Instance methods for ByteLiteralsTestCase
 category: 'other'
 method: ByteLiteralsTestCase
 testBackspace
 
-	| x |
+	| x pyString ast |
+	pyString := 'b"def\b"'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	self
-		assert: ((x := self statementsAt: 16) isKindOf: ExprAst);
-		assert: x line == 36;
-		assert: x column == 0;
+		assert: (x isKindOf: ExprAst);
 		assert: ((x := x.value) isKindOf: ConstantAst);
-		assert: x line == 36;
-		assert: x column == 0;
 		assert: ((x := x.value) isKindOf: String);
 		assert: x equals: 'bytes ___fromAsciiString: ''def''';
 		yourself.
@@ -29,14 +22,13 @@ category: 'other'
 method: ByteLiteralsTestCase
 testBell
 
-	| x |
+	| x pyString ast |
+	pyString := 'b"abc\a"'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	self
-		assert: ((x := self statementsAt: 15) isKindOf: ExprAst);
-		assert: x line == 35;
-		assert: x column == 0;
+		assert: (x isKindOf: ExprAst);
 		assert: ((x := x.value) isKindOf: ConstantAst);
-		assert: x line == 35;
-		assert: x column == 0;
 		assert: ((x := x.value) isKindOf: String);
 		assert: x equals: 'bytes ___fromAsciiString: ''abc''';
 		yourself.
@@ -45,14 +37,13 @@ category: 'other'
 method: ByteLiteralsTestCase
 testHexHigh
 
-	| x |
+	| x pyString ast |
+	pyString := 'b"""def\xff"""'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	self
-		assert: ((x := self statementsAt: 20) isKindOf: ExprAst);
-		assert: x line == 44;
-		assert: x column == 0;
+		assert: (x isKindOf: ExprAst);
 		assert: ((x := x.value) isKindOf: ConstantAst);
-		assert: x line == 44;
-		assert: x column == 0;
 		assert: ((x := x.value) isKindOf: String);
 		assert: x equals: 'bytes ___fromAsciiString: ''defÿ''';
 		yourself.
@@ -61,14 +52,13 @@ category: 'other'
 method: ByteLiteralsTestCase
 testHexLow
 
-	| x |
+	| x pyString ast |
+	pyString := 'b"""abc\x00"""'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	self
-		assert: ((x := self statementsAt: 19) isKindOf: ExprAst);
-		assert: x line == 43;
-		assert: x column == 0;
+		assert: (x isKindOf: ExprAst);
 		assert: ((x := x.value) isKindOf: ConstantAst);
-		assert: x line == 43;
-		assert: x column == 0;
 		assert: ((x := x.value) isKindOf: String);
 		assert: x equals: ('bytes ___fromAsciiString: ''abc', (Unicode7 new add: (Character codePoint: 0); yourself) , '''');
 		yourself.
@@ -77,14 +67,13 @@ category: 'other'
 method: ByteLiteralsTestCase
 testNewline
 
-	| x |
+	| x pyString ast |
+	pyString := 'b"abc\n"'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	self
-		assert: ((x := self statementsAt: 13) isKindOf: ExprAst);
-		assert: x line == 31;
-		assert: x column == 0;
+		assert: (x isKindOf: ExprAst);
 		assert: ((x := x.value) isKindOf: ConstantAst);
-		assert: x line == 31;
-		assert: x column == 0;
 		assert: ((x := x.value) isKindOf: String);
 		assert: x equals: 'bytes ___fromAsciiString: ''abc
 ''';
@@ -94,14 +83,13 @@ category: 'other'
 method: ByteLiteralsTestCase
 testOctalHigh
 
-	| x |
+	| x pyString ast |
+	pyString := 'b"""def\377"""'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	self
-		assert: ((x := self statementsAt: 18) isKindOf: ExprAst);
-		assert: x line == 40;
-		assert: x column == 0;
+		assert: (x isKindOf: ExprAst);
 		assert: ((x := x.value) isKindOf: ConstantAst);
-		assert: x line == 40;
-		assert: x column == 0;
 		assert: ((x := x.value) isKindOf: String);
 		assert: x equals: 'bytes ___fromAsciiString: ''defÿ''';
 		yourself.
@@ -110,14 +98,13 @@ category: 'other'
 method: ByteLiteralsTestCase
 testOctalLow
 
-	| x |
+	| x pyString ast |
+	pyString := 'b"""abc\000"""'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	self
-		assert: ((x := self statementsAt: 17) isKindOf: ExprAst);
-		assert: x line == 39;
-		assert: x column == 0;
+		assert: (x isKindOf: ExprAst);
 		assert: ((x := x.value) isKindOf: ConstantAst);
-		assert: x line == 39;
-		assert: x column == 0;
 		assert: ((x := x.value) isKindOf: String);
 		assert: x equals: 'bytes ___fromAsciiString: ''abc' , (Unicode7 new add: (Character codePoint: 0); yourself) , '''';
 		yourself.
@@ -126,14 +113,13 @@ category: 'other'
 method: ByteLiteralsTestCase
 testSlash
 
-	| x |
+	| x pyString ast |
+	pyString := 'b"""def\\"""'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	self
-		assert: ((x := self statementsAt: 14) isKindOf: ExprAst);
-		assert: x line == 32;
-		assert: x column == 0;
+		assert: (x isKindOf: ExprAst);
 		assert: ((x := x.value) isKindOf: ConstantAst);
-		assert: x line == 32;
-		assert: x column == 0;
 		assert: ((x := x.value) isKindOf: String);
 		assert: x = 'bytes ___fromAsciiString: ''def\''';
 		yourself.

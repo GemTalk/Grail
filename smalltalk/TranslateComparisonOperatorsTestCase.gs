@@ -2,19 +2,15 @@
 removeallmethods TranslateComparisonOperatorsTestCase
 removeallclassmethods TranslateComparisonOperatorsTestCase
 ! ------------------- Class methods for TranslateComparisonOperatorsTestCase
-category: 'other'
-classmethod: TranslateComparisonOperatorsTestCase
-filename
-
-	^'Operators.py'
-%
 ! ------------------- Instance methods for TranslateComparisonOperatorsTestCase
 category: 'other'
 method: TranslateComparisonOperatorsTestCase
 testTranslateEqExpr
 
-	| stream x |
-	x := (self statementsAt: 20).
+	| pyString ast stream x |
+	pyString := '10 == 20'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '(int ___value: 10) __eq__: (int ___value: 20)'.
@@ -24,8 +20,10 @@ category: 'other'
 method: TranslateComparisonOperatorsTestCase
 testTranslateGtEqExpr
 
-	| stream x |
-	x := (self statementsAt: 21).
+	| pyString ast stream x |
+	pyString := '25 >= 15'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '(int ___value: 25) __ge__: (int ___value: 15)'.
@@ -35,8 +33,10 @@ category: 'other'
 method: TranslateComparisonOperatorsTestCase
 testTranslateGtExpr
 
-	| stream x |
-	x := (self statementsAt: 22).
+	| pyString ast stream x |
+	pyString := '25 > 15'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '(int ___value: 25) __gt__: (int ___value: 15)'.
@@ -48,8 +48,10 @@ testTranslateInExpr
 
 	"TODO"
 
-	| stream x |
-	x := (self statementsAt: 28).
+	| pyString ast stream x |
+	pyString := '3 in [1, 2, 3]'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents equals: '(list ___value: { (int ___value: 1). (int ___value: 2). (int ___value: 3). }) __contains__: (int ___value: 3)'.
@@ -59,8 +61,10 @@ category: 'other'
 method: TranslateComparisonOperatorsTestCase
 testTranslateIsExpr
 
-	| stream x |
-	x := (self statementsAt: 26).
+	| pyString ast stream x |
+	pyString := 'False is True'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '(False) is_: (True)'.
@@ -70,8 +74,10 @@ category: 'other'
 method: TranslateComparisonOperatorsTestCase
 testTranslateIsNotExpr
 
-	| stream x |
-	x := (self statementsAt: 27).
+	| pyString ast stream x |
+	pyString := 'False is not True'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '(False) is_not: (True)'.
@@ -81,8 +87,10 @@ category: 'other'
 method: TranslateComparisonOperatorsTestCase
 testTranslateLtEqExpr
 
-	| stream x |
-	x := (self statementsAt: 24).
+	| pyString ast stream x |
+	pyString := '15 <= 25'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '(int ___value: 15) __le__: (int ___value: 25)'.
@@ -92,8 +100,10 @@ category: 'other'
 method: TranslateComparisonOperatorsTestCase
 testTranslateLtExpr
 
-	| stream x |
-	x := (self statementsAt: 23).
+	| pyString ast stream x |
+	pyString := '25 < 15'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '(int ___value: 25) __lt__: (int ___value: 15)'.
@@ -103,8 +113,10 @@ category: 'other'
 method: TranslateComparisonOperatorsTestCase
 testTranslateNeExpr
 
-	| stream x |
-	x := (self statementsAt: 25).
+	| pyString ast stream x |
+	pyString := '15 != 15'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '(int ___value: 15) __ne__: (int ___value: 15)'.
@@ -114,8 +126,10 @@ category: 'other'
 method: TranslateComparisonOperatorsTestCase
 testTranslateNestedComparisonExpr
 
-	| stream x |
-	x := (self statementsAt: 30).
+	| pyString ast stream x |
+	pyString := '11 == 22 == 33 == 44'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents equals: '[
@@ -124,8 +138,9 @@ testTranslateNestedComparisonExpr
 ] value'.
 	self assert: stream contents evaluate equals: (bool ___value: false).
 
-
-	x := (self statementsAt: 31).
+	pyString := '44 >= 55 >= 66'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents equals: '[
@@ -134,7 +149,9 @@ testTranslateNestedComparisonExpr
 ] value'.
 	self assert: stream contents evaluate equals: (bool ___value: false).
 
-	x := (self statementsAt: 32).
+	pyString := '''he'' in ''hello'' in ''hello world'' == ''hello world'''.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents equals: '[
@@ -147,11 +164,13 @@ testTranslateNestedComparisonExpr
 category: 'other'
 method: TranslateComparisonOperatorsTestCase
 testTranslateNotInExpr
-	
+
 	"TODO"
 
-	| stream x |
-	x := (self statementsAt: 29).
+	| pyString ast stream x |
+	pyString := '3 not in [1, 2, 3]'.
+	ast := ModuleAst astForSource: pyString.
+	x := ast.body.body at: 1.
 	stream := PrettyWriteStream on: String new.
 	x printSmalltalkOn: stream.
 	self assert: stream contents = '((list ___value: { (int ___value: 1). (int ___value: 2). (int ___value: 3). }) __contains__: (int ___value: 3)) __not__'.
