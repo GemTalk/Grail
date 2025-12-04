@@ -3924,6 +3924,27 @@ expectvalue /Class
 doit
 builtins category: 'BuiltIns-Kernel'
 %
+! ------------------- Class definition for cmath
+expectvalue /Class
+doit
+builtin_function_or_method subclass: 'cmath'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+cmath comment: 
+'https://docs.python.org/3/library/cmath.html'
+%
+expectvalue /Class
+doit
+cmath category: 'BuiltIns-Kernel'
+%
 ! ------------------- Class definition for math
 expectvalue /Class
 doit
@@ -5466,6 +5487,22 @@ expectvalue /Class
 doit
 ByteLiteralsTestCase category: 'Tests'
 %
+! ------------------- Class definition for CMathTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'CMathTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+CMathTestCase category: 'Tests'
+%
 ! ------------------- Class definition for CompoundStatementsTestCase
 expectvalue /Class
 doit
@@ -5862,32 +5899,6 @@ expectvalue /Class
 doit
 TupleTestCase category: 'Tests'
 %
-! ------------------- Class definition for PythonTestResource
-expectvalue /Class
-doit
-TestResource subclass: 'PythonTestResource'
-  instVarNames: #( path module statements)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-PythonTestResource comment: 
-'No class-specific documentation for PythonTestResource, hierarchy is:
-Object
-  TestAsserter
-    TestResource(name description)
-      PythonTestResource(statements)
-'
-%
-expectvalue /Class
-doit
-PythonTestResource category: 'Tests'
-%
 ! ------------------- Class definition for Variables
 expectvalue /Class
 doit
@@ -5991,6 +6002,8 @@ input ClassDefAst.gs
 input ClassFunctionDefAst.gs
 input classmethod.gs
 input classmethodTest.gs
+input cmath.gs
+input CMathTestCase.gs
 input CmpOpAst.gs
 input CompareAst.gs
 input complex.gs
@@ -6128,7 +6141,6 @@ input property.gs
 input propertyTest.gs
 input PyGlobals.gs
 input PythonTestCase.gs
-input PythonTestResource.gs
 input RaiseAst.gs
 input range.gs
 input rangeTest.gs

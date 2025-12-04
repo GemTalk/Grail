@@ -276,6 +276,13 @@ ___addReal: aFloatReal imag: aFloatImag
 %
 category: 'Smalltalk'
 method: complex
+___imaginary
+	"Return the Smalltalk Float value of the imaginary part"
+
+	^imaginary
+%
+category: 'Smalltalk'
+method: complex
 ___mulFloat: aFloat
 
 	^complex ___real: aFloat * real imaginary: aFloat * imaginary
@@ -359,10 +366,27 @@ ___powReal: aFloatReal imag: aFloatImag
 %
 category: 'Smalltalk'
 method: complex
-___real: r imaginary: i
+___real
+	"Return the Smalltalk Float value of the real part"
 
-	real := r.
-	imaginary := i.
+	^real
+%
+category: 'Smalltalk'
+method: complex
+___real: r imaginary: i
+	"Store real and imaginary parts, coercing to Float if needed"
+
+	real := r asFloat.
+	imaginary := i asFloat.
+%
+category: 'Smalltalk'
+method: complex
+___rsubInt: anInteger
+	"Reverse subtraction: anInteger - self"
+
+	^complex
+		___real: anInteger - real
+		imaginary: imaginary negated.
 %
 category: 'Smalltalk'
 method: complex

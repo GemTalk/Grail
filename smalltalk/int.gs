@@ -258,6 +258,13 @@ ___powReal: aFloatReal imag: aFloatImag
 %
 category: 'Python-int'
 method: int
+___rsubInt: anInteger
+	"Reverse subtraction: anInteger - self"
+
+	^int ___value: anInteger - value
+%
+category: 'Python-int'
+method: int
 ___truedivFloat: aFloat
 
 	^[float ___value: aFloat / value]
@@ -490,8 +497,6 @@ category: 'Python-int'
 method: int
 __rsub__: any
 
-	(any isKindOf: Magnitude)
-		ifTrue: [^self __rsub__: (int ___value: any)].
 	^any __sub__: self
 %
 category: 'Python-int'
@@ -512,7 +517,7 @@ category: 'Python-int'
 method: int
 __sub__: anObject
 
-	^int ___value: value - anObject ___value
+	^anObject ___rsubInt: value
 %
 category: 'Python-int'
 method: int

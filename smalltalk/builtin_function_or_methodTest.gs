@@ -747,25 +747,28 @@ category: 'other'
 method: builtin_function_or_methodTest
 test_print
 
-	| stream variables transcript |
+	| stream variables savedPrintFile |
 	variables := Variables new.
 	stream := WriteStream with: String new.
-	
+
+	"Test with explicit file parameter"
 	(variables at: #print) scope: variables
 						  positional: { str ___value: 'abc' }
 						  named: { #'file' -> stream }.
 	self assert: stream contents equals: 'abc
 '.
-	transcript := Transcript.
+
+	"Test with default file (Builtins printFile)"
+	savedPrintFile := Builtins printFile.
 	[
 		stream := WriteStream with: String new.
-		Transcript := stream.
+		Builtins printFile: stream.
 		(variables at: #print) scope: variables
 						  positional: { str ___value: 'abcd' }
 						  named: {}.
-		self assert: Transcript contents equals: 'abcd
+		self assert: stream contents equals: 'abcd
 '.
-	] ensure: [Transcript := transcript].
+	] ensure: [Builtins printFile: savedPrintFile].
 
 	stream := WriteStream with: String new.
 	(variables at: #print) scope: variables

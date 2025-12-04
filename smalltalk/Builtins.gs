@@ -152,7 +152,7 @@ callable
 	function block: [:currentScope |
 		| obj |
 		obj := currentScope at: #object.
-		bool ___value: (obj class == FunctionDef or: [obj class includesBehavior: builtin_function_or_method]).
+		bool ___value: (obj class == FunctionDef or: [obj isKindOf: builtin_function_or_method]).
 	].
 	Builtins singleton at: #callable put: function.
 %
@@ -539,7 +539,7 @@ isinstance
 		| obj classinfo |
 		obj := currentScope at: #object.
 		classinfo := currentScope at: #classinfo.
-		bool ___value: (obj class == classinfo or: [obj class includesBehavior: classinfo]).
+		bool ___value: (obj class == classinfo or: [obj isKindOf: classinfo]).
 	].
 	Builtins singleton at: #isinstance put: function.
 %
@@ -556,7 +556,7 @@ issubclass
 		| cls classinfo |
 		cls := currentScope at: #class.
 		classinfo := currentScope at: #classinfo.
-		bool ___value: (cls == classinfo or: [cls includesBehavior: classinfo]).
+		bool ___value: (cls == classinfo or: [cls isKindOf: classinfo]).
 	].
 	Builtins singleton at: #issubclass put: function.
 %

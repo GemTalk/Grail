@@ -599,6 +599,13 @@ ___powReal: aFloatReal imag: aFloatImag
 %
 category: 'Smalltalk'
 method: float
+___rsubInt: anInteger
+	"Reverse subtraction: anInteger - self"
+
+	^float ___value: anInteger - value
+%
+category: 'Smalltalk'
+method: float
 ___value
 
 	^value

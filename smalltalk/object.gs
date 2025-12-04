@@ -91,6 +91,7 @@ of the keyword selector until we find a method that exists.
 	index := selector indexOf: $:.
 	index == 0 ifTrue: [^super doesNotUnderstand: aMessageDescriptor].
 	index := selector indexOf: $: startingAt: 2.
+	index == 0 ifTrue: [^super doesNotUnderstand: aMessageDescriptor].
 	^self 
 		perform: ((selector copyFrom: index to: selector size) reverse asSymbol) 
 		withArguments: (args copyFrom: 1 to: args size - 1).

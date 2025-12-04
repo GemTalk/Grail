@@ -2,6 +2,12 @@
 removeallmethods Other_Test
 removeallclassmethods Other_Test
 ! ------------------- Class methods for Other_Test
+category: 'testing'
+classmethod: Other_Test
+isAbstract
+
+	^self == Other_Test
+%
 ! ------------------- Instance methods for Other_Test
 category: 'testing'
 method: Other_Test

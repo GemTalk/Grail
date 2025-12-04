@@ -16,12 +16,6 @@ pathToTests
 %
 category: 'other'
 classmethod: PythonTestCase
-resources
-
-	^super resources , (Array with: PythonTestResource)
-%
-category: 'other'
-classmethod: PythonTestCase
 setPath
 
 	| path |
