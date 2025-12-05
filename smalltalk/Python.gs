@@ -4730,694 +4730,6 @@ expectvalue /Class
 doit
 PrettyWriteStream category: 'Tools'
 %
-! ------------------- Class definition for Base_Class_Test
-expectvalue /Class
-doit
-TestCase subclass: 'Base_Class_Test'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-Base_Class_Test category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for passing
-expectvalue /Class
-doit
-Base_Class_Test subclass: 'passing'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-passing category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for boolTest
-expectvalue /Class
-doit
-passing subclass: 'boolTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-boolTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for bytearrayTest
-expectvalue /Class
-doit
-passing subclass: 'bytearrayTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-bytearrayTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for bytesTest
-expectvalue /Class
-doit
-passing subclass: 'bytesTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-bytesTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for complexTest
-expectvalue /Class
-doit
-passing subclass: 'complexTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-complexTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for dictTest
-expectvalue /Class
-doit
-passing subclass: 'dictTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-dictTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for floatTest
-expectvalue /Class
-doit
-passing subclass: 'floatTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-floatTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for frozensetTest
-expectvalue /Class
-doit
-passing subclass: 'frozensetTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-frozensetTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for intTest
-expectvalue /Class
-doit
-passing subclass: 'intTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-intTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for listTest
-expectvalue /Class
-doit
-passing subclass: 'listTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-listTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for memoryviewTest
-expectvalue /Class
-doit
-passing subclass: 'memoryviewTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-memoryviewTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for objectTest
-expectvalue /Class
-doit
-passing subclass: 'objectTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-objectTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for rangeTest
-expectvalue /Class
-doit
-passing subclass: 'rangeTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-rangeTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for setTest
-expectvalue /Class
-doit
-passing subclass: 'setTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-setTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for strTest
-expectvalue /Class
-doit
-passing subclass: 'strTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-strTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for tupleTest
-expectvalue /Class
-doit
-passing subclass: 'tupleTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-tupleTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for Base_Exception_Test
-expectvalue /Class
-doit
-TestCase subclass: 'Base_Exception_Test'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-Base_Exception_Test category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for BaseExceptionTest
-expectvalue /Class
-doit
-Base_Exception_Test subclass: 'BaseExceptionTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-BaseExceptionTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for ImportErrorTest
-expectvalue /Class
-doit
-Base_Exception_Test subclass: 'ImportErrorTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-ImportErrorTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for OSErrorTest
-expectvalue /Class
-doit
-Base_Exception_Test subclass: 'OSErrorTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-OSErrorTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for StopIterationTest
-expectvalue /Class
-doit
-Base_Exception_Test subclass: 'StopIterationTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-StopIterationTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for SyntaxErrorTest
-expectvalue /Class
-doit
-Base_Exception_Test subclass: 'SyntaxErrorTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-SyntaxErrorTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for SystemExitTest
-expectvalue /Class
-doit
-Base_Exception_Test subclass: 'SystemExitTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-SystemExitTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for UnicodeDecodeErrorTest
-expectvalue /Class
-doit
-Base_Exception_Test subclass: 'UnicodeDecodeErrorTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-UnicodeDecodeErrorTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for UnicodeEncodeErrorTest
-expectvalue /Class
-doit
-Base_Exception_Test subclass: 'UnicodeEncodeErrorTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-UnicodeEncodeErrorTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for UnicodeTranslateErrorTest
-expectvalue /Class
-doit
-Base_Exception_Test subclass: 'UnicodeTranslateErrorTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-UnicodeTranslateErrorTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for BuiltinImporterTest
-expectvalue /Class
-doit
-TestCase subclass: 'BuiltinImporterTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-BuiltinImporterTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for Other_Test
-expectvalue /Class
-doit
-TestCase subclass: 'Other_Test'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-Other_Test category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for builtin_function_or_methodTest
-expectvalue /Class
-doit
-Other_Test subclass: 'builtin_function_or_methodTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-builtin_function_or_methodTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for classmethodTest
-expectvalue /Class
-doit
-Other_Test subclass: 'classmethodTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-classmethodTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for enumerateTest
-expectvalue /Class
-doit
-Other_Test subclass: 'enumerateTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-enumerateTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for filterTest
-expectvalue /Class
-doit
-Other_Test subclass: 'filterTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-filterTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for functionTest
-expectvalue /Class
-doit
-Other_Test subclass: 'functionTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-functionTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for mapTest
-expectvalue /Class
-doit
-Other_Test subclass: 'mapTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-mapTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for moduleTest
-expectvalue /Class
-doit
-Other_Test subclass: 'moduleTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-moduleTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for propertyTest
-expectvalue /Class
-doit
-Other_Test subclass: 'propertyTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-propertyTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for reversedTest
-expectvalue /Class
-doit
-Other_Test subclass: 'reversedTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-reversedTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for sliceTest
-expectvalue /Class
-doit
-Other_Test subclass: 'sliceTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-sliceTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for staticmethodTest
-expectvalue /Class
-doit
-Other_Test subclass: 'staticmethodTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-staticmethodTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for superTest
-expectvalue /Class
-doit
-Other_Test subclass: 'superTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-superTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for typeTest
-expectvalue /Class
-doit
-Other_Test subclass: 'typeTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-typeTest category: 'BuiltIns-Tests'
-%
-! ------------------- Class definition for zipTest
-expectvalue /Class
-doit
-Other_Test subclass: 'zipTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-zipTest category: 'BuiltIns-Tests'
-%
 ! ------------------- Class definition for PythonTestCase
 expectvalue /Class
 doit
@@ -5459,6 +4771,422 @@ PythonTestCase subclass: 'AugTestCase'
 expectvalue /Class
 doit
 AugTestCase category: 'Tests'
+%
+! ------------------- Class definition for Base_Class_Test
+expectvalue /Class
+doit
+PythonTestCase subclass: 'Base_Class_Test'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+Base_Class_Test category: 'Tests'
+%
+! ------------------- Class definition for boolTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'boolTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+boolTest category: 'Tests'
+%
+! ------------------- Class definition for bytearrayTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'bytearrayTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+bytearrayTest category: 'Tests'
+%
+! ------------------- Class definition for bytesTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'bytesTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+bytesTest category: 'Tests'
+%
+! ------------------- Class definition for complexTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'complexTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+complexTest category: 'Tests'
+%
+! ------------------- Class definition for dictTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'dictTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+dictTest category: 'Tests'
+%
+! ------------------- Class definition for floatTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'floatTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+floatTest category: 'Tests'
+%
+! ------------------- Class definition for frozensetTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'frozensetTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+frozensetTest category: 'Tests'
+%
+! ------------------- Class definition for intTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'intTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+intTest category: 'Tests'
+%
+! ------------------- Class definition for listTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'listTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+listTest category: 'Tests'
+%
+! ------------------- Class definition for memoryviewTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'memoryviewTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+memoryviewTest category: 'Tests'
+%
+! ------------------- Class definition for objectTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'objectTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+objectTest category: 'Tests'
+%
+! ------------------- Class definition for rangeTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'rangeTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+rangeTest category: 'Tests'
+%
+! ------------------- Class definition for setTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'setTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+setTest category: 'Tests'
+%
+! ------------------- Class definition for strTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'strTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+strTest category: 'Tests'
+%
+! ------------------- Class definition for tupleTest
+expectvalue /Class
+doit
+Base_Class_Test subclass: 'tupleTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+tupleTest category: 'Tests'
+%
+! ------------------- Class definition for Base_Exception_Test
+expectvalue /Class
+doit
+PythonTestCase subclass: 'Base_Exception_Test'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+Base_Exception_Test category: 'Tests'
+%
+! ------------------- Class definition for BaseExceptionTest
+expectvalue /Class
+doit
+Base_Exception_Test subclass: 'BaseExceptionTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+BaseExceptionTest category: 'Tests'
+%
+! ------------------- Class definition for ImportErrorTest
+expectvalue /Class
+doit
+Base_Exception_Test subclass: 'ImportErrorTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ImportErrorTest category: 'Tests'
+%
+! ------------------- Class definition for OSErrorTest
+expectvalue /Class
+doit
+Base_Exception_Test subclass: 'OSErrorTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+OSErrorTest category: 'Tests'
+%
+! ------------------- Class definition for StopIterationTest
+expectvalue /Class
+doit
+Base_Exception_Test subclass: 'StopIterationTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+StopIterationTest category: 'Tests'
+%
+! ------------------- Class definition for SyntaxErrorTest
+expectvalue /Class
+doit
+Base_Exception_Test subclass: 'SyntaxErrorTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+SyntaxErrorTest category: 'Tests'
+%
+! ------------------- Class definition for SystemExitTest
+expectvalue /Class
+doit
+Base_Exception_Test subclass: 'SystemExitTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+SystemExitTest category: 'Tests'
+%
+! ------------------- Class definition for UnicodeDecodeErrorTest
+expectvalue /Class
+doit
+Base_Exception_Test subclass: 'UnicodeDecodeErrorTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+UnicodeDecodeErrorTest category: 'Tests'
+%
+! ------------------- Class definition for UnicodeEncodeErrorTest
+expectvalue /Class
+doit
+Base_Exception_Test subclass: 'UnicodeEncodeErrorTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+UnicodeEncodeErrorTest category: 'Tests'
+%
+! ------------------- Class definition for UnicodeTranslateErrorTest
+expectvalue /Class
+doit
+Base_Exception_Test subclass: 'UnicodeTranslateErrorTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+UnicodeTranslateErrorTest category: 'Tests'
 %
 ! ------------------- Class definition for ByteLiteralsTestCase
 expectvalue /Class
@@ -5668,6 +5396,246 @@ Object
 expectvalue /Class
 doit
 OperatorsTestCase category: 'Tests'
+%
+! ------------------- Class definition for Other_Test
+expectvalue /Class
+doit
+PythonTestCase subclass: 'Other_Test'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+Other_Test category: 'Tests'
+%
+! ------------------- Class definition for builtin_function_or_methodTest
+expectvalue /Class
+doit
+Other_Test subclass: 'builtin_function_or_methodTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+builtin_function_or_methodTest category: 'Tests'
+%
+! ------------------- Class definition for classmethodTest
+expectvalue /Class
+doit
+Other_Test subclass: 'classmethodTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+classmethodTest category: 'Tests'
+%
+! ------------------- Class definition for enumerateTest
+expectvalue /Class
+doit
+Other_Test subclass: 'enumerateTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+enumerateTest category: 'Tests'
+%
+! ------------------- Class definition for filterTest
+expectvalue /Class
+doit
+Other_Test subclass: 'filterTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+filterTest category: 'Tests'
+%
+! ------------------- Class definition for functionTest
+expectvalue /Class
+doit
+Other_Test subclass: 'functionTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+functionTest category: 'Tests'
+%
+! ------------------- Class definition for mapTest
+expectvalue /Class
+doit
+Other_Test subclass: 'mapTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+mapTest category: 'Tests'
+%
+! ------------------- Class definition for moduleTest
+expectvalue /Class
+doit
+Other_Test subclass: 'moduleTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+moduleTest category: 'Tests'
+%
+! ------------------- Class definition for propertyTest
+expectvalue /Class
+doit
+Other_Test subclass: 'propertyTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+propertyTest category: 'Tests'
+%
+! ------------------- Class definition for reversedTest
+expectvalue /Class
+doit
+Other_Test subclass: 'reversedTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+reversedTest category: 'Tests'
+%
+! ------------------- Class definition for sliceTest
+expectvalue /Class
+doit
+Other_Test subclass: 'sliceTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+sliceTest category: 'Tests'
+%
+! ------------------- Class definition for staticmethodTest
+expectvalue /Class
+doit
+Other_Test subclass: 'staticmethodTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+staticmethodTest category: 'Tests'
+%
+! ------------------- Class definition for superTest
+expectvalue /Class
+doit
+Other_Test subclass: 'superTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+superTest category: 'Tests'
+%
+! ------------------- Class definition for typeTest
+expectvalue /Class
+doit
+Other_Test subclass: 'typeTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+typeTest category: 'Tests'
+%
+! ------------------- Class definition for zipTest
+expectvalue /Class
+doit
+Other_Test subclass: 'zipTest'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+zipTest category: 'Tests'
 %
 ! ------------------- Class definition for SimpleStatementsTestCase
 expectvalue /Class
@@ -5987,7 +5955,6 @@ input BufferError.gs
 input builtin_function_or_method.gs
 input builtin_function_or_methodTest.gs
 input BuiltinImporter.gs
-input BuiltinImporterTest.gs
 input builtins.gs
 input Builtins_.gs
 input bytearray.gs
@@ -6131,7 +6098,6 @@ input OverflowError.gs
 input Package.gs
 input ParamAst.gs
 input PassAst.gs
-input passing.gs
 input PendingDeprecationWarning.gs
 input PermissionError.gs
 input PowAst.gs
