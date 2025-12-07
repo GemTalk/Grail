@@ -304,6 +304,7 @@ ___mulReal: aFloatReal imag: aFloatImag
 category: 'Smalltalk'
 method: complex
 ___parse: stringArg
+
  
 	[
 		| stream |
@@ -329,6 +330,7 @@ ___parse: stringArg
 category: 'Smalltalk'
 method: complex
 ___powFloat: aFloat
+
 	^complex
 		___real: (aFloat raisedTo: real) * ((imaginary *(aFloat ln)) cos)
 		imaginary: (aFloat raisedTo: real) * ((imaginary *(aFloat ln)) sin)
@@ -336,6 +338,7 @@ ___powFloat: aFloat
 category: 'Smalltalk'
 method: complex
 ___powInt: anInteger
+
 	^complex
 		___real: (anInteger raisedTo: real) * ((imaginary *(anInteger ln)) cos)
 		imaginary: (anInteger raisedTo: real) * ((imaginary *(anInteger ln)) sin)
@@ -343,19 +346,19 @@ ___powInt: anInteger
 category: 'Smalltalk'
 method: complex
 ___powReal: aFloatReal imag: aFloatImag
+
 	
 	| radius radians eulerTranslationExp originalExp combinationExp |
 	
 
 	originalExp := complex ___real: aFloatReal imaginary: aFloatImag.
 	radius := ((aFloatReal raisedTo: 2) + (aFloatImag raisedTo: 2)) sqrt.
-	aFloatReal asFloat == 0.0
-		ifTrue: [
-			radians := Float pi / 2.
-			aFloatImag < 0 ifTrue: [radians := radians + Float pi / 2].
-		] ifFalse: [
-			radians := (aFloatImag / aFloatReal) arcTan.
-		].
+	aFloatReal asFloat == 0.0 ifTrue: [
+		radians := Float pi / 2.
+		aFloatImag < 0 ifTrue: [radians := radians + Float pi / 2].
+	] ifFalse: [
+		radians := (aFloatImag / aFloatReal) arcTan.
+	].
 	eulerTranslationExp := complex
 										___real:  radius ln
 										imaginary: radians.
@@ -391,11 +394,12 @@ ___rsubInt: anInteger
 category: 'Smalltalk'
 method: complex
 ___truedivFloat: aFloat
+
 	| numerator denominator |
 
-	(real = 0) & (imaginary = 0) 
-		ifTrue: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero'].
-	
+	(real = 0 and: [imaginary = 0]) ifTrue: [
+		ZeroDivisionError signal: 'ZeroDivisionError: division by zero'
+	].
 	numerator := (float ___value: aFloat) __mul__: self conjugate.
 	denominator := (real*real) + (imaginary*imaginary).
 	^numerator __truediv__: (float ___value: denominator)
@@ -403,11 +407,12 @@ ___truedivFloat: aFloat
 category: 'Smalltalk'
 method: complex
 ___truedivInt: anInteger
+
 	| numerator denominator |
 
-	(real = 0) & (imaginary = 0) 
-		ifTrue: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero'].
-	
+	(real = 0 and: [imaginary = 0]) ifTrue: [
+		ZeroDivisionError signal: 'ZeroDivisionError: division by zero'
+	].
 	numerator := (float ___value: anInteger) __mul__: self conjugate.
 	denominator := (real*real) + (imaginary*imaginary).
 	^numerator __truediv__: (float ___value: denominator)
@@ -415,10 +420,11 @@ ___truedivInt: anInteger
 category: 'Smalltalk'
 method: complex
 ___truedivReal: aFloatReal imag: aFloatImag
-	| numerator denominator |
-	(real = 0) & (imaginary = 0) 
-		ifTrue: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero'].
 
+	| numerator denominator |
+	(real = 0 and: [imaginary = 0]) ifTrue: [
+		ZeroDivisionError signal: 'ZeroDivisionError: division by zero'
+	].
 	numerator := complex ___real: aFloatReal imaginary: aFloatImag.
 
 	numerator := numerator __mul__: self conjugate.

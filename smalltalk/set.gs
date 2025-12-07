@@ -49,6 +49,7 @@ __eq__: otherCollection
 category: 'Python'
 method: set
 __ge__: otherCollection
+
 	^bool ___value: (self issuperset: otherCollection)
 %
 category: 'Python'
@@ -66,6 +67,7 @@ __iand__: aSet
 category: 'Python'
 method: set
 __init__: aCollection
+
 	| items |
 	items := aCollection.
 	(aCollection isKindOf: Container) ifTrue: [
@@ -95,6 +97,7 @@ __ixor__: aSet
 category: 'Python'
 method: set
 __le__: otherCollection
+
 	^self issubset: otherCollection
 %
 category: 'Python'
@@ -226,6 +229,7 @@ issuperset: aSet
 category: 'Python'
 method: set
 pop
+
  	container isEmpty ifTrue: [KeyError signal].
 	^self remove: container any
 %

@@ -230,6 +230,7 @@ test_chr
 category: 'other'
 method: builtin_function_or_methodTest
 test_dict
+
    | containerHolder variables |
 	variables := Variables new.
 	
@@ -413,7 +414,6 @@ test_hex
 category: 'other'
 method: builtin_function_or_methodTest
 test_input
-
 	"This is a test designed to make the input test work. It should not be run with all the other tests
 	because it is not automatice. If you would like to run this test please uncomment the code below."
 
@@ -531,6 +531,7 @@ test_len
 category: 'other'
 method: builtin_function_or_methodTest
 test_list
+
 	| listHolder variables alist |
 	variables := Variables new.
 	alist := list ___value: { 'c'. 'b'. 'a' }.
@@ -972,6 +973,7 @@ test_str
 category: 'other'
 method: builtin_function_or_methodTest
 test_sum
+
 	| listHolder variables alist |
 	variables := Variables new.
 	alist := list ___value: { int ___value: 1. int ___value: 2. int ___value: 3 }.

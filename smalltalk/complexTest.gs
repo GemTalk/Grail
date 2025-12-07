@@ -437,11 +437,13 @@ false ifTrue: [
 category: 'todo'
 method: complexTest
 test__getnewargs__
+
    #pyTodo
 %
 category: 'todo'
 method: complexTest
 test__rpow__
+
 	#pyTodo
 "
 	| a b c |

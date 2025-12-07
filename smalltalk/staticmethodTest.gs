@@ -6,10 +6,12 @@ removeallclassmethods staticmethodTest
 category: 'todo'
 method: staticmethodTest
 test__func__
+
    #pyTodo
 %
 category: 'todo'
 method: staticmethodTest
 test__get__
+
    #pyTodo
 %

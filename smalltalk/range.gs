@@ -141,12 +141,12 @@ stop
 category: 'Smalltalk'
 method: range
 ___container
+
 	^container
 %
 category: 'Smalltalk'
 method: range
 ___convertWithFlags: aSet precision: anObject andType: aCharacter
-
 	"
 	aSet contains the flags that are set for the input that are not used here
 	anObject contains an empty string if there was no precision or an Integer if it was
@@ -174,13 +174,11 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 		(invalidTypes at: aCharacter) value.
 	].
 
-	(aCharacter == $r or: [aCharacter == $a])
-		ifTrue: [
-			return := self __repr__ ___value
-		]
-		ifFalse: [
-			return := self __str__ ___value
-		].
+	(aCharacter == $r or: [aCharacter == $a]) ifTrue: [
+		return := self __repr__ ___value
+	] ifFalse: [
+		return := self __str__ ___value
+	].
 	(anObject ~= '' and: [anObject < return size]) ifFalse: [return := return copyFrom: 1 to: return size].
 	^return
 %
@@ -193,6 +191,7 @@ ___size
 category: 'Smalltalk'
 method: range
 ___value
+
 	^container
 %
 category: 'Smalltalk'
@@ -204,17 +203,15 @@ __repr__
 	stream := WriteStream on: String new.
 	
 	stream nextPutAll: 'range('.
-	self begin class == NoneType
-		ifTrue: [
-			stream nextPutAll: self end ___value asString.
-		]
-		ifFalse: [
-			stream
-				nextPutAll: self begin ___value asString;
-				nextPut: $,;
-				space;
-				nextPutAll: self end ___value asString;
-			yourself.
+	self begin class == NoneType ifTrue: [
+		stream nextPutAll: self end ___value asString.
+	] ifFalse: [
+		stream
+			nextPutAll: self begin ___value asString;
+			nextPut: $,;
+			space;
+			nextPutAll: self end ___value asString;
+		yourself.
 		
 
 			self ___value increment == 1 ifFalse: [

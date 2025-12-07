@@ -85,27 +85,15 @@ testJoinedStrWithFormattedValueNum
 	x := ast.body.body at: 1.
 	self
 		assert: (x isKindOf: ExprAst);
-		yourself.
-	x := x.value.
-	self
-		assert: (x isKindOf:JoinedStrAst);
-		yourself.
-	child := x.values at: 1.
-	self
-		assert: (child isKindOf: ConstantAst);
+		assert: ((x := x.value) isKindOf:JoinedStrAst);
+		assert: ((child := x.values at: 1) isKindOf: ConstantAst);
 		assert: child.value = 'str ___value: ''123''';
-		yourself.
-	child := x.values at: 2.
-	self
-		assert: (child isKindOf: FormattedValueAst);
+		assert: ((child := x.values at: 2) isKindOf: FormattedValueAst);
 		assert: child.value.value = 'int ___value: 456';
-		yourself.
-	child := x.values at: 3.
-	self
-		assert: (child isKindOf: ConstantAst);
+		assert: ((child := x.values at: 3) isKindOf: ConstantAst);
 		assert: child.value = 'str ___value: ''789''';
+		assert: x.values size == 3;
 		yourself.
-	self assert: x.values size == 3.
 %
 category: 'other'
 method: StringLiteralsTestCase

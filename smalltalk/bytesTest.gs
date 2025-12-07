@@ -114,6 +114,7 @@ test__dir__
 category: 'done'
 method: bytesTest
 test__eq__
+
    | list |
 	list := self bytes: '123'.
 
@@ -147,6 +148,7 @@ test__ge__
 category: 'done'
 method: bytesTest
 test__getitem__
+
    | list |
 	list := self bytes: '1234'.
 
@@ -158,6 +160,7 @@ test__getitem__
 category: 'done'
 method: bytesTest
 test__getitem__negative
+
    | list |
 	list := self bytes: 'o'.
 
@@ -211,6 +214,7 @@ test__init__
 category: 'done'
 method: bytesTest
 test__le__
+
    | list |
 	#pyElaborate. "this is an aproximated implementation"
 
@@ -227,6 +231,7 @@ test__le__
 category: 'done'
 method: bytesTest
 test__len__
+
 	self assert: bytes __call__ __len__ equals: (self int: 0).
 	self assert: (bytes __call__: (self int: 3)) __len__ equals: (self int: 3).
 
@@ -235,6 +240,7 @@ test__len__
 category: 'done'
 method: bytesTest
 test__lt__
+
    | list |
 	#pyElaborate. "this is an aproximated implementation"
 
@@ -251,6 +257,7 @@ test__lt__
 category: 'done'
 method: bytesTest
 test__mod__
+
    self should: [(self bytes: 'j') __mod__: 3]
 			raise: TypeError
 			withExceptionDo: [:exception |
@@ -259,6 +266,7 @@ test__mod__
 category: 'done'
 method: bytesTest
 test__mul__
+
 	| j ja |
 	j :=  self bytes: 'j'.
 	ja :=  self bytes: 'ja'.
@@ -273,6 +281,7 @@ test__mul__
 category: 'done'
 method: bytesTest
 test__ne__
+
    | list |
 	list := self bytes: 'abc'.
 
@@ -286,11 +295,13 @@ test__ne__
 category: 'done'
 method: bytesTest
 test__rmod__
+
    self  assert: (self targetInstance __rmod__: 'x') == NotImplementedType singleton.
 %
 category: 'done'
 method: bytesTest
 test__rmul__
+
 	| j ja |
 	j :=  self bytes: 'j'.
 	ja :=  self bytes: 'ja'.
@@ -305,6 +316,7 @@ test__rmul__
 category: 'done'
 method: bytesTest
 test__str__
+
    | bytes1 bytes2 bytes3 string1 string2 string3 |
 	bytes1 := bytes new ___value: #(97 98 99 100).
 	bytes2 := bytes new ___value: (0 to: 30) asArray.
@@ -322,6 +334,7 @@ test__str__
 category: 'done'
 method: bytesTest
 testcapitalize
+
 	| Abcd |
 	Abcd := self bytes: 'Abcd'.
 
@@ -335,6 +348,7 @@ testcapitalize
 category: 'done'
 method: bytesTest
 testcenter
+
 "
 r'abc'.center(2)  >> 'abc'
 r'abc'.center(3)  >> 'abc'
@@ -366,6 +380,7 @@ r'abcd'.center(5)  >> ' abcd'
 category: 'done'
 method: bytesTest
 testcount
+
    | list |
 	list := self bytes: 'abcb'.
 
@@ -389,6 +404,7 @@ testcount
 category: 'done'
 method: bytesTest
 testcountWithEnd
+
    | list |
 	list := self bytes: 'abcbabcb'.
 
@@ -400,6 +416,7 @@ testcountWithEnd
 category: 'done'
 method: bytesTest
 testcountWithStart
+
    | list |
 	list := self bytes: 'abcbabcb'.
 
@@ -413,6 +430,7 @@ testcountWithStart
 category: 'done'
 method: bytesTest
 testendswith
+
    | list |
 	list := self bytes: 'abcb'.
 
@@ -443,6 +461,7 @@ testendswith
 category: 'done'
 method: bytesTest
 testendswithWithEnd
+
    | list |
 	list := self bytes: 'abcbabcb'.
 
@@ -454,6 +473,7 @@ testendswithWithEnd
 category: 'done'
 method: bytesTest
 testendswithWithStart
+
    | list |
 	list := self bytes: 'abcbabcb'.
 
@@ -466,6 +486,7 @@ testendswithWithStart
 category: 'done'
 method: bytesTest
 testexpandtabs
+
    | x |
 	x := bytes __call__: (str ___value: ('cb', (String with: Character tab), 'e')) _: (str ___value: 'ascii').
 
@@ -479,6 +500,7 @@ testexpandtabs
 category: 'done'
 method: bytesTest
 testfind
+
    self
 		testfindByOne
 		testfindByTwo
@@ -489,6 +511,7 @@ testfind
 category: 'done'
 method: bytesTest
 testfindByOne
+
    | list |
 	list := self bytes: 'abcb'.
 
@@ -508,6 +531,7 @@ testfindByOne
 category: 'done'
 method: bytesTest
 testfindByTwo
+
    | list |
 	list := self bytes: 'abcb'.
 
@@ -523,6 +547,7 @@ testfindByTwo
 category: 'done'
 method: bytesTest
 testfindWithEnd
+
    | list |
 	list := self bytes: 'abcbabcb'.
 
@@ -535,6 +560,7 @@ testfindWithEnd
 category: 'done'
 method: bytesTest
 testfindWithStart
+
    | list |
 	list := self bytes: 'abcbabcb'.
 
@@ -548,6 +574,7 @@ testfindWithStart
 category: 'done'
 method: bytesTest
 testindexByOne
+
    | list |
 	list := self bytes: 'abcb'.
 
@@ -565,6 +592,7 @@ testindexByOne
 category: 'done'
 method: bytesTest
 testindexByTwo
+
    | list |
 	list := self bytes: 'abcb'.
 
@@ -580,6 +608,7 @@ testindexByTwo
 category: 'done'
 method: bytesTest
 testindexWithEnd
+
    | list |
 	list := self bytes: 'abcbabcb'.
 
@@ -591,6 +620,7 @@ testindexWithEnd
 category: 'done'
 method: bytesTest
 testindexWithStart
+
    | list |
 	list := self bytes: 'abcbabcb'.
 
@@ -720,6 +750,7 @@ testisupper
 category: 'done'
 method: bytesTest
 testljust
+
 "
 r'abc'.ljust(2)  >> 'abc'
 "
@@ -741,6 +772,7 @@ r'abc'.ljust(2)  >> 'abc'
 category: 'done'
 method: bytesTest
 testlower
+
 	| abcd |
 	abcd := self bytes: 'abcd'.
 
@@ -754,6 +786,7 @@ testlower
 category: 'done'
 method: bytesTest
 testlstrip
+
 "https://docs.python.org/3/library/stdtypes.html?highlight=lstrip#bytes.lstrip"
 	self
 		assert: self targetInstance lstrip equals: (self bytes: '');
@@ -823,6 +856,7 @@ testreplace
 category: 'done'
 method: bytesTest
 testrfind
+
    self
 		testrfindByOne
 		testrfindByTwo
@@ -833,6 +867,7 @@ testrfind
 category: 'done'
 method: bytesTest
 testrfindByOne
+
    | list |
 	list := self bytes: 'abcb'.
 
@@ -856,6 +891,7 @@ testrfindByOne
 category: 'done'
 method: bytesTest
 testrfindByTwo
+
    | list |
 	list := self bytes: 'abcb'.
 
@@ -871,6 +907,7 @@ testrfindByTwo
 category: 'done'
 method: bytesTest
 testrfindWithEnd
+
    | list |
 	list := self bytes: 'abceabcb'.
 
@@ -883,6 +920,7 @@ testrfindWithEnd
 category: 'done'
 method: bytesTest
 testrfindWithStart
+
    | list |
 	list := self bytes: 'abcbabcb'.
 
@@ -895,6 +933,7 @@ testrfindWithStart
 category: 'done'
 method: bytesTest
 testrindex
+
    self
 		testrindexByOne
 		testrindexByTwo
@@ -905,6 +944,7 @@ testrindex
 category: 'done'
 method: bytesTest
 testrindexByOne
+
    | list |
 	list := self bytes: 'bcba'.
 
@@ -917,6 +957,7 @@ testrindexByOne
 category: 'done'
 method: bytesTest
 testrindexByTwo
+
    | list |
 	list := self bytes: 'abcb'.
 
@@ -932,6 +973,7 @@ testrindexByTwo
 category: 'done'
 method: bytesTest
 testrindexWithEnd
+
    | list |
 	list := self bytes: 'abcbabcb'.
 
@@ -943,6 +985,7 @@ testrindexWithEnd
 category: 'done'
 method: bytesTest
 testrindexWithStart
+
    | list |
 	list := self bytes: 'abcbabcb'.
 
@@ -955,6 +998,7 @@ testrindexWithStart
 category: 'done'
 method: bytesTest
 testrjust
+
 "
 r'abc'.ljust(2)  >> 'abc'
 "
@@ -1063,6 +1107,7 @@ testsplitOnSepAndMaxSplit
 category: 'done'
 method: bytesTest
 teststartswith
+
    | list |
 	list := self bytes: 'abcb'.
 
@@ -1081,6 +1126,7 @@ teststartswith
 category: 'done'
 method: bytesTest
 teststartswithWithEnd
+
    | list |
 	list := self bytes: 'abcbabcb'.
 
@@ -1093,6 +1139,7 @@ teststartswithWithEnd
 category: 'done'
 method: bytesTest
 teststartswithWithStart
+
    | list |
 	list := self bytes: 'abcbabcb'.
 
@@ -1147,6 +1194,7 @@ testtitle
 category: 'done'
 method: bytesTest
 testupper
+
 	| abcd |
 	abcd := self bytes: 'ABCD'.
 
@@ -1160,21 +1208,25 @@ testupper
 category: 'setup'
 method: bytesTest
 bytes: aString
+
    ^bytes __call__: (str ___value: aString) _: (str ___value: 'ascii')
 %
 category: 'todo'
 method: bytesTest
 test__getnewargs__
+
    #pyTodo
 %
 category: 'todo'
 method: bytesTest
 test__iter__
+
    #pyTodo
 %
 category: 'todo'
 method: bytesTest
 testdecode
+
    
 	| x |
 	x := self bytes: 'abcde'.
@@ -1184,31 +1236,37 @@ testdecode
 category: 'todo'
 method: bytesTest
 testfromhex
+
    #pyTodo
 %
 category: 'todo'
 method: bytesTest
 testhex
+
    #pyTodo
 %
 category: 'todo'
 method: bytesTest
 testjoin
+
    #pyTodo
 %
 category: 'todo'
 method: bytesTest
 testmaketrans
+
    #pyTodo
 %
 category: 'todo'
 method: bytesTest
 testrsplit
+
    #pyTodo
 %
 category: 'todo'
 method: bytesTest
 testsplit
+
    #pyTodo.
 	self
 "		assert: ((self bytes: '  bcd') split)
@@ -1220,15 +1278,18 @@ testsplit
 category: 'todo'
 method: bytesTest
 testsplitlines
+
    #pyTodo
 %
 category: 'todo'
 method: bytesTest
 testtranslate
+
    #pyTodo
 %
 category: 'todo'
 method: bytesTest
 testzfill
+
    #pyTodo
 %

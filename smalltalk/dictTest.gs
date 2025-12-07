@@ -6,6 +6,7 @@ removeallclassmethods dictTest
 category: 'done'
 method: dictTest
 test__contains__onEmptyList
+
    	self
 		deny: (self targetInstance __contains__: 'x');
 		yourself.
@@ -13,6 +14,7 @@ test__contains__onEmptyList
 category: 'done'
 method: dictTest
 test__delitem__
+
    | list |
 	list := self targetInstance: { #a -> 1. #b -> 2. #c -> 3. #b -> 4 }.
 	list __delitem__: #b.
@@ -26,6 +28,7 @@ test__delitem__
 category: 'done'
 method: dictTest
 test__delitem__IfAbsent
+
    | list |
 	list := self targetInstance.
 
@@ -96,6 +99,7 @@ test__dir__
 category: 'done'
 method: dictTest
 test__eq__
+
    | list |
 	list := self targetInstance: { 1 -> 'a'. 2 -> 'b'. 3 -> 'c' }.
 
@@ -109,6 +113,7 @@ test__eq__
 category: 'done'
 method: dictTest
 test__ge__
+
    | list |
 	#pyElaborate. "this is an aproximated implementation"
 
@@ -125,6 +130,7 @@ test__ge__
 category: 'done'
 method: dictTest
 test__getitem__
+
    | object |
 	object := dict ___value: (Dictionary new
 		at: (self str: 'a') put: (self int: 1);
@@ -142,6 +148,7 @@ test__getitem__
 category: 'done'
 method: dictTest
 test__gt__
+
    | list |
 	#pyElaborate. "this is an aproximated implementation"
 
@@ -158,6 +165,7 @@ test__gt__
 category: 'done'
 method: dictTest
 test__ior__
+
 	| a b c |
 	a := self targetInstance: { 1 -> 'a'. 2 -> 'b'. 3 -> 'c'. 4 -> 'd' }.
 	b := self targetInstance: { 2 -> 'b'. 3 -> 'c'. 4 -> 'd'. 5 -> 'e' }.
@@ -173,6 +181,7 @@ test__ior__
 category: 'done'
 method: dictTest
 test__le__
+
    | list |
 	#pyElaborate. "this is an aproximated implementation"
 
@@ -189,6 +198,7 @@ test__le__
 category: 'done'
 method: dictTest
 test__len__onEmptyList
+
    	self
 		assert: self targetInstance __len__ equals: (self int: 0);
 		yourself.
@@ -196,6 +206,7 @@ test__len__onEmptyList
 category: 'done'
 method: dictTest
 test__lt__
+
    | list |
 	#pyElaborate. "this is an aproximated implementation"
 
@@ -212,6 +223,7 @@ test__lt__
 category: 'done'
 method: dictTest
 test__ne__
+
    | list |
 	list := self targetInstance: { 1 -> 'a'. 2 -> 'b'. 3 -> 'c' }.
 
@@ -225,6 +237,7 @@ test__ne__
 category: 'done'
 method: dictTest
 test__or__
+
 	| a b c |
 	a := self targetInstance: { 1 -> 'a'. 2 -> 'b'. 3 -> 'c'. 4 -> 'd' }.
 	b := self targetInstance: { 2 -> 'b'. 3 -> 'c'. 4 -> 'd'. 5 -> 'e' }.
@@ -241,6 +254,7 @@ test__or__
 category: 'done'
 method: dictTest
 test__ror__
+
 	| a b c |
 	a := self targetInstance: { 1 -> 'a'. 2 -> 'b'. 3 -> 'c'. 4 -> 'd' }.
 	b := self targetInstance: { 2 -> 'b'. 3 -> 'c'. 4 -> 'd'. 5 -> 'e' }.
@@ -257,6 +271,7 @@ test__ror__
 category: 'done'
 method: dictTest
 test__setitem__
+
    | list |
 	list := self targetInstance: { #a -> 1. #b -> 2. #c -> 3. #b -> 4 }.
 
@@ -271,6 +286,7 @@ test__setitem__
 category: 'done'
 method: dictTest
 testclear
+
    | list |
 	list := self targetInstance: { 1 -> 'a'. 2 -> 'b'. 3 -> 'c' }.
 	list clear.
@@ -281,6 +297,7 @@ testclear
 category: 'done'
 method: dictTest
 testcopy
+
    | list lost |
 	list := self targetInstance: { 1 -> 'a'. 2 -> 'b'. 3 -> 'c' }.
 
@@ -295,6 +312,7 @@ testcopy
 category: 'done'
 method: dictTest
 testget
+
    | list |
 	list := self targetInstance: { #a -> 1. #b -> 2. #c -> 3. #b -> 4 }.
 
@@ -307,6 +325,7 @@ testget
 category: 'done'
 method: dictTest
 testitems
+
    | x |
 	x := (dict ___value: { #a -> 1. #b -> 2 }) items.
 
@@ -319,6 +338,7 @@ testitems
 category: 'done'
 method: dictTest
 testkeys
+
    | list |
 	list := self targetInstance: { 1 -> 'a'. 2 -> 'b'. 3 -> 'c' }.
 
@@ -330,6 +350,7 @@ testkeys
 category: 'done'
 method: dictTest
 testpop
+
    | list |
 	list := self targetInstance: { #a -> 1. #b -> 2. #c -> 3. #b -> 4 }.
 
@@ -344,6 +365,7 @@ testpop
 category: 'done'
 method: dictTest
 testUpdate
+
    | dict1 dict2 dict3|
 	dict1 := (dict ___value: { (str ___value: 'a') -> (int ___value: 1).  (str ___value: 'b') -> (int ___value: 2) } asDictionary).
 	dict2 := (dict ___value: { (str ___value: 'c') -> (int ___value: 3). (str ___value: 'd') -> (int ___value: 4) } asDictionary).
@@ -393,6 +415,7 @@ testUpdate
 category: 'done'
 method: dictTest
 testvalues
+
    | list |
 	list := self targetInstance: { 1 -> 'a'. 2 -> 'b'. 3 -> 'c' }.
 
@@ -404,21 +427,25 @@ testvalues
 category: 'todo'
 method: dictTest
 test__class_getitem__
+
    #pyTodo
 %
 category: 'todo'
 method: dictTest
 test__iter__
+
    #pyTodo
 %
 category: 'todo'
 method: dictTest
 test__reversed__
+
    #pyTodo
 %
 category: 'todo'
 method: dictTest
 testfromkeys
+
    #pyTodo
 %
 category: 'todo'
@@ -430,10 +457,12 @@ testgetWithDefault
 category: 'todo'
 method: dictTest
 testpopitem
+
    #pyTodo
 %
 category: 'todo'
 method: dictTest
 testsetdefault
+
    #pyTodo
 %

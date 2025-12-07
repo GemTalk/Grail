@@ -7,6 +7,7 @@ set compile_env: 0
 category: 'Python'
 method: Magnitude
 __add__: anObject
+
 	| val |
 	val := (anObject isKindOf: Number)
 	   ifTrue: [anObject]
@@ -17,6 +18,7 @@ __add__: anObject
 category: 'Python'
 method: Magnitude
 __bool__
+
 	^value ~= 0
 %
 category: 'Python'
@@ -32,6 +34,7 @@ __eq__: anObject
 category: 'Python'
 method: Magnitude
 __floordiv__: anObject
+
 	| val |
 	val := (anObject isKindOf: Number)
 	   ifTrue: [anObject]
@@ -42,26 +45,31 @@ __floordiv__: anObject
 category: 'Python'
 method: Magnitude
 __ge__: anObject
+
 	^(self __eq__: anObject) or: [self __gt__: anObject]
 %
 category: 'Python'
 method: Magnitude
 __le__: anObject
+
 	^(self __gt__: anObject) not
 %
 category: 'Python'
 method: Magnitude
 __lt__: anObject
+
 	^(self __ge__: anObject) not
 %
 category: 'Python'
 method: Magnitude
 __ne__: other
+
 	^(self __eq__: other) not
 %
 category: 'Python'
 method: Magnitude
 __radd__: any
+
 	(any isKindOf: Magnitude)
 		ifFalse: [^self __radd__: (self class ___new__init__: any)].
 	^any __add__: self
@@ -69,6 +77,7 @@ __radd__: any
 category: 'Python'
 method: Magnitude
 __rand__: any
+
 	(any isKindOf: Magnitude)
 		ifFalse: [^self __rand__: (self class ___new__init__: any)].
 	^any __and__: self
@@ -76,6 +85,7 @@ __rand__: any
 category: 'Python'
 method: Magnitude
 __rdivmod__: any
+
 	(any isKindOf: Magnitude)
 		ifFalse: [^self __rdivmod__: (self class ___new__init__: any)].
 	^any __divmod__: self
@@ -83,6 +93,7 @@ __rdivmod__: any
 category: 'Python'
 method: Magnitude
 __rfloordiv__: any
+
 	(any isKindOf: Magnitude)
 		ifFalse: [^self __rfloordiv__: (self class ___new__init__: any)].
 	^any __floordiv__: self
@@ -90,6 +101,7 @@ __rfloordiv__: any
 category: 'Python'
 method: Magnitude
 __rmod__: any
+
 	(any isKindOf: Magnitude)
 		ifFalse: [^self __rmod__: (self class ___new__init__: any)].
 	^any __mod__: self
@@ -109,6 +121,7 @@ __rmul__: any
 category: 'Python'
 method: Magnitude
 __rpow__: any
+
 	(any isKindOf: Magnitude)
 		ifFalse: [^self __rpow__: (self class ___new__init__: any)].
 	^any __pow__: self
@@ -116,6 +129,7 @@ __rpow__: any
 category: 'Python'
 method: Magnitude
 __rsub__: any
+
 	(any isKindOf: Magnitude)
 		ifFalse: [^self __rsub__: (self class ___new__init__: any)].
 	^any __sub__: self
@@ -124,5 +138,6 @@ set compile_env: 0
 category: 'Smalltalk'
 method: Magnitude
 ___value
+
 	^value
 %

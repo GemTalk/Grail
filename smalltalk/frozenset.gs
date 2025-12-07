@@ -34,6 +34,7 @@ __eq__: otherCollection
 category: 'Python'
 method: frozenset
 __ge__: otherCollection
+
 	^self issuperset: otherCollection
 %
 category: 'Python'
@@ -45,6 +46,7 @@ __gt__: otherCollection
 category: 'Python'
 method: frozenset
 __le__: otherCollection
+
 	^self issubset: otherCollection
 %
 category: 'Python'
@@ -134,6 +136,7 @@ symmetric_difference: aSet
 category: 'Python'
 method: frozenset
 union: aSet
+
 	| newSet |
 	newSet := self copy.
 	newSet ___container addAll: aSet ___container.

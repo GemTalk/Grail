@@ -166,11 +166,10 @@ chr
 		params: { #object };
 		yourself.
 	function block: [:currentScope |
-		(currentScope at: #object) class == int
-			ifFalse: [
-				TypeError signal: 'TypeError: ', (currentScope at: #object) class asString,
-					'object cannot be interpreted as an integer'.
-			].
+		(currentScope at: #object) class == int ifFalse: [
+			TypeError signal: 'TypeError: ', (currentScope at: #object) class asString,
+				'object cannot be interpreted as an integer'.
+		].
 		str ___value: (currentScope at: #object) ___value asCharacter asString.
 	].
 	Builtins singleton at: #chr put: function.
@@ -206,10 +205,9 @@ dict
 		(currentScope at: #object) ~~ nil ifTrue: [
 			return update: (currentScope at: #object).
 		].
-		[(currentScope at: #kwarg) __len__ ___value ~~ 0
-			ifTrue: [
-				return update: (currentScope at: #kwarg).
-			].
+		[(currentScope at: #kwarg) __len__ ___value ~~ 0 ifTrue: [
+			return update: (currentScope at: #kwarg).
+		].
 		] on: NameError do: [].
 		return.
 	].
@@ -229,14 +227,12 @@ dir
 		| obj result |
 		obj := currentScope at: #object.
 		result := list ___value: {}.
-		obj == nil
-			ifTrue: [
-				currentScope dict keysDo: [:key | result append: (str ___value: key asString)].
-			]
-			ifFalse: [
-				obj class allInstVarNames do: [:name | result append: (str ___value: name asString)].
-				obj class selectors do: [:sel | result append: (str ___value: sel asString)].
-			].
+		obj == nil ifTrue: [
+			currentScope dict keysDo: [:key | result append: (str ___value: key asString)].
+		] ifFalse: [
+			obj class allInstVarNames do: [:name | result append: (str ___value: name asString)].
+			obj class selectors do: [:sel | result append: (str ___value: sel asString)].
+		].
 		result.
 	].
 	Builtins singleton at: #dir put: function.
@@ -321,21 +317,20 @@ frozenset
 		[
 			| return |
 			return := {}.
-			(currentScope at: #object) class == UndefinedObject
-				ifFalse: [
-					(currentScope at: #object) class == str ifTrue: [
-							(currentScope at: #object) ___value
-								do: [:each | return add: (str ___value: each asString)].
-						] ifFalse: [
-							(currentScope at: #object) class == dict ifTrue: [
-									((currentScope at: #object) keys ___container)
-										do: [:each | return add: each].
-								] ifFalse: [
-									((currentScope at: #object) ___container)
-										do: [:each | return add: each].
-								].
-						].
+			(currentScope at: #object) class == UndefinedObject ifFalse: [
+				(currentScope at: #object) class == str ifTrue: [
+					(currentScope at: #object) ___value
+						do: [:each | return add: (str ___value: each asString)].
+				] ifFalse: [
+					(currentScope at: #object) class == dict ifTrue: [
+						((currentScope at: #object) keys ___container)
+							do: [:each | return add: each].
+					] ifFalse: [
+						((currentScope at: #object) ___container)
+							do: [:each | return add: each].
+					].
 				].
+			].
 			frozenset ___value: return.
 		]
 		on: MessageNotUnderstood
@@ -382,6 +377,7 @@ hex
 category: 'other'
 method: builtins
 initialize
+
 	self
 		__import__;
 		abs;
@@ -456,63 +452,56 @@ int
 		yourself.
 	function block: [:currentScope |
 		| return |
-		(currentScope at: #base) == nil
-			ifTrue: [currentScope at: #base put: (int ___value: 10)]
-			ifFalse: [
-				(currentScope at: #object) class == str
-					ifFalse: [
-						TypeError signal: 'TypeError: int() can''t convert non-string with explicit base'.
-					].
+		(currentScope at: #base) == nil ifTrue: [
+			currentScope at: #base put: (int ___value: 10)
+		] ifFalse: [
+			(currentScope at: #object) class == str ifFalse: [
+				TypeError signal: 'TypeError: int() can''t convert non-string with explicit base'.
 			].
+		].
 		(currentScope at: #object) class == str ifTrue: [
 			| baseConverter |
-			((currentScope at: #object) ___value at: 2) isLetter 
-				ifTrue: [
-					((currentScope at: #object) ___value at: 1) == 0
-						ifFalse: [
-							ValueError signal:
-								'Value Error: invalid literal for int() with base ',
-								(currentScope at: #base) ___value asString,
-								': ',
-								(currentScope at: #object) value.
-						].
-					(((currentScope at: #object) ___value at: 2) == $b) & ((currentScope at: #base) ___value == 2)
-						ifFalse: [
-							ValueError signal:
-								'Value Error: invalid literal for int() with base ',
-								(currentScope at: #base) ___value asString,
-								': ',
-								(currentScope at: #object) value.
-						].
-					(((currentScope at: #object) ___value at: 2) == $o) & ((currentScope at: #base) ___value == 8)
-						ifFalse: [
-							ValueError signal:
-								'Value Error: invalid literal for int() with base ',
-								(currentScope at: #base) ___value asString,
-								': ',
-								(currentScope at: #object) value.
-						].
-					(((currentScope at: #object) ___value at: 2) == $h) & ((currentScope at: #base) ___value == 16)
-						ifFalse: [
-							ValueError signal:
-								'Value Error: invalid literal for int() with base ',
-								(currentScope at: #base) ___value asString,
-								': ',
-								(currentScope at: #object) value.
-						].
-				]
-				ifFalse: [
-					baseConverter := (currentScope at: #base) ___value asString, 'r', (currentScope at: #object) ___value.
-					[return := int ___value: baseConverter evaluate]
-						on: Error
-						do: [
-							ValueError signal:
-								'Value Error: invalid literal for int() with base ',
-								(currentScope at: #base) ___value asString,
-								': ',
-								(currentScope at: #object) value.
-						].
+			((currentScope at: #object) ___value at: 2) isLetter ifTrue: [
+				((currentScope at: #object) ___value at: 1) == 0 ifFalse: [
+					ValueError signal:
+						'Value Error: invalid literal for int() with base ',
+						(currentScope at: #base) ___value asString,
+						': ',
+						(currentScope at: #object) value.
 				].
+				(((currentScope at: #object) ___value at: 2) == $b) and: [(currentScope at: #base) ___value == 2]) ifFalse: [
+					ValueError signal:
+						'Value Error: invalid literal for int() with base ',
+						(currentScope at: #base) ___value asString,
+						': ',
+						(currentScope at: #object) value.
+				].
+				(((currentScope at: #object) ___value at: 2) == $o) and: [(currentScope at: #base) ___value == 8]) ifFalse: [
+					ValueError signal:
+						'Value Error: invalid literal for int() with base ',
+						(currentScope at: #base) ___value asString,
+						': ',
+						(currentScope at: #object) value.
+				].
+				(((currentScope at: #object) ___value at: 2) == $h) and: [(currentScope at: #base) ___value == 16]) ifFalse: [
+					ValueError signal:
+						'Value Error: invalid literal for int() with base ',
+						(currentScope at: #base) ___value asString,
+						': ',
+						(currentScope at: #object) value.
+				].
+			] ifFalse: [
+				baseConverter := (currentScope at: #base) ___value asString, 'r', (currentScope at: #object) ___value.
+				[return := int ___value: baseConverter evaluate]
+					on: Error
+					do: [
+						ValueError signal:
+							'Value Error: invalid literal for int() with base ',
+							(currentScope at: #base) ___value asString,
+							': ',
+							(currentScope at: #object) value.
+					].
+			].
 		] ifFalse: [
 			return := [(currentScope at: #object) __int__]
 				on: MessageNotUnderstood
@@ -590,25 +579,20 @@ list
 		[
 			| return |
 			return := list ___value: {}.
-			(currentScope at: #object) ~~ nil
-				ifTrue: [
-					(currentScope at: #object) class == str
-						ifTrue: [
-							(currentScope at: #object) ___value
-								do: [:each | return append: (str ___value: each asString)].
-						]
-						ifFalse: [
-							(currentScope at: #object) class == dict
-								ifTrue: [
-									(currentScope at: #object) keys ___container
-										do: [:each | return append: each].
-								]
-								ifFalse: [
-									(currentScope at: #object) ___container
-										do: [:each | return append: each].
-								].
-						].
+			(currentScope at: #object) ~~ nil ifTrue: [
+				(currentScope at: #object) class == str ifTrue: [
+					(currentScope at: #object) ___value
+						do: [:each | return append: (str ___value: each asString)].
+				] ifFalse: [
+					(currentScope at: #object) class == dict ifTrue: [
+						(currentScope at: #object) keys ___container
+							do: [:each | return append: each].
+					] ifFalse: [
+						(currentScope at: #object) ___container
+							do: [:each | return append: each].
+					].
 				].
+			].
 			return
 		]
 		on: MessageNotUnderstood
@@ -665,15 +649,13 @@ max
 			maxVal := args at: 1.
 			args do: [:each |
 				| compareVal maxCompareVal |
-				keyFunc == nil
-					ifTrue: [
-						compareVal := each.
-						maxCompareVal := maxVal.
-					]
-					ifFalse: [
-						compareVal := keyFunc ___call: { each } keywords: Dictionary new scope: currentScope.
-						maxCompareVal := keyFunc ___call: { maxVal } keywords: Dictionary new scope: currentScope.
-					].
+				keyFunc == nil ifTrue: [
+					compareVal := each.
+					maxCompareVal := maxVal.
+				] ifFalse: [
+					compareVal := keyFunc ___call: { each } keywords: Dictionary new scope: currentScope.
+					maxCompareVal := keyFunc ___call: { maxVal } keywords: Dictionary new scope: currentScope.
+				].
 				((compareVal __gt__: maxCompareVal) ___value) ifTrue: [maxVal := each].
 			].
 			result := maxVal.
@@ -717,15 +699,13 @@ min
 			minVal := args at: 1.
 			args do: [:each |
 				| compareVal minCompareVal |
-				keyFunc == nil
-					ifTrue: [
-						compareVal := each.
-						minCompareVal := minVal.
-					]
-					ifFalse: [
-						compareVal := keyFunc ___call: { each } keywords: Dictionary new scope: currentScope.
-						minCompareVal := keyFunc ___call: { minVal } keywords: Dictionary new scope: currentScope.
-					].
+				keyFunc == nil ifTrue: [
+					compareVal := each.
+					minCompareVal := minVal.
+				] ifFalse: [
+					compareVal := keyFunc ___call: { each } keywords: Dictionary new scope: currentScope.
+					minCompareVal := keyFunc ___call: { minVal } keywords: Dictionary new scope: currentScope.
+				].
 				((compareVal __lt__: minCompareVal) ___value) ifTrue: [minVal := each].
 			].
 			result := minVal.
@@ -791,13 +771,12 @@ ord
 		params: { #object };
 		yourself.
 	function block: [:currentScope |
-		(currentScope at: #object) class ~~ str
-			ifTrue: [
-				TypeError signal:
-					'TypeError: ord() expected string of length 1, but ',
-					(currentScope at: #object) class asString,
-					' found'.
-			].
+		(currentScope at: #object) class ~~ str ifTrue: [
+			TypeError signal:
+				'TypeError: ord() expected string of length 1, but ',
+				(currentScope at: #object) class asString,
+				' found'.
+		].
 		(currentScope at: #object) __len__ ___value == 1 ifFalse: [
 				TypeError signal:
 					'TypeError: ord() expected a character, but string of length ',
@@ -811,7 +790,6 @@ ord
 category: 'other'
 method: builtins
 pow
-
 	"On startup this creates a builtin pow function to return base raised to the pow of exp
 	This should work for ints, floats, and complex numbers in any combination"
 
@@ -826,14 +804,12 @@ pow
 		base := currentScope at: #base.
 		exp := currentScope at: #exp.
 		result := base __pow__: exp.
-		(currentScope at: #mod) ~~ nil
-			ifTrue: [
-				(result class = complex) | ((currentScope at: #mod) class = complex)
-					ifTrue: [
-						TypeError signal: 'TypeError: complex modulo'.
-					].
-				result := result __mod__: (currentScope at: #mod).
+		(currentScope at: #mod) ~~ nil ifTrue: [
+			(result class = complex or: [(currentScope at: #mod) class = complex]) ifTrue: [
+				TypeError signal: 'TypeError: complex modulo'.
 			].
+			result := result __mod__: (currentScope at: #mod).
+		].
 		result.
 	].
 
@@ -967,9 +943,11 @@ round
 		yourself.
 	function block: [:currentScope |
 		| result |
-		(currentScope at: #ndigits) == nil
-			ifTrue: [result := (currentScope at: #object) __round__]
-			ifFalse: [result := (currentScope at: #object) __round__: (currentScope at: #ndigits)].
+		(currentScope at: #ndigits) == nil ifTrue: [
+			result := (currentScope at: #object) __round__
+		] ifFalse: [
+			result := (currentScope at: #object) __round__: (currentScope at: #ndigits)
+		].
 		result.
 	].
 	Builtins singleton at: #round put: function.
@@ -988,19 +966,18 @@ set
 		[
 			| return |
 			return := set ___value: {}.
-			(currentScope at: #object) ~~ nil
-				ifTrue: [
-					(currentScope at: #object) class == str ifTrue: [
-							((currentScope at: #object) ___value)
-								do: [:each | return add: (str ___value: each asString)].
-						] ifFalse: [
-							(currentScope at: #object) class == dict ifTrue: [
-									(currentScope at: #object) keys ___container do: [:each | return add: each].
-								] ifFalse: [
-									(currentScope at: #object) ___container do: [:each | return add: each].
-								].
-						].
+			(currentScope at: #object) ~~ nil ifTrue: [
+				(currentScope at: #object) class == str ifTrue: [
+					((currentScope at: #object) ___value)
+						do: [:each | return add: (str ___value: each asString)].
+				] ifFalse: [
+					(currentScope at: #object) class == dict ifTrue: [
+						(currentScope at: #object) keys ___container do: [:each | return add: each].
+					] ifFalse: [
+						(currentScope at: #object) ___container do: [:each | return add: each].
+					].
 				].
+			].
 			return.
 		]
 		on: MessageNotUnderstood
@@ -1028,18 +1005,16 @@ sorted
 		result := list ___value: {}.
 		iterable ___container do: [:each | result append: each].
 
-		sortedArray := keyFunc == nil
-			ifTrue: [
-				result ___container asSortedCollection: [:a :b | (a __lt__: b) ___value].
-			]
-			ifFalse: [
-				result ___container asSortedCollection: [:a :b |
-					| keyA keyB |
-					keyA := keyFunc ___call: { a } keywords: Dictionary new scope: currentScope.
-					keyB := keyFunc ___call: { b } keywords: Dictionary new scope: currentScope.
-					(keyA __lt__: keyB) ___value.
-				].
+		sortedArray := keyFunc == nil ifTrue: [
+			result ___container asSortedCollection: [:a :b | (a __lt__: b) ___value].
+		] ifFalse: [
+			result ___container asSortedCollection: [:a :b |
+				| keyA keyB |
+				keyA := keyFunc ___call: { a } keywords: Dictionary new scope: currentScope.
+				keyB := keyFunc ___call: { b } keywords: Dictionary new scope: currentScope.
+				(keyA __lt__: keyB) ___value.
 			].
+		].
 
 		result := list ___value: sortedArray asArray.
 		reverse ifTrue: [result reverse].
@@ -1090,13 +1065,12 @@ sum
 				].
 				sum := sum __add__: holder.
 			].
-		sum imag ___value == 0
-			ifTrue: [
-				sum := sum real.
-				integer ifTrue: [
-					sum := int ___value: sum ___value.
-				].
+		sum imag ___value == 0 ifTrue: [
+			sum := sum real.
+			integer ifTrue: [
+				sum := int ___value: sum ___value.
 			].
+		].
 		sum.
 	].
 	Builtins singleton at: #sum put: function.
@@ -1114,25 +1088,21 @@ tuple
 	function block: [:currentScope |
 		| iterable result finalResult |
 		iterable := currentScope at: #iterable.
-		iterable == nil
-			ifTrue: [
-				finalResult := tuple ___value: #().
-			]
-			ifFalse: [
-				result := {}.
-				[
-					iterable class == str
-						ifTrue: [
-							iterable ___value do: [:each | result add: (str ___value: each asString)].
-						]
-						ifFalse: [
-							iterable ___container do: [:each | result add: each].
-						].
-				] on: MessageNotUnderstood do: [
-					TypeError signal: 'TypeError: ''', iterable class asString, ''' object is not iterable'.
+		iterable == nil ifTrue: [
+			finalResult := tuple ___value: #().
+		] ifFalse: [
+			result := {}.
+			[
+				iterable class == str ifTrue: [
+					iterable ___value do: [:each | result add: (str ___value: each asString)].
+				] ifFalse: [
+					iterable ___container do: [:each | result add: each].
 				].
-				finalResult := tuple ___value: result.
+			] on: MessageNotUnderstood do: [
+				TypeError signal: 'TypeError: ''', iterable class asString, ''' object is not iterable'.
 			].
+			finalResult := tuple ___value: result.
+		].
 		finalResult.
 	].
 	Builtins singleton at: #tuple put: function.

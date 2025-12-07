@@ -2,17 +2,7 @@
 
 Run [Python](https://docs.python.org/3/reference/index.html) on GemStone/S 64 Bit.
 
-## macOS Installation
-
-### Git Checkout
-
-Checkout this Git project to `$HOME/code/GemStone/Grail` (or to some other place and be prepared to edit things to match your path).
-
-### GemStone/S
-
-[GemStone/S](https://gemtalksystems.com/products/gs64/) can be most easily run on macOS using the free, open source [GemStone.app](https://github.com/jgfoster/GemStoneApp). From the Setup tab, click `Authenticate` and give your password (as an administrator) to allow the helper tool to be installed. Then, from the Versions tab, click `Update` to get a list of available GemStone versions. Check the box for a recent version (3.7.1 at the time of this writing) to download that version. Then, from the Databases tab, click the `+` button to create a new database and click `Start` to start the database.
-
-Copy the provided `topazini` to `~/.topazini` and edit `gs64stone` to show the name of your database (e.g., `gs64stone1`). Copy the provided `setenv` to `.setenv` and edit the path to point to your GemStone install. Then open a terminal in this directory and run `./install.sh`. If this finishes without errors then you may proceed to the next step.
+## Installation
 
 ### Python 3
 
@@ -22,7 +12,32 @@ Install the following:
   * [pip](https://docs.python.org/3/installing/index.html) is used to install Python packages. When you enter `pip --version` it should show you 25.3 or later.
   * [pprintast](https://pypi.org/project/pprintast/) is used to parse Python source files. When you enter `pprintast --version` it should show you 1.2.1 or later.
 
-## Sample Code
+### Git Checkout
+
+Checkout this Git project to `$HOME/code/GemStone/Grail` (or to some other place and be prepared to edit things to match your path).
+
+### GemStone/S
+
+[GemStone/S](https://gemtalksystems.com/products/gs64/) can be most easily run on macOS using the free, open source [GemStone.app](https://github.com/jgfoster/GemStoneApp). From the Setup tab, click `Authenticate` and give your password (as an administrator) to allow the helper tool to be installed. Then, from the Versions tab, click `Update` to get a list of available GemStone versions. Check the box for a recent version (3.7.4.3 at the time of this writing) to download that version. Then, from the Databases tab, click the `+` button to create a new database and click `Start` to start the database.
+
+Copy the provided `topazini` to `~/.topazini` and edit `gs64stone` to show the name of your database if different. Copy the provided `setenv` to `.setenv` and edit the path to point to your GemStone install. Then open a terminal in this directory and run `./install.sh`. If this finishes without errors then you may proceed to the next step.
+
+## Tests
+
+To run the test suite, run the following:
+
+```
+. ./setenv
+topaz -lq <<EOF
+login
+run
+PythonTestCase suite run printString
+%
+logout
+EOF
+```
+
+## Running Python Code in Grail
 
 ### Hello World
 Our first task is a "Hello World!" program (`tests/hello.py`). From a command line execute:
@@ -31,46 +46,17 @@ Our first task is a "Hello World!" program (`tests/hello.py`). From a command li
 ./grail tests/hello.py
 ```
 
-### Benchmark
-There is a [Python Benchmark Suite](https://github.com/python/performance) that "is intended to be an authoritative source of benchmarks for all Python implementations." This seems like a good target for our work.
+### REPL
 
-### Regression Tests
-Python comes with a [regression test package](https://docs.python.org/3/library/test.html) that can be launched with `python3 -m test`. This generates a number of errors and even some crashes on macOS, so before trying to get it to run we would need to understand more about what it does and how it is expected to work.
-
-## Process
-
-While we could parse source files directly (and may eventually do so), we can take advantage of some built-in Python features to jump ahead to the interesting parts.
-
-### Abstract Syntax Tree
-
-Python has a module [ast](https://docs.python.org/3/library/ast.html) that generates an AST (abstract syntax tree). To see this in action evaluate the following in a workspace:
+A REPL (read-eval-print loop) is a convenient way to experiment with a programming language. To run the Grail REPL, execute:
 
 ```
-ModuleAst astForPath: '$HOME/code/GemStone/Grail/hello.py'
+./grail
 ```
 
-It would be nice to have this run in Grail, but the `ast` package is simply a wrapper around some CPython internal C code. So we might as well just write our own parser in Smalltalk at that point!
+To exit the REPL, enter `exit()` or `quit()`. If you get an error and end up with a `topaz 1>` prompt, then enter `exit` to exit.
 
-## Next Steps
+## Other documentation
 
-### Build an AST using Smalltalk objects
-
-Our initial approach is to let Python generate an AST for us and then use the text representation to build our own AST. We will use the [abstract grammar](https://docs.python.org/3/library/ast.html) as a guide to hand-build subclasses of AstNode.
-
-* ModuleAst class>>script: is the basic entry point for reading a Python file (module)
-  * ModuleAst>>load:as: builds an AST for a Module
-      * ModuleAst>>buildStatementsFromAST reads the AST and calls #suite
-          * ModuleAst>>suite constructs statements
-              * StatementAst class>>statementFrom: looks for a [statement](https://docs.python.org/3/library/ast.html)
-
-### Translate the AST to Smalltalk Code
-
-We should include a reference to the Python source in some way so that we can trace the Smalltalk code back to the Python code. The information should be in such a format that we can eventually build a debugger.
-
-### Run the Smalltalk Code
-
-When we reach an import statement then the process starts over!
-
-### Automated Tests
-
-Eventually we will rely on the Python test suite, but for now we have started with a number of SUnit tests.
+* [Programs](docs/Programs.md) that we could use to test our work.
+* [Development](docs/Development.md) process and notes.

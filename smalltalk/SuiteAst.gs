@@ -29,6 +29,7 @@ initialize
 category: 'other'
 method: SuiteAst
 printSmalltalkOn: aStream
+
 	
 	body size == 1 ifTrue: [
 		 (body at: 1) printSmalltalkOn: aStream.
@@ -43,6 +44,7 @@ printSmalltalkOn: aStream
 category: 'other'
 method: SuiteAst
 size 
+
 	
 	^body size
 %

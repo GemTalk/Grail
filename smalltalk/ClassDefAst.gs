@@ -104,6 +104,7 @@ initialize
 category: 'other'
 method: ClassDefAst
 isDerivedFrom: aClass scope: aScope
+
 "distinct from isSubclassOf: because
 1) isDerivedFrom: checks the Python class hierarchy
 2) isSubclassOf: checks the Smalltalk class hierarchy"

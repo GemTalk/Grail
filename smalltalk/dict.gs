@@ -28,6 +28,7 @@ __contains__: anElement
 category: 'Python'
 method: dict
 __delitem__: aKey
+
 	^self ___container
 		removeKey: aKey
 		ifAbsent: [KeyError signal: aKey printString].
@@ -35,11 +36,13 @@ __delitem__: aKey
 category: 'Python'
 method: dict
 __ge__: otherCollection
+
 	^(self __gt__: otherCollection) or: [self __eq__: otherCollection]
 %
 category: 'Python'
 method: dict
 __getitem__: aKey
+
 	^self ___container
 		at: aKey
 		ifAbsent: [KeyError signal: 'KeyError: ' + aKey __repr__ ___value].
@@ -71,26 +74,31 @@ __gt__: otherDict
 category: 'Python'
 method: dict
 __ior__: aDict
+
 	self ___container addAll: aDict ___container.
 %
 category: 'Python'
 method: dict
 __le__: otherCollection
+
 	^(self __gt__: otherCollection) not
 %
 category: 'Python'
 method: dict
 __lt__: otherCollection
+
 	^(self __gt__: otherCollection) not and: [self __ne__: otherCollection]
 %
 category: 'Python'
 method: dict
 __ne__: otherCollection
+
 	^(self __eq__: otherCollection) __not__
 %
 category: 'Python'
 method: dict
 __or__: aDict
+
 	^self copy __ior__: aDict
 %
 category: 'Python'
@@ -120,11 +128,13 @@ __repr__
 category: 'Python'
 method: dict
 __ror__: aDict
+
    ^aDict __or__: self
 %
 category: 'Python'
 method: dict
 __setitem__: aKey _: aValue
+
 	^self ___container
 		at: aKey
 		put: aValue.
@@ -144,6 +154,7 @@ copy
 category: 'Python'
 method: dict
 get: aKey
+
 	^self __getitem__: aKey
 %
 category: 'Python'
@@ -167,6 +178,7 @@ keys
 category: 'Python'
 method: dict
 pop: aKey
+
 	^self __delitem__: aKey
 %
 category: 'Python'
@@ -175,38 +187,33 @@ update: anObject
 	"update the dictionary with the new key, value pairs in anObject,
 		this can be done with another dictionary or nested data structures"
 	| index KeyAndValue |
-	anObject class == dict
-		ifTrue: [
-			anObject ___container keysAndValuesDo: [:key :val | self ___container at: key put: val].
-		]
-		ifFalse: [
-			anObject __len__ ___value == 0 ifFalse: [
-				anObject class == str ifTrue: [
-					ValueError signal: 'ValueError: dictionary update sequence element #0 has length 1; 2 is required'.
+	anObject class == dict ifTrue: [
+		anObject ___container keysAndValuesDo: [:key :val | self ___container at: key put: val].
+	] ifFalse: [
+		anObject __len__ ___value == 0 ifFalse: [
+			anObject class == str ifTrue: [
+				ValueError signal: 'ValueError: dictionary update sequence element #0 has length 1; 2 is required'.
+			].
+			index := 0.
+			KeyAndValue := OrderedCollection new.
+			anObject ___container do: [:each |
+				each __len__ ___value == 2 ifFalse: [
+					ValueError signal:
+						'TypeError: dictionary update sequence element #',
+						index asString,
+						' has a length ',
+						each __len__ ___value asString,
+						'; 2 is required'.
 				].
-				index := 0.
-				KeyAndValue := OrderedCollection new.
-				anObject ___container do: [:each |
-					each __len__ ___value == 2 ifFalse: [
-						ValueError signal:
-							'TypeError: dictionary update sequence element #',
-							index asString,
-							' has a length ',
-							each __len__ ___value asString, 
-							'; 2 is required'.
-					].
-					each class == str
-						ifTrue: [
-							each ___value do: [:elem | KeyAndValue add: (str ___value: elem asString)].
-						]
-						ifFalse: [
-							each ___container do: [:elem | KeyAndValue add: elem].
-							
-						].
-					self ___container add: ((KeyAndValue at: 1) -> (KeyAndValue at: 2))
+				each class == str ifTrue: [
+					each ___value do: [:elem | KeyAndValue add: (str ___value: elem asString)].
+				] ifFalse: [
+					each ___container do: [:elem | KeyAndValue add: elem].
 				].
+				self ___container add: ((KeyAndValue at: 1) -> (KeyAndValue at: 2))
 			].
 		].
+	].
 %
 category: 'Python'
 method: dict

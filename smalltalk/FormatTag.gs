@@ -6,13 +6,14 @@ removeallclassmethods FormatTag
 category: 'other'
 method: FormatTag
 adjustWidth: aReadStream
+
 	self halt.
 %
 category: 'other'
 method: FormatTag
 initializeFrom: aReadStream
-
 	"aReadStream is at the character after a single %"
+
 	aReadStream peek == $% ifTrue: [
 		^'%'
 	].
@@ -26,6 +27,7 @@ initializeFrom: aReadStream
 category: 'other'
 method: FormatTag
 setFlag: aReadStream
+
 	| flagSet |
 	flagSet := (#'#', #'0', #'-', #'+', #' ') asSet.
 	flags := Set new.
@@ -68,6 +70,7 @@ setPrecision: aReadStream
 category: 'other'
 method: FormatTag
 setType: aReadStream
+
 	| validTypes |
 
 	aReadStream peek isAlphabetic
@@ -86,6 +89,7 @@ setType: aReadStream
 category: 'other'
 method: FormatTag
 setWidth: aReadStream
+
 		"Method comment"
 	
 	width := ''.
@@ -102,6 +106,7 @@ setWidth: aReadStream
 category: 'other'
 method: FormatTag
 tupleForParameters: aReadStream
+
 	
 	| insertString padding numClassHolder toBeConverted displacement |
 
@@ -165,10 +170,9 @@ tupleForParameters: aReadStream
 
 	"if the flag does not have a - but does have 0 then the padding must be all 0s and it
 	must happen after any signs or numeric bases."
-	((flags includes: $0) and: [(numClassHolder = int) or: [(numClassHolder = float)]])
-		ifFalse: [
-			^padding , insertString
-		].
+	((flags includes: $0) and: [(numClassHolder = int) or: [(numClassHolder = float)]]) ifFalse: [
+		^padding , insertString
+	].
 	displacement := 0.
 	padding := ''.
 

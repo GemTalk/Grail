@@ -6,11 +6,13 @@ removeallclassmethods WithItemAst
 category: 'Accessing'
 method: WithItemAst
 context_expr
+
 	^context_expr
 %
 category: 'Accessing'
 method: WithItemAst
 optional_vars
+
 	^optional_vars
 %
 category: 'other'

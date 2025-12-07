@@ -50,15 +50,14 @@ scope: aVariables positional: positionalArgsArray named: namedArgsArray
 	vararg isNil ifFalse: [
 		myScope at: vararg put: (list ___value: OrderedCollection new).
 	] ifTrue: [
-		 positionalArgsArray size < defaultsOffset
-			ifTrue: [
-				| errorString |
-				errorString := ''.
-				(positionalArgsArray size + 1) to: params size do: [:i | errorString := errorString, ' ', ((params at: i) asString)].
-				TypeError signal:
-					'TypeError: missing ', (defaultsOffset - positionalArgsArray size) asString,
-					' required positional arguments:', errorString.
-			].
+		positionalArgsArray size < defaultsOffset ifTrue: [
+			| errorString |
+			errorString := ''.
+			(positionalArgsArray size + 1) to: params size do: [:i | errorString := errorString, ' ', ((params at: i) asString)].
+			TypeError signal:
+				'TypeError: missing ', (defaultsOffset - positionalArgsArray size) asString,
+				' required positional arguments:', errorString.
+		].
 	].
 	(1 to: positionalArgsArray size) do: [:i |
 		i <= params size ifTrue: [

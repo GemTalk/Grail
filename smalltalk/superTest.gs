@@ -6,20 +6,24 @@ removeallclassmethods superTest
 category: 'todo'
 method: superTest
 test__get__
+
    #pyTodo
 %
 category: 'todo'
 method: superTest
 test__self__
+
    #pyTodo
 %
 category: 'todo'
 method: superTest
 test__self_class__
+
    #pyTodo
 %
 category: 'todo'
 method: superTest
 test__thisclass__
+
    #pyTodo
 %

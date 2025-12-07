@@ -47,6 +47,7 @@ builtins
 category: 'other'
 method: Builtins
 initialize
+
 	super initialize.
 	builtins new initialize.
 %

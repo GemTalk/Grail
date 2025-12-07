@@ -6,25 +6,30 @@ removeallclassmethods UnicodeDecodeErrorTest
 category: 'todo'
 method: UnicodeDecodeErrorTest
 testencoding
+
    #pyTodo
 %
 category: 'todo'
 method: UnicodeDecodeErrorTest
 testend
+
    #pyTodo
 %
 category: 'todo'
 method: UnicodeDecodeErrorTest
 testobject
+
    #pyTodo
 %
 category: 'todo'
 method: UnicodeDecodeErrorTest
 testreason
+
    #pyTodo
 %
 category: 'todo'
 method: UnicodeDecodeErrorTest
 teststart
+
    #pyTodo
 %

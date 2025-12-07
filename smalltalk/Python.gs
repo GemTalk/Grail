@@ -3831,6 +3831,12 @@ Object subclass: 'FormatTag'
 %
 expectvalue /Class
 doit
+FormatTag comment: 
+'https://docs.python.org/3/library/stdtypes.html#printf-style-string-formatting
+'
+%
+expectvalue /Class
+doit
 FormatTag category: 'Tools'
 %
 ! ------------------- Class definition for FunctionDef

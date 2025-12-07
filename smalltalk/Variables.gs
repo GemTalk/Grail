@@ -33,15 +33,14 @@ assoc == nil ifTrue: [
 category: 'other'
 method: Variables
 at: aKey
-
 	"Checks for a local variable read before write error and then checks the current scope
 	and all previous scopes for the variable in questions."
+
 	self isGlobals ifFalse: [
-		(helperSymbols includes: aKey)
-			ifTrue: [
-				UnboundLocalError signal: 'UnboundLocalError: local variable ''' , aKey asString , ''' referenced before assignment'.
-			]
-		].
+		(helperSymbols includes: aKey) ifTrue: [
+			UnboundLocalError signal: 'UnboundLocalError: local variable ''' , aKey asString , ''' referenced before assignment'.
+		]
+	].
 
 	^self find: aKey
 %
@@ -84,7 +83,6 @@ dict
 category: 'other'
 method: Variables
 find: aKey
-
 	"locates a variable in the current dictionary or if it isn't present searches its parent for it"
 
 	parent ifNil: [^dict at: aKey ifAbsent: [NameError signal: 'NameError: name ''' , aKey asString , ''' is not defined']].
@@ -139,7 +137,6 @@ parent: aVariables
 category: 'other'
 method: Variables
 setAsGlobals: aArray
-
 	"create a global variable for each key in the array by creating a new variable in
 	PyGlobals if one doesn't already exist by the name aKey and then adding the
 	association from PyGlobals to this Variables"
@@ -156,7 +153,6 @@ setAsGlobals: aArray
 category: 'other'
 method: Variables
 setAsNonlocals: aArray
-
 	"create a global variable for each key in the array by creating a new variable in
 	PyGlobals if one doesn't already exist by the name aKey and then adding the
 	association from PyGlobals to this Variables"

@@ -62,6 +62,7 @@ name
 category: 'other'
 method: FunctionDefAst
 printArgList: anArray on: aStream
+
 	
 	aStream nextPutAll: '{ '.
 	anArray do: [:arg |
@@ -76,6 +77,7 @@ printArgList: anArray on: aStream
 category: 'other'
 method: FunctionDefAst
 printDefaultsList: anArray on: aStream
+
 	
 	aStream nextPutAll: '{ '.
 	anArray do: [:arg |

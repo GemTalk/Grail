@@ -55,6 +55,7 @@ class Bar(Foo): # 18
 category: 'other'
 method: CompoundStatementsTestCase
 testCompression
+
 "
 # cpython/Lib/importlib/_bootstrap.py:321
 if any(arg is not None for arg in []):	# 23

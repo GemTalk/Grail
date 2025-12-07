@@ -6,5 +6,6 @@ removeallclassmethods SystemExitTest
 category: 'todo'
 method: SystemExitTest
 testcode
+
    #pyTodo
 %

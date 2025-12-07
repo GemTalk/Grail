@@ -6,6 +6,7 @@ removeallclassmethods TupleTestCase
 category: 'other'
 method: TupleTestCase
 testJoinedStr
+
 "
   | pyString result |
   
@@ -18,6 +19,7 @@ testJoinedStr
 category: 'other'
 method: TupleTestCase
 testTuple
+
 	| pyString result |
 
 	pyString := 
@@ -37,6 +39,7 @@ self assert: result ___value.
 category: 'other'
 method: TupleTestCase
 testTupleAssignment
+
 "
   | pyString result |
   pyString := 'for a, b in [(1, 2)]: pass'.
@@ -54,6 +57,7 @@ self assert: result ___value.
 category: 'other'
 method: TupleTestCase
 testTupleID
+
 "
   | pyString result sequences seq_id sequence |
 	sequences := Dictionary new.

@@ -50,6 +50,7 @@ test__dir__
 category: 'done'
 method: rangeTest
 test__getitem__
+
    	self assert: ((self targetInstance: (int ___value: 1) _: (int ___value: 10)) __getItem__: 1) equals: 2.
 	self assert: ((self targetInstance: (int ___value: 1) _: (int ___value: 10)) __getItem__: 3) equals: 4.
 	self assert: ((self targetInstance: (int ___value: 1) _: (int ___value: 10) _: (int ___value: 2)) __getItem__: 1) equals: 3.
@@ -69,6 +70,7 @@ test__len__
 category: 'done'
 method: rangeTest
 test__repr__
+
 	| currentScope |
 	currentScope := Variables new.
 	self
@@ -95,6 +97,7 @@ testcount
 category: 'done'
 method: rangeTest
 testindex
+
    	self assert: ((self targetInstance: (int ___value: 1) _: (int ___value: 10)) index: 1) equals: 1.
 	self assert: ((self targetInstance: (int ___value: 1) _: (int ___value: 10)) index: 3) equals: 3.
 	self assert: ((self targetInstance: (int ___value: 1) _: (int ___value: 10) _: (int ___value: 2)) index: 1) equals: 1.
@@ -114,10 +117,12 @@ testSSS
 category: 'todo'
 method: rangeTest
 test__iter__
+
    #pyTodo
 %
 category: 'todo'
 method: rangeTest
 test__reversed__
+
    #pyTodo
 %

@@ -45,7 +45,6 @@ testTranslateGtExpr
 category: 'other'
 method: TranslateComparisonOperatorsTestCase
 testTranslateInExpr
-
 	"TODO"
 
 	| pyString ast stream x |
@@ -164,7 +163,6 @@ testTranslateNestedComparisonExpr
 category: 'other'
 method: TranslateComparisonOperatorsTestCase
 testTranslateNotInExpr
-
 	"TODO"
 
 	| pyString ast stream x |

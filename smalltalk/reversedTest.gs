@@ -6,15 +6,18 @@ removeallclassmethods reversedTest
 category: 'todo'
 method: reversedTest
 test__iter__
+
    #pyTodo
 %
 category: 'todo'
 method: reversedTest
 test__length_hint__
+
    #pyTodo
 %
 category: 'todo'
 method: reversedTest
 testnext
+
    #pyTodo
 %

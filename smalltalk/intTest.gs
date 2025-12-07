@@ -295,6 +295,7 @@ test__pos__
 category: 'done'
 method: intTest
 test__pow__
+
 	| powHolder |
 	self
 		assert: ((self int: 3) __pow__: (self int: 2)) ___value equals: 9;

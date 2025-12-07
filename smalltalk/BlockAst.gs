@@ -19,6 +19,7 @@ initialize
 category: 'other'
 method: BlockAst
 printSmalltalkOn: aStream
+
 	
 	"initialize a set of written variables in the block"
 

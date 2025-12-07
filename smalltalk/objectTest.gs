@@ -259,11 +259,13 @@ test__getattribute__
 category: 'todo'
 method: objectTest
 test__reduce__
+
    #pyTodo.
 %
 category: 'todo'
 method: objectTest
 test__reduce_ex__
+
    #pyTodo.
 %
 category: 'todo'

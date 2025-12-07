@@ -6,6 +6,7 @@ removeallclassmethods tupleTest
 category: 'done'
 method: tupleTest
 test__add__
+
    | list lost |
 	list := self targetInstance __add__: (tuple ___value: { 'o' }).
 
@@ -21,6 +22,7 @@ test__add__
 category: 'done'
 method: tupleTest
 test__contains__onEmptyList
+
    	self
 		deny: (self targetInstance __contains__: 'x');
 		yourself.
@@ -74,6 +76,7 @@ test__dir__
 category: 'done'
 method: tupleTest
 test__eq__
+
    | list |
 	list := self targetInstance __add__: { '1'. '2'. '3' }.
 
@@ -86,6 +89,7 @@ test__eq__
 category: 'done'
 method: tupleTest
 test__ge__
+
    | list |
 	list := self targetInstance __add__: { '1'. '2'. '3' }.
 
@@ -100,6 +104,7 @@ test__ge__
 category: 'done'
 method: tupleTest
 test__getitem__negative
+
    | list |
 	list := self targetInstance __add__: { 'o' }.
 
@@ -121,6 +126,7 @@ test__getitem__outOfRange
 category: 'done'
 method: tupleTest
 test__getslice__
+
    | list |
 	list := self targetInstance __add__: { 'a'. 'b'. 'c'. 'd' }.
 
@@ -135,6 +141,7 @@ test__getslice__
 category: 'done'
 method: tupleTest
 test__gt__
+
    | list |
 	list := tuple ___value: { '1'. '2'. '3' }.
 
@@ -149,6 +156,7 @@ test__gt__
 category: 'done'
 method: tupleTest
 test__le__
+
    | x |
 	x := tuple ___value: { '1'. '2'. '3' }.
 
@@ -163,6 +171,7 @@ test__le__
 category: 'done'
 method: tupleTest
 test__len__onEmptyList
+
    	self
 		assert: self targetInstance __len__ equals: (self int: 0);
 		yourself.
@@ -170,6 +179,7 @@ test__len__onEmptyList
 category: 'done'
 method: tupleTest
 test__lt__
+
    | x |
 	x := tuple ___value: { '1'. '2'. '3' }.
 
@@ -184,6 +194,7 @@ test__lt__
 category: 'done'
 method: tupleTest
 test__mul__
+
    | x |
 	x := tuple ___value: { 'a'. 'b' }.
 
@@ -196,6 +207,7 @@ test__mul__
 category: 'done'
 method: tupleTest
 test__ne__
+
    | list |
 	list := self targetInstance __add__: { '1'. '2'. '3' }.
 
@@ -208,6 +220,7 @@ test__ne__
 category: 'done'
 method: tupleTest
 test__repr__
+
    | list |
 	list := self targetInstance __add__: { str ___value: 'a'. str ___value: 'b'. str ___value: 'c'. str ___value: 'd' }.
 
@@ -219,6 +232,7 @@ test__repr__
 category: 'done'
 method: tupleTest
 test__rmul__
+
    | list |
 	list := self targetInstance __add__: { 'a'. 'b' }.
 
@@ -231,6 +245,7 @@ test__rmul__
 category: 'done'
 method: tupleTest
 test__str__
+
    | list |
 	list := self targetInstance __add__: { str ___value: 'a'. str ___value: 'b'. str ___value: 'c'. str ___value: 'd' }.
 
@@ -241,6 +256,7 @@ test__str__
 category: 'done'
 method: tupleTest
 testcount
+
    | list |
 	list := self targetInstance __add__: { 'a'. 'b'. 'c'. 'b' }.
 
@@ -253,6 +269,7 @@ testcount
 category: 'done'
 method: tupleTest
 testindex
+
    | x |
 	x := tuple ___value: { (self str: 'a'). (self str: 'b'). (self str: 'c'). (self str: 'b') }.
 
@@ -273,25 +290,30 @@ testindex
 category: 'todo'
 method: tupleTest
 test__class_getitem__
+
    #pyTodo
 %
 category: 'todo'
 method: tupleTest
 test__init_subclass__
+
    #pyTodo
 %
 category: 'todo'
 method: tupleTest
 test__iter__
+
    #pyTodo
 %
 category: 'todo'
 method: tupleTest
 test__reduce__
+
    #pyTodo
 %
 category: 'todo'
 method: tupleTest
 test__reduce_ex__
+
    #pyTodo
 %

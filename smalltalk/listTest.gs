@@ -6,6 +6,7 @@ removeallclassmethods listTest
 category: 'done'
 method: listTest
 test__add__
+
    | list lost |
 	list := self targetInstance __add__: { 'o' }.
 
@@ -32,6 +33,7 @@ test__add__anElement
 category: 'done'
 method: listTest
 test__contains__onEmptyList
+
    	self
 		deny: (self targetInstance __contains__: 'x');
 		yourself.
@@ -39,6 +41,7 @@ test__contains__onEmptyList
 category: 'done'
 method: listTest
 test__delitem__
+
    | list |
 	list := self targetInstance __add__: { 'o' }.
 	list __delitem__: 0.
@@ -51,6 +54,7 @@ test__delitem__
 category: 'done'
 method: listTest
 test__delitem__negative
+
    | list |
 	list := self targetInstance __add__: { 'o' }.
 	list __delitem__: -1.
@@ -74,6 +78,7 @@ test__delitem__outOfRange
 category: 'done'
 method: listTest
 test__delslice__
+
    | list |
 	list := self targetInstance __add__: { 'a'. 'b'. 'c'. 'd' }.
 
@@ -148,6 +153,7 @@ test__dir__
 category: 'done'
 method: listTest
 test__eq__
+
    | list |
 	list := self targetInstance __add__: { '1'. '2'. '3' }.
 
@@ -160,6 +166,7 @@ test__eq__
 category: 'done'
 method: listTest
 test__ge__
+
    | list |
 	list := self targetInstance __add__: { '1'. '2'. '3' }.
 
@@ -174,6 +181,7 @@ test__ge__
 category: 'done'
 method: listTest
 test__getitem__negative
+
    | list |
 	list := self targetInstance __add__: { 'o' }.
 
@@ -195,6 +203,7 @@ test__getitem__outOfRange
 category: 'done'
 method: listTest
 test__getslice__
+
    | list |
 	list := self targetInstance __add__: { 'a'. 'b'. 'c'. 'd' }.
 
@@ -209,6 +218,7 @@ test__getslice__
 category: 'done'
 method: listTest
 test__gt__
+
    | list |
 	list := self targetInstance __add__: { '1'. '2'. '3' }.
 
@@ -223,6 +233,7 @@ test__gt__
 category: 'done'
 method: listTest
 test__iadd__
+
    | list lost |
 	list := self targetInstance: { 'o' }.
 
@@ -237,6 +248,7 @@ test__iadd__
 category: 'done'
 method: listTest
 test__imul__
+
    | list |
 	list := self targetInstance __add__: { 'a'. 'b' }.
 
@@ -249,6 +261,7 @@ test__imul__
 category: 'done'
 method: listTest
 test__le__
+
    | list |
 	list := self targetInstance __add__: { '1'. '2'. '3' }.
 
@@ -263,6 +276,7 @@ test__le__
 category: 'done'
 method: listTest
 test__len__onEmptyList
+
    	self
 		assert: self targetInstance __len__ equals: (self int: 0);
 		yourself.
@@ -270,6 +284,7 @@ test__len__onEmptyList
 category: 'done'
 method: listTest
 test__lt__
+
    | list |
 	list := self targetInstance __add__: { '1'. '2'. '3' }.
 
@@ -284,6 +299,7 @@ test__lt__
 category: 'done'
 method: listTest
 test__mul__
+
    | list |
 	list := self targetInstance __add__: { 'a'. 'b' }.
 
@@ -296,6 +312,7 @@ test__mul__
 category: 'done'
 method: listTest
 test__ne__
+
    | list |
 	list := self targetInstance __add__: { '1'. '2'. '3' }.
 
@@ -308,6 +325,7 @@ test__ne__
 category: 'done'
 method: listTest
 test__repr__
+
    | list |
 	list := self targetInstance __add__: { str ___value: 'a'. str ___value: 'b'. str ___value: 'c'. str ___value: 'd' }.
 
@@ -320,6 +338,7 @@ test__repr__
 category: 'done'
 method: listTest
 test__reversed__
+
    | x |
 	x := list ___value: { 'a'. 'b'. 'c' }.
 
@@ -334,6 +353,7 @@ test__reversed__
 category: 'done'
 method: listTest
 test__rmul__
+
    | x |
 	x := list ___value: { 'a'. 'b' }.
 
@@ -346,6 +366,7 @@ test__rmul__
 category: 'done'
 method: listTest
 test__setitem__
+
    | x |
 	x := list ___value: { self str: 'o' }.
 	x __setitem__: (self str: 'u') _: (self int: 0).
@@ -359,6 +380,7 @@ test__setitem__
 category: 'done'
 method: listTest
 test__setitem__negative
+
    | list |
 	list := self targetInstance __add__: { self str:'o' }.
 	list __setitem__: (self str: 'u') _: (self int: -1).
@@ -372,6 +394,7 @@ test__setitem__negative
 category: 'done'
 method: listTest
 test__setslice__replacing
+
 	| list |
 	list := self targetInstance __add__: {'a' . 'b' . 'c' . 'd'}.
 	list __setslice__: 1 _: 2 _: 'y'.
@@ -383,6 +406,7 @@ test__setslice__replacing
 category: 'done'
 method: listTest
 test__setslice__withOneSpot
+
 	| list |
 	list := self targetInstance __add__: {'a' . 'b' . 'c' . 'd'}.
 	list __setslice__: 1 _: 1 _: 'y'.
@@ -394,6 +418,7 @@ test__setslice__withOneSpot
 category: 'done'
 method: listTest
 test__setslice__zipping
+
 	| list |
 	list := self targetInstance __add__: {'a' . 'b' . 'c' . 'd'}.
 	list __setslice__: 1 _: 3 _: 'y'.
@@ -405,6 +430,7 @@ test__setslice__zipping
 category: 'done'
 method: listTest
 test__str__
+
    | list |
 	list := self targetInstance __add__: { str ___value: 'a'. str ___value: 'b'. str ___value: 'c'. str ___value: 'd' }.
 
@@ -415,6 +441,7 @@ test__str__
 category: 'done'
 method: listTest
 testappend
+
    | list |
 	list := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c' }.
 
@@ -429,6 +456,7 @@ testappend
 category: 'done'
 method: listTest
 testclear
+
    | list |
 	list := self targetInstance __add__: { 'a'. 'b'. 'c' }.
 	list clear.
@@ -439,6 +467,7 @@ testclear
 category: 'done'
 method: listTest
 testcopy
+
    | list lost |
 	list := self targetInstance __add__: { 'a'. 'b'. 'c' }.
 
@@ -453,6 +482,7 @@ testcopy
 category: 'done'
 method: listTest
 testcount
+
    | list |
 	list := self targetInstance __add__: { 'a'. 'b'. 'c'. 'b' }.
 
@@ -465,6 +495,7 @@ testcount
 category: 'done'
 method: listTest
 testextendWithElement
+
    | list |
 	list := self targetInstance __add__: { 'o' }.
 
@@ -477,6 +508,7 @@ testextendWithElement
 category: 'done'
 method: listTest
 testextendWithList
+
    | list lost |
 	list := self targetInstance __add__: { 'o' }.
 
@@ -491,6 +523,7 @@ testextendWithList
 category: 'done'
 method: listTest
 testindex
+
    | list |
 	list := self targetInstance __add__: { (self str: 'a'). (self str: 'b'). (self str: 'c'). (self str: 'b') }.
 
@@ -511,6 +544,7 @@ testindex
 category: 'done'
 method: listTest
 testinsertBeforeLast
+
 	| list |
 	list := self targetInstance __add__: {'a'}.
 	list insert: -1 _: 'c'.
@@ -523,6 +557,7 @@ testinsertBeforeLast
 category: 'done'
 method: listTest
 testinsertBeforeRange
+
 	| list |
 	list := self targetInstance __add__: {'a'}.
 	list insert: -5 _: 'c'.
@@ -535,6 +570,7 @@ testinsertBeforeRange
 category: 'done'
 method: listTest
 testinsertInRange
+
 	| list |
 	list := self targetInstance __add__: {'a' . 'b'}.
 	list insert: 1 _: 'c'.
@@ -548,6 +584,7 @@ testinsertInRange
 category: 'done'
 method: listTest
 testinsertPassRange
+
 	| list |
 	list := self targetInstance __add__: {'a'}.
 	list insert: 5 _: 'c'.
@@ -560,6 +597,7 @@ testinsertPassRange
 category: 'done'
 method: listTest
 testpop
+
    | list |
 	list := self targetInstance __add__: { 'a'. 'b'. 'c' }.
 
@@ -571,6 +609,7 @@ testpop
 category: 'done'
 method: listTest
 testpopNegaive
+
    | list |
 	list := self targetInstance __add__: { 'a'. 'b'. 'c' }.
 
@@ -582,6 +621,7 @@ testpopNegaive
 category: 'done'
 method: listTest
 testpopPassNegative
+
    | list |
 	list := self targetInstance __add__: { 'a' }.
 
@@ -595,6 +635,7 @@ testpopPassNegative
 category: 'done'
 method: listTest
 testpopPassPositive
+
    | list |
 	list := self targetInstance __add__: { 'a' }.
 
@@ -608,6 +649,7 @@ testpopPassPositive
 category: 'done'
 method: listTest
 testpopPositive
+
    | list |
 	list := self targetInstance __add__: { 'a'. 'b'. 'c' }.
 
@@ -619,6 +661,7 @@ testpopPositive
 category: 'done'
 method: listTest
 testremove
+
    | list |
 	list := self targetInstance __add__: { 'a'. 'b'. 'c'. 'b' }.
 	list remove: 'b'.
@@ -633,6 +676,7 @@ testremove
 category: 'done'
 method: listTest
 testremoveIfAbsent
+
    | list |
 	list := self targetInstance.
 
@@ -646,6 +690,7 @@ testremoveIfAbsent
 category: 'done'
 method: listTest
 testreverse
+
    | x |
 	x := self targetInstance __add__: (list ___value: { 'a'. 'b'. 'c' }).
 	x reverse.
@@ -659,6 +704,7 @@ testreverse
 category: 'done'
 method: listTest
 testsort
+
    | x |
 	x := self targetInstance __add__: (list ___value: { 'c'. 'b'. 'a' }).
 	x sort.
@@ -672,36 +718,43 @@ testsort
 category: 'todo'
 method: listTest
 test__class_getitem__
+
    #pyTodo
 %
 category: 'todo'
 method: listTest
 test__init_subclass__
+
    #pyTodo
 %
 category: 'todo'
 method: listTest
 test__iter__
+
    #pyTodo
 %
 category: 'todo'
 method: listTest
 test__reduce__
+
    #pyTodo
 %
 category: 'todo'
 method: listTest
 test__reduce_ex__
+
    #pyTodo
 %
 category: 'todo'
 method: listTest
 test__sizeof__
+
    #pyTodo
 %
 category: 'todo'
 method: listTest
 testsortWithDict
+
 #pyTodo
 "
    | x |
@@ -719,6 +772,7 @@ testsortWithDict
 category: 'todo'
 method: listTest
 testsortWithKey
+
 #pyTodo
 "
    | x |

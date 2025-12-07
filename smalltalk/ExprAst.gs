@@ -14,6 +14,7 @@ initialize
 category: 'other'
 method: ExprAst
 messagePrecendence
+
 	
 	^3
 %

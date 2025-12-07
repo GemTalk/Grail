@@ -48,6 +48,7 @@ hash
 category: 'Python'
 method: Container
 __add__: aList
+
 	| newlist |
 
 	{ Container. Collection }
@@ -64,6 +65,7 @@ __add__: aList
 category: 'Python'
 method: Container
 __bool__
+
 	^bool ___value: (self ___container size) ~= 0
 %
 category: 'Python'
@@ -80,6 +82,7 @@ __contains__: aPyObject
 category: 'Python'
 method: Container
 __eq__: otherCollection
+
 	| size |
 
 	(self class = otherCollection class) ifFalse: [^bool ___value: false].
@@ -93,11 +96,13 @@ __eq__: otherCollection
 category: 'Python'
 method: Container
 __ge__: otherCollection
+
 	^(self __gt__: otherCollection) or: [self __eq__: otherCollection]
 %
 category: 'Python'
 method: Container
 __getitem__: aPyIndex
+
 	| index |
 	index := aPyIndex ___value < 0 ifTrue: [self __len__ ___value + aPyIndex ___value] ifFalse: [aPyIndex ___value].
 	(index < 0 or: [	index >= self __len__ ___value])
@@ -121,6 +126,7 @@ __getslice__: aPyIntStart _: aPyIntEnd
 category: 'Python'
 method: Container
 __gt__: otherCollection
+
 	| size |
 
 	size := self ___container size min: otherCollection ___container size.
@@ -149,6 +155,7 @@ __iadd__: aList
 category: 'Python'
 method: Container
 __imul__: aMultiplier
+
 	| newList |
 	 newList := self.
 
@@ -167,6 +174,7 @@ __init__
 category: 'Python'
 method: Container
 __le__: otherCollection
+
 	^(self __gt__: otherCollection) not
 %
 category: 'Python'
@@ -178,11 +186,13 @@ __len__
 category: 'Python'
 method: Container
 __lt__: otherCollection
+
 	^(self __gt__: otherCollection) not and: [self __ne__: otherCollection]
 %
 category: 'Python'
 method: Container
 __mul__: aPyIntMultiplier
+
 	| newList |
 	 newList := OrderedCollection new.
 
@@ -195,6 +205,7 @@ __mul__: aPyIntMultiplier
 category: 'Python'
 method: Container
 __ne__: otherCollection
+
 	^(self __eq__: otherCollection) __not__
 %
 category: 'Python'
@@ -219,6 +230,7 @@ __repr__
 category: 'Python'
 method: Container
 __rmul__: aPyIntMultiplier
+
 	^self __mul__: aPyIntMultiplier
 %
 category: 'Python'
@@ -242,11 +254,13 @@ count: aPyObject
 category: 'Python'
 method: Container
 index: aPythonObject
+
 	^self index: aPythonObject from: (int ___value: 1)
 %
 category: 'Python'
 method: Container
 index: aPythonObject from: aPyIntStart
+
 	^self index: aPythonObject from: aPyIntStart to: self __len__
 %
 category: 'Python'
@@ -267,6 +281,7 @@ ___asIterableForFor
 category: 'Smalltalk'
 method: Container
 ___container
+
 	^container
 %
 category: 'Smalltalk'
@@ -303,6 +318,7 @@ ___size
 category: 'Smalltalk'
 method: Container
 ___value
+
 	^container
 %
 category: 'Smalltalk'

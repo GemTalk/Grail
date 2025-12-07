@@ -6,6 +6,7 @@ removeallclassmethods frozensetTest
 category: 'done'
 method: frozensetTest
 test__and__
+
 	| a b c |
 	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
 	b := frozenset ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
@@ -24,6 +25,7 @@ test__and__
 category: 'done'
 method: frozensetTest
 test__and__Set
+
 	| a b c |
 	a := frozenset ___value: { 'a'. 'b'. 'c'. 'd' }.
 	b := set ___value: { 'b'. 'c'. 'd'. 'e' }.
@@ -37,6 +39,7 @@ test__and__Set
 category: 'done'
 method: frozensetTest
 test__contains__onEmptyList
+
    	self
 		deny: (self targetInstance __contains__: 'x');
 		yourself.
@@ -99,6 +102,7 @@ test__dir__
 category: 'done'
 method: frozensetTest
 test__eq__
+
    | list |
 	list := self targetInstance: { '1'. '2'. '3' }.
 
@@ -112,6 +116,7 @@ test__eq__
 category: 'done'
 method: frozensetTest
 test__eq__Set
+
    | list |
 	list := self targetInstance: { '1'. '2'. '3' }.
 
@@ -125,6 +130,7 @@ test__eq__Set
 category: 'done'
 method: frozensetTest
 test__ge__
+
 	| a b c bb |
 	a := frozenset ___value: { 'a'. 'b'. 'c' }.
 	b := frozenset ___value: { 'b'. 'c' }.
@@ -164,6 +170,7 @@ test__gt__
 category: 'done'
 method: frozensetTest
 test__le__
+
 	| a b c bb |
 	a := frozenset ___value: { 'a'. 'b'. 'c' }.
 	b := frozenset ___value: { 'b'. 'c' }.
@@ -183,6 +190,7 @@ test__le__
 category: 'done'
 method: frozensetTest
 test__len__onEmptyList
+
    	self
 		assert: self targetInstance __len__ equals: (self int: 0);
 		yourself.
@@ -190,6 +198,7 @@ test__len__onEmptyList
 category: 'done'
 method: frozensetTest
 test__lt__
+
 	| a b c bb |
 	a := frozenset ___value: { 'a'. 'b'. 'c' }.
 	b := frozenset ___value: { 'b'. 'c' }.
@@ -209,6 +218,7 @@ test__lt__
 category: 'done'
 method: frozensetTest
 test__ne__
+
    | list |
 	list := self targetInstance: { '1'. '2'. '3' }.
 
@@ -222,6 +232,7 @@ test__ne__
 category: 'done'
 method: frozensetTest
 test__ne__Set
+
    | list |
 	list := self targetInstance: { '1'. '2'. '3' }.
 
@@ -235,6 +246,7 @@ test__ne__Set
 category: 'done'
 method: frozensetTest
 test__or__
+
 	| a b c |
 	a := self targetInstance: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
 	b := self targetInstance: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
@@ -252,6 +264,7 @@ test__or__
 category: 'done'
 method: frozensetTest
 test__or__Set
+
 	| a b c |
 	a := self targetInstance: { 'a'. 'b'. 'c'. 'd' }.
 	b := set ___value: { 'b'. 'c'. 'd'. 'e' }.
@@ -265,6 +278,7 @@ test__or__Set
 category: 'done'
 method: frozensetTest
 test__rand__
+
 	| a b c |
 	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
 	b := frozenset ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
@@ -283,6 +297,7 @@ test__rand__
 category: 'done'
 method: frozensetTest
 test__rand__Set
+
 	| a b c |
 	a := self targetInstance: { 'a'. 'b'. 'c'. 'd' }.
 	b := set ___value:  { 'b'. 'c'. 'd'. 'e' }.
@@ -296,6 +311,7 @@ test__rand__Set
 category: 'done'
 method: frozensetTest
 test__repr__
+
    | list |
 	list := self targetInstance: { str ___value: 'a' }.
 
@@ -306,6 +322,7 @@ test__repr__
 category: 'done'
 method: frozensetTest
 test__ror__
+
 	| a b c |
 	a := self targetInstance: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
 	b := self targetInstance: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
@@ -323,6 +340,7 @@ test__ror__
 category: 'done'
 method: frozensetTest
 test__ror__Set
+
 	| a b c |
 	a := self targetInstance: { 'a'. 'b'. 'c'. 'd' }.
 	b := set ___value:  { 'b'. 'c'. 'd'. 'e' }.
@@ -336,6 +354,7 @@ test__ror__Set
 category: 'done'
 method: frozensetTest
 test__rsub__
+
 	| a b c |
 	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
 	b := frozenset ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
@@ -355,6 +374,7 @@ test__rsub__
 category: 'done'
 method: frozensetTest
 test__rsub__Set
+
 	| a b c |
 	a := self targetInstance: { 'a'. 'b'. 'c'. 'd' }.
 	b := set ___value:  { 'b'. 'c'. 'd'. 'e' }.
@@ -368,6 +388,7 @@ test__rsub__Set
 category: 'done'
 method: frozensetTest
 test__rxor__
+
 	| a b c bb |
 	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c' }.
 	b := frozenset ___value: { self str: 'b'. self str: 'c' }.
@@ -388,6 +409,7 @@ test__rxor__
 category: 'done'
 method: frozensetTest
 test__rxor__Set
+
 	| a b |
 	a := frozenset ___value: { 'a'. 'b'. 'c' }.
 	b := set ___value: { 'b'. 'c' }.
@@ -400,6 +422,7 @@ test__rxor__Set
 category: 'done'
 method: frozensetTest
 test__str__
+
    | list |
 	list := self targetInstance: { str ___value: 'a' }.
 
@@ -410,6 +433,7 @@ test__str__
 category: 'done'
 method: frozensetTest
 test__sub__
+
 	| a b c |
 	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
 	b := frozenset ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
@@ -429,6 +453,7 @@ test__sub__
 category: 'done'
 method: frozensetTest
 test__sub__Set
+
 	| a b c |
 	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
 	b := set ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
@@ -448,6 +473,7 @@ test__sub__Set
 category: 'done'
 method: frozensetTest
 test__xor__
+
 	| a b c bb |
 	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c' }.
 	b := frozenset ___value: { self str: 'b'. self str: 'c' }.
@@ -468,6 +494,7 @@ test__xor__
 category: 'done'
 method: frozensetTest
 test__xor__Set
+
 	| a b |
 	a := frozenset ___value: { 'a'. 'b'. 'c' }.
 	b := set ___value: { 'b'. 'c' }.
@@ -479,6 +506,7 @@ test__xor__Set
 category: 'done'
 method: frozensetTest
 testcopy
+
    | list lost |
 	list := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c' }.
 
@@ -493,6 +521,7 @@ testcopy
 category: 'done'
 method: frozensetTest
 testdifference
+
 	| a b c |
 	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
 	b := frozenset ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
@@ -511,6 +540,7 @@ testdifference
 category: 'done'
 method: frozensetTest
 testdifferenceSet
+
 	| a b c |
 	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
 	b := set ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
@@ -529,6 +559,7 @@ testdifferenceSet
 category: 'done'
 method: frozensetTest
 testintersection
+
 	| a b c |
 	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
 	b := frozenset ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
@@ -547,6 +578,7 @@ testintersection
 category: 'done'
 method: frozensetTest
 testintersectionSet
+
 	| a b c |
 	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
 	b := set ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
@@ -565,6 +597,7 @@ testintersectionSet
 category: 'done'
 method: frozensetTest
 testisdisjoint
+
 	| a b c bb |
 	a := frozenset ___value: { 'a'. 'b'. 'c' }.
 	b := frozenset ___value: { 'b'. 'c' }.
@@ -584,6 +617,7 @@ testisdisjoint
 category: 'done'
 method: frozensetTest
 testissubset
+
 	| a b c bb |
 	a := frozenset ___value: { 'a'. 'b'. 'c' }.
 	b := frozenset ___value: { 'b'. 'c' }.
@@ -603,6 +637,7 @@ testissubset
 category: 'done'
 method: frozensetTest
 testissuperset
+
 	| a b c bb |
 	a := frozenset ___value: { 'a'. 'b'. 'c' }.
 	b := frozenset ___value: { 'b'. 'c' }.
@@ -622,6 +657,7 @@ testissuperset
 category: 'done'
 method: frozensetTest
 testsymmetric_difference
+
 	| a b c bb |
 	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c' }.
 	b := frozenset ___value: { self str: 'b'. self str: 'c' }.
@@ -642,6 +678,7 @@ testsymmetric_difference
 category: 'done'
 method: frozensetTest
 testsymmetric_differenceSet
+
 	| a b |
 	a := frozenset ___value: { 'a'. 'b'. 'c' }.
 	b := set ___value: { 'b'. 'c' }.
@@ -653,6 +690,7 @@ testsymmetric_differenceSet
 category: 'done'
 method: frozensetTest
 testunion
+
 	| a b c |
 	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
 	b := frozenset ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
@@ -670,6 +708,7 @@ testunion
 category: 'done'
 method: frozensetTest
 testunionSet
+
 	| a b c |
 	a := frozenset ___value: { 'a'. 'b'. 'c'. 'd' }.
 	b := set ___value: { 'b'. 'c'. 'd'. 'e' }.
@@ -683,10 +722,12 @@ testunionSet
 category: 'todo'
 method: frozensetTest
 test__class_getitem__
+
    #pyTodo
 %
 category: 'todo'
 method: frozensetTest
 test__iter__
+
    #pyTodo
 %

@@ -18,8 +18,8 @@ defaults
 category: 'other'
 method: ArgumentsAst
 initialize
-"arguments(arg* posonlyargs, arg* args, arg? vararg, arg* kwonlyargs,
-                 expr* kw_defaults, arg? kwarg, expr* defaults)"
+	"arguments(arg* posonlyargs, arg* args, arg? vararg, arg* kwonlyargs,
+		expr* kw_defaults, arg? kwarg, expr* defaults)"
 
 	| next stream |
 	stream := self stream.

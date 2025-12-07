@@ -18,6 +18,7 @@ declareVariable
 category: 'other'
 method: AttributeAst
 id
+
 	^attr
 %
 category: 'other'

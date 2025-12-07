@@ -14,6 +14,7 @@ with: aSymbol
 category: 'other'
 method: NameAst
 addVariableNamesTo: aStream
+
 	
 	aStream nextPutAll: id; space.
 %

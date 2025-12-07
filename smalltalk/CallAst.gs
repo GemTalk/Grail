@@ -6,16 +6,19 @@ removeallclassmethods CallAst
 category: 'Accessing'
 method: CallAst
 arguments
+
 	^arguments
 %
 category: 'Accessing'
 method: CallAst
 function
+
 	^function
 %
 category: 'Accessing'
 method: CallAst
 keywords
+
 	^keywords
 %
 category: 'other'
@@ -71,9 +74,9 @@ printSmalltalkOn: aStream
 category: 'other'
 method: CallAst
 printSmalltalkOnY: aStream
-
 	"throw namedefbefore error here"
-	aStream 
+
+	aStream
 		nextPutAll: '(currentScope at: #';
 		nextPutAll: function id;
 		nextPut: $);

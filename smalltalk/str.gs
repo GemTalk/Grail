@@ -14,6 +14,7 @@ ___value: aString
 category: 'Python'
 method: str
 __add__: pythonObject
+
 	
 	pythonObject class ~= str ifTrue: [TypeError signal: 'must a string, not ', pythonObject class name].
 
@@ -40,6 +41,7 @@ __eq__: anObject
 category: 'Python'
 method: str
 __float__
+
 	
 	^float ___value: self ___value asNumber
 %
@@ -71,7 +73,6 @@ __getitem__: pyInt
 category: 'Python'
 method: str
 __getnewargs__
-
 	" Not well-documented. Implementation based on what is output from Python."
 
 	^tuple ___value: { str ___value: value. }
@@ -183,6 +184,7 @@ __lt__: other
 category: 'Python'
 method: str
 __mod__: anObject
+
 	| stringOutput |
 
 	stringOutput := value asString.
@@ -211,6 +213,7 @@ __ne__: anObject
 category: 'Python'
 method: str
 __repr__
+
 	
 	^str ___value: self ___value printString
 %
@@ -223,6 +226,7 @@ __rmod__: any
 category: 'Python'
 method: str
 __str__
+
 	
 	^self
 %
@@ -255,7 +259,6 @@ tagFrom: aReadStream
 category: 'Smalltalk'
 method: str
 ___convertWithFlags: aSet precision: anObject andType: aCharacter
-
 	"
 	aSet contains the flags that are set for the input that are not used here
 	anObject contains an empty string if there was no precision or an Integer if it was
@@ -284,10 +287,9 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 	].
 
 	return := value.
-	(aCharacter == $r or: [aCharacter == $a])
-		ifTrue: [
-			return := self __repr__ ___value
-		].
+	(aCharacter == $r or: [aCharacter == $a]) ifTrue: [
+		return := self __repr__ ___value
+	].
 	
 	((aCharacter == $c) and: [return size > 1]) ifTrue: [
 		TypeError signal: 'TypeError: %c requires int or char'

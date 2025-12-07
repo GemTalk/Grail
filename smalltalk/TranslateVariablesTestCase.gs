@@ -6,7 +6,6 @@ removeallclassmethods TranslateVariablesTestCase
 category: 'other'
 method: TranslateVariablesTestCase
 _testNonlocalAndModifyGlobalTODO
-
 	"TODO: These tests are commented out and need to be implemented.
 	They test:
 	1. Modifying global variables in local scope

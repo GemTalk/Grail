@@ -72,7 +72,6 @@ ___addReal: aFloatReal imag: aFloatImag
 category: 'Python-int'
 method: int
 ___convertWithFlags: aSet precision: anObject andType: aCharacter
-
 	"
 	aSet contains the flags that are set for the input that are not used here
 	anObject contains an empty string if there was no precision or an Integer if it was
@@ -166,6 +165,7 @@ ___modFloat: aFloat
 category: 'Python-int'
 method: int
 ___modInt: anInteger
+
 	^int ___value: (anInteger rem: value)
 %
 category: 'Python-int'
@@ -192,10 +192,9 @@ ___powFloat: aFloat
 
 	| return |
 	return := float ___value: (aFloat raisedTo: value).
-	(return ___value asString = 'PlusQuietNaN' or: [return ___value asString = 'MinusQuietNaN'])
-		ifTrue: [
-			^((complex ___real: 0 imaginary: ((aFloat abs) sqrt)) __pow__: (float ___value: 2 * value))
-		].
+	(return ___value asString = 'PlusQuietNaN' or: [return ___value asString = 'MinusQuietNaN']) ifTrue: [
+		^((complex ___real: 0 imaginary: ((aFloat abs) sqrt)) __pow__: (float ___value: 2 * value))
+	].
 	^return
 %
 category: 'Python-int'
@@ -213,6 +212,7 @@ ___powInt: anInteger
 category: 'Python-int'
 method: int
 ___powReal: aFloatReal imag: aFloatImag
+
 		
 	| negative complexHolder exponent result |
 
@@ -325,6 +325,7 @@ __bool__
 category: 'Python-int'
 method: int
 __ceil__
+
 	^self
 %
 category: 'Python-int'
@@ -344,6 +345,7 @@ __float__
 category: 'Python-int'
 method: int
 __floor__
+
 	^self
 %
 category: 'Python-int'
@@ -363,11 +365,13 @@ __getnewargs__
 category: 'Python-int'
 method: int
 __index__
+
 	^self
 %
 category: 'Python-int'
 method: int
 __int__
+
 	^self
 %
 category: 'Python-int'
@@ -379,6 +383,7 @@ __invert__
 category: 'Python-int'
 method: int
 __lshift__: anIndex
+
 	anIndex ___value < 0 ifTrue: [ValueError signal: 'ValueError: negative shift count'].
 	^int ___value: (value bitShift: anIndex ___value)
 %
@@ -409,6 +414,7 @@ __or__: anObject
 category: 'Python-int'
 method: int
 __pos__
+
 	^self __abs__
 %
 category: 'Python-int'
@@ -444,6 +450,7 @@ __rfloordiv__: any
 category: 'Python-int'
 method: int
 __rlshift__: any
+
 	self ___value < 0 ifTrue: [ValueError signal: 'ValueError: negative shift count'].
 	^any __lshift__: self
 %
@@ -468,6 +475,7 @@ __ror__: any
 category: 'Python-int'
 method: int
 __round__
+
 	^self
 %
 category: 'Python-int'
@@ -482,6 +490,7 @@ __round__: anInt
 category: 'Python-int'
 method: int
 __rrshift__: any
+
 	self ___value < 0 ifTrue: [ValueError signal: 'ValueError: negative shift count'].
 	(any isKindOf: Magnitude)
 		ifTrue: [^self __rrshift__: (int ___value: any)].
@@ -490,6 +499,7 @@ __rrshift__: any
 category: 'Python-int'
 method: int
 __rshift__: anIndex
+
 	anIndex ___value < 0 ifTrue: [ValueError signal: 'ValueError: negative shift count'].
 	^int ___value: (value bitShift: anIndex ___value negated)
 %
@@ -528,6 +538,7 @@ __truediv__: anObject
 category: 'Python-int'
 method: int
 __trunc__
+
 	^self
 %
 category: 'Python-int'
@@ -539,6 +550,7 @@ __xor__: anObject
 category: 'Python-int'
 method: int
 as_integer_ratio
+
 	| val |
 
 	val := value asFraction.
@@ -553,6 +565,7 @@ bit_length
 category: 'Python-int'
 method: int
 conjugate
+
 	^self
 %
 category: 'Python-int'
@@ -577,11 +590,13 @@ imag
 category: 'Python-int'
 method: int
 numerator
+
 	^self
 %
 category: 'Python-int'
 method: int
 real
+
 	^self
 %
 category: 'Python-int'
@@ -600,6 +615,7 @@ __eq__: anObject
 category: 'Python-object'
 method: int
 __ge__: anObject
+
  
 	^bool ___value: value >= anObject ___value
 %

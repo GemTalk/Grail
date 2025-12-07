@@ -34,6 +34,7 @@ ___startChar
 category: 'Python'
 method: list
 __delitem__: anIndex
+
 	^self ___remove: anIndex ifFail: 'list assignment index out of range'
 %
 category: 'Python'
@@ -119,6 +120,7 @@ extend: aList
 category: 'Python'
 method: list
 insert: anIndex _: anElement
+
 	| index |
 	index := anIndex < 0 ifTrue: [self __len__ ___value + anIndex] ifFalse: [anIndex].
 
@@ -137,11 +139,13 @@ insert: anIndex _: anElement
 category: 'Python'
 method: list
 pop
+
 	^self pop: self __len__ ___value - 1
 %
 category: 'Python'
 method: list
 pop: anIndex
+
 	^self ___remove: anIndex ifFail: 'pop index out of range'
 %
 category: 'Python'
@@ -167,6 +171,7 @@ sort
 category: 'Python'
 method: list
 sort_key: aFunction reverse: aBool
+
 "
 	| sortBlock reverse |
 	sortBlock := aDict at: #key
@@ -181,6 +186,7 @@ sort_key: aFunction reverse: aBool
 category: 'Python'
 method: list
 sort: aDict
+
 	| sortBlock reverse |
 	sortBlock := aDict at: #key
 							ifPresent: [:sortFunc | [:a :b | (sortFunc value: a) < (sortFunc value: b)]]
@@ -226,5 +232,6 @@ ___remove: anIndex ifFail: message
 category: 'Smalltalk'
 method: list
 ___typeName
+
 	^'list'
 %

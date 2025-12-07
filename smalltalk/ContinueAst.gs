@@ -6,6 +6,7 @@ removeallclassmethods ContinueAst
 category: 'other'
 method: ContinueAst
 initialize
+
 "continue"
 
 	self readPositionOnly

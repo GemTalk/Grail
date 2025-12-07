@@ -6,6 +6,7 @@ removeallclassmethods TranslateStatementsTestCase
 category: 'other'
 method: TranslateStatementsTestCase
 testTranslateIf
+
 "
 if (True):
     print(0, end='')
@@ -26,6 +27,7 @@ if (True):
 category: 'other'
 method: TranslateStatementsTestCase
 testTranslateIfElifElse
+
 "
 if (False):
     print(5, end=' ')
@@ -90,6 +92,7 @@ else:
 category: 'other'
 method: TranslateStatementsTestCase
 testTranslateIfElse
+
 "
 if (True):
     print(1, end='')

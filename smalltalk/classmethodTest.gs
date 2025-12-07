@@ -6,10 +6,12 @@ removeallclassmethods classmethodTest
 category: 'todo'
 method: classmethodTest
 test__func__
+
    #pyTodo
 %
 category: 'todo'
 method: classmethodTest
 test__get__
+
    #pyTodo
 %

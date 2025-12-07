@@ -6,6 +6,7 @@ removeallclassmethods CMathTestCase
 category: 'other'
 method: CMathTestCase
 test_asin_acos
+
 	| cmathModule asinResult acosResult scope |
 	scope := Variables new.
 	cmathModule := (Python at: #cmath) instance.
@@ -28,6 +29,7 @@ test_asin_acos
 category: 'other'
 method: CMathTestCase
 test_asinh_acosh_atanh
+
 	| cmathModule asinhResult acoshResult atanhResult scope |
 	scope := Variables new.
 	cmathModule := (Python at: #cmath) instance.
@@ -50,6 +52,7 @@ test_asinh_acosh_atanh
 category: 'other'
 method: CMathTestCase
 test_atan
+
 	| cmathModule result scope |
 	scope := Variables new.
 	cmathModule := (Python at: #cmath) instance.
@@ -67,6 +70,7 @@ test_atan
 category: 'other'
 method: CMathTestCase
 test_constants
+
 	| cmathModule |
 	cmathModule := (Python at: #cmath) instance.
 
@@ -79,6 +83,7 @@ test_constants
 category: 'other'
 method: CMathTestCase
 test_exp
+
 	| cmathModule result scope |
 	scope := Variables new.
 	cmathModule := (Python at: #cmath) instance.
@@ -96,6 +101,7 @@ test_exp
 category: 'other'
 method: CMathTestCase
 test_inverse_roundtrip
+
 	| cmathModule z sinZ asinResult cosZ acosResult scope |
 	scope := Variables new.
 	cmathModule := (Python at: #cmath) instance.
@@ -119,6 +125,7 @@ test_inverse_roundtrip
 category: 'other'
 method: CMathTestCase
 test_isfinite
+
 	| cmathModule scope |
 	scope := Variables new.
 	cmathModule := (Python at: #cmath) instance.
@@ -132,6 +139,7 @@ test_isfinite
 category: 'other'
 method: CMathTestCase
 test_isinf
+
 	| cmathModule scope |
 	scope := Variables new.
 	cmathModule := (Python at: #cmath) instance.
@@ -145,6 +153,7 @@ test_isinf
 category: 'other'
 method: CMathTestCase
 test_isnan
+
 	| cmathModule scope |
 	scope := Variables new.
 	cmathModule := (Python at: #cmath) instance.
@@ -158,6 +167,7 @@ test_isnan
 category: 'other'
 method: CMathTestCase
 test_log
+
 	| cmathModule result scope |
 	scope := Variables new.
 	cmathModule := (Python at: #cmath) instance.
@@ -175,6 +185,7 @@ test_log
 category: 'other'
 method: CMathTestCase
 test_phase
+
 	| cmathModule result scope |
 	scope := Variables new.
 	cmathModule := (Python at: #cmath) instance.
@@ -194,6 +205,7 @@ test_phase
 category: 'other'
 method: CMathTestCase
 test_polar
+
 	| cmathModule result r phi scope |
 	scope := Variables new.
 	cmathModule := (Python at: #cmath) instance.
@@ -209,6 +221,7 @@ test_polar
 category: 'other'
 method: CMathTestCase
 test_rect
+
 	| cmathModule result scope |
 	scope := Variables new.
 	cmathModule := (Python at: #cmath) instance.
@@ -222,6 +235,7 @@ test_rect
 category: 'other'
 method: CMathTestCase
 test_sin_cos
+
 	| cmathModule sinResult cosResult scope |
 	scope := Variables new.
 	cmathModule := (Python at: #cmath) instance.
@@ -239,6 +253,7 @@ test_sin_cos
 category: 'other'
 method: CMathTestCase
 test_sqrt
+
 	| cmathModule result scope |
 	scope := Variables new.
 	cmathModule := (Python at: #cmath) instance.

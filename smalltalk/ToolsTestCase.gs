@@ -6,6 +6,7 @@ removeallclassmethods ToolsTestCase
 category: 'other'
 method: ToolsTestCase
 testBuiltinsSingleton
+
 	| g1 g2|
 
 	g1 := PyGlobals new.

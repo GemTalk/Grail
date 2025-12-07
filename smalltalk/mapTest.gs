@@ -6,10 +6,12 @@ removeallclassmethods mapTest
 category: 'todo'
 method: mapTest
 test__iter__
+
    #pyTodo
 %
 category: 'todo'
 method: mapTest
 test__next__
+
    #pyTodo
 %

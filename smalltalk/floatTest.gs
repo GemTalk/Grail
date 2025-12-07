@@ -150,6 +150,7 @@ test__int__
 category: 'done'
 method: floatTest
 test__le__
+
 	self
 		assert: ((self float: 2) __le__: (self int: 3));
 		assert: ((self float: 3) __le__: (self int: 3));
@@ -162,6 +163,7 @@ test__le__
 category: 'done'
 method: floatTest
 test__lt__
+
 	self
 		assert: ((self float: 2) __lt__: (self int: 3));
 		deny:   ((self float: 3) __lt__: (self int: 3));
@@ -229,6 +231,7 @@ test__pos__
 category: 'done'
 method: floatTest
 test__pow__
+
 	| powHolder |
 	self
 		assert: ((self float: 3.5) __pow__: (self int: 2)) ___value equals: 12.25;
@@ -476,15 +479,18 @@ false ifTrue: [
 category: 'todo'
 method: floatTest
 test__getnewargs__
+
    #pyTodo
 %
 category: 'todo'
 method: floatTest
 test_fromhex
+
    #pyTodo
 %
 category: 'todo'
 method: floatTest
 test_hex
+
    #pyTodo
 %

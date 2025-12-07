@@ -34,6 +34,7 @@ __new__: aPythonTuple
 category: 'Python'
 method: tuple
 ___modString: aString
+
 	
 	| readStream writeStream pieces piece counter |
 
@@ -109,5 +110,6 @@ __repr__
 category: 'Smalltalk'
 method: tuple
 ___typeName
+
 	^'tuple'
 %

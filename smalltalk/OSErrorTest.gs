@@ -6,15 +6,18 @@ removeallclassmethods OSErrorTest
 category: 'todo'
 method: OSErrorTest
 testerrno
+
    #pyTodo
 %
 category: 'todo'
 method: OSErrorTest
 testfilename
+
    #pyTodo
 %
 category: 'todo'
 method: OSErrorTest
 teststrerror
+
    #pyTodo
 %

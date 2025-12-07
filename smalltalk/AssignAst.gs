@@ -35,5 +35,6 @@ printSmalltalkOn: aStream
 category: 'other'
 method: AssignAst
 target
+
 	^targets at: 1
 %

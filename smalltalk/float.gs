@@ -23,7 +23,6 @@ ___addFloat: aFloat
 category: 'Python-float'
 method: float
 ___convertWithFlags: aSet precision: anObject andType: aCharacter
-
 	"
 	aSet contains the flags that are set for the input that are not used here
 	anObject contains an empty string if there was no precision or an Integer if it was
@@ -31,6 +30,7 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 	"
 	"There is definitely a way to make this more efficient. If you would like to make this
 	more efficient go ahead."
+
 	| resultString tempNumber invalidTypes characterUsed exponent precisionHolder decimalIndex |
 	resultString := ''.
 
@@ -96,50 +96,47 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 	].
 	resultString := tempNumber asStringUsingFormat: { 10. precisionHolder. false }.
 
-	characterUsed == $g
-		ifTrue: [
-			| tempHolder index |
-			tempHolder := ''.
-			index := 1.
-			"Collect only significant digits"
-			[precisionHolder > 0 and: [index <= resultString size]] whileTrue: [
-				(resultString at: index) isAlphaNumeric ifTrue: [
-					precisionHolder := precisionHolder - 1.
-				].
-				tempHolder := tempHolder , (resultString at: index).
-				index := index + 1.
+	characterUsed == $g ifTrue: [
+		| tempHolder index |
+		tempHolder := ''.
+		index := 1.
+		"Collect only significant digits"
+		[precisionHolder > 0 and: [index <= resultString size]] whileTrue: [
+			(resultString at: index) isAlphaNumeric ifTrue: [
+				precisionHolder := precisionHolder - 1.
 			].
-			"remove trailing zeros"
-			resultString := tempHolder.
-			aCharacter asLowercase == $g ifTrue: [
-				| reverseIndex |
-				reverseIndex := resultString size.
-				[(resultString at: reverseIndex) == $0] whileTrue: [
-					reverseIndex := reverseIndex - 1.
-				].
-				(resultString at: reverseIndex) == $. ifTrue: [
-					reverseIndex := reverseIndex - 1.
-				].
-				resultString := resultString copyFrom: 1 to: reverseIndex.
+			tempHolder := tempHolder , (resultString at: index).
+			index := index + 1.
+		].
+		"remove trailing zeros"
+		resultString := tempHolder.
+		aCharacter asLowercase == $g ifTrue: [
+			| reverseIndex |
+			reverseIndex := resultString size.
+			[(resultString at: reverseIndex) == $0] whileTrue: [
+				reverseIndex := reverseIndex - 1.
 			].
-		]
-		ifFalse: [
+			(resultString at: reverseIndex) == $. ifTrue: [
+				reverseIndex := reverseIndex - 1.
+			].
+			resultString := resultString copyFrom: 1 to: reverseIndex.
+		].
+	] ifFalse: [
 
-			decimalIndex := resultString indexOf: $..
-			"add trailing zeros, this is based on the precision or 6 if there is no precision"
-			precisionHolder + decimalIndex <= resultString size
-				ifTrue: [
-					resultString := resultString copyFrom: 1 to: precisionHolder + decimalIndex.
-					resultString last == $. ifTrue: [
-						resultString := resultString copyFrom: 1 to: (resultString size -1).
-					].
-				] ifFalse: [
-					aCharacter asLowercase == $g ifFalse: [
-						[resultString size < (precisionHolder + decimalIndex)] whileTrue: [
-							resultString := resultString , '0'.
-						].
-					].
+		decimalIndex := resultString indexOf: $..
+		"add trailing zeros, this is based on the precision or 6 if there is no precision"
+		precisionHolder + decimalIndex <= resultString size ifTrue: [
+			resultString := resultString copyFrom: 1 to: precisionHolder + decimalIndex.
+			resultString last == $. ifTrue: [
+				resultString := resultString copyFrom: 1 to: (resultString size -1).
+			].
+		] ifFalse: [
+			aCharacter asLowercase == $g ifFalse: [
+				[resultString size < (precisionHolder + decimalIndex)] whileTrue: [
+					resultString := resultString , '0'.
 				].
+			].
+		].
 
 			aCharacter asLowercase == $g ifTrue: [
 				| reverseIndex |
@@ -376,6 +373,7 @@ __rmul__: any
 category: 'Python-float'
 method: float
 __round__
+
 	
 	"Python uses Gaussian rounding so it which Smalltalk does not do"
 
@@ -390,6 +388,7 @@ __round__
 category: 'Python-float'
 method: float
 __round__: anInt
+
 	
 	"Python uses Gaussian rounding so it which Smalltalk does not do"
 
@@ -401,12 +400,11 @@ __round__: anInt
 
 	result := value * (10 raisedTo: anInt ___value).
 
-	((result * 2) odd and: [result floor even])
-		ifTrue: [
-			result := result floor.
-		] ifFalse: [
-			result := result rounded.
-		].
+	((result * 2) odd and: [result floor even]) ifTrue: [
+		result := result floor.
+	] ifFalse: [
+		result := result rounded.
+	].
 	^float ___value: result / (10 raisedTo: anInt ___value)
 %
 category: 'Python-float'
@@ -546,6 +544,7 @@ ___addReal: aFloatReal imag: aFloatImag
 category: 'Smalltalk'
 method: float
 ___powFloat: aFloat
+
 	
 	| return asString |
 
@@ -559,6 +558,7 @@ ___powFloat: aFloat
 category: 'Smalltalk'
 method: float
 ___powInt: anInteger
+
 	| return asString |
 
 	return := float ___value: (anInteger  raisedTo: value).
@@ -571,6 +571,7 @@ ___powInt: anInteger
 category: 'Smalltalk'
 method: float
 ___powReal: aFloatReal imag: aFloatImag
+
 		
 	| radius radians |
 	value = value asInteger ifTrue: [
@@ -579,19 +580,16 @@ ___powReal: aFloatReal imag: aFloatImag
 	].
 
 	radius := ((aFloatReal raisedTo: 2) + (aFloatImag raisedTo: 2)) sqrt.
-	aFloatReal asFloat == 0.0
-		ifTrue: [
-			radians := Float pi / 2.
-			aFloatImag < 0 ifTrue: [radians := radians + Float pi / 2].
-		] ifFalse: [
-			radians := (aFloatImag / aFloatReal) arcTan.
-		].
-			
+	aFloatReal asFloat == 0.0 ifTrue: [
+		radians := Float pi / 2.
+		aFloatImag < 0 ifTrue: [radians := radians + Float pi / 2].
+	] ifFalse: [
+		radians := (aFloatImag / aFloatReal) arcTan.
+	].
 
-	aFloatReal < 0
-		ifTrue: [
-			radians := radians + Float pi
-		].
+	aFloatReal < 0 ifTrue: [
+		radians := radians + Float pi
+	].
 
 	^complex
 		___real: ((radius raisedTo: value) * ((value * radians) cos))

@@ -57,16 +57,19 @@ targetInstance: firstArg
 category: 'setup'
 method: Base_Class_Test
 targetInstance: firstArg _: secondArg
+
 	^self targetClass __call__: firstArg _: secondArg
 %
 category: 'setup'
 method: Base_Class_Test
 targetInstance: firstArg _: secondArg _: thirdArg
+
 	^self targetClass __call__: firstArg _: secondArg _: thirdArg
 %
 category: 'setup'
 method: Base_Class_Test
 writeDirTestOn: methodList
+
 	^Scripter writeFor: self targetClass dirTestOn: methodList
 %
 category: 'testing'

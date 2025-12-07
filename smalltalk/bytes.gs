@@ -50,7 +50,10 @@ __new__: pythonObject
 		^self basicNew ___value: newArray immediateInvariant
 	].
 	" TODO should throw error if iterable contains non-int value "
-	((pythonObject isKindOf: range) | (pythonObject isKindOf: list) | (pythonObject isKindOf: set) | (pythonObject isKindOf: tuple)) ifTrue: [
+	((pythonObject isKindOf: range)
+		or: [(pythonObject isKindOf: list)
+		or: [(pythonObject isKindOf: set)
+		or: [pythonObject isKindOf: tuple]]]) ifTrue: [
 		^self basicNew ___value: (pythonObject ___value asArray) immediateInvariant
 	].
 	(pythonObject isKindOf: str) ifTrue: [
@@ -110,11 +113,13 @@ ___whiteSpace
 category: 'Python'
 method: bytes
 __add__: anArgument
+
 	TypeError signal: 'can''t concat', anArgument class name.
 %
 category: 'Python'
 method: bytes
 __contains__: someBytes
+
 	^(self ___container indexOfSubCollection: someBytes ___container
 		startingAt: 1
 		ifAbsent: [0]) > 0
@@ -122,6 +127,7 @@ __contains__: someBytes
 category: 'Python'
 method: bytes
 __getitem__: anIndex
+
 	^(super __getitem__: anIndex) asCharacter asString
 %
 category: 'Python'
@@ -154,11 +160,13 @@ __init__: pythonString _: encoding
 category: 'Python'
 method: bytes
 __mod__: anArgument
+
 	TypeError signal: 'not all arguments converted during bytes formatting'.
 %
 category: 'Python'
 method: bytes
 __rmod__: anArgument
+
 	^NotImplementedType singleton
 %
 category: 'Python'
@@ -191,6 +199,7 @@ __str__
 category: 'Python'
 method: bytes
 capitalize
+
 	| contents new |
 	contents := (String withAll: (self ___value copy collect: [:each | Character codePoint: each])) asLowercase.
 	contents at: 1 put: contents first asUppercase.
@@ -202,11 +211,13 @@ capitalize
 category: 'Python'
 method: bytes
 center: with
+
 	^self center: with _: (bytes ___value: { 32 })
 %
 category: 'Python'
 method: bytes
 center: pyIntWidth _: pyFillByte
+
 	| leftPad leftPadSize rightPad rightPadSize oddLen |
 
 	(pyFillByte class ~= bytes or: [pyFillByte ___value size > 1]) ifTrue: [TypeError signal: 'center() argument 2 must be a byte string of length 1, not ', pyFillByte class name].
@@ -230,6 +241,7 @@ copy
 category: 'Python'
 method: bytes
 count: aPyObject
+
 	^self count: aPyObject _: (int ___value: 0)
 %
 category: 'Python'
@@ -285,6 +297,7 @@ endswith: aPyBytes _: aPyIntStart
 category: 'Python'
 method: bytes
 endswith: aPyBytes _: aPyIntStart _: aPyIntEnd
+
 	| idx |
 	
 	"TODO there is also a case where all elements in the tuple are not bytes objects: 
@@ -311,11 +324,13 @@ endswith: aPyBytes _: aPyIntStart _: aPyIntEnd
 category: 'Python'
 method: bytes
 expandtabs
+
 	^self expandtabs: (int ___value: 8)
 %
 category: 'Python'
 method: bytes
 expandtabs: pythonInt
+
 	| columnIndex new tabsize |
 	tabsize := pythonInt ___value.
 	new := WriteStream on: container class new.
@@ -392,6 +407,7 @@ index: aPyObject _: aPyIntStart
 category: 'Python'
 method: bytes
 index: aPyObject _: aPyIntStart _: aPyIntEnd
+
 	| idx |
 
 	(aPyObject class == bytes or: [aPyObject class == int]) ifFalse: [TypeError signal: 'argument should be integer or bytes-like object, not ''', aPyObject class name, ''''].
@@ -404,6 +420,7 @@ index: aPyObject _: aPyIntStart _: aPyIntEnd
 category: 'Python'
 method: bytes
 isalnum
+
 	^self __len__ ___value > 0 and: [
 		(String withAll: (self ___container collect: [:x | Character codePoint: x])) allSatisfy: [:e | e isAlphaNumeric]
 	]
@@ -411,6 +428,7 @@ isalnum
 category: 'Python'
 method: bytes
 isalpha
+
 	^self __len__ ___value > 0 and: [
 		(String withAll: (self ___container collect: [:x | Character codePoint: x])) allSatisfy: [:e | e isLetter]
 	]
@@ -418,6 +436,7 @@ isalpha
 category: 'Python'
 method: bytes
 isascii
+
 	^self __len__ ___value == 0 or: [
 		self ___container allSatisfy: [:each | each <= 127]
 	]
@@ -425,6 +444,7 @@ isascii
 category: 'Python'
 method: bytes
 isdigit
+
 	^self __len__ ___value > 0 and: [
 		(String withAll: (self ___container collect: [:x | Character codePoint: x])) allSatisfy: [:e | e isDigit]
 	]
@@ -432,6 +452,7 @@ isdigit
 category: 'Python'
 method: bytes
 islower
+
 	^self __len__ ___value > 0 and: [
 		(String withAll: (self ___container collect: [:x | Character codePoint: x])) allSatisfy: [:e | e isLowercase]
 	]
@@ -439,6 +460,7 @@ islower
 category: 'Python'
 method: bytes
 isspace
+
 	^self __len__ ___value > 0 and: [
 		self ___container allSatisfy: [:e | e == 32]
 	]
@@ -446,6 +468,7 @@ isspace
 category: 'Python'
 method: bytes
 istitle
+
 	^self __len__ ___value > 0 and: [
 		self = self title
 	]
@@ -453,6 +476,7 @@ istitle
 category: 'Python'
 method: bytes
 isupper
+
 	^self __len__ ___value > 0 and: [
 		(String withAll: (self ___container collect: [:x | Character codePoint: x])) allSatisfy: [:e | e isUppercase]
 	]
@@ -460,11 +484,13 @@ isupper
 category: 'Python'
 method: bytes
 ljust: pyIntWidth
+
 	^self ljust: pyIntWidth _: (bytes ___value: (Array with: 32))
 %
 category: 'Python'
 method: bytes
 ljust: pyIntWidth _: pyByte
+
 	| new |
 	(pyByte class ~= bytes or: [pyByte ___value size > 1]) ifTrue: [TypeError signal: 'ljust() argument 2 must be a byte string of length 1, not ', pyByte class name].
 	
@@ -475,6 +501,7 @@ ljust: pyIntWidth _: pyByte
 category: 'Python'
 method: bytes
 lower
+
 	| lowerString |
 	lowerString := Array withAll: (String withAll: (self ___container collect: [:x | Character codePoint: x])) asLowercase.
 	
@@ -483,6 +510,7 @@ lower
 category: 'Python'
 method: bytes
 lstrip
+
 	^self lstrip: bytes ___whiteSpace
 %
 category: 'Python'
@@ -502,6 +530,7 @@ lstrip: aPyBytesStripset
 category: 'Python'
 method: bytes
 partition: sep
+
 	| element1 idx |
 	idx := self find: sep.
 	idx ___value < 0 ifTrue: [
@@ -534,6 +563,7 @@ removeprefix: pyBytesPrefix
 category: 'Python'
 method: bytes
 removesuffix: pyBytesSuffix
+
 	| new |
 	pyBytesSuffix class == bytes ifFalse: [TypeError signal: 'a bytes-like object is required, not ''str'''].
 	
@@ -545,6 +575,7 @@ removesuffix: pyBytesSuffix
 category: 'Python'
 method: bytes
 replace: pyBytesOld _: pyBytesNew
+
 	^bytes ___value: (container copyReplaceAll: pyBytesOld ___value with: pyBytesNew ___value)
 %
 category: 'Python'
@@ -562,6 +593,7 @@ rfind: aSublist _: start
 category: 'Python'
 method: bytes
 rfind: aPyObjectSublist _: aPyIntStart _: aPyIntEnd
+
 	| searchResult start end x |
 	
 	aPyObjectSublist class == int ifTrue: [
@@ -596,6 +628,7 @@ rindex: aPyObjectSublist _: aPyIntStart
 category: 'Python'
 method: bytes
 rindex: aPyObjectSublist _: aPyIntStart _: aPyIntEnd
+
 	| idx |
 
 	idx := self rfind: aPyObjectSublist _: aPyIntStart _: aPyIntEnd.
@@ -606,6 +639,7 @@ rindex: aPyObjectSublist _: aPyIntStart _: aPyIntEnd
 category: 'Python'
 method: bytes
 rjust: aPyIntWidth
+
 	^self rjust: aPyIntWidth _: (bytes ___value: { 32 })
 %
 category: 'Python'
@@ -617,6 +651,7 @@ rjust: aPyIntWidth _: aPyBytesFillChar
 category: 'Python'
 method: bytes
 rpartition: aPyObjectSep
+
 	| element1 idx |
 	idx := self rfind: aPyObjectSep.
 	idx ___value < 0 ifTrue: [
@@ -637,11 +672,13 @@ rpartition: aPyObjectSep
 category: 'Python'
 method: bytes
 rsplit: sep
+
 	^self rsplit: sep _: (int ___value: -1)
 %
 category: 'Python'
 method: bytes
 rsplit: pyBytesSep _: pyIntLimit
+
 	| idx newLimit remaining splits splitsIndex |
 	idx := (self rfind: pyBytesSep) ___value + 1.
 	idx < 1 ifTrue: [
@@ -667,6 +704,7 @@ rsplit: pyBytesSep _: pyIntLimit
 category: 'Python'
 method: bytes
 rstrip
+
 	^self rstrip: bytes ___whiteSpace
 %
 category: 'Python'
@@ -686,11 +724,13 @@ rstrip: aPyBytesStripset
 category: 'Python'
 method: bytes
 split: pyBytesSep
+
 	^self split: pyBytesSep _: (int ___value: -1)
 %
 category: 'Python'
 method: bytes
 split: pyBytesSep _: pyIntLimit
+
 	| idx newLimit remaining splits |
 	idx := (self find: pyBytesSep) ___value + 1.
 	idx < 1 ifTrue: [
@@ -730,6 +770,7 @@ startswith: aPyBytesSublist _: aPyIntStart _: aPyBytesEnd
 category: 'Python'
 method: bytes
 strip
+
 	^self strip: bytes ___whiteSpace
 %
 category: 'Python'
@@ -741,6 +782,7 @@ strip: stripset
 category: 'Python'
 method: bytes
 swapcase
+
 	| answer |
 
 	answer := String withAll: (self ___container collect: [:x | Character codePoint: x]).
@@ -755,6 +797,7 @@ swapcase
 category: 'Python'
 method: bytes
 title
+
 	| new previous |
 	new := Array new.
 	previous := -1.
@@ -779,6 +822,7 @@ title
 category: 'Python'
 method: bytes
 upper
+
 	| upperString |
 	upperString := Array withAll: (String withAll: (self ___container collect: [:x | Character codePoint: x])) asUppercase.
 	

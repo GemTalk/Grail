@@ -6,6 +6,7 @@ removeallclassmethods setTest
 category: 'done'
 method: setTest
 test__and__
+
 	| a b c |
 	a := set ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
 	b := set ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
@@ -23,6 +24,7 @@ test__and__
 category: 'done'
 method: setTest
 test__contains__onEmptyList
+
    	self
 		deny: (self targetInstance __contains__: (self str: 'x'));
 		yourself.
@@ -98,6 +100,7 @@ test__dir__
 category: 'done'
 method: setTest
 test__eq__
+
    | list |
 	list := self targetInstance __add__: { self str: '1'. self str: '2'. self str: '3' }.
 
@@ -111,6 +114,7 @@ test__eq__
 category: 'done'
 method: setTest
 test__ge__
+
 	| a b c bb |
 	a := set ___value: { self str: 'a'. self str: 'b'. self str: 'c' }.
 	b := set ___value: { self str: 'b'. self str: 'c' }.
@@ -130,6 +134,7 @@ test__ge__
 category: 'done'
 method: setTest
 test__gt__
+
 	| a b c bb |
 	a := set ___value: { self str: 'a'. self str: 'b'. self str: 'c' }.
 	b := set ___value: { self str: 'b'. self str: 'c' }.
@@ -149,6 +154,7 @@ test__gt__
 category: 'done'
 method: setTest
 test__iand__
+
 	| a b c |
 	a := set ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
 	b := set ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
@@ -165,6 +171,7 @@ test__iand__
 category: 'done'
 method: setTest
 test__ior__
+
 	| a b c |
 	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
 	b := self targetInstance __add__: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
@@ -180,6 +187,7 @@ test__ior__
 category: 'done'
 method: setTest
 test__isub__
+
 	| a b c |
 	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
 	b := self targetInstance __add__: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
@@ -196,6 +204,7 @@ test__isub__
 category: 'done'
 method: setTest
 test__ixor__
+
 	| a b c bb |
 	a := set ___value: { self str: 'a'. self str: 'b'. self str: 'c' }.
 	b := set ___value: { self str: 'b'. self str: 'c' }.
@@ -216,6 +225,7 @@ test__ixor__
 category: 'done'
 method: setTest
 test__le__
+
 	| a b c bb |
 	a := set ___value: { self str: 'a'. self str: 'b'. self str: 'c' }.
 	b := set ___value: { self str: 'b'. self str: 'c' }.
@@ -235,6 +245,7 @@ test__le__
 category: 'done'
 method: setTest
 test__len__onEmptyList
+
    	self
 		assert: self targetInstance __len__ equals: (self int: 0);
 		yourself.
@@ -242,6 +253,7 @@ test__len__onEmptyList
 category: 'done'
 method: setTest
 test__lt__
+
 	| a b c bb |
 	a := set ___value: { self str: 'a'. self str: 'b'. self str: 'c' }.
 	b := set ___value: { self str: 'b'. self str: 'c' }.
@@ -261,6 +273,7 @@ test__lt__
 category: 'done'
 method: setTest
 test__ne__
+
    | list |
 	list := self targetInstance __add__: { self str: '1'. self str: '2'. self str: '3' }.
 
@@ -274,6 +287,7 @@ test__ne__
 category: 'done'
 method: setTest
 test__or__
+
 	| a b c |
 	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
 	b := self targetInstance __add__: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
@@ -290,6 +304,7 @@ test__or__
 category: 'done'
 method: setTest
 test__rand__
+
 	| a b c |
 	a := set ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
 	b := set ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
@@ -307,6 +322,7 @@ test__rand__
 category: 'done'
 method: setTest
 test__repr__
+
    | list |
 	list := self targetInstance __add__: { self str: 'a' }.
 
@@ -317,6 +333,7 @@ test__repr__
 category: 'done'
 method: setTest
 test__ror__
+
 	| a b c |
 	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
 	b := self targetInstance __add__: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
@@ -333,6 +350,7 @@ test__ror__
 category: 'done'
 method: setTest
 test__rsub__
+
 	| a b c |
 	a := set ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
 	b := set ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
@@ -351,6 +369,7 @@ test__rsub__
 category: 'done'
 method: setTest
 test__rxor__
+
 	| a b c bb |
 	a := set ___value: { self str: 'a'. self str: 'b'. self str: 'c' }.
 	b := set ___value: { self str: 'b'. self str: 'c' }.
@@ -370,6 +389,7 @@ test__rxor__
 category: 'done'
 method: setTest
 test__str__
+
    | list |
 	list := self targetInstance __add__: { self str: 'a' }.
 
@@ -380,6 +400,7 @@ test__str__
 category: 'done'
 method: setTest
 test__sub__
+
 	| a b c |
 	a := set ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
 	b := set ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
@@ -398,6 +419,7 @@ test__sub__
 category: 'done'
 method: setTest
 test__xor__
+
 	| a b c bb |
 	a := set ___value: { self str: 'a'. self str: 'b'. self str: 'c' }.
 	b := set ___value: { self str: 'b'. self str: 'c' }.
@@ -417,6 +439,7 @@ test__xor__
 category: 'done'
 method: setTest
 testadd
+
    | list |
 	list := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c' }.
 
@@ -430,6 +453,7 @@ testadd
 category: 'done'
 method: setTest
 testclear
+
    | list |
 	list := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c' }.
 	list clear.
@@ -440,6 +464,7 @@ testclear
 category: 'done'
 method: setTest
 testcopy
+
    | list lost |
 	list := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c' }.
 
@@ -454,6 +479,7 @@ testcopy
 category: 'done'
 method: setTest
 testdifference
+
 	| a b c |
 	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
 	b := self targetInstance __add__: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
@@ -471,6 +497,7 @@ testdifference
 category: 'done'
 method: setTest
 testdifference_update
+
 	| a b c |
 	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
 	b := self targetInstance __add__: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
@@ -487,6 +514,7 @@ testdifference_update
 category: 'done'
 method: setTest
 testdiscard
+
    | list |
 	list := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'b' }.
 	list discard: (self str: 'b').
@@ -506,6 +534,7 @@ testdiscardIfAbsent
 category: 'done'
 method: setTest
 testintersection
+
 	| a b c |
 	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
 	b := self targetInstance __add__: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
@@ -523,6 +552,7 @@ testintersection
 category: 'done'
 method: setTest
 testintersection_update
+
 	| a b c |
 	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
 	b := self targetInstance __add__: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
@@ -539,6 +569,7 @@ testintersection_update
 category: 'done'
 method: setTest
 testisdisjoint
+
 	| a b c bb |
 	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c' }.
 	b := self targetInstance __add__: { self str: 'b'. self str: 'c' }.
@@ -558,6 +589,7 @@ testisdisjoint
 category: 'done'
 method: setTest
 testissubset
+
 	| a b c bb |
 	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c' }.
 	b := self targetInstance __add__: { self str: 'b'. self str: 'c' }.
@@ -577,6 +609,7 @@ testissubset
 category: 'done'
 method: setTest
 testissuperset
+
 	| a b c bb |
 	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c' }.
 	b := self targetInstance __add__: { self str: 'b'. self str: 'c' }.
@@ -596,6 +629,7 @@ testissuperset
 category: 'done'
 method: setTest
 testpop
+
    | set lost element |
 	set := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c' }.
 	lost := set copy.
@@ -615,6 +649,7 @@ testpop
 category: 'done'
 method: setTest
 testremove
+
    | list |
 	list := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'b' }.
 	list remove: (self str: 'b').
@@ -628,6 +663,7 @@ testremove
 category: 'done'
 method: setTest
 testremoveIfAbsent
+
    | list |
 	list := self targetInstance.
 
@@ -641,6 +677,7 @@ testremoveIfAbsent
 category: 'done'
 method: setTest
 testsymmetric_difference
+
 	| a b c bb |
 	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c' }.
 	b := self targetInstance __add__: { self str: 'b'. self str: 'c' }.
@@ -660,6 +697,7 @@ testsymmetric_difference
 category: 'done'
 method: setTest
 testsymmetric_difference_update
+
 	| a b c bb |
 	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c' }.
 	b := self targetInstance __add__: { self str: 'b'. self str: 'c' }.
@@ -680,6 +718,7 @@ testsymmetric_difference_update
 category: 'done'
 method: setTest
 testunion
+
 	| a b c |
 	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
 	b := self targetInstance __add__: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
@@ -696,6 +735,7 @@ testunion
 category: 'done'
 method: setTest
 testupdate
+
 	| a b c |
 	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
 	b := self targetInstance __add__: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
@@ -711,10 +751,12 @@ testupdate
 category: 'todo'
 method: setTest
 test__class_getitem__
+
    #pyTodo
 %
 category: 'todo'
 method: setTest
 test__iter__
+
    #pyTodo
 %

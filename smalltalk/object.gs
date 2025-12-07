@@ -124,7 +124,6 @@ ___and: aPythonObject
 category: 'other'
 method: object
 ___convertWithFlags: aSet precision: anObject andType: aCharacter
-
 	"
 	aSet contains the flags that are set for the input that are not used here
 	anObject contains an empty string if there was no precision or an Integer if it was
@@ -153,10 +152,9 @@ ___convertWithFlags: aSet precision: anObject andType: aCharacter
 	].
 
 	return := self __str__ ___value.
-	(aCharacter == $r or: [aCharacter == $a])
-		ifTrue: [
-			return := self __repr__ ___value
-		].
+	(aCharacter == $r or: [aCharacter == $a]) ifTrue: [
+		return := self __repr__ ___value
+	].
 
 	((aCharacter == $c) and: [return size > 1]) ifTrue: [
 		TypeError signal: 'TypeError: %c requires int or char'
@@ -180,6 +178,7 @@ ___modInt: anInteger
 category: 'other'
 method: object
 ___modString: aString
+
 	
 	^(tuple ___value: { self }) ___modString: aString
 %
@@ -335,8 +334,8 @@ __init__
 category: 'Python'
 method: object
 __init__: firstArg
-
 	"self ___initArgs: { firstArg }"
+
 	TypeError signal: 'object.__init__() takes exactly one argument (the instance to initialize)'
 %
 category: 'Python'
@@ -429,6 +428,7 @@ ___yourself
 category: 'Smalltalk'
 method: object
 = other
+
 	(self __eq__: other) ___value ifTrue: [
 		^true
 	].
@@ -448,6 +448,7 @@ asString
 category: 'Smalltalk'
 method: object
 basicInspect
+
 	^self error: 'inspect not supported'
 %
 category: 'Smalltalk'
@@ -464,6 +465,7 @@ basicSize
 category: 'Smalltalk'
 method: object
 doesNotUnderstand: aMessageDescriptor
+
 "
 If you pass in too many arguments, python will ignore the extra ones.
 In Smalltalk we don't have optional arguments, so we just keep cutting off the end
