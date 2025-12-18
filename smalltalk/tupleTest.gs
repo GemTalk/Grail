@@ -35,25 +35,6 @@ test__add__TypeError
 %
 category: 'done'
 method: tupleTest
-test__iadd__
-
-	"Tuples are immutable, so += creates a new tuple instead of modifying in place"
-	| tup1 tup2 result |
-	tup1 := self tuple: { 'a'. 'b' }.
-	tup2 := self tuple: { 'c'. 'd' }.
-
-	result := tup1 __iadd__: tup2.
-
-	self
-		assert: result __len__ equals: (self int: 4);
-		assert: (result __getitem__: (self int: 0)) equals: (self str: 'a');
-		assert: (result __getitem__: (self int: 3)) equals: (self str: 'd');
-		deny: result == tup1;  "Should be a new tuple, not the same object"
-		assert: tup1 __len__ equals: (self int: 2);  "Original tuple unchanged"
-		yourself
-%
-category: 'done'
-method: tupleTest
 test__contains__onEmptyList
 
 	self
@@ -279,6 +260,25 @@ test__hash__unhashable
 	t := tuple ___value: { int ___value: 1. list ___value: #() }.
 
 	self should: [t __hash__] raise: TypeError.
+%
+category: 'done'
+method: tupleTest
+test__iadd__
+
+	"Tuples are immutable, so += creates a new tuple instead of modifying in place"
+	| tup1 tup2 result |
+	tup1 := self tuple: { 'a'. 'b' }.
+	tup2 := self tuple: { 'c'. 'd' }.
+
+	result := tup1 __iadd__: tup2.
+
+	self
+		assert: result __len__ equals: (self int: 4);
+		assert: (result __getitem__: (self int: 0)) equals: (self str: 'a');
+		assert: (result __getitem__: (self int: 3)) equals: (self str: 'd');
+		deny: result == tup1;  "Should be a new tuple, not the same object"
+		assert: tup1 __len__ equals: (self int: 2);  "Original tuple unchanged"
+		yourself
 %
 category: 'done'
 method: tupleTest

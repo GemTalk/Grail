@@ -4123,22 +4123,6 @@ expectvalue /Class
 doit
 bytearray category: 'BuiltIns-Containers'
 %
-! ------------------- Class definition for OrderedDictionary
-! OrderedDictionary maintains insertion order like Python 3.7+ dict.
-! It wraps a Dictionary for fast key lookup and an OrderedCollection for key ordering.
-expectvalue /Class
-doit
-Object subclass: 'OrderedDictionary'
-  instVarNames: #( dictionary keys )
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-%
-expectvalue /Class
-doit
-OrderedDictionary category: 'Tools'
-%
 ! ------------------- Class definition for dict
 expectvalue /Class
 doit
@@ -4690,6 +4674,22 @@ expectvalue /Class
 doit
 zip category: 'BuiltIns-Kernel'
 %
+! ------------------- Class definition for OrderedDictionary
+expectvalue /Class
+doit
+Object subclass: 'OrderedDictionary'
+  instVarNames: #( dictionary keys)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+OrderedDictionary category: 'Tools'
+%
 ! ------------------- Class definition for Scripter
 expectvalue /Class
 doit
@@ -5223,6 +5223,22 @@ expectvalue /Class
 doit
 CMathTestCase category: 'Tests'
 %
+! ------------------- Class definition for ComparisonOperatorsTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'ComparisonOperatorsTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+ComparisonOperatorsTestCase category: 'Tests'
+%
 ! ------------------- Class definition for CompoundStatementsTestCase
 expectvalue /Class
 doit
@@ -5699,122 +5715,10 @@ expectvalue /Class
 doit
 ToolsTestCase category: 'Tests'
 %
-! ------------------- Class definition for TranslatorTestCase
-expectvalue /Class
-doit
-PythonTestCase subclass: 'TranslatorTestCase'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-TranslatorTestCase category: 'Tests'
-%
-! ------------------- Class definition for TranslateBinaryOperatorsTestCase
-expectvalue /Class
-doit
-TranslatorTestCase subclass: 'TranslateBinaryOperatorsTestCase'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-TranslateBinaryOperatorsTestCase category: 'Tests'
-%
-! ------------------- Class definition for TranslateComparisonOperatorsTestCase
-expectvalue /Class
-doit
-TranslatorTestCase subclass: 'TranslateComparisonOperatorsTestCase'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-TranslateComparisonOperatorsTestCase category: 'Tests'
-%
-! ------------------- Class definition for TranslateCompoundStatementsTestCase
-expectvalue /Class
-doit
-TranslatorTestCase subclass: 'TranslateCompoundStatementsTestCase'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-TranslateCompoundStatementsTestCase category: 'Tests'
-%
-! ------------------- Class definition for TranslateSimpleStatementsTestCase
-expectvalue /Class
-doit
-TranslatorTestCase subclass: 'TranslateSimpleStatementsTestCase'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-TranslateSimpleStatementsTestCase category: 'Tests'
-%
-! ------------------- Class definition for TranslateStatementsTestCase
-expectvalue /Class
-doit
-TranslatorTestCase subclass: 'TranslateStatementsTestCase'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-TranslateStatementsTestCase category: 'Tests'
-%
-! ------------------- Class definition for TranslateUnaryOperatorsTestCase
-expectvalue /Class
-doit
-TranslatorTestCase subclass: 'TranslateUnaryOperatorsTestCase'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-TranslateUnaryOperatorsTestCase category: 'Tests'
-%
 ! ------------------- Class definition for TranslateVariablesTestCase
 expectvalue /Class
 doit
-TranslatorTestCase subclass: 'TranslateVariablesTestCase'
+PythonTestCase subclass: 'TranslateVariablesTestCase'
   instVarNames: #( outputStream)
   classVars: #()
   classInstVars: #()
@@ -5932,6 +5836,7 @@ input cmath.gs
 input CMathTestCase.gs
 input CmpOpAst.gs
 input CompareAst.gs
+input ComparisonOperatorsTestCase.gs
 input complex.gs
 input complexTest.gs
 input CompoundStatementsTestCase.gs
@@ -5947,7 +5852,6 @@ input DelAst.gs
 input DeleteAst.gs
 input DelimitersTestCase.gs
 input DeprecationWarning.gs
-input OrderedDictionary.gs
 input dict.gs
 input DictAst.gs
 input DictCompAst.gs
@@ -6048,6 +5952,7 @@ input objectTest.gs
 input OperatorAst.gs
 input OperatorsTestCase.gs
 input OrAst.gs
+input OrderedDictionary.gs
 input OSError.gs
 input OSErrorTest.gs
 input Other_Test.gs
@@ -6115,14 +6020,7 @@ input TabError.gs
 input TextIOWrapper.gs
 input TimeoutError.gs
 input ToolsTestCase.gs
-input TranslateBinaryOperatorsTestCase.gs
-input TranslateComparisonOperatorsTestCase.gs
-input TranslateCompoundStatementsTestCase.gs
-input TranslateSimpleStatementsTestCase.gs
-input TranslateStatementsTestCase.gs
-input TranslateUnaryOperatorsTestCase.gs
 input TranslateVariablesTestCase.gs
-input TranslatorTestCase.gs
 input TryAst.gs
 input tuple.gs
 input TupleAst.gs

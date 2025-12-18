@@ -84,14 +84,6 @@ __doc__
 %
 category: 'Python'
 method: tuple
-__iadd__: aList
-	"Tuples are immutable, so += creates a new tuple instead of modifying in place.
-	 This is different from list where += modifies in place."
-
-	^self __add__: aList
-%
-category: 'Python'
-method: tuple
 __getnewargs__
 	"Return args for pickling. Returns a tuple containing this tuple."
 
@@ -114,6 +106,14 @@ __hash__
 		result := (result * 31) bitAnd: 16rFFFFFFFF.  "Keep it bounded"
 	].
 	^int ___value: result
+%
+category: 'Python'
+method: tuple
+__iadd__: aList
+	"Tuples are immutable, so += creates a new tuple instead of modifying in place.
+	 This is different from list where += modifies in place."
+
+	^self __add__: aList
 %
 category: 'Python'
 method: tuple
