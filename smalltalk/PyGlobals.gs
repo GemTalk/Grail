@@ -7,7 +7,7 @@ classmethod: PyGlobals
 new
 	^super new 
 		initialize;
-		parent: Builtins singleton;
+		parent: builtins singleton;
 		yourself.
 %
 ! ------------------- Instance methods for PyGlobals

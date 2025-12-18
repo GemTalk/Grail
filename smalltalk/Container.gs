@@ -48,19 +48,26 @@ hash
 category: 'Python'
 method: Container
 __add__: aList
+	"Only accept containers of the same type (tuple + tuple, list + list, etc.)"
 
-	| newlist |
+	| newContainer otherTypeName |
 
-	{ Container. Collection }
-		detect: [:each | aList isKindOf: each]
-		ifNone: [TypeError signal: 'can only concatenate ', self ___typeName , ' (not "', aList class name,'") to ', self ___typeName].
+	(aList class == self class)
+		ifFalse: [
+			"Get the type name - use ___typeName for Python objects, class name for Smalltalk objects"
+			otherTypeName := (aList respondsTo: #___typeName)
+				ifTrue: [aList ___typeName]
+				ifFalse: [aList class name].
+			TypeError signal: 'can only concatenate ', self ___typeName , ' (not "', otherTypeName,'") to ', self ___typeName
+		].
 
-	newlist := self class __call__: self.
-	"We don't know yet what aList might be"
-	newlist ___container addAll: ((aList isKindOf: Container)
-											 ifTrue: [aList ___container] ifFalse: [aList]).
+	"Build a new mutable container with elements from both, then create the result.
+	 This works for both mutable (list) and immutable (tuple) containers."
+	newContainer := OrderedCollection new.
+	newContainer addAll: container.
+	newContainer addAll: aList ___container.
 
-	^newlist
+	^self class new ___value: newContainer
 %
 category: 'Python'
 method: Container
@@ -74,10 +81,10 @@ __contains__: aPyObject
 
 	container do: [:each |
 		(each __eq__: aPyObject) ___value ifTrue: [
-			^bool ___value: true
+			^True
 		].
 	].
-	^bool ___value: false
+	^False
 %
 category: 'Python'
 method: Container
@@ -85,43 +92,37 @@ __eq__: otherCollection
 
 	| size |
 
-	(self class = otherCollection class) ifFalse: [^bool ___value: false].
+	(self class = otherCollection class) ifFalse: [^False].
 
-	(size := self __len__ ___value) = otherCollection __len__ ___value ifFalse: [^bool ___value: false].
+	(size := self __len__ ___value) = otherCollection __len__ ___value ifFalse: [^False].
 
 	1 to: size do: [:index |
-		(self ___container at: index) = (otherCollection ___container at: index) ifFalse: [^bool ___value: false]].
-	^bool ___value: true
+		(self ___container at: index) = (otherCollection ___container at: index) ifFalse: [^False]].
+	^True
 %
 category: 'Python'
 method: Container
 __ge__: otherCollection
 
-	^(self __gt__: otherCollection) or: [self __eq__: otherCollection]
+	^(self __gt__: otherCollection) ___or: [self __eq__: otherCollection]
 %
 category: 'Python'
 method: Container
 __getitem__: aPyIndex
 
 	| index |
+
+	"Handle slice object"
+	(aPyIndex isKindOf: slice) ifTrue: [
+		^self ___getslice: aPyIndex start _: aPyIndex stop _: aPyIndex step
+	].
+
+	"Handle integer index"
 	index := aPyIndex ___value < 0 ifTrue: [self __len__ ___value + aPyIndex ___value] ifFalse: [aPyIndex ___value].
 	(index < 0 or: [	index >= self __len__ ___value])
 		ifTrue: [IndexError signal: self ___typeName, ' index out of range'].
 
 	^self ___container at: index + 1
-%
-category: 'Python'
-method: Container
-__getslice__: aPyIntStart _: aPyIntEnd
-
-	| end |
-	end := aPyIntEnd.
-
-	end == None ifTrue: [
-		end := int ___value: container size
-	].
-
-	^self class ___value: (self ___getslice: aPyIntStart _: end)
 %
 category: 'Python'
 method: Container
@@ -132,11 +133,14 @@ __gt__: otherCollection
 	size := self ___container size min: otherCollection ___container size.
 
 	1 to: size do: 	[:index |
-			(self ___container at: index) > (otherCollection ___container at: index) ifTrue: [^true].
-			(self ___container at: index) < (otherCollection ___container at: index) ifTrue: [^false]
+			| selfElement otherElement |
+			selfElement := self ___container at: index.
+			otherElement := otherCollection ___container at: index.
+			(selfElement __gt__: otherElement) ___value ifTrue: [^True].
+			(selfElement __lt__: otherElement) ___value ifTrue: [^False]
 		].
 
-	^self ___container size > otherCollection ___container size
+	^self ___container size > otherCollection ___container size ifTrue: [True] ifFalse: [False]
 %
 category: 'Python'
 method: Container
@@ -175,7 +179,7 @@ category: 'Python'
 method: Container
 __le__: otherCollection
 
-	^(self __gt__: otherCollection) not
+	^(self __gt__: otherCollection) __not__
 %
 category: 'Python'
 method: Container
@@ -187,7 +191,7 @@ category: 'Python'
 method: Container
 __lt__: otherCollection
 
-	^(self __gt__: otherCollection) not and: [self __ne__: otherCollection]
+	^(self __gt__: otherCollection) __not__ ___and: [self __ne__: otherCollection]
 %
 category: 'Python'
 method: Container
@@ -249,7 +253,7 @@ category: 'Python'
 method: Container
 count: aPyObject
 
-	^(self ___container select: [:each | each == aPyObject]) size
+	^(self ___container select: [:each | each = aPyObject]) size
 %
 category: 'Python'
 method: Container
@@ -267,7 +271,7 @@ category: 'Python'
 method: Container
 index: aPythonObject from: aPyIntStart to: aPyIntEnd
 
-	^int ___value: (((self ___getslice: aPyIntStart _: aPyIntEnd)
+	^int ___value: (((self ___getslice: aPyIntStart _: aPyIntEnd) ___container
 		indexOf: aPythonObject
 		ifAbsent: [ValueError signal: aPythonObject ___value printString, ' is not in ', self ___typeName]
 				) - 1 + aPyIntStart ___value)
@@ -288,26 +292,62 @@ category: 'Smalltalk'
 method: Container
 ___getslice: aPyIntStart _: aPyIntEnd
 
-	| subset x y |
-	x := aPyIntStart ___value.
-	y := aPyIntEnd ___value.
+	"Delegate to 3-argument version with None step"
+	^self ___getslice: aPyIntStart _: aPyIntEnd _: None
+%
+category: 'Smalltalk'
+method: Container
+___getslice: aPyIntStart _: aPyIntEnd _: aPyIntStep
+	"Slice with step: s[i:j:k]"
 
-	x < 0 ifTrue: [
-		x := container size + x.
+	| start stop step result size |
+	size := container size.
+
+	"Handle None step - defaults to 1"
+	step := aPyIntStep == None ifTrue: [1] ifFalse: [aPyIntStep ___value].
+	step == 0 ifTrue: [ValueError signal: 'slice step cannot be zero'].
+
+	"Handle None values for start and stop based on step direction"
+	step > 0 ifTrue: [
+		start := aPyIntStart == None ifTrue: [0] ifFalse: [aPyIntStart ___value].
+		stop := aPyIntEnd == None ifTrue: [size] ifFalse: [aPyIntEnd ___value].
+	] ifFalse: [
+		start := aPyIntStart == None ifTrue: [size - 1] ifFalse: [aPyIntStart ___value].
+		stop := aPyIntEnd == None ifTrue: [-1 - size] ifFalse: [aPyIntEnd ___value].
 	].
 
-	y < 0 ifTrue: [
-		y := container size + y.
+	"Handle negative indices"
+	start < 0 ifTrue: [start := (size + start) max: 0].
+	stop < 0 ifTrue: [stop := size + stop].
+
+	"Clamp to valid range"
+	step > 0 ifTrue: [
+		start := start min: size.
+		stop := stop min: size.
+	] ifFalse: [
+		start := start min: (size - 1).
+		stop := (stop max: -1).
 	].
 
-	subset := self ___container copy.
-	(y < subset size) ifTrue: [
-		subset removeFrom: y + 1 to: subset size.
+	"Build result"
+	result := OrderedCollection new.
+	step > 0 ifTrue: [
+		| i |
+		i := start.
+		[i < stop] whileTrue: [
+			result add: (container at: i + 1).
+			i := i + step.
+		].
+	] ifFalse: [
+		| i |
+		i := start.
+		[i > stop] whileTrue: [
+			result add: (container at: i + 1).
+			i := i + step.
+		].
 	].
-	x > 0 ifTrue: [
-		subset removeFrom: 1 to: x.
-	].
-	^subset
+
+	^self class ___value: result
 %
 category: 'Smalltalk'
 method: Container
@@ -325,7 +365,11 @@ category: 'Smalltalk'
 method: Container
 ___value: aCollection
 
-	container := self class ___containerClass withAll: aCollection.
+	"If the collection is already the right type, just use it directly.
+	 Otherwise, create a new container from the collection."
+	container := (aCollection class == self class ___containerClass)
+		ifTrue: [aCollection]
+		ifFalse: [self class ___containerClass withAll: aCollection].
 %
 category: 'Smalltalk'
 method: Container

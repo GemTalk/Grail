@@ -18,7 +18,7 @@ method: AssertAst
 printSmalltalkOn: aStream
 
 	test printSmalltalkWithParenthesisOn: aStream.
-	aStream nextPutAll: ' ___value ifFalse: [AssertionError signal'.
+	aStream nextPutAll: ' __bool__ ___value ifFalse: [AssertionError signal'.
 	msg ~~ None ifTrue: [
 		aStream nextPutAll: ': '.
 		msg printSmalltalkWithParenthesisOn: aStream.

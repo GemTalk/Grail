@@ -193,7 +193,7 @@ test_callable
 
 	| result variables func |
 	variables := Variables new.
-	func := FunctionDef new.
+	func := builtin_function_or_method new.
 
 	result := (variables at: #callable)
 		scope: variables
@@ -239,35 +239,35 @@ test_dict
 		scope: variables
 		positional: { containerHolder }
 		named: {}.
-	self assert: containerHolder equals: (dict ___value: {} asDictionary).
+	self assert: containerHolder equals: (dict ___value: (OrderedDictionary fromAssociations: {})).
 
-	containerHolder := dict ___value: { (str ___value: 'd') -> (int ___value: 7) } asDictionary.
-	containerHolder := (variables at: #dict) 
+	containerHolder := dict ___value: (OrderedDictionary fromAssociations: { (str ___value: 'd') -> (int ___value: 7) }).
+	containerHolder := (variables at: #dict)
 		scope: variables
 		positional: { containerHolder }
 		named: {}.
-	self assert: containerHolder equals: (dict ___value: { (str ___value: 'd') -> (int ___value: 7) } asDictionary).
+	self assert: containerHolder equals: (dict ___value: (OrderedDictionary fromAssociations: { (str ___value: 'd') -> (int ___value: 7) })).
 
 	containerHolder := list ___value: { tuple ___value: { str ___value: 'c'. int ___value: 3 } asArray }.
 	containerHolder := (variables at: #dict)
 		scope: variables
 		positional: { containerHolder }
 		named: {}.
-	self assert: containerHolder equals: (dict ___value: { (str ___value: 'c') -> (int ___value: 3) } asDictionary).
+	self assert: containerHolder equals: (dict ___value: (OrderedDictionary fromAssociations: { (str ___value: 'c') -> (int ___value: 3) })).
 
 	containerHolder := list ___value: {}.
-	containerHolder := (variables at: #dict) 
+	containerHolder := (variables at: #dict)
 		scope: variables
 		positional: { containerHolder }
 		named: { (str ___value: 'd') -> (int ___value: 7) }.
-	self assert: containerHolder equals: (dict ___value: { (str ___value: 'd') -> (int ___value: 7) } asDictionary).
+	self assert: containerHolder equals: (dict ___value: (OrderedDictionary fromAssociations: { (str ___value: 'd') -> (int ___value: 7) })).
 
 	containerHolder := list ___value: { tuple ___value: { str ___value: 'c'. int ___value: 3 } asArray }.
-	containerHolder := (variables at: #dict) 
+	containerHolder := (variables at: #dict)
 		scope: variables
 		positional: { containerHolder }
 		named: { (str ___value: 'd') -> (int ___value: 7) }.
-	self assert: containerHolder equals: (dict ___value: { (str ___value: 'c') -> (int ___value: 3). (str ___value: 'd') -> (int ___value: 7) } asDictionary).
+	self assert: containerHolder equals: (dict ___value: (OrderedDictionary fromAssociations: { (str ___value: 'c') -> (int ___value: 3). (str ___value: 'd') -> (int ___value: 7) })).
 %
 category: 'other'
 method: builtin_function_or_methodTest
@@ -369,13 +369,15 @@ test_frozenset
 	self assert: frozensetHolder equals: afrozenset.
 
 	frozensetHolder := ((variables at: #frozenset) scope: variables
-						  positional: { dict ___value: { (str ___value: 'd') -> (int ___value: 7) } asDictionary }
+						  positional: { dict ___value: (OrderedDictionary fromAssociations: { (str ___value: 'd') -> (int ___value: 7) }) }
 						  named: {}).
 	self assert: frozensetHolder equals: (frozenset ___value: { str ___value: 'd' }).
 %
 category: 'other'
 method: builtin_function_or_methodTest
 test_globals
+	"globals() returns a Python dict wrapping the internal OrderedDictionary,
+	 matching CPython behavior where globals() returns a dict."
 
 	| globalsHolder variables |
 	variables := PyGlobals new.
@@ -383,14 +385,15 @@ test_globals
 	globalsHolder := ((variables at: #globals) scope: variables
 						  positional: {}
 						  named: {}).
-	self assert: globalsHolder equals: (dict ___value: {}).
+	self assert: (globalsHolder isKindOf: dict).
+	self assert: globalsHolder ___container size equals: 0.
 
 	variables at: #x put: 3.
 
 	globalsHolder := ((variables at: #globals) scope: variables
 						  positional: {}
 						  named: {}).
-	self assert: globalsHolder equals: (dict ___value: { #'x'->3 }).
+	self assert: (globalsHolder __getitem__: #x) equals: 3.
 %
 category: 'other'
 method: builtin_function_or_methodTest
@@ -551,7 +554,7 @@ test_list
 	self assert: listHolder equals: alist.
 
 	listHolder := ((variables at: #list) scope: variables
-						  positional: { dict ___value: { (str ___value: 'd') -> (int ___value: 7) } asDictionary }
+						  positional: { dict ___value: (OrderedDictionary fromAssociations: { (str ___value: 'd') -> (int ___value: 7) }) }
 						  named: {}).
 	self assert: listHolder equals: (list ___value: { str ___value: 'd' }).
 %
@@ -759,17 +762,17 @@ test_print
 	self assert: stream contents equals: 'abc
 '.
 
-	"Test with default file (Builtins printFile)"
-	savedPrintFile := Builtins printFile.
+	"Test with default file (builtins printFile)"
+	savedPrintFile := builtins printFile.
 	[
 		stream := WriteStream with: String new.
-		Builtins printFile: stream.
+		builtins printFile: stream.
 		(variables at: #print) scope: variables
 						  positional: { str ___value: 'abcd' }
 						  named: {}.
 		self assert: stream contents equals: 'abcd
 '.
-	] ensure: [Builtins printFile: savedPrintFile].
+	] ensure: [builtins printFile: savedPrintFile].
 
 	stream := WriteStream with: String new.
 	(variables at: #print) scope: variables
@@ -931,7 +934,7 @@ test_set
 
 
 	setHolder := ((variables at: #set) scope: variables
-						  positional: { dict ___value: { (str ___value: 'd') -> (int ___value: 7) } asDictionary }
+						  positional: { dict ___value: (OrderedDictionary fromAssociations: { (str ___value: 'd') -> (int ___value: 7) }) }
 						  named: {}).
 	self assert: setHolder equals: (set ___value: { str ___value: 'd' }).
 %
@@ -1044,7 +1047,7 @@ test_type
 	typeHolder := ((variables at: #type) scope: variables
 						  positional: { (variables at: #type) }
 						  named: {}).
-	self assert: typeHolder equals: FunctionDef.
+	self assert: typeHolder equals: builtin_function_or_method.
 
 	typeHolder := [((variables at: #type) scope: variables
 						  positional: { int ___value: 5. tuple ___value: #(h) }

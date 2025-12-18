@@ -16,7 +16,7 @@ testTranslateIf
 	x printSmalltalkOn: stream.
 
 	self assert: stream contents equals:
-'(True) ___value ifTrue: [
+'(True) __bool__ ___value ifTrue: [
 	self yourself.
 ]'.
 
@@ -30,7 +30,7 @@ else:
 	x printSmalltalkOn: stream.
 
 	self assert: stream contents equals:
-'(False) ___value ifTrue: [
+'(False) __bool__ ___value ifTrue: [
 	self yourself.
 ] ifFalse: [
 	self yourself.
@@ -136,7 +136,7 @@ testTranslateWhile
 	x printSmalltalkOn: stream.
 
 	self assert: stream contents equals:
-'[True] whileTrue: [
+'[(True) __bool__ ___value] whileTrue: [
 	self yourself.
-].'
+]'
 %

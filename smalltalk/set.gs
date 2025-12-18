@@ -4,22 +4,6 @@ removeallclassmethods set
 ! ------------------- Class methods for set
 category: 'Smalltalk'
 classmethod: set
-___containerClass
-
-	^Set
-%
-category: 'Smalltalk'
-classmethod: set
-___endChar
-	^$}
-%
-category: 'Smalltalk'
-classmethod: set
-___startChar
-	^${
-%
-category: 'Smalltalk'
-classmethod: set
 __call__: aSet
 
 	^(self __new__: aSet) __init__: aSet; yourself
@@ -33,30 +17,16 @@ __new__: aSet
 ! ------------------- Instance methods for set
 category: 'Python'
 method: set
-__and__: aSet
+__doc__
 
-	| x |
-	x := set ___value: Set new.
-	aSet ___value do: [:each | (container includesValue: each) ifTrue: [x add: each]].
-	^x
+	^str ___value: 'Build an unordered collection of unique elements.'
 %
 category: 'Python'
 method: set
-__eq__: otherCollection
+__hash__
+	"set is mutable and therefore not hashable. In Python, set.__hash__ is None."
 
-	^bool ___value: (self ___container = otherCollection ___container)
-%
-category: 'Python'
-method: set
-__ge__: otherCollection
-
-	^bool ___value: (self issuperset: otherCollection)
-%
-category: 'Python'
-method: set
-__gt__: otherCollection
-
-	^bool ___value: ((self __ge__: otherCollection) ___value and: [(self __ne__: otherCollection) ___value])
+	TypeError signal: 'unhashable type: ''set'''
 %
 category: 'Python'
 method: set
@@ -96,34 +66,10 @@ __ixor__: aSet
 %
 category: 'Python'
 method: set
-__le__: otherCollection
-
-	^self issubset: otherCollection
-%
-category: 'Python'
-method: set
-__lt__: otherCollection
-
-	^(self __le__: otherCollection) and: [self __ne__: otherCollection]
-%
-category: 'Python'
-method: set
-__or__: aSet
-
-	^self union: aSet
-%
-category: 'Python'
-method: set
-__rand__: aSet
-
-	^aSet intersection: self
-%
-category: 'Python'
-method: set
 __repr__
 
 	| stream index |
-	
+
 	index := 1.
 	stream := WriteStream on: String new.
 	stream nextPut: ${.
@@ -140,51 +86,30 @@ __repr__
 %
 category: 'Python'
 method: set
-__ror__: aSet
-
-	^aSet union: self
-%
-category: 'Python'
-method: set
-__rsub__: aSet
-
-	^aSet difference: self
-%
-category: 'Python'
-method: set
-__rxor__: aSet
-
-	^aSet symmetric_difference: self
-%
-category: 'Python'
-method: set
-__sub__: aSet
-
-	^self difference: aSet
-%
-category: 'Python'
-method: set
-__xor__: aSet
-
-	^self symmetric_difference: aSet
-%
-category: 'Python'
-method: set
 add: anElement
 
 	self ___container add: anElement
 %
 category: 'Python'
 method: set
-difference_update: aSet
+clear
+	"Remove all elements from the set"
 
-	container := container - aSet ___container
+	container := self class ___containerClass new.
 %
 category: 'Python'
 method: set
-difference: aSet
+difference_update: others
+	"Remove all elements of others from this set.
+	 others can be a single set/iterable or a tuple of sets/iterables."
 
-	^self copy difference_update: aSet
+	| iterables |
+	iterables := (others isKindOf: tuple)
+		ifTrue: [others ___container]
+		ifFalse: [{others}].
+	iterables do: [:each |
+		container := container - each ___container.
+	].
 %
 category: 'Python'
 method: set
@@ -196,35 +121,17 @@ discard: anElement
 %
 category: 'Python'
 method: set
-intersection_update: aSet
+intersection_update: others
+	"Update the set, keeping only elements found in it and all others.
+	 others can be a single set/iterable or a tuple of sets/iterables."
 
-	container := container * aSet ___container
-%
-category: 'Python'
-method: set
-intersection: aSet
-
-	^self copy intersection_update: aSet
-%
-category: 'Python'
-method: set
-isdisjoint: aSet
-
-	^(self intersection: aSet) __len__ ___value == 0
-%
-category: 'Python'
-method: set
-issubset: aSet
-
-	self ___container do: [:each | (aSet ___container includesValue: each) ifFalse: [^false]].
-	^true
-%
-category: 'Python'
-method: set
-issuperset: aSet
-
-	aSet ___container do: [:each | (self ___container includesValue: each) ifFalse: [^false]].
-	^true
+	| iterables |
+	iterables := (others isKindOf: tuple)
+		ifTrue: [others ___container]
+		ifFalse: [{others}].
+	iterables do: [:each |
+		container := container * each ___container.
+	].
 %
 category: 'Python'
 method: set
@@ -250,20 +157,78 @@ symmetric_difference_update: aSet
 %
 category: 'Python'
 method: set
-symmetric_difference: aSet
-	"A + B - (AxB)
-	"
-	^(self union: aSet) difference: (self intersection: aSet)
-%
-category: 'Python'
-method: set
-union: aSet
+update: others
+	"Update the set, adding elements from all others.
+	 others can be a single set/iterable or a tuple of sets/iterables."
 
-	^self copy update: aSet
+	| iterables |
+	iterables := (others isKindOf: tuple)
+		ifTrue: [others ___container]
+		ifFalse: [{others}].
+	iterables do: [:each |
+		self ___container addAll: each ___container.
+	].
 %
-category: 'Python'
+category: 'Smalltalk'
 method: set
-update: aSet
+__getitem__: anIndex
+	"Sets do not support indexing"
 
-	self ___container addAll: aSet ___container
+	TypeError signal: '''', self ___typeName, ''' object is not subscriptable'
+%
+category: 'Smalltalk'
+method: set
+__iadd__: other
+	"Sets do not support += (use update for set)"
+
+	TypeError signal: 'unsupported operand type(s) for +=: ''', self ___typeName, ''' and ''', other ___typeName, ''''
+%
+category: 'Smalltalk'
+method: set
+__imul__: other
+	"Sets do not support *="
+
+	TypeError signal: 'unsupported operand type(s) for *=: ''', self ___typeName, ''' and ''', other ___typeName, ''''
+%
+category: 'Smalltalk'
+method: set
+__mul__: other
+	"Sets do not support *"
+
+	TypeError signal: 'unsupported operand type(s) for *: ''', self ___typeName, ''' and ''', other ___typeName, ''''
+%
+category: 'Smalltalk'
+method: set
+__rmul__: other
+	"Sets do not support *"
+
+	TypeError signal: 'unsupported operand type(s) for *: ''', other ___typeName, ''' and ''', self ___typeName, ''''
+%
+category: 'Smalltalk'
+method: set
+count: anElement
+	"Sets do not have count method"
+
+	AttributeError signal: '''', self ___typeName, ''' object has no attribute ''count'''
+%
+category: 'Smalltalk'
+method: set
+index: anElement
+	"Sets do not have index method"
+
+	AttributeError signal: '''', self ___typeName, ''' object has no attribute ''index'''
+%
+category: 'Smalltalk'
+method: set
+index: anElement from: start
+	"Sets do not have index method"
+
+	AttributeError signal: '''', self ___typeName, ''' object has no attribute ''index'''
+%
+category: 'Smalltalk'
+method: set
+index: anElement from: start to: stop
+	"Sets do not have index method"
+
+	AttributeError signal: '''', self ___typeName, ''' object has no attribute ''index'''
 %

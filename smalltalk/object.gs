@@ -55,21 +55,50 @@ category: 'Smalltalk'
 classmethod: object
 ___pyProtocol
 
-	| set |
-	set := self == object
-		ifTrue: [Set new]
-		ifFalse: [self superclass ___pyProtocol].
-	self categorysDo: [:catName :catMethods |
-		(catName beginsWith: 'Python') ifTrue: [
-			set addAll: catMethods.
+	| pythonMethods currentClass methodStatus |
+
+	pythonMethods := Set new.
+	methodStatus := Dictionary new.  "Maps method name -> #included or #excluded"
+
+	"Walk up the hierarchy from self to object.
+	 For each method, track whether it should be included or excluded.
+	 A method in a Python category at a more specific class overrides
+	 an exclusion (non-Python category) at a less specific class."
+	currentClass := self.
+	[currentClass notNil] whileTrue: [
+		"Process instance methods"
+		currentClass categorysDo: [:catName :catMethods |
+			catMethods do: [:methodName |
+				"Only set status if not already set by a more specific class"
+				(methodStatus includesKey: methodName) ifFalse: [
+					(catName beginsWith: 'Python')
+						ifTrue: [methodStatus at: methodName put: #included]
+						ifFalse: [methodStatus at: methodName put: #excluded].
+				].
+			].
 		].
-	].
-	self class categorysDo: [:catName :catMethods |
-		(catName beginsWith: 'Python') ifTrue: [
-			set addAll: catMethods.
+
+		"Process class methods"
+		currentClass class categorysDo: [:catName :catMethods |
+			catMethods do: [:methodName |
+				"Only set status if not already set by a more specific class"
+				(methodStatus includesKey: methodName) ifFalse: [
+					(catName beginsWith: 'Python')
+						ifTrue: [methodStatus at: methodName put: #included]
+						ifFalse: [methodStatus at: methodName put: #excluded].
+				].
+			].
 		].
+
+		currentClass := currentClass == object ifTrue: [nil] ifFalse: [currentClass superclass].
 	].
-	^set
+
+	"Collect all methods marked as included"
+	methodStatus keysAndValuesDo: [:methodName :status |
+		status == #included ifTrue: [pythonMethods add: methodName].
+	].
+
+	^pythonMethods
 %
 category: 'Smalltalk'
 classmethod: object
@@ -118,8 +147,14 @@ ___addReal: aFloatReal imag: aFloatImag
 category: 'other'
 method: object
 ___and: aPythonObject
+	"Python's 'and' operator: if self is false, return self, else return aPythonObject.
+	 aPythonObject may be a block for short-circuit evaluation."
 
-	^self __bool__ __and__: aPythonObject __bool__
+	| other |
+	self __bool__ ___value ifFalse: [^self].
+	other := aPythonObject.
+	(other isKindOf: ExecBlock) ifTrue: [other := other value].
+	^other
 %
 category: 'other'
 method: object
@@ -203,8 +238,14 @@ ___mulReal: aFloatReal imag: aFloatImag
 category: 'other'
 method: object
 ___or: aPythonObject
+	"Python's 'or' operator: if self is true, return self, else return aPythonObject.
+	 aPythonObject may be a block for short-circuit evaluation."
 
-	^self __bool__ __or__: aPythonObject __bool__
+	| other |
+	self __bool__ ___value ifTrue: [^self].
+	other := aPythonObject.
+	(other isKindOf: ExecBlock) ifTrue: [other := other value].
+	^other
 %
 category: 'other'
 method: object
@@ -244,6 +285,18 @@ ___truedivReal: aFloatReal imag: aFloatImag
 %
 category: 'other'
 method: object
+__bool__
+	"Default truth value testing for Python objects.
+	By default, an object is considered true unless its class defines either a
+	__bool__() method that returns False or a __len__() method that returns zero."
+
+	(self respondsTo: #'__len__') ifTrue: [
+		^self __len__ ___value ~= 0 ifTrue: [True] ifFalse: [False]
+	].
+	^True
+%
+category: 'other'
+method: object
 __not__
 
 	^self __bool__ __not__
@@ -264,7 +317,7 @@ category: 'Python'
 method: object
 __delattr__: name
 
-	TypeError signal: 'can''t delete ' , name ___string , ' attribute'.
+	AttributeError signal: 'readonly attribute'.
 %
 category: 'Python'
 method: object
@@ -276,7 +329,7 @@ category: 'Python'
 method: object
 __doc__
 
-	^'The base class of the class hierarchy.\n' ,
+	^str ___value: 'The base class of the class hierarchy.\n' ,
 		'\n' ,
 		'When called, it accepts no arguments and returns a new featureless\n' ,
 		'instance that has no instance attributes and cannot be given any.\n'
@@ -325,7 +378,7 @@ category: 'Python'
 method: object
 __hash__
 
-	^self identityHash printString
+	^int ___value: self identityHash
 %
 category: 'Python'
 method: object
@@ -378,7 +431,7 @@ category: 'Python'
 method: object
 __sizeof__
 
-	^16
+	^int ___value: 16
 %
 category: 'Python'
 method: object
@@ -395,14 +448,16 @@ __subclasshook__
 category: 'Python'
 method: object
 is_: anObject
+	"Python 'is' operator checks object identity, not value equality"
 
-	^bool ___value: self ___value == anObject ___value
+	^self == anObject ifTrue: [True] ifFalse: [False]
 %
 category: 'Python'
 method: object
 is_not: anObject
+	"Python 'is not' operator checks object non-identity"
 
-	^bool ___value: (self ___value == anObject ___value) not
+	^self == anObject ifTrue: [False] ifFalse: [True]
 %
 category: 'Smalltalk'
 method: object
@@ -420,6 +475,13 @@ method: object
 ___perform: selector withArguments: argArray
 
 	^self perform: selector withArguments: argArray
+%
+category: 'Smalltalk'
+method: object
+___typeName
+	"Return the Python type name for this object"
+
+	^self class name asString
 %
 category: 'Smalltalk'
 method: object
@@ -512,9 +574,12 @@ category: 'Smalltalk'
 method: object
 hash
 	"Answer a SmallInteger whose value is related to the receiver's identity.
-	May be overridden, and should be overridden in any classes that define = "
+	 For Python objects that implement __hash__, use that value.
+	 May be overridden, and should be overridden in any classes that define = "
 
-	^self identityHash
+	| pyHash |
+	[pyHash := self __hash__] on: Error do: [:ex | ^self identityHash].
+	^pyHash ___value
 %
 category: 'Smalltalk'
 method: object

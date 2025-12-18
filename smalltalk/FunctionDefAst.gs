@@ -111,7 +111,7 @@ printSmalltalkOn: aStream
 		nextPutAll: 'currentScope at: ';
 		nextPut: $#;
 		nextPutAll: name asString;
-		nextPutAll: ' put: (FunctionDef new params: ';
+		nextPutAll: ' put: (builtin_function_or_method new params: ';
 		yourself.
 
 	self printArgList: args args on: aStream.

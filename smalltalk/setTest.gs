@@ -5,11 +5,37 @@ removeallclassmethods setTest
 ! ------------------- Instance methods for setTest
 category: 'done'
 method: setTest
+test__add__
+
+	"Python 3 set does not support + operator"
+	| a b |
+	a := self set: { 'a'. 'b' }.
+	b := self set: { 'c'. 'd' }.
+
+	self
+		should: [a __add__: b]
+		raise: TypeError
+		withExceptionDo: [:exception |
+			self assert: (exception messageText includesString: 'unsupported operand type')];
+		yourself
+%
+category: 'done'
+method: setTest
+test__add__Unsupported
+	"set does not support + operator"
+
+	| a b |
+	a := self set: { 'a' }.
+	b := self set: { 'b' }.
+	self should: [a __add__: b] raise: TypeError.
+%
+category: 'done'
+method: setTest
 test__and__
 
 	| a b c |
-	a := set ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
-	b := set ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
+	a := self set: { 'a'. 'b'. 'c'. 'd' }.
+	b := self set: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a __and__: b.
 
@@ -25,7 +51,7 @@ category: 'done'
 method: setTest
 test__contains__onEmptyList
 
-   	self
+	self
 		deny: (self targetInstance __contains__: (self str: 'x'));
 		yourself.
 %
@@ -96,19 +122,37 @@ test__dir__
    self assert: (dir __contains__: (self str: 'symmetric_difference_update')).
    self assert: (dir __contains__: (self str: 'union')).
    self assert: (dir __contains__: (self str: 'update')).
+
+   "Methods inherited from Container that should NOT be in set/frozenset"
+   self deny: (dir __contains__: (self str: '__getitem__')).
+   self deny: (dir __contains__: (self str: '__mul__')).
+   self deny: (dir __contains__: (self str: '__rmul__')).
+   self deny: (dir __contains__: (self str: '__imul__')).
+   self deny: (dir __contains__: (self str: '__iadd__')).
+   self deny: (dir __contains__: (self str: 'count')).
+   self deny: (dir __contains__: (self str: 'index')).
+%
+category: 'done'
+method: setTest
+test__doc__
+	"set.__doc__ should return a str"
+
+	| doc |
+	doc := set __call__ __doc__.
+	self assert: (doc isKindOf: str).
 %
 category: 'done'
 method: setTest
 test__eq__
 
-   | list |
-	list := self targetInstance __add__: { self str: '1'. self str: '2'. self str: '3' }.
+	| s |
+	s := self set: { '1'. '2'. '3' }.
 
 	self
-		deny:   (list __eq__: (self targetInstance __add__: { self str: '1'. self str: '2' }));
-		assert: (list __eq__: (self targetInstance __add__: { self str: '1'. self str: '2'. self str: '3' }));
-		assert: (list __eq__: (self targetInstance __add__: { self str: '1'. self str: '2'. self str: '3'. self str: '1' }));
-		deny:   (list __eq__: (self targetInstance __add__: { self str: '1'. self str: '2'. self str: '3'. self str: '0' }));
+		deny:   (s __eq__: (self set: { '1'. '2' }));
+		assert: (s __eq__: (self set: { '1'. '2'. '3' }));
+		assert: (s __eq__: (self set: { '1'. '2'. '3'. '1' }));
+		deny:   (s __eq__: (self set: { '1'. '2'. '3'. '0' }));
 		yourself
 %
 category: 'done'
@@ -116,10 +160,10 @@ method: setTest
 test__ge__
 
 	| a b c bb |
-	a := set ___value: { self str: 'a'. self str: 'b'. self str: 'c' }.
-	b := set ___value: { self str: 'b'. self str: 'c' }.
-	bb := set ___value: { self str: 'b'. self str: 'c' }.
-	c := set ___value: { self str: 'a' }.
+	a := self set: { 'a'. 'b'. 'c' }.
+	b := self set: { 'b'. 'c' }.
+	bb := self set: { 'b'. 'c' }.
+	c := self set: { 'a' }.
 
 
 	self
@@ -136,11 +180,10 @@ method: setTest
 test__gt__
 
 	| a b c bb |
-	a := set ___value: { self str: 'a'. self str: 'b'. self str: 'c' }.
-	b := set ___value: { self str: 'b'. self str: 'c' }.
-	bb := set ___value: { self str: 'b'. self str: 'c' }.
-	c := set ___value: { self str: 'a' }.
-
+	a := self set: { 'a'. 'b'. 'c' }.
+	b := self set: { 'b'. 'c' }.
+	bb := self set: { 'b'. 'c' }.
+	c := self set: { 'a' }.
 
 	self
 		assert: (a __gt__: b);
@@ -153,11 +196,20 @@ test__gt__
 %
 category: 'done'
 method: setTest
+test__hash__Unhashable
+	"set is mutable and should not be hashable"
+
+	| s |
+	s := self set: { 'a'. 'b'. 'c' }.
+	self should: [s __hash__] raise: TypeError.
+%
+category: 'done'
+method: setTest
 test__iand__
 
 	| a b c |
-	a := set ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
-	b := set ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
+	a := self set: { 'a'. 'b'. 'c'. 'd' }.
+	b := self set: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a __iand__: b.
 
@@ -173,8 +225,8 @@ method: setTest
 test__ior__
 
 	| a b c |
-	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
-	b := self targetInstance __add__: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
+	a := self set: { 'a'. 'b'. 'c'. 'd' }.
+	b := self set: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a __ior__: b.
 
@@ -189,8 +241,8 @@ method: setTest
 test__isub__
 
 	| a b c |
-	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
-	b := self targetInstance __add__: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
+	a := self set: { 'a'. 'b'. 'c'. 'd' }.
+	b := self set: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a __isub__: b.
 
@@ -206,10 +258,10 @@ method: setTest
 test__ixor__
 
 	| a b c bb |
-	a := set ___value: { self str: 'a'. self str: 'b'. self str: 'c' }.
-	b := set ___value: { self str: 'b'. self str: 'c' }.
-	bb := set ___value: { self str: 'b'. self str: 'c' }.
-	c := set ___value: { self str: 'a' }.
+	a := self set: { 'a'. 'b'. 'c' }.
+	b := self set: { 'b'. 'c' }.
+	bb := self set: { 'b'. 'c' }.
+	c := self set: { 'a' }.
 
 	self
 		assert: (a copy __ixor__: b) __len__ equals: (self int: 1);
@@ -227,11 +279,10 @@ method: setTest
 test__le__
 
 	| a b c bb |
-	a := set ___value: { self str: 'a'. self str: 'b'. self str: 'c' }.
-	b := set ___value: { self str: 'b'. self str: 'c' }.
-	bb := set ___value: { self str: 'b'. self str: 'c' }.
-	c := set ___value: { self str: 'a' }.
-
+	a := self set: { 'a'. 'b'. 'c' }.
+	b := self set: { 'b'. 'c' }.
+	bb := self set: { 'b'. 'c' }.
+	c := self set: { 'a' }.
 
 	self
 		deny:   (a __le__: b);
@@ -246,7 +297,7 @@ category: 'done'
 method: setTest
 test__len__onEmptyList
 
-   	self
+	self
 		assert: self targetInstance __len__ equals: (self int: 0);
 		yourself.
 %
@@ -255,11 +306,10 @@ method: setTest
 test__lt__
 
 	| a b c bb |
-	a := set ___value: { self str: 'a'. self str: 'b'. self str: 'c' }.
-	b := set ___value: { self str: 'b'. self str: 'c' }.
-	bb := set ___value: { self str: 'b'. self str: 'c' }.
-	c := set ___value: { self str: 'a' }.
-
+	a := self set: { 'a'. 'b'. 'c' }.
+	b := self set: { 'b'. 'c' }.
+	bb := self set: { 'b'. 'c' }.
+	c := self set: { 'a' }.
 
 	self
 		deny:   (a __lt__: b);
@@ -274,14 +324,14 @@ category: 'done'
 method: setTest
 test__ne__
 
-   | list |
-	list := self targetInstance __add__: { self str: '1'. self str: '2'. self str: '3' }.
+	| s |
+	s := self set: { '1'. '2'. '3' }.
 
 	self
-		assert: (list __ne__: (self targetInstance __add__: { self str: '1'. self str: '2' }));
-		deny:   (list __ne__: (self targetInstance __add__: { self str: '1'. self str: '2'. self str: '3' }));
-		deny:   (list __ne__: (self targetInstance __add__: { self str: '1'. self str: '2'. self str: '3'. self str: '2' }));
-		assert: (list __ne__: (self targetInstance __add__: { self str: '1'. self str: '2'. self str: '3'. self str: '0' }));
+		assert: (s __ne__: (self set: { '1'. '2' }));
+		deny:   (s __ne__: (self set: { '1'. '2'. '3' }));
+		deny:   (s __ne__: (self set: { '1'. '2'. '3'. '2' }));
+		assert: (s __ne__: (self set: { '1'. '2'. '3'. '0' }));
 		yourself
 %
 category: 'done'
@@ -289,8 +339,8 @@ method: setTest
 test__or__
 
 	| a b c |
-	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
-	b := self targetInstance __add__: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
+	a := self set: { 'a'. 'b'. 'c'. 'd' }.
+	b := self set: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a __or__: b.
 
@@ -306,8 +356,8 @@ method: setTest
 test__rand__
 
 	| a b c |
-	a := set ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
-	b := set ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
+	a := self set: { 'a'. 'b'. 'c'. 'd' }.
+	b := self set: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a __rand__: b.
 
@@ -323,11 +373,11 @@ category: 'done'
 method: setTest
 test__repr__
 
-   | list |
-	list := self targetInstance __add__: { self str: 'a' }.
+	| s |
+	s := self set: { 'a' }.
 
 	self
-		assert: list __repr__ ___value equals: '{''a''}';
+		assert: s __repr__ ___value equals: '{''a''}';
 		yourself
 %
 category: 'done'
@@ -335,8 +385,8 @@ method: setTest
 test__ror__
 
 	| a b c |
-	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
-	b := self targetInstance __add__: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
+	a := self set: { 'a'. 'b'. 'c'. 'd' }.
+	b := self set: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a __ror__: b.
 
@@ -352,8 +402,8 @@ method: setTest
 test__rsub__
 
 	| a b c |
-	a := set ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
-	b := set ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
+	a := self set: { 'a'. 'b'. 'c'. 'd' }.
+	b := self set: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a __rsub__: b.
 
@@ -371,10 +421,10 @@ method: setTest
 test__rxor__
 
 	| a b c bb |
-	a := set ___value: { self str: 'a'. self str: 'b'. self str: 'c' }.
-	b := set ___value: { self str: 'b'. self str: 'c' }.
-	bb := set ___value: { self str: 'b'. self str: 'c' }.
-	c := set ___value: { self str: 'a' }.
+	a := self set: { 'a'. 'b'. 'c' }.
+	b := self set: { 'b'. 'c' }.
+	bb := self set: { 'b'. 'c' }.
+	c := self set: { 'a' }.
 
 	self
 		assert: (a __rxor__: b) __len__ equals: (self int: 1);
@@ -390,11 +440,11 @@ category: 'done'
 method: setTest
 test__str__
 
-   | list |
-	list := self targetInstance __add__: { self str: 'a' }.
+	| s |
+	s := self set: { 'a' }.
 
 	self
-		assert: list __str__ ___value equals: '{''a''}';
+		assert: s __str__ ___value equals: '{''a''}';
 		yourself
 %
 category: 'done'
@@ -402,8 +452,8 @@ method: setTest
 test__sub__
 
 	| a b c |
-	a := set ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
-	b := set ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
+	a := self set: { 'a'. 'b'. 'c'. 'd' }.
+	b := self set: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a __sub__: b.
 
@@ -421,10 +471,10 @@ method: setTest
 test__xor__
 
 	| a b c bb |
-	a := set ___value: { self str: 'a'. self str: 'b'. self str: 'c' }.
-	b := set ___value: { self str: 'b'. self str: 'c' }.
-	bb := set ___value: { self str: 'b'. self str: 'c' }.
-	c := set ___value: { self str: 'a' }.
+	a := self set: { 'a'. 'b'. 'c' }.
+	b := self set: { 'b'. 'c' }.
+	bb := self set: { 'b'. 'c' }.
+	c := self set: { 'a' }.
 
 	self
 		assert: (a __xor__: b) __len__ equals: (self int: 1);
@@ -440,40 +490,59 @@ category: 'done'
 method: setTest
 testadd
 
-   | list |
-	list := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c' }.
+	| s |
+	s := self set: { 'a'. 'b'. 'c' }.
 
-	list add: (self str: 'o').
+	s add: (self str: 'o').
 
 	self
-		assert: list __len__ equals: (self int: 4);
-		assert: (list __contains__: (self str: 'o'));
+		assert: s __len__ equals: (self int: 4);
+		assert: (s __contains__: (self str: 'o'));
+		yourself
+%
+category: 'done'
+method: setTest
+testBooleanReturnTypes
+	"Verify that comparison methods return Python bool objects"
+
+	| a b |
+	a := self set: { 'a'. 'b'. 'c' }.
+	b := self set: { 'b'. 'c' }.
+
+	self
+		assert: (a issubset: b) class equals: bool;
+		assert: (a issuperset: b) class equals: bool;
+		assert: (a isdisjoint: b) class equals: bool;
+		assert: (a __le__: b) class equals: bool;
+		assert: (a __lt__: b) class equals: bool;
+		assert: (a __ge__: b) class equals: bool;
+		assert: (a __gt__: b) class equals: bool;
 		yourself
 %
 category: 'done'
 method: setTest
 testclear
 
-   | list |
-	list := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c' }.
-	list clear.
+	| s |
+	s := self set: { 'a'. 'b'. 'c' }.
+	s clear.
 	self
-		assert: list __len__ equals: (self int: 0);
+		assert: s __len__ equals: (self int: 0);
 		yourself
 %
 category: 'done'
 method: setTest
 testcopy
 
-   | list lost |
-	list := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c' }.
+	| s copy |
+	s := self set: { 'a'. 'b'. 'c' }.
 
-	lost := list copy.
-   list remove: (self str: 'a').
+	copy := s copy.
+	s remove: (self str: 'a').
 	self
-		assert: lost __len__ equals: (self int: 3);
-		assert: (lost __contains__: (self str: 'a'));
-		assert: (lost __contains__: (self str: 'c'));
+		assert: copy __len__ equals: (self int: 3);
+		assert: (copy __contains__: (self str: 'a'));
+		assert: (copy __contains__: (self str: 'c'));
 		yourself
 %
 category: 'done'
@@ -481,8 +550,8 @@ method: setTest
 testdifference
 
 	| a b c |
-	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
-	b := self targetInstance __add__: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
+	a := self set: { 'a'. 'b'. 'c'. 'd' }.
+	b := self set: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a difference: b.
 
@@ -499,8 +568,8 @@ method: setTest
 testdifference_update
 
 	| a b c |
-	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
-	b := self targetInstance __add__: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
+	a := self set: { 'a'. 'b'. 'c'. 'd' }.
+	b := self set: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a difference_update: b.
 
@@ -513,16 +582,38 @@ testdifference_update
 %
 category: 'done'
 method: setTest
-testdiscard
+testdifferenceVariadic
+	"Test difference with multiple sets"
 
-   | list |
-	list := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'b' }.
-	list discard: (self str: 'b').
+	| a b c d result |
+	a := self set: { 'a'. 'b'. 'c'. 'd'. 'e' }.
+	b := self set: { 'b' }.
+	c := self set: { 'c' }.
+	d := self set: { 'd' }.
+
+	result := a difference: (tuple ___value: {b. c. d}).
 
 	self
-		assert: list __len__ equals: (self int: 2);
-		assert: (list __contains__: (self str: 'a'));
-		assert: (list __contains__: (self str: 'c'));
+		assert: result __len__ equals: (self int: 2);
+		assert: (result __contains__: (self str: 'a'));
+		assert: (result __contains__: (self str: 'e'));
+		deny:   (result __contains__: (self str: 'b'));
+		deny:   (result __contains__: (self str: 'c'));
+		deny:   (result __contains__: (self str: 'd'));
+		yourself
+%
+category: 'done'
+method: setTest
+testdiscard
+
+	| s |
+	s := self set: { 'a'. 'b'. 'c'. 'b' }.
+	s discard: (self str: 'b').
+
+	self
+		assert: s __len__ equals: (self int: 2);
+		assert: (s __contains__: (self str: 'a'));
+		assert: (s __contains__: (self str: 'c'));
 		yourself
 %
 category: 'done'
@@ -533,11 +624,23 @@ testdiscardIfAbsent
 %
 category: 'done'
 method: setTest
+testInheritsFromFrozenset
+	"Verify that set properly inherits from frozenset"
+
+	| s |
+	s := self set: { 'a'. 'b'. 'c' }.
+	self
+		assert: (s isKindOf: frozenset);
+		assert: (s isKindOf: set);
+		yourself
+%
+category: 'done'
+method: setTest
 testintersection
 
 	| a b c |
-	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
-	b := self targetInstance __add__: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
+	a := self set: { 'a'. 'b'. 'c'. 'd' }.
+	b := self set: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a intersection: b.
 
@@ -554,8 +657,8 @@ method: setTest
 testintersection_update
 
 	| a b c |
-	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
-	b := self targetInstance __add__: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
+	a := self set: { 'a'. 'b'. 'c'. 'd' }.
+	b := self set: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a intersection_update: b.
 
@@ -568,14 +671,33 @@ testintersection_update
 %
 category: 'done'
 method: setTest
+testintersectionVariadic
+	"Test intersection with multiple sets"
+
+	| a b c result |
+	a := self set: { 'a'. 'b'. 'c'. 'd' }.
+	b := self set: { 'b'. 'c'. 'd'. 'e' }.
+	c := self set: { 'c'. 'd'. 'f' }.
+
+	result := a intersection: (tuple ___value: {b. c}).
+
+	self
+		assert: result __len__ equals: (self int: 2);
+		assert: (result __contains__: (self str: 'c'));
+		assert: (result __contains__: (self str: 'd'));
+		deny:   (result __contains__: (self str: 'a'));
+		deny:   (result __contains__: (self str: 'b'));
+		yourself
+%
+category: 'done'
+method: setTest
 testisdisjoint
 
 	| a b c bb |
-	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c' }.
-	b := self targetInstance __add__: { self str: 'b'. self str: 'c' }.
-	bb := self targetInstance __add__: { self str: 'b'. self str: 'c' }.
-	c := self targetInstance __add__: { self str: 'a' }.
-
+	a := self set: { 'a'. 'b'. 'c' }.
+	b := self set: { 'b'. 'c' }.
+	bb := self set: { 'b'. 'c' }.
+	c := self set: { 'a' }.
 
 	self
 		deny:   (a isdisjoint: b);
@@ -591,11 +713,10 @@ method: setTest
 testissubset
 
 	| a b c bb |
-	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c' }.
-	b := self targetInstance __add__: { self str: 'b'. self str: 'c' }.
-	bb := self targetInstance __add__: { self str: 'b'. self str: 'c' }.
-	c := self targetInstance __add__: { self str: 'a' }.
-
+	a := self set: { 'a'. 'b'. 'c' }.
+	b := self set: { 'b'. 'c' }.
+	bb := self set: { 'b'. 'c' }.
+	c := self set: { 'a' }.
 
 	self
 		deny:   (a issubset: b);
@@ -611,11 +732,10 @@ method: setTest
 testissuperset
 
 	| a b c bb |
-	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c' }.
-	b := self targetInstance __add__: { self str: 'b'. self str: 'c' }.
-	bb := self targetInstance __add__: { self str: 'b'. self str: 'c' }.
-	c := self targetInstance __add__: { self str: 'a' }.
-
+	a := self set: { 'a'. 'b'. 'c' }.
+	b := self set: { 'b'. 'c' }.
+	bb := self set: { 'b'. 'c' }.
+	c := self set: { 'a' }.
 
 	self
 		assert: (a issuperset: b);
@@ -630,45 +750,45 @@ category: 'done'
 method: setTest
 testpop
 
-   | set lost element |
-	set := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c' }.
-	lost := set copy.
-	element :=  set pop.
+	| s copy element |
+	s := self set: { 'a'. 'b'. 'c' }.
+	copy := s copy.
+	element := s pop.
 
 	self
-		assert: (lost __contains__: element);
-		deny:   (set __contains__: element);
-		assert: set __len__ equals: (self int: 2);
+		assert: (copy __contains__: element);
+		deny:   (s __contains__: element);
+		assert: s __len__ equals: (self int: 2);
 		yourself.
 
 	"Remove the rest of the items"
-	set pop; pop.
+	s pop; pop.
 
-	self should: [set pop] raise: KeyError.
+	self should: [s pop] raise: KeyError.
 %
 category: 'done'
 method: setTest
 testremove
 
-   | list |
-	list := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'b' }.
-	list remove: (self str: 'b').
+	| s |
+	s := self set: { 'a'. 'b'. 'c'. 'b' }.
+	s remove: (self str: 'b').
 
 	self
-		assert: list __len__ equals: (self int: 2);
-		assert: (list __contains__: (self str: 'a'));
-		assert: (list __contains__: (self str: 'c'));
+		assert: s __len__ equals: (self int: 2);
+		assert: (s __contains__: (self str: 'a'));
+		assert: (s __contains__: (self str: 'c'));
 		yourself
 %
 category: 'done'
 method: setTest
 testremoveIfAbsent
 
-   | list |
-	list := self targetInstance.
+	| s |
+	s := self targetInstance.
 
 	self
-		should: [list remove: (self str: 'e')]
+		should: [s remove: (self str: 'e')]
 		raise: KeyError
 		withExceptionDo: [:exception |
 			self assert: exception messageText equals: '''e'''];
@@ -679,10 +799,10 @@ method: setTest
 testsymmetric_difference
 
 	| a b c bb |
-	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c' }.
-	b := self targetInstance __add__: { self str: 'b'. self str: 'c' }.
-	bb := self targetInstance __add__: { self str: 'b'. self str: 'c' }.
-	c := self targetInstance __add__: { self str: 'a' }.
+	a := self set: { 'a'. 'b'. 'c' }.
+	b := self set: { 'b'. 'c' }.
+	bb := self set: { 'b'. 'c' }.
+	c := self set: { 'a' }.
 
 	self
 		assert: (a symmetric_difference: b) __len__ equals: (self int: 1);
@@ -699,10 +819,10 @@ method: setTest
 testsymmetric_difference_update
 
 	| a b c bb |
-	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c' }.
-	b := self targetInstance __add__: { self str: 'b'. self str: 'c' }.
-	bb := self targetInstance __add__: { self str: 'b'. self str: 'c' }.
-	c := self targetInstance __add__: { self str: 'a' }.
+	a := self set: { 'a'. 'b'. 'c' }.
+	b := self set: { 'b'. 'c' }.
+	bb := self set: { 'b'. 'c' }.
+	c := self set: { 'a' }.
 
 	self
 		assert: (a copy symmetric_difference_update: b) __len__ equals: (self int: 1);
@@ -720,8 +840,8 @@ method: setTest
 testunion
 
 	| a b c |
-	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
-	b := self targetInstance __add__: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
+	a := self set: { 'a'. 'b'. 'c'. 'd' }.
+	b := self set: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a union: b.
 
@@ -734,11 +854,53 @@ testunion
 %
 category: 'done'
 method: setTest
+testunionVariadic
+	"Test union with multiple sets"
+
+	| a b c result |
+	a := self set: { 'a' }.
+	b := self set: { 'b' }.
+	c := self set: { 'c' }.
+
+	result := a union: (tuple ___value: {b. c}).
+
+	self
+		assert: result __len__ equals: (self int: 3);
+		assert: (result __contains__: (self str: 'a'));
+		assert: (result __contains__: (self str: 'b'));
+		assert: (result __contains__: (self str: 'c'));
+		yourself
+%
+category: 'done'
+method: setTest
+testUnsupportedOperations
+	"Test that set raises errors for operations it doesn't support"
+
+	| s |
+	s := self set: { self int: 1. self int: 2 }.
+
+	"set doesn't support indexing"
+	self should: [s __getitem__: (self int: 0)] raise: TypeError.
+
+	"set doesn't support *"
+	self should: [s __mul__: (self int: 2)] raise: TypeError.
+	self should: [s __rmul__: (self int: 2)] raise: TypeError.
+	self should: [s __imul__: (self int: 2)] raise: TypeError.
+
+	"set doesn't support += (use update instead)"
+	self should: [s __iadd__: s] raise: TypeError.
+
+	"set doesn't have count or index"
+	self should: [s count: (self int: 1)] raise: AttributeError.
+	self should: [s index: (self int: 1)] raise: AttributeError.
+%
+category: 'done'
+method: setTest
 testupdate
 
 	| a b c |
-	a := self targetInstance __add__: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
-	b := self targetInstance __add__: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
+	a := self set: { 'a'. 'b'. 'c'. 'd' }.
+	b := self set: { 'b'. 'c'. 'd'. 'e' }.
 
 	c := a update: b.
 
@@ -746,6 +908,25 @@ testupdate
 		assert: a == c;
 		assert: c __len__ equals: (self int: 5);
 		assert: (c __contains__: (self str: 'e'));
+		yourself
+%
+category: 'done'
+method: setTest
+testupdateVariadic
+	"Test update with multiple sets"
+
+	| a b c |
+	a := self set: { 'a' }.
+	b := self set: { 'b' }.
+	c := self set: { 'c' }.
+
+	a update: (tuple ___value: {b. c}).
+
+	self
+		assert: a __len__ equals: (self int: 3);
+		assert: (a __contains__: (self str: 'a'));
+		assert: (a __contains__: (self str: 'b'));
+		assert: (a __contains__: (self str: 'c'));
 		yourself
 %
 category: 'todo'

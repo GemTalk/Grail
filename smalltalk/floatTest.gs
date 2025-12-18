@@ -5,6 +5,17 @@ removeallclassmethods floatTest
 ! ------------------- Instance methods for floatTest
 category: 'done'
 method: floatTest
+test___getformat__
+
+	| result |
+	result := float __getformat__: (str ___value: 'double').
+	self assert: result ___value equals: 'IEEE, little-endian'.
+
+	result := float __getformat__: (str ___value: 'float').
+	self assert: result ___value equals: 'IEEE, little-endian'.
+%
+category: 'done'
+method: floatTest
 test__abs__
 
 	self
@@ -49,17 +60,65 @@ test__ceil__
 %
 category: 'done'
 method: floatTest
+test__class__
+	"float.__class__ should return the float class"
+
+	self assert: (self float: 3.14) __class__ equals: float.
+%
+category: 'done'
+method: floatTest
+test__delattr__
+	"float.__delattr__ should raise AttributeError"
+
+	self should: [(self float: 3.14) __delattr__: (str ___value: 'foo')] raise: AttributeError.
+%
+category: 'done'
+method: floatTest
+test__dir__
+	"float.__dir__ should return a list of attribute names"
+
+	| dir |
+	dir := (self float: 3.14) __dir__.
+	self assert: dir class equals: list.
+	self assert: (dir __contains__: (str ___value: '__abs__')) ___value.
+	self assert: (dir __contains__: (str ___value: '__add__')) ___value.
+	self assert: (dir __contains__: (str ___value: 'real')) ___value.
+%
+category: 'done'
+method: floatTest
 test__divmod__
 
+	| result |
+	result := (self float: 3) __divmod__: (self int: 4).
 	self
-		assert: ((self float: 3) __divmod__: (self int: 4)) ___container asArray equals: #(0 3);
-		assert: ((self float: 3) __divmod__: (self int: -4)) ___container asArray equals: #(-1 -1);
-		assert: ((self float:-3) __divmod__: (self int: -4)) ___container asArray equals: #(0 -3);
-		assert: ((self float: 4) __divmod__: (self int: 3)) ___container asArray equals: #(1 1);
-		assert: ((self float: 4) __divmod__: (self int: -3)) ___container asArray equals: #(-2 -2);
-		assert: ((self float:-4) __divmod__: (self int: -3)) ___container asArray equals: #(1 -1);
-		assert: ((self float:-4) __divmod__: (self int: 3)) ___container asArray equals: #(-2 2);
-		yourself
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(0.0 3.0).
+	result := (self float: 3) __divmod__: (self int: -4).
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(-1.0 -1.0).
+	result := (self float: -3) __divmod__: (self int: -4).
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(0.0 -3.0).
+	result := (self float: 4) __divmod__: (self int: 3).
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(1.0 1.0).
+	result := (self float: 4) __divmod__: (self int: -3).
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(-2.0 -2.0).
+	result := (self float: -4) __divmod__: (self int: -3).
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(1.0 -1.0).
+	result := (self float: -4) __divmod__: (self int: 3).
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(-2.0 2.0).
+%
+category: 'done'
+method: floatTest
+test__doc__
+	"float.__doc__ should return a str or None"
+
+	| doc |
+	doc := (self float: 3.14) __doc__.
+	self assert: (doc == None or: [doc isKindOf: str]).
 %
 category: 'done'
 method: floatTest
@@ -113,6 +172,16 @@ test__floordiv__
 %
 category: 'done'
 method: floatTest
+test__format__
+	"float.__format__ should format the float according to format spec"
+
+	self
+		assert: ((self float: 3.14159) __format__: (str ___value: '.2f')) ___value equals: '3.14';
+		assert: ((self float: 3.14159) __format__: (str ___value: '')) ___value equals: '3.14159';
+		yourself.
+%
+category: 'done'
+method: floatTest
 test__ge__
 
 	self
@@ -126,6 +195,25 @@ test__ge__
 %
 category: 'done'
 method: floatTest
+test__getattribute__
+	"float.__getattribute__ should get attributes"
+
+	self assert: ((self float: 3.14) __getattribute__: (str ___value: 'real')) ___value equals: 3.14.
+	self should: [(self float: 3.14) __getattribute__: (str ___value: 'nonexistent')] raise: AttributeError.
+%
+category: 'done'
+method: floatTest
+test__getnewargs__
+
+	| result |
+	result := (float ___value: 3.14) __getnewargs__.
+	self
+		assert: result class equals: tuple;
+		assert: result ___value size equals: 1;
+		assert: (result ___value first) ___value equals: 3.14.
+%
+category: 'done'
+method: floatTest
 test__gt__
 
 	self
@@ -136,6 +224,18 @@ test__gt__
 		deny:   ((self float: 3) __gt__: (self float: 3));
 		assert: ((self float: 4) __gt__: (self float: 3));
 		yourself
+%
+category: 'done'
+method: floatTest
+test__hash__
+	"float.__hash__ should return consistent hash values"
+
+	| h1 h2 |
+	h1 := (self float: 3.14) __hash__.
+	h2 := (self float: 3.14) __hash__.
+	self assert: h1 equals: h2.
+	"Hash of integer-valued float should equal hash of that integer"
+	self assert: (self float: 3.0) __hash__ equals: (self int: 3) __hash__.
 %
 category: 'done'
 method: floatTest
@@ -221,6 +321,16 @@ test__neg__
 %
 category: 'done'
 method: floatTest
+test__new__
+	"float.__new__ should create new instances"
+
+	| f |
+	f := float __new__.
+	self assert: f class equals: float.
+	self assert: f ___value equals: 0.0.
+%
+category: 'done'
+method: floatTest
 test__pos__
 
 	self
@@ -262,15 +372,39 @@ category: 'done'
 method: floatTest
 test__rdivmod__
 
+	| result |
+	result := (self float: 4) __rdivmod__: (self int: 3).
 	self
-		assert: ((self float: 4) __rdivmod__: (self int: 3)) ___container asArray equals: #(0 3);
-		assert: ((self float:-4) __rdivmod__: (self int: 3)) ___container asArray equals: #(-1 -1);
-		assert: ((self float:-4) __rdivmod__: (self int: -3)) ___container asArray equals: #(0 -3);
-		assert: ((self float: 3) __rdivmod__: (self int: 4)) ___container asArray equals: #(1 1);
-		assert: ((self float:-3) __rdivmod__: (self int: 4)) ___container asArray equals: #(-2 -2);
-		assert: ((self float:-3) __rdivmod__: (self int: -4)) ___container asArray equals: #(1 -1);
-		assert: ((self float: 3) __rdivmod__: (self int: -4)) ___container asArray equals: #(-2 2);
-		yourself
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(0 3).
+	result := (self float: -4) __rdivmod__: (self int: 3).
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(-1 -1).
+	result := (self float: -4) __rdivmod__: (self int: -3).
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(0 -3).
+	result := (self float: 3) __rdivmod__: (self int: 4).
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(1 1).
+	result := (self float: -3) __rdivmod__: (self int: 4).
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(-2 -2).
+	result := (self float: -3) __rdivmod__: (self int: -4).
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(1 -1).
+	result := (self float: 3) __rdivmod__: (self int: -4).
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(-2 2).
+%
+category: 'done'
+method: floatTest
+test__repr__
+
+	self
+		assert: (self float: 3.0) __repr__ ___value equals: '3.0';
+		assert: (self float: -3.5) __repr__ ___value equals: '-3.5';
+		assert: (self float: 0.0) __repr__ ___value equals: '0.0';
+		assert: (self float: 123.456) __repr__ ___value equals: '123.456';
+		yourself.
 %
 category: 'done'
 method: floatTest
@@ -350,6 +484,34 @@ test__rtruediv__
 %
 category: 'done'
 method: floatTest
+test__setattr__
+	"float.__setattr__ should raise TypeError/AttributeError"
+
+	self should: [(self float: 3.14) __setattr__: (str ___value: 'foo') _: (self int: 1)] raise: AttributeError.
+%
+category: 'done'
+method: floatTest
+test__sizeof__
+	"float.__sizeof__ should return an int"
+
+	| size |
+	size := (self float: 3.14) __sizeof__.
+	self assert: (size isKindOf: int).
+	self assert: size ___value > 0.
+%
+category: 'done'
+method: floatTest
+test__str__
+	"float.__str__ should return string representation"
+
+	self
+		assert: (self float: 3.14) __str__ ___value equals: '3.14';
+		assert: (self float: 3.0) __str__ ___value equals: '3.0';
+		assert: (self float: -0.0) __str__ ___value equals: '-0.0';
+		yourself.
+%
+category: 'done'
+method: floatTest
 test__sub__
 
 	self
@@ -358,6 +520,13 @@ test__sub__
         assert: ((self float:  3) __sub__: (self float: 1)) ___value equals: 2;
         assert: ((self float: -3) __sub__: (self float: 1)) ___value equals: -4;
 		yourself.
+%
+category: 'done'
+method: floatTest
+test__subclasshook__
+	"float.__subclasshook__ should return NotImplemented"
+
+	self assert: (self float: 3.14) __subclasshook__ == NotImplementedType singleton.
 %
 category: 'done'
 method: floatTest
@@ -390,12 +559,19 @@ category: 'done'
 method: floatTest
 test_as_integer_ratio
 
+	| result |
+	result := (self float: 3) as_integer_ratio.
 	self
-		assert: ((self float: 3) as_integer_ratio) ___container asArray equals: #(3 1);
-		assert: ((self float:-3) as_integer_ratio) ___container asArray equals: #(-3 1);
-		assert: ((self float:-0.25) as_integer_ratio) ___container asArray equals: #(-1 4);
-		assert: ((self float: 0) as_integer_ratio) ___container asArray equals: #(0 1);
-		yourself.
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(3 1).
+	result := (self float: -3) as_integer_ratio.
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(-3 1).
+	result := (self float: -0.25) as_integer_ratio.
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(-1 4).
+	result := (self float: 0) as_integer_ratio.
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(0 1).
 %
 category: 'done'
 method: floatTest
@@ -405,6 +581,46 @@ test_conjugate
 		assert: (self float:  3.4) conjugate ___value equals: 3.4;
         assert: (self float: -3) conjugate ___value equals: -3;
 		yourself.
+%
+category: 'done'
+method: floatTest
+test_from_number
+	"float.from_number should create a float from a number"
+
+	self
+		assert: (float from_number: (self int: 42)) ___value equals: 42.0;
+		assert: (float from_number: (self float: 3.14)) ___value equals: 3.14;
+		yourself.
+%
+category: 'done'
+method: floatTest
+test_fromhex
+
+	self
+		assert: (float fromhex: (str ___value: '0x1.0p+0')) ___value equals: 1.0;
+		assert: (float fromhex: (str ___value: '0x1.0p+1')) ___value equals: 2.0;
+		assert: (float fromhex: (str ___value: '0x1.0p-1')) ___value equals: 0.5;
+		assert: (float fromhex: (str ___value: '-0x1.0p+0')) ___value equals: -1.0;
+		assert: (float fromhex: (str ___value: '0xff')) ___value equals: 255.0;
+		yourself.
+%
+category: 'done'
+method: floatTest
+test_hex
+
+	| result |
+	"Test basic values"
+	result := (float ___value: 1.0) hex ___value.
+	self assert: (result beginsWith: '0x1.').
+	self assert: (result includesString: 'p+0').
+
+	"Test negative"
+	result := (float ___value: -1.0) hex ___value.
+	self assert: (result beginsWith: '-0x1.').
+
+	"Test zero"
+	result := (float ___value: 0.0) hex ___value.
+	self assert: result equals: '0x0.0000000000000p+0'.
 %
 category: 'done'
 method: floatTest
@@ -425,72 +641,80 @@ test_real
         assert: (self float: -3) real ___value equals: -3;
 		yourself.
 %
-category: 'todo'
+category: 'done'
 method: floatTest
-test__dir__
-	" please inspect
-	self new writeDirTestOn: #('__abs__' '__add__' '__bool__' '__ceil__' '__divmod__' '__float__' '__floor__' '__floordiv__' '__getformat__' '__getnewargs__' '__int__' '__mod__' '__mul__' '__neg__' '__pos__' '__pow__' '__radd__' '__rdivmod__' '__rfloordiv__' '__rmod__' '__rmul__' '__round__' '__rpow__' '__rsub__' '__rtruediv__' '__set_format__' '__sub__' '__truediv__' '__trunc__' 'as_integer_ratio' 'conjugate' 'fromhex' 'hex' 'imag' 'is_integer' 'real')
-	"
+testas_integer_ratio
+	"float.as_integer_ratio() returns tuple of (numerator, denominator)"
 
-false ifTrue: [
-	| dir |
-		dir := self targetInstance __dir__.
-	self assert: dir __class__ equals: list.
+	| result |
+	result := (self float: 3.5) as_integer_ratio.
+	self assert: (result isKindOf: tuple).
+	self assert: (result __getitem__: (self int: 0)) ___value equals: 7.
+	self assert: (result __getitem__: (self int: 1)) ___value equals: 2.
 
-   #pyTodo. "self assert: dir __len__ equals: 36.
-"   self assert: (dir __contains__: (self str: '__abs__')).
-   self assert: (dir __contains__: (self str: '__add__')).
-   self assert: (dir __contains__: (self str: '__bool__')).
-   self assert: (dir __contains__: (self str: '__ceil__')).
-   self assert: (dir __contains__: (self str: '__divmod__')).
-   self assert: (dir __contains__: (self str: '__float__')).
-   self assert: (dir __contains__: (self str: '__floor__')).
-   self assert: (dir __contains__: (self str: '__floordiv__')).
-   #pyTodo. "self assert: (dir __contains__: (self str: '__getformat__')).
-"   #pyTodo. "self assert: (dir __contains__: (self str: '__getnewargs__')).
-"   self assert: (dir __contains__: (self str: '__int__')).
-   self assert: (dir __contains__: (self str: '__mod__')).
-   self assert: (dir __contains__: (self str: '__mul__')).
-   self assert: (dir __contains__: (self str: '__neg__')).
-   self assert: (dir __contains__: (self str: '__pos__')).
-   self assert: (dir __contains__: (self str: '__pow__')).
-   self assert: (dir __contains__: (self str: '__radd__')).
-   self assert: (dir __contains__: (self str: '__rdivmod__')).
-   self assert: (dir __contains__: (self str: '__rfloordiv__')).
-   self assert: (dir __contains__: (self str: '__rmod__')).
-   self assert: (dir __contains__: (self str: '__rmul__')).
-   #pyTodo. "self assert: (dir __contains__: (self str: '__round__')).
-"   self assert: (dir __contains__: (self str: '__rpow__')).
-   self assert: (dir __contains__: (self str: '__rsub__')).
-   self assert: (dir __contains__: (self str: '__rtruediv__')).
-   #pyTodo. "self assert: (dir __contains__: (self str: '__set_format__')).
-"   self assert: (dir __contains__: (self str: '__sub__')).
-   self assert: (dir __contains__: (self str: '__truediv__')).
-   self assert: (dir __contains__: (self str: '__trunc__')).
-   self assert: (dir __contains__: (self str: 'as_integer_ratio')).
-   self assert: (dir __contains__: (self str: 'conjugate')).
-   #pyTodo. "self assert: (dir __contains__: #fromhex).
-"   #pyTodo. "self assert: (dir __contains__: #hex).
-"   self assert: (dir __contains__: (self str: 'imag')).
-   self assert: (dir __contains__: (self str: 'is_integer')).
-   self assert: (dir __contains__: (self str: 'real')).
-]
+	result := (self float: 0.5) as_integer_ratio.
+	self assert: (result __getitem__: (self int: 0)) ___value equals: 1.
+	self assert: (result __getitem__: (self int: 1)) ___value equals: 2.
 %
-category: 'todo'
+category: 'done'
 method: floatTest
-test__getnewargs__
+testfromhex
+	"float.fromhex() class method parses hex float strings"
 
-   #pyTodo
+	self
+		assert: (float fromhex: (str ___value: '0x1.cp+1')) ___value equals: 3.5;
+		assert: (float fromhex: (str ___value: '0x1.0p+0')) ___value equals: 1.0;
+		assert: (float fromhex: (str ___value: '-0x1.0p+0')) ___value equals: -1.0;
+		assert: (float fromhex: (str ___value: '0x1.0p+3')) ___value equals: 8.0;
+		yourself.
 %
-category: 'todo'
+category: 'done'
 method: floatTest
-test_fromhex
+testhex
+	"float.hex() returns hexadecimal string representation"
 
-   #pyTodo
+	| result |
+	result := (self float: 0.0) hex.
+	self assert: (result isKindOf: str).
+	self assert: result ___value equals: '0x0.0000000000000p+0'.
+
+	"Check roundtrip for 3.5"
+	result := (self float: 3.5) hex.
+	self assert: (result isKindOf: str).
+	self assert: (float fromhex: result) ___value equals: 3.5.
 %
-category: 'todo'
+category: 'done'
 method: floatTest
-test_hex
+testimag
+	"float.imag always returns 0.0"
 
-   #pyTodo
+	self
+		assert: (self float: 3.14) imag ___value equals: 0;
+		assert: (self float: -5.0) imag ___value equals: 0;
+		yourself.
+%
+category: 'done'
+method: floatTest
+testis_integer
+	"float.is_integer() returns True if float has integral value"
+
+	self
+		assert: (self float: 3.0) is_integer ___value;
+		assert: (self float: -5.0) is_integer ___value;
+		assert: (self float: 0.0) is_integer ___value;
+		deny: (self float: 3.5) is_integer ___value;
+		deny: (self float: 0.1) is_integer ___value;
+		yourself.
+%
+category: 'done'
+method: floatTest
+testreal
+	"float.real returns self"
+
+	| f |
+	f := self float: 3.14.
+	self assert: f real == f.
+
+	f := self float: -5.0.
+	self assert: f real == f.
 %

@@ -56,13 +56,14 @@ printSmalltalkOn: aStream
 			give UnboundLocalError
 		if ctx is write change flag in block to true aka has been written"
 	value printSmalltalkWithParenthesisOn: aStream.
-	aStream 
-		space;
+	aStream
+		nextPutAll: ' __getattribute__: (str ___value: ''';
 		nextPutAll: attr asString;
+		nextPutAll: ''')';
 		yourself.
 
 	ctx class == StoreAst ifTrue: [
-		self halt. 
+		self halt.
 		aStream nextPutAll: ' put: '.
 	].
 %

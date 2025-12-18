@@ -35,14 +35,29 @@ isAbstract
 category: 'other'
 method: PythonTestCase
 assert: value
+	"Handle Python bool instances (including True/False singletons) and Smalltalk booleans"
 
-	super assert: (value == True or: [value]).
+	(value isKindOf: bool) ifTrue: [^super assert: value ___value].
+	super assert: value.
+%
+category: 'other'
+method: PythonTestCase
+assert: x equals: y
+
+	"If identical (handles singletons like None, True, False), pass immediately"
+	x == y ifTrue: [^self].
+	"Use Python's __eq__ for Python objects"
+	((x isKindOf: object) and: [y isKindOf: object])
+		ifTrue: [self assert: (x __eq__: y) == True]
+		ifFalse: [super assert: x equals: y]
 %
 category: 'other'
 method: PythonTestCase
 deny: value
+	"Handle Python bool instances (including True/False singletons) and Smalltalk booleans"
 
-	super assert: (value == False or: [value ~= True or: [value not]]).
+	(value isKindOf: bool) ifTrue: [^super deny: value ___value].
+	super deny: value.
 %
 category: 'other'
 method: PythonTestCase

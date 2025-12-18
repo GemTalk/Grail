@@ -3839,36 +3839,6 @@ expectvalue /Class
 doit
 FormatTag category: 'Tools'
 %
-! ------------------- Class definition for FunctionDef
-expectvalue /Class
-doit
-Object subclass: 'FunctionDef'
-  instVarNames: #( block params vararg
-                    kwonlyargs kw_defaults kwarg defaults)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-FunctionDef comment: 
-'See following for a discussion on arguments: https://docs.python.org/3/library/ast.html#ast.arg
-
-Notes:
-	We are ignoring posonlyargs (For now!)
-	
-
-hierarchy is:
-Object
-  FunctionDef( block args vararg kwonlyargs kw_defaults kwarg defaults)'
-%
-expectvalue /Class
-doit
-FunctionDef category: 'Tools'
-%
 ! ------------------- Class definition for object
 expectvalue /Class
 doit
@@ -3902,13 +3872,29 @@ object category: 'BuiltIns-Kernel'
 expectvalue /Class
 doit
 object subclass: 'builtin_function_or_method'
-  instVarNames: #()
+  instVarNames: #( block params vararg
+                    kwonlyargs kw_defaults kwarg defaults)
   classVars: #()
-  classInstVars: #()
+  classInstVars: #( singleton)
   poolDictionaries: #()
   inDictionary: Python
   options: #()
 
+%
+expectvalue /Class
+doit
+builtin_function_or_method comment: 
+'
+I implement the behavior found in Python''s builtin_function_or_method. From Python, we find the following attributes:
+
+>>> dir(type(all))
+[''__class__'', ''__delattr__'', ''__dir__'', ''__doc__'', ''__eq__'', ''__format__'', ''__ge__'', ''__getattribute__'', ''__gt__'', ''__hash__'', ''__init__'', ''__init_subclass__'', ''__le__'', ''__lt__'', ''__ne__'', ''__new__'', ''__reduce__'', ''__reduce_ex__'', ''__repr__'', ''__setattr__'', ''__sizeof__'', ''__str__'', ''__subclasshook__'']''
+
+Some of these are inherited from object. The ones that are not are:
+
+>>> sorted(list(set(dir(type(all))) - set(dir(object))))
+[''__call__'', ''__module__'', ''__name__'', ''__qualname__'', ''__self__'', ''__text_signature__'']
+'
 %
 expectvalue /Class
 doit
@@ -3920,7 +3906,7 @@ doit
 builtin_function_or_method subclass: 'builtins'
   instVarNames: #()
   classVars: #()
-  classInstVars: #()
+  classInstVars: #( printFile)
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -4003,22 +3989,6 @@ object subclass: 'BuiltinImporter'
 expectvalue /Class
 doit
 BuiltinImporter category: 'BuiltIns-Kernel'
-%
-! ------------------- Class definition for bytearray
-expectvalue /Class
-doit
-object subclass: 'bytearray'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-bytearray category: 'BuiltIns-Kernel'
 %
 ! ------------------- Class definition for classmethod
 expectvalue /Class
@@ -4137,6 +4107,38 @@ expectvalue /Class
 doit
 bytes category: 'BuiltIns-Containers'
 %
+! ------------------- Class definition for bytearray
+expectvalue /Class
+doit
+bytes subclass: 'bytearray'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+bytearray category: 'BuiltIns-Containers'
+%
+! ------------------- Class definition for OrderedDictionary
+! OrderedDictionary maintains insertion order like Python 3.7+ dict.
+! It wraps a Dictionary for fast key lookup and an OrderedCollection for key ordering.
+expectvalue /Class
+doit
+Object subclass: 'OrderedDictionary'
+  instVarNames: #( dictionary keys )
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+%
+expectvalue /Class
+doit
+OrderedDictionary category: 'Tools'
+%
 ! ------------------- Class definition for dict
 expectvalue /Class
 doit
@@ -4213,6 +4215,42 @@ expectvalue /Class
 doit
 frozenset category: 'BuiltIns-Containers'
 %
+! ------------------- Class definition for set
+expectvalue /Class
+doit
+frozenset subclass: 'set'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+
+%
+expectvalue /Class
+doit
+set comment: 
+'
+Python also includes a data type for sets. A set is an unordered collection with no duplicate elements. Basic uses include membership testing and eliminating duplicate entries. Set objects also support mathematical operations like union, intersection, difference, and symmetric difference.
+
+
+>>> set.mro()
+[<class ''set''>, <class ''object''>]
+>>> sorted(set(dir(set)) - set(dir(object)))
+[''__and__'', ''__class_getitem__'', ''__contains__'', ''__iand__'', ''__ior__'', ''__isub__'', ''__iter__'', ''__ixor__'', ''__len__'', ''__or__'', ''__rand__'', ''__ror__'', ''__rsub__'', ''__rxor__'', ''__sub__'', ''__xor__'', ''add'', ''clear'', ''copy'', ''difference'', ''difference_update'', ''discard'', ''intersection'', ''intersection_update'', ''isdisjoint'', ''issubset'', ''issuperset'', ''pop'', ''remove'', ''symmetric_difference'', ''symmetric_difference_update'', ''union'', ''update'']
+
+
+The following are implemented in Container:
+Container ___dir
+ a Set(''__gt__'' ''__ge__'' ''__eq__'' ''__imul__'' ''__add__'' ''__contains__'' ''__format__'' ''__str__'' ''__delattr__'' ''index'' ''__setattr__'' ''__getattribute__'' ''__subclasshook__'' ''__ne__'' ''__sizeof__'' ''__dir__'' ''__mul__'' ''__class__'' ''clear'' ''__doc__'' ''__repr__'' ''copy'' ''__new__'' ''__lt__'' ''__le__'' ''count'' ''__hash__'' ''__len__'' ''__getitem__'')
+
+https://docs.python.org/3/tutorial/datastructures.html#tuples-and-sequences
+https://docs.python.org/3/tutorial/datastructures.html'
+%
+expectvalue /Class
+doit
+set category: 'BuiltIns-Containers'
+%
 ! ------------------- Class definition for list
 expectvalue /Class
 doit
@@ -4246,42 +4284,6 @@ https://docs.python.org/3/tutorial/datastructures.html'
 expectvalue /Class
 doit
 list category: 'BuiltIns-Containers'
-%
-! ------------------- Class definition for set
-expectvalue /Class
-doit
-Container subclass: 'set'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-set comment: 
-'
-Python also includes a data type for sets. A set is an unordered collection with no duplicate elements. Basic uses include membership testing and eliminating duplicate entries. Set objects also support mathematical operations like union, intersection, difference, and symmetric difference.
-
-
->>> set.mro()
-[<class ''set''>, <class ''object''>]
->>> sorted(set(dir(set)) - set(dir(object)))
-[''__and__'', ''__class_getitem__'', ''__contains__'', ''__iand__'', ''__ior__'', ''__isub__'', ''__iter__'', ''__ixor__'', ''__len__'', ''__or__'', ''__rand__'', ''__ror__'', ''__rsub__'', ''__rxor__'', ''__sub__'', ''__xor__'', ''add'', ''clear'', ''copy'', ''difference'', ''difference_update'', ''discard'', ''intersection'', ''intersection_update'', ''isdisjoint'', ''issubset'', ''issuperset'', ''pop'', ''remove'', ''symmetric_difference'', ''symmetric_difference_update'', ''union'', ''update'']
-
-
-The following are implemented in Container:
-Container ___dir
- a Set(''__gt__'' ''__ge__'' ''__eq__'' ''__imul__'' ''__add__'' ''__contains__'' ''__format__'' ''__str__'' ''__delattr__'' ''index'' ''__setattr__'' ''__getattribute__'' ''__subclasshook__'' ''__ne__'' ''__sizeof__'' ''__dir__'' ''__mul__'' ''__class__'' ''clear'' ''__doc__'' ''__repr__'' ''copy'' ''__new__'' ''__lt__'' ''__le__'' ''count'' ''__hash__'' ''__len__'' ''__getitem__'')
-
-https://docs.python.org/3/tutorial/datastructures.html#tuples-and-sequences
-https://docs.python.org/3/tutorial/datastructures.html'
-%
-expectvalue /Class
-doit
-set category: 'BuiltIns-Containers'
 %
 ! ------------------- Class definition for tuple
 expectvalue /Class
@@ -4376,22 +4378,6 @@ float comment:
 expectvalue /Class
 doit
 float category: 'BuiltIns-Numbers'
-%
-! ------------------- Class definition for function
-expectvalue /Class
-doit
-object subclass: 'function'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-function category: 'BuiltIns-Kernel'
 %
 ! ------------------- Class definition for int
 expectvalue /Class
@@ -4594,7 +4580,7 @@ NotImplementedType category: 'BuiltIns-Kernel'
 expectvalue /Class
 doit
 object subclass: 'slice'
-  instVarNames: #()
+  instVarNames: #( start stop step)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -5225,7 +5211,7 @@ ByteLiteralsTestCase category: 'Tests'
 expectvalue /Class
 doit
 PythonTestCase subclass: 'CMathTestCase'
-  instVarNames: #()
+  instVarNames: #( cmathModule scope)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -5482,22 +5468,6 @@ Other_Test subclass: 'filterTest'
 expectvalue /Class
 doit
 filterTest category: 'Tests'
-%
-! ------------------- Class definition for functionTest
-expectvalue /Class
-doit
-Other_Test subclass: 'functionTest'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-functionTest category: 'Tests'
 %
 ! ------------------- Class definition for mapTest
 expectvalue /Class
@@ -5889,22 +5859,6 @@ expectvalue /Class
 doit
 Variables category: 'Tools'
 %
-! ------------------- Class definition for Builtins
-expectvalue /Class
-doit
-Variables subclass: 'Builtins'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #( singleton printFile)
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-
-%
-expectvalue /Class
-doit
-Builtins category: 'Tools'
-%
 ! ------------------- Class definition for PyGlobals
 expectvalue /Class
 doit
@@ -5962,7 +5916,6 @@ input builtin_function_or_method.gs
 input builtin_function_or_methodTest.gs
 input BuiltinImporter.gs
 input builtins.gs
-input Builtins_.gs
 input bytearray.gs
 input bytearrayTest.gs
 input ByteLiteralsTestCase.gs
@@ -5994,6 +5947,7 @@ input DelAst.gs
 input DeleteAst.gs
 input DelimitersTestCase.gs
 input DeprecationWarning.gs
+input OrderedDictionary.gs
 input dict.gs
 input DictAst.gs
 input DictCompAst.gs
@@ -6023,10 +5977,7 @@ input FormattedValueAst.gs
 input ForTestCase.gs
 input frozenset.gs
 input frozensetTest.gs
-input function.gs
-input FunctionDef.gs
 input FunctionDefAst.gs
-input functionTest.gs
 input FutureWarning.gs
 input GeneratorExit.gs
 input GeneratorExpAst.gs

@@ -17,7 +17,7 @@ test__getitem__
 %
 category: 'todo'
 method: BaseExceptionTest
-test__getslice__
+test__getitem__slice
 
    #pyTodo
 %

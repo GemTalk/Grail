@@ -20,7 +20,7 @@ method: IfAst
 printSmalltalkOn: aStream
 
 	test printSmalltalkWithParenthesisOn: aStream.
-	aStream nextPutAll: ' ___value ifTrue: ['; lf; yourself.
+	aStream nextPutAll: ' __bool__ ___value ifTrue: ['; lf; yourself.
 	aStream increaseIndent.
 	aStream nextPutAll: ''.	"This adds an indent before proceeding."
 	body printSmalltalkOn: aStream.

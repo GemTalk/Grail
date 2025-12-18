@@ -91,7 +91,7 @@ category: 'other'
 classmethod: ModuleAst
 evaluate: aString
 "
-ModuleAst script: '1 == 1'.
+ModuleAst evaluate: '1 == 1'.
 "
 	^self evaluate: aString withScope: nil
 %

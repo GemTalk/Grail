@@ -39,16 +39,16 @@ __delitem__: anIndex
 %
 category: 'Python'
 method: list
-__getslice__: aPyIntStart _: aPyIntEnd
+__doc__
 
-	| end |
-	end := aPyIntEnd.
+	^str ___value: 'Built-in mutable sequence.\n\nIf no argument is given, the constructor creates a new empty list.\nThe argument must be an iterable if specified.'
+%
+category: 'Python'
+method: list
+__hash__
+	"Lists are not hashable in Python"
 
-	end class == NoneType ifTrue: [
-		end := int ___value: container size
-	].
-
-	^self class ___value: (self ___getslice: aPyIntStart _: end)
+	TypeError signal: 'unhashable type: ''list'''
 %
 category: 'Python'
 method: list
@@ -165,36 +165,48 @@ reverse
 category: 'Python'
 method: list
 sort
+	"Sort the list in place using Python's __lt__ for comparison"
 
-	^self ___value: self ___container sort
-%
-category: 'Python'
-method: list
-sort_key: aFunction reverse: aBool
-
-"
-	| sortBlock reverse |
-	sortBlock := aDict at: #key
-							ifPresent: [:sortFunc | [:a :b | (sortFunc value: a) < (sortFunc value: b)]]
-							ifAbsent: [[:a :b | a < b]].
-
-	^self ___initialize: aBool ___value
-									ifTrue: [(self ___container sort: sortBlock) reverse]
-									ifFalse: [self ___container sort: sortBlock]).
-"
+	container := self ___container sort: [:a :b | (a __lt__: b) ___value].
+	^None
 %
 category: 'Python'
 method: list
 sort: aDict
+	"Sort the list in place with optional key and reverse arguments.
+	 aDict should contain #key -> aBlock/callable and/or #reverse -> aBoolean/True/False"
 
-	| sortBlock reverse |
-	sortBlock := aDict at: #key
-							ifPresent: [:sortFunc | [:a :b | (sortFunc value: a) < (sortFunc value: b)]]
-							ifAbsent: [[:a :b | a < b]].
+	| sortBlock sorted keyFunc reverseVal |
 
-	^self ___initialize: ((aDict at: #reverse ifAbsent: [false])
-									ifTrue: [(self ___container sort: sortBlock) reverse]
-									ifFalse: [self ___container sort: sortBlock]).
+	"Get the key function if provided"
+	keyFunc := aDict at: #key ifAbsent: [nil].
+
+	"Build the sort block"
+	keyFunc isNil ifTrue: [
+		"No key function - use Python's __lt__ directly"
+		sortBlock := [:a :b | (a __lt__: b) ___value].
+	] ifFalse: [
+		"Key function provided - could be a Smalltalk block or Python callable"
+		(keyFunc isKindOf: BlockClosure) ifTrue: [
+			"Smalltalk block - use directly with Smalltalk comparison"
+			sortBlock := [:a :b | (keyFunc value: a) < (keyFunc value: b)].
+		] ifFalse: [
+			"Python callable - use __call__ and Python's __lt__"
+			sortBlock := [:a :b | ((keyFunc __call__: a) __lt__: (keyFunc __call__: b)) ___value].
+		].
+	].
+
+	"Sort the container"
+	sorted := self ___container sort: sortBlock.
+
+	"Reverse if requested - handle both Smalltalk booleans and Python True/False"
+	reverseVal := aDict at: #reverse ifAbsent: [false].
+	(reverseVal == True or: [reverseVal == true]) ifTrue: [
+		sorted := sorted reverse.
+	].
+
+	container := sorted.
+	^None
 %
 category: 'Python 2.7'
 method: list
@@ -228,10 +240,4 @@ ___remove: anIndex ifFail: message
 		ifTrue: [IndexError signal: message].
 
 	^self ___container removeAtIndex: index + 1
-%
-category: 'Smalltalk'
-method: list
-___typeName
-
-	^'list'
 %

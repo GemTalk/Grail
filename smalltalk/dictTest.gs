@@ -52,49 +52,58 @@ test__dir__
    #pyTodo. "self assert: dir __len__ equals: 45."
    self assert: (dir __contains__: (self str: '__class__')).
    #pyTodo. "self assert: (dir __contains__: #__class_getitem__)."
-   #pyTodo. "self assert: (dir __contains__: #__contains__)."
+   self assert: (dir __contains__: (self str: '__contains__')).
    self assert: (dir __contains__: (self str: '__delattr__')).
-   #pyTodo. "self assert: (dir __contains__: #__delitem__)."
+   self assert: (dir __contains__: (self str: '__delitem__')).
    self assert: (dir __contains__: (self str: '__dir__')).
    self assert: (dir __contains__: (self str: '__doc__')).
    self assert: (dir __contains__: (self str: '__eq__')).
    self assert: (dir __contains__: (self str: '__format__')).
    self assert: (dir __contains__: (self str: '__ge__')).
    self assert: (dir __contains__: (self str: '__getattribute__')).
-   #pyTodo. "self assert: (dir __contains__: #__getitem__)."
+   self assert: (dir __contains__: (self str: '__getitem__')).
    self assert: (dir __contains__: (self str: '__gt__')).
    self assert: (dir __contains__: (self str: '__hash__')).
-   #pyTodo. "self assert: (dir __contains__: #__init__)."
-   #pyTodo. "self assert: (dir __contains__: #__init_subclass__)."
-   #pyTodo. "self assert: (dir __contains__: #__ior__)."
-   #pyTodo. "self assert: (dir __contains__: #__iter__)."
+   #pyTodo. "self assert: (dir __contains__: (self str: '__init__'))."
+   #pyTodo. "self assert: (dir __contains__: (self str: '__init_subclass__'))."
+   self assert: (dir __contains__: (self str: '__ior__')).
+   #pyTodo. "self assert: (dir __contains__: (self str: '__iter__'))."
    self assert: (dir __contains__: (self str: '__le__')).
-   #pyTodo. "self assert: (dir __contains__: #__len__)."
+   self assert: (dir __contains__: (self str: '__len__')).
    self assert: (dir __contains__: (self str: '__lt__')).
    self assert: (dir __contains__: (self str: '__ne__')).
    self assert: (dir __contains__: (self str: '__new__')).
-   #pyTodo. "self assert: (dir __contains__: #__or__)."
-   #pyTodo. "self assert: (dir __contains__: #__reduce__)."
-   #pyTodo. "self assert: (dir __contains__: #__reduce_ex__)."
+   self assert: (dir __contains__: (self str: '__or__')).
+   #pyTodo. "self assert: (dir __contains__: (self str: '__reduce__'))."
+   #pyTodo. "self assert: (dir __contains__: (self str: '__reduce_ex__'))."
    self assert: (dir __contains__: (self str: '__repr__')).
-   #pyTodo. "self assert: (dir __contains__: #__reversed__)."
-   #pyTodo. "self assert: (dir __contains__: #__ror__)."
+   #pyTodo. "self assert: (dir __contains__: (self str: '__reversed__'))."
+   self assert: (dir __contains__: (self str: '__ror__')).
    self assert: (dir __contains__: (self str: '__setattr__')).
-   #pyTodo. "self assert: (dir __contains__: #__setitem__)."
+   self assert: (dir __contains__: (self str: '__setitem__')).
    self assert: (dir __contains__: (self str: '__sizeof__')).
    self assert: (dir __contains__: (self str: '__str__')).
    self assert: (dir __contains__: (self str: '__subclasshook__')).
-   #pyTodo. "self assert: (dir __contains__: #clear)."
-   #pyTodo. "self assert: (dir __contains__: #copy)."
-   #pyTodo. "self assert: (dir __contains__: #fromkeys)."
-   #pyTodo. "self assert: (dir __contains__: #get)."
-   #pyTodo. "self assert: (dir __contains__: #items)."
-   #pyTodo. "self assert: (dir __contains__: #keys)."
-   #pyTodo. "self assert: (dir __contains__: #pop)."
-   #pyTodo. "self assert: (dir __contains__: #popitem)."
-   #pyTodo. "self assert: (dir __contains__: #setdefault)."
-   #pyTodo. "self assert: (dir __contains__: #update)."
-   #pyTodo. "self assert: (dir __contains__: #values)."
+   self assert: (dir __contains__: (self str: 'clear')).
+   self assert: (dir __contains__: (self str: 'copy')).
+   self assert: (dir __contains__: (self str: 'fromkeys')).
+   self assert: (dir __contains__: (self str: 'get')).
+   self assert: (dir __contains__: (self str: 'items')).
+   self assert: (dir __contains__: (self str: 'keys')).
+   self assert: (dir __contains__: (self str: 'pop')).
+   self assert: (dir __contains__: (self str: 'popitem')).
+   self assert: (dir __contains__: (self str: 'setdefault')).
+   self assert: (dir __contains__: (self str: 'update')).
+   self assert: (dir __contains__: (self str: 'values')).
+%
+category: 'done'
+method: dictTest
+test__doc__
+	"dict.__doc__ should return a str"
+
+	| doc |
+	doc := dict __call__ __doc__.
+	self assert: (doc isKindOf: str).
 %
 category: 'done'
 method: dictTest
@@ -113,29 +122,25 @@ test__eq__
 category: 'done'
 method: dictTest
 test__ge__
+	"Python 3: dict does not support ordering comparisons"
 
-   | list |
-	#pyElaborate. "this is an aproximated implementation"
-
-	list := self targetInstance: { 1 -> '1'. 2 -> '2'. 3 -> '3' }.
+	| d1 d2 |
+	d1 := self targetInstance: { 1 -> '1'. 2 -> '2'. 3 -> '3' }.
+	d2 := self targetInstance: { 1 -> '1'. 2 -> '2' }.
 
 	self
-		assert: (list __ge__: (self targetInstance: { 1 -> '1'. 2 -> '2' }));
-		assert: (list __ge__: (self targetInstance: { 1 -> '1'. 2 -> '2'. 3 -> '3' }));
-		deny:   (list __ge__: (self targetInstance: { 1 -> '1'. 2 -> '2'. 3 -> '3'. 4 -> '0' }));
-		assert: (list __ge__: (self targetInstance: { 1 -> '1'. 2 -> '2'. 3 -> '2' }));
-		deny:   (list __ge__: (self targetInstance: { 1 -> '1'. 2 -> '2'. 3 -> '4' }));
-		yourself
+		should: [d1 __ge__: d2]
+		raise: TypeError
 %
 category: 'done'
 method: dictTest
 test__getitem__
 
    | object |
-	object := dict ___value: (Dictionary new
+	object := dict ___value: (OrderedDictionary new
 		at: (self str: 'a') put: (self int: 1);
 		at: (self str: 'b') put: (self int: 2);
-		at: (self str: 'c') put: (self int: 3); 
+		at: (self str: 'c') put: (self int: 3);
 		at: (self str: 'd') put: (self int: 4);
 		yourself).
 
@@ -148,19 +153,24 @@ test__getitem__
 category: 'done'
 method: dictTest
 test__gt__
+	"Python 3: dict does not support ordering comparisons"
 
-   | list |
-	#pyElaborate. "this is an aproximated implementation"
-
-	list := self targetInstance: { 1 -> '1'. 2 -> '2'. 3 -> '3' }.
+	| d1 d2 |
+	d1 := self targetInstance: { 1 -> '1'. 2 -> '2'. 3 -> '3' }.
+	d2 := self targetInstance: { 1 -> '1'. 2 -> '2' }.
 
 	self
-		assert: (list __gt__: (self targetInstance: { 1 -> '1'. 2 -> '2' }));
-		deny:   (list __gt__: (self targetInstance: { 1 -> '1'. 2 -> '2'. 3 -> '3' }));
-		deny:   (list __gt__: (self targetInstance: { 1 -> '1'. 2 -> '2'. 3 -> '3'. 4 -> '0' }));
-		assert: (list __gt__: (self targetInstance: { 1 -> '1'. 2 -> '2'. 3 -> '2' }));
-		deny:   (list __gt__: (self targetInstance: { 1 -> '1'. 2 -> '2'. 3 -> '4' }));
-		yourself
+		should: [d1 __gt__: d2]
+		raise: TypeError
+%
+category: 'done'
+method: dictTest
+test__hash__Unhashable
+	"dict is mutable and unhashable"
+
+	| d |
+	d := self targetInstance: { #a -> 1 }.
+	self should: [d __hash__] raise: TypeError.
 %
 category: 'done'
 method: dictTest
@@ -181,19 +191,15 @@ test__ior__
 category: 'done'
 method: dictTest
 test__le__
+	"Python 3: dict does not support ordering comparisons"
 
-   | list |
-	#pyElaborate. "this is an aproximated implementation"
-
-	list := self targetInstance: { 1 -> '1'. 2 -> '2'. 3 -> '3' }.
+	| d1 d2 |
+	d1 := self targetInstance: { 1 -> '1'. 2 -> '2'. 3 -> '3' }.
+	d2 := self targetInstance: { 1 -> '1'. 2 -> '2' }.
 
 	self
-		deny:   (list __le__: (self targetInstance: { 1 -> '1'. 2 -> '2' }));
-		assert: (list __le__: (self targetInstance: { 1 -> '1'. 2 -> '2'. 3 -> '3' }));
-		assert: (list __le__: (self targetInstance: { 1 -> '1'. 2 -> '2'. 3 -> '3'. 4 -> '0' }));
-		deny:   (list __le__: (self targetInstance: { 1 -> '1'. 2 -> '2'. 3 -> '2' }));
-		assert: (list __le__: (self targetInstance: { 1 -> '1'. 2 -> '2'. 3 -> '4' }));
-		yourself
+		should: [d1 __le__: d2]
+		raise: TypeError
 %
 category: 'done'
 method: dictTest
@@ -206,19 +212,15 @@ test__len__onEmptyList
 category: 'done'
 method: dictTest
 test__lt__
+	"Python 3: dict does not support ordering comparisons"
 
-   | list |
-	#pyElaborate. "this is an aproximated implementation"
-
-	list := self targetInstance: { 1 -> '1'. 2 -> '2'. 3 -> '3' }.
+	| d1 d2 |
+	d1 := self targetInstance: { 1 -> '1'. 2 -> '2'. 3 -> '3' }.
+	d2 := self targetInstance: { 1 -> '1'. 2 -> '2' }.
 
 	self
-		deny:   (list __lt__: (self targetInstance: { 1 -> '1'. 2 -> '2' }));
-		deny:   (list __lt__: (self targetInstance: { 1 -> '1'. 2 -> '2'. 3 -> '3' }));
-		assert: (list __lt__: (self targetInstance: { 1 -> '1'. 2 -> '2'. 3 -> '3'. 4 -> '0' }));
-		deny:   (list __lt__: (self targetInstance: { 1 -> '1'. 2 -> '2'. 3 -> '2' }));
-		assert: (list __lt__: (self targetInstance: { 1 -> '1'. 2 -> '2'. 3 -> '4' }));
-		yourself
+		should: [d1 __lt__: d2]
+		raise: TypeError
 %
 category: 'done'
 method: dictTest
@@ -311,16 +313,50 @@ testcopy
 %
 category: 'done'
 method: dictTest
-testget
+testfromkeys
+	"Test dict.fromkeys class method"
 
-   | list |
-	list := self targetInstance: { #a -> 1. #b -> 2. #c -> 3. #b -> 4 }.
+	| d keys |
+	keys := list ___value: { self int: 1. self int: 2. self int: 3 }.
 
+	"fromkeys with just keys - values default to None"
+	d := dict fromkeys: keys.
 	self
-		assert: list __len__ equals: (self int: 3);
-		assert: (list __contains__: #a);
-		assert: (list get: #a) equals: 1;
-		yourself
+		assert: d __len__ equals: (self int: 3);
+		assert: (d get: (self int: 1)) equals: None;
+		assert: (d get: (self int: 2)) equals: None;
+		yourself.
+
+	"fromkeys with keys and value"
+	d := dict fromkeys: keys _: (self int: 0).
+	self
+		assert: d __len__ equals: (self int: 3);
+		assert: (d get: (self int: 1)) equals: (self int: 0);
+		assert: (d get: (self int: 2)) equals: (self int: 0);
+		yourself.
+%
+category: 'done'
+method: dictTest
+testget
+	"Test get: with key present, missing, and with default"
+
+	| d |
+	d := dict ___value: (OrderedDictionary new
+		at: (self str: 'a') put: (self int: 1);
+		at: (self str: 'b') put: (self int: 2);
+		yourself).
+
+	"Key present - returns value"
+	self assert: (d get: (self str: 'a')) equals: (self int: 1).
+
+	"Key missing - returns None"
+	self assert: (d get: (self str: 'x')) equals: None.
+
+	"Key missing with default - returns default"
+	self assert: (d get: (self str: 'x') _: (self str: 'default')) equals: (self str: 'default').
+
+	"Key present with default - still returns value"
+	self assert: (d get: (self str: 'a') _: (self str: 'default')) equals: (self int: 1).
 %
 category: 'done'
 method: dictTest
@@ -350,67 +386,134 @@ testkeys
 category: 'done'
 method: dictTest
 testpop
+	"Test pop: with key present, missing, and with default"
 
-   | list |
-	list := self targetInstance: { #a -> 1. #b -> 2. #c -> 3. #b -> 4 }.
+	| d |
+	d := dict ___value: (OrderedDictionary new
+		at: (self str: 'a') put: (self int: 1);
+		at: (self str: 'b') put: (self int: 2);
+		yourself).
 
-	self
-		assert: list __len__ equals: (self int: 3);
-		assert: (list __contains__: #a);
-		assert: (list pop: #a) equals: 1; 
-		assert: list __len__ equals: (self int: 2);
-		deny: (list __contains__: #a);
-		yourself
+	"Pop existing key - returns value and removes it"
+	self assert: (d pop: (self str: 'a')) equals: (self int: 1).
+	self assert: d __len__ equals: (self int: 1).
+	self deny: (d __contains__: (self str: 'a')).
+
+	"Pop missing key - raises KeyError"
+	self should: [d pop: (self str: 'x')] raise: KeyError.
+
+	"Pop missing key with default - returns default"
+	self assert: (d pop: (self str: 'x') _: (self str: 'default')) equals: (self str: 'default').
+
+	"Pop existing key with default - returns value"
+	self assert: (d pop: (self str: 'b') _: (self str: 'default')) equals: (self int: 2).
+	self assert: d __len__ equals: (self int: 0).
+%
+category: 'done'
+method: dictTest
+testpopitem
+	"Test popitem removes and returns a (key, value) tuple"
+
+	| d item |
+	d := dict ___value: (OrderedDictionary new
+		at: (self str: 'a') put: (self int: 1);
+		at: (self str: 'b') put: (self int: 2);
+		yourself).
+
+	"Pop returns a tuple - LIFO order, so 'b' is popped first"
+	item := d popitem.
+	self assert: (item isKindOf: tuple).
+	self assert: item __len__ equals: (self int: 2).
+	self assert: (item __getitem__: (self int: 0)) equals: (self str: 'b').
+	self assert: (item __getitem__: (self int: 1)) equals: (self int: 2).
+	self assert: d __len__ equals: (self int: 1).
+
+	"Pop again - now 'a' is popped"
+	item := d popitem.
+	self assert: (item __getitem__: (self int: 0)) equals: (self str: 'a').
+	self assert: (item __getitem__: (self int: 1)) equals: (self int: 1).
+	self assert: d __len__ equals: (self int: 0).
+
+	"Pop from empty dict raises KeyError"
+	self should: [d popitem] raise: KeyError.
+%
+category: 'done'
+method: dictTest
+testsetdefault
+	"Test setdefault: and setdefault:_:"
+
+	| d |
+	d := dict ___value: (OrderedDictionary new
+		at: (self str: 'a') put: (self int: 1);
+		yourself).
+
+	"Key present - returns existing value"
+	self assert: (d setdefault: (self str: 'a')) equals: (self int: 1).
+	self assert: d __len__ equals: (self int: 1).
+
+	"Key missing without default - inserts None and returns it"
+	self assert: (d setdefault: (self str: 'b')) equals: None.
+	self assert: d __len__ equals: (self int: 2).
+	self assert: (d get: (self str: 'b')) equals: None.
+
+	"Key missing with default - inserts default and returns it"
+	self assert: (d setdefault: (self str: 'c') _: (self int: 3)) equals: (self int: 3).
+	self assert: d __len__ equals: (self int: 3).
+	self assert: (d get: (self str: 'c')) equals: (self int: 3).
+
+	"Key present with default - still returns existing value"
+	self assert: (d setdefault: (self str: 'a') _: (self int: 99)) equals: (self int: 1).
 %
 category: 'done'
 method: dictTest
 testUpdate
+	"Test update: returns None (like Python)"
 
-   | dict1 dict2 dict3|
-	dict1 := (dict ___value: { (str ___value: 'a') -> (int ___value: 1).  (str ___value: 'b') -> (int ___value: 2) } asDictionary).
-	dict2 := (dict ___value: { (str ___value: 'c') -> (int ___value: 3). (str ___value: 'd') -> (int ___value: 4) } asDictionary).
-	dict3 := dict1 update: dict2.
+	| dict1 dict2 result |
+	dict1 := (dict ___value: (OrderedDictionary fromAssociations: { (str ___value: 'a') -> (int ___value: 1).  (str ___value: 'b') -> (int ___value: 2) })).
+	dict2 := (dict ___value: (OrderedDictionary fromAssociations: { (str ___value: 'c') -> (int ___value: 3). (str ___value: 'd') -> (int ___value: 4) })).
+	result := dict1 update: dict2.
 	self
 		assert: dict1 __len__ equals: (self int: 4);
-		assert: dict1 == dict3;
+		assert: result equals: None;
 		assert: ((dict1 get: (str ___value: 'c'))) equals: (int ___value: 3);
 		assert: dict2 __len__ equals: (self int: 2);
 		yourself.
 
-	dict1 := (dict ___value: { (str ___value: 'a') -> (int ___value: 1).  (str ___value: 'b') -> (int ___value: 2) } asDictionary).
-	dict2 := dict ___value: {} asDictionary.
-	dict3 := dict1 update: dict2.
+	dict1 := (dict ___value: (OrderedDictionary fromAssociations: { (str ___value: 'a') -> (int ___value: 1).  (str ___value: 'b') -> (int ___value: 2) })).
+	dict2 := dict ___value: (OrderedDictionary fromAssociations: {}).
+	result := dict1 update: dict2.
 	self
 		assert: dict1 __len__ equals: (self int: 2);
-		assert: dict1 == dict3;
+		assert: result equals: None;
 		assert: dict2 __len__ equals: (self int: 0);
 		yourself.
 
-	dict1 := (dict ___value: { (str ___value: 'a') -> (int ___value: 1).  (str ___value: 'b') -> (int ___value: 2) } asDictionary).
+	dict1 := (dict ___value: (OrderedDictionary fromAssociations: { (str ___value: 'a') -> (int ___value: 1).  (str ___value: 'b') -> (int ___value: 2) })).
 	dict2 := list ___value: { tuple ___value: { str ___value: 'c'. int ___value: 3 } asArray }.
-	dict3 := dict1 update: dict2.
+	result := dict1 update: dict2.
 	self
 		assert: dict1 __len__ equals: (self int: 3);
-		assert: dict1 == dict3;
-		assert: ((dict1 get: (str ___value: 'c'))) equals: (int ___value: 3);		
+		assert: result equals: None;
+		assert: ((dict1 get: (str ___value: 'c'))) equals: (int ___value: 3);
 		assert: dict2 __len__ equals: (self int: 1);
 		yourself.
 
 
-	dict1 := (dict ___value: { (str ___value: 'a') -> (int ___value: 1).  (str ___value: 'b') -> (int ___value: 2) } asDictionary).
+	dict1 := (dict ___value: (OrderedDictionary fromAssociations: { (str ___value: 'a') -> (int ___value: 1).  (str ___value: 'b') -> (int ___value: 2) })).
 	dict2 := list ___value: { str ___value: 'ca'. }.
-	dict3 := dict1 update: dict2.
+	result := dict1 update: dict2.
 	self
 		assert: dict1 __len__ equals: (self int: 3);
-		assert: dict1 == dict3;
-		assert: ((dict1 get: (str ___value: 'c'))) equals: (str ___value: 'a');		
+		assert: result equals: None;
+		assert: ((dict1 get: (str ___value: 'c'))) equals: (str ___value: 'a');
 		assert: dict2 __len__ equals: (self int: 1);
 		yourself.
 
-	dict1 := (dict ___value: { (str ___value: 'a') -> (int ___value: 1).  (str ___value: 'b') -> (int ___value: 2) } asDictionary).
+	dict1 := (dict ___value: (OrderedDictionary fromAssociations: { (str ___value: 'a') -> (int ___value: 1).  (str ___value: 'b') -> (int ___value: 2) })).
 	dict2 := list ___value: { tuple ___value: { str ___value: 'c' } asArray }.
-	dict3 := [dict1 update: dict2] on: ValueError do: [1].
-	self assert: dict3 equals: 1.
+	result := [dict1 update: dict2] on: ValueError do: [1].
+	self assert: result equals: 1.
 %
 category: 'done'
 method: dictTest
@@ -439,30 +542,6 @@ test__iter__
 category: 'todo'
 method: dictTest
 test__reversed__
-
-   #pyTodo
-%
-category: 'todo'
-method: dictTest
-testfromkeys
-
-   #pyTodo
-%
-category: 'todo'
-method: dictTest
-testgetWithDefault
-	"Is this a real method?"
-   #pyTodo
-%
-category: 'todo'
-method: dictTest
-testpopitem
-
-   #pyTodo
-%
-category: 'todo'
-method: dictTest
-testsetdefault
 
    #pyTodo
 %

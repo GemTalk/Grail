@@ -19,10 +19,11 @@ category: 'other'
 method: SliceAst
 printSmalltalkOn: aStream
 
-	aStream nextPutAll: ' __getslice__: '.
+	"Generate a slice object: (slice __call__: start _: stop _: step)"
+	aStream nextPutAll: '(slice __call__: '.
 
 	lower class == NoneType ifTrue: [
-		aStream nextPutAll: '(int ___value: 0)'.
+		aStream nextPutAll: 'None'.
 	] ifFalse: [
 		lower printSmalltalkWithParenthesisOn: aStream.
 	].
@@ -34,7 +35,6 @@ printSmalltalkOn: aStream
 	] ifFalse: [
 		upper printSmalltalkWithParenthesisOn: aStream.
 	].
-	
 
 	aStream nextPutAll: ' _: '.
 
@@ -43,4 +43,6 @@ printSmalltalkOn: aStream
 	] ifFalse: [
 		step printSmalltalkWithParenthesisOn: aStream.
 	].
+
+	aStream nextPut: $).
 %

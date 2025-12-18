@@ -17,12 +17,12 @@ category: 'other'
 method: DictAst
 printSmalltalkOn: aStream
 
-	aStream nextPutAll: 'dict ___value: { '.
+	aStream nextPutAll: 'dict ___value: (OrderedDictionary fromAssociations: { '.
 	keys with: values do: [:key :value |
 		key printSmalltalkWithParenthesisOn: aStream.
 		aStream nextPutAll: '->'.
 		value printSmalltalkWithParenthesisOn: aStream.
 		aStream nextPutAll: '. '.
 	].
-	aStream nextPutAll: '} asDictionary'.
+	aStream nextPutAll: '})'.
 %

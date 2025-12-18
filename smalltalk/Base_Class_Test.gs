@@ -29,6 +29,38 @@ int: anInteger
 %
 category: 'setup'
 method: Base_Class_Test
+list: anArray
+	"Create a Python list from a Smalltalk array, converting Smalltalk strings to Python strings"
+
+	| pyList |
+	pyList := list __call__.
+	anArray do: [:each |
+		| element |
+		element := (each isKindOf: CharacterCollection)
+			ifTrue: [str ___value: each]
+			ifFalse: [each].
+		pyList append: element
+	].
+	^pyList
+%
+category: 'setup'
+method: Base_Class_Test
+set: anArray
+	"Create a Python set from a Smalltalk array, converting Smalltalk strings to Python strings"
+
+	| pySet |
+	pySet := set __call__.
+	anArray do: [:each |
+		| element |
+		element := (each isKindOf: CharacterCollection)
+			ifTrue: [str ___value: each]
+			ifFalse: [each].
+		pySet add: element
+	].
+	^pySet
+%
+category: 'setup'
+method: Base_Class_Test
 str: aString
 
 	^str ___value: aString
@@ -68,33 +100,25 @@ targetInstance: firstArg _: secondArg _: thirdArg
 %
 category: 'setup'
 method: Base_Class_Test
+tuple: anArray
+	"Create a Python tuple from a Smalltalk array, converting Smalltalk strings to Python strings"
+
+	| pyList |
+	pyList := list __call__.
+	anArray do: [:each |
+		| element |
+		element := (each isKindOf: CharacterCollection)
+			ifTrue: [str ___value: each]
+			ifFalse: [each].
+		pyList append: element
+	].
+	^tuple __call__: pyList
+%
+category: 'setup'
+method: Base_Class_Test
 writeDirTestOn: methodList
 
 	^Scripter writeFor: self targetClass dirTestOn: methodList
-%
-category: 'testing'
-method: Base_Class_Test
-assert: anObject
-
-	(anObject isKindOf: bool)
-		ifTrue: [super assert: anObject ___value]
-		ifFalse: [super assert: anObject]
-%
-category: 'testing'
-method: Base_Class_Test
-assert: x equals: y
-
-	((x isKindOf: object) and: [y isKindOf: object])
-		ifTrue: [super assert: x ___value equals: y ___value]
-		ifFalse: [super assert: x equals: y]
-%
-category: 'testing'
-method: Base_Class_Test
-deny: anObject
-
-	(anObject isKindOf: bool)
-		ifTrue: [super deny: anObject ___value == 1]
-		ifFalse: [super deny: anObject]
 %
 category: 'testing'
 method: Base_Class_Test

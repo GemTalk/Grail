@@ -5,6 +5,16 @@ removeallclassmethods frozensetTest
 ! ------------------- Instance methods for frozensetTest
 category: 'done'
 method: frozensetTest
+test__add__Unsupported
+	"frozenset does not support + operator"
+
+	| a b |
+	a := frozenset ___value: { self str: 'a' }.
+	b := frozenset ___value: { self str: 'b' }.
+	self should: [a __add__: b] raise: TypeError.
+%
+category: 'done'
+method: frozensetTest
 test__and__
 
 	| a b c |
@@ -77,13 +87,13 @@ test__dir__
    self assert: (dir __contains__: (self str: '__ne__')).
    self assert: (dir __contains__: (self str: '__new__')).
    self assert: (dir __contains__: (self str: '__or__')).
-   #pyTodo. "self assert: (dir __contains__: #__rand__)."
+   self assert: (dir __contains__: (self str: '__rand__')).
    #pyTodo. "self assert: (dir __contains__: #__reduce__)."
    #pyTodo. "self assert: (dir __contains__: #__reduce_ex__)."
    self assert: (dir __contains__: (self str: '__repr__')).
-   #pyTodo. "self assert: (dir __contains__: #__ror__)."
-   #pyTodo. "self assert: (dir __contains__: #__rsub__)."
-   #pyTodo. "self assert: (dir __contains__: #__rxor__)."
+   self assert: (dir __contains__: (self str: '__ror__')).
+   self assert: (dir __contains__: (self str: '__rsub__')).
+   self assert: (dir __contains__: (self str: '__rxor__')).
    self assert: (dir __contains__: (self str: '__setattr__')).
    self assert: (dir __contains__: (self str: '__sizeof__')).
    self assert: (dir __contains__: (self str: '__str__')).
@@ -98,6 +108,38 @@ test__dir__
    self assert: (dir __contains__: (self str: 'issuperset')).
    self assert: (dir __contains__: (self str: 'symmetric_difference')).
    self assert: (dir __contains__: (self str: 'union')).
+
+   "Methods that should NOT be in frozenset (mutable operations)"
+   self deny: (dir __contains__: (self str: 'add')).
+   self deny: (dir __contains__: (self str: 'discard')).
+   self deny: (dir __contains__: (self str: 'pop')).
+   self deny: (dir __contains__: (self str: 'remove')).
+   self deny: (dir __contains__: (self str: 'update')).
+   self deny: (dir __contains__: (self str: 'difference_update')).
+   self deny: (dir __contains__: (self str: 'intersection_update')).
+   self deny: (dir __contains__: (self str: 'symmetric_difference_update')).
+   self deny: (dir __contains__: (self str: '__iand__')).
+   self deny: (dir __contains__: (self str: '__ior__')).
+   self deny: (dir __contains__: (self str: '__isub__')).
+   self deny: (dir __contains__: (self str: '__ixor__')).
+
+   "Methods inherited from Container that should NOT be in set/frozenset"
+   self deny: (dir __contains__: (self str: '__getitem__')).
+   self deny: (dir __contains__: (self str: '__mul__')).
+   self deny: (dir __contains__: (self str: '__rmul__')).
+   self deny: (dir __contains__: (self str: '__imul__')).
+   self deny: (dir __contains__: (self str: '__iadd__')).
+   self deny: (dir __contains__: (self str: 'count')).
+   self deny: (dir __contains__: (self str: 'index')).
+%
+category: 'done'
+method: frozensetTest
+test__doc__
+	"frozenset.__doc__ should return a str"
+
+	| doc |
+	doc := frozenset __call__ __doc__.
+	self assert: (doc isKindOf: str).
 %
 category: 'done'
 method: frozensetTest
@@ -166,6 +208,25 @@ test__gt__
 		deny:   (c __gt__: b);
 		deny:   (b __gt__: c);
 		yourself
+%
+category: 'done'
+method: frozensetTest
+test__hash__
+	"frozenset should be hashable since it's immutable"
+
+	| a b c |
+	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c' }.
+	b := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c' }.
+	c := frozenset ___value: { self str: 'x'. self str: 'y' }.
+
+	"Same contents should have same hash"
+	self assert: a __hash__ equals: b __hash__.
+
+	"Hash should return an int"
+	self assert: (a __hash__ isKindOf: int).
+
+	"Different contents should (likely) have different hash"
+	self deny: a __hash__ equals: c __hash__.
 %
 category: 'done'
 method: frozensetTest
@@ -505,6 +566,25 @@ test__xor__Set
 %
 category: 'done'
 method: frozensetTest
+testBooleanReturnTypes
+	"Verify that comparison methods return Python bool objects"
+
+	| a b |
+	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c' }.
+	b := frozenset ___value: { self str: 'b'. self str: 'c' }.
+
+	self
+		assert: (a issubset: b) class equals: bool;
+		assert: (a issuperset: b) class equals: bool;
+		assert: (a isdisjoint: b) class equals: bool;
+		assert: (a __le__: b) class equals: bool;
+		assert: (a __lt__: b) class equals: bool;
+		assert: (a __ge__: b) class equals: bool;
+		assert: (a __gt__: b) class equals: bool;
+		yourself
+%
+category: 'done'
+method: frozensetTest
 testcopy
 
    | list lost |
@@ -558,6 +638,27 @@ testdifferenceSet
 %
 category: 'done'
 method: frozensetTest
+testdifferenceVariadic
+	"Test difference with multiple frozensets"
+
+	| a b c d result |
+	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
+	b := frozenset ___value: { self str: 'b' }.
+	c := frozenset ___value: { self str: 'c' }.
+	d := frozenset ___value: { self str: 'd' }.
+
+	result := a difference: (tuple ___value: {b. c. d}).
+
+	self
+		assert: result __class__ equals: self targetClass;
+		assert: result __len__ equals: (self int: 2);
+		assert: (result __contains__: (self str: 'a'));
+		assert: (result __contains__: (self str: 'e'));
+		deny:   (result __contains__: (self str: 'b'));
+		yourself
+%
+category: 'done'
+method: frozensetTest
 testintersection
 
 	| a b c |
@@ -592,6 +693,26 @@ testintersectionSet
 		assert: c __len__ equals: (self int: 3);
 		deny:   (c __contains__: (self str: 'e'));
 		assert: (c __contains__: (self str: 'd'));
+		yourself
+%
+category: 'done'
+method: frozensetTest
+testintersectionVariadic
+	"Test intersection with multiple frozensets"
+
+	| a b c result |
+	a := frozenset ___value: { self str: 'a'. self str: 'b'. self str: 'c'. self str: 'd' }.
+	b := frozenset ___value: { self str: 'b'. self str: 'c'. self str: 'd'. self str: 'e' }.
+	c := frozenset ___value: { self str: 'c'. self str: 'd'. self str: 'f' }.
+
+	result := a intersection: (tuple ___value: {b. c}).
+
+	self
+		assert: result __class__ equals: self targetClass;
+		assert: result __len__ equals: (self int: 2);
+		assert: (result __contains__: (self str: 'c'));
+		assert: (result __contains__: (self str: 'd'));
+		deny:   (result __contains__: (self str: 'a'));
 		yourself
 %
 category: 'done'
@@ -718,6 +839,52 @@ testunionSet
 	self
 		assert: c __class__ equals: self targetClass;
 		yourself
+%
+category: 'done'
+method: frozensetTest
+testunionVariadic
+	"Test union with multiple frozensets"
+
+	| a b c result |
+	a := frozenset ___value: { self str: 'a' }.
+	b := frozenset ___value: { self str: 'b' }.
+	c := frozenset ___value: { self str: 'c' }.
+
+	result := a union: (tuple ___value: {b. c}).
+
+	self
+		assert: result __class__ equals: self targetClass;
+		assert: result __len__ equals: (self int: 3);
+		assert: (result __contains__: (self str: 'a'));
+		assert: (result __contains__: (self str: 'b'));
+		assert: (result __contains__: (self str: 'c'));
+		yourself
+%
+category: 'done'
+method: frozensetTest
+testUnsupportedOperations
+	"Test that frozenset raises errors for operations it doesn't support"
+
+	| fs |
+	fs := frozenset ___value: { self int: 1. self int: 2 }.
+
+	"frozenset doesn't support indexing"
+	self should: [fs __getitem__: (self int: 0)] raise: TypeError.
+
+	"frozenset doesn't support *"
+	self should: [fs __mul__: (self int: 2)] raise: TypeError.
+	self should: [fs __rmul__: (self int: 2)] raise: TypeError.
+	self should: [fs __imul__: (self int: 2)] raise: TypeError.
+
+	"frozenset doesn't support +="
+	self should: [fs __iadd__: fs] raise: TypeError.
+
+	"frozenset doesn't have count or index"
+	self should: [fs count: (self int: 1)] raise: AttributeError.
+	self should: [fs index: (self int: 1)] raise: AttributeError.
+
+	"frozenset is immutable - no clear"
+	self should: [fs clear] raise: AttributeError.
 %
 category: 'todo'
 method: frozensetTest

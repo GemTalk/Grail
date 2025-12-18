@@ -2,15 +2,43 @@
 removeallmethods builtins
 removeallclassmethods builtins
 ! ------------------- Class methods for builtins
+category: 'other'
+classmethod: builtins
+functionNames
+
+	^#( #'__import__' #abs #all #any #bin #bool #callable #chr #complex #dict #dir
+		#divmod #exit #float #frozenset #globals #hex #input #int #isinstance
+		#issubclass #len #list #locals #max #min #oct #open #ord #pow #print #quit
+		#range #repr #round #set #sorted #str #sum #tuple #type )
+%
+category: 'other'
+classmethod: builtins
+printFile
+
+	^printFile
+%
+category: 'other'
+classmethod: builtins
+printFile: aStreamOrNil
+
+	printFile := aStreamOrNil
+%
+category: 'other'
+classmethod: builtins
+reset
+
+	super reset.
+	printFile := nil.
+%
 ! ------------------- Instance methods for builtins
 category: 'other'
 method: builtins
 __import__
-	"On startup this creates a builtin function to import a module"
+	"Return a builtin function to import a module"
 	"__import__(name, globals=None, locals=None, fromlist=(), level=0)"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #name. #globals. #locals. #fromlist. #level. };
 		defaults: { nil. None. None. list ___value: #(). 0. };
 		yourself.
@@ -18,9 +46,9 @@ __import__
 		| name class |
 		name := currentScope at: #'name'.
 		class := Python at: name ifAbsent: [nil].
-		class ifNil: [None] ifNotNil: [class instance].
+		class ifNil: [None] ifNotNil: [class singleton].
 	].
-	Builtins singleton at: #'__import__' put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -28,7 +56,7 @@ abs
 	"On startup this creates a builtin abs function to find the absolute value of a object"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #number };
 		yourself.
 	function block: [:currentScope |
@@ -36,7 +64,7 @@ abs
 		value := currentScope at: #number.
 		[value  __abs__] on: MessageNotUnderstood do: [TypeError signal].
 	].
-	Builtins singleton at: #abs put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -44,7 +72,7 @@ all
 	"On startup this creates a builtin all function to check if all elements are truthy"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #iterable };
 		yourself.
 	function block: [:currentScope |
@@ -66,7 +94,7 @@ all
 		].
 		bool ___value: result.
 	].
-	Builtins singleton at: #all put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -74,7 +102,7 @@ any
 	"On startup this creates a builtin any function to check if any element is truthy"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #iterable };
 		yourself.
 	function block: [:currentScope |
@@ -96,7 +124,7 @@ any
 		].
 		bool ___value: result.
 	].
-	Builtins singleton at: #any put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -104,7 +132,7 @@ bin
 	"On startup this creates a builtin bin function to convert an integer to a binary string"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #number };
 		yourself.
 	function block: [:currentScope |
@@ -115,10 +143,10 @@ bin
 		].
 		value := number ___value.
 		value < 0
-			ifTrue: [str ___value: '-0b', (value negated printStringRadix: 2)]
-			ifFalse: [str ___value: '0b', (value printStringRadix: 2)].
+			ifTrue: [str ___value: '-0b' , (value negated printStringRadix: 2)]
+			ifFalse: [str ___value: '0b' , (value printStringRadix: 2)].
 	].
-	Builtins singleton at: #bin put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -126,7 +154,7 @@ bool
 	"On startup this creates a builtin bool function to turn any object into a boolean value"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #object };
 		yourself.
 	function block: [:currentScope |
@@ -138,7 +166,7 @@ bool
 					do: [True]
 			].
 	].
-	Builtins singleton at: #bool put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -146,15 +174,15 @@ callable
 	"On startup this creates a builtin callable function to check if an object is callable"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #object };
 		yourself.
 	function block: [:currentScope |
 		| obj |
 		obj := currentScope at: #object.
-		bool ___value: (obj class == FunctionDef or: [obj isKindOf: builtin_function_or_method]).
+		bool ___value: (obj class == builtin_function_or_method or: [obj isKindOf: builtin_function_or_method]).
 	].
-	Builtins singleton at: #callable put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -162,17 +190,17 @@ chr
 	"On startup this creates a builtin chr function to change an integer into a character"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #object };
 		yourself.
 	function block: [:currentScope |
 		(currentScope at: #object) class == int ifFalse: [
-			TypeError signal: 'TypeError: ', (currentScope at: #object) class asString,
+			TypeError signal: 'TypeError: ' , (currentScope at: #object) class asString ,
 				'object cannot be interpreted as an integer'.
 		].
 		str ___value: (currentScope at: #object) ___value asCharacter asString.
 	].
-	Builtins singleton at: #chr put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -180,13 +208,13 @@ complex
 	"On startup this creates a builtin chr function to change an integer into a character"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #real. #imag };
 		yourself.
 	function block: [:currentScope |
 		complex ___real: ((currentScope at: #real) ___value) imaginary: ((currentScope at: #imag) ___value)
 	].
-	Builtins singleton at: #complex put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -194,14 +222,14 @@ dict
 	"On startup this creates a builtin dict function to turn a list of kwargs into a dictionary"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #object };
 		defaults: { nil };
 		kwarg: #'kwarg';
 		yourself.
 	function block: [:currentScope |
 		| return |
-		return :=  dict ___value: Dictionary new.
+		return :=  dict ___value: OrderedDictionary new.
 		(currentScope at: #object) ~~ nil ifTrue: [
 			return update: (currentScope at: #object).
 		].
@@ -211,7 +239,7 @@ dict
 		] on: NameError do: [].
 		return.
 	].
-	Builtins singleton at: #dict put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -219,7 +247,7 @@ dir
 	"On startup this creates a builtin dir function to list attributes of an object"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #object };
 		defaults: { nil };
 		yourself.
@@ -235,7 +263,7 @@ dir
 		].
 		result.
 	].
-	Builtins singleton at: #dir put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -243,7 +271,7 @@ divmod
 	"On startup this creates a builtin divmod function to return quotient and remainder"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #a. #b };
 		yourself.
 	function block: [:currentScope |
@@ -254,7 +282,7 @@ divmod
 		remainder := a __mod__: b.
 		tuple ___value: { quotient. remainder }.
 	].
-	Builtins singleton at: #divmod put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -262,7 +290,7 @@ exit
 	"On startup this creates a builtin exit function to exit the REPL (alias for quit)"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #code };
 		defaults: { int ___value: 0 };
 		yourself.
@@ -274,7 +302,7 @@ exit
 			ifFalse: [0].
 		ExitClientError signal: 'exit() called' status: status.
 	].
-	Builtins singleton at: #exit put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -283,7 +311,7 @@ float
 		with a float method to a float."
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #object };
 		yourself.
 	function block: [:currentScope |
@@ -301,7 +329,7 @@ float
 				].
 			].
 	].
-	Builtins singleton at: #float put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -309,7 +337,7 @@ frozenset
 	"On startup this creates a builtin frozenset function to turn one iterable object into a frozenset"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #object };
 		defaults: { nil };
 		yourself.
@@ -334,9 +362,9 @@ frozenset
 			frozenset ___value: return.
 		]
 		on: MessageNotUnderstood
-		do: [TypeError signal: 'TypeError: ''', (currentScope at: #object) class asString, ''' object is not iterable'].
+		do: [TypeError signal: 'TypeError: ''' , (currentScope at: #object) class asString , ''' object is not iterable'].
 	].
-	Builtins singleton at: #frozenset put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -344,13 +372,13 @@ globals
 	"On startup this creates a builtin global function"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: {};
 		yourself.
 	function block: [:currentScope |
-		dict ___value: (currentScope globals dict)
+		dict ___value: currentScope globals dict
 	].
-	Builtins singleton at: #globals put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -358,7 +386,7 @@ hex
 	"On startup this creates a builtin hex function to convert an integer to a hexadecimal string"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #number };
 		yourself.
 	function block: [:currentScope |
@@ -369,58 +397,10 @@ hex
 		].
 		value := number ___value.
 		value < 0
-			ifTrue: [str ___value: '-0x', (value negated printStringRadix: 16) asLowercase]
-			ifFalse: [str ___value: '0x', (value printStringRadix: 16) asLowercase].
+			ifTrue: [str ___value: '-0x' , (value negated printStringRadix: 16) asLowercase]
+			ifFalse: [str ___value: '0x' , (value printStringRadix: 16) asLowercase].
 	].
-	Builtins singleton at: #hex put: function.
-%
-category: 'other'
-method: builtins
-initialize
-
-	self
-		__import__;
-		abs;
-		all;
-		any;
-		bin;
-		bool;
-		callable;
-		chr;
-		complex;
-		dict;
-		dir;
-		divmod;
-		exit;
-		float;
-		frozenset;
-		globals;
-		hex;
-		input;
-		int;
-		isinstance;
-		issubclass;
-		len;
-		list;
-		locals;
-		max;
-		min;
-		oct;
-		open;
-		ord;
-		pow;
-		print;
-		quit;
-		range;
-		repr;
-		round;
-		set;
-		sorted;
-		str;
-		sum;
-		tuple;
-		type;
-		yourself.
+	^function
 %
 category: 'other'
 method: builtins
@@ -429,7 +409,7 @@ input
 		or that is a string into an int"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #object };
 		defaults: { str ___value: '' };
 		yourself.
@@ -438,7 +418,7 @@ input
 			prompt: (currentScope at: #object) ___value
 			caption: 'Input') decodeToString
 	].
-	Builtins singleton at: #input put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -446,7 +426,7 @@ int
 	"On startup this creates a builtin int function to turn a string or anything with a __int__ method into an int"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #object. #base };
 		defaults: { nil };
 		yourself.
@@ -469,21 +449,21 @@ int
 						': ',
 						(currentScope at: #object) value.
 				].
-				(((currentScope at: #object) ___value at: 2) == $b) and: [(currentScope at: #base) ___value == 2]) ifFalse: [
+				((((currentScope at: #object) ___value at: 2) == $b) and: [(currentScope at: #base) ___value == 2]) ifFalse: [
 					ValueError signal:
 						'Value Error: invalid literal for int() with base ',
 						(currentScope at: #base) ___value asString,
 						': ',
 						(currentScope at: #object) value.
 				].
-				(((currentScope at: #object) ___value at: 2) == $o) and: [(currentScope at: #base) ___value == 8]) ifFalse: [
+				((((currentScope at: #object) ___value at: 2) == $o) and: [(currentScope at: #base) ___value == 8]) ifFalse: [
 					ValueError signal:
 						'Value Error: invalid literal for int() with base ',
 						(currentScope at: #base) ___value asString,
 						': ',
 						(currentScope at: #object) value.
 				].
-				(((currentScope at: #object) ___value at: 2) == $h) and: [(currentScope at: #base) ___value == 16]) ifFalse: [
+				((((currentScope at: #object) ___value at: 2) == $h) and: [(currentScope at: #base) ___value == 16]) ifFalse: [
 					ValueError signal:
 						'Value Error: invalid literal for int() with base ',
 						(currentScope at: #base) ___value asString,
@@ -491,7 +471,7 @@ int
 						(currentScope at: #object) value.
 				].
 			] ifFalse: [
-				baseConverter := (currentScope at: #base) ___value asString, 'r', (currentScope at: #object) ___value.
+				baseConverter := (currentScope at: #base) ___value asString , 'r' , (currentScope at: #object) ___value.
 				[return := int ___value: baseConverter evaluate]
 					on: Error
 					do: [
@@ -513,7 +493,7 @@ int
 		].
 		return
 	].
-	Builtins singleton at: #int put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -521,7 +501,7 @@ isinstance
 	"On startup this creates a builtin isinstance function to check if an object is an instance of a class"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #object. #classinfo };
 		yourself.
 	function block: [:currentScope |
@@ -530,7 +510,7 @@ isinstance
 		classinfo := currentScope at: #classinfo.
 		bool ___value: (obj class == classinfo or: [obj isKindOf: classinfo]).
 	].
-	Builtins singleton at: #isinstance put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -538,7 +518,7 @@ issubclass
 	"On startup this creates a builtin issubclass function to check if a class is a subclass of another"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #class. #classinfo };
 		yourself.
 	function block: [:currentScope |
@@ -547,7 +527,7 @@ issubclass
 		classinfo := currentScope at: #classinfo.
 		bool ___value: (cls == classinfo or: [cls isKindOf: classinfo]).
 	].
-	Builtins singleton at: #issubclass put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -555,15 +535,15 @@ len
 	"On startup this creates a builtin len function to return the length of anything that has a __len method"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #object };
 		yourself.
 	function block: [:currentScope |
 		[(currentScope at: #object) __len__]
 			on: MessageNotUnderstood
-			do: [TypeError signal: 'TypeError: object of type ''', (currentScope at: #object) class asString, ''' has no len()'].
+			do: [TypeError signal: 'TypeError: object of type ''' , (currentScope at: #object) class asString , ''' has no len()'].
 	].
-	Builtins singleton at: #len put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -571,7 +551,7 @@ list
 	"On startup this creates a builtin list function to turn one iterable object into a list"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #object };
 		defaults: { nil };
 		yourself.
@@ -596,9 +576,9 @@ list
 			return
 		]
 		on: MessageNotUnderstood
-		do: [TypeError signal: 'TypeError: ''', (currentScope at: #object) class asString, ''' object is not iterable'].
+		do: [TypeError signal: 'TypeError: ''' , (currentScope at: #object) class asString , ''' object is not iterable'].
 	].
-	Builtins singleton at: #list put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -606,13 +586,13 @@ locals
 	"On startup this creates a builtin repr function to return the value of something's __repr method"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: {};
 		yourself.
 	function block: [:currentScope |
 		dict ___value: currentScope parent dict.
 	].
-	Builtins singleton at: #locals put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -620,7 +600,7 @@ max
 	"On startup this creates a builtin max function to find the maximum value"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		vararg: #vararg;
 		kwonlyargs: { #key. #default };
 		kw_defaults: { nil. nil };
@@ -662,7 +642,7 @@ max
 		].
 		result.
 	].
-	Builtins singleton at: #max put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -670,7 +650,7 @@ min
 	"On startup this creates a builtin min function to find the minimum value"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		vararg: #vararg;
 		kwonlyargs: { #key. #default };
 		kw_defaults: { nil. nil };
@@ -712,7 +692,7 @@ min
 		].
 		result.
 	].
-	Builtins singleton at: #min put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -720,7 +700,7 @@ oct
 	"On startup this creates a builtin oct function to convert an integer to an octal string"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #number };
 		yourself.
 	function block: [:currentScope |
@@ -731,10 +711,10 @@ oct
 		].
 		value := number ___value.
 		value < 0
-			ifTrue: [str ___value: '-0o', (value negated printStringRadix: 8)]
-			ifFalse: [str ___value: '0o', (value printStringRadix: 8)].
+			ifTrue: [str ___value: '-0o' , (value negated printStringRadix: 8)]
+			ifFalse: [str ___value: '0o' , (value printStringRadix: 8)].
 	].
-	Builtins singleton at: #oct put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -743,7 +723,7 @@ open
 
 	| function |
 	"On startup this creates a builtin open function to open a file."
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #file. #mode. #buffering. #encoding. #errors. #newline. #closefd. #opener. };
 		defaults: { None. 'r'. -1. None. None. None. True. None. };
 		vararg: #'None';
@@ -759,7 +739,7 @@ open
 			closefd: (currentScope at: #closefd)
 			opener: (currentScope at: #opener).
 	].
-	Builtins singleton at: #open put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -767,7 +747,7 @@ ord
 	"On startup this creates a builtin ord function to turn a character into its unicode integer"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #object };
 		yourself.
 	function block: [:currentScope |
@@ -785,7 +765,7 @@ ord
 		].
 		int ___value: (currentScope at: #object) ___value first codePoint.
 	].
-	Builtins singleton at: #ord put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -794,7 +774,7 @@ pow
 	This should work for ints, floats, and complex numbers in any combination"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #base. #exp. #mod };
 		defaults: { nil };
 		yourself.
@@ -813,7 +793,7 @@ pow
 		result.
 	].
 
-	Builtins singleton at: #pow put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -826,16 +806,16 @@ print
 	flush		- a boolean, on True the printing cache is flushed"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		vararg: #vararg;
 		kwonlyargs: { #sep. #end. #file. #flush };
-		kw_defaults: { str ___value: ''. str ___value: (Character lf asString). nil. bool ___value: False };
+		kw_defaults: { str ___value: ''. str ___value: (Character lf asString). nil. False };
 		yourself.
 	function block: [:currentScope |
 		| objects sep end file flush |
 		(currentScope at: #file) == nil ifTrue: [
 			| defaultFile |
-			defaultFile := Builtins printFile.
+			defaultFile := builtins printFile.
 			defaultFile ifNil: [defaultFile := GsFile stdout].
 			currentScope at: #file put: defaultFile
 		].
@@ -861,8 +841,9 @@ print
 		file nextPutAll: end __str__ ___value.
 		flush ___value ifTrue: [file flush].
 		file close.
+		None.
 	].
-	Builtins singleton at: #print put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -870,7 +851,7 @@ quit
 	"On startup this creates a builtin quit function to exit the REPL"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #code };
 		defaults: { int ___value: 0 };
 		yourself.
@@ -882,7 +863,7 @@ quit
 			ifFalse: [0].
 		ExitClientError signal: 'quit() called' status: status.
 	].
-	Builtins singleton at: #quit put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -890,7 +871,7 @@ range
 	"On startup this creates a builtin range function to convert an interval in to a range object"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		vararg: #vararg;
 		yourself.
 	function block: [:currentScope |
@@ -915,7 +896,7 @@ range
 		varargSize > 3 ifTrue: [TypeError signal: 'range expected at most 3 arguments, got ', varargSize].
 		returnObject.
 	].
-	Builtins singleton at: #range put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -923,13 +904,13 @@ repr
 	"On startup this creates a builtin repr function to return the value of something's __repr method"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #object };
 		yourself.
 	function block: [:currentScope |
 		(currentScope at: #object) __repr__
 	].
-	Builtins singleton at: #repr put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -937,7 +918,7 @@ round
 	"On startup this creates a builtin repr function to return the value of something's __repr method"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #object. #ndigits };
 		defaults: { nil };
 		yourself.
@@ -950,7 +931,7 @@ round
 		].
 		result.
 	].
-	Builtins singleton at: #round put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -958,7 +939,7 @@ set
 	"On startup this creates a builtin set function to turn one iterable object into a set"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #object };
 		defaults: { nil };
 		yourself.
@@ -981,9 +962,9 @@ set
 			return.
 		]
 		on: MessageNotUnderstood
-		do: [TypeError signal: 'TypeError: ''', (currentScope at: #object) class asString, ''' object is not iterable'].
+		do: [TypeError signal: 'TypeError: ''' , (currentScope at: #object) class asString , ''' object is not iterable'].
 	].
-	Builtins singleton at: #set put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -991,10 +972,10 @@ sorted
 	"On startup this creates a builtin sorted function to return a sorted list"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #iterable };
 		kwonlyargs: { #key. #reverse };
-		kw_defaults: { nil. bool ___value: false };
+		kw_defaults: { nil. False };
 		yourself.
 	function block: [:currentScope |
 		| iterable keyFunc reverse result sortedArray |
@@ -1020,7 +1001,7 @@ sorted
 		reverse ifTrue: [result reverse].
 		result.
 	].
-	Builtins singleton at: #sorted put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -1028,13 +1009,13 @@ str
 	"On startup this creates a builtin str function to return anything with a __str__ method"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #object };
 		yourself.
 	function block: [:currentScope |
 		(currentScope at: #object) __str__.
 	].
-	Builtins singleton at: #str put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -1043,7 +1024,7 @@ sum
 		or that is a string into an int"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #object. #start };
 		defaults: { int ___value: 0 };
 		yourself.
@@ -1073,7 +1054,7 @@ sum
 		].
 		sum.
 	].
-	Builtins singleton at: #sum put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -1081,7 +1062,7 @@ tuple
 	"On startup this creates a builtin tuple function to convert an iterable to a tuple"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: { #iterable };
 		defaults: { nil };
 		yourself.
@@ -1105,7 +1086,7 @@ tuple
 		].
 		finalResult.
 	].
-	Builtins singleton at: #tuple put: function.
+	^function
 %
 category: 'other'
 method: builtins
@@ -1113,7 +1094,7 @@ type
 	"On startup this creates a builtin type function to return the type of a function or create a new type"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		vararg: #vararg;
 		yourself.
 	function block: [:currentScope |
@@ -1125,5 +1106,5 @@ type
 		varargSize > 3 ifTrue: [TypeError signal: 'TypeError: type() takes 1 or 3 arguments'].
 		result.
 	].
-	Builtins singleton at: #type put: function.
+	^function
 %

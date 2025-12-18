@@ -27,6 +27,54 @@ __new__: aPythonObject
  	TypeError signal: 'TypeError: can''t convert ' , aPythonObject class name , ' to int'.
 	^instance
 %
+category: 'Python-int'
+classmethod: int
+from_bytes: aBytes _: byteorder
+	"int.from_bytes(bytes, byteorder='big', *, signed=False)"
+
+	^self from_bytes: aBytes _: byteorder _: False
+%
+category: 'Python-int'
+classmethod: int
+from_bytes: aBytes _: byteorder _: signed
+	"int.from_bytes(bytes, byteorder='big', *, signed=False)
+	 Return the integer represented by the given array of bytes."
+
+	| bytesArray result isBigEndian isSigned |
+	bytesArray := aBytes ___container.
+	isBigEndian := byteorder ___value = 'big'.
+	isSigned := signed == True.
+
+	result := 0.
+	isBigEndian
+		ifTrue: [
+			bytesArray do: [:each |
+				result := (result bitShift: 8) bitOr: each.
+			].
+		]
+		ifFalse: [
+			| shift |
+			shift := 0.
+			bytesArray do: [:each |
+				result := result bitOr: (each bitShift: shift).
+				shift := shift + 8.
+			].
+		].
+
+	"Handle signed conversion"
+	(isSigned and: [bytesArray size > 0]) ifTrue: [
+		| highByte |
+		highByte := isBigEndian
+			ifTrue: [bytesArray first]
+			ifFalse: [bytesArray last].
+		(highByte bitAnd: 16r80) ~= 0 ifTrue: [
+			"Negative number - subtract 2^(numBits)"
+			result := result - (1 bitShift: (bytesArray size * 8)).
+		].
+	].
+
+	^int ___value: result
+%
 category: 'Smalltalk'
 classmethod: int
 ___assertMagnitudeAsFirstAgumentOn: args
@@ -332,9 +380,28 @@ category: 'Python-int'
 method: int
 __divmod__: anObject
 
-	^[tuple  ___value: { value // anObject ___value. value \\ anObject ___value }]
+	^[tuple  ___value: { int ___value: value // anObject ___value. int ___value: value \\ anObject ___value }]
 		on: ZeroDivide
 		do: [ZeroDivisionError signal: 'ZeroDivisionError: division by zero']
+%
+category: 'Python-int'
+method: int
+__doc__
+
+	^str ___value: 'int([x]) -> integer\n' ,
+		'int(x, base=10) -> integer\n' ,
+		'\n' ,
+		'Convert a number or string to an integer, or return 0 if no arguments\n' ,
+		'are given.  If x is a number, return x.__int__().  For floating-point\n' ,
+		'numbers, this truncates towards zero.\n' ,
+		'\n' ,
+		'If x is not a number or if base is given, then x must be a string,\n' ,
+		'bytes, or bytearray instance representing an integer literal in the\n' ,
+		'given base.  The literal can be preceded by ''+'' or ''-'' and be surrounded\n' ,
+		'by whitespace.  The base defaults to 10.  Valid bases are 0 and 2-36.\n' ,
+		'Base 0 means to interpret the base from the string as an integer literal.\n' ,
+		'>>> int(''0b100'', base=0)\n' ,
+		'4'
 %
 category: 'Python-int'
 method: int
@@ -359,14 +426,36 @@ __floordiv__: anObject
 category: 'Python-int'
 method: int
 __getnewargs__
+	"Return a tuple of arguments for pickling"
 
-	self error: #pyTodo
+	^tuple ___value: { self }
+%
+category: 'Python-int'
+method: int
+__getstate__
+	"Return state for pickling. Not implemented - implement when adding pickle support."
+
+	NotImplementedError signal: '__getstate__ is not implemented. Implement when adding pickle support.'
+%
+category: 'Python-int'
+method: int
+__hash__
+	"Return hash value. In Python, hash(n) == n for small integers."
+
+	^int ___value: value hash
 %
 category: 'Python-int'
 method: int
 __index__
 
 	^self
+%
+category: 'Python-int'
+method: int
+__init_subclass__
+	"Called when subclassing int. Not implemented - implement when adding metaclass support."
+
+	NotImplementedError signal: '__init_subclass__ is not implemented. Implement when adding metaclass support.'
 %
 category: 'Python-int'
 method: int
@@ -415,7 +504,7 @@ category: 'Python-int'
 method: int
 __pos__
 
-	^self __abs__
+	^self
 %
 category: 'Python-int'
 method: int
@@ -440,6 +529,20 @@ method: int
 __rdivmod__: any
 
 	^any __divmod__: self
+%
+category: 'Python-int'
+method: int
+__reduce__
+	"Return state for pickling. Not implemented - implement when adding pickle support."
+
+	NotImplementedError signal: '__reduce__ is not implemented. Implement when adding pickle support.'
+%
+category: 'Python-int'
+method: int
+__reduce_ex__: protocol
+	"Return state for pickling with protocol version. Not implemented - implement when adding pickle support."
+
+	NotImplementedError signal: '__reduce_ex__ is not implemented. Implement when adding pickle support.'
 %
 category: 'Python-int'
 method: int
@@ -554,7 +657,14 @@ as_integer_ratio
 	| val |
 
 	val := value asFraction.
-   ^tuple ___value: { val numerator. val denominator }
+   ^tuple ___value: { int ___value: val numerator. int ___value: val denominator }
+%
+category: 'Python-int'
+method: int
+bit_count
+	"Return the number of ones in the binary representation of the absolute value of the integer"
+
+	^int ___value: ((value abs printStringRadix: 2) occurrencesOf: $1)
 %
 category: 'Python-int'
 method: int
@@ -576,16 +686,16 @@ denominator
 %
 category: 'Python-int'
 method: int
-from_bytes
-	"https://docs.python.org/3/library/stdtypes.html#int.from_bytes"
-
-	self error: #pyTodo
-%
-category: 'Python-int'
-method: int
 imag
 
 	^int ___value: 0
+%
+category: 'Python-int'
+method: int
+is_integer
+	"Return True. Exists for duck type compatibility with float.is_integer()"
+
+	^True
 %
 category: 'Python-int'
 method: int
@@ -601,10 +711,47 @@ real
 %
 category: 'Python-int'
 method: int
-to_bytes
-	"https://docs.python.org/3/library/stdtypes.html#int.to_bytes"
-	
-	self error: #pyTodo
+to_bytes: length _: byteorder
+	"int.to_bytes(length, byteorder='big', *, signed=False)"
+
+	^self to_bytes: length _: byteorder _: False
+%
+category: 'Python-int'
+method: int
+to_bytes: length _: byteorder _: signed
+	"int.to_bytes(length, byteorder='big', *, signed=False)
+	 Return an array of bytes representing an integer."
+
+	| numBytes isBigEndian isSigned val result |
+	numBytes := length ___value.
+	isBigEndian := byteorder ___value = 'big'.
+	isSigned := signed == True.
+	val := value.
+
+	"Handle negative numbers"
+	val < 0 ifTrue: [
+		isSigned ifFalse: [
+			OverflowError signal: 'can''t convert negative int to unsigned'.
+		].
+		"Two's complement"
+		val := (1 bitShift: (numBytes * 8)) + val.
+	].
+
+	"Check if value fits in the given number of bytes"
+	(val < 0 or: [val >= (1 bitShift: (numBytes * 8))]) ifTrue: [
+		OverflowError signal: 'int too big to convert'.
+	].
+
+	"Build the byte array"
+	result := ByteArray new: numBytes.
+	1 to: numBytes do: [:i |
+		isBigEndian
+			ifTrue: [result at: (numBytes - i + 1) put: (val bitAnd: 16rFF)]
+			ifFalse: [result at: i put: (val bitAnd: 16rFF)].
+		val := val bitShift: -8.
+	].
+
+	^bytes ___value: result
 %
 category: 'Python-object'
 method: int

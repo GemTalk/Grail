@@ -6,7 +6,7 @@ category: 'other'
 classmethod: Variables
 new
 
-	^self newWithParent: Builtins singleton
+	^self newWithParent: builtins singleton
 %
 category: 'other'
 classmethod: Variables
@@ -20,15 +20,16 @@ newWithParent: aVariables
 ! ------------------- Instance methods for Variables
 category: 'other'
 method: Variables
+__getattribute__: aString
+	"Python-style attribute access - look up by name"
+
+	^self at: aString ___string asSymbol
+%
+category: 'other'
+method: Variables
 associationAt: aKey
 
-| assoc |
-assoc := dict associationAt: aKey otherwise: nil.
-assoc == nil ifTrue: [
-	dict at: aKey put: nil.
-	assoc := dict associationAt: aKey.
-].
-^assoc
+	^dict associationAt: aKey
 %
 category: 'other'
 method: Variables
@@ -48,24 +49,15 @@ category: 'other'
 method: Variables
 at: aKey put: aValue
 
-| anAssoc |
-helperSymbols remove: aKey ifAbsent: [].
-(dict _validatePrivilegeOld: (dict at: aKey otherwise: nil) new: aValue) ifTrue: [
-  anAssoc:= dict associationAt: aKey otherwise: nil.
-  anAssoc == nil ifTrue: [
-       dict _at: aKey put:
-       (SymbolAssociation newWithKey: aKey value: aValue).
-       ^aValue
- ].
-
-  anAssoc value: aValue.
-  ^aValue
-].
+	helperSymbols remove: aKey ifAbsent: [].
+	dict at: aKey put: aValue.
+	^aValue
 %
 category: 'other'
 method: Variables
 builtins
 
+	parent ifNil: [ ^self ].
 	^parent builtins
 %
 category: 'other'
@@ -107,14 +99,8 @@ method: Variables
 initialize
 
 	helperSymbols := IdentitySet new.
-	dict := SymbolDictionary new.
+	dict := OrderedDictionary new.
 	super initialize.
-%
-category: 'other'
-method: Variables
-isBuiltins
-
-	^false
 %
 category: 'other'
 method: Variables

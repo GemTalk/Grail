@@ -37,6 +37,38 @@ test__bool__
 %
 category: 'done'
 method: complexTest
+test__class__
+	"complex.__class__ should return the type"
+
+	self assert: self targetInstance __class__ == complex.
+%
+category: 'done'
+method: complexTest
+test__complex__
+	"complex.__complex__ returns self"
+
+	| c |
+	c := complex ___real: 3 imaginary: 4.
+	self assert: c __complex__ == c.
+%
+category: 'done'
+method: complexTest
+test__delattr__
+	"complex.__delattr__ should raise AttributeError for any attribute"
+
+	self should: [self targetInstance __delattr__: (self str: 'real')] raise: AttributeError.
+%
+category: 'done'
+method: complexTest
+test__doc__
+	"complex.__doc__ should return a string or None"
+
+	| doc |
+	doc := self targetInstance __doc__.
+	self assert: (doc == None or: [(doc isKindOf: str)]).
+%
+category: 'done'
+method: complexTest
 test__eq__
 
 	| a b |
@@ -51,6 +83,16 @@ test__eq__
 %
 category: 'done'
 method: complexTest
+test__format__
+	"complex.__format__ should format both real and imaginary parts"
+
+	self
+		assert: (self targetInstance __format__: (self str: '')) ___value equals: '0j';
+		assert: ((complex ___real: 3 imaginary: 4) __format__: (self str: '')) ___value equals: '(3+4j)';
+		yourself.
+%
+category: 'done'
+method: complexTest
 test__ge__
 
 	self
@@ -59,11 +101,57 @@ test__ge__
 %
 category: 'done'
 method: complexTest
+test__getattribute__
+	"complex.__getattribute__ should get attributes"
+
+	self assert: ((complex ___real: 3 imaginary: 4) __getattribute__: (self str: 'real')) ___value equals: 3.0.
+%
+category: 'done'
+method: complexTest
+test__getnewargs__
+	"complex.__getnewargs__ should return (real, imag) tuple"
+
+	| args |
+	args := (complex ___real: 3 imaginary: 4) __getnewargs__.
+	self
+		assert: args __class__ == tuple;
+		assert: (args __getitem__: (self int: 0)) ___value equals: 3.0;
+		assert: (args __getitem__: (self int: 1)) ___value equals: 4.0;
+		yourself.
+%
+category: 'done'
+method: complexTest
+test__getstate__
+	"complex.__getstate__ should raise NotImplementedError"
+
+	self should: [self targetInstance __getstate__] raise: NotImplementedError.
+%
+category: 'done'
+method: complexTest
 test__gt__
 
 	self
 		should: [self targetInstance __gt__: 0] raise: TypeError;
 		yourself.
+%
+category: 'done'
+method: complexTest
+test__hash__
+	"complex.__hash__ should return an int. complex(x, 0) should hash same as float(x)"
+
+	| h |
+	h := (complex ___real: 3 imaginary: 4) __hash__.
+	self
+		assert: (h isKindOf: int);
+		assert: (complex ___real: 3 imaginary: 0) __hash__ ___value equals: (float ___value: 3.0) __hash__ ___value;
+		yourself.
+%
+category: 'done'
+method: complexTest
+test__init_subclass__
+	"complex.__init_subclass__ should raise NotImplementedError"
+
+	self should: [self targetInstance __init_subclass__] raise: NotImplementedError.
 %
 category: 'done'
 method: complexTest
@@ -257,6 +345,20 @@ test__radd__
 %
 category: 'done'
 method: complexTest
+test__reduce__
+	"complex.__reduce__ should raise NotImplementedError"
+
+	self should: [self targetInstance __reduce__] raise: NotImplementedError.
+%
+category: 'done'
+method: complexTest
+test__reduce_ex__
+	"complex.__reduce_ex__ should raise NotImplementedError"
+
+	self should: [self targetInstance __reduce_ex__: (self int: 0)] raise: NotImplementedError.
+%
+category: 'done'
+method: complexTest
 test__repr__
 
 	self
@@ -293,6 +395,29 @@ test__rsub__
 %
 category: 'done'
 method: complexTest
+test__setattr__
+	"complex.__setattr__ should raise AttributeError"
+
+	self should: [self targetInstance __setattr__: (self str: 'real') _: (self int: 5)] raise: AttributeError.
+%
+category: 'done'
+method: complexTest
+test__sizeof__
+	"complex.__sizeof__ should return an integer"
+
+	self assert: (self targetInstance __sizeof__ isKindOf: int).
+%
+category: 'done'
+method: complexTest
+test__str__
+	"complex.__str__ should be same as __repr__"
+
+	| c |
+	c := complex ___real: 3 imaginary: 4.
+	self assert: c __str__ ___value equals: c __repr__ ___value.
+%
+category: 'done'
+method: complexTest
 test__sub__
 
 	| a |
@@ -302,6 +427,13 @@ test__sub__
 		assert: (a __sub__: (complex ___real: 1 imaginary: 2)) real ___value equals: 2;
 		assert: (a __sub__: (complex ___real: 1 imaginary: 2)) imag ___value equals: 2;
 		yourself.
+%
+category: 'done'
+method: complexTest
+test__subclasshook__
+	"complex.__subclasshook__ should return NotImplemented"
+
+	self assert: self targetInstance __subclasshook__ == NotImplementedType singleton.
 %
 category: 'done'
 method: complexTest
@@ -339,6 +471,17 @@ test_conjugate
 %
 category: 'done'
 method: complexTest
+test_from_number
+	"complex.from_number should create a complex from a number"
+
+	self
+		assert: (complex from_number: (self int: 42)) real ___value equals: 42.0;
+		assert: (complex from_number: (self int: 42)) imag ___value equals: 0.0;
+		assert: (complex from_number: (self float: 3.14)) real ___value equals: 3.14;
+		yourself.
+%
+category: 'done'
+method: complexTest
 test_imag
 
 	self
@@ -362,6 +505,48 @@ test_real
 		assert: (complex ___real:  1) real ___value equals: 1;
 		assert: (complex ___real: -1) real ___value equals: -1;
 		yourself.
+%
+category: 'done'
+method: complexTest
+testconjugate
+	"complex.conjugate() negates the imaginary part"
+
+	| c conj |
+	c := complex ___real: 3 imaginary: 4.
+	conj := c conjugate.
+	self assert: (conj isKindOf: complex).
+	self assert: conj real ___value equals: 3.0.
+	self assert: conj imag ___value equals: -4.0.
+
+	c := complex ___real: 3 imaginary: -4.
+	conj := c conjugate.
+	self assert: conj imag ___value equals: 4.0.
+%
+category: 'done'
+method: complexTest
+testimag
+	"complex.imag returns the imaginary part as a float"
+
+	| c |
+	c := complex ___real: 3 imaginary: 4.
+	self assert: (c imag isKindOf: float).
+	self assert: c imag ___value equals: 4.0.
+
+	c := complex ___real: 0 imaginary: -5.
+	self assert: c imag ___value equals: -5.0.
+%
+category: 'done'
+method: complexTest
+testreal
+	"complex.real returns the real part as a float"
+
+	| c |
+	c := complex ___real: 3 imaginary: 4.
+	self assert: (c real isKindOf: float).
+	self assert: c real ___value equals: 3.0.
+
+	c := complex ___real: -5 imaginary: 0.
+	self assert: c real ___value equals: -5.0.
 %
 category: 'overrides'
 method: complexTest
@@ -433,12 +618,6 @@ false ifTrue: [
    self assert: (dir __contains__: (self str: 'imag')).
    self assert: (dir __contains__: (self str: 'real')).
 ]
-%
-category: 'todo'
-method: complexTest
-test__getnewargs__
-
-   #pyTodo
 %
 category: 'todo'
 method: complexTest

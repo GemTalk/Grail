@@ -15,7 +15,7 @@ method: TextIOWrapper
 __enter__
 	"https://docs.python.org/3/reference/datamodel.html#object.__enter__"
 
-	^FunctionDef new
+	^builtin_function_or_method new
 		block: [:currentScope |
 			self.
 		];
@@ -27,7 +27,7 @@ __exit__
 	"https://docs.python.org/3/reference/datamodel.html#object.__exit__
 	self, exc_type, exc_value, traceback"
 
-	^FunctionDef new
+	^builtin_function_or_method new
 		block: [:currentScope |
 			gsFile close.
 		];
@@ -39,7 +39,7 @@ category: 'other'
 method: TextIOWrapper
 close
 
-	^FunctionDef new
+	^builtin_function_or_method new
 		block: [:currentScope |
 			gsFile close.
 		];
@@ -66,7 +66,7 @@ method: TextIOWrapper
 read
 	"read(size=-1, /)"
 
-	^FunctionDef new
+	^builtin_function_or_method new
 		block: [:currentScope |
 			| size string |
 			size := currentScope at: #size.
@@ -82,7 +82,7 @@ category: 'other'
 method: TextIOWrapper
 write
 
-	^FunctionDef new
+	^builtin_function_or_method new
 		block: [:currentScope |
 			gsFile nextPutAll: (currentScope at: #bytes) ___value.
 		];

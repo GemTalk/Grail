@@ -2,6 +2,14 @@
 removeallmethods cmath
 removeallclassmethods cmath
 ! ------------------- Class methods for cmath
+category: 'other'
+classmethod: cmath
+functionNames
+
+	^#( #acos #acosh #asin #asinh #atan #atanh #cos #cosh #e #exp #inf #infj
+		#isclose #isfinite #isinf #isnan #log #log10 #nan #nanj #phase #pi
+		#polar #rect #sin #sinh #sqrt #tan #tanh #tau )
+%
 ! ------------------- Instance methods for cmath
 category: 'other'
 method: cmath
@@ -9,7 +17,7 @@ acos
 	"Return the arc cosine of z"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #z );
 		yourself.
 	function block: [:currentScope |
@@ -51,7 +59,7 @@ acosh
 	"Return the inverse hyperbolic cosine of z"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #z );
 		yourself.
 	function block: [:currentScope |
@@ -105,7 +113,7 @@ asin
 	"Return the arc sine of z"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #z );
 		yourself.
 	function block: [:currentScope |
@@ -147,7 +155,7 @@ asinh
 	"Return the inverse hyperbolic sine of z"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #z );
 		yourself.
 	function block: [:currentScope |
@@ -181,7 +189,7 @@ atan
 	"Return the arc tangent of z"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #z );
 		yourself.
 	function block: [:currentScope |
@@ -233,7 +241,7 @@ atanh
 	"Return the inverse hyperbolic tangent of z"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #z );
 		yourself.
 	function block: [:currentScope |
@@ -285,7 +293,7 @@ cos
 	"Return the cosine of z"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #z );
 		yourself.
 	function block: [:currentScope |
@@ -308,7 +316,7 @@ cosh
 	"Return the hyperbolic cosine of z"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #z );
 		yourself.
 	function block: [:currentScope |
@@ -338,7 +346,7 @@ exp
 	"Return e raised to the power z"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #z );
 		yourself.
 	function block: [:currentScope |
@@ -376,7 +384,7 @@ isclose
 	"Check if the values a and b are close to each other"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #a #b );
 		kwonlyargs: #( #rel_tol #abs_tol );
 		kw_defaults: { float ___value: 1.0e-9. float ___value: 0.0 };
@@ -407,7 +415,7 @@ isfinite
 	"Return True if both the real and imaginary parts of z are finite"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #z );
 		yourself.
 	function block: [:currentScope |
@@ -430,7 +438,7 @@ isinf
 	"Return True if either the real or imaginary part of z is an infinity"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #z );
 		yourself.
 	function block: [:currentScope |
@@ -453,7 +461,7 @@ isnan
 	"Return True if either the real or imaginary part of z is a NaN"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #z );
 		yourself.
 	function block: [:currentScope |
@@ -474,7 +482,7 @@ log
 	"Return the logarithm of z to the given base (e by default)"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #z );
 		kwonlyargs: #( #base );
 		kw_defaults: { nil };
@@ -511,7 +519,7 @@ log10
 	"Return the base-10 logarithm of z"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #z );
 		yourself.
 	function block: [:currentScope |
@@ -546,7 +554,7 @@ phase
 	"Return the phase of z (also known as the argument of z)"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #z );
 		yourself.
 	function block: [:currentScope |
@@ -574,7 +582,7 @@ polar
 	"Return the representation of z in polar coordinates"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #z );
 		yourself.
 	function block: [:currentScope |
@@ -596,7 +604,7 @@ rect
 	"Return the complex number z with polar coordinates r and phi"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #r #phi );
 		yourself.
 	function block: [:currentScope |
@@ -622,7 +630,7 @@ sin
 	"Return the sine of z"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #z );
 		yourself.
 	function block: [:currentScope |
@@ -645,7 +653,7 @@ sinh
 	"Return the hyperbolic sine of z"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #z );
 		yourself.
 	function block: [:currentScope |
@@ -668,7 +676,7 @@ sqrt
 	"Return the square root of z"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #z );
 		yourself.
 	function block: [:currentScope |
@@ -687,7 +695,7 @@ tan
 	"Return the tangent of z"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #z );
 		yourself.
 	function block: [:currentScope |
@@ -708,7 +716,7 @@ tanh
 	"Return the hyperbolic tangent of z"
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #z );
 		yourself.
 	function block: [:currentScope |

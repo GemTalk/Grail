@@ -2,21 +2,19 @@
 removeallmethods sys
 removeallclassmethods sys
 ! ------------------- Class methods for sys
-! ------------------- Instance methods for sys
 category: 'other'
-method: sys
-initialize
+classmethod: sys
+functionNames
 
-	self
-		is_stack_trampoline_active;
-		yourself.
+	^#( #is_stack_trampoline_active )
 %
+! ------------------- Instance methods for sys
 category: 'other'
 method: sys
 is_stack_trampoline_active
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: {};
 		yourself.
 	function block: [:currentScope |

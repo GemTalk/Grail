@@ -21,9 +21,22 @@ ___startChar
 ! ------------------- Instance methods for frozenset
 category: 'Python'
 method: frozenset
+__add__: aSet
+	"Python set/frozenset does not support + operator"
+
+	TypeError signal: 'unsupported operand type(s) for +: ''', self ___typeName, ''' and ''', aSet ___typeName, ''''
+%
+category: 'Python'
+method: frozenset
 __and__: aSet
 
 	^self intersection: aSet
+%
+category: 'Python'
+method: frozenset
+__doc__
+
+	^str ___value: 'Build an immutable unordered collection of unique elements.'
 %
 category: 'Python'
 method: frozenset
@@ -41,7 +54,19 @@ category: 'Python'
 method: frozenset
 __gt__: otherCollection
 
-	^(self __ge__: otherCollection) and: [self __ne__: otherCollection]
+	^(self __ge__: otherCollection) ___and: [self __ne__: otherCollection]
+%
+category: 'Python'
+method: frozenset
+__hash__
+	"frozenset is immutable and hashable. Compute a hash based on the elements."
+
+	| hash |
+	hash := 0.
+	container do: [:each |
+		hash := hash bitXor: each __hash__ ___value.
+	].
+	^int ___value: hash
 %
 category: 'Python'
 method: frozenset
@@ -53,13 +78,19 @@ category: 'Python'
 method: frozenset
 __lt__: otherCollection
 
-	^(self __le__: otherCollection) and: [self __ne__: otherCollection]
+	^(self __le__: otherCollection) ___and: [self __ne__: otherCollection]
 %
 category: 'Python'
 method: frozenset
 __or__: aSet
 
 	^self union: aSet
+%
+category: 'Python'
+method: frozenset
+__rand__: aSet
+
+	^aSet intersection: self
 %
 category: 'Python'
 method: frozenset
@@ -84,6 +115,24 @@ __repr__
 %
 category: 'Python'
 method: frozenset
+__ror__: aSet
+
+	^aSet union: self
+%
+category: 'Python'
+method: frozenset
+__rsub__: aSet
+
+	^aSet difference: self
+%
+category: 'Python'
+method: frozenset
+__rxor__: aSet
+
+	^aSet symmetric_difference: self
+%
+category: 'Python'
+method: frozenset
 __sub__: aSet
 
 	^self difference: aSet
@@ -96,35 +145,55 @@ __xor__: aSet
 %
 category: 'Python'
 method: frozenset
-difference: aSet
+difference: others
+	"Return a new frozenset with elements in self that are not in any of the others.
+	 others can be a single set/iterable or a tuple of sets/iterables."
 
-	^self class ___value: container - aSet ___container
+	| result iterables |
+	iterables := (others isKindOf: tuple)
+		ifTrue: [others ___container]
+		ifFalse: [{others}].
+	result := container copy.
+	iterables do: [:each |
+		result := result - each ___container.
+	].
+	^self class ___value: result
 %
 category: 'Python'
 method: frozenset
-intersection: aSet
+intersection: others
+	"Return a new frozenset with elements common to self and all others.
+	 others can be a single set/iterable or a tuple of sets/iterables."
 
-	^self class ___value: container * aSet ___container
+	| result iterables |
+	iterables := (others isKindOf: tuple)
+		ifTrue: [others ___container]
+		ifFalse: [{others}].
+	result := container copy.
+	iterables do: [:each |
+		result := result * each ___container.
+	].
+	^self class ___value: result
 %
 category: 'Python'
 method: frozenset
 isdisjoint: aSet
 
-	^(self intersection: aSet) __len__ ___value == 0
+	^bool ___value: ((self intersection: aSet) __len__ ___value == 0)
 %
 category: 'Python'
 method: frozenset
 issubset: aSet
 
-	self ___container do: [:each | (aSet ___container includesValue: each) ifFalse: [^false]].
-	^true
+	self ___container do: [:each | (aSet ___container includesValue: each) ifFalse: [^bool ___value: false]].
+	^bool ___value: true
 %
 category: 'Python'
 method: frozenset
 issuperset: aSet
 
-	aSet ___container do: [:each | (self ___container includesValue: each) ifFalse: [^false]].
-	^true
+	aSet ___container do: [:each | (self ___container includesValue: each) ifFalse: [^bool ___value: false]].
+	^bool ___value: true
 %
 category: 'Python'
 method: frozenset
@@ -135,36 +204,89 @@ symmetric_difference: aSet
 %
 category: 'Python'
 method: frozenset
-union: aSet
+union: others
+	"Return a new frozenset with elements from self and all others.
+	 others can be a single set/iterable or a tuple of sets/iterables."
 
-	| newSet |
+	| newSet iterables |
+	iterables := (others isKindOf: tuple)
+		ifTrue: [others ___container]
+		ifFalse: [{others}].
 	newSet := self copy.
-	newSet ___container addAll: aSet ___container.
+	iterables do: [:each |
+		newSet ___container addAll: each ___container.
+	].
 	^newSet
 %
 category: 'Smalltalk'
 method: frozenset
-__rand__: aSet
+__getitem__: anIndex
+	"Sets do not support indexing"
 
-	^aSet intersection: self
+	TypeError signal: '''', self ___typeName, ''' object is not subscriptable'
 %
 category: 'Smalltalk'
 method: frozenset
-__ror__: aSet
+__iadd__: other
+	"Sets do not support += (use update for set)"
 
-	^aSet union: self
+	TypeError signal: 'unsupported operand type(s) for +=: ''', self ___typeName, ''' and ''', other ___typeName, ''''
 %
 category: 'Smalltalk'
 method: frozenset
-__rsub__: aSet
+__imul__: other
+	"Sets do not support *="
 
-	^aSet difference: self
+	TypeError signal: 'unsupported operand type(s) for *=: ''', self ___typeName, ''' and ''', other ___typeName, ''''
 %
 category: 'Smalltalk'
 method: frozenset
-__rxor__: aSet
+__mul__: other
+	"Sets do not support *"
 
-	^aSet symmetric_difference: self
+	TypeError signal: 'unsupported operand type(s) for *: ''', self ___typeName, ''' and ''', other ___typeName, ''''
+%
+category: 'Smalltalk'
+method: frozenset
+__rmul__: other
+	"Sets do not support *"
+
+	TypeError signal: 'unsupported operand type(s) for *: ''', other ___typeName, ''' and ''', self ___typeName, ''''
+%
+category: 'Smalltalk'
+method: frozenset
+clear
+	"frozenset is immutable and does not support clear"
+
+	AttributeError signal: '''frozenset'' object has no attribute ''clear'''
+%
+category: 'Smalltalk'
+method: frozenset
+count: anElement
+	"Sets do not have count method"
+
+	AttributeError signal: '''', self ___typeName, ''' object has no attribute ''count'''
+%
+category: 'Smalltalk'
+method: frozenset
+index: anElement
+	"Sets do not have index method"
+
+	AttributeError signal: '''', self ___typeName, ''' object has no attribute ''index'''
+%
+category: 'Smalltalk'
+method: frozenset
+index: anElement from: start
+	"Sets do not have index method"
+
+	AttributeError signal: '''', self ___typeName, ''' object has no attribute ''index'''
+%
+category: 'Smalltalk'
+method: frozenset
+index: anElement from: start to: stop
+	"Sets do not have index method"
+
+	AttributeError signal: '''', self ___typeName, ''' object has no attribute ''index'''
 %
 category: 'Smalltalk'
 method: frozenset

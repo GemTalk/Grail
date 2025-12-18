@@ -30,12 +30,12 @@ category: 'other'
 method: SuiteAst
 printSmalltalkOn: aStream
 
-	
 	body size == 1 ifTrue: [
-		 (body at: 1) printSmalltalkOn: aStream.
+		(body at: 1) printSmalltalkOn: aStream.
 		aStream nextPut: $..
 	] ifFalse: [
-		body do: [:each |
+		body doWithIndex: [:each :index |
+			index > 1 ifTrue: [aStream removeTrailingNone].
 			each printSmalltalkOn: aStream.
 			aStream nextPut: $.; lf; yourself.
 		].

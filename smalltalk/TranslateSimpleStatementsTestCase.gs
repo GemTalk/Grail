@@ -14,7 +14,7 @@ testTranslateAssert
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
 
-	self assert: stream contents equals: '(True) ___value ifFalse: [AssertionError signal].'.
+	self assert: stream contents equals: '(True) __bool__ ___value ifFalse: [AssertionError signal].'.
 	self assert: stream contents evaluate equals: nil.
 
 	pyString := 'assert False'.
@@ -23,7 +23,7 @@ testTranslateAssert
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
 
-	self assert: stream contents equals: '(False) ___value ifFalse: [AssertionError signal].'.
+	self assert: stream contents equals: '(False) __bool__ ___value ifFalse: [AssertionError signal].'.
 	self should: [stream contents evaluate] raise: AssertionError.
 
 	pyString := 'assert False, "Assert failed"'.
@@ -32,7 +32,7 @@ testTranslateAssert
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
 
-	self assert: stream contents equals: '(False) ___value ifFalse: [AssertionError signal: (str ___value: ''Assert failed'') ___value].'.
+	self assert: stream contents equals: '(False) __bool__ ___value ifFalse: [AssertionError signal: (str ___value: ''Assert failed'') ___value].'.
 	self
 		should: [stream contents evaluate]
 		raise: AssertionError
@@ -86,7 +86,7 @@ testTranslateRaise
 	stream := WriteStream on: String new.
 	x printSmalltalkOn: stream.
 
-	self assert: stream contents equals: 'RuntimeError signal: ((str ___value: ''Something bad happened'') ___value, '' The above exception was the direct cause of the following exception: '', ((RuntimeError new addText: (str ___value: ''Caused by me'')  ___value) describe))'.
+	self assert: stream contents equals: 'RuntimeError signal: ((str ___value: ''Something bad happened'') ___value , '' The above exception was the direct cause of the following exception: '' , ((RuntimeError new addText: (str ___value: ''Caused by me'')  ___value) describe))'.
 	self
 		should: [stream contents evaluate]
 		raise: RuntimeError

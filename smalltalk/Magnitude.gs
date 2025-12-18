@@ -19,7 +19,7 @@ category: 'Python'
 method: Magnitude
 __bool__
 
-	^value ~= 0
+	^value ~= 0 ifTrue: [True] ifFalse: [False]
 %
 category: 'Python'
 method: Magnitude
@@ -29,7 +29,7 @@ __eq__: anObject
 	val := (anObject isKindOf: Number)
 	   ifTrue: [anObject]
 		ifFalse: [anObject ___value].
-	^value = val
+	^value = val ifTrue: [True] ifFalse: [False]
 %
 category: 'Python'
 method: Magnitude
@@ -46,25 +46,25 @@ category: 'Python'
 method: Magnitude
 __ge__: anObject
 
-	^(self __eq__: anObject) or: [self __gt__: anObject]
+	^(self __eq__: anObject) ___or: [self __gt__: anObject]
 %
 category: 'Python'
 method: Magnitude
 __le__: anObject
 
-	^(self __gt__: anObject) not
+	^(self __gt__: anObject) __not__
 %
 category: 'Python'
 method: Magnitude
 __lt__: anObject
 
-	^(self __ge__: anObject) not
+	^(self __ge__: anObject) __not__
 %
 category: 'Python'
 method: Magnitude
 __ne__: other
 
-	^(self __eq__: other) not
+	^(self __eq__: other) __not__
 %
 category: 'Python'
 method: Magnitude

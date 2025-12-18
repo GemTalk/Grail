@@ -29,8 +29,9 @@ printSmalltalkOn: aStream
 
 	aStream nextPutAll: 'value := '.
 	value printSmalltalkOn: aStream.
-	aStream nextPutAll: '.'; lf. 
+	aStream nextPutAll: '.'; lf.
 	(targets at: 1) printSmalltalkAssignmentOn: aStream.
+	aStream nextPutAll: '.'; lf; nextPutAll: 'None'.
 %
 category: 'other'
 method: AssignAst

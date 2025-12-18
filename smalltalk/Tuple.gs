@@ -35,7 +35,7 @@ category: 'Python'
 method: tuple
 ___modString: aString
 
-	
+
 	| readStream writeStream pieces piece counter |
 
 	readStream := ReadStream on: aString.
@@ -52,7 +52,7 @@ ___modString: aString
 			piece := ''.
 			pieces add: (FormatTag new initializeFrom: readStream).
 			counter := counter + 1.
-		]. 
+		].
 	].
 	pieces add: piece.
 	readStream := ReadStream on: self ___value.
@@ -62,7 +62,7 @@ ___modString: aString
 	].
 
 	writeStream := WriteStream on: String new.
-	pieces do: [:each | 
+	pieces do: [:each |
 		(each isKindOf: String) ifTrue: [
 			writeStream nextPutAll: each.
 		] ifFalse: [
@@ -73,16 +73,47 @@ ___modString: aString
 %
 category: 'Python'
 method: tuple
-__getslice__: aPyIntStart _: aPyIntEnd
+__doc__
 
-	| end |
-	end := aPyIntEnd.
+	^str ___value: 'Built-in immutable sequence.\n' ,
+		'\n' ,
+		'If no argument is given, the constructor returns an empty tuple.\n' ,
+		'If iterable is specified the tuple is initialized from iterable''s items.\n' ,
+		'\n' ,
+		'If the argument is a tuple, the return value is the same object.'
+%
+category: 'Python'
+method: tuple
+__iadd__: aList
+	"Tuples are immutable, so += creates a new tuple instead of modifying in place.
+	 This is different from list where += modifies in place."
 
-	end class == NoneType ifTrue: [
-		end := int ___value: container size
+	^self __add__: aList
+%
+category: 'Python'
+method: tuple
+__getnewargs__
+	"Return args for pickling. Returns a tuple containing this tuple."
+
+	^tuple ___value: { self }
+%
+category: 'Python'
+method: tuple
+__hash__
+	"Return hash of the tuple. Combines hashes of all elements.
+	 Raises TypeError if any element is unhashable."
+
+	| result |
+	result := 0.
+	container do: [:each |
+		| elemHash |
+		[elemHash := each __hash__ ___value]
+			on: MessageNotUnderstood
+			do: [:ex | TypeError signal: 'unhashable type: ''', each ___typeName, ''''].
+		result := result bitXor: elemHash.
+		result := (result * 31) bitAnd: 16rFFFFFFFF.  "Keep it bounded"
 	].
-
-	^self class ___value: (self ___getslice: aPyIntStart _: end)
+	^int ___value: result
 %
 category: 'Python'
 method: tuple
@@ -98,7 +129,7 @@ __repr__
 	stream nextPut: $(.
 	stream nextPutAll: container removeFirst __repr__ ___value.
 	container do: [:elem |
-		stream 
+		stream
 			nextPutAll: ', ';
 			nextPutAll: elem __repr__ ___value;
 			yourself.
@@ -106,10 +137,4 @@ __repr__
 	stream nextPut: $).
 
 	^(str ___value: stream contents)
-%
-category: 'Smalltalk'
-method: tuple
-___typeName
-
-	^'tuple'
 %

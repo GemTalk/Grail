@@ -3,6 +3,109 @@ removeallmethods bytearrayTest
 removeallclassmethods bytearrayTest
 ! ------------------- Class methods for bytearrayTest
 ! ------------------- Instance methods for bytearrayTest
+category: 'done'
+method: bytearrayTest
+test__delitem__
+
+	| ba |
+	ba := bytearray ___value: #[1 2 3 4 5].
+	ba __delitem__: (int ___value: 2).
+	self assert: ba equals: (bytearray ___value: #[1 2 4 5]).
+	ba __delitem__: (int ___value: -1).
+	self assert: ba equals: (bytearray ___value: #[1 2 4]).
+%
+category: 'done'
+method: bytearrayTest
+test__setitem__
+
+	| ba |
+	ba := bytearray ___value: #[1 2 3].
+	ba __setitem__: (int ___value: 1) _: (int ___value: 99).
+	self assert: ba equals: (bytearray ___value: #[1 99 3]).
+	ba __setitem__: (int ___value: -1) _: (int ___value: 88).
+	self assert: ba equals: (bytearray ___value: #[1 99 88]).
+%
+category: 'done'
+method: bytearrayTest
+testappend
+
+	| ba |
+	ba := bytearray ___value: #[1 2 3].
+	ba append: (int ___value: 4).
+	self assert: ba equals: (bytearray ___value: #[1 2 3 4]).
+%
+category: 'done'
+method: bytearrayTest
+testclear
+
+	| ba |
+	ba := bytearray ___value: #[1 2 3].
+	ba clear.
+	self assert: ba equals: (bytearray ___value: #[]).
+%
+category: 'done'
+method: bytearrayTest
+testcopy
+
+	| ba copy |
+	ba := bytearray ___value: #[1 2 3].
+	copy := ba copy.
+	self assert: copy equals: ba.
+	self assert: copy class equals: bytearray.
+	ba append: (int ___value: 4).
+	self assert: copy equals: (bytearray ___value: #[1 2 3]).
+%
+category: 'done'
+method: bytearrayTest
+testextend
+
+	| ba |
+	ba := bytearray ___value: #[1 2 3].
+	ba extend: (list ___value: { int ___value: 4. int ___value: 5 }).
+	self assert: ba equals: (bytearray ___value: #[1 2 3 4 5]).
+%
+category: 'done'
+method: bytearrayTest
+testinsert
+
+	| ba |
+	ba := bytearray ___value: #[1 2 3].
+	ba insert: (int ___value: 1) _: (int ___value: 99).
+	self assert: ba equals: (bytearray ___value: #[1 99 2 3]).
+	ba insert: (int ___value: 0) _: (int ___value: 0).
+	self assert: ba equals: (bytearray ___value: #[0 1 99 2 3]).
+%
+category: 'done'
+method: bytearrayTest
+testpop
+
+	| ba val |
+	ba := bytearray ___value: #[1 2 3 4 5].
+	val := ba pop.
+	self assert: val equals: (int ___value: 5).
+	self assert: ba equals: (bytearray ___value: #[1 2 3 4]).
+	val := ba pop: (int ___value: 0).
+	self assert: val equals: (int ___value: 1).
+	self assert: ba equals: (bytearray ___value: #[2 3 4]).
+%
+category: 'done'
+method: bytearrayTest
+testremove
+
+	| ba |
+	ba := bytearray ___value: #[1 2 3 2 4].
+	ba remove: (int ___value: 2).
+	self assert: ba equals: (bytearray ___value: #[1 3 2 4]).
+%
+category: 'done'
+method: bytearrayTest
+testreverse
+
+	| ba |
+	ba := bytearray ___value: #[1 2 3 4 5].
+	ba reverse.
+	self assert: ba equals: (bytearray ___value: #[5 4 3 2 1]).
+%
 category: 'todo'
 method: bytearrayTest
 test__add__
@@ -18,12 +121,6 @@ test__alloc__
 category: 'todo'
 method: bytearrayTest
 test__contains__
-
-   #pyTodo
-%
-category: 'todo'
-method: bytearrayTest
-test__delitem__
 
    #pyTodo
 %
@@ -83,18 +180,6 @@ test__rmul__
 %
 category: 'todo'
 method: bytearrayTest
-test__setitem__
-
-   #pyTodo
-%
-category: 'todo'
-method: bytearrayTest
-testappend
-
-   #pyTodo
-%
-category: 'todo'
-method: bytearrayTest
 testcapitalize
 
    #pyTodo
@@ -102,18 +187,6 @@ testcapitalize
 category: 'todo'
 method: bytearrayTest
 testcenter
-
-   #pyTodo
-%
-category: 'todo'
-method: bytearrayTest
-testclear
-
-   #pyTodo
-%
-category: 'todo'
-method: bytearrayTest
-testcopy
 
    #pyTodo
 %
@@ -143,12 +216,6 @@ testexpandtabs
 %
 category: 'todo'
 method: bytearrayTest
-testextend
-
-   #pyTodo
-%
-category: 'todo'
-method: bytearrayTest
 testfind
 
    #pyTodo
@@ -168,12 +235,6 @@ testhex
 category: 'todo'
 method: bytearrayTest
 testindex
-
-   #pyTodo
-%
-category: 'todo'
-method: bytearrayTest
-testinsert
 
    #pyTodo
 %
@@ -263,18 +324,6 @@ testpartition
 %
 category: 'todo'
 method: bytearrayTest
-testpop
-
-   #pyTodo
-%
-category: 'todo'
-method: bytearrayTest
-testremove
-
-   #pyTodo
-%
-category: 'todo'
-method: bytearrayTest
 testremoveprefix
 
    #pyTodo
@@ -288,12 +337,6 @@ testremovesuffix
 category: 'todo'
 method: bytearrayTest
 testreplace
-
-   #pyTodo
-%
-category: 'todo'
-method: bytearrayTest
-testreverse
 
    #pyTodo
 %

@@ -33,11 +33,8 @@ category: 'other'
 method: SubscriptAst
 printSmalltalkOn: aStream
 
+	"Always use __getitem__: - SliceAst generates a slice object"
 	value printSmalltalkWithParenthesisOn: aStream.
-	slice class == SliceAst ifTrue: [
-		slice printSmalltalkOn: aStream.
-	] ifFalse: [
-		aStream nextPutAll: ' __getitem__: '.
-		slice printSmalltalkWithParenthesisOn: aStream.
-	].
+	aStream nextPutAll: ' __getitem__: '.
+	slice printSmalltalkWithParenthesisOn: aStream.
 %

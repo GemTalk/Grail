@@ -5,24 +5,23 @@ removeallclassmethods bool
 category: 'Smalltalk'
 classmethod: bool
 ___value: anObject
+	"Return the singleton True or False from the Python dictionary."
 
+	| boolValue |
 	(anObject isKindOf: Boolean) ifTrue: [
-		^self basicNew
-			___value: (anObject ifTrue: [1] ifFalse: [0]);
-			yourself
+		boolValue := anObject.
+	] ifFalse: [
+		(anObject isKindOf: int) ifTrue: [
+			boolValue := anObject ___value ~= 0.
+		] ifFalse: [
+			(anObject isKindOf: Number) ifTrue: [
+				boolValue := anObject ~= 0.
+			] ifFalse: [
+				NotImplementedError signal: 'Boolean value not supported'.
+			].
+		].
 	].
-	(anObject isKindOf: int) ifTrue: [
-		^self basicNew
-			___value: (anObject ___value ~= 0 ifTrue: [1] ifFalse: [0]);
-			yourself
-	].
-	(anObject isKindOf: Number) ifTrue: [
-		^self basicNew
-			___value: (anObject ~= 0 ifTrue: [1] ifFalse: [0]);
-			yourself
-	].
-	NotImplementedError signal: 'Boolean value not supported'.
-	#todo
+	^Python at: (boolValue ifTrue: [#True] ifFalse: [#False])
 %
 ! ------------------- Instance methods for bool
 category: 'other'
@@ -64,6 +63,14 @@ __or__: anObject
 	].
 
 	^bool ___value: (self ___value or: [other ___value])
+%
+category: 'Python'
+method: bool
+__doc__
+
+	^str ___value: 'Returns True when the argument is true, False otherwise.\n' ,
+		'The builtins True and False are the only two instances of the class bool.\n' ,
+		'The class bool is a subclass of the class int, and cannot be subclassed.'
 %
 category: 'Smalltalk'
 method: bool

@@ -81,8 +81,8 @@ PythonTestCase setPath.
 Python
     at: #'None'             put: NoneType singleton;
     at: #'NotImplemented'   put: NotImplementedType singleton;
-    at: #'True'             put: (bool ___value: true);
-    at: #'False'            put: (bool ___value: false);
+    at: #'True'             put: (bool basicNew ___value: 1; yourself);
+    at: #'False'            put: (bool basicNew ___value: 0; yourself);
     "at: #'builtins'         put: Builtins singleton;"
     yourself.
 

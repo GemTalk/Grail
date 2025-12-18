@@ -69,13 +69,13 @@ setUp
 
 	super setUp.
 	outputStream := WriteStream with: String new.
-	Builtins printFile: outputStream.
+	builtins printFile: outputStream.
 %
 category: 'other'
 method: TranslateVariablesTestCase
 tearDown
 
-	Builtins printFile: nil.
+	builtins printFile: nil.
 	super tearDown.
 %
 category: 'other'

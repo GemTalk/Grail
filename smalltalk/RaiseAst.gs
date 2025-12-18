@@ -28,7 +28,7 @@ printSmalltalkOn: aStream
 		exc arguments first printSmalltalkWithParenthesisOn: aStream.
 		aStream nextPutAll: ' ___value'.
 		(cause ~= None and: [cause value ~= nil and: [cause value ~= 'None']]) ifTrue: [
-			aStream nextPutAll: ', '' The above exception was the direct cause of the following exception: '', ((';
+			aStream nextPutAll: ' , '' The above exception was the direct cause of the following exception: '' , ((';
 			nextPutAll: (cause class == CallAst ifTrue: [cause function id] ifFalse: [cause id]).
 				(cause class == CallAst) ifTrue: [
 					aStream nextPutAll: ' new addText: '.
@@ -39,7 +39,7 @@ printSmalltalkOn: aStream
 		].
 	] ifFalse: [
 		(cause ~= None and: [cause value ~= nil and: [cause value ~= 'None']]) ifTrue: [
-				aStream nextPutAll: ', '' The above exception was the direct cause of the following exception: '', ((';
+				aStream nextPutAll: ' , '' The above exception was the direct cause of the following exception: '' , ((';
 				nextPutAll: (cause class == CallAst ifTrue: [cause function id] ifFalse: [cause id]).
 					cause class == CallAst ifTrue: [
 						aStream nextPutAll: ' new addText: '.

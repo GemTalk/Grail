@@ -22,13 +22,15 @@ printSmalltalkOn: aStream
 		alias ifNil: [
 			alias := name.
 		].
-		aStream 
+		aStream
 			nextPutAll: 'currentScope at: #''';
 			nextPutAll: alias;
 			nextPutAll: ''' put: (';
 			nextPutAll: '(currentScope at: #__import__) scope: currentScope positional: { #''';
 			nextPutAll: name;
-			nextPutAll: '''. } named: {})';
+			nextPutAll: '''. } named: {}).';
+			lf;
 			yourself.
 	].
+	aStream nextPutAll: 'None'.
 %

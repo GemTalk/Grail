@@ -26,6 +26,13 @@ __new__: p1 _: p2
 
 	^self basicNew
 %
+category: 'Python-complex'
+classmethod: complex
+from_number: aNumber
+	"Create a complex from a number. Equivalent to complex(x) for numeric x."
+
+	^self ___real: aNumber __float__ ___value imaginary: 0
+%
 category: 'Smalltalk'
 classmethod: complex
 ___assertJustOneStringArgumentOn: args
@@ -80,11 +87,67 @@ __bool__
 %
 category: 'Python-complex'
 method: complex
-__getnewargs__
-	"https://docs.python.org/3/library/pickle.html#object.__getnewargs__"
+__complex__
+	"Return self. For consistency with float.__float__() etc."
 
-	#pyTodo.
-	self error: 'Not yet implemented!'.
+	^self
+%
+category: 'Python-complex'
+method: complex
+__doc__
+
+	^str ___value: 'Create a complex number from a string or numbers.\n' ,
+		'\n' ,
+		'If a string is given, parse it as a complex number.\n' ,
+		'If a single number is given, convert it to a complex number.\n' ,
+		'If the ''real'' or ''imag'' arguments are given, create a complex number\n' ,
+		'with the specified real and imaginary components.'
+%
+category: 'Python-complex'
+method: complex
+__format__: formatSpec
+	"Format the complex number according to the format specification."
+
+	| spec realStr imagStr sign |
+	spec := formatSpec ___value.
+	spec isEmpty ifTrue: [^self __str__].
+
+	"Format both parts with the format spec"
+	realStr := (float ___value: real) __format__: formatSpec.
+	imagStr := (float ___value: imaginary abs) __format__: formatSpec.
+	sign := imaginary >= 0 ifTrue: ['+'] ifFalse: ['-'].
+
+	^str ___value: realStr ___value, sign, imagStr ___value, 'j'
+%
+category: 'Python-complex'
+method: complex
+__getnewargs__
+	"Return args tuple for pickling: (real, imag)"
+
+	^tuple ___value: { float ___value: real. float ___value: imaginary }
+%
+category: 'Python-complex'
+method: complex
+__getstate__
+	"Return state for pickling. Not implemented - implement when adding pickle support."
+
+	NotImplementedError signal: '__getstate__ is not implemented. Implement when adding pickle support.'
+%
+category: 'Python-complex'
+method: complex
+__hash__
+	"Return hash value. complex(x, 0) hashes the same as x for real x."
+
+	imaginary = 0
+		ifTrue: [^(float ___value: real) __hash__]
+		ifFalse: [^int ___value: ((real hash bitXor: imaginary hash) bitXor: 1000003)]
+%
+category: 'Python-complex'
+method: complex
+__init_subclass__
+	"Called when subclassing complex. Not implemented - implement when adding metaclass support."
+
+	NotImplementedError signal: '__init_subclass__ is not implemented. Implement when adding metaclass support.'
 %
 category: 'Python-complex'
 method: complex
@@ -114,6 +177,20 @@ __radd__: any
 %
 category: 'Python-complex'
 method: complex
+__reduce__
+	"Return state for pickling. Not implemented - implement when adding pickle support."
+
+	NotImplementedError signal: '__reduce__ is not implemented. Implement when adding pickle support.'
+%
+category: 'Python-complex'
+method: complex
+__reduce_ex__: protocol
+	"Return state for pickling with protocol version. Not implemented - implement when adding pickle support."
+
+	NotImplementedError signal: '__reduce_ex__ is not implemented. Implement when adding pickle support.'
+%
+category: 'Python-complex'
+method: complex
 __rmul__: any
 
 	^any __mul__: self
@@ -130,6 +207,13 @@ __rtruediv__: any
 	"https://mathworld.wolfram.com/ComplexDivision.html"
 
 	^any __truediv__: self
+%
+category: 'Python-complex'
+method: complex
+__str__
+	"Return string representation. Same as __repr__ for complex."
+
+	^self __repr__
 %
 category: 'Python-complex'
 method: complex

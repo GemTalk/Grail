@@ -2,13 +2,24 @@
 removeallmethods math
 removeallclassmethods math
 ! ------------------- Class methods for math
+category: 'other'
+classmethod: math
+functionNames
+
+	^#( #acos #acosh #asin #asinh #atan #atan2 #atanh #cbrt #ceil #comb #copysign
+		#cos #cosh #degrees #dist #e #erf #erfc #exp #expm1 #fabs #factorial #floor
+		#fma #fmod #frexp #fsum #gamma #gcd #hypot #inf #isclose #isfinite #isinf
+		#isnan #isqrt #lcm #ldexp #lgamma #log #log10 #log1p #log2 #modf #nan
+		#nextafter #perm #pi #pow #prod #radians #remainder #sin #sinh #sqrt
+		#sumprod #tan #tanh #tau #trunc #ulp )
+%
 ! ------------------- Instance methods for math
 category: 'other'
 method: math
 acos
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -23,7 +34,7 @@ method: math
 acosh
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -38,7 +49,7 @@ method: math
 asin
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -53,7 +64,7 @@ method: math
 asinh
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -68,7 +79,7 @@ method: math
 atan
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -83,7 +94,7 @@ method: math
 atan2
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #y #x );
 		yourself.
 	function block: [:currentScope |
@@ -99,7 +110,7 @@ method: math
 atanh
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -114,7 +125,7 @@ method: math
 cbrt
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -129,7 +140,7 @@ method: math
 ceil
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -144,7 +155,7 @@ method: math
 comb
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #'n' #'k' );
 		yourself.
 	function block: [:currentScope |
@@ -170,7 +181,7 @@ method: math
 copysign
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #mag #sgn );
 		yourself.
 	function block: [:currentScope |
@@ -186,7 +197,7 @@ method: math
 cos
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -201,7 +212,7 @@ method: math
 cosh
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -216,7 +227,7 @@ method: math
 degrees
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -231,7 +242,7 @@ method: math
 dist
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #p #q );
 		yourself.
 	function block: [:currentScope |
@@ -260,7 +271,7 @@ method: math
 erf
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -275,7 +286,7 @@ method: math
 erfc
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -290,7 +301,7 @@ method: math
 exp
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -305,7 +316,7 @@ method: math
 expm1
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -320,7 +331,7 @@ method: math
 fabs
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -335,7 +346,7 @@ method: math
 factorial
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #n );
 		yourself.
 	function block: [:currentScope |
@@ -352,7 +363,7 @@ method: math
 floor
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -367,7 +378,7 @@ method: math
 fma
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x #y #z );
 		yourself.
 	function block: [:currentScope |
@@ -384,7 +395,7 @@ method: math
 fmod
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x #y );
 		yourself.
 	function block: [:currentScope |
@@ -400,7 +411,7 @@ method: math
 frexp
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -416,7 +427,7 @@ method: math
 fsum
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #iterable );
 		yourself.
 	function block: [:currentScope |
@@ -435,7 +446,7 @@ method: math
 gamma
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -480,7 +491,7 @@ method: math
 gcd
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		vararg: #ints;
 		yourself.
 	function block: [:currentScope |
@@ -513,7 +524,7 @@ method: math
 hypot
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		vararg: #coordinates;
 		yourself.
 	function block: [:currentScope |
@@ -540,7 +551,7 @@ method: math
 isclose
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #a #b );
 		kwonlyargs: #( #rel_tol #abs_tol );
 		kw_defaults: { float ___value: 1.0e-9. float ___value: 0.0. };
@@ -552,10 +563,10 @@ isclose
 		rel_tol := (currentScope at: #rel_tol) ___value asFloat.
 		abs_tol := (currentScope at: #abs_tol) ___value asFloat.
 		a = b ifTrue: [
-			result := bool ___value: true.
+			result := True.
 		] ifFalse: [
 			diff := (a - b) abs.
-			result := bool ___value: (diff <= ((a abs max: b abs) * rel_tol max: abs_tol)).
+			result := (diff <= ((a abs max: b abs) * rel_tol max: abs_tol)) ifTrue: [True] ifFalse: [False].
 		].
 		result.
 	].
@@ -566,7 +577,7 @@ method: math
 isfinite
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -582,7 +593,7 @@ method: math
 isinf
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -598,7 +609,7 @@ method: math
 isnan
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -613,7 +624,7 @@ method: math
 isqrt
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #n );
 		yourself.
 	function block: [:currentScope |
@@ -630,7 +641,7 @@ method: math
 lcm
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		vararg: #ints;
 		yourself.
 	function block: [:currentScope |
@@ -663,7 +674,7 @@ method: math
 ldexp
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x #i );
 		yourself.
 	function block: [:currentScope |
@@ -679,7 +690,7 @@ method: math
 lgamma
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -723,7 +734,7 @@ method: math
 log
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x #base );
 		defaults: { nil };
 		yourself.
@@ -744,7 +755,7 @@ method: math
 log10
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -759,7 +770,7 @@ method: math
 log1p
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -774,7 +785,7 @@ method: math
 log2
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -789,7 +800,7 @@ method: math
 modf
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -811,7 +822,7 @@ method: math
 nextafter
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x #y );
 		yourself.
 	function block: [:currentScope |
@@ -847,7 +858,7 @@ method: math
 perm
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #'n' #'k' );
 		yourself.
 	function block: [:currentScope |
@@ -879,7 +890,7 @@ method: math
 pow
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x #y );
 		yourself.
 	function block: [:currentScope |
@@ -895,7 +906,7 @@ method: math
 prod
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #iterable );
 		kwonlyargs: #( #start );
 		kw_defaults: { int ___value: 1. };
@@ -921,7 +932,7 @@ method: math
 radians
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -936,7 +947,7 @@ method: math
 remainder
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x #y );
 		yourself.
 	function block: [:currentScope |
@@ -953,7 +964,7 @@ method: math
 sin
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -968,7 +979,7 @@ method: math
 sinh
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -983,7 +994,7 @@ method: math
 sqrt
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -998,7 +1009,7 @@ method: math
 sumprod
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #p #q );
 		yourself.
 	function block: [:currentScope |
@@ -1019,7 +1030,7 @@ method: math
 tan
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -1034,7 +1045,7 @@ method: math
 tanh
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -1055,7 +1066,7 @@ method: math
 trunc
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |
@@ -1070,7 +1081,7 @@ method: math
 ulp
 
 	| function |
-	function := FunctionDef new
+	function := builtin_function_or_method new
 		params: #( #x );
 		yourself.
 	function block: [:currentScope |

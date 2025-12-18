@@ -113,6 +113,15 @@ test__dir__
 %
 category: 'done'
 method: bytesTest
+test__doc__
+	"bytes.__doc__ should return a str"
+
+	| doc |
+	doc := (bytes ___value: #[]) __doc__.
+	self assert: (doc isKindOf: str).
+%
+category: 'done'
+method: bytesTest
 test__eq__
 
    | list |
@@ -149,38 +158,51 @@ category: 'done'
 method: bytesTest
 test__getitem__
 
-   | list |
-	list := self bytes: '1234'.
+	"In Python, bytes[int] returns an int (the byte value 0-255)"
+	| b |
+	b := self bytes: '1234'.
 
 	self
-		assert: list __len__ equals: (self int: 4);
-		assert: (list __getitem__: (self int: 0)) equals: '1';
+		assert: b __len__ equals: (self int: 4);
+		assert: (b __getitem__: (self int: 0)) equals: (self int: 49);  "ASCII code for '1'"
+		assert: (b __getitem__: (self int: 1)) equals: (self int: 50);  "ASCII code for '2'"
 		yourself
 %
 category: 'done'
 method: bytesTest
 test__getitem__negative
 
-   | list |
-	list := self bytes: 'o'.
+	"In Python, bytes[int] returns an int (the byte value 0-255)"
+	| b |
+	b := self bytes: 'hello'.
 
 	self
-		assert: (list __getitem__: (self int: -1)) equals: 'o';
+		assert: (b __getitem__: (self int: -1)) equals: (self int: 111);  "ASCII code for 'o'"
+		assert: (b __getitem__: (self int: -2)) equals: (self int: 108);  "ASCII code for 'l'"
 		yourself
 %
 category: 'done'
 method: bytesTest
-test__getslice__
+test__getitem__slice
 
-	| x |
+	| x s |
 	x := self bytes: 'abcdefg'.
 
-	self
-		assert: (x __getslice__: (self int: 0) _: (self int: 2)) equals: (self bytes: ('ab'));
-		assert: (x __getslice__: (self int: 2) _: (self int: 3)) equals: (self bytes: ('c'));
-		assert: (x __getslice__: (self int: 2) _: (self int: 2)) equals: (self bytes: (''));
-		assert: (x __getslice__: (self int: -3) _: (self int: -2)) equals: (self bytes: ('e'));
-		yourself.
+	"b[0:2]"
+	s := slice __call__: (self int: 0) _: (self int: 2) _: None.
+	self assert: (x __getitem__: s) equals: (self bytes: 'ab').
+
+	"b[2:3]"
+	s := slice __call__: (self int: 2) _: (self int: 3) _: None.
+	self assert: (x __getitem__: s) equals: (self bytes: 'c').
+
+	"b[2:2] - empty slice"
+	s := slice __call__: (self int: 2) _: (self int: 2) _: None.
+	self assert: (x __getitem__: s) equals: (self bytes: '').
+
+	"b[-3:-2] - negative indices"
+	s := slice __call__: (self int: -3) _: (self int: -2) _: None.
+	self assert: (x __getitem__: s) equals: (self bytes: 'e').
 %
 category: 'done'
 method: bytesTest
@@ -193,22 +215,22 @@ test__init__
 	y := self bytes: 'abc'.
 	z := bytes __call__: (list ___value: { 0. 10. 9 }).
 
-	self 
+	self
 		assert: w ___value size equals: 10;
-		assert: w ___value equals: { 0. 1. 2. 3. 4. 5. 6. 7. 8. 9 };
+		assert: w ___value equals: #[0 1 2 3 4 5 6 7 8 9];
 		assert: x ___value size equals: 3;
-		assert: x ___value equals: { 0. 0. 0 };
+		assert: x ___value equals: #[0 0 0];
 		assert: y ___value size equals: 3;
-		assert: y ___value equals: {	97. 98. 99 };
+		assert: y ___value equals: #[97 98 99];
 		assert: z ___value size equals: 3;
-		assert: z ___value equals: { 0. 10. 9 };
+		assert: z ___value equals: #[0 10 9];
 		yourself.
 
 	w := self bytes: 'abc'.
 
-	self 
+	self
 		assert: w ___value size equals: 3;
-		assert: w ___value equals: { 97. 98. 99. };
+		assert: w ___value equals: #[97 98 99];
 		yourself.
 %
 category: 'done'
@@ -318,9 +340,9 @@ method: bytesTest
 test__str__
 
    | bytes1 bytes2 bytes3 string1 string2 string3 |
-	bytes1 := bytes new ___value: #(97 98 99 100).
-	bytes2 := bytes new ___value: (0 to: 30) asArray.
-	bytes3 := bytes new ___value: (128 to: 139) asArray.
+	bytes1 := bytes new ___value: #[97 98 99 100].
+	bytes2 := bytes new ___value: (0 to: 30) asByteArray.
+	bytes3 := bytes new ___value: (128 to: 139) asByteArray.
 	string1 := bytes1 __str__.
 	string2 := bytes2 __str__.
 	string3 := bytes3 __str__.
@@ -749,6 +771,25 @@ testisupper
 %
 category: 'done'
 method: bytesTest
+testjoin
+
+	| sep |
+	sep := self bytes: ', '.
+
+	self
+		assert: (sep join: (list ___value: { self bytes: 'a'. self bytes: 'b'. self bytes: 'c' })) equals: (self bytes: 'a, b, c');
+		assert: ((self bytes: '') join: (list ___value: { self bytes: 'a'. self bytes: 'b' })) equals: (self bytes: 'ab');
+		assert: (sep join: (list ___value: { self bytes: 'hello' })) equals: (self bytes: 'hello');
+		assert: (sep join: (list ___value: { })) equals: (self bytes: '');
+		yourself.
+
+	self should: [sep join: (list ___value: { self str: 'a' })]
+			raise: TypeError
+			withExceptionDo: [:exception |
+				self assert: (exception messageText beginsWith: 'sequence item')]
+%
+category: 'done'
+method: bytesTest
 testljust
 
 "
@@ -1076,6 +1117,20 @@ testrstrip
 %
 category: 'done'
 method: bytesTest
+testsplitlines
+
+	| b |
+	b := bytes ___value: #[108 105 110 101 49 10 108 105 110 101 50 13 108 105 110 101 51].  "line1\nline2\rline3"
+
+	self
+		assert: b splitlines
+			equals: (list ___value: { self bytes: 'line1'. self bytes: 'line2'. self bytes: 'line3' });
+		assert: (b splitlines: True)
+			equals: (list ___value: { bytes ___value: #[108 105 110 101 49 10]. bytes ___value: #[108 105 110 101 50 13]. self bytes: 'line3' });
+		yourself
+%
+category: 'done'
+method: bytesTest
 testsplitOnSep
 
 	self
@@ -1205,6 +1260,17 @@ testupper
 		assert: (self bytes: 'Abcd') upper equals: abcd;
 		yourself
 %
+category: 'done'
+method: bytesTest
+testzfill
+
+	self
+		assert: ((self bytes: '42') zfill: (self int: 5)) equals: (self bytes: '00042');
+		assert: ((self bytes: '-42') zfill: (self int: 5)) equals: (bytes ___value: #[45 48 48 52 50]);  "-0042"
+		assert: ((self bytes: '+42') zfill: (self int: 5)) equals: (bytes ___value: #[43 48 48 52 50]);  "+0042"
+		assert: ((self bytes: '42') zfill: (self int: 1)) equals: (self bytes: '42');
+		yourself
+%
 category: 'setup'
 method: bytesTest
 bytes: aString
@@ -1247,12 +1313,6 @@ testhex
 %
 category: 'todo'
 method: bytesTest
-testjoin
-
-   #pyTodo
-%
-category: 'todo'
-method: bytesTest
 testmaketrans
 
    #pyTodo
@@ -1277,19 +1337,7 @@ testsplit
 %
 category: 'todo'
 method: bytesTest
-testsplitlines
-
-   #pyTodo
-%
-category: 'todo'
-method: bytesTest
 testtranslate
-
-   #pyTodo
-%
-category: 'todo'
-method: bytesTest
-testzfill
 
    #pyTodo
 %

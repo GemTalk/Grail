@@ -2,11 +2,30 @@
 removeallmethods dict
 removeallclassmethods dict
 ! ------------------- Class methods for dict
+category: 'Python'
+classmethod: dict
+fromkeys: iterable
+	"Create a new dictionary with keys from iterable and values set to None."
+
+	^self fromkeys: iterable _: None
+%
+category: 'Python'
+classmethod: dict
+fromkeys: iterable _: value
+	"Create a new dictionary with keys from iterable and values set to value."
+
+	| newDict |
+	newDict := dict ___value: OrderedDictionary new.
+	iterable ___container do: [:each |
+		newDict ___container at: each put: value
+	].
+	^newDict
+%
 category: 'Smalltalk'
 classmethod: dict
 ___containerClass
 
-	^Dictionary
+	^OrderedDictionary
 %
 category: 'Smalltalk'
 classmethod: dict
@@ -35,13 +54,70 @@ __delitem__: aKey
 %
 category: 'Python'
 method: dict
-__ge__: otherCollection
+__doc__
 
-	^(self __gt__: otherCollection) or: [self __eq__: otherCollection]
+	^str ___value: 'dict() -> new empty dictionary\n' ,
+		'dict(mapping) -> new dictionary initialized from a mapping object''s\n' ,
+		'    (key, value) pairs\n' ,
+		'dict(iterable) -> new dictionary initialized as if via:\n' ,
+		'    d = {}\n' ,
+		'    for k, v in iterable:\n' ,
+		'        d[k] = v\n' ,
+		'dict(**kwargs) -> new dictionary initialized with the name=value pairs\n' ,
+		'    in the keyword argument list.  For example:  dict(one=1, two=2)'
+%
+category: 'Python'
+method: dict
+__eq__: otherDict
+	"Two dicts are equal if they have the same keys with equal values.
+	 Uses Python equality (__eq__) for Python objects."
+
+	(otherDict isKindOf: dict) ifFalse: [^False].
+	self ___container size = otherDict ___container size ifFalse: [^False].
+	self ___container keysAndValuesDo: [:key :value |
+		| otherValue keysEqual valuesEqual |
+		"Check if key exists in other dict"
+		otherValue := otherDict ___container at: key ifAbsent: [
+			"Key not found directly - try Python equality for keys"
+			| found |
+			found := false.
+			otherDict ___container keysAndValuesDo: [:otherKey :otherVal |
+				found ifFalse: [
+					keysEqual := (key isKindOf: object)
+						ifTrue: [(key __eq__: otherKey) == True]
+						ifFalse: [key = otherKey].
+					keysEqual ifTrue: [
+						otherValue := otherVal.
+						found := true.
+					].
+				].
+			].
+			found ifFalse: [^False].
+			otherValue
+		].
+		"Compare values using Python equality if both are Python objects"
+		valuesEqual := ((value isKindOf: object) and: [otherValue isKindOf: object])
+			ifTrue: [(value __eq__: otherValue) == True]
+			ifFalse: [value = otherValue].
+		valuesEqual ifFalse: [^False]
+	].
+	^True
+%
+category: 'Python'
+method: dict
+__ge__: otherDict
+	"Python 3: dict does not support ordering comparisons"
+
+	TypeError signal: 'TypeError: ''>'' not supported between instances of ''dict'' and ''dict'''
 %
 category: 'Python'
 method: dict
 __getitem__: aKey
+
+	"Dicts don't support slicing"
+	(aKey isKindOf: slice) ifTrue: [
+		TypeError signal: 'unhashable type: ''slice'''
+	].
 
 	^self ___container
 		at: aKey
@@ -49,45 +125,38 @@ __getitem__: aKey
 %
 category: 'Python'
 method: dict
-__getslice__: aPyIntStart _: aPyIntEnd
+__gt__: otherDict
+	"Python 3: dict does not support ordering comparisons"
 
-	TypeError signal:  'unhashable type: slice'
+	TypeError signal: 'TypeError: ''>'' not supported between instances of ''dict'' and ''dict'''
 %
 category: 'Python'
 method: dict
-__gt__: otherDict
-	"https://stackoverflow.com/questions/29916585/dictionary-gt-and-lt-implementation"
-	#pyElaborate. "this is an aproximated implementation"
+__hash__
+	"dict is mutable and unhashable"
 
-	^(self ___container size > otherDict ___container size) or: [
-		 (self ___container size = otherDict ___container size) and: [
-			self ___container keys do: [:key |
-				(self ___container at: key) > (otherDict ___container at: key ifAbsent: [^true])
-					ifTrue: [^true].
-				(self ___container at: key) < (otherDict ___container at: key)
-				   ifTrue: [^false]
-			]
-		].
-		false
-	]
+	TypeError signal: 'unhashable type: ''dict'''
 %
 category: 'Python'
 method: dict
 __ior__: aDict
 
 	self ___container addAll: aDict ___container.
+	^self
 %
 category: 'Python'
 method: dict
-__le__: otherCollection
+__le__: otherDict
+	"Python 3: dict does not support ordering comparisons"
 
-	^(self __gt__: otherCollection) not
+	TypeError signal: 'TypeError: ''<'' not supported between instances of ''dict'' and ''dict'''
 %
 category: 'Python'
 method: dict
-__lt__: otherCollection
+__lt__: otherDict
+	"Python 3: dict does not support ordering comparisons"
 
-	^(self __gt__: otherCollection) not and: [self __ne__: otherCollection]
+	TypeError signal: 'TypeError: ''<'' not supported between instances of ''dict'' and ''dict'''
 %
 category: 'Python'
 method: dict
@@ -143,7 +212,7 @@ category: 'Python'
 method: dict
 clear
 
-	^self ___container removeAllKeys: self ___container keys
+	self ___container clear
 %
 category: 'Python'
 method: dict
@@ -154,8 +223,18 @@ copy
 category: 'Python'
 method: dict
 get: aKey
+	"Return the value for key if key is in the dictionary, else None."
 
-	^self __getitem__: aKey
+	^self get: aKey _: None
+%
+category: 'Python'
+method: dict
+get: aKey _: default
+	"Return the value for key if key is in the dictionary, else default."
+
+	^self ___container
+		at: aKey
+		ifAbsent: [default]
 %
 category: 'Python'
 method: dict
@@ -178,14 +257,65 @@ keys
 category: 'Python'
 method: dict
 pop: aKey
+	"Remove specified key and return the corresponding value.
+	 If the key is not found, raise KeyError."
 
-	^self __delitem__: aKey
+	| value |
+	value := self ___container at: aKey ifAbsent: [
+		KeyError signal: aKey __repr__ ___value
+	].
+	self ___container removeKey: aKey.
+	^value
+%
+category: 'Python'
+method: dict
+pop: aKey _: default
+	"Remove specified key and return the corresponding value.
+	 If the key is not found, return default."
+
+	| value |
+	value := self ___container at: aKey ifAbsent: [^default].
+	self ___container removeKey: aKey.
+	^value
+%
+category: 'Python'
+method: dict
+popitem
+	"Remove and return a (key, value) pair as a tuple.
+	 In CPython 3.7+, pairs are returned in LIFO order.
+	 Raises KeyError if empty."
+
+	| key value |
+	container size == 0 ifTrue: [
+		KeyError signal: 'popitem(): dictionary is empty'
+	].
+	key := container lastKey.
+	value := container at: key.
+	container removeKey: key.
+	^tuple ___value: (Array with: key with: value)
+%
+category: 'Python'
+method: dict
+setdefault: aKey
+	"If key is in the dictionary, return its value.
+	 If not, insert key with value None and return None."
+
+	^self setdefault: aKey _: None
+%
+category: 'Python'
+method: dict
+setdefault: aKey _: default
+	"If key is in the dictionary, return its value.
+	 If not, insert key with value of default and return default."
+
+	^self ___container at: aKey ifAbsentPut: [default]
 %
 category: 'Python'
 method: dict
 update: anObject
-	"update the dictionary with the new key, value pairs in anObject,
-		this can be done with another dictionary or nested data structures"
+	"Update the dictionary with the key/value pairs from anObject.
+	 Returns None (like Python)."
+
 	| index KeyAndValue |
 	anObject class == dict ifTrue: [
 		anObject ___container keysAndValuesDo: [:key :val | self ___container at: key put: val].
@@ -214,6 +344,7 @@ update: anObject
 			].
 		].
 	].
+	^None
 %
 category: 'Python'
 method: dict

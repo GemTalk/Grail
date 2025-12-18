@@ -20,8 +20,8 @@ method: WhileAst
 printSmalltalkOn: aStream
 
 	aStream nextPut: $[.
-	test printSmalltalkOn: aStream. " Doesn't need parenthesis "
-	aStream nextPutAll: '] whileTrue: ['; lf; increaseIndent; yourself.
-	body printSmalltalkOn: aStream. " Doesn't need parenthesis "
-	aStream lf; decreaseIndent; nextPutAll: '].'.
+	test printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: ' __bool__ ___value] whileTrue: ['; lf; increaseIndent; yourself.
+	body printSmalltalkOn: aStream.
+	aStream lf; decreaseIndent; nextPutAll: ']'.
 %

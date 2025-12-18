@@ -81,9 +81,9 @@ setType: aReadStream
 	
 	(validTypes includes: type) ifFalse: [
 		ValueError signal:
-			'ValueError: unsupported format character ''',
-			type asString,''' (0x', (type asciiValue printStringRadix: 16) ,
-			') at ', (aReadStream position + 1) asString.
+			'ValueError: unsupported format character ''' ,
+			type asString , ''' (0x' , (type asciiValue printStringRadix: 16) ,
+			') at ' , (aReadStream position + 1) asString.
 	].
 %
 category: 'other'

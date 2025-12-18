@@ -64,15 +64,37 @@ category: 'done'
 method: intTest
 test__divmod__
 
+	| result |
+	result := (self int: 3) __divmod__: (self int: 4).
 	self
-		assert: ((self int: 3) __divmod__: (self int: 4)) ___container asArray equals: #(0 3);
-		assert: ((self int: 3) __divmod__: (self int: -4)) ___container asArray equals: #(-1 -1);
-		assert: ((self int: -3) __divmod__: (self int: -4)) ___container asArray equals: #(0 -3);
-		assert: ((self int: 4) __divmod__: (self int: 3)) ___container asArray equals: #(1 1);
-		assert: ((self int: 4) __divmod__: (self int: -3)) ___container asArray equals: #(-2 -2);
-		assert: ((self int: -4) __divmod__: (self int: -3)) ___container asArray equals: #(1 -1);
-		assert: ((self int: -4) __divmod__: (self int: 3)) ___container asArray equals: #(-2 2);
-		yourself
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(0 3).
+	result := (self int: 3) __divmod__: (self int: -4).
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(-1 -1).
+	result := (self int: -3) __divmod__: (self int: -4).
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(0 -3).
+	result := (self int: 4) __divmod__: (self int: 3).
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(1 1).
+	result := (self int: 4) __divmod__: (self int: -3).
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(-2 -2).
+	result := (self int: -4) __divmod__: (self int: -3).
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(1 -1).
+	result := (self int: -4) __divmod__: (self int: 3).
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(-2 2).
+%
+category: 'done'
+method: intTest
+test__doc__
+	"int.__doc__ should return a str"
+
+	| doc |
+	doc := (self int: 42) __doc__.
+	self assert: (doc isKindOf: str).
 %
 category: 'done'
 method: intTest
@@ -128,6 +150,20 @@ test__ge__
 		assert: ((self int: 3) __ge__: (self int: 3));
 		assert: ((self int: 4) __ge__: (self int: 3));
 		yourself
+%
+category: 'done'
+method: intTest
+test__getnewargs__
+
+	| result |
+	result := (self int: 5) __getnewargs__.
+	self
+		assert: result class equals: tuple;
+		assert: result ___value size equals: 1;
+		assert: (result ___value first) ___value equals: 5.
+
+	result := (self int: -3) __getnewargs__.
+	self assert: (result ___value first) ___value equals: -3.
 %
 category: 'done'
 method: intTest
@@ -287,9 +323,9 @@ category: 'done'
 method: intTest
 test__pos__
 
-   self
+	self
 		assert: (self int: 3) __pos__ ___value equals: 3;
-        assert: (self int: -3) __pos__ ___value equals: 3;
+		assert: (self int: -3) __pos__ ___value equals: -3;
 		yourself.
 %
 category: 'done'
@@ -337,15 +373,28 @@ category: 'done'
 method: intTest
 test__rdivmod__
 
+	| result |
+	result := (self int: 4) __rdivmod__: (self int: 3).
 	self
-		assert: ((self int: 4) __rdivmod__: (self int: 3)) ___container asArray equals: #(0 3);
-		assert: ((self int: -4) __rdivmod__: (self int: 3)) ___container asArray equals: #(-1 -1);
-		assert: ((self int: -4) __rdivmod__: (self int: -3)) ___container asArray equals: #(0 -3);
-		assert: ((self int: 3) __rdivmod__: (self int: 4)) ___container asArray equals: #(1 1);
-		assert: ((self int: -3) __rdivmod__: (self int: 4)) ___container asArray equals: #(-2 -2);
-		assert: ((self int: -3) __rdivmod__: (self int: -4)) ___container asArray equals: #(1 -1);
-		assert: ((self int: 3) __rdivmod__: (self int: -4)) ___container asArray equals: #(-2 2);
-		yourself
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(0 3).
+	result := (self int: -4) __rdivmod__: (self int: 3).
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(-1 -1).
+	result := (self int: -4) __rdivmod__: (self int: -3).
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(0 -3).
+	result := (self int: 3) __rdivmod__: (self int: 4).
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(1 1).
+	result := (self int: -3) __rdivmod__: (self int: 4).
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(-2 -2).
+	result := (self int: -3) __rdivmod__: (self int: -4).
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(1 -1).
+	result := (self int: 3) __rdivmod__: (self int: -4).
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(-2 2).
 %
 category: 'done'
 method: intTest
@@ -390,12 +439,13 @@ test__rmul__
 category: 'done'
 method: intTest
 test__ror__
+	"Test reverse or: (self int: 3) __ror__: x returns x __or__: (self int: 3)"
 
 	self
-		assert: ((self int: 1) __or__: (self int: 3)) ___value equals: 3;
-        assert: ((self int: 1) __or__: (self int: -3)) ___value equals: -3;
-        assert: ((self int: 2) __or__: (self int: 3)) ___value equals: 3;
-        assert: ((self int: 2) __or__: (self int: -3)) ___value equals: -1;
+		assert: ((self int: 3) __ror__: (self int: 1)) ___value equals: 3;
+		assert: ((self int: -3) __ror__: (self int: 1)) ___value equals: -3;
+		assert: ((self int: 3) __ror__: (self int: 2)) ___value equals: 3;
+		assert: ((self int: -3) __ror__: (self int: 2)) ___value equals: -1;
 		yourself.
 %
 category: 'done'
@@ -518,10 +568,28 @@ category: 'done'
 method: intTest
 test_as_integer_ratio
 
+	| result |
+	result := (self int: 3) as_integer_ratio.
 	self
-		assert: ((self int: 3) as_integer_ratio) ___container asArray equals: #(3 1);
-		assert: ((self int: -3) as_integer_ratio) ___container asArray equals: #(-3 1);
-		assert: ((self int: 0) as_integer_ratio) ___container asArray equals: #(0 1);
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(3 1).
+	result := (self int: -3) as_integer_ratio.
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(-3 1).
+	result := (self int: 0) as_integer_ratio.
+	self
+		assert: (result ___container collect: [:each | each ___value]) asArray equals: #(0 1).
+%
+category: 'done'
+method: intTest
+test_bit_count
+
+	self
+		assert: (self int:  7) bit_count ___value equals: 3;   "binary 111"
+		assert: (self int:  4) bit_count ___value equals: 1;   "binary 100"
+		assert: (self int:  3) bit_count ___value equals: 2;   "binary 11"
+		assert: (self int: -3) bit_count ___value equals: 2;   "abs value"
+		assert: (self int: 255) bit_count ___value equals: 8;  "binary 11111111"
+		assert: (self int:  0) bit_count ___value equals: 0;
 		yourself.
 %
 category: 'done'
@@ -558,11 +626,42 @@ test_denominator
 %
 category: 'done'
 method: intTest
+test_from_bytes
+
+	"Test big-endian"
+	self assert: (int from_bytes: (bytes ___value: #[0 16]) _: (str ___value: 'big')) ___value equals: 16.
+	self assert: (int from_bytes: (bytes ___value: #[1 0]) _: (str ___value: 'big')) ___value equals: 256.
+
+	"Test little-endian"
+	self assert: (int from_bytes: (bytes ___value: #[0 16]) _: (str ___value: 'little')) ___value equals: 4096.
+	self assert: (int from_bytes: (bytes ___value: #[1 0]) _: (str ___value: 'little')) ___value equals: 1.
+
+	"Test signed - positive"
+	self assert: (int from_bytes: (bytes ___value: #[127]) _: (str ___value: 'big') _: False) ___value equals: 127.
+	self assert: (int from_bytes: (bytes ___value: #[127]) _: (str ___value: 'big') _: True) ___value equals: 127.
+
+	"Test signed - negative"
+	self assert: (int from_bytes: (bytes ___value: #[255]) _: (str ___value: 'big') _: False) ___value equals: 255.
+	self assert: (int from_bytes: (bytes ___value: #[255]) _: (str ___value: 'big') _: True) ___value equals: -1.
+	self assert: (int from_bytes: (bytes ___value: #[255 255]) _: (str ___value: 'big') _: True) ___value equals: -1.
+%
+category: 'done'
+method: intTest
 test_imag
 
 	self
 		assert: (self int: 3) imag  ___value equals: 0;
         assert: (self int: -3) imag ___value equals: 0;
+		yourself.
+%
+category: 'done'
+method: intTest
+test_is_integer
+
+	self
+		assert: (self int: 0) is_integer == True;
+		assert: (self int: 3) is_integer == True;
+		assert: (self int: -3) is_integer == True;
 		yourself.
 %
 category: 'done'
@@ -582,6 +681,154 @@ test_real
 		assert: (self int: 3) real ___value equals: 3;
         assert: (self int: -3) real ___value equals: -3;
 		yourself.
+%
+category: 'done'
+method: intTest
+test_to_bytes
+
+	| result |
+	"Test big-endian"
+	result := (self int: 1024) to_bytes: (int ___value: 2) _: (str ___value: 'big').
+	self assert: result ___container equals: #[4 0].
+
+	"Test little-endian"
+	result := (self int: 1024) to_bytes: (int ___value: 2) _: (str ___value: 'little').
+	self assert: result ___container equals: #[0 4].
+
+	"Test with more bytes"
+	result := (self int: 256) to_bytes: (int ___value: 4) _: (str ___value: 'big').
+	self assert: result ___container equals: #[0 0 1 0].
+
+	"Test signed negative"
+	result := (self int: -1) to_bytes: (int ___value: 2) _: (str ___value: 'big') _: True.
+	self assert: result ___container equals: #[255 255].
+
+	result := (self int: -128) to_bytes: (int ___value: 1) _: (str ___value: 'big') _: True.
+	self assert: result ___container equals: #[128].
+%
+category: 'done'
+method: intTest
+testas_integer_ratio
+	"int.as_integer_ratio() returns (n, 1) tuple"
+
+	| result |
+	result := (self int: 42) as_integer_ratio.
+	self assert: (result isKindOf: tuple).
+	self assert: (result __getitem__: (self int: 0)) ___value equals: 42.
+	self assert: (result __getitem__: (self int: 1)) ___value equals: 1.
+
+	result := (self int: -5) as_integer_ratio.
+	self assert: (result __getitem__: (self int: 0)) ___value equals: -5.
+	self assert: (result __getitem__: (self int: 1)) ___value equals: 1.
+%
+category: 'done'
+method: intTest
+testbit_count
+	"int.bit_count() returns number of 1s in binary representation"
+
+	self
+		assert: (self int: 0) bit_count ___value equals: 0;
+		assert: (self int: 1) bit_count ___value equals: 1;
+		assert: (self int: 7) bit_count ___value equals: 3;
+		assert: (self int: 19) bit_count ___value equals: 3;
+		assert: (self int: -19) bit_count ___value equals: 3;
+		yourself.
+%
+category: 'done'
+method: intTest
+testbit_length
+	"int.bit_length() returns number of bits to represent integer"
+
+	self
+		assert: (self int: 0) bit_length ___value equals: 0;
+		assert: (self int: 1) bit_length ___value equals: 1;
+		assert: (self int: 2) bit_length ___value equals: 2;
+		assert: (self int: 37) bit_length ___value equals: 6;
+		assert: (self int: -37) bit_length ___value equals: 6;
+		yourself.
+%
+category: 'done'
+method: intTest
+testdenominator
+	"int.denominator always returns 1"
+
+	self
+		assert: (self int: 42) denominator ___value equals: 1;
+		assert: (self int: 0) denominator ___value equals: 1;
+		assert: (self int: -5) denominator ___value equals: 1;
+		yourself.
+%
+category: 'done'
+method: intTest
+testfrom_bytes
+	"int.from_bytes() class method"
+
+	self
+		assert: (int from_bytes: (bytes ___value: #[0 42]) _: (str ___value: 'big')) ___value equals: 42;
+		assert: (int from_bytes: (bytes ___value: #[42 0]) _: (str ___value: 'little')) ___value equals: 42;
+		assert: (int from_bytes: (bytes ___value: #[0 0 1 0]) _: (str ___value: 'big')) ___value equals: 256;
+		yourself.
+%
+category: 'done'
+method: intTest
+testimag
+	"int.imag always returns 0"
+
+	self
+		assert: (self int: 42) imag ___value equals: 0;
+		assert: (self int: -5) imag ___value equals: 0;
+		yourself.
+%
+category: 'done'
+method: intTest
+testis_integer
+	"int.is_integer() always returns True"
+
+	self
+		assert: (self int: 42) is_integer == True;
+		assert: (self int: 0) is_integer == True;
+		assert: (self int: -5) is_integer == True;
+		yourself.
+%
+category: 'done'
+method: intTest
+testnumerator
+	"int.numerator returns self"
+
+	| n |
+	n := self int: 42.
+	self assert: n numerator == n.
+
+	n := self int: -5.
+	self assert: n numerator == n.
+%
+category: 'done'
+method: intTest
+testreal
+	"int.real returns self"
+
+	| n |
+	n := self int: 42.
+	self assert: n real == n.
+
+	n := self int: -5.
+	self assert: n real == n.
+%
+category: 'done'
+method: intTest
+testto_bytes
+	"int.to_bytes() method"
+
+	| result |
+	result := (self int: 42) to_bytes: (self int: 2) _: (str ___value: 'big').
+	self assert: (result isKindOf: bytes).
+	self assert: result ___value equals: #[0 42].
+
+	result := (self int: 42) to_bytes: (self int: 2) _: (str ___value: 'little').
+	self assert: result ___value equals: #[42 0].
+
+	result := (self int: 256) to_bytes: (self int: 4) _: (str ___value: 'big').
+	self assert: result ___value equals: #[0 0 1 0].
 %
 category: 'done'
 method: intTest

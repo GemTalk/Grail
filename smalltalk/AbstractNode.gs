@@ -133,7 +133,7 @@ interpretEscapeSequence: aStream
 	| char |
 	char := aStream next.
 	(char == $x) ifTrue: [
-		^Character codePoint: ('16r', (aStream next: 2)) asInteger
+		^Character codePoint: ('16r' , (aStream next: 2)) asInteger
 	].
 	^Character codePoint: (self class escapeCharacters at: char)
 %

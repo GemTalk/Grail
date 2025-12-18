@@ -2,6 +2,87 @@
 removeallmethods float
 removeallclassmethods float
 ! ------------------- Class methods for float
+category: 'Python-float'
+classmethod: float
+__getformat__: typestr
+	"Return information about the float type.
+	 typestr must be 'double' or 'float'."
+
+	| ts |
+	ts := typestr ___value.
+	(ts = 'double' or: [ts = 'float']) ifFalse: [
+		ValueError signal: '__getformat__() argument must be ''double'' or ''float'''.
+	].
+	"GemStone uses IEEE 754 format"
+	^str ___value: 'IEEE, little-endian'
+%
+category: 'Python-float'
+classmethod: float
+__new__
+	"Create a new float instance with default value 0.0"
+
+	^self basicNew
+		___value: 0.0;
+		yourself
+%
+category: 'Python-float'
+classmethod: float
+from_number: aNumber
+	"Create a float from a number. Equivalent to float(x) for numeric x."
+
+	^self ___value: aNumber __float__ ___value
+%
+category: 'Python-float'
+classmethod: float
+fromhex: aHexString
+	"Create a floating-point number from a hexadecimal string.
+	 Format: [sign] ['0x'] integer ['.' fraction] ['p' exponent]"
+
+	| s sign mantissa exponent idx val result dotIdx pIdx |
+	s := aHexString ___value asLowercase.
+	sign := 1.
+	idx := 1.
+
+	"Parse sign"
+	(s at: 1) = $- ifTrue: [sign := -1. idx := 2].
+	(s at: 1) = $+ ifTrue: [idx := 2].
+
+	"Skip '0x' prefix if present"
+	(s size >= (idx + 1) and: [(s copyFrom: idx to: idx + 1) = '0x'])
+		ifTrue: [idx := idx + 2].
+
+	"Find 'p' for exponent"
+	pIdx := s findString: 'p' startingAt: idx.
+	pIdx = 0 ifTrue: [
+		"No exponent"
+		exponent := 0.
+		mantissa := s copyFrom: idx to: s size.
+	] ifFalse: [
+		mantissa := s copyFrom: idx to: pIdx - 1.
+		exponent := (s copyFrom: pIdx + 1 to: s size) asInteger.
+	].
+
+	"Parse mantissa (may have decimal point)"
+	dotIdx := mantissa findString: '.' startingAt: 1.
+	dotIdx = 0 ifTrue: [
+		"Integer mantissa"
+		val := (Integer fromHexString: mantissa) asFloat.
+	] ifFalse: [
+		| intPart fracPart fracVal |
+		intPart := mantissa copyFrom: 1 to: dotIdx - 1.
+		fracPart := mantissa copyFrom: dotIdx + 1 to: mantissa size.
+		intPart isEmpty ifTrue: [intPart := '0'].
+		val := (Integer fromHexString: intPart) asFloat.
+		fracPart isEmpty ifFalse: [
+			fracVal := (Integer fromHexString: fracPart) asFloat.
+			val := val + (fracVal / (16 raisedTo: fracPart size)).
+		].
+	].
+
+	"Apply exponent (power of 2)"
+	result := val * (2 raisedTo: exponent) * sign.
+	^float ___value: result
+%
 category: 'Smalltalk'
 classmethod: float
 ___value: aNumber
@@ -266,7 +347,13 @@ category: 'Python-float'
 method: float
 __divmod__: anObject
 
-	^tuple  ___value: { value // anObject ___value. value \\ anObject ___value }
+	^tuple  ___value: { float ___value: value // anObject ___value. float ___value: value \\ anObject ___value }
+%
+category: 'Python-float'
+method: float
+__doc__
+
+	^str ___value: 'Convert a string or number to a floating-point number, if possible.'
 %
 category: 'Python-float'
 method: float
@@ -288,27 +375,70 @@ __floordiv__: anObject
 %
 category: 'Python-float'
 method: float
-__fromhex__
+__format__: formatSpec
+	"Format the float according to the format specification.
+	 Format: [[fill]align][sign][#][0][width][,][.precision][type]
+	 Type can be: e, E, f, F, g, G, n, %"
 
-	self error: #pyTodo
-%
-category: 'Python-float'
-method: float
-__getformat__
+	| spec precision typeChar idx |
+	spec := formatSpec ___value.
+	spec isEmpty ifTrue: [^self __str__].
 
-	self error: #pyTodo
+	"Parse simple format specs like '.2f', 'f', '.4e', etc."
+	typeChar := spec last.
+	('eEfFgGn%' includes: typeChar) ifFalse: [
+		"Default to general format if no type specified"
+		typeChar := $g.
+	].
+
+	"Find precision (digits after the dot)"
+	idx := spec indexOf: $..
+	idx > 0
+		ifTrue: [
+			| precStr |
+			precStr := spec copyFrom: idx + 1 to: spec size - 1.
+			precStr isEmpty
+				ifTrue: [precision := 0]
+				ifFalse: [precision := precStr asInteger].
+		]
+		ifFalse: [precision := ''].
+
+	^str ___value: (self ___convertWithFlags: Set new precision: precision andType: typeChar)
 %
 category: 'Python-float'
 method: float
 __getnewargs__
+	"Return a tuple of arguments for pickling"
 
-	self error: #pyTodo
+	^tuple ___value: { self }
 %
 category: 'Python-float'
 method: float
-__hex__
+__getstate__
+	"Return state for pickling. Not implemented - implement when adding pickle support."
 
-	self error: #pyTodo
+	NotImplementedError signal: '__getstate__ is not implemented. Implement when adding pickle support.'
+%
+category: 'Python-float'
+method: float
+__hash__
+	"Return hash value. Integer-valued floats hash the same as the corresponding integer."
+
+	| intVal kind |
+	kind := value _getKind.
+	kind >= 5 ifTrue: [^int ___value: value hash].  "NaN"
+	kind = 3 ifTrue: [^int ___value: (value > 0 ifTrue: [314159] ifFalse: [-314159])].  "Infinity"
+	intVal := value truncated.
+	(value = intVal asFloat)
+		ifTrue: [^int ___value: intVal hash]
+		ifFalse: [^int ___value: value hash].
+%
+category: 'Python-float'
+method: float
+__init_subclass__
+	"Called when subclassing float. Not implemented - implement when adding metaclass support."
+
+	NotImplementedError signal: '__init_subclass__ is not implemented. Implement when adding metaclass support.'
 %
 category: 'Python-float'
 method: float
@@ -351,6 +481,20 @@ method: float
 __rdivmod__: any
 
 	^any __divmod__: self
+%
+category: 'Python-float'
+method: float
+__reduce__
+	"Return state for pickling. Not implemented - implement when adding pickle support."
+
+	NotImplementedError signal: '__reduce__ is not implemented. Implement when adding pickle support.'
+%
+category: 'Python-float'
+method: float
+__reduce_ex__: protocol
+	"Return state for pickling with protocol version. Not implemented - implement when adding pickle support."
+
+	NotImplementedError signal: '__reduce_ex__ is not implemented. Implement when adding pickle support.'
 %
 category: 'Python-float'
 method: float
@@ -427,12 +571,6 @@ __rtruediv__: any
 %
 category: 'Python-float'
 method: float
-__setformat__
-
-	self error: #pyTodo
-%
-category: 'Python-float'
-method: float
 __sub__: anObject
 
 	^float ___value: value - anObject ___value
@@ -455,13 +593,59 @@ as_integer_ratio
 
 	| val |
 	val := value asFraction.
-   ^tuple ___value: { val numerator. val denominator }
+   ^tuple ___value: { int ___value: val numerator. int ___value: val denominator }
 %
 category: 'Python-float'
 method: float
 conjugate
 
 	^self
+%
+category: 'Python-float'
+method: float
+hex
+	"Return a hexadecimal string representation of a floating-point number.
+	 Format: [sign] '0x' integer '.' fraction 'p' [sign] exponent"
+
+	| sign mantissa exponent mantissaHex result absVal kind |
+	value = 0.0 ifTrue: [^str ___value: '0x0.0000000000000p+0'].
+
+	"Check for exceptional values (NaN, Infinity)"
+	kind := value _getKind.
+	kind >= 5 ifTrue: [^str ___value: 'nan'].  "NaN"
+	kind = 3 ifTrue: [  "Infinity"
+		^str ___value: (value > 0 ifTrue: ['inf'] ifFalse: ['-inf'])
+	].
+
+	absVal := value abs.
+	sign := value < 0 ifTrue: ['-'] ifFalse: [''].
+
+	"Get the exponent (power of 2)"
+	exponent := absVal fractionPart = 0
+		ifTrue: [(absVal ln / 2 ln) floor]
+		ifFalse: [(absVal ln / 2 ln) floor].
+
+	"Normalize mantissa to be in range [1, 2)"
+	mantissa := absVal / (2 raisedTo: exponent).
+
+	"Handle denormalized numbers"
+	mantissa >= 2 ifTrue: [
+		exponent := exponent + 1.
+		mantissa := mantissa / 2.
+	].
+	mantissa < 1 ifTrue: [
+		exponent := exponent - 1.
+		mantissa := mantissa * 2.
+	].
+
+	"Convert mantissa to hex (13 hex digits for 52-bit mantissa)"
+	mantissaHex := ((mantissa - 1) * (16 raisedTo: 13)) rounded printStringRadix: 16.
+	mantissaHex := mantissaHex asLowercase.
+	[mantissaHex size < 13] whileTrue: [mantissaHex := '0', mantissaHex].
+
+	result := sign, '0x1.', mantissaHex, 'p',
+		(exponent >= 0 ifTrue: ['+'] ifFalse: ['']), exponent printString.
+	^str ___value: result
 %
 category: 'Python-float'
 method: float
@@ -472,8 +656,9 @@ imag
 category: 'Python-float'
 method: float
 is_integer
+	"Return True if the float is an integer value (has no fractional part)"
 
-	^self __trunc__ __eq__: self
+	^bool ___value: value = value truncated
 %
 category: 'Python-float'
 method: float
@@ -528,6 +713,23 @@ method: float
 __ne__: anObject
 
 	^bool ___value: value ~= anObject ___value
+%
+category: 'Python-object'
+method: float
+__repr__
+
+	^str ___value: value printString
+%
+category: 'Python-object'
+method: float
+__str__
+	"Return string representation of the float."
+
+	| s |
+	s := value printString.
+	"Handle -0.0 specially - use signBit to detect negative zero"
+	(value = 0.0 and: [value signBit = 1]) ifTrue: [s := '-0.0'].
+	^str ___value: s
 %
 category: 'Smalltalk'
 method: float

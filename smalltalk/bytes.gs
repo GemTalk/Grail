@@ -39,22 +39,19 @@ __new__: pythonObject
 "
 	pythonBytes can be:
 		literal - byte string
-		int - fill a bytearray of length pythonBytes with 0
+		int - fill a bytearray of length pythonBytes with 0 (ByteArray is already initialized to 0s)
 		iterable - fill bytearray with an iterable of integers
 
 "
 	(pythonObject isKindOf: int) ifTrue: [
-		| newArray |
-		newArray := self ___containerClass new: pythonObject ___value.
-		newArray fillFrom: 1 to: pythonObject ___value with: 0.
-		^self basicNew ___value: newArray immediateInvariant
+		^self basicNew ___value: (ByteArray new: pythonObject ___value)
 	].
 	" TODO should throw error if iterable contains non-int value "
 	((pythonObject isKindOf: range)
 		or: [(pythonObject isKindOf: list)
 		or: [(pythonObject isKindOf: set)
 		or: [pythonObject isKindOf: tuple]]]) ifTrue: [
-		^self basicNew ___value: (pythonObject ___value asArray) immediateInvariant
+		^self basicNew ___value: pythonObject ___value asArray
 	].
 	(pythonObject isKindOf: str) ifTrue: [
 		TypeError signal: 'string argument without an encoding'
@@ -70,10 +67,10 @@ __new__: pythonString _: encoding
 	" TODO support more encodings "
 	(encoding ___value = 'ascii') ifTrue: [
 		(pythonString ___value isKindOf: Unicode7) ifTrue: [
-			^self basicNew ___value: (self ___containerClass new addAll: (pythonString ___value asArray collect: [:each | each codePoint])) immediateInvariant
+			^self basicNew ___value: (pythonString ___value asArray collect: [:each | each codePoint])
 		].
 		(pythonString ___value isKindOf: String) ifTrue: [
-			^self basicNew ___value: (self ___containerClass new addAll: (pythonString ___value asArray collect: [:each | each codePoint])) immediateInvariant
+			^self basicNew ___value: (pythonString ___value asArray collect: [:each | each codePoint])
 		].
 	].
 	self error: 'we only support ascii for now'
@@ -95,7 +92,7 @@ category: 'Smalltalk'
 classmethod: bytes
 ___containerClass
 
-	^Array
+	^ByteArray
 %
 category: 'Smalltalk'
 classmethod: bytes
@@ -126,22 +123,59 @@ __contains__: someBytes
 %
 category: 'Python'
 method: bytes
-__getitem__: anIndex
+__doc__
 
-	^(super __getitem__: anIndex) asCharacter asString
+	^str ___value: 'bytes(iterable_of_ints) -> bytes\n' ,
+		'bytes(string, encoding[, errors]) -> bytes\n' ,
+		'bytes(bytes_or_buffer) -> immutable copy of bytes_or_buffer\n' ,
+		'bytes(int) -> bytes object of size given by the parameter initialized with null bytes\n' ,
+		'bytes() -> empty bytes object\n' ,
+		'\n' ,
+		'Construct an immutable array of bytes from:\n' ,
+		'  - an iterable yielding integers in range(256)\n' ,
+		'  - a text string encoded using the specified encoding\n' ,
+		'  - any object implementing the buffer API.\n' ,
+		'  - an integer'
 %
 category: 'Python'
 method: bytes
-__getslice__: aPyIntStart _: aPyIntEnd
+__eq__: otherBytes
+	"bytes stores Smalltalk Integers, so use Smalltalk comparison"
 
-	| end |
-	end := aPyIntEnd.
+	(otherBytes isKindOf: bytes) ifFalse: [^False].
+	^bool ___value: self ___container = otherBytes ___container
+%
+category: 'Python'
+method: bytes
+__ge__: otherBytes
+	"bytes stores Smalltalk Integers, so use Smalltalk comparison"
 
-	end class == NoneType ifTrue: [
-		end := int ___value: container size
+	^(self __gt__: otherBytes) ___or: [self __eq__: otherBytes]
+%
+category: 'Python'
+method: bytes
+__getitem__: anIndex
+
+	"Handle slice object"
+	(anIndex isKindOf: slice) ifTrue: [
+		^self ___getslice: anIndex start _: anIndex stop _: anIndex step
 	].
 
-	^self class ___value: (self ___getslice: aPyIntStart _: end)
+	"Handle integer index - returns an int (byte value), not bytes"
+	^int ___value: (super __getitem__: anIndex)
+%
+category: 'Python'
+method: bytes
+__gt__: otherBytes
+	"bytes stores Smalltalk Integers, so use Smalltalk comparison"
+
+	| size |
+	size := self ___container size min: otherBytes ___container size.
+	1 to: size do: [:index |
+		(self ___container at: index) > (otherBytes ___container at: index) ifTrue: [^True].
+		(self ___container at: index) < (otherBytes ___container at: index) ifTrue: [^False]
+	].
+	^self ___container size > otherBytes ___container size ifTrue: [True] ifFalse: [False]
 %
 category: 'Python'
 method: bytes
@@ -159,9 +193,30 @@ __init__: pythonString _: encoding
 %
 category: 'Python'
 method: bytes
+__le__: otherBytes
+	"bytes stores Smalltalk Integers, so use Smalltalk comparison"
+
+	^(self __gt__: otherBytes) __not__
+%
+category: 'Python'
+method: bytes
+__lt__: otherBytes
+	"bytes stores Smalltalk Integers, so use Smalltalk comparison"
+
+	^(self __gt__: otherBytes) __not__ ___and: [self __ne__: otherBytes]
+%
+category: 'Python'
+method: bytes
 __mod__: anArgument
 
 	TypeError signal: 'not all arguments converted during bytes formatting'.
+%
+category: 'Python'
+method: bytes
+__ne__: otherBytes
+	"bytes stores Smalltalk Integers, so use Smalltalk comparison"
+
+	^(self __eq__: otherBytes) __not__
 %
 category: 'Python'
 method: bytes
@@ -201,12 +256,12 @@ method: bytes
 capitalize
 
 	| contents new |
-	contents := (String withAll: (self ___value copy collect: [:each | Character codePoint: each])) asLowercase.
+	contents := (String withAll: (self ___value asArray collect: [:each | Character codePoint: each])) asLowercase.
 	contents at: 1 put: contents first asUppercase.
 	new := Array new.
 	contents do: [:each | new add: each codePoint].
 
-	^bytes ___value: new
+	^self class ___value: new
 %
 category: 'Python'
 method: bytes
@@ -230,7 +285,7 @@ center: pyIntWidth _: pyFillByte
 	leftPadSize := pyIntWidth ___value - self __len__ ___value - rightPadSize.
 	leftPad := Array new replaceFrom: 1 to: leftPadSize withObject: pyFillByte ___value first; yourself.
 
-	^bytes ___value: (Array new addAll: leftPad; addAll: (Array withAll: self ___container); addAll: rightPad; yourself) asArray
+	^self class ___value: (Array new addAll: leftPad; addAll: (Array withAll: self ___container); addAll: rightPad; yourself) asArray
 %
 category: 'Python'
 method: bytes
@@ -256,8 +311,8 @@ method: bytes
 count: aPyObject _: aPyIntStart _: aPyIntEnd
 
 	| count start idx |
-	
-	(aPyObject class == bytes or: [aPyObject class == int]) ifFalse: [TypeError signal: 'argument should be integer or bytes-like object, not ''', aPyObject class name, ''''].
+
+	((aPyObject isKindOf: bytes) or: [aPyObject isKindOf: int]) ifFalse: [TypeError signal: 'argument should be integer or bytes-like object, not ''', aPyObject class name, ''''].
 
 	count := 0.
 	start := aPyIntStart ___value.
@@ -280,7 +335,7 @@ decode: pyStrEncoding _: pyStrErrors
 
 	#PyTodo"Handle encoding and error handlers".
 
-	^str ___value: (String withAll: (container collect: [:x | Character codePoint: x]))
+	^str ___value: (String withAll: (container asArray collect: [:x | Character codePoint: x]))
 %
 category: 'Python'
 method: bytes
@@ -300,25 +355,25 @@ endswith: aPyBytes _: aPyIntStart _: aPyIntEnd
 
 	| idx |
 	
-	"TODO there is also a case where all elements in the tuple are not bytes objects: 
+	"TODO there is also a case where all elements in the tuple are not bytes objects:
 		b'aaa'.endswith(('aa', 'a'))
 		TypeError: a bytes-like object is required, not 'str'
 	"
-	(aPyBytes class == bytes or: [aPyBytes class == tuple]) ifFalse: [TypeError signal: 'endswith first arg must be bytes or a tuple of bytes, not ', aPyBytes class name].
+	((aPyBytes isKindOf: bytes) or: [aPyBytes isKindOf: tuple]) ifFalse: [TypeError signal: 'endswith first arg must be bytes or a tuple of bytes, not ', aPyBytes class name].
 
-	aPyBytes class == bytes ifTrue: [
+	(aPyBytes isKindOf: bytes) ifTrue: [
 		idx := aPyIntEnd ___value - aPyBytes ___value size.
 		^bool ___value: (self find: aPyBytes _: (int ___value: idx) _: aPyIntEnd) ___value = idx
 	].
 
-	aPyBytes class == tuple ifTrue: [
+	(aPyBytes isKindOf: tuple) ifTrue: [
 		aPyBytes ___value do: [:each |
 			"Python bool implemented as a Python int which is implemented as a Smalltalk integer, meaning we have this odd test for equality with Smalltalk Booleans"
 			(self endswith: each _: aPyIntStart _: aPyIntEnd) ___value ifTrue: [
-				^bool ___value: true
+				^True
 			].
 		].
-		^bool ___value: false
+		^False
 	].
 %
 category: 'Python'
@@ -354,7 +409,7 @@ expandtabs: pythonInt
 		]
 	].
 
-	^bytes ___value: new contents
+	^self class ___value: new contents
 %
 category: 'Python'
 method: bytes
@@ -374,11 +429,11 @@ find: aPyObjectSublist _: aPyIntStart _: aPyIntEnd
 
 	| searchBounds searchResult start x |
 	start := aPyIntStart ___value.
-	
-	aPyObjectSublist class == int ifTrue: [
+
+	(aPyObjectSublist isKindOf: int) ifTrue: [
 		x := bytes ___value: { aPyObjectSublist ___value }.
 	] ifFalse: [
-		aPyObjectSublist class == bytes ifTrue: [
+		(aPyObjectSublist isKindOf: bytes) ifTrue: [
 			x := aPyObjectSublist.
 		] ifFalse: [
 			TypeError signal: 'argument should be integer or bytes-like object, not ''', aPyObjectSublist class name, ''''.
@@ -387,7 +442,7 @@ find: aPyObjectSublist _: aPyIntStart _: aPyIntEnd
 
 	start < 0 ifTrue: [start := container size - start abs].
 
-	searchBounds := self ___getslice: (int ___value: 0) _: aPyIntEnd.
+	searchBounds := (self ___getslice: (int ___value: 0) _: aPyIntEnd) ___value.
 	searchResult := (searchBounds indexOfSubCollection: x ___value startingAt: start + 1) - 1.
 
 	^int ___value: searchResult
@@ -410,7 +465,7 @@ index: aPyObject _: aPyIntStart _: aPyIntEnd
 
 	| idx |
 
-	(aPyObject class == bytes or: [aPyObject class == int]) ifFalse: [TypeError signal: 'argument should be integer or bytes-like object, not ''', aPyObject class name, ''''].
+	((aPyObject isKindOf: bytes) or: [aPyObject isKindOf: int]) ifFalse: [TypeError signal: 'argument should be integer or bytes-like object, not ''', aPyObject class name, ''''].
 
 	idx := self find: aPyObject _: aPyIntStart _: aPyIntEnd.
 	idx ___value > -1
@@ -422,7 +477,7 @@ method: bytes
 isalnum
 
 	^self __len__ ___value > 0 and: [
-		(String withAll: (self ___container collect: [:x | Character codePoint: x])) allSatisfy: [:e | e isAlphaNumeric]
+		(String withAll: (self ___container asArray collect: [:x | Character codePoint: x])) allSatisfy: [:e | e isAlphaNumeric]
 	]
 %
 category: 'Python'
@@ -430,7 +485,7 @@ method: bytes
 isalpha
 
 	^self __len__ ___value > 0 and: [
-		(String withAll: (self ___container collect: [:x | Character codePoint: x])) allSatisfy: [:e | e isLetter]
+		(String withAll: (self ___container asArray collect: [:x | Character codePoint: x])) allSatisfy: [:e | e isLetter]
 	]
 %
 category: 'Python'
@@ -446,7 +501,7 @@ method: bytes
 isdigit
 
 	^self __len__ ___value > 0 and: [
-		(String withAll: (self ___container collect: [:x | Character codePoint: x])) allSatisfy: [:e | e isDigit]
+		(String withAll: (self ___container asArray collect: [:x | Character codePoint: x])) allSatisfy: [:e | e isDigit]
 	]
 %
 category: 'Python'
@@ -454,7 +509,7 @@ method: bytes
 islower
 
 	^self __len__ ___value > 0 and: [
-		(String withAll: (self ___container collect: [:x | Character codePoint: x])) allSatisfy: [:e | e isLowercase]
+		(String withAll: (self ___container asArray collect: [:x | Character codePoint: x])) allSatisfy: [:e | e isLowercase]
 	]
 %
 category: 'Python'
@@ -478,8 +533,22 @@ method: bytes
 isupper
 
 	^self __len__ ___value > 0 and: [
-		(String withAll: (self ___container collect: [:x | Character codePoint: x])) allSatisfy: [:e | e isUppercase]
+		(String withAll: (self ___container asArray collect: [:x | Character codePoint: x])) allSatisfy: [:e | e isUppercase]
 	]
+%
+category: 'Python'
+method: bytes
+join: pyIterable
+
+	| stream first |
+	stream := WriteStream on: ByteArray new.
+	first := true.
+	pyIterable ___container do: [:each |
+		(each isKindOf: bytes) ifFalse: [TypeError signal: 'sequence item: expected a bytes-like object, ', each class name, ' found'].
+		first ifTrue: [first := false] ifFalse: [stream nextPutAll: container].
+		stream nextPutAll: each ___container.
+	].
+	^self class ___value: stream contents
 %
 category: 'Python'
 method: bytes
@@ -496,16 +565,16 @@ ljust: pyIntWidth _: pyByte
 	
 	new := Array withAll: container.
 	(1 to: (pyIntWidth ___value - container size)) do: [:each | new add: pyByte ___value first].
-	^bytes ___value: new
+	^self class ___value: new
 %
 category: 'Python'
 method: bytes
 lower
 
 	| lowerString |
-	lowerString := Array withAll: (String withAll: (self ___container collect: [:x | Character codePoint: x])) asLowercase.
-	
-	^bytes ___value: (lowerString collect: [:x | x codePoint])
+	lowerString := Array withAll: (String withAll: (self ___container asArray collect: [:x | Character codePoint: x])) asLowercase.
+
+	^self class ___value: (lowerString collect: [:x | x codePoint])
 %
 category: 'Python'
 method: bytes
@@ -522,7 +591,7 @@ lstrip: aPyBytesStripset
 	
 	1 to: container size do: [:i |
 		(aPyBytesStripset ___value includes: (container at: i)) ifFalse: [
-			^bytes ___value: (container copyFrom: left to: container size)
+			^self class ___value: (container copyFrom: left to: container size)
 		].
 		left := left + 1.
 	]
@@ -534,18 +603,18 @@ partition: sep
 	| element1 idx |
 	idx := self find: sep.
 	idx ___value < 0 ifTrue: [
-		^tuple ___value: { self copy. bytes __call__. bytes __call__ }
+		^tuple ___value: { self copy. self class __call__. self class __call__ }
 	].
 
-	element1 := bytes __call__.
+	element1 := self class __call__.
 	idx ___value > 0 ifTrue: [
-		element1 := bytes ___value: (container copyFrom: 1 to: idx ___value).
+		element1 := self class ___value: (container copyFrom: 1 to: idx ___value).
 	].
 
 	^tuple ___value: {
 		element1.
 		sep.
-		bytes ___value: (container copyFrom: idx ___value + 1 + sep ___value size to: container size).
+		self class ___value: (container copyFrom: idx ___value + 1 + sep ___value size to: container size).
 	}
 %
 category: 'Python'
@@ -553,30 +622,30 @@ method: bytes
 removeprefix: pyBytesPrefix
 
 	| new |
-	pyBytesPrefix class == bytes ifFalse: [TypeError signal: 'a bytes-like object is required, not ''str'''].
+	(pyBytesPrefix isKindOf: bytes) ifFalse: [TypeError signal: 'a bytes-like object is required, not ''str'''].
 
 	new := container copy.
 	(container beginsWith: pyBytesPrefix ___value) ifTrue: [new := container copyFrom: 1 + pyBytesPrefix ___value size to: container size].
 
-	^bytes ___value: new
+	^self class ___value: new
 %
 category: 'Python'
 method: bytes
 removesuffix: pyBytesSuffix
 
 	| new |
-	pyBytesSuffix class == bytes ifFalse: [TypeError signal: 'a bytes-like object is required, not ''str'''].
-	
+	(pyBytesSuffix isKindOf: bytes) ifFalse: [TypeError signal: 'a bytes-like object is required, not ''str'''].
+
 	new := container copy.
 	(self endswith: pyBytesSuffix) ___value ifTrue: [new := container copyFrom: 1 to: container size - pyBytesSuffix ___value size].
 
-	^bytes ___value: new
+	^self class ___value: new
 %
 category: 'Python'
 method: bytes
 replace: pyBytesOld _: pyBytesNew
 
-	^bytes ___value: (container copyReplaceAll: pyBytesOld ___value with: pyBytesNew ___value)
+	^self class ___value: (container copyReplaceAll: pyBytesOld ___value with: pyBytesNew ___value)
 %
 category: 'Python'
 method: bytes
@@ -595,11 +664,11 @@ method: bytes
 rfind: aPyObjectSublist _: aPyIntStart _: aPyIntEnd
 
 	| searchResult start end x |
-	
-	aPyObjectSublist class == int ifTrue: [
+
+	(aPyObjectSublist isKindOf: int) ifTrue: [
 		x := bytes ___value: { aPyObjectSublist ___value }.
 	] ifFalse: [
-		aPyObjectSublist class == bytes ifTrue: [
+		(aPyObjectSublist isKindOf: bytes) ifTrue: [
 			x := bytes ___value: aPyObjectSublist ___value reverse.
 		] ifFalse: [
 			TypeError signal: 'argument should be integer or bytes-like object, not ''', aPyObjectSublist class name, ''''.
@@ -646,7 +715,7 @@ category: 'Python'
 method: bytes
 rjust: aPyIntWidth _: aPyBytesFillChar
 
-	^bytes ___value: ((bytes ___value: container reverse) ljust: aPyIntWidth _: aPyBytesFillChar) ___value reverse
+	^self class ___value: ((bytes ___value: container reverse) ljust: aPyIntWidth _: aPyBytesFillChar) ___value reverse
 %
 category: 'Python'
 method: bytes
@@ -655,18 +724,18 @@ rpartition: aPyObjectSep
 	| element1 idx |
 	idx := self rfind: aPyObjectSep.
 	idx ___value < 0 ifTrue: [
-		^tuple ___value: { bytes __call__. bytes __call__. self copy }
+		^tuple ___value: { self class __call__. self class __call__. self copy }
 	].
 
-	element1 := bytes __call__.
+	element1 := self class __call__.
 	idx ___value > 0 ifTrue: [
-		element1 := bytes ___value: (container copyFrom: 1 to: idx ___value).
+		element1 := self class ___value: (container copyFrom: 1 to: idx ___value).
 	].
 
 	^tuple ___value: {
 		element1.
 		aPyObjectSep.
-		bytes ___value: (container copyFrom: idx ___value + 1 + aPyObjectSep ___value size to: container size).
+		self class ___value: (container copyFrom: idx ___value + 1 + aPyObjectSep ___value size to: container size).
 	}
 %
 category: 'Python'
@@ -691,13 +760,13 @@ rsplit: pyBytesSep _: pyIntLimit
 	splits := OrderedCollection new.
 	splitsIndex := idx + pyBytesSep ___value size.
 	splitsIndex > container size ifTrue: [
-		splits add: bytes __call__.
+		splits add: self class __call__.
 	] ifFalse: [
-		splits add: (bytes ___value: (container copyFrom: splitsIndex to: container size)).
+		splits add: (self class ___value: (container copyFrom: splitsIndex to: container size)).
 	].
 	remaining := container copyFrom: 1 to: idx - 1.
 	newLimit := int ___value: pyIntLimit ___value - 1.
-	splits addAllFirst: ((bytes ___value: remaining) rsplit: pyBytesSep _: newLimit) ___container.
+	splits addAllFirst: ((self class ___value: remaining) rsplit: pyBytesSep _: newLimit) ___container.
 
 	^tuple ___value: (Array withAll: splits)
 %
@@ -713,10 +782,10 @@ rstrip: aPyBytesStripset
 
 	| left |
 	left := 1.
-	
+
 	1 to: container size do: [:i |
 		(aPyBytesStripset ___value includes: (container reverse at: i)) ifFalse: [
-			^bytes ___value: (container reverse copyFrom: left to: container size) reverse
+			^self class ___value: (container reverse copyFrom: left to: container size) reverse
 		].
 		left := left + 1.
 	]
@@ -741,13 +810,50 @@ split: pyBytesSep _: pyIntLimit
 	].
 
 	splits := OrderedCollection new.
-	splits add: (bytes ___value: (container copyFrom: 1 to: idx - 1)).
+	splits add: (self class ___value: (container copyFrom: 1 to: idx - 1)).
 	remaining := container copyFrom: (idx + pyBytesSep ___value size) to: container size.
 	newLimit := int ___value: pyIntLimit ___value - 1.
-	splits addAll: ((bytes ___value: remaining) split: pyBytesSep _: newLimit) ___container.
+	splits addAll: ((self class ___value: remaining) split: pyBytesSep _: newLimit) ___container.
 
 
 	^tuple ___value: (Array withAll: splits)
+%
+category: 'Python'
+method: bytes
+splitlines
+
+	^self splitlines: False
+%
+category: 'Python'
+method: bytes
+splitlines: keepends
+
+	| lines stream currentLine |
+	lines := OrderedCollection new.
+	stream := ReadStream on: container.
+	currentLine := WriteStream on: ByteArray new.
+
+	[stream atEnd] whileFalse: [
+		| byte |
+		byte := stream next.
+		(byte == 13 or: [byte == 10]) ifTrue: [
+			keepends == True ifTrue: [currentLine nextPut: byte].
+			"Handle CRLF"
+			(byte == 13 and: [stream peek == 10]) ifTrue: [
+				keepends == True ifTrue: [currentLine nextPut: stream next] ifFalse: [stream next].
+			].
+			lines add: (self class ___value: currentLine contents).
+			currentLine := WriteStream on: ByteArray new.
+		] ifFalse: [
+			currentLine nextPut: byte.
+		].
+	].
+
+	currentLine contents isEmpty ifFalse: [
+		lines add: (self class ___value: currentLine contents).
+	].
+
+	^list ___value: lines asArray
 %
 category: 'Python'
 method: bytes
@@ -785,14 +891,14 @@ swapcase
 
 	| answer |
 
-	answer := String withAll: (self ___container collect: [:x | Character codePoint: x]).
+	answer := String withAll: (self ___container asArray collect: [:x | Character codePoint: x]).
 	1 to: answer size do: [:i |
 		(answer at: i) isUppercase ifTrue: [answer at: i put: (answer at: i)asLowercase
 		] ifFalse: [(answer at: i) isLowercase ifTrue: [answer at: i put: (answer at: i) asUppercase]
 			]
 		].
 
-	^bytes ___value: ((Array withAll: answer) collect: [:x | x codePoint])
+	^self class ___value: ((Array withAll: answer) collect: [:x | x codePoint])
 %
 category: 'Python'
 method: bytes
@@ -817,16 +923,97 @@ title
 		].
 		previous := new last.
 	].
-	^bytes ___value: new
+	^self class ___value: new
 %
 category: 'Python'
 method: bytes
 upper
 
 	| upperString |
-	upperString := Array withAll: (String withAll: (self ___container collect: [:x | Character codePoint: x])) asUppercase.
-	
-	^bytes ___value: (upperString collect: [:x | x codePoint])
+	upperString := Array withAll: (String withAll: (self ___container asArray collect: [:x | Character codePoint: x])) asUppercase.
+
+	^self class ___value: (upperString collect: [:x | x codePoint])
+%
+category: 'Python'
+method: bytes
+zfill: pyIntWidth
+
+	| padSize result |
+	padSize := pyIntWidth ___value - container size.
+	padSize <= 0 ifTrue: [^self class ___value: container copy].
+
+	result := ByteArray new: pyIntWidth ___value.
+	result atAllPut: 48.  "ASCII for '0'"
+	1 to: container size do: [:i | result at: padSize + i put: (container at: i)].
+
+	"Handle sign characters (+ is 43, - is 45)"
+	(container size > 0 and: [(container first == 43 or: [container first == 45])]) ifTrue: [
+		result at: 1 put: container first.
+		result at: padSize + 1 put: 48.
+	].
+
+	^self class ___value: result
+%
+category: 'Smalltalk'
+method: bytes
+___getslice: aPyIntStart _: aPyIntEnd
+
+	"Delegate to 3-argument version with None step"
+	^self ___getslice: aPyIntStart _: aPyIntEnd _: None
+%
+category: 'Smalltalk'
+method: bytes
+___getslice: aPyIntStart _: aPyIntEnd _: aPyIntStep
+	"Slice with step: b[i:j:k]"
+
+	| start stop step result size |
+	size := container size.
+
+	"Handle None step - defaults to 1"
+	step := aPyIntStep == None ifTrue: [1] ifFalse: [aPyIntStep ___value].
+	step == 0 ifTrue: [ValueError signal: 'slice step cannot be zero'].
+
+	"Handle None values for start and stop based on step direction"
+	step > 0 ifTrue: [
+		start := aPyIntStart == None ifTrue: [0] ifFalse: [aPyIntStart ___value].
+		stop := aPyIntEnd == None ifTrue: [size] ifFalse: [aPyIntEnd ___value].
+	] ifFalse: [
+		start := aPyIntStart == None ifTrue: [size - 1] ifFalse: [aPyIntStart ___value].
+		stop := aPyIntEnd == None ifTrue: [-1 - size] ifFalse: [aPyIntEnd ___value].
+	].
+
+	"Handle negative indices"
+	start < 0 ifTrue: [start := (size + start) max: 0].
+	stop < 0 ifTrue: [stop := size + stop].
+
+	"Clamp to valid range"
+	step > 0 ifTrue: [
+		start := start min: size.
+		stop := stop min: size.
+	] ifFalse: [
+		start := start min: (size - 1).
+		stop := (stop max: -1).
+	].
+
+	"Build result"
+	result := OrderedCollection new.
+	step > 0 ifTrue: [
+		| i |
+		i := start.
+		[i < stop] whileTrue: [
+			result add: (container at: i + 1).
+			i := i + step.
+		].
+	] ifFalse: [
+		| i |
+		i := start.
+		[i > stop] whileTrue: [
+			result add: (container at: i + 1).
+			i := i + step.
+		].
+	].
+
+	^self class ___value: result asArray
 %
 category: 'Smalltalk'
 method: bytes

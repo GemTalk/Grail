@@ -38,10 +38,13 @@ args size >= 6 ifTrue: [
         inContinuation ifFalse: [
             [
                 | result |
-                result := ModuleAst 
-                    evaluate: bufferStream contents 
+                result := ModuleAst
+                    evaluate: bufferStream contents
                     withScope: replScope.
-                GsFile stdout nextPutAll: result ___value printString; lf; flush.
+                result == None ifFalse: [
+                    GsFile stdout nextPutAll: result __repr__ ___value; lf; flush.
+                ].
+                bufferStream := WriteStream on: String new.
             ] on: Error do: [:ex |
                 | msg |
                 (ex isKindOf: ExitClientError) ifTrue: [ex pass].

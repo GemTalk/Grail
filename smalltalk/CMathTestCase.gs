@@ -5,11 +5,16 @@ removeallclassmethods CMathTestCase
 ! ------------------- Instance methods for CMathTestCase
 category: 'other'
 method: CMathTestCase
+setUp
+
+	scope := Variables new.
+	cmathModule := (Python at: #cmath) new.
+%
+category: 'other'
+method: CMathTestCase
 test_asin_acos
 
-	| cmathModule asinResult acosResult scope |
-	scope := Variables new.
-	cmathModule := (Python at: #cmath) instance.
+	| asinResult acosResult |
 
 	"Test asin(0) = 0"
 	asinResult := cmathModule asin scope: scope positional: {int ___value: 0} named: {}.
@@ -30,9 +35,7 @@ category: 'other'
 method: CMathTestCase
 test_asinh_acosh_atanh
 
-	| cmathModule asinhResult acoshResult atanhResult scope |
-	scope := Variables new.
-	cmathModule := (Python at: #cmath) instance.
+	| asinhResult acoshResult atanhResult |
 
 	"Test asinh(0) = 0"
 	asinhResult := cmathModule asinh scope: scope positional: {int ___value: 0} named: {}.
@@ -53,9 +56,7 @@ category: 'other'
 method: CMathTestCase
 test_atan
 
-	| cmathModule result scope |
-	scope := Variables new.
-	cmathModule := (Python at: #cmath) instance.
+	| result |
 
 	"Test atan(0) = 0"
 	result := cmathModule atan scope: scope positional: {int ___value: 0} named: {}.
@@ -71,9 +72,6 @@ category: 'other'
 method: CMathTestCase
 test_constants
 
-	| cmathModule |
-	cmathModule := (Python at: #cmath) instance.
-
 	self
 		assert: (cmathModule pi) ___value equals: Float pi;
 		assert: (cmathModule e) ___value equals: Float e;
@@ -84,9 +82,7 @@ category: 'other'
 method: CMathTestCase
 test_exp
 
-	| cmathModule result scope |
-	scope := Variables new.
-	cmathModule := (Python at: #cmath) instance.
+	| result |
 
 	"Test exp(0) = 1"
 	result := cmathModule exp scope: scope positional: {int ___value: 0} named: {}.
@@ -102,9 +98,7 @@ category: 'other'
 method: CMathTestCase
 test_inverse_roundtrip
 
-	| cmathModule z sinZ asinResult cosZ acosResult scope |
-	scope := Variables new.
-	cmathModule := (Python at: #cmath) instance.
+	| z sinZ asinResult cosZ acosResult |
 
 	"Test that asin(sin(z)) ≈ z for a simple value"
 	z := complex ___real: 0.5 imaginary: 0.3.
@@ -126,10 +120,6 @@ category: 'other'
 method: CMathTestCase
 test_isfinite
 
-	| cmathModule scope |
-	scope := Variables new.
-	cmathModule := (Python at: #cmath) instance.
-
 	self
 		assert: (cmathModule isfinite scope: scope positional: {complex ___real: 1.0 imaginary: 2.0} named: {}) ___value;
 		deny: (cmathModule isfinite scope: scope positional: {complex ___real: PlusInfinity imaginary: 0.0} named: {}) ___value;
@@ -139,10 +129,6 @@ test_isfinite
 category: 'other'
 method: CMathTestCase
 test_isinf
-
-	| cmathModule scope |
-	scope := Variables new.
-	cmathModule := (Python at: #cmath) instance.
 
 	self
 		deny: (cmathModule isinf scope: scope positional: {complex ___real: 1.0 imaginary: 2.0} named: {}) ___value;
@@ -154,10 +140,6 @@ category: 'other'
 method: CMathTestCase
 test_isnan
 
-	| cmathModule scope |
-	scope := Variables new.
-	cmathModule := (Python at: #cmath) instance.
-
 	self
 		deny: (cmathModule isnan scope: scope positional: {complex ___real: 1.0 imaginary: 2.0} named: {}) ___value;
 		assert: (cmathModule isnan scope: scope positional: {complex ___real: PlusQuietNaN imaginary: 0.0} named: {}) ___value;
@@ -168,9 +150,7 @@ category: 'other'
 method: CMathTestCase
 test_log
 
-	| cmathModule result scope |
-	scope := Variables new.
-	cmathModule := (Python at: #cmath) instance.
+	| result |
 
 	"Test log(e) = 1"
 	result := cmathModule log scope: scope positional: {float ___value: Float e} named: {}.
@@ -186,9 +166,7 @@ category: 'other'
 method: CMathTestCase
 test_phase
 
-	| cmathModule result scope |
-	scope := Variables new.
-	cmathModule := (Python at: #cmath) instance.
+	| result |
 
 	"Test phase(1) = 0"
 	result := cmathModule phase scope: scope positional: {int ___value: 1} named: {}.
@@ -206,9 +184,7 @@ category: 'other'
 method: CMathTestCase
 test_polar
 
-	| cmathModule result r phi scope |
-	scope := Variables new.
-	cmathModule := (Python at: #cmath) instance.
+	| result r phi |
 
 	"Test polar(1+i)"
 	result := cmathModule polar scope: scope positional: {complex ___real: 1 imaginary: 1} named: {}.
@@ -222,9 +198,7 @@ category: 'other'
 method: CMathTestCase
 test_rect
 
-	| cmathModule result scope |
-	scope := Variables new.
-	cmathModule := (Python at: #cmath) instance.
+	| result |
 
 	"Test rect(sqrt(2), pi/4) = 1+i"
 	result := cmathModule rect scope: scope positional: {float ___value: 2.0 sqrt. float ___value: Float pi / 4} named: {}.
@@ -236,9 +210,7 @@ category: 'other'
 method: CMathTestCase
 test_sin_cos
 
-	| cmathModule sinResult cosResult scope |
-	scope := Variables new.
-	cmathModule := (Python at: #cmath) instance.
+	| sinResult cosResult |
 
 	"Test sin(0) = 0"
 	sinResult := cmathModule sin scope: scope positional: {int ___value: 0} named: {}.
@@ -254,9 +226,7 @@ category: 'other'
 method: CMathTestCase
 test_sqrt
 
-	| cmathModule result scope |
-	scope := Variables new.
-	cmathModule := (Python at: #cmath) instance.
+	| result |
 
 	"Test sqrt(4) = 2"
 	result := cmathModule sqrt scope: scope positional: {int ___value: 4} named: {}.

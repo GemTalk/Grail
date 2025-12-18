@@ -426,6 +426,83 @@ testNestedFunction
 %
 category: 'other'
 method: CompoundStatementsTestCase
+testTruthValueTesting
+	"Test that non-boolean values are properly coerced via __bool__ in conditionals.
+	See https://docs.python.org/3/library/stdtypes.html#truth-value-testing"
+
+	| pyString result |
+	"Empty list is falsy"
+	pyString := 'x = []
+if x:
+    result = "truthy"
+else:
+    result = "falsy"
+result'.
+	result := ModuleAst evaluate: pyString.
+	self assert: result ___value equals: 'falsy'.
+
+	"Non-empty list is truthy"
+	pyString := 'x = [1, 2, 3]
+if x:
+    result = "truthy"
+else:
+    result = "falsy"
+result'.
+	result := ModuleAst evaluate: pyString.
+	self assert: result ___value equals: 'truthy'.
+
+	"Zero int is falsy"
+	pyString := 'x = 0
+if x:
+    result = "truthy"
+else:
+    result = "falsy"
+result'.
+	result := ModuleAst evaluate: pyString.
+	self assert: result ___value equals: 'falsy'.
+
+	"Non-zero int is truthy"
+	pyString := 'x = 42
+if x:
+    result = "truthy"
+else:
+    result = "falsy"
+result'.
+	result := ModuleAst evaluate: pyString.
+	self assert: result ___value equals: 'truthy'.
+
+	"Empty string is falsy"
+	pyString := 'x = ""
+if x:
+    result = "truthy"
+else:
+    result = "falsy"
+result'.
+	result := ModuleAst evaluate: pyString.
+	self assert: result ___value equals: 'falsy'.
+
+	"Non-empty string is truthy"
+	pyString := 'x = "hello"
+if x:
+    result = "truthy"
+else:
+    result = "falsy"
+result'.
+	result := ModuleAst evaluate: pyString.
+	self assert: result ___value equals: 'truthy'.
+
+	"None is falsy"
+	pyString := 'x = None
+if x:
+    result = "truthy"
+else:
+    result = "falsy"
+result'.
+	result := ModuleAst evaluate: pyString.
+	self assert: result ___value equals: 'falsy'.
+%
+category: 'other'
+method: CompoundStatementsTestCase
 testTry
 	"Try(
 		[Expr(
@@ -479,6 +556,45 @@ except:
 		assert: (x.orelse size == 0);
 		assert: (x.finalbody size == 0);
 		yourself.
+%
+category: 'other'
+method: CompoundStatementsTestCase
+testWhile
+	"Test while loop execution"
+
+	| pyString result |
+	pyString := 'x = 0
+while x < 5:
+    x = x + 1
+x'.
+	result := ModuleAst evaluate: pyString.
+	self assert: result ___value equals: 5.
+%
+category: 'other'
+method: CompoundStatementsTestCase
+testWhileTruthValueTesting
+	"Test that non-boolean values are properly coerced via __bool__ in while loops.
+	See https://docs.python.org/3/library/stdtypes.html#truth-value-testing"
+
+	| pyString result |
+	"Empty list should not enter loop"
+	pyString := 'items = []
+count = 0
+while items:
+    count = count + 1
+count'.
+	result := ModuleAst evaluate: pyString.
+	self assert: result ___value equals: 0.
+
+	"Decrementing int used as while condition - loop runs until int is 0"
+	pyString := 'n = 3
+result = 0
+while n:
+    result = result + n
+    n = n - 1
+result'.
+	result := ModuleAst evaluate: pyString.
+	self assert: result ___value equals: 6.
 %
 category: 'other'
 method: CompoundStatementsTestCase

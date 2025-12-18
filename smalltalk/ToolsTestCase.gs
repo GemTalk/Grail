@@ -40,7 +40,7 @@ testFunctionDefScopePositionalNamed
 
 	| scope function |
 	scope := Variables new.
-	function := FunctionDef new
+	function := builtin_function_or_method new
 						params: { #a. #b };
 						vararg: #vararg;
 						kwonlyargs: { #c };
