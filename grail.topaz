@@ -23,7 +23,7 @@ args size >= 6 ifTrue: [
 ] ifFalse: [
     | replScope bufferStream inContinuation |
     replScope := PyGlobals new.
-    bufferStream := WriteStream on: String new.
+    bufferStream := WriteStream on: Unicode7 new.
     inContinuation := false.
     [true] whileTrue: [
         | line |
@@ -44,13 +44,13 @@ args size >= 6 ifTrue: [
                 result == None ifFalse: [
                     GsFile stdout nextPutAll: result __repr__ ___value; lf; flush.
                 ].
-                bufferStream := WriteStream on: String new.
+                bufferStream := WriteStream on: Unicode7 new.
             ] on: Error do: [:ex |
                 | msg |
                 (ex isKindOf: ExitClientError) ifTrue: [ex pass].
                 msg := ex messageText.
                 GsFile stderr nextPutAll: msg; lf; flush.
-                bufferStream := WriteStream on: String new.
+                bufferStream := WriteStream on: Unicode7 new.
             ].
         ].
     ].

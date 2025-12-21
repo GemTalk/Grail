@@ -9,3 +9,4 @@ While Smalltalk methods are in separate files with the class name, the class sch
 When writing code, keep in mind the message precedence: unary, binary, and keyword messages. Please avoid unnecessary parentheses, but take care to avoid stringing together keyword messages without parenthesis.
 While writing the primary code is important, writing tests is equally important.
 GemStone Smalltalk code can be found in the `image` directory.
+In Smalltalk it is necessary to define all temporary variables at the top of the method or block. You can't define variables after code.

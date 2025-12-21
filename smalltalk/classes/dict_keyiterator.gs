@@ -1,0 +1,87 @@
+! ===============================================================================
+! dict_keyiterator - Iterator for dictionary keys
+! ===============================================================================
+
+! ------------------- Remove existing methods
+expectvalue /Metaclass3
+doit
+dict_keyiterator removeAllMethods: 2.
+dict_keyiterator class removeAllMethods: 2.
+%
+
+! ------------------- Class methods for dict_keyiterator
+set compile_env: 2
+
+category: 'Python-Instance Creation'
+classmethod: dict_keyiterator
+___on: aDict
+	"Create a new dict_keyiterator for the given dictionary"
+
+	| iter keysArray |
+	iter := self perform: #new env: 0.
+	keysArray := Array perform: #new env: 0.
+	aDict perform: #keysDo: env: 0 withArguments: {[:key |
+		keysArray perform: #add: env: 0 withArguments: {key}
+	]}.
+	iter perform: #___dict: env: 2 withArguments: {aDict}.
+	iter perform: #___keys: env: 2 withArguments: {keysArray}.
+	iter perform: #___position: env: 2 withArguments: {0}.
+	^ iter
+%
+
+! ------------------- Instance methods for dict_keyiterator
+
+category: 'Python-Type'
+method: dict_keyiterator
+__class__
+	"Return the Python type for dict_keyiterator"
+	^ dict_keyiterator
+%
+
+category: 'Python-Internal'
+method: dict_keyiterator
+___dict: aDict
+	"Set the dictionary being iterated over"
+	dict := aDict
+%
+
+category: 'Python-Internal'
+method: dict_keyiterator
+___keys: keysArray
+	"Set the keys array (snapshot of keys at iterator creation)"
+	keys := keysArray
+%
+
+category: 'Python-Internal'
+method: dict_keyiterator
+___position: anInteger
+	"Set the current position in the iteration"
+	position := anInteger
+%
+
+category: 'Python-Iterator Protocol'
+method: dict_keyiterator
+__iter__
+	"Return self (iterators are their own iterators)"
+	^ self
+%
+
+category: 'Python-Iterator Protocol'
+method: dict_keyiterator
+__next__
+	"Return the next key from the dictionary"
+
+	| size nextKey |
+	size := keys perform: #size env: 0.
+	position := position perform: #+ env: 0 withArguments: {1}.
+	
+	(position perform: #> env: 0 withArguments: {size}) ifTrue: [
+		StopIteration perform: #signal env: 0
+	].
+	
+	nextKey := keys perform: #at: env: 0 withArguments: {position}.
+	^ nextKey
+%
+
+set compile_env: 0
+

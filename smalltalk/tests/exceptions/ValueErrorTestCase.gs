@@ -1,0 +1,31 @@
+! ===============================================================================
+! ValueErrorTestCase - Tests for Python ValueError
+! ===============================================================================
+
+expectvalue /Metaclass3
+doit
+ValueErrorTestCase removeAllMethods: 2.
+ValueErrorTestCase class removeAllMethods: 2.
+%
+
+set compile_env: 0
+
+category: 'Python-Tests-ValueError'
+method: ValueErrorTestCase
+test_inheritance
+	"Test that ValueError inherits from Exception."
+	
+	| exc |
+	exc := ValueError perform: #__new__: env: 2 withArguments: { ValueError }.
+	self assert: (exc isKindOf: Exception).
+%
+
+category: 'Python-Tests-ValueError'
+method: ValueErrorTestCase
+test_creation
+	"Test creating a ValueError instance."
+	
+	| exc |
+	exc := ValueError perform: #__new__: env: 2 withArguments: { ValueError }.
+	self assert: exc notNil.
+%

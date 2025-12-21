@@ -34,10 +34,9 @@ fi
 # Get the absolute path
 PPRINTAST_ABSOLUTE=$(cd "$(dirname "$PPRINTAST_PATH")" && pwd)/$(basename "$PPRINTAST_PATH")
 echo "Using pprintast at: $PPRINTAST_ABSOLUTE"
-cd smalltalk
 topaz -lq << EOF
 errorCount
-output push ../install.out only
+output push install.out only
 iferr 1 stk
 iferr 2 output pop
 iferr 3 stk
@@ -53,41 +52,7 @@ commit
 logout
 set user DataCurator pass swordfish
 login
-run
-| aSymbol names userProfile symbolDictionary |
-aSymbol := #'Python'.
-userProfile := System myUserProfile.
-names := userProfile symbolList names.
-(names includes: aSymbol) ifTrue: [
-	userProfile symbolList removeAtIndex: (names indexOf: aSymbol).
-].
-symbolDictionary := SymbolDictionary new
-    name: aSymbol;
-    at: #'None'             put: nil;
-    at: #'NotImplemented'   put: nil;
-    at: #'Ellipsis'         put: nil;
-    at: #'True'             put: nil;
-    at: #'False'            put: nil;
-    at: #'Linearization'    put: nil;
-    at: #'Instance'         put: nil;
-    at: #'GlobalScope'      put: nil;
-    "at: #'builtins'         put: nil;"
-    yourself.
-userProfile insertDictionary: symbolDictionary at: 1.
-%
-input Python.gs
-run
-PythonTestCase setPath.
-Python
-    at: #'None'             put: NoneType singleton;
-    at: #'NotImplemented'   put: NotImplementedType singleton;
-    at: #'True'             put: (bool basicNew ___value: 1; yourself);
-    at: #'False'            put: (bool basicNew ___value: 0; yourself);
-    "at: #'builtins'         put: Builtins singleton;"
-    yourself.
-
-Python
-%
+input smalltalk/install.gs
 run
 ModuleAst pprintast: '$PPRINTAST_ABSOLUTE'.
 %
