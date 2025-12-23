@@ -26,7 +26,7 @@ method: tuple
 __iter__
 	"Return an iterator over the tuple."
 
-	^ tuple_iterator perform: #___on: env: 2 withArguments: {self}
+	^ tuple_iterator ___on: self
 %
 
 
@@ -80,14 +80,14 @@ __repr__
 	size == 1 ifTrue: [
 		"Single element tuple needs trailing comma"
 		| reprStr |
-		reprStr := (self perform: #at: env: 0 withArguments: {1}) perform: #__repr__ env: 2.
+		reprStr := (self perform: #at: env: 0 withArguments: {1}) __repr__.
 		stream with: reprStr perform: #nextPutAll: env: 0.
 		stream with: ',' perform: #nextPutAll: env: 0.
 	] ifFalse: [
 		self perform: #do:separatedBy: env: 0 withArguments: {
 			[:each |
 				| reprStr |
-				reprStr := each perform: #__repr__ env: 2.
+				reprStr := each __repr__.
 				stream with: reprStr perform: #nextPutAll: env: 0
 			].
 			[stream with: ', ' perform: #nextPutAll: env: 0]

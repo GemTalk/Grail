@@ -3,7 +3,7 @@
 ! ===============================================================================
 ! This file contains tests for Python's iterator protocol and iterator types.
 ! Tests cover the base iterator class and specific iterator implementations
-! (list_iterator, tuple_iterator, str_iterator, range_iterator).
+! (list_iterator, tuple_iterator, str_iterator, range_iterator}.
 ! ===============================================================================
 
 ! ------------------- Remove existing Python methods from IteratorTestCase
@@ -20,8 +20,8 @@ testIteratorTypes
 	"Test that iter() creates distinct iterator types for each collection type"
 
 	| lst tpl str rng s fs d lstIter tplIter strIter rngIter sIter fsIter dIter |
-	lst := list withAll: #(1 2 3).
-	tpl := tuple withAll: #(1 2 3).
+	lst := list perform: #withAll: env: 0 withArguments: {#(1 2 3)}.
+	tpl := tuple perform: #withAll: env: 0 withArguments: {#(1 2 3)}.
 	str := 'abc'.
 	rng := range from: 0 to: 2 by: 1.
 	s := set perform: #new env: 0.
@@ -54,7 +54,7 @@ testIteratorHasIterAndNext
 	"Test that iterators have __iter__ and __next__ methods"
 
 	| lst iter |
-	lst := list withAll: #(1 2 3).
+	lst := list perform: #withAll: env: 0 withArguments: {#(1 2 3)}.
 	iter := lst perform: #__iter__ env: 2.
 
 	"Iterator should have __iter__"
@@ -70,7 +70,7 @@ testIteratorIterReturnsSelf
 	"Test that iterator.__iter__() returns the iterator itself"
 
 	| lst iter result |
-	lst := list withAll: #(1 2 3).
+	lst := list perform: #withAll: env: 0 withArguments: {#(1 2 3)}.
 	iter := lst perform: #__iter__ env: 2.
 
 	result := iter perform: #__iter__ env: 2.
@@ -84,7 +84,7 @@ testCollectionsAreIterableNotIterators
 	"Test that collections have __iter__ but not __next__"
 
 	| lst |
-	lst := list withAll: #(1 2 3).
+	lst := list perform: #withAll: env: 0 withArguments: {#(1 2 3)}.
 
 	"Collection should have __iter__"
 	self assert: (lst class whichClassIncludesSelector: #__iter__ environmentId: 2) notNil.
@@ -99,7 +99,7 @@ testListIteratorBasicIteration
 	"Test basic iteration over a list with next()"
 
 	| lst iter |
-	lst := list withAll: #(10 20 30).
+	lst := list perform: #withAll: env: 0 withArguments: {#(10 20 30)}.
 	iter := lst perform: #__iter__ env: 2.
 
 	self assert: (iter perform: #__next__ env: 2) equals: 10.
@@ -116,7 +116,7 @@ testListIteratorIndependence
 	"Test that multiple iterators over the same list are independent"
 
 	| lst iter1 iter2 |
-	lst := list withAll: #(1 2 3).
+	lst := list perform: #withAll: env: 0 withArguments: {#(1 2 3)}.
 	iter1 := lst perform: #__iter__ env: 2.
 	iter2 := lst perform: #__iter__ env: 2.
 
@@ -136,7 +136,7 @@ testListIteratorExhaustion
 	"Test that iterator stays exhausted after StopIteration"
 
 	| lst iter |
-	lst := list withAll: #(1 2).
+	lst := list perform: #withAll: env: 0 withArguments: {#(1 2)}.
 	iter := lst perform: #__iter__ env: 2.
 
 	"Consume all items"
@@ -156,7 +156,7 @@ testTupleIteratorBasicIteration
 	"Test basic iteration over a tuple with next()"
 
 	| tpl iter |
-	tpl := tuple withAll: #(10 20 30).
+	tpl := tuple perform: #withAll: env: 0 withArguments: {#(10 20 30)}.
 	iter := tpl perform: #__iter__ env: 2.
 
 	self assert: (iter perform: #__next__ env: 2) equals: 10.
@@ -173,7 +173,7 @@ testTupleIteratorIndependence
 	"Test that multiple iterators over the same tuple are independent"
 
 	| tpl iter1 iter2 |
-	tpl := tuple withAll: #(1 2 3).
+	tpl := tuple perform: #withAll: env: 0 withArguments: {#(1 2 3)}.
 	iter1 := tpl perform: #__iter__ env: 2.
 	iter2 := tpl perform: #__iter__ env: 2.
 
@@ -336,7 +336,7 @@ testSetIteratorBasicIteration
 	self assert: (items perform: #__len__ env: 2) equals: 3.
 	self assert: (items perform: #__contains__: env: 2 withArguments: {1}).
 	self assert: (items perform: #__contains__: env: 2 withArguments: {2}).
-	self assert: (items perform: #__contains__: env: 2 withArguments: {3})
+	self assert: (items perform: #__contains__: env: 2 withArguments: {3}).
 %
 
 category: 'Tests - Set Iterator'
@@ -364,7 +364,7 @@ testFrozensetIteratorBasicIteration
 	self assert: (items perform: #__len__ env: 2) equals: 3.
 	self assert: (items perform: #__contains__: env: 2 withArguments: {1}).
 	self assert: (items perform: #__contains__: env: 2 withArguments: {2}).
-	self assert: (items perform: #__contains__: env: 2 withArguments: {3})
+	self assert: (items perform: #__contains__: env: 2 withArguments: {3}).
 %
 
 category: 'Tests - Set Iterator'

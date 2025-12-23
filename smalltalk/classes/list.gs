@@ -262,7 +262,7 @@ __repr__
 	self perform: #do:separatedBy: env: 0 withArguments: {
 		[:each |
 			| reprStr |
-			reprStr := each perform: #__repr__ env: 2.
+			reprStr := each __repr__.
 			stream with: reprStr perform: #nextPutAll: env: 0
 		].
 		[stream with: ', ' perform: #nextPutAll: env: 0]

@@ -26,7 +26,7 @@ method: frozenset
 __iter__
 	"Return an iterator over the frozenset."
 
-	^ set_iterator perform: #___on: env: 2 withArguments: {self}
+	^ set_iterator ___on: self
 %
 
 category: 'Python-Collection Protocol'
@@ -67,7 +67,7 @@ method: frozenset
 __ne__: other
 	"Return True if self and other have different elements."
 
-	^ (self perform: #__eq__: env: 2 withArguments: {other}) perform: #not env: 0
+	^ (self __eq__: other) perform: #not env: 0
 %
 
 category: 'Python-Comparison'
@@ -84,8 +84,8 @@ __lt__: other
 	"Test whether the set is a proper subset of other."
 
 	| isSubset notEqual |
-	isSubset := self perform: #issubset: env: 2 withArguments: {other}.
-	notEqual := self perform: #__ne__: env: 2 withArguments: {other}.
+	isSubset := self issubset: other.
+	notEqual := self __ne__: other.
 	^ isSubset perform: #and: env: 0 withArguments: {[notEqual]}
 %
 
@@ -103,8 +103,8 @@ __gt__: other
 	"Test whether the set is a proper superset of other."
 
 	| isSuperset notEqual |
-	isSuperset := self perform: #issuperset: env: 2 withArguments: {other}.
-	notEqual := self perform: #__ne__: env: 2 withArguments: {other}.
+	isSuperset := self issuperset: other.
+	notEqual := self __ne__: other.
 	^ isSuperset perform: #and: env: 0 withArguments: {[notEqual]}
 %
 
@@ -118,7 +118,7 @@ __hash__
 	hash := 0.
 	self perform: #do: env: 0 withArguments: {[:each |
 		| elemHash |
-		elemHash := each perform: #__hash__ env: 2.
+		elemHash := each __hash__.
 		hash := hash perform: #bitXor: env: 0 withArguments: {elemHash}
 	]}.
 	^ hash
@@ -209,7 +209,7 @@ intersection: other
 	| result |
 	result := frozenset perform: #new env: 0.
 	self perform: #do: env: 0 withArguments: {[:each |
-		(other perform: #__contains__: env: 2 withArguments: {each}) ifTrue: [
+		(other __contains__: each) ifTrue: [
 			result perform: #add: env: 0 withArguments: {each}
 		]
 	]}.
@@ -224,7 +224,7 @@ difference: other
 	| result |
 	result := frozenset perform: #new env: 0.
 	self perform: #do: env: 0 withArguments: {[:each |
-		(other perform: #__contains__: env: 2 withArguments: {each}) ifFalse: [
+		(other __contains__: each) ifFalse: [
 			result perform: #add: env: 0 withArguments: {each}
 		]
 	]}.
@@ -241,14 +241,14 @@ symmetric_difference: other
 
 	"Add elements from self that are not in other"
 	self perform: #do: env: 0 withArguments: {[:each |
-		(other perform: #__contains__: env: 2 withArguments: {each}) ifFalse: [
+		(other __contains__: each) ifFalse: [
 			result perform: #add: env: 0 withArguments: {each}
 		]
 	]}.
 
 	"Add elements from other that are not in self"
 	other perform: #do: env: 0 withArguments: {[:each |
-		(self perform: #__contains__: env: 2 withArguments: {each}) ifFalse: [
+		(self __contains__: each) ifFalse: [
 			result perform: #add: env: 0 withArguments: {each}
 		]
 	]}.
@@ -262,7 +262,7 @@ issubset: other
 	"Test whether every element in the set is in other."
 
 	self perform: #do: env: 0 withArguments: {[:each |
-		(other perform: #__contains__: env: 2 withArguments: {each}) ifFalse: [
+		(other __contains__: each) ifFalse: [
 			^ false
 		]
 	]}.
@@ -275,7 +275,7 @@ issuperset: other
 	"Test whether every element in other is in the set."
 
 	other perform: #do: env: 0 withArguments: {[:each |
-		(self perform: #__contains__: env: 2 withArguments: {each}) ifFalse: [
+		(self __contains__: each) ifFalse: [
 			^ false
 		]
 	]}.
@@ -288,7 +288,7 @@ isdisjoint: other
 	"Return True if the set has no elements in common with other."
 
 	self perform: #do: env: 0 withArguments: {[:each |
-		(other perform: #__contains__: env: 2 withArguments: {each}) ifTrue: [
+		(other __contains__: each) ifTrue: [
 			^ false
 		]
 	]}.
@@ -318,7 +318,7 @@ __repr__
 		first ifFalse: [
 			stream with: ', ' perform: #nextPutAll: env: 0
 		].
-		reprStr := each perform: #__repr__ env: 2.
+		reprStr := each __repr__.
 		stream with: reprStr perform: #nextPutAll: env: 0.
 		first := false
 	]}.

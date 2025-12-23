@@ -323,7 +323,7 @@ __reversed__
 	"New stop is original start + newStep (exclusive)"
 	newStop := startVal perform: #+ env: 0 withArguments: {newStep}.
 
-	^ range perform: #__new__:_:_:_: env: 2 withArguments: {range. newStart. newStop. newStep}
+	^ range __new__: range _: newStart _: newStop _: newStep
 %
 
 set compile_env: 0

@@ -91,7 +91,7 @@ method: SequenceableCollection
 __ne__: other
 	"Return True if sequences are not equal."
 
-	^ (self perform: #__eq__: env: 2 withArguments: {other}) perform: #not env: 0
+	^ (self __eq__: other) perform: #not env: 0
 %
 
 category: 'Python-Comparison'
@@ -159,7 +159,7 @@ method: SequenceableCollection
 __rmul__: n
 	"Reverse multiply: n * sequence. Same as __mul__."
 
-	^ self perform: #__mul__: env: 2 withArguments: {n}
+	^ self __mul__: n
 %
 
 category: 'Python-Sequence Methods'
@@ -208,7 +208,7 @@ __repr__
 	self perform: #do:separatedBy: env: 0 withArguments: {
 		[:each |
 			| reprStr |
-			reprStr := each perform: #__repr__ env: 2.
+			reprStr := each __repr__.
 			stream with: reprStr perform: #nextPutAll: env: 0
 		].
 		[stream with: ', ' perform: #nextPutAll: env: 0]
@@ -223,7 +223,7 @@ method: SequenceableCollection
 __str__
 	"Return a string representation. Same as __repr__ for sequences."
 
-	^ self perform: #__repr__ env: 2
+	^ self __repr__
 %
 
 category: 'Python-Other'

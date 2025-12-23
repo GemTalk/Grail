@@ -26,8 +26,8 @@ ___on: aCollection
 
 	| instance |
 	instance := self perform: #new env: 0.
-	instance perform: #___collection: env: 2 withArguments: {aCollection}.
-	instance perform: #___position: env: 2 withArguments: {0}.
+	instance ___collection: aCollection.
+	instance ___position: 0.
 	^ instance
 %
 

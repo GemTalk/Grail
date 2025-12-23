@@ -35,10 +35,10 @@ ___on: aSet
 	aSet perform: #do: env: 0 withArguments: {[:each |
 		elementsArray perform: #add: env: 0 withArguments: {each}
 	]}.
-	
-	iter perform: #___collection: env: 2 withArguments: {aSet}.
-	iter perform: #___elements: env: 2 withArguments: {elementsArray}.
-	iter perform: #___position: env: 2 withArguments: {0}.
+
+	iter ___collection: aSet.
+	iter ___elements: elementsArray.
+	iter ___position: 0.
 	^ iter
 %
 

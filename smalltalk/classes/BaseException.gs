@@ -203,7 +203,7 @@ __ne__: other
 	"Compare exceptions for inequality."
 
 	| result |
-	result := self perform: #__eq__: env: 2 withArguments: { other }.
+	result := self __eq__: other.
 	^ result perform: #not env: 0
 %
 

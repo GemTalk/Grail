@@ -23,9 +23,9 @@ ___on: aDict
 	aDict perform: #valuesDo: env: 0 withArguments: {[:value |
 		valuesArray perform: #add: env: 0 withArguments: {value}
 	]}.
-	iter perform: #___dict: env: 2 withArguments: {aDict}.
-	iter perform: #___values: env: 2 withArguments: {valuesArray}.
-	iter perform: #___position: env: 2 withArguments: {0}.
+	iter ___dict: aDict.
+	iter ___values: valuesArray.
+	iter ___position: 0.
 	^ iter
 %
 

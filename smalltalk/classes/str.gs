@@ -917,7 +917,7 @@ method: str
 __iter__
 	"Return an iterator over the string characters."
 
-	^ str_iterator perform: #___on: env: 2 withArguments: {self}
+	^ str_iterator ___on: self
 %
 
 ! ------------------- Reset compile environment to Smalltalk

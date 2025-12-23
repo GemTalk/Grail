@@ -51,7 +51,9 @@ pythonDict := System myUserProfile symbolList objectNamed: #'Python'.
 pythonDict
   "Python names that map to existing GemStone classes"
 	at: #'bool'   put: Boolean;
+	at: #'builtin_function_or_method' put: GsNMethod;
 	at: #'bytes'  put: ByteArray;
+	at: #'Decimal' put: ScaledDecimal;
 	at: #'dict'   put: Dictionary;
 	at: #'float'  put: Float;
 	at: #'frozenset' put: Set;
@@ -1376,6 +1378,87 @@ doit
 complex category: 'Numbers'
 %
 
+! ------- builtins class (Python 'builtins' module)
+expectvalue /Class
+doit
+object subclass: 'builtins'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+expectvalue /Class
+doit
+builtins comment:
+'Python builtins module.
+
+This class provides access to Python''s built-in functions like abs(), len(), print(), etc.
+Each method in this class corresponds to a Python built-in function.
+
+See https://docs.python.org/3/library/functions.html for the complete list.
+'
+%
+expectvalue /Class
+doit
+builtins category: 'Builtins'
+%
+
+! ------- math class (Python 'math' module)
+expectvalue /Class
+doit
+object subclass: 'math'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+expectvalue /Class
+doit
+math comment:
+'Python math module.
+
+This class provides access to mathematical functions and constants.
+Each method in this class corresponds to a Python math module function.
+
+See https://docs.python.org/3/library/math.html for the complete list.
+'
+%
+expectvalue /Class
+doit
+math category: 'Math'
+%
+
+! ------- cmath class (Python 'cmath' module)
+expectvalue /Class
+doit
+object subclass: 'cmath'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+expectvalue /Class
+doit
+cmath comment:
+'Python cmath module.
+
+This class provides access to mathematical functions for complex numbers.
+Each method in this class corresponds to a Python cmath module function.
+
+See https://docs.python.org/3/library/cmath.html for the complete list.
+'
+%
+expectvalue /Class
+doit
+cmath category: 'Math'
+%
+
 ! ------- iterator class (Python base iterator type)
 expectvalue /Class
 doit
@@ -1650,7 +1733,9 @@ dict_itemiterator category: 'Collections-Iterators'
 ! ===============================================================================
 
 input smalltalk/classes/BaseException.gs
+input smalltalk/classes/builtins.gs
 input smalltalk/classes/bytearray.gs
+input smalltalk/classes/cmath.gs
 input smalltalk/classes/complex.gs
 input smalltalk/classes/dict_itemiterator.gs
 input smalltalk/classes/dict_keyiterator.gs
@@ -1658,6 +1743,7 @@ input smalltalk/classes/dict_valueiterator.gs
 input smalltalk/classes/Exception.gs
 input smalltalk/classes/iterator.gs
 input smalltalk/classes/list_iterator.gs
+input smalltalk/classes/math.gs
 input smalltalk/classes/range_iterator.gs
 input smalltalk/classes/set_iterator.gs
 input smalltalk/classes/str_iterator.gs
@@ -1692,7 +1778,9 @@ Transcript show: 'Added Python dictionary to SystemUser''s symbol list'.
 ! ===============================================================================
 
 input smalltalk/classes/bool.gs
+input smalltalk/classes/builtin_function_or_method.gs
 input smalltalk/classes/bytes.gs
+input smalltalk/classes/Decimal.gs
 input smalltalk/classes/dict.gs
 input smalltalk/classes/float.gs
 input smalltalk/classes/frozenset.gs

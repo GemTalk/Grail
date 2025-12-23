@@ -10,3 +10,4 @@ When writing code, keep in mind the message precedence: unary, binary, and keywo
 While writing the primary code is important, writing tests is equally important.
 GemStone Smalltalk code can be found in the `image` directory.
 In Smalltalk it is necessary to define all temporary variables at the top of the method or block. You can't define variables after code.
+In Smalltalk every keyword message must receive exactly the right number of arguments, and parentheses are essential to ensure the parser groups the expression correctly.

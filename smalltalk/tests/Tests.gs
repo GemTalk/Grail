@@ -79,6 +79,23 @@ doit
 BooleanTestCase category: 'SUnit'
 %
 
+! ------------------- Class definition for BuiltinsTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'BuiltinsTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+BuiltinsTestCase category: 'SUnit'
+%
+
 ! ------------------- Class definition for BytesTestCase
 expectvalue /Class
 doit
@@ -113,6 +130,23 @@ doit
 BytearrayTestCase category: 'SUnit'
 %
 
+! ------------------- Class definition for CMathTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'CMathTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+CMathTestCase category: 'SUnit'
+%
+
 ! ------------------- Class definition for DictTestCase
 expectvalue /Class
 doit
@@ -128,6 +162,23 @@ PythonTestCase subclass: 'DictTestCase'
 expectvalue /Class
 doit
 DictTestCase category: 'SUnit'
+%
+
+! ------------------- Class definition for DecimalTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'DecimalTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+DecimalTestCase category: 'SUnit'
 %
 
 ! ------------------- Class definition for IntegerTestCase
@@ -247,6 +298,23 @@ PythonTestCase subclass: 'ListTestCase'
 expectvalue /Class
 doit
 ListTestCase category: 'SUnit'
+%
+
+! ------------------- Class definition for MathTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'MathTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+MathTestCase category: 'SUnit'
 %
 
 ! ------------------- Class definition for TupleTestCase
@@ -379,15 +447,19 @@ testClasses do: [:className |
 ! ------------------- Load all built-in type test methods
 input smalltalk/tests/BaseExceptionTestCase.gs
 input smalltalk/tests/BooleanTestCase.gs
+input smalltalk/tests/BuiltinsTestCase.gs
 input smalltalk/tests/BytesTestCase.gs
 input smalltalk/tests/BytearrayTestCase.gs
+input smalltalk/tests/CMathTestCase.gs
 input smalltalk/tests/ComplexTestCase.gs
+input smalltalk/tests/DecimalTestCase.gs
 input smalltalk/tests/DictTestCase.gs
 input smalltalk/tests/FloatTestCase.gs
 input smalltalk/tests/FrozensetTestCase.gs
 input smalltalk/tests/IntegerTestCase.gs
 input smalltalk/tests/IteratorTestCase.gs
 input smalltalk/tests/ListTestCase.gs
+input smalltalk/tests/MathTestCase.gs
 input smalltalk/tests/ObjectTestCase.gs
 input smalltalk/tests/RangeTestCase.gs
 input smalltalk/tests/SetTestCase.gs

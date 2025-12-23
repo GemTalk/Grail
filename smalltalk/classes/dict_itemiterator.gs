@@ -25,9 +25,9 @@ ___on: aDict
 		pair := InvariantArray perform: #with:with: env: 0 withArguments: {key. value}.
 		itemsArray perform: #add: env: 0 withArguments: {pair}
 	]}.
-	iter perform: #___dict: env: 2 withArguments: {aDict}.
-	iter perform: #___items: env: 2 withArguments: {itemsArray}.
-	iter perform: #___position: env: 2 withArguments: {0}.
+	iter ___dict: aDict.
+	iter ___items: itemsArray.
+	iter ___position: 0.
 	^ iter
 %
 
