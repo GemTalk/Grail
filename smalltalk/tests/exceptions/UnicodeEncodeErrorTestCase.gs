@@ -16,7 +16,7 @@ test_inheritance
 	"Test that UnicodeEncodeError inherits from UnicodeError."
 	
 	| exc |
-	exc := UnicodeEncodeError perform: #__new__: env: 2 withArguments: { UnicodeEncodeError }.
+	exc := UnicodeEncodeError ___new___:  UnicodeEncodeError .
 	self assert: (exc isKindOf: UnicodeError).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a UnicodeEncodeError instance."
 	
 	| exc |
-	exc := UnicodeEncodeError perform: #__new__: env: 2 withArguments: { UnicodeEncodeError }.
+	exc := UnicodeEncodeError ___new___:  UnicodeEncodeError .
 	self assert: exc notNil.
 %

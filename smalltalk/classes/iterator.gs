@@ -34,7 +34,7 @@ __next__
 	If there are no further items, raise StopIteration.
 	This is an abstract method that must be overridden by subclasses."
 
-	self with: 'Subclass must implement __next__' perform: #error: env: 0
+	self ___error___: 'Subclass must implement __next__'
 %
 
 category: 'Python-String Representation'
@@ -43,15 +43,15 @@ __repr__
 	"Return a string representation of the iterator."
 
 	| className stream |
-	className := self perform: #class env: 0.
-	className := className perform: #name env: 0.
-	stream := WriteStream perform: #on: env: 0 withArguments: {String perform: #new env: 0}.
-	stream with: $< perform: #nextPut: env: 0.
-	stream with: className perform: #nextPutAll: env: 0.
-	stream with: ' object at 0x' perform: #nextPutAll: env: 0.
-	stream with: (self perform: #identityHash env: 0) perform: #nextPutAll: env: 0.
-	stream with: $> perform: #nextPut: env: 0.
-	^ stream perform: #contents env: 0
+	className := self ___class___.
+	className := className ___name___.
+	stream := WriteStream ___on___: (String ___new___).
+	stream ___nextPut___: $<.
+	stream ___nextPutAll___: className.
+	stream ___nextPutAll___: ' object at 0x'.
+	stream ___nextPutAll___: (self ___identityHash___).
+	stream ___nextPut___: $>.
+	^ stream ___contents___
 %
 
 category: 'Python-Type Information'
@@ -59,7 +59,7 @@ method: iterator
 __class__
 	"Return the class of this iterator."
 
-	^ self perform: #class env: 0
+	^ self ___class___
 %
 
 ! ------------------- Reset compile environment to Smalltalk

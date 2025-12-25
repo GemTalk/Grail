@@ -20,4 +20,5 @@ category: 'other'
 method: NonlocalAst
 printSmalltalkOn: aStream
 
+	self halt.
 %

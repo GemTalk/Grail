@@ -7,4 +7,5 @@ category: 'other'
 method: FloorDivAst
 printSmalltalkOn: aStream
 
+	self halt.
 %

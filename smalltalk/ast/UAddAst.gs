@@ -7,4 +7,5 @@ category: 'other'
 method: UAddAst
 printSmalltalkOn: aStream
 
+	self halt.
 %

@@ -16,7 +16,7 @@ test_inheritance
 	"Test that SyntaxWarning inherits from Warning."
 	
 	| exc |
-	exc := SyntaxWarning perform: #__new__: env: 2 withArguments: { SyntaxWarning }.
+	exc := SyntaxWarning ___new___:  SyntaxWarning .
 	self assert: (exc isKindOf: Warning).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a SyntaxWarning instance."
 	
 	| exc |
-	exc := SyntaxWarning perform: #__new__: env: 2 withArguments: { SyntaxWarning }.
+	exc := SyntaxWarning ___new___:  SyntaxWarning .
 	self assert: exc notNil.
 %

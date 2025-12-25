@@ -34,10 +34,10 @@ test__len__
 
 	| tup |
 	tup := InvariantArray new.
-	self assert: (tup perform: #__len__ env: 2) equals: 0.
+	self assert: (tup ___len___) equals: 0.
 	
 	tup := InvariantArray withAll: #(1 2 3).
-	self assert: (tup perform: #__len__ env: 2) equals: 3.
+	self assert: (tup ___len___) equals: 3.
 %
 
 category: 'Tests - Sequence Protocol'
@@ -92,8 +92,8 @@ test__contains__
 	| tup |
 	tup := InvariantArray withAll: #(1 2 3).
 	
-	self assert: (tup perform: #__contains__: env: 2 withArguments: {2}).
-	self deny: (tup perform: #__contains__: env: 2 withArguments: {4}).
+	self assert: (tup ___contains___: 2).
+	self deny: (tup ___contains___: 4).
 %
 
 category: 'Tests - Comparison'

@@ -17,4 +17,5 @@ category: 'other'
 method: DictAst
 printSmalltalkOn: aStream
 
+	self halt.
 %

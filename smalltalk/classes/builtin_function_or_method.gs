@@ -32,7 +32,7 @@ __name__
 	"Return the name of the function/method"
 
 	selector ifNil: [^ '<anonymous>'].
-	^ selector perform: #asString env: 0
+	^ selector ___asString___
 %
 
 category: 'Python-Attributes'
@@ -44,13 +44,13 @@ __qualname__
 	selector ifNil: [^ '<anonymous>'].
 
 	inClass ifNil: [
-		^ selector perform: #asString env: 0
+		^ selector ___asString___
 	].
 
-	className := inClass perform: #name env: 0.
-	selectorStr := selector perform: #asString env: 0.
-	result := (className perform: #asString env: 0) perform: #, env: 0 withArguments: {'.'}.
-	result := result perform: #, env: 0 withArguments: {selectorStr}.
+	className := inClass ___name___.
+	selectorStr := selector ___asString___.
+	result := (className ___asString___) ___concat___: '.'.
+	result := result ___concat___: selectorStr.
 	^ result
 %
 
@@ -66,7 +66,7 @@ method: builtin_function_or_method
 __self__
 	"Return the object the method is bound to"
 	"For builtin_function_or_method, we don't track bound objects, so raise AttributeError"
-	AttributeError perform: #signal: env: 0 withArguments: {'__self__'}
+	AttributeError ___signal___: '__self__'
 %
 
 category: 'Python-Attributes'
@@ -92,8 +92,8 @@ __repr__
 
 	| name result |
 	name := self __name__.
-	result := '<built-in function ' perform: #, env: 0 withArguments: {name}.
-	result := result perform: #, env: 0 withArguments: {'>'}.
+	result := '<built-in function ' ___concat___: name.
+	result := result ___concat___: '>'.
 	^ result
 %
 

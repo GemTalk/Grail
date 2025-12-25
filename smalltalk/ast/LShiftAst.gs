@@ -7,4 +7,5 @@ category: 'other'
 method: LShiftAst
 printSmalltalkOn: aStream
 
+	self halt.
 %

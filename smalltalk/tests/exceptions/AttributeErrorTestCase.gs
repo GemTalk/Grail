@@ -16,7 +16,7 @@ test_inheritance
 	"Test that AttributeError inherits from Exception."
 	
 	| exc |
-	exc := AttributeError perform: #__new__: env: 2 withArguments: { AttributeError }.
+	exc := AttributeError ___new___:  AttributeError .
 	self assert: (exc isKindOf: Exception).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a AttributeError instance."
 	
 	| exc |
-	exc := AttributeError perform: #__new__: env: 2 withArguments: { AttributeError }.
+	exc := AttributeError ___new___:  AttributeError .
 	self assert: exc notNil.
 %

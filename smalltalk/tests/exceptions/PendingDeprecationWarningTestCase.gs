@@ -16,7 +16,7 @@ test_inheritance
 	"Test that PendingDeprecationWarning inherits from Warning."
 	
 	| exc |
-	exc := PendingDeprecationWarning perform: #__new__: env: 2 withArguments: { PendingDeprecationWarning }.
+	exc := PendingDeprecationWarning ___new___:  PendingDeprecationWarning .
 	self assert: (exc isKindOf: Warning).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a PendingDeprecationWarning instance."
 	
 	| exc |
-	exc := PendingDeprecationWarning perform: #__new__: env: 2 withArguments: { PendingDeprecationWarning }.
+	exc := PendingDeprecationWarning ___new___:  PendingDeprecationWarning .
 	self assert: exc notNil.
 %

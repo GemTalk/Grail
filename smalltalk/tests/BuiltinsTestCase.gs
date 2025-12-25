@@ -17,7 +17,7 @@ testAbs
 	"Test abs() function"
 
 	| b result |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 	
 	result := b perform: #abs: env: 2 withArguments: {5}.
 	self assert: result equals: 5.
@@ -39,7 +39,7 @@ testHex
 	"Test hex() function"
 
 	| b result |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 	
 	result := b perform: #hex: env: 2 withArguments: {255}.
 	self assert: result equals: '0xff'.
@@ -57,7 +57,7 @@ testOct
 	"Test oct() function"
 
 	| b result |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 	
 	result := b perform: #oct: env: 2 withArguments: {8}.
 	self assert: result equals: '0o10'.
@@ -75,7 +75,7 @@ testBin
 	"Test bin() function"
 
 	| b result |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 	
 	result := b perform: #bin: env: 2 withArguments: {5}.
 	self assert: result equals: '0b101'.
@@ -93,7 +93,7 @@ testType
 	"Test type() function"
 
 	| b result |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 
 	result := b perform: #type: env: 2 withArguments: {42}.
 	self assert: (42 perform: #isKindOf: env: 0 withArguments: {result}).
@@ -101,8 +101,8 @@ testType
 	result := b perform: #type: env: 2 withArguments: {'hello'}.
 	self assert: ('hello' perform: #isKindOf: env: 0 withArguments: {result}).
 
-	result := b perform: #type: env: 2 withArguments: {list perform: #new env: 0}.
-	self assert: ((list perform: #new env: 0) perform: #isKindOf: env: 0 withArguments: {result})
+	result := b perform: #type: env: 2 withArguments: {list new}.
+	self assert: ((list new) perform: #isKindOf: env: 0 withArguments: {result})
 %
 
 category: 'Tests - Type Functions'
@@ -111,12 +111,12 @@ testLen
 	"Test len() function"
 
 	| b result lst |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 	
 	result := b perform: #len: env: 2 withArguments: {'hello'}.
 	self assert: result equals: 5.
 	
-	lst := list perform: #new env: 0.
+	lst := list new.
 	lst perform: #append: env: 2 withArguments: {1}.
 	lst perform: #append: env: 2 withArguments: {2}.
 	lst perform: #append: env: 2 withArguments: {3}.
@@ -130,7 +130,7 @@ testLenTypeError
 	"Test that len() raises TypeError for objects without __len__"
 
 	| b |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 	
 	self should: [
 		b perform: #len: env: 2 withArguments: {42}
@@ -143,7 +143,7 @@ testHash
 	"Test hash() function"
 
 	| b result |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 
 	result := b perform: #hash: env: 2 withArguments: {42}.
 	self assert: (result perform: #isKindOf: env: 0 withArguments: {Integer}).
@@ -158,7 +158,7 @@ testRepr
 	"Test repr() function"
 
 	| b result |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 
 	result := b perform: #repr: env: 2 withArguments: {'hello'}.
 	self assert: (result perform: #includesString: env: 0 withArguments: {'hello'}).
@@ -173,7 +173,7 @@ testStr
 	"Test str() function"
 
 	| b result |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 
 	result := b perform: #str: env: 2 withArguments: {42}.
 	self assert: result equals: '42'.
@@ -188,7 +188,7 @@ testChr
 	"Test chr() function"
 
 	| b result |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 
 	result := b perform: #chr: env: 2 withArguments: {65}.
 	self assert: result equals: 'A'.
@@ -206,7 +206,7 @@ testOrd
 	"Test ord() function"
 
 	| b result |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 
 	result := b perform: #ord: env: 2 withArguments: {'A'}.
 	self assert: result equals: 65.
@@ -224,7 +224,7 @@ testOrdTypeError
 	"Test that ord() raises TypeError for strings with length != 1"
 
 	| b |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 
 	self should: [
 		b perform: #ord: env: 2 withArguments: {'hello'}
@@ -241,7 +241,7 @@ testMin
 	"Test min() function"
 
 	| b result lst |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 
 	lst := list perform: #withAll: env: 0 withArguments: {#(5 2 8 1 9)}.
 	result := b perform: #min: env: 2 withArguments: {lst}.
@@ -258,7 +258,7 @@ testMax
 	"Test max() function"
 
 	| b result lst |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 
 	lst := list perform: #withAll: env: 0 withArguments: {#(5 2 8 1 9)}.
 	result := b perform: #max: env: 2 withArguments: {lst}.
@@ -275,7 +275,7 @@ testSum
 	"Test sum() function"
 
 	| b result lst |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 
 	lst := list perform: #withAll: env: 0 withArguments: {#(1 2 3 4 5)}.
 	result := b perform: #sum: env: 2 withArguments: {lst}.
@@ -292,7 +292,7 @@ testAll
 	"Test all() function"
 
 	| b result lst |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 
 	lst := list perform: #withAll: env: 0 withArguments: {#(true true true)}.
 	result := b perform: #all: env: 2 withArguments: {lst}.
@@ -313,7 +313,7 @@ testAny
 	"Test any() function"
 
 	| b result lst |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 
 	lst := list perform: #withAll: env: 0 withArguments: {#(false false true)}.
 	result := b perform: #any: env: 2 withArguments: {lst}.
@@ -334,7 +334,7 @@ testIsinstance
 	"Test isinstance() function"
 
 	| b result lst |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 
 	result := b perform: #isinstance:_: env: 2 withArguments: {42. int}.
 	self assert: result.
@@ -342,7 +342,7 @@ testIsinstance
 	result := b perform: #isinstance:_: env: 2 withArguments: {'hello'. str}.
 	self assert: result.
 
-	lst := list perform: #new env: 0.
+	lst := list new.
 	result := b perform: #isinstance:_: env: 2 withArguments: {lst. list}.
 	self assert: result.
 
@@ -356,7 +356,7 @@ testCallable
 	"Test callable() function"
 
 	| b method result lst |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 	method := builtins compiledMethodAt: #abs: environmentId: 2.
 	"Functions/methods are callable"
 	result := b perform: #callable: env: 2 withArguments: {method}.
@@ -366,7 +366,7 @@ testCallable
 	result := b perform: #callable: env: 2 withArguments: {42}.
 	self deny: result.
 
-	lst := list perform: #new env: 0.
+	lst := list new.
 	result := b perform: #callable: env: 2 withArguments: {lst}.
 	self deny: result
 %
@@ -377,10 +377,10 @@ testId
 	"Test id() function"
 
 	| b result obj1 obj2 id1 id2 |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 
-	obj1 := list perform: #new env: 0.
-	obj2 := list perform: #new env: 0.
+	obj1 := list new.
+	obj2 := list new.
 
 	id1 := b perform: #id: env: 2 withArguments: {obj1}.
 	id2 := b perform: #id: env: 2 withArguments: {obj2}.
@@ -396,7 +396,7 @@ testPow
 	"Test pow() function"
 
 	| b result |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 
 	result := b perform: #pow:_: env: 2 withArguments: {2. 3}.
 	self assert: result equals: 8.
@@ -414,7 +414,7 @@ testPowWithModulo
 	"Test pow() function with modulo"
 
 	| b result |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 
 	result := b perform: #pow:_:_: env: 2 withArguments: {2. 3. 5}.
 	self assert: result equals: 3.
@@ -429,7 +429,7 @@ testRound
 	"Test round() function"
 
 	| b result |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 
 	result := b perform: #round: env: 2 withArguments: {3.7}.
 	self assert: result equals: 4.
@@ -447,7 +447,7 @@ testDivmod
 	"Test divmod() function"
 
 	| b result quotient remainder |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 
 	result := b perform: #divmod:_: env: 2 withArguments: {10. 3}.
 	quotient := result perform: #__getitem__: env: 2 withArguments: {0}.
@@ -468,7 +468,7 @@ testSorted
 	"Test sorted() function - returns a new sorted list, leaving original unchanged"
 
 	| b result lst |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 
 	lst := list perform: #withAll: env: 0 withArguments: {#(3 1 4 1 5 9 2 6)}.
 	result := b perform: #sorted: env: 2 withArguments: {lst}.
@@ -477,13 +477,13 @@ testSorted
 	self assert: (result perform: #__getitem__: env: 2 withArguments: {0}) equals: 1.
 	self assert: (result perform: #__getitem__: env: 2 withArguments: {1}) equals: 1.
 	self assert: (result perform: #__getitem__: env: 2 withArguments: {2}) equals: 2.
-	self assert: (result perform: #__len__ env: 2) equals: 8.
+	self assert: (result ___len___) equals: 8.
 
 	"Verify the original list is unchanged"
 	self assert: (lst perform: #__getitem__: env: 2 withArguments: {0}) equals: 3.
 	self assert: (lst perform: #__getitem__: env: 2 withArguments: {1}) equals: 1.
 	self assert: (lst perform: #__getitem__: env: 2 withArguments: {2}) equals: 4.
-	self assert: (lst perform: #__len__ env: 2) equals: 8
+	self assert: (lst ___len___) equals: 8
 %
 
 category: 'Tests - Sequence Functions'
@@ -492,7 +492,7 @@ testEnumerate
 	"Test enumerate() function"
 
 	| b result lst iter first second |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 
 	lst := list perform: #withAll: env: 0 withArguments: {#('a' 'b' 'c')}.
 	result := b perform: #enumerate: env: 2 withArguments: {lst}.
@@ -512,7 +512,7 @@ testZip
 	"Test zip() function"
 
 	| b result lst1 lst2 iterables iter first |
-	b := builtins perform: #new env: 0.
+	b := builtins new.
 
 	lst1 := list perform: #withAll: env: 0 withArguments: {#(1 2 3)}.
 	lst2 := list perform: #withAll: env: 0 withArguments: {#('a' 'b' 'c')}.

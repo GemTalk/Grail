@@ -14,18 +14,6 @@ removeallclassmethods complex
 ! ------------------- Smalltalk-side class methods for complex
 set compile_env: 0
 
-category: 'Smalltalk'
-classmethod: complex
-	___real: r imaginary: i
-	"Smalltalk-side constructor for creating complex numbers.
-	This is called from AST nodes and other Smalltalk code."
-
-	| instance |
-	instance := self basicNew.
-	instance perform: #__init__:_: env: 2 withArguments: {r. i}.
-	^ instance
-%
-
 ! ------------------- Python class methods for complex
 set compile_env: 2
 
@@ -35,13 +23,14 @@ __new__: r _: i
 	"Create a new complex number with given real and imaginary parts.
 	In Python: complex(real, imag) or complex.__new__(complex, real, imag)"
 
-	| realVal imagVal |
+	| realVal imagVal instance |
 	"Default values"
 	realVal := r ifNil: [0.0] ifNotNil: [r].
 	imagVal := i ifNil: [0.0] ifNotNil: [i].
 
-	"Use Smalltalk-side constructor"
-	^ self perform: #___real:imaginary: env: 0 withArguments: {realVal. imagVal}
+	instance := self __new__.
+	instance __init__: realVal _: imagVal.
+	^ instance
 %
 
 category: 'Python-Type Conversion'
@@ -51,7 +40,7 @@ from_number: n
 	In Python: complex.from_number(5) returns (5+0j)"
 
 	"Use Smalltalk-side constructor"
-	^ self perform: #___real:imaginary: env: 0 withArguments: {n. 0.0}
+	^ self __new__: n _: 0.0
 %
 
 ! ------------------- Python instance methods for complex
@@ -63,8 +52,8 @@ __init__: r _: i
 	"Initialize a complex number with real and imaginary parts.
 	Called after __new__ in Python, or directly from Smalltalk constructor."
 
-	real := r perform: #asFloat env: 0.
-	imag := i perform: #asFloat env: 0.
+	real := r ___asFloat___.
+	imag := i ___asFloat___.
 	^ nil
 %
 
@@ -89,7 +78,7 @@ method: complex
 conjugate
 	"Return the complex conjugate."
 
-	^ complex perform: #___real:imaginary: env: 0 withArguments: {real. imag perform: #negated env: 0}
+	^ complex __new__: real _: (imag ___negated___)
 %
 
 category: 'Python-String Representation'
@@ -98,27 +87,27 @@ __repr__
 	"Return string representation of complex number."
 
 	| realStr imagStr |
-	realStr := real perform: #printString env: 0.
-	imagStr := imag perform: #abs env: 0.
-	imagStr := imagStr perform: #printString env: 0.
+	realStr := real ___printString___.
+	imagStr := imag ___abs___.
+	imagStr := imagStr ___printString___.
 
-	^ ((real perform: #= env: 0 withArguments: {0.0})
-		ifTrue: [imagStr perform: #, env: 0 withArguments: {'j'}]
+	^ ((real ___eq___: 0.0)
+		ifTrue: [imagStr ___concat___: 'j']
 		ifFalse: [
-			(imag perform: #>= env: 0 withArguments: {0.0})
+			(imag ___ge___: 0.0)
 				ifTrue: [
-					((('(' perform: #, env: 0 withArguments: {realStr})
-						perform: #, env: 0 withArguments: {'+'})
-						perform: #, env: 0 withArguments: {imagStr})
-						perform: #, env: 0 withArguments: {'j)'}
+					(((('(' ___concat___: realStr)
+						___concat___: '+')
+						___concat___: imagStr)
+						___concat___: 'j)')
 				]
 				ifFalse: [
-					((('(' perform: #, env: 0 withArguments: {realStr})
-						perform: #, env: 0 withArguments: {'-'})
-						perform: #, env: 0 withArguments: {imagStr})
-						perform: #, env: 0 withArguments: {'j)'}
+					(((('(' ___concat___: realStr)
+						___concat___: '-')
+						___concat___: imagStr)
+						___concat___: 'j)')
 				]
-		]) perform: #asUnicodeString env: 0
+		]) ___asUnicodeString___
 %
 
 category: 'Python-String Representation'
@@ -135,11 +124,11 @@ __eq__: other
 	"Test equality with another complex number."
 	
 	| otherReal otherImag |
-	(other perform: #class env: 0) == complex ifFalse: [^ false].
+	(other ___class___) == complex ifFalse: [^ false].
 	otherReal := other real.
 	otherImag := other imag.
-	^ (real perform: #= env: 0 withArguments: {otherReal}) 
-		and: [imag perform: #= env: 0 withArguments: {otherImag}]
+	^ (real ___eq___: otherReal) 
+		and: [imag ___eq___: otherImag]
 %
 
 category: 'Python-Comparison'
@@ -147,7 +136,7 @@ method: complex
 __ne__: other
 	"Test inequality with another complex number."
 
-	^ (self __eq__: other) perform: #not env: 0
+	^ (self __eq__: other) ___not___
 %
 
 category: 'Python-Comparison'
@@ -188,19 +177,16 @@ __add__: other
 	"Add two complex numbers or complex and real."
 
 	| otherReal otherImag |
-	(other perform: #class env: 0) == complex
+	(other ___class___) == complex
 		ifTrue: [
 			otherReal := other real.
 			otherImag := other imag.
 		]
 		ifFalse: [
-			otherReal := other perform: #asFloat env: 0.
+			otherReal := other ___asFloat___.
 			otherImag := 0.0.
 		].
-	^ complex perform: #___real:imaginary: env: 0 withArguments: {
-		real perform: #+ env: 0 withArguments: {otherReal}.
-		imag perform: #+ env: 0 withArguments: {otherImag}
-	}
+	^ complex __new__: (real ___plus___: otherReal) _: (imag ___plus___: otherImag)
 %
 
 category: 'Python-Arithmetic'
@@ -217,19 +203,16 @@ __sub__: other
 	"Subtract two complex numbers or complex and real."
 
 	| otherReal otherImag |
-	(other perform: #class env: 0) == complex
+	(other ___class___) == complex
 		ifTrue: [
 			otherReal := other real.
 			otherImag := other imag.
 		]
 		ifFalse: [
-			otherReal := other perform: #asFloat env: 0.
+			otherReal := other ___asFloat___.
 			otherImag := 0.0.
 		].
-	^ complex perform: #___real:imaginary: env: 0 withArguments: {
-		real perform: #- env: 0 withArguments: {otherReal}.
-		imag perform: #- env: 0 withArguments: {otherImag}
-	}
+	^ complex __new__: (real ___minus___: otherReal) _: (imag ___minus___: otherImag)
 %
 
 category: 'Python-Arithmetic'
@@ -238,19 +221,16 @@ __rsub__: other
 	"Right-hand subtract (other - self)."
 
 	| otherReal otherImag |
-	(other perform: #class env: 0) == complex
+	(other ___class___) == complex
 		ifTrue: [
 			otherReal := other real.
 			otherImag := other imag.
 		]
 		ifFalse: [
-			otherReal := other perform: #asFloat env: 0.
+			otherReal := other ___asFloat___.
 			otherImag := 0.0.
 		].
-	^ complex perform: #___real:imaginary: env: 0 withArguments: {
-		otherReal perform: #- env: 0 withArguments: {real}.
-		otherImag perform: #- env: 0 withArguments: {imag}
-	}
+	^ complex __new__: (otherReal ___minus___: real) _: (otherImag ___minus___: imag)
 %
 
 category: 'Python-Arithmetic'
@@ -260,25 +240,25 @@ __mul__: other
 	(a+bi)(c+di) = (ac-bd) + (ad+bc)i"
 
 	| otherReal otherImag newReal newImag ac bd ad bc |
-	(other perform: #class env: 0) == complex
+	(other ___class___) == complex
 		ifTrue: [
 			otherReal := other real.
 			otherImag := other imag.
 		]
 		ifFalse: [
-			otherReal := other perform: #asFloat env: 0.
+			otherReal := other ___asFloat___.
 			otherImag := 0.0.
 		].
 
-	ac := real perform: #* env: 0 withArguments: {otherReal}.
-	bd := imag perform: #* env: 0 withArguments: {otherImag}.
-	ad := real perform: #* env: 0 withArguments: {otherImag}.
-	bc := imag perform: #* env: 0 withArguments: {otherReal}.
+	ac := real ___times___: otherReal.
+	bd := imag ___times___: otherImag.
+	ad := real ___times___: otherImag.
+	bc := imag ___times___: otherReal.
 
-	newReal := ac perform: #- env: 0 withArguments: {bd}.
-	newImag := ad perform: #+ env: 0 withArguments: {bc}.
+	newReal := ac ___minus___: (bd).
+	newImag := ad ___plus___: bc.
 
-	^ complex perform: #___real:imaginary: env: 0 withArguments: {newReal. newImag}
+	^ complex __new__: newReal _: newImag
 %
 
 category: 'Python-Arithmetic'
@@ -296,34 +276,32 @@ __truediv__: other
 	(a+bi)/(c+di) = [(ac+bd) + (bc-ad)i] / (c²+d²)"
 
 	| otherReal otherImag denom ac bd bc ad newReal newImag |
-	(other perform: #class env: 0) == complex
+	(other ___class___) == complex
 		ifTrue: [
 			otherReal := other real.
 			otherImag := other imag.
 		]
 		ifFalse: [
-			otherReal := other perform: #asFloat env: 0.
+			otherReal := other ___asFloat___.
 			otherImag := 0.0.
 		].
 
 	"Calculate denominator: c² + d²"
-	denom := (otherReal perform: #* env: 0 withArguments: {otherReal})
-		perform: #+ env: 0 withArguments: {
-			otherImag perform: #* env: 0 withArguments: {otherImag}
-		}.
+	denom := (otherReal ___times___: otherReal)
+		___plus___: (otherImag ___times___: otherImag).
 
 	"Calculate numerator components"
-	ac := real perform: #* env: 0 withArguments: {otherReal}.
-	bd := imag perform: #* env: 0 withArguments: {otherImag}.
-	bc := imag perform: #* env: 0 withArguments: {otherReal}.
-	ad := real perform: #* env: 0 withArguments: {otherImag}.
+	ac := real ___times___: otherReal.
+	bd := imag ___times___: otherImag.
+	bc := imag ___times___: otherReal.
+	ad := real ___times___: otherImag.
 
-	newReal := (ac perform: #+ env: 0 withArguments: {bd})
-		perform: #/ env: 0 withArguments: {denom}.
-	newImag := (bc perform: #- env: 0 withArguments: {ad})
-		perform: #/ env: 0 withArguments: {denom}.
+	newReal := (ac ___plus___: bd)
+		___divide___: denom.
+	newImag := (bc ___minus___: (ad))
+		___divide___: denom.
 
-	^ complex perform: #___real:imaginary: env: 0 withArguments: {newReal. newImag}
+	^ complex __new__: newReal _: newImag
 %
 
 category: 'Python-Arithmetic'
@@ -332,34 +310,32 @@ __rtruediv__: other
 	"Right-hand divide (other / self)."
 
 	| otherReal otherImag denom ac bd bc ad newReal newImag |
-	(other perform: #class env: 0) == complex
+	(other ___class___) == complex
 		ifTrue: [
 			otherReal := other real.
 			otherImag := other imag.
 		]
 		ifFalse: [
-			otherReal := other perform: #asFloat env: 0.
+			otherReal := other ___asFloat___.
 			otherImag := 0.0.
 		].
 
 	"Calculate denominator: a² + b² (self's magnitude squared)"
-	denom := (real perform: #* env: 0 withArguments: {real})
-		perform: #+ env: 0 withArguments: {
-			imag perform: #* env: 0 withArguments: {imag}
-		}.
+	denom := (real ___times___: real)
+		___plus___: (imag ___times___: imag).
 
 	"Calculate numerator components for other / self"
-	ac := otherReal perform: #* env: 0 withArguments: {real}.
-	bd := otherImag perform: #* env: 0 withArguments: {imag}.
-	bc := otherImag perform: #* env: 0 withArguments: {real}.
-	ad := otherReal perform: #* env: 0 withArguments: {imag}.
+	ac := otherReal ___times___: real.
+	bd := otherImag ___times___: imag.
+	bc := otherImag ___times___: real.
+	ad := otherReal ___times___: imag.
 
-	newReal := (ac perform: #+ env: 0 withArguments: {bd})
-		perform: #/ env: 0 withArguments: {denom}.
-	newImag := (bc perform: #- env: 0 withArguments: {ad})
-		perform: #/ env: 0 withArguments: {denom}.
+	newReal := (ac ___plus___: bd)
+		___divide___: denom.
+	newImag := (bc ___minus___: (ad))
+		___divide___: denom.
 
-	^ complex perform: #___real:imaginary: env: 0 withArguments: {newReal. newImag}
+	^ complex __new__: newReal _: newImag
 %
 
 category: 'Python-Arithmetic'
@@ -370,24 +346,24 @@ __pow__: other
 
 	| result n |
 	"Convert other to integer"
-	n := other perform: #asInteger env: 0.
+	n := other ___asInteger___.
 
 	"Handle special cases"
-	n == 0 ifTrue: [^ complex perform: #___real:imaginary: env: 0 withArguments: {1.0. 0.0}].
+	n == 0 ifTrue: [^ complex __new__: 1.0 _: 0.0].
 	n == 1 ifTrue: [^ self].
 
 	"Positive powers: multiply self n times"
-	(n perform: #> env: 0 withArguments: {0}) ifTrue: [
+	(n ___gt___: 0) ifTrue: [
 		result := self.
-		((n perform: #- env: 0 withArguments: {1}) perform: #timesRepeat: env: 0 withArguments: {[
+		((n ___minus___: 1) ___timesRepeat___: [
 			result := result __mul__: self.
-		]}).
+		]).
 		^ result
 	].
 
 	"Negative powers: 1 / (self ** -n)"
-	result := complex perform: #___real:imaginary: env: 0 withArguments: {1.0. 0.0}.
-	^ result __truediv__: (self __pow__: (n perform: #negated env: 0))
+	result := complex __new__: 1.0 _: 0.0.
+	^ result __truediv__: (self __pow__: (n ___negated___))
 %
 
 category: 'Python-Arithmetic'
@@ -404,10 +380,7 @@ method: complex
 __neg__
 	"Negate the complex number."
 
-	^ complex perform: #___real:imaginary: env: 0 withArguments: {
-		real perform: #negated env: 0.
-		imag perform: #negated env: 0
-	}
+	^ complex __new__: (real ___negated___) _: (imag ___negated___)
 %
 
 category: 'Python-Arithmetic'
@@ -425,10 +398,10 @@ __abs__
 	|a+bi| = sqrt(a² + b²)"
 
 	| realSquared imagSquared sumSquares magnitude |
-	realSquared := real perform: #* env: 0 withArguments: {real}.
-	imagSquared := imag perform: #* env: 0 withArguments: {imag}.
-	sumSquares := realSquared perform: #+ env: 0 withArguments: {imagSquared}.
-	magnitude := sumSquares perform: #sqrt env: 0.
+	realSquared := real ___times___: real.
+	imagSquared := imag ___times___: imag.
+	sumSquares := realSquared ___plus___: imagSquared.
+	magnitude := sumSquares ___sqrt___.
 	^ magnitude
 %
 
@@ -437,8 +410,8 @@ method: complex
 __bool__
 	"Return True if complex number is non-zero, False otherwise."
 
-	^ (real perform: #~= env: 0 withArguments: {0.0})
-		or: [imag perform: #~= env: 0 withArguments: {0.0}]
+	^ (real ___ne___: 0.0)
+		or: [imag ___ne___: 0.0]
 %
 
 category: 'Python-Type Conversion'

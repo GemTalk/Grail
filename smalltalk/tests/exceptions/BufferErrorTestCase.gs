@@ -16,7 +16,7 @@ test_inheritance
 	"Test that BufferError inherits from Exception."
 	
 	| exc |
-	exc := BufferError perform: #__new__: env: 2 withArguments: { BufferError }.
+	exc := BufferError ___new___:  BufferError .
 	self assert: (exc isKindOf: Exception).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a BufferError instance."
 	
 	| exc |
-	exc := BufferError perform: #__new__: env: 2 withArguments: { BufferError }.
+	exc := BufferError ___new___:  BufferError .
 	self assert: exc notNil.
 %

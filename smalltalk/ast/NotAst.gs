@@ -7,4 +7,5 @@ category: 'other'
 method: NotAst
 printSmalltalkOn: aStream
 
+	self halt.
 %

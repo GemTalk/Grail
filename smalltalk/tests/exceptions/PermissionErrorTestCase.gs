@@ -16,7 +16,7 @@ test_inheritance
 	"Test that PermissionError inherits from OSError."
 	
 	| exc |
-	exc := PermissionError perform: #__new__: env: 2 withArguments: { PermissionError }.
+	exc := PermissionError ___new___:  PermissionError .
 	self assert: (exc isKindOf: OSError).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a PermissionError instance."
 	
 	| exc |
-	exc := PermissionError perform: #__new__: env: 2 withArguments: { PermissionError }.
+	exc := PermissionError ___new___:  PermissionError .
 	self assert: exc notNil.
 %

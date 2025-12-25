@@ -34,7 +34,7 @@ category: 'Python-Mathematical Constants'
 method: math
 tau
 	"The mathematical constant τ = 2π = 6.283185..."
-	^ (Float perform: #pi env: 0) perform: #* env: 0 withArguments: {2}
+	^ (Float perform: #pi env: 0) ___times___: 2
 %
 
 category: 'Python-Mathematical Constants'
@@ -55,7 +55,7 @@ category: 'Python-Power and Logarithmic Functions'
 method: math
 sqrt: x
 	"Return the square root of x"
-	^ x perform: #sqrt env: 0
+	^ x ___sqrt___
 %
 
 category: 'Python-Power and Logarithmic Functions'
@@ -63,9 +63,9 @@ method: math
 pow: x _: y
 	"Return x raised to the power y"
 	| xFloat yFloat |
-	xFloat := x perform: #asFloat env: 0.
-	yFloat := y perform: #asFloat env: 0.
-	^ xFloat perform: #raisedTo: env: 0 withArguments: {yFloat}
+	xFloat := x ___asFloat___.
+	yFloat := y ___asFloat___.
+	^ xFloat ___raisedTo___: yFloat
 %
 
 category: 'Python-Power and Logarithmic Functions'
@@ -79,7 +79,7 @@ category: 'Python-Power and Logarithmic Functions'
 method: math
 log: x
 	"Return the natural logarithm of x (base e)"
-	^ x perform: #ln env: 0
+	^ x ___ln___
 %
 
 category: 'Python-Power and Logarithmic Functions'
@@ -87,16 +87,16 @@ method: math
 log: x _: base
 	"Return the logarithm of x to the given base"
 	| lnX lnBase |
-	lnX := x perform: #ln env: 0.
-	lnBase := base perform: #ln env: 0.
-	^ lnX perform: #/ env: 0 withArguments: {lnBase}
+	lnX := x ___ln___.
+	lnBase := base ___ln___.
+	^ lnX ___divide___: lnBase
 %
 
 category: 'Python-Power and Logarithmic Functions'
 method: math
 log10: x
 	"Return the base-10 logarithm of x"
-	^ (x perform: #asFloat env: 0) perform: #log10 env: 0
+	^ (x ___asFloat___) perform: #log10 env: 0
 %
 
 category: 'Python-Power and Logarithmic Functions'
@@ -104,22 +104,22 @@ method: math
 log2: x
 	"Return the base-2 logarithm of x"
 	| ln2 |
-	ln2 := 2 perform: #ln env: 0.
-	^ (x perform: #ln env: 0) perform: #/ env: 0 withArguments: {ln2}
+	ln2 := 2 ___ln___.
+	^ (x ___ln___) ___divide___: ln2
 %
 
 category: 'Python-Trigonometric Functions'
 method: math
 sin: x
 	"Return the sine of x (in radians)"
-	^ x perform: #sin env: 0
+	^ x ___sin___
 %
 
 category: 'Python-Trigonometric Functions'
 method: math
 cos: x
 	"Return the cosine of x (in radians)"
-	^ x perform: #cos env: 0
+	^ x ___cos___
 %
 
 category: 'Python-Trigonometric Functions'
@@ -155,8 +155,8 @@ method: math
 atan2: y _: x
 	"Return atan(y / x) in radians, with correct quadrant"
 	| yFloat xFloat |
-	yFloat := y perform: #asFloat env: 0.
-	xFloat := x perform: #asFloat env: 0.
+	yFloat := y ___asFloat___.
+	xFloat := x ___asFloat___.
 	^ yFloat perform: #arcTan2: env: 0 withArguments: {xFloat}
 %
 
@@ -165,7 +165,7 @@ method: math
 sinh: x
 	"Return the hyperbolic sine of x"
 	| xFloat |
-	xFloat := x perform: #asFloat env: 0.
+	xFloat := x ___asFloat___.
 	^ xFloat perform: #sinh env: 0
 %
 
@@ -174,7 +174,7 @@ method: math
 cosh: x
 	"Return the hyperbolic cosine of x"
 	| xFloat |
-	xFloat := x perform: #asFloat env: 0.
+	xFloat := x ___asFloat___.
 	^ xFloat perform: #cosh env: 0
 %
 
@@ -183,7 +183,7 @@ method: math
 tanh: x
 	"Return the hyperbolic tangent of x"
 	| xFloat |
-	xFloat := x perform: #asFloat env: 0.
+	xFloat := x ___asFloat___.
 	^ xFloat perform: #tanh env: 0
 %
 
@@ -192,7 +192,7 @@ method: math
 asinh: x
 	"Return the inverse hyperbolic sine of x"
 	| xFloat |
-	xFloat := x perform: #asFloat env: 0.
+	xFloat := x ___asFloat___.
 	^ xFloat perform: #arcSinh env: 0
 %
 
@@ -201,7 +201,7 @@ method: math
 acosh: x
 	"Return the inverse hyperbolic cosine of x"
 	| xFloat |
-	xFloat := x perform: #asFloat env: 0.
+	xFloat := x ___asFloat___.
 	^ xFloat perform: #arcCosh env: 0
 %
 
@@ -210,7 +210,7 @@ method: math
 atanh: x
 	"Return the inverse hyperbolic tangent of x"
 	| xFloat |
-	xFloat := x perform: #asFloat env: 0.
+	xFloat := x ___asFloat___.
 	^ xFloat perform: #arcTanh env: 0
 %
 
@@ -219,7 +219,7 @@ method: math
 ceil: x
 	"Return the ceiling of x (smallest integer >= x)"
 	| xFloat |
-	xFloat := x perform: #asFloat env: 0.
+	xFloat := x ___asFloat___.
 	^ xFloat perform: #ceiling env: 0
 %
 
@@ -228,7 +228,7 @@ method: math
 floor: x
 	"Return the floor of x (largest integer <= x)"
 	| xFloat |
-	xFloat := x perform: #asFloat env: 0.
+	xFloat := x ___asFloat___.
 	^ xFloat perform: #floor env: 0
 %
 
@@ -237,8 +237,8 @@ method: math
 trunc: x
 	"Return x truncated to an integer"
 	| xFloat |
-	xFloat := x perform: #asFloat env: 0.
-	^ xFloat perform: #truncated env: 0
+	xFloat := x ___asFloat___.
+	^ xFloat ___truncated___
 %
 
 category: 'Python-Number Theory Functions'
@@ -246,9 +246,9 @@ method: math
 factorial: n
 	"Return n factorial (n!)"
 	| nInt |
-	nInt := n perform: #asInteger env: 0.
-	(nInt perform: #< env: 0 withArguments: {0}) ifTrue: [
-		ValueError perform: #signal: env: 0 withArguments: {'factorial() not defined for negative values'}
+	nInt := n ___asInteger___.
+	(nInt ___lt___: 0) ifTrue: [
+		ValueError ___signal___: 'factorial() not defined for negative values'
 	].
 	^ nInt perform: #factorial env: 0
 %
@@ -258,8 +258,8 @@ method: math
 gcd: a _: b
 	"Return the greatest common divisor of a and b"
 	| aInt bInt |
-	aInt := a perform: #asInteger env: 0.
-	bInt := b perform: #asInteger env: 0.
+	aInt := a ___asInteger___.
+	bInt := b ___asInteger___.
 	^ aInt perform: #gcd: env: 0 withArguments: {bInt}
 %
 
@@ -268,8 +268,8 @@ method: math
 lcm: a _: b
 	"Return the least common multiple of a and b"
 	| aInt bInt |
-	aInt := a perform: #asInteger env: 0.
-	bInt := b perform: #asInteger env: 0.
+	aInt := a ___asInteger___.
+	bInt := b ___asInteger___.
 	^ aInt perform: #lcm: env: 0 withArguments: {bInt}
 %
 
@@ -278,8 +278,8 @@ method: math
 fabs: x
 	"Return the absolute value of x as a float"
 	| xFloat |
-	xFloat := x perform: #asFloat env: 0.
-	^ xFloat perform: #abs env: 0
+	xFloat := x ___asFloat___.
+	^ xFloat ___abs___
 %
 
 category: 'Python-Floating Point Functions'
@@ -287,7 +287,7 @@ method: math
 isnan: x
 	"Return True if x is NaN"
 	| xFloat result |
-	xFloat := x perform: #asFloat env: 0.
+	xFloat := x ___asFloat___.
 	result := xFloat perform: #_isNaN env: 0.
 	^ result ifTrue: [true] ifFalse: [false]
 %
@@ -297,9 +297,9 @@ method: math
 isinf: x
 	"Return True if x is positive or negative infinity"
 	| xFloat kind |
-	xFloat := x perform: #asFloat env: 0.
+	xFloat := x ___asFloat___.
 	kind := xFloat perform: #_getKind env: 0.
-	^ (kind perform: #= env: 0 withArguments: {3}) ifTrue: [true] ifFalse: [false]
+	^ (kind ___eq___: 3) ifTrue: [true] ifFalse: [false]
 %
 
 category: 'Python-Floating Point Functions'
@@ -307,10 +307,10 @@ method: math
 isfinite: x
 	"Return True if x is neither infinity nor NaN"
 	| xFloat kind |
-	xFloat := x perform: #asFloat env: 0.
+	xFloat := x ___asFloat___.
 	kind := xFloat perform: #_getKind env: 0.
 	"kind: 1=normal, 2=subnormal, 3=infinity, 4=zero, 5=signaling NaN, 6=quiet NaN"
-	^ ((kind perform: #<= env: 0 withArguments: {2}) or: [kind perform: #= env: 0 withArguments: {4}])
+	^ ((kind ___le___: 2) or: [kind ___eq___: 4])
 		ifTrue: [true] ifFalse: [false]
 %
 
@@ -319,7 +319,7 @@ method: math
 degrees: x
 	"Convert angle x from radians to degrees"
 	| xFloat |
-	xFloat := x perform: #asFloat env: 0.
+	xFloat := x ___asFloat___.
 	^ xFloat perform: #radiansToDegrees env: 0
 %
 
@@ -328,7 +328,7 @@ method: math
 radians: x
 	"Convert angle x from degrees to radians"
 	| xFloat |
-	xFloat := x perform: #asFloat env: 0.
+	xFloat := x ___asFloat___.
 	^ xFloat perform: #degreesToRadians env: 0
 %
 

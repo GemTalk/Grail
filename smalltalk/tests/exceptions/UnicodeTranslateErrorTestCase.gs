@@ -16,7 +16,7 @@ test_inheritance
 	"Test that UnicodeTranslateError inherits from UnicodeError."
 	
 	| exc |
-	exc := UnicodeTranslateError perform: #__new__: env: 2 withArguments: { UnicodeTranslateError }.
+	exc := UnicodeTranslateError ___new___:  UnicodeTranslateError .
 	self assert: (exc isKindOf: UnicodeError).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a UnicodeTranslateError instance."
 	
 	| exc |
-	exc := UnicodeTranslateError perform: #__new__: env: 2 withArguments: { UnicodeTranslateError }.
+	exc := UnicodeTranslateError ___new___:  UnicodeTranslateError .
 	self assert: exc notNil.
 %

@@ -33,10 +33,10 @@ initialize
 	stream := self stream.
 	char := stream peek.
 	(char == $' or: [char == $"]) ifTrue: [
-		value := 'str ___value: ', self string printString. "constant is a string"
+		value := self string.
 		^self finalize].
 	char == $b ifTrue: [
-		value := 'bytes ___fromAsciiString: ', self string printString."constant is a string"
+		value := self string asByteArray.
 		^self finalize].
 	[char asString asInteger.
 		value := self number. "constant is a number"
@@ -44,16 +44,20 @@ initialize
 		on: ImproperOperation
 		do: [].
 	next := stream peekN: 4.
-	next = 'None' ifTrue: [value := 'None'. "constant is None"
+	next = 'None' ifTrue: [
+		value := nil.
 		stream next: 4.
 		^self finalize].
-	next = 'True' ifTrue: [value := 'True'. "constant is True"
+	next = 'True' ifTrue: [
+		value := true.
 		stream next: 4.
 		^self finalize].
 	next := stream peekN: 5.
-	next = 'False' ifTrue: [value := 'False'. "constant is False"
+	next = 'False' ifTrue: [
+		value := false.
 		stream next: 5.
 		^self finalize].
+	self error: 'Constant type not yet supported'.
 %
 category: 'other'
 method: ConstantAst
@@ -64,18 +68,36 @@ number
 	string := stream upTo: $,.
 	stream skip: -1.
 	^(string notEmpty and: [string last == $j]) ifTrue: [
-		'complex ___real: 0 imaginary: ' , (string copyFrom: 1 to: string size - 1) asNumber printString.
+		complex ___new___: 0 _: (string copyFrom: 1 to: string size - 1) asNumber.
 	] ifFalse: [
-		x := string asNumber.
-		(x isKindOf: Integer)
-			ifTrue: ['int ___value: ', x printString]
-			ifFalse: ['float ___value: ' , x printString].
+		string asNumber.
 	]
 %
 category: 'other'
 method: ConstantAst
 printSmalltalkOn: aStream
 
+	value == true ifTrue: [
+		aStream nextPutAll: 'true'.
+		^self.
+	].
+	value == false ifTrue: [
+		aStream nextPutAll: 'false'.
+		^self.
+	].
+	value == nil ifTrue: [
+		aStream nextPutAll: 'nil'.
+		^self.
+	].
+	(value isKindOf: String) ifTrue: [
+		aStream nextPutAll: value printString.
+		^self.
+	].
+	(value isKindOf: ByteArray) ifTrue: [
+		aStream nextPutAll: value printString.
+		^self.
+	].
+	aStream nextPutAll: value.
 %
 category: 'other'
 method: ConstantAst

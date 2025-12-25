@@ -16,7 +16,7 @@ test_inheritance
 	"Test that GeneratorExit inherits from BaseException."
 	
 	| exc |
-	exc := GeneratorExit perform: #__new__: env: 2 withArguments: { GeneratorExit }.
+	exc := GeneratorExit ___new___:  GeneratorExit .
 	self assert: (exc isKindOf: BaseException).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a GeneratorExit instance."
 	
 	| exc |
-	exc := GeneratorExit perform: #__new__: env: 2 withArguments: { GeneratorExit }.
+	exc := GeneratorExit ___new___:  GeneratorExit .
 	self assert: exc notNil.
 %

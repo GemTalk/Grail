@@ -16,7 +16,7 @@ test_inheritance
 	"Test that IndentationError inherits from SyntaxError."
 	
 	| exc |
-	exc := IndentationError perform: #__new__: env: 2 withArguments: { IndentationError }.
+	exc := IndentationError ___new___:  IndentationError .
 	self assert: (exc isKindOf: SyntaxError).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a IndentationError instance."
 	
 	| exc |
-	exc := IndentationError perform: #__new__: env: 2 withArguments: { IndentationError }.
+	exc := IndentationError ___new___:  IndentationError .
 	self assert: exc notNil.
 %

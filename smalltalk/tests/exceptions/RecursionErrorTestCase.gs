@@ -16,7 +16,7 @@ test_inheritance
 	"Test that RecursionError inherits from RuntimeError."
 
 	| exc |
-	exc := RecursionError perform: #__new__: env: 2 withArguments: { RecursionError }.
+	exc := RecursionError ___new___:  RecursionError .
 	self assert: (exc isKindOf: RuntimeError).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a RecursionError instance."
 	
 	| exc |
-	exc := RecursionError perform: #__new__: env: 2 withArguments: { RecursionError }.
+	exc := RecursionError ___new___:  RecursionError .
 	self assert: exc notNil.
 %

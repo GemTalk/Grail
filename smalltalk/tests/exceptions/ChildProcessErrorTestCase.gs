@@ -16,7 +16,7 @@ test_inheritance
 	"Test that ChildProcessError inherits from OSError."
 	
 	| exc |
-	exc := ChildProcessError perform: #__new__: env: 2 withArguments: { ChildProcessError }.
+	exc := ChildProcessError ___new___:  ChildProcessError .
 	self assert: (exc isKindOf: OSError).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a ChildProcessError instance."
 	
 	| exc |
-	exc := ChildProcessError perform: #__new__: env: 2 withArguments: { ChildProcessError }.
+	exc := ChildProcessError ___new___:  ChildProcessError .
 	self assert: exc notNil.
 %

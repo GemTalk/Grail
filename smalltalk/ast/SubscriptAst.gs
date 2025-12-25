@@ -33,4 +33,5 @@ category: 'other'
 method: SubscriptAst
 printSmalltalkOn: aStream
 
+	self halt.
 %

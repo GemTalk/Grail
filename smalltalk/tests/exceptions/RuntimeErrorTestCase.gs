@@ -16,7 +16,7 @@ test_inheritance
 	"Test that RuntimeError inherits from Exception."
 	
 	| exc |
-	exc := RuntimeError perform: #__new__: env: 2 withArguments: { RuntimeError }.
+	exc := RuntimeError ___new___:  RuntimeError .
 	self assert: (exc isKindOf: Exception).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a RuntimeError instance."
 	
 	| exc |
-	exc := RuntimeError perform: #__new__: env: 2 withArguments: { RuntimeError }.
+	exc := RuntimeError ___new___:  RuntimeError .
 	self assert: exc notNil.
 %

@@ -16,7 +16,7 @@ test_inheritance
 	"Test that LookupError inherits from Exception."
 	
 	| exc |
-	exc := LookupError perform: #__new__: env: 2 withArguments: { LookupError }.
+	exc := LookupError ___new___:  LookupError .
 	self assert: (exc isKindOf: Exception).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a LookupError instance."
 	
 	| exc |
-	exc := LookupError perform: #__new__: env: 2 withArguments: { LookupError }.
+	exc := LookupError ___new___:  LookupError .
 	self assert: exc notNil.
 %

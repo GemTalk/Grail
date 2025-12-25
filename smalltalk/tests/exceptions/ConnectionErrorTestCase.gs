@@ -16,7 +16,7 @@ test_inheritance
 	"Test that ConnectionError inherits from OSError."
 	
 	| exc |
-	exc := ConnectionError perform: #__new__: env: 2 withArguments: { ConnectionError }.
+	exc := ConnectionError ___new___:  ConnectionError .
 	self assert: (exc isKindOf: OSError).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a ConnectionError instance."
 	
 	| exc |
-	exc := ConnectionError perform: #__new__: env: 2 withArguments: { ConnectionError }.
+	exc := ConnectionError ___new___:  ConnectionError .
 	self assert: exc notNil.
 %

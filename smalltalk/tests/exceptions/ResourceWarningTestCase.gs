@@ -16,7 +16,7 @@ test_inheritance
 	"Test that ResourceWarning inherits from Warning."
 	
 	| exc |
-	exc := ResourceWarning perform: #__new__: env: 2 withArguments: { ResourceWarning }.
+	exc := ResourceWarning ___new___:  ResourceWarning .
 	self assert: (exc isKindOf: Warning).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a ResourceWarning instance."
 	
 	| exc |
-	exc := ResourceWarning perform: #__new__: env: 2 withArguments: { ResourceWarning }.
+	exc := ResourceWarning ___new___:  ResourceWarning .
 	self assert: exc notNil.
 %

@@ -45,16 +45,15 @@ category: 'other'
 method: CallAst
 printSmalltalkOn: aStream
 
-%
-category: 'other'
-method: CallAst
-printSmalltalkOnY: aStream
-	"throw namedefbefore error here"
-
-	aStream
-		nextPutAll: '(currentScope at: #';
-		nextPutAll: function id;
-		nextPut: $);
-		nextPutAll: ' scope: currentScope';
-		yourself.
+	function printSmalltalkOn: aStream.
+	self halt.
+	arguments isEmpty ifTrue: [
+		aStream nextPutAll: ' value.'.
+		^self
+	].
+	arguments do: [:each |
+		aStream nextPutAll: ' value: '.
+		each printSmalltalkOn: aStream.
+	].
+	aStream nextPut: $..
 %

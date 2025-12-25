@@ -19,4 +19,5 @@ category: 'other'
 method: SliceAst
 printSmalltalkOn: aStream
 
+	self halt.
 %

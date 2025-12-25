@@ -21,4 +21,5 @@ category: 'other'
 method: CompareAst
 printSmalltalkOn: aStream
 
+	self halt.
 %

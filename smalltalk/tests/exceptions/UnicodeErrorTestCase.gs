@@ -16,7 +16,7 @@ test_inheritance
 	"Test that UnicodeError inherits from ValueError."
 	
 	| exc |
-	exc := UnicodeError perform: #__new__: env: 2 withArguments: { UnicodeError }.
+	exc := UnicodeError ___new___:  UnicodeError .
 	self assert: (exc isKindOf: ValueError).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a UnicodeError instance."
 	
 	| exc |
-	exc := UnicodeError perform: #__new__: env: 2 withArguments: { UnicodeError }.
+	exc := UnicodeError ___new___:  UnicodeError .
 	self assert: exc notNil.
 %

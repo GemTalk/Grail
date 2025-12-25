@@ -35,10 +35,10 @@ test__len__
 
 	| lst |
 	lst := OrderedCollection new.
-	self assert: (lst perform: #__len__ env: 2) equals: 0.
+	self assert: (lst ___len___) equals: 0.
 	
 	lst add: 1; add: 2; add: 3.
-	self assert: (lst perform: #__len__ env: 2) equals: 3.
+	self assert: (lst ___len___) equals: 3.
 %
 
 category: 'Tests - Sequence Protocol'
@@ -110,8 +110,8 @@ test__contains__
 	| lst |
 	lst := OrderedCollection withAll: #(1 2 3).
 	
-	self assert: (lst perform: #__contains__: env: 2 withArguments: {2}).
-	self deny: (lst perform: #__contains__: env: 2 withArguments: {4}).
+	self assert: (lst ___contains___: 2).
+	self deny: (lst ___contains___: 4).
 %
 
 category: 'Tests - Comparison'

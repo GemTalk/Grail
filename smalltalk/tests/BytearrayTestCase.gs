@@ -10,8 +10,8 @@ test__new__empty
 	"Test bytearray() constructor"
 
 	| result |
-	result := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
-	self assert: (result perform: #__len__ env: 2) equals: 0.
+	result := bytearray ___new___: bytearray.
+	self assert: (result ___len___) equals: 0.
 %
 
 category: 'Tests - Initialization'
@@ -20,8 +20,8 @@ test__new__fromInteger
 	"Test bytearray(n) - create n zero bytes"
 
 	| result |
-	result := bytearray perform: #__new__:_: env: 2 withArguments: {bytearray. 5}.
-	self assert: (result perform: #__len__ env: 2) equals: 5.
+	result := bytearray ___new___: bytearray _: 5.
+	self assert: (result ___len___) equals: 5.
 	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 0.
 	self assert: (result perform: #at: env: 0 withArguments: {5}) equals: 0.
 %
@@ -32,13 +32,13 @@ test__new__fromList
 	"Test bytearray([65, 66, 67]) creates bytearray(b'ABC')"
 
 	| list result |
-	list := OrderedCollection perform: #new env: 0.
+	list := OrderedCollection new.
 	list perform: #add: env: 0 withArguments: {65}.
 	list perform: #add: env: 0 withArguments: {66}.
 	list perform: #add: env: 0 withArguments: {67}.
 	
-	result := bytearray perform: #__new__:_: env: 2 withArguments: {bytearray. list}.
-	self assert: (result perform: #__len__ env: 2) equals: 3.
+	result := bytearray ___new___: bytearray _: list.
+	self assert: (result ___len___) equals: 3.
 	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 65.
 	self assert: (result perform: #at: env: 0 withArguments: {2}) equals: 66.
 	self assert: (result perform: #at: env: 0 withArguments: {3}) equals: 67.
@@ -51,9 +51,9 @@ test__new__fromBytes
 
 	| bytes result |
 	bytes := bytearray perform: #__new__:_:_: env: 2 withArguments: {bytearray. 'hello'. 'ascii'}.
-	result := bytearray perform: #__new__:_: env: 2 withArguments: {bytearray. bytes}.
+	result := bytearray ___new___: bytearray _: bytes.
 	
-	self assert: (result perform: #__len__ env: 2) equals: 5.
+	self assert: (result ___len___) equals: 5.
 	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 104.  "h"
 %
 
@@ -65,7 +65,7 @@ testFromhex
 	| result |
 	result := bytearray perform: #fromhex:_: env: 2 withArguments: {bytearray. '48656c6c6f'}.
 	
-	self assert: (result perform: #__len__ env: 2) equals: 5.
+	self assert: (result ___len___) equals: 5.
 	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 72.   "H"
 	self assert: (result perform: #at: env: 0 withArguments: {2}) equals: 101.  "e"
 	self assert: (result perform: #at: env: 0 withArguments: {3}) equals: 108.  "l"
@@ -79,7 +79,7 @@ test__class__
 	"Test that type(bytearray()) returns bytearray"
 
 	| result cls |
-	result := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
+	result := bytearray ___new___: bytearray.
 	cls := result perform: #__class__ env: 2.
 	
 	self assert: cls equals: (Python at: #'bytearray').
@@ -91,7 +91,7 @@ test__setitem__
 	"Test that bytearray is mutable via __setitem__"
 
 	| ba |
-	ba := bytearray perform: #__new__:_: env: 2 withArguments: {bytearray. 3}.
+	ba := bytearray ___new___: bytearray _: 3.
 	
 	"Set values"
 	ba perform: #__setitem__:_: env: 2 withArguments: {0. 65}.
@@ -109,7 +109,7 @@ test__setitem__negativeIndex
 	"Test bytearray[-1] = 90"
 
 	| ba |
-	ba := bytearray perform: #__new__:_: env: 2 withArguments: {bytearray. 3}.
+	ba := bytearray ___new___: bytearray _: 3.
 	ba perform: #__setitem__:_: env: 2 withArguments: {-1. 90}.
 	
 	self assert: (ba perform: #at: env: 0 withArguments: {3}) equals: 90.
@@ -121,7 +121,7 @@ test__setitem__outOfRange
 	"Test that setting out of range raises IndexError"
 
 	| ba |
-	ba := bytearray perform: #__new__:_: env: 2 withArguments: {bytearray. 3}.
+	ba := bytearray ___new___: bytearray _: 3.
 	
 	self 
 		should: [ba perform: #__setitem__:_: env: 2 withArguments: {10. 65}]
@@ -134,7 +134,7 @@ test__setitem__invalidValue
 	"Test that setting invalid byte value raises ValueError"
 
 	| ba |
-	ba := bytearray perform: #__new__:_: env: 2 withArguments: {bytearray. 3}.
+	ba := bytearray ___new___: bytearray _: 3.
 	
 	self 
 		should: [ba perform: #__setitem__:_: env: 2 withArguments: {0. 256}]
@@ -151,13 +151,13 @@ testAppend
 	"Test bytearray.append(byte)"
 
 	| ba |
-	ba := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
+	ba := bytearray ___new___: bytearray.
 
 	ba perform: #append: env: 2 withArguments: {65}.
 	ba perform: #append: env: 2 withArguments: {66}.
 	ba perform: #append: env: 2 withArguments: {67}.
 
-	self assert: (ba perform: #__len__ env: 2) equals: 3.
+	self assert: (ba ___len___) equals: 3.
 	self assert: (ba perform: #at: env: 0 withArguments: {1}) equals: 65.
 	self assert: (ba perform: #at: env: 0 withArguments: {2}) equals: 66.
 	self assert: (ba perform: #at: env: 0 withArguments: {3}) equals: 67.
@@ -169,7 +169,7 @@ testAppendInvalidValue
 	"Test that append with invalid value raises ValueError"
 
 	| ba |
-	ba := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
+	ba := bytearray ___new___: bytearray.
 
 	self
 		should: [ba perform: #append: env: 2 withArguments: {256}]
@@ -182,12 +182,12 @@ testExtendWithBytes
 	"Test bytearray.extend(b'hello')"
 
 	| ba bytes |
-	ba := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
+	ba := bytearray ___new___: bytearray.
 	bytes := bytearray perform: #__new__:_:_: env: 2 withArguments: {bytearray. 'hello'. 'ascii'}.
 
 	ba perform: #extend: env: 2 withArguments: {bytes}.
 
-	self assert: (ba perform: #__len__ env: 2) equals: 5.
+	self assert: (ba ___len___) equals: 5.
 	self assert: (ba perform: #at: env: 0 withArguments: {1}) equals: 104.  "h"
 %
 
@@ -197,15 +197,15 @@ testExtendWithList
 	"Test bytearray.extend([65, 66, 67])"
 
 	| ba list |
-	ba := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
-	list := OrderedCollection perform: #new env: 0.
+	ba := bytearray ___new___: bytearray.
+	list := OrderedCollection new.
 	list perform: #add: env: 0 withArguments: {65}.
 	list perform: #add: env: 0 withArguments: {66}.
 	list perform: #add: env: 0 withArguments: {67}.
 
 	ba perform: #extend: env: 2 withArguments: {list}.
 
-	self assert: (ba perform: #__len__ env: 2) equals: 3.
+	self assert: (ba ___len___) equals: 3.
 	self assert: (ba perform: #at: env: 0 withArguments: {1}) equals: 65.
 	self assert: (ba perform: #at: env: 0 withArguments: {2}) equals: 66.
 	self assert: (ba perform: #at: env: 0 withArguments: {3}) equals: 67.
@@ -217,14 +217,14 @@ testInsert
 	"Test bytearray.insert(index, byte)"
 
 	| ba |
-	ba := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
+	ba := bytearray ___new___: bytearray.
 	ba perform: #append: env: 2 withArguments: {65}.
 	ba perform: #append: env: 2 withArguments: {67}.
 
 	"Insert B between A and C"
 	ba perform: #insert:_: env: 2 withArguments: {1. 66}.
 
-	self assert: (ba perform: #__len__ env: 2) equals: 3.
+	self assert: (ba ___len___) equals: 3.
 	self assert: (ba perform: #at: env: 0 withArguments: {1}) equals: 65.
 	self assert: (ba perform: #at: env: 0 withArguments: {2}) equals: 66.
 	self assert: (ba perform: #at: env: 0 withArguments: {3}) equals: 67.
@@ -236,14 +236,14 @@ testRemove
 	"Test bytearray.remove(value)"
 
 	| ba |
-	ba := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
+	ba := bytearray ___new___: bytearray.
 	ba perform: #append: env: 2 withArguments: {65}.
 	ba perform: #append: env: 2 withArguments: {66}.
 	ba perform: #append: env: 2 withArguments: {67}.
 
 	ba perform: #remove: env: 2 withArguments: {66}.
 
-	self assert: (ba perform: #__len__ env: 2) equals: 2.
+	self assert: (ba ___len___) equals: 2.
 	self assert: (ba perform: #at: env: 0 withArguments: {1}) equals: 65.
 	self assert: (ba perform: #at: env: 0 withArguments: {2}) equals: 67.
 %
@@ -254,7 +254,7 @@ testRemoveNotFound
 	"Test that remove raises ValueError if value not found"
 
 	| ba |
-	ba := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
+	ba := bytearray ___new___: bytearray.
 	ba perform: #append: env: 2 withArguments: {65}.
 
 	self
@@ -268,7 +268,7 @@ testPop
 	"Test bytearray.pop() - remove and return last byte"
 
 	| ba result |
-	ba := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
+	ba := bytearray ___new___: bytearray.
 	ba perform: #append: env: 2 withArguments: {65}.
 	ba perform: #append: env: 2 withArguments: {66}.
 	ba perform: #append: env: 2 withArguments: {67}.
@@ -276,7 +276,7 @@ testPop
 	result := ba perform: #pop env: 2.
 
 	self assert: result equals: 67.
-	self assert: (ba perform: #__len__ env: 2) equals: 2.
+	self assert: (ba ___len___) equals: 2.
 %
 
 category: 'Tests - Mutation Methods'
@@ -285,7 +285,7 @@ testPopEmpty
 	"Test that pop on empty bytearray raises IndexError"
 
 	| ba |
-	ba := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
+	ba := bytearray ___new___: bytearray.
 
 	self
 		should: [ba perform: #pop env: 2]
@@ -298,7 +298,7 @@ testPopIndex
 	"Test bytearray.pop(index)"
 
 	| ba result |
-	ba := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
+	ba := bytearray ___new___: bytearray.
 	ba perform: #append: env: 2 withArguments: {65}.
 	ba perform: #append: env: 2 withArguments: {66}.
 	ba perform: #append: env: 2 withArguments: {67}.
@@ -306,7 +306,7 @@ testPopIndex
 	result := ba perform: #pop: env: 2 withArguments: {1}.
 
 	self assert: result equals: 66.
-	self assert: (ba perform: #__len__ env: 2) equals: 2.
+	self assert: (ba ___len___) equals: 2.
 	self assert: (ba perform: #at: env: 0 withArguments: {1}) equals: 65.
 	self assert: (ba perform: #at: env: 0 withArguments: {2}) equals: 67.
 %
@@ -317,14 +317,14 @@ testClear
 	"Test bytearray.clear()"
 
 	| ba |
-	ba := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
+	ba := bytearray ___new___: bytearray.
 	ba perform: #append: env: 2 withArguments: {65}.
 	ba perform: #append: env: 2 withArguments: {66}.
 	ba perform: #append: env: 2 withArguments: {67}.
 
 	ba perform: #clear env: 2.
 
-	self assert: (ba perform: #__len__ env: 2) equals: 0.
+	self assert: (ba ___len___) equals: 0.
 %
 
 category: 'Tests - Mutation Methods'
@@ -333,14 +333,14 @@ testReverse
 	"Test bytearray.reverse()"
 
 	| ba |
-	ba := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
+	ba := bytearray ___new___: bytearray.
 	ba perform: #append: env: 2 withArguments: {65}.
 	ba perform: #append: env: 2 withArguments: {66}.
 	ba perform: #append: env: 2 withArguments: {67}.
 
 	ba perform: #reverse env: 2.
 
-	self assert: (ba perform: #__len__ env: 2) equals: 3.
+	self assert: (ba ___len___) equals: 3.
 	self assert: (ba perform: #at: env: 0 withArguments: {1}) equals: 67.
 	self assert: (ba perform: #at: env: 0 withArguments: {2}) equals: 66.
 	self assert: (ba perform: #at: env: 0 withArguments: {3}) equals: 65.
@@ -352,13 +352,13 @@ testCopy
 	"Test bytearray.copy()"
 
 	| ba copy |
-	ba := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
+	ba := bytearray ___new___: bytearray.
 	ba perform: #append: env: 2 withArguments: {65}.
 	ba perform: #append: env: 2 withArguments: {66}.
 
 	copy := ba perform: #copy env: 2.
 
-	self assert: (copy perform: #__len__ env: 2) equals: 2.
+	self assert: (copy ___len___) equals: 2.
 	self assert: (copy perform: #at: env: 0 withArguments: {1}) equals: 65.
 	self assert: (copy perform: #at: env: 0 withArguments: {2}) equals: 66.
 
@@ -374,14 +374,14 @@ test__delitem__
 	"Test del bytearray[index]"
 
 	| ba |
-	ba := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
+	ba := bytearray ___new___: bytearray.
 	ba perform: #append: env: 2 withArguments: {65}.
 	ba perform: #append: env: 2 withArguments: {66}.
 	ba perform: #append: env: 2 withArguments: {67}.
 
 	ba perform: #__delitem__: env: 2 withArguments: {1}.
 
-	self assert: (ba perform: #__len__ env: 2) equals: 2.
+	self assert: (ba ___len___) equals: 2.
 	self assert: (ba perform: #at: env: 0 withArguments: {1}) equals: 65.
 	self assert: (ba perform: #at: env: 0 withArguments: {2}) equals: 67.
 %
@@ -392,14 +392,14 @@ test__delitem__negativeIndex
 	"Test del bytearray[-1]"
 
 	| ba |
-	ba := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
+	ba := bytearray ___new___: bytearray.
 	ba perform: #append: env: 2 withArguments: {65}.
 	ba perform: #append: env: 2 withArguments: {66}.
 	ba perform: #append: env: 2 withArguments: {67}.
 
 	ba perform: #__delitem__: env: 2 withArguments: {-1}.
 
-	self assert: (ba perform: #__len__ env: 2) equals: 2.
+	self assert: (ba ___len___) equals: 2.
 	self assert: (ba perform: #at: env: 0 withArguments: {1}) equals: 65.
 	self assert: (ba perform: #at: env: 0 withArguments: {2}) equals: 66.
 %
@@ -410,7 +410,7 @@ test__iadd__
 	"Test bytearray += other"
 
 	| ba bytes result |
-	ba := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
+	ba := bytearray ___new___: bytearray.
 	ba perform: #append: env: 2 withArguments: {65}.
 	ba perform: #append: env: 2 withArguments: {66}.
 
@@ -420,7 +420,7 @@ test__iadd__
 	"Should return same object"
 	self assert: result equals: ba.
 
-	self assert: (ba perform: #__len__ env: 2) equals: 4.
+	self assert: (ba ___len___) equals: 4.
 	self assert: (ba perform: #at: env: 0 withArguments: {1}) equals: 65.
 	self assert: (ba perform: #at: env: 0 withArguments: {2}) equals: 66.
 	self assert: (ba perform: #at: env: 0 withArguments: {3}) equals: 67.
@@ -433,7 +433,7 @@ test__imul__
 	"Test bytearray *= count"
 
 	| ba result |
-	ba := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
+	ba := bytearray ___new___: bytearray.
 	ba perform: #append: env: 2 withArguments: {65}.
 	ba perform: #append: env: 2 withArguments: {66}.
 
@@ -442,7 +442,7 @@ test__imul__
 	"Should return same object"
 	self assert: result equals: ba.
 
-	self assert: (ba perform: #__len__ env: 2) equals: 6.
+	self assert: (ba ___len___) equals: 6.
 	self assert: (ba perform: #at: env: 0 withArguments: {1}) equals: 65.
 	self assert: (ba perform: #at: env: 0 withArguments: {2}) equals: 66.
 	self assert: (ba perform: #at: env: 0 withArguments: {3}) equals: 65.
@@ -457,13 +457,13 @@ test__imul__zero
 	"Test bytearray *= 0 clears the bytearray"
 
 	| ba |
-	ba := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
+	ba := bytearray ___new___: bytearray.
 	ba perform: #append: env: 2 withArguments: {65}.
 	ba perform: #append: env: 2 withArguments: {66}.
 
 	ba perform: #__imul__: env: 2 withArguments: {0}.
 
-	self assert: (ba perform: #__len__ env: 2) equals: 0.
+	self assert: (ba ___len___) equals: 0.
 %
 
 category: 'Tests - Inherited Methods'
@@ -472,15 +472,15 @@ testInheritedUpper
 	"Test that bytearray inherits upper() from bytes"
 
 	| ba result |
-	ba := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
+	ba := bytearray ___new___: bytearray.
 	ba perform: #append: env: 2 withArguments: {97}.   "a"
 	ba perform: #append: env: 2 withArguments: {98}.   "b"
 	ba perform: #append: env: 2 withArguments: {99}.   "c"
 
 	result := ba perform: #upper env: 2.
 
-	self assert: (result perform: #class env: 0) equals: bytearray.
-	self assert: (result perform: #__len__ env: 2) equals: 3.
+	self assert: (result class) equals: bytearray.
+	self assert: (result ___len___) equals: 3.
 	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 65.  "A"
 	self assert: (result perform: #at: env: 0 withArguments: {2}) equals: 66.  "B"
 	self assert: (result perform: #at: env: 0 withArguments: {3}) equals: 67.  "C"
@@ -492,7 +492,7 @@ testInheritedFind
 	"Test that bytearray inherits find() from bytes"
 
 	| ba bytes result |
-	ba := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
+	ba := bytearray ___new___: bytearray.
 	ba perform: #append: env: 2 withArguments: {72}.   "H"
 	ba perform: #append: env: 2 withArguments: {101}.  "e"
 	ba perform: #append: env: 2 withArguments: {108}.  "l"
@@ -511,7 +511,7 @@ testInheritedDecode
 	"Test that bytearray inherits decode() from bytes"
 
 	| ba result |
-	ba := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
+	ba := bytearray ___new___: bytearray.
 	ba perform: #append: env: 2 withArguments: {72}.   "H"
 	ba perform: #append: env: 2 withArguments: {101}.  "e"
 	ba perform: #append: env: 2 withArguments: {108}.  "l"
@@ -520,7 +520,7 @@ testInheritedDecode
 
 	result := ba perform: #decode env: 2.
 
-	self assert: (result perform: #class env: 0) equals: Unicode7.
+	self assert: (result class) equals: Unicode7.
 	self assert: result equals: 'Hello'.
 %
 
@@ -531,13 +531,13 @@ testInheritedIsascii
 
 	| ba1 ba2 |
 	"Create bytearray with ASCII bytes"
-	ba1 := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
+	ba1 := bytearray ___new___: bytearray.
 	ba1 perform: #append: env: 2 withArguments: {65}.   "A"
 	ba1 perform: #append: env: 2 withArguments: {66}.   "B"
 	ba1 perform: #append: env: 2 withArguments: {67}.   "C"
 
 	"Create bytearray with non-ASCII byte"
-	ba2 := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
+	ba2 := bytearray ___new___: bytearray.
 	ba2 perform: #append: env: 2 withArguments: {65}.   "A"
 	ba2 perform: #append: env: 2 withArguments: {200}.  "non-ASCII"
 	ba2 perform: #append: env: 2 withArguments: {67}.   "C"
@@ -552,7 +552,7 @@ testEqualityWithBytes
 	"Test bytearray == bytes comparison"
 
 	| ba bytes |
-	ba := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
+	ba := bytearray ___new___: bytearray.
 	ba perform: #append: env: 2 withArguments: {65}.
 	ba perform: #append: env: 2 withArguments: {66}.
 
@@ -567,11 +567,11 @@ testEqualityWithBytearray
 	"Test bytearray == bytearray comparison"
 
 	| ba1 ba2 |
-	ba1 := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
+	ba1 := bytearray ___new___: bytearray.
 	ba1 perform: #append: env: 2 withArguments: {65}.
 	ba1 perform: #append: env: 2 withArguments: {66}.
 
-	ba2 := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
+	ba2 := bytearray ___new___: bytearray.
 	ba2 perform: #append: env: 2 withArguments: {65}.
 	ba2 perform: #append: env: 2 withArguments: {66}.
 
@@ -584,18 +584,18 @@ testConcatenation
 	"Test bytearray + bytes returns new bytearray"
 
 	| ba bytes result |
-	ba := bytearray perform: #__new__: env: 2 withArguments: {bytearray}.
+	ba := bytearray ___new___: bytearray.
 	ba perform: #append: env: 2 withArguments: {65}.
 	ba perform: #append: env: 2 withArguments: {66}.
 
 	bytes := bytearray perform: #__new__:_:_: env: 2 withArguments: {bytearray. 'CD'. 'ascii'}.
 	result := ba perform: #__add__: env: 2 withArguments: {bytes}.
 
-	self assert: (result perform: #class env: 0) equals: bytearray.
-	self assert: (result perform: #__len__ env: 2) equals: 4.
+	self assert: (result class) equals: bytearray.
+	self assert: (result ___len___) equals: 4.
 
 	"Original should be unchanged"
-	self assert: (ba perform: #__len__ env: 2) equals: 2.
+	self assert: (ba ___len___) equals: 2.
 %
 
 set compile_env: 0

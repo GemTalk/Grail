@@ -24,7 +24,7 @@ __new__: cls
 	"Create a new BaseException instance with no arguments."
 	
 	| instance |
-	instance := cls perform: #new env: 0.
+	instance := cls ___new___.
 	instance perform: #___args: env: 0 withArguments: { #() }.
 	^ instance
 %
@@ -36,7 +36,7 @@ __new__: cls _: anArray
 	anArray should be a tuple (Array) of arguments."
 	
 	| instance |
-	instance := cls perform: #new env: 0.
+	instance := cls ___new___.
 	instance 
 		perform: #___args: 
 		env: 0 
@@ -82,13 +82,13 @@ __str__
 	
 	| argsArray size |
 	argsArray := self perform: #args env: 2.
-	size := argsArray perform: #size env: 0.
+	size := argsArray ___size___.
 	
 	size == 0 ifTrue: [ ^ '' ].
 	size == 1 ifTrue: [
-		^ ((argsArray perform: #at: env: 0 withArguments: { 1 }) perform: #asString env: 0) perform: #asUnicodeString env: 0
+		^ ((argsArray ___at___: 1) ___asString___) ___asUnicodeString___
 	].
-	^ (argsArray perform: #asString env: 0) perform: #asUnicodeString env: 0
+	^ (argsArray ___asString___) ___asUnicodeString___
 %
 
 category: 'Python-String Representation'
@@ -97,32 +97,32 @@ __repr__
 	"Return a detailed string representation of the exception."
 	
 	| className argsArray stream |
-	className := (self perform: #class env: 0) perform: #name env: 0.
+	className := (self ___class___) ___name___.
 	argsArray := self perform: #args env: 2.
-	stream := WriteStream perform: #on: env: 0 withArguments: { Unicode7 perform: #new env: 0 }.
+	stream := WriteStream ___on___: (Unicode7 ___new___).
 	
-	stream with: className perform: #nextPutAll: env: 0.
-	stream with: $( perform: #nextPut: env: 0.
+	stream ___nextPutAll___: className.
+	stream ___nextPut___: $(.
 	
-	((argsArray perform: #size env: 0) with: 0 perform: #> env: 0) ifTrue: [
+	((argsArray ___size___) with: 0 perform: #> env: 0) ifTrue: [
 		argsArray perform: #doWithIndex: env: 0 withArguments: { [:arg :idx |
 			| argRepr |
 			(idx with: 1 perform: #> env: 0) ifTrue: [
-				stream with: ', ' perform: #nextPutAll: env: 0.
+				stream ___nextPutAll___: ', '.
 			].
-			argRepr := arg perform: #asString env: 0.
-			(arg perform: #isKindOf: env: 0 withArguments: { Unicode7 }) ifTrue: [
-				stream with: $' perform: #nextPut: env: 0.
-				stream with: argRepr perform: #nextPutAll: env: 0.
-				stream with: $' perform: #nextPut: env: 0.
+			argRepr := arg ___asString___.
+			(arg ___isKindOf___: Unicode7) ifTrue: [
+				stream ___nextPut___: $'.
+				stream ___nextPutAll___: argRepr.
+				stream ___nextPut___: $'.
 			] ifFalse: [
-				stream with: argRepr perform: #nextPutAll: env: 0.
+				stream ___nextPutAll___: argRepr.
 			].
-		] }.
+		]}.
 	].
 	
-	stream with: $) perform: #nextPut: env: 0.
-	^ stream perform: #contents env: 0
+	stream ___nextPut___: $).
+	^ stream ___contents___
 %
 
 category: 'Python-Exception Chaining'
@@ -186,15 +186,15 @@ __eq__: other
 	Two exceptions are equal if they are the same class and have the same args."
 
 	| myClass otherClass myArgs otherArgs |
-	myClass := self perform: #class env: 0.
-	otherClass := other perform: #class env: 0.
+	myClass := self ___class___.
+	otherClass := other ___class___.
 
 	myClass == otherClass ifFalse: [ ^ false ].
 
 	myArgs := self perform: #args env: 2.
 	otherArgs := other perform: #args env: 2.
 
-	^ myArgs perform: #= env: 0 withArguments: { otherArgs }
+	^ myArgs ___eq___: otherArgs
 %
 
 category: 'Python-Comparison'
@@ -204,7 +204,7 @@ __ne__: other
 
 	| result |
 	result := self __eq__: other.
-	^ result perform: #not env: 0
+	^ result ___not___
 %
 
 ! ------------------- Smalltalk-side methods (env 0)

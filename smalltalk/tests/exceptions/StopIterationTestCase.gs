@@ -16,7 +16,7 @@ test_inheritance
 	"Test that StopIteration inherits from Exception."
 	
 	| exc |
-	exc := StopIteration perform: #__new__: env: 2 withArguments: { StopIteration }.
+	exc := StopIteration ___new___:  StopIteration .
 	self assert: (exc isKindOf: Exception).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a StopIteration instance."
 	
 	| exc |
-	exc := StopIteration perform: #__new__: env: 2 withArguments: { StopIteration }.
+	exc := StopIteration ___new___:  StopIteration .
 	self assert: exc notNil.
 %

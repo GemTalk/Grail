@@ -28,13 +28,13 @@ ___on: aSet
 	Convert the set to an array for indexed iteration."
 
 	| iter elementsArray |
-	iter := self perform: #new env: 0.
+	iter := self ___new___.
 	
 	"Convert set to array for iteration"
-	elementsArray := Array perform: #new env: 0.
-	aSet perform: #do: env: 0 withArguments: {[:each |
-		elementsArray perform: #add: env: 0 withArguments: {each}
-	]}.
+	elementsArray := Array ___new___.
+	aSet ___do___: [:each |
+		elementsArray ___add___: each
+	].
 
 	iter ___collection: aSet.
 	iter ___elements: elementsArray.
@@ -71,11 +71,11 @@ __next__
 	If there are no further items, raise StopIteration."
 
 	| size item |
-	size := elements perform: #size env: 0.
-	(position perform: #>= env: 0 withArguments: {size}) ifTrue: [
-		StopIteration perform: #signal env: 0
+	size := elements ___size___.
+	(position ___ge___: size) ifTrue: [
+		StopIteration ___signal___
 	].
-	item := elements perform: #at: env: 0 withArguments: {position + 1}.
+	item := elements ___at___: (position + 1).
 	position := position + 1.
 	^ item
 %
@@ -93,14 +93,14 @@ __repr__
 	"Return a string representation of the set iterator"
 
 	| className stream |
-	className := self perform: #class env: 0 perform: #name env: 0.
-	stream := WriteStream perform: #on: env: 0 withArguments: {String perform: #new env: 0}.
-	stream with: '<' perform: #nextPut: env: 0.
-	stream with: className perform: #nextPutAll: env: 0.
-	stream with: ' object at 0x' perform: #nextPutAll: env: 0.
-	stream with: (self perform: #identityHash env: 0) perform: #printString env: 0 perform: #nextPutAll: env: 0.
-	stream with: '>' perform: #nextPut: env: 0.
-	^ stream perform: #contents env: 0
+	className := self ___class___ ___name___.
+	stream := WriteStream ___on___: (String ___new___).
+	stream ___nextPut___: $<.
+	stream ___nextPutAll___: className.
+	stream ___nextPutAll___: ' object at 0x'.
+	stream ___nextPutAll___: ((self ___identityHash___) ___printString___).
+	stream ___nextPut___: $>.
+	^ stream ___contents___
 %
 
 set compile_env: 0

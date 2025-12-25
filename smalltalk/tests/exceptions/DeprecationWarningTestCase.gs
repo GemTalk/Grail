@@ -16,7 +16,7 @@ test_inheritance
 	"Test that DeprecationWarning inherits from Warning."
 	
 	| exc |
-	exc := DeprecationWarning perform: #__new__: env: 2 withArguments: { DeprecationWarning }.
+	exc := DeprecationWarning ___new___:  DeprecationWarning .
 	self assert: (exc isKindOf: Warning).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a DeprecationWarning instance."
 	
 	| exc |
-	exc := DeprecationWarning perform: #__new__: env: 2 withArguments: { DeprecationWarning }.
+	exc := DeprecationWarning ___new___:  DeprecationWarning .
 	self assert: exc notNil.
 %

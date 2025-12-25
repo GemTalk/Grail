@@ -16,7 +16,7 @@ test_inheritance
 	"Test that TimeoutError inherits from OSError."
 	
 	| exc |
-	exc := TimeoutError perform: #__new__: env: 2 withArguments: { TimeoutError }.
+	exc := TimeoutError ___new___:  TimeoutError .
 	self assert: (exc isKindOf: OSError).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a TimeoutError instance."
 	
 	| exc |
-	exc := TimeoutError perform: #__new__: env: 2 withArguments: { TimeoutError }.
+	exc := TimeoutError ___new___:  TimeoutError .
 	self assert: exc notNil.
 %

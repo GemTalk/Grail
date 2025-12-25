@@ -35,7 +35,7 @@ method: tuple
 __setitem__: index _: value
 	"Tuples are immutable - raise TypeError."
 
-	TypeError perform: #signal: env: 0 withArguments: {'''tuple'' object does not support item assignment'}
+	TypeError ___signal___: '''tuple'' object does not support item assignment'
 %
 
 category: 'Python-Sequence Protocol'
@@ -43,7 +43,7 @@ method: tuple
 __delitem__: index
 	"Tuples are immutable - raise TypeError."
 
-	TypeError perform: #signal: env: 0 withArguments: {'''tuple'' object doesn''t support item deletion'}
+	TypeError ___signal___: '''tuple'' object doesn''t support item deletion'
 %
 
 category: 'Python-Hashing'
@@ -53,7 +53,7 @@ __hash__
 	Tuples are hashable (unlike lists) because they are immutable."
 
 	| hash |
-	hash := self perform: #hash env: 0.
+	hash := self ___hash___.
 	^ hash
 %
 
@@ -63,7 +63,7 @@ __getnewargs__
 	"Return arguments for unpickling.
 	For tuples, this is just the tuple itself as an argument."
 
-	^ Array perform: #with: env: 0 withArguments: {self}
+	^ Array ___with___: self
 %
 
 category: 'Python-String Representation'
@@ -73,29 +73,29 @@ __repr__
 	Special case: single-element tuples need a trailing comma."
 
 	| stream size |
-	size := self perform: #size env: 0.
-	stream := WriteStream perform: #on: env: 0 withArguments: {String perform: #new env: 0}.
-	stream with: $( perform: #nextPut: env: 0.
+	size := self ___size___.
+	stream := WriteStream ___on___: (String ___new___).
+	stream ___nextPut___: $(.
 
 	size == 1 ifTrue: [
 		"Single element tuple needs trailing comma"
 		| reprStr |
-		reprStr := (self perform: #at: env: 0 withArguments: {1}) __repr__.
-		stream with: reprStr perform: #nextPutAll: env: 0.
-		stream with: ',' perform: #nextPutAll: env: 0.
+		reprStr := (self ___at___: 1) __repr__.
+		stream ___nextPutAll___: reprStr.
+		stream ___nextPutAll___: ','.
 	] ifFalse: [
 		self perform: #do:separatedBy: env: 0 withArguments: {
 			[:each |
 				| reprStr |
 				reprStr := each __repr__.
-				stream with: reprStr perform: #nextPutAll: env: 0
+				stream ___nextPutAll___: reprStr
 			].
-			[stream with: ', ' perform: #nextPutAll: env: 0]
+			[stream ___nextPutAll___: ', ']
 		}
 	].
 
-	stream with: $) perform: #nextPut: env: 0.
-	^ stream perform: #contents env: 0
+	stream ___nextPut___: $).
+	^ stream ___contents___
 %
 
 category: 'Python-Other'

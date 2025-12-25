@@ -16,7 +16,7 @@ test_inheritance
 	"Test that SystemExit inherits from BaseException."
 	
 	| exc |
-	exc := SystemExit perform: #__new__: env: 2 withArguments: { SystemExit }.
+	exc := SystemExit ___new___:  SystemExit .
 	self assert: (exc isKindOf: BaseException).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a SystemExit instance."
 	
 	| exc |
-	exc := SystemExit perform: #__new__: env: 2 withArguments: { SystemExit }.
+	exc := SystemExit ___new___:  SystemExit .
 	self assert: exc notNil.
 %

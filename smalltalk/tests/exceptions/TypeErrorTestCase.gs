@@ -16,7 +16,7 @@ test_inheritance
 	"Test that TypeError inherits from Exception."
 	
 	| exc |
-	exc := TypeError perform: #__new__: env: 2 withArguments: { TypeError }.
+	exc := TypeError ___new___:  TypeError .
 	self assert: (exc isKindOf: Exception).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a TypeError instance."
 	
 	| exc |
-	exc := TypeError perform: #__new__: env: 2 withArguments: { TypeError }.
+	exc := TypeError ___new___:  TypeError .
 	self assert: exc notNil.
 %

@@ -16,7 +16,7 @@ test_inheritance
 	"Test that InterruptedError inherits from OSError."
 	
 	| exc |
-	exc := InterruptedError perform: #__new__: env: 2 withArguments: { InterruptedError }.
+	exc := InterruptedError ___new___:  InterruptedError .
 	self assert: (exc isKindOf: OSError).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a InterruptedError instance."
 	
 	| exc |
-	exc := InterruptedError perform: #__new__: env: 2 withArguments: { InterruptedError }.
+	exc := InterruptedError ___new___:  InterruptedError .
 	self assert: exc notNil.
 %

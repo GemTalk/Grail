@@ -16,7 +16,7 @@ test_inheritance
 	"Test that NameError inherits from Exception."
 	
 	| exc |
-	exc := NameError perform: #__new__: env: 2 withArguments: { NameError }.
+	exc := NameError ___new___:  NameError .
 	self assert: (exc isKindOf: Exception).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a NameError instance."
 	
 	| exc |
-	exc := NameError perform: #__new__: env: 2 withArguments: { NameError }.
+	exc := NameError ___new___:  NameError .
 	self assert: exc notNil.
 %

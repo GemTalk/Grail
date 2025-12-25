@@ -25,7 +25,7 @@ ___on: aCollection
 	Position starts at 0 (Python 0-based indexing)."
 
 	| instance |
-	instance := self perform: #new env: 0.
+	instance := self ___new___.
 	instance ___collection: aCollection.
 	instance ___position: 0.
 	^ instance
@@ -41,20 +41,18 @@ __next__
 	If there are no further items, raise StopIteration."
 
 	| size item |
-	size := collection perform: #size env: 0.
+	size := collection ___size___.
 
 	"Check if we've reached the end"
-	(position perform: #>= env: 0 withArguments: {size}) ifTrue: [
-		StopIteration perform: #signal env: 0
+	(position ___ge___: size) ifTrue: [
+		StopIteration ___signal___
 	].
 
 	"Get the item at current position (convert to 1-based Smalltalk index)"
-	item := collection perform: #at: env: 0 withArguments: {
-		position perform: #+ env: 0 withArguments: {1}
-	}.
+	item := collection ___at___: (position ___plus___: 1).
 
 	"Increment position"
-	position := position perform: #+ env: 0 withArguments: {1}.
+	position := position ___plus___: 1.
 
 	^ item
 %

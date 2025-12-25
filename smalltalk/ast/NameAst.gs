@@ -102,6 +102,7 @@ category: 'other'
 method: NameAst
 printSmalltalkOn: aStream
 
+	aStream nextPutAll: id.
 %
 category: 'other'
 method: NameAst

@@ -7,4 +7,5 @@ category: 'other'
 method: BitXorAst
 printSmalltalkOn: aStream
 
+	self halt.
 %

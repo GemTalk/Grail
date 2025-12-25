@@ -20,6 +20,15 @@ category: 'other'
 method: BlockAst
 printSmalltalkOn: aStream
 
+	variables notEmpty ifTrue: [
+		aStream nextPut: $|.
+		variables do: [:each | aStream space; nextPutAll: each].
+		aStream nextPutAll: ' |'; lf.
+	].
+	body do: [:each |
+		each printSmalltalkOn: aStream.
+		aStream lf.
+	].
 %
 category: 'other'
 method: BlockAst

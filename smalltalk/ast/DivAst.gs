@@ -7,4 +7,5 @@ category: 'other'
 method: DivAst
 printSmalltalkOn: aStream
 
+	self halt.
 %

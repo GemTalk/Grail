@@ -7,4 +7,5 @@ category: 'other'
 method: PowAst
 printSmalltalkOn: aStream
 
+	self halt.
 %

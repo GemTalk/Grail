@@ -47,7 +47,7 @@ parent: aNode
 			^None
 		].
 		symbol := ((aNode stream upTo: self subclassDelimiter) , 'Ast') asSymbol.
-		class := Python at: symbol.
+		class := PythonAst at: symbol.
 		^class parent: aNode.
 	].
 	^self basicNew
@@ -262,7 +262,7 @@ number
 	string := stream upTo: $,.
 	stream skip: -1.
 	(string notEmpty and: [string last == $j]) ifTrue: [
-		num := complex ___real: 0 imaginary: (string copyFrom: 1 to: string size - 1) asNumber.
+		num := complex __new__: 0.0 _: (string copyFrom: 1 to: string size - 1) asNumber.
 	] ifFalse: [
 		num := string asNumber.
 		"num := (x isKindOf: Integer)
@@ -285,6 +285,7 @@ category: 'other'
 method: AbstractNode
 printSmalltalkOn: aStream
 
+	self halt.
 %
 category: 'other'
 method: AbstractNode

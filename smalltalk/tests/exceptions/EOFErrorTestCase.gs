@@ -16,7 +16,7 @@ test_inheritance
 	"Test that EOFError inherits from Exception."
 	
 	| exc |
-	exc := EOFError perform: #__new__: env: 2 withArguments: { EOFError }.
+	exc := EOFError ___new___:  EOFError .
 	self assert: (exc isKindOf: Exception).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a EOFError instance."
 	
 	| exc |
-	exc := EOFError perform: #__new__: env: 2 withArguments: { EOFError }.
+	exc := EOFError ___new___:  EOFError .
 	self assert: exc notNil.
 %

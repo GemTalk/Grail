@@ -16,7 +16,7 @@ test_inheritance
 	"Test that OverflowError inherits from ArithmeticError."
 	
 	| exc |
-	exc := OverflowError perform: #__new__: env: 2 withArguments: { OverflowError }.
+	exc := OverflowError ___new___:  OverflowError .
 	self assert: (exc isKindOf: ArithmeticError).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a OverflowError instance."
 	
 	| exc |
-	exc := OverflowError perform: #__new__: env: 2 withArguments: { OverflowError }.
+	exc := OverflowError ___new___:  OverflowError .
 	self assert: exc notNil.
 %

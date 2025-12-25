@@ -44,34 +44,34 @@ __new__: obj
 	obj ifNil: [ ^ false ].
 
 	"If already a bool, return it"
-	(obj perform: #isKindOf: env: 0 withArguments: { bool }) ifTrue: [
+	(obj ___isKindOf___: bool) ifTrue: [
 		^ obj
 	].
 
 	"Try to call __bool__ on the object if it has one"
-	(obj perform: #respondsTo: env: 0 withArguments: { #__bool__ }) ifTrue: [
+	(obj ___respondsTo___: #__bool__) ifTrue: [
 		result := obj __bool__.
 		^ result
 	].
 
 	"For integers, 0 is False, everything else is True"
-	(obj perform: #isKindOf: env: 0 withArguments: { int }) ifTrue: [
-		^ obj perform: #~= env: 0 withArguments: {0}
+	(obj ___isKindOf___: int) ifTrue: [
+		^ obj ___ne___: 0
 	].
 
 	"For floats, 0.0 is False, everything else is True"
-	(obj perform: #isKindOf: env: 0 withArguments: { Float }) ifTrue: [
-		^ obj perform: #~= env: 0 withArguments: {0.0}
+	(obj ___isKindOf___: Float) ifTrue: [
+		^ obj ___ne___: 0.0
 	].
 
 	"For strings, empty string is False"
-	(obj perform: #isKindOf: env: 0 withArguments: { Unicode7 }) ifTrue: [
-		^ (obj perform: #size env: 0) perform: #> env: 0 withArguments: {0}
+	(obj ___isKindOf___: Unicode7) ifTrue: [
+		^ (obj ___size___) ___gt___: 0
 	].
 
 	"For collections, empty is False"
-	(obj perform: #isKindOf: env: 0 withArguments: { Collection }) ifTrue: [
-		^ (obj perform: #size env: 0) perform: #> env: 0 withArguments: {0}
+	(obj ___isKindOf___: Collection) ifTrue: [
+		^ (obj ___size___) ___gt___: 0
 	].
 
 	"Default: everything else is True"
@@ -84,7 +84,7 @@ method: bool
 __repr__
 	"Return the official string representation of the bool."
 
-	^ (self ifTrue: ['True'] ifFalse: ['False']) perform: #asUnicodeString env: 0
+	^ (self ifTrue: ['True'] ifFalse: ['False']) ___asUnicodeString___
 %
 
 category: 'Python-String Representation'
@@ -92,7 +92,7 @@ method: bool
 __str__
 	"Return the informal string representation of the bool."
 
-	^ (self ifTrue: ['True'] ifFalse: ['False']) perform: #asUnicodeString env: 0
+	^ (self ifTrue: ['True'] ifFalse: ['False']) ___asUnicodeString___
 %
 
 category: 'Python-Conversion'
@@ -135,7 +135,7 @@ method: bool
 __add__: other
 	"Add bool (as int) to other."
 
-	^ (self ifTrue: [1] ifFalse: [0]) perform: #+ env: 0 withArguments: {other}
+	^ (self ifTrue: [1] ifFalse: [0]) ___plus___: other
 %
 
 category: 'Python-Arithmetic'
@@ -143,7 +143,7 @@ method: bool
 __sub__: other
 	"Subtract other from bool (as int)."
 
-	^ (self ifTrue: [1] ifFalse: [0]) perform: #- env: 0 withArguments: {other}
+	^ (self ifTrue: [1] ifFalse: [0]) ___minus___: (other)
 %
 
 category: 'Python-Arithmetic'
@@ -151,7 +151,7 @@ method: bool
 __mul__: other
 	"Multiply bool (as int) by other."
 
-	^ (self ifTrue: [1] ifFalse: [0]) perform: #* env: 0 withArguments: {other}
+	^ (self ifTrue: [1] ifFalse: [0]) ___times___: other
 %
 
 category: 'Python-Arithmetic'
@@ -159,7 +159,7 @@ method: bool
 __truediv__: other
 	"True division of bool (as int) by other."
 
-	^ (self ifTrue: [1] ifFalse: [0]) perform: #/ env: 0 withArguments: {other}
+	^ (self ifTrue: [1] ifFalse: [0]) ___divide___: other
 %
 
 category: 'Python-Arithmetic'
@@ -167,7 +167,7 @@ method: bool
 __floordiv__: other
 	"Floor division of bool (as int) by other."
 
-	^ (self ifTrue: [1] ifFalse: [0]) perform: #// env: 0 withArguments: {other}
+	^ (self ifTrue: [1] ifFalse: [0]) ___divideInteger___: other
 %
 
 category: 'Python-Arithmetic'
@@ -175,7 +175,7 @@ method: bool
 __mod__: other
 	"Modulo of bool (as int) by other."
 
-	^ (self ifTrue: [1] ifFalse: [0]) perform: #\\ env: 0 withArguments: {other}
+	^ (self ifTrue: [1] ifFalse: [0]) ___modulo___: other
 %
 
 category: 'Python-Arithmetic'
@@ -183,7 +183,7 @@ method: bool
 __pow__: other
 	"Raise bool (as int) to power of other."
 
-	^ (self ifTrue: [1] ifFalse: [0]) perform: #raisedTo: env: 0 withArguments: {other}
+	^ (self ifTrue: [1] ifFalse: [0]) ___raisedTo___: other
 %
 
 category: 'Python-Arithmetic'
@@ -191,7 +191,7 @@ method: bool
 __neg__
 	"Negate bool (as int)."
 
-	^ (self ifTrue: [1] ifFalse: [0]) perform: #negated env: 0
+	^ (self ifTrue: [1] ifFalse: [0]) ___negated___
 %
 
 category: 'Python-Arithmetic'
@@ -218,10 +218,10 @@ __lt__: other
 
 	| selfInt otherInt |
 	selfInt := self ifTrue: [1] ifFalse: [0].
-	otherInt := (other perform: #class env: 0) == bool
+	otherInt := (other ___class___) == bool
 		ifTrue: [other ifTrue: [1] ifFalse: [0]]
 		ifFalse: [other].
-	^ selfInt perform: #< env: 0 withArguments: {otherInt}
+	^ selfInt ___lt___: otherInt
 %
 
 category: 'Python-Comparison'
@@ -231,10 +231,10 @@ __le__: other
 
 	| selfInt otherInt |
 	selfInt := self ifTrue: [1] ifFalse: [0].
-	otherInt := (other perform: #class env: 0) == bool
+	otherInt := (other ___class___) == bool
 		ifTrue: [other ifTrue: [1] ifFalse: [0]]
 		ifFalse: [other].
-	^ selfInt perform: #<= env: 0 withArguments: {otherInt}
+	^ selfInt ___le___: otherInt
 %
 
 category: 'Python-Comparison'
@@ -244,10 +244,10 @@ __gt__: other
 
 	| selfInt otherInt |
 	selfInt := self ifTrue: [1] ifFalse: [0].
-	otherInt := (other perform: #class env: 0) == bool
+	otherInt := (other ___class___) == bool
 		ifTrue: [other ifTrue: [1] ifFalse: [0]]
 		ifFalse: [other].
-	^ selfInt perform: #> env: 0 withArguments: {otherInt}
+	^ selfInt ___gt___: otherInt
 %
 
 category: 'Python-Comparison'
@@ -257,10 +257,10 @@ __ge__: other
 
 	| selfInt otherInt |
 	selfInt := self ifTrue: [1] ifFalse: [0].
-	otherInt := (other perform: #class env: 0) == bool
+	otherInt := (other ___class___) == bool
 		ifTrue: [other ifTrue: [1] ifFalse: [0]]
 		ifFalse: [other].
-	^ selfInt perform: #>= env: 0 withArguments: {otherInt}
+	^ selfInt ___ge___: otherInt
 %
 
 category: 'Python-Comparison'
@@ -270,10 +270,10 @@ __eq__: other
 
 	| selfInt otherInt |
 	selfInt := self ifTrue: [1] ifFalse: [0].
-	otherInt := (other perform: #class env: 0) == bool
+	otherInt := (other ___class___) == bool
 		ifTrue: [other ifTrue: [1] ifFalse: [0]]
 		ifFalse: [other].
-	^ selfInt perform: #= env: 0 withArguments: {otherInt}
+	^ selfInt ___eq___: otherInt
 %
 
 category: 'Python-Comparison'
@@ -283,10 +283,10 @@ __ne__: other
 
 	| selfInt otherInt |
 	selfInt := self ifTrue: [1] ifFalse: [0].
-	otherInt := (other perform: #class env: 0) == bool
+	otherInt := (other ___class___) == bool
 		ifTrue: [other ifTrue: [1] ifFalse: [0]]
 		ifFalse: [other].
-	^ selfInt perform: #~= env: 0 withArguments: {otherInt}
+	^ selfInt ___ne___: otherInt
 %
 
 ! ------------------- Bitwise operations (bool as int)
@@ -295,7 +295,7 @@ method: bool
 __and__: other
 	"Bitwise AND of bool (as int) with other."
 
-	^ (self ifTrue: [1] ifFalse: [0]) perform: #bitAnd: env: 0 withArguments: {other}
+	^ (self ifTrue: [1] ifFalse: [0]) ___bitAnd___: other
 %
 
 category: 'Python-Bitwise'
@@ -331,7 +331,7 @@ __doc__
 
 Returns True when the argument x is true, False otherwise.
 The builtins True and False are the only two instances of the class bool.
-The class bool is a subclass of the class int, and cannot be subclassed.' perform: #asUnicodeString env: 0
+The class bool is a subclass of the class int, and cannot be subclassed.' ___asUnicodeString___
 %
 
 ! ------------------- Reset compile environment and add Smalltalk methods

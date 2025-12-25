@@ -90,17 +90,10 @@ ModuleAst astStringForSource: '1 == 1'.
 category: 'other'
 classmethod: ModuleAst
 evaluate: aString
-"
-ModuleAst evaluate: '1 == 1'.
-"
-	^self evaluate: aString withScope: nil
-%
-category: 'other'
-classmethod: ModuleAst
-evaluate: aString withScope: aScope
-"
-ModuleAst evaluate: 'x = 5' withScope: PyGlobals new.
-"
+	"
+	ModuleAst evaluate: '1 == 1'.
+	"
+
 	| file path module stream |
 	path := '/tmp/grail.py'.
 	file := GsFile open: path mode: 'w' onClient: false.
@@ -108,7 +101,7 @@ ModuleAst evaluate: 'x = 5' withScope: PyGlobals new.
 	module := self script: path.
 	GsFile removeServerFile: path.
 	stream := PrettyWriteStream on: Unicode7 new.
-	module printSmalltalkOn: stream withScope: aScope.
+	module printSmalltalkOn: stream.
 	^stream contents evaluate
 %
 category: 'other'
@@ -117,11 +110,65 @@ evaluateScript: aPath
 "
 ModuleAst evaluateScript: '/Users/acaraveo/ORA.py'.
 "
-	| module stream |
+	| method module mySymbolDictionary mySymbolList stream |
 	module := self script: aPath.
 	stream := PrettyWriteStream on: Unicode7 new.
 	module printSmalltalkOn: stream.
-	^stream contents evaluate
+	mySymbolDictionary := SymbolDictionary new
+		name: #'foo';
+		at: #'abs' put: [:arg1 | builtins new abs: arg1];
+		at: #'len' put: [:arg1 | builtins new len: arg1];
+		at: #'type' put: [:arg1 | builtins new type: arg1];
+		at: #'repr' put: [:arg1 | builtins new repr: arg1];
+		at: #'str' put: [:arg1 | builtins new str: arg1];
+		at: #'hash' put: [:arg1 | builtins new hash: arg1];
+		at: #'hex' put: [:arg1 | builtins new hex: arg1];
+		at: #'oct' put: [:arg1 | builtins new oct: arg1];
+		at: #'bin' put: [:arg1 | builtins new bin: arg1];
+		at: #'chr' put: [:arg1 | builtins new chr: arg1];
+		at: #'ord' put: [:arg1 | builtins new ord: arg1];
+		at: #'min' put: [:arg1 | builtins new min: arg1];
+		at: #'max' put: [:arg1 | builtins new max: arg1];
+		at: #'sum' put: [:arg1 | builtins new sum: arg1];
+		at: #'all' put: [:arg1 | builtins new all: arg1];
+		at: #'any' put: [:arg1 | builtins new any: arg1];
+		at: #'isinstance' put: [:arg1 :arg2 | builtins new isinstance: arg1 _: arg2];
+		at: #'callable' put: [:arg1 | builtins new callable: arg1];
+		at: #'dir' put: [:arg1 | builtins new dir: arg1];
+		at: #'id' put: [:arg1 | builtins new id: arg1];
+		at: #'pow' put: [:arg1 :arg2 | builtins new pow: arg1 _: arg2];
+		at: #'round' put: [:arg1 | builtins new round: arg1];
+		at: #'divmod' put: [:arg1 :arg2 | builtins new divmod: arg1 _: arg2];
+		at: #'print' put: [:arg1 | builtins new print: arg1];
+		at: #'input' put: [builtins new input];
+		at: #'sorted' put: [:arg1 | builtins new sorted: arg1];
+		at: #'reversed' put: [:arg1 | builtins new reversed: arg1];
+		at: #'enumerate' put: [:arg1 | builtins new enumerate: arg1];
+		at: #'zip' put: [:arg1 | builtins new zip: arg1];
+		yourself.
+	mySymbolList := SymbolList with: mySymbolDictionary.
+	self halt.
+	[
+		method := stream contents 
+			_compileInContext: nil 
+			symbolList: mySymbolList 
+			oldLitVars: nil
+			environmentId: 2
+			flags: 0.
+	] on: AbstractException do: [:ex |
+		ex halt.
+	].
+	[
+    	^method perform: #_executeInContext: env: 0 withArguments: { nil }
+	] on: AbstractException do: [:ex |
+		ex halt.
+	].
+%
+category: 'other'
+classmethod: ModuleAst
+hello
+
+	ModuleAst evaluateScript: '/Users/jfoster/code/GemStone/Grail/scripts/hello.py'.
 %
 category: 'other'
 classmethod: ModuleAst
@@ -152,7 +199,7 @@ category: 'other'
 classmethod: ModuleAst
 smalltalkForModulePath: aString
 "
-ModuleAst smalltalkForModulePath: '/Users/jfoster/code/Python/Grail/tests/hello.py'.
+ModuleAst smalltalkForModulePath: '/Users/jfoster/code/Python/Grail/scripts/hello.py'.
 ModuleAst smalltalkForModulePath: '/Users/acaraveo/ORA.py'.
 "
 	| module stream |
@@ -178,42 +225,54 @@ ModuleAst smalltalkForSource: '1 == 1'.
 	^stream contents
 %
 ! ------------------- Instance methods for ModuleAst
-category: 'other'
+category: 'accessors'
 method: ModuleAst
-call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
+module
 
-	| function |
-	function := scope get: aSymbol.
-	^function
-		value: anArray
-		value: aSymbolDictionary
-		value: aScope
+	^self
 %
-category: 'other'
+category: 'accessors'
 method: ModuleAst
-globals
+name
 
-	^body
+	^name
 %
-category: 'other'
+category: 'accessors'
+method: ModuleAst
+path
+
+	^path
+%
+category: 'accessors'
+method: ModuleAst
+setBlock: aBlockAst
+
+	body := aBlockAst.
+%
+category: 'accessors'
+method: ModuleAst
+source
+
+	^source
+%
+category: 'accessors'
+method: ModuleAst
+stream
+
+	stream skipSeparators.
+	^stream
+%
+category: 'code generation'
+method: ModuleAst
+printSmalltalkOn: aStream
+
+	body printSmalltalkOn: aStream.
+%
+category: 'parse'
 method: ModuleAst
 initialize
-
-	parent := nil.
 %
-category: 'other'
-method: ModuleAst
-isInClass
-
-	^false
-%
-category: 'other'
-method: ModuleAst
-isPackage
-
-	^false
-%
-category: 'other'
+category: 'parse'
 method: ModuleAst
 load: aPathString as: aNameString
 
@@ -224,25 +283,7 @@ load: aPathString as: aNameString
 		readSource;
 		yourself.
 %
-category: 'other'
-method: ModuleAst
-locals
-
-	^body
-%
-category: 'other'
-method: ModuleAst
-module
-
-	^self
-%
-category: 'other'
-method: ModuleAst
-name
-
-	^name
-%
-category: 'other'
+category: 'parse'
 method: ModuleAst
 parseAst
 
@@ -257,47 +298,13 @@ parseAst
 	string := stream upToEnd trimSeparators.
 	string isEmpty ifFalse: [SyntaxError signal: 'Unexpected text at end of AST: ' , string printString].
 %
-category: 'other'
-method: ModuleAst
-path
-
-	^path
-%
-category: 'other'
-method: ModuleAst
-printSmalltalkOn: aStream
-
-%
-category: 'other'
-method: ModuleAst
-printSmalltalkOn: aStream withScope: aScope
-
-	aStream
-		increaseIndent;
-		lf;
-		nextPutAll: '| currentScope value |';
-		lf.
-	aScope ifNil: [
-		aStream
-			nextPutAll: 'currentScope := PyGlobals new.';
-			lf.
-	] ifNotNil: [
-		aStream
-			nextPutAll: 'currentScope := Object _objectForOop: ';
-			nextPutAll: (aScope asOop printString);
-			nextPutAll: '.';
-			lf.
-	].
-	body printSmalltalkOn: aStream. " Doesn't need parenthesis "
-	aStream lf.
-%
-category: 'other'
+category: 'parse'
 method: ModuleAst
 readAst
 
 	^self class astStringForPath: path
 %
-category: 'other'
+category: 'parse'
 method: ModuleAst
 readSource
 
@@ -306,28 +313,33 @@ readSource
 	source := file contentsAsUtf8.
 	file close.
 %
-category: 'other'
+category: 'querying'
+method: ModuleAst
+isInClass
+
+	^false
+%
+category: 'querying'
+method: ModuleAst
+isPackage
+
+	^false
+%
+category: 'variables'
+method: ModuleAst
+globals
+
+	^body
+%
+category: 'variables'
+method: ModuleAst
+locals
+
+	^body
+%
+category: 'variables'
 method: ModuleAst
 set: aSymbol to: anObject
 
-	scope set: aSymbol to: anObject
-%
-category: 'other'
-method: ModuleAst
-setBlock: aBlockAst
-
-	body := aBlockAst.
-%
-category: 'other'
-method: ModuleAst
-source
-
-	^source
-%
-category: 'other'
-method: ModuleAst
-stream
-
-	stream skipSeparators.
-	^stream
+	self halt.
 %

@@ -20,15 +20,12 @@ method: cmath
 ___asComplex: z
 	"Convert z to a complex number if it isn't already"
 	| zClass |
-	zClass := z perform: #class env: 0.
+	zClass := z ___class___.
 
-	(zClass perform: #= env: 0 withArguments: {complex}) ifTrue: [^ z].
+	(zClass ___eq___: complex) ifTrue: [^ z].
 
 	"For numeric types, create complex with zero imaginary part"
-	^ complex perform: #___real:imaginary: env: 0 withArguments: {
-		z perform: #asFloat env: 0.
-		0.0
-	}
+	^ complex __new__: (z ___asFloat___) _: 0.0
 %
 
 category: 'Python-Constants'
@@ -51,7 +48,7 @@ tau
 	"The mathematical constant τ = 2π = 6.283185..."
 	| pi |
 	pi := Float perform: #pi env: 0.
-	^ pi perform: #* env: 0 withArguments: {2.0}
+	^ pi ___times___: 2.0
 %
 
 category: 'Python-Constants'
@@ -65,7 +62,7 @@ category: 'Python-Constants'
 method: cmath
 infj
 	"Complex number with zero real part and positive infinity imaginary part"
-	^ complex perform: #___real:imaginary: env: 0 withArguments: {0.0. PlusInfinity}
+	^ complex __new__: 0.0 _: PlusInfinity
 %
 
 category: 'Python-Constants'
@@ -79,7 +76,7 @@ category: 'Python-Constants'
 method: cmath
 nanj
 	"Complex number with zero real part and NaN imaginary part"
-	^ complex perform: #___real:imaginary: env: 0 withArguments: {0.0. PlusQuietNaN}
+	^ complex __new__: 0.0 _: PlusQuietNaN
 %
 
 category: 'Python-Trigonometric Functions'
@@ -92,10 +89,7 @@ sin: z
 	imag := zComplex imag.
 	
 	"sin(a + bi) = sin(a)*cosh(b) + i*cos(a)*sinh(b)"
-	^ complex perform: #___real:imaginary: env: 0 withArguments: {
-		(real perform: #sin env: 0) perform: #* env: 0 withArguments: {imag perform: #cosh env: 0}.
-		(real perform: #cos env: 0) perform: #* env: 0 withArguments: {imag perform: #sinh env: 0}
-	}
+	^ complex __new__: ((real ___sin___) ___times___: (imag perform: #cosh env: 0)) _: ((real ___cos___) ___times___: (imag perform: #sinh env: 0))
 %
 
 category: 'Python-Trigonometric Functions'
@@ -108,10 +102,7 @@ cos: z
 	imag := zComplex imag.
 	
 	"cos(a + bi) = cos(a)*cosh(b) - i*sin(a)*sinh(b)"
-	^ complex perform: #___real:imaginary: env: 0 withArguments: {
-		(real perform: #cos env: 0) perform: #* env: 0 withArguments: {imag perform: #cosh env: 0}.
-		((real perform: #sin env: 0) perform: #* env: 0 withArguments: {imag perform: #sinh env: 0}) perform: #negated env: 0
-	}
+	^ complex __new__: ((real ___cos___) ___times___: (imag perform: #cosh env: 0)) _: (((real ___sin___) ___times___: (imag perform: #sinh env: 0)) ___negated___)
 %
 
 category: 'Python-Trigonometric Functions'
@@ -134,10 +125,7 @@ sinh: z
 	imag := zComplex imag.
 	
 	"sinh(a + bi) = sinh(a)*cos(b) + i*cosh(a)*sin(b)"
-	^ complex perform: #___real:imaginary: env: 0 withArguments: {
-		(real perform: #sinh env: 0) perform: #* env: 0 withArguments: {imag perform: #cos env: 0}.
-		(real perform: #cosh env: 0) perform: #* env: 0 withArguments: {imag perform: #sin env: 0}
-	}
+	^ complex __new__: ((real perform: #sinh env: 0) ___times___: (imag ___cos___)) _: ((real perform: #cosh env: 0) ___times___: (imag ___sin___))
 %
 
 category: 'Python-Hyperbolic Functions'
@@ -150,10 +138,7 @@ cosh: z
 	imag := zComplex imag.
 	
 	"cosh(a + bi) = cosh(a)*cos(b) + i*sinh(a)*sin(b)"
-	^ complex perform: #___real:imaginary: env: 0 withArguments: {
-		(real perform: #cosh env: 0) perform: #* env: 0 withArguments: {imag perform: #cos env: 0}.
-		(real perform: #sinh env: 0) perform: #* env: 0 withArguments: {imag perform: #sin env: 0}
-	}
+	^ complex __new__: ((real perform: #cosh env: 0) ___times___: (imag ___cos___)) _: ((real perform: #sinh env: 0) ___times___: (imag ___sin___))
 %
 
 category: 'Python-Hyperbolic Functions'
@@ -177,10 +162,7 @@ exp: z
 
 	"exp(a + bi) = exp(a) * (cos(b) + i*sin(b))"
 	expReal := real perform: #exp env: 0.
-	^ complex perform: #___real:imaginary: env: 0 withArguments: {
-		expReal perform: #* env: 0 withArguments: {imag perform: #cos env: 0}.
-		expReal perform: #* env: 0 withArguments: {imag perform: #sin env: 0}
-	}
+	^ complex __new__: (expReal ___times___: (imag ___cos___)) _: (expReal ___times___: (imag ___sin___))
 %
 
 category: 'Python-Exponential and Logarithmic'
@@ -194,17 +176,13 @@ log: z
 
 	"log(z) = log(|z|) + i*arg(z)"
 	"Calculate magnitude: r = sqrt(real^2 + imag^2)"
-	r := ((real perform: #* env: 0 withArguments: {real})
-		perform: #+ env: 0 withArguments: {imag perform: #* env: 0 withArguments: {imag}})
-		perform: #sqrt env: 0.
+	r := (((real ___times___: real)
+		___plus___: (imag ___times___: imag)) ___sqrt___).
 
 	"Calculate argument: theta = atan2(imag, real)"
 	theta := imag perform: #arcTan2: env: 0 withArguments: {real}.
 
-	^ complex perform: #___real:imaginary: env: 0 withArguments: {
-		r perform: #ln env: 0.
-		theta
-	}
+	^ complex __new__: (r ___ln___) _: theta
 %
 
 category: 'Python-Exponential and Logarithmic'
@@ -213,8 +191,8 @@ log10: z
 	"Return the base-10 logarithm of z (complex number)"
 	| logZ ln10 |
 	logZ := self log: z.
-	ln10 := 10.0 perform: #ln env: 0.
-	^ logZ __truediv__: (complex perform: #___real:imaginary: env: 0 withArguments: {ln10. 0.0})
+	ln10 := 10.0 ___ln___.
+	^ logZ __truediv__: (complex __new__: ln10 _: 0.0)
 %
 
 category: 'Python-Exponential and Logarithmic'
@@ -230,20 +208,16 @@ sqrt: z
 	"where r = |z| and theta = arg(z)"
 
 	"Calculate magnitude"
-	r := ((real perform: #* env: 0 withArguments: {real})
-		perform: #+ env: 0 withArguments: {imag perform: #* env: 0 withArguments: {imag}})
-		perform: #sqrt env: 0.
+	r := (((real ___times___: real)
+		___plus___: (imag ___times___: imag)) ___sqrt___).
 
 	"Calculate argument"
 	theta := imag perform: #arcTan2: env: 0 withArguments: {real}.
 
-	sqrtR := r perform: #sqrt env: 0.
-	halfTheta := theta perform: #/ env: 0 withArguments: {2.0}.
+	sqrtR := r ___sqrt___.
+	halfTheta := theta ___divide___: 2.0.
 
-	^ complex perform: #___real:imaginary: env: 0 withArguments: {
-		sqrtR perform: #* env: 0 withArguments: {halfTheta perform: #cos env: 0}.
-		sqrtR perform: #* env: 0 withArguments: {halfTheta perform: #sin env: 0}
-	}
+	^ complex __new__: (sqrtR ___times___: (halfTheta ___cos___)) _: (sqrtR ___times___: (halfTheta ___sin___))
 %
 
 category: 'Python-Polar Coordinates'
@@ -268,14 +242,13 @@ polar: z
 	imag := zComplex imag.
 
 	"Calculate magnitude"
-	r := ((real perform: #* env: 0 withArguments: {real})
-		perform: #+ env: 0 withArguments: {imag perform: #* env: 0 withArguments: {imag}})
-		perform: #sqrt env: 0.
+	r := (((real ___times___: real)
+		___plus___: (imag ___times___: imag)) ___sqrt___).
 
 	"Calculate argument"
 	theta := imag perform: #arcTan2: env: 0 withArguments: {real}.
 
-	^ tuple perform: #withAll: env: 0 withArguments: {InvariantArray perform: #with:with: env: 0 withArguments: {r. theta}}
+	^ tuple ___withAll___: (InvariantArray ___with___: r with: theta)
 %
 
 category: 'Python-Polar Coordinates'
@@ -283,13 +256,10 @@ method: cmath
 rect: r _: theta
 	"Convert polar coordinates (r, theta) to rectangular form (complex number)"
 	| rFloat thetaFloat |
-	rFloat := r perform: #asFloat env: 0.
-	thetaFloat := theta perform: #asFloat env: 0.
+	rFloat := r ___asFloat___.
+	thetaFloat := theta ___asFloat___.
 
-	^ complex perform: #___real:imaginary: env: 0 withArguments: {
-		rFloat perform: #* env: 0 withArguments: {thetaFloat perform: #cos env: 0}.
-		rFloat perform: #* env: 0 withArguments: {thetaFloat perform: #sin env: 0}
-	}
+	^ complex __new__: (rFloat ___times___: (thetaFloat ___cos___)) _: (rFloat ___times___: (thetaFloat ___sin___))
 %
 
 category: 'Python-Classification'
@@ -317,7 +287,7 @@ isinf: z
 	realKind := real perform: #_getKind env: 0.
 	imagKind := imag perform: #_getKind env: 0.
 
-	^ (((realKind perform: #= env: 0 withArguments: {3}) or: [imagKind perform: #= env: 0 withArguments: {3}]))
+	^ (((realKind ___eq___: 3) or: [imagKind ___eq___: 3]))
 		ifTrue: [true] ifFalse: [false]
 %
 
@@ -334,8 +304,8 @@ isfinite: z
 	imagKind := imag perform: #_getKind env: 0.
 
 	"Both must be normal (1), subnormal (2), or zero (4)"
-	^ ((((realKind perform: #<= env: 0 withArguments: {2}) or: [realKind perform: #= env: 0 withArguments: {4}])
-		and: [(imagKind perform: #<= env: 0 withArguments: {2}) or: [imagKind perform: #= env: 0 withArguments: {4}]]))
+	^ ((((realKind ___le___: 2) or: [realKind ___eq___: 4])
+		and: [(imagKind ___le___: 2) or: [imagKind ___eq___: 4]]))
 		ifTrue: [true] ifFalse: [false]
 %
 

@@ -16,7 +16,7 @@ test_inheritance
 	"Test that TabError inherits from IndentationError."
 	
 	| exc |
-	exc := TabError perform: #__new__: env: 2 withArguments: { TabError }.
+	exc := TabError ___new___:  TabError .
 	self assert: (exc isKindOf: IndentationError).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a TabError instance."
 	
 	| exc |
-	exc := TabError perform: #__new__: env: 2 withArguments: { TabError }.
+	exc := TabError ___new___:  TabError .
 	self assert: exc notNil.
 %

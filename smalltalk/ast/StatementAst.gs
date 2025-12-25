@@ -8,7 +8,7 @@ statementFrom: aNode
 
 	| symbol class |
 	symbol := ((aNode stream upTo: $() , 'Ast') asSymbol.
-	class := Python at: symbol.
+	class := PythonAst at: symbol.
 	"Pywithitem may return an instance of WithItemAst"
 	^class parent: aNode
 

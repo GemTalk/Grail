@@ -3,7 +3,7 @@
 ! ===============================================================================
 ! This script installs the Grail Python implementation in GemStone Smalltalk.
 ! It performs the following steps:
-! 1. Removes existing SymbolDictionaries (Python, PythonAST, PythonTests)
+! 1. Removes existing SymbolDictionaries (Python, PythonAst, PythonTests)
 !    and creates fresh ones in the correct order
 ! 2. Loads Python built-in type classes (handles user switching internally)
 ! 3. Loads AST node classes
@@ -50,12 +50,12 @@ userProfile := System myUserProfile.
 symbolList := userProfile symbolList.
 names := symbolList names.
 
-"Remove PythonAST dictionary if it exists"
-(names includes: #'PythonAST') ifTrue: [
-	symbolList removeAtIndex: (names indexOf: #'PythonAST').
-	Transcript show: 'Removed PythonAST dictionary'.
+"Remove PythonAst dictionary if it exists"
+(names includes: #'PythonAst') ifTrue: [
+	symbolList removeAtIndex: (names indexOf: #'PythonAst').
+	Transcript show: 'Removed PythonAst dictionary'.
 ] ifFalse: [
-	Transcript show: 'PythonAST dictionary not found (OK)'.
+	Transcript show: 'PythonAst dictionary not found (OK)'.
 ].
 %
 run
@@ -69,10 +69,10 @@ pythonDict := SymbolDictionary new name: #'Python'; yourself.
 userProfile insertDictionary: pythonDict at: 1.
 Transcript show: 'Created Python dictionary'.
 
-"Create PythonAST dictionary (second in order)"
-pythonASTDict := SymbolDictionary new name: #'PythonAST'; yourself.
+"Create PythonAst dictionary (second in order)"
+pythonASTDict := SymbolDictionary new name: #'PythonAst'; yourself.
 userProfile insertDictionary: pythonASTDict at: 2.
-Transcript show: 'Created PythonAST dictionary'.
+Transcript show: 'Created PythonAst dictionary'.
 
 "Create PythonTests dictionary (third in order)"
 pythonTestsDict := SymbolDictionary new name: #'PythonTests'; yourself.
@@ -98,7 +98,7 @@ Transcript show: 'Step 2 complete: Python built-in type classes loaded'.
 run
 Transcript show: 'Step 3: Loading AST classes...'.
 %
-input smalltalk/ast/ast.gs
+input smalltalk/ast/PythonAst.gs
 run
 Transcript show: 'Step 3 complete: AST classes loaded'.
 %
@@ -131,15 +131,15 @@ Transcript show: '==============================================='.
 	Transcript show: 'Python dictionary: MISSING!'.
 ].
 
-"Check PythonAST dictionary (loaded second, can reference Python types)"
-(names includes: #'PythonAST') ifTrue: [
-	pythonASTDict := symbolList objectNamed: #'PythonAST'.
-	Transcript show: 'PythonAST dictionary: OK (', pythonASTDict size printString, ' classes)'.
+"Check PythonAst dictionary (loaded second, can reference Python types)"
+(names includes: #'PythonAst') ifTrue: [
+	pythonASTDict := symbolList objectNamed: #'PythonAst'.
+	Transcript show: 'PythonAst dictionary: OK (', pythonASTDict size printString, ' classes)'.
 ] ifFalse: [
-	Transcript show: 'PythonAST dictionary: MISSING!'.
+	Transcript show: 'PythonAst dictionary: MISSING!'.
 ].
 
-"Check PythonTests dictionary (loaded last, can reference both Python and PythonAST)"
+"Check PythonTests dictionary (loaded last, can reference both Python and PythonAst)"
 (names includes: #'PythonTests') ifTrue: [
 	pythonTestsDict := symbolList objectNamed: #'PythonTests'.
 	Transcript show: 'PythonTests dictionary: OK (', pythonTestsDict size printString, ' test classes)'.

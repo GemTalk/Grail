@@ -30,6 +30,10 @@ category: 'other'
 method: SuiteAst
 printSmalltalkOn: aStream
 
+	body do: [:stmt |
+		stmt printSmalltalkOn: aStream.
+		aStream lf.
+	].
 %
 category: 'other'
 method: SuiteAst

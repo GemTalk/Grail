@@ -18,13 +18,13 @@ ___on: aDict
 	"Create a new dict_itemiterator for the given dictionary"
 
 	| iter itemsArray |
-	iter := self perform: #new env: 0.
-	itemsArray := Array perform: #new env: 0.
-	aDict perform: #keysAndValuesDo: env: 0 withArguments: {[:key :value |
+	iter := self ___new___.
+	itemsArray := Array ___new___.
+	aDict ___keysAndValuesDo___: [:key :value |
 		| pair |
-		pair := InvariantArray perform: #with:with: env: 0 withArguments: {key. value}.
-		itemsArray perform: #add: env: 0 withArguments: {pair}
-	]}.
+		pair := InvariantArray ___with___: key with: value.
+		itemsArray ___add___: pair
+	].
 	iter ___dict: aDict.
 	iter ___items: itemsArray.
 	iter ___position: 0.
@@ -74,14 +74,14 @@ __next__
 	"Return the next (key, value) pair from the dictionary"
 
 	| size nextItem |
-	size := items perform: #size env: 0.
-	position := position perform: #+ env: 0 withArguments: {1}.
+	size := items ___size___.
+	position := position ___plus___: 1.
 	
-	(position perform: #> env: 0 withArguments: {size}) ifTrue: [
-		StopIteration perform: #signal env: 0
+	(position ___gt___: size) ifTrue: [
+		StopIteration ___signal___
 	].
 	
-	nextItem := items perform: #at: env: 0 withArguments: {position}.
+	nextItem := items ___at___: position.
 	^ nextItem
 %
 

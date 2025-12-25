@@ -34,7 +34,7 @@ method: frozenset
 __len__
 	"Return the number of elements in the frozenset."
 
-	^ self perform: #size env: 0
+	^ self ___size___
 %
 
 category: 'Python-Collection Protocol'
@@ -51,15 +51,15 @@ __eq__: other
 	"Return True if self and other have the same elements."
 
 	| otherClass |
-	otherClass := other perform: #class env: 0.
+	otherClass := other ___class___.
 	
 	"Check if other is a set or frozenset"
-	((otherClass perform: #= env: 0 withArguments: {frozenset}) or: [
-		otherClass perform: #= env: 0 withArguments: {set}
+	((otherClass ___eq___: frozenset) or: [
+		otherClass ___eq___: set
 	]) ifFalse: [^ false].
 	
 	"Compare using Set's equality"
-	^ self perform: #= env: 0 withArguments: {other}
+	^ self ___eq___: other
 %
 
 category: 'Python-Comparison'
@@ -67,7 +67,7 @@ method: frozenset
 __ne__: other
 	"Return True if self and other have different elements."
 
-	^ (self __eq__: other) perform: #not env: 0
+	^ (self __eq__: other) ___not___
 %
 
 category: 'Python-Comparison'
@@ -116,11 +116,11 @@ __hash__
 
 	| hash |
 	hash := 0.
-	self perform: #do: env: 0 withArguments: {[:each |
+	self ___do___: [:each |
 		| elemHash |
 		elemHash := each __hash__.
 		hash := hash perform: #bitXor: env: 0 withArguments: {elemHash}
-	]}.
+	].
 	^ hash
 %
 
@@ -194,10 +194,10 @@ union: other
 	"Return a new frozenset with elements from self and other."
 
 	| result |
-	result := self perform: #copy env: 0.
-	other perform: #do: env: 0 withArguments: {[:each |
-		result perform: #add: env: 0 withArguments: {each}
-	]}.
+	result := self ___copy___.
+	other ___do___: [:each |
+		result ___add___: each
+	].
 	^ result
 %
 
@@ -207,12 +207,12 @@ intersection: other
 	"Return a new frozenset with elements common to self and other."
 
 	| result |
-	result := frozenset perform: #new env: 0.
-	self perform: #do: env: 0 withArguments: {[:each |
+	result := frozenset ___new___.
+	self ___do___: [:each |
 		(other __contains__: each) ifTrue: [
-			result perform: #add: env: 0 withArguments: {each}
+			result ___add___: each
 		]
-	]}.
+	].
 	^ result
 %
 
@@ -222,12 +222,12 @@ difference: other
 	"Return a new frozenset with elements in self that are not in other."
 
 	| result |
-	result := frozenset perform: #new env: 0.
-	self perform: #do: env: 0 withArguments: {[:each |
+	result := frozenset ___new___.
+	self ___do___: [:each |
 		(other __contains__: each) ifFalse: [
-			result perform: #add: env: 0 withArguments: {each}
+			result ___add___: each
 		]
-	]}.
+	].
 	^ result
 %
 
@@ -237,21 +237,21 @@ symmetric_difference: other
 	"Return a new frozenset with elements in either self or other but not both."
 
 	| result |
-	result := frozenset perform: #new env: 0.
+	result := frozenset ___new___.
 
 	"Add elements from self that are not in other"
-	self perform: #do: env: 0 withArguments: {[:each |
+	self ___do___: [:each |
 		(other __contains__: each) ifFalse: [
-			result perform: #add: env: 0 withArguments: {each}
+			result ___add___: each
 		]
-	]}.
+	].
 
 	"Add elements from other that are not in self"
-	other perform: #do: env: 0 withArguments: {[:each |
+	other ___do___: [:each |
 		(self __contains__: each) ifFalse: [
-			result perform: #add: env: 0 withArguments: {each}
+			result ___add___: each
 		]
-	]}.
+	].
 
 	^ result
 %
@@ -261,11 +261,11 @@ method: frozenset
 issubset: other
 	"Test whether every element in the set is in other."
 
-	self perform: #do: env: 0 withArguments: {[:each |
+	self ___do___: [:each |
 		(other __contains__: each) ifFalse: [
 			^ false
 		]
-	]}.
+	].
 	^ true
 %
 
@@ -274,11 +274,11 @@ method: frozenset
 issuperset: other
 	"Test whether every element in other is in the set."
 
-	other perform: #do: env: 0 withArguments: {[:each |
+	other ___do___: [:each |
 		(self __contains__: each) ifFalse: [
 			^ false
 		]
-	]}.
+	].
 	^ true
 %
 
@@ -287,11 +287,11 @@ method: frozenset
 isdisjoint: other
 	"Return True if the set has no elements in common with other."
 
-	self perform: #do: env: 0 withArguments: {[:each |
+	self ___do___: [:each |
 		(other __contains__: each) ifTrue: [
 			^ false
 		]
-	]}.
+	].
 	^ true
 %
 
@@ -300,7 +300,7 @@ method: frozenset
 copy
 	"Return a shallow copy of the frozenset."
 
-	^ self perform: #copy env: 0
+	^ self ___copy___
 %
 
 category: 'Python-String Representation'
@@ -309,22 +309,22 @@ __repr__
 	"Return a string representation of the frozenset: frozenset({item1, item2, ...})"
 
 	| stream first |
-	stream := WriteStream perform: #on: env: 0 withArguments: {String perform: #new env: 0}.
-	stream with: 'frozenset({' perform: #nextPutAll: env: 0.
+	stream := WriteStream ___on___: (String ___new___).
+	stream ___nextPutAll___: 'frozenset({'.
 
 	first := true.
-	self perform: #do: env: 0 withArguments: {[:each |
+	self ___do___: [:each |
 		| reprStr |
 		first ifFalse: [
-			stream with: ', ' perform: #nextPutAll: env: 0
+			stream ___nextPutAll___: ', '
 		].
 		reprStr := each __repr__.
-		stream with: reprStr perform: #nextPutAll: env: 0.
+		stream ___nextPutAll___: reprStr.
 		first := false
-	]}.
+	].
 
-	stream with: '})' perform: #nextPutAll: env: 0.
-	^ stream perform: #contents env: 0
+	stream ___nextPutAll___: '})'.
+	^ stream ___contents___
 %
 
 set compile_env: 0

@@ -16,7 +16,7 @@ test_inheritance
 	"Test that ImportError inherits from Exception."
 	
 	| exc |
-	exc := ImportError perform: #__new__: env: 2 withArguments: { ImportError }.
+	exc := ImportError ___new___:  ImportError .
 	self assert: (exc isKindOf: Exception).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a ImportError instance."
 	
 	| exc |
-	exc := ImportError perform: #__new__: env: 2 withArguments: { ImportError }.
+	exc := ImportError ___new___:  ImportError .
 	self assert: exc notNil.
 %

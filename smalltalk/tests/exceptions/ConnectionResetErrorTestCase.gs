@@ -16,7 +16,7 @@ test_inheritance
 	"Test that ConnectionResetError inherits from ConnectionError."
 	
 	| exc |
-	exc := ConnectionResetError perform: #__new__: env: 2 withArguments: { ConnectionResetError }.
+	exc := ConnectionResetError ___new___:  ConnectionResetError .
 	self assert: (exc isKindOf: ConnectionError).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a ConnectionResetError instance."
 	
 	| exc |
-	exc := ConnectionResetError perform: #__new__: env: 2 withArguments: { ConnectionResetError }.
+	exc := ConnectionResetError ___new___:  ConnectionResetError .
 	self assert: exc notNil.
 %

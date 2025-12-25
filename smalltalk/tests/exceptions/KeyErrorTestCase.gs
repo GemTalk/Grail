@@ -16,7 +16,7 @@ test_inheritance
 	"Test that KeyError inherits from LookupError."
 	
 	| exc |
-	exc := KeyError perform: #__new__: env: 2 withArguments: { KeyError }.
+	exc := KeyError ___new___:  KeyError .
 	self assert: (exc isKindOf: LookupError).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a KeyError instance."
 	
 	| exc |
-	exc := KeyError perform: #__new__: env: 2 withArguments: { KeyError }.
+	exc := KeyError ___new___:  KeyError .
 	self assert: exc notNil.
 %

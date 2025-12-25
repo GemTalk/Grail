@@ -7,4 +7,5 @@ category: 'other'
 method: AddAst
 printSmalltalkOn: aStream
 
+	aStream nextPutAll: ' __add__: '.
 %

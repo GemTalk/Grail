@@ -15,11 +15,11 @@ test__new__
 	self assert: result equals: 0.0.
 
 	"float(3.14) returns 3.14"
-	result := Float perform: #__new__: env: 2 withArguments: {3.14}.
+	result := Float ___new___: 3.14.
 	self assert: result equals: 3.14.
 
 	"float(-5.5) returns -5.5"
-	result := Float perform: #__new__: env: 2 withArguments: {-5.5}.
+	result := Float ___new___: -5.5.
 	self assert: result equals: -5.5.
 %
 
@@ -30,15 +30,15 @@ test__new__fromInteger
 
 	| result |
 	"float(42) returns 42.0"
-	result := Float perform: #__new__: env: 2 withArguments: {42}.
+	result := Float ___new___: 42.
 	self assert: result equals: 42.0.
 
 	"float(-5) returns -5.0"
-	result := Float perform: #__new__: env: 2 withArguments: {-5}.
+	result := Float ___new___: -5.
 	self assert: result equals: -5.0.
 
 	"float(0) returns 0.0"
-	result := Float perform: #__new__: env: 2 withArguments: {0}.
+	result := Float ___new___: 0.
 	self assert: result equals: 0.0.
 %
 
@@ -49,15 +49,15 @@ test__new__fromString
 
 	| result |
 	"float('3.14') returns 3.14"
-	result := Float perform: #__new__: env: 2 withArguments: {'3.14'}.
+	result := Float ___new___: '3.14'.
 	self assert: (result - 3.14) abs < 0.0001.
 
 	"float('-5.5') returns -5.5"
-	result := Float perform: #__new__: env: 2 withArguments: {'-5.5'}.
+	result := Float ___new___: '-5.5'.
 	self assert: result equals: -5.5.
 
 	"float('  100.0  ') returns 100.0 (strips whitespace)"
-	result := Float perform: #__new__: env: 2 withArguments: {'  100.0  '}.
+	result := Float ___new___: '  100.0  '.
 	self assert: result equals: 100.0.
 %
 
@@ -68,18 +68,18 @@ test__new__fromStringSpecial
 
 	| result kind |
 	"float('inf') returns infinity"
-	result := Float perform: #__new__: env: 2 withArguments: {'inf'}.
+	result := Float ___new___: 'inf'.
 	kind := result _getKind.
 	self assert: kind equals: 3.  "3 = infinity"
 
 	"float('-inf') returns negative infinity"
-	result := Float perform: #__new__: env: 2 withArguments: {'-inf'}.
+	result := Float ___new___: '-inf'.
 	kind := result _getKind.
 	self assert: kind equals: 3.  "3 = infinity"
 	self assert: (result < 0).
 
 	"float('nan') returns NaN"
-	result := Float perform: #__new__: env: 2 withArguments: {'nan'}.
+	result := Float ___new___: 'nan'.
 	kind := result _getKind.
 	self assert: kind > 4.  "5 or 6 = NaN"
 %

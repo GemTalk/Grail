@@ -38,4 +38,7 @@ category: 'other'
 method: BinOpAst
 printSmalltalkOn: aStream
 
+	left printSmalltalkOn: aStream.
+	op printSmalltalkOn: aStream.
+	right printSmalltalkOn: aStream.
 %

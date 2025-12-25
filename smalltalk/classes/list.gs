@@ -37,23 +37,23 @@ __setitem__: index _: value
 	Supports negative indices (counting from end)."
 
 	| size idx |
-	size := self perform: #size env: 0.
+	size := self ___size___.
 	idx := index.
 
 	"Handle negative indices"
-	(idx perform: #< env: 0 withArguments: {0}) ifTrue: [
-		idx := size perform: #+ env: 0 withArguments: {idx}
+	(idx ___lt___: 0) ifTrue: [
+		idx := size ___plus___: idx
 	].
 
 	"Check bounds (Python uses 0-based indexing)"
-	((idx perform: #< env: 0 withArguments: {0}) or: [
-		idx perform: #>= env: 0 withArguments: {size}
+	((idx ___lt___: 0) or: [
+		idx ___ge___: size
 	]) ifTrue: [
-		IndexError perform: #signal: env: 0 withArguments: {'list assignment index out of range'}
+		IndexError ___signal___: 'list assignment index out of range'
 	].
 
 	"Convert to 1-based Smalltalk index"
-	self perform: #at:put: env: 0 withArguments: {idx perform: #+ env: 0 withArguments: {1}. value}.
+	self ___at___: (idx ___plus___: 1) put: value.
 	^ nil
 %
 
@@ -64,23 +64,23 @@ __delitem__: index
 	Supports negative indices (counting from end)."
 
 	| size idx |
-	size := self perform: #size env: 0.
+	size := self ___size___.
 	idx := index.
 
 	"Handle negative indices"
-	(idx perform: #< env: 0 withArguments: {0}) ifTrue: [
-		idx := size perform: #+ env: 0 withArguments: {idx}
+	(idx ___lt___: 0) ifTrue: [
+		idx := size ___plus___: idx
 	].
 
 	"Check bounds (Python uses 0-based indexing)"
-	((idx perform: #< env: 0 withArguments: {0}) or: [
-		idx perform: #>= env: 0 withArguments: {size}
+	((idx ___lt___: 0) or: [
+		idx ___ge___: size
 	]) ifTrue: [
-		IndexError perform: #signal: env: 0 withArguments: {'list assignment index out of range'}
+		IndexError ___signal___: 'list assignment index out of range'
 	].
 
 	"Convert to 1-based Smalltalk index"
-	self perform: #removeAtIndex: env: 0 withArguments: {idx perform: #+ env: 0 withArguments: {1}}.
+	self ___removeAtIndex___: (idx ___plus___: 1).
 	^ nil
 %
 
@@ -89,7 +89,7 @@ method: list
 __iadd__: other
 	"In-place concatenation: self += other. Returns self."
 
-	self perform: #addAll: env: 0 withArguments: {other}.
+	self ___addAll___: other.
 	^ self
 %
 
@@ -98,17 +98,16 @@ method: list
 __imul__: n
 	"In-place repetition: self *= n. Returns self."
 
-	| original count |
-	count := n.
-	(count perform: #<= env: 0 withArguments: {0}) ifTrue: [
-		self perform: #size: env: 0 withArguments: {0}.
+	| original |
+	(n ___le___: 0) ifTrue: [
+		self ___size___: 0.
 		^ self
 	].
 
-	original := self perform: #copy env: 0.
-	(count perform: #- env: 0 withArguments: {1}) perform: #timesRepeat: env: 0 withArguments: {
-		[self perform: #addAll: env: 0 withArguments: {original}]
-	}.
+	original := self ___copy___.
+	(n ___minus___: 1) ___timesRepeat___: [
+		self ___addAll___: original.
+	].
 	^ self
 %
 
@@ -117,7 +116,7 @@ method: list
 append: item
 	"Add item to the end of the list."
 
-	self perform: #add: env: 0 withArguments: {item}.
+	self ___add___: item.
 	^ nil
 %
 
@@ -126,7 +125,7 @@ method: list
 clear
 	"Remove all items from the list."
 
-	self perform: #size: env: 0 withArguments: {0}.
+	self ___size___: 0.
 	^ nil
 %
 
@@ -135,7 +134,7 @@ method: list
 copy
 	"Return a shallow copy of the list."
 
-	^ self perform: #copy env: 0
+	^ self ___copy___
 %
 
 category: 'Python-List Methods'
@@ -143,7 +142,7 @@ method: list
 extend: iterable
 	"Extend the list by appending all items from iterable."
 
-	self perform: #addAll: env: 0 withArguments: {iterable}.
+	self ___addAll___: iterable.
 	^ nil
 %
 
@@ -153,21 +152,21 @@ insert: index _: item
 	"Insert item before the given index."
 
 	| size idx temp |
-	size := self perform: #size env: 0.
+	size := self ___size___.
 	idx := index.
 
 	"Handle negative indices"
-	(idx perform: #< env: 0 withArguments: {0}) ifTrue: [
-		temp := size perform: #+ env: 0 withArguments: {idx}.
-		idx := temp perform: #max: env: 0 withArguments: {0}
+	(idx ___lt___: 0) ifTrue: [
+		temp := size ___plus___: idx.
+		idx := temp ___max___: 0
 	].
 
 	"Clamp to valid range"
-	temp := idx perform: #max: env: 0 withArguments: {0}.
-	idx := temp perform: #min: env: 0 withArguments: {size}.
+	temp := idx ___max___: 0.
+	idx := temp ___min___: size.
 
 	"Convert to 1-based Smalltalk index (add at position idx+1)"
-	(idx perform: #= env: 0 withArguments: {0})
+	(idx ___eq___: 0)
 		ifTrue: [self perform: #addFirst: env: 0 withArguments: {item}]
 		ifFalse: [self perform: #add:afterIndex: env: 0 withArguments: {item. idx}].
 	^ nil
@@ -179,9 +178,9 @@ pop
 	"Remove and return the last item. Raises IndexError if list is empty."
 
 	| size |
-	size := self perform: #size env: 0.
-	(size perform: #= env: 0 withArguments: {0}) ifTrue: [
-		IndexError perform: #signal: env: 0 withArguments: {'pop from empty list'}
+	size := self ___size___.
+	(size ___eq___: 0) ifTrue: [
+		IndexError ___signal___: 'pop from empty list'
 	].
 
 	^ self perform: #removeLast env: 0
@@ -193,25 +192,25 @@ pop: index
 	"Remove and return the item at index. Raises IndexError if index is out of range."
 
 	| size idx item stIdx |
-	size := self perform: #size env: 0.
+	size := self ___size___.
 	idx := index.
 
 	"Handle negative indices"
-	(idx perform: #< env: 0 withArguments: {0}) ifTrue: [
-		idx := size perform: #+ env: 0 withArguments: {idx}
+	(idx ___lt___: 0) ifTrue: [
+		idx := size ___plus___: idx
 	].
 
 	"Check bounds (Python uses 0-based indexing)"
-	((idx perform: #< env: 0 withArguments: {0}) or: [
-		idx perform: #>= env: 0 withArguments: {size}
+	((idx ___lt___: 0) or: [
+		idx ___ge___: size
 	]) ifTrue: [
-		IndexError perform: #signal: env: 0 withArguments: {'pop index out of range'}
+		IndexError ___signal___: 'pop index out of range'
 	].
 
 	"Convert to 1-based Smalltalk index"
-	stIdx := idx perform: #+ env: 0 withArguments: {1}.
-	item := self perform: #at: env: 0 withArguments: {stIdx}.
-	self perform: #removeAtIndex: env: 0 withArguments: {stIdx}.
+	stIdx := idx ___plus___: 1.
+	item := self ___at___: stIdx.
+	self ___removeAtIndex___: stIdx.
 	^ item
 %
 
@@ -222,7 +221,7 @@ remove: value
 
 	self perform: #remove:ifAbsent: env: 0 withArguments: {
 		value.
-		[ValueError perform: #signal: env: 0 withArguments: {'list.remove(x): x not in list'}]
+		[ValueError ___signal___: 'list.remove(x): x not in list']
 	}.
 	^ nil
 %
@@ -234,8 +233,8 @@ reverse
 
 	| reversed |
 	reversed := self perform: #reversed env: 0.
-	self perform: #size: env: 0 withArguments: {0}.
-	self perform: #addAll: env: 0 withArguments: {reversed}.
+	self ___size___: 0.
+	self ___addAll___: reversed.
 	^ nil
 %
 
@@ -244,9 +243,7 @@ method: list
 sort
 	"Sort the list in place using Python's __lt__ for comparison."
 
-	self perform: #sort: env: 0 withArguments: {
-		[:a :b | a perform: #__lt__: env: 2 withArguments: {b}]
-	}.
+	self ___sort___: [:a :b | a perform: #__lt__: env: 2 withArguments: {b}].
 	^ nil
 %
 
@@ -256,20 +253,20 @@ __repr__
 	"Return a string representation of the list: [item1, item2, ...]"
 
 	| stream |
-	stream := WriteStream perform: #on: env: 0 withArguments: {String perform: #new env: 0}.
-	stream with: $[ perform: #nextPut: env: 0.
+	stream := WriteStream ___on___: (String ___new___).
+	stream ___nextPut___: $[.
 
 	self perform: #do:separatedBy: env: 0 withArguments: {
 		[:each |
 			| reprStr |
 			reprStr := each __repr__.
-			stream with: reprStr perform: #nextPutAll: env: 0
+			stream ___nextPutAll___: reprStr
 		].
-		[stream with: ', ' perform: #nextPutAll: env: 0]
+		[stream ___nextPutAll___: ', ']
 	}.
 
-	stream with: $] perform: #nextPut: env: 0.
-	^ stream perform: #contents env: 0
+	stream ___nextPut___: $].
+	^ stream ___contents___
 %
 
 category: 'Python-Other'

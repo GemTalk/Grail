@@ -40,10 +40,10 @@ EOF
 ## Running Python Code in Grail
 
 ### Hello World
-Our first task is a "Hello World!" program (`tests/hello.py`). From a command line execute:
+Our first task is a "Hello World!" program (`scripts/hello.py`). From a command line execute:
 
 ```
-./grail tests/hello.py
+./grail scripts/hello.py
 ```
 
 ### REPL

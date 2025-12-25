@@ -26,7 +26,7 @@ classmethod: bytes
 __new__: cls
 	"bytes() - create empty bytes"
 
-	^ cls perform: #new env: 0
+	^ cls ___new___
 %
 
 category: 'Python-Constructors'
@@ -35,75 +35,75 @@ __new__: cls _: source
 	"bytes(source) - create bytes from various sources"
 
 	| result sourceClass |
-	sourceClass := source perform: #class env: 0.
+	sourceClass := source ___class___.
 
 	"If source is an integer, create bytes of that size filled with zeros"
 	sourceClass == SmallInteger ifTrue: [
-		(source perform: #< env: 0 withArguments: {0}) ifTrue: [
-			ValueError perform: #signal: env: 0 withArguments: {'negative count'}
+		(source ___lt___: 0) ifTrue: [
+			ValueError ___signal___: 'negative count'
 		].
-		^ cls perform: #new: env: 0 withArguments: {source}
+		^ cls ___new___: source
 	].
 
 	"If source is a string, raise TypeError (need encoding)"
-	(source perform: #isKindOf: env: 0 withArguments: {String}) ifTrue: [
-		TypeError perform: #signal: env: 0 withArguments: {'string argument without an encoding'}
+	(source ___isKindOf___: String) ifTrue: [
+		TypeError ___signal___: 'string argument without an encoding'
 	].
 
 	"If source is bytes, make a copy"
 	(sourceClass == bytes) ifTrue: [
-		result := cls perform: #new: env: 0 withArguments: {source perform: #size env: 0}.
-		1 perform: #to:do: env: 0 withArguments: {source perform: #size env: 0. [:i |
-			result perform: #at:put: env: 0 withArguments: {i. source perform: #at: env: 0 withArguments: {i}}
-		]}.
+		result := cls ___new___: (source ___size___).
+		1 ___to___: source ___size___ do: [:i |
+			result ___at___: i put: (source ___at___: i)
+		].
 		^ result
 	].
 
 	"If source is a list, tuple, or array, convert elements to bytes"
-	((sourceClass perform: #= env: 0 withArguments: {OrderedCollection}) or: [
-		(sourceClass perform: #= env: 0 withArguments: {InvariantArray}) or: [
-			sourceClass perform: #= env: 0 withArguments: {Array}
+	((sourceClass ___eq___: OrderedCollection) or: [
+		(sourceClass ___eq___: InvariantArray) or: [
+			sourceClass ___eq___: Array
 		]
 	]) ifTrue: [
 		| ba size |
-		size := source perform: #size env: 0.
-		ba := cls perform: #new: env: 0 withArguments: {size}.
-		1 perform: #to:do: env: 0 withArguments: {size. [:i |
+		size := source ___size___.
+		ba := cls ___new___: size.
+		1 ___to___: size do: [:i |
 			| elem val |
-			elem := source perform: #at: env: 0 withArguments: {i}.
+			elem := source ___at___: i.
 			val := elem.
 			"Validate byte value (0-255)"
-			((val perform: #< env: 0 withArguments: {0}) or: [
-				val perform: #> env: 0 withArguments: {255}
+			((val ___lt___: 0) or: [
+				val ___gt___: 255
 			]) ifTrue: [
-				ValueError perform: #signal: env: 0 withArguments: {'bytes must be in range(0, 256)'}
+				ValueError ___signal___: 'bytes must be in range(0, 256)'
 			].
-			ba perform: #at:put: env: 0 withArguments: {i. val}
-		]}.
+			ba ___at___: i put: val
+		].
 		^ ba
 	].
 
 	"If source is a range, convert to bytes"
-	(sourceClass perform: #= env: 0 withArguments: {Interval}) ifTrue: [
+	(sourceClass ___eq___: Interval) ifTrue: [
 		| ba size |
-		size := source perform: #size env: 0.
-		ba := cls perform: #new: env: 0 withArguments: {size}.
-		1 perform: #to:do: env: 0 withArguments: {size. [:i |
+		size := source ___size___.
+		ba := cls ___new___: size.
+		1 ___to___: size do: [:i |
 			| val |
-			val := source perform: #at: env: 0 withArguments: {i}.
+			val := source ___at___: i.
 			"Validate byte value (0-255)"
-			((val perform: #< env: 0 withArguments: {0}) or: [
-				val perform: #> env: 0 withArguments: {255}
+			((val ___lt___: 0) or: [
+				val ___gt___: 255
 			]) ifTrue: [
-				ValueError perform: #signal: env: 0 withArguments: {'bytes must be in range(0, 256)'}
+				ValueError ___signal___: 'bytes must be in range(0, 256)'
 			].
-			ba perform: #at:put: env: 0 withArguments: {i. val}
-		]}.
+			ba ___at___: i put: val
+		].
 		^ ba
 	].
 
 	"Default: empty bytes"
-	^ cls perform: #new env: 0
+	^ cls ___new___
 %
 
 category: 'Python-Constructors'
@@ -112,67 +112,67 @@ __new__: cls _: source _: encoding
 	"bytes(string, encoding) - encode string to bytes"
 
 	| result sourceClass encodingStr |
-	sourceClass := source perform: #class env: 0.
+	sourceClass := source ___class___.
 
 	"Source must be a string (String or Unicode7)"
-	((source perform: #isKindOf: env: 0 withArguments: {String}) not) ifTrue: [
-		TypeError perform: #signal: env: 0 withArguments: {'encoding without a string argument'}
+	((source ___isKindOf___: String) not) ifTrue: [
+		TypeError ___signal___: 'encoding without a string argument'
 	].
 
 	"Get encoding as a Smalltalk string"
 	encodingStr := encoding.
 
 	"Support ASCII encoding"
-	(encodingStr perform: #= env: 0 withArguments: {'ascii'}) ifTrue: [
+	(encodingStr ___eq___: 'ascii') ifTrue: [
 		| ba size |
-		size := source perform: #size env: 0.
-		ba := cls perform: #new: env: 0 withArguments: {size}.
-		1 perform: #to:do: env: 0 withArguments: {size. [:i |
+		size := source ___size___.
+		ba := cls ___new___: size.
+		1 ___to___: size do: [:i |
 			| char codePoint |
-			char := source perform: #at: env: 0 withArguments: {i}.
-			codePoint := char perform: #codePoint env: 0.
-			(codePoint perform: #> env: 0 withArguments: {127}) ifTrue: [
-				UnicodeEncodeError perform: #signal: env: 0 withArguments: {'ordinal not in range(128)'}
+			char := source ___at___: i.
+			codePoint := char ___codePoint___.
+			(codePoint ___gt___: 127) ifTrue: [
+				UnicodeEncodeError ___signal___: 'ordinal not in range(128)'
 			].
-			ba perform: #at:put: env: 0 withArguments: {i. codePoint}
-		]}.
+			ba ___at___: i put: codePoint
+		].
 		^ ba
 	].
 
 	"Support UTF-8 encoding"
-	((encodingStr perform: #= env: 0 withArguments: {'utf-8'}) or: [
-		encodingStr perform: #= env: 0 withArguments: {'utf8'}
+	((encodingStr ___eq___: 'utf-8') or: [
+		encodingStr ___eq___: 'utf8'
 	]) ifTrue: [
 		| utf8Bytes |
 		utf8Bytes := source perform: #encodeAsUTF8 env: 0.
-		result := cls perform: #new: env: 0 withArguments: {utf8Bytes perform: #size env: 0}.
-		1 perform: #to:do: env: 0 withArguments: {utf8Bytes perform: #size env: 0. [:i |
-			result perform: #at:put: env: 0 withArguments: {i. utf8Bytes perform: #at: env: 0 withArguments: {i}}
-		]}.
+		result := cls ___new___: (utf8Bytes ___size___).
+		1 ___to___: utf8Bytes ___size___ do: [:i |
+			result ___at___: i put: (utf8Bytes ___at___: i)
+		].
 		^ result
 	].
 
 	"Support Latin-1 encoding"
-	((encodingStr perform: #= env: 0 withArguments: {'latin-1'}) or: [
-		encodingStr perform: #= env: 0 withArguments: {'latin1'}
+	((encodingStr ___eq___: 'latin-1') or: [
+		encodingStr ___eq___: 'latin1'
 	]) ifTrue: [
 		| ba size |
-		size := source perform: #size env: 0.
-		ba := cls perform: #new: env: 0 withArguments: {size}.
-		1 perform: #to:do: env: 0 withArguments: {size. [:i |
+		size := source ___size___.
+		ba := cls ___new___: size.
+		1 ___to___: size do: [:i |
 			| char codePoint |
-			char := source perform: #at: env: 0 withArguments: {i}.
-			codePoint := char perform: #codePoint env: 0.
-			(codePoint perform: #> env: 0 withArguments: {255}) ifTrue: [
-				UnicodeEncodeError perform: #signal: env: 0 withArguments: {'ordinal not in range(256)'}
+			char := source ___at___: i.
+			codePoint := char ___codePoint___.
+			(codePoint ___gt___: 255) ifTrue: [
+				UnicodeEncodeError ___signal___: 'ordinal not in range(256)'
 			].
-			ba perform: #at:put: env: 0 withArguments: {i. codePoint}
-		]}.
+			ba ___at___: i put: codePoint
+		].
 		^ ba
 	].
 
 	"Unsupported encoding"
-	LookupError perform: #signal: env: 0 withArguments: {'unknown encoding: ', encodingStr}
+	LookupError ___signal___: ('unknown encoding: ' ___concat___: encodingStr)
 %
 
 category: 'Python-Constructors'
@@ -182,25 +182,25 @@ fromhex: cls _: hexString
 
 	| cleaned size ba |
 	"Remove spaces from hex string"
-	cleaned := hexString perform: #select: env: 0 withArguments: {[:ch |
-		(ch perform: #~= env: 0 withArguments: {$ })
-	]}.
+	cleaned := hexString ___select___: [:ch |
+		(ch ___ne___: $ )
+	].
 
 	"Hex string must have even length"
-	size := cleaned perform: #size env: 0.
-	((size perform: #\\ env: 0 withArguments: {2}) perform: #~= env: 0 withArguments: {0}) ifTrue: [
-		ValueError perform: #signal: env: 0 withArguments: {'non-hexadecimal number found in fromhex() arg'}
+	size := cleaned ___size___.
+	((size ___modulo___: 2) ___ne___: 0) ifTrue: [
+		ValueError ___signal___: 'non-hexadecimal number found in fromhex() arg'
 	].
 
 	"Create bytes and fill with hex values"
-	ba := cls perform: #new: env: 0 withArguments: {size perform: #// env: 0 withArguments: {2}}.
-	1 perform: #to:by:do: env: 0 withArguments: {size. 2. [:i |
+	ba := cls ___new___: (size ___divideInteger___: 2).
+	1 ___to___: size by: 2 do: [:i |
 		| hexPair byte stream |
-		hexPair := cleaned perform: #copyFrom:to: env: 0 withArguments: {i. i perform: #+ env: 0 withArguments: {1}}.
-		stream := ReadStream perform: #on: env: 0 withArguments: {'16r' perform: #, env: 0 withArguments: {hexPair}}.
-		byte := Number perform: #fromStream: env: 0 withArguments: {stream}.
-		ba perform: #at:put: env: 0 withArguments: {(i perform: #+ env: 0 withArguments: {1}) perform: #// env: 0 withArguments: {2}. byte}
-	]}.
+		hexPair := cleaned ___copyFrom___: i to: (i ___plus___: 1).
+		stream := ReadStream ___on___: ('16r' ___concat___: hexPair).
+		byte := Number ___fromStream___: stream.
+		ba ___at___: ((i ___plus___: 1) ___divideInteger___: 2) put: byte
+	].
 
 	^ ba
 %
@@ -217,7 +217,7 @@ category: 'Python-Sequence Protocol'
 method: bytes
 __len__
 	"Return the number of bytes"
-	^ self perform: #size env: 0
+	^ self ___size___
 %
 
 category: 'Python-Sequence Protocol'
@@ -225,30 +225,30 @@ method: bytes
 __getitem__: index
 	"Get byte at index (0-based, supports negative indices)"
 	| idx size |
-	size := self perform: #size env: 0.
+	size := self ___size___.
 	idx := index.
 
 	"Handle negative indices"
-	(idx perform: #< env: 0 withArguments: {0}) ifTrue: [
-		idx := size perform: #+ env: 0 withArguments: {idx}
+	(idx ___lt___: 0) ifTrue: [
+		idx := size ___plus___: idx
 	].
 
 	"Check bounds"
-	((idx perform: #< env: 0 withArguments: {0}) or: [
-		idx perform: #>= env: 0 withArguments: {size}
+	((idx ___lt___: 0) or: [
+		idx ___ge___: size
 	]) ifTrue: [
-		IndexError perform: #signal: env: 0 withArguments: {'index out of range'}
+		IndexError ___signal___: 'index out of range'
 	].
 
 	"Return byte value (convert to 1-based index)"
-	^ self perform: #at: env: 0 withArguments: {idx perform: #+ env: 0 withArguments: {1}}
+	^ self ___at___: (idx ___plus___: 1)
 %
 
 category: 'Python-Sequence Protocol'
 method: bytes
 __setitem__: index _: value
 	"bytes is immutable - raise TypeError"
-	TypeError perform: #signal: env: 0 withArguments: {'''bytes'' object does not support item assignment'}
+	TypeError ___signal___: '''bytes'' object does not support item assignment'
 %
 
 category: 'Python-Sequence Protocol'
@@ -256,14 +256,14 @@ method: bytes
 __contains__: item
 	"Check if byte value is in bytes"
 	| size |
-	size := self perform: #size env: 0.
-	1 perform: #to:do: env: 0 withArguments: {size. [:i |
+	size := self ___size___.
+	1 ___to___: size do: [:i |
 		| byte |
-		byte := self perform: #at: env: 0 withArguments: {i}.
-		(byte perform: #= env: 0 withArguments: {item}) ifTrue: [
+		byte := self ___at___: i.
+		(byte ___eq___: item) ifTrue: [
 			^ true
 		]
-	]}.
+	].
 	^ false
 %
 
@@ -272,30 +272,30 @@ method: bytes
 __eq__: other
 	"Compare bytes for equality"
 	| otherClass size |
-	otherClass := other perform: #class env: 0.
+	otherClass := other ___class___.
 
 	"Can only concatenate with bytes or bytearray"
-	((otherClass perform: #= env: 0 withArguments: {bytes}) or: [
-		otherClass perform: #= env: 0 withArguments: {bytearray}
+	((otherClass ___eq___: bytes) or: [
+		otherClass ___eq___: bytearray
 	]) ifFalse: [
 		^ false
 	].
 
 	"Check sizes"
-	size := self perform: #size env: 0.
-	(size perform: #= env: 0 withArguments: {other perform: #size env: 0}) ifFalse: [
+	size := self ___size___.
+	(size ___eq___: other ___size___) ifFalse: [
 		^ false
 	].
 
 	"Compare each byte"
-	1 perform: #to:do: env: 0 withArguments: {size. [:i |
+	1 ___to___: size do: [:i |
 		| myByte otherByte |
-		myByte := self perform: #at: env: 0 withArguments: {i}.
-		otherByte := other perform: #at: env: 0 withArguments: {i}.
-		(myByte perform: #= env: 0 withArguments: {otherByte}) ifFalse: [
+		myByte := self ___at___: i.
+		otherByte := other ___at___: i.
+		(myByte ___eq___: otherByte) ifFalse: [
 			^ false
 		]
-	]}.
+	].
 
 	^ true
 %
@@ -306,14 +306,14 @@ __ne__: other
 	"Compare bytes for inequality"
 	| result |
 	result := self perform: #__eq__: env: 2 withArguments: {other}.
-	^ result perform: #not env: 0
+	^ result ___not___
 %
 
 category: 'Python-Hashing'
 method: bytes
 __hash__
 	"Return hash of bytes"
-	^ self perform: #hash env: 0
+	^ self ___hash___
 %
 
 category: 'Python-String Representation'
@@ -322,40 +322,40 @@ __repr__
 	"Return string representation of bytes (e.g., b'hello')"
 	| result size |
 	result := 'b'''.
-	size := self perform: #size env: 0.
+	size := self ___size___.
 
-	1 perform: #to:do: env: 0 withArguments: {size. [:i |
+	1 ___to___: size do: [:i |
 		| byte |
-		byte := self perform: #at: env: 0 withArguments: {i}.
+		byte := self ___at___: i.
 
 		"Printable ASCII characters (32-126)"
-		((byte perform: #>= env: 0 withArguments: {32}) and: [
-			byte perform: #<= env: 0 withArguments: {126}
+		((byte ___ge___: 32) and: [
+			byte ___le___: 126
 		]) ifTrue: [
 			"Special cases that need escaping"
-			(byte perform: #= env: 0 withArguments: {39}) ifTrue: [  "single quote"
-				result := result perform: #, env: 0 withArguments: {'\'''}
+			(byte ___eq___: 39) ifTrue: [  "single quote"
+				result := result ___concat___: '\'''
 			] ifFalse: [
-				(byte perform: #= env: 0 withArguments: {92}) ifTrue: [  "backslash"
-					result := result perform: #, env: 0 withArguments: {'\\'}
+				(byte ___eq___: 92) ifTrue: [  "backslash"
+					result := result ___concat___: '\\'
 				] ifFalse: [
 					| char |
-					char := Character perform: #codePoint: env: 0 withArguments: {byte}.
-					result := result perform: #, env: 0 withArguments: {char perform: #asString env: 0}
+					char := Character ___codePoint___: byte.
+					result := result ___concat___: (char ___asString___)
 				]
 			]
 		] ifFalse: [
 			"Non-printable: use \xNN format"
 			| hex |
-			hex := byte perform: #printStringRadix: env: 0 withArguments: {16}.
-			((hex perform: #size env: 0) perform: #= env: 0 withArguments: {1}) ifTrue: [
-				hex := '0' perform: #, env: 0 withArguments: {hex}
+			hex := byte ___printStringRadix___: 16.
+			((hex ___size___) ___eq___: 1) ifTrue: [
+				hex := '0' ___concat___: hex
 			].
-			result := result perform: #, env: 0 withArguments: {'\x' perform: #, env: 0 withArguments: {hex}}
+			result := result ___concat___: ('\x' ___concat___: hex)
 		]
-	]}.
+	].
 
-	result := result perform: #, env: 0 withArguments: {''''}.
+	result := result ___concat___: ''''.
 	^ result
 %
 
@@ -364,28 +364,28 @@ method: bytes
 __add__: other
 	"Concatenate bytes"
 	| otherClass size1 size2 result |
-	otherClass := other perform: #class env: 0.
+	otherClass := other ___class___.
 
 	"Can only concatenate with bytes or bytearray"
-	((otherClass perform: #= env: 0 withArguments: {bytes}) or: [
-		otherClass perform: #= env: 0 withArguments: {bytearray}
+	((otherClass ___eq___: bytes) or: [
+		otherClass ___eq___: bytearray
 	]) ifFalse: [
-		TypeError perform: #signal: env: 0 withArguments: {'can''t concat bytes to ', otherClass}
+		TypeError ___signal___: ('can''t concat bytes to ' ___concat___: otherClass)
 	].
 
-	size1 := self perform: #size env: 0.
-	size2 := other perform: #size env: 0.
-	result := (self perform: #class env: 0) perform: #new: env: 0 withArguments: {size1 perform: #+ env: 0 withArguments: {size2}}.
+	size1 := self ___size___.
+	size2 := other ___size___.
+	result := (self ___class___) ___new___: (size1 ___plus___: size2).
 
 	"Copy self"
-	1 perform: #to:do: env: 0 withArguments: {size1. [:i |
-		result perform: #at:put: env: 0 withArguments: {i. self perform: #at: env: 0 withArguments: {i}}
-	]}.
+	1 ___to___: size1 do: [:i |
+		result ___at___: i put: (self ___at___: i)
+	].
 
 	"Copy other"
-	1 perform: #to:do: env: 0 withArguments: {size2. [:i |
-		result perform: #at:put: env: 0 withArguments: {size1 perform: #+ env: 0 withArguments: {i}. other perform: #at: env: 0 withArguments: {i}}
-	]}.
+	1 ___to___: size2 do: [:i |
+		result ___at___: (size1 ___plus___: i) put: (other ___at___: i)
+	].
 
 	^ result
 %
@@ -398,25 +398,25 @@ __mul__: count
 	n := count.
 
 	"Validate count is an integer"
-	(n perform: #class env: 0) == SmallInteger ifFalse: [
-		TypeError perform: #signal: env: 0 withArguments: {'can''t multiply sequence by non-int'}
+	(n ___class___) == SmallInteger ifFalse: [
+		TypeError ___signal___: 'can''t multiply sequence by non-int'
 	].
 
 	"If count <= 0, return empty bytes"
-	(n perform: #<= env: 0 withArguments: {0}) ifTrue: [
-		^ bytes perform: #new env: 0
+	(n ___le___: 0) ifTrue: [
+		^ bytes ___new___
 	].
 
-	size := self perform: #size env: 0.
-	result := bytes perform: #new: env: 0 withArguments: {size perform: #* env: 0 withArguments: {n}}.
+	size := self ___size___.
+	result := bytes ___new___: (size ___times___: n).
 	offset := 0.
 
-	1 perform: #to:do: env: 0 withArguments: {n. [:rep |
-		1 perform: #to:do: env: 0 withArguments: {size. [:i |
-			result perform: #at:put: env: 0 withArguments: {offset perform: #+ env: 0 withArguments: {i}. self perform: #at: env: 0 withArguments: {i}}
-		]}.
-		offset := offset perform: #+ env: 0 withArguments: {size}
-	]}.
+	1 ___to___: n do: [:rep |
+		1 ___to___: size do: [:i |
+			result ___at___: (offset ___plus___: i) put: (self ___at___: i)
+		].
+		offset := offset ___plus___: size
+	].
 
 	^ result
 %
@@ -426,57 +426,57 @@ method: bytes
 count: sub
 	"Count non-overlapping occurrences of sub"
 	| subClass subSize mySize count i |
-	subClass := sub perform: #class env: 0.
+	subClass := sub ___class___.
 
 	"sub must be bytes or integer"
 	subClass == SmallInteger ifTrue: [
 		"Count occurrences of single byte"
 		count := 0.
-		mySize := self perform: #size env: 0.
-		1 perform: #to:do: env: 0 withArguments: {mySize. [:idx |
+		mySize := self ___size___.
+		1 ___to___: mySize do: [:idx |
 			| byte |
-			byte := self perform: #at: env: 0 withArguments: {idx}.
-			(byte perform: #= env: 0 withArguments: {sub}) ifTrue: [
-				count := count perform: #+ env: 0 withArguments: {1}
+			byte := self ___at___: idx.
+			(byte ___eq___: sub) ifTrue: [
+				count := count ___plus___: 1
 			]
-		]}.
+		].
 		^ count
 	].
 
 	"sub must be bytes"
 	subClass == bytes ifFalse: [
-		TypeError perform: #signal: env: 0 withArguments: {'argument should be bytes or integer'}
+		TypeError ___signal___: 'argument should be bytes or integer'
 	].
 
-	subSize := sub perform: #size env: 0.
-	mySize := self perform: #size env: 0.
+	subSize := sub ___size___.
+	mySize := self ___size___.
 
 	"Empty sub always returns 0"
-	(subSize perform: #= env: 0 withArguments: {0}) ifTrue: [
+	(subSize ___eq___: 0) ifTrue: [
 		^ 0
 	].
 
 	count := 0.
 	i := 1.
 
-	[i perform: #<= env: 0 withArguments: {mySize perform: #- env: 0 withArguments: {subSize perform: #- env: 0 withArguments: {1}}}] perform: #whileTrue: env: 0 withArguments: {[
+	[i ___le___: (mySize ___minus___: (subSize ___minus___: 1))] ___whileTrue___: [
 		| match |
 		match := true.
-		1 perform: #to:do: env: 0 withArguments: {subSize. [:j |
+		1 ___to___: subSize do: [:j |
 			| myByte subByte |
-			myByte := self perform: #at: env: 0 withArguments: {i perform: #+ env: 0 withArguments: {j perform: #- env: 0 withArguments: {1}}}.
-			subByte := sub perform: #at: env: 0 withArguments: {j}.
-			(myByte perform: #= env: 0 withArguments: {subByte}) ifFalse: [
+			myByte := self ___at___: (i ___plus___: (j ___minus___: (1))).
+			subByte := sub ___at___: j.
+			(myByte ___eq___: subByte) ifFalse: [
 				match := false
 			]
-		]}.
+		].
 		match ifTrue: [
-			count := count perform: #+ env: 0 withArguments: {1}.
-			i := i perform: #+ env: 0 withArguments: {subSize}
+			count := count ___plus___: 1.
+			i := i ___plus___: subSize
 		] ifFalse: [
-			i := i perform: #+ env: 0 withArguments: {1}
+			i := i ___plus___: 1
 		]
-	]}.
+	].
 
 	^ count
 %
@@ -486,19 +486,19 @@ method: bytes
 find: sub
 	"Find first occurrence of sub, return index or -1"
 	| subClass subSize mySize i w x y z |
-	subClass := sub perform: #class env: 0.
+	subClass := sub ___class___.
 
 	"sub must be bytes or integer"
 	subClass == SmallInteger ifTrue: [
 		"Find first occurrence of single byte"
-		mySize := self perform: #size env: 0.
-		1 perform: #to:do: env: 0 withArguments: {mySize. [:idx |
+		mySize := self ___size___.
+		1 ___to___: mySize do: [:idx |
 			| byte |
-			byte := self perform: #at: env: 0 withArguments: {idx}.
-			(byte perform: #= env: 0 withArguments: {sub}) ifTrue: [
-				^ idx perform: #- env: 0 withArguments: {1}  "Convert to 0-based"
+			byte := self ___at___: idx.
+			(byte ___eq___: sub) ifTrue: [
+				^ idx ___minus___: (1)  "Convert to 0-based"
 			]
-		]}.
+		].
 		^ -1
 	].
 
@@ -508,34 +508,34 @@ find: sub
 	y := subClass == bytearray.
 	z := x or: [y].
 	(subClass == bytes or: [subClass == bytearray]) ifFalse: [
-		TypeError perform: #signal: env: 0 withArguments: {'argument should be bytes, bytearray or int'}
+		TypeError ___signal___: 'argument should be bytes, bytearray or int'
 	].
 
-	subSize := sub perform: #size env: 0.
-	mySize := self perform: #size env: 0.
+	subSize := sub ___size___.
+	mySize := self ___size___.
 
 	"Empty sub always returns 0"
-	(subSize perform: #= env: 0 withArguments: {0}) ifTrue: [
+	(subSize ___eq___: 0) ifTrue: [
 		^ 0
 	].
 
 	i := 1.
-	[i perform: #<= env: 0 withArguments: {mySize perform: #- env: 0 withArguments: {subSize perform: #- env: 0 withArguments: {1}}}] perform: #whileTrue: env: 0 withArguments: {[
+	[i ___le___: (mySize ___minus___: (subSize ___minus___: 1))] ___whileTrue___: [
 		| match |
 		match := true.
-		1 perform: #to:do: env: 0 withArguments: {subSize. [:j |
+		1 ___to___: subSize do: [:j |
 			| myByte subByte |
-			myByte := self perform: #at: env: 0 withArguments: {i perform: #+ env: 0 withArguments: {j perform: #- env: 0 withArguments: {1}}}.
-			subByte := sub perform: #at: env: 0 withArguments: {j}.
-			(myByte perform: #= env: 0 withArguments: {subByte}) ifFalse: [
+			myByte := self ___at___: (i ___plus___: (j ___minus___: (1))).
+			subByte := sub ___at___: j.
+			(myByte ___eq___: subByte) ifFalse: [
 				match := false
 			]
-		]}.
-		match ifTrue: [
-			^ i perform: #- env: 0 withArguments: {1}  "Convert to 0-based"
 		].
-		i := i perform: #+ env: 0 withArguments: {1}
-	]}.
+		match ifTrue: [
+			^ i ___minus___: (1)  "Convert to 0-based"
+		].
+		i := i ___plus___: 1
+	].
 
 	^ -1
 %
@@ -546,8 +546,8 @@ index: sub
 	"Find first occurrence of sub, raise ValueError if not found"
 	| result |
 	result := self perform: #find: env: 2 withArguments: {sub}.
-	(result perform: #= env: 0 withArguments: {-1}) ifTrue: [
-		ValueError perform: #signal: env: 0 withArguments: {'subsection not found'}
+	(result ___eq___: -1) ifTrue: [
+		ValueError ___signal___: 'subsection not found'
 	].
 	^ result
 %
@@ -557,52 +557,52 @@ method: bytes
 rfind: sub
 	"Find last occurrence of sub, return index or -1"
 	| subClass subSize mySize i |
-	subClass := sub perform: #class env: 0.
+	subClass := sub ___class___.
 
 	"sub must be bytes or integer"
 	subClass == SmallInteger ifTrue: [
 		"Find last occurrence of single byte"
-		mySize := self perform: #size env: 0.
-		mySize perform: #to:by:do: env: 0 withArguments: {1. -1. [:idx |
+		mySize := self ___size___.
+		mySize ___to___: 1 by: -1 do: [:idx |
 			| byte |
-			byte := self perform: #at: env: 0 withArguments: {idx}.
-			(byte perform: #= env: 0 withArguments: {sub}) ifTrue: [
-				^ idx perform: #- env: 0 withArguments: {1}  "Convert to 0-based"
+			byte := self ___at___: idx.
+			(byte ___eq___: sub) ifTrue: [
+				^ idx ___minus___: (1)  "Convert to 0-based"
 			]
-		]}.
+		].
 		^ -1
 	].
 
 	"sub must be bytes"
 	(subClass == bytes or: [subClass == bytearray]) ifFalse: [
-		TypeError perform: #signal: env: 0 withArguments: {'argument should be bytes, bytearray or int'}
+		TypeError ___signal___: 'argument should be bytes, bytearray or int'
 	].
 
-	subSize := sub perform: #size env: 0.
-	mySize := self perform: #size env: 0.
+	subSize := sub ___size___.
+	mySize := self ___size___.
 
 	"Empty sub always returns size"
-	(subSize perform: #= env: 0 withArguments: {0}) ifTrue: [
+	(subSize ___eq___: 0) ifTrue: [
 		^ mySize
 	].
 
-	i := mySize perform: #- env: 0 withArguments: {subSize perform: #- env: 0 withArguments: {1}}.
-	[i perform: #>= env: 0 withArguments: {1}] perform: #whileTrue: env: 0 withArguments: {[
+	i := mySize ___minus___: (subSize ___minus___: 1).
+	[i ___ge___: 1] ___whileTrue___: [
 		| match |
 		match := true.
-		1 perform: #to:do: env: 0 withArguments: {subSize. [:j |
+		1 ___to___: subSize do: [:j |
 			| myByte subByte |
-			myByte := self perform: #at: env: 0 withArguments: {i perform: #+ env: 0 withArguments: {j perform: #- env: 0 withArguments: {1}}}.
-			subByte := sub perform: #at: env: 0 withArguments: {j}.
-			(myByte perform: #= env: 0 withArguments: {subByte}) ifFalse: [
+			myByte := self ___at___: (i ___plus___: (j ___minus___: (1))).
+			subByte := sub ___at___: j.
+			(myByte ___eq___: subByte) ifFalse: [
 				match := false
 			]
-		]}.
-		match ifTrue: [
-			^ i perform: #- env: 0 withArguments: {1}  "Convert to 0-based"
 		].
-		i := i perform: #- env: 0 withArguments: {1}
-	]}.
+		match ifTrue: [
+			^ i ___minus___: (1)  "Convert to 0-based"
+		].
+		i := i ___minus___: (1)
+	].
 
 	^ -1
 %
@@ -613,8 +613,8 @@ rindex: sub
 	"Find last occurrence of sub, raise ValueError if not found"
 	| result |
 	result := self perform: #rfind: env: 2 withArguments: {sub}.
-	(result perform: #= env: 0 withArguments: {-1}) ifTrue: [
-		ValueError perform: #signal: env: 0 withArguments: {'subsection not found'}
+	(result ___eq___: -1) ifTrue: [
+		ValueError ___signal___: 'subsection not found'
 	].
 	^ result
 %
@@ -624,30 +624,30 @@ method: bytes
 startswith: prefix
 	"Check if bytes starts with prefix"
 	| prefixClass prefixSize mySize |
-	prefixClass := prefix perform: #class env: 0.
+	prefixClass := prefix ___class___.
 
 	"prefix must be bytes"
-	(prefixClass perform: #= env: 0 withArguments: {bytes}) ifFalse: [
-		TypeError perform: #signal: env: 0 withArguments: {'argument should be bytes'}
+	(prefixClass ___eq___: bytes) ifFalse: [
+		TypeError ___signal___: 'argument should be bytes'
 	].
 
-	prefixSize := prefix perform: #size env: 0.
-	mySize := self perform: #size env: 0.
+	prefixSize := prefix ___size___.
+	mySize := self ___size___.
 
 	"If prefix is longer, can't match"
-	(prefixSize perform: #> env: 0 withArguments: {mySize}) ifTrue: [
+	(prefixSize ___gt___: mySize) ifTrue: [
 		^ false
 	].
 
 	"Compare each byte"
-	1 perform: #to:do: env: 0 withArguments: {prefixSize. [:i |
+	1 ___to___: prefixSize do: [:i |
 		| myByte prefixByte |
-		myByte := self perform: #at: env: 0 withArguments: {i}.
-		prefixByte := prefix perform: #at: env: 0 withArguments: {i}.
-		(myByte perform: #= env: 0 withArguments: {prefixByte}) ifFalse: [
+		myByte := self ___at___: i.
+		prefixByte := prefix ___at___: i.
+		(myByte ___eq___: prefixByte) ifFalse: [
 			^ false
 		]
-	]}.
+	].
 
 	^ true
 %
@@ -657,32 +657,32 @@ method: bytes
 endswith: suffix
 	"Check if bytes ends with suffix"
 	| suffixClass suffixSize mySize offset |
-	suffixClass := suffix perform: #class env: 0.
+	suffixClass := suffix ___class___.
 
 	"suffix must be bytes"
-	(suffixClass perform: #= env: 0 withArguments: {bytes}) ifFalse: [
-		TypeError perform: #signal: env: 0 withArguments: {'argument should be bytes'}
+	(suffixClass ___eq___: bytes) ifFalse: [
+		TypeError ___signal___: 'argument should be bytes'
 	].
 
-	suffixSize := suffix perform: #size env: 0.
-	mySize := self perform: #size env: 0.
+	suffixSize := suffix ___size___.
+	mySize := self ___size___.
 
 	"If suffix is longer, can't match"
-	(suffixSize perform: #> env: 0 withArguments: {mySize}) ifTrue: [
+	(suffixSize ___gt___: mySize) ifTrue: [
 		^ false
 	].
 
-	offset := mySize perform: #- env: 0 withArguments: {suffixSize}.
+	offset := mySize ___minus___: (suffixSize).
 
 	"Compare each byte"
-	1 perform: #to:do: env: 0 withArguments: {suffixSize. [:i |
+	1 ___to___: suffixSize do: [:i |
 		| myByte suffixByte |
-		myByte := self perform: #at: env: 0 withArguments: {offset perform: #+ env: 0 withArguments: {i}}.
-		suffixByte := suffix perform: #at: env: 0 withArguments: {i}.
-		(myByte perform: #= env: 0 withArguments: {suffixByte}) ifFalse: [
+		myByte := self ___at___: (offset ___plus___: i).
+		suffixByte := suffix ___at___: i.
+		(myByte ___eq___: suffixByte) ifFalse: [
 			^ false
 		]
-	]}.
+	].
 
 	^ true
 %
@@ -694,16 +694,16 @@ removeprefix: prefix
 	| hasPrefix prefixSize mySize result |
 	hasPrefix := self perform: #startswith: env: 2 withArguments: {prefix}.
 	hasPrefix ifFalse: [
-		^ self perform: #copy env: 0
+		^ self ___copy___
 	].
 
-	prefixSize := prefix perform: #size env: 0.
-	mySize := self perform: #size env: 0.
-	result := bytes perform: #new: env: 0 withArguments: {mySize perform: #- env: 0 withArguments: {prefixSize}}.
+	prefixSize := prefix ___size___.
+	mySize := self ___size___.
+	result := bytes ___new___: (mySize ___minus___: prefixSize).
 
-	1 perform: #to:do: env: 0 withArguments: {mySize perform: #- env: 0 withArguments: {prefixSize}. [:i |
-		result perform: #at:put: env: 0 withArguments: {i. self perform: #at: env: 0 withArguments: {prefixSize perform: #+ env: 0 withArguments: {i}}}
-	]}.
+	1 ___to___: (mySize ___minus___: prefixSize) do: [:i |
+		result ___at___: i put: (self ___at___: (prefixSize ___plus___: i))
+	].
 
 	^ result
 %
@@ -715,16 +715,16 @@ removesuffix: suffix
 	| hasSuffix suffixSize mySize result |
 	hasSuffix := self perform: #endswith: env: 2 withArguments: {suffix}.
 	hasSuffix ifFalse: [
-		^ self perform: #copy env: 0
+		^ self ___copy___
 	].
 
-	suffixSize := suffix perform: #size env: 0.
-	mySize := self perform: #size env: 0.
-	result := bytes perform: #new: env: 0 withArguments: {mySize perform: #- env: 0 withArguments: {suffixSize}}.
+	suffixSize := suffix ___size___.
+	mySize := self ___size___.
+	result := bytes ___new___: (mySize ___minus___: suffixSize).
 
-	1 perform: #to:do: env: 0 withArguments: {mySize perform: #- env: 0 withArguments: {suffixSize}. [:i |
-		result perform: #at:put: env: 0 withArguments: {i. self perform: #at: env: 0 withArguments: {i}}
-	]}.
+	1 ___to___: (mySize ___minus___: suffixSize) do: [:i |
+		result ___at___: i put: (self ___at___: i)
+	].
 
 	^ result
 %
@@ -735,15 +735,15 @@ isascii
 	"Return True if the sequence is empty or all bytes are ASCII (0-127)"
 
 	| size |
-	size := self perform: #size env: 0.
-	1 perform: #to:do: env: 0 withArguments: {size. [:i |
+	size := self ___size___.
+	1 ___to___: size do: [:i |
 		| byte |
-		byte := self perform: #at: env: 0 withArguments: {i}.
+		byte := self ___at___: i.
 		"ASCII bytes are in the range 0-0x7F (0-127)"
-		(byte perform: #> env: 0 withArguments: {127}) ifTrue: [
+		(byte ___gt___: 127) ifTrue: [
 			^ false
 		]
-	]}.
+	].
 	^ true
 %
 
@@ -753,20 +753,20 @@ upper
 	"Return uppercase version of bytes"
 
 	| result size |
-	size := self perform: #size env: 0.
-	result := (self perform: #class env: 0) perform: #new: env: 0 withArguments: {size}.
+	size := self ___size___.
+	result := (self ___class___) ___new___: size.
 
-	1 perform: #to:do: env: 0 withArguments: {size. [:i |
+	1 ___to___: size do: [:i |
 		| byte |
-		byte := self perform: #at: env: 0 withArguments: {i}.
+		byte := self ___at___: i.
 		"Convert lowercase ASCII (97-122) to uppercase (65-90)"
-		((byte perform: #>= env: 0 withArguments: {97}) and: [
-			byte perform: #<= env: 0 withArguments: {122}
+		((byte ___ge___: 97) and: [
+			byte ___le___: 122
 		]) ifTrue: [
-			byte := byte perform: #- env: 0 withArguments: {32}
+			byte := byte ___minus___: (32)
 		].
-		result perform: #at:put: env: 0 withArguments: {i. byte}
-	]}.
+		result ___at___: i put: byte
+	].
 
 	^ result
 %
@@ -777,20 +777,20 @@ lower
 	"Return lowercase version of bytes"
 
 	| result size |
-	size := self perform: #size env: 0.
-	result := bytes perform: #new: env: 0 withArguments: {size}.
+	size := self ___size___.
+	result := bytes ___new___: size.
 
-	1 perform: #to:do: env: 0 withArguments: {size. [:i |
+	1 ___to___: size do: [:i |
 		| byte |
-		byte := self perform: #at: env: 0 withArguments: {i}.
+		byte := self ___at___: i.
 		"Convert uppercase ASCII (65-90) to lowercase (97-122)"
-		((byte perform: #>= env: 0 withArguments: {65}) and: [
-			byte perform: #<= env: 0 withArguments: {90}
+		((byte ___ge___: 65) and: [
+			byte ___le___: 90
 		]) ifTrue: [
-			byte := byte perform: #+ env: 0 withArguments: {32}
+			byte := byte ___plus___: 32
 		].
-		result perform: #at:put: env: 0 withArguments: {i. byte}
-	]}.
+		result ___at___: i put: byte
+	].
 
 	^ result
 %
@@ -801,19 +801,19 @@ capitalize
 	"Return capitalized version (first byte uppercase, rest lowercase)"
 
 	| result size firstByte |
-	size := self perform: #size env: 0.
-	(size perform: #= env: 0 withArguments: {0}) ifTrue: [
-		^ bytes perform: #new env: 0
+	size := self ___size___.
+	(size ___eq___: 0) ifTrue: [
+		^ bytes ___new___
 	].
 
 	result := self perform: #lower env: 2.
 
 	"Capitalize first byte if it's a lowercase letter"
-	firstByte := result perform: #at: env: 0 withArguments: {1}.
-	((firstByte perform: #>= env: 0 withArguments: {97}) and: [
-		firstByte perform: #<= env: 0 withArguments: {122}
+	firstByte := result ___at___: 1.
+	((firstByte ___ge___: 97) and: [
+		firstByte ___le___: 122
 	]) ifTrue: [
-		result perform: #at:put: env: 0 withArguments: {1. firstByte perform: #- env: 0 withArguments: {32}}
+		result ___at___: 1 put: (firstByte ___minus___: (32))
 	].
 
 	^ result
@@ -835,47 +835,47 @@ decode: encoding
 	encodingStr := encoding.
 
 	"Support UTF-8"
-	((encodingStr perform: #= env: 0 withArguments: {'utf-8'}) or: [
-		encodingStr perform: #= env: 0 withArguments: {'utf8'}
+	((encodingStr ___eq___: 'utf-8') or: [
+		encodingStr ___eq___: 'utf8'
 	]) ifTrue: [
 		^ self perform: #decodeFromUTF8 env: 0
 	].
 
 	"Support ASCII"
-	(encodingStr perform: #= env: 0 withArguments: {'ascii'}) ifTrue: [
+	(encodingStr ___eq___: 'ascii') ifTrue: [
 		| result size |
-		size := self perform: #size env: 0.
-		result := Unicode7 perform: #new: env: 0 withArguments: {size}.
-		1 perform: #to:do: env: 0 withArguments: {size. [:i |
+		size := self ___size___.
+		result := Unicode7 ___new___: size.
+		1 ___to___: size do: [:i |
 			| byte char |
-			byte := self perform: #at: env: 0 withArguments: {i}.
-			(byte perform: #> env: 0 withArguments: {127}) ifTrue: [
-				UnicodeDecodeError perform: #signal: env: 0 withArguments: {'ordinal not in range(128)'}
+			byte := self ___at___: i.
+			(byte ___gt___: 127) ifTrue: [
+				UnicodeDecodeError ___signal___: 'ordinal not in range(128)'
 			].
-			char := Character perform: #codePoint: env: 0 withArguments: {byte}.
-			result perform: #at:put: env: 0 withArguments: {i. char}
-		]}.
+			char := Character ___codePoint___: byte.
+			result ___at___: i put: char
+		].
 		^ result
 	].
 
 	"Support Latin-1"
-	((encodingStr perform: #= env: 0 withArguments: {'latin-1'}) or: [
-		encodingStr perform: #= env: 0 withArguments: {'latin1'}
+	((encodingStr ___eq___: 'latin-1') or: [
+		encodingStr ___eq___: 'latin1'
 	]) ifTrue: [
 		| result size |
-		size := self perform: #size env: 0.
-		result := Unicode7 perform: #new: env: 0 withArguments: {size}.
-		1 perform: #to:do: env: 0 withArguments: {size. [:i |
+		size := self ___size___.
+		result := Unicode7 ___new___: size.
+		1 ___to___: size do: [:i |
 			| byte char |
-			byte := self perform: #at: env: 0 withArguments: {i}.
-			char := Character perform: #codePoint: env: 0 withArguments: {byte}.
-			result perform: #at:put: env: 0 withArguments: {i. char}
-		]}.
+			byte := self ___at___: i.
+			char := Character ___codePoint___: byte.
+			result ___at___: i put: char
+		].
 		^ result
 	].
 
 	"Unsupported encoding"
-	LookupError perform: #signal: env: 0 withArguments: {'unknown encoding: ', encodingStr}
+	LookupError ___signal___: ('unknown encoding: ' ___concat___: encodingStr)
 %
 
 category: 'Python-Encoding/Decoding'
@@ -884,18 +884,18 @@ hex
 	"Return hex representation of bytes"
 	| result size |
 	result := ''.
-	size := self perform: #size env: 0.
+	size := self ___size___.
 
-	1 perform: #to:do: env: 0 withArguments: {size. [:i |
+	1 ___to___: size do: [:i |
 		| byte hexStr |
-		byte := self perform: #at: env: 0 withArguments: {i}.
-		hexStr := byte perform: #printStringRadix: env: 0 withArguments: {16}.
+		byte := self ___at___: i.
+		hexStr := byte ___printStringRadix___: 16.
 		"Pad with leading zero if needed"
-		((hexStr perform: #size env: 0) perform: #= env: 0 withArguments: {1}) ifTrue: [
-			hexStr := '0' perform: #, env: 0 withArguments: {hexStr}
+		((hexStr ___size___) ___eq___: 1) ifTrue: [
+			hexStr := '0' ___concat___: hexStr
 		].
-		result := result perform: #, env: 0 withArguments: {hexStr}
-	]}.
+		result := result ___concat___: hexStr
+	].
 
 	^ result
 %
@@ -906,55 +906,55 @@ strip
 	"Remove leading and trailing whitespace bytes"
 	| start end size result newSize |
 
-	size := self perform: #size env: 0.
-	(size perform: #= env: 0 withArguments: {0}) ifTrue: [
-		^ bytes perform: #new env: 0
+	size := self ___size___.
+	(size ___eq___: 0) ifTrue: [
+		^ bytes ___new___
 	].
 
 	"Find first non-whitespace"
 	start := 1.
-	[(start perform: #<= env: 0 withArguments: {size}) and: [
+	[(start ___le___: size) and: [
 		| byte |
-		byte := self perform: #at: env: 0 withArguments: {start}.
+		byte := self ___at___: start.
 		"Whitespace: space(32), tab(9), newline(10), carriage return(13)"
-		(byte perform: #= env: 0 withArguments: {32}) or: [
-			(byte perform: #= env: 0 withArguments: {9}) or: [
-				(byte perform: #= env: 0 withArguments: {10}) or: [
-					byte perform: #= env: 0 withArguments: {13}
+		(byte ___eq___: 32) or: [
+			(byte ___eq___: 9) or: [
+				(byte ___eq___: 10) or: [
+					byte ___eq___: 13
 				]
 			]
 		]
-	]] perform: #whileTrue: env: 0 withArguments: {[
-		start := start perform: #+ env: 0 withArguments: {1}
-	]}.
+	]] ___whileTrue___: [
+		start := start ___plus___: 1
+	].
 
 	"All whitespace"
-	(start perform: #> env: 0 withArguments: {size}) ifTrue: [
-		^ bytes perform: #new env: 0
+	(start ___gt___: size) ifTrue: [
+		^ bytes ___new___
 	].
 
 	"Find last non-whitespace"
 	end := size.
-	[(end perform: #>= env: 0 withArguments: {start}) and: [
+	[(end ___ge___: start) and: [
 		| byte |
-		byte := self perform: #at: env: 0 withArguments: {end}.
-		(byte perform: #= env: 0 withArguments: {32}) or: [
-			(byte perform: #= env: 0 withArguments: {9}) or: [
-				(byte perform: #= env: 0 withArguments: {10}) or: [
-					byte perform: #= env: 0 withArguments: {13}
+		byte := self ___at___: end.
+		(byte ___eq___: 32) or: [
+			(byte ___eq___: 9) or: [
+				(byte ___eq___: 10) or: [
+					byte ___eq___: 13
 				]
 			]
 		]
-	]] perform: #whileTrue: env: 0 withArguments: {[
-		end := end perform: #- env: 0 withArguments: {1}
-	]}.
+	]] ___whileTrue___: [
+		end := end ___minus___: (1)
+	].
 
 	"Extract substring"
-	newSize := end perform: #- env: 0 withArguments: {start perform: #- env: 0 withArguments: {1}}.
-	result := bytes perform: #new: env: 0 withArguments: {newSize}.
-	1 perform: #to:do: env: 0 withArguments: {newSize. [:i |
-		result perform: #at:put: env: 0 withArguments: {i. self perform: #at: env: 0 withArguments: {start perform: #+ env: 0 withArguments: {i perform: #- env: 0 withArguments: {1}}}}
-	]}.
+	newSize := end ___minus___: (start ___minus___: 1).
+	result := bytes ___new___: newSize.
+	1 ___to___: newSize do: [:i |
+		result ___at___: i put: (self ___at___: (start ___plus___: (i ___minus___: (1))))
+	].
 
 	^ result
 %
@@ -964,38 +964,38 @@ method: bytes
 lstrip
 	"Remove leading whitespace bytes"
 	| start size result newSize |
-	size := self perform: #size env: 0.
-	(size perform: #= env: 0 withArguments: {0}) ifTrue: [
-		^ bytes perform: #new env: 0
+	size := self ___size___.
+	(size ___eq___: 0) ifTrue: [
+		^ bytes ___new___
 	].
 
 	"Find first non-whitespace"
 	start := 1.
-	[(start perform: #<= env: 0 withArguments: {size}) and: [
+	[(start ___le___: size) and: [
 		| byte |
-		byte := self perform: #at: env: 0 withArguments: {start}.
-		(byte perform: #= env: 0 withArguments: {32}) or: [
-			(byte perform: #= env: 0 withArguments: {9}) or: [
-				(byte perform: #= env: 0 withArguments: {10}) or: [
-					byte perform: #= env: 0 withArguments: {13}
+		byte := self ___at___: start.
+		(byte ___eq___: 32) or: [
+			(byte ___eq___: 9) or: [
+				(byte ___eq___: 10) or: [
+					byte ___eq___: 13
 				]
 			]
 		]
-	]] perform: #whileTrue: env: 0 withArguments: {[
-		start := start perform: #+ env: 0 withArguments: {1}
-	]}.
+	]] ___whileTrue___: [
+		start := start ___plus___: 1
+	].
 
 	"All whitespace"
-	(start perform: #> env: 0 withArguments: {size}) ifTrue: [
-		^ bytes perform: #new env: 0
+	(start ___gt___: size) ifTrue: [
+		^ bytes ___new___
 	].
 
 	"Extract substring"
-	newSize := size perform: #- env: 0 withArguments: {start perform: #- env: 0 withArguments: {1}}.
-	result := bytes perform: #new: env: 0 withArguments: {newSize}.
-	1 perform: #to:do: env: 0 withArguments: {newSize. [:i |
-		result perform: #at:put: env: 0 withArguments: {i. self perform: #at: env: 0 withArguments: {start perform: #+ env: 0 withArguments: {i perform: #- env: 0 withArguments: {1}}}}
-	]}.
+	newSize := size ___minus___: (start ___minus___: 1).
+	result := bytes ___new___: newSize.
+	1 ___to___: newSize do: [:i |
+		result ___at___: i put: (self ___at___: (start ___plus___: (i ___minus___: (1))))
+	].
 
 	^ result
 %
@@ -1005,37 +1005,37 @@ method: bytes
 rstrip
 	"Remove trailing whitespace bytes"
 	| end size result |
-	size := self perform: #size env: 0.
-	(size perform: #= env: 0 withArguments: {0}) ifTrue: [
-		^ bytes perform: #new env: 0
+	size := self ___size___.
+	(size ___eq___: 0) ifTrue: [
+		^ bytes ___new___
 	].
 
 	"Find last non-whitespace"
 	end := size.
-	[(end perform: #>= env: 0 withArguments: {1}) and: [
+	[(end ___ge___: 1) and: [
 		| byte |
-		byte := self perform: #at: env: 0 withArguments: {end}.
-		(byte perform: #= env: 0 withArguments: {32}) or: [
-			(byte perform: #= env: 0 withArguments: {9}) or: [
-				(byte perform: #= env: 0 withArguments: {10}) or: [
-					byte perform: #= env: 0 withArguments: {13}
+		byte := self ___at___: end.
+		(byte ___eq___: 32) or: [
+			(byte ___eq___: 9) or: [
+				(byte ___eq___: 10) or: [
+					byte ___eq___: 13
 				]
 			]
 		]
-	]] perform: #whileTrue: env: 0 withArguments: {[
-		end := end perform: #- env: 0 withArguments: {1}
-	]}.
+	]] ___whileTrue___: [
+		end := end ___minus___: (1)
+	].
 
 	"All whitespace"
-	(end perform: #< env: 0 withArguments: {1}) ifTrue: [
-		^ bytes perform: #new env: 0
+	(end ___lt___: 1) ifTrue: [
+		^ bytes ___new___
 	].
 
 	"Extract substring"
-	result := bytes perform: #new: env: 0 withArguments: {end}.
-	1 perform: #to:do: env: 0 withArguments: {end. [:i |
-		result perform: #at:put: env: 0 withArguments: {i. self perform: #at: env: 0 withArguments: {i}}
-	]}.
+	result := bytes ___new___: end.
+	1 ___to___: end do: [:i |
+		result ___at___: i put: (self ___at___: i)
+	].
 
 	^ result
 %
@@ -1045,59 +1045,61 @@ method: bytes
 split: sep
 	"Split bytes by separator, return list of bytes"
 	| sepClass sepSize mySize parts currentPart i |
-	sepClass := sep perform: #class env: 0.
+	sepClass := sep ___class___.
 
 	"sep must be bytes"
-	(sepClass perform: #= env: 0 withArguments: {bytes}) ifFalse: [
-		TypeError perform: #signal: env: 0 withArguments: {'sep must be bytes'}
+	(sepClass ___eq___: bytes) ifFalse: [
+		TypeError ___signal___: 'sep must be bytes'
 	].
 
-	sepSize := sep perform: #size env: 0.
-	mySize := self perform: #size env: 0.
+	sepSize := sep ___size___.
+	mySize := self ___size___.
 
 	"Empty separator not allowed"
-	(sepSize perform: #= env: 0 withArguments: {0}) ifTrue: [
-		ValueError perform: #signal: env: 0 withArguments: {'empty separator'}
+	(sepSize ___eq___: 0) ifTrue: [
+		ValueError ___signal___: 'empty separator'
 	].
 
-	parts := OrderedCollection perform: #new env: 0.
-	currentPart := bytes perform: #new env: 0.
+	parts := OrderedCollection ___new___.
+	currentPart := bytes ___new___.
 	i := 1.
 
-	[i perform: #<= env: 0 withArguments: {mySize}] perform: #whileTrue: env: 0 withArguments: {[
+	[i ___le___: mySize] ___whileTrue___: [
 		| match |
 		match := true.
 
 		"Check if separator matches at current position"
-		((i perform: #+ env: 0 withArguments: {sepSize perform: #- env: 0 withArguments: {1}}) perform: #<= env: 0 withArguments: {mySize}) ifTrue: [
-			1 perform: #to:do: env: 0 withArguments: {sepSize. [:j |
+		((i ___plus___: (sepSize ___minus___: (1))) perform: #<= env: 0  withArguments: {mySize}) ifTrue: [
+			1 ___to___: sepSize do: [:j |
 				| myByte sepByte |
-				myByte := self perform: #at: env: 0 withArguments: {i perform: #+ env: 0 withArguments: {j perform: #- env: 0 withArguments: {1}}}.
-				sepByte := sep perform: #at: env: 0 withArguments: {j}.
-				(myByte perform: #= env: 0 withArguments: {sepByte}) ifFalse: [
+				myByte := self ___at___: (i ___plus___: (j ___minus___: (1))).
+				sepByte := sep ___at___: j.
+				(myByte ___eq___: sepByte) ifFalse: [
 					match := false
 				]
-			]}
+			]
 		] ifFalse: [
 			match := false
 		].
 
 		match ifTrue: [
 			"Found separator - add current part to list"
-			parts perform: #add: env: 0 withArguments: {currentPart}.
-			currentPart := bytes perform: #new env: 0.
-			i := i perform: #+ env: 0 withArguments: {sepSize}
+			parts ___add___: currentPart.
+			currentPart := bytes ___new___.
+			i := i ___plus___: sepSize
 		] ifFalse: [
 			"Add byte to current part"
-			| byte |
-			byte := self perform: #at: env: 0 withArguments: {i}.
-			currentPart := currentPart perform: #, env: 0 withArguments: {(bytes perform: #new: env: 0 withArguments: {1}) perform: #at:put: env: 0 withArguments: {1. byte}; yourself}.
-			i := i perform: #+ env: 0 withArguments: {1}
+			| byte newByte |
+			byte := self ___at___: i.
+			newByte := bytes ___new___: 1.
+			newByte ___at___: 1 put: byte.
+			currentPart := currentPart ___concat___: newByte.
+			i := i ___plus___: 1
 		]
-	]}.
+	].
 
 	"Add final part"
-	parts perform: #add: env: 0 withArguments: {currentPart}.
+	parts ___add___: currentPart.
 
 	^ parts
 %
@@ -1107,48 +1109,48 @@ method: bytes
 split: sep _: maxsplit
 	"Split bytes by separator with maximum number of splits"
 	| sepClass sepSize mySize parts currentPart i splitCount match |
-	sepClass := sep perform: #class env: 0.
+	sepClass := sep ___class___.
 
 	"sep must be bytes"
 	(sepClass == bytes) ifFalse: [
-		TypeError perform: #signal: env: 0 withArguments: {'sep must be bytes'}
+		TypeError ___signal___: 'sep must be bytes'
 	].
 
-	sepSize := sep perform: #size env: 0.
-	mySize := self perform: #size env: 0.
+	sepSize := sep ___size___.
+	mySize := self ___size___.
 
 	"Empty separator not allowed"
-	(sepSize perform: #= env: 0 withArguments: {0}) ifTrue: [
-		ValueError perform: #signal: env: 0 withArguments: {'empty separator'}
+	(sepSize ___eq___: 0) ifTrue: [
+		ValueError ___signal___: 'empty separator'
 	].
 
 	"If maxsplit is -1 or < 0, do unlimited split"
-	(maxsplit perform: #< env: 0 withArguments: {0}) ifTrue: [
+	(maxsplit ___lt___: 0) ifTrue: [
 		^ self perform: #split: env: 2 withArguments: {sep}
 	].
 
-	parts := OrderedCollection perform: #new env: 0.
-	currentPart := bytes perform: #new env: 0.
+	parts := OrderedCollection ___new___.
+	currentPart := bytes ___new___.
 	i := 1.
 	splitCount := 0.
 
-	[i perform: #<= env: 0 withArguments: {mySize}] perform: #whileTrue: env: 0 withArguments: {[
+	[i ___le___: mySize] ___whileTrue___: [
 		match := true.
 
 		"Check if we've reached maxsplit"
-		(splitCount perform: #>= env: 0 withArguments: {maxsplit}) ifTrue: [
+		(splitCount ___ge___: maxsplit) ifTrue: [
 			match := false
 		] ifFalse: [
 			"Check if separator matches at current position"
-			((i perform: #+ env: 0 withArguments: {sepSize perform: #- env: 0 withArguments: {1}}) perform: #<= env: 0 withArguments: {mySize}) ifTrue: [
-				1 perform: #to:do: env: 0 withArguments: {sepSize. [:j |
+			((i ___plus___: (sepSize ___minus___: 1)) ___le___: mySize) ifTrue: [
+				1 ___to___: sepSize do: [:j |
 					| myByte sepByte |
-					myByte := self perform: #at: env: 0 withArguments: {i perform: #+ env: 0 withArguments: {j perform: #- env: 0 withArguments: {1}}}.
-					sepByte := sep perform: #at: env: 0 withArguments: {j}.
-					(myByte perform: #= env: 0 withArguments: {sepByte}) ifFalse: [
+					myByte := self ___at___: (i ___plus___: (j ___minus___: (1))).
+					sepByte := sep ___at___: j.
+					(myByte ___eq___: sepByte) ifFalse: [
 						match := false
 					]
-				]}
+				]
 			] ifFalse: [
 				match := false
 			]
@@ -1156,21 +1158,23 @@ split: sep _: maxsplit
 
 		match ifTrue: [
 			"Found separator - add current part to list"
-			parts perform: #add: env: 0 withArguments: {currentPart}.
-			currentPart := bytes perform: #new env: 0.
-			i := i perform: #+ env: 0 withArguments: {sepSize}.
-			splitCount := splitCount perform: #+ env: 0 withArguments: {1}
+			parts ___add___: currentPart.
+			currentPart := bytes ___new___.
+			i := i ___plus___: sepSize.
+			splitCount := splitCount ___plus___: 1
 		] ifFalse: [
 			"Add byte to current part"
-			| byte |
-			byte := self perform: #at: env: 0 withArguments: {i}.
-			currentPart := currentPart perform: #, env: 0 withArguments: {(bytes perform: #new: env: 0 withArguments: {1}) perform: #at:put: env: 0 withArguments: {1. byte}; yourself}.
-			i := i perform: #+ env: 0 withArguments: {1}
+			| byte newByte |
+			byte := self ___at___: i.
+			newByte := bytes ___new___: 1.
+			newByte ___at___: 1 put: byte.
+			currentPart := currentPart ___concat___: newByte.
+			i := i ___plus___: 1
 		]
-	]}.
+	].
 
 	"Add final part"
-	parts perform: #add: env: 0 withArguments: {currentPart}.
+	parts ___add___: currentPart.
 
 	^ parts
 %
@@ -1180,58 +1184,58 @@ method: bytes
 join: iterable
 	"Join iterable of bytes with self as separator"
 	| iterClass parts totalSize result offset |
-	iterClass := iterable perform: #class env: 0.
+	iterClass := iterable ___class___.
 
 	"iterable must be list or tuple"
-	((iterClass perform: #= env: 0 withArguments: {OrderedCollection}) or: [
-		iterClass perform: #= env: 0 withArguments: {InvariantArray}
+		((iterClass ___eq___: OrderedCollection) or: [
+		iterClass ___eq___: InvariantArray
 	]) ifFalse: [
-		TypeError perform: #signal: env: 0 withArguments: {'can only join an iterable'}
+		TypeError ___signal___: 'can only join an iterable'
 	].
 
 	parts := iterable.
 
 	"Empty iterable"
-	((parts perform: #size env: 0) perform: #= env: 0 withArguments: {0}) ifTrue: [
-		^ bytes perform: #new env: 0
+	((parts ___size___) ___eq___: 0) ifTrue: [
+		^ bytes ___new___
 	].
 
 	"Calculate total size"
 	totalSize := 0.
-	1 perform: #to:do: env: 0 withArguments: {parts perform: #size env: 0. [:i |
+	1 ___to___: parts ___size___ do: [:i |
 		| part |
-		part := parts perform: #at: env: 0 withArguments: {i}.
-		totalSize := totalSize perform: #+ env: 0 withArguments: {part perform: #size env: 0}.
-		(i perform: #< env: 0 withArguments: {parts perform: #size env: 0}) ifTrue: [
-			totalSize := totalSize perform: #+ env: 0 withArguments: {self perform: #size env: 0}
+		part := parts ___at___: i.
+		totalSize := totalSize ___plus___: part ___size___.
+		(i ___lt___: parts ___size___) ifTrue: [
+			totalSize := totalSize ___plus___: self ___size___
 		]
-	]}.
+	].
 
 	"Build result"
-	result := bytes perform: #new: env: 0 withArguments: {totalSize}.
+	result := bytes ___new___: totalSize.
 	offset := 0.
 
-	1 perform: #to:do: env: 0 withArguments: {parts perform: #size env: 0. [:i |
+	1 ___to___: parts ___size___ do: [:i |
 		| part partSize |
-		part := parts perform: #at: env: 0 withArguments: {i}.
-		partSize := part perform: #size env: 0.
+		part := parts ___at___: i.
+		partSize := part ___size___.
 
 		"Copy part"
-		1 perform: #to:do: env: 0 withArguments: {partSize. [:j |
-			result perform: #at:put: env: 0 withArguments: {offset perform: #+ env: 0 withArguments: {j}. part perform: #at: env: 0 withArguments: {j}}
-		]}.
-		offset := offset perform: #+ env: 0 withArguments: {partSize}.
+		1 ___to___: partSize do: [:j |
+			result ___at___: (offset ___plus___: j) put: (part ___at___: j)
+		].
+		offset := offset ___plus___: partSize.
 
 		"Add separator (except after last part)"
-		(i perform: #< env: 0 withArguments: {parts perform: #size env: 0}) ifTrue: [
+		(i ___lt___: parts ___size___) ifTrue: [
 			| sepSize |
-			sepSize := self perform: #size env: 0.
-			1 perform: #to:do: env: 0 withArguments: {sepSize. [:j |
-				result perform: #at:put: env: 0 withArguments: {offset perform: #+ env: 0 withArguments: {j}. self perform: #at: env: 0 withArguments: {j}}
-			]}.
-			offset := offset perform: #+ env: 0 withArguments: {sepSize}
+			sepSize := self ___size___.
+			1 ___to___: sepSize do: [:j |
+				result ___at___: (offset ___plus___: j) put: (self ___at___: j)
+			].
+			offset := offset ___plus___: sepSize
 		]
-	]}.
+	].
 
 	^ result
 %
@@ -1241,24 +1245,24 @@ method: bytes
 replace: old _: new
 	"Replace all occurrences of old with new"
 	| oldClass newClass oldSize newSize mySize parts i |
-	oldClass := old perform: #class env: 0.
-	newClass := new perform: #class env: 0.
+	oldClass := old ___class___.
+	newClass := new ___class___.
 
 	"old and new must be bytes"
-	(oldClass perform: #= env: 0 withArguments: {bytes}) ifFalse: [
-		TypeError perform: #signal: env: 0 withArguments: {'first argument must be bytes'}
+	(oldClass ___eq___: bytes) ifFalse: [
+		TypeError ___signal___: 'first argument must be bytes'
 	].
-	(newClass perform: #= env: 0 withArguments: {bytes}) ifFalse: [
-		TypeError perform: #signal: env: 0 withArguments: {'second argument must be bytes'}
+	(newClass ___eq___: bytes) ifFalse: [
+		TypeError ___signal___: 'second argument must be bytes'
 	].
 
-	oldSize := old perform: #size env: 0.
-	newSize := new perform: #size env: 0.
-	mySize := self perform: #size env: 0.
+	oldSize := old ___size___.
+	newSize := new ___size___.
+	mySize := self ___size___.
 
 	"Empty old not allowed"
-	(oldSize perform: #= env: 0 withArguments: {0}) ifTrue: [
-		^ self perform: #copy env: 0
+	(oldSize ___eq___: 0) ifTrue: [
+		^ self ___copy___
 	].
 
 	"Split by old, then join with new"
@@ -1271,27 +1275,27 @@ method: bytes
 isalpha
 	"Check if all bytes are alphabetic ASCII (A-Z, a-z)"
 	| size |
-	size := self perform: #size env: 0.
+	size := self ___size___.
 
 	"Empty bytes returns False"
-	(size perform: #= env: 0 withArguments: {0}) ifTrue: [
+	(size ___eq___: 0) ifTrue: [
 		^ false
 	].
 
-	1 perform: #to:do: env: 0 withArguments: {size. [:i |
+	1 ___to___: size do: [:i |
 		| byte |
-		byte := self perform: #at: env: 0 withArguments: {i}.
+		byte := self ___at___: i.
 		"Check if A-Z (65-90) or a-z (97-122)"
-		((byte perform: #>= env: 0 withArguments: {65}) and: [
-			byte perform: #<= env: 0 withArguments: {90}
+		((byte ___ge___: 65) and: [
+			byte ___le___: 90
 		]) ifFalse: [
-			((byte perform: #>= env: 0 withArguments: {97}) and: [
-				byte perform: #<= env: 0 withArguments: {122}
+			((byte ___ge___: 97) and: [
+				byte ___le___: 122
 			]) ifFalse: [
 				^ false
 			]
 		]
-	]}.
+	].
 
 	^ true
 %
@@ -1301,23 +1305,23 @@ method: bytes
 isdigit
 	"Check if all bytes are digits (0-9)"
 	| size |
-	size := self perform: #size env: 0.
+	size := self ___size___.
 
 	"Empty bytes returns False"
-	(size perform: #= env: 0 withArguments: {0}) ifTrue: [
+	(size ___eq___: 0) ifTrue: [
 		^ false
 	].
 
-	1 perform: #to:do: env: 0 withArguments: {size. [:i |
+	1 ___to___: size do: [:i |
 		| byte |
-		byte := self perform: #at: env: 0 withArguments: {i}.
+		byte := self ___at___: i.
 		"Check if 0-9 (48-57)"
-		((byte perform: #>= env: 0 withArguments: {48}) and: [
-			byte perform: #<= env: 0 withArguments: {57}
+		((byte ___ge___: 48) and: [
+			byte ___le___: 57
 		]) ifFalse: [
 			^ false
 		]
-	]}.
+	].
 
 	^ true
 %
@@ -1327,31 +1331,31 @@ method: bytes
 isalnum
 	"Check if all bytes are alphanumeric ASCII"
 	| size |
-	size := self perform: #size env: 0.
+	size := self ___size___.
 
 	"Empty bytes returns False"
-	(size perform: #= env: 0 withArguments: {0}) ifTrue: [
+	(size ___eq___: 0) ifTrue: [
 		^ false
 	].
 
-	1 perform: #to:do: env: 0 withArguments: {size. [:i |
+	1 ___to___: size do: [:i |
 		| byte |
-		byte := self perform: #at: env: 0 withArguments: {i}.
+		byte := self ___at___: i.
 		"Check if 0-9 (48-57), A-Z (65-90), or a-z (97-122)"
-		((byte perform: #>= env: 0 withArguments: {48}) and: [
-			byte perform: #<= env: 0 withArguments: {57}
+		((byte ___ge___: 48) and: [
+			byte ___le___: 57
 		]) ifFalse: [
-			((byte perform: #>= env: 0 withArguments: {65}) and: [
-				byte perform: #<= env: 0 withArguments: {90}
+			((byte ___ge___: 65) and: [
+				byte ___le___: 90
 			]) ifFalse: [
-				((byte perform: #>= env: 0 withArguments: {97}) and: [
-					byte perform: #<= env: 0 withArguments: {122}
+				((byte ___ge___: 97) and: [
+					byte ___le___: 122
 				]) ifFalse: [
 					^ false
 				]
 			]
 		]
-	]}.
+	].
 
 	^ true
 %
@@ -1361,23 +1365,23 @@ method: bytes
 isspace
 	"Check if all bytes are whitespace"
 	| size |
-	size := self perform: #size env: 0.
+	size := self ___size___.
 
 	"Empty bytes returns False"
-	(size perform: #= env: 0 withArguments: {0}) ifTrue: [
+	(size ___eq___: 0) ifTrue: [
 		^ false
 	].
 
-	1 perform: #to:do: env: 0 withArguments: {size. [:i |
+	1 ___to___: size do: [:i |
 		| byte |
-		byte := self perform: #at: env: 0 withArguments: {i}.
+		byte := self ___at___: i.
 		"Whitespace: space(32), tab(9), newline(10), carriage return(13), form feed(12), vertical tab(11)"
-		((byte perform: #= env: 0 withArguments: {32}) or: [
-			(byte perform: #= env: 0 withArguments: {9}) or: [
-				(byte perform: #= env: 0 withArguments: {10}) or: [
-					(byte perform: #= env: 0 withArguments: {13}) or: [
-						(byte perform: #= env: 0 withArguments: {12}) or: [
-							byte perform: #= env: 0 withArguments: {11}
+		((byte ___eq___: 32) or: [
+			(byte ___eq___: 9) or: [
+				(byte ___eq___: 10) or: [
+					(byte ___eq___: 13) or: [
+						(byte ___eq___: 12) or: [
+							byte ___eq___: 11
 						]
 					]
 				]
@@ -1385,7 +1389,7 @@ isspace
 		]) ifFalse: [
 			^ false
 		]
-	]}.
+	].
 
 	^ true
 %
@@ -1395,25 +1399,25 @@ method: bytes
 isupper
 	"Check if all cased bytes are uppercase"
 	| size hasCased |
-	size := self perform: #size env: 0.
+	size := self ___size___.
 	hasCased := false.
 
-	1 perform: #to:do: env: 0 withArguments: {size. [:i |
+	1 ___to___: size do: [:i |
 		| byte |
-		byte := self perform: #at: env: 0 withArguments: {i}.
+		byte := self ___at___: i.
 		"Check if lowercase (97-122)"
-		((byte perform: #>= env: 0 withArguments: {97}) and: [
-			byte perform: #<= env: 0 withArguments: {122}
+		((byte ___ge___: 97) and: [
+			byte ___le___: 122
 		]) ifTrue: [
 			^ false
 		].
 		"Check if uppercase (65-90)"
-		((byte perform: #>= env: 0 withArguments: {65}) and: [
-			byte perform: #<= env: 0 withArguments: {90}
+		((byte ___ge___: 65) and: [
+			byte ___le___: 90
 		]) ifTrue: [
 			hasCased := true
 		]
-	]}.
+	].
 
 	^ hasCased
 %
@@ -1423,25 +1427,25 @@ method: bytes
 islower
 	"Check if all cased bytes are lowercase"
 	| size hasCased |
-	size := self perform: #size env: 0.
+	size := self ___size___.
 	hasCased := false.
 
-	1 perform: #to:do: env: 0 withArguments: {size. [:i |
+	1 ___to___: size do: [:i |
 		| byte |
-		byte := self perform: #at: env: 0 withArguments: {i}.
+		byte := self ___at___: i.
 		"Check if uppercase (65-90)"
-		((byte perform: #>= env: 0 withArguments: {65}) and: [
-			byte perform: #<= env: 0 withArguments: {90}
+		((byte ___ge___: 65) and: [
+			byte ___le___: 90
 		]) ifTrue: [
 			^ false
 		].
 		"Check if lowercase (97-122)"
-		((byte perform: #>= env: 0 withArguments: {97}) and: [
-			byte perform: #<= env: 0 withArguments: {122}
+		((byte ___ge___: 97) and: [
+			byte ___le___: 122
 		]) ifTrue: [
 			hasCased := true
 		]
-	]}.
+	].
 
 	^ hasCased
 %
@@ -1451,27 +1455,27 @@ method: bytes
 swapcase
 	"Return bytes with case swapped"
 	| result size |
-	size := self perform: #size env: 0.
-	result := bytes perform: #new: env: 0 withArguments: {size}.
+	size := self ___size___.
+	result := bytes ___new___: size.
 
-	1 perform: #to:do: env: 0 withArguments: {size. [:i |
+	1 ___to___: size do: [:i |
 		| byte |
-		byte := self perform: #at: env: 0 withArguments: {i}.
+		byte := self ___at___: i.
 		"Uppercase to lowercase"
-		((byte perform: #>= env: 0 withArguments: {65}) and: [
-			byte perform: #<= env: 0 withArguments: {90}
+		((byte ___ge___: 65) and: [
+			byte ___le___: 90
 		]) ifTrue: [
-			byte := byte perform: #+ env: 0 withArguments: {32}
+			byte := byte ___plus___: 32
 		] ifFalse: [
 			"Lowercase to uppercase"
-			((byte perform: #>= env: 0 withArguments: {97}) and: [
-				byte perform: #<= env: 0 withArguments: {122}
+			((byte ___ge___: 97) and: [
+				byte ___le___: 122
 			]) ifTrue: [
-				byte := byte perform: #- env: 0 withArguments: {32}
+				byte := byte ___minus___: (32)
 			]
 		].
-		result perform: #at:put: env: 0 withArguments: {i. byte}
-	]}.
+		result ___at___: i put: byte
+	].
 
 	^ result
 %
@@ -1481,46 +1485,46 @@ method: bytes
 title
 	"Return titlecased bytes (first letter of each word capitalized)"
 	| result size inWord |
-	size := self perform: #size env: 0.
-	result := bytes perform: #new: env: 0 withArguments: {size}.
+	size := self ___size___.
+	result := bytes ___new___: size.
 	inWord := false.
 
-	1 perform: #to:do: env: 0 withArguments: {size. [:i |
+	1 ___to___: size do: [:i |
 		| byte isAlpha |
-		byte := self perform: #at: env: 0 withArguments: {i}.
+		byte := self ___at___: i.
 
 		"Check if alphabetic"
-		isAlpha := ((byte perform: #>= env: 0 withArguments: {65}) and: [
-			byte perform: #<= env: 0 withArguments: {90}
+		isAlpha := ((byte ___ge___: 65) and: [
+			byte ___le___: 90
 		]) or: [
-			(byte perform: #>= env: 0 withArguments: {97}) and: [
-				byte perform: #<= env: 0 withArguments: {122}
+			(byte ___ge___: 97) and: [
+				byte ___le___: 122
 			]
 		].
 
 		isAlpha ifTrue: [
 			inWord ifFalse: [
 				"First letter of word - capitalize"
-				((byte perform: #>= env: 0 withArguments: {97}) and: [
-					byte perform: #<= env: 0 withArguments: {122}
+				((byte ___ge___: 97) and: [
+					byte ___le___: 122
 				]) ifTrue: [
-					byte := byte perform: #- env: 0 withArguments: {32}
+					byte := byte ___minus___: (32)
 				].
 				inWord := true
 			] ifTrue: [
 				"Not first letter - lowercase"
-				((byte perform: #>= env: 0 withArguments: {65}) and: [
-					byte perform: #<= env: 0 withArguments: {90}
+				((byte ___ge___: 65) and: [
+					byte ___le___: 90
 				]) ifTrue: [
-					byte := byte perform: #+ env: 0 withArguments: {32}
+					byte := byte ___plus___: 32
 				]
 			]
 		] ifFalse: [
 			inWord := false
 		].
 
-		result perform: #at:put: env: 0 withArguments: {i. byte}
-	]}.
+		result ___at___: i put: byte
+	].
 
 	^ result
 %
@@ -1530,19 +1534,19 @@ method: bytes
 istitle
 	"Check if bytes is titlecased"
 	| size inWord hasCased |
-	size := self perform: #size env: 0.
+	size := self ___size___.
 	inWord := false.
 	hasCased := false.
 
-	1 perform: #to:do: env: 0 withArguments: {size. [:i |
+	1 ___to___: size do: [:i |
 		| byte isUpper isLower |
-		byte := self perform: #at: env: 0 withArguments: {i}.
+		byte := self ___at___: i.
 
-		isUpper := (byte perform: #>= env: 0 withArguments: {65}) and: [
-			byte perform: #<= env: 0 withArguments: {90}
+		isUpper := (byte ___ge___: 65) and: [
+			byte ___le___: 90
 		].
-		isLower := (byte perform: #>= env: 0 withArguments: {97}) and: [
-			byte perform: #<= env: 0 withArguments: {122}
+		isLower := (byte ___ge___: 97) and: [
+			byte ___le___: 122
 		].
 
 		(isUpper or: [isLower]) ifTrue: [
@@ -1562,7 +1566,7 @@ istitle
 		] ifFalse: [
 			inWord := false
 		]
-	]}.
+	].
 
 	^ hasCased
 %
@@ -1572,26 +1576,26 @@ method: bytes
 ljust: width
 	"Left justify bytes in field of given width"
 	| mySize result padding |
-	mySize := self perform: #size env: 0.
+	mySize := self ___size___.
 
 	"If already wide enough, return copy"
-	(width perform: #<= env: 0 withArguments: {mySize}) ifTrue: [
-		^ self perform: #copy env: 0
+	(width ___le___: mySize) ifTrue: [
+		^ self ___copy___
 	].
 
 	"Pad with spaces"
-	padding := width perform: #- env: 0 withArguments: {mySize}.
-	result := bytes perform: #new: env: 0 withArguments: {width}.
+	padding := width ___minus___: (mySize).
+	result := bytes ___new___: width.
 
 	"Copy original"
-	1 perform: #to:do: env: 0 withArguments: {mySize. [:i |
-		result perform: #at:put: env: 0 withArguments: {i. self perform: #at: env: 0 withArguments: {i}}
-	]}.
+	1 ___to___: mySize do: [:i |
+		result ___at___: i put: (self ___at___: i)
+	].
 
 	"Add spaces"
-	1 perform: #to:do: env: 0 withArguments: {padding. [:i |
-		result perform: #at:put: env: 0 withArguments: {mySize perform: #+ env: 0 withArguments: {i}. 32}
-	]}.
+	1 ___to___: padding do: [:i |
+		result ___at___: (mySize ___plus___: i) put: 32
+	].
 
 	^ result
 %
@@ -1601,26 +1605,26 @@ method: bytes
 rjust: width
 	"Right justify bytes in field of given width"
 	| mySize result padding |
-	mySize := self perform: #size env: 0.
+	mySize := self ___size___.
 
 	"If already wide enough, return copy"
-	(width perform: #<= env: 0 withArguments: {mySize}) ifTrue: [
-		^ self perform: #copy env: 0
+	(width ___le___: mySize) ifTrue: [
+		^ self ___copy___
 	].
 
 	"Pad with spaces"
-	padding := width perform: #- env: 0 withArguments: {mySize}.
-	result := bytes perform: #new: env: 0 withArguments: {width}.
+	padding := width ___minus___: (mySize).
+	result := bytes ___new___: width.
 
 	"Add spaces"
-	1 perform: #to:do: env: 0 withArguments: {padding. [:i |
-		result perform: #at:put: env: 0 withArguments: {i. 32}
-	]}.
+	1 ___to___: padding do: [:i |
+		result ___at___: i put: 32
+	].
 
 	"Copy original"
-	1 perform: #to:do: env: 0 withArguments: {mySize. [:i |
-		result perform: #at:put: env: 0 withArguments: {padding perform: #+ env: 0 withArguments: {i}. self perform: #at: env: 0 withArguments: {i}}
-	]}.
+	1 ___to___: mySize do: [:i |
+		result ___at___: (padding ___plus___: i) put: (self ___at___: i)
+	].
 
 	^ result
 %
@@ -1630,33 +1634,33 @@ method: bytes
 center: width
 	"Center bytes in field of given width"
 	| mySize result totalPadding leftPadding rightPadding |
-	mySize := self perform: #size env: 0.
+	mySize := self ___size___.
 
 	"If already wide enough, return copy"
-	(width perform: #<= env: 0 withArguments: {mySize}) ifTrue: [
-		^ self perform: #copy env: 0
+	(width ___le___: mySize) ifTrue: [
+		^ self ___copy___
 	].
 
 	"Calculate padding"
-	totalPadding := width perform: #- env: 0 withArguments: {mySize}.
-	leftPadding := totalPadding perform: #// env: 0 withArguments: {2}.
-	rightPadding := totalPadding perform: #- env: 0 withArguments: {leftPadding}.
-	result := bytes perform: #new: env: 0 withArguments: {width}.
+	totalPadding := width ___minus___: (mySize).
+	leftPadding := totalPadding ___divideInteger___: 2.
+	rightPadding := totalPadding ___minus___: (leftPadding).
+	result := bytes ___new___: width.
 
 	"Add left spaces"
-	1 perform: #to:do: env: 0 withArguments: {leftPadding. [:i |
-		result perform: #at:put: env: 0 withArguments: {i. 32}
-	]}.
+	1 ___to___: leftPadding do: [:i |
+		result ___at___: i put: 32
+	].
 
 	"Copy original"
-	1 perform: #to:do: env: 0 withArguments: {mySize. [:i |
-		result perform: #at:put: env: 0 withArguments: {leftPadding perform: #+ env: 0 withArguments: {i}. self perform: #at: env: 0 withArguments: {i}}
-	]}.
+	1 ___to___: mySize do: [:i |
+		result ___at___: (leftPadding ___plus___: i) put: (self ___at___: i)
+	].
 
 	"Add right spaces"
-	1 perform: #to:do: env: 0 withArguments: {rightPadding. [:i |
-		result perform: #at:put: env: 0 withArguments: {leftPadding perform: #+ env: 0 withArguments: {mySize perform: #+ env: 0 withArguments: {i}}. 32}
-	]}.
+	1 ___to___: rightPadding do: [:i |
+		result ___at___: (leftPadding ___plus___: (mySize ___plus___: i)) put: 32
+	].
 
 	^ result
 %
@@ -1666,26 +1670,26 @@ method: bytes
 zfill: width
 	"Pad bytes with zeros on the left to fill width"
 	| mySize result padding |
-	mySize := self perform: #size env: 0.
+	mySize := self ___size___.
 
 	"If already wide enough, return copy"
-	(width perform: #<= env: 0 withArguments: {mySize}) ifTrue: [
-		^ self perform: #copy env: 0
+	(width ___le___: mySize) ifTrue: [
+		^ self ___copy___
 	].
 
 	"Pad with zeros"
-	padding := width perform: #- env: 0 withArguments: {mySize}.
-	result := bytes perform: #new: env: 0 withArguments: {width}.
+	padding := width ___minus___: (mySize).
+	result := bytes ___new___: width.
 
 	"Add zeros"
-	1 perform: #to:do: env: 0 withArguments: {padding. [:i |
-		result perform: #at:put: env: 0 withArguments: {i. 48}  "ASCII '0'"
-	]}.
+	1 ___to___: padding do: [:i |
+		result ___at___: i put: 48  "ASCII '0'"
+	].
 
 	"Copy original"
-	1 perform: #to:do: env: 0 withArguments: {mySize. [:i |
-		result perform: #at:put: env: 0 withArguments: {padding perform: #+ env: 0 withArguments: {i}. self perform: #at: env: 0 withArguments: {i}}
-	]}.
+	1 ___to___: mySize do: [:i |
+		result ___at___: (padding ___plus___: i) put: (self ___at___: i)
+	].
 
 	^ result
 %
@@ -1698,32 +1702,28 @@ partition: sep
 	idx := self perform: #find: env: 2 withArguments: {sep}.
 
 	"Not found - return (self, empty, empty)"
-	(idx perform: #= env: 0 withArguments: {-1}) ifTrue: [
-		^ InvariantArray perform: #with:with:with: env: 0 withArguments: {
-			self perform: #copy env: 0.
-			bytes perform: #new env: 0.
-			bytes perform: #new env: 0
-		}
+	(idx ___eq___: -1) ifTrue: [
+		^ InvariantArray ___with___: (self ___copy___) with: (bytes ___new___) with: (bytes ___new___)
 	].
 
 	"Found - split at separator"
-	mySize := self perform: #size env: 0.
-	sepSize := sep perform: #size env: 0.
+	mySize := self ___size___.
+	sepSize := sep ___size___.
 
 	"Before separator"
-	before := bytes perform: #new: env: 0 withArguments: {idx}.
-	1 perform: #to:do: env: 0 withArguments: {idx. [:i |
-		before perform: #at:put: env: 0 withArguments: {i. self perform: #at: env: 0 withArguments: {i}}
-	]}.
+	before := bytes ___new___: idx.
+	1 ___to___: idx do: [:i |
+		before ___at___: i put: (self ___at___: i)
+	].
 
 	"After separator"
-	afterSize := mySize perform: #- env: 0 withArguments: {idx perform: #+ env: 0 withArguments: {sepSize}}.
-	after := bytes perform: #new: env: 0 withArguments: {afterSize}.
-	1 perform: #to:do: env: 0 withArguments: {afterSize. [:i |
-		after perform: #at:put: env: 0 withArguments: {i. self perform: #at: env: 0 withArguments: {idx perform: #+ env: 0 withArguments: {sepSize perform: #+ env: 0 withArguments: {i}}}}
-	]}.
+	afterSize := mySize ___minus___: (idx ___plus___: sepSize).
+	after := bytes ___new___: afterSize.
+	1 ___to___: afterSize do: [:i |
+		after ___at___: i put: (self ___at___: (idx ___plus___: (sepSize ___plus___: i)))
+	].
 
-	^ InvariantArray perform: #with:with:with: env: 0 withArguments: {before. sep. after}
+	^ InvariantArray ___with___: before with: sep with: after
 %
 
 category: 'Python-Splitting Methods'
@@ -1734,32 +1734,28 @@ rpartition: sep
 	idx := self perform: #rfind: env: 2 withArguments: {sep}.
 
 	"Not found - return (empty, empty, self)"
-	(idx perform: #= env: 0 withArguments: {-1}) ifTrue: [
-		^ InvariantArray perform: #with:with:with: env: 0 withArguments: {
-			bytes perform: #new env: 0.
-			bytes perform: #new env: 0.
-			self perform: #copy env: 0
-		}
+	(idx ___eq___: -1) ifTrue: [
+		^ InvariantArray ___with___: (bytes ___new___) with: (bytes ___new___) with: self ___copy___
 	].
 
 	"Found - split at separator"
-	mySize := self perform: #size env: 0.
-	sepSize := sep perform: #size env: 0.
+	mySize := self ___size___.
+	sepSize := sep ___size___.
 
 	"Before separator"
-	before := bytes perform: #new: env: 0 withArguments: {idx}.
-	1 perform: #to:do: env: 0 withArguments: {idx. [:i |
-		before perform: #at:put: env: 0 withArguments: {i. self perform: #at: env: 0 withArguments: {i}}
-	]}.
+	before := bytes ___new___: idx.
+	1 ___to___: idx do: [:i |
+		before ___at___: i put: (self ___at___: i)
+	].
 
 	"After separator"
-	afterSize := mySize perform: #- env: 0 withArguments: {idx perform: #+ env: 0 withArguments: {sepSize}}.
-	after := bytes perform: #new: env: 0 withArguments: {afterSize}.
-	1 perform: #to:do: env: 0 withArguments: {afterSize. [:i |
-		after perform: #at:put: env: 0 withArguments: {i. self perform: #at: env: 0 withArguments: {idx perform: #+ env: 0 withArguments: {sepSize perform: #+ env: 0 withArguments: {i}}}}
-	]}.
+	afterSize := mySize ___minus___: (idx ___plus___: sepSize).
+	after := bytes ___new___: afterSize.
+	1 ___to___: afterSize do: [:i |
+		after ___at___: i put: (self ___at___: (idx ___plus___: (sepSize ___plus___: i)))
+	].
 
-	^ InvariantArray perform: #with:with:with: env: 0 withArguments: {before. sep. after}
+	^ InvariantArray ___with___: before with: sep with: after
 %
 
 category: 'Python-Splitting Methods'
@@ -1774,80 +1770,80 @@ method: bytes
 rsplit: sep _: maxsplit
 	"Split from right with maximum number of splits"
 	| sepClass sepSize mySize parts positions i actualSplits lastEnd firstPart firstPartSize |
-	sepClass := sep perform: #class env: 0.
+	sepClass := sep ___class___.
 
 	"sep must be bytes"
 	(sepClass == bytes) ifFalse: [
-		TypeError perform: #signal: env: 0 withArguments: {'sep must be bytes'}
+		TypeError ___signal___: 'sep must be bytes'
 	].
 
-	sepSize := sep perform: #size env: 0.
-	mySize := self perform: #size env: 0.
+	sepSize := sep ___size___.
+	mySize := self ___size___.
 
 	"Empty separator not allowed"
-	(sepSize perform: #= env: 0 withArguments: {0}) ifTrue: [
-		ValueError perform: #signal: env: 0 withArguments: {'empty separator'}
+	(sepSize ___eq___: 0) ifTrue: [
+		ValueError ___signal___: 'empty separator'
 	].
 
 	"If maxsplit is -1 or < 0, do unlimited split"
-	(maxsplit perform: #< env: 0 withArguments: {0}) ifTrue: [
+	(maxsplit ___lt___: 0) ifTrue: [
 		^ self perform: #split: env: 2 withArguments: {sep}
 	].
 
 	"Find all separator positions from right to left"
-	positions := OrderedCollection perform: #new env: 0.
-	i := mySize perform: #- env: 0 withArguments: {sepSize perform: #- env: 0 withArguments: {1}}.
+	positions := OrderedCollection ___new___.
+	i := mySize ___minus___: (sepSize ___minus___: 1).
 	
-	[i perform: #>= env: 0 withArguments: {1}] perform: #whileTrue: env: 0 withArguments: {[
+	[i ___ge___: 1] ___whileTrue___: [
 		| match |
 		match := true.
-		1 perform: #to:do: env: 0 withArguments: {sepSize. [:j |
+				1 ___to___: sepSize do: [:j |
 			| myByte sepByte |
-			myByte := self perform: #at: env: 0 withArguments: {i perform: #+ env: 0 withArguments: {j perform: #- env: 0 withArguments: {1}}}.
-			sepByte := sep perform: #at: env: 0 withArguments: {j}.
-			(myByte perform: #= env: 0 withArguments: {sepByte}) ifFalse: [
+			myByte := self ___at___: (i ___plus___: (j ___minus___: (1))).
+			sepByte := sep ___at___: j.
+			(myByte ___eq___: sepByte) ifFalse: [
 				match := false
 			]
-		]}.
-		match ifTrue: [
-			positions perform: #add: env: 0 withArguments: {i}
 		].
-		i := i perform: #- env: 0 withArguments: {1}
-	]}.
+		match ifTrue: [
+			positions ___add___: i
+		].
+		i := i ___minus___: (1)
+	].
 
 	"Limit to maxsplit splits (take first maxsplit positions since we collected from right)"
-	actualSplits := positions perform: #size env: 0.
-	(actualSplits perform: #> env: 0 withArguments: {maxsplit}) ifTrue: [
+	actualSplits := positions ___size___.
+	(actualSplits ___gt___: maxsplit) ifTrue: [
 		| newPositions |
-		newPositions := OrderedCollection perform: #new env: 0.
-		1 perform: #to:do: env: 0 withArguments: {maxsplit. [:idx |
-			newPositions perform: #add: env: 0 withArguments: {positions perform: #at: env: 0 withArguments: {idx}}
-		]}.
+		newPositions := OrderedCollection ___new___.
+		1 ___to___: maxsplit do: [:idx |
+			newPositions ___add___: (positions ___at___: idx)
+		].
 		positions := newPositions
 	].
 
 	"Build parts from right to left"
-	parts := OrderedCollection perform: #new env: 0.
-	lastEnd := mySize perform: #+ env: 0 withArguments: {1}.
+	parts := OrderedCollection ___new___.
+	lastEnd := mySize ___plus___: 1.
 	
-	1 perform: #to:do: env: 0 withArguments: {positions perform: #size env: 0. [:idx |
+	1 ___to___: positions ___size___ do: [:idx |
 		| pos part partSize |
-		pos := positions perform: #at: env: 0 withArguments: {idx}.
-		partSize := lastEnd perform: #- env: 0 withArguments: {pos perform: #+ env: 0 withArguments: {sepSize}}.
-		part := bytes perform: #new: env: 0 withArguments: {partSize}.
-		1 perform: #to:do: env: 0 withArguments: {partSize. [:j |
-			part perform: #at:put: env: 0 withArguments: {j. self perform: #at: env: 0 withArguments: {pos perform: #+ env: 0 withArguments: {sepSize perform: #+ env: 0 withArguments: {j perform: #- env: 0 withArguments: {1}}}}}
-		]}.
+		pos := positions ___at___: idx.
+		partSize := lastEnd ___minus___: (pos ___plus___: sepSize).
+		part := bytes ___new___: partSize.
+		1 ___to___: partSize do: [:j |
+			part ___at___: j put: (self ___at___: (pos ___plus___: (sepSize ___plus___: (j ___minus___: (1)))))
+		].
 		parts perform: #addFirst: env: 0 withArguments: {part}.
 		lastEnd := pos
-	]}.
+	].
 
 	"Add first part (everything before first split position)"
-	firstPartSize := lastEnd perform: #- env: 0 withArguments: {1}.
-	firstPart := bytes perform: #new: env: 0 withArguments: {firstPartSize}.
-	1 perform: #to:do: env: 0 withArguments: {firstPartSize. [:j |
-		firstPart perform: #at:put: env: 0 withArguments: {j. self perform: #at: env: 0 withArguments: {j}}
-	]}.
+	firstPartSize := lastEnd ___minus___: (1).
+	firstPart := bytes ___new___: firstPartSize.
+	1 ___to___: firstPartSize do: [:j |
+		firstPart ___at___: j put: (self ___at___: j)
+	].
 	parts perform: #addFirst: env: 0 withArguments: {firstPart}.
 
 	^ parts
@@ -1858,43 +1854,46 @@ method: bytes
 splitlines
 	"Split bytes at line boundaries, return list"
 	| parts currentPart size i |
-	size := self perform: #size env: 0.
-	parts := OrderedCollection perform: #new env: 0.
-	currentPart := bytes perform: #new env: 0.
+	size := self ___size___.
+	parts := OrderedCollection ___new___.
+	currentPart := bytes ___new___.
 	i := 1.
 
-	[i perform: #<= env: 0 withArguments: {size}] perform: #whileTrue: env: 0 withArguments: {[
+	[i ___le___: size] ___whileTrue___: [
 		| byte |
-		byte := self perform: #at: env: 0 withArguments: {i}.
+		byte := self ___at___: i.
 
 		"Check for line endings"
-		(byte perform: #= env: 0 withArguments: {10}) ifTrue: [  "LF"
-			parts perform: #add: env: 0 withArguments: {currentPart}.
-			currentPart := bytes perform: #new env: 0.
-			i := i perform: #+ env: 0 withArguments: {1}
+		(byte ___eq___: 10) ifTrue: [  "LF"
+			parts ___add___: currentPart.
+			currentPart := bytes ___new___.
+			i := i ___plus___: 1
 		] ifFalse: [
-			(byte perform: #= env: 0 withArguments: {13}) ifTrue: [  "CR"
-				parts perform: #add: env: 0 withArguments: {currentPart}.
-				currentPart := bytes perform: #new env: 0.
+			(byte ___eq___: 13) ifTrue: [  "CR"
+				parts ___add___: currentPart.
+				currentPart := bytes ___new___.
 				"Check for CRLF"
-				((i perform: #< env: 0 withArguments: {size}) and: [
-					(self perform: #at: env: 0 withArguments: {i perform: #+ env: 0 withArguments: {1}}) perform: #= env: 0 withArguments: {10}
+				((i ___lt___: size) and: [
+					(self ___at___: (i ___plus___: 1)) ___eq___: 10
 				]) ifTrue: [
-					i := i perform: #+ env: 0 withArguments: {2}
+					i := i ___plus___: 2
 				] ifFalse: [
-					i := i perform: #+ env: 0 withArguments: {1}
+					i := i ___plus___: 1
 				]
 			] ifFalse: [
 				"Regular character"
-				currentPart := currentPart perform: #, env: 0 withArguments: {(bytes perform: #new: env: 0 withArguments: {1}) perform: #at:put: env: 0 withArguments: {1. byte}; yourself}.
-				i := i perform: #+ env: 0 withArguments: {1}
+				| newByte |
+				newByte := bytes ___new___: 1.
+				newByte ___at___: 1 put: byte.
+				currentPart := currentPart ___concat___: newByte.
+				i := i ___plus___: 1
 			]
 		]
-	]}.
+	].
 
 	"Add final part if non-empty"
-	((currentPart perform: #size env: 0) perform: #> env: 0 withArguments: {0}) ifTrue: [
-		parts perform: #add: env: 0 withArguments: {currentPart}
+		((currentPart ___size___) ___gt___: 0) ifTrue: [
+		parts ___add___: currentPart
 	].
 
 	^ parts
@@ -1912,31 +1911,40 @@ method: bytes
 expandtabs: tabsize
 	"Expand tabs to spaces with given tabsize"
 	| result size column |
-	result := bytes perform: #new env: 0.
-	size := self perform: #size env: 0.
+	result := bytes ___new___.
+	size := self ___size___.
 	column := 0.
 
-	1 perform: #to:do: env: 0 withArguments: {size. [:i |
+	1 ___to___: size do: [:i |
 		| byte |
-		byte := self perform: #at: env: 0 withArguments: {i}.
+		byte := self ___at___: i.
 
-		(byte perform: #= env: 0 withArguments: {9}) ifTrue: [  "Tab"
+		(byte ___eq___: 9) ifTrue: [  "Tab"
 			| spaces |
-			spaces := tabsize perform: #- env: 0 withArguments: {column perform: #\\ env: 0 withArguments: {tabsize}}.
-			1 perform: #to:do: env: 0 withArguments: {spaces. [:j |
-				result := result perform: #, env: 0 withArguments: {(bytes perform: #new: env: 0 withArguments: {1}) perform: #at:put: env: 0 withArguments: {1. 32}; yourself}
-			]}.
-			column := column perform: #+ env: 0 withArguments: {spaces}
+			spaces := tabsize ___minus___: (column ___modulo___: tabsize).
+			1 ___to___: spaces do: [:j |
+				| newByte |
+				newByte := bytes ___new___: 1.
+				newByte ___at___: 1 put: 32.
+				result := result ___concat___: newByte
+			].
+			column := column ___plus___: spaces
 		] ifFalse: [
-			(byte perform: #= env: 0 withArguments: {10}) ifTrue: [  "Newline"
-				result := result perform: #, env: 0 withArguments: {(bytes perform: #new: env: 0 withArguments: {1}) perform: #at:put: env: 0 withArguments: {1. byte}; yourself}.
+			(byte ___eq___: 10) ifTrue: [  "Newline"
+				| newByte |
+				newByte := bytes ___new___: 1.
+				newByte ___at___: 1 put: byte.
+				result := result ___concat___: newByte.
 				column := 0
 			] ifFalse: [
-				result := result perform: #, env: 0 withArguments: {(bytes perform: #new: env: 0 withArguments: {1}) perform: #at:put: env: 0 withArguments: {1. byte}; yourself}.
-				column := column perform: #+ env: 0 withArguments: {1}
+				| newByte |
+				newByte := bytes ___new___: 1.
+				newByte ___at___: 1 put: byte.
+				result := result ___concat___: newByte.
+				column := column ___plus___: 1
 			]
 		]
-	]}.
+	].
 
 	^ result
 %
@@ -1948,27 +1956,27 @@ maketrans: frm _: to
 	Note: This is actually a staticmethod in Python (doesn't receive cls),
 	but Grail doesn't have a staticmethod: directive for hand-written methods."
 	| frmSize toSize table |
-	frmSize := frm perform: #size env: 0.
-	toSize := to perform: #size env: 0.
+	frmSize := frm ___size___.
+	toSize := to ___size___.
 
 	"frm and to must be same size"
-	(frmSize perform: #= env: 0 withArguments: {toSize}) ifFalse: [
-		ValueError perform: #signal: env: 0 withArguments: {'maketrans arguments must have same length'}
+	(frmSize ___eq___: toSize) ifFalse: [
+		ValueError ___signal___: 'maketrans arguments must have same length'
 	].
 
 	"Create identity table (0-255)"
-	table := bytes perform: #new: env: 0 withArguments: {256}.
-	0 perform: #to:do: env: 0 withArguments: {255. [:i |
-		table perform: #at:put: env: 0 withArguments: {i perform: #+ env: 0 withArguments: {1}. i}
-	]}.
+	table := bytes ___new___: 256.
+	0 ___to___: 255 do: [:i |
+		table ___at___: (i ___plus___: 1) put: i
+	].
 
 	"Apply replacements"
-	1 perform: #to:do: env: 0 withArguments: {frmSize. [:i |
+	1 ___to___: frmSize do: [:i |
 		| frmByte toByte |
-		frmByte := frm perform: #at: env: 0 withArguments: {i}.
-		toByte := to perform: #at: env: 0 withArguments: {i}.
-		table perform: #at:put: env: 0 withArguments: {frmByte perform: #+ env: 0 withArguments: {1}. toByte}
-	]}.
+		frmByte := frm ___at___: i.
+		toByte := to ___at___: i.
+		table ___at___: (frmByte ___plus___: 1) put: toByte
+	].
 
 	^ table
 %
@@ -1978,22 +1986,22 @@ method: bytes
 translate: table
 	"Translate bytes using translation table"
 	| tableSize mySize result |
-	tableSize := table perform: #size env: 0.
-	mySize := self perform: #size env: 0.
+	tableSize := table ___size___.
+	mySize := self ___size___.
 
 	"Table must be 256 bytes"
-	(tableSize perform: #= env: 0 withArguments: {256}) ifFalse: [
-		ValueError perform: #signal: env: 0 withArguments: {'translation table must be 256 characters long'}
+	(tableSize ___eq___: 256) ifFalse: [
+		ValueError ___signal___: 'translation table must be 256 characters long'
 	].
 
-	result := bytes perform: #new: env: 0 withArguments: {mySize}.
+	result := bytes ___new___: mySize.
 
-	1 perform: #to:do: env: 0 withArguments: {mySize. [:i |
+	1 ___to___: mySize do: [:i |
 		| byte newByte |
-		byte := self perform: #at: env: 0 withArguments: {i}.
-		newByte := table perform: #at: env: 0 withArguments: {byte perform: #+ env: 0 withArguments: {1}}.
-		result perform: #at:put: env: 0 withArguments: {i. newByte}
-	]}.
+		byte := self ___at___: i.
+		newByte := table ___at___: (byte ___plus___: 1).
+		result ___at___: i put: newByte
+	].
 
 	^ result
 %

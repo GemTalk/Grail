@@ -1459,6 +1459,60 @@ doit
 cmath category: 'Math'
 %
 
+! ------- os class (Python 'os' module)
+expectvalue /Class
+doit
+object subclass: 'os'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+expectvalue /Class
+doit
+os comment:
+'Python os module.
+
+This class provides access to operating system interfaces.
+Each method in this class corresponds to a Python os module function.
+
+See https://docs.python.org/3/library/os.html for the complete list.
+'
+%
+expectvalue /Class
+doit
+os category: 'Operating System'
+%
+
+! ------- os_path class (Python 'os.path' module)
+expectvalue /Class
+doit
+object subclass: 'os_path'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+expectvalue /Class
+doit
+os_path comment:
+'Python os.path module.
+
+This class provides common pathname manipulations.
+Each method in this class corresponds to a Python os.path function.
+
+See https://docs.python.org/3/library/os.path.html for the complete list.
+'
+%
+expectvalue /Class
+doit
+os_path category: 'Operating System'
+%
+
 ! ------- iterator class (Python base iterator type)
 expectvalue /Class
 doit
@@ -1744,6 +1798,8 @@ input smalltalk/classes/Exception.gs
 input smalltalk/classes/iterator.gs
 input smalltalk/classes/list_iterator.gs
 input smalltalk/classes/math.gs
+input smalltalk/classes/os.gs
+input smalltalk/classes/os_path.gs
 input smalltalk/classes/range_iterator.gs
 input smalltalk/classes/set_iterator.gs
 input smalltalk/classes/str_iterator.gs

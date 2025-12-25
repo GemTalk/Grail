@@ -16,7 +16,7 @@ test_inheritance
 	"Test that EncodingWarning inherits from Warning."
 	
 	| exc |
-	exc := EncodingWarning perform: #__new__: env: 2 withArguments: { EncodingWarning }.
+	exc := EncodingWarning ___new___:  EncodingWarning .
 	self assert: (exc isKindOf: Warning).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a EncodingWarning instance."
 	
 	| exc |
-	exc := EncodingWarning perform: #__new__: env: 2 withArguments: { EncodingWarning }.
+	exc := EncodingWarning ___new___:  EncodingWarning .
 	self assert: exc notNil.
 %

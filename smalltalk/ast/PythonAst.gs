@@ -13,7 +13,7 @@ Object subclass: 'AbstractNode'
   classVars: #( escapeCharacters)
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -49,7 +49,7 @@ AbstractNode subclass: 'AbstractLocationNode'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -84,7 +84,7 @@ AbstractLocationNode subclass: 'AliasAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -119,7 +119,7 @@ AbstractLocationNode subclass: 'ArgAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -153,7 +153,7 @@ AbstractLocationNode subclass: 'ExceptHandlerAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -187,7 +187,7 @@ AbstractLocationNode subclass: 'ExpressionAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -220,7 +220,7 @@ ExpressionAst subclass: 'AttributeAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -263,7 +263,7 @@ ExpressionAst subclass: 'AwaitAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -303,7 +303,7 @@ ExpressionAst subclass: 'BinOpAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -345,7 +345,7 @@ ExpressionAst subclass: 'BoolOpAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -391,7 +391,7 @@ BoolOpAst subclass: 'AndAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -425,7 +425,7 @@ BoolOpAst subclass: 'OrAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -459,7 +459,7 @@ ExpressionAst subclass: 'CallAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -502,7 +502,7 @@ ExpressionAst subclass: 'CompareAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -545,7 +545,7 @@ ExpressionAst subclass: 'ConstantAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -570,7 +570,7 @@ ExpressionAst subclass: 'DictAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -614,7 +614,7 @@ ExpressionAst subclass: 'DictCompAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -656,7 +656,7 @@ ExpressionAst subclass: 'FormattedValueAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -695,7 +695,7 @@ ExpressionAst subclass: 'GeneratorExpAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -736,7 +736,7 @@ ExpressionAst subclass: 'IfExpAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -779,7 +779,7 @@ ExpressionAst subclass: 'JoinedStrAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -822,7 +822,7 @@ ExpressionAst subclass: 'LambdaAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -865,7 +865,7 @@ ExpressionAst subclass: 'ListAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -907,7 +907,7 @@ ExpressionAst subclass: 'ListCompAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -948,7 +948,7 @@ ExpressionAst subclass: 'NameAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -984,7 +984,7 @@ NameAst subclass: 'KeywordsAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -1016,7 +1016,7 @@ ExpressionAst subclass: 'NamedExprAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -1032,7 +1032,7 @@ ExpressionAst subclass: 'SetAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -1071,7 +1071,7 @@ ExpressionAst subclass: 'SetCompAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -1112,7 +1112,7 @@ ExpressionAst subclass: 'StarredAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -1154,7 +1154,7 @@ ExpressionAst subclass: 'SubscriptAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -1196,7 +1196,7 @@ ExpressionAst subclass: 'TupleAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -1238,7 +1238,7 @@ ExpressionAst subclass: 'UnaryOpAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -1279,7 +1279,7 @@ UnaryOpAst subclass: 'InvertAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -1312,7 +1312,7 @@ UnaryOpAst subclass: 'NotAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -1345,7 +1345,7 @@ UnaryOpAst subclass: 'UAddAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -1378,7 +1378,7 @@ UnaryOpAst subclass: 'USubAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -1411,7 +1411,7 @@ ExpressionAst subclass: 'YieldAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -1449,7 +1449,7 @@ ExpressionAst subclass: 'YieldFromAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -1487,7 +1487,7 @@ AbstractLocationNode subclass: 'KeywordAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -1530,7 +1530,7 @@ AbstractLocationNode subclass: 'SliceAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -1575,7 +1575,7 @@ AbstractLocationNode subclass: 'StatementAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -1608,7 +1608,7 @@ StatementAst subclass: 'AnnAssignAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -1654,7 +1654,7 @@ StatementAst subclass: 'AssertAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -1696,7 +1696,7 @@ StatementAst subclass: 'AssignAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -1738,7 +1738,7 @@ StatementAst subclass: 'AsyncForAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -1760,7 +1760,7 @@ StatementAst subclass: 'AsyncFunctionDefAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -1783,7 +1783,7 @@ StatementAst subclass: 'AsyncWithAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -1826,7 +1826,7 @@ StatementAst subclass: 'AugAssignAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -1870,7 +1870,7 @@ StatementAst subclass: 'BreakAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -1907,7 +1907,7 @@ StatementAst subclass: 'ClassDefAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -1933,7 +1933,7 @@ StatementAst subclass: 'ContinueAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -1969,7 +1969,7 @@ StatementAst subclass: 'DeleteAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2009,7 +2009,7 @@ StatementAst subclass: 'ExprAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2049,7 +2049,7 @@ StatementAst subclass: 'ForAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2072,7 +2072,7 @@ StatementAst subclass: 'FunctionDefAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2095,7 +2095,7 @@ FunctionDefAst subclass: 'ClassFunctionDefAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2134,7 +2134,7 @@ FunctionDefAst subclass: 'InstanceFunctionDefAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2173,7 +2173,7 @@ FunctionDefAst subclass: 'StaticFunctionDefAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2189,7 +2189,7 @@ StatementAst subclass: 'GlobalAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2228,7 +2228,7 @@ StatementAst subclass: 'IfAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2272,7 +2272,7 @@ StatementAst subclass: 'ImportAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2312,7 +2312,7 @@ StatementAst subclass: 'ImportFromAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2356,7 +2356,7 @@ StatementAst subclass: 'NonlocalAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2395,7 +2395,7 @@ StatementAst subclass: 'PassAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2431,7 +2431,7 @@ StatementAst subclass: 'RaiseAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2473,7 +2473,7 @@ StatementAst subclass: 'ReturnAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2513,7 +2513,7 @@ StatementAst subclass: 'TryAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2559,7 +2559,7 @@ StatementAst subclass: 'WhileAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2603,7 +2603,7 @@ StatementAst subclass: 'WithAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2625,7 +2625,7 @@ AbstractNode subclass: 'ArgumentsAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2647,7 +2647,7 @@ AbstractNode subclass: 'CmpOpAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2681,7 +2681,7 @@ CmpOpAst subclass: 'EqAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2714,7 +2714,7 @@ CmpOpAst subclass: 'GtAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2747,7 +2747,7 @@ CmpOpAst subclass: 'GtEAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2780,7 +2780,7 @@ CmpOpAst subclass: 'InAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2813,7 +2813,7 @@ CmpOpAst subclass: 'IsAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2846,7 +2846,7 @@ CmpOpAst subclass: 'IsNotAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2879,7 +2879,7 @@ CmpOpAst subclass: 'LtAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2912,7 +2912,7 @@ CmpOpAst subclass: 'LtEAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2945,7 +2945,7 @@ CmpOpAst subclass: 'NotEqAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -2978,7 +2978,7 @@ CmpOpAst subclass: 'NotInAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3012,7 +3012,7 @@ AbstractNode subclass: 'ComprehensionAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3058,7 +3058,7 @@ AbstractNode subclass: 'ExpressionContextAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3090,7 +3090,7 @@ ExpressionContextAst subclass: 'DelAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3123,7 +3123,7 @@ ExpressionContextAst subclass: 'LoadAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3156,7 +3156,7 @@ ExpressionContextAst subclass: 'ParamAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3189,7 +3189,7 @@ ExpressionContextAst subclass: 'StoreAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3223,7 +3223,7 @@ AbstractNode subclass: 'ModuleAst'
   classVars: #()
   classInstVars: #( pprintast)
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3260,7 +3260,7 @@ ModuleAst subclass: 'Package'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3282,7 +3282,7 @@ AbstractNode subclass: 'OperatorAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3316,7 +3316,7 @@ OperatorAst subclass: 'AddAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3349,7 +3349,7 @@ OperatorAst subclass: 'BitAndAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3382,7 +3382,7 @@ OperatorAst subclass: 'BitOrAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3415,7 +3415,7 @@ OperatorAst subclass: 'BitXorAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3448,7 +3448,7 @@ OperatorAst subclass: 'DivAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3481,7 +3481,7 @@ OperatorAst subclass: 'FloorDivAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3514,7 +3514,7 @@ OperatorAst subclass: 'LShiftAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3547,7 +3547,7 @@ OperatorAst subclass: 'MatMultAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3580,7 +3580,7 @@ OperatorAst subclass: 'ModAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3613,7 +3613,7 @@ OperatorAst subclass: 'MultAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3646,7 +3646,7 @@ OperatorAst subclass: 'PowAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3679,7 +3679,7 @@ OperatorAst subclass: 'RShiftAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3712,7 +3712,7 @@ OperatorAst subclass: 'SubAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3745,7 +3745,7 @@ AbstractNode subclass: 'SuiteAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3778,7 +3778,7 @@ SuiteAst subclass: 'BlockAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3794,7 +3794,7 @@ AbstractNode subclass: 'TypeIgnoreAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3810,7 +3810,7 @@ AbstractNode subclass: 'TypeParamAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3826,7 +3826,7 @@ AbstractNode subclass: 'WithItemAst'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %
@@ -3871,7 +3871,7 @@ WriteStream subclass: 'PrettyWriteStream'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: PythonAST
+  inDictionary: PythonAst
   options: #()
 
 %

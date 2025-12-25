@@ -52,6 +52,7 @@ category: 'other'
 method: AttributeAst
 printSmalltalkOn: aStream
 
+	self halt.
 %
 category: 'other'
 method: AttributeAst

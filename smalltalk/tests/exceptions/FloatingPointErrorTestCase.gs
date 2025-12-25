@@ -16,7 +16,7 @@ test_inheritance
 	"Test that FloatingPointError inherits from Exception."
 	
 	| exc |
-	exc := FloatingPointError perform: #__new__: env: 2 withArguments: { FloatingPointError }.
+	exc := FloatingPointError ___new___:  FloatingPointError .
 	self assert: (exc isKindOf: Exception).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a FloatingPointError instance."
 	
 	| exc |
-	exc := FloatingPointError perform: #__new__: env: 2 withArguments: { FloatingPointError }.
+	exc := FloatingPointError ___new___:  FloatingPointError .
 	self assert: exc notNil.
 %

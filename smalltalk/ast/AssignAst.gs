@@ -27,6 +27,10 @@ category: 'other'
 method: AssignAst
 printSmalltalkOn: aStream
 
+	targets first printSmalltalkOn: aStream.
+	aStream nextPutAll: ' := '.
+	value printSmalltalkOn: aStream.
+	aStream nextPut: $..
 %
 category: 'other'
 method: AssignAst

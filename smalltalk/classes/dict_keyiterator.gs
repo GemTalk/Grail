@@ -18,10 +18,10 @@ ___on: aDict
 	"Create a new dict_keyiterator for the given dictionary"
 
 	| iter keysArray |
-	iter := self perform: #new env: 0.
-	keysArray := Array perform: #new env: 0.
+	iter := self ___new___.
+	keysArray := Array ___new___.
 	aDict perform: #keysDo: env: 0 withArguments: {[:key |
-		keysArray perform: #add: env: 0 withArguments: {key}
+		keysArray ___add___: key
 	]}.
 	iter ___dict: aDict.
 	iter ___keys: keysArray.
@@ -72,14 +72,14 @@ __next__
 	"Return the next key from the dictionary"
 
 	| size nextKey |
-	size := keys perform: #size env: 0.
-	position := position perform: #+ env: 0 withArguments: {1}.
+	size := keys ___size___.
+	position := position ___plus___: 1.
 	
-	(position perform: #> env: 0 withArguments: {size}) ifTrue: [
-		StopIteration perform: #signal env: 0
+	(position ___gt___: size) ifTrue: [
+		StopIteration ___signal___
 	].
 	
-	nextKey := keys perform: #at: env: 0 withArguments: {position}.
+	nextKey := keys ___at___: position.
 	^ nextKey
 %
 

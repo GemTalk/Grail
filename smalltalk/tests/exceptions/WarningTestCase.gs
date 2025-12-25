@@ -16,7 +16,7 @@ test_inheritance
 	"Test that Warning inherits from Exception."
 	
 	| exc |
-	exc := Warning perform: #__new__: env: 2 withArguments: { Warning }.
+	exc := Warning ___new___:  Warning .
 	self assert: (exc isKindOf: Exception).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a Warning instance."
 	
 	| exc |
-	exc := Warning perform: #__new__: env: 2 withArguments: { Warning }.
+	exc := Warning ___new___:  Warning .
 	self assert: exc notNil.
 %

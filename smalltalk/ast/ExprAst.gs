@@ -22,4 +22,5 @@ category: 'other'
 method: ExprAst
 printSmalltalkOn: aStream
 
+	value printSmalltalkOn: aStream.
 %

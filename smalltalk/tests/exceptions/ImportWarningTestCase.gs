@@ -16,7 +16,7 @@ test_inheritance
 	"Test that ImportWarning inherits from Warning."
 	
 	| exc |
-	exc := ImportWarning perform: #__new__: env: 2 withArguments: { ImportWarning }.
+	exc := ImportWarning ___new___:  ImportWarning .
 	self assert: (exc isKindOf: Warning).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a ImportWarning instance."
 	
 	| exc |
-	exc := ImportWarning perform: #__new__: env: 2 withArguments: { ImportWarning }.
+	exc := ImportWarning ___new___:  ImportWarning .
 	self assert: exc notNil.
 %

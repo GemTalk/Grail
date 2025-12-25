@@ -16,7 +16,7 @@ test_inheritance
 	"Test that NotADirectoryError inherits from OSError."
 	
 	| exc |
-	exc := NotADirectoryError perform: #__new__: env: 2 withArguments: { NotADirectoryError }.
+	exc := NotADirectoryError ___new___:  NotADirectoryError .
 	self assert: (exc isKindOf: OSError).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a NotADirectoryError instance."
 	
 	| exc |
-	exc := NotADirectoryError perform: #__new__: env: 2 withArguments: { NotADirectoryError }.
+	exc := NotADirectoryError ___new___:  NotADirectoryError .
 	self assert: exc notNil.
 %

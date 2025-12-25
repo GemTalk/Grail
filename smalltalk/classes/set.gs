@@ -36,7 +36,7 @@ method: set
 __hash__
 	"set is mutable and therefore not hashable."
 
-	TypeError perform: #signal: env: 0 withArguments: {'unhashable type: ''set'''}
+	TypeError ___signal___: 'unhashable type: ''set'''
 %
 
 category: 'Python-Mutation Methods'
@@ -44,7 +44,7 @@ method: set
 add: item
 	"Add an element to the set."
 
-	self perform: #add: env: 0 withArguments: {item}
+	self ___add___: item
 %
 
 category: 'Python-Mutation Methods'
@@ -54,16 +54,16 @@ remove: item
 
 	| removed |
 	removed := false.
-	self perform: #do: env: 0 withArguments: {[:each |
+	self ___do___: [:each |
 		(each perform: #__eq__: env: 2 withArguments: {item}) ifTrue: [
-			self perform: #remove: env: 0 withArguments: {each}.
+			self ___remove___: each.
 			removed := true.
 			^ nil
 		]
-	]}.
+	].
 	
 	removed ifFalse: [
-		KeyError perform: #signal: env: 0 withArguments: {item}
+		KeyError ___signal___: item
 	]
 %
 
@@ -72,12 +72,12 @@ method: set
 discard: item
 	"Remove an element from the set if it is present."
 
-	self perform: #do: env: 0 withArguments: {[:each |
+	self ___do___: [:each |
 		(each perform: #__eq__: env: 2 withArguments: {item}) ifTrue: [
-			self perform: #remove: env: 0 withArguments: {each}.
+			self ___remove___: each.
 			^ nil
 		]
-	]}
+	]
 %
 
 category: 'Python-Mutation Methods'
@@ -87,18 +87,18 @@ pop
 	Raises KeyError if the set is empty."
 
 	| item |
-	(self perform: #isEmpty env: 0) ifTrue: [
-		KeyError perform: #signal: env: 0 withArguments: {'pop from an empty set'}
+	(self ___isEmpty___) ifTrue: [
+		KeyError ___signal___: 'pop from an empty set'
 	].
 
 	item := nil.
-	self perform: #do: env: 0 withArguments: {[:each |
+	self ___do___: [:each |
 		item isNil ifTrue: [
 			item := each
 		]
-	]}.
+	].
 
-	self perform: #remove: env: 0 withArguments: {item}.
+	self ___remove___: item.
 	^ item
 %
 
@@ -107,7 +107,7 @@ method: set
 clear
 	"Remove all elements from the set."
 
-	self perform: #removeAll: env: 0 withArguments: {self}
+	self ___removeAll___: self
 %
 
 category: 'Python-Mutation Methods'
@@ -115,9 +115,9 @@ method: set
 update: other
 	"Update the set, adding elements from other."
 
-	other perform: #do: env: 0 withArguments: {[:each |
-		self perform: #add: env: 0 withArguments: {each}
-	]}
+	other ___do___: [:each |
+		self ___add___: each
+	]
 %
 
 category: 'Python-Mutation Methods'
@@ -126,17 +126,17 @@ intersection_update: other
 	"Update the set, keeping only elements found in it and other."
 
 	| toRemove |
-	toRemove := Array perform: #new env: 0.
+	toRemove := Array ___new___.
 	
-	self perform: #do: env: 0 withArguments: {[:each |
-		(other perform: #__contains__: env: 2 withArguments: {each}) ifFalse: [
-			toRemove perform: #add: env: 0 withArguments: {each}
+	self ___do___: [:each |
+		(other __contains__: each) ifFalse: [
+			toRemove ___add___: each
 		]
-	]}.
+	].
 	
-	toRemove perform: #do: env: 0 withArguments: {[:each |
-		self perform: #remove: env: 0 withArguments: {each}
-	]}
+	toRemove ___do___: [:each |
+		self ___remove___: each
+	]
 %
 
 category: 'Python-Mutation Methods'
@@ -145,17 +145,17 @@ difference_update: other
 	"Update the set, removing elements found in other."
 
 	| toRemove |
-	toRemove := Array perform: #new env: 0.
+	toRemove := Array ___new___.
 	
-	self perform: #do: env: 0 withArguments: {[:each |
-		(other perform: #__contains__: env: 2 withArguments: {each}) ifTrue: [
-			toRemove perform: #add: env: 0 withArguments: {each}
+	self ___do___: [:each |
+		(other __contains__: each) ifTrue: [
+			toRemove ___add___: each
 		]
-	]}.
+	].
 	
-	toRemove perform: #do: env: 0 withArguments: {[:each |
-		self perform: #remove: env: 0 withArguments: {each}
-	]}
+	toRemove ___do___: [:each |
+		self ___remove___: each
+	]
 %
 
 category: 'Python-Mutation Methods'
@@ -164,32 +164,32 @@ symmetric_difference_update: other
 	"Update the set, keeping only elements found in either set, but not in both."
 
 	| toAdd toRemove |
-	toAdd := Array perform: #new env: 0.
-	toRemove := Array perform: #new env: 0.
+	toAdd := Array ___new___.
+	toRemove := Array ___new___.
 
 	"Find elements in self that are also in other (to remove)"
-	self perform: #do: env: 0 withArguments: {[:each |
-		(other perform: #__contains__: env: 2 withArguments: {each}) ifTrue: [
-			toRemove perform: #add: env: 0 withArguments: {each}
+	self ___do___: [:each |
+		(other __contains__: each) ifTrue: [
+			toRemove ___add___: each
 		]
-	]}.
+	].
 
 	"Find elements in other that are not in self (to add)"
-	other perform: #do: env: 0 withArguments: {[:each |
-		(self perform: #__contains__: env: 2 withArguments: {each}) ifFalse: [
-			toAdd perform: #add: env: 0 withArguments: {each}
+	other ___do___: [:each |
+		(self __contains__: each) ifFalse: [
+			toAdd ___add___: each
 		]
-	]}.
+	].
 
 	"Remove common elements"
-	toRemove perform: #do: env: 0 withArguments: {[:each |
-		self perform: #remove: env: 0 withArguments: {each}
-	]}.
+	toRemove ___do___: [:each |
+		self ___remove___: each
+	].
 
 	"Add unique elements from other"
-	toAdd perform: #do: env: 0 withArguments: {[:each |
-		self perform: #add: env: 0 withArguments: {each}
-	]}
+	toAdd ___do___: [:each |
+		self ___add___: each
+	]
 %
 
 category: 'Python-In-Place Operators'
@@ -234,29 +234,29 @@ __repr__
 	"Return a string representation of the set: {item1, item2, ...}"
 
 	| stream first size |
-	size := self perform: #size env: 0.
+	size := self ___size___.
 
 	"Handle empty set specially"
-	(size perform: #= env: 0 withArguments: {0}) ifTrue: [
+	(size ___eq___: 0) ifTrue: [
 		^ 'set()'
 	].
 
-	stream := WriteStream perform: #on: env: 0 withArguments: {String perform: #new env: 0}.
-	stream with: ${ perform: #nextPut: env: 0.
+	stream := WriteStream ___on___: (String ___new___).
+	stream ___nextPut___: ${.
 
 	first := true.
-	self perform: #do: env: 0 withArguments: {[:each |
+	self ___do___: [:each |
 		| reprStr |
 		first ifFalse: [
-			stream with: ', ' perform: #nextPutAll: env: 0
+			stream ___nextPutAll___: ', '
 		].
 		reprStr := each perform: #__repr__ env: 2.
-		stream with: reprStr perform: #nextPutAll: env: 0.
+		stream ___nextPutAll___: reprStr.
 		first := false
-	]}.
+	].
 
-	stream with: $} perform: #nextPut: env: 0.
-	^ stream perform: #contents env: 0
+	stream ___nextPut___: $}.
+	^ stream ___contents___
 %
 
 set compile_env: 0

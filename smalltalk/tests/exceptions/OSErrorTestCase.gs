@@ -16,7 +16,7 @@ test_inheritance
 	"Test that OSError inherits from Exception."
 	
 	| exc |
-	exc := OSError perform: #__new__: env: 2 withArguments: { OSError }.
+	exc := OSError ___new___:  OSError .
 	self assert: (exc isKindOf: Exception).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a OSError instance."
 	
 	| exc |
-	exc := OSError perform: #__new__: env: 2 withArguments: { OSError }.
+	exc := OSError ___new___:  OSError .
 	self assert: exc notNil.
 %

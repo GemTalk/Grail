@@ -17,15 +17,15 @@ testSetCreation
 	"Test creating sets"
 
 	| s1 s2 |
-	s1 := set perform: #new env: 0.
-	s2 := set perform: #new env: 0.
+	s1 := set new.
+	s2 := set new.
 	
-	s2 perform: #add: env: 2 withArguments: {1}.
-	s2 perform: #add: env: 2 withArguments: {2}.
-	s2 perform: #add: env: 2 withArguments: {3}.
+	s2 ___add___: 1.
+	s2 ___add___: 2.
+	s2 ___add___: 3.
 	
-	self assert: (s1 perform: #__len__ env: 2) equals: 0.
-	self assert: (s2 perform: #__len__ env: 2) equals: 3
+	self assert: (s1 ___len___) equals: 0.
+	self assert: (s2 ___len___) equals: 3
 %
 
 category: 'Tests - Creation'
@@ -34,14 +34,14 @@ testSetUniqueness
 	"Test that sets only store unique elements"
 
 	| s |
-	s := set perform: #new env: 0.
-	s perform: #add: env: 2 withArguments: {1}.
-	s perform: #add: env: 2 withArguments: {1}.
-	s perform: #add: env: 2 withArguments: {2}.
-	s perform: #add: env: 2 withArguments: {2}.
-	s perform: #add: env: 2 withArguments: {2}.
+	s := set new.
+	s ___add___: 1.
+	s ___add___: 1.
+	s ___add___: 2.
+	s ___add___: 2.
+	s ___add___: 2.
 	
-	self assert: (s perform: #__len__ env: 2) equals: 2
+	self assert: (s ___len___) equals: 2
 %
 
 category: 'Tests - Iteration'
@@ -50,15 +50,15 @@ testSetIteration
 	"Test iterating over a set"
 
 	| s iter items |
-	s := set perform: #new env: 0.
-	s perform: #add: env: 2 withArguments: {1}.
-	s perform: #add: env: 2 withArguments: {2}.
-	s perform: #add: env: 2 withArguments: {3}.
+	s := set new.
+	s ___add___: 1.
+	s ___add___: 2.
+	s ___add___: 3.
 	
 	iter := s perform: #__iter__ env: 2.
-	self assert: (iter perform: #class env: 0) name equals: #'set_iterator'.
+	self assert: (iter class) name equals: #'set_iterator'.
 	
-	items := list perform: #new env: 0.
+	items := list new.
 	[true] perform: #whileTrue: env: 0 withArguments: {[
 		| item |
 		[
@@ -67,7 +67,7 @@ testSetIteration
 		] perform: #on:do: env: 0 withArguments: {StopIteration. [:ex | ^ nil]}
 	]}.
 	
-	self assert: (items perform: #__len__ env: 2) equals: 3
+	self assert: (items ___len___) equals: 3
 %
 
 category: 'Tests - Mutation'
@@ -76,18 +76,18 @@ testSetAdd
 	"Test adding elements to a set"
 
 	| s |
-	s := set perform: #new env: 0.
+	s := set new.
 	
-	s perform: #add: env: 2 withArguments: {1}.
-	self assert: (s perform: #__len__ env: 2) equals: 1.
-	self assert: (s perform: #__contains__: env: 2 withArguments: {1}).
+	s ___add___: 1.
+	self assert: (s ___len___) equals: 1.
+	self assert: (s ___contains___: 1).
 	
-	s perform: #add: env: 2 withArguments: {2}.
-	self assert: (s perform: #__len__ env: 2) equals: 2.
+	s ___add___: 2.
+	self assert: (s ___len___) equals: 2.
 	
 	"Adding duplicate should not increase size"
-	s perform: #add: env: 2 withArguments: {1}.
-	self assert: (s perform: #__len__ env: 2) equals: 2
+	s ___add___: 1.
+	self assert: (s ___len___) equals: 2
 %
 
 category: 'Tests - Mutation'
@@ -96,14 +96,14 @@ testSetRemove
 	"Test removing elements from a set"
 
 	| s |
-	s := set perform: #new env: 0.
-	s perform: #add: env: 2 withArguments: {1}.
-	s perform: #add: env: 2 withArguments: {2}.
-	s perform: #add: env: 2 withArguments: {3}.
+	s := set new.
+	s ___add___: 1.
+	s ___add___: 2.
+	s ___add___: 3.
 	
 	s perform: #remove: env: 2 withArguments: {2}.
-	self assert: (s perform: #__len__ env: 2) equals: 2.
-	self deny: (s perform: #__contains__: env: 2 withArguments: {2}).
+	self assert: (s ___len___) equals: 2.
+	self deny: (s ___contains___: 2).
 	
 	"Removing non-existent element should raise KeyError"
 	self should: [s perform: #remove: env: 2 withArguments: {99}] raise: KeyError
@@ -115,16 +115,16 @@ testSetDiscard
 	"Test discarding elements from a set"
 
 	| s |
-	s := set perform: #new env: 0.
-	s perform: #add: env: 2 withArguments: {1}.
-	s perform: #add: env: 2 withArguments: {2}.
+	s := set new.
+	s ___add___: 1.
+	s ___add___: 2.
 	
 	s perform: #discard: env: 2 withArguments: {2}.
-	self assert: (s perform: #__len__ env: 2) equals: 1.
+	self assert: (s ___len___) equals: 1.
 	
 	"Discarding non-existent element should not raise error"
 	s perform: #discard: env: 2 withArguments: {99}.
-	self assert: (s perform: #__len__ env: 2) equals: 1
+	self assert: (s ___len___) equals: 1
 %
 
 category: 'Tests - Mutation'
@@ -133,16 +133,16 @@ testSetPop
 	"Test popping an element from a set"
 
 	| s item |
-	s := set perform: #new env: 0.
-	s perform: #add: env: 2 withArguments: {1}.
-	s perform: #add: env: 2 withArguments: {2}.
+	s := set new.
+	s ___add___: 1.
+	s ___add___: 2.
 	
 	item := s perform: #pop env: 2.
-	self assert: (s perform: #__len__ env: 2) equals: 1.
+	self assert: (s ___len___) equals: 1.
 	self assert: ((item perform: #= env: 0 withArguments: {1}) or: [item perform: #= env: 0 withArguments: {2}]).
 	
 	s perform: #pop env: 2.
-	self assert: (s perform: #__len__ env: 2) equals: 0.
+	self assert: (s ___len___) equals: 0.
 	
 	"Popping from empty set should raise KeyError"
 	self should: [s perform: #pop env: 2] raise: KeyError
@@ -154,13 +154,13 @@ testSetClear
 	"Test clearing a set"
 
 	| s |
-	s := set perform: #new env: 0.
-	s perform: #add: env: 2 withArguments: {1}.
-	s perform: #add: env: 2 withArguments: {2}.
-	s perform: #add: env: 2 withArguments: {3}.
+	s := set new.
+	s ___add___: 1.
+	s ___add___: 2.
+	s ___add___: 3.
 	
 	s perform: #clear env: 2.
-	self assert: (s perform: #__len__ env: 2) equals: 0
+	self assert: (s ___len___) equals: 0
 %
 
 category: 'Tests - Update Methods'
@@ -169,22 +169,22 @@ testSetUpdate
 	"Test updating a set with elements from another"
 
 	| s1 s2 |
-	s1 := set perform: #new env: 0.
-	s1 perform: #add: env: 2 withArguments: {1}.
-	s1 perform: #add: env: 2 withArguments: {2}.
+	s1 := set new.
+	s1 ___add___: 1.
+	s1 ___add___: 2.
 
-	s2 := set perform: #new env: 0.
-	s2 perform: #add: env: 2 withArguments: {2}.
-	s2 perform: #add: env: 2 withArguments: {3}.
-	s2 perform: #add: env: 2 withArguments: {4}.
+	s2 := set new.
+	s2 ___add___: 2.
+	s2 ___add___: 3.
+	s2 ___add___: 4.
 
 	s1 perform: #update: env: 2 withArguments: {s2}.
 
-	self assert: (s1 perform: #__len__ env: 2) equals: 4.
-	self assert: (s1 perform: #__contains__: env: 2 withArguments: {1}).
-	self assert: (s1 perform: #__contains__: env: 2 withArguments: {2}).
-	self assert: (s1 perform: #__contains__: env: 2 withArguments: {3}).
-	self assert: (s1 perform: #__contains__: env: 2 withArguments: {4})
+	self assert: (s1 ___len___) equals: 4.
+	self assert: (s1 ___contains___: 1).
+	self assert: (s1 ___contains___: 2).
+	self assert: (s1 ___contains___: 3).
+	self assert: (s1 ___contains___: 4)
 %
 
 category: 'Tests - Update Methods'
@@ -193,22 +193,22 @@ testSetIntersectionUpdate
 	"Test intersection_update method"
 
 	| s1 s2 |
-	s1 := set perform: #new env: 0.
-	s1 perform: #add: env: 2 withArguments: {1}.
-	s1 perform: #add: env: 2 withArguments: {2}.
-	s1 perform: #add: env: 2 withArguments: {3}.
+	s1 := set new.
+	s1 ___add___: 1.
+	s1 ___add___: 2.
+	s1 ___add___: 3.
 
-	s2 := set perform: #new env: 0.
-	s2 perform: #add: env: 2 withArguments: {2}.
-	s2 perform: #add: env: 2 withArguments: {3}.
-	s2 perform: #add: env: 2 withArguments: {4}.
+	s2 := set new.
+	s2 ___add___: 2.
+	s2 ___add___: 3.
+	s2 ___add___: 4.
 
 	s1 perform: #intersection_update: env: 2 withArguments: {s2}.
 
-	self assert: (s1 perform: #__len__ env: 2) equals: 2.
-	self assert: (s1 perform: #__contains__: env: 2 withArguments: {2}).
-	self assert: (s1 perform: #__contains__: env: 2 withArguments: {3}).
-	self deny: (s1 perform: #__contains__: env: 2 withArguments: {1})
+	self assert: (s1 ___len___) equals: 2.
+	self assert: (s1 ___contains___: 2).
+	self assert: (s1 ___contains___: 3).
+	self deny: (s1 ___contains___: 1)
 %
 
 category: 'Tests - Update Methods'
@@ -217,21 +217,21 @@ testSetDifferenceUpdate
 	"Test difference_update method"
 
 	| s1 s2 |
-	s1 := set perform: #new env: 0.
-	s1 perform: #add: env: 2 withArguments: {1}.
-	s1 perform: #add: env: 2 withArguments: {2}.
-	s1 perform: #add: env: 2 withArguments: {3}.
+	s1 := set new.
+	s1 ___add___: 1.
+	s1 ___add___: 2.
+	s1 ___add___: 3.
 
-	s2 := set perform: #new env: 0.
-	s2 perform: #add: env: 2 withArguments: {2}.
-	s2 perform: #add: env: 2 withArguments: {4}.
+	s2 := set new.
+	s2 ___add___: 2.
+	s2 ___add___: 4.
 
 	s1 perform: #difference_update: env: 2 withArguments: {s2}.
 
-	self assert: (s1 perform: #__len__ env: 2) equals: 2.
-	self assert: (s1 perform: #__contains__: env: 2 withArguments: {1}).
-	self assert: (s1 perform: #__contains__: env: 2 withArguments: {3}).
-	self deny: (s1 perform: #__contains__: env: 2 withArguments: {2})
+	self assert: (s1 ___len___) equals: 2.
+	self assert: (s1 ___contains___: 1).
+	self assert: (s1 ___contains___: 3).
+	self deny: (s1 ___contains___: 2)
 %
 
 category: 'Tests - Update Methods'
@@ -240,23 +240,23 @@ testSetSymmetricDifferenceUpdate
 	"Test symmetric_difference_update method"
 
 	| s1 s2 |
-	s1 := set perform: #new env: 0.
-	s1 perform: #add: env: 2 withArguments: {1}.
-	s1 perform: #add: env: 2 withArguments: {2}.
-	s1 perform: #add: env: 2 withArguments: {3}.
+	s1 := set new.
+	s1 ___add___: 1.
+	s1 ___add___: 2.
+	s1 ___add___: 3.
 
-	s2 := set perform: #new env: 0.
-	s2 perform: #add: env: 2 withArguments: {2}.
-	s2 perform: #add: env: 2 withArguments: {3}.
-	s2 perform: #add: env: 2 withArguments: {4}.
+	s2 := set new.
+	s2 ___add___: 2.
+	s2 ___add___: 3.
+	s2 ___add___: 4.
 
 	s1 perform: #symmetric_difference_update: env: 2 withArguments: {s2}.
 
-	self assert: (s1 perform: #__len__ env: 2) equals: 2.
-	self assert: (s1 perform: #__contains__: env: 2 withArguments: {1}).
-	self assert: (s1 perform: #__contains__: env: 2 withArguments: {4}).
-	self deny: (s1 perform: #__contains__: env: 2 withArguments: {2}).
-	self deny: (s1 perform: #__contains__: env: 2 withArguments: {3})
+	self assert: (s1 ___len___) equals: 2.
+	self assert: (s1 ___contains___: 1).
+	self assert: (s1 ___contains___: 4).
+	self deny: (s1 ___contains___: 2).
+	self deny: (s1 ___contains___: 3)
 %
 
 category: 'Tests - In-Place Operators'
@@ -267,54 +267,54 @@ testSetInPlaceOperators
 	| s1 s2 result |
 
 	"Test &= (intersection)"
-	s1 := set perform: #new env: 0.
-	s1 perform: #add: env: 2 withArguments: {1}.
-	s1 perform: #add: env: 2 withArguments: {2}.
-	s1 perform: #add: env: 2 withArguments: {3}.
+	s1 := set new.
+	s1 ___add___: 1.
+	s1 ___add___: 2.
+	s1 ___add___: 3.
 
-	s2 := set perform: #new env: 0.
-	s2 perform: #add: env: 2 withArguments: {2}.
-	s2 perform: #add: env: 2 withArguments: {3}.
+	s2 := set new.
+	s2 ___add___: 2.
+	s2 ___add___: 3.
 
 	result := s1 perform: #__iand__: env: 2 withArguments: {s2}.
 	self assert: result == s1.
-	self assert: (s1 perform: #__len__ env: 2) equals: 2.
+	self assert: (s1 ___len___) equals: 2.
 
 	"Test |= (union)"
-	s1 := set perform: #new env: 0.
-	s1 perform: #add: env: 2 withArguments: {1}.
+	s1 := set new.
+	s1 ___add___: 1.
 
-	s2 := set perform: #new env: 0.
-	s2 perform: #add: env: 2 withArguments: {2}.
+	s2 := set new.
+	s2 ___add___: 2.
 
 	result := s1 perform: #__ior__: env: 2 withArguments: {s2}.
 	self assert: result == s1.
-	self assert: (s1 perform: #__len__ env: 2) equals: 2.
+	self assert: (s1 ___len___) equals: 2.
 
 	"Test -= (difference)"
-	s1 := set perform: #new env: 0.
-	s1 perform: #add: env: 2 withArguments: {1}.
-	s1 perform: #add: env: 2 withArguments: {2}.
+	s1 := set new.
+	s1 ___add___: 1.
+	s1 ___add___: 2.
 
-	s2 := set perform: #new env: 0.
-	s2 perform: #add: env: 2 withArguments: {2}.
+	s2 := set new.
+	s2 ___add___: 2.
 
 	result := s1 perform: #__isub__: env: 2 withArguments: {s2}.
 	self assert: result == s1.
-	self assert: (s1 perform: #__len__ env: 2) equals: 1.
+	self assert: (s1 ___len___) equals: 1.
 
 	"Test ^= (symmetric difference)"
-	s1 := set perform: #new env: 0.
-	s1 perform: #add: env: 2 withArguments: {1}.
-	s1 perform: #add: env: 2 withArguments: {2}.
+	s1 := set new.
+	s1 ___add___: 1.
+	s1 ___add___: 2.
 
-	s2 := set perform: #new env: 0.
-	s2 perform: #add: env: 2 withArguments: {2}.
-	s2 perform: #add: env: 2 withArguments: {3}.
+	s2 := set new.
+	s2 ___add___: 2.
+	s2 ___add___: 3.
 
 	result := s1 perform: #__ixor__: env: 2 withArguments: {s2}.
 	self assert: result == s1.
-	self assert: (s1 perform: #__len__ env: 2) equals: 2
+	self assert: (s1 ___len___) equals: 2
 %
 
 category: 'Tests - Hashing'
@@ -323,8 +323,8 @@ testSetNotHashable
 	"Test that set is not hashable"
 
 	| s |
-	s := set perform: #new env: 0.
-	s perform: #add: env: 2 withArguments: {1}.
+	s := set new.
+	s ___add___: 1.
 
 	self should: [s perform: #__hash__ env: 2] raise: TypeError
 %
@@ -335,7 +335,7 @@ testSetInheritsFromFrozenset
 	"Test that set inherits from frozenset"
 
 	| s |
-	s := set perform: #new env: 0.
+	s := set new.
 
 	self assert: (s perform: #isKindOf: env: 0 withArguments: {frozenset}).
 	self assert: (s perform: #isKindOf: env: 0 withArguments: {set})
@@ -347,9 +347,9 @@ testSetRepr
 	"Test string representation of set"
 
 	| s repr |
-	s := set perform: #new env: 0.
-	s perform: #add: env: 2 withArguments: {1}.
-	s perform: #add: env: 2 withArguments: {2}.
+	s := set new.
+	s ___add___: 1.
+	s ___add___: 2.
 
 	repr := s perform: #__repr__ env: 2.
 
@@ -363,7 +363,7 @@ testEmptySetRepr
 	"Test string representation of empty set"
 
 	| s repr |
-	s := set perform: #new env: 0.
+	s := set new.
 
 	repr := s perform: #__repr__ env: 2.
 

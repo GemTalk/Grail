@@ -16,7 +16,7 @@ test_inheritance
 	"Test that ValueError inherits from Exception."
 	
 	| exc |
-	exc := ValueError perform: #__new__: env: 2 withArguments: { ValueError }.
+	exc := ValueError ___new___:  ValueError .
 	self assert: (exc isKindOf: Exception).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a ValueError instance."
 	
 	| exc |
-	exc := ValueError perform: #__new__: env: 2 withArguments: { ValueError }.
+	exc := ValueError ___new___:  ValueError .
 	self assert: exc notNil.
 %

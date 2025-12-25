@@ -18,10 +18,10 @@ ___on: aDict
 	"Create a new dict_valueiterator for the given dictionary"
 
 	| iter valuesArray |
-	iter := self perform: #new env: 0.
-	valuesArray := Array perform: #new env: 0.
+	iter := self ___new___.
+	valuesArray := Array ___new___.
 	aDict perform: #valuesDo: env: 0 withArguments: {[:value |
-		valuesArray perform: #add: env: 0 withArguments: {value}
+		valuesArray ___add___: value
 	]}.
 	iter ___dict: aDict.
 	iter ___values: valuesArray.
@@ -72,14 +72,14 @@ __next__
 	"Return the next value from the dictionary"
 
 	| size nextValue |
-	size := values perform: #size env: 0.
-	position := position perform: #+ env: 0 withArguments: {1}.
+	size := values ___size___.
+	position := position ___plus___: 1.
 	
-	(position perform: #> env: 0 withArguments: {size}) ifTrue: [
-		StopIteration perform: #signal env: 0
+	(position ___gt___: size) ifTrue: [
+		StopIteration ___signal___
 	].
 	
-	nextValue := values perform: #at: env: 0 withArguments: {position}.
+	nextValue := values ___at___: position.
 	^ nextValue
 %
 

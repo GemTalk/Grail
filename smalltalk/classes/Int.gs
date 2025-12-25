@@ -39,34 +39,34 @@ __new__: obj
 	obj ifNil: [ ^ 0 ].
 
 	"If already an int, return it"
-	(obj perform: #isKindOf: env: 0 withArguments: { int }) ifTrue: [
+	(obj ___isKindOf___: int) ifTrue: [
 		^ obj
 	].
 
 	"Try to call __int__ on the object if it has one"
-	(obj perform: #respondsTo: env: 0 withArguments: { #__int__ }) ifTrue: [
+	(obj ___respondsTo___: #__int__) ifTrue: [
 		result := obj __int__.
 		^ result
 	].
 
 	"Try to convert from float"
-	(obj perform: #isKindOf: env: 0 withArguments: { Float }) ifTrue: [
-		^ obj perform: #truncated env: 0
+	(obj ___isKindOf___: Float) ifTrue: [
+		^ obj ___truncated___
 	].
 
 	"Try to convert from string"
-	(obj perform: #isKindOf: env: 0 withArguments: { Unicode7 }) ifTrue: [
+	(obj ___isKindOf___: Unicode7) ifTrue: [
 		^ ([:block :handler |
-			block perform: #on:do: env: 0 withArguments: { Error. handler }
+			block ___on___: Error do: handler
 		] value: [
-			(obj perform: #asNumber env: 0) perform: #truncated env: 0
+			(obj perform: #asNumber env: 0) ___truncated___
 		] value: [:ex |
-			self perform: #error: env: 0 withArguments: {'ValueError: invalid literal for int()'}
+			self ___error___: 'ValueError: invalid literal for int()'
 		])
 	].
 
 	"Otherwise, error"
-	self perform: #error: env: 0 withArguments: {'TypeError: int() argument must be a string or a number'}
+	self ___error___: 'TypeError: int() argument must be a string or a number'
 %
 
 category: 'Python-Initialization'
@@ -77,36 +77,36 @@ __new__: obj _: base
 
 	| str baseInt |
 	"base must be an integer"
-	(base perform: #isKindOf: env: 0 withArguments: { int }) ifFalse: [
-		self perform: #error: env: 0 withArguments: {'TypeError: int() base must be an integer'}
+	(base ___isKindOf___: int) ifFalse: [
+		self ___error___: 'TypeError: int() base must be an integer'
 	].
 
 	baseInt := base.
 
 	"base must be 0 or 2-36"
-	((baseInt perform: #= env: 0 withArguments: {0}) not and: [
-		(baseInt perform: #< env: 0 withArguments: {2}) or: [
-			baseInt perform: #> env: 0 withArguments: {36}
+	((baseInt ___eq___: 0) not and: [
+		(baseInt ___lt___: 2) or: [
+			baseInt ___gt___: 36
 		]
 	]) ifTrue: [
-		self perform: #error: env: 0 withArguments: {'ValueError: int() base must be >= 2 and <= 36, or 0'}
+		self ___error___: 'ValueError: int() base must be >= 2 and <= 36, or 0'
 	].
 
 	"obj must be a string"
-	(obj perform: #isKindOf: env: 0 withArguments: { Unicode7 }) ifFalse: [
-		self perform: #error: env: 0 withArguments: {'TypeError: int() can''t convert non-string with explicit base'}
+	(obj ___isKindOf___: Unicode7) ifFalse: [
+		self ___error___: 'TypeError: int() can''t convert non-string with explicit base'
 	].
 
 	str := obj perform: #trimBoth env: 0.
 
 	"Parse the string with the given base"
 	^ ([:block :handler |
-		block perform: #on:do: env: 0 withArguments: { Error. handler }
+		block ___on___: Error do: handler
 	] value: [
-		baseInt perform: #= env: 0 withArguments: {0}
+		baseInt ___eq___: 0
 			ifTrue: [
 				"Base 0: auto-detect from prefix"
-				(str perform: #asNumber env: 0) perform: #truncated env: 0
+				(str perform: #asNumber env: 0) ___truncated___
 			]
 			ifFalse: [
 				"Specific base"
@@ -114,8 +114,8 @@ __new__: obj _: base
 			]
 	] value: [:ex |
 		| msg |
-		msg := ('ValueError: invalid literal for int() with base ' perform: #, env: 0 withArguments: {baseInt perform: #printString env: 0}).
-		self perform: #error: env: 0 withArguments: {msg}
+		msg := ('ValueError: invalid literal for int() with base ' ___concat___: (baseInt ___printString___)).
+		self ___error___: msg
 	])
 %
 
@@ -136,41 +136,41 @@ from_bytes: bytes _: byteorder _: signed
 	| bytesArray result isBigEndian isSigned |
 	"Extract bytes - assuming bytes is a Python bytes object or similar"
 	bytesArray := bytes.
-	(bytesArray perform: #isKindOf: env: 0 withArguments: { Array }) ifFalse: [
-		self perform: #error: env: 0 withArguments: {'TypeError: from_bytes() argument must be bytes-like'}
+	(bytesArray ___isKindOf___: Array) ifFalse: [
+		self ___error___: 'TypeError: from_bytes() argument must be bytes-like'
 	].
 
-	isBigEndian := (byteorder perform: #= env: 0 withArguments: {'big'}).
-	isSigned := (signed perform: #= env: 0 withArguments: {true}) or: [signed == true].
+	isBigEndian := (byteorder ___eq___: 'big').
+	isSigned := (signed ___eq___: true) or: [signed == true].
 
 	result := 0.
 	isBigEndian
 		ifTrue: [
-			bytesArray perform: #do: env: 0 withArguments: { [:each |
-				result := ((result perform: #bitShift: env: 0 withArguments: {8})
+			bytesArray ___do___: [:each |
+				result := ((result ___bitShift___: 8)
 					perform: #bitOr: env: 0 withArguments: {each}).
-			] }.
+			].
 		]
 		ifFalse: [
 			| shift |
 			shift := 0.
-			bytesArray perform: #do: env: 0 withArguments: { [:each |
-				result := (result perform: #bitOr: env: 0 withArguments: {(each perform: #bitShift: env: 0 withArguments: {shift})}).
-				shift := (shift perform: #+ env: 0 withArguments: {8}).
-			] }.
+			bytesArray ___do___: [:each |
+				result := (result perform: #bitOr: env: 0 withArguments: {(each ___bitShift___: shift)}).
+				shift := (shift ___plus___: 8).
+			].
 		].
 
 	"Handle signed conversion"
-	(isSigned and: [(bytesArray perform: #size env: 0) perform: #> env: 0 withArguments: {0}]) ifTrue: [
+	(isSigned and: [(bytesArray ___size___) ___gt___: 0]) ifTrue: [
 		| highByte |
 		highByte := isBigEndian
-			ifTrue: [bytesArray perform: #first env: 0]
+			ifTrue: [bytesArray ___first___]
 			ifFalse: [bytesArray perform: #last env: 0].
-		((highByte perform: #bitAnd: env: 0 withArguments: {16r80}) perform: #~= env: 0 withArguments: {0}) ifTrue: [
+		((highByte ___bitAnd___: 16r80) ___ne___: 0) ifTrue: [
 			"Negative number - subtract 2^(numBits)"
-			result := (result perform: #- env: 0 withArguments: {
-				(1 perform: #bitShift: env: 0 withArguments: {((bytesArray perform: #size env: 0) perform: #* env: 0 withArguments: {8})})
-			}).
+			result := (result ___minus___: 
+				(1 ___bitShift___: ((bytesArray ___size___) ___times___: 8))
+			).
 		].
 	].
 
@@ -203,7 +203,7 @@ method: int
 __repr__
 	"Return string representation of integer."
 
-	^ (self perform: #printString env: 0) perform: #asUnicodeString env: 0
+	^ (self ___printString___) ___asUnicodeString___
 %
 
 category: 'Python-String Representation'
@@ -211,7 +211,7 @@ method: int
 __str__
 	"Return string representation of integer."
 
-	^ (self perform: #printString env: 0) perform: #asUnicodeString env: 0
+	^ (self ___printString___) ___asUnicodeString___
 %
 
 category: 'Python-String Representation'
@@ -236,7 +236,7 @@ method: int
 __float__
 	"Convert to float."
 
-	^ self perform: #asFloat env: 0
+	^ self ___asFloat___
 %
 
 category: 'Python-Conversion'
@@ -244,7 +244,7 @@ method: int
 __bool__
 	"Return True if non-zero, False if zero."
 
-	^ self perform: #~= env: 0 withArguments: {0}
+	^ self ___ne___: 0
 %
 
 category: 'Python-Conversion'
@@ -260,7 +260,7 @@ method: int
 __add__: other
 	"Add two integers or integer and other number."
 
-	^ self perform: #+ env: 0 withArguments: {other}
+	^ self ___plus___: other
 %
 
 category: 'Python-Arithmetic'
@@ -268,7 +268,7 @@ method: int
 __sub__: other
 	"Subtract other from self."
 
-	^ self perform: #- env: 0 withArguments: {other}
+	^ self ___minus___: (other)
 %
 
 category: 'Python-Arithmetic'
@@ -276,7 +276,7 @@ method: int
 __mul__: other
 	"Multiply two integers or integer and other number."
 
-	^ self perform: #* env: 0 withArguments: {other}
+	^ self ___times___: other
 %
 
 category: 'Python-Arithmetic'
@@ -284,7 +284,7 @@ method: int
 __truediv__: other
 	"True division (returns float)."
 
-	^ self perform: #/ env: 0 withArguments: {other}
+	^ self ___divide___: other
 %
 
 category: 'Python-Arithmetic'
@@ -292,7 +292,7 @@ method: int
 __floordiv__: other
 	"Floor division."
 
-	^ self perform: #// env: 0 withArguments: {other}
+	^ self ___divideInteger___: other
 %
 
 category: 'Python-Arithmetic'
@@ -300,7 +300,7 @@ method: int
 __mod__: other
 	"Modulo operation."
 
-	^ self perform: #\\ env: 0 withArguments: {other}
+	^ self ___modulo___: other
 %
 
 category: 'Python-Arithmetic'
@@ -309,9 +309,9 @@ __divmod__: other
 	"Return (quotient, remainder) tuple."
 
 	| quot rem |
-	quot := self perform: #// env: 0 withArguments: {other}.
-	rem := self perform: #\\ env: 0 withArguments: {other}.
-	^ Array perform: #with:with: env: 0 withArguments: {quot. rem}
+	quot := self ___divideInteger___: other.
+	rem := self ___modulo___: other.
+	^ Array ___with___: quot with: rem
 %
 
 category: 'Python-Arithmetic'
@@ -319,7 +319,7 @@ method: int
 __pow__: other
 	"Raise to power."
 
-	^ self perform: #raisedTo: env: 0 withArguments: {other}
+	^ self ___raisedTo___: other
 %
 
 category: 'Python-Arithmetic'
@@ -328,9 +328,9 @@ __pow__: other _: mod
 	"Raise to power with modulo."
 
 	| result |
-	result := self perform: #raisedTo: env: 0 withArguments: {other}.
+	result := self ___raisedTo___: other.
 	mod ifNotNil: [
-		result := result perform: #\\ env: 0 withArguments: {mod}.
+		result := result ___modulo___: mod.
 	].
 	^ result
 %
@@ -340,7 +340,7 @@ method: int
 __neg__
 	"Unary negation."
 
-	^ self perform: #negated env: 0
+	^ self ___negated___
 %
 
 category: 'Python-Arithmetic'
@@ -356,7 +356,7 @@ method: int
 __abs__
 	"Absolute value."
 
-	^ self perform: #abs env: 0
+	^ self ___abs___
 %
 
 category: 'Python-Arithmetic - Reverse'
@@ -364,7 +364,7 @@ method: int
 __radd__: other
 	"Reverse add (other + self)."
 
-	^ other perform: #+ env: 0 withArguments: {self}
+	^ other ___plus___: self
 %
 
 category: 'Python-Arithmetic - Reverse'
@@ -372,7 +372,7 @@ method: int
 __rsub__: other
 	"Reverse subtract (other - self)."
 
-	^ other perform: #- env: 0 withArguments: {self}
+	^ other ___minus___: (self)
 %
 
 category: 'Python-Arithmetic - Reverse'
@@ -380,7 +380,7 @@ method: int
 __rmul__: other
 	"Reverse multiply (other * self)."
 
-	^ other perform: #* env: 0 withArguments: {self}
+	^ other ___times___: self
 %
 
 category: 'Python-Arithmetic - Reverse'
@@ -388,7 +388,7 @@ method: int
 __rtruediv__: other
 	"Reverse true division (other / self)."
 
-	^ other perform: #/ env: 0 withArguments: {self}
+	^ other ___divide___: self
 %
 
 category: 'Python-Arithmetic - Reverse'
@@ -396,7 +396,7 @@ method: int
 __rfloordiv__: other
 	"Reverse floor division (other // self)."
 
-	^ other perform: #// env: 0 withArguments: {self}
+	^ other ___divideInteger___: self
 %
 
 category: 'Python-Arithmetic - Reverse'
@@ -404,7 +404,7 @@ method: int
 __rmod__: other
 	"Reverse modulo (other % self)."
 
-	^ other perform: #\\ env: 0 withArguments: {self}
+	^ other ___modulo___: self
 %
 
 category: 'Python-Arithmetic - Reverse'
@@ -413,9 +413,9 @@ __rdivmod__: other
 	"Reverse divmod (divmod(other, self))."
 
 	| quot rem |
-	quot := other perform: #// env: 0 withArguments: {self}.
-	rem := other perform: #\\ env: 0 withArguments: {self}.
-	^ Array perform: #with:with: env: 0 withArguments: {quot. rem}
+	quot := other ___divideInteger___: self.
+	rem := other ___modulo___: self.
+	^ Array ___with___: quot with: rem
 %
 
 category: 'Python-Arithmetic - Reverse'
@@ -423,7 +423,7 @@ method: int
 __rpow__: other
 	"Reverse power (other ** self)."
 
-	^ other perform: #raisedTo: env: 0 withArguments: {self}
+	^ other ___raisedTo___: self
 %
 
 category: 'Python-Bitwise Operations'
@@ -431,7 +431,7 @@ method: int
 __and__: other
 	"Bitwise AND."
 
-	^ self perform: #bitAnd: env: 0 withArguments: {other}
+	^ self ___bitAnd___: other
 %
 
 category: 'Python-Bitwise Operations'
@@ -463,7 +463,7 @@ method: int
 __lshift__: other
 	"Left shift."
 
-	^ self perform: #bitShift: env: 0 withArguments: {other}
+	^ self ___bitShift___: other
 %
 
 category: 'Python-Bitwise Operations'
@@ -471,7 +471,7 @@ method: int
 __rshift__: other
 	"Right shift."
 
-	^ self perform: #bitShift: env: 0 withArguments: {other perform: #negated env: 0}
+	^ self ___bitShift___: (other ___negated___)
 %
 
 category: 'Python-Bitwise Operations - Reverse'
@@ -479,7 +479,7 @@ method: int
 __rand__: other
 	"Reverse bitwise AND (other & self)."
 
-	^ other perform: #bitAnd: env: 0 withArguments: {self}
+	^ other ___bitAnd___: self
 %
 
 category: 'Python-Bitwise Operations - Reverse'
@@ -503,7 +503,7 @@ method: int
 __rlshift__: other
 	"Reverse left shift (other << self)."
 
-	^ other perform: #bitShift: env: 0 withArguments: {self}
+	^ other ___bitShift___: self
 %
 
 category: 'Python-Bitwise Operations - Reverse'
@@ -511,7 +511,7 @@ method: int
 __rrshift__: other
 	"Reverse right shift (other >> self)."
 
-	^ other perform: #bitShift: env: 0 withArguments: {self perform: #negated env: 0}
+	^ other ___bitShift___: (self ___negated___)
 %
 
 category: 'Python-Comparison'
@@ -519,7 +519,7 @@ method: int
 __lt__: other
 	"Return self < other"
 
-	^ self perform: #< env: 0 withArguments: {other}
+	^ self ___lt___: other
 %
 
 category: 'Python-Comparison'
@@ -527,7 +527,7 @@ method: int
 __le__: other
 	"Return self <= other"
 
-	^ self perform: #<= env: 0 withArguments: {other}
+	^ self ___le___: other
 %
 
 category: 'Python-Comparison'
@@ -535,7 +535,7 @@ method: int
 __gt__: other
 	"Return self > other"
 
-	^ self perform: #> env: 0 withArguments: {other}
+	^ self ___gt___: other
 %
 
 category: 'Python-Comparison'
@@ -543,7 +543,7 @@ method: int
 __ge__: other
 	"Return self >= other"
 
-	^ self perform: #>= env: 0 withArguments: {other}
+	^ self ___ge___: other
 %
 
 category: 'Python-Comparison'
@@ -551,7 +551,7 @@ method: int
 __eq__: other
 	"Return self == other"
 
-	^ self perform: #= env: 0 withArguments: {other}
+	^ self ___eq___: other
 %
 
 category: 'Python-Comparison'
@@ -559,7 +559,7 @@ method: int
 __ne__: other
 	"Return self != other"
 
-	^ self perform: #~= env: 0 withArguments: {other}
+	^ self ___ne___: other
 %
 
 category: 'Python-Hashing'
@@ -567,7 +567,7 @@ method: int
 __hash__
 	"Return hash value (self for integers)."
 
-	^ self perform: #hash env: 0
+	^ self ___hash___
 %
 
 category: 'Python-Rounding'
@@ -586,11 +586,11 @@ __round__: ndigits
 	ndigits ifNil: [ ^ self ].
 
 	"If ndigits is negative, round to that many places left of decimal"
-	(ndigits perform: #< env: 0 withArguments: {0}) ifTrue: [
+	(ndigits ___lt___: 0) ifTrue: [
 		| divisor |
-		divisor := (10 perform: #raisedTo: env: 0 withArguments: {ndigits perform: #abs env: 0}).
-		^ ((self perform: #/ env: 0 withArguments: {divisor}) perform: #rounded env: 0)
-			perform: #* env: 0 withArguments: {divisor}
+		divisor := (10 ___raisedTo___: (ndigits ___abs___)).
+		^ ((self ___divide___: divisor) ___rounded___)
+			___times___: divisor
 	].
 
 	"If ndigits is non-negative, just return self"
@@ -627,11 +627,11 @@ bit_length
 	"Return the number of bits necessary to represent self in binary."
 
 	| n count |
-	n := self perform: #abs env: 0.
+	n := self ___abs___.
 	count := 0.
-	[(n perform: #> env: 0 withArguments: {0})] whileTrue: [
-		n := n perform: #bitShift: env: 0 withArguments: {-1}.
-		count := (count perform: #+ env: 0 withArguments: {1}).
+	[(n ___gt___: 0)] whileTrue: [
+		n := n ___bitShift___: -1.
+		count := (count ___plus___: 1).
 	].
 	^ count
 %
@@ -642,13 +642,13 @@ bit_count
 	"Return the number of ones in the binary representation."
 
 	| n count |
-	n := self perform: #abs env: 0.
+	n := self ___abs___.
 	count := 0.
-	[(n perform: #> env: 0 withArguments: {0})] whileTrue: [
-		((n perform: #bitAnd: env: 0 withArguments: {1}) perform: #= env: 0 withArguments: {1}) ifTrue: [
-			count := (count perform: #+ env: 0 withArguments: {1}).
+	[(n ___gt___: 0)] whileTrue: [
+		((n ___bitAnd___: 1) ___eq___: 1) ifTrue: [
+			count := (count ___plus___: 1).
 		].
-		n := n perform: #bitShift: env: 0 withArguments: {-1}.
+		n := n ___bitShift___: -1.
 	].
 	^ count
 %
@@ -669,38 +669,38 @@ to_bytes: length _: byteorder _: signed
 
 	| numBytes isBigEndian isSigned val result |
 	numBytes := length.
-	isBigEndian := (byteorder perform: #= env: 0 withArguments: {'big'}).
-	isSigned := (signed perform: #= env: 0 withArguments: {true}) or: [signed == true].
+	isBigEndian := (byteorder ___eq___: 'big').
+	isSigned := (signed ___eq___: true) or: [signed == true].
 	val := self.
 
 	"Handle negative numbers"
-	(val perform: #< env: 0 withArguments: {0}) ifTrue: [
+	(val ___lt___: 0) ifTrue: [
 		isSigned ifFalse: [
-			self perform: #error: env: 0 withArguments: {'OverflowError: can''t convert negative int to unsigned'}
+			self ___error___: 'OverflowError: can''t convert negative int to unsigned'
 		].
 		"Two's complement"
-		val := ((1 perform: #bitShift: env: 0 withArguments: {(numBytes perform: #* env: 0 withArguments: {8})})
-			perform: #+ env: 0 withArguments: {val}).
+		val := ((1 ___bitShift___: (numBytes ___times___: 8))
+			___plus___: val).
 	].
 
 	"Check if value fits in the given number of bytes"
-	((val perform: #< env: 0 withArguments: {0}) or: [
-		val perform: #>= env: 0 withArguments: {(1 perform: #bitShift: env: 0 withArguments: {(numBytes perform: #* env: 0 withArguments: {8})})}
+	((val ___lt___: 0) or: [
+		val ___ge___: (1 ___bitShift___: (numBytes ___times___: 8))
 	]) ifTrue: [
-		self perform: #error: env: 0 withArguments: {'OverflowError: int too big to convert'}
+		self ___error___: 'OverflowError: int too big to convert'
 	].
 
 	"Convert to bytes"
-	result := Array perform: #new: env: 0 withArguments: {numBytes}.
-	1 perform: #to:do: env: 0 withArguments: {numBytes. [:i |
+	result := Array ___new___: numBytes.
+	1 ___to___: numBytes do: [:i |
 		| byteVal idx |
-		byteVal := (val perform: #bitAnd: env: 0 withArguments: {16rFF}).
+		byteVal := (val ___bitAnd___: 16rFF).
 		idx := isBigEndian
-			ifTrue: [(numBytes perform: #- env: 0 withArguments: {(i perform: #- env: 0 withArguments: {1})})]
+			ifTrue: [(numBytes ___minus___: (i ___minus___: 1))]
 			ifFalse: [i].
-		result perform: #at:put: env: 0 withArguments: {idx. byteVal}.
-		val := val perform: #bitShift: env: 0 withArguments: {-8}.
-	]}.
+		result ___at___: idx put: byteVal.
+		val := val ___bitShift___: -8.
+	].
 
 	^ result
 %
@@ -711,7 +711,7 @@ as_integer_ratio
 	"Return a pair of integers whose ratio is exactly equal to the original int.
 	For integers, this is (self, 1)."
 
-	^ Array perform: #with:with: env: 0 withArguments: {self. 1}
+	^ Array ___with___: self with: 1
 %
 
 category: 'Python-Integer Methods'
@@ -780,7 +780,7 @@ given base.  The literal can be preceded by ''+'' or ''-'' and be surrounded
 by whitespace.  The base defaults to 10.  Valid bases are 0 and 2-36.
 Base 0 means to interpret the base from the string as an integer literal.
 >>> int(''0b100'', base=0)
-4' perform: #asUnicodeString env: 0
+4' ___asUnicodeString___
 %
 
 ! ------------------- Reset compile environment

@@ -34,7 +34,7 @@ printSmalltalkAssignmentOn: aStream
 	1 to: elts size do: [:i | 
 		(elts at: i) printSmalltalkOn: aStream.
 		aStream 
-			nextPutAll: '(value ___value at: ';
+			nextPutAll: '(value at: ';
 			print: i;
 			nextPutAll: ').'; lf.
 	].
@@ -44,6 +44,7 @@ category: 'other'
 method: TupleAst
 printSmalltalkOn: aStream
 
+	self halt.
 %
 category: 'other'
 method: TupleAst

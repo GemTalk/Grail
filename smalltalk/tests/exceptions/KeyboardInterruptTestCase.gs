@@ -16,7 +16,7 @@ test_inheritance
 	"Test that KeyboardInterrupt inherits from BaseException."
 	
 	| exc |
-	exc := KeyboardInterrupt perform: #__new__: env: 2 withArguments: { KeyboardInterrupt }.
+	exc := KeyboardInterrupt ___new___:  KeyboardInterrupt .
 	self assert: (exc isKindOf: BaseException).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a KeyboardInterrupt instance."
 	
 	| exc |
-	exc := KeyboardInterrupt perform: #__new__: env: 2 withArguments: { KeyboardInterrupt }.
+	exc := KeyboardInterrupt ___new___:  KeyboardInterrupt .
 	self assert: exc notNil.
 %

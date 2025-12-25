@@ -16,7 +16,7 @@ test_inheritance
 	"Test that ExceptionGroup inherits from BaseExceptionGroup."
 	
 	| exc |
-	exc := ExceptionGroup perform: #__new__: env: 2 withArguments: { ExceptionGroup }.
+	exc := ExceptionGroup ___new___:  ExceptionGroup .
 	self assert: (exc isKindOf: BaseExceptionGroup).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a ExceptionGroup instance."
 	
 	| exc |
-	exc := ExceptionGroup perform: #__new__: env: 2 withArguments: { ExceptionGroup }.
+	exc := ExceptionGroup ___new___:  ExceptionGroup .
 	self assert: exc notNil.
 %

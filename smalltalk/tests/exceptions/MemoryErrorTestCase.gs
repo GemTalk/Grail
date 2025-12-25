@@ -16,7 +16,7 @@ test_inheritance
 	"Test that MemoryError inherits from Exception."
 	
 	| exc |
-	exc := MemoryError perform: #__new__: env: 2 withArguments: { MemoryError }.
+	exc := MemoryError ___new___:  MemoryError .
 	self assert: (exc isKindOf: Exception).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a MemoryError instance."
 	
 	| exc |
-	exc := MemoryError perform: #__new__: env: 2 withArguments: { MemoryError }.
+	exc := MemoryError ___new___:  MemoryError .
 	self assert: exc notNil.
 %

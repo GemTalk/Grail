@@ -17,7 +17,7 @@ test__new__WithNil
 	"Test that str(None) returns empty string"
 
 	| result |
-	result := str perform: #__new__: env: 2 withArguments: { nil }.
+	result := str ___new___: nil.
 	self assert: result equals: ''.
 %
 
@@ -27,7 +27,7 @@ test__new__WithString
 	"Test that str('hello') returns the same string"
 
 	| result |
-	result := str perform: #__new__: env: 2 withArguments: { 'hello' }.
+	result := str ___new___: 'hello'.
 	self assert: result equals: 'hello'.
 %
 
@@ -155,7 +155,7 @@ test__len__
 
 	| s result |
 	s := 'hello'.
-	result := s perform: #__len__ env: 2.
+	result := s ___len___.
 	self assert: result equals: 5.
 %
 
@@ -166,10 +166,10 @@ test__contains__
 
 	| s result |
 	s := 'hello world'.
-	result := s perform: #__contains__: env: 2 withArguments: { 'world' }.
+	result := s ___contains___:  'world' .
 	self assert: result equals: true.
 
-	result := s perform: #__contains__: env: 2 withArguments: { 'xyz' }.
+	result := s ___contains___:  'xyz' .
 	self assert: result equals: false.
 %
 

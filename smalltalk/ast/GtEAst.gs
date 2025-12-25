@@ -7,4 +7,5 @@ category: 'other'
 method: GtEAst
 printSmalltalkOn: aStream
 
+	self halt.
 %

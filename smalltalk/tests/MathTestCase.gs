@@ -17,7 +17,7 @@ testPi
 	"Test math.pi constant"
 
 	| m result |
-	m := math perform: #new env: 0.
+	m := math new.
 	result := m perform: #pi env: 2.
 
 	self assert: (((result perform: #- env: 0 withArguments: {3.14159}) perform: #abs env: 0)
@@ -30,7 +30,7 @@ testE
 	"Test math.e constant"
 
 	| m result |
-	m := math perform: #new env: 0.
+	m := math new.
 	result := m perform: #e env: 2.
 
 	self assert: (((result perform: #- env: 0 withArguments: {2.71828}) perform: #abs env: 0)
@@ -43,11 +43,11 @@ testTau
 	"Test math.tau constant (2*pi)"
 
 	| m result pi |
-	m := math perform: #new env: 0.
+	m := math new.
 	result := m perform: #tau env: 2.
 	pi := m perform: #pi env: 2.
 
-	self assert: (((result perform: #- env: 0 withArguments: {(pi perform: #* env: 0 withArguments: {2})}) perform: #abs env: 0)
+	self assert: (((result perform: #- env: 0 withArguments: {pi * 2}) perform: #abs env: 0)
 		perform: #< env: 0 withArguments: {0.00001})
 %
 
@@ -57,7 +57,7 @@ testInf
 	"Test math.inf constant"
 
 	| m result |
-	m := math perform: #new env: 0.
+	m := math new.
 	result := m perform: #inf env: 2.
 
 	self assert: (result perform: #_getKind env: 0) equals: 3
@@ -69,7 +69,7 @@ testNan
 	"Test math.nan constant"
 
 	| m result |
-	m := math perform: #new env: 0.
+	m := math new.
 	result := m perform: #nan env: 2.
 
 	self assert: (result perform: #_isNaN env: 0)
@@ -81,7 +81,7 @@ testSqrt
 	"Test math.sqrt()"
 
 	| m result |
-	m := math perform: #new env: 0.
+	m := math new.
 
 	result := (m perform: #sqrt: env: 2 withArguments: {4}).
 	self assert: result equals: 2.0.
@@ -100,7 +100,7 @@ testPow
 	"Test math.pow()"
 
 	| m result |
-	m := math perform: #new env: 0.
+	m := math new.
 
 	result := (m perform: #pow:_: env: 2 withArguments: {2. 3}).
 	self assert: result equals: 8.0.
@@ -118,7 +118,7 @@ testExp
 	"Test math.exp()"
 
 	| m result |
-	m := math perform: #new env: 0.
+	m := math new.
 
 	result := (m perform: #exp: env: 2 withArguments: {0}).
 	self assert: result equals: 1.0.
@@ -134,7 +134,7 @@ testLog
 	"Test math.log()"
 
 	| m result |
-	m := math perform: #new env: 0.
+	m := math new.
 
 	result := (m perform: #log: env: 2 withArguments: {2.71828}).
 	self assert: (((result perform: #- env: 0 withArguments: {1.0}) perform: #abs env: 0)
@@ -151,7 +151,7 @@ testLog10
 	"Test math.log10()"
 
 	| m result |
-	m := math perform: #new env: 0.
+	m := math new.
 
 	result := (m perform: #log10: env: 2 withArguments: {100}).
 	self assert: (((result perform: #- env: 0 withArguments: {2.0}) perform: #abs env: 0)
@@ -168,7 +168,7 @@ testLog2
 	"Test math.log2()"
 
 	| m result |
-	m := math perform: #new env: 0.
+	m := math new.
 
 	result := (m perform: #log2: env: 2 withArguments: {8}).
 	self assert: (((result perform: #- env: 0 withArguments: {3.0}) perform: #abs env: 0)
@@ -185,7 +185,7 @@ testSin
 	"Test math.sin()"
 
 	| m result pi |
-	m := math perform: #new env: 0.
+	m := math new.
 	pi := m perform: #pi env: 2.
 
 	result := (m perform: #sin: env: 2 withArguments: {0}).
@@ -202,7 +202,7 @@ testCos
 	"Test math.cos()"
 
 	| m result pi |
-	m := math perform: #new env: 0.
+	m := math new.
 	pi := m perform: #pi env: 2.
 
 	result := (m perform: #cos: env: 2 withArguments: {0}).
@@ -220,7 +220,7 @@ testTan
 	"Test math.tan()"
 
 	| m result pi |
-	m := math perform: #new env: 0.
+	m := math new.
 	pi := m perform: #pi env: 2.
 
 	result := (m perform: #tan: env: 2 withArguments: {0}).
@@ -237,7 +237,7 @@ testAsin
 	"Test math.asin()"
 
 	| m result pi |
-	m := math perform: #new env: 0.
+	m := math new.
 	pi := m perform: #pi env: 2.
 
 	result := (m perform: #asin: env: 2 withArguments: {0}).
@@ -254,7 +254,7 @@ testAcos
 	"Test math.acos()"
 
 	| m result pi |
-	m := math perform: #new env: 0.
+	m := math new.
 	pi := m perform: #pi env: 2.
 
 	result := (m perform: #acos: env: 2 withArguments: {1}).
@@ -271,7 +271,7 @@ testAtan
 	"Test math.atan()"
 
 	| m result pi |
-	m := math perform: #new env: 0.
+	m := math new.
 	pi := m perform: #pi env: 2.
 
 	result := (m perform: #atan: env: 2 withArguments: {0}).
@@ -288,7 +288,7 @@ testAtan2
 	"Test math.atan2()"
 
 	| m result pi |
-	m := math perform: #new env: 0.
+	m := math new.
 	pi := m perform: #pi env: 2.
 
 	result := (m perform: #atan2:_: env: 2 withArguments: {1. 1}).
@@ -306,7 +306,7 @@ testSinh
 	"Test math.sinh()"
 
 	| m result |
-	m := math perform: #new env: 0.
+	m := math new.
 
 	result := (m perform: #sinh: env: 2 withArguments: {0}).
 	self assert: ((result perform: #abs env: 0) perform: #< env: 0 withArguments: {0.00001}).
@@ -322,7 +322,7 @@ testCosh
 	"Test math.cosh()"
 
 	| m result |
-	m := math perform: #new env: 0.
+	m := math new.
 
 	result := (m perform: #cosh: env: 2 withArguments: {0}).
 	self assert: (((result perform: #- env: 0 withArguments: {1.0}) perform: #abs env: 0)
@@ -339,7 +339,7 @@ testTanh
 	"Test math.tanh()"
 
 	| m result |
-	m := math perform: #new env: 0.
+	m := math new.
 
 	result := (m perform: #tanh: env: 2 withArguments: {0}).
 	self assert: ((result perform: #abs env: 0) perform: #< env: 0 withArguments: {0.00001}).
@@ -355,7 +355,7 @@ testCeil
 	"Test math.ceil()"
 
 	| m result |
-	m := math perform: #new env: 0.
+	m := math new.
 
 	result := (m perform: #ceil: env: 2 withArguments: {3.2}).
 	self assert: result equals: 4.
@@ -373,7 +373,7 @@ testFloor
 	"Test math.floor()"
 
 	| m result |
-	m := math perform: #new env: 0.
+	m := math new.
 
 	result := (m perform: #floor: env: 2 withArguments: {3.2}).
 	self assert: result equals: 3.
@@ -391,7 +391,7 @@ testTrunc
 	"Test math.trunc()"
 
 	| m result |
-	m := math perform: #new env: 0.
+	m := math new.
 
 	result := (m perform: #trunc: env: 2 withArguments: {3.7}).
 	self assert: result equals: 3.
@@ -406,7 +406,7 @@ testFactorial
 	"Test math.factorial()"
 
 	| m result |
-	m := math perform: #new env: 0.
+	m := math new.
 
 	result := (m perform: #factorial: env: 2 withArguments: {0}).
 	self assert: result equals: 1.
@@ -424,7 +424,7 @@ testGcd
 	"Test math.gcd()"
 
 	| m result |
-	m := math perform: #new env: 0.
+	m := math new.
 
 	result := (m perform: #gcd:_: env: 2 withArguments: {12. 8}).
 	self assert: result equals: 4.
@@ -442,7 +442,7 @@ testLcm
 	"Test math.lcm()"
 
 	| m result |
-	m := math perform: #new env: 0.
+	m := math new.
 
 	result := (m perform: #lcm:_: env: 2 withArguments: {12. 8}).
 	self assert: result equals: 24.
@@ -457,7 +457,7 @@ testFabs
 	"Test math.fabs()"
 
 	| m result |
-	m := math perform: #new env: 0.
+	m := math new.
 
 	result := (m perform: #fabs: env: 2 withArguments: {-5.5}).
 	self assert: result equals: 5.5.
@@ -472,7 +472,7 @@ testIsnan
 	"Test math.isnan()"
 
 	| m result nan |
-	m := math perform: #new env: 0.
+	m := math new.
 	nan := m perform: #nan env: 2.
 
 	result := (m perform: #isnan: env: 2 withArguments: {nan}).
@@ -488,7 +488,7 @@ testIsinf
 	"Test math.isinf()"
 
 	| m result inf |
-	m := math perform: #new env: 0.
+	m := math new.
 	inf := m perform: #inf env: 2.
 
 	result := (m perform: #isinf: env: 2 withArguments: {inf}).
@@ -504,7 +504,7 @@ testIsfinite
 	"Test math.isfinite()"
 
 	| m result inf nan |
-	m := math perform: #new env: 0.
+	m := math new.
 	inf := m perform: #inf env: 2.
 	nan := m perform: #nan env: 2.
 
@@ -524,7 +524,7 @@ testDegrees
 	"Test math.degrees()"
 
 	| m result pi |
-	m := math perform: #new env: 0.
+	m := math new.
 	pi := m perform: #pi env: 2.
 
 	result := (m perform: #degrees: env: 2 withArguments: {pi}).
@@ -542,7 +542,7 @@ testRadians
 	"Test math.radians()"
 
 	| m result pi |
-	m := math perform: #new env: 0.
+	m := math new.
 	pi := m perform: #pi env: 2.
 
 	result := (m perform: #radians: env: 2 withArguments: {180}).

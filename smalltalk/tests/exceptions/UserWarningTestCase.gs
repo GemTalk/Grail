@@ -16,7 +16,7 @@ test_inheritance
 	"Test that UserWarning inherits from Warning."
 	
 	| exc |
-	exc := UserWarning perform: #__new__: env: 2 withArguments: { UserWarning }.
+	exc := UserWarning ___new___:  UserWarning .
 	self assert: (exc isKindOf: Warning).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a UserWarning instance."
 	
 	| exc |
-	exc := UserWarning perform: #__new__: env: 2 withArguments: { UserWarning }.
+	exc := UserWarning ___new___:  UserWarning .
 	self assert: exc notNil.
 %

@@ -19,10 +19,10 @@ method: BooleanTestCase
 test__new__fromInteger
 	"Test bool(int) conversion"
 
-	self assert: (Boolean perform: #__new__: env: 2 withArguments: {0}) equals: false.
-	self assert: (Boolean perform: #__new__: env: 2 withArguments: {1}) equals: true.
-	self assert: (Boolean perform: #__new__: env: 2 withArguments: {42}) equals: true.
-	self assert: (Boolean perform: #__new__: env: 2 withArguments: {-1}) equals: true.
+	self assert: (Boolean ___new___: 0) equals: false.
+	self assert: (Boolean ___new___: 1) equals: true.
+	self assert: (Boolean ___new___: 42) equals: true.
+	self assert: (Boolean ___new___: -1) equals: true.
 %
 
 category: 'Tests - Initialization'
@@ -30,10 +30,10 @@ method: BooleanTestCase
 test__new__fromFloat
 	"Test bool(float) conversion"
 
-	self assert: (Boolean perform: #__new__: env: 2 withArguments: {0.0}) equals: false.
-	self assert: (Boolean perform: #__new__: env: 2 withArguments: {1.0}) equals: true.
-	self assert: (Boolean perform: #__new__: env: 2 withArguments: {3.14}) equals: true.
-	self assert: (Boolean perform: #__new__: env: 2 withArguments: {-0.5}) equals: true.
+	self assert: (Boolean ___new___: 0.0) equals: false.
+	self assert: (Boolean ___new___: 1.0) equals: true.
+	self assert: (Boolean ___new___: 3.14) equals: true.
+	self assert: (Boolean ___new___: -0.5) equals: true.
 %
 
 category: 'Tests - Initialization'
@@ -45,8 +45,8 @@ test__new__fromString
 	emptyStr := '' asUnicodeString.
 	nonEmptyStr := 'hello' asUnicodeString.
 	
-	self assert: (Boolean perform: #__new__: env: 2 withArguments: {emptyStr}) equals: false.
-	self assert: (Boolean perform: #__new__: env: 2 withArguments: {nonEmptyStr}) equals: true.
+	self assert: (Boolean ___new___: emptyStr) equals: false.
+	self assert: (Boolean ___new___: nonEmptyStr) equals: true.
 %
 
 category: 'Tests - Initialization'
@@ -54,8 +54,8 @@ method: BooleanTestCase
 test__new__fromBoolean
 	"Test bool(bool) returns the same boolean"
 
-	self assert: (Boolean perform: #__new__: env: 2 withArguments: {true}) equals: true.
-	self assert: (Boolean perform: #__new__: env: 2 withArguments: {false}) equals: false.
+	self assert: (Boolean ___new___: true) equals: true.
+	self assert: (Boolean ___new___: false) equals: false.
 %
 
 category: 'Tests - String Representation'

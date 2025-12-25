@@ -29,7 +29,7 @@ classmethod: bytearray
 __new__: cls
 	"bytearray() - create empty bytearray"
 
-	^ cls perform: #new env: 0
+	^ cls ___new___
 %
 
 category: 'Python-Constructors'
@@ -38,29 +38,29 @@ __new__: cls _: source
 	"bytearray(source) - create bytearray from various sources"
 
 	| result sourceClass |
-	sourceClass := source perform: #class env: 0.
+	sourceClass := source ___class___.
 
 	"If source is an integer, create bytearray of that size filled with zeros"
 	sourceClass == SmallInteger ifTrue: [
-		(source perform: #< env: 0 withArguments: {0}) ifTrue: [
-			ValueError perform: #signal: env: 0 withArguments: {'negative count'}
+		(source ___lt___: 0) ifTrue: [
+			ValueError ___signal___: 'negative count'
 		].
-		^ cls perform: #new: env: 0 withArguments: {source}
+		^ cls ___new___: source
 	].
 
 	"If source is a string, raise TypeError (need encoding)"
-	(source perform: #isKindOf: env: 0 withArguments: {String}) ifTrue: [
-		TypeError perform: #signal: env: 0 withArguments: {'string argument without an encoding'}
+	(source ___isKindOf___: String) ifTrue: [
+		TypeError ___signal___: 'string argument without an encoding'
 	].
 
 	"If source is bytes or bytearray, make a copy"
-	((sourceClass perform: #= env: 0 withArguments: {bytes}) or: [
-		sourceClass perform: #= env: 0 withArguments: {bytearray}
+	((sourceClass ___eq___: bytes) or: [
+		sourceClass ___eq___: bytearray
 	]) ifTrue: [
-		result := cls perform: #new: env: 0 withArguments: {source perform: #size env: 0}.
-		1 perform: #to:do: env: 0 withArguments: {source perform: #size env: 0. [:i |
-			result perform: #at:put: env: 0 withArguments: {i. source perform: #at: env: 0 withArguments: {i}}
-		]}.
+		result := cls ___new___: (source ___size___).
+		1 ___to___: source ___size___ do: [:i |
+			result ___at___: i put: (source ___at___: i)
+		].
 		^ result
 	].
 
@@ -71,44 +71,44 @@ __new__: cls _: source
 		]
 	]) ifTrue: [
 		| ba size |
-		size := source perform: #size env: 0.
-		ba := cls perform: #new: env: 0 withArguments: {size}.
-		1 perform: #to:do: env: 0 withArguments: {size. [:i |
+		size := source ___size___.
+		ba := cls ___new___: size.
+		1 ___to___: size do: [:i |
 			| elem val |
-			elem := source perform: #at: env: 0 withArguments: {i}.
+			elem := source ___at___: i.
 			val := elem.
 			"Validate byte value (0-255)"
-			((val perform: #< env: 0 withArguments: {0}) or: [
-				val perform: #> env: 0 withArguments: {255}
+			((val ___lt___: 0) or: [
+				val ___gt___: 255
 			]) ifTrue: [
-				ValueError perform: #signal: env: 0 withArguments: {'bytes must be in range(0, 256)'}
+				ValueError ___signal___: 'bytes must be in range(0, 256)'
 			].
-			ba perform: #at:put: env: 0 withArguments: {i. val}
-		]}.
+			ba ___at___: i put: val
+		].
 		^ ba
 	].
 
 	"If source is a range, convert to bytearray"
 	(sourceClass == Interval) ifTrue: [
 		| ba size |
-		size := source perform: #size env: 0.
-		ba := cls perform: #new: env: 0 withArguments: {size}.
-		1 perform: #to:do: env: 0 withArguments: {size. [:i |
+		size := source ___size___.
+		ba := cls ___new___: size.
+		1 ___to___: size do: [:i |
 			| val |
-			val := source perform: #at: env: 0 withArguments: {i}.
+			val := source ___at___: i.
 			"Validate byte value (0-255)"
-			((val perform: #< env: 0 withArguments: {0}) or: [
-				val perform: #> env: 0 withArguments: {255}
+			((val ___lt___: 0) or: [
+				val ___gt___: 255
 			]) ifTrue: [
-				ValueError perform: #signal: env: 0 withArguments: {'bytes must be in range(0, 256)'}
+				ValueError ___signal___: 'bytes must be in range(0, 256)'
 			].
-			ba perform: #at:put: env: 0 withArguments: {i. val}
-		]}.
+			ba ___at___: i put: val
+		].
 		^ ba
 	].
 
 	"Default: empty bytearray"
-	^ cls perform: #new env: 0
+	^ cls ___new___
 %
 
 category: 'Python-Constructors'
@@ -117,67 +117,67 @@ __new__: cls _: source _: encoding
 	"bytearray(string, encoding) - encode string to bytearray"
 
 	| result sourceClass encodingStr |
-	sourceClass := source perform: #class env: 0.
+	sourceClass := source ___class___.
 
 	"Source must be a string"
-	((source perform: #isKindOf: env: 0 withArguments: {String}) not) ifTrue: [
-		TypeError perform: #signal: env: 0 withArguments: {'encoding without a string argument'}
+	((source ___isKindOf___: String) not) ifTrue: [
+		TypeError ___signal___: 'encoding without a string argument'
 	].
 
 	"Get encoding as a Smalltalk string"
 	encodingStr := encoding.
 
 	"Support ASCII encoding"
-	(encodingStr perform: #= env: 0 withArguments: {'ascii'}) ifTrue: [
+	(encodingStr ___eq___: 'ascii') ifTrue: [
 		| ba size |
-		size := source perform: #size env: 0.
-		ba := cls perform: #new: env: 0 withArguments: {size}.
-		1 perform: #to:do: env: 0 withArguments: {size. [:i |
+		size := source ___size___.
+		ba := cls ___new___: size.
+		1 ___to___: size do: [:i |
 			| char codePoint |
-			char := source perform: #at: env: 0 withArguments: {i}.
-			codePoint := char perform: #codePoint env: 0.
-			(codePoint perform: #> env: 0 withArguments: {127}) ifTrue: [
-				UnicodeEncodeError perform: #signal: env: 0 withArguments: {'ordinal not in range(128)'}
+			char := source ___at___: i.
+			codePoint := char ___codePoint___.
+			(codePoint ___gt___: 127) ifTrue: [
+				UnicodeEncodeError ___signal___: 'ordinal not in range(128)'
 			].
-			ba perform: #at:put: env: 0 withArguments: {i. codePoint}
-		]}.
+			ba ___at___: i put: codePoint
+		].
 		^ ba
 	].
 
 	"Support UTF-8 encoding"
-	((encodingStr perform: #= env: 0 withArguments: {'utf-8'}) or: [
-		encodingStr perform: #= env: 0 withArguments: {'utf8'}
+	((encodingStr ___eq___: 'utf-8') or: [
+		encodingStr ___eq___: 'utf8'
 	]) ifTrue: [
 		| utf8Bytes |
 		utf8Bytes := source perform: #encodeAsUTF8 env: 0.
-		result := cls perform: #new: env: 0 withArguments: {utf8Bytes perform: #size env: 0}.
-		1 perform: #to:do: env: 0 withArguments: {utf8Bytes perform: #size env: 0. [:i |
-			result perform: #at:put: env: 0 withArguments: {i. utf8Bytes perform: #at: env: 0 withArguments: {i}}
-		]}.
+		result := cls ___new___: (utf8Bytes ___size___).
+		1 ___to___: utf8Bytes ___size___ do: [:i |
+			result ___at___: i put: (utf8Bytes ___at___: i)
+		].
 		^ result
 	].
 
 	"Support Latin-1 encoding"
-	((encodingStr perform: #= env: 0 withArguments: {'latin-1'}) or: [
-		encodingStr perform: #= env: 0 withArguments: {'latin1'}
+	((encodingStr ___eq___: 'latin-1') or: [
+		encodingStr ___eq___: 'latin1'
 	]) ifTrue: [
 		| ba size |
-		size := source perform: #size env: 0.
-		ba := cls perform: #new: env: 0 withArguments: {size}.
-		1 perform: #to:do: env: 0 withArguments: {size. [:i |
+		size := source ___size___.
+		ba := cls ___new___: size.
+		1 ___to___: size do: [:i |
 			| char codePoint |
-			char := source perform: #at: env: 0 withArguments: {i}.
-			codePoint := char perform: #codePoint env: 0.
-			(codePoint perform: #> env: 0 withArguments: {255}) ifTrue: [
-				UnicodeEncodeError perform: #signal: env: 0 withArguments: {'ordinal not in range(256)'}
+			char := source ___at___: i.
+			codePoint := char ___codePoint___.
+			(codePoint ___gt___: 255) ifTrue: [
+				UnicodeEncodeError ___signal___: 'ordinal not in range(256)'
 			].
-			ba perform: #at:put: env: 0 withArguments: {i. codePoint}
-		]}.
+			ba ___at___: i put: codePoint
+		].
 		^ ba
 	].
 
 	"Unsupported encoding"
-	LookupError perform: #signal: env: 0 withArguments: {'unknown encoding: ', encodingStr}
+	LookupError ___signal___: ('unknown encoding: ' ___concat___: encodingStr)
 %
 
 
@@ -188,25 +188,25 @@ fromhex: cls _: hexString
 
 	| cleaned size ba |
 	"Remove spaces from hex string"
-	cleaned := hexString perform: #select: env: 0 withArguments: {[:ch |
-		(ch perform: #~= env: 0 withArguments: {$ })
-	]}.
+	cleaned := hexString ___select___: [:ch |
+		(ch ___ne___: $ )
+	].
 
 	"Hex string must have even length"
-	size := cleaned perform: #size env: 0.
-	((size perform: #\\ env: 0 withArguments: {2}) perform: #~= env: 0 withArguments: {0}) ifTrue: [
-		ValueError perform: #signal: env: 0 withArguments: {'non-hexadecimal number found in fromhex() arg'}
+	size := cleaned ___size___.
+	((size ___modulo___: 2) ___ne___: 0) ifTrue: [
+		ValueError ___signal___: 'non-hexadecimal number found in fromhex() arg'
 	].
 
 	"Create bytearray and fill with hex values"
-	ba := cls perform: #new: env: 0 withArguments: {size perform: #// env: 0 withArguments: {2}}.
-	1 perform: #to:by:do: env: 0 withArguments: {size. 2. [:i |
+	ba := cls ___new___: (size ___divideInteger___: 2).
+	1 ___to___: size by: 2 do: [:i |
 		| hexPair byte stream |
-		hexPair := cleaned perform: #copyFrom:to: env: 0 withArguments: {i. i perform: #+ env: 0 withArguments: {1}}.
-		stream := ReadStream perform: #on: env: 0 withArguments: {'16r' perform: #, env: 0 withArguments: {hexPair}}.
-		byte := Integer perform: #fromStream: env: 0 withArguments: {stream}.
-		ba perform: #at:put: env: 0 withArguments: {(i perform: #+ env: 0 withArguments: {1}) perform: #// env: 0 withArguments: {2}. byte}
-	]}.
+		hexPair := cleaned ___copyFrom___: i to: (i ___plus___: 1).
+		stream := ReadStream ___on___: ('16r' ___concat___: hexPair).
+		byte := Integer ___fromStream___: stream.
+		ba ___at___: ((i ___plus___: 1) ___divideInteger___: 2) put: byte
+	].
 
 	^ ba
 %
@@ -224,31 +224,31 @@ method: bytearray
 __setitem__: index _: value
 	"Set byte at index (mutable)"
 	| idx size val |
-	size := self perform: #size env: 0.
+	size := self ___size___.
 	idx := index.
 	val := value.
 
 	"Handle negative indices"
-	(idx perform: #< env: 0 withArguments: {0}) ifTrue: [
-		idx := size perform: #+ env: 0 withArguments: {idx}
+	(idx ___lt___: 0) ifTrue: [
+		idx := size ___plus___: idx
 	].
 
 	"Check bounds"
-	((idx perform: #< env: 0 withArguments: {0}) or: [
-		idx perform: #>= env: 0 withArguments: {size}
+	((idx ___lt___: 0) or: [
+		idx ___ge___: size
 	]) ifTrue: [
-		IndexError perform: #signal: env: 0 withArguments: {'bytearray index out of range'}
+		IndexError ___signal___: 'bytearray index out of range'
 	].
 
 	"Validate byte value"
 	((val perform: #< env: 0 withArguments: {0}) or: [
-		val perform: #> env: 0 withArguments: {255}
+		val ___gt___: 255
 	]) ifTrue: [
-		ValueError perform: #signal: env: 0 withArguments: {'byte must be in range(0, 256)'}
+		ValueError ___signal___: 'byte must be in range(0, 256)'
 	].
 
 	"Set value (convert to 1-based index)"
-	self perform: #at:put: env: 0 withArguments: {idx perform: #+ env: 0 withArguments: {1}. val}
+	self ___at___: (idx ___plus___: 1) put: val
 %
 
 category: 'Python-Mutation Methods'
@@ -261,13 +261,13 @@ append: item
 
 	"Validate byte value"
 	((val perform: #< env: 0 withArguments: {0}) or: [
-		val perform: #> env: 0 withArguments: {255}
+		val ___gt___: 255
 	]) ifTrue: [
-		ValueError perform: #signal: env: 0 withArguments: {'byte must be in range(0, 256)'}
+		ValueError ___signal___: 'byte must be in range(0, 256)'
 	].
 
 	"Add to end"
-	self perform: #add: env: 0 withArguments: {val}
+	self ___add___: val
 %
 
 category: 'Python-Mutation Methods'
@@ -275,7 +275,7 @@ method: bytearray
 clear
 	"Remove all bytes"
 
-	self perform: #size: env: 0 withArguments: {0}
+	self ___size___: 0
 %
 
 category: 'Python-Mutation Methods'
@@ -284,11 +284,11 @@ copy
 	"Return a shallow copy"
 
 	| result size |
-	size := self perform: #size env: 0.
-	result := bytearray perform: #new: env: 0 withArguments: {size}.
-	1 perform: #to:do: env: 0 withArguments: {size. [:i |
-		result perform: #at:put: env: 0 withArguments: {i. self perform: #at: env: 0 withArguments: {i}}
-	]}.
+	size := self ___size___.
+	result := bytearray ___new___: size.
+	1 ___to___: size do: [:i |
+		result ___at___: i put: (self ___at___: i)
+	].
 	^ result
 %
 
@@ -298,41 +298,41 @@ extend: iterable
 	"Extend bytearray with bytes from iterable"
 
 	| iterClass size |
-	iterClass := iterable perform: #class env: 0.
+	iterClass := iterable ___class___.
 
 	"Handle bytes or bytearray"
-	((iterClass perform: #= env: 0 withArguments: {bytes}) or: [
-		iterClass perform: #= env: 0 withArguments: {bytearray}
+	((iterClass ___eq___: bytes) or: [
+		iterClass ___eq___: bytearray
 	]) ifTrue: [
-		size := iterable perform: #size env: 0.
-		1 perform: #to:do: env: 0 withArguments: {size. [:i |
+		size := iterable ___size___.
+		1 ___to___: size do: [:i |
 			| byte |
-			byte := iterable perform: #at: env: 0 withArguments: {i}.
-			self perform: #add: env: 0 withArguments: {byte}
-		]}.
+			byte := iterable ___at___: i.
+			self ___add___: byte
+		].
 		^ nil
 	].
 
 	"Handle list or tuple"
-	((iterClass perform: #= env: 0 withArguments: {OrderedCollection}) or: [
-		iterClass perform: #= env: 0 withArguments: {InvariantArray}
+	((iterClass ___eq___: OrderedCollection) or: [
+		iterClass ___eq___: InvariantArray
 	]) ifTrue: [
-		size := iterable perform: #size env: 0.
-		1 perform: #to:do: env: 0 withArguments: {size. [:i |
+		size := iterable ___size___.
+		1 ___to___: size do: [:i |
 			| val |
-			val := iterable perform: #at: env: 0 withArguments: {i}.
+			val := iterable ___at___: i.
 			"Validate byte value"
-			((val perform: #< env: 0 withArguments: {0}) or: [
-				val perform: #> env: 0 withArguments: {255}
+			((val ___lt___: 0) or: [
+				val ___gt___: 255
 			]) ifTrue: [
-				ValueError perform: #signal: env: 0 withArguments: {'byte must be in range(0, 256)'}
+				ValueError ___signal___: 'byte must be in range(0, 256)'
 			].
-			self perform: #add: env: 0 withArguments: {val}
-		]}.
+			self ___add___: val
+		].
 		^ nil
 	].
 
-	TypeError perform: #signal: env: 0 withArguments: {'extend() argument must be iterable'}
+	TypeError ___signal___: 'extend() argument must be iterable'
 %
 
 category: 'Python-Mutation Methods'
@@ -341,28 +341,28 @@ insert: index _: item
 "Insert byte at index"
 
 	| idx size val |
-	size := self perform: #size env: 0.
+	size := self ___size___.
 	idx := index.
 	val := item.
 
 	"Handle negative indices"
-	(index perform: #< env: 0 withArguments: {0}) ifTrue: [
-		idx := size perform: #+ env: 0 withArguments: {idx}
+	(index ___lt___: 0) ifTrue: [
+		idx := size ___plus___: idx
 	].
 
 	"Clamp to valid range"
-	(index perform: #< env: 0 withArguments: {0}) ifTrue: [
+	(index ___lt___: 0) ifTrue: [
 		idx := 0
 	].
-	(index perform: #> env: 0 withArguments: {size}) ifTrue: [
+	(index ___gt___: size) ifTrue: [
 		idx := size
 	].
 
 	"Validate byte value"
 	((val perform: #< env: 0 withArguments: {0}) or: [
-		val perform: #> env: 0 withArguments: {255}
+		val ___gt___: 255
 	]) ifTrue: [
-		ValueError perform: #signal: env: 0 withArguments: {'byte must be in range(0, 256)'}
+		ValueError ___signal___: 'byte must be in range(0, 256)'
 	].
 
 	"Insert at position (convert to 1-based)"
@@ -370,8 +370,8 @@ insert: index _: item
 		perform: #insertAll:at: 
 		env: 0 
 		withArguments: {
-			bytearray perform: #with: env: 0 withArguments: {val}. 
-			index perform: #+ env: 0 withArguments: {1}.
+			bytearray ___with___: val. 
+			index ___plus___: 1.
 			
 		}
 %
@@ -382,18 +382,18 @@ remove: value
 	"Remove first occurrence of value"
 
 	| size |
-	size := self perform: #size env: 0.
+	size := self ___size___.
 
-	1 perform: #to:do: env: 0 withArguments: {size. [:i |
+	1 ___to___: size do: [:i |
 		| byte |
-		byte := self perform: #at: env: 0 withArguments: {i}.
-		(byte perform: #= env: 0 withArguments: {value}) ifTrue: [
-			self perform: #removeAtIndex: env: 0 withArguments: {i}.
+		byte := self ___at___: i.
+		(byte ___eq___: value) ifTrue: [
+			self ___removeAtIndex___: i.
 			^ nil
 		]
-	]}.
+	].
 
-	ValueError perform: #signal: env: 0 withArguments: {'value not in bytearray'}
+	ValueError ___signal___: 'value not in bytearray'
 %
 
 category: 'Python-Mutation Methods'
@@ -402,10 +402,10 @@ pop
 	"Remove and return last byte"
 
 	| size |
-	size := self perform: #size env: 0.
+	size := self ___size___.
 
-	(size perform: #= env: 0 withArguments: {0}) ifTrue: [
-		IndexError perform: #signal: env: 0 withArguments: {'pop from empty bytearray'}
+	(size ___eq___: 0) ifTrue: [
+		IndexError ___signal___: 'pop from empty bytearray'
 	].
 
 	^ self perform: #removeLast env: 0
@@ -417,24 +417,24 @@ pop: index
 	"Remove and return byte at index"
 
 	| idx size byte |
-	size := self perform: #size env: 0.
+	size := self ___size___.
 	idx := index.
 
 	"Handle negative indices"
-	(idx perform: #< env: 0 withArguments: {0}) ifTrue: [
-		idx := size perform: #+ env: 0 withArguments: {idx}
+	(idx ___lt___: 0) ifTrue: [
+		idx := size ___plus___: idx
 	].
 
 	"Check bounds"
-	((idx perform: #< env: 0 withArguments: {0}) or: [
-		idx perform: #>= env: 0 withArguments: {size}
+	((idx ___lt___: 0) or: [
+		idx ___ge___: size
 	]) ifTrue: [
-		IndexError perform: #signal: env: 0 withArguments: {'pop index out of range'}
+		IndexError ___signal___: 'pop index out of range'
 	].
 
 	"Get byte and remove (convert to 1-based)"
-	byte := self perform: #at: env: 0 withArguments: {idx perform: #+ env: 0 withArguments: {1}}.
-	self perform: #removeAtIndex: env: 0 withArguments: {idx perform: #+ env: 0 withArguments: {1}}.
+	byte := self ___at___: (idx ___plus___: 1).
+	self ___removeAtIndex___: (idx ___plus___: 1).
 	^ byte
 %
 
@@ -444,15 +444,15 @@ reverse
 	"Reverse bytearray in place"
 
 	| size |
-	size := self perform: #size env: 0.
+	size := self ___size___.
 
-	1 perform: #to:do: env: 0 withArguments: {size perform: #// env: 0 withArguments: {2}. [:i |
+	1 ___to___: (size ___divideInteger___: 2) do: [:i |
 		| temp j |
-		j := size perform: #- env: 0 withArguments: {i perform: #- env: 0 withArguments: {1}}.
-		temp := self perform: #at: env: 0 withArguments: {i}.
-		self perform: #at:put: env: 0 withArguments: {i. self perform: #at: env: 0 withArguments: {j}}.
-		self perform: #at:put: env: 0 withArguments: {j. temp}
-	]}
+		j := size ___minus___: (i ___minus___: 1).
+		temp := self ___at___: i.
+		self ___at___: i put: (self ___at___: j).
+		self ___at___: j put: temp
+	]
 %
 
 category: 'Python-Sequence Protocol'
@@ -461,23 +461,23 @@ __delitem__: index
 	"Delete byte at index"
 
 	| idx size |
-	size := self perform: #size env: 0.
+	size := self ___size___.
 	idx := index.
 
 	"Handle negative indices"
-	(idx perform: #< env: 0 withArguments: {0}) ifTrue: [
-		idx := size perform: #+ env: 0 withArguments: {idx}
+	(idx ___lt___: 0) ifTrue: [
+		idx := size ___plus___: idx
 	].
 
 	"Check bounds"
-	((idx perform: #< env: 0 withArguments: {0}) or: [
-		idx perform: #>= env: 0 withArguments: {size}
+	((idx ___lt___: 0) or: [
+		idx ___ge___: size
 	]) ifTrue: [
-		IndexError perform: #signal: env: 0 withArguments: {'bytearray index out of range'}
+		IndexError ___signal___: 'bytearray index out of range'
 	].
 
 	"Remove (convert to 1-based)"
-	self perform: #removeAtIndex: env: 0 withArguments: {idx perform: #+ env: 0 withArguments: {1}}
+	self ___removeAtIndex___: (idx ___plus___: 1)
 %
 
 category: 'Python-Concatenation'
@@ -486,13 +486,13 @@ __iadd__: other
 	"In-place concatenation"
 
 	| otherClass |
-	otherClass := other perform: #class env: 0.
+	otherClass := other ___class___.
 
 	"Can only concatenate with bytes or bytearray"
-	((otherClass perform: #= env: 0 withArguments: {bytes}) or: [
-		otherClass perform: #= env: 0 withArguments: {bytearray}
+	((otherClass ___eq___: bytes) or: [
+		otherClass ___eq___: bytearray
 	]) ifFalse: [
-		TypeError perform: #signal: env: 0 withArguments: {'can''t concat bytearray to ', otherClass}
+		TypeError ___signal___: ('can''t concat bytearray to ' ___concat___: otherClass)
 	].
 
 	self perform: #extend: env: 2 withArguments: {other}.
@@ -508,31 +508,31 @@ __imul__: count
 	n := count.
 
 	"Validate count is an integer"
-	(n perform: #class env: 0) == SmallInteger ifFalse: [
-		TypeError perform: #signal: env: 0 withArguments: {'can''t multiply sequence by non-int'}
+	(n ___class___) == SmallInteger ifFalse: [
+		TypeError ___signal___: 'can''t multiply sequence by non-int'
 	].
 
 	"If count <= 1, nothing to do (or clear if <= 0)"
-	(n perform: #<= env: 0 withArguments: {0}) ifTrue: [
-		self perform: #size: env: 0 withArguments: {0}.
+	(n ___le___: 0) ifTrue: [
+		self ___size___: 0.
 		^ self
 	].
 
-	(n perform: #= env: 0 withArguments: {1}) ifTrue: [
+	(n ___eq___: 1) ifTrue: [
 		^ self
 	].
 
 	"Save original content"
-	originalSize := self perform: #size env: 0.
-	original := bytearray perform: #new: env: 0 withArguments: {originalSize}.
-	1 perform: #to:do: env: 0 withArguments: {originalSize. [:i |
-		original perform: #at:put: env: 0 withArguments: {i. self perform: #at: env: 0 withArguments: {i}}
-	]}.
+	originalSize := self ___size___.
+	original := bytearray ___new___: originalSize.
+	1 ___to___: originalSize do: [:i |
+		original ___at___: i put: (self ___at___: i)
+	].
 
 	"Repeat n-1 times"
-	2 perform: #to:do: env: 0 withArguments: {n. [:rep |
+	2 ___to___: n do: [:rep |
 		self perform: #extend: env: 2 withArguments: {original}
-	]}.
+	].
 
 	^ self
 %

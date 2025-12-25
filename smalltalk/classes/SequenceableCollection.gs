@@ -23,7 +23,7 @@ method: SequenceableCollection
 __len__
 	"Return the length of the sequence."
 
-	^ self perform: #size env: 0
+	^ self ___size___
 %
 
 category: 'Python-Sequence Protocol'
@@ -34,23 +34,23 @@ __getitem__: index
 	TODO: Support slicing."
 
 	| size idx |
-	size := self perform: #size env: 0.
+	size := self ___size___.
 	idx := index.
 
 	"Handle negative indices"
-	(idx perform: #< env: 0 withArguments: {0}) ifTrue: [
-		idx := size perform: #+ env: 0 withArguments: {idx}
+	(idx ___lt___: 0) ifTrue: [
+		idx := size ___plus___: idx
 	].
 
 	"Check bounds (Python uses 0-based indexing)"
-	((idx perform: #< env: 0 withArguments: {0}) or: [
-		idx perform: #>= env: 0 withArguments: {size}
+	((idx ___lt___: 0) or: [
+		idx ___ge___: size
 	]) ifTrue: [
-		IndexError perform: #signal: env: 0 withArguments: {'list index out of range'}
+		IndexError ___signal___: 'list index out of range'
 	].
 
 	"Convert to 1-based Smalltalk index"
-	^ self perform: #at: env: 0 withArguments: {idx perform: #+ env: 0 withArguments: {1}}
+	^ self ___at___: (idx ___plus___: 1)
 %
 
 category: 'Python-Sequence Protocol'
@@ -76,14 +76,14 @@ __eq__: other
 	"Return True if sequences are equal (same type, same length, same elements)."
 
 	| myClass otherClass |
-	myClass := self perform: #class env: 0.
-	otherClass := other perform: #class env: 0.
+	myClass := self ___class___.
+	otherClass := other ___class___.
 	
 	"Must be same class"
 	myClass == otherClass ifFalse: [^ false].
 	
 	"Use Smalltalk's = for comparison"
-	^ self with: other perform: #= env: 0
+	^ self ___eq___: other
 %
 
 category: 'Python-Comparison'
@@ -91,7 +91,7 @@ method: SequenceableCollection
 __ne__: other
 	"Return True if sequences are not equal."
 
-	^ (self __eq__: other) perform: #not env: 0
+	^ (self __eq__: other) ___not___
 %
 
 category: 'Python-Comparison'
@@ -99,7 +99,7 @@ method: SequenceableCollection
 __lt__: other
 	"Lexicographic comparison: self < other"
 
-	^ self perform: #< env: 0 withArguments: {other}
+	^ self ___lt___: other
 %
 
 category: 'Python-Comparison'
@@ -107,7 +107,7 @@ method: SequenceableCollection
 __le__: other
 	"Lexicographic comparison: self <= other"
 
-	^ self perform: #<= env: 0 withArguments: {other}
+	^ self ___le___: other
 %
 
 category: 'Python-Comparison'
@@ -115,7 +115,7 @@ method: SequenceableCollection
 __gt__: other
 	"Lexicographic comparison: self > other"
 
-	^ self perform: #> env: 0 withArguments: {other}
+	^ self ___gt___: other
 %
 
 category: 'Python-Comparison'
@@ -123,7 +123,7 @@ method: SequenceableCollection
 __ge__: other
 	"Lexicographic comparison: self >= other"
 
-	^ self perform: #>= env: 0 withArguments: {other}
+	^ self ___ge___: other
 %
 
 category: 'Python-Sequence Operations'
@@ -132,8 +132,8 @@ __add__: other
 	"Concatenate two sequences. Returns a new sequence of the same type."
 
 	| result x |
-	result := self perform: #copy env: 0.
-	result perform: #addAll: env: 0 withArguments: {other}.
+	result := self ___copy___.
+	result ___addAll___: other.
 	^ result
 %
 
@@ -143,14 +143,12 @@ __mul__: n
 	"Repeat the sequence n times. Returns a new sequence."
 
 	| result |
-	result := (self perform: #species env: 0) perform: #new env: 0.
-	(n perform: #<= env: 0 withArguments: {0}) ifTrue: [
+	result := (self perform: #species env: 0) ___new___.
+	(n ___le___: 0) ifTrue: [
 		^ result
 	].
 
-	n perform: #timesRepeat: env: 0 withArguments: {
-		[result perform: #addAll: env: 0 withArguments: {self}]
-	}.
+	n ___timesRepeat___: [result ___addAll___: self].
 	^ result
 %
 
@@ -169,13 +167,11 @@ count: value
 
 	| count |
 	count := 0.
-	self perform: #do: env: 0 withArguments: {
-		[:each |
-			(each perform: #= env: 0 withArguments: {value}) ifTrue: [
-				count := count perform: #+ env: 0 withArguments: {1}
-			]
+	self ___do___: [:each |
+		(each ___eq___: value) ifTrue: [
+			count := count ___plus___: 1
 		]
-	}.
+	].
 	^ count
 %
 
@@ -186,13 +182,10 @@ index: value
 	Raises ValueError if value is not found."
 
 	| idx |
-	idx := self perform: #indexOf:ifAbsent: env: 0 withArguments: {
-		value.
-		[ValueError perform: #signal: env: 0 withArguments: {'list.index(x): x not in list'}]
-	}.
+	idx := self ___indexOf___: value ifAbsent: [ValueError ___signal___: 'list.index(x): x not in list'].
 
 	"Convert from 1-based Smalltalk to 0-based Python"
-	^ idx perform: #- env: 0 withArguments: {1}
+	^ idx ___minus___: (1)
 %
 
 category: 'Python-String Representation'
@@ -202,20 +195,20 @@ __repr__
 	Subclasses override to provide list vs tuple formatting."
 
 	| stream |
-	stream := WriteStream perform: #on: env: 0 withArguments: {String perform: #new env: 0}.
-	stream with: $[ perform: #nextPut: env: 0.
+	stream := WriteStream ___on___: (String ___new___).
+	stream ___nextPut___: $[.
 
 	self perform: #do:separatedBy: env: 0 withArguments: {
 		[:each |
 			| reprStr |
 			reprStr := each __repr__.
-			stream with: reprStr perform: #nextPutAll: env: 0
+			stream ___nextPutAll___: reprStr
 		].
-		[stream with: ', ' perform: #nextPutAll: env: 0]
+		[stream ___nextPutAll___: ', ']
 	}.
 
-	stream with: $] perform: #nextPut: env: 0.
-	^ stream perform: #contents env: 0
+	stream ___nextPut___: $].
+	^ stream ___contents___
 %
 
 category: 'Python-String Representation'

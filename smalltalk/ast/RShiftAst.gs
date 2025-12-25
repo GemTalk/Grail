@@ -7,4 +7,5 @@ category: 'other'
 method: RShiftAst
 printSmalltalkOn: aStream
 
+	self halt.
 %

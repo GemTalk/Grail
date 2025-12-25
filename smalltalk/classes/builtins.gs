@@ -24,7 +24,7 @@ method: builtins
 abs: aNumber
 	"Return the absolute value of a number"
 
-	[^ aNumber __abs__] perform: #on:do: env: 0 withArguments: {MessageNotUnderstood. [:ex | TypeError perform: #signal env: 0]}
+	[^ aNumber __abs__] ___on___: MessageNotUnderstood do: [:ex | TypeError ___signal___]
 %
 
 category: 'Python-Built-in Functions'
@@ -33,12 +33,12 @@ len: anObject
 	"Return the length (the number of items) of an object"
 
 	| className errorMsg |
-	[^ anObject __len__] perform: #on:do: env: 0 withArguments: {MessageNotUnderstood. [:ex |
-		className := (anObject perform: #class env: 0) perform: #name env: 0.
-		errorMsg := 'object of type ''' perform: #, env: 0 withArguments: {className}.
-		errorMsg := errorMsg perform: #, env: 0 withArguments: {''' has no len()'}.
-		TypeError perform: #signal: env: 0 withArguments: {errorMsg}
-	]}
+	[^ anObject __len__] ___on___: MessageNotUnderstood do: [:ex |
+		className := (anObject ___class___) ___name___.
+		errorMsg := 'object of type ''' ___concat___: className.
+		errorMsg := errorMsg ___concat___: ''' has no len()'.
+		TypeError ___signal___: errorMsg
+	]
 %
 
 category: 'Python-Built-in Functions'
@@ -62,9 +62,9 @@ method: builtins
 str: anObject
 	"Return a string version of object"
 
-	[^ anObject __str__] perform: #on:do: env: 0 withArguments: {MessageNotUnderstood. [:ex |
+	[^ anObject __str__] ___on___: MessageNotUnderstood do: [:ex |
 		^ anObject __repr__
-	]}
+	]
 %
 
 category: 'Python-Built-in Functions'
@@ -72,9 +72,9 @@ method: builtins
 hash: anObject
 	"Return the hash value of the object"
 
-	[^ anObject __hash__] perform: #on:do: env: 0 withArguments: {MessageNotUnderstood. [:ex |
-		TypeError perform: #signal: env: 0 withArguments: {'unhashable type'}
-	]}
+	[^ anObject __hash__] ___on___: MessageNotUnderstood do: [:ex |
+		TypeError ___signal___: 'unhashable type'
+	]
 %
 
 category: 'Python-Built-in Functions'
@@ -83,8 +83,8 @@ hex: aNumber
 	"Convert an integer number to a lowercase hexadecimal string"
 
 	| result |
-	result := aNumber perform: #printStringRadix: env: 0 withArguments: {16}.
-	^ '0x' perform: #, env: 0 withArguments: {result perform: #asLowercase env: 0}
+	result := aNumber ___printStringRadix___: 16.
+	^ '0x' ___concat___: (result perform: #asLowercase env: 0)
 %
 
 category: 'Python-Built-in Functions'
@@ -93,8 +93,8 @@ oct: aNumber
 	"Convert an integer number to an octal string"
 
 	| result |
-	result := aNumber perform: #printStringRadix: env: 0 withArguments: {8}.
-	^ '0o' perform: #, env: 0 withArguments: {result}
+	result := aNumber ___printStringRadix___: 8.
+	^ '0o' ___concat___: result
 %
 
 category: 'Python-Built-in Functions'
@@ -103,8 +103,8 @@ bin: aNumber
 	"Convert an integer number to a binary string"
 
 	| result |
-	result := aNumber perform: #printStringRadix: env: 0 withArguments: {2}.
-	^ '0b' perform: #, env: 0 withArguments: {result}
+	result := aNumber ___printStringRadix___: 2.
+	^ '0b' ___concat___: result
 %
 
 category: 'Python-Built-in Functions'
@@ -112,8 +112,8 @@ method: builtins
 chr: anInteger
 	"Return a string representing a character whose Unicode code point is the integer"
 
-	^ (Character perform: #codePoint: env: 0 withArguments: {anInteger})
-		perform: #asString env: 0
+	^ (Character ___codePoint___: anInteger)
+		___asString___
 %
 
 category: 'Python-Built-in Functions'
@@ -122,15 +122,15 @@ ord: aString
 	"Return an integer representing the Unicode code point of a character"
 
 	| char size errorMsg sizeStr |
-	size := aString perform: #size env: 0.
-	(size perform: #= env: 0 withArguments: {1}) ifFalse: [
-		sizeStr := size perform: #asString env: 0.
-		errorMsg := 'ord() expected a character, but string of length ' perform: #, env: 0 withArguments: {sizeStr}.
-		errorMsg := errorMsg perform: #, env: 0 withArguments: {' found'}.
-		TypeError perform: #signal: env: 0 withArguments: {errorMsg}
+	size := aString ___size___.
+	(size ___eq___: 1) ifFalse: [
+		sizeStr := size ___asString___.
+		errorMsg := 'ord() expected a character, but string of length ' ___concat___: sizeStr.
+		errorMsg := errorMsg ___concat___: ' found'.
+		TypeError ___signal___: errorMsg
 	].
-	char := aString perform: #at: env: 0 withArguments: {1}.
-	^ char perform: #codePoint env: 0
+	char := aString ___at___: 1.
+	^ char ___codePoint___
 %
 
 category: 'Python-Built-in Functions'
@@ -143,7 +143,7 @@ min: iterable
 	first := true.
 	minVal := nil.
 
-	[true] perform: #whileTrue: env: 0 withArguments: {[
+	[true] ___whileTrue___: [
 		| item |
 		[
 			item := iter __next__.
@@ -155,8 +155,8 @@ min: iterable
 					minVal := item
 				]
 			]
-		] perform: #on:do: env: 0 withArguments: {StopIteration. [:ex | ^ minVal]}
-	]}
+		] ___on___: StopIteration do: [:ex | ^ minVal]
+	]
 %
 
 category: 'Python-Built-in Functions'
@@ -169,7 +169,7 @@ max: iterable
 	first := true.
 	maxVal := nil.
 
-	[true] perform: #whileTrue: env: 0 withArguments: {[
+	[true] ___whileTrue___: [
 		| item |
 		[
 			item := iter __next__.
@@ -181,8 +181,8 @@ max: iterable
 					maxVal := item
 				]
 			]
-		] perform: #on:do: env: 0 withArguments: {StopIteration. [:ex | ^ maxVal]}
-	]}
+		] ___on___: StopIteration do: [:ex | ^ maxVal]
+	]
 %
 
 category: 'Python-Built-in Functions'
@@ -194,13 +194,13 @@ sum: iterable
 	total := 0.
 	iter := iterable __iter__.
 
-	[true] perform: #whileTrue: env: 0 withArguments: {[
+	[true] ___whileTrue___: [
 		| item |
 		[
 			item := iter __next__.
 			total := total __add__: item
-		] perform: #on:do: env: 0 withArguments: {StopIteration. [:ex | ^ total]}
-	]}
+		] ___on___: StopIteration do: [:ex | ^ total]
+	]
 %
 
 category: 'Python-Built-in Functions'
@@ -211,18 +211,18 @@ all: iterable
 	| iter |
 	iter := iterable __iter__.
 
-	[true] perform: #whileTrue: env: 0 withArguments: {[
+	[true] ___whileTrue___: [
 		| item isTruthy |
 		[
 			item := iter __next__.
 			[
 				isTruthy := item __bool__
-			] perform: #on:do: env: 0 withArguments: {MessageNotUnderstood. [:ex |
+			] ___on___: MessageNotUnderstood do: [:ex |
 				isTruthy := true
-			]}.
+			].
 			isTruthy ifFalse: [^ false]
-		] perform: #on:do: env: 0 withArguments: {StopIteration. [:ex | ^ true]}
-	]}
+		] ___on___: StopIteration do: [:ex | ^ true]
+	]
 %
 
 category: 'Python-Built-in Functions'
@@ -233,18 +233,18 @@ any: iterable
 	| iter |
 	iter := iterable __iter__.
 
-	[true] perform: #whileTrue: env: 0 withArguments: {[
+	[true] ___whileTrue___: [
 		| item isTruthy |
 		[
 			item := iter __next__.
 			[
 				isTruthy := item __bool__
-			] perform: #on:do: env: 0 withArguments: {MessageNotUnderstood. [:ex |
+			] ___on___: MessageNotUnderstood do: [:ex |
 				isTruthy := true
-			]}.
+			].
 			isTruthy ifTrue: [^ true]
-		] perform: #on:do: env: 0 withArguments: {StopIteration. [:ex | ^ false]}
-	]}
+		] ___on___: StopIteration do: [:ex | ^ false]
+	]
 %
 
 category: 'Python-Built-in Functions'
@@ -252,7 +252,7 @@ method: builtins
 isinstance: anObject _: aClassOrTuple
 	"Return True if object is an instance of classinfo"
 
-	^ anObject perform: #isKindOf: env: 0 withArguments: {aClassOrTuple}
+	^ anObject ___isKindOf___: aClassOrTuple
 %
 
 category: 'Python-Built-in Functions'
@@ -261,7 +261,7 @@ callable: anObject
 	"Return True if the object appears callable (responds to __call__)"
 
 	| objClass |
-	objClass := anObject perform: #class env: 0.
+	objClass := anObject ___class___.
 	^ (objClass perform: #whichClassIncludesSelector:environmentId: env: 0 withArguments: {#__call__:. 2}) notNil
 %
 
@@ -278,7 +278,7 @@ method: builtins
 id: anObject
 	"Return the identity of an object"
 
-	^ anObject perform: #identityHash env: 0
+	^ anObject ___identityHash___
 %
 
 category: 'Python-Built-in Functions'
@@ -304,7 +304,7 @@ method: builtins
 round: number
 	"Round a number to the nearest integer"
 
-	^ number perform: #rounded env: 0
+	^ number ___rounded___
 %
 
 category: 'Python-Built-in Functions'
@@ -313,10 +313,10 @@ round: number _: ndigits
 	"Round a number to ndigits precision after the decimal point"
 
 	| multiplier |
-	ndigits ifNil: [^ number perform: #rounded env: 0].
+	ndigits ifNil: [^ number ___rounded___].
 	multiplier := 10 perform: #** env: 0 withArguments: {ndigits}.
-	^ (number perform: #* env: 0 withArguments: {multiplier}) perform: #rounded env: 0
-		perform: #/ env: 0 withArguments: {multiplier}
+	^ ((number ___times___: multiplier) ___rounded___)
+		___divide___: multiplier
 %
 
 category: 'Python-Built-in Functions'
@@ -327,7 +327,7 @@ divmod: x _: y
 	| quotient remainder |
 	quotient := x __floordiv__: y.
 	remainder := x __mod__: y.
-	^ tuple perform: #withAll: env: 0 withArguments: {{quotient. remainder}}
+	^ tuple ___withAll___: {quotient. remainder}
 %
 
 category: 'Python-Built-in Functions'
@@ -336,18 +336,20 @@ print: args
 	"Print objects to stdout"
 
 	| stream |
-	stream := System perform: #stdout env: 0.
-	args perform: #do: env: 0 withArguments: {[:obj |
+	stream := WriteStream ___on___: (String ___new___).
+	"GsFile perform: #stdout env: 0."
+	args ___do___: [:obj |
 		| strRep |
 		[
 			strRep := obj __str__
-		] perform: #on:do: env: 0 withArguments: {MessageNotUnderstood. [:ex |
+		] ___on___: MessageNotUnderstood do: [:ex |
 			strRep := obj __repr__
-		]}.
-		stream perform: #nextPutAll: env: 0 withArguments: {strRep}.
-		stream perform: #space env: 0
-	]}.
-	stream perform: #cr env: 0.
+		].
+		stream ___nextPutAll___: strRep.
+		stream ___space___
+	].
+	stream ___cr___.
+	UserGlobals ___at___: #'James' put: (stream ___contents___).
 	^ nil
 %
 
@@ -357,8 +359,8 @@ input
 	"Read a line from input"
 
 	| stream line |
-	stream := System perform: #stdin env: 0.
-	line := stream perform: #nextLine env: 0.
+	stream := System ___stdin___.
+	line := stream ___nextLine___.
 	^ line
 %
 
@@ -368,12 +370,12 @@ input: prompt
 	"Read a line from input, displaying a prompt first"
 
 	| stream line |
-	stream := System perform: #stdout env: 0.
-	stream perform: #nextPutAll: env: 0 withArguments: {prompt}.
-	stream perform: #flush env: 0.
+	stream := System ___stdout___.
+	stream ___nextPutAll___: prompt.
+	stream ___flush___.
 
-	stream := System perform: #stdin env: 0.
-	line := stream perform: #nextLine env: 0.
+	stream := System ___stdin___.
+	line := stream ___nextLine___.
 	^ line
 %
 
@@ -383,21 +385,21 @@ sorted: iterable
 	"Return a new sorted list from the items in iterable"
 
 	| lst iter sorted |
-	lst := list perform: #new env: 0.
+	lst := list ___new___.
 	iter := iterable __iter__.
 
 	"Collect all items from the iterable"
-	[true] perform: #whileTrue: env: 0 withArguments: {[
+	[true] ___whileTrue___: [
 		| item |
 		[
 			item := iter __next__.
 			lst append: item
-		] perform: #on:do: env: 0 withArguments: {StopIteration. [:ex |
+		] ___on___: StopIteration do: [:ex |
 			"Use Smalltalk sort: to get a new sorted collection"
-			sorted := lst perform: #sort: env: 0 withArguments: {[:a :b | a __lt__: b]}.
+			sorted := lst ___sort___: [:a :b | a __lt__: b].
 			^ sorted
-		]}
-	]}
+		]
+	]
 %
 
 category: 'Python-Built-in Functions'
@@ -406,10 +408,10 @@ reversed: sequence
 	"Return a reverse iterator"
 
 	| lst |
-	lst := list perform: #new env: 0.
-	sequence perform: #reverseDo: env: 0 withArguments: {[:item |
+	lst := list ___new___.
+	sequence ___reverseDo___: [:item |
 		lst append: item
-	]}.
+	].
 	^ lst __iter__
 %
 
@@ -419,19 +421,19 @@ enumerate: iterable
 	"Return an enumerate object"
 
 	| lst index iter |
-	lst := list perform: #new env: 0.
+	lst := list ___new___.
 	index := 0.
 	iter := iterable __iter__.
 
-	[true] perform: #whileTrue: env: 0 withArguments: {[
+	[true] ___whileTrue___: [
 		| item pair |
 		[
 			item := iter __next__.
-			pair := tuple perform: #withAll: env: 0 withArguments: {{index. item}}.
+			pair := tuple ___withAll___: {index. item}.
 			lst append: pair.
-			index := index perform: #+ env: 0 withArguments: {1}
-		] perform: #on:do: env: 0 withArguments: {StopIteration. [:ex | ^ lst __iter__]}
-	]}
+			index := index ___plus___: 1
+		] ___on___: StopIteration do: [:ex | ^ lst __iter__]
+	]
 %
 
 category: 'Python-Built-in Functions'
@@ -440,34 +442,34 @@ zip: iterables
 	"Return an iterator of tuples"
 
 	| iterators result allDone |
-	iterators := list perform: #new env: 0.
-	iterables perform: #do: env: 0 withArguments: {[:iterable |
+	iterators := list ___new___.
+	iterables ___do___: [:iterable |
 		iterators append: iterable __iter__
-	]}.
+	].
 
-	result := list perform: #new env: 0.
+	result := list ___new___.
 	allDone := false.
 
-	[allDone] perform: #whileFalse: env: 0 withArguments: {[
+	[allDone] ___whileFalse___: [
 		| items |
-		items := list perform: #new env: 0.
-		iterators perform: #do: env: 0 withArguments: {[:iter |
+		items := list ___new___.
+		iterators ___do___: [:iter |
 			[
 				| item |
 				item := iter __next__.
 				items append: item
-			] perform: #on:do: env: 0 withArguments: {StopIteration. [:ex |
+			] ___on___: StopIteration do: [:ex |
 				allDone := true.
 				^ result __iter__
-			]}
-		]}.
+			]
+		].
 		allDone ifFalse: [
 			| itemsArray tup |
-			itemsArray := items perform: #asArray env: 0.
-			tup := tuple perform: #withAll: env: 0 withArguments: {itemsArray}.
+			itemsArray := items ___asArray___.
+			tup := tuple ___withAll___: itemsArray.
 			result append: tup
 		]
-	]}.
+	].
 
 	^ result __iter__
 %

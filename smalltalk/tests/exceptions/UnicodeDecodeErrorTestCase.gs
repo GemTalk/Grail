@@ -16,7 +16,7 @@ test_inheritance
 	"Test that UnicodeDecodeError inherits from UnicodeError."
 	
 	| exc |
-	exc := UnicodeDecodeError perform: #__new__: env: 2 withArguments: { UnicodeDecodeError }.
+	exc := UnicodeDecodeError ___new___:  UnicodeDecodeError .
 	self assert: (exc isKindOf: UnicodeError).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a UnicodeDecodeError instance."
 	
 	| exc |
-	exc := UnicodeDecodeError perform: #__new__: env: 2 withArguments: { UnicodeDecodeError }.
+	exc := UnicodeDecodeError ___new___:  UnicodeDecodeError .
 	self assert: exc notNil.
 %

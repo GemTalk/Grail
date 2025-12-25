@@ -15,4 +15,5 @@ category: 'other'
 method: SetAst
 printSmalltalkOn: aStream
 
+	self halt.
 %

@@ -7,4 +7,5 @@ category: 'other'
 method: USubAst
 printSmalltalkOn: aStream
 
+	self halt.
 %

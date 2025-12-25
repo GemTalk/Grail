@@ -16,7 +16,7 @@ test_inheritance
 	"Test that BlockingIOError inherits from OSError."
 	
 	| exc |
-	exc := BlockingIOError perform: #__new__: env: 2 withArguments: { BlockingIOError }.
+	exc := BlockingIOError ___new___:  BlockingIOError .
 	self assert: (exc isKindOf: OSError).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a BlockingIOError instance."
 	
 	| exc |
-	exc := BlockingIOError perform: #__new__: env: 2 withArguments: { BlockingIOError }.
+	exc := BlockingIOError ___new___:  BlockingIOError .
 	self assert: exc notNil.
 %

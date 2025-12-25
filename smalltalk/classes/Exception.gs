@@ -27,7 +27,7 @@ __new__: cls
 	"Create a new Exception instance with no arguments."
 	
 	| instance |
-	instance := cls perform: #new env: 0.
+	instance := cls perform: #new env: 0 withArguments: {  }.
 	instance perform: #___args: env: 0 withArguments: { #() }.
 	^ instance
 %
@@ -39,7 +39,7 @@ __new__: cls _: anArray
 	anArray should be a tuple (Array) of arguments."
 	
 	| instance |
-	instance := cls perform: #new env: 0.
+	instance := cls perform: #new env: 0 withArguments: {  }.
 	instance 
 		perform: #___args: 
 		env: 0 

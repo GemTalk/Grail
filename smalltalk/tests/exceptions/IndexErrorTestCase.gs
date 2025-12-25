@@ -16,7 +16,7 @@ test_inheritance
 	"Test that IndexError inherits from LookupError."
 	
 	| exc |
-	exc := IndexError perform: #__new__: env: 2 withArguments: { IndexError }.
+	exc := IndexError ___new___:  IndexError .
 	self assert: (exc isKindOf: LookupError).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a IndexError instance."
 	
 	| exc |
-	exc := IndexError perform: #__new__: env: 2 withArguments: { IndexError }.
+	exc := IndexError ___new___:  IndexError .
 	self assert: exc notNil.
 %

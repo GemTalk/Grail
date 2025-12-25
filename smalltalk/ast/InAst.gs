@@ -7,6 +7,7 @@ category: 'other'
 method: InAst
 printSmalltalkOn: aStream
 
+	self halt.
 %
 category: 'other'
 method: InAst

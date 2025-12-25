@@ -16,7 +16,7 @@ test_inheritance
 	"Test that ReferenceError inherits from Exception."
 	
 	| exc |
-	exc := ReferenceError perform: #__new__: env: 2 withArguments: { ReferenceError }.
+	exc := ReferenceError ___new___:  ReferenceError .
 	self assert: (exc isKindOf: Exception).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a ReferenceError instance."
 	
 	| exc |
-	exc := ReferenceError perform: #__new__: env: 2 withArguments: { ReferenceError }.
+	exc := ReferenceError ___new___:  ReferenceError .
 	self assert: exc notNil.
 %

@@ -16,7 +16,7 @@ test_inheritance
 	"Test that SyntaxError inherits from Exception."
 	
 	| exc |
-	exc := SyntaxError perform: #__new__: env: 2 withArguments: { SyntaxError }.
+	exc := SyntaxError ___new___:  SyntaxError .
 	self assert: (exc isKindOf: Exception).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a SyntaxError instance."
 	
 	| exc |
-	exc := SyntaxError perform: #__new__: env: 2 withArguments: { SyntaxError }.
+	exc := SyntaxError ___new___:  SyntaxError .
 	self assert: exc notNil.
 %

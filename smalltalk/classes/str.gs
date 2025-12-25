@@ -25,7 +25,7 @@ __new__
 	"Create a new empty str instance.
 	In Python: str() or str.__new__(str)"
 
-	^ '' perform: #yourself env: 0
+	^ '' ___copy___
 %
 
 category: 'Python-Initialization'
@@ -35,10 +35,10 @@ __new__: obj
 	In Python: str(obj) or str.__new__(str, obj)"
 
 	| result |
-	obj ifNil: [ ^ '' perform: #yourself env: 0 ].
+	obj ifNil: [ ^ '' ___copy___ ].
 
 	"If already a str return it"
-	(obj perform: #isKindOf: env: 0 withArguments: { str }) ifTrue: [
+	(obj ___isKindOf___: str) ifTrue: [
 		^ obj
 	].
 
@@ -64,7 +64,7 @@ method: str
 __add__: other
 	"Concatenate two strings. In Python: str1 + str2"
 
-	^ self perform: #, env: 0 withArguments: { other }
+	^ self ___concat___: other
 %
 
 category: 'Python-String Operations'
@@ -73,14 +73,14 @@ __mul__: n
 	"Repeat string n times. In Python: str * n"
 
 	| count result stream |
-	count := n perform: #asInteger env: 0.
-	(count perform: #<= env: 0 withArguments: {0}) ifTrue: [ ^ '' perform: #yourself env: 0 ].
+	count := n ___asInteger___.
+	(count ___le___: 0) ifTrue: [ ^ '' ___copy___ ].
 
-	stream := WriteStream perform: #on: env: 0 withArguments: { str perform: #new env: 0 }.
-	count perform: #timesRepeat: env: 0 withArguments: { [
-		stream with: self perform: #nextPutAll: env: 0
-	] }.
-	result := stream perform: #contents env: 0.
+	stream := WriteStream ___on___: (str ___new___).
+	count ___timesRepeat___: [
+		stream ___nextPutAll___: self
+	].
+	result := stream ___contents___.
 	^ result
 %
 
@@ -97,7 +97,7 @@ method: str
 __mod__: args
 	"String formatting using % operator. In Python: 'format %s' % args"
 
-	self with: 'Not yet implemented: __mod__' perform: #error: env: 0
+	self ___error___: 'Not yet implemented: __mod__'
 %
 
 category: 'Python-String Operations'
@@ -105,7 +105,7 @@ method: str
 __rmod__: args
 	"String formatting (reverse). Not typically used."
 
-	self with: 'Not yet implemented: __rmod__' perform: #error: env: 0
+	self ___error___: 'Not yet implemented: __rmod__'
 %
 
 category: 'Python-Comparison'
@@ -145,7 +145,7 @@ method: str
 __eq__: other
 	"Return self == other"
 
-	^ self with: other perform: #= env: 0
+	^ self ___eq___: other
 %
 
 category: 'Python-Comparison'
@@ -153,7 +153,7 @@ method: str
 __ne__: other
 	"Return self != other"
 
-	^ self with: other perform: #~= env: 0
+	^ self ___ne___: other
 %
 
 category: 'Python-Sequence Operations'
@@ -161,7 +161,7 @@ method: str
 __len__
 	"Return the length of the string. In Python: len(str)"
 
-	^ self perform: #size env: 0
+	^ self ___size___
 %
 
 category: 'Python-Sequence Operations'
@@ -169,7 +169,7 @@ method: str
 __getitem__: index
 	"Get character at index. In Python: str[index]"
 
-	self with: 'Not yet implemented: __getitem__' perform: #error: env: 0
+	self ___error___: 'Not yet implemented: __getitem__'
 %
 
 category: 'Python-Sequence Operations'
@@ -188,24 +188,24 @@ __repr__
 	"Return a string representation for debugging. In Python: repr(str)"
 
 	| stream |
-	stream := WriteStream perform: #on: env: 0 withArguments: { str perform: #new env: 0 }.
-	stream with: $' perform: #nextPut: env: 0.
-	self perform: #do: env: 0 withArguments: { [:char |
+	stream := WriteStream ___on___: (str ___new___).
+	stream ___nextPut___: $'.
+	self ___do___: [:char |
 		| cp |
-		cp := char perform: #codePoint env: 0.
-		(cp perform: #= env: 0 withArguments: {39}) ifTrue: [  "apostrophe"
-			stream with: '\' perform: #nextPutAll: env: 0.
-			stream with: $' perform: #nextPut: env: 0.
+		cp := char ___codePoint___.
+		(cp ___eq___: 39) ifTrue: [  "apostrophe"
+			stream ___nextPutAll___: '\'.
+			stream ___nextPut___: $'.
 		] ifFalse: [
-			(cp perform: #= env: 0 withArguments: {92}) ifTrue: [  "backslash"
-				stream with: '\\' perform: #nextPutAll: env: 0.
+			(cp ___eq___: 92) ifTrue: [  "backslash"
+				stream ___nextPutAll___: '\\'.
 			] ifFalse: [
-				stream with: char perform: #nextPut: env: 0.
+				stream ___nextPut___: char.
 			]
 		]
-	] }.
-	stream with: $' perform: #nextPut: env: 0.
-	^ stream perform: #contents env: 0
+	].
+	stream ___nextPut___: $'.
+	^ stream ___contents___
 %
 
 category: 'Python-String Representation'
@@ -221,7 +221,7 @@ method: str
 __format__: formatSpec
 	"Return a formatted string representation"
 
-	self with: 'Not yet implemented: __format__' perform: #error: env: 0
+	self ___error___: 'Not yet implemented: __format__'
 %
 
 category: 'Python-Hashing & Identity'
@@ -229,7 +229,7 @@ method: str
 __hash__
 	"Return hash value for this string"
 
-	^ self perform: #hash env: 0
+	^ self ___hash___
 %
 
 category: 'Python-String Methods'
@@ -254,16 +254,16 @@ capitalize
 	"Return a copy of the string with its first character capitalized and the rest lowercased."
 
 	| stream first rest |
-	(self perform: #isEmpty env: 0) ifTrue: [ ^ self ].
+	(self ___isEmpty___) ifTrue: [ ^ self ].
 
-	stream := WriteStream perform: #on: env: 0 withArguments: { str perform: #new env: 0 }.
-	first := self perform: #first env: 0.
+	stream := WriteStream ___on___: (str ___new___).
+	first := self ___first___.
 	rest := self perform: #allButFirst env: 0.
 
-	stream with: (first perform: #asUppercase env: 0) perform: #nextPut: env: 0.
-	stream with: (rest perform: #asLowercase env: 0) perform: #nextPutAll: env: 0.
+	stream ___nextPut___: (first ___asUppercase___).
+	stream ___nextPutAll___: (rest ___asLowercase___).
 
-	^ stream perform: #contents env: 0
+	^ stream ___contents___
 %
 
 category: 'Python-String Methods'
@@ -295,7 +295,7 @@ method: str
 startswith: prefix
 	"Test whether string starts with the specified prefix."
 
-	^ self perform: #beginsWith: env: 0 withArguments: { prefix }
+	^ self ___beginsWith___: prefix
 %
 
 category: 'Python-String Methods'
@@ -303,7 +303,7 @@ method: str
 endswith: suffix
 	"Test whether string ends with the specified suffix."
 
-	^ self perform: #endsWith: env: 0 withArguments: { suffix }
+	^ self ___endsWith___: suffix
 %
 
 category: 'Python-String Methods'
@@ -312,9 +312,9 @@ find: sub
 	"Return the lowest index where substring sub is found, or -1 if not found."
 
 	| index |
-	index := self perform: #findString:startingAt: env: 0 withArguments: { sub. 1 }.
-	(index perform: #= env: 0 withArguments: {0}) ifTrue: [ ^ -1 ].
-	^ (index perform: #- env: 0 withArguments: {1})  "Convert to 0-based indexing"
+	index := self ___findString___: sub startingAt: 1.
+	(index ___eq___: 0) ifTrue: [ ^ -1 ].
+	^ (index ___minus___: (1))  "Convert to 0-based indexing"
 %
 
 category: 'Python-String Methods'
@@ -341,18 +341,18 @@ join: iterable
 	"Concatenate any number of strings with self as separator."
 
 	| stream first |
-	stream := WriteStream perform: #on: env: 0 withArguments: { str perform: #new env: 0 }.
+	stream := WriteStream ___on___: (str ___new___).
 	first := true.
 
-	iterable perform: #do: env: 0 withArguments: { [:each |
+	iterable ___do___: [:each |
 		first ifFalse: [
-			stream with: self perform: #nextPutAll: env: 0
+			stream ___nextPutAll___: self
 		].
-		stream with: each perform: #nextPutAll: env: 0.
+		stream ___nextPutAll___: each.
 		first := false.
-	] }.
+	].
 
-	^ stream perform: #contents env: 0
+	^ stream ___contents___
 %
 
 category: 'Python-String Methods'
@@ -363,10 +363,10 @@ count: sub
 	| count index start |
 	count := 0.
 	start := 1.
-	[ index := self perform: #findString:startingAt: env: 0 withArguments: { sub. start }.
-	  (index perform: #> env: 0 withArguments: {0}) ] whileTrue: [
-		count := (count perform: #+ env: 0 withArguments: {1}).
-		start := (index perform: #+ env: 0 withArguments: {(sub perform: #size env: 0)}).
+	[ index := self ___findString___: sub startingAt: start.
+	  (index ___gt___: 0) ] whileTrue: [
+		count := (count ___plus___: 1).
+		start := (index ___plus___: sub ___size___).
 	].
 	^ count
 %
@@ -378,8 +378,8 @@ index: sub
 
 	| idx |
 	idx := self find: sub.
-	(idx perform: #= env: 0 withArguments: {-1}) ifTrue: [
-		self with: 'ValueError: substring not found' perform: #error: env: 0
+	(idx ___eq___: -1) ifTrue: [
+		self ___error___: 'ValueError: substring not found'
 	].
 	^ idx
 %
@@ -392,13 +392,13 @@ rfind: sub
 	| index lastIndex start |
 	lastIndex := 0.
 	start := 1.
-	[ index := self perform: #findString:startingAt: env: 0 withArguments: { sub. start }.
-	  (index perform: #> env: 0 withArguments: {0}) ] whileTrue: [
+	[ index := self ___findString___: sub startingAt: start.
+	  (index ___gt___: 0) ] whileTrue: [
 		lastIndex := index.
-		start := (index perform: #+ env: 0 withArguments: {1}).
+		start := (index ___plus___: 1).
 	].
-	(lastIndex perform: #= env: 0 withArguments: {0}) ifTrue: [ ^ -1 ].
-	^ (lastIndex perform: #- env: 0 withArguments: {1})  "Convert to 0-based indexing"
+	(lastIndex ___eq___: 0) ifTrue: [ ^ -1 ].
+	^ (lastIndex ___minus___: (1))  "Convert to 0-based indexing"
 %
 
 category: 'Python-String Methods'
@@ -408,8 +408,8 @@ rindex: sub
 
 	| idx |
 	idx := self rfind: sub.
-	(idx perform: #= env: 0 withArguments: {-1}) ifTrue: [
-		self with: 'ValueError: substring not found' perform: #error: env: 0
+	(idx ___eq___: -1) ifTrue: [
+		self ___error___: 'ValueError: substring not found'
 	].
 	^ idx
 %
@@ -420,17 +420,17 @@ swapcase
 	"Return a copy with uppercase characters converted to lowercase and vice versa."
 
 	| stream |
-	stream := WriteStream perform: #on: env: 0 withArguments: { str perform: #new env: 0 }.
-	self perform: #do: env: 0 withArguments: { [:char |
+	stream := WriteStream ___on___: (str ___new___).
+	self ___do___: [:char |
 		| isUpper |
 		isUpper := char perform: #isUppercase env: 0.
 		isUpper ifTrue: [
-			stream with: (char perform: #asLowercase env: 0) perform: #nextPut: env: 0
+			stream ___nextPut___: (char ___asLowercase___)
 		] ifFalse: [
-			stream with: (char perform: #asUppercase env: 0) perform: #nextPut: env: 0
+			stream ___nextPut___: (char ___asUppercase___)
 		]
-	] }.
-	^ stream perform: #contents env: 0
+	].
+	^ stream ___contents___
 %
 
 category: 'Python-String Methods'
@@ -439,24 +439,24 @@ title
 	"Return a titlecased version of the string where words start with uppercase."
 
 	| stream inWord |
-	stream := WriteStream perform: #on: env: 0 withArguments: { str perform: #new env: 0 }.
+	stream := WriteStream ___on___: (str ___new___).
 	inWord := false.
-	self perform: #do: env: 0 withArguments: { [:char |
+	self ___do___: [:char |
 		| isAlpha |
 		isAlpha := char perform: #isLetter env: 0.
 		isAlpha ifTrue: [
 			inWord ifTrue: [
-				stream with: (char perform: #asLowercase env: 0) perform: #nextPut: env: 0
+				stream ___nextPut___: (char ___asLowercase___)
 			] ifFalse: [
-				stream with: (char perform: #asUppercase env: 0) perform: #nextPut: env: 0.
+				stream ___nextPut___: (char ___asUppercase___).
 				inWord := true.
 			]
 		] ifFalse: [
-			stream with: char perform: #nextPut: env: 0.
+			stream ___nextPut___: char.
 			inWord := false.
 		]
-	] }.
-	^ stream perform: #contents env: 0
+	].
+	^ stream ___contents___
 %
 
 category: 'Python-String Methods'
@@ -473,22 +473,22 @@ center: width
 	"Return a centered string of length width, padded with spaces."
 
 	| totalPad leftPad rightPad stream mySize |
-	mySize := self perform: #size env: 0.
-	(width perform: #<= env: 0 withArguments: {mySize}) ifTrue: [ ^ self ].
+	mySize := self ___size___.
+	(width ___le___: mySize) ifTrue: [ ^ self ].
 
-	totalPad := (width perform: #- env: 0 withArguments: {mySize}).
-	leftPad := totalPad perform: #// env: 0 withArguments: { 2 }.
-	rightPad := (totalPad perform: #- env: 0 withArguments: {leftPad}).
+	totalPad := (width ___minus___: (mySize)).
+	leftPad := totalPad ___divideInteger___: 2.
+	rightPad := (totalPad ___minus___: (leftPad)).
 
-	stream := WriteStream perform: #on: env: 0 withArguments: { str perform: #new env: 0 }.
-	leftPad perform: #timesRepeat: env: 0 withArguments: { [
-		stream with: $  perform: #nextPut: env: 0
-	] }.
-	stream with: self perform: #nextPutAll: env: 0.
-	rightPad perform: #timesRepeat: env: 0 withArguments: { [
-		stream with: $  perform: #nextPut: env: 0
-	] }.
-	^ stream perform: #contents env: 0
+	stream := WriteStream ___on___: (str ___new___).
+	leftPad ___timesRepeat___: [
+		stream ___nextPut___: $ 
+	].
+	stream ___nextPutAll___: self.
+	rightPad ___timesRepeat___: [
+		stream ___nextPut___: $ 
+	].
+	^ stream ___contents___
 %
 
 category: 'Python-String Methods'
@@ -497,16 +497,16 @@ ljust: width
 	"Return a left-justified string of length width, padded with spaces."
 
 	| stream mySize padding |
-	mySize := self perform: #size env: 0.
-	(width perform: #<= env: 0 withArguments: {mySize}) ifTrue: [ ^ self ].
+	mySize := self ___size___.
+	(width ___le___: mySize) ifTrue: [ ^ self ].
 
-	padding := (width perform: #- env: 0 withArguments: {mySize}).
-	stream := WriteStream perform: #on: env: 0 withArguments: { str perform: #new env: 0 }.
-	stream with: self perform: #nextPutAll: env: 0.
-	padding perform: #timesRepeat: env: 0 withArguments: { [
-		stream with: $  perform: #nextPut: env: 0
-	] }.
-	^ stream perform: #contents env: 0
+	padding := (width ___minus___: (mySize)).
+	stream := WriteStream ___on___: (str ___new___).
+	stream ___nextPutAll___: self.
+	padding ___timesRepeat___: [
+		stream ___nextPut___: $ 
+	].
+	^ stream ___contents___
 %
 
 category: 'Python-String Methods'
@@ -515,16 +515,16 @@ rjust: width
 	"Return a right-justified string of length width, padded with spaces."
 
 	| stream mySize padding |
-	mySize := self perform: #size env: 0.
-	(width perform: #<= env: 0 withArguments: {mySize}) ifTrue: [ ^ self ].
+	mySize := self ___size___.
+	(width ___le___: mySize) ifTrue: [ ^ self ].
 
-	padding := (width perform: #- env: 0 withArguments: {mySize}).
-	stream := WriteStream perform: #on: env: 0 withArguments: { str perform: #new env: 0 }.
-	padding perform: #timesRepeat: env: 0 withArguments: { [
-		stream with: $  perform: #nextPut: env: 0
-	] }.
-	stream with: self perform: #nextPutAll: env: 0.
-	^ stream perform: #contents env: 0
+	padding := (width ___minus___: (mySize)).
+	stream := WriteStream ___on___: (str ___new___).
+	padding ___timesRepeat___: [
+		stream ___nextPut___: $ 
+	].
+	stream ___nextPutAll___: self.
+	^ stream ___contents___
 %
 
 category: 'Python-String Methods'
@@ -533,32 +533,32 @@ zfill: width
 	"Pad a numeric string with zeros on the left, to fill a field of the given width."
 
 	| stream mySize padding hasSign firstChar |
-	mySize := self perform: #size env: 0.
-	(width perform: #<= env: 0 withArguments: {mySize}) ifTrue: [ ^ self ].
+	mySize := self ___size___.
+	(width ___le___: mySize) ifTrue: [ ^ self ].
 
 	"Check if string starts with + or -"
 	hasSign := false.
-	(mySize perform: #> env: 0 withArguments: {0}) ifTrue: [
-		firstChar := self perform: #first env: 0.
-		hasSign := ((firstChar perform: #= env: 0 withArguments: {$+}) perform: #| env: 0 withArguments: {(firstChar perform: #= env: 0 withArguments: {$-})}).
+	(mySize ___gt___: 0) ifTrue: [
+		firstChar := self ___first___.
+		hasSign := ((firstChar ___eq___: $+) perform: #| env: 0 withArguments: {(firstChar ___eq___: $-)}).
 	].
 
-	padding := (width perform: #- env: 0 withArguments: {mySize}).
-	stream := WriteStream perform: #on: env: 0 withArguments: { str perform: #new env: 0 }.
+	padding := (width ___minus___: (mySize)).
+	stream := WriteStream ___on___: (str ___new___).
 
 	hasSign ifTrue: [
-		stream with: firstChar perform: #nextPut: env: 0.
-		padding perform: #timesRepeat: env: 0 withArguments: { [
-			stream with: $0 perform: #nextPut: env: 0
-		] }.
-		stream with: (self perform: #allButFirst env: 0) perform: #nextPutAll: env: 0.
+		stream ___nextPut___: firstChar.
+		padding ___timesRepeat___: [
+			stream ___nextPut___: $0
+		].
+		stream ___nextPutAll___: (self perform: #allButFirst env: 0).
 	] ifFalse: [
-		padding perform: #timesRepeat: env: 0 withArguments: { [
-			stream with: $0 perform: #nextPut: env: 0
-		] }.
-		stream with: self perform: #nextPutAll: env: 0.
+		padding ___timesRepeat___: [
+			stream ___nextPut___: $0
+		].
+		stream ___nextPutAll___: self.
 	].
-	^ stream perform: #contents env: 0
+	^ stream ___contents___
 %
 
 category: 'Python-String Test Methods'
@@ -567,15 +567,15 @@ isalnum
 	"Return True if all characters are alphanumeric and there is at least one character."
 
 	| isEmpty allAlnum |
-	isEmpty := self perform: #isEmpty env: 0.
+	isEmpty := self ___isEmpty___.
 	isEmpty ifTrue: [ ^ false ].
 
 	allAlnum := true.
-	self perform: #do: env: 0 withArguments: { [:char |
+	self ___do___: [:char |
 		| isAlnum |
 		isAlnum := char perform: #isAlphaNumeric env: 0.
 		isAlnum ifFalse: [ allAlnum := false ].
-	] }.
+	].
 	^ allAlnum
 %
 
@@ -585,15 +585,15 @@ isalpha
 	"Return True if all characters are alphabetic and there is at least one character."
 
 	| isEmpty allAlpha |
-	isEmpty := self perform: #isEmpty env: 0.
+	isEmpty := self ___isEmpty___.
 	isEmpty ifTrue: [ ^ false ].
 
 	allAlpha := true.
-	self perform: #do: env: 0 withArguments: { [:char |
+	self ___do___: [:char |
 		| isAlpha |
 		isAlpha := char perform: #isLetter env: 0.
 		isAlpha ifFalse: [ allAlpha := false ].
-	] }.
+	].
 	^ allAlpha
 %
 
@@ -603,15 +603,15 @@ isdigit
 	"Return True if all characters are digits and there is at least one character."
 
 	| isEmpty allDigit |
-	isEmpty := self perform: #isEmpty env: 0.
+	isEmpty := self ___isEmpty___.
 	isEmpty ifTrue: [ ^ false ].
 
 	allDigit := true.
-	self perform: #do: env: 0 withArguments: { [:char |
+	self ___do___: [:char |
 		| isDigit |
 		isDigit := char perform: #isDigit env: 0.
 		isDigit ifFalse: [ allDigit := false ].
-	] }.
+	].
 	^ allDigit
 %
 
@@ -623,7 +623,7 @@ islower
 	| hasCased allLower |
 	hasCased := false.
 	allLower := true.
-	self perform: #do: env: 0 withArguments: { [:char |
+	self ___do___: [:char |
 		| isLetter isLower |
 		isLetter := char perform: #isLetter env: 0.
 		isLetter ifTrue: [
@@ -631,7 +631,7 @@ islower
 			isLower := char perform: #isLowercase env: 0.
 			isLower ifFalse: [ allLower := false ].
 		].
-	] }.
+	].
 	^ hasCased perform: #& env: 0 withArguments: {allLower}
 %
 
@@ -643,7 +643,7 @@ isupper
 	| hasCased allUpper |
 	hasCased := false.
 	allUpper := true.
-	self perform: #do: env: 0 withArguments: { [:char |
+	self ___do___: [:char |
 		| isLetter isUpper |
 		isLetter := char perform: #isLetter env: 0.
 		isLetter ifTrue: [
@@ -651,7 +651,7 @@ isupper
 			isUpper := char perform: #isUppercase env: 0.
 			isUpper ifFalse: [ allUpper := false ].
 		].
-	] }.
+	].
 	^ hasCased perform: #& env: 0 withArguments: {allUpper}
 %
 
@@ -661,15 +661,15 @@ isspace
 	"Return True if all characters are whitespace and there is at least one character."
 
 	| isEmpty allSpace |
-	isEmpty := self perform: #isEmpty env: 0.
+	isEmpty := self ___isEmpty___.
 	isEmpty ifTrue: [ ^ false ].
 
 	allSpace := true.
-	self perform: #do: env: 0 withArguments: { [:char |
+	self ___do___: [:char |
 		| isSpace |
 		isSpace := char perform: #isSeparator env: 0.
 		isSpace ifFalse: [ allSpace := false ].
-	] }.
+	].
 	^ allSpace
 %
 
@@ -681,7 +681,7 @@ istitle
 	| inWord expectUpper |
 	inWord := false.
 	expectUpper := true.
-	self perform: #do: env: 0 withArguments: { [:char |
+	self ___do___: [:char |
 		| isLetter isUpper isLower |
 		isLetter := char perform: #isLetter env: 0.
 		isLetter ifTrue: [
@@ -696,7 +696,7 @@ istitle
 		] ifFalse: [
 			inWord := false.
 		].
-	] }.
+	].
 	^ true
 %
 
@@ -707,11 +707,11 @@ isascii
 
 	| allAscii |
 	allAscii := true.
-	self perform: #do: env: 0 withArguments: { [:char |
+	self ___do___: [:char |
 		| cp |
-		cp := char perform: #codePoint env: 0.
-		(cp perform: #>= env: 0 withArguments: {128}) ifTrue: [ allAscii := false ].
-	] }.
+		cp := char ___codePoint___.
+		(cp ___ge___: 128) ifTrue: [ allAscii := false ].
+	].
 	^ allAscii
 %
 
@@ -721,15 +721,15 @@ isdecimal
 	"Return True if all characters are decimal characters."
 
 	| isEmpty allDecimal |
-	isEmpty := self perform: #isEmpty env: 0.
+	isEmpty := self ___isEmpty___.
 	isEmpty ifTrue: [ ^ false ].
 
 	allDecimal := true.
-	self perform: #do: env: 0 withArguments: { [:char |
+	self ___do___: [:char |
 		| isDigit |
 		isDigit := char perform: #isDigit env: 0.
 		isDigit ifFalse: [ allDecimal := false ].
-	] }.
+	].
 	^ allDecimal
 %
 
@@ -747,19 +747,19 @@ isidentifier
 	"Return True if string is a valid Python identifier."
 
 	| isEmpty firstChar |
-	isEmpty := self perform: #isEmpty env: 0.
+	isEmpty := self ___isEmpty___.
 	isEmpty ifTrue: [ ^ false ].
 
 	"First character must be letter or underscore"
-	firstChar := self perform: #first env: 0.
-	((firstChar perform: #isLetter env: 0) perform: #| env: 0 withArguments: {(firstChar perform: #= env: 0 withArguments: {$_})}) ifFalse: [ ^ false ].
+	firstChar := self ___first___.
+	((firstChar perform: #isLetter env: 0) perform: #| env: 0 withArguments: {(firstChar ___eq___: $_)}) ifFalse: [ ^ false ].
 
 	"Rest must be letters, digits, or underscores"
-	(self perform: #allButFirst env: 0) perform: #do: env: 0 withArguments: { [:char |
+	(self perform: #allButFirst env: 0) ___do___: [:char |
 		| valid |
-		valid := ((char perform: #isAlphaNumeric env: 0) perform: #| env: 0 withArguments: {(char perform: #= env: 0 withArguments: {$_})}).
+		valid := ((char perform: #isAlphaNumeric env: 0) perform: #| env: 0 withArguments: {(char ___eq___: $_)}).
 		valid ifFalse: [ ^ false ].
-	] }.
+	].
 	^ true
 %
 
@@ -770,12 +770,12 @@ isprintable
 
 	| allPrintable |
 	allPrintable := true.
-	self perform: #do: env: 0 withArguments: { [:char |
+	self ___do___: [:char |
 		| cp |
-		cp := char perform: #codePoint env: 0.
+		cp := char ___codePoint___.
 		"Control characters and some special characters are not printable"
-		((cp perform: #< env: 0 withArguments: {32}) perform: #| env: 0 withArguments: {((cp perform: #>= env: 0 withArguments: {127}) perform: #& env: 0 withArguments: {(cp perform: #< env: 0 withArguments: {160})})}) ifTrue: [ allPrintable := false ].
-	] }.
+		((cp ___lt___: 32) perform: #| env: 0 withArguments: {((cp ___ge___: 127) perform: #& env: 0 withArguments: {(cp ___lt___: 160)})}) ifTrue: [ allPrintable := false ].
+	].
 	^ allPrintable
 %
 
@@ -785,7 +785,7 @@ splitlines
 	"Return a list of lines in the string, breaking at line boundaries."
 
 	| lines lf |
-	lf := Character perform: #lf env: 0.
+	lf := Character ___lf___.
 	lines := self perform: #subStrings: env: 0 withArguments: {lf}.
 	^ lines
 %
@@ -796,14 +796,14 @@ partition: sep
 	"Split the string at the first occurrence of sep, return (before, sep, after)."
 
 	| index before after |
-	index := self perform: #findString:startingAt: env: 0 withArguments: { sep. 1 }.
-	(index perform: #= env: 0 withArguments: {0}) ifTrue: [
-		^ Array perform: #with:with:with: env: 0 withArguments: { self. ''. '' }
+	index := self ___findString___: sep startingAt: 1.
+	(index ___eq___: 0) ifTrue: [
+		^ Array ___with___: self with: '' with: ''
 	].
 
-	before := self perform: #copyFrom:to: env: 0 withArguments: { 1. (index perform: #- env: 0 withArguments: {1}) }.
-	after := self perform: #copyFrom:to: env: 0 withArguments: { (index perform: #+ env: 0 withArguments: {(sep perform: #size env: 0)}). self perform: #size env: 0 }.
-	^ Array perform: #with:with:with: env: 0 withArguments: { before. sep. after }
+	before := self ___copyFrom___: 1 to: (index ___minus___: 1).
+	after := self ___copyFrom___: (index ___plus___: sep ___size___) to: self ___size___.
+	^ Array ___with___: before with: sep with: after
 %
 
 category: 'Python-String Methods'
@@ -814,19 +814,19 @@ rpartition: sep
 	| index before after start lastIndex |
 	lastIndex := 0.
 	start := 1.
-	[ index := self perform: #findString:startingAt: env: 0 withArguments: { sep. start }.
-	  (index perform: #> env: 0 withArguments: {0}) ] whileTrue: [
+	[ index := self ___findString___: sep startingAt: start.
+	  (index ___gt___: 0) ] whileTrue: [
 		lastIndex := index.
-		start := (index perform: #+ env: 0 withArguments: {1}).
+		start := (index ___plus___: 1).
 	].
 
-	(lastIndex perform: #= env: 0 withArguments: {0}) ifTrue: [
+	(lastIndex ___eq___: 0) ifTrue: [
 		^ Array perform: #with:with:with: env: 0 withArguments: { ''. ''. self }
 	].
 
-	before := self perform: #copyFrom:to: env: 0 withArguments: { 1. (lastIndex perform: #- env: 0 withArguments: {1}) }.
-	after := self perform: #copyFrom:to: env: 0 withArguments: { (lastIndex perform: #+ env: 0 withArguments: {(sep perform: #size env: 0)}). self perform: #size env: 0 }.
-	^ Array perform: #with:with:with: env: 0 withArguments: { before. sep. after }
+	before := self ___copyFrom___: 1 to: (lastIndex ___minus___: 1).
+	after := self ___copyFrom___: (lastIndex ___plus___: sep ___size___) to: self ___size___.
+	^ Array ___with___: before with: sep with: after
 %
 
 category: 'Python-String Methods'
@@ -844,9 +844,9 @@ removeprefix: prefix
 	"If the string starts with prefix, return string[len(prefix):], otherwise return a copy."
 
 	| starts |
-	starts := self perform: #beginsWith: env: 0 withArguments: { prefix }.
+	starts := self ___beginsWith___: prefix.
 	starts ifTrue: [
-		^ self perform: #copyFrom:to: env: 0 withArguments: { ((prefix perform: #size env: 0) perform: #+ env: 0 withArguments: {1}). self perform: #size env: 0 }
+		^ self ___copyFrom___: ((prefix ___size___) ___plus___: 1) to: self ___size___
 	].
 	^ self
 %
@@ -857,9 +857,9 @@ removesuffix: suffix
 	"If the string ends with suffix, return string[:-len(suffix)], otherwise return a copy."
 
 	| ends |
-	ends := self perform: #endsWith: env: 0 withArguments: { suffix }.
+	ends := self ___endsWith___: suffix.
 	ends ifTrue: [
-		^ self perform: #copyFrom:to: env: 0 withArguments: { 1. ((self perform: #size env: 0) perform: #- env: 0 withArguments: {(suffix perform: #size env: 0)}) }
+		^ self ___copyFrom___: 1 to: ((self ___size___) ___minus___: suffix ___size___)
 	].
 	^ self
 %
@@ -869,7 +869,7 @@ method: str
 expandtabs
 	"Return a copy where all tab characters are replaced by spaces."
 
-	^ self perform: #copyReplaceAll:with: env: 0 withArguments: { (Character perform: #tab env: 0) perform: #asString env: 0. '        ' }
+	^ self perform: #copyReplaceAll:with: env: 0 withArguments: { (Character perform: #tab env: 0) ___asString___. '        ' }
 %
 
 category: 'Python-String Methods'
@@ -877,7 +877,7 @@ method: str
 format
 	"String formatting using {} placeholders. Not yet implemented."
 
-	self with: 'Not yet implemented: format' perform: #error: env: 0
+	self ___error___: 'Not yet implemented: format'
 %
 
 category: 'Python-String Methods'
@@ -885,7 +885,7 @@ method: str
 format_map: mapping
 	"String formatting using a mapping. Not yet implemented."
 
-	self with: 'Not yet implemented: format_map' perform: #error: env: 0
+	self ___error___: 'Not yet implemented: format_map'
 %
 
 category: 'Python-String Methods'
@@ -893,7 +893,7 @@ method: str
 encode
 	"Encode the string to bytes. Not yet implemented."
 
-	self with: 'Not yet implemented: encode' perform: #error: env: 0
+	self ___error___: 'Not yet implemented: encode'
 %
 
 category: 'Python-String Methods'
@@ -901,7 +901,7 @@ method: str
 translate: table
 	"Return a copy with each character mapped through the translation table. Not yet implemented."
 
-	self with: 'Not yet implemented: translate' perform: #error: env: 0
+	self ___error___: 'Not yet implemented: translate'
 %
 
 category: 'Python-String Methods'
@@ -909,7 +909,7 @@ classmethod: str
 maketrans
 	"Create a translation table. Not yet implemented."
 
-	self with: 'Not yet implemented: maketrans' perform: #error: env: 0
+	self ___error___: 'Not yet implemented: maketrans'
 %
 
 category: 'Python-Sequence Operations'

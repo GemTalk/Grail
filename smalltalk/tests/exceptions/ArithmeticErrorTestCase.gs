@@ -16,7 +16,7 @@ test_inheritance
 	"Test that ArithmeticError inherits from Exception."
 	
 	| exc |
-	exc := ArithmeticError perform: #__new__: env: 2 withArguments: { ArithmeticError }.
+	exc := ArithmeticError ___new___: ArithmeticError.
 	self assert: (exc isKindOf: Exception).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a ArithmeticError instance."
 	
 	| exc |
-	exc := ArithmeticError perform: #__new__: env: 2 withArguments: { ArithmeticError }.
+	exc := ArithmeticError ___new___: ArithmeticError.
 	self assert: exc notNil.
 %

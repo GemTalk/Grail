@@ -11,11 +11,11 @@ test__new__oneArg
 
 	| result |
 	"range(5) creates 0, 1, 2, 3, 4"
-	result := Interval perform: #__new__:_: env: 2 withArguments: {Interval. 5}.
+	result := Interval ___new___: Interval _: 5.
 	self assert: (result perform: #start env: 2) equals: 0.
 	self assert: (result perform: #stop env: 2) equals: 5.
 	self assert: (result perform: #step env: 2) equals: 1.
-	self assert: (result perform: #__len__ env: 2) equals: 5.
+	self assert: (result ___len___) equals: 5.
 %
 
 category: 'Tests - Initialization'
@@ -29,7 +29,7 @@ test__new__twoArgs
 	self assert: (result perform: #start env: 2) equals: 2.
 	self assert: (result perform: #stop env: 2) equals: 7.
 	self assert: (result perform: #step env: 2) equals: 1.
-	self assert: (result perform: #__len__ env: 2) equals: 5.
+	self assert: (result ___len___) equals: 5.
 %
 
 category: 'Tests - Initialization'
@@ -43,7 +43,7 @@ test__new__threeArgs
 	self assert: (result perform: #start env: 2) equals: 0.
 	self assert: (result perform: #stop env: 2) equals: 10.
 	self assert: (result perform: #step env: 2) equals: 2.
-	self assert: (result perform: #__len__ env: 2) equals: 5.
+	self assert: (result ___len___) equals: 5.
 %
 
 category: 'Tests - Initialization'
@@ -57,7 +57,7 @@ test__new__negativeStep
 	self assert: (result perform: #start env: 2) equals: 10.
 	self assert: (result perform: #stop env: 2) equals: 0.
 	self assert: (result perform: #step env: 2) equals: -2.
-	self assert: (result perform: #__len__ env: 2) equals: 5.
+	self assert: (result ___len___) equals: 5.
 %
 
 category: 'Tests - Initialization'
@@ -68,11 +68,11 @@ test__new__emptyRange
 	| result |
 	"range(0, 0) is empty"
 	result := Interval perform: #__new__:_:_: env: 2 withArguments: {Interval. 0. 0}.
-	self assert: (result perform: #__len__ env: 2) equals: 0.
+	self assert: (result ___len___) equals: 0.
 	
 	"range(5, 5) is empty"
 	result := Interval perform: #__new__:_:_: env: 2 withArguments: {Interval. 5. 5}.
-	self assert: (result perform: #__len__ env: 2) equals: 0.
+	self assert: (result ___len___) equals: 0.
 %
 
 category: 'Tests - Initialization'
@@ -104,13 +104,13 @@ test__len__
 
 	| r |
 	r := Interval perform: #__new__:_:_: env: 2 withArguments: {Interval. 0. 10}.
-	self assert: (r perform: #__len__ env: 2) equals: 10.
+	self assert: (r ___len___) equals: 10.
 	
 	r := Interval perform: #__new__:_:_:_: env: 2 withArguments: {Interval. 0. 10. 2}.
-	self assert: (r perform: #__len__ env: 2) equals: 5.
+	self assert: (r ___len___) equals: 5.
 	
 	r := Interval perform: #__new__:_:_:_: env: 2 withArguments: {Interval. 10. 0. -1}.
-	self assert: (r perform: #__len__ env: 2) equals: 10.
+	self assert: (r ___len___) equals: 10.
 %
 
 category: 'Tests - Sequence Protocol'
@@ -157,14 +157,14 @@ test__contains__
 
 	| r |
 	r := Interval perform: #__new__:_:_: env: 2 withArguments: {Interval. 0. 10}.
-	self assert: (r perform: #__contains__: env: 2 withArguments: {5}).
-	self deny: (r perform: #__contains__: env: 2 withArguments: {10}).
-	self deny: (r perform: #__contains__: env: 2 withArguments: {-1}).
+	self assert: (r ___contains___: 5).
+	self deny: (r ___contains___: 10).
+	self deny: (r ___contains___: -1).
 
 	"Test with step"
 	r := Interval perform: #__new__:_:_:_: env: 2 withArguments: {Interval. 0. 10. 2}.
-	self assert: (r perform: #__contains__: env: 2 withArguments: {4}).
-	self deny: (r perform: #__contains__: env: 2 withArguments: {5}).
+	self assert: (r ___contains___: 4).
+	self deny: (r ___contains___: 5).
 %
 
 category: 'Tests - Sequence Protocol'
@@ -240,7 +240,7 @@ test__repr__
 
 	| r result |
 	"range(5) shows just stop"
-	r := Interval perform: #__new__:_: env: 2 withArguments: {Interval. 5}.
+	r := Interval ___new___: Interval _: 5.
 	result := r perform: #__repr__ env: 2.
 	self assert: result equals: 'range(5)'.
 
@@ -304,7 +304,7 @@ test__reversed__
 	self assert: (rev perform: #start env: 2) equals: 4.
 	self assert: (rev perform: #stop env: 2) equals: -1.
 	self assert: (rev perform: #step env: 2) equals: -1.
-	self assert: (rev perform: #__len__ env: 2) equals: 5.
+	self assert: (rev ___len___) equals: 5.
 %
 
 category: 'Tests - Iteration'
@@ -316,6 +316,6 @@ test__reversed__empty
 	r := Interval perform: #__new__:_:_: env: 2 withArguments: {Interval. 0. 0}.
 	rev := r perform: #__reversed__ env: 2.
 
-	self assert: (rev perform: #__len__ env: 2) equals: 0.
+	self assert: (rev ___len___) equals: 0.
 %
 

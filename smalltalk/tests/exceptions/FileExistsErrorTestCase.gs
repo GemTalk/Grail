@@ -16,7 +16,7 @@ test_inheritance
 	"Test that FileExistsError inherits from OSError."
 	
 	| exc |
-	exc := FileExistsError perform: #__new__: env: 2 withArguments: { FileExistsError }.
+	exc := FileExistsError ___new___:  FileExistsError .
 	self assert: (exc isKindOf: OSError).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a FileExistsError instance."
 	
 	| exc |
-	exc := FileExistsError perform: #__new__: env: 2 withArguments: { FileExistsError }.
+	exc := FileExistsError ___new___:  FileExistsError .
 	self assert: exc notNil.
 %

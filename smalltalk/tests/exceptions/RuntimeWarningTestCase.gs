@@ -16,7 +16,7 @@ test_inheritance
 	"Test that RuntimeWarning inherits from Warning."
 	
 	| exc |
-	exc := RuntimeWarning perform: #__new__: env: 2 withArguments: { RuntimeWarning }.
+	exc := RuntimeWarning ___new___:  RuntimeWarning .
 	self assert: (exc isKindOf: Warning).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a RuntimeWarning instance."
 	
 	| exc |
-	exc := RuntimeWarning perform: #__new__: env: 2 withArguments: { RuntimeWarning }.
+	exc := RuntimeWarning ___new___:  RuntimeWarning .
 	self assert: exc notNil.
 %

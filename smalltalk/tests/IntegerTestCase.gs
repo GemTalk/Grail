@@ -15,11 +15,11 @@ test__new__
 	self assert: result equals: 0.
 
 	"int(42) returns 42"
-	result := Integer perform: #__new__: env: 2 withArguments: {42}.
+	result := Integer ___new___: 42.
 	self assert: result equals: 42.
 
 	"int(-5) returns -5"
-	result := Integer perform: #__new__: env: 2 withArguments: {-5}.
+	result := Integer ___new___: -5.
 	self assert: result equals: -5.
 %
 
@@ -30,15 +30,15 @@ test__new__fromFloat
 
 	| result |
 	"int(3.14) returns 3"
-	result := Integer perform: #__new__: env: 2 withArguments: {3.14}.
+	result := Integer ___new___: 3.14.
 	self assert: result equals: 3.
 
 	"int(-3.14) returns -3"
-	result := Integer perform: #__new__: env: 2 withArguments: {-3.14}.
+	result := Integer ___new___: -3.14.
 	self assert: result equals: -3.
 
 	"int(3.9) returns 3 (truncates, not rounds)"
-	result := Integer perform: #__new__: env: 2 withArguments: {3.9}.
+	result := Integer ___new___: 3.9.
 	self assert: result equals: 3.
 %
 
@@ -49,15 +49,15 @@ test__new__fromString
 
 	| result |
 	"int('42') returns 42"
-	result := Integer perform: #__new__: env: 2 withArguments: {'42'}.
+	result := Integer ___new___: '42'.
 	self assert: result equals: 42.
 
 	"int('-5') returns -5"
-	result := Integer perform: #__new__: env: 2 withArguments: {'-5'}.
+	result := Integer ___new___: '-5'.
 	self assert: result equals: -5.
 
 	"int('  100  ') returns 100 (strips whitespace)"
-	result := Integer perform: #__new__: env: 2 withArguments: {'  100  '}.
+	result := Integer ___new___: '  100  '.
 	self assert: result equals: 100.
 %
 

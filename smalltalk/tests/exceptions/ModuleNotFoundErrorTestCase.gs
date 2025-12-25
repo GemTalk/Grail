@@ -16,7 +16,7 @@ test_inheritance
 	"Test that ModuleNotFoundError inherits from ImportError."
 	
 	| exc |
-	exc := ModuleNotFoundError perform: #__new__: env: 2 withArguments: { ModuleNotFoundError }.
+	exc := ModuleNotFoundError ___new___:  ModuleNotFoundError .
 	self assert: (exc isKindOf: ImportError).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a ModuleNotFoundError instance."
 	
 	| exc |
-	exc := ModuleNotFoundError perform: #__new__: env: 2 withArguments: { ModuleNotFoundError }.
+	exc := ModuleNotFoundError ___new___:  ModuleNotFoundError .
 	self assert: exc notNil.
 %

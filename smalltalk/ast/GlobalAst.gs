@@ -20,4 +20,5 @@ category: 'other'
 method: GlobalAst
 printSmalltalkOn: aStream
 
+	self halt.
 %

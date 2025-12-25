@@ -32,14 +32,14 @@ category: 'Python-Collection Protocol'
 method: Dictionary
 __len__
 	"Return the number of items in the dictionary"
-	^ self perform: #size env: 0
+	^ self ___size___
 %
 
 category: 'Python-Collection Protocol'
 method: Dictionary
 __contains__: key
 	"Return True if key is in the dictionary, else False"
-	^ self perform: #includesKey: env: 0 withArguments: {key}
+	^ self ___includesKey___: key
 %
 
 category: 'Python-Subscript Protocol'
@@ -48,18 +48,18 @@ __getitem__: key
 	"Return the value for key. Raises KeyError if key is not in the dictionary"
 
 	| hasKey |
-	hasKey := self perform: #includesKey: env: 0 withArguments: {key}.
+	hasKey := self ___includesKey___: key.
 	hasKey ifFalse: [
-		KeyError perform: #signal: env: 0 withArguments: {key}
+		KeyError ___signal___: key
 	].
-	^ self perform: #at: env: 0 withArguments: {key}
+	^ self ___at___: key
 %
 
 category: 'Python-Subscript Protocol'
 method: Dictionary
 __setitem__: key _: value
 	"Set d[key] to value"
-	self perform: #at:put: env: 0 withArguments: {key. value}
+	self ___at___: key put: value
 %
 
 category: 'Python-Subscript Protocol'
@@ -68,9 +68,9 @@ __delitem__: key
 	"Remove d[key] from dictionary. Raises KeyError if key is not in the dictionary"
 
 	| hasKey |
-	hasKey := self perform: #includesKey: env: 0 withArguments: {key}.
+	hasKey := self ___includesKey___: key.
 	hasKey ifFalse: [
-		KeyError perform: #signal: env: 0 withArguments: {key}
+		KeyError ___signal___: key
 	].
 	self perform: #removeKey: env: 0 withArguments: {key}
 %
@@ -88,27 +88,27 @@ __eq__: other
 	"Return True if dictionaries have the same (key, value) pairs"
 
 	| mySize otherSize |
-	(other perform: #isKindOf: env: 0 withArguments: {Dictionary}) ifFalse: [
+	(other ___isKindOf___: Dictionary) ifFalse: [
 		^ false
 	].
 	
-	mySize := self perform: #size env: 0.
-	otherSize := other perform: #size env: 0.
-	(mySize perform: #= env: 0 withArguments: {otherSize}) ifFalse: [
+	mySize := self ___size___.
+	otherSize := other ___size___.
+	(mySize ___eq___: otherSize) ifFalse: [
 		^ false
 	].
 	
-	self perform: #keysAndValuesDo: env: 0 withArguments: {[:key :value |
+	self ___keysAndValuesDo___: [:key :value |
 		| otherHasKey otherValue |
-		otherHasKey := other perform: #includesKey: env: 0 withArguments: {key}.
+		otherHasKey := other ___includesKey___: key.
 		otherHasKey ifFalse: [
 			^ false
 		].
-		otherValue := other perform: #at: env: 0 withArguments: {key}.
+		otherValue := other ___at___: key.
 		(value perform: #__eq__: env: 2 withArguments: {otherValue}) ifFalse: [
 			^ false
 		]
-	]}.
+	].
 	
 	^ true
 %
@@ -117,7 +117,7 @@ category: 'Python-Comparison'
 method: Dictionary
 __ne__: other
 	"Return True if dictionaries do not have the same (key, value) pairs"
-	^ (self perform: #__eq__: env: 2 withArguments: {other}) perform: #not env: 0
+	^ (self perform: #__eq__: env: 2 withArguments: {other}) ___not___
 %
 
 category: 'Python-Mutation Methods'
@@ -131,7 +131,7 @@ category: 'Python-Mutation Methods'
 method: Dictionary
 copy
 	"Return a shallow copy of the dictionary"
-	^ self perform: #copy env: 0
+	^ self ___copy___
 %
 
 category: 'Python-Access Methods'
@@ -147,9 +147,9 @@ get: key _: default
 	"Return the value for key if key is in the dictionary, else default"
 
 	| hasKey |
-	hasKey := self perform: #includesKey: env: 0 withArguments: {key}.
+	hasKey := self ___includesKey___: key.
 	hasKey ifTrue: [
-		^ self perform: #at: env: 0 withArguments: {key}
+		^ self ___at___: key
 	].
 	^ default
 %
@@ -160,9 +160,9 @@ keys
 	"Return a new view of the dictionary's keys"
 
 	| keysArray |
-	keysArray := Array perform: #new env: 0.
+	keysArray := Array ___new___.
 	self perform: #keysDo: env: 0 withArguments: {[:key |
-		keysArray perform: #add: env: 0 withArguments: {key}
+		keysArray ___add___: key
 	]}.
 	^ keysArray
 %
@@ -173,9 +173,9 @@ values
 	"Return a new view of the dictionary's values"
 
 	| valuesArray |
-	valuesArray := Array perform: #new env: 0.
+	valuesArray := Array ___new___.
 	self perform: #valuesDo: env: 0 withArguments: {[:value |
-		valuesArray perform: #add: env: 0 withArguments: {value}
+		valuesArray ___add___: value
 	]}.
 	^ valuesArray
 %
@@ -186,12 +186,12 @@ items
 	"Return a new view of the dictionary's (key, value) pairs"
 
 	| itemsArray |
-	itemsArray := Array perform: #new env: 0.
-	self perform: #keysAndValuesDo: env: 0 withArguments: {[:key :value |
+	itemsArray := Array ___new___.
+	self ___keysAndValuesDo___: [:key :value |
 		| pair |
-		pair := InvariantArray perform: #with:with: env: 0 withArguments: {key. value}.
-		itemsArray perform: #add: env: 0 withArguments: {pair}
-	]}.
+		pair := InvariantArray ___with___: key with: value.
+		itemsArray ___add___: pair
+	].
 	^ itemsArray
 %
 
@@ -201,11 +201,11 @@ pop: key
 	"If key is in the dictionary, remove it and return its value, else raise KeyError"
 
 	| hasKey value |
-	hasKey := self perform: #includesKey: env: 0 withArguments: {key}.
+	hasKey := self ___includesKey___: key.
 	hasKey ifFalse: [
-		KeyError perform: #signal: env: 0 withArguments: {key}
+		KeyError ___signal___: key
 	].
-	value := self perform: #at: env: 0 withArguments: {key}.
+		value := self ___at___: key.
 	self perform: #removeKey: env: 0 withArguments: {key}.
 	^ value
 %
@@ -216,11 +216,11 @@ pop: key _: default
 	"If key is in the dictionary, remove it and return its value, else return default"
 
 	| hasKey value |
-	hasKey := self perform: #includesKey: env: 0 withArguments: {key}.
+	hasKey := self ___includesKey___: key.
 	hasKey ifFalse: [
 		^ default
 	].
-	value := self perform: #at: env: 0 withArguments: {key}.
+		value := self ___at___: key.
 	self perform: #removeKey: env: 0 withArguments: {key}.
 	^ value
 %
@@ -232,20 +232,20 @@ popitem
 	Raises KeyError if the dictionary is empty"
 
 	| isEmpty lastKey lastValue pair |
-	isEmpty := self perform: #isEmpty env: 0.
+	isEmpty := self ___isEmpty___.
 	isEmpty ifTrue: [
-		KeyError perform: #signal: env: 0 withArguments: {'popitem(): dictionary is empty'}
+		KeyError ___signal___: 'popitem(): dictionary is empty'
 	].
 
 	lastKey := nil.
 	lastValue := nil.
-	self perform: #keysAndValuesDo: env: 0 withArguments: {[:key :value |
+	self ___keysAndValuesDo___: [:key :value |
 		lastKey := key.
 		lastValue := value
-	]}.
+	].
 
 	self perform: #removeKey: env: 0 withArguments: {lastKey}.
-	pair := InvariantArray perform: #with:with: env: 0 withArguments: {lastKey. lastValue}.
+	pair := InvariantArray ___with___: lastKey with: lastValue.
 	^ pair
 %
 
@@ -262,11 +262,11 @@ setdefault: key _: default
 	"If key is in the dictionary, return its value. If not, insert key with value default and return default"
 
 	| hasKey |
-	hasKey := self perform: #includesKey: env: 0 withArguments: {key}.
+	hasKey := self ___includesKey___: key.
 	hasKey ifTrue: [
-		^ self perform: #at: env: 0 withArguments: {key}
+		^ self ___at___: key
 	].
-	self perform: #at:put: env: 0 withArguments: {key. default}.
+	self ___at___: key put: default.
 	^ default
 %
 
@@ -276,19 +276,19 @@ update: other
 	"Update the dictionary with key/value pairs from other, overwriting existing keys"
 
 	| isDict |
-	isDict := other perform: #isKindOf: env: 0 withArguments: {Dictionary}.
+	isDict := other ___isKindOf___: Dictionary.
 	isDict ifTrue: [
-		other perform: #keysAndValuesDo: env: 0 withArguments: {[:key :value |
-			self perform: #at:put: env: 0 withArguments: {key. value}
-		]}
+		other ___keysAndValuesDo___: [:key :value |
+			self ___at___: key put: value
+		]
 	] ifFalse: [
 		"Assume other is an iterable of (key, value) pairs"
-		other perform: #do: env: 0 withArguments: {[:pair |
+		other ___do___: [:pair |
 			| key value |
-			key := pair perform: #at: env: 0 withArguments: {1}.
-			value := pair perform: #at: env: 0 withArguments: {2}.
-			self perform: #at:put: env: 0 withArguments: {key. value}
-		]}
+			key := pair ___at___: 1.
+			value := pair ___at___: 2.
+			self ___at___: key put: value
+		]
 	]
 %
 
@@ -298,29 +298,29 @@ __repr__
 	"Return a string representation of the dictionary"
 
 	| stream isEmpty |
-	isEmpty := self perform: #isEmpty env: 0.
+	isEmpty := self ___isEmpty___.
 	isEmpty ifTrue: [
 		^ '{}'
 	].
 
-	stream := WriteStream perform: #on: env: 0 withArguments: {String perform: #new env: 0}.
-	stream perform: #nextPutAll: env: 0 withArguments: {'{'}.
+	stream := WriteStream ___on___: (String ___new___).
+	stream ___nextPutAll___: '{'.
 
-	self perform: #keysAndValuesDo: env: 0 withArguments: {[:key :value |
+	self ___keysAndValuesDo___: [:key :value |
 		| keyRepr valueRepr |
 		keyRepr := key perform: #__repr__ env: 2.
 		valueRepr := value perform: #__repr__ env: 2.
-		stream perform: #nextPutAll: env: 0 withArguments: {keyRepr}.
-		stream perform: #nextPutAll: env: 0 withArguments: {': '}.
-		stream perform: #nextPutAll: env: 0 withArguments: {valueRepr}.
-		stream perform: #nextPutAll: env: 0 withArguments: {', '}
-	]}.
+		stream ___nextPutAll___: keyRepr.
+		stream ___nextPutAll___: ': '.
+		stream ___nextPutAll___: valueRepr.
+		stream ___nextPutAll___: ', '
+	].
 
 	"Remove the trailing ', '"
 	stream perform: #skip: env: 0 withArguments: {-2}.
-	stream perform: #nextPutAll: env: 0 withArguments: {'}'}.
+	stream ___nextPutAll___: '}'.
 
-	^ stream perform: #contents env: 0
+	^ stream ___contents___
 %
 
 set compile_env: 0

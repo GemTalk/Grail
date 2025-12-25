@@ -7,4 +7,5 @@ category: 'other'
 method: InvertAst
 printSmalltalkOn: aStream
 
+	self halt.
 %

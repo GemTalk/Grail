@@ -24,11 +24,11 @@ testIteratorTypes
 	tpl := tuple perform: #withAll: env: 0 withArguments: {#(1 2 3)}.
 	str := 'abc'.
 	rng := range from: 0 to: 2 by: 1.
-	s := set perform: #new env: 0.
-	s perform: #add: env: 2 withArguments: {1}.
-	fs := frozenset perform: #new env: 0.
+	s := set new.
+	s ___add___: 1.
+	fs := frozenset new.
 	fs perform: #add: env: 0 withArguments: {1}.
-	d := dict perform: #new env: 0.
+	d := dict new.
 	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 1}.
 
 	lstIter := lst perform: #__iter__ env: 2.
@@ -317,13 +317,13 @@ testSetIteratorBasicIteration
 	"Test basic iteration over a set"
 
 	| s iter items |
-	s := set perform: #new env: 0.
-	s perform: #add: env: 2 withArguments: {1}.
-	s perform: #add: env: 2 withArguments: {2}.
-	s perform: #add: env: 2 withArguments: {3}.
+	s := set new.
+	s ___add___: 1.
+	s ___add___: 2.
+	s ___add___: 3.
 
 	iter := s perform: #__iter__ env: 2.
-	items := list perform: #new env: 0.
+	items := list new.
 
 	[true] perform: #whileTrue: env: 0 withArguments: {[
 		| item |
@@ -333,10 +333,10 @@ testSetIteratorBasicIteration
 		] perform: #on:do: env: 0 withArguments: {StopIteration. [:ex | ^ nil]}
 	]}.
 
-	self assert: (items perform: #__len__ env: 2) equals: 3.
-	self assert: (items perform: #__contains__: env: 2 withArguments: {1}).
-	self assert: (items perform: #__contains__: env: 2 withArguments: {2}).
-	self assert: (items perform: #__contains__: env: 2 withArguments: {3}).
+	self assert: (items ___len___) equals: 3.
+	self assert: (items ___contains___: 1).
+	self assert: (items ___contains___: 2).
+	self assert: (items ___contains___: 3).
 %
 
 category: 'Tests - Set Iterator'
@@ -345,13 +345,13 @@ testFrozensetIteratorBasicIteration
 	"Test basic iteration over a frozenset"
 
 	| fs iter items |
-	fs := frozenset perform: #new env: 0.
+	fs := frozenset new.
 	fs perform: #add: env: 0 withArguments: {1}.
 	fs perform: #add: env: 0 withArguments: {2}.
 	fs perform: #add: env: 0 withArguments: {3}.
 
 	iter := fs perform: #__iter__ env: 2.
-	items := list perform: #new env: 0.
+	items := list new.
 
 	[true] perform: #whileTrue: env: 0 withArguments: {[
 		| item |
@@ -361,10 +361,10 @@ testFrozensetIteratorBasicIteration
 		] perform: #on:do: env: 0 withArguments: {StopIteration. [:ex | ^ nil]}
 	]}.
 
-	self assert: (items perform: #__len__ env: 2) equals: 3.
-	self assert: (items perform: #__contains__: env: 2 withArguments: {1}).
-	self assert: (items perform: #__contains__: env: 2 withArguments: {2}).
-	self assert: (items perform: #__contains__: env: 2 withArguments: {3}).
+	self assert: (items ___len___) equals: 3.
+	self assert: (items ___contains___: 1).
+	self assert: (items ___contains___: 2).
+	self assert: (items ___contains___: 3).
 %
 
 category: 'Tests - Set Iterator'
@@ -373,10 +373,10 @@ testSetIteratorIndependence
 	"Test that multiple iterators over the same set are independent"
 
 	| s iter1 iter2 item1 item2 |
-	s := set perform: #new env: 0.
-	s perform: #add: env: 2 withArguments: {1}.
-	s perform: #add: env: 2 withArguments: {2}.
-	s perform: #add: env: 2 withArguments: {3}.
+	s := set new.
+	s ___add___: 1.
+	s ___add___: 2.
+	s ___add___: 3.
 
 	iter1 := s perform: #__iter__ env: 2.
 	iter2 := s perform: #__iter__ env: 2.
@@ -401,9 +401,9 @@ testSetIteratorExhaustion
 	"Test that set iterator raises StopIteration when exhausted"
 
 	| s iter |
-	s := set perform: #new env: 0.
-	s perform: #add: env: 2 withArguments: {1}.
-	s perform: #add: env: 2 withArguments: {2}.
+	s := set new.
+	s ___add___: 1.
+	s ___add___: 2.
 
 	iter := s perform: #__iter__ env: 2.
 
@@ -424,7 +424,7 @@ testEmptySetIterator
 	"Test iterator over empty set"
 
 	| s iter |
-	s := set perform: #new env: 0.
+	s := set new.
 	iter := s perform: #__iter__ env: 2.
 
 	"Should immediately raise StopIteration"
@@ -437,7 +437,7 @@ testEmptyFrozensetIterator
 	"Test iterator over empty frozenset"
 
 	| fs iter |
-	fs := frozenset perform: #new env: 0.
+	fs := frozenset new.
 	iter := fs perform: #__iter__ env: 2.
 
 	"Should immediately raise StopIteration"
@@ -450,7 +450,7 @@ testDictKeyIteratorBasicIteration
 	"Test basic iteration over dictionary keys"
 
 	| d iter key1 key2 key3 keys |
-	d := dict perform: #new env: 0.
+	d := dict new.
 	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 1}.
 	d perform: #__setitem__:_: env: 2 withArguments: {'b'. 2}.
 	d perform: #__setitem__:_: env: 2 withArguments: {'c'. 3}.
@@ -477,7 +477,7 @@ testDictKeyIteratorIndependence
 	"Test that multiple iterators over the same dict are independent"
 
 	| d iter1 iter2 key1a key1b |
-	d := dict perform: #new env: 0.
+	d := dict new.
 	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 1}.
 	d perform: #__setitem__:_: env: 2 withArguments: {'b'. 2}.
 
@@ -497,7 +497,7 @@ testDictKeyIteratorExhaustion
 	"Test that dict_keyiterator raises StopIteration when exhausted"
 
 	| d iter |
-	d := dict perform: #new env: 0.
+	d := dict new.
 	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 1}.
 
 	iter := d perform: #__iter__ env: 2.
@@ -514,7 +514,7 @@ testEmptyDictKeyIterator
 	"Test iterator over empty dict"
 
 	| d iter |
-	d := dict perform: #new env: 0.
+	d := dict new.
 	iter := d perform: #__iter__ env: 2.
 
 	"Should immediately raise StopIteration"

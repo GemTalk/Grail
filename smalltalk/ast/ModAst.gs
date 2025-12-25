@@ -7,4 +7,5 @@ category: 'other'
 method: ModAst
 printSmalltalkOn: aStream
 
+	self halt.
 %

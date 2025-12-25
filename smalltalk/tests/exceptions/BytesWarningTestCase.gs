@@ -16,7 +16,7 @@ test_inheritance
 	"Test that BytesWarning inherits from Warning."
 	
 	| exc |
-	exc := BytesWarning perform: #__new__: env: 2 withArguments: { BytesWarning }.
+	exc := BytesWarning ___new___:  BytesWarning .
 	self assert: (exc isKindOf: Warning).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a BytesWarning instance."
 	
 	| exc |
-	exc := BytesWarning perform: #__new__: env: 2 withArguments: { BytesWarning }.
+	exc := BytesWarning ___new___:  BytesWarning .
 	self assert: exc notNil.
 %

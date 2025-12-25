@@ -17,4 +17,5 @@ category: 'other'
 method: AssertAst
 printSmalltalkOn: aStream
 
+	self halt.
 %

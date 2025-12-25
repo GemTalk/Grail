@@ -16,7 +16,7 @@ test_inheritance
 	"Test that ZeroDivisionError inherits from Exception."
 	
 	| exc |
-	exc := ZeroDivisionError perform: #__new__: env: 2 withArguments: { ZeroDivisionError }.
+	exc := ZeroDivisionError ___new___:  ZeroDivisionError .
 	self assert: (exc isKindOf: Exception).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a ZeroDivisionError instance."
 	
 	| exc |
-	exc := ZeroDivisionError perform: #__new__: env: 2 withArguments: { ZeroDivisionError }.
+	exc := ZeroDivisionError ___new___:  ZeroDivisionError .
 	self assert: exc notNil.
 %

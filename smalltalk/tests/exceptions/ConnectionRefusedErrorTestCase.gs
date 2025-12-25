@@ -16,7 +16,7 @@ test_inheritance
 	"Test that ConnectionRefusedError inherits from ConnectionError."
 	
 	| exc |
-	exc := ConnectionRefusedError perform: #__new__: env: 2 withArguments: { ConnectionRefusedError }.
+	exc := ConnectionRefusedError ___new___:  ConnectionRefusedError .
 	self assert: (exc isKindOf: ConnectionError).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a ConnectionRefusedError instance."
 	
 	| exc |
-	exc := ConnectionRefusedError perform: #__new__: env: 2 withArguments: { ConnectionRefusedError }.
+	exc := ConnectionRefusedError ___new___:  ConnectionRefusedError .
 	self assert: exc notNil.
 %

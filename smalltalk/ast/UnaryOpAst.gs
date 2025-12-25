@@ -24,4 +24,5 @@ category: 'other'
 method: UnaryOpAst
 printSmalltalkOn: aStream
 
+	self halt.
 %

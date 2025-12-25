@@ -7,4 +7,5 @@ category: 'other'
 method: NotEqAst
 printSmalltalkOn: aStream
 
+	self halt.
 %

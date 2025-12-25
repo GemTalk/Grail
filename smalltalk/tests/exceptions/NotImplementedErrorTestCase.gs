@@ -16,7 +16,7 @@ test_inheritance
 	"Test that NotImplementedError inherits from RuntimeError."
 
 	| exc |
-	exc := NotImplementedError perform: #__new__: env: 2 withArguments: { NotImplementedError }.
+	exc := NotImplementedError ___new___:  NotImplementedError .
 	self assert: (exc isKindOf: RuntimeError).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a NotImplementedError instance."
 	
 	| exc |
-	exc := NotImplementedError perform: #__new__: env: 2 withArguments: { NotImplementedError }.
+	exc := NotImplementedError ___new___:  NotImplementedError .
 	self assert: exc notNil.
 %

@@ -317,6 +317,22 @@ doit
 MathTestCase category: 'SUnit'
 %
 
+! ------------------- Class definition for OsTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'OsTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+%
+expectvalue /Class
+doit
+OsTestCase category: 'SUnit'
+%
+
 ! ------------------- Class definition for TupleTestCase
 expectvalue /Class
 doit
@@ -460,6 +476,7 @@ input smalltalk/tests/IntegerTestCase.gs
 input smalltalk/tests/IteratorTestCase.gs
 input smalltalk/tests/ListTestCase.gs
 input smalltalk/tests/MathTestCase.gs
+input smalltalk/tests/OsTestCase.gs
 input smalltalk/tests/ObjectTestCase.gs
 input smalltalk/tests/RangeTestCase.gs
 input smalltalk/tests/SetTestCase.gs

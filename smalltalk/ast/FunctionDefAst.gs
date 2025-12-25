@@ -39,6 +39,7 @@ initialize
 	stream := self stream.
 	(stream peekFor: $') ifFalse: [self error].
 	name := (stream upTo: $') asSymbol.
+	self declareVariable: name.
 	self commaSpace.
 	args := ArgumentsAst parent: self.
 	self commaSpace.
@@ -107,6 +108,16 @@ category: 'other'
 method: FunctionDefAst
 printSmalltalkOn: aStream
 
+	aStream nextPutAll: name; nextPutAll: ' := ['.
+	args args notEmpty ifTrue: [
+		args args do: [:arg |
+			aStream nextPut: $:; nextPutAll: arg name; space.
+		].
+		aStream nextPut: $|.
+	].
+	aStream increaseIndent; lf.
+	body printSmalltalkOn: aStream.
+	aStream decreaseIndent; nextPutAll: '].'.
 %
 category: 'other'
 method: FunctionDefAst

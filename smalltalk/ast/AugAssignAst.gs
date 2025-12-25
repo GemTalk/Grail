@@ -19,4 +19,5 @@ category: 'other'
 method: AugAssignAst
 printSmalltalkOn: aStream
 
+	self halt.
 %

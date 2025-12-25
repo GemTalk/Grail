@@ -16,7 +16,7 @@ test_inheritance
 	"Test that AssertionError inherits from Exception."
 	
 	| exc |
-	exc := AssertionError perform: #__new__: env: 2 withArguments: { AssertionError }.
+	exc := AssertionError ___new___: AssertionError.
 	self assert: (exc isKindOf: Exception).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a AssertionError instance."
 	
 	| exc |
-	exc := AssertionError perform: #__new__: env: 2 withArguments: { AssertionError }.
+	exc := AssertionError ___new___: AssertionError.
 	self assert: exc notNil.
 %

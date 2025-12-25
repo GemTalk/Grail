@@ -16,7 +16,7 @@ test_inheritance
 	"Test that FutureWarning inherits from Warning."
 	
 	| exc |
-	exc := FutureWarning perform: #__new__: env: 2 withArguments: { FutureWarning }.
+	exc := FutureWarning ___new___:  FutureWarning .
 	self assert: (exc isKindOf: Warning).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a FutureWarning instance."
 	
 	| exc |
-	exc := FutureWarning perform: #__new__: env: 2 withArguments: { FutureWarning }.
+	exc := FutureWarning ___new___:  FutureWarning .
 	self assert: exc notNil.
 %

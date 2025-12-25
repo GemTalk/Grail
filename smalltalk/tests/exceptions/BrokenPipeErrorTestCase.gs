@@ -16,7 +16,7 @@ test_inheritance
 	"Test that BrokenPipeError inherits from ConnectionError."
 	
 	| exc |
-	exc := BrokenPipeError perform: #__new__: env: 2 withArguments: { BrokenPipeError }.
+	exc := BrokenPipeError ___new___:  BrokenPipeError .
 	self assert: (exc isKindOf: ConnectionError).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a BrokenPipeError instance."
 	
 	| exc |
-	exc := BrokenPipeError perform: #__new__: env: 2 withArguments: { BrokenPipeError }.
+	exc := BrokenPipeError ___new___:  BrokenPipeError .
 	self assert: exc notNil.
 %

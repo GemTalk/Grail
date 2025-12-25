@@ -16,7 +16,7 @@ test_inheritance
 	"Test that UnboundLocalError inherits from NameError."
 	
 	| exc |
-	exc := UnboundLocalError perform: #__new__: env: 2 withArguments: { UnboundLocalError }.
+	exc := UnboundLocalError ___new___:  UnboundLocalError .
 	self assert: (exc isKindOf: NameError).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a UnboundLocalError instance."
 	
 	| exc |
-	exc := UnboundLocalError perform: #__new__: env: 2 withArguments: { UnboundLocalError }.
+	exc := UnboundLocalError ___new___:  UnboundLocalError .
 	self assert: exc notNil.
 %

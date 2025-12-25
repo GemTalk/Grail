@@ -16,7 +16,7 @@ test_inheritance
 	"Test that SystemError inherits from Exception."
 	
 	| exc |
-	exc := SystemError perform: #__new__: env: 2 withArguments: { SystemError }.
+	exc := SystemError ___new___:  SystemError .
 	self assert: (exc isKindOf: Exception).
 %
 
@@ -26,6 +26,6 @@ test_creation
 	"Test creating a SystemError instance."
 	
 	| exc |
-	exc := SystemError perform: #__new__: env: 2 withArguments: { SystemError }.
+	exc := SystemError ___new___:  SystemError .
 	self assert: exc notNil.
 %

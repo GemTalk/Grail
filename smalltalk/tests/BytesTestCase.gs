@@ -10,8 +10,8 @@ test__new__empty
 	"Test bytes() constructor"
 
 	| result |
-	result := bytes perform: #__new__: env: 2 withArguments: {bytes}.
-	self assert: (result perform: #__len__ env: 2) equals: 0.
+	result := bytes ___new___: bytes.
+	self assert: (result ___len___) equals: 0.
 %
 
 category: 'Tests - Initialization'
@@ -20,8 +20,8 @@ test__new__fromInteger
 	"Test bytes(n) - create n zero bytes"
 
 	| result |
-	result := bytes perform: #__new__:_: env: 2 withArguments: {bytes. 5}.
-	self assert: (result perform: #__len__ env: 2) equals: 5.
+	result := bytes ___new___: bytes _: 5.
+	self assert: (result ___len___) equals: 5.
 	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 0.
 	self assert: (result perform: #at: env: 0 withArguments: {5}) equals: 0.
 %
@@ -32,7 +32,7 @@ test__new__fromIntegerNegative
 	"Test bytes(-1) raises ValueError"
 
 	self 
-		should: [bytes perform: #__new__:_: env: 2 withArguments: {bytes. -1}]
+		should: [bytes ___new___: bytes _: -1]
 		raise: ValueError.
 %
 
@@ -42,13 +42,13 @@ test__new__fromList
 	"Test bytes([65, 66, 67]) creates b'ABC'"
 
 	| list result |
-	list := OrderedCollection perform: #new env: 0.
+	list := OrderedCollection new.
 	list perform: #add: env: 0 withArguments: {65}.
 	list perform: #add: env: 0 withArguments: {66}.
 	list perform: #add: env: 0 withArguments: {67}.
 	
-	result := bytes perform: #__new__:_: env: 2 withArguments: {bytes. list}.
-	self assert: (result perform: #__len__ env: 2) equals: 3.
+	result := bytes ___new___: bytes _: list.
+	self assert: (result ___len___) equals: 3.
 	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 65.
 	self assert: (result perform: #at: env: 0 withArguments: {2}) equals: 66.
 	self assert: (result perform: #at: env: 0 withArguments: {3}) equals: 67.
@@ -60,11 +60,11 @@ test__new__fromListInvalidByte
 	"Test bytes([256]) raises ValueError"
 
 	| list |
-	list := OrderedCollection perform: #new env: 0.
+	list := OrderedCollection new.
 	list perform: #add: env: 0 withArguments: {256}.
 	
 	self 
-		should: [bytes perform: #__new__:_: env: 2 withArguments: {bytes. list}]
+		should: [bytes ___new___: bytes _: list]
 		raise: ValueError.
 %
 
@@ -76,8 +76,8 @@ test__new__fromRange
 	| range result |
 	range := Interval perform: #__new__:_:_:_: env: 2 withArguments: {Interval. 65. 68. 1}.
 	
-	result := bytes perform: #__new__:_: env: 2 withArguments: {bytes. range}.
-	self assert: (result perform: #__len__ env: 2) equals: 3.
+	result := bytes ___new___: bytes _: range.
+	self assert: (result ___len___) equals: 3.
 	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 65.
 	self assert: (result perform: #at: env: 0 withArguments: {2}) equals: 66.
 	self assert: (result perform: #at: env: 0 withArguments: {3}) equals: 67.
@@ -90,9 +90,9 @@ test__new__fromBytes
 
 	| original copy |
 	original := bytes perform: #__new__:_:_: env: 2 withArguments: {bytes. 'hello'. 'ascii'}.
-	copy := bytes perform: #__new__:_: env: 2 withArguments: {bytes. original}.
+	copy := bytes ___new___: bytes _: original.
 	
-	self assert: (copy perform: #__len__ env: 2) equals: 5.
+	self assert: (copy ___len___) equals: 5.
 	self assert: (copy perform: #__eq__: env: 2 withArguments: {original}).
 	self deny: (copy perform: #== env: 0 withArguments: {original}).
 %
@@ -106,7 +106,7 @@ test__new__fromStringNoEncoding
 	str := 'hello'.
 	
 	self 
-		should: [bytes perform: #__new__:_: env: 2 withArguments: {bytes. str}]
+		should: [bytes ___new___: bytes _: str]
 		raise: TypeError.
 %
 
@@ -119,7 +119,7 @@ test__new__fromStringAscii
 	str := 'hello'.
 	
 	result := bytes perform: #__new__:_:_: env: 2 withArguments: {bytes. str. 'ascii'}.
-	self assert: (result perform: #__len__ env: 2) equals: 5.
+	self assert: (result ___len___) equals: 5.
 	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 104.
 	self assert: (result perform: #at: env: 0 withArguments: {5}) equals: 111.
 %
@@ -133,7 +133,7 @@ test__new__fromStringUtf8
 	str := 'hello'.
 	
 	result := bytes perform: #__new__:_:_: env: 2 withArguments: {bytes. str. 'utf-8'}.
-	self assert: (result perform: #__len__ env: 2) equals: 5.
+	self assert: (result ___len___) equals: 5.
 %
 
 category: 'Tests - Initialization'
@@ -145,7 +145,7 @@ test__new__fromStringLatin1
 	str := 'hello'.
 
 	result := bytes perform: #__new__:_:_: env: 2 withArguments: {bytes. str. 'latin-1'}.
-	self assert: (result perform: #__len__ env: 2) equals: 5.
+	self assert: (result ___len___) equals: 5.
 %
 
 category: 'Tests - Sequence Protocol'
@@ -155,8 +155,8 @@ test__len__
 
 	| b arr |
 	arr := Array perform: #with:with:with: env: 0 withArguments: {1. 2. 3}.
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. arr}.
-	self assert: (b perform: #__len__ env: 2) equals: 3.
+	b := bytes ___new___: bytes _: arr.
+	self assert: (b ___len___) equals: 3.
 %
 
 category: 'Tests - Sequence Protocol'
@@ -165,7 +165,7 @@ test__getitem__
 	"Test indexing: b[i]"
 
 	| b |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {65. 66. 67}}.
+	b :=  bytes withAll: {65. 66. 67}.
 	self assert: (b perform: #__getitem__: env: 2 withArguments: {0}) equals: 65.
 	self assert: (b perform: #__getitem__: env: 2 withArguments: {1}) equals: 66.
 	self assert: (b perform: #__getitem__: env: 2 withArguments: {2}) equals: 67.
@@ -177,7 +177,7 @@ test__getitem__negative
 	"Test negative indexing: b[-1]"
 
 	| b |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {65. 66. 67}}.
+	b :=  bytes withAll: {65. 66. 67}.
 	self assert: (b perform: #__getitem__: env: 2 withArguments: {-1}) equals: 67.
 	self assert: (b perform: #__getitem__: env: 2 withArguments: {-2}) equals: 66.
 	self assert: (b perform: #__getitem__: env: 2 withArguments: {-3}) equals: 65.
@@ -189,7 +189,7 @@ test__getitem__outOfRange
 	"Test index out of range raises IndexError"
 
 	| b |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {1. 2. 3}}.
+	b :=  bytes withAll: {1. 2. 3}.
 	self should: [b perform: #__getitem__: env: 2 withArguments: {10}] raise: IndexError.
 	self should: [b perform: #__getitem__: env: 2 withArguments: {-10}] raise: IndexError.
 %
@@ -200,7 +200,7 @@ test__setitem__immutable
 	"Test that bytes is immutable"
 
 	| b |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {1. 2. 3}}.
+	b :=  bytes withAll: {1. 2. 3}.
 	self should: [b perform: #__setitem__:_: env: 2 withArguments: {0. 99}] raise: TypeError.
 %
 
@@ -210,11 +210,11 @@ test__contains__
 	"Test membership: x in bytes"
 
 	| b |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {65. 66. 67}}.
-	self assert: (b perform: #__contains__: env: 2 withArguments: {65}).
-	self assert: (b perform: #__contains__: env: 2 withArguments: {66}).
-	self deny: (b perform: #__contains__: env: 2 withArguments: {68}).
-	self deny: (b perform: #__contains__: env: 2 withArguments: {256}).
+	b :=  bytes withAll: {65. 66. 67}.
+	self assert: (b ___contains___: 65).
+	self assert: (b ___contains___: 66).
+	self deny: (b ___contains___: 68).
+	self deny: (b ___contains___: 256).
 %
 
 category: 'Tests - Comparison'
@@ -223,9 +223,9 @@ test__eq__
 	"Test bytes equality"
 
 	| b1 b2 b3 |
-	b1 := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {1. 2. 3}}.
-	b2 := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {1. 2. 3}}.
-	b3 := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {1. 2. 4}}.
+	b1 :=  bytes withAll: {1. 2. 3}.
+	b2 :=  bytes withAll: {1. 2. 3}.
+	b3 :=  bytes withAll: {1. 2. 4}.
 
 	self assert: (b1 perform: #__eq__: env: 2 withArguments: {b2}).
 	self deny: (b1 perform: #__eq__: env: 2 withArguments: {b3}).
@@ -237,8 +237,8 @@ test__ne__
 	"Test bytes inequality"
 
 	| b1 b2 |
-	b1 := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {1. 2. 3}}.
-	b2 := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {1. 2. 4}}.
+	b1 :=  bytes withAll: {1. 2. 3}.
+	b2 :=  bytes withAll: {1. 2. 4}.
 
 	self assert: (b1 perform: #__ne__: env: 2 withArguments: {b2}).
 	self deny: (b1 perform: #__ne__: env: 2 withArguments: {b1}).
@@ -250,8 +250,8 @@ test__hash__
 	"Test bytes hashing"
 
 	| b1 b2 h1 h2 |
-	b1 := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {1. 2. 3}}.
-	b2 := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {1. 2. 3}}.
+	b1 :=  bytes withAll: {1. 2. 3}.
+	b2 :=  bytes withAll: {1. 2. 3}.
 
 	h1 := b1 perform: #__hash__ env: 2.
 	h2 := b2 perform: #__hash__ env: 2.
@@ -266,7 +266,7 @@ test_count
 	"Test bytes.count(x)"
 
 	| b |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {65. 66. 65. 67. 65}}.
+	b :=  bytes withAll: {65. 66. 65. 67. 65}.
 	self assert: (b perform: #count: env: 2 withArguments: {65}) equals: 3.
 	self assert: (b perform: #count: env: 2 withArguments: {66}) equals: 1.
 	self assert: (b perform: #count: env: 2 withArguments: {68}) equals: 0.
@@ -278,7 +278,7 @@ test_index
 	"Test bytes.index(x)"
 
 	| b |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {65. 66. 67}}.
+	b :=  bytes withAll: {65. 66. 67}.
 	self assert: (b perform: #index: env: 2 withArguments: {65}) equals: 0.
 	self assert: (b perform: #index: env: 2 withArguments: {66}) equals: 1.
 	self assert: (b perform: #index: env: 2 withArguments: {67}) equals: 2.
@@ -290,7 +290,7 @@ test_indexNotFound
 	"Test bytes.index(x) raises ValueError when not found"
 
 	| b |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {1. 2. 3}}.
+	b :=  bytes withAll: {1. 2. 3}.
 	self should: [b perform: #index: env: 2 withArguments: {99}] raise: ValueError.
 %
 
@@ -300,7 +300,7 @@ test_hex
 	"Test bytes.hex()"
 
 	| b result |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {255. 0. 16}}.
+	b :=  bytes withAll: {255. 0. 16}.
 	result := b perform: #hex env: 2.
 	self assert: result equals: 'FF0010'.
 %
@@ -323,11 +323,11 @@ test_startswith
 
 	| b prefix |
 	b := bytes perform: #__new__:_:_: env: 2 withArguments: {bytes. 'hello'. 'ascii'}.
-	prefix := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {104. 101}}.
+	prefix :=  bytes withAll: {104. 101}.
 
 	self assert: (b perform: #startswith: env: 2 withArguments: {prefix}).
 
-	prefix := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {108. 108}}.
+	prefix :=  bytes withAll: {108. 108}.
 	self deny: (b perform: #startswith: env: 2 withArguments: {prefix}).
 %
 
@@ -338,11 +338,11 @@ test_endswith
 
 	| b suffix |
 	b := bytes perform: #__new__:_:_: env: 2 withArguments: {bytes. 'hello'. 'ascii'}.
-	suffix := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {108. 111}}.
+	suffix :=  bytes withAll: {108. 111}.
 
 	self assert: (b perform: #endswith: env: 2 withArguments: {suffix}).
 
-	suffix := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {104. 101}}.
+	suffix :=  bytes withAll: {104. 101}.
 	self deny: (b perform: #endswith: env: 2 withArguments: {suffix}).
 %
 
@@ -353,11 +353,11 @@ test_find
 
 	| b sub |
 	b := bytes perform: #__new__:_:_: env: 2 withArguments: {bytes. 'hello'. 'ascii'}.
-	sub := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {108. 108}}.
+	sub :=  bytes withAll: {108. 108}.
 
 	self assert: (b perform: #find: env: 2 withArguments: {sub}) equals: 2.
 
-	sub := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {120. 121}}.
+	sub :=  bytes withAll: {120. 121}.
 	self assert: (b perform: #find: env: 2 withArguments: {sub}) equals: -1.
 %
 
@@ -367,11 +367,11 @@ test__add__
 	"Test bytes concatenation: b1 + b2"
 
 	| b1 b2 result |
-	b1 := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {1. 2}}.
-	b2 := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {3. 4}}.
+	b1 :=  bytes withAll: {1. 2}.
+	b2 :=  bytes withAll: {3. 4}.
 
 	result := b1 perform: #__add__: env: 2 withArguments: {b2}.
-	self assert: (result perform: #__len__ env: 2) equals: 4.
+	self assert: (result ___len___) equals: 4.
 	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 1.
 	self assert: (result perform: #at: env: 0 withArguments: {4}) equals: 4.
 %
@@ -382,10 +382,10 @@ test__mul__
 	"Test bytes repetition: b * n"
 
 	| b result |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {1. 2}}.
+	b :=  bytes withAll: {1. 2}.
 
 	result := b perform: #__mul__: env: 2 withArguments: {3}.
-	self assert: (result perform: #__len__ env: 2) equals: 6.
+	self assert: (result ___len___) equals: 6.
 	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 1.
 	self assert: (result perform: #at: env: 0 withArguments: {3}) equals: 1.
 	self assert: (result perform: #at: env: 0 withArguments: {5}) equals: 1.
@@ -397,11 +397,11 @@ test_split
 	"Test bytes.split(sep)"
 
 	| b sep result |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {97. 44. 98. 44. 99}}.
-	sep := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {44}}.
+	b :=  bytes withAll: {97. 44. 98. 44. 99}.
+	sep := bytes ___new___: bytes _: {44}.
 
 	result := b perform: #split: env: 2 withArguments: {sep}.
-	self assert: (result perform: #size env: 0) equals: 3.
+	self assert: (result size) equals: 3.
 %
 
 category: 'Tests - Bytes Methods'
@@ -410,13 +410,13 @@ test_join
 	"Test bytes.join(iterable)"
 
 	| sep parts result |
-	sep := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {44}}.
-	parts := OrderedCollection perform: #new env: 0.
-	parts perform: #add: env: 0 withArguments: {bytes perform: #__new__:_: env: 2 withArguments: {bytes. {97}}}.
-	parts perform: #add: env: 0 withArguments: {bytes perform: #__new__:_: env: 2 withArguments: {bytes. {98}}}.
+	sep := bytes ___new___: bytes _: {44}.
+	parts := OrderedCollection new.
+	parts perform: #add: env: 0 withArguments: {bytes ___new___: bytes _: {97}}.
+	parts perform: #add: env: 0 withArguments: {bytes ___new___: bytes _: {98}}.
 
 	result := sep perform: #join: env: 2 withArguments: {parts}.
-	self assert: (result perform: #__len__ env: 2) equals: 3.
+	self assert: (result ___len___) equals: 3.
 	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 97.
 	self assert: (result perform: #at: env: 0 withArguments: {2}) equals: 44.
 	self assert: (result perform: #at: env: 0 withArguments: {3}) equals: 98.
@@ -440,7 +440,7 @@ test_lower
 	"Test bytes.lower()"
 
 	| b result |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {72. 69. 76. 76. 79}}.
+	b :=  bytes withAll: {72. 69. 76. 76. 79}.
 	result := b perform: #lower env: 2.
 	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 104.
 	self assert: (result perform: #at: env: 0 withArguments: {2}) equals: 101.
@@ -452,9 +452,9 @@ test_strip
 	"Test bytes.strip()"
 
 	| b result |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {32. 97. 98. 99. 32}}.
+	b :=  bytes withAll: {32. 97. 98. 99. 32}.
 	result := b perform: #strip env: 2.
-	self assert: (result perform: #__len__ env: 2) equals: 3.
+	self assert: (result ___len___) equals: 3.
 	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 97.
 %
 
@@ -464,9 +464,9 @@ test_lstrip
 	"Test bytes.lstrip()"
 
 	| b result |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {32. 97. 98. 99. 32}}.
+	b :=  bytes withAll: {32. 97. 98. 99. 32}.
 	result := b perform: #lstrip env: 2.
-	self assert: (result perform: #__len__ env: 2) equals: 4.
+	self assert: (result ___len___) equals: 4.
 	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 97.
 %
 
@@ -476,9 +476,9 @@ test_rstrip
 	"Test bytes.rstrip()"
 
 	| b result |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {32. 97. 98. 99. 32}}.
+	b :=  bytes withAll: {32. 97. 98. 99. 32}.
 	result := b perform: #rstrip env: 2.
-	self assert: (result perform: #__len__ env: 2) equals: 4.
+	self assert: (result ___len___) equals: 4.
 	self assert: (result perform: #at: env: 0 withArguments: {4}) equals: 99.
 %
 
@@ -488,8 +488,8 @@ test_rfind
 	"Test bytes.rfind(sub)"
 
 	| b sub |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {97. 98. 97. 98. 99}}.
-	sub := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {97}}.
+	b :=  bytes withAll: {97. 98. 97. 98. 99}.
+	sub := bytes ___new___: bytes _: {97}.
 
 	self assert: (b perform: #rfind: env: 2 withArguments: {sub}) equals: 2.
 %
@@ -500,8 +500,8 @@ test_isalpha
 	"Test bytes.isalpha()"
 
 	| b1 b2 |
-	b1 := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {97. 98. 99}}.
-	b2 := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {97. 49. 99}}.
+	b1 :=  bytes withAll: {97. 98. 99}.
+	b2 :=  bytes withAll: {97. 49. 99}.
 
 	self assert: (b1 perform: #isalpha env: 2).
 	self deny: (b2 perform: #isalpha env: 2).
@@ -513,8 +513,8 @@ test_isdigit
 	"Test bytes.isdigit()"
 
 	| b1 b2 |
-	b1 := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {49. 50. 51}}.
-	b2 := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {49. 97. 51}}.
+	b1 :=  bytes withAll: {49. 50. 51}.
+	b2 :=  bytes withAll: {49. 97. 51}.
 
 	self assert: (b1 perform: #isdigit env: 2).
 	self deny: (b2 perform: #isdigit env: 2).
@@ -526,8 +526,8 @@ test_isalnum
 	"Test bytes.isalnum()"
 
 	| b1 b2 |
-	b1 := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {97. 49. 98}}.
-	b2 := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {97. 32. 98}}.
+	b1 :=  bytes withAll: {97. 49. 98}.
+	b2 :=  bytes withAll: {97. 32. 98}.
 
 	self assert: (b1 perform: #isalnum env: 2).
 	self deny: (b2 perform: #isalnum env: 2).
@@ -539,8 +539,8 @@ test_isspace
 	"Test bytes.isspace()"
 
 	| b1 b2 |
-	b1 := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {32. 9. 10}}.
-	b2 := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {32. 97. 10}}.
+	b1 :=  bytes withAll: {32. 9. 10}.
+	b2 :=  bytes withAll: {32. 97. 10}.
 
 	self assert: (b1 perform: #isspace env: 2).
 	self deny: (b2 perform: #isspace env: 2).
@@ -552,8 +552,8 @@ test_islower
 	"Test bytes.islower()"
 
 	| b1 b2 |
-	b1 := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {97. 98. 99}}.
-	b2 := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {97. 66. 99}}.
+	b1 :=  bytes withAll: {97. 98. 99}.
+	b2 :=  bytes withAll: {97. 66. 99}.
 
 	self assert: (b1 perform: #islower env: 2).
 	self deny: (b2 perform: #islower env: 2).
@@ -565,8 +565,8 @@ test_isupper
 	"Test bytes.isupper()"
 
 	| b1 b2 |
-	b1 := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {65. 66. 67}}.
-	b2 := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {65. 98. 67}}.
+	b1 :=  bytes withAll: {65. 66. 67}.
+	b2 :=  bytes withAll: {65. 98. 67}.
 
 	self assert: (b1 perform: #isupper env: 2).
 	self deny: (b2 perform: #isupper env: 2).
@@ -578,8 +578,8 @@ test_isascii
 	"Test bytes.isascii()"
 
 	| b1 b2 |
-	b1 := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {65. 66. 67}}.
-	b2 := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {65. 200. 67}}.
+	b1 :=  bytes withAll: {65. 66. 67}.
+	b2 :=  bytes withAll: {65. 200. 67}.
 
 	self assert: (b1 perform: #isascii env: 2).
 	self deny: (b2 perform: #isascii env: 2).
@@ -591,9 +591,9 @@ test_istitle
 	"Test bytes.istitle()"
 
 	| b1 b2 b3 |
-	b1 := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {72. 101. 108. 108. 111. 32. 87. 111. 114. 108. 100}}.
-	b2 := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {104. 101. 108. 108. 111. 32. 119. 111. 114. 108. 100}}.
-	b3 := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {72. 69. 76. 76. 79. 32. 87. 79. 82. 76. 68}}.
+	b1 :=  bytes withAll: {72. 101. 108. 108. 111. 32. 87. 111. 114. 108. 100}.
+	b2 :=  bytes withAll: {104. 101. 108. 108. 111. 32. 119. 111. 114. 108. 100}.
+	b3 :=  bytes withAll: {72. 69. 76. 76. 79. 32. 87. 79. 82. 76. 68}.
 
 	self assert: (b1 perform: #istitle env: 2).
 	self deny: (b2 perform: #istitle env: 2).
@@ -606,7 +606,7 @@ test_capitalize
 	"Test bytes.capitalize()"
 
 	| b result |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {104. 101. 108. 108. 111. 32. 119. 111. 114. 108. 100}}.
+	b :=  bytes withAll: {104. 101. 108. 108. 111. 32. 119. 111. 114. 108. 100}.
 	result := b perform: #capitalize env: 2.
 	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 72.
 	self assert: (result perform: #at: env: 0 withArguments: {7}) equals: 119.
@@ -618,7 +618,7 @@ test_swapcase
 	"Test bytes.swapcase()"
 
 	| b result |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {72. 101. 108. 108. 111. 32. 87. 111. 114. 108. 100}}.
+	b :=  bytes withAll: {72. 101. 108. 108. 111. 32. 87. 111. 114. 108. 100}.
 	result := b perform: #swapcase env: 2.
 	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 104.
 	self assert: (result perform: #at: env: 0 withArguments: {7}) equals: 119.
@@ -630,7 +630,7 @@ test_title
 	"Test bytes.title()"
 
 	| b result |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {104. 101. 108. 108. 111. 32. 119. 111. 114. 108. 100}}.
+	b :=  bytes withAll: {104. 101. 108. 108. 111. 32. 119. 111. 114. 108. 100}.
 	result := b perform: #title env: 2.
 	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 72.
 	self assert: (result perform: #at: env: 0 withArguments: {7}) equals: 87.
@@ -642,11 +642,11 @@ test_removeprefix
 	"Test bytes.removeprefix(prefix)"
 
 	| b prefix result |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {104. 101. 108. 108. 111. 32. 119. 111. 114. 108. 100}}.
-	prefix := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {104. 101. 108. 108. 111. 32}}.
+	b :=  bytes withAll: {104. 101. 108. 108. 111. 32. 119. 111. 114. 108. 100}.
+	prefix :=  bytes withAll: {104. 101. 108. 108. 111. 32}.
 
 	result := b perform: #removeprefix: env: 2 withArguments: {prefix}.
-	self assert: (result perform: #__len__ env: 2) equals: 5.
+	self assert: (result ___len___) equals: 5.
 	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 119.
 %
 
@@ -656,11 +656,11 @@ test_removesuffix
 	"Test bytes.removesuffix(suffix)"
 
 	| b suffix result |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {104. 101. 108. 108. 111. 32. 119. 111. 114. 108. 100}}.
-	suffix := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {32. 119. 111. 114. 108. 100}}.
+	b :=  bytes withAll: {104. 101. 108. 108. 111. 32. 119. 111. 114. 108. 100}.
+	suffix :=  bytes withAll: {32. 119. 111. 114. 108. 100}.
 
 	result := b perform: #removesuffix: env: 2 withArguments: {suffix}.
-	self assert: (result perform: #__len__ env: 2) equals: 5.
+	self assert: (result ___len___) equals: 5.
 	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 104.
 %
 
@@ -670,9 +670,9 @@ test_replace
 	"Test bytes.replace(old, new)"
 
 	| b old new result |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {104. 101. 108. 108. 111. 32. 119. 111. 114. 108. 100}}.
-	old := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {108. 108}}.
-	new := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {120. 120}}.
+	b :=  bytes withAll: {104. 101. 108. 108. 111. 32. 119. 111. 114. 108. 100}.
+	old :=  bytes withAll: {108. 108}.
+	new :=  bytes withAll: {120. 120}.
 
 	result := b perform: #replace:_: env: 2 withArguments: {old. new}.
 	self assert: (result perform: #at: env: 0 withArguments: {3}) equals: 120.
@@ -685,8 +685,8 @@ test_rindex
 	"Test bytes.rindex(sub)"
 
 	| b sub |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {97. 98. 97. 98. 99}}.
-	sub := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {97}}.
+	b :=  bytes withAll: {97. 98. 97. 98. 99}.
+	sub := bytes ___new___: bytes _: {97}.
 
 	self assert: (b perform: #rindex: env: 2 withArguments: {sub}) equals: 2.
 %
@@ -697,8 +697,8 @@ test_rindexNotFound
 	"Test bytes.rindex(sub) raises ValueError when not found"
 
 	| b sub |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {1. 2. 3}}.
-	sub := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {99}}.
+	b :=  bytes withAll: {1. 2. 3}.
+	sub := bytes ___new___: bytes _: {99}.
 
 	self should: [b perform: #rindex: env: 2 withArguments: {sub}] raise: ValueError.
 %
@@ -709,10 +709,10 @@ test_ljust
 	"Test bytes.ljust(width)"
 
 	| b result |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {97. 98. 99}}.
+	b :=  bytes withAll: {97. 98. 99}.
 	result := b perform: #ljust: env: 2 withArguments: {10}.
 
-	self assert: (result perform: #__len__ env: 2) equals: 10.
+	self assert: (result ___len___) equals: 10.
 	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 97.
 	self assert: (result perform: #at: env: 0 withArguments: {10}) equals: 32.
 %
@@ -723,10 +723,10 @@ test_rjust
 	"Test bytes.rjust(width)"
 
 	| b result |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {97. 98. 99}}.
+	b :=  bytes withAll: {97. 98. 99}.
 	result := b perform: #rjust: env: 2 withArguments: {10}.
 
-	self assert: (result perform: #__len__ env: 2) equals: 10.
+	self assert: (result ___len___) equals: 10.
 	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 32.
 	self assert: (result perform: #at: env: 0 withArguments: {10}) equals: 99.
 %
@@ -737,10 +737,10 @@ test_center
 	"Test bytes.center(width)"
 
 	| b result |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {97. 98. 99}}.
+	b :=  bytes withAll: {97. 98. 99}.
 	result := b perform: #center: env: 2 withArguments: {9}.
 
-	self assert: (result perform: #__len__ env: 2) equals: 9.
+	self assert: (result ___len___) equals: 9.
 	self assert: (result perform: #at: env: 0 withArguments: {4}) equals: 97.
 %
 
@@ -750,10 +750,10 @@ test_zfill
 	"Test bytes.zfill(width)"
 
 	| b result |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {52. 50}}.
+	b :=  bytes withAll: {52. 50}.
 	result := b perform: #zfill: env: 2 withArguments: {5}.
 
-	self assert: (result perform: #__len__ env: 2) equals: 5.
+	self assert: (result ___len___) equals: 5.
 	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 48.
 	self assert: (result perform: #at: env: 0 withArguments: {4}) equals: 52.
 %
@@ -764,13 +764,13 @@ test_partition
 	"Test bytes.partition(sep)"
 
 	| b sep result |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {104. 101. 108. 108. 111. 32. 119. 111. 114. 108. 100}}.
-	sep := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {32}}.
+	b :=  bytes withAll: {104. 101. 108. 108. 111. 32. 119. 111. 114. 108. 100}.
+	sep := bytes ___new___: bytes _: {32}.
 
 	result := b perform: #partition: env: 2 withArguments: {sep}.
-	self assert: (result perform: #size env: 0) equals: 3.
-	self assert: ((result perform: #at: env: 0 withArguments: {1}) perform: #__len__ env: 2) equals: 5.
-	self assert: ((result perform: #at: env: 0 withArguments: {3}) perform: #__len__ env: 2) equals: 5.
+	self assert: (result size) equals: 3.
+	self assert: ((result perform: #at: env: 0 withArguments: {1}) ___len___) equals: 5.
+	self assert: ((result perform: #at: env: 0 withArguments: {3}) ___len___) equals: 5.
 %
 
 category: 'Tests - Bytes Methods'
@@ -779,13 +779,13 @@ test_rpartition
 	"Test bytes.rpartition(sep)"
 
 	| b sep result |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {104. 101. 108. 108. 111. 32. 119. 111. 114. 108. 100}}.
-	sep := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {32}}.
+	b :=  bytes withAll: {104. 101. 108. 108. 111. 32. 119. 111. 114. 108. 100}.
+	sep := bytes ___new___: bytes _: {32}.
 
 	result := b perform: #rpartition: env: 2 withArguments: {sep}.
-	self assert: (result perform: #size env: 0) equals: 3.
-	self assert: ((result perform: #at: env: 0 withArguments: {1}) perform: #__len__ env: 2) equals: 5.
-	self assert: ((result perform: #at: env: 0 withArguments: {3}) perform: #__len__ env: 2) equals: 5.
+	self assert: (result size) equals: 3.
+	self assert: ((result perform: #at: env: 0 withArguments: {1}) ___len___) equals: 5.
+	self assert: ((result perform: #at: env: 0 withArguments: {3}) ___len___) equals: 5.
 %
 
 category: 'Tests - Bytes Methods'
@@ -794,11 +794,11 @@ test_rsplit
 	"Test bytes.rsplit(sep, maxsplit)"
 
 	| b sep result |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {97. 44. 98. 44. 99. 44. 100}}.
-	sep := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {44}}.
+	b :=  bytes withAll: {97. 44. 98. 44. 99. 44. 100}.
+	sep := bytes ___new___: bytes _: {44}.
 
 	result := b perform: #rsplit:_: env: 2 withArguments: {sep. 1}.
-	self assert: (result perform: #size env: 0) equals: 2.
+	self assert: (result size) equals: 2.
 %
 
 category: 'Tests - Bytes Methods'
@@ -808,22 +808,22 @@ test_split_maxsplit
 
 	| b sep result part0 part1 part2 |
 	"Test: b'a,b,c,d'.split(b',', 2) should give [b'a', b'b', b'c,d']"
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {97. 44. 98. 44. 99. 44. 100}}.
-	sep := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {44}}.
+	b :=  bytes withAll: {97. 44. 98. 44. 99. 44. 100}.
+	sep := bytes ___new___: bytes _: {44}.
 
 	result := b perform: #split:_: env: 2 withArguments: {sep. 2}.
-	self assert: (result perform: #size env: 0) equals: 3.
+	self assert: (result size) equals: 3.
 
 	part0 := result perform: #at: env: 0 withArguments: {1}.
-	self assert: (part0 perform: #size env: 0) equals: 1.
+	self assert: (part0 size) equals: 1.
 	self assert: (part0 perform: #at: env: 0 withArguments: {1}) equals: 97.  "a"
 
 	part1 := result perform: #at: env: 0 withArguments: {2}.
-	self assert: (part1 perform: #size env: 0) equals: 1.
+	self assert: (part1 size) equals: 1.
 	self assert: (part1 perform: #at: env: 0 withArguments: {1}) equals: 98.  "b"
 
 	part2 := result perform: #at: env: 0 withArguments: {3}.
-	self assert: (part2 perform: #size env: 0) equals: 3.
+	self assert: (part2 size) equals: 3.
 	self assert: (part2 perform: #at: env: 0 withArguments: {1}) equals: 99.  "c"
 	self assert: (part2 perform: #at: env: 0 withArguments: {2}) equals: 44.  ","
 	self assert: (part2 perform: #at: env: 0 withArguments: {3}) equals: 100. "d"
@@ -836,18 +836,18 @@ test_split_maxsplit_one
 
 	| b sep result part0 part1 |
 	"Test: b'a,b,c,d'.split(b',', 1) should give [b'a', b'b,c,d']"
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {97. 44. 98. 44. 99. 44. 100}}.
-	sep := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {44}}.
+	b :=  bytes withAll: {97. 44. 98. 44. 99. 44. 100}.
+	sep := bytes ___new___: bytes _: {44}.
 
 	result := b perform: #split:_: env: 2 withArguments: {sep. 1}.
-	self assert: (result perform: #size env: 0) equals: 2.
+	self assert: (result size) equals: 2.
 
 	part0 := result perform: #at: env: 0 withArguments: {1}.
-	self assert: (part0 perform: #size env: 0) equals: 1.
+	self assert: (part0 size) equals: 1.
 	self assert: (part0 perform: #at: env: 0 withArguments: {1}) equals: 97.  "a"
 
 	part1 := result perform: #at: env: 0 withArguments: {2}.
-	self assert: (part1 perform: #size env: 0) equals: 5.
+	self assert: (part1 size) equals: 5.
 	self assert: (part1 perform: #at: env: 0 withArguments: {1}) equals: 98.  "b"
 %
 
@@ -858,11 +858,11 @@ test_split_maxsplit_negative
 
 	| b sep result |
 	"Test: b'a,b,c'.split(b',', -1) should give [b'a', b'b', b'c']"
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {97. 44. 98. 44. 99}}.
-	sep := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {44}}.
+	b :=  bytes withAll: {97. 44. 98. 44. 99}.
+	sep := bytes ___new___: bytes _: {44}.
 
 	result := b perform: #split:_: env: 2 withArguments: {sep. -1}.
-	self assert: (result perform: #size env: 0) equals: 3.
+	self assert: (result size) equals: 3.
 %
 
 category: 'Tests - Bytes Methods'
@@ -872,24 +872,24 @@ test_rsplit_maxsplit
 
 	| b sep result part0 part1 part2 |
 	"Test: b'a,b,c,d'.rsplit(b',', 2) should give [b'a,b', b'c', b'd']"
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {97. 44. 98. 44. 99. 44. 100}}.
-	sep := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {44}}.
+	b :=  bytes withAll: {97. 44. 98. 44. 99. 44. 100}.
+	sep := bytes ___new___: bytes _: {44}.
 
 	result := b perform: #rsplit:_: env: 2 withArguments: {sep. 2}.
-	self assert: (result perform: #size env: 0) equals: 3.
+	self assert: (result size) equals: 3.
 
 	part0 := result perform: #at: env: 0 withArguments: {1}.
-	self assert: (part0 perform: #size env: 0) equals: 3.
+	self assert: (part0 size) equals: 3.
 	self assert: (part0 perform: #at: env: 0 withArguments: {1}) equals: 97.  "a"
 	self assert: (part0 perform: #at: env: 0 withArguments: {2}) equals: 44.  ","
 	self assert: (part0 perform: #at: env: 0 withArguments: {3}) equals: 98.  "b"
 
 	part1 := result perform: #at: env: 0 withArguments: {2}.
-	self assert: (part1 perform: #size env: 0) equals: 1.
+	self assert: (part1 size) equals: 1.
 	self assert: (part1 perform: #at: env: 0 withArguments: {1}) equals: 99.  "c"
 
 	part2 := result perform: #at: env: 0 withArguments: {3}.
-	self assert: (part2 perform: #size env: 0) equals: 1.
+	self assert: (part2 size) equals: 1.
 	self assert: (part2 perform: #at: env: 0 withArguments: {1}) equals: 100. "d"
 %
 
@@ -900,19 +900,19 @@ test_rsplit_maxsplit_one
 
 	| b sep result part0 part1 |
 	"Test: b'a,b,c,d'.rsplit(b',', 1) should give [b'a,b,c', b'd']"
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {97. 44. 98. 44. 99. 44. 100}}.
-	sep := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {44}}.
+	b :=  bytes withAll: {97. 44. 98. 44. 99. 44. 100}.
+	sep := bytes ___new___: bytes _: {44}.
 
 	result := b perform: #rsplit:_: env: 2 withArguments: {sep. 1}.
-	self assert: (result perform: #size env: 0) equals: 2.
+	self assert: (result size) equals: 2.
 
 	part0 := result perform: #at: env: 0 withArguments: {1}.
-	self assert: (part0 perform: #size env: 0) equals: 5.
+	self assert: (part0 size) equals: 5.
 	self assert: (part0 perform: #at: env: 0 withArguments: {1}) equals: 97.  "a"
 	self assert: (part0 perform: #at: env: 0 withArguments: {5}) equals: 99.  "c"
 
 	part1 := result perform: #at: env: 0 withArguments: {2}.
-	self assert: (part1 perform: #size env: 0) equals: 1.
+	self assert: (part1 size) equals: 1.
 	self assert: (part1 perform: #at: env: 0 withArguments: {1}) equals: 100. "d"
 %
 
@@ -923,11 +923,11 @@ test_rsplit_maxsplit_negative
 
 	| b sep result |
 	"Test: b'a,b,c'.rsplit(b',', -1) should give [b'a', b'b', b'c']"
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {97. 44. 98. 44. 99}}.
-	sep := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {44}}.
+	b :=  bytes withAll: {97. 44. 98. 44. 99}.
+	sep := bytes ___new___: bytes _: {44}.
 
 	result := b perform: #rsplit:_: env: 2 withArguments: {sep. -1}.
-	self assert: (result perform: #size env: 0) equals: 3.
+	self assert: (result size) equals: 3.
 %
 
 category: 'Tests - Bytes Methods'
@@ -936,11 +936,11 @@ test_splitlines
 	"Test bytes.splitlines()"
 
 	| b result |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {104. 101. 108. 108. 111. 10. 119. 111. 114}}.
+	b :=  bytes withAll: {104. 101. 108. 108. 111. 10. 119. 111. 114}.
 
 	result := b perform: #splitlines env: 2.
-	self assert: (result perform: #size env: 0) equals: 2.
-	self assert: ((result perform: #at: env: 0 withArguments: {1}) perform: #__len__ env: 2) equals: 5.
+	self assert: (result size) equals: 2.
+	self assert: ((result perform: #at: env: 0 withArguments: {1}) ___len___) equals: 5.
 %
 
 category: 'Tests - Bytes Methods'
@@ -949,10 +949,10 @@ test_expandtabs
 	"Test bytes.expandtabs()"
 
 	| b result |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {104. 101. 108. 9. 119. 111. 114. 108. 100}}.
+	b :=  bytes withAll: {104. 101. 108. 9. 119. 111. 114. 108. 100}.
 
 	result := b perform: #expandtabs env: 2.
-	self assert: (result perform: #__len__ env: 2) > 9.
+	self assert: (result ___len___) > 9.
 %
 
 category: 'Tests - Bytes Methods'
@@ -961,11 +961,11 @@ test_maketrans
 	"Test bytes.maketrans(from, to)"
 
 	| frm to table |
-	frm := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {97. 98. 99}}.
-	to := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {49. 50. 51}}.
+	frm :=  bytes withAll: {97. 98. 99}.
+	to :=  bytes withAll: {49. 50. 51}.
 
 	table := bytes perform: #maketrans:_: env: 2 withArguments: {frm. to}.
-	self assert: (table perform: #size env: 0) equals: 256.
+	self assert: (table size) equals: 256.
 	self assert: (table perform: #at: env: 0 withArguments: {98}) equals: 49.
 %
 
@@ -975,9 +975,9 @@ test_translate
 	"Test bytes.translate(table)"
 
 	| b frm to table result |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {97. 98. 99}}.
-	frm := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {97. 98. 99}}.
-	to := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {49. 50. 51}}.
+	b :=  bytes withAll: {97. 98. 99}.
+	frm :=  bytes withAll: {97. 98. 99}.
+	to :=  bytes withAll: {49. 50. 51}.
 
 	table := bytes perform: #maketrans:_: env: 2 withArguments: {frm. to}.
 	result := b perform: #translate: env: 2 withArguments: {table}.
@@ -995,7 +995,7 @@ test_fromhex
 	| result |
 	result := bytes perform: #fromhex:_: env: 2 withArguments: {bytes. 'ff0010'}.
 
-	self assert: (result perform: #__len__ env: 2) equals: 3.
+	self assert: (result ___len___) equals: 3.
 	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 255.
 	self assert: (result perform: #at: env: 0 withArguments: {2}) equals: 0.
 	self assert: (result perform: #at: env: 0 withArguments: {3}) equals: 16.
@@ -1021,7 +1021,7 @@ test__class__
 	"Test that bytes.__class__ returns bytes type"
 
 	| b bytesType result |
-	b := bytes perform: #__new__:_: env: 2 withArguments: {bytes. {1. 2. 3}}.
+	b :=  bytes withAll: {1. 2. 3}.
 	bytesType := Python at: #'bytes'.
 
 	result := b perform: #__class__ env: 2.
