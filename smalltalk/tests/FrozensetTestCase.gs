@@ -21,13 +21,13 @@ testFrozensetCreation
 	fs2 := frozenset new.
 	fs3 := frozenset new.
 	
-	fs2 perform: #add: env: 0 withArguments: {1}.
-	fs2 perform: #add: env: 0 withArguments: {2}.
-	fs2 perform: #add: env: 0 withArguments: {3}.
+	fs2 add: 1.
+	fs2 add: 2.
+	fs2 add: 3.
 	
-	fs3 perform: #add: env: 0 withArguments: {1}.
-	fs3 perform: #add: env: 0 withArguments: {1}.
-	fs3 perform: #add: env: 0 withArguments: {2}.
+	fs3 add: 1.
+	fs3 add: 1.
+	fs3 add: 2.
 	
 	self assert: (fs1 ___len___) equals: 0.
 	self assert: (fs2 ___len___) equals: 3.
@@ -41,21 +41,21 @@ testFrozensetIteration
 
 	| fs iter items |
 	fs := frozenset new.
-	fs perform: #add: env: 0 withArguments: {1}.
-	fs perform: #add: env: 0 withArguments: {2}.
-	fs perform: #add: env: 0 withArguments: {3}.
+	fs add: 1.
+	fs add: 2.
+	fs add: 3.
 	
 	iter := fs perform: #__iter__ env: 2.
 	self assert: (iter class) name equals: #'set_iterator'.
 	
 	items := list new.
-	[true] perform: #whileTrue: env: 0 withArguments: {[
+	[true] whileTrue: [
 		| item |
 		[
 			item := iter perform: #__next__ env: 2.
-			items perform: #append: env: 2 withArguments: {item}
-		] perform: #on:do: env: 0 withArguments: {StopIteration. [:ex | ^ nil]}
-	]}.
+			items perform: #append: env: 2 withArguments: {item}.
+		] on: StopIteration do: [:ex | ^ nil]
+	].
 	
 	self assert: (items ___len___) equals: 3.
 	self assert: (items ___contains___: 1).
@@ -70,9 +70,9 @@ testFrozensetMembership
 
 	| fs |
 	fs := frozenset new.
-	fs perform: #add: env: 0 withArguments: {1}.
-	fs perform: #add: env: 0 withArguments: {2}.
-	fs perform: #add: env: 0 withArguments: {3}.
+	fs add: 1.
+	fs add: 2.
+	fs add: 3.
 	
 	self assert: (fs ___contains___: 1).
 	self assert: (fs ___contains___: 2).
@@ -87,12 +87,12 @@ testFrozensetUnion
 
 	| fs1 fs2 result |
 	fs1 := frozenset new.
-	fs1 perform: #add: env: 0 withArguments: {1}.
-	fs1 perform: #add: env: 0 withArguments: {2}.
+	fs1 add: 1.
+	fs1 add: 2.
 	
 	fs2 := frozenset new.
-	fs2 perform: #add: env: 0 withArguments: {2}.
-	fs2 perform: #add: env: 0 withArguments: {3}.
+	fs2 add: 2.
+	fs2 add: 3.
 	
 	result := fs1 perform: #union: env: 2 withArguments: {fs2}.
 	
@@ -109,14 +109,14 @@ testFrozensetIntersection
 
 	| fs1 fs2 result |
 	fs1 := frozenset new.
-	fs1 perform: #add: env: 0 withArguments: {1}.
-	fs1 perform: #add: env: 0 withArguments: {2}.
-	fs1 perform: #add: env: 0 withArguments: {3}.
+	fs1 add: 1.
+	fs1 add: 2.
+	fs1 add: 3.
 	
 	fs2 := frozenset new.
-	fs2 perform: #add: env: 0 withArguments: {2}.
-	fs2 perform: #add: env: 0 withArguments: {3}.
-	fs2 perform: #add: env: 0 withArguments: {4}.
+	fs2 add: 2.
+	fs2 add: 3.
+	fs2 add: 4.
 	
 	result := fs1 perform: #intersection: env: 2 withArguments: {fs2}.
 	
@@ -134,13 +134,13 @@ testFrozensetDifference
 
 	| fs1 fs2 result |
 	fs1 := frozenset new.
-	fs1 perform: #add: env: 0 withArguments: {1}.
-	fs1 perform: #add: env: 0 withArguments: {2}.
-	fs1 perform: #add: env: 0 withArguments: {3}.
+	fs1 add: 1.
+	fs1 add: 2.
+	fs1 add: 3.
 	
 	fs2 := frozenset new.
-	fs2 perform: #add: env: 0 withArguments: {2}.
-	fs2 perform: #add: env: 0 withArguments: {4}.
+	fs2 add: 2.
+	fs2 add: 4.
 	
 	result := fs1 perform: #difference: env: 2 withArguments: {fs2}.
 	
@@ -157,14 +157,14 @@ testFrozensetSymmetricDifference
 
 	| fs1 fs2 result |
 	fs1 := frozenset new.
-	fs1 perform: #add: env: 0 withArguments: {1}.
-	fs1 perform: #add: env: 0 withArguments: {2}.
-	fs1 perform: #add: env: 0 withArguments: {3}.
+	fs1 add: 1.
+	fs1 add: 2.
+	fs1 add: 3.
 
 	fs2 := frozenset new.
-	fs2 perform: #add: env: 0 withArguments: {2}.
-	fs2 perform: #add: env: 0 withArguments: {3}.
-	fs2 perform: #add: env: 0 withArguments: {4}.
+	fs2 add: 2.
+	fs2 add: 3.
+	fs2 add: 4.
 
 	result := fs1 perform: #symmetric_difference: env: 2 withArguments: {fs2}.
 
@@ -182,12 +182,12 @@ testFrozensetOperators
 
 	| fs1 fs2 |
 	fs1 := frozenset new.
-	fs1 perform: #add: env: 0 withArguments: {1}.
-	fs1 perform: #add: env: 0 withArguments: {2}.
+	fs1 add: 1.
+	fs1 add: 2.
 
 	fs2 := frozenset new.
-	fs2 perform: #add: env: 0 withArguments: {2}.
-	fs2 perform: #add: env: 0 withArguments: {3}.
+	fs2 add: 2.
+	fs2 add: 3.
 
 	"Test & (intersection)"
 	self assert: ((fs1 perform: #__and__: env: 2 withArguments: {fs2}) ___len___) equals: 1.
@@ -209,16 +209,16 @@ testFrozensetEquality
 
 	| fs1 fs2 fs3 |
 	fs1 := frozenset new.
-	fs1 perform: #add: env: 0 withArguments: {1}.
-	fs1 perform: #add: env: 0 withArguments: {2}.
+	fs1 add: 1.
+	fs1 add: 2.
 
 	fs2 := frozenset new.
-	fs2 perform: #add: env: 0 withArguments: {2}.
-	fs2 perform: #add: env: 0 withArguments: {1}.
+	fs2 add: 2.
+	fs2 add: 1.
 
 	fs3 := frozenset new.
-	fs3 perform: #add: env: 0 withArguments: {1}.
-	fs3 perform: #add: env: 0 withArguments: {3}.
+	fs3 add: 1.
+	fs3 add: 3.
 
 	self assert: (fs1 perform: #__eq__: env: 2 withArguments: {fs2}).
 	self deny: (fs1 perform: #__eq__: env: 2 withArguments: {fs3}).
@@ -233,16 +233,16 @@ testFrozensetSubsetSuperset
 
 	| fs1 fs2 fs3 |
 	fs1 := frozenset new.
-	fs1 perform: #add: env: 0 withArguments: {1}.
-	fs1 perform: #add: env: 0 withArguments: {2}.
+	fs1 add: 1.
+	fs1 add: 2.
 
 	fs2 := frozenset new.
-	fs2 perform: #add: env: 0 withArguments: {1}.
-	fs2 perform: #add: env: 0 withArguments: {2}.
-	fs2 perform: #add: env: 0 withArguments: {3}.
+	fs2 add: 1.
+	fs2 add: 2.
+	fs2 add: 3.
 
 	fs3 := frozenset new.
-	fs3 perform: #add: env: 0 withArguments: {1}.
+	fs3 add: 1.
 
 	"Test issubset"
 	self assert: (fs1 perform: #issubset: env: 2 withArguments: {fs2}).
@@ -269,16 +269,16 @@ testFrozensetIsdisjoint
 
 	| fs1 fs2 fs3 |
 	fs1 := frozenset new.
-	fs1 perform: #add: env: 0 withArguments: {1}.
-	fs1 perform: #add: env: 0 withArguments: {2}.
+	fs1 add: 1.
+	fs1 add: 2.
 
 	fs2 := frozenset new.
-	fs2 perform: #add: env: 0 withArguments: {3}.
-	fs2 perform: #add: env: 0 withArguments: {4}.
+	fs2 add: 3.
+	fs2 add: 4.
 
 	fs3 := frozenset new.
-	fs3 perform: #add: env: 0 withArguments: {2}.
-	fs3 perform: #add: env: 0 withArguments: {3}.
+	fs3 add: 2.
+	fs3 add: 3.
 
 	self assert: (fs1 perform: #isdisjoint: env: 2 withArguments: {fs2}).
 	self deny: (fs1 perform: #isdisjoint: env: 2 withArguments: {fs3})
@@ -291,12 +291,12 @@ testFrozensetHashable
 
 	| fs1 fs2 hash1 hash2 |
 	fs1 := frozenset new.
-	fs1 perform: #add: env: 0 withArguments: {1}.
-	fs1 perform: #add: env: 0 withArguments: {2}.
+	fs1 add: 1.
+	fs1 add: 2.
 
 	fs2 := frozenset new.
-	fs2 perform: #add: env: 0 withArguments: {2}.
-	fs2 perform: #add: env: 0 withArguments: {1}.
+	fs2 add: 2.
+	fs2 add: 1.
 
 	hash1 := fs1 perform: #__hash__ env: 2.
 	hash2 := fs2 perform: #__hash__ env: 2.
@@ -312,8 +312,8 @@ testFrozensetCopy
 
 	| fs1 fs2 |
 	fs1 := frozenset new.
-	fs1 perform: #add: env: 0 withArguments: {1}.
-	fs1 perform: #add: env: 0 withArguments: {2}.
+	fs1 add: 1.
+	fs1 add: 2.
 
 	fs2 := fs1 perform: #copy env: 2.
 
@@ -329,14 +329,14 @@ testFrozensetRepr
 
 	| fs repr |
 	fs := frozenset new.
-	fs perform: #add: env: 0 withArguments: {1}.
-	fs perform: #add: env: 0 withArguments: {2}.
+	fs add: 1.
+	fs add: 2.
 
 	repr := fs perform: #__repr__ env: 2.
 
-	self assert: (repr perform: #includesString: env: 0 withArguments: {'frozenset'}).
-	self assert: (repr perform: #includesString: env: 0 withArguments: {'{'}).
-	self assert: (repr perform: #includesString: env: 0 withArguments: {'}'})
+	self assert: (repr includesString: 'frozenset').
+	self assert: (repr includesString: '{').
+	self assert: (repr includesString: '}')
 %
 
 

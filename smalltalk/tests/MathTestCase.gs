@@ -17,11 +17,11 @@ testPi
 	"Test math.pi constant"
 
 	| m result |
-	m := math new.
+	m := math perform: #instance env: 2.
 	result := m perform: #pi env: 2.
 
-	self assert: (((result perform: #- env: 0 withArguments: {3.14159}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.001})
+	self assert: (((result - 3.14159) abs)
+		< 0.001)
 %
 
 category: 'Tests - Constants'
@@ -30,11 +30,11 @@ testE
 	"Test math.e constant"
 
 	| m result |
-	m := math new.
+	m := math perform: #instance env: 2.
 	result := m perform: #e env: 2.
 
-	self assert: (((result perform: #- env: 0 withArguments: {2.71828}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.001})
+	self assert: (((result - 2.71828) abs)
+		< 0.001)
 %
 
 category: 'Tests - Constants'
@@ -43,12 +43,11 @@ testTau
 	"Test math.tau constant (2*pi)"
 
 	| m result pi |
-	m := math new.
+	m := math perform: #instance env: 2.
 	result := m perform: #tau env: 2.
 	pi := m perform: #pi env: 2.
 
-	self assert: (((result perform: #- env: 0 withArguments: {pi * 2}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.00001})
+	self assert: result - (pi * 2) abs < 0.00001
 %
 
 category: 'Tests - Constants'
@@ -57,10 +56,10 @@ testInf
 	"Test math.inf constant"
 
 	| m result |
-	m := math new.
+	m := math perform: #instance env: 2.
 	result := m perform: #inf env: 2.
 
-	self assert: (result perform: #_getKind env: 0) equals: 3
+	self assert: (result _getKind) equals: 3
 %
 
 category: 'Tests - Constants'
@@ -69,10 +68,10 @@ testNan
 	"Test math.nan constant"
 
 	| m result |
-	m := math new.
+	m := math perform: #instance env: 2.
 	result := m perform: #nan env: 2.
 
-	self assert: (result perform: #_isNaN env: 0)
+	self assert: (result _isNaN)
 %
 
 category: 'Tests - Power and Logarithmic'
@@ -80,18 +79,19 @@ method: MathTestCase
 testSqrt
 	"Test math.sqrt()"
 
-	| m result |
-	m := math new.
+	| m sqrtBlock result |
+	m := math perform: #instance env: 2.
+	sqrtBlock := m perform: #sqrt env: 2.
 
-	result := (m perform: #sqrt: env: 2 withArguments: {4}).
+	result := sqrtBlock value: 4.
 	self assert: result equals: 2.0.
 
-	result := (m perform: #sqrt: env: 2 withArguments: {9}).
+	result := sqrtBlock value: 9.
 	self assert: result equals: 3.0.
 
-	result := (m perform: #sqrt: env: 2 withArguments: {2}).
-	self assert: (((result perform: #- env: 0 withArguments: {1.41421}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.001})
+	result := sqrtBlock value: 2.
+	self assert: (((result - 1.41421) abs)
+		< 0.001)
 %
 
 category: 'Tests - Power and Logarithmic'
@@ -99,16 +99,17 @@ method: MathTestCase
 testPow
 	"Test math.pow()"
 
-	| m result |
-	m := math new.
+	| m powBlock result |
+	m := math perform: #instance env: 2.
+	powBlock := m perform: #pow env: 2.
 
-	result := (m perform: #pow:_: env: 2 withArguments: {2. 3}).
+	result := powBlock value: 2 value: 3.
 	self assert: result equals: 8.0.
 
-	result := (m perform: #pow:_: env: 2 withArguments: {5. 2}).
+	result := powBlock value: 5 value: 2.
 	self assert: result equals: 25.0.
 
-	result := (m perform: #pow:_: env: 2 withArguments: {10. 0}).
+	result := powBlock value: 10 value: 0.
 	self assert: result equals: 1.0
 %
 
@@ -117,15 +118,16 @@ method: MathTestCase
 testExp
 	"Test math.exp()"
 
-	| m result |
-	m := math new.
+	| m expBlock result |
+	m := math perform: #instance env: 2.
+	expBlock := m perform: #exp env: 2.
 
-	result := (m perform: #exp: env: 2 withArguments: {0}).
+	result := expBlock value: 0.
 	self assert: result equals: 1.0.
 
-	result := (m perform: #exp: env: 2 withArguments: {1}).
-	self assert: (((result perform: #- env: 0 withArguments: {2.71828}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.001})
+	result := expBlock value: 1.
+	self assert: (((result - 2.71828) abs)
+		< 0.001)
 %
 
 category: 'Tests - Power and Logarithmic'
@@ -133,16 +135,18 @@ method: MathTestCase
 testLog
 	"Test math.log()"
 
-	| m result |
-	m := math new.
+	| m logBlock logWithBaseBlock result |
+	m := math perform: #instance env: 2.
+	logBlock := m perform: #log env: 2.
+		logWithBaseBlock := m perform: #logWithBase env: 2.
 
-	result := (m perform: #log: env: 2 withArguments: {2.71828}).
-	self assert: (((result perform: #- env: 0 withArguments: {1.0}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.001}).
+	result := logBlock value: 2.71828.
+	self assert: (((result - 1.0) abs)
+		< 0.001).
 
-	result := (m perform: #log:_: env: 2 withArguments: {100. 10}).
-	self assert: (((result perform: #- env: 0 withArguments: {2.0}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.001})
+	result := logWithBaseBlock value: 100 value: 10.
+	self assert: (((result - 2.0) abs)
+		< 0.001)
 %
 
 category: 'Tests - Power and Logarithmic'
@@ -150,16 +154,17 @@ method: MathTestCase
 testLog10
 	"Test math.log10()"
 
-	| m result |
-	m := math new.
+	| m log10Block result |
+	m := math perform: #instance env: 2.
+	log10Block := m perform: #log10 env: 2.
 
-	result := (m perform: #log10: env: 2 withArguments: {100}).
-	self assert: (((result perform: #- env: 0 withArguments: {2.0}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.00001}).
+	result := log10Block value: 100.
+	self assert: (((result - 2.0) abs)
+		< 0.00001).
 
-	result := (m perform: #log10: env: 2 withArguments: {1000}).
-	self assert: (((result perform: #- env: 0 withArguments: {3.0}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.00001})
+	result := log10Block value: 1000.
+	self assert: (((result - 3.0) abs)
+		< 0.00001)
 %
 
 category: 'Tests - Power and Logarithmic'
@@ -167,16 +172,17 @@ method: MathTestCase
 testLog2
 	"Test math.log2()"
 
-	| m result |
-	m := math new.
+	| m log2Block result |
+	m := math perform: #instance env: 2.
+	log2Block := m perform: #log2 env: 2.
 
-	result := (m perform: #log2: env: 2 withArguments: {8}).
-	self assert: (((result perform: #- env: 0 withArguments: {3.0}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.00001}).
+	result := log2Block value: 8.
+	self assert: (((result - 3.0) abs)
+		< 0.00001).
 
-	result := (m perform: #log2: env: 2 withArguments: {16}).
-	self assert: (((result perform: #- env: 0 withArguments: {4.0}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.00001})
+	result := log2Block value: 16.
+	self assert: (((result - 4.0) abs)
+		< 0.00001)
 %
 
 category: 'Tests - Trigonometric'
@@ -184,16 +190,17 @@ method: MathTestCase
 testSin
 	"Test math.sin()"
 
-	| m result pi |
-	m := math new.
+	| m sinBlock result pi |
+	m := math perform: #instance env: 2.
 	pi := m perform: #pi env: 2.
+	sinBlock := m perform: #sin env: 2.
 
-	result := (m perform: #sin: env: 2 withArguments: {0}).
-	self assert: ((result perform: #abs env: 0) perform: #< env: 0 withArguments: {0.00001}).
+	result := sinBlock value: 0.
+	self assert: ((result abs) < 0.00001).
 
-	result := (m perform: #sin: env: 2 withArguments: {(pi perform: #/ env: 0 withArguments: {2})}).
-	self assert: (((result perform: #- env: 0 withArguments: {1.0}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.00001})
+	result := sinBlock value: (pi / 2).
+	self assert: (((result - 1.0) abs)
+		< 0.00001)
 %
 
 category: 'Tests - Trigonometric'
@@ -201,17 +208,18 @@ method: MathTestCase
 testCos
 	"Test math.cos()"
 
-	| m result pi |
-	m := math new.
+	| m cosBlock result pi |
+	m := math perform: #instance env: 2.
 	pi := m perform: #pi env: 2.
+	cosBlock := m perform: #cos env: 2.
 
-	result := (m perform: #cos: env: 2 withArguments: {0}).
-	self assert: (((result perform: #- env: 0 withArguments: {1.0}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.00001}).
+	result := cosBlock value: 0.
+	self assert: (((result - 1.0) abs)
+		< 0.00001).
 
-	result := (m perform: #cos: env: 2 withArguments: {pi}).
-	self assert: (((result perform: #+ env: 0 withArguments: {1.0}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.00001})
+	result := cosBlock value: pi.
+	self assert: (((result + 1.0) abs)
+		< 0.00001)
 %
 
 category: 'Tests - Trigonometric'
@@ -219,16 +227,17 @@ method: MathTestCase
 testTan
 	"Test math.tan()"
 
-	| m result pi |
-	m := math new.
+	| m tanBlock result pi |
+	m := math perform: #instance env: 2.
 	pi := m perform: #pi env: 2.
+	tanBlock := m perform: #tan env: 2.
 
-	result := (m perform: #tan: env: 2 withArguments: {0}).
-	self assert: ((result perform: #abs env: 0) perform: #< env: 0 withArguments: {0.00001}).
+	result := tanBlock value: 0.
+	self assert: ((result abs) < 0.00001).
 
-	result := (m perform: #tan: env: 2 withArguments: {(pi perform: #/ env: 0 withArguments: {4})}).
-	self assert: (((result perform: #- env: 0 withArguments: {1.0}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.00001})
+	result := tanBlock value: (pi / 4).
+	self assert: (((result - 1.0) abs)
+		< 0.00001)
 %
 
 category: 'Tests - Trigonometric'
@@ -236,16 +245,17 @@ method: MathTestCase
 testAsin
 	"Test math.asin()"
 
-	| m result pi |
-	m := math new.
+	| m asinBlock result pi |
+	m := math perform: #instance env: 2.
 	pi := m perform: #pi env: 2.
+	asinBlock := m perform: #asin env: 2.
 
-	result := (m perform: #asin: env: 2 withArguments: {0}).
-	self assert: ((result perform: #abs env: 0) perform: #< env: 0 withArguments: {0.00001}).
+	result := asinBlock value: 0.
+	self assert: ((result abs) < 0.00001).
 
-	result := (m perform: #asin: env: 2 withArguments: {1}).
-	self assert: (((result perform: #- env: 0 withArguments: {(pi perform: #/ env: 0 withArguments: {2})}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.00001})
+	result := asinBlock value: 1.
+	self assert: (((result - (pi / 2)) abs)
+		< 0.00001)
 %
 
 category: 'Tests - Trigonometric'
@@ -253,16 +263,17 @@ method: MathTestCase
 testAcos
 	"Test math.acos()"
 
-	| m result pi |
-	m := math new.
+	| m acosBlock result pi |
+	m := math perform: #instance env: 2.
 	pi := m perform: #pi env: 2.
+	acosBlock := m perform: #acos env: 2.
 
-	result := (m perform: #acos: env: 2 withArguments: {1}).
-	self assert: ((result perform: #abs env: 0) perform: #< env: 0 withArguments: {0.00001}).
+	result := acosBlock value: 1.
+	self assert: ((result abs) < 0.00001).
 
-	result := (m perform: #acos: env: 2 withArguments: {0}).
-	self assert: (((result perform: #- env: 0 withArguments: {(pi perform: #/ env: 0 withArguments: {2})}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.00001})
+	result := acosBlock value: 0.
+	self assert: (((result - (pi / 2)) abs)
+		< 0.00001)
 %
 
 category: 'Tests - Trigonometric'
@@ -270,16 +281,17 @@ method: MathTestCase
 testAtan
 	"Test math.atan()"
 
-	| m result pi |
-	m := math new.
+	| m atanBlock result pi |
+	m := math perform: #instance env: 2.
 	pi := m perform: #pi env: 2.
+	atanBlock := m perform: #atan env: 2.
 
-	result := (m perform: #atan: env: 2 withArguments: {0}).
-	self assert: ((result perform: #abs env: 0) perform: #< env: 0 withArguments: {0.00001}).
+	result := atanBlock value: 0.
+	self assert: ((result abs) < 0.00001).
 
-	result := (m perform: #atan: env: 2 withArguments: {1}).
-	self assert: (((result perform: #- env: 0 withArguments: {(pi perform: #/ env: 0 withArguments: {4})}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.00001})
+	result := atanBlock value: 1.
+	self assert: (((result - (pi / 4)) abs)
+		< 0.00001)
 %
 
 category: 'Tests - Trigonometric'
@@ -287,17 +299,18 @@ method: MathTestCase
 testAtan2
 	"Test math.atan2()"
 
-	| m result pi |
-	m := math new.
+	| m atan2Block result pi |
+	m := math perform: #instance env: 2.
 	pi := m perform: #pi env: 2.
+	atan2Block := m perform: #atan2 env: 2.
 
-	result := (m perform: #atan2:_: env: 2 withArguments: {1. 1}).
-	self assert: (((result perform: #- env: 0 withArguments: {(pi perform: #/ env: 0 withArguments: {4})}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.00001}).
+	result := atan2Block value: 1 value: 1.
+	self assert: (((result - (pi / 4)) abs)
+		< 0.00001).
 
-	result := (m perform: #atan2:_: env: 2 withArguments: {1. 0}).
-	self assert: (((result perform: #- env: 0 withArguments: {(pi perform: #/ env: 0 withArguments: {2})}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.00001})
+	result := atan2Block value: 1 value: 0.
+	self assert: (((result - (pi / 2)) abs)
+		< 0.00001)
 %
 
 category: 'Tests - Hyperbolic'
@@ -305,15 +318,16 @@ method: MathTestCase
 testSinh
 	"Test math.sinh()"
 
-	| m result |
-	m := math new.
+	| m sinhBlock result |
+	m := math perform: #instance env: 2.
+	sinhBlock := m perform: #sinh env: 2.
 
-	result := (m perform: #sinh: env: 2 withArguments: {0}).
-	self assert: ((result perform: #abs env: 0) perform: #< env: 0 withArguments: {0.00001}).
+	result := sinhBlock value: 0.
+	self assert: ((result abs) < 0.00001).
 
-	result := (m perform: #sinh: env: 2 withArguments: {1}).
-	self assert: (((result perform: #- env: 0 withArguments: {1.1752}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.001})
+	result := sinhBlock value: 1.
+	self assert: (((result - 1.1752) abs)
+		< 0.001)
 %
 
 category: 'Tests - Hyperbolic'
@@ -321,16 +335,17 @@ method: MathTestCase
 testCosh
 	"Test math.cosh()"
 
-	| m result |
-	m := math new.
+	| m coshBlock result |
+	m := math perform: #instance env: 2.
+	coshBlock := m perform: #cosh env: 2.
 
-	result := (m perform: #cosh: env: 2 withArguments: {0}).
-	self assert: (((result perform: #- env: 0 withArguments: {1.0}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.00001}).
+	result := coshBlock value: 0.
+	self assert: (((result - 1.0) abs)
+		< 0.00001).
 
-	result := (m perform: #cosh: env: 2 withArguments: {1}).
-	self assert: (((result perform: #- env: 0 withArguments: {1.5430}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.001})
+	result := coshBlock value: 1.
+	self assert: (((result - 1.5430) abs)
+		< 0.001)
 %
 
 category: 'Tests - Hyperbolic'
@@ -338,15 +353,16 @@ method: MathTestCase
 testTanh
 	"Test math.tanh()"
 
-	| m result |
-	m := math new.
+	| m tanhBlock result |
+	m := math perform: #instance env: 2.
+	tanhBlock := m perform: #tanh env: 2.
 
-	result := (m perform: #tanh: env: 2 withArguments: {0}).
-	self assert: ((result perform: #abs env: 0) perform: #< env: 0 withArguments: {0.00001}).
+	result := tanhBlock value: 0.
+	self assert: ((result abs) < 0.00001).
 
-	result := (m perform: #tanh: env: 2 withArguments: {1}).
-	self assert: (((result perform: #- env: 0 withArguments: {0.7615}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.001})
+	result := tanhBlock value: 1.
+	self assert: (((result - 0.7615) abs)
+		< 0.001)
 %
 
 category: 'Tests - Rounding'
@@ -354,16 +370,17 @@ method: MathTestCase
 testCeil
 	"Test math.ceil()"
 
-	| m result |
-	m := math new.
+	| m ceilBlock result |
+	m := math perform: #instance env: 2.
+	ceilBlock := m perform: #ceil env: 2.
 
-	result := (m perform: #ceil: env: 2 withArguments: {3.2}).
+	result := ceilBlock value: 3.2.
 	self assert: result equals: 4.
 
-	result := (m perform: #ceil: env: 2 withArguments: {3.8}).
+	result := ceilBlock value: 3.8.
 	self assert: result equals: 4.
 
-	result := (m perform: #ceil: env: 2 withArguments: {-3.2}).
+	result := ceilBlock value: -3.2.
 	self assert: result equals: -3
 %
 
@@ -372,16 +389,17 @@ method: MathTestCase
 testFloor
 	"Test math.floor()"
 
-	| m result |
-	m := math new.
+	| m floorBlock result |
+	m := math perform: #instance env: 2.
+	floorBlock := m perform: #floor env: 2.
 
-	result := (m perform: #floor: env: 2 withArguments: {3.2}).
+	result := floorBlock value: 3.2.
 	self assert: result equals: 3.
 
-	result := (m perform: #floor: env: 2 withArguments: {3.8}).
+	result := floorBlock value: 3.8.
 	self assert: result equals: 3.
 
-	result := (m perform: #floor: env: 2 withArguments: {-3.2}).
+	result := floorBlock value: -3.2.
 	self assert: result equals: -4
 %
 
@@ -390,13 +408,14 @@ method: MathTestCase
 testTrunc
 	"Test math.trunc()"
 
-	| m result |
-	m := math new.
+	| m truncBlock result |
+	m := math perform: #instance env: 2.
+	truncBlock := m perform: #trunc env: 2.
 
-	result := (m perform: #trunc: env: 2 withArguments: {3.7}).
+	result := truncBlock value: 3.7.
 	self assert: result equals: 3.
 
-	result := (m perform: #trunc: env: 2 withArguments: {-3.7}).
+	result := truncBlock value: -3.7.
 	self assert: result equals: -3
 %
 
@@ -405,16 +424,17 @@ method: MathTestCase
 testFactorial
 	"Test math.factorial()"
 
-	| m result |
-	m := math new.
+	| m factorialBlock result |
+	m := math perform: #instance env: 2.
+	factorialBlock := m perform: #factorial env: 2.
 
-	result := (m perform: #factorial: env: 2 withArguments: {0}).
+	result := factorialBlock value: 0.
 	self assert: result equals: 1.
 
-	result := (m perform: #factorial: env: 2 withArguments: {5}).
+	result := factorialBlock value: 5.
 	self assert: result equals: 120.
 
-	result := (m perform: #factorial: env: 2 withArguments: {10}).
+	result := factorialBlock value: 10.
 	self assert: result equals: 3628800
 %
 
@@ -423,16 +443,17 @@ method: MathTestCase
 testGcd
 	"Test math.gcd()"
 
-	| m result |
-	m := math new.
+	| m gcdBlock result |
+	m := math perform: #instance env: 2.
+	gcdBlock := m perform: #gcd env: 2.
 
-	result := (m perform: #gcd:_: env: 2 withArguments: {12. 8}).
+	result := gcdBlock value: 12 value: 8.
 	self assert: result equals: 4.
 
-	result := (m perform: #gcd:_: env: 2 withArguments: {15. 25}).
+	result := gcdBlock value: 15 value: 25.
 	self assert: result equals: 5.
 
-	result := (m perform: #gcd:_: env: 2 withArguments: {7. 13}).
+	result := gcdBlock value: 7 value: 13.
 	self assert: result equals: 1
 %
 
@@ -441,13 +462,14 @@ method: MathTestCase
 testLcm
 	"Test math.lcm()"
 
-	| m result |
-	m := math new.
+	| m lcmBlock result |
+	m := math perform: #instance env: 2.
+	lcmBlock := m perform: #lcm env: 2.
 
-	result := (m perform: #lcm:_: env: 2 withArguments: {12. 8}).
+	result := lcmBlock value: 12 value: 8.
 	self assert: result equals: 24.
 
-	result := (m perform: #lcm:_: env: 2 withArguments: {15. 25}).
+	result := lcmBlock value: 15 value: 25.
 	self assert: result equals: 75
 %
 
@@ -456,13 +478,14 @@ method: MathTestCase
 testFabs
 	"Test math.fabs()"
 
-	| m result |
-	m := math new.
+	| m fabsBlock result |
+	m := math perform: #instance env: 2.
+	fabsBlock := m perform: #fabs env: 2.
 
-	result := (m perform: #fabs: env: 2 withArguments: {-5.5}).
+	result := fabsBlock value: -5.5.
 	self assert: result equals: 5.5.
 
-	result := (m perform: #fabs: env: 2 withArguments: {3.2}).
+	result := fabsBlock value: 3.2.
 	self assert: result equals: 3.2
 %
 
@@ -471,14 +494,15 @@ method: MathTestCase
 testIsnan
 	"Test math.isnan()"
 
-	| m result nan |
-	m := math new.
+	| m isnanBlock result nan |
+	m := math perform: #instance env: 2.
 	nan := m perform: #nan env: 2.
+	isnanBlock := m perform: #isnan env: 2.
 
-	result := (m perform: #isnan: env: 2 withArguments: {nan}).
+	result := isnanBlock value: nan.
 	self assert: result.
 
-	result := (m perform: #isnan: env: 2 withArguments: {5.5}).
+	result := isnanBlock value: 5.5.
 	self deny: result
 %
 
@@ -487,14 +511,15 @@ method: MathTestCase
 testIsinf
 	"Test math.isinf()"
 
-	| m result inf |
-	m := math new.
+	| m isinfBlock result inf |
+	m := math perform: #instance env: 2.
 	inf := m perform: #inf env: 2.
+	isinfBlock := m perform: #isinf env: 2.
 
-	result := (m perform: #isinf: env: 2 withArguments: {inf}).
+	result := isinfBlock value: inf.
 	self assert: result.
 
-	result := (m perform: #isinf: env: 2 withArguments: {5.5}).
+	result := isinfBlock value: 5.5.
 	self deny: result
 %
 
@@ -503,18 +528,19 @@ method: MathTestCase
 testIsfinite
 	"Test math.isfinite()"
 
-	| m result inf nan |
-	m := math new.
+	| m isfiniteBlock result inf nan |
+	m := math perform: #instance env: 2.
 	inf := m perform: #inf env: 2.
 	nan := m perform: #nan env: 2.
+	isfiniteBlock := m perform: #isfinite env: 2.
 
-	result := (m perform: #isfinite: env: 2 withArguments: {5.5}).
+	result := isfiniteBlock value: 5.5.
 	self assert: result.
 
-	result := (m perform: #isfinite: env: 2 withArguments: {inf}).
+	result := isfiniteBlock value: inf.
 	self deny: result.
 
-	result := (m perform: #isfinite: env: 2 withArguments: {nan}).
+	result := isfiniteBlock value: nan.
 	self deny: result
 %
 
@@ -523,17 +549,18 @@ method: MathTestCase
 testDegrees
 	"Test math.degrees()"
 
-	| m result pi |
-	m := math new.
+	| m degreesBlock result pi |
+	m := math perform: #instance env: 2.
 	pi := m perform: #pi env: 2.
+	degreesBlock := m perform: #degrees env: 2.
 
-	result := (m perform: #degrees: env: 2 withArguments: {pi}).
-	self assert: (((result perform: #- env: 0 withArguments: {180.0}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.00001}).
+	result := degreesBlock value: pi.
+	self assert: (((result - 180.0) abs)
+		< 0.00001).
 
-	result := (m perform: #degrees: env: 2 withArguments: {(pi perform: #/ env: 0 withArguments: {2})}).
-	self assert: (((result perform: #- env: 0 withArguments: {90.0}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.00001})
+	result := degreesBlock value: (pi / 2).
+	self assert: (((result - 90.0) abs)
+		< 0.00001)
 %
 
 category: 'Tests - Angular Conversion'
@@ -541,17 +568,18 @@ method: MathTestCase
 testRadians
 	"Test math.radians()"
 
-	| m result pi |
-	m := math new.
+	| m radiansBlock result pi |
+	m := math perform: #instance env: 2.
 	pi := m perform: #pi env: 2.
+	radiansBlock := m perform: #radians env: 2.
 
-	result := (m perform: #radians: env: 2 withArguments: {180}).
-	self assert: (((result perform: #- env: 0 withArguments: {pi}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.00001}).
+	result := radiansBlock value: 180.
+	self assert: (((result - pi) abs)
+		< 0.00001).
 
-	result := (m perform: #radians: env: 2 withArguments: {90}).
-	self assert: (((result perform: #- env: 0 withArguments: {(pi perform: #/ env: 0 withArguments: {2})}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.00001})
+	result := radiansBlock value: 90.
+	self assert: (((result - (pi / 2)) abs)
+		< 0.00001)
 %
 
 

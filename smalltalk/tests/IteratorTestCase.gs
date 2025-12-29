@@ -20,14 +20,14 @@ testIteratorTypes
 	"Test that iter() creates distinct iterator types for each collection type"
 
 	| lst tpl str rng s fs d lstIter tplIter strIter rngIter sIter fsIter dIter |
-	lst := list perform: #withAll: env: 0 withArguments: {#(1 2 3)}.
-	tpl := tuple perform: #withAll: env: 0 withArguments: {#(1 2 3)}.
+	lst := list withAll: #(1 2 3).
+	tpl := tuple withAll: #(1 2 3).
 	str := 'abc'.
 	rng := range from: 0 to: 2 by: 1.
 	s := set new.
 	s ___add___: 1.
 	fs := frozenset new.
-	fs perform: #add: env: 0 withArguments: {1}.
+	fs add: 1.
 	d := dict new.
 	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 1}.
 
@@ -54,7 +54,7 @@ testIteratorHasIterAndNext
 	"Test that iterators have __iter__ and __next__ methods"
 
 	| lst iter |
-	lst := list perform: #withAll: env: 0 withArguments: {#(1 2 3)}.
+	lst := list withAll: #(1 2 3).
 	iter := lst perform: #__iter__ env: 2.
 
 	"Iterator should have __iter__"
@@ -70,7 +70,7 @@ testIteratorIterReturnsSelf
 	"Test that iterator.__iter__() returns the iterator itself"
 
 	| lst iter result |
-	lst := list perform: #withAll: env: 0 withArguments: {#(1 2 3)}.
+	lst := list withAll: #(1 2 3).
 	iter := lst perform: #__iter__ env: 2.
 
 	result := iter perform: #__iter__ env: 2.
@@ -84,7 +84,7 @@ testCollectionsAreIterableNotIterators
 	"Test that collections have __iter__ but not __next__"
 
 	| lst |
-	lst := list perform: #withAll: env: 0 withArguments: {#(1 2 3)}.
+	lst := list withAll: #(1 2 3).
 
 	"Collection should have __iter__"
 	self assert: (lst class whichClassIncludesSelector: #__iter__ environmentId: 2) notNil.
@@ -99,7 +99,7 @@ testListIteratorBasicIteration
 	"Test basic iteration over a list with next()"
 
 	| lst iter |
-	lst := list perform: #withAll: env: 0 withArguments: {#(10 20 30)}.
+	lst := list withAll: #(10 20 30).
 	iter := lst perform: #__iter__ env: 2.
 
 	self assert: (iter perform: #__next__ env: 2) equals: 10.
@@ -116,7 +116,7 @@ testListIteratorIndependence
 	"Test that multiple iterators over the same list are independent"
 
 	| lst iter1 iter2 |
-	lst := list perform: #withAll: env: 0 withArguments: {#(1 2 3)}.
+	lst := list withAll: #(1 2 3).
 	iter1 := lst perform: #__iter__ env: 2.
 	iter2 := lst perform: #__iter__ env: 2.
 
@@ -136,7 +136,7 @@ testListIteratorExhaustion
 	"Test that iterator stays exhausted after StopIteration"
 
 	| lst iter |
-	lst := list perform: #withAll: env: 0 withArguments: {#(1 2)}.
+	lst := list withAll: #(1 2).
 	iter := lst perform: #__iter__ env: 2.
 
 	"Consume all items"
@@ -156,7 +156,7 @@ testTupleIteratorBasicIteration
 	"Test basic iteration over a tuple with next()"
 
 	| tpl iter |
-	tpl := tuple perform: #withAll: env: 0 withArguments: {#(10 20 30)}.
+	tpl := tuple withAll: #(10 20 30).
 	iter := tpl perform: #__iter__ env: 2.
 
 	self assert: (iter perform: #__next__ env: 2) equals: 10.
@@ -173,7 +173,7 @@ testTupleIteratorIndependence
 	"Test that multiple iterators over the same tuple are independent"
 
 	| tpl iter1 iter2 |
-	tpl := tuple perform: #withAll: env: 0 withArguments: {#(1 2 3)}.
+	tpl := tuple withAll: #(1 2 3).
 	iter1 := tpl perform: #__iter__ env: 2.
 	iter2 := tpl perform: #__iter__ env: 2.
 
@@ -325,13 +325,13 @@ testSetIteratorBasicIteration
 	iter := s perform: #__iter__ env: 2.
 	items := list new.
 
-	[true] perform: #whileTrue: env: 0 withArguments: {[
+	[true] whileTrue: [
 		| item |
 		[
 			item := iter perform: #__next__ env: 2.
 			items perform: #append: env: 2 withArguments: {item}
-		] perform: #on:do: env: 0 withArguments: {StopIteration. [:ex | ^ nil]}
-	]}.
+		] on: StopIteration do: [:ex | ^ nil]
+	].
 
 	self assert: (items ___len___) equals: 3.
 	self assert: (items ___contains___: 1).
@@ -346,20 +346,20 @@ testFrozensetIteratorBasicIteration
 
 	| fs iter items |
 	fs := frozenset new.
-	fs perform: #add: env: 0 withArguments: {1}.
-	fs perform: #add: env: 0 withArguments: {2}.
-	fs perform: #add: env: 0 withArguments: {3}.
+	fs add: 1.
+	fs add: 2.
+	fs add: 3.
 
 	iter := fs perform: #__iter__ env: 2.
 	items := list new.
 
-	[true] perform: #whileTrue: env: 0 withArguments: {[
+	[true] whileTrue: [
 		| item |
 		[
 			item := iter perform: #__next__ env: 2.
 			items perform: #append: env: 2 withArguments: {item}
-		] perform: #on:do: env: 0 withArguments: {StopIteration. [:ex | ^ nil]}
-	]}.
+		] on: StopIteration do: [:ex | ^ nil]
+	].
 
 	self assert: (items ___len___) equals: 3.
 	self assert: (items ___contains___: 1).
@@ -388,9 +388,9 @@ testSetIteratorIndependence
 	item2 := iter2 perform: #__next__ env: 2.
 
 	"Both should have gotten the first element (order may vary in sets)"
-	self assert: ((item1 perform: #= env: 0 withArguments: {1}) or: [
-		(item1 perform: #= env: 0 withArguments: {2}) or: [
-			item1 perform: #= env: 0 withArguments: {3}
+	self assert: ((item1 = 1) or: [
+		(item1 = 2) or: [
+			item1 = 3
 		]
 	])
 %
@@ -461,11 +461,11 @@ testDictKeyIteratorBasicIteration
 	key2 := iter perform: #__next__ env: 2.
 	key3 := iter perform: #__next__ env: 2.
 
-	keys := Array perform: #with:with:with: env: 0 withArguments: {key1. key2. key3}.
+	keys := { key1. key2. key3. }.
 
-	self assert: (keys perform: #includes: env: 0 withArguments: {'a'}).
-	self assert: (keys perform: #includes: env: 0 withArguments: {'b'}).
-	self assert: (keys perform: #includes: env: 0 withArguments: {'c'}).
+	self assert: (keys includes: 'a').
+	self assert: (keys includes: 'b').
+	self assert: (keys includes: 'c').
 
 	"Iterator should be exhausted"
 	self should: [iter perform: #__next__ env: 2] raise: StopIteration.

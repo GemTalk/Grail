@@ -76,16 +76,14 @@ method: BuiltinsTestCase
 testAbs
 	"Test abs() function"
 
-	| b result |
-	b := builtins perform: #new env: 0.
-	
-	result := b perform: #abs: env: 2 withArguments: {5}.
+	| result |
+	result := builtins perform: #abs: env: 2 withArguments: {5}.
 	self assert: result equals: 5.
-	
-	result := b perform: #abs: env: 2 withArguments: {-5}.
+
+	result := builtins perform: #abs: env: 2 withArguments: {-5}.
 	self assert: result equals: 5.
-	
-	result := b perform: #abs: env: 2 withArguments: {0}.
+
+	result := builtins perform: #abs: env: 2 withArguments: {0}.
 	self assert: result equals: 0
 %
 ```
@@ -94,7 +92,7 @@ testAbs
 
 1. **Declare all temporary variables at the top** - Smalltalk requires this
 2. **Use `env: 2` for Python methods** - This ensures methods are called in the Python environment
-3. **Use `env: 0` for Smalltalk base methods** - For creating objects and basic operations
+3. **Use direct Smalltalk messages for basic operations** - e.g., `obj at: 1` instead of `obj perform: #at: env: 0 withArguments: {1}`
 4. **Use descriptive comments** - Explain what the test verifies
 
 ### Testing Multiple Cases
@@ -130,11 +128,8 @@ method: BuiltinsTestCase
 testLenTypeError
 	"Test that len() raises TypeError for objects without __len__"
 
-	| b |
-	b := builtins perform: #new env: 0.
-	
 	self should: [
-		b perform: #len: env: 2 withArguments: {42}
+		builtins perform: #len: env: 2 withArguments: {42}
 	] raise: TypeError
 %
 ```
@@ -149,12 +144,9 @@ method: MathTestCase
 testSqrt
 	"Test math.sqrt()"
 
-	| m result |
-	m := math perform: #new env: 0.
-
-	result := (m perform: #sqrt: env: 2 withArguments: {2}).
-	self assert: (((result perform: #- env: 0 withArguments: {1.41421}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.001})
+	| result |
+	result := (math perform: #sqrt: env: 2 withArguments: {2}).
+	self assert: ((result - 1.41421) abs < 0.001)
 %
 ```
 
@@ -166,12 +158,10 @@ method: MathTestCase
 testPi
 	"Test math.pi constant"
 
-	| m result |
-	m := math perform: #new env: 0.
-	result := m perform: #pi env: 2.
+	| result |
+	result := math perform: #pi env: 2.
 
-	self assert: (((result perform: #- env: 0 withArguments: {3.14159}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.001})
+	self assert: ((result - 3.14159) abs < 0.001)
 %
 ```
 
@@ -242,7 +232,7 @@ self assert: result equals: 5
 ### `assert:`
 Tests that a boolean is true:
 ```smalltalk
-self assert: (result perform: #includes: env: 0 withArguments: {'__class__'})
+self assert: (result includes: '__class__')
 ```
 
 ### `deny:`
@@ -263,13 +253,14 @@ self should: [
 
 Understanding environment IDs is crucial:
 
-- **`env: 0`** - Smalltalk environment (base GemStone methods)
-  - Use for: Creating objects, basic Smalltalk operations, type checks
-  - Example: `builtins perform: #new env: 0`
-  
 - **`env: 2`** - Python environment (Python methods)
   - Use for: Calling Python methods, Python protocol methods
   - Example: `obj perform: #__len__ env: 2`
+
+- **Direct Smalltalk messages** - For basic Smalltalk operations
+  - Use for: Creating objects, basic operations, type checks
+  - Example: `obj at: 1` instead of `obj perform: #at: env: 0 withArguments: {1}`
+  - Example: `list add: item` instead of `list perform: #add: env: 0 withArguments: {item}`
 
 ## Test Categories
 
@@ -325,9 +316,8 @@ input smalltalk/tests/{ClassName}TestCase.gs
 Start with the happy path:
 ```smalltalk
 testAbs
-	| b result |
-	b := builtins perform: #new env: 0.
-	result := b perform: #abs: env: 2 withArguments: {5}.
+	| result |
+	result := builtins perform: #abs: env: 2 withArguments: {5}.
 	self assert: result equals: 5
 %
 ```
@@ -337,14 +327,12 @@ testAbs
 Include boundary conditions:
 ```smalltalk
 testAbs
-	| b result |
-	b := builtins perform: #new env: 0.
-	result := b perform: #abs: env: 2 withArguments: {0}.
+	| result |
+	result := builtins perform: #abs: env: 2 withArguments: {0}.
 	self assert: result equals: 0.
-	
-	result := b perform: #abs: env: 2 withArguments: {-3.14}.
-	self assert: (((result perform: #- env: 0 withArguments: {3.14}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.0001})
+
+	result := builtins perform: #abs: env: 2 withArguments: {-3.14}.
+	self assert: ((result - 3.14) abs < 0.0001)
 %
 ```
 
@@ -353,10 +341,8 @@ testAbs
 Verify exceptions are raised correctly:
 ```smalltalk
 testLenTypeError
-	| b |
-	b := builtins perform: #new env: 0.
 	self should: [
-		b perform: #len: env: 2 withArguments: {42}
+		builtins perform: #len: env: 2 withArguments: {42}
 	] raise: TypeError
 %
 ```
@@ -494,7 +480,7 @@ When implementing a new feature, ensure you:
 - [ ] Use appropriate categories
 - [ ] Use descriptive test method names
 - [ ] Declare all temporary variables at the top
-- [ ] Use correct environment IDs (`env: 0` vs `env: 2`)
+- [ ] Use `env: 2` for Python methods, direct Smalltalk messages for basic operations
 - [ ] Run tests and ensure they pass
 
 ## Common Patterns
@@ -505,9 +491,8 @@ When implementing a new feature, ensure you:
 category: 'Tests - Numeric Functions'
 method: BuiltinsTestCase
 test{FunctionName}
-	| b result |
-	b := builtins perform: #new env: 0.
-	result := b perform: #{functionName}: env: 2 withArguments: {arg}.
+	| result |
+	result := builtins perform: #{functionName}: env: 2 withArguments: {arg}.
 	self assert: result equals: expectedValue
 %
 ```
@@ -550,7 +535,7 @@ test_creation
 - **Tests are essential** - Write tests alongside implementation
 - **Follow the structure** - Use the established patterns
 - **Test comprehensively** - Normal cases, edge cases, error cases
-- **Use correct environments** - `env: 0` for Smalltalk, `env: 2` for Python
+- **Use `env: 2` for Python methods** - Direct Smalltalk messages for basic operations
 - **Be descriptive** - Clear test names and comments
 - **Organize logically** - Use categories to group related tests
 - **Verify CPython compatibility** - When possible, compare with CPython behavior

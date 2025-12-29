@@ -1409,9 +1409,9 @@ builtins category: 'Builtins'
 expectvalue /Class
 doit
 object subclass: 'math'
-  instVarNames: #()
+  instVarNames: #('pi' 'e' 'tau' 'inf' 'nan' 'sqrt' 'pow' 'exp' 'log' 'logWithBase' 'log10' 'log2' 'sin' 'cos' 'tan' 'asin' 'acos' 'atan' 'atan2' 'sinh' 'cosh' 'tanh' 'asinh' 'acosh' 'atanh' 'ceil' 'floor' 'trunc' 'factorial' 'gcd' 'lcm' 'fabs' 'isnan' 'isinf' 'isfinite' 'degrees' 'radians')
   classVars: #()
-  classInstVars: #()
+  classInstVars: #('instance')
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -1436,9 +1436,9 @@ math category: 'Math'
 expectvalue /Class
 doit
 object subclass: 'cmath'
-  instVarNames: #()
+  instVarNames: #('pi' 'e' 'tau' 'inf' 'infj' 'nan' 'nanj' 'sin' 'cos' 'tan' 'sinh' 'cosh' 'tanh' 'exp' 'log' 'log10' 'sqrt' 'phase' 'polar' 'rect' 'isnan' 'isinf' 'isfinite')
   classVars: #()
-  classInstVars: #()
+  classInstVars: #('instance')
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -1463,9 +1463,9 @@ cmath category: 'Math'
 expectvalue /Class
 doit
 object subclass: 'os'
-  instVarNames: #()
+  instVarNames: #('getcwd' 'chdir' 'listdir' 'mkdir' 'mkdirWithMode' 'makedirs' 'remove' 'rmdir' 'rename' 'exists' 'isdir' 'isfile' 'stat' 'lstat' 'system' 'getenv' 'getenvWithDefault' 'putenv' 'sep' 'pathsep' 'linesep' 'path')
   classVars: #()
-  classInstVars: #()
+  classInstVars: #('instance')
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -1490,9 +1490,9 @@ os category: 'Operating System'
 expectvalue /Class
 doit
 object subclass: 'os_path'
-  instVarNames: #()
+  instVarNames: #('join' 'basename' 'dirname' 'split' 'splitext' 'isabs' 'normpath' 'abspath' 'exists' 'isdir' 'isfile' 'commonpath' 'commonprefix')
   classVars: #()
-  classInstVars: #()
+  classInstVars: #('instance')
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -1838,6 +1838,7 @@ input smalltalk/classes/builtin_function_or_method.gs
 input smalltalk/classes/bytes.gs
 input smalltalk/classes/Decimal.gs
 input smalltalk/classes/dict.gs
+input smalltalk/classes/ExecBlock.gs
 input smalltalk/classes/float.gs
 input smalltalk/classes/frozenset.gs
 input smalltalk/classes/int.gs

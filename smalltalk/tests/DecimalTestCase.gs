@@ -30,7 +30,7 @@ testCreateFromInteger
 	| d |
 	d := (Decimal ___new___: Decimal _: 42).
 	
-	self assert: ((d perform: #__int__ env: 2) perform: #= env: 0 withArguments: {42})
+	self assert: (d perform: #__int__ env: 2) = 42
 %
 
 category: 'Tests - Creation'
@@ -42,8 +42,7 @@ testCreateFromFloat
 	d := (Decimal ___new___: Decimal _: 3.14).
 	
 	"Float conversion may not be exact, so just check it's close"
-	self assert: ((((d perform: #__float__ env: 2) perform: #- env: 0 withArguments: {3.14}) perform: #abs env: 0) 
-		perform: #< env: 0 withArguments: {0.01})
+	self assert: ((d perform: #__float__ env: 2) - 3.14) abs < 0.01
 %
 
 category: 'Tests - Arithmetic'

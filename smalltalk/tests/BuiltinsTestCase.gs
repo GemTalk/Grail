@@ -16,21 +16,21 @@ method: BuiltinsTestCase
 testAbs
 	"Test abs() function"
 
-	| b result |
+	| b absBlock result |
 	b := builtins new.
-	
-	result := b perform: #abs: env: 2 withArguments: {5}.
+	absBlock := b perform: #abs env: 2.
+
+	result := absBlock value: 5.
 	self assert: result equals: 5.
-	
-	result := b perform: #abs: env: 2 withArguments: {-5}.
+
+	result := absBlock value: -5.
 	self assert: result equals: 5.
-	
-	result := b perform: #abs: env: 2 withArguments: {0}.
+
+	result := absBlock value: 0.
 	self assert: result equals: 0.
-	
-	result := b perform: #abs: env: 2 withArguments: {-3.14}.
-	self assert: (((result perform: #- env: 0 withArguments: {3.14}) perform: #abs env: 0)
-		perform: #< env: 0 withArguments: {0.0001})
+
+	result := absBlock value: -3.14.
+	self assert: (result - 3.14) abs < 0.0001
 %
 
 category: 'Tests - Numeric Functions'
@@ -38,16 +38,17 @@ method: BuiltinsTestCase
 testHex
 	"Test hex() function"
 
-	| b result |
+	| b hexBlock result |
 	b := builtins new.
-	
-	result := b perform: #hex: env: 2 withArguments: {255}.
+	hexBlock := b perform: #hex env: 2.
+
+	result := hexBlock value: 255.
 	self assert: result equals: '0xff'.
-	
-	result := b perform: #hex: env: 2 withArguments: {16}.
+
+	result := hexBlock value: 16.
 	self assert: result equals: '0x10'.
-	
-	result := b perform: #hex: env: 2 withArguments: {0}.
+
+	result := hexBlock value: 0.
 	self assert: result equals: '0x0'
 %
 
@@ -56,16 +57,17 @@ method: BuiltinsTestCase
 testOct
 	"Test oct() function"
 
-	| b result |
+	| b octBlock result |
 	b := builtins new.
-	
-	result := b perform: #oct: env: 2 withArguments: {8}.
+	octBlock := b perform: #oct env: 2.
+
+	result := octBlock value: 8.
 	self assert: result equals: '0o10'.
-	
-	result := b perform: #oct: env: 2 withArguments: {64}.
+
+	result := octBlock value: 64.
 	self assert: result equals: '0o100'.
-	
-	result := b perform: #oct: env: 2 withArguments: {0}.
+
+	result := octBlock value: 0.
 	self assert: result equals: '0o0'
 %
 
@@ -74,16 +76,17 @@ method: BuiltinsTestCase
 testBin
 	"Test bin() function"
 
-	| b result |
+	| b binBlock result |
 	b := builtins new.
-	
-	result := b perform: #bin: env: 2 withArguments: {5}.
+	binBlock := b perform: #bin env: 2.
+
+	result := binBlock value: 5.
 	self assert: result equals: '0b101'.
-	
-	result := b perform: #bin: env: 2 withArguments: {8}.
+
+	result := binBlock value: 8.
 	self assert: result equals: '0b1000'.
-	
-	result := b perform: #bin: env: 2 withArguments: {0}.
+
+	result := binBlock value: 0.
 	self assert: result equals: '0b0'
 %
 
@@ -92,17 +95,18 @@ method: BuiltinsTestCase
 testType
 	"Test type() function"
 
-	| b result |
+	| b typeBlock result |
 	b := builtins new.
+	typeBlock := b perform: #type env: 2.
 
-	result := b perform: #type: env: 2 withArguments: {42}.
-	self assert: (42 perform: #isKindOf: env: 0 withArguments: {result}).
+	result := typeBlock value: 42.
+	self assert: (42 isKindOf: result).
 
-	result := b perform: #type: env: 2 withArguments: {'hello'}.
-	self assert: ('hello' perform: #isKindOf: env: 0 withArguments: {result}).
+	result := typeBlock value: 'hello'.
+	self assert: ('hello' isKindOf: result).
 
-	result := b perform: #type: env: 2 withArguments: {list new}.
-	self assert: ((list new) perform: #isKindOf: env: 0 withArguments: {result})
+	result := typeBlock value: list new.
+	self assert: (list new isKindOf: result)
 %
 
 category: 'Tests - Type Functions'
@@ -110,17 +114,18 @@ method: BuiltinsTestCase
 testLen
 	"Test len() function"
 
-	| b result lst |
+	| b lenBlock result lst |
 	b := builtins new.
-	
-	result := b perform: #len: env: 2 withArguments: {'hello'}.
+	lenBlock := b perform: #len env: 2.
+
+	result := lenBlock value: 'hello'.
 	self assert: result equals: 5.
-	
+
 	lst := list new.
 	lst perform: #append: env: 2 withArguments: {1}.
 	lst perform: #append: env: 2 withArguments: {2}.
 	lst perform: #append: env: 2 withArguments: {3}.
-	result := b perform: #len: env: 2 withArguments: {lst}.
+	result := lenBlock value: lst.
 	self assert: result equals: 3
 %
 
@@ -129,11 +134,12 @@ method: BuiltinsTestCase
 testLenTypeError
 	"Test that len() raises TypeError for objects without __len__"
 
-	| b |
+	| b lenBlock |
 	b := builtins new.
-	
+	lenBlock := b perform: #len env: 2.
+
 	self should: [
-		b perform: #len: env: 2 withArguments: {42}
+		lenBlock value: 42
 	] raise: TypeError
 %
 
@@ -142,14 +148,15 @@ method: BuiltinsTestCase
 testHash
 	"Test hash() function"
 
-	| b result |
+	| b hashBlock result |
 	b := builtins new.
+	hashBlock := b perform: #hash env: 2.
 
-	result := b perform: #hash: env: 2 withArguments: {42}.
-	self assert: (result perform: #isKindOf: env: 0 withArguments: {Integer}).
+	result := hashBlock value: 42.
+	self assert: (result isKindOf: Integer).
 
-	result := b perform: #hash: env: 2 withArguments: {'hello'}.
-	self assert: (result perform: #isKindOf: env: 0 withArguments: {Integer})
+	result := hashBlock value: 'hello'.
+	self assert: (result isKindOf: Integer)
 %
 
 category: 'Tests - String Functions'
@@ -157,13 +164,14 @@ method: BuiltinsTestCase
 testRepr
 	"Test repr() function"
 
-	| b result |
+	| b reprBlock result |
 	b := builtins new.
+	reprBlock := b perform: #repr env: 2.
 
-	result := b perform: #repr: env: 2 withArguments: {'hello'}.
-	self assert: (result perform: #includesString: env: 0 withArguments: {'hello'}).
+	result := reprBlock value: 'hello'.
+	self assert: (result includesString: 'hello').
 
-	result := b perform: #repr: env: 2 withArguments: {42}.
+	result := reprBlock value: 42.
 	self assert: result equals: '42'
 %
 
@@ -172,13 +180,14 @@ method: BuiltinsTestCase
 testStr
 	"Test str() function"
 
-	| b result |
+	| b strBlock result |
 	b := builtins new.
+	strBlock := b perform: #str env: 2.
 
-	result := b perform: #str: env: 2 withArguments: {42}.
+	result := strBlock value: 42.
 	self assert: result equals: '42'.
 
-	result := b perform: #str: env: 2 withArguments: {'hello'}.
+	result := strBlock value: 'hello'.
 	self assert: result equals: 'hello'
 %
 
@@ -187,16 +196,17 @@ method: BuiltinsTestCase
 testChr
 	"Test chr() function"
 
-	| b result |
+	| b chrBlock result |
 	b := builtins new.
+	chrBlock := b perform: #chr env: 2.
 
-	result := b perform: #chr: env: 2 withArguments: {65}.
+	result := chrBlock value: 65.
 	self assert: result equals: 'A'.
 
-	result := b perform: #chr: env: 2 withArguments: {97}.
+	result := chrBlock value: 97.
 	self assert: result equals: 'a'.
 
-	result := b perform: #chr: env: 2 withArguments: {48}.
+	result := chrBlock value: 48.
 	self assert: result equals: '0'
 %
 
@@ -205,16 +215,17 @@ method: BuiltinsTestCase
 testOrd
 	"Test ord() function"
 
-	| b result |
+	| b ordBlock result |
 	b := builtins new.
+	ordBlock := b perform: #ord env: 2.
 
-	result := b perform: #ord: env: 2 withArguments: {'A'}.
+	result := ordBlock value: 'A'.
 	self assert: result equals: 65.
 
-	result := b perform: #ord: env: 2 withArguments: {'a'}.
+	result := ordBlock value: 'a'.
 	self assert: result equals: 97.
 
-	result := b perform: #ord: env: 2 withArguments: {'0'}.
+	result := ordBlock value: '0'.
 	self assert: result equals: 48
 %
 
@@ -223,15 +234,16 @@ method: BuiltinsTestCase
 testOrdTypeError
 	"Test that ord() raises TypeError for strings with length != 1"
 
-	| b |
+	| b ordBlock |
 	b := builtins new.
+	ordBlock := b perform: #ord env: 2.
 
 	self should: [
-		b perform: #ord: env: 2 withArguments: {'hello'}
+		ordBlock value: 'hello'
 	] raise: TypeError.
 
 	self should: [
-		b perform: #ord: env: 2 withArguments: {''}
+		ordBlock value: ''
 	] raise: TypeError
 %
 
@@ -240,15 +252,16 @@ method: BuiltinsTestCase
 testMin
 	"Test min() function"
 
-	| b result lst |
+	| b minBlock result lst |
 	b := builtins new.
+	minBlock := b perform: #min env: 2.
 
-	lst := list perform: #withAll: env: 0 withArguments: {#(5 2 8 1 9)}.
-	result := b perform: #min: env: 2 withArguments: {lst}.
+	lst := list withAll: #(5 2 8 1 9).
+	result := minBlock value: lst.
 	self assert: result equals: 1.
 
-	lst := list perform: #withAll: env: 0 withArguments: {#(-5 -2 -8)}.
-	result := b perform: #min: env: 2 withArguments: {lst}.
+	lst := list withAll: #(-5 -2 -8).
+	result := minBlock value: lst.
 	self assert: result equals: -8
 %
 
@@ -257,15 +270,16 @@ method: BuiltinsTestCase
 testMax
 	"Test max() function"
 
-	| b result lst |
+	| b maxBlock result lst |
 	b := builtins new.
+	maxBlock := b perform: #max env: 2.
 
-	lst := list perform: #withAll: env: 0 withArguments: {#(5 2 8 1 9)}.
-	result := b perform: #max: env: 2 withArguments: {lst}.
+	lst := list withAll: #(5 2 8 1 9).
+	result := maxBlock value: lst.
 	self assert: result equals: 9.
 
-	lst := list perform: #withAll: env: 0 withArguments: {#(-5 -2 -8)}.
-	result := b perform: #max: env: 2 withArguments: {lst}.
+	lst := list withAll: #(-5 -2 -8).
+	result := maxBlock value: lst.
 	self assert: result equals: -2
 %
 
@@ -274,15 +288,16 @@ method: BuiltinsTestCase
 testSum
 	"Test sum() function"
 
-	| b result lst |
+	| b sumBlock result lst |
 	b := builtins new.
+	sumBlock := b perform: #sum env: 2.
 
-	lst := list perform: #withAll: env: 0 withArguments: {#(1 2 3 4 5)}.
-	result := b perform: #sum: env: 2 withArguments: {lst}.
+	lst := list withAll: #(1 2 3 4 5).
+	result := sumBlock value: lst.
 	self assert: result equals: 15.
 
-	lst := list perform: #withAll: env: 0 withArguments: {#()}.
-	result := b perform: #sum: env: 2 withArguments: {lst}.
+	lst := list withAll: #().
+	result := sumBlock value: lst.
 	self assert: result equals: 0
 %
 
@@ -291,19 +306,20 @@ method: BuiltinsTestCase
 testAll
 	"Test all() function"
 
-	| b result lst |
+	| b allBlock result lst |
 	b := builtins new.
+	allBlock := b perform: #all env: 2.
 
-	lst := list perform: #withAll: env: 0 withArguments: {#(true true true)}.
-	result := b perform: #all: env: 2 withArguments: {lst}.
+	lst := list withAll: #(true true true).
+	result := allBlock value: lst.
 	self assert: result.
 
-	lst := list perform: #withAll: env: 0 withArguments: {#(true false true)}.
-	result := b perform: #all: env: 2 withArguments: {lst}.
+	lst := list withAll: #(true false true).
+	result := allBlock value: lst.
 	self deny: result.
 
-	lst := list perform: #withAll: env: 0 withArguments: {#()}.
-	result := b perform: #all: env: 2 withArguments: {lst}.
+	lst := list withAll: #().
+	result := allBlock value: lst.
 	self assert: result
 %
 
@@ -312,19 +328,20 @@ method: BuiltinsTestCase
 testAny
 	"Test any() function"
 
-	| b result lst |
+	| b anyBlock result lst |
 	b := builtins new.
+	anyBlock := b perform: #any env: 2.
 
-	lst := list perform: #withAll: env: 0 withArguments: {#(false false true)}.
-	result := b perform: #any: env: 2 withArguments: {lst}.
+	lst := list withAll: #(false false true).
+	result := anyBlock value: lst.
 	self assert: result.
 
-	lst := list perform: #withAll: env: 0 withArguments: {#(false false false)}.
-	result := b perform: #any: env: 2 withArguments: {lst}.
+	lst := list withAll: #(false false false).
+	result := anyBlock value: lst.
 	self deny: result.
 
-	lst := list perform: #withAll: env: 0 withArguments: {#()}.
-	result := b perform: #any: env: 2 withArguments: {lst}.
+	lst := list withAll: #().
+	result := anyBlock value: lst.
 	self deny: result
 %
 
@@ -333,20 +350,21 @@ method: BuiltinsTestCase
 testIsinstance
 	"Test isinstance() function"
 
-	| b result lst |
+	| b isinstanceBlock result lst |
 	b := builtins new.
+	isinstanceBlock := b perform: #isinstance env: 2.
 
-	result := b perform: #isinstance:_: env: 2 withArguments: {42. int}.
+	result := isinstanceBlock value: 42 value: int.
 	self assert: result.
 
-	result := b perform: #isinstance:_: env: 2 withArguments: {'hello'. str}.
+	result := isinstanceBlock value: 'hello' value: str.
 	self assert: result.
 
 	lst := list new.
-	result := b perform: #isinstance:_: env: 2 withArguments: {lst. list}.
+	result := isinstanceBlock value: lst value: list.
 	self assert: result.
 
-	result := b perform: #isinstance:_: env: 2 withArguments: {42. str}.
+	result := isinstanceBlock value: 42 value: str.
 	self deny: result
 %
 
@@ -355,19 +373,20 @@ method: BuiltinsTestCase
 testCallable
 	"Test callable() function"
 
-	| b method result lst |
+	| b callableBlock method result lst |
 	b := builtins new.
-	method := builtins compiledMethodAt: #abs: environmentId: 2.
+	callableBlock := b perform: #callable env: 2.
+	method := b perform: #abs env: 2.
 	"Functions/methods are callable"
-	result := b perform: #callable: env: 2 withArguments: {method}.
+	result := callableBlock value: method.
 	self assert: result.
 
 	"Regular objects are not callable"
-	result := b perform: #callable: env: 2 withArguments: {42}.
+	result := callableBlock value: 42.
 	self deny: result.
 
 	lst := list new.
-	result := b perform: #callable: env: 2 withArguments: {lst}.
+	result := callableBlock value: lst.
 	self deny: result
 %
 
@@ -376,17 +395,18 @@ method: BuiltinsTestCase
 testId
 	"Test id() function"
 
-	| b result obj1 obj2 id1 id2 |
+	| b idBlock result obj1 obj2 id1 id2 |
 	b := builtins new.
+	idBlock := b perform: #id env: 2.
 
 	obj1 := list new.
 	obj2 := list new.
 
-	id1 := b perform: #id: env: 2 withArguments: {obj1}.
-	id2 := b perform: #id: env: 2 withArguments: {obj2}.
+	id1 := idBlock value: obj1.
+	id2 := idBlock value: obj2.
 
-	self assert: (id1 perform: #isKindOf: env: 0 withArguments: {Integer}).
-	self assert: (id2 perform: #isKindOf: env: 0 withArguments: {Integer}).
+	self assert: (id1 isKindOf: Integer).
+	self assert: (id2 isKindOf: Integer).
 	self deny: id1 == id2
 %
 
@@ -395,16 +415,17 @@ method: BuiltinsTestCase
 testPow
 	"Test pow() function"
 
-	| b result |
+	| b powBlock result |
 	b := builtins new.
+	powBlock := b perform: #pow env: 2.
 
-	result := b perform: #pow:_: env: 2 withArguments: {2. 3}.
+	result := powBlock value: 2 value: 3.
 	self assert: result equals: 8.
 
-	result := b perform: #pow:_: env: 2 withArguments: {5. 2}.
+	result := powBlock value: 5 value: 2.
 	self assert: result equals: 25.
 
-	result := b perform: #pow:_: env: 2 withArguments: {10. 0}.
+	result := powBlock value: 10 value: 0.
 	self assert: result equals: 1
 %
 
@@ -413,13 +434,14 @@ method: BuiltinsTestCase
 testPowWithModulo
 	"Test pow() function with modulo"
 
-	| b result |
+	| b powModBlock result |
 	b := builtins new.
+	powModBlock := b perform: #powWithMod env: 2.
 
-	result := b perform: #pow:_:_: env: 2 withArguments: {2. 3. 5}.
+	result := powModBlock value: 2 value: 3 value: 5.
 	self assert: result equals: 3.
 
-	result := b perform: #pow:_:_: env: 2 withArguments: {10. 2. 7}.
+	result := powModBlock value: 10 value: 2 value: 7.
 	self assert: result equals: 2
 %
 
@@ -428,16 +450,17 @@ method: BuiltinsTestCase
 testRound
 	"Test round() function"
 
-	| b result |
+	| b roundBlock result |
 	b := builtins new.
+	roundBlock := b perform: #round env: 2.
 
-	result := b perform: #round: env: 2 withArguments: {3.7}.
+	result := roundBlock value: 3.7.
 	self assert: result equals: 4.
 
-	result := b perform: #round: env: 2 withArguments: {3.2}.
+	result := roundBlock value: 3.2.
 	self assert: result equals: 3.
 
-	result := b perform: #round: env: 2 withArguments: {-2.8}.
+	result := roundBlock value: -2.8.
 	self assert: result equals: -3
 %
 
@@ -446,16 +469,17 @@ method: BuiltinsTestCase
 testDivmod
 	"Test divmod() function"
 
-	| b result quotient remainder |
+	| b divmodBlock result quotient remainder |
 	b := builtins new.
+	divmodBlock := b perform: #divmod env: 2.
 
-	result := b perform: #divmod:_: env: 2 withArguments: {10. 3}.
+	result := divmodBlock value: 10 value: 3.
 	quotient := result perform: #__getitem__: env: 2 withArguments: {0}.
 	remainder := result perform: #__getitem__: env: 2 withArguments: {1}.
 	self assert: quotient equals: 3.
 	self assert: remainder equals: 1.
 
-	result := b perform: #divmod:_: env: 2 withArguments: {17. 5}.
+	result := divmodBlock value: 17 value: 5.
 	quotient := result perform: #__getitem__: env: 2 withArguments: {0}.
 	remainder := result perform: #__getitem__: env: 2 withArguments: {1}.
 	self assert: quotient equals: 3.
@@ -467,23 +491,24 @@ method: BuiltinsTestCase
 testSorted
 	"Test sorted() function - returns a new sorted list, leaving original unchanged"
 
-	| b result lst |
+	| b sortedBlock result lst |
 	b := builtins new.
+	sortedBlock := b perform: #sorted env: 2.
 
-	lst := list perform: #withAll: env: 0 withArguments: {#(3 1 4 1 5 9 2 6)}.
-	result := b perform: #sorted: env: 2 withArguments: {lst}.
+	lst := list withAll: #(3 1 4 1 5 9 2 6).
+	result := sortedBlock value: lst.
 
 	"Verify the result is sorted"
 	self assert: (result perform: #__getitem__: env: 2 withArguments: {0}) equals: 1.
 	self assert: (result perform: #__getitem__: env: 2 withArguments: {1}) equals: 1.
 	self assert: (result perform: #__getitem__: env: 2 withArguments: {2}) equals: 2.
-	self assert: (result ___len___) equals: 8.
+	self assert: result size equals: 8.
 
 	"Verify the original list is unchanged"
 	self assert: (lst perform: #__getitem__: env: 2 withArguments: {0}) equals: 3.
 	self assert: (lst perform: #__getitem__: env: 2 withArguments: {1}) equals: 1.
 	self assert: (lst perform: #__getitem__: env: 2 withArguments: {2}) equals: 4.
-	self assert: (lst ___len___) equals: 8
+	self assert: lst size equals: 8
 %
 
 category: 'Tests - Sequence Functions'
@@ -491,11 +516,12 @@ method: BuiltinsTestCase
 testEnumerate
 	"Test enumerate() function"
 
-	| b result lst iter first second |
+	| b enumerateBlock result lst iter first second |
 	b := builtins new.
+	enumerateBlock := b perform: #enumerate env: 2.
 
-	lst := list perform: #withAll: env: 0 withArguments: {#('a' 'b' 'c')}.
-	result := b perform: #enumerate: env: 2 withArguments: {lst}.
+	lst := list withAll: #('a' 'b' 'c').
+	result := enumerateBlock value: lst.
 
 	first := result perform: #__next__ env: 2.
 	self assert: (first perform: #__getitem__: env: 2 withArguments: {0}) equals: 0.
@@ -511,18 +537,67 @@ method: BuiltinsTestCase
 testZip
 	"Test zip() function"
 
-	| b result lst1 lst2 iterables iter first |
+	| b zipBlock result lst1 lst2 iterables iter first |
 	b := builtins new.
+	zipBlock := b perform: #zip env: 2.
 
-	lst1 := list perform: #withAll: env: 0 withArguments: {#(1 2 3)}.
-	lst2 := list perform: #withAll: env: 0 withArguments: {#('a' 'b' 'c')}.
-	iterables := list perform: #withAll: env: 0 withArguments: {{lst1. lst2}}.
+	lst1 := list withAll: #(1 2 3).
+	lst2 := list withAll: #('a' 'b' 'c').
+	iterables := list withAll: {lst1. lst2}.
 
-	result := b perform: #zip: env: 2 withArguments: {iterables}.
+	result := zipBlock value: iterables.
 
 	first := result perform: #__next__ env: 2.
 	self assert: (first perform: #__getitem__: env: 2 withArguments: {0}) equals: 1.
 	self assert: (first perform: #__getitem__: env: 2 withArguments: {1}) equals: 'a'
+%
+
+category: 'Tests - Utility'
+method: BuiltinsTestCase
+testAsSymbolDictionary
+	"Test asSymbolDictionary() method"
+
+	| b dict absBlock lenBlock typeBlock type |
+	b := builtins new.
+	dict := b perform: #asSymbolDictionary env: 2.
+
+	"Verify it returns a SymbolDictionary"
+	self assert: (dict isKindOf: SymbolDictionary).
+
+	"Verify it contains expected built-in functions"
+	self assert: (dict includesKey: #abs).
+	self assert: (dict includesKey: #len).
+	self assert: (dict includesKey: #type).
+	self assert: (dict includesKey: #repr).
+	self assert: (dict includesKey: #str).
+	self assert: (dict includesKey: #min).
+	self assert: (dict includesKey: #max).
+	self assert: (dict includesKey: #sum).
+	self assert: (dict includesKey: #pow).
+
+	"Verify the values are blocks/functions"
+	absBlock := dict at: #abs.
+	self assert: (absBlock isKindOf: BlockClosure).
+	
+	lenBlock := dict at: #len.
+	self assert: (lenBlock isKindOf: BlockClosure).
+
+	"Verify it does not contain internal methods (starting with ___)"
+	dict keys do: [:key |
+		| keyStr |
+		keyStr := key asString.
+		(keyStr size >= 3) ifTrue: [
+			self deny: ((keyStr copyFrom: 1 to: 3) = '___')
+		]
+	].
+
+	"Verify it does not contain asSymbolDictionary itself"
+	self deny: (dict includesKey: #asSymbolDictionary).
+
+	"Verify the functions work correctly"
+	typeBlock := dict at: #type.
+	type := typeBlock value: 42.
+	self assert: ((type == int) or: [type isSubclassOf: int]).
 %
 
 

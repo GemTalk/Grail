@@ -22,8 +22,8 @@ test__new__fromInteger
 	| result |
 	result := bytearray ___new___: bytearray _: 5.
 	self assert: (result ___len___) equals: 5.
-	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 0.
-	self assert: (result perform: #at: env: 0 withArguments: {5}) equals: 0.
+	self assert: (result at: 1) equals: 0.
+	self assert: (result at: 5) equals: 0.
 %
 
 category: 'Tests - Initialization'
@@ -33,15 +33,15 @@ test__new__fromList
 
 	| list result |
 	list := OrderedCollection new.
-	list perform: #add: env: 0 withArguments: {65}.
-	list perform: #add: env: 0 withArguments: {66}.
-	list perform: #add: env: 0 withArguments: {67}.
-	
+	list add: 65.
+	list add: 66.
+	list add: 67.
+
 	result := bytearray ___new___: bytearray _: list.
 	self assert: (result ___len___) equals: 3.
-	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 65.
-	self assert: (result perform: #at: env: 0 withArguments: {2}) equals: 66.
-	self assert: (result perform: #at: env: 0 withArguments: {3}) equals: 67.
+	self assert: (result at: 1) equals: 65.
+	self assert: (result at: 2) equals: 66.
+	self assert: (result at: 3) equals: 67.
 %
 
 category: 'Tests - Initialization'
@@ -52,9 +52,9 @@ test__new__fromBytes
 	| bytes result |
 	bytes := bytearray perform: #__new__:_:_: env: 2 withArguments: {bytearray. 'hello'. 'ascii'}.
 	result := bytearray ___new___: bytearray _: bytes.
-	
+
 	self assert: (result ___len___) equals: 5.
-	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 104.  "h"
+	self assert: (result at: 1) equals: 104.  "h"
 %
 
 category: 'Tests - Initialization'
@@ -64,13 +64,13 @@ testFromhex
 
 	| result |
 	result := bytearray perform: #fromhex:_: env: 2 withArguments: {bytearray. '48656c6c6f'}.
-	
+
 	self assert: (result ___len___) equals: 5.
-	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 72.   "H"
-	self assert: (result perform: #at: env: 0 withArguments: {2}) equals: 101.  "e"
-	self assert: (result perform: #at: env: 0 withArguments: {3}) equals: 108.  "l"
-	self assert: (result perform: #at: env: 0 withArguments: {4}) equals: 108.  "l"
-	self assert: (result perform: #at: env: 0 withArguments: {5}) equals: 111.  "o"
+	self assert: (result at: 1) equals: 72.   "H"
+	self assert: (result at: 2) equals: 101.  "e"
+	self assert: (result at: 3) equals: 108.  "l"
+	self assert: (result at: 4) equals: 108.  "l"
+	self assert: (result at: 5) equals: 111.  "o"
 %
 
 category: 'Tests - Type'
@@ -97,10 +97,10 @@ test__setitem__
 	ba perform: #__setitem__:_: env: 2 withArguments: {0. 65}.
 	ba perform: #__setitem__:_: env: 2 withArguments: {1. 66}.
 	ba perform: #__setitem__:_: env: 2 withArguments: {2. 67}.
-	
-	self assert: (ba perform: #at: env: 0 withArguments: {1}) equals: 65.
-	self assert: (ba perform: #at: env: 0 withArguments: {2}) equals: 66.
-	self assert: (ba perform: #at: env: 0 withArguments: {3}) equals: 67.
+
+	self assert: (ba at: 1) equals: 65.
+	self assert: (ba at: 2) equals: 66.
+	self assert: (ba at: 3) equals: 67.
 %
 
 category: 'Tests - Mutability'
@@ -111,8 +111,8 @@ test__setitem__negativeIndex
 	| ba |
 	ba := bytearray ___new___: bytearray _: 3.
 	ba perform: #__setitem__:_: env: 2 withArguments: {-1. 90}.
-	
-	self assert: (ba perform: #at: env: 0 withArguments: {3}) equals: 90.
+
+	self assert: (ba at: 3) equals: 90.
 %
 
 category: 'Tests - Mutability'
@@ -158,9 +158,9 @@ testAppend
 	ba perform: #append: env: 2 withArguments: {67}.
 
 	self assert: (ba ___len___) equals: 3.
-	self assert: (ba perform: #at: env: 0 withArguments: {1}) equals: 65.
-	self assert: (ba perform: #at: env: 0 withArguments: {2}) equals: 66.
-	self assert: (ba perform: #at: env: 0 withArguments: {3}) equals: 67.
+	self assert: (ba at: 1) equals: 65.
+	self assert: (ba at: 2) equals: 66.
+	self assert: (ba at: 3) equals: 67.
 %
 
 category: 'Tests - Mutation Methods'
@@ -188,7 +188,7 @@ testExtendWithBytes
 	ba perform: #extend: env: 2 withArguments: {bytes}.
 
 	self assert: (ba ___len___) equals: 5.
-	self assert: (ba perform: #at: env: 0 withArguments: {1}) equals: 104.  "h"
+	self assert: (ba at: 1) equals: 104.  "h"
 %
 
 category: 'Tests - Mutation Methods'
@@ -199,16 +199,16 @@ testExtendWithList
 	| ba list |
 	ba := bytearray ___new___: bytearray.
 	list := OrderedCollection new.
-	list perform: #add: env: 0 withArguments: {65}.
-	list perform: #add: env: 0 withArguments: {66}.
-	list perform: #add: env: 0 withArguments: {67}.
+	list add: 65.
+	list add: 66.
+	list add: 67.
 
 	ba perform: #extend: env: 2 withArguments: {list}.
 
 	self assert: (ba ___len___) equals: 3.
-	self assert: (ba perform: #at: env: 0 withArguments: {1}) equals: 65.
-	self assert: (ba perform: #at: env: 0 withArguments: {2}) equals: 66.
-	self assert: (ba perform: #at: env: 0 withArguments: {3}) equals: 67.
+	self assert: (ba at: 1) equals: 65.
+	self assert: (ba at: 2) equals: 66.
+	self assert: (ba at: 3) equals: 67.
 %
 
 category: 'Tests - Mutation Methods'
@@ -225,9 +225,9 @@ testInsert
 	ba perform: #insert:_: env: 2 withArguments: {1. 66}.
 
 	self assert: (ba ___len___) equals: 3.
-	self assert: (ba perform: #at: env: 0 withArguments: {1}) equals: 65.
-	self assert: (ba perform: #at: env: 0 withArguments: {2}) equals: 66.
-	self assert: (ba perform: #at: env: 0 withArguments: {3}) equals: 67.
+	self assert: (ba at: 1) equals: 65.
+	self assert: (ba at: 2) equals: 66.
+	self assert: (ba at: 3) equals: 67.
 %
 
 category: 'Tests - Mutation Methods'
@@ -244,8 +244,8 @@ testRemove
 	ba perform: #remove: env: 2 withArguments: {66}.
 
 	self assert: (ba ___len___) equals: 2.
-	self assert: (ba perform: #at: env: 0 withArguments: {1}) equals: 65.
-	self assert: (ba perform: #at: env: 0 withArguments: {2}) equals: 67.
+	self assert: (ba at: 1) equals: 65.
+	self assert: (ba at: 2) equals: 67.
 %
 
 category: 'Tests - Mutation Methods'
@@ -307,8 +307,8 @@ testPopIndex
 
 	self assert: result equals: 66.
 	self assert: (ba ___len___) equals: 2.
-	self assert: (ba perform: #at: env: 0 withArguments: {1}) equals: 65.
-	self assert: (ba perform: #at: env: 0 withArguments: {2}) equals: 67.
+	self assert: (ba at: 1) equals: 65.
+	self assert: (ba at: 2) equals: 67.
 %
 
 category: 'Tests - Mutation Methods'
@@ -341,9 +341,9 @@ testReverse
 	ba perform: #reverse env: 2.
 
 	self assert: (ba ___len___) equals: 3.
-	self assert: (ba perform: #at: env: 0 withArguments: {1}) equals: 67.
-	self assert: (ba perform: #at: env: 0 withArguments: {2}) equals: 66.
-	self assert: (ba perform: #at: env: 0 withArguments: {3}) equals: 65.
+	self assert: (ba at: 1) equals: 67.
+	self assert: (ba at: 2) equals: 66.
+	self assert: (ba at: 3) equals: 65.
 %
 
 category: 'Tests - Mutation Methods'
@@ -359,13 +359,13 @@ testCopy
 	copy := ba perform: #copy env: 2.
 
 	self assert: (copy ___len___) equals: 2.
-	self assert: (copy perform: #at: env: 0 withArguments: {1}) equals: 65.
-	self assert: (copy perform: #at: env: 0 withArguments: {2}) equals: 66.
+	self assert: (copy at: 1) equals: 65.
+	self assert: (copy at: 2) equals: 66.
 
 	"Verify it's a separate copy"
 	copy perform: #__setitem__:_: env: 2 withArguments: {0. 90}.
-	self assert: (ba perform: #at: env: 0 withArguments: {1}) equals: 65.
-	self assert: (copy perform: #at: env: 0 withArguments: {1}) equals: 90.
+	self assert: (ba at: 1) equals: 65.
+	self assert: (copy at: 1) equals: 90.
 %
 
 category: 'Tests - Deletion'
@@ -382,8 +382,8 @@ test__delitem__
 	ba perform: #__delitem__: env: 2 withArguments: {1}.
 
 	self assert: (ba ___len___) equals: 2.
-	self assert: (ba perform: #at: env: 0 withArguments: {1}) equals: 65.
-	self assert: (ba perform: #at: env: 0 withArguments: {2}) equals: 67.
+	self assert: (ba at: 1) equals: 65.
+	self assert: (ba at: 2) equals: 67.
 %
 
 category: 'Tests - Deletion'
@@ -400,8 +400,8 @@ test__delitem__negativeIndex
 	ba perform: #__delitem__: env: 2 withArguments: {-1}.
 
 	self assert: (ba ___len___) equals: 2.
-	self assert: (ba perform: #at: env: 0 withArguments: {1}) equals: 65.
-	self assert: (ba perform: #at: env: 0 withArguments: {2}) equals: 66.
+	self assert: (ba at: 1) equals: 65.
+	self assert: (ba at: 2) equals: 66.
 %
 
 category: 'Tests - In-place Operations'
@@ -421,10 +421,10 @@ test__iadd__
 	self assert: result equals: ba.
 
 	self assert: (ba ___len___) equals: 4.
-	self assert: (ba perform: #at: env: 0 withArguments: {1}) equals: 65.
-	self assert: (ba perform: #at: env: 0 withArguments: {2}) equals: 66.
-	self assert: (ba perform: #at: env: 0 withArguments: {3}) equals: 67.
-	self assert: (ba perform: #at: env: 0 withArguments: {4}) equals: 68.
+	self assert: (ba at: 1) equals: 65.
+	self assert: (ba at: 2) equals: 66.
+	self assert: (ba at: 3) equals: 67.
+	self assert: (ba at: 4) equals: 68.
 %
 
 category: 'Tests - In-place Operations'
@@ -443,12 +443,12 @@ test__imul__
 	self assert: result equals: ba.
 
 	self assert: (ba ___len___) equals: 6.
-	self assert: (ba perform: #at: env: 0 withArguments: {1}) equals: 65.
-	self assert: (ba perform: #at: env: 0 withArguments: {2}) equals: 66.
-	self assert: (ba perform: #at: env: 0 withArguments: {3}) equals: 65.
-	self assert: (ba perform: #at: env: 0 withArguments: {4}) equals: 66.
-	self assert: (ba perform: #at: env: 0 withArguments: {5}) equals: 65.
-	self assert: (ba perform: #at: env: 0 withArguments: {6}) equals: 66.
+	self assert: (ba at: 1) equals: 65.
+	self assert: (ba at: 2) equals: 66.
+	self assert: (ba at: 3) equals: 65.
+	self assert: (ba at: 4) equals: 66.
+	self assert: (ba at: 5) equals: 65.
+	self assert: (ba at: 6) equals: 66.
 %
 
 category: 'Tests - In-place Operations'
@@ -481,9 +481,9 @@ testInheritedUpper
 
 	self assert: (result class) equals: bytearray.
 	self assert: (result ___len___) equals: 3.
-	self assert: (result perform: #at: env: 0 withArguments: {1}) equals: 65.  "A"
-	self assert: (result perform: #at: env: 0 withArguments: {2}) equals: 66.  "B"
-	self assert: (result perform: #at: env: 0 withArguments: {3}) equals: 67.  "C"
+	self assert: (result at: 1) equals: 65.  "A"
+	self assert: (result at: 2) equals: 66.  "B"
+	self assert: (result at: 3) equals: 67.  "C"
 %
 
 category: 'Tests - Inherited Methods'

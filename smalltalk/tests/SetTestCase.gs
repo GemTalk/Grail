@@ -59,13 +59,13 @@ testSetIteration
 	self assert: (iter class) name equals: #'set_iterator'.
 	
 	items := list new.
-	[true] perform: #whileTrue: env: 0 withArguments: {[
+	[true] whileTrue: [
 		| item |
 		[
 			item := iter perform: #__next__ env: 2.
 			items perform: #append: env: 2 withArguments: {item}
-		] perform: #on:do: env: 0 withArguments: {StopIteration. [:ex | ^ nil]}
-	]}.
+		] on: StopIteration do: [:ex | ^ nil]
+	].
 	
 	self assert: (items ___len___) equals: 3
 %
@@ -139,7 +139,7 @@ testSetPop
 	
 	item := s perform: #pop env: 2.
 	self assert: (s ___len___) equals: 1.
-	self assert: ((item perform: #= env: 0 withArguments: {1}) or: [item perform: #= env: 0 withArguments: {2}]).
+	self assert: ((item = 1) or: [item = 2]).
 	
 	s perform: #pop env: 2.
 	self assert: (s ___len___) equals: 0.
@@ -337,8 +337,8 @@ testSetInheritsFromFrozenset
 	| s |
 	s := set new.
 
-	self assert: (s perform: #isKindOf: env: 0 withArguments: {frozenset}).
-	self assert: (s perform: #isKindOf: env: 0 withArguments: {set})
+	self assert: (s isKindOf: frozenset).
+	self assert: (s isKindOf: set)
 %
 
 category: 'Tests - String Representation'
@@ -353,8 +353,8 @@ testSetRepr
 
 	repr := s perform: #__repr__ env: 2.
 
-	self assert: (repr perform: #includesString: env: 0 withArguments: {'{'}).
-	self assert: (repr perform: #includesString: env: 0 withArguments: {'}'})
+	self assert: (repr includesString: '{').
+	self assert: (repr includesString: '}')
 %
 
 category: 'Tests - String Representation'

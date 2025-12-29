@@ -212,9 +212,9 @@ testDictKeys
 	keys := d perform: #keys env: 2.
 
 	self assert: (keys size) equals: 3.
-	self assert: (keys perform: #includes: env: 0 withArguments: {'a'}).
-	self assert: (keys perform: #includes: env: 0 withArguments: {'b'}).
-	self assert: (keys perform: #includes: env: 0 withArguments: {'c'})
+	self assert: (keys includes: 'a').
+	self assert: (keys includes: 'b').
+	self assert: (keys includes: 'c')
 %
 
 category: 'Tests - Methods'
@@ -231,9 +231,9 @@ testDictValues
 	values := d perform: #values env: 2.
 
 	self assert: (values size) equals: 3.
-	self assert: (values perform: #includes: env: 0 withArguments: {1}).
-	self assert: (values perform: #includes: env: 0 withArguments: {2}).
-	self assert: (values perform: #includes: env: 0 withArguments: {3})
+	self assert: (values includes: 1).
+	self assert: (values includes: 2).
+	self assert: (values includes: 3)
 %
 
 category: 'Tests - Methods'
@@ -250,7 +250,7 @@ testDictItems
 
 	self assert: (items size) equals: 2.
 
-	firstItem := items perform: #at: env: 0 withArguments: {1}.
+	firstItem := items at: 1.
 	self assert: (firstItem size) equals: 2
 %
 
@@ -314,8 +314,8 @@ testDictPopitem
 	self assert: (d ___len___) equals: 1.
 	self assert: (pair size) equals: 2.
 
-	key := pair perform: #at: env: 0 withArguments: {1}.
-	value := pair perform: #at: env: 0 withArguments: {2}.
+	key := pair at: 1.
+	value := pair at: 2.
 
 	self deny: (d ___contains___: key)
 %
@@ -418,11 +418,11 @@ testDictIteration
 	key2 := iter perform: #__next__ env: 2.
 	key3 := iter perform: #__next__ env: 2.
 
-	keys := Array perform: #with:with:with: env: 0 withArguments: {key1. key2. key3}.
+	keys := { key1. key2. key3. }.
 
-	self assert: (keys perform: #includes: env: 0 withArguments: {'a'}).
-	self assert: (keys perform: #includes: env: 0 withArguments: {'b'}).
-	self assert: (keys perform: #includes: env: 0 withArguments: {'c'}).
+	self assert: (keys includes: 'a').
+	self assert: (keys includes: 'b').
+	self assert: (keys includes: 'c').
 
 	self should: [
 		iter perform: #__next__ env: 2
@@ -442,8 +442,8 @@ testDictRepr
 
 	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 1}.
 	repr := d perform: #__repr__ env: 2.
-	self assert: (repr perform: #includesString: env: 0 withArguments: {'''a'''}).
-	self assert: (repr perform: #includesString: env: 0 withArguments: {'1'})
+	self assert: (repr includesString: '''a''').
+	self assert: (repr includesString: '1')
 %
 
 category: 'Tests - Type'
