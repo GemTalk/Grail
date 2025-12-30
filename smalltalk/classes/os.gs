@@ -78,7 +78,7 @@ category: 'Python-Initialization'
 method: os
 initialize_getcwd
 	"Return a string representing the current working directory"
-	getcwd := [
+	getcwd := [:positional :keywords |
 		| result |
 		result := GsFile perform: #_directoryPrim:with:with: env: 0 withArguments: {2. nil. nil}.
 		(result ___isKindOf___: String) ifTrue: [result] ifFalse: [
@@ -95,8 +95,9 @@ category: 'Python-Initialization'
 method: os
 initialize_chdir
 	"Change the current working directory to path"
-	chdir := [:path |
-		| result |
+	chdir := [:positional :keywords |
+		| path result |
+		path := positional ___at___: 1.
 		result := GsFile perform: #_directoryPrim:with:with: env: 0 withArguments: {0. path. nil}.
 		result == nil ifTrue: [
 			OSError ___signal___: ('Cannot change directory to: ' ___concat___: (path ___printString___))
@@ -109,12 +110,13 @@ category: 'Python-Initialization'
 method: os
 initialize_listdir
 	"Return a list containing the names of the entries in the directory given by path (or current directory if path is nil)"
-	listdir := [:path |
-		| dirContents result size i each decoded actualPath getcwdBlock |
+	listdir := [:positional :keywords |
+		| path dirContents result size i each decoded actualPath getcwdBlock |
+		path := (positional ___size___ ___ge___: 1) ifTrue: [positional ___at___: 1] ifFalse: [nil].
 		actualPath := path.
 		actualPath == nil ifTrue: [
 			getcwdBlock := self getcwd.
-			actualPath := getcwdBlock value
+			actualPath := getcwdBlock value: {} value: nil
 		].
 		dirContents := GsFile perform: #contentsOfDirectory:onClient: env: 0 withArguments: {actualPath. false}.
 		(dirContents ___isKindOf___: Array) ifFalse: [
@@ -154,8 +156,9 @@ category: 'Python-Initialization'
 method: os
 initialize_mkdir
 	"Create a directory named path"
-	mkdir := [:path |
-		| result |
+	mkdir := [:positional :keywords |
+		| path result |
+		path := positional ___at___: 1.
 		result := GsFile perform: #createServerDirectory: env: 0 withArguments: {path}.
 		result == nil ifTrue: [
 			OSError ___signal___: ('Cannot create directory: ' ___concat___: (path ___printString___))
@@ -168,8 +171,10 @@ category: 'Python-Initialization'
 method: os
 initialize_mkdirWithMode
 	"Create a directory named path with numeric mode"
-	mkdirWithMode := [:path :mode |
-		| result |
+	mkdirWithMode := [:positional :keywords |
+		| path mode result |
+		path := positional ___at___: 1.
+		mode := positional ___at___: 2.
 		result := GsFile perform: #createServerDirectory:mode: env: 0 withArguments: {path. mode}.
 		result == nil ifTrue: [
 			OSError ___signal___: ('Cannot create directory: ' ___concat___: (path ___printString___))
@@ -182,8 +187,9 @@ category: 'Python-Initialization'
 method: os
 initialize_makedirs
 	"Recursive directory creation function"
-	makedirs := [:path |
-		| parts currentPath size i part sep mkdirBlock |
+	makedirs := [:positional :keywords |
+		| path parts currentPath size i part sep mkdirBlock |
+		path := positional ___at___: 1.
 		sep := '/'.
 		parts := $/ ___split___: path.
 		currentPath := ''.
@@ -201,7 +207,7 @@ initialize_makedirs
 					]
 					ifFalse: [(currentPath ___concat___: sep) ___concat___: part].
 				(GsFile ___existsOnServer___: currentPath) ifFalse: [
-					mkdirBlock value: currentPath.
+					mkdirBlock value: {currentPath} value: nil.
 				].
 			]
 		].
@@ -213,8 +219,9 @@ category: 'Python-Initialization'
 method: os
 initialize_remove
 	"Remove (delete) the file path"
-	remove := [:path |
-		| result |
+	remove := [:positional :keywords |
+		| path result |
+		path := positional ___at___: 1.
 		result := GsFile perform: #removeServerFile: env: 0 withArguments: {path}.
 		result == nil ifTrue: [
 			OSError ___signal___: ('Cannot remove file: ' ___concat___: (path ___printString___))
@@ -227,8 +234,9 @@ category: 'Python-Initialization'
 method: os
 initialize_rmdir
 	"Remove (delete) the directory path"
-	rmdir := [:path |
-		| result |
+	rmdir := [:positional :keywords |
+		| path result |
+		path := positional ___at___: 1.
 		result := GsFile perform: #removeServerDirectory: env: 0 withArguments: {path}.
 		result == nil ifTrue: [
 			OSError ___signal___: ('Cannot remove directory: ' ___concat___: (path ___printString___))
@@ -241,8 +249,10 @@ category: 'Python-Initialization'
 method: os
 initialize_rename
 	"Rename the file or directory from oldPath to newPath"
-	rename := [:oldPath :newPath |
-		| result msg |
+	rename := [:positional :keywords |
+		| oldPath newPath result msg |
+		oldPath := positional ___at___: 1.
+		newPath := positional ___at___: 2.
 		result := GsFile perform: #renameFileOnServer:to: env: 0 withArguments: {oldPath. newPath}.
 		result == nil ifTrue: [
 			msg := ((oldPath ___printString___) ___concat___: ' to ') ___concat___: (newPath ___printString___).
@@ -256,15 +266,20 @@ category: 'Python-Initialization'
 method: os
 initialize_exists
 	"Return True if path refers to an existing path"
-	exists := [:path | GsFile ___existsOnServer___: path]
+	exists := [:positional :keywords |
+		| path |
+		path := positional ___at___: 1.
+		GsFile ___existsOnServer___: path
+	]
 %
 
 category: 'Python-Initialization'
 method: os
 initialize_isdir
 	"Return True if path is an existing directory"
-	isdir := [:path |
-		| exists |
+	isdir := [:positional :keywords |
+		| path exists |
+		path := positional ___at___: 1.
 		exists := GsFile ___existsOnServer___: path.
 		exists ifTrue: [
 			GsFile perform: #isServerDirectory: env: 0 withArguments: {path}
@@ -276,8 +291,9 @@ category: 'Python-Initialization'
 method: os
 initialize_isfile
 	"Return True if path is an existing regular file"
-	isfile := [:path |
-		| exists isDir |
+	isfile := [:positional :keywords |
+		| path exists isDir |
+		path := positional ___at___: 1.
 		exists := GsFile ___existsOnServer___: path.
 		exists ifTrue: [
 			isDir := GsFile perform: #isServerDirectory: env: 0 withArguments: {path}.
@@ -290,8 +306,9 @@ category: 'Python-Initialization'
 method: os
 initialize_stat
 	"Get the status of a file or directory"
-	stat := [:path |
-		| statResult |
+	stat := [:positional :keywords |
+		| path statResult |
+		path := positional ___at___: 1.
 		statResult := GsFile perform: #stat:isLstat: env: 0 withArguments: {path. false}.
 		statResult == nil ifTrue: [
 			OSError ___signal___: ('Cannot stat: ' ___concat___: (path ___printString___))
@@ -304,8 +321,9 @@ category: 'Python-Initialization'
 method: os
 initialize_lstat
 	"Like stat(), but does not follow symbolic links"
-	lstat := [:path |
-		| statResult |
+	lstat := [:positional :keywords |
+		| path statResult |
+		path := positional ___at___: 1.
 		statResult := GsFile perform: #stat:isLstat: env: 0 withArguments: {path. true}.
 		statResult == nil ifTrue: [
 			OSError ___signal___: ('Cannot lstat: ' ___concat___: (path ___printString___))
@@ -318,8 +336,9 @@ category: 'Python-Initialization'
 method: os
 initialize_system
 	"Execute the command (a string) in a subshell"
-	system := [:command |
-		| result |
+	system := [:positional :keywords |
+		| command result |
+		command := positional ___at___: 1.
 		result := System perform: #performOnServer: env: 0 withArguments: {command}.
 		result
 	]
@@ -329,8 +348,9 @@ category: 'Python-Initialization'
 method: os
 initialize_getenv
 	"Get an environment variable, return None if it doesn't exist"
-	getenv := [:name |
-		| result |
+	getenv := [:positional :keywords |
+		| name result |
+		name := positional ___at___: 1.
 		result := System perform: #gemEnvironmentVariable: env: 0 withArguments: {name}.
 		result
 	]
@@ -340,8 +360,10 @@ category: 'Python-Initialization'
 method: os
 initialize_getenvWithDefault
 	"Get an environment variable, return default if it doesn't exist"
-	getenvWithDefault := [:name :default |
-		| result |
+	getenvWithDefault := [:positional :keywords |
+		| name default result |
+		name := positional ___at___: 1.
+		default := positional ___at___: 2.
 		result := System perform: #gemEnvironmentVariable: env: 0 withArguments: {name}.
 		result == nil ifTrue: [default] ifFalse: [result]
 	]
@@ -351,7 +373,10 @@ category: 'Python-Initialization'
 method: os
 initialize_putenv
 	"Set the environment variable named name to the string value"
-	putenv := [:name :value |
+	putenv := [:positional :keywords |
+		| name value |
+		name := positional ___at___: 1.
+		value := positional ___at___: 2.
 		System perform: #gemEnvironmentVariable:put: env: 0 withArguments: {name. value}.
 		nil
 	]

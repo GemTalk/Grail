@@ -98,7 +98,7 @@ testExp
 	
 	"exp(0) = 1"
 	z := complex ___new___: 0.0 _: 0.0.
-	result := expBlock value: z.
+	result := expBlock value: {z} value: nil.
 	real := result perform: #real env: 2.
 	imag := result perform: #imag env: 2.
 	
@@ -118,7 +118,7 @@ testLog
 	
 	"log(1) = 0"
 	z := complex ___new___: 1.0 _: 0.0.
-	result := logBlock value: z.
+	result := logBlock value: {z} value: nil.
 	real := result perform: #real env: 2.
 	imag := result perform: #imag env: 2.
 	
@@ -137,7 +137,7 @@ testSqrt
 
 	"sqrt(4) = 2"
 	z := complex ___new___: 4.0 _: 0.0.
-	result := sqrtBlock value: z.
+	result := sqrtBlock value: {z} value: nil.
 	real := result perform: #real env: 2.
 	imag := result perform: #imag env: 2.
 
@@ -158,12 +158,12 @@ testPhase
 
 	"phase(1+0j) = 0"
 	z := complex ___new___: 1.0 _: 0.0.
-	result := phaseBlock value: z.
+	result := phaseBlock value: {z} value: nil.
 	self assert: ((result abs) < 0.00001).
 
 	"phase(0+1j) = pi/2"
 	z := complex ___new___: 0.0 _: 1.0.
-	result := phaseBlock value: z.
+	result := phaseBlock value: {z} value: nil.
 	self assert: (((result - (pi / 2.0)) abs)
 		< 0.00001)
 %
@@ -179,7 +179,7 @@ testPolar
 
 	"polar(3+4j) should give (5, atan(4/3))"
 	z := complex ___new___: 3.0 _: 4.0.
-	result := polarBlock value: z.
+	result := polarBlock value: {z} value: nil.
 
 	r := result perform: #__getitem__: env: 2 withArguments: {0}.
 	theta := result perform: #__getitem__: env: 2 withArguments: {1}.
@@ -199,7 +199,7 @@ testRect
 	rectBlock := cm perform: #rect env: 2.
 
 	"rect(1, 0) = 1+0j"
-	result := rectBlock value: 1.0 value: 0.0.
+	result := rectBlock value: {1.0. 0.0} value: nil.
 	real := result perform: #real env: 2.
 	imag := result perform: #imag env: 2.
 
@@ -220,12 +220,12 @@ testIsnan
 
 	"isnan(nan+0j) = True"
 	z := complex ___new___: nan _: 0.0.
-	result := isnanBlock value: z.
+	result := isnanBlock value: {z} value: nil.
 	self assert: result.
 
 	"isnan(1+0j) = False"
 	z := complex ___new___: 1.0 _: 0.0.
-	result := isnanBlock value: z.
+	result := isnanBlock value: {z} value: nil.
 	self deny: result
 %
 
@@ -241,12 +241,12 @@ testIsinf
 
 	"isinf(inf+0j) = True"
 	z := complex ___new___: inf _: 0.0.
-	result := isinfBlock value: z.
+	result := isinfBlock value: {z} value: nil.
 	self assert: result.
 
 	"isinf(1+0j) = False"
 	z := complex ___new___: 1.0 _: 0.0.
-	result := isinfBlock value: z.
+	result := isinfBlock value: {z} value: nil.
 	self deny: result
 %
 
@@ -262,12 +262,12 @@ testIsfinite
 
 	"isfinite(1+2j) = True"
 	z := complex ___new___: 1.0 _: 2.0.
-	result := isfiniteBlock value: z.
+	result := isfiniteBlock value: {z} value: nil.
 	self assert: result.
 
 	"isfinite(inf+0j) = False"
 	z := complex ___new___: inf _: 0.0.
-	result := isfiniteBlock value: z.
+	result := isfiniteBlock value: {z} value: nil.
 	self deny: result
 %
 

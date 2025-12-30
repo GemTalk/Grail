@@ -108,46 +108,13 @@ category: 'other'
 classmethod: ModuleAst
 evaluateScript: aPath
 "
-ModuleAst evaluateScript: '/Users/acaraveo/ORA.py'.
+ModuleAst evaluateScript: 'hello.py'.
 "
-	| method module mySymbolDictionary mySymbolList stream |
+	| method module mySymbolList stream |
 	module := self script: aPath.
 	stream := PrettyWriteStream on: Unicode7 new.
 	module printSmalltalkOn: stream.
-	mySymbolDictionary := SymbolDictionary new
-		name: #'foo';
-		at: #'abs' put: [:arg1 | builtins new abs: arg1];
-		at: #'len' put: [:arg1 | builtins new len: arg1];
-		at: #'type' put: [:arg1 | builtins new type: arg1];
-		at: #'repr' put: [:arg1 | builtins new repr: arg1];
-		at: #'str' put: [:arg1 | builtins new str: arg1];
-		at: #'hash' put: [:arg1 | builtins new hash: arg1];
-		at: #'hex' put: [:arg1 | builtins new hex: arg1];
-		at: #'oct' put: [:arg1 | builtins new oct: arg1];
-		at: #'bin' put: [:arg1 | builtins new bin: arg1];
-		at: #'chr' put: [:arg1 | builtins new chr: arg1];
-		at: #'ord' put: [:arg1 | builtins new ord: arg1];
-		at: #'min' put: [:arg1 | builtins new min: arg1];
-		at: #'max' put: [:arg1 | builtins new max: arg1];
-		at: #'sum' put: [:arg1 | builtins new sum: arg1];
-		at: #'all' put: [:arg1 | builtins new all: arg1];
-		at: #'any' put: [:arg1 | builtins new any: arg1];
-		at: #'isinstance' put: [:arg1 :arg2 | builtins new isinstance: arg1 _: arg2];
-		at: #'callable' put: [:arg1 | builtins new callable: arg1];
-		at: #'dir' put: [:arg1 | builtins new dir: arg1];
-		at: #'id' put: [:arg1 | builtins new id: arg1];
-		at: #'pow' put: [:arg1 :arg2 | builtins new pow: arg1 _: arg2];
-		at: #'round' put: [:arg1 | builtins new round: arg1];
-		at: #'divmod' put: [:arg1 :arg2 | builtins new divmod: arg1 _: arg2];
-		at: #'print' put: [:arg1 | builtins new print: arg1];
-		at: #'input' put: [builtins new input];
-		at: #'sorted' put: [:arg1 | builtins new sorted: arg1];
-		at: #'reversed' put: [:arg1 | builtins new reversed: arg1];
-		at: #'enumerate' put: [:arg1 | builtins new enumerate: arg1];
-		at: #'zip' put: [:arg1 | builtins new zip: arg1];
-		yourself.
-	mySymbolList := SymbolList with: mySymbolDictionary.
-	self halt.
+	mySymbolList := SymbolList with: (builtins perform: #instance env: 2) asSymbolDictionary.
 	[
 		method := stream contents 
 			_compileInContext: nil 

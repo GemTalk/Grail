@@ -83,13 +83,13 @@ testSqrt
 	m := math perform: #instance env: 2.
 	sqrtBlock := m perform: #sqrt env: 2.
 
-	result := sqrtBlock value: 4.
+	result := sqrtBlock value: {4} value: nil.
 	self assert: result equals: 2.0.
 
-	result := sqrtBlock value: 9.
+	result := sqrtBlock value: {9} value: nil.
 	self assert: result equals: 3.0.
 
-	result := sqrtBlock value: 2.
+	result := sqrtBlock value: {2} value: nil.
 	self assert: (((result - 1.41421) abs)
 		< 0.001)
 %
@@ -103,13 +103,13 @@ testPow
 	m := math perform: #instance env: 2.
 	powBlock := m perform: #pow env: 2.
 
-	result := powBlock value: 2 value: 3.
+	result := powBlock value: {2. 3} value: nil.
 	self assert: result equals: 8.0.
 
-	result := powBlock value: 5 value: 2.
+	result := powBlock value: {5. 2} value: nil.
 	self assert: result equals: 25.0.
 
-	result := powBlock value: 10 value: 0.
+	result := powBlock value: {10. 0} value: nil.
 	self assert: result equals: 1.0
 %
 
@@ -122,10 +122,10 @@ testExp
 	m := math perform: #instance env: 2.
 	expBlock := m perform: #exp env: 2.
 
-	result := expBlock value: 0.
+	result := expBlock value: {0} value: nil.
 	self assert: result equals: 1.0.
 
-	result := expBlock value: 1.
+	result := expBlock value: {1} value: nil.
 	self assert: (((result - 2.71828) abs)
 		< 0.001)
 %
@@ -140,11 +140,11 @@ testLog
 	logBlock := m perform: #log env: 2.
 		logWithBaseBlock := m perform: #logWithBase env: 2.
 
-	result := logBlock value: 2.71828.
+	result := logBlock value: {2.71828} value: nil.
 	self assert: (((result - 1.0) abs)
 		< 0.001).
 
-	result := logWithBaseBlock value: 100 value: 10.
+	result := logWithBaseBlock value: {100. 10} value: nil.
 	self assert: (((result - 2.0) abs)
 		< 0.001)
 %
@@ -158,11 +158,11 @@ testLog10
 	m := math perform: #instance env: 2.
 	log10Block := m perform: #log10 env: 2.
 
-	result := log10Block value: 100.
+	result := log10Block value: {100} value: nil.
 	self assert: (((result - 2.0) abs)
 		< 0.00001).
 
-	result := log10Block value: 1000.
+	result := log10Block value: {1000} value: nil.
 	self assert: (((result - 3.0) abs)
 		< 0.00001)
 %
@@ -176,11 +176,11 @@ testLog2
 	m := math perform: #instance env: 2.
 	log2Block := m perform: #log2 env: 2.
 
-	result := log2Block value: 8.
+	result := log2Block value: {8} value: nil.
 	self assert: (((result - 3.0) abs)
 		< 0.00001).
 
-	result := log2Block value: 16.
+	result := log2Block value: {16} value: nil.
 	self assert: (((result - 4.0) abs)
 		< 0.00001)
 %
@@ -195,10 +195,10 @@ testSin
 	pi := m perform: #pi env: 2.
 	sinBlock := m perform: #sin env: 2.
 
-	result := sinBlock value: 0.
+	result := sinBlock value: {0} value: nil.
 	self assert: ((result abs) < 0.00001).
 
-	result := sinBlock value: (pi / 2).
+	result := sinBlock value: {(pi / 2)} value: nil.
 	self assert: (((result - 1.0) abs)
 		< 0.00001)
 %
@@ -213,11 +213,11 @@ testCos
 	pi := m perform: #pi env: 2.
 	cosBlock := m perform: #cos env: 2.
 
-	result := cosBlock value: 0.
+	result := cosBlock value: {0} value: nil.
 	self assert: (((result - 1.0) abs)
 		< 0.00001).
 
-	result := cosBlock value: pi.
+	result := cosBlock value: {pi} value: nil.
 	self assert: (((result + 1.0) abs)
 		< 0.00001)
 %
@@ -232,10 +232,10 @@ testTan
 	pi := m perform: #pi env: 2.
 	tanBlock := m perform: #tan env: 2.
 
-	result := tanBlock value: 0.
+	result := tanBlock value: {0} value: nil.
 	self assert: ((result abs) < 0.00001).
 
-	result := tanBlock value: (pi / 4).
+	result := tanBlock value: {(pi / 4)} value: nil.
 	self assert: (((result - 1.0) abs)
 		< 0.00001)
 %
@@ -250,10 +250,10 @@ testAsin
 	pi := m perform: #pi env: 2.
 	asinBlock := m perform: #asin env: 2.
 
-	result := asinBlock value: 0.
+	result := asinBlock value: {0} value: nil.
 	self assert: ((result abs) < 0.00001).
 
-	result := asinBlock value: 1.
+	result := asinBlock value: {1} value: nil.
 	self assert: (((result - (pi / 2)) abs)
 		< 0.00001)
 %
@@ -268,10 +268,10 @@ testAcos
 	pi := m perform: #pi env: 2.
 	acosBlock := m perform: #acos env: 2.
 
-	result := acosBlock value: 1.
+	result := acosBlock value: {1} value: nil.
 	self assert: ((result abs) < 0.00001).
 
-	result := acosBlock value: 0.
+	result := acosBlock value: {0} value: nil.
 	self assert: (((result - (pi / 2)) abs)
 		< 0.00001)
 %
@@ -286,10 +286,10 @@ testAtan
 	pi := m perform: #pi env: 2.
 	atanBlock := m perform: #atan env: 2.
 
-	result := atanBlock value: 0.
+	result := atanBlock value: {0} value: nil.
 	self assert: ((result abs) < 0.00001).
 
-	result := atanBlock value: 1.
+	result := atanBlock value: {1} value: nil.
 	self assert: (((result - (pi / 4)) abs)
 		< 0.00001)
 %
@@ -304,11 +304,11 @@ testAtan2
 	pi := m perform: #pi env: 2.
 	atan2Block := m perform: #atan2 env: 2.
 
-	result := atan2Block value: 1 value: 1.
+	result := atan2Block value: {1. 1} value: nil.
 	self assert: (((result - (pi / 4)) abs)
 		< 0.00001).
 
-	result := atan2Block value: 1 value: 0.
+	result := atan2Block value: {1. 0} value: nil.
 	self assert: (((result - (pi / 2)) abs)
 		< 0.00001)
 %
@@ -322,10 +322,10 @@ testSinh
 	m := math perform: #instance env: 2.
 	sinhBlock := m perform: #sinh env: 2.
 
-	result := sinhBlock value: 0.
+	result := sinhBlock value: {0} value: nil.
 	self assert: ((result abs) < 0.00001).
 
-	result := sinhBlock value: 1.
+	result := sinhBlock value: {1} value: nil.
 	self assert: (((result - 1.1752) abs)
 		< 0.001)
 %
@@ -339,11 +339,11 @@ testCosh
 	m := math perform: #instance env: 2.
 	coshBlock := m perform: #cosh env: 2.
 
-	result := coshBlock value: 0.
+	result := coshBlock value: {0} value: nil.
 	self assert: (((result - 1.0) abs)
 		< 0.00001).
 
-	result := coshBlock value: 1.
+	result := coshBlock value: {1} value: nil.
 	self assert: (((result - 1.5430) abs)
 		< 0.001)
 %
@@ -357,10 +357,10 @@ testTanh
 	m := math perform: #instance env: 2.
 	tanhBlock := m perform: #tanh env: 2.
 
-	result := tanhBlock value: 0.
+	result := tanhBlock value: {0} value: nil.
 	self assert: ((result abs) < 0.00001).
 
-	result := tanhBlock value: 1.
+	result := tanhBlock value: {1} value: nil.
 	self assert: (((result - 0.7615) abs)
 		< 0.001)
 %
@@ -374,13 +374,13 @@ testCeil
 	m := math perform: #instance env: 2.
 	ceilBlock := m perform: #ceil env: 2.
 
-	result := ceilBlock value: 3.2.
+	result := ceilBlock value: {3.2} value: nil.
 	self assert: result equals: 4.
 
-	result := ceilBlock value: 3.8.
+	result := ceilBlock value: {3.8} value: nil.
 	self assert: result equals: 4.
 
-	result := ceilBlock value: -3.2.
+	result := ceilBlock value: {-3.2} value: nil.
 	self assert: result equals: -3
 %
 
@@ -393,13 +393,13 @@ testFloor
 	m := math perform: #instance env: 2.
 	floorBlock := m perform: #floor env: 2.
 
-	result := floorBlock value: 3.2.
+	result := floorBlock value: {3.2} value: nil.
 	self assert: result equals: 3.
 
-	result := floorBlock value: 3.8.
+	result := floorBlock value: {3.8} value: nil.
 	self assert: result equals: 3.
 
-	result := floorBlock value: -3.2.
+	result := floorBlock value: {-3.2} value: nil.
 	self assert: result equals: -4
 %
 
@@ -412,10 +412,10 @@ testTrunc
 	m := math perform: #instance env: 2.
 	truncBlock := m perform: #trunc env: 2.
 
-	result := truncBlock value: 3.7.
+	result := truncBlock value: {3.7} value: nil.
 	self assert: result equals: 3.
 
-	result := truncBlock value: -3.7.
+	result := truncBlock value: {-3.7} value: nil.
 	self assert: result equals: -3
 %
 
@@ -428,13 +428,13 @@ testFactorial
 	m := math perform: #instance env: 2.
 	factorialBlock := m perform: #factorial env: 2.
 
-	result := factorialBlock value: 0.
+	result := factorialBlock value: {0} value: nil.
 	self assert: result equals: 1.
 
-	result := factorialBlock value: 5.
+	result := factorialBlock value: {5} value: nil.
 	self assert: result equals: 120.
 
-	result := factorialBlock value: 10.
+	result := factorialBlock value: {10} value: nil.
 	self assert: result equals: 3628800
 %
 
@@ -447,13 +447,13 @@ testGcd
 	m := math perform: #instance env: 2.
 	gcdBlock := m perform: #gcd env: 2.
 
-	result := gcdBlock value: 12 value: 8.
+	result := gcdBlock value: {12. 8} value: nil.
 	self assert: result equals: 4.
 
-	result := gcdBlock value: 15 value: 25.
+	result := gcdBlock value: {15. 25} value: nil.
 	self assert: result equals: 5.
 
-	result := gcdBlock value: 7 value: 13.
+	result := gcdBlock value: {7. 13} value: nil.
 	self assert: result equals: 1
 %
 
@@ -466,10 +466,10 @@ testLcm
 	m := math perform: #instance env: 2.
 	lcmBlock := m perform: #lcm env: 2.
 
-	result := lcmBlock value: 12 value: 8.
+	result := lcmBlock value: {12. 8} value: nil.
 	self assert: result equals: 24.
 
-	result := lcmBlock value: 15 value: 25.
+	result := lcmBlock value: {15. 25} value: nil.
 	self assert: result equals: 75
 %
 
@@ -482,10 +482,10 @@ testFabs
 	m := math perform: #instance env: 2.
 	fabsBlock := m perform: #fabs env: 2.
 
-	result := fabsBlock value: -5.5.
+	result := fabsBlock value: {-5.5} value: nil.
 	self assert: result equals: 5.5.
 
-	result := fabsBlock value: 3.2.
+	result := fabsBlock value: {3.2} value: nil.
 	self assert: result equals: 3.2
 %
 
@@ -499,10 +499,10 @@ testIsnan
 	nan := m perform: #nan env: 2.
 	isnanBlock := m perform: #isnan env: 2.
 
-	result := isnanBlock value: nan.
+	result := isnanBlock value: {nan} value: nil.
 	self assert: result.
 
-	result := isnanBlock value: 5.5.
+	result := isnanBlock value: {5.5} value: nil.
 	self deny: result
 %
 
@@ -516,10 +516,10 @@ testIsinf
 	inf := m perform: #inf env: 2.
 	isinfBlock := m perform: #isinf env: 2.
 
-	result := isinfBlock value: inf.
+	result := isinfBlock value: {inf} value: nil.
 	self assert: result.
 
-	result := isinfBlock value: 5.5.
+	result := isinfBlock value: {5.5} value: nil.
 	self deny: result
 %
 
@@ -534,13 +534,13 @@ testIsfinite
 	nan := m perform: #nan env: 2.
 	isfiniteBlock := m perform: #isfinite env: 2.
 
-	result := isfiniteBlock value: 5.5.
+	result := isfiniteBlock value: {5.5} value: nil.
 	self assert: result.
 
-	result := isfiniteBlock value: inf.
+	result := isfiniteBlock value: {inf} value: nil.
 	self deny: result.
 
-	result := isfiniteBlock value: nan.
+	result := isfiniteBlock value: {nan} value: nil.
 	self deny: result
 %
 
@@ -554,11 +554,11 @@ testDegrees
 	pi := m perform: #pi env: 2.
 	degreesBlock := m perform: #degrees env: 2.
 
-	result := degreesBlock value: pi.
+	result := degreesBlock value: {pi} value: nil.
 	self assert: (((result - 180.0) abs)
 		< 0.00001).
 
-	result := degreesBlock value: (pi / 2).
+	result := degreesBlock value: {(pi / 2)} value: nil.
 	self assert: (((result - 90.0) abs)
 		< 0.00001)
 %
@@ -573,11 +573,11 @@ testRadians
 	pi := m perform: #pi env: 2.
 	radiansBlock := m perform: #radians env: 2.
 
-	result := radiansBlock value: 180.
+	result := radiansBlock value: {180} value: nil.
 	self assert: (((result - pi) abs)
 		< 0.00001).
 
-	result := radiansBlock value: 90.
+	result := radiansBlock value: {90} value: nil.
 	self assert: (((result - (pi / 2)) abs)
 		< 0.00001)
 %

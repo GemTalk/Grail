@@ -1382,9 +1382,9 @@ complex category: 'Numbers'
 expectvalue /Class
 doit
 object subclass: 'builtins'
-  instVarNames: #()
+  instVarNames: #('abs' 'len' 'type' 'repr' 'str' 'hash' 'hex' 'oct' 'bin' 'chr' 'ord' 'min' 'max' 'sum' 'all' 'any' 'isinstance' 'callable' 'dir' 'id' 'pow' 'powWithMod' 'round' 'roundWithDigits' 'divmod' 'print' 'input' 'inputWithPrompt' 'sorted' 'reversed' 'enumerate' 'zip')
   classVars: #()
-  classInstVars: #()
+  classInstVars: #('instance')
   poolDictionaries: #()
   inDictionary: Python
   options: #()

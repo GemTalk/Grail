@@ -291,6 +291,10 @@ category: 'other'
 method: AbstractNode
 printSmalltalkWithParenthesisOn: aStream
 
+	aStream nextPut: $(.
+	self printSmalltalkOn: aStream.
+	aStream nextPut: $).
+
 %
 category: 'other'
 method: AbstractNode

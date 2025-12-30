@@ -17,19 +17,19 @@ testAbs
 	"Test abs() function"
 
 	| b absBlock result |
-	b := builtins new.
+	b := builtins ___instance___.
 	absBlock := b perform: #abs env: 2.
 
-	result := absBlock value: 5.
+	result := absBlock value: {5} value: nil.
 	self assert: result equals: 5.
 
-	result := absBlock value: -5.
+	result := absBlock value: {-5} value: nil.
 	self assert: result equals: 5.
 
-	result := absBlock value: 0.
+	result := absBlock value: {0} value: nil.
 	self assert: result equals: 0.
 
-	result := absBlock value: -3.14.
+	result := absBlock value: {-3.14} value: nil.
 	self assert: (result - 3.14) abs < 0.0001
 %
 
@@ -39,16 +39,16 @@ testHex
 	"Test hex() function"
 
 	| b hexBlock result |
-	b := builtins new.
+	b := builtins ___instance___.
 	hexBlock := b perform: #hex env: 2.
 
-	result := hexBlock value: 255.
+	result := hexBlock value: {255} value: nil.
 	self assert: result equals: '0xff'.
 
-	result := hexBlock value: 16.
+	result := hexBlock value: {16} value: nil.
 	self assert: result equals: '0x10'.
 
-	result := hexBlock value: 0.
+	result := hexBlock value: {0} value: nil.
 	self assert: result equals: '0x0'
 %
 
@@ -58,16 +58,16 @@ testOct
 	"Test oct() function"
 
 	| b octBlock result |
-	b := builtins new.
+	b := builtins ___instance___.
 	octBlock := b perform: #oct env: 2.
 
-	result := octBlock value: 8.
+	result := octBlock value: {8} value: nil.
 	self assert: result equals: '0o10'.
 
-	result := octBlock value: 64.
+	result := octBlock value: {64} value: nil.
 	self assert: result equals: '0o100'.
 
-	result := octBlock value: 0.
+	result := octBlock value: {0} value: nil.
 	self assert: result equals: '0o0'
 %
 
@@ -77,16 +77,16 @@ testBin
 	"Test bin() function"
 
 	| b binBlock result |
-	b := builtins new.
+	b := builtins ___instance___.
 	binBlock := b perform: #bin env: 2.
 
-	result := binBlock value: 5.
+	result := binBlock value: {5} value: nil.
 	self assert: result equals: '0b101'.
 
-	result := binBlock value: 8.
+	result := binBlock value: {8} value: nil.
 	self assert: result equals: '0b1000'.
 
-	result := binBlock value: 0.
+	result := binBlock value: {0} value: nil.
 	self assert: result equals: '0b0'
 %
 
@@ -96,16 +96,16 @@ testType
 	"Test type() function"
 
 	| b typeBlock result |
-	b := builtins new.
+	b := builtins ___instance___.
 	typeBlock := b perform: #type env: 2.
 
-	result := typeBlock value: 42.
+	result := typeBlock value: {42} value: nil.
 	self assert: (42 isKindOf: result).
 
-	result := typeBlock value: 'hello'.
+	result := typeBlock value: {'hello'} value: nil.
 	self assert: ('hello' isKindOf: result).
 
-	result := typeBlock value: list new.
+	result := typeBlock value: {list new} value: nil.
 	self assert: (list new isKindOf: result)
 %
 
@@ -115,17 +115,17 @@ testLen
 	"Test len() function"
 
 	| b lenBlock result lst |
-	b := builtins new.
+	b := builtins ___instance___.
 	lenBlock := b perform: #len env: 2.
 
-	result := lenBlock value: 'hello'.
+	result := lenBlock value: {'hello'} value: nil.
 	self assert: result equals: 5.
 
 	lst := list new.
 	lst perform: #append: env: 2 withArguments: {1}.
 	lst perform: #append: env: 2 withArguments: {2}.
 	lst perform: #append: env: 2 withArguments: {3}.
-	result := lenBlock value: lst.
+	result := lenBlock value: {lst} value: nil.
 	self assert: result equals: 3
 %
 
@@ -135,11 +135,11 @@ testLenTypeError
 	"Test that len() raises TypeError for objects without __len__"
 
 	| b lenBlock |
-	b := builtins new.
+	b := builtins ___instance___.
 	lenBlock := b perform: #len env: 2.
 
 	self should: [
-		lenBlock value: 42
+		lenBlock value: {42} value: nil.
 	] raise: TypeError
 %
 
@@ -149,13 +149,13 @@ testHash
 	"Test hash() function"
 
 	| b hashBlock result |
-	b := builtins new.
+	b := builtins ___instance___.
 	hashBlock := b perform: #hash env: 2.
 
-	result := hashBlock value: 42.
+	result := hashBlock value: {42} value: nil.
 	self assert: (result isKindOf: Integer).
 
-	result := hashBlock value: 'hello'.
+	result := hashBlock value: {'hello'} value: nil.
 	self assert: (result isKindOf: Integer)
 %
 
@@ -165,13 +165,13 @@ testRepr
 	"Test repr() function"
 
 	| b reprBlock result |
-	b := builtins new.
+	b := builtins ___instance___.
 	reprBlock := b perform: #repr env: 2.
 
-	result := reprBlock value: 'hello'.
+	result := reprBlock value: {'hello'} value: nil.
 	self assert: (result includesString: 'hello').
 
-	result := reprBlock value: 42.
+	result := reprBlock value: {42} value: nil.
 	self assert: result equals: '42'
 %
 
@@ -181,13 +181,13 @@ testStr
 	"Test str() function"
 
 	| b strBlock result |
-	b := builtins new.
+	b := builtins ___instance___.
 	strBlock := b perform: #str env: 2.
 
-	result := strBlock value: 42.
+	result := strBlock value: {42} value: nil.
 	self assert: result equals: '42'.
 
-	result := strBlock value: 'hello'.
+	result := strBlock value: {'hello'} value: nil.
 	self assert: result equals: 'hello'
 %
 
@@ -197,16 +197,16 @@ testChr
 	"Test chr() function"
 
 	| b chrBlock result |
-	b := builtins new.
+	b := builtins ___instance___.
 	chrBlock := b perform: #chr env: 2.
 
-	result := chrBlock value: 65.
+	result := chrBlock value: {65} value: nil.
 	self assert: result equals: 'A'.
 
-	result := chrBlock value: 97.
+	result := chrBlock value: {97} value: nil.
 	self assert: result equals: 'a'.
 
-	result := chrBlock value: 48.
+	result := chrBlock value: {48} value: nil.
 	self assert: result equals: '0'
 %
 
@@ -216,16 +216,16 @@ testOrd
 	"Test ord() function"
 
 	| b ordBlock result |
-	b := builtins new.
+	b := builtins ___instance___.
 	ordBlock := b perform: #ord env: 2.
 
-	result := ordBlock value: 'A'.
+	result := ordBlock value: {'A'} value: nil.
 	self assert: result equals: 65.
 
-	result := ordBlock value: 'a'.
+	result := ordBlock value: {'a'} value: nil.
 	self assert: result equals: 97.
 
-	result := ordBlock value: '0'.
+	result := ordBlock value: {'0'} value: nil.
 	self assert: result equals: 48
 %
 
@@ -235,15 +235,15 @@ testOrdTypeError
 	"Test that ord() raises TypeError for strings with length != 1"
 
 	| b ordBlock |
-	b := builtins new.
+	b := builtins ___instance___.
 	ordBlock := b perform: #ord env: 2.
 
 	self should: [
-		ordBlock value: 'hello'
+		ordBlock value: {'hello'} value: nil.
 	] raise: TypeError.
 
 	self should: [
-		ordBlock value: ''
+		ordBlock value: {''} value: nil.
 	] raise: TypeError
 %
 
@@ -253,15 +253,15 @@ testMin
 	"Test min() function"
 
 	| b minBlock result lst |
-	b := builtins new.
+	b := builtins ___instance___.
 	minBlock := b perform: #min env: 2.
 
 	lst := list withAll: #(5 2 8 1 9).
-	result := minBlock value: lst.
+	result := minBlock value: {lst} value: nil.
 	self assert: result equals: 1.
 
 	lst := list withAll: #(-5 -2 -8).
-	result := minBlock value: lst.
+	result := minBlock value: {lst} value: nil.
 	self assert: result equals: -8
 %
 
@@ -271,15 +271,15 @@ testMax
 	"Test max() function"
 
 	| b maxBlock result lst |
-	b := builtins new.
+	b := builtins ___instance___.
 	maxBlock := b perform: #max env: 2.
 
 	lst := list withAll: #(5 2 8 1 9).
-	result := maxBlock value: lst.
+	result := maxBlock value: {lst} value: nil.
 	self assert: result equals: 9.
 
 	lst := list withAll: #(-5 -2 -8).
-	result := maxBlock value: lst.
+	result := maxBlock value: {lst} value: nil.
 	self assert: result equals: -2
 %
 
@@ -289,15 +289,15 @@ testSum
 	"Test sum() function"
 
 	| b sumBlock result lst |
-	b := builtins new.
+	b := builtins ___instance___.
 	sumBlock := b perform: #sum env: 2.
 
 	lst := list withAll: #(1 2 3 4 5).
-	result := sumBlock value: lst.
+	result := sumBlock value: {lst} value: nil.
 	self assert: result equals: 15.
 
 	lst := list withAll: #().
-	result := sumBlock value: lst.
+	result := sumBlock value: {lst} value: nil.
 	self assert: result equals: 0
 %
 
@@ -307,19 +307,19 @@ testAll
 	"Test all() function"
 
 	| b allBlock result lst |
-	b := builtins new.
+	b := builtins ___instance___.
 	allBlock := b perform: #all env: 2.
 
 	lst := list withAll: #(true true true).
-	result := allBlock value: lst.
+	result := allBlock value: {lst} value: nil.
 	self assert: result.
 
 	lst := list withAll: #(true false true).
-	result := allBlock value: lst.
+	result := allBlock value: {lst} value: nil.
 	self deny: result.
 
 	lst := list withAll: #().
-	result := allBlock value: lst.
+	result := allBlock value: {lst} value: nil.
 	self assert: result
 %
 
@@ -329,19 +329,19 @@ testAny
 	"Test any() function"
 
 	| b anyBlock result lst |
-	b := builtins new.
+	b := builtins ___instance___.
 	anyBlock := b perform: #any env: 2.
 
 	lst := list withAll: #(false false true).
-	result := anyBlock value: lst.
+	result := anyBlock value: {lst} value: nil.
 	self assert: result.
 
 	lst := list withAll: #(false false false).
-	result := anyBlock value: lst.
+	result := anyBlock value: {lst} value: nil.
 	self deny: result.
 
 	lst := list withAll: #().
-	result := anyBlock value: lst.
+	result := anyBlock value: {lst} value: nil.
 	self deny: result
 %
 
@@ -351,20 +351,20 @@ testIsinstance
 	"Test isinstance() function"
 
 	| b isinstanceBlock result lst |
-	b := builtins new.
+	b := builtins ___instance___.
 	isinstanceBlock := b perform: #isinstance env: 2.
 
-	result := isinstanceBlock value: 42 value: int.
+	result := isinstanceBlock value: {42. int} value: nil.
 	self assert: result.
 
-	result := isinstanceBlock value: 'hello' value: str.
+	result := isinstanceBlock value: {'hello'. str} value: nil.
 	self assert: result.
 
 	lst := list new.
-	result := isinstanceBlock value: lst value: list.
+	result := isinstanceBlock value: {lst. list} value: nil.
 	self assert: result.
 
-	result := isinstanceBlock value: 42 value: str.
+	result := isinstanceBlock value: {42. str} value: nil.
 	self deny: result
 %
 
@@ -374,19 +374,19 @@ testCallable
 	"Test callable() function"
 
 	| b callableBlock method result lst |
-	b := builtins new.
+	b := builtins ___instance___.
 	callableBlock := b perform: #callable env: 2.
 	method := b perform: #abs env: 2.
 	"Functions/methods are callable"
-	result := callableBlock value: method.
+	result := callableBlock value: {method} value: nil.
 	self assert: result.
 
 	"Regular objects are not callable"
-	result := callableBlock value: 42.
+	result := callableBlock value: {42} value: nil.
 	self deny: result.
 
 	lst := list new.
-	result := callableBlock value: lst.
+	result := callableBlock value: {lst} value: nil.
 	self deny: result
 %
 
@@ -396,14 +396,14 @@ testId
 	"Test id() function"
 
 	| b idBlock result obj1 obj2 id1 id2 |
-	b := builtins new.
+	b := builtins ___instance___.
 	idBlock := b perform: #id env: 2.
 
 	obj1 := list new.
 	obj2 := list new.
 
-	id1 := idBlock value: obj1.
-	id2 := idBlock value: obj2.
+	id1 := idBlock value: {obj1} value: nil.
+	id2 := idBlock value: {obj2} value: nil.
 
 	self assert: (id1 isKindOf: Integer).
 	self assert: (id2 isKindOf: Integer).
@@ -416,16 +416,16 @@ testPow
 	"Test pow() function"
 
 	| b powBlock result |
-	b := builtins new.
+	b := builtins ___instance___.
 	powBlock := b perform: #pow env: 2.
 
-	result := powBlock value: 2 value: 3.
+	result := powBlock value: {2. 3} value: nil.
 	self assert: result equals: 8.
 
-	result := powBlock value: 5 value: 2.
+	result := powBlock value: {5. 2} value: nil.
 	self assert: result equals: 25.
 
-	result := powBlock value: 10 value: 0.
+	result := powBlock value: {10. 0} value: nil.
 	self assert: result equals: 1
 %
 
@@ -435,13 +435,13 @@ testPowWithModulo
 	"Test pow() function with modulo"
 
 	| b powModBlock result |
-	b := builtins new.
+	b := builtins ___instance___.
 	powModBlock := b perform: #powWithMod env: 2.
 
-	result := powModBlock value: 2 value: 3 value: 5.
+	result := powModBlock value: {2. 3. 5} value: nil.
 	self assert: result equals: 3.
 
-	result := powModBlock value: 10 value: 2 value: 7.
+	result := powModBlock value: {10. 2. 7} value: nil.
 	self assert: result equals: 2
 %
 
@@ -451,16 +451,16 @@ testRound
 	"Test round() function"
 
 	| b roundBlock result |
-	b := builtins new.
+	b := builtins ___instance___.
 	roundBlock := b perform: #round env: 2.
 
-	result := roundBlock value: 3.7.
+	result := roundBlock value: {3.7} value: nil.
 	self assert: result equals: 4.
 
-	result := roundBlock value: 3.2.
+	result := roundBlock value: {3.2} value: nil.
 	self assert: result equals: 3.
 
-	result := roundBlock value: -2.8.
+	result := roundBlock value: {-2.8} value: nil.
 	self assert: result equals: -3
 %
 
@@ -470,16 +470,16 @@ testDivmod
 	"Test divmod() function"
 
 	| b divmodBlock result quotient remainder |
-	b := builtins new.
+	b := builtins ___instance___.
 	divmodBlock := b perform: #divmod env: 2.
 
-	result := divmodBlock value: 10 value: 3.
+	result := divmodBlock value: {10. 3} value: nil.
 	quotient := result perform: #__getitem__: env: 2 withArguments: {0}.
 	remainder := result perform: #__getitem__: env: 2 withArguments: {1}.
 	self assert: quotient equals: 3.
 	self assert: remainder equals: 1.
 
-	result := divmodBlock value: 17 value: 5.
+	result := divmodBlock value: {17. 5} value: nil.
 	quotient := result perform: #__getitem__: env: 2 withArguments: {0}.
 	remainder := result perform: #__getitem__: env: 2 withArguments: {1}.
 	self assert: quotient equals: 3.
@@ -492,11 +492,11 @@ testSorted
 	"Test sorted() function - returns a new sorted list, leaving original unchanged"
 
 	| b sortedBlock result lst |
-	b := builtins new.
+	b := builtins ___instance___.
 	sortedBlock := b perform: #sorted env: 2.
 
 	lst := list withAll: #(3 1 4 1 5 9 2 6).
-	result := sortedBlock value: lst.
+	result := sortedBlock value: {lst} value: nil.
 
 	"Verify the result is sorted"
 	self assert: (result perform: #__getitem__: env: 2 withArguments: {0}) equals: 1.
@@ -517,11 +517,11 @@ testEnumerate
 	"Test enumerate() function"
 
 	| b enumerateBlock result lst iter first second |
-	b := builtins new.
+	b := builtins ___instance___.
 	enumerateBlock := b perform: #enumerate env: 2.
 
 	lst := list withAll: #('a' 'b' 'c').
-	result := enumerateBlock value: lst.
+	result := enumerateBlock value: {lst} value: nil.
 
 	first := result perform: #__next__ env: 2.
 	self assert: (first perform: #__getitem__: env: 2 withArguments: {0}) equals: 0.
@@ -538,14 +538,14 @@ testZip
 	"Test zip() function"
 
 	| b zipBlock result lst1 lst2 iterables iter first |
-	b := builtins new.
+	b := builtins ___instance___.
 	zipBlock := b perform: #zip env: 2.
 
 	lst1 := list withAll: #(1 2 3).
 	lst2 := list withAll: #('a' 'b' 'c').
 	iterables := list withAll: {lst1. lst2}.
 
-	result := zipBlock value: iterables.
+	result := zipBlock value: {iterables} value: nil.
 
 	first := result perform: #__next__ env: 2.
 	self assert: (first perform: #__getitem__: env: 2 withArguments: {0}) equals: 1.
@@ -558,8 +558,8 @@ testAsSymbolDictionary
 	"Test asSymbolDictionary() method"
 
 	| b dict absBlock lenBlock typeBlock type |
-	b := builtins new.
-	dict := b perform: #asSymbolDictionary env: 2.
+	b := builtins ___instance___.
+	dict := b asSymbolDictionary.
 
 	"Verify it returns a SymbolDictionary"
 	self assert: (dict isKindOf: SymbolDictionary).
@@ -596,7 +596,7 @@ testAsSymbolDictionary
 
 	"Verify the functions work correctly"
 	typeBlock := dict at: #type.
-	type := typeBlock value: 42.
+	type := typeBlock value: {42} value: nil.
 	self assert: ((type == int) or: [type isSubclassOf: int]).
 %
 

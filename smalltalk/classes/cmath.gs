@@ -129,8 +129,9 @@ category: 'Python-Initialization'
 method: cmath
 initialize_sin
 	"Return the sine of z (complex number)"
-	sin := [:z |
-		| zComplex real imag |
+	sin := [:positional :keywords |
+		| z zComplex real imag |
+		z := positional ___at___: 1.
 		zComplex := self ___asComplex: z.
 		real := zComplex real.
 		imag := zComplex imag.
@@ -144,8 +145,9 @@ category: 'Python-Initialization'
 method: cmath
 initialize_cos
 	"Return the cosine of z (complex number)"
-	cos := [:z |
-		| zComplex real imag |
+	cos := [:positional :keywords |
+		| z zComplex real imag |
+		z := positional ___at___: 1.
 		zComplex := self ___asComplex: z.
 		real := zComplex real.
 		imag := zComplex imag.
@@ -159,12 +161,13 @@ category: 'Python-Initialization'
 method: cmath
 initialize_tan
 	"Return the tangent of z (complex number)"
-	tan := [:z |
-		| sinBlock cosBlock sinZ cosZ |
+	tan := [:positional :keywords |
+		| z sinBlock cosBlock sinZ cosZ |
+		z := positional ___at___: 1.
 		sinBlock := self sin.
 		cosBlock := self cos.
-		sinZ := sinBlock value: z.
-		cosZ := cosBlock value: z.
+		sinZ := sinBlock value: {z} value: nil.
+		cosZ := cosBlock value: {z} value: nil.
 		sinZ __truediv__: cosZ
 	]
 %
@@ -173,8 +176,9 @@ category: 'Python-Initialization'
 method: cmath
 initialize_sinh
 	"Return the hyperbolic sine of z (complex number)"
-	sinh := [:z |
-		| zComplex real imag |
+	sinh := [:positional :keywords |
+		| z zComplex real imag |
+		z := positional ___at___: 1.
 		zComplex := self ___asComplex: z.
 		real := zComplex real.
 		imag := zComplex imag.
@@ -188,8 +192,9 @@ category: 'Python-Initialization'
 method: cmath
 initialize_cosh
 	"Return the hyperbolic cosine of z (complex number)"
-	cosh := [:z |
-		| zComplex real imag |
+	cosh := [:positional :keywords |
+		| z zComplex real imag |
+		z := positional ___at___: 1.
 		zComplex := self ___asComplex: z.
 		real := zComplex real.
 		imag := zComplex imag.
@@ -203,12 +208,13 @@ category: 'Python-Initialization'
 method: cmath
 initialize_tanh
 	"Return the hyperbolic tangent of z (complex number)"
-	tanh := [:z |
-		| sinhBlock coshBlock sinhZ coshZ |
+	tanh := [:positional :keywords |
+		| z sinhBlock coshBlock sinhZ coshZ |
+		z := positional ___at___: 1.
 		sinhBlock := self sinh.
 		coshBlock := self cosh.
-		sinhZ := sinhBlock value: z.
-		coshZ := coshBlock value: z.
+		sinhZ := sinhBlock value: {z} value: nil.
+		coshZ := coshBlock value: {z} value: nil.
 		sinhZ __truediv__: coshZ
 	]
 %
@@ -217,8 +223,9 @@ category: 'Python-Initialization'
 method: cmath
 initialize_exp
 	"Return e raised to the power z (complex number)"
-	exp := [:z |
-		| zComplex real imag expReal |
+	exp := [:positional :keywords |
+		| z zComplex real imag expReal |
+		z := positional ___at___: 1.
 		zComplex := self ___asComplex: z.
 		real := zComplex real.
 		imag := zComplex imag.
@@ -233,8 +240,9 @@ category: 'Python-Initialization'
 method: cmath
 initialize_log
 	"Return the natural logarithm of z (complex number)"
-	log := [:z |
-		| zComplex real imag r theta |
+	log := [:positional :keywords |
+		| z zComplex real imag r theta |
+		z := positional ___at___: 1.
 		zComplex := self ___asComplex: z.
 		real := zComplex real.
 		imag := zComplex imag.
@@ -255,10 +263,11 @@ category: 'Python-Initialization'
 method: cmath
 initialize_log10
 	"Return the base-10 logarithm of z (complex number)"
-	log10 := [:z |
-		| logBlock logZ ln10 |
+	log10 := [:positional :keywords |
+		| z logBlock logZ ln10 |
+		z := positional ___at___: 1.
 		logBlock := self log.
-		logZ := logBlock value: z.
+		logZ := logBlock value: {z} value: nil.
 		ln10 := 10.0 ___ln___.
 		logZ __truediv__: (complex __new__: ln10 _: 0.0)
 	]
@@ -268,8 +277,9 @@ category: 'Python-Initialization'
 method: cmath
 initialize_sqrt
 	"Return the square root of z (complex number)"
-	sqrt := [:z |
-		| zComplex real imag r theta sqrtR halfTheta |
+	sqrt := [:positional :keywords |
+		| z zComplex real imag r theta sqrtR halfTheta |
+		z := positional ___at___: 1.
 		zComplex := self ___asComplex: z.
 		real := zComplex real.
 		imag := zComplex imag.
@@ -295,8 +305,9 @@ category: 'Python-Initialization'
 method: cmath
 initialize_phase
 	"Return the phase (argument) of z in radians"
-	phase := [:z |
-		| zComplex real imag |
+	phase := [:positional :keywords |
+		| z zComplex real imag |
+		z := positional ___at___: 1.
 		zComplex := self ___asComplex: z.
 		real := zComplex real.
 		imag := zComplex imag.
@@ -309,8 +320,9 @@ category: 'Python-Initialization'
 method: cmath
 initialize_polar
 	"Return the polar coordinates (r, theta) of z"
-	polar := [:z |
-		| zComplex real imag r theta |
+	polar := [:positional :keywords |
+		| z zComplex real imag r theta |
+		z := positional ___at___: 1.
 		zComplex := self ___asComplex: z.
 		real := zComplex real.
 		imag := zComplex imag.
@@ -330,8 +342,10 @@ category: 'Python-Initialization'
 method: cmath
 initialize_rect
 	"Convert polar coordinates (r, theta) to rectangular form (complex number)"
-	rect := [:r :theta |
-		| rFloat thetaFloat |
+	rect := [:positional :keywords |
+		| r theta rFloat thetaFloat |
+		r := positional ___at___: 1.
+		theta := positional ___at___: 2.
 		rFloat := r ___asFloat___.
 		thetaFloat := theta ___asFloat___.
 
@@ -343,8 +357,9 @@ category: 'Python-Initialization'
 method: cmath
 initialize_isnan
 	"Return True if either the real or imaginary part of z is NaN"
-	isnan := [:z |
-		| zComplex real imag |
+	isnan := [:positional :keywords |
+		| z zComplex real imag |
+		z := positional ___at___: 1.
 		zComplex := self ___asComplex: z.
 		real := zComplex real.
 		imag := zComplex imag.
@@ -357,8 +372,9 @@ category: 'Python-Initialization'
 method: cmath
 initialize_isinf
 	"Return True if either the real or imaginary part of z is infinity"
-	isinf := [:z |
-		| zComplex real imag realKind imagKind |
+	isinf := [:positional :keywords |
+		| z zComplex real imag realKind imagKind |
+		z := positional ___at___: 1.
 		zComplex := self ___asComplex: z.
 		real := zComplex real.
 		imag := zComplex imag.
@@ -374,8 +390,9 @@ category: 'Python-Initialization'
 method: cmath
 initialize_isfinite
 	"Return True if both the real and imaginary parts of z are finite"
-	isfinite := [:z |
-		| zComplex real imag realKind imagKind |
+	isfinite := [:positional :keywords |
+		| z zComplex real imag realKind imagKind |
+		z := positional ___at___: 1.
 		zComplex := self ___asComplex: z.
 		real := zComplex real.
 		imag := zComplex imag.

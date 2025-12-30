@@ -68,8 +68,9 @@ category: 'Python-Initialization'
 method: os_path
 initialize_join
 	"Join one or more path components intelligently. Takes a collection of paths."
-	join := [:paths |
-		| result sep first size i each path |
+	join := [:positional :keywords |
+		| paths result sep first size i each path |
+		paths := positional ___at___: 1.
 		(paths ___isEmpty___) ifTrue: [
 			''
 		] ifFalse: [
@@ -103,8 +104,9 @@ category: 'Python-Initialization'
 method: os_path
 initialize_basename
 	"Return the base name of pathname path"
-	basename := [:path |
-		| sep lastIndex pathSize trimmedPath reversedPath reversedSep index |
+	basename := [:positional :keywords |
+		| path sep lastIndex pathSize trimmedPath reversedPath reversedSep index |
+		path := positional ___at___: 1.
 		sep := '/'.
 		pathSize := path ___size___.
 		"Remove trailing separators"
@@ -138,8 +140,9 @@ category: 'Python-Initialization'
 method: os_path
 initialize_dirname
 	"Return the directory name of pathname path"
-	dirname := [:path |
-		| sep lastIndex reversedPath reversedSep index pathSize trimmedPath |
+	dirname := [:positional :keywords |
+		| path sep lastIndex reversedPath reversedSep index pathSize trimmedPath |
+		path := positional ___at___: 1.
 		sep := '/'.
 		pathSize := path ___size___.
 		"Remove trailing separators before processing"
@@ -177,8 +180,9 @@ category: 'Python-Initialization'
 method: os_path
 initialize_split
 	"Split the pathname path into a pair (head, tail)"
-	split := [:path |
-		| sep lastIndex head tail pathSize reversedPath reversedSep index |
+	split := [:positional :keywords |
+		| path sep lastIndex head tail pathSize reversedPath reversedSep index |
+		path := positional ___at___: 1.
 		sep := '/'.
 		pathSize := path ___size___.
 		"Find last occurrence by reversing string and finding first occurrence"
@@ -212,8 +216,9 @@ category: 'Python-Initialization'
 method: os_path
 initialize_splitext
 	"Split the pathname path into a pair (root, ext)"
-	splitext := [:path |
-		| lastDotIndex root ext pathSize sepIndex reversedPath reversedDot reversedSep index |
+	splitext := [:positional :keywords |
+		| path lastDotIndex root ext pathSize sepIndex reversedPath reversedDot reversedSep index |
+		path := positional ___at___: 1.
 		pathSize := path ___size___.
 		"Find last occurrence of '.' by reversing string"
 		reversedPath := path ___reverse___.
@@ -261,15 +266,20 @@ category: 'Python-Initialization'
 method: os_path
 initialize_isabs
 	"Return True if path is an absolute pathname"
-	isabs := [:path | (path ___beginsWith___: '/')]
+	isabs := [:positional :keywords |
+		| path |
+		path := positional ___at___: 1.
+		(path ___beginsWith___: '/')
+	]
 %
 
 category: 'Python-Initialization'
 method: os_path
 initialize_normpath
 	"Normalize a pathname by collapsing redundant separators and up-level references"
-	normpath := [:path |
-		| parts sep isAbsolute dotDotIndex prevIndex result earlyExit |
+	normpath := [:positional :keywords |
+		| path parts sep isAbsolute dotDotIndex prevIndex result earlyExit |
+		path := positional ___at___: 1.
 		sep := '/'.
 		parts := $/ ___split___: path.
 		isAbsolute := path ___beginsWith___: sep.
@@ -365,19 +375,20 @@ category: 'Python-Initialization'
 method: os_path
 initialize_abspath
 	"Return a normalized absolutized version of the pathname path"
-	abspath := [:path |
-		| isabsBlock normpathBlock joinBlock cwd normalized getcwdBlock |
+	abspath := [:positional :keywords |
+		| path isabsBlock normpathBlock joinBlock cwd normalized getcwdBlock |
+		path := positional ___at___: 1.
 		isabsBlock := self isabs.
 		normpathBlock := self normpath.
 		joinBlock := self join.
-		(isabsBlock value: path) ifTrue: [
-			normpathBlock value: path
+		(isabsBlock value: {path} value: nil) ifTrue: [
+			normpathBlock value: {path} value: nil
 		] ifFalse: [
 			cwd := os instance.
 			getcwdBlock := cwd getcwd.
-			cwd := getcwdBlock value.
-			normalized := normpathBlock value: path.
-			joinBlock value: { cwd. normalized. }.
+			cwd := getcwdBlock value: {} value: nil.
+			normalized := normpathBlock value: {path} value: nil.
+			joinBlock value: {{cwd. normalized}} value: nil.
 		]
 	]
 %
@@ -386,11 +397,12 @@ category: 'Python-Initialization'
 method: os_path
 initialize_exists
 	"Return True if path refers to an existing path"
-	exists := [:path |
-		| o existsBlock |
+	exists := [:positional :keywords |
+		| path o existsBlock |
+		path := positional ___at___: 1.
 		o := os instance.
 		existsBlock := o exists.
-		existsBlock value: path
+		existsBlock value: {path} value: nil
 	]
 %
 
@@ -398,11 +410,12 @@ category: 'Python-Initialization'
 method: os_path
 initialize_isdir
 	"Return True if path is an existing directory"
-	isdir := [:path |
-		| o isdirBlock |
+	isdir := [:positional :keywords |
+		| path o isdirBlock |
+		path := positional ___at___: 1.
 		o := os instance.
 		isdirBlock := o isdir.
-		isdirBlock value: path
+		isdirBlock value: {path} value: nil
 	]
 %
 
@@ -410,11 +423,12 @@ category: 'Python-Initialization'
 method: os_path
 initialize_isfile
 	"Return True if path is an existing regular file"
-	isfile := [:path |
-		| o isfileBlock |
+	isfile := [:positional :keywords |
+		| path o isfileBlock |
+		path := positional ___at___: 1.
 		o := os instance.
 		isfileBlock := o isfile.
-		isfileBlock value: path
+		isfileBlock value: {path} value: nil
 	]
 %
 
@@ -422,8 +436,9 @@ category: 'Python-Initialization'
 method: os_path
 initialize_commonpath
 	"Return the longest common sub-path of each pathname in paths"
-	commonpath := [:paths |
-		| commonParts allParts minSize pathsSize i path normalized parts allPartsSize j partsSize firstSize k firstPart allMatch normpathBlock |
+	commonpath := [:positional :keywords |
+		| paths commonParts allParts minSize pathsSize i path normalized parts allPartsSize j partsSize firstSize k firstPart allMatch normpathBlock |
+		paths := positional ___at___: 1.
 		(paths ___isEmpty___) ifTrue: [
 			ValueError ___signal___: 'commonpath() arg is an empty sequence'
 		].
@@ -432,7 +447,7 @@ initialize_commonpath
 		normpathBlock := self normpath.
 		1 ___to___: pathsSize do: [:i |
 			path := paths ___at___: i.
-			normalized := normpathBlock value: path.
+			normalized := normpathBlock value: {path} value: nil.
 			parts := $/ ___split___: normalized.
 			partsSize := parts ___size___.
 			parts := parts ___select___: [:each | each perform: #notEmpty env: 0].
@@ -480,8 +495,9 @@ category: 'Python-Initialization'
 method: os_path
 initialize_commonprefix
 	"Return the longest path prefix (taken character-by-character) that is a prefix of all paths"
-	commonprefix := [:paths |
-		| prefix minLen pathsSize i char allMatch j path |
+	commonprefix := [:positional :keywords |
+		| paths prefix minLen pathsSize i char allMatch j path |
+		paths := positional ___at___: 1.
 		(paths ___isEmpty___) ifTrue: [
 			''
 		] ifFalse: [

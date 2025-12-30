@@ -31,14 +31,6 @@ initialize
 	arguments := self collectAst: [self expression].
 	self commaSpace.
 	keywords := self collectAst: [KeywordAst parent: self].
-	(keywords size == 1 and: [keywords first name isNil]) ifTrue: [
-		keywords := KeywordsAst from: keywords.
-	] ifFalse: [
-		| replacement |
-		replacement := Dictionary new.
-		keywords do: [:each | replacement at: each name put: each value].
-		keywords := replacement.
-	].
 	self readPosition.
 %
 category: 'other'
@@ -46,14 +38,24 @@ method: CallAst
 printSmalltalkOn: aStream
 
 	function printSmalltalkOn: aStream.
-	self halt.
-	arguments isEmpty ifTrue: [
-		aStream nextPutAll: ' value.'.
-		^self
-	].
+	
+	"Build positional arguments array"
+	aStream nextPutAll: ' value: { '.
 	arguments do: [:each |
-		aStream nextPutAll: ' value: '.
-		each printSmalltalkOn: aStream.
+		each printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPut: $.; space.
 	].
-	aStream nextPut: $..
+	aStream nextPutAll: '} value: '.
+	
+	keywords isEmpty ifTrue: [
+		aStream nextPutAll: 'nil.'.
+	] ifFalse: [
+		"Build keywords dictionary"
+		keywords keysAndValuesDo: [:key :value |
+			aStream nextPutAll: ' at: #'; nextPutAll: key; nextPutAll: ' put: '.
+			value printSmalltalkWithParenthesisOn: aStream.
+			aStream nextPut: $;.
+		].
+		aStream nextPutAll: ' yourself).'.
+	].
 %

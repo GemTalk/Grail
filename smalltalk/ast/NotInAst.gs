@@ -20,8 +20,7 @@ printSmalltalkOn: aStream left: left rightList: right
 	right size == 1 ifTrue: [
 		right first printSmalltalkWithParenthesisOn: aStream.
 	] ifFalse: [
-		aStream nextPut: $(.
-		aStream nextPutAll: '((lhs := '.
+		aStream nextPutAll: '(((lhs := '.
 		(right at: 1) printSmalltalkOn: aStream.
 		aStream nextPutAll: ')'.
 	].

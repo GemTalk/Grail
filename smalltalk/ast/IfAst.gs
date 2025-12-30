@@ -19,7 +19,7 @@ category: 'other'
 method: IfAst
 printSmalltalkOn: aStream
 
-	test printSmalltalkOn: aStream.
+	test printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' ifTrue: ['; increaseIndent; lf.
 	body printSmalltalkOn: aStream.
 	aStream decreaseIndent; nextPutAll: '].'.

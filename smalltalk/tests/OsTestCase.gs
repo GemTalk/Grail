@@ -55,7 +55,7 @@ testGetcwd
 	| o getcwdBlock result |
 	o := os perform: #instance env: 2.
 	getcwdBlock := o perform: #getcwd env: 2.
-	result := getcwdBlock value.
+	result := getcwdBlock value: {} value: nil.
 
 	self assert: (result isKindOf: String).
 	self deny: result isEmpty
@@ -70,17 +70,17 @@ testChdir
 	o := os perform: #instance env: 2.
 	getcwdBlock := o perform: #getcwd env: 2.
 	chdirBlock := o perform: #chdir env: 2.
-	originalCwd := getcwdBlock value.
+	originalCwd := getcwdBlock value: {} value: nil.
 	testDir := '/tmp'.
 
 	"Change to test directory"
-	chdirBlock value: testDir.
-	newCwd := getcwdBlock value.
+	chdirBlock value: {testDir} value: nil.
+	newCwd := getcwdBlock value: {} value: nil.
 
 	self assert: (newCwd includesString: testDir).
 
 	"Change back to original directory"
-	chdirBlock value: originalCwd
+	chdirBlock value: {originalCwd} value: nil.
 %
 
 category: 'Tests - File and Directory Operations'
@@ -97,19 +97,19 @@ testMkdir
 	testDir := '/tmp/grail_os_test_mkdir'.
 
 	"Clean up if it exists"
-	(existsBlock value: testDir) ifTrue: [
-		rmdirBlock value: testDir
+		(existsBlock value: {testDir} value: nil) ifTrue: [
+			rmdirBlock value: {testDir} value: nil
 	].
 
 	"Create directory"
-	mkdirBlock value: testDir.
+	mkdirBlock value: {testDir} value: nil.
 
 	"Verify it exists and is a directory"
-	self assert: (existsBlock value: testDir).
-	self assert: (isdirBlock value: testDir).
+	self assert: (existsBlock value: {testDir} value: nil).
+	self assert: (isdirBlock value: {testDir} value: nil).
 
 	"Clean up"
-	rmdirBlock value: testDir
+	rmdirBlock value: {testDir} value: nil
 %
 
 category: 'Tests - File and Directory Operations'
@@ -125,18 +125,18 @@ testMkdirWithMode
 	testDir := '/tmp/grail_os_test_mkdir_mode'.
 
 	"Clean up if it exists"
-	(existsBlock value: testDir) ifTrue: [
-		rmdirBlock value: testDir
+		(existsBlock value: {testDir} value: nil) ifTrue: [
+			rmdirBlock value: {testDir} value: nil
 	].
 
 	"Create directory with mode"
-	mkdirWithModeBlock value: testDir value: 493.
+	mkdirWithModeBlock value: {testDir. 493} value: nil.
 
 	"Verify it exists"
-	self assert: (existsBlock value: testDir).
+	self assert: (existsBlock value: {testDir} value: nil).
 
 	"Clean up"
-	rmdirBlock value: testDir
+	rmdirBlock value: {testDir} value: nil
 %
 
 category: 'Tests - File and Directory Operations'
@@ -152,24 +152,24 @@ testMakedirs
 	testDir := '/tmp/grail_os_test_makedirs/level1/level2'.
 
 	"Clean up if it exists"
-	(existsBlock value: '/tmp/grail_os_test_makedirs') ifTrue: [
-		rmdirBlock value: '/tmp/grail_os_test_makedirs/level1/level2'.
-		rmdirBlock value: '/tmp/grail_os_test_makedirs/level1'.
-		rmdirBlock value: '/tmp/grail_os_test_makedirs'
+	(existsBlock value: {'/tmp/grail_os_test_makedirs'} value: nil) ifTrue: [
+		rmdirBlock value: {'/tmp/grail_os_test_makedirs/level1/level2'} value: nil.
+		rmdirBlock value: {'/tmp/grail_os_test_makedirs/level1'} value: nil.
+		rmdirBlock value: {'/tmp/grail_os_test_makedirs'} value: nil
 	].
 
 	"Create nested directories"
-	makedirsBlock value: testDir.
+	makedirsBlock value: {testDir} value: nil.
 
 	"Verify all levels exist"
-	self assert: (existsBlock value: '/tmp/grail_os_test_makedirs').
-	self assert: (existsBlock value: '/tmp/grail_os_test_makedirs/level1').
-	self assert: (existsBlock value: testDir).
+	self assert: (existsBlock value: {'/tmp/grail_os_test_makedirs'} value: nil).
+	self assert: (existsBlock value: {'/tmp/grail_os_test_makedirs/level1'} value: nil).
+	self assert: (existsBlock value: {testDir} value: nil).
 
 	"Clean up"
-	rmdirBlock value: '/tmp/grail_os_test_makedirs/level1/level2'.
-	rmdirBlock value: '/tmp/grail_os_test_makedirs/level1'.
-	rmdirBlock value: '/tmp/grail_os_test_makedirs'
+	rmdirBlock value: {'/tmp/grail_os_test_makedirs/level1/level2'} value: nil.
+	rmdirBlock value: {'/tmp/grail_os_test_makedirs/level1'} value: nil.
+	rmdirBlock value: {'/tmp/grail_os_test_makedirs'} value: nil
 %
 
 category: 'Tests - File and Directory Operations'
@@ -180,7 +180,7 @@ testListdir
 	| o listdirBlock result |
 	o := os perform: #instance env: 2.
 	listdirBlock := o perform: #listdir env: 2.
-	result := listdirBlock value: nil.
+	result := listdirBlock value: {} value: nil.
 
 	self assert: (result isKindOf: OrderedCollection).
 	self deny: result isEmpty
@@ -194,7 +194,7 @@ testListdirWithPath
 	| o listdirBlock result |
 	o := os perform: #instance env: 2.
 	listdirBlock := o perform: #listdir env: 2.
-	result := listdirBlock value: '/tmp'.
+	result := listdirBlock value: {'/tmp'} value: nil.
 
 	self assert: (result isKindOf: OrderedCollection)
 %
@@ -216,13 +216,13 @@ testRemove
 	file close.
 
 	"Verify it exists"
-	self assert: (existsBlock value: testFile).
+	self assert: (existsBlock value: {testFile} value: nil).
 
 	"Remove it"
-	removeBlock value: testFile.
+	removeBlock value: {testFile} value: nil.
 
 	"Verify it's gone"
-	self deny: (existsBlock value: testFile)
+	self deny: (existsBlock value: {testFile} value: nil)
 %
 
 category: 'Tests - File and Directory Operations'
@@ -238,21 +238,21 @@ testRmdir
 	testDir := '/tmp/grail_os_test_rmdir'.
 
 	"Clean up if it exists"
-	(existsBlock value: testDir) ifTrue: [
-		rmdirBlock value: testDir
+		(existsBlock value: {testDir} value: nil) ifTrue: [
+			rmdirBlock value: {testDir} value: nil
 	].
 
 	"Create directory"
-	mkdirBlock value: testDir.
+	mkdirBlock value: {testDir} value: nil.
 
 	"Verify it exists"
-	self assert: (existsBlock value: testDir).
+	self assert: (existsBlock value: {testDir} value: nil).
 
 	"Remove it"
-	rmdirBlock value: testDir.
+	rmdirBlock value: {testDir} value: nil.
 
 	"Verify it's gone"
-	self deny: (existsBlock value: testDir)
+	self deny: (existsBlock value: {testDir} value: nil)
 %
 
 category: 'Tests - File and Directory Operations'
@@ -269,11 +269,11 @@ testRename
 	newPath := '/tmp/grail_os_test_rename_new'.
 
 	"Clean up if they exist"
-	(existsBlock value: oldPath) ifTrue: [
-		removeBlock value: oldPath
+	(existsBlock value: {oldPath} value: nil) ifTrue: [
+		removeBlock value: {oldPath} value: nil
 	].
-	(existsBlock value: newPath) ifTrue: [
-		removeBlock value: newPath
+	(existsBlock value: {newPath} value: nil) ifTrue: [
+		removeBlock value: {newPath} value: nil
 	].
 
 	"Create a test file"
@@ -282,17 +282,17 @@ testRename
 	file close.
 
 	"Verify old file exists"
-	self assert: (existsBlock value: oldPath).
+	self assert: (existsBlock value: {oldPath} value: nil).
 
 	"Rename it"
-	renameBlock value: oldPath value: newPath.
+	renameBlock value: {oldPath. newPath} value: nil.
 
 	"Verify old file is gone and new file exists"
-	self deny: (existsBlock value: oldPath).
-	self assert: (existsBlock value: newPath).
+	self deny: (existsBlock value: {oldPath} value: nil).
+	self assert: (existsBlock value: {newPath} value: nil).
 
 	"Clean up"
-	removeBlock value: newPath
+	removeBlock value: {newPath} value: nil
 %
 
 category: 'Tests - File and Directory Operations'
@@ -305,10 +305,10 @@ testExists
 	existsBlock := o perform: #exists env: 2.
 
 	"Test with existing path"
-	self assert: (existsBlock value: '/tmp').
+	self assert: (existsBlock value: {'/tmp'} value: nil).
 
 	"Test with non-existing path"
-	self deny: (existsBlock value: '/tmp/grail_os_test_nonexistent_xyz123')
+	self deny: (existsBlock value: {'/tmp/grail_os_test_nonexistent_xyz123'} value: nil)
 %
 
 category: 'Tests - File and Directory Operations'
@@ -325,19 +325,19 @@ testIsdir
 	testDir := '/tmp/grail_os_test_isdir'.
 
 	"Clean up if it exists"
-	(existsBlock value: testDir) ifTrue: [
-		rmdirBlock value: testDir
+		(existsBlock value: {testDir} value: nil) ifTrue: [
+			rmdirBlock value: {testDir} value: nil
 	].
 
 	"Create directory"
-	mkdirBlock value: testDir.
+	mkdirBlock value: {testDir} value: nil.
 
 	"Test isdir"
-	self assert: (isdirBlock value: testDir).
-	self deny: (isdirBlock value: '/tmp/grail_os_test_isdir_nonexistent').
+	self assert: (isdirBlock value: {testDir} value: nil).
+	self deny: (isdirBlock value: {'/tmp/grail_os_test_isdir_nonexistent'} value: nil).
 
 	"Clean up"
-	rmdirBlock value: testDir
+	rmdirBlock value: {testDir} value: nil
 %
 
 category: 'Tests - File and Directory Operations'
@@ -353,8 +353,8 @@ testIsfile
 	testFile := '/tmp/grail_os_test_isfile'.
 
 	"Clean up if it exists"
-	(existsBlock value: testFile) ifTrue: [
-		removeBlock value: testFile
+	(existsBlock value: {testFile} value: nil) ifTrue: [
+		removeBlock value: {testFile} value: nil
 	].
 
 	"Create a test file"
@@ -363,14 +363,14 @@ testIsfile
 	file close.
 
 	"Test isfile"
-	self assert: (isfileBlock value: testFile).
-	self deny: (isfileBlock value: '/tmp/grail_os_test_isfile_nonexistent').
+	self assert: (isfileBlock value: {testFile} value: nil).
+	self deny: (isfileBlock value: {'/tmp/grail_os_test_isfile_nonexistent'} value: nil).
 
 	"Test that directory is not a file"
-	self deny: (isfileBlock value: '/tmp').
+	self deny: (isfileBlock value: {'/tmp'} value: nil).
 
 	"Clean up"
-	removeBlock value: testFile
+	removeBlock value: {testFile} value: nil
 %
 
 category: 'Tests - File and Directory Operations'
@@ -386,8 +386,8 @@ testStat
 	testFile := '/tmp/grail_os_test_stat'.
 
 	"Clean up if it exists"
-	(existsBlock value: testFile) ifTrue: [
-		removeBlock value: testFile
+	(existsBlock value: {testFile} value: nil) ifTrue: [
+		removeBlock value: {testFile} value: nil
 	].
 
 	"Create a test file"
@@ -396,13 +396,13 @@ testStat
 	file close.
 
 	"Get stat"
-	statResult := statBlock value: testFile.
+	statResult := statBlock value: {testFile} value: nil.
 
 	"Verify stat result is not nil"
 	self assert: statResult notNil.
 
 	"Clean up"
-	removeBlock value: testFile
+	removeBlock value: {testFile} value: nil
 %
 
 category: 'Tests - File and Directory Operations'
@@ -418,8 +418,8 @@ testLstat
 	testFile := '/tmp/grail_os_test_lstat'.
 
 	"Clean up if it exists"
-	(existsBlock value: testFile) ifTrue: [
-		removeBlock value: testFile
+	(existsBlock value: {testFile} value: nil) ifTrue: [
+		removeBlock value: {testFile} value: nil
 	].
 
 	"Create a test file"
@@ -428,13 +428,13 @@ testLstat
 	file close.
 
 	"Get lstat"
-	statResult := lstatBlock value: testFile.
+	statResult := lstatBlock value: {testFile} value: nil.
 
 	"Verify lstat result is not nil"
 	self assert: statResult notNil.
 
 	"Clean up"
-	removeBlock value: testFile
+	removeBlock value: {testFile} value: nil
 %
 
 category: 'Tests - Process Management'
@@ -447,7 +447,7 @@ testSystem
 	systemBlock := o perform: #system env: 2.
 
 	"Execute a simple command"
-	result := systemBlock value: 'echo "test"'.
+	result := systemBlock value: {'echo "test"'} value: nil.
 
 	"Result should not be nil (exit code or output)"
 	self assert: result notNil
@@ -463,7 +463,7 @@ testGetenv
 	getenvBlock := o perform: #getenv env: 2.
 
 	"Try to get a common environment variable (may or may not exist)"
-	result := getenvBlock value: 'PATH'.
+	result := getenvBlock value: {'PATH'} value: nil.
 
 	"Result may be nil or a string"
 	(result notNil) ifTrue: [
@@ -482,7 +482,7 @@ testGetenvWithDefault
 	default := 'default_value'.
 
 	"Try to get a non-existent environment variable"
-	result := getenvWithDefaultBlock value: 'GRAIL_TEST_NONEXISTENT_VAR_XYZ123' value: default.
+	result := getenvWithDefaultBlock value: {'GRAIL_TEST_NONEXISTENT_VAR_XYZ123'. default} value: nil.
 
 	"Should return default value"
 	self assert: result equals: default
@@ -501,10 +501,10 @@ testPutenv
 	testValue := 'test_value_123'.
 
 	"Set the environment variable"
-	putenvBlock value: testVar value: testValue.
+	putenvBlock value: {testVar. testValue} value: nil.
 
 	"Get it back"
-	result := getenvBlock value: testVar.
+	result := getenvBlock value: {testVar} value: nil.
 
 	"Should match what we set"
 	self assert: result equals: testValue
@@ -528,19 +528,19 @@ testFileOperationsSequence
 	testFile := testDir , '/test_file.txt'.
 
 	"Clean up if it exists"
-	(existsBlock value: testDir) ifTrue: [
-		(existsBlock value: testFile) ifTrue: [
-			removeBlock value: testFile
+	(existsBlock value: {testDir} value: nil) ifTrue: [
+		(existsBlock value: {testFile} value: nil) ifTrue: [
+			removeBlock value: {testFile} value: nil
 		].
-		rmdirBlock value: testDir
+		rmdirBlock value: {testDir} value: nil
 	].
 
 	"Create directory"
-	mkdirBlock value: testDir.
-	self assert: (isdirBlock value: testDir).
+	mkdirBlock value: {testDir} value: nil.
+	self assert: (isdirBlock value: {testDir} value: nil).
 
 	"List directory (should be empty or have minimal entries)"
-	listResult := listdirBlock value: testDir.
+	listResult := listdirBlock value: {testDir} value: nil.
 	self assert: (listResult isKindOf: OrderedCollection).
 
 	"Create file in directory"
@@ -549,20 +549,20 @@ testFileOperationsSequence
 	file close.
 
 	"Verify file exists"
-	self assert: (existsBlock value: testFile).
-	self assert: (isfileBlock value: testFile).
+	self assert: (existsBlock value: {testFile} value: nil).
+	self assert: (isfileBlock value: {testFile} value: nil).
 
 	"List directory again (should now include our file)"
-	listResult := listdirBlock value: testDir.
+	listResult := listdirBlock value: {testDir} value: nil.
 	self assert: (listResult includes: 'test_file.txt').
 
 	"Remove file"
-	removeBlock value: testFile.
-	self deny: (existsBlock value: testFile).
+	removeBlock value: {testFile} value: nil.
+	self deny: (existsBlock value: {testFile} value: nil).
 
 	"Remove directory"
-	rmdirBlock value: testDir.
-	self deny: (existsBlock value: testDir)
+	rmdirBlock value: {testDir} value: nil.
+	self deny: (existsBlock value: {testDir} value: nil)
 %
 
 category: 'Tests - Path Manipulation'
@@ -576,15 +576,15 @@ testPathJoin
 	joinBlock := path perform: #join env: 2.
 
 	paths := OrderedCollection with: '/usr' with: 'bin'.
-	result := joinBlock value: paths.
+	result := joinBlock value: {paths} value: nil.
 	self assert: result equals: '/usr/bin'.
 
 	paths := OrderedCollection with: '/usr/' with: 'bin'.
-	result := joinBlock value: paths.
+	result := joinBlock value: {paths} value: nil.
 	self assert: result equals: '/usr/bin'.
 
 	paths := OrderedCollection with: '/usr' with: '/bin'.
-	result := joinBlock value: paths.
+	result := joinBlock value: {paths} value: nil.
 	self assert: result equals: '/bin'
 %
 
@@ -599,11 +599,11 @@ testPathJoinMultiple
 	joinBlock := path perform: #join env: 2.
 
 	paths := OrderedCollection with: '/usr' with: 'local' with: 'bin'.
-	result := joinBlock value: paths.
+	result := joinBlock value: {paths} value: nil.
 	self assert: result equals: '/usr/local/bin'.
 
 	paths := OrderedCollection with: 'home' with: 'user' with: 'docs' with: 'file.txt'.
-	result := joinBlock value: paths.
+	result := joinBlock value: {paths} value: nil.
 	self assert: result equals: 'home/user/docs/file.txt'
 %
 
@@ -617,16 +617,16 @@ testPathBasename
 	path := o perform: #path env: 2.
 	basenameBlock := path perform: #basename env: 2.
 
-	result := basenameBlock value: '/usr/bin/python'.
+	result := basenameBlock value: {'/usr/bin/python'} value: nil.
 	self assert: result equals: 'python'.
 
-	result := basenameBlock value: '/usr/bin/'.
+	result := basenameBlock value: {'/usr/bin/'} value: nil.
 	self assert: result equals: 'bin'.
 
-	result := basenameBlock value: '/usr/'.
+	result := basenameBlock value: {'/usr/'} value: nil.
 	self assert: result equals: 'usr'.
 
-	result := basenameBlock value: 'python'.
+	result := basenameBlock value: {'python'} value: nil.
 	self assert: result equals: 'python'
 %
 
@@ -640,16 +640,16 @@ testPathDirname
 	path := o perform: #path env: 2.
 	dirnameBlock := path perform: #dirname env: 2.
 
-	result := dirnameBlock value: '/usr/bin/python'.
+	result := dirnameBlock value: {'/usr/bin/python'} value: nil.
 	self assert: result equals: '/usr/bin'.
 
-	result := dirnameBlock value: '/usr/bin/'.
+	result := dirnameBlock value: {'/usr/bin/'} value: nil.
 	self assert: result equals: '/usr'.
 
-	result := dirnameBlock value: 'python'.
+	result := dirnameBlock value: {'python'} value: nil.
 	self assert: result equals: '.'.
 
-	result := dirnameBlock value: '/'.
+	result := dirnameBlock value: {'/'} value: nil.
 	self assert: result equals: '/'
 %
 
@@ -663,16 +663,16 @@ testPathSplit
 	path := o perform: #path env: 2.
 	splitBlock := path perform: #split env: 2.
 
-	result := splitBlock value: '/usr/bin/python'.
+	result := splitBlock value: {'/usr/bin/python'} value: nil.
 	self assert: (result size) equals: 2.
 	self assert: (result at: 1) equals: '/usr/bin'.
 	self assert: (result at: 2) equals: 'python'.
 
-	result := splitBlock value: '/usr/bin/'.
+	result := splitBlock value: {'/usr/bin/'} value: nil.
 	self assert: (result at: 1) equals: '/usr/bin'.
 	self assert: (result at: 2) equals: ''.
 
-	result := splitBlock value: 'python'.
+	result := splitBlock value: {'python'} value: nil.
 	self assert: (result at: 1) equals: ''.
 	self assert: (result at: 2) equals: 'python'
 %
@@ -687,20 +687,20 @@ testPathSplitext
 	path := o perform: #path env: 2.
 	splitextBlock := path perform: #splitext env: 2.
 
-	result := splitextBlock value: 'file.txt'.
+	result := splitextBlock value: {'file.txt'} value: nil.
 	self assert: (result size) equals: 2.
 	self assert: (result at: 1) equals: 'file'.
 	self assert: (result at: 2) equals: '.txt'.
 
-	result := splitextBlock value: '/path/to/file.txt'.
+	result := splitextBlock value: {'/path/to/file.txt'} value: nil.
 	self assert: (result at: 1) equals: '/path/to/file'.
 	self assert: (result at: 2) equals: '.txt'.
 
-	result := splitextBlock value: 'file'.
+	result := splitextBlock value: {'file'} value: nil.
 	self assert: (result at: 1) equals: 'file'.
 	self assert: (result at: 2) equals: ''.
 
-	result := splitextBlock value: '.hidden'.
+	result := splitextBlock value: {'.hidden'} value: nil.
 	self assert: (result at: 1) equals: '.hidden'.
 	self assert: (result at: 2) equals: ''
 %
@@ -715,10 +715,10 @@ testPathIsabs
 	path := o perform: #path env: 2.
 	isabsBlock := path perform: #isabs env: 2.
 
-	self assert: (isabsBlock value: '/usr/bin').
-	self assert: (isabsBlock value: '/').
-	self deny: (isabsBlock value: 'usr/bin').
-	self deny: (isabsBlock value: 'file.txt')
+	self assert: (isabsBlock value: {'/usr/bin'} value: nil).
+	self assert: (isabsBlock value: {'/'} value: nil).
+	self deny: (isabsBlock value: {'usr/bin'} value: nil).
+	self deny: (isabsBlock value: {'file.txt'} value: nil)
 %
 
 category: 'Tests - Path Manipulation'
@@ -731,25 +731,25 @@ testPathNormpath
 	path := o perform: #path env: 2.
 	normpathBlock := path perform: #normpath env: 2.
 
-	result := normpathBlock value: '/usr/../usr/bin'.
+	result := normpathBlock value: {'/usr/../usr/bin'} value: nil.
 	self assert: result equals: '/usr/bin'.
 
-	result := normpathBlock value: '/usr/./bin'.
+	result := normpathBlock value: {'/usr/./bin'} value: nil.
 	self assert: result equals: '/usr/bin'.
 
-	result := normpathBlock value: 'usr/../bin'.
+	result := normpathBlock value: {'usr/../bin'} value: nil.
 	self assert: result equals: 'bin'.
 
-	result := normpathBlock value: 'usr/./bin'.
+	result := normpathBlock value: {'usr/./bin'} value: nil.
 	self assert: result equals: 'usr/bin'.
 
-	result := normpathBlock value: '/usr//bin'.
+	result := normpathBlock value: {'/usr//bin'} value: nil.
 	self assert: result equals: '/usr/bin'.
 
-	result := normpathBlock value: '..'.
+	result := normpathBlock value: {'..'} value: nil.
 	self assert: result equals: '..'.
 
-	result := normpathBlock value: '.'.
+	result := normpathBlock value: {'.'} value: nil.
 	self assert: result equals: '.'
 %
 
@@ -764,15 +764,15 @@ testPathAbspath
 	abspathBlock := path perform: #abspath env: 2.
 	isabsBlock := path perform: #isabs env: 2.
 	getcwdBlock := o perform: #getcwd env: 2.
-	cwd := getcwdBlock value.
+	cwd := getcwdBlock value: {} value: nil.
 
 	"Absolute path should remain absolute"
-	result := abspathBlock value: '/usr/bin'.
+	result := abspathBlock value: {'/usr/bin'} value: nil.
 	self assert: result equals: '/usr/bin'.
 
 	"Relative path should become absolute"
-	result := abspathBlock value: 'file.txt'.
-	self assert: (isabsBlock value: result).
+	result := abspathBlock value: {'file.txt'} value: nil.
+	self assert: (isabsBlock value: {result} value: nil).
 	self assert: (result endsWith: 'file.txt')
 %
 
@@ -787,10 +787,10 @@ testPathExists
 	existsBlock := path perform: #exists env: 2.
 
 	"Test with existing path"
-	self assert: (existsBlock value: '/tmp').
+	self assert: (existsBlock value: {'/tmp'} value: nil).
 
 	"Test with non-existing path"
-	self deny: (existsBlock value: '/tmp/grail_os_path_test_nonexistent_xyz123')
+	self deny: (existsBlock value: {'/tmp/grail_os_path_test_nonexistent_xyz123'} value: nil)
 %
 
 category: 'Tests - Path Manipulation'
@@ -808,19 +808,19 @@ testPathIsdir
 	testDir := '/tmp/grail_os_path_test_isdir'.
 
 	"Clean up if it exists"
-	(existsBlock value: testDir) ifTrue: [
-		rmdirBlock value: testDir
+		(existsBlock value: {testDir} value: nil) ifTrue: [
+			rmdirBlock value: {testDir} value: nil
 	].
 
 	"Create directory"
-	mkdirBlock value: testDir.
+	mkdirBlock value: {testDir} value: nil.
 
 	"Test isdir"
-	self assert: (isdirBlock value: testDir).
-	self deny: (isdirBlock value: '/tmp/grail_os_path_test_isdir_nonexistent').
+	self assert: (isdirBlock value: {testDir} value: nil).
+	self deny: (isdirBlock value: {'/tmp/grail_os_path_test_isdir_nonexistent'} value: nil).
 
 	"Clean up"
-	rmdirBlock value: testDir
+	rmdirBlock value: {testDir} value: nil
 %
 
 category: 'Tests - Path Manipulation'
@@ -837,8 +837,8 @@ testPathIsfile
 	testFile := '/tmp/grail_os_path_test_isfile'.
 
 	"Clean up if it exists"
-	(existsBlock value: testFile) ifTrue: [
-		removeBlock value: testFile
+	(existsBlock value: {testFile} value: nil) ifTrue: [
+		removeBlock value: {testFile} value: nil
 	].
 
 	"Create a test file"
@@ -847,14 +847,14 @@ testPathIsfile
 	file close.
 
 	"Test isfile"
-	self assert: (isfileBlock value: testFile).
-	self deny: (isfileBlock value: '/tmp/grail_os_path_test_isfile_nonexistent').
+	self assert: (isfileBlock value: {testFile} value: nil).
+	self deny: (isfileBlock value: {'/tmp/grail_os_path_test_isfile_nonexistent'} value: nil).
 
 	"Test that directory is not a file"
-	self deny: (isfileBlock value: '/tmp').
+	self deny: (isfileBlock value: {'/tmp'} value: nil).
 
 	"Clean up"
-	removeBlock value: testFile
+	removeBlock value: {testFile} value: nil
 %
 
 category: 'Tests - Path Manipulation'
@@ -868,15 +868,15 @@ testPathCommonprefix
 	commonprefixBlock := path perform: #commonprefix env: 2.
 
 	paths := OrderedCollection with: '/usr/lib' with: '/usr/lib/python3'.
-	result := commonprefixBlock value: paths.
+	result := commonprefixBlock value: {paths} value: nil.
 	self assert: result equals: '/usr/lib'.
 
 	paths := OrderedCollection with: '/usr/lib' with: '/usr/local/lib'.
-	result := commonprefixBlock value: paths.
+	result := commonprefixBlock value: {paths} value: nil.
 	self assert: result equals: '/usr/l'.
 
 	paths := OrderedCollection with: 'file1.txt' with: 'file2.txt'.
-	result := commonprefixBlock value: paths.
+	result := commonprefixBlock value: {paths} value: nil.
 	self assert: result equals: 'file'
 %
 
@@ -891,11 +891,11 @@ testPathCommonpath
 	commonpathBlock := path perform: #commonpath env: 2.
 
 	paths := OrderedCollection with: '/usr/lib/python3' with: '/usr/lib/python2'.
-	result := commonpathBlock value: paths.
+	result := commonpathBlock value: {paths} value: nil.
 	self assert: result equals: '/usr/lib'.
 
 	paths := OrderedCollection with: '/usr/lib/python3' with: '/usr/local/lib'.
-	result := commonpathBlock value: paths.
+	result := commonpathBlock value: {paths} value: nil.
 	self assert: result equals: '/usr'
 %
 
@@ -910,15 +910,15 @@ testPathJoinAll
 	joinBlock := path perform: #join env: 2.
 
 	paths := OrderedCollection with: '/usr' with: 'local' with: 'bin'.
-	result := joinBlock value: paths.
+	result := joinBlock value: {paths} value: nil.
 	self assert: result equals: '/usr/local/bin'.
 
 	paths := OrderedCollection with: 'home' with: 'user' with: 'docs'.
-	result := joinBlock value: paths.
+	result := joinBlock value: {paths} value: nil.
 	self assert: result equals: 'home/user/docs'.
 
 	paths := OrderedCollection with: '/usr/'.
-	result := joinBlock value: paths.
+	result := joinBlock value: {paths} value: nil.
 	self assert: result equals: '/usr/'
 %
 
@@ -940,20 +940,20 @@ testPathIntegration
 
 	"Join paths, then split"
 	paths := OrderedCollection with: '/usr' with: 'local'.
-	result := joinBlock value: paths.
-	result := splitBlock value: result.
+	result := joinBlock value: {paths} value: nil.
+	result := splitBlock value: {result} value: nil.
 	self assert: (result at: 1) equals: '/usr'.
 	self assert: (result at: 2) equals: 'local'.
 
 	"Get basename and dirname"
 	paths := OrderedCollection with: '/usr' with: 'bin/python'.
-	result := joinBlock value: paths.
-	self assert: (basenameBlock value: result) equals: 'python'.
-	self assert: (dirnameBlock value: result) equals: '/usr/bin'.
+	result := joinBlock value: {paths} value: nil.
+	self assert: (basenameBlock value: {result} value: nil) equals: 'python'.
+	self assert: (dirnameBlock value: {result} value: nil) equals: '/usr/bin'.
 
 	"Normalize and get absolute path"
-	result := normpathBlock value: 'usr/../bin/python'.
-	result := abspathBlock value: result.
-	self assert: (isabsBlock value: result)
+	result := normpathBlock value: {'usr/../bin/python'} value: nil.
+	result := abspathBlock value: {result} value: nil.
+	self assert: (isabsBlock value: {result} value: nil)
 %
 
