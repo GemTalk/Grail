@@ -2,13 +2,13 @@
 ! SyntaxWarningTestCase - Tests for Python SyntaxWarning
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-SyntaxWarningTestCase removeAllMethods: 2.
-SyntaxWarningTestCase class removeAllMethods: 2.
+SyntaxWarningTestCase removeAllMethods.
+SyntaxWarningTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-SyntaxWarning'
 method: SyntaxWarningTestCase

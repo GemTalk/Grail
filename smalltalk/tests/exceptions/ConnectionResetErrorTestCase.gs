@@ -2,13 +2,13 @@
 ! ConnectionResetErrorTestCase - Tests for Python ConnectionResetError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-ConnectionResetErrorTestCase removeAllMethods: 2.
-ConnectionResetErrorTestCase class removeAllMethods: 2.
+ConnectionResetErrorTestCase removeAllMethods.
+ConnectionResetErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-ConnectionResetError'
 method: ConnectionResetErrorTestCase

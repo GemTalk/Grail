@@ -9,8 +9,9 @@ dict_keyiterator removeAllMethods: 2.
 dict_keyiterator class removeAllMethods: 2.
 %
 
-! ------------------- Class methods for dict_keyiterator
 set compile_env: 2
+
+! ------------------- Class methods for dict_keyiterator
 
 category: 'Python-Instance Creation'
 classmethod: dict_keyiterator
@@ -19,9 +20,9 @@ ___on: aDict
 
 	| iter keysArray |
 	iter := self ___new___.
-	keysArray := Array ___new___.
+	keysArray := list ___new___.
 	aDict perform: #keysDo: env: 0 withArguments: {[:key |
-		keysArray ___add___: key
+		keysArray append: key
 	]}.
 	iter ___dict: aDict.
 	iter ___keys: keysArray.
@@ -84,4 +85,3 @@ __next__
 %
 
 set compile_env: 0
-

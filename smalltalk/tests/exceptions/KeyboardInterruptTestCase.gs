@@ -2,13 +2,13 @@
 ! KeyboardInterruptTestCase - Tests for Python KeyboardInterrupt
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-KeyboardInterruptTestCase removeAllMethods: 2.
-KeyboardInterruptTestCase class removeAllMethods: 2.
+KeyboardInterruptTestCase removeAllMethods.
+KeyboardInterruptTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-KeyboardInterrupt'
 method: KeyboardInterruptTestCase

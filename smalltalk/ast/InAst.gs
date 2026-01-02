@@ -1,6 +1,7 @@
 ﻿! ------------------- Remove existing behavior from InAst
 removeallmethods InAst
 removeallclassmethods InAst
+set compile_env: 0
 ! ------------------- Class methods for InAst
 ! ------------------- Instance methods for InAst
 category: 'other'

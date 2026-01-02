@@ -17,8 +17,9 @@ int removeAllMethods: 2.
 int class removeAllMethods: 2.
 %
 
-! ------------------- Class methods for int
 set compile_env: 2
+
+! ------------------- Class methods for int
 
 category: 'Python-Initialization'
 classmethod: int
@@ -136,7 +137,7 @@ from_bytes: bytes _: byteorder _: signed
 	| bytesArray result isBigEndian isSigned |
 	"Extract bytes - assuming bytes is a Python bytes object or similar"
 	bytesArray := bytes.
-	(bytesArray ___isKindOf___: Array) ifFalse: [
+	(bytesArray ___isKindOf___: tuple) ifFalse: [
 		self ___error___: 'TypeError: from_bytes() argument must be bytes-like'
 	].
 
@@ -178,7 +179,6 @@ from_bytes: bytes _: byteorder _: signed
 %
 
 ! ------------------- Instance methods for int
-set compile_env: 2
 
 category: 'Python-Initialization'
 method: int
@@ -311,7 +311,7 @@ __divmod__: other
 	| quot rem |
 	quot := self ___divideInteger___: other.
 	rem := self ___modulo___: other.
-	^ Array ___with___: quot with: rem
+	^ tuple ___with___: quot with: rem
 %
 
 category: 'Python-Arithmetic'
@@ -415,7 +415,7 @@ __rdivmod__: other
 	| quot rem |
 	quot := other ___divideInteger___: self.
 	rem := other ___modulo___: self.
-	^ Array ___with___: quot with: rem
+	^ tuple ___with___: quot with: rem
 %
 
 category: 'Python-Arithmetic - Reverse'
@@ -691,7 +691,7 @@ to_bytes: length _: byteorder _: signed
 	].
 
 	"Convert to bytes"
-	result := Array ___new___: numBytes.
+	result := tuple ___new___: numBytes.
 	1 ___to___: numBytes do: [:i |
 		| byteVal idx |
 		byteVal := (val ___bitAnd___: 16rFF).
@@ -711,7 +711,7 @@ as_integer_ratio
 	"Return a pair of integers whose ratio is exactly equal to the original int.
 	For integers, this is (self, 1)."
 
-	^ Array ___with___: self with: 1
+	^ tuple ___with___: self with: 1
 %
 
 category: 'Python-Integer Methods'
@@ -785,4 +785,3 @@ Base 0 means to interpret the base from the string as an integer literal.
 
 ! ------------------- Reset compile environment
 set compile_env: 0
-

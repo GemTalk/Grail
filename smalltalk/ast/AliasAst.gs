@@ -1,6 +1,7 @@
 ﻿! ------------------- Remove existing behavior from AliasAst
 removeallmethods AliasAst
 removeallclassmethods AliasAst
+set compile_env: 0
 ! ------------------- Class methods for AliasAst
 ! ------------------- Instance methods for AliasAst
 category: 'other'

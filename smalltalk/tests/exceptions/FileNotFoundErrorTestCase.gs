@@ -2,13 +2,13 @@
 ! FileNotFoundErrorTestCase - Tests for Python FileNotFoundError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-FileNotFoundErrorTestCase removeAllMethods: 2.
-FileNotFoundErrorTestCase class removeAllMethods: 2.
+FileNotFoundErrorTestCase removeAllMethods.
+FileNotFoundErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-FileNotFoundError'
 method: FileNotFoundErrorTestCase

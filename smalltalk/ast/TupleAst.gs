@@ -1,6 +1,7 @@
 ﻿! ------------------- Remove existing behavior from TupleAst
 removeallmethods TupleAst
 removeallclassmethods TupleAst
+set compile_env: 0
 ! ------------------- Class methods for TupleAst
 ! ------------------- Instance methods for TupleAst
 category: 'other'

@@ -11,11 +11,12 @@
 ! ------------------- Remove existing Python methods from builtins
 expectvalue /Metaclass3
 doit
-builtins removeAllMethods: 2.
-builtins class removeAllMethods: 2.
+builtins removeAllMethods.
+builtins class removeAllMethods.
 %
 
 set compile_env: 2
+
 ! ------------------- Class methods for builtins
 
 category: 'Python-Singleton'
@@ -32,7 +33,7 @@ instance
 	Creates it if it doesn't exist."
 	instance == nil ifTrue: [
 		instance := self perform: #basicNew env: 0.
-		instance perform: #initialize env: 2
+		instance initialize
 	].
 	^ instance
 %
@@ -44,24 +45,13 @@ clearInstance
 	instance := nil
 %
 
-set compile_env: 0
-
-category: 'Convenience Methods'
-classmethod: builtins
-___instance___
-	"Convenience method: self perform: #instance env: 2"
-	^ self perform: #instance env: 2
-%
-
-set compile_env: 2
-
 ! ------------------- Instance methods for builtins
 
 category: 'Python-Initialization'
 method: builtins
 initialize
 	"Initialize all module attributes with their default values"
-	self 
+	self
 		initialize_abs;
 		initialize_len;
 		initialize_type;
@@ -94,6 +84,7 @@ initialize
 		initialize_reversed;
 		initialize_enumerate;
 		initialize_zip;
+		initialize___import__;
 		yourself
 %
 
@@ -646,6 +637,22 @@ initialize_zip
 	]
 %
 
+category: 'Python-Initialization'
+method: builtins
+initialize___import__
+	"Import a module.
+	__import__(name, globals=None, locals=None, fromlist=(), level=0) -> module
+
+	This function is invoked by the import statement.
+	It delegates to importlib.__import__."
+	__import__ := [:positional :keywords |
+		| importlibInstance importFunc |
+		importlibInstance := importlib instance.
+		importFunc := importlibInstance __import__.
+		importFunc value: positional value: keywords
+	]
+%
+
 category: 'Python-Built-in Functions'
 method: builtins
 abs
@@ -1093,6 +1100,23 @@ zip: aBlock
 	"Set the zip function (for monkey patching)"
 	zip := aBlock
 %
+
+category: 'Python-Built-in Functions'
+method: builtins
+__import__
+	"Return the __import__ function"
+	^ __import__
+%
+
+category: 'Python-Built-in Functions'
+method: builtins
+__import__: aBlock
+	"Set the __import__ function (for monkey patching)"
+	__import__ := aBlock
+%
+
+! reset compiler environment
+
 set compile_env: 0
 
 category: 'Python-Utility'
@@ -1100,15 +1124,15 @@ method: builtins
 asSymbolDictionary
 	"Return a SymbolDictionary populated with keys and values equivalent to the instance variables in builtins.
 	Each instance variable name (as a Symbol) is a key, and its value (the block/function) is the value."
-	| dict varNames |
-	dict := SymbolDictionary new.
+	| dict varNames superclassOffset |
+	dict := SymbolDictionary ___new___.
 	varNames := self class instVarNames.
+	superclassOffset := self class superclass instSize.
 	"Populate dictionary with instance variable names and values"
 	1 to: varNames size do: [:i |
 		dict 
 			at: (varNames at: i) 
-			put: (self instVarAt: i).
+			put: (self instVarAt: superclassOffset + i).
 	].
 	^ dict
 %
-

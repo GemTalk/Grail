@@ -2,13 +2,13 @@
 ! NotADirectoryErrorTestCase - Tests for Python NotADirectoryError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-NotADirectoryErrorTestCase removeAllMethods: 2.
-NotADirectoryErrorTestCase class removeAllMethods: 2.
+NotADirectoryErrorTestCase removeAllMethods.
+NotADirectoryErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-NotADirectoryError'
 method: NotADirectoryErrorTestCase

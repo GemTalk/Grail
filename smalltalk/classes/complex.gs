@@ -5,17 +5,16 @@
 ! Complex numbers have a real and imaginary part, both stored as floats.
 ! ===============================================================================
 
-set compile_env: 0
-
 ! ------------------- Remove existing Python methods from complex
-removeallmethods complex
-removeallclassmethods complex
+expectvalue /Metaclass3
+doit
+complex removeAllMethods: 2.
+complex class removeAllMethods: 2.
+%
 
-! ------------------- Smalltalk-side class methods for complex
-set compile_env: 0
+set compile_env: 2
 
 ! ------------------- Python class methods for complex
-set compile_env: 2
 
 category: 'Python-Initialization'
 classmethod: complex
@@ -44,7 +43,6 @@ from_number: n
 %
 
 ! ------------------- Python instance methods for complex
-set compile_env: 2
 
 category: 'Python-Initialization'
 method: complex

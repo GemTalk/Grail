@@ -2,13 +2,13 @@
 ! SystemExitTestCase - Tests for Python SystemExit
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-SystemExitTestCase removeAllMethods: 2.
-SystemExitTestCase class removeAllMethods: 2.
+SystemExitTestCase removeAllMethods.
+SystemExitTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-SystemExit'
 method: SystemExitTestCase

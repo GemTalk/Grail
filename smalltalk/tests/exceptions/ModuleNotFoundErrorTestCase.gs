@@ -2,13 +2,13 @@
 ! ModuleNotFoundErrorTestCase - Tests for Python ModuleNotFoundError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-ModuleNotFoundErrorTestCase removeAllMethods: 2.
-ModuleNotFoundErrorTestCase class removeAllMethods: 2.
+ModuleNotFoundErrorTestCase removeAllMethods.
+ModuleNotFoundErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-ModuleNotFoundError'
 method: ModuleNotFoundErrorTestCase

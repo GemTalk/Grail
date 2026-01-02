@@ -2,13 +2,13 @@
 ! SyntaxErrorTestCase - Tests for Python SyntaxError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-SyntaxErrorTestCase removeAllMethods: 2.
-SyntaxErrorTestCase class removeAllMethods: 2.
+SyntaxErrorTestCase removeAllMethods.
+SyntaxErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-SyntaxError'
 method: SyntaxErrorTestCase

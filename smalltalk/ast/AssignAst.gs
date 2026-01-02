@@ -1,6 +1,7 @@
 ﻿! ------------------- Remove existing behavior from AssignAst
 removeallmethods AssignAst
 removeallclassmethods AssignAst
+set compile_env: 0
 ! ------------------- Class methods for AssignAst
 ! ------------------- Instance methods for AssignAst
 category: 'other'

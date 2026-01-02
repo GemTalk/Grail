@@ -24,8 +24,8 @@ testSetCreation
 	s2 ___add___: 2.
 	s2 ___add___: 3.
 	
-	self assert: (s1 ___len___) equals: 0.
-	self assert: (s2 ___len___) equals: 3
+	self assert: s1 size equals: 0.
+	self assert: s2 size equals: 3
 %
 
 category: 'Tests - Creation'
@@ -41,7 +41,7 @@ testSetUniqueness
 	s ___add___: 2.
 	s ___add___: 2.
 	
-	self assert: (s ___len___) equals: 2
+	self assert: s size equals: 2
 %
 
 category: 'Tests - Iteration'
@@ -67,7 +67,7 @@ testSetIteration
 		] on: StopIteration do: [:ex | ^ nil]
 	].
 	
-	self assert: (items ___len___) equals: 3
+	self assert: items size equals: 3
 %
 
 category: 'Tests - Mutation'
@@ -79,15 +79,15 @@ testSetAdd
 	s := set new.
 	
 	s ___add___: 1.
-	self assert: (s ___len___) equals: 1.
+	self assert: s size equals: 1.
 	self assert: (s ___contains___: 1).
 	
 	s ___add___: 2.
-	self assert: (s ___len___) equals: 2.
+	self assert: s size equals: 2.
 	
 	"Adding duplicate should not increase size"
 	s ___add___: 1.
-	self assert: (s ___len___) equals: 2
+	self assert: s size equals: 2
 %
 
 category: 'Tests - Mutation'
@@ -102,7 +102,7 @@ testSetRemove
 	s ___add___: 3.
 	
 	s perform: #remove: env: 2 withArguments: {2}.
-	self assert: (s ___len___) equals: 2.
+	self assert: s size equals: 2.
 	self deny: (s ___contains___: 2).
 	
 	"Removing non-existent element should raise KeyError"
@@ -120,11 +120,11 @@ testSetDiscard
 	s ___add___: 2.
 	
 	s perform: #discard: env: 2 withArguments: {2}.
-	self assert: (s ___len___) equals: 1.
+	self assert: s size equals: 1.
 	
 	"Discarding non-existent element should not raise error"
 	s perform: #discard: env: 2 withArguments: {99}.
-	self assert: (s ___len___) equals: 1
+	self assert: s size equals: 1
 %
 
 category: 'Tests - Mutation'
@@ -138,11 +138,11 @@ testSetPop
 	s ___add___: 2.
 	
 	item := s perform: #pop env: 2.
-	self assert: (s ___len___) equals: 1.
+	self assert: s size equals: 1.
 	self assert: ((item = 1) or: [item = 2]).
 	
 	s perform: #pop env: 2.
-	self assert: (s ___len___) equals: 0.
+	self assert: s size equals: 0.
 	
 	"Popping from empty set should raise KeyError"
 	self should: [s perform: #pop env: 2] raise: KeyError
@@ -160,7 +160,7 @@ testSetClear
 	s ___add___: 3.
 	
 	s perform: #clear env: 2.
-	self assert: (s ___len___) equals: 0
+	self assert: s size equals: 0
 %
 
 category: 'Tests - Update Methods'
@@ -180,7 +180,7 @@ testSetUpdate
 
 	s1 perform: #update: env: 2 withArguments: {s2}.
 
-	self assert: (s1 ___len___) equals: 4.
+	self assert: s1 size equals: 4.
 	self assert: (s1 ___contains___: 1).
 	self assert: (s1 ___contains___: 2).
 	self assert: (s1 ___contains___: 3).
@@ -205,7 +205,7 @@ testSetIntersectionUpdate
 
 	s1 perform: #intersection_update: env: 2 withArguments: {s2}.
 
-	self assert: (s1 ___len___) equals: 2.
+	self assert: s1 size equals: 2.
 	self assert: (s1 ___contains___: 2).
 	self assert: (s1 ___contains___: 3).
 	self deny: (s1 ___contains___: 1)
@@ -228,7 +228,7 @@ testSetDifferenceUpdate
 
 	s1 perform: #difference_update: env: 2 withArguments: {s2}.
 
-	self assert: (s1 ___len___) equals: 2.
+	self assert: s1 size equals: 2.
 	self assert: (s1 ___contains___: 1).
 	self assert: (s1 ___contains___: 3).
 	self deny: (s1 ___contains___: 2)
@@ -252,7 +252,7 @@ testSetSymmetricDifferenceUpdate
 
 	s1 perform: #symmetric_difference_update: env: 2 withArguments: {s2}.
 
-	self assert: (s1 ___len___) equals: 2.
+	self assert: s1 size equals: 2.
 	self assert: (s1 ___contains___: 1).
 	self assert: (s1 ___contains___: 4).
 	self deny: (s1 ___contains___: 2).
@@ -278,7 +278,7 @@ testSetInPlaceOperators
 
 	result := s1 perform: #__iand__: env: 2 withArguments: {s2}.
 	self assert: result == s1.
-	self assert: (s1 ___len___) equals: 2.
+	self assert: s1 size equals: 2.
 
 	"Test |= (union)"
 	s1 := set new.
@@ -289,7 +289,7 @@ testSetInPlaceOperators
 
 	result := s1 perform: #__ior__: env: 2 withArguments: {s2}.
 	self assert: result == s1.
-	self assert: (s1 ___len___) equals: 2.
+	self assert: s1 size equals: 2.
 
 	"Test -= (difference)"
 	s1 := set new.
@@ -301,7 +301,7 @@ testSetInPlaceOperators
 
 	result := s1 perform: #__isub__: env: 2 withArguments: {s2}.
 	self assert: result == s1.
-	self assert: (s1 ___len___) equals: 1.
+	self assert: s1 size equals: 1.
 
 	"Test ^= (symmetric difference)"
 	s1 := set new.
@@ -314,7 +314,7 @@ testSetInPlaceOperators
 
 	result := s1 perform: #__ixor__: env: 2 withArguments: {s2}.
 	self assert: result == s1.
-	self assert: (s1 ___len___) equals: 2
+	self assert: s1 size equals: 2
 %
 
 category: 'Tests - Hashing'

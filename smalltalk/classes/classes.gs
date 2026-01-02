@@ -25,44 +25,29 @@ set compile_env: 0
 ! These classes already exist in GemStone; we just add them to the Python dictionary.
 ! ===============================================================================
 
-! ------- Add existing GemStone globals as Python objects
+! ------- Add existing GemStone globals and classes as Python objects and classes
 run
 | pythonDict |
 pythonDict := System myUserProfile symbolList objectNamed: #'Python'.
 pythonDict
   "Python names that map to existing GemStone globals"
-	at: #'True'   put: true;
-	at: #'False'  put: false;
-	at: #'None'	  put: nil;
-	yourself.
-%
-
-! ===============================================================================
-! Python Type Mappings - GemStone Base Classes (as DataCurator)
-! ===============================================================================
-! Map Python type names to existing GemStone Smalltalk classes.
-! These classes already exist in GemStone; we just add them to the Python dictionary.
-! ===============================================================================
-
-! ------- Add existing GemStone classes as Python types
-run
-| pythonDict |
-pythonDict := System myUserProfile symbolList objectNamed: #'Python'.
-pythonDict
+	at: #'True'                       put: true;
+	at: #'False'                      put: false;
+	at: #'None'	                      put: nil;
   "Python names that map to existing GemStone classes"
-	at: #'bool'   put: Boolean;
+	at: #'bool'                       put: Boolean;
 	at: #'builtin_function_or_method' put: GsNMethod;
-	at: #'bytes'  put: ByteArray;
-	at: #'Decimal' put: ScaledDecimal;
-	at: #'dict'   put: Dictionary;
-	at: #'float'  put: Float;
-	at: #'frozenset' put: Set;
-	at: #'int'    put: Integer;
-	at: #'list'   put: OrderedCollection;
-	at: #'object' put: Object;
-	at: #'range'  put: Interval;
-	at: #'str'    put: Unicode7;
-	at: #'tuple'  put: InvariantArray;
+	at: #'bytes'                      put: ByteArray;
+	at: #'Decimal'                    put: ScaledDecimal;
+	at: #'dict'                       put: Dictionary;
+	at: #'float'                      put: Float;
+	at: #'frozenset'                  put: Set;
+	at: #'int'                        put: Integer;
+	at: #'list'                       put: OrderedCollection;
+	at: #'object'                     put: Object;
+	at: #'range'                      put: Interval;
+	at: #'str'                        put: Unicode7;
+	at: #'tuple'                      put: InvariantArray;
 	yourself.
 %
 
@@ -1377,12 +1362,39 @@ expectvalue /Class
 doit
 complex category: 'Numbers'
 %
+	
+! ------- module class (Python 'module' type)
+expectvalue /Class
+doit
+object subclass: 'module'
+	  instVarNames: #('__name__' '__package__' '__loader__' '__spec__' '__doc__')
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+expectvalue /Class
+doit
+module comment:
+'Python module type.
+
+This is the type of all module objects (e.g., sys, math, os).
+It represents Python modules as first-class objects. Concrete
+modules like sys, math, and importlib are implemented as
+singleton classes that conceptually have this type.
+'
+%
+expectvalue /Class
+doit
+module category: 'Modules'
+%
 
 ! ------- builtins class (Python 'builtins' module)
 expectvalue /Class
 doit
-object subclass: 'builtins'
-  instVarNames: #('abs' 'len' 'type' 'repr' 'str' 'hash' 'hex' 'oct' 'bin' 'chr' 'ord' 'min' 'max' 'sum' 'all' 'any' 'isinstance' 'callable' 'dir' 'id' 'pow' 'powWithMod' 'round' 'roundWithDigits' 'divmod' 'print' 'input' 'inputWithPrompt' 'sorted' 'reversed' 'enumerate' 'zip')
+module subclass: 'builtins'
+  instVarNames: #('abs' 'len' 'type' 'repr' 'str' 'hash' 'hex' 'oct' 'bin' 'chr' 'ord' 'min' 'max' 'sum' 'all' 'any' 'isinstance' 'callable' 'dir' 'id' 'pow' 'powWithMod' 'round' 'roundWithDigits' 'divmod' 'print' 'input' 'inputWithPrompt' 'sorted' 'reversed' 'enumerate' 'zip' '__import__')
   classVars: #()
   classInstVars: #('instance')
   poolDictionaries: #()
@@ -1402,13 +1414,13 @@ See https://docs.python.org/3/library/functions.html for the complete list.
 %
 expectvalue /Class
 doit
-builtins category: 'Builtins'
+builtins category: 'Modules'
 %
 
 ! ------- math class (Python 'math' module)
 expectvalue /Class
 doit
-object subclass: 'math'
+module subclass: 'math'
   instVarNames: #('pi' 'e' 'tau' 'inf' 'nan' 'sqrt' 'pow' 'exp' 'log' 'logWithBase' 'log10' 'log2' 'sin' 'cos' 'tan' 'asin' 'acos' 'atan' 'atan2' 'sinh' 'cosh' 'tanh' 'asinh' 'acosh' 'atanh' 'ceil' 'floor' 'trunc' 'factorial' 'gcd' 'lcm' 'fabs' 'isnan' 'isinf' 'isfinite' 'degrees' 'radians')
   classVars: #()
   classInstVars: #('instance')
@@ -1429,13 +1441,13 @@ See https://docs.python.org/3/library/math.html for the complete list.
 %
 expectvalue /Class
 doit
-math category: 'Math'
+math category: 'Modules'
 %
 
 ! ------- cmath class (Python 'cmath' module)
 expectvalue /Class
 doit
-object subclass: 'cmath'
+module subclass: 'cmath'
   instVarNames: #('pi' 'e' 'tau' 'inf' 'infj' 'nan' 'nanj' 'sin' 'cos' 'tan' 'sinh' 'cosh' 'tanh' 'exp' 'log' 'log10' 'sqrt' 'phase' 'polar' 'rect' 'isnan' 'isinf' 'isfinite')
   classVars: #()
   classInstVars: #('instance')
@@ -1456,13 +1468,13 @@ See https://docs.python.org/3/library/cmath.html for the complete list.
 %
 expectvalue /Class
 doit
-cmath category: 'Math'
+cmath category: 'Modules'
 %
 
 ! ------- os class (Python 'os' module)
 expectvalue /Class
 doit
-object subclass: 'os'
+module subclass: 'os'
   instVarNames: #('getcwd' 'chdir' 'listdir' 'mkdir' 'mkdirWithMode' 'makedirs' 'remove' 'rmdir' 'rename' 'exists' 'isdir' 'isfile' 'stat' 'lstat' 'system' 'getenv' 'getenvWithDefault' 'putenv' 'sep' 'pathsep' 'linesep' 'path')
   classVars: #()
   classInstVars: #('instance')
@@ -1483,13 +1495,13 @@ See https://docs.python.org/3/library/os.html for the complete list.
 %
 expectvalue /Class
 doit
-os category: 'Operating System'
+os category: 'Modules'
 %
 
 ! ------- os_path class (Python 'os.path' module)
 expectvalue /Class
 doit
-object subclass: 'os_path'
+module subclass: 'os_path'
   instVarNames: #('join' 'basename' 'dirname' 'split' 'splitext' 'isabs' 'normpath' 'abspath' 'exists' 'isdir' 'isfile' 'commonpath' 'commonprefix')
   classVars: #()
   classInstVars: #('instance')
@@ -1510,9 +1522,88 @@ See https://docs.python.org/3/library/os.path.html for the complete list.
 %
 expectvalue /Class
 doit
-os_path category: 'Operating System'
+os_path category: 'Modules'
 %
 
+! ------- sys class (Python 'sys' module)
+expectvalue /Class
+doit
+module subclass: 'sys'
+  instVarNames: #('argv' 'base_exec_prefix' 'base_prefix' 'byteorder' 'builtin_module_names' 'copyright' 'exec_prefix' 'executable' 'exit' 'flags' 'float_info' 'float_repr_style' 'getdefaultencoding' 'getfilesystemencoding' 'getfilesystemencodeerrors' 'getrecursionlimit' 'getsizeof' 'getrefcount' 'hash_info' 'hexversion' 'implementation' 'int_info' 'intern' 'maxsize' 'maxunicode' 'modules' 'path' 'path_hooks' 'path_importer_cache' 'platform' 'platlibdir' 'prefix' 'ps1' 'ps2' 'setrecursionlimit' 'stdin' 'stdout' 'stderr' 'stdlib_module_names' 'thread_info' 'version' 'version_info' 'api_version' 'warnoptions' 'exc_info' 'exception' 'excepthook' 'displayhook' 'breakpointhook' 'audit' 'addaudithook' 'settrace' 'setprofile' 'gettrace' 'getprofile' 'call_tracing' 'is_finalizing' 'getallocatedblocks' 'get_int_max_str_digits' 'set_int_max_str_digits' 'unraisablehook' '__breakpointhook__' '__displayhook__' '__excepthook__' '__unraisablehook__' '__stdin__' '__stdout__' '__stderr__' 'meta_path' 'orig_argv' 'tracebacklimit' 'dont_write_bytecode' 'pycache_prefix')
+  classVars: #()
+  classInstVars: #('instance' 'modules')
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+expectvalue /Class
+doit
+sys comment:
+'Python sys module.
+
+This class provides access to some variables used or maintained by the
+interpreter and to functions that interact strongly with the interpreter.
+
+Key attributes:
+- argv: Command line arguments
+- path: Module search path
+- modules: Dictionary of loaded modules
+- stdin/stdout/stderr: Standard I/O streams
+- version/version_info: Python version information
+- platform: Platform identifier
+- exit(): Exit the interpreter
+- exc_info(): Current exception information
+
+See https://docs.python.org/3/library/sys.html for the complete list.
+'
+%
+expectvalue /Class
+doit
+sys category: 'Modules'
+%
+
+! ------- importlib class (Python 'importlib' module)
+expectvalue /Class
+doit
+module subclass: 'importlib'
+  instVarNames: #('import_module' 'reload' 'invalidate_caches' '__import__')
+  classVars: #()
+  classInstVars: #('instance' 'pprintast' 'grailDir')
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+expectvalue /Class
+doit
+importlib comment:
+'Python importlib module.
+
+This class provides the implementation of the import statement.
+It enables programmatic importing of modules.
+
+Key functions:
+- import_module(name, package=None): Import a module by name
+- reload(module): Reload a previously imported module
+- invalidate_caches(): Invalidate finder caches
+- __import__(name, globals, locals, fromlist, level): Low-level import function
+
+Class methods for loading modules from files:
+- pprintast: / pprintast - Get/set the path to pprintast executable
+- astStringForPath: - Generate AST text from a Python file
+- astStringForSource: - Generate AST text from Python source code
+- astForPath: - Create a ModuleAst from a Python file
+- astForSource: - Create a ModuleAst from Python source
+- runPath: - Execute a Python file as __main__
+
+The module registry is maintained in sys.modules (accessed via sys class>>modules).
+
+See https://docs.python.org/3/library/importlib.html for documentation.
+'
+%
+expectvalue /Class
+doit
+importlib category: 'Modules'
+%
 ! ------- iterator class (Python base iterator type)
 expectvalue /Class
 doit
@@ -1795,11 +1886,14 @@ input smalltalk/classes/dict_itemiterator.gs
 input smalltalk/classes/dict_keyiterator.gs
 input smalltalk/classes/dict_valueiterator.gs
 input smalltalk/classes/Exception.gs
+input smalltalk/classes/importlib.gs
+input smalltalk/classes/module.gs
 input smalltalk/classes/iterator.gs
 input smalltalk/classes/list_iterator.gs
 input smalltalk/classes/math.gs
 input smalltalk/classes/os.gs
 input smalltalk/classes/os_path.gs
+input smalltalk/classes/sys.gs
 input smalltalk/classes/range_iterator.gs
 input smalltalk/classes/set_iterator.gs
 input smalltalk/classes/str_iterator.gs
@@ -1869,6 +1963,3 @@ commit
 logout
 set user DataCurator pass swordfish
 login
-
-! ------------------- Reset compile environment
-set compile_env: 0

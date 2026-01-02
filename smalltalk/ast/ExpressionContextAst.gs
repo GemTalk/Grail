@@ -1,6 +1,7 @@
 ﻿! ------------------- Remove existing behavior from ExpressionContextAst
 removeallmethods ExpressionContextAst
 removeallclassmethods ExpressionContextAst
+set compile_env: 0
 ! ------------------- Class methods for ExpressionContextAst
 category: 'other'
 classmethod: ExpressionContextAst

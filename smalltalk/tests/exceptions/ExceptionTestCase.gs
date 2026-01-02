@@ -2,13 +2,13 @@
 ! ExceptionTestCase - Tests for Python Exception
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-ExceptionTestCase removeAllMethods: 2.
-ExceptionTestCase class removeAllMethods: 2.
+ExceptionTestCase removeAllMethods.
+ExceptionTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-Exception'
 method: ExceptionTestCase

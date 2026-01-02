@@ -1,6 +1,7 @@
 ﻿! ------------------- Remove existing behavior from BlockAst
 removeallmethods BlockAst
 removeallclassmethods BlockAst
+set compile_env: 0
 ! ------------------- Class methods for BlockAst
 ! ------------------- Instance methods for BlockAst
 category: 'other'

@@ -21,8 +21,9 @@ bytearray removeAllMethods: 2.
 bytearray class removeAllMethods: 2.
 %
 
-! ------------------- Class methods for bytearray
 set compile_env: 2
+
+! ------------------- Class methods for bytearray
 
 category: 'Python-Constructors'
 classmethod: bytearray
@@ -65,8 +66,8 @@ __new__: cls _: source
 	].
 
 	"If source is a list, tuple, or array, convert elements to bytes"
-	((sourceClass == OrderedCollection) or: [
-		(sourceClass == InvariantArray) or: [
+	((sourceClass == list) or: [
+		(sourceClass == tuple) or: [
 			sourceClass == Array
 		]
 	]) ifTrue: [
@@ -131,7 +132,7 @@ __new__: cls _: source _: encoding
 	(encodingStr ___eq___: 'ascii') ifTrue: [
 		| ba size |
 		size := source ___size___.
-		ba := cls ___new___: size.
+		ba := cls __new__: cls _: size.
 		1 ___to___: size do: [:i |
 			| char codePoint |
 			char := source ___at___: i.
@@ -150,7 +151,7 @@ __new__: cls _: source _: encoding
 	]) ifTrue: [
 		| utf8Bytes |
 		utf8Bytes := source perform: #encodeAsUTF8 env: 0.
-		result := cls ___new___: (utf8Bytes ___size___).
+		result := cls __new__: (utf8Bytes ___size___).
 		1 ___to___: utf8Bytes ___size___ do: [:i |
 			result ___at___: i put: (utf8Bytes ___at___: i)
 		].
@@ -308,14 +309,14 @@ extend: iterable
 		1 ___to___: size do: [:i |
 			| byte |
 			byte := iterable ___at___: i.
-			self ___add___: byte
+			self append: byte
 		].
 		^ nil
 	].
 
 	"Handle list or tuple"
-	((iterClass ___eq___: OrderedCollection) or: [
-		iterClass ___eq___: InvariantArray
+	((iterClass ___eq___: list) or: [
+		iterClass ___eq___: tuple
 	]) ifTrue: [
 		size := iterable ___size___.
 		1 ___to___: size do: [:i |
@@ -327,7 +328,7 @@ extend: iterable
 			]) ifTrue: [
 				ValueError ___signal___: 'byte must be in range(0, 256)'
 			].
-			self ___add___: val
+			self append: val
 		].
 		^ nil
 	].
@@ -538,4 +539,3 @@ __imul__: count
 %
 
 set compile_env: 0
-

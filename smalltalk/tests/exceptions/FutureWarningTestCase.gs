@@ -2,13 +2,13 @@
 ! FutureWarningTestCase - Tests for Python FutureWarning
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-FutureWarningTestCase removeAllMethods: 2.
-FutureWarningTestCase class removeAllMethods: 2.
+FutureWarningTestCase removeAllMethods.
+FutureWarningTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-FutureWarning'
 method: FutureWarningTestCase

@@ -13,6 +13,7 @@ cmath class removeAllMethods: 2.
 %
 
 set compile_env: 2
+
 ! ------------------- Class methods for cmath
 
 category: 'Python-Singleton'
@@ -29,7 +30,7 @@ instance
 	Creates it if it doesn't exist."
 	instance == nil ifTrue: [
 		instance := self perform: #basicNew env: 0.
-		instance perform: #initialize env: 2
+		instance initialize
 	].
 	^ instance
 %
@@ -334,7 +335,7 @@ initialize_polar
 		"Calculate argument"
 		theta := imag perform: #arcTan2: env: 0 withArguments: {real}.
 
-		tuple ___withAll___: (InvariantArray ___with___: r with: theta)
+		tuple ___withAll___: (tuple ___with___: r with: theta)
 	]
 %
 

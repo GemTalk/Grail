@@ -2,13 +2,13 @@
 ! PermissionErrorTestCase - Tests for Python PermissionError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-PermissionErrorTestCase removeAllMethods: 2.
-PermissionErrorTestCase class removeAllMethods: 2.
+PermissionErrorTestCase removeAllMethods.
+PermissionErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-PermissionError'
 method: PermissionErrorTestCase

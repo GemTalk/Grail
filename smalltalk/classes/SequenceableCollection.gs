@@ -15,8 +15,9 @@ SequenceableCollection removeAllMethods: 2.
 SequenceableCollection class removeAllMethods: 2.
 %
 
-! ------------------- Instance methods for SequenceableCollection
 set compile_env: 2
+
+! ------------------- Instance methods for SequenceableCollection
 
 category: 'Python-Sequence Protocol'
 method: SequenceableCollection
@@ -58,7 +59,7 @@ method: SequenceableCollection
 __contains__: item
 	"Return True if item is in the sequence, False otherwise."
 
-	^ self perform: #includes: env: 0 withArguments: {item}
+	^ self ___includes___: item
 %
 
 category: 'Python-Sequence Protocol'
@@ -229,5 +230,3 @@ __doc__
 
 ! ------------------- Reset compile environment
 set compile_env: 0
-
-

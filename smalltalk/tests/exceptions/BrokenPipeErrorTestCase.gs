@@ -2,13 +2,13 @@
 ! BrokenPipeErrorTestCase - Tests for Python BrokenPipeError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-BrokenPipeErrorTestCase removeAllMethods: 2.
-BrokenPipeErrorTestCase class removeAllMethods: 2.
+BrokenPipeErrorTestCase removeAllMethods.
+BrokenPipeErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-BrokenPipeError'
 method: BrokenPipeErrorTestCase

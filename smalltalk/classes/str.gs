@@ -16,8 +16,9 @@ str removeAllMethods: 2.
 str class removeAllMethods: 2.
 %
 
-! ------------------- Class methods for str
 set compile_env: 2
+
+! ------------------- Class methods for str
 
 category: 'Python-Initialization'
 classmethod: str
@@ -48,7 +49,6 @@ __new__: obj
 %
 
 ! ------------------- Instance methods for str
-set compile_env: 2
 
 category: 'Python-Initialization'
 method: str
@@ -798,12 +798,12 @@ partition: sep
 	| index before after |
 	index := self ___findString___: sep startingAt: 1.
 	(index ___eq___: 0) ifTrue: [
-		^ Array ___with___: self with: '' with: ''
+		^ tuple ___with___: self with: '' with: ''
 	].
 
 	before := self ___copyFrom___: 1 to: (index ___minus___: 1).
 	after := self ___copyFrom___: (index ___plus___: sep ___size___) to: self ___size___.
-	^ Array ___with___: before with: sep with: after
+	^ tuple ___with___: before with: sep with: after
 %
 
 category: 'Python-String Methods'
@@ -821,12 +821,12 @@ rpartition: sep
 	].
 
 	(lastIndex ___eq___: 0) ifTrue: [
-		^ Array perform: #with:with:with: env: 0 withArguments: { ''. ''. self }
+		^ tuple perform: #with:with:with: env: 0 withArguments: { ''. ''. self }
 	].
 
 	before := self ___copyFrom___: 1 to: (lastIndex ___minus___: 1).
 	after := self ___copyFrom___: (lastIndex ___plus___: sep ___size___) to: self ___size___.
-	^ Array ___with___: before with: sep with: after
+	^ tuple ___with___: before with: sep with: after
 %
 
 category: 'Python-String Methods'
@@ -922,5 +922,3 @@ __iter__
 
 ! ------------------- Reset compile environment to Smalltalk
 set compile_env: 0
-
-

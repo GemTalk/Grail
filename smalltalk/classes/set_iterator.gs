@@ -18,8 +18,9 @@ set_iterator removeAllMethods: 2.
 set_iterator class removeAllMethods: 2.
 %
 
-! ------------------- Class methods for set_iterator
 set compile_env: 2
+
+! ------------------- Class methods for set_iterator
 
 category: 'Python-Instance Creation'
 classmethod: set_iterator
@@ -31,9 +32,9 @@ ___on: aSet
 	iter := self ___new___.
 	
 	"Convert set to array for iteration"
-	elementsArray := Array ___new___.
+	elementsArray := list ___new___.
 	aSet ___do___: [:each |
-		elementsArray ___add___: each
+		elementsArray append: each
 	].
 
 	iter ___collection: aSet.
@@ -104,4 +105,3 @@ __repr__
 %
 
 set compile_env: 0
-

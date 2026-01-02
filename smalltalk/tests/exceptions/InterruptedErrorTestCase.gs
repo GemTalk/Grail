@@ -2,13 +2,13 @@
 ! InterruptedErrorTestCase - Tests for Python InterruptedError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-InterruptedErrorTestCase removeAllMethods: 2.
-InterruptedErrorTestCase class removeAllMethods: 2.
+InterruptedErrorTestCase removeAllMethods.
+InterruptedErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-InterruptedError'
 method: InterruptedErrorTestCase

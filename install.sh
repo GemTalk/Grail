@@ -1,10 +1,5 @@
 #!/bin/bash
 
-echo "This will reload your GemStone environment."
-echo "Make sure you have saved all your edits!"
-read -n 1 -s -r -p "Press any key to continue"
-echo
-echo
 if [ ! -f .setenv ]; then
     cp setenv .setenv
 fi
@@ -31,9 +26,14 @@ else
     PPRINTAST_PATH=$(which pprintast)
 fi
 
-# Get the absolute path
+# Get the absolute path to pprintast
 PPRINTAST_ABSOLUTE=$(cd "$(dirname "$PPRINTAST_PATH")" && pwd)/$(basename "$PPRINTAST_PATH")
 echo "Using pprintast at: $PPRINTAST_ABSOLUTE"
+
+# Absolute path to the Grail project directory (this script's directory)
+GRAIL_DIR=$(cd "$(dirname "$0")" && pwd)
+echo "Grail directory: $GRAIL_DIR"
+
 topaz -lq << EOF
 errorCount
 output push install.out only
@@ -42,7 +42,7 @@ iferr 2 output pop
 iferr 3 stk
 iferr 4 abort
 iferr 5 logout
-iferr 6 exit
+iferr 6 exit 1
 fileformat utf8
 set user SystemUser pass swordfish
 login
@@ -54,11 +54,12 @@ set user DataCurator pass swordfish
 login
 input smalltalk/install.gs
 run
-ModuleAst pprintast: '$PPRINTAST_ABSOLUTE'.
+importlib pprintast: '$PPRINTAST_ABSOLUTE'.
+importlib grailDir: '$GRAIL_DIR'.
 %
 output pop
 errorCount
 commit
 logout
-exit
+exit 0
 EOF

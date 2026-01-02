@@ -18,8 +18,9 @@ Dictionary removeAllMethods: 2.
 Dictionary class removeAllMethods: 2.
 %
 
-! ------------------- Instance methods for dict
 set compile_env: 2
+
+! ------------------- Instance methods for dict
 
 category: 'Python-Type'
 method: Dictionary
@@ -160,9 +161,9 @@ keys
 	"Return a new view of the dictionary's keys"
 
 	| keysArray |
-	keysArray := Array ___new___.
+	keysArray := list ___new___.
 	self perform: #keysDo: env: 0 withArguments: {[:key |
-		keysArray ___add___: key
+		keysArray append: key
 	]}.
 	^ keysArray
 %
@@ -173,9 +174,9 @@ values
 	"Return a new view of the dictionary's values"
 
 	| valuesArray |
-	valuesArray := Array ___new___.
+	valuesArray := list ___new___.
 	self perform: #valuesDo: env: 0 withArguments: {[:value |
-		valuesArray ___add___: value
+		valuesArray append: value
 	]}.
 	^ valuesArray
 %
@@ -186,11 +187,11 @@ items
 	"Return a new view of the dictionary's (key, value) pairs"
 
 	| itemsArray |
-	itemsArray := Array ___new___.
+	itemsArray := list ___new___.
 	self ___keysAndValuesDo___: [:key :value |
 		| pair |
-		pair := InvariantArray ___with___: key with: value.
-		itemsArray ___add___: pair
+		pair := tuple ___with___: key with: value.
+		itemsArray append: pair
 	].
 	^ itemsArray
 %
@@ -245,7 +246,7 @@ popitem
 	].
 
 	self perform: #removeKey: env: 0 withArguments: {lastKey}.
-	pair := InvariantArray ___with___: lastKey with: lastValue.
+	pair := tuple ___with___: lastKey with: lastValue.
 	^ pair
 %
 

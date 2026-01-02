@@ -1,0 +1,88 @@
+! ===============================================================================
+! module Methods (Python 'module' type)
+! ===============================================================================
+! This file will contain Python method implementations for the module class.
+! For now, the module type has no Python-level methods defined.
+! ==============================================================================
+
+! ------------------- Remove existing Python methods from module
+expectvalue /Metaclass3
+doit
+module removeAllMethods: 2.
+module class removeAllMethods: 2.
+%
+
+set compile_env: 2
+
+! ------------------- Instance methods for module
+
+category: 'Python-Accessors'
+method: module
+__name__
+	^ __name__
+%
+
+category: 'Python-Accessors'
+method: module
+__name__: aValue
+	__name__ := aValue
+%
+
+category: 'Python-Accessors'
+method: module
+__package__
+	^ __package__
+%
+
+category: 'Python-Accessors'
+method: module
+__package__: aValue
+	__package__ := aValue
+%
+
+category: 'Python-Accessors'
+method: module
+__loader__
+	^ __loader__
+%
+
+category: 'Python-Accessors'
+method: module
+__loader__: aValue
+	__loader__ := aValue
+%
+
+category: 'Python-Accessors'
+method: module
+__spec__
+	^ __spec__
+%
+
+category: 'Python-Accessors'
+method: module
+__spec__: aValue
+	__spec__ := aValue
+%
+
+category: 'Python-Accessors'
+method: module
+__doc__
+	"Return the module docstring, falling back to the base object docstring if unset."
+	__doc__ == nil ifTrue: [^ super __doc__].
+	^ __doc__
+%
+
+category: 'Python-Accessors'
+method: module
+__doc__: aValue
+	__doc__ := aValue
+%
+
+! ------------------- Reset compile environment to Smalltalk
+set compile_env: 0
+
+category: 'Convenience Methods'
+classmethod: module
+___instance___
+	^ self perform: #instance env: 2
+%

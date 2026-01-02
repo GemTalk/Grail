@@ -2,13 +2,13 @@
 ! ReferenceErrorTestCase - Tests for Python ReferenceError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-ReferenceErrorTestCase removeAllMethods: 2.
-ReferenceErrorTestCase class removeAllMethods: 2.
+ReferenceErrorTestCase removeAllMethods.
+ReferenceErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-ReferenceError'
 method: ReferenceErrorTestCase

@@ -4,6 +4,12 @@
 
 set compile_env: 0
 
+expectvalue /Metaclass3
+doit
+RangeTestCase removeAllMethods.
+RangeTestCase class removeAllMethods.
+%
+
 category: 'Tests - Initialization'
 method: RangeTestCase
 test__new__oneArg
@@ -15,7 +21,7 @@ test__new__oneArg
 	self assert: (result perform: #start env: 2) equals: 0.
 	self assert: (result perform: #stop env: 2) equals: 5.
 	self assert: (result perform: #step env: 2) equals: 1.
-	self assert: (result ___len___) equals: 5.
+	self assert: result size equals: 5.
 %
 
 category: 'Tests - Initialization'
@@ -29,7 +35,7 @@ test__new__twoArgs
 	self assert: (result perform: #start env: 2) equals: 2.
 	self assert: (result perform: #stop env: 2) equals: 7.
 	self assert: (result perform: #step env: 2) equals: 1.
-	self assert: (result ___len___) equals: 5.
+	self assert: result size equals: 5.
 %
 
 category: 'Tests - Initialization'
@@ -43,7 +49,7 @@ test__new__threeArgs
 	self assert: (result perform: #start env: 2) equals: 0.
 	self assert: (result perform: #stop env: 2) equals: 10.
 	self assert: (result perform: #step env: 2) equals: 2.
-	self assert: (result ___len___) equals: 5.
+	self assert: result size equals: 5.
 %
 
 category: 'Tests - Initialization'
@@ -57,7 +63,7 @@ test__new__negativeStep
 	self assert: (result perform: #start env: 2) equals: 10.
 	self assert: (result perform: #stop env: 2) equals: 0.
 	self assert: (result perform: #step env: 2) equals: -2.
-	self assert: (result ___len___) equals: 5.
+	self assert: result size equals: 5.
 %
 
 category: 'Tests - Initialization'
@@ -68,11 +74,11 @@ test__new__emptyRange
 	| result |
 	"range(0, 0) is empty"
 	result := Interval perform: #__new__:_:_: env: 2 withArguments: {Interval. 0. 0}.
-	self assert: (result ___len___) equals: 0.
+	self assert: result size equals: 0.
 	
 	"range(5, 5) is empty"
 	result := Interval perform: #__new__:_:_: env: 2 withArguments: {Interval. 5. 5}.
-	self assert: (result ___len___) equals: 0.
+	self assert: result size equals: 0.
 %
 
 category: 'Tests - Initialization'
@@ -104,13 +110,13 @@ test__len__
 
 	| r |
 	r := Interval perform: #__new__:_:_: env: 2 withArguments: {Interval. 0. 10}.
-	self assert: (r ___len___) equals: 10.
+	self assert: r size equals: 10.
 	
 	r := Interval perform: #__new__:_:_:_: env: 2 withArguments: {Interval. 0. 10. 2}.
-	self assert: (r ___len___) equals: 5.
+	self assert: r size equals: 5.
 	
 	r := Interval perform: #__new__:_:_:_: env: 2 withArguments: {Interval. 10. 0. -1}.
-	self assert: (r ___len___) equals: 10.
+	self assert: r size equals: 10.
 %
 
 category: 'Tests - Sequence Protocol'
@@ -304,7 +310,7 @@ test__reversed__
 	self assert: (rev perform: #start env: 2) equals: 4.
 	self assert: (rev perform: #stop env: 2) equals: -1.
 	self assert: (rev perform: #step env: 2) equals: -1.
-	self assert: (rev ___len___) equals: 5.
+	self assert: rev size equals: 5.
 %
 
 category: 'Tests - Iteration'
@@ -316,6 +322,6 @@ test__reversed__empty
 	r := Interval perform: #__new__:_:_: env: 2 withArguments: {Interval. 0. 0}.
 	rev := r perform: #__reversed__ env: 2.
 
-	self assert: (rev ___len___) equals: 0.
+	self assert: rev size equals: 0.
 %
 

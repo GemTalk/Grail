@@ -1,4 +1,7 @@
 ! ------------------- Remove existing behavior from StrTestCase
+
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
 StrTestCase removeAllMethods.
@@ -6,10 +9,7 @@ StrTestCase class removeAllMethods.
 %
 
 ! ------------------- Class methods for StrTestCase
-set compile_env: 0
-
 ! ------------------- Instance methods for StrTestCase
-set compile_env: 0
 
 category: 'Python-Initialization'
 method: StrTestCase
@@ -155,7 +155,7 @@ test__len__
 
 	| s result |
 	s := 'hello'.
-	result := s ___len___.
+	result := s perform: #__len__ env: 2.
 	self assert: result equals: 5.
 %
 

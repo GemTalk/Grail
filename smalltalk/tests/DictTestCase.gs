@@ -24,8 +24,8 @@ testDictCreation
 	d2 perform: #__setitem__:_: env: 2 withArguments: {'b'. 2}.
 	d2 perform: #__setitem__:_: env: 2 withArguments: {'c'. 3}.
 	
-	self assert: (d1 ___len___) equals: 0.
-	self assert: (d2 ___len___) equals: 3
+	self assert: d1 size equals: 0.
+	self assert: d2 size equals: 3
 %
 
 category: 'Tests - Creation'
@@ -39,7 +39,7 @@ testDictKeyOverwrite
 	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 2}.
 	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 3}.
 	
-	self assert: (d ___len___) equals: 1.
+	self assert: d size equals: 1.
 	self assert: (d perform: #__getitem__: env: 2 withArguments: {'a'}) equals: 3
 %
 
@@ -100,11 +100,11 @@ testDictDelItem
 	d perform: #__setitem__:_: env: 2 withArguments: {'b'. 2}.
 	d perform: #__setitem__:_: env: 2 withArguments: {'c'. 3}.
 	
-	self assert: (d ___len___) equals: 3.
+	self assert: d size equals: 3.
 	
 	d perform: #__delitem__: env: 2 withArguments: {'b'}.
 	
-	self assert: (d ___len___) equals: 2.
+	self assert: d size equals: 2.
 	self assert: (d ___contains___: 'a').
 	self deny: (d ___contains___: 'b').
 	self assert: (d ___contains___: 'c')
@@ -135,11 +135,11 @@ testDictClear
 	d perform: #__setitem__:_: env: 2 withArguments: {'b'. 2}.
 	d perform: #__setitem__:_: env: 2 withArguments: {'c'. 3}.
 
-	self assert: (d ___len___) equals: 3.
+	self assert: d size equals: 3.
 
 	d perform: #clear env: 2.
 
-	self assert: (d ___len___) equals: 0
+	self assert: d size equals: 0
 %
 
 category: 'Tests - Comparison'
@@ -267,7 +267,7 @@ testDictPop
 	value := d perform: #pop: env: 2 withArguments: {'a'}.
 
 	self assert: value equals: 1.
-	self assert: (d ___len___) equals: 1.
+	self assert: d size equals: 1.
 	self deny: (d ___contains___: 'a')
 %
 
@@ -307,11 +307,11 @@ testDictPopitem
 	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 1}.
 	d perform: #__setitem__:_: env: 2 withArguments: {'b'. 2}.
 
-	self assert: (d ___len___) equals: 2.
+	self assert: d size equals: 2.
 
 	pair := d perform: #popitem env: 2.
 
-	self assert: (d ___len___) equals: 1.
+	self assert: d size equals: 1.
 	self assert: (pair size) equals: 2.
 
 	key := pair at: 1.
@@ -367,7 +367,7 @@ testDictUpdate
 
 	d1 perform: #update: env: 2 withArguments: {d2}.
 
-	self assert: (d1 ___len___) equals: 3.
+	self assert: d1 size equals: 3.
 	self assert: (d1 perform: #__getitem__: env: 2 withArguments: {'a'}) equals: 1.
 	self assert: (d1 perform: #__getitem__: env: 2 withArguments: {'b'}) equals: 3.
 	self assert: (d1 perform: #__getitem__: env: 2 withArguments: {'c'}) equals: 4
@@ -385,7 +385,7 @@ testDictCopy
 
 	d2 := d1 perform: #copy env: 2.
 
-	self assert: (d2 ___len___) equals: 2.
+	self assert: d2 size equals: 2.
 	self assert: (d2 perform: #__getitem__: env: 2 withArguments: {'a'}) equals: 1.
 	self assert: (d2 perform: #__getitem__: env: 2 withArguments: {'b'}) equals: 2.
 
@@ -394,8 +394,8 @@ testDictCopy
 
 	"Modify the copy and verify original is unchanged"
 	d2 perform: #__setitem__:_: env: 2 withArguments: {'c'. 3}.
-	self assert: (d2 ___len___) equals: 3.
-	self assert: (d1 ___len___) equals: 2
+	self assert: d2 size equals: 3.
+	self assert: d1 size equals: 2
 %
 
 category: 'Tests - Iteration'

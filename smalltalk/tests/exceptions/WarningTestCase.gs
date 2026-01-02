@@ -2,13 +2,13 @@
 ! WarningTestCase - Tests for Python Warning
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-WarningTestCase removeAllMethods: 2.
-WarningTestCase class removeAllMethods: 2.
+WarningTestCase removeAllMethods.
+WarningTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-Warning'
 method: WarningTestCase

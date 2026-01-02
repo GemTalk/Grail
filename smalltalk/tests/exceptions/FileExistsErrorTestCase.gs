@@ -2,13 +2,13 @@
 ! FileExistsErrorTestCase - Tests for Python FileExistsError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-FileExistsErrorTestCase removeAllMethods: 2.
-FileExistsErrorTestCase class removeAllMethods: 2.
+FileExistsErrorTestCase removeAllMethods.
+FileExistsErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-FileExistsError'
 method: FileExistsErrorTestCase

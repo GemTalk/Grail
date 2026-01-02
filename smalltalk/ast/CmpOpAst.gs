@@ -1,6 +1,7 @@
 ﻿! ------------------- Remove existing behavior from CmpOpAst
 removeallmethods CmpOpAst
 removeallclassmethods CmpOpAst
+set compile_env: 0
 ! ------------------- Class methods for CmpOpAst
 category: 'other'
 classmethod: CmpOpAst

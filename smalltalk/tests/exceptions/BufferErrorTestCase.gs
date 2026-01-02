@@ -2,13 +2,13 @@
 ! BufferErrorTestCase - Tests for Python BufferError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-BufferErrorTestCase removeAllMethods: 2.
-BufferErrorTestCase class removeAllMethods: 2.
+BufferErrorTestCase removeAllMethods.
+BufferErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-BufferError'
 method: BufferErrorTestCase

@@ -1,6 +1,7 @@
 ﻿! ------------------- Remove existing behavior from IfAst
 removeallmethods IfAst
 removeallclassmethods IfAst
+set compile_env: 0
 ! ------------------- Class methods for IfAst
 ! ------------------- Instance methods for IfAst
 category: 'other'

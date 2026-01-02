@@ -3221,7 +3221,7 @@ AbstractNode subclass: 'ModuleAst'
   instVarNames: #( body name path
                     source stream scope type_ignore)
   classVars: #()
-  classInstVars: #( pprintast)
+  classInstVars: #()
   poolDictionaries: #()
   inDictionary: PythonAst
   options: #()

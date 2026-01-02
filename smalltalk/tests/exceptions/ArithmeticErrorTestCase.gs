@@ -2,13 +2,13 @@
 ! ArithmeticErrorTestCase - Tests for Python ArithmeticError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-ArithmeticErrorTestCase removeAllMethods: 2.
-ArithmeticErrorTestCase class removeAllMethods: 2.
+ArithmeticErrorTestCase removeAllMethods.
+ArithmeticErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-ArithmeticError'
 method: ArithmeticErrorTestCase

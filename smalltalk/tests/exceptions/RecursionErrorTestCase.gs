@@ -2,13 +2,13 @@
 ! RecursionErrorTestCase - Tests for Python RecursionError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-RecursionErrorTestCase removeAllMethods: 2.
-RecursionErrorTestCase class removeAllMethods: 2.
+RecursionErrorTestCase removeAllMethods.
+RecursionErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-RecursionError'
 method: RecursionErrorTestCase

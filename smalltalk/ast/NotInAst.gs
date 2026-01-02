@@ -1,6 +1,7 @@
 ﻿! ------------------- Remove existing behavior from NotInAst
 removeallmethods NotInAst
 removeallclassmethods NotInAst
+set compile_env: 0
 ! ------------------- Class methods for NotInAst
 ! ------------------- Instance methods for NotInAst
 category: 'other'

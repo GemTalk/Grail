@@ -1,6 +1,7 @@
 ﻿! ------------------- Remove existing behavior from SubscriptAst
 removeallmethods SubscriptAst
 removeallclassmethods SubscriptAst
+set compile_env: 0
 ! ------------------- Class methods for SubscriptAst
 ! ------------------- Instance methods for SubscriptAst
 category: 'other'

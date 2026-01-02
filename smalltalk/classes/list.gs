@@ -18,8 +18,9 @@ list removeAllMethods: 2.
 list class removeAllMethods: 2.
 %
 
-! ------------------- Instance methods for list
 set compile_env: 2
+
+! ------------------- Instance methods for list
 
 category: 'Python-Sequence Protocol'
 method: list
@@ -282,5 +283,3 @@ The argument must be an iterable if specified.'
 
 ! ------------------- Reset compile environment
 set compile_env: 0
-
-

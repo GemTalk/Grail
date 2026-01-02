@@ -14,8 +14,9 @@ str_iterator removeAllMethods: 2.
 str_iterator class removeAllMethods: 2.
 %
 
-! ------------------- Class methods for str_iterator
 set compile_env: 2
+
+! ------------------- Class methods for str_iterator
 
 category: 'Python-Instance Creation'
 classmethod: str_iterator
@@ -32,7 +33,6 @@ ___on: aCollection
 %
 
 ! ------------------- Instance methods for str_iterator
-set compile_env: 2
 
 category: 'Python-Iterator Protocol'
 method: str_iterator
@@ -52,7 +52,7 @@ __next__
 	char := collection ___at___: (position ___plus___: 1).
 
 	"Convert character to a single-character string"
-	charString := String ___new___: 1.
+	charString := str ___new___: 1.
 	charString ___at___: 1 put: char.
 
 	"Increment position"
@@ -81,5 +81,3 @@ ___position: anInteger
 
 ! ------------------- Reset compile environment to Smalltalk
 set compile_env: 0
-
-

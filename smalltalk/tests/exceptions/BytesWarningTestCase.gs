@@ -2,13 +2,13 @@
 ! BytesWarningTestCase - Tests for Python BytesWarning
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-BytesWarningTestCase removeAllMethods: 2.
-BytesWarningTestCase class removeAllMethods: 2.
+BytesWarningTestCase removeAllMethods.
+BytesWarningTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-BytesWarning'
 method: BytesWarningTestCase

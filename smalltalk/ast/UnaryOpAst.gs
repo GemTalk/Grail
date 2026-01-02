@@ -1,6 +1,7 @@
 ﻿! ------------------- Remove existing behavior from UnaryOpAst
 removeallmethods UnaryOpAst
 removeallclassmethods UnaryOpAst
+set compile_env: 0
 ! ------------------- Class methods for UnaryOpAst
 category: 'other'
 classmethod: UnaryOpAst

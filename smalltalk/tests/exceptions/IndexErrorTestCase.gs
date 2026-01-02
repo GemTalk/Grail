@@ -2,13 +2,13 @@
 ! IndexErrorTestCase - Tests for Python IndexError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-IndexErrorTestCase removeAllMethods: 2.
-IndexErrorTestCase class removeAllMethods: 2.
+IndexErrorTestCase removeAllMethods.
+IndexErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-IndexError'
 method: IndexErrorTestCase

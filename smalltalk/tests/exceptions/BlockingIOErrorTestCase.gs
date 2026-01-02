@@ -2,13 +2,13 @@
 ! BlockingIOErrorTestCase - Tests for Python BlockingIOError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-BlockingIOErrorTestCase removeAllMethods: 2.
-BlockingIOErrorTestCase class removeAllMethods: 2.
+BlockingIOErrorTestCase removeAllMethods.
+BlockingIOErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-BlockingIOError'
 method: BlockingIOErrorTestCase

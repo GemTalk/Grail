@@ -2,13 +2,13 @@
 ! PendingDeprecationWarningTestCase - Tests for Python PendingDeprecationWarning
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-PendingDeprecationWarningTestCase removeAllMethods: 2.
-PendingDeprecationWarningTestCase class removeAllMethods: 2.
+PendingDeprecationWarningTestCase removeAllMethods.
+PendingDeprecationWarningTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-PendingDeprecationWarning'
 method: PendingDeprecationWarningTestCase

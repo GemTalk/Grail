@@ -2,13 +2,13 @@
 ! ZeroDivisionErrorTestCase - Tests for Python ZeroDivisionError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-ZeroDivisionErrorTestCase removeAllMethods: 2.
-ZeroDivisionErrorTestCase class removeAllMethods: 2.
+ZeroDivisionErrorTestCase removeAllMethods.
+ZeroDivisionErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-ZeroDivisionError'
 method: ZeroDivisionErrorTestCase

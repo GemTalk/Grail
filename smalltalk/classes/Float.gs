@@ -16,8 +16,9 @@ float removeAllMethods: 2.
 float class removeAllMethods: 2.
 %
 
-! ------------------- Class methods for float
 set compile_env: 2
+
+! ------------------- Class methods for float
 
 category: 'Python-Initialization'
 classmethod: float
@@ -235,12 +236,12 @@ __mod__: other
 category: 'Python-Arithmetic'
 method: float
 __divmod__: other
-	"Return (quotient, remainder) as array."
+	"Return (quotient, remainder) as a tuple."
 
 	| quot rem |
 	quot := self ___divideInteger___: other.
 	rem := self ___modulo___: other.
-	^ Array ___with___: quot with: rem
+	^ tuple ___with___: quot with: rem
 %
 
 category: 'Python-Arithmetic'
@@ -390,7 +391,7 @@ as_integer_ratio
 
 	| frac |
 	frac := self perform: #asFraction env: 0.
-	^ Array ___with___: (frac perform: #numerator env: 0) with: (frac perform: #denominator env: 0)
+	^ tuple ___with___: (frac perform: #numerator env: 0) with: (frac perform: #denominator env: 0)
 %
 
 category: 'Python-Float Methods'
@@ -472,5 +473,3 @@ __doc__
 
 ! ------------------- Reset compile environment
 set compile_env: 0
-
-

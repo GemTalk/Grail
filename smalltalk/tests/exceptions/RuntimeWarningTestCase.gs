@@ -2,13 +2,13 @@
 ! RuntimeWarningTestCase - Tests for Python RuntimeWarning
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-RuntimeWarningTestCase removeAllMethods: 2.
-RuntimeWarningTestCase class removeAllMethods: 2.
+RuntimeWarningTestCase removeAllMethods.
+RuntimeWarningTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-RuntimeWarning'
 method: RuntimeWarningTestCase

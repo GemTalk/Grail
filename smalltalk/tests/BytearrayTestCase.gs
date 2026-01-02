@@ -4,6 +4,12 @@
 
 set compile_env: 0
 
+expectvalue /Metaclass3
+doit
+BytearrayTestCase removeAllMethods.
+BytearrayTestCase class removeAllMethods.
+%
+
 category: 'Tests - Initialization'
 method: BytearrayTestCase
 test__new__empty
@@ -11,7 +17,7 @@ test__new__empty
 
 	| result |
 	result := bytearray ___new___: bytearray.
-	self assert: (result ___len___) equals: 0.
+	self assert: result size equals: 0.
 %
 
 category: 'Tests - Initialization'
@@ -21,7 +27,7 @@ test__new__fromInteger
 
 	| result |
 	result := bytearray ___new___: bytearray _: 5.
-	self assert: (result ___len___) equals: 5.
+	self assert: result size equals: 5.
 	self assert: (result at: 1) equals: 0.
 	self assert: (result at: 5) equals: 0.
 %
@@ -38,7 +44,7 @@ test__new__fromList
 	list add: 67.
 
 	result := bytearray ___new___: bytearray _: list.
-	self assert: (result ___len___) equals: 3.
+	self assert: result size equals: 3.
 	self assert: (result at: 1) equals: 65.
 	self assert: (result at: 2) equals: 66.
 	self assert: (result at: 3) equals: 67.
@@ -53,7 +59,7 @@ test__new__fromBytes
 	bytes := bytearray perform: #__new__:_:_: env: 2 withArguments: {bytearray. 'hello'. 'ascii'}.
 	result := bytearray ___new___: bytearray _: bytes.
 
-	self assert: (result ___len___) equals: 5.
+	self assert: result size equals: 5.
 	self assert: (result at: 1) equals: 104.  "h"
 %
 
@@ -65,7 +71,7 @@ testFromhex
 	| result |
 	result := bytearray perform: #fromhex:_: env: 2 withArguments: {bytearray. '48656c6c6f'}.
 
-	self assert: (result ___len___) equals: 5.
+	self assert: result size equals: 5.
 	self assert: (result at: 1) equals: 72.   "H"
 	self assert: (result at: 2) equals: 101.  "e"
 	self assert: (result at: 3) equals: 108.  "l"
@@ -157,7 +163,7 @@ testAppend
 	ba perform: #append: env: 2 withArguments: {66}.
 	ba perform: #append: env: 2 withArguments: {67}.
 
-	self assert: (ba ___len___) equals: 3.
+	self assert: ba size equals: 3.
 	self assert: (ba at: 1) equals: 65.
 	self assert: (ba at: 2) equals: 66.
 	self assert: (ba at: 3) equals: 67.
@@ -187,7 +193,7 @@ testExtendWithBytes
 
 	ba perform: #extend: env: 2 withArguments: {bytes}.
 
-	self assert: (ba ___len___) equals: 5.
+	self assert: ba size equals: 5.
 	self assert: (ba at: 1) equals: 104.  "h"
 %
 
@@ -205,7 +211,7 @@ testExtendWithList
 
 	ba perform: #extend: env: 2 withArguments: {list}.
 
-	self assert: (ba ___len___) equals: 3.
+	self assert: ba size equals: 3.
 	self assert: (ba at: 1) equals: 65.
 	self assert: (ba at: 2) equals: 66.
 	self assert: (ba at: 3) equals: 67.
@@ -224,7 +230,7 @@ testInsert
 	"Insert B between A and C"
 	ba perform: #insert:_: env: 2 withArguments: {1. 66}.
 
-	self assert: (ba ___len___) equals: 3.
+	self assert: ba size equals: 3.
 	self assert: (ba at: 1) equals: 65.
 	self assert: (ba at: 2) equals: 66.
 	self assert: (ba at: 3) equals: 67.
@@ -243,7 +249,7 @@ testRemove
 
 	ba perform: #remove: env: 2 withArguments: {66}.
 
-	self assert: (ba ___len___) equals: 2.
+	self assert: ba size equals: 2.
 	self assert: (ba at: 1) equals: 65.
 	self assert: (ba at: 2) equals: 67.
 %
@@ -276,7 +282,7 @@ testPop
 	result := ba perform: #pop env: 2.
 
 	self assert: result equals: 67.
-	self assert: (ba ___len___) equals: 2.
+	self assert: ba size equals: 2.
 %
 
 category: 'Tests - Mutation Methods'
@@ -306,7 +312,7 @@ testPopIndex
 	result := ba perform: #pop: env: 2 withArguments: {1}.
 
 	self assert: result equals: 66.
-	self assert: (ba ___len___) equals: 2.
+	self assert: ba size equals: 2.
 	self assert: (ba at: 1) equals: 65.
 	self assert: (ba at: 2) equals: 67.
 %
@@ -324,7 +330,7 @@ testClear
 
 	ba perform: #clear env: 2.
 
-	self assert: (ba ___len___) equals: 0.
+	self assert: ba size equals: 0.
 %
 
 category: 'Tests - Mutation Methods'
@@ -340,7 +346,7 @@ testReverse
 
 	ba perform: #reverse env: 2.
 
-	self assert: (ba ___len___) equals: 3.
+	self assert: ba size equals: 3.
 	self assert: (ba at: 1) equals: 67.
 	self assert: (ba at: 2) equals: 66.
 	self assert: (ba at: 3) equals: 65.
@@ -358,7 +364,7 @@ testCopy
 
 	copy := ba perform: #copy env: 2.
 
-	self assert: (copy ___len___) equals: 2.
+	self assert: copy size equals: 2.
 	self assert: (copy at: 1) equals: 65.
 	self assert: (copy at: 2) equals: 66.
 
@@ -381,7 +387,7 @@ test__delitem__
 
 	ba perform: #__delitem__: env: 2 withArguments: {1}.
 
-	self assert: (ba ___len___) equals: 2.
+	self assert: ba size equals: 2.
 	self assert: (ba at: 1) equals: 65.
 	self assert: (ba at: 2) equals: 67.
 %
@@ -399,7 +405,7 @@ test__delitem__negativeIndex
 
 	ba perform: #__delitem__: env: 2 withArguments: {-1}.
 
-	self assert: (ba ___len___) equals: 2.
+	self assert: ba size equals: 2.
 	self assert: (ba at: 1) equals: 65.
 	self assert: (ba at: 2) equals: 66.
 %
@@ -420,7 +426,7 @@ test__iadd__
 	"Should return same object"
 	self assert: result equals: ba.
 
-	self assert: (ba ___len___) equals: 4.
+	self assert: ba size equals: 4.
 	self assert: (ba at: 1) equals: 65.
 	self assert: (ba at: 2) equals: 66.
 	self assert: (ba at: 3) equals: 67.
@@ -442,7 +448,7 @@ test__imul__
 	"Should return same object"
 	self assert: result equals: ba.
 
-	self assert: (ba ___len___) equals: 6.
+	self assert: ba size equals: 6.
 	self assert: (ba at: 1) equals: 65.
 	self assert: (ba at: 2) equals: 66.
 	self assert: (ba at: 3) equals: 65.
@@ -463,7 +469,7 @@ test__imul__zero
 
 	ba perform: #__imul__: env: 2 withArguments: {0}.
 
-	self assert: (ba ___len___) equals: 0.
+	self assert: ba size equals: 0.
 %
 
 category: 'Tests - Inherited Methods'
@@ -480,7 +486,7 @@ testInheritedUpper
 	result := ba perform: #upper env: 2.
 
 	self assert: (result class) equals: bytearray.
-	self assert: (result ___len___) equals: 3.
+	self assert: result size equals: 3.
 	self assert: (result at: 1) equals: 65.  "A"
 	self assert: (result at: 2) equals: 66.  "B"
 	self assert: (result at: 3) equals: 67.  "C"
@@ -592,13 +598,8 @@ testConcatenation
 	result := ba perform: #__add__: env: 2 withArguments: {bytes}.
 
 	self assert: (result class) equals: bytearray.
-	self assert: (result ___len___) equals: 4.
+	self assert: result size equals: 4.
 
 	"Original should be unchanged"
-	self assert: (ba ___len___) equals: 2.
+	self assert: ba size equals: 2.
 %
-
-set compile_env: 0
-
-
-

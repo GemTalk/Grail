@@ -2,13 +2,13 @@
 ! TimeoutErrorTestCase - Tests for Python TimeoutError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-TimeoutErrorTestCase removeAllMethods: 2.
-TimeoutErrorTestCase class removeAllMethods: 2.
+TimeoutErrorTestCase removeAllMethods.
+TimeoutErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-TimeoutError'
 method: TimeoutErrorTestCase

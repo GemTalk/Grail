@@ -22,8 +22,9 @@ bool removeAllMethods: 2.
 bool class removeAllMethods: 2.
 %
 
-! ------------------- Class methods for bool
 set compile_env: 2
+
+! ------------------- Class methods for bool
 
 category: 'Python-Initialization'
 classmethod: bool
@@ -666,5 +667,3 @@ max: aNumber
 
 	^ self asInteger max: aNumber
 %
-
-

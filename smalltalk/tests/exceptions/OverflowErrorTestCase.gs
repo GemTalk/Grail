@@ -2,13 +2,13 @@
 ! OverflowErrorTestCase - Tests for Python OverflowError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-OverflowErrorTestCase removeAllMethods: 2.
-OverflowErrorTestCase class removeAllMethods: 2.
+OverflowErrorTestCase removeAllMethods.
+OverflowErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-OverflowError'
 method: OverflowErrorTestCase

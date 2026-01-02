@@ -1,6 +1,7 @@
 ﻿! ------------------- Remove existing behavior from NameAst
 removeallmethods NameAst
 removeallclassmethods NameAst
+set compile_env: 0
 ! ------------------- Class methods for NameAst
 category: 'other'
 classmethod: NameAst

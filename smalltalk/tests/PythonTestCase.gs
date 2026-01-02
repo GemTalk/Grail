@@ -2,13 +2,13 @@
 ! PythonTestCase - Abstract base class for Python tests
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-PythonTestCase removeAllMethods: 2.
-PythonTestCase class removeAllMethods: 2.
+PythonTestCase removeAllMethods.
+PythonTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Testing'
 classmethod: PythonTestCase
@@ -18,4 +18,3 @@ isAbstract
 
 	^self sunitName == #PythonTestCase
 %
-

@@ -2,13 +2,13 @@
 ! ResourceWarningTestCase - Tests for Python ResourceWarning
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-ResourceWarningTestCase removeAllMethods: 2.
-ResourceWarningTestCase class removeAllMethods: 2.
+ResourceWarningTestCase removeAllMethods.
+ResourceWarningTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-ResourceWarning'
 method: ResourceWarningTestCase

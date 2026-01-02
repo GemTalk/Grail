@@ -1,6 +1,7 @@
 ﻿! ------------------- Remove existing behavior from SuiteAst
 removeallmethods SuiteAst
 removeallclassmethods SuiteAst
+set compile_env: 0
 ! ------------------- Class methods for SuiteAst
 ! ------------------- Instance methods for SuiteAst
 category: 'other'

@@ -2,13 +2,13 @@
 ! RuntimeErrorTestCase - Tests for Python RuntimeError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-RuntimeErrorTestCase removeAllMethods: 2.
-RuntimeErrorTestCase class removeAllMethods: 2.
+RuntimeErrorTestCase removeAllMethods.
+RuntimeErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-RuntimeError'
 method: RuntimeErrorTestCase

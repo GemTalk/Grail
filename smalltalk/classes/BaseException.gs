@@ -12,11 +12,15 @@
 ! ===============================================================================
 
 ! ------------------- Remove existing Python methods from BaseException
-removeallmethods BaseException
-removeallclassmethods BaseException
+expectvalue /Metaclass3
+doit
+BaseException removeAllMethods: 2.
+BaseException class removeAllMethods: 2.
+%
+
+set compile_env: 2
 
 ! ------------------- Class methods for BaseException
-set compile_env: 2
 
 category: 'Python-Initialization'
 classmethod: BaseException
@@ -25,7 +29,7 @@ __new__: cls
 	
 	| instance |
 	instance := cls ___new___.
-	instance perform: #___args: env: 0 withArguments: { #() }.
+	instance ___args: #().
 	^ instance
 %
 
@@ -37,15 +41,11 @@ __new__: cls _: anArray
 	
 	| instance |
 	instance := cls ___new___.
-	instance 
-		perform: #___args: 
-		env: 0 
-		withArguments: { anArray ifNil: [ #() ] }.
+	instance ___args: { anArray ifNil: [ #() ] }.
 	^ instance
 %
 
 ! ------------------- Instance methods for BaseException
-set compile_env: 2
 
 category: 'Python-Initialization'
 method: BaseException
@@ -207,15 +207,13 @@ __ne__: other
 	^ result ___not___
 %
 
-! ------------------- Smalltalk-side methods (env 0)
-set compile_env: 0
-
-category: 'Smalltalk'
+category: 'Private'
 method: BaseException
 ___args: anArray
-	"Smalltalk-side setter for args instance variable."
+	"Setter for args instance variable."
 
 	args := anArray
 %
 
-
+! ------------------- reset compiler environment
+set compile_env: 0

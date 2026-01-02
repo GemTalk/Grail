@@ -2,13 +2,13 @@
 ! AttributeErrorTestCase - Tests for Python AttributeError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-AttributeErrorTestCase removeAllMethods: 2.
-AttributeErrorTestCase class removeAllMethods: 2.
+AttributeErrorTestCase removeAllMethods.
+AttributeErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-AttributeError'
 method: AttributeErrorTestCase

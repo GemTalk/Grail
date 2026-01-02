@@ -18,37 +18,10 @@ Exception removeAllMethods: 2.
 Exception class removeAllMethods: 2.
 %
 
+set compile_env: 2
+
 ! ------------------- Class methods for Exception
-set compile_env: 2
-
-category: 'Python-Initialization'
-classmethod: Exception
-__new__: cls
-	"Create a new Exception instance with no arguments."
-	
-	| instance |
-	instance := cls perform: #new env: 0 withArguments: {  }.
-	instance perform: #___args: env: 0 withArguments: { #() }.
-	^ instance
-%
-
-category: 'Python-Initialization'
-classmethod: Exception
-__new__: cls _: anArray
-	"Create a new Exception instance with arguments.
-	anArray should be a tuple (Array) of arguments."
-	
-	| instance |
-	instance := cls perform: #new env: 0 withArguments: {  }.
-	instance 
-		perform: #___args: 
-		env: 0 
-		withArguments: { anArray ifNil: [ #() ] }.
-	^ instance
-%
-
 ! ------------------- Instance methods for Exception
-set compile_env: 2
 
 category: 'Python-Initialization'
 method: Exception

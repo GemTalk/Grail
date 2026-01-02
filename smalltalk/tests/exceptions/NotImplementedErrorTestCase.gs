@@ -2,13 +2,13 @@
 ! NotImplementedErrorTestCase - Tests for Python NotImplementedError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-NotImplementedErrorTestCase removeAllMethods: 2.
-NotImplementedErrorTestCase class removeAllMethods: 2.
+NotImplementedErrorTestCase removeAllMethods.
+NotImplementedErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-NotImplementedError'
 method: NotImplementedErrorTestCase

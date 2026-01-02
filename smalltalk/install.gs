@@ -79,6 +79,13 @@ pythonTestsDict := SymbolDictionary new name: #'PythonTests'; yourself.
 userProfile insertDictionary: pythonTestsDict at: 3.
 Transcript show: 'Created PythonTests dictionary'.
 
+"Forward declarations to avoid circular reference between importlib and AST classes"
+pythonASTDict 
+	at: #'ModuleAst' put: nil;
+	at: #'PrettyWriteStream' put: nil;
+	yourself.
+Transcript show: 'Forward declared ModuleAst and PrettyWriteStream (will be defined later)'.
+
 Transcript show: 'Step 1 complete: Recreated dictionaries in correct order'.
 %
 

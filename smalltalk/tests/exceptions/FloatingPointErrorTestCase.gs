@@ -2,13 +2,13 @@
 ! FloatingPointErrorTestCase - Tests for Python FloatingPointError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-FloatingPointErrorTestCase removeAllMethods: 2.
-FloatingPointErrorTestCase class removeAllMethods: 2.
+FloatingPointErrorTestCase removeAllMethods.
+FloatingPointErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-FloatingPointError'
 method: FloatingPointErrorTestCase

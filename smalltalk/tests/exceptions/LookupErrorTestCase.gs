@@ -2,13 +2,13 @@
 ! LookupErrorTestCase - Tests for Python LookupError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-LookupErrorTestCase removeAllMethods: 2.
-LookupErrorTestCase class removeAllMethods: 2.
+LookupErrorTestCase removeAllMethods.
+LookupErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-LookupError'
 method: LookupErrorTestCase

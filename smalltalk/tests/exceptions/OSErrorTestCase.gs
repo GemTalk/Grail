@@ -2,13 +2,13 @@
 ! OSErrorTestCase - Tests for Python OSError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-OSErrorTestCase removeAllMethods: 2.
-OSErrorTestCase class removeAllMethods: 2.
+OSErrorTestCase removeAllMethods.
+OSErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-OSError'
 method: OSErrorTestCase

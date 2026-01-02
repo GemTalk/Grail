@@ -2,13 +2,13 @@
 ! UnboundLocalErrorTestCase - Tests for Python UnboundLocalError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-UnboundLocalErrorTestCase removeAllMethods: 2.
-UnboundLocalErrorTestCase class removeAllMethods: 2.
+UnboundLocalErrorTestCase removeAllMethods.
+UnboundLocalErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-UnboundLocalError'
 method: UnboundLocalErrorTestCase

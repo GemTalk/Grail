@@ -184,4 +184,3 @@ __hash__
 %
 
 set compile_env: 0
-

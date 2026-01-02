@@ -6,27 +6,13 @@
 ! list-specific mutating methods.
 ! ===============================================================================
 
-! ------------------- Remove existing test class
-expectvalue /Class
-doit
-(PythonTests includesKey: #'ListTestCase') ifTrue: [
-	PythonTests removeKey: #'ListTestCase'
-].
-%
-
-! ------------------- Define ListTestCase class
-expectvalue /Class
-doit
-PythonTestCase subclass: 'ListTestCase'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: PythonTests
-  options: #()
-%
-
 set compile_env: 0
+
+expectvalue /Metaclass3
+doit
+ListTestCase removeAllMethods.
+ListTestCase class removeAllMethods.
+%
 
 category: 'Tests - Sequence Protocol'
 method: ListTestCase
@@ -35,10 +21,10 @@ test__len__
 
 	| lst |
 	lst := OrderedCollection new.
-	self assert: (lst ___len___) equals: 0.
+	self assert: lst size equals: 0.
 	
 	lst add: 1; add: 2; add: 3.
-	self assert: (lst ___len___) equals: 3.
+	self assert: lst size equals: 3.
 %
 
 category: 'Tests - Sequence Protocol'

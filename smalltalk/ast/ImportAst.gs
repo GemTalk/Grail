@@ -1,6 +1,7 @@
 ﻿! ------------------- Remove existing behavior from ImportAst
 removeallmethods ImportAst
 removeallclassmethods ImportAst
+set compile_env: 0
 ! ------------------- Class methods for ImportAst
 ! ------------------- Instance methods for ImportAst
 category: 'other'

@@ -18,8 +18,9 @@ frozenset removeAllMethods: 2.
 frozenset class removeAllMethods: 2.
 %
 
-! ------------------- Instance methods for frozenset
 set compile_env: 2
+
+! ------------------- Instance methods for frozenset
 
 category: 'Python-Iterator Protocol'
 method: frozenset
@@ -42,7 +43,7 @@ method: frozenset
 __contains__: item
 	"Test if item is in the frozenset."
 
-	^ self perform: #includes: env: 0 withArguments: {item}
+	^ self ___includes___: item
 %
 
 category: 'Python-Comparison'
@@ -328,5 +329,3 @@ __repr__
 %
 
 set compile_env: 0
-
-

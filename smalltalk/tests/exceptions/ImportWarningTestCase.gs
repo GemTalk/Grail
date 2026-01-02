@@ -2,13 +2,13 @@
 ! ImportWarningTestCase - Tests for Python ImportWarning
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-ImportWarningTestCase removeAllMethods: 2.
-ImportWarningTestCase class removeAllMethods: 2.
+ImportWarningTestCase removeAllMethods.
+ImportWarningTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-ImportWarning'
 method: ImportWarningTestCase

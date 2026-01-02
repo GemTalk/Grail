@@ -29,9 +29,9 @@ testFrozensetCreation
 	fs3 add: 1.
 	fs3 add: 2.
 	
-	self assert: (fs1 ___len___) equals: 0.
-	self assert: (fs2 ___len___) equals: 3.
-	self assert: (fs3 ___len___) equals: 2
+	self assert: fs1 size equals: 0.
+	self assert: fs2 size equals: 3.
+	self assert: fs3 size equals: 2
 %
 
 category: 'Tests - Iteration'
@@ -57,7 +57,7 @@ testFrozensetIteration
 		] on: StopIteration do: [:ex | ^ nil]
 	].
 	
-	self assert: (items ___len___) equals: 3.
+	self assert: items size equals: 3.
 	self assert: (items ___contains___: 1).
 	self assert: (items ___contains___: 2).
 	self assert: (items ___contains___: 3)
@@ -96,7 +96,7 @@ testFrozensetUnion
 	
 	result := fs1 perform: #union: env: 2 withArguments: {fs2}.
 	
-	self assert: (result ___len___) equals: 3.
+	self assert: result size equals: 3.
 	self assert: (result ___contains___: 1).
 	self assert: (result ___contains___: 2).
 	self assert: (result ___contains___: 3)
@@ -120,7 +120,7 @@ testFrozensetIntersection
 	
 	result := fs1 perform: #intersection: env: 2 withArguments: {fs2}.
 	
-	self assert: (result ___len___) equals: 2.
+	self assert: result size equals: 2.
 	self assert: (result ___contains___: 2).
 	self assert: (result ___contains___: 3).
 	self deny: (result ___contains___: 1).
@@ -144,7 +144,7 @@ testFrozensetDifference
 	
 	result := fs1 perform: #difference: env: 2 withArguments: {fs2}.
 	
-	self assert: (result ___len___) equals: 2.
+	self assert: result size equals: 2.
 	self assert: (result ___contains___: 1).
 	self assert: (result ___contains___: 3).
 	self deny: (result ___contains___: 2)
@@ -168,7 +168,7 @@ testFrozensetSymmetricDifference
 
 	result := fs1 perform: #symmetric_difference: env: 2 withArguments: {fs2}.
 
-	self assert: (result ___len___) equals: 2.
+	self assert: result size equals: 2.
 	self assert: (result ___contains___: 1).
 	self assert: (result ___contains___: 4).
 	self deny: (result ___contains___: 2).
@@ -190,16 +190,16 @@ testFrozensetOperators
 	fs2 add: 3.
 
 	"Test & (intersection)"
-	self assert: ((fs1 perform: #__and__: env: 2 withArguments: {fs2}) ___len___) equals: 1.
+	self assert: (fs1 perform: #__and__: env: 2 withArguments: {fs2}) size equals: 1.
 
 	"Test | (union)"
-	self assert: ((fs1 perform: #__or__: env: 2 withArguments: {fs2}) ___len___) equals: 3.
+	self assert: (fs1 perform: #__or__: env: 2 withArguments: {fs2}) size equals: 3.
 
 	"Test - (difference)"
-	self assert: ((fs1 perform: #__sub__: env: 2 withArguments: {fs2}) ___len___) equals: 1.
+	self assert: (fs1 perform: #__sub__: env: 2 withArguments: {fs2}) size equals: 1.
 
 	"Test ^ (symmetric difference)"
-	self assert: ((fs1 perform: #__xor__: env: 2 withArguments: {fs2}) ___len___) equals: 2
+	self assert: (fs1 perform: #__xor__: env: 2 withArguments: {fs2}) size equals: 2
 %
 
 category: 'Tests - Comparison'
@@ -317,7 +317,7 @@ testFrozensetCopy
 
 	fs2 := fs1 perform: #copy env: 2.
 
-	self assert: (fs2 ___len___) equals: 2.
+	self assert: fs2 size equals: 2.
 	self assert: (fs2 ___contains___: 1).
 	self assert: (fs2 ___contains___: 2)
 %

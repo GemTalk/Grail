@@ -2,13 +2,13 @@
 ! UnicodeTranslateErrorTestCase - Tests for Python UnicodeTranslateError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-UnicodeTranslateErrorTestCase removeAllMethods: 2.
-UnicodeTranslateErrorTestCase class removeAllMethods: 2.
+UnicodeTranslateErrorTestCase removeAllMethods.
+UnicodeTranslateErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-UnicodeTranslateError'
 method: UnicodeTranslateErrorTestCase

@@ -2,13 +2,13 @@
 ! IsADirectoryErrorTestCase - Tests for Python IsADirectoryError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-IsADirectoryErrorTestCase removeAllMethods: 2.
-IsADirectoryErrorTestCase class removeAllMethods: 2.
+IsADirectoryErrorTestCase removeAllMethods.
+IsADirectoryErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-IsADirectoryError'
 method: IsADirectoryErrorTestCase

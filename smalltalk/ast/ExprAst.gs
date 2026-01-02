@@ -1,6 +1,7 @@
 ﻿! ------------------- Remove existing behavior from ExprAst
 removeallmethods ExprAst
 removeallclassmethods ExprAst
+set compile_env: 0
 ! ------------------- Class methods for ExprAst
 ! ------------------- Instance methods for ExprAst
 category: 'other'

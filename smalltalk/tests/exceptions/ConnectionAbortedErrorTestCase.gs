@@ -2,13 +2,13 @@
 ! ConnectionAbortedErrorTestCase - Tests for Python ConnectionAbortedError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-ConnectionAbortedErrorTestCase removeAllMethods: 2.
-ConnectionAbortedErrorTestCase class removeAllMethods: 2.
+ConnectionAbortedErrorTestCase removeAllMethods.
+ConnectionAbortedErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-ConnectionAbortedError'
 method: ConnectionAbortedErrorTestCase

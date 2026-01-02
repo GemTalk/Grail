@@ -2,13 +2,13 @@
 ! UnicodeEncodeErrorTestCase - Tests for Python UnicodeEncodeError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-UnicodeEncodeErrorTestCase removeAllMethods: 2.
-UnicodeEncodeErrorTestCase class removeAllMethods: 2.
+UnicodeEncodeErrorTestCase removeAllMethods.
+UnicodeEncodeErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-UnicodeEncodeError'
 method: UnicodeEncodeErrorTestCase

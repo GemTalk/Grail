@@ -6,13 +6,13 @@
 ! (list_iterator, tuple_iterator, str_iterator, range_iterator}.
 ! ===============================================================================
 
-! ------------------- Remove existing Python methods from IteratorTestCase
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-IteratorTestCase removeAllMethods: 0.
+IteratorTestCase removeAllMethods.
+IteratorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Tests - Iterator Protocol'
 method: IteratorTestCase
@@ -25,7 +25,7 @@ testIteratorTypes
 	str := 'abc'.
 	rng := range from: 0 to: 2 by: 1.
 	s := set new.
-	s ___add___: 1.
+	s add: 1.
 	fs := frozenset new.
 	fs add: 1.
 	d := dict new.
@@ -214,7 +214,7 @@ testStringIteratorReturnsStrings
 	result := iter perform: #__next__ env: 2.
 
 	"Result should be a string, not a character"
-	self assert: result class name equals: #'String'.
+	self assert: (result isKindOf: String).
 	self assert: result size equals: 1.
 	self assert: result equals: 'h'.
 %
@@ -318,9 +318,9 @@ testSetIteratorBasicIteration
 
 	| s iter items |
 	s := set new.
-	s ___add___: 1.
-	s ___add___: 2.
-	s ___add___: 3.
+	s add: 1.
+	s add: 2.
+	s add: 3.
 
 	iter := s perform: #__iter__ env: 2.
 	items := list new.
@@ -333,7 +333,7 @@ testSetIteratorBasicIteration
 		] on: StopIteration do: [:ex | ^ nil]
 	].
 
-	self assert: (items ___len___) equals: 3.
+	self assert: items size equals: 3.
 	self assert: (items ___contains___: 1).
 	self assert: (items ___contains___: 2).
 	self assert: (items ___contains___: 3).
@@ -361,7 +361,7 @@ testFrozensetIteratorBasicIteration
 		] on: StopIteration do: [:ex | ^ nil]
 	].
 
-	self assert: (items ___len___) equals: 3.
+	self assert: items size equals: 3.
 	self assert: (items ___contains___: 1).
 	self assert: (items ___contains___: 2).
 	self assert: (items ___contains___: 3).
@@ -374,9 +374,9 @@ testSetIteratorIndependence
 
 	| s iter1 iter2 item1 item2 |
 	s := set new.
-	s ___add___: 1.
-	s ___add___: 2.
-	s ___add___: 3.
+	s add: 1.
+	s add: 2.
+	s add: 3.
 
 	iter1 := s perform: #__iter__ env: 2.
 	iter2 := s perform: #__iter__ env: 2.
@@ -402,8 +402,8 @@ testSetIteratorExhaustion
 
 	| s iter |
 	s := set new.
-	s ___add___: 1.
-	s ___add___: 2.
+	s add: 1.
+	s add: 2.
 
 	iter := s perform: #__iter__ env: 2.
 

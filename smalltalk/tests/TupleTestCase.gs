@@ -5,27 +5,13 @@
 ! Tests cover shared sequence methods and tuple-specific immutability/hashing.
 ! ===============================================================================
 
-! ------------------- Remove existing test class
-expectvalue /Class
-doit
-(PythonTests includesKey: #'TupleTestCase') ifTrue: [
-	PythonTests removeKey: #'TupleTestCase'
-].
-%
-
-! ------------------- Define TupleTestCase class
-expectvalue /Class
-doit
-PythonTestCase subclass: 'TupleTestCase'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: PythonTests
-  options: #()
-%
-
 set compile_env: 0
+
+expectvalue /Metaclass3
+doit
+TupleTestCase removeAllMethods.
+TupleTestCase class removeAllMethods.
+%
 
 category: 'Tests - Sequence Protocol'
 method: TupleTestCase
@@ -34,10 +20,10 @@ test__len__
 
 	| tup |
 	tup := InvariantArray new.
-	self assert: (tup ___len___) equals: 0.
+	self assert: tup size equals: 0.
 	
 	tup := InvariantArray withAll: #(1 2 3).
-	self assert: (tup ___len___) equals: 3.
+	self assert: tup size equals: 3.
 %
 
 category: 'Tests - Sequence Protocol'

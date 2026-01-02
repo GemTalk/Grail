@@ -2,13 +2,13 @@
 ! BaseExceptionGroupTestCase - Tests for Python BaseExceptionGroup
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-BaseExceptionGroupTestCase removeAllMethods: 2.
-BaseExceptionGroupTestCase class removeAllMethods: 2.
+BaseExceptionGroupTestCase removeAllMethods.
+BaseExceptionGroupTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-BaseExceptionGroup'
 method: BaseExceptionGroupTestCase

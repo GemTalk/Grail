@@ -2,13 +2,13 @@
 ! TabErrorTestCase - Tests for Python TabError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-TabErrorTestCase removeAllMethods: 2.
-TabErrorTestCase class removeAllMethods: 2.
+TabErrorTestCase removeAllMethods.
+TabErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-TabError'
 method: TabErrorTestCase

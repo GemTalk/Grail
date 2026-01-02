@@ -21,8 +21,9 @@ set removeAllMethods: 2.
 set class removeAllMethods: 2.
 %
 
-! ------------------- Instance methods for set
 set compile_env: 2
+
+! ------------------- Instance methods for set
 
 category: 'Python-Type'
 method: set
@@ -126,7 +127,7 @@ intersection_update: other
 	"Update the set, keeping only elements found in it and other."
 
 	| toRemove |
-	toRemove := Array ___new___.
+	toRemove := list ___new___.
 	
 	self ___do___: [:each |
 		(other __contains__: each) ifFalse: [
@@ -145,7 +146,7 @@ difference_update: other
 	"Update the set, removing elements found in other."
 
 	| toRemove |
-	toRemove := Array ___new___.
+	toRemove := list ___new___.
 	
 	self ___do___: [:each |
 		(other __contains__: each) ifTrue: [
@@ -164,8 +165,8 @@ symmetric_difference_update: other
 	"Update the set, keeping only elements found in either set, but not in both."
 
 	| toAdd toRemove |
-	toAdd := Array ___new___.
-	toRemove := Array ___new___.
+	toAdd := list ___new___.
+	toRemove := list ___new___.
 
 	"Find elements in self that are also in other (to remove)"
 	self ___do___: [:each |
@@ -260,5 +261,3 @@ __repr__
 %
 
 set compile_env: 0
-
-

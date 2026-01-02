@@ -2,13 +2,13 @@
 ! TypeErrorTestCase - Tests for Python TypeError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-TypeErrorTestCase removeAllMethods: 2.
-TypeErrorTestCase class removeAllMethods: 2.
+TypeErrorTestCase removeAllMethods.
+TypeErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-TypeError'
 method: TypeErrorTestCase

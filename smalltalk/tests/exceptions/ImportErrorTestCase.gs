@@ -2,13 +2,13 @@
 ! ImportErrorTestCase - Tests for Python ImportError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-ImportErrorTestCase removeAllMethods: 2.
-ImportErrorTestCase class removeAllMethods: 2.
+ImportErrorTestCase removeAllMethods.
+ImportErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-ImportError'
 method: ImportErrorTestCase

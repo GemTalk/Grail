@@ -1,6 +1,7 @@
 ﻿! ------------------- Remove existing behavior from BinOpAst
 removeallmethods BinOpAst
 removeallclassmethods BinOpAst
+set compile_env: 0
 ! ------------------- Class methods for BinOpAst
 category: 'other'
 classmethod: BinOpAst

@@ -1,6 +1,7 @@
 ﻿! ------------------- Remove existing behavior from AttributeAst
 removeallmethods AttributeAst
 removeallclassmethods AttributeAst
+set compile_env: 0
 ! ------------------- Class methods for AttributeAst
 ! ------------------- Instance methods for AttributeAst
 category: 'other'

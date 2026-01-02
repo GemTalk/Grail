@@ -2,13 +2,13 @@
 ! StopAsyncIterationTestCase - Tests for Python StopAsyncIteration
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-StopAsyncIterationTestCase removeAllMethods: 2.
-StopAsyncIterationTestCase class removeAllMethods: 2.
+StopAsyncIterationTestCase removeAllMethods.
+StopAsyncIterationTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-StopAsyncIteration'
 method: StopAsyncIterationTestCase

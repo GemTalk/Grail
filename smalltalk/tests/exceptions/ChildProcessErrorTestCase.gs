@@ -2,13 +2,13 @@
 ! ChildProcessErrorTestCase - Tests for Python ChildProcessError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-ChildProcessErrorTestCase removeAllMethods: 2.
-ChildProcessErrorTestCase class removeAllMethods: 2.
+ChildProcessErrorTestCase removeAllMethods.
+ChildProcessErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-ChildProcessError'
 method: ChildProcessErrorTestCase

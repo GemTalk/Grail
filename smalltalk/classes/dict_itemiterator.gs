@@ -9,8 +9,9 @@ dict_itemiterator removeAllMethods: 2.
 dict_itemiterator class removeAllMethods: 2.
 %
 
-! ------------------- Class methods for dict_itemiterator
 set compile_env: 2
+
+! ------------------- Class methods for dict_itemiterator
 
 category: 'Python-Instance Creation'
 classmethod: dict_itemiterator
@@ -19,11 +20,11 @@ ___on: aDict
 
 	| iter itemsArray |
 	iter := self ___new___.
-	itemsArray := Array ___new___.
+	itemsArray := list ___new___.
 	aDict ___keysAndValuesDo___: [:key :value |
 		| pair |
-		pair := InvariantArray ___with___: key with: value.
-		itemsArray ___add___: pair
+		pair := tuple ___with___: key with: value.
+		itemsArray append: pair
 	].
 	iter ___dict: aDict.
 	iter ___items: itemsArray.
@@ -86,4 +87,3 @@ __next__
 %
 
 set compile_env: 0
-

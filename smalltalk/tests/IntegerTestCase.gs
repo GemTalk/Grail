@@ -4,6 +4,12 @@
 
 set compile_env: 0
 
+expectvalue /Metaclass3
+doit
+IntegerTestCase removeAllMethods.
+IntegerTestCase class removeAllMethods.
+%
+
 category: 'Tests - Initialization'
 method: IntegerTestCase
 test__new__

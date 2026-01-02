@@ -16,8 +16,9 @@ builtin_function_or_method removeAllMethods: 2.
 builtin_function_or_method class removeAllMethods: 2.
 %
 
-! ------------------- Instance methods for builtin_function_or_method
 set compile_env: 2
+
+! ------------------- Instance methods for builtin_function_or_method
 
 category: 'Python-Type'
 method: builtin_function_or_method
@@ -98,4 +99,3 @@ __repr__
 %
 
 set compile_env: 0
-

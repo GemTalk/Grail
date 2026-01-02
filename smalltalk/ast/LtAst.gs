@@ -1,6 +1,7 @@
 ﻿! ------------------- Remove existing behavior from LtAst
 removeallmethods LtAst
 removeallclassmethods LtAst
+set compile_env: 0
 ! ------------------- Class methods for LtAst
 ! ------------------- Instance methods for LtAst
 category: 'other'

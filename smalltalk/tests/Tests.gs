@@ -198,6 +198,23 @@ doit
 IntegerTestCase category: 'SUnit'
 %
 
+! ------------------- Class definition for ImportlibTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'ImportlibTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+ImportlibTestCase category: 'SUnit'
+%
+
 ! ------------------- Class definition for IteratorTestCase
 expectvalue /Class
 doit
@@ -331,6 +348,22 @@ PythonTestCase subclass: 'OsTestCase'
 expectvalue /Class
 doit
 OsTestCase category: 'SUnit'
+%
+
+! ------------------- Class definition for SysTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'SysTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+%
+expectvalue /Class
+doit
+SysTestCase category: 'SUnit'
 %
 
 ! ------------------- Class definition for TupleTestCase
@@ -472,6 +505,7 @@ input smalltalk/tests/DecimalTestCase.gs
 input smalltalk/tests/DictTestCase.gs
 input smalltalk/tests/FloatTestCase.gs
 input smalltalk/tests/FrozensetTestCase.gs
+input smalltalk/tests/ImportlibTestCase.gs
 input smalltalk/tests/IntegerTestCase.gs
 input smalltalk/tests/IteratorTestCase.gs
 input smalltalk/tests/ListTestCase.gs
@@ -481,6 +515,7 @@ input smalltalk/tests/ObjectTestCase.gs
 input smalltalk/tests/RangeTestCase.gs
 input smalltalk/tests/SetTestCase.gs
 input smalltalk/tests/StrTestCase.gs
+input smalltalk/tests/SysTestCase.gs
 input smalltalk/tests/TupleTestCase.gs
 
 ! ------------------- Load all exception test methods

@@ -2,13 +2,13 @@
 ! ProcessLookupErrorTestCase - Tests for Python ProcessLookupError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-ProcessLookupErrorTestCase removeAllMethods: 2.
-ProcessLookupErrorTestCase class removeAllMethods: 2.
+ProcessLookupErrorTestCase removeAllMethods.
+ProcessLookupErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-ProcessLookupError'
 method: ProcessLookupErrorTestCase

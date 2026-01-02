@@ -18,8 +18,9 @@ tuple removeAllMethods: 2.
 tuple class removeAllMethods: 2.
 %
 
-! ------------------- Instance methods for tuple
 set compile_env: 2
+
+! ------------------- Instance methods for tuple
 
 category: 'Python-Sequence Protocol'
 method: tuple
@@ -63,7 +64,7 @@ __getnewargs__
 	"Return arguments for unpickling.
 	For tuples, this is just the tuple itself as an argument."
 
-	^ Array ___with___: self
+	^ tuple ___with___: self
 %
 
 category: 'Python-String Representation'
@@ -113,4 +114,3 @@ If the argument is a tuple, the return value is the same object.'
 
 ! ------------------- Reset compile environment
 set compile_env: 0
-

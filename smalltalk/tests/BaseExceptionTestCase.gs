@@ -2,13 +2,13 @@
 ! BaseExceptionTestCase - Tests for Python BaseException
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-BaseExceptionTestCase removeAllMethods: 2.
-BaseExceptionTestCase class removeAllMethods: 2.
+BaseExceptionTestCase removeAllMethods.
+BaseExceptionTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-BaseException'
 method: BaseExceptionTestCase

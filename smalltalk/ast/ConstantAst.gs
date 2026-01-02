@@ -1,6 +1,7 @@
 ﻿! ------------------- Remove existing behavior from ConstantAst
 removeallmethods ConstantAst
 removeallclassmethods ConstantAst
+set compile_env: 0
 ! ------------------- Class methods for ConstantAst
 category: 'other'
 classmethod: ConstantAst
@@ -97,7 +98,7 @@ printSmalltalkOn: aStream
 		aStream nextPutAll: value printString.
 		^self.
 	].
-	aStream nextPutAll: value.
+	aStream print: value.
 %
 category: 'other'
 method: ConstantAst

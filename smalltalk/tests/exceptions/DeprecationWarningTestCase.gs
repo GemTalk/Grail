@@ -2,13 +2,13 @@
 ! DeprecationWarningTestCase - Tests for Python DeprecationWarning
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-DeprecationWarningTestCase removeAllMethods: 2.
-DeprecationWarningTestCase class removeAllMethods: 2.
+DeprecationWarningTestCase removeAllMethods.
+DeprecationWarningTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-DeprecationWarning'
 method: DeprecationWarningTestCase

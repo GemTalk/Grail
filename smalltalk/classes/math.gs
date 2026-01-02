@@ -13,6 +13,7 @@ math class removeAllMethods: 2.
 %
 
 set compile_env: 2
+
 ! ------------------- Class methods for math
 
 category: 'Python-Singleton'
@@ -29,7 +30,7 @@ instance
 	Creates it if it doesn't exist."
 	instance == nil ifTrue: [
 		instance := self perform: #basicNew env: 0.
-		instance perform: #initialize env: 2
+		instance initialize
 	].
 	^ instance
 %
@@ -1032,4 +1033,3 @@ radians: aBlock
 %
 
 set compile_env: 0
-

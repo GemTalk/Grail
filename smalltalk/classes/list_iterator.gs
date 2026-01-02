@@ -14,8 +14,9 @@ list_iterator removeAllMethods: 2.
 list_iterator class removeAllMethods: 2.
 %
 
-! ------------------- Class methods for list_iterator
 set compile_env: 2
+
+! ------------------- Class methods for list_iterator
 
 category: 'Python-Instance Creation'
 classmethod: list_iterator
@@ -32,7 +33,6 @@ ___on: aCollection
 %
 
 ! ------------------- Instance methods for list_iterator
-set compile_env: 2
 
 category: 'Python-Iterator Protocol'
 method: list_iterator
@@ -77,5 +77,3 @@ ___position: anInteger
 
 ! ------------------- Reset compile environment to Smalltalk
 set compile_env: 0
-
-

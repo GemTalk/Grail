@@ -2,13 +2,13 @@
 ! SystemErrorTestCase - Tests for Python SystemError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-SystemErrorTestCase removeAllMethods: 2.
-SystemErrorTestCase class removeAllMethods: 2.
+SystemErrorTestCase removeAllMethods.
+SystemErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-SystemError'
 method: SystemErrorTestCase

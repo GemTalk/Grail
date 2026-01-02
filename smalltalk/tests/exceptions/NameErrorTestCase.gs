@@ -2,13 +2,13 @@
 ! NameErrorTestCase - Tests for Python NameError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-NameErrorTestCase removeAllMethods: 2.
-NameErrorTestCase class removeAllMethods: 2.
+NameErrorTestCase removeAllMethods.
+NameErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-NameError'
 method: NameErrorTestCase

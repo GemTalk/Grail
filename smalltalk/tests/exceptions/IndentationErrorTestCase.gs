@@ -2,13 +2,13 @@
 ! IndentationErrorTestCase - Tests for Python IndentationError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-IndentationErrorTestCase removeAllMethods: 2.
-IndentationErrorTestCase class removeAllMethods: 2.
+IndentationErrorTestCase removeAllMethods.
+IndentationErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-IndentationError'
 method: IndentationErrorTestCase

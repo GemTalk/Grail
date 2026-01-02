@@ -2,13 +2,13 @@
 ! ExceptionGroupTestCase - Tests for Python ExceptionGroup
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-ExceptionGroupTestCase removeAllMethods: 2.
-ExceptionGroupTestCase class removeAllMethods: 2.
+ExceptionGroupTestCase removeAllMethods.
+ExceptionGroupTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-ExceptionGroup'
 method: ExceptionGroupTestCase

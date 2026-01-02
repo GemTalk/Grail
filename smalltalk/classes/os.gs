@@ -14,6 +14,7 @@ os class removeAllMethods: 2.
 %
 
 set compile_env: 2
+
 ! ------------------- Class methods for os
 
 category: 'Python-Singleton'
@@ -30,7 +31,7 @@ instance
 	Creates it if it doesn't exist."
 	instance == nil ifTrue: [
 		instance := self perform: #basicNew env: 0.
-		instance perform: #initialize env: 2
+		instance initialize
 	].
 	^ instance
 %
@@ -122,7 +123,7 @@ initialize_listdir
 		(dirContents ___isKindOf___: Array) ifFalse: [
 			OSError ___signal___: ('Cannot list directory: ' ___concat___: (actualPath ___printString___))
 		].
-		result := OrderedCollection ___new___.
+		result := list ___new___.
 		size := dirContents ___size___.
 		1 ___to___: size do: [:i | | basename lastSlashIndex reversedPath reversedSep index |
 			each := dirContents ___at___: i.
@@ -146,7 +147,7 @@ initialize_listdir
 				basename := decoded ___copyFrom___: (lastSlashIndex ___plus___: 1) to: decoded ___size___.
 				decoded := basename
 			].
-			result ___add___: decoded
+			result append: decoded
 		].
 		result
 	]
@@ -719,4 +720,3 @@ path: aValue
 %
 
 set compile_env: 0
-

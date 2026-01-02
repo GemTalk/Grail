@@ -13,6 +13,7 @@ os_path class removeAllMethods: 2.
 %
 
 set compile_env: 2
+
 ! ------------------- Class methods for os_path
 
 category: 'Python-Singleton'
@@ -29,7 +30,7 @@ instance
 	Creates it if it doesn't exist."
 	instance == nil ifTrue: [
 		instance := self perform: #basicNew env: 0.
-		instance perform: #initialize env: 2
+		instance initialize
 	].
 	^ instance
 %
@@ -196,17 +197,17 @@ initialize_split
 			lastIndex := (pathSize ___minus___: (index)) ___plus___: 1
 		].
 		(lastIndex ___eq___: 0) ifTrue: [
-			Array ___with___: '' with: path
+			tuple ___with___: '' with: path
 		] ifFalse: [
 			(lastIndex ___eq___: pathSize) ifTrue: [
 				"Path ends with separator"
 				head := path ___copyFrom___: 1 to: (lastIndex ___minus___: 1).
 				(head ___isEmpty___) ifTrue: [head := sep].
-				Array ___with___: head with: ''
+				tuple ___with___: head with: ''
 			] ifFalse: [
 				head := path ___copyFrom___: 1 to: (lastIndex ___minus___: 1).
 				tail := path ___copyFrom___: (lastIndex ___plus___: 1) to: pathSize.
-				Array ___with___: head with: tail
+				tuple ___with___: head with: tail
 			]
 		]
 	]
@@ -231,10 +232,10 @@ initialize_splitext
 			lastDotIndex := (pathSize ___minus___: (index)) ___plus___: 1
 		].
 		(lastDotIndex ___eq___: 0) ifTrue: [
-			Array ___with___: path with: ''
+			tuple ___with___: path with: ''
 		] ifFalse: [
 			(lastDotIndex ___eq___: pathSize) ifTrue: [
-				Array ___with___: path with: ''
+				tuple ___with___: path with: ''
 			] ifFalse: [
 				"Check if there's a path separator after the dot (e.g., '/.hidden')"
 				reversedSep := '/' ___reverse___.
@@ -246,15 +247,15 @@ initialize_splitext
 					sepIndex := (pathSize ___minus___: (index)) ___plus___: 1
 				].
 				(sepIndex ___gt___: lastDotIndex) ifTrue: [
-					Array ___with___: path with: ''
+					tuple ___with___: path with: ''
 				] ifFalse: [
 					"If dot is at position 1 (leading dot), it's not an extension"
 					(lastDotIndex ___eq___: 1) ifTrue: [
-						Array ___with___: path with: ''
+						tuple ___with___: path with: ''
 					] ifFalse: [
 						root := path ___copyFrom___: 1 to: (lastDotIndex ___minus___: 1).
 						ext := path ___copyFrom___: lastDotIndex to: pathSize.
-						Array ___with___: root with: ext
+						tuple ___with___: root with: ext
 					]
 				]
 			]
@@ -325,7 +326,7 @@ initialize_normpath
 				]
 			].
 			earlyExit ifTrue: [
-				parts := OrderedCollection ___new___
+				parts := list ___new___
 			]
 		].
 		earlyExit ifTrue: [
@@ -442,7 +443,7 @@ initialize_commonpath
 		(paths ___isEmpty___) ifTrue: [
 			ValueError ___signal___: 'commonpath() arg is an empty sequence'
 		].
-		allParts := OrderedCollection ___new___.
+		allParts := list ___new___.
 		pathsSize := paths ___size___.
 		normpathBlock := self normpath.
 		1 ___to___: pathsSize do: [:i |
@@ -451,13 +452,13 @@ initialize_commonpath
 			parts := $/ ___split___: normalized.
 			partsSize := parts ___size___.
 			parts := parts ___select___: [:each | each perform: #notEmpty env: 0].
-			allParts ___add___: parts
+			allParts append: parts
 		].
 		firstSize := (allParts ___first___) ___size___.
 		minSize := allParts ___inject___: firstSize into: [:min :parts |
 			(min ___min___: (parts ___size___))
 		].
-		commonParts := OrderedCollection ___new___.
+		commonParts := list ___new___.
 		allPartsSize := allParts ___size___.
 		i := 1.
 		[(i ___le___: minSize)] ___whileTrue___: [
@@ -470,7 +471,7 @@ initialize_commonpath
 				]
 			].
 			allMatch ifTrue: [
-				commonParts ___add___: firstPart.
+				commonParts append: firstPart.
 				i := i ___plus___: 1
 			] ifFalse: [
 				"If first part doesn't match, paths don't start from common point"
@@ -715,4 +716,3 @@ commonprefix: aBlock
 %
 
 set compile_env: 0
-

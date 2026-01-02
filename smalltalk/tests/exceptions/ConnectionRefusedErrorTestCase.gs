@@ -2,13 +2,13 @@
 ! ConnectionRefusedErrorTestCase - Tests for Python ConnectionRefusedError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-ConnectionRefusedErrorTestCase removeAllMethods: 2.
-ConnectionRefusedErrorTestCase class removeAllMethods: 2.
+ConnectionRefusedErrorTestCase removeAllMethods.
+ConnectionRefusedErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-ConnectionRefusedError'
 method: ConnectionRefusedErrorTestCase

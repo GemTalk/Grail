@@ -1,6 +1,7 @@
 ﻿! ------------------- Remove existing behavior from ArgAst
 removeallmethods ArgAst
 removeallclassmethods ArgAst
+set compile_env: 0
 ! ------------------- Class methods for ArgAst
 ! ------------------- Instance methods for ArgAst
 category: 'other'

@@ -15,8 +15,9 @@ iterator removeAllMethods: 2.
 iterator class removeAllMethods: 2.
 %
 
-! ------------------- Instance methods for iterator
 set compile_env: 2
+
+! ------------------- Instance methods for iterator
 
 category: 'Python-Iterator Protocol'
 method: iterator
@@ -64,5 +65,3 @@ __class__
 
 ! ------------------- Reset compile environment to Smalltalk
 set compile_env: 0
-
-

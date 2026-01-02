@@ -2,13 +2,13 @@
 ! KeyErrorTestCase - Tests for Python KeyError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-KeyErrorTestCase removeAllMethods: 2.
-KeyErrorTestCase class removeAllMethods: 2.
+KeyErrorTestCase removeAllMethods.
+KeyErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-KeyError'
 method: KeyErrorTestCase

@@ -2,13 +2,13 @@
 ! UserWarningTestCase - Tests for Python UserWarning
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-UserWarningTestCase removeAllMethods: 2.
-UserWarningTestCase class removeAllMethods: 2.
+UserWarningTestCase removeAllMethods.
+UserWarningTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-UserWarning'
 method: UserWarningTestCase

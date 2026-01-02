@@ -2,13 +2,13 @@
 ! AssertionErrorTestCase - Tests for Python AssertionError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-AssertionErrorTestCase removeAllMethods: 2.
-AssertionErrorTestCase class removeAllMethods: 2.
+AssertionErrorTestCase removeAllMethods.
+AssertionErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-AssertionError'
 method: AssertionErrorTestCase

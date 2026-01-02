@@ -2,13 +2,13 @@
 ! UnicodeWarningTestCase - Tests for Python UnicodeWarning
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-UnicodeWarningTestCase removeAllMethods: 2.
-UnicodeWarningTestCase class removeAllMethods: 2.
+UnicodeWarningTestCase removeAllMethods.
+UnicodeWarningTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-UnicodeWarning'
 method: UnicodeWarningTestCase

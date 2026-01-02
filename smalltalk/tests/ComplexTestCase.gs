@@ -2,15 +2,14 @@
 ! ComplexTestCase - Tests for Python complex Type
 ! ===============================================================================
 
+set compile_env: 0
+
 ! ------------------- Remove existing methods
 removeallmethods ComplexTestCase
 removeallclassmethods ComplexTestCase
 
 ! ------------------- Class methods for ComplexTestCase
-set compile_env: 0
-
 ! ------------------- Instance methods for ComplexTestCase
-set compile_env: 0
 
 category: 'Python-Initialization'
 method: ComplexTestCase
@@ -448,7 +447,3 @@ test__dir__sorted
 	"Verify the list is sorted"
 	self assert: dirResult first equals: '__abs__'.
 %
-
-! ------------------- Reset compile environment
-set compile_env: 0
-

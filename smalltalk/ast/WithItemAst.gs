@@ -1,6 +1,7 @@
 ﻿! ------------------- Remove existing behavior from WithItemAst
 removeallmethods WithItemAst
 removeallclassmethods WithItemAst
+set compile_env: 0
 ! ------------------- Class methods for WithItemAst
 ! ------------------- Instance methods for WithItemAst
 category: 'Accessing'

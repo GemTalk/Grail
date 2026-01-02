@@ -1,6 +1,7 @@
 ﻿! ------------------- Remove existing behavior from FunctionDefAst
 removeallmethods FunctionDefAst
 removeallclassmethods FunctionDefAst
+set compile_env: 0
 ! ------------------- Class methods for FunctionDefAst
 category: 'other'
 classmethod: FunctionDefAst
@@ -108,15 +109,37 @@ category: 'other'
 method: FunctionDefAst
 printSmalltalkOn: aStream
 
-	aStream nextPutAll: name; nextPutAll: ' := ['.
+	aStream 
+		nextPutAll: name; 
+		nextPutAll: ' := [:positional :keyword |';
+		lf;
+		increaseIndent.
 	args args notEmpty ifTrue: [
+		aStream nextPutAll: '| '.
 		args args do: [:arg |
-			aStream nextPut: $:; nextPutAll: arg name; space.
+			aStream nextPutAll: arg name; space.
 		].
-		aStream nextPut: $|.
+		aStream nextPut: $|; lf.
+		1 to: args args size do: [:i | 
+			| arg |
+			arg := args args at: i.
+			aStream 
+				nextPutAll: arg name;
+				nextPutAll: ' := positional ___at___: ';
+				print: i;
+				nextPut: $.;
+				lf.
+		].
 	].
-	aStream increaseIndent; lf.
+	aStream 
+		nextPut: $[; 
+		lf; 
+		increaseIndent.
 	body printSmalltalkOn: aStream.
+	aStream 
+		decreaseIndent; 
+		nextPutAll: '] value.';
+		lf.
 	aStream decreaseIndent; nextPutAll: '].'.
 %
 category: 'other'

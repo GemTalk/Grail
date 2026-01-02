@@ -9,8 +9,9 @@ dict_valueiterator removeAllMethods: 2.
 dict_valueiterator class removeAllMethods: 2.
 %
 
-! ------------------- Class methods for dict_valueiterator
 set compile_env: 2
+
+! ------------------- Class methods for dict_valueiterator
 
 category: 'Python-Instance Creation'
 classmethod: dict_valueiterator
@@ -19,9 +20,9 @@ ___on: aDict
 
 	| iter valuesArray |
 	iter := self ___new___.
-	valuesArray := Array ___new___.
+	valuesArray := list ___new___.
 	aDict perform: #valuesDo: env: 0 withArguments: {[:value |
-		valuesArray ___add___: value
+		valuesArray append: value
 	]}.
 	iter ___dict: aDict.
 	iter ___values: valuesArray.
@@ -84,4 +85,3 @@ __next__
 %
 
 set compile_env: 0
-

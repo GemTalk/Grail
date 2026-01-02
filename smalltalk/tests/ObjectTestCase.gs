@@ -1,4 +1,7 @@
 ! ------------------- Remove existing behavior from ObjectTestCase
+
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
 ObjectTestCase removeAllMethods.
@@ -6,10 +9,7 @@ ObjectTestCase class removeAllMethods.
 %
 
 ! ------------------- Class methods for ObjectTestCase
-set compile_env: 0
-
 ! ------------------- Instance methods for ObjectTestCase
-set compile_env: 0
 
 category: 'Python-Attribute Access'
 method: ObjectTestCase
@@ -194,7 +194,3 @@ test__init_subclass__
 	"Result should be nil (Python's None)"
 	self assert: result equals: nil
 %
-
-! ------------------- Reset compile environment
-set compile_env: 0
-

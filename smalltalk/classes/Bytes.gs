@@ -18,8 +18,9 @@ bytes removeAllMethods: 2.
 bytes class removeAllMethods: 2.
 %
 
-! ------------------- Class methods for bytes
 set compile_env: 2
+
+! ------------------- Class methods for bytes
 
 category: 'Python-Constructors'
 classmethod: bytes
@@ -52,7 +53,7 @@ __new__: cls _: source
 
 	"If source is bytes, make a copy"
 	(sourceClass == bytes) ifTrue: [
-		result := cls ___new___: (source ___size___).
+		result := cls ___new___: source ___size___.
 		1 ___to___: source ___size___ do: [:i |
 			result ___at___: i put: (source ___at___: i)
 		].
@@ -60,9 +61,9 @@ __new__: cls _: source
 	].
 
 	"If source is a list, tuple, or array, convert elements to bytes"
-	((sourceClass ___eq___: OrderedCollection) or: [
-		(sourceClass ___eq___: InvariantArray) or: [
-			sourceClass ___eq___: Array
+	(sourceClass == list or: [
+		sourceClass == tuple or: [
+			sourceClass == Array
 		]
 	]) ifTrue: [
 		| ba size |
@@ -254,17 +255,7 @@ __setitem__: index _: value
 category: 'Python-Sequence Protocol'
 method: bytes
 __contains__: item
-	"Check if byte value is in bytes"
-	| size |
-	size := self ___size___.
-	1 ___to___: size do: [:i |
-		| byte |
-		byte := self ___at___: i.
-		(byte ___eq___: item) ifTrue: [
-			^ true
-		]
-	].
-	^ false
+	^ self ___includes___: item
 %
 
 category: 'Python-Comparison'
@@ -1060,7 +1051,7 @@ split: sep
 		ValueError ___signal___: 'empty separator'
 	].
 
-	parts := OrderedCollection ___new___.
+	parts := list ___new___.
 	currentPart := bytes ___new___.
 	i := 1.
 
@@ -1084,7 +1075,7 @@ split: sep
 
 		match ifTrue: [
 			"Found separator - add current part to list"
-			parts ___add___: currentPart.
+			parts append: currentPart.
 			currentPart := bytes ___new___.
 			i := i ___plus___: sepSize
 		] ifFalse: [
@@ -1099,7 +1090,7 @@ split: sep
 	].
 
 	"Add final part"
-	parts ___add___: currentPart.
+	parts append: currentPart.
 
 	^ parts
 %
@@ -1129,7 +1120,7 @@ split: sep _: maxsplit
 		^ self perform: #split: env: 2 withArguments: {sep}
 	].
 
-	parts := OrderedCollection ___new___.
+	parts := list ___new___.
 	currentPart := bytes ___new___.
 	i := 1.
 	splitCount := 0.
@@ -1158,7 +1149,7 @@ split: sep _: maxsplit
 
 		match ifTrue: [
 			"Found separator - add current part to list"
-			parts ___add___: currentPart.
+			parts append: currentPart.
 			currentPart := bytes ___new___.
 			i := i ___plus___: sepSize.
 			splitCount := splitCount ___plus___: 1
@@ -1174,7 +1165,7 @@ split: sep _: maxsplit
 	].
 
 	"Add final part"
-	parts ___add___: currentPart.
+	parts append: currentPart.
 
 	^ parts
 %
@@ -1187,8 +1178,8 @@ join: iterable
 	iterClass := iterable ___class___.
 
 	"iterable must be list or tuple"
-		((iterClass ___eq___: OrderedCollection) or: [
-		iterClass ___eq___: InvariantArray
+		((iterClass ___eq___: list) or: [
+		iterClass ___eq___: tuple
 	]) ifFalse: [
 		TypeError ___signal___: 'can only join an iterable'
 	].
@@ -1703,7 +1694,7 @@ partition: sep
 
 	"Not found - return (self, empty, empty)"
 	(idx ___eq___: -1) ifTrue: [
-		^ InvariantArray ___with___: (self ___copy___) with: (bytes ___new___) with: (bytes ___new___)
+		^ tuple ___with___: (self ___copy___) with: (bytes ___new___) with: (bytes ___new___)
 	].
 
 	"Found - split at separator"
@@ -1723,7 +1714,7 @@ partition: sep
 		after ___at___: i put: (self ___at___: (idx ___plus___: (sepSize ___plus___: i)))
 	].
 
-	^ InvariantArray ___with___: before with: sep with: after
+	^ tuple ___with___: before with: sep with: after
 %
 
 category: 'Python-Splitting Methods'
@@ -1735,7 +1726,7 @@ rpartition: sep
 
 	"Not found - return (empty, empty, self)"
 	(idx ___eq___: -1) ifTrue: [
-		^ InvariantArray ___with___: (bytes ___new___) with: (bytes ___new___) with: self ___copy___
+		^ tuple ___with___: (bytes ___new___) with: (bytes ___new___) with: self ___copy___
 	].
 
 	"Found - split at separator"
@@ -1755,7 +1746,7 @@ rpartition: sep
 		after ___at___: i put: (self ___at___: (idx ___plus___: (sepSize ___plus___: i)))
 	].
 
-	^ InvariantArray ___with___: before with: sep with: after
+	^ tuple ___with___: before with: sep with: after
 %
 
 category: 'Python-Splitting Methods'
@@ -1791,7 +1782,7 @@ rsplit: sep _: maxsplit
 	].
 
 	"Find all separator positions from right to left"
-	positions := OrderedCollection ___new___.
+	positions := list ___new___.
 	i := mySize ___minus___: (sepSize ___minus___: 1).
 	
 	[i ___ge___: 1] ___whileTrue___: [
@@ -1806,7 +1797,7 @@ rsplit: sep _: maxsplit
 			]
 		].
 		match ifTrue: [
-			positions ___add___: i
+			positions append: i
 		].
 		i := i ___minus___: (1)
 	].
@@ -1815,15 +1806,15 @@ rsplit: sep _: maxsplit
 	actualSplits := positions ___size___.
 	(actualSplits ___gt___: maxsplit) ifTrue: [
 		| newPositions |
-		newPositions := OrderedCollection ___new___.
+		newPositions := list ___new___.
 		1 ___to___: maxsplit do: [:idx |
-			newPositions ___add___: (positions ___at___: idx)
+			newPositions append: (positions ___at___: idx)
 		].
 		positions := newPositions
 	].
 
 	"Build parts from right to left"
-	parts := OrderedCollection ___new___.
+	parts := list ___new___.
 	lastEnd := mySize ___plus___: 1.
 	
 	1 ___to___: positions ___size___ do: [:idx |
@@ -1855,7 +1846,7 @@ splitlines
 	"Split bytes at line boundaries, return list"
 	| parts currentPart size i |
 	size := self ___size___.
-	parts := OrderedCollection ___new___.
+	parts := list ___new___.
 	currentPart := bytes ___new___.
 	i := 1.
 
@@ -1865,12 +1856,12 @@ splitlines
 
 		"Check for line endings"
 		(byte ___eq___: 10) ifTrue: [  "LF"
-			parts ___add___: currentPart.
+			parts append: currentPart.
 			currentPart := bytes ___new___.
 			i := i ___plus___: 1
 		] ifFalse: [
 			(byte ___eq___: 13) ifTrue: [  "CR"
-				parts ___add___: currentPart.
+				parts append: currentPart.
 				currentPart := bytes ___new___.
 				"Check for CRLF"
 				((i ___lt___: size) and: [
@@ -1892,8 +1883,8 @@ splitlines
 	].
 
 	"Add final part if non-empty"
-		((currentPart ___size___) ___gt___: 0) ifTrue: [
-		parts ___add___: currentPart
+		(currentPart ___size___ ___gt___: 0) ifTrue: [
+		parts append: currentPart
 	].
 
 	^ parts
@@ -2007,5 +1998,3 @@ translate: table
 %
 
 set compile_env: 0
-
-

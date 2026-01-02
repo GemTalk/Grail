@@ -1,6 +1,7 @@
 ﻿! ------------------- Remove existing behavior from KeywordsAst
 removeallmethods KeywordsAst
 removeallclassmethods KeywordsAst
+set compile_env: 0
 ! ------------------- Class methods for KeywordsAst
 category: 'other'
 classmethod: KeywordsAst

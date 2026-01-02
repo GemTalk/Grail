@@ -22,8 +22,9 @@ range removeAllMethods: 2.
 range class removeAllMethods: 2.
 %
 
-! ------------------- Python class methods for range
 set compile_env: 2
+
+! ------------------- Python class methods for range
 
 category: 'Python-Initialization'
 classmethod: range
@@ -76,10 +77,7 @@ __new__: cls _: start _: stop _: step
 	^ range ___from___: startVal to: adjustedStop by: stepVal
 %
 
-set compile_env: 0
-
 ! ------------------- Python instance methods for range
-set compile_env: 2
 
 category: 'Python-Sequence Protocol'
 method: range
@@ -172,7 +170,7 @@ method: range
 __contains__: value
 	"Test if value is in the range"
 
-	^ self perform: #includes: env: 0 withArguments: {value}
+	^ self ___includes___: value
 %
 
 category: 'Python-Comparison'
@@ -313,4 +311,3 @@ __reversed__
 %
 
 set compile_env: 0
-

@@ -2,13 +2,13 @@
 ! EncodingWarningTestCase - Tests for Python EncodingWarning
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-EncodingWarningTestCase removeAllMethods: 2.
-EncodingWarningTestCase class removeAllMethods: 2.
+EncodingWarningTestCase removeAllMethods.
+EncodingWarningTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-EncodingWarning'
 method: EncodingWarningTestCase

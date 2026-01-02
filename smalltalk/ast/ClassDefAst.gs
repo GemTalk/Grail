@@ -1,6 +1,7 @@
 ﻿! ------------------- Remove existing behavior from ClassDefAst
 removeallmethods ClassDefAst
 removeallclassmethods ClassDefAst
+set compile_env: 0
 ! ------------------- Class methods for ClassDefAst
 ! ------------------- Instance methods for ClassDefAst
 category: 'other'

@@ -2,13 +2,13 @@
 ! GeneratorExitTestCase - Tests for Python GeneratorExit
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-GeneratorExitTestCase removeAllMethods: 2.
-GeneratorExitTestCase class removeAllMethods: 2.
+GeneratorExitTestCase removeAllMethods.
+GeneratorExitTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-GeneratorExit'
 method: GeneratorExitTestCase

@@ -2,13 +2,13 @@
 ! EOFErrorTestCase - Tests for Python EOFError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-EOFErrorTestCase removeAllMethods: 2.
-EOFErrorTestCase class removeAllMethods: 2.
+EOFErrorTestCase removeAllMethods.
+EOFErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-EOFError'
 method: EOFErrorTestCase

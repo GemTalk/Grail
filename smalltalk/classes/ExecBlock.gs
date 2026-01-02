@@ -17,8 +17,8 @@ ExecBlock class removeAllMethods: 2.
 %
 
 set compile_env: 2
-! ------------------- Instance methods for ExecBlock
 
+! ------------------- Instance methods for ExecBlock
 category: 'Python-Block Evaluation'
 method: ExecBlock
 value
@@ -85,49 +85,3 @@ __call__: args
 %
 
 set compile_env: 0
-
-! ------------------- Convenience methods for calling Python environment value methods
-! These are in environment 0 so they can be called from Smalltalk code
-
-category: 'Convenience Methods - Python (env 2)'
-method: ExecBlock
-___value___
-	"Convenience method: self perform: #value env: 2"
-	^ self perform: #value env: 2
-%
-
-category: 'Convenience Methods - Python (env 2)'
-method: ExecBlock
-___value___: arg1
-	"Convenience method: self perform: #value: env: 2 withArguments: {arg1}"
-	^ self perform: #value: env: 2 withArguments: {arg1}
-%
-
-category: 'Convenience Methods - Python (env 2)'
-method: ExecBlock
-___value___: arg1 ___value___: arg2
-	"Convenience method: self perform: #value:value: env: 2 withArguments: {arg1. arg2}"
-	^ self perform: #value:value: env: 2 withArguments: {arg1. arg2}
-%
-
-category: 'Convenience Methods - Python (env 2)'
-method: ExecBlock
-___value___: arg1 ___value___: arg2 ___value___: arg3
-	"Convenience method: self perform: #value:value:value: env: 2 withArguments: {arg1. arg2. arg3}"
-	^ self perform: #value:value:value: env: 2 withArguments: {arg1. arg2. arg3}
-%
-
-category: 'Convenience Methods - Python (env 2)'
-method: ExecBlock
-___value___: arg1 ___value___: arg2 ___value___: arg3 ___value___: arg4
-	"Convenience method: self perform: #value:value:value:value: env: 2 withArguments: {arg1. arg2. arg3. arg4}"
-	^ self perform: #value:value:value:value: env: 2 withArguments: {arg1. arg2. arg3. arg4}
-%
-
-category: 'Convenience Methods - Python (env 2)'
-method: ExecBlock
-___valueWithArguments___: anArray
-	"Convenience method: self perform: #valueWithArguments: env: 2 withArguments: {anArray}"
-	^ self perform: #valueWithArguments: env: 2 withArguments: {anArray}
-%
-

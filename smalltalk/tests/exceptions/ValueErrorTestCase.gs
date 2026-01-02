@@ -2,13 +2,13 @@
 ! ValueErrorTestCase - Tests for Python ValueError
 ! ===============================================================================
 
+set compile_env: 0
+
 expectvalue /Metaclass3
 doit
-ValueErrorTestCase removeAllMethods: 2.
-ValueErrorTestCase class removeAllMethods: 2.
+ValueErrorTestCase removeAllMethods.
+ValueErrorTestCase class removeAllMethods.
 %
-
-set compile_env: 0
 
 category: 'Python-Tests-ValueError'
 method: ValueErrorTestCase
