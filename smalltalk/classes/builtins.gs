@@ -375,12 +375,26 @@ initialize_any
 category: 'Python-Initialization'
 method: builtins
 initialize_isinstance
-	"Return True if object is an instance of classinfo"
+	"Return True if object is an instance of classinfo.
+	Supports Abstract Base Classes (ABCs) via __instancecheck__."
 	isinstance := [:positional :keywords |
-		| anObject aClassOrTuple |
+		| anObject aClassOrTuple result theMetaclass |
 		anObject := positional ___at___: 1.
 		aClassOrTuple := positional ___at___: 2.
-		anObject ___isKindOf___: aClassOrTuple
+
+		"First try normal isinstance check"
+		result := anObject ___isKindOf___: aClassOrTuple.
+
+		"If normal check fails, try ABC's __instancecheck__ if it exists"
+		result ifFalse: [
+			theMetaclass := aClassOrTuple ___class___.
+			(theMetaclass perform: #includesSelector:environmentId: env: 0
+				withArguments: {#'__instancecheck__:'. 2}) ifTrue: [
+					result := aClassOrTuple __instancecheck__: anObject
+				]
+		].
+
+		result
 	]
 %
 

@@ -46,19 +46,13 @@ parent: aNode
 			aNode stream skip: 4.
 			^None
 		].
-		symbol := ((aNode stream upTo: self subclassDelimiter) , 'Ast') asSymbol.
+		symbol := ((aNode stream upTo: $() , 'Ast') asSymbol.
 		class := PythonAst at: symbol.
 		^class parent: aNode.
 	].
 	^self basicNew
 		initialize: aNode;
 		yourself
-%
-category: 'other'
-classmethod: AbstractNode
-subclassDelimiter
-
-	^$(
 %
 ! ------------------- Instance methods for AbstractNode
 category: 'initialization'

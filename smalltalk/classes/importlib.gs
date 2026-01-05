@@ -55,10 +55,7 @@ classmethod: importlib
 lookupModule: aName
 	"Look up a module by name in the registry.
 	Returns the module class or nil if not found."
-	^ self modules
-		perform: #at:ifAbsent:
-		env: 0
-		withArguments: { aName ___asSymbol___. [nil] }
+	^ self modules ___at___: aName ___asSymbol___ ifAbsent: [nil]
 %
 
 category: 'Module Loading'

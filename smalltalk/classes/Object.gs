@@ -39,6 +39,20 @@ ___new___
 
 category: 'Convenience Methods'
 classmethod: object
+___new___: arg1 _: arg2
+	"Convenience method for calling __new__:_: from env 2 code"
+	^ self perform: #__new__:_: env: 2 withArguments: {arg1. arg2}
+%
+
+category: 'Convenience Methods'
+classmethod: object
+___new___: arg1 _: arg2 _: arg3
+	"Convenience method for calling __new__:_:_: from env 2 code"
+	^ self perform: #__new__:_:_: env: 2 withArguments: {arg1. arg2. arg3}
+%
+
+category: 'Convenience Methods'
+classmethod: object
 ___on___: aCollection
 	^ self perform: #on: env: 0 withArguments: {aCollection}
 %
@@ -354,6 +368,12 @@ ___asFloat___
 
 category: 'Convenience Methods - Unary'
 method: object
+___asFraction___
+	^ self perform: #asFraction env: 0
+%
+
+category: 'Convenience Methods - Unary'
+method: object
 ___asInteger___
 	^ self perform: #asInteger env: 0
 %
@@ -542,6 +562,13 @@ category: 'Convenience Methods - Keyword'
 method: object
 ___at___: index put: value
 	^ self perform: #at:put: env: 0 withArguments: {index. value}
+%
+
+category: 'Convenience Methods - Keyword'
+method: object
+___at___: key ifAbsent: aBlock
+	"Convenience method: self perform: #at:ifAbsent: env: 0 withArguments: {key. aBlock}"
+	^ self perform: #at:ifAbsent: env: 0 withArguments: {key. aBlock}
 %
 
 category: 'Convenience Methods - Keyword'
@@ -751,6 +778,15 @@ ___respondsTo___: aSelector
 
 category: 'Convenience Methods - Keyword'
 method: object
+___respondsToEnv2___: aSelector
+	"Check if the receiver responds to aSelector in environment 2 (Python)"
+	| selectors |
+	selectors := self ___class___ ___allSelectorsForEnvironment___: 2.
+	^ selectors ___includes___: aSelector
+%
+
+category: 'Convenience Methods - Keyword'
+method: object
 ___with___: arg1 with: arg2
 	^ self perform: #with:with: env: 0 withArguments: {arg1. arg2}
 %
@@ -843,6 +879,27 @@ category: 'Convenience Methods - Unary'
 method: object
 ___ln___
 	^ self perform: #ln env: 0
+%
+
+category: 'Convenience Methods - Unary'
+method: object
+___getKind___
+	"Return the float kind: 1=normal, 3=infinity, 5=NaN"
+	^ self perform: #_getKind env: 0
+%
+
+category: 'Convenience Methods - Unary'
+method: object
+___isNaN___
+	"Return true if this float is NaN"
+	^ self perform: #_isNaN env: 0
+%
+
+category: 'Convenience Methods - Unary'
+method: object
+___isScaledDecimal___
+	"Return true if this is a ScaledDecimal"
+	^ self perform: #_isScaledDecimal env: 0
 %
 
 category: 'Convenience Methods - Unary'
@@ -1014,7 +1071,7 @@ perform: aSelectorSymbol env: environmentId
 "
 
 <primitive: 2014>
-^self _perform: aSelectorSymbol asSymbol env: environmentId withArguments:  #()
+^self perform: #_perform:env:withArguments: env: 0 withArguments: {aSelectorSymbol perform: #asSymbol env: 0. environmentId. #()}
 %
 
 category: 'Message Handling'
@@ -1033,12 +1090,11 @@ perform: aSelectorSymbol env: environmentId withArguments: anArray
  specifying a method lookup environment."
 
 <primitive: 2015>
-anArray _validateClass: Array.
+anArray perform: #_validateClass: env: 0 withArguments: {Array}.
 
 "Now just try the primitive again, but send asSymbol to the selector to convert
  it to a Symbol."
-^ self _perform: aSelectorSymbol asSymbol env: environmentId
-	withArguments: anArray
+^ self perform: #_perform:env:withArguments: env: 0 withArguments: {aSelectorSymbol perform: #asSymbol env: 0. environmentId. anArray}
 %
 
 category: 'Python-Other'
@@ -1065,15 +1121,51 @@ with: anObject perform: aSelectorSymbol env: environmentId
 
 <primitive: 2014>
 | sel |
-sel := aSelectorSymbol asSymbol .
-^self _perform: sel env: environmentId withArguments: { anObject }
+sel := aSelectorSymbol perform: #asSymbol env: 0.
+^self perform: #_perform:env:withArguments: env: 0 withArguments: {sel. environmentId. { anObject }}
 %
 
 ! ------------------- Reset compile environment to Smalltalk
 set compile_env: 0
 
 category: 'Convenience Methods - Python (env 2)'
+classmethod: object
+___new___: arg
+	"Convenience method: self perform: #__new__: env: 2 withArguments: {arg}"
+	^ self perform: #__new__: env: 2 withArguments: {arg}
+%
+
+category: 'Convenience Methods - Python (env 2)'
+classmethod: object
+___new___: arg1 _: arg2
+	"Convenience method: self perform: #__new__:_: env: 2 withArguments: {arg1. arg2}"
+	^ self perform: #__new__:_: env: 2 withArguments: {arg1. arg2}
+%
+
+category: 'Convenience Methods - Python (env 2)'
+classmethod: object
+___new___: arg1 _: arg2 _: arg3
+	"Convenience method: self perform: #__new__:_:_: env: 2 withArguments: {arg1. arg2. arg3}"
+	^ self perform: #__new__:_:_: env: 2 withArguments: {arg1. arg2. arg3}
+%
+
+category: 'Convenience Methods - Python (env 2)'
+method: object
+___len___
+	"Convenience method: self perform: #__len__ env: 2"
+	^ self perform: #__len__ env: 2
+%
+
+category: 'Convenience Methods - Python (env 2)'
 method: object
 ___contains___: element
+	"Convenience method: self perform: #__contains__: env: 2 withArguments: {element}"
 	^ self perform: #__contains__: env: 2 withArguments: {element}
+%
+
+category: 'Convenience Methods - Python (env 2)'
+method: object
+___add___: element
+	"Convenience method: self perform: #add: env: 2 withArguments: {element}"
+	^ self perform: #add: env: 2 withArguments: {element}
 %

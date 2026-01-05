@@ -249,6 +249,23 @@ doit
 FloatTestCase category: 'SUnit'
 %
 
+! ------------------- Class definition for FractionTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'FractionTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+FractionTestCase category: 'SUnit'
+%
+
 ! ------------------- Class definition for FrozensetTestCase
 expectvalue /Class
 doit
@@ -334,6 +351,23 @@ doit
 MathTestCase category: 'SUnit'
 %
 
+! ------------------- Class definition for NumbersTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'NumbersTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+NumbersTestCase category: 'SUnit'
+%
+
 ! ------------------- Class definition for OsTestCase
 expectvalue /Class
 doit
@@ -398,6 +432,40 @@ PythonTestCase subclass: 'RangeTestCase'
 expectvalue /Class
 doit
 RangeTestCase category: 'SUnit'
+%
+
+! ------------------- Class definition for RandomTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'RandomTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+RandomTestCase category: 'SUnit'
+%
+
+! ------------------- Class definition for StatisticsTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'StatisticsTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+StatisticsTestCase category: 'SUnit'
 %
 
 ! ===============================================================================
@@ -504,15 +572,19 @@ input smalltalk/tests/ComplexTestCase.gs
 input smalltalk/tests/DecimalTestCase.gs
 input smalltalk/tests/DictTestCase.gs
 input smalltalk/tests/FloatTestCase.gs
+input smalltalk/tests/FractionTestCase.gs
 input smalltalk/tests/FrozensetTestCase.gs
 input smalltalk/tests/ImportlibTestCase.gs
 input smalltalk/tests/IntegerTestCase.gs
 input smalltalk/tests/IteratorTestCase.gs
 input smalltalk/tests/ListTestCase.gs
 input smalltalk/tests/MathTestCase.gs
+input smalltalk/tests/NumbersTestCase.gs
 input smalltalk/tests/OsTestCase.gs
 input smalltalk/tests/ObjectTestCase.gs
 input smalltalk/tests/RangeTestCase.gs
+input smalltalk/tests/RandomTestCase.gs
+input smalltalk/tests/StatisticsTestCase.gs
 input smalltalk/tests/SetTestCase.gs
 input smalltalk/tests/StrTestCase.gs
 input smalltalk/tests/SysTestCase.gs

@@ -64,6 +64,8 @@ initializeBuiltinModules
 		___at___: #builtins put: builtins 	instance;
 		___at___: #math 	put: math 		instance;
 		___at___: #cmath 	put: cmath 		instance;
+		___at___: #fractions put: fractions 	instance;
+		___at___: #random 	put: random 	instance;
 		___at___: #os 		put: os 		instance;
 		___at___: #sys 		put: sys 		instance;
 		___yourself___.
@@ -91,7 +93,7 @@ initialize_version_info
 	"Initialize version-related attributes using GemStone version info"
 	| gsVersion gsVersionReport grailVersion |
 	gsVersionReport := System perform: #gemVersionReport env: 0.
-	gsVersion := gsVersionReport perform: #at:ifAbsent: env: 0 withArguments: {#gsVersion. ['unknown']}.
+	gsVersion := gsVersionReport ___at___: #gsVersion ifAbsent: ['unknown'].
 	grailVersion := '0.1.0'.
 
 	"Build version string similar to Python's"
@@ -146,7 +148,7 @@ initialize_path_info
 	"Initialize path-related attributes using GemStone info"
 	| gsVersionReport gemNativeCodePath |
 	gsVersionReport := System perform: #gemVersionReport env: 0.
-	gemNativeCodePath := gsVersionReport perform: #at:ifAbsent: env: 0 withArguments: {'gemNativeCodePath'. ['']}.
+	gemNativeCodePath := gsVersionReport ___at___: 'gemNativeCodePath' ifAbsent: [''].
 
 	"Use GemStone installation paths"
 	prefix := gemNativeCodePath.
@@ -195,8 +197,8 @@ initialize_runtime_info
 	"Module registry - get from class-level modules"
 	modules := sys modules.
 
-	"Built-in module names as tuple"
-	builtin_module_names := tuple ___withAll___: {'builtins'. 'cmath'. 'importlib'. 'math'. 'os'. 'sys'}.
+		"Built-in module names as tuple"
+		builtin_module_names := tuple ___withAll___: {'builtins'. 'cmath'. 'fractions'. 'importlib'. 'math'. 'os'. 'sys'}.
 	stdlib_module_names := frozenset ___new___.
 
 	"Copyright and other info"
@@ -1083,6 +1085,342 @@ category: 'Python-Accessors'
 method: sys
 exception: aValue
 	exception := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+base_exec_prefix
+	^ base_exec_prefix
+%
+
+category: 'Python-Accessors'
+method: sys
+base_exec_prefix: aValue
+	base_exec_prefix := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+base_prefix
+	^ base_prefix
+%
+
+category: 'Python-Accessors'
+method: sys
+base_prefix: aValue
+	base_prefix := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+exec_prefix
+	^ exec_prefix
+%
+
+category: 'Python-Accessors'
+method: sys
+exec_prefix: aValue
+	exec_prefix := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+flags
+	^ flags
+%
+
+category: 'Python-Accessors'
+method: sys
+flags: aValue
+	flags := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+float_info
+	^ float_info
+%
+
+category: 'Python-Accessors'
+method: sys
+float_info: aValue
+	float_info := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+float_repr_style
+	^ float_repr_style
+%
+
+category: 'Python-Accessors'
+method: sys
+float_repr_style: aValue
+	float_repr_style := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+hash_info
+	^ hash_info
+%
+
+category: 'Python-Accessors'
+method: sys
+hash_info: aValue
+	hash_info := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+int_info
+	^ int_info
+%
+
+category: 'Python-Accessors'
+method: sys
+int_info: aValue
+	int_info := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+maxunicode
+	^ maxunicode
+%
+
+category: 'Python-Accessors'
+method: sys
+maxunicode: aValue
+	maxunicode := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+path_hooks
+	^ path_hooks
+%
+
+category: 'Python-Accessors'
+method: sys
+path_hooks: aValue
+	path_hooks := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+path_importer_cache
+	^ path_importer_cache
+%
+
+category: 'Python-Accessors'
+method: sys
+path_importer_cache: aValue
+	path_importer_cache := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+platlibdir
+	^ platlibdir
+%
+
+category: 'Python-Accessors'
+method: sys
+platlibdir: aValue
+	platlibdir := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+ps1
+	^ ps1
+%
+
+category: 'Python-Accessors'
+method: sys
+ps1: aValue
+	ps1 := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+ps2
+	^ ps2
+%
+
+category: 'Python-Accessors'
+method: sys
+ps2: aValue
+	ps2 := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+stdlib_module_names
+	^ stdlib_module_names
+%
+
+category: 'Python-Accessors'
+method: sys
+stdlib_module_names: aValue
+	stdlib_module_names := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+thread_info
+	^ thread_info
+%
+
+category: 'Python-Accessors'
+method: sys
+thread_info: aValue
+	thread_info := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+warnoptions
+	^ warnoptions
+%
+
+category: 'Python-Accessors'
+method: sys
+warnoptions: aValue
+	warnoptions := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+tracebacklimit
+	^ tracebacklimit
+%
+
+category: 'Python-Accessors'
+method: sys
+tracebacklimit: aValue
+	tracebacklimit := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+dont_write_bytecode
+	^ dont_write_bytecode
+%
+
+category: 'Python-Accessors'
+method: sys
+dont_write_bytecode: aValue
+	dont_write_bytecode := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+pycache_prefix
+	^ pycache_prefix
+%
+
+category: 'Python-Accessors'
+method: sys
+pycache_prefix: aValue
+	pycache_prefix := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+meta_path
+	^ meta_path
+%
+
+category: 'Python-Accessors'
+method: sys
+meta_path: aValue
+	meta_path := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+__breakpointhook__
+	^ __breakpointhook__
+%
+
+category: 'Python-Accessors'
+method: sys
+__breakpointhook__: aValue
+	__breakpointhook__ := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+__displayhook__
+	^ __displayhook__
+%
+
+category: 'Python-Accessors'
+method: sys
+__displayhook__: aValue
+	__displayhook__ := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+__excepthook__
+	^ __excepthook__
+%
+
+category: 'Python-Accessors'
+method: sys
+__excepthook__: aValue
+	__excepthook__ := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+__unraisablehook__
+	^ __unraisablehook__
+%
+
+category: 'Python-Accessors'
+method: sys
+__unraisablehook__: aValue
+	__unraisablehook__ := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+__stdin__
+	^ __stdin__
+%
+
+category: 'Python-Accessors'
+method: sys
+__stdin__: aValue
+	__stdin__ := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+__stdout__
+	^ __stdout__
+%
+
+category: 'Python-Accessors'
+method: sys
+__stdout__: aValue
+	__stdout__ := aValue
+%
+
+category: 'Python-Accessors'
+method: sys
+__stderr__
+	^ __stderr__
+%
+
+category: 'Python-Accessors'
+method: sys
+__stderr__: aValue
+	__stderr__ := aValue
 %
 
 set compile_env: 0

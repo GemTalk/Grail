@@ -335,6 +335,25 @@ The builtins True and False are the only two instances of the class bool.
 The class bool is a subclass of the class int, and cannot be subclassed.' ___asUnicodeString___
 %
 
+! ------------------- Logical operators (short-circuit evaluation)
+category: 'Python-Logical Operators'
+method: bool
+___or___: aBlock
+	"Short-circuit logical OR. If self is true, return true.
+	Otherwise, evaluate the block and return its value."
+
+	^ self ifTrue: [true] ifFalse: [aBlock value]
+%
+
+category: 'Python-Logical Operators'
+method: bool
+___and___: aBlock
+	"Short-circuit logical AND. If self is false, return false.
+	Otherwise, evaluate the block and return its value."
+
+	^ self ifTrue: [aBlock value] ifFalse: [false]
+%
+
 ! ------------------- Reset compile environment and add Smalltalk methods
 set compile_env: 0
 

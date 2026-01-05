@@ -6,6 +6,8 @@
 ! operations, process management, and environment variables.
 ! ===============================================================================
 
+set compile_env: 0
+
 ! ------------------- Remove existing Python methods from os
 expectvalue /Metaclass3
 doit
