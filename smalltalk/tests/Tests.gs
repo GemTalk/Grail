@@ -351,6 +351,23 @@ doit
 MathTestCase category: 'SUnit'
 %
 
+! ------------------- Class definition for StringModuleTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'StringModuleTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+StringModuleTestCase category: 'SUnit'
+%
+
 ! ------------------- Class definition for NumbersTestCase
 expectvalue /Class
 doit
@@ -587,6 +604,7 @@ input smalltalk/tests/RandomTestCase.gs
 input smalltalk/tests/StatisticsTestCase.gs
 input smalltalk/tests/SetTestCase.gs
 input smalltalk/tests/StrTestCase.gs
+input smalltalk/tests/StringModuleTestCase.gs
 input smalltalk/tests/SysTestCase.gs
 input smalltalk/tests/TupleTestCase.gs
 

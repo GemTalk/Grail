@@ -1,0 +1,25 @@
+Module(body=[
+    FunctionDef(name='say_hello', args=arguments(posonlyargs=[], args=[
+        arg(arg='to', annotation=None, type_comment=None),
+        arg(arg='excited', annotation=None, type_comment=None),
+      ], vararg=None, kwonlyargs=[], kw_defaults=[], kwarg=None, defaults=[]), body=[
+        Assign(targets=[
+            Name(id='trailing_character', ctx=Store()),
+          ], value=Constant(value='.', kind=None), type_comment=None),
+        If(test=Name(id='excited', ctx=Load()), body=[
+            Assign(targets=[
+                Name(id='trailing_character', ctx=Store()),
+              ], value=Constant(value='!', kind=None), type_comment=None),
+          ], orelse=[]),
+        Expr(value=Call(func=Name(id='print', ctx=Load()), args=[
+            BinOp(left=BinOp(left=Constant(value='Hello ', kind=None), op=Add(), right=Name(id='to', ctx=Load())), op=Add(), right=Name(id='trailing_character', ctx=Load())),
+          ], keywords=[])),
+      ], decorator_list=[], returns=None, type_comment=None, type_params=[]),
+    Assign(targets=[
+        Name(id='to', ctx=Store()),
+      ], value=Constant(value='Will', kind=None), type_comment=None),
+    Expr(value=Call(func=Name(id='say_hello', ctx=Load()), args=[
+        Name(id='to', ctx=Load()),
+        Constant(value=True, kind=None),
+      ], keywords=[])),
+  ], type_ignores=[])

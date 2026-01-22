@@ -67,6 +67,7 @@ initializeBuiltinModules
 		___at___: #fractions put: fractions 	instance;
 		___at___: #random 	put: random 	instance;
 		___at___: #os 		put: os 		instance;
+		___at___: #string 	put: string 	instance;
 		___at___: #sys 		put: sys 		instance;
 		___yourself___.
 %
@@ -198,7 +199,7 @@ initialize_runtime_info
 	modules := sys modules.
 
 		"Built-in module names as tuple"
-		builtin_module_names := tuple ___withAll___: {'builtins'. 'cmath'. 'fractions'. 'importlib'. 'math'. 'os'. 'sys'}.
+		builtin_module_names := tuple ___withAll___: {'builtins'. 'cmath'. 'fractions'. 'importlib'. 'math'. 'os'. 'string'. 'sys'}.
 	stdlib_module_names := frozenset ___new___.
 
 	"Copyright and other info"

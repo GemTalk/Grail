@@ -1,9 +1,0 @@
-Module([
-    Import([
-        alias('sys', None, 4, 7, 4, 10),
-      ], 4, 0, 4, 10),
-    Assign([
-        Name('s', Store(), 5, 0, 5, 1),
-      ], Name('sys', Load(), 5, 4, 5, 7), None, 5, 0, 5, 7),
-    Expr(Attribute(Name('s', Load(), 6, 0, 6, 1), 'byteorder', Load(), 6, 0, 6, 11), 6, 0, 6, 11),
-  ], [])

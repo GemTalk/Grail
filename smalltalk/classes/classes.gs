@@ -1905,6 +1905,86 @@ expectvalue /Class
 doit
 importlib category: 'Modules'
 %
+
+! ------- string class (Python 'string' module)
+expectvalue /Class
+doit
+module subclass: 'string'
+  instVarNames: #('ascii_letters' 'ascii_lowercase' 'ascii_uppercase' 'digits' 'hexdigits' 'octdigits' 'punctuation' 'printable' 'whitespace' 'capwords' 'Formatter' 'Template')
+  classVars: #()
+  classInstVars: #('instance')
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+expectvalue /Class
+doit
+string comment:
+'Python string module.
+
+This class provides string constants and utility functions.
+
+String constants:
+- ascii_letters: Concatenation of ascii_lowercase and ascii_uppercase
+- ascii_lowercase: Lowercase letters ''abcdefghijklmnopqrstuvwxyz''
+- ascii_uppercase: Uppercase letters ''ABCDEFGHIJKLMNOPQRSTUVWXYZ''
+- digits: String containing digits ''0123456789''
+- hexdigits: String containing hexadecimal digits ''0123456789abcdefABCDEF''
+- octdigits: String containing octal digits ''01234567''
+- punctuation: String of ASCII punctuation characters
+- printable: String of printable ASCII characters
+- whitespace: String of all whitespace characters
+
+Utility functions:
+- capwords(s, sep=None): Split string into words, capitalize first letter of each word, and join
+- Formatter: Class for custom string formatting
+- Template: Class for string templates with placeholders
+
+See https://docs.python.org/3/library/string.html for documentation.
+'
+%
+expectvalue /Class
+doit
+string category: 'Modules'
+%
+! ------- string_formatter class (Python 'string.Formatter' type)
+expectvalue /Class
+doit
+object subclass: 'string_formatter'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+expectvalue /Class
+doit
+string_formatter comment:
+'Python string.Formatter class.
+
+This class provides a way to create and customize your own string formatting
+behavior using the same mechanism as the built-in format() function and
+str.format() method.
+
+The Formatter class has the following public methods:
+- format(format_string, *args, **kwargs): Format a string
+- vformat(format_string, args, kwargs): Format using args and kwargs dicts
+- parse(format_string): Parse format string into tuples
+- get_field(field_name, args, kwargs): Get field value
+- get_value(key, args, kwargs): Get value for a key
+- format_field(value, format_spec): Format a single field
+- convert_field(value, conversion): Convert field value
+- check_unused_args(used_args, args, kwargs): Check for unused args
+
+See https://docs.python.org/3/library/string.html#string.Formatter for documentation.
+'
+%
+expectvalue /Class
+doit
+string_formatter category: 'Modules-String'
+%
+
 ! ------- iterator class (Python base iterator type)
 expectvalue /Class
 doit
@@ -2196,32 +2276,8 @@ input smalltalk/classes/fractions.gs
 input smalltalk/classes/numbers.gs
 input smalltalk/classes/random.gs
 input smalltalk/classes/statistics.gs
-
-! ------- Register built-in numeric types with numbers module ABCs
-! This makes isinstance(5, numbers.Integral) work immediately
-run
-"Register int (Integer and its subclasses) with Integral"
-numbers_Integral perform: #register: env: 2 withArguments: {Integer}.
-numbers_Integral perform: #register: env: 2 withArguments: {SmallInteger}.
-numbers_Integral perform: #register: env: 2 withArguments: {LargeInteger}.
-
-"Register bool (Boolean) with Integral (bool is subclass of int in Python)"
-numbers_Integral perform: #register: env: 2 withArguments: {Boolean}.
-
-"Register float (Float and subclasses) with Real"
-numbers_Real perform: #register: env: 2 withArguments: {Float}.
-numbers_Real perform: #register: env: 2 withArguments: {SmallDouble}.
-
-"Register Fraction (and SmallFraction, AbstractFraction) with Rational"
-numbers_Rational perform: #register: env: 2 withArguments: {AbstractFraction}.
-numbers_Rational perform: #register: env: 2 withArguments: {Fraction}.
-numbers_Rational perform: #register: env: 2 withArguments: {SmallFraction}.
-numbers_Rational perform: #register: env: 2 withArguments: {ScaledDecimal}.
-
-"Register complex with Complex"
-numbers_Complex perform: #register: env: 2 withArguments: {complex}.
-Transcript perform: #show: env: 0 withArguments: {'Registered built-in types with numbers module ABCs'}.
-%
+input smalltalk/classes/string.gs
+input smalltalk/classes/string_formatter.gs
 
 input smalltalk/classes/os.gs
 input smalltalk/classes/os_path.gs
@@ -2296,3 +2352,10 @@ commit
 logout
 set user DataCurator pass swordfish
 login
+
+! ------- Register built-in numeric types with numbers module ABCs
+! This makes isinstance(5, numbers.Integral) work immediately
+run
+numbers perform: #'instance' env: 2.
+%
+commit

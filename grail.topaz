@@ -13,7 +13,14 @@ args size >= 6 ifTrue: [
         Error signal: 'Path not found!'.
     ].
     [
-        ModuleAst evaluateScript: path.
+        | priorTranscript |
+        priorTranscript := Transcript.
+        Transcript := GsFile stdout.
+        [
+            importlib runPath: path.
+        ] ensure: [
+            Transcript := priorTranscript.
+        ].
     ] on: Error do: [:ex |
         | msg |
         msg := ex messageText.
@@ -22,7 +29,7 @@ args size >= 6 ifTrue: [
     ].
 ] ifFalse: [
     | replScope bufferStream inContinuation |
-    replScope := PyGlobals new.
+    replScope := Globals new.
     bufferStream := WriteStream on: Unicode7 new.
     inContinuation := false.
     [true] whileTrue: [

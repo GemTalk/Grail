@@ -3219,7 +3219,7 @@ expectvalue /Class
 doit
 AbstractNode subclass: 'ModuleAst'
   instVarNames: #( body name path
-                    source stream scope type_ignore)
+                    source stream type_ignore)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()

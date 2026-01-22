@@ -31,9 +31,3 @@ printSmalltalkOn: aStream
 		aStream lf.
 	].
 %
-category: 'other'
-method: BlockAst
-variables
-
-	^variables
-%

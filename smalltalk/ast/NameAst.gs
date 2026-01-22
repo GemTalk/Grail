@@ -65,7 +65,7 @@ initialize
 	self commaSpace.
 	ctx := ExpressionContextAst parent: self.
 	self readPosition.
-	ctx isStoreCtx ifTrue: [self parent declareVariable: id]
+	ctx isStoreCtx ifTrue: [self declareVariable].
 %
 category: 'other'
 method: NameAst

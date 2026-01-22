@@ -1,5 +1,0 @@
-Module([
-    Import([
-        alias('importlib', None, 4, 7, 4, 16),
-      ], 4, 0, 4, 16),
-  ], [])

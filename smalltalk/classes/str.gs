@@ -167,9 +167,34 @@ __len__
 category: 'Python-Sequence Operations'
 method: str
 __getitem__: index
-	"Get character at index. In Python: str[index]"
+	"Get character at index. In Python: str[index]
+	Returns a single-character string.
+	Supports negative indices (counting from end)."
 
-	self ___error___: 'Not yet implemented: __getitem__'
+	| size idx char charString |
+	size := self ___size___.
+	idx := index.
+
+	"Handle negative indices"
+	(idx ___lt___: 0) ifTrue: [
+		idx := size ___plus___: idx
+	].
+
+	"Check bounds (Python uses 0-based indexing)"
+	((idx ___lt___: 0) or: [
+		idx ___ge___: size
+	]) ifTrue: [
+		IndexError ___signal___: 'string index out of range'
+	].
+
+	"Get character at 1-based Smalltalk index"
+	char := self ___at___: (idx ___plus___: 1).
+
+	"Convert character to a single-character string"
+	charString := str ___new___: 1.
+	charString ___at___: 1 put: char.
+
+	^ charString
 %
 
 category: 'Python-Sequence Operations'

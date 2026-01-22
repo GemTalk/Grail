@@ -1139,7 +1139,7 @@ asSymbolDictionary
 	"Return a SymbolDictionary populated with keys and values equivalent to the instance variables in builtins.
 	Each instance variable name (as a Symbol) is a key, and its value (the block/function) is the value."
 	| dict varNames superclassOffset |
-	dict := SymbolDictionary ___new___.
+	dict := SymbolDictionary new.
 	varNames := self class instVarNames.
 	superclassOffset := self class superclass instSize.
 	"Populate dictionary with instance variable names and values"

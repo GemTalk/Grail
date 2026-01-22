@@ -173,6 +173,74 @@ test__contains__
 	self assert: result equals: false.
 %
 
+category: 'Python-Sequence Operations'
+method: StrTestCase
+test__getitem__
+	"Test string indexing: s[index]"
+
+	| s result |
+	s := 'hello'.
+	
+	"Positive indices (0-based)"
+	result := s perform: #__getitem__: env: 2 withArguments: {0}.
+	self assert: result equals: 'h'.
+	self assert: result class equals: Unicode7.
+	
+	result := s perform: #__getitem__: env: 2 withArguments: {1}.
+	self assert: result equals: 'e'.
+	
+	result := s perform: #__getitem__: env: 2 withArguments: {4}.
+	self assert: result equals: 'o'.
+%
+
+category: 'Python-Sequence Operations'
+method: StrTestCase
+test__getitem__negative
+	"Test negative indexing: s[-1]"
+
+	| s result |
+	s := 'hello'.
+	
+	"Negative indices"
+	result := s perform: #__getitem__: env: 2 withArguments: {-1}.
+	self assert: result equals: 'o'.
+	
+	result := s perform: #__getitem__: env: 2 withArguments: {-2}.
+	self assert: result equals: 'l'.
+	
+	result := s perform: #__getitem__: env: 2 withArguments: {-5}.
+	self assert: result equals: 'h'.
+%
+
+category: 'Python-Sequence Operations'
+method: StrTestCase
+test__getitem__outOfRange
+	"Test index out of range raises IndexError"
+
+	| s |
+	s := 'hello'.
+	
+	"Out of bounds positive index"
+	self should: [s perform: #__getitem__: env: 2 withArguments: {5}] raise: IndexError.
+	self should: [s perform: #__getitem__: env: 2 withArguments: {10}] raise: IndexError.
+	
+	"Out of bounds negative index"
+	self should: [s perform: #__getitem__: env: 2 withArguments: {-6}] raise: IndexError.
+	self should: [s perform: #__getitem__: env: 2 withArguments: {-10}] raise: IndexError.
+%
+
+category: 'Python-Sequence Operations'
+method: StrTestCase
+test__getitem__emptyString
+	"Test indexing on empty string raises IndexError"
+
+	| s |
+	s := ''.
+	
+	self should: [s perform: #__getitem__: env: 2 withArguments: {0}] raise: IndexError.
+	self should: [s perform: #__getitem__: env: 2 withArguments: {-1}] raise: IndexError.
+%
+
 category: 'Python-String Representation'
 method: StrTestCase
 test__str__

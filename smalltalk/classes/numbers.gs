@@ -215,6 +215,7 @@ registerBuiltinTypes
 
 	"Register Fraction with Rational"
 	numbers_Rational register: Fraction.
+	numbers_Rational register: SmallFraction.
 	numbers_Rational register: ScaledDecimal.
 
 	"Register complex with Complex"
