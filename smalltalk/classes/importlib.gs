@@ -315,28 +315,11 @@ classmethod: importlib
 loadModuleFromPath: pathString name: moduleName
 	"Load a module from a file path and register it.
 	Returns the module instance."
-	| moduleAst stream method mySymbolList moduleInstance moduleScope nameParts packageName |
+	| moduleAst mySymbolList moduleInstance nameParts packageName |
 	moduleAst := self astForPath: pathString.
 	moduleAst name: moduleName.
-	stream := PrettyWriteStream on: Unicode7 new.
-	moduleAst printSmalltalkOn: stream.
 	mySymbolList := SymbolList with: builtins ___instance___ asSymbolDictionary.
-	moduleScope := nil.
-	[
-		method := stream contents
-			_compileInContext: nil
-			symbolList: mySymbolList
-			oldLitVars: nil
-			environmentId: 2
-			flags: 0.
-	] on: AbstractException do: [:ex |
-		ex pass.
-	].
-	[
-		moduleScope := method _executeInContext: 2.
-	] on: AbstractException do: [:ex |
-		ex pass.
-	].
+	moduleAst executeWithScope: mySymbolList.
 	"Create a module instance"
 	moduleInstance := module basicNew.
 	nameParts := $. split: moduleName.
@@ -469,24 +452,29 @@ astStringForSource: aString
 
 category: 'AST-Generation'
 classmethod: importlib
+astForAstString: astString source: sourceString path: pathString
+	"Create a ModuleAst from an AST string.
+
+	importlib astForAstString: (importlib astStringForPath: '/path/to/file.py') source: nil path: nil.
+	"
+		^ModuleAst basicNew
+			name: '__main__';
+			path: pathString;
+			source: sourceString;
+			initialize: (ReadStream on: astString);
+			yourself
+%
+
+category: 'AST-Generation'
+classmethod: importlib
 astForPath: pathString
 	"Create a ModuleAst from a Python file path.
 
 	importlib astForPath: '/path/to/file.py'.
 	"
-		| astString astStream sourceString file |
-		"Read the source code from the given path so we can attach it to the ModuleAst."
-		file := GsFile openReadOnServer: pathString.
-		sourceString := file contentsAsUtf8.
-		file close.
+		| astString |
 		astString := self astStringForPath: pathString.
-		astStream := ReadStream on: astString.
-		^ModuleAst basicNew
-			name: '__main__';
-			path: pathString;
-			source: sourceString;
-			initialize: astStream;
-			yourself
+		^self astForAstString: astString source: nil path: pathString
 %
 
 category: 'AST-Generation'

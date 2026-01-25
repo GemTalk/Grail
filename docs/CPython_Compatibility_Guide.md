@@ -319,7 +319,7 @@ The Python Standard Library is organized into several categories. This guide pri
    - Reference official Python documentation
 
 5. **Code Organization**:
-   - Class definitions go in `smalltalk/classes/classes.gs`
+   - Class definitions go in `smalltalk/classes/_PythonClasses.gs`
    - Method implementations go in separate files (e.g., `smalltalk/classes/sys.gs`)
    - Tests go in `smalltalk/tests/`
 

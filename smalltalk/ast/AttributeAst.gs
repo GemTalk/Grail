@@ -1,4 +1,4 @@
-﻿! ------------------- Remove existing behavior from AttributeAst
+! ------------------- Remove existing behavior from AttributeAst
 removeallmethods AttributeAst
 removeallclassmethods AttributeAst
 set compile_env: 0
@@ -53,7 +53,9 @@ category: 'other'
 method: AttributeAst
 printSmalltalkOn: aStream
 
-	self halt.
+	self assertContextIsLoad.
+	value printSmalltalkWithParenthesisOn: aStream.
+	aStream space; nextPutAll: attr.
 %
 category: 'other'
 method: AttributeAst

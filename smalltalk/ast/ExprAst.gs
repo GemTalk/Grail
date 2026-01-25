@@ -1,4 +1,4 @@
-﻿! ------------------- Remove existing behavior from ExprAst
+! ------------------- Remove existing behavior from ExprAst
 removeallmethods ExprAst
 removeallclassmethods ExprAst
 set compile_env: 0

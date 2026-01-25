@@ -3214,12 +3214,57 @@ expectvalue /Class
 doit
 StoreAst category: 'Parser'
 %
+! ------------------- Class definition for SuiteAst
+expectvalue /Class
+doit
+AbstractNode subclass: 'SuiteAst'
+  instVarNames: #( body)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonAst
+  options: #()
+
+%
+expectvalue /Class
+doit
+SuiteAst comment:
+'Grail-specific helper class for managing statement suites.
+
+This is not a standard Python AST node, but a Grail implementation detail for managing collections of statements and their associated variables.
+
+body is a list of statement nodes.
+variables tracks variable declarations in the suite.
+
+Hierarchy:
+Object
+  AbstractNode(parent)
+    AbstractLocationNode(beginLine beginColumn endLine endColumn)
+      SuiteAst(body variables)
+'
+%
+! ------------------- Class definition for BlockAst
+expectvalue /Class
+doit
+SuiteAst subclass: 'BlockAst'
+  instVarNames: #( variables)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonAst
+  options: #()
+
+%
+expectvalue /Class
+doit
+BlockAst category: 'Parser'
+%
 ! ------------------- Class definition for ModuleAst
 expectvalue /Class
 doit
 AbstractNode subclass: 'ModuleAst'
-  instVarNames: #( body name path
-                    source stream type_ignore)
+  instVarNames: #(body name path
+                    source stream type_ignore useTempsForBlock)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -3736,55 +3781,6 @@ Object
 expectvalue /Class
 doit
 SubAst category: 'Parser'
-%
-! ------------------- Class definition for SuiteAst
-expectvalue /Class
-doit
-AbstractNode subclass: 'SuiteAst'
-  instVarNames: #( body)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: PythonAst
-  options: #()
-
-%
-expectvalue /Class
-doit
-SuiteAst comment:
-'Grail-specific helper class for managing statement suites.
-
-This is not a standard Python AST node, but a Grail implementation detail for managing collections of statements and their associated variables.
-
-body is a list of statement nodes.
-variables tracks variable declarations in the suite.
-
-Hierarchy:
-Object
-  AbstractNode(parent)
-    AbstractLocationNode(beginLine beginColumn endLine endColumn)
-      SuiteAst(body variables)
-'
-%
-expectvalue /Class
-doit
-SuiteAst category: 'Parser'
-%
-! ------------------- Class definition for BlockAst
-expectvalue /Class
-doit
-SuiteAst subclass: 'BlockAst'
-  instVarNames: #( variables)
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: PythonAst
-  options: #()
-
-%
-expectvalue /Class
-doit
-BlockAst category: 'Parser'
 %
 ! ------------------- Class definition for TypeIgnoreAst
 expectvalue /Class

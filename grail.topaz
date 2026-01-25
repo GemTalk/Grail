@@ -28,8 +28,9 @@ args size >= 6 ifTrue: [
         ExitClientError signal: msg status: 1.
     ].
 ] ifFalse: [
-    | replScope bufferStream inContinuation |
-    replScope := Globals new.
+    | replScope bufferStream inContinuation moduleScope |
+    moduleScope := SymbolDictionary new.
+    replScope := ModuleAst symbolListForModuleScope: moduleScope.
     bufferStream := WriteStream on: Unicode7 new.
     inContinuation := false.
     [true] whileTrue: [
@@ -44,12 +45,12 @@ args size >= 6 ifTrue: [
         inContinuation := line isEmpty not and: [inContinuation or: [line endsWith: ':']].
         inContinuation ifFalse: [
             [
-                | result |
+                | module result |
                 result := ModuleAst
-                    evaluate: bufferStream contents
-                    withScope: replScope.
+                    evaluateSource: bufferStream contents
+                    usingModuleScope: moduleScope.
                 result == None ifFalse: [
-                    GsFile stdout nextPutAll: result __repr__ ___value; lf; flush.
+                    GsFile stdout nextPutAll: result ___repr___; lf; flush.
                 ].
                 bufferStream := WriteStream on: Unicode7 new.
             ] on: Error do: [:ex |

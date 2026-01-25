@@ -1128,42 +1128,50 @@ sel := aSelectorSymbol perform: #asSymbol env: 0.
 ! ------------------- Reset compile environment to Smalltalk
 set compile_env: 0
 
-category: 'Convenience Methods - Python (env 2)'
+category: 'Python-Bridge'
+method: Object
+___repr___
+	"Call the Python __repr__ implementation (env 2)."
+
+	^ self perform: #__repr__ env: 2
+%
+
+category: 'Python-Bridge'
 classmethod: object
 ___new___: arg
 	"Convenience method: self perform: #__new__: env: 2 withArguments: {arg}"
 	^ self perform: #__new__: env: 2 withArguments: {arg}
 %
 
-category: 'Convenience Methods - Python (env 2)'
+category: 'Python-Bridge'
 classmethod: object
 ___new___: arg1 _: arg2
 	"Convenience method: self perform: #__new__:_: env: 2 withArguments: {arg1. arg2}"
 	^ self perform: #__new__:_: env: 2 withArguments: {arg1. arg2}
 %
 
-category: 'Convenience Methods - Python (env 2)'
+category: 'Python-Bridge'
 classmethod: object
 ___new___: arg1 _: arg2 _: arg3
 	"Convenience method: self perform: #__new__:_:_: env: 2 withArguments: {arg1. arg2. arg3}"
 	^ self perform: #__new__:_:_: env: 2 withArguments: {arg1. arg2. arg3}
 %
 
-category: 'Convenience Methods - Python (env 2)'
+category: 'Python-Bridge'
 method: object
 ___len___
 	"Convenience method: self perform: #__len__ env: 2"
 	^ self perform: #__len__ env: 2
 %
 
-category: 'Convenience Methods - Python (env 2)'
+category: 'Python-Bridge'
 method: object
 ___contains___: element
 	"Convenience method: self perform: #__contains__: env: 2 withArguments: {element}"
 	^ self perform: #__contains__: env: 2 withArguments: {element}
 %
 
-category: 'Convenience Methods - Python (env 2)'
+category: 'Python-Bridge'
 method: object
 ___add___: element
 	"Convenience method: self perform: #add: env: 2 withArguments: {element}"

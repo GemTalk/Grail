@@ -15,7 +15,7 @@ This guide explains how to write tests for Grail, following the established patt
 
 Tests are organized in `smalltalk/tests/` with the following structure:
 
-1. **Test class definitions** are in `smalltalk/tests/Tests.gs`
+1. **Test class definitions** are in `smalltalk/tests/_PythonTests.gs`
 2. **Test method implementations** are in separate files (e.g., `smalltalk/tests/BuiltinsTestCase.gs`)
 3. **Exception tests** are in `smalltalk/tests/exceptions/` subdirectory
 4. All test classes inherit from `PythonTestCase` (which inherits from `TestCase`)
@@ -278,7 +278,7 @@ Organize tests into logical categories:
 
 ## Creating New Test Classes
 
-### Step 1: Add Class Definition to `Tests.gs`
+### Step 1: Add Class Definition to `_PythonTests.gs`
 
 ```smalltalk
 ! ------------------- Class definition for {ClassName}TestCase
@@ -302,9 +302,9 @@ doit
 
 Create `smalltalk/tests/{ClassName}TestCase.gs` with the template structure.
 
-### Step 3: Load Test File in `Tests.gs`
+### Step 3: Load Test File in `_PythonTests.gs`
 
-Add at the end of `Tests.gs`:
+Add at the end of `_PythonTests.gs`:
 ```smalltalk
 input smalltalk/tests/{ClassName}TestCase.gs
 ```

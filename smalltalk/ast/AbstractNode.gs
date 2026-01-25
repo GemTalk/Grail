@@ -1,4 +1,4 @@
-﻿! ------------------- Remove existing behavior from AbstractNode
+! ------------------- Remove existing behavior from AbstractNode
 removeallmethods AbstractNode
 removeallclassmethods AbstractNode
 ! ------------------- Class methods for AbstractNode
@@ -39,6 +39,7 @@ classmethod: AbstractNode
 parent: aNode
 
 	(aNode isKindOf: AbstractNode) ifFalse: [self error: 'Not a valid parent!'].
+	aNode stream skipSeparators.
 	self isAbstract ifTrue: [
 		| symbol class |
 		symbol := aNode stream peekN: 4.

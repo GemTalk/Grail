@@ -187,7 +187,7 @@ The `smalltalk/classes/` directory contains **existing Python type implementatio
 
 ### Key Files
 
-- **`classes.gs`** - Class definitions (DO NOT create subclasses elsewhere)
+- **`_PythonClasses.gs`** - Class definitions (DO NOT create subclasses elsewhere)
 - **`builtins.gs`** - Built-in functions implementation
 - **`object.gs`** - Object Python methods
 - **`str.gs`** - String (Unicode7) Python methods
@@ -274,7 +274,7 @@ The `smalltalk/tests/` directory contains **test implementations**. Use these as
 
 ### Key Files
 
-- **`Tests.gs`** - Test class definitions
+- **`_PythonTests.gs`** - Test class definitions
 - **`PythonTestCase.gs`** - Base test class
 - **`BuiltinsTestCase.gs`** - Built-in functions tests
 - **`ListTestCase.gs`** - List tests
@@ -511,7 +511,7 @@ result := lst perform: #__getitem__: env: 2 withArguments: {0}
 | New GemStone classes | `gemstone/rowan/src/Filein*/{ClassName}.class.st` |
 | Python type implementation examples | `smalltalk/classes/{typename}.gs` |
 | Test examples | `smalltalk/tests/{ClassName}TestCase.gs` |
-| Class definitions | `smalltalk/classes/classes.gs` |
+| Class definitions | `smalltalk/classes/_PythonClasses.gs` |
 | AST node examples | `smalltalk/ast/{NodeName}Ast.gs` |
 | Built-in function examples | `smalltalk/classes/builtins.gs` |
 | Math function examples | `smalltalk/classes/math.gs` |

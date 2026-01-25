@@ -1,4 +1,4 @@
-﻿! ------------------- Remove existing behavior from CallAst
+! ------------------- Remove existing behavior from CallAst
 removeallmethods CallAst
 removeallclassmethods CallAst
 set compile_env: 0
@@ -49,7 +49,7 @@ printSmalltalkOn: aStream
 	aStream nextPutAll: '} value: '.
 	
 	keywords isEmpty ifTrue: [
-		aStream nextPutAll: 'nil.'.
+		aStream nextPutAll: 'nil'.
 	] ifFalse: [
 		"Build keywords dictionary"
 		keywords keysAndValuesDo: [:key :value |
@@ -57,6 +57,6 @@ printSmalltalkOn: aStream
 			value printSmalltalkWithParenthesisOn: aStream.
 			aStream nextPut: $;.
 		].
-		aStream nextPutAll: ' yourself).'.
+		aStream nextPutAll: ' yourself)'.
 	].
 %

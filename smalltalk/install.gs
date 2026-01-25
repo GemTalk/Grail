@@ -12,7 +12,7 @@
 !
 ! PERMISSIONS:
 ! - This script should be started as DataCurator
-! - The classes.gs file handles switching to SystemUser when needed
+! - The _PythonClasses.gs file handles switching to SystemUser when needed
 ! ===============================================================================
 
 ! ------------------- Step 1: Remove and recreate SymbolDictionaries
@@ -90,14 +90,14 @@ Transcript show: 'Step 1 complete: Recreated dictionaries in correct order'.
 %
 
 ! ------------------- Step 2: Load Python built-in type classes
-! NOTE: The classes.gs file handles user switching internally:
+! NOTE: The _PythonClasses.gs file handles user switching internally:
 !       - Maps types as DataCurator
 !       - Switches to SystemUser to add methods to base classes
 !       - Switches back to DataCurator for new Python classes
 run
 Transcript show: 'Step 2: Loading Python built-in type classes...'.
 %
-input smalltalk/classes/classes.gs
+input smalltalk/classes/_PythonClasses.gs
 run
 Transcript show: 'Step 2 complete: Python built-in type classes loaded'.
 %
@@ -105,7 +105,7 @@ Transcript show: 'Step 2 complete: Python built-in type classes loaded'.
 run
 Transcript show: 'Step 3: Loading AST classes...'.
 %
-input smalltalk/ast/PythonAst.gs
+input smalltalk/ast/_PythonAst.gs
 run
 Transcript show: 'Step 3 complete: AST classes loaded'.
 %
@@ -113,7 +113,7 @@ Transcript show: 'Step 3 complete: AST classes loaded'.
 run
 Transcript show: 'Step 4: Loading test classes...'.
 %
-input smalltalk/tests/Tests.gs
+input smalltalk/tests/_PythonTests.gs
 run
 Transcript show: 'Step 4 complete: Test classes loaded'.
 %
