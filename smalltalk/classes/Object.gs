@@ -554,14 +554,14 @@ ___printStringRadix___: radix
 
 category: 'Convenience Methods - Keyword'
 method: object
-___at___: index
-	^ self perform: #at: env: 0 withArguments: {index}
+___at___: key
+	^ self perform: #at: env: 0 withArguments: {key}
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
-___at___: index put: value
-	^ self perform: #at:put: env: 0 withArguments: {index. value}
+___at___: key put: value
+	^ self perform: #at:put: env: 0 withArguments: {key. value}
 %
 
 category: 'Convenience Methods - Keyword'

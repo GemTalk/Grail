@@ -41,7 +41,7 @@ category: 'Python-Initialization'
 method: os_path
 initialize_join
 	"Join one or more path components intelligently. Takes a collection of paths."
-	join := [:positional :keywords |
+	self ___at___: #join put: [:positional :keywords |
 		| paths result sep first size i each path |
 		paths := positional ___at___: 1.
 		(paths ___isEmpty___) ifTrue: [
@@ -77,7 +77,7 @@ category: 'Python-Initialization'
 method: os_path
 initialize_basename
 	"Return the base name of pathname path"
-	basename := [:positional :keywords |
+	self ___at___: #basename put: [:positional :keywords |
 		| path sep lastIndex pathSize trimmedPath reversedPath reversedSep index |
 		path := positional ___at___: 1.
 		sep := '/'.
@@ -113,7 +113,7 @@ category: 'Python-Initialization'
 method: os_path
 initialize_dirname
 	"Return the directory name of pathname path"
-	dirname := [:positional :keywords |
+	self ___at___: #dirname put: [:positional :keywords |
 		| path sep lastIndex reversedPath reversedSep index pathSize trimmedPath |
 		path := positional ___at___: 1.
 		sep := '/'.
@@ -153,7 +153,7 @@ category: 'Python-Initialization'
 method: os_path
 initialize_split
 	"Split the pathname path into a pair (head, tail)"
-	split := [:positional :keywords |
+	self ___at___: #split put: [:positional :keywords |
 		| path sep lastIndex head tail pathSize reversedPath reversedSep index |
 		path := positional ___at___: 1.
 		sep := '/'.
@@ -189,7 +189,7 @@ category: 'Python-Initialization'
 method: os_path
 initialize_splitext
 	"Split the pathname path into a pair (root, ext)"
-	splitext := [:positional :keywords |
+	self ___at___: #splitext put: [:positional :keywords |
 		| path lastDotIndex root ext pathSize sepIndex reversedPath reversedDot reversedSep index |
 		path := positional ___at___: 1.
 		pathSize := path ___size___.
@@ -239,7 +239,7 @@ category: 'Python-Initialization'
 method: os_path
 initialize_isabs
 	"Return True if path is an absolute pathname"
-	isabs := [:positional :keywords |
+	self ___at___: #isabs put: [:positional :keywords |
 		| path |
 		path := positional ___at___: 1.
 		(path ___beginsWith___: '/')
@@ -250,7 +250,7 @@ category: 'Python-Initialization'
 method: os_path
 initialize_normpath
 	"Normalize a pathname by collapsing redundant separators and up-level references"
-	normpath := [:positional :keywords |
+	self ___at___: #normpath put: [:positional :keywords |
 		| path parts sep isAbsolute dotDotIndex prevIndex result earlyExit |
 		path := positional ___at___: 1.
 		sep := '/'.
@@ -348,7 +348,7 @@ category: 'Python-Initialization'
 method: os_path
 initialize_abspath
 	"Return a normalized absolutized version of the pathname path"
-	abspath := [:positional :keywords |
+	self ___at___: #abspath put: [:positional :keywords |
 		| path isabsBlock normpathBlock joinBlock cwd normalized getcwdBlock |
 		path := positional ___at___: 1.
 		isabsBlock := self isabs.
@@ -370,7 +370,7 @@ category: 'Python-Initialization'
 method: os_path
 initialize_exists
 	"Return True if path refers to an existing path"
-	exists := [:positional :keywords |
+	self ___at___: #exists put: [:positional :keywords |
 		| path o existsBlock |
 		path := positional ___at___: 1.
 		o := os instance.
@@ -383,7 +383,7 @@ category: 'Python-Initialization'
 method: os_path
 initialize_isdir
 	"Return True if path is an existing directory"
-	isdir := [:positional :keywords |
+	self ___at___: #isdir put: [:positional :keywords |
 		| path o isdirBlock |
 		path := positional ___at___: 1.
 		o := os instance.
@@ -396,7 +396,7 @@ category: 'Python-Initialization'
 method: os_path
 initialize_isfile
 	"Return True if path is an existing regular file"
-	isfile := [:positional :keywords |
+	self ___at___: #isfile put: [:positional :keywords |
 		| path o isfileBlock |
 		path := positional ___at___: 1.
 		o := os instance.
@@ -409,7 +409,7 @@ category: 'Python-Initialization'
 method: os_path
 initialize_commonpath
 	"Return the longest common sub-path of each pathname in paths"
-	commonpath := [:positional :keywords |
+	self ___at___: #commonpath put: [:positional :keywords |
 		| paths commonParts allParts minSize pathsSize i path normalized parts allPartsSize j partsSize firstSize k firstPart allMatch normpathBlock |
 		paths := positional ___at___: 1.
 		(paths ___isEmpty___) ifTrue: [
@@ -468,7 +468,7 @@ category: 'Python-Initialization'
 method: os_path
 initialize_commonprefix
 	"Return the longest path prefix (taken character-by-character) that is a prefix of all paths"
-	commonprefix := [:positional :keywords |
+	self ___at___: #commonprefix put: [:positional :keywords |
 		| paths prefix minLen pathsSize i char allMatch j path |
 		paths := positional ___at___: 1.
 		(paths ___isEmpty___) ifTrue: [
@@ -509,182 +509,182 @@ category: 'Python-Path Manipulation'
 method: os_path
 join
 	"Return the join function"
-	^ join
+	^ self ___at___: #join
 %
 
 category: 'Python-Path Manipulation'
 method: os_path
 join: aBlock
 	"Set the join function (for monkey patching)"
-	join := aBlock
+	self ___at___: #join put: aBlock
 %
 
 category: 'Python-Path Manipulation'
 method: os_path
 basename
 	"Return the basename function"
-	^ basename
+	^ self ___at___: #basename
 %
 
 category: 'Python-Path Manipulation'
 method: os_path
 basename: aBlock
 	"Set the basename function (for monkey patching)"
-	basename := aBlock
+	self ___at___: #basename put: aBlock
 %
 
 category: 'Python-Path Manipulation'
 method: os_path
 dirname
 	"Return the dirname function"
-	^ dirname
+	^ self ___at___: #dirname
 %
 
 category: 'Python-Path Manipulation'
 method: os_path
 dirname: aBlock
 	"Set the dirname function (for monkey patching)"
-	dirname := aBlock
+	self ___at___: #dirname put: aBlock
 %
 
 category: 'Python-Path Manipulation'
 method: os_path
 split
 	"Return the split function"
-	^ split
+	^ self ___at___: #split
 %
 
 category: 'Python-Path Manipulation'
 method: os_path
 split: aBlock
 	"Set the split function (for monkey patching)"
-	split := aBlock
+	self ___at___: #split put: aBlock
 %
 
 category: 'Python-Path Manipulation'
 method: os_path
 splitext
 	"Return the splitext function"
-	^ splitext
+	^ self ___at___: #splitext
 %
 
 category: 'Python-Path Manipulation'
 method: os_path
 splitext: aBlock
 	"Set the splitext function (for monkey patching)"
-	splitext := aBlock
+	self ___at___: #splitext put: aBlock
 %
 
 category: 'Python-Path Manipulation'
 method: os_path
 isabs
 	"Return the isabs function"
-	^ isabs
+	^ self ___at___: #isabs
 %
 
 category: 'Python-Path Manipulation'
 method: os_path
 isabs: aBlock
 	"Set the isabs function (for monkey patching)"
-	isabs := aBlock
+	self ___at___: #isabs put: aBlock
 %
 
 category: 'Python-Path Manipulation'
 method: os_path
 normpath
 	"Return the normpath function"
-	^ normpath
+	^ self ___at___: #normpath
 %
 
 category: 'Python-Path Manipulation'
 method: os_path
 normpath: aBlock
 	"Set the normpath function (for monkey patching)"
-	normpath := aBlock
+	self ___at___: #normpath put: aBlock
 %
 
 category: 'Python-Path Manipulation'
 method: os_path
 abspath
 	"Return the abspath function"
-	^ abspath
+	^ self ___at___: #abspath
 %
 
 category: 'Python-Path Manipulation'
 method: os_path
 abspath: aBlock
 	"Set the abspath function (for monkey patching)"
-	abspath := aBlock
+	self ___at___: #abspath put: aBlock
 %
 
 category: 'Python-Path Manipulation'
 method: os_path
 exists
 	"Return the exists function"
-	^ exists
+	^ self ___at___: #exists
 %
 
 category: 'Python-Path Manipulation'
 method: os_path
 exists: aBlock
 	"Set the exists function (for monkey patching)"
-	exists := aBlock
+	self ___at___: #exists put: aBlock
 %
 
 category: 'Python-Path Manipulation'
 method: os_path
 isdir
 	"Return the isdir function"
-	^ isdir
+	^ self ___at___: #isdir
 %
 
 category: 'Python-Path Manipulation'
 method: os_path
 isdir: aBlock
 	"Set the isdir function (for monkey patching)"
-	isdir := aBlock
+	self ___at___: #isdir put: aBlock
 %
 
 category: 'Python-Path Manipulation'
 method: os_path
 isfile
 	"Return the isfile function"
-	^ isfile
+	^ self ___at___: #isfile
 %
 
 category: 'Python-Path Manipulation'
 method: os_path
 isfile: aBlock
 	"Set the isfile function (for monkey patching)"
-	isfile := aBlock
+	self ___at___: #isfile put: aBlock
 %
 
 category: 'Python-Path Manipulation'
 method: os_path
 commonpath
 	"Return the commonpath function"
-	^ commonpath
+	^ self ___at___: #commonpath
 %
 
 category: 'Python-Path Manipulation'
 method: os_path
 commonpath: aBlock
 	"Set the commonpath function (for monkey patching)"
-	commonpath := aBlock
+	self ___at___: #commonpath put: aBlock
 %
 
 category: 'Python-Path Manipulation'
 method: os_path
 commonprefix
 	"Return the commonprefix function"
-	^ commonprefix
+	^ self ___at___: #commonprefix
 %
 
 category: 'Python-Path Manipulation'
 method: os_path
 commonprefix: aBlock
 	"Set the commonprefix function (for monkey patching)"
-	commonprefix := aBlock
+	self ___at___: #commonprefix put: aBlock
 %
 
 set compile_env: 0

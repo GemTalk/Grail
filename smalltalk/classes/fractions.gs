@@ -30,21 +30,21 @@ category: 'Python-Initialization'
 method: fractions
 initialize_Fraction
 	"Bind the Fraction attribute to GemStone's Fraction class."
-	fractionClass := Fraction
+	self ___at___: #fractionClass put: Fraction
 %
 
 category: 'Python-Types'
 method: fractions
 Fraction
 	"Return the Fraction type exposed by this module."
-	^ fractionClass
+	^ self ___at___: #fractionClass
 %
 
 category: 'Python-Types'
 method: fractions
 Fraction: aClass
 	"Set the Fraction type (for monkey patching or testing)."
-	fractionClass := aClass
+	self ___at___: #fractionClass put: aClass
 %
 
 set compile_env: 0

@@ -51,14 +51,14 @@ category: 'Python-Initialization'
 method: cmath
 initialize_pi
 	"The mathematical constant π = 3.141592..."
-	pi := Float perform: #pi env: 0
+	self ___at___: #pi put: (Float perform: #pi env: 0)
 %
 
 category: 'Python-Initialization'
 method: cmath
 initialize_e
 	"The mathematical constant e = 2.718281..."
-	e := 1.0 perform: #exp env: 0
+	self ___at___: #e put: (1.0 perform: #exp env: 0)
 %
 
 category: 'Python-Initialization'
@@ -67,42 +67,42 @@ initialize_tau
 	"The mathematical constant τ = 2π = 6.283185..."
 	| piValue |
 	piValue := Float perform: #pi env: 0.
-	tau := piValue ___times___: 2.0
+	self ___at___: #tau put: (piValue ___times___: 2.0)
 %
 
 category: 'Python-Initialization'
 method: cmath
 initialize_inf
 	"Positive infinity"
-	inf := PlusInfinity
+	self ___at___: #inf put: PlusInfinity
 %
 
 category: 'Python-Initialization'
 method: cmath
 initialize_infj
 	"Complex number with zero real part and positive infinity imaginary part"
-	infj := complex __new__: 0.0 _: PlusInfinity
+	self ___at___: #infj put: (complex __new__: 0.0 _: PlusInfinity)
 %
 
 category: 'Python-Initialization'
 method: cmath
 initialize_nan
 	"Not a number (NaN)"
-	nan := PlusQuietNaN
+	self ___at___: #nan put: PlusQuietNaN
 %
 
 category: 'Python-Initialization'
 method: cmath
 initialize_nanj
 	"Complex number with zero real part and NaN imaginary part"
-	nanj := complex __new__: 0.0 _: PlusQuietNaN
+	self ___at___: #nanj put: (complex __new__: 0.0 _: PlusQuietNaN)
 %
 
 category: 'Python-Initialization'
 method: cmath
 initialize_sin
 	"Return the sine of z (complex number)"
-	sin := [:positional :keywords |
+	self ___at___: #sin put: [:positional :keywords |
 		| z zComplex real imag |
 		z := positional ___at___: 1.
 		zComplex := self ___asComplex: z.
@@ -118,7 +118,7 @@ category: 'Python-Initialization'
 method: cmath
 initialize_cos
 	"Return the cosine of z (complex number)"
-	cos := [:positional :keywords |
+	self ___at___: #cos put: [:positional :keywords |
 		| z zComplex real imag |
 		z := positional ___at___: 1.
 		zComplex := self ___asComplex: z.
@@ -134,7 +134,7 @@ category: 'Python-Initialization'
 method: cmath
 initialize_tan
 	"Return the tangent of z (complex number)"
-	tan := [:positional :keywords |
+	self ___at___: #tan put: [:positional :keywords |
 		| z sinBlock cosBlock sinZ cosZ |
 		z := positional ___at___: 1.
 		sinBlock := self sin.
@@ -149,7 +149,7 @@ category: 'Python-Initialization'
 method: cmath
 initialize_sinh
 	"Return the hyperbolic sine of z (complex number)"
-	sinh := [:positional :keywords |
+	self ___at___: #sinh put: [:positional :keywords |
 		| z zComplex real imag |
 		z := positional ___at___: 1.
 		zComplex := self ___asComplex: z.
@@ -165,7 +165,7 @@ category: 'Python-Initialization'
 method: cmath
 initialize_cosh
 	"Return the hyperbolic cosine of z (complex number)"
-	cosh := [:positional :keywords |
+	self ___at___: #cosh put: [:positional :keywords |
 		| z zComplex real imag |
 		z := positional ___at___: 1.
 		zComplex := self ___asComplex: z.
@@ -181,7 +181,7 @@ category: 'Python-Initialization'
 method: cmath
 initialize_tanh
 	"Return the hyperbolic tangent of z (complex number)"
-	tanh := [:positional :keywords |
+	self ___at___: #tanh put: [:positional :keywords |
 		| z sinhBlock coshBlock sinhZ coshZ |
 		z := positional ___at___: 1.
 		sinhBlock := self sinh.
@@ -196,7 +196,7 @@ category: 'Python-Initialization'
 method: cmath
 initialize_exp
 	"Return e raised to the power z (complex number)"
-	exp := [:positional :keywords |
+	self ___at___: #exp put: [:positional :keywords |
 		| z zComplex real imag expReal |
 		z := positional ___at___: 1.
 		zComplex := self ___asComplex: z.
@@ -213,7 +213,7 @@ category: 'Python-Initialization'
 method: cmath
 initialize_log
 	"Return the natural logarithm of z (complex number)"
-	log := [:positional :keywords |
+	self ___at___: #log put: [:positional :keywords |
 		| z zComplex real imag r theta |
 		z := positional ___at___: 1.
 		zComplex := self ___asComplex: z.
@@ -236,7 +236,7 @@ category: 'Python-Initialization'
 method: cmath
 initialize_log10
 	"Return the base-10 logarithm of z (complex number)"
-	log10 := [:positional :keywords |
+	self ___at___: #log10 put: [:positional :keywords |
 		| z logBlock logZ ln10 |
 		z := positional ___at___: 1.
 		logBlock := self log.
@@ -250,7 +250,7 @@ category: 'Python-Initialization'
 method: cmath
 initialize_sqrt
 	"Return the square root of z (complex number)"
-	sqrt := [:positional :keywords |
+	self ___at___: #sqrt put: [:positional :keywords |
 		| z zComplex real imag r theta sqrtR halfTheta |
 		z := positional ___at___: 1.
 		zComplex := self ___asComplex: z.
@@ -278,7 +278,7 @@ category: 'Python-Initialization'
 method: cmath
 initialize_phase
 	"Return the phase (argument) of z in radians"
-	phase := [:positional :keywords |
+	self ___at___: #phase put: [:positional :keywords |
 		| z zComplex real imag |
 		z := positional ___at___: 1.
 		zComplex := self ___asComplex: z.
@@ -293,7 +293,7 @@ category: 'Python-Initialization'
 method: cmath
 initialize_polar
 	"Return the polar coordinates (r, theta) of z"
-	polar := [:positional :keywords |
+	self ___at___: #polar put: [:positional :keywords |
 		| z zComplex real imag r theta |
 		z := positional ___at___: 1.
 		zComplex := self ___asComplex: z.
@@ -315,7 +315,7 @@ category: 'Python-Initialization'
 method: cmath
 initialize_rect
 	"Convert polar coordinates (r, theta) to rectangular form (complex number)"
-	rect := [:positional :keywords |
+	self ___at___: #rect put: [:positional :keywords |
 		| r theta rFloat thetaFloat |
 		r := positional ___at___: 1.
 		theta := positional ___at___: 2.
@@ -330,7 +330,7 @@ category: 'Python-Initialization'
 method: cmath
 initialize_isnan
 	"Return True if either the real or imaginary part of z is NaN"
-	isnan := [:positional :keywords |
+	self ___at___: #isnan put: [:positional :keywords |
 		| z zComplex real imag |
 		z := positional ___at___: 1.
 		zComplex := self ___asComplex: z.
@@ -345,7 +345,7 @@ category: 'Python-Initialization'
 method: cmath
 initialize_isinf
 	"Return True if either the real or imaginary part of z is infinity"
-	isinf := [:positional :keywords |
+	self ___at___: #isinf put: [:positional :keywords |
 		| z zComplex real imag realKind imagKind |
 		z := positional ___at___: 1.
 		zComplex := self ___asComplex: z.
@@ -363,7 +363,7 @@ category: 'Python-Initialization'
 method: cmath
 initialize_isfinite
 	"Return True if both the real and imaginary parts of z are finite"
-	isfinite := [:positional :keywords |
+	self ___at___: #isfinite put: [:positional :keywords |
 		| z zComplex real imag realKind imagKind |
 		z := positional ___at___: 1.
 		zComplex := self ___asComplex: z.
@@ -396,322 +396,322 @@ category: 'Python-Constants'
 method: cmath
 pi
 	"The mathematical constant π = 3.141592..."
-	^ pi
+	^ self ___at___: #pi
 %
 
 category: 'Python-Constants'
 method: cmath
 pi: aValue
 	"Set the pi constant (for monkey patching)"
-	pi := aValue
+	self ___at___: #pi put: aValue
 %
 
 category: 'Python-Constants'
 method: cmath
 e
 	"The mathematical constant e = 2.718281..."
-	^ e
+	^ self ___at___: #e
 %
 
 category: 'Python-Constants'
 method: cmath
 e: aValue
 	"Set the e constant (for monkey patching)"
-	e := aValue
+	self ___at___: #e put: aValue
 %
 
 category: 'Python-Constants'
 method: cmath
 tau
 	"The mathematical constant τ = 2π = 6.283185..."
-	^ tau
+	^ self ___at___: #tau
 %
 
 category: 'Python-Constants'
 method: cmath
 tau: aValue
 	"Set the tau constant (for monkey patching)"
-	tau := aValue
+	self ___at___: #tau put: aValue
 %
 
 category: 'Python-Constants'
 method: cmath
 inf
 	"Positive infinity"
-	^ inf
+	^ self ___at___: #inf
 %
 
 category: 'Python-Constants'
 method: cmath
 inf: aValue
 	"Set the inf constant (for monkey patching)"
-	inf := aValue
+	self ___at___: #inf put: aValue
 %
 
 category: 'Python-Constants'
 method: cmath
 infj
 	"Complex number with zero real part and positive infinity imaginary part"
-	^ infj
+	^ self ___at___: #infj
 %
 
 category: 'Python-Constants'
 method: cmath
 infj: aValue
 	"Set the infj constant (for monkey patching)"
-	infj := aValue
+	self ___at___: #infj put: aValue
 %
 
 category: 'Python-Constants'
 method: cmath
 nan
 	"Not a number (NaN)"
-	^ nan
+	^ self ___at___: #nan
 %
 
 category: 'Python-Constants'
 method: cmath
 nan: aValue
 	"Set the nan constant (for monkey patching)"
-	nan := aValue
+	self ___at___: #nan put: aValue
 %
 
 category: 'Python-Constants'
 method: cmath
 nanj
 	"Complex number with zero real part and NaN imaginary part"
-	^ nanj
+	^ self ___at___: #nanj
 %
 
 category: 'Python-Constants'
 method: cmath
 nanj: aValue
 	"Set the nanj constant (for monkey patching)"
-	nanj := aValue
+	self ___at___: #nanj put: aValue
 %
 
 category: 'Python-Trigonometric Functions'
 method: cmath
 sin
 	"Return the sin function"
-	^ sin
+	^ self ___at___: #sin
 %
 
 category: 'Python-Trigonometric Functions'
 method: cmath
 sin: aBlock
 	"Set the sin function (for monkey patching)"
-	sin := aBlock
+	self ___at___: #sin put: aBlock
 %
 
 category: 'Python-Trigonometric Functions'
 method: cmath
 cos
 	"Return the cos function"
-	^ cos
+	^ self ___at___: #cos
 %
 
 category: 'Python-Trigonometric Functions'
 method: cmath
 cos: aBlock
 	"Set the cos function (for monkey patching)"
-	cos := aBlock
+	self ___at___: #cos put: aBlock
 %
 
 category: 'Python-Trigonometric Functions'
 method: cmath
 tan
 	"Return the tan function"
-	^ tan
+	^ self ___at___: #tan
 %
 
 category: 'Python-Trigonometric Functions'
 method: cmath
 tan: aBlock
 	"Set the tan function (for monkey patching)"
-	tan := aBlock
+	self ___at___: #tan put: aBlock
 %
 
 category: 'Python-Hyperbolic Functions'
 method: cmath
 sinh
 	"Return the sinh function"
-	^ sinh
+	^ self ___at___: #sinh
 %
 
 category: 'Python-Hyperbolic Functions'
 method: cmath
 sinh: aBlock
 	"Set the sinh function (for monkey patching)"
-	sinh := aBlock
+	self ___at___: #sinh put: aBlock
 %
 
 category: 'Python-Hyperbolic Functions'
 method: cmath
 cosh
 	"Return the cosh function"
-	^ cosh
+	^ self ___at___: #cosh
 %
 
 category: 'Python-Hyperbolic Functions'
 method: cmath
 cosh: aBlock
 	"Set the cosh function (for monkey patching)"
-	cosh := aBlock
+	self ___at___: #cosh put: aBlock
 %
 
 category: 'Python-Hyperbolic Functions'
 method: cmath
 tanh
 	"Return the tanh function"
-	^ tanh
+	^ self ___at___: #tanh
 %
 
 category: 'Python-Hyperbolic Functions'
 method: cmath
 tanh: aBlock
 	"Set the tanh function (for monkey patching)"
-	tanh := aBlock
+	self ___at___: #tanh put: aBlock
 %
 
 category: 'Python-Exponential and Logarithmic'
 method: cmath
 exp
 	"Return the exp function"
-	^ exp
+	^ self ___at___: #exp
 %
 
 category: 'Python-Exponential and Logarithmic'
 method: cmath
 exp: aBlock
 	"Set the exp function (for monkey patching)"
-	exp := aBlock
+	self ___at___: #exp put: aBlock
 %
 
 category: 'Python-Exponential and Logarithmic'
 method: cmath
 log
 	"Return the log function"
-	^ log
+	^ self ___at___: #log
 %
 
 category: 'Python-Exponential and Logarithmic'
 method: cmath
 log: aBlock
 	"Set the log function (for monkey patching)"
-	log := aBlock
+	self ___at___: #log put: aBlock
 %
 
 category: 'Python-Exponential and Logarithmic'
 method: cmath
 log10
 	"Return the log10 function"
-	^ log10
+	^ self ___at___: #log10
 %
 
 category: 'Python-Exponential and Logarithmic'
 method: cmath
 log10: aBlock
 	"Set the log10 function (for monkey patching)"
-	log10 := aBlock
+	self ___at___: #log10 put: aBlock
 %
 
 category: 'Python-Exponential and Logarithmic'
 method: cmath
 sqrt
 	"Return the sqrt function"
-	^ sqrt
+	^ self ___at___: #sqrt
 %
 
 category: 'Python-Exponential and Logarithmic'
 method: cmath
 sqrt: aBlock
 	"Set the sqrt function (for monkey patching)"
-	sqrt := aBlock
+	self ___at___: #sqrt put: aBlock
 %
 
 category: 'Python-Polar Coordinates'
 method: cmath
 phase
 	"Return the phase function"
-	^ phase
+	^ self ___at___: #phase
 %
 
 category: 'Python-Polar Coordinates'
 method: cmath
 phase: aBlock
 	"Set the phase function (for monkey patching)"
-	phase := aBlock
+	self ___at___: #phase put: aBlock
 %
 
 category: 'Python-Polar Coordinates'
 method: cmath
 polar
 	"Return the polar function"
-	^ polar
+	^ self ___at___: #polar
 %
 
 category: 'Python-Polar Coordinates'
 method: cmath
 polar: aBlock
 	"Set the polar function (for monkey patching)"
-	polar := aBlock
+	self ___at___: #polar put: aBlock
 %
 
 category: 'Python-Polar Coordinates'
 method: cmath
 rect
 	"Return the rect function"
-	^ rect
+	^ self ___at___: #rect
 %
 
 category: 'Python-Polar Coordinates'
 method: cmath
 rect: aBlock
 	"Set the rect function (for monkey patching)"
-	rect := aBlock
+	self ___at___: #rect put: aBlock
 %
 
 category: 'Python-Classification'
 method: cmath
 isnan
 	"Return the isnan function"
-	^ isnan
+	^ self ___at___: #isnan
 %
 
 category: 'Python-Classification'
 method: cmath
 isnan: aBlock
 	"Set the isnan function (for monkey patching)"
-	isnan := aBlock
+	self ___at___: #isnan put: aBlock
 %
 
 category: 'Python-Classification'
 method: cmath
 isinf
 	"Return the isinf function"
-	^ isinf
+	^ self ___at___: #isinf
 %
 
 category: 'Python-Classification'
 method: cmath
 isinf: aBlock
 	"Set the isinf function (for monkey patching)"
-	isinf := aBlock
+	self ___at___: #isinf put: aBlock
 %
 
 category: 'Python-Classification'
 method: cmath
 isfinite
 	"Return the isfinite function"
-	^ isfinite
+	^ self ___at___: #isfinite
 %
 
 category: 'Python-Classification'
 method: cmath
 isfinite: aBlock
 	"Set the isfinite function (for monkey patching)"
-	isfinite := aBlock
+	self ___at___: #isfinite put: aBlock
 %
 
 set compile_env: 0

@@ -5,3 +5,4 @@ stdout.txt
 tmp/
 .setenv
 pyperf*
+.claude

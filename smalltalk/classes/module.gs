@@ -29,7 +29,7 @@ instance
 	"Return the singleton instance of a module subclass.
 	Creates it if it doesn't exist."
 	instance == nil ifTrue: [
-		instance := self perform: #basicNew env: 0.
+		instance := self perform: #new env: 0.
 		instance perform: #initialize env: 2
 	].
 	^ instance
@@ -47,63 +47,65 @@ clearInstance
 category: 'Python-Accessors'
 method: module
 __name__
-	^ __name__
+	^ self ___at___: #__name__
 %
 
 category: 'Python-Accessors'
 method: module
 __name__: aValue
-	__name__ := aValue
+	self ___at___: #__name__ put: aValue
 %
 
 category: 'Python-Accessors'
 method: module
 __package__
-	^ __package__
+	^ self ___at___: #__package__
 %
 
 category: 'Python-Accessors'
 method: module
 __package__: aValue
-	__package__ := aValue
+	self ___at___: #__package__ put: aValue
 %
 
 category: 'Python-Accessors'
 method: module
 __loader__
-	^ __loader__
+	^ self ___at___: #__loader__
 %
 
 category: 'Python-Accessors'
 method: module
 __loader__: aValue
-	__loader__ := aValue
+	self ___at___: #__loader__ put: aValue
 %
 
 category: 'Python-Accessors'
 method: module
 __spec__
-	^ __spec__
+	^ self ___at___: #__spec__
 %
 
 category: 'Python-Accessors'
 method: module
 __spec__: aValue
-	__spec__ := aValue
+	self ___at___: #__spec__ put: aValue
 %
 
 category: 'Python-Accessors'
 method: module
 __doc__
 	"Return the module docstring, falling back to the base object docstring if unset."
-	__doc__ == nil ifTrue: [^ super __doc__].
-	^ __doc__
+	| doc |
+	doc := self ___at___: #__doc__.
+	doc == nil ifTrue: [^ super __doc__].
+	^ doc
 %
 
 category: 'Python-Accessors'
 method: module
 __doc__: aValue
-	__doc__ := aValue
+	self ___at___: #__doc__ put: aValue
 %
 
 ! ------------------- Reset compile environment to Smalltalk

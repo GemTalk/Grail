@@ -28,11 +28,11 @@ args size >= 6 ifTrue: [
     bufferStream := WriteStream on: Unicode7 new.
     inContinuation := false.
     [true] whileTrue: [
-        | line |
-        inContinuation
-            ifTrue: [GsFile stdout nextPutAll: '... '; flush]
-            ifFalse: [GsFile stdout nextPutAll: '>>> '; flush].
-        line := GsFile stdin nextLine.
+        | prompt line |
+        prompt := inContinuation ifTrue: ['... '] ifFalse: ['>>> '].
+        line := GsFile stdin 
+            nextLineTo: Character lf codePoint 
+            prompt: prompt.
         line ifNil: [Error signal: 'EOF from stdin!'].
         bufferStream nextPutAll: line.
         line := line trimTrailingSeparators.
@@ -44,12 +44,18 @@ args size >= 6 ifTrue: [
                     evaluateSource: bufferStream contents
                     usingModuleScope: moduleScope.
                 result == None ifFalse: [
-                    GsFile stdout nextPutAll: result ___repr___; lf; flush.
+                    GsFile stdout 
+                        nextPut: Character cr;
+                        nextPutAll: result ___repr___; 
+                        nextPut: Character cr;
+                        nextPut: Character lf;
+                        yourself.
                 ].
                 bufferStream := WriteStream on: Unicode7 new.
             ] on: Error do: [:ex |
                 | msg |
                 (ex isKindOf: ExitClientError) ifTrue: [ex pass].
+                (ex isKindOf: Break) ifTrue: [ExitClientError signal: 'Soft Break' status: 1].
                 msg := ex messageText.
                 GsFile stderr nextPutAll: msg; lf; flush.
                 bufferStream := WriteStream on: Unicode7 new.

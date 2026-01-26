@@ -1382,8 +1382,8 @@ complex category: 'Numbers'
 ! ------- module class (Python 'module' type)
 expectvalue /Class
 doit
-object subclass: 'module'
-	  instVarNames: #('__name__' '__package__' '__loader__' '__spec__' '__doc__')
+SymbolDictionary subclass: 'module'
+	  instVarNames: #()
   classVars: #()
   classInstVars: #('instance')
   poolDictionaries: #()
@@ -1410,7 +1410,7 @@ module category: 'Modules'
 expectvalue /Class
 doit
 module subclass: 'builtins'
-  instVarNames: #('abs' 'len' 'type' 'repr' 'str' 'hash' 'hex' 'oct' 'bin' 'chr' 'ord' 'min' 'max' 'sum' 'all' 'any' 'isinstance' 'callable' 'dir' 'id' 'pow' 'powWithMod' 'round' 'roundWithDigits' 'divmod' 'print' 'input' 'inputWithPrompt' 'sorted' 'reversed' 'enumerate' 'zip' '__import__')
+  instVarNames: #()
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -1437,7 +1437,7 @@ builtins category: 'Modules'
 expectvalue /Class
 doit
 module subclass: 'math'
-  instVarNames: #('pi' 'e' 'tau' 'inf' 'nan' 'sqrt' 'pow' 'exp' 'log' 'logWithBase' 'log10' 'log2' 'sin' 'cos' 'tan' 'asin' 'acos' 'atan' 'atan2' 'sinh' 'cosh' 'tanh' 'asinh' 'acosh' 'atanh' 'ceil' 'floor' 'trunc' 'factorial' 'gcd' 'lcm' 'fabs' 'isnan' 'isinf' 'isfinite' 'degrees' 'radians')
+  instVarNames: #()
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -1464,7 +1464,7 @@ math category: 'Modules'
 expectvalue /Class
 doit
 module subclass: 'gemstone'
-  instVarNames: #('version')
+  instVarNames: #()
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -1488,7 +1488,7 @@ gemstone category: 'Modules'
 expectvalue /Class
 doit
 module subclass: 'cmath'
-  instVarNames: #('pi' 'e' 'tau' 'inf' 'infj' 'nan' 'nanj' 'sin' 'cos' 'tan' 'sinh' 'cosh' 'tanh' 'exp' 'log' 'log10' 'sqrt' 'phase' 'polar' 'rect' 'isnan' 'isinf' 'isfinite')
+  instVarNames: #()
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -1515,7 +1515,7 @@ cmath category: 'Modules'
 expectvalue /Class
 doit
 module subclass: 'random'
-  instVarNames: #('_generator' 'random' 'seed' 'getstate' 'setstate' 'getrandbits' 'randbytes' 'randrange' 'randint' 'choice' 'choices' 'shuffle' 'sample' 'uniform' 'triangular' 'gauss' 'normalvariate' 'lognormvariate' 'expovariate' 'gammavariate' 'betavariate' 'paretovariate' 'weibullvariate' 'binomialvariate')
+  instVarNames: #()
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -1559,7 +1559,7 @@ random category: 'Modules'
 expectvalue /Class
 doit
 module subclass: 'statistics'
-  instVarNames: #('mean' 'fmean' 'geometric_mean' 'harmonic_mean' 'median' 'median_low' 'median_high' 'median_grouped' 'mode' 'multimode' 'quantiles' 'pstdev' 'pvariance' 'stdev' 'variance' 'covariance' 'correlation' 'linear_regression')
+  instVarNames: #()
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -1608,7 +1608,7 @@ statistics category: 'Modules'
 expectvalue /Class
 doit
 module subclass: 'fractions'
-  instVarNames: #('fractionClass')
+  instVarNames: #()
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -1765,7 +1765,7 @@ numbers_Integral category: 'Numbers-ABC'
 expectvalue /Class
 doit
 module subclass: 'numbers'
-  instVarNames: #('Number' 'Complex' 'Real' 'Rational' 'Integral')
+  instVarNames: #()
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -1800,7 +1800,7 @@ numbers category: 'Modules'
 expectvalue /Class
 doit
 module subclass: 'os'
-  instVarNames: #('getcwd' 'chdir' 'listdir' 'mkdir' 'mkdirWithMode' 'makedirs' 'remove' 'rmdir' 'rename' 'exists' 'isdir' 'isfile' 'stat' 'lstat' 'system' 'getenv' 'getenvWithDefault' 'putenv' 'sep' 'pathsep' 'linesep' 'path')
+  instVarNames: #()
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -1827,7 +1827,7 @@ os category: 'Modules'
 expectvalue /Class
 doit
 module subclass: 'os_path'
-  instVarNames: #('join' 'basename' 'dirname' 'split' 'splitext' 'isabs' 'normpath' 'abspath' 'exists' 'isdir' 'isfile' 'commonpath' 'commonprefix')
+  instVarNames: #()
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -1854,7 +1854,7 @@ os_path category: 'Modules'
 expectvalue /Class
 doit
 module subclass: 'sys'
-  instVarNames: #('argv' 'base_exec_prefix' 'base_prefix' 'byteorder' 'builtin_module_names' 'copyright' 'exec_prefix' 'executable' 'exit' 'flags' 'float_info' 'float_repr_style' 'getdefaultencoding' 'getfilesystemencoding' 'getfilesystemencodeerrors' 'getrecursionlimit' 'getsizeof' 'getrefcount' 'hash_info' 'hexversion' 'implementation' 'int_info' 'intern' 'maxsize' 'maxunicode' 'modules' 'path' 'path_hooks' 'path_importer_cache' 'platform' 'platlibdir' 'prefix' 'ps1' 'ps2' 'setrecursionlimit' 'stdin' 'stdout' 'stderr' 'stdlib_module_names' 'thread_info' 'version' 'version_info' 'api_version' 'warnoptions' 'exc_info' 'exception' 'excepthook' 'displayhook' 'breakpointhook' 'audit' 'addaudithook' 'settrace' 'setprofile' 'gettrace' 'getprofile' 'call_tracing' 'is_finalizing' 'getallocatedblocks' 'get_int_max_str_digits' 'set_int_max_str_digits' 'unraisablehook' '__breakpointhook__' '__displayhook__' '__excepthook__' '__unraisablehook__' '__stdin__' '__stdout__' '__stderr__' 'meta_path' 'orig_argv' 'tracebacklimit' 'dont_write_bytecode' 'pycache_prefix')
+  instVarNames: #()
   classVars: #()
   classInstVars: #('modules')
   poolDictionaries: #()
@@ -1891,7 +1891,7 @@ sys category: 'Modules'
 expectvalue /Class
 doit
 module subclass: 'importlib'
-  instVarNames: #('import_module' 'reload' 'invalidate_caches' '__import__')
+  instVarNames: #()
   classVars: #()
   classInstVars: #('pprintast' 'grailDir')
   poolDictionaries: #()
@@ -1934,7 +1934,7 @@ importlib category: 'Modules'
 expectvalue /Class
 doit
 module subclass: 'string'
-  instVarNames: #('ascii_letters' 'ascii_lowercase' 'ascii_uppercase' 'digits' 'hexdigits' 'octdigits' 'punctuation' 'printable' 'whitespace' 'capwords' 'Formatter' 'Template')
+  instVarNames: #()
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()

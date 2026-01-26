@@ -85,7 +85,7 @@ category: 'Python-Initialization'
 method: statistics
 initialize_mean
 	"mean(data) -> Return the sample arithmetic mean of data."
-	mean := [:positional :keywords |
+	self ___at___: #mean put: [:positional :keywords |
 		| data n total |
 		data := self _toList: (positional ___at___: 1).
 		n := data ___size___.
@@ -101,7 +101,7 @@ category: 'Python-Initialization'
 method: statistics
 initialize_fmean
 	"fmean(data, weights=None) -> Return the fast floating-point arithmetic mean."
-	fmean := [:positional :keywords |
+	self ___at___: #fmean put: [:positional :keywords |
 		| data weights n total weightSum |
 		data := self _toList: (positional ___at___: 1).
 		n := data ___size___.
@@ -135,7 +135,7 @@ category: 'Python-Initialization'
 method: statistics
 initialize_geometric_mean
 	"geometric_mean(data) -> Return the geometric mean of data."
-	geometric_mean := [:positional :keywords |
+	self ___at___: #geometric_mean put: [:positional :keywords |
 		| data n product logSum |
 		data := self _toList: (positional ___at___: 1).
 		n := data ___size___.
@@ -160,7 +160,7 @@ category: 'Python-Initialization'
 method: statistics
 initialize_harmonic_mean
 	"harmonic_mean(data, weights=None) -> Return the harmonic mean of data."
-	harmonic_mean := [:positional :keywords |
+	self ___at___: #harmonic_mean put: [:positional :keywords |
 		| data weights n recipSum weightSum |
 		data := self _toList: (positional ___at___: 1).
 		n := data ___size___.
@@ -206,7 +206,7 @@ category: 'Python-Initialization'
 method: statistics
 initialize_median
 	"median(data) -> Return the median (middle value) of numeric data."
-	median := [:positional :keywords |
+	self ___at___: #median put: [:positional :keywords |
 		| data sorted n mid |
 		data := self _toList: (positional ___at___: 1).
 		n := data ___size___.
@@ -227,7 +227,7 @@ category: 'Python-Initialization'
 method: statistics
 initialize_median_low
 	"median_low(data) -> Return the low median of numeric data."
-	median_low := [:positional :keywords |
+	self ___at___: #median_low put: [:positional :keywords |
 		| data sorted n mid |
 		data := self _toList: (positional ___at___: 1).
 		n := data ___size___.
@@ -244,7 +244,7 @@ category: 'Python-Initialization'
 method: statistics
 initialize_median_high
 	"median_high(data) -> Return the high median of numeric data."
-	median_high := [:positional :keywords |
+	self ___at___: #median_high put: [:positional :keywords |
 		| data sorted n mid |
 		data := self _toList: (positional ___at___: 1).
 		n := data ___size___.
@@ -266,7 +266,7 @@ category: 'Python-Initialization'
 method: statistics
 initialize_median_grouped
 	"median_grouped(data, interval=1.0) -> Return the median of grouped data."
-	median_grouped := [:positional :keywords |
+	self ___at___: #median_grouped put: [:positional :keywords |
 		| data interval sorted n mid cf L freq |
 		data := self _toList: (positional ___at___: 1).
 		n := data ___size___.
@@ -293,7 +293,7 @@ category: 'Python-Initialization'
 method: statistics
 initialize_mode
 	"mode(data) -> Return the single most common data point."
-	mode := [:positional :keywords |
+	self ___at___: #mode put: [:positional :keywords |
 		| data counts maxCount modeValue |
 		data := self _toList: (positional ___at___: 1).
 		(data ___size___ ___eq___: 0) ifTrue: [
@@ -321,7 +321,7 @@ category: 'Python-Initialization'
 method: statistics
 initialize_multimode
 	"multimode(data) -> Return a list of the most frequently occurring values."
-	multimode := [:positional :keywords |
+	self ___at___: #multimode put: [:positional :keywords |
 		| data counts maxCount modes |
 		data := self _toList: (positional ___at___: 1).
 		(data ___size___ ___eq___: 0) ifTrue: [
@@ -349,7 +349,7 @@ category: 'Python-Initialization'
 method: statistics
 initialize_quantiles
 	"quantiles(data, n=4, method='exclusive') -> Divide data into n intervals."
-	quantiles := [:positional :keywords |
+	self ___at___: #quantiles put: [:positional :keywords |
 		| data n method sorted len result |
 		data := self _toList: (positional ___at___: 1).
 		len := data ___size___.
@@ -395,7 +395,7 @@ category: 'Python-Initialization'
 method: statistics
 initialize_pvariance
 	"pvariance(data, mu=None) -> Return the population variance of data."
-	pvariance := [:positional :keywords |
+	self ___at___: #pvariance put: [:positional :keywords |
 		| data mu n total |
 		data := self _toList: (positional ___at___: 1).
 		n := data ___size___.
@@ -422,9 +422,9 @@ category: 'Python-Initialization'
 method: statistics
 initialize_pstdev
 	"pstdev(data, mu=None) -> Return the population standard deviation of data."
-	pstdev := [:positional :keywords |
+	self ___at___: #pstdev put: [:positional :keywords |
 		| var |
-		var := pvariance value: positional value: keywords.
+		var := (self ___at___: #pvariance) value: positional value: keywords.
 		var perform: #sqrt env: 0
 	]
 %
@@ -433,7 +433,7 @@ category: 'Python-Initialization'
 method: statistics
 initialize_variance
 	"variance(data, xbar=None) -> Return the sample variance of data."
-	variance := [:positional :keywords |
+	self ___at___: #variance put: [:positional :keywords |
 		| data xbar n total |
 		data := self _toList: (positional ___at___: 1).
 		n := data ___size___.
@@ -460,9 +460,9 @@ category: 'Python-Initialization'
 method: statistics
 initialize_stdev
 	"stdev(data, xbar=None) -> Return the sample standard deviation of data."
-	stdev := [:positional :keywords |
+	self ___at___: #stdev put: [:positional :keywords |
 		| var |
-		var := variance value: positional value: keywords.
+		var := (self ___at___: #variance) value: positional value: keywords.
 		var perform: #sqrt env: 0
 	]
 %
@@ -471,7 +471,7 @@ category: 'Python-Initialization'
 method: statistics
 initialize_covariance
 	"covariance(x, y) -> Return the sample covariance of two inputs."
-	covariance := [:positional :keywords |
+	self ___at___: #covariance put: [:positional :keywords |
 		| x y n xbar ybar total |
 		x := self _toList: (positional ___at___: 1).
 		y := self _toList: (positional ___at___: 2).
@@ -499,7 +499,7 @@ category: 'Python-Initialization'
 method: statistics
 initialize_correlation
 	"correlation(x, y) -> Return the Pearson correlation coefficient for two inputs."
-	correlation := [:positional :keywords |
+	self ___at___: #correlation put: [:positional :keywords |
 		| x y n xbar ybar sxx syy sxy |
 		x := self _toList: (positional ___at___: 1).
 		y := self _toList: (positional ___at___: 2).
@@ -534,7 +534,7 @@ category: 'Python-Initialization'
 method: statistics
 initialize_linear_regression
 	"linear_regression(x, y) -> Return the slope and intercept of simple linear regression."
-	linear_regression := [:positional :keywords |
+	self ___at___: #linear_regression put: [:positional :keywords |
 		| x y n xbar ybar sxx sxy slope intercept result |
 		x := self _toList: (positional ___at___: 1).
 		y := self _toList: (positional ___at___: 2).
@@ -570,217 +570,217 @@ initialize_linear_regression
 category: 'Python-Accessors'
 method: statistics
 mean
-	^ mean
+	^ self ___at___: #mean
 %
 
 category: 'Python-Accessors'
 method: statistics
 mean: aValue
-	mean := aValue
+	self ___at___: #mean put: aValue
 %
 
 category: 'Python-Accessors'
 method: statistics
 fmean
-	^ fmean
+	^ self ___at___: #fmean
 %
 
 category: 'Python-Accessors'
 method: statistics
 fmean: aValue
-	fmean := aValue
+	self ___at___: #fmean put: aValue
 %
 
 category: 'Python-Accessors'
 method: statistics
 geometric_mean
-	^ geometric_mean
+	^ self ___at___: #geometric_mean
 %
 
 category: 'Python-Accessors'
 method: statistics
 geometric_mean: aValue
-	geometric_mean := aValue
+	self ___at___: #geometric_mean put: aValue
 %
 
 category: 'Python-Accessors'
 method: statistics
 harmonic_mean
-	^ harmonic_mean
+	^ self ___at___: #harmonic_mean
 %
 
 category: 'Python-Accessors'
 method: statistics
 harmonic_mean: aValue
-	harmonic_mean := aValue
+	self ___at___: #harmonic_mean put: aValue
 %
 
 category: 'Python-Accessors'
 method: statistics
 median
-	^ median
+	^ self ___at___: #median
 %
 
 category: 'Python-Accessors'
 method: statistics
 median: aValue
-	median := aValue
+	self ___at___: #median put: aValue
 %
 
 category: 'Python-Accessors'
 method: statistics
 median_low
-	^ median_low
+	^ self ___at___: #median_low
 %
 
 category: 'Python-Accessors'
 method: statistics
 median_low: aValue
-	median_low := aValue
+	self ___at___: #median_low put: aValue
 %
 
 category: 'Python-Accessors'
 method: statistics
 median_high
-	^ median_high
+	^ self ___at___: #median_high
 %
 
 category: 'Python-Accessors'
 method: statistics
 median_high: aValue
-	median_high := aValue
+	self ___at___: #median_high put: aValue
 %
 
 category: 'Python-Accessors'
 method: statistics
 median_grouped
-	^ median_grouped
+	^ self ___at___: #median_grouped
 %
 
 category: 'Python-Accessors'
 method: statistics
 median_grouped: aValue
-	median_grouped := aValue
+	self ___at___: #median_grouped put: aValue
 %
 
 category: 'Python-Accessors'
 method: statistics
 mode
-	^ mode
+	^ self ___at___: #mode
 %
 
 category: 'Python-Accessors'
 method: statistics
 mode: aValue
-	mode := aValue
+	self ___at___: #mode put: aValue
 %
 
 category: 'Python-Accessors'
 method: statistics
 multimode
-	^ multimode
+	^ self ___at___: #multimode
 %
 
 category: 'Python-Accessors'
 method: statistics
 multimode: aValue
-	multimode := aValue
+	self ___at___: #multimode put: aValue
 %
 
 category: 'Python-Accessors'
 method: statistics
 quantiles
-	^ quantiles
+	^ self ___at___: #quantiles
 %
 
 category: 'Python-Accessors'
 method: statistics
 quantiles: aValue
-	quantiles := aValue
+	self ___at___: #quantiles put: aValue
 %
 
 category: 'Python-Accessors'
 method: statistics
 pstdev
-	^ pstdev
+	^ self ___at___: #pstdev
 %
 
 category: 'Python-Accessors'
 method: statistics
 pstdev: aValue
-	pstdev := aValue
+	self ___at___: #pstdev put: aValue
 %
 
 category: 'Python-Accessors'
 method: statistics
 pvariance
-	^ pvariance
+	^ self ___at___: #pvariance
 %
 
 category: 'Python-Accessors'
 method: statistics
 pvariance: aValue
-	pvariance := aValue
+	self ___at___: #pvariance put: aValue
 %
 
 category: 'Python-Accessors'
 method: statistics
 stdev
-	^ stdev
+	^ self ___at___: #stdev
 %
 
 category: 'Python-Accessors'
 method: statistics
 stdev: aValue
-	stdev := aValue
+	self ___at___: #stdev put: aValue
 %
 
 category: 'Python-Accessors'
 method: statistics
 variance
-	^ variance
+	^ self ___at___: #variance
 %
 
 category: 'Python-Accessors'
 method: statistics
 variance: aValue
-	variance := aValue
+	self ___at___: #variance put: aValue
 %
 
 category: 'Python-Accessors'
 method: statistics
 covariance
-	^ covariance
+	^ self ___at___: #covariance
 %
 
 category: 'Python-Accessors'
 method: statistics
 covariance: aValue
-	covariance := aValue
+	self ___at___: #covariance put: aValue
 %
 
 category: 'Python-Accessors'
 method: statistics
 correlation
-	^ correlation
+	^ self ___at___: #correlation
 %
 
 category: 'Python-Accessors'
 method: statistics
 correlation: aValue
-	correlation := aValue
+	self ___at___: #correlation put: aValue
 %
 
 category: 'Python-Accessors'
 method: statistics
 linear_regression
-	^ linear_regression
+	^ self ___at___: #linear_regression
 %
 
 category: 'Python-Accessors'
 method: statistics
 linear_regression: aValue
-	linear_regression := aValue
+	self ___at___: #linear_regression put: aValue
 %
 
 set compile_env: 0

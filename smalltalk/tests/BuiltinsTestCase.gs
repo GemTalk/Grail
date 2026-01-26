@@ -552,54 +552,18 @@ testZip
 	self assert: (first perform: #__getitem__: env: 2 withArguments: {1}) equals: 'a'
 %
 
-category: 'Tests - Utility'
+category: 'Tests - System Functions'
 method: BuiltinsTestCase
-testAsSymbolDictionary
-	"Test asSymbolDictionary() method"
+testQuit
+	"Test quit() function is defined and callable"
 
-	| b dict absBlock lenBlock typeBlock type |
+	| b quitBlock callableBlock |
 	b := builtins ___instance___.
-	dict := b asSymbolDictionary.
+	quitBlock := b perform: #quit env: 2.
+	"Verify quit is defined"
+	self assert: quitBlock notNil.
 
-	"Verify it returns a SymbolDictionary"
-	self assert: (dict isKindOf: SymbolDictionary).
-
-	"Verify it contains expected built-in functions"
-	self assert: (dict includesKey: #abs).
-	self assert: (dict includesKey: #len).
-	self assert: (dict includesKey: #type).
-	self assert: (dict includesKey: #repr).
-	self assert: (dict includesKey: #str).
-	self assert: (dict includesKey: #min).
-	self assert: (dict includesKey: #max).
-	self assert: (dict includesKey: #sum).
-	self assert: (dict includesKey: #pow).
-
-	"Verify the values are blocks/functions"
-	absBlock := dict at: #abs.
-	self assert: (absBlock isKindOf: BlockClosure).
-	
-	lenBlock := dict at: #len.
-	self assert: (lenBlock isKindOf: BlockClosure).
-
-	"Verify it does not contain internal methods (starting with ___)"
-	dict keys do: [:key |
-		| keyStr |
-		keyStr := key asString.
-		(keyStr size >= 3) ifTrue: [
-			self deny: ((keyStr copyFrom: 1 to: 3) = '___')
-		]
-	].
-
-	"Verify it does not contain asSymbolDictionary itself"
-	self deny: (dict includesKey: #asSymbolDictionary).
-
-	"Verify the functions work correctly"
-	typeBlock := dict at: #type.
-	type := typeBlock value: {42} value: nil.
-	self assert: ((type == int) or: [type isSubclassOf: int]).
+	"Verify quit is callable (responds to value:value:)"
+	callableBlock := b perform: #callable env: 2.
+	self assert: (callableBlock value: {quitBlock} value: nil)
 %
-
-
-
-

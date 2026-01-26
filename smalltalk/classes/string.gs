@@ -40,14 +40,14 @@ category: 'Python-Initialization'
 method: string
 initialize_ascii_lowercase
 	"Lowercase letters 'abcdefghijklmnopqrstuvwxyz'"
-	ascii_lowercase := 'abcdefghijklmnopqrstuvwxyz'
+	self ___at___: #ascii_lowercase put: 'abcdefghijklmnopqrstuvwxyz'
 %
 
 category: 'Python-Initialization'
 method: string
 initialize_ascii_uppercase
 	"Uppercase letters 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'"
-	ascii_uppercase := 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+	self ___at___: #ascii_uppercase put: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 %
 
 category: 'Python-Initialization'
@@ -55,35 +55,35 @@ method: string
 initialize_ascii_letters
 	"Concatenation of ascii_lowercase and ascii_uppercase"
 	"Use Smalltalk concatenation since these are Smalltalk strings"
-	ascii_letters := ascii_lowercase ___concat___: ascii_uppercase
+	self ___at___: #ascii_letters put: ((self ___at___: #ascii_lowercase) ___concat___: (self ___at___: #ascii_uppercase))
 %
 
 category: 'Python-Initialization'
 method: string
 initialize_digits
 	"String containing digits '0123456789'"
-	digits := '0123456789'
+	self ___at___: #digits put: '0123456789'
 %
 
 category: 'Python-Initialization'
 method: string
 initialize_hexdigits
 	"String containing hexadecimal digits '0123456789abcdefABCDEF'"
-	hexdigits := '0123456789abcdefABCDEF'
+	self ___at___: #hexdigits put: '0123456789abcdefABCDEF'
 %
 
 category: 'Python-Initialization'
 method: string
 initialize_octdigits
 	"String containing octal digits '01234567'"
-	octdigits := '01234567'
+	self ___at___: #octdigits put: '01234567'
 %
 
 category: 'Python-Initialization'
 method: string
 initialize_punctuation
 	"String of ASCII punctuation characters"
-	punctuation := '!"#$%&''()*+,-./:;<=>?@[\]^_`{|}~'
+	self ___at___: #punctuation put: '!"#$%&''()*+,-./:;<=>?@[\]^_`{|}~'
 %
 
 category: 'Python-Initialization'
@@ -92,23 +92,23 @@ initialize_printable
 	"String of printable ASCII characters (digits + letters + punctuation + whitespace)"
 	"Use Smalltalk concatenation since these are Smalltalk strings"
 	| temp |
-	temp := digits ___concat___: ascii_letters.
-	temp := temp ___concat___: punctuation.
-	printable := temp ___concat___: whitespace
+	temp := (self ___at___: #digits) ___concat___: (self ___at___: #ascii_letters).
+	temp := temp ___concat___: (self ___at___: #punctuation).
+	self ___at___: #printable put: (temp ___concat___: (self ___at___: #whitespace))
 %
 
 category: 'Python-Initialization'
 method: string
 initialize_whitespace
 	"String of all whitespace characters"
-	whitespace := ' \t\n\r\x0b\x0c'
+	self ___at___: #whitespace put: ' \t\n\r\x0b\x0c'
 %
 
 category: 'Python-Initialization'
 method: string
 initialize_capwords
 	"capwords(s, sep=None) - Split string into words, capitalize first letter of each word, and join"
-	capwords := [:positional :keywords |
+	self ___at___: #capwords put: [:positional :keywords |
 		| s sep words result keywordsDict |
 		s := positional ___at___: 1.
 		"Convert keywords to Dictionary - handle nil, Dictionary, or array of Associations"
@@ -224,7 +224,7 @@ category: 'Python-Initialization'
 method: string
 initialize_Formatter
 	"Formatter class for custom string formatting"
-	Formatter := string_formatter
+	self ___at___: #Formatter put: string_formatter
 %
 
 category: 'Python-Initialization'
@@ -232,175 +232,175 @@ method: string
 initialize_Template
 	"Template class for string templates (stub implementation)"
 	"TODO: Implement full Template class"
-	Template := None
+	self ___at___: #Template put: None
 %
 
 category: 'Python-String Constants'
 method: string
 ascii_letters
 	"Concatenation of ascii_lowercase and ascii_uppercase"
-	^ ascii_letters
+	^ self ___at___: #ascii_letters
 %
 
 category: 'Python-String Constants'
 method: string
 ascii_letters: aValue
 	"Set the ascii_letters constant (for monkey patching)"
-	ascii_letters := aValue
+	self ___at___: #ascii_letters put: aValue
 %
 
 category: 'Python-String Constants'
 method: string
 ascii_lowercase
 	"Lowercase letters 'abcdefghijklmnopqrstuvwxyz'"
-	^ ascii_lowercase
+	^ self ___at___: #ascii_lowercase
 %
 
 category: 'Python-String Constants'
 method: string
 ascii_lowercase: aValue
 	"Set the ascii_lowercase constant (for monkey patching)"
-	ascii_lowercase := aValue
+	self ___at___: #ascii_lowercase put: aValue
 %
 
 category: 'Python-String Constants'
 method: string
 ascii_uppercase
 	"Uppercase letters 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'"
-	^ ascii_uppercase
+	^ self ___at___: #ascii_uppercase
 %
 
 category: 'Python-String Constants'
 method: string
 ascii_uppercase: aValue
 	"Set the ascii_uppercase constant (for monkey patching)"
-	ascii_uppercase := aValue
+	self ___at___: #ascii_uppercase put: aValue
 %
 
 category: 'Python-String Constants'
 method: string
 digits
 	"String containing digits '0123456789'"
-	^ digits
+	^ self ___at___: #digits
 %
 
 category: 'Python-String Constants'
 method: string
 digits: aValue
 	"Set the digits constant (for monkey patching)"
-	digits := aValue
+	self ___at___: #digits put: aValue
 %
 
 category: 'Python-String Constants'
 method: string
 hexdigits
 	"String containing hexadecimal digits '0123456789abcdefABCDEF'"
-	^ hexdigits
+	^ self ___at___: #hexdigits
 %
 
 category: 'Python-String Constants'
 method: string
 hexdigits: aValue
 	"Set the hexdigits constant (for monkey patching)"
-	hexdigits := aValue
+	self ___at___: #hexdigits put: aValue
 %
 
 category: 'Python-String Constants'
 method: string
 octdigits
 	"String containing octal digits '01234567'"
-	^ octdigits
+	^ self ___at___: #octdigits
 %
 
 category: 'Python-String Constants'
 method: string
 octdigits: aValue
 	"Set the octdigits constant (for monkey patching)"
-	octdigits := aValue
+	self ___at___: #octdigits put: aValue
 %
 
 category: 'Python-String Constants'
 method: string
 punctuation
 	"String of ASCII punctuation characters"
-	^ punctuation
+	^ self ___at___: #punctuation
 %
 
 category: 'Python-String Constants'
 method: string
 punctuation: aValue
 	"Set the punctuation constant (for monkey patching)"
-	punctuation := aValue
+	self ___at___: #punctuation put: aValue
 %
 
 category: 'Python-String Constants'
 method: string
 printable
 	"String of printable ASCII characters"
-	^ printable
+	^ self ___at___: #printable
 %
 
 category: 'Python-String Constants'
 method: string
 printable: aValue
 	"Set the printable constant (for monkey patching)"
-	printable := aValue
+	self ___at___: #printable put: aValue
 %
 
 category: 'Python-String Constants'
 method: string
 whitespace
 	"String of all whitespace characters"
-	^ whitespace
+	^ self ___at___: #whitespace
 %
 
 category: 'Python-String Constants'
 method: string
 whitespace: aValue
 	"Set the whitespace constant (for monkey patching)"
-	whitespace := aValue
+	self ___at___: #whitespace put: aValue
 %
 
 category: 'Python-Utility Functions'
 method: string
 capwords
 	"Return the capwords function"
-	^ capwords
+	^ self ___at___: #capwords
 %
 
 category: 'Python-Utility Functions'
 method: string
 capwords: aBlock
 	"Set the capwords function (for monkey patching)"
-	capwords := aBlock
+	self ___at___: #capwords put: aBlock
 %
 
 category: 'Python-Utility Classes'
 method: string
 Formatter
 	"Return the Formatter class"
-	^ Formatter
+	^ self ___at___: #Formatter
 %
 
 category: 'Python-Utility Classes'
 method: string
 Formatter: aValue
 	"Set the Formatter class (for monkey patching)"
-	Formatter := aValue
+	self ___at___: #Formatter put: aValue
 %
 
 category: 'Python-Utility Classes'
 method: string
 Template
 	"Return the Template class"
-	^ Template
+	^ self ___at___: #Template
 %
 
 category: 'Python-Utility Classes'
 method: string
 Template: aValue
 	"Set the Template class (for monkey patching)"
-	Template := aValue
+	self ___at___: #Template put: aValue
 %
 
 set compile_env: 0

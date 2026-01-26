@@ -57,6 +57,7 @@ initialize
 		initialize_enumerate;
 		initialize_zip;
 		initialize___import__;
+		initialize_quit;
 		yourself
 %
 
@@ -64,7 +65,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_abs
 	"Return the absolute value of a number"
-	abs := [:positional :keywords | 
+	self ___at___: #abs put: [:positional :keywords | 
 		| aNumber |
 		aNumber := positional ___at___: 1.
 		[aNumber __abs__] ___on___: MessageNotUnderstood do: [:ex | TypeError ___signal___]
@@ -75,7 +76,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_len
 	"Return the length (the number of items) of an object"
-	len := [:positional :keywords |
+	self ___at___: #len put: [:positional :keywords |
 		| anObject className errorMsg |
 		anObject := positional ___at___: 1.
 		[anObject __len__] ___on___: MessageNotUnderstood do: [:ex |
@@ -91,7 +92,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_type
 	"Return the type of an object"
-	type := [:positional :keywords |
+	self ___at___: #type put: [:positional :keywords |
 		| anObject |
 		anObject := positional ___at___: 1.
 		anObject __class__
@@ -102,7 +103,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_repr
 	"Return a string containing a printable representation of an object"
-	repr := [:positional :keywords |
+	self ___at___: #repr put: [:positional :keywords |
 		| anObject |
 		anObject := positional ___at___: 1.
 		anObject __repr__
@@ -113,7 +114,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_str
 	"Return a string version of object"
-	str := [:positional :keywords |
+	self ___at___: #str put: [:positional :keywords |
 		| anObject |
 		anObject := positional ___at___: 1.
 		[anObject __str__] ___on___: MessageNotUnderstood do: [:ex |
@@ -126,7 +127,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_hash
 	"Return the hash value of the object"
-	hash := [:positional :keywords |
+	self ___at___: #hash put: [:positional :keywords |
 		| anObject |
 		anObject := positional ___at___: 1.
 		[anObject __hash__] ___on___: MessageNotUnderstood do: [:ex |
@@ -139,7 +140,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_hex
 	"Convert an integer number to a lowercase hexadecimal string"
-	hex := [:positional :keywords |
+	self ___at___: #hex put: [:positional :keywords |
 		| aNumber result |
 		aNumber := positional ___at___: 1.
 		result := aNumber ___printStringRadix___: 16.
@@ -151,7 +152,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_oct
 	"Convert an integer number to an octal string"
-	oct := [:positional :keywords |
+	self ___at___: #oct put: [:positional :keywords |
 		| aNumber result |
 		aNumber := positional ___at___: 1.
 		result := aNumber ___printStringRadix___: 8.
@@ -163,7 +164,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_bin
 	"Convert an integer number to a binary string"
-	bin := [:positional :keywords |
+	self ___at___: #bin put: [:positional :keywords |
 		| aNumber result |
 		aNumber := positional ___at___: 1.
 		result := aNumber ___printStringRadix___: 2.
@@ -175,7 +176,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_chr
 	"Return a string representing a character whose Unicode code point is the integer"
-	chr := [:positional :keywords |
+	self ___at___: #chr put: [:positional :keywords |
 		| anInteger |
 		anInteger := positional ___at___: 1.
 		(Character ___codePoint___: anInteger)
@@ -187,7 +188,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_ord
 	"Return an integer representing the Unicode code point of a character"
-	ord := [:positional :keywords |
+	self ___at___: #ord put: [:positional :keywords |
 		| aString char size errorMsg sizeStr |
 		aString := positional ___at___: 1.
 		size := aString ___size___.
@@ -206,7 +207,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_min
 	"Return the smallest item in an iterable"
-	min := [:positional :keywords |
+	self ___at___: #min put: [:positional :keywords |
 		| iterable iter minVal first done |
 		iterable := positional ___at___: 1.
 		iter := iterable __iter__.
@@ -236,7 +237,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_max
 	"Return the largest item in an iterable"
-	max := [:positional :keywords |
+	self ___at___: #max put: [:positional :keywords |
 		| iterable iter maxVal first done |
 		iterable := positional ___at___: 1.
 		iter := iterable __iter__.
@@ -266,7 +267,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_sum
 	"Return the sum of all items in an iterable"
-	sum := [:positional :keywords |
+	self ___at___: #sum put: [:positional :keywords |
 		| iterable iter total done |
 		iterable := positional ___at___: 1.
 		total := 0.
@@ -288,7 +289,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_all
 	"Return True if all elements of the iterable are true"
-	all := [:positional :keywords |
+	self ___at___: #all put: [:positional :keywords |
 		| iterable iter result done |
 		iterable := positional ___at___: 1.
 		iter := iterable __iter__.
@@ -318,7 +319,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_any
 	"Return True if any element of the iterable is true"
-	any := [:positional :keywords |
+	self ___at___: #any put: [:positional :keywords |
 		| iterable iter result done |
 		iterable := positional ___at___: 1.
 		iter := iterable __iter__.
@@ -349,7 +350,7 @@ method: builtins
 initialize_isinstance
 	"Return True if object is an instance of classinfo.
 	Supports Abstract Base Classes (ABCs) via __instancecheck__."
-	isinstance := [:positional :keywords |
+	self ___at___: #isinstance put: [:positional :keywords |
 		| anObject aClassOrTuple result theMetaclass |
 		anObject := positional ___at___: 1.
 		aClassOrTuple := positional ___at___: 2.
@@ -374,7 +375,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_callable
 	"Return True if the object appears callable (responds to __call__)"
-	callable := [:positional :keywords |
+	self ___at___: #callable put: [:positional :keywords |
 		| anObject objClass |
 		anObject := positional ___at___: 1.
 		objClass := anObject ___class___.
@@ -386,7 +387,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_dir
 	"Return the list of names in the current local scope or attributes of an object"
-	dir := [:positional :keywords |
+	self ___at___: #dir put: [:positional :keywords |
 		| anObject |
 		anObject := positional ___at___: 1.
 		anObject __dir__
@@ -397,7 +398,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_id
 	"Return the identity of an object"
-	id := [:positional :keywords |
+	self ___at___: #id put: [:positional :keywords |
 		| anObject |
 		anObject := positional ___at___: 1.
 		anObject ___identityHash___
@@ -408,7 +409,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_pow
 	"Return x to the power y, optionally modulo z"
-	pow := [:positional :keywords |
+	self ___at___: #pow put: [:positional :keywords |
 		| x y |
 		x := positional ___at___: 1.
 		y := positional ___at___: 2.
@@ -420,7 +421,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_powWithMod
 	"Return (x to the power y) modulo z"
-	powWithMod := [:positional :keywords |
+	self ___at___: #powWithMod put: [:positional :keywords |
 		| x y z result |
 		x := positional ___at___: 1.
 		y := positional ___at___: 2.
@@ -434,7 +435,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_round
 	"Round a number to the nearest integer"
-	round := [:positional :keywords |
+	self ___at___: #round put: [:positional :keywords |
 		| number |
 		number := positional ___at___: 1.
 		number ___rounded___
@@ -445,7 +446,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_roundWithDigits
 	"Round a number to ndigits precision after the decimal point"
-	roundWithDigits := [:positional :keywords |
+	self ___at___: #roundWithDigits put: [:positional :keywords |
 		| number ndigits multiplier |
 		number := positional ___at___: 1.
 		ndigits := (positional ___size___ ___ge___: 2) ifTrue: [positional ___at___: 2] ifFalse: [keywords ___at___: #ndigits ifAbsent: [nil]].
@@ -461,7 +462,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_divmod
 	"Return the tuple (x//y, x%y)"
-	divmod := [:positional :keywords |
+	self ___at___: #divmod put: [:positional :keywords |
 		| x y quotient remainder |
 		x := positional ___at___: 1.
 		y := positional ___at___: 2.
@@ -475,7 +476,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_print
 	"Print objects to stdout"
-	print := [:positional :keywords |
+	self ___at___: #print put: [:positional :keywords |
 		positional ___do___: [:obj |
 			| strRep |
 			[
@@ -495,7 +496,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_input
 	"Read a line from input"
-	input := [:positional :keywords |
+	self ___at___: #input put: [:positional :keywords |
 		| stream line |
 		stream := System ___stdin___.
 		line := stream ___nextLine___.
@@ -507,7 +508,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_inputWithPrompt
 	"Read a line from input, displaying a prompt first"
-	inputWithPrompt := [:positional :keywords |
+	self ___at___: #inputWithPrompt put: [:positional :keywords |
 		| prompt stream line |
 		prompt := positional ___at___: 1.
 		stream := System ___stdout___.
@@ -524,7 +525,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_sorted
 	"Return a new sorted list from the items in iterable"
-	sorted := [:positional :keywords |
+	self ___at___: #sorted put: [:positional :keywords |
 		| iterable lst iter sortedResult done |
 		iterable := positional ___at___: 1.
 		lst := list ___new___.
@@ -549,7 +550,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_reversed
 	"Return a reverse iterator"
-	reversed := [:positional :keywords |
+	self ___at___: #reversed put: [:positional :keywords |
 		| sequence lst |
 		sequence := positional ___at___: 1.
 		lst := list ___new___.
@@ -564,7 +565,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_enumerate
 	"Return an enumerate object"
-	enumerate := [:positional :keywords |
+	self ___at___: #enumerate put: [:positional :keywords |
 		| iterable lst index iter done |
 		iterable := positional ___at___: 1.
 		lst := list ___new___.
@@ -589,7 +590,7 @@ category: 'Python-Initialization'
 method: builtins
 initialize_zip
 	"Return an iterator of tuples"
-	zip := [:positional :keywords |
+	self ___at___: #zip put: [:positional :keywords |
 		| iterables iterators result allDone |
 		iterables := positional ___at___: 1.
 		iterators := list ___new___.
@@ -631,7 +632,7 @@ initialize___import__
 
 	This function is invoked by the import statement.
 	It delegates to importlib.__import__."
-	__import__ := [:positional :keywords |
+	self ___at___: #__import__ put: [:positional :keywords |
 		| importlibInstance importFunc |
 		importlibInstance := importlib instance.
 		importFunc := importlibInstance __import__.
@@ -639,486 +640,491 @@ initialize___import__
 	]
 %
 
+category: 'Python-Initialization'
+method: builtins
+initialize_quit
+	"Exit the interpreter"
+	self ___at___: #quit put: [:positional :keywords |
+		ExitClientError perform: #signal:status: env: 0 withArguments: {  'quit()'. 0 }
+	]
+%
+
 category: 'Python-Built-in Functions'
 method: builtins
 abs
 	"Return the absolute value function"
-	^ abs
+	^ self ___at___: #abs
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 abs: aBlock
 	"Set the abs function (for monkey patching)"
-	abs := aBlock
+	self ___at___: #abs put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 len
 	"Return the length function"
-	^ len
+	^ self ___at___: #len
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 len: aBlock
 	"Set the len function (for monkey patching)"
-	len := aBlock
+	self ___at___: #len put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 type
 	"Return the type function"
-	^ type
+	^ self ___at___: #type
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 type: aBlock
 	"Set the type function (for monkey patching)"
-	type := aBlock
+	self ___at___: #type put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 repr
 	"Return the repr function"
-	^ repr
+	^ self ___at___: #repr
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 repr: aBlock
 	"Set the repr function (for monkey patching)"
-	repr := aBlock
+	self ___at___: #repr put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 str
 	"Return the str function"
-	^ str
+	^ self ___at___: #str
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 str: aBlock
 	"Set the str function (for monkey patching)"
-	str := aBlock
+	self ___at___: #str put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 hash
 	"Return the hash function"
-	^ hash
+	^ self ___at___: #hash
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 hash: aBlock
 	"Set the hash function (for monkey patching)"
-	hash := aBlock
+	self ___at___: #hash put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 hex
 	"Return the hex function"
-	^ hex
+	^ self ___at___: #hex
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 hex: aBlock
 	"Set the hex function (for monkey patching)"
-	hex := aBlock
+	self ___at___: #hex put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 oct
 	"Return the oct function"
-	^ oct
+	^ self ___at___: #oct
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 oct: aBlock
 	"Set the oct function (for monkey patching)"
-	oct := aBlock
+	self ___at___: #oct put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 bin
 	"Return the bin function"
-	^ bin
+	^ self ___at___: #bin
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 bin: aBlock
 	"Set the bin function (for monkey patching)"
-	bin := aBlock
+	self ___at___: #bin put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 chr
 	"Return the chr function"
-	^ chr
+	^ self ___at___: #chr
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 chr: aBlock
 	"Set the chr function (for monkey patching)"
-	chr := aBlock
+	self ___at___: #chr put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 ord
 	"Return the ord function"
-	^ ord
+	^ self ___at___: #ord
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 ord: aBlock
 	"Set the ord function (for monkey patching)"
-	ord := aBlock
+	self ___at___: #ord put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 min
 	"Return the min function"
-	^ min
+	^ self ___at___: #min
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 min: aBlock
 	"Set the min function (for monkey patching)"
-	min := aBlock
+	self ___at___: #min put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 max
 	"Return the max function"
-	^ max
+	^ self ___at___: #max
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 max: aBlock
 	"Set the max function (for monkey patching)"
-	max := aBlock
+	self ___at___: #max put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 sum
 	"Return the sum function"
-	^ sum
+	^ self ___at___: #sum
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 sum: aBlock
 	"Set the sum function (for monkey patching)"
-	sum := aBlock
+	self ___at___: #sum put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 all
 	"Return the all function"
-	^ all
+	^ self ___at___: #all
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 all: aBlock
 	"Set the all function (for monkey patching)"
-	all := aBlock
+	self ___at___: #all put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 any
 	"Return the any function"
-	^ any
+	^ self ___at___: #any
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 any: aBlock
 	"Set the any function (for monkey patching)"
-	any := aBlock
+	self ___at___: #any put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 isinstance
 	"Return the isinstance function"
-	^ isinstance
+	^ self ___at___: #isinstance
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 isinstance: aBlock
 	"Set the isinstance function (for monkey patching)"
-	isinstance := aBlock
+	self ___at___: #isinstance put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 callable
 	"Return the callable function"
-	^ callable
+	^ self ___at___: #callable
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 callable: aBlock
 	"Set the callable function (for monkey patching)"
-	callable := aBlock
+	self ___at___: #callable put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 dir
 	"Return the dir function"
-	^ dir
+	^ self ___at___: #dir
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 dir: aBlock
 	"Set the dir function (for monkey patching)"
-	dir := aBlock
+	self ___at___: #dir put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 id
 	"Return the id function"
-	^ id
+	^ self ___at___: #id
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 id: aBlock
 	"Set the id function (for monkey patching)"
-	id := aBlock
+	self ___at___: #id put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 pow
 	"Return the pow function"
-	^ pow
+	^ self ___at___: #pow
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 pow: aBlock
 	"Set the pow function (for monkey patching)"
-	pow := aBlock
+	self ___at___: #pow put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 powWithMod
 	"Return the powWithMod function"
-	^ powWithMod
+	^ self ___at___: #powWithMod
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 powWithMod: aBlock
 	"Set the powWithMod function (for monkey patching)"
-	powWithMod := aBlock
+	self ___at___: #powWithMod put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 round
 	"Return the round function"
-	^ round
+	^ self ___at___: #round
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 round: aBlock
 	"Set the round function (for monkey patching)"
-	round := aBlock
+	self ___at___: #round put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 roundWithDigits
 	"Return the roundWithDigits function"
-	^ roundWithDigits
+	^ self ___at___: #roundWithDigits
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 roundWithDigits: aBlock
 	"Set the roundWithDigits function (for monkey patching)"
-	roundWithDigits := aBlock
+	self ___at___: #roundWithDigits put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 divmod
 	"Return the divmod function"
-	^ divmod
+	^ self ___at___: #divmod
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 divmod: aBlock
 	"Set the divmod function (for monkey patching)"
-	divmod := aBlock
+	self ___at___: #divmod put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 print
 	"Return the print function"
-	^ print
+	^ self ___at___: #print
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 print: aBlock
 	"Set the print function (for monkey patching)"
-	print := aBlock
+	self ___at___: #print put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 input
 	"Return the input function"
-	^ input
+	^ self ___at___: #input
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 input: aBlock
 	"Set the input function (for monkey patching)"
-	input := aBlock
+	self ___at___: #input put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 inputWithPrompt
 	"Return the inputWithPrompt function"
-	^ inputWithPrompt
+	^ self ___at___: #inputWithPrompt
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 inputWithPrompt: aBlock
 	"Set the inputWithPrompt function (for monkey patching)"
-	inputWithPrompt := aBlock
+	self ___at___: #inputWithPrompt put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 sorted
 	"Return the sorted function"
-	^ sorted
+	^ self ___at___: #sorted
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 sorted: aBlock
 	"Set the sorted function (for monkey patching)"
-	sorted := aBlock
+	self ___at___: #sorted put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 reversed
 	"Return the reversed function"
-	^ reversed
+	^ self ___at___: #reversed
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 reversed: aBlock
 	"Set the reversed function (for monkey patching)"
-	reversed := aBlock
+	self ___at___: #reversed put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 enumerate
 	"Return the enumerate function"
-	^ enumerate
+	^ self ___at___: #enumerate
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 enumerate: aBlock
 	"Set the enumerate function (for monkey patching)"
-	enumerate := aBlock
+	self ___at___: #enumerate put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 zip
 	"Return the zip function"
-	^ zip
+	^ self ___at___: #zip
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 zip: aBlock
 	"Set the zip function (for monkey patching)"
-	zip := aBlock
+	self ___at___: #zip put: aBlock
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 __import__
 	"Return the __import__ function"
-	^ __import__
+	^ self ___at___: #__import__
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 __import__: aBlock
 	"Set the __import__ function (for monkey patching)"
-	__import__ := aBlock
+	self ___at___: #__import__ put: aBlock
+%
+
+category: 'Python-Built-in Functions'
+method: builtins
+quit
+	"Return the quit function"
+	^ self ___at___: #quit
+%
+
+category: 'Python-Built-in Functions'
+method: builtins
+quit: aBlock
+	"Set the quit function (for monkey patching)"
+	self ___at___: #quit put: aBlock
 %
 
 ! reset compiler environment
 
 set compile_env: 0
-
-category: 'Python-Utility'
-method: builtins
-asSymbolDictionary
-	"Return a SymbolDictionary populated with keys and values equivalent to the instance variables in builtins.
-	Each instance variable name (as a Symbol) is a key, and its value (the block/function) is the value."
-	| dict varNames superclassOffset |
-	dict := SymbolDictionary new.
-	varNames := self class instVarNames.
-	superclassOffset := self class superclass instSize.
-	"Populate dictionary with instance variable names and values"
-	1 to: varNames size do: [:i |
-		dict 
-			at: (varNames at: i) 
-			put: (self instVarAt: superclassOffset + i).
-	].
-	^ dict
-%

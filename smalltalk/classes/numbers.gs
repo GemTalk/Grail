@@ -134,35 +134,35 @@ category: 'Python-Initialization'
 method: numbers
 initialize_Number
 	"Bind the Number ABC."
-	Number := numbers_Number
+	self ___at___: #Number put: numbers_Number
 %
 
 category: 'Python-Initialization'
 method: numbers
 initialize_Complex
 	"Bind the Complex ABC."
-	Complex := numbers_Complex
+	self ___at___: #Complex put: numbers_Complex
 %
 
 category: 'Python-Initialization'
 method: numbers
 initialize_Real
 	"Bind the Real ABC."
-	Real := numbers_Real
+	self ___at___: #Real put: numbers_Real
 %
 
 category: 'Python-Initialization'
 method: numbers
 initialize_Rational
 	"Bind the Rational ABC."
-	Rational := numbers_Rational
+	self ___at___: #Rational put: numbers_Rational
 %
 
 category: 'Python-Initialization'
 method: numbers
 initialize_Integral
 	"Bind the Integral ABC."
-	Integral := numbers_Integral
+	self ___at___: #Integral put: numbers_Integral
 %
 
 category: 'Python-Initialization'
@@ -198,70 +198,70 @@ category: 'Python-Attributes'
 method: numbers
 Number
 	"Return the Number ABC."
-	^ Number
+	^ self ___at___: #Number
 %
 
 category: 'Python-Attributes'
 method: numbers
 Number: aValue
 	"Set the Number ABC."
-	Number := aValue
+	self ___at___: #Number put: aValue
 %
 
 category: 'Python-Attributes'
 method: numbers
 Complex
 	"Return the Complex ABC."
-	^ Complex
+	^ self ___at___: #Complex
 %
 
 category: 'Python-Attributes'
 method: numbers
 Complex: aValue
 	"Set the Complex ABC."
-	Complex := aValue
+	self ___at___: #Complex put: aValue
 %
 
 category: 'Python-Attributes'
 method: numbers
 Real
 	"Return the Real ABC."
-	^ Real
+	^ self ___at___: #Real
 %
 
 category: 'Python-Attributes'
 method: numbers
 Real: aValue
 	"Set the Real ABC."
-	Real := aValue
+	self ___at___: #Real put: aValue
 %
 
 category: 'Python-Attributes'
 method: numbers
 Rational
 	"Return the Rational ABC."
-	^ Rational
+	^ self ___at___: #Rational
 %
 
 category: 'Python-Attributes'
 method: numbers
 Rational: aValue
 	"Set the Rational ABC."
-	Rational := aValue
+	self ___at___: #Rational put: aValue
 %
 
 category: 'Python-Attributes'
 method: numbers
 Integral
 	"Return the Integral ABC."
-	^ Integral
+	^ self ___at___: #Integral
 %
 
 category: 'Python-Attributes'
 method: numbers
 Integral: aValue
 	"Set the Integral ABC."
-	Integral := aValue
+	self ___at___: #Integral put: aValue
 %
 
 set compile_env: 0

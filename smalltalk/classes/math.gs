@@ -65,42 +65,42 @@ category: 'Python-Initialization'
 method: math
 initialize_pi
 	"The mathematical constant π = 3.141592..."
-	pi := Float perform: #pi env: 0
+	self ___at___: #pi put: (Float perform: #pi env: 0)
 %
 
 category: 'Python-Initialization'
 method: math
 initialize_e
 	"The mathematical constant e = 2.718281..."
-	e := Float perform: #e env: 0
+	self ___at___: #e put: (Float perform: #e env: 0)
 %
 
 category: 'Python-Initialization'
 method: math
 initialize_tau
 	"The mathematical constant τ = 2π = 6.283185..."
-	tau := (Float perform: #pi env: 0) ___times___: 2
+	self ___at___: #tau put: ((Float perform: #pi env: 0) ___times___: 2)
 %
 
 category: 'Python-Initialization'
 method: math
 initialize_inf
 	"Positive infinity"
-	inf := PlusInfinity
+	self ___at___: #inf put: PlusInfinity
 %
 
 category: 'Python-Initialization'
 method: math
 initialize_nan
 	"Not a number (NaN)"
-	nan := PlusQuietNaN
+	self ___at___: #nan put: PlusQuietNaN
 %
 
 category: 'Python-Initialization'
 method: math
 initialize_sqrt
 	"Return the square root of x"
-	sqrt := [:positional :keywords |
+	self ___at___: #sqrt put: [:positional :keywords |
 		| x |
 		x := positional ___at___: 1.
 		x ___sqrt___
@@ -111,7 +111,7 @@ category: 'Python-Initialization'
 method: math
 initialize_pow
 	"Return x raised to the power y"
-	pow := [:positional :keywords |
+	self ___at___: #pow put: [:positional :keywords |
 		| x y xFloat yFloat |
 		x := positional ___at___: 1.
 		y := positional ___at___: 2.
@@ -125,7 +125,7 @@ category: 'Python-Initialization'
 method: math
 initialize_exp
 	"Return e raised to the power x"
-	exp := [:positional :keywords |
+	self ___at___: #exp put: [:positional :keywords |
 		| x |
 		x := positional ___at___: 1.
 		x perform: #exp env: 0
@@ -136,7 +136,7 @@ category: 'Python-Initialization'
 method: math
 initialize_log
 	"Return the natural logarithm of x (base e)"
-	log := [:positional :keywords |
+	self ___at___: #log put: [:positional :keywords |
 		| x |
 		x := positional ___at___: 1.
 		x ___ln___
@@ -147,7 +147,7 @@ category: 'Python-Initialization'
 method: math
 initialize_logWithBase
 	"Return the logarithm of x to the given base"
-	logWithBase := [:positional :keywords |
+	self ___at___: #logWithBase put: [:positional :keywords |
 		| x base lnX lnBase |
 		x := positional ___at___: 1.
 		base := positional ___at___: 2.
@@ -161,7 +161,7 @@ category: 'Python-Initialization'
 method: math
 initialize_log10
 	"Return the base-10 logarithm of x"
-	log10 := [:positional :keywords |
+	self ___at___: #log10 put: [:positional :keywords |
 		| x |
 		x := positional ___at___: 1.
 		(x ___asFloat___) perform: #log10 env: 0
@@ -172,7 +172,7 @@ category: 'Python-Initialization'
 method: math
 initialize_log2
 	"Return the base-2 logarithm of x"
-	log2 := [:positional :keywords |
+	self ___at___: #log2 put: [:positional :keywords |
 		| x ln2 |
 		x := positional ___at___: 1.
 		ln2 := 2 ___ln___.
@@ -184,7 +184,7 @@ category: 'Python-Initialization'
 method: math
 initialize_sin
 	"Return the sine of x (in radians)"
-	sin := [:positional :keywords |
+	self ___at___: #sin put: [:positional :keywords |
 		| x |
 		x := positional ___at___: 1.
 		x ___sin___
@@ -195,7 +195,7 @@ category: 'Python-Initialization'
 method: math
 initialize_cos
 	"Return the cosine of x (in radians)"
-	cos := [:positional :keywords |
+	self ___at___: #cos put: [:positional :keywords |
 		| x |
 		x := positional ___at___: 1.
 		x ___cos___
@@ -206,7 +206,7 @@ category: 'Python-Initialization'
 method: math
 initialize_tan
 	"Return the tangent of x (in radians)"
-	tan := [:positional :keywords |
+	self ___at___: #tan put: [:positional :keywords |
 		| x |
 		x := positional ___at___: 1.
 		x perform: #tan env: 0
@@ -217,7 +217,7 @@ category: 'Python-Initialization'
 method: math
 initialize_asin
 	"Return the arc sine of x (in radians)"
-	asin := [:positional :keywords |
+	self ___at___: #asin put: [:positional :keywords |
 		| x |
 		x := positional ___at___: 1.
 		x perform: #arcSin env: 0
@@ -228,7 +228,7 @@ category: 'Python-Initialization'
 method: math
 initialize_acos
 	"Return the arc cosine of x (in radians)"
-	acos := [:positional :keywords |
+	self ___at___: #acos put: [:positional :keywords |
 		| x |
 		x := positional ___at___: 1.
 		x perform: #arcCos env: 0
@@ -239,7 +239,7 @@ category: 'Python-Initialization'
 method: math
 initialize_atan
 	"Return the arc tangent of x (in radians)"
-	atan := [:positional :keywords |
+	self ___at___: #atan put: [:positional :keywords |
 		| x |
 		x := positional ___at___: 1.
 		x perform: #arcTan env: 0
@@ -250,7 +250,7 @@ category: 'Python-Initialization'
 method: math
 initialize_atan2
 	"Return atan(y / x) in radians, with correct quadrant"
-	atan2 := [:positional :keywords |
+	self ___at___: #atan2 put: [:positional :keywords |
 		| y x yFloat xFloat |
 		y := positional ___at___: 1.
 		x := positional ___at___: 2.
@@ -264,7 +264,7 @@ category: 'Python-Initialization'
 method: math
 initialize_sinh
 	"Return the hyperbolic sine of x"
-	sinh := [:positional :keywords |
+	self ___at___: #sinh put: [:positional :keywords |
 		| x xFloat |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
@@ -276,7 +276,7 @@ category: 'Python-Initialization'
 method: math
 initialize_cosh
 	"Return the hyperbolic cosine of x"
-	cosh := [:positional :keywords |
+	self ___at___: #cosh put: [:positional :keywords |
 		| x xFloat |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
@@ -288,7 +288,7 @@ category: 'Python-Initialization'
 method: math
 initialize_tanh
 	"Return the hyperbolic tangent of x"
-	tanh := [:positional :keywords |
+	self ___at___: #tanh put: [:positional :keywords |
 		| x xFloat |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
@@ -300,7 +300,7 @@ category: 'Python-Initialization'
 method: math
 initialize_asinh
 	"Return the inverse hyperbolic sine of x"
-	asinh := [:positional :keywords |
+	self ___at___: #asinh put: [:positional :keywords |
 		| x xFloat |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
@@ -312,7 +312,7 @@ category: 'Python-Initialization'
 method: math
 initialize_acosh
 	"Return the inverse hyperbolic cosine of x"
-	acosh := [:positional :keywords |
+	self ___at___: #acosh put: [:positional :keywords |
 		| x xFloat |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
@@ -324,7 +324,7 @@ category: 'Python-Initialization'
 method: math
 initialize_atanh
 	"Return the inverse hyperbolic tangent of x"
-	atanh := [:positional :keywords |
+	self ___at___: #atanh put: [:positional :keywords |
 		| x xFloat |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
@@ -336,7 +336,7 @@ category: 'Python-Initialization'
 method: math
 initialize_ceil
 	"Return the ceiling of x (smallest integer >= x)"
-	ceil := [:positional :keywords |
+	self ___at___: #ceil put: [:positional :keywords |
 		| x xFloat |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
@@ -348,7 +348,7 @@ category: 'Python-Initialization'
 method: math
 initialize_floor
 	"Return the floor of x (largest integer <= x)"
-	floor := [:positional :keywords |
+	self ___at___: #floor put: [:positional :keywords |
 		| x xFloat |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
@@ -360,7 +360,7 @@ category: 'Python-Initialization'
 method: math
 initialize_trunc
 	"Return x truncated to an integer"
-	trunc := [:positional :keywords |
+	self ___at___: #trunc put: [:positional :keywords |
 		| x xFloat |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
@@ -372,7 +372,7 @@ category: 'Python-Initialization'
 method: math
 initialize_factorial
 	"Return n factorial (n!)"
-	factorial := [:positional :keywords |
+	self ___at___: #factorial put: [:positional :keywords |
 		| n nInt |
 		n := positional ___at___: 1.
 		nInt := n ___asInteger___.
@@ -387,7 +387,7 @@ category: 'Python-Initialization'
 method: math
 initialize_gcd
 	"Return the greatest common divisor of a and b"
-	gcd := [:positional :keywords |
+	self ___at___: #gcd put: [:positional :keywords |
 		| a b aInt bInt |
 		a := positional ___at___: 1.
 		b := positional ___at___: 2.
@@ -401,7 +401,7 @@ category: 'Python-Initialization'
 method: math
 initialize_lcm
 	"Return the least common multiple of a and b"
-	lcm := [:positional :keywords |
+	self ___at___: #lcm put: [:positional :keywords |
 		| a b aInt bInt |
 		a := positional ___at___: 1.
 		b := positional ___at___: 2.
@@ -415,7 +415,7 @@ category: 'Python-Initialization'
 method: math
 initialize_fabs
 	"Return the absolute value of x as a float"
-	fabs := [:positional :keywords |
+	self ___at___: #fabs put: [:positional :keywords |
 		| x xFloat |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
@@ -427,7 +427,7 @@ category: 'Python-Initialization'
 method: math
 initialize_isnan
 	"Return True if x is NaN"
-	isnan := [:positional :keywords |
+	self ___at___: #isnan put: [:positional :keywords |
 		| x xFloat |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
@@ -439,7 +439,7 @@ category: 'Python-Initialization'
 method: math
 initialize_isinf
 	"Return True if x is positive or negative infinity"
-	isinf := [:positional :keywords |
+	self ___at___: #isinf put: [:positional :keywords |
 		| x xFloat kind |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
@@ -452,7 +452,7 @@ category: 'Python-Initialization'
 method: math
 initialize_isfinite
 	"Return True if x is neither infinity nor NaN"
-	isfinite := [:positional :keywords |
+	self ___at___: #isfinite put: [:positional :keywords |
 		| x xFloat kind |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
@@ -466,7 +466,7 @@ category: 'Python-Initialization'
 method: math
 initialize_degrees
 	"Convert angle x from radians to degrees"
-	degrees := [:positional :keywords |
+	self ___at___: #degrees put: [:positional :keywords |
 		| x xFloat |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
@@ -478,7 +478,7 @@ category: 'Python-Initialization'
 method: math
 initialize_radians
 	"Convert angle x from degrees to radians"
-	radians := [:positional :keywords |
+	self ___at___: #radians put: [:positional :keywords |
 		| x xFloat |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
@@ -490,518 +490,518 @@ category: 'Python-Mathematical Constants'
 method: math
 pi
 	"The mathematical constant π = 3.141592..."
-	^ pi
+	^ self ___at___: #pi
 %
 
 category: 'Python-Mathematical Constants'
 method: math
 pi: aValue
 	"Set the pi constant (for monkey patching)"
-	pi := aValue
+	self ___at___: #pi put: aValue
 %
 
 category: 'Python-Mathematical Constants'
 method: math
 e
 	"The mathematical constant e = 2.718281..."
-	^ e
+	^ self ___at___: #e
 %
 
 category: 'Python-Mathematical Constants'
 method: math
 e: aValue
 	"Set the e constant (for monkey patching)"
-	e := aValue
+	self ___at___: #e put: aValue
 %
 
 category: 'Python-Mathematical Constants'
 method: math
 tau
 	"The mathematical constant τ = 2π = 6.283185..."
-	^ tau
+	^ self ___at___: #tau
 %
 
 category: 'Python-Mathematical Constants'
 method: math
 tau: aValue
 	"Set the tau constant (for monkey patching)"
-	tau := aValue
+	self ___at___: #tau put: aValue
 %
 
 category: 'Python-Mathematical Constants'
 method: math
 inf
 	"Positive infinity"
-	^ inf
+	^ self ___at___: #inf
 %
 
 category: 'Python-Mathematical Constants'
 method: math
 inf: aValue
 	"Set the inf constant (for monkey patching)"
-	inf := aValue
+	self ___at___: #inf put: aValue
 %
 
 category: 'Python-Mathematical Constants'
 method: math
 nan
 	"Not a number (NaN)"
-	^ nan
+	^ self ___at___: #nan
 %
 
 category: 'Python-Mathematical Constants'
 method: math
 nan: aValue
 	"Set the nan constant (for monkey patching)"
-	nan := aValue
+	self ___at___: #nan put: aValue
 %
 
 category: 'Python-Power and Logarithmic Functions'
 method: math
 sqrt
 	"Return the square root function"
-	^ sqrt
+	^ self ___at___: #sqrt
 %
 
 category: 'Python-Power and Logarithmic Functions'
 method: math
 sqrt: aBlock
 	"Set the sqrt function (for monkey patching)"
-	sqrt := aBlock
+	self ___at___: #sqrt put: aBlock
 %
 
 category: 'Python-Power and Logarithmic Functions'
 method: math
 pow
 	"Return the pow function"
-	^ pow
+	^ self ___at___: #pow
 %
 
 category: 'Python-Power and Logarithmic Functions'
 method: math
 pow: aBlock
 	"Set the pow function (for monkey patching)"
-	pow := aBlock
+	self ___at___: #pow put: aBlock
 %
 
 category: 'Python-Power and Logarithmic Functions'
 method: math
 exp
 	"Return the exp function"
-	^ exp
+	^ self ___at___: #exp
 %
 
 category: 'Python-Power and Logarithmic Functions'
 method: math
 exp: aBlock
 	"Set the exp function (for monkey patching)"
-	exp := aBlock
+	self ___at___: #exp put: aBlock
 %
 
 category: 'Python-Power and Logarithmic Functions'
 method: math
 log
 	"Return the log function"
-	^ log
+	^ self ___at___: #log
 %
 
 category: 'Python-Power and Logarithmic Functions'
 method: math
 log: aBlock
 	"Set the log function (for monkey patching)"
-	log := aBlock
+	self ___at___: #log put: aBlock
 %
 
 category: 'Python-Power and Logarithmic Functions'
 method: math
 logWithBase
 	"Return the logWithBase function"
-	^ logWithBase
+	^ self ___at___: #logWithBase
 %
 
 category: 'Python-Power and Logarithmic Functions'
 method: math
 logWithBase: aBlock
 	"Set the logWithBase function (for monkey patching)"
-	logWithBase := aBlock
+	self ___at___: #logWithBase put: aBlock
 %
 
 category: 'Python-Power and Logarithmic Functions'
 method: math
 log10
 	"Return the log10 function"
-	^ log10
+	^ self ___at___: #log10
 %
 
 category: 'Python-Power and Logarithmic Functions'
 method: math
 log10: aBlock
 	"Set the log10 function (for monkey patching)"
-	log10 := aBlock
+	self ___at___: #log10 put: aBlock
 %
 
 category: 'Python-Power and Logarithmic Functions'
 method: math
 log2
 	"Return the log2 function"
-	^ log2
+	^ self ___at___: #log2
 %
 
 category: 'Python-Power and Logarithmic Functions'
 method: math
 log2: aBlock
 	"Set the log2 function (for monkey patching)"
-	log2 := aBlock
+	self ___at___: #log2 put: aBlock
 %
 
 category: 'Python-Trigonometric Functions'
 method: math
 sin
 	"Return the sin function"
-	^ sin
+	^ self ___at___: #sin
 %
 
 category: 'Python-Trigonometric Functions'
 method: math
 sin: aBlock
 	"Set the sin function (for monkey patching)"
-	sin := aBlock
+	self ___at___: #sin put: aBlock
 %
 
 category: 'Python-Trigonometric Functions'
 method: math
 cos
 	"Return the cos function"
-	^ cos
+	^ self ___at___: #cos
 %
 
 category: 'Python-Trigonometric Functions'
 method: math
 cos: aBlock
 	"Set the cos function (for monkey patching)"
-	cos := aBlock
+	self ___at___: #cos put: aBlock
 %
 
 category: 'Python-Trigonometric Functions'
 method: math
 tan
 	"Return the tan function"
-	^ tan
+	^ self ___at___: #tan
 %
 
 category: 'Python-Trigonometric Functions'
 method: math
 tan: aBlock
 	"Set the tan function (for monkey patching)"
-	tan := aBlock
+	self ___at___: #tan put: aBlock
 %
 
 category: 'Python-Trigonometric Functions'
 method: math
 asin
 	"Return the asin function"
-	^ asin
+	^ self ___at___: #asin
 %
 
 category: 'Python-Trigonometric Functions'
 method: math
 asin: aBlock
 	"Set the asin function (for monkey patching)"
-	asin := aBlock
+	self ___at___: #asin put: aBlock
 %
 
 category: 'Python-Trigonometric Functions'
 method: math
 acos
 	"Return the acos function"
-	^ acos
+	^ self ___at___: #acos
 %
 
 category: 'Python-Trigonometric Functions'
 method: math
 acos: aBlock
 	"Set the acos function (for monkey patching)"
-	acos := aBlock
+	self ___at___: #acos put: aBlock
 %
 
 category: 'Python-Trigonometric Functions'
 method: math
 atan
 	"Return the atan function"
-	^ atan
+	^ self ___at___: #atan
 %
 
 category: 'Python-Trigonometric Functions'
 method: math
 atan: aBlock
 	"Set the atan function (for monkey patching)"
-	atan := aBlock
+	self ___at___: #atan put: aBlock
 %
 
 category: 'Python-Trigonometric Functions'
 method: math
 atan2
 	"Return the atan2 function"
-	^ atan2
+	^ self ___at___: #atan2
 %
 
 category: 'Python-Trigonometric Functions'
 method: math
 atan2: aBlock
 	"Set the atan2 function (for monkey patching)"
-	atan2 := aBlock
+	self ___at___: #atan2 put: aBlock
 %
 
 category: 'Python-Hyperbolic Functions'
 method: math
 sinh
 	"Return the sinh function"
-	^ sinh
+	^ self ___at___: #sinh
 %
 
 category: 'Python-Hyperbolic Functions'
 method: math
 sinh: aBlock
 	"Set the sinh function (for monkey patching)"
-	sinh := aBlock
+	self ___at___: #sinh put: aBlock
 %
 
 category: 'Python-Hyperbolic Functions'
 method: math
 cosh
 	"Return the cosh function"
-	^ cosh
+	^ self ___at___: #cosh
 %
 
 category: 'Python-Hyperbolic Functions'
 method: math
 cosh: aBlock
 	"Set the cosh function (for monkey patching)"
-	cosh := aBlock
+	self ___at___: #cosh put: aBlock
 %
 
 category: 'Python-Hyperbolic Functions'
 method: math
 tanh
 	"Return the tanh function"
-	^ tanh
+	^ self ___at___: #tanh
 %
 
 category: 'Python-Hyperbolic Functions'
 method: math
 tanh: aBlock
 	"Set the tanh function (for monkey patching)"
-	tanh := aBlock
+	self ___at___: #tanh put: aBlock
 %
 
 category: 'Python-Hyperbolic Functions'
 method: math
 asinh
 	"Return the asinh function"
-	^ asinh
+	^ self ___at___: #asinh
 %
 
 category: 'Python-Hyperbolic Functions'
 method: math
 asinh: aBlock
 	"Set the asinh function (for monkey patching)"
-	asinh := aBlock
+	self ___at___: #asinh put: aBlock
 %
 
 category: 'Python-Hyperbolic Functions'
 method: math
 acosh
 	"Return the acosh function"
-	^ acosh
+	^ self ___at___: #acosh
 %
 
 category: 'Python-Hyperbolic Functions'
 method: math
 acosh: aBlock
 	"Set the acosh function (for monkey patching)"
-	acosh := aBlock
+	self ___at___: #acosh put: aBlock
 %
 
 category: 'Python-Hyperbolic Functions'
 method: math
 atanh
 	"Return the atanh function"
-	^ atanh
+	^ self ___at___: #atanh
 %
 
 category: 'Python-Hyperbolic Functions'
 method: math
 atanh: aBlock
 	"Set the atanh function (for monkey patching)"
-	atanh := aBlock
+	self ___at___: #atanh put: aBlock
 %
 
 category: 'Python-Rounding Functions'
 method: math
 ceil
 	"Return the ceil function"
-	^ ceil
+	^ self ___at___: #ceil
 %
 
 category: 'Python-Rounding Functions'
 method: math
 ceil: aBlock
 	"Set the ceil function (for monkey patching)"
-	ceil := aBlock
+	self ___at___: #ceil put: aBlock
 %
 
 category: 'Python-Rounding Functions'
 method: math
 floor
 	"Return the floor function"
-	^ floor
+	^ self ___at___: #floor
 %
 
 category: 'Python-Rounding Functions'
 method: math
 floor: aBlock
 	"Set the floor function (for monkey patching)"
-	floor := aBlock
+	self ___at___: #floor put: aBlock
 %
 
 category: 'Python-Rounding Functions'
 method: math
 trunc
 	"Return the trunc function"
-	^ trunc
+	^ self ___at___: #trunc
 %
 
 category: 'Python-Rounding Functions'
 method: math
 trunc: aBlock
 	"Set the trunc function (for monkey patching)"
-	trunc := aBlock
+	self ___at___: #trunc put: aBlock
 %
 
 category: 'Python-Number Theory Functions'
 method: math
 factorial
 	"Return the factorial function"
-	^ factorial
+	^ self ___at___: #factorial
 %
 
 category: 'Python-Number Theory Functions'
 method: math
 factorial: aBlock
 	"Set the factorial function (for monkey patching)"
-	factorial := aBlock
+	self ___at___: #factorial put: aBlock
 %
 
 category: 'Python-Number Theory Functions'
 method: math
 gcd
 	"Return the gcd function"
-	^ gcd
+	^ self ___at___: #gcd
 %
 
 category: 'Python-Number Theory Functions'
 method: math
 gcd: aBlock
 	"Set the gcd function (for monkey patching)"
-	gcd := aBlock
+	self ___at___: #gcd put: aBlock
 %
 
 category: 'Python-Number Theory Functions'
 method: math
 lcm
 	"Return the lcm function"
-	^ lcm
+	^ self ___at___: #lcm
 %
 
 category: 'Python-Number Theory Functions'
 method: math
 lcm: aBlock
 	"Set the lcm function (for monkey patching)"
-	lcm := aBlock
+	self ___at___: #lcm put: aBlock
 %
 
 category: 'Python-Floating Point Functions'
 method: math
 fabs
 	"Return the fabs function"
-	^ fabs
+	^ self ___at___: #fabs
 %
 
 category: 'Python-Floating Point Functions'
 method: math
 fabs: aBlock
 	"Set the fabs function (for monkey patching)"
-	fabs := aBlock
+	self ___at___: #fabs put: aBlock
 %
 
 category: 'Python-Floating Point Functions'
 method: math
 isnan
 	"Return the isnan function"
-	^ isnan
+	^ self ___at___: #isnan
 %
 
 category: 'Python-Floating Point Functions'
 method: math
 isnan: aBlock
 	"Set the isnan function (for monkey patching)"
-	isnan := aBlock
+	self ___at___: #isnan put: aBlock
 %
 
 category: 'Python-Floating Point Functions'
 method: math
 isinf
 	"Return the isinf function"
-	^ isinf
+	^ self ___at___: #isinf
 %
 
 category: 'Python-Floating Point Functions'
 method: math
 isinf: aBlock
 	"Set the isinf function (for monkey patching)"
-	isinf := aBlock
+	self ___at___: #isinf put: aBlock
 %
 
 category: 'Python-Floating Point Functions'
 method: math
 isfinite
 	"Return the isfinite function"
-	^ isfinite
+	^ self ___at___: #isfinite
 %
 
 category: 'Python-Floating Point Functions'
 method: math
 isfinite: aBlock
 	"Set the isfinite function (for monkey patching)"
-	isfinite := aBlock
+	self ___at___: #isfinite put: aBlock
 %
 
 category: 'Python-Angular Conversion'
 method: math
 degrees
 	"Return the degrees function"
-	^ degrees
+	^ self ___at___: #degrees
 %
 
 category: 'Python-Angular Conversion'
 method: math
 degrees: aBlock
 	"Set the degrees function (for monkey patching)"
-	degrees := aBlock
+	self ___at___: #degrees put: aBlock
 %
 
 category: 'Python-Angular Conversion'
 method: math
 radians
 	"Return the radians function"
-	^ radians
+	^ self ___at___: #radians
 %
 
 category: 'Python-Angular Conversion'
 method: math
 radians: aBlock
 	"Set the radians function (for monkey patching)"
-	radians := aBlock
+	self ___at___: #radians put: aBlock
 %
 
 set compile_env: 0

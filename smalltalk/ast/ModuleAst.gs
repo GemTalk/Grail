@@ -57,7 +57,7 @@ symbolListForModuleScope: aSymbolDictionary
 
 	^SymbolList new
 		add: aSymbolDictionary;
-		add: builtins ___instance___ asSymbolDictionary;
+		add: builtins ___instance___;
 		yourself
 %
 ! ------------------- Instance methods for ModuleAst

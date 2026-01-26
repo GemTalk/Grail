@@ -68,7 +68,7 @@ initialize_import_module
 	
 	The name argument specifies what module to import in absolute or relative terms.
 	If the name is specified in relative terms, then the package argument must be set."
-	import_module := [:positional :keywords |
+	self ___at___: #import_module put: [:positional :keywords |
 		| name package absoluteName importFunc |
 		name := positional ___at___: 1.
 		package := (positional __len__ ___gt___: 1)
@@ -99,7 +99,7 @@ initialize_reload
 	reload(module) -> module
 
 	The argument must be a module object."
-	reload := [:positional :keywords |
+	self ___at___: #reload put: [:positional :keywords |
 		| aModule moduleClass |
 		aModule := positional ___at___: 1.
 		"For built-in modules, we can clear and reinitialize the instance"
@@ -116,7 +116,7 @@ initialize_invalidate_caches
 	invalidate_caches() -> None
 
 	For built-in modules, this is a no-op."
-	invalidate_caches := [:positional :keywords |
+	self ___at___: #invalidate_caches put: [:positional :keywords |
 		None
 	]
 %
@@ -128,7 +128,7 @@ initialize___import__
 	__import__(name, globals=None, locals=None, fromlist=(), level=0) -> module
 
 	This is the function invoked by the import statement."
-	__import__ := [:positional :keywords |
+	self ___at___: #__import__ put: [:positional :keywords |
 		| name globals locals fromlist level absoluteName moduleInstance filePath result |
 		name := positional ___at___: 1.
 		globals := (positional __len__ ___gt___: 1)
@@ -213,56 +213,56 @@ category: 'Python-Accessors'
 method: importlib
 import_module
 	"Return the import_module function"
-	^ import_module
+	^ self ___at___: #import_module
 %
 
 category: 'Python-Accessors'
 method: importlib
 import_module: aBlock
 	"Set the import_module function (for monkey patching)"
-	import_module := aBlock
+	self ___at___: #import_module put: aBlock
 %
 
 category: 'Python-Accessors'
 method: importlib
 reload
 	"Return the reload function"
-	^ reload
+	^ self ___at___: #reload
 %
 
 category: 'Python-Accessors'
 method: importlib
 reload: aBlock
 	"Set the reload function (for monkey patching)"
-	reload := aBlock
+	self ___at___: #reload put: aBlock
 %
 
 category: 'Python-Accessors'
 method: importlib
 invalidate_caches
 	"Return the invalidate_caches function"
-	^ invalidate_caches
+	^ self ___at___: #invalidate_caches
 %
 
 category: 'Python-Accessors'
 method: importlib
 invalidate_caches: aBlock
 	"Set the invalidate_caches function (for monkey patching)"
-	invalidate_caches := aBlock
+	self ___at___: #invalidate_caches put: aBlock
 %
 
 category: 'Python-Accessors'
 method: importlib
 __import__
 	"Return the __import__ function"
-	^ __import__
+	^ self ___at___: #__import__
 %
 
 category: 'Python-Accessors'
 method: importlib
 __import__: aBlock
 	"Set the __import__ function (for monkey patching)"
-	__import__ := aBlock
+	self ___at___: #__import__ put: aBlock
 %
 
 set compile_env: 0
@@ -292,7 +292,7 @@ loadModuleFromPath: pathString name: moduleName
 	| moduleAst mySymbolList moduleInstance nameParts packageName |
 	moduleAst := self astForPath: pathString.
 	moduleAst name: moduleName.
-	mySymbolList := SymbolList with: builtins ___instance___ asSymbolDictionary.
+	mySymbolList := SymbolList with: builtins ___instance___.
 	moduleAst executeWithScope: mySymbolList.
 	"Create a module instance"
 	moduleInstance := module basicNew.
@@ -481,7 +481,7 @@ runPath: pathString
 	module := self astForPath: pathString.
 	stream := PrettyWriteStream on: Unicode7 new.
 	module printSmalltalkOn: stream.
-	mySymbolList := SymbolList with: builtins ___instance___ asSymbolDictionary.
+	mySymbolList := SymbolList with: builtins ___instance___.
 	[
 		method := stream contents
 			_compileInContext: nil
