@@ -16,32 +16,6 @@ set compile_env: 2
 
 ! ------------------- Class methods for importlib
 
-category: 'Python-Singleton'
-classmethod: importlib
-new
-	"Raise an error: use instance instead of new"
-	TypeError ___signal___: 'Use instance instead of new for importlib module'
-%
-
-category: 'Python-Singleton'
-classmethod: importlib
-instance
-	"Return the singleton instance of importlib.
-	Creates it if it doesn't exist."
-	instance == nil ifTrue: [
-		instance := self perform: #basicNew env: 0.
-		instance initialize
-	].
-	^ instance
-%
-
-category: 'Python-Singleton'
-classmethod: importlib
-clearInstance
-	"Clear the singleton instance (useful for testing)"
-	instance := nil
-%
-
 category: 'Python-Module Registry'
 classmethod: importlib
 modules

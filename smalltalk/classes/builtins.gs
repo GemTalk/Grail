@@ -17,34 +17,6 @@ builtins class removeAllMethods.
 
 set compile_env: 2
 
-! ------------------- Class methods for builtins
-
-category: 'Python-Singleton'
-classmethod: builtins
-new
-	"Raise an error: use instance instead of new"
-	TypeError ___signal___: 'Use instance instead of new for builtins module'
-%
-
-category: 'Python-Singleton'
-classmethod: builtins
-instance
-	"Return the singleton instance of builtins.
-	Creates it if it doesn't exist."
-	instance == nil ifTrue: [
-		instance := self perform: #basicNew env: 0.
-		instance initialize
-	].
-	^ instance
-%
-
-category: 'Python-Singleton'
-classmethod: builtins
-clearInstance
-	"Clear the singleton instance (useful for testing)"
-	instance := nil
-%
-
 ! ------------------- Instance methods for builtins
 
 category: 'Python-Initialization'

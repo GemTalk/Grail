@@ -5,6 +5,7 @@ args := System commandLineArguments.
 args size < 5 ifTrue: [
     Error signal: 'Should have at least five arguments but found ' , args printString , '!'.
 ].
+Transcript := GsFile stdout.
 args size >= 6 ifTrue: [
     | path |
     path := args at: 6.
@@ -13,14 +14,7 @@ args size >= 6 ifTrue: [
         Error signal: 'Path not found!'.
     ].
     [
-        | priorTranscript |
-        priorTranscript := Transcript.
-        Transcript := GsFile stdout.
-        [
-            importlib runPath: path.
-        ] ensure: [
-            Transcript := priorTranscript.
-        ].
+        importlib runPath: path.
     ] on: Error do: [:ex |
         | msg |
         msg := ex messageText.

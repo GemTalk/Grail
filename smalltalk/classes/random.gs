@@ -16,45 +16,6 @@ random class removeAllMethods: 2.
 
 set compile_env: 2
 
-! ------------------- Class methods for random
-
-category: 'Python-Singleton'
-classmethod: random
-new
-	"Raise an error: use instance instead of new"
-	TypeError ___signal___: 'Use instance instead of new for random module'
-%
-
-category: 'Python-Singleton'
-classmethod: random
-instance
-	"Return the singleton instance of random.
-	Creates it if it doesn't exist."
-	instance == nil ifTrue: [
-		instance := self perform: #basicNew env: 0.
-		instance perform: #initialize env: 2
-	].
-	^ instance
-%
-
-category: 'Python-Singleton'
-classmethod: random
-clearInstance
-	"Clear the singleton instance (useful for testing)"
-	instance := nil
-%
-
-set compile_env: 0
-
-category: 'Convenience Methods'
-classmethod: random
-___instance___
-	"Convenience method: self perform: #instance env: 2"
-	^ self perform: #instance env: 2
-%
-
-set compile_env: 2
-
 ! ------------------- Instance methods for random - Initialization
 
 category: 'Python-Initialization'

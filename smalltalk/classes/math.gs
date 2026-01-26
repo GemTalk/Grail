@@ -14,34 +14,6 @@ math class removeAllMethods: 2.
 
 set compile_env: 2
 
-! ------------------- Class methods for math
-
-category: 'Python-Singleton'
-classmethod: math
-new
-	"Raise an error: use instance instead of new"
-	TypeError ___signal___: 'Use instance instead of new for math module'
-%
-
-category: 'Python-Singleton'
-classmethod: math
-instance
-	"Return the singleton instance of math.
-	Creates it if it doesn't exist."
-	instance == nil ifTrue: [
-		instance := self perform: #basicNew env: 0.
-		instance initialize
-	].
-	^ instance
-%
-
-category: 'Python-Singleton'
-classmethod: math
-clearInstance
-	"Clear the singleton instance (useful for testing)"
-	instance := nil
-%
-
 ! ------------------- Instance methods for math
 
 category: 'Python-Initialization'

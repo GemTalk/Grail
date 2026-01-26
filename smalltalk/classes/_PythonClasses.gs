@@ -1385,7 +1385,7 @@ doit
 object subclass: 'module'
 	  instVarNames: #('__name__' '__package__' '__loader__' '__spec__' '__doc__')
   classVars: #()
-  classInstVars: #()
+  classInstVars: #('instance')
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -1412,7 +1412,7 @@ doit
 module subclass: 'builtins'
   instVarNames: #('abs' 'len' 'type' 'repr' 'str' 'hash' 'hex' 'oct' 'bin' 'chr' 'ord' 'min' 'max' 'sum' 'all' 'any' 'isinstance' 'callable' 'dir' 'id' 'pow' 'powWithMod' 'round' 'roundWithDigits' 'divmod' 'print' 'input' 'inputWithPrompt' 'sorted' 'reversed' 'enumerate' 'zip' '__import__')
   classVars: #()
-  classInstVars: #('instance')
+  classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -1439,7 +1439,7 @@ doit
 module subclass: 'math'
   instVarNames: #('pi' 'e' 'tau' 'inf' 'nan' 'sqrt' 'pow' 'exp' 'log' 'logWithBase' 'log10' 'log2' 'sin' 'cos' 'tan' 'asin' 'acos' 'atan' 'atan2' 'sinh' 'cosh' 'tanh' 'asinh' 'acosh' 'atanh' 'ceil' 'floor' 'trunc' 'factorial' 'gcd' 'lcm' 'fabs' 'isnan' 'isinf' 'isfinite' 'degrees' 'radians')
   classVars: #()
-  classInstVars: #('instance')
+  classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -1460,13 +1460,37 @@ doit
 math category: 'Modules'
 %
 
+! ------- gemstone class (Python 'gemstone' module)
+expectvalue /Class
+doit
+module subclass: 'gemstone'
+  instVarNames: #('version')
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+expectvalue /Class
+doit
+gemstone comment:
+'Python gemstone module.
+
+This class provides basic metadata about the Grail runtime.
+'
+%
+expectvalue /Class
+doit
+gemstone category: 'Modules'
+%
+
 ! ------- cmath class (Python 'cmath' module)
 expectvalue /Class
 doit
 module subclass: 'cmath'
   instVarNames: #('pi' 'e' 'tau' 'inf' 'infj' 'nan' 'nanj' 'sin' 'cos' 'tan' 'sinh' 'cosh' 'tanh' 'exp' 'log' 'log10' 'sqrt' 'phase' 'polar' 'rect' 'isnan' 'isinf' 'isfinite')
   classVars: #()
-  classInstVars: #('instance')
+  classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -1493,7 +1517,7 @@ doit
 module subclass: 'random'
   instVarNames: #('_generator' 'random' 'seed' 'getstate' 'setstate' 'getrandbits' 'randbytes' 'randrange' 'randint' 'choice' 'choices' 'shuffle' 'sample' 'uniform' 'triangular' 'gauss' 'normalvariate' 'lognormvariate' 'expovariate' 'gammavariate' 'betavariate' 'paretovariate' 'weibullvariate' 'binomialvariate')
   classVars: #()
-  classInstVars: #('instance')
+  classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -1537,7 +1561,7 @@ doit
 module subclass: 'statistics'
   instVarNames: #('mean' 'fmean' 'geometric_mean' 'harmonic_mean' 'median' 'median_low' 'median_high' 'median_grouped' 'mode' 'multimode' 'quantiles' 'pstdev' 'pvariance' 'stdev' 'variance' 'covariance' 'correlation' 'linear_regression')
   classVars: #()
-  classInstVars: #('instance')
+  classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -1586,7 +1610,7 @@ doit
 module subclass: 'fractions'
   instVarNames: #('fractionClass')
   classVars: #()
-  classInstVars: #('instance')
+  classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -1743,7 +1767,7 @@ doit
 module subclass: 'numbers'
   instVarNames: #('Number' 'Complex' 'Real' 'Rational' 'Integral')
   classVars: #()
-  classInstVars: #('instance')
+  classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -1778,7 +1802,7 @@ doit
 module subclass: 'os'
   instVarNames: #('getcwd' 'chdir' 'listdir' 'mkdir' 'mkdirWithMode' 'makedirs' 'remove' 'rmdir' 'rename' 'exists' 'isdir' 'isfile' 'stat' 'lstat' 'system' 'getenv' 'getenvWithDefault' 'putenv' 'sep' 'pathsep' 'linesep' 'path')
   classVars: #()
-  classInstVars: #('instance')
+  classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -1805,7 +1829,7 @@ doit
 module subclass: 'os_path'
   instVarNames: #('join' 'basename' 'dirname' 'split' 'splitext' 'isabs' 'normpath' 'abspath' 'exists' 'isdir' 'isfile' 'commonpath' 'commonprefix')
   classVars: #()
-  classInstVars: #('instance')
+  classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -1832,7 +1856,7 @@ doit
 module subclass: 'sys'
   instVarNames: #('argv' 'base_exec_prefix' 'base_prefix' 'byteorder' 'builtin_module_names' 'copyright' 'exec_prefix' 'executable' 'exit' 'flags' 'float_info' 'float_repr_style' 'getdefaultencoding' 'getfilesystemencoding' 'getfilesystemencodeerrors' 'getrecursionlimit' 'getsizeof' 'getrefcount' 'hash_info' 'hexversion' 'implementation' 'int_info' 'intern' 'maxsize' 'maxunicode' 'modules' 'path' 'path_hooks' 'path_importer_cache' 'platform' 'platlibdir' 'prefix' 'ps1' 'ps2' 'setrecursionlimit' 'stdin' 'stdout' 'stderr' 'stdlib_module_names' 'thread_info' 'version' 'version_info' 'api_version' 'warnoptions' 'exc_info' 'exception' 'excepthook' 'displayhook' 'breakpointhook' 'audit' 'addaudithook' 'settrace' 'setprofile' 'gettrace' 'getprofile' 'call_tracing' 'is_finalizing' 'getallocatedblocks' 'get_int_max_str_digits' 'set_int_max_str_digits' 'unraisablehook' '__breakpointhook__' '__displayhook__' '__excepthook__' '__unraisablehook__' '__stdin__' '__stdout__' '__stderr__' 'meta_path' 'orig_argv' 'tracebacklimit' 'dont_write_bytecode' 'pycache_prefix')
   classVars: #()
-  classInstVars: #('instance' 'modules')
+  classInstVars: #('modules')
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -1869,7 +1893,7 @@ doit
 module subclass: 'importlib'
   instVarNames: #('import_module' 'reload' 'invalidate_caches' '__import__')
   classVars: #()
-  classInstVars: #('instance' 'pprintast' 'grailDir')
+  classInstVars: #('pprintast' 'grailDir')
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -1912,7 +1936,7 @@ doit
 module subclass: 'string'
   instVarNames: #('ascii_letters' 'ascii_lowercase' 'ascii_uppercase' 'digits' 'hexdigits' 'octdigits' 'punctuation' 'printable' 'whitespace' 'capwords' 'Formatter' 'Template')
   classVars: #()
-  classInstVars: #('instance')
+  classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -2272,6 +2296,7 @@ input smalltalk/classes/module.gs
 input smalltalk/classes/iterator.gs
 input smalltalk/classes/list_iterator.gs
 input smalltalk/classes/math.gs
+input smalltalk/classes/gemstone.gs
 input smalltalk/classes/fractions.gs
 input smalltalk/classes/numbers.gs
 input smalltalk/classes/random.gs

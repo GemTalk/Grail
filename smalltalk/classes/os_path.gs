@@ -14,34 +14,6 @@ os_path class removeAllMethods: 2.
 
 set compile_env: 2
 
-! ------------------- Class methods for os_path
-
-category: 'Python-Singleton'
-classmethod: os_path
-new
-	"Raise an error: use instance instead of new"
-	TypeError ___signal___: 'Use instance instead of new for os_path module'
-%
-
-category: 'Python-Singleton'
-classmethod: os_path
-instance
-	"Return the singleton instance of os_path.
-	Creates it if it doesn't exist."
-	instance == nil ifTrue: [
-		instance := self perform: #basicNew env: 0.
-		instance initialize
-	].
-	^ instance
-%
-
-category: 'Python-Singleton'
-classmethod: os_path
-clearInstance
-	"Clear the singleton instance (useful for testing)"
-	instance := nil
-%
-
 ! ------------------- Instance methods for os_path
 
 category: 'Python-Initialization'

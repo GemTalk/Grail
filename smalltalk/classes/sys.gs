@@ -17,32 +17,6 @@ set compile_env: 2
 
 ! ------------------- Class methods for sys
 
-category: 'Python-Singleton'
-classmethod: sys
-new
-	"Raise an error: use instance instead of new"
-	TypeError ___signal___: 'Use instance instead of new for sys module'
-%
-
-category: 'Python-Singleton'
-classmethod: sys
-instance
-	"Return the singleton instance of sys.
-	Creates it if it doesn't exist."
-	instance == nil ifTrue: [
-		instance := self perform: #basicNew env: 0.
-		instance initialize
-	].
-	^ instance
-%
-
-category: 'Python-Singleton'
-classmethod: sys
-clearInstance
-	"Clear the singleton instance (useful for testing)"
-	instance := nil
-%
-
 category: 'Python-Module Registry'
 classmethod: sys
 modules
@@ -61,14 +35,15 @@ classmethod: sys
 initializeBuiltinModules
 	"Initialize the registry with built-in modules"
 	modules
-		___at___: #builtins put: builtins 	instance;
-		___at___: #math 	put: math 		instance;
-		___at___: #cmath 	put: cmath 		instance;
-		___at___: #fractions put: fractions 	instance;
-		___at___: #random 	put: random 	instance;
-		___at___: #os 		put: os 		instance;
-		___at___: #string 	put: string 	instance;
-		___at___: #sys 		put: sys 		instance;
+		___at___: #builtins 	put: builtins 	instance;
+		___at___: #math 		put: math 		instance;
+		___at___: #gemstone 	put: gemstone 	instance;
+		___at___: #cmath 		put: cmath 		instance;
+		___at___: #fractions	put: fractions 	instance;
+		___at___: #random 		put: random 	instance;
+		___at___: #os 			put: os 		instance;
+		___at___: #string 		put: string 	instance;
+		___at___: #sys 			put: sys 		instance;
 		___yourself___.
 %
 
@@ -199,7 +174,7 @@ initialize_runtime_info
 	modules := sys modules.
 
 		"Built-in module names as tuple"
-		builtin_module_names := tuple ___withAll___: {'builtins'. 'cmath'. 'fractions'. 'importlib'. 'math'. 'os'. 'string'. 'sys'}.
+	builtin_module_names := tuple ___withAll___: {'builtins'. 'cmath'. 'fractions'. 'gemstone'. 'importlib'. 'math'. 'os'. 'string'. 'sys'}.
 	stdlib_module_names := frozenset ___new___.
 
 	"Copyright and other info"

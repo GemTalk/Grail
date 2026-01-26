@@ -14,6 +14,34 @@ module class removeAllMethods: 2.
 
 set compile_env: 2
 
+! ------------------- Class methods for module
+
+category: 'Python-Singleton'
+classmethod: module
+new
+	"Raise an error: use instance instead of new"
+	TypeError ___signal___: ('Use #''instance'' instead of #''new'' for ' ___concat___: (self ___name___ ___asString___ ___concat___: ' module'))
+%
+
+category: 'Python-Singleton'
+classmethod: module
+instance
+	"Return the singleton instance of a module subclass.
+	Creates it if it doesn't exist."
+	instance == nil ifTrue: [
+		instance := self perform: #basicNew env: 0.
+		instance perform: #initialize env: 2
+	].
+	^ instance
+%
+
+category: 'Python-Singleton'
+classmethod: module
+clearInstance
+	"Clear the singleton instance (useful for testing)"
+	instance := nil
+%
+
 ! ------------------- Instance methods for module
 
 category: 'Python-Accessors'

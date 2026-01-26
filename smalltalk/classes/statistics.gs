@@ -26,45 +26,6 @@
 
 set compile_env: 2
 
-! ------------------- Class methods for statistics
-
-category: 'Python-Singleton'
-classmethod: statistics
-new
-	"Raise an error: use instance instead of new"
-	TypeError ___signal___: 'Use instance instead of new for statistics module'
-%
-
-category: 'Python-Singleton'
-classmethod: statistics
-instance
-	"Return the singleton instance of statistics.
-	Creates it if it doesn't exist."
-	instance == nil ifTrue: [
-		instance := self perform: #basicNew env: 0.
-		instance perform: #initialize env: 2
-	].
-	^ instance
-%
-
-category: 'Python-Singleton'
-classmethod: statistics
-clearInstance
-	"Clear the singleton instance (useful for testing)"
-	instance := nil
-%
-
-set compile_env: 0
-
-category: 'Convenience Methods'
-classmethod: statistics
-___instance___
-	"Convenience method: self perform: #instance env: 2"
-	^ self perform: #instance env: 2
-%
-
-set compile_env: 2
-
 ! ------------------- Instance methods for statistics - Initialization
 
 category: 'Python-Initialization'

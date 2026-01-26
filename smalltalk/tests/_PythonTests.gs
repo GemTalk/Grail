@@ -351,6 +351,23 @@ doit
 MathTestCase category: 'SUnit'
 %
 
+! ------------------- Class definition for GemStoneTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'GemStoneTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+GemStoneTestCase category: 'SUnit'
+%
+
 ! ------------------- Class definition for StringModuleTestCase
 expectvalue /Class
 doit
@@ -613,6 +630,7 @@ input smalltalk/tests/IntegerTestCase.gs
 input smalltalk/tests/IteratorTestCase.gs
 input smalltalk/tests/ListTestCase.gs
 input smalltalk/tests/MathTestCase.gs
+input smalltalk/tests/GemStoneTestCase.gs
 input smalltalk/tests/ModuleTestCase.gs
 input smalltalk/tests/NumbersTestCase.gs
 input smalltalk/tests/OsTestCase.gs

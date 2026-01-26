@@ -14,34 +14,6 @@ string class removeAllMethods: 2.
 
 set compile_env: 2
 
-! ------------------- Class methods for string
-
-category: 'Python-Singleton'
-classmethod: string
-new
-	"Raise an error: use instance instead of new"
-	TypeError ___signal___: 'Use instance instead of new for string module'
-%
-
-category: 'Python-Singleton'
-classmethod: string
-instance
-	"Return the singleton instance of string.
-	Creates it if it doesn't exist."
-	instance == nil ifTrue: [
-		instance := self perform: #basicNew env: 0.
-		instance initialize
-	].
-	^ instance
-%
-
-category: 'Python-Singleton'
-classmethod: string
-clearInstance
-	"Clear the singleton instance (useful for testing)"
-	instance := nil
-%
-
 ! ------------------- Instance methods for string
 
 category: 'Python-Initialization'
