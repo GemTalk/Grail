@@ -23,7 +23,6 @@ initialize
 	self
 		initialize_abort;
 		initialize_commit;
-		initialize_objectNamed;
 		yourself
 %
 
@@ -42,19 +41,6 @@ initialize_commit
 
 	self ___at___: #'commit' put: [:positional :keywords |
 		System perform: #'commit' env: 0.
-	]
-%
-
-category: 'Initialization'
-method: gemstone
-initialize_objectNamed
-
-	self ___at___: #objectNamed put: [:positional :keywords |
-		| name session |
-		name := positional ___at___: 1.
-		name := name perform: #'asSymbol' env: 0.
-		session := GsCurrentSession perform: #'currentSession' env: 0.
-		session perform: #'objectNamed:' env: 0 withArguments: { name }
 	]
 %
 
@@ -86,18 +72,50 @@ commit: aBlock
 	self ___at___: #'commit' put: aBlock.
 %
 
-category: 'Accessors'
+category: 'Python-Subscript Protocol'
 method: gemstone
-objectNamed
+__getitem__: key
+	"Return the object named key from the current session. Raises KeyError if not found."
 
-	^ self ___at___: #'objectNamed'
+	| name session result |
+	name := key perform: #'asSymbol' env: 0.
+	session := GsCurrentSession perform: #'currentSession' env: 0.
+	result := session perform: #'objectNamed:' env: 0 withArguments: { name }.
+	result ifNil: [
+		KeyError ___signal___: key
+	].
+	^ result
 %
 
-category: 'Accessors'
+category: 'Python-Subscript Protocol'
 method: gemstone
-objectNamed: aBlock
+__setitem__: key _: value
+	"Set the object named key in the current session. If an Association exists, update it; otherwise add to UserGlobals."
 
-	self ___at___: #'objectNamed' put: aBlock.
+	| name session assoc |
+	name := key perform: #'asSymbol' env: 0.
+	session := GsCurrentSession perform: #'currentSession' env: 0.
+	assoc := session perform: #'resolveSymbol:' env: 0 withArguments: { name }.
+	assoc ifNotNil: [
+		assoc perform: #'value:' env: 0 withArguments: { value }.
+		^ nil
+	].
+	UserGlobals perform: #'at:put:' env: 0 withArguments: { name . value }.
+	^ nil
+%
+
+category: 'Python-Subscript Protocol'
+method: gemstone
+__delitem__: key
+	"Remove the object named key from UserGlobals. Raises KeyError if not found."
+
+	| name |
+	name := key perform: #'asSymbol' env: 0.
+	(UserGlobals perform: #'includesKey:' env: 0 withArguments: { name }) ifFalse: [
+		KeyError ___signal___: key
+	].
+	UserGlobals perform: #'removeKey:' env: 0 withArguments: { name }.
+	^ nil
 %
 
 category: 'Metadata'

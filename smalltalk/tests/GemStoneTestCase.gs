@@ -30,13 +30,82 @@ testGemstoneModuleIsAvailable
 
 category: 'Tests'
 method: GemStoneTestCase
-test_objectNamed
+test_getitem
 
-	| gs method userGlobals |
+	| gs userGlobals |
 	gs := gemstone perform: #instance env: 2.
-	method := gs perform: #objectNamed env: 2.
-	userGlobals := method value: { str withAll: 'UserGlobals' } value: nil.
+	userGlobals := gs perform: #__getitem__: env: 2 withArguments: { str withAll: 'UserGlobals' }.
 	self assert: userGlobals identical: UserGlobals.
+%
+
+category: 'Tests'
+method: GemStoneTestCase
+test_getitem_keyError
+
+	| gs |
+	gs := gemstone perform: #instance env: 2.
+	self should: [
+		gs perform: #__getitem__: env: 2 withArguments: { str withAll: '_no_such_key' }
+	] raise: KeyError
+%
+
+category: 'Tests'
+method: GemStoneTestCase
+test_setitem_existing
+
+	| gs original |
+	gs := gemstone perform: #instance env: 2.
+	"Save original value"
+	original := gs perform: #__getitem__: env: 2 withArguments: { str withAll: 'UserGlobals' }.
+	self assert: original identical: UserGlobals.
+	"Set it to something else and verify"
+	gs perform: #__setitem__:_: env: 2 withArguments: { str withAll: 'UserGlobals' . original }.
+	self assert: (gs perform: #__getitem__: env: 2 withArguments: { str withAll: 'UserGlobals' }) identical: UserGlobals.
+%
+
+category: 'Tests'
+method: GemStoneTestCase
+test_setitem_new
+
+	| gs key value result |
+	gs := gemstone perform: #instance env: 2.
+	key := str withAll: '_grail_test_setitem'.
+	value := str withAll: 'test_value'.
+	"Should add to UserGlobals"
+	gs perform: #__setitem__:_: env: 2 withArguments: { key . value }.
+	result := gs perform: #__getitem__: env: 2 withArguments: { key }.
+	self assert: result equals: value.
+	"Clean up"
+	UserGlobals perform: #'removeKey:' env: 0 withArguments: { #'_grail_test_setitem' }.
+%
+
+category: 'Tests'
+method: GemStoneTestCase
+test_delitem
+
+	| gs key value |
+	gs := gemstone perform: #instance env: 2.
+	key := str withAll: '_grail_test_delitem'.
+	value := str withAll: 'to_be_deleted'.
+	"Add an entry, then delete it"
+	gs perform: #__setitem__:_: env: 2 withArguments: { key . value }.
+	self assert: (gs perform: #__getitem__: env: 2 withArguments: { key }) equals: value.
+	gs perform: #__delitem__: env: 2 withArguments: { key }.
+	"Should now raise KeyError"
+	self should: [
+		gs perform: #__getitem__: env: 2 withArguments: { key }
+	] raise: KeyError
+%
+
+category: 'Tests'
+method: GemStoneTestCase
+test_delitem_keyError
+
+	| gs |
+	gs := gemstone perform: #instance env: 2.
+	self should: [
+		gs perform: #__delitem__: env: 2 withArguments: { str withAll: '_no_such_key' }
+	] raise: KeyError
 %
 
 category: 'Tests'

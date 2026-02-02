@@ -60,7 +60,8 @@ category: 'Python-Subscript Protocol'
 method: dict
 __setitem__: key _: value
 	"Set d[key] to value"
-	self ___at___: key put: value
+	self ___at___: key put: value.
+	^ nil
 %
 
 category: 'Python-Subscript Protocol'
@@ -339,7 +340,8 @@ method: SymbolDictionary
 __setitem__: key _: value
 	"Set d[key] to value"
 
-	super __setitem__: (key perform: #'asSymbol' env: 0) _: value
+	super __setitem__: (key perform: #'asSymbol' env: 0) _: value.
+	^ nil
 %
 
 set compile_env: 0

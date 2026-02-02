@@ -249,7 +249,8 @@ __setitem__: index _: value
 	].
 
 	"Set value (convert to 1-based index)"
-	self ___at___: (idx ___plus___: 1) put: val
+	self ___at___: (idx ___plus___: 1) put: val.
+	^ nil
 %
 
 category: 'Python-Mutation Methods'
