@@ -2,7 +2,7 @@
 ! dict Methods (Python 'dict' type - mutable mapping)
 ! ===============================================================================
 ! This file contains Python method implementations for the dict class.
-! dict is mapped to GemStone's Dictionary class.
+! dict is mapped to GemStone's KeyValueDictionary class.
 !
 ! dict is a mutable mapping type that maps hashable keys to arbitrary values.
 ! Dictionaries preserve insertion order (as of Python 3.7).
@@ -14,8 +14,8 @@
 ! ------------------- Remove existing Python methods from dict
 expectvalue /Metaclass3
 doit
-Dictionary removeAllMethods: 2.
-Dictionary class removeAllMethods: 2.
+dict removeAllMethods: 2.
+dict class removeAllMethods: 2.
 %
 
 set compile_env: 2
@@ -23,28 +23,28 @@ set compile_env: 2
 ! ------------------- Instance methods for dict
 
 category: 'Python-Type'
-method: Dictionary
+method: dict
 __class__
 	"Return the Python type for dict"
 	^ dict
 %
 
 category: 'Python-Collection Protocol'
-method: Dictionary
+method: dict
 __len__
 	"Return the number of items in the dictionary"
 	^ self ___size___
 %
 
 category: 'Python-Collection Protocol'
-method: Dictionary
+method: dict
 __contains__: key
 	"Return True if key is in the dictionary, else False"
 	^ self ___includesKey___: key
 %
 
 category: 'Python-Subscript Protocol'
-method: Dictionary
+method: dict
 __getitem__: key
 	"Return the value for key. Raises KeyError if key is not in the dictionary"
 
@@ -57,14 +57,14 @@ __getitem__: key
 %
 
 category: 'Python-Subscript Protocol'
-method: Dictionary
+method: dict
 __setitem__: key _: value
 	"Set d[key] to value"
 	self ___at___: key put: value
 %
 
 category: 'Python-Subscript Protocol'
-method: Dictionary
+method: dict
 __delitem__: key
 	"Remove d[key] from dictionary. Raises KeyError if key is not in the dictionary"
 
@@ -77,19 +77,19 @@ __delitem__: key
 %
 
 category: 'Python-Iterator Protocol'
-method: Dictionary
+method: dict
 __iter__
 	"Return an iterator over the keys of the dictionary"
 	^ dict_keyiterator perform: #___on: env: 2 withArguments: {self}
 %
 
 category: 'Python-Comparison'
-method: Dictionary
+method: dict
 __eq__: other
 	"Return True if dictionaries have the same (key, value) pairs"
 
 	| mySize otherSize |
-	(other ___isKindOf___: Dictionary) ifFalse: [
+	(other ___isKindOf___: dict) ifFalse: [
 		^ false
 	].
 	
@@ -115,35 +115,35 @@ __eq__: other
 %
 
 category: 'Python-Comparison'
-method: Dictionary
+method: dict
 __ne__: other
 	"Return True if dictionaries do not have the same (key, value) pairs"
 	^ (self perform: #__eq__: env: 2 withArguments: {other}) ___not___
 %
 
 category: 'Python-Mutation Methods'
-method: Dictionary
+method: dict
 clear
 	"Remove all items from the dictionary"
 	self perform: #removeAllKeys: env: 0 withArguments: {self perform: #keys env: 0}
 %
 
 category: 'Python-Mutation Methods'
-method: Dictionary
+method: dict
 copy
 	"Return a shallow copy of the dictionary"
 	^ self ___copy___
 %
 
 category: 'Python-Access Methods'
-method: Dictionary
+method: dict
 get: key
 	"Return the value for key if key is in the dictionary, else None"
 	^ self perform: #get:_: env: 2 withArguments: {key. nil}
 %
 
 category: 'Python-Access Methods'
-method: Dictionary
+method: dict
 get: key _: default
 	"Return the value for key if key is in the dictionary, else default"
 
@@ -156,7 +156,7 @@ get: key _: default
 %
 
 category: 'Python-View Methods'
-method: Dictionary
+method: dict
 keys
 	"Return a new view of the dictionary's keys"
 
@@ -169,7 +169,7 @@ keys
 %
 
 category: 'Python-View Methods'
-method: Dictionary
+method: dict
 values
 	"Return a new view of the dictionary's values"
 
@@ -182,7 +182,7 @@ values
 %
 
 category: 'Python-View Methods'
-method: Dictionary
+method: dict
 items
 	"Return a new view of the dictionary's (key, value) pairs"
 
@@ -197,7 +197,7 @@ items
 %
 
 category: 'Python-Mutation Methods'
-method: Dictionary
+method: dict
 pop: key
 	"If key is in the dictionary, remove it and return its value, else raise KeyError"
 
@@ -212,7 +212,7 @@ pop: key
 %
 
 category: 'Python-Mutation Methods'
-method: Dictionary
+method: dict
 pop: key _: default
 	"If key is in the dictionary, remove it and return its value, else return default"
 
@@ -227,7 +227,7 @@ pop: key _: default
 %
 
 category: 'Python-Mutation Methods'
-method: Dictionary
+method: dict
 popitem
 	"Remove and return a (key, value) pair from the dictionary in LIFO order.
 	Raises KeyError if the dictionary is empty"
@@ -251,14 +251,14 @@ popitem
 %
 
 category: 'Python-Mutation Methods'
-method: Dictionary
+method: dict
 setdefault: key
 	"If key is in the dictionary, return its value. If not, insert key with value None and return None"
 	^ self perform: #setdefault:_: env: 2 withArguments: {key. nil}
 %
 
 category: 'Python-Mutation Methods'
-method: Dictionary
+method: dict
 setdefault: key _: default
 	"If key is in the dictionary, return its value. If not, insert key with value default and return default"
 
@@ -272,12 +272,12 @@ setdefault: key _: default
 %
 
 category: 'Python-Mutation Methods'
-method: Dictionary
+method: dict
 update: other
 	"Update the dictionary with key/value pairs from other, overwriting existing keys"
 
 	| isDict |
-	isDict := other ___isKindOf___: Dictionary.
+	isDict := other ___isKindOf___: dict.
 	isDict ifTrue: [
 		other ___keysAndValuesDo___: [:key :value |
 			self ___at___: key put: value
@@ -294,7 +294,7 @@ update: other
 %
 
 category: 'Python-String Representation'
-method: Dictionary
+method: dict
 __repr__
 	"Return a string representation of the dictionary"
 
@@ -322,6 +322,24 @@ __repr__
 	stream ___nextPutAll___: '}'.
 
 	^ stream ___contents___
+%
+
+! Overrides for SymbolDictionary
+
+category: 'Python-Subscript Protocol'
+method: SymbolDictionary
+__getitem__: key
+	"Return the value for key. Raises KeyError if key is not in the dictionary"
+
+	^ super __getitem__: (key perform: #'asSymbol' env: 0)
+%
+
+category: 'Python-Subscript Protocol'
+method: SymbolDictionary
+__setitem__: key _: value
+	"Set d[key] to value"
+
+	super __setitem__: (key perform: #'asSymbol' env: 0) _: value
 %
 
 set compile_env: 0

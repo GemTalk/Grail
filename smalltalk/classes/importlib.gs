@@ -382,8 +382,6 @@ astStringForPath: pathString
 	file := GsFile open: path mode: 'rb' onClient: false.
 	string := file contentsAsUtf8 decodeToUnicode.
 	file close.
-	GsFile removeServerFile: path.
-	GsFile removeServerFile: errPath.
 	^string
 %
 
@@ -477,10 +475,13 @@ runPath: pathString
 
 	importlib runPath: '/path/to/script.py'.
 	"
-	| module stream method mySymbolList |
+	| file module stream method mySymbolList |
 	module := self astForPath: pathString.
 	stream := PrettyWriteStream on: Unicode7 new.
 	module printSmalltalkOn: stream.
+	file := GsFile open: '/tmp/grail.st' mode: 'w' onClient: false.
+	file nextPutAll: stream contents.
+	file close.
 	mySymbolList := SymbolList with: builtins ___instance___.
 	[
 		method := stream contents

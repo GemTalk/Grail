@@ -39,7 +39,7 @@ pythonDict
 	at: #'builtin_function_or_method' put: GsNMethod;
 	at: #'bytes'                      put: ByteArray;
 	at: #'Decimal'                    put: ScaledDecimal;
-	at: #'dict'                       put: Dictionary;
+	at: #'dict'                       put: KeyValueDictionary;
 	at: #'float'                      put: Float;
 	at: #'frozenset'                  put: Set;
 	at: #'int'                        put: Integer;

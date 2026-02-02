@@ -149,9 +149,12 @@ method: ModuleAst
 executeWithScope: aSymbolList
 	"Compile and execute this module, returning the raw execution result."
 
-	| writeStream compiledMethod result |
+	| file writeStream compiledMethod result |
 	writeStream := PrettyWriteStream on: Unicode7 new.
 	self printSmalltalkOn: writeStream.
+	file := GsFile open: '/tmp/grail.st' mode: 'w' onClient: false.
+	file nextPutAll: writeStream contents.
+	file close.
 	[
 		compiledMethod := writeStream contents
 			_compileInContext: nil
