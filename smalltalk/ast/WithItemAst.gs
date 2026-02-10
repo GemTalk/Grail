@@ -16,19 +16,3 @@ optional_vars
 
 	^optional_vars
 %
-category: 'other'
-method: WithItemAst
-initialize
-	"withitem = (expr context_expr, expr? optional_vars)"
-
-	| stream next |
-	stream := self stream.
-	next := stream peekN: 9.
-	next ~= 'withitem(' ifTrue: [self error].
-	stream next: 9.
-	context_expr := self expression.
-	self commaSpace.
-	next := stream peekN: 4.
-	optional_vars := self optionalExpression.
-	(stream peekFor: $)) ifFalse: [self error].
-%

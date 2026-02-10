@@ -1,0 +1,2288 @@
+! ===============================================================================
+! PythonParser - Recursive descent parser for Python source code
+! ===============================================================================
+! Parses Python source code into an AST (Abstract Syntax Tree) composed of
+! the existing AST node classes (ModuleAst, ExprAst, BinOpAst, etc.).
+!
+! Usage:
+!   PythonParser parse: 'x = 1 + 2'
+!   => returns a ModuleAst
+! ===============================================================================
+
+! ------------------- Remove existing behavior from PythonParser
+removeallmethods PythonParser
+removeallclassmethods PythonParser
+! ------------------- Class methods for PythonParser
+category: 'parsing'
+classmethod: PythonParser
+parse: aString
+
+	^self basicNew
+		source: aString;
+		parseModule
+%
+! ------------------- Instance methods - Initialization
+category: 'initialization'
+method: PythonParser
+source: aString
+
+	source := aString.
+	tokens := PythonTokenizer tokenize: aString.
+	position := 1.
+	variableStack := Array new.
+	variableStack add: IdentitySet new.
+	classNesting := 0.
+%
+! ------------------- Instance methods - Token Access
+category: 'token access'
+method: PythonParser
+peek
+	"Return the current token without consuming it."
+
+	position > tokens size ifTrue: [^nil].
+	^tokens at: position
+%
+category: 'token access'
+method: PythonParser
+peekType
+	"Return the type of the current token."
+
+	| tok |
+	tok := self peek.
+	tok ifNil: [^nil].
+	^tok type
+%
+category: 'token access'
+method: PythonParser
+peekValue
+	"Return the value of the current token."
+
+	| tok |
+	tok := self peek.
+	tok ifNil: [^nil].
+	^tok value
+%
+category: 'token access'
+method: PythonParser
+advance
+	"Consume and return the current token."
+
+	| tok |
+	tok := tokens at: position.
+	position := position + 1.
+	^tok
+%
+category: 'token access'
+method: PythonParser
+expect: aType value: aValue
+	"Consume a token matching the given type and value, or signal an error."
+
+	| tok |
+	tok := self advance.
+	(tok type == aType and: [tok value = aValue]) ifFalse: [
+		SyntaxError signal: 'Expected ' , aType , ' ''' , aValue , ''' but got ' , tok type , ' ''' , tok value , ''' at line ' , tok line printString.
+	].
+	^tok
+%
+category: 'token access'
+method: PythonParser
+expectType: aType
+	"Consume a token of the given type, or signal an error."
+
+	| tok |
+	tok := self advance.
+	tok type == aType ifFalse: [
+		SyntaxError signal: 'Expected ' , aType , ' but got ' , tok type , ' ''' , tok value , ''' at line ' , tok line printString.
+	].
+	^tok
+%
+category: 'token access'
+method: PythonParser
+matchKeyword: aString
+	"If the current token is the given keyword, consume it and return true."
+
+	| tok |
+	tok := self peek.
+	(tok notNil and: [tok isKeyword: aString]) ifTrue: [
+		self advance.
+		^true
+	].
+	^false
+%
+category: 'token access'
+method: PythonParser
+matchOp: aString
+	"If the current token is the given operator, consume it and return true."
+
+	| tok |
+	tok := self peek.
+	(tok notNil and: [tok isOp: aString]) ifTrue: [
+		self advance.
+		^true
+	].
+	^false
+%
+category: 'token access'
+method: PythonParser
+atKeyword: aString
+	"Check if the current token is the given keyword without consuming."
+
+	| tok |
+	tok := self peek.
+	^tok notNil and: [tok isKeyword: aString]
+%
+category: 'token access'
+method: PythonParser
+atOp: aString
+	"Check if the current token is the given operator without consuming."
+
+	| tok |
+	tok := self peek.
+	^tok notNil and: [tok isOp: aString]
+%
+category: 'token access'
+method: PythonParser
+skipNewlines
+	"Skip any NEWLINE and NL tokens."
+
+	[self peek notNil and: [self peek isNewline]] whileTrue: [
+		self advance.
+	].
+%
+! ------------------- Instance methods - Node Construction
+category: 'node construction'
+method: PythonParser
+buildNode: aClass fields: aDictionary
+	"Build an AST node of the given class with the given field values."
+
+	^aClass buildWithFields: aDictionary
+%
+category: 'node construction'
+method: PythonParser
+buildNode: aClass fields: aDictionary token: aToken
+	"Build an AST node with location info from a token."
+
+	| dict |
+	dict := aDictionary copy.
+	dict at: #beginLine put: aToken line.
+	dict at: #beginColumn put: aToken column.
+	dict at: #endLine put: aToken endLine.
+	dict at: #endColumn put: aToken endColumn.
+	^aClass buildWithFields: dict
+%
+category: 'node construction'
+method: PythonParser
+buildNode: aClass fields: aDictionary from: startToken to: endToken
+	"Build an AST node with location info spanning two tokens."
+
+	| dict |
+	dict := aDictionary copy.
+	dict at: #beginLine put: startToken line.
+	dict at: #beginColumn put: startToken column.
+	dict at: #endLine put: endToken endLine.
+	dict at: #endColumn put: endToken endColumn.
+	^aClass buildWithFields: dict
+%
+category: 'node construction'
+method: PythonParser
+loadCtx
+
+	^LoadAst basicNew
+%
+category: 'node construction'
+method: PythonParser
+storeCtx
+
+	^StoreAst basicNew
+%
+category: 'node construction'
+method: PythonParser
+delCtx
+
+	^DelAst basicNew
+%
+category: 'node construction'
+method: PythonParser
+setStoreCtx: anExpr
+	"Change an expression's context to Store (for assignment targets).
+	Also registers variable names with the current scope."
+
+	| varNames index |
+	varNames := anExpr class allInstVarNames.
+	index := varNames indexOf: #ctx.
+	index > 0 ifTrue: [anExpr instVarAt: index put: self storeCtx].
+	"Register variable name"
+	(anExpr isKindOf: NameAst) ifTrue: [
+		self declareVariable: anExpr id.
+	].
+	"Recurse into tuples and lists (use instVarAt for elts)"
+	((anExpr isKindOf: TupleAst) or: [anExpr isKindOf: ListAst]) ifTrue: [
+		| eltsIndex |
+		eltsIndex := varNames indexOf: #elts.
+		eltsIndex > 0 ifTrue: [
+			(anExpr instVarAt: eltsIndex) do: [:each | self setStoreCtx: each].
+		].
+	].
+	(anExpr isKindOf: StarredAst) ifTrue: [
+		| valueIndex |
+		valueIndex := varNames indexOf: #value.
+		valueIndex > 0 ifTrue: [
+			self setStoreCtx: (anExpr instVarAt: valueIndex).
+		].
+	].
+	^anExpr
+%
+category: 'node construction'
+method: PythonParser
+declareVariable: aSymbol
+	"Register a variable name with the current scope."
+
+	variableStack last add: aSymbol.
+%
+category: 'node construction'
+method: PythonParser
+pushScope
+	"Push a new variable scope."
+
+	variableStack add: IdentitySet new.
+%
+category: 'node construction'
+method: PythonParser
+popScope
+	"Pop and return the current variable scope."
+
+	^variableStack removeLast
+%
+category: 'node construction'
+method: PythonParser
+setDelCtx: anExpr
+	"Change an expression's context to Del."
+
+	| varNames index |
+	varNames := anExpr class allInstVarNames.
+	index := varNames indexOf: #ctx.
+	index > 0 ifTrue: [anExpr instVarAt: index put: self delCtx].
+	^anExpr
+%
+category: 'node construction'
+method: PythonParser
+lastToken
+	"Return the most recently consumed token."
+
+	^tokens at: position - 1
+%
+! ------------------- Instance methods - Module
+category: 'parsing - module'
+method: PythonParser
+parseModule
+	"Parse a complete module. Returns a ModuleAst."
+
+	| body block module variables |
+	self skipNewlines.
+	body := self parseStatements.
+	variables := self popScope.
+	block := BlockAst buildWithFields: (IdentityKeyValueDictionary new
+		at: #body put: body;
+		at: #variables put: variables;
+		yourself).
+	module := ModuleAst basicNew.
+	module
+		name: '__main__';
+		path: nil;
+		source: source;
+		useTempsForBlock: true;
+		setBlock: block.
+	^module
+%
+! ------------------- Instance methods - Statements
+category: 'parsing - statements'
+method: PythonParser
+parseStatements
+	"Parse a sequence of statements until ENDMARKER or DEDENT."
+
+	| stmts |
+	stmts := Array new.
+	self skipNewlines.
+	[self peek notNil and: [self peek isEndMarker not and: [self peekType ~~ #DEDENT]]] whileTrue: [
+		stmts addAll: self parseStatement.
+		self skipNewlines.
+	].
+	^stmts
+%
+category: 'parsing - statements'
+method: PythonParser
+parseStatement
+	"Parse a single statement. Returns an array of statements
+	(simple_stmts can contain multiple ';'-separated statements)."
+
+	| tok |
+	tok := self peek.
+	tok ifNil: [^Array new].
+
+	"Compound statements"
+	(tok isKeyword: 'if') ifTrue: [^Array with: self parseIf].
+	(tok isKeyword: 'while') ifTrue: [^Array with: self parseWhile].
+	(tok isKeyword: 'for') ifTrue: [^Array with: self parseFor].
+	(tok isKeyword: 'def') ifTrue: [^Array with: self parseFunctionDef].
+	(tok isKeyword: 'class') ifTrue: [^Array with: self parseClassDef].
+	(tok isKeyword: 'try') ifTrue: [^Array with: self parseTry].
+	(tok isKeyword: 'with') ifTrue: [^Array with: self parseWith].
+	(tok isKeyword: 'async') ifTrue: [^Array with: self parseAsync].
+	(tok isOp: '@') ifTrue: [^Array with: self parseDecorated].
+
+	"Simple statements"
+	^self parseSimpleStatements
+%
+category: 'parsing - statements'
+method: PythonParser
+parseSimpleStatements
+	"Parse one or more simple statements separated by ';'."
+
+	| stmts stmt |
+	stmts := Array new.
+	stmt := self parseSimpleStatement.
+	stmts add: stmt.
+	[self matchOp: ';'] whileTrue: [
+		(self peek notNil and: [self peek isNewline or: [self peek isEndMarker]]) ifTrue: [
+			"Trailing semicolon"
+		] ifFalse: [
+			stmts add: self parseSimpleStatement.
+		].
+	].
+	^stmts
+%
+category: 'parsing - statements'
+method: PythonParser
+parseSimpleStatement
+	"Parse a single simple statement."
+
+	| tok |
+	tok := self peek.
+
+	(tok isKeyword: 'return') ifTrue: [^self parseReturn].
+	(tok isKeyword: 'import') ifTrue: [^self parseImport].
+	(tok isKeyword: 'from') ifTrue: [^self parseImportFrom].
+	(tok isKeyword: 'raise') ifTrue: [^self parseRaise].
+	(tok isKeyword: 'assert') ifTrue: [^self parseAssert].
+	(tok isKeyword: 'del') ifTrue: [^self parseDelete].
+	(tok isKeyword: 'global') ifTrue: [^self parseGlobal].
+	(tok isKeyword: 'nonlocal') ifTrue: [^self parseNonlocal].
+	(tok isKeyword: 'pass') ifTrue: [^self parsePass].
+	(tok isKeyword: 'break') ifTrue: [^self parseBreak].
+	(tok isKeyword: 'continue') ifTrue: [^self parseContinue].
+	(tok isKeyword: 'yield') ifTrue: [^self parseYieldStatement].
+
+	"Assignment or expression statement"
+	^self parseExpressionOrAssignment
+%
+category: 'parsing - statements'
+method: PythonParser
+parseExpressionOrAssignment
+	"Parse an expression statement, assignment, augmented assignment, or annotated assignment."
+
+	| startTok expr tok |
+	startTok := self peek.
+	expr := self parseStarExpressions.
+
+	tok := self peek.
+
+	"Augmented assignment: +=, -=, *=, /=, //=, %=, **=, &=, |=, ^=, <<=, >>=, @="
+	(tok notNil and: [tok type == #OP and: [
+		#('+=' '-=' '*=' '/=' '//=' '%=' '**=' '&=' '|=' '^=' '<<=' '>>=' '@=') includes: tok value]]) ifTrue: [
+		| opTok opStr opClass value |
+		opTok := self advance.
+		opStr := opTok value copyFrom: 1 to: opTok value size - 1. "Remove the '='"
+		opClass := self operatorClassFor: opStr.
+		value := self parseExpression.
+		self setStoreCtx: expr.
+		^self buildNode: AugAssignAst fields: (IdentityKeyValueDictionary new
+			at: #target put: expr;
+			at: #op put: opClass basicNew;
+			at: #value put: value;
+			yourself) from: startTok to: self lastToken
+	].
+
+	"Annotated assignment: x: int = value"
+	(tok notNil and: [tok isOp: ':']) ifTrue: [
+		| colonTok annotation value simple |
+		colonTok := self advance.
+		"Check this isn't a walrus operator :="
+		(self peek notNil and: [self peek isOp: '=']) ifFalse: [
+			annotation := self parseExpression.
+			value := nil.
+			(self matchOp: '=') ifTrue: [
+				value := self parseExpression.
+			].
+			self setStoreCtx: expr.
+			simple := (expr isKindOf: NameAst) ifTrue: [1] ifFalse: [0].
+			^self buildNode: AnnAssignAst fields: (IdentityKeyValueDictionary new
+				at: #target put: expr;
+				at: #annotation put: annotation;
+				at: #value put: value;
+				at: #simple put: simple;
+				yourself) from: startTok to: self lastToken
+		].
+	].
+
+	"Regular assignment: x = value (possibly chained: x = y = value)"
+	(tok notNil and: [tok isOp: '=']) ifTrue: [
+		| targets value |
+		targets := Array new.
+		self setStoreCtx: expr.
+		targets add: expr.
+		[self matchOp: '='] whileTrue: [
+			| nextExpr |
+			nextExpr := self parseStarExpressions.
+			"Check if followed by another '=' - if so, this is another target"
+			(self peek notNil and: [self peek isOp: '=']) ifTrue: [
+				self setStoreCtx: nextExpr.
+				targets add: nextExpr.
+			] ifFalse: [
+				value := nextExpr.
+			].
+		].
+		value ifNil: [value := targets removeLast].
+		^self buildNode: AssignAst fields: (IdentityKeyValueDictionary new
+			at: #targets put: targets;
+			at: #value put: value;
+			at: #type_comment put: nil;
+			yourself) from: startTok to: self lastToken
+	].
+
+	"Walrus operator: name := value"
+	(tok notNil and: [tok isOp: ':=']) ifTrue: [
+		| value |
+		self advance.
+		value := self parseExpression.
+		self setStoreCtx: expr.
+		^self buildNode: NamedExprAst fields: (IdentityKeyValueDictionary new
+			at: #target put: expr;
+			at: #value put: value;
+			yourself) from: startTok to: self lastToken
+	].
+
+	"Expression statement"
+	^self buildNode: ExprAst fields: (IdentityKeyValueDictionary new
+		at: #value put: expr;
+		yourself) from: startTok to: self lastToken
+%
+! ------------------- Instance methods - Simple Statements
+category: 'parsing - simple statements'
+method: PythonParser
+parseReturn
+	"Parse: return [expr]"
+
+	| tok value |
+	tok := self advance. "consume 'return'"
+	value := nil.
+	(self peek notNil and: [self peek isNewline not and: [self peek isEndMarker not and: [(self peek isOp: ';') not]]]) ifTrue: [
+		value := self parseStarExpressions.
+	].
+	^self buildNode: ReturnAst fields: (IdentityKeyValueDictionary new
+		at: #value put: value;
+		yourself) from: tok to: self lastToken
+%
+category: 'parsing - simple statements'
+method: PythonParser
+parseImport
+	"Parse: import name [as alias], ..."
+
+	| tok names |
+	tok := self advance. "consume 'import'"
+	names := Array new.
+	names add: self parseImportName.
+	[self matchOp: ','] whileTrue: [
+		names add: self parseImportName.
+	].
+	names do: [:alias | self declareVariable: (alias asName ifNil: [alias name])].
+	^self buildNode: ImportAst fields: (IdentityKeyValueDictionary new
+		at: #names put: names;
+		yourself) from: tok to: self lastToken
+%
+category: 'parsing - simple statements'
+method: PythonParser
+parseImportName
+	"Parse: dotted_name ['as' NAME]"
+
+	| nameTok nameStr asName |
+	nameTok := self expectType: #NAME.
+	nameStr := nameTok value.
+	[self matchOp: '.'] whileTrue: [
+		nameStr := nameStr , '.' , self advance value.
+	].
+	asName := nil.
+	(self matchKeyword: 'as') ifTrue: [
+		asName := self advance value asSymbol.
+	].
+	^self buildNode: AliasAst fields: (IdentityKeyValueDictionary new
+		at: #name put: nameStr asSymbol;
+		at: #asName put: asName;
+		yourself) from: nameTok to: self lastToken
+%
+category: 'parsing - simple statements'
+method: PythonParser
+parseImportFrom
+	"Parse: from [dots] [module] import names"
+
+	| tok level moduleStr names |
+	tok := self advance. "consume 'from'"
+	level := 0.
+	[self matchOp: '.'] whileTrue: [
+		level := level + 1.
+	].
+	"Ellipsis counts as 3 dots"
+	[self matchOp: '...'] whileTrue: [
+		level := level + 3.
+	].
+	"Module name (optional if we have dots)"
+	moduleStr := nil.
+	(self peek notNil and: [self peekType == #NAME]) ifTrue: [
+		moduleStr := self advance value.
+		[self matchOp: '.'] whileTrue: [
+			moduleStr := moduleStr , '.' , self advance value.
+		].
+	].
+	self expect: #KEYWORD value: 'import'.
+	"Parse names"
+	(self matchOp: '*') ifTrue: [
+		names := Array with: (self buildNode: AliasAst fields: (IdentityKeyValueDictionary new
+			at: #name put: #'*';
+			at: #asName put: nil;
+			yourself) token: self lastToken).
+	] ifFalse: [
+		| hasParen |
+		hasParen := self matchOp: '('.
+		names := Array new.
+		names add: self parseFromImportName.
+		[self matchOp: ','] whileTrue: [
+			(self peek notNil and: [self peek isOp: ')']) ifFalse: [
+				names add: self parseFromImportName.
+			].
+		].
+		hasParen ifTrue: [self expect: #OP value: ')'].
+	].
+	names do: [:alias |
+		alias name ~~ #'*' ifTrue: [
+			self declareVariable: (alias asName ifNil: [alias name]).
+		].
+	].
+	^self buildNode: ImportFromAst fields: (IdentityKeyValueDictionary new
+		at: #module put: moduleStr;
+		at: #names put: names;
+		at: #level put: level;
+		yourself) from: tok to: self lastToken
+%
+category: 'parsing - simple statements'
+method: PythonParser
+parseFromImportName
+	"Parse: NAME ['as' NAME]"
+
+	| nameTok asName |
+	nameTok := self expectType: #NAME.
+	asName := nil.
+	(self matchKeyword: 'as') ifTrue: [
+		asName := self advance value asSymbol.
+	].
+	^self buildNode: AliasAst fields: (IdentityKeyValueDictionary new
+		at: #name put: nameTok value asSymbol;
+		at: #asName put: asName;
+		yourself) from: nameTok to: self lastToken
+%
+category: 'parsing - simple statements'
+method: PythonParser
+parseRaise
+	"Parse: raise [expr ['from' expr]]"
+
+	| tok exc cause |
+	tok := self advance. "consume 'raise'"
+	exc := nil.
+	cause := nil.
+	(self peek notNil and: [self peek isNewline not and: [self peek isEndMarker not]]) ifTrue: [
+		exc := self parseExpression.
+		(self matchKeyword: 'from') ifTrue: [
+			cause := self parseExpression.
+		].
+	].
+	^self buildNode: RaiseAst fields: (IdentityKeyValueDictionary new
+		at: #exc put: exc;
+		at: #cause put: cause;
+		yourself) from: tok to: self lastToken
+%
+category: 'parsing - simple statements'
+method: PythonParser
+parseAssert
+	"Parse: assert expr [, expr]"
+
+	| tok test msg |
+	tok := self advance. "consume 'assert'"
+	test := self parseExpression.
+	msg := nil.
+	(self matchOp: ',') ifTrue: [
+		msg := self parseExpression.
+	].
+	^self buildNode: AssertAst fields: (IdentityKeyValueDictionary new
+		at: #test put: test;
+		at: #msg put: msg;
+		yourself) from: tok to: self lastToken
+%
+category: 'parsing - simple statements'
+method: PythonParser
+parseDelete
+	"Parse: del target_list"
+
+	| tok targets |
+	tok := self advance. "consume 'del'"
+	targets := Array new.
+	targets add: (self setDelCtx: self parsePrimary).
+	[self matchOp: ','] whileTrue: [
+		(self peek notNil and: [self peek isNewline not]) ifTrue: [
+			targets add: (self setDelCtx: self parsePrimary).
+		].
+	].
+	^self buildNode: DeleteAst fields: (IdentityKeyValueDictionary new
+		at: #targets put: targets;
+		yourself) from: tok to: self lastToken
+%
+category: 'parsing - simple statements'
+method: PythonParser
+parseGlobal
+	"Parse: global name, ..."
+
+	| tok names |
+	tok := self advance. "consume 'global'"
+	names := Array new.
+	names add: self advance value asSymbol.
+	[self matchOp: ','] whileTrue: [
+		names add: self advance value asSymbol.
+	].
+	^self buildNode: GlobalAst fields: (IdentityKeyValueDictionary new
+		at: #names put: names;
+		yourself) from: tok to: self lastToken
+%
+category: 'parsing - simple statements'
+method: PythonParser
+parseNonlocal
+	"Parse: nonlocal name, ..."
+
+	| tok names |
+	tok := self advance. "consume 'nonlocal'"
+	names := Array new.
+	names add: self advance value asSymbol.
+	[self matchOp: ','] whileTrue: [
+		names add: self advance value asSymbol.
+	].
+	^self buildNode: NonlocalAst fields: (IdentityKeyValueDictionary new
+		at: #names put: names;
+		yourself) from: tok to: self lastToken
+%
+category: 'parsing - simple statements'
+method: PythonParser
+parsePass
+
+	| tok |
+	tok := self advance. "consume 'pass'"
+	^self buildNode: PassAst fields: IdentityKeyValueDictionary new token: tok
+%
+category: 'parsing - simple statements'
+method: PythonParser
+parseBreak
+
+	| tok |
+	tok := self advance. "consume 'break'"
+	^self buildNode: BreakAst fields: IdentityKeyValueDictionary new token: tok
+%
+category: 'parsing - simple statements'
+method: PythonParser
+parseContinue
+
+	| tok |
+	tok := self advance. "consume 'continue'"
+	^self buildNode: ContinueAst fields: IdentityKeyValueDictionary new token: tok
+%
+category: 'parsing - simple statements'
+method: PythonParser
+parseYieldStatement
+	"Parse yield as a statement (wraps in ExprAst)."
+
+	| tok expr |
+	tok := self peek.
+	expr := self parseYieldExpression.
+	^self buildNode: ExprAst fields: (IdentityKeyValueDictionary new
+		at: #value put: expr;
+		yourself) from: tok to: self lastToken
+%
+! ------------------- Instance methods - Compound Statements
+category: 'parsing - compound statements'
+method: PythonParser
+parseBlock
+	"Parse an indented block or a single-line body.
+	Indented: NEWLINE INDENT stmt* DEDENT
+	Single-line: simple_stmts (on same line as colon)
+	Returns an array of statements."
+
+	| stmts |
+	"Check for single-line body (no NEWLINE/INDENT)"
+	(self peek notNil and: [self peekType ~~ #NEWLINE and: [self peekType ~~ #NL and: [self peekType ~~ #INDENT]]]) ifTrue: [
+		^self parseSimpleStatements
+	].
+	self skipNewlines.
+	self expectType: #INDENT.
+	stmts := self parseStatements.
+	self expectType: #DEDENT.
+	^stmts
+%
+category: 'parsing - compound statements'
+method: PythonParser
+parseIf
+	"Parse: if test: body [elif test: body]* [else: body]"
+
+	| tok test body orelse |
+	tok := self advance. "consume 'if'"
+	test := self parseExpression.
+	self expect: #OP value: ':'.
+	body := self parseBlock.
+	orelse := Array new.
+	(self atKeyword: 'elif') ifTrue: [
+		orelse := Array with: self parseElif.
+	] ifFalse: [
+		(self matchKeyword: 'else') ifTrue: [
+			self expect: #OP value: ':'.
+			orelse := self parseBlock.
+		].
+	].
+	^self buildNode: IfAst fields: (IdentityKeyValueDictionary new
+		at: #test put: test;
+		at: #body put: (self wrapSuite: body);
+		at: #orelse put: (self wrapSuite: orelse);
+		yourself) from: tok to: self lastToken
+%
+category: 'parsing - compound statements'
+method: PythonParser
+parseElif
+	"Parse an elif clause as a nested IfAst."
+
+	| tok test body orelse |
+	tok := self advance. "consume 'elif'"
+	test := self parseExpression.
+	self expect: #OP value: ':'.
+	body := self parseBlock.
+	orelse := Array new.
+	(self atKeyword: 'elif') ifTrue: [
+		orelse := Array with: self parseElif.
+	] ifFalse: [
+		(self matchKeyword: 'else') ifTrue: [
+			self expect: #OP value: ':'.
+			orelse := self parseBlock.
+		].
+	].
+	^self buildNode: IfAst fields: (IdentityKeyValueDictionary new
+		at: #test put: test;
+		at: #body put: (self wrapSuite: body);
+		at: #orelse put: (self wrapSuite: orelse);
+		yourself) from: tok to: self lastToken
+%
+category: 'parsing - compound statements'
+method: PythonParser
+parseWhile
+	"Parse: while test: body [else: body]"
+
+	| tok test body orelse |
+	tok := self advance. "consume 'while'"
+	test := self parseExpression.
+	self expect: #OP value: ':'.
+	body := self parseBlock.
+	orelse := Array new.
+	(self matchKeyword: 'else') ifTrue: [
+		self expect: #OP value: ':'.
+		orelse := self parseBlock.
+	].
+	^self buildNode: WhileAst fields: (IdentityKeyValueDictionary new
+		at: #test put: test;
+		at: #body put: (self wrapSuite: body);
+		at: #orelse put: (self wrapSuite: orelse);
+		yourself) from: tok to: self lastToken
+%
+category: 'parsing - compound statements'
+method: PythonParser
+parseFor
+	"Parse: for target in iter: body [else: body]"
+
+	| tok target iter body orelse |
+	tok := self advance. "consume 'for'"
+	target := self parseStarTargets.
+	self setStoreCtx: target.
+	self expect: #KEYWORD value: 'in'.
+	iter := self parseStarExpressions.
+	self expect: #OP value: ':'.
+	body := self parseBlock.
+	orelse := Array new.
+	(self matchKeyword: 'else') ifTrue: [
+		self expect: #OP value: ':'.
+		orelse := self parseBlock.
+	].
+	^self buildNode: ForAst fields: (IdentityKeyValueDictionary new
+		at: #target put: target;
+		at: #iter put: iter;
+		at: #body put: (self wrapSuite: body);
+		at: #orelse put: (self wrapSuite: orelse);
+		at: #type_comment put: nil;
+		yourself) from: tok to: self lastToken
+%
+category: 'parsing - compound statements'
+method: PythonParser
+parseFunctionDef
+	"Parse: def name(params) [-> type]: body"
+
+	^self parseFunctionDefWithDecorators: Array new
+%
+category: 'parsing - compound statements'
+method: PythonParser
+parseFunctionDefWithDecorators: decorators
+	"Parse a function definition with already-parsed decorators."
+
+	| tok nameTok args returns body block funcNode decoratorNames variables |
+	tok := self advance. "consume 'def'"
+	nameTok := self expectType: #NAME.
+	self declareVariable: nameTok value asSymbol.
+	self expect: #OP value: '('.
+	args := self parseFunctionParametersUntil: ')'.
+	self expect: #OP value: ')'.
+	returns := nil.
+	(self matchOp: '->') ifTrue: [
+		returns := self parseExpression.
+	].
+	self expect: #OP value: ':'.
+	self pushScope.
+	body := self parseBlock.
+	variables := self popScope.
+	block := BlockAst buildWithFields: (IdentityKeyValueDictionary new
+		at: #body put: body;
+		at: #variables put: variables;
+		yourself).
+	decoratorNames := decorators collect: [:each |
+		(each isKindOf: NameAst) ifTrue: [each id] ifFalse: [each]
+	].
+	funcNode := self buildNode: FunctionDefAst fields: (IdentityKeyValueDictionary new
+		at: #name put: nameTok value asSymbol;
+		at: #args put: args;
+		at: #body put: block;
+		at: #decorator_list put: decoratorNames;
+		at: #returns put: returns;
+		at: #type_comment put: nil;
+		at: #type_params put: Array new;
+		yourself) from: tok to: self lastToken.
+	"Convert to appropriate subclass when inside a class"
+	classNesting > 0 ifTrue: [
+		(decoratorNames includes: #'staticmethod')
+			ifTrue: [funcNode changeClassTo: StaticFunctionDefAst]
+			ifFalse: [(decoratorNames includes: #'classmethod')
+				ifTrue: [funcNode changeClassTo: ClassFunctionDefAst]
+				ifFalse: [funcNode changeClassTo: InstanceFunctionDefAst]].
+	].
+	^funcNode
+%
+category: 'parsing - compound statements'
+method: PythonParser
+parseClassDef
+	"Parse: class name[(bases)]: body"
+
+	^self parseClassDefWithDecorators: Array new
+%
+category: 'parsing - compound statements'
+method: PythonParser
+parseClassDefWithDecorators: decorators
+	"Parse a class definition with already-parsed decorators."
+
+	| tok nameTok bases keywords body block variables |
+	tok := self advance. "consume 'class'"
+	nameTok := self expectType: #NAME.
+	self declareVariable: nameTok value asSymbol.
+	bases := Array new.
+	keywords := Array new.
+	(self matchOp: '(') ifTrue: [
+		| result |
+		result := self parseCallArgList.
+		bases := result first.
+		keywords := result last.
+		self expect: #OP value: ')'.
+	].
+	self expect: #OP value: ':'.
+	self pushScope.
+	classNesting := classNesting + 1.
+	body := self parseBlock.
+	classNesting := classNesting - 1.
+	variables := self popScope.
+	block := BlockAst buildWithFields: (IdentityKeyValueDictionary new
+		at: #body put: body;
+		at: #variables put: variables;
+		yourself).
+	^self buildNode: ClassDefAst fields: (IdentityKeyValueDictionary new
+		at: #name put: nameTok value asSymbol;
+		at: #bases put: bases;
+		at: #keywords put: keywords;
+		at: #body put: block;
+		at: #decorator_list put: decorators;
+		at: #type_params put: Array new;
+		yourself) from: tok to: self lastToken
+%
+category: 'parsing - compound statements'
+method: PythonParser
+parseTry
+	"Parse: try: body [except [type [as name]]: body]+ [else: body] [finally: body]"
+
+	| tok body handlers orelse finalbody |
+	tok := self advance. "consume 'try'"
+	self expect: #OP value: ':'.
+	body := self parseBlock.
+	handlers := Array new.
+	orelse := Array new.
+	finalbody := Array new.
+
+	"Parse except clauses"
+	[self atKeyword: 'except'] whileTrue: [
+		| exceptTok excType excName exceptBody |
+		exceptTok := self advance. "consume 'except'"
+		excType := nil.
+		excName := nil.
+		(self peek notNil and: [(self peek isOp: ':') not]) ifTrue: [
+			excType := self parseExpression.
+			(self matchKeyword: 'as') ifTrue: [
+				excName := self advance value asSymbol.
+			].
+		].
+		self expect: #OP value: ':'.
+		exceptBody := self parseBlock.
+		handlers add: (self buildNode: ExceptHandlerAst fields: (IdentityKeyValueDictionary new
+			at: #type put: excType;
+			at: #name put: excName;
+			at: #body put: (self wrapSuite: exceptBody);
+			yourself) from: exceptTok to: self lastToken).
+	].
+
+	"Parse else clause"
+	(self matchKeyword: 'else') ifTrue: [
+		self expect: #OP value: ':'.
+		orelse := self parseBlock.
+	].
+
+	"Parse finally clause"
+	(self matchKeyword: 'finally') ifTrue: [
+		self expect: #OP value: ':'.
+		finalbody := self parseBlock.
+	].
+
+	^self buildNode: TryAst fields: (IdentityKeyValueDictionary new
+		at: #body put: (self wrapSuite: body);
+		at: #handlers put: handlers;
+		at: #orelse put: (self wrapSuite: orelse);
+		at: #finalbody put: (self wrapSuite: finalbody);
+		yourself) from: tok to: self lastToken
+%
+category: 'parsing - compound statements'
+method: PythonParser
+parseWith
+	"Parse: with expr [as target], ...: body"
+
+	| tok items body |
+	tok := self advance. "consume 'with'"
+	items := Array new.
+	items add: self parseWithItem.
+	[self matchOp: ','] whileTrue: [
+		items add: self parseWithItem.
+	].
+	self expect: #OP value: ':'.
+	body := self parseBlock.
+	^self buildNode: WithAst fields: (IdentityKeyValueDictionary new
+		at: #items put: items;
+		at: #body put: (self wrapSuite: body);
+		at: #type_comment put: nil;
+		yourself) from: tok to: self lastToken
+%
+category: 'parsing - compound statements'
+method: PythonParser
+parseWithItem
+	"Parse: expr ['as' target]"
+
+	| expr optVars startTok |
+	startTok := self peek.
+	expr := self parseExpression.
+	optVars := nil.
+	(self matchKeyword: 'as') ifTrue: [
+		optVars := self parsePrimary.
+		self setStoreCtx: optVars.
+	].
+	^self buildNode: WithItemAst fields: (IdentityKeyValueDictionary new
+		at: #context_expr put: expr;
+		at: #optional_vars put: optVars;
+		yourself) from: startTok to: self lastToken
+%
+category: 'parsing - compound statements'
+method: PythonParser
+parseAsync
+	"Parse: async def/for/with"
+
+	| tok |
+	tok := self advance. "consume 'async'"
+	(self atKeyword: 'def') ifTrue: [
+		| funcNode |
+		funcNode := self parseFunctionDef.
+		"Change class to AsyncFunctionDefAst"
+		funcNode changeClassTo: AsyncFunctionDefAst.
+		^funcNode
+	].
+	(self atKeyword: 'for') ifTrue: [
+		| forNode |
+		forNode := self parseFor.
+		forNode changeClassTo: AsyncForAst.
+		^forNode
+	].
+	(self atKeyword: 'with') ifTrue: [
+		| withNode |
+		withNode := self parseWith.
+		withNode changeClassTo: AsyncWithAst.
+		^withNode
+	].
+	SyntaxError signal: 'Expected def, for, or with after async at line ' , tok line printString.
+%
+category: 'parsing - compound statements'
+method: PythonParser
+parseDecorated
+	"Parse a decorated function or class definition."
+
+	| decorators |
+	decorators := self parseDecorators.
+	(self atKeyword: 'def') ifTrue: [
+		^self parseFunctionDefWithDecorators: decorators
+	].
+	(self atKeyword: 'class') ifTrue: [
+		^self parseClassDefWithDecorators: decorators
+	].
+	(self atKeyword: 'async') ifTrue: [
+		| funcNode |
+		self advance. "consume 'async'"
+		funcNode := self parseFunctionDefWithDecorators: decorators.
+		funcNode changeClassTo: AsyncFunctionDefAst.
+		^funcNode
+	].
+	SyntaxError signal: 'Expected function or class definition after decorator'.
+%
+category: 'parsing - compound statements'
+method: PythonParser
+parseDecorators
+	"Parse decorator list: @expr NEWLINE ..."
+
+	| decorators |
+	decorators := Array new.
+	[self atOp: '@'] whileTrue: [
+		self advance. "consume '@'"
+		decorators add: self parseExpression.
+		self skipNewlines.
+	].
+	^decorators
+%
+! ------------------- Instance methods - Function Parameters
+category: 'parsing - parameters'
+method: PythonParser
+parseFunctionParametersUntil: endOp
+	"Parse function parameters until endOp (')' for def, ':' for lambda).
+	Returns an ArgumentsAst."
+
+	| posonlyargs args vararg kwonlyargs kw_defaults kwarg defaults
+	  sawSlash sawStar allowAnnotations |
+	posonlyargs := Array new.
+	args := Array new.
+	vararg := nil.
+	kwonlyargs := Array new.
+	kw_defaults := Array new.
+	kwarg := nil.
+	defaults := Array new.
+	sawSlash := false.
+	sawStar := false.
+	allowAnnotations := endOp ~= ':'.
+
+	(self peek notNil and: [(self peek isOp: endOp) not]) ifTrue: [
+		[
+			| tok |
+			tok := self peek.
+			(tok isOp: endOp) ifTrue: [false] ifFalse: [
+				"Check for / (positional-only separator)"
+				(tok isOp: '/') ifTrue: [
+					self advance.
+					posonlyargs := args.
+					args := Array new.
+					"Move defaults to posonlyargs"
+					sawSlash := true.
+					self matchOp: ','.
+				] ifFalse: [
+				"Check for * (keyword-only separator or *args)"
+				(tok isOp: '*') ifTrue: [
+					self advance.
+					sawStar := true.
+					"If followed by name, it's *args"
+					(self peek notNil and: [self peekType == #NAME]) ifTrue: [
+						| argNode |
+						argNode := self parseSingleParamWithAnnotations: allowAnnotations.
+						vararg := argNode.
+					].
+					self matchOp: ','.
+				] ifFalse: [
+				"Check for **kwargs"
+				(tok isOp: '**') ifTrue: [
+					self advance.
+					kwarg := self parseSingleParamWithAnnotations: allowAnnotations.
+					self matchOp: ','.
+				] ifFalse: [
+					"Regular parameter"
+					| param default |
+					param := self parseSingleParamWithAnnotations: allowAnnotations.
+					default := nil.
+					(self matchOp: '=') ifTrue: [
+						default := self parseExpression.
+					].
+					sawStar ifTrue: [
+						kwonlyargs add: param.
+						kw_defaults add: (default ifNil: [nil]).
+					] ifFalse: [
+						args add: param.
+						default ifNotNil: [defaults add: default].
+					].
+					self matchOp: ','.
+				]]].
+				true
+			]
+		] whileTrue.
+	].
+
+	^ArgumentsAst buildWithFields: (IdentityKeyValueDictionary new
+		at: #posonlyargs put: posonlyargs;
+		at: #args put: args;
+		at: #vararg put: vararg;
+		at: #kwonlyargs put: kwonlyargs;
+		at: #kw_defaults put: kw_defaults;
+		at: #kwarg put: kwarg;
+		at: #defaults put: defaults;
+		yourself)
+%
+category: 'parsing - parameters'
+method: PythonParser
+parseSingleParam
+	"Parse a single parameter: NAME [: annotation]"
+
+	^self parseSingleParamWithAnnotations: true
+%
+category: 'parsing - parameters'
+method: PythonParser
+parseSingleParamWithAnnotations: allowAnnotations
+	"Parse a single parameter: NAME [: annotation]"
+
+	| nameTok annotation |
+	nameTok := self expectType: #NAME.
+	annotation := nil.
+	(allowAnnotations and: [self matchOp: ':']) ifTrue: [
+		annotation := self parseExpression.
+	].
+	^self buildNode: ArgAst fields: (IdentityKeyValueDictionary new
+		at: #arg put: nameTok value asSymbol;
+		at: #annotation put: annotation;
+		at: #type_comment put: nil;
+		yourself) from: nameTok to: self lastToken
+%
+! ------------------- Instance methods - Expressions
+category: 'parsing - expressions'
+method: PythonParser
+parseExpression
+	"Parse an expression (handles ternary if/else and lambda)."
+
+	| tok |
+	tok := self peek.
+	(tok notNil and: [tok isKeyword: 'lambda']) ifTrue: [
+		^self parseLambda
+	].
+	^self parseTernary
+%
+category: 'parsing - expressions'
+method: PythonParser
+parseTernary
+	"Parse: expr ['if' condition 'else' expr]"
+
+	| expr startTok |
+	startTok := self peek.
+	expr := self parseDisjunction.
+	(self atKeyword: 'if') ifTrue: [
+		| test orelse |
+		self advance. "consume 'if'"
+		test := self parseDisjunction.
+		self expect: #KEYWORD value: 'else'.
+		orelse := self parseExpression.
+		^self buildNode: IfExpAst fields: (IdentityKeyValueDictionary new
+			at: #test put: test;
+			at: #body put: expr;
+			at: #orelse put: orelse;
+			yourself) from: startTok to: self lastToken
+	].
+	^expr
+%
+category: 'parsing - expressions'
+method: PythonParser
+parseDisjunction
+	"Parse: conjunction ('or' conjunction)*"
+
+	| left startTok values |
+	startTok := self peek.
+	left := self parseConjunction.
+	(self atKeyword: 'or') ifFalse: [^left].
+	values := Array new.
+	values add: left.
+	[self matchKeyword: 'or'] whileTrue: [
+		values add: self parseConjunction.
+	].
+	^self buildNode: OrAst fields: (IdentityKeyValueDictionary new
+		at: #values put: values;
+		yourself) from: startTok to: self lastToken
+%
+category: 'parsing - expressions'
+method: PythonParser
+parseConjunction
+	"Parse: inversion ('and' inversion)*"
+
+	| left startTok values |
+	startTok := self peek.
+	left := self parseInversion.
+	(self atKeyword: 'and') ifFalse: [^left].
+	values := Array new.
+	values add: left.
+	[self matchKeyword: 'and'] whileTrue: [
+		values add: self parseInversion.
+	].
+	^self buildNode: AndAst fields: (IdentityKeyValueDictionary new
+		at: #values put: values;
+		yourself) from: startTok to: self lastToken
+%
+category: 'parsing - expressions'
+method: PythonParser
+parseInversion
+	"Parse: 'not' inversion | comparison"
+
+	| tok |
+	tok := self peek.
+	(tok notNil and: [tok isKeyword: 'not']) ifTrue: [
+		| operand |
+		self advance.
+		operand := self parseInversion.
+		^self buildNode: NotAst fields: (IdentityKeyValueDictionary new
+			at: #operand put: operand;
+			yourself) from: tok to: self lastToken
+	].
+	^self parseComparison
+%
+category: 'parsing - expressions'
+method: PythonParser
+parseComparison
+	"Parse: bitwise_or (comp_op bitwise_or)*"
+
+	| left startTok ops comparators |
+	startTok := self peek.
+	left := self parseBitwiseOr.
+	ops := Array new.
+	comparators := Array new.
+	[self peekComparisonOp notNil] whileTrue: [
+		| op right |
+		op := self parseComparisonOp.
+		right := self parseBitwiseOr.
+		ops add: op.
+		comparators add: right.
+	].
+	ops isEmpty ifTrue: [^left].
+	^self buildNode: CompareAst fields: (IdentityKeyValueDictionary new
+		at: #left put: left;
+		at: #cmpopList put: ops;
+		at: #comparatorList put: comparators;
+		yourself) from: startTok to: self lastToken
+%
+category: 'parsing - expressions'
+method: PythonParser
+peekComparisonOp
+	"Return a comparison operator class if one is at the current position, else nil."
+
+	| tok |
+	tok := self peek.
+	tok ifNil: [^nil].
+	(tok isOp: '==') ifTrue: [^EqAst].
+	(tok isOp: '!=') ifTrue: [^NotEqAst].
+	(tok isOp: '<') ifTrue: [^LtAst].
+	(tok isOp: '<=') ifTrue: [^LtEAst].
+	(tok isOp: '>') ifTrue: [^GtAst].
+	(tok isOp: '>=') ifTrue: [^GtEAst].
+	(tok isKeyword: 'in') ifTrue: [^InAst].
+	(tok isKeyword: 'is') ifTrue: [
+		"Check for 'is not'"
+		| next |
+		next := position + 1 <= tokens size ifTrue: [tokens at: position + 1] ifFalse: [nil].
+		(next notNil and: [next isKeyword: 'not']) ifTrue: [^IsNotAst].
+		^IsAst
+	].
+	(tok isKeyword: 'not') ifTrue: [
+		"Check for 'not in'"
+		| next |
+		next := position + 1 <= tokens size ifTrue: [tokens at: position + 1] ifFalse: [nil].
+		(next notNil and: [next isKeyword: 'in']) ifTrue: [^NotInAst].
+		^nil
+	].
+	^nil
+%
+category: 'parsing - expressions'
+method: PythonParser
+parseComparisonOp
+	"Parse a comparison operator and return its AST node."
+
+	| tok |
+	tok := self peek.
+	(tok isOp: '==') ifTrue: [self advance. ^EqAst basicNew].
+	(tok isOp: '!=') ifTrue: [self advance. ^NotEqAst basicNew].
+	(tok isOp: '<') ifTrue: [self advance. ^LtAst basicNew].
+	(tok isOp: '<=') ifTrue: [self advance. ^LtEAst basicNew].
+	(tok isOp: '>') ifTrue: [self advance. ^GtAst basicNew].
+	(tok isOp: '>=') ifTrue: [self advance. ^GtEAst basicNew].
+	(tok isKeyword: 'in') ifTrue: [self advance. ^InAst basicNew].
+	(tok isKeyword: 'is') ifTrue: [
+		self advance.
+		(self matchKeyword: 'not') ifTrue: [^IsNotAst basicNew].
+		^IsAst basicNew
+	].
+	(tok isKeyword: 'not') ifTrue: [
+		self advance.
+		self expect: #KEYWORD value: 'in'.
+		^NotInAst basicNew
+	].
+	SyntaxError signal: 'Expected comparison operator'.
+%
+category: 'parsing - expressions'
+method: PythonParser
+parseBitwiseOr
+	"Parse: bitwise_xor ('|' bitwise_xor)*"
+
+	| left startTok |
+	startTok := self peek.
+	left := self parseBitwiseXor.
+	[self atOp: '|'] whileTrue: [
+		| right |
+		self advance.
+		right := self parseBitwiseXor.
+		left := self buildNode: BinOpAst fields: (IdentityKeyValueDictionary new
+			at: #left put: left;
+			at: #op put: BitOrAst basicNew;
+			at: #right put: right;
+			yourself) from: startTok to: self lastToken.
+	].
+	^left
+%
+category: 'parsing - expressions'
+method: PythonParser
+parseBitwiseXor
+	"Parse: bitwise_and ('^' bitwise_and)*"
+
+	| left startTok |
+	startTok := self peek.
+	left := self parseBitwiseAnd.
+	[self atOp: '^'] whileTrue: [
+		| right |
+		self advance.
+		right := self parseBitwiseAnd.
+		left := self buildNode: BinOpAst fields: (IdentityKeyValueDictionary new
+			at: #left put: left;
+			at: #op put: BitXorAst basicNew;
+			at: #right put: right;
+			yourself) from: startTok to: self lastToken.
+	].
+	^left
+%
+category: 'parsing - expressions'
+method: PythonParser
+parseBitwiseAnd
+	"Parse: shift_expr ('&' shift_expr)*"
+
+	| left startTok |
+	startTok := self peek.
+	left := self parseShift.
+	[self atOp: '&'] whileTrue: [
+		| right |
+		self advance.
+		right := self parseShift.
+		left := self buildNode: BinOpAst fields: (IdentityKeyValueDictionary new
+			at: #left put: left;
+			at: #op put: BitAndAst basicNew;
+			at: #right put: right;
+			yourself) from: startTok to: self lastToken.
+	].
+	^left
+%
+category: 'parsing - expressions'
+method: PythonParser
+parseShift
+	"Parse: sum (('<<' | '>>') sum)*"
+
+	| left startTok |
+	startTok := self peek.
+	left := self parseSum.
+	[self peek notNil and: [(self atOp: '<<') or: [self atOp: '>>']]] whileTrue: [
+		| opTok opClass right |
+		opTok := self advance.
+		opClass := opTok value = '<<' ifTrue: [LShiftAst] ifFalse: [RShiftAst].
+		right := self parseSum.
+		left := self buildNode: BinOpAst fields: (IdentityKeyValueDictionary new
+			at: #left put: left;
+			at: #op put: opClass basicNew;
+			at: #right put: right;
+			yourself) from: startTok to: self lastToken.
+	].
+	^left
+%
+category: 'parsing - expressions'
+method: PythonParser
+parseSum
+	"Parse: term (('+' | '-') term)*"
+
+	| left startTok |
+	startTok := self peek.
+	left := self parseTerm.
+	[self peek notNil and: [(self atOp: '+') or: [self atOp: '-']]] whileTrue: [
+		| opTok opClass right |
+		opTok := self advance.
+		opClass := opTok value = '+' ifTrue: [AddAst] ifFalse: [SubAst].
+		right := self parseTerm.
+		left := self buildNode: BinOpAst fields: (IdentityKeyValueDictionary new
+			at: #left put: left;
+			at: #op put: opClass basicNew;
+			at: #right put: right;
+			yourself) from: startTok to: self lastToken.
+	].
+	^left
+%
+category: 'parsing - expressions'
+method: PythonParser
+parseTerm
+	"Parse: factor (('*' | '/' | '//' | '%' | '@') factor)*"
+
+	| left startTok |
+	startTok := self peek.
+	left := self parseFactor.
+	[self peek notNil and: [(self atOp: '*') or: [(self atOp: '/') or: [(self atOp: '//') or: [(self atOp: '%') or: [self atOp: '@']]]]]] whileTrue: [
+		| opTok opClass right |
+		opTok := self advance.
+		opClass := self operatorClassFor: opTok value.
+		right := self parseFactor.
+		left := self buildNode: BinOpAst fields: (IdentityKeyValueDictionary new
+			at: #left put: left;
+			at: #op put: opClass basicNew;
+			at: #right put: right;
+			yourself) from: startTok to: self lastToken.
+	].
+	^left
+%
+category: 'parsing - expressions'
+method: PythonParser
+parseFactor
+	"Parse: ('+' | '-' | '~') factor | power"
+
+	| tok |
+	tok := self peek.
+	(tok notNil and: [tok isOp: '+']) ifTrue: [
+		| operand |
+		self advance.
+		operand := self parseFactor.
+		^self buildNode: UAddAst fields: (IdentityKeyValueDictionary new
+			at: #operand put: operand;
+			yourself) from: tok to: self lastToken
+	].
+	(tok notNil and: [tok isOp: '-']) ifTrue: [
+		| operand |
+		self advance.
+		operand := self parseFactor.
+		^self buildNode: USubAst fields: (IdentityKeyValueDictionary new
+			at: #operand put: operand;
+			yourself) from: tok to: self lastToken
+	].
+	(tok notNil and: [tok isOp: '~']) ifTrue: [
+		| operand |
+		self advance.
+		operand := self parseFactor.
+		^self buildNode: InvertAst fields: (IdentityKeyValueDictionary new
+			at: #operand put: operand;
+			yourself) from: tok to: self lastToken
+	].
+	^self parsePower
+%
+category: 'parsing - expressions'
+method: PythonParser
+parsePower
+	"Parse: primary ['**' factor]"
+
+	| left startTok |
+	startTok := self peek.
+	left := self parsePrimary.
+	(self atOp: '**') ifTrue: [
+		| right |
+		self advance.
+		right := self parseFactor.
+		^self buildNode: BinOpAst fields: (IdentityKeyValueDictionary new
+			at: #left put: left;
+			at: #op put: PowAst basicNew;
+			at: #right put: right;
+			yourself) from: startTok to: self lastToken
+	].
+	^left
+%
+category: 'parsing - expressions'
+method: PythonParser
+parsePrimary
+	"Parse: atom trailer* where trailer is .name, [subscript], or (args)"
+
+	| expr startTok |
+	startTok := self peek.
+	expr := self parseAtom.
+	"Parse trailers"
+	[self peek notNil and: [(self atOp: '.') or: [(self atOp: '[') or: [self atOp: '(']]]] whileTrue: [
+		(self atOp: '.') ifTrue: [
+			| nameTok |
+			self advance.
+			nameTok := self expectType: #NAME.
+			expr := self buildNode: AttributeAst fields: (IdentityKeyValueDictionary new
+				at: #value put: expr;
+				at: #attr put: nameTok value asSymbol;
+				at: #ctx put: self loadCtx;
+				yourself) from: startTok to: self lastToken.
+		] ifFalse: [
+		(self atOp: '[') ifTrue: [
+			| slice |
+			self advance.
+			slice := self parseSubscript.
+			self expect: #OP value: ']'.
+			expr := self buildNode: SubscriptAst fields: (IdentityKeyValueDictionary new
+				at: #value put: expr;
+				at: #slice put: slice;
+				at: #ctx put: self loadCtx;
+				yourself) from: startTok to: self lastToken.
+		] ifFalse: [
+		(self atOp: '(') ifTrue: [
+			| result callArgs callKwargs |
+			self advance.
+			result := self parseCallArgList.
+			callArgs := result first.
+			callKwargs := result last.
+			self expect: #OP value: ')'.
+			expr := self buildNode: CallAst fields: (IdentityKeyValueDictionary new
+				at: #function put: expr;
+				at: #arguments put: callArgs;
+				at: #keywords put: callKwargs;
+				yourself) from: startTok to: self lastToken.
+		]]].
+	].
+	^expr
+%
+category: 'parsing - expressions'
+method: PythonParser
+parseAtom
+	"Parse an atomic expression: literal, name, parenthesized, list, dict, set."
+
+	| tok |
+	tok := self peek.
+	tok ifNil: [SyntaxError signal: 'Unexpected end of input'].
+
+	"None, True, False"
+	(tok isKeyword: 'None') ifTrue: [
+		self advance.
+		^self buildNode: ConstantAst fields: (IdentityKeyValueDictionary new
+			at: #value put: nil;
+			at: #kind put: nil;
+			yourself) token: tok
+	].
+	(tok isKeyword: 'True') ifTrue: [
+		self advance.
+		^self buildNode: ConstantAst fields: (IdentityKeyValueDictionary new
+			at: #value put: true;
+			at: #kind put: nil;
+			yourself) token: tok
+	].
+	(tok isKeyword: 'False') ifTrue: [
+		self advance.
+		^self buildNode: ConstantAst fields: (IdentityKeyValueDictionary new
+			at: #value put: false;
+			at: #kind put: nil;
+			yourself) token: tok
+	].
+
+	"Numeric literals"
+	tok isNumber ifTrue: [
+		self advance.
+		^self buildNode: ConstantAst fields: (IdentityKeyValueDictionary new
+			at: #value put: (self parseNumberValue: tok value);
+			at: #kind put: nil;
+			yourself) token: tok
+	].
+
+	"String literals (may be multiple concatenated)"
+	tok isString ifTrue: [
+		^self parseStringLiteral
+	].
+
+	"Ellipsis"
+	(tok isOp: '...') ifTrue: [
+		self advance.
+		^self buildNode: ConstantAst fields: (IdentityKeyValueDictionary new
+			at: #value put: #'...';
+			at: #kind put: nil;
+			yourself) token: tok
+	].
+
+	"Identifiers"
+	tok isName ifTrue: [
+		self advance.
+		^self buildNode: NameAst fields: (IdentityKeyValueDictionary new
+			at: #id put: tok value asSymbol;
+			at: #ctx put: self loadCtx;
+			yourself) token: tok
+	].
+
+	"Parenthesized expression, tuple, or generator"
+	(tok isOp: '(') ifTrue: [
+		^self parseParenExpr
+	].
+
+	"List or list comprehension"
+	(tok isOp: '[') ifTrue: [
+		^self parseListDisplay
+	].
+
+	"Dict, set, or comprehension"
+	(tok isOp: '{') ifTrue: [
+		^self parseDictOrSetDisplay
+	].
+
+	"Starred expression"
+	(tok isOp: '*') ifTrue: [
+		| value |
+		self advance.
+		value := self parsePrimary.
+		^self buildNode: StarredAst fields: (IdentityKeyValueDictionary new
+			at: #value put: value;
+			at: #ctx put: self loadCtx;
+			yourself) from: tok to: self lastToken
+	].
+
+	"Yield expression"
+	(tok isKeyword: 'yield') ifTrue: [
+		^self parseYieldExpression
+	].
+
+	"Await expression"
+	(tok isKeyword: 'await') ifTrue: [
+		| value |
+		self advance.
+		value := self parsePrimary.
+		^self buildNode: AwaitAst fields: (IdentityKeyValueDictionary new
+			at: #value put: value;
+			yourself) from: tok to: self lastToken
+	].
+
+	SyntaxError signal: 'Unexpected token: ' , tok type , ' ''' , tok value , ''' at line ' , tok line printString.
+%
+! ------------------- Instance methods - Atom Helpers
+category: 'parsing - atoms'
+method: PythonParser
+parseNumberValue: aString
+	"Convert a number string to a Smalltalk number."
+
+	| str |
+	str := aString.
+
+	"Complex number"
+	(str notEmpty and: [(str last == $j) or: [str last == $J]]) ifTrue: [
+		| realPart |
+		realPart := (str copyFrom: 1 to: str size - 1) asNumber.
+		^complex __new__: 0.0 _: realPart
+	].
+
+	"Hex"
+	(str size > 2 and: [(str copyFrom: 1 to: 2) = '0x' or: [(str copyFrom: 1 to: 2) = '0X']]) ifTrue: [
+		^('16r' , (str copyFrom: 3 to: str size)) asInteger
+	].
+
+	"Octal"
+	(str size > 2 and: [(str copyFrom: 1 to: 2) = '0o' or: [(str copyFrom: 1 to: 2) = '0O']]) ifTrue: [
+		^('8r' , (str copyFrom: 3 to: str size)) asInteger
+	].
+
+	"Binary"
+	(str size > 2 and: [(str copyFrom: 1 to: 2) = '0b' or: [(str copyFrom: 1 to: 2) = '0B']]) ifTrue: [
+		^('2r' , (str copyFrom: 3 to: str size)) asInteger
+	].
+
+	"Float or integer"
+	^str asNumber
+%
+category: 'parsing - atoms'
+method: PythonParser
+parseStringLiteral
+	"Parse one or more adjacent string tokens (implicit concatenation)."
+
+	| startTok writeStream |
+	startTok := self peek.
+	writeStream := WriteStream on: Unicode7 new.
+	[self peek notNil and: [self peek isString]] whileTrue: [
+		writeStream nextPutAll: self advance value.
+	].
+	^self buildNode: ConstantAst fields: (IdentityKeyValueDictionary new
+		at: #value put: writeStream contents;
+		at: #kind put: nil;
+		yourself) from: startTok to: self lastToken
+%
+category: 'parsing - atoms'
+method: PythonParser
+parseParenExpr
+	"Parse parenthesized expression, tuple, or generator."
+
+	| startTok expr exprs |
+	startTok := self advance. "consume '('"
+
+	"Empty tuple"
+	(self atOp: ')') ifTrue: [
+		self advance.
+		^self buildNode: TupleAst fields: (IdentityKeyValueDictionary new
+			at: #elts put: Array new;
+			at: #ctx put: self loadCtx;
+			yourself) from: startTok to: self lastToken
+	].
+
+	expr := self parseStarExpression.
+
+	"Check for comprehension (generator expression)"
+	(self atKeyword: 'for') ifTrue: [
+		| generators |
+		generators := self parseComprehensions.
+		self expect: #OP value: ')'.
+		^self buildNode: GeneratorExpAst fields: (IdentityKeyValueDictionary new
+			at: #elt put: expr;
+			at: #generators put: generators;
+			yourself) from: startTok to: self lastToken
+	].
+
+	"Tuple or single expression"
+	(self matchOp: ',') ifTrue: [
+		"Tuple"
+		exprs := Array new.
+		exprs add: expr.
+		(self atOp: ')') ifFalse: [
+			exprs add: self parseStarExpression.
+			[self matchOp: ','] whileTrue: [
+				(self atOp: ')') ifFalse: [
+					exprs add: self parseStarExpression.
+				].
+			].
+		].
+		self expect: #OP value: ')'.
+		^self buildNode: TupleAst fields: (IdentityKeyValueDictionary new
+			at: #elts put: exprs;
+			at: #ctx put: self loadCtx;
+			yourself) from: startTok to: self lastToken
+	] ifFalse: [
+		"Parenthesized single expression"
+		self expect: #OP value: ')'.
+		^expr
+	].
+%
+category: 'parsing - atoms'
+method: PythonParser
+parseListDisplay
+	"Parse list display: [expr, ...] or [expr for ...]"
+
+	| startTok expr elts |
+	startTok := self advance. "consume '['"
+
+	"Empty list"
+	(self atOp: ']') ifTrue: [
+		self advance.
+		^self buildNode: ListAst fields: (IdentityKeyValueDictionary new
+			at: #elts put: Array new;
+			at: #ctx put: self loadCtx;
+			yourself) from: startTok to: self lastToken
+	].
+
+	expr := self parseStarExpression.
+
+	"List comprehension"
+	(self atKeyword: 'for') ifTrue: [
+		| generators |
+		generators := self parseComprehensions.
+		self expect: #OP value: ']'.
+		^self buildNode: ListCompAst fields: (IdentityKeyValueDictionary new
+			at: #elt put: expr;
+			at: #generators put: generators;
+			yourself) from: startTok to: self lastToken
+	].
+
+	"Regular list"
+	elts := Array new.
+	elts add: expr.
+	[self matchOp: ','] whileTrue: [
+		(self atOp: ']') ifFalse: [
+			elts add: self parseStarExpression.
+		].
+	].
+	self expect: #OP value: ']'.
+	^self buildNode: ListAst fields: (IdentityKeyValueDictionary new
+		at: #elts put: elts;
+		at: #ctx put: self loadCtx;
+		yourself) from: startTok to: self lastToken
+%
+category: 'parsing - atoms'
+method: PythonParser
+parseDictOrSetDisplay
+	"Parse dict/set display: {k:v, ...}, {expr, ...}, {k:v for ...}, {expr for ...}"
+
+	| startTok first elts |
+	startTok := self advance. "consume '{'"
+
+	"Empty dict"
+	(self atOp: '}') ifTrue: [
+		self advance.
+		^self buildNode: DictAst fields: (IdentityKeyValueDictionary new
+			at: #keys put: Array new;
+			at: #values put: Array new;
+			yourself) from: startTok to: self lastToken
+	].
+
+	"Check for **unpack in dict"
+	(self atOp: '**') ifTrue: [
+		^self parseDictDisplayFromStar: startTok
+	].
+
+	first := self parseStarExpression.
+
+	"Dict: key : value"
+	(self matchOp: ':') ifTrue: [
+		| value keys values |
+
+		value := self parseExpression.
+
+		"Dict comprehension"
+		(self atKeyword: 'for') ifTrue: [
+			| generators |
+			generators := self parseComprehensions.
+			self expect: #OP value: '}'.
+			^self buildNode: DictCompAst fields: (IdentityKeyValueDictionary new
+				at: #key put: first;
+				at: #value put: value;
+				at: #generators put: generators;
+				yourself) from: startTok to: self lastToken
+		].
+
+		"Regular dict"
+		keys := Array new.
+		values := Array new.
+		keys add: first.
+		values add: value.
+		[self matchOp: ','] whileTrue: [
+			(self atOp: '}') ifFalse: [
+				(self atOp: '**') ifTrue: [
+					self advance.
+					keys add: nil.
+					values add: self parseExpression.
+				] ifFalse: [
+					keys add: self parseExpression.
+					self expect: #OP value: ':'.
+					values add: self parseExpression.
+				].
+			].
+		].
+		self expect: #OP value: '}'.
+		^self buildNode: DictAst fields: (IdentityKeyValueDictionary new
+			at: #keys put: keys;
+			at: #values put: values;
+			yourself) from: startTok to: self lastToken
+	].
+
+	"Set comprehension"
+	(self atKeyword: 'for') ifTrue: [
+		| generators |
+		generators := self parseComprehensions.
+		self expect: #OP value: '}'.
+		^self buildNode: SetCompAst fields: (IdentityKeyValueDictionary new
+			at: #elt put: first;
+			at: #generators put: generators;
+			yourself) from: startTok to: self lastToken
+	].
+
+	"Regular set"
+	elts := Array new.
+	elts add: first.
+	[self matchOp: ','] whileTrue: [
+		(self atOp: '}') ifFalse: [
+			elts add: self parseStarExpression.
+		].
+	].
+	self expect: #OP value: '}'.
+	^self buildNode: SetAst fields: (IdentityKeyValueDictionary new
+		at: #elts put: elts;
+		yourself) from: startTok to: self lastToken
+%
+category: 'parsing - atoms'
+method: PythonParser
+parseDictDisplayFromStar: startTok
+	"Parse dict display starting with **unpack."
+
+	| keys values |
+	keys := Array new.
+	values := Array new.
+	self advance. "consume '**'"
+	keys add: nil.
+	values add: self parseExpression.
+	[self matchOp: ','] whileTrue: [
+		(self atOp: '}') ifFalse: [
+			(self atOp: '**') ifTrue: [
+				self advance.
+				keys add: nil.
+				values add: self parseExpression.
+			] ifFalse: [
+				keys add: self parseExpression.
+				self expect: #OP value: ':'.
+				values add: self parseExpression.
+			].
+		].
+	].
+	self expect: #OP value: '}'.
+	^self buildNode: DictAst fields: (IdentityKeyValueDictionary new
+		at: #keys put: keys;
+		at: #values put: values;
+		yourself) from: startTok to: self lastToken
+%
+! ------------------- Instance methods - Subscript / Slice
+category: 'parsing - subscript'
+method: PythonParser
+parseSubscript
+	"Parse a subscript expression which may be a slice or a regular expression.
+	Handles: expr, lower:upper, lower:upper:step, and tuples of slices."
+
+	| items first |
+	first := self parseSliceOrExpr.
+
+	"Check for tuple of slices: a[1:2, 3]"
+	(self matchOp: ',') ifTrue: [
+		items := Array new.
+		items add: first.
+		(self atOp: ']') ifFalse: [
+			items add: self parseSliceOrExpr.
+			[self matchOp: ','] whileTrue: [
+				(self atOp: ']') ifFalse: [
+					items add: self parseSliceOrExpr.
+				].
+			].
+		].
+		^self buildNode: TupleAst fields: (IdentityKeyValueDictionary new
+			at: #elts put: items;
+			at: #ctx put: self loadCtx;
+			yourself) from: (tokens at: position - 1) to: self lastToken
+	].
+
+	^first
+%
+category: 'parsing - subscript'
+method: PythonParser
+parseSliceOrExpr
+	"Parse either a slice (lower:upper[:step]) or a regular expression."
+
+	| lower upper step hasColon startTok |
+	startTok := self peek.
+	hasColon := false.
+
+	"Check for initial colon (no lower bound)"
+	(self atOp: ':') ifTrue: [
+		lower := nil.
+		hasColon := true.
+	] ifFalse: [
+		lower := self parseExpression.
+		(self atOp: ':') ifTrue: [
+			hasColon := true.
+		] ifFalse: [
+			"Just an expression, not a slice"
+			^lower
+		].
+	].
+
+	"Parse upper bound"
+	self advance. "consume ':'"
+	upper := nil.
+	((self atOp: ':') or: [(self atOp: ']') or: [self atOp: ',']]) ifFalse: [
+		upper := self parseExpression.
+	].
+
+	"Parse optional step"
+	step := nil.
+	(self matchOp: ':') ifTrue: [
+		((self atOp: ']') or: [self atOp: ',']) ifFalse: [
+			step := self parseExpression.
+		].
+	].
+
+	^self buildNode: SliceAst fields: (IdentityKeyValueDictionary new
+		at: #lower put: lower;
+		at: #upper put: upper;
+		at: #step put: step;
+		yourself) from: startTok to: self lastToken
+%
+! ------------------- Instance methods - Call Arguments
+category: 'parsing - arguments'
+method: PythonParser
+parseCallArgList
+	"Parse function call arguments. Returns an Array of {positional. keywords}."
+
+	| args kwargs |
+	args := Array new.
+	kwargs := Array new.
+	(self peek notNil and: [(self peek isOp: ')') not]) ifTrue: [
+		[
+			(self peek isOp: ')') ifTrue: [false] ifFalse: [
+				"**kwargs"
+				(self atOp: '**') ifTrue: [
+					self advance.
+					kwargs add: (self buildNode: KeywordAst fields: (IdentityKeyValueDictionary new
+						at: #arg put: nil;
+						at: #value put: self parseExpression;
+						yourself) from: self lastToken to: self lastToken).
+				] ifFalse: [
+				"*args"
+				(self atOp: '*') ifTrue: [
+					self advance.
+					args add: (self buildNode: StarredAst fields: (IdentityKeyValueDictionary new
+						at: #value put: self parseExpression;
+						at: #ctx put: self loadCtx;
+						yourself) from: self lastToken to: self lastToken).
+				] ifFalse: [
+					| expr |
+					expr := self parseExpression.
+					"Check for keyword argument: name=value"
+					(self matchOp: '=') ifTrue: [
+						| name value |
+						name := (expr isKindOf: NameAst) ifTrue: [expr id asString] ifFalse: [nil].
+						value := self parseExpression.
+						kwargs add: (self buildNode: KeywordAst fields: (IdentityKeyValueDictionary new
+							at: #arg put: name;
+							at: #value put: value;
+							yourself) from: self lastToken to: self lastToken).
+					] ifFalse: [
+						"Check for comprehension in generator expression"
+						(self atKeyword: 'for') ifTrue: [
+							| generators |
+							generators := self parseComprehensions.
+							args add: (self buildNode: GeneratorExpAst fields: (IdentityKeyValueDictionary new
+								at: #elt put: expr;
+								at: #generators put: generators;
+								yourself) from: self lastToken to: self lastToken).
+						] ifFalse: [
+							args add: expr.
+						].
+					].
+				]].
+				self matchOp: ','.
+				true
+			]
+		] whileTrue.
+	].
+	^Array with: args with: kwargs
+%
+! ------------------- Instance methods - Comprehensions
+category: 'parsing - comprehensions'
+method: PythonParser
+parseComprehensions
+	"Parse one or more 'for target in iter [if cond]*' clauses."
+
+	| generators |
+	generators := Array new.
+	[self atKeyword: 'for'] whileTrue: [
+		| forTok target iter ifs isAsync |
+		isAsync := 0.
+		(self atKeyword: 'async') ifTrue: [
+			self advance.
+			isAsync := 1.
+		].
+		forTok := self advance. "consume 'for'"
+		target := self parseStarTargets.
+		self setStoreCtx: target.
+		self expect: #KEYWORD value: 'in'.
+		iter := self parseDisjunction.
+		ifs := Array new.
+		[self atKeyword: 'if'] whileTrue: [
+			self advance.
+			ifs add: self parseDisjunction.
+		].
+		generators add: (ComprehensionAst buildWithFields: (IdentityKeyValueDictionary new
+			at: #target put: target;
+			at: #iter put: iter;
+			at: #ifs put: ifs;
+			at: #is_async put: isAsync;
+			yourself)).
+	].
+	^generators
+%
+! ------------------- Instance methods - Lambda
+category: 'parsing - lambda'
+method: PythonParser
+parseLambda
+	"Parse: lambda [params]: expr"
+
+	| tok args body |
+	tok := self advance. "consume 'lambda'"
+	(self atOp: ':') ifTrue: [
+		args := ArgumentsAst buildWithFields: (IdentityKeyValueDictionary new
+			at: #posonlyargs put: Array new;
+			at: #args put: Array new;
+			at: #vararg put: nil;
+			at: #kwonlyargs put: Array new;
+			at: #kw_defaults put: Array new;
+			at: #kwarg put: nil;
+			at: #defaults put: Array new;
+			yourself).
+	] ifFalse: [
+		args := self parseFunctionParametersUntil: ':'.
+	].
+	self expect: #OP value: ':'.
+	body := self parseExpression.
+	^self buildNode: LambdaAst fields: (IdentityKeyValueDictionary new
+		at: #args put: args;
+		at: #body put: body;
+		yourself) from: tok to: self lastToken
+%
+! ------------------- Instance methods - Yield
+category: 'parsing - yield'
+method: PythonParser
+parseYieldExpression
+	"Parse: yield [from expr] | yield [expr_list]"
+
+	| tok value |
+	tok := self advance. "consume 'yield'"
+	(self matchKeyword: 'from') ifTrue: [
+		value := self parseExpression.
+		^self buildNode: YieldFromAst fields: (IdentityKeyValueDictionary new
+			at: #value put: value;
+			yourself) from: tok to: self lastToken
+	].
+	value := nil.
+	(self peek notNil and: [self peek isNewline not and: [self peek isEndMarker not and: [(self peek isOp: ')') not and: [(self peek isOp: ']') not]]]]) ifTrue: [
+		value := self parseStarExpressions.
+	].
+	^self buildNode: YieldAst fields: (IdentityKeyValueDictionary new
+		at: #value put: value;
+		yourself) from: tok to: self lastToken
+%
+! ------------------- Instance methods - Star Expressions
+category: 'parsing - star expressions'
+method: PythonParser
+parseStarExpressions
+	"Parse comma-separated expressions, possibly starred.
+	Returns a single expression or a tuple if there's a comma."
+
+	| first exprs startTok |
+	startTok := self peek.
+	first := self parseStarExpression.
+	(self peek notNil and: [self peek isOp: ',']) ifFalse: [^first].
+
+	exprs := Array new.
+	exprs add: first.
+	[self matchOp: ','] whileTrue: [
+		(self peek notNil and: [self peek isNewline not and: [self peek isEndMarker not and: [(self peek isOp: ')') not and: [(self peek isOp: ']') not and: [(self peek isOp: '}') not and: [(self peek isOp: ':') not and: [(self peek isOp: ';') not]]]]]]]) ifTrue: [
+			exprs add: self parseStarExpression.
+		].
+	].
+	exprs size == 1 ifTrue: [^first].
+	^self buildNode: TupleAst fields: (IdentityKeyValueDictionary new
+		at: #elts put: exprs;
+		at: #ctx put: self loadCtx;
+		yourself) from: startTok to: self lastToken
+%
+category: 'parsing - star expressions'
+method: PythonParser
+parseStarExpression
+	"Parse: '*' bitwise_or | expression"
+
+	| tok |
+	tok := self peek.
+	(tok notNil and: [tok isOp: '*']) ifTrue: [
+		| value |
+		self advance.
+		value := self parseBitwiseOr.
+		^self buildNode: StarredAst fields: (IdentityKeyValueDictionary new
+			at: #value put: value;
+			at: #ctx put: self loadCtx;
+			yourself) from: tok to: self lastToken
+	].
+	^self parseExpression
+%
+category: 'parsing - star expressions'
+method: PythonParser
+parseStarTargets
+	"Parse assignment targets, possibly starred, possibly as tuple."
+
+	| first targets startTok |
+	startTok := self peek.
+	first := self parseStarTarget.
+	(self peek notNil and: [self peek isOp: ',']) ifFalse: [^first].
+
+	targets := Array new.
+	targets add: first.
+	[self matchOp: ','] whileTrue: [
+		(self peek notNil and: [(self peek isKeyword: 'in') not and: [self peek isNewline not and: [(self peek isOp: ':') not and: [(self peek isOp: ')') not]]]]) ifTrue: [
+			targets add: self parseStarTarget.
+		].
+	].
+	^self buildNode: TupleAst fields: (IdentityKeyValueDictionary new
+		at: #elts put: targets;
+		at: #ctx put: self loadCtx;
+		yourself) from: startTok to: self lastToken
+%
+category: 'parsing - star expressions'
+method: PythonParser
+parseStarTarget
+	"Parse: '*' primary | primary"
+
+	| tok |
+	tok := self peek.
+	(tok notNil and: [tok isOp: '*']) ifTrue: [
+		| value |
+		self advance.
+		value := self parsePrimary.
+		^self buildNode: StarredAst fields: (IdentityKeyValueDictionary new
+			at: #value put: value;
+			at: #ctx put: self loadCtx;
+			yourself) from: tok to: self lastToken
+	].
+	^self parsePrimary
+%
+! ------------------- Instance methods - Operator Helpers
+category: 'parsing - helpers'
+method: PythonParser
+operatorClassFor: opString
+	"Return the operator AST class for the given operator string."
+
+	opString = '+' ifTrue: [^AddAst].
+	opString = '-' ifTrue: [^SubAst].
+	opString = '*' ifTrue: [^MultAst].
+	opString = '/' ifTrue: [^DivAst].
+	opString = '//' ifTrue: [^FloorDivAst].
+	opString = '%' ifTrue: [^ModAst].
+	opString = '**' ifTrue: [^PowAst].
+	opString = '@' ifTrue: [^MatMultAst].
+	opString = '<<' ifTrue: [^LShiftAst].
+	opString = '>>' ifTrue: [^RShiftAst].
+	opString = '|' ifTrue: [^BitOrAst].
+	opString = '^' ifTrue: [^BitXorAst].
+	opString = '&' ifTrue: [^BitAndAst].
+	SyntaxError signal: 'Unknown operator: ' , opString.
+%
+category: 'parsing - helpers'
+method: PythonParser
+wrapSuite: statementsArray
+	"Wrap an array of statements into a SuiteAst."
+
+	^SuiteAst buildWithFields: (IdentityKeyValueDictionary new
+		at: #body put: statementsArray;
+		yourself)
+%

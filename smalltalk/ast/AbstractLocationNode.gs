@@ -1,4 +1,4 @@
-﻿! ------------------- Remove existing behavior from AbstractLocationNode
+! ------------------- Remove existing behavior from AbstractLocationNode
 removeallmethods AbstractLocationNode
 removeallclassmethods AbstractLocationNode
 ! ------------------- Class methods for AbstractLocationNode
@@ -30,24 +30,6 @@ printOn: aStream
 		nextPut: $:;
 		print: beginLine;
 		yourself.
-%
-category: 'other'
-method: AbstractLocationNode
-readPosition
-
-	(self stream peekFor: $,) ifFalse: [self error].
-	self readPositionOnly.
-%
-category: 'other'
-method: AbstractLocationNode
-readPositionOnly
-
-	| stream |
-	stream := self stream.
-	beginLine := (stream upTo: $,) asNumber.
-	beginColumn := (stream upTo: $,) asNumber.
-	endLine := (stream upTo: $,) asNumber.
-	endColumn := (stream upTo: $)) asNumber.
 %
 category: 'other'
 method: AbstractLocationNode

@@ -1893,7 +1893,7 @@ doit
 module subclass: 'importlib'
   instVarNames: #()
   classVars: #()
-  classInstVars: #('pprintast' 'grailDir')
+  classInstVars: #('grailDir')
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -1913,9 +1913,6 @@ Key functions:
 - __import__(name, globals, locals, fromlist, level): Low-level import function
 
 Class methods for loading modules from files:
-- pprintast: / pprintast - Get/set the path to pprintast executable
-- astStringForPath: - Generate AST text from a Python file
-- astStringForSource: - Generate AST text from Python source code
 - astForPath: - Create a ModuleAst from a Python file
 - astForSource: - Create a ModuleAst from Python source
 - runPath: - Execute a Python file as __main__

@@ -4,10 +4,3 @@ removeallclassmethods ParamAst
 set compile_env: 0
 ! ------------------- Class methods for ParamAst
 ! ------------------- Instance methods for ParamAst
-category: 'other'
-method: ParamAst
-initialize
-
-	self halt.
-	super initialize.
-%

@@ -519,6 +519,40 @@ doit
 StatisticsTestCase category: 'SUnit'
 %
 
+! ------------------- Class definition for PythonTokenizerTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'PythonTokenizerTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+PythonTokenizerTestCase category: 'SUnit'
+%
+
+! ------------------- Class definition for PythonParserTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'PythonParserTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+PythonParserTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! Exception Test Classes
 ! ===============================================================================
@@ -643,6 +677,8 @@ input smalltalk/tests/StrTestCase.gs
 input smalltalk/tests/StringModuleTestCase.gs
 input smalltalk/tests/SysTestCase.gs
 input smalltalk/tests/TupleTestCase.gs
+input smalltalk/tests/PythonTokenizerTestCase.gs
+input smalltalk/tests/PythonParserTestCase.gs
 
 ! ------------------- Load all exception test methods
 input smalltalk/tests/exceptions/ArithmeticErrorTestCase.gs

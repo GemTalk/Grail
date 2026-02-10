@@ -24,20 +24,6 @@ id
 %
 category: 'other'
 method: AttributeAst
-initialize
-	"Attribute(expr value, identifier attr, expr_context ctx)"
-
-	| stream |
-	stream := self stream.
-	value := self expression.
-	self commaSpace.
-	attr := self string asSymbol.
-	self commaSpace.
-	ctx := ExpressionContextAst parent: self.
-	self readPosition.
-%
-category: 'other'
-method: AttributeAst
 printOn: aStream
 
 	super printOn: aStream.

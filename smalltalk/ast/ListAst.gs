@@ -6,16 +6,6 @@ set compile_env: 0
 ! ------------------- Instance methods for ListAst
 category: 'other'
 method: ListAst
-initialize
-	"list(expr* elts, expr_context ctx)"
-	
-	elts := self collectAst: [self expression].
-	self commaSpace.
-	ctx := ExpressionContextAst parent: self.
-	self readPosition.
-%
-category: 'other'
-method: ListAst
 printSmalltalkOn: aStream
 
 	self halt.

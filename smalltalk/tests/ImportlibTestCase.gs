@@ -211,74 +211,10 @@ testNewRaisesTypeError
 
 category: 'Tests - AST Generation'
 method: ImportlibTestCase
-testPprintastSetterGetter
-	"Test setting and getting the pprintast path"
-
-	| originalPath testPath |
-	originalPath := importlib pprintast.
-	testPath := '/test/path/to/pprintast'.
-
-	importlib pprintast: testPath.
-	self assert: importlib pprintast equals: testPath.
-
-	"Restore original path"
-	importlib pprintast: originalPath
-%
-
-category: 'Tests - AST Generation'
-method: ImportlibTestCase
-testAstStringForPath
-	"Test generating AST string from hello.py"
-
-	| astString testFilePath |
-	importlib pprintast ifNil: [
-		"Skip test if pprintast is not configured"
-		^ self
-	].
-
-	testFilePath := importlib grailDir , '/smalltalk/tests/hello.py'.
-	astString := importlib astStringForPath: testFilePath.
-
-	"The AST should start with Module("
-	self assert: (astString beginsWith: 'Module(').
-
-	"The AST should contain FunctionDef for say_hello"
-	self assert: (astString includesString: 'FunctionDef').
-	self assert: (astString includesString: 'say_hello')
-%
-
-category: 'Tests - AST Generation'
-method: ImportlibTestCase
-testAstStringForSource
-	"Test generating AST string from Python source code"
-
-	| astString |
-	importlib pprintast ifNil: [
-		"Skip test if pprintast is not configured"
-		^ self
-	].
-
-	astString := importlib astStringForSource: 'x = 1 + 2'.
-
-	"The AST should start with Module("
-	self assert: (astString beginsWith: 'Module(').
-
-	"The AST should contain Assign and BinOp"
-	self assert: (astString includesString: 'Assign').
-	self assert: (astString includesString: 'BinOp')
-%
-
-category: 'Tests - AST Generation'
-method: ImportlibTestCase
 testAstForPath
 	"Test creating a ModuleAst from hello.py"
 
 	| moduleAst testFilePath |
-	importlib pprintast ifNil: [
-		"Skip test if pprintast is not configured"
-		^ self
-	].
-
 	testFilePath := importlib grailDir , '/smalltalk/tests/hello.py'.
 	moduleAst := importlib astForPath: testFilePath.
 
@@ -293,11 +229,6 @@ testAstForSource
 	"Test creating a ModuleAst from Python source code"
 
 	| moduleAst |
-	importlib pprintast ifNil: [
-		"Skip test if pprintast is not configured"
-		^ self
-	].
-
 	moduleAst := importlib astForSource: 'x = 1'.
 
 	self assert: moduleAst class equals: ModuleAst.
@@ -310,11 +241,6 @@ testSmalltalkForPath
 	"Test generating Smalltalk code from hello.py"
 
 	| smalltalkCode testFilePath |
-	importlib pprintast ifNil: [
-		"Skip test if pprintast is not configured"
-		^ self
-	].
-
 	testFilePath := importlib grailDir , '/smalltalk/tests/hello.py'.
 	smalltalkCode := importlib smalltalkForPath: testFilePath.
 
@@ -329,11 +255,6 @@ testSmalltalkForSource
 	"Test generating Smalltalk code from Python source"
 
 	| smalltalkCode |
-	importlib pprintast ifNil: [
-		"Skip test if pprintast is not configured"
-		^ self
-	].
-
 	smalltalkCode := importlib smalltalkForSource: '1 + 2'.
 
 	"The generated code should be a non-empty string"

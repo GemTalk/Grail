@@ -12,13 +12,6 @@ declareVariable: aSymbol
 %
 category: 'other'
 method: BlockAst
-initialize
-
-	variables := IdentitySet new.
-	super initialize.
-%
-category: 'other'
-method: BlockAst
 variables
 
 	^variables

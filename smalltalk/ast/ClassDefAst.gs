@@ -80,33 +80,6 @@ get: aSymbol
 %
 category: 'other'
 method: ClassDefAst
-initialize
-	"ClassDef(identifier name,
-		 expr* bases,
-		 keyword* keywords,
-		 stmt* body,
-		 expr* decorator_list,
-		 type_param* type_params)"
-
-	| stream |
-	stream := self stream.
-	(stream peekFor: $') ifFalse: [self error].
-	name := (stream upTo: $') asSymbol.
-	self commaSpace.
-	bases := self collectAst: [self expression].
-	"(bases size == 0) ifTrue: [bases add: (NameAst with: #'object')]."
-	self commaSpace.
-	keywords := self collectAst: [KeywordAst parent: self].
-	self commaSpace.
-	BlockAst parent: self.	"calls back to set body"
-	self commaSpace.
-	decorator_list := self collectAst: [self expression].
-	self commaSpace.
-	type_params := self collectAst: [self typeParams].
-	self readPosition.
-%
-category: 'other'
-method: ClassDefAst
 isDerivedFrom: aClass scope: aScope
 
 "distinct from isSubclassOf: because

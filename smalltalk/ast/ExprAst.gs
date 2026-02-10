@@ -6,14 +6,6 @@ set compile_env: 0
 ! ------------------- Instance methods for ExprAst
 category: 'other'
 method: ExprAst
-initialize
-	"Expr(expr value)"
-
-	value := self expression.
-	self readPosition.
-%
-category: 'other'
-method: ExprAst
 messagePrecendence
 
 	

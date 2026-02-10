@@ -1,4 +1,4 @@
-﻿! ------------------- Remove existing behavior from StoreAst
+! ------------------- Remove existing behavior from StoreAst
 removeallmethods StoreAst
 removeallclassmethods StoreAst
 set compile_env: 0
@@ -8,11 +8,4 @@ category: 'other'
 method: StoreAst
 assertIsStore
 	"Overide to avoid error"
-%
-category: 'other'
-method: StoreAst
-initialize
-
-	super initialize.
-	parent declareVariable.
 %

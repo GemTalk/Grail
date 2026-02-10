@@ -4,9 +4,3 @@ removeallclassmethods BreakAst
 set compile_env: 0
 ! ------------------- Class methods for BreakAst
 ! ------------------- Instance methods for BreakAst
-category: 'other'
-method: BreakAst
-initialize
-
-  self readPositionOnly.
-%

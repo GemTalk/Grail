@@ -20,22 +20,6 @@ result = math.sqrt(9)
 result
 '
 %
-category: 'AST'
-method: MathTestCase
-math_sqrt_ast
-
-	^'Module([
-    Import([
-        alias(''math'', None, 1, 7, 1, 11),
-      ], 1, 0, 1, 11),
-    Assign([
-        Name(''result'', Store(), 2, 0, 2, 6),
-      ], Call(Attribute(Name(''math'', Load(), 2, 9, 2, 13), ''sqrt'', Load(), 2, 9, 2, 18), [
-        Constant(9, None, 2, 19, 2, 20),
-      ], [], 2, 9, 2, 21), None, 2, 0, 2, 21),
-    Expr(Name(''result'', Load(), 3, 0, 3, 6), 3, 0, 3, 6),
-  ], [])'
-%
 category: 'Source'
 method: MathTestCase
 math_cos_py
@@ -45,45 +29,27 @@ result = math.cos(0)
 result
 '
 %
-category: 'AST'
-method: MathTestCase
-math_cos_ast
-
-	^'Module([
-    Import([
-        alias(''math'', None, 1, 7, 1, 11),
-      ], 1, 0, 1, 11),
-    Assign([
-        Name(''result'', Store(), 2, 0, 2, 6),
-      ], Call(Attribute(Name(''math'', Load(), 2, 9, 2, 13), ''cos'', Load(), 2, 9, 2, 17), [
-        Constant(0, None, 2, 18, 2, 19),
-      ], [], 2, 9, 2, 20), None, 2, 0, 2, 20),
-    Expr(Name(''result'', Load(), 3, 0, 3, 6), 3, 0, 3, 6),
-  ], [])'
-%
 category: 'Tests - Python Source'
 method: MathTestCase
 testPythonMathSqrt
-	"Execute math.sqrt from Python source AST."
+	"Execute math.sqrt from Python source."
 
 	| moduleScope result |
 	moduleScope := SymbolDictionary new.
 	result := ModuleAst
-		evaluateAstString: self math_sqrt_ast
-		source: self math_sqrt_py
+		evaluateSource: self math_sqrt_py
 		usingModuleScope: moduleScope.
 	self assert: ((result - 3.0) abs) < 0.00001.
 %
 category: 'Tests - Python Source'
 method: MathTestCase
 testPythonMathCos
-	"Execute math.cos from Python source AST."
+	"Execute math.cos from Python source."
 
 	| moduleScope result |
 	moduleScope := SymbolDictionary new.
 	result := ModuleAst
-		evaluateAstString: self math_cos_ast
-		source: self math_cos_py
+		evaluateSource: self math_cos_py
 		usingModuleScope: moduleScope.
 	self assert: ((result - 1.0) abs) < 0.00001.
 %

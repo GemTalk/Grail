@@ -24,13 +24,6 @@ assertIsStore
 %
 category: 'other'
 method: ExpressionContextAst
-initialize
-	"expr_context = Load | Store | Del | AugLoad | AugStore | Param"
-
-	(self stream peekFor: $)) ifFalse: [self error].
-%
-category: 'other'
-method: ExpressionContextAst
 isStoreCtx
 
 	^false

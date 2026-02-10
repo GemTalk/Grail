@@ -24,18 +24,6 @@ keywords
 %
 category: 'other'
 method: CallAst
-initialize
-	"Call(expr func, expr* args, keyword* keywords)"
-
-	function := self expression.
-	self commaSpace.
-	arguments := self collectAst: [self expression].
-	self commaSpace.
-	keywords := self collectAst: [KeywordAst parent: self].
-	self readPosition.
-%
-category: 'other'
-method: CallAst
 printSmalltalkOn: aStream
 
 	function printSmalltalkOn: aStream.

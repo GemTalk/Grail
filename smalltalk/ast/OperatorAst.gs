@@ -10,12 +10,3 @@ isAbstract
 	^self == OperatorAst
 %
 ! ------------------- Instance methods for OperatorAst
-category: 'other'
-method: OperatorAst
-initialize
-
-	    "operator = Add | Sub | Mult | MatMult | Div | Mod | Pow | LShift
-                 | RShift | BitOr | BitXor | BitAnd | FloorDiv"
-
-	(self stream peekFor: $)) ifFalse: [self error].
-%
