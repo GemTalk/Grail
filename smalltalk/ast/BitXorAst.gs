@@ -8,5 +8,5 @@ category: 'other'
 method: BitXorAst
 printSmalltalkOn: aStream
 
-	self halt.
+	aStream nextPutAll: ' __xor__: '.
 %

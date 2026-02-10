@@ -132,6 +132,12 @@ isString
 %
 category: 'testing'
 method: PythonToken
+isBytes
+
+	^type == #BYTES
+%
+category: 'testing'
+method: PythonToken
 isNewline
 
 	^type == #NEWLINE or: [type == #NL]

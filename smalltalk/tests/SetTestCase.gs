@@ -370,4 +370,94 @@ testEmptySetRepr
 	self assert: repr equals: 'set()'
 %
 
+! ------------------- Eval tests for SetTestCase
+
+category: 'Tests - Eval - Set Creation'
+method: SetTestCase
+testEvalSetLiteral
+	"Test set literal creation via Python source"
+
+	| result |
+	result := self eval: '{1, 2, 3}'.
+	self assert: result size equals: 3.
+	self assert: (result includes: 1).
+	self assert: (result includes: 2).
+	self assert: (result includes: 3).
+%
+
+category: 'Tests - Eval - Set Creation'
+method: SetTestCase
+testEvalSetUniqueness
+	"Test that set literals deduplicate via Python source"
+
+	| result |
+	result := self eval: '{1, 1, 2, 2, 3}'.
+	self assert: result size equals: 3.
+%
+
+category: 'Tests - Eval - Set Operations'
+method: SetTestCase
+testEvalSetContains
+	"Test in operator for sets via Python source"
+
+	self assert: (self eval: '2 in {1, 2, 3}').
+	self deny: (self eval: '4 in {1, 2, 3}').
+%
+
+category: 'Tests - Eval - Set Operations'
+method: SetTestCase
+testEvalSetLen
+	"Test len() on sets via Python source"
+
+	self assert: (self eval: 'len({1, 2, 3})') equals: 3.
+	self assert: (self eval: 'len({1, 1, 1})') equals: 1.
+%
+
+category: 'Tests - Eval - Set Operations'
+method: SetTestCase
+testEvalSetUnion
+	"Test set | set via Python source"
+
+	| result |
+	result := self eval: '{1, 2} | {2, 3}'.
+	self assert: result size equals: 3.
+	self assert: (result includes: 1).
+	self assert: (result includes: 2).
+	self assert: (result includes: 3).
+%
+
+category: 'Tests - Eval - Set Operations'
+method: SetTestCase
+testEvalSetIntersection
+	"Test set & set via Python source"
+
+	| result |
+	result := self eval: '{1, 2, 3} & {2, 3, 4}'.
+	self assert: result size equals: 2.
+	self assert: (result includes: 2).
+	self assert: (result includes: 3).
+%
+
+category: 'Tests - Eval - Set Operations'
+method: SetTestCase
+testEvalSetDifference
+	"Test set - set via Python source"
+
+	| result |
+	result := self eval: '{1, 2, 3} - {2, 3, 4}'.
+	self assert: result size equals: 1.
+	self assert: (result includes: 1).
+%
+
+category: 'Tests - Eval - Set Operations'
+method: SetTestCase
+testEvalSetSymmetricDifference
+	"Test set ^ set via Python source"
+
+	| result |
+	result := self eval: '{1, 2, 3} ^ {2, 3, 4}'.
+	self assert: result size equals: 2.
+	self assert: (result includes: 1).
+	self assert: (result includes: 4).
+%
 

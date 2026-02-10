@@ -8,5 +8,5 @@ category: 'other'
 method: BitOrAst
 printSmalltalkOn: aStream
 
-	self halt.
+	aStream nextPutAll: ' __or__: '.
 %

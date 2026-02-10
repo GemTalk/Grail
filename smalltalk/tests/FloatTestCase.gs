@@ -456,3 +456,66 @@ test__dir__
 	self assert: (result includes: 'is_integer').
 %
 
+! ------------------- Eval tests for FloatTestCase
+
+category: 'Tests - Eval - Literals'
+method: FloatTestCase
+testEvalFloatLiteral
+	"Test float literal creation via Python source"
+
+	self assert: (self eval: '3.14') equals: 3.14.
+	self assert: (self eval: '-2.5') equals: -2.5.
+	self assert: (self eval: '0.0') equals: 0.0.
+%
+
+category: 'Tests - Eval - Arithmetic'
+method: FloatTestCase
+testEvalFloatArithmetic
+	"Test float arithmetic via Python source"
+
+	self assert: (self eval: '3.0 + 2.0') equals: 5.0.
+	self assert: (self eval: '10.0 - 3.5') equals: 6.5.
+	self assert: (self eval: '2.5 * 4.0') equals: 10.0.
+	self assert: (self eval: '10.0 / 4.0') equals: 2.5.
+%
+
+category: 'Tests - Eval - Mixed Arithmetic'
+method: FloatTestCase
+testEvalMixedArithmetic
+	"Test mixed int/float arithmetic via Python source"
+
+	self assert: (self eval: '3 + 2.5') equals: 5.5.
+	self assert: (self eval: '10 / 4') equals: 2.5.
+	self assert: (self eval: '2.5 * 2') equals: 5.0.
+%
+
+category: 'Tests - Eval - Comparison'
+method: FloatTestCase
+testEvalFloatComparison
+	"Test float comparisons via Python source"
+
+	self assert: (self eval: '3.14 > 2.5').
+	self assert: (self eval: '2.5 < 3.14').
+	self assert: (self eval: '3.14 == 3.14').
+	self assert: (self eval: '3.14 != 2.5').
+%
+
+category: 'Tests - Eval - Negation'
+method: FloatTestCase
+testEvalFloatNegation
+	"Test float negation via Python source"
+
+	self assert: (self eval: '-3.14') equals: -3.14.
+	self assert: (self eval: '--3.14') equals: 3.14.
+%
+
+category: 'Tests - Eval - Functions'
+method: FloatTestCase
+testEvalFloatFunctions
+	"Test builtin functions on floats via Python source"
+
+	self assert: (self eval: 'abs(-3.14)') equals: 3.14.
+	self assert: (self eval: 'round(3.7)') equals: 4.
+	self assert: (self eval: 'round(3.2)') equals: 3.
+%
+

@@ -8,5 +8,5 @@ category: 'other'
 method: BitAndAst
 printSmalltalkOn: aStream
 
-	self halt.
+	aStream nextPutAll: ' __and__: '.
 %

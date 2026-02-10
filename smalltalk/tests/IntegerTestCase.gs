@@ -524,4 +524,77 @@ test__dir__
 	self assert: (result includes: '__str__').
 %
 
+! ------------------- Eval tests for IntegerTestCase
+
+category: 'Tests - Eval - Arithmetic'
+method: IntegerTestCase
+testEvalArithmetic
+	"Test basic integer arithmetic via Python source"
+
+	self assert: (self eval: '3 + 4') equals: 7.
+	self assert: (self eval: '10 - 3') equals: 7.
+	self assert: (self eval: '6 * 7') equals: 42.
+	self assert: (self eval: '7 // 3') equals: 2.
+	self assert: (self eval: '7 % 3') equals: 1.
+	self assert: (self eval: '2 ** 10') equals: 1024.
+%
+
+category: 'Tests - Eval - Arithmetic'
+method: IntegerTestCase
+testEvalNegation
+	"Test unary operators via Python source"
+
+	self assert: (self eval: '-5') equals: -5.
+	self assert: (self eval: '--5') equals: 5.
+	self assert: (self eval: '+5') equals: 5.
+%
+
+category: 'Tests - Eval - Arithmetic'
+method: IntegerTestCase
+testEvalFloorDivNegative
+	"Test floor division with negative numbers via Python source"
+
+	self assert: (self eval: '-7 // 3') equals: -3.
+	self assert: (self eval: '7 // -3') equals: -3.
+%
+
+category: 'Tests - Eval - Comparison'
+method: IntegerTestCase
+testEvalComparison
+	"Test integer comparisons via Python source"
+
+	self assert: (self eval: '3 < 5').
+	self deny: (self eval: '5 < 3').
+	self assert: (self eval: '5 <= 5').
+	self assert: (self eval: '5 > 3').
+	self assert: (self eval: '5 >= 5').
+	self assert: (self eval: '5 == 5').
+	self assert: (self eval: '5 != 3').
+%
+
+category: 'Tests - Eval - Bitwise'
+method: IntegerTestCase
+testEvalBitwise
+	"Test bitwise operations via Python source"
+
+	self assert: (self eval: '12 & 10') equals: 8.
+	self assert: (self eval: '12 | 10') equals: 14.
+	self assert: (self eval: '12 ^ 10') equals: 6.
+	self assert: (self eval: '~0') equals: -1.
+	self assert: (self eval: '5 << 2') equals: 20.
+	self assert: (self eval: '20 >> 2') equals: 5.
+%
+
+category: 'Tests - Eval - Variables'
+method: IntegerTestCase
+testEvalAssignment
+	"Test integer variable assignment and use via Python source"
+
+	self assert: (self eval: 'x = 42
+x') equals: 42.
+	self assert: (self eval: 'x = 10
+y = 20
+x + y') equals: 30.
+%
+
 

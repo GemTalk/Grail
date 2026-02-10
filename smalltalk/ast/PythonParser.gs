@@ -1625,6 +1625,11 @@ parseAtom
 		^self parseStringLiteral
 	].
 
+	"Bytes literals"
+	tok isBytes ifTrue: [
+		^self parseBytesLiteral
+	].
+
 	"Ellipsis"
 	(tok isOp: '...') ifTrue: [
 		self advance.
@@ -1699,7 +1704,7 @@ parseNumberValue: aString
 	(str notEmpty and: [(str last == $j) or: [str last == $J]]) ifTrue: [
 		| realPart |
 		realPart := (str copyFrom: 1 to: str size - 1) asNumber.
-		^complex __new__: 0.0 _: realPart
+		^complex perform: #__new__:_: env: 2 withArguments: {0.0. realPart}
 	].
 
 	"Hex"
@@ -1733,6 +1738,25 @@ parseStringLiteral
 	].
 	^self buildNode: ConstantAst fields: (IdentityKeyValueDictionary new
 		at: #value put: writeStream contents;
+		at: #kind put: nil;
+		yourself) from: startTok to: self lastToken
+%
+category: 'parsing - atoms'
+method: PythonParser
+parseBytesLiteral
+	"Parse one or more adjacent bytes tokens (implicit concatenation)."
+
+	| startTok writeStream str ba |
+	startTok := self peek.
+	writeStream := WriteStream on: Unicode7 new.
+	[self peek notNil and: [self peek isBytes]] whileTrue: [
+		writeStream nextPutAll: self advance value.
+	].
+	str := writeStream contents.
+	ba := ByteArray new: str size.
+	1 to: str size do: [:i | ba at: i put: (str at: i) codePoint].
+	^self buildNode: ConstantAst fields: (IdentityKeyValueDictionary new
+		at: #value put: ba;
 		at: #kind put: nil;
 		yourself) from: startTok to: self lastToken
 %

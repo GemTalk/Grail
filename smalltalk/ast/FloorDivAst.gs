@@ -8,5 +8,5 @@ category: 'other'
 method: FloorDivAst
 printSmalltalkOn: aStream
 
-	self halt.
+	aStream nextPutAll: ' __floordiv__: '.
 %

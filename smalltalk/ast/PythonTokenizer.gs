@@ -341,7 +341,7 @@ method: PythonTokenizer
 tokenizeString
 	"Tokenize a string literal (handles prefixes, single/double/triple quotes, escapes)."
 
-	| startLine startCol prefix quoteChar triple writeStream char isFString isRaw isBytes |
+	| startLine startCol prefix quoteChar triple writeStream char isFString isRaw isBytes tokenType |
 	startLine := line.
 	startCol := column.
 	prefix := ''.
@@ -360,6 +360,7 @@ tokenizeString
 		c == $r ifTrue: [isRaw := true].
 		c == $b ifTrue: [isBytes := true].
 	].
+	tokenType := isBytes ifTrue: [#BYTES] ifFalse: [#STRING].
 
 	"Read quote character"
 	quoteChar := self advance.
@@ -381,13 +382,13 @@ tokenizeString
 			"Check for closing triple quote"
 			(char == quoteChar and: [(self peekAt: 1) == quoteChar and: [(self peekAt: 2) == quoteChar]]) ifTrue: [
 				self advance. self advance. self advance.
-				self addToken: #STRING value: writeStream contents line: startLine column: startCol endLine: line endColumn: column.
+				self addToken: tokenType value: writeStream contents line: startLine column: startCol endLine: line endColumn: column.
 				^self
 			].
 		] ifFalse: [
 			char == quoteChar ifTrue: [
 				self advance.
-				self addToken: #STRING value: writeStream contents line: startLine column: startCol endLine: line endColumn: column.
+				self addToken: tokenType value: writeStream contents line: startLine column: startCol endLine: line endColumn: column.
 				^self
 			].
 			char == Character lf ifTrue: [

@@ -8,5 +8,6 @@ category: 'other'
 method: USubAst
 printSmalltalkOn: aStream
 
-	self halt.
+	operand printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: ' __neg__'.
 %

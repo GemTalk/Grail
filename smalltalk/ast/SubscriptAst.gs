@@ -6,6 +6,12 @@ set compile_env: 0
 ! ------------------- Instance methods for SubscriptAst
 category: 'other'
 method: SubscriptAst
+assertContextIsLoad
+
+	ctx assertIsLoad.
+%
+category: 'other'
+method: SubscriptAst
 assertContextIsStore
 
 	ctx assertIsStore.
@@ -20,5 +26,8 @@ category: 'other'
 method: SubscriptAst
 printSmalltalkOn: aStream
 
-	self halt.
+	self assertContextIsLoad.
+	value printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: ' __getitem__: '.
+	slice printSmalltalkWithParenthesisOn: aStream.
 %

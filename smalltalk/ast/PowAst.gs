@@ -8,5 +8,5 @@ category: 'other'
 method: PowAst
 printSmalltalkOn: aStream
 
-	self halt.
+	aStream nextPutAll: ' __pow__: '.
 %

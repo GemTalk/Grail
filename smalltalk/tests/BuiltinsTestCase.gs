@@ -567,3 +567,141 @@ testQuit
 	callableBlock := b perform: #callable env: 2.
 	self assert: (callableBlock value: {quitBlock} value: nil)
 %
+
+! ------------------- Eval tests for BuiltinsTestCase
+
+category: 'Tests - Eval - Numeric Functions'
+method: BuiltinsTestCase
+testEvalAbs
+	"Test abs() via Python source"
+
+	self assert: (self eval: 'abs(5)') equals: 5.
+	self assert: (self eval: 'abs(-5)') equals: 5.
+	self assert: (self eval: 'abs(0)') equals: 0.
+%
+
+category: 'Tests - Eval - Numeric Functions'
+method: BuiltinsTestCase
+testEvalHex
+	"Test hex() via Python source"
+
+	self assert: (self eval: 'hex(255)') equals: '0xff'.
+	self assert: (self eval: 'hex(0)') equals: '0x0'.
+%
+
+category: 'Tests - Eval - Numeric Functions'
+method: BuiltinsTestCase
+testEvalOct
+	"Test oct() via Python source"
+
+	self assert: (self eval: 'oct(8)') equals: '0o10'.
+	self assert: (self eval: 'oct(0)') equals: '0o0'.
+%
+
+category: 'Tests - Eval - Numeric Functions'
+method: BuiltinsTestCase
+testEvalBin
+	"Test bin() via Python source"
+
+	self assert: (self eval: 'bin(5)') equals: '0b101'.
+	self assert: (self eval: 'bin(0)') equals: '0b0'.
+%
+
+category: 'Tests - Eval - Type Functions'
+method: BuiltinsTestCase
+testEvalLen
+	"Test len() via Python source"
+
+	self assert: (self eval: 'len("hello")') equals: 5.
+	self assert: (self eval: 'len([1, 2, 3])') equals: 3.
+	self assert: (self eval: 'len("")') equals: 0.
+%
+
+category: 'Tests - Eval - String Functions'
+method: BuiltinsTestCase
+testEvalRepr
+	"Test repr() via Python source"
+
+	self assert: (self eval: 'repr(42)') equals: '42'.
+%
+
+category: 'Tests - Eval - String Functions'
+method: BuiltinsTestCase
+testEvalStr
+	"Test str() via Python source"
+
+	self assert: (self eval: 'str(42)') equals: '42'.
+	self assert: (self eval: 'str(True)') equals: 'True'.
+%
+
+category: 'Tests - Eval - String Functions'
+method: BuiltinsTestCase
+testEvalChr
+	"Test chr() via Python source"
+
+	self assert: (self eval: 'chr(65)') equals: 'A'.
+	self assert: (self eval: 'chr(97)') equals: 'a'.
+%
+
+category: 'Tests - Eval - String Functions'
+method: BuiltinsTestCase
+testEvalOrd
+	"Test ord() via Python source"
+
+	self assert: (self eval: 'ord("A")') equals: 65.
+	self assert: (self eval: 'ord("a")') equals: 97.
+%
+
+category: 'Tests - Eval - Aggregation Functions'
+method: BuiltinsTestCase
+testEvalMin
+	"Test min() via Python source"
+
+	self assert: (self eval: 'min([5, 2, 8, 1, 9])') equals: 1.
+%
+
+category: 'Tests - Eval - Aggregation Functions'
+method: BuiltinsTestCase
+testEvalMax
+	"Test max() via Python source"
+
+	self assert: (self eval: 'max([5, 2, 8, 1, 9])') equals: 9.
+%
+
+category: 'Tests - Eval - Aggregation Functions'
+method: BuiltinsTestCase
+testEvalSum
+	"Test sum() via Python source"
+
+	self assert: (self eval: 'sum([1, 2, 3, 4, 5])') equals: 15.
+	self assert: (self eval: 'sum([])') equals: 0.
+%
+
+category: 'Tests - Eval - Math Functions'
+method: BuiltinsTestCase
+testEvalPow
+	"Test pow() via Python source"
+
+	self assert: (self eval: 'pow(2, 3)') equals: 8.
+	self assert: (self eval: 'pow(10, 0)') equals: 1.
+%
+
+category: 'Tests - Eval - Math Functions'
+method: BuiltinsTestCase
+testEvalRound
+	"Test round() via Python source"
+
+	self assert: (self eval: 'round(3.7)') equals: 4.
+	self assert: (self eval: 'round(3.2)') equals: 3.
+%
+
+category: 'Tests - Eval - Sequence Functions'
+method: BuiltinsTestCase
+testEvalSorted
+	"Test sorted() via Python source"
+
+	| result |
+	result := self eval: 'sorted([3, 1, 4, 1, 5])'.
+	self assert: (result perform: #__getitem__: env: 2 withArguments: {0}) equals: 1.
+	self assert: (result perform: #__getitem__: env: 2 withArguments: {4}) equals: 5.
+%

@@ -1033,3 +1033,77 @@ test__class__
 	self assert: result equals: bytesType.
 	self assert: result equals: bytes.
 %
+
+category: 'Tests - Eval'
+method: BytesTestCase
+testEvalBytesLiteral
+	"Test bytes literal via Python source"
+
+	| result |
+	result := self eval: 'b''hello'''.
+	self assert: (result isKindOf: ByteArray).
+	self assert: result size equals: 5.
+	self assert: (result at: 1) equals: 104.
+	self assert: (result at: 5) equals: 111.
+%
+category: 'Tests - Eval'
+method: BytesTestCase
+testEvalEmptyBytes
+	"Test empty bytes literal via Python source"
+
+	| result |
+	result := self eval: 'b'''''.
+	self assert: (result isKindOf: ByteArray).
+	self assert: result size equals: 0.
+%
+category: 'Tests - Eval'
+method: BytesTestCase
+testEvalBytesConcatenation
+	"Test bytes + bytes via Python source"
+
+	| result |
+	result := self eval: 'b''hello'' + b'' world'''.
+	self assert: result size equals: 11.
+%
+category: 'Tests - Eval'
+method: BytesTestCase
+testEvalBytesRepetition
+	"Test bytes * n via Python source"
+
+	| result |
+	result := self eval: 'b''ab'' * 3'.
+	self assert: result size equals: 6.
+%
+category: 'Tests - Eval'
+method: BytesTestCase
+testEvalBytesIndexing
+	"Test bytes indexing via Python source"
+
+	self assert: (self eval: 'b''ABC''[0]') equals: 65.
+	self assert: (self eval: 'b''ABC''[2]') equals: 67.
+	self assert: (self eval: 'b''ABC''[-1]') equals: 67.
+%
+category: 'Tests - Eval'
+method: BytesTestCase
+testEvalBytesContains
+	"Test in operator for bytes via Python source"
+
+	self assert: (self eval: '65 in b''ABC''').
+	self deny: (self eval: '68 in b''ABC''').
+%
+category: 'Tests - Eval'
+method: BytesTestCase
+testEvalBytesLen
+	"Test len() on bytes via Python source"
+
+	self assert: (self eval: 'len(b''hello'')') equals: 5.
+	self assert: (self eval: 'len(b'''')') equals: 0.
+%
+category: 'Tests - Eval'
+method: BytesTestCase
+testEvalBytesEquality
+	"Test bytes equality via Python source"
+
+	self assert: (self eval: 'b''abc'' == b''abc''').
+	self deny: (self eval: 'b''abc'' == b''def''').
+%

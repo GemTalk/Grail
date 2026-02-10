@@ -8,5 +8,13 @@ category: 'other'
 method: NotEqAst
 printSmalltalkOn: aStream
 
-	self halt.
+	aStream nextPutAll: ' __ne__: '.
+%
+category: 'other'
+method: NotEqAst
+printSmalltalkOn: aStream left: aLeft rightList: aRight
+
+	aLeft printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: ' __ne__: '.
+	aRight first printSmalltalkWithParenthesisOn: aStream.
 %

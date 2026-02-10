@@ -816,4 +816,59 @@ testExpandtabs
 	self assert: (result includesString: '	') equals: false.
 %
 
+! ------------------- Eval tests for StrTestCase
+
+category: 'Tests - Eval - String Creation'
+method: StrTestCase
+testEvalStringLiteral
+	"Test string literal creation via Python source"
+
+	self assert: (self eval: '"hello"') equals: 'hello'.
+	self assert: (self eval: '''hello''') equals: 'hello'.
+%
+
+category: 'Tests - Eval - String Operations'
+method: StrTestCase
+testEvalStringConcatenation
+	"Test string + string via Python source"
+
+	self assert: (self eval: '"hello" + " world"') equals: 'hello world'.
+%
+
+category: 'Tests - Eval - String Operations'
+method: StrTestCase
+testEvalStringRepetition
+	"Test string * n via Python source"
+
+	self assert: (self eval: '"ab" * 3') equals: 'ababab'.
+%
+
+category: 'Tests - Eval - String Operations'
+method: StrTestCase
+testEvalStringIndexing
+	"Test string indexing via Python source"
+
+	self assert: (self eval: '"hello"[0]') equals: 'h'.
+	self assert: (self eval: '"hello"[4]') equals: 'o'.
+	self assert: (self eval: '"hello"[-1]') equals: 'o'.
+%
+
+category: 'Tests - Eval - String Operations'
+method: StrTestCase
+testEvalStringContains
+	"Test in operator for strings via Python source"
+
+	self assert: (self eval: '"world" in "hello world"').
+	self deny: (self eval: '"xyz" in "hello world"').
+%
+
+category: 'Tests - Eval - String Methods'
+method: StrTestCase
+testEvalLen
+	"Test len() on strings via Python source"
+
+	self assert: (self eval: 'len("hello")') equals: 5.
+	self assert: (self eval: 'len("")') equals: 0.
+%
+
 

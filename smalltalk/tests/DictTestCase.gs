@@ -457,5 +457,54 @@ testDictType
 	self assert: (d perform: #__class__ env: 2) == dict
 %
 
+! ------------------- Eval tests for DictTestCase
 
+category: 'Tests - Eval - Dict Creation'
+method: DictTestCase
+testEvalDictLiteral
+	"Test dict literal creation via Python source"
+
+	| result |
+	result := self eval: '{"a": 1, "b": 2, "c": 3}'.
+	self assert: result size equals: 3.
+	self assert: (result perform: #__getitem__: env: 2 withArguments: {'a'}) equals: 1.
+	self assert: (result perform: #__getitem__: env: 2 withArguments: {'c'}) equals: 3.
+%
+
+category: 'Tests - Eval - Dict Creation'
+method: DictTestCase
+testEvalEmptyDict
+	"Test empty dict creation via Python source"
+
+	| result |
+	result := self eval: '{}'.
+	self assert: result size equals: 0.
+%
+
+category: 'Tests - Eval - Dict Access'
+method: DictTestCase
+testEvalDictAccess
+	"Test dict subscript access via Python source"
+
+	self assert: (self eval: '{"a": 1, "b": 2}["a"]') equals: 1.
+	self assert: (self eval: '{"x": 42}["x"]') equals: 42.
+%
+
+category: 'Tests - Eval - Dict Functions'
+method: DictTestCase
+testEvalDictLen
+	"Test len() on dicts via Python source"
+
+	self assert: (self eval: 'len({"a": 1, "b": 2})') equals: 2.
+	self assert: (self eval: 'len({})') equals: 0.
+%
+
+category: 'Tests - Eval - Dict Assignment'
+method: DictTestCase
+testEvalDictAssignment
+	"Test dict variable assignment and access via Python source"
+
+	self assert: (self eval: 'd = {"x": 10, "y": 20}
+d["x"]') equals: 10.
+%
 

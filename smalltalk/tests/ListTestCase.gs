@@ -356,4 +356,70 @@ test__repr__
 	self assert: (result includesString: ']').
 %
 
+! ------------------- Eval tests for ListTestCase
+
+category: 'Tests - Eval - List Creation'
+method: ListTestCase
+testEvalListLiteral
+	"Test list literal creation via Python source"
+
+	| result |
+	result := self eval: '[1, 2, 3]'.
+	self assert: result size equals: 3.
+	self assert: (result perform: #__getitem__: env: 2 withArguments: {0}) equals: 1.
+	self assert: (result perform: #__getitem__: env: 2 withArguments: {2}) equals: 3.
+%
+
+category: 'Tests - Eval - List Creation'
+method: ListTestCase
+testEvalEmptyList
+	"Test empty list creation via Python source"
+
+	| result |
+	result := self eval: '[]'.
+	self assert: result size equals: 0.
+%
+
+category: 'Tests - Eval - List Operations'
+method: ListTestCase
+testEvalListConcatenation
+	"Test list + list via Python source"
+
+	| result |
+	result := self eval: '[1, 2] + [3, 4]'.
+	self assert: result size equals: 4.
+	self assert: (result perform: #__getitem__: env: 2 withArguments: {0}) equals: 1.
+	self assert: (result perform: #__getitem__: env: 2 withArguments: {3}) equals: 4.
+%
+
+category: 'Tests - Eval - List Operations'
+method: ListTestCase
+testEvalListRepetition
+	"Test list * n via Python source"
+
+	| result |
+	result := self eval: '[1, 2] * 3'.
+	self assert: result size equals: 6.
+%
+
+category: 'Tests - Eval - List Operations'
+method: ListTestCase
+testEvalListIndexing
+	"Test list indexing via Python source"
+
+	self assert: (self eval: '[10, 20, 30][0]') equals: 10.
+	self assert: (self eval: '[10, 20, 30][2]') equals: 30.
+	self assert: (self eval: '[10, 20, 30][-1]') equals: 30.
+%
+
+category: 'Tests - Eval - List Operations'
+method: ListTestCase
+testEvalListContains
+	"Test in operator via Python source"
+
+	self assert: (self eval: '2 in [1, 2, 3]').
+	self deny: (self eval: '4 in [1, 2, 3]').
+%
+
+
 

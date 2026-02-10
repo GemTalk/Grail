@@ -284,7 +284,7 @@ test_byte_string
 
 	| tokens strTok |
 	tokens := self tokenize: 'b''hello'''.
-	strTok := (self tokensOfType: #STRING from: tokens) first.
+	strTok := (self tokensOfType: #BYTES from: tokens) first.
 	self assert: strTok value equals: 'hello'.
 %
 category: 'tests - strings'

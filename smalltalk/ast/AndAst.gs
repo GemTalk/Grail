@@ -8,5 +8,13 @@ category: 'other'
 method: AndAst
 printSmalltalkOn: aStream
 
+	values size == 2 ifTrue: [
+		aStream nextPutAll: '(('.
+		(values at: 1) printSmalltalkOn: aStream.
+		aStream nextPutAll: ') and: ['.
+		(values at: 2) printSmalltalkOn: aStream.
+		aStream nextPutAll: '])'.
+		^self.
+	].
 	self halt.
 %

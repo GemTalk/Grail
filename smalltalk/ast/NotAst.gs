@@ -8,5 +8,6 @@ category: 'other'
 method: NotAst
 printSmalltalkOn: aStream
 
-	self halt.
+	operand printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: ' ___not___'.
 %

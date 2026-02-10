@@ -446,5 +446,94 @@ __getstate__
 	^ nil
 %
 
-! ------------------- Reset compile environment
+! ------------------- Reset compile environment and add Smalltalk methods
 set compile_env: 0
+
+! ------------------- Smalltalk methods for arithmetic coercion (env 0)
+! These methods allow complex to participate in GemStone's numeric coercion system
+
+category: 'Python-Arithmetic Support'
+method: complex
+_generality
+	"Return generality for complex in numeric hierarchy.
+	complex has the HIGHEST generality (90) so other types get coerced to complex.
+	Hierarchy: bool(10) < SmallInt(20) < LargeInt(40) < Fraction(70) < Float(85) < complex(90)."
+
+	^ 90
+%
+
+category: 'Python-Arithmetic Support'
+method: complex
+_coerce: aNumber
+	"Coerce aNumber to complex.
+	Convert aNumber to a complex number with zero imaginary part."
+
+	^ complex perform: #__new__:_: env: 2 withArguments: {aNumber. 0.0}
+%
+
+category: 'Python-Arithmetic Support'
+method: complex
+isNumber
+	"Return true - complex participates in arithmetic as a number."
+
+	^ true
+%
+
+! ------------------- Smalltalk arithmetic operators (env 0)
+! These allow complex to participate in Smalltalk arithmetic expressions
+
+category: 'Python-Arithmetic Operators'
+method: complex
++ aNumber
+	"Add aNumber to complex."
+
+	^ self perform: #__add__: env: 2 withArguments: {aNumber}
+%
+
+category: 'Python-Arithmetic Operators'
+method: complex
+- aNumber
+	"Subtract aNumber from complex."
+
+	^ self perform: #__sub__: env: 2 withArguments: {aNumber}
+%
+
+category: 'Python-Arithmetic Operators'
+method: complex
+* aNumber
+	"Multiply complex by aNumber."
+
+	^ self perform: #__mul__: env: 2 withArguments: {aNumber}
+%
+
+category: 'Python-Arithmetic Operators'
+method: complex
+/ aNumber
+	"Divide complex by aNumber."
+
+	^ self perform: #__truediv__: env: 2 withArguments: {aNumber}
+%
+
+category: 'Python-Arithmetic Operators'
+method: complex
+= anObject
+	"Equality comparison."
+
+	^ self perform: #__eq__: env: 2 withArguments: {anObject}
+%
+
+category: 'Python-Arithmetic Operators'
+method: complex
+negated
+	"Negate the complex number."
+
+	^ self perform: #__neg__ env: 2
+%
+
+category: 'Python-Arithmetic Operators'
+method: complex
+abs
+	"Return the magnitude of the complex number."
+
+	^ self perform: #__abs__ env: 2
+%

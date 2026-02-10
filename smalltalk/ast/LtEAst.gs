@@ -8,5 +8,13 @@ category: 'other'
 method: LtEAst
 printSmalltalkOn: aStream
 
-	self halt.
+	aStream nextPutAll: ' __le__: '.
+%
+category: 'other'
+method: LtEAst
+printSmalltalkOn: aStream left: aLeft rightList: aRight
+
+	aLeft printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: ' __le__: '.
+	aRight first printSmalltalkWithParenthesisOn: aStream.
 %

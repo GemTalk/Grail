@@ -8,5 +8,13 @@ category: 'other'
 method: IsAst
 printSmalltalkOn: aStream
 
-	self halt.
+	aStream nextPutAll: ' == '.
+%
+category: 'other'
+method: IsAst
+printSmalltalkOn: aStream left: aLeft rightList: aRight
+
+	aLeft printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: ' == '.
+	aRight first printSmalltalkWithParenthesisOn: aStream.
 %

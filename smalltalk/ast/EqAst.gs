@@ -8,5 +8,13 @@ category: 'other'
 method: EqAst
 printSmalltalkOn: aStream
 
-	self halt.
+	aStream nextPutAll: ' __eq__: '.
+%
+category: 'other'
+method: EqAst
+printSmalltalkOn: aStream left: aLeft rightList: aRight
+
+	aLeft printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: ' __eq__: '.
+	aRight first printSmalltalkWithParenthesisOn: aStream.
 %

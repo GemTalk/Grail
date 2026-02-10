@@ -8,5 +8,6 @@ category: 'other'
 method: UAddAst
 printSmalltalkOn: aStream
 
-	self halt.
+	operand printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: ' __pos__'.
 %

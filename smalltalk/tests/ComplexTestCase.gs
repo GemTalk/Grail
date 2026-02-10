@@ -447,3 +447,79 @@ test__dir__sorted
 	"Verify the list is sorted"
 	self assert: dirResult first equals: '__abs__'.
 %
+
+! ------------------- Eval tests for ComplexTestCase
+
+category: 'Tests - Eval - Complex Creation'
+method: ComplexTestCase
+testEvalComplexLiteral
+	"Test complex literal creation via Python source"
+
+	| result |
+	result := self eval: '5j'.
+	self assert: (result isKindOf: complex).
+	self assert: (result perform: #real env: 2) equals: 0.0.
+	self assert: (result perform: #imag env: 2) equals: 5.0.
+%
+
+category: 'Tests - Eval - Complex Creation'
+method: ComplexTestCase
+testEvalComplexCreation
+	"Test complex number via real + imaginary syntax"
+
+	| result |
+	result := self eval: '3 + 4j'.
+	self assert: (result isKindOf: complex).
+	self assert: (result perform: #real env: 2) equals: 3.0.
+	self assert: (result perform: #imag env: 2) equals: 4.0.
+%
+
+category: 'Tests - Eval - Complex Arithmetic'
+method: ComplexTestCase
+testEvalComplexArithmetic
+	"Test complex arithmetic via Python source"
+
+	| result |
+	result := self eval: '(3 + 4j) + (1 + 2j)'.
+	self assert: (result perform: #real env: 2) equals: 4.0.
+	self assert: (result perform: #imag env: 2) equals: 6.0.
+%
+
+category: 'Tests - Eval - Complex Arithmetic'
+method: ComplexTestCase
+testEvalComplexMultiplication
+	"Test complex multiplication via Python source"
+
+	| result |
+	result := self eval: '(2 + 3j) * 2'.
+	self assert: (result perform: #real env: 2) equals: 4.0.
+	self assert: (result perform: #imag env: 2) equals: 6.0.
+%
+
+category: 'Tests - Eval - Complex Arithmetic'
+method: ComplexTestCase
+testEvalComplexNegation
+	"Test complex negation via Python source"
+
+	| result |
+	result := self eval: '-(3 + 4j)'.
+	self assert: (result perform: #real env: 2) equals: -3.0.
+	self assert: (result perform: #imag env: 2) equals: -4.0.
+%
+
+category: 'Tests - Eval - Complex Comparison'
+method: ComplexTestCase
+testEvalComplexEquality
+	"Test complex equality via Python source"
+
+	self assert: (self eval: '(3 + 4j) == (3 + 4j)').
+	self assert: (self eval: '(3 + 4j) != (1 + 2j)').
+%
+
+category: 'Tests - Eval - Complex Functions'
+method: ComplexTestCase
+testEvalComplexAbs
+	"Test abs() on complex number via Python source"
+
+	self assert: (self eval: 'abs(3 + 4j)') equals: 5.0.
+%

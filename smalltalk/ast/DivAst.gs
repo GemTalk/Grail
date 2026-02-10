@@ -8,5 +8,5 @@ category: 'other'
 method: DivAst
 printSmalltalkOn: aStream
 
-	self halt.
+	aStream nextPutAll: ' __truediv__: '.
 %

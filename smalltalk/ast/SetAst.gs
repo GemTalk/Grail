@@ -8,5 +8,11 @@ category: 'other'
 method: SetAst
 printSmalltalkOn: aStream
 
-	self halt.
+	aStream nextPutAll: '([:___s | '.
+	elts do: [:each |
+		aStream nextPutAll: '___s add: '.
+		each printSmalltalkOn: aStream.
+		aStream nextPutAll: '. '.
+	].
+	aStream nextPutAll: '___s] value: (set perform: #new env: 0))'.
 %

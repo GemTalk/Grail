@@ -707,4 +707,88 @@ testSmalltalkComparisonsWithBooleans
 	self deny: false = 1.
 %
 
+! ------------------- Eval tests for BooleanTestCase
+
+category: 'Tests - Eval - Literals'
+method: BooleanTestCase
+testEvalBooleanLiterals
+	"Test True and False literals via Python source"
+
+	self assert: (self eval: 'True').
+	self deny: (self eval: 'False').
+%
+
+category: 'Tests - Eval - Not'
+method: BooleanTestCase
+testEvalNot
+	"Test not operator via Python source"
+
+	self deny: (self eval: 'not True').
+	self assert: (self eval: 'not False').
+%
+
+category: 'Tests - Eval - And'
+method: BooleanTestCase
+testEvalAnd
+	"Test and operator via Python source"
+
+	self assert: (self eval: 'True and True').
+	self deny: (self eval: 'True and False').
+	self deny: (self eval: 'False and True').
+	self deny: (self eval: 'False and False').
+%
+
+category: 'Tests - Eval - Or'
+method: BooleanTestCase
+testEvalOr
+	"Test or operator via Python source"
+
+	self assert: (self eval: 'True or True').
+	self assert: (self eval: 'True or False').
+	self assert: (self eval: 'False or True').
+	self deny: (self eval: 'False or False').
+%
+
+category: 'Tests - Eval - Combined'
+method: BooleanTestCase
+testEvalCombinedLogic
+	"Test combined boolean logic via Python source"
+
+	self assert: (self eval: '3 < 5 and 5 > 1').
+	self deny: (self eval: '3 > 5 and 5 > 1').
+	self assert: (self eval: '3 > 5 or 5 > 1').
+	self assert: (self eval: 'not (3 > 5)').
+%
+
+category: 'Tests - Eval - Comparison'
+method: BooleanTestCase
+testEvalBooleanComparison
+	"Test boolean comparisons via Python source"
+
+	self assert: (self eval: 'True == True').
+	self assert: (self eval: 'False == False').
+	self assert: (self eval: 'True != False').
+%
+
+category: 'Tests - Eval - Arithmetic'
+method: BooleanTestCase
+testEvalBoolArithmetic
+	"Test boolean arithmetic via Python source"
+
+	self assert: (self eval: 'True + True') equals: 2.
+	self assert: (self eval: 'True + False') equals: 1.
+	self assert: (self eval: 'True * 5') equals: 5.
+	self assert: (self eval: 'False * 5') equals: 0.
+%
+
+category: 'Tests - Eval - IfExp'
+method: BooleanTestCase
+testEvalIfExpression
+	"Test ternary if expression via Python source"
+
+	self assert: (self eval: '1 if True else 2') equals: 1.
+	self assert: (self eval: '1 if False else 2') equals: 2.
+	self assert: (self eval: '"yes" if 3 > 2 else "no"') equals: 'yes'.
+%
+
 

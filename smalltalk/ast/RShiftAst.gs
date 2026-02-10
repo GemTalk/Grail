@@ -8,5 +8,5 @@ category: 'other'
 method: RShiftAst
 printSmalltalkOn: aStream
 
-	self halt.
+	aStream nextPutAll: ' __rshift__: '.
 %

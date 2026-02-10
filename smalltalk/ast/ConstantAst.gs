@@ -25,7 +25,21 @@ printSmalltalkOn: aStream
 		^self.
 	].
 	(value isKindOf: ByteArray) ifTrue: [
-		aStream nextPutAll: value printString.
+		aStream nextPutAll: '#['.
+		value doWithIndex: [:each :i |
+			i > 1 ifTrue: [aStream nextPutAll: ' '].
+			aStream print: each.
+		].
+		aStream nextPutAll: ']'.
+		^self.
+	].
+	(value isKindOf: complex) ifTrue: [
+		aStream
+			nextPutAll: '(complex ___new___: ';
+			print: (value perform: #real env: 2);
+			nextPutAll: ' _: ';
+			print: (value perform: #imag env: 2);
+			nextPutAll: ')'.
 		^self.
 	].
 	aStream print: value.

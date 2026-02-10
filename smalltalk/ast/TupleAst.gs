@@ -35,7 +35,16 @@ category: 'other'
 method: TupleAst
 printSmalltalkOn: aStream
 
-	self halt.
+	elts isEmpty ifTrue: [
+		aStream nextPutAll: '(InvariantArray perform: #new env: 0)'.
+		^self.
+	].
+	aStream nextPutAll: '(InvariantArray perform: #withAll: env: 0 withArguments: {{'.
+	elts doWithIndex: [:each :i |
+		i > 1 ifTrue: [aStream nextPutAll: '. '].
+		each printSmalltalkOn: aStream.
+	].
+	aStream nextPutAll: '}})'.
 %
 category: 'other'
 method: TupleAst

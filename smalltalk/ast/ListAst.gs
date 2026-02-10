@@ -8,5 +8,14 @@ category: 'other'
 method: ListAst
 printSmalltalkOn: aStream
 
-	self halt.
+	elts isEmpty ifTrue: [
+		aStream nextPutAll: '(OrderedCollection perform: #new env: 0)'.
+		^self.
+	].
+	aStream nextPutAll: '({'.
+	elts doWithIndex: [:each :i |
+		i > 1 ifTrue: [aStream nextPutAll: '. '].
+		each printSmalltalkOn: aStream.
+	].
+	aStream nextPutAll: '} perform: #asOrderedCollection env: 0)'.
 %

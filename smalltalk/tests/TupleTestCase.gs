@@ -211,4 +211,79 @@ test__repr__
 	self assert: result equals: '()'.
 %
 
+! ------------------- Eval tests for TupleTestCase
+
+category: 'Tests - Eval - Tuple Creation'
+method: TupleTestCase
+testEvalTupleLiteral
+	"Test tuple literal creation via Python source"
+
+	| result |
+	result := self eval: '(1, 2, 3)'.
+	self assert: (result isKindOf: InvariantArray).
+	self assert: result size equals: 3.
+	self assert: (result perform: #__getitem__: env: 2 withArguments: {0}) equals: 1.
+	self assert: (result perform: #__getitem__: env: 2 withArguments: {2}) equals: 3.
+%
+
+category: 'Tests - Eval - Tuple Creation'
+method: TupleTestCase
+testEvalEmptyTuple
+	"Test empty tuple creation via Python source"
+
+	| result |
+	result := self eval: '()'.
+	self assert: (result isKindOf: InvariantArray).
+	self assert: result size equals: 0.
+%
+
+category: 'Tests - Eval - Tuple Operations'
+method: TupleTestCase
+testEvalTupleIndexing
+	"Test tuple indexing via Python source"
+
+	self assert: (self eval: '(10, 20, 30)[0]') equals: 10.
+	self assert: (self eval: '(10, 20, 30)[2]') equals: 30.
+	self assert: (self eval: '(10, 20, 30)[-1]') equals: 30.
+%
+
+category: 'Tests - Eval - Tuple Operations'
+method: TupleTestCase
+testEvalTupleConcatenation
+	"Test tuple + tuple via Python source"
+
+	| result |
+	result := self eval: '(1, 2) + (3, 4)'.
+	self assert: result size equals: 4.
+	self assert: (result perform: #__getitem__: env: 2 withArguments: {0}) equals: 1.
+	self assert: (result perform: #__getitem__: env: 2 withArguments: {3}) equals: 4.
+%
+
+category: 'Tests - Eval - Tuple Operations'
+method: TupleTestCase
+testEvalTupleRepetition
+	"Test tuple * n via Python source"
+
+	| result |
+	result := self eval: '(1, 2) * 3'.
+	self assert: result size equals: 6.
+%
+
+category: 'Tests - Eval - Tuple Operations'
+method: TupleTestCase
+testEvalTupleContains
+	"Test in operator for tuples via Python source"
+
+	self assert: (self eval: '2 in (1, 2, 3)').
+	self deny: (self eval: '4 in (1, 2, 3)').
+%
+
+category: 'Tests - Eval - Tuple Operations'
+method: TupleTestCase
+testEvalTupleLen
+	"Test len() on tuples via Python source"
+
+	self assert: (self eval: 'len((1, 2, 3))') equals: 3.
+	self assert: (self eval: 'len(())') equals: 0.
+%
 

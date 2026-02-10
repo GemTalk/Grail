@@ -8,5 +8,13 @@ category: 'other'
 method: GtAst
 printSmalltalkOn: aStream
 
-	self halt.
+	aStream nextPutAll: ' __gt__: '.
+%
+category: 'other'
+method: GtAst
+printSmalltalkOn: aStream left: aLeft rightList: aRight
+
+	aLeft printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: ' __gt__: '.
+	aRight first printSmalltalkWithParenthesisOn: aStream.
 %

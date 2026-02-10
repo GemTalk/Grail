@@ -8,5 +8,17 @@ category: 'other'
 method: DictAst
 printSmalltalkOn: aStream
 
-	self halt.
+	keys isEmpty ifTrue: [
+		aStream nextPutAll: '(KeyValueDictionary perform: #new env: 0)'.
+		^self.
+	].
+	aStream nextPutAll: '([:___d | '.
+	1 to: keys size do: [:i |
+		aStream nextPutAll: '___d __setitem__: '.
+		(keys at: i) printSmalltalkOn: aStream.
+		aStream nextPutAll: ' _: '.
+		(values at: i) printSmalltalkOn: aStream.
+		aStream nextPutAll: '. '.
+	].
+	aStream nextPutAll: '___d] value: (KeyValueDictionary perform: #new env: 0))'.
 %

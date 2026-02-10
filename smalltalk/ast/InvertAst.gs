@@ -8,5 +8,6 @@ category: 'other'
 method: InvertAst
 printSmalltalkOn: aStream
 
-	self halt.
+	operand printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: ' __invert__'.
 %

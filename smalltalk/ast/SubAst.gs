@@ -8,5 +8,5 @@ category: 'other'
 method: SubAst
 printSmalltalkOn: aStream
 
-	self halt.
+	aStream nextPutAll: ' __sub__: '.
 %

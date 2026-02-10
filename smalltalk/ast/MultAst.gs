@@ -8,5 +8,5 @@ category: 'other'
 method: MultAst
 printSmalltalkOn: aStream
 
-	self halt.
+	aStream nextPutAll: ' __mul__: '.
 %

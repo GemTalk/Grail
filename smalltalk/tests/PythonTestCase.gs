@@ -35,3 +35,19 @@ suite
 	
 	^ super suite
 %
+
+category: 'helpers'
+method: PythonTestCase
+eval: pythonSource
+	"Parse and evaluate a Python source string, returning the result."
+
+	| moduleScope scope module |
+	moduleScope := SymbolDictionary new.
+	scope := System myUserProfile symbolList copy.
+	scope insertObject: builtins ___instance___ at: 1.
+	scope insertObject: moduleScope at: 1.
+	module := ModuleAst parseSource: pythonSource.
+	module useTempsForBlock: false.
+	module ensureModuleScope: moduleScope.
+	^module evaluateWithScope: scope
+%

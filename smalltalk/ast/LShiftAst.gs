@@ -8,5 +8,5 @@ category: 'other'
 method: LShiftAst
 printSmalltalkOn: aStream
 
-	self halt.
+	aStream nextPutAll: ' __lshift__: '.
 %

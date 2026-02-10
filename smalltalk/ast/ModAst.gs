@@ -8,5 +8,5 @@ category: 'other'
 method: ModAst
 printSmalltalkOn: aStream
 
-	self halt.
+	aStream nextPutAll: ' __mod__: '.
 %
