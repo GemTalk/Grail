@@ -4,15 +4,3 @@ removeallclassmethods DictCompAst
 set compile_env: 0
 ! ------------------- Class methods for DictCompAst
 ! ------------------- Instance methods for DictCompAst
-category: 'other'
-method: DictCompAst
-initialize
-	"DictComp(expr key, expr value, comprehension* generators)"
-
-	key := self expression.
-	self commaSpace.
-	value := self expression.
-	self commaSpace.
-	generators := self collectAst: [ComprehensionAst parent: self].
-	self readPosition.
-%

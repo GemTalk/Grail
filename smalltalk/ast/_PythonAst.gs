@@ -3264,7 +3264,7 @@ expectvalue /Class
 doit
 AbstractNode subclass: 'ModuleAst'
   instVarNames: #(body name path
-                    source stream type_ignore useTempsForBlock)
+                    source type_ignore useTempsForBlock)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -3859,6 +3859,105 @@ doit
 WithItemAst category: 'Parser'
 %
 
+! ------------------- Class definition for PythonToken
+expectvalue /Class
+doit
+Object subclass: 'PythonToken'
+  instVarNames: #( type value line column
+                    endLine endColumn)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonAst
+  options: #()
+
+%
+expectvalue /Class
+doit
+PythonToken comment:
+'A lexical token produced by PythonTokenizer.
+
+type is a symbol: #NAME, #NUMBER, #STRING, #OP, #KEYWORD,
+  #NEWLINE, #NL, #INDENT, #DEDENT, #ENDMARKER.
+value is the string content of the token.
+line, column, endLine, endColumn track source location.
+
+Hierarchy:
+Object
+  PythonToken(type value line column endLine endColumn)
+'
+%
+expectvalue /Class
+doit
+PythonToken category: 'Parser'
+%
+! ------------------- Class definition for PythonTokenizer
+expectvalue /Class
+doit
+Object subclass: 'PythonTokenizer'
+  instVarNames: #( source position line column
+                    tokens indentStack parenDepth atLineStart)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonAst
+  options: #()
+
+%
+expectvalue /Class
+doit
+PythonTokenizer comment:
+'A lexer for Python source code.
+
+Converts a Python source string into a sequence of PythonToken objects.
+Handles indentation-based INDENT/DEDENT tokens, string literals,
+numbers, operators, keywords, and comments.
+
+Usage:
+  PythonTokenizer tokenize: ''x = 1 + 2''
+
+Hierarchy:
+Object
+  PythonTokenizer(source position line column tokens indentStack parenDepth atLineStart)
+'
+%
+expectvalue /Class
+doit
+PythonTokenizer category: 'Parser'
+%
+! ------------------- Class definition for PythonParser
+expectvalue /Class
+doit
+Object subclass: 'PythonParser'
+  instVarNames: #( source tokens position variableStack classNesting)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonAst
+  options: #()
+
+%
+expectvalue /Class
+doit
+PythonParser comment:
+'A recursive descent parser for Python source code.
+
+Takes a Python source string and produces an AST (Abstract Syntax Tree)
+composed of the existing AST node classes (ModuleAst, ExprAst, BinOpAst, etc.).
+
+Usage:
+  PythonParser parse: ''x = 1 + 2''
+  => returns a ModuleAst
+
+Hierarchy:
+Object
+  PythonParser(source tokens position)
+'
+%
+expectvalue /Class
+doit
+PythonParser category: 'Parser'
+%
 ! ------------------- Class definition for PrettyWriteStream
 expectvalue /Class
 doit
@@ -3969,6 +4068,9 @@ input smalltalk/ast/ParamAst.gs
 input smalltalk/ast/PassAst.gs
 input smalltalk/ast/PowAst.gs
 input smalltalk/ast/PrettyWriteStream.gs
+input smalltalk/ast/PythonToken.gs
+input smalltalk/ast/PythonTokenizer.gs
+input smalltalk/ast/PythonParser.gs
 input smalltalk/ast/RShiftAst.gs
 input smalltalk/ast/RaiseAst.gs
 input smalltalk/ast/ReturnAst.gs

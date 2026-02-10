@@ -6,21 +6,6 @@ set compile_env: 0
 ! ------------------- Instance methods for ArgAst
 category: 'other'
 method: ArgAst
-initialize
-	"arg = (identifier arg, expr? annotation, string? type_comment) "
-
-	| stream |
-	stream := self stream.
-	(stream peekFor: $') ifFalse: [self error].
-	arg := stream upTo: $'.
-	self commaSpace.
-	annotation := self optionalExpression.
-	self commaSpace.
-	type_comment := self optionalString.
-	self readPosition.
-%
-category: 'other'
-method: ArgAst
 name
 
 	^arg

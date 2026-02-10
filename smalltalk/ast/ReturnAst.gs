@@ -6,17 +6,6 @@ set compile_env: 0
 ! ------------------- Instance methods for ReturnAst
 category: 'other'
 method: ReturnAst
-initialize
-	"Return(expr? value)"
-	
-	| stream next |
-	stream := self stream.
-	next := stream peekN: 4.
-	value := self optionalExpression.
-	self readPosition.
-%
-category: 'other'
-method: ReturnAst
 printSmalltalkOn: aStream
 
 	self halt.

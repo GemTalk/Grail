@@ -3,21 +3,21 @@ removeallmethods ModuleAst
 removeallclassmethods ModuleAst
 set compile_env: 0
 ! ------------------- Class methods for ModuleAst
+category: 'parsing'
+classmethod: ModuleAst
+parseSource: sourceString
+	"Parse Python source code and return a ModuleAst."
+
+	^PythonParser parse: sourceString
+%
 category: 'evaluation'
 classmethod: ModuleAst
 evaluate: sourceString withScope: aSymbolList
 	"Evaluate sourceString in a persistent scope for REPL usage."
 
-	| astString astStream module |
-	astString := importlib astStringForSource: sourceString.
-	astStream := ReadStream on: astString.
-	module := self basicNew
-		name: '__main__';
-		path: nil;
-		source: sourceString;
-		useTempsForBlock: false;
-		initialize: astStream;
-		yourself.
+	| module |
+	module := self parseSource: sourceString.
+	module useTempsForBlock: false.
 	^module evaluateWithScope: aSymbolList
 %
 category: 'evaluation'
@@ -25,27 +25,9 @@ classmethod: ModuleAst
 evaluateSource: sourceString usingModuleScope: aSymbolDictionary
 	"Evaluate sourceString in a persistent scope for REPL usage."
 
-	| astString |
-	astString := importlib astStringForSource: sourceString.
-	^self
-		evaluateAstString: astString
-		source: sourceString
-		usingModuleScope: aSymbolDictionary
-%
-category: 'evaluation'
-classmethod: ModuleAst
-evaluateAstString: astString source: sourceString usingModuleScope: aSymbolDictionary
-	"Evaluate an AST string in a persistent scope for REPL usage."
-
-	| astStream module symbolList |
-	astStream := ReadStream on: astString.
-	module := self basicNew
-		name: '__main__';
-		path: nil;
-		source: sourceString;
-		useTempsForBlock: false;
-		initialize: astStream;
-		yourself.
+	| module symbolList |
+	module := self parseSource: sourceString.
+	module useTempsForBlock: false.
 	module ensureModuleScope: aSymbolDictionary.
 	symbolList := self symbolListForModuleScope: aSymbolDictionary.
 	^module evaluateWithScope: symbolList
@@ -79,21 +61,18 @@ name
 
 	^name
 %
-
 category: 'accessors'
 method: ModuleAst
 name: aString
 
 	name := aString
 %
-
 category: 'accessors'
 method: ModuleAst
 path
 
 	^path
 %
-
 category: 'accessors'
 method: ModuleAst
 path: aString
@@ -112,19 +91,11 @@ source
 
 	^source
 %
-
 category: 'accessors'
 method: ModuleAst
 source: aString
 
 	source := aString
-%
-category: 'accessors'
-method: ModuleAst
-stream
-
-	stream skipSeparators.
-	^stream
 %
 category: 'code generation'
 method: ModuleAst
@@ -183,31 +154,6 @@ ensureModuleScope: aSymbolDictionary
 	"Ensure module scope has entries for declared variables."
 
 	body variables do: [:each | aSymbolDictionary at: each ifAbsentPut: [nil] ].
-%
-category: 'parse'
-method: ModuleAst
-initialize: aStream
-	"Initialize with an AST stream. Saves the stream and calls initialize."
-
-	stream := aStream.
-	self initialize
-%
-
-category: 'parse'
-method: ModuleAst
-initialize
-	"Module(body=[...], type_ignores=[...])"
-
-	| string |
-	string := stream upTo: $(.
-	string = 'Module' ifFalse: [self error].
-	useTempsForBlock ifNil: [useTempsForBlock := true].
-	BlockAst parent: self.
-	self commaSpace.
-	type_ignore := self collectAst: [StatementAst statementFrom: self].
-	(stream peekFor: $)) ifFalse: [self error].
-	string := stream upToEnd trimSeparators.
-	string isEmpty ifFalse: [SyntaxError signal: 'Unexpected text at end of AST: ' , string printString].
 %
 category: 'querying'
 method: ModuleAst

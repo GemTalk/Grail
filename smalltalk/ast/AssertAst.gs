@@ -6,16 +6,6 @@ set compile_env: 0
 ! ------------------- Instance methods for AssertAst
 category: 'other'
 method: AssertAst
-initialize
-	"Assert(expr test, expr? msg)"
-
-	test := self expression. 
-	self commaSpace.
-	msg := self optionalExpression.
-	self readPosition.
-%
-category: 'other'
-method: AssertAst
 printSmalltalkOn: aStream
 
 	self halt.

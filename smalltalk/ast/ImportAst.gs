@@ -6,17 +6,6 @@ set compile_env: 0
 ! ------------------- Instance methods for ImportAst
 category: 'other'
 method: ImportAst
-initialize
-	"Import(alias* names)"
-
-	names := self collectAst: [self alias].
-	names do: [:each |
-		self declareVariable: (each asName ifNil: [each name]).
-	].
-	self readPosition.
-%
-category: 'other'
-method: ImportAst
 printSmalltalkOn: aStream
 
 	names doWithIndex: [:each :index |

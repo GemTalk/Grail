@@ -1,4 +1,4 @@
-﻿! ------------------- Remove existing behavior from SuiteAst
+! ------------------- Remove existing behavior from SuiteAst
 removeallmethods SuiteAst
 removeallclassmethods SuiteAst
 set compile_env: 0
@@ -12,23 +12,6 @@ body
 %
 category: 'other'
 method: SuiteAst
-initialize
-
-	| stream node |
-	parent setBlock: self.
-	stream := self stream.
-	(stream peekFor: $[) ifFalse: [self error].
-	body := Array new.
-	[
-		stream skipSeparators; peekFor: $]
-	] whileFalse: [
-		node := StatementAst statementFrom: self.
-		body add: node.
-		(stream peekFor: $,) ifFalse: [self error].
-	].
-%
-category: 'other'
-method: SuiteAst
 printSmalltalkOn: aStream
 
 	body do: [:stmt |
@@ -38,8 +21,8 @@ printSmalltalkOn: aStream
 %
 category: 'other'
 method: SuiteAst
-size 
+size
 
-	
+
 	^body size
 %

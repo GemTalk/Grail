@@ -6,16 +6,6 @@ set compile_env: 0
 ! ------------------- Instance methods for RaiseAst
 category: 'other'
 method: RaiseAst
-initialize
-	"Raise(expr? exc, expr? cause)"
-
-	exc := self optionalExpression.
-	self commaSpace.
-	cause := self optionalExpression.
-	self readPosition.
-%
-category: 'other'
-method: RaiseAst
 printSmalltalkOn: aStream
 
 	self halt.

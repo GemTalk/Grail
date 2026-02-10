@@ -20,16 +20,6 @@ declareVariable
 %
 category: 'other'
 method: TupleAst
-initialize
-	"tuple(expr* elts, expr_context ctx)"
-
-	elts := self collectAst: [self expression].
-	self commaSpace.
-	ctx := ExpressionContextAst parent: self.
-	self readPosition.
-%
-category: 'other'
-method: TupleAst
 printSmalltalkAssignmentOn: aStream 
 
 	1 to: elts size do: [:i | 

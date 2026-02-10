@@ -339,106 +339,6 @@ grailDir: aString
 	grailDir := aString
 %
 
-category: 'Configuration'
-classmethod: importlib
-pprintast: aString
-	"Set the path to the pprintast executable.
-
-	importlib pprintast: '/path/to/.venv/bin/pprintast'.
-	"
-	pprintast := aString
-%
-
-category: 'For Tests'
-classmethod: importlib
-pprintast
-	"Return the path to the pprintast executable."
-	^ pprintast
-%
-
-category: 'AST-Generation'
-classmethod: importlib
-astStringForPath: pathString
-	"Generate AST string from a Python file path using pprintast.
-
-	importlib astStringForPath: '/path/to/file.py'.
-	"
-	| file path string exitCode errPath errFile errMsg |
-	path := '/tmp/grail.ast'.
-	errPath := '/tmp/grail.err'.
-	pprintast ifNil: [self error: 'Please run `importlib pprintast: aPathString`!'].
-	exitCode := System performOnServer: pprintast , ' -a -t ' , pathString , ' > ' , path , ' 2> ' , errPath , '; echo $?'.
-
-	"Check if pprintast failed"
-	(Integer fromString: exitCode) ~= 0 ifTrue: [
-		errFile := GsFile open: errPath mode: 'rb' onClient: false.
-		errMsg := errFile contentsAsUtf8 decodeToUnicode.
-		errFile close.
-		GsFile removeServerFile: path.
-		GsFile removeServerFile: errPath.
-		SyntaxError signal: errMsg.
-	].
-
-	file := GsFile open: path mode: 'rb' onClient: false.
-	string := file contentsAsUtf8 decodeToUnicode.
-	file close.
-	GsFile removeServerFile: path.
-	GsFile removeServerFile: errPath.
-	^string
-%
-
-category: 'AST-Generation'
-classmethod: importlib
-astStringForSource: aString
-	"Generate AST string from Python source code using pprintast.
-
-	importlib astStringForSource: '1 == 1'.
-	"
-	| file pathPy pathAst string exitCode errPath errFile errMsg |
-	pathPy := '/tmp/grail.py'.
-	pathAst := '/tmp/grail.ast'.
-	errPath := '/tmp/grail.err'.
-	file := GsFile open: pathPy mode: 'w' onClient: false.
-	file nextPutAll: aString.
-	file close.
-	pprintast ifNil: [self error: 'Please run `importlib pprintast: aPathString`!'].
-	exitCode := System performOnServer: pprintast , ' -a -t ' , pathPy , ' > ' , pathAst , ' 2> ' , errPath , '; echo $?'.
-
-	"Check if pprintast failed"
-	(Integer fromString: exitCode) ~= 0 ifTrue: [
-		errFile := GsFile open: errPath mode: 'rb' onClient: false.
-		errMsg := errFile contentsAsUtf8 decodeToUnicode.
-		errFile close.
-		GsFile removeServerFile: pathAst.
-		GsFile removeServerFile: pathPy.
-		GsFile removeServerFile: errPath.
-		SyntaxError signal: errMsg.
-	].
-
-	file := GsFile open: pathAst mode: 'rb' onClient: false.
-	string := file contentsAsUtf8 decodeToUnicode.
-	file close.
-	GsFile removeServerFile: pathAst.
-	GsFile removeServerFile: pathPy.
-	GsFile removeServerFile: errPath.
-	^string
-%
-
-category: 'AST-Generation'
-classmethod: importlib
-astForAstString: astString source: sourceString path: pathString
-	"Create a ModuleAst from an AST string.
-
-	importlib astForAstString: (importlib astStringForPath: '/path/to/file.py') source: nil path: nil.
-	"
-		^ModuleAst basicNew
-			name: '__main__';
-			path: pathString;
-			source: sourceString;
-			initialize: (ReadStream on: astString);
-			yourself
-%
-
 category: 'AST-Generation'
 classmethod: importlib
 astForPath: pathString
@@ -446,9 +346,13 @@ astForPath: pathString
 
 	importlib astForPath: '/path/to/file.py'.
 	"
-		| astString |
-		astString := self astStringForPath: pathString.
-		^self astForAstString: astString source: nil path: pathString
+		| file sourceString module |
+		file := GsFile open: pathString mode: 'rb' onClient: false.
+		sourceString := file contentsAsUtf8 decodeToUnicode.
+		file close.
+		module := ModuleAst parseSource: sourceString.
+		module path: pathString.
+		^module
 %
 
 category: 'AST-Generation'
@@ -458,16 +362,7 @@ astForSource: aString
 
 	importlib astForSource: '1 == 1'.
 	"
-		| astString astStream module |
-		astString := self astStringForSource: aString.
-		astStream := ReadStream on: astString.
-		module := ModuleAst basicNew
-			name: '__main__';
-			path: nil;
-			source: aString;
-			initialize: astStream;
-			yourself.
-		^module
+		^ModuleAst parseSource: aString
 %
 
 category: 'Module Loading'

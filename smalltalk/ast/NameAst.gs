@@ -57,18 +57,6 @@ id: aSymbol
 %
 category: 'other'
 method: NameAst
-initialize
-	"Name(identifier id, expr_context ctx)"
-
-	self stream peekFor: $(.
-	id := self string asSymbol.
-	self commaSpace.
-	ctx := ExpressionContextAst parent: self.
-	self readPosition.
-	ctx isStoreCtx ifTrue: [self declareVariable].
-%
-category: 'other'
-method: NameAst
 injectSuperArguments: anArray scope: aScope
 
 	| type objectOrType |

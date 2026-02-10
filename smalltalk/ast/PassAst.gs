@@ -6,13 +6,6 @@ set compile_env: 0
 ! ------------------- Instance methods for PassAst
 category: 'other'
 method: PassAst
-initialize
-	"pass"
-
-	self readPositionOnly.
-%
-category: 'other'
-method: PassAst
 printSmalltalkOn: aStream
 
 	self halt.
