@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for IsADirectoryErrorTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'IsADirectoryErrorTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+IsADirectoryErrorTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! IsADirectoryErrorTestCase - Tests for Python IsADirectoryError
 ! ===============================================================================
@@ -10,15 +32,7 @@ IsADirectoryErrorTestCase removeAllMethods.
 IsADirectoryErrorTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-IsADirectoryError'
-method: IsADirectoryErrorTestCase
-test_inheritance
-	"Test that IsADirectoryError inherits from OSError."
-	
-	| exc |
-	exc := IsADirectoryError ___new___:  IsADirectoryError .
-	self assert: (exc isKindOf: OSError).
-%
+set compile_env: 0
 
 category: 'Python-Tests-IsADirectoryError'
 method: IsADirectoryErrorTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := IsADirectoryError ___new___:  IsADirectoryError .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-IsADirectoryError'
+method: IsADirectoryErrorTestCase
+test_inheritance
+	"Test that IsADirectoryError inherits from OSError."
+	
+	| exc |
+	exc := IsADirectoryError ___new___:  IsADirectoryError .
+	self assert: (exc isKindOf: OSError).
 %

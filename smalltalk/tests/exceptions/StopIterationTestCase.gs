@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for StopIterationTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'StopIterationTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+StopIterationTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! StopIterationTestCase - Tests for Python StopIteration
 ! ===============================================================================
@@ -10,15 +32,7 @@ StopIterationTestCase removeAllMethods.
 StopIterationTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-StopIteration'
-method: StopIterationTestCase
-test_inheritance
-	"Test that StopIteration inherits from Exception."
-	
-	| exc |
-	exc := StopIteration ___new___:  StopIteration .
-	self assert: (exc isKindOf: Exception).
-%
+set compile_env: 0
 
 category: 'Python-Tests-StopIteration'
 method: StopIterationTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := StopIteration ___new___:  StopIteration .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-StopIteration'
+method: StopIterationTestCase
+test_inheritance
+	"Test that StopIteration inherits from Exception."
+	
+	| exc |
+	exc := StopIteration ___new___:  StopIteration .
+	self assert: (exc isKindOf: Exception).
 %

@@ -1,3 +1,43 @@
+! ------------------- Superclass check
+run
+Object ifNil: [self error: 'Object is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for PythonToken
+expectvalue /Class
+doit
+Object subclass: 'PythonToken'
+  instVarNames: #( type value line column
+                    endLine endColumn)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonAst
+  options: #()
+
+%
+
+expectvalue /Class
+doit
+PythonToken comment:
+'A lexical token produced by PythonTokenizer.
+
+type is a symbol: #NAME, #NUMBER, #STRING, #OP, #KEYWORD,
+  #NEWLINE, #NL, #INDENT, #DEDENT, #ENDMARKER.
+value is the string content of the token.
+line, column, endLine, endColumn track source location.
+
+Hierarchy:
+Object
+  PythonToken(type value line column endLine endColumn)
+'
+%
+
+expectvalue /Class
+doit
+PythonToken category: 'Parser'
+%
+
 ! ===============================================================================
 ! PythonToken - Lexical token for Python source code
 ! ===============================================================================
@@ -7,7 +47,16 @@
 ! ------------------- Remove existing behavior from PythonToken
 removeallmethods PythonToken
 removeallclassmethods PythonToken
-! ------------------- Class methods for PythonToken
+
+set compile_env: 0
+
+category: 'instance creation'
+classmethod: PythonToken
+type: aSymbol value: aString line: aLine column: aColumn
+
+	^self type: aSymbol value: aString line: aLine column: aColumn endLine: aLine endColumn: aColumn + aString size
+%
+
 category: 'instance creation'
 classmethod: PythonToken
 type: aSymbol value: aString line: aLine column: aColumn endLine: anEndLine endColumn: anEndColumn
@@ -21,133 +70,119 @@ type: aSymbol value: aString line: aLine column: aColumn endLine: anEndLine endC
 		endColumn: anEndColumn;
 		yourself
 %
-category: 'instance creation'
-classmethod: PythonToken
-type: aSymbol value: aString line: aLine column: aColumn
 
-	^self type: aSymbol value: aString line: aLine column: aColumn endLine: aLine endColumn: aColumn + aString size
-%
-! ------------------- Instance methods for PythonToken
-category: 'accessors'
-method: PythonToken
-type
-
-	^type
-%
-category: 'accessors'
-method: PythonToken
-type: aSymbol
-
-	type := aSymbol
-%
-category: 'accessors'
-method: PythonToken
-value
-
-	^value
-%
-category: 'accessors'
-method: PythonToken
-value: anObject
-
-	value := anObject
-%
-category: 'accessors'
-method: PythonToken
-line
-
-	^line
-%
-category: 'accessors'
-method: PythonToken
-line: anInteger
-
-	line := anInteger
-%
 category: 'accessors'
 method: PythonToken
 column
 
 	^column
 %
+
 category: 'accessors'
 method: PythonToken
 column: anInteger
 
 	column := anInteger
 %
-category: 'accessors'
-method: PythonToken
-endLine
 
-	^endLine
-%
-category: 'accessors'
-method: PythonToken
-endLine: anInteger
-
-	endLine := anInteger
-%
 category: 'accessors'
 method: PythonToken
 endColumn
 
 	^endColumn
 %
+
 category: 'accessors'
 method: PythonToken
 endColumn: anInteger
 
 	endColumn := anInteger
 %
-category: 'testing'
-method: PythonToken
-isKeyword: aString
 
-	^type == #KEYWORD and: [value = aString]
-%
-category: 'testing'
+category: 'accessors'
 method: PythonToken
-isOp: aString
+endLine
 
-	^type == #OP and: [value = aString]
+	^endLine
 %
-category: 'testing'
+
+category: 'accessors'
 method: PythonToken
-isName
+endLine: anInteger
 
-	^type == #NAME
+	endLine := anInteger
 %
-category: 'testing'
-method: PythonToken
-isNumber
 
-	^type == #NUMBER
-%
-category: 'testing'
-method: PythonToken
-isString
-
-	^type == #STRING
-%
 category: 'testing'
 method: PythonToken
 isBytes
 
 	^type == #BYTES
 %
-category: 'testing'
-method: PythonToken
-isNewline
 
-	^type == #NEWLINE or: [type == #NL]
-%
 category: 'testing'
 method: PythonToken
 isEndMarker
 
 	^type == #ENDMARKER
 %
+
+category: 'testing'
+method: PythonToken
+isKeyword: aString
+
+	^type == #KEYWORD and: [value = aString]
+%
+
+category: 'testing'
+method: PythonToken
+isName
+
+	^type == #NAME
+%
+
+category: 'testing'
+method: PythonToken
+isNewline
+
+	^type == #NEWLINE or: [type == #NL]
+%
+
+category: 'testing'
+method: PythonToken
+isNumber
+
+	^type == #NUMBER
+%
+
+category: 'testing'
+method: PythonToken
+isOp: aString
+
+	^type == #OP and: [value = aString]
+%
+
+category: 'testing'
+method: PythonToken
+isString
+
+	^type == #STRING
+%
+
+category: 'accessors'
+method: PythonToken
+line
+
+	^line
+%
+
+category: 'accessors'
+method: PythonToken
+line: anInteger
+
+	line := anInteger
+%
+
 category: 'printing'
 method: PythonToken
 printOn: aStream
@@ -159,4 +194,32 @@ printOn: aStream
 		nextPut: $,;
 		print: value;
 		nextPut: $).
+%
+
+category: 'accessors'
+method: PythonToken
+type
+
+	^type
+%
+
+category: 'accessors'
+method: PythonToken
+type: aSymbol
+
+	type := aSymbol
+%
+
+category: 'accessors'
+method: PythonToken
+value
+
+	^value
+%
+
+category: 'accessors'
+method: PythonToken
+value: anObject
+
+	value := anObject
 %

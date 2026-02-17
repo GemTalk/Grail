@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for NameErrorTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'NameErrorTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+NameErrorTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! NameErrorTestCase - Tests for Python NameError
 ! ===============================================================================
@@ -10,15 +32,7 @@ NameErrorTestCase removeAllMethods.
 NameErrorTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-NameError'
-method: NameErrorTestCase
-test_inheritance
-	"Test that NameError inherits from Exception."
-	
-	| exc |
-	exc := NameError ___new___:  NameError .
-	self assert: (exc isKindOf: Exception).
-%
+set compile_env: 0
 
 category: 'Python-Tests-NameError'
 method: NameErrorTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := NameError ___new___:  NameError .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-NameError'
+method: NameErrorTestCase
+test_inheritance
+	"Test that NameError inherits from Exception."
+	
+	| exc |
+	exc := NameError ___new___:  NameError .
+	self assert: (exc isKindOf: Exception).
 %

@@ -1,0 +1,114 @@
+! ------------------- Superclass check
+run
+iterator ifNil: [self error: 'iterator is not defined. Check file ordering.'].
+%
+
+! ------- str_iterator class (Python 'str_iterator' type)
+expectvalue /Class
+doit
+iterator subclass: 'str_iterator'
+  instVarNames: #( collection position)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+str_iterator comment:
+'Python str_iterator type.
+
+An iterator over a string (Unicode7). Created by calling iter() on a string.
+Returns one character at a time as a single-character string.
+
+Instance variables:
+  collection - the string being iterated over
+  position - current position (0-based Python index)
+'
+%
+
+expectvalue /Class
+doit
+str_iterator category: 'Collections-Iterators'
+%
+
+! ===============================================================================
+! String Iterator Methods (Python 'str_iterator' type)
+! ===============================================================================
+! This file contains method implementations for the str_iterator class.
+!
+! These methods are compiled with environmentId 2 (Python) to keep them separate
+! from the base Smalltalk methods (environmentId 0).
+! ===============================================================================
+
+! ------------------- Remove existing Python methods from str_iterator
+expectvalue /Metaclass3
+doit
+str_iterator removeAllMethods: 2.
+str_iterator class removeAllMethods: 2.
+%
+
+set compile_env: 2
+
+category: 'Python-Instance Creation'
+classmethod: str_iterator
+___on: aCollection
+	"Create a new str_iterator for the given string.
+	This is a Grail-internal method (triple underscore).
+	Position starts at 0 (Python 0-based indexing)."
+
+	| instance |
+	instance := self ___new___.
+	instance ___collection: aCollection.
+	instance ___position: 0.
+	^ instance
+%
+
+category: 'Python-Private'
+method: str_iterator
+___collection: aCollection
+	"Set the collection being iterated over.
+	This is a Grail-internal method (triple underscore)."
+
+	collection := aCollection
+%
+
+category: 'Python-Private'
+method: str_iterator
+___position: anInteger
+	"Set the current position.
+	This is a Grail-internal method (triple underscore)."
+
+	position := anInteger
+%
+
+category: 'Python-Iterator Protocol'
+method: str_iterator
+__next__
+	"Return the next character from the string as a single-character string.
+	If there are no further characters, raise StopIteration."
+
+	| size char charString |
+	size := collection ___size___.
+
+	"Check if we've reached the end"
+	(position ___ge___: size) ifTrue: [
+		StopIteration ___signal___
+	].
+
+	"Get the character at current position (convert to 1-based Smalltalk index)"
+	char := collection ___at___: (position ___plus___: 1).
+
+	"Convert character to a single-character string"
+	charString := str ___new___: 1.
+	charString ___at___: 1 put: char.
+
+	"Increment position"
+	position := position ___plus___: 1.
+
+	^ charString
+%
+
+set compile_env: 0

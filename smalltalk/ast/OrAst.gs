@@ -1,20 +1,62 @@
-﻿! ------------------- Remove existing behavior from OrAst
+! ------------------- Superclass check
+run
+BoolOpAst ifNil: [self error: 'BoolOpAst is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for OrAst
+expectvalue /Class
+doit
+BoolOpAst subclass: 'OrAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonAst
+  options: #()
+
+%
+
+expectvalue /Class
+doit
+OrAst comment:
+'https://docs.python.org/3/library/ast.html#ast.Or
+
+Boolean operator token for ''or''.
+
+Used as the op field in BoolOp nodes.
+
+Hierarchy:
+Object
+  AbstractNode(parent)
+    AbstractLocationNode(beginLine beginColumn endLine endColumn)
+      ExpressionAst
+        BoolOpAst(op values)
+          OrAst
+'
+%
+
+expectvalue /Class
+doit
+OrAst category: 'Parser'
+%
+
+! ------------------- Remove existing behavior from OrAst
 removeallmethods OrAst
 removeallclassmethods OrAst
+
 set compile_env: 0
-! ------------------- Class methods for OrAst
-! ------------------- Instance methods for OrAst
+
 category: 'other'
 method: OrAst
 printSmalltalkOn: aStream
 
-	values size == 2 ifTrue: [
+	1 to: values size - 1 do: [:i |
 		aStream nextPutAll: '(('.
-		(values at: 1) printSmalltalkOn: aStream.
+		(values at: i) printSmalltalkOn: aStream.
 		aStream nextPutAll: ') or: ['.
-		(values at: 2) printSmalltalkOn: aStream.
-		aStream nextPutAll: '])'.
-		^self.
 	].
-	self halt.
+	values last printSmalltalkOn: aStream.
+	values size - 1 timesRepeat: [
+		aStream nextPutAll: '])'.
+	].
 %

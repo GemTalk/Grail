@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for ProcessLookupErrorTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'ProcessLookupErrorTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+ProcessLookupErrorTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! ProcessLookupErrorTestCase - Tests for Python ProcessLookupError
 ! ===============================================================================
@@ -10,15 +32,7 @@ ProcessLookupErrorTestCase removeAllMethods.
 ProcessLookupErrorTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-ProcessLookupError'
-method: ProcessLookupErrorTestCase
-test_inheritance
-	"Test that ProcessLookupError inherits from OSError."
-	
-	| exc |
-	exc := ProcessLookupError ___new___:  ProcessLookupError .
-	self assert: (exc isKindOf: OSError).
-%
+set compile_env: 0
 
 category: 'Python-Tests-ProcessLookupError'
 method: ProcessLookupErrorTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := ProcessLookupError ___new___:  ProcessLookupError .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-ProcessLookupError'
+method: ProcessLookupErrorTestCase
+test_inheritance
+	"Test that ProcessLookupError inherits from OSError."
+	
+	| exc |
+	exc := ProcessLookupError ___new___:  ProcessLookupError .
+	self assert: (exc isKindOf: OSError).
 %

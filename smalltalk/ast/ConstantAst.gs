@@ -1,9 +1,42 @@
+! ------------------- Superclass check
+run
+ExpressionAst ifNil: [self error: 'ExpressionAst is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for ConstantAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'ConstantAst'
+  instVarNames: #( value kind)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonAst
+  options: #()
+
+%
+
+expectvalue /Class
+doit
+ConstantAst comment: 
+'Constant(constant value, string? kind)
+
+A constant value. The value attribute of the Constant literal contains the Python object it represents.
+The values represented can be simple types such as a number, string or None, but also immutable
+container types (tuples and frozensets) if all of their elements are constant."'
+%
+
+expectvalue /Class
+doit
+ConstantAst category: 'Parser'
+%
+
 ! ------------------- Remove existing behavior from ConstantAst
 removeallmethods ConstantAst
 removeallclassmethods ConstantAst
+
 set compile_env: 0
-! ------------------- Class methods for ConstantAst
-! ------------------- Instance methods for ConstantAst
+
 category: 'other'
 method: ConstantAst
 printSmalltalkOn: aStream
@@ -44,6 +77,7 @@ printSmalltalkOn: aStream
 	].
 	aStream print: value.
 %
+
 category: 'other'
 method: ConstantAst
 set: container to: anObject scope: aScope
@@ -52,6 +86,7 @@ set: container to: anObject scope: aScope
 		set: value
 		to: anObject.
 %
+
 category: 'other'
 method: ConstantAst
 value

@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for FileNotFoundErrorTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'FileNotFoundErrorTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+FileNotFoundErrorTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! FileNotFoundErrorTestCase - Tests for Python FileNotFoundError
 ! ===============================================================================
@@ -10,15 +32,7 @@ FileNotFoundErrorTestCase removeAllMethods.
 FileNotFoundErrorTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-FileNotFoundError'
-method: FileNotFoundErrorTestCase
-test_inheritance
-	"Test that FileNotFoundError inherits from OSError."
-	
-	| exc |
-	exc := FileNotFoundError ___new___:  FileNotFoundError .
-	self assert: (exc isKindOf: OSError).
-%
+set compile_env: 0
 
 category: 'Python-Tests-FileNotFoundError'
 method: FileNotFoundErrorTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := FileNotFoundError ___new___:  FileNotFoundError .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-FileNotFoundError'
+method: FileNotFoundErrorTestCase
+test_inheritance
+	"Test that FileNotFoundError inherits from OSError."
+	
+	| exc |
+	exc := FileNotFoundError ___new___:  FileNotFoundError .
+	self assert: (exc isKindOf: OSError).
 %

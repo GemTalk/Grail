@@ -1,3 +1,26 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for StrTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'StrTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+
+expectvalue /Class
+doit
+StrTestCase category: 'SUnit'
+%
+
 ! ------------------- Remove existing behavior from StrTestCase
 
 set compile_env: 0
@@ -8,28 +31,7 @@ StrTestCase removeAllMethods.
 StrTestCase class removeAllMethods.
 %
 
-! ------------------- Class methods for StrTestCase
-! ------------------- Instance methods for StrTestCase
-
-category: 'Python-Initialization'
-method: StrTestCase
-test__new__WithNil
-	"Test that str(None) returns empty string"
-
-	| result |
-	result := str ___new___: nil.
-	self assert: result equals: ''.
-%
-
-category: 'Python-Initialization'
-method: StrTestCase
-test__new__WithString
-	"Test that str('hello') returns the same string"
-
-	| result |
-	result := str ___new___: 'hello'.
-	self assert: result equals: 'hello'.
-%
+set compile_env: 0
 
 category: 'Python-String Operations'
 method: StrTestCase
@@ -43,37 +45,18 @@ test__add__
 	self assert: result equals: 'hello world'.
 %
 
-category: 'Python-String Operations'
+category: 'Python-Sequence Operations'
 method: StrTestCase
-test__mul__
-	"Test string repetition with *"
+test__contains__
+	"Test substring containment"
 
 	| s result |
-	s := 'ab'.
-	result := s perform: #__mul__: env: 2 withArguments: { 3 }.
-	self assert: result equals: 'ababab'.
-%
+	s := 'hello world'.
+	result := s ___contains___:  'world' .
+	self assert: result equals: true.
 
-category: 'Python-String Operations'
-method: StrTestCase
-test__mul__Zero
-	"Test string repetition with 0"
-
-	| s result |
-	s := 'ab'.
-	result := s perform: #__mul__: env: 2 withArguments: { 0 }.
-	self assert: result equals: ''.
-%
-
-category: 'Python-String Operations'
-method: StrTestCase
-test__rmul__
-	"Test reverse string repetition"
-
-	| s result |
-	s := 'ab'.
-	result := s perform: #__rmul__: env: 2 withArguments: { 3 }.
-	self assert: result equals: 'ababab'.
+	result := s ___contains___:  'xyz' .
+	self assert: result equals: false.
 %
 
 category: 'Python-Comparison'
@@ -90,54 +73,6 @@ test__eq__
 
 category: 'Python-Comparison'
 method: StrTestCase
-test__ne__
-	"Test string inequality"
-
-	| s1 s2 result |
-	s1 := 'hello'.
-	s2 := 'world'.
-	result := s1 perform: #__ne__: env: 2 withArguments: { s2 }.
-	self assert: result equals: true.
-%
-
-category: 'Python-Comparison'
-method: StrTestCase
-test__lt__
-	"Test string less than"
-
-	| s1 s2 result |
-	s1 := 'apple'.
-	s2 := 'banana'.
-	result := s1 perform: #__lt__: env: 2 withArguments: { s2 }.
-	self assert: result equals: true.
-%
-
-category: 'Python-Comparison'
-method: StrTestCase
-test__le__
-	"Test string less than or equal"
-
-	| s1 s2 result |
-	s1 := 'apple'.
-	s2 := 'apple'.
-	result := s1 perform: #__le__: env: 2 withArguments: { s2 }.
-	self assert: result equals: true.
-%
-
-category: 'Python-Comparison'
-method: StrTestCase
-test__gt__
-	"Test string greater than"
-
-	| s1 s2 result |
-	s1 := 'banana'.
-	s2 := 'apple'.
-	result := s1 perform: #__gt__: env: 2 withArguments: { s2 }.
-	self assert: result equals: true.
-%
-
-category: 'Python-Comparison'
-method: StrTestCase
 test__ge__
 	"Test string greater than or equal"
 
@@ -146,31 +81,6 @@ test__ge__
 	s2 := 'banana'.
 	result := s1 perform: #__ge__: env: 2 withArguments: { s2 }.
 	self assert: result equals: true.
-%
-
-category: 'Python-Sequence Operations'
-method: StrTestCase
-test__len__
-	"Test string length"
-
-	| s result |
-	s := 'hello'.
-	result := s perform: #__len__ env: 2.
-	self assert: result equals: 5.
-%
-
-category: 'Python-Sequence Operations'
-method: StrTestCase
-test__contains__
-	"Test substring containment"
-
-	| s result |
-	s := 'hello world'.
-	result := s ___contains___:  'world' .
-	self assert: result equals: true.
-
-	result := s ___contains___:  'xyz' .
-	self assert: result equals: false.
 %
 
 category: 'Python-Sequence Operations'
@@ -191,6 +101,18 @@ test__getitem__
 	
 	result := s perform: #__getitem__: env: 2 withArguments: {4}.
 	self assert: result equals: 'o'.
+%
+
+category: 'Python-Sequence Operations'
+method: StrTestCase
+test__getitem__emptyString
+	"Test indexing on empty string raises IndexError"
+
+	| s |
+	s := ''.
+	
+	self should: [s perform: #__getitem__: env: 2 withArguments: {0}] raise: IndexError.
+	self should: [s perform: #__getitem__: env: 2 withArguments: {-1}] raise: IndexError.
 %
 
 category: 'Python-Sequence Operations'
@@ -229,27 +151,116 @@ test__getitem__outOfRange
 	self should: [s perform: #__getitem__: env: 2 withArguments: {-10}] raise: IndexError.
 %
 
-category: 'Python-Sequence Operations'
+category: 'Python-Comparison'
 method: StrTestCase
-test__getitem__emptyString
-	"Test indexing on empty string raises IndexError"
+test__gt__
+	"Test string greater than"
 
-	| s |
-	s := ''.
-	
-	self should: [s perform: #__getitem__: env: 2 withArguments: {0}] raise: IndexError.
-	self should: [s perform: #__getitem__: env: 2 withArguments: {-1}] raise: IndexError.
+	| s1 s2 result |
+	s1 := 'banana'.
+	s2 := 'apple'.
+	result := s1 perform: #__gt__: env: 2 withArguments: { s2 }.
+	self assert: result equals: true.
 %
 
-category: 'Python-String Representation'
+category: 'Python-Hashing & Identity'
 method: StrTestCase
-test__str__
-	"Test __str__ returns self"
+test__hash__
+	"Test that __hash__ returns a hash value"
 
 	| s result |
 	s := 'hello'.
-	result := s perform: #__str__ env: 2.
-	self assert: result equals: s.
+	result := s perform: #__hash__ env: 2.
+	self assert: result class equals: SmallInteger.
+%
+
+category: 'Python-Comparison'
+method: StrTestCase
+test__le__
+	"Test string less than or equal"
+
+	| s1 s2 result |
+	s1 := 'apple'.
+	s2 := 'apple'.
+	result := s1 perform: #__le__: env: 2 withArguments: { s2 }.
+	self assert: result equals: true.
+%
+
+category: 'Python-Sequence Operations'
+method: StrTestCase
+test__len__
+	"Test string length"
+
+	| s result |
+	s := 'hello'.
+	result := s perform: #__len__ env: 2.
+	self assert: result equals: 5.
+%
+
+category: 'Python-Comparison'
+method: StrTestCase
+test__lt__
+	"Test string less than"
+
+	| s1 s2 result |
+	s1 := 'apple'.
+	s2 := 'banana'.
+	result := s1 perform: #__lt__: env: 2 withArguments: { s2 }.
+	self assert: result equals: true.
+%
+
+category: 'Python-String Operations'
+method: StrTestCase
+test__mul__
+	"Test string repetition with *"
+
+	| s result |
+	s := 'ab'.
+	result := s perform: #__mul__: env: 2 withArguments: { 3 }.
+	self assert: result equals: 'ababab'.
+%
+
+category: 'Python-String Operations'
+method: StrTestCase
+test__mul__Zero
+	"Test string repetition with 0"
+
+	| s result |
+	s := 'ab'.
+	result := s perform: #__mul__: env: 2 withArguments: { 0 }.
+	self assert: result equals: ''.
+%
+
+category: 'Python-Comparison'
+method: StrTestCase
+test__ne__
+	"Test string inequality"
+
+	| s1 s2 result |
+	s1 := 'hello'.
+	s2 := 'world'.
+	result := s1 perform: #__ne__: env: 2 withArguments: { s2 }.
+	self assert: result equals: true.
+%
+
+category: 'Python-Initialization'
+method: StrTestCase
+test__new__WithNil
+	"Test that str(None) returns empty string"
+
+	| result |
+	result := str ___new___: nil.
+	self assert: result equals: ''.
+%
+
+category: 'Python-Initialization'
+method: StrTestCase
+test__new__WithString
+	"Test that str('hello') returns the same string"
+
+	| result |
+	result := str ___new___: 'hello'.
+	self assert: result equals: 'hello'.
 %
 
 category: 'Python-String Representation'
@@ -274,37 +285,26 @@ test__repr__WithApostrophe
 	self assert: result equals: '''it\''s'''.
 %
 
-category: 'Python-Hashing & Identity'
+category: 'Python-String Operations'
 method: StrTestCase
-test__hash__
-	"Test that __hash__ returns a hash value"
+test__rmul__
+	"Test reverse string repetition"
+
+	| s result |
+	s := 'ab'.
+	result := s perform: #__rmul__: env: 2 withArguments: { 3 }.
+	self assert: result equals: 'ababab'.
+%
+
+category: 'Python-String Representation'
+method: StrTestCase
+test__str__
+	"Test __str__ returns self"
 
 	| s result |
 	s := 'hello'.
-	result := s perform: #__hash__ env: 2.
-	self assert: result class equals: SmallInteger.
-%
-
-category: 'Python-String Methods'
-method: StrTestCase
-testUpper
-	"Test upper() method"
-
-	| s result |
-	s := 'hello'.
-	result := s perform: #upper env: 2.
-	self assert: result equals: 'HELLO'.
-%
-
-category: 'Python-String Methods'
-method: StrTestCase
-testLower
-	"Test lower() method"
-
-	| s result |
-	s := 'HELLO'.
-	result := s perform: #lower env: 2.
-	self assert: result equals: 'hello'.
+	result := s perform: #__str__ env: 2.
+	self assert: result equals: s.
 %
 
 category: 'Python-String Methods'
@@ -316,193 +316,6 @@ testCapitalize
 	s := 'hello world'.
 	result := s perform: #capitalize env: 2.
 	self assert: result equals: 'Hello world'.
-%
-
-category: 'Python-String Methods'
-method: StrTestCase
-testStrip
-	"Test strip() method"
-
-	| s result |
-	s := '  hello  '.
-	result := s perform: #strip env: 2.
-	self assert: result equals: 'hello'.
-%
-
-category: 'Python-String Methods'
-method: StrTestCase
-testLstrip
-	"Test lstrip() method"
-
-	| s result |
-	s := '  hello  '.
-	result := s perform: #lstrip env: 2.
-	self assert: result equals: 'hello  '.
-%
-
-category: 'Python-String Methods'
-method: StrTestCase
-testRstrip
-	"Test rstrip() method"
-
-	| s result |
-	s := '  hello  '.
-	result := s perform: #rstrip env: 2.
-	self assert: result equals: '  hello'.
-%
-
-category: 'Python-String Methods'
-method: StrTestCase
-testStartswith
-	"Test startswith() method"
-
-	| s result |
-	s := 'hello world'.
-	result := s perform: #startswith: env: 2 withArguments: { 'hello' }.
-	self assert: result equals: true.
-
-	result := s perform: #startswith: env: 2 withArguments: { 'world' }.
-	self assert: result equals: false.
-%
-
-category: 'Python-String Methods'
-method: StrTestCase
-testEndswith
-	"Test endswith() method"
-
-	| s result |
-	s := 'hello world'.
-	result := s perform: #endswith: env: 2 withArguments: { 'world' }.
-	self assert: result equals: true.
-
-	result := s perform: #endswith: env: 2 withArguments: { 'hello' }.
-	self assert: result equals: false.
-%
-
-category: 'Python-String Methods'
-method: StrTestCase
-testFind
-	"Test find() method"
-
-	| s result |
-	s := 'hello world'.
-	result := s perform: #find: env: 2 withArguments: { 'world' }.
-	self assert: result equals: 6.  "0-based index"
-
-	result := s perform: #find: env: 2 withArguments: { 'xyz' }.
-	self assert: result equals: -1.
-%
-
-category: 'Python-String Methods'
-method: StrTestCase
-testReplace
-	"Test replace() method"
-
-	| s result |
-	s := 'hello world'.
-	result := s perform: #replace:_: env: 2 withArguments: { 'world'. 'there' }.
-	self assert: result equals: 'hello there'.
-%
-
-category: 'Python-String Methods'
-method: StrTestCase
-testSplit
-	"Test split() method"
-
-	| s result |
-	s := 'hello world foo'.
-	result := s perform: #split env: 2.
-	self assert: result size equals: 3.
-	self assert: (result at: 1) equals: 'hello'.
-	self assert: (result at: 2) equals: 'world'.
-	self assert: (result at: 3) equals: 'foo'.
-%
-
-category: 'Python-String Methods'
-method: StrTestCase
-testJoin
-	"Test join() method"
-
-	| sep parts result |
-	sep := ', '.
-	parts := #('apple' 'banana' 'cherry').
-	result := sep perform: #join: env: 2 withArguments: { parts }.
-	self assert: result equals: 'apple, banana, cherry'.
-%
-
-category: 'Python-String Methods'
-method: StrTestCase
-testCount
-	"Test count() method"
-
-	| s result |
-	s := 'hello world'.
-	result := s perform: #count: env: 2 withArguments: { 'l' }.
-	self assert: result equals: 3.
-
-	result := s perform: #count: env: 2 withArguments: { 'o' }.
-	self assert: result equals: 2.
-
-	result := s perform: #count: env: 2 withArguments: { 'xyz' }.
-	self assert: result equals: 0.
-%
-
-category: 'Python-String Methods'
-method: StrTestCase
-testIndex
-	"Test index() method"
-
-	| s result |
-	s := 'hello world'.
-	result := s perform: #index: env: 2 withArguments: { 'world' }.
-	self assert: result equals: 6.
-%
-
-category: 'Python-String Methods'
-method: StrTestCase
-testRfind
-	"Test rfind() method"
-
-	| s result |
-	s := 'hello world hello'.
-	result := s perform: #rfind: env: 2 withArguments: { 'hello' }.
-	self assert: result equals: 12.
-
-	result := s perform: #rfind: env: 2 withArguments: { 'xyz' }.
-	self assert: result equals: -1.
-%
-
-category: 'Python-String Methods'
-method: StrTestCase
-testRindex
-	"Test rindex() method"
-
-	| s result |
-	s := 'hello world hello'.
-	result := s perform: #rindex: env: 2 withArguments: { 'hello' }.
-	self assert: result equals: 12.
-%
-
-category: 'Python-String Methods'
-method: StrTestCase
-testSwapcase
-	"Test swapcase() method"
-
-	| s result |
-	s := 'Hello World'.
-	result := s perform: #swapcase env: 2.
-	self assert: result equals: 'hELLO wORLD'.
-%
-
-category: 'Python-String Methods'
-method: StrTestCase
-testTitle
-	"Test title() method"
-
-	| s result |
-	s := 'hello world'.
-	result := s perform: #title env: 2.
-	self assert: result equals: 'Hello World'.
 %
 
 category: 'Python-String Methods'
@@ -530,41 +343,122 @@ testCenter
 
 category: 'Python-String Methods'
 method: StrTestCase
-testLjust
-	"Test ljust() method"
+testCount
+	"Test count() method"
 
 	| s result |
-	s := 'hi'.
-	result := s perform: #ljust: env: 2 withArguments: { 10 }.
-	self assert: result size equals: 10.
-	self assert: (result beginsWith: 'hi') equals: true.
+	s := 'hello world'.
+	result := s perform: #count: env: 2 withArguments: { 'l' }.
+	self assert: result equals: 3.
+
+	result := s perform: #count: env: 2 withArguments: { 'o' }.
+	self assert: result equals: 2.
+
+	result := s perform: #count: env: 2 withArguments: { 'xyz' }.
+	self assert: result equals: 0.
 %
 
 category: 'Python-String Methods'
 method: StrTestCase
-testRjust
-	"Test rjust() method"
+testEndswith
+	"Test endswith() method"
 
 	| s result |
-	s := 'hi'.
-	result := s perform: #rjust: env: 2 withArguments: { 10 }.
-	self assert: result size equals: 10.
-	self assert: (result endsWith: 'hi') equals: true.
+	s := 'hello world'.
+	result := s perform: #endswith: env: 2 withArguments: { 'world' }.
+	self assert: result equals: true.
+
+	result := s perform: #endswith: env: 2 withArguments: { 'hello' }.
+	self assert: result equals: false.
+%
+
+category: 'Tests - Eval - String Methods'
+method: StrTestCase
+testEvalLen
+	"Test len() on strings via Python source"
+
+	self assert: (self eval: 'len("hello")') equals: 5.
+	self assert: (self eval: 'len("")') equals: 0.
+%
+
+category: 'Tests - Eval - String Operations'
+method: StrTestCase
+testEvalStringConcatenation
+	"Test string + string via Python source"
+
+	self assert: (self eval: '"hello" + " world"') equals: 'hello world'.
+%
+
+category: 'Tests - Eval - String Operations'
+method: StrTestCase
+testEvalStringContains
+	"Test in operator for strings via Python source"
+
+	self assert: (self eval: '"world" in "hello world"').
+	self deny: (self eval: '"xyz" in "hello world"').
+%
+
+category: 'Tests - Eval - String Operations'
+method: StrTestCase
+testEvalStringIndexing
+	"Test string indexing via Python source"
+
+	self assert: (self eval: '"hello"[0]') equals: 'h'.
+	self assert: (self eval: '"hello"[4]') equals: 'o'.
+	self assert: (self eval: '"hello"[-1]') equals: 'o'.
+%
+
+category: 'Tests - Eval - String Creation'
+method: StrTestCase
+testEvalStringLiteral
+	"Test string literal creation via Python source"
+
+	self assert: (self eval: '"hello"') equals: 'hello'.
+	self assert: (self eval: '''hello''') equals: 'hello'.
+%
+
+category: 'Tests - Eval - String Operations'
+method: StrTestCase
+testEvalStringRepetition
+	"Test string * n via Python source"
+
+	self assert: (self eval: '"ab" * 3') equals: 'ababab'.
 %
 
 category: 'Python-String Methods'
 method: StrTestCase
-testZfill
-	"Test zfill() method"
+testExpandtabs
+	"Test expandtabs() method"
 
 	| s result |
-	s := '42'.
-	result := s perform: #zfill: env: 2 withArguments: { 5 }.
-	self assert: result equals: '00042'.
+	s := 'hello	world'.
+	result := s perform: #expandtabs env: 2.
+	self assert: (result includesString: '	') equals: false.
+%
 
-	s := '-42'.
-	result := s perform: #zfill: env: 2 withArguments: { 5 }.
-	self assert: result equals: '-0042'.
+category: 'Python-String Methods'
+method: StrTestCase
+testFind
+	"Test find() method"
+
+	| s result |
+	s := 'hello world'.
+	result := s perform: #find: env: 2 withArguments: { 'world' }.
+	self assert: result equals: 6.  "0-based index"
+
+	result := s perform: #find: env: 2 withArguments: { 'xyz' }.
+	self assert: result equals: -1.
+%
+
+category: 'Python-String Methods'
+method: StrTestCase
+testIndex
+	"Test index() method"
+
+	| s result |
+	s := 'hello world'.
+	result := s perform: #index: env: 2 withArguments: { 'world' }.
+	self assert: result equals: 6.
 %
 
 category: 'Python-String Test Methods'
@@ -599,6 +493,32 @@ testIsalpha
 
 category: 'Python-String Test Methods'
 method: StrTestCase
+testIsascii
+	"Test isascii() method"
+
+	| s result |
+	s := 'hello'.
+	result := s perform: #isascii env: 2.
+	self assert: result equals: true.
+%
+
+category: 'Python-String Test Methods'
+method: StrTestCase
+testIsdecimal
+	"Test isdecimal() method"
+
+	| s result |
+	s := '123'.
+	result := s perform: #isdecimal env: 2.
+	self assert: result equals: true.
+
+	s := '123abc'.
+	result := s perform: #isdecimal env: 2.
+	self assert: result equals: false.
+%
+
+category: 'Python-String Test Methods'
+method: StrTestCase
 testIsdigit
 	"Test isdigit() method"
 
@@ -609,6 +529,21 @@ testIsdigit
 
 	s := '123abc'.
 	result := s perform: #isdigit env: 2.
+	self assert: result equals: false.
+%
+
+category: 'Python-String Test Methods'
+method: StrTestCase
+testIsidentifier
+	"Test isidentifier() method"
+
+	| s result |
+	s := 'hello_world'.
+	result := s perform: #isidentifier env: 2.
+	self assert: result equals: true.
+
+	s := '123abc'.
+	result := s perform: #isidentifier env: 2.
 	self assert: result equals: false.
 %
 
@@ -629,17 +564,24 @@ testIslower
 
 category: 'Python-String Test Methods'
 method: StrTestCase
-testIsupper
-	"Test isupper() method"
+testIsnumeric
+	"Test isnumeric() method"
 
 	| s result |
-	s := 'HELLO'.
-	result := s perform: #isupper env: 2.
+	s := '123'.
+	result := s perform: #isnumeric env: 2.
 	self assert: result equals: true.
+%
 
-	s := 'Hello'.
-	result := s perform: #isupper env: 2.
-	self assert: result equals: false.
+category: 'Python-String Test Methods'
+method: StrTestCase
+testIsprintable
+	"Test isprintable() method"
+
+	| s result |
+	s := 'hello'.
+	result := s perform: #isprintable env: 2.
+	self assert: result equals: true.
 %
 
 category: 'Python-String Test Methods'
@@ -674,79 +616,63 @@ testIstitle
 
 category: 'Python-String Test Methods'
 method: StrTestCase
-testIsascii
-	"Test isascii() method"
+testIsupper
+	"Test isupper() method"
 
 	| s result |
-	s := 'hello'.
-	result := s perform: #isascii env: 2.
-	self assert: result equals: true.
-%
-
-category: 'Python-String Test Methods'
-method: StrTestCase
-testIsdecimal
-	"Test isdecimal() method"
-
-	| s result |
-	s := '123'.
-	result := s perform: #isdecimal env: 2.
+	s := 'HELLO'.
+	result := s perform: #isupper env: 2.
 	self assert: result equals: true.
 
-	s := '123abc'.
-	result := s perform: #isdecimal env: 2.
+	s := 'Hello'.
+	result := s perform: #isupper env: 2.
 	self assert: result equals: false.
-%
-
-category: 'Python-String Test Methods'
-method: StrTestCase
-testIsnumeric
-	"Test isnumeric() method"
-
-	| s result |
-	s := '123'.
-	result := s perform: #isnumeric env: 2.
-	self assert: result equals: true.
-%
-
-category: 'Python-String Test Methods'
-method: StrTestCase
-testIsidentifier
-	"Test isidentifier() method"
-
-	| s result |
-	s := 'hello_world'.
-	result := s perform: #isidentifier env: 2.
-	self assert: result equals: true.
-
-	s := '123abc'.
-	result := s perform: #isidentifier env: 2.
-	self assert: result equals: false.
-%
-
-category: 'Python-String Test Methods'
-method: StrTestCase
-testIsprintable
-	"Test isprintable() method"
-
-	| s result |
-	s := 'hello'.
-	result := s perform: #isprintable env: 2.
-	self assert: result equals: true.
 %
 
 category: 'Python-String Methods'
 method: StrTestCase
-testSplitlines
-	"Test splitlines() method"
+testJoin
+	"Test join() method"
+
+	| sep parts result |
+	sep := ', '.
+	parts := #('apple' 'banana' 'cherry').
+	result := sep perform: #join: env: 2 withArguments: { parts }.
+	self assert: result equals: 'apple, banana, cherry'.
+%
+
+category: 'Python-String Methods'
+method: StrTestCase
+testLjust
+	"Test ljust() method"
 
 	| s result |
-	s := 'hello
-world'.
-	result := s perform: #splitlines env: 2.
-	self assert: result size equals: 2.
-	self assert: (result at: 1) equals: 'hello'.
-	self assert: (result at: 2) equals: 'world'.
+	s := 'hi'.
+	result := s perform: #ljust: env: 2 withArguments: { 10 }.
+	self assert: result size equals: 10.
+	self assert: (result beginsWith: 'hi') equals: true.
+%
+
+category: 'Python-String Methods'
+method: StrTestCase
+testLower
+	"Test lower() method"
+
+	| s result |
+	s := 'HELLO'.
+	result := s perform: #lower env: 2.
+	self assert: result equals: 'hello'.
+%
+
+category: 'Python-String Methods'
+method: StrTestCase
+testLstrip
+	"Test lstrip() method"
+
+	| s result |
+	s := '  hello  '.
+	result := s perform: #lstrip env: 2.
+	self assert: result equals: 'hello  '.
 %
 
 category: 'Python-String Methods'
@@ -761,20 +687,6 @@ testPartition
 	self assert: (result at: 1) equals: 'hello'.
 	self assert: (result at: 2) equals: ' '.
 	self assert: (result at: 3) equals: 'world'.
-%
-
-category: 'Python-String Methods'
-method: StrTestCase
-testRpartition
-	"Test rpartition() method"
-
-	| s result |
-	s := 'hello world foo'.
-	result := s perform: #rpartition: env: 2 withArguments: { ' ' }.
-	self assert: result size equals: 3.
-	self assert: (result at: 1) equals: 'hello world'.
-	self assert: (result at: 2) equals: ' '.
-	self assert: (result at: 3) equals: 'foo'.
 %
 
 category: 'Python-String Methods'
@@ -807,68 +719,174 @@ testRemovesuffix
 
 category: 'Python-String Methods'
 method: StrTestCase
-testExpandtabs
-	"Test expandtabs() method"
+testReplace
+	"Test replace() method"
 
 	| s result |
-	s := 'hello	world'.
-	result := s perform: #expandtabs env: 2.
-	self assert: (result includesString: '	') equals: false.
+	s := 'hello world'.
+	result := s perform: #replace:_: env: 2 withArguments: { 'world'. 'there' }.
+	self assert: result equals: 'hello there'.
 %
 
-! ------------------- Eval tests for StrTestCase
-
-category: 'Tests - Eval - String Creation'
+category: 'Python-String Methods'
 method: StrTestCase
-testEvalStringLiteral
-	"Test string literal creation via Python source"
+testRfind
+	"Test rfind() method"
 
-	self assert: (self eval: '"hello"') equals: 'hello'.
-	self assert: (self eval: '''hello''') equals: 'hello'.
+	| s result |
+	s := 'hello world hello'.
+	result := s perform: #rfind: env: 2 withArguments: { 'hello' }.
+	self assert: result equals: 12.
+
+	result := s perform: #rfind: env: 2 withArguments: { 'xyz' }.
+	self assert: result equals: -1.
 %
 
-category: 'Tests - Eval - String Operations'
+category: 'Python-String Methods'
 method: StrTestCase
-testEvalStringConcatenation
-	"Test string + string via Python source"
+testRindex
+	"Test rindex() method"
 
-	self assert: (self eval: '"hello" + " world"') equals: 'hello world'.
+	| s result |
+	s := 'hello world hello'.
+	result := s perform: #rindex: env: 2 withArguments: { 'hello' }.
+	self assert: result equals: 12.
 %
 
-category: 'Tests - Eval - String Operations'
+category: 'Python-String Methods'
 method: StrTestCase
-testEvalStringRepetition
-	"Test string * n via Python source"
+testRjust
+	"Test rjust() method"
 
-	self assert: (self eval: '"ab" * 3') equals: 'ababab'.
+	| s result |
+	s := 'hi'.
+	result := s perform: #rjust: env: 2 withArguments: { 10 }.
+	self assert: result size equals: 10.
+	self assert: (result endsWith: 'hi') equals: true.
 %
 
-category: 'Tests - Eval - String Operations'
+category: 'Python-String Methods'
 method: StrTestCase
-testEvalStringIndexing
-	"Test string indexing via Python source"
+testRpartition
+	"Test rpartition() method"
 
-	self assert: (self eval: '"hello"[0]') equals: 'h'.
-	self assert: (self eval: '"hello"[4]') equals: 'o'.
-	self assert: (self eval: '"hello"[-1]') equals: 'o'.
+	| s result |
+	s := 'hello world foo'.
+	result := s perform: #rpartition: env: 2 withArguments: { ' ' }.
+	self assert: result size equals: 3.
+	self assert: (result at: 1) equals: 'hello world'.
+	self assert: (result at: 2) equals: ' '.
+	self assert: (result at: 3) equals: 'foo'.
 %
 
-category: 'Tests - Eval - String Operations'
+category: 'Python-String Methods'
 method: StrTestCase
-testEvalStringContains
-	"Test in operator for strings via Python source"
+testRstrip
+	"Test rstrip() method"
 
-	self assert: (self eval: '"world" in "hello world"').
-	self deny: (self eval: '"xyz" in "hello world"').
+	| s result |
+	s := '  hello  '.
+	result := s perform: #rstrip env: 2.
+	self assert: result equals: '  hello'.
 %
 
-category: 'Tests - Eval - String Methods'
+category: 'Python-String Methods'
 method: StrTestCase
-testEvalLen
-	"Test len() on strings via Python source"
+testSplit
+	"Test split() method"
 
-	self assert: (self eval: 'len("hello")') equals: 5.
-	self assert: (self eval: 'len("")') equals: 0.
+	| s result |
+	s := 'hello world foo'.
+	result := s perform: #split env: 2.
+	self assert: result size equals: 3.
+	self assert: (result at: 1) equals: 'hello'.
+	self assert: (result at: 2) equals: 'world'.
+	self assert: (result at: 3) equals: 'foo'.
 %
 
+category: 'Python-String Methods'
+method: StrTestCase
+testSplitlines
+	"Test splitlines() method"
 
+	| s result |
+	s := 'hello
+world'.
+	result := s perform: #splitlines env: 2.
+	self assert: result size equals: 2.
+	self assert: (result at: 1) equals: 'hello'.
+	self assert: (result at: 2) equals: 'world'.
+%
+
+category: 'Python-String Methods'
+method: StrTestCase
+testStartswith
+	"Test startswith() method"
+
+	| s result |
+	s := 'hello world'.
+	result := s perform: #startswith: env: 2 withArguments: { 'hello' }.
+	self assert: result equals: true.
+
+	result := s perform: #startswith: env: 2 withArguments: { 'world' }.
+	self assert: result equals: false.
+%
+
+category: 'Python-String Methods'
+method: StrTestCase
+testStrip
+	"Test strip() method"
+
+	| s result |
+	s := '  hello  '.
+	result := s perform: #strip env: 2.
+	self assert: result equals: 'hello'.
+%
+
+category: 'Python-String Methods'
+method: StrTestCase
+testSwapcase
+	"Test swapcase() method"
+
+	| s result |
+	s := 'Hello World'.
+	result := s perform: #swapcase env: 2.
+	self assert: result equals: 'hELLO wORLD'.
+%
+
+category: 'Python-String Methods'
+method: StrTestCase
+testTitle
+	"Test title() method"
+
+	| s result |
+	s := 'hello world'.
+	result := s perform: #title env: 2.
+	self assert: result equals: 'Hello World'.
+%
+
+category: 'Python-String Methods'
+method: StrTestCase
+testUpper
+	"Test upper() method"
+
+	| s result |
+	s := 'hello'.
+	result := s perform: #upper env: 2.
+	self assert: result equals: 'HELLO'.
+%
+
+category: 'Python-String Methods'
+method: StrTestCase
+testZfill
+	"Test zfill() method"
+
+	| s result |
+	s := '42'.
+	result := s perform: #zfill: env: 2 withArguments: { 5 }.
+	self assert: result equals: '00042'.
+
+	s := '-42'.
+	result := s perform: #zfill: env: 2 withArguments: { 5 }.
+	self assert: result equals: '-0042'.
+%

@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for TimeoutErrorTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'TimeoutErrorTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+TimeoutErrorTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! TimeoutErrorTestCase - Tests for Python TimeoutError
 ! ===============================================================================
@@ -10,15 +32,7 @@ TimeoutErrorTestCase removeAllMethods.
 TimeoutErrorTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-TimeoutError'
-method: TimeoutErrorTestCase
-test_inheritance
-	"Test that TimeoutError inherits from OSError."
-	
-	| exc |
-	exc := TimeoutError ___new___:  TimeoutError .
-	self assert: (exc isKindOf: OSError).
-%
+set compile_env: 0
 
 category: 'Python-Tests-TimeoutError'
 method: TimeoutErrorTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := TimeoutError ___new___:  TimeoutError .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-TimeoutError'
+method: TimeoutErrorTestCase
+test_inheritance
+	"Test that TimeoutError inherits from OSError."
+	
+	| exc |
+	exc := TimeoutError ___new___:  TimeoutError .
+	self assert: (exc isKindOf: OSError).
 %

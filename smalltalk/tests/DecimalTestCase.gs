@@ -1,3 +1,26 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for DecimalTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'DecimalTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+
+expectvalue /Class
+doit
+DecimalTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! DecimalTestCase - Tests for Python Decimal type
 ! ===============================================================================
@@ -9,40 +32,19 @@ DecimalTestCase removeAllMethods: 0.
 DecimalTestCase class removeAllMethods: 0.
 %
 
-! ------------------- Test methods for DecimalTestCase
+set compile_env: 0
 
-category: 'Tests - Creation'
+category: 'Tests - Arithmetic'
 method: DecimalTestCase
-testCreateFromString
-	"Test creating Decimal from string"
+testAbsoluteValue
+	"Test Decimal absolute value"
 
-	| d |
-	d := (Decimal ___new___: Decimal _: '123.45').
+	| d result |
+	d := (Decimal ___new___: Decimal _: '-42.5').
 	
-	self assert: (d perform: #__str__ env: 2) equals: '123.45'
-%
-
-category: 'Tests - Creation'
-method: DecimalTestCase
-testCreateFromInteger
-	"Test creating Decimal from integer"
-
-	| d |
-	d := (Decimal ___new___: Decimal _: 42).
+	result := (d perform: #__abs__ env: 2).
 	
-	self assert: (d perform: #__int__ env: 2) = 42
-%
-
-category: 'Tests - Creation'
-method: DecimalTestCase
-testCreateFromFloat
-	"Test creating Decimal from float"
-
-	| d |
-	d := (Decimal ___new___: Decimal _: 3.14).
-	
-	"Float conversion may not be exact, so just check it's close"
-	self assert: ((d perform: #__float__ env: 2) - 3.14) abs < 0.01
+	self assert: (result perform: #__str__ env: 2) equals: '42.5'
 %
 
 category: 'Tests - Arithmetic'
@@ -61,32 +63,38 @@ testAddition
 	self assert: (result perform: #__str__ env: 2) equals: '30.8'
 %
 
-category: 'Tests - Arithmetic'
+category: 'Tests - Creation'
 method: DecimalTestCase
-testSubtraction
-	"Test Decimal subtraction"
+testCreateFromFloat
+	"Test creating Decimal from float"
 
-	| d1 d2 result |
-	d1 := (Decimal ___new___: Decimal _: '50.7').
-	d2 := (Decimal ___new___: Decimal _: '20.3').
+	| d |
+	d := (Decimal ___new___: Decimal _: 3.14).
 	
-	result := (d1 perform: #__sub__: env: 2 withArguments: {d2}).
-	
-	self assert: (result perform: #__str__ env: 2) equals: '30.4'
+	"Float conversion may not be exact, so just check it's close"
+	self assert: ((d perform: #__float__ env: 2) - 3.14) abs < 0.01
 %
 
-category: 'Tests - Arithmetic'
+category: 'Tests - Creation'
 method: DecimalTestCase
-testMultiplication
-	"Test Decimal multiplication"
+testCreateFromInteger
+	"Test creating Decimal from integer"
 
-	| d1 d2 result |
-	d1 := (Decimal ___new___: Decimal _: '3.5').
-	d2 := (Decimal ___new___: Decimal _: '2.0').
+	| d |
+	d := (Decimal ___new___: Decimal _: 42).
 	
-	result := (d1 perform: #__mul__: env: 2 withArguments: {d2}).
+	self assert: (d perform: #__int__ env: 2) = 42
+%
+
+category: 'Tests - Creation'
+method: DecimalTestCase
+testCreateFromString
+	"Test creating Decimal from string"
+
+	| d |
+	d := (Decimal ___new___: Decimal _: '123.45').
 	
-	self assert: (result perform: #__str__ env: 2) equals: '7.0'
+	self assert: (d perform: #__str__ env: 2) equals: '123.45'
 %
 
 category: 'Tests - Arithmetic'
@@ -101,32 +109,6 @@ testDivision
 	result := (d1 perform: #__truediv__: env: 2 withArguments: {d2}).
 	
 	self assert: (result perform: #__str__ env: 2) equals: '2.5'
-%
-
-category: 'Tests - Arithmetic'
-method: DecimalTestCase
-testNegation
-	"Test Decimal negation"
-
-	| d result |
-	d := (Decimal ___new___: Decimal _: '42.5').
-	
-	result := (d perform: #__neg__ env: 2).
-	
-	self assert: (result perform: #__str__ env: 2) equals: '-42.5'
-%
-
-category: 'Tests - Arithmetic'
-method: DecimalTestCase
-testAbsoluteValue
-	"Test Decimal absolute value"
-
-	| d result |
-	d := (Decimal ___new___: Decimal _: '-42.5').
-	
-	result := (d perform: #__abs__ env: 2).
-	
-	self assert: (result perform: #__str__ env: 2) equals: '42.5'
 %
 
 category: 'Tests - Comparison'
@@ -156,3 +138,43 @@ testLessThan
 	self deny: (d2 perform: #__lt__: env: 2 withArguments: {d1})
 %
 
+category: 'Tests - Arithmetic'
+method: DecimalTestCase
+testMultiplication
+	"Test Decimal multiplication"
+
+	| d1 d2 result |
+	d1 := (Decimal ___new___: Decimal _: '3.5').
+	d2 := (Decimal ___new___: Decimal _: '2.0').
+	
+	result := (d1 perform: #__mul__: env: 2 withArguments: {d2}).
+	
+	self assert: (result perform: #__str__ env: 2) equals: '7.0'
+%
+
+category: 'Tests - Arithmetic'
+method: DecimalTestCase
+testNegation
+	"Test Decimal negation"
+
+	| d result |
+	d := (Decimal ___new___: Decimal _: '42.5').
+	
+	result := (d perform: #__neg__ env: 2).
+	
+	self assert: (result perform: #__str__ env: 2) equals: '-42.5'
+%
+
+category: 'Tests - Arithmetic'
+method: DecimalTestCase
+testSubtraction
+	"Test Decimal subtraction"
+
+	| d1 d2 result |
+	d1 := (Decimal ___new___: Decimal _: '50.7').
+	d2 := (Decimal ___new___: Decimal _: '20.3').
+	
+	result := (d1 perform: #__sub__: env: 2 withArguments: {d2}).
+	
+	self assert: (result perform: #__str__ env: 2) equals: '30.4'
+%

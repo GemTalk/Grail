@@ -1,0 +1,674 @@
+! ===============================================================================
+! Boolean Methods (Python 'bool' type)
+! ===============================================================================
+! This file contains method implementations for the Boolean class when used
+! as the Python 'bool' type. In Python, bool is a subclass of int with only
+! two instances: True and False.
+!
+! In GemStone, Boolean is a separate class with singleton instances true and false.
+! We map Python's True to true and False to false, and implement Python's bool
+! methods in environment 2.
+!
+! Key differences from Python:
+! - In Python: bool is a subclass of int, True and False are instances of bool
+! - In GemStone: Boolean is separate from Integer, true and false are singletons
+! - We make Boolean behave like int for arithmetic (true=1, false=0)
+! ===============================================================================
+
+! ------------------- Remove existing Python methods from bool
+expectvalue /Metaclass3
+doit
+bool removeAllMethods: 2.
+bool class removeAllMethods: 2.
+%
+
+set compile_env: 0
+
+category: 'Python-Arithmetic Operators'
+method: bool
+* aNumber
+	"Multiply bool (as integer) by aNumber."
+
+	^ self asInteger * aNumber
+%
+
+category: 'Python-Arithmetic Operators'
+method: bool
++ aNumber
+	"Add bool (as integer) to aNumber."
+
+	^ self asInteger + aNumber
+%
+
+category: 'Python-Arithmetic Operators'
+method: bool
+- aNumber
+	"Subtract aNumber from bool (as integer)."
+
+	^ self asInteger - aNumber
+%
+
+category: 'Python-Arithmetic Operators'
+method: bool
+/ aNumber
+	"Divide bool (as integer) by aNumber."
+
+	^ self asInteger / aNumber
+%
+
+category: 'Python-Arithmetic Operators'
+method: bool
+// aNumber
+	"Integer division of bool (as integer) by aNumber."
+
+	^ self asInteger // aNumber
+%
+
+category: 'Python-Arithmetic Operators'
+method: bool
+< aNumber
+	"Less than comparison."
+
+	| otherInt |
+	otherInt := aNumber class == bool
+		ifTrue: [aNumber ifTrue: [1] ifFalse: [0]]
+		ifFalse: [aNumber].
+	^ self asInteger < otherInt
+%
+
+category: 'Python-Arithmetic Operators'
+method: bool
+<= aNumber
+	"Less than or equal comparison."
+
+	| otherInt |
+	otherInt := aNumber class == bool
+		ifTrue: [aNumber ifTrue: [1] ifFalse: [0]]
+		ifFalse: [aNumber].
+	^ self asInteger <= otherInt
+%
+
+category: 'Python-Arithmetic Operators'
+method: bool
+= anObject
+	"Equality comparison. Handle bool specially, otherwise compare as integer."
+
+	| otherInt |
+	otherInt := anObject class == bool
+		ifTrue: [anObject ifTrue: [1] ifFalse: [0]]
+		ifFalse: [anObject].
+	^ self asInteger = otherInt
+%
+
+category: 'Python-Arithmetic Operators'
+method: bool
+> aNumber
+	"Greater than comparison."
+
+	| otherInt |
+	otherInt := aNumber class == bool
+		ifTrue: [aNumber ifTrue: [1] ifFalse: [0]]
+		ifFalse: [aNumber].
+	^ self asInteger > otherInt
+%
+
+category: 'Python-Arithmetic Operators'
+method: bool
+>= aNumber
+	"Greater than or equal comparison."
+
+	| otherInt |
+	otherInt := aNumber class == bool
+		ifTrue: [aNumber ifTrue: [1] ifFalse: [0]]
+		ifFalse: [aNumber].
+	^ self asInteger >= otherInt
+%
+
+category: 'Python-Arithmetic Operators'
+method: bool
+\\ aNumber
+	"Modulo of bool (as integer) by aNumber."
+
+	^ self asInteger \\ aNumber
+%
+
+category: 'Python-Arithmetic Support'
+method: bool
+_coerce: aNumber
+	"Coerce aNumber to be compatible with bool (as integer).
+	Convert aNumber to Integer since bool behaves like Integer for arithmetic."
+
+	^ aNumber asInteger
+%
+
+category: 'Python-Arithmetic Support'
+method: bool
+_generality
+	"Return generality for bool in numeric hierarchy.
+	bool has the LOWEST generality (10) so it gets coerced to other numeric types.
+	This is lower than SmallInteger (20) and Integer (40)."
+
+	^ 10
+%
+
+category: 'Python-Arithmetic'
+method: bool
+abs
+	"Return absolute value (true=1, false=0)."
+
+	^ self asInteger
+%
+
+category: 'Python-Conversion'
+method: bool
+asFixedPoint: scale
+	"Convert bool to FixedPoint."
+
+	^ self asInteger asFixedPoint: scale
+%
+
+category: 'Python-Conversion'
+method: bool
+asFloat
+	"Convert bool to Float (true=1.0, false=0.0)."
+
+	^ self ifTrue: [1.0] ifFalse: [0.0]
+%
+
+category: 'Python-Conversion'
+method: bool
+asFraction
+	"Convert bool to Fraction (true=1, false=0)."
+
+	^ self asInteger
+%
+
+category: 'Python-Conversion'
+method: bool
+asInteger
+	"Convert bool to int (true=1, false=0)."
+
+	^ self ifTrue: [1] ifFalse: [0]
+%
+
+category: 'Python-Conversion'
+method: bool
+asScaledDecimal: scale
+	"Convert bool to ScaledDecimal."
+
+	^ self asInteger asScaledDecimal: scale
+%
+
+category: 'Python-Conversion'
+method: bool
+ceiling
+	"Return integer value (true=1, false=0)."
+
+	^ self asInteger
+%
+
+category: 'Python-Testing'
+method: bool
+even
+	"Return true if even (true=1 is odd, false=0 is even)."
+
+	^ self not
+%
+
+category: 'Python-Conversion'
+method: bool
+floor
+	"Return integer value (true=1, false=0)."
+
+	^ self asInteger
+%
+
+category: 'Python-Arithmetic Support'
+method: bool
+isNumber
+	"Return true - bool participates in arithmetic as a number.
+	Note: We override isNumber (not _isNumber which is an optimized selector)."
+
+	^ true
+%
+
+category: 'Python-Arithmetic Operators'
+method: bool
+max: aNumber
+	"Return maximum of bool (as integer) and aNumber."
+
+	^ self asInteger max: aNumber
+%
+
+category: 'Python-Arithmetic Operators'
+method: bool
+min: aNumber
+	"Return minimum of bool (as integer) and aNumber."
+
+	^ self asInteger min: aNumber
+%
+
+category: 'Python-Arithmetic'
+method: bool
+negated
+	"Return negation (true=-1, false=0)."
+
+	^ self asInteger negated
+%
+
+category: 'Python-Testing'
+method: bool
+negative
+	"Return false - booleans as integers are never negative."
+
+	^ false
+%
+
+category: 'Python-Testing'
+method: bool
+odd
+	"Return true if odd (true=1 is odd, false=0 is even)."
+
+	^ self
+%
+
+category: 'Python-Testing'
+method: bool
+positive
+	"Return true if self is true or false (equivalent to >= 0)."
+
+	^ true
+%
+
+category: 'Python-Arithmetic Operators'
+method: bool
+raisedTo: aNumber
+	"Raise bool (as integer) to the power of aNumber."
+
+	^ self asInteger raisedTo: aNumber
+%
+
+category: 'Python-Arithmetic Operators'
+method: bool
+raisedToInteger: aNumber
+	"Raise bool (as integer) to the power of aNumber (integer)."
+
+	^ self asInteger raisedToInteger: aNumber
+%
+
+category: 'Python-Arithmetic'
+method: bool
+reciprocal
+	"Return reciprocal (true=1, false=error)."
+
+	^ self asInteger reciprocal
+%
+
+category: 'Python-Conversion'
+method: bool
+rounded
+	"Return integer value (true=1, false=0)."
+
+	^ self asInteger
+%
+
+category: 'Python-Arithmetic'
+method: bool
+sign
+	"Return sign (true=1, false=0)."
+
+	^ self asInteger
+%
+
+category: 'Python-Testing'
+method: bool
+strictlyPositive
+	"Return true if self is true (equivalent to > 0)."
+
+	^ self
+%
+
+category: 'Python-Conversion'
+method: bool
+truncated
+	"Return integer value (true=1, false=0)."
+
+	^ self asInteger
+%
+
+category: 'Python-Arithmetic Operators'
+method: bool
+~= anObject
+	"Inequality comparison. Handle bool specially, otherwise compare as integer."
+
+	| otherInt |
+	otherInt := anObject class == bool
+		ifTrue: [anObject ifTrue: [1] ifFalse: [0]]
+		ifFalse: [anObject].
+	^ self asInteger ~= otherInt
+%
+
+set compile_env: 2
+
+category: 'Python-Initialization'
+classmethod: bool
+__new__
+	"Create a bool instance with default value False.
+	In Python: bool() or bool.__new__(bool)"
+
+	^ false
+%
+
+category: 'Python-Initialization'
+classmethod: bool
+__new__: obj
+	"Create a bool instance from an object by calling its __bool__ method.
+	In Python: bool(obj) or bool.__new__(bool, obj)"
+
+	| result |
+	obj ifNil: [ ^ false ].
+
+	"If already a bool, return it"
+	(obj ___isKindOf___: bool) ifTrue: [
+		^ obj
+	].
+
+	"Try to call __bool__ on the object if it has one"
+	(obj ___respondsTo___: #__bool__) ifTrue: [
+		result := obj __bool__.
+		^ result
+	].
+
+	"For integers, 0 is False, everything else is True"
+	(obj ___isKindOf___: int) ifTrue: [
+		^ obj ___ne___: 0
+	].
+
+	"For floats, 0.0 is False, everything else is True"
+	(obj ___isKindOf___: Float) ifTrue: [
+		^ obj ___ne___: 0.0
+	].
+
+	"For strings, empty string is False"
+	(obj ___isKindOf___: Unicode7) ifTrue: [
+		^ (obj ___size___) ___gt___: 0
+	].
+
+	"For collections, empty is False"
+	(obj ___isKindOf___: Collection) ifTrue: [
+		^ (obj ___size___) ___gt___: 0
+	].
+
+	"Default: everything else is True"
+	^ true
+%
+
+category: 'Python-Logical Operators'
+method: bool
+___and___: aBlock
+	"Short-circuit logical AND. If self is false, return false.
+	Otherwise, evaluate the block and return its value."
+
+	^ self ifTrue: [aBlock value] ifFalse: [false]
+%
+
+category: 'Python-Logical Operators'
+method: bool
+___or___: aBlock
+	"Short-circuit logical OR. If self is true, return true.
+	Otherwise, evaluate the block and return its value."
+
+	^ self ifTrue: [true] ifFalse: [aBlock value]
+%
+
+category: 'Python-Arithmetic'
+method: bool
+__abs__
+	"Absolute value of bool (as int)."
+
+	^ self ifTrue: [1] ifFalse: [0]
+%
+
+category: 'Python-Arithmetic'
+method: bool
+__add__: other
+	"Add bool (as int) to other."
+
+	^ (self ifTrue: [1] ifFalse: [0]) ___plus___: other
+%
+
+category: 'Python-Bitwise'
+method: bool
+__and__: other
+	"Bitwise AND of bool (as int) with other."
+
+	^ (self ifTrue: [1] ifFalse: [0]) ___bitAnd___: other
+%
+
+category: 'Python-Conversion'
+method: bool
+__bool__
+	"Return self (already a bool)."
+
+	^ self
+%
+
+category: 'Python-Documentation'
+method: bool
+__doc__
+	"Return documentation string for bool type."
+
+	^ 'bool(x) -> bool
+
+Returns True when the argument x is true, False otherwise.
+The builtins True and False are the only two instances of the class bool.
+The class bool is a subclass of the class int, and cannot be subclassed.' ___asUnicodeString___
+%
+
+category: 'Python-Comparison'
+method: bool
+__eq__: other
+	"Equality comparison. True==1 and False==0 in Python."
+
+	| selfInt otherInt |
+	selfInt := self ifTrue: [1] ifFalse: [0].
+	otherInt := (other ___class___) == bool
+		ifTrue: [other ifTrue: [1] ifFalse: [0]]
+		ifFalse: [other].
+	^ selfInt ___eq___: otherInt
+%
+
+category: 'Python-Conversion'
+method: bool
+__float__
+	"Convert bool to float (True=1.0, False=0.0)."
+
+	^ self ifTrue: [1.0] ifFalse: [0.0]
+%
+
+category: 'Python-Arithmetic'
+method: bool
+__floordiv__: other
+	"Floor division of bool (as int) by other."
+
+	^ (self ifTrue: [1] ifFalse: [0]) ___divideInteger___: other
+%
+
+category: 'Python-Comparison'
+method: bool
+__ge__: other
+	"Greater than or equal comparison."
+
+	| selfInt otherInt |
+	selfInt := self ifTrue: [1] ifFalse: [0].
+	otherInt := (other ___class___) == bool
+		ifTrue: [other ifTrue: [1] ifFalse: [0]]
+		ifFalse: [other].
+	^ selfInt ___ge___: otherInt
+%
+
+category: 'Python-Comparison'
+method: bool
+__gt__: other
+	"Greater than comparison."
+
+	| selfInt otherInt |
+	selfInt := self ifTrue: [1] ifFalse: [0].
+	otherInt := (other ___class___) == bool
+		ifTrue: [other ifTrue: [1] ifFalse: [0]]
+		ifFalse: [other].
+	^ selfInt ___gt___: otherInt
+%
+
+category: 'Python-Conversion'
+method: bool
+__index__
+	"Return int value (used for indexing). True=1, False=0."
+
+	^ self ifTrue: [1] ifFalse: [0]
+%
+
+category: 'Python-Conversion'
+method: bool
+__int__
+	"Convert bool to int (True=1, False=0)."
+
+	^ self ifTrue: [1] ifFalse: [0]
+%
+
+category: 'Python-Bitwise'
+method: bool
+__invert__
+	"Bitwise NOT of bool (as int)."
+
+	^ (self ifTrue: [1] ifFalse: [0]) perform: #bitInvert env: 0
+%
+
+category: 'Python-Comparison'
+method: bool
+__le__: other
+	"Less than or equal comparison."
+
+	| selfInt otherInt |
+	selfInt := self ifTrue: [1] ifFalse: [0].
+	otherInt := (other ___class___) == bool
+		ifTrue: [other ifTrue: [1] ifFalse: [0]]
+		ifFalse: [other].
+	^ selfInt ___le___: otherInt
+%
+
+category: 'Python-Comparison'
+method: bool
+__lt__: other
+	"Less than comparison."
+
+	| selfInt otherInt |
+	selfInt := self ifTrue: [1] ifFalse: [0].
+	otherInt := (other ___class___) == bool
+		ifTrue: [other ifTrue: [1] ifFalse: [0]]
+		ifFalse: [other].
+	^ selfInt ___lt___: otherInt
+%
+
+category: 'Python-Arithmetic'
+method: bool
+__mod__: other
+	"Modulo of bool (as int) by other."
+
+	^ (self ifTrue: [1] ifFalse: [0]) ___modulo___: other
+%
+
+category: 'Python-Arithmetic'
+method: bool
+__mul__: other
+	"Multiply bool (as int) by other."
+
+	^ (self ifTrue: [1] ifFalse: [0]) ___times___: other
+%
+
+category: 'Python-Comparison'
+method: bool
+__ne__: other
+	"Inequality comparison."
+
+	| selfInt otherInt |
+	selfInt := self ifTrue: [1] ifFalse: [0].
+	otherInt := (other ___class___) == bool
+		ifTrue: [other ifTrue: [1] ifFalse: [0]]
+		ifFalse: [other].
+	^ selfInt ___ne___: otherInt
+%
+
+category: 'Python-Arithmetic'
+method: bool
+__neg__
+	"Negate bool (as int)."
+
+	^ (self ifTrue: [1] ifFalse: [0]) ___negated___
+%
+
+category: 'Python-Bitwise'
+method: bool
+__or__: other
+	"Bitwise OR of bool (as int) with other."
+
+	^ (self ifTrue: [1] ifFalse: [0]) perform: #bitOr: env: 0 withArguments: {other}
+%
+
+category: 'Python-Arithmetic'
+method: bool
+__pos__
+	"Unary plus of bool (as int)."
+
+	^ self ifTrue: [1] ifFalse: [0]
+%
+
+category: 'Python-Arithmetic'
+method: bool
+__pow__: other
+	"Raise bool (as int) to power of other."
+
+	^ (self ifTrue: [1] ifFalse: [0]) ___raisedTo___: other
+%
+
+category: 'Python-String Representation'
+method: bool
+__repr__
+	"Return the official string representation of the bool."
+
+	^ (self ifTrue: ['True'] ifFalse: ['False']) ___asUnicodeString___
+%
+
+category: 'Python-String Representation'
+method: bool
+__str__
+	"Return the informal string representation of the bool."
+
+	^ (self ifTrue: ['True'] ifFalse: ['False']) ___asUnicodeString___
+%
+
+category: 'Python-Arithmetic'
+method: bool
+__sub__: other
+	"Subtract other from bool (as int)."
+
+	^ (self ifTrue: [1] ifFalse: [0]) ___minus___: (other)
+%
+
+category: 'Python-Arithmetic'
+method: bool
+__truediv__: other
+	"True division of bool (as int) by other."
+
+	^ (self ifTrue: [1] ifFalse: [0]) ___divide___: other
+%
+
+category: 'Python-Bitwise'
+method: bool
+__xor__: other
+	"Bitwise XOR of bool (as int) with other."
+
+	^ (self ifTrue: [1] ifFalse: [0]) perform: #bitXor: env: 0 withArguments: {other}
+%
+
+set compile_env: 0

@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for FloatingPointErrorTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'FloatingPointErrorTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+FloatingPointErrorTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! FloatingPointErrorTestCase - Tests for Python FloatingPointError
 ! ===============================================================================
@@ -10,15 +32,7 @@ FloatingPointErrorTestCase removeAllMethods.
 FloatingPointErrorTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-FloatingPointError'
-method: FloatingPointErrorTestCase
-test_inheritance
-	"Test that FloatingPointError inherits from Exception."
-	
-	| exc |
-	exc := FloatingPointError ___new___:  FloatingPointError .
-	self assert: (exc isKindOf: Exception).
-%
+set compile_env: 0
 
 category: 'Python-Tests-FloatingPointError'
 method: FloatingPointErrorTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := FloatingPointError ___new___:  FloatingPointError .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-FloatingPointError'
+method: FloatingPointErrorTestCase
+test_inheritance
+	"Test that FloatingPointError inherits from Exception."
+	
+	| exc |
+	exc := FloatingPointError ___new___:  FloatingPointError .
+	self assert: (exc isKindOf: Exception).
 %

@@ -1,3 +1,26 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for GemStoneTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'GemStoneTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+
+expectvalue /Class
+doit
+GemStoneTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! GemStoneTestCase - Tests for Python gemstone module
 ! ===============================================================================
@@ -10,22 +33,35 @@ GemStoneTestCase removeAllMethods.
 GemStoneTestCase class removeAllMethods.
 %
 
-! ------------------- Instance Methods
+set compile_env: 0
 
 category: 'Tests'
 method: GemStoneTestCase
-testGemstoneModuleIsAvailable
-	"Test that gemstone module is registered and importable"
+test_delitem
 
-	| modules imp importModuleBlock result |
-	modules := importlib perform: #modules env: 2.
-	self assert: (modules includesKey: #gemstone).
+	| gs key value |
+	gs := gemstone perform: #instance env: 2.
+	key := str withAll: '_grail_test_delitem'.
+	value := str withAll: 'to_be_deleted'.
+	"Add an entry, then delete it"
+	gs perform: #__setitem__:_: env: 2 withArguments: { key . value }.
+	self assert: (gs perform: #__getitem__: env: 2 withArguments: { key }) equals: value.
+	gs perform: #__delitem__: env: 2 withArguments: { key }.
+	"Should now raise KeyError"
+	self should: [
+		gs perform: #__getitem__: env: 2 withArguments: { key }
+	] raise: KeyError
+%
 
-	imp := importlib perform: #instance env: 2.
-	importModuleBlock := imp perform: #import_module env: 2.
-	result := importModuleBlock value: {'gemstone'} value: nil.
+category: 'Tests'
+method: GemStoneTestCase
+test_delitem_keyError
 
-	self assert: result class equals: gemstone
+	| gs |
+	gs := gemstone perform: #instance env: 2.
+	self should: [
+		gs perform: #__delitem__: env: 2 withArguments: { str withAll: '_no_such_key' }
+	] raise: KeyError
 %
 
 category: 'Tests'
@@ -81,39 +117,26 @@ test_setitem_new
 
 category: 'Tests'
 method: GemStoneTestCase
-test_delitem
-
-	| gs key value |
-	gs := gemstone perform: #instance env: 2.
-	key := str withAll: '_grail_test_delitem'.
-	value := str withAll: 'to_be_deleted'.
-	"Add an entry, then delete it"
-	gs perform: #__setitem__:_: env: 2 withArguments: { key . value }.
-	self assert: (gs perform: #__getitem__: env: 2 withArguments: { key }) equals: value.
-	gs perform: #__delitem__: env: 2 withArguments: { key }.
-	"Should now raise KeyError"
-	self should: [
-		gs perform: #__getitem__: env: 2 withArguments: { key }
-	] raise: KeyError
-%
-
-category: 'Tests'
-method: GemStoneTestCase
-test_delitem_keyError
-
-	| gs |
-	gs := gemstone perform: #instance env: 2.
-	self should: [
-		gs perform: #__delitem__: env: 2 withArguments: { str withAll: '_no_such_key' }
-	] raise: KeyError
-%
-
-category: 'Tests'
-method: GemStoneTestCase
 test_version
 
 	| gs result |
 	gs := gemstone perform: #instance env: 2.
 	result := gs perform: #version env: 2.
 	self assert: result equals: '3.7.4.3'.
+%
+
+category: 'Tests'
+method: GemStoneTestCase
+testGemstoneModuleIsAvailable
+	"Test that gemstone module is registered and importable"
+
+	| modules imp importModuleBlock result |
+	modules := importlib perform: #modules env: 2.
+	self assert: (modules includesKey: #gemstone).
+
+	imp := importlib perform: #instance env: 2.
+	importModuleBlock := imp perform: #import_module env: 2.
+	result := importModuleBlock value: {'gemstone'} value: nil.
+
+	self assert: result class equals: gemstone
 %

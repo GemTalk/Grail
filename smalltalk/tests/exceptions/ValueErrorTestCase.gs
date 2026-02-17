@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for ValueErrorTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'ValueErrorTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+ValueErrorTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! ValueErrorTestCase - Tests for Python ValueError
 ! ===============================================================================
@@ -10,15 +32,7 @@ ValueErrorTestCase removeAllMethods.
 ValueErrorTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-ValueError'
-method: ValueErrorTestCase
-test_inheritance
-	"Test that ValueError inherits from Exception."
-	
-	| exc |
-	exc := ValueError ___new___:  ValueError .
-	self assert: (exc isKindOf: Exception).
-%
+set compile_env: 0
 
 category: 'Python-Tests-ValueError'
 method: ValueErrorTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := ValueError ___new___:  ValueError .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-ValueError'
+method: ValueErrorTestCase
+test_inheritance
+	"Test that ValueError inherits from Exception."
+	
+	| exc |
+	exc := ValueError ___new___:  ValueError .
+	self assert: (exc isKindOf: Exception).
 %

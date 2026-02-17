@@ -1,21 +1,46 @@
-﻿! ------------------- Remove existing behavior from PrettyWriteStream
+! ------------------- Superclass check
+run
+WriteStream ifNil: [self error: 'WriteStream is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for PrettyWriteStream
+expectvalue /Class
+doit
+WriteStream subclass: 'PrettyWriteStream'
+  instVarNames: #( indentCount)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonAst
+  options: #()
+
+%
+
+expectvalue /Class
+doit
+PrettyWriteStream category: 'Tools'
+%
+
+! ------------------- Remove existing behavior from PrettyWriteStream
 removeallmethods PrettyWriteStream
 removeallclassmethods PrettyWriteStream
+
 set compile_env: 0
-! ------------------- Class methods for PrettyWriteStream
-! ------------------- Instance methods for PrettyWriteStream
+
 category: 'other'
 method: PrettyWriteStream
 decreaseIndent
 
 	indentCount := indentCount - 1.
 %
+
 category: 'other'
 method: PrettyWriteStream
 increaseIndent
 
 	indentCount := indentCount + 1.
 %
+
 category: 'other'
 method: PrettyWriteStream
 nextPut: aChar
@@ -26,6 +51,7 @@ nextPut: aChar
 	].
 	super nextPut: aChar.
 %
+
 category: 'other'
 method: PrettyWriteStream
 nextPutAll: aString
@@ -36,6 +62,7 @@ nextPutAll: aString
 	].
 	super nextPutAll: aString.
 %
+
 category: 'other'
 method: PrettyWriteStream
 on: aCollection
@@ -44,6 +71,7 @@ on: aCollection
 	super on: aCollection.
 	indentCount := 0.
 %
+
 category: 'other'
 method: PrettyWriteStream
 removeTrailingNone
@@ -60,6 +88,7 @@ removeTrailingNone
 		collection := contents copyFrom: 1 to: newSize.
 	].
 %
+
 category: 'other'
 method: PrettyWriteStream
 tab

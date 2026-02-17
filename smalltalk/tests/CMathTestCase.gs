@@ -1,3 +1,26 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for CMathTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'CMathTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+
+expectvalue /Class
+doit
+CMathTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! CMathTestCase - Tests for Python cmath module
 ! ===============================================================================
@@ -9,20 +32,7 @@ CMathTestCase removeAllMethods: 0.
 CMathTestCase class removeAllMethods: 0.
 %
 
-! ------------------- Test methods for CMathTestCase
-
-category: 'Tests - Constants'
-method: CMathTestCase
-testPi
-	"Test cmath.pi constant"
-
-	| cm result |
-	cm := cmath perform: #instance env: 2.
-	result := cm perform: #pi env: 2.
-	
-	self assert: (((result - 3.14159) abs) 
-		< 0.001)
-%
+set compile_env: 0
 
 category: 'Tests - Constants'
 method: CMathTestCase
@@ -35,6 +45,26 @@ testE
 	
 	self assert: (((result - 2.71828) abs) 
 		< 0.001)
+%
+
+category: 'Tests - Exponential'
+method: CMathTestCase
+testExp
+	"Test cmath.exp() with complex number"
+
+	| cm expBlock z result real imag |
+	cm := cmath perform: #instance env: 2.
+	expBlock := cm perform: #exp env: 2.
+	
+	"exp(0) = 1"
+	z := complex ___new___: 0.0 _: 0.0.
+	result := expBlock value: {z} value: nil.
+	real := result perform: #real env: 2.
+	imag := result perform: #imag env: 2.
+	
+	self assert: (((real - 1.0) abs) 
+		< 0.00001).
+	self assert: ((imag abs) < 0.00001)
 %
 
 category: 'Tests - Constants'
@@ -62,6 +92,88 @@ testInfj
 	self assert: (imag _getKind) equals: 3
 %
 
+category: 'Tests - Classification'
+method: CMathTestCase
+testIsfinite
+	"Test cmath.isfinite()"
+
+	| cm isfiniteBlock z result inf |
+	cm := cmath perform: #instance env: 2.
+	inf := cm perform: #inf env: 2.
+	isfiniteBlock := cm perform: #isfinite env: 2.
+
+	"isfinite(1+2j) = True"
+	z := complex ___new___: 1.0 _: 2.0.
+	result := isfiniteBlock value: {z} value: nil.
+	self assert: result.
+
+	"isfinite(inf+0j) = False"
+	z := complex ___new___: inf _: 0.0.
+	result := isfiniteBlock value: {z} value: nil.
+	self deny: result
+%
+
+category: 'Tests - Classification'
+method: CMathTestCase
+testIsinf
+	"Test cmath.isinf()"
+
+	| cm isinfBlock z result inf |
+	cm := cmath perform: #instance env: 2.
+	inf := cm perform: #inf env: 2.
+	isinfBlock := cm perform: #isinf env: 2.
+
+	"isinf(inf+0j) = True"
+	z := complex ___new___: inf _: 0.0.
+	result := isinfBlock value: {z} value: nil.
+	self assert: result.
+
+	"isinf(1+0j) = False"
+	z := complex ___new___: 1.0 _: 0.0.
+	result := isinfBlock value: {z} value: nil.
+	self deny: result
+%
+
+category: 'Tests - Classification'
+method: CMathTestCase
+testIsnan
+	"Test cmath.isnan()"
+
+	| cm isnanBlock z result nan |
+	cm := cmath perform: #instance env: 2.
+	nan := cm perform: #nan env: 2.
+	isnanBlock := cm perform: #isnan env: 2.
+
+	"isnan(nan+0j) = True"
+	z := complex ___new___: nan _: 0.0.
+	result := isnanBlock value: {z} value: nil.
+	self assert: result.
+
+	"isnan(1+0j) = False"
+	z := complex ___new___: 1.0 _: 0.0.
+	result := isnanBlock value: {z} value: nil.
+	self deny: result
+%
+
+category: 'Tests - Logarithmic'
+method: CMathTestCase
+testLog
+	"Test cmath.log() with complex number"
+
+	| cm logBlock z result real imag |
+	cm := cmath perform: #instance env: 2.
+	logBlock := cm perform: #log env: 2.
+	
+	"log(1) = 0"
+	z := complex ___new___: 1.0 _: 0.0.
+	result := logBlock value: {z} value: nil.
+	real := result perform: #real env: 2.
+	imag := result perform: #imag env: 2.
+	
+	self assert: ((real abs) < 0.00001).
+	self assert: ((imag abs) < 0.00001)
+%
+
 category: 'Tests - Constants'
 method: CMathTestCase
 testNan
@@ -87,65 +199,6 @@ testNanj
 	self assert: (imag _isNaN)
 %
 
-category: 'Tests - Exponential'
-method: CMathTestCase
-testExp
-	"Test cmath.exp() with complex number"
-
-	| cm expBlock z result real imag |
-	cm := cmath perform: #instance env: 2.
-	expBlock := cm perform: #exp env: 2.
-	
-	"exp(0) = 1"
-	z := complex ___new___: 0.0 _: 0.0.
-	result := expBlock value: {z} value: nil.
-	real := result perform: #real env: 2.
-	imag := result perform: #imag env: 2.
-	
-	self assert: (((real - 1.0) abs) 
-		< 0.00001).
-	self assert: ((imag abs) < 0.00001)
-%
-
-category: 'Tests - Logarithmic'
-method: CMathTestCase
-testLog
-	"Test cmath.log() with complex number"
-
-	| cm logBlock z result real imag |
-	cm := cmath perform: #instance env: 2.
-	logBlock := cm perform: #log env: 2.
-	
-	"log(1) = 0"
-	z := complex ___new___: 1.0 _: 0.0.
-	result := logBlock value: {z} value: nil.
-	real := result perform: #real env: 2.
-	imag := result perform: #imag env: 2.
-	
-	self assert: ((real abs) < 0.00001).
-	self assert: ((imag abs) < 0.00001)
-%
-
-category: 'Tests - Power'
-method: CMathTestCase
-testSqrt
-	"Test cmath.sqrt() with complex number"
-
-	| cm sqrtBlock z result real imag |
-	cm := cmath perform: #instance env: 2.
-	sqrtBlock := cm perform: #sqrt env: 2.
-
-	"sqrt(4) = 2"
-	z := complex ___new___: 4.0 _: 0.0.
-	result := sqrtBlock value: {z} value: nil.
-	real := result perform: #real env: 2.
-	imag := result perform: #imag env: 2.
-
-	self assert: (((real - 2.0) abs)
-		< 0.00001).
-	self assert: ((imag abs) < 0.00001)
-%
-
 category: 'Tests - Polar'
 method: CMathTestCase
 testPhase
@@ -166,6 +219,19 @@ testPhase
 	result := phaseBlock value: {z} value: nil.
 	self assert: (((result - (pi / 2.0)) abs)
 		< 0.00001)
+%
+
+category: 'Tests - Constants'
+method: CMathTestCase
+testPi
+	"Test cmath.pi constant"
+
+	| cm result |
+	cm := cmath perform: #instance env: 2.
+	result := cm perform: #pi env: 2.
+	
+	self assert: (((result - 3.14159) abs) 
+		< 0.001)
 %
 
 category: 'Tests - Polar'
@@ -208,67 +274,22 @@ testRect
 	self assert: ((imag abs) < 0.00001)
 %
 
-category: 'Tests - Classification'
+category: 'Tests - Power'
 method: CMathTestCase
-testIsnan
-	"Test cmath.isnan()"
+testSqrt
+	"Test cmath.sqrt() with complex number"
 
-	| cm isnanBlock z result nan |
+	| cm sqrtBlock z result real imag |
 	cm := cmath perform: #instance env: 2.
-	nan := cm perform: #nan env: 2.
-	isnanBlock := cm perform: #isnan env: 2.
+	sqrtBlock := cm perform: #sqrt env: 2.
 
-	"isnan(nan+0j) = True"
-	z := complex ___new___: nan _: 0.0.
-	result := isnanBlock value: {z} value: nil.
-	self assert: result.
+	"sqrt(4) = 2"
+	z := complex ___new___: 4.0 _: 0.0.
+	result := sqrtBlock value: {z} value: nil.
+	real := result perform: #real env: 2.
+	imag := result perform: #imag env: 2.
 
-	"isnan(1+0j) = False"
-	z := complex ___new___: 1.0 _: 0.0.
-	result := isnanBlock value: {z} value: nil.
-	self deny: result
+	self assert: (((real - 2.0) abs)
+		< 0.00001).
+	self assert: ((imag abs) < 0.00001)
 %
-
-category: 'Tests - Classification'
-method: CMathTestCase
-testIsinf
-	"Test cmath.isinf()"
-
-	| cm isinfBlock z result inf |
-	cm := cmath perform: #instance env: 2.
-	inf := cm perform: #inf env: 2.
-	isinfBlock := cm perform: #isinf env: 2.
-
-	"isinf(inf+0j) = True"
-	z := complex ___new___: inf _: 0.0.
-	result := isinfBlock value: {z} value: nil.
-	self assert: result.
-
-	"isinf(1+0j) = False"
-	z := complex ___new___: 1.0 _: 0.0.
-	result := isinfBlock value: {z} value: nil.
-	self deny: result
-%
-
-category: 'Tests - Classification'
-method: CMathTestCase
-testIsfinite
-	"Test cmath.isfinite()"
-
-	| cm isfiniteBlock z result inf |
-	cm := cmath perform: #instance env: 2.
-	inf := cm perform: #inf env: 2.
-	isfiniteBlock := cm perform: #isfinite env: 2.
-
-	"isfinite(1+2j) = True"
-	z := complex ___new___: 1.0 _: 2.0.
-	result := isfiniteBlock value: {z} value: nil.
-	self assert: result.
-
-	"isfinite(inf+0j) = False"
-	z := complex ___new___: inf _: 0.0.
-	result := isfiniteBlock value: {z} value: nil.
-	self deny: result
-%
-
-

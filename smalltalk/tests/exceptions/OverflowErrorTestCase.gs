@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for OverflowErrorTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'OverflowErrorTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+OverflowErrorTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! OverflowErrorTestCase - Tests for Python OverflowError
 ! ===============================================================================
@@ -10,15 +32,7 @@ OverflowErrorTestCase removeAllMethods.
 OverflowErrorTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-OverflowError'
-method: OverflowErrorTestCase
-test_inheritance
-	"Test that OverflowError inherits from ArithmeticError."
-	
-	| exc |
-	exc := OverflowError ___new___:  OverflowError .
-	self assert: (exc isKindOf: ArithmeticError).
-%
+set compile_env: 0
 
 category: 'Python-Tests-OverflowError'
 method: OverflowErrorTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := OverflowError ___new___:  OverflowError .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-OverflowError'
+method: OverflowErrorTestCase
+test_inheritance
+	"Test that OverflowError inherits from ArithmeticError."
+	
+	| exc |
+	exc := OverflowError ___new___:  OverflowError .
+	self assert: (exc isKindOf: ArithmeticError).
 %

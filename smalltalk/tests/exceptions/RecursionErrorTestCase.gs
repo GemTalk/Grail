@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for RecursionErrorTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'RecursionErrorTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+RecursionErrorTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! RecursionErrorTestCase - Tests for Python RecursionError
 ! ===============================================================================
@@ -10,15 +32,7 @@ RecursionErrorTestCase removeAllMethods.
 RecursionErrorTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-RecursionError'
-method: RecursionErrorTestCase
-test_inheritance
-	"Test that RecursionError inherits from RuntimeError."
-
-	| exc |
-	exc := RecursionError ___new___:  RecursionError .
-	self assert: (exc isKindOf: RuntimeError).
-%
+set compile_env: 0
 
 category: 'Python-Tests-RecursionError'
 method: RecursionErrorTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := RecursionError ___new___:  RecursionError .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-RecursionError'
+method: RecursionErrorTestCase
+test_inheritance
+	"Test that RecursionError inherits from RuntimeError."
+
+	| exc |
+	exc := RecursionError ___new___:  RecursionError .
+	self assert: (exc isKindOf: RuntimeError).
 %

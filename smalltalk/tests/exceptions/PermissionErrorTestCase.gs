@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for PermissionErrorTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'PermissionErrorTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+PermissionErrorTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! PermissionErrorTestCase - Tests for Python PermissionError
 ! ===============================================================================
@@ -10,15 +32,7 @@ PermissionErrorTestCase removeAllMethods.
 PermissionErrorTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-PermissionError'
-method: PermissionErrorTestCase
-test_inheritance
-	"Test that PermissionError inherits from OSError."
-	
-	| exc |
-	exc := PermissionError ___new___:  PermissionError .
-	self assert: (exc isKindOf: OSError).
-%
+set compile_env: 0
 
 category: 'Python-Tests-PermissionError'
 method: PermissionErrorTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := PermissionError ___new___:  PermissionError .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-PermissionError'
+method: PermissionErrorTestCase
+test_inheritance
+	"Test that PermissionError inherits from OSError."
+	
+	| exc |
+	exc := PermissionError ___new___:  PermissionError .
+	self assert: (exc isKindOf: OSError).
 %

@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for PendingDeprecationWarningTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'PendingDeprecationWarningTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+PendingDeprecationWarningTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! PendingDeprecationWarningTestCase - Tests for Python PendingDeprecationWarning
 ! ===============================================================================
@@ -10,15 +32,7 @@ PendingDeprecationWarningTestCase removeAllMethods.
 PendingDeprecationWarningTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-PendingDeprecationWarning'
-method: PendingDeprecationWarningTestCase
-test_inheritance
-	"Test that PendingDeprecationWarning inherits from Warning."
-	
-	| exc |
-	exc := PendingDeprecationWarning ___new___:  PendingDeprecationWarning .
-	self assert: (exc isKindOf: Warning).
-%
+set compile_env: 0
 
 category: 'Python-Tests-PendingDeprecationWarning'
 method: PendingDeprecationWarningTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := PendingDeprecationWarning ___new___:  PendingDeprecationWarning .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-PendingDeprecationWarning'
+method: PendingDeprecationWarningTestCase
+test_inheritance
+	"Test that PendingDeprecationWarning inherits from Warning."
+	
+	| exc |
+	exc := PendingDeprecationWarning ___new___:  PendingDeprecationWarning .
+	self assert: (exc isKindOf: Warning).
 %

@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for LookupErrorTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'LookupErrorTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+LookupErrorTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! LookupErrorTestCase - Tests for Python LookupError
 ! ===============================================================================
@@ -10,15 +32,7 @@ LookupErrorTestCase removeAllMethods.
 LookupErrorTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-LookupError'
-method: LookupErrorTestCase
-test_inheritance
-	"Test that LookupError inherits from Exception."
-	
-	| exc |
-	exc := LookupError ___new___:  LookupError .
-	self assert: (exc isKindOf: Exception).
-%
+set compile_env: 0
 
 category: 'Python-Tests-LookupError'
 method: LookupErrorTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := LookupError ___new___:  LookupError .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-LookupError'
+method: LookupErrorTestCase
+test_inheritance
+	"Test that LookupError inherits from Exception."
+	
+	| exc |
+	exc := LookupError ___new___:  LookupError .
+	self assert: (exc isKindOf: Exception).
 %

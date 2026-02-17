@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for FileExistsErrorTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'FileExistsErrorTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+FileExistsErrorTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! FileExistsErrorTestCase - Tests for Python FileExistsError
 ! ===============================================================================
@@ -10,15 +32,7 @@ FileExistsErrorTestCase removeAllMethods.
 FileExistsErrorTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-FileExistsError'
-method: FileExistsErrorTestCase
-test_inheritance
-	"Test that FileExistsError inherits from OSError."
-	
-	| exc |
-	exc := FileExistsError ___new___:  FileExistsError .
-	self assert: (exc isKindOf: OSError).
-%
+set compile_env: 0
 
 category: 'Python-Tests-FileExistsError'
 method: FileExistsErrorTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := FileExistsError ___new___:  FileExistsError .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-FileExistsError'
+method: FileExistsErrorTestCase
+test_inheritance
+	"Test that FileExistsError inherits from OSError."
+	
+	| exc |
+	exc := FileExistsError ___new___:  FileExistsError .
+	self assert: (exc isKindOf: OSError).
 %

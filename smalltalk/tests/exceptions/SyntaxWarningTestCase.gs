@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for SyntaxWarningTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'SyntaxWarningTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+SyntaxWarningTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! SyntaxWarningTestCase - Tests for Python SyntaxWarning
 ! ===============================================================================
@@ -10,15 +32,7 @@ SyntaxWarningTestCase removeAllMethods.
 SyntaxWarningTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-SyntaxWarning'
-method: SyntaxWarningTestCase
-test_inheritance
-	"Test that SyntaxWarning inherits from Warning."
-	
-	| exc |
-	exc := SyntaxWarning ___new___:  SyntaxWarning .
-	self assert: (exc isKindOf: Warning).
-%
+set compile_env: 0
 
 category: 'Python-Tests-SyntaxWarning'
 method: SyntaxWarningTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := SyntaxWarning ___new___:  SyntaxWarning .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-SyntaxWarning'
+method: SyntaxWarningTestCase
+test_inheritance
+	"Test that SyntaxWarning inherits from Warning."
+	
+	| exc |
+	exc := SyntaxWarning ___new___:  SyntaxWarning .
+	self assert: (exc isKindOf: Warning).
 %

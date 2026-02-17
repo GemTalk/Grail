@@ -1,3 +1,26 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for ModuleTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'ModuleTestCase'
+  instVarNames: #(priorTranscript)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+
+expectvalue /Class
+doit
+ModuleTestCase category: 'SUnit'
+%
+
 ! ------------------- Remove existing behavior from ModuleTestCase
 
 set compile_env: 0
@@ -8,21 +31,8 @@ ModuleTestCase removeAllMethods.
 ModuleTestCase class removeAllMethods.
 %
 
-! ------------------- Class methods for ModuleTestCase
-! ------------------- Instance methods for ModuleTestCase
+set compile_env: 0
 
-category: 'Setup'
-method: ModuleTestCase
-setUp
-
-	priorTranscript := Transcript.
-%
-category: 'Setup'
-method: ModuleTestCase
-tearDown
-
-	Transcript := priorTranscript.
-%
 category: 'Source'
 method: ModuleTestCase
 hello_py
@@ -39,6 +49,20 @@ say_hello(to, True)
 '
 %
 
+category: 'Setup'
+method: ModuleTestCase
+setUp
+
+	priorTranscript := Transcript.
+%
+
+category: 'Setup'
+method: ModuleTestCase
+tearDown
+
+	Transcript := priorTranscript.
+%
+
 category: 'Tests'
 method: ModuleTestCase
 testCreateAst
@@ -47,6 +71,7 @@ testCreateAst
 	ast := ModuleAst parseSource: self hello_py.
 	self assert: ast class == ModuleAst.
 %
+
 category: 'Tests'
 method: ModuleTestCase
 testEvaluateWithPersistentScope
@@ -70,6 +95,7 @@ testEvaluateWithPersistentScope
 		usingModuleScope: moduleScope.
 	self assert: result = 3.
 %
+
 category: 'Tests'
 method: ModuleTestCase
 testReplOutput

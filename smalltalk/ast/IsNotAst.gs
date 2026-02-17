@@ -1,20 +1,53 @@
-﻿! ------------------- Remove existing behavior from IsNotAst
+! ------------------- Superclass check
+run
+CmpOpAst ifNil: [self error: 'CmpOpAst is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for IsNotAst
+expectvalue /Class
+doit
+CmpOpAst subclass: 'IsNotAst'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonAst
+  options: #()
+
+%
+
+expectvalue /Class
+doit
+IsNotAst comment:
+'https://docs.python.org/3/library/ast.html#ast.IsNot
+
+Comparison operator token for negative identity test (is not).
+
+Used in the ops list of Compare nodes.
+
+Hierarchy:
+Object
+  AbstractNode(parent)
+    AbstractLocationNode(beginLine beginColumn endLine endColumn)
+      CmpOpAst
+        IsNotAst
+'
+%
+
+expectvalue /Class
+doit
+IsNotAst category: 'Parser'
+%
+
+! ------------------- Remove existing behavior from IsNotAst
 removeallmethods IsNotAst
 removeallclassmethods IsNotAst
+
 set compile_env: 0
-! ------------------- Class methods for IsNotAst
-! ------------------- Instance methods for IsNotAst
+
 category: 'other'
 method: IsNotAst
 printSmalltalkOn: aStream
 
 	aStream nextPutAll: ' ~~ '.
-%
-category: 'other'
-method: IsNotAst
-printSmalltalkOn: aStream left: aLeft rightList: aRight
-
-	aLeft printSmalltalkWithParenthesisOn: aStream.
-	aStream nextPutAll: ' ~~ '.
-	aRight first printSmalltalkWithParenthesisOn: aStream.
 %

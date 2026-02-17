@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for ResourceWarningTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'ResourceWarningTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+ResourceWarningTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! ResourceWarningTestCase - Tests for Python ResourceWarning
 ! ===============================================================================
@@ -10,15 +32,7 @@ ResourceWarningTestCase removeAllMethods.
 ResourceWarningTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-ResourceWarning'
-method: ResourceWarningTestCase
-test_inheritance
-	"Test that ResourceWarning inherits from Warning."
-	
-	| exc |
-	exc := ResourceWarning ___new___:  ResourceWarning .
-	self assert: (exc isKindOf: Warning).
-%
+set compile_env: 0
 
 category: 'Python-Tests-ResourceWarning'
 method: ResourceWarningTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := ResourceWarning ___new___:  ResourceWarning .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-ResourceWarning'
+method: ResourceWarningTestCase
+test_inheritance
+	"Test that ResourceWarning inherits from Warning."
+	
+	| exc |
+	exc := ResourceWarning ___new___:  ResourceWarning .
+	self assert: (exc isKindOf: Warning).
 %

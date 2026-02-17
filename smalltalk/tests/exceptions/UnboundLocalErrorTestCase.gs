@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for UnboundLocalErrorTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'UnboundLocalErrorTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+UnboundLocalErrorTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! UnboundLocalErrorTestCase - Tests for Python UnboundLocalError
 ! ===============================================================================
@@ -10,15 +32,7 @@ UnboundLocalErrorTestCase removeAllMethods.
 UnboundLocalErrorTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-UnboundLocalError'
-method: UnboundLocalErrorTestCase
-test_inheritance
-	"Test that UnboundLocalError inherits from NameError."
-	
-	| exc |
-	exc := UnboundLocalError ___new___:  UnboundLocalError .
-	self assert: (exc isKindOf: NameError).
-%
+set compile_env: 0
 
 category: 'Python-Tests-UnboundLocalError'
 method: UnboundLocalErrorTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := UnboundLocalError ___new___:  UnboundLocalError .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-UnboundLocalError'
+method: UnboundLocalErrorTestCase
+test_inheritance
+	"Test that UnboundLocalError inherits from NameError."
+	
+	| exc |
+	exc := UnboundLocalError ___new___:  UnboundLocalError .
+	self assert: (exc isKindOf: NameError).
 %

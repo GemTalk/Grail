@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for ExceptionGroupTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'ExceptionGroupTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+ExceptionGroupTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! ExceptionGroupTestCase - Tests for Python ExceptionGroup
 ! ===============================================================================
@@ -10,15 +32,7 @@ ExceptionGroupTestCase removeAllMethods.
 ExceptionGroupTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-ExceptionGroup'
-method: ExceptionGroupTestCase
-test_inheritance
-	"Test that ExceptionGroup inherits from BaseExceptionGroup."
-	
-	| exc |
-	exc := ExceptionGroup ___new___:  ExceptionGroup .
-	self assert: (exc isKindOf: BaseExceptionGroup).
-%
+set compile_env: 0
 
 category: 'Python-Tests-ExceptionGroup'
 method: ExceptionGroupTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := ExceptionGroup ___new___:  ExceptionGroup .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-ExceptionGroup'
+method: ExceptionGroupTestCase
+test_inheritance
+	"Test that ExceptionGroup inherits from BaseExceptionGroup."
+	
+	| exc |
+	exc := ExceptionGroup ___new___:  ExceptionGroup .
+	self assert: (exc isKindOf: BaseExceptionGroup).
 %

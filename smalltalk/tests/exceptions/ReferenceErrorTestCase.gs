@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for ReferenceErrorTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'ReferenceErrorTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+ReferenceErrorTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! ReferenceErrorTestCase - Tests for Python ReferenceError
 ! ===============================================================================
@@ -10,15 +32,7 @@ ReferenceErrorTestCase removeAllMethods.
 ReferenceErrorTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-ReferenceError'
-method: ReferenceErrorTestCase
-test_inheritance
-	"Test that ReferenceError inherits from Exception."
-	
-	| exc |
-	exc := ReferenceError ___new___:  ReferenceError .
-	self assert: (exc isKindOf: Exception).
-%
+set compile_env: 0
 
 category: 'Python-Tests-ReferenceError'
 method: ReferenceErrorTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := ReferenceError ___new___:  ReferenceError .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-ReferenceError'
+method: ReferenceErrorTestCase
+test_inheritance
+	"Test that ReferenceError inherits from Exception."
+	
+	| exc |
+	exc := ReferenceError ___new___:  ReferenceError .
+	self assert: (exc isKindOf: Exception).
 %

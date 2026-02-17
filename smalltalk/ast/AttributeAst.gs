@@ -1,27 +1,81 @@
+! ------------------- Superclass check
+run
+ExpressionAst ifNil: [self error: 'ExpressionAst is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for AttributeAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'AttributeAst'
+  instVarNames: #( value attr ctx)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonAst
+  options: #()
+
+%
+
+expectvalue /Class
+doit
+AttributeAst comment:
+'https://docs.python.org/3/library/ast.html#ast.Attribute
+
+Attribute access, e.g. d.keys.
+
+value is a node, typically a Name.
+attr is a bare string giving the name of the attribute.
+ctx is Load, Store or Del according to how the attribute is acted on.
+
+Example:
+>>> print(ast.dump(ast.parse(''snake.colour'', mode=''eval''), indent=4))
+Expression(
+    body=Attribute(
+        value=Name(id=''snake'', ctx=Load()),
+        attr=''colour'',
+        ctx=Load()))
+
+Hierarchy:
+Object
+  AbstractNode(parent)
+    AbstractLocationNode(beginLine beginColumn endLine endColumn)
+      ExpressionAst
+        AttributeAst(value attr ctx)
+'
+%
+
+expectvalue /Class
+doit
+AttributeAst category: 'Parser'
+%
+
 ! ------------------- Remove existing behavior from AttributeAst
 removeallmethods AttributeAst
 removeallclassmethods AttributeAst
+
 set compile_env: 0
-! ------------------- Class methods for AttributeAst
-! ------------------- Instance methods for AttributeAst
+
 category: 'other'
 method: AttributeAst
 assertContextIsLoad
 
 	ctx assertIsLoad.
 %
+
 category: 'other'
 method: AttributeAst
 declareVariable
 
 	value declareVariable.
 %
+
 category: 'other'
 method: AttributeAst
 id
 
 	^attr
 %
+
 category: 'other'
 method: AttributeAst
 printOn: aStream
@@ -35,6 +89,7 @@ printOn: aStream
 		nextPut: $);
 		yourself.
 %
+
 category: 'other'
 method: AttributeAst
 printSmalltalkOn: aStream
@@ -43,6 +98,7 @@ printSmalltalkOn: aStream
 	value printSmalltalkWithParenthesisOn: aStream.
 	aStream space; nextPutAll: attr.
 %
+
 category: 'other'
 method: AttributeAst
 setSuperInfo: aScope

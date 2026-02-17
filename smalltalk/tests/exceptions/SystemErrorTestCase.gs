@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for SystemErrorTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'SystemErrorTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+SystemErrorTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! SystemErrorTestCase - Tests for Python SystemError
 ! ===============================================================================
@@ -10,15 +32,7 @@ SystemErrorTestCase removeAllMethods.
 SystemErrorTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-SystemError'
-method: SystemErrorTestCase
-test_inheritance
-	"Test that SystemError inherits from Exception."
-	
-	| exc |
-	exc := SystemError ___new___:  SystemError .
-	self assert: (exc isKindOf: Exception).
-%
+set compile_env: 0
 
 category: 'Python-Tests-SystemError'
 method: SystemErrorTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := SystemError ___new___:  SystemError .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-SystemError'
+method: SystemErrorTestCase
+test_inheritance
+	"Test that SystemError inherits from Exception."
+	
+	| exc |
+	exc := SystemError ___new___:  SystemError .
+	self assert: (exc isKindOf: Exception).
 %

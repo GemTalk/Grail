@@ -1,9 +1,60 @@
-﻿! ------------------- Remove existing behavior from IfExpAst
+! ------------------- Superclass check
+run
+ExpressionAst ifNil: [self error: 'ExpressionAst is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for IfExpAst
+expectvalue /Class
+doit
+ExpressionAst subclass: 'IfExpAst'
+  instVarNames: #( test body orelse)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonAst
+  options: #()
+
+%
+
+expectvalue /Class
+doit
+IfExpAst comment:
+'https://docs.python.org/3/library/ast.html#ast.IfExp
+
+An expression such as a if b else c.
+
+test is the condition.
+body is the value if the condition is true.
+orelse is the value if the condition is false.
+
+Example:
+>>> print(ast.dump(ast.parse(''a if b else c'', mode=''eval''), indent=4))
+Expression(
+    body=IfExp(
+        test=Name(id=''b'', ctx=Load()),
+        body=Name(id=''a'', ctx=Load()),
+        orelse=Name(id=''c'', ctx=Load())))
+
+Hierarchy:
+Object
+  AbstractNode(parent)
+    AbstractLocationNode(beginLine beginColumn endLine endColumn)
+      ExpressionAst
+        IfExpAst(test body orelse)
+'
+%
+
+expectvalue /Class
+doit
+IfExpAst category: 'Parser'
+%
+
+! ------------------- Remove existing behavior from IfExpAst
 removeallmethods IfExpAst
 removeallclassmethods IfExpAst
+
 set compile_env: 0
-! ------------------- Class methods for IfExpAst
-! ------------------- Instance methods for IfExpAst
+
 category: 'other'
 method: IfExpAst
 printSmalltalkOn: aStream

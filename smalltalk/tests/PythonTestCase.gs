@@ -1,3 +1,26 @@
+! ------------------- Superclass check
+run
+TestCase ifNil: [self error: 'TestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for PythonTestCase
+expectvalue /Class
+doit
+TestCase subclass: 'PythonTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+
+expectvalue /Class
+doit
+PythonTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! PythonTestCase - Abstract base class for Python tests
 ! ===============================================================================
@@ -9,6 +32,8 @@ doit
 PythonTestCase removeAllMethods.
 PythonTestCase class removeAllMethods.
 %
+
+set compile_env: 0
 
 category: 'Testing'
 classmethod: PythonTestCase

@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for IndexErrorTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'IndexErrorTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+IndexErrorTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! IndexErrorTestCase - Tests for Python IndexError
 ! ===============================================================================
@@ -10,15 +32,7 @@ IndexErrorTestCase removeAllMethods.
 IndexErrorTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-IndexError'
-method: IndexErrorTestCase
-test_inheritance
-	"Test that IndexError inherits from LookupError."
-	
-	| exc |
-	exc := IndexError ___new___:  IndexError .
-	self assert: (exc isKindOf: LookupError).
-%
+set compile_env: 0
 
 category: 'Python-Tests-IndexError'
 method: IndexErrorTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := IndexError ___new___:  IndexError .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-IndexError'
+method: IndexErrorTestCase
+test_inheritance
+	"Test that IndexError inherits from LookupError."
+	
+	| exc |
+	exc := IndexError ___new___:  IndexError .
+	self assert: (exc isKindOf: LookupError).
 %

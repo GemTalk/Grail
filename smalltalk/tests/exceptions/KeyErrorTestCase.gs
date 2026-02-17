@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for KeyErrorTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'KeyErrorTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+KeyErrorTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! KeyErrorTestCase - Tests for Python KeyError
 ! ===============================================================================
@@ -10,15 +32,7 @@ KeyErrorTestCase removeAllMethods.
 KeyErrorTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-KeyError'
-method: KeyErrorTestCase
-test_inheritance
-	"Test that KeyError inherits from LookupError."
-	
-	| exc |
-	exc := KeyError ___new___:  KeyError .
-	self assert: (exc isKindOf: LookupError).
-%
+set compile_env: 0
 
 category: 'Python-Tests-KeyError'
 method: KeyErrorTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := KeyError ___new___:  KeyError .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-KeyError'
+method: KeyErrorTestCase
+test_inheritance
+	"Test that KeyError inherits from LookupError."
+	
+	| exc |
+	exc := KeyError ___new___:  KeyError .
+	self assert: (exc isKindOf: LookupError).
 %

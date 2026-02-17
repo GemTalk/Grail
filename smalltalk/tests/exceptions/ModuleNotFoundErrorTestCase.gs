@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for ModuleNotFoundErrorTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'ModuleNotFoundErrorTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+ModuleNotFoundErrorTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! ModuleNotFoundErrorTestCase - Tests for Python ModuleNotFoundError
 ! ===============================================================================
@@ -10,15 +32,7 @@ ModuleNotFoundErrorTestCase removeAllMethods.
 ModuleNotFoundErrorTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-ModuleNotFoundError'
-method: ModuleNotFoundErrorTestCase
-test_inheritance
-	"Test that ModuleNotFoundError inherits from ImportError."
-	
-	| exc |
-	exc := ModuleNotFoundError ___new___:  ModuleNotFoundError .
-	self assert: (exc isKindOf: ImportError).
-%
+set compile_env: 0
 
 category: 'Python-Tests-ModuleNotFoundError'
 method: ModuleNotFoundErrorTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := ModuleNotFoundError ___new___:  ModuleNotFoundError .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-ModuleNotFoundError'
+method: ModuleNotFoundErrorTestCase
+test_inheritance
+	"Test that ModuleNotFoundError inherits from ImportError."
+	
+	| exc |
+	exc := ModuleNotFoundError ___new___:  ModuleNotFoundError .
+	self assert: (exc isKindOf: ImportError).
 %

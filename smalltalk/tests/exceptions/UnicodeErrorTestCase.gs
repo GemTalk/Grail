@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for UnicodeErrorTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'UnicodeErrorTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+UnicodeErrorTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! UnicodeErrorTestCase - Tests for Python UnicodeError
 ! ===============================================================================
@@ -10,15 +32,7 @@ UnicodeErrorTestCase removeAllMethods.
 UnicodeErrorTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-UnicodeError'
-method: UnicodeErrorTestCase
-test_inheritance
-	"Test that UnicodeError inherits from ValueError."
-	
-	| exc |
-	exc := UnicodeError ___new___:  UnicodeError .
-	self assert: (exc isKindOf: ValueError).
-%
+set compile_env: 0
 
 category: 'Python-Tests-UnicodeError'
 method: UnicodeErrorTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := UnicodeError ___new___:  UnicodeError .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-UnicodeError'
+method: UnicodeErrorTestCase
+test_inheritance
+	"Test that UnicodeError inherits from ValueError."
+	
+	| exc |
+	exc := UnicodeError ___new___:  UnicodeError .
+	self assert: (exc isKindOf: ValueError).
 %

@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for ConnectionAbortedErrorTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'ConnectionAbortedErrorTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+ConnectionAbortedErrorTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! ConnectionAbortedErrorTestCase - Tests for Python ConnectionAbortedError
 ! ===============================================================================
@@ -10,15 +32,7 @@ ConnectionAbortedErrorTestCase removeAllMethods.
 ConnectionAbortedErrorTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-ConnectionAbortedError'
-method: ConnectionAbortedErrorTestCase
-test_inheritance
-	"Test that ConnectionAbortedError inherits from ConnectionError."
-	
-	| exc |
-	exc := ConnectionAbortedError ___new___:  ConnectionAbortedError .
-	self assert: (exc isKindOf: ConnectionError).
-%
+set compile_env: 0
 
 category: 'Python-Tests-ConnectionAbortedError'
 method: ConnectionAbortedErrorTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := ConnectionAbortedError ___new___:  ConnectionAbortedError .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-ConnectionAbortedError'
+method: ConnectionAbortedErrorTestCase
+test_inheritance
+	"Test that ConnectionAbortedError inherits from ConnectionError."
+	
+	| exc |
+	exc := ConnectionAbortedError ___new___:  ConnectionAbortedError .
+	self assert: (exc isKindOf: ConnectionError).
 %

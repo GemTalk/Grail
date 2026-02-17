@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for ConnectionRefusedErrorTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'ConnectionRefusedErrorTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+ConnectionRefusedErrorTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! ConnectionRefusedErrorTestCase - Tests for Python ConnectionRefusedError
 ! ===============================================================================
@@ -10,15 +32,7 @@ ConnectionRefusedErrorTestCase removeAllMethods.
 ConnectionRefusedErrorTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-ConnectionRefusedError'
-method: ConnectionRefusedErrorTestCase
-test_inheritance
-	"Test that ConnectionRefusedError inherits from ConnectionError."
-	
-	| exc |
-	exc := ConnectionRefusedError ___new___:  ConnectionRefusedError .
-	self assert: (exc isKindOf: ConnectionError).
-%
+set compile_env: 0
 
 category: 'Python-Tests-ConnectionRefusedError'
 method: ConnectionRefusedErrorTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := ConnectionRefusedError ___new___:  ConnectionRefusedError .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-ConnectionRefusedError'
+method: ConnectionRefusedErrorTestCase
+test_inheritance
+	"Test that ConnectionRefusedError inherits from ConnectionError."
+	
+	| exc |
+	exc := ConnectionRefusedError ___new___:  ConnectionRefusedError .
+	self assert: (exc isKindOf: ConnectionError).
 %

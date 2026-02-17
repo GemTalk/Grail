@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for ConnectionResetErrorTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'ConnectionResetErrorTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+ConnectionResetErrorTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! ConnectionResetErrorTestCase - Tests for Python ConnectionResetError
 ! ===============================================================================
@@ -10,15 +32,7 @@ ConnectionResetErrorTestCase removeAllMethods.
 ConnectionResetErrorTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-ConnectionResetError'
-method: ConnectionResetErrorTestCase
-test_inheritance
-	"Test that ConnectionResetError inherits from ConnectionError."
-	
-	| exc |
-	exc := ConnectionResetError ___new___:  ConnectionResetError .
-	self assert: (exc isKindOf: ConnectionError).
-%
+set compile_env: 0
 
 category: 'Python-Tests-ConnectionResetError'
 method: ConnectionResetErrorTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := ConnectionResetError ___new___:  ConnectionResetError .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-ConnectionResetError'
+method: ConnectionResetErrorTestCase
+test_inheritance
+	"Test that ConnectionResetError inherits from ConnectionError."
+	
+	| exc |
+	exc := ConnectionResetError ___new___:  ConnectionResetError .
+	self assert: (exc isKindOf: ConnectionError).
 %

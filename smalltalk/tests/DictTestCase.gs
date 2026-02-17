@@ -1,3 +1,26 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for DictTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'DictTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+
+expectvalue /Class
+doit
+DictTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! DictTestCase - Tests for Python dict type
 ! ===============================================================================
@@ -9,7 +32,65 @@ DictTestCase removeAllMethods: 0.
 DictTestCase class removeAllMethods: 0.
 %
 
-! ------------------- Test methods for DictTestCase
+set compile_env: 0
+
+category: 'Tests - Mutation'
+method: DictTestCase
+testDictClear
+	"Test clearing a dictionary"
+
+	| d |
+	d := dict new.
+	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 1}.
+	d perform: #__setitem__:_: env: 2 withArguments: {'b'. 2}.
+	d perform: #__setitem__:_: env: 2 withArguments: {'c'. 3}.
+
+	self assert: d size equals: 3.
+
+	d perform: #clear env: 2.
+
+	self assert: d size equals: 0
+%
+
+category: 'Tests - Access'
+method: DictTestCase
+testDictContains
+	"Test the __contains__ method"
+
+	| d |
+	d := dict new.
+	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 1}.
+	d perform: #__setitem__:_: env: 2 withArguments: {'b'. 2}.
+	
+	self assert: (d ___contains___: 'a').
+	self assert: (d ___contains___: 'b').
+	self deny: (d ___contains___: 'c')
+%
+
+category: 'Tests - Methods'
+method: DictTestCase
+testDictCopy
+	"Test the copy method"
+
+	| d1 d2 |
+	d1 := dict new.
+	d1 perform: #__setitem__:_: env: 2 withArguments: {'a'. 1}.
+	d1 perform: #__setitem__:_: env: 2 withArguments: {'b'. 2}.
+
+	d2 := d1 perform: #copy env: 2.
+
+	self assert: d2 size equals: 2.
+	self assert: (d2 perform: #__getitem__: env: 2 withArguments: {'a'}) equals: 1.
+	self assert: (d2 perform: #__getitem__: env: 2 withArguments: {'b'}) equals: 2.
+
+	"Verify it's a copy, not the same object"
+	self deny: d1 == d2.
+
+	"Modify the copy and verify original is unchanged"
+	d2 perform: #__setitem__:_: env: 2 withArguments: {'c'. 3}.
+	self assert: d2 size equals: 3.
+	self assert: d1 size equals: 2
+%
 
 category: 'Tests - Creation'
 method: DictTestCase
@@ -26,67 +107,6 @@ testDictCreation
 	
 	self assert: d1 size equals: 0.
 	self assert: d2 size equals: 3
-%
-
-category: 'Tests - Creation'
-method: DictTestCase
-testDictKeyOverwrite
-	"Test that setting the same key overwrites the value"
-
-	| d |
-	d := dict new.
-	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 1}.
-	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 2}.
-	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 3}.
-	
-	self assert: d size equals: 1.
-	self assert: (d perform: #__getitem__: env: 2 withArguments: {'a'}) equals: 3
-%
-
-category: 'Tests - Access'
-method: DictTestCase
-testDictGetItem
-	"Test getting items from a dictionary"
-
-	| d value |
-	d := dict new.
-	d perform: #__setitem__:_: env: 2 withArguments: {'key1'. 'value1'}.
-	d perform: #__setitem__:_: env: 2 withArguments: {'key2'. 'value2'}.
-	
-	value := d perform: #__getitem__: env: 2 withArguments: {'key1'}.
-	self assert: value equals: 'value1'.
-	
-	value := d perform: #__getitem__: env: 2 withArguments: {'key2'}.
-	self assert: value equals: 'value2'
-%
-
-category: 'Tests - Access'
-method: DictTestCase
-testDictGetItemKeyError
-	"Test that getting a non-existent key raises KeyError"
-
-	| d |
-	d := dict new.
-	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 1}.
-	
-	self should: [
-		d perform: #__getitem__: env: 2 withArguments: {'nonexistent'}
-	] raise: KeyError
-%
-
-category: 'Tests - Access'
-method: DictTestCase
-testDictContains
-	"Test the __contains__ method"
-
-	| d |
-	d := dict new.
-	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 1}.
-	d perform: #__setitem__:_: env: 2 withArguments: {'b'. 2}.
-	
-	self assert: (d ___contains___: 'a').
-	self assert: (d ___contains___: 'b').
-	self deny: (d ___contains___: 'c')
 %
 
 category: 'Tests - Mutation'
@@ -124,24 +144,6 @@ testDictDelItemKeyError
 	] raise: KeyError
 %
 
-category: 'Tests - Mutation'
-method: DictTestCase
-testDictClear
-	"Test clearing a dictionary"
-
-	| d |
-	d := dict new.
-	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 1}.
-	d perform: #__setitem__:_: env: 2 withArguments: {'b'. 2}.
-	d perform: #__setitem__:_: env: 2 withArguments: {'c'. 3}.
-
-	self assert: d size equals: 3.
-
-	d perform: #clear env: 2.
-
-	self assert: d size equals: 0
-%
-
 category: 'Tests - Comparison'
 method: DictTestCase
 testDictEquality
@@ -164,21 +166,6 @@ testDictEquality
 	self deny: (d1 perform: #__eq__: env: 2 withArguments: {d3})
 %
 
-category: 'Tests - Comparison'
-method: DictTestCase
-testDictInequality
-	"Test dictionary inequality"
-
-	| d1 d2 |
-	d1 := dict new.
-	d1 perform: #__setitem__:_: env: 2 withArguments: {'a'. 1}.
-
-	d2 := dict new.
-	d2 perform: #__setitem__:_: env: 2 withArguments: {'a'. 2}.
-
-	self assert: (d1 perform: #__ne__: env: 2 withArguments: {d2})
-%
-
 category: 'Tests - Methods'
 method: DictTestCase
 testDictGet
@@ -196,6 +183,116 @@ testDictGet
 
 	value := d perform: #get:_: env: 2 withArguments: {'nonexistent'. 'default'}.
 	self assert: value equals: 'default'
+%
+
+category: 'Tests - Access'
+method: DictTestCase
+testDictGetItem
+	"Test getting items from a dictionary"
+
+	| d value |
+	d := dict new.
+	d perform: #__setitem__:_: env: 2 withArguments: {'key1'. 'value1'}.
+	d perform: #__setitem__:_: env: 2 withArguments: {'key2'. 'value2'}.
+	
+	value := d perform: #__getitem__: env: 2 withArguments: {'key1'}.
+	self assert: value equals: 'value1'.
+	
+	value := d perform: #__getitem__: env: 2 withArguments: {'key2'}.
+	self assert: value equals: 'value2'
+%
+
+category: 'Tests - Access'
+method: DictTestCase
+testDictGetItemKeyError
+	"Test that getting a non-existent key raises KeyError"
+
+	| d |
+	d := dict new.
+	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 1}.
+	
+	self should: [
+		d perform: #__getitem__: env: 2 withArguments: {'nonexistent'}
+	] raise: KeyError
+%
+
+category: 'Tests - Comparison'
+method: DictTestCase
+testDictInequality
+	"Test dictionary inequality"
+
+	| d1 d2 |
+	d1 := dict new.
+	d1 perform: #__setitem__:_: env: 2 withArguments: {'a'. 1}.
+
+	d2 := dict new.
+	d2 perform: #__setitem__:_: env: 2 withArguments: {'a'. 2}.
+
+	self assert: (d1 perform: #__ne__: env: 2 withArguments: {d2})
+%
+
+category: 'Tests - Methods'
+method: DictTestCase
+testDictItems
+	"Test the items method"
+
+	| d items firstItem |
+	d := dict new.
+	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 1}.
+	d perform: #__setitem__:_: env: 2 withArguments: {'b'. 2}.
+
+	items := d perform: #items env: 2.
+
+	self assert: (items size) equals: 2.
+
+	firstItem := items at: 1.
+	self assert: (firstItem size) equals: 2
+%
+
+category: 'Tests - Iteration'
+method: DictTestCase
+testDictIteration
+	"Test iterating over a dictionary (iterates over keys)"
+
+	| d iter key1 key2 key3 keys |
+	d := dict new.
+	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 1}.
+	d perform: #__setitem__:_: env: 2 withArguments: {'b'. 2}.
+	d perform: #__setitem__:_: env: 2 withArguments: {'c'. 3}.
+
+	iter := d perform: #__iter__ env: 2.
+
+	"Verify iterator type"
+	self assert: iter class name equals: #'dict_keyiterator'.
+
+	key1 := iter perform: #__next__ env: 2.
+	key2 := iter perform: #__next__ env: 2.
+	key3 := iter perform: #__next__ env: 2.
+
+	keys := { key1. key2. key3. }.
+
+	self assert: (keys includes: 'a').
+	self assert: (keys includes: 'b').
+	self assert: (keys includes: 'c').
+
+	self should: [
+		iter perform: #__next__ env: 2
+	] raise: StopIteration
+%
+
+category: 'Tests - Creation'
+method: DictTestCase
+testDictKeyOverwrite
+	"Test that setting the same key overwrites the value"
+
+	| d |
+	d := dict new.
+	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 1}.
+	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 2}.
+	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 3}.
+	
+	self assert: d size equals: 1.
+	self assert: (d perform: #__getitem__: env: 2 withArguments: {'a'}) equals: 3
 %
 
 category: 'Tests - Methods'
@@ -219,43 +316,6 @@ testDictKeys
 
 category: 'Tests - Methods'
 method: DictTestCase
-testDictValues
-	"Test the values method"
-
-	| d values |
-	d := dict new.
-	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 1}.
-	d perform: #__setitem__:_: env: 2 withArguments: {'b'. 2}.
-	d perform: #__setitem__:_: env: 2 withArguments: {'c'. 3}.
-
-	values := d perform: #values env: 2.
-
-	self assert: (values size) equals: 3.
-	self assert: (values includes: 1).
-	self assert: (values includes: 2).
-	self assert: (values includes: 3)
-%
-
-category: 'Tests - Methods'
-method: DictTestCase
-testDictItems
-	"Test the items method"
-
-	| d items firstItem |
-	d := dict new.
-	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 1}.
-	d perform: #__setitem__:_: env: 2 withArguments: {'b'. 2}.
-
-	items := d perform: #items env: 2.
-
-	self assert: (items size) equals: 2.
-
-	firstItem := items at: 1.
-	self assert: (firstItem size) equals: 2
-%
-
-category: 'Tests - Methods'
-method: DictTestCase
 testDictPop
 	"Test the pop method"
 
@@ -269,32 +329,6 @@ testDictPop
 	self assert: value equals: 1.
 	self assert: d size equals: 1.
 	self deny: (d ___contains___: 'a')
-%
-
-category: 'Tests - Methods'
-method: DictTestCase
-testDictPopKeyError
-	"Test that pop raises KeyError for non-existent key without default"
-
-	| d |
-	d := dict new.
-
-	self should: [
-		d perform: #pop: env: 2 withArguments: {'nonexistent'}
-	] raise: KeyError
-%
-
-category: 'Tests - Methods'
-method: DictTestCase
-testDictPopWithDefault
-	"Test the pop method with default value"
-
-	| d value |
-	d := dict new.
-
-	value := d perform: #pop:_: env: 2 withArguments: {'nonexistent'. 'default'}.
-
-	self assert: value equals: 'default'
 %
 
 category: 'Tests - Methods'
@@ -335,6 +369,49 @@ testDictPopitemKeyError
 
 category: 'Tests - Methods'
 method: DictTestCase
+testDictPopKeyError
+	"Test that pop raises KeyError for non-existent key without default"
+
+	| d |
+	d := dict new.
+
+	self should: [
+		d perform: #pop: env: 2 withArguments: {'nonexistent'}
+	] raise: KeyError
+%
+
+category: 'Tests - Methods'
+method: DictTestCase
+testDictPopWithDefault
+	"Test the pop method with default value"
+
+	| d value |
+	d := dict new.
+
+	value := d perform: #pop:_: env: 2 withArguments: {'nonexistent'. 'default'}.
+
+	self assert: value equals: 'default'
+%
+
+category: 'Tests - String Representation'
+method: DictTestCase
+testDictRepr
+	"Test the __repr__ method"
+
+	| d repr |
+	d := dict new.
+
+	repr := d perform: #__repr__ env: 2.
+	self assert: repr equals: '{}'.
+
+	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 1}.
+	repr := d perform: #__repr__ env: 2.
+	self assert: (repr includesString: '''a''').
+	self assert: (repr includesString: '1')
+%
+
+category: 'Tests - Methods'
+method: DictTestCase
 testDictSetdefault
 	"Test the setdefault method"
 
@@ -349,6 +426,17 @@ testDictSetdefault
 	self assert: value equals: 2.
 	self assert: (d ___contains___: 'b').
 	self assert: (d perform: #__getitem__: env: 2 withArguments: {'b'}) equals: 2
+%
+
+category: 'Tests - Type'
+method: DictTestCase
+testDictType
+	"Test that dict instances report their type correctly"
+
+	| d |
+	d := dict new.
+
+	self assert: (d perform: #__class__ env: 2) == dict
 %
 
 category: 'Tests - Methods'
@@ -375,89 +463,49 @@ testDictUpdate
 
 category: 'Tests - Methods'
 method: DictTestCase
-testDictCopy
-	"Test the copy method"
+testDictValues
+	"Test the values method"
 
-	| d1 d2 |
-	d1 := dict new.
-	d1 perform: #__setitem__:_: env: 2 withArguments: {'a'. 1}.
-	d1 perform: #__setitem__:_: env: 2 withArguments: {'b'. 2}.
-
-	d2 := d1 perform: #copy env: 2.
-
-	self assert: d2 size equals: 2.
-	self assert: (d2 perform: #__getitem__: env: 2 withArguments: {'a'}) equals: 1.
-	self assert: (d2 perform: #__getitem__: env: 2 withArguments: {'b'}) equals: 2.
-
-	"Verify it's a copy, not the same object"
-	self deny: d1 == d2.
-
-	"Modify the copy and verify original is unchanged"
-	d2 perform: #__setitem__:_: env: 2 withArguments: {'c'. 3}.
-	self assert: d2 size equals: 3.
-	self assert: d1 size equals: 2
-%
-
-category: 'Tests - Iteration'
-method: DictTestCase
-testDictIteration
-	"Test iterating over a dictionary (iterates over keys)"
-
-	| d iter key1 key2 key3 keys |
+	| d values |
 	d := dict new.
 	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 1}.
 	d perform: #__setitem__:_: env: 2 withArguments: {'b'. 2}.
 	d perform: #__setitem__:_: env: 2 withArguments: {'c'. 3}.
 
-	iter := d perform: #__iter__ env: 2.
+	values := d perform: #values env: 2.
 
-	"Verify iterator type"
-	self assert: iter class name equals: #'dict_keyiterator'.
-
-	key1 := iter perform: #__next__ env: 2.
-	key2 := iter perform: #__next__ env: 2.
-	key3 := iter perform: #__next__ env: 2.
-
-	keys := { key1. key2. key3. }.
-
-	self assert: (keys includes: 'a').
-	self assert: (keys includes: 'b').
-	self assert: (keys includes: 'c').
-
-	self should: [
-		iter perform: #__next__ env: 2
-	] raise: StopIteration
+	self assert: (values size) equals: 3.
+	self assert: (values includes: 1).
+	self assert: (values includes: 2).
+	self assert: (values includes: 3)
 %
 
-category: 'Tests - String Representation'
+category: 'Tests - Eval - Dict Access'
 method: DictTestCase
-testDictRepr
-	"Test the __repr__ method"
+testEvalDictAccess
+	"Test dict subscript access via Python source"
 
-	| d repr |
-	d := dict new.
-
-	repr := d perform: #__repr__ env: 2.
-	self assert: repr equals: '{}'.
-
-	d perform: #__setitem__:_: env: 2 withArguments: {'a'. 1}.
-	repr := d perform: #__repr__ env: 2.
-	self assert: (repr includesString: '''a''').
-	self assert: (repr includesString: '1')
+	self assert: (self eval: '{"a": 1, "b": 2}["a"]') equals: 1.
+	self assert: (self eval: '{"x": 42}["x"]') equals: 42.
 %
 
-category: 'Tests - Type'
+category: 'Tests - Eval - Dict Assignment'
 method: DictTestCase
-testDictType
-	"Test that dict instances report their type correctly"
+testEvalDictAssignment
+	"Test dict variable assignment and access via Python source"
 
-	| d |
-	d := dict new.
-
-	self assert: (d perform: #__class__ env: 2) == dict
+	self assert: (self eval: 'd = {"x": 10, "y": 20}
+d["x"]') equals: 10.
 %
 
-! ------------------- Eval tests for DictTestCase
+category: 'Tests - Eval - Dict Functions'
+method: DictTestCase
+testEvalDictLen
+	"Test len() on dicts via Python source"
+
+	self assert: (self eval: 'len({"a": 1, "b": 2})') equals: 2.
+	self assert: (self eval: 'len({})') equals: 0.
+%
 
 category: 'Tests - Eval - Dict Creation'
 method: DictTestCase
@@ -480,31 +528,3 @@ testEvalEmptyDict
 	result := self eval: '{}'.
 	self assert: result size equals: 0.
 %
-
-category: 'Tests - Eval - Dict Access'
-method: DictTestCase
-testEvalDictAccess
-	"Test dict subscript access via Python source"
-
-	self assert: (self eval: '{"a": 1, "b": 2}["a"]') equals: 1.
-	self assert: (self eval: '{"x": 42}["x"]') equals: 42.
-%
-
-category: 'Tests - Eval - Dict Functions'
-method: DictTestCase
-testEvalDictLen
-	"Test len() on dicts via Python source"
-
-	self assert: (self eval: 'len({"a": 1, "b": 2})') equals: 2.
-	self assert: (self eval: 'len({})') equals: 0.
-%
-
-category: 'Tests - Eval - Dict Assignment'
-method: DictTestCase
-testEvalDictAssignment
-	"Test dict variable assignment and access via Python source"
-
-	self assert: (self eval: 'd = {"x": 10, "y": 20}
-d["x"]') equals: 10.
-%
-

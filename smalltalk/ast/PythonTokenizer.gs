@@ -1,3 +1,45 @@
+! ------------------- Superclass check
+run
+Object ifNil: [self error: 'Object is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for PythonTokenizer
+expectvalue /Class
+doit
+Object subclass: 'PythonTokenizer'
+  instVarNames: #( source position line column
+                    tokens indentStack parenDepth atLineStart)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonAst
+  options: #()
+
+%
+
+expectvalue /Class
+doit
+PythonTokenizer comment:
+'A lexer for Python source code.
+
+Converts a Python source string into a sequence of PythonToken objects.
+Handles indentation-based INDENT/DEDENT tokens, string literals,
+numbers, operators, keywords, and comments.
+
+Usage:
+  PythonTokenizer tokenize: ''x = 1 + 2''
+
+Hierarchy:
+Object
+  PythonTokenizer(source position line column tokens indentStack parenDepth atLineStart)
+'
+%
+
+expectvalue /Class
+doit
+PythonTokenizer category: 'Parser'
+%
+
 ! ===============================================================================
 ! PythonTokenizer - Lexer for Python source code
 ! ===============================================================================
@@ -9,21 +51,9 @@
 ! ------------------- Remove existing behavior from PythonTokenizer
 removeallmethods PythonTokenizer
 removeallclassmethods PythonTokenizer
-! ------------------- Class methods for PythonTokenizer
-category: 'instance creation'
-classmethod: PythonTokenizer
-on: aString
 
-	^self basicNew
-		source: aString;
-		yourself
-%
-category: 'tokenizing'
-classmethod: PythonTokenizer
-tokenize: aString
+set compile_env: 0
 
-	^(self on: aString) tokenize
-%
 category: 'private'
 classmethod: PythonTokenizer
 keywords
@@ -34,55 +64,36 @@ keywords
 	   'lambda' 'nonlocal' 'not' 'or' 'pass' 'raise' 'return'
 	   'try' 'while' 'with' 'yield')
 %
-! ------------------- Instance methods for PythonTokenizer
-category: 'accessors'
-method: PythonTokenizer
-source: aString
 
-	source := aString.
-	position := 1.
-	line := 1.
-	column := 0.
-	tokens := Array new.
-	indentStack := Array new.
-	indentStack add: 0.
-	parenDepth := 0.
-	atLineStart := true.
+category: 'instance creation'
+classmethod: PythonTokenizer
+on: aString
+
+	^self basicNew
+		source: aString;
+		yourself
 %
+
+category: 'tokenizing'
+classmethod: PythonTokenizer
+tokenize: aString
+
+	^(self on: aString) tokenize
+%
+
 category: 'private'
 method: PythonTokenizer
-sourceSize
+addToken: aType value: aValue line: aLine column: aCol endLine: anEndLine endColumn: anEndCol
 
-	^source size
+	tokens add: (PythonToken
+		type: aType
+		value: aValue
+		line: aLine
+		column: aCol
+		endLine: anEndLine
+		endColumn: anEndCol).
 %
-category: 'private'
-method: PythonTokenizer
-atEnd
 
-	^position > source size
-%
-category: 'private'
-method: PythonTokenizer
-currentChar
-
-	^source at: position
-%
-category: 'private'
-method: PythonTokenizer
-peek
-
-	position > source size ifTrue: [^nil].
-	^source at: position
-%
-category: 'private'
-method: PythonTokenizer
-peekAt: offset
-
-	| pos |
-	pos := position + offset.
-	(pos > source size or: [pos < 1]) ifTrue: [^nil].
-	^source at: pos
-%
 category: 'private'
 method: PythonTokenizer
 advance
@@ -98,32 +109,42 @@ advance
 	].
 	^char
 %
+
 category: 'private'
 method: PythonTokenizer
-addToken: aType value: aValue line: aLine column: aCol endLine: anEndLine endColumn: anEndCol
+atEnd
 
-	tokens add: (PythonToken
-		type: aType
-		value: aValue
-		line: aLine
-		column: aCol
-		endLine: anEndLine
-		endColumn: anEndCol).
+	^position > source size
 %
+
 category: 'private'
 method: PythonTokenizer
-isIdentifierStart: aChar
+currentChar
 
-	aChar ifNil: [^false].
-	^aChar isLetter or: [aChar == $_]
+	^source at: position
 %
-category: 'private'
+
+category: 'tokenizing'
 method: PythonTokenizer
-isIdentifierPart: aChar
+handleIndentation: indent
+	"Emit INDENT or DEDENT tokens based on the new indentation level."
 
-	aChar ifNil: [^false].
-	^aChar isLetter or: [aChar isDigit or: [aChar == $_]]
+	| currentIndent |
+	currentIndent := indentStack last.
+	indent > currentIndent ifTrue: [
+		indentStack add: indent.
+		self addToken: #INDENT value: '' line: line column: 0 endLine: line endColumn: indent.
+	] ifFalse: [
+		[indent < indentStack last] whileTrue: [
+			indentStack removeLast.
+			self addToken: #DEDENT value: '' line: line column: 0 endLine: line endColumn: indent.
+		].
+		indent ~= indentStack last ifTrue: [
+			SyntaxError signal: 'unindent does not match any outer indentation level at line ' , line printString.
+		].
+	].
 %
+
 category: 'private'
 method: PythonTokenizer
 isDigit: aChar
@@ -131,6 +152,141 @@ isDigit: aChar
 	aChar ifNil: [^false].
 	^aChar isDigit
 %
+
+category: 'private'
+method: PythonTokenizer
+isIdentifierPart: aChar
+
+	aChar ifNil: [^false].
+	^aChar isLetter or: [aChar isDigit or: [aChar == $_]]
+%
+
+category: 'private'
+method: PythonTokenizer
+isIdentifierStart: aChar
+
+	aChar ifNil: [^false].
+	^aChar isLetter or: [aChar == $_]
+%
+
+category: 'tokenizing'
+method: PythonTokenizer
+isStringStart
+	"Check if current position starts a string literal."
+
+	| char next third |
+	char := self peek.
+	char ifNil: [^false].
+
+	"Direct quote"
+	(char == $' or: [char == $"]) ifTrue: [^true].
+
+	"String prefix followed by quote"
+	next := self peekAt: 1.
+	next ifNil: [^false].
+
+	"Single-char prefix: r, b, f, u, R, B, F, U"
+	((char == $r or: [char == $R or: [char == $b or: [char == $B or: [char == $f or: [char == $F or: [char == $u or: [char == $U]]]]]]]) and: [next == $' or: [next == $"]]) ifTrue: [^true].
+
+	"Two-char prefix: rb, br, fr, rf (and case variants)"
+	third := self peekAt: 2.
+	third ifNil: [^false].
+	(third == $' or: [third == $"]) ifTrue: [
+		| pair |
+		pair := (char asString , next asString) asLowercase.
+		^(pair = 'rb' or: [pair = 'br' or: [pair = 'fr' or: [pair = 'rf']]])
+	].
+	^false
+%
+
+category: 'private'
+method: PythonTokenizer
+peek
+
+	position > source size ifTrue: [^nil].
+	^source at: position
+%
+
+category: 'private'
+method: PythonTokenizer
+peekAt: offset
+
+	| pos |
+	pos := position + offset.
+	(pos > source size or: [pos < 1]) ifTrue: [^nil].
+	^source at: pos
+%
+
+category: 'tokenizing'
+method: PythonTokenizer
+readIndentation
+	"Read whitespace at the beginning of a line and return the indent level."
+
+	| indent |
+	indent := 0.
+	[self atEnd not and: [(self peek == Character space) or: [self peek == Character tab]]] whileTrue: [
+		self peek == Character tab
+			ifTrue: [indent := (indent // 8 + 1) * 8]
+			ifFalse: [indent := indent + 1].
+		self advance.
+	].
+	^indent
+%
+
+category: 'tokenizing'
+method: PythonTokenizer
+skipComment
+	"Skip a comment (from # to end of line)."
+
+	[self atEnd not and: [self peek ~~ Character lf]] whileTrue: [
+		self advance.
+	].
+%
+
+category: 'tokenizing'
+method: PythonTokenizer
+skipNewline
+	"Skip a newline character and emit NEWLINE token if not inside parens."
+
+	self atEnd ifTrue: [
+		parenDepth == 0 ifTrue: [
+			self addToken: #NEWLINE value: '' line: line column: column endLine: line endColumn: column.
+		].
+		^self
+	].
+	self peek == Character lf ifTrue: [
+		| startLine startCol |
+		startLine := line.
+		startCol := column.
+		self advance.
+		parenDepth == 0 ifTrue: [
+			self addToken: #NEWLINE value: '' line: startLine column: startCol endLine: line endColumn: column.
+		].
+	].
+%
+
+category: 'accessors'
+method: PythonTokenizer
+source: aString
+
+	source := aString.
+	position := 1.
+	line := 1.
+	column := 0.
+	tokens := Array new.
+	indentStack := Array new.
+	indentStack add: 0.
+	parenDepth := 0.
+	atLineStart := true.
+%
+
+category: 'private'
+method: PythonTokenizer
+sourceSize
+
+	^source size
+%
+
 category: 'tokenizing'
 method: PythonTokenizer
 tokenize
@@ -148,6 +304,25 @@ tokenize
 	self addToken: #ENDMARKER value: '' line: line column: column endLine: line endColumn: column.
 	^tokens
 %
+
+category: 'tokenizing'
+method: PythonTokenizer
+tokenizeIdentifier
+	"Tokenize an identifier or keyword."
+
+	| startLine startCol writeStream name |
+	startLine := line.
+	startCol := column.
+	writeStream := WriteStream on: String new.
+	[self atEnd not and: [self isIdentifierPart: self peek]] whileTrue: [
+		writeStream nextPut: self advance.
+	].
+	name := writeStream contents.
+	(self class keywords includes: name)
+		ifTrue: [self addToken: #KEYWORD value: name line: startLine column: startCol endLine: line endColumn: column]
+		ifFalse: [self addToken: #NAME value: name line: startLine column: startCol endLine: line endColumn: column].
+%
+
 category: 'tokenizing'
 method: PythonTokenizer
 tokenizeLine
@@ -187,251 +362,7 @@ tokenizeLine
 	self skipNewline.
 	atLineStart := true.
 %
-category: 'tokenizing'
-method: PythonTokenizer
-readIndentation
-	"Read whitespace at the beginning of a line and return the indent level."
 
-	| indent |
-	indent := 0.
-	[self atEnd not and: [(self peek == Character space) or: [self peek == Character tab]]] whileTrue: [
-		self peek == Character tab
-			ifTrue: [indent := (indent // 8 + 1) * 8]
-			ifFalse: [indent := indent + 1].
-		self advance.
-	].
-	^indent
-%
-category: 'tokenizing'
-method: PythonTokenizer
-handleIndentation: indent
-	"Emit INDENT or DEDENT tokens based on the new indentation level."
-
-	| currentIndent |
-	currentIndent := indentStack last.
-	indent > currentIndent ifTrue: [
-		indentStack add: indent.
-		self addToken: #INDENT value: '' line: line column: 0 endLine: line endColumn: indent.
-	] ifFalse: [
-		[indent < indentStack last] whileTrue: [
-			indentStack removeLast.
-			self addToken: #DEDENT value: '' line: line column: 0 endLine: line endColumn: indent.
-		].
-		indent ~= indentStack last ifTrue: [
-			SyntaxError signal: 'unindent does not match any outer indentation level at line ' , line printString.
-		].
-	].
-%
-category: 'tokenizing'
-method: PythonTokenizer
-skipComment
-	"Skip a comment (from # to end of line)."
-
-	[self atEnd not and: [self peek ~~ Character lf]] whileTrue: [
-		self advance.
-	].
-%
-category: 'tokenizing'
-method: PythonTokenizer
-skipNewline
-	"Skip a newline character and emit NEWLINE token if not inside parens."
-
-	self atEnd ifTrue: [
-		parenDepth == 0 ifTrue: [
-			self addToken: #NEWLINE value: '' line: line column: column endLine: line endColumn: column.
-		].
-		^self
-	].
-	self peek == Character lf ifTrue: [
-		| startLine startCol |
-		startLine := line.
-		startCol := column.
-		self advance.
-		parenDepth == 0 ifTrue: [
-			self addToken: #NEWLINE value: '' line: startLine column: startCol endLine: line endColumn: column.
-		].
-	].
-%
-category: 'tokenizing'
-method: PythonTokenizer
-tokenizeOne
-	"Tokenize a single token from the current position."
-
-	| char |
-	"Skip whitespace (not newlines)"
-	[self atEnd not and: [(self peek == Character space) or: [self peek == Character tab]]] whileTrue: [
-		self advance.
-	].
-	self atEnd ifTrue: [^self].
-	char := self peek.
-	char == Character lf ifTrue: [^self].
-
-	"Line continuation"
-	char == $\ ifTrue: [
-		(self peekAt: 1) == Character lf ifTrue: [
-			self advance. "skip \"
-			self advance. "skip newline"
-			^self
-		].
-	].
-
-	"Comment"
-	char == $# ifTrue: [
-		self skipComment.
-		^self
-	].
-
-	"String literals (check for prefixes: r, b, f, u, rb, br, fr, rf)"
-	(self isStringStart) ifTrue: [
-		self tokenizeString.
-		^self
-	].
-
-	"Numbers"
-	(self isDigit: char) ifTrue: [
-		self tokenizeNumber.
-		^self
-	].
-	"Dot followed by digit is also a number"
-	(char == $. and: [self isDigit: (self peekAt: 1)]) ifTrue: [
-		self tokenizeNumber.
-		^self
-	].
-
-	"Identifiers and keywords"
-	(self isIdentifierStart: char) ifTrue: [
-		self tokenizeIdentifier.
-		^self
-	].
-
-	"Operators and delimiters"
-	self tokenizeOperator.
-%
-category: 'tokenizing'
-method: PythonTokenizer
-isStringStart
-	"Check if current position starts a string literal."
-
-	| char next third |
-	char := self peek.
-	char ifNil: [^false].
-
-	"Direct quote"
-	(char == $' or: [char == $"]) ifTrue: [^true].
-
-	"String prefix followed by quote"
-	next := self peekAt: 1.
-	next ifNil: [^false].
-
-	"Single-char prefix: r, b, f, u, R, B, F, U"
-	((char == $r or: [char == $R or: [char == $b or: [char == $B or: [char == $f or: [char == $F or: [char == $u or: [char == $U]]]]]]]) and: [next == $' or: [next == $"]]) ifTrue: [^true].
-
-	"Two-char prefix: rb, br, fr, rf (and case variants)"
-	third := self peekAt: 2.
-	third ifNil: [^false].
-	(third == $' or: [third == $"]) ifTrue: [
-		| pair |
-		pair := (char asString , next asString) asLowercase.
-		^(pair = 'rb' or: [pair = 'br' or: [pair = 'fr' or: [pair = 'rf']]])
-	].
-	^false
-%
-category: 'tokenizing'
-method: PythonTokenizer
-tokenizeString
-	"Tokenize a string literal (handles prefixes, single/double/triple quotes, escapes)."
-
-	| startLine startCol prefix quoteChar triple writeStream char isFString isRaw isBytes tokenType |
-	startLine := line.
-	startCol := column.
-	prefix := ''.
-	isFString := false.
-	isRaw := false.
-	isBytes := false.
-
-	"Read prefix"
-	[self peek notNil and: [(self peek == $' or: [self peek == $"]) not]] whileTrue: [
-		| ch |
-		ch := self advance.
-		prefix := prefix , ch asString.
-	].
-	prefix asLowercase do: [:c |
-		c == $f ifTrue: [isFString := true].
-		c == $r ifTrue: [isRaw := true].
-		c == $b ifTrue: [isBytes := true].
-	].
-	tokenType := isBytes ifTrue: [#BYTES] ifFalse: [#STRING].
-
-	"Read quote character"
-	quoteChar := self advance.
-
-	"Check for triple quote"
-	triple := false.
-	(self peek == quoteChar and: [(self peekAt: 1) == quoteChar]) ifTrue: [
-		self advance.
-		self advance.
-		triple := true.
-	].
-
-	"Read string contents"
-	writeStream := WriteStream on: Unicode7 new.
-	[
-		self atEnd ifTrue: [SyntaxError signal: 'unterminated string literal at line ' , startLine printString].
-		char := self peek.
-		triple ifTrue: [
-			"Check for closing triple quote"
-			(char == quoteChar and: [(self peekAt: 1) == quoteChar and: [(self peekAt: 2) == quoteChar]]) ifTrue: [
-				self advance. self advance. self advance.
-				self addToken: tokenType value: writeStream contents line: startLine column: startCol endLine: line endColumn: column.
-				^self
-			].
-		] ifFalse: [
-			char == quoteChar ifTrue: [
-				self advance.
-				self addToken: tokenType value: writeStream contents line: startLine column: startCol endLine: line endColumn: column.
-				^self
-			].
-			char == Character lf ifTrue: [
-				SyntaxError signal: 'EOL while scanning string literal at line ' , startLine printString.
-			].
-		].
-		"Handle escape sequences"
-		(char == $\ and: [isRaw not]) ifTrue: [
-			| escaped |
-			self advance.
-			self atEnd ifTrue: [SyntaxError signal: 'unterminated string literal'].
-			escaped := self advance.
-			escaped == $n ifTrue: [writeStream nextPut: Character lf]
-			ifFalse: [escaped == $t ifTrue: [writeStream nextPut: Character tab]
-			ifFalse: [escaped == $r ifTrue: [writeStream nextPut: (Character codePoint: 13)]
-			ifFalse: [escaped == $\ ifTrue: [writeStream nextPut: $\]
-			ifFalse: [escaped == quoteChar ifTrue: [writeStream nextPut: quoteChar]
-			ifFalse: [escaped == $a ifTrue: [writeStream nextPut: (Character codePoint: 7)]
-			ifFalse: [escaped == $b ifTrue: [writeStream nextPut: (Character codePoint: 8)]
-			ifFalse: [escaped == $f ifTrue: [writeStream nextPut: (Character codePoint: 12)]
-			ifFalse: [escaped == $v ifTrue: [writeStream nextPut: (Character codePoint: 11)]
-			ifFalse: [escaped == $0 ifTrue: [writeStream nextPut: (Character codePoint: 0)]
-			ifFalse: [escaped == $x ifTrue: [
-				| hex |
-				hex := (self advance asString , self advance asString).
-				writeStream nextPut: (Character codePoint: ('16r' , hex) asInteger).
-			]
-			ifFalse: [escaped == $u ifTrue: [
-				| hex |
-				hex := (self advance asString , self advance asString , self advance asString , self advance asString).
-				writeStream nextPut: (Character codePoint: ('16r' , hex) asInteger).
-			]
-			ifFalse: [escaped == Character lf ifTrue: ["line continuation in string - skip"]
-			ifFalse: [
-				"Unknown escape - keep as-is"
-				writeStream nextPut: $\; nextPut: escaped.
-			]]]]]]]]]]]]].
-		] ifFalse: [
-			writeStream nextPut: self advance.
-		].
-		true
-	] whileTrue.
-%
 category: 'tokenizing'
 method: PythonTokenizer
 tokenizeNumber
@@ -539,23 +470,63 @@ tokenizeNumber
 
 	self addToken: #NUMBER value: writeStream contents line: startLine column: startCol endLine: line endColumn: column.
 %
+
 category: 'tokenizing'
 method: PythonTokenizer
-tokenizeIdentifier
-	"Tokenize an identifier or keyword."
+tokenizeOne
+	"Tokenize a single token from the current position."
 
-	| startLine startCol writeStream name |
-	startLine := line.
-	startCol := column.
-	writeStream := WriteStream on: String new.
-	[self atEnd not and: [self isIdentifierPart: self peek]] whileTrue: [
-		writeStream nextPut: self advance.
+	| char |
+	"Skip whitespace (not newlines)"
+	[self atEnd not and: [(self peek == Character space) or: [self peek == Character tab]]] whileTrue: [
+		self advance.
 	].
-	name := writeStream contents.
-	(self class keywords includes: name)
-		ifTrue: [self addToken: #KEYWORD value: name line: startLine column: startCol endLine: line endColumn: column]
-		ifFalse: [self addToken: #NAME value: name line: startLine column: startCol endLine: line endColumn: column].
+	self atEnd ifTrue: [^self].
+	char := self peek.
+	char == Character lf ifTrue: [^self].
+
+	"Line continuation"
+	char == $\ ifTrue: [
+		(self peekAt: 1) == Character lf ifTrue: [
+			self advance. "skip \"
+			self advance. "skip newline"
+			^self
+		].
+	].
+
+	"Comment"
+	char == $# ifTrue: [
+		self skipComment.
+		^self
+	].
+
+	"String literals (check for prefixes: r, b, f, u, rb, br, fr, rf)"
+	(self isStringStart) ifTrue: [
+		self tokenizeString.
+		^self
+	].
+
+	"Numbers"
+	(self isDigit: char) ifTrue: [
+		self tokenizeNumber.
+		^self
+	].
+	"Dot followed by digit is also a number"
+	(char == $. and: [self isDigit: (self peekAt: 1)]) ifTrue: [
+		self tokenizeNumber.
+		^self
+	].
+
+	"Identifiers and keywords"
+	(self isIdentifierStart: char) ifTrue: [
+		self tokenizeIdentifier.
+		^self
+	].
+
+	"Operators and delimiters"
+	self tokenizeOperator.
 %
+
 category: 'tokenizing'
 method: PythonTokenizer
 tokenizeOperator
@@ -604,4 +575,101 @@ tokenizeOperator
 
 	"Single-character operator"
 	self addToken: #OP value: char asString line: startLine column: startCol endLine: line endColumn: column.
+%
+
+category: 'tokenizing'
+method: PythonTokenizer
+tokenizeString
+	"Tokenize a string literal (handles prefixes, single/double/triple quotes, escapes)."
+
+	| startLine startCol prefix quoteChar triple writeStream char isFString isRaw isBytes tokenType |
+	startLine := line.
+	startCol := column.
+	prefix := ''.
+	isFString := false.
+	isRaw := false.
+	isBytes := false.
+
+	"Read prefix"
+	[self peek notNil and: [(self peek == $' or: [self peek == $"]) not]] whileTrue: [
+		| ch |
+		ch := self advance.
+		prefix := prefix , ch asString.
+	].
+	prefix asLowercase do: [:c |
+		c == $f ifTrue: [isFString := true].
+		c == $r ifTrue: [isRaw := true].
+		c == $b ifTrue: [isBytes := true].
+	].
+	tokenType := isBytes ifTrue: [#BYTES] ifFalse: [#STRING].
+
+	"Read quote character"
+	quoteChar := self advance.
+
+	"Check for triple quote"
+	triple := false.
+	(self peek == quoteChar and: [(self peekAt: 1) == quoteChar]) ifTrue: [
+		self advance.
+		self advance.
+		triple := true.
+	].
+
+	"Read string contents"
+	writeStream := WriteStream on: Unicode7 new.
+	[
+		self atEnd ifTrue: [SyntaxError signal: 'unterminated string literal at line ' , startLine printString].
+		char := self peek.
+		triple ifTrue: [
+			"Check for closing triple quote"
+			(char == quoteChar and: [(self peekAt: 1) == quoteChar and: [(self peekAt: 2) == quoteChar]]) ifTrue: [
+				self advance. self advance. self advance.
+				self addToken: tokenType value: writeStream contents line: startLine column: startCol endLine: line endColumn: column.
+				^self
+			].
+		] ifFalse: [
+			char == quoteChar ifTrue: [
+				self advance.
+				self addToken: tokenType value: writeStream contents line: startLine column: startCol endLine: line endColumn: column.
+				^self
+			].
+			char == Character lf ifTrue: [
+				SyntaxError signal: 'EOL while scanning string literal at line ' , startLine printString.
+			].
+		].
+		"Handle escape sequences"
+		(char == $\ and: [isRaw not]) ifTrue: [
+			| escaped |
+			self advance.
+			self atEnd ifTrue: [SyntaxError signal: 'unterminated string literal'].
+			escaped := self advance.
+			escaped == $n ifTrue: [writeStream nextPut: Character lf]
+			ifFalse: [escaped == $t ifTrue: [writeStream nextPut: Character tab]
+			ifFalse: [escaped == $r ifTrue: [writeStream nextPut: (Character codePoint: 13)]
+			ifFalse: [escaped == $\ ifTrue: [writeStream nextPut: $\]
+			ifFalse: [escaped == quoteChar ifTrue: [writeStream nextPut: quoteChar]
+			ifFalse: [escaped == $a ifTrue: [writeStream nextPut: (Character codePoint: 7)]
+			ifFalse: [escaped == $b ifTrue: [writeStream nextPut: (Character codePoint: 8)]
+			ifFalse: [escaped == $f ifTrue: [writeStream nextPut: (Character codePoint: 12)]
+			ifFalse: [escaped == $v ifTrue: [writeStream nextPut: (Character codePoint: 11)]
+			ifFalse: [escaped == $0 ifTrue: [writeStream nextPut: (Character codePoint: 0)]
+			ifFalse: [escaped == $x ifTrue: [
+				| hex |
+				hex := (self advance asString , self advance asString).
+				writeStream nextPut: (Character codePoint: ('16r' , hex) asInteger).
+			]
+			ifFalse: [escaped == $u ifTrue: [
+				| hex |
+				hex := (self advance asString , self advance asString , self advance asString , self advance asString).
+				writeStream nextPut: (Character codePoint: ('16r' , hex) asInteger).
+			]
+			ifFalse: [escaped == Character lf ifTrue: ["line continuation in string - skip"]
+			ifFalse: [
+				"Unknown escape - keep as-is"
+				writeStream nextPut: $\; nextPut: escaped.
+			]]]]]]]]]]]]].
+		] ifFalse: [
+			writeStream nextPut: self advance.
+		].
+		true
+	] whileTrue.
 %

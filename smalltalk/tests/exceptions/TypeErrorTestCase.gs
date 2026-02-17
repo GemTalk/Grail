@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for TypeErrorTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'TypeErrorTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+TypeErrorTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! TypeErrorTestCase - Tests for Python TypeError
 ! ===============================================================================
@@ -10,15 +32,7 @@ TypeErrorTestCase removeAllMethods.
 TypeErrorTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-TypeError'
-method: TypeErrorTestCase
-test_inheritance
-	"Test that TypeError inherits from Exception."
-	
-	| exc |
-	exc := TypeError ___new___:  TypeError .
-	self assert: (exc isKindOf: Exception).
-%
+set compile_env: 0
 
 category: 'Python-Tests-TypeError'
 method: TypeErrorTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := TypeError ___new___:  TypeError .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-TypeError'
+method: TypeErrorTestCase
+test_inheritance
+	"Test that TypeError inherits from Exception."
+	
+	| exc |
+	exc := TypeError ___new___:  TypeError .
+	self assert: (exc isKindOf: Exception).
 %

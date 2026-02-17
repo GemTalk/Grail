@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for TabErrorTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'TabErrorTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+TabErrorTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! TabErrorTestCase - Tests for Python TabError
 ! ===============================================================================
@@ -10,15 +32,7 @@ TabErrorTestCase removeAllMethods.
 TabErrorTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-TabError'
-method: TabErrorTestCase
-test_inheritance
-	"Test that TabError inherits from IndentationError."
-	
-	| exc |
-	exc := TabError ___new___:  TabError .
-	self assert: (exc isKindOf: IndentationError).
-%
+set compile_env: 0
 
 category: 'Python-Tests-TabError'
 method: TabErrorTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := TabError ___new___:  TabError .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-TabError'
+method: TabErrorTestCase
+test_inheritance
+	"Test that TabError inherits from IndentationError."
+	
+	| exc |
+	exc := TabError ___new___:  TabError .
+	self assert: (exc isKindOf: IndentationError).
 %

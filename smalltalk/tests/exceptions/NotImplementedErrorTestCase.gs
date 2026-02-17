@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for NotImplementedErrorTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'NotImplementedErrorTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+NotImplementedErrorTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! NotImplementedErrorTestCase - Tests for Python NotImplementedError
 ! ===============================================================================
@@ -10,15 +32,7 @@ NotImplementedErrorTestCase removeAllMethods.
 NotImplementedErrorTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-NotImplementedError'
-method: NotImplementedErrorTestCase
-test_inheritance
-	"Test that NotImplementedError inherits from RuntimeError."
-
-	| exc |
-	exc := NotImplementedError ___new___:  NotImplementedError .
-	self assert: (exc isKindOf: RuntimeError).
-%
+set compile_env: 0
 
 category: 'Python-Tests-NotImplementedError'
 method: NotImplementedErrorTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := NotImplementedError ___new___:  NotImplementedError .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-NotImplementedError'
+method: NotImplementedErrorTestCase
+test_inheritance
+	"Test that NotImplementedError inherits from RuntimeError."
+
+	| exc |
+	exc := NotImplementedError ___new___:  NotImplementedError .
+	self assert: (exc isKindOf: RuntimeError).
 %

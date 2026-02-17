@@ -1,3 +1,25 @@
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for UserWarningTestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: 'UserWarningTestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+
+%
+expectvalue /Class
+doit
+UserWarningTestCase category: 'SUnit'
+%
+
 ! ===============================================================================
 ! UserWarningTestCase - Tests for Python UserWarning
 ! ===============================================================================
@@ -10,15 +32,7 @@ UserWarningTestCase removeAllMethods.
 UserWarningTestCase class removeAllMethods.
 %
 
-category: 'Python-Tests-UserWarning'
-method: UserWarningTestCase
-test_inheritance
-	"Test that UserWarning inherits from Warning."
-	
-	| exc |
-	exc := UserWarning ___new___:  UserWarning .
-	self assert: (exc isKindOf: Warning).
-%
+set compile_env: 0
 
 category: 'Python-Tests-UserWarning'
 method: UserWarningTestCase
@@ -28,4 +42,14 @@ test_creation
 	| exc |
 	exc := UserWarning ___new___:  UserWarning .
 	self assert: exc notNil.
+%
+
+category: 'Python-Tests-UserWarning'
+method: UserWarningTestCase
+test_inheritance
+	"Test that UserWarning inherits from Warning."
+	
+	| exc |
+	exc := UserWarning ___new___:  UserWarning .
+	self assert: (exc isKindOf: Warning).
 %
