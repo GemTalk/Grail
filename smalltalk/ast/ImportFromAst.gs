@@ -54,5 +54,25 @@ ImportFromAst category: 'Parser'
 removeallmethods ImportFromAst
 removeallclassmethods ImportFromAst
 set compile_env: 0
-! ------------------- Class methods for ImportFromAst
-! ------------------- Instance methods for ImportFromAst
+
+category: 'other'
+method: ImportFromAst
+printSmalltalkOn: aStream
+	"Generate Smalltalk for 'from module import name1, name2 as alias2, ...'.
+
+	Each imported name is resolved by importing the module via __import__
+	and then accessing the attribute on the returned module object."
+
+	names doWithIndex: [:each :index |
+		| targetName |
+		targetName := each asName ifNil: [each name].
+		aStream
+			nextPutAll: targetName;
+			nextPutAll: ' := (__import__ value: { ''';
+			nextPutAll: module asString;
+			nextPutAll: ''' } value: nil) ';
+			nextPutAll: each name asString;
+			nextPutAll: '.'.
+		index < names size ifTrue: [aStream lf].
+	].
+%

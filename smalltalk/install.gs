@@ -168,6 +168,12 @@ pythonDict
 	at: #'ValueError' put: nil;
 	at: #'Warning' put: nil;
 	at: #'ZeroDivisionError' put: nil;
+	at: #'CPythonShim' put: nil;
+	at: #'PyObject' put: nil;
+	at: #'_statistics' put: nil;
+	at: #'_bisect' put: nil;
+	at: #'_crc32c' put: nil;
+	at: #'_shimtest' put: nil;
 	at: #'builtins' put: nil;
 	at: #'bytearray' put: nil;
 	at: #'cmath' put: nil;
@@ -344,6 +350,7 @@ dict
 	at: #'BytearrayTestCase' put: nil;
 	at: #'BytesTestCase' put: nil;
 	at: #'BytesWarningTestCase' put: nil;
+	at: #'CPythonShimTestCase' put: nil;
 	at: #'CMathTestCase' put: nil;
 	at: #'ChildProcessErrorTestCase' put: nil;
 	at: #'ComplexTestCase' put: nil;
@@ -510,6 +517,12 @@ input smalltalk/classes/runtime_services/builtins.gs
 input smalltalk/classes/numerics/cmath.gs
 input smalltalk/classes/numerics/fractions.gs
 input smalltalk/classes/gemstone/gemstone.gs
+input smalltalk/cpython/PyObject.gs
+input smalltalk/cpython/CPythonShim.gs
+input smalltalk/cpython/ShimStatisticsModule.gs
+input smalltalk/cpython/ShimBisectModule.gs
+input smalltalk/cpython/ShimCrc32cModule.gs
+input smalltalk/cpython/ShimTestModule.gs
 input smalltalk/classes/importing/importlib.gs
 input smalltalk/classes/numerics/math.gs
 input smalltalk/classes/numerics/numbers.gs
@@ -796,6 +809,7 @@ input smalltalk/tests/FloatTestCase.gs
 input smalltalk/tests/FractionTestCase.gs
 input smalltalk/tests/FrozensetTestCase.gs
 input smalltalk/tests/GemStoneTestCase.gs
+input smalltalk/tests/CPythonShimTestCase.gs
 input smalltalk/tests/ImportlibTestCase.gs
 input smalltalk/tests/IntegerTestCase.gs
 input smalltalk/tests/IteratorTestCase.gs

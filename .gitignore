@@ -6,3 +6,10 @@ tmp/
 .setenv
 pyperf*
 .claude
+
+# Build artifacts
+lib/
+*.o
+*.dylib
+*.so
+test_driver

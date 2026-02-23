@@ -249,7 +249,7 @@ initialize_binomialvariate
 		].
 		successes := 0.
 		1 ___to___: n do: [:unused |
-			(((self ___at___: #_generator) perform: #float env: 0) ___lt___: p) ifTrue: [
+			((self _generator perform: #float env: 0) ___lt___: p) ifTrue: [
 				successes := successes ___plus___: 1.
 			].
 		].
@@ -268,7 +268,7 @@ initialize_choice
 		(len ___eq___: 0) ifTrue: [
 			IndexError ___signal___: 'Cannot choose from an empty sequence'
 		].
-		idx := (self ___at___: #_generator) perform: #integerBetween:and: env: 0 withArguments: {1. len}.
+		idx := self _generator perform: #integerBetween:and: env: 0 withArguments: {1. len}.
 		seq ___at___: idx
 	]
 %
@@ -313,7 +313,7 @@ initialize_choices
 			result := list ___new___.
 			1 ___to___: k do: [:unused |
 				| r idx |
-				r := ((self ___at___: #_generator) perform: #float env: 0) ___times___: total.
+				r := (self _generator perform: #float env: 0) ___times___: total.
 				idx := 1.
 				[(idx ___lt___: n) and: [(cumWeights ___at___: idx) ___le___: r]] ___whileTrue___: [
 					idx := idx ___plus___: 1.
@@ -325,7 +325,7 @@ initialize_choices
 			result := list ___new___.
 			1 ___to___: k do: [:unused |
 				| idx |
-				idx := (self ___at___: #_generator) perform: #integerBetween:and: env: 0 withArguments: {1. n}.
+				idx := self _generator perform: #integerBetween:and: env: 0 withArguments: {1. n}.
 				result perform: #append: env: 2 withArguments: {population ___at___: idx}.
 			].
 		].
@@ -340,9 +340,9 @@ initialize_expovariate
 	self ___at___: #expovariate put: [:positional :keywords |
 		| lambd u |
 		lambd := (positional ___size___ ___ge___: 1) ifTrue: [positional ___at___: 1] ifFalse: [1.0].
-		u := (self ___at___: #_generator) perform: #float env: 0.
+		u := self _generator perform: #float env: 0.
 		"Avoid log(0)"
-		[u ___eq___: 0.0] ___whileTrue___: [u := (self ___at___: #_generator) perform: #float env: 0].
+		[u ___eq___: 0.0] ___whileTrue___: [u := self _generator perform: #float env: 0].
 		(((1.0 ___minus___: u) perform: #ln env: 0) perform: #negated env: 0)
 			perform: #/ env: 0 withArguments: {lambd}
 	]
@@ -373,7 +373,7 @@ initialize_gammavariate
 				x := (self ___at___: #gauss) value: {0.0. 1.0} value: nil.
 				v := (1.0 ___plus___: (c ___times___: x)) ___raisedTo___: 3.
 				(v ___gt___: 0) ifTrue: [
-					u := (self ___at___: #_generator) perform: #float env: 0.
+					u := self _generator perform: #float env: 0.
 					((u ___lt___: (1.0 ___minus___: ((0.0331 ___times___: (x ___times___: x)) ___times___: (x ___times___: x))))
 						or: [(u perform: #ln env: 0) ___lt___: (((0.5 ___times___: x) ___times___: x) ___plus___: (d ___times___: ((1.0 ___minus___: v) ___plus___: (v perform: #ln env: 0))))]) ifTrue: [
 						result := (d ___times___: v) ___times___: beta.
@@ -383,8 +383,8 @@ initialize_gammavariate
 		] ifFalse: [
 			"For alpha < 1, use: gamma(alpha) = gamma(alpha+1) * U^(1/alpha)"
 			| u g |
-			u := (self ___at___: #_generator) perform: #float env: 0.
-			[u ___eq___: 0.0] ___whileTrue___: [u := (self ___at___: #_generator) perform: #float env: 0].
+			u := self _generator perform: #float env: 0.
+			[u ___eq___: 0.0] ___whileTrue___: [u := self _generator perform: #float env: 0].
 			g := (self ___at___: #gammavariate) value: {alpha ___plus___: 1.0. 1.0} value: nil.
 			result := (g ___times___: (u ___raisedTo___: (1.0 perform: #/ env: 0 withArguments: {alpha}))) ___times___: beta.
 		].
@@ -402,14 +402,29 @@ initialize_gauss
 		mu := (positional ___size___ ___ge___: 1) ifTrue: [positional ___at___: 1] ifFalse: [0.0].
 		sigma := (positional ___size___ ___ge___: 2) ifTrue: [positional ___at___: 2] ifFalse: [1.0].
 		"Box-Muller transform"
-		u1 := (self ___at___: #_generator) perform: #float env: 0.
-		u2 := (self ___at___: #_generator) perform: #float env: 0.
+		u1 := self _generator perform: #float env: 0.
+		u2 := self _generator perform: #float env: 0.
 		"Avoid log(0)"
-		[u1 ___eq___: 0.0] ___whileTrue___: [u1 := (self ___at___: #_generator) perform: #float env: 0].
+		[u1 ___eq___: 0.0] ___whileTrue___: [u1 := self _generator perform: #float env: 0].
 		z := ((-2.0 ___times___: (u1 perform: #ln env: 0)) ___sqrt___)
 			___times___: (((2.0 ___times___: (Float perform: #pi env: 0)) ___times___: u2) perform: #cos env: 0).
 		mu ___plus___: (z ___times___: sigma)
 	]
+%
+
+category: 'Python-Private'
+method: random
+_generator
+	"Return the internal random generator, re-creating it if needed.
+	HostRandom wraps a native OS resource that does not survive across sessions,
+	so we check isOpen. Lag1MwcRandom (from seed:) has no such issue."
+	| gen |
+	gen := self ___at___: #_generator.
+	(gen == nil or: [(gen perform: #respondsTo: env: 0 withArguments: {#isOpen}) and: [(gen perform: #isOpen env: 0) not]]) ifTrue: [
+		gen := Random ___new___.
+		self ___at___: #_generator put: gen.
+	].
+	^ gen
 %
 
 category: 'Python-Initialization'
@@ -435,7 +450,7 @@ initialize_getrandbits
 			bitsNeeded := k.
 			[bitsNeeded ___gt___: 0] ___whileTrue___: [
 				| chunk bits |
-				chunk := (self ___at___: #_generator) perform: #integer env: 0.
+				chunk := self _generator perform: #integer env: 0.
 				bits := bitsNeeded ___min___: 32.
 				result := (result perform: #bitShift: env: 0 withArguments: {bits})
 					perform: #bitOr: env: 0 withArguments: {
@@ -491,8 +506,8 @@ initialize_paretovariate
 	self ___at___: #paretovariate put: [:positional :keywords |
 		| alpha u |
 		alpha := positional ___at___: 1.
-		u := (self ___at___: #_generator) perform: #float env: 0.
-		[u ___eq___: 0.0] ___whileTrue___: [u := (self ___at___: #_generator) perform: #float env: 0].
+		u := self _generator perform: #float env: 0.
+		[u ___eq___: 0.0] ___whileTrue___: [u := self _generator perform: #float env: 0].
 		1.0 perform: #/ env: 0 withArguments: {u ___raisedTo___: (1.0 perform: #/ env: 0 withArguments: {alpha})}
 	]
 %
@@ -511,7 +526,7 @@ initialize_randbytes
 			"Generate random bytes using the generator"
 			result := ByteArray ___new___: n.
 			1 ___to___: n do: [:i |
-				result ___at___: i put: (((self ___at___: #_generator) perform: #integer env: 0) perform: #bitAnd: env: 0 withArguments: {16rFF})
+				result ___at___: i put: ((self _generator perform: #integer env: 0) perform: #bitAnd: env: 0 withArguments: {16rFF})
 			].
 			result
 		]
@@ -526,7 +541,7 @@ initialize_randint
 		| a b |
 		a := positional ___at___: 1.
 		b := positional ___at___: 2.
-		(self ___at___: #_generator) perform: #integerBetween:and: env: 0 withArguments: {a. b}
+		self _generator perform: #integerBetween:and: env: 0 withArguments: {a. b}
 	]
 %
 
@@ -535,7 +550,7 @@ method: random
 initialize_random
 	"random() -> x in the interval [0, 1)"
 	self ___at___: #random put: [:positional :keywords |
-		(self ___at___: #_generator) perform: #float env: 0
+		self _generator perform: #float env: 0
 	]
 %
 
@@ -574,7 +589,7 @@ initialize_randrange
 			ValueError ___signal___: 'empty range for randrange()'
 		].
 		"Pick a random index and compute the element"
-		r := (self ___at___: #_generator) perform: #integerBetween:and: env: 0 withArguments: {0. (count ___minus___: 1)}.
+		r := self _generator perform: #integerBetween:and: env: 0 withArguments: {0. (count ___minus___: 1)}.
 		result := start ___plus___: (r ___times___: step).
 		result
 	]
@@ -613,7 +628,7 @@ initialize_sample
 			selected := IdentitySet ___new___.
 			[selected ___size___ ___lt___: k] ___whileTrue___: [
 				| idx |
-				idx := (self ___at___: #_generator) perform: #integerBetween:and: env: 0 withArguments: {1. n}.
+				idx := self _generator perform: #integerBetween:and: env: 0 withArguments: {1. n}.
 				(selected perform: #includes: env: 0 withArguments: {idx}) ifFalse: [
 					selected perform: #add: env: 0 withArguments: {idx}.
 					result perform: #append: env: 2 withArguments: {population ___at___: idx}.
@@ -625,7 +640,7 @@ initialize_sample
 			1 ___to___: n do: [:i | pool ___at___: i put: (population ___at___: i) ].
 			1 ___to___: k do: [:i |
 				| j temp |
-				j := (self ___at___: #_generator) perform: #integerBetween:and: env: 0 withArguments: {i. n}.
+				j := self _generator perform: #integerBetween:and: env: 0 withArguments: {i. n}.
 				"Swap and add to result"
 				temp := pool ___at___: j.
 				pool ___at___: j put: (pool ___at___: i).
@@ -675,7 +690,7 @@ initialize_shuffle
 		"Fisher-Yates shuffle"
 		n ___to___: 2 by: -1 do: [:i |
 			| j temp |
-			j := (self ___at___: #_generator) perform: #integerBetween:and: env: 0 withArguments: {1. i}.
+			j := self _generator perform: #integerBetween:and: env: 0 withArguments: {1. i}.
 			"Swap elements at i and j"
 			temp := x ___at___: i.
 			x ___at___: i put: (x ___at___: j).
@@ -697,7 +712,7 @@ initialize_triangular
 		(mode == nil or: [mode == None]) ifTrue: [
 			mode := (low ___plus___: high) perform: #/ env: 0 withArguments: {2.0}
 		].
-		u := (self ___at___: #_generator) perform: #float env: 0.
+		u := self _generator perform: #float env: 0.
 		c := (mode ___minus___: low) perform: #/ env: 0 withArguments: {high ___minus___: low}.
 		(u ___lt___: c) ifTrue: [
 			low ___plus___: (((u ___times___: (high ___minus___: low)) ___times___: (mode ___minus___: low)) ___sqrt___)
@@ -715,7 +730,7 @@ initialize_uniform
 		| a b |
 		a := positional ___at___: 1.
 		b := positional ___at___: 2.
-		a ___plus___: (((self ___at___: #_generator) perform: #float env: 0) ___times___: (b ___minus___: a))
+		a ___plus___: ((self _generator perform: #float env: 0) ___times___: (b ___minus___: a))
 	]
 %
 
@@ -727,8 +742,8 @@ initialize_weibullvariate
 		| alpha beta u |
 		alpha := positional ___at___: 1.
 		beta := positional ___at___: 2.
-		u := (self ___at___: #_generator) perform: #float env: 0.
-		[u ___eq___: 0.0] ___whileTrue___: [u := (self ___at___: #_generator) perform: #float env: 0].
+		u := self _generator perform: #float env: 0.
+		[u ___eq___: 0.0] ___whileTrue___: [u := self _generator perform: #float env: 0].
 		alpha ___times___: ((((1.0 ___minus___: u) perform: #ln env: 0) perform: #negated env: 0) ___raisedTo___: (1.0 perform: #/ env: 0 withArguments: {beta}))
 	]
 %

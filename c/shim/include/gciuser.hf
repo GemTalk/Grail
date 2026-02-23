@@ -1,0 +1,44 @@
+#ifndef GCIUSER_HF
+#define GCIUSER_HF
+/*=========================================================================
+ * Copyright (C) GemTalk Systems 1986-2025.  All Rights Reserved.
+ *
+ * Name - gciuser.hf
+ *
+ * You should include gciua.hf instead of this file.
+ * This file is included by gciua.hf
+ *
+ *========================================================================
+ */
+#include "gcistring.hf"
+
+#define GCI_DECLARE_ACTION_EX(name, func, nargs, flags) \
+  GciDeclareAction(name, (void*)(func), nargs, flags, TRUE)
+
+/* GCI_DECLARE_ACTION:
+ *  Use this macro to declare a user action with no flags == 0
+ */
+#define GCI_DECLARE_ACTION(name, func, nargs) \
+  GCI_DECLARE_ACTION_EX(name, func, nargs, 0)
+
+extern "C" {
+  /* GciUserActionInit
+   * Called when a user action library is loaded.
+   */
+  void GciUserActionInit();
+
+  /* GciUserActionShutdown
+   * Called when a session user action library is unloaded.
+   * It will never be called in an application user action library.
+   * It should only be used to clean up resources used by the user
+   * action library. It should not make GCI calls because the session
+   * may not exist.
+   */
+  void GciUserActionShutdown(void);
+}
+
+// following 2 for compatibility with old code
+#define GCIUSER_ACTION_INIT_DEF() extern "C" void GciUserActionInit(void)
+#define GCIUSER_ACTION_SHUTDOWN_DEF() extern "C" void GciUserActionShutdown(void)
+
+#endif /* GCIUSER_HF */

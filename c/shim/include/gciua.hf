@@ -1,0 +1,24 @@
+#ifndef GCIUA_HF
+#define GCIUA_HF
+/*=========================================================================
+ * Copyright (C) GemTalk Systems 1986-2025.  All Rights Reserved.
+ *
+ * Name - gciua.hf
+ *
+ * Description - Functional interface to the GemStone C interface (GCI).
+ *               This header file must be included in modules that define
+ *               GCI user actions.
+ *  Note that gci.hf and gciua.hf are mutually exclusive.
+ *
+ *========================================================================
+ */
+
+#include "flag.ht"
+
+#undef GCIUA_HF
+#include "gci.hf"
+#define GCIUA_HF
+
+#include "gciuser.hf"
+
+#endif /* GGCIUA_HF */
