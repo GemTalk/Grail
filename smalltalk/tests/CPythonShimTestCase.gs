@@ -1584,3 +1584,85 @@ testSizeofType
 	self assert: size > 200.
 %
 
+! ===============================================================================
+! Tests - Dynamic Module Loading (shimDynLoad)
+! ===============================================================================
+
+category: 'Tests - Dynamic Loading'
+method: CPythonShimTestCase
+testDynLoadGrailDemo
+	"shimDynLoad should load _grail_demo.so and return method names."
+
+	| soPath methodNames |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	methodNames := System userAction: #shimDynLoad withArgs: { soPath . '_grail_demo' }.
+	self assert: (methodNames isKindOf: Array).
+	self assert: methodNames size equals: 3.
+	self assert: (methodNames includes: 'add').
+	self assert: (methodNames includes: 'dot_product').
+	self assert: (methodNames includes: 'scale').
+%
+
+category: 'Tests - Dynamic Loading'
+method: CPythonShimTestCase
+testDynLoadCallAdd
+	"Call _grail_demo.add(3, 4) via shimCall after dynamic loading."
+
+	| soPath result |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	System userAction: #shimDynLoad withArgs: { soPath . '_grail_demo' }.
+	result := CPythonShim current
+		callModule: '_grail_demo' method: 'add' with: 3 with: 4.
+	self assert: result equals: 7.
+%
+
+category: 'Tests - Dynamic Loading'
+method: CPythonShimTestCase
+testDynLoadModule
+	"loadDynamicModule:fromPath: should create a module subclass with compiled methods."
+
+	| soPath mod addFunc result |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	mod := CPythonShim loadDynamicModule: '_grail_demo' fromPath: soPath.
+	self assert: mod class name equals: #'_grail_demo'.
+	self assert: (mod class superclass == module).
+	addFunc := mod perform: #add env: 2.
+	result := addFunc value: { 10 . 20 } value: nil.
+	self assert: result equals: 30.
+%
+
+category: 'Tests - Dynamic Loading'
+method: CPythonShimTestCase
+testEvalImportGrailDemo
+	"End-to-end: Python source 'import _grail_demo; _grail_demo.add(3, 4)' returns 7."
+
+	| soPath result |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	result := self eval:
+'import _grail_demo
+result = _grail_demo.add(3, 4)
+result
+'.
+	self assert: result equals: 7.
+%
+
+category: 'Tests - Dynamic Loading'
+method: CPythonShimTestCase
+testEvalImportGrailDemoDotProduct
+	"End-to-end: dot_product via Python import."
+
+	| soPath result |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	result := self eval:
+'import _grail_demo
+result = _grail_demo.dot_product([1.0, 2.0, 3.0], [4.0, 5.0, 6.0])
+result
+'.
+	self assert: result equals: 32.0.
+%
+

@@ -361,19 +361,35 @@ extern PyTypeObject _PyNone_Type;
 
 /* ========== Singleton objects ========== */
 
-/* Initialized at library load time. */
-extern PyObject *Py_None;
-extern PyObject *Py_True;
-extern PyObject *Py_False;
+/* Match CPython's ABI: modules reference the struct symbols directly. */
+extern PyObject _Py_NoneStruct;
+extern PyObject _Py_TrueStruct;   /* actually PyLongObject in CPython */
+extern PyObject _Py_FalseStruct;  /* actually PyLongObject in CPython */
+
+#define Py_None   (&_Py_NoneStruct)
+#define Py_True   ((PyObject *)&_Py_TrueStruct)
+#define Py_False  ((PyObject *)&_Py_FalseStruct)
 
 #define Py_RETURN_NONE  return Py_None
 #define Py_RETURN_TRUE  return Py_True
 #define Py_RETURN_FALSE return Py_False
 
+/* ========== Casting ========== */
+
+#define _PyObject_CAST(op) ((PyObject *)(op))
+
 /* ========== Reference counting ========== */
 
+/* _Py_Dealloc is called by CPython's Py_DECREF when refcount hits zero.
+   In the shim, object lifetime is managed by GemStone, so this is a no-op. */
+void _Py_Dealloc(PyObject *op);
+
 #define Py_INCREF(op)  (++(((PyObject*)(op))->ob_refcnt))
-#define Py_DECREF(op)  (--(((PyObject*)(op))->ob_refcnt))
+#define Py_DECREF(op)  do { \
+        PyObject *_py_decref_tmp = _PyObject_CAST(op); \
+        if (--_py_decref_tmp->ob_refcnt == 0) \
+            _Py_Dealloc(_py_decref_tmp); \
+    } while (0)
 #define Py_XINCREF(op) do { if ((op) != NULL) Py_INCREF(op); } while (0)
 #define Py_XDECREF(op) do { if ((op) != NULL) Py_DECREF(op); } while (0)
 
@@ -407,20 +423,31 @@ typedef struct PyModuleDef_Slot {
     void *value;
 } PyModuleDef_Slot;
 
+typedef struct PyModuleDef_Base {
+    PyObject_HEAD
+    PyObject* (*m_init)(void);
+    Py_ssize_t m_index;
+    PyObject*  m_copy;
+} PyModuleDef_Base;
+
 typedef struct PyModuleDef {
-    /* Simplified: real CPython has PyModuleDef_Base here. */
-    int              _placeholder;
+    PyModuleDef_Base m_base;
     const char      *m_name;
     const char      *m_doc;
     Py_ssize_t       m_size;
     PyMethodDef     *m_methods;
     struct PyModuleDef_Slot *m_slots;
-    void            *m_traverse;
-    void            *m_clear;
-    void            *m_free;
+    traverseproc     m_traverse;
+    inquiry          m_clear;
+    freefunc         m_free;
 } PyModuleDef;
 
-#define PyModuleDef_HEAD_INIT 0
+#define PyModuleDef_HEAD_INIT { \
+    PyObject_HEAD_INIT(NULL)    \
+    NULL, /* m_init */          \
+    0,    /* m_index */         \
+    NULL, /* m_copy */          \
+  }
 
 /* PyMODINIT_FUNC: the return type of PyInit_xxx() */
 #ifdef _WIN32
@@ -542,22 +569,15 @@ PyObject     *PyType_GenericAlloc(PyTypeObject *type, Py_ssize_t nitems);
 
 /* ========== Exception type objects ========== */
 
-extern PyObject _PyExc_ValueError;
-extern PyObject _PyExc_TypeError;
-extern PyObject _PyExc_AttributeError;
-extern PyObject _PyExc_KeyError;
-extern PyObject _PyExc_IndexError;
-extern PyObject _PyExc_OverflowError;
-extern PyObject _PyExc_ZeroDivisionError;
-extern PyObject _PyExc_RuntimeError;
-#define PyExc_ValueError        (&_PyExc_ValueError)
-#define PyExc_TypeError         (&_PyExc_TypeError)
-#define PyExc_AttributeError    (&_PyExc_AttributeError)
-#define PyExc_KeyError          (&_PyExc_KeyError)
-#define PyExc_IndexError        (&_PyExc_IndexError)
-#define PyExc_OverflowError     (&_PyExc_OverflowError)
-#define PyExc_ZeroDivisionError (&_PyExc_ZeroDivisionError)
-#define PyExc_RuntimeError      (&_PyExc_RuntimeError)
+/* Match CPython's ABI: these are PyObject* variables (not structs). */
+extern PyObject *PyExc_ValueError;
+extern PyObject *PyExc_TypeError;
+extern PyObject *PyExc_AttributeError;
+extern PyObject *PyExc_KeyError;
+extern PyObject *PyExc_IndexError;
+extern PyObject *PyExc_OverflowError;
+extern PyObject *PyExc_ZeroDivisionError;
+extern PyObject *PyExc_RuntimeError;
 
 /* ========== Float API ========== */
 

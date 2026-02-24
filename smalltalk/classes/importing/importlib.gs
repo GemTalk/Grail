@@ -148,6 +148,17 @@ loadModuleFromPath: pathString name: moduleName
 	^ moduleInstance
 %
 
+category: 'Module Loading'
+classmethod: importlib
+loadDynamicModuleNamed: moduleName fromPath: pathString
+	"Load a .so C extension module via CPythonShim and register it."
+
+	| moduleInstance |
+	moduleInstance := CPythonShim loadDynamicModule: moduleName fromPath: pathString.
+	self registerModule: moduleName with: moduleInstance.
+	^ moduleInstance
+%
+
 category: 'Python-Module Registry'
 classmethod: importlib
 registerModule: aName with: aModule
@@ -231,6 +242,18 @@ ___moduleNameToPath___: aName
 	pathParts := $. ___split___: aName.
 	filePath := (grailDir ___concat___: '/') ___concat___: ('/' join: pathParts).
 	filePath := filePath ___concat___: '.py'.
+	(GsFile perform: #existsOnServer: env: 0 withArguments: { filePath }) ifTrue: [^ filePath].
+	^ nil
+%
+
+category: 'Module Loading'
+classmethod: importlib
+___moduleNameToSoPath___: aName
+	"Search for a .so extension module in the lib/ directory.
+	Returns the full path if found, or nil if not found."
+	| filePath |
+	grailDir == nil ifTrue: [^ nil].
+	filePath := ((grailDir ___concat___: '/lib/') ___concat___: aName) ___concat___: '.so'.
 	(GsFile perform: #existsOnServer: env: 0 withArguments: { filePath }) ifTrue: [^ filePath].
 	^ nil
 %
@@ -364,13 +387,19 @@ initialize___import__
 		moduleInstance notNil ifTrue: [
 			result := moduleInstance
 		] ifFalse: [
-			"Module not found in registry - search filesystem"
+			"Module not found in registry - search filesystem for .py"
 			filePath := self ___class___ ___moduleNameToPath___: absoluteName.
 			filePath notNil ifTrue: [
 				result := self ___class___ perform: #loadModuleFromPath:name: env: 0 withArguments: { filePath. absoluteName. }.
 			] ifFalse: [
-				"Module not found in filesystem either"
-				ModuleNotFoundError ___signal___: (('No module named ''' ___concat___: absoluteName) ___concat___: '''')
+				"Search filesystem for .so (C extension module)"
+				filePath := self ___class___ ___moduleNameToSoPath___: absoluteName.
+				filePath notNil ifTrue: [
+					result := self ___class___ perform: #loadDynamicModuleNamed:fromPath: env: 0 withArguments: { absoluteName. filePath. }.
+				] ifFalse: [
+					"Module not found in filesystem either"
+					ModuleNotFoundError ___signal___: (('No module named ''' ___concat___: absoluteName) ___concat___: '''')
+				]
 			]
 		].
 		result

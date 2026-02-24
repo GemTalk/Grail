@@ -639,6 +639,70 @@ PyObject_Length: obj
 	^ obj perform: #__len__ env: 2
 %
 
+! --------------- Dynamic module loading ---------------
+
+category: 'Dynamic Loading'
+method: CPythonShim
+callModuleDynamic: moduleName method: methodName args: anArray
+	"Call a dynamically loaded module method with a variable number of arguments.
+	anArray is an Array of Smalltalk values (0 to 5 elements)."
+
+	| nargs a1 a2 a3 a4 a5 |
+	nargs := anArray size.
+	a1 := nargs >= 1 ifTrue: [(self wrap: (anArray at: 1)) memoryAddress] ifFalse: [0].
+	a2 := nargs >= 2 ifTrue: [(self wrap: (anArray at: 2)) memoryAddress] ifFalse: [0].
+	a3 := nargs >= 3 ifTrue: [(self wrap: (anArray at: 3)) memoryAddress] ifFalse: [0].
+	a4 := nargs >= 4 ifTrue: [(self wrap: (anArray at: 4)) memoryAddress] ifFalse: [0].
+	a5 := nargs >= 5 ifTrue: [(self wrap: (anArray at: 5)) memoryAddress] ifFalse: [0].
+	^ System userAction: #shimCall withArgs: {
+		moduleName . methodName .
+		a1 . a2 . a3 .
+		a4 . a5 . nargs
+	}
+%
+
+category: 'Dynamic Loading'
+classmethod: CPythonShim
+loadDynamicModule: moduleName fromPath: pathString
+	"Dynamically load a .so extension module.
+	Creates a module subclass with compiled env:2 methods for each C function.
+	Returns an instance of the new class."
+
+	| methodNames moduleClass moduleInstance symbolList |
+	self current.
+	methodNames := System userAction: #shimDynLoad withArgs: { pathString . moduleName }.
+	"Create a module subclass for this C extension"
+	moduleClass := module
+		subclass: moduleName
+		instVarNames: #()
+		classVars: #()
+		classInstVars: #()
+		poolDictionaries: #()
+		inDictionary: UserGlobals
+		options: #().
+	"Compile an env:2 method for each C function.
+	Each method returns a callable block matching Python's call convention."
+	symbolList := System myUserProfile symbolList.
+	methodNames do: [:methName |
+		| source |
+		source := methName , '
+	^ [:positional :keywords |
+		(CPythonShim perform: #current env: 0) perform: #callModuleDynamic:method:args: env: 0 withArguments: { ''' , moduleName , ''' . ''' , methName , ''' . positional }
+	]'.
+		moduleClass
+			compileMethod: source
+			dictionaries: symbolList
+			category: 'C Extension'
+			environmentId: 2.
+	].
+	"Create and initialize the instance"
+	moduleInstance := moduleClass perform: #new env: 0.
+	moduleInstance
+		perform: #'__name__:' env: 2 withArguments: { moduleName };
+		perform: #'__package__:' env: 2 withArguments: { nil }.
+	^ moduleInstance
+%
+
 ! --------------- Rich comparison ---------------
 
 category: 'CPython API'

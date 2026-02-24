@@ -27,6 +27,12 @@ extern "C" {
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <dlfcn.h>
+
+/* GemStone OOPs for the three singletons (defined below, set by shimInit). */
+static OopType none_oop;
+static OopType true_oop;
+static OopType false_oop;
 
 /* ====================================================================
  * PyObject OOP access
@@ -34,9 +40,16 @@ extern "C" {
  * Each PyObject* points to a 24-byte CByteArray. The Smalltalk target
  * OOP lives at offset 16. Reading it is a single pointer dereference
  * — zero GCI calls.
+ *
+ * Singletons (None, True, False) are static C structs (matching
+ * CPython's ABI symbol names) that don't have the hidden OOP field,
+ * so we detect them by pointer identity.
  * ==================================================================== */
 
 static inline OopType pyobj_oop(PyObject *obj) {
+    if (obj == Py_None)  return none_oop;
+    if (obj == Py_True)  return true_oop;
+    if (obj == Py_False) return false_oop;
     return *(OopType *)((char *)obj + 16);
 }
 
@@ -123,30 +136,51 @@ static void init_types(void) {
 }
 
 /* ====================================================================
- * Exception type singletons
+ * Exception type objects — PyObject* variables matching CPython's ABI
  *
  * Used only for identity comparison (pointer equality) in PyErr_SetString.
- * struct _object is defined in cpython.h with ob_refcnt and ob_type.
+ * Each points to a static sentinel; the identity is what matters, not
+ * the content.
  * ==================================================================== */
 
-struct _object _PyExc_ValueError        = { 0, NULL };
-struct _object _PyExc_TypeError         = { 0, NULL };
-struct _object _PyExc_AttributeError    = { 0, NULL };
-struct _object _PyExc_KeyError          = { 0, NULL };
-struct _object _PyExc_IndexError        = { 0, NULL };
-struct _object _PyExc_OverflowError     = { 0, NULL };
-struct _object _PyExc_ZeroDivisionError = { 0, NULL };
-struct _object _PyExc_RuntimeError      = { 0, NULL };
+static struct _object _exc_ValueError        = { 1, NULL };
+static struct _object _exc_TypeError         = { 1, NULL };
+static struct _object _exc_AttributeError    = { 1, NULL };
+static struct _object _exc_KeyError          = { 1, NULL };
+static struct _object _exc_IndexError        = { 1, NULL };
+static struct _object _exc_OverflowError     = { 1, NULL };
+static struct _object _exc_ZeroDivisionError = { 1, NULL };
+static struct _object _exc_RuntimeError      = { 1, NULL };
+
+PyObject *PyExc_ValueError        = &_exc_ValueError;
+PyObject *PyExc_TypeError         = &_exc_TypeError;
+PyObject *PyExc_AttributeError    = &_exc_AttributeError;
+PyObject *PyExc_KeyError          = &_exc_KeyError;
+PyObject *PyExc_IndexError        = &_exc_IndexError;
+PyObject *PyExc_OverflowError     = &_exc_OverflowError;
+PyObject *PyExc_ZeroDivisionError = &_exc_ZeroDivisionError;
+PyObject *PyExc_RuntimeError      = &_exc_RuntimeError;
 
 /* ====================================================================
- * Singleton PyObject pointers — initialized by shimInit
+ * Singleton objects — match CPython's ABI symbol names
  *
- * These point to pre-wrapped CByteArrays allocated by Smalltalk.
+ * Extension modules compiled against Python.h reference _Py_NoneStruct,
+ * _Py_TrueStruct, _Py_FalseStruct by address. These are the actual
+ * PyObject structs that get returned from API functions.
+ *
+ * shimInit fills in the hidden OOP field at offset 16 so pyobj_oop()
+ * can extract the GemStone value.
  * ==================================================================== */
 
-PyObject *Py_None  = NULL;
-PyObject *Py_True  = NULL;
-PyObject *Py_False = NULL;
+struct _object _Py_NoneStruct  = { 1, &_PyNone_Type };
+struct _object _Py_TrueStruct  = { 1, NULL };  /* ob_type set by shimInit */
+struct _object _Py_FalseStruct = { 1, NULL };  /* ob_type set by shimInit */
+
+/* _Py_Dealloc — called when refcount hits zero.
+   In the shim, object lifetime is managed by GemStone. No-op. */
+extern "C" void _Py_Dealloc(PyObject *op) {
+    (void)op;
+}
 
 /* ====================================================================
  * Error state (single-threaded)
@@ -660,6 +694,7 @@ extern "C" PyObject *PyInit__bisect(void);
 extern "C" PyObject *PyInit__crc32c(void);
 extern "C" PyObject *PyInit__shimtest(void);
 extern "C" PyObject *PyInit__heapq(void);
+extern "C" PyObject *PyInit__grail_demo(void);
 
 typedef PyObject *(*ModuleInitFunc)(void);
 
@@ -667,19 +702,20 @@ static struct {
     const char    *name;
     ModuleInitFunc init;
 } module_registry[] = {
-    { "_statistics", PyInit__statistics },
-    { "_bisect",     PyInit__bisect },
-    { "_crc32c",     PyInit__crc32c },
-    { "_shimtest",   PyInit__shimtest },
-    { "_heapq",      PyInit__heapq },
-    { NULL,          NULL }
+    { "_statistics",  PyInit__statistics },
+    { "_bisect",      PyInit__bisect },
+    { "_crc32c",      PyInit__crc32c },
+    { "_shimtest",    PyInit__shimtest },
+    { "_heapq",       PyInit__heapq },
+    { "_grail_demo",  PyInit__grail_demo },
+    { NULL,           NULL }
 };
 
 /* ====================================================================
  * Module cache
  * ==================================================================== */
 
-#define MAX_MODULES 16
+#define MAX_MODULES 64
 
 static PyObject *module_cache[MAX_MODULES];
 static char      module_names[MAX_MODULES][64];
@@ -849,10 +885,18 @@ static OopType shimLoadModule(OopType modOop)
 static OopType shimInit(OopType serverOop, OopType noneAddr,
                         OopType trueAddr, OopType falseAddr)
 {
-    server   = serverOop;
-    Py_None  = (PyObject *)(intptr_t)GciOopToI64(noneAddr);
-    Py_True  = (PyObject *)(intptr_t)GciOopToI64(trueAddr);
-    Py_False = (PyObject *)(intptr_t)GciOopToI64(falseAddr);
+    server = serverOop;
+
+    /* Extract OOPs from the Smalltalk-allocated CByteArray wrappers
+       (which have the GemStone OOP at offset 16). */
+    none_oop  = *(OopType *)((char *)(intptr_t)GciOopToI64(noneAddr) + 16);
+    true_oop  = *(OopType *)((char *)(intptr_t)GciOopToI64(trueAddr) + 16);
+    false_oop = *(OopType *)((char *)(intptr_t)GciOopToI64(falseAddr) + 16);
+
+    /* Set type pointers on the static singletons. */
+    _Py_TrueStruct.ob_type  = &PyBool_Type;
+    _Py_FalseStruct.ob_type = &PyBool_Type;
+
     return OOP_TRUE;
 }
 
@@ -933,14 +977,102 @@ extern "C" void *PyType_GetSlot(PyTypeObject *type, int slot) {
 }
 
 /* ====================================================================
+ * shimDynLoad — dynamically load a .so extension module
+ *
+ * Arguments (2 OopType):
+ *   pathOop — String: absolute path to the .so file
+ *   nameOop — String: module name (e.g. "_grail_demo")
+ *
+ * Returns: an Array of method name Strings (the module's method table)
+ * ==================================================================== */
+
+static OopType shimDynLoad(OopType pathOop, OopType nameOop)
+{
+    char path[512], name[64];
+    fetch_string(pathOop, path, sizeof(path));
+    fetch_string(nameOop, name, sizeof(name));
+
+    /* Check if already cached */
+    for (int i = 0; i < num_modules; i++) {
+        if (strcmp(module_names[i], name) == 0) {
+            /* Already loaded — just return the method names */
+            PyModuleDef *def = (PyModuleDef *)module_cache[i];
+            PyMethodDef *methods = def->m_methods;
+            int count = 0;
+            while (methods[count].ml_name) count++;
+            OopType sizeOop = GciI64ToOop((int64)count);
+            OopType arr = GciPerform(OOP_CLASS_ARRAY, "new:", &sizeOop, 1);
+            for (int j = 0; j < count; j++) {
+                OopType nameStr = GciNewString(methods[j].ml_name);
+                GciStoreOop(arr, j + 1, nameStr);
+            }
+            return arr;
+        }
+    }
+
+    /* dlopen the .so */
+    void *handle = dlopen(path, RTLD_NOW | RTLD_GLOBAL);
+    if (!handle) {
+        char msg[1024];
+        snprintf(msg, sizeof(msg), "dlopen failed: %s", dlerror());
+        raise_error(msg);
+        return OOP_NIL;
+    }
+
+    /* Look for PyInit_{name} */
+    char initName[128];
+    snprintf(initName, sizeof(initName), "PyInit_%s", name);
+    ModuleInitFunc initFunc = (ModuleInitFunc)dlsym(handle, initName);
+    if (!initFunc) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Symbol not found: %s in %s", initName, path);
+        raise_error(msg);
+        return OOP_NIL;
+    }
+
+    /* Call the init function */
+    PyObject *mod = initFunc();
+    if (!mod) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Module init failed: %s", name);
+        raise_error(msg);
+        return OOP_NIL;
+    }
+
+    /* Cache the module */
+    if (num_modules >= MAX_MODULES) {
+        raise_error("Too many loaded modules (increase MAX_MODULES)");
+        return OOP_NIL;
+    }
+    strncpy(module_names[num_modules], name, 63);
+    module_names[num_modules][63] = '\0';
+    module_cache[num_modules] = mod;
+    num_modules++;
+
+    /* Walk the method table and return an Array of method name strings */
+    PyModuleDef *def = (PyModuleDef *)mod;
+    PyMethodDef *methods = def->m_methods;
+    int count = 0;
+    while (methods[count].ml_name) count++;
+
+    OopType sizeOop = GciI64ToOop((int64)count);
+    OopType arr = GciPerform(OOP_CLASS_ARRAY, "new:", &sizeOop, 1);
+    for (int i = 0; i < count; i++) {
+        OopType nameStr = GciNewString(methods[i].ml_name);
+        GciStoreOop(arr, i + 1, nameStr);
+    }
+    return arr;
+}
+
+/* ====================================================================
  * GCI User Action registration
  * ==================================================================== */
 
 extern "C" void GciUserActionInit(void) {
     server   = OOP_NIL;
-    Py_None  = NULL;
-    Py_True  = NULL;
-    Py_False = NULL;
+    none_oop = 0;
+    true_oop = 0;
+    false_oop = 0;
 
     init_types();
 
@@ -948,6 +1080,7 @@ extern "C" void GciUserActionInit(void) {
     GCI_DECLARE_ACTION("shimLoadModule", shimLoadModule, 1);
     GCI_DECLARE_ACTION("shimInit", shimInit, 4);
     GCI_DECLARE_ACTION("shimTypeAddr", shimTypeAddr, 1);
+    GCI_DECLARE_ACTION("shimDynLoad", shimDynLoad, 2);
 }
 
 extern "C" void GciUserActionShutdown(void) {

@@ -148,3 +148,27 @@ __spec__: aValue
 %
 
 set compile_env: 0
+
+category: 'Python-Attribute Access'
+method: module
+doesNotUnderstand: aSelector args: anArray envId: envId
+	"Fall back to dictionary lookup for unrecognized messages.
+	This enables dynamic module attributes (e.g., functions loaded from .so files)
+	to be accessed via normal Python attribute syntax.
+	This path is used by compiled code message sends."
+
+	(self includesKey: aSelector) ifTrue: [^ self at: aSelector].
+	^ super doesNotUnderstand: aSelector args: anArray envId: envId
+%
+
+category: 'Python-Attribute Access'
+method: module
+cantPerform: aSymbol withArguments: anArray env: envId
+	"Fall back to dictionary lookup for unrecognized messages.
+	This path is used by perform:env: calls."
+
+	(self includesKey: aSymbol) ifTrue: [^ self at: aSymbol].
+	^ super cantPerform: aSymbol withArguments: anArray env: envId
+%
+
+set compile_env: 0

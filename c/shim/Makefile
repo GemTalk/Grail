@@ -1,6 +1,6 @@
 CC = cc
 CXX = c++
-CFLAGS = -Wall -Wextra -fPIC -O2 -fvisibility=hidden
+CFLAGS = -Wall -Wextra -fPIC -O2
 UNAME_S := $(shell uname -s)
 comma := ,
 
@@ -14,7 +14,7 @@ else
   RPATH_FLAGS =
 endif
 
-EXT_OBJECTS = _statisticsmodule.o _bisectmodule.o _crc32cmodule.o _shimtestmodule.o _heapqmodule.o
+EXT_OBJECTS = _statisticsmodule.o _bisectmodule.o _crc32cmodule.o _shimtestmodule.o _heapqmodule.o _grail_demo.o
 
 LIB = libcpython_ua.$(SHARED_EXT)
 OBJECTS = cpython.o $(EXT_OBJECTS)
@@ -41,10 +41,21 @@ _shimtestmodule.o: _shimtestmodule.c cpython.h
 _heapqmodule.o: _heapqmodule.c cpython.h
 	$(CC) $(CFLAGS) -Wno-unused-parameter -c _heapqmodule.c
 
+_grail_demo.o: _grail_demo.c cpython.h
+	$(CC) $(CFLAGS) -DGRAIL_SHIM -c _grail_demo.c
+
 $(LIB): $(OBJECTS)
 	$(CXX) $(SHARED_FLAGS) -o $@ $(OBJECTS) $(GEMSTONE)/lib/gciualib.o -lm -lpthread -undefined dynamic_lookup
+
+GRAIL_LIB_DIR = ../../lib
+PYTHON_INCLUDES = $(shell python3-config --includes 2>/dev/null)
+
+dynmods: $(GRAIL_LIB_DIR)/_grail_demo.so
+
+$(GRAIL_LIB_DIR)/_grail_demo.so: _grail_demo.c
+	$(CC) $(CFLAGS) $(PYTHON_INCLUDES) $(SHARED_FLAGS) -o $@ _grail_demo.c -undefined dynamic_lookup
 
 clean:
 	rm -f $(OBJECTS) $(LIB)
 
-.PHONY: all clean
+.PHONY: all clean dynmods

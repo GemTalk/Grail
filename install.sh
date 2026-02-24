@@ -21,6 +21,9 @@ if [ -n "$GEMSTONE" ]; then
     if [ ! -f "$SHIM_LIB_PATH" ]; then
         echo "Warning: CPython shim library build failed. CPythonShim tests will be skipped."
         SHIM_LIB_PATH=""
+    else
+        echo "Building dynamic extension modules..."
+        make -C "$GRAIL_DIR/c/shim" dynmods
     fi
 else
     echo "Warning: GEMSTONE not set. Skipping shim library build."
