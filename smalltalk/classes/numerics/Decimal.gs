@@ -8,11 +8,11 @@
 ! ------------------- Remove existing Python methods from Decimal
 expectvalue /Metaclass3
 doit
-Decimal removeAllMethods: 2.
-Decimal class removeAllMethods: 2.
+Decimal removeAllMethods: 1.
+Decimal class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Instance Creation'
 classmethod: Decimal

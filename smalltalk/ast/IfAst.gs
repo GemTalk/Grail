@@ -61,7 +61,11 @@ method: IfAst
 printSmalltalkOn: aStream
 
 	test printSmalltalkWithParenthesisOn: aStream.
-	aStream nextPutAll: ' ifTrue: ['; increaseIndent; lf.
+	aStream nextPutAll: ' ___isTruthy___ ifTrue: ['; increaseIndent; lf.
 	body printSmalltalkOn: aStream.
+	(orelse notNil and: [orelse size > 0]) ifTrue: [
+		aStream decreaseIndent; nextPutAll: '] ifFalse: ['; increaseIndent; lf.
+		orelse printSmalltalkOn: aStream.
+	].
 	aStream decreaseIndent; nextPutAll: '].'.
 %

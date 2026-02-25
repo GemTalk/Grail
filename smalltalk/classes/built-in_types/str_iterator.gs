@@ -46,11 +46,11 @@ str_iterator category: 'Collections-Iterators'
 ! ------------------- Remove existing Python methods from str_iterator
 expectvalue /Metaclass3
 doit
-str_iterator removeAllMethods: 2.
-str_iterator class removeAllMethods: 2.
+str_iterator removeAllMethods: 1.
+str_iterator class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Instance Creation'
 classmethod: str_iterator

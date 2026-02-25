@@ -57,11 +57,11 @@ string category: 'Modules'
 ! ------------------- Remove existing Python methods from string
 expectvalue /Metaclass3
 doit
-string removeAllMethods: 2.
-string class removeAllMethods: 2.
+string removeAllMethods: 1.
+string class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-String Constants'
 method: string

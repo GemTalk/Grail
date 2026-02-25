@@ -1,10 +1,10 @@
-# Summary of `perform:env: 2` Message Senders
+# Summary of `perform:env: 1` Message Senders
 
-This document provides a comprehensive summary of all places in the codebase that use `perform:env: 2` to send messages to environment 2 (Python methods).
+This document provides a comprehensive summary of all places in the codebase that use `perform:env: 1` to send messages to environment 2 (Python methods).
 
 ## Overview
 
-- **Total `perform:env: 2` calls**: 2,169
+- **Total `perform:env: 1` calls**: 2,169
 - **Unique message selectors**: ~150+
 
 ## Top 30 Most Frequently Sent Messages
@@ -42,7 +42,7 @@ This document provides a comprehensive summary of all places in the codebase tha
 | 14 | `__bool__` | Boolean conversion |
 | 13 | `count:` | Count occurrences |
 
-## Files with Most `perform:env: 2` Calls
+## Files with Most `perform:env: 1` Calls
 
 | Count | File | Primary Usage |
 |-------|------|---------------|
@@ -74,120 +74,120 @@ This document provides a comprehensive summary of all places in the codebase tha
 - **Messages**: `__new__`, `__new__:`, `__new__:_:`, `__new__:_:_:`, `__new__:_:_:_:`
 - **Usage**: Creating instances of Python types from Smalltalk code
 - **Examples**:
-  - `complex perform: #__new__:_: env: 2 withArguments: {3. 4}`
-  - `bytes perform: #__new__:_: env: 2 withArguments: {data. encoding}`
+  - `complex perform: #__new__:_: env: 1 withArguments: {3. 4}`
+  - `bytes perform: #__new__:_: env: 1 withArguments: {data. encoding}`
 
 ### 2. Collection Operations
 - **Total**: ~400+ calls
 - **Messages**: `__len__`, `__getitem__:`, `__setitem__:_:`, `__contains__:`, `add:`, `append:`, `remove:`, `__iter__`, `__next__`
 - **Usage**: Manipulating Python collections (list, dict, set, bytes, etc.)
 - **Examples**:
-  - `list perform: #__len__ env: 2`
-  - `dict perform: #__setitem__:_: env: 2 withArguments: {key. value}`
+  - `list perform: #__len__ env: 1`
+  - `dict perform: #__setitem__:_: env: 1 withArguments: {key. value}`
 
 ### 3. Comparison Operations
 - **Total**: ~100+ calls
 - **Messages**: `__eq__:`, `__ne__:`, `__lt__:`, `__gt__:`, `__le__:`, `__ge__:`
 - **Usage**: Comparing Python objects
 - **Examples**:
-  - `obj1 perform: #__eq__: env: 2 withArguments: {obj2}`
-  - `num1 perform: #__lt__: env: 2 withArguments: {num2}`
+  - `obj1 perform: #__eq__: env: 1 withArguments: {obj2}`
+  - `num1 perform: #__lt__: env: 1 withArguments: {num2}`
 
 ### 4. Arithmetic Operations
 - **Total**: ~80+ calls
 - **Messages**: `__add__:`, `__sub__:`, `__mul__:`, `__truediv__:`, `__floordiv__:`, `__mod__:`, `__pow__:`, `__neg__`, `__pos__`, `__abs__`
 - **Usage**: Mathematical operations on Python numbers
 - **Examples**:
-  - `num1 perform: #__add__: env: 2 withArguments: {num2}`
-  - `complex perform: #__mul__: env: 2 withArguments: {other}`
+  - `num1 perform: #__add__: env: 1 withArguments: {num2}`
+  - `complex perform: #__mul__: env: 1 withArguments: {other}`
 
 ### 5. String/Representation Operations
 - **Total**: ~60+ calls
 - **Messages**: `__str__`, `__repr__`, `real`, `imag`
 - **Usage**: Converting objects to strings, accessing complex number parts
 - **Examples**:
-  - `obj perform: #__repr__ env: 2`
-  - `c perform: #real env: 2`
+  - `obj perform: #__repr__ env: 1`
+  - `c perform: #real env: 1`
 
 ### 6. File System Operations
 - **Total**: ~50+ calls
 - **Messages**: `exists:`, `path`, `rmdir:`, `isfile:`, `isdir:`, `getcwd`, `listdir`, `mkdir:`, `basename:`, `dirname:`, `normpath:`, `isabs:`, `abspath:`, `splitext:`, `commonprefix:`, `commonpath:`, `join:`, `joinAll:`, `join:_:`, `join:_:_:`, `join:_:_:_:`
 - **Usage**: File and path operations via `os` and `os.path` modules
 - **Examples**:
-  - `pathObj perform: #exists: env: 2 withArguments: {path}`
-  - `os perform: #getcwd env: 2`
+  - `pathObj perform: #exists: env: 1 withArguments: {path}`
+  - `os perform: #getcwd env: 1`
 
 ### 7. Mathematical Functions
 - **Total**: ~40+ calls
 - **Messages**: `pi`, `e`, `tau`, `inf`, `nan`, `nanj`, `infj`, `exp:`, `log:`, `log2:`, `log10:`, `sqrt:`, `sin:`, `cos:`, `tan:`, `sinh:`, `cosh:`, `tanh:`, `asin:`, `acos:`, `atan:`, `atan2:_:`, `phase:`, `polar:`, `rect:_:`, `isnan:`, `isinf:`, `isfinite:`
 - **Usage**: Mathematical constants and functions from `math` and `cmath` modules
 - **Examples**:
-  - `cmath perform: #pi env: 2`
-  - `cmath perform: #sqrt: env: 2 withArguments: {z}`
+  - `cmath perform: #pi env: 1`
+  - `cmath perform: #sqrt: env: 1 withArguments: {z}`
 
 ### 8. Type Conversion
 - **Total**: ~30+ calls
 - **Messages**: `__int__`, `__float__`, `__bool__`, `__complex__`, `__str__`, `__repr__`
 - **Usage**: Converting between Python types
 - **Examples**:
-  - `num perform: #__int__ env: 2`
-  - `obj perform: #__bool__ env: 2`
+  - `num perform: #__int__ env: 1`
+  - `obj perform: #__bool__ env: 1`
 
 ### 9. String Operations
 - **Total**: ~100+ calls
 - **Messages**: `startswith:`, `endswith:`, `find:`, `rfind:`, `index:`, `rindex:`, `split:`, `split:_:`, `rsplit:_:`, `splitlines`, `strip`, `lstrip`, `rstrip`, `upper`, `lower`, `title`, `capitalize`, `swapcase`, `casefold`, `isalpha`, `isdigit`, `isalnum`, `isspace`, `isupper`, `islower`, `istitle`, `isascii`, `isdecimal`, `isnumeric`, `isprintable`, `isidentifier`, `zfill:`, `center:`, `ljust:`, `rjust:`, `expandtabs`, `expandtabs:`, `replace:_:`, `partition:`, `rpartition:`, `maketrans:_:`, `translate:`, `removesuffix:`, `removeprefix:`, `encode`, `decode`, `decode:`, `fromhex:_:`, `hex`, `oct`, `bin`, `ord:`, `chr:`, `count:`, `join:`, `joinAll:`
 - **Usage**: String manipulation methods
 - **Examples**:
-  - `str perform: #startswith: env: 2 withArguments: {prefix}`
-  - `str perform: #find: env: 2 withArguments: {sub}`
+  - `str perform: #startswith: env: 1 withArguments: {prefix}`
+  - `str perform: #find: env: 1 withArguments: {sub}`
 
 ### 10. Dictionary/Set Operations
 - **Total**: ~50+ calls
 - **Messages**: `__setitem__:_:`, `__getitem__:`, `get:`, `get:_:`, `setdefault:`, `setdefault:_:`, `pop`, `pop:`, `popitem`, `update:`, `keys`, `values`, `items`, `union:`, `intersection:`, `difference:`, `symmetric_difference:`, `issubset:`, `issuperset:`, `isdisjoint:`, `intersection_update:`, `difference_update:`, `symmetric_difference_update:`, `discard:`, `clear`
 - **Usage**: Dictionary and set manipulation
 - **Examples**:
-  - `dict perform: #get: env: 2 withArguments: {key}`
-  - `set1 perform: #union: env: 2 withArguments: {set2}`
+  - `dict perform: #get: env: 1 withArguments: {key}`
+  - `set1 perform: #union: env: 1 withArguments: {set2}`
 
 ### 11. List/Sequence Operations
 - **Total**: ~40+ calls
 - **Messages**: `append:`, `extend:`, `insert:_:`, `pop`, `pop:`, `remove:`, `index:`, `count:`, `reverse`, `sort:`, `copy`, `clear`
 - **Usage**: List and sequence manipulation
 - **Examples**:
-  - `list perform: #append: env: 2 withArguments: {item}`
-  - `list perform: #insert:_: env: 2 withArguments: {index. item}`
+  - `list perform: #append: env: 1 withArguments: {item}`
+  - `list perform: #insert:_: env: 1 withArguments: {index. item}`
 
 ### 12. Integer Operations
 - **Total**: ~20+ calls
 - **Messages**: `bit_length`, `bit_count`, `is_integer`, `as_integer_ratio`, `numerator`, `denominator`, `gcd:_:`, `lcm:_:`, `factorial:`, `__round__`, `__trunc__`, `__floor__`, `__ceil__`, `__index__`, `__and__:`, `__or__:`, `__xor__:`, `__invert__`, `__lshift__:`, `__rshift__:`, `__divmod__:`, `divmod:_:`, `pow:_:`, `pow:_:_:`
 - **Usage**: Integer-specific operations
 - **Examples**:
-  - `int perform: #bit_length env: 2`
-  - `int1 perform: #gcd:_: env: 2 withArguments: {int2}`
+  - `int perform: #bit_length env: 1`
+  - `int1 perform: #gcd:_: env: 1 withArguments: {int2}`
 
 ### 13. Float Operations
 - **Total**: ~15+ calls
 - **Messages**: `is_integer`, `as_integer_ratio`, `__round__`, `__trunc__`, `__floor__`, `__ceil__`, `abs:`, `fabs:`, `round:`, `floor:`, `ceil:`, `trunc:`
 - **Usage**: Float-specific operations
 - **Examples**:
-  - `float perform: #is_integer env: 2`
-  - `math perform: #abs: env: 2 withArguments: {x}`
+  - `float perform: #is_integer env: 1`
+  - `math perform: #abs: env: 1 withArguments: {x}`
 
 ### 14. Iterator Operations
 - **Total**: ~90+ calls
 - **Messages**: `__iter__`, `__next__`
 - **Usage**: Iterating over Python collections
 - **Examples**:
-  - `collection perform: #__iter__ env: 2`
-  - `iter perform: #__next__ env: 2`
+  - `collection perform: #__iter__ env: 1`
+  - `iter perform: #__next__ env: 1`
 
 ### 15. Type Checking
 - **Total**: ~10+ calls
 - **Messages**: `isinstance:_:`, `type:`, `__class__`, `callable:`
 - **Usage**: Type checking and introspection
 - **Examples**:
-  - `obj perform: #isinstance:_: env: 2 withArguments: {type}`
-  - `obj perform: #__class__ env: 2`
+  - `obj perform: #isinstance:_: env: 1 withArguments: {type}`
+  - `obj perform: #__class__ env: 1`
 
 ### 16. Other Operations
 - **Total**: ~100+ calls
@@ -197,13 +197,13 @@ This document provides a comprehensive summary of all places in the codebase tha
 ## Primary Usage Patterns
 
 ### 1. Test Files
-The majority of `perform:env: 2` calls are in test files, where Smalltalk test code needs to call Python methods to verify behavior.
+The majority of `perform:env: 1` calls are in test files, where Smalltalk test code needs to call Python methods to verify behavior.
 
 ### 2. AST Code Generation
 Some AST nodes generate Smalltalk code that calls Python constructors (e.g., `ConstantAst.gs` for complex numbers).
 
 ### 3. Cross-Environment Communication
-When Smalltalk code (env 0) needs to interact with Python objects (env 2), it uses `perform:env: 2`.
+When Smalltalk code (env 0) needs to interact with Python objects (env 2), it uses `perform:env: 1`.
 
 ## Notes
 
@@ -215,5 +215,5 @@ When Smalltalk code (env 0) needs to interact with Python objects (env 2), it us
 
 ## Potential Refactoring Opportunities
 
-While most `perform:env: 2` calls are necessary for cross-environment communication, some frequently-used patterns might benefit from convenience methods similar to the `___` methods created for `perform:env: 0` calls. However, this would need to be evaluated on a case-by-case basis, as the primary use case (tests) may benefit from the explicit `perform:env: 2` syntax for clarity.
+While most `perform:env: 1` calls are necessary for cross-environment communication, some frequently-used patterns might benefit from convenience methods similar to the `___` methods created for `perform:env: 0` calls. However, this would need to be evaluated on a case-by-case basis, as the primary use case (tests) may benefit from the explicit `perform:env: 1` syntax for clarity.
 

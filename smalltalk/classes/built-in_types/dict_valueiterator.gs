@@ -41,11 +41,11 @@ dict_valueiterator category: 'Collections-Iterators'
 ! ------------------- Remove existing methods
 expectvalue /Metaclass3
 doit
-dict_valueiterator removeAllMethods: 2.
-dict_valueiterator class removeAllMethods: 2.
+dict_valueiterator removeAllMethods: 1.
+dict_valueiterator class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Instance Creation'
 classmethod: dict_valueiterator

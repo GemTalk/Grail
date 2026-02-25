@@ -45,7 +45,7 @@ __dir__
 
 	| selectors result myClass |
 	myClass := self perform: #class env: 0.
-	selectors := myClass perform: #allSelectorsForEnvironment: env: 0 withArguments: { 2 }.
+	selectors := myClass perform: #allSelectorsForEnvironment: env: 0 withArguments: { 1 }.
 	result := selectors perform: #collect: env: 0 withArguments: { [:selector |
 		| index |
 		index := selector perform: #indexOf: env: 0 withArguments: { $: }.
@@ -480,7 +480,7 @@ checkCondition: value
 method: MyClass
 safeOperation: obj
 	| result |
-	[result := obj perform: #operation env: 2] perform: #on:do: env: 0 withArguments: {
+	[result := obj perform: #operation env: 1] perform: #on:do: env: 0 withArguments: {
 		MessageNotUnderstood.
 		[:ex | TypeError perform: #signal: env: 0 withArguments: {'operation not supported'}]
 	}.

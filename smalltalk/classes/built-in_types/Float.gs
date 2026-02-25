@@ -12,11 +12,11 @@
 ! ------------------- Remove existing Python methods from float
 expectvalue /Metaclass3
 doit
-float removeAllMethods: 2.
-float class removeAllMethods: 2.
+float removeAllMethods: 1.
+float class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Initialization'
 classmethod: float

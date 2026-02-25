@@ -138,7 +138,7 @@ executeWithScope: aSymbolList
 			_compileInContext: nil
 			symbolList: aSymbolList
 			oldLitVars: nil
-			environmentId: 2
+			environmentId: 1
 			flags: 0.
 	] on: AbstractException do: [:ex |
 		ex pass.

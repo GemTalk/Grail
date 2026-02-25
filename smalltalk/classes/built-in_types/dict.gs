@@ -14,11 +14,11 @@
 ! ------------------- Remove existing Python methods from dict
 expectvalue /Metaclass3
 doit
-dict removeAllMethods: 2.
-dict class removeAllMethods: 2.
+dict removeAllMethods: 1.
+dict class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Type'
 method: dict
@@ -70,7 +70,7 @@ __eq__: other
 			^ false
 		].
 		otherValue := other ___at___: key.
-		(value perform: #__eq__: env: 2 withArguments: {otherValue}) ifFalse: [
+		(value perform: #__eq__: env: 1 withArguments: {otherValue}) ifFalse: [
 			^ false
 		]
 	].
@@ -103,7 +103,7 @@ category: 'Python-Iterator Protocol'
 method: dict
 __iter__
 	"Return an iterator over the keys of the dictionary"
-	^ dict_keyiterator perform: #___on: env: 2 withArguments: {self}
+	^ dict_keyiterator perform: #___on: env: 1 withArguments: {self}
 %
 
 category: 'Python-Collection Protocol'
@@ -117,7 +117,7 @@ category: 'Python-Comparison'
 method: dict
 __ne__: other
 	"Return True if dictionaries do not have the same (key, value) pairs"
-	^ (self perform: #__eq__: env: 2 withArguments: {other}) ___not___
+	^ (self perform: #__eq__: env: 1 withArguments: {other}) ___not___
 %
 
 category: 'Python-String Representation'
@@ -136,8 +136,8 @@ __repr__
 
 	self ___keysAndValuesDo___: [:key :value |
 		| keyRepr valueRepr |
-		keyRepr := key perform: #__repr__ env: 2.
-		valueRepr := value perform: #__repr__ env: 2.
+		keyRepr := key perform: #__repr__ env: 1.
+		valueRepr := value perform: #__repr__ env: 1.
 		stream ___nextPutAll___: keyRepr.
 		stream ___nextPutAll___: ': '.
 		stream ___nextPutAll___: valueRepr.
@@ -186,7 +186,7 @@ category: 'Python-Access Methods'
 method: dict
 get: key
 	"Return the value for key if key is in the dictionary, else None"
-	^ self perform: #get:_: env: 2 withArguments: {key. nil}
+	^ self perform: #get:_: env: 1 withArguments: {key. nil}
 %
 
 category: 'Python-Access Methods'
@@ -288,7 +288,7 @@ category: 'Python-Mutation Methods'
 method: dict
 setdefault: key
 	"If key is in the dictionary, return its value. If not, insert key with value None and return None"
-	^ self perform: #setdefault:_: env: 2 withArguments: {key. nil}
+	^ self perform: #setdefault:_: env: 1 withArguments: {key. nil}
 %
 
 category: 'Python-Mutation Methods'

@@ -1629,7 +1629,7 @@ testDynLoadModule
 	mod := CPythonShim loadDynamicModule: '_grail_demo' fromPath: soPath.
 	self assert: mod class name equals: #'_grail_demo'.
 	self assert: (mod class superclass == module).
-	addFunc := mod perform: #add env: 2.
+	addFunc := mod perform: #add env: 1.
 	result := addFunc value: { 10 . 20 } value: nil.
 	self assert: result equals: 30.
 %
@@ -1664,5 +1664,166 @@ result = _grail_demo.dot_product([1.0, 2.0, 3.0], [4.0, 5.0, 6.0])
 result
 '.
 	self assert: result equals: 32.0.
+%
+
+! ===============================================================================
+! Tests - _sre (Regular Expression Engine)
+! ===============================================================================
+
+category: 'Tests - Module Loading'
+method: CPythonShimTestCase
+testLoadSre
+	"The _sre module should load successfully."
+
+	self assert: (CPythonShim current loadModule: '_sre') equals: true.
+%
+
+category: 'Tests - SRE'
+method: CPythonShimTestCase
+testSreGetcodesize
+	"getcodesize() returns sizeof(SRE_CODE), which is 4."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_sre' method: 'getcodesize'.
+	self assert: result equals: 4.
+%
+
+category: 'Tests - SRE'
+method: CPythonShimTestCase
+testSreAsciiIscasedUpperA
+	"ascii_iscased('A') => 1 (uppercase letter is cased)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_sre' method: 'ascii_iscased'
+		with: 65.
+	self assert: result equals: 1.
+%
+
+category: 'Tests - SRE'
+method: CPythonShimTestCase
+testSreAsciiIscasedLowerA
+	"ascii_iscased('a') => 1 (lowercase letter is cased)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_sre' method: 'ascii_iscased'
+		with: 97.
+	self assert: result equals: 1.
+%
+
+category: 'Tests - SRE'
+method: CPythonShimTestCase
+testSreAsciiIscasedDigit
+	"ascii_iscased('0') => 0 (digit is not cased)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_sre' method: 'ascii_iscased'
+		with: 48.
+	self assert: result equals: 0.
+%
+
+category: 'Tests - SRE'
+method: CPythonShimTestCase
+testSreUnicodeIscasedUpperA
+	"unicode_iscased('A') => 1."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_sre' method: 'unicode_iscased'
+		with: 65.
+	self assert: result equals: 1.
+%
+
+category: 'Tests - SRE'
+method: CPythonShimTestCase
+testSreUnicodeIscasedDigit
+	"unicode_iscased('0') => 0."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_sre' method: 'unicode_iscased'
+		with: 48.
+	self assert: result equals: 0.
+%
+
+category: 'Tests - SRE'
+method: CPythonShimTestCase
+testSreAsciiTolowerUpperA
+	"ascii_tolower('A'=65) => 'a'=97."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_sre' method: 'ascii_tolower'
+		with: 65.
+	self assert: result equals: 97.
+%
+
+category: 'Tests - SRE'
+method: CPythonShimTestCase
+testSreAsciiTolowerAlreadyLower
+	"ascii_tolower('a'=97) => 97 (already lowercase)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_sre' method: 'ascii_tolower'
+		with: 97.
+	self assert: result equals: 97.
+%
+
+category: 'Tests - SRE'
+method: CPythonShimTestCase
+testSreUnicodeTolowerUpperA
+	"unicode_tolower('A'=65) => 'a'=97."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_sre' method: 'unicode_tolower'
+		with: 65.
+	self assert: result equals: 97.
+%
+
+category: 'Tests - Python Eval'
+method: CPythonShimTestCase
+testEvalSreImport
+	"import _sre should succeed and module should be accessible."
+
+	| result |
+	result := self eval:
+'import _sre
+result = _sre.getcodesize()
+result
+'.
+	self assert: result equals: 4.
+%
+
+category: 'Tests - Python Eval'
+method: CPythonShimTestCase
+testEvalSreAsciiIscased
+	"Evaluate _sre.ascii_iscased via Python source."
+
+	| result |
+	result := self eval:
+'import _sre
+result = _sre.ascii_iscased(65)
+result
+'.
+	self assert: result equals: 1.
+%
+
+category: 'Tests - Python Eval'
+method: CPythonShimTestCase
+testEvalSreAsciiTolower
+	"Evaluate _sre.ascii_tolower via Python source."
+
+	| result |
+	result := self eval:
+'import _sre
+result = _sre.ascii_tolower(90)
+result
+'.
+	self assert: result equals: 122.
 %
 

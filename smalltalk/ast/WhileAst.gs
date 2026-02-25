@@ -60,5 +60,16 @@ category: 'other'
 method: WhileAst
 printSmalltalkOn: aStream
 
-	self halt.
+	aStream nextPut: $[.
+	test printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: ' ___isTruthy___] whileTrue: ['; increaseIndent; lf.
+	body printSmalltalkOn: aStream.
+	aStream decreaseIndent; nextPutAll: '].'.
+	(orelse notNil and: [orelse size > 0]) ifTrue: [
+		aStream lf.
+		orelse do: [:stmt |
+			stmt printSmalltalkOn: aStream.
+			aStream lf.
+		].
+	].
 %

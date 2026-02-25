@@ -41,11 +41,11 @@ dict_keyiterator category: 'Collections-Iterators'
 ! ------------------- Remove existing methods
 expectvalue /Metaclass3
 doit
-dict_keyiterator removeAllMethods: 2.
-dict_keyiterator class removeAllMethods: 2.
+dict_keyiterator removeAllMethods: 1.
+dict_keyiterator class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Instance Creation'
 classmethod: dict_keyiterator

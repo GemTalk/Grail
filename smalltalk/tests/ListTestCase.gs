@@ -48,7 +48,7 @@ test__add__
 	lst1 := OrderedCollection withAll: #(1 2).
 	lst2 := OrderedCollection withAll: #(3 4).
 
-	result := lst1 perform: #__add__: env: 2 withArguments: {lst2}.
+	result := lst1 perform: #__add__: env: 1 withArguments: {lst2}.
 
 	self assert: result size equals: 4.
 	self assert: (result at: 1) equals: 1.
@@ -80,12 +80,12 @@ test__delitem__
 	lst := OrderedCollection withAll: #(10 20 30 40).
 	
 	"Delete by positive index"
-	lst perform: #__delitem__: env: 2 withArguments: {1}.
+	lst perform: #__delitem__: env: 1 withArguments: {1}.
 	self assert: lst size equals: 3.
 	self assert: (lst at: 2) equals: 30.
 	
 	"Delete by negative index"
-	lst perform: #__delitem__: env: 2 withArguments: {-1}.
+	lst perform: #__delitem__: env: 1 withArguments: {-1}.
 	self assert: lst size equals: 2.
 	self assert: (lst at: 2) equals: 30.
 %
@@ -102,13 +102,13 @@ test__eq__
 	tup := InvariantArray withAll: #(1 2 3).
 	
 	"Same contents"
-	self assert: (lst1 perform: #__eq__: env: 2 withArguments: {lst2}).
+	self assert: (lst1 perform: #__eq__: env: 1 withArguments: {lst2}).
 	
 	"Different contents"
-	self deny: (lst1 perform: #__eq__: env: 2 withArguments: {lst3}).
+	self deny: (lst1 perform: #__eq__: env: 1 withArguments: {lst3}).
 	
 	"Different types (list vs tuple)"
-	self deny: (lst1 perform: #__eq__: env: 2 withArguments: {tup}).
+	self deny: (lst1 perform: #__eq__: env: 1 withArguments: {tup}).
 %
 
 category: 'Tests - Sequence Protocol'
@@ -120,17 +120,17 @@ test__getitem__
 	lst := OrderedCollection withAll: #(10 20 30 40 50).
 	
 	"Positive indices"
-	self assert: (lst perform: #__getitem__: env: 2 withArguments: {0}) equals: 10.
-	self assert: (lst perform: #__getitem__: env: 2 withArguments: {2}) equals: 30.
-	self assert: (lst perform: #__getitem__: env: 2 withArguments: {4}) equals: 50.
+	self assert: (lst perform: #__getitem__: env: 1 withArguments: {0}) equals: 10.
+	self assert: (lst perform: #__getitem__: env: 1 withArguments: {2}) equals: 30.
+	self assert: (lst perform: #__getitem__: env: 1 withArguments: {4}) equals: 50.
 	
 	"Negative indices"
-	self assert: (lst perform: #__getitem__: env: 2 withArguments: {-1}) equals: 50.
-	self assert: (lst perform: #__getitem__: env: 2 withArguments: {-5}) equals: 10.
+	self assert: (lst perform: #__getitem__: env: 1 withArguments: {-1}) equals: 50.
+	self assert: (lst perform: #__getitem__: env: 1 withArguments: {-5}) equals: 10.
 	
 	"Out of bounds"
-	self should: [lst perform: #__getitem__: env: 2 withArguments: {5}] raise: IndexError.
-	self should: [lst perform: #__getitem__: env: 2 withArguments: {-6}] raise: IndexError.
+	self should: [lst perform: #__getitem__: env: 1 withArguments: {5}] raise: IndexError.
+	self should: [lst perform: #__getitem__: env: 1 withArguments: {-6}] raise: IndexError.
 %
 
 category: 'Tests - Sequence Operations'
@@ -142,7 +142,7 @@ test__iadd__
 	lst := OrderedCollection withAll: #(1 2).
 	original := lst.
 
-	lst := lst perform: #__iadd__: env: 2 withArguments: {OrderedCollection withAll: #(3 4)}.
+	lst := lst perform: #__iadd__: env: 1 withArguments: {OrderedCollection withAll: #(3 4)}.
 
 	"Returns same object"
 	self assert: lst == original.
@@ -161,7 +161,7 @@ test__imul__
 	lst := OrderedCollection withAll: #(1 2).
 	original := lst.
 
-	lst := lst perform: #__imul__: env: 2 withArguments: {3}.
+	lst := lst perform: #__imul__: env: 1 withArguments: {3}.
 
 	"Returns same object"
 	self assert: lst == original.
@@ -191,7 +191,7 @@ test__mul__
 	| lst result |
 	lst := OrderedCollection withAll: #(1 2).
 
-	result := lst perform: #__mul__: env: 2 withArguments: {3}.
+	result := lst perform: #__mul__: env: 1 withArguments: {3}.
 
 	self assert: result size equals: 6.
 	self assert: (result at: 1) equals: 1.
@@ -210,7 +210,7 @@ test__repr__
 	| lst result |
 	lst := OrderedCollection withAll: #(1 2 3).
 
-	result := lst perform: #__repr__ env: 2.
+	result := lst perform: #__repr__ env: 1.
 
 	"Should contain brackets and commas"
 	self assert: (result includesString: '[').
@@ -226,15 +226,15 @@ test__setitem__
 	lst := OrderedCollection withAll: #(10 20 30).
 	
 	"Positive indices"
-	lst perform: #__setitem__:_: env: 2 withArguments: {0. 100}.
+	lst perform: #__setitem__:_: env: 1 withArguments: {0. 100}.
 	self assert: (lst at: 1) equals: 100.
 	
 	"Negative indices"
-	lst perform: #__setitem__:_: env: 2 withArguments: {-1. 300}.
+	lst perform: #__setitem__:_: env: 1 withArguments: {-1. 300}.
 	self assert: (lst at: 3) equals: 300.
 	
 	"Out of bounds"
-	self should: [lst perform: #__setitem__:_: env: 2 withArguments: {3. 400}] raise: IndexError.
+	self should: [lst perform: #__setitem__:_: env: 1 withArguments: {3. 400}] raise: IndexError.
 %
 
 category: 'Tests - List Methods'
@@ -245,7 +245,7 @@ testAppend
 	| lst |
 	lst := OrderedCollection withAll: #(1 2 3).
 
-	lst perform: #append: env: 2 withArguments: {4}.
+	lst perform: #append: env: 1 withArguments: {4}.
 
 	self assert: lst size equals: 4.
 	self assert: (lst at: 4) equals: 4.
@@ -259,7 +259,7 @@ testClear
 	| lst |
 	lst := OrderedCollection withAll: #(1 2 3).
 
-	lst perform: #clear env: 2.
+	lst perform: #clear env: 1.
 
 	self assert: lst size equals: 0.
 %
@@ -272,10 +272,10 @@ testCount
 	| lst result |
 	lst := OrderedCollection withAll: #(1 2 2 3 2).
 
-	result := lst perform: #count: env: 2 withArguments: {2}.
+	result := lst perform: #count: env: 1 withArguments: {2}.
 	self assert: result equals: 3.
 
-	result := lst perform: #count: env: 2 withArguments: {4}.
+	result := lst perform: #count: env: 1 withArguments: {4}.
 	self assert: result equals: 0.
 %
 
@@ -297,8 +297,8 @@ testEvalListConcatenation
 	| result |
 	result := self eval: '[1, 2] + [3, 4]'.
 	self assert: result size equals: 4.
-	self assert: (result perform: #__getitem__: env: 2 withArguments: {0}) equals: 1.
-	self assert: (result perform: #__getitem__: env: 2 withArguments: {3}) equals: 4.
+	self assert: (result perform: #__getitem__: env: 1 withArguments: {0}) equals: 1.
+	self assert: (result perform: #__getitem__: env: 1 withArguments: {3}) equals: 4.
 %
 
 category: 'Tests - Eval - List Operations'
@@ -328,8 +328,8 @@ testEvalListLiteral
 	| result |
 	result := self eval: '[1, 2, 3]'.
 	self assert: result size equals: 3.
-	self assert: (result perform: #__getitem__: env: 2 withArguments: {0}) equals: 1.
-	self assert: (result perform: #__getitem__: env: 2 withArguments: {2}) equals: 3.
+	self assert: (result perform: #__getitem__: env: 1 withArguments: {0}) equals: 1.
+	self assert: (result perform: #__getitem__: env: 1 withArguments: {2}) equals: 3.
 %
 
 category: 'Tests - Eval - List Operations'
@@ -350,7 +350,7 @@ testExtend
 	| lst |
 	lst := OrderedCollection withAll: #(1 2).
 
-	lst perform: #extend: env: 2 withArguments: {OrderedCollection withAll: #(3 4 5)}.
+	lst perform: #extend: env: 1 withArguments: {OrderedCollection withAll: #(3 4 5)}.
 
 	self assert: lst size equals: 5.
 	self assert: (lst at: 5) equals: 5.
@@ -365,11 +365,11 @@ testIndex
 	lst := OrderedCollection withAll: #(1 2 3 2).
 
 	"Find first occurrence"
-	result := lst perform: #index: env: 2 withArguments: {2}.
+	result := lst perform: #index: env: 1 withArguments: {2}.
 	self assert: result equals: 1.  "0-based index"
 
 	"Not found"
-	self should: [lst perform: #index: env: 2 withArguments: {4}] raise: ValueError.
+	self should: [lst perform: #index: env: 1 withArguments: {4}] raise: ValueError.
 %
 
 category: 'Tests - List Methods'
@@ -381,12 +381,12 @@ testInsert
 	lst := OrderedCollection withAll: #(1 2 4).
 
 	"Insert in middle"
-	lst perform: #insert:_: env: 2 withArguments: {2. 3}.
+	lst perform: #insert:_: env: 1 withArguments: {2. 3}.
 	self assert: lst size equals: 4.
 	self assert: (lst at: 3) equals: 3.
 
 	"Insert at beginning"
-	lst perform: #insert:_: env: 2 withArguments: {0. 0}.
+	lst perform: #insert:_: env: 1 withArguments: {0. 0}.
 	self assert: (lst at: 1) equals: 0.
 %
 
@@ -399,18 +399,18 @@ testPop
 	lst := OrderedCollection withAll: #(1 2 3 4 5).
 
 	"Pop last"
-	result := lst perform: #pop env: 2.
+	result := lst perform: #pop env: 1.
 	self assert: result equals: 5.
 	self assert: lst size equals: 4.
 
 	"Pop by index"
-	result := lst perform: #pop: env: 2 withArguments: {1}.
+	result := lst perform: #pop: env: 1 withArguments: {1}.
 	self assert: result equals: 2.
 	self assert: lst size equals: 3.
 
 	"Pop from empty list"
 	lst size: 0.
-	self should: [lst perform: #pop env: 2] raise: IndexError.
+	self should: [lst perform: #pop env: 1] raise: IndexError.
 %
 
 category: 'Tests - List Methods'
@@ -422,12 +422,12 @@ testRemove
 	lst := OrderedCollection withAll: #(1 2 3 2 4).
 
 	"Remove first occurrence"
-	lst perform: #remove: env: 2 withArguments: {2}.
+	lst perform: #remove: env: 1 withArguments: {2}.
 	self assert: lst size equals: 4.
 	self assert: (lst at: 2) equals: 3.
 
 	"Remove non-existent"
-	self should: [lst perform: #remove: env: 2 withArguments: {99}] raise: ValueError.
+	self should: [lst perform: #remove: env: 1 withArguments: {99}] raise: ValueError.
 %
 
 category: 'Tests - List Methods'
@@ -438,7 +438,7 @@ testReverse
 	| lst |
 	lst := OrderedCollection withAll: #(1 2 3 4 5).
 
-	lst perform: #reverse env: 2.
+	lst perform: #reverse env: 1.
 
 	self assert: (lst at: 1) equals: 5.
 	self assert: (lst at: 5) equals: 1.

@@ -66,11 +66,11 @@ BaseException category: 'Exceptions'
 ! ------------------- Remove existing Python methods from BaseException
 expectvalue /Metaclass3
 doit
-BaseException removeAllMethods: 2.
-BaseException class removeAllMethods: 2.
+BaseException removeAllMethods: 1.
+BaseException class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Initialization'
 classmethod: BaseException
@@ -144,8 +144,8 @@ __eq__: other
 
 	myClass == otherClass ifFalse: [ ^ false ].
 
-	myArgs := self perform: #args env: 2.
-	otherArgs := other perform: #args env: 2.
+	myArgs := self perform: #args env: 1.
+	otherArgs := other perform: #args env: 1.
 
 	^ myArgs ___eq___: otherArgs
 %
@@ -184,7 +184,7 @@ __repr__
 	
 	| className argsArray stream |
 	className := (self ___class___) ___name___.
-	argsArray := self perform: #args env: 2.
+	argsArray := self perform: #args env: 1.
 	stream := WriteStream ___on___: (Unicode7 ___new___).
 	
 	stream ___nextPutAll___: className.
@@ -220,7 +220,7 @@ __str__
 	Otherwise, return str of the args tuple."
 	
 	| argsArray size |
-	argsArray := self perform: #args env: 2.
+	argsArray := self perform: #args env: 1.
 	size := argsArray ___size___.
 	
 	size == 0 ifTrue: [ ^ '' ].

@@ -48,16 +48,16 @@ grep -rn "perform:.*env: 0.*ifTrue:\|perform:.*env: 0.*ifFalse:" smalltalk/class
     issues=$((issues + 1))
   done
 
-# Pattern 2: Binary operators that might need perform:env:0 (only in env: 2 code)
+# Pattern 2: Binary operators that might need perform:env:0 (only in env: 1 code)
 echo ""
-echo "=== Checking for binary operators that might need perform:env:0 (env: 2 code only) ==="
+echo "=== Checking for binary operators that might need perform:env:0 (env: 1 code only) ==="
 for file in smalltalk/classes/*.gs; do
-    # Only check files with env: 2 code
-    if ! grep -q "set compile_env: 2" "$file" 2>/dev/null; then
+    # Only check files with env: 1 code
+    if ! grep -q "set compile_env: 1" "$file" 2>/dev/null; then
         continue
     fi
-    # Find the line numbers where env: 2 starts and ends
-    env2_lines=$(grep -n "set compile_env: 2" "$file" 2>/dev/null | cut -d: -f1)
+    # Find the line numbers where env: 1 starts and ends
+    env2_lines=$(grep -n "set compile_env: 1" "$file" 2>/dev/null | cut -d: -f1)
     env0_lines=$(grep -n "set compile_env: 0" "$file" 2>/dev/null | cut -d: -f1)
     if [ -z "$env2_lines" ]; then
         continue
@@ -72,10 +72,10 @@ for file in smalltalk/classes/*.gs; do
         if is_in_comment "$full_line" "[><=]"; then
           continue
         fi
-        # Check if this line is in an env: 2 section
+        # Check if this line is in an env: 1 section
         in_env2=false
         for env2_line in $env2_lines; do
-          # Find the next env: 0 line after this env: 2
+          # Find the next env: 0 line after this env: 1
           next_env0=""
           for env0_line in $env0_lines; do
             if [ "$env0_line" -gt "$env2_line" ]; then
@@ -83,7 +83,7 @@ for file in smalltalk/classes/*.gs; do
               break
             fi
           done
-          # Check if our line is between env: 2 and next env: 0 (or end of file)
+          # Check if our line is between env: 1 and next env: 0 (or end of file)
           if [ "$line_num" -ge "$env2_line" ]; then
             if [ -z "$next_env0" ] || [ "$line_num" -lt "$next_env0" ]; then
               in_env2=true
@@ -91,7 +91,7 @@ for file in smalltalk/classes/*.gs; do
             fi
           fi
         done
-        # Only flag if it's in env: 2 code
+        # Only flag if it's in env: 1 code
         if [ "$in_env2" = true ]; then
           echo "⚠️  Potential issue: $full_line"
           issues=$((issues + 1))

@@ -43,8 +43,8 @@ module category: 'Modules'
 ! ------------------- Remove existing Python methods from module
 expectvalue /Metaclass3
 doit
-module removeAllMethods: 2.
-module class removeAllMethods: 2.
+module removeAllMethods: 1.
+module class removeAllMethods: 1.
 %
 
 set compile_env: 0
@@ -52,10 +52,10 @@ set compile_env: 0
 category: 'Convenience Methods'
 classmethod: module
 ___instance___
-	^ self perform: #instance env: 2
+	^ self perform: #instance env: 1
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Singleton'
 classmethod: module
@@ -71,7 +71,7 @@ instance
 	Creates it if it doesn't exist."
 	instance == nil ifTrue: [
 		instance := self perform: #new env: 0.
-		instance perform: #initialize env: 2
+		instance perform: #initialize env: 1
 	].
 	^ instance
 %
@@ -133,6 +133,19 @@ category: 'Python-Accessors'
 method: module
 __package__: aValue
 	self ___at___: #__package__ put: aValue
+%
+
+category: 'Python-Accessors'
+method: module
+__path__
+	^ (self perform: #includesKey: env: 0 withArguments: { #__path__ })
+		ifTrue: [self ___at___: #__path__] ifFalse: [nil]
+%
+
+category: 'Python-Accessors'
+method: module
+__path__: aValue
+	self ___at___: #__path__ put: aValue
 %
 
 category: 'Python-Accessors'

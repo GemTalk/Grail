@@ -206,7 +206,7 @@ The `smalltalk/classes/` directory contains **existing Python type implementatio
 
 1. **Find similar implementations**: Look for classes that do similar things
 2. **Copy patterns**: Use the same structure and style
-3. **Understand environment IDs**: See how `env: 0` vs `env: 2` is used
+3. **Understand environment IDs**: See how `env: 0` vs `env: 1` is used
 4. **Learn method organization**: See how methods are categorized
 
 ### Example: Implementing a New Built-in Function
@@ -302,13 +302,13 @@ testAbs
 	| b result |
 	b := builtins perform: #new env: 0.
 	
-	result := b perform: #abs: env: 2 withArguments: {5}.
+	result := b perform: #abs: env: 1 withArguments: {5}.
 	self assert: result equals: 5.
 	
-	result := b perform: #abs: env: 2 withArguments: {-5}.
+	result := b perform: #abs: env: 1 withArguments: {-5}.
 	self assert: result equals: 5.
 	
-	result := b perform: #abs: env: 2 withArguments: {0}.
+	result := b perform: #abs: env: 1 withArguments: {0}.
 	self assert: result equals: 0
 %
 ```
@@ -330,7 +330,7 @@ test_inheritance
 	"Test that TypeError inherits from Exception."
 	
 	| exc |
-	exc := TypeError perform: #__new__: env: 2 withArguments: { TypeError }.
+	exc := TypeError perform: #__new__: env: 1 withArguments: { TypeError }.
 	self assert: (exc isKindOf: Exception)
 %
 ```
@@ -451,10 +451,10 @@ Understanding environment IDs is crucial:
   - Example: `builtins perform: #new env: 0`
   - Example: `self perform: #size env: 0`
   
-- **`env: 2`** - Python environment (Python methods)
+- **`env: 1`** - Python environment (Python methods)
   - Use for: Calling Python protocol methods
-  - Example: `obj perform: #__len__ env: 2`
-  - Example: `lst perform: #__getitem__: env: 2 withArguments: {0}`
+  - Example: `obj perform: #__len__ env: 1`
+  - Example: `lst perform: #__getitem__: env: 1 withArguments: {0}`
 
 ## Code Patterns
 
@@ -475,17 +475,17 @@ result := self perform: #at: env: 0 withArguments: {index}
 
 ```smalltalk
 "Call a Python method"
-result := obj perform: #__len__ env: 2
+result := obj perform: #__len__ env: 1
 
 "Call a Python method with arguments"
-result := lst perform: #__getitem__: env: 2 withArguments: {0}
+result := lst perform: #__getitem__: env: 1 withArguments: {0}
 ```
 
 ### Pattern 3: Error Handling
 
 ```smalltalk
 "Try to call a method, catch error"
-[^ obj perform: #__len__ env: 2] perform: #on:do: env: 0 withArguments: {
+[^ obj perform: #__len__ env: 1] perform: #on:do: env: 0 withArguments: {
 	MessageNotUnderstood. 
 	[:ex | TypeError perform: #signal: env: 0 withArguments: {'object has no len()'}]
 }
@@ -537,7 +537,7 @@ result := lst perform: #__getitem__: env: 2 withArguments: {0}
    - Check `gemstone/rowan/src/` for extensions and additional classes
 2. **Look for similar code** - Find existing implementations that do similar things
 3. **Follow existing patterns** - Use the same structure and style as existing code
-4. **Use correct environment IDs** - `env: 0` for Smalltalk, `env: 2` for Python
+4. **Use correct environment IDs** - `env: 0` for Smalltalk, `env: 1` for Python
 5. **Write tests** - Always write tests alongside implementation
 6. **Reference CPython** - Verify behavior matches CPython when possible
 7. **Search both monticello and rowan** - Base methods may be in monticello, extensions in rowan

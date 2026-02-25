@@ -14,11 +14,11 @@
 ! ------------------- Remove existing Python methods from bytes
 expectvalue /Metaclass3
 doit
-bytes removeAllMethods: 2.
-bytes class removeAllMethods: 2.
+bytes removeAllMethods: 1.
+bytes class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Constructors'
 classmethod: bytes
@@ -387,7 +387,7 @@ method: bytes
 __ne__: other
 	"Compare bytes for inequality"
 	| result |
-	result := self perform: #__eq__: env: 2 withArguments: {other}.
+	result := self perform: #__eq__: env: 1 withArguments: {other}.
 	^ result ___not___
 %
 
@@ -452,7 +452,7 @@ capitalize
 		^ bytes ___new___
 	].
 
-	result := self perform: #lower env: 2.
+	result := self perform: #lower env: 1.
 
 	"Capitalize first byte if it's a lowercase letter"
 	firstByte := result ___at___: 1.
@@ -565,7 +565,7 @@ category: 'Python-Encoding/Decoding'
 method: bytes
 decode
 	"Decode bytes to string using UTF-8"
-	^ self perform: #decode: env: 2 withArguments: {'utf-8'}
+	^ self perform: #decode: env: 1 withArguments: {'utf-8'}
 %
 
 category: 'Python-Encoding/Decoding'
@@ -659,7 +659,7 @@ category: 'Python-String-like Methods'
 method: bytes
 expandtabs
 	"Expand tabs to spaces (default tabsize=8)"
-	^ self perform: #expandtabs: env: 2 withArguments: {8}
+	^ self perform: #expandtabs: env: 1 withArguments: {8}
 %
 
 category: 'Python-String-like Methods'
@@ -791,7 +791,7 @@ method: bytes
 index: sub
 	"Find first occurrence of sub, raise ValueError if not found"
 	| result |
-	result := self perform: #find: env: 2 withArguments: {sub}.
+	result := self perform: #find: env: 1 withArguments: {sub}.
 	(result ___eq___: -1) ifTrue: [
 		ValueError ___signal___: 'subsection not found'
 	].
@@ -1198,7 +1198,7 @@ method: bytes
 partition: sep
 	"Partition bytes at first occurrence of sep, return tuple (before, sep, after)"
 	| idx before after mySize sepSize afterSize |
-	idx := self perform: #find: env: 2 withArguments: {sep}.
+	idx := self perform: #find: env: 1 withArguments: {sep}.
 
 	"Not found - return (self, empty, empty)"
 	(idx ___eq___: -1) ifTrue: [
@@ -1230,7 +1230,7 @@ method: bytes
 removeprefix: prefix
 	"Remove prefix if present, otherwise return copy"
 	| hasPrefix prefixSize mySize result |
-	hasPrefix := self perform: #startswith: env: 2 withArguments: {prefix}.
+	hasPrefix := self perform: #startswith: env: 1 withArguments: {prefix}.
 	hasPrefix ifFalse: [
 		^ self ___copy___
 	].
@@ -1251,7 +1251,7 @@ method: bytes
 removesuffix: suffix
 	"Remove suffix if present, otherwise return copy"
 	| hasSuffix suffixSize mySize result |
-	hasSuffix := self perform: #endswith: env: 2 withArguments: {suffix}.
+	hasSuffix := self perform: #endswith: env: 1 withArguments: {suffix}.
 	hasSuffix ifFalse: [
 		^ self ___copy___
 	].
@@ -1293,8 +1293,8 @@ replace: old _: new
 	].
 
 	"Split by old, then join with new"
-	parts := self perform: #split: env: 2 withArguments: {old}.
-	^ new perform: #join: env: 2 withArguments: {parts}
+	parts := self perform: #split: env: 1 withArguments: {old}.
+	^ new perform: #join: env: 1 withArguments: {parts}
 %
 
 category: 'Python-Search Methods'
@@ -1357,7 +1357,7 @@ method: bytes
 rindex: sub
 	"Find last occurrence of sub, raise ValueError if not found"
 	| result |
-	result := self perform: #rfind: env: 2 withArguments: {sub}.
+	result := self perform: #rfind: env: 1 withArguments: {sub}.
 	(result ___eq___: -1) ifTrue: [
 		ValueError ___signal___: 'subsection not found'
 	].
@@ -1398,7 +1398,7 @@ method: bytes
 rpartition: sep
 	"Partition bytes at last occurrence of sep, return tuple (before, sep, after)"
 	| idx before after mySize sepSize afterSize|
-	idx := self perform: #rfind: env: 2 withArguments: {sep}.
+	idx := self perform: #rfind: env: 1 withArguments: {sep}.
 
 	"Not found - return (empty, empty, self)"
 	(idx ___eq___: -1) ifTrue: [
@@ -1429,7 +1429,7 @@ category: 'Python-Splitting Methods'
 method: bytes
 rsplit: sep
 	"Split from right (same as split for now - full implementation would need maxsplit)"
-	^ self perform: #split: env: 2 withArguments: {sep}
+	^ self perform: #split: env: 1 withArguments: {sep}
 %
 
 category: 'Python-Splitting Methods'
@@ -1454,7 +1454,7 @@ rsplit: sep _: maxsplit
 
 	"If maxsplit is -1 or < 0, do unlimited split"
 	(maxsplit ___lt___: 0) ifTrue: [
-		^ self perform: #split: env: 2 withArguments: {sep}
+		^ self perform: #split: env: 1 withArguments: {sep}
 	].
 
 	"Find all separator positions from right to left"
@@ -1642,7 +1642,7 @@ split: sep _: maxsplit
 
 	"If maxsplit is -1 or < 0, do unlimited split"
 	(maxsplit ___lt___: 0) ifTrue: [
-		^ self perform: #split: env: 2 withArguments: {sep}
+		^ self perform: #split: env: 1 withArguments: {sep}
 	].
 
 	parts := list ___new___.

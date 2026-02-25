@@ -45,11 +45,11 @@ range_iterator category: 'Collections-Iterators'
 ! ------------------- Remove existing Python methods from range_iterator
 expectvalue /Metaclass3
 doit
-range_iterator removeAllMethods: 2.
-range_iterator class removeAllMethods: 2.
+range_iterator removeAllMethods: 1.
+range_iterator class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Instance Creation'
 classmethod: range_iterator

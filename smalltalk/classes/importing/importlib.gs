@@ -64,7 +64,7 @@ set compile_env: 0
 category: 'For Tests'
 classmethod: importlib
 ___lookupModule___: aName
-	^ self perform: #'lookupModule:' env: 2 withArguments: { aName }
+	^ self perform: #'lookupModule:' env: 1 withArguments: { aName }
 %
 
 category: 'AST-Generation'
@@ -113,9 +113,9 @@ hello
 
 	[
 		| module function hello |
-		module := importlib perform: #instance env: 2.
-		function := module perform: #import_module env: 2.
-		hello := function value: { 'smalltalk.tests.hello' } value: nil.
+		module := importlib perform: #instance env: 1.
+		function := module perform: #import_module env: 1.
+		hello := function value: { 'python.hello' } value: nil.
 		^hello
 	] on: AbstractException do: [:ex |
 		ex halt.
@@ -133,17 +133,25 @@ loadModuleFromPath: pathString name: moduleName
 	mySymbolList := SymbolList with: builtins ___instance___.
 	moduleAst executeWithScope: mySymbolList.
 	"Create a module instance"
-	moduleInstance := module basicNew.
+	moduleInstance := module perform: #new env: 0.
 	nameParts := $. split: moduleName.
 	packageName := (nameParts size > 1)
-		ifTrue: ['.' perform: #join: env: 2 withArguments: { (nameParts copyFrom: 1 to: nameParts size - 1) }]
+		ifTrue: ['.' perform: #join: env: 1 withArguments: { (nameParts copyFrom: 1 to: nameParts size - 1) }]
 		ifFalse: [None].
-	moduleInstance 
-		perform: #'__name__:' env: 2 withArguments: { moduleName };
-		perform: #'__package__:' env: 2 withArguments: { packageName }.
+	moduleInstance
+		perform: #'__name__:' env: 1 withArguments: { moduleName };
+		perform: #'__package__:' env: 1 withArguments: { packageName }.
+	"If this is a package (__init__.py), set __path__ to the package directory"
+	(pathString endsWith: '__init__.py') ifTrue: [
+		| dirPath |
+		dirPath := pathString copyFrom: 1 to: pathString size - '/__init__.py' size.
+		moduleInstance perform: #'__path__:' env: 1 withArguments: { { dirPath } }.
+		"For packages, __package__ is the module name itself"
+		moduleInstance perform: #'__package__:' env: 1 withArguments: { moduleName }.
+	].
 	"Register the module in sys.modules"
-	self 
-		registerModule: moduleName 
+	self
+		registerModule: moduleName
 		with: moduleInstance.
 	^ moduleInstance
 %
@@ -163,7 +171,7 @@ category: 'Python-Module Registry'
 classmethod: importlib
 registerModule: aName with: aModule
 	"Register a module class in the module registry"
-	(self perform: #modules env: 2) 
+	(self perform: #modules env: 1) 
 		at: aName asSymbol 
 		put: aModule
 %
@@ -188,7 +196,7 @@ runPath: pathString
 			_compileInContext: nil
 			symbolList: mySymbolList
 			oldLitVars: nil
-			environmentId: 2
+			environmentId: 1
 			flags: 0.
 	] on: AbstractException do: [:ex |
 		ex pass.
@@ -230,19 +238,24 @@ smalltalkForSource: aString
 	^ stream contents
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Module Loading'
 classmethod: importlib
 ___moduleNameToPath___: aName
-	"Convert a module name (e.g., 'smalltalk.tests.hello') to a file path (e.g., 'smalltalk/tests/hello.py').
-	Returns the full path if the file exists, or nil if not found."
-	| pathParts filePath baseDir |
+	"Convert a module name (e.g., 'python.hello') to a file path.
+	Checks for name.py first, then name/__init__.py (package).
+	Returns the full path if found, or nil if not found."
+	| pathParts basePath pyPath initPath |
 	grailDir == nil ifTrue: [^ nil].
 	pathParts := $. ___split___: aName.
-	filePath := (grailDir ___concat___: '/') ___concat___: ('/' join: pathParts).
-	filePath := filePath ___concat___: '.py'.
-	(GsFile perform: #existsOnServer: env: 0 withArguments: { filePath }) ifTrue: [^ filePath].
+	basePath := (grailDir ___concat___: '/') ___concat___: ('/' join: pathParts).
+	"Try name.py first"
+	pyPath := basePath ___concat___: '.py'.
+	(GsFile perform: #existsOnServer: env: 0 withArguments: { pyPath }) ifTrue: [^ pyPath].
+	"Try name/__init__.py (package)"
+	initPath := basePath ___concat___: '/__init__.py'.
+	(GsFile perform: #existsOnServer: env: 0 withArguments: { initPath }) ifTrue: [^ initPath].
 	^ nil
 %
 
@@ -355,7 +368,7 @@ initialize___import__
 
 	This is the function invoked by the import statement."
 	self ___at___: #__import__ put: [:positional :keywords |
-		| name globals locals fromlist level absoluteName moduleInstance filePath result |
+		| name globals locals fromlist level absoluteName moduleInstance filePath result nameParts isDotted prefix parentFilePath idx parentParts parentName childName parentModule |
 		name := positional ___at___: 1.
 		globals := (positional __len__ ___gt___: 1)
 			ifTrue: [positional ___at___: 2]
@@ -382,6 +395,32 @@ initialize___import__
 			]
 			ifFalse: [name].
 
+		"Split the name into parts; detect dotted names"
+		nameParts := $. ___split___: absoluteName.
+		isDotted := nameParts __len__ ___gt___: 1.
+
+		"Ensure parent packages are loaded for dotted names"
+		isDotted ifTrue: [
+			prefix := nameParts perform: #at: env: 0 withArguments: {1}.
+			(self ___class___ lookupModule: prefix) ifNil: [
+				parentFilePath := self ___class___ ___moduleNameToPath___: prefix.
+				parentFilePath notNil ifTrue: [
+					self ___class___ perform: #loadModuleFromPath:name: env: 0
+						withArguments: { parentFilePath. prefix. }.
+				].
+			].
+			2 perform: #to:do: env: 0 withArguments: {nameParts __len__ - 1. [:i |
+				prefix := (prefix ___concat___: '.') ___concat___: (nameParts perform: #at: env: 0 withArguments: {i}).
+				(self ___class___ lookupModule: prefix) ifNil: [
+					parentFilePath := self ___class___ ___moduleNameToPath___: prefix.
+					parentFilePath notNil ifTrue: [
+						self ___class___ perform: #loadModuleFromPath:name: env: 0
+							withArguments: { parentFilePath. prefix. }.
+					].
+				].
+			]}.
+		].
+
 		"Look up the module"
 		moduleInstance := self ___class___ lookupModule: absoluteName.
 		moduleInstance notNil ifTrue: [
@@ -402,7 +441,24 @@ initialize___import__
 				]
 			]
 		].
-		result
+
+		"Bind submodule as attribute on parent module"
+		isDotted ifTrue: [
+			parentParts := nameParts perform: #copyFrom:to: env: 0 withArguments: {1. nameParts __len__ - 1}.
+			parentName := '.' perform: #join: env: 0 withArguments: {parentParts}.
+			childName := nameParts perform: #last env: 0.
+			parentModule := self ___class___ lookupModule: parentName.
+			parentModule notNil ifTrue: [
+				parentModule ___at___: childName ___asSymbol___ put: result.
+			].
+		].
+
+		"Return the correct module per CPython semantics:
+		 - import foo.bar (fromlist empty): return top-level 'foo'
+		 - from foo.bar import x (fromlist non-empty): return 'foo.bar'"
+		(isDotted and: [fromlist __len__ ___eq___: 0])
+			ifTrue: [self ___class___ lookupModule: (nameParts ___at___: 1)]
+			ifFalse: [result]
 	]
 %
 

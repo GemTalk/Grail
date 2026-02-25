@@ -39,8 +39,8 @@ _testStderr
 	"Test sys.stderr is a GsFile"
 
 	| s result |
-	s := sys perform: #instance env: 2.
-	result := s perform: #stderr env: 2.
+	s := sys perform: #instance env: 1.
+	result := s perform: #stderr env: 1.
 
 	self assert: result notNil.
 	self assert: (result isKindOf: GsFile)
@@ -52,8 +52,8 @@ _testStdin
 	"Test sys.stdin is a GsFile"
 
 	| s result |
-	s := sys perform: #instance env: 2.
-	result := s perform: #stdin env: 2.
+	s := sys perform: #instance env: 1.
+	result := s perform: #stdin env: 1.
 
 	self assert: result notNil.
 	self assert: (result isKindOf: GsFile)
@@ -65,8 +65,8 @@ _testStdout
 	"Test sys.stdout is a GsFile"
 
 	| s result |
-	s := sys perform: #instance env: 2.
-	result := s perform: #stdout env: 2.
+	s := sys perform: #instance env: 1.
+	result := s perform: #stdout env: 1.
 
 	self assert: result notNil.
 	self assert: (result isKindOf: GsFile)
@@ -76,7 +76,7 @@ category: 'Setup'
 method: SysTestCase
 setUp
 	"Initialize the modules registry before each test"
-	sys perform: #modules env: 2
+	sys perform: #modules env: 1
 %
 
 category: 'Tests - Runtime Info'
@@ -85,8 +85,8 @@ testArgv
 	"Test sys.argv is a list"
 
 	| s result |
-	s := sys perform: #instance env: 2.
-	result := s perform: #argv env: 2.
+	s := sys perform: #instance env: 1.
+	result := s perform: #argv env: 1.
 
 	self assert: (result isKindOf: list)
 %
@@ -97,8 +97,8 @@ testBuiltinModuleNames
 	"Test sys.builtin_module_names contains expected modules"
 
 	| s result |
-	s := sys perform: #instance env: 2.
-	result := s perform: #builtin_module_names env: 2.
+	s := sys perform: #instance env: 1.
+	result := s perform: #builtin_module_names env: 1.
 
 	self assert: (result isKindOf: tuple)
 %
@@ -109,8 +109,8 @@ testByteorder
 	"Test sys.byteorder attribute"
 
 	| s result |
-	s := sys perform: #instance env: 2.
-	result := s perform: #byteorder env: 2.
+	s := sys perform: #instance env: 1.
+	result := s perform: #byteorder env: 1.
 
 	self assert: ((result = 'little') or: [result = 'big'])
 %
@@ -121,8 +121,8 @@ testCopyright
 	"Test sys.copyright attribute"
 
 	| s result |
-	s := sys perform: #instance env: 2.
-	result := s perform: #copyright env: 2.
+	s := sys perform: #instance env: 1.
+	result := s perform: #copyright env: 1.
 
 	self assert: (result isKindOf: String).
 	self assert: result size > 0
@@ -134,8 +134,8 @@ testDisplayhookExists
 	"Test sys.displayhook exists and is callable"
 
 	| s displayhookBlock |
-	s := sys perform: #instance env: 2.
-	displayhookBlock := s perform: #displayhook env: 2.
+	s := sys perform: #instance env: 1.
+	displayhookBlock := s perform: #displayhook env: 1.
 
 	self assert: displayhookBlock notNil
 %
@@ -146,8 +146,8 @@ testExcepthookExists
 	"Test sys.excepthook exists and is callable"
 
 	| s excepthookBlock |
-	s := sys perform: #instance env: 2.
-	excepthookBlock := s perform: #excepthook env: 2.
+	s := sys perform: #instance env: 1.
+	excepthookBlock := s perform: #excepthook env: 1.
 
 	self assert: excepthookBlock notNil
 %
@@ -158,8 +158,8 @@ testExcInfo
 	"Test sys.exc_info() returns a tuple"
 
 	| s excInfoBlock result |
-	s := sys perform: #instance env: 2.
-	excInfoBlock := s perform: #exc_info env: 2.
+	s := sys perform: #instance env: 1.
+	excInfoBlock := s perform: #exc_info env: 1.
 
 	result := excInfoBlock value: {} value: nil.
 
@@ -173,8 +173,8 @@ testExecutable
 	"Test sys.executable is set from GemStone"
 
 	| s result |
-	s := sys perform: #instance env: 2.
-	result := s perform: #executable env: 2.
+	s := sys perform: #instance env: 1.
+	result := s perform: #executable env: 1.
 
 	self assert: (result isKindOf: String)
 %
@@ -185,8 +185,8 @@ testExit
 	"Test sys.exit raises SystemExit"
 
 	| s exitBlock |
-	s := sys perform: #instance env: 2.
-	exitBlock := s perform: #exit env: 2.
+	s := sys perform: #instance env: 1.
+	exitBlock := s perform: #exit env: 1.
 
 	self should: [exitBlock value: {} value: nil] raise: SystemExit
 %
@@ -197,8 +197,8 @@ testExitWithCode
 	"Test sys.exit(code) raises SystemExit with code"
 
 	| s exitBlock |
-	s := sys perform: #instance env: 2.
-	exitBlock := s perform: #exit env: 2.
+	s := sys perform: #instance env: 1.
+	exitBlock := s perform: #exit env: 1.
 
 	self should: [exitBlock value: {42} value: nil] raise: SystemExit
 %
@@ -209,8 +209,8 @@ testGetdefaultencoding
 	"Test sys.getdefaultencoding() returns utf-8"
 
 	| s getdefaultencodingBlock result |
-	s := sys perform: #instance env: 2.
-	getdefaultencodingBlock := s perform: #getdefaultencoding env: 2.
+	s := sys perform: #instance env: 1.
+	getdefaultencodingBlock := s perform: #getdefaultencoding env: 1.
 
 	result := getdefaultencodingBlock value: {} value: nil.
 
@@ -223,8 +223,8 @@ testGetfilesystemencoding
 	"Test sys.getfilesystemencoding() returns utf-8"
 
 	| s getfilesystemencodingBlock result |
-	s := sys perform: #instance env: 2.
-	getfilesystemencodingBlock := s perform: #getfilesystemencoding env: 2.
+	s := sys perform: #instance env: 1.
+	getfilesystemencodingBlock := s perform: #getfilesystemencoding env: 1.
 
 	result := getfilesystemencodingBlock value: {} value: nil.
 
@@ -237,8 +237,8 @@ testGetrecursionlimit
 	"Test sys.getrecursionlimit() returns a positive integer"
 
 	| s getrecursionlimitBlock result |
-	s := sys perform: #instance env: 2.
-	getrecursionlimitBlock := s perform: #getrecursionlimit env: 2.
+	s := sys perform: #instance env: 1.
+	getrecursionlimitBlock := s perform: #getrecursionlimit env: 1.
 
 	result := getrecursionlimitBlock value: {} value: nil.
 
@@ -252,8 +252,8 @@ testGetsizeof
 	"Test sys.getsizeof() returns a size"
 
 	| s getsizeofBlock result |
-	s := sys perform: #instance env: 2.
-	getsizeofBlock := s perform: #getsizeof env: 2.
+	s := sys perform: #instance env: 1.
+	getsizeofBlock := s perform: #getsizeof env: 1.
 
 	result := getsizeofBlock value: {'hello'} value: nil.
 
@@ -267,8 +267,8 @@ testImportSys
 	"Test importing sys module via importlib"
 
 	| imp importModuleBlock result |
-	imp := importlib perform: #instance env: 2.
-	importModuleBlock := imp perform: #import_module env: 2.
+	imp := importlib perform: #instance env: 1.
+	importModuleBlock := imp perform: #import_module env: 1.
 
 	result := importModuleBlock value: {'sys'} value: nil.
 
@@ -281,8 +281,8 @@ testInstance
 	"Test that sys module is a singleton"
 
 	| s1 s2 |
-	s1 := sys perform: #instance env: 2.
-	s2 := sys perform: #instance env: 2.
+	s1 := sys perform: #instance env: 1.
+	s2 := sys perform: #instance env: 1.
 
 	self assert: s1 == s2
 %
@@ -293,8 +293,8 @@ testIntern
 	"Test sys.intern() returns the same string"
 
 	| s internBlock result |
-	s := sys perform: #instance env: 2.
-	internBlock := s perform: #intern env: 2.
+	s := sys perform: #instance env: 1.
+	internBlock := s perform: #intern env: 1.
 
 	result := internBlock value: {'hello'} value: nil.
 
@@ -307,8 +307,8 @@ testIsFinalizing
 	"Test sys.is_finalizing() returns false during normal execution"
 
 	| s isFinalizingBlock result |
-	s := sys perform: #instance env: 2.
-	isFinalizingBlock := s perform: #is_finalizing env: 2.
+	s := sys perform: #instance env: 1.
+	isFinalizingBlock := s perform: #is_finalizing env: 1.
 
 	result := isFinalizingBlock value: {} value: nil.
 
@@ -321,8 +321,8 @@ testMaxsize
 	"Test sys.maxsize attribute"
 
 	| s result |
-	s := sys perform: #instance env: 2.
-	result := s perform: #maxsize env: 2.
+	s := sys perform: #instance env: 1.
+	result := s perform: #maxsize env: 1.
 
 	self assert: (result isKindOf: Integer).
 	self assert: result > 0
@@ -334,9 +334,9 @@ testModules
 	"Test sys.modules attribute is shared with importlib"
 
 	| s result importModules |
-	s := sys perform: #instance env: 2.
-	result := s perform: #modules env: 2.
-	importModules := importlib perform: #modules env: 2.
+	s := sys perform: #instance env: 1.
+	result := s perform: #modules env: 1.
+	importModules := importlib perform: #modules env: 1.
 
 	self assert: result == importModules
 %
@@ -346,7 +346,7 @@ method: SysTestCase
 testNewRaisesError
 	"Test that sys.new raises TypeError"
 
-	self should: [sys perform: #new env: 2] raise: TypeError
+	self should: [sys perform: #new env: 1] raise: TypeError
 %
 
 category: 'Tests - Path Info'
@@ -355,8 +355,8 @@ testPath
 	"Test sys.path attribute is a list"
 
 	| s result |
-	s := sys perform: #instance env: 2.
-	result := s perform: #path env: 2.
+	s := sys perform: #instance env: 1.
+	result := s perform: #path env: 1.
 
 	self assert: (result isKindOf: list)
 %
@@ -367,8 +367,8 @@ testPlatform
 	"Test sys.platform attribute"
 
 	| s result |
-	s := sys perform: #instance env: 2.
-	result := s perform: #platform env: 2.
+	s := sys perform: #instance env: 1.
+	result := s perform: #platform env: 1.
 
 	self assert: (result isKindOf: String).
 	self assert: ((result = 'darwin') or: [(result = 'linux') or: [result = 'win32']])
@@ -380,8 +380,8 @@ testPlatformFromGemStone
 	"Test sys.platform is derived from GemStone osName"
 
 	| s result osName |
-	s := sys perform: #instance env: 2.
-	result := s perform: #platform env: 2.
+	s := sys perform: #instance env: 1.
+	result := s perform: #platform env: 1.
 	osName := System gemVersionAt: #osName.
 
 	"Platform should match OS"
@@ -395,8 +395,8 @@ testPrefix
 	"Test sys.prefix is set"
 
 	| s result |
-	s := sys perform: #instance env: 2.
-	result := s perform: #prefix env: 2.
+	s := sys perform: #instance env: 1.
+	result := s perform: #prefix env: 1.
 
 	self assert: (result isKindOf: String)
 %
@@ -407,7 +407,7 @@ testSysInModuleRegistry
 	"Test that sys is registered in importlib modules"
 
 	| modules |
-	modules := importlib perform: #modules env: 2.
+	modules := importlib perform: #modules env: 1.
 
 	self assert: (modules includesKey: #sys)
 %
@@ -418,8 +418,8 @@ testVersion
 	"Test sys.version attribute"
 
 	| s result |
-	s := sys perform: #instance env: 2.
-	result := s perform: #version env: 2.
+	s := sys perform: #instance env: 1.
+	result := s perform: #version env: 1.
 
 	self assert: (result isKindOf: String).
 	self assert: result size > 0
@@ -431,8 +431,8 @@ testVersionContainsGemStone
 	"Test sys.version contains GemStone identifier"
 
 	| s result |
-	s := sys perform: #instance env: 2.
-	result := s perform: #version env: 2.
+	s := sys perform: #instance env: 1.
+	result := s perform: #version env: 1.
 
 	self assert: (result includesString: 'GemStone')
 %
@@ -443,8 +443,8 @@ testVersionContainsGrail
 	"Test sys.version contains Grail identifier"
 
 	| s result |
-	s := sys perform: #instance env: 2.
-	result := s perform: #version env: 2.
+	s := sys perform: #instance env: 1.
+	result := s perform: #version env: 1.
 
 	self assert: (result includesString: 'Grail')
 %
@@ -455,8 +455,8 @@ testVersionInfo
 	"Test sys.version_info attribute"
 
 	| s result |
-	s := sys perform: #instance env: 2.
-	result := s perform: #version_info env: 2.
+	s := sys perform: #instance env: 1.
+	result := s perform: #version_info env: 1.
 
 	self assert: (result isKindOf: tuple).
 	self assert: result size >= 5

@@ -18,8 +18,8 @@
 ! ------------------- Remove existing Python methods from bool
 expectvalue /Metaclass3
 doit
-bool removeAllMethods: 2.
-bool class removeAllMethods: 2.
+bool removeAllMethods: 1.
+bool class removeAllMethods: 1.
 %
 
 set compile_env: 0
@@ -348,7 +348,7 @@ method: bool
 	^ self asInteger ~= otherInt
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Initialization'
 classmethod: bool
@@ -449,6 +449,14 @@ category: 'Python-Conversion'
 method: bool
 __bool__
 	"Return self (already a bool)."
+
+	^ self
+%
+
+category: 'Python-Bridge'
+method: bool
+___isTruthy___
+	"Boolean is already a Smalltalk Boolean."
 
 	^ self
 %

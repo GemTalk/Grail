@@ -244,7 +244,7 @@ result perform: #isEmpty env: 0 ifTrue: [^ 'empty']
 (result perform: #size env: 0) perform: #= env: 0 withArguments: {1} ifTrue: [^ 'one']
 
 "❌ BAD: Missing parentheses on binary operators"
-sepIndex > lastDotIndex ifTrue: [...]  "In env: 2, this needs perform:env:0"
+sepIndex > lastDotIndex ifTrue: [...]  "In env: 1, this needs perform:env:0"
 ```
 
 ### ✅ Correct Patterns
@@ -273,7 +273,7 @@ sepIndex > lastDotIndex ifTrue: [...]  "In env: 2, this needs perform:env:0"
 
 **When you see:**
 - `perform:env:0` followed by `ifTrue:`, `ifFalse:`, `and:`, `or:`
-- Binary operators (`>`, `<`, `=`, `>=`, `<=`) used in env: 2 code
+- Binary operators (`>`, `<`, `=`, `>=`, `<=`) used in env: 1 code
 - Chained `perform:env:0` expressions before conditionals
 
 **Always wrap in parentheses:**
@@ -292,7 +292,7 @@ grep -n "perform:.*env: 0.*ifTrue:\|perform:.*env: 0.*ifFalse:" file.gs
 ```
 **Fix**: Ensure the entire `perform:env:0` expression is in parentheses.
 
-### 2. Search for binary operators in env: 2 code
+### 2. Search for binary operators in env: 1 code
 ```bash
 # Pattern to search for:
 grep -n "[^)] > \|[^)] < \|[^)] >= \|[^)] <=" file.gs
@@ -316,7 +316,7 @@ grep -n ") perform:.*env: 0.*ifTrue:\|) perform:.*env: 0.*ifFalse:" file.gs
 - **Binary messages**: Medium precedence, may need parentheses for clarity
 - **Keyword messages**: Lowest precedence, **always use parentheses when chaining**
 - **`perform:env:0` in conditionals**: **ALWAYS wrap in parentheses**
-- **Binary operators in env: 2**: Use `perform:env:0` wrapped in parentheses
+- **Binary operators in env: 1**: Use `perform:env:0` wrapped in parentheses
 - **When in doubt**: Use parentheses or break into multiple statements
 - **Readability**: Prefer clear, multi-line code over complex one-liners
 

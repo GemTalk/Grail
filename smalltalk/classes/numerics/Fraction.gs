@@ -9,15 +9,15 @@
 ! ------------------- Remove existing Python methods from AbstractFraction
 expectvalue /Metaclass3
 doit
-AbstractFraction removeAllMethods: 2.
-AbstractFraction class removeAllMethods: 2.
-Fraction removeAllMethods: 2.
-Fraction class removeAllMethods: 2.
-SmallFraction removeAllMethods: 2.
-SmallFraction class removeAllMethods: 2.
+AbstractFraction removeAllMethods: 1.
+AbstractFraction class removeAllMethods: 1.
+Fraction removeAllMethods: 1.
+Fraction class removeAllMethods: 1.
+SmallFraction removeAllMethods: 1.
+SmallFraction class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Instance Creation'
 classmethod: Fraction
@@ -193,7 +193,7 @@ __format__: formatSpec
 		^ self __str__
 	].
 	"For other format specs, convert to float and format"
-	^ (self perform: #asFloat env: 0) perform: #__format__: env: 2 withArguments: {spec}
+	^ (self perform: #asFloat env: 0) perform: #__format__: env: 1 withArguments: {spec}
 %
 
 category: 'Python-Hash'

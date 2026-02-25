@@ -14,18 +14,18 @@
 ! ------------------- Remove existing Python methods from frozenset
 expectvalue /Metaclass3
 doit
-frozenset removeAllMethods: 2.
-frozenset class removeAllMethods: 2.
+frozenset removeAllMethods: 1.
+frozenset class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Set Operations (Operators)'
 method: frozenset
 __and__: other
 	"Return the intersection of two sets (self & other)."
 
-	^ self perform: #intersection: env: 2 withArguments: {other}
+	^ self perform: #intersection: env: 1 withArguments: {other}
 %
 
 category: 'Python-Collection Protocol'
@@ -58,7 +58,7 @@ method: frozenset
 __ge__: other
 	"Test whether every element in other is in the set (superset test)."
 
-	^ self perform: #issuperset: env: 2 withArguments: {other}
+	^ self perform: #issuperset: env: 1 withArguments: {other}
 %
 
 category: 'Python-Comparison'
@@ -101,7 +101,7 @@ method: frozenset
 __le__: other
 	"Test whether every element in the set is in other (subset test)."
 
-	^ self perform: #issubset: env: 2 withArguments: {other}
+	^ self perform: #issubset: env: 1 withArguments: {other}
 %
 
 category: 'Python-Collection Protocol'
@@ -136,7 +136,7 @@ method: frozenset
 __or__: other
 	"Return the union of two sets (self | other)."
 
-	^ self perform: #union: env: 2 withArguments: {other}
+	^ self perform: #union: env: 1 withArguments: {other}
 %
 
 category: 'Python-Set Operations (Operators)'
@@ -144,7 +144,7 @@ method: frozenset
 __rand__: other
 	"Return the intersection of two sets (other & self)."
 
-	^ other perform: #intersection: env: 2 withArguments: {self}
+	^ other perform: #intersection: env: 1 withArguments: {self}
 %
 
 category: 'Python-String Representation'
@@ -176,7 +176,7 @@ method: frozenset
 __ror__: other
 	"Return the union of two sets (other | self)."
 
-	^ other perform: #union: env: 2 withArguments: {self}
+	^ other perform: #union: env: 1 withArguments: {self}
 %
 
 category: 'Python-Set Operations (Operators)'
@@ -184,7 +184,7 @@ method: frozenset
 __rsub__: other
 	"Return the difference of two sets (other - self)."
 
-	^ other perform: #difference: env: 2 withArguments: {self}
+	^ other perform: #difference: env: 1 withArguments: {self}
 %
 
 category: 'Python-Set Operations (Operators)'
@@ -192,7 +192,7 @@ method: frozenset
 __rxor__: other
 	"Return the symmetric difference of two sets (other ^ self)."
 
-	^ other perform: #symmetric_difference: env: 2 withArguments: {self}
+	^ other perform: #symmetric_difference: env: 1 withArguments: {self}
 %
 
 category: 'Python-Set Operations (Operators)'
@@ -200,7 +200,7 @@ method: frozenset
 __sub__: other
 	"Return the difference of two sets (self - other)."
 
-	^ self perform: #difference: env: 2 withArguments: {other}
+	^ self perform: #difference: env: 1 withArguments: {other}
 %
 
 category: 'Python-Set Operations (Operators)'
@@ -208,7 +208,7 @@ method: frozenset
 __xor__: other
 	"Return the symmetric difference of two sets (self ^ other)."
 
-	^ self perform: #symmetric_difference: env: 2 withArguments: {other}
+	^ self perform: #symmetric_difference: env: 1 withArguments: {other}
 %
 
 category: 'Python-Copying'

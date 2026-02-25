@@ -45,11 +45,11 @@ tuple_iterator category: 'Collections-Iterators'
 ! ------------------- Remove existing Python methods from tuple_iterator
 expectvalue /Metaclass3
 doit
-tuple_iterator removeAllMethods: 2.
-tuple_iterator class removeAllMethods: 2.
+tuple_iterator removeAllMethods: 1.
+tuple_iterator class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Instance Creation'
 classmethod: tuple_iterator

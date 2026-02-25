@@ -135,7 +135,7 @@ callTestListInsert: aList index: anIndex value: aValue
 ! env 2 instance methods — Python-compatible callables
 ! ===============================================================================
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Initialization'
 method: _shimtest

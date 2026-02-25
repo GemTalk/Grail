@@ -54,7 +54,7 @@ doit
 statistics category: 'Modules'
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Private'
 method: statistics

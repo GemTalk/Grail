@@ -12,8 +12,8 @@
 ! ------------------- Remove existing Python methods from object
 expectvalue /Metaclass3
 doit
-object removeAllMethods: 2.
-object class removeAllMethods: 2.
+object removeAllMethods: 1.
+object class removeAllMethods: 1.
 %
 
 set compile_env: 0
@@ -21,43 +21,43 @@ set compile_env: 0
 category: 'Python-Bridge'
 classmethod: object
 ___new___: arg
-	"Convenience method: self perform: #__new__: env: 2 withArguments: {arg}"
-	^ self perform: #__new__: env: 2 withArguments: {arg}
+	"Convenience method: self perform: #__new__: env: 1 withArguments: {arg}"
+	^ self perform: #__new__: env: 1 withArguments: {arg}
 %
 
 category: 'Python-Bridge'
 classmethod: object
 ___new___: arg1 _: arg2
-	"Convenience method: self perform: #__new__:_: env: 2 withArguments: {arg1. arg2}"
-	^ self perform: #__new__:_: env: 2 withArguments: {arg1. arg2}
+	"Convenience method: self perform: #__new__:_: env: 1 withArguments: {arg1. arg2}"
+	^ self perform: #__new__:_: env: 1 withArguments: {arg1. arg2}
 %
 
 category: 'Python-Bridge'
 classmethod: object
 ___new___: arg1 _: arg2 _: arg3
-	"Convenience method: self perform: #__new__:_:_: env: 2 withArguments: {arg1. arg2. arg3}"
-	^ self perform: #__new__:_:_: env: 2 withArguments: {arg1. arg2. arg3}
+	"Convenience method: self perform: #__new__:_:_: env: 1 withArguments: {arg1. arg2. arg3}"
+	^ self perform: #__new__:_:_: env: 1 withArguments: {arg1. arg2. arg3}
 %
 
 category: 'Python-Bridge'
 method: object
 ___add___: element
-	"Convenience method: self perform: #add: env: 2 withArguments: {element}"
-	^ self perform: #add: env: 2 withArguments: {element}
+	"Convenience method: self perform: #add: env: 1 withArguments: {element}"
+	^ self perform: #add: env: 1 withArguments: {element}
 %
 
 category: 'Python-Bridge'
 method: object
 ___contains___: element
-	"Convenience method: self perform: #__contains__: env: 2 withArguments: {element}"
-	^ self perform: #__contains__: env: 2 withArguments: {element}
+	"Convenience method: self perform: #__contains__: env: 1 withArguments: {element}"
+	^ self perform: #__contains__: env: 1 withArguments: {element}
 %
 
 category: 'Python-Bridge'
 method: object
 ___len___
-	"Convenience method: self perform: #__len__ env: 2"
-	^ self perform: #__len__ env: 2
+	"Convenience method: self perform: #__len__ env: 1"
+	^ self perform: #__len__ env: 1
 %
 
 category: 'Python-Bridge'
@@ -65,10 +65,10 @@ method: Object
 ___repr___
 	"Call the Python __repr__ implementation (env 2)."
 
-	^ self perform: #__repr__ env: 2
+	^ self perform: #__repr__ env: 1
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Convenience Methods'
 classmethod: object
@@ -87,14 +87,14 @@ category: 'Convenience Methods'
 classmethod: object
 ___new___: arg1 _: arg2
 	"Convenience method for calling __new__:_: from env 2 code"
-	^ self perform: #__new__:_: env: 2 withArguments: {arg1. arg2}
+	^ self perform: #__new__:_: env: 1 withArguments: {arg1. arg2}
 %
 
 category: 'Convenience Methods'
 classmethod: object
 ___new___: arg1 _: arg2 _: arg3
 	"Convenience method for calling __new__:_:_: from env 2 code"
-	^ self perform: #__new__:_:_: env: 2 withArguments: {arg1. arg2. arg3}
+	^ self perform: #__new__:_:_: env: 1 withArguments: {arg1. arg2. arg3}
 %
 
 category: 'Convenience Methods'
@@ -517,6 +517,15 @@ ___isKindOf___: aClass
 
 category: 'Convenience Methods - Unary'
 method: object
+___isTruthy___
+	"Convert any Python object to a Smalltalk Boolean for use in if/while conditions.
+	Follows Python truth value testing: https://docs.python.org/3/library/stdtypes.html#truth-value-testing"
+
+	^ bool perform: #'__new__:' env: 1 withArguments: { self }
+%
+
+category: 'Convenience Methods - Unary'
+method: object
 ___isLetter___
 	^ self perform: #isLetter env: 0
 %
@@ -932,7 +941,7 @@ __dir__
 
 	| selectors result myClass |
 	myClass := self ___class___.
-	selectors := myClass perform: #allSelectorsForEnvironment: env: 0 withArguments: { 2 }.
+	selectors := myClass perform: #allSelectorsForEnvironment: env: 0 withArguments: { 1 }.
 	"Filter out convenience methods (starting with ___)"
 	selectors := selectors perform: #reject: env: 0 withArguments: { [:selector |
 		| selectorStr prefix |

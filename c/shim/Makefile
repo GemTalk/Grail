@@ -14,7 +14,7 @@ else
   RPATH_FLAGS =
 endif
 
-EXT_OBJECTS = _statisticsmodule.o _bisectmodule.o _crc32cmodule.o _shimtestmodule.o _heapqmodule.o _grail_demo.o
+EXT_OBJECTS = _statisticsmodule.o _bisectmodule.o _crc32cmodule.o _shimtestmodule.o _heapqmodule.o _grail_demo.o _sre.o
 
 LIB = libcpython_ua.$(SHARED_EXT)
 OBJECTS = cpython.o $(EXT_OBJECTS)
@@ -43,6 +43,9 @@ _heapqmodule.o: _heapqmodule.c cpython.h
 
 _grail_demo.o: _grail_demo.c cpython.h
 	$(CC) $(CFLAGS) -DGRAIL_SHIM -c _grail_demo.c
+
+_sre.o: _sre/sre.c _sre/sre.h _sre/sre_lib.h _sre/sre_constants.h _sre/sre_targets.h cpython.h
+	$(CC) $(CFLAGS) -DGRAIL_SHIM -Wno-unused-parameter -Wno-unused-function -Wno-unused-variable -Wno-missing-field-initializers -I. -c _sre/sre.c -o _sre.o
 
 $(LIB): $(OBJECTS)
 	$(CXX) $(SHARED_FLAGS) -o $@ $(OBJECTS) $(GEMSTONE)/lib/gciualib.o -lm -lpthread -undefined dynamic_lookup

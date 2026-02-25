@@ -57,6 +57,7 @@ importlib grailDir: '$GRAIL_DIR'.
 	importlib registerModule: '_bisect' with: _bisect ___instance___.
 	importlib registerModule: '_crc32c' with: _crc32c ___instance___.
 	importlib registerModule: '_shimtest' with: _shimtest ___instance___.
+	importlib registerModule: '_sre' with: _sre ___instance___.
 ].
 %
 output pop

@@ -44,8 +44,8 @@ complex category: 'Numbers'
 ! ------------------- Remove existing Python methods from complex
 expectvalue /Metaclass3
 doit
-complex removeAllMethods: 2.
-complex class removeAllMethods: 2.
+complex removeAllMethods: 1.
+complex class removeAllMethods: 1.
 %
 
 set compile_env: 0
@@ -55,7 +55,7 @@ method: complex
 * aNumber
 	"Multiply complex by aNumber."
 
-	^ self perform: #__mul__: env: 2 withArguments: {aNumber}
+	^ self perform: #__mul__: env: 1 withArguments: {aNumber}
 %
 
 category: 'Python-Arithmetic Operators'
@@ -63,7 +63,7 @@ method: complex
 + aNumber
 	"Add aNumber to complex."
 
-	^ self perform: #__add__: env: 2 withArguments: {aNumber}
+	^ self perform: #__add__: env: 1 withArguments: {aNumber}
 %
 
 category: 'Python-Arithmetic Operators'
@@ -71,7 +71,7 @@ method: complex
 - aNumber
 	"Subtract aNumber from complex."
 
-	^ self perform: #__sub__: env: 2 withArguments: {aNumber}
+	^ self perform: #__sub__: env: 1 withArguments: {aNumber}
 %
 
 category: 'Python-Arithmetic Operators'
@@ -79,7 +79,7 @@ method: complex
 / aNumber
 	"Divide complex by aNumber."
 
-	^ self perform: #__truediv__: env: 2 withArguments: {aNumber}
+	^ self perform: #__truediv__: env: 1 withArguments: {aNumber}
 %
 
 category: 'Python-Arithmetic Operators'
@@ -87,7 +87,7 @@ method: complex
 = anObject
 	"Equality comparison."
 
-	^ self perform: #__eq__: env: 2 withArguments: {anObject}
+	^ self perform: #__eq__: env: 1 withArguments: {anObject}
 %
 
 category: 'Python-Arithmetic Support'
@@ -96,7 +96,7 @@ _coerce: aNumber
 	"Coerce aNumber to complex.
 	Convert aNumber to a complex number with zero imaginary part."
 
-	^ complex perform: #__new__:_: env: 2 withArguments: {aNumber. 0.0}
+	^ complex perform: #__new__:_: env: 1 withArguments: {aNumber. 0.0}
 %
 
 category: 'Python-Arithmetic Support'
@@ -114,7 +114,7 @@ method: complex
 abs
 	"Return the magnitude of the complex number."
 
-	^ self perform: #__abs__ env: 2
+	^ self perform: #__abs__ env: 1
 %
 
 category: 'Python-Arithmetic Support'
@@ -130,10 +130,10 @@ method: complex
 negated
 	"Negate the complex number."
 
-	^ self perform: #__neg__ env: 2
+	^ self perform: #__neg__ env: 1
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Initialization'
 classmethod: complex

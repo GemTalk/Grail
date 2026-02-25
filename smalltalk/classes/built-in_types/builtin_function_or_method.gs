@@ -12,11 +12,11 @@
 ! ------------------- Remove existing Python methods from builtin_function_or_method
 expectvalue /Metaclass3
 doit
-builtin_function_or_method removeAllMethods: 2.
-builtin_function_or_method class removeAllMethods: 2.
+builtin_function_or_method removeAllMethods: 1.
+builtin_function_or_method class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Callable'
 method: builtin_function_or_method

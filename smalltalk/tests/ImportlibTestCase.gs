@@ -38,7 +38,7 @@ category: 'Setup'
 method: ImportlibTestCase
 setUp
 	"Initialize the builtin modules before each test"
-	importlib perform: #modules env: 2
+	importlib perform: #modules env: 1
 %
 
 category: 'Tests - AST Generation'
@@ -47,7 +47,7 @@ testAstForPath
 	"Test creating a ModuleAst from hello.py"
 
 	| moduleAst testFilePath |
-	testFilePath := importlib grailDir , '/smalltalk/tests/hello.py'.
+	testFilePath := importlib grailDir , '/python/hello.py'.
 	moduleAst := importlib astForPath: testFilePath.
 
 	self assert: moduleAst class equals: ModuleAst.
@@ -74,7 +74,7 @@ testBuiltinsImport
 
 	| b importBlock result |
 	b := builtins ___instance___.
-	importBlock := b perform: #'__import__' env: 2.
+	importBlock := b perform: #'__import__' env: 1.
 
 	result := importBlock value: {'math'} value: nil.
 
@@ -88,7 +88,7 @@ testBuiltinsImportNotFound
 
 	| b importBlock |
 	b := builtins ___instance___.
-	importBlock := b perform: #'__import__' env: 2.
+	importBlock := b perform: #'__import__' env: 1.
 
 	self should: [importBlock value: {'unknown_module'} value: nil]
 		raise: ModuleNotFoundError
@@ -100,8 +100,8 @@ testImportModuleBuiltins
 	"Test importing the builtins module"
 
 	| imp importModuleBlock result |
-	imp := importlib perform: #instance env: 2.
-	importModuleBlock := imp perform: #import_module env: 2.
+	imp := importlib perform: #instance env: 1.
+	importModuleBlock := imp perform: #import_module env: 1.
 
 	result := importModuleBlock value: {'builtins'} value: nil.
 
@@ -114,8 +114,8 @@ testImportModuleCmath
 	"Test importing the cmath module"
 
 	| imp importModuleBlock result |
-	imp := importlib perform: #instance env: 2.
-	importModuleBlock := imp perform: #import_module env: 2.
+	imp := importlib perform: #instance env: 1.
+	importModuleBlock := imp perform: #import_module env: 1.
 
 	result := importModuleBlock value: {'cmath'} value: nil.
 
@@ -128,8 +128,8 @@ testImportModuleMath
 	"Test importing the math module"
 
 	| imp importModuleBlock result |
-	imp := importlib perform: #instance env: 2.
-	importModuleBlock := imp perform: #import_module env: 2.
+	imp := importlib perform: #instance env: 1.
+	importModuleBlock := imp perform: #import_module env: 1.
 
 	result := importModuleBlock value: {'math'} value: nil.
 
@@ -142,8 +142,8 @@ testImportModuleNotFound
 	"Test that importing a non-existent module raises ModuleNotFoundError"
 
 	| imp importModuleBlock |
-	imp := importlib perform: #instance env: 2.
-	importModuleBlock := imp perform: #import_module env: 2.
+	imp := importlib perform: #instance env: 1.
+	importModuleBlock := imp perform: #import_module env: 1.
 
 	self should: [importModuleBlock value: {'nonexistent_module'} value: nil]
 		raise: ModuleNotFoundError
@@ -155,8 +155,8 @@ testImportModuleOs
 	"Test importing the os module"
 
 	| imp importModuleBlock result |
-	imp := importlib perform: #instance env: 2.
-	importModuleBlock := imp perform: #import_module env: 2.
+	imp := importlib perform: #instance env: 1.
+	importModuleBlock := imp perform: #import_module env: 1.
 
 	result := importModuleBlock value: {'os'} value: nil.
 
@@ -169,8 +169,8 @@ testImportModuleSys
 	"Test importing the sys module"
 
 	| imp importModuleBlock result |
-	imp := importlib perform: #instance env: 2.
-	importModuleBlock := imp perform: #import_module env: 2.
+	imp := importlib perform: #instance env: 1.
+	importModuleBlock := imp perform: #import_module env: 1.
 
 	result := importModuleBlock value: {'sys'} value: nil.
 
@@ -183,8 +183,8 @@ testInvalidateCaches
 	"Test invalidate_caches (should be a no-op for built-in modules)"
 
 	| imp invalidateCachesBlock result |
-	imp := importlib perform: #instance env: 2.
-	invalidateCachesBlock := imp perform: #invalidate_caches env: 2.
+	imp := importlib perform: #instance env: 1.
+	invalidateCachesBlock := imp perform: #invalidate_caches env: 1.
 
 	result := invalidateCachesBlock value: {} value: nil.
 
@@ -212,7 +212,7 @@ testModulesRegistry
 	"Test that the modules registry exists and contains built-in modules"
 
 	| modules |
-	modules := importlib perform: #modules env: 2.
+	modules := importlib perform: #modules env: 1.
 
 	self assert: (modules includesKey: #builtins).
 	self assert: (modules includesKey: #math).
@@ -226,7 +226,7 @@ method: ImportlibTestCase
 testNewRaisesTypeError
 	"Test that importlib.new raises TypeError"
 
-	self should: [importlib perform: #new env: 2]
+	self should: [importlib perform: #new env: 1]
 		raise: TypeError
 %
 
@@ -236,10 +236,10 @@ testReload
 	"Test reloading a module"
 
 	| imp reloadBlock mathInstance reloadedInstance |
-	imp := importlib perform: #instance env: 2.
-	reloadBlock := imp perform: #reload env: 2.
+	imp := importlib perform: #instance env: 1.
+	reloadBlock := imp perform: #reload env: 1.
 
-	mathInstance := math perform: #instance env: 2.
+	mathInstance := math perform: #instance env: 1.
 	reloadedInstance := reloadBlock value: {mathInstance} value: nil.
 
 	"After reload, we should get a fresh instance"
@@ -252,8 +252,8 @@ testSingleton
 	"Test that importlib.instance returns the same instance"
 
 	| instance1 instance2 |
-	instance1 := importlib perform: #instance env: 2.
-	instance2 := importlib perform: #instance env: 2.
+	instance1 := importlib perform: #instance env: 1.
+	instance2 := importlib perform: #instance env: 1.
 
 	self assert: instance1 == instance2
 %
@@ -264,7 +264,7 @@ testSmalltalkForPath
 	"Test generating Smalltalk code from hello.py"
 
 	| smalltalkCode testFilePath |
-	testFilePath := importlib grailDir , '/smalltalk/tests/hello.py'.
+	testFilePath := importlib grailDir , '/python/hello.py'.
 	smalltalkCode := importlib smalltalkForPath: testFilePath.
 
 	"The generated code should be a non-empty string"

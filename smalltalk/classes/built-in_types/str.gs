@@ -1,25 +1,32 @@
 ! ===============================================================================
-! Unicode7 Methods (Python 'str' type)
+! CharacterCollection Methods (Python 'str' type)
 ! ===============================================================================
-! This file contains method implementations for the Unicode7 class when used
-! as the Python 'str' type. Since Unicode7 is a fundamental GemStone Smalltalk
-! class, we only add Python-specific methods here.
+! This file contains method implementations for CharacterCollection, the common
+! superclass of both String (→ Unicode7) and MultiByteString (→ Unicode16,
+! Unicode32). Installing here makes all Python string methods available on
+! every string subclass automatically.
 !
-! These methods are compiled with environmentId 2 (Python) to keep them separate
+! These methods are compiled with environmentId 1 (Python) to keep them separate
 ! from the base Smalltalk methods (environmentId 0).
 ! ===============================================================================
 
-! ------------------- Remove existing Python methods from str
+! ------------------- Remove existing Python methods from CharacterCollection
 expectvalue /Metaclass3
 doit
-str removeAllMethods: 2.
-str class removeAllMethods: 2.
+"Remove from CharacterCollection (the target) and from String/Unicode7
+ (old targets, in case of reinstall)."
+CharacterCollection removeAllMethods: 1.
+CharacterCollection class removeAllMethods: 1.
+String removeAllMethods: 1.
+String class removeAllMethods: 1.
+Unicode7 removeAllMethods: 1.
+Unicode7 class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Initialization'
-classmethod: str
+classmethod: CharacterCollection
 __new__
 	"Create a new empty str instance.
 	In Python: str() or str.__new__(str)"
@@ -28,7 +35,7 @@ __new__
 %
 
 category: 'Python-Initialization'
-classmethod: str
+classmethod: CharacterCollection
 __new__: obj
 	"Create a new str instance from an object.
 	In Python: str(obj) or str.__new__(str, obj)"
@@ -36,18 +43,18 @@ __new__: obj
 	| result |
 	obj ifNil: [ ^ '' ___copy___ ].
 
-	"If already a str return it"
-	(obj ___isKindOf___: str) ifTrue: [
+	"If already a string return it"
+	(obj ___isKindOf___: CharacterCollection) ifTrue: [
 		^ obj
 	].
 
 	"Try to call __str__ on the object"
-	result := obj perform: #__str__ env: 2.
+	result := obj perform: #__str__ env: 1.
 	^ result
 %
 
 category: 'Python-String Methods'
-classmethod: str
+classmethod: CharacterCollection
 maketrans
 	"Create a translation table. Not yet implemented."
 
@@ -55,7 +62,7 @@ maketrans
 %
 
 category: 'Python-String Operations'
-method: str
+method: CharacterCollection
 __add__: other
 	"Concatenate two strings. In Python: str1 + str2"
 
@@ -63,7 +70,7 @@ __add__: other
 %
 
 category: 'Python-Sequence Operations'
-method: str
+method: CharacterCollection
 __contains__: item
 	"Test if item is in string. In Python: item in str"
 
@@ -73,7 +80,7 @@ __contains__: item
 %
 
 category: 'Python-Comparison'
-method: str
+method: CharacterCollection
 __eq__: other
 	"Return self == other"
 
@@ -81,7 +88,7 @@ __eq__: other
 %
 
 category: 'Python-String Representation'
-method: str
+method: CharacterCollection
 __format__: formatSpec
 	"Return a formatted string representation"
 
@@ -89,7 +96,7 @@ __format__: formatSpec
 %
 
 category: 'Python-Comparison'
-method: str
+method: CharacterCollection
 __ge__: other
 	"Return self >= other"
 
@@ -97,7 +104,7 @@ __ge__: other
 %
 
 category: 'Python-Sequence Operations'
-method: str
+method: CharacterCollection
 __getitem__: index
 	"Get character at index. In Python: str[index]
 	Returns a single-character string.
@@ -123,14 +130,14 @@ __getitem__: index
 	char := self ___at___: (idx ___plus___: 1).
 
 	"Convert character to a single-character string"
-	charString := str ___new___: 1.
+	charString := Unicode7 ___new___: 1.
 	charString ___at___: 1 put: char.
 
 	^ charString
 %
 
 category: 'Python-Comparison'
-method: str
+method: CharacterCollection
 __gt__: other
 	"Return self > other"
 
@@ -138,7 +145,7 @@ __gt__: other
 %
 
 category: 'Python-Hashing & Identity'
-method: str
+method: CharacterCollection
 __hash__
 	"Return hash value for this string"
 
@@ -146,7 +153,7 @@ __hash__
 %
 
 category: 'Python-Initialization'
-method: str
+method: CharacterCollection
 __init__: obj
 	"Initialize a str instance (called after __new__).
 	Default implementation does nothing since __new__ handles everything."
@@ -155,7 +162,7 @@ __init__: obj
 %
 
 category: 'Python-Sequence Operations'
-method: str
+method: CharacterCollection
 __iter__
 	"Return an iterator over the string characters."
 
@@ -163,7 +170,7 @@ __iter__
 %
 
 category: 'Python-Comparison'
-method: str
+method: CharacterCollection
 __le__: other
 	"Return self <= other"
 
@@ -171,7 +178,7 @@ __le__: other
 %
 
 category: 'Python-Sequence Operations'
-method: str
+method: CharacterCollection
 __len__
 	"Return the length of the string. In Python: len(str)"
 
@@ -179,7 +186,7 @@ __len__
 %
 
 category: 'Python-Comparison'
-method: str
+method: CharacterCollection
 __lt__: other
 	"Return self < other"
 
@@ -187,7 +194,7 @@ __lt__: other
 %
 
 category: 'Python-String Operations'
-method: str
+method: CharacterCollection
 __mod__: args
 	"String formatting using % operator. In Python: 'format %s' % args"
 
@@ -195,7 +202,7 @@ __mod__: args
 %
 
 category: 'Python-String Operations'
-method: str
+method: CharacterCollection
 __mul__: n
 	"Repeat string n times. In Python: str * n"
 
@@ -203,7 +210,7 @@ __mul__: n
 	count := n ___asInteger___.
 	(count ___le___: 0) ifTrue: [ ^ '' ___copy___ ].
 
-	stream := WriteStream ___on___: (str ___new___).
+	stream := WriteStream ___on___: (Unicode7 ___new___).
 	count ___timesRepeat___: [
 		stream ___nextPutAll___: self
 	].
@@ -212,7 +219,7 @@ __mul__: n
 %
 
 category: 'Python-Comparison'
-method: str
+method: CharacterCollection
 __ne__: other
 	"Return self != other"
 
@@ -220,12 +227,12 @@ __ne__: other
 %
 
 category: 'Python-String Representation'
-method: str
+method: CharacterCollection
 __repr__
 	"Return a string representation for debugging. In Python: repr(str)"
 
 	| stream |
-	stream := WriteStream ___on___: (str ___new___).
+	stream := WriteStream ___on___: (Unicode7 ___new___).
 	stream ___nextPut___: $'.
 	self ___do___: [:char |
 		| cp |
@@ -246,7 +253,7 @@ __repr__
 %
 
 category: 'Python-String Operations'
-method: str
+method: CharacterCollection
 __rmod__: args
 	"String formatting (reverse). Not typically used."
 
@@ -254,7 +261,7 @@ __rmod__: args
 %
 
 category: 'Python-String Operations'
-method: str
+method: CharacterCollection
 __rmul__: n
 	"Repeat string n times (reverse). In Python: n * str"
 
@@ -262,7 +269,7 @@ __rmul__: n
 %
 
 category: 'Python-String Representation'
-method: str
+method: CharacterCollection
 __str__
 	"Return a string representation for display. In Python: str(obj)"
 
@@ -270,14 +277,14 @@ __str__
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 capitalize
 	"Return a copy of the string with its first character capitalized and the rest lowercased."
 
 	| stream first rest |
 	(self ___isEmpty___) ifTrue: [ ^ self ].
 
-	stream := WriteStream ___on___: (str ___new___).
+	stream := WriteStream ___on___: (Unicode7 ___new___).
 	first := self ___first___.
 	rest := self perform: #allButFirst env: 0.
 
@@ -288,7 +295,7 @@ capitalize
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 casefold
 	"Return a casefolded copy of the string. Similar to lowercase but more aggressive."
 
@@ -296,7 +303,7 @@ casefold
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 center: width
 	"Return a centered string of length width, padded with spaces."
 
@@ -308,7 +315,7 @@ center: width
 	leftPad := totalPad ___divideInteger___: 2.
 	rightPad := (totalPad ___minus___: (leftPad)).
 
-	stream := WriteStream ___on___: (str ___new___).
+	stream := WriteStream ___on___: (Unicode7 ___new___).
 	leftPad ___timesRepeat___: [
 		stream ___nextPut___: $ 
 	].
@@ -320,7 +327,7 @@ center: width
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 count: sub
 	"Return the number of non-overlapping occurrences of substring sub."
 
@@ -336,7 +343,7 @@ count: sub
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 encode
 	"Encode the string to bytes. Not yet implemented."
 
@@ -344,7 +351,7 @@ encode
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 endswith: suffix
 	"Test whether string ends with the specified suffix."
 
@@ -352,7 +359,7 @@ endswith: suffix
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 expandtabs
 	"Return a copy where all tab characters are replaced by spaces."
 
@@ -360,7 +367,7 @@ expandtabs
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 find: sub
 	"Return the lowest index where substring sub is found, or -1 if not found."
 
@@ -371,7 +378,7 @@ find: sub
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 format
 	"String formatting using {} placeholders. Not yet implemented."
 
@@ -379,7 +386,7 @@ format
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 format_map: mapping
 	"String formatting using a mapping. Not yet implemented."
 
@@ -387,7 +394,7 @@ format_map: mapping
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 index: sub
 	"Return the lowest index where substring sub is found. Raises ValueError if not found."
 
@@ -400,7 +407,7 @@ index: sub
 %
 
 category: 'Python-String Test Methods'
-method: str
+method: CharacterCollection
 isalnum
 	"Return True if all characters are alphanumeric and there is at least one character."
 
@@ -418,7 +425,7 @@ isalnum
 %
 
 category: 'Python-String Test Methods'
-method: str
+method: CharacterCollection
 isalpha
 	"Return True if all characters are alphabetic and there is at least one character."
 
@@ -436,7 +443,7 @@ isalpha
 %
 
 category: 'Python-String Test Methods'
-method: str
+method: CharacterCollection
 isascii
 	"Return True if all characters are ASCII (code point < 128)."
 
@@ -451,7 +458,7 @@ isascii
 %
 
 category: 'Python-String Test Methods'
-method: str
+method: CharacterCollection
 isdecimal
 	"Return True if all characters are decimal characters."
 
@@ -469,7 +476,7 @@ isdecimal
 %
 
 category: 'Python-String Test Methods'
-method: str
+method: CharacterCollection
 isdigit
 	"Return True if all characters are digits and there is at least one character."
 
@@ -487,7 +494,7 @@ isdigit
 %
 
 category: 'Python-String Test Methods'
-method: str
+method: CharacterCollection
 isidentifier
 	"Return True if string is a valid Python identifier."
 
@@ -509,7 +516,7 @@ isidentifier
 %
 
 category: 'Python-String Test Methods'
-method: str
+method: CharacterCollection
 islower
 	"Return True if all cased characters are lowercase and there is at least one cased character."
 
@@ -529,7 +536,7 @@ islower
 %
 
 category: 'Python-String Test Methods'
-method: str
+method: CharacterCollection
 isnumeric
 	"Return True if all characters are numeric characters."
 
@@ -537,7 +544,7 @@ isnumeric
 %
 
 category: 'Python-String Test Methods'
-method: str
+method: CharacterCollection
 isprintable
 	"Return True if all characters are printable."
 
@@ -553,7 +560,7 @@ isprintable
 %
 
 category: 'Python-String Test Methods'
-method: str
+method: CharacterCollection
 isspace
 	"Return True if all characters are whitespace and there is at least one character."
 
@@ -571,7 +578,7 @@ isspace
 %
 
 category: 'Python-String Test Methods'
-method: str
+method: CharacterCollection
 istitle
 	"Return True if string is titlecased."
 
@@ -598,7 +605,7 @@ istitle
 %
 
 category: 'Python-String Test Methods'
-method: str
+method: CharacterCollection
 isupper
 	"Return True if all cased characters are uppercase and there is at least one cased character."
 
@@ -618,12 +625,12 @@ isupper
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 join: iterable
 	"Concatenate any number of strings with self as separator."
 
 	| stream first |
-	stream := WriteStream ___on___: (str ___new___).
+	stream := WriteStream ___on___: (Unicode7 ___new___).
 	first := true.
 
 	iterable ___do___: [:each |
@@ -638,7 +645,7 @@ join: iterable
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 ljust: width
 	"Return a left-justified string of length width, padded with spaces."
 
@@ -647,7 +654,7 @@ ljust: width
 	(width ___le___: mySize) ifTrue: [ ^ self ].
 
 	padding := (width ___minus___: (mySize)).
-	stream := WriteStream ___on___: (str ___new___).
+	stream := WriteStream ___on___: (Unicode7 ___new___).
 	stream ___nextPutAll___: self.
 	padding ___timesRepeat___: [
 		stream ___nextPut___: $ 
@@ -656,7 +663,7 @@ ljust: width
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 lower
 	"Return a copy of the string with all characters converted to lowercase."
 
@@ -664,7 +671,7 @@ lower
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 lstrip
 	"Return a copy of the string with leading whitespace removed."
 
@@ -672,7 +679,7 @@ lstrip
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 partition: sep
 	"Split the string at the first occurrence of sep, return (before, sep, after)."
 
@@ -688,7 +695,7 @@ partition: sep
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 removeprefix: prefix
 	"If the string starts with prefix, return string[len(prefix):], otherwise return a copy."
 
@@ -701,7 +708,7 @@ removeprefix: prefix
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 removesuffix: suffix
 	"If the string ends with suffix, return string[:-len(suffix)], otherwise return a copy."
 
@@ -714,7 +721,7 @@ removesuffix: suffix
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 replace: old _: new
 	"Return a copy with all occurrences of substring old replaced by new."
 
@@ -722,7 +729,7 @@ replace: old _: new
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 rfind: sub
 	"Return the highest index where substring sub is found, or -1 if not found."
 
@@ -739,7 +746,7 @@ rfind: sub
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 rindex: sub
 	"Return the highest index where substring sub is found. Raises ValueError if not found."
 
@@ -752,7 +759,7 @@ rindex: sub
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 rjust: width
 	"Return a right-justified string of length width, padded with spaces."
 
@@ -761,7 +768,7 @@ rjust: width
 	(width ___le___: mySize) ifTrue: [ ^ self ].
 
 	padding := (width ___minus___: (mySize)).
-	stream := WriteStream ___on___: (str ___new___).
+	stream := WriteStream ___on___: (Unicode7 ___new___).
 	padding ___timesRepeat___: [
 		stream ___nextPut___: $ 
 	].
@@ -770,7 +777,7 @@ rjust: width
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 rpartition: sep
 	"Split the string at the last occurrence of sep, return (before, sep, after)."
 
@@ -793,7 +800,7 @@ rpartition: sep
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 rsplit
 	"Return a list of words in the string, using whitespace as the delimiter (from right)."
 
@@ -802,7 +809,7 @@ rsplit
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 rstrip
 	"Return a copy of the string with trailing whitespace removed."
 
@@ -810,7 +817,7 @@ rstrip
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 split
 	"Return a list of words in the string, using whitespace as the delimiter."
 
@@ -820,7 +827,7 @@ split
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 splitlines
 	"Return a list of lines in the string, breaking at line boundaries."
 
@@ -831,7 +838,7 @@ splitlines
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 startswith: prefix
 	"Test whether string starts with the specified prefix."
 
@@ -839,7 +846,7 @@ startswith: prefix
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 strip
 	"Return a copy of the string with leading and trailing whitespace removed."
 
@@ -847,12 +854,12 @@ strip
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 swapcase
 	"Return a copy with uppercase characters converted to lowercase and vice versa."
 
 	| stream |
-	stream := WriteStream ___on___: (str ___new___).
+	stream := WriteStream ___on___: (Unicode7 ___new___).
 	self ___do___: [:char |
 		| isUpper |
 		isUpper := char perform: #isUppercase env: 0.
@@ -866,12 +873,12 @@ swapcase
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 title
 	"Return a titlecased version of the string where words start with uppercase."
 
 	| stream inWord |
-	stream := WriteStream ___on___: (str ___new___).
+	stream := WriteStream ___on___: (Unicode7 ___new___).
 	inWord := false.
 	self ___do___: [:char |
 		| isAlpha |
@@ -892,7 +899,7 @@ title
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 translate: table
 	"Return a copy with each character mapped through the translation table. Not yet implemented."
 
@@ -900,7 +907,7 @@ translate: table
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 upper
 	"Return a copy of the string with all characters converted to uppercase."
 
@@ -908,7 +915,7 @@ upper
 %
 
 category: 'Python-String Methods'
-method: str
+method: CharacterCollection
 zfill: width
 	"Pad a numeric string with zeros on the left, to fill a field of the given width."
 
@@ -924,7 +931,7 @@ zfill: width
 	].
 
 	padding := (width ___minus___: (mySize)).
-	stream := WriteStream ___on___: (str ___new___).
+	stream := WriteStream ___on___: (Unicode7 ___new___).
 
 	hasSign ifTrue: [
 		stream ___nextPut___: firstChar.

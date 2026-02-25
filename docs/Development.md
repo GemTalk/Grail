@@ -11,7 +11,7 @@ While we could parse source files directly (and may eventually do so), we can ta
 Python has a module [ast](https://docs.python.org/3/library/ast.html) that generates an AST (abstract syntax tree). To see this in action evaluate the following:
 
 ```bash
-pprintast -a -t smalltalk/tests/hello.py
+pprintast -a -t python/hello.py
 ```
 
 If at some point we want to remove the dependency on CPython then we could consider some alternatives. Some of these generate Smalltalk code, while others generate C or C++ code.

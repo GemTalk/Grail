@@ -610,13 +610,13 @@ PyTuple_GetItem: anArray at: zeroBasedIndex
 category: 'CPython API'
 method: CPythonShim
 PyObject_GetAttrString: obj name: nameString
-	^ (self wrap: (obj perform: nameString asSymbol env: 2)) memoryAddress
+	^ (self wrap: (obj perform: nameString asSymbol env: 1)) memoryAddress
 %
 
 category: 'CPython API'
 method: CPythonShim
 PyObject_HasAttrString: obj name: nameString
-	^ [obj perform: nameString asSymbol env: 2. true]
+	^ [obj perform: nameString asSymbol env: 1. true]
 		on: MessageNotUnderstood, Error
 		do: [:e | false]
 %
@@ -624,19 +624,19 @@ PyObject_HasAttrString: obj name: nameString
 category: 'CPython API'
 method: CPythonShim
 PyObject_Repr: obj
-	^ (self wrap: (obj perform: #__repr__ env: 2)) memoryAddress
+	^ (self wrap: (obj perform: #__repr__ env: 1)) memoryAddress
 %
 
 category: 'CPython API'
 method: CPythonShim
 PyObject_Str: obj
-	^ (self wrap: (obj perform: #__str__ env: 2)) memoryAddress
+	^ (self wrap: (obj perform: #__str__ env: 1)) memoryAddress
 %
 
 category: 'CPython API'
 method: CPythonShim
 PyObject_Length: obj
-	^ obj perform: #__len__ env: 2
+	^ obj perform: #__len__ env: 1
 %
 
 ! --------------- Dynamic module loading ---------------
@@ -693,13 +693,13 @@ loadDynamicModule: moduleName fromPath: pathString
 			compileMethod: source
 			dictionaries: symbolList
 			category: 'C Extension'
-			environmentId: 2.
+			environmentId: 1.
 	].
 	"Create and initialize the instance"
 	moduleInstance := moduleClass perform: #new env: 0.
 	moduleInstance
-		perform: #'__name__:' env: 2 withArguments: { moduleName };
-		perform: #'__package__:' env: 2 withArguments: { nil }.
+		perform: #'__name__:' env: 1 withArguments: { moduleName };
+		perform: #'__package__:' env: 1 withArguments: { nil }.
 	^ moduleInstance
 %
 
@@ -714,5 +714,5 @@ PyObject_RichCompareBool: v with: w op: opInt
 	| selectors selector |
 	selectors := #(#'__lt__:' #'__le__:' #'__eq__:' #'__ne__:' #'__gt__:' #'__ge__:').
 	selector := selectors at: opInt + 1.
-	^ v perform: selector env: 2 withArguments: { w }
+	^ v perform: selector env: 1 withArguments: { w }
 %

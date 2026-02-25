@@ -44,7 +44,7 @@ testFrozensetCopy
 	fs1 add: 1.
 	fs1 add: 2.
 
-	fs2 := fs1 perform: #copy env: 2.
+	fs2 := fs1 perform: #copy env: 1.
 
 	self assert: fs2 size equals: 2.
 	self assert: (fs2 ___contains___: 1).
@@ -89,7 +89,7 @@ testFrozensetDifference
 	fs2 add: 2.
 	fs2 add: 4.
 	
-	result := fs1 perform: #difference: env: 2 withArguments: {fs2}.
+	result := fs1 perform: #difference: env: 1 withArguments: {fs2}.
 	
 	self assert: result size equals: 2.
 	self assert: (result ___contains___: 1).
@@ -115,10 +115,10 @@ testFrozensetEquality
 	fs3 add: 1.
 	fs3 add: 3.
 
-	self assert: (fs1 perform: #__eq__: env: 2 withArguments: {fs2}).
-	self deny: (fs1 perform: #__eq__: env: 2 withArguments: {fs3}).
-	self deny: (fs1 perform: #__ne__: env: 2 withArguments: {fs2}).
-	self assert: (fs1 perform: #__ne__: env: 2 withArguments: {fs3})
+	self assert: (fs1 perform: #__eq__: env: 1 withArguments: {fs2}).
+	self deny: (fs1 perform: #__eq__: env: 1 withArguments: {fs3}).
+	self deny: (fs1 perform: #__ne__: env: 1 withArguments: {fs2}).
+	self assert: (fs1 perform: #__ne__: env: 1 withArguments: {fs3})
 %
 
 category: 'Tests - Hashing'
@@ -135,8 +135,8 @@ testFrozensetHashable
 	fs2 add: 2.
 	fs2 add: 1.
 
-	hash1 := fs1 perform: #__hash__ env: 2.
-	hash2 := fs2 perform: #__hash__ env: 2.
+	hash1 := fs1 perform: #__hash__ env: 1.
+	hash2 := fs2 perform: #__hash__ env: 1.
 
 	"Equal frozensets should have equal hashes"
 	self assert: hash1 equals: hash2
@@ -158,7 +158,7 @@ testFrozensetIntersection
 	fs2 add: 3.
 	fs2 add: 4.
 	
-	result := fs1 perform: #intersection: env: 2 withArguments: {fs2}.
+	result := fs1 perform: #intersection: env: 1 withArguments: {fs2}.
 	
 	self assert: result size equals: 2.
 	self assert: (result ___contains___: 2).
@@ -185,8 +185,8 @@ testFrozensetIsdisjoint
 	fs3 add: 2.
 	fs3 add: 3.
 
-	self assert: (fs1 perform: #isdisjoint: env: 2 withArguments: {fs2}).
-	self deny: (fs1 perform: #isdisjoint: env: 2 withArguments: {fs3})
+	self assert: (fs1 perform: #isdisjoint: env: 1 withArguments: {fs2}).
+	self deny: (fs1 perform: #isdisjoint: env: 1 withArguments: {fs3})
 %
 
 category: 'Tests - Iteration'
@@ -200,15 +200,15 @@ testFrozensetIteration
 	fs add: 2.
 	fs add: 3.
 	
-	iter := fs perform: #__iter__ env: 2.
+	iter := fs perform: #__iter__ env: 1.
 	self assert: (iter class) name equals: #'set_iterator'.
 	
 	items := list new.
 	[true] whileTrue: [
 		| item |
 		[
-			item := iter perform: #__next__ env: 2.
-			items perform: #append: env: 2 withArguments: {item}.
+			item := iter perform: #__next__ env: 1.
+			items perform: #append: env: 1 withArguments: {item}.
 		] on: StopIteration do: [:ex | ^ nil]
 	].
 	
@@ -250,16 +250,16 @@ testFrozensetOperators
 	fs2 add: 3.
 
 	"Test & (intersection)"
-	self assert: (fs1 perform: #__and__: env: 2 withArguments: {fs2}) size equals: 1.
+	self assert: (fs1 perform: #__and__: env: 1 withArguments: {fs2}) size equals: 1.
 
 	"Test | (union)"
-	self assert: (fs1 perform: #__or__: env: 2 withArguments: {fs2}) size equals: 3.
+	self assert: (fs1 perform: #__or__: env: 1 withArguments: {fs2}) size equals: 3.
 
 	"Test - (difference)"
-	self assert: (fs1 perform: #__sub__: env: 2 withArguments: {fs2}) size equals: 1.
+	self assert: (fs1 perform: #__sub__: env: 1 withArguments: {fs2}) size equals: 1.
 
 	"Test ^ (symmetric difference)"
-	self assert: (fs1 perform: #__xor__: env: 2 withArguments: {fs2}) size equals: 2
+	self assert: (fs1 perform: #__xor__: env: 1 withArguments: {fs2}) size equals: 2
 %
 
 category: 'Tests - String Representation'
@@ -272,7 +272,7 @@ testFrozensetRepr
 	fs add: 1.
 	fs add: 2.
 
-	repr := fs perform: #__repr__ env: 2.
+	repr := fs perform: #__repr__ env: 1.
 
 	self assert: (repr includesString: 'frozenset').
 	self assert: (repr includesString: '{').
@@ -298,21 +298,21 @@ testFrozensetSubsetSuperset
 	fs3 add: 1.
 
 	"Test issubset"
-	self assert: (fs1 perform: #issubset: env: 2 withArguments: {fs2}).
-	self deny: (fs2 perform: #issubset: env: 2 withArguments: {fs1}).
+	self assert: (fs1 perform: #issubset: env: 1 withArguments: {fs2}).
+	self deny: (fs2 perform: #issubset: env: 1 withArguments: {fs1}).
 
 	"Test issuperset"
-	self assert: (fs2 perform: #issuperset: env: 2 withArguments: {fs1}).
-	self deny: (fs1 perform: #issuperset: env: 2 withArguments: {fs2}).
+	self assert: (fs2 perform: #issuperset: env: 1 withArguments: {fs1}).
+	self deny: (fs1 perform: #issuperset: env: 1 withArguments: {fs2}).
 
 	"Test <= and >="
-	self assert: (fs1 perform: #__le__: env: 2 withArguments: {fs2}).
-	self assert: (fs2 perform: #__ge__: env: 2 withArguments: {fs1}).
+	self assert: (fs1 perform: #__le__: env: 1 withArguments: {fs2}).
+	self assert: (fs2 perform: #__ge__: env: 1 withArguments: {fs1}).
 
 	"Test < and > (proper subset/superset)"
-	self assert: (fs1 perform: #__lt__: env: 2 withArguments: {fs2}).
-	self assert: (fs2 perform: #__gt__: env: 2 withArguments: {fs1}).
-	self deny: (fs1 perform: #__lt__: env: 2 withArguments: {fs1})
+	self assert: (fs1 perform: #__lt__: env: 1 withArguments: {fs2}).
+	self assert: (fs2 perform: #__gt__: env: 1 withArguments: {fs1}).
+	self deny: (fs1 perform: #__lt__: env: 1 withArguments: {fs1})
 %
 
 category: 'Tests - Set Operations'
@@ -331,7 +331,7 @@ testFrozensetSymmetricDifference
 	fs2 add: 3.
 	fs2 add: 4.
 
-	result := fs1 perform: #symmetric_difference: env: 2 withArguments: {fs2}.
+	result := fs1 perform: #symmetric_difference: env: 1 withArguments: {fs2}.
 
 	self assert: result size equals: 2.
 	self assert: (result ___contains___: 1).
@@ -354,7 +354,7 @@ testFrozensetUnion
 	fs2 add: 2.
 	fs2 add: 3.
 	
-	result := fs1 perform: #union: env: 2 withArguments: {fs2}.
+	result := fs1 perform: #union: env: 1 withArguments: {fs2}.
 	
 	self assert: result size equals: 3.
 	self assert: (result ___contains___: 1).

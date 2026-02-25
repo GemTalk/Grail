@@ -224,21 +224,21 @@ numbers category: 'Modules'
 ! ------------------- Remove existing Python methods from numbers ABCs and module
 expectvalue /Metaclass3
 doit
-numbers_Number removeAllMethods: 2.
-numbers_Number class removeAllMethods: 2.
-numbers_Complex removeAllMethods: 2.
-numbers_Complex class removeAllMethods: 2.
-numbers_Real removeAllMethods: 2.
-numbers_Real class removeAllMethods: 2.
-numbers_Rational removeAllMethods: 2.
-numbers_Rational class removeAllMethods: 2.
-numbers_Integral removeAllMethods: 2.
-numbers_Integral class removeAllMethods: 2.
-numbers removeAllMethods: 2.
-numbers class removeAllMethods: 2.
+numbers_Number removeAllMethods: 1.
+numbers_Number class removeAllMethods: 1.
+numbers_Complex removeAllMethods: 1.
+numbers_Complex class removeAllMethods: 1.
+numbers_Real removeAllMethods: 1.
+numbers_Real class removeAllMethods: 1.
+numbers_Rational removeAllMethods: 1.
+numbers_Rational class removeAllMethods: 1.
+numbers_Integral removeAllMethods: 1.
+numbers_Integral class removeAllMethods: 1.
+numbers removeAllMethods: 1.
+numbers class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-ABC'
 classmethod: numbers_Number

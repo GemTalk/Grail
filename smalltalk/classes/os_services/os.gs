@@ -45,11 +45,11 @@ set compile_env: 0
 ! ------------------- Remove existing Python methods from os
 expectvalue /Metaclass3
 doit
-os removeAllMethods: 2.
-os class removeAllMethods: 2.
+os removeAllMethods: 1.
+os class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-File and Directory Operations'
 method: os

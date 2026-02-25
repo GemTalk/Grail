@@ -5,7 +5,7 @@ This checklist helps ensure all `perform:env:0` expressions and conditionals hav
 ## Quick Reference Rules
 
 1. **`perform:env:0` before `ifTrue:`/`ifFalse:`**: Always wrap in parentheses
-2. **Binary operators (`>`, `<`, `=`, `>=`, `<=`) in env: 2**: Use `perform:env:0` wrapped in parentheses
+2. **Binary operators (`>`, `<`, `=`, `>=`, `<=`) in env: 1**: Use `perform:env:0` wrapped in parentheses
 3. **Chained `perform:env:0`**: Wrap entire chain in parentheses before conditionals
 4. **`==` vs `=`**: `==` is inlined (can use directly), `=` needs `perform:env:0`
 
@@ -33,7 +33,7 @@ grep -n "[^)] > \|[^)] < \|[^)] >= \|[^)] <=" smalltalk/classes/*.gs
 
 **What to look for:**
 ```smalltalk
-❌ BAD (in env: 2): sepIndex > lastDotIndex ifTrue: [...]
+❌ BAD (in env: 1): sepIndex > lastDotIndex ifTrue: [...]
 ✅ GOOD: (sepIndex perform: #> env: 0 withArguments: {lastDotIndex}) ifTrue: [...]
 ```
 
@@ -64,7 +64,7 @@ grep -n "perform: #=" smalltalk/classes/*.gs
 ✅ GOOD: isDir == false
 
 # = needs perform:env:0 (equality comparison):
-❌ BAD: result = nil  "In env: 2 code"
+❌ BAD: result = nil  "In env: 1 code"
 ✅ GOOD: (result perform: #= env: 0 withArguments: {nil})
 ```
 
@@ -74,7 +74,7 @@ Before committing code, verify:
 
 - [ ] All temporary variables are declared at the beginning of the method/block scope
 - [ ] All `perform:env:0` expressions before `ifTrue:`/`ifFalse:` are wrapped in parentheses
-- [ ] All binary operators (`>`, `<`, `=`, `>=`, `<=`) in env: 2 code use `perform:env:0`
+- [ ] All binary operators (`>`, `<`, `=`, `>=`, `<=`) in env: 1 code use `perform:env:0`
 - [ ] All chained `perform:env:0` expressions are properly parenthesized
 - [ ] `==` (identity) is used directly, `=` (equality) uses `perform:env:0`
 - [ ] Code compiles without parse errors
@@ -134,7 +134,7 @@ result perform: #isEmpty env: 0 ifTrue: [^ 'empty']
 
 ### Example 3: Binary Operator
 ```smalltalk
-# Before (WRONG in env: 2):
+# Before (WRONG in env: 1):
 sepIndex > lastDotIndex ifTrue: [...]
 
 # After (CORRECT):

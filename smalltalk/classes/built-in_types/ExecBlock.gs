@@ -12,11 +12,11 @@
 ! ------------------- Remove existing Python methods from ExecBlock
 expectvalue /Metaclass3
 doit
-ExecBlock removeAllMethods: 2.
-ExecBlock class removeAllMethods: 2.
+ExecBlock removeAllMethods: 1.
+ExecBlock class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Callable'
 method: ExecBlock

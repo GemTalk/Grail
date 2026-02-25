@@ -39,11 +39,11 @@ gemstone category: 'Modules'
 ! ------------------- Remove existing Python methods from gemstone
 expectvalue /Metaclass3
 doit
-gemstone removeAllMethods: 2.
-gemstone class removeAllMethods: 2.
+gemstone removeAllMethods: 1.
+gemstone class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Subscript Protocol'
 method: gemstone

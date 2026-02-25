@@ -41,11 +41,11 @@ fractions category: 'Modules'
 ! ------------------- Remove existing Python methods from fractions
 expectvalue /Metaclass3
 doit
-fractions removeAllMethods: 2.
-fractions class removeAllMethods: 2.
+fractions removeAllMethods: 1.
+fractions class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Types'
 method: fractions

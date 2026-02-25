@@ -11,11 +11,11 @@
 ! ------------------- Remove existing Python methods from SequenceableCollection
 expectvalue /Metaclass3
 doit
-SequenceableCollection removeAllMethods: 2.
-SequenceableCollection class removeAllMethods: 2.
+SequenceableCollection removeAllMethods: 1.
+SequenceableCollection class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Sequence Operations'
 method: SequenceableCollection

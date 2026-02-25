@@ -18,12 +18,15 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
+#include <assert.h>
 #include <math.h>
 
 /* ========== Core types ========== */
 
 typedef intptr_t Py_ssize_t;
 typedef Py_ssize_t Py_hash_t;
+typedef size_t     Py_uhash_t;
 
 typedef struct _typeobject PyTypeObject;
 typedef struct _object PyObject;
@@ -393,13 +396,20 @@ void _Py_Dealloc(PyObject *op);
 #define Py_XINCREF(op) do { if ((op) != NULL) Py_INCREF(op); } while (0)
 #define Py_XDECREF(op) do { if ((op) != NULL) Py_DECREF(op); } while (0)
 
-static inline PyObject *Py_NewRef(PyObject *obj) {
-    Py_INCREF(obj);
-    return obj;
+#define Py_CLEAR(op) do { PyObject *_py_tmp = _PyObject_CAST(op); (op) = NULL; Py_XDECREF(_py_tmp); } while (0)
+#define Py_SETREF(op, op2) do { PyObject *_py_tmp = _PyObject_CAST(op); (op) = (op2); Py_DECREF(_py_tmp); } while (0)
+#define Py_XSETREF(op, op2) do { PyObject *_py_tmp = _PyObject_CAST(op); (op) = (op2); Py_XDECREF(_py_tmp); } while (0)
+
+/* Py_UNUSED — suppress unused parameter warnings */
+#define Py_UNUSED(name) _unused_##name __attribute__((unused))
+
+static inline PyObject *Py_NewRef(void *obj) {
+    Py_INCREF((PyObject *)obj);
+    return (PyObject *)obj;
 }
-static inline PyObject *Py_XNewRef(PyObject *obj) {
-    Py_XINCREF(obj);
-    return obj;
+static inline PyObject *Py_XNewRef(void *obj) {
+    Py_XINCREF((PyObject *)obj);
+    return (PyObject *)obj;
 }
 
 /* ========== Method and module definitions ========== */
@@ -409,7 +419,9 @@ static inline PyObject *Py_XNewRef(PyObject *obj) {
 #define METH_KEYWORDS   0x0002
 #define METH_NOARGS     0x0004
 #define METH_O          0x0008
+#define METH_CLASS      0x0010
 #define METH_FASTCALL   0x0080
+#define METH_METHOD     0x0200
 
 /* Module definition slots */
 #define Py_mod_exec                  1
@@ -561,11 +573,15 @@ typedef struct {
 /* Type creation functions */
 PyObject     *PyType_FromSpec(PyType_Spec *spec);
 PyObject     *PyType_FromSpecWithBases(PyType_Spec *spec, PyObject *bases);
+PyObject     *PyType_FromModuleAndSpec(PyObject *module, PyType_Spec *spec,
+                                       PyObject *bases);
 void         *PyType_GetSlot(PyTypeObject *type, int slot);
 int           PyType_Ready(PyTypeObject *type);
 PyObject     *PyType_GenericNew(PyTypeObject *type, PyObject *args,
                                 PyObject *kwds);
 PyObject     *PyType_GenericAlloc(PyTypeObject *type, Py_ssize_t nitems);
+unsigned long PyType_GetFlags(PyTypeObject *type);
+PyObject     *PyType_GetModule(PyTypeObject *type);
 
 /* ========== Exception type objects ========== */
 
@@ -578,6 +594,12 @@ extern PyObject *PyExc_IndexError;
 extern PyObject *PyExc_OverflowError;
 extern PyObject *PyExc_ZeroDivisionError;
 extern PyObject *PyExc_RuntimeError;
+extern PyObject *PyExc_DeprecationWarning;
+extern PyObject *PyExc_FutureWarning;
+extern PyObject *PyExc_MemoryError;
+extern PyObject *PyExc_StopIteration;
+extern PyObject *PyExc_SystemError;
+extern PyObject *PyExc_RecursionError;
 
 /* ========== Float API ========== */
 
@@ -614,6 +636,7 @@ int         PyBytes_Check(PyObject *obj);
 /* Compatibility aliases for macros used in CPython code */
 #define PyBytes_AS_STRING(op) PyBytes_AsString(op)
 #define PyBytes_GET_SIZE(op)  PyBytes_Size(op)
+#define PyBytes_CheckExact(op) PyBytes_Check(op)
 
 /* ========== List API ========== */
 
@@ -677,6 +700,10 @@ void      PyErr_SetString(PyObject *type, const char *message);
 void      PyErr_Format(PyObject *type, const char *format, ...);
 PyObject *PyErr_Occurred(void);
 void      PyErr_Clear(void);
+PyObject *PyErr_NoMemory(void);
+void      PyErr_SetNone(PyObject *type);
+void      PyErr_Fetch(PyObject **ptype, PyObject **pvalue, PyObject **ptb);
+void      PyErr_Restore(PyObject *type, PyObject *value, PyObject *tb);
 
 /* ========== Argument parsing ========== */
 
@@ -690,5 +717,331 @@ int       PyModule_AddObjectRef(PyObject *module, const char *name,
                                 PyObject *value);
 int       PyModule_Add(PyObject *module, const char *name,
                        PyObject *value);
+int       PyModule_AddIntConstant(PyObject *module, const char *name,
+                                  long value);
+int       PyModule_AddStringConstant(PyObject *module, const char *name,
+                                     const char *value);
+void     *PyModule_GetState(PyObject *module);
+
+/* ========== Object allocation for C types ========== */
+
+PyObject    *_PyObject_New(PyTypeObject *type);
+PyVarObject *_PyObject_NewVar(PyTypeObject *type, Py_ssize_t nitems);
+
+#define PyObject_New(type, typeobj)          ((type *)_PyObject_New(typeobj))
+#define PyObject_NewVar(type, typeobj, n)    ((type *)_PyObject_NewVar(typeobj, n))
+
+/* GC no-ops — GemStone manages object lifetime */
+void PyObject_GC_Track(void *op);
+void PyObject_GC_UnTrack(void *op);
+void PyObject_GC_Del(void *op);
+
+/* Py_VISIT — used in tp_traverse implementations (no-op in Grail) */
+#define Py_VISIT(op) do { /* no-op */ } while (0)
+
+/* Weak references — no-op in Grail */
+static inline void PyObject_ClearWeakRefs(PyObject *op) { (void)op; }
+
+#define _PyObject_GC_New(type, typeobj)       PyObject_New(type, typeobj)
+#define _PyObject_GC_NewVar(type, typeobj, n) PyObject_NewVar(type, typeobj, n)
+#define PyObject_GC_New(type, typeobj)        PyObject_New(type, typeobj)
+#define PyObject_GC_NewVar(type, typeobj, n)  PyObject_NewVar(type, typeobj, n)
+
+/* ========== Integer API (additional) ========== */
+
+PyObject      *PyLong_FromUnsignedLong(unsigned long v);
+unsigned long  PyLong_AsUnsignedLong(PyObject *obj);
+int            PyIndex_Check(PyObject *obj);
+PyObject      *PyNumber_Index(PyObject *obj);
+PyObject      *PyLong_FromSize_t(size_t v);
+
+/* ========== String (Unicode) API (additional) ========== */
+
+Py_ssize_t  PyUnicode_GetLength(PyObject *unicode);
+PyObject   *PyUnicode_FromStringAndSize(const char *str, Py_ssize_t len);
+PyObject   *PyUnicode_Substring(PyObject *str, Py_ssize_t start,
+                                Py_ssize_t end);
+
+/* Unicode kind constants (CPython internal representation) */
+#define PyUnicode_1BYTE_KIND  1
+#define PyUnicode_2BYTE_KIND  2
+#define PyUnicode_4BYTE_KIND  4
+
+/* For Grail, all strings are UTF-8 internally. We provide UCS-4 access
+   for the SRE engine through a conversion layer. */
+typedef uint32_t Py_UCS4;
+typedef uint16_t Py_UCS2;
+typedef uint8_t  Py_UCS1;
+
+/* Unicode internal access for SRE.
+   In CPython, these access the internal compact representation.
+   In Grail, we convert UTF-8 → UCS-4 and cache the result. */
+Py_ssize_t _grail_PyUnicode_GET_LENGTH(PyObject *op);
+int        _grail_PyUnicode_KIND(PyObject *op);
+void      *_grail_PyUnicode_DATA(PyObject *op);
+
+#define PyUnicode_GET_LENGTH(op) _grail_PyUnicode_GET_LENGTH(op)
+#define PyUnicode_KIND(op)       _grail_PyUnicode_KIND(op)
+#define PyUnicode_DATA(op)       _grail_PyUnicode_DATA(op)
+
+#define Py_UNICODE_TOLOWER(ch) _grail_unicode_tolower(ch)
+#define Py_UNICODE_TOUPPER(ch) _grail_unicode_toupper(ch)
+#define Py_UNICODE_ISALNUM(ch) _grail_unicode_isalnum(ch)
+
+Py_UCS4 _grail_unicode_tolower(Py_UCS4 ch);
+Py_UCS4 _grail_unicode_toupper(Py_UCS4 ch);
+int     _grail_unicode_isalnum(Py_UCS4 ch);
+
+/* ========== Tuple API (additional) ========== */
+
+PyObject *PyTuple_Pack(Py_ssize_t n, ...);
+
+/* Unchecked macro versions */
+#define PyTuple_GET_ITEM(op, i)     PyTuple_GetItem((op), (i))
+#define PyTuple_SET_ITEM(op, i, v)  PyTuple_SetItem((op), (i), (v))
+#define PyTuple_GET_SIZE(op)        PyTuple_Size(op)
+
+/* ========== Sequence protocol ========== */
+
+PyObject   *PySequence_GetItem(PyObject *seq, Py_ssize_t i);
+Py_ssize_t  PySequence_Length(PyObject *seq);
+
+/* ========== Object protocol (additional) ========== */
+
+PyObject *PyObject_GetItem(PyObject *obj, PyObject *key);
+int       PyObject_SetItem(PyObject *obj, PyObject *key, PyObject *value);
+PyObject *PyObject_Call(PyObject *callable, PyObject *args, PyObject *kwargs);
+PyObject *PyObject_CallOneArg(PyObject *callable, PyObject *arg);
+int       PyObject_SetAttrString(PyObject *obj, const char *name,
+                                 PyObject *value);
+int       PyCallable_Check(PyObject *obj);
+PyObject *PyObject_RichCompare(PyObject *v, PyObject *w, int op);
+PyObject *PyObject_Type(PyObject *obj);
+
+/* ========== Slice API ========== */
+
+PyObject *PySlice_New(PyObject *start, PyObject *stop, PyObject *step);
+int       PySlice_Unpack(PyObject *slice, Py_ssize_t *start,
+                         Py_ssize_t *stop, Py_ssize_t *step);
+Py_ssize_t PySlice_AdjustIndices(Py_ssize_t length, Py_ssize_t *start,
+                                  Py_ssize_t *stop, Py_ssize_t step);
+
+/* ========== Buffer protocol ========== */
+
+#define PyBUF_SIMPLE    0
+#define PyBUF_WRITABLE  0x0001
+#define PyBUF_FORMAT    0x0004
+#define PyBUF_ND        0x0008
+#define PyBUF_STRIDES   (0x0010 | PyBUF_ND)
+#define PyBUF_FULL      (PyBUF_FORMAT | PyBUF_STRIDES | PyBUF_WRITABLE)
+#define PyBUF_READ      0x100
+#define PyBUF_WRITE     0x200
+
+int  PyObject_GetBuffer(PyObject *obj, Py_buffer *view, int flags);
+void PyBuffer_Release(Py_buffer *view);
+int  PyObject_CheckBuffer(PyObject *obj);
+
+/* ========== Dict API (additional) ========== */
+
+int PyDict_Next(PyObject *dict, Py_ssize_t *ppos, PyObject **pkey,
+                PyObject **pvalue);
+PyObject *PyDict_GetItemWithError(PyObject *dict, PyObject *key);
+
+/* ========== Argument parsing ========== */
+
+int PyArg_ParseTuple(PyObject *args, const char *format, ...);
+int PyArg_Parse(PyObject *arg, const char *format, ...);
+
+/* ========== Warning API ========== */
+
+int PyErr_WarnEx(PyObject *category, const char *message, Py_ssize_t level);
+
+/* ========== Miscellaneous ========== */
+
+/* PyCMethod calling convention (METH_METHOD) */
+typedef PyObject *(*PyCMethod)(PyObject *self, PyTypeObject *defining_class,
+                               PyObject *const *args, Py_ssize_t nargs,
+                               PyObject *kwnames);
+
+/* PyDoc_STR */
+#define PyDoc_STR(str) str
+
+/* PY_SSIZE_T_MAX */
+#ifndef PY_SSIZE_T_MAX
+#define PY_SSIZE_T_MAX  ((Py_ssize_t)(((size_t)-1) >> 1))
+#endif
+
+/* Py_GenericAlias (used for __class_getitem__ support) */
+PyObject *Py_GenericAlias(PyObject *origin, PyObject *args);
+
+/* SIZEOF_SIZE_T and SIZEOF_VOID_P (needed by sre_constants.h in #if directives).
+   sizeof() is not available at preprocessor time, so use platform detection. */
+#ifndef SIZEOF_SIZE_T
+#if defined(__LP64__) || defined(_WIN64) || defined(__x86_64__) || defined(__aarch64__)
+#define SIZEOF_SIZE_T 8
+#define SIZEOF_VOID_P 8
+#else
+#define SIZEOF_SIZE_T 4
+#define SIZEOF_VOID_P 4
+#endif
+#endif
+
+/* Py_DEPRECATED macro */
+#ifndef Py_DEPRECATED
+#define Py_DEPRECATED(ver)
+#endif
+
+/* Critical section no-ops (Grail is single-threaded) */
+#define Py_BEGIN_CRITICAL_SECTION(op)
+#define Py_END_CRITICAL_SECTION()
+#define Py_BEGIN_CRITICAL_SECTION2(op1, op2)
+#define Py_END_CRITICAL_SECTION2()
+
+/* INT32_MAX if not defined */
+#ifndef INT32_MAX
+#define INT32_MAX 0x7fffffff
+#endif
+
+/* _Py_RVALUE is used in some CPython macros */
+#define _Py_RVALUE(x) (x)
+
+/* Py_UNREACHABLE */
+#define Py_UNREACHABLE() __builtin_unreachable()
+
+/* Py_ALWAYS_INLINE */
+#define Py_ALWAYS_INLINE
+
+/* _Py_CAST */
+#define _Py_CAST(type, expr) ((type)(expr))
+
+/* Py_MEMCPY */
+#define Py_MEMCPY memcpy
+
+/* Py_LOCAL / Py_LOCAL_INLINE for sre_lib.h */
+#define Py_LOCAL(type) static type
+#define Py_LOCAL_INLINE(type) static inline type
+
+/* _PyUnicode_IsLinebreak (used by sre_lib.h) */
+static inline int _PyUnicode_IsLinebreak(Py_UCS4 ch) {
+    return (ch == 0x000A || ch == 0x000B || ch == 0x000C ||
+            ch == 0x000D || ch == 0x001C || ch == 0x001D ||
+            ch == 0x001E || ch == 0x0085 || ch == 0x2028 ||
+            ch == 0x2029);
+}
+
+/* SRE engine needs to check for signals periodically */
+#define PyErr_CheckSignals() 0
+
+/* _Py_IsDigit, _Py_IsAlpha etc. (used by sre) */
+static inline int _Py_IsDigit(Py_UCS4 ch) {
+    return ch >= '0' && ch <= '9';
+}
+
+/* Py_TOLOWER, Py_ISDIGIT, etc. — ASCII ctype wrappers used by sre's SRE_IS_* macros */
+#include <ctype.h>
+#define Py_TOLOWER(c)  tolower((unsigned char)(c))
+#define Py_TOUPPER(c)  toupper((unsigned char)(c))
+#define Py_ISDIGIT(c)  isdigit((unsigned char)(c))
+#define Py_ISSPACE(c)  isspace((unsigned char)(c))
+#define Py_ISALNUM(c)  isalnum((unsigned char)(c))
+#define Py_ISALPHA(c)  isalpha((unsigned char)(c))
+
+/* Py_UNICODE_* category functions (Unicode-aware, used by sre's SRE_UNI_IS_* macros).
+   These wrap ICU / POSIX wide-char functions for basic Unicode support. */
+#include <wctype.h>
+
+static inline int Py_UNICODE_ISDECIMAL(Py_UCS4 ch) {
+    /* ASCII decimal digits + Unicode Nd category (simplified) */
+    if (ch < 128) return (ch >= '0' && ch <= '9');
+    return iswdigit((wint_t)ch);
+}
+
+static inline int Py_UNICODE_ISSPACE(Py_UCS4 ch) {
+    if (ch < 128) return isspace((unsigned char)ch);
+    return iswspace((wint_t)ch);
+}
+
+static inline int Py_UNICODE_ISLINEBREAK(Py_UCS4 ch) {
+    return _PyUnicode_IsLinebreak(ch);
+}
+
+/* Memory allocation — route to standard library */
+#include <stdlib.h>
+#define PyMem_Malloc   malloc
+#define PyMem_Realloc  realloc
+#define PyMem_Free     free
+#define PyMem_New(type, n) ((type *)malloc((n) * sizeof(type)))
+
+#define PyObject_Malloc  malloc
+#define PyObject_Realloc realloc
+#define PyObject_Free    free
+
+/* ========== Additional APIs needed by _sre ========== */
+
+/* Utility macros */
+#define Py_ARRAY_LENGTH(array) (sizeof(array) / sizeof((array)[0]))
+#define Py_IS_TYPE(op, type) (Py_TYPE(op) == (type))
+#define Py_SET_SIZE(op, size) (((PyVarObject *)(op))->ob_size = (size))
+#define Py_MIN(a, b) ((a) < (b) ? (a) : (b))
+#define Py_MAX(a, b) ((a) > (b) ? (a) : (b))
+
+/* Py_RETURN_NOTIMPLEMENTED */
+extern PyObject _Py_NotImplementedStruct;
+#define Py_NotImplemented (&_Py_NotImplementedStruct)
+#define Py_RETURN_NOTIMPLEMENTED return Py_NotImplemented
+
+/* Vectorcall protocol */
+PyObject *PyObject_Vectorcall(PyObject *callable, PyObject *const *args,
+                               size_t nargsf, PyObject *kwnames);
+
+/* Error handling (additional) */
+int PyErr_ExceptionMatches(PyObject *exc);
+
+/* Unicode (additional) */
+#define PyUnicode_CheckExact(op) PyUnicode_Check(op)
+PyObject   *PyUnicode_FromFormat(const char *format, ...);
+PyObject   *PyUnicode_Join(PyObject *separator, PyObject *seq);
+Py_ssize_t  PyUnicode_FindChar(PyObject *str, Py_UCS4 ch,
+                                Py_ssize_t start, Py_ssize_t end, int dir);
+
+/* _PyUnicode_Copy — return a copy of the string (simplified: just NewRef) */
+static inline PyObject *_PyUnicode_Copy(PyObject *str) {
+    return Py_NewRef(str);
+}
+
+/* _PyUnicode_JoinArray — join an array of PyObject* strings */
+PyObject *_PyUnicode_JoinArray(PyObject *separator, PyObject *const *items,
+                                Py_ssize_t seqlen);
+
+/* Bytes (additional) */
+PyObject *PyBytes_FromObject(PyObject *obj);
+PyObject *PyBytes_Join(PyObject *sep, PyObject *iterable);
+
+/* Import helper */
+PyObject *_PyImport_GetModuleAttrString(const char *modname, const char *attrname);
+
+/* Py_BuildValue — format-based value construction */
+PyObject *Py_BuildValue(const char *format, ...);
+
+/* Number protocol (additional) */
+Py_ssize_t PyNumber_AsSsize_t(PyObject *obj, PyObject *exc);
+
+/* Object protocol (additional) */
+Py_hash_t PyObject_Hash(PyObject *obj);
+Py_hash_t Py_HashBuffer(const void *ptr, Py_ssize_t len);
+
+/* Dict (additional) */
+#define PyDict_GET_SIZE(op) PyDict_Size(op)
+PyObject *PyDictProxy_New(PyObject *mapping);
+
+/* Iterator */
+PyObject *PyCallIter_New(PyObject *callable, PyObject *sentinel);
+
+/* Member type constants (additional) */
+#define _Py_T_OBJECT Py_T_OBJECT_EX
+
+/* Singletons */
+#define _Py_SINGLETON(name) /* unused */
+#define _Py_STR(name) /* unused */
 
 #endif /* CPYTHON_H */

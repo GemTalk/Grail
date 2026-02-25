@@ -46,11 +46,11 @@ Exception category: 'Exceptions'
 ! ------------------- Remove existing Python methods from Exception
 expectvalue /Metaclass3
 doit
-Exception removeAllMethods: 2.
-Exception class removeAllMethods: 2.
+Exception removeAllMethods: 1.
+Exception class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Initialization'
 method: Exception

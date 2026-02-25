@@ -53,11 +53,11 @@ set_iterator category: 'Collections-Iterators'
 ! ------------------- Remove existing Python methods from set_iterator
 expectvalue /Metaclass3
 doit
-set_iterator removeAllMethods: 2.
-set_iterator class removeAllMethods: 2.
+set_iterator removeAllMethods: 1.
+set_iterator class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Instance Creation'
 classmethod: set_iterator

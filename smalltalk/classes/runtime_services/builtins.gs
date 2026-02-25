@@ -49,7 +49,7 @@ builtins removeAllMethods.
 builtins class removeAllMethods.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Built-in Functions'
 method: builtins

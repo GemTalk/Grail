@@ -58,11 +58,11 @@ set category: 'Collections-Unordered'
 ! ------------------- Remove existing Python methods from set
 expectvalue /Metaclass3
 doit
-set removeAllMethods: 2.
-set class removeAllMethods: 2.
+set removeAllMethods: 1.
+set class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Type'
 method: set
@@ -84,7 +84,7 @@ method: set
 __iand__: other
 	"In-place intersection: self &= other. Returns self."
 
-	self perform: #intersection_update: env: 2 withArguments: {other}.
+	self perform: #intersection_update: env: 1 withArguments: {other}.
 	^ self
 %
 
@@ -93,7 +93,7 @@ method: set
 __ior__: other
 	"In-place union: self |= other. Returns self."
 
-	self perform: #update: env: 2 withArguments: {other}.
+	self perform: #update: env: 1 withArguments: {other}.
 	^ self
 %
 
@@ -102,7 +102,7 @@ method: set
 __isub__: other
 	"In-place difference: self -= other. Returns self."
 
-	self perform: #difference_update: env: 2 withArguments: {other}.
+	self perform: #difference_update: env: 1 withArguments: {other}.
 	^ self
 %
 
@@ -111,7 +111,7 @@ method: set
 __ixor__: other
 	"In-place symmetric difference: self ^= other. Returns self."
 
-	self perform: #symmetric_difference_update: env: 2 withArguments: {other}.
+	self perform: #symmetric_difference_update: env: 1 withArguments: {other}.
 	^ self
 %
 
@@ -137,7 +137,7 @@ __repr__
 		first ifFalse: [
 			stream ___nextPutAll___: ', '
 		].
-		reprStr := each perform: #__repr__ env: 2.
+		reprStr := each perform: #__repr__ env: 1.
 		stream ___nextPutAll___: reprStr.
 		first := false
 	].
@@ -187,7 +187,7 @@ discard: item
 	"Remove an element from the set if it is present."
 
 	self ___do___: [:each |
-		(each perform: #__eq__: env: 2 withArguments: {item}) ifTrue: [
+		(each perform: #__eq__: env: 1 withArguments: {item}) ifTrue: [
 			self ___remove___: each.
 			^ nil
 		]
@@ -243,7 +243,7 @@ remove: item
 	| removed |
 	removed := false.
 	self ___do___: [:each |
-		(each perform: #__eq__: env: 2 withArguments: {item}) ifTrue: [
+		(each perform: #__eq__: env: 1 withArguments: {item}) ifTrue: [
 			self ___remove___: each.
 			removed := true.
 			^ nil

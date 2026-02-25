@@ -55,11 +55,11 @@ string_formatter category: 'Modules-String'
 ! ------------------- Remove existing Python methods from string_formatter
 expectvalue /Metaclass3
 doit
-string_formatter removeAllMethods: 2.
-string_formatter class removeAllMethods: 2.
+string_formatter removeAllMethods: 1.
+string_formatter class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Type'
 method: string_formatter
@@ -102,14 +102,14 @@ check_unused_args: used_args _: args _: keywords
 		error_msg := 'Unused argument(s): '.
 		(((unused_pos ___size___) ___gt___: 0)) ifTrue: [
 			error_msg := error_msg ___concat___: 'positional '.
-			error_msg := error_msg ___concat___: (unused_pos perform: #__str__ env: 2)
+			error_msg := error_msg ___concat___: (unused_pos perform: #__str__ env: 1)
 		].
 		(((unused_kw ___size___) ___gt___: 0)) ifTrue: [
 			(((unused_pos ___size___) ___gt___: 0)) ifTrue: [
 				error_msg := error_msg ___concat___: ', '
 			].
 			error_msg := error_msg ___concat___: 'keyword '.
-			error_msg := error_msg ___concat___: (unused_kw perform: #__str__ env: 2)
+			error_msg := error_msg ___concat___: (unused_kw perform: #__str__ env: 1)
 		].
 		ValueError ___signal___: error_msg
 	]
@@ -125,14 +125,14 @@ convert_field: value _: conversion
 	conv_char := conversion ___at___: 1.
 	
 	((conv_char ___eq___: $r)) ifTrue: [
-		^ value perform: #__repr__ env: 2
+		^ value perform: #__repr__ env: 1
 	] ifFalse: [
 		((conv_char ___eq___: $s)) ifTrue: [
-			^ value perform: #__str__ env: 2
+			^ value perform: #__str__ env: 1
 		] ifFalse: [
 			((conv_char ___eq___: $a)) ifTrue: [
 				"ASCII conversion - same as repr for now"
-				^ value perform: #__repr__ env: 2
+				^ value perform: #__repr__ env: 1
 			] ifFalse: [
 				ValueError ___signal___: ('Unknown conversion specifier: ' ___concat___: conversion)
 			]
@@ -166,9 +166,9 @@ format_field: value _: format_spec _: conversion
 	
 	"Apply format spec if specified"
 	format_spec == nil ifTrue: [
-		^ converted_value perform: #__str__ env: 2
+		^ converted_value perform: #__str__ env: 1
 	] ifFalse: [
-		^ converted_value perform: #__format__: env: 2 withArguments: {format_spec}
+		^ converted_value perform: #__format__: env: 1 withArguments: {format_spec}
 	]
 %
 

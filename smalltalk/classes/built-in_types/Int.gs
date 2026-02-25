@@ -13,11 +13,11 @@
 ! ------------------- Remove existing Python methods from int
 expectvalue /Metaclass3
 doit
-int removeAllMethods: 2.
-int class removeAllMethods: 2.
+int removeAllMethods: 1.
+int class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Initialization'
 classmethod: int

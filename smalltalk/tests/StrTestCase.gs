@@ -41,7 +41,7 @@ test__add__
 	| s1 s2 result |
 	s1 := 'hello'.
 	s2 := ' world'.
-	result := s1 perform: #__add__: env: 2 withArguments: { s2 }.
+	result := s1 perform: #__add__: env: 1 withArguments: { s2 }.
 	self assert: result equals: 'hello world'.
 %
 
@@ -67,7 +67,7 @@ test__eq__
 	| s1 s2 result |
 	s1 := 'hello'.
 	s2 := 'hello'.
-	result := s1 perform: #__eq__: env: 2 withArguments: { s2 }.
+	result := s1 perform: #__eq__: env: 1 withArguments: { s2 }.
 	self assert: result equals: true.
 %
 
@@ -79,7 +79,7 @@ test__ge__
 	| s1 s2 result |
 	s1 := 'banana'.
 	s2 := 'banana'.
-	result := s1 perform: #__ge__: env: 2 withArguments: { s2 }.
+	result := s1 perform: #__ge__: env: 1 withArguments: { s2 }.
 	self assert: result equals: true.
 %
 
@@ -92,14 +92,14 @@ test__getitem__
 	s := 'hello'.
 	
 	"Positive indices (0-based)"
-	result := s perform: #__getitem__: env: 2 withArguments: {0}.
+	result := s perform: #__getitem__: env: 1 withArguments: {0}.
 	self assert: result equals: 'h'.
 	self assert: result class equals: Unicode7.
 	
-	result := s perform: #__getitem__: env: 2 withArguments: {1}.
+	result := s perform: #__getitem__: env: 1 withArguments: {1}.
 	self assert: result equals: 'e'.
 	
-	result := s perform: #__getitem__: env: 2 withArguments: {4}.
+	result := s perform: #__getitem__: env: 1 withArguments: {4}.
 	self assert: result equals: 'o'.
 %
 
@@ -111,8 +111,8 @@ test__getitem__emptyString
 	| s |
 	s := ''.
 	
-	self should: [s perform: #__getitem__: env: 2 withArguments: {0}] raise: IndexError.
-	self should: [s perform: #__getitem__: env: 2 withArguments: {-1}] raise: IndexError.
+	self should: [s perform: #__getitem__: env: 1 withArguments: {0}] raise: IndexError.
+	self should: [s perform: #__getitem__: env: 1 withArguments: {-1}] raise: IndexError.
 %
 
 category: 'Python-Sequence Operations'
@@ -124,13 +124,13 @@ test__getitem__negative
 	s := 'hello'.
 	
 	"Negative indices"
-	result := s perform: #__getitem__: env: 2 withArguments: {-1}.
+	result := s perform: #__getitem__: env: 1 withArguments: {-1}.
 	self assert: result equals: 'o'.
 	
-	result := s perform: #__getitem__: env: 2 withArguments: {-2}.
+	result := s perform: #__getitem__: env: 1 withArguments: {-2}.
 	self assert: result equals: 'l'.
 	
-	result := s perform: #__getitem__: env: 2 withArguments: {-5}.
+	result := s perform: #__getitem__: env: 1 withArguments: {-5}.
 	self assert: result equals: 'h'.
 %
 
@@ -143,12 +143,12 @@ test__getitem__outOfRange
 	s := 'hello'.
 	
 	"Out of bounds positive index"
-	self should: [s perform: #__getitem__: env: 2 withArguments: {5}] raise: IndexError.
-	self should: [s perform: #__getitem__: env: 2 withArguments: {10}] raise: IndexError.
+	self should: [s perform: #__getitem__: env: 1 withArguments: {5}] raise: IndexError.
+	self should: [s perform: #__getitem__: env: 1 withArguments: {10}] raise: IndexError.
 	
 	"Out of bounds negative index"
-	self should: [s perform: #__getitem__: env: 2 withArguments: {-6}] raise: IndexError.
-	self should: [s perform: #__getitem__: env: 2 withArguments: {-10}] raise: IndexError.
+	self should: [s perform: #__getitem__: env: 1 withArguments: {-6}] raise: IndexError.
+	self should: [s perform: #__getitem__: env: 1 withArguments: {-10}] raise: IndexError.
 %
 
 category: 'Python-Comparison'
@@ -159,7 +159,7 @@ test__gt__
 	| s1 s2 result |
 	s1 := 'banana'.
 	s2 := 'apple'.
-	result := s1 perform: #__gt__: env: 2 withArguments: { s2 }.
+	result := s1 perform: #__gt__: env: 1 withArguments: { s2 }.
 	self assert: result equals: true.
 %
 
@@ -170,7 +170,7 @@ test__hash__
 
 	| s result |
 	s := 'hello'.
-	result := s perform: #__hash__ env: 2.
+	result := s perform: #__hash__ env: 1.
 	self assert: result class equals: SmallInteger.
 %
 
@@ -182,7 +182,7 @@ test__le__
 	| s1 s2 result |
 	s1 := 'apple'.
 	s2 := 'apple'.
-	result := s1 perform: #__le__: env: 2 withArguments: { s2 }.
+	result := s1 perform: #__le__: env: 1 withArguments: { s2 }.
 	self assert: result equals: true.
 %
 
@@ -193,7 +193,7 @@ test__len__
 
 	| s result |
 	s := 'hello'.
-	result := s perform: #__len__ env: 2.
+	result := s perform: #__len__ env: 1.
 	self assert: result equals: 5.
 %
 
@@ -205,7 +205,7 @@ test__lt__
 	| s1 s2 result |
 	s1 := 'apple'.
 	s2 := 'banana'.
-	result := s1 perform: #__lt__: env: 2 withArguments: { s2 }.
+	result := s1 perform: #__lt__: env: 1 withArguments: { s2 }.
 	self assert: result equals: true.
 %
 
@@ -216,7 +216,7 @@ test__mul__
 
 	| s result |
 	s := 'ab'.
-	result := s perform: #__mul__: env: 2 withArguments: { 3 }.
+	result := s perform: #__mul__: env: 1 withArguments: { 3 }.
 	self assert: result equals: 'ababab'.
 %
 
@@ -227,7 +227,7 @@ test__mul__Zero
 
 	| s result |
 	s := 'ab'.
-	result := s perform: #__mul__: env: 2 withArguments: { 0 }.
+	result := s perform: #__mul__: env: 1 withArguments: { 0 }.
 	self assert: result equals: ''.
 %
 
@@ -239,7 +239,7 @@ test__ne__
 	| s1 s2 result |
 	s1 := 'hello'.
 	s2 := 'world'.
-	result := s1 perform: #__ne__: env: 2 withArguments: { s2 }.
+	result := s1 perform: #__ne__: env: 1 withArguments: { s2 }.
 	self assert: result equals: true.
 %
 
@@ -270,7 +270,7 @@ test__repr__
 
 	| s result |
 	s := 'hello'.
-	result := s perform: #__repr__ env: 2.
+	result := s perform: #__repr__ env: 1.
 	self assert: result equals: '''hello'''.
 %
 
@@ -281,7 +281,7 @@ test__repr__WithApostrophe
 
 	| s result |
 	s := 'it''s'.
-	result := s perform: #__repr__ env: 2.
+	result := s perform: #__repr__ env: 1.
 	self assert: result equals: '''it\''s'''.
 %
 
@@ -292,7 +292,7 @@ test__rmul__
 
 	| s result |
 	s := 'ab'.
-	result := s perform: #__rmul__: env: 2 withArguments: { 3 }.
+	result := s perform: #__rmul__: env: 1 withArguments: { 3 }.
 	self assert: result equals: 'ababab'.
 %
 
@@ -303,7 +303,7 @@ test__str__
 
 	| s result |
 	s := 'hello'.
-	result := s perform: #__str__ env: 2.
+	result := s perform: #__str__ env: 1.
 	self assert: result equals: s.
 %
 
@@ -314,7 +314,7 @@ testCapitalize
 
 	| s result |
 	s := 'hello world'.
-	result := s perform: #capitalize env: 2.
+	result := s perform: #capitalize env: 1.
 	self assert: result equals: 'Hello world'.
 %
 
@@ -325,7 +325,7 @@ testCasefold
 
 	| s result |
 	s := 'HELLO'.
-	result := s perform: #casefold env: 2.
+	result := s perform: #casefold env: 1.
 	self assert: result equals: 'hello'.
 %
 
@@ -336,7 +336,7 @@ testCenter
 
 	| s result |
 	s := 'hi'.
-	result := s perform: #center: env: 2 withArguments: { 10 }.
+	result := s perform: #center: env: 1 withArguments: { 10 }.
 	self assert: result size equals: 10.
 	self assert: result trimBoth equals: 'hi'.
 %
@@ -348,13 +348,13 @@ testCount
 
 	| s result |
 	s := 'hello world'.
-	result := s perform: #count: env: 2 withArguments: { 'l' }.
+	result := s perform: #count: env: 1 withArguments: { 'l' }.
 	self assert: result equals: 3.
 
-	result := s perform: #count: env: 2 withArguments: { 'o' }.
+	result := s perform: #count: env: 1 withArguments: { 'o' }.
 	self assert: result equals: 2.
 
-	result := s perform: #count: env: 2 withArguments: { 'xyz' }.
+	result := s perform: #count: env: 1 withArguments: { 'xyz' }.
 	self assert: result equals: 0.
 %
 
@@ -365,10 +365,10 @@ testEndswith
 
 	| s result |
 	s := 'hello world'.
-	result := s perform: #endswith: env: 2 withArguments: { 'world' }.
+	result := s perform: #endswith: env: 1 withArguments: { 'world' }.
 	self assert: result equals: true.
 
-	result := s perform: #endswith: env: 2 withArguments: { 'hello' }.
+	result := s perform: #endswith: env: 1 withArguments: { 'hello' }.
 	self assert: result equals: false.
 %
 
@@ -432,7 +432,7 @@ testExpandtabs
 
 	| s result |
 	s := 'hello	world'.
-	result := s perform: #expandtabs env: 2.
+	result := s perform: #expandtabs env: 1.
 	self assert: (result includesString: '	') equals: false.
 %
 
@@ -443,10 +443,10 @@ testFind
 
 	| s result |
 	s := 'hello world'.
-	result := s perform: #find: env: 2 withArguments: { 'world' }.
+	result := s perform: #find: env: 1 withArguments: { 'world' }.
 	self assert: result equals: 6.  "0-based index"
 
-	result := s perform: #find: env: 2 withArguments: { 'xyz' }.
+	result := s perform: #find: env: 1 withArguments: { 'xyz' }.
 	self assert: result equals: -1.
 %
 
@@ -457,7 +457,7 @@ testIndex
 
 	| s result |
 	s := 'hello world'.
-	result := s perform: #index: env: 2 withArguments: { 'world' }.
+	result := s perform: #index: env: 1 withArguments: { 'world' }.
 	self assert: result equals: 6.
 %
 
@@ -468,11 +468,11 @@ testIsalnum
 
 	| s result |
 	s := 'hello123'.
-	result := s perform: #isalnum env: 2.
+	result := s perform: #isalnum env: 1.
 	self assert: result equals: true.
 
 	s := 'hello 123'.
-	result := s perform: #isalnum env: 2.
+	result := s perform: #isalnum env: 1.
 	self assert: result equals: false.
 %
 
@@ -483,11 +483,11 @@ testIsalpha
 
 	| s result |
 	s := 'hello'.
-	result := s perform: #isalpha env: 2.
+	result := s perform: #isalpha env: 1.
 	self assert: result equals: true.
 
 	s := 'hello123'.
-	result := s perform: #isalpha env: 2.
+	result := s perform: #isalpha env: 1.
 	self assert: result equals: false.
 %
 
@@ -498,7 +498,7 @@ testIsascii
 
 	| s result |
 	s := 'hello'.
-	result := s perform: #isascii env: 2.
+	result := s perform: #isascii env: 1.
 	self assert: result equals: true.
 %
 
@@ -509,11 +509,11 @@ testIsdecimal
 
 	| s result |
 	s := '123'.
-	result := s perform: #isdecimal env: 2.
+	result := s perform: #isdecimal env: 1.
 	self assert: result equals: true.
 
 	s := '123abc'.
-	result := s perform: #isdecimal env: 2.
+	result := s perform: #isdecimal env: 1.
 	self assert: result equals: false.
 %
 
@@ -524,11 +524,11 @@ testIsdigit
 
 	| s result |
 	s := '123'.
-	result := s perform: #isdigit env: 2.
+	result := s perform: #isdigit env: 1.
 	self assert: result equals: true.
 
 	s := '123abc'.
-	result := s perform: #isdigit env: 2.
+	result := s perform: #isdigit env: 1.
 	self assert: result equals: false.
 %
 
@@ -539,11 +539,11 @@ testIsidentifier
 
 	| s result |
 	s := 'hello_world'.
-	result := s perform: #isidentifier env: 2.
+	result := s perform: #isidentifier env: 1.
 	self assert: result equals: true.
 
 	s := '123abc'.
-	result := s perform: #isidentifier env: 2.
+	result := s perform: #isidentifier env: 1.
 	self assert: result equals: false.
 %
 
@@ -554,11 +554,11 @@ testIslower
 
 	| s result |
 	s := 'hello'.
-	result := s perform: #islower env: 2.
+	result := s perform: #islower env: 1.
 	self assert: result equals: true.
 
 	s := 'Hello'.
-	result := s perform: #islower env: 2.
+	result := s perform: #islower env: 1.
 	self assert: result equals: false.
 %
 
@@ -569,7 +569,7 @@ testIsnumeric
 
 	| s result |
 	s := '123'.
-	result := s perform: #isnumeric env: 2.
+	result := s perform: #isnumeric env: 1.
 	self assert: result equals: true.
 %
 
@@ -580,7 +580,7 @@ testIsprintable
 
 	| s result |
 	s := 'hello'.
-	result := s perform: #isprintable env: 2.
+	result := s perform: #isprintable env: 1.
 	self assert: result equals: true.
 %
 
@@ -591,11 +591,11 @@ testIsspace
 
 	| s result |
 	s := '   '.
-	result := s perform: #isspace env: 2.
+	result := s perform: #isspace env: 1.
 	self assert: result equals: true.
 
 	s := '  a  '.
-	result := s perform: #isspace env: 2.
+	result := s perform: #isspace env: 1.
 	self assert: result equals: false.
 %
 
@@ -606,11 +606,11 @@ testIstitle
 
 	| s result |
 	s := 'Hello World'.
-	result := s perform: #istitle env: 2.
+	result := s perform: #istitle env: 1.
 	self assert: result equals: true.
 
 	s := 'Hello world'.
-	result := s perform: #istitle env: 2.
+	result := s perform: #istitle env: 1.
 	self assert: result equals: false.
 %
 
@@ -621,11 +621,11 @@ testIsupper
 
 	| s result |
 	s := 'HELLO'.
-	result := s perform: #isupper env: 2.
+	result := s perform: #isupper env: 1.
 	self assert: result equals: true.
 
 	s := 'Hello'.
-	result := s perform: #isupper env: 2.
+	result := s perform: #isupper env: 1.
 	self assert: result equals: false.
 %
 
@@ -637,7 +637,7 @@ testJoin
 	| sep parts result |
 	sep := ', '.
 	parts := #('apple' 'banana' 'cherry').
-	result := sep perform: #join: env: 2 withArguments: { parts }.
+	result := sep perform: #join: env: 1 withArguments: { parts }.
 	self assert: result equals: 'apple, banana, cherry'.
 %
 
@@ -648,7 +648,7 @@ testLjust
 
 	| s result |
 	s := 'hi'.
-	result := s perform: #ljust: env: 2 withArguments: { 10 }.
+	result := s perform: #ljust: env: 1 withArguments: { 10 }.
 	self assert: result size equals: 10.
 	self assert: (result beginsWith: 'hi') equals: true.
 %
@@ -660,7 +660,7 @@ testLower
 
 	| s result |
 	s := 'HELLO'.
-	result := s perform: #lower env: 2.
+	result := s perform: #lower env: 1.
 	self assert: result equals: 'hello'.
 %
 
@@ -671,7 +671,7 @@ testLstrip
 
 	| s result |
 	s := '  hello  '.
-	result := s perform: #lstrip env: 2.
+	result := s perform: #lstrip env: 1.
 	self assert: result equals: 'hello  '.
 %
 
@@ -682,7 +682,7 @@ testPartition
 
 	| s result |
 	s := 'hello world'.
-	result := s perform: #partition: env: 2 withArguments: { ' ' }.
+	result := s perform: #partition: env: 1 withArguments: { ' ' }.
 	self assert: result size equals: 3.
 	self assert: (result at: 1) equals: 'hello'.
 	self assert: (result at: 2) equals: ' '.
@@ -696,10 +696,10 @@ testRemoveprefix
 
 	| s result |
 	s := 'hello world'.
-	result := s perform: #removeprefix: env: 2 withArguments: { 'hello ' }.
+	result := s perform: #removeprefix: env: 1 withArguments: { 'hello ' }.
 	self assert: result equals: 'world'.
 
-	result := s perform: #removeprefix: env: 2 withArguments: { 'foo' }.
+	result := s perform: #removeprefix: env: 1 withArguments: { 'foo' }.
 	self assert: result equals: 'hello world'.
 %
 
@@ -710,10 +710,10 @@ testRemovesuffix
 
 	| s result |
 	s := 'hello world'.
-	result := s perform: #removesuffix: env: 2 withArguments: { ' world' }.
+	result := s perform: #removesuffix: env: 1 withArguments: { ' world' }.
 	self assert: result equals: 'hello'.
 
-	result := s perform: #removesuffix: env: 2 withArguments: { 'foo' }.
+	result := s perform: #removesuffix: env: 1 withArguments: { 'foo' }.
 	self assert: result equals: 'hello world'.
 %
 
@@ -724,7 +724,7 @@ testReplace
 
 	| s result |
 	s := 'hello world'.
-	result := s perform: #replace:_: env: 2 withArguments: { 'world'. 'there' }.
+	result := s perform: #replace:_: env: 1 withArguments: { 'world'. 'there' }.
 	self assert: result equals: 'hello there'.
 %
 
@@ -735,10 +735,10 @@ testRfind
 
 	| s result |
 	s := 'hello world hello'.
-	result := s perform: #rfind: env: 2 withArguments: { 'hello' }.
+	result := s perform: #rfind: env: 1 withArguments: { 'hello' }.
 	self assert: result equals: 12.
 
-	result := s perform: #rfind: env: 2 withArguments: { 'xyz' }.
+	result := s perform: #rfind: env: 1 withArguments: { 'xyz' }.
 	self assert: result equals: -1.
 %
 
@@ -749,7 +749,7 @@ testRindex
 
 	| s result |
 	s := 'hello world hello'.
-	result := s perform: #rindex: env: 2 withArguments: { 'hello' }.
+	result := s perform: #rindex: env: 1 withArguments: { 'hello' }.
 	self assert: result equals: 12.
 %
 
@@ -760,7 +760,7 @@ testRjust
 
 	| s result |
 	s := 'hi'.
-	result := s perform: #rjust: env: 2 withArguments: { 10 }.
+	result := s perform: #rjust: env: 1 withArguments: { 10 }.
 	self assert: result size equals: 10.
 	self assert: (result endsWith: 'hi') equals: true.
 %
@@ -772,7 +772,7 @@ testRpartition
 
 	| s result |
 	s := 'hello world foo'.
-	result := s perform: #rpartition: env: 2 withArguments: { ' ' }.
+	result := s perform: #rpartition: env: 1 withArguments: { ' ' }.
 	self assert: result size equals: 3.
 	self assert: (result at: 1) equals: 'hello world'.
 	self assert: (result at: 2) equals: ' '.
@@ -786,7 +786,7 @@ testRstrip
 
 	| s result |
 	s := '  hello  '.
-	result := s perform: #rstrip env: 2.
+	result := s perform: #rstrip env: 1.
 	self assert: result equals: '  hello'.
 %
 
@@ -797,7 +797,7 @@ testSplit
 
 	| s result |
 	s := 'hello world foo'.
-	result := s perform: #split env: 2.
+	result := s perform: #split env: 1.
 	self assert: result size equals: 3.
 	self assert: (result at: 1) equals: 'hello'.
 	self assert: (result at: 2) equals: 'world'.
@@ -812,7 +812,7 @@ testSplitlines
 	| s result |
 	s := 'hello
 world'.
-	result := s perform: #splitlines env: 2.
+	result := s perform: #splitlines env: 1.
 	self assert: result size equals: 2.
 	self assert: (result at: 1) equals: 'hello'.
 	self assert: (result at: 2) equals: 'world'.
@@ -825,10 +825,10 @@ testStartswith
 
 	| s result |
 	s := 'hello world'.
-	result := s perform: #startswith: env: 2 withArguments: { 'hello' }.
+	result := s perform: #startswith: env: 1 withArguments: { 'hello' }.
 	self assert: result equals: true.
 
-	result := s perform: #startswith: env: 2 withArguments: { 'world' }.
+	result := s perform: #startswith: env: 1 withArguments: { 'world' }.
 	self assert: result equals: false.
 %
 
@@ -839,7 +839,7 @@ testStrip
 
 	| s result |
 	s := '  hello  '.
-	result := s perform: #strip env: 2.
+	result := s perform: #strip env: 1.
 	self assert: result equals: 'hello'.
 %
 
@@ -850,7 +850,7 @@ testSwapcase
 
 	| s result |
 	s := 'Hello World'.
-	result := s perform: #swapcase env: 2.
+	result := s perform: #swapcase env: 1.
 	self assert: result equals: 'hELLO wORLD'.
 %
 
@@ -861,7 +861,7 @@ testTitle
 
 	| s result |
 	s := 'hello world'.
-	result := s perform: #title env: 2.
+	result := s perform: #title env: 1.
 	self assert: result equals: 'Hello World'.
 %
 
@@ -872,7 +872,7 @@ testUpper
 
 	| s result |
 	s := 'hello'.
-	result := s perform: #upper env: 2.
+	result := s perform: #upper env: 1.
 	self assert: result equals: 'HELLO'.
 %
 
@@ -883,10 +883,10 @@ testZfill
 
 	| s result |
 	s := '42'.
-	result := s perform: #zfill: env: 2 withArguments: { 5 }.
+	result := s perform: #zfill: env: 1 withArguments: { 5 }.
 	self assert: result equals: '00042'.
 
 	s := '-42'.
-	result := s perform: #zfill: env: 2 withArguments: { 5 }.
+	result := s perform: #zfill: env: 1 withArguments: { 5 }.
 	self assert: result equals: '-0042'.
 %

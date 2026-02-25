@@ -174,15 +174,21 @@ pythonDict
 	at: #'_bisect' put: nil;
 	at: #'_crc32c' put: nil;
 	at: #'_shimtest' put: nil;
+	at: #'_sre' put: nil;
 	at: #'builtins' put: nil;
 	at: #'bytearray' put: nil;
 	at: #'cmath' put: nil;
 	at: #'complex' put: nil;
+	at: #'copyreg' put: nil;
+	at: #'enum' put: nil;
+	at: #'fractions' put: nil;
+	at: #'functools' put: nil;
 	at: #'dict_itemiterator' put: nil;
 	at: #'dict_keyiterator' put: nil;
 	at: #'dict_valueiterator' put: nil;
-	at: #'fractions' put: nil;
 	at: #'gemstone' put: nil;
+	at: #'html' put: nil;
+	at: #'html_entities' put: nil;
 	at: #'importlib' put: nil;
 	at: #'iterator' put: nil;
 	at: #'list_iterator' put: nil;
@@ -377,6 +383,7 @@ dict
 	at: #'ImportErrorTestCase' put: nil;
 	at: #'ImportWarningTestCase' put: nil;
 	at: #'ImportlibTestCase' put: nil;
+	at: #'PackageImportTestCase' put: nil;
 	at: #'IndentationErrorTestCase' put: nil;
 	at: #'IndexErrorTestCase' put: nil;
 	at: #'IntegerTestCase' put: nil;
@@ -514,8 +521,11 @@ input smalltalk/classes/built-in_types/set_iterator.gs
 input smalltalk/classes/built-in_types/str_iterator.gs
 input smalltalk/classes/built-in_types/tuple_iterator.gs
 input smalltalk/classes/runtime_services/builtins.gs
+input smalltalk/classes/runtime_services/copyreg.gs
 input smalltalk/classes/numerics/cmath.gs
+input smalltalk/classes/runtime_services/enum.gs
 input smalltalk/classes/numerics/fractions.gs
+input smalltalk/classes/runtime_services/functools.gs
 input smalltalk/classes/gemstone/gemstone.gs
 input smalltalk/cpython/PyObject.gs
 input smalltalk/cpython/CPythonShim.gs
@@ -523,6 +533,7 @@ input smalltalk/cpython/ShimStatisticsModule.gs
 input smalltalk/cpython/ShimBisectModule.gs
 input smalltalk/cpython/ShimCrc32cModule.gs
 input smalltalk/cpython/ShimTestModule.gs
+input smalltalk/cpython/ShimSreModule.gs
 input smalltalk/classes/importing/importlib.gs
 input smalltalk/classes/numerics/math.gs
 input smalltalk/classes/numerics/numbers.gs
@@ -531,6 +542,8 @@ input smalltalk/classes/os_services/os_path.gs
 input smalltalk/classes/numerics/random.gs
 input smalltalk/classes/numerics/statistics.gs
 input smalltalk/classes/text/string.gs
+input smalltalk/classes/text/html_entities.gs
+input smalltalk/classes/text/html.gs
 input smalltalk/classes/runtime_services/sys.gs
 input smalltalk/classes/exceptions/ExceptionGroup.gs
 input smalltalk/classes/exceptions/ArithmeticError.gs
@@ -650,7 +663,7 @@ login
 
 ! ------- Register built-in numeric types with numbers module ABCs
 run
-numbers perform: #'instance' env: 2.
+numbers perform: #'instance' env: 1.
 %
 commit
 
@@ -809,8 +822,10 @@ input smalltalk/tests/FloatTestCase.gs
 input smalltalk/tests/FractionTestCase.gs
 input smalltalk/tests/FrozensetTestCase.gs
 input smalltalk/tests/GemStoneTestCase.gs
+input smalltalk/tests/HtmlTestCase.gs
 input smalltalk/tests/CPythonShimTestCase.gs
 input smalltalk/tests/ImportlibTestCase.gs
+input smalltalk/tests/PackageImportTestCase.gs
 input smalltalk/tests/IntegerTestCase.gs
 input smalltalk/tests/IteratorTestCase.gs
 input smalltalk/tests/ListTestCase.gs

@@ -42,11 +42,11 @@ math category: 'Modules'
 ! ------------------- Remove existing Python methods from math
 expectvalue /Metaclass3
 doit
-math removeAllMethods: 2.
-math class removeAllMethods: 2.
+math removeAllMethods: 1.
+math class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Trigonometric Functions'
 method: math

@@ -39,8 +39,8 @@ test__class__
 	"Test that __class__ returns the class of the object"
 
 	| obj result |
-	obj := object perform: #__new__ env: 2.
-	result := obj perform: #__class__ env: 2.
+	obj := object perform: #__new__ env: 1.
+	result := obj perform: #__class__ env: 1.
 	self assert: result equals: object
 %
 
@@ -50,8 +50,8 @@ test__dir__
 	"Test that __dir__ returns a sorted array of method names"
 
 	| obj result |
-	obj := object perform: #__new__ env: 2.
-	result := obj perform: #__dir__ env: 2.
+	obj := object perform: #__new__ env: 1.
+	result := obj perform: #__dir__ env: 1.
 
 	"Result should be an Array"
 	self assert: result class equals: Array.
@@ -70,8 +70,8 @@ test__doc__
 	"Test that __doc__ returns the docstring"
 
 	| obj result |
-	obj := object perform: #__new__ env: 2.
-	result := obj perform: #__doc__ env: 2.
+	obj := object perform: #__new__ env: 1.
+	result := obj perform: #__doc__ env: 1.
 
 	"Result should be a Unicode7"
 	self assert: result class equals: Unicode7.
@@ -86,15 +86,15 @@ test__eq__
 	"Test that __eq__ works correctly"
 
 	| obj1 obj2 |
-	obj1 := object perform: #__new__ env: 2.
+	obj1 := object perform: #__new__ env: 1.
 	obj2 := obj1.
 
 	"Same object should be equal to itself"
-	self assert: (obj1 perform: #__eq__: env: 2 withArguments: { obj2 }).
+	self assert: (obj1 perform: #__eq__: env: 1 withArguments: { obj2 }).
 
 	"Different objects should not be equal"
-	obj2 := object perform: #__new__ env: 2.
-	self deny: (obj1 perform: #__eq__: env: 2 withArguments: { obj2 })
+	obj2 := object perform: #__new__ env: 1.
+	self deny: (obj1 perform: #__eq__: env: 1 withArguments: { obj2 })
 %
 
 category: 'Python-Hashing & Identity'
@@ -103,8 +103,8 @@ test__hash__
 	"Test that __hash__ returns a hash value"
 
 	| obj result |
-	obj := object perform: #__new__ env: 2.
-	result := obj perform: #__hash__ env: 2.
+	obj := object perform: #__new__ env: 1.
+	result := obj perform: #__hash__ env: 1.
 
 	"Result should be a SmallInteger"
 	self assert: result class equals: SmallInteger
@@ -116,8 +116,8 @@ test__init__
 	"Test that __init__ initializes an instance (instance method)"
 
 	| obj result |
-	obj := object perform: #__new__ env: 2.
-	result := obj perform: #__init__ env: 2.
+	obj := object perform: #__new__ env: 1.
+	result := obj perform: #__init__ env: 1.
 
 	"Result should be nil (Python's None)"
 	self assert: result equals: nil
@@ -130,7 +130,7 @@ test__init_subclass__
 
 	| result |
 	"Call __init_subclass__ as a class method on object"
-	result := object perform: #__init_subclass__ env: 2.
+	result := object perform: #__init_subclass__ env: 1.
 
 	"Result should be nil (Python's None)"
 	self assert: result equals: nil
@@ -142,15 +142,15 @@ test__ne__
 	"Test that __ne__ works correctly"
 
 	| obj1 obj2 |
-	obj1 := object perform: #__new__ env: 2.
+	obj1 := object perform: #__new__ env: 1.
 	obj2 := obj1.
 
 	"Same object should not be not-equal to itself"
-	self deny: (obj1 perform: #__ne__: env: 2 withArguments: { obj2 }).
+	self deny: (obj1 perform: #__ne__: env: 1 withArguments: { obj2 }).
 
 	"Different objects should be not-equal"
-	obj2 := object perform: #__new__ env: 2.
-	self assert: (obj1 perform: #__ne__: env: 2 withArguments: { obj2 })
+	obj2 := object perform: #__new__ env: 1.
+	self assert: (obj1 perform: #__ne__: env: 1 withArguments: { obj2 })
 %
 
 category: 'Python-Initialization'
@@ -160,14 +160,14 @@ test__new__
 
 	| result obj1 obj2 |
 	"Call __new__ as a class method on object"
-	result := object perform: #__new__ env: 2.
+	result := object perform: #__new__ env: 1.
 
 	"Result should be an instance of object"
 	self assert: result class equals: object.
 
 	"Each call to __new__ should create a different instance"
-	obj1 := object perform: #__new__ env: 2.
-	obj2 := object perform: #__new__ env: 2.
+	obj1 := object perform: #__new__ env: 1.
+	obj2 := object perform: #__new__ env: 1.
 	self deny: obj1 == obj2
 %
 
@@ -177,8 +177,8 @@ test__repr__
 	"Test that __repr__ returns a string representation"
 
 	| obj result |
-	obj := object perform: #__new__ env: 2.
-	result := obj perform: #__repr__ env: 2.
+	obj := object perform: #__new__ env: 1.
+	result := obj perform: #__repr__ env: 1.
 
 	"Result should be a Unicode7"
 	self assert: result class equals: Unicode7.
@@ -194,8 +194,8 @@ test__sizeof__
 	"Test that __sizeof__ returns a size in bytes"
 
 	| obj result |
-	obj := object perform: #__new__ env: 2.
-	result := obj perform: #__sizeof__ env: 2.
+	obj := object perform: #__new__ env: 1.
+	result := obj perform: #__sizeof__ env: 1.
 
 	"Result should be a SmallInteger"
 	self assert: result class equals: SmallInteger.
@@ -210,8 +210,8 @@ test__str__
 	"Test that __str__ returns a string representation"
 
 	| obj result |
-	obj := object perform: #__new__ env: 2.
-	result := obj perform: #__str__ env: 2.
+	obj := object perform: #__new__ env: 1.
+	result := obj perform: #__str__ env: 1.
 
 	"Result should be a Unicode7"
 	self assert: result class equals: Unicode7

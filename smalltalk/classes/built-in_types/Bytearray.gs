@@ -59,11 +59,11 @@ bytearray category: 'Collections-Ordered'
 ! ------------------- Remove existing Python methods from bytearray
 expectvalue /Metaclass3
 doit
-bytearray removeAllMethods: 2.
-bytearray class removeAllMethods: 2.
+bytearray removeAllMethods: 1.
+bytearray class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Constructors'
 classmethod: bytearray
@@ -298,7 +298,7 @@ __iadd__: other
 		TypeError ___signal___: ('can''t concat bytearray to ' ___concat___: otherClass)
 	].
 
-	self perform: #extend: env: 2 withArguments: {other}.
+	self perform: #extend: env: 1 withArguments: {other}.
 	^ self
 %
 
@@ -334,7 +334,7 @@ __imul__: count
 
 	"Repeat n-1 times"
 	2 ___to___: n do: [:rep |
-		self perform: #extend: env: 2 withArguments: {original}
+		self perform: #extend: env: 1 withArguments: {original}
 	].
 
 	^ self

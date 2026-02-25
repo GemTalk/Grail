@@ -14,11 +14,11 @@
 ! ------------------- Remove existing Python methods from tuple
 expectvalue /Metaclass3
 doit
-tuple removeAllMethods: 2.
-tuple class removeAllMethods: 2.
+tuple removeAllMethods: 1.
+tuple class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Sequence Protocol'
 method: tuple

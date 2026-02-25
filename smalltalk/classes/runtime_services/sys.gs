@@ -53,11 +53,11 @@ sys category: 'Modules'
 ! ------------------- Remove existing Python methods from sys
 expectvalue /Metaclass3
 doit
-sys removeAllMethods: 2.
-sys class removeAllMethods: 2.
+sys removeAllMethods: 1.
+sys class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Module Registry'
 classmethod: sys
@@ -65,10 +65,14 @@ initializeBuiltinModules
 	"Initialize the registry with built-in modules"
 	modules
 		___at___: #builtins 	put: builtins 	instance;
+		___at___: #copyreg 		put: copyreg 	instance;
 		___at___: #math 		put: math 		instance;
-		___at___: #gemstone 	put: gemstone 	instance;
-		___at___: #cmath 		put: cmath 		instance;
+		___at___: #enum 		put: enum 		instance;
 		___at___: #fractions	put: fractions 	instance;
+		___at___: #functools	put: functools 	instance;
+		___at___: #gemstone 	put: gemstone 	instance;
+		___at___: #html 		put: html 		instance;
+		___at___: #cmath 		put: cmath 		instance;
 		___at___: #random 		put: random 	instance;
 		___at___: #os 			put: os 		instance;
 		___at___: #string 		put: string 	instance;

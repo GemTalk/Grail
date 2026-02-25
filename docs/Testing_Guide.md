@@ -59,7 +59,7 @@ test{FeatureName}
 	"Setup code here"
 	
 	"Test code here"
-	result := object perform: #methodName: env: 2 withArguments: {arg}.
+	result := object perform: #methodName: env: 1 withArguments: {arg}.
 	
 	"Assertions here"
 	self assert: result equals: expectedValue
@@ -77,13 +77,13 @@ testAbs
 	"Test abs() function"
 
 	| result |
-	result := builtins perform: #abs: env: 2 withArguments: {5}.
+	result := builtins perform: #abs: env: 1 withArguments: {5}.
 	self assert: result equals: 5.
 
-	result := builtins perform: #abs: env: 2 withArguments: {-5}.
+	result := builtins perform: #abs: env: 1 withArguments: {-5}.
 	self assert: result equals: 5.
 
-	result := builtins perform: #abs: env: 2 withArguments: {0}.
+	result := builtins perform: #abs: env: 1 withArguments: {0}.
 	self assert: result equals: 0
 %
 ```
@@ -91,7 +91,7 @@ testAbs
 ### Key Points:
 
 1. **Declare all temporary variables at the top** - Smalltalk requires this
-2. **Use `env: 2` for Python methods** - This ensures methods are called in the Python environment
+2. **Use `env: 1` for Python methods** - This ensures methods are called in the Python environment
 3. **Use direct Smalltalk messages for basic operations** - e.g., `obj at: 1` instead of `obj perform: #at: env: 0 withArguments: {1}`
 4. **Use descriptive comments** - Explain what the test verifies
 
@@ -107,14 +107,14 @@ test__getitem__
 	lst := OrderedCollection withAll: #(10 20 30 40 50).
 	
 	"Positive indices"
-	self assert: (lst perform: #__getitem__: env: 2 withArguments: {0}) equals: 10.
-	self assert: (lst perform: #__getitem__: env: 2 withArguments: {2}) equals: 30.
+	self assert: (lst perform: #__getitem__: env: 1 withArguments: {0}) equals: 10.
+	self assert: (lst perform: #__getitem__: env: 1 withArguments: {2}) equals: 30.
 	
 	"Negative indices"
-	self assert: (lst perform: #__getitem__: env: 2 withArguments: {-1}) equals: 50.
+	self assert: (lst perform: #__getitem__: env: 1 withArguments: {-1}) equals: 50.
 	
 	"Out of bounds"
-	self should: [lst perform: #__getitem__: env: 2 withArguments: {5}] raise: IndexError
+	self should: [lst perform: #__getitem__: env: 1 withArguments: {5}] raise: IndexError
 %
 ```
 
@@ -129,7 +129,7 @@ testLenTypeError
 	"Test that len() raises TypeError for objects without __len__"
 
 	self should: [
-		builtins perform: #len: env: 2 withArguments: {42}
+		builtins perform: #len: env: 1 withArguments: {42}
 	] raise: TypeError
 %
 ```
@@ -145,7 +145,7 @@ testSqrt
 	"Test math.sqrt()"
 
 	| result |
-	result := (math perform: #sqrt: env: 2 withArguments: {2}).
+	result := (math perform: #sqrt: env: 1 withArguments: {2}).
 	self assert: ((result - 1.41421) abs < 0.001)
 %
 ```
@@ -159,7 +159,7 @@ testPi
 	"Test math.pi constant"
 
 	| result |
-	result := math perform: #pi env: 2.
+	result := math perform: #pi env: 1.
 
 	self assert: ((result - 3.14159) abs < 0.001)
 %
@@ -174,8 +174,8 @@ test__class__
 	"Test that __class__ returns the class of the object"
 
 	| obj result |
-	obj := object perform: #__new__ env: 2.
-	result := obj perform: #__class__ env: 2.
+	obj := object perform: #__new__ env: 1.
+	result := obj perform: #__class__ env: 1.
 	self assert: result equals: object
 %
 ```
@@ -191,7 +191,7 @@ testAppend
 	| lst |
 	lst := OrderedCollection withAll: #(1 2 3).
 
-	lst perform: #append: env: 2 withArguments: {4}.
+	lst perform: #append: env: 1 withArguments: {4}.
 
 	self assert: lst size equals: 4.
 	self assert: (lst at: 4) equals: 4
@@ -212,10 +212,10 @@ test__eq__
 	lst3 := OrderedCollection withAll: #(1 2 4).
 	
 	"Same contents"
-	self assert: (lst1 perform: #__eq__: env: 2 withArguments: {lst2}).
+	self assert: (lst1 perform: #__eq__: env: 1 withArguments: {lst2}).
 	
 	"Different contents"
-	self deny: (lst1 perform: #__eq__: env: 2 withArguments: {lst3})
+	self deny: (lst1 perform: #__eq__: env: 1 withArguments: {lst3})
 %
 ```
 
@@ -238,14 +238,14 @@ self assert: (result includes: '__class__')
 ### `deny:`
 Tests that a boolean is false:
 ```smalltalk
-self deny: (lst1 perform: #__eq__: env: 2 withArguments: {lst3})
+self deny: (lst1 perform: #__eq__: env: 1 withArguments: {lst3})
 ```
 
 ### `should:raise:`
 Tests that a block raises a specific exception:
 ```smalltalk
 self should: [
-	lst perform: #__getitem__: env: 2 withArguments: {5}
+	lst perform: #__getitem__: env: 1 withArguments: {5}
 ] raise: IndexError
 ```
 
@@ -253,9 +253,9 @@ self should: [
 
 Understanding environment IDs is crucial:
 
-- **`env: 2`** - Python environment (Python methods)
+- **`env: 1`** - Python environment (Python methods)
   - Use for: Calling Python methods, Python protocol methods
-  - Example: `obj perform: #__len__ env: 2`
+  - Example: `obj perform: #__len__ env: 1`
 
 - **Direct Smalltalk messages** - For basic Smalltalk operations
   - Use for: Creating objects, basic operations, type checks
@@ -317,7 +317,7 @@ Start with the happy path:
 ```smalltalk
 testAbs
 	| result |
-	result := builtins perform: #abs: env: 2 withArguments: {5}.
+	result := builtins perform: #abs: env: 1 withArguments: {5}.
 	self assert: result equals: 5
 %
 ```
@@ -328,10 +328,10 @@ Include boundary conditions:
 ```smalltalk
 testAbs
 	| result |
-	result := builtins perform: #abs: env: 2 withArguments: {0}.
+	result := builtins perform: #abs: env: 1 withArguments: {0}.
 	self assert: result equals: 0.
 
-	result := builtins perform: #abs: env: 2 withArguments: {-3.14}.
+	result := builtins perform: #abs: env: 1 withArguments: {-3.14}.
 	self assert: ((result - 3.14) abs < 0.0001)
 %
 ```
@@ -342,7 +342,7 @@ Verify exceptions are raised correctly:
 ```smalltalk
 testLenTypeError
 	self should: [
-		builtins perform: #len: env: 2 withArguments: {42}
+		builtins perform: #len: env: 1 withArguments: {42}
 	] raise: TypeError
 %
 ```
@@ -356,13 +356,13 @@ test__getitem__
 	lst := OrderedCollection withAll: #(10 20 30 40 50).
 	
 	"Positive indices"
-	self assert: (lst perform: #__getitem__: env: 2 withArguments: {0}) equals: 10.
+	self assert: (lst perform: #__getitem__: env: 1 withArguments: {0}) equals: 10.
 	
 	"Negative indices"
-	self assert: (lst perform: #__getitem__: env: 2 withArguments: {-1}) equals: 50.
+	self assert: (lst perform: #__getitem__: env: 1 withArguments: {-1}) equals: 50.
 	
 	"Out of bounds"
-	self should: [lst perform: #__getitem__: env: 2 withArguments: {5}] raise: IndexError
+	self should: [lst perform: #__getitem__: env: 1 withArguments: {5}] raise: IndexError
 %
 ```
 
@@ -442,10 +442,10 @@ test__len__
 
 	| lst |
 	lst := OrderedCollection new.
-	self assert: (lst perform: #__len__ env: 2) equals: 0.
+	self assert: (lst perform: #__len__ env: 1) equals: 0.
 	
 	lst add: 1; add: 2; add: 3.
-	self assert: (lst perform: #__len__ env: 2) equals: 3
+	self assert: (lst perform: #__len__ env: 1) equals: 3
 %
 
 category: 'Tests - Sequence Protocol'
@@ -457,13 +457,13 @@ test__getitem__
 	lst := OrderedCollection withAll: #(10 20 30 40 50).
 	
 	"Positive indices"
-	self assert: (lst perform: #__getitem__: env: 2 withArguments: {0}) equals: 10.
+	self assert: (lst perform: #__getitem__: env: 1 withArguments: {0}) equals: 10.
 	
 	"Negative indices"
-	self assert: (lst perform: #__getitem__: env: 2 withArguments: {-1}) equals: 50.
+	self assert: (lst perform: #__getitem__: env: 1 withArguments: {-1}) equals: 50.
 	
 	"Out of bounds"
-	self should: [lst perform: #__getitem__: env: 2 withArguments: {5}] raise: IndexError
+	self should: [lst perform: #__getitem__: env: 1 withArguments: {5}] raise: IndexError
 %
 ```
 
@@ -480,7 +480,7 @@ When implementing a new feature, ensure you:
 - [ ] Use appropriate categories
 - [ ] Use descriptive test method names
 - [ ] Declare all temporary variables at the top
-- [ ] Use `env: 2` for Python methods, direct Smalltalk messages for basic operations
+- [ ] Use `env: 1` for Python methods, direct Smalltalk messages for basic operations
 - [ ] Run tests and ensure they pass
 
 ## Common Patterns
@@ -492,7 +492,7 @@ category: 'Tests - Numeric Functions'
 method: BuiltinsTestCase
 test{FunctionName}
 	| result |
-	result := builtins perform: #{functionName}: env: 2 withArguments: {arg}.
+	result := builtins perform: #{functionName}: env: 1 withArguments: {arg}.
 	self assert: result equals: expectedValue
 %
 ```
@@ -505,7 +505,7 @@ method: ListTestCase
 test{MethodName}
 	| lst result |
 	lst := OrderedCollection withAll: #(1 2 3).
-	result := lst perform: #{methodName}: env: 2 withArguments: {args}.
+	result := lst perform: #{methodName}: env: 1 withArguments: {args}.
 	self assert: result equals: expectedValue
 %
 ```
@@ -517,7 +517,7 @@ category: 'Python-Tests-{ExceptionName}'
 method: {ExceptionName}TestCase
 test_inheritance
 	| exc |
-	exc := {ExceptionName} perform: #__new__: env: 2 withArguments: { {ExceptionName} }.
+	exc := {ExceptionName} perform: #__new__: env: 1 withArguments: { {ExceptionName} }.
 	self assert: (exc isKindOf: Exception)
 %
 
@@ -525,7 +525,7 @@ category: 'Python-Tests-{ExceptionName}'
 method: {ExceptionName}TestCase
 test_creation
 	| exc |
-	exc := {ExceptionName} perform: #__new__: env: 2 withArguments: { {ExceptionName} }.
+	exc := {ExceptionName} perform: #__new__: env: 1 withArguments: { {ExceptionName} }.
 	self assert: exc notNil
 %
 ```
@@ -535,7 +535,7 @@ test_creation
 - **Tests are essential** - Write tests alongside implementation
 - **Follow the structure** - Use the established patterns
 - **Test comprehensively** - Normal cases, edge cases, error cases
-- **Use `env: 2` for Python methods** - Direct Smalltalk messages for basic operations
+- **Use `env: 1` for Python methods** - Direct Smalltalk messages for basic operations
 - **Be descriptive** - Clear test names and comments
 - **Organize logically** - Use categories to group related tests
 - **Verify CPython compatibility** - When possible, compare with CPython behavior

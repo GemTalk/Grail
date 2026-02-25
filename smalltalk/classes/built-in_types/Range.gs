@@ -18,11 +18,11 @@
 ! ------------------- Remove existing Python methods from range
 expectvalue /Metaclass3
 doit
-range removeAllMethods: 2.
-range class removeAllMethods: 2.
+range removeAllMethods: 1.
+range class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Initialization'
 classmethod: range
@@ -112,12 +112,12 @@ __eq__: other
 	].
 
 	"Non-empty ranges must have same start, stop, and step"
-	selfStart := self perform: #start env: 2.
-	otherStart := other perform: #start env: 2.
+	selfStart := self perform: #start env: 1.
+	otherStart := other perform: #start env: 1.
 	(selfStart ___eq___: otherStart) ifFalse: [ ^ false ].
 
-	selfStep := self perform: #step env: 2.
-	otherStep := other perform: #step env: 2.
+	selfStep := self perform: #step env: 1.
+	otherStep := other perform: #step env: 1.
 	(selfStep ___eq___: otherStep) ifFalse: [ ^ false ].
 
 	^ selfSize ___eq___: otherSize
@@ -166,7 +166,7 @@ method: range
 __iter__
 	"Return an iterator over the range."
 
-	^ range_iterator perform: #___on: env: 2 withArguments: {self}
+	^ range_iterator perform: #___on: env: 1 withArguments: {self}
 %
 
 category: 'Python-Sequence Protocol'
@@ -182,7 +182,7 @@ __ne__: other
 	"Test inequality with another range"
 
 	| eq |
-	eq := self perform: #__eq__: env: 2 withArguments: {other}.
+	eq := self perform: #__eq__: env: 1 withArguments: {other}.
 	^ eq ___not___
 %
 
@@ -228,11 +228,11 @@ __reversed__
 
 	"Empty range returns empty range"
 	(size ___eq___: 0) ifTrue: [
-		^ range perform: #__new__:_:_:_: env: 2 withArguments: {range. 0. 0. 1}
+		^ range perform: #__new__:_:_:_: env: 1 withArguments: {range. 0. 0. 1}
 	].
 
-	startVal := self perform: #start env: 2.
-	stepVal := self perform: #step env: 2.
+	startVal := self perform: #start env: 1.
+	stepVal := self perform: #step env: 1.
 
 	"Calculate new start: original start + (size - 1) * step"
 	newStart := startVal  ___plus___: ((size ___minus___: 1) ___times___: stepVal).

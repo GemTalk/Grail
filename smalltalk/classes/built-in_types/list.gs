@@ -14,11 +14,11 @@
 ! ------------------- Remove existing Python methods from list
 expectvalue /Metaclass3
 doit
-list removeAllMethods: 2.
-list class removeAllMethods: 2.
+list removeAllMethods: 1.
+list class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Sequence Protocol'
 method: list
@@ -90,7 +90,7 @@ method: list
 __iter__
 	"Return an iterator over the list."
 
-	^ list_iterator perform: #___on: env: 2 withArguments: {self}
+	^ list_iterator perform: #___on: env: 1 withArguments: {self}
 %
 
 category: 'Python-String Representation'
@@ -274,7 +274,7 @@ method: list
 sort
 	"Sort the list in place using Python's __lt__ for comparison."
 
-	self ___sort___: [:a :b | a perform: #__lt__: env: 2 withArguments: {b}].
+	self ___sort___: [:a :b | a perform: #__lt__: env: 1 withArguments: {b}].
 	^ nil
 %
 

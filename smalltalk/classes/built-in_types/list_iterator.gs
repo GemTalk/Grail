@@ -45,11 +45,11 @@ list_iterator category: 'Collections-Iterators'
 ! ------------------- Remove existing Python methods from list_iterator
 expectvalue /Metaclass3
 doit
-list_iterator removeAllMethods: 2.
-list_iterator class removeAllMethods: 2.
+list_iterator removeAllMethods: 1.
+list_iterator class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Instance Creation'
 classmethod: list_iterator

@@ -39,9 +39,9 @@ testChdir
 	"Test os.chdir()"
 
 	| o getcwdBlock chdirBlock originalCwd testDir newCwd |
-	o := os perform: #instance env: 2.
-	getcwdBlock := o perform: #getcwd env: 2.
-	chdirBlock := o perform: #chdir env: 2.
+	o := os perform: #instance env: 1.
+	getcwdBlock := o perform: #getcwd env: 1.
+	chdirBlock := o perform: #chdir env: 1.
 	originalCwd := getcwdBlock value: {} value: nil.
 	testDir := '/tmp'.
 
@@ -61,8 +61,8 @@ testExists
 	"Test os.exists()"
 
 	| o existsBlock |
-	o := os perform: #instance env: 2.
-	existsBlock := o perform: #exists env: 2.
+	o := os perform: #instance env: 1.
+	existsBlock := o perform: #exists env: 1.
 
 	"Test with existing path"
 	self assert: (existsBlock value: {'/tmp'} value: nil).
@@ -77,14 +77,14 @@ testFileOperationsSequence
 	"Test a sequence of file operations"
 
 	| o existsBlock removeBlock rmdirBlock mkdirBlock isdirBlock listdirBlock isfileBlock testDir testFile file listResult |
-	o := os perform: #instance env: 2.
-	existsBlock := o perform: #exists env: 2.
-	removeBlock := o perform: #remove env: 2.
-	rmdirBlock := o perform: #rmdir env: 2.
-	mkdirBlock := o perform: #mkdir env: 2.
-	isdirBlock := o perform: #isdir env: 2.
-	listdirBlock := o perform: #listdir env: 2.
-	isfileBlock := o perform: #isfile env: 2.
+	o := os perform: #instance env: 1.
+	existsBlock := o perform: #exists env: 1.
+	removeBlock := o perform: #remove env: 1.
+	rmdirBlock := o perform: #rmdir env: 1.
+	mkdirBlock := o perform: #mkdir env: 1.
+	isdirBlock := o perform: #isdir env: 1.
+	listdirBlock := o perform: #listdir env: 1.
+	isfileBlock := o perform: #isfile env: 1.
 	testDir := '/tmp/grail_os_test_sequence'.
 	testFile := testDir , '/test_file.txt'.
 
@@ -132,8 +132,8 @@ testGetcwd
 	"Test os.getcwd()"
 
 	| o getcwdBlock result |
-	o := os perform: #instance env: 2.
-	getcwdBlock := o perform: #getcwd env: 2.
+	o := os perform: #instance env: 1.
+	getcwdBlock := o perform: #getcwd env: 1.
 	result := getcwdBlock value: {} value: nil.
 
 	self assert: (result isKindOf: String).
@@ -146,8 +146,8 @@ testGetenv
 	"Test os.getenv() - get environment variable"
 
 	| o getenvBlock result |
-	o := os perform: #instance env: 2.
-	getenvBlock := o perform: #getenv env: 2.
+	o := os perform: #instance env: 1.
+	getenvBlock := o perform: #getenv env: 1.
 
 	"Try to get a common environment variable (may or may not exist)"
 	result := getenvBlock value: {'PATH'} value: nil.
@@ -164,8 +164,8 @@ testGetenvWithDefault
 	"Test os.getenv() with default value"
 
 	| o getenvWithDefaultBlock result default |
-	o := os perform: #instance env: 2.
-	getenvWithDefaultBlock := o perform: #getenvWithDefault env: 2.
+	o := os perform: #instance env: 1.
+	getenvWithDefaultBlock := o perform: #getenvWithDefault env: 1.
 	default := 'default_value'.
 
 	"Try to get a non-existent environment variable"
@@ -181,11 +181,11 @@ testIsdir
 	"Test os.isdir()"
 
 	| o existsBlock rmdirBlock mkdirBlock isdirBlock testDir |
-	o := os perform: #instance env: 2.
-	existsBlock := o perform: #exists env: 2.
-	rmdirBlock := o perform: #rmdir env: 2.
-	mkdirBlock := o perform: #mkdir env: 2.
-	isdirBlock := o perform: #isdir env: 2.
+	o := os perform: #instance env: 1.
+	existsBlock := o perform: #exists env: 1.
+	rmdirBlock := o perform: #rmdir env: 1.
+	mkdirBlock := o perform: #mkdir env: 1.
+	isdirBlock := o perform: #isdir env: 1.
 	testDir := '/tmp/grail_os_test_isdir'.
 
 	"Clean up if it exists"
@@ -210,10 +210,10 @@ testIsfile
 	"Test os.isfile()"
 
 	| o existsBlock removeBlock isfileBlock testFile file |
-	o := os perform: #instance env: 2.
-	existsBlock := o perform: #exists env: 2.
-	removeBlock := o perform: #remove env: 2.
-	isfileBlock := o perform: #isfile env: 2.
+	o := os perform: #instance env: 1.
+	existsBlock := o perform: #exists env: 1.
+	removeBlock := o perform: #remove env: 1.
+	isfileBlock := o perform: #isfile env: 1.
 	testFile := '/tmp/grail_os_test_isfile'.
 
 	"Clean up if it exists"
@@ -243,8 +243,8 @@ testLinesep
 	"Test os.linesep constant"
 
 	| o result |
-	o := os perform: #instance env: 2.
-	result := o perform: #linesep env: 2.
+	o := os perform: #instance env: 1.
+	result := o perform: #linesep env: 1.
 
 	self assert: (result size) equals: 1
 %
@@ -255,8 +255,8 @@ testListdir
 	"Test os.listdir() with no argument (uses current directory)"
 
 	| o listdirBlock result |
-	o := os perform: #instance env: 2.
-	listdirBlock := o perform: #listdir env: 2.
+	o := os perform: #instance env: 1.
+	listdirBlock := o perform: #listdir env: 1.
 	result := listdirBlock value: {} value: nil.
 
 	self assert: (result isKindOf: OrderedCollection).
@@ -269,8 +269,8 @@ testListdirWithPath
 	"Test os.listdir() with path"
 
 	| o listdirBlock result |
-	o := os perform: #instance env: 2.
-	listdirBlock := o perform: #listdir env: 2.
+	o := os perform: #instance env: 1.
+	listdirBlock := o perform: #listdir env: 1.
 	result := listdirBlock value: {'/tmp'} value: nil.
 
 	self assert: (result isKindOf: OrderedCollection)
@@ -282,10 +282,10 @@ testLstat
 	"Test os.lstat()"
 
 	| o existsBlock removeBlock lstatBlock testFile file statResult |
-	o := os perform: #instance env: 2.
-	existsBlock := o perform: #exists env: 2.
-	removeBlock := o perform: #remove env: 2.
-	lstatBlock := o perform: #lstat env: 2.
+	o := os perform: #instance env: 1.
+	existsBlock := o perform: #exists env: 1.
+	removeBlock := o perform: #remove env: 1.
+	lstatBlock := o perform: #lstat env: 1.
 	testFile := '/tmp/grail_os_test_lstat'.
 
 	"Clean up if it exists"
@@ -314,10 +314,10 @@ testMakedirs
 	"Test os.makedirs() - recursive directory creation"
 
 	| o existsBlock rmdirBlock makedirsBlock testDir |
-	o := os perform: #instance env: 2.
-	existsBlock := o perform: #exists env: 2.
-	rmdirBlock := o perform: #rmdir env: 2.
-	makedirsBlock := o perform: #makedirs env: 2.
+	o := os perform: #instance env: 1.
+	existsBlock := o perform: #exists env: 1.
+	rmdirBlock := o perform: #rmdir env: 1.
+	makedirsBlock := o perform: #makedirs env: 1.
 	testDir := '/tmp/grail_os_test_makedirs/level1/level2'.
 
 	"Clean up if it exists"
@@ -347,11 +347,11 @@ testMkdir
 	"Test os.mkdir()"
 
 	| o existsBlock rmdirBlock mkdirBlock isdirBlock testDir |
-	o := os perform: #instance env: 2.
-	existsBlock := o perform: #exists env: 2.
-	rmdirBlock := o perform: #rmdir env: 2.
-	mkdirBlock := o perform: #mkdir env: 2.
-	isdirBlock := o perform: #isdir env: 2.
+	o := os perform: #instance env: 1.
+	existsBlock := o perform: #exists env: 1.
+	rmdirBlock := o perform: #rmdir env: 1.
+	mkdirBlock := o perform: #mkdir env: 1.
+	isdirBlock := o perform: #isdir env: 1.
 	testDir := '/tmp/grail_os_test_mkdir'.
 
 	"Clean up if it exists"
@@ -376,10 +376,10 @@ testMkdirWithMode
 	"Test os.mkdir() with mode"
 
 	| o existsBlock rmdirBlock mkdirWithModeBlock testDir |
-	o := os perform: #instance env: 2.
-	existsBlock := o perform: #exists env: 2.
-	rmdirBlock := o perform: #rmdir env: 2.
-	mkdirWithModeBlock := o perform: #mkdirWithMode env: 2.
+	o := os perform: #instance env: 1.
+	existsBlock := o perform: #exists env: 1.
+	rmdirBlock := o perform: #rmdir env: 1.
+	mkdirWithModeBlock := o perform: #mkdirWithMode env: 1.
 	testDir := '/tmp/grail_os_test_mkdir_mode'.
 
 	"Clean up if it exists"
@@ -403,11 +403,11 @@ testPathAbspath
 	"Test os.path.abspath()"
 
 	| o path abspathBlock isabsBlock getcwdBlock result cwd |
-	o := os perform: #instance env: 2.
-	path := o perform: #path env: 2.
-	abspathBlock := path perform: #abspath env: 2.
-	isabsBlock := path perform: #isabs env: 2.
-	getcwdBlock := o perform: #getcwd env: 2.
+	o := os perform: #instance env: 1.
+	path := o perform: #path env: 1.
+	abspathBlock := path perform: #abspath env: 1.
+	isabsBlock := path perform: #isabs env: 1.
+	getcwdBlock := o perform: #getcwd env: 1.
 	cwd := getcwdBlock value: {} value: nil.
 
 	"Absolute path should remain absolute"
@@ -426,9 +426,9 @@ testPathBasename
 	"Test os.path.basename()"
 
 	| o path basenameBlock result |
-	o := os perform: #instance env: 2.
-	path := o perform: #path env: 2.
-	basenameBlock := path perform: #basename env: 2.
+	o := os perform: #instance env: 1.
+	path := o perform: #path env: 1.
+	basenameBlock := path perform: #basename env: 1.
 
 	result := basenameBlock value: {'/usr/bin/python'} value: nil.
 	self assert: result equals: 'python'.
@@ -449,9 +449,9 @@ testPathCommonpath
 	"Test os.path.commonpath()"
 
 	| o path commonpathBlock result paths |
-	o := os perform: #instance env: 2.
-	path := o perform: #path env: 2.
-	commonpathBlock := path perform: #commonpath env: 2.
+	o := os perform: #instance env: 1.
+	path := o perform: #path env: 1.
+	commonpathBlock := path perform: #commonpath env: 1.
 
 	paths := OrderedCollection with: '/usr/lib/python3' with: '/usr/lib/python2'.
 	result := commonpathBlock value: {paths} value: nil.
@@ -468,9 +468,9 @@ testPathCommonprefix
 	"Test os.path.commonprefix()"
 
 	| o path commonprefixBlock result paths |
-	o := os perform: #instance env: 2.
-	path := o perform: #path env: 2.
-	commonprefixBlock := path perform: #commonprefix env: 2.
+	o := os perform: #instance env: 1.
+	path := o perform: #path env: 1.
+	commonprefixBlock := path perform: #commonprefix env: 1.
 
 	paths := OrderedCollection with: '/usr/lib' with: '/usr/lib/python3'.
 	result := commonprefixBlock value: {paths} value: nil.
@@ -491,9 +491,9 @@ testPathDirname
 	"Test os.path.dirname()"
 
 	| o path dirnameBlock result |
-	o := os perform: #instance env: 2.
-	path := o perform: #path env: 2.
-	dirnameBlock := path perform: #dirname env: 2.
+	o := os perform: #instance env: 1.
+	path := o perform: #path env: 1.
+	dirnameBlock := path perform: #dirname env: 1.
 
 	result := dirnameBlock value: {'/usr/bin/python'} value: nil.
 	self assert: result equals: '/usr/bin'.
@@ -514,9 +514,9 @@ testPathExists
 	"Test os.path.exists()"
 
 	| o path existsBlock |
-	o := os perform: #instance env: 2.
-	path := o perform: #path env: 2.
-	existsBlock := path perform: #exists env: 2.
+	o := os perform: #instance env: 1.
+	path := o perform: #path env: 1.
+	existsBlock := path perform: #exists env: 1.
 
 	"Test with existing path"
 	self assert: (existsBlock value: {'/tmp'} value: nil).
@@ -531,15 +531,15 @@ testPathIntegration
 	"Test integration of multiple os.path functions"
 
 	| o path joinBlock splitBlock basenameBlock dirnameBlock normpathBlock abspathBlock isabsBlock result paths |
-	o := os perform: #instance env: 2.
-	path := o perform: #path env: 2.
-	joinBlock := path perform: #join env: 2.
-	splitBlock := path perform: #split env: 2.
-	basenameBlock := path perform: #basename env: 2.
-	dirnameBlock := path perform: #dirname env: 2.
-	normpathBlock := path perform: #normpath env: 2.
-	abspathBlock := path perform: #abspath env: 2.
-	isabsBlock := path perform: #isabs env: 2.
+	o := os perform: #instance env: 1.
+	path := o perform: #path env: 1.
+	joinBlock := path perform: #join env: 1.
+	splitBlock := path perform: #split env: 1.
+	basenameBlock := path perform: #basename env: 1.
+	dirnameBlock := path perform: #dirname env: 1.
+	normpathBlock := path perform: #normpath env: 1.
+	abspathBlock := path perform: #abspath env: 1.
+	isabsBlock := path perform: #isabs env: 1.
 
 	"Join paths, then split"
 	paths := OrderedCollection with: '/usr' with: 'local'.
@@ -566,9 +566,9 @@ testPathIsabs
 	"Test os.path.isabs()"
 
 	| o path isabsBlock |
-	o := os perform: #instance env: 2.
-	path := o perform: #path env: 2.
-	isabsBlock := path perform: #isabs env: 2.
+	o := os perform: #instance env: 1.
+	path := o perform: #path env: 1.
+	isabsBlock := path perform: #isabs env: 1.
 
 	self assert: (isabsBlock value: {'/usr/bin'} value: nil).
 	self assert: (isabsBlock value: {'/'} value: nil).
@@ -582,12 +582,12 @@ testPathIsdir
 	"Test os.path.isdir()"
 
 	| o path existsBlock rmdirBlock mkdirBlock isdirBlock testDir |
-	o := os perform: #instance env: 2.
-	path := o perform: #path env: 2.
-	existsBlock := path perform: #exists env: 2.
-	rmdirBlock := o perform: #rmdir env: 2.
-	mkdirBlock := o perform: #mkdir env: 2.
-	isdirBlock := path perform: #isdir env: 2.
+	o := os perform: #instance env: 1.
+	path := o perform: #path env: 1.
+	existsBlock := path perform: #exists env: 1.
+	rmdirBlock := o perform: #rmdir env: 1.
+	mkdirBlock := o perform: #mkdir env: 1.
+	isdirBlock := path perform: #isdir env: 1.
 	testDir := '/tmp/grail_os_path_test_isdir'.
 
 	"Clean up if it exists"
@@ -612,11 +612,11 @@ testPathIsfile
 	"Test os.path.isfile()"
 
 	| o path existsBlock removeBlock isfileBlock testFile file |
-	o := os perform: #instance env: 2.
-	path := o perform: #path env: 2.
-	existsBlock := path perform: #exists env: 2.
-	removeBlock := o perform: #remove env: 2.
-	isfileBlock := path perform: #isfile env: 2.
+	o := os perform: #instance env: 1.
+	path := o perform: #path env: 1.
+	existsBlock := path perform: #exists env: 1.
+	removeBlock := o perform: #remove env: 1.
+	isfileBlock := path perform: #isfile env: 1.
 	testFile := '/tmp/grail_os_path_test_isfile'.
 
 	"Clean up if it exists"
@@ -646,9 +646,9 @@ testPathJoin
 	"Test os.path.join() with paths"
 
 	| o path joinBlock result paths |
-	o := os perform: #instance env: 2.
-	path := o perform: #path env: 2.
-	joinBlock := path perform: #join env: 2.
+	o := os perform: #instance env: 1.
+	path := o perform: #path env: 1.
+	joinBlock := path perform: #join env: 1.
 
 	paths := OrderedCollection with: '/usr' with: 'bin'.
 	result := joinBlock value: {paths} value: nil.
@@ -669,9 +669,9 @@ testPathJoinAll
 	"Test os.path.join() with collection (already covered by testPathJoinMultiple, but keeping for completeness)"
 
 	| o path joinBlock result paths |
-	o := os perform: #instance env: 2.
-	path := o perform: #path env: 2.
-	joinBlock := path perform: #join env: 2.
+	o := os perform: #instance env: 1.
+	path := o perform: #path env: 1.
+	joinBlock := path perform: #join env: 1.
 
 	paths := OrderedCollection with: '/usr' with: 'local' with: 'bin'.
 	result := joinBlock value: {paths} value: nil.
@@ -692,9 +692,9 @@ testPathJoinMultiple
 	"Test os.path.join() with multiple paths"
 
 	| o path joinBlock result paths |
-	o := os perform: #instance env: 2.
-	path := o perform: #path env: 2.
-	joinBlock := path perform: #join env: 2.
+	o := os perform: #instance env: 1.
+	path := o perform: #path env: 1.
+	joinBlock := path perform: #join env: 1.
 
 	paths := OrderedCollection with: '/usr' with: 'local' with: 'bin'.
 	result := joinBlock value: {paths} value: nil.
@@ -711,9 +711,9 @@ testPathNormpath
 	"Test os.path.normpath()"
 
 	| o path normpathBlock result |
-	o := os perform: #instance env: 2.
-	path := o perform: #path env: 2.
-	normpathBlock := path perform: #normpath env: 2.
+	o := os perform: #instance env: 1.
+	path := o perform: #path env: 1.
+	normpathBlock := path perform: #normpath env: 1.
 
 	result := normpathBlock value: {'/usr/../usr/bin'} value: nil.
 	self assert: result equals: '/usr/bin'.
@@ -743,8 +743,8 @@ testPathsep
 	"Test os.pathsep constant"
 
 	| o result |
-	o := os perform: #instance env: 2.
-	result := o perform: #pathsep env: 2.
+	o := os perform: #instance env: 1.
+	result := o perform: #pathsep env: 1.
 
 	self assert: result equals: ':'
 %
@@ -755,9 +755,9 @@ testPathSplit
 	"Test os.path.split()"
 
 	| o path splitBlock result |
-	o := os perform: #instance env: 2.
-	path := o perform: #path env: 2.
-	splitBlock := path perform: #split env: 2.
+	o := os perform: #instance env: 1.
+	path := o perform: #path env: 1.
+	splitBlock := path perform: #split env: 1.
 
 	result := splitBlock value: {'/usr/bin/python'} value: nil.
 	self assert: (result size) equals: 2.
@@ -779,9 +779,9 @@ testPathSplitext
 	"Test os.path.splitext()"
 
 	| o path splitextBlock result |
-	o := os perform: #instance env: 2.
-	path := o perform: #path env: 2.
-	splitextBlock := path perform: #splitext env: 2.
+	o := os perform: #instance env: 1.
+	path := o perform: #path env: 1.
+	splitextBlock := path perform: #splitext env: 1.
 
 	result := splitextBlock value: {'file.txt'} value: nil.
 	self assert: (result size) equals: 2.
@@ -807,9 +807,9 @@ testPutenv
 	"Test os.putenv() - set environment variable"
 
 	| o putenvBlock getenvBlock testVar testValue result |
-	o := os perform: #instance env: 2.
-	putenvBlock := o perform: #putenv env: 2.
-	getenvBlock := o perform: #getenv env: 2.
+	o := os perform: #instance env: 1.
+	putenvBlock := o perform: #putenv env: 1.
+	getenvBlock := o perform: #getenv env: 1.
 	testVar := 'GRAIL_TEST_PUTENV_VAR'.
 	testValue := 'test_value_123'.
 
@@ -829,9 +829,9 @@ testRemove
 	"Test os.remove() - remove file"
 
 	| o existsBlock removeBlock testFile file |
-	o := os perform: #instance env: 2.
-	existsBlock := o perform: #exists env: 2.
-	removeBlock := o perform: #remove env: 2.
+	o := os perform: #instance env: 1.
+	existsBlock := o perform: #exists env: 1.
+	removeBlock := o perform: #remove env: 1.
 	testFile := '/tmp/grail_os_test_remove'.
 
 	"Create a test file"
@@ -855,10 +855,10 @@ testRename
 	"Test os.rename() - rename file"
 
 	| o existsBlock removeBlock renameBlock oldPath newPath file |
-	o := os perform: #instance env: 2.
-	existsBlock := o perform: #exists env: 2.
-	removeBlock := o perform: #remove env: 2.
-	renameBlock := o perform: #rename env: 2.
+	o := os perform: #instance env: 1.
+	existsBlock := o perform: #exists env: 1.
+	removeBlock := o perform: #remove env: 1.
+	renameBlock := o perform: #rename env: 1.
 	oldPath := '/tmp/grail_os_test_rename_old'.
 	newPath := '/tmp/grail_os_test_rename_new'.
 
@@ -895,10 +895,10 @@ testRmdir
 	"Test os.rmdir() - remove directory"
 
 	| o existsBlock rmdirBlock mkdirBlock testDir |
-	o := os perform: #instance env: 2.
-	existsBlock := o perform: #exists env: 2.
-	rmdirBlock := o perform: #rmdir env: 2.
-	mkdirBlock := o perform: #mkdir env: 2.
+	o := os perform: #instance env: 1.
+	existsBlock := o perform: #exists env: 1.
+	rmdirBlock := o perform: #rmdir env: 1.
+	mkdirBlock := o perform: #mkdir env: 1.
 	testDir := '/tmp/grail_os_test_rmdir'.
 
 	"Clean up if it exists"
@@ -925,8 +925,8 @@ testSep
 	"Test os.sep constant"
 
 	| o result |
-	o := os perform: #instance env: 2.
-	result := o perform: #sep env: 2.
+	o := os perform: #instance env: 1.
+	result := o perform: #sep env: 1.
 
 	self assert: result equals: '/'
 %
@@ -937,10 +937,10 @@ testStat
 	"Test os.stat()"
 
 	| o existsBlock removeBlock statBlock testFile file statResult |
-	o := os perform: #instance env: 2.
-	existsBlock := o perform: #exists env: 2.
-	removeBlock := o perform: #remove env: 2.
-	statBlock := o perform: #stat env: 2.
+	o := os perform: #instance env: 1.
+	existsBlock := o perform: #exists env: 1.
+	removeBlock := o perform: #remove env: 1.
+	statBlock := o perform: #stat env: 1.
 	testFile := '/tmp/grail_os_test_stat'.
 
 	"Clean up if it exists"
@@ -969,8 +969,8 @@ testSystem
 	"Test os.system() - execute shell command"
 
 	| o systemBlock result |
-	o := os perform: #instance env: 2.
-	systemBlock := o perform: #system env: 2.
+	o := os perform: #instance env: 1.
+	systemBlock := o perform: #system env: 1.
 
 	"Execute a simple command"
 	result := systemBlock value: {'echo "test"'} value: nil.

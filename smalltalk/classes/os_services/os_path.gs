@@ -42,11 +42,11 @@ os_path category: 'Modules'
 ! ------------------- Remove existing Python methods from os_path
 expectvalue /Metaclass3
 doit
-os_path removeAllMethods: 2.
-os_path class removeAllMethods: 2.
+os_path removeAllMethods: 1.
+os_path class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Path Manipulation'
 method: os_path

@@ -61,11 +61,11 @@ random category: 'Modules'
 ! ------------------- Remove existing Python methods from random
 expectvalue /Metaclass3
 doit
-random removeAllMethods: 2.
-random class removeAllMethods: 2.
+random removeAllMethods: 1.
+random class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Private'
 method: random
@@ -318,7 +318,7 @@ initialize_choices
 				[(idx ___lt___: n) and: [(cumWeights ___at___: idx) ___le___: r]] ___whileTrue___: [
 					idx := idx ___plus___: 1.
 				].
-				result perform: #append: env: 2 withArguments: {population ___at___: idx}.
+				result perform: #append: env: 1 withArguments: {population ___at___: idx}.
 			].
 		] ifFalse: [
 			"Uniform selection"
@@ -326,7 +326,7 @@ initialize_choices
 			1 ___to___: k do: [:unused |
 				| idx |
 				idx := self _generator perform: #integerBetween:and: env: 0 withArguments: {1. n}.
-				result perform: #append: env: 2 withArguments: {population ___at___: idx}.
+				result perform: #append: env: 1 withArguments: {population ___at___: idx}.
 			].
 		].
 		result
@@ -631,7 +631,7 @@ initialize_sample
 				idx := self _generator perform: #integerBetween:and: env: 0 withArguments: {1. n}.
 				(selected perform: #includes: env: 0 withArguments: {idx}) ifFalse: [
 					selected perform: #add: env: 0 withArguments: {idx}.
-					result perform: #append: env: 2 withArguments: {population ___at___: idx}.
+					result perform: #append: env: 1 withArguments: {population ___at___: idx}.
 				].
 			].
 		] ifFalse: [
@@ -645,7 +645,7 @@ initialize_sample
 				temp := pool ___at___: j.
 				pool ___at___: j put: (pool ___at___: i).
 				pool ___at___: i put: temp.
-				result perform: #append: env: 2 withArguments: {temp}.
+				result perform: #append: env: 1 withArguments: {temp}.
 			].
 		].
 		result

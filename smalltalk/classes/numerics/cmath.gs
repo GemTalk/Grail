@@ -42,11 +42,11 @@ cmath category: 'Modules'
 ! ------------------- Remove existing Python methods from cmath
 expectvalue /Metaclass3
 doit
-cmath removeAllMethods: 2.
-cmath class removeAllMethods: 2.
+cmath removeAllMethods: 1.
+cmath class removeAllMethods: 1.
 %
 
-set compile_env: 2
+set compile_env: 1
 
 category: 'Python-Private'
 method: cmath
