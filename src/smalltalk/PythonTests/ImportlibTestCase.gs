@@ -47,7 +47,7 @@ testAstForPath
 	"Test creating a ModuleAst from hello.py"
 
 	| moduleAst testFilePath |
-	testFilePath := importlib grailDir , '/python/hello.py'.
+	testFilePath := importlib grailDir , '/src/python/hello.py'.
 	moduleAst := importlib astForPath: testFilePath.
 
 	self assert: moduleAst class equals: ModuleAst.
@@ -264,7 +264,7 @@ testSmalltalkForPath
 	"Test generating Smalltalk code from hello.py"
 
 	| smalltalkCode testFilePath |
-	testFilePath := importlib grailDir , '/python/hello.py'.
+	testFilePath := importlib grailDir , '/src/python/hello.py'.
 	smalltalkCode := importlib smalltalkForPath: testFilePath.
 
 	"The generated code should be a non-empty string"

@@ -1,6 +1,0 @@
-# source ./setenv
-
-# edit to path to GemStone product directory
-export GEMSTONE_GLOBAL_DIR='/Users/jfoster/Documents/GemStone'
-export GEMSTONE='/Users/jfoster/Documents/GemStone/GemStone64Bit3.7.4.3-arm64.Darwin'
-export PATH="$GEMSTONE/bin:$GEMSTONE/seaside/bin:$PATH"

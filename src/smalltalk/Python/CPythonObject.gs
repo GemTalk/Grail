@@ -12,7 +12,7 @@ Object subclass: 'CPythonObject'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: UserGlobals
+  inDictionary: Python
   options: #()
 %
 

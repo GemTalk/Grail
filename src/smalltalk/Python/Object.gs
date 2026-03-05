@@ -751,10 +751,10 @@ ___respondsTo___: aSelector
 
 category: 'Convenience Methods - Keyword'
 method: object
-___respondsToEnv2___: aSelector
-	"Check if the receiver responds to aSelector in environment 2 (Python)"
+___respondsToEnv1___: aSelector
+	"Check if the receiver responds to aSelector in environment 1 (Python)"
 	| selectors |
-	selectors := self ___class___ ___allSelectorsForEnvironment___: 2.
+	selectors := self ___class___ ___allSelectorsForEnvironment___: 1.
 	^ selectors ___includes___: aSelector
 %
 

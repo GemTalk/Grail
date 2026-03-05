@@ -12,7 +12,7 @@ TestCase subclass: 'CPythonTestCase'
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
-  inDictionary: UserGlobals
+  inDictionary: PythonTests
   options: #()
 
 %

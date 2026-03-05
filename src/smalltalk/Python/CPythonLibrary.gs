@@ -11,7 +11,7 @@ Object subclass: 'CPythonLibrary'
   classVars: #()
   classInstVars: #( current libraryPath pythonHomePath)
   poolDictionaries: #()
-  inDictionary: UserGlobals
+  inDictionary: Python
   options: #()
 %
 
@@ -117,6 +117,9 @@ method: CPythonLibrary
 initialize
 	"Open the shared library and initialize the Python interpreter."
 
+	CPythonShim isActive ifTrue: [
+		self error: 'Cannot use CPythonLibrary: CPythonShim is already active in this session.'.
+	].
 	library := CLibrary named: self class libraryPath.
 	callouts := KeyValueDictionary new.
 	self isInitialized ifFalse: [
@@ -314,6 +317,14 @@ checkPythonError
 %
 
 ! ------------------- Class methods - Null pointer detection
+
+category: 'Testing'
+classmethod: CPythonLibrary
+isActive
+	"Return true if the embedded CPython singleton has been initialized."
+
+	^ current notNil
+%
 
 category: 'Private'
 classmethod: CPythonLibrary

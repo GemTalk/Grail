@@ -382,7 +382,7 @@ initialize_callable
 		| anObject objClass |
 		anObject := positional ___at___: 1.
 		objClass := anObject ___class___.
-		(objClass perform: #whichClassIncludesSelector:environmentId: env: 0 withArguments: {#__call__:. 2}) notNil
+		(objClass perform: #whichClassIncludesSelector:environmentId: env: 0 withArguments: {#__call__:. 1}) notNil
 	]
 %
 

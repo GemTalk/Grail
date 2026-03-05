@@ -76,3 +76,13 @@ eval: pythonSource
 	module ensureModuleScope: moduleScope.
 	^module evaluateWithScope: scope
 %
+
+category: 'testing'
+method: PythonTestCase
+performTest
+
+	[
+		super performTest.
+	] on: BaseException do: [:ex |
+		Error signal: ex description.
+	].

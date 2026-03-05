@@ -102,11 +102,22 @@ libraryPath: aString
 	current := nil.
 %
 
+category: 'Testing'
+classmethod: CPythonShim
+isActive
+	"Return true if the shim singleton has been initialized."
+
+	^ current notNil
+%
+
 category: 'Loading'
 classmethod: CPythonShim
 ensureLoaded
 	"Load the user action library if needed, then init the server and types."
 
+	CPythonLibrary isActive ifTrue: [
+		self error: 'Cannot use CPythonShim: CPythonLibrary is already active in this session.'.
+	].
 	(System hasUserAction: #shimCall) ifFalse: [
 		libraryPath ifNil: [
 			self error: 'CPythonShim library path not configured.'.

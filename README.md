@@ -1,41 +1,22 @@
 # Grail
 
-Run [Python](https://docs.python.org/3/reference/index.html) on GemStone/S 64 Bit.
+Run [Python](https://docs.python.org/3/reference/index.html) on the GemStone/S 64 Bit.
 
 ## Installation
 
-### Python 3
-
-Install the following:
-
-  * [Python](https://www.python.org/downloads/). When you enter `python3 --version` it should show you 3.14.0 or later. 
-  * [pip](https://docs.python.org/3/installing/index.html) is used to install Python packages. When you enter `pip --version` it should show you 25.3 or later.
-  * [pprintast](https://pypi.org/project/pprintast/) is used to parse Python source files. When you enter `pprintast --version` it should show you 1.2.1 or later.
-
 ### Git Checkout
 
-Checkout this Git project to `$HOME/code/GemStone/Grail` (or to some other place and be prepared to edit things to match your path).
+Checkout this [GitHub project](git@github.com:jgfoster/Grail.git) to `$HOME/code/GemStone/Grail` (or to some other place and be prepared to edit things to match your path).
 
 ### GemStone/S
 
-[GemStone/S](https://gemtalksystems.com/products/gs64/) can be most easily run on macOS using the free, open source [GemStone.app](https://github.com/jgfoster/GemStoneApp). From the Setup tab, click `Authenticate` and give your password (as an administrator) to allow the helper tool to be installed. Then, from the Versions tab, click `Update` to get a list of available GemStone versions. Check the box for a recent version (3.7.4.3 at the time of this writing) to download that version. Then, from the Databases tab, click the `+` button to create a new database and click `Start` to start the database.
+[GemStone/S](https://gemtalksystems.com/products/gs64/) can be most easily run using the [GemStone Smalltalk IDE](https://marketplace.visualstudio.com/items?itemName=GemTalkSystems.gemstone-ide) (a Visual Studio Code Extension).
 
 Copy the provided `topazini` to `~/.topazini` and edit `gs64stone` to show the name of your database if different. Copy the provided `setenv` to `.setenv` and edit the path to point to your GemStone install. Then open a terminal in this directory and run `./install.sh`. If this finishes without errors then you may proceed to the next step.
 
 ## Tests
 
-To run the test suite, run the following:
-
-```
-. ./setenv
-topaz -lq <<EOF
-login
-run
-PythonTestCase suite run printString
-%
-logout
-EOF
-```
+To run the test suite, run `./scripts/run_tests.sh`.
 
 ## Running Python Code in Grail
 
@@ -55,6 +36,19 @@ A REPL (read-eval-print loop) is a convenient way to experiment with a programmi
 ```
 
 To exit the REPL, enter `exit()` or `quit()`. If you get an error and end up with a `topaz 1>` prompt, then enter `exit` to exit.
+
+## Embedded CPython (Two-Object-Space)
+
+Grail includes an optional embedded CPython integration that loads `libpython` as a dynamic library
+via GemStone's CCallout/CLibrary FFI. This provides a "two-object-space" bridge where Python objects
+live in CPython's heap and are manipulated through `CPythonLibrary` and `CPythonObject` wrappers.
+
+This is separate from the main Grail approach (single object space with native Smalltalk types) and
+from the CPythonShim (which loads C extension modules). If `python3` is available at install time,
+`install.sh` will auto-detect and configure the library path.
+
+**Note:** Both `CPythonLibrary` (embedded) and `CPythonShim` (extension shim) export CPython C API
+symbols. Only one may be used per Gem session; a runtime guard prevents loading both.
 
 ## Other documentation
 

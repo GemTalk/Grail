@@ -42,7 +42,7 @@ setUp
 	mods := importlib perform: #modules env: 1.
 	keysToRemove := OrderedCollection new.
 	mods keysDo: [:k |
-		(k asString beginsWith: 'smalltalk.tests.mypkg')
+		(k asString beginsWith: 'src.python.mypkg')
 			ifTrue: [keysToRemove add: k]
 	].
 	keysToRemove do: [:k | mods removeKey: k ifAbsent: []].
@@ -54,7 +54,7 @@ testModuleNameToPathFindsPackage
 	"___moduleNameToPath___: should find a package's __init__.py"
 
 	| path |
-	path := importlib perform: #'___moduleNameToPath___:' env: 1 withArguments: { 'smalltalk.tests.mypkg' }.
+	path := importlib perform: #'___moduleNameToPath___:' env: 1 withArguments: { 'src.python.mypkg' }.
 	self assert: path notNil.
 	self assert: (path endsWith: '__init__.py')
 %
@@ -65,7 +65,7 @@ testModuleNameToPathPrefersFile
 	"___moduleNameToPath___: should prefer name.py over name/__init__.py"
 
 	| path |
-	path := importlib perform: #'___moduleNameToPath___:' env: 1 withArguments: { 'python.hello' }.
+	path := importlib perform: #'___moduleNameToPath___:' env: 1 withArguments: { 'src.python.hello' }.
 	self assert: path notNil.
 	self assert: (path endsWith: 'hello.py').
 	self deny: (path endsWith: '__init__.py')
@@ -79,9 +79,9 @@ testImportPackage
 	| imp importFunc |
 	imp := importlib perform: #instance env: 1.
 	importFunc := imp perform: #__import__ env: 1.
-	importFunc value: { 'smalltalk.tests.mypkg' } value: nil.
+	importFunc value: { 'src.python.mypkg' } value: nil.
 
-	self assert: (importlib ___lookupModule___: 'smalltalk.tests.mypkg') notNil
+	self assert: (importlib ___lookupModule___: 'src.python.mypkg') notNil
 %
 
 category: 'Tests - Import Package'
@@ -92,13 +92,13 @@ testPackageHasPath
 	| imp importFunc pkg path |
 	imp := importlib perform: #instance env: 1.
 	importFunc := imp perform: #__import__ env: 1.
-	importFunc value: { 'smalltalk.tests.mypkg' } value: nil.
-	pkg := importlib ___lookupModule___: 'smalltalk.tests.mypkg'.
+	importFunc value: { 'src.python.mypkg' } value: nil.
+	pkg := importlib ___lookupModule___: 'src.python.mypkg'.
 
 	path := pkg perform: #__path__ env: 1.
 	self assert: path class equals: Array.
 	self assert: path size equals: 1.
-	self assert: (path first endsWith: 'smalltalk/tests/mypkg')
+	self assert: (path first endsWith: 'src/python/mypkg')
 %
 
 category: 'Tests - Import Package'
@@ -108,7 +108,7 @@ testNonPackageNoPath
 
 	| helloModule path |
 	importlib perform: #loadModuleFromPath:name: env: 0
-		withArguments: { (importlib grailDir , '/python/hello.py'). 'python.hello'. }.
+		withArguments: { (importlib grailDir , '/src/python/hello.py'). 'python.hello'. }.
 	helloModule := importlib ___lookupModule___: 'python.hello'.
 
 	path := helloModule perform: #__path__ env: 1.
@@ -123,10 +123,10 @@ testImportSubmodule
 	| imp importFunc |
 	imp := importlib perform: #instance env: 1.
 	importFunc := imp perform: #__import__ env: 1.
-	importFunc value: { 'smalltalk.tests.mypkg.sub' } value: nil.
+	importFunc value: { 'src.python.mypkg.sub' } value: nil.
 
-	self assert: (importlib ___lookupModule___: 'smalltalk.tests.mypkg') notNil.
-	self assert: (importlib ___lookupModule___: 'smalltalk.tests.mypkg.sub') notNil
+	self assert: (importlib ___lookupModule___: 'src.python.mypkg') notNil.
+	self assert: (importlib ___lookupModule___: 'src.python.mypkg.sub') notNil
 %
 
 category: 'Tests - Import Submodule'
@@ -135,14 +135,14 @@ testParentAutoLoaded
 	"Importing a submodule auto-loads parent packages"
 
 	| parentBefore imp importFunc |
-	parentBefore := importlib ___lookupModule___: 'smalltalk.tests.mypkg'.
+	parentBefore := importlib ___lookupModule___: 'src.python.mypkg'.
 	self assert: parentBefore equals: nil.
 
 	imp := importlib perform: #instance env: 1.
 	importFunc := imp perform: #__import__ env: 1.
-	importFunc value: { 'smalltalk.tests.mypkg.sub' } value: nil.
+	importFunc value: { 'src.python.mypkg.sub' } value: nil.
 
-	self assert: (importlib ___lookupModule___: 'smalltalk.tests.mypkg') notNil
+	self assert: (importlib ___lookupModule___: 'src.python.mypkg') notNil
 %
 
 category: 'Tests - Import Submodule'
@@ -153,12 +153,12 @@ testSubmoduleBoundOnParent
 	| imp importFunc pkg subMod |
 	imp := importlib perform: #instance env: 1.
 	importFunc := imp perform: #__import__ env: 1.
-	importFunc value: { 'smalltalk.tests.mypkg.sub' } value: nil.
+	importFunc value: { 'src.python.mypkg.sub' } value: nil.
 
-	pkg := importlib ___lookupModule___: 'smalltalk.tests.mypkg'.
+	pkg := importlib ___lookupModule___: 'src.python.mypkg'.
 	subMod := pkg perform: #sub env: 1.
 	self assert: subMod notNil.
-	self assert: subMod == (importlib ___lookupModule___: 'smalltalk.tests.mypkg.sub')
+	self assert: subMod == (importlib ___lookupModule___: 'src.python.mypkg.sub')
 %
 
 category: 'Tests - Import Nested'
@@ -169,11 +169,11 @@ testImportNestedPackage
 	| imp importFunc |
 	imp := importlib perform: #instance env: 1.
 	importFunc := imp perform: #__import__ env: 1.
-	importFunc value: { 'smalltalk.tests.mypkg.nested.deep' } value: nil.
+	importFunc value: { 'src.python.mypkg.nested.deep' } value: nil.
 
-	self assert: (importlib ___lookupModule___: 'smalltalk.tests.mypkg') notNil.
-	self assert: (importlib ___lookupModule___: 'smalltalk.tests.mypkg.nested') notNil.
-	self assert: (importlib ___lookupModule___: 'smalltalk.tests.mypkg.nested.deep') notNil
+	self assert: (importlib ___lookupModule___: 'src.python.mypkg') notNil.
+	self assert: (importlib ___lookupModule___: 'src.python.mypkg.nested') notNil.
+	self assert: (importlib ___lookupModule___: 'src.python.mypkg.nested.deep') notNil
 %
 
 category: 'Tests - Return Value Semantics'
@@ -184,7 +184,7 @@ testImportDottedReturnsTopLevel
 
 	| imp importFunc result topModule priorGrailDir |
 	priorGrailDir := importlib grailDir.
-	importlib grailDir: (importlib grailDir , '/smalltalk/tests').
+	importlib grailDir: (importlib grailDir , '/src/python').
 	[
 		imp := importlib perform: #instance env: 1.
 		importFunc := imp perform: #__import__ env: 1.
@@ -205,7 +205,7 @@ testFromImportReturnsNamedModule
 
 	| imp importFunc result subModule priorGrailDir |
 	priorGrailDir := importlib grailDir.
-	importlib grailDir: (importlib grailDir , '/smalltalk/tests').
+	importlib grailDir: (importlib grailDir , '/src/python').
 	[
 		imp := importlib perform: #instance env: 1.
 		importFunc := imp perform: #__import__ env: 1.
@@ -228,14 +228,14 @@ testPackageInitExecuted
 	| imp importFunc pkg |
 	imp := importlib perform: #instance env: 1.
 	importFunc := imp perform: #__import__ env: 1.
-	importFunc value: { 'smalltalk.tests.mypkg' } value: nil.
+	importFunc value: { 'src.python.mypkg' } value: nil.
 
-	pkg := importlib ___lookupModule___: 'smalltalk.tests.mypkg'.
+	pkg := importlib ___lookupModule___: 'src.python.mypkg'.
 	"The __init__.py sets x = 'init' — but since the module is loaded via
 	 loadModuleFromPath (which creates a fresh module instance), the scope
 	 variables aren't directly on the module. Check that the module registered."
 	self assert: pkg notNil.
-	self assert: (pkg perform: #__name__ env: 1) equals: 'smalltalk.tests.mypkg'
+	self assert: (pkg perform: #__name__ env: 1) equals: 'src.python.mypkg'
 %
 
 category: 'Tests - Package Contents'
@@ -246,8 +246,8 @@ testPackageIsPackage
 	| imp importFunc pkg |
 	imp := importlib perform: #instance env: 1.
 	importFunc := imp perform: #__import__ env: 1.
-	importFunc value: { 'smalltalk.tests.mypkg' } value: nil.
+	importFunc value: { 'src.python.mypkg' } value: nil.
 
-	pkg := importlib ___lookupModule___: 'smalltalk.tests.mypkg'.
-	self assert: (pkg perform: #__package__ env: 1) equals: 'smalltalk.tests.mypkg'
+	pkg := importlib ___lookupModule___: 'src.python.mypkg'.
+	self assert: (pkg perform: #__package__ env: 1) equals: 'src.python.mypkg'
 %

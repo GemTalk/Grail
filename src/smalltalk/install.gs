@@ -22,67 +22,28 @@
 ! Step 1: Remove and recreate SymbolDictionaries
 ! ===============================================================================
 run
-| userProfile symbolList names pythonDict pythonASTDict pythonTestsDict |
-userProfile := System myUserProfile.
-symbolList := userProfile symbolList.
-names := symbolList names.
-
-"Remove PythonTests dictionary if it exists"
-(names includes: #'PythonTests') ifTrue: [
-	symbolList removeAtIndex: (names indexOf: #'PythonTests').
-	Transcript show: 'Removed PythonTests dictionary'.
-] ifFalse: [
-	Transcript show: 'PythonTests dictionary not found (OK)'.
-].
-%
-run
-| userProfile symbolList names pythonDict pythonASTDict pythonTestsDict |
-userProfile := System myUserProfile.
-symbolList := userProfile symbolList.
-names := symbolList names.
-
 "Remove Python dictionary if it exists"
-(names includes: #'Python') ifTrue: [
-	symbolList removeAtIndex: (names indexOf: #'Python').
-	Transcript show: 'Removed Python dictionary'.
-] ifFalse: [
-	Transcript show: 'Python dictionary not found (OK)'.
+#(#'Python' #'PythonAst' #'PythonTests') do: [:each |
+	| symbolList names |
+	symbolList := System myUserProfile symbolList.
+	names := symbolList names.
+	(names includes: each) ifTrue: [
+		symbolList removeAtIndex: (names indexOf: each).
+		Transcript show: 'Removed ' , each , ' dictionary'.
+	] ifFalse: [
+		Transcript show: each , ' dictionary not found (OK)'.
+	].
 ].
 %
-run
-| userProfile symbolList names pythonDict pythonASTDict pythonTestsDict |
-userProfile := System myUserProfile.
-symbolList := userProfile symbolList.
-names := symbolList names.
 
-"Remove PythonAst dictionary if it exists"
-(names includes: #'PythonAst') ifTrue: [
-	symbolList removeAtIndex: (names indexOf: #'PythonAst').
-	Transcript show: 'Removed PythonAst dictionary'.
-] ifFalse: [
-	Transcript show: 'PythonAst dictionary not found (OK)'.
+run
+"Create Python dictionaries in reverse order"
+#(#'PythonTests' #'PythonAst' #'Python') do: [:each |
+	| dict |
+	dict := SymbolDictionary new name: each; yourself.
+	System myUserProfile insertDictionary: dict at: 1.
+	Transcript show: 'Created ' , each , ' dictionary'.
 ].
-%
-run
-| userProfile symbolList names pythonDict pythonASTDict pythonTestsDict |
-userProfile := System myUserProfile.
-symbolList := userProfile symbolList.
-names := symbolList names.
-
-"Create Python dictionary (first in order)"
-pythonDict := SymbolDictionary new name: #'Python'; yourself.
-userProfile insertDictionary: pythonDict at: 1.
-Transcript show: 'Created Python dictionary'.
-
-"Create PythonAst dictionary (second in order)"
-pythonASTDict := SymbolDictionary new name: #'PythonAst'; yourself.
-userProfile insertDictionary: pythonASTDict at: 2.
-Transcript show: 'Created PythonAst dictionary'.
-
-"Create PythonTests dictionary (third in order)"
-pythonTestsDict := SymbolDictionary new name: #'PythonTests'; yourself.
-userProfile insertDictionary: pythonTestsDict at: 3.
-Transcript show: 'Created PythonTests dictionary'.
 
 Transcript show: 'Step 1 complete: Recreated dictionaries in correct order'.
 %
@@ -97,9 +58,7 @@ Transcript show: 'Step 1 complete: Recreated dictionaries in correct order'.
 
 ! ------------------- Forward references for Python dictionary
 run
-| pythonDict |
-pythonDict := System myUserProfile symbolList objectNamed: #'Python'.
-pythonDict
+(System myUserProfile symbolList objectNamed: #'Python')
 	at: #'ArithmeticError' put: nil;
 	at: #'AssertionError' put: nil;
 	at: #'AttributeError' put: nil;
@@ -169,6 +128,8 @@ pythonDict
 	at: #'Warning' put: nil;
 	at: #'ZeroDivisionError' put: nil;
 	at: #'CPythonShim' put: nil;
+	at: #'CPythonLibrary' put: nil;
+	at: #'CPythonObject' put: nil;
 	at: #'PyObject' put: nil;
 	at: #'_statistics' put: nil;
 	at: #'_bisect' put: nil;
@@ -218,9 +179,7 @@ Transcript show: 'Forward references created for Python dictionary'.
 
 ! ------------------- Forward references for PythonAst dictionary
 run
-| dict |
-dict := System myUserProfile symbolList objectNamed: #'PythonAst'.
-dict
+(System myUserProfile symbolList objectNamed: #'PythonAst')
 	at: #'AbstractLocationNode' put: nil;
 	at: #'AbstractNode' put: nil;
 	at: #'AddAst' put: nil;
@@ -340,9 +299,7 @@ Transcript show: 'Forward references created for PythonAst dictionary'.
 
 ! ------------------- Forward references for PythonTests dictionary
 run
-| dict |
-dict := System myUserProfile symbolList objectNamed: #'PythonTests'.
-dict
+(System myUserProfile symbolList objectNamed: #'PythonTests')
 	at: #'ArithmeticErrorTestCase' put: nil;
 	at: #'AssertionErrorTestCase' put: nil;
 	at: #'AttributeErrorTestCase' put: nil;
@@ -357,6 +314,7 @@ dict
 	at: #'BytesTestCase' put: nil;
 	at: #'BytesWarningTestCase' put: nil;
 	at: #'CPythonShimTestCase' put: nil;
+	at: #'CPythonTestCase' put: nil;
 	at: #'CMathTestCase' put: nil;
 	at: #'ChildProcessErrorTestCase' put: nil;
 	at: #'ComplexTestCase' put: nil;
@@ -466,9 +424,7 @@ Transcript show: 'Step 2 complete: All forward references created'.
 set compile_env: 0
 
 run
-| pythonDict |
-pythonDict := System myUserProfile symbolList objectNamed: #'Python'.
-pythonDict
+(System myUserProfile symbolList objectNamed: #'Python')
   "Python names that map to existing GemStone globals"
 	at: #'True'                       put: true;
 	at: #'False'                      put: false;
@@ -501,112 +457,114 @@ run
 Transcript show: 'Step 4: Loading Python built-in type classes...'.
 %
 
-input smalltalk/classes/exceptions/BaseException.gs
-input smalltalk/classes/built-in_types/bytearray.gs
-input smalltalk/classes/built-in_types/complex.gs
-input smalltalk/classes/built-in_types/iterator.gs
-input smalltalk/classes/importing/module.gs
-input smalltalk/classes/text/string_formatter.gs
-input smalltalk/classes/exceptions/BaseExceptionGroup.gs
-input smalltalk/classes/exceptions/Exception.gs
-input smalltalk/classes/exceptions/GeneratorExit.gs
-input smalltalk/classes/exceptions/KeyboardInterrupt.gs
-input smalltalk/classes/exceptions/SystemExit.gs
-input smalltalk/classes/built-in_types/dict_itemiterator.gs
-input smalltalk/classes/built-in_types/dict_keyiterator.gs
-input smalltalk/classes/built-in_types/dict_valueiterator.gs
-input smalltalk/classes/built-in_types/list_iterator.gs
-input smalltalk/classes/built-in_types/range_iterator.gs
-input smalltalk/classes/built-in_types/set_iterator.gs
-input smalltalk/classes/built-in_types/str_iterator.gs
-input smalltalk/classes/built-in_types/tuple_iterator.gs
-input smalltalk/classes/runtime_services/builtins.gs
-input smalltalk/classes/runtime_services/copyreg.gs
-input smalltalk/classes/numerics/cmath.gs
-input smalltalk/classes/runtime_services/enum.gs
-input smalltalk/classes/numerics/fractions.gs
-input smalltalk/classes/runtime_services/functools.gs
-input smalltalk/classes/gemstone/gemstone.gs
-input smalltalk/cpython/PyObject.gs
-input smalltalk/cpython/CPythonShim.gs
-input smalltalk/cpython/ShimStatisticsModule.gs
-input smalltalk/cpython/ShimBisectModule.gs
-input smalltalk/cpython/ShimCrc32cModule.gs
-input smalltalk/cpython/ShimTestModule.gs
-input smalltalk/cpython/ShimSreModule.gs
-input smalltalk/classes/importing/importlib.gs
-input smalltalk/classes/numerics/math.gs
-input smalltalk/classes/numerics/numbers.gs
-input smalltalk/classes/os_services/os.gs
-input smalltalk/classes/os_services/os_path.gs
-input smalltalk/classes/numerics/random.gs
-input smalltalk/classes/numerics/statistics.gs
-input smalltalk/classes/text/string.gs
-input smalltalk/classes/text/html_entities.gs
-input smalltalk/classes/text/html.gs
-input smalltalk/classes/runtime_services/sys.gs
-input smalltalk/classes/exceptions/ExceptionGroup.gs
-input smalltalk/classes/exceptions/ArithmeticError.gs
-input smalltalk/classes/exceptions/AssertionError.gs
-input smalltalk/classes/exceptions/AttributeError.gs
-input smalltalk/classes/exceptions/BufferError.gs
-input smalltalk/classes/exceptions/EOFError.gs
-input smalltalk/classes/exceptions/ImportError.gs
-input smalltalk/classes/exceptions/LookupError.gs
-input smalltalk/classes/exceptions/MemoryError.gs
-input smalltalk/classes/exceptions/NameError.gs
-input smalltalk/classes/exceptions/OSError.gs
-input smalltalk/classes/exceptions/ReferenceError.gs
-input smalltalk/classes/exceptions/RuntimeError.gs
-input smalltalk/classes/exceptions/StopAsyncIteration.gs
-input smalltalk/classes/exceptions/StopIteration.gs
-input smalltalk/classes/exceptions/SyntaxError.gs
-input smalltalk/classes/exceptions/SystemError.gs
-input smalltalk/classes/exceptions/TypeError.gs
-input smalltalk/classes/exceptions/ValueError.gs
-input smalltalk/classes/exceptions/Warning.gs
-input smalltalk/classes/exceptions/FloatingPointError.gs
-input smalltalk/classes/exceptions/OverflowError.gs
-input smalltalk/classes/exceptions/ZeroDivisionError.gs
-input smalltalk/classes/exceptions/ModuleNotFoundError.gs
-input smalltalk/classes/exceptions/IndexError.gs
-input smalltalk/classes/exceptions/KeyError.gs
-input smalltalk/classes/exceptions/UnboundLocalError.gs
-input smalltalk/classes/exceptions/BlockingIOError.gs
-input smalltalk/classes/exceptions/ChildProcessError.gs
-input smalltalk/classes/exceptions/ConnectionError.gs
-input smalltalk/classes/exceptions/FileExistsError.gs
-input smalltalk/classes/exceptions/FileNotFoundError.gs
-input smalltalk/classes/exceptions/InterruptedError.gs
-input smalltalk/classes/exceptions/IsADirectoryError.gs
-input smalltalk/classes/exceptions/NotADirectoryError.gs
-input smalltalk/classes/exceptions/PermissionError.gs
-input smalltalk/classes/exceptions/ProcessLookupError.gs
-input smalltalk/classes/exceptions/TimeoutError.gs
-input smalltalk/classes/exceptions/NotImplementedError.gs
-input smalltalk/classes/exceptions/RecursionError.gs
-input smalltalk/classes/exceptions/IndentationError.gs
-input smalltalk/classes/exceptions/StatisticsError.gs
-input smalltalk/classes/exceptions/UnicodeError.gs
-input smalltalk/classes/exceptions/BytesWarning.gs
-input smalltalk/classes/exceptions/DeprecationWarning.gs
-input smalltalk/classes/exceptions/EncodingWarning.gs
-input smalltalk/classes/exceptions/FutureWarning.gs
-input smalltalk/classes/exceptions/ImportWarning.gs
-input smalltalk/classes/exceptions/PendingDeprecationWarning.gs
-input smalltalk/classes/exceptions/ResourceWarning.gs
-input smalltalk/classes/exceptions/RuntimeWarning.gs
-input smalltalk/classes/exceptions/SyntaxWarning.gs
-input smalltalk/classes/exceptions/UnicodeWarning.gs
-input smalltalk/classes/exceptions/UserWarning.gs
-input smalltalk/classes/exceptions/BrokenPipeError.gs
-input smalltalk/classes/exceptions/ConnectionAbortedError.gs
-input smalltalk/classes/exceptions/ConnectionRefusedError.gs
-input smalltalk/classes/exceptions/ConnectionResetError.gs
-input smalltalk/classes/exceptions/TabError.gs
-input smalltalk/classes/exceptions/UnicodeDecodeError.gs
-input smalltalk/classes/exceptions/UnicodeEncodeError.gs
-input smalltalk/classes/exceptions/UnicodeTranslateError.gs
+input src/smalltalk/Python/BaseException.gs
+input src/smalltalk/Python/bytearray.gs
+input src/smalltalk/Python/complex.gs
+input src/smalltalk/Python/iterator.gs
+input src/smalltalk/Python/module.gs
+input src/smalltalk/Python/string_formatter.gs
+input src/smalltalk/Python/BaseExceptionGroup.gs
+input src/smalltalk/Python/Exception.gs
+input src/smalltalk/Python/GeneratorExit.gs
+input src/smalltalk/Python/KeyboardInterrupt.gs
+input src/smalltalk/Python/SystemExit.gs
+input src/smalltalk/Python/dict_itemiterator.gs
+input src/smalltalk/Python/dict_keyiterator.gs
+input src/smalltalk/Python/dict_valueiterator.gs
+input src/smalltalk/Python/list_iterator.gs
+input src/smalltalk/Python/range_iterator.gs
+input src/smalltalk/Python/set_iterator.gs
+input src/smalltalk/Python/str_iterator.gs
+input src/smalltalk/Python/tuple_iterator.gs
+input src/smalltalk/Python/builtins.gs
+input src/smalltalk/Python/copyreg.gs
+input src/smalltalk/Python/cmath.gs
+input src/smalltalk/Python/enum.gs
+input src/smalltalk/Python/fractions.gs
+input src/smalltalk/Python/functools.gs
+input src/smalltalk/Python/gemstone.gs
+input src/smalltalk/Python/PyObject.gs
+input src/smalltalk/Python/CPythonShim.gs
+input src/smalltalk/Python/CPythonLibrary.gs
+input src/smalltalk/Python/CPythonObject.gs
+input src/smalltalk/Python/ShimStatisticsModule.gs
+input src/smalltalk/Python/ShimBisectModule.gs
+input src/smalltalk/Python/ShimCrc32cModule.gs
+input src/smalltalk/Python/ShimTestModule.gs
+input src/smalltalk/Python/ShimSreModule.gs
+input src/smalltalk/Python/importlib.gs
+input src/smalltalk/Python/math.gs
+input src/smalltalk/Python/numbers.gs
+input src/smalltalk/Python/os.gs
+input src/smalltalk/Python/os_path.gs
+input src/smalltalk/Python/random.gs
+input src/smalltalk/Python/statistics.gs
+input src/smalltalk/Python/string.gs
+input src/smalltalk/Python/html_entities.gs
+input src/smalltalk/Python/html.gs
+input src/smalltalk/Python/sys.gs
+input src/smalltalk/Python/ExceptionGroup.gs
+input src/smalltalk/Python/ArithmeticError.gs
+input src/smalltalk/Python/AssertionError.gs
+input src/smalltalk/Python/AttributeError.gs
+input src/smalltalk/Python/BufferError.gs
+input src/smalltalk/Python/EOFError.gs
+input src/smalltalk/Python/ImportError.gs
+input src/smalltalk/Python/LookupError.gs
+input src/smalltalk/Python/MemoryError.gs
+input src/smalltalk/Python/NameError.gs
+input src/smalltalk/Python/OSError.gs
+input src/smalltalk/Python/ReferenceError.gs
+input src/smalltalk/Python/RuntimeError.gs
+input src/smalltalk/Python/StopAsyncIteration.gs
+input src/smalltalk/Python/StopIteration.gs
+input src/smalltalk/Python/SyntaxError.gs
+input src/smalltalk/Python/SystemError.gs
+input src/smalltalk/Python/TypeError.gs
+input src/smalltalk/Python/ValueError.gs
+input src/smalltalk/Python/Warning.gs
+input src/smalltalk/Python/FloatingPointError.gs
+input src/smalltalk/Python/OverflowError.gs
+input src/smalltalk/Python/ZeroDivisionError.gs
+input src/smalltalk/Python/ModuleNotFoundError.gs
+input src/smalltalk/Python/IndexError.gs
+input src/smalltalk/Python/KeyError.gs
+input src/smalltalk/Python/UnboundLocalError.gs
+input src/smalltalk/Python/BlockingIOError.gs
+input src/smalltalk/Python/ChildProcessError.gs
+input src/smalltalk/Python/ConnectionError.gs
+input src/smalltalk/Python/FileExistsError.gs
+input src/smalltalk/Python/FileNotFoundError.gs
+input src/smalltalk/Python/InterruptedError.gs
+input src/smalltalk/Python/IsADirectoryError.gs
+input src/smalltalk/Python/NotADirectoryError.gs
+input src/smalltalk/Python/PermissionError.gs
+input src/smalltalk/Python/ProcessLookupError.gs
+input src/smalltalk/Python/TimeoutError.gs
+input src/smalltalk/Python/NotImplementedError.gs
+input src/smalltalk/Python/RecursionError.gs
+input src/smalltalk/Python/IndentationError.gs
+input src/smalltalk/Python/StatisticsError.gs
+input src/smalltalk/Python/UnicodeError.gs
+input src/smalltalk/Python/BytesWarning.gs
+input src/smalltalk/Python/DeprecationWarning.gs
+input src/smalltalk/Python/EncodingWarning.gs
+input src/smalltalk/Python/FutureWarning.gs
+input src/smalltalk/Python/ImportWarning.gs
+input src/smalltalk/Python/PendingDeprecationWarning.gs
+input src/smalltalk/Python/ResourceWarning.gs
+input src/smalltalk/Python/RuntimeWarning.gs
+input src/smalltalk/Python/SyntaxWarning.gs
+input src/smalltalk/Python/UnicodeWarning.gs
+input src/smalltalk/Python/UserWarning.gs
+input src/smalltalk/Python/BrokenPipeError.gs
+input src/smalltalk/Python/ConnectionAbortedError.gs
+input src/smalltalk/Python/ConnectionRefusedError.gs
+input src/smalltalk/Python/ConnectionResetError.gs
+input src/smalltalk/Python/TabError.gs
+input src/smalltalk/Python/UnicodeDecodeError.gs
+input src/smalltalk/Python/UnicodeEncodeError.gs
+input src/smalltalk/Python/UnicodeTranslateError.gs
 
 ! ------------------- Switch to SystemUser for adding methods to base classes
 commit
@@ -626,23 +584,23 @@ Transcript show: 'Added Python dictionary to SystemUser''s symbol list'.
 %
 
 ! ------------------- GemStone base class methods (as SystemUser)
-input smalltalk/classes/built-in_types/bool.gs
-input smalltalk/classes/built-in_types/builtin_function_or_method.gs
-input smalltalk/classes/built-in_types/bytes.gs
-input smalltalk/classes/numerics/Decimal.gs
-input smalltalk/classes/numerics/Fraction.gs
-input smalltalk/classes/built-in_types/dict.gs
-input smalltalk/classes/built-in_types/ExecBlock.gs
-input smalltalk/classes/built-in_types/float.gs
-input smalltalk/classes/built-in_types/frozenset.gs
-input smalltalk/classes/built-in_types/int.gs
-input smalltalk/classes/built-in_types/list.gs
-input smalltalk/classes/built-in_types/object.gs
-input smalltalk/classes/built-in_types/range.gs
-input smalltalk/classes/built-in_types/SequenceableCollection.gs
-input smalltalk/classes/built-in_types/set.gs
-input smalltalk/classes/built-in_types/str.gs
-input smalltalk/classes/built-in_types/tuple.gs
+input src/smalltalk/Python/bool.gs
+input src/smalltalk/Python/builtin_function_or_method.gs
+input src/smalltalk/Python/bytes.gs
+input src/smalltalk/Python/Decimal.gs
+input src/smalltalk/Python/Fraction.gs
+input src/smalltalk/Python/dict.gs
+input src/smalltalk/Python/ExecBlock.gs
+input src/smalltalk/Python/float.gs
+input src/smalltalk/Python/frozenset.gs
+input src/smalltalk/Python/int.gs
+input src/smalltalk/Python/list.gs
+input src/smalltalk/Python/object.gs
+input src/smalltalk/Python/range.gs
+input src/smalltalk/Python/SequenceableCollection.gs
+input src/smalltalk/Python/set.gs
+input src/smalltalk/Python/str.gs
+input src/smalltalk/Python/tuple.gs
 
 ! ------- Remove Python dictionary from SystemUser's symbol list
 run
@@ -680,119 +638,119 @@ run
 Transcript show: 'Step 5: Loading AST classes...'.
 %
 
-input smalltalk/ast/AbstractNode.gs
-input smalltalk/ast/PrettyWriteStream.gs
-input smalltalk/ast/PythonParser.gs
-input smalltalk/ast/PythonToken.gs
-input smalltalk/ast/PythonTokenizer.gs
-input smalltalk/ast/AbstractLocationNode.gs
-input smalltalk/ast/ArgumentsAst.gs
-input smalltalk/ast/CmpOpAst.gs
-input smalltalk/ast/ComprehensionAst.gs
-input smalltalk/ast/ExpressionContextAst.gs
-input smalltalk/ast/ModuleAst.gs
-input smalltalk/ast/OperatorAst.gs
-input smalltalk/ast/SuiteAst.gs
-input smalltalk/ast/TypeIgnoreAst.gs
-input smalltalk/ast/TypeParamAst.gs
-input smalltalk/ast/WithItemAst.gs
-input smalltalk/ast/AliasAst.gs
-input smalltalk/ast/ArgAst.gs
-input smalltalk/ast/ExceptHandlerAst.gs
-input smalltalk/ast/ExpressionAst.gs
-input smalltalk/ast/KeywordAst.gs
-input smalltalk/ast/SliceAst.gs
-input smalltalk/ast/StatementAst.gs
-input smalltalk/ast/EqAst.gs
-input smalltalk/ast/GtAst.gs
-input smalltalk/ast/GtEAst.gs
-input smalltalk/ast/InAst.gs
-input smalltalk/ast/IsAst.gs
-input smalltalk/ast/IsNotAst.gs
-input smalltalk/ast/LtAst.gs
-input smalltalk/ast/LtEAst.gs
-input smalltalk/ast/NotEqAst.gs
-input smalltalk/ast/NotInAst.gs
-input smalltalk/ast/DelAst.gs
-input smalltalk/ast/LoadAst.gs
-input smalltalk/ast/ParamAst.gs
-input smalltalk/ast/StoreAst.gs
-input smalltalk/ast/Package.gs
-input smalltalk/ast/AddAst.gs
-input smalltalk/ast/BitAndAst.gs
-input smalltalk/ast/BitOrAst.gs
-input smalltalk/ast/BitXorAst.gs
-input smalltalk/ast/DivAst.gs
-input smalltalk/ast/FloorDivAst.gs
-input smalltalk/ast/LShiftAst.gs
-input smalltalk/ast/MatMultAst.gs
-input smalltalk/ast/ModAst.gs
-input smalltalk/ast/MultAst.gs
-input smalltalk/ast/PowAst.gs
-input smalltalk/ast/RShiftAst.gs
-input smalltalk/ast/SubAst.gs
-input smalltalk/ast/BlockAst.gs
-input smalltalk/ast/AttributeAst.gs
-input smalltalk/ast/AwaitAst.gs
-input smalltalk/ast/BinOpAst.gs
-input smalltalk/ast/BoolOpAst.gs
-input smalltalk/ast/CallAst.gs
-input smalltalk/ast/CompareAst.gs
-input smalltalk/ast/ConstantAst.gs
-input smalltalk/ast/DictAst.gs
-input smalltalk/ast/DictCompAst.gs
-input smalltalk/ast/FormattedValueAst.gs
-input smalltalk/ast/GeneratorExpAst.gs
-input smalltalk/ast/IfExpAst.gs
-input smalltalk/ast/JoinedStrAst.gs
-input smalltalk/ast/LambdaAst.gs
-input smalltalk/ast/ListAst.gs
-input smalltalk/ast/ListCompAst.gs
-input smalltalk/ast/NameAst.gs
-input smalltalk/ast/NamedExprAst.gs
-input smalltalk/ast/SetAst.gs
-input smalltalk/ast/SetCompAst.gs
-input smalltalk/ast/StarredAst.gs
-input smalltalk/ast/SubscriptAst.gs
-input smalltalk/ast/TupleAst.gs
-input smalltalk/ast/UnaryOpAst.gs
-input smalltalk/ast/YieldAst.gs
-input smalltalk/ast/YieldFromAst.gs
-input smalltalk/ast/AnnAssignAst.gs
-input smalltalk/ast/AssertAst.gs
-input smalltalk/ast/AssignAst.gs
-input smalltalk/ast/AsyncForAst.gs
-input smalltalk/ast/AsyncFunctionDefAst.gs
-input smalltalk/ast/AsyncWithAst.gs
-input smalltalk/ast/AugAssignAst.gs
-input smalltalk/ast/BreakAst.gs
-input smalltalk/ast/ClassDefAst.gs
-input smalltalk/ast/ContinueAst.gs
-input smalltalk/ast/DeleteAst.gs
-input smalltalk/ast/ExprAst.gs
-input smalltalk/ast/ForAst.gs
-input smalltalk/ast/FunctionDefAst.gs
-input smalltalk/ast/GlobalAst.gs
-input smalltalk/ast/IfAst.gs
-input smalltalk/ast/ImportAst.gs
-input smalltalk/ast/ImportFromAst.gs
-input smalltalk/ast/NonlocalAst.gs
-input smalltalk/ast/PassAst.gs
-input smalltalk/ast/RaiseAst.gs
-input smalltalk/ast/ReturnAst.gs
-input smalltalk/ast/TryAst.gs
-input smalltalk/ast/WhileAst.gs
-input smalltalk/ast/WithAst.gs
-input smalltalk/ast/AndAst.gs
-input smalltalk/ast/OrAst.gs
-input smalltalk/ast/KeywordsAst.gs
-input smalltalk/ast/InvertAst.gs
-input smalltalk/ast/NotAst.gs
-input smalltalk/ast/UAddAst.gs
-input smalltalk/ast/USubAst.gs
-input smalltalk/ast/ClassFunctionDefAst.gs
-input smalltalk/ast/InstanceFunctionDefAst.gs
-input smalltalk/ast/StaticFunctionDefAst.gs
+input src/smalltalk/PythonAst/AbstractNode.gs
+input src/smalltalk/PythonAst/PrettyWriteStream.gs
+input src/smalltalk/PythonAst/PythonParser.gs
+input src/smalltalk/PythonAst/PythonToken.gs
+input src/smalltalk/PythonAst/PythonTokenizer.gs
+input src/smalltalk/PythonAst/AbstractLocationNode.gs
+input src/smalltalk/PythonAst/ArgumentsAst.gs
+input src/smalltalk/PythonAst/CmpOpAst.gs
+input src/smalltalk/PythonAst/ComprehensionAst.gs
+input src/smalltalk/PythonAst/ExpressionContextAst.gs
+input src/smalltalk/PythonAst/ModuleAst.gs
+input src/smalltalk/PythonAst/OperatorAst.gs
+input src/smalltalk/PythonAst/SuiteAst.gs
+input src/smalltalk/PythonAst/TypeIgnoreAst.gs
+input src/smalltalk/PythonAst/TypeParamAst.gs
+input src/smalltalk/PythonAst/WithItemAst.gs
+input src/smalltalk/PythonAst/AliasAst.gs
+input src/smalltalk/PythonAst/ArgAst.gs
+input src/smalltalk/PythonAst/ExceptHandlerAst.gs
+input src/smalltalk/PythonAst/ExpressionAst.gs
+input src/smalltalk/PythonAst/KeywordAst.gs
+input src/smalltalk/PythonAst/SliceAst.gs
+input src/smalltalk/PythonAst/StatementAst.gs
+input src/smalltalk/PythonAst/EqAst.gs
+input src/smalltalk/PythonAst/GtAst.gs
+input src/smalltalk/PythonAst/GtEAst.gs
+input src/smalltalk/PythonAst/InAst.gs
+input src/smalltalk/PythonAst/IsAst.gs
+input src/smalltalk/PythonAst/IsNotAst.gs
+input src/smalltalk/PythonAst/LtAst.gs
+input src/smalltalk/PythonAst/LtEAst.gs
+input src/smalltalk/PythonAst/NotEqAst.gs
+input src/smalltalk/PythonAst/NotInAst.gs
+input src/smalltalk/PythonAst/DelAst.gs
+input src/smalltalk/PythonAst/LoadAst.gs
+input src/smalltalk/PythonAst/ParamAst.gs
+input src/smalltalk/PythonAst/StoreAst.gs
+input src/smalltalk/PythonAst/Package.gs
+input src/smalltalk/PythonAst/AddAst.gs
+input src/smalltalk/PythonAst/BitAndAst.gs
+input src/smalltalk/PythonAst/BitOrAst.gs
+input src/smalltalk/PythonAst/BitXorAst.gs
+input src/smalltalk/PythonAst/DivAst.gs
+input src/smalltalk/PythonAst/FloorDivAst.gs
+input src/smalltalk/PythonAst/LShiftAst.gs
+input src/smalltalk/PythonAst/MatMultAst.gs
+input src/smalltalk/PythonAst/ModAst.gs
+input src/smalltalk/PythonAst/MultAst.gs
+input src/smalltalk/PythonAst/PowAst.gs
+input src/smalltalk/PythonAst/RShiftAst.gs
+input src/smalltalk/PythonAst/SubAst.gs
+input src/smalltalk/PythonAst/BlockAst.gs
+input src/smalltalk/PythonAst/AttributeAst.gs
+input src/smalltalk/PythonAst/AwaitAst.gs
+input src/smalltalk/PythonAst/BinOpAst.gs
+input src/smalltalk/PythonAst/BoolOpAst.gs
+input src/smalltalk/PythonAst/CallAst.gs
+input src/smalltalk/PythonAst/CompareAst.gs
+input src/smalltalk/PythonAst/ConstantAst.gs
+input src/smalltalk/PythonAst/DictAst.gs
+input src/smalltalk/PythonAst/DictCompAst.gs
+input src/smalltalk/PythonAst/FormattedValueAst.gs
+input src/smalltalk/PythonAst/GeneratorExpAst.gs
+input src/smalltalk/PythonAst/IfExpAst.gs
+input src/smalltalk/PythonAst/JoinedStrAst.gs
+input src/smalltalk/PythonAst/LambdaAst.gs
+input src/smalltalk/PythonAst/ListAst.gs
+input src/smalltalk/PythonAst/ListCompAst.gs
+input src/smalltalk/PythonAst/NameAst.gs
+input src/smalltalk/PythonAst/NamedExprAst.gs
+input src/smalltalk/PythonAst/SetAst.gs
+input src/smalltalk/PythonAst/SetCompAst.gs
+input src/smalltalk/PythonAst/StarredAst.gs
+input src/smalltalk/PythonAst/SubscriptAst.gs
+input src/smalltalk/PythonAst/TupleAst.gs
+input src/smalltalk/PythonAst/UnaryOpAst.gs
+input src/smalltalk/PythonAst/YieldAst.gs
+input src/smalltalk/PythonAst/YieldFromAst.gs
+input src/smalltalk/PythonAst/AnnAssignAst.gs
+input src/smalltalk/PythonAst/AssertAst.gs
+input src/smalltalk/PythonAst/AssignAst.gs
+input src/smalltalk/PythonAst/AsyncForAst.gs
+input src/smalltalk/PythonAst/AsyncFunctionDefAst.gs
+input src/smalltalk/PythonAst/AsyncWithAst.gs
+input src/smalltalk/PythonAst/AugAssignAst.gs
+input src/smalltalk/PythonAst/BreakAst.gs
+input src/smalltalk/PythonAst/ClassDefAst.gs
+input src/smalltalk/PythonAst/ContinueAst.gs
+input src/smalltalk/PythonAst/DeleteAst.gs
+input src/smalltalk/PythonAst/ExprAst.gs
+input src/smalltalk/PythonAst/ForAst.gs
+input src/smalltalk/PythonAst/FunctionDefAst.gs
+input src/smalltalk/PythonAst/GlobalAst.gs
+input src/smalltalk/PythonAst/IfAst.gs
+input src/smalltalk/PythonAst/ImportAst.gs
+input src/smalltalk/PythonAst/ImportFromAst.gs
+input src/smalltalk/PythonAst/NonlocalAst.gs
+input src/smalltalk/PythonAst/PassAst.gs
+input src/smalltalk/PythonAst/RaiseAst.gs
+input src/smalltalk/PythonAst/ReturnAst.gs
+input src/smalltalk/PythonAst/TryAst.gs
+input src/smalltalk/PythonAst/WhileAst.gs
+input src/smalltalk/PythonAst/WithAst.gs
+input src/smalltalk/PythonAst/AndAst.gs
+input src/smalltalk/PythonAst/OrAst.gs
+input src/smalltalk/PythonAst/KeywordsAst.gs
+input src/smalltalk/PythonAst/InvertAst.gs
+input src/smalltalk/PythonAst/NotAst.gs
+input src/smalltalk/PythonAst/UAddAst.gs
+input src/smalltalk/PythonAst/USubAst.gs
+input src/smalltalk/PythonAst/ClassFunctionDefAst.gs
+input src/smalltalk/PythonAst/InstanceFunctionDefAst.gs
+input src/smalltalk/PythonAst/StaticFunctionDefAst.gs
 
 run
 Transcript show: 'Step 5 complete: AST classes loaded'.
@@ -809,114 +767,115 @@ Transcript show: 'Step 6: Loading test classes...'.
 
 set compile_env: 0
 
-input smalltalk/tests/PythonTestCase.gs
-input smalltalk/tests/BooleanTestCase.gs
-input smalltalk/tests/BuiltinsTestCase.gs
-input smalltalk/tests/BytearrayTestCase.gs
-input smalltalk/tests/BytesTestCase.gs
-input smalltalk/tests/CMathTestCase.gs
-input smalltalk/tests/ComplexTestCase.gs
-input smalltalk/tests/DecimalTestCase.gs
-input smalltalk/tests/DictTestCase.gs
-input smalltalk/tests/FloatTestCase.gs
-input smalltalk/tests/FractionTestCase.gs
-input smalltalk/tests/FrozensetTestCase.gs
-input smalltalk/tests/GemStoneTestCase.gs
-input smalltalk/tests/HtmlTestCase.gs
-input smalltalk/tests/CPythonShimTestCase.gs
-input smalltalk/tests/ImportlibTestCase.gs
-input smalltalk/tests/PackageImportTestCase.gs
-input smalltalk/tests/IntegerTestCase.gs
-input smalltalk/tests/IteratorTestCase.gs
-input smalltalk/tests/ListTestCase.gs
-input smalltalk/tests/MathTestCase.gs
-input smalltalk/tests/ModuleTestCase.gs
-input smalltalk/tests/NumbersTestCase.gs
-input smalltalk/tests/ObjectTestCase.gs
-input smalltalk/tests/OsTestCase.gs
-input smalltalk/tests/PassTestCase.gs
-input smalltalk/tests/PythonParserTestCase.gs
-input smalltalk/tests/PythonTokenizerTestCase.gs
-input smalltalk/tests/RaiseTestCase.gs
-input smalltalk/tests/RandomTestCase.gs
-input smalltalk/tests/RangeTestCase.gs
-input smalltalk/tests/ReturnTestCase.gs
-input smalltalk/tests/SetTestCase.gs
-input smalltalk/tests/StatisticsTestCase.gs
-input smalltalk/tests/StrTestCase.gs
-input smalltalk/tests/StringModuleTestCase.gs
-input smalltalk/tests/SysTestCase.gs
-input smalltalk/tests/TryTestCase.gs
-input smalltalk/tests/TupleTestCase.gs
-input smalltalk/tests/BaseExceptionTestCase.gs
+input src/smalltalk/PythonTests/PythonTestCase.gs
+input src/smalltalk/PythonTests/BooleanTestCase.gs
+input src/smalltalk/PythonTests/BuiltinsTestCase.gs
+input src/smalltalk/PythonTests/BytearrayTestCase.gs
+input src/smalltalk/PythonTests/BytesTestCase.gs
+input src/smalltalk/PythonTests/CMathTestCase.gs
+input src/smalltalk/PythonTests/ComplexTestCase.gs
+input src/smalltalk/PythonTests/DecimalTestCase.gs
+input src/smalltalk/PythonTests/DictTestCase.gs
+input src/smalltalk/PythonTests/FloatTestCase.gs
+input src/smalltalk/PythonTests/FractionTestCase.gs
+input src/smalltalk/PythonTests/FrozensetTestCase.gs
+input src/smalltalk/PythonTests/GemStoneTestCase.gs
+input src/smalltalk/PythonTests/HtmlTestCase.gs
+input src/smalltalk/PythonTests/CPythonShimTestCase.gs
+input src/smalltalk/PythonTests/CPythonTestCase.gs
+input src/smalltalk/PythonTests/ImportlibTestCase.gs
+input src/smalltalk/PythonTests/PackageImportTestCase.gs
+input src/smalltalk/PythonTests/IntegerTestCase.gs
+input src/smalltalk/PythonTests/IteratorTestCase.gs
+input src/smalltalk/PythonTests/ListTestCase.gs
+input src/smalltalk/PythonTests/MathTestCase.gs
+input src/smalltalk/PythonTests/ModuleTestCase.gs
+input src/smalltalk/PythonTests/NumbersTestCase.gs
+input src/smalltalk/PythonTests/ObjectTestCase.gs
+input src/smalltalk/PythonTests/OsTestCase.gs
+input src/smalltalk/PythonTests/PassTestCase.gs
+input src/smalltalk/PythonTests/PythonParserTestCase.gs
+input src/smalltalk/PythonTests/PythonTokenizerTestCase.gs
+input src/smalltalk/PythonTests/RaiseTestCase.gs
+input src/smalltalk/PythonTests/RandomTestCase.gs
+input src/smalltalk/PythonTests/RangeTestCase.gs
+input src/smalltalk/PythonTests/ReturnTestCase.gs
+input src/smalltalk/PythonTests/SetTestCase.gs
+input src/smalltalk/PythonTests/StatisticsTestCase.gs
+input src/smalltalk/PythonTests/StrTestCase.gs
+input src/smalltalk/PythonTests/StringModuleTestCase.gs
+input src/smalltalk/PythonTests/SysTestCase.gs
+input src/smalltalk/PythonTests/TryTestCase.gs
+input src/smalltalk/PythonTests/TupleTestCase.gs
+input src/smalltalk/PythonTests/BaseExceptionTestCase.gs
 
 ! ------------------- Exception Test Classes
-input smalltalk/tests/exceptions/ArithmeticErrorTestCase.gs
-input smalltalk/tests/exceptions/AssertionErrorTestCase.gs
-input smalltalk/tests/exceptions/AttributeErrorTestCase.gs
-input smalltalk/tests/exceptions/BaseExceptionGroupTestCase.gs
-input smalltalk/tests/exceptions/BlockingIOErrorTestCase.gs
-input smalltalk/tests/exceptions/BrokenPipeErrorTestCase.gs
-input smalltalk/tests/exceptions/BufferErrorTestCase.gs
-input smalltalk/tests/exceptions/BytesWarningTestCase.gs
-input smalltalk/tests/exceptions/ChildProcessErrorTestCase.gs
-input smalltalk/tests/exceptions/ConnectionAbortedErrorTestCase.gs
-input smalltalk/tests/exceptions/ConnectionErrorTestCase.gs
-input smalltalk/tests/exceptions/ConnectionRefusedErrorTestCase.gs
-input smalltalk/tests/exceptions/ConnectionResetErrorTestCase.gs
-input smalltalk/tests/exceptions/DeprecationWarningTestCase.gs
-input smalltalk/tests/exceptions/EOFErrorTestCase.gs
-input smalltalk/tests/exceptions/EncodingWarningTestCase.gs
-input smalltalk/tests/exceptions/ExceptionGroupTestCase.gs
-input smalltalk/tests/exceptions/ExceptionTestCase.gs
-input smalltalk/tests/exceptions/FileExistsErrorTestCase.gs
-input smalltalk/tests/exceptions/FileNotFoundErrorTestCase.gs
-input smalltalk/tests/exceptions/FloatingPointErrorTestCase.gs
-input smalltalk/tests/exceptions/FutureWarningTestCase.gs
-input smalltalk/tests/exceptions/GeneratorExitTestCase.gs
-input smalltalk/tests/exceptions/ImportErrorTestCase.gs
-input smalltalk/tests/exceptions/ImportWarningTestCase.gs
-input smalltalk/tests/exceptions/IndentationErrorTestCase.gs
-input smalltalk/tests/exceptions/IndexErrorTestCase.gs
-input smalltalk/tests/exceptions/InterruptedErrorTestCase.gs
-input smalltalk/tests/exceptions/IsADirectoryErrorTestCase.gs
-input smalltalk/tests/exceptions/KeyErrorTestCase.gs
-input smalltalk/tests/exceptions/KeyboardInterruptTestCase.gs
-input smalltalk/tests/exceptions/LookupErrorTestCase.gs
-input smalltalk/tests/exceptions/MemoryErrorTestCase.gs
-input smalltalk/tests/exceptions/ModuleNotFoundErrorTestCase.gs
-input smalltalk/tests/exceptions/NameErrorTestCase.gs
-input smalltalk/tests/exceptions/NotADirectoryErrorTestCase.gs
-input smalltalk/tests/exceptions/NotImplementedErrorTestCase.gs
-input smalltalk/tests/exceptions/OSErrorTestCase.gs
-input smalltalk/tests/exceptions/OverflowErrorTestCase.gs
-input smalltalk/tests/exceptions/PendingDeprecationWarningTestCase.gs
-input smalltalk/tests/exceptions/PermissionErrorTestCase.gs
-input smalltalk/tests/exceptions/ProcessLookupErrorTestCase.gs
-input smalltalk/tests/exceptions/RecursionErrorTestCase.gs
-input smalltalk/tests/exceptions/ReferenceErrorTestCase.gs
-input smalltalk/tests/exceptions/ResourceWarningTestCase.gs
-input smalltalk/tests/exceptions/RuntimeErrorTestCase.gs
-input smalltalk/tests/exceptions/RuntimeWarningTestCase.gs
-input smalltalk/tests/exceptions/StopAsyncIterationTestCase.gs
-input smalltalk/tests/exceptions/StopIterationTestCase.gs
-input smalltalk/tests/exceptions/SyntaxErrorTestCase.gs
-input smalltalk/tests/exceptions/SyntaxWarningTestCase.gs
-input smalltalk/tests/exceptions/SystemErrorTestCase.gs
-input smalltalk/tests/exceptions/SystemExitTestCase.gs
-input smalltalk/tests/exceptions/TabErrorTestCase.gs
-input smalltalk/tests/exceptions/TimeoutErrorTestCase.gs
-input smalltalk/tests/exceptions/TypeErrorTestCase.gs
-input smalltalk/tests/exceptions/UnboundLocalErrorTestCase.gs
-input smalltalk/tests/exceptions/UnicodeDecodeErrorTestCase.gs
-input smalltalk/tests/exceptions/UnicodeEncodeErrorTestCase.gs
-input smalltalk/tests/exceptions/UnicodeErrorTestCase.gs
-input smalltalk/tests/exceptions/UnicodeTranslateErrorTestCase.gs
-input smalltalk/tests/exceptions/UnicodeWarningTestCase.gs
-input smalltalk/tests/exceptions/UserWarningTestCase.gs
-input smalltalk/tests/exceptions/ValueErrorTestCase.gs
-input smalltalk/tests/exceptions/WarningTestCase.gs
-input smalltalk/tests/exceptions/ZeroDivisionErrorTestCase.gs
+input src/smalltalk/PythonTests/ArithmeticErrorTestCase.gs
+input src/smalltalk/PythonTests/AssertionErrorTestCase.gs
+input src/smalltalk/PythonTests/AttributeErrorTestCase.gs
+input src/smalltalk/PythonTests/BaseExceptionGroupTestCase.gs
+input src/smalltalk/PythonTests/BlockingIOErrorTestCase.gs
+input src/smalltalk/PythonTests/BrokenPipeErrorTestCase.gs
+input src/smalltalk/PythonTests/BufferErrorTestCase.gs
+input src/smalltalk/PythonTests/BytesWarningTestCase.gs
+input src/smalltalk/PythonTests/ChildProcessErrorTestCase.gs
+input src/smalltalk/PythonTests/ConnectionAbortedErrorTestCase.gs
+input src/smalltalk/PythonTests/ConnectionErrorTestCase.gs
+input src/smalltalk/PythonTests/ConnectionRefusedErrorTestCase.gs
+input src/smalltalk/PythonTests/ConnectionResetErrorTestCase.gs
+input src/smalltalk/PythonTests/DeprecationWarningTestCase.gs
+input src/smalltalk/PythonTests/EOFErrorTestCase.gs
+input src/smalltalk/PythonTests/EncodingWarningTestCase.gs
+input src/smalltalk/PythonTests/ExceptionGroupTestCase.gs
+input src/smalltalk/PythonTests/ExceptionTestCase.gs
+input src/smalltalk/PythonTests/FileExistsErrorTestCase.gs
+input src/smalltalk/PythonTests/FileNotFoundErrorTestCase.gs
+input src/smalltalk/PythonTests/FloatingPointErrorTestCase.gs
+input src/smalltalk/PythonTests/FutureWarningTestCase.gs
+input src/smalltalk/PythonTests/GeneratorExitTestCase.gs
+input src/smalltalk/PythonTests/ImportErrorTestCase.gs
+input src/smalltalk/PythonTests/ImportWarningTestCase.gs
+input src/smalltalk/PythonTests/IndentationErrorTestCase.gs
+input src/smalltalk/PythonTests/IndexErrorTestCase.gs
+input src/smalltalk/PythonTests/InterruptedErrorTestCase.gs
+input src/smalltalk/PythonTests/IsADirectoryErrorTestCase.gs
+input src/smalltalk/PythonTests/KeyErrorTestCase.gs
+input src/smalltalk/PythonTests/KeyboardInterruptTestCase.gs
+input src/smalltalk/PythonTests/LookupErrorTestCase.gs
+input src/smalltalk/PythonTests/MemoryErrorTestCase.gs
+input src/smalltalk/PythonTests/ModuleNotFoundErrorTestCase.gs
+input src/smalltalk/PythonTests/NameErrorTestCase.gs
+input src/smalltalk/PythonTests/NotADirectoryErrorTestCase.gs
+input src/smalltalk/PythonTests/NotImplementedErrorTestCase.gs
+input src/smalltalk/PythonTests/OSErrorTestCase.gs
+input src/smalltalk/PythonTests/OverflowErrorTestCase.gs
+input src/smalltalk/PythonTests/PendingDeprecationWarningTestCase.gs
+input src/smalltalk/PythonTests/PermissionErrorTestCase.gs
+input src/smalltalk/PythonTests/ProcessLookupErrorTestCase.gs
+input src/smalltalk/PythonTests/RecursionErrorTestCase.gs
+input src/smalltalk/PythonTests/ReferenceErrorTestCase.gs
+input src/smalltalk/PythonTests/ResourceWarningTestCase.gs
+input src/smalltalk/PythonTests/RuntimeErrorTestCase.gs
+input src/smalltalk/PythonTests/RuntimeWarningTestCase.gs
+input src/smalltalk/PythonTests/StopAsyncIterationTestCase.gs
+input src/smalltalk/PythonTests/StopIterationTestCase.gs
+input src/smalltalk/PythonTests/SyntaxErrorTestCase.gs
+input src/smalltalk/PythonTests/SyntaxWarningTestCase.gs
+input src/smalltalk/PythonTests/SystemErrorTestCase.gs
+input src/smalltalk/PythonTests/SystemExitTestCase.gs
+input src/smalltalk/PythonTests/TabErrorTestCase.gs
+input src/smalltalk/PythonTests/TimeoutErrorTestCase.gs
+input src/smalltalk/PythonTests/TypeErrorTestCase.gs
+input src/smalltalk/PythonTests/UnboundLocalErrorTestCase.gs
+input src/smalltalk/PythonTests/UnicodeDecodeErrorTestCase.gs
+input src/smalltalk/PythonTests/UnicodeEncodeErrorTestCase.gs
+input src/smalltalk/PythonTests/UnicodeErrorTestCase.gs
+input src/smalltalk/PythonTests/UnicodeTranslateErrorTestCase.gs
+input src/smalltalk/PythonTests/UnicodeWarningTestCase.gs
+input src/smalltalk/PythonTests/UserWarningTestCase.gs
+input src/smalltalk/PythonTests/ValueErrorTestCase.gs
+input src/smalltalk/PythonTests/WarningTestCase.gs
+input src/smalltalk/PythonTests/ZeroDivisionErrorTestCase.gs
 
 run
 Transcript show: 'Step 6 complete: Test classes loaded'.

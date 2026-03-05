@@ -50,7 +50,7 @@ _sre.o: _sre/sre.c _sre/sre.h _sre/sre_lib.h _sre/sre_constants.h _sre/sre_targe
 $(LIB): $(OBJECTS)
 	$(CXX) $(SHARED_FLAGS) -o $@ $(OBJECTS) $(GEMSTONE)/lib/gciualib.o -lm -lpthread -undefined dynamic_lookup
 
-GRAIL_LIB_DIR = ../../lib
+GRAIL_LIB_DIR = ../../../lib
 PYTHON_INCLUDES = $(shell python3-config --includes 2>/dev/null)
 
 dynmods: $(GRAIL_LIB_DIR)/_grail_demo.so

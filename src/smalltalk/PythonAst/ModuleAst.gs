@@ -127,10 +127,19 @@ method: ModuleAst
 executeWithScope: aSymbolList
 	"Compile and execute this module, returning the raw execution result."
 
-	| file writeStream compiledMethod result |
+	| tmpPath file writeStream compiledMethod result |
 	writeStream := PrettyWriteStream on: Unicode7 new.
 	self printSmalltalkOn: writeStream.
-	file := GsFile open: '/tmp/grail.st' mode: 'w' onClient: false.
+	tmpPath := '/tmp/grail'.
+	(GsFile isServerDirectory: tmpPath) ifNil: [
+		GsFile createServerDirectory: tmpPath.
+	] ifNotNil: [
+		(GsFile isServerDirectory: tmpPath) ifFalse: [
+			self error: '/tmp/grail should be a directory!'.
+		].
+	].
+	"Write source to disk to allow debugging/inspecting"
+	file := GsFile open: tmpPath , '/' , name , '.gs' mode: 'w' onClient: false.
 	file nextPutAll: writeStream contents.
 	file close.
 	[

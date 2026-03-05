@@ -125,7 +125,7 @@ from_number: n
 
 	| ratio num den |
 	"Check if it has as_integer_ratio method in env 2"
-	(n ___respondsToEnv2___: #as_integer_ratio) ifFalse: [
+	(n ___respondsToEnv1___: #as_integer_ratio) ifFalse: [
 		TypeError ___signal___: 'argument must have as_integer_ratio method'
 	].
 

@@ -5,7 +5,7 @@ stdout.txt
 tmp/
 .setenv
 pyperf*
-.claude
+.claude/settings.local.json
 
 # Build artifacts
 lib/
@@ -13,3 +13,4 @@ lib/
 *.dylib
 *.so
 test_driver
+gemstone

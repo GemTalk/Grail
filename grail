@@ -1,11 +1,11 @@
 #!/bin/bash
 
 if [ ! -f .setenv ]; then
-    cp setenv .setenv
+    cp scripts/setenv .setenv
 fi
 source .setenv
 if [ ! -f ~/.topazini ]; then
-    cp topazini ~/.topazini
+    cp scripts/topazini ~/.topazini
 fi
 
-topaz -lq -S grail.topaz -- $1
+topaz -lq -S scripts/grail.tpz -- $1

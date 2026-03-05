@@ -16,17 +16,28 @@ echo "Grail directory: $GRAIL_DIR"
 SHIM_LIB_PATH=""
 if [ -n "$GEMSTONE" ]; then
     echo "Building CPython shim library..."
-    make -C "$GRAIL_DIR/c/shim" clean all GEMSTONE="$GEMSTONE"
-    SHIM_LIB_PATH="$GRAIL_DIR/c/shim/libcpython_ua.dylib"
+    make -C "$GRAIL_DIR/src/c/shim" clean all GEMSTONE="$GEMSTONE"
+    SHIM_LIB_PATH="$GRAIL_DIR/src/c/shim/libcpython_ua.dylib"
     if [ ! -f "$SHIM_LIB_PATH" ]; then
         echo "Warning: CPython shim library build failed. CPythonShim tests will be skipped."
         SHIM_LIB_PATH=""
     else
         echo "Building dynamic extension modules..."
-        make -C "$GRAIL_DIR/c/shim" dynmods
+        make -C "$GRAIL_DIR/src/c/shim" dynmods
     fi
 else
     echo "Warning: GEMSTONE not set. Skipping shim library build."
+fi
+
+# Detect CPython shared library for embedded FFI integration
+PYTHON_LIB_PATH=""
+PYTHON_PREFIX=""
+if command -v python3 &>/dev/null; then
+    echo "Detecting CPython shared library..."
+    eval "$("$GRAIL_DIR/scripts/detect-python.sh" "$GRAIL_DIR/lib")"
+    if [ -n "$PYTHON_LIB_PATH" ]; then
+        echo "Found CPython: $PYTHON_LIB_PATH"
+    fi
 fi
 
 topaz -lq << EOF
@@ -47,7 +58,7 @@ commit
 logout
 set user DataCurator pass swordfish
 login
-input smalltalk/install.gs
+input src/smalltalk/install.gs
 run
 importlib grailDir: '$GRAIL_DIR'.
 '$SHIM_LIB_PATH' isEmpty ifFalse: [
@@ -58,6 +69,10 @@ importlib grailDir: '$GRAIL_DIR'.
 	importlib registerModule: '_crc32c' with: _crc32c ___instance___.
 	importlib registerModule: '_shimtest' with: _shimtest ___instance___.
 	importlib registerModule: '_sre' with: _sre ___instance___.
+].
+'$PYTHON_LIB_PATH' isEmpty ifFalse: [
+	CPythonLibrary libraryPath: '$PYTHON_LIB_PATH'.
+	CPythonLibrary pythonHomePath: '$PYTHON_PREFIX'.
 ].
 %
 output pop
