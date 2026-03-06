@@ -434,6 +434,142 @@ callModule: moduleName method: methodName extendCrc: anInteger withBytes: aByteA
 %
 
 ! ===============================================================================
+! Instance methods - 6-arg calling (via shimCall6)
+! ===============================================================================
+
+category: 'Calling'
+method: CPythonShim
+callModule6: modDotMethod with: a1 with: a2 with: a3 with: a4 with: a5 with: a6
+	"Call a module method with 6 arguments. modDotMethod is 'module.method'.
+	Returns a Smalltalk OOP (extracted from result PyObject offset 16)."
+
+	^ System userAction: #shimCall6 withArgs: {
+		modDotMethod .
+		(self wrap: a1) memoryAddress .
+		(self wrap: a2) memoryAddress .
+		(self wrap: a3) memoryAddress .
+		(self wrap: a4) memoryAddress .
+		(self wrap: a5) memoryAddress .
+		(self wrap: a6) memoryAddress . 6
+	}
+%
+
+category: 'Calling'
+method: CPythonShim
+callModule6ReturnCPtr: modDotMethod with: a1 with: a2 with: a3 with: a4 with: a5 with: a6
+	"Call a module method with 6 arguments. Returns a raw C pointer (SmallInteger).
+	modDotMethod is 'module.method'."
+
+	^ System userAction: #shimCall6 withArgs: {
+		modDotMethod .
+		(self wrap: a1) memoryAddress .
+		(self wrap: a2) memoryAddress .
+		(self wrap: a3) memoryAddress .
+		(self wrap: a4) memoryAddress .
+		(self wrap: a5) memoryAddress .
+		(self wrap: a6) memoryAddress . (6 bitOr: 8)
+	}
+%
+
+! ===============================================================================
+! Instance methods - Typed object calling (via shimCallTyped)
+! ===============================================================================
+
+category: 'Calling'
+method: CPythonShim
+callTyped: moduleName type: typeName method: methName selfPtr: ptr
+	"Call a no-arg method on a C-allocated typed object. Returns a Smalltalk OOP."
+
+	^ System userAction: #shimCallTyped withArgs: {
+		moduleName . typeName . methName . ptr .
+		0 . 0 . 0 . 0
+	}
+%
+
+category: 'Calling'
+method: CPythonShim
+callTyped: moduleName type: typeName method: methName selfPtr: ptr with: a1
+	"Call a 1-arg method on a C-allocated typed object. Returns a Smalltalk OOP."
+
+	^ System userAction: #shimCallTyped withArgs: {
+		moduleName . typeName . methName . ptr .
+		(self wrap: a1) memoryAddress . 0 . 0 . 1
+	}
+%
+
+category: 'Calling'
+method: CPythonShim
+callTyped: moduleName type: typeName method: methName selfPtr: ptr with: a1 with: a2
+	"Call a 2-arg method on a C-allocated typed object. Returns a Smalltalk OOP."
+
+	^ System userAction: #shimCallTyped withArgs: {
+		moduleName . typeName . methName . ptr .
+		(self wrap: a1) memoryAddress .
+		(self wrap: a2) memoryAddress . 0 . 2
+	}
+%
+
+category: 'Calling'
+method: CPythonShim
+callTyped: moduleName type: typeName method: methName selfPtr: ptr with: a1 with: a2 with: a3
+	"Call a 3-arg method on a C-allocated typed object. Returns a Smalltalk OOP."
+
+	^ System userAction: #shimCallTyped withArgs: {
+		moduleName . typeName . methName . ptr .
+		(self wrap: a1) memoryAddress .
+		(self wrap: a2) memoryAddress .
+		(self wrap: a3) memoryAddress . 3
+	}
+%
+
+category: 'Calling'
+method: CPythonShim
+callTypedReturnCPtr: moduleName type: typeName method: methName selfPtr: ptr
+	"Call a no-arg method on a C-allocated typed object. Returns a raw C pointer."
+
+	^ System userAction: #shimCallTyped withArgs: {
+		moduleName . typeName . methName . ptr .
+		0 . 0 . 0 . 8
+	}
+%
+
+category: 'Calling'
+method: CPythonShim
+callTypedReturnCPtr: moduleName type: typeName method: methName selfPtr: ptr with: a1
+	"Call a 1-arg method on a C-allocated typed object. Returns a raw C pointer."
+
+	^ System userAction: #shimCallTyped withArgs: {
+		moduleName . typeName . methName . ptr .
+		(self wrap: a1) memoryAddress . 0 . 0 . (1 bitOr: 8)
+	}
+%
+
+category: 'Calling'
+method: CPythonShim
+callTypedReturnCPtr: moduleName type: typeName method: methName selfPtr: ptr with: a1 with: a2
+	"Call a 2-arg method on a C-allocated typed object. Returns a raw C pointer."
+
+	^ System userAction: #shimCallTyped withArgs: {
+		moduleName . typeName . methName . ptr .
+		(self wrap: a1) memoryAddress .
+		(self wrap: a2) memoryAddress . 0 . (2 bitOr: 8)
+	}
+%
+
+category: 'Calling'
+method: CPythonShim
+callTypedReturnCPtr: moduleName type: typeName method: methName selfPtr: ptr with: a1 with: a2 with: a3
+	"Call a 3-arg method on a C-allocated typed object. Returns a raw C pointer."
+
+	^ System userAction: #shimCallTyped withArgs: {
+		moduleName . typeName . methName . ptr .
+		(self wrap: a1) memoryAddress .
+		(self wrap: a2) memoryAddress .
+		(self wrap: a3) memoryAddress . (3 bitOr: 8)
+	}
+%
+
+! ===============================================================================
 ! Instance methods - Module Loading (for tests)
 ! ===============================================================================
 

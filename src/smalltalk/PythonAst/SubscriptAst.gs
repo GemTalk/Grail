@@ -54,6 +54,20 @@ removeallclassmethods SubscriptAst
 
 set compile_env: 0
 
+category: 'accessing'
+method: SubscriptAst
+slice
+
+	^slice
+%
+
+category: 'accessing'
+method: SubscriptAst
+value
+
+	^value
+%
+
 category: 'other'
 method: SubscriptAst
 assertContextIsLoad

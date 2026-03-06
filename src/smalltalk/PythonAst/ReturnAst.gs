@@ -55,11 +55,11 @@ category: 'other'
 method: ReturnAst
 printSmalltalkOn: aStream
 
-	aStream nextPut: $^.
+	aStream nextPutAll: 'PythonReturn ___signal___: '.
 	value ifNil: [
 		aStream nextPutAll: 'None'.
 	] ifNotNil: [
-		value printSmalltalkOn: aStream.
+		value printSmalltalkWithParenthesisOn: aStream.
 	].
 	aStream nextPut: $.
 %

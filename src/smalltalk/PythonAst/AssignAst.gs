@@ -66,9 +66,43 @@ category: 'other'
 method: AssignAst
 printSmalltalkOn: aStream
 
-	targets first printSmalltalkOn: aStream.
+	| tgt |
+	tgt := targets first.
+	(tgt isKindOf: AttributeAst) ifTrue: [
+		^self printSmalltalkAttributeStoreOn: aStream target: tgt.
+	].
+	(tgt isKindOf: SubscriptAst) ifTrue: [
+		^self printSmalltalkSubscriptStoreOn: aStream target: tgt.
+	].
+	tgt printSmalltalkOn: aStream.
 	aStream nextPutAll: ' := '.
 	value printSmalltalkOn: aStream.
+	aStream nextPut: $..
+%
+
+category: 'other'
+method: AssignAst
+printSmalltalkAttributeStoreOn: aStream target: tgt
+	"Generate: obj ___at___: #'attr' put: value."
+
+	tgt value printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: ' ___at___: #'''.
+	aStream nextPutAll: tgt attr.
+	aStream nextPutAll: ''' put: '.
+	value printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPut: $..
+%
+
+category: 'other'
+method: AssignAst
+printSmalltalkSubscriptStoreOn: aStream target: tgt
+	"Generate: obj __setitem__: slice _: value."
+
+	tgt value printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: ' __setitem__: '.
+	tgt slice printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: ' _: '.
+	value printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPut: $..
 %
 

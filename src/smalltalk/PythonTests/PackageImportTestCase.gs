@@ -107,8 +107,9 @@ testNonPackageNoPath
 	"Regular (non-package) module should not have __path__"
 
 	| helloModule path |
-	importlib perform: #loadModuleFromPath:name: env: 0
-		withArguments: { (importlib grailDir , '/src/python/hello.py'). 'python.hello'. }.
+	importlib 
+		loadModuleFromPath: (importlib grailDir , '/src/python/hello.py')
+		name: 'python.hello'.
 	helloModule := importlib ___lookupModule___: 'python.hello'.
 
 	path := helloModule perform: #__path__ env: 1.

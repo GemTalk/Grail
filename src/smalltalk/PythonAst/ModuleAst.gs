@@ -85,12 +85,15 @@ parseSource: sourceString
 category: 'evaluation'
 classmethod: ModuleAst
 symbolListForModuleScope: aSymbolDictionary
-	"Return a SymbolList with module scope before builtins."
+	"Return a SymbolList with module scope at the front, followed by builtins
+	and the full system symbol list (Python dict, Globals, etc.) so that
+	exception classes, PythonReturn, None, etc. are all resolvable."
 
-	^SymbolList new
-		add: aSymbolDictionary;
-		add: builtins ___instance___;
-		yourself
+	| symbolList |
+	symbolList := System myUserProfile symbolList copy.
+	symbolList insertObject: builtins ___instance___ at: 1.
+	symbolList insertObject: aSymbolDictionary at: 1.
+	^symbolList
 %
 
 category: 'accessors'
@@ -150,12 +153,12 @@ executeWithScope: aSymbolList
 			environmentId: 1
 			flags: 0.
 	] on: AbstractException do: [:ex |
-		ex pass.
+		ex pass. "Code is here to allow a breakpoint"
 	].
 	[
 		result := compiledMethod _executeInContext: nil.
 	] on: AbstractException do: [:ex |
-		ex pass.
+		ex pass. "Code is here to allow a breakpoint"
 	].
 	^result
 %

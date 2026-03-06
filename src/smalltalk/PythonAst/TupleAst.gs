@@ -54,6 +54,13 @@ removeallclassmethods TupleAst
 
 set compile_env: 0
 
+category: 'accessing'
+method: TupleAst
+elts
+
+	^elts
+%
+
 category: 'other'
 method: TupleAst
 addVariableNamesTo: aStream

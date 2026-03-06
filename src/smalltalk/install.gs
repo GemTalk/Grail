@@ -109,6 +109,7 @@ run
 	at: #'RuntimeWarning' put: nil;
 	at: #'StatisticsError' put: nil;
 	at: #'StopAsyncIteration' put: nil;
+	at: #'PythonReturn' put: nil;
 	at: #'StopIteration' put: nil;
 	at: #'SyntaxError' put: nil;
 	at: #'SyntaxWarning' put: nil;
@@ -155,6 +156,7 @@ run
 	at: #'list_iterator' put: nil;
 	at: #'math' put: nil;
 	at: #'module' put: nil;
+	at: #'PythonClass' put: nil;
 	at: #'numbers' put: nil;
 	at: #'numbers_Complex' put: nil;
 	at: #'numbers_Integral' put: nil;
@@ -517,6 +519,7 @@ input src/smalltalk/Python/OSError.gs
 input src/smalltalk/Python/ReferenceError.gs
 input src/smalltalk/Python/RuntimeError.gs
 input src/smalltalk/Python/StopAsyncIteration.gs
+input src/smalltalk/Python/PythonReturn.gs
 input src/smalltalk/Python/StopIteration.gs
 input src/smalltalk/Python/SyntaxError.gs
 input src/smalltalk/Python/SystemError.gs

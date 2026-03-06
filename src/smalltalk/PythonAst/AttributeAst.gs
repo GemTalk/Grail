@@ -55,6 +55,20 @@ removeallclassmethods AttributeAst
 
 set compile_env: 0
 
+category: 'accessing'
+method: AttributeAst
+attr
+
+	^attr
+%
+
+category: 'accessing'
+method: AttributeAst
+value
+
+	^value
+%
+
 category: 'other'
 method: AttributeAst
 assertContextIsLoad

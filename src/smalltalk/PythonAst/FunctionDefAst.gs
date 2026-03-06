@@ -131,13 +131,21 @@ printSmalltalkOn: aStream
 		].
 	].
 	aStream
-		nextPut: $[;
+		nextPutAll: '[';
+		lf;
+		increaseIndent.
+	aStream
+		nextPutAll: '[';
 		lf;
 		increaseIndent.
 	body printSmalltalkOn: aStream.
 	aStream
 		decreaseIndent;
 		nextPutAll: '] value.';
+		lf.
+	aStream
+		decreaseIndent;
+		nextPutAll: '] ___on___: PythonReturn do: [:___ex___ | ___ex___ returnValue].';
 		lf.
 	aStream decreaseIndent; nextPutAll: '].'.
 %

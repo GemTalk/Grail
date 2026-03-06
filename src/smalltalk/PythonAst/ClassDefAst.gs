@@ -39,6 +39,64 @@ removeallclassmethods ClassDefAst
 
 set compile_env: 0
 
+category: 'code generation'
+method: ClassDefAst
+addVariableNamesTo: aStream
+
+	aStream nextPutAll: name; space
+%
+
+category: 'code generation'
+method: ClassDefAst
+printSmalltalkOn: aStream
+	"Generate class creation code.
+	class Foo:
+	    def bar(self): return 42
+	->
+	Foo := [:___cls___ |
+	    | bar |
+	    bar := [:positional :keyword | ... ].
+	    ___cls___ ___at___: #'bar' put: bar.
+	    ___cls___ ___at___: #'__name__' put: #'Foo'.
+	    ___cls___
+	] value: (PythonClass perform: #new env: 0)."
+
+	aStream nextPutAll: name.
+	aStream nextPutAll: ' := [:___cls___ |'; lf; increaseIndent.
+
+	"Declare temps from the body block"
+	body variables notEmpty ifTrue: [
+		aStream nextPut: $|.
+		body variables do: [:each | aStream space; nextPutAll: each].
+		aStream nextPutAll: ' |'; lf.
+	].
+
+	"Generate body statements"
+	body body do: [:each |
+		each printSmalltalkOn: aStream.
+		aStream lf.
+	].
+
+	"Store each variable into the class dict"
+	body variables do: [:each |
+		aStream nextPutAll: '___cls___ ___at___: #'''.
+		aStream nextPutAll: each.
+		aStream nextPutAll: ''' put: '.
+		aStream nextPutAll: each.
+		aStream nextPut: $.; lf.
+	].
+
+	"Store __name__"
+	aStream nextPutAll: '___cls___ ___at___: #''__name__'' put: #'''.
+	aStream nextPutAll: name.
+	aStream nextPutAll: '''.'; lf.
+
+	"Return the class"
+	aStream nextPutAll: '___cls___'; lf.
+
+	aStream decreaseIndent; nextPutAll: '] value: (PythonClass perform: #new env: 0).'.
+%
+
 category: 'other'
 method: ClassDefAst
 __eq__

@@ -126,11 +126,24 @@ category: 'Module Loading'
 classmethod: importlib
 loadModuleFromPath: pathString name: moduleName
 	"Load a module from a file path and register it.
-	Returns the module instance."
-	| moduleAst mySymbolList moduleInstance nameParts packageName |
+	Returns the module instance.
+
+	The module instance (a SymbolDictionary) is created FIRST and used as the
+	scope dictionary during execution. Variables declared in the module body
+	resolve to dictionary entries (not temps), so they persist after execution."
+	| moduleAst moduleInstance nameParts packageName mySymbolList |
 	moduleAst := self astForPath: pathString.
 	moduleAst name: moduleName.
-	mySymbolList := SymbolList with: builtins ___instance___.
+	" Create module instance FIRST as the scope dictionary
+	moduleInstance := module perform: #new env: 0.
+	moduleAst useTempsForBlock: false.
+	moduleAst ensureModuleScope: moduleInstance. "
+	"Set module metadata before execution (so __name__ etc. are visible)"
+	" mySymbolList := SymbolList with: builtins ___instance___. "
+
+	mySymbolList := System myUserProfile symbolList copy.
+	mySymbolList insertObject: builtins ___instance___ at: 1.
+
 	moduleAst executeWithScope: mySymbolList.
 	"Create a module instance"
 	moduleInstance := module perform: #new env: 0.
@@ -149,10 +162,10 @@ loadModuleFromPath: pathString name: moduleName
 		"For packages, __package__ is the module name itself"
 		moduleInstance perform: #'__package__:' env: 1 withArguments: { moduleName }.
 	].
-	"Register the module in sys.modules"
-	self
-		registerModule: moduleName
-		with: moduleInstance.
+	"Register BEFORE execution so circular imports resolve"
+	self registerModule: moduleName with: moduleInstance.
+	"Execute with module scope in SymbolList"
+	moduleAst evaluateWithScope: (ModuleAst symbolListForModuleScope: moduleInstance).
 	^ moduleInstance
 %
 
@@ -199,12 +212,12 @@ runPath: pathString
 			environmentId: 1
 			flags: 0.
 	] on: AbstractException do: [:ex |
-		ex pass.
+		ex pass. "Code is here to allow a breakpoint"
 	].
 	[
-		^ method _executeInContext: 2
+		^ method _executeInContext: nil
 	] on: AbstractException do: [:ex |
-		ex pass.
+		ex pass. "Code is here to allow a breakpoint"
 	].
 %
 

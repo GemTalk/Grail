@@ -1,34 +1,3 @@
-# TODO — Upcoming Work
-
-## `html.parser` Module
-
-`html.parser` is pure Python (no C extension needed) but depends heavily on
-`re`. The dependency chain:
-
-1. **Finish `_sre` C module** — expose the regex engine beyond the current
-   utility functions (`getcodesize`, casing helpers). Need: `compile`,
-   `match`, `search`, `SRE_Pattern`, `SRE_Match` types.
-
-2. **Implement `re` module** — the Python-level wrapper providing
-   `re.compile()`, `Pattern` and `Match` objects, flags (`VERBOSE`,
-   `IGNORECASE`, etc.), and key methods (`match`, `search`, `sub`,
-   `findall`, `split`).
-
-3. **Import `html.parser`** — once `re` works, CPython's `html/parser.py`
-   can be imported largely as-is. It uses ~12 compiled regex patterns with
-   alternation, character classes, quantifiers, lookaheads, named groups,
-   `re.VERBOSE`, and `re.IGNORECASE`.
-
-### Current State
-
-| Component | Status |
-|-----------|--------|
-| `html.escape` / `html.unescape` | Done (manual parsing, no `re` needed) |
-| `html.entities` (HTML4 + HTML5) | Done (252 + 2,125 entries) |
-| `_sre` C module (utility funcs) | Partial — casing helpers only |
-| `_sre` regex engine | Not yet exposed |
-| `re` module | Not yet implemented |
-| `html.parser` / `HTMLParser` | Blocked on `re` |
 # TODO
 
 ## `import re` — Regular Expression Support

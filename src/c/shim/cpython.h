@@ -710,6 +710,30 @@ void      PyErr_Restore(PyObject *type, PyObject *value, PyObject *tb);
 int PyArg_UnpackTuple(PyObject *args, const char *name, Py_ssize_t min,
                       Py_ssize_t max, ...);
 
+/* _PyArg_Parser — used by clinic-generated argument parsing code */
+typedef struct _PyArg_Parser {
+    const char *format;           /* unused in our shim */
+    const char * const *keywords;
+    const char *fname;
+    const char *custom_msg;
+    int pos;                      /* positional-only count */
+    int min;
+    int max;
+    PyObject *kwtuple;
+    struct _PyArg_Parser *next;
+} _PyArg_Parser;
+
+PyObject *const *
+_PyArg_UnpackKeywords(PyObject *const *args, Py_ssize_t nargs,
+                      PyObject *kwargs, PyObject *kwnames,
+                      _PyArg_Parser *parser,
+                      int minpos, int maxpos,
+                      int minkw, int varpos,
+                      PyObject **buf);
+
+/* _PyNumber_Index — internal alias for PyNumber_Index */
+#define _PyNumber_Index PyNumber_Index
+
 /* ========== Module initialization ========== */
 
 PyObject *PyModuleDef_Init(PyModuleDef *def);
