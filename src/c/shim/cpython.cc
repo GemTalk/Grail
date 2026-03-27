@@ -1280,9 +1280,12 @@ extern "C" int PyDict_Next(PyObject *dict, Py_ssize_t *ppos, PyObject **pkey,
     if (result == OOP_NIL) return 0;
 
     /* Result is an Array of { key_addr, value_addr, next_pos } */
-    OopType keyAddr = GciPerform(result, "at:", (OopType[]){ GciI64ToOop(1) }, 1);
-    OopType valAddr = GciPerform(result, "at:", (OopType[]){ GciI64ToOop(2) }, 1);
-    OopType nextPos = GciPerform(result, "at:", (OopType[]){ GciI64ToOop(3) }, 1);
+    OopType keyArr[1] = { GciI64ToOop(1) };
+    OopType valArr[1] = { GciI64ToOop(2) };
+    OopType nextArr[1] = { GciI64ToOop(3) };
+    OopType keyAddr = GciPerform(result, "at:", keyArr, 1);
+    OopType valAddr = GciPerform(result, "at:", valArr, 1);
+    OopType nextPos = GciPerform(result, "at:", nextArr, 1);
 
     *pkey = addr_to_pyobj(keyAddr);
     *pvalue = addr_to_pyobj(valAddr);

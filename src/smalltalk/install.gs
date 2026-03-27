@@ -460,11 +460,11 @@ Transcript show: 'Step 4: Loading Python built-in type classes...'.
 %
 
 input src/smalltalk/Python/BaseException.gs
-input src/smalltalk/Python/bytearray.gs
+input src/smalltalk/Python/Bytearray.gs
 input src/smalltalk/Python/complex.gs
 input src/smalltalk/Python/iterator.gs
 input src/smalltalk/Python/module.gs
-input src/smalltalk/Python/string_formatter.gs
+input src/smalltalk/Python/string_Formatter.gs
 input src/smalltalk/Python/BaseExceptionGroup.gs
 input src/smalltalk/Python/Exception.gs
 input src/smalltalk/Python/GeneratorExit.gs
@@ -587,23 +587,23 @@ Transcript show: 'Added Python dictionary to SystemUser''s symbol list'.
 %
 
 ! ------------------- GemStone base class methods (as SystemUser)
-input src/smalltalk/Python/bool.gs
+input src/smalltalk/Python/Bool.gs
 input src/smalltalk/Python/builtin_function_or_method.gs
-input src/smalltalk/Python/bytes.gs
+input src/smalltalk/Python/Bytes.gs
 input src/smalltalk/Python/Decimal.gs
 input src/smalltalk/Python/Fraction.gs
 input src/smalltalk/Python/dict.gs
 input src/smalltalk/Python/ExecBlock.gs
-input src/smalltalk/Python/float.gs
+input src/smalltalk/Python/Float.gs
 input src/smalltalk/Python/frozenset.gs
-input src/smalltalk/Python/int.gs
+input src/smalltalk/Python/Int.gs
 input src/smalltalk/Python/list.gs
-input src/smalltalk/Python/object.gs
-input src/smalltalk/Python/range.gs
+input src/smalltalk/Python/Object.gs
+input src/smalltalk/Python/Range.gs
 input src/smalltalk/Python/SequenceableCollection.gs
 input src/smalltalk/Python/set.gs
 input src/smalltalk/Python/str.gs
-input src/smalltalk/Python/tuple.gs
+input src/smalltalk/Python/Tuple.gs
 
 ! ------- Remove Python dictionary from SystemUser's symbol list
 run
