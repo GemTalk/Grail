@@ -18,7 +18,11 @@
 #ifdef GRAIL_SHIM
 #include "cpython.h"
 #else
+#if defined(linux)
+#include <python3.10/Python.h>
+#else
 #include <Python.h>
+#endif
 #endif
 
 /* ------------------------------------------------------------------ */

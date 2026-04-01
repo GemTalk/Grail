@@ -8,4 +8,10 @@ if [ ! -f ~/.topazini ]; then
     cp scripts/topazini ~/.topazini
 fi
 
+# examples of things to add before -S  (or have them in a gem.conf  in current directory)
+#  to have topaz stop for debugging an error
+#    -C 'GEM_LISTEN_FOR_DEBUG=TRUE' 
+#  stop for debug and use 1GB temp obj cache .
+#    -C 'GEM_LISTEN_FOR_DEBUG=TRUE;GEM_TEMPOBJ_CACHE_SIZE=1GB' 
+
 topaz -lq -S scripts/grail.tpz -- $1

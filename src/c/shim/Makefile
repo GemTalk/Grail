@@ -8,10 +8,13 @@ ifeq ($(UNAME_S),Darwin)
   SHARED_EXT = dylib
   SHARED_FLAGS = -dynamiclib
   RPATH_FLAGS = -Wl$(comma)-rpath$(comma)@executable_path
+  UNDEF_ARGS = -undefined dynamic_lookup
 else
+  # Linux
   SHARED_EXT = so
   SHARED_FLAGS = -shared
   RPATH_FLAGS =
+  UNDEF_ARGS =
 endif
 
 EXT_OBJECTS = _statisticsmodule.o _bisectmodule.o _crc32cmodule.o _shimtestmodule.o _heapqmodule.o _grail_demo.o _sre.o
@@ -48,7 +51,7 @@ _sre.o: _sre/sre.c _sre/sre.h _sre/sre_lib.h _sre/sre_constants.h _sre/sre_targe
 	$(CC) $(CFLAGS) -DGRAIL_SHIM -Wno-unused-parameter -Wno-unused-function -Wno-unused-variable -Wno-missing-field-initializers -I. -c _sre/sre.c -o _sre.o
 
 $(LIB): $(OBJECTS)
-	$(CXX) $(SHARED_FLAGS) -o $@ $(OBJECTS) $(GEMSTONE)/lib/gciualib.o -lm -lpthread -undefined dynamic_lookup
+	$(CXX) $(SHARED_FLAGS) -o $@ $(OBJECTS) $(GEMSTONE)/lib/gciualib.o -lm -lpthread $(UNDEF_ARGS)
 
 GRAIL_LIB_DIR = ../../../lib
 PYTHON_INCLUDES = $(shell python3-config --includes 2>/dev/null)
@@ -56,7 +59,7 @@ PYTHON_INCLUDES = $(shell python3-config --includes 2>/dev/null)
 dynmods: $(GRAIL_LIB_DIR)/_grail_demo.so
 
 $(GRAIL_LIB_DIR)/_grail_demo.so: _grail_demo.c
-	$(CC) $(CFLAGS) $(PYTHON_INCLUDES) $(SHARED_FLAGS) -o $@ _grail_demo.c -undefined dynamic_lookup
+	$(CC) $(CFLAGS) $(PYTHON_INCLUDES) $(SHARED_FLAGS) -o $@ _grail_demo.c $(UNDEF_ARGS)
 
 clean:
 	rm -f $(OBJECTS) $(LIB)

@@ -41,7 +41,11 @@ static const char copyright[] =
 #ifdef GRAIL_SHIM
 #include "../cpython.h"
 #else
-#include "Python.h"
+#if defined(linux)
+#include <python3.10/Python.h>
+#else
+#include <Python.h>
+#endif
 #include "pycore_critical_section.h" // Py_BEGIN_CRITICAL_SECTION
 #include "pycore_dict.h"             // _PyDict_Next()
 #include "pycore_long.h"             // PyLong_FromLong(0)

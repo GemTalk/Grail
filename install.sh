@@ -1,13 +1,19 @@
 #!/bin/bash
 
-if [ ! -f .setenv ]; then
-    cp setenv .setenv
-fi
-source .setenv
-if [ ! -f ~/.topazini ]; then
-    cp topazini ~/.topazini
-fi
+# This script assumes a stone is already running per the stone name defined in .topazini
 
+if [ -z "$GEMSTONE" ]; then
+    echo "Error: \$GEMSTONE is not set. Set it to your GemStone installation directory (e.g., /path/to/GemStone64Bit3.7.x-arch.Darwin)."
+    exit 1
+fi
+if [ -z "$GEMSTONE_GLOBAL_DIR" ]; then
+    echo "Error: \$GEMSTONE_GLOBAL_DIR is not set. Set it to the directory containing your GemStone locks and logs."
+    exit 1
+fi
+if ! command -v topaz &>/dev/null; then
+    echo "Error: 'topaz' is not on your \$PATH. Add \$GEMSTONE/bin to your PATH (e.g., export PATH=\$GEMSTONE/bin:\$PATH)."
+    exit 1
+fi
 # Absolute path to the Grail project directory (this script's directory)
 GRAIL_DIR=$(cd "$(dirname "$0")" && pwd)
 echo "Grail directory: $GRAIL_DIR"
@@ -17,12 +23,18 @@ SHIM_LIB_PATH=""
 if [ -n "$GEMSTONE" ]; then
     echo "Building CPython shim library..."
     make -C "$GRAIL_DIR/src/c/shim" clean all GEMSTONE="$GEMSTONE"
-    SHIM_LIB_PATH="$GRAIL_DIR/src/c/shim/libcpython_ua.dylib"
+    if [ "$OSTYPE" = "linux" ]; then
+      SHIM_LIB_PATH="$GRAIL_DIR/src/c/shim/libcpython_ua.so"
+    else
+      # Assume Darwin
+      SHIM_LIB_PATH="$GRAIL_DIR/src/c/shim/libcpython_ua.dylib"
+    fi
     if [ ! -f "$SHIM_LIB_PATH" ]; then
         echo "Warning: CPython shim library build failed. CPythonShim tests will be skipped."
         SHIM_LIB_PATH=""
     else
         echo "Building dynamic extension modules..."
+        mkdir -p "$GRAIL_DIR/lib"
         make -C "$GRAIL_DIR/src/c/shim" dynmods
     fi
 else
@@ -42,10 +54,10 @@ fi
 
 topaz -lq << EOF
 errorCount
-output push install.out only
-iferr 1 stk
+output pushnew install.out only
+iferr 1 where
 iferr 2 output pop
-iferr 3 stk
+iferr 3 where
 iferr 4 abort
 iferr 5 logout
 iferr 6 exit 1
@@ -81,3 +93,12 @@ commit
 logout
 exit 0
 EOF
+
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "Topaz exited with an error. Some things to check:"
+    echo "  - Is the GemStone stone running? (try: gslist)"
+    echo "  - Is .topazini present and configured? (topaz looks in the current directory and ~/)"
+    echo "  - Check install.out for details."
+    exit 1
+fi

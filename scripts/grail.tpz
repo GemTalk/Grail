@@ -1,14 +1,14 @@
 login
 run
-| args |
+| args dashDashOfs |
+" Search for  --  in command line, expect args before that to be topaz config, etc"
 args := System commandLineArguments.
-args size < 5 ifTrue: [
-    Error signal: 'Should have at least five arguments but found ' , args printString , '!'.
-].
+1 to: args size do:[:j | (args at: j) = '--' ifTrue:[ dashDashOfs := j ]].
 Transcript := GsFile stdout.
-args size >= 6 ifTrue: [
+dashDashOfs ifNil:[ ExitClientError signal:' "--"   not found on topaz command line ' ].
+dashDashOfs < args size ifTrue:[  "assume a file name after the -- "
     | path |
-    path := args at: 6.
+    path := args at: dashDashOfs + 1 .
     (GsFile exists: path) ifFalse: [
         GsFile stderr nextPutAll: path printString , ' not found!'; lf; flush.
         Error signal: 'Path not found!'.
@@ -18,20 +18,22 @@ args size >= 6 ifTrue: [
     ] on: Error do: [:ex |
         | msg |
         msg := ex messageText.
-        GsFile stderr nextPutAll: msg; flush.
+        GsFile stdout flush .
+        GsFile stderr nextPutAll: msg; lf ; flush.
         ExitClientError signal: msg status: 1.
     ].
 ] ifFalse: [
-    | replScope bufferStream inContinuation moduleScope |
+    | replScope bufferStream inContinuation moduleScope lfCodepoint |
     moduleScope := SymbolDictionary new.
     replScope := ModuleAst symbolListForModuleScope: moduleScope.
     bufferStream := WriteStream on: Unicode7 new.
     inContinuation := false.
+    lfCodepoint := Character lf codePoint .
     [true] whileTrue: [
         | prompt line |
         prompt := inContinuation ifTrue: ['... '] ifFalse: ['>>> '].
         line := GsFile stdin 
-            nextLineTo: Character lf codePoint 
+            nextLineTo: lfCodepoint 
             prompt: prompt.
         line ifNil: [Error signal: 'EOF from stdin!'].
         bufferStream nextPutAll: line.
@@ -57,6 +59,7 @@ args size >= 6 ifTrue: [
                 (ex isKindOf: ExitClientError) ifTrue: [ex pass].
                 (ex isKindOf: Break) ifTrue: [ExitClientError signal: 'Soft Break' status: 1].
                 msg := ex messageText.
+                GsFile stdout flush .
                 GsFile stderr nextPutAll: msg; lf; flush.
                 bufferStream := WriteStream on: Unicode7 new.
             ].
