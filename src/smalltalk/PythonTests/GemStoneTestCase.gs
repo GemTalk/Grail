@@ -122,7 +122,7 @@ test_version
 	| gs result |
 	gs := gemstone perform: #instance env: 1.
 	result := gs perform: #version env: 1.
-	self assert: result equals: '3.7.4.3'.
+	self assert: result equals: '3.7.6'.
 %
 
 category: 'Tests'

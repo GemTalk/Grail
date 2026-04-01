@@ -203,7 +203,7 @@ runPath: pathString
 	file := GsFile open: '/tmp/grail.st' mode: 'w' onClient: false.
 	file nextPutAll: stream contents.
 	file close.
-	mySymbolList := SymbolList with: builtins ___instance___.
+	mySymbolList := SymbolList with: (builtins @env1:instance) with: Python.
 	[
 		method := stream contents
 			_compileInContext: nil
