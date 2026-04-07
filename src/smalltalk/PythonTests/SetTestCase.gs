@@ -42,7 +42,7 @@ testEmptySetRepr
 	| s repr |
 	s := set new.
 
-	repr := s perform: #__repr__ env: 1.
+	repr := s @env1:__repr__.
 
 	self assert: repr equals: 'set()'
 %
@@ -167,7 +167,7 @@ testSetClear
 	s ___add___: 2.
 	s ___add___: 3.
 	
-	s perform: #clear env: 1.
+	s @env1:clear.
 	self assert: s size equals: 0
 %
 
@@ -203,7 +203,7 @@ testSetDifferenceUpdate
 	s2 ___add___: 2.
 	s2 ___add___: 4.
 
-	s1 perform: #difference_update: env: 1 withArguments: {s2}.
+	s1 @env1:difference_update: s2.
 
 	self assert: s1 size equals: 2.
 	self assert: (s1 ___contains___: 1).
@@ -221,11 +221,11 @@ testSetDiscard
 	s ___add___: 1.
 	s ___add___: 2.
 	
-	s perform: #discard: env: 1 withArguments: {2}.
+	s @env1:discard: 2.
 	self assert: s size equals: 1.
 	
 	"Discarding non-existent element should not raise error"
-	s perform: #discard: env: 1 withArguments: {99}.
+	s @env1:discard: 99.
 	self assert: s size equals: 1
 %
 
@@ -258,7 +258,7 @@ testSetInPlaceOperators
 	s2 ___add___: 2.
 	s2 ___add___: 3.
 
-	result := s1 perform: #__iand__: env: 1 withArguments: {s2}.
+	result := s1 @env1:__iand__: s2.
 	self assert: result == s1.
 	self assert: s1 size equals: 2.
 
@@ -269,7 +269,7 @@ testSetInPlaceOperators
 	s2 := set new.
 	s2 ___add___: 2.
 
-	result := s1 perform: #__ior__: env: 1 withArguments: {s2}.
+	result := s1 @env1:__ior__: s2.
 	self assert: result == s1.
 	self assert: s1 size equals: 2.
 
@@ -281,7 +281,7 @@ testSetInPlaceOperators
 	s2 := set new.
 	s2 ___add___: 2.
 
-	result := s1 perform: #__isub__: env: 1 withArguments: {s2}.
+	result := s1 @env1:__isub__: s2.
 	self assert: result == s1.
 	self assert: s1 size equals: 1.
 
@@ -294,7 +294,7 @@ testSetInPlaceOperators
 	s2 ___add___: 2.
 	s2 ___add___: 3.
 
-	result := s1 perform: #__ixor__: env: 1 withArguments: {s2}.
+	result := s1 @env1:__ixor__: s2.
 	self assert: result == s1.
 	self assert: s1 size equals: 2
 %
@@ -315,7 +315,7 @@ testSetIntersectionUpdate
 	s2 ___add___: 3.
 	s2 ___add___: 4.
 
-	s1 perform: #intersection_update: env: 1 withArguments: {s2}.
+	s1 @env1:intersection_update: s2.
 
 	self assert: s1 size equals: 2.
 	self assert: (s1 ___contains___: 2).
@@ -334,15 +334,15 @@ testSetIteration
 	s ___add___: 2.
 	s ___add___: 3.
 	
-	iter := s perform: #__iter__ env: 1.
+	iter := s @env1:__iter__.
 	self assert: (iter class) name equals: #'set_iterator'.
 	
 	items := list new.
 	[true] whileTrue: [
 		| item |
 		[
-			item := iter perform: #__next__ env: 1.
-			items perform: #append: env: 1 withArguments: {item}
+			item := iter @env1:__next__.
+			items @env1:append: item
 		] on: StopIteration do: [:ex | ^ nil]
 	].
 	
@@ -358,7 +358,7 @@ testSetNotHashable
 	s := set new.
 	s ___add___: 1.
 
-	self should: [s perform: #__hash__ env: 1] raise: TypeError
+	self should: [s @env1:__hash__] raise: TypeError
 %
 
 category: 'Tests - Mutation'
@@ -371,15 +371,15 @@ testSetPop
 	s ___add___: 1.
 	s ___add___: 2.
 	
-	item := s perform: #pop env: 1.
+	item := s @env1:pop.
 	self assert: s size equals: 1.
 	self assert: ((item = 1) or: [item = 2]).
 	
-	s perform: #pop env: 1.
+	s @env1:pop.
 	self assert: s size equals: 0.
 	
 	"Popping from empty set should raise KeyError"
-	self should: [s perform: #pop env: 1] raise: KeyError
+	self should: [s @env1:pop] raise: KeyError
 %
 
 category: 'Tests - Mutation'
@@ -393,12 +393,12 @@ testSetRemove
 	s ___add___: 2.
 	s ___add___: 3.
 	
-	s perform: #remove: env: 1 withArguments: {2}.
+	s @env1:remove: 2.
 	self assert: s size equals: 2.
 	self deny: (s ___contains___: 2).
 	
 	"Removing non-existent element should raise KeyError"
-	self should: [s perform: #remove: env: 1 withArguments: {99}] raise: KeyError
+	self should: [s @env1:remove: 99] raise: KeyError
 %
 
 category: 'Tests - String Representation'
@@ -411,7 +411,7 @@ testSetRepr
 	s ___add___: 1.
 	s ___add___: 2.
 
-	repr := s perform: #__repr__ env: 1.
+	repr := s @env1:__repr__.
 
 	self assert: (repr includesString: '{').
 	self assert: (repr includesString: '}')
@@ -433,7 +433,7 @@ testSetSymmetricDifferenceUpdate
 	s2 ___add___: 3.
 	s2 ___add___: 4.
 
-	s1 perform: #symmetric_difference_update: env: 1 withArguments: {s2}.
+	s1 @env1:symmetric_difference_update: s2.
 
 	self assert: s1 size equals: 2.
 	self assert: (s1 ___contains___: 1).
@@ -473,7 +473,7 @@ testSetUpdate
 	s2 ___add___: 3.
 	s2 ___add___: 4.
 
-	s1 perform: #update: env: 1 withArguments: {s2}.
+	s1 @env1:update: s2.
 
 	self assert: s1 size equals: 4.
 	self assert: (s1 ___contains___: 1).

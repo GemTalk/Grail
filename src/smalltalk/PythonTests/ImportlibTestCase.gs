@@ -38,7 +38,7 @@ category: 'Setup'
 method: ImportlibTestCase
 setUp
 	"Initialize the builtin modules before each test"
-	importlib perform: #modules env: 1
+	importlib @env1:modules
 %
 
 category: 'Tests - AST Generation'
@@ -74,7 +74,7 @@ testBuiltinsImport
 
 	| b importBlock result |
 	b := builtins ___instance___.
-	importBlock := b perform: #'__import__' env: 1.
+	importBlock := b @env1:__import__.
 
 	result := importBlock value: {'math'} value: nil.
 
@@ -88,7 +88,7 @@ testBuiltinsImportNotFound
 
 	| b importBlock |
 	b := builtins ___instance___.
-	importBlock := b perform: #'__import__' env: 1.
+	importBlock := b @env1:__import__.
 
 	self should: [importBlock value: {'unknown_module'} value: nil]
 		raise: ModuleNotFoundError
@@ -100,8 +100,8 @@ testImportModuleBuiltins
 	"Test importing the builtins module"
 
 	| imp importModuleBlock result |
-	imp := importlib perform: #instance env: 1.
-	importModuleBlock := imp perform: #import_module env: 1.
+	imp := importlib @env1:instance.
+	importModuleBlock := imp @env1:import_module.
 
 	result := importModuleBlock value: {'builtins'} value: nil.
 
@@ -114,8 +114,8 @@ testImportModuleCmath
 	"Test importing the cmath module"
 
 	| imp importModuleBlock result |
-	imp := importlib perform: #instance env: 1.
-	importModuleBlock := imp perform: #import_module env: 1.
+	imp := importlib @env1:instance.
+	importModuleBlock := imp @env1:import_module.
 
 	result := importModuleBlock value: {'cmath'} value: nil.
 
@@ -128,8 +128,8 @@ testImportModuleMath
 	"Test importing the math module"
 
 	| imp importModuleBlock result |
-	imp := importlib perform: #instance env: 1.
-	importModuleBlock := imp perform: #import_module env: 1.
+	imp := importlib @env1:instance.
+	importModuleBlock := imp @env1:import_module.
 
 	result := importModuleBlock value: {'math'} value: nil.
 
@@ -142,8 +142,8 @@ testImportModuleNotFound
 	"Test that importing a non-existent module raises ModuleNotFoundError"
 
 	| imp importModuleBlock |
-	imp := importlib perform: #instance env: 1.
-	importModuleBlock := imp perform: #import_module env: 1.
+	imp := importlib @env1:instance.
+	importModuleBlock := imp @env1:import_module.
 
 	self should: [importModuleBlock value: {'nonexistent_module'} value: nil]
 		raise: ModuleNotFoundError
@@ -155,8 +155,8 @@ testImportModuleOs
 	"Test importing the os module"
 
 	| imp importModuleBlock result |
-	imp := importlib perform: #instance env: 1.
-	importModuleBlock := imp perform: #import_module env: 1.
+	imp := importlib @env1:instance.
+	importModuleBlock := imp @env1:import_module.
 
 	result := importModuleBlock value: {'os'} value: nil.
 
@@ -169,8 +169,8 @@ testImportModuleSys
 	"Test importing the sys module"
 
 	| imp importModuleBlock result |
-	imp := importlib perform: #instance env: 1.
-	importModuleBlock := imp perform: #import_module env: 1.
+	imp := importlib @env1:instance.
+	importModuleBlock := imp @env1:import_module.
 
 	result := importModuleBlock value: {'sys'} value: nil.
 
@@ -183,8 +183,8 @@ testInvalidateCaches
 	"Test invalidate_caches (should be a no-op for built-in modules)"
 
 	| imp invalidateCachesBlock result |
-	imp := importlib perform: #instance env: 1.
-	invalidateCachesBlock := imp perform: #invalidate_caches env: 1.
+	imp := importlib @env1:instance.
+	invalidateCachesBlock := imp @env1:invalidate_caches.
 
 	result := invalidateCachesBlock value: {} value: nil.
 
@@ -212,7 +212,7 @@ testModulesRegistry
 	"Test that the modules registry exists and contains built-in modules"
 
 	| modules |
-	modules := importlib perform: #modules env: 1.
+	modules := importlib @env1:modules.
 
 	self assert: (modules includesKey: #builtins).
 	self assert: (modules includesKey: #math).
@@ -226,7 +226,7 @@ method: ImportlibTestCase
 testNewRaisesTypeError
 	"Test that importlib.new raises TypeError"
 
-	self should: [importlib perform: #new env: 1]
+	self should: [importlib @env1:new]
 		raise: TypeError
 %
 
@@ -236,10 +236,10 @@ testReload
 	"Test reloading a module"
 
 	| imp reloadBlock mathInstance reloadedInstance |
-	imp := importlib perform: #instance env: 1.
-	reloadBlock := imp perform: #reload env: 1.
+	imp := importlib @env1:instance.
+	reloadBlock := imp @env1:reload.
 
-	mathInstance := math perform: #instance env: 1.
+	mathInstance := math @env1:instance.
 	reloadedInstance := reloadBlock value: {mathInstance} value: nil.
 
 	"After reload, we should get a fresh instance"
@@ -252,8 +252,8 @@ testSingleton
 	"Test that importlib.instance returns the same instance"
 
 	| instance1 instance2 |
-	instance1 := importlib perform: #instance env: 1.
-	instance2 := importlib perform: #instance env: 1.
+	instance1 := importlib @env1:instance.
+	instance2 := importlib @env1:instance.
 
 	self assert: instance1 == instance2
 %

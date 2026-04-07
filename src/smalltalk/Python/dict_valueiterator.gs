@@ -55,9 +55,9 @@ ___on: aDict
 	| iter valuesArray |
 	iter := self ___new___.
 	valuesArray := list ___new___.
-	aDict perform: #valuesDo: env: 0 withArguments: {[:value |
+	aDict @env0:valuesDo: [:value |
 		valuesArray append: value
-	]}.
+	].
 	iter ___dict: aDict.
 	iter ___values: valuesArray.
 	iter ___position: 0.

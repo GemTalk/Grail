@@ -42,9 +42,9 @@ testAbsoluteValue
 	| d result |
 	d := (Decimal ___new___: Decimal _: '-42.5').
 	
-	result := (d perform: #__abs__ env: 1).
+	result := (d @env1:__abs__).
 	
-	self assert: (result perform: #__str__ env: 1) equals: '42.5'
+	self assert: (result @env1:__str__) equals: '42.5'
 %
 
 category: 'Tests - Arithmetic'
@@ -56,11 +56,11 @@ testAddition
 	d1 := (Decimal ___new___: Decimal _: '10.5').
 	d2 := (Decimal ___new___: Decimal _: '20.3').
 	
-	result := (d1 perform: #__add__: env: 1 withArguments: {d2}).
+	result := (d1 @env1:__add__: d2).
 	
-	self assert: (d1 perform: #__str__ env: 1) equals: '10.5'.
-	self assert: (d2 perform: #__str__ env: 1) equals: '20.3'.
-	self assert: (result perform: #__str__ env: 1) equals: '30.8'
+	self assert: (d1 @env1:__str__) equals: '10.5'.
+	self assert: (d2 @env1:__str__) equals: '20.3'.
+	self assert: (result @env1:__str__) equals: '30.8'
 %
 
 category: 'Tests - Creation'
@@ -72,7 +72,7 @@ testCreateFromFloat
 	d := (Decimal ___new___: Decimal _: 3.14).
 	
 	"Float conversion may not be exact, so just check it's close"
-	self assert: ((d perform: #__float__ env: 1) - 3.14) abs < 0.01
+	self assert: ((d @env1:__float__) - 3.14) abs < 0.01
 %
 
 category: 'Tests - Creation'
@@ -83,7 +83,7 @@ testCreateFromInteger
 	| d |
 	d := (Decimal ___new___: Decimal _: 42).
 	
-	self assert: (d perform: #__int__ env: 1) = 42
+	self assert: (d @env1:__int__) = 42
 %
 
 category: 'Tests - Creation'
@@ -94,7 +94,7 @@ testCreateFromString
 	| d |
 	d := (Decimal ___new___: Decimal _: '123.45').
 	
-	self assert: (d perform: #__str__ env: 1) equals: '123.45'
+	self assert: (d @env1:__str__) equals: '123.45'
 %
 
 category: 'Tests - Arithmetic'
@@ -106,9 +106,9 @@ testDivision
 	d1 := (Decimal ___new___: Decimal _: '10.0').
 	d2 := (Decimal ___new___: Decimal _: '4.0').
 	
-	result := (d1 perform: #__truediv__: env: 1 withArguments: {d2}).
+	result := (d1 @env1:__truediv__: d2).
 	
-	self assert: (result perform: #__str__ env: 1) equals: '2.5'
+	self assert: (result @env1:__str__) equals: '2.5'
 %
 
 category: 'Tests - Comparison'
@@ -121,8 +121,8 @@ testEquality
 	d2 := (Decimal ___new___: Decimal _: '42.5').
 	d3 := (Decimal ___new___: Decimal _: '42.6').
 	
-	self assert: (d1 perform: #__eq__: env: 1 withArguments: {d2}).
-	self deny: (d1 perform: #__eq__: env: 1 withArguments: {d3})
+	self assert: (d1 @env1:__eq__: d2).
+	self deny: (d1 @env1:__eq__: d3)
 %
 
 category: 'Tests - Comparison'
@@ -134,8 +134,8 @@ testLessThan
 	d1 := (Decimal ___new___: Decimal _: '10.5').
 	d2 := (Decimal ___new___: Decimal _: '20.3').
 	
-	self assert: (d1 perform: #__lt__: env: 1 withArguments: {d2}).
-	self deny: (d2 perform: #__lt__: env: 1 withArguments: {d1})
+	self assert: (d1 @env1:__lt__: d2).
+	self deny: (d2 @env1:__lt__: d1)
 %
 
 category: 'Tests - Arithmetic'
@@ -147,9 +147,9 @@ testMultiplication
 	d1 := (Decimal ___new___: Decimal _: '3.5').
 	d2 := (Decimal ___new___: Decimal _: '2.0').
 	
-	result := (d1 perform: #__mul__: env: 1 withArguments: {d2}).
+	result := (d1 @env1:__mul__: d2).
 	
-	self assert: (result perform: #__str__ env: 1) equals: '7.0'
+	self assert: (result @env1:__str__) equals: '7.0'
 %
 
 category: 'Tests - Arithmetic'
@@ -160,9 +160,9 @@ testNegation
 	| d result |
 	d := (Decimal ___new___: Decimal _: '42.5').
 	
-	result := (d perform: #__neg__ env: 1).
+	result := (d @env1:__neg__).
 	
-	self assert: (result perform: #__str__ env: 1) equals: '-42.5'
+	self assert: (result @env1:__str__) equals: '-42.5'
 %
 
 category: 'Tests - Arithmetic'
@@ -174,7 +174,7 @@ testSubtraction
 	d1 := (Decimal ___new___: Decimal _: '50.7').
 	d2 := (Decimal ___new___: Decimal _: '20.3').
 	
-	result := (d1 perform: #__sub__: env: 1 withArguments: {d2}).
+	result := (d1 @env1:__sub__: d2).
 	
-	self assert: (result perform: #__str__ env: 1) equals: '30.4'
+	self assert: (result @env1:__str__) equals: '30.4'
 %

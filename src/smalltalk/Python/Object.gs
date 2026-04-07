@@ -22,42 +22,42 @@ category: 'Python-Bridge'
 classmethod: object
 ___new___: arg
 	"Convenience method: self perform: #__new__: env: 1 withArguments: {arg}"
-	^ self perform: #__new__: env: 1 withArguments: {arg}
+	^ self @env1:__new__: arg
 %
 
 category: 'Python-Bridge'
 classmethod: object
 ___new___: arg1 _: arg2
 	"Convenience method: self perform: #__new__:_: env: 1 withArguments: {arg1. arg2}"
-	^ self perform: #__new__:_: env: 1 withArguments: {arg1. arg2}
+	^ self @env1:__new__: arg1 _: arg2
 %
 
 category: 'Python-Bridge'
 classmethod: object
 ___new___: arg1 _: arg2 _: arg3
 	"Convenience method: self perform: #__new__:_:_: env: 1 withArguments: {arg1. arg2. arg3}"
-	^ self perform: #__new__:_:_: env: 1 withArguments: {arg1. arg2. arg3}
+	^ self @env1:__new__: arg1 _: arg2 _: arg3
 %
 
 category: 'Python-Bridge'
 method: object
 ___add___: element
 	"Convenience method: self perform: #add: env: 1 withArguments: {element}"
-	^ self perform: #add: env: 1 withArguments: {element}
+	^ self @env1:add: element
 %
 
 category: 'Python-Bridge'
 method: object
 ___contains___: element
 	"Convenience method: self perform: #__contains__: env: 1 withArguments: {element}"
-	^ self perform: #__contains__: env: 1 withArguments: {element}
+	^ self @env1:__contains__: element
 %
 
 category: 'Python-Bridge'
 method: object
 ___len___
 	"Convenience method: self perform: #__len__ env: 1"
-	^ self perform: #__len__ env: 1
+	^ self @env1:__len__
 %
 
 category: 'Python-Bridge'
@@ -65,7 +65,7 @@ method: Object
 ___repr___
 	"Call the Python __repr__ implementation (env 2)."
 
-	^ self perform: #__repr__ env: 1
+	^ self @env1:__repr__
 %
 
 set compile_env: 1
@@ -73,52 +73,52 @@ set compile_env: 1
 category: 'Convenience Methods'
 classmethod: object
 ___lf___
-	^ self perform: #lf env: 0
+	^ self @env0:lf
 %
 
 category: 'Convenience Methods'
 classmethod: object
 ___new___
 
-	^ self perform: #new env: 0
+	^ self @env0:new
 %
 
 category: 'Convenience Methods'
 classmethod: object
 ___new___: arg1 _: arg2
 	"Convenience method for calling __new__:_: from env 2 code"
-	^ self perform: #__new__:_: env: 1 withArguments: {arg1. arg2}
+	^ self @env1:__new__: arg1 _: arg2
 %
 
 category: 'Convenience Methods'
 classmethod: object
 ___new___: arg1 _: arg2 _: arg3
 	"Convenience method for calling __new__:_:_: from env 2 code"
-	^ self perform: #__new__:_:_: env: 1 withArguments: {arg1. arg2. arg3}
+	^ self @env1:__new__: arg1 _: arg2 _: arg3
 %
 
 category: 'Convenience Methods'
 classmethod: object
 ___on___: aCollection
-	^ self perform: #on: env: 0 withArguments: {aCollection}
+	^ self @env0:on: aCollection
 %
 
 category: 'Convenience Methods'
 classmethod: object
 ___stdin___
-	^ self perform: #stdin env: 0
+	^ self @env0:stdin
 %
 
 category: 'Convenience Methods'
 classmethod: object
 ___stdout___
-	^ self perform: #stdout env: 0
+	^ self @env0:stdout
 %
 
 category: 'Convenience Methods'
 classmethod: object
 ___with___: anObject
-	^ self perform: #with: env: 0 withArguments: {anObject}
+	^ self @env0:with: anObject
 %
 
 category: 'Python-Initialization'
@@ -138,381 +138,381 @@ __new__
 	This is a class method that takes the class as the receiver.
 	In Python: object.__new__(cls) creates a new instance of cls."
 
-	^ self perform: #new env: 0
+	^ self @env0:new
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___abs___
-	^ self perform: #abs env: 0
+	^ self @env0:abs
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___add___: element
-	^ self perform: #add: env: 0 withArguments: {element}
+	^ self @env0:add: element
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___addAll___: aCollection
-	^ self perform: #addAll: env: 0 withArguments: {aCollection}
+	^ self @env0:addAll: aCollection
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___addFirst___: element
-	^ self perform: #addFirst: env: 0 withArguments: {element}
+	^ self @env0:addFirst: element
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___allButFirst___
-	^ self perform: #allButFirst env: 0
+	^ self @env0:allButFirst
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___allSelectorsForEnvironment___: envId
-	^ self perform: #allSelectorsForEnvironment: env: 0 withArguments: {envId}
+	^ self @env0:allSelectorsForEnvironment: envId
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___arcTan2___: y
-	^ self perform: #arcTan2: env: 0 withArguments: {y}
+	^ self @env0:arcTan2: y
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___asArray___
-	^ self perform: #asArray env: 0
+	^ self @env0:asArray
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___asFloat___
-	^ self perform: #asFloat env: 0
+	^ self @env0:asFloat
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___asFraction___
-	^ self perform: #asFraction env: 0
+	^ self @env0:asFraction
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___asInteger___
-	^ self perform: #asInteger env: 0
+	^ self @env0:asInteger
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___asLowercase___
-	^ self perform: #asLowercase env: 0
+	^ self @env0:asLowercase
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___asSortedCollection___
-	^ self perform: #asSortedCollection env: 0
+	^ self @env0:asSortedCollection
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___asString___
-	^ self perform: #asString env: 0
+	^ self @env0:asString
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___asSymbol___
-	^ self perform: #asSymbol env: 0
+	^ self @env0:asSymbol
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___asUnicodeString___
-	^ self perform: #asUnicodeString env: 0
+	^ self @env0:asUnicodeString
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___asUppercase___
-	^ self perform: #asUppercase env: 0
+	^ self @env0:asUppercase
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___at___: key
-	^ self perform: #at: env: 0 withArguments: {key}
+	^ self @env0:at: key
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___at___: key ifAbsent: aBlock
 	"Convenience method: self perform: #at:ifAbsent: env: 0 withArguments: {key. aBlock}"
-	^ self perform: #at:ifAbsent: env: 0 withArguments: {key. aBlock}
+	^ self @env0:at: key ifAbsent: aBlock
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___at___: key put: value
-	^ self perform: #at:put: env: 0 withArguments: {key. value}
+	^ self @env0:at: key put: value
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___beginsWith___: aString
-	^ self perform: #beginsWith: env: 0 withArguments: {aString}
+	^ self @env0:beginsWith: aString
 %
 
 category: 'Convenience Methods - Binary'
 method: object
 ___bitAnd___: other
-	^ self perform: #bitAnd: env: 0 withArguments: {other}
+	^ self @env0:bitAnd: other
 %
 
 category: 'Convenience Methods - Binary'
 method: object
 ___bitOr___: other
-	^ self perform: #bitOr: env: 0 withArguments: {other}
+	^ self @env0:bitOr: other
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___bitShift___: amount
-	^ self perform: #bitShift: env: 0 withArguments: {amount}
+	^ self @env0:bitShift: amount
 %
 
 category: 'Convenience Methods - Binary'
 method: object
 ___bitXor___: other
-	^ self perform: #bitXor: env: 0 withArguments: {other}
+	^ self @env0:bitXor: other
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___class___
-	^ self perform: #class env: 0
+	^ self @env0:class
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___codePoint___
-	^ self perform: #codePoint env: 0
+	^ self @env0:codePoint
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___codePoint___: anInteger
-	^ self perform: #codePoint: env: 0 withArguments: {anInteger}
+	^ self @env0:codePoint: anInteger
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___collect___: block
-	^ self perform: #collect: env: 0 withArguments: {block}
+	^ self @env0:collect: block
 %
 
 category: 'Convenience Methods - Binary'
 method: object
 ___concat___: other
-	^ self perform: #, env: 0 withArguments: {other}
+	^ self @env0:, other
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___contains___: element
-	^ self perform: #__contains__: env: 0 withArguments: {element}
+	^ self @env0:__contains__: element
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___contents___
-	^ self perform: #contents env: 0
+	^ self @env0:contents
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___copy___
-	^ self perform: #copy env: 0
+	^ self @env0:copy
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___copyFrom___: start to: end
-	^ self perform: #copyFrom:to: env: 0 withArguments: {start. end}
+	^ self @env0:copyFrom: start to: end
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___cos___
-	^ self perform: #cos env: 0
+	^ self @env0:cos
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___cr___
-	^ self perform: #cr env: 0
+	^ self @env0:cr
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___decodeToUnicode___
-	^ self perform: #decodeToUnicode env: 0
+	^ self @env0:decodeToUnicode
 %
 
 category: 'Convenience Methods - Binary'
 method: object
 ___divide___: other
-	^ self perform: #/ env: 0 withArguments: {other}
+	^ self @env0:/ other
 %
 
 category: 'Convenience Methods - Binary'
 method: object
 ___divideInteger___: other
-	^ self perform: #// env: 0 withArguments: {other}
+	^ self @env0:// other
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___do___: block
-	^ self perform: #do: env: 0 withArguments: {block}
+	^ self @env0:do: block
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___endsWith___: aString
-	^ self perform: #endsWith: env: 0 withArguments: {aString}
+	^ self @env0:endsWith: aString
 %
 
 category: 'Convenience Methods - Binary'
 method: object
 ___eq___: other
-	^ self perform: #= env: 0 withArguments: {other}
+	^ self @env0:= other
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___error___: message
-	^ self perform: #error: env: 0 withArguments: {message}
+	^ self @env0:error: message
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___existsOnServer___: aPath
-	^ self perform: #existsOnServer: env: 0 withArguments: {aPath}
+	^ self @env0:existsOnServer: aPath
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___findString___: aString startingAt: startIndex
-	^ self perform: #findString:startingAt: env: 0 withArguments: {aString. startIndex}
+	^ self @env0:findString: aString startingAt: startIndex
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___first___
-	^ self perform: #first env: 0
+	^ self @env0:first
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___flush___
-	^ self perform: #flush env: 0
+	^ self @env0:flush
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___from___: start to: end by: step
-	^ self perform: #from:to:by: env: 0 withArguments: {start. end. step}
+	^ self @env0:from: start to: end by: step
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___fromStream___: aStream
-	^ self perform: #fromStream: env: 0 withArguments: {aStream}
+	^ self @env0:fromStream: aStream
 %
 
 category: 'Convenience Methods - Binary'
 method: object
 ___ge___: other
-	^ self perform: #>= env: 0 withArguments: {other}
+	^ self @env0:>= other
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___getKind___
 	"Return the float kind: 1=normal, 3=infinity, 5=NaN"
-	^ self perform: #_getKind env: 0
+	^ self @env0:_getKind
 %
 
 category: 'Convenience Methods - Binary'
 method: object
 ___gt___: other
-	^ self perform: #> env: 0 withArguments: {other}
+	^ self @env0:> other
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___hash___
-	^ self perform: #hash env: 0
+	^ self @env0:hash
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___identityHash___
-	^ self perform: #identityHash env: 0
+	^ self @env0:identityHash
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___includes___: element
-	^ self perform: #includes: env: 0 withArguments: {element}
+	^ self @env0:includes: element
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___includesKey___: key
-	^ self perform: #includesKey: env: 0 withArguments: {key}
+	^ self @env0:includesKey: key
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___includesString___: aString
-	^ self perform: #includesString: env: 0 withArguments: {aString}
+	^ self @env0:includesString: aString
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___indexOf___: element
-	^ self perform: #indexOf: env: 0 withArguments: {element}
+	^ self @env0:indexOf: element
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___indexOf___: element ifAbsent: exceptionBlock
-	^ self perform: #indexOf:ifAbsent: env: 0 withArguments: {element. exceptionBlock}
+	^ self @env0:indexOf: element ifAbsent: exceptionBlock
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___inject___: initial into: block
-	^ self perform: #inject:into: env: 0 withArguments: {initial. block}
+	^ self @env0:inject: initial into: block
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___isEmpty___
-	^ self perform: #isEmpty env: 0
+	^ self @env0:isEmpty
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___isKindOf___: aClass
-	^ self perform: #isKindOf: env: 0 withArguments: {aClass}
+	^ self @env0:isKindOf: aClass
 %
 
 category: 'Convenience Methods - Unary'
@@ -521,232 +521,232 @@ ___isTruthy___
 	"Convert any Python object to a Smalltalk Boolean for use in if/while conditions.
 	Follows Python truth value testing: https://docs.python.org/3/library/stdtypes.html#truth-value-testing"
 
-	^ bool perform: #'__new__:' env: 1 withArguments: { self }
+	^ bool @env1:__new__: self
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___isLetter___
-	^ self perform: #isLetter env: 0
+	^ self @env0:isLetter
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___isNaN___
 	"Return true if this float is NaN"
-	^ self perform: #_isNaN env: 0
+	^ self @env0:_isNaN
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___isScaledDecimal___
 	"Return true if this is a ScaledDecimal"
-	^ self perform: #_isScaledDecimal env: 0
+	^ self @env0:_isScaledDecimal
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___isUppercase___
-	^ self perform: #isUppercase env: 0
+	^ self @env0:isUppercase
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___keysAndValuesDo___: aBlock
-	^ self perform: #keysAndValuesDo: env: 0 withArguments: {aBlock}
+	^ self @env0:keysAndValuesDo: aBlock
 %
 
 category: 'Convenience Methods - Binary'
 method: object
 ___le___: other
-	^ self perform: #<= env: 0 withArguments: {other}
+	^ self @env0:<= other
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___ln___
-	^ self perform: #ln env: 0
+	^ self @env0:ln
 %
 
 category: 'Convenience Methods - Binary'
 method: object
 ___lt___: other
-	^ self perform: #< env: 0 withArguments: {other}
+	^ self @env0:< other
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___max___: other
-	^ self perform: #max: env: 0 withArguments: {other}
+	^ self @env0:max: other
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___min___: other
-	^ self perform: #min: env: 0 withArguments: {other}
+	^ self @env0:min: other
 %
 
 category: 'Convenience Methods - Binary'
 method: object
 ___minus___: other
-	^ self perform: #- env: 0 withArguments: {other}
+	^ self @env0:- other
 %
 
 category: 'Convenience Methods - Binary'
 method: object
 ___modulo___: other
-	^ self perform: #\\ env: 0 withArguments: {other}
+	^ self @env0:\\ other
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___name___
-	^ self perform: #name env: 0
+	^ self @env0:name
 %
 
 category: 'Convenience Methods - Binary'
 method: object
 ___ne___: other
-	^ self perform: #~= env: 0 withArguments: {other}
+	^ self @env0:~= other
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___negated___
-	^ self perform: #negated env: 0
+	^ self @env0:negated
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___new___: size
 	"Convenience method: self perform: #new: env: 0 withArguments: {size}"
-	^ self perform: #new: env: 0 withArguments: {size}
+	^ self @env0:new: size
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___nextLine___
-	^ self perform: #nextLine env: 0
+	^ self @env0:nextLine
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___nextPut___: char
-	^ self perform: #nextPut: env: 0 withArguments: {char}
+	^ self @env0:nextPut: char
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___nextPutAll___: string
-	^ self perform: #nextPutAll: env: 0 withArguments: {string}
+	^ self @env0:nextPutAll: string
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___not___
-	^ self perform: #not env: 0
+	^ self @env0:not
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___notEmpty___
-	^ self perform: #notEmpty env: 0
+	^ self @env0:notEmpty
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___ensure___: aBlock
-	^ self perform: #ensure: env: 0 withArguments: {aBlock}
+	^ self @env0:ensure: aBlock
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___on___: exception do: handler
-	^ self perform: #on:do: env: 0 withArguments: {exception. handler}
+	^ self @env0:on: exception do: handler
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___on___: stream
-	^ self perform: #on: env: 0 withArguments: {stream}
+	^ self @env0:on: stream
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___pass___
-	^ self perform: #pass env: 0
+	^ self @env0:pass
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___physicalSize___
-	^ self perform: #physicalSize env: 0
+	^ self @env0:physicalSize
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___pi___
-	^ self perform: #pi env: 0
+	^ self @env0:pi
 %
 
 category: 'Convenience Methods - Binary'
 method: object
 ___plus___: other
-	^ self perform: #+ env: 0 withArguments: {other}
+	^ self @env0:+ other
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___printString___
-	^ self perform: #printString env: 0
+	^ self @env0:printString
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___printStringRadix___: radix
-	^ self perform: #printStringRadix: env: 0 withArguments: {radix}
+	^ self @env0:printStringRadix: radix
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___raisedTo___: power
-	^ self perform: #raisedTo: env: 0 withArguments: {power}
+	^ self @env0:raisedTo: power
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___remove___: element
-	^ self perform: #remove: env: 0 withArguments: {element}
+	^ self @env0:remove: element
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___removeAll___: aCollection
-	^ self perform: #removeAll: env: 0 withArguments: {aCollection}
+	^ self @env0:removeAll: aCollection
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___removeAtIndex___: index
-	^ self perform: #removeAtIndex: env: 0 withArguments: {index}
+	^ self @env0:removeAtIndex: index
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___removeKey___: key
-	^ self perform: #removeKey: env: 0 withArguments: {key}
+	^ self @env0:removeKey: key
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___removeLast___
-	^ self perform: #removeLast env: 0
+	^ self @env0:removeLast
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___respondsTo___: aSelector
-	^ self perform: #respondsTo: env: 0 withArguments: {aSelector}
+	^ self @env0:respondsTo: aSelector
 %
 
 category: 'Convenience Methods - Keyword'
@@ -761,157 +761,157 @@ ___respondsToEnv1___: aSelector
 category: 'Convenience Methods - Unary'
 method: object
 ___reverse___
-	^ self perform: #reverse env: 0
+	^ self @env0:reverse
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___reversed___
-	^ self perform: #reversed env: 0
+	^ self @env0:reversed
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___reverseDo___: aBlock
-	^ self perform: #reverseDo: env: 0 withArguments: {aBlock}
+	^ self @env0:reverseDo: aBlock
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___rounded___
-	^ self perform: #rounded env: 0
+	^ self @env0:rounded
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___select___: block
-	^ self perform: #select: env: 0 withArguments: {block}
+	^ self @env0:select: block
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___signal___
-	^ self perform: #signal env: 0
+	^ self @env0:signal
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___signal___: message
-	^ self perform: #signal: env: 0 withArguments: {message}
+	^ self @env0:signal: message
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___sin___
-	^ self perform: #sin env: 0
+	^ self @env0:sin
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___size___
-	^ self perform: #size env: 0
+	^ self @env0:size
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___size___: aSize
-	^ self perform: #size: env: 0 withArguments: {aSize}
+	^ self @env0:size: aSize
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___sort___: aBlock
-	^ self perform: #sort: env: 0 withArguments: {aBlock}
+	^ self @env0:sort: aBlock
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___space___
-	^ self perform: #space env: 0
+	^ self @env0:space
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___split___: aString
-	^ self perform: #split: env: 0 withArguments: {aString}
+	^ self @env0:split: aString
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___sqrt___
-	^ self perform: #sqrt env: 0
+	^ self @env0:sqrt
 %
 
 category: 'Convenience Methods - Binary'
 method: object
 ___times___: other
-	^ self perform: #* env: 0 withArguments: {other}
+	^ self @env0:* other
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___timesRepeat___: block
-	^ self perform: #timesRepeat: env: 0 withArguments: {block}
+	^ self @env0:timesRepeat: block
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___to___: end by: step do: aBlock
-	^ self perform: #to:by:do: env: 0 withArguments: {end. step. aBlock}
+	^ self @env0:to: end by: step do: aBlock
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___to___: end do: block
-	^ self perform: #to:do: env: 0 withArguments: {end. block}
+	^ self @env0:to: end do: block
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___trimBoth___
-	^ self perform: #trimBoth env: 0
+	^ self @env0:trimBoth
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___truncated___
-	^ self perform: #truncated env: 0
+	^ self @env0:truncated
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___whileFalse___: block
-	^ self perform: #whileFalse: env: 0 withArguments: {block}
+	^ self @env0:whileFalse: block
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___whileTrue___: block
-	^ self perform: #whileTrue: env: 0 withArguments: {block}
+	^ self @env0:whileTrue: block
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___with___: arg1 with: arg2
-	^ self perform: #with:with: env: 0 withArguments: {arg1. arg2}
+	^ self @env0:with: arg1 with: arg2
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___with___: arg1 with: arg2 with: arg3
-	^ self perform: #with:with:with: env: 0 withArguments: {arg1. arg2. arg3}
+	^ self @env0:with: arg1 with: arg2 with: arg3
 %
 
 category: 'Convenience Methods - Keyword'
 method: object
 ___withAll___: aCollection
-	^ self perform: #withAll: env: 0 withArguments: {aCollection}
+	^ self @env0:withAll: aCollection
 %
 
 category: 'Convenience Methods - Unary'
 method: object
 ___yourself___
-	^ self perform: #yourself env: 0
+	^ self @env0:yourself
 %
 
 category: 'Python-Attribute Access'
@@ -941,25 +941,25 @@ __dir__
 
 	| selectors result myClass |
 	myClass := self ___class___.
-	selectors := myClass perform: #allSelectorsForEnvironment: env: 0 withArguments: { 1 }.
+	selectors := myClass @env0:allSelectorsForEnvironment: 1.
 	"Filter out convenience methods (starting with ___)"
-	selectors := selectors perform: #reject: env: 0 withArguments: { [:selector |
+	selectors := selectors @env0:reject: [:selector |
 		| selectorStr prefix |
 		selectorStr := selector ___asString___.
 		((selectorStr ___size___) ___ge___: 3) ifTrue: [
 			prefix := selectorStr ___copyFrom___: 1 to: 3.
 			prefix ___eq___: '___'
 		] ifFalse: [false]
-	] }.
-	result := selectors perform: #collect: env: 0 withArguments: { [:selector |
+	].
+	result := selectors @env0:collect: [:selector |
 		| index |
 		"Convert selector to string, removing trailing colon(s) for keyword methods"
-		index := selector perform: #indexOf: env: 0 withArguments: { $: }.
+		index := selector @env0:indexOf: $:.
 		index == 0
 			ifTrue: [selector ___asString___]
 			ifFalse: [selector ___copyFrom___: 1 to: (index ___minus___: 1)]
-	] }.
-	^ (result perform: #asSortedCollection env: 0) ___asArray___
+	].
+	^ (result @env0:asSortedCollection) ___asArray___
 %
 
 category: 'Python-Other'
@@ -1112,7 +1112,7 @@ __sizeof__
 	"Return the size of the object in memory, in bytes.
 	Uses GemStone's physicalSize which returns bytes required to represent the object."
 
-	^ self perform: #physicalSize env: 0
+	^ self @env0:physicalSize
 %
 
 category: 'Python-String Representation'
@@ -1146,7 +1146,7 @@ perform: aSelectorSymbol env: environmentId
 "
 
 <primitive: 2014>
-^self perform: #_perform:env:withArguments: env: 0 withArguments: {aSelectorSymbol perform: #asSymbol env: 0. environmentId. #()}
+^self @env0:_perform: (aSelectorSymbol @env0:asSymbol) env: environmentId withArguments: #()
 %
 
 category: 'Message Handling'
@@ -1165,11 +1165,11 @@ perform: aSelectorSymbol env: environmentId withArguments: anArray
  specifying a method lookup environment."
 
 <primitive: 2015>
-anArray perform: #_validateClass: env: 0 withArguments: {Array}.
+anArray @env0:_validateClass: Array.
 
 "Now just try the primitive again, but send asSymbol to the selector to convert
  it to a Symbol."
-^ self perform: #_perform:env:withArguments: env: 0 withArguments: {aSelectorSymbol perform: #asSymbol env: 0. environmentId. anArray}
+^ self @env0:_perform: (aSelectorSymbol @env0:asSymbol) env: environmentId withArguments: anArray
 %
 
 category: 'Message Handling'
@@ -1186,8 +1186,8 @@ with: anObject perform: aSelectorSymbol env: environmentId
 
 <primitive: 2014>
 | sel |
-sel := aSelectorSymbol perform: #asSymbol env: 0.
-^self perform: #_perform:env:withArguments: env: 0 withArguments: {sel. environmentId. { anObject }}
+sel := aSelectorSymbol @env0:asSymbol.
+^self @env0:_perform: sel env: environmentId withArguments: { anObject }
 %
 
 set compile_env: 0

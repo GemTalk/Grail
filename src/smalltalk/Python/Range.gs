@@ -112,12 +112,12 @@ __eq__: other
 	].
 
 	"Non-empty ranges must have same start, stop, and step"
-	selfStart := self perform: #start env: 1.
-	otherStart := other perform: #start env: 1.
+	selfStart := self @env1:start.
+	otherStart := other @env1:start.
 	(selfStart ___eq___: otherStart) ifFalse: [ ^ false ].
 
-	selfStep := self perform: #step env: 1.
-	otherStep := other perform: #step env: 1.
+	selfStep := self @env1:step.
+	otherStep := other @env1:step.
 	(selfStep ___eq___: otherStep) ifFalse: [ ^ false ].
 
 	^ selfSize ___eq___: otherSize
@@ -166,7 +166,7 @@ method: range
 __iter__
 	"Return an iterator over the range."
 
-	^ range_iterator perform: #___on: env: 1 withArguments: {self}
+	^ range_iterator @env1:___on: self
 %
 
 category: 'Python-Sequence Protocol'
@@ -182,7 +182,7 @@ __ne__: other
 	"Test inequality with another range"
 
 	| eq |
-	eq := self perform: #__eq__: env: 1 withArguments: {other}.
+	eq := self @env1:__eq__: other.
 	^ eq ___not___
 %
 
@@ -228,11 +228,11 @@ __reversed__
 
 	"Empty range returns empty range"
 	(size ___eq___: 0) ifTrue: [
-		^ range perform: #__new__:_:_:_: env: 1 withArguments: {range. 0. 0. 1}
+		^ range @env1:__new__: range _: 0 _: 0 _: 1
 	].
 
-	startVal := self perform: #start env: 1.
-	stepVal := self perform: #step env: 1.
+	startVal := self @env1:start.
+	stepVal := self @env1:step.
 
 	"Calculate new start: original start + (size - 1) * step"
 	newStart := startVal  ___plus___: ((size ___minus___: 1) ___times___: stepVal).
@@ -262,8 +262,8 @@ index: value
 	"Return the index of value in the range. Raises ValueError if not found."
 
 	| fromVal byVal idx |
-	fromVal := self perform: #_from env: 0.
-	byVal := self perform: #increment env: 0.
+	fromVal := self @env0:_from.
+	byVal := self @env0:increment.
 
 	"Check if value is in range"
 	(self __contains__: value) ifFalse: [
@@ -279,14 +279,14 @@ category: 'Python-Attributes'
 method: range
 start
 	"Return the start value (Python's start attribute)"
-	^ self perform: #_from env: 0
+	^ self @env0:_from
 %
 
 category: 'Python-Attributes'
 method: range
 step
 	"Return the step value (Python's step attribute)"
-	^ self perform: #increment env: 0
+	^ self @env0:increment
 %
 
 category: 'Python-Attributes'
@@ -295,9 +295,9 @@ stop
 	"Return the stop value (Python's stop attribute - exclusive)"
 
 	| fromVal byVal toVal |
-	fromVal := self perform: #_from env: 0.
-	byVal := self perform: #increment env: 0.
-	toVal := self perform: #_to env: 0.
+	fromVal := self @env0:_from.
+	byVal := self @env0:increment.
+	toVal := self @env0:_to.
 
 	"Convert from inclusive 'to' to exclusive 'stop'"
 	^ (byVal ___gt___: 0)

@@ -69,9 +69,9 @@ printSmalltalkOn: aStream
 	(value isKindOf: complex) ifTrue: [
 		aStream
 			nextPutAll: '(complex ___new___: ';
-			print: (value perform: #real env: 1);
+			print: (value @env1:real);
 			nextPutAll: ' _: ';
-			print: (value perform: #imag env: 1);
+			print: (value @env1:imag);
 			nextPutAll: ')'.
 		^self.
 	].

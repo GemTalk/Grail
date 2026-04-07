@@ -41,24 +41,24 @@ test__ceil__
 	"Test __ceil__ returns smallest integer >= self"
 
 	| fm fracClass f |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 
 	"ceil(3/2) = 2"
 	f := fracClass ___new___: fracClass _: 3 _: 2.
-	self assert: (f perform: #__ceil__ env: 1) equals: 2.
+	self assert: (f @env1:__ceil__) equals: 2.
 
 	"ceil(5/1) = 5"
 	f := fracClass ___new___: fracClass _: 5 _: 1.
-	self assert: (f perform: #__ceil__ env: 1) equals: 5.
+	self assert: (f @env1:__ceil__) equals: 5.
 
 	"ceil(-3/2) = -1 (ceil goes toward positive infinity)"
 	f := fracClass ___new___: fracClass _: -3 _: 2.
-	self assert: (f perform: #__ceil__ env: 1) equals: -1.
+	self assert: (f @env1:__ceil__) equals: -1.
 
 	"ceil(-5/1) = -5"
 	f := fracClass ___new___: fracClass _: -5 _: 1.
-	self assert: (f perform: #__ceil__ env: 1) equals: -5.
+	self assert: (f @env1:__ceil__) equals: -5.
 %
 
 category: 'Tests - Rounding'
@@ -67,24 +67,24 @@ test__floor__
 	"Test __floor__ returns largest integer <= self"
 
 	| fm fracClass f |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 
 	"floor(3/2) = 1"
 	f := fracClass ___new___: fracClass _: 3 _: 2.
-	self assert: (f perform: #__floor__ env: 1) equals: 1.
+	self assert: (f @env1:__floor__) equals: 1.
 
 	"floor(5/1) = 5"
 	f := fracClass ___new___: fracClass _: 5 _: 1.
-	self assert: (f perform: #__floor__ env: 1) equals: 5.
+	self assert: (f @env1:__floor__) equals: 5.
 
 	"floor(-3/2) = -2 (floor goes toward negative infinity)"
 	f := fracClass ___new___: fracClass _: -3 _: 2.
-	self assert: (f perform: #__floor__ env: 1) equals: -2.
+	self assert: (f @env1:__floor__) equals: -2.
 
 	"floor(-5/1) = -5"
 	f := fracClass ___new___: fracClass _: -5 _: 1.
-	self assert: (f perform: #__floor__ env: 1) equals: -5.
+	self assert: (f @env1:__floor__) equals: -5.
 %
 
 category: 'Tests - Format'
@@ -93,11 +93,11 @@ test__format__Empty
 	"Test __format__('') returns str(self)"
 
 	| fm fracClass f result |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 
 	f := fracClass ___new___: fracClass _: 3 _: 2.
-	result := f perform: #__format__: env: 1 withArguments: {''}.
+	result := f @env1:__format__: ''.
 	self assert: result equals: '3/2'.
 %
 
@@ -107,11 +107,11 @@ test__format__Nil
 	"Test __format__(nil) returns str(self)"
 
 	| fm fracClass f result |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 
 	f := fracClass ___new___: fracClass _: 3 _: 2.
-	result := f perform: #__format__: env: 1 withArguments: {nil}.
+	result := f @env1:__format__: nil.
 	self assert: result equals: '3/2'.
 %
 
@@ -121,10 +121,10 @@ test__hash__
 	"Test __hash__ returns an integer"
 
 	| fm fracClass f result |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 	f := fracClass ___new___: fracClass _: 3 _: 2.
-	result := f perform: #__hash__ env: 1.
+	result := f @env1:__hash__.
 	self assert: (result isKindOf: Integer).
 %
 
@@ -134,15 +134,15 @@ test__repr__
 	"Test repr(Fraction) format matches CPython: 'Fraction(n, d)'"
 
 	| fm fracClass f result |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 
 	f := fracClass ___new___: fracClass _: 3 _: 2.
-	result := f perform: #__repr__ env: 1.
+	result := f @env1:__repr__.
 	self assert: result equals: 'Fraction(3, 2)'.
 
 	f := fracClass ___new___: fracClass _: -1 _: 2.
-	result := f perform: #__repr__ env: 1.
+	result := f @env1:__repr__.
 	self assert: result equals: 'Fraction(-1, 2)'.
 
 	"Note: Fraction(0, 1) in GemStone becomes SmallInteger 0, not a Fraction
@@ -155,28 +155,28 @@ test__round__
 	"Test __round__ rounds to nearest integer, ties to even"
 
 	| fm fracClass f |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 
 	"round(3/2) = 2 (1.5 rounds to 2, the even number)"
 	f := fracClass ___new___: fracClass _: 3 _: 2.
-	self assert: (f perform: #__round__ env: 1) equals: 2.
+	self assert: (f @env1:__round__) equals: 2.
 
 	"round(5/2) = 2 (2.5 rounds to 2, the even number)"
 	f := fracClass ___new___: fracClass _: 5 _: 2.
-	self assert: (f perform: #__round__ env: 1) equals: 2.
+	self assert: (f @env1:__round__) equals: 2.
 
 	"round(7/2) = 4 (3.5 rounds to 4, the even number)"
 	f := fracClass ___new___: fracClass _: 7 _: 2.
-	self assert: (f perform: #__round__ env: 1) equals: 4.
+	self assert: (f @env1:__round__) equals: 4.
 
 	"round(7/4) = 2 (1.75 rounds to 2)"
 	f := fracClass ___new___: fracClass _: 7 _: 4.
-	self assert: (f perform: #__round__ env: 1) equals: 2.
+	self assert: (f @env1:__round__) equals: 2.
 
 	"round(-3/2) = -2 (-1.5 rounds to -2, the even number)"
 	f := fracClass ___new___: fracClass _: -3 _: 2.
-	self assert: (f perform: #__round__ env: 1) equals: -2.
+	self assert: (f @env1:__round__) equals: -2.
 %
 
 category: 'Tests - Rounding'
@@ -185,18 +185,18 @@ test__round__WithNdigits
 	"Test __round__(ndigits)"
 
 	| fm fracClass f result |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 
 	"round(7/4, 1) should give Fraction close to 1.8"
 	f := fracClass ___new___: fracClass _: 7 _: 4.
-	result := f perform: #__round__: env: 1 withArguments: {1}.
+	result := f @env1:__round__: 1.
 	"Result should be 9/5 = 1.8"
-	self assert: ((result perform: #__float__ env: 1) - 1.8) abs < 0.0001.
+	self assert: ((result @env1:__float__) - 1.8) abs < 0.0001.
 
 	"round with ndigits=0 returns integer"
 	f := fracClass ___new___: fracClass _: 7 _: 4.
-	result := f perform: #__round__: env: 1 withArguments: {0}.
+	result := f @env1:__round__: 0.
 	self assert: (result isKindOf: Integer).
 	self assert: result equals: 2.
 %
@@ -207,19 +207,19 @@ testAs_integer_ratio
 	"Test as_integer_ratio returns (numerator, denominator) tuple"
 
 	| fm fracClass f result |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 
 	f := fracClass ___new___: fracClass _: 3 _: 2.
-	result := f perform: #as_integer_ratio env: 1.
+	result := f @env1:as_integer_ratio.
 	"Use 0-based Python indexing"
-	self assert: (result perform: #__getitem__: env: 1 withArguments: {0}) equals: 3.
-	self assert: (result perform: #__getitem__: env: 1 withArguments: {1}) equals: 2.
+	self assert: (result @env1:__getitem__: 0) equals: 3.
+	self assert: (result @env1:__getitem__: 1) equals: 2.
 
 	f := fracClass ___new___: fracClass _: -5 _: 4.
-	result := f perform: #as_integer_ratio env: 1.
-	self assert: (result perform: #__getitem__: env: 1 withArguments: {0}) equals: -5.
-	self assert: (result perform: #__getitem__: env: 1 withArguments: {1}) equals: 4.
+	result := f @env1:as_integer_ratio.
+	self assert: (result @env1:__getitem__: 0) equals: -5.
+	self assert: (result @env1:__getitem__: 1) equals: 4.
 %
 
 category: 'Tests - Negative Conversion'
@@ -228,14 +228,14 @@ testBoolNegative
 	"Test __bool__ for negative fractions (any non-zero is True)"
 
 	| fm fracClass f |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 
 	f := fracClass ___new___: fracClass _: -3 _: 2.
-	self assert: (f perform: #__bool__ env: 1).
+	self assert: (f @env1:__bool__).
 
 	f := fracClass ___new___: fracClass _: -1 _: 1.
-	self assert: (f perform: #__bool__ env: 1).
+	self assert: (f @env1:__bool__).
 %
 
 category: 'Tests - Canonical Form & Signs'
@@ -244,14 +244,14 @@ testCanonicalFormEquality
 	"Test that equivalent fractions are equal (e.g., 1/2 == 2/4)"
 
 	| fm fracClass f1 f2 |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 	f1 := fracClass ___new___: fracClass _: 1 _: 2.
 	f2 := fracClass ___new___: fracClass _: 2 _: 4.
-	self assert: (f1 perform: #__eq__: env: 1 withArguments: {f2}).
+	self assert: (f1 @env1:__eq__: f2).
 	"After reduction, both should have same numerator/denominator"
-	self assert: (f1 perform: #numerator env: 1) equals: (f2 perform: #numerator env: 1).
-	self assert: (f1 perform: #denominator env: 1) equals: (f2 perform: #denominator env: 1).
+	self assert: (f1 @env1:numerator) equals: (f2 @env1:numerator).
+	self assert: (f1 @env1:denominator) equals: (f2 @env1:denominator).
 %
 
 category: 'Tests - Conversion'
@@ -260,14 +260,14 @@ testConversionsAndBool
 	"Test __int__, __float__ and __bool__ on Fraction"
 
 	| fm fracClass f |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 	f := fracClass ___new___: fracClass _: 3 _: 2.
-	self assert: (f perform: #__int__ env: 1) equals: 1.
-	self assert: ((f perform: #__float__ env: 1) - 1.5) abs < 0.0001.
-	self assert: (f perform: #__bool__ env: 1).
+	self assert: (f @env1:__int__) equals: 1.
+	self assert: ((f @env1:__float__) - 1.5) abs < 0.0001.
+	self assert: (f @env1:__bool__).
 	f := fracClass ___new___: fracClass _: 0 _: 1.
-	self deny: (f perform: #__bool__ env: 1).
+	self deny: (f @env1:__bool__).
 %
 
 category: 'Tests - Creation'
@@ -276,11 +276,11 @@ testCreateFromFraction
 	"Test Fraction(Fraction(1, 3)) returns an equivalent fraction"
 
 	| fm fracClass f1 f2 |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 	f1 := fracClass ___new___: fracClass _: 1 _: 3.
 	f2 := fracClass ___new___: fracClass _: f1.
-	self assert: (f2 perform: #__eq__: env: 1 withArguments: {f1}).
+	self assert: (f2 @env1:__eq__: f1).
 %
 
 category: 'Tests - Creation'
@@ -289,12 +289,12 @@ testCreateFromIntegers
 	"Test Fraction(1, 2) construction"
 
 	| fm fracClass f |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 	f := fracClass ___new___: fracClass _: 1 _: 2.
-	self assert: (f perform: #numerator env: 1) equals: 1.
-	self assert: (f perform: #denominator env: 1) equals: 2.
-	self assert: (f perform: #__str__ env: 1) equals: '1/2'.
+	self assert: (f @env1:numerator) equals: 1.
+	self assert: (f @env1:denominator) equals: 2.
+	self assert: (f @env1:__str__) equals: '1/2'.
 %
 
 category: 'Tests - Creation'
@@ -303,11 +303,11 @@ testCreateFromSingleInteger
 	"Test Fraction(3) construction"
 
 	| fm fracClass f |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 	f := fracClass ___new___: fracClass _: 3.
-	self assert: (f perform: #__int__ env: 1) equals: 3.
-	self assert: (f perform: #__float__ env: 1) equals: 3.0.
+	self assert: (f @env1:__int__) equals: 3.
+	self assert: (f @env1:__float__) equals: 3.0.
 %
 
 category: 'Tests - Negative Conversion'
@@ -316,14 +316,14 @@ testFloatNegative
 	"Test __float__ for negative fractions"
 
 	| fm fracClass f |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 
 	f := fracClass ___new___: fracClass _: -3 _: 2.
-	self assert: ((f perform: #__float__ env: 1) - -1.5) abs < 0.0001.
+	self assert: ((f @env1:__float__) - -1.5) abs < 0.0001.
 
 	f := fracClass ___new___: fracClass _: -1 _: 4.
-	self assert: ((f perform: #__float__ env: 1) - -0.25) abs < 0.0001.
+	self assert: ((f @env1:__float__) - -0.25) abs < 0.0001.
 %
 
 category: 'Tests - Module Binding'
@@ -332,8 +332,8 @@ testFractionsModuleProvidesFraction
 	"Test that fractions module exposes the Fraction type"
 
 	| fm fracClass |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 	self assert: fracClass equals: Fraction.
 %
 
@@ -343,13 +343,13 @@ testFrom_decimal
 	"Test Fraction.from_decimal() class method"
 
 	| fm fracClass dec f |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 
 	"Create a Decimal (ScaledDecimal) with value 0.5"
-	dec := Decimal perform: #for:scale: env: 0 withArguments: {0.5. 2}.
-	f := fracClass perform: #from_decimal: env: 1 withArguments: {dec}.
-	self assert: ((f perform: #__float__ env: 1) - 0.5) abs < 0.0001.
+	dec := Decimal @env0:for: 0.5 scale: 2.
+	f := fracClass @env1:from_decimal: dec.
+	self assert: ((f @env1:__float__) - 0.5) abs < 0.0001.
 %
 
 category: 'Tests - Class Methods'
@@ -358,23 +358,23 @@ testFrom_float
 	"Test Fraction.from_float() class method"
 
 	| fm fracClass f |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 
 	"0.5 should give 1/2"
-	f := fracClass perform: #from_float: env: 1 withArguments: {0.5}.
-	self assert: (f perform: #numerator env: 1) equals: 1.
-	self assert: (f perform: #denominator env: 1) equals: 2.
+	f := fracClass @env1:from_float: 0.5.
+	self assert: (f @env1:numerator) equals: 1.
+	self assert: (f @env1:denominator) equals: 2.
 
 	"Integer argument should work"
-	f := fracClass perform: #from_float: env: 1 withArguments: {5}.
-	self assert: (f perform: #numerator env: 1) equals: 5.
-	self assert: (f perform: #denominator env: 1) equals: 1.
+	f := fracClass @env1:from_float: 5.
+	self assert: (f @env1:numerator) equals: 5.
+	self assert: (f @env1:denominator) equals: 1.
 
 	"Negative float"
-	f := fracClass perform: #from_float: env: 1 withArguments: {-0.25}.
-	self assert: (f perform: #numerator env: 1) equals: -1.
-	self assert: (f perform: #denominator env: 1) equals: 4.
+	f := fracClass @env1:from_float: -0.25.
+	self assert: (f @env1:numerator) equals: -1.
+	self assert: (f @env1:denominator) equals: 4.
 %
 
 category: 'Tests - Class Methods'
@@ -383,11 +383,11 @@ testFrom_floatRaisesOnInfinity
 	"Test Fraction.from_float() raises on Infinity"
 
 	| fm fracClass inf |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 	inf := 1.0 / 0.0.  "Create Infinity"
 	self
-		should: [fracClass perform: #from_float: env: 1 withArguments: {inf}]
+		should: [fracClass @env1:from_float: inf]
 		raise: ValueError.
 %
 
@@ -397,11 +397,11 @@ testFrom_floatRaisesOnNaN
 	"Test Fraction.from_float() raises on NaN"
 
 	| fm fracClass nan |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 	nan := 0.0 / 0.0.  "Create NaN"
 	self
-		should: [fracClass perform: #from_float: env: 1 withArguments: {nan}]
+		should: [fracClass @env1:from_float: nan]
 		raise: ValueError.
 %
 
@@ -411,18 +411,18 @@ testFrom_number
 	"Test Fraction.from_number() class method with objects having as_integer_ratio"
 
 	| fm fracClass f origFrac |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 
 	"Float has as_integer_ratio"
-	f := fracClass perform: #from_number: env: 1 withArguments: {0.5}.
-	self assert: (f perform: #numerator env: 1) equals: 1.
-	self assert: (f perform: #denominator env: 1) equals: 2.
+	f := fracClass @env1:from_number: 0.5.
+	self assert: (f @env1:numerator) equals: 1.
+	self assert: (f @env1:denominator) equals: 2.
 
 	"Fraction has as_integer_ratio"
 	origFrac := fracClass ___new___: fracClass _: 3 _: 4.
-	f := fracClass perform: #from_number: env: 1 withArguments: {origFrac}.
-	self assert: (f perform: #__eq__: env: 1 withArguments: {origFrac}).
+	f := fracClass @env1:from_number: origFrac.
+	self assert: (f @env1:__eq__: origFrac).
 %
 
 category: 'Tests - Hash'
@@ -431,21 +431,21 @@ testHashEqualityConsistency
 	"Test that equal fractions have equal hashes"
 
 	| fm fracClass f1 f2 f3 h1 h2 h3 |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 
 	"1/2 and 2/4 are equal, so their hashes must match"
 	f1 := fracClass ___new___: fracClass _: 1 _: 2.
 	f2 := fracClass ___new___: fracClass _: 2 _: 4.
-	h1 := f1 perform: #__hash__ env: 1.
-	h2 := f2 perform: #__hash__ env: 1.
+	h1 := f1 @env1:__hash__.
+	h2 := f2 @env1:__hash__.
 	self assert: h1 equals: h2.
 
 	"-1/2 and 1/-2 are equal, so their hashes must match"
 	f1 := fracClass ___new___: fracClass _: -1 _: 2.
 	f3 := fracClass ___new___: fracClass _: 1 _: -2.
-	h1 := f1 perform: #__hash__ env: 1.
-	h3 := f3 perform: #__hash__ env: 1.
+	h1 := f1 @env1:__hash__.
+	h3 := f3 @env1:__hash__.
 	self assert: h1 equals: h3.
 %
 
@@ -455,20 +455,20 @@ testIntTruncationTowardZeroNegative
 	"Test __int__ truncates toward zero for negative fractions (CPython behavior)"
 
 	| fm fracClass f |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 
 	"int(-3/2) should be -1, not -2 (truncation toward zero)"
 	f := fracClass ___new___: fracClass _: -3 _: 2.
-	self assert: (f perform: #__int__ env: 1) equals: -1.
+	self assert: (f @env1:__int__) equals: -1.
 
 	"int(-7/4) should be -1"
 	f := fracClass ___new___: fracClass _: -7 _: 4.
-	self assert: (f perform: #__int__ env: 1) equals: -1.
+	self assert: (f @env1:__int__) equals: -1.
 
 	"int(-5/5) should be -1"
 	f := fracClass ___new___: fracClass _: -5 _: 5.
-	self assert: (f perform: #__int__ env: 1) equals: -1.
+	self assert: (f @env1:__int__) equals: -1.
 %
 
 category: 'Tests - Fraction Methods'
@@ -477,21 +477,21 @@ testIs_integer
 	"Test is_integer returns True when denominator is 1"
 
 	| fm fracClass f |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 
 	f := fracClass ___new___: fracClass _: 5 _: 1.
-	self assert: (f perform: #is_integer env: 1).
+	self assert: (f @env1:is_integer).
 
 	f := fracClass ___new___: fracClass _: -3 _: 1.
-	self assert: (f perform: #is_integer env: 1).
+	self assert: (f @env1:is_integer).
 
 	f := fracClass ___new___: fracClass _: 3 _: 2.
-	self deny: (f perform: #is_integer env: 1).
+	self deny: (f @env1:is_integer).
 
 	f := fracClass ___new___: fracClass _: 6 _: 3.
 	"After reduction, 6/3 = 2/1, so is_integer should be true"
-	self assert: (f perform: #is_integer env: 1).
+	self assert: (f @env1:is_integer).
 %
 
 category: 'Tests - Limit Denominator'
@@ -500,13 +500,13 @@ testLimit_denominatorDefault
 	"Test limit_denominator() with default max (10**6)"
 
 	| fm fracClass f result |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 
 	"Fraction with denominator within limit stays the same"
 	f := fracClass ___new___: fracClass _: 1 _: 3.
-	result := f perform: #limit_denominator env: 1.
-	self assert: (result perform: #__eq__: env: 1 withArguments: {f}).
+	result := f @env1:limit_denominator.
+	self assert: (result @env1:__eq__: f).
 %
 
 category: 'Tests - Limit Denominator'
@@ -515,13 +515,13 @@ testLimit_denominatorSmall
 	"Test limit_denominator with small max values"
 
 	| fm fracClass f result |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 
 	"1/3 with max_denominator=2 should give 1/2 (closest with d <= 2)"
 	f := fracClass ___new___: fracClass _: 1 _: 3.
-	result := f perform: #limit_denominator: env: 1 withArguments: {2}.
-	self assert: (result perform: #denominator env: 1) <= 2.
+	result := f @env1:limit_denominator: 2.
+	self assert: (result @env1:denominator) <= 2.
 %
 
 category: 'Tests - Limit Denominator'
@@ -530,15 +530,15 @@ testLimit_denominatorWithMax
 	"Test limit_denominator(max_denominator)"
 
 	| fm fracClass f result |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 
 	"Pi approximation: 355/113 is close to pi with denominator <= 1000"
 	f := fracClass ___new___: fracClass _: 314159265 _: 100000000.
-	result := f perform: #limit_denominator: env: 1 withArguments: {1000}.
+	result := f @env1:limit_denominator: 1000.
 	"355/113 is the best approximation with denominator <= 1000"
-	self assert: (result perform: #numerator env: 1) equals: 355.
-	self assert: (result perform: #denominator env: 1) equals: 113.
+	self assert: (result @env1:numerator) equals: 355.
+	self assert: (result @env1:denominator) equals: 113.
 %
 
 category: 'Tests - Canonical Form & Signs'
@@ -547,17 +547,17 @@ testNegativeFractionEquality
 	"Test equality of negative fractions with different sign positions"
 
 	| fm fracClass f1 f2 f3 |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 	f1 := fracClass ___new___: fracClass _: -1 _: 2.
 	f2 := fracClass ___new___: fracClass _: 1 _: -2.
 	f3 := fracClass ___new___: fracClass _: -1 _: -2.
 
 	"f1 and f2 should be equal (-1/2 == 1/-2)"
-	self assert: (f1 perform: #__eq__: env: 1 withArguments: {f2}).
+	self assert: (f1 @env1:__eq__: f2).
 
 	"f3 should NOT equal f1 (1/2 != -1/2)"
-	self deny: (f3 perform: #__eq__: env: 1 withArguments: {f1}).
+	self deny: (f3 @env1:__eq__: f1).
 %
 
 category: 'Tests - Zero and One Argument Forms'
@@ -566,12 +566,12 @@ testOneArgumentFormNegative
 	"Test Fraction(-3) returns -3/1"
 
 	| fm fracClass f |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 	f := fracClass ___new___: fracClass _: -3.
-	self assert: (f perform: #numerator env: 1) equals: -3.
-	self assert: (f perform: #denominator env: 1) equals: 1.
-	self assert: (f perform: #__int__ env: 1) equals: -3.
+	self assert: (f @env1:numerator) equals: -3.
+	self assert: (f @env1:denominator) equals: 1.
+	self assert: (f @env1:__int__) equals: -3.
 %
 
 category: 'Tests - Zero and One Argument Forms'
@@ -580,13 +580,13 @@ testOneArgumentFormNegativeFraction
 	"Test Fraction(Fraction(-3, 2)) returns -3/2"
 
 	| fm fracClass f1 f2 |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 	f1 := fracClass ___new___: fracClass _: -3 _: 2.
 	f2 := fracClass ___new___: fracClass _: f1.
-	self assert: (f2 perform: #__eq__: env: 1 withArguments: {f1}).
-	self assert: (f2 perform: #numerator env: 1) equals: -3.
-	self assert: (f2 perform: #denominator env: 1) equals: 2.
+	self assert: (f2 @env1:__eq__: f1).
+	self assert: (f2 @env1:numerator) equals: -3.
+	self assert: (f2 @env1:denominator) equals: 2.
 %
 
 category: 'Tests - Zero and One Argument Forms'
@@ -595,11 +595,11 @@ testOneArgumentFormZero
 	"Test Fraction(0) returns 0/1"
 
 	| fm fracClass f |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 	f := fracClass ___new___: fracClass _: 0.
-	self assert: (f perform: #numerator env: 1) equals: 0.
-	self assert: (f perform: #denominator env: 1) equals: 1.
+	self assert: (f @env1:numerator) equals: 0.
+	self assert: (f @env1:denominator) equals: 1.
 %
 
 category: 'Tests - Canonical Form & Signs'
@@ -608,23 +608,23 @@ testSignNormalization
 	"Test that sign is always in numerator, denominator always positive per CPython rules"
 
 	| fm fracClass f |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 
 	"Fraction(-1, 2) should have numerator -1, denominator 2"
 	f := fracClass ___new___: fracClass _: -1 _: 2.
-	self assert: (f perform: #numerator env: 1) equals: -1.
-	self assert: (f perform: #denominator env: 1) equals: 2.
+	self assert: (f @env1:numerator) equals: -1.
+	self assert: (f @env1:denominator) equals: 2.
 
 	"Fraction(1, -2) should have numerator -1, denominator 2 (sign moved to numerator)"
 	f := fracClass ___new___: fracClass _: 1 _: -2.
-	self assert: (f perform: #numerator env: 1) equals: -1.
-	self assert: (f perform: #denominator env: 1) equals: 2.
+	self assert: (f @env1:numerator) equals: -1.
+	self assert: (f @env1:denominator) equals: 2.
 
 	"Fraction(-1, -2) should have numerator 1, denominator 2 (both negatives cancel)"
 	f := fracClass ___new___: fracClass _: -1 _: -2.
-	self assert: (f perform: #numerator env: 1) equals: 1.
-	self assert: (f perform: #denominator env: 1) equals: 2.
+	self assert: (f @env1:numerator) equals: 1.
+	self assert: (f @env1:denominator) equals: 2.
 %
 
 category: 'Tests - Zero and One Argument Forms'
@@ -633,12 +633,12 @@ testZeroArgumentForm
 	"Test Fraction() returns 0/1"
 
 	| fm fracClass f |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 	f := fracClass ___new___: fracClass.
-	self assert: (f perform: #numerator env: 1) equals: 0.
-	self assert: (f perform: #denominator env: 1) equals: 1.
-	self assert: (f perform: #__int__ env: 1) equals: 0.
+	self assert: (f @env1:numerator) equals: 0.
+	self assert: (f @env1:denominator) equals: 1.
+	self assert: (f @env1:__int__) equals: 0.
 %
 
 category: 'Tests - Errors'
@@ -647,8 +647,8 @@ testZeroDenominatorRaises
 	"Test that Fraction(1, 0) raises ZeroDivisionError"
 
 	| fm fracClass |
-	fm := fractions perform: #instance env: 1.
-	fracClass := fm perform: #Fraction env: 1.
+	fm := fractions @env1:instance.
+	fracClass := fm @env1:Fraction.
 	self
 		should: [fracClass ___new___: fracClass _: 1 _: 0]
 		raise: ZeroDivisionError.

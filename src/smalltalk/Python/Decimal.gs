@@ -24,17 +24,17 @@ __new__: cls _: value
 	valueClass := value ___class___.
 	
 	"If it's already a Decimal, return it"
-	(value perform: #_isScaledDecimal env: 0) ifTrue: [
+	(value @env0:_isScaledDecimal) ifTrue: [
 		^ value
 	].
 	
 	"If it's a string, parse it"
 	(value ___isKindOf___: String) ifTrue: [
-		^ Decimal perform: #_fromString:decimalPoint: env: 0 withArguments: {value. nil}
+		^ Decimal @env0:_fromString: value decimalPoint: nil
 	].
 	
 	"If it's a number, convert it with default scale of 28"
-	^ Decimal perform: #for:scale: env: 0 withArguments: {value. 28}
+	^ Decimal @env0:for: value scale: 28
 %
 
 category: 'Python-Arithmetic'

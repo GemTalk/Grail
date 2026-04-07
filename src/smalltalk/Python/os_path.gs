@@ -229,7 +229,7 @@ initialize_commonpath
 			normalized := normpathBlock value: {path} value: nil.
 			parts := $/ ___split___: normalized.
 			partsSize := parts ___size___.
-			parts := parts ___select___: [:each | each perform: #notEmpty env: 0].
+			parts := parts ___select___: [:each | each @env0:notEmpty].
 			allParts append: parts
 		].
 		firstSize := (allParts ___first___) ___size___.
@@ -448,14 +448,14 @@ initialize_normpath
 		parts := $/ ___split___: path.
 		isAbsolute := path ___beginsWith___: sep.
 		"First, remove empty strings and '.' elements"
-		parts := parts perform: #reject: env: 0 withArguments: {[:each |
+		parts := parts @env0:reject: [:each |
 			(each ___isEmpty___) or: [each ___eq___: '.']
-		]}.
+		].
 		"Preserve leading empty string for absolute paths (if not already present)"
 		(isAbsolute and: [(parts ___isEmpty___) or: [
 			((parts ___first___) ___isEmpty___) not
 		]]) ifTrue: [
-			parts perform: #addFirst: env: 0 withArguments: {''}
+			parts @env0:addFirst: ''
 		].
 		earlyExit := false.
 		result := nil.

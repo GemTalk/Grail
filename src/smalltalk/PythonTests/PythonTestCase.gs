@@ -53,7 +53,7 @@ suite
 	"Initialize sys.modules to ensure all built-in modules are registered.
 	We need to do this carefully to avoid circular dependencies.
 	Call the class method directly in Python environment."
-	[sys perform: #modules env: 1] on: Error do: [:ex | 
+	[sys @env1:modules] on: Error do: [:ex | 
 		"If initialization fails, continue anyway - individual tests will handle it"
 		Transcript show: 'Warning: Could not initialize sys.modules: ', ex messageText; cr
 	].

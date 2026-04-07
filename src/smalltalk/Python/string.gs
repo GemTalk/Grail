@@ -215,7 +215,7 @@ initialize_capwords
 			KeyValueDictionary ___new___
 		] ifFalse: [
 			| keywordsClass |
-			keywordsClass := keywords perform: #class env: 0.
+			keywordsClass := keywords @env0:class.
 			(keywordsClass == KeyValueDictionary) ifTrue: [
 				keywords
 			] ifFalse: [
@@ -223,11 +223,11 @@ initialize_capwords
 				| dict assoc assocKey assocValue |
 				dict := KeyValueDictionary ___new___.
 				"Access each Association in the array"
-				keywords perform: #do: env: 0 withArguments: {[:assoc |
-					assocKey := assoc perform: #key env: 0.
-					assocValue := assoc perform: #value env: 0.
-					dict perform: #at:put: env: 0 withArguments: {assocKey. assocValue}
-				]}.
+				keywords @env0:do: [:assoc |
+					assocKey := assoc @env0:key.
+					assocValue := assoc @env0:value.
+					dict @env0:at: assocKey put: assocValue
+				].
 				dict
 			]
 		].
@@ -241,7 +241,7 @@ initialize_capwords
 			words := s split
 		] ifFalse: [
 			"Split by separator using GemStone's subStrings: method"
-			words := s perform: #subStrings: env: 0 withArguments: {sep}
+			words := s @env0:subStrings: sep
 		].
 		result := list ___new___.
 		words ___do___: [:word |

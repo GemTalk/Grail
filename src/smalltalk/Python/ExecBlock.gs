@@ -24,7 +24,7 @@ __call__: args
 	"Call the block with the given arguments.
 	 This makes ExecBlock callable in Python's sense."
 
-	^ self perform: #valueWithArguments: env: 0 withArguments: {args}
+	^ self @env0:valueWithArguments: args
 %
 
 category: 'Python-Block Evaluation'
@@ -32,7 +32,7 @@ method: ExecBlock
 value
 	"Evaluate a zero-argument block"
 
-	^ self perform: #value env: 0
+	^ self @env0:value
 %
 
 category: 'Python-Block Evaluation'
@@ -40,7 +40,7 @@ method: ExecBlock
 value: arg1
 	"Evaluate a one-argument block"
 
-	^ self perform: #value: env: 0 withArguments: {arg1}
+	^ self @env0:value: arg1
 %
 
 category: 'Python-Block Evaluation'
@@ -48,7 +48,7 @@ method: ExecBlock
 value: arg1 value: arg2
 	"Evaluate a two-argument block"
 
-	^ self perform: #value:value: env: 0 withArguments: {arg1. arg2}
+	^ self @env0:value: arg1 value: arg2
 %
 
 category: 'Python-Block Evaluation'
@@ -56,7 +56,7 @@ method: ExecBlock
 value: arg1 value: arg2 value: arg3
 	"Evaluate a three-argument block"
 
-	^ self perform: #value:value:value: env: 0 withArguments: {arg1. arg2. arg3}
+	^ self @env0:value: arg1 value: arg2 value: arg3
 %
 
 category: 'Python-Block Evaluation'
@@ -64,7 +64,7 @@ method: ExecBlock
 value: arg1 value: arg2 value: arg3 value: arg4
 	"Evaluate a four-argument block"
 
-	^ self perform: #value:value:value:value: env: 0 withArguments: {arg1. arg2. arg3. arg4}
+	^ self @env0:value: arg1 value: arg2 value: arg3 value: arg4
 %
 
 category: 'Python-Block Evaluation'
@@ -72,7 +72,7 @@ method: ExecBlock
 value: arg1 value: arg2 value: arg3 value: arg4 value: arg5
 	"Evaluate a five-argument block"
 
-	^ self perform: #value:value:value:value:value: env: 0 withArguments: {arg1. arg2. arg3. arg4. arg5}
+	^ self @env0:value: arg1 value: arg2 value: arg3 value: arg4 value: arg5
 %
 
 category: 'Python-Block Evaluation'
@@ -80,7 +80,7 @@ method: ExecBlock
 valueWithArguments: anArray
 	"Evaluate the block with an array of arguments"
 
-	^ self perform: #valueWithArguments: env: 0 withArguments: {anArray}
+	^ self @env0:valueWithArguments: anArray
 %
 
 set compile_env: 0

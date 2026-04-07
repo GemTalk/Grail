@@ -250,9 +250,9 @@ testUnescapeGreekEntity
 result = html.unescape(''&alpha;&beta;&gamma;'')
 result
 ') equals: (
-	(Character perform: #codePoint: env: 0 withArguments: { 945 }) asString,
-	(Character perform: #codePoint: env: 0 withArguments: { 946 }) asString,
-	(Character perform: #codePoint: env: 0 withArguments: { 947 }) asString
+	(Character @env0:codePoint: 945) asString,
+	(Character @env0:codePoint: 946) asString,
+	(Character @env0:codePoint: 947) asString
 ).
 %
 
@@ -268,7 +268,7 @@ testUnicode16StrMethod
 	"greek is a DoubleByteString (MultiByteString subclass)"
 	self assert: (greek class name) equals: #'DoubleByteString'.
 	"__str__ should return self"
-	result := greek perform: #__str__ env: 1.
+	result := greek @env1:__str__.
 	self assert: result equals: greek.
 %
 
@@ -281,7 +281,7 @@ testUnicode16ReprMethod
 	greek := (Character codePoint: 945) asString,
 		(Character codePoint: 946) asString,
 		(Character codePoint: 947) asString.
-	result := greek perform: #__repr__ env: 1.
+	result := greek @env1:__repr__.
 	self assert: (result includesString: '''').
 %
 
@@ -294,7 +294,7 @@ testUnicode16LenMethod
 	greek := (Character codePoint: 945) asString,
 		(Character codePoint: 946) asString,
 		(Character codePoint: 947) asString.
-	result := greek perform: #__len__ env: 1.
+	result := greek @env1:__len__.
 	self assert: result equals: 3.
 %
 

@@ -1,11 +1,18 @@
 #!/bin/bash
 
-if [ ! -f .setenv ]; then
-    cp setenv .setenv
+# This script assumes a stone is already running per the stone name defined in .topazini
+
+if [ -z "$GEMSTONE" ]; then
+    echo "Error: \$GEMSTONE is not set. Set it to your GemStone installation directory (e.g., /path/to/GemStone64Bit3.7.x-arch.Darwin)."
+    exit 1
 fi
-source .setenv
-if [ ! -f ~/.topazini ]; then
-    cp topazini ~/.topazini
+if [ -z "$GEMSTONE_GLOBAL_DIR" ]; then
+    echo "Error: \$GEMSTONE_GLOBAL_DIR is not set. Set it to the directory containing your GemStone locks and logs."
+    exit 1
+fi
+if ! command -v topaz &>/dev/null; then
+    echo "Error: 'topaz' is not on your \$PATH. Add \$GEMSTONE/bin to your PATH (e.g., export PATH=\$GEMSTONE/bin:\$PATH)."
+    exit 1
 fi
 
 topaz -lq <<EOF

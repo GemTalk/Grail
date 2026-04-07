@@ -251,7 +251,7 @@ __instancecheck__: instance
 	instanceClass := instance ___class___.
 
 	"Check normal inheritance - use env 0 for isSubclassOf:"
-	(instanceClass perform: #isSubclassOf: env: 0 withArguments: {self}) ifTrue: [^ true].
+	(instanceClass @env0:isSubclassOf: self) ifTrue: [^ true].
 
 	"Check registered types in this ABC and all subclass ABCs"
 	(self isClassRegistered: instanceClass) ifTrue: [^ true].
@@ -267,7 +267,7 @@ __subclasscheck__: aClass
 	or if aClass has been registered with this ABC or any of its sub-ABCs."
 
 	"Check normal inheritance - use env 0 for isSubclassOf:"
-	(aClass perform: #isSubclassOf: env: 0 withArguments: {self}) ifTrue: [^ true].
+	(aClass @env0:isSubclassOf: self) ifTrue: [^ true].
 
 	"Check if aClass is registered with this ABC or any subclass ABC"
 	(self isClassRegistered: aClass) ifTrue: [^ true].
@@ -285,15 +285,15 @@ isClassRegistered: aClass
 	"Check if any superclass of aClass is registered directly with us"
 	currentClass := aClass.
 	[currentClass notNil] whileTrue: [
-		(self registeredTypes perform: #includes: env: 0 withArguments: {currentClass}) ifTrue: [^ true].
-		currentClass := currentClass perform: #superclass env: 0.
+		(self registeredTypes @env0:includes: currentClass) ifTrue: [^ true].
+		currentClass := currentClass @env0:superclass.
 	].
 
 	"Check if aClass is registered with any of our ABC subclasses"
-	abcSubclasses := self perform: #subclasses env: 0.
-	abcSubclasses perform: #do: env: 0 withArguments: {[:subABC |
+	abcSubclasses := self @env0:subclasses.
+	abcSubclasses @env0:do: [:subABC |
 		(subABC isClassRegistered: aClass) ifTrue: [^ true].
-	]}.
+	].
 
 	^ false
 %

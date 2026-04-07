@@ -58,7 +58,7 @@ __new__: obj
 		^ ([:block :handler |
 			block ___on___: Error do: handler
 		] value: [
-			(obj perform: #asNumber env: 0) ___truncated___
+			(obj @env0:asNumber) ___truncated___
 		] value: [:ex |
 			self ___error___: 'ValueError: invalid literal for int()'
 		])
@@ -96,7 +96,7 @@ __new__: obj _: base
 		self ___error___: 'TypeError: int() can''t convert non-string with explicit base'
 	].
 
-	str := obj perform: #trimBoth env: 0.
+	str := obj @env0:trimBoth.
 
 	"Parse the string with the given base"
 	^ ([:block :handler |
@@ -105,11 +105,11 @@ __new__: obj _: base
 		baseInt ___eq___: 0
 			ifTrue: [
 				"Base 0: auto-detect from prefix"
-				(str perform: #asNumber env: 0) ___truncated___
+				(str @env0:asNumber) ___truncated___
 			]
 			ifFalse: [
 				"Specific base"
-				int perform: #fromString:radix: env: 0 withArguments: { str. baseInt }
+				int @env0:fromString: str radix: baseInt
 			]
 	] value: [:ex |
 		| msg |
@@ -146,15 +146,14 @@ from_bytes: bytes _: byteorder _: signed
 	isBigEndian
 		ifTrue: [
 			bytesArray ___do___: [:each |
-				result := ((result ___bitShift___: 8)
-					perform: #bitOr: env: 0 withArguments: {each}).
+				result := ((result ___bitShift___: 8) @env0:bitOr: each).
 			].
 		]
 		ifFalse: [
 			| shift |
 			shift := 0.
 			bytesArray ___do___: [:each |
-				result := (result perform: #bitOr: env: 0 withArguments: {(each ___bitShift___: shift)}).
+				result := (result @env0:bitOr: (each ___bitShift___: shift)).
 				shift := (shift ___plus___: 8).
 			].
 		].
@@ -164,7 +163,7 @@ from_bytes: bytes _: byteorder _: signed
 		| highByte |
 		highByte := isBigEndian
 			ifTrue: [bytesArray ___first___]
-			ifFalse: [bytesArray perform: #last env: 0].
+			ifFalse: [bytesArray @env0:last].
 		((highByte ___bitAnd___: 16r80) ___ne___: 0) ifTrue: [
 			"Negative number - subtract 2^(numBits)"
 			result := (result ___minus___: 
@@ -352,7 +351,7 @@ method: int
 __invert__
 	"Bitwise NOT (one's complement)."
 
-	^ self perform: #bitInvert env: 0
+	^ self @env0:bitInvert
 %
 
 category: 'Python-Comparison'
@@ -416,7 +415,7 @@ method: int
 __or__: other
 	"Bitwise OR."
 
-	^ self perform: #bitOr: env: 0 withArguments: {other}
+	^ self @env0:bitOr: other
 %
 
 category: 'Python-Arithmetic'
@@ -520,7 +519,7 @@ method: int
 __ror__: other
 	"Reverse bitwise OR (other | self)."
 
-	^ other perform: #bitOr: env: 0 withArguments: {self}
+	^ other @env0:bitOr: self
 %
 
 category: 'Python-Rounding'
@@ -595,7 +594,7 @@ method: int
 __rxor__: other
 	"Reverse bitwise XOR (other ^ self)."
 
-	^ other perform: #bitXor: env: 0 withArguments: {self}
+	^ other @env0:bitXor: self
 %
 
 category: 'Python-String Representation'
@@ -635,7 +634,7 @@ method: int
 __xor__: other
 	"Bitwise XOR."
 
-	^ self perform: #bitXor: env: 0 withArguments: {other}
+	^ self @env0:bitXor: other
 %
 
 category: 'Python-Integer Methods'

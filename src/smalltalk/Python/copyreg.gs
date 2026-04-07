@@ -62,7 +62,7 @@ initialize
 category: 'Python-Initialization'
 method: copyreg
 initialize_dispatch_table
-	self ___at___: #dispatch_table put: (KeyValueDictionary perform: #new env: 0)
+	self ___at___: #dispatch_table put: (KeyValueDictionary @env0:new)
 %
 
 category: 'Python-Initialization'
@@ -73,7 +73,7 @@ initialize_pickle
 		| obType pickleFunc |
 		obType := positional ___at___: 1.
 		pickleFunc := positional ___at___: 2.
-		(self ___at___: #dispatch_table) perform: #at:put: env: 0 withArguments: { obType. pickleFunc }.
+		(self ___at___: #dispatch_table) @env0:at: obType put: pickleFunc.
 		nil
 	]
 %

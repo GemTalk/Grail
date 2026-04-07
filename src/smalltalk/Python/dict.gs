@@ -44,7 +44,7 @@ __delitem__: key
 	hasKey ifFalse: [
 		KeyError ___signal___: key
 	].
-	self perform: #removeKey: env: 0 withArguments: {key}
+	self @env0:removeKey: key
 %
 
 category: 'Python-Comparison'
@@ -70,7 +70,7 @@ __eq__: other
 			^ false
 		].
 		otherValue := other ___at___: key.
-		(value perform: #__eq__: env: 1 withArguments: {otherValue}) ifFalse: [
+		(value @env1:__eq__: otherValue) ifFalse: [
 			^ false
 		]
 	].
@@ -96,14 +96,14 @@ method: SymbolDictionary
 __getitem__: key
 	"Return the value for key. Raises KeyError if key is not in the dictionary"
 
-	^ super __getitem__: (key perform: #'asSymbol' env: 0)
+	^ super __getitem__: (key @env0:asSymbol)
 %
 
 category: 'Python-Iterator Protocol'
 method: dict
 __iter__
 	"Return an iterator over the keys of the dictionary"
-	^ dict_keyiterator perform: #___on: env: 1 withArguments: {self}
+	^ dict_keyiterator @env1:___on: self
 %
 
 category: 'Python-Collection Protocol'
@@ -117,7 +117,7 @@ category: 'Python-Comparison'
 method: dict
 __ne__: other
 	"Return True if dictionaries do not have the same (key, value) pairs"
-	^ (self perform: #__eq__: env: 1 withArguments: {other}) ___not___
+	^ (self @env1:__eq__: other) ___not___
 %
 
 category: 'Python-String Representation'
@@ -136,8 +136,8 @@ __repr__
 
 	self ___keysAndValuesDo___: [:key :value |
 		| keyRepr valueRepr |
-		keyRepr := key perform: #__repr__ env: 1.
-		valueRepr := value perform: #__repr__ env: 1.
+		keyRepr := key @env1:__repr__.
+		valueRepr := value @env1:__repr__.
 		stream ___nextPutAll___: keyRepr.
 		stream ___nextPutAll___: ': '.
 		stream ___nextPutAll___: valueRepr.
@@ -145,7 +145,7 @@ __repr__
 	].
 
 	"Remove the trailing ', '"
-	stream perform: #skip: env: 0 withArguments: {-2}.
+	stream @env0:skip: -2.
 	stream ___nextPutAll___: '}'.
 
 	^ stream ___contents___
@@ -164,7 +164,7 @@ method: SymbolDictionary
 __setitem__: key _: value
 	"Set d[key] to value"
 
-	super __setitem__: (key perform: #'asSymbol' env: 0) _: value.
+	super __setitem__: (key @env0:asSymbol) _: value.
 	^ nil
 %
 
@@ -172,7 +172,7 @@ category: 'Python-Mutation Methods'
 method: dict
 clear
 	"Remove all items from the dictionary"
-	self perform: #removeAllKeys: env: 0 withArguments: {self perform: #keys env: 0}
+	self @env0:removeAllKeys: (self @env0:keys)
 %
 
 category: 'Python-Mutation Methods'
@@ -186,7 +186,7 @@ category: 'Python-Access Methods'
 method: dict
 get: key
 	"Return the value for key if key is in the dictionary, else None"
-	^ self perform: #get:_: env: 1 withArguments: {key. nil}
+	^ self @env1:get: key _: nil
 %
 
 category: 'Python-Access Methods'
@@ -224,9 +224,9 @@ keys
 
 	| keysArray |
 	keysArray := list ___new___.
-	self perform: #keysDo: env: 0 withArguments: {[:key |
+	self @env0:keysDo: [:key |
 		keysArray append: key
-	]}.
+	].
 	^ keysArray
 %
 
@@ -241,7 +241,7 @@ pop: key
 		KeyError ___signal___: key
 	].
 		value := self ___at___: key.
-	self perform: #removeKey: env: 0 withArguments: {key}.
+	self @env0:removeKey: key.
 	^ value
 %
 
@@ -256,7 +256,7 @@ pop: key _: default
 		^ default
 	].
 		value := self ___at___: key.
-	self perform: #removeKey: env: 0 withArguments: {key}.
+	self @env0:removeKey: key.
 	^ value
 %
 
@@ -279,7 +279,7 @@ popitem
 		lastValue := value
 	].
 
-	self perform: #removeKey: env: 0 withArguments: {lastKey}.
+	self @env0:removeKey: lastKey.
 	pair := tuple ___with___: lastKey with: lastValue.
 	^ pair
 %
@@ -288,7 +288,7 @@ category: 'Python-Mutation Methods'
 method: dict
 setdefault: key
 	"If key is in the dictionary, return its value. If not, insert key with value None and return None"
-	^ self perform: #setdefault:_: env: 1 withArguments: {key. nil}
+	^ self @env1:setdefault: key _: nil
 %
 
 category: 'Python-Mutation Methods'
@@ -334,9 +334,9 @@ values
 
 	| valuesArray |
 	valuesArray := list ___new___.
-	self perform: #valuesDo: env: 0 withArguments: {[:value |
+	self @env0:valuesDo: [:value |
 		valuesArray append: value
-	]}.
+	].
 	^ valuesArray
 %
 

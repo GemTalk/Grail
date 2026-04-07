@@ -125,25 +125,22 @@ match
 	"match(string[, pos[, endpos]]) -> SreMatch or None"
 	^ [:positional :keywords |
 		| nargs result |
-		nargs := (positional perform: #size env: 0).
+		nargs := (positional @env0:size).
 		result := (nargs ___eq___: 1)
 			ifTrue: [
-				(CPythonShim perform: #current env: 0) perform: #callTypedReturnCPtr:type:method:selfPtr:with: env: 0
-					withArguments: { '_sre'. 'Pattern'. 'match'. cPtr. (positional perform: #at: env: 0 withArguments: {1}) }
+				(CPythonShim @env0:current) @env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'match' selfPtr: cPtr with: (positional @env0:at: 1)
 			]
 			ifFalse: [ (nargs ___eq___: 2)
 				ifTrue: [
-					(CPythonShim perform: #current env: 0) perform: #callTypedReturnCPtr:type:method:selfPtr:with:with: env: 0
-						withArguments: { '_sre'. 'Pattern'. 'match'. cPtr. (positional perform: #at: env: 0 withArguments: {1}). (positional perform: #at: env: 0 withArguments: {2}) }
+					(CPythonShim @env0:current) @env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'match' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2)
 				]
 				ifFalse: [
-					(CPythonShim perform: #current env: 0) perform: #callTypedReturnCPtr:type:method:selfPtr:with:with:with: env: 0
-						withArguments: { '_sre'. 'Pattern'. 'match'. cPtr. (positional perform: #at: env: 0 withArguments: {1}). (positional perform: #at: env: 0 withArguments: {2}). (positional perform: #at: env: 0 withArguments: {3}) }
+					(CPythonShim @env0:current) @env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'match' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2) with: (positional @env0:at: 3)
 				]
 			].
 		(result ___eq___: 0)
 			ifTrue: [nil]
-			ifFalse: [SreMatch perform: #newFromCPtr: env: 0 withArguments: {result}]
+			ifFalse: [SreMatch @env0:newFromCPtr: result]
 	]
 %
 
@@ -153,25 +150,22 @@ search
 	"search(string[, pos[, endpos]]) -> SreMatch or None"
 	^ [:positional :keywords |
 		| nargs result |
-		nargs := (positional perform: #size env: 0).
+		nargs := (positional @env0:size).
 		result := (nargs ___eq___: 1)
 			ifTrue: [
-				(CPythonShim perform: #current env: 0) perform: #callTypedReturnCPtr:type:method:selfPtr:with: env: 0
-					withArguments: { '_sre'. 'Pattern'. 'search'. cPtr. (positional perform: #at: env: 0 withArguments: {1}) }
+				(CPythonShim @env0:current) @env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'search' selfPtr: cPtr with: (positional @env0:at: 1)
 			]
 			ifFalse: [ (nargs ___eq___: 2)
 				ifTrue: [
-					(CPythonShim perform: #current env: 0) perform: #callTypedReturnCPtr:type:method:selfPtr:with:with: env: 0
-						withArguments: { '_sre'. 'Pattern'. 'search'. cPtr. (positional perform: #at: env: 0 withArguments: {1}). (positional perform: #at: env: 0 withArguments: {2}) }
+					(CPythonShim @env0:current) @env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'search' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2)
 				]
 				ifFalse: [
-					(CPythonShim perform: #current env: 0) perform: #callTypedReturnCPtr:type:method:selfPtr:with:with:with: env: 0
-						withArguments: { '_sre'. 'Pattern'. 'search'. cPtr. (positional perform: #at: env: 0 withArguments: {1}). (positional perform: #at: env: 0 withArguments: {2}). (positional perform: #at: env: 0 withArguments: {3}) }
+					(CPythonShim @env0:current) @env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'search' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2) with: (positional @env0:at: 3)
 				]
 			].
 		(result ___eq___: 0)
 			ifTrue: [nil]
-			ifFalse: [SreMatch perform: #newFromCPtr: env: 0 withArguments: {result}]
+			ifFalse: [SreMatch @env0:newFromCPtr: result]
 	]
 %
 
@@ -181,25 +175,22 @@ fullmatch
 	"fullmatch(string[, pos[, endpos]]) -> SreMatch or None"
 	^ [:positional :keywords |
 		| nargs result |
-		nargs := (positional perform: #size env: 0).
+		nargs := (positional @env0:size).
 		result := (nargs ___eq___: 1)
 			ifTrue: [
-				(CPythonShim perform: #current env: 0) perform: #callTypedReturnCPtr:type:method:selfPtr:with: env: 0
-					withArguments: { '_sre'. 'Pattern'. 'fullmatch'. cPtr. (positional perform: #at: env: 0 withArguments: {1}) }
+				(CPythonShim @env0:current) @env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'fullmatch' selfPtr: cPtr with: (positional @env0:at: 1)
 			]
 			ifFalse: [ (nargs ___eq___: 2)
 				ifTrue: [
-					(CPythonShim perform: #current env: 0) perform: #callTypedReturnCPtr:type:method:selfPtr:with:with: env: 0
-						withArguments: { '_sre'. 'Pattern'. 'fullmatch'. cPtr. (positional perform: #at: env: 0 withArguments: {1}). (positional perform: #at: env: 0 withArguments: {2}) }
+					(CPythonShim @env0:current) @env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'fullmatch' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2)
 				]
 				ifFalse: [
-					(CPythonShim perform: #current env: 0) perform: #callTypedReturnCPtr:type:method:selfPtr:with:with:with: env: 0
-						withArguments: { '_sre'. 'Pattern'. 'fullmatch'. cPtr. (positional perform: #at: env: 0 withArguments: {1}). (positional perform: #at: env: 0 withArguments: {2}). (positional perform: #at: env: 0 withArguments: {3}) }
+					(CPythonShim @env0:current) @env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'fullmatch' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2) with: (positional @env0:at: 3)
 				]
 			].
 		(result ___eq___: 0)
 			ifTrue: [nil]
-			ifFalse: [SreMatch perform: #newFromCPtr: env: 0 withArguments: {result}]
+			ifFalse: [SreMatch @env0:newFromCPtr: result]
 	]
 %
 
@@ -209,20 +200,17 @@ findall
 	"findall(string[, pos[, endpos]]) -> list"
 	^ [:positional :keywords |
 		| nargs |
-		nargs := (positional perform: #size env: 0).
+		nargs := (positional @env0:size).
 		(nargs ___eq___: 1)
 			ifTrue: [
-				(CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr:with: env: 0
-					withArguments: { '_sre'. 'Pattern'. 'findall'. cPtr. (positional perform: #at: env: 0 withArguments: {1}) }
+				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'findall' selfPtr: cPtr with: (positional @env0:at: 1)
 			]
 			ifFalse: [ (nargs ___eq___: 2)
 				ifTrue: [
-					(CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr:with:with: env: 0
-						withArguments: { '_sre'. 'Pattern'. 'findall'. cPtr. (positional perform: #at: env: 0 withArguments: {1}). (positional perform: #at: env: 0 withArguments: {2}) }
+					(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'findall' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2)
 				]
 				ifFalse: [
-					(CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr:with:with:with: env: 0
-						withArguments: { '_sre'. 'Pattern'. 'findall'. cPtr. (positional perform: #at: env: 0 withArguments: {1}). (positional perform: #at: env: 0 withArguments: {2}). (positional perform: #at: env: 0 withArguments: {3}) }
+					(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'findall' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2) with: (positional @env0:at: 3)
 				]
 			]
 	]
@@ -234,15 +222,13 @@ sub
 	"sub(repl, string, count=0) -> str"
 	^ [:positional :keywords |
 		| nargs |
-		nargs := (positional perform: #size env: 0).
+		nargs := (positional @env0:size).
 		(nargs ___eq___: 2)
 			ifTrue: [
-				(CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr:with:with: env: 0
-					withArguments: { '_sre'. 'Pattern'. 'sub'. cPtr. (positional perform: #at: env: 0 withArguments: {1}). (positional perform: #at: env: 0 withArguments: {2}) }
+				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'sub' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2)
 			]
 			ifFalse: [
-				(CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr:with:with:with: env: 0
-					withArguments: { '_sre'. 'Pattern'. 'sub'. cPtr. (positional perform: #at: env: 0 withArguments: {1}). (positional perform: #at: env: 0 withArguments: {2}). (positional perform: #at: env: 0 withArguments: {3}) }
+				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'sub' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2) with: (positional @env0:at: 3)
 			]
 	]
 %
@@ -253,15 +239,13 @@ subn
 	"subn(repl, string, count=0) -> (str, int)"
 	^ [:positional :keywords |
 		| nargs |
-		nargs := (positional perform: #size env: 0).
+		nargs := (positional @env0:size).
 		(nargs ___eq___: 2)
 			ifTrue: [
-				(CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr:with:with: env: 0
-					withArguments: { '_sre'. 'Pattern'. 'subn'. cPtr. (positional perform: #at: env: 0 withArguments: {1}). (positional perform: #at: env: 0 withArguments: {2}) }
+				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'subn' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2)
 			]
 			ifFalse: [
-				(CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr:with:with:with: env: 0
-					withArguments: { '_sre'. 'Pattern'. 'subn'. cPtr. (positional perform: #at: env: 0 withArguments: {1}). (positional perform: #at: env: 0 withArguments: {2}). (positional perform: #at: env: 0 withArguments: {3}) }
+				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'subn' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2) with: (positional @env0:at: 3)
 			]
 	]
 %
@@ -272,15 +256,13 @@ split
 	"split(string, maxsplit=0) -> list"
 	^ [:positional :keywords |
 		| nargs |
-		nargs := (positional perform: #size env: 0).
+		nargs := (positional @env0:size).
 		(nargs ___eq___: 1)
 			ifTrue: [
-				(CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr:with: env: 0
-					withArguments: { '_sre'. 'Pattern'. 'split'. cPtr. (positional perform: #at: env: 0 withArguments: {1}) }
+				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'split' selfPtr: cPtr with: (positional @env0:at: 1)
 			]
 			ifFalse: [
-				(CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr:with:with: env: 0
-					withArguments: { '_sre'. 'Pattern'. 'split'. cPtr. (positional perform: #at: env: 0 withArguments: {1}). (positional perform: #at: env: 0 withArguments: {2}) }
+				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'split' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2)
 			]
 	]
 %
@@ -289,32 +271,28 @@ category: 'Python-Properties'
 method: SrePattern
 pattern
 	"The pattern string from which the RE object was compiled."
-	^ (CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr: env: 0
-		withArguments: { '_sre'. 'Pattern'. 'pattern'. cPtr }
+	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'pattern' selfPtr: cPtr
 %
 
 category: 'Python-Properties'
 method: SrePattern
 flags
 	"The regex matching flags."
-	^ (CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr: env: 0
-		withArguments: { '_sre'. 'Pattern'. 'flags'. cPtr }
+	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'flags' selfPtr: cPtr
 %
 
 category: 'Python-Properties'
 method: SrePattern
 groups
 	"The number of capturing groups in the pattern."
-	^ (CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr: env: 0
-		withArguments: { '_sre'. 'Pattern'. 'groups'. cPtr }
+	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'groups' selfPtr: cPtr
 %
 
 category: 'Python-Properties'
 method: SrePattern
 groupindex
 	"A dictionary mapping group names to group numbers."
-	^ (CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr: env: 0
-		withArguments: { '_sre'. 'Pattern'. 'groupindex'. cPtr }
+	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'groupindex' selfPtr: cPtr
 %
 
 ! ===============================================================================
@@ -356,25 +334,21 @@ group
 	"group([group1, ...]) -> str or tuple"
 	^ [:positional :keywords |
 		| nargs |
-		nargs := (positional perform: #size env: 0).
+		nargs := (positional @env0:size).
 		(nargs ___eq___: 0)
 			ifTrue: [
-				(CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr: env: 0
-					withArguments: { '_sre'. 'Match'. 'group'. cPtr }
+				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: cPtr
 			]
 			ifFalse: [ (nargs ___eq___: 1)
 				ifTrue: [
-					(CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr:with: env: 0
-						withArguments: { '_sre'. 'Match'. 'group'. cPtr. (positional perform: #at: env: 0 withArguments: {1}) }
+					(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: cPtr with: (positional @env0:at: 1)
 				]
 				ifFalse: [ (nargs ___eq___: 2)
 					ifTrue: [
-						(CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr:with:with: env: 0
-							withArguments: { '_sre'. 'Match'. 'group'. cPtr. (positional perform: #at: env: 0 withArguments: {1}). (positional perform: #at: env: 0 withArguments: {2}) }
+						(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2)
 					]
 					ifFalse: [
-						(CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr:with:with:with: env: 0
-							withArguments: { '_sre'. 'Match'. 'group'. cPtr. (positional perform: #at: env: 0 withArguments: {1}). (positional perform: #at: env: 0 withArguments: {2}). (positional perform: #at: env: 0 withArguments: {3}) }
+						(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2) with: (positional @env0:at: 3)
 					]
 				]
 			]
@@ -387,15 +361,13 @@ groups
 	"groups(default=None) -> tuple"
 	^ [:positional :keywords |
 		| nargs |
-		nargs := (positional perform: #size env: 0).
+		nargs := (positional @env0:size).
 		(nargs ___eq___: 0)
 			ifTrue: [
-				(CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr: env: 0
-					withArguments: { '_sre'. 'Match'. 'groups'. cPtr }
+				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'groups' selfPtr: cPtr
 			]
 			ifFalse: [
-				(CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr:with: env: 0
-					withArguments: { '_sre'. 'Match'. 'groups'. cPtr. (positional perform: #at: env: 0 withArguments: {1}) }
+				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'groups' selfPtr: cPtr with: (positional @env0:at: 1)
 			]
 	]
 %
@@ -406,15 +378,13 @@ groupdict
 	"groupdict(default=None) -> dict"
 	^ [:positional :keywords |
 		| nargs |
-		nargs := (positional perform: #size env: 0).
+		nargs := (positional @env0:size).
 		(nargs ___eq___: 0)
 			ifTrue: [
-				(CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr: env: 0
-					withArguments: { '_sre'. 'Match'. 'groupdict'. cPtr }
+				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'groupdict' selfPtr: cPtr
 			]
 			ifFalse: [
-				(CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr:with: env: 0
-					withArguments: { '_sre'. 'Match'. 'groupdict'. cPtr. (positional perform: #at: env: 0 withArguments: {1}) }
+				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'groupdict' selfPtr: cPtr with: (positional @env0:at: 1)
 			]
 	]
 %
@@ -425,15 +395,13 @@ start
 	"start(group=0) -> int"
 	^ [:positional :keywords |
 		| nargs |
-		nargs := (positional perform: #size env: 0).
+		nargs := (positional @env0:size).
 		(nargs ___eq___: 0)
 			ifTrue: [
-				(CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr: env: 0
-					withArguments: { '_sre'. 'Match'. 'start'. cPtr }
+				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'start' selfPtr: cPtr
 			]
 			ifFalse: [
-				(CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr:with: env: 0
-					withArguments: { '_sre'. 'Match'. 'start'. cPtr. (positional perform: #at: env: 0 withArguments: {1}) }
+				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'start' selfPtr: cPtr with: (positional @env0:at: 1)
 			]
 	]
 %
@@ -444,15 +412,13 @@ end
 	"end(group=0) -> int"
 	^ [:positional :keywords |
 		| nargs |
-		nargs := (positional perform: #size env: 0).
+		nargs := (positional @env0:size).
 		(nargs ___eq___: 0)
 			ifTrue: [
-				(CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr: env: 0
-					withArguments: { '_sre'. 'Match'. 'end'. cPtr }
+				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'end' selfPtr: cPtr
 			]
 			ifFalse: [
-				(CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr:with: env: 0
-					withArguments: { '_sre'. 'Match'. 'end'. cPtr. (positional perform: #at: env: 0 withArguments: {1}) }
+				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'end' selfPtr: cPtr with: (positional @env0:at: 1)
 			]
 	]
 %
@@ -463,15 +429,13 @@ span
 	"span(group=0) -> (int, int)"
 	^ [:positional :keywords |
 		| nargs |
-		nargs := (positional perform: #size env: 0).
+		nargs := (positional @env0:size).
 		(nargs ___eq___: 0)
 			ifTrue: [
-				(CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr: env: 0
-					withArguments: { '_sre'. 'Match'. 'span'. cPtr }
+				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'span' selfPtr: cPtr
 			]
 			ifFalse: [
-				(CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr:with: env: 0
-					withArguments: { '_sre'. 'Match'. 'span'. cPtr. (positional perform: #at: env: 0 withArguments: {1}) }
+				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'span' selfPtr: cPtr with: (positional @env0:at: 1)
 			]
 	]
 %
@@ -481,8 +445,7 @@ method: SreMatch
 expand
 	"expand(template) -> str"
 	^ [:positional :keywords |
-		(CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr:with: env: 0
-			withArguments: { '_sre'. 'Match'. 'expand'. cPtr. (positional perform: #at: env: 0 withArguments: {1}) }
+		(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'expand' selfPtr: cPtr with: (positional @env0:at: 1)
 	]
 %
 
@@ -490,8 +453,7 @@ category: 'Python-Properties'
 method: SreMatch
 string
 	"The string passed to match() or search()."
-	^ (CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr: env: 0
-		withArguments: { '_sre'. 'Match'. 'string'. cPtr }
+	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'string' selfPtr: cPtr
 %
 
 category: 'Python-Properties'
@@ -500,49 +462,43 @@ re
 	"The regular expression object."
 	"Returns the C pointer for the pattern object, wrapped as SrePattern."
 	| patCPtr |
-	patCPtr := (CPythonShim perform: #current env: 0) perform: #callTypedReturnCPtr:type:method:selfPtr: env: 0
-		withArguments: { '_sre'. 'Match'. 're'. cPtr }.
-	^ SrePattern perform: #newFromCPtr: env: 0 withArguments: {patCPtr}
+	patCPtr := (CPythonShim @env0:current) @env0:callTypedReturnCPtr: '_sre' type: 'Match' method: 're' selfPtr: cPtr.
+	^ SrePattern @env0:newFromCPtr: patCPtr
 %
 
 category: 'Python-Properties'
 method: SreMatch
 pos
 	"The value of pos passed to search() or match()."
-	^ (CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr: env: 0
-		withArguments: { '_sre'. 'Match'. 'pos'. cPtr }
+	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'pos' selfPtr: cPtr
 %
 
 category: 'Python-Properties'
 method: SreMatch
 endpos
 	"The value of endpos passed to search() or match()."
-	^ (CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr: env: 0
-		withArguments: { '_sre'. 'Match'. 'endpos'. cPtr }
+	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'endpos' selfPtr: cPtr
 %
 
 category: 'Python-Properties'
 method: SreMatch
 lastindex
 	"The integer index of the last matched capturing group."
-	^ (CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr: env: 0
-		withArguments: { '_sre'. 'Match'. 'lastindex'. cPtr }
+	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'lastindex' selfPtr: cPtr
 %
 
 category: 'Python-Properties'
 method: SreMatch
 lastgroup
 	"The name of the last matched capturing group."
-	^ (CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr: env: 0
-		withArguments: { '_sre'. 'Match'. 'lastgroup'. cPtr }
+	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'lastgroup' selfPtr: cPtr
 %
 
 category: 'Python-Properties'
 method: SreMatch
 regs
 	"A tuple of (start, end) for each group."
-	^ (CPythonShim perform: #current env: 0) perform: #callTyped:type:method:selfPtr: env: 0
-		withArguments: { '_sre'. 'Match'. 'regs'. cPtr }
+	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'regs' selfPtr: cPtr
 %
 
 ! ===============================================================================
@@ -641,7 +597,7 @@ method: _sre
 initialize_getcodesize
 	"getcodesize() -> int"
 	self ___at___: #getcodesize put: [:positional :keywords |
-		self ___class___ perform: #callGetcodesize env: 0
+		self ___class___ @env0:callGetcodesize
 	]
 %
 
@@ -650,8 +606,7 @@ method: _sre
 initialize_ascii_iscased
 	"ascii_iscased(character) -> bool"
 	self ___at___: #ascii_iscased put: [:positional :keywords |
-		self ___class___ perform: #'callAsciiIscased:' env: 0
-			withArguments: { (positional perform: #at: env: 0 withArguments: {1}) }
+		self ___class___ @env0:callAsciiIscased: (positional @env0:at: 1)
 	]
 %
 
@@ -660,8 +615,7 @@ method: _sre
 initialize_unicode_iscased
 	"unicode_iscased(character) -> bool"
 	self ___at___: #unicode_iscased put: [:positional :keywords |
-		self ___class___ perform: #'callUnicodeIscased:' env: 0
-			withArguments: { (positional perform: #at: env: 0 withArguments: {1}) }
+		self ___class___ @env0:callUnicodeIscased: (positional @env0:at: 1)
 	]
 %
 
@@ -670,8 +624,7 @@ method: _sre
 initialize_ascii_tolower
 	"ascii_tolower(character) -> int"
 	self ___at___: #ascii_tolower put: [:positional :keywords |
-		self ___class___ perform: #'callAsciiTolower:' env: 0
-			withArguments: { (positional perform: #at: env: 0 withArguments: {1}) }
+		self ___class___ @env0:callAsciiTolower: (positional @env0:at: 1)
 	]
 %
 
@@ -680,8 +633,7 @@ method: _sre
 initialize_unicode_tolower
 	"unicode_tolower(character) -> int"
 	self ___at___: #unicode_tolower put: [:positional :keywords |
-		self ___class___ perform: #'callUnicodeTolower:' env: 0
-			withArguments: { (positional perform: #at: env: 0 withArguments: {1}) }
+		self ___class___ @env0:callUnicodeTolower: (positional @env0:at: 1)
 	]
 %
 
@@ -691,16 +643,8 @@ initialize_compile
 	"compile(pattern, flags, code, groups, groupindex, indexgroup) -> SrePattern"
 	self ___at___: #compile put: [:positional :keywords |
 		| cPtr |
-		cPtr := self ___class___ perform: #'callCompile:flags:code:groups:groupindex:indexgroup:'
-			env: 0 withArguments: {
-				(positional perform: #at: env: 0 withArguments: {1}) .
-				(positional perform: #at: env: 0 withArguments: {2}) .
-				(positional perform: #at: env: 0 withArguments: {3}) .
-				(positional perform: #at: env: 0 withArguments: {4}) .
-				(positional perform: #at: env: 0 withArguments: {5}) .
-				(positional perform: #at: env: 0 withArguments: {6})
-			}.
-		SrePattern perform: #newFromCPtr: env: 0 withArguments: {cPtr}
+		cPtr := self ___class___ @env0:callCompile: (positional @env0:at: 1) flags: (positional @env0:at: 2) code: (positional @env0:at: 3) groups: (positional @env0:at: 4) groupindex: (positional @env0:at: 5) indexgroup: (positional @env0:at: 6).
+		SrePattern @env0:newFromCPtr: cPtr
 	]
 %
 

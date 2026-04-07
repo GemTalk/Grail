@@ -24,7 +24,7 @@ __call__: args
 	"Call the method with the given arguments"
 	"Note: For now, this is a simple implementation"
 	"In the future, we may need to handle bound methods differently"
-	^ self perform: #valueWithArguments: env: 0 withArguments: {args}
+	^ self @env0:valueWithArguments: args
 %
 
 category: 'Python-Type'

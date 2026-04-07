@@ -86,22 +86,12 @@ initialize_escape
 			ifFalse: [true].
 
 		"& must be replaced first to avoid double-escaping"
-		result := s
-			perform: #copyReplaceAll:with: env: 0
-			withArguments: { '&'. '&amp;' }.
-		result := result
-			perform: #copyReplaceAll:with: env: 0
-			withArguments: { '<'. '&lt;' }.
-		result := result
-			perform: #copyReplaceAll:with: env: 0
-			withArguments: { '>'. '&gt;' }.
+		result := s @env0:copyReplaceAll: '&' with: '&amp;'.
+		result := result @env0:copyReplaceAll: '<' with: '&lt;'.
+		result := result @env0:copyReplaceAll: '>' with: '&gt;'.
 		quote ___isTruthy___ ifTrue: [
-			result := result
-				perform: #copyReplaceAll:with: env: 0
-				withArguments: { '"'. '&quot;' }.
-			result := result
-				perform: #copyReplaceAll:with: env: 0
-				withArguments: { ''''. '&#x27;' }.
+			result := result @env0:copyReplaceAll: '"' with: '&quot;'.
+			result := result @env0:copyReplaceAll: '''' with: '&#x27;'.
 		].
 		result
 	]
@@ -119,23 +109,23 @@ initialize_unescape
 		n2c := (self ___at___: #entities) ___at___: #name2codepoint.
 
 		"Quick exit if no & in string"
-		(s perform: #includesString: env: 0 withArguments: { '&' })
+		(s @env0:includesString: '&')
 			ifFalse: [s]
 			ifTrue: [
 				| out i len |
-				out := WriteStream perform: #on: env: 0 withArguments: { Unicode7 perform: #new env: 0 }.
+				out := WriteStream @env0:on: (Unicode7 @env0:new).
 				i := 1.
-				len := s perform: #size env: 0.
+				len := s @env0:size.
 				[i ___le___: len] ___whileTrue___: [
 					| ch |
-					ch := s perform: #at: env: 0 withArguments: { i }.
+					ch := s @env0:at: i.
 					(ch ___eq___: $&) ifTrue: [
 						| j semiPos ref replacement |
 						"Find the closing semicolon (max 32 chars ahead)"
 						semiPos := 0.
 						j := i ___plus___: 1.
 						[((j ___le___: len) and: [(j ___minus___: i) ___lt___: 32])] ___whileTrue___: [
-							((s perform: #at: env: 0 withArguments: { j }) ___eq___: $;) ifTrue: [
+							((s @env0:at: j) ___eq___: $;) ifTrue: [
 								semiPos := j.
 								j := len ___plus___: 1.  "break"
 							] ifFalse: [
@@ -143,52 +133,51 @@ initialize_unescape
 							].
 						].
 						(semiPos ___gt___: 0) ifTrue: [
-							ref := s perform: #copyFrom:to: env: 0 withArguments: { (i ___plus___: 1). (semiPos ___minus___: 1) }.
+							ref := s @env0:copyFrom: (i ___plus___: 1) to: (semiPos ___minus___: 1).
 							replacement := nil.
 							"Numeric reference: &#NNN; or &#xHHH;"
-							((ref perform: #at: env: 0 withArguments: { 1 }) ___eq___: $#) ifTrue: [
+							((ref @env0:at: 1) ___eq___: $#) ifTrue: [
 								| numStr codepoint |
-								numStr := ref perform: #copyFrom:to: env: 0 withArguments: { 2. ref perform: #size env: 0 }.
+								numStr := ref @env0:copyFrom: 2 to: (ref @env0:size).
 								[
-									(((numStr perform: #at: env: 0 withArguments: { 1 }) ___eq___: $x) or:
-									 [((numStr perform: #at: env: 0 withArguments: { 1 }) ___eq___: $X)]) ifTrue: [
+									(((numStr @env0:at: 1) ___eq___: $x) or:
+									 [((numStr @env0:at: 1) ___eq___: $X)]) ifTrue: [
 										"Hex: &#xHHH; - prepend 16r for Smalltalk hex literal parsing"
 										| hexDigits |
-										hexDigits := numStr perform: #copyFrom:to: env: 0 withArguments: { 2. numStr perform: #size env: 0 }.
-										codepoint := ('16r' perform: #, env: 0 withArguments: { hexDigits })
-											perform: #asInteger env: 0.
+										hexDigits := numStr @env0:copyFrom: 2 to: (numStr @env0:size).
+										codepoint := ('16r' @env0:, hexDigits) @env0:asInteger.
 									] ifFalse: [
 										"Decimal: &#NNN;"
-										codepoint := numStr perform: #asInteger env: 0.
+										codepoint := numStr @env0:asInteger.
 									].
-									replacement := Character perform: #codePoint: env: 0 withArguments: { codepoint }.
+									replacement := Character @env0:codePoint: codepoint.
 									replacement := replacement ___asString___.
 								] ___on___: Error do: [:ex | replacement := nil].
 							] ifFalse: [
 								"Named reference: &name; — look up codepoint and convert"
 								| cp |
-								cp := n2c perform: #at:ifAbsent: env: 0 withArguments: { ref. [nil] }.
+								cp := n2c @env0:at: ref ifAbsent: [nil].
 								(cp ___eq___: nil) ifFalse: [
-									replacement := (Character perform: #codePoint: env: 0 withArguments: { cp }) ___asString___.
+									replacement := (Character @env0:codePoint: cp) ___asString___.
 								].
 							].
 							(replacement ___eq___: nil) ifFalse: [
-								out perform: #nextPutAll: env: 0 withArguments: { replacement }.
+								out @env0:nextPutAll: replacement.
 								i := semiPos ___plus___: 1.
 							] ifTrue: [
-								out perform: #nextPut: env: 0 withArguments: { $& }.
+								out @env0:nextPut: $&.
 								i := i ___plus___: 1.
 							].
 						] ifFalse: [
-							out perform: #nextPut: env: 0 withArguments: { $& }.
+							out @env0:nextPut: $&.
 							i := i ___plus___: 1.
 						].
 					] ifFalse: [
-						out perform: #nextPut: env: 0 withArguments: { ch }.
+						out @env0:nextPut: ch.
 						i := i ___plus___: 1.
 					].
 				].
-				out perform: #contents env: 0
+				out @env0:contents
 			]
 	]
 %
@@ -197,7 +186,7 @@ category: 'Python-Initialization'
 method: html
 initialize_entities_module
 	"Bind the html.entities submodule."
-	self ___at___: #entities put: (html_entities perform: #instance env: 1)
+	self ___at___: #entities put: (html_entities @env1:instance)
 %
 
 set compile_env: 0

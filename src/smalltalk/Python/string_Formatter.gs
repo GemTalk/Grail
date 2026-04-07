@@ -79,20 +79,20 @@ check_unused_args: used_args _: args _: keywords
 	unused_kw := list ___new___.
 	
 	"Check positional args"
-	1 perform: #to:do: env: 0 withArguments: {args ___size___. [:i |
+	1 @env0:to: args ___size___ do: [:i |
 		| arg_index |
 		arg_index := i ___minus___: 1.  "0-based index"
 		(used_args ___includes___: arg_index) ifFalse: [
 			unused_pos append: arg_index
 		]
-	]}.
+	].
 	
 	"Check keyword args"
-	keywords perform: #keysDo: env: 0 withArguments: {[:key |
+	keywords @env0:keysDo: [:key |
 		(used_args ___includes___: key) ifFalse: [
 			unused_kw append: key
 		]
-	]}.
+	].
 	
 	"Raise error if unused args found"
 	(((unused_pos ___size___) ___gt___: 0) or: [
@@ -102,14 +102,14 @@ check_unused_args: used_args _: args _: keywords
 		error_msg := 'Unused argument(s): '.
 		(((unused_pos ___size___) ___gt___: 0)) ifTrue: [
 			error_msg := error_msg ___concat___: 'positional '.
-			error_msg := error_msg ___concat___: (unused_pos perform: #__str__ env: 1)
+			error_msg := error_msg ___concat___: (unused_pos @env1:__str__)
 		].
 		(((unused_kw ___size___) ___gt___: 0)) ifTrue: [
 			(((unused_pos ___size___) ___gt___: 0)) ifTrue: [
 				error_msg := error_msg ___concat___: ', '
 			].
 			error_msg := error_msg ___concat___: 'keyword '.
-			error_msg := error_msg ___concat___: (unused_kw perform: #__str__ env: 1)
+			error_msg := error_msg ___concat___: (unused_kw @env1:__str__)
 		].
 		ValueError ___signal___: error_msg
 	]
@@ -125,14 +125,14 @@ convert_field: value _: conversion
 	conv_char := conversion ___at___: 1.
 	
 	((conv_char ___eq___: $r)) ifTrue: [
-		^ value perform: #__repr__ env: 1
+		^ value @env1:__repr__
 	] ifFalse: [
 		((conv_char ___eq___: $s)) ifTrue: [
-			^ value perform: #__str__ env: 1
+			^ value @env1:__str__
 		] ifFalse: [
 			((conv_char ___eq___: $a)) ifTrue: [
 				"ASCII conversion - same as repr for now"
-				^ value perform: #__repr__ env: 1
+				^ value @env1:__repr__
 			] ifFalse: [
 				ValueError ___signal___: ('Unknown conversion specifier: ' ___concat___: conversion)
 			]
@@ -166,9 +166,9 @@ format_field: value _: format_spec _: conversion
 	
 	"Apply format spec if specified"
 	format_spec == nil ifTrue: [
-		^ converted_value perform: #__str__ env: 1
+		^ converted_value @env1:__str__
 	] ifFalse: [
-		^ converted_value perform: #__format__: env: 1 withArguments: {format_spec}
+		^ converted_value @env1:__format__: format_spec
 	]
 %
 

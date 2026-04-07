@@ -382,7 +382,7 @@ initialize_callable
 		| anObject objClass |
 		anObject := positional ___at___: 1.
 		objClass := anObject ___class___.
-		(objClass perform: #whichClassIncludesSelector:environmentId: env: 0 withArguments: {#__call__:. 1}) notNil
+		(objClass @env0:whichClassIncludesSelector: (#__call__:) environmentId: 1) notNil
 	]
 %
 
@@ -469,7 +469,7 @@ initialize_hex
 		| aNumber result |
 		aNumber := positional ___at___: 1.
 		result := aNumber ___printStringRadix___: 16.
-		'0x' ___concat___: (result perform: #asLowercase env: 0)
+		'0x' ___concat___: (result @env0:asLowercase)
 	]
 %
 
@@ -529,8 +529,7 @@ initialize_isinstance
 		"If normal check fails, try ABC's __instancecheck__ if it exists"
 		result ifFalse: [
 			theMetaclass := aClassOrTuple ___class___.
-			(theMetaclass perform: #includesSelector:environmentId: env: 0
-				withArguments: {#'__instancecheck__:'. 2}) ifTrue: [
+			(theMetaclass @env0:includesSelector: #'__instancecheck__:' environmentId: 2) ifTrue: [
 					result := aClassOrTuple __instancecheck__: anObject
 				]
 		].
@@ -697,7 +696,7 @@ method: builtins
 initialize_quit
 	"Exit the interpreter"
 	self ___at___: #quit put: [:positional :keywords |
-		ExitClientError perform: #signal:status: env: 0 withArguments: {  'quit()'. 0 }
+		ExitClientError @env0:signal: 'quit()' status: 0
 	]
 %
 
@@ -747,7 +746,7 @@ initialize_roundWithDigits
 		number := positional ___at___: 1.
 		ndigits := (positional ___size___ ___ge___: 2) ifTrue: [positional ___at___: 2] ifFalse: [keywords ___at___: #ndigits ifAbsent: [nil]].
 		ndigits ifNil: [number ___rounded___] ifNotNil: [
-			multiplier := 10 perform: #** env: 0 withArguments: {ndigits}.
+			multiplier := 10 @env0:** ndigits.
 			((number ___times___: multiplier) ___rounded___)
 				___divide___: multiplier
 		]

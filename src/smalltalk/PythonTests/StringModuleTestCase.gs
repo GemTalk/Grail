@@ -40,10 +40,10 @@ testAsciiLetters
 	"Test string.ascii_letters constant (should be lowercase + uppercase)"
 
 	| s result lowercase uppercase |
-	s := string perform: #instance env: 1.
-	result := s perform: #ascii_letters env: 1.
-	lowercase := s perform: #ascii_lowercase env: 1.
-	uppercase := s perform: #ascii_uppercase env: 1.
+	s := string @env1:instance.
+	result := s @env1:ascii_letters.
+	lowercase := s @env1:ascii_lowercase.
+	uppercase := s @env1:ascii_uppercase.
 
 	self assert: result equals: lowercase , uppercase
 %
@@ -54,8 +54,8 @@ testAsciiLowercase
 	"Test string.ascii_lowercase constant"
 
 	| s result |
-	s := string perform: #instance env: 1.
-	result := s perform: #ascii_lowercase env: 1.
+	s := string @env1:instance.
+	result := s @env1:ascii_lowercase.
 
 	self assert: result equals: 'abcdefghijklmnopqrstuvwxyz'
 %
@@ -66,8 +66,8 @@ testAsciiUppercase
 	"Test string.ascii_uppercase constant"
 
 	| s result |
-	s := string perform: #instance env: 1.
-	result := s perform: #ascii_uppercase env: 1.
+	s := string @env1:instance.
+	result := s @env1:ascii_uppercase.
 
 	self assert: result equals: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 %
@@ -78,8 +78,8 @@ testCapwords
 	"Test string.capwords() function"
 
 	| s capwordsBlock result |
-	s := string perform: #instance env: 1.
-	capwordsBlock := s perform: #capwords env: 1.
+	s := string @env1:instance.
+	capwordsBlock := s @env1:capwords.
 
 	result := capwordsBlock value: {'hello world'} value: nil.
 	self assert: result equals: 'Hello World'.
@@ -97,8 +97,8 @@ testCapwordsEmptyString
 	"Test string.capwords() with empty string"
 
 	| s capwordsBlock result |
-	s := string perform: #instance env: 1.
-	capwordsBlock := s perform: #capwords env: 1.
+	s := string @env1:instance.
+	capwordsBlock := s @env1:capwords.
 
 	result := capwordsBlock value: {''} value: nil.
 	self assert: result equals: ''
@@ -110,8 +110,8 @@ testCapwordsSingleWord
 	"Test string.capwords() with single word"
 
 	| s capwordsBlock result |
-	s := string perform: #instance env: 1.
-	capwordsBlock := s perform: #capwords env: 1.
+	s := string @env1:instance.
+	capwordsBlock := s @env1:capwords.
 
 	result := capwordsBlock value: {'hello'} value: nil.
 	self assert: result equals: 'Hello'.
@@ -126,8 +126,8 @@ testCapwordsWithSep
 	"Test string.capwords() function with custom separator"
 
 	| s capwordsBlock result |
-	s := string perform: #instance env: 1.
-	capwordsBlock := s perform: #capwords env: 1.
+	s := string @env1:instance.
+	capwordsBlock := s @env1:capwords.
 
 	result := capwordsBlock value: {'hello-world'} value: {#sep -> '-'}.
 	self assert: result equals: 'Hello-World'.
@@ -142,8 +142,8 @@ testDigits
 	"Test string.digits constant"
 
 	| s result |
-	s := string perform: #instance env: 1.
-	result := s perform: #digits env: 1.
+	s := string @env1:instance.
+	result := s @env1:digits.
 
 	self assert: result equals: '0123456789'
 %
@@ -154,21 +154,21 @@ testFormatterBasic
 	"Test string.Formatter basic functionality"
 
 	| s formatter result formatter_instance keywords |
-	s := string perform: #instance env: 1.
-	formatter := s perform: #Formatter env: 1.
+	s := string @env1:instance.
+	formatter := s @env1:Formatter.
 	
 	"Create formatter instance"
-	formatter_instance := formatter perform: #__new__ env: 1.
+	formatter_instance := formatter @env1:__new__.
 	
 	"Test basic formatting with positional args"
-	result := formatter_instance perform: #format:_:_: env: 1 withArguments: {'Hello {0}'. {'world'}. nil}.
+	result := formatter_instance @env1:format: 'Hello {0}' _: {'world'} _: nil.
 	self assert: result equals: 'Hello world'.
 	
 	"Test with keyword args"
 	keywords := KeyValueDictionary new.
 	keywords at: 'name' put: 'Alice'.
 	keywords at: 'age' put: 30.
-	result := formatter_instance perform: #format:_:_: env: 1 withArguments: {'{name} is {age}'. {}. keywords}.
+	result := formatter_instance @env1:format: '{name} is {age}' _: {} _: keywords.
 	self assert: result equals: 'Alice is 30'
 %
 
@@ -178,14 +178,14 @@ testFormatterKeywords
 	"Test string.Formatter with keyword arguments"
 
 	| s formatter formatter_instance result keywords1 keywords2 |
-	s := string perform: #instance env: 1.
-	formatter := s perform: #Formatter env: 1.
-	formatter_instance := formatter perform: #__new__ env: 1.
+	s := string @env1:instance.
+	formatter := s @env1:Formatter.
+	formatter_instance := formatter @env1:__new__.
 	
 	"Test with keyword args"
 	keywords1 := KeyValueDictionary new.
 	keywords1 at: 'name' put: 'World'.
-	result := formatter_instance perform: #format:_:_: env: 1 withArguments: {'Hello {name}'. {}. keywords1}.
+	result := formatter_instance @env1:format: 'Hello {name}' _: {} _: keywords1.
 	self assert: result equals: 'Hello World'.
 	
 	"Test with multiple keywords"
@@ -193,7 +193,7 @@ testFormatterKeywords
 	keywords2 at: 'x' put: 5.
 	keywords2 at: 'y' put: 3.
 	keywords2 at: 'z' put: 8.
-	result := formatter_instance perform: #format:_:_: env: 1 withArguments: {'{x} + {y} = {z}'. {}. keywords2}.
+	result := formatter_instance @env1:format: '{x} + {y} = {z}' _: {} _: keywords2.
 	self assert: result equals: '5 + 3 = 8'
 %
 
@@ -203,16 +203,16 @@ testFormatterLiteral
 	"Test string.Formatter with literal text"
 
 	| s formatter formatter_instance result |
-	s := string perform: #instance env: 1.
-	formatter := s perform: #Formatter env: 1.
-	formatter_instance := formatter perform: #__new__ env: 1.
+	s := string @env1:instance.
+	formatter := s @env1:Formatter.
+	formatter_instance := formatter @env1:__new__.
 	
 	"Test with only literal text"
-	result := formatter_instance perform: #format:_:_: env: 1 withArguments: {'Hello World'. {}. nil}.
+	result := formatter_instance @env1:format: 'Hello World' _: {} _: nil.
 	self assert: result equals: 'Hello World'.
 	
 	"Test with literal and field"
-	result := formatter_instance perform: #format:_:_: env: 1 withArguments: {'Hello {0}!'. {'world'}. nil}.
+	result := formatter_instance @env1:format: 'Hello {0}!' _: {'world'} _: nil.
 	self assert: result equals: 'Hello world!'
 %
 
@@ -222,16 +222,16 @@ testFormatterPositional
 	"Test string.Formatter with positional arguments"
 
 	| s formatter formatter_instance result |
-	s := string perform: #instance env: 1.
-	formatter := s perform: #Formatter env: 1.
-	formatter_instance := formatter perform: #__new__ env: 1.
+	s := string @env1:instance.
+	formatter := s @env1:Formatter.
+	formatter_instance := formatter @env1:__new__.
 	
 	"Test with numbered positional args"
-	result := formatter_instance perform: #format:_:_: env: 1 withArguments: {'{0} {1} {2}'. {'one'. 'two'. 'three'}. nil}.
+	result := formatter_instance @env1:format: '{0} {1} {2}' _: {'one'. 'two'. 'three'} _: nil.
 	self assert: result equals: 'one two three'.
 	
 	"Test with reordered args"
-	result := formatter_instance perform: #format:_:_: env: 1 withArguments: {'{2} {0} {1}'. {'first'. 'second'. 'third'}. nil}.
+	result := formatter_instance @env1:format: '{2} {0} {1}' _: {'first'. 'second'. 'third'} _: nil.
 	self assert: result equals: 'third first second'
 %
 
@@ -241,8 +241,8 @@ testHexdigits
 	"Test string.hexdigits constant"
 
 	| s result |
-	s := string perform: #instance env: 1.
-	result := s perform: #hexdigits env: 1.
+	s := string @env1:instance.
+	result := s @env1:hexdigits.
 
 	self assert: result equals: '0123456789abcdefABCDEF'
 %
@@ -253,8 +253,8 @@ testOctdigits
 	"Test string.octdigits constant"
 
 	| s result |
-	s := string perform: #instance env: 1.
-	result := s perform: #octdigits env: 1.
+	s := string @env1:instance.
+	result := s @env1:octdigits.
 
 	self assert: result equals: '01234567'
 %
@@ -265,18 +265,18 @@ testPrintable
 	"Test string.printable constant (should contain digits, letters, punctuation, whitespace)"
 
 	| s result digits ascii_letters punctuation whitespace |
-	s := string perform: #instance env: 1.
-	result := s perform: #printable env: 1.
-	digits := s perform: #digits env: 1.
-	ascii_letters := s perform: #ascii_letters env: 1.
-	punctuation := s perform: #punctuation env: 1.
-	whitespace := s perform: #whitespace env: 1.
+	s := string @env1:instance.
+	result := s @env1:printable.
+	digits := s @env1:digits.
+	ascii_letters := s @env1:ascii_letters.
+	punctuation := s @env1:punctuation.
+	whitespace := s @env1:whitespace.
 
 	"Check that printable contains all component parts"
-	self assert: (result perform: #'__contains__:' env: 1 withArguments: {digits}).
-	self assert: (result perform: #'__contains__:' env: 1 withArguments: {ascii_letters}).
-	self assert: (result perform: #'__contains__:' env: 1 withArguments: {punctuation}).
-	self assert: (result perform: #'__contains__:' env: 1 withArguments: {whitespace})
+	self assert: (result @env1:__contains__: digits).
+	self assert: (result @env1:__contains__: ascii_letters).
+	self assert: (result @env1:__contains__: punctuation).
+	self assert: (result @env1:__contains__: whitespace)
 %
 
 category: 'Tests - Constants'
@@ -285,13 +285,13 @@ testPunctuation
 	"Test string.punctuation constant"
 
 	| s result |
-	s := string perform: #instance env: 1.
-	result := s perform: #punctuation env: 1.
+	s := string @env1:instance.
+	result := s @env1:punctuation.
 
 	"Check that it contains common punctuation characters"
-	self assert: (result perform: #'__contains__:' env: 1 withArguments: {'!'}).
-	self assert: (result perform: #'__contains__:' env: 1 withArguments: {'@'}).
-	self assert: (result perform: #'__contains__:' env: 1 withArguments: {'#'})
+	self assert: (result @env1:__contains__: '!').
+	self assert: (result @env1:__contains__: '@').
+	self assert: (result @env1:__contains__: '#')
 %
 
 category: 'Tests - Constants'
@@ -300,11 +300,11 @@ testWhitespace
 	"Test string.whitespace constant"
 
 	| s result |
-	s := string perform: #instance env: 1.
-	result := s perform: #whitespace env: 1.
+	s := string @env1:instance.
+	result := s @env1:whitespace.
 
 	"Check that it contains common whitespace characters"
-	self assert: (result perform: #'__contains__:' env: 1 withArguments: {' '}).
-	self assert: (result perform: #'__contains__:' env: 1 withArguments: {'\t'}).
-	self assert: (result perform: #'__contains__:' env: 1 withArguments: {'\n'})
+	self assert: (result @env1:__contains__: ' ').
+	self assert: (result @env1:__contains__: '\t').
+	self assert: (result @env1:__contains__: '\n')
 %

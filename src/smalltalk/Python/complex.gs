@@ -55,7 +55,7 @@ method: complex
 * aNumber
 	"Multiply complex by aNumber."
 
-	^ self perform: #__mul__: env: 1 withArguments: {aNumber}
+	^ self @env1:__mul__: aNumber
 %
 
 category: 'Python-Arithmetic Operators'
@@ -63,7 +63,7 @@ method: complex
 + aNumber
 	"Add aNumber to complex."
 
-	^ self perform: #__add__: env: 1 withArguments: {aNumber}
+	^ self @env1:__add__: aNumber
 %
 
 category: 'Python-Arithmetic Operators'
@@ -71,7 +71,7 @@ method: complex
 - aNumber
 	"Subtract aNumber from complex."
 
-	^ self perform: #__sub__: env: 1 withArguments: {aNumber}
+	^ self @env1:__sub__: aNumber
 %
 
 category: 'Python-Arithmetic Operators'
@@ -79,7 +79,7 @@ method: complex
 / aNumber
 	"Divide complex by aNumber."
 
-	^ self perform: #__truediv__: env: 1 withArguments: {aNumber}
+	^ self @env1:__truediv__: aNumber
 %
 
 category: 'Python-Arithmetic Operators'
@@ -87,7 +87,7 @@ method: complex
 = anObject
 	"Equality comparison."
 
-	^ self perform: #__eq__: env: 1 withArguments: {anObject}
+	^ self @env1:__eq__: anObject
 %
 
 category: 'Python-Arithmetic Support'
@@ -96,7 +96,7 @@ _coerce: aNumber
 	"Coerce aNumber to complex.
 	Convert aNumber to a complex number with zero imaginary part."
 
-	^ complex perform: #__new__:_: env: 1 withArguments: {aNumber. 0.0}
+	^ complex @env1:__new__: aNumber _: 0.0
 %
 
 category: 'Python-Arithmetic Support'
@@ -114,7 +114,7 @@ method: complex
 abs
 	"Return the magnitude of the complex number."
 
-	^ self perform: #__abs__ env: 1
+	^ self @env1:__abs__
 %
 
 category: 'Python-Arithmetic Support'
@@ -130,7 +130,7 @@ method: complex
 negated
 	"Negate the complex number."
 
-	^ self perform: #__neg__ env: 1
+	^ self @env1:__neg__
 %
 
 set compile_env: 1

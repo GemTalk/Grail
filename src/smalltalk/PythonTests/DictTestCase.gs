@@ -41,13 +41,13 @@ testDictClear
 
 	| d |
 	d := dict new.
-	d perform: #__setitem__:_: env: 1 withArguments: {'a'. 1}.
-	d perform: #__setitem__:_: env: 1 withArguments: {'b'. 2}.
-	d perform: #__setitem__:_: env: 1 withArguments: {'c'. 3}.
+	d @env1:__setitem__: 'a' _: 1.
+	d @env1:__setitem__: 'b' _: 2.
+	d @env1:__setitem__: 'c' _: 3.
 
 	self assert: d size equals: 3.
 
-	d perform: #clear env: 1.
+	d @env1:clear.
 
 	self assert: d size equals: 0
 %
@@ -59,8 +59,8 @@ testDictContains
 
 	| d |
 	d := dict new.
-	d perform: #__setitem__:_: env: 1 withArguments: {'a'. 1}.
-	d perform: #__setitem__:_: env: 1 withArguments: {'b'. 2}.
+	d @env1:__setitem__: 'a' _: 1.
+	d @env1:__setitem__: 'b' _: 2.
 	
 	self assert: (d ___contains___: 'a').
 	self assert: (d ___contains___: 'b').
@@ -74,20 +74,20 @@ testDictCopy
 
 	| d1 d2 |
 	d1 := dict new.
-	d1 perform: #__setitem__:_: env: 1 withArguments: {'a'. 1}.
-	d1 perform: #__setitem__:_: env: 1 withArguments: {'b'. 2}.
+	d1 @env1:__setitem__: 'a' _: 1.
+	d1 @env1:__setitem__: 'b' _: 2.
 
-	d2 := d1 perform: #copy env: 1.
+	d2 := d1 @env1:copy.
 
 	self assert: d2 size equals: 2.
-	self assert: (d2 perform: #__getitem__: env: 1 withArguments: {'a'}) equals: 1.
-	self assert: (d2 perform: #__getitem__: env: 1 withArguments: {'b'}) equals: 2.
+	self assert: (d2 @env1:__getitem__: 'a') equals: 1.
+	self assert: (d2 @env1:__getitem__: 'b') equals: 2.
 
 	"Verify it's a copy, not the same object"
 	self deny: d1 == d2.
 
 	"Modify the copy and verify original is unchanged"
-	d2 perform: #__setitem__:_: env: 1 withArguments: {'c'. 3}.
+	d2 @env1:__setitem__: 'c' _: 3.
 	self assert: d2 size equals: 3.
 	self assert: d1 size equals: 2
 %
@@ -101,9 +101,9 @@ testDictCreation
 	d1 := dict new.
 	d2 := dict new.
 	
-	d2 perform: #__setitem__:_: env: 1 withArguments: {'a'. 1}.
-	d2 perform: #__setitem__:_: env: 1 withArguments: {'b'. 2}.
-	d2 perform: #__setitem__:_: env: 1 withArguments: {'c'. 3}.
+	d2 @env1:__setitem__: 'a' _: 1.
+	d2 @env1:__setitem__: 'b' _: 2.
+	d2 @env1:__setitem__: 'c' _: 3.
 	
 	self assert: d1 size equals: 0.
 	self assert: d2 size equals: 3
@@ -116,13 +116,13 @@ testDictDelItem
 
 	| d |
 	d := dict new.
-	d perform: #__setitem__:_: env: 1 withArguments: {'a'. 1}.
-	d perform: #__setitem__:_: env: 1 withArguments: {'b'. 2}.
-	d perform: #__setitem__:_: env: 1 withArguments: {'c'. 3}.
+	d @env1:__setitem__: 'a' _: 1.
+	d @env1:__setitem__: 'b' _: 2.
+	d @env1:__setitem__: 'c' _: 3.
 	
 	self assert: d size equals: 3.
 	
-	d perform: #__delitem__: env: 1 withArguments: {'b'}.
+	d @env1:__delitem__: 'b'.
 	
 	self assert: d size equals: 2.
 	self assert: (d ___contains___: 'a').
@@ -137,10 +137,10 @@ testDictDelItemKeyError
 
 	| d |
 	d := dict new.
-	d perform: #__setitem__:_: env: 1 withArguments: {'a'. 1}.
+	d @env1:__setitem__: 'a' _: 1.
 	
 	self should: [
-		d perform: #__delitem__: env: 1 withArguments: {'nonexistent'}
+		d @env1:__delitem__: 'nonexistent'
 	] raise: KeyError
 %
 
@@ -151,19 +151,19 @@ testDictEquality
 
 	| d1 d2 d3 |
 	d1 := dict new.
-	d1 perform: #__setitem__:_: env: 1 withArguments: {'a'. 1}.
-	d1 perform: #__setitem__:_: env: 1 withArguments: {'b'. 2}.
+	d1 @env1:__setitem__: 'a' _: 1.
+	d1 @env1:__setitem__: 'b' _: 2.
 
 	d2 := dict new.
-	d2 perform: #__setitem__:_: env: 1 withArguments: {'a'. 1}.
-	d2 perform: #__setitem__:_: env: 1 withArguments: {'b'. 2}.
+	d2 @env1:__setitem__: 'a' _: 1.
+	d2 @env1:__setitem__: 'b' _: 2.
 
 	d3 := dict new.
-	d3 perform: #__setitem__:_: env: 1 withArguments: {'a'. 1}.
-	d3 perform: #__setitem__:_: env: 1 withArguments: {'b'. 3}.
+	d3 @env1:__setitem__: 'a' _: 1.
+	d3 @env1:__setitem__: 'b' _: 3.
 
-	self assert: (d1 perform: #__eq__: env: 1 withArguments: {d2}).
-	self deny: (d1 perform: #__eq__: env: 1 withArguments: {d3})
+	self assert: (d1 @env1:__eq__: d2).
+	self deny: (d1 @env1:__eq__: d3)
 %
 
 category: 'Tests - Methods'
@@ -173,15 +173,15 @@ testDictGet
 
 	| d value |
 	d := dict new.
-	d perform: #__setitem__:_: env: 1 withArguments: {'a'. 1}.
+	d @env1:__setitem__: 'a' _: 1.
 
-	value := d perform: #get: env: 1 withArguments: {'a'}.
+	value := d @env1:get: 'a'.
 	self assert: value equals: 1.
 
-	value := d perform: #get: env: 1 withArguments: {'nonexistent'}.
+	value := d @env1:get: 'nonexistent'.
 	self assert: value isNil.
 
-	value := d perform: #get:_: env: 1 withArguments: {'nonexistent'. 'default'}.
+	value := d @env1:get: 'nonexistent' _: 'default'.
 	self assert: value equals: 'default'
 %
 
@@ -192,13 +192,13 @@ testDictGetItem
 
 	| d value |
 	d := dict new.
-	d perform: #__setitem__:_: env: 1 withArguments: {'key1'. 'value1'}.
-	d perform: #__setitem__:_: env: 1 withArguments: {'key2'. 'value2'}.
+	d @env1:__setitem__: 'key1' _: 'value1'.
+	d @env1:__setitem__: 'key2' _: 'value2'.
 	
-	value := d perform: #__getitem__: env: 1 withArguments: {'key1'}.
+	value := d @env1:__getitem__: 'key1'.
 	self assert: value equals: 'value1'.
 	
-	value := d perform: #__getitem__: env: 1 withArguments: {'key2'}.
+	value := d @env1:__getitem__: 'key2'.
 	self assert: value equals: 'value2'
 %
 
@@ -209,10 +209,10 @@ testDictGetItemKeyError
 
 	| d |
 	d := dict new.
-	d perform: #__setitem__:_: env: 1 withArguments: {'a'. 1}.
+	d @env1:__setitem__: 'a' _: 1.
 	
 	self should: [
-		d perform: #__getitem__: env: 1 withArguments: {'nonexistent'}
+		d @env1:__getitem__: 'nonexistent'
 	] raise: KeyError
 %
 
@@ -223,12 +223,12 @@ testDictInequality
 
 	| d1 d2 |
 	d1 := dict new.
-	d1 perform: #__setitem__:_: env: 1 withArguments: {'a'. 1}.
+	d1 @env1:__setitem__: 'a' _: 1.
 
 	d2 := dict new.
-	d2 perform: #__setitem__:_: env: 1 withArguments: {'a'. 2}.
+	d2 @env1:__setitem__: 'a' _: 2.
 
-	self assert: (d1 perform: #__ne__: env: 1 withArguments: {d2})
+	self assert: (d1 @env1:__ne__: d2)
 %
 
 category: 'Tests - Methods'
@@ -238,10 +238,10 @@ testDictItems
 
 	| d items firstItem |
 	d := dict new.
-	d perform: #__setitem__:_: env: 1 withArguments: {'a'. 1}.
-	d perform: #__setitem__:_: env: 1 withArguments: {'b'. 2}.
+	d @env1:__setitem__: 'a' _: 1.
+	d @env1:__setitem__: 'b' _: 2.
 
-	items := d perform: #items env: 1.
+	items := d @env1:items.
 
 	self assert: (items size) equals: 2.
 
@@ -256,18 +256,18 @@ testDictIteration
 
 	| d iter key1 key2 key3 keys |
 	d := dict new.
-	d perform: #__setitem__:_: env: 1 withArguments: {'a'. 1}.
-	d perform: #__setitem__:_: env: 1 withArguments: {'b'. 2}.
-	d perform: #__setitem__:_: env: 1 withArguments: {'c'. 3}.
+	d @env1:__setitem__: 'a' _: 1.
+	d @env1:__setitem__: 'b' _: 2.
+	d @env1:__setitem__: 'c' _: 3.
 
-	iter := d perform: #__iter__ env: 1.
+	iter := d @env1:__iter__.
 
 	"Verify iterator type"
 	self assert: iter class name equals: #'dict_keyiterator'.
 
-	key1 := iter perform: #__next__ env: 1.
-	key2 := iter perform: #__next__ env: 1.
-	key3 := iter perform: #__next__ env: 1.
+	key1 := iter @env1:__next__.
+	key2 := iter @env1:__next__.
+	key3 := iter @env1:__next__.
 
 	keys := { key1. key2. key3. }.
 
@@ -276,7 +276,7 @@ testDictIteration
 	self assert: (keys includes: 'c').
 
 	self should: [
-		iter perform: #__next__ env: 1
+		iter @env1:__next__
 	] raise: StopIteration
 %
 
@@ -287,12 +287,12 @@ testDictKeyOverwrite
 
 	| d |
 	d := dict new.
-	d perform: #__setitem__:_: env: 1 withArguments: {'a'. 1}.
-	d perform: #__setitem__:_: env: 1 withArguments: {'a'. 2}.
-	d perform: #__setitem__:_: env: 1 withArguments: {'a'. 3}.
+	d @env1:__setitem__: 'a' _: 1.
+	d @env1:__setitem__: 'a' _: 2.
+	d @env1:__setitem__: 'a' _: 3.
 	
 	self assert: d size equals: 1.
-	self assert: (d perform: #__getitem__: env: 1 withArguments: {'a'}) equals: 3
+	self assert: (d @env1:__getitem__: 'a') equals: 3
 %
 
 category: 'Tests - Methods'
@@ -302,11 +302,11 @@ testDictKeys
 
 	| d keys |
 	d := dict new.
-	d perform: #__setitem__:_: env: 1 withArguments: {'a'. 1}.
-	d perform: #__setitem__:_: env: 1 withArguments: {'b'. 2}.
-	d perform: #__setitem__:_: env: 1 withArguments: {'c'. 3}.
+	d @env1:__setitem__: 'a' _: 1.
+	d @env1:__setitem__: 'b' _: 2.
+	d @env1:__setitem__: 'c' _: 3.
 
-	keys := d perform: #keys env: 1.
+	keys := d @env1:keys.
 
 	self assert: (keys size) equals: 3.
 	self assert: (keys includes: 'a').
@@ -321,10 +321,10 @@ testDictPop
 
 	| d value |
 	d := dict new.
-	d perform: #__setitem__:_: env: 1 withArguments: {'a'. 1}.
-	d perform: #__setitem__:_: env: 1 withArguments: {'b'. 2}.
+	d @env1:__setitem__: 'a' _: 1.
+	d @env1:__setitem__: 'b' _: 2.
 
-	value := d perform: #pop: env: 1 withArguments: {'a'}.
+	value := d @env1:pop: 'a'.
 
 	self assert: value equals: 1.
 	self assert: d size equals: 1.
@@ -338,12 +338,12 @@ testDictPopitem
 
 	| d pair key value |
 	d := dict new.
-	d perform: #__setitem__:_: env: 1 withArguments: {'a'. 1}.
-	d perform: #__setitem__:_: env: 1 withArguments: {'b'. 2}.
+	d @env1:__setitem__: 'a' _: 1.
+	d @env1:__setitem__: 'b' _: 2.
 
 	self assert: d size equals: 2.
 
-	pair := d perform: #popitem env: 1.
+	pair := d @env1:popitem.
 
 	self assert: d size equals: 1.
 	self assert: (pair size) equals: 2.
@@ -363,7 +363,7 @@ testDictPopitemKeyError
 	d := dict new.
 
 	self should: [
-		d perform: #popitem env: 1
+		d @env1:popitem
 	] raise: KeyError
 %
 
@@ -376,7 +376,7 @@ testDictPopKeyError
 	d := dict new.
 
 	self should: [
-		d perform: #pop: env: 1 withArguments: {'nonexistent'}
+		d @env1:pop: 'nonexistent'
 	] raise: KeyError
 %
 
@@ -388,7 +388,7 @@ testDictPopWithDefault
 	| d value |
 	d := dict new.
 
-	value := d perform: #pop:_: env: 1 withArguments: {'nonexistent'. 'default'}.
+	value := d @env1:pop: 'nonexistent' _: 'default'.
 
 	self assert: value equals: 'default'
 %
@@ -401,11 +401,11 @@ testDictRepr
 	| d repr |
 	d := dict new.
 
-	repr := d perform: #__repr__ env: 1.
+	repr := d @env1:__repr__.
 	self assert: repr equals: '{}'.
 
-	d perform: #__setitem__:_: env: 1 withArguments: {'a'. 1}.
-	repr := d perform: #__repr__ env: 1.
+	d @env1:__setitem__: 'a' _: 1.
+	repr := d @env1:__repr__.
 	self assert: (repr includesString: '''a''').
 	self assert: (repr includesString: '1')
 %
@@ -417,15 +417,15 @@ testDictSetdefault
 
 	| d value |
 	d := dict new.
-	d perform: #__setitem__:_: env: 1 withArguments: {'a'. 1}.
+	d @env1:__setitem__: 'a' _: 1.
 
-	value := d perform: #setdefault: env: 1 withArguments: {'a'}.
+	value := d @env1:setdefault: 'a'.
 	self assert: value equals: 1.
 
-	value := d perform: #setdefault:_: env: 1 withArguments: {'b'. 2}.
+	value := d @env1:setdefault: 'b' _: 2.
 	self assert: value equals: 2.
 	self assert: (d ___contains___: 'b').
-	self assert: (d perform: #__getitem__: env: 1 withArguments: {'b'}) equals: 2
+	self assert: (d @env1:__getitem__: 'b') equals: 2
 %
 
 category: 'Tests - Type'
@@ -436,7 +436,7 @@ testDictType
 	| d |
 	d := dict new.
 
-	self assert: (d perform: #__class__ env: 1) == dict
+	self assert: (d @env1:__class__) == dict
 %
 
 category: 'Tests - Methods'
@@ -446,19 +446,19 @@ testDictUpdate
 
 	| d1 d2 |
 	d1 := dict new.
-	d1 perform: #__setitem__:_: env: 1 withArguments: {'a'. 1}.
-	d1 perform: #__setitem__:_: env: 1 withArguments: {'b'. 2}.
+	d1 @env1:__setitem__: 'a' _: 1.
+	d1 @env1:__setitem__: 'b' _: 2.
 
 	d2 := dict new.
-	d2 perform: #__setitem__:_: env: 1 withArguments: {'b'. 3}.
-	d2 perform: #__setitem__:_: env: 1 withArguments: {'c'. 4}.
+	d2 @env1:__setitem__: 'b' _: 3.
+	d2 @env1:__setitem__: 'c' _: 4.
 
-	d1 perform: #update: env: 1 withArguments: {d2}.
+	d1 @env1:update: d2.
 
 	self assert: d1 size equals: 3.
-	self assert: (d1 perform: #__getitem__: env: 1 withArguments: {'a'}) equals: 1.
-	self assert: (d1 perform: #__getitem__: env: 1 withArguments: {'b'}) equals: 3.
-	self assert: (d1 perform: #__getitem__: env: 1 withArguments: {'c'}) equals: 4
+	self assert: (d1 @env1:__getitem__: 'a') equals: 1.
+	self assert: (d1 @env1:__getitem__: 'b') equals: 3.
+	self assert: (d1 @env1:__getitem__: 'c') equals: 4
 %
 
 category: 'Tests - Methods'
@@ -468,11 +468,11 @@ testDictValues
 
 	| d values |
 	d := dict new.
-	d perform: #__setitem__:_: env: 1 withArguments: {'a'. 1}.
-	d perform: #__setitem__:_: env: 1 withArguments: {'b'. 2}.
-	d perform: #__setitem__:_: env: 1 withArguments: {'c'. 3}.
+	d @env1:__setitem__: 'a' _: 1.
+	d @env1:__setitem__: 'b' _: 2.
+	d @env1:__setitem__: 'c' _: 3.
 
-	values := d perform: #values env: 1.
+	values := d @env1:values.
 
 	self assert: (values size) equals: 3.
 	self assert: (values includes: 1).
@@ -515,8 +515,8 @@ testEvalDictLiteral
 	| result |
 	result := self eval: '{"a": 1, "b": 2, "c": 3}'.
 	self assert: result size equals: 3.
-	self assert: (result perform: #__getitem__: env: 1 withArguments: {'a'}) equals: 1.
-	self assert: (result perform: #__getitem__: env: 1 withArguments: {'c'}) equals: 3.
+	self assert: (result @env1:__getitem__: 'a') equals: 1.
+	self assert: (result @env1:__getitem__: 'c') equals: 3.
 %
 
 category: 'Tests - Eval - Dict Creation'

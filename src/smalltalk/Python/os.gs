@@ -158,7 +158,7 @@ initialize_chdir
 	self ___at___: #chdir put: [:positional :keywords |
 		| path result |
 		path := positional ___at___: 1.
-		result := GsFile perform: #_directoryPrim:with:with: env: 0 withArguments: {0. path. nil}.
+		result := GsFile @env0:_directoryPrim: 0 with: path with: nil.
 		result == nil ifTrue: [
 			OSError ___signal___: ('Cannot change directory to: ' ___concat___: (path ___printString___))
 		].
@@ -183,7 +183,7 @@ initialize_getcwd
 	"Return a string representing the current working directory"
 	self ___at___: #getcwd put: [:positional :keywords |
 		| result |
-		result := GsFile perform: #_directoryPrim:with:with: env: 0 withArguments: {2. nil. nil}.
+		result := GsFile @env0:_directoryPrim: 2 with: nil with: nil.
 		(result ___isKindOf___: String) ifTrue: [result] ifFalse: [
 			(result ___isKindOf___: Utf8) ifTrue: [result ___decodeToUnicode___] ifFalse: [
 				(result ___isKindOf___: Utf16) ifTrue: [result ___decodeToUnicode___] ifFalse: [
@@ -201,7 +201,7 @@ initialize_getenv
 	self ___at___: #getenv put: [:positional :keywords |
 		| name result |
 		name := positional ___at___: 1.
-		result := System perform: #gemEnvironmentVariable: env: 0 withArguments: {name}.
+		result := System @env0:gemEnvironmentVariable: name.
 		result
 	]
 %
@@ -214,7 +214,7 @@ initialize_getenvWithDefault
 		| name default result |
 		name := positional ___at___: 1.
 		default := positional ___at___: 2.
-		result := System perform: #gemEnvironmentVariable: env: 0 withArguments: {name}.
+		result := System @env0:gemEnvironmentVariable: name.
 		result == nil ifTrue: [default] ifFalse: [result]
 	]
 %
@@ -228,7 +228,7 @@ initialize_isdir
 		path := positional ___at___: 1.
 		exists := GsFile ___existsOnServer___: path.
 		exists ifTrue: [
-			GsFile perform: #isServerDirectory: env: 0 withArguments: {path}
+			GsFile @env0:isServerDirectory: path
 		] ifFalse: [false]
 	]
 %
@@ -242,7 +242,7 @@ initialize_isfile
 		path := positional ___at___: 1.
 		exists := GsFile ___existsOnServer___: path.
 		exists ifTrue: [
-			isDir := GsFile perform: #isServerDirectory: env: 0 withArguments: {path}.
+			isDir := GsFile @env0:isServerDirectory: path.
 			isDir == false
 		] ifFalse: [false]
 	]
@@ -267,7 +267,7 @@ initialize_listdir
 			getcwdBlock := self getcwd.
 			actualPath := getcwdBlock value: {} value: nil
 		].
-		dirContents := GsFile perform: #contentsOfDirectory:onClient: env: 0 withArguments: {actualPath. false}.
+		dirContents := GsFile @env0:contentsOfDirectory: actualPath onClient: false.
 		(dirContents ___isKindOf___: Array) ifFalse: [
 			OSError ___signal___: ('Cannot list directory: ' ___concat___: (actualPath ___printString___))
 		].
@@ -308,7 +308,7 @@ initialize_lstat
 	self ___at___: #lstat put: [:positional :keywords |
 		| path statResult |
 		path := positional ___at___: 1.
-		statResult := GsFile perform: #stat:isLstat: env: 0 withArguments: {path. true}.
+		statResult := GsFile @env0:stat: path isLstat: true.
 		statResult == nil ifTrue: [
 			OSError ___signal___: ('Cannot lstat: ' ___concat___: (path ___printString___))
 		].
@@ -355,7 +355,7 @@ initialize_mkdir
 	self ___at___: #mkdir put: [:positional :keywords |
 		| path result |
 		path := positional ___at___: 1.
-		result := GsFile perform: #createServerDirectory: env: 0 withArguments: {path}.
+		result := GsFile @env0:createServerDirectory: path.
 		result == nil ifTrue: [
 			OSError ___signal___: ('Cannot create directory: ' ___concat___: (path ___printString___))
 		].
@@ -371,7 +371,7 @@ initialize_mkdirWithMode
 		| path mode result |
 		path := positional ___at___: 1.
 		mode := positional ___at___: 2.
-		result := GsFile perform: #createServerDirectory:mode: env: 0 withArguments: {path. mode}.
+		result := GsFile @env0:createServerDirectory: path mode: mode.
 		result == nil ifTrue: [
 			OSError ___signal___: ('Cannot create directory: ' ___concat___: (path ___printString___))
 		].
@@ -401,7 +401,7 @@ initialize_putenv
 		| name value |
 		name := positional ___at___: 1.
 		value := positional ___at___: 2.
-		System perform: #gemEnvironmentVariable:put: env: 0 withArguments: {name. value}.
+		System @env0:gemEnvironmentVariable: name put: value.
 		nil
 	]
 %
@@ -413,7 +413,7 @@ initialize_remove
 	self ___at___: #remove put: [:positional :keywords |
 		| path result |
 		path := positional ___at___: 1.
-		result := GsFile perform: #removeServerFile: env: 0 withArguments: {path}.
+		result := GsFile @env0:removeServerFile: path.
 		result == nil ifTrue: [
 			OSError ___signal___: ('Cannot remove file: ' ___concat___: (path ___printString___))
 		].
@@ -429,7 +429,7 @@ initialize_rename
 		| oldPath newPath result msg |
 		oldPath := positional ___at___: 1.
 		newPath := positional ___at___: 2.
-		result := GsFile perform: #renameFileOnServer:to: env: 0 withArguments: {oldPath. newPath}.
+		result := GsFile @env0:renameFileOnServer: oldPath to: newPath.
 		result == nil ifTrue: [
 			msg := ((oldPath ___printString___) ___concat___: ' to ') ___concat___: (newPath ___printString___).
 			OSError ___signal___: ('Cannot rename: ' ___concat___: msg)
@@ -445,7 +445,7 @@ initialize_rmdir
 	self ___at___: #rmdir put: [:positional :keywords |
 		| path result |
 		path := positional ___at___: 1.
-		result := GsFile perform: #removeServerDirectory: env: 0 withArguments: {path}.
+		result := GsFile @env0:removeServerDirectory: path.
 		result == nil ifTrue: [
 			OSError ___signal___: ('Cannot remove directory: ' ___concat___: (path ___printString___))
 		].
@@ -467,7 +467,7 @@ initialize_stat
 	self ___at___: #stat put: [:positional :keywords |
 		| path statResult |
 		path := positional ___at___: 1.
-		statResult := GsFile perform: #stat:isLstat: env: 0 withArguments: {path. false}.
+		statResult := GsFile @env0:stat: path isLstat: false.
 		statResult == nil ifTrue: [
 			OSError ___signal___: ('Cannot stat: ' ___concat___: (path ___printString___))
 		].
@@ -482,7 +482,7 @@ initialize_system
 	self ___at___: #system put: [:positional :keywords |
 		| command result |
 		command := positional ___at___: 1.
-		result := System perform: #performOnServer: env: 0 withArguments: {command}.
+		result := System @env0:performOnServer: command.
 		result
 	]
 %

@@ -663,9 +663,9 @@ initialize_displayhook
 		value := positional ___at___: 1.
 		value == None ifFalse: [
 			"TODO: Print repr(value) to stdout"
-			stdoutStream := GsFile perform: #stdout env: 0.
-			stdoutStream perform: #nextPutAll: env: 0 withArguments: {value printString}.
-			stdoutStream perform: #lf env: 0.
+			stdoutStream := GsFile @env0:stdout.
+			stdoutStream @env0:nextPutAll: value printString.
+			stdoutStream @env0:lf.
 		].
 		None
 	]
@@ -692,7 +692,7 @@ initialize_excepthook
 		excValue := positional ___at___: 2.
 		excTb := positional ___at___: 3.
 		"TODO: Format and print to stderr"
-		GsFile perform: #gciLogServer: env: 0 withArguments: {'Exception: ', excValue printString}.
+		GsFile @env0:gciLogServer: 'Exception: ', excValue printString.
 		None
 	]
 %
@@ -847,7 +847,7 @@ initialize_getsizeof
 			ifTrue: [positional ___at___: 2]
 			ifFalse: [nil].
 		"Use GemStone's physicalSize (env 0)"
-		[obj perform: #physicalSize env: 0] ___on___: Error do: [:ex |
+		[obj @env0:physicalSize] ___on___: Error do: [:ex |
 			default ifNil: [TypeError ___signal___: 'object does not provide size'].
 			default
 		]
@@ -871,7 +871,7 @@ initialize_intern
 		| aString |
 		aString := positional ___at___: 1.
 		"GemStone automatically interns Symbols"
-		(aString perform: #asSymbol env: 0) perform: #asString env: 0
+		(aString @env0:asSymbol) @env0:asString
 	]
 %
 
@@ -880,9 +880,9 @@ method: sys
 initialize_io_streams
 	"Initialize I/O stream attributes using GsFile"
 	"Use GsFile directly for now; proper TextIO wrappers can be added later"
-	self ___at___: #stdin put: (GsFile perform: #stdin env: 0).
-	self ___at___: #stdout put: (GsFile perform: #stdout env: 0).
-	self ___at___: #stderr put: (GsFile perform: #stderr env: 0).
+	self ___at___: #stdin put: (GsFile @env0:stdin).
+	self ___at___: #stdout put: (GsFile @env0:stdout).
+	self ___at___: #stderr put: (GsFile @env0:stderr).
 	self ___at___: #__stdin__ put: (self ___at___: #stdin).
 	self ___at___: #__stdout__ put: (self ___at___: #stdout).
 	self ___at___: #__stderr__ put: (self ___at___: #stderr).
@@ -902,7 +902,7 @@ method: sys
 initialize_path_info
 	"Initialize path-related attributes using GemStone info"
 	| gsVersionReport gemNativeCodePath |
-	gsVersionReport := System perform: #gemVersionReport env: 0.
+	gsVersionReport := System @env0:gemVersionReport.
 	gemNativeCodePath := gsVersionReport ___at___: 'gemNativeCodePath' ifAbsent: [''].
 
 	"Use GemStone installation paths"
@@ -915,7 +915,7 @@ initialize_path_info
 	"Initialize module path list"
 	self ___at___: #path put: (list ___new___).
 	self ___at___: #path_hooks put: (list ___new___).
-	self ___at___: #path_importer_cache put: (KeyValueDictionary perform: #new env: 0).
+	self ___at___: #path_importer_cache put: (KeyValueDictionary @env0:new).
 	self ___at___: #meta_path put: (list ___new___).
 	self ___at___: #pycache_prefix put: None.
 	self ___at___: #dont_write_bytecode put: true. "GemStone doesn't use .pyc files"
@@ -926,8 +926,8 @@ method: sys
 initialize_platform_info
 	"Initialize platform-related attributes using GemStone system info"
 	| osName cpuArch |
-	osName := System perform: #gemVersionAt: env: 0 withArguments: {#osName}.
-	cpuArch := System perform: #gemVersionAt: env: 0 withArguments: {#cpuArchitecture}.
+	osName := System @env0:gemVersionAt: #osName.
+	cpuArch := System @env0:gemVersionAt: #cpuArchitecture.
 
 	"Map GemStone OS names to Python platform strings"
 	self ___at___: #platform put: ((osName ___eq___: 'Darwin')
@@ -938,7 +938,7 @@ initialize_platform_info
 				ifTrue: ['sunos']
 				ifFalse: [(osName ___eq___: 'AIX')
 					ifTrue: ['aix']
-					ifFalse: [osName perform: #asLowercase env: 0]]]]).
+					ifFalse: [osName @env0:asLowercase]]]]).
 
 	"Determine byte order from CPU architecture"
 	"SPARC is big-endian, x86/ARM are little-endian"
@@ -947,7 +947,7 @@ initialize_platform_info
 		ifFalse: ['little']).
 
 	"Maximum size for integers and other limits"
-	self ___at___: #maxsize put: (SmallInteger perform: #maximumValue env: 0). "GemStone's SmallInteger max"
+	self ___at___: #maxsize put: (SmallInteger @env0:maximumValue). "GemStone's SmallInteger max"
 	self ___at___: #maxunicode put: 16r10FFFF. "Unicode max codepoint"
 	self ___at___: #platlibdir put: 'lib'.
 	self ___at___: #float_repr_style put: 'short'.
@@ -960,13 +960,13 @@ initialize_runtime_info
 	| cmdArgs |
 
 	"Get command line arguments from GemStone"
-	cmdArgs := System perform: #commandLineArguments env: 0.
+	cmdArgs := System @env0:commandLineArguments.
 	self ___at___: #argv put: (list ___new___).
 	self ___at___: #orig_argv put: (list ___new___).
-	cmdArgs perform: #do: env: 0 withArguments: {[:arg |
+	cmdArgs @env0:do: [:arg |
 		(self ___at___: #argv) append: arg.
 		(self ___at___: #orig_argv) append: arg.
-	]}.
+	].
 
 	"Module registry - get from class-level modules"
 	self ___at___: #modules put: (sys modules).
@@ -1049,7 +1049,7 @@ method: sys
 initialize_version_info
 	"Initialize version-related attributes using GemStone version info"
 	| gsVersion gsVersionReport grailVersion |
-	gsVersionReport := System perform: #gemVersionReport env: 0.
+	gsVersionReport := System @env0:gemVersionReport.
 	gsVersion := gsVersionReport ___at___: #gsVersion ifAbsent: ['unknown'].
 	grailVersion := '0.1.0'.
 

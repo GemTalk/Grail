@@ -25,7 +25,7 @@ method: frozenset
 __and__: other
 	"Return the intersection of two sets (self & other)."
 
-	^ self perform: #intersection: env: 1 withArguments: {other}
+	^ self @env1:intersection: other
 %
 
 category: 'Python-Collection Protocol'
@@ -58,7 +58,7 @@ method: frozenset
 __ge__: other
 	"Test whether every element in other is in the set (superset test)."
 
-	^ self perform: #issuperset: env: 1 withArguments: {other}
+	^ self @env1:issuperset: other
 %
 
 category: 'Python-Comparison'
@@ -69,7 +69,7 @@ __gt__: other
 	| isSuperset notEqual |
 	isSuperset := self issuperset: other.
 	notEqual := self __ne__: other.
-	^ isSuperset perform: #and: env: 0 withArguments: {[notEqual]}
+	^ isSuperset @env0:and: [notEqual]
 %
 
 category: 'Python-Hashing'
@@ -83,7 +83,7 @@ __hash__
 	self ___do___: [:each |
 		| elemHash |
 		elemHash := each __hash__.
-		hash := hash perform: #bitXor: env: 0 withArguments: {elemHash}
+		hash := hash @env0:bitXor: elemHash
 	].
 	^ hash
 %
@@ -101,7 +101,7 @@ method: frozenset
 __le__: other
 	"Test whether every element in the set is in other (subset test)."
 
-	^ self perform: #issubset: env: 1 withArguments: {other}
+	^ self @env1:issubset: other
 %
 
 category: 'Python-Collection Protocol'
@@ -120,7 +120,7 @@ __lt__: other
 	| isSubset notEqual |
 	isSubset := self issubset: other.
 	notEqual := self __ne__: other.
-	^ isSubset perform: #and: env: 0 withArguments: {[notEqual]}
+	^ isSubset @env0:and: [notEqual]
 %
 
 category: 'Python-Comparison'
@@ -136,7 +136,7 @@ method: frozenset
 __or__: other
 	"Return the union of two sets (self | other)."
 
-	^ self perform: #union: env: 1 withArguments: {other}
+	^ self @env1:union: other
 %
 
 category: 'Python-Set Operations (Operators)'
@@ -144,7 +144,7 @@ method: frozenset
 __rand__: other
 	"Return the intersection of two sets (other & self)."
 
-	^ other perform: #intersection: env: 1 withArguments: {self}
+	^ other @env1:intersection: self
 %
 
 category: 'Python-String Representation'
@@ -176,7 +176,7 @@ method: frozenset
 __ror__: other
 	"Return the union of two sets (other | self)."
 
-	^ other perform: #union: env: 1 withArguments: {self}
+	^ other @env1:union: self
 %
 
 category: 'Python-Set Operations (Operators)'
@@ -184,7 +184,7 @@ method: frozenset
 __rsub__: other
 	"Return the difference of two sets (other - self)."
 
-	^ other perform: #difference: env: 1 withArguments: {self}
+	^ other @env1:difference: self
 %
 
 category: 'Python-Set Operations (Operators)'
@@ -192,7 +192,7 @@ method: frozenset
 __rxor__: other
 	"Return the symmetric difference of two sets (other ^ self)."
 
-	^ other perform: #symmetric_difference: env: 1 withArguments: {self}
+	^ other @env1:symmetric_difference: self
 %
 
 category: 'Python-Set Operations (Operators)'
@@ -200,7 +200,7 @@ method: frozenset
 __sub__: other
 	"Return the difference of two sets (self - other)."
 
-	^ self perform: #difference: env: 1 withArguments: {other}
+	^ self @env1:difference: other
 %
 
 category: 'Python-Set Operations (Operators)'
@@ -208,7 +208,7 @@ method: frozenset
 __xor__: other
 	"Return the symmetric difference of two sets (self ^ other)."
 
-	^ self perform: #symmetric_difference: env: 1 withArguments: {other}
+	^ self @env1:symmetric_difference: other
 %
 
 category: 'Python-Copying'

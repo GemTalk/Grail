@@ -188,7 +188,7 @@ initialize_cos
 		imag := zComplex imag.
 		
 		"cos(a + bi) = cos(a)*cosh(b) - i*sin(a)*sinh(b)"
-		complex __new__: ((real ___cos___) ___times___: (imag perform: #cosh env: 0)) _: (((real ___sin___) ___times___: (imag perform: #sinh env: 0)) ___negated___)
+		complex __new__: ((real ___cos___) ___times___: (imag @env0:cosh)) _: (((real ___sin___) ___times___: (imag @env0:sinh)) ___negated___)
 	]
 %
 
@@ -204,7 +204,7 @@ initialize_cosh
 		imag := zComplex imag.
 		
 		"cosh(a + bi) = cosh(a)*cos(b) + i*sinh(a)*sin(b)"
-		complex __new__: ((real perform: #cosh env: 0) ___times___: (imag ___cos___)) _: ((real perform: #sinh env: 0) ___times___: (imag ___sin___))
+		complex __new__: ((real @env0:cosh) ___times___: (imag ___cos___)) _: ((real @env0:sinh) ___times___: (imag ___sin___))
 	]
 %
 
@@ -212,7 +212,7 @@ category: 'Python-Initialization'
 method: cmath
 initialize_e
 	"The mathematical constant e = 2.718281..."
-	self ___at___: #e put: (1.0 perform: #exp env: 0)
+	self ___at___: #e put: (1.0 @env0:exp)
 %
 
 category: 'Python-Initialization'
@@ -227,7 +227,7 @@ initialize_exp
 		imag := zComplex imag.
 
 		"exp(a + bi) = exp(a) * (cos(b) + i*sin(b))"
-		expReal := real perform: #exp env: 0.
+		expReal := real @env0:exp.
 		complex __new__: (expReal ___times___: (imag ___cos___)) _: (expReal ___times___: (imag ___sin___))
 	]
 %
@@ -257,8 +257,8 @@ initialize_isfinite
 		real := zComplex real.
 		imag := zComplex imag.
 
-		realKind := real perform: #_getKind env: 0.
-		imagKind := imag perform: #_getKind env: 0.
+		realKind := real @env0:_getKind.
+		imagKind := imag @env0:_getKind.
 
 		"Both must be normal (1), subnormal (2), or zero (4)"
 		((realKind ___le___: 2) or: [realKind ___eq___: 4])
@@ -277,8 +277,8 @@ initialize_isinf
 		real := zComplex real.
 		imag := zComplex imag.
 
-		realKind := real perform: #_getKind env: 0.
-		imagKind := imag perform: #_getKind env: 0.
+		realKind := real @env0:_getKind.
+		imagKind := imag @env0:_getKind.
 
 		(realKind ___eq___: 3) or: [imagKind ___eq___: 3]
 	]
@@ -295,7 +295,7 @@ initialize_isnan
 		real := zComplex real.
 		imag := zComplex imag.
 
-		(real perform: #_isNaN env: 0) or: [imag perform: #_isNaN env: 0]
+		(real @env0:_isNaN) or: [imag @env0:_isNaN]
 	]
 %
 
@@ -316,7 +316,7 @@ initialize_log
 			___plus___: (imag ___times___: imag)) ___sqrt___).
 
 		"Calculate argument: theta = atan2(imag, real)"
-		theta := imag perform: #arcTan2: env: 0 withArguments: {real}.
+		theta := imag @env0:arcTan2: real.
 
 		complex __new__: (r ___ln___) _: theta
 	]
@@ -361,7 +361,7 @@ initialize_phase
 		real := zComplex real.
 		imag := zComplex imag.
 
-		imag perform: #arcTan2: env: 0 withArguments: {real}
+		imag @env0:arcTan2: real
 	]
 %
 
@@ -369,7 +369,7 @@ category: 'Python-Initialization'
 method: cmath
 initialize_pi
 	"The mathematical constant π = 3.141592..."
-	self ___at___: #pi put: (Float perform: #pi env: 0)
+	self ___at___: #pi put: (Float @env0:pi)
 %
 
 category: 'Python-Initialization'
@@ -388,7 +388,7 @@ initialize_polar
 			___plus___: (imag ___times___: imag)) ___sqrt___).
 
 		"Calculate argument"
-		theta := imag perform: #arcTan2: env: 0 withArguments: {real}.
+		theta := imag @env0:arcTan2: real.
 
 		tuple ___withAll___: (tuple ___with___: r with: theta)
 	]
@@ -421,7 +421,7 @@ initialize_sin
 		imag := zComplex imag.
 		
 		"sin(a + bi) = sin(a)*cosh(b) + i*cos(a)*sinh(b)"
-		complex __new__: ((real ___sin___) ___times___: (imag perform: #cosh env: 0)) _: ((real ___cos___) ___times___: (imag perform: #sinh env: 0))
+		complex __new__: ((real ___sin___) ___times___: (imag @env0:cosh)) _: ((real ___cos___) ___times___: (imag @env0:sinh))
 	]
 %
 
@@ -437,7 +437,7 @@ initialize_sinh
 		imag := zComplex imag.
 		
 		"sinh(a + bi) = sinh(a)*cos(b) + i*cosh(a)*sin(b)"
-		complex __new__: ((real perform: #sinh env: 0) ___times___: (imag ___cos___)) _: ((real perform: #cosh env: 0) ___times___: (imag ___sin___))
+		complex __new__: ((real @env0:sinh) ___times___: (imag ___cos___)) _: ((real @env0:cosh) ___times___: (imag ___sin___))
 	]
 %
 
@@ -460,7 +460,7 @@ initialize_sqrt
 			___plus___: (imag ___times___: imag)) ___sqrt___).
 
 		"Calculate argument"
-		theta := imag perform: #arcTan2: env: 0 withArguments: {real}.
+		theta := imag @env0:arcTan2: real.
 
 		sqrtR := r ___sqrt___.
 		halfTheta := theta ___divide___: 2.0.
@@ -504,7 +504,7 @@ method: cmath
 initialize_tau
 	"The mathematical constant τ = 2π = 6.283185..."
 	| piValue |
-	piValue := Float perform: #pi env: 0.
+	piValue := Float @env0:pi.
 	self ___at___: #tau put: (piValue ___times___: 2.0)
 %
 

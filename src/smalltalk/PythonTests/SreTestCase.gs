@@ -46,7 +46,7 @@ category: 'Helpers'
 method: SreTestCase
 sreInstance
 	"Return the _sre module instance."
-	^ _sre perform: #instance env: 1
+	^ _sre @env1:instance
 %
 
 category: 'Helpers'
@@ -56,7 +56,7 @@ compilePattern: patternStr flags: flags code: codeArray groups: groups groupinde
 
 	| sre compileFn args |
 	sre := self sreInstance.
-	compileFn := sre perform: #compile env: 1.
+	compileFn := sre @env1:compile.
 	args := OrderedCollection new.
 	args add: patternStr.
 	args add: flags.
@@ -102,7 +102,7 @@ method: SreTestCase
 testMagic
 	"Test that _sre.MAGIC matches the C engine's magic number."
 
-	self assert: (self sreInstance perform: #MAGIC env: 1) equals: 20230612.
+	self assert: (self sreInstance @env1:MAGIC) equals: 20230612.
 %
 
 category: 'Tests - Constants'
@@ -110,7 +110,7 @@ method: SreTestCase
 testCodesize
 	"Test that _sre.CODESIZE is 4."
 
-	self assert: (self sreInstance perform: #CODESIZE env: 1) equals: 4.
+	self assert: (self sreInstance @env1:CODESIZE) equals: 4.
 %
 
 category: 'Tests - Constants'
@@ -118,7 +118,7 @@ method: SreTestCase
 testMaxrepeat
 	"Test that _sre.MAXREPEAT is set."
 
-	self assert: (self sreInstance perform: #MAXREPEAT env: 1) equals: 4294967295.
+	self assert: (self sreInstance @env1:MAXREPEAT) equals: 4294967295.
 %
 
 category: 'Tests - Constants'
@@ -126,7 +126,7 @@ method: SreTestCase
 testMaxgroups
 	"Test that _sre.MAXGROUPS is set."
 
-	self assert: (self sreInstance perform: #MAXGROUPS env: 1) equals: 1073741823.
+	self assert: (self sreInstance @env1:MAXGROUPS) equals: 1073741823.
 %
 
 ! ===============================================================================
@@ -150,7 +150,7 @@ testPatternSearch
 
 	| pattern searchFn match |
 	pattern := self abcPattern.
-	searchFn := pattern perform: #search env: 1.
+	searchFn := pattern @env1:search.
 	match := searchFn value: (OrderedCollection with: 'xyzabc') value: nil.
 	self assert: (match isKindOf: SreMatch).
 %
@@ -162,7 +162,7 @@ testPatternSearchNoMatch
 
 	| pattern searchFn match |
 	pattern := self abcPattern.
-	searchFn := pattern perform: #search env: 1.
+	searchFn := pattern @env1:search.
 	match := searchFn value: (OrderedCollection with: 'xyz') value: nil.
 	self assert: match equals: nil.
 %
@@ -174,9 +174,9 @@ testMatchGroup
 
 	| pattern searchFn match groupFn result |
 	pattern := self abcPattern.
-	searchFn := pattern perform: #search env: 1.
+	searchFn := pattern @env1:search.
 	match := searchFn value: (OrderedCollection with: 'xyzabc123') value: nil.
-	groupFn := match perform: #group env: 1.
+	groupFn := match @env1:group.
 	result := groupFn value: (OrderedCollection with: 0) value: nil.
 	self assert: result equals: 'abc'.
 %
@@ -188,9 +188,9 @@ testMatchSpan
 
 	| pattern searchFn match spanFn result |
 	pattern := self abcPattern.
-	searchFn := pattern perform: #search env: 1.
+	searchFn := pattern @env1:search.
 	match := searchFn value: (OrderedCollection with: 'xyzabc') value: nil.
-	spanFn := match perform: #span env: 1.
+	spanFn := match @env1:span.
 	result := spanFn value: (OrderedCollection with: 0) value: nil.
 	self assert: (result at: 1) equals: 3.
 	self assert: (result at: 2) equals: 6.
@@ -203,9 +203,9 @@ testMatchWithGroups
 
 	| pattern searchFn match groupFn result |
 	pattern := self abcGroupPattern.
-	searchFn := pattern perform: #search env: 1.
+	searchFn := pattern @env1:search.
 	match := searchFn value: (OrderedCollection with: 'xyzabc123') value: nil.
-	groupFn := match perform: #group env: 1.
+	groupFn := match @env1:group.
 	"group(0) = whole match"
 	result := groupFn value: (OrderedCollection with: 0) value: nil.
 	self assert: result equals: 'abc'.
@@ -221,14 +221,14 @@ testPatternMatch
 
 	| pattern matchFn match groupFn result |
 	pattern := self abcPattern.
-	matchFn := pattern perform: #match env: 1.
+	matchFn := pattern @env1:match.
 	"match() only matches at the beginning - should fail for 'xyzabc'"
 	match := matchFn value: (OrderedCollection with: 'xyzabc') value: nil.
 	self assert: match equals: nil.
 	"match() should succeed for 'abcxyz'"
 	match := matchFn value: (OrderedCollection with: 'abcxyz') value: nil.
 	self assert: (match isKindOf: SreMatch).
-	groupFn := match perform: #group env: 1.
+	groupFn := match @env1:group.
 	result := groupFn value: (OrderedCollection with: 0) value: nil.
 	self assert: result equals: 'abc'.
 %

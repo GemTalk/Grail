@@ -109,7 +109,7 @@ __iter__
 	"Return an iterator over the sequence.
 	Subclasses must override this to return an appropriate iterator instance."
 
-	self perform: #subclassResponsibility env: 0
+	self @env0:subclassResponsibility
 %
 
 category: 'Python-Comparison'
@@ -142,7 +142,7 @@ __mul__: n
 	"Repeat the sequence n times. Returns a new sequence."
 
 	| result |
-	result := (self perform: #species env: 0) ___new___.
+	result := (self @env0:species) ___new___.
 	(n ___le___: 0) ifTrue: [
 		^ result
 	].
@@ -169,14 +169,11 @@ __repr__
 	stream := WriteStream ___on___: (String ___new___).
 	stream ___nextPut___: $[.
 
-	self perform: #do:separatedBy: env: 0 withArguments: {
-		[:each |
+	self @env0:do: [:each |
 			| reprStr |
 			reprStr := each __repr__.
 			stream ___nextPutAll___: reprStr
-		].
-		[stream ___nextPutAll___: ', ']
-	}.
+		] separatedBy: [stream ___nextPutAll___: ', '].
 
 	stream ___nextPut___: $].
 	^ stream ___contents___

@@ -41,8 +41,8 @@ test___real_imaginary
 	| c |
 	c := complex ___new___: 5 _: 12.
 	self assert: c class equals: complex.
-	self assert: (c perform: #real env: 1) equals: 5.0.
-	self assert: (c perform: #imag env: 1) equals: 12.0.
+	self assert: (c @env1:real) equals: 5.0.
+	self assert: (c @env1:imag) equals: 12.0.
 %
 
 category: 'Python-Arithmetic'
@@ -52,7 +52,7 @@ test__abs__
 
 	| c result |
 	c := complex ___new___: 3 _: 4.
-	result := c perform: #__abs__ env: 1.
+	result := c @env1:__abs__.
 	self assert: result equals: 5.0.
 %
 
@@ -64,9 +64,9 @@ test__add__complex
 	| c1 c2 result |
 	c1 := complex ___new___: 3 _: 4.
 	c2 := complex ___new___: 1 _: 2.
-	result := c1 perform: #__add__: env: 1 withArguments: {c2}.
-	self assert: (result perform: #real env: 1) equals: 4.0.
-	self assert: (result perform: #imag env: 1) equals: 6.0.
+	result := c1 @env1:__add__: c2.
+	self assert: (result @env1:real) equals: 4.0.
+	self assert: (result @env1:imag) equals: 6.0.
 %
 
 category: 'Python-Arithmetic'
@@ -76,9 +76,9 @@ test__add__real
 
 	| c result |
 	c := complex ___new___: 3 _: 4.
-	result := c perform: #__add__: env: 1 withArguments: {5}.
-	self assert: (result perform: #real env: 1) equals: 8.0.
-	self assert: (result perform: #imag env: 1) equals: 4.0.
+	result := c @env1:__add__: 5.
+	self assert: (result @env1:real) equals: 8.0.
+	self assert: (result @env1:imag) equals: 4.0.
 %
 
 category: 'Python-Type Conversion'
@@ -88,7 +88,7 @@ test__bool__nonzero
 
 	| c |
 	c := complex ___new___: 3 _: 4.
-	self assert: (c perform: #__bool__ env: 1).
+	self assert: (c @env1:__bool__).
 %
 
 category: 'Python-Type Conversion'
@@ -98,7 +98,7 @@ test__bool__zero
 
 	| c |
 	c := complex ___new___: 0 _: 0.
-	self deny: (c perform: #__bool__ env: 1).
+	self deny: (c @env1:__bool__).
 %
 
 category: 'Python-Type Conversion'
@@ -108,7 +108,7 @@ test__complex__
 
 	| c result |
 	c := complex ___new___: 3 _: 4.
-	result := c perform: #__complex__ env: 1.
+	result := c @env1:__complex__.
 	self assert: result equals: c.
 %
 
@@ -119,7 +119,7 @@ test__dir__
 
 	| c dirResult |
 	c := complex ___new___: 3 _: 4.
-	dirResult := c perform: #__dir__ env: 1.
+	dirResult := c @env1:__dir__.
 
 	"Verify it's an array"
 	self assert: dirResult class equals: Array.
@@ -143,7 +143,7 @@ test__dir__sorted
 
 	| c dirResult |
 	c := complex ___new___: 3 _: 4.
-	dirResult := c perform: #__dir__ env: 1.
+	dirResult := c @env1:__dir__.
 
 	"Verify the list is sorted"
 	self assert: dirResult first equals: '__abs__'.
@@ -157,7 +157,7 @@ test__eq__different_imag
 	| c1 c2 |
 	c1 := complex ___new___: 3 _: 4.
 	c2 := complex ___new___: 3 _: 5.
-	self deny: (c1 perform: #__eq__: env: 1 withArguments: {c2}).
+	self deny: (c1 @env1:__eq__: c2).
 %
 
 category: 'Python-Comparison'
@@ -168,7 +168,7 @@ test__eq__different_real
 	| c1 c2 |
 	c1 := complex ___new___: 3 _: 4.
 	c2 := complex ___new___: 5 _: 4.
-	self deny: (c1 perform: #__eq__: env: 1 withArguments: {c2}).
+	self deny: (c1 @env1:__eq__: c2).
 %
 
 category: 'Python-Comparison'
@@ -178,7 +178,7 @@ test__eq__different_type
 
 	| c |
 	c := complex ___new___: 3 _: 4.
-	self deny: (c perform: #__eq__: env: 1 withArguments: {42}).
+	self deny: (c @env1:__eq__: 42).
 %
 
 category: 'Python-Comparison'
@@ -189,7 +189,7 @@ test__eq__same_values
 	| c1 c2 |
 	c1 := complex ___new___: 3 _: 4.
 	c2 := complex ___new___: 3 _: 4.
-	self assert: (c1 perform: #__eq__: env: 1 withArguments: {c2}).
+	self assert: (c1 @env1:__eq__: c2).
 %
 
 category: 'Python-Arithmetic'
@@ -200,9 +200,9 @@ test__mul__complex
 	| c1 c2 result |
 	c1 := complex ___new___: 3 _: 4.
 	c2 := complex ___new___: 1 _: 2.
-	result := c1 perform: #__mul__: env: 1 withArguments: {c2}.
-	self assert: (result perform: #real env: 1) equals: -5.0.
-	self assert: (result perform: #imag env: 1) equals: 10.0.
+	result := c1 @env1:__mul__: c2.
+	self assert: (result @env1:real) equals: -5.0.
+	self assert: (result @env1:imag) equals: 10.0.
 %
 
 category: 'Python-Arithmetic'
@@ -212,9 +212,9 @@ test__mul__real
 
 	| c result |
 	c := complex ___new___: 3 _: 4.
-	result := c perform: #__mul__: env: 1 withArguments: {2}.
-	self assert: (result perform: #real env: 1) equals: 6.0.
-	self assert: (result perform: #imag env: 1) equals: 8.0.
+	result := c @env1:__mul__: 2.
+	self assert: (result @env1:real) equals: 6.0.
+	self assert: (result @env1:imag) equals: 8.0.
 %
 
 category: 'Python-Comparison'
@@ -225,7 +225,7 @@ test__ne__different_values
 	| c1 c2 |
 	c1 := complex ___new___: 3 _: 4.
 	c2 := complex ___new___: 5 _: 6.
-	self assert: (c1 perform: #__ne__: env: 1 withArguments: {c2}).
+	self assert: (c1 @env1:__ne__: c2).
 %
 
 category: 'Python-Comparison'
@@ -236,7 +236,7 @@ test__ne__same_values
 	| c1 c2 |
 	c1 := complex ___new___: 3 _: 4.
 	c2 := complex ___new___: 3 _: 4.
-	self deny: (c1 perform: #__ne__: env: 1 withArguments: {c2}).
+	self deny: (c1 @env1:__ne__: c2).
 %
 
 category: 'Python-Arithmetic'
@@ -246,9 +246,9 @@ test__neg__
 
 	| c result |
 	c := complex ___new___: 3 _: 4.
-	result := c perform: #__neg__ env: 1.
-	self assert: (result perform: #real env: 1) equals: -3.0.
-	self assert: (result perform: #imag env: 1) equals: -4.0.
+	result := c @env1:__neg__.
+	self assert: (result @env1:real) equals: -3.0.
+	self assert: (result @env1:imag) equals: -4.0.
 %
 
 category: 'Python-Initialization'
@@ -259,8 +259,8 @@ test__new__
 	| c |
 	c := complex ___new___: 3 _: 4.
 	self assert: c class equals: complex.
-	self assert: (c perform: #real env: 1) equals: 3.0.
-	self assert: (c perform: #imag env: 1) equals: 4.0.
+	self assert: (c @env1:real) equals: 3.0.
+	self assert: (c @env1:imag) equals: 4.0.
 %
 
 category: 'Python-Initialization'
@@ -270,8 +270,8 @@ test__new__defaults
 
 	| c |
 	c := complex ___new___: nil _: nil.
-	self assert: (c perform: #real env: 1) equals: 0.0.
-	self assert: (c perform: #imag env: 1) equals: 0.0.
+	self assert: (c @env1:real) equals: 0.0.
+	self assert: (c @env1:imag) equals: 0.0.
 %
 
 category: 'Python-Arithmetic'
@@ -281,7 +281,7 @@ test__pos__
 
 	| c result |
 	c := complex ___new___: 3 _: 4.
-	result := c perform: #__pos__ env: 1.
+	result := c @env1:__pos__.
 	self assert: result equals: c.
 %
 
@@ -292,9 +292,9 @@ test__pow__positive
 
 	| c result realPart imagPart |
 	c := complex ___new___: 1 _: 1.
-	result := c perform: #__pow__: env: 1 withArguments: {2}.
-	realPart := result perform: #real env: 1.
-	imagPart := result perform: #imag env: 1.
+	result := c @env1:__pow__: 2.
+	realPart := result @env1:real.
+	imagPart := result @env1:imag.
 	"Check that real part is close to 0.0 (within tolerance for floating point)"
 	self assert: realPart abs < 0.0001.
 	"Check that imaginary part is close to 2.0"
@@ -308,7 +308,7 @@ test__repr__negative_imag
 	
 	| c repr |
 	c := complex ___new___: 3 _: -4.
-	repr := c perform: #__repr__ env: 1.
+	repr := c @env1:__repr__.
 	self assert: repr equals: '(3.0-4.0j)'.
 %
 
@@ -319,7 +319,7 @@ test__repr__positive_imag
 	
 	| c repr |
 	c := complex ___new___: 3 _: 4.
-	repr := c perform: #__repr__ env: 1.
+	repr := c @env1:__repr__.
 	self assert: repr equals: '(3.0+4.0j)'.
 %
 
@@ -330,7 +330,7 @@ test__repr__pure_imaginary
 	
 	| c repr |
 	c := complex ___new___: 0 _: 5.
-	repr := c perform: #__repr__ env: 1.
+	repr := c @env1:__repr__.
 	self assert: repr equals: '5.0j'.
 %
 
@@ -341,8 +341,8 @@ test__str__
 	
 	| c str repr |
 	c := complex ___new___: 3 _: 4.
-	str := c perform: #__str__ env: 1.
-	repr := c perform: #__repr__ env: 1.
+	str := c @env1:__str__.
+	repr := c @env1:__repr__.
 	self assert: str equals: repr.
 %
 
@@ -354,9 +354,9 @@ test__sub__complex
 	| c1 c2 result |
 	c1 := complex ___new___: 5 _: 7.
 	c2 := complex ___new___: 2 _: 3.
-	result := c1 perform: #__sub__: env: 1 withArguments: {c2}.
-	self assert: (result perform: #real env: 1) equals: 3.0.
-	self assert: (result perform: #imag env: 1) equals: 4.0.
+	result := c1 @env1:__sub__: c2.
+	self assert: (result @env1:real) equals: 3.0.
+	self assert: (result @env1:imag) equals: 4.0.
 %
 
 category: 'Python-Arithmetic'
@@ -366,9 +366,9 @@ test__truediv__real
 
 	| c result |
 	c := complex ___new___: 6 _: 8.
-	result := c perform: #__truediv__: env: 1 withArguments: {2}.
-	self assert: (result perform: #real env: 1) equals: 3.0.
-	self assert: (result perform: #imag env: 1) equals: 4.0.
+	result := c @env1:__truediv__: 2.
+	self assert: (result @env1:real) equals: 3.0.
+	self assert: (result @env1:imag) equals: 4.0.
 %
 
 category: 'Numbers'
@@ -378,9 +378,9 @@ test_conjugate
 	
 	| c conj |
 	c := complex ___new___: 3 _: 4.
-	conj := c perform: #conjugate env: 1.
-	self assert: (conj perform: #real env: 1) equals: 3.0.
-	self assert: (conj perform: #imag env: 1) equals: -4.0.
+	conj := c @env1:conjugate.
+	self assert: (conj @env1:real) equals: 3.0.
+	self assert: (conj @env1:imag) equals: -4.0.
 %
 
 category: 'Numbers'
@@ -390,9 +390,9 @@ test_conjugate_negative_imag
 	
 	| c conj |
 	c := complex ___new___: 2 _: -5.
-	conj := c perform: #conjugate env: 1.
-	self assert: (conj perform: #real env: 1) equals: 2.0.
-	self assert: (conj perform: #imag env: 1) equals: 5.0.
+	conj := c @env1:conjugate.
+	self assert: (conj @env1:real) equals: 2.0.
+	self assert: (conj @env1:imag) equals: 5.0.
 %
 
 category: 'Python-Type Conversion'
@@ -401,9 +401,9 @@ test_from_number
 	"Test class method from_number"
 
 	| c |
-	c := complex perform: #from_number: env: 1 withArguments: {5}.
-	self assert: (c perform: #real env: 1) equals: 5.0.
-	self assert: (c perform: #imag env: 1) equals: 0.0.
+	c := complex @env1:from_number: 5.
+	self assert: (c @env1:real) equals: 5.0.
+	self assert: (c @env1:imag) equals: 0.0.
 %
 
 category: 'Python-Attribute Access'
@@ -413,7 +413,7 @@ test_imag
 	
 	| c |
 	c := complex ___new___: 3 _: 4.
-	self assert: (c perform: #imag env: 1) equals: 4.0.
+	self assert: (c @env1:imag) equals: 4.0.
 %
 
 category: 'Python-Inheritance'
@@ -433,8 +433,8 @@ test_negative_both
 
 	| c |
 	c := complex ___new___: -3 _: -4.
-	self assert: (c perform: #real env: 1) equals: -3.0.
-	self assert: (c perform: #imag env: 1) equals: -4.0.
+	self assert: (c @env1:real) equals: -3.0.
+	self assert: (c @env1:imag) equals: -4.0.
 %
 
 category: 'Python-Edge Cases'
@@ -444,8 +444,8 @@ test_negative_real
 
 	| c |
 	c := complex ___new___: -3 _: 4.
-	self assert: (c perform: #real env: 1) equals: -3.0.
-	self assert: (c perform: #imag env: 1) equals: 4.0.
+	self assert: (c @env1:real) equals: -3.0.
+	self assert: (c @env1:imag) equals: 4.0.
 %
 
 category: 'Python-Attribute Access'
@@ -455,7 +455,7 @@ test_real
 	
 	| c |
 	c := complex ___new___: 3 _: 4.
-	self assert: (c perform: #real env: 1) equals: 3.0.
+	self assert: (c @env1:real) equals: 3.0.
 %
 
 category: 'Python-Edge Cases'
@@ -465,9 +465,9 @@ test_zero_complex
 
 	| c |
 	c := complex ___new___: 0 _: 0.
-	self assert: (c perform: #real env: 1) equals: 0.0.
-	self assert: (c perform: #imag env: 1) equals: 0.0.
-	self assert: (c perform: #__repr__ env: 1) equals: '0.0j'.
+	self assert: (c @env1:real) equals: 0.0.
+	self assert: (c @env1:imag) equals: 0.0.
+	self assert: (c @env1:__repr__) equals: '0.0j'.
 %
 
 category: 'Tests - Eval - Complex Functions'
@@ -485,8 +485,8 @@ testEvalComplexArithmetic
 
 	| result |
 	result := self eval: '(3 + 4j) + (1 + 2j)'.
-	self assert: (result perform: #real env: 1) equals: 4.0.
-	self assert: (result perform: #imag env: 1) equals: 6.0.
+	self assert: (result @env1:real) equals: 4.0.
+	self assert: (result @env1:imag) equals: 6.0.
 %
 
 category: 'Tests - Eval - Complex Creation'
@@ -497,8 +497,8 @@ testEvalComplexCreation
 	| result |
 	result := self eval: '3 + 4j'.
 	self assert: (result isKindOf: complex).
-	self assert: (result perform: #real env: 1) equals: 3.0.
-	self assert: (result perform: #imag env: 1) equals: 4.0.
+	self assert: (result @env1:real) equals: 3.0.
+	self assert: (result @env1:imag) equals: 4.0.
 %
 
 category: 'Tests - Eval - Complex Comparison'
@@ -518,8 +518,8 @@ testEvalComplexLiteral
 	| result |
 	result := self eval: '5j'.
 	self assert: (result isKindOf: complex).
-	self assert: (result perform: #real env: 1) equals: 0.0.
-	self assert: (result perform: #imag env: 1) equals: 5.0.
+	self assert: (result @env1:real) equals: 0.0.
+	self assert: (result @env1:imag) equals: 5.0.
 %
 
 category: 'Tests - Eval - Complex Arithmetic'
@@ -529,8 +529,8 @@ testEvalComplexMultiplication
 
 	| result |
 	result := self eval: '(2 + 3j) * 2'.
-	self assert: (result perform: #real env: 1) equals: 4.0.
-	self assert: (result perform: #imag env: 1) equals: 6.0.
+	self assert: (result @env1:real) equals: 4.0.
+	self assert: (result @env1:imag) equals: 6.0.
 %
 
 category: 'Tests - Eval - Complex Arithmetic'
@@ -540,6 +540,6 @@ testEvalComplexNegation
 
 	| result |
 	result := self eval: '-(3 + 4j)'.
-	self assert: (result perform: #real env: 1) equals: -3.0.
-	self assert: (result perform: #imag env: 1) equals: -4.0.
+	self assert: (result @env1:real) equals: -3.0.
+	self assert: (result @env1:imag) equals: -4.0.
 %

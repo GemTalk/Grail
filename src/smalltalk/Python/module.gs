@@ -52,7 +52,7 @@ set compile_env: 0
 category: 'Convenience Methods'
 classmethod: module
 ___instance___
-	^ self perform: #instance env: 1
+	^ self @env1:instance
 %
 
 set compile_env: 1
@@ -70,8 +70,8 @@ instance
 	"Return the singleton instance of a module subclass.
 	Creates it if it doesn't exist."
 	instance == nil ifTrue: [
-		instance := self perform: #new env: 0.
-		instance perform: #initialize env: 1
+		instance := self @env0:new.
+		instance @env1:initialize
 	].
 	^ instance
 %
@@ -138,7 +138,7 @@ __package__: aValue
 category: 'Python-Accessors'
 method: module
 __path__
-	^ (self perform: #includesKey: env: 0 withArguments: { #__path__ })
+	^ (self @env0:includesKey: #__path__)
 		ifTrue: [self ___at___: #__path__] ifFalse: [nil]
 %
 

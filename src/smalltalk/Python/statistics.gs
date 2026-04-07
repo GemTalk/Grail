@@ -200,7 +200,7 @@ initialize_correlation
 		((sxx ___eq___: 0) ___or___: [syy ___eq___: 0]) ifTrue: [
 			StatisticsError ___signal___: 'at least one of the inputs is constant'
 		].
-		sxy ___divide___: ((sxx ___times___: syy) perform: #sqrt env: 0)
+		sxy ___divide___: ((sxx ___times___: syy) @env0:sqrt)
 	]
 %
 
@@ -287,7 +287,7 @@ initialize_geometric_mean
 			].
 			logSum := logSum ___plus___: (val ___ln___)
 		].
-		(logSum ___divide___: n) perform: #exp env: 0
+		(logSum ___divide___: n) @env0:exp
 	]
 %
 
@@ -401,7 +401,7 @@ initialize_median
 		(n ___eq___: 0) ifTrue: [
 			StatisticsError ___signal___: 'median requires at least one data point'
 		].
-		sorted := data perform: #asSortedCollection env: 0.
+		sorted := data @env0:asSortedCollection.
 		mid := (n ___plus___: 1) ___divideInteger___: 2.
 		((n ___modulo___: 2) ___eq___: 1) ifTrue: [
 			sorted ___at___: mid
@@ -425,7 +425,7 @@ initialize_median_grouped
 		interval := (positional ___size___ ___ge___: 2)
 			ifTrue: [positional ___at___: 2]
 			ifFalse: [(keywords == nil) ifTrue: [1.0] ifFalse: [keywords ___at___: #interval ifAbsent: [1.0]]].
-		sorted := data perform: #asSortedCollection env: 0.
+		sorted := data @env0:asSortedCollection.
 		mid := (n ___plus___: 1) ___divideInteger___: 2.
 		L := (sorted ___at___: mid) ___minus___: (interval ___divide___: 2.0).
 		"Count frequency of median class and cumulative frequency below"
@@ -449,7 +449,7 @@ initialize_median_high
 		(n ___eq___: 0) ifTrue: [
 			StatisticsError ___signal___: 'median_high requires at least one data point'
 		].
-		sorted := data perform: #asSortedCollection env: 0.
+		sorted := data @env0:asSortedCollection.
 		((n ___modulo___: 2) ___eq___: 1) ifTrue: [
 			mid := (n ___plus___: 1) ___divideInteger___: 2.
 			sorted ___at___: mid
@@ -471,7 +471,7 @@ initialize_median_low
 		(n ___eq___: 0) ifTrue: [
 			StatisticsError ___signal___: 'median_low requires at least one data point'
 		].
-		sorted := data perform: #asSortedCollection env: 0.
+		sorted := data @env0:asSortedCollection.
 		mid := (n ___plus___: 1) ___divideInteger___: 2.
 		sorted ___at___: mid
 	]
@@ -495,12 +495,12 @@ initialize_mode
 		].
 		maxCount := 0.
 		modeValue := nil.
-		counts perform: #keysAndValuesDo: env: 0 withArguments: {[:k :v |
+		counts @env0:keysAndValuesDo: [:k :v |
 			(v ___gt___: maxCount) ifTrue: [
 				maxCount := v.
 				modeValue := k
 			]
-		]}.
+		].
 		modeValue
 	]
 %
@@ -522,13 +522,13 @@ initialize_multimode
 			counts ___at___: each put: (count ___plus___: 1)
 		].
 		maxCount := 0.
-		counts perform: #valuesDo: env: 0 withArguments: {[:v |
+		counts @env0:valuesDo: [:v |
 			(v ___gt___: maxCount) ifTrue: [maxCount := v]
-		]}.
+		].
 		modes := list ___new___.
-		counts perform: #keysAndValuesDo: env: 0 withArguments: {[:k :v |
+		counts @env0:keysAndValuesDo: [:k :v |
 			(v ___eq___: maxCount) ifTrue: [modes ___append___: k]
-		]}.
+		].
 		modes
 	]
 %
@@ -540,7 +540,7 @@ initialize_pstdev
 	self ___at___: #pstdev put: [:positional :keywords |
 		| var |
 		var := (self ___at___: #pvariance) value: positional value: keywords.
-		var perform: #sqrt env: 0
+		var @env0:sqrt
 	]
 %
 
@@ -589,18 +589,18 @@ initialize_quantiles
 			StatisticsError ___signal___: 'n must be at least 1'
 		].
 		method := (keywords == nil) ifTrue: ['exclusive'] ifFalse: [keywords ___at___: #method ifAbsent: ['exclusive']].
-		sorted := (data perform: #asSortedCollection env: 0) perform: #asArray env: 0.
+		sorted := (data @env0:asSortedCollection) @env0:asArray.
 		result := list ___new___.
 		1 ___to___: (n ___minus___: 1) do: [:i |
 			| m j g |
 			(method ___eq___: 'inclusive') ifTrue: [
 				m := ((len ___minus___: 1) ___times___: i) ___divide___: n.
-				j := m perform: #truncated env: 0.
+				j := m @env0:truncated.
 				g := m ___minus___: j.
 				result ___add___: (((sorted ___at___: (j ___plus___: 1)) ___times___: (1 ___minus___: g)) ___plus___: ((sorted ___at___: ((j ___plus___: 2) ___min___: len)) ___times___: g))
 			] ifFalse: [
 				m := ((len ___plus___: 1) ___times___: i) ___divide___: n.
-				j := m perform: #truncated env: 0.
+				j := m @env0:truncated.
 				g := m ___minus___: j.
 				(j ___lt___: 1) ifTrue: [
 					result ___add___: (sorted ___at___: 1)
@@ -624,7 +624,7 @@ initialize_stdev
 	self ___at___: #stdev put: [:positional :keywords |
 		| var |
 		var := (self ___at___: #variance) value: positional value: keywords.
-		var perform: #sqrt env: 0
+		var @env0:sqrt
 	]
 %
 

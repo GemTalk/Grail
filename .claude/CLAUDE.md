@@ -7,4 +7,4 @@
 # Install Changes and Run Tests
 * `./install.sh` # installs all Smalltalk code
 * `./scripts/run_tests.sh` # run all Python-related tests
-* `source setenv` # needed for stand-alone Topaz scripts (already in `run_tests.sh`)
+* `source .setenv` # needed for stand-alone Topaz scripts

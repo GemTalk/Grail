@@ -771,19 +771,19 @@ PyObject_HasAttrString: obj name: nameString
 category: 'CPython API'
 method: CPythonShim
 PyObject_Repr: obj
-	^ (self wrap: (obj perform: #__repr__ env: 1)) memoryAddress
+	^ (self wrap: (obj @env1:__repr__)) memoryAddress
 %
 
 category: 'CPython API'
 method: CPythonShim
 PyObject_Str: obj
-	^ (self wrap: (obj perform: #__str__ env: 1)) memoryAddress
+	^ (self wrap: (obj @env1:__str__)) memoryAddress
 %
 
 category: 'CPython API'
 method: CPythonShim
 PyObject_Length: obj
-	^ obj perform: #__len__ env: 1
+	^ obj @env1:__len__
 %
 
 ! --------------- Dynamic module loading ---------------
@@ -843,10 +843,9 @@ loadDynamicModule: moduleName fromPath: pathString
 			environmentId: 1.
 	].
 	"Create and initialize the instance"
-	moduleInstance := moduleClass perform: #new env: 0.
-	moduleInstance
-		perform: #'__name__:' env: 1 withArguments: { moduleName };
-		perform: #'__package__:' env: 1 withArguments: { nil }.
+	moduleInstance := moduleClass @env0:new.
+	moduleInstance @env1:__name__: moduleName;
+		 @env1:__package__: nil.
 	^ moduleInstance
 %
 

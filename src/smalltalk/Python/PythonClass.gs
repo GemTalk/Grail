@@ -50,22 +50,21 @@ value: positional value: keywords
 	"Instantiate this class: create instance dict, copy methods, call __init__."
 
 	| instance initFunc |
-	instance := SymbolDictionary perform: #new env: 0.
+	instance := SymbolDictionary @env0:new.
 	"Copy all entries from class to instance, wrapping closures as bound methods"
-	self perform: #keysAndValuesDo: env: 0 withArguments: {[:k :v |
+	self @env0:keysAndValuesDo: [:k :v |
 		(v ___isKindOf___: ExecBlock) ifTrue: [
 			"Wrap closure to auto-inject instance as first positional arg"
-			instance perform: #at:put: env: 0 withArguments: {k.
-				[:pos :kw | v value: (({instance} perform: #, env: 0 withArguments: {pos})) value: kw]}.
+			instance @env0:at: k put: [:pos :kw | v value: (({instance} @env0:, pos)) value: kw].
 		] ifFalse: [
-			instance perform: #at:put: env: 0 withArguments: {k. v}.
+			instance @env0:at: k put: v.
 		].
-	]}.
+	].
 	instance ___at___: #'__class__' put: self.
 	"Call __init__ if defined"
-	initFunc := self perform: #at:ifAbsent: env: 0 withArguments: {#'__init__'. [nil]}.
+	initFunc := self @env0:at: #'__init__' ifAbsent: [nil].
 	initFunc ifNotNil: [
-		initFunc value: (({instance} perform: #, env: 0 withArguments: {positional})) value: keywords.
+		initFunc value: (({instance} @env0:, positional)) value: keywords.
 	].
 	^ instance
 %

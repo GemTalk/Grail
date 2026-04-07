@@ -624,7 +624,7 @@ login
 
 ! ------- Register built-in numeric types with numbers module ABCs
 run
-numbers perform: #'instance' env: 1.
+numbers @env1:instance.
 %
 commit
 

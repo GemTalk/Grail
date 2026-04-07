@@ -87,14 +87,11 @@ __repr__
 		stream ___nextPutAll___: reprStr.
 		stream ___nextPutAll___: ','.
 	] ifFalse: [
-		self perform: #do:separatedBy: env: 0 withArguments: {
-			[:each |
+		self @env0:do: [:each |
 				| reprStr |
 				reprStr := each __repr__.
 				stream ___nextPutAll___: reprStr
-			].
-			[stream ___nextPutAll___: ', ']
-		}
+			] separatedBy: [stream ___nextPutAll___: ', ']
 	].
 
 	stream ___nextPut___: $).

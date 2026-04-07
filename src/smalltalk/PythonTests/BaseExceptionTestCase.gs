@@ -43,7 +43,7 @@ test_creation_no_args
 	exc := BaseException ___new___: BaseException.
 	self assert: exc notNil.
 
-	args := exc perform: #args env: 1.
+	args := exc @env1:args.
 	self assert: args isEmpty.
 %
 
@@ -54,9 +54,9 @@ test_creation_with_args
 
 	| exc args |
 	exc := BaseException ___new___:  BaseException _: #('error message') .
-	exc perform: #__init__: env: 1 withArguments: { #('error message') }.
+	exc @env1:__init__: #('error message').
 
-	args := exc perform: #args env: 1.
+	args := exc @env1:args.
 	self assert: args size equals: 1.
 	self assert: (args at: 1) equals: 'error message'.
 %
@@ -68,16 +68,16 @@ test_equality
 
 	| exc1 exc2 exc3 |
 	exc1 := BaseException ___new___:  BaseException _: #('msg') .
-	exc1 perform: #__init__: env: 1 withArguments: { #('msg') }.
+	exc1 @env1:__init__: #('msg').
 
 	exc2 := BaseException ___new___:  BaseException _: #('msg') .
-	exc2 perform: #__init__: env: 1 withArguments: { #('msg') }.
+	exc2 @env1:__init__: #('msg').
 
 	exc3 := BaseException ___new___:  BaseException _: #('different') .
-	exc3 perform: #__init__: env: 1 withArguments: { #('different') }.
+	exc3 @env1:__init__: #('different').
 
-	self assert: (exc1 perform: #__eq__: env: 1 withArguments: { exc2 }).
-	self assert: (exc1 perform: #__ne__: env: 1 withArguments: { exc3 }).
+	self assert: (exc1 @env1:__eq__: exc2).
+	self assert: (exc1 @env1:__ne__: exc3).
 %
 
 category: 'Python-Tests-BaseException'
@@ -97,8 +97,8 @@ test_repr
 
 	| exc repr |
 	exc := BaseException ___new___:  BaseException _: #('test message') .
-	exc perform: #__init__: env: 1 withArguments: { #('test message') }.
-	repr := exc perform: #__repr__ env: 1.
+	exc @env1:__init__: #('test message').
+	repr := exc @env1:__repr__.
 
 	self assert: (repr includesString: 'BaseException').
 	self assert: (repr includesString: 'test message').
@@ -111,7 +111,7 @@ test_str_empty
 
 	| exc str |
 	exc := BaseException ___new___: BaseException.
-	str := exc perform: #__str__ env: 1.
+	str := exc @env1:__str__.
 	self assert: str isEmpty.
 %
 
@@ -122,8 +122,8 @@ test_str_multiple_args
 
 	| exc str |
 	exc := BaseException ___new___:  BaseException _: #('arg1' 'arg2') .
-	exc perform: #__init__: env: 1 withArguments: { #('arg1' 'arg2') }.
-	str := exc perform: #__str__ env: 1.
+	exc @env1:__init__: #('arg1' 'arg2').
+	str := exc @env1:__str__.
 	self assert: str notEmpty.
 %
 
@@ -134,7 +134,7 @@ test_str_single_arg
 
 	| exc str |
 	exc := BaseException ___new___:  BaseException _: #('test') .
-	exc perform: #__init__: env: 1 withArguments: { #('test') }.
-	str := exc perform: #__str__ env: 1.
+	exc @env1:__init__: #('test').
+	str := exc @env1:__str__.
 	self assert: str equals: 'test'.
 %

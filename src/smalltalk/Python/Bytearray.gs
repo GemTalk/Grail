@@ -190,7 +190,7 @@ __new__: cls _: source _: encoding
 		encodingStr ___eq___: 'utf8'
 	]) ifTrue: [
 		| utf8Bytes |
-		utf8Bytes := source perform: #encodeAsUTF8 env: 0.
+		utf8Bytes := source @env0:encodeAsUTF8.
 		result := cls __new__: (utf8Bytes ___size___).
 		1 ___to___: utf8Bytes ___size___ do: [:i |
 			result ___at___: i put: (utf8Bytes ___at___: i)
@@ -298,7 +298,7 @@ __iadd__: other
 		TypeError ___signal___: ('can''t concat bytearray to ' ___concat___: otherClass)
 	].
 
-	self perform: #extend: env: 1 withArguments: {other}.
+	self @env1:extend: other.
 	^ self
 %
 
@@ -334,7 +334,7 @@ __imul__: count
 
 	"Repeat n-1 times"
 	2 ___to___: n do: [:rep |
-		self perform: #extend: env: 1 withArguments: {original}
+		self @env1:extend: original
 	].
 
 	^ self
@@ -362,7 +362,7 @@ __setitem__: index _: value
 	].
 
 	"Validate byte value"
-	((val perform: #< env: 0 withArguments: {0}) or: [
+	((val @env0:< 0) or: [
 		val ___gt___: 255
 	]) ifTrue: [
 		ValueError ___signal___: 'byte must be in range(0, 256)'
@@ -382,7 +382,7 @@ append: item
 	val := item.
 
 	"Validate byte value"
-	((val perform: #< env: 0 withArguments: {0}) or: [
+	((val @env0:< 0) or: [
 		val ___gt___: 255
 	]) ifTrue: [
 		ValueError ___signal___: 'byte must be in range(0, 256)'
@@ -481,21 +481,14 @@ insert: index _: item
 	].
 
 	"Validate byte value"
-	((val perform: #< env: 0 withArguments: {0}) or: [
+	((val @env0:< 0) or: [
 		val ___gt___: 255
 	]) ifTrue: [
 		ValueError ___signal___: 'byte must be in range(0, 256)'
 	].
 
 	"Insert at position (convert to 1-based)"
-	self 
-		perform: #insertAll:at: 
-		env: 0 
-		withArguments: {
-			bytearray ___with___: val. 
-			index ___plus___: 1.
-			
-		}
+	self @env0:insertAll: (bytearray ___with___: val) at: (index ___plus___: 1)
 %
 
 category: 'Python-Mutation Methods'
@@ -510,7 +503,7 @@ pop
 		IndexError ___signal___: 'pop from empty bytearray'
 	].
 
-	^ self perform: #removeLast env: 0
+	^ self @env0:removeLast
 %
 
 category: 'Python-Mutation Methods'

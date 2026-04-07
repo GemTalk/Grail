@@ -44,7 +44,7 @@ test__add__
 	b1 :=  bytes withAll: {1. 2}.
 	b2 :=  bytes withAll: {3. 4}.
 
-	result := b1 perform: #__add__: env: 1 withArguments: {b2}.
+	result := b1 @env1:__add__: b2.
 	self assert: result size equals: 4.
 	self assert: (result at: 1) equals: 1.
 	self assert: (result at: 4) equals: 4.
@@ -59,7 +59,7 @@ test__class__
 	b :=  bytes withAll: {1. 2. 3}.
 	bytesType := Python at: #'bytes'.
 
-	result := b perform: #__class__ env: 1.
+	result := b @env1:__class__.
 	self assert: result equals: bytesType.
 	self assert: result equals: bytes.
 %
@@ -87,8 +87,8 @@ test__eq__
 	b2 :=  bytes withAll: {1. 2. 3}.
 	b3 :=  bytes withAll: {1. 2. 4}.
 
-	self assert: (b1 perform: #__eq__: env: 1 withArguments: {b2}).
-	self deny: (b1 perform: #__eq__: env: 1 withArguments: {b3}).
+	self assert: (b1 @env1:__eq__: b2).
+	self deny: (b1 @env1:__eq__: b3).
 %
 
 category: 'Tests - Sequence Protocol'
@@ -98,9 +98,9 @@ test__getitem__
 
 	| b |
 	b :=  bytes withAll: {65. 66. 67}.
-	self assert: (b perform: #__getitem__: env: 1 withArguments: {0}) equals: 65.
-	self assert: (b perform: #__getitem__: env: 1 withArguments: {1}) equals: 66.
-	self assert: (b perform: #__getitem__: env: 1 withArguments: {2}) equals: 67.
+	self assert: (b @env1:__getitem__: 0) equals: 65.
+	self assert: (b @env1:__getitem__: 1) equals: 66.
+	self assert: (b @env1:__getitem__: 2) equals: 67.
 %
 
 category: 'Tests - Sequence Protocol'
@@ -110,9 +110,9 @@ test__getitem__negative
 
 	| b |
 	b :=  bytes withAll: {65. 66. 67}.
-	self assert: (b perform: #__getitem__: env: 1 withArguments: {-1}) equals: 67.
-	self assert: (b perform: #__getitem__: env: 1 withArguments: {-2}) equals: 66.
-	self assert: (b perform: #__getitem__: env: 1 withArguments: {-3}) equals: 65.
+	self assert: (b @env1:__getitem__: -1) equals: 67.
+	self assert: (b @env1:__getitem__: -2) equals: 66.
+	self assert: (b @env1:__getitem__: -3) equals: 65.
 %
 
 category: 'Tests - Sequence Protocol'
@@ -122,8 +122,8 @@ test__getitem__outOfRange
 
 	| b |
 	b :=  bytes withAll: {1. 2. 3}.
-	self should: [b perform: #__getitem__: env: 1 withArguments: {10}] raise: IndexError.
-	self should: [b perform: #__getitem__: env: 1 withArguments: {-10}] raise: IndexError.
+	self should: [b @env1:__getitem__: 10] raise: IndexError.
+	self should: [b @env1:__getitem__: -10] raise: IndexError.
 %
 
 category: 'Tests - Hashing'
@@ -135,8 +135,8 @@ test__hash__
 	b1 :=  bytes withAll: {1. 2. 3}.
 	b2 :=  bytes withAll: {1. 2. 3}.
 
-	h1 := b1 perform: #__hash__ env: 1.
-	h2 := b2 perform: #__hash__ env: 1.
+	h1 := b1 @env1:__hash__.
+	h2 := b2 @env1:__hash__.
 
 	"Same bytes should have same hash"
 	self assert: h1 equals: h2.
@@ -160,7 +160,7 @@ test__mul__
 	| b result |
 	b :=  bytes withAll: {1. 2}.
 
-	result := b perform: #__mul__: env: 1 withArguments: {3}.
+	result := b @env1:__mul__: 3.
 	self assert: result size equals: 6.
 	self assert: (result at: 1) equals: 1.
 	self assert: (result at: 3) equals: 1.
@@ -176,8 +176,8 @@ test__ne__
 	b1 :=  bytes withAll: {1. 2. 3}.
 	b2 :=  bytes withAll: {1. 2. 4}.
 
-	self assert: (b1 perform: #__ne__: env: 1 withArguments: {b2}).
-	self deny: (b1 perform: #__ne__: env: 1 withArguments: {b1}).
+	self assert: (b1 @env1:__ne__: b2).
+	self deny: (b1 @env1:__ne__: b1).
 %
 
 category: 'Tests - Initialization'
@@ -196,11 +196,11 @@ test__new__fromBytes
 	"Test bytes(b'hello') creates a copy"
 
 	| original copy |
-	original := bytes perform: #__new__:_:_: env: 1 withArguments: {bytes. 'hello'. 'ascii'}.
+	original := bytes @env1:__new__: bytes _: 'hello' _: 'ascii'.
 	copy := bytes ___new___: bytes _: original.
 	
 	self assert: copy size equals: 5.
-	self assert: (copy perform: #__eq__: env: 1 withArguments: {original}).
+	self assert: (copy @env1:__eq__: original).
 	self deny: (copy == original).
 %
 
@@ -264,7 +264,7 @@ test__new__fromRange
 	"Test bytes(range(65, 68)) creates b'ABC'"
 
 	| range result |
-	range := Interval perform: #__new__:_:_:_: env: 1 withArguments: {Interval. 65. 68. 1}.
+	range := Interval @env1:__new__: Interval _: 65 _: 68 _: 1.
 	
 	result := bytes ___new___: bytes _: range.
 	self assert: result size equals: 3.
@@ -281,7 +281,7 @@ test__new__fromStringAscii
 	| str result |
 	str := 'hello'.
 	
-	result := bytes perform: #__new__:_:_: env: 1 withArguments: {bytes. str. 'ascii'}.
+	result := bytes @env1:__new__: bytes _: str _: 'ascii'.
 	self assert: result size equals: 5.
 	self assert: (result at: 1) equals: 104.
 	self assert: (result at: 5) equals: 111.
@@ -295,7 +295,7 @@ test__new__fromStringLatin1
 	| str result |
 	str := 'hello'.
 
-	result := bytes perform: #__new__:_:_: env: 1 withArguments: {bytes. str. 'latin-1'}.
+	result := bytes @env1:__new__: bytes _: str _: 'latin-1'.
 	self assert: result size equals: 5.
 %
 
@@ -320,7 +320,7 @@ test__new__fromStringUtf8
 	| str result |
 	str := 'hello'.
 	
-	result := bytes perform: #__new__:_:_: env: 1 withArguments: {bytes. str. 'utf-8'}.
+	result := bytes @env1:__new__: bytes _: str _: 'utf-8'.
 	self assert: result size equals: 5.
 %
 
@@ -330,8 +330,8 @@ test__repr__
 	"Test bytes.__repr__()"
 
 	| b result |
-	b := bytes perform: #__new__:_:_: env: 1 withArguments: {bytes. 'hello'. 'ascii'}.
-	result := b perform: #__repr__ env: 1.
+	b := bytes @env1:__new__: bytes _: 'hello' _: 'ascii'.
+	result := b @env1:__repr__.
 
 	"Should start with b' and end with '"
 	self assert: ((result at: 1) codePoint) == 98.
@@ -345,7 +345,7 @@ test__setitem__immutable
 
 	| b |
 	b :=  bytes withAll: {1. 2. 3}.
-	self should: [b perform: #__setitem__:_: env: 1 withArguments: {0. 99}] raise: TypeError.
+	self should: [b @env1:__setitem__: 0 _: 99] raise: TypeError.
 %
 
 category: 'Tests - Bytes Methods'
@@ -355,7 +355,7 @@ test_capitalize
 
 	| b result |
 	b :=  bytes withAll: {104. 101. 108. 108. 111. 32. 119. 111. 114. 108. 100}.
-	result := b perform: #capitalize env: 1.
+	result := b @env1:capitalize.
 	self assert: (result at: 1) equals: 72.
 	self assert: (result at: 7) equals: 119.
 %
@@ -367,7 +367,7 @@ test_center
 
 	| b result |
 	b :=  bytes withAll: {97. 98. 99}.
-	result := b perform: #center: env: 1 withArguments: {9}.
+	result := b @env1:center: 9.
 
 	self assert: result size equals: 9.
 	self assert: (result at: 4) equals: 97.
@@ -380,9 +380,9 @@ test_count
 
 	| b |
 	b :=  bytes withAll: {65. 66. 65. 67. 65}.
-	self assert: (b perform: #count: env: 1 withArguments: {65}) equals: 3.
-	self assert: (b perform: #count: env: 1 withArguments: {66}) equals: 1.
-	self assert: (b perform: #count: env: 1 withArguments: {68}) equals: 0.
+	self assert: (b @env1:count: 65) equals: 3.
+	self assert: (b @env1:count: 66) equals: 1.
+	self assert: (b @env1:count: 68) equals: 0.
 %
 
 category: 'Tests - Bytes Methods'
@@ -391,8 +391,8 @@ test_decode_ascii
 	"Test bytes.decode('ascii')"
 
 	| b result |
-	b := bytes perform: #__new__:_:_: env: 1 withArguments: {bytes. 'hello'. 'ascii'}.
-	result := b perform: #decode: env: 1 withArguments: {'ascii'}.
+	b := bytes @env1:__new__: bytes _: 'hello' _: 'ascii'.
+	result := b @env1:decode: 'ascii'.
 	self assert: result equals: 'hello'.
 %
 
@@ -402,13 +402,13 @@ test_endswith
 	"Test bytes.endswith(suffix)"
 
 	| b suffix |
-	b := bytes perform: #__new__:_:_: env: 1 withArguments: {bytes. 'hello'. 'ascii'}.
+	b := bytes @env1:__new__: bytes _: 'hello' _: 'ascii'.
 	suffix :=  bytes withAll: {108. 111}.
 
-	self assert: (b perform: #endswith: env: 1 withArguments: {suffix}).
+	self assert: (b @env1:endswith: suffix).
 
 	suffix :=  bytes withAll: {104. 101}.
-	self deny: (b perform: #endswith: env: 1 withArguments: {suffix}).
+	self deny: (b @env1:endswith: suffix).
 %
 
 category: 'Tests - Bytes Methods'
@@ -419,7 +419,7 @@ test_expandtabs
 	| b result |
 	b :=  bytes withAll: {104. 101. 108. 9. 119. 111. 114. 108. 100}.
 
-	result := b perform: #expandtabs env: 1.
+	result := b @env1:expandtabs.
 	self assert: result size > 9.
 %
 
@@ -429,13 +429,13 @@ test_find
 	"Test bytes.find(sub)"
 
 	| b sub |
-	b := bytes perform: #__new__:_:_: env: 1 withArguments: {bytes. 'hello'. 'ascii'}.
+	b := bytes @env1:__new__: bytes _: 'hello' _: 'ascii'.
 	sub :=  bytes withAll: {108. 108}.
 
-	self assert: (b perform: #find: env: 1 withArguments: {sub}) equals: 2.
+	self assert: (b @env1:find: sub) equals: 2.
 
 	sub :=  bytes withAll: {120. 121}.
-	self assert: (b perform: #find: env: 1 withArguments: {sub}) equals: -1.
+	self assert: (b @env1:find: sub) equals: -1.
 %
 
 category: 'Tests - Bytes Methods'
@@ -444,7 +444,7 @@ test_fromhex
 	"Test bytes.fromhex(string)"
 
 	| result |
-	result := bytes perform: #fromhex:_: env: 1 withArguments: {bytes. 'ff0010'}.
+	result := bytes @env1:fromhex: bytes _: 'ff0010'.
 
 	self assert: result size equals: 3.
 	self assert: (result at: 1) equals: 255.
@@ -459,7 +459,7 @@ test_hex
 
 	| b result |
 	b :=  bytes withAll: {255. 0. 16}.
-	result := b perform: #hex env: 1.
+	result := b @env1:hex.
 	self assert: result equals: 'FF0010'.
 %
 
@@ -470,9 +470,9 @@ test_index
 
 	| b |
 	b :=  bytes withAll: {65. 66. 67}.
-	self assert: (b perform: #index: env: 1 withArguments: {65}) equals: 0.
-	self assert: (b perform: #index: env: 1 withArguments: {66}) equals: 1.
-	self assert: (b perform: #index: env: 1 withArguments: {67}) equals: 2.
+	self assert: (b @env1:index: 65) equals: 0.
+	self assert: (b @env1:index: 66) equals: 1.
+	self assert: (b @env1:index: 67) equals: 2.
 %
 
 category: 'Tests - Sequence Methods'
@@ -482,7 +482,7 @@ test_indexNotFound
 
 	| b |
 	b :=  bytes withAll: {1. 2. 3}.
-	self should: [b perform: #index: env: 1 withArguments: {99}] raise: ValueError.
+	self should: [b @env1:index: 99] raise: ValueError.
 %
 
 category: 'Tests - Bytes Methods'
@@ -494,8 +494,8 @@ test_isalnum
 	b1 :=  bytes withAll: {97. 49. 98}.
 	b2 :=  bytes withAll: {97. 32. 98}.
 
-	self assert: (b1 perform: #isalnum env: 1).
-	self deny: (b2 perform: #isalnum env: 1).
+	self assert: (b1 @env1:isalnum).
+	self deny: (b2 @env1:isalnum).
 %
 
 category: 'Tests - Bytes Methods'
@@ -507,8 +507,8 @@ test_isalpha
 	b1 :=  bytes withAll: {97. 98. 99}.
 	b2 :=  bytes withAll: {97. 49. 99}.
 
-	self assert: (b1 perform: #isalpha env: 1).
-	self deny: (b2 perform: #isalpha env: 1).
+	self assert: (b1 @env1:isalpha).
+	self deny: (b2 @env1:isalpha).
 %
 
 category: 'Tests - Bytes Methods'
@@ -520,8 +520,8 @@ test_isascii
 	b1 :=  bytes withAll: {65. 66. 67}.
 	b2 :=  bytes withAll: {65. 200. 67}.
 
-	self assert: (b1 perform: #isascii env: 1).
-	self deny: (b2 perform: #isascii env: 1).
+	self assert: (b1 @env1:isascii).
+	self deny: (b2 @env1:isascii).
 %
 
 category: 'Tests - Bytes Methods'
@@ -533,8 +533,8 @@ test_isdigit
 	b1 :=  bytes withAll: {49. 50. 51}.
 	b2 :=  bytes withAll: {49. 97. 51}.
 
-	self assert: (b1 perform: #isdigit env: 1).
-	self deny: (b2 perform: #isdigit env: 1).
+	self assert: (b1 @env1:isdigit).
+	self deny: (b2 @env1:isdigit).
 %
 
 category: 'Tests - Bytes Methods'
@@ -546,8 +546,8 @@ test_islower
 	b1 :=  bytes withAll: {97. 98. 99}.
 	b2 :=  bytes withAll: {97. 66. 99}.
 
-	self assert: (b1 perform: #islower env: 1).
-	self deny: (b2 perform: #islower env: 1).
+	self assert: (b1 @env1:islower).
+	self deny: (b2 @env1:islower).
 %
 
 category: 'Tests - Bytes Methods'
@@ -559,8 +559,8 @@ test_isspace
 	b1 :=  bytes withAll: {32. 9. 10}.
 	b2 :=  bytes withAll: {32. 97. 10}.
 
-	self assert: (b1 perform: #isspace env: 1).
-	self deny: (b2 perform: #isspace env: 1).
+	self assert: (b1 @env1:isspace).
+	self deny: (b2 @env1:isspace).
 %
 
 category: 'Tests - Bytes Methods'
@@ -573,9 +573,9 @@ test_istitle
 	b2 :=  bytes withAll: {104. 101. 108. 108. 111. 32. 119. 111. 114. 108. 100}.
 	b3 :=  bytes withAll: {72. 69. 76. 76. 79. 32. 87. 79. 82. 76. 68}.
 
-	self assert: (b1 perform: #istitle env: 1).
-	self deny: (b2 perform: #istitle env: 1).
-	self deny: (b3 perform: #istitle env: 1).
+	self assert: (b1 @env1:istitle).
+	self deny: (b2 @env1:istitle).
+	self deny: (b3 @env1:istitle).
 %
 
 category: 'Tests - Bytes Methods'
@@ -587,8 +587,8 @@ test_isupper
 	b1 :=  bytes withAll: {65. 66. 67}.
 	b2 :=  bytes withAll: {65. 98. 67}.
 
-	self assert: (b1 perform: #isupper env: 1).
-	self deny: (b2 perform: #isupper env: 1).
+	self assert: (b1 @env1:isupper).
+	self deny: (b2 @env1:isupper).
 %
 
 category: 'Tests - Bytes Methods'
@@ -602,7 +602,7 @@ test_join
 	parts add: (bytes ___new___: bytes _: {97}).
 	parts add: (bytes ___new___: bytes _: {98}).
 
-	result := sep perform: #join: env: 1 withArguments: {parts}.
+	result := sep @env1:join: parts.
 	self assert: result size equals: 3.
 	self assert: (result at: 1) equals: 97.
 	self assert: (result at: 2) equals: 44.
@@ -616,7 +616,7 @@ test_ljust
 
 	| b result |
 	b :=  bytes withAll: {97. 98. 99}.
-	result := b perform: #ljust: env: 1 withArguments: {10}.
+	result := b @env1:ljust: 10.
 
 	self assert: result size equals: 10.
 	self assert: (result at: 1) equals: 97.
@@ -630,7 +630,7 @@ test_lower
 
 	| b result |
 	b :=  bytes withAll: {72. 69. 76. 76. 79}.
-	result := b perform: #lower env: 1.
+	result := b @env1:lower.
 	self assert: (result at: 1) equals: 104.
 	self assert: (result at: 2) equals: 101.
 %
@@ -642,7 +642,7 @@ test_lstrip
 
 	| b result |
 	b :=  bytes withAll: {32. 97. 98. 99. 32}.
-	result := b perform: #lstrip env: 1.
+	result := b @env1:lstrip.
 	self assert: result size equals: 4.
 	self assert: (result at: 1) equals: 97.
 %
@@ -656,7 +656,7 @@ test_maketrans
 	frm :=  bytes withAll: {97. 98. 99}.
 	to :=  bytes withAll: {49. 50. 51}.
 
-	table := bytes perform: #maketrans:_: env: 1 withArguments: {frm. to}.
+	table := bytes @env1:maketrans: frm _: to.
 	self assert: (table size) equals: 256.
 	self assert: (table at: 98) equals: 49.
 %
@@ -670,7 +670,7 @@ test_partition
 	b :=  bytes withAll: {104. 101. 108. 108. 111. 32. 119. 111. 114. 108. 100}.
 	sep := bytes ___new___: bytes _: {32}.
 
-	result := b perform: #partition: env: 1 withArguments: {sep}.
+	result := b @env1:partition: sep.
 	self assert: result size equals: 3.
 	self assert: (result at: 1) size equals: 5.
 	self assert: (result at: 3) size equals: 5.
@@ -685,7 +685,7 @@ test_removeprefix
 	b :=  bytes withAll: {104. 101. 108. 108. 111. 32. 119. 111. 114. 108. 100}.
 	prefix :=  bytes withAll: {104. 101. 108. 108. 111. 32}.
 
-	result := b perform: #removeprefix: env: 1 withArguments: {prefix}.
+	result := b @env1:removeprefix: prefix.
 	self assert: result size equals: 5.
 	self assert: (result at: 1) equals: 119.
 %
@@ -699,7 +699,7 @@ test_removesuffix
 	b :=  bytes withAll: {104. 101. 108. 108. 111. 32. 119. 111. 114. 108. 100}.
 	suffix :=  bytes withAll: {32. 119. 111. 114. 108. 100}.
 
-	result := b perform: #removesuffix: env: 1 withArguments: {suffix}.
+	result := b @env1:removesuffix: suffix.
 	self assert: result size equals: 5.
 	self assert: (result at: 1) equals: 104.
 %
@@ -714,7 +714,7 @@ test_replace
 	old :=  bytes withAll: {108. 108}.
 	new :=  bytes withAll: {120. 120}.
 
-	result := b perform: #replace:_: env: 1 withArguments: {old. new}.
+	result := b @env1:replace: old _: new.
 	self assert: (result at: 3) equals: 120.
 	self assert: (result at: 4) equals: 120.
 %
@@ -728,7 +728,7 @@ test_rfind
 	b :=  bytes withAll: {97. 98. 97. 98. 99}.
 	sub := bytes ___new___: bytes _: {97}.
 
-	self assert: (b perform: #rfind: env: 1 withArguments: {sub}) equals: 2.
+	self assert: (b @env1:rfind: sub) equals: 2.
 %
 
 category: 'Tests - Bytes Methods'
@@ -740,7 +740,7 @@ test_rindex
 	b :=  bytes withAll: {97. 98. 97. 98. 99}.
 	sub := bytes ___new___: bytes _: {97}.
 
-	self assert: (b perform: #rindex: env: 1 withArguments: {sub}) equals: 2.
+	self assert: (b @env1:rindex: sub) equals: 2.
 %
 
 category: 'Tests - Bytes Methods'
@@ -752,7 +752,7 @@ test_rindexNotFound
 	b :=  bytes withAll: {1. 2. 3}.
 	sub := bytes ___new___: bytes _: {99}.
 
-	self should: [b perform: #rindex: env: 1 withArguments: {sub}] raise: ValueError.
+	self should: [b @env1:rindex: sub] raise: ValueError.
 %
 
 category: 'Tests - Bytes Methods'
@@ -762,7 +762,7 @@ test_rjust
 
 	| b result |
 	b :=  bytes withAll: {97. 98. 99}.
-	result := b perform: #rjust: env: 1 withArguments: {10}.
+	result := b @env1:rjust: 10.
 
 	self assert: result size equals: 10.
 	self assert: (result at: 1) equals: 32.
@@ -778,7 +778,7 @@ test_rpartition
 	b :=  bytes withAll: {104. 101. 108. 108. 111. 32. 119. 111. 114. 108. 100}.
 	sep := bytes ___new___: bytes _: {32}.
 
-	result := b perform: #rpartition: env: 1 withArguments: {sep}.
+	result := b @env1:rpartition: sep.
 	self assert: (result size) equals: 3.
 	self assert: (result at: 1) size equals: 5.
 	self assert: (result at: 3) size equals: 5.
@@ -793,7 +793,7 @@ test_rsplit
 	b :=  bytes withAll: {97. 44. 98. 44. 99. 44. 100}.
 	sep := bytes ___new___: bytes _: {44}.
 
-	result := b perform: #rsplit:_: env: 1 withArguments: {sep. 1}.
+	result := b @env1:rsplit: sep _: 1.
 	self assert: (result size) equals: 2.
 %
 
@@ -807,7 +807,7 @@ test_rsplit_maxsplit
 	b :=  bytes withAll: {97. 44. 98. 44. 99. 44. 100}.
 	sep := bytes ___new___: bytes _: {44}.
 
-	result := b perform: #rsplit:_: env: 1 withArguments: {sep. 2}.
+	result := b @env1:rsplit: sep _: 2.
 	self assert: (result size) equals: 3.
 
 	part0 := result at: 1.
@@ -835,7 +835,7 @@ test_rsplit_maxsplit_negative
 	b :=  bytes withAll: {97. 44. 98. 44. 99}.
 	sep := bytes ___new___: bytes _: {44}.
 
-	result := b perform: #rsplit:_: env: 1 withArguments: {sep. -1}.
+	result := b @env1:rsplit: sep _: -1.
 	self assert: (result size) equals: 3.
 %
 
@@ -849,7 +849,7 @@ test_rsplit_maxsplit_one
 	b :=  bytes withAll: {97. 44. 98. 44. 99. 44. 100}.
 	sep := bytes ___new___: bytes _: {44}.
 
-	result := b perform: #rsplit:_: env: 1 withArguments: {sep. 1}.
+	result := b @env1:rsplit: sep _: 1.
 	self assert: (result size) equals: 2.
 
 	part0 := result at: 1.
@@ -869,7 +869,7 @@ test_rstrip
 
 	| b result |
 	b :=  bytes withAll: {32. 97. 98. 99. 32}.
-	result := b perform: #rstrip env: 1.
+	result := b @env1:rstrip.
 	self assert: result size equals: 4.
 	self assert: (result at: 4) equals: 99.
 %
@@ -883,7 +883,7 @@ test_split
 	b :=  bytes withAll: {97. 44. 98. 44. 99}.
 	sep := bytes ___new___: bytes _: {44}.
 
-	result := b perform: #split: env: 1 withArguments: {sep}.
+	result := b @env1:split: sep.
 	self assert: (result size) equals: 3.
 %
 
@@ -897,7 +897,7 @@ test_split_maxsplit
 	b :=  bytes withAll: {97. 44. 98. 44. 99. 44. 100}.
 	sep := bytes ___new___: bytes _: {44}.
 
-	result := b perform: #split:_: env: 1 withArguments: {sep. 2}.
+	result := b @env1:split: sep _: 2.
 	self assert: (result size) equals: 3.
 
 	part0 := result at: 1.
@@ -925,7 +925,7 @@ test_split_maxsplit_negative
 	b :=  bytes withAll: {97. 44. 98. 44. 99}.
 	sep := bytes ___new___: bytes _: {44}.
 
-	result := b perform: #split:_: env: 1 withArguments: {sep. -1}.
+	result := b @env1:split: sep _: -1.
 	self assert: (result size) equals: 3.
 %
 
@@ -939,7 +939,7 @@ test_split_maxsplit_one
 	b :=  bytes withAll: {97. 44. 98. 44. 99. 44. 100}.
 	sep := bytes ___new___: bytes _: {44}.
 
-	result := b perform: #split:_: env: 1 withArguments: {sep. 1}.
+	result := b @env1:split: sep _: 1.
 	self assert: (result size) equals: 2.
 
 	part0 := result at: 1.
@@ -959,7 +959,7 @@ test_splitlines
 	| b result |
 	b :=  bytes withAll: {104. 101. 108. 108. 111. 10. 119. 111. 114}.
 
-	result := b perform: #splitlines env: 1.
+	result := b @env1:splitlines.
 	self assert: result size equals: 2.
 	self assert: (result at: 1) size equals: 5.
 %
@@ -970,13 +970,13 @@ test_startswith
 	"Test bytes.startswith(prefix)"
 
 	| b prefix |
-	b := bytes perform: #__new__:_:_: env: 1 withArguments: {bytes. 'hello'. 'ascii'}.
+	b := bytes @env1:__new__: bytes _: 'hello' _: 'ascii'.
 	prefix :=  bytes withAll: {104. 101}.
 
-	self assert: (b perform: #startswith: env: 1 withArguments: {prefix}).
+	self assert: (b @env1:startswith: prefix).
 
 	prefix :=  bytes withAll: {108. 108}.
-	self deny: (b perform: #startswith: env: 1 withArguments: {prefix}).
+	self deny: (b @env1:startswith: prefix).
 %
 
 category: 'Tests - Bytes Methods'
@@ -986,7 +986,7 @@ test_strip
 
 	| b result |
 	b :=  bytes withAll: {32. 97. 98. 99. 32}.
-	result := b perform: #strip env: 1.
+	result := b @env1:strip.
 	self assert: result size equals: 3.
 	self assert: (result at: 1) equals: 97.
 %
@@ -998,7 +998,7 @@ test_swapcase
 
 	| b result |
 	b :=  bytes withAll: {72. 101. 108. 108. 111. 32. 87. 111. 114. 108. 100}.
-	result := b perform: #swapcase env: 1.
+	result := b @env1:swapcase.
 	self assert: (result at: 1) equals: 104.
 	self assert: (result at: 7) equals: 119.
 %
@@ -1010,7 +1010,7 @@ test_title
 
 	| b result |
 	b :=  bytes withAll: {104. 101. 108. 108. 111. 32. 119. 111. 114. 108. 100}.
-	result := b perform: #title env: 1.
+	result := b @env1:title.
 	self assert: (result at: 1) equals: 72.
 	self assert: (result at: 7) equals: 87.
 %
@@ -1025,8 +1025,8 @@ test_translate
 	frm :=  bytes withAll: {97. 98. 99}.
 	to :=  bytes withAll: {49. 50. 51}.
 
-	table := bytes perform: #maketrans:_: env: 1 withArguments: {frm. to}.
-	result := b perform: #translate: env: 1 withArguments: {table}.
+	table := bytes @env1:maketrans: frm _: to.
+	result := b @env1:translate: table.
 
 	self assert: (result at: 1) equals: 49.
 	self assert: (result at: 2) equals: 50.
@@ -1039,8 +1039,8 @@ test_upper
 	"Test bytes.upper()"
 
 	| b result |
-	b := bytes perform: #__new__:_:_: env: 1 withArguments: {bytes. 'hello'. 'ascii'}.
-	result := b perform: #upper env: 1.
+	b := bytes @env1:__new__: bytes _: 'hello' _: 'ascii'.
+	result := b @env1:upper.
 	self assert: (result at: 1) equals: 72.
 	self assert: (result at: 2) equals: 69.
 %
@@ -1052,7 +1052,7 @@ test_zfill
 
 	| b result |
 	b :=  bytes withAll: {52. 50}.
-	result := b perform: #zfill: env: 1 withArguments: {5}.
+	result := b @env1:zfill: 5.
 
 	self assert: result size equals: 5.
 	self assert: (result at: 1) equals: 48.

@@ -157,8 +157,7 @@ category: 'Python-Initialization'
 method: _shimtest
 initialize_test_float
 	self ___at___: #test_float put: [:positional :keywords |
-		self ___class___ perform: #'callTestFloat:' env: 0
-			withArguments: { positional ___at___: 1 }
+		self ___class___ @env0:callTestFloat: (positional ___at___: 1)
 	]
 %
 
@@ -166,8 +165,7 @@ category: 'Python-Initialization'
 method: _shimtest
 initialize_test_int
 	self ___at___: #test_int put: [:positional :keywords |
-		self ___class___ perform: #'callTestInt:' env: 0
-			withArguments: { positional ___at___: 1 }
+		self ___class___ @env0:callTestInt: (positional ___at___: 1)
 	]
 %
 
@@ -175,8 +173,7 @@ category: 'Python-Initialization'
 method: _shimtest
 initialize_test_string_len
 	self ___at___: #test_string_len put: [:positional :keywords |
-		self ___class___ perform: #'callTestStringLen:' env: 0
-			withArguments: { positional ___at___: 1 }
+		self ___class___ @env0:callTestStringLen: (positional ___at___: 1)
 	]
 %
 
@@ -184,8 +181,7 @@ category: 'Python-Initialization'
 method: _shimtest
 initialize_test_list_sum
 	self ___at___: #test_list_sum put: [:positional :keywords |
-		self ___class___ perform: #'callTestListSum:' env: 0
-			withArguments: { positional ___at___: 1 }
+		self ___class___ @env0:callTestListSum: (positional ___at___: 1)
 	]
 %
 
@@ -193,8 +189,7 @@ category: 'Python-Initialization'
 method: _shimtest
 initialize_test_list_modify
 	self ___at___: #test_list_modify put: [:positional :keywords |
-		self ___class___ perform: #'callTestListModify:value:' env: 0
-			withArguments: { positional ___at___: 1 . positional ___at___: 2 }
+		self ___class___ @env0:callTestListModify: (positional ___at___: 1) value: (positional ___at___: 2)
 	]
 %
 
@@ -202,8 +197,7 @@ category: 'Python-Initialization'
 method: _shimtest
 initialize_test_bool_not
 	self ___at___: #test_bool_not put: [:positional :keywords |
-		self ___class___ perform: #'callTestBoolNot:' env: 0
-			withArguments: { positional ___at___: 1 }
+		self ___class___ @env0:callTestBoolNot: (positional ___at___: 1)
 	]
 %
 
@@ -211,7 +205,7 @@ category: 'Python-Initialization'
 method: _shimtest
 initialize_test_none
 	self ___at___: #test_none put: [:positional :keywords |
-		self ___class___ perform: #'callTestNone' env: 0
+		self ___class___ @env0:callTestNone
 	]
 %
 
@@ -219,7 +213,7 @@ category: 'Python-Initialization'
 method: _shimtest
 initialize_test_error
 	self ___at___: #test_error put: [:positional :keywords |
-		self ___class___ perform: #'callTestError' env: 0
+		self ___class___ @env0:callTestError
 	]
 %
 
@@ -227,8 +221,7 @@ category: 'Python-Initialization'
 method: _shimtest
 initialize_test_bytes_len
 	self ___at___: #test_bytes_len put: [:positional :keywords |
-		self ___class___ perform: #'callTestBytesLen:' env: 0
-			withArguments: { positional ___at___: 1 }
+		self ___class___ @env0:callTestBytesLen: (positional ___at___: 1)
 	]
 %
 
@@ -236,8 +229,7 @@ category: 'Python-Initialization'
 method: _shimtest
 initialize_test_list_insert
 	self ___at___: #test_list_insert put: [:positional :keywords |
-		self ___class___ perform: #'callTestListInsert:index:value:' env: 0
-			withArguments: { positional ___at___: 1 . positional ___at___: 2 . positional ___at___: 3 }
+		self ___class___ @env0:callTestListInsert: (positional ___at___: 1) index: (positional ___at___: 2) value: (positional ___at___: 3)
 	]
 %
 

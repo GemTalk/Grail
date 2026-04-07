@@ -352,7 +352,7 @@ initialize_acos
 	self ___at___: #acos put: [:positional :keywords |
 		| x |
 		x := positional ___at___: 1.
-		x perform: #arcCos env: 0
+		x @env0:arcCos
 	]
 %
 
@@ -364,7 +364,7 @@ initialize_acosh
 		| x xFloat |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
-		xFloat perform: #arcCosh env: 0
+		xFloat @env0:arcCosh
 	]
 %
 
@@ -375,7 +375,7 @@ initialize_asin
 	self ___at___: #asin put: [:positional :keywords |
 		| x |
 		x := positional ___at___: 1.
-		x perform: #arcSin env: 0
+		x @env0:arcSin
 	]
 %
 
@@ -387,7 +387,7 @@ initialize_asinh
 		| x xFloat |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
-		xFloat perform: #arcSinh env: 0
+		xFloat @env0:arcSinh
 	]
 %
 
@@ -398,7 +398,7 @@ initialize_atan
 	self ___at___: #atan put: [:positional :keywords |
 		| x |
 		x := positional ___at___: 1.
-		x perform: #arcTan env: 0
+		x @env0:arcTan
 	]
 %
 
@@ -412,7 +412,7 @@ initialize_atan2
 		x := positional ___at___: 2.
 		yFloat := y ___asFloat___.
 		xFloat := x ___asFloat___.
-		yFloat perform: #arcTan2: env: 0 withArguments: {xFloat}
+		yFloat @env0:arcTan2: xFloat
 	]
 %
 
@@ -424,7 +424,7 @@ initialize_atanh
 		| x xFloat |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
-		xFloat perform: #arcTanh env: 0
+		xFloat @env0:arcTanh
 	]
 %
 
@@ -436,7 +436,7 @@ initialize_ceil
 		| x xFloat |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
-		xFloat perform: #ceiling env: 0
+		xFloat @env0:ceiling
 	]
 %
 
@@ -459,7 +459,7 @@ initialize_cosh
 		| x xFloat |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
-		xFloat perform: #cosh env: 0
+		xFloat @env0:cosh
 	]
 %
 
@@ -471,7 +471,7 @@ initialize_degrees
 		| x xFloat |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
-		xFloat perform: #radiansToDegrees env: 0
+		xFloat @env0:radiansToDegrees
 	]
 %
 
@@ -479,7 +479,7 @@ category: 'Python-Initialization'
 method: math
 initialize_e
 	"The mathematical constant e = 2.718281..."
-	self ___at___: #e put: (Float perform: #e env: 0)
+	self ___at___: #e put: (Float @env0:e)
 %
 
 category: 'Python-Initialization'
@@ -489,7 +489,7 @@ initialize_exp
 	self ___at___: #exp put: [:positional :keywords |
 		| x |
 		x := positional ___at___: 1.
-		x perform: #exp env: 0
+		x @env0:exp
 	]
 %
 
@@ -516,7 +516,7 @@ initialize_factorial
 		(nInt ___lt___: 0) ifTrue: [
 			ValueError ___signal___: 'factorial() not defined for negative values'
 		].
-		nInt perform: #factorial env: 0
+		nInt @env0:factorial
 	]
 %
 
@@ -528,7 +528,7 @@ initialize_floor
 		| x xFloat |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
-		xFloat perform: #floor env: 0
+		xFloat @env0:floor
 	]
 %
 
@@ -542,7 +542,7 @@ initialize_gcd
 		b := positional ___at___: 2.
 		aInt := a ___asInteger___.
 		bInt := b ___asInteger___.
-		aInt perform: #gcd: env: 0 withArguments: {bInt}
+		aInt @env0:gcd: bInt
 	]
 %
 
@@ -561,7 +561,7 @@ initialize_isfinite
 		| x xFloat kind |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
-		kind := xFloat perform: #_getKind env: 0.
+		kind := xFloat @env0:_getKind.
 		"kind: 1=normal, 2=subnormal, 3=infinity, 4=zero, 5=signaling NaN, 6=quiet NaN"
 		(kind ___le___: 2) or: [kind ___eq___: 4]
 	]
@@ -575,7 +575,7 @@ initialize_isinf
 		| x xFloat kind |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
-		kind := xFloat perform: #_getKind env: 0.
+		kind := xFloat @env0:_getKind.
 		kind ___eq___: 3
 	]
 %
@@ -588,7 +588,7 @@ initialize_isnan
 		| x xFloat |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
-		xFloat perform: #_isNaN env: 0
+		xFloat @env0:_isNaN
 	]
 %
 
@@ -602,7 +602,7 @@ initialize_lcm
 		b := positional ___at___: 2.
 		aInt := a ___asInteger___.
 		bInt := b ___asInteger___.
-		aInt perform: #lcm: env: 0 withArguments: {bInt}
+		aInt @env0:lcm: bInt
 	]
 %
 
@@ -624,7 +624,7 @@ initialize_log10
 	self ___at___: #log10 put: [:positional :keywords |
 		| x |
 		x := positional ___at___: 1.
-		(x ___asFloat___) perform: #log10 env: 0
+		(x ___asFloat___) @env0:log10
 	]
 %
 
@@ -665,7 +665,7 @@ category: 'Python-Initialization'
 method: math
 initialize_pi
 	"The mathematical constant π = 3.141592..."
-	self ___at___: #pi put: (Float perform: #pi env: 0)
+	self ___at___: #pi put: (Float @env0:pi)
 %
 
 category: 'Python-Initialization'
@@ -690,7 +690,7 @@ initialize_radians
 		| x xFloat |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
-		xFloat perform: #degreesToRadians env: 0
+		xFloat @env0:degreesToRadians
 	]
 %
 
@@ -713,7 +713,7 @@ initialize_sinh
 		| x xFloat |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
-		xFloat perform: #sinh env: 0
+		xFloat @env0:sinh
 	]
 %
 
@@ -735,7 +735,7 @@ initialize_tan
 	self ___at___: #tan put: [:positional :keywords |
 		| x |
 		x := positional ___at___: 1.
-		x perform: #tan env: 0
+		x @env0:tan
 	]
 %
 
@@ -747,7 +747,7 @@ initialize_tanh
 		| x xFloat |
 		x := positional ___at___: 1.
 		xFloat := x ___asFloat___.
-		xFloat perform: #tanh env: 0
+		xFloat @env0:tanh
 	]
 %
 
@@ -755,7 +755,7 @@ category: 'Python-Initialization'
 method: math
 initialize_tau
 	"The mathematical constant τ = 2π = 6.283185..."
-	self ___at___: #tau put: ((Float perform: #pi env: 0) ___times___: 2)
+	self ___at___: #tau put: ((Float @env0:pi) ___times___: 2)
 %
 
 category: 'Python-Initialization'

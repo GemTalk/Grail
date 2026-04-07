@@ -40,16 +40,16 @@ method: GemStoneTestCase
 test_delitem
 
 	| gs key value |
-	gs := gemstone perform: #instance env: 1.
+	gs := gemstone @env1:instance.
 	key := str withAll: '_grail_test_delitem'.
 	value := str withAll: 'to_be_deleted'.
 	"Add an entry, then delete it"
-	gs perform: #__setitem__:_: env: 1 withArguments: { key . value }.
-	self assert: (gs perform: #__getitem__: env: 1 withArguments: { key }) equals: value.
-	gs perform: #__delitem__: env: 1 withArguments: { key }.
+	gs @env1:__setitem__: key _: value.
+	self assert: (gs @env1:__getitem__: key) equals: value.
+	gs @env1:__delitem__: key.
 	"Should now raise KeyError"
 	self should: [
-		gs perform: #__getitem__: env: 1 withArguments: { key }
+		gs @env1:__getitem__: key
 	] raise: KeyError
 %
 
@@ -58,9 +58,9 @@ method: GemStoneTestCase
 test_delitem_keyError
 
 	| gs |
-	gs := gemstone perform: #instance env: 1.
+	gs := gemstone @env1:instance.
 	self should: [
-		gs perform: #__delitem__: env: 1 withArguments: { str withAll: '_no_such_key' }
+		gs @env1:__delitem__: (str withAll: '_no_such_key')
 	] raise: KeyError
 %
 
@@ -69,8 +69,8 @@ method: GemStoneTestCase
 test_getitem
 
 	| gs userGlobals |
-	gs := gemstone perform: #instance env: 1.
-	userGlobals := gs perform: #__getitem__: env: 1 withArguments: { str withAll: 'UserGlobals' }.
+	gs := gemstone @env1:instance.
+	userGlobals := gs @env1:__getitem__: (str withAll: 'UserGlobals').
 	self assert: userGlobals identical: UserGlobals.
 %
 
@@ -79,9 +79,9 @@ method: GemStoneTestCase
 test_getitem_keyError
 
 	| gs |
-	gs := gemstone perform: #instance env: 1.
+	gs := gemstone @env1:instance.
 	self should: [
-		gs perform: #__getitem__: env: 1 withArguments: { str withAll: '_no_such_key' }
+		gs @env1:__getitem__: (str withAll: '_no_such_key')
 	] raise: KeyError
 %
 
@@ -90,13 +90,13 @@ method: GemStoneTestCase
 test_setitem_existing
 
 	| gs original |
-	gs := gemstone perform: #instance env: 1.
+	gs := gemstone @env1:instance.
 	"Save original value"
-	original := gs perform: #__getitem__: env: 1 withArguments: { str withAll: 'UserGlobals' }.
+	original := gs @env1:__getitem__: (str withAll: 'UserGlobals').
 	self assert: original identical: UserGlobals.
 	"Set it to something else and verify"
-	gs perform: #__setitem__:_: env: 1 withArguments: { str withAll: 'UserGlobals' . original }.
-	self assert: (gs perform: #__getitem__: env: 1 withArguments: { str withAll: 'UserGlobals' }) identical: UserGlobals.
+	gs @env1:__setitem__: (str withAll: 'UserGlobals') _: original.
+	self assert: (gs @env1:__getitem__: (str withAll: 'UserGlobals')) identical: UserGlobals.
 %
 
 category: 'Tests'
@@ -104,25 +104,26 @@ method: GemStoneTestCase
 test_setitem_new
 
 	| gs key value result |
-	gs := gemstone perform: #instance env: 1.
+	gs := gemstone @env1:instance.
 	key := str withAll: '_grail_test_setitem'.
 	value := str withAll: 'test_value'.
 	"Should add to UserGlobals"
-	gs perform: #__setitem__:_: env: 1 withArguments: { key . value }.
-	result := gs perform: #__getitem__: env: 1 withArguments: { key }.
+	gs @env1:__setitem__: key _: value.
+	result := gs @env1:__getitem__: key.
 	self assert: result equals: value.
 	"Clean up"
-	UserGlobals perform: #'removeKey:' env: 0 withArguments: { #'_grail_test_setitem' }.
+	UserGlobals @env0:removeKey: #'_grail_test_setitem'.
 %
 
 category: 'Tests'
 method: GemStoneTestCase
 test_version
 
-	| gs result |
-	gs := gemstone perform: #instance env: 1.
-	result := gs perform: #version env: 1.
-	self assert: result equals: '3.7.6'.
+	| gs result expected |
+	gs := gemstone @env1:instance.
+	result := gs @env1:version.
+	expected := System @env0:stoneVersionAt: 'gsVersion'.
+	self assert: result equals: expected.
 %
 
 category: 'Tests'
@@ -131,11 +132,11 @@ testGemstoneModuleIsAvailable
 	"Test that gemstone module is registered and importable"
 
 	| modules imp importModuleBlock result |
-	modules := importlib perform: #modules env: 1.
+	modules := importlib @env1:modules.
 	self assert: (modules includesKey: #gemstone).
 
-	imp := importlib perform: #instance env: 1.
-	importModuleBlock := imp perform: #import_module env: 1.
+	imp := importlib @env1:instance.
+	importModuleBlock := imp @env1:import_module.
 	result := importModuleBlock value: {'gemstone'} value: nil.
 
 	self assert: result class equals: gemstone

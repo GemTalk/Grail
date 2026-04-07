@@ -144,8 +144,8 @@ __eq__: other
 
 	myClass == otherClass ifFalse: [ ^ false ].
 
-	myArgs := self perform: #args env: 1.
-	otherArgs := other perform: #args env: 1.
+	myArgs := self @env1:args.
+	otherArgs := other @env1:args.
 
 	^ myArgs ___eq___: otherArgs
 %
@@ -184,16 +184,16 @@ __repr__
 	
 	| className argsArray stream |
 	className := (self ___class___) ___name___.
-	argsArray := self perform: #args env: 1.
+	argsArray := self @env1:args.
 	stream := WriteStream ___on___: (Unicode7 ___new___).
 	
 	stream ___nextPutAll___: className.
 	stream ___nextPut___: $(.
 	
-	((argsArray ___size___) with: 0 perform: #> env: 0) ifTrue: [
-		argsArray perform: #doWithIndex: env: 0 withArguments: { [:arg :idx |
+	((argsArray ___size___) @env0:> 0) ifTrue: [
+		argsArray @env0:doWithIndex: [:arg :idx |
 			| argRepr |
-			(idx with: 1 perform: #> env: 0) ifTrue: [
+			(idx @env0:> 1) ifTrue: [
 				stream ___nextPutAll___: ', '.
 			].
 			argRepr := arg ___asString___.
@@ -204,7 +204,7 @@ __repr__
 			] ifFalse: [
 				stream ___nextPutAll___: argRepr.
 			].
-		]}.
+		].
 	].
 	
 	stream ___nextPut___: $).
@@ -220,7 +220,7 @@ __str__
 	Otherwise, return str of the args tuple."
 	
 	| argsArray size |
-	argsArray := self perform: #args env: 1.
+	argsArray := self @env1:args.
 	size := argsArray ___size___.
 	
 	size == 0 ifTrue: [ ^ '' ].

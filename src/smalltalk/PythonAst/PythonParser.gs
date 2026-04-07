@@ -1567,7 +1567,7 @@ parseNumberValue: aString
 	(str notEmpty and: [(str last == $j) or: [str last == $J]]) ifTrue: [
 		| realPart |
 		realPart := (str copyFrom: 1 to: str size - 1) asNumber.
-		^complex perform: #__new__:_: env: 1 withArguments: {0.0. realPart}
+		^complex @env1:__new__: 0.0 _: realPart
 	].
 
 	"Hex"

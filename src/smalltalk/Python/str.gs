@@ -49,7 +49,7 @@ __new__: obj
 	].
 
 	"Try to call __str__ on the object"
-	result := obj perform: #__str__ env: 1.
+	result := obj @env1:__str__.
 	^ result
 %
 
@@ -75,7 +75,7 @@ __contains__: item
 	"Test if item is in string. In Python: item in str"
 
 	| result |
-	result := self perform: #includesString: env: 0 withArguments: { item }.
+	result := self @env0:includesString: item.
 	^ result
 %
 
@@ -100,7 +100,7 @@ method: CharacterCollection
 __ge__: other
 	"Return self >= other"
 
-	^ self with: other perform: #>= env: 0
+	^ self @env0:>= other
 %
 
 category: 'Python-Sequence Operations'
@@ -141,7 +141,7 @@ method: CharacterCollection
 __gt__: other
 	"Return self > other"
 
-	^ self with: other perform: #> env: 0
+	^ self @env0:> other
 %
 
 category: 'Python-Hashing & Identity'
@@ -174,7 +174,7 @@ method: CharacterCollection
 __le__: other
 	"Return self <= other"
 
-	^ self with: other perform: #<= env: 0
+	^ self @env0:<= other
 %
 
 category: 'Python-Sequence Operations'
@@ -190,7 +190,7 @@ method: CharacterCollection
 __lt__: other
 	"Return self < other"
 
-	^ self with: other perform: #< env: 0
+	^ self @env0:< other
 %
 
 category: 'Python-String Operations'
@@ -286,7 +286,7 @@ capitalize
 
 	stream := WriteStream ___on___: (Unicode7 ___new___).
 	first := self ___first___.
-	rest := self perform: #allButFirst env: 0.
+	rest := self @env0:allButFirst.
 
 	stream ___nextPut___: (first ___asUppercase___).
 	stream ___nextPutAll___: (rest ___asLowercase___).
@@ -299,7 +299,7 @@ method: CharacterCollection
 casefold
 	"Return a casefolded copy of the string. Similar to lowercase but more aggressive."
 
-	^ self perform: #asLowercase env: 0
+	^ self @env0:asLowercase
 %
 
 category: 'Python-String Methods'
@@ -363,7 +363,7 @@ method: CharacterCollection
 expandtabs
 	"Return a copy where all tab characters are replaced by spaces."
 
-	^ self perform: #copyReplaceAll:with: env: 0 withArguments: { (Character perform: #tab env: 0) ___asString___. '        ' }
+	^ self @env0:copyReplaceAll: (Character @env0:tab) ___asString___ with: '        '
 %
 
 category: 'Python-String Methods'
@@ -418,7 +418,7 @@ isalnum
 	allAlnum := true.
 	self ___do___: [:char |
 		| isAlnum |
-		isAlnum := char perform: #isAlphaNumeric env: 0.
+		isAlnum := char @env0:isAlphaNumeric.
 		isAlnum ifFalse: [ allAlnum := false ].
 	].
 	^ allAlnum
@@ -436,7 +436,7 @@ isalpha
 	allAlpha := true.
 	self ___do___: [:char |
 		| isAlpha |
-		isAlpha := char perform: #isLetter env: 0.
+		isAlpha := char @env0:isLetter.
 		isAlpha ifFalse: [ allAlpha := false ].
 	].
 	^ allAlpha
@@ -469,7 +469,7 @@ isdecimal
 	allDecimal := true.
 	self ___do___: [:char |
 		| isDigit |
-		isDigit := char perform: #isDigit env: 0.
+		isDigit := char @env0:isDigit.
 		isDigit ifFalse: [ allDecimal := false ].
 	].
 	^ allDecimal
@@ -487,7 +487,7 @@ isdigit
 	allDigit := true.
 	self ___do___: [:char |
 		| isDigit |
-		isDigit := char perform: #isDigit env: 0.
+		isDigit := char @env0:isDigit.
 		isDigit ifFalse: [ allDigit := false ].
 	].
 	^ allDigit
@@ -504,12 +504,12 @@ isidentifier
 
 	"First character must be letter or underscore"
 	firstChar := self ___first___.
-	((firstChar perform: #isLetter env: 0) perform: #| env: 0 withArguments: {(firstChar ___eq___: $_)}) ifFalse: [ ^ false ].
+	((firstChar @env0:isLetter) @env0:| (firstChar ___eq___: $_)) ifFalse: [ ^ false ].
 
 	"Rest must be letters, digits, or underscores"
-	(self perform: #allButFirst env: 0) ___do___: [:char |
+	(self @env0:allButFirst) ___do___: [:char |
 		| valid |
-		valid := ((char perform: #isAlphaNumeric env: 0) perform: #| env: 0 withArguments: {(char ___eq___: $_)}).
+		valid := ((char @env0:isAlphaNumeric) @env0:| (char ___eq___: $_)).
 		valid ifFalse: [ ^ false ].
 	].
 	^ true
@@ -525,14 +525,14 @@ islower
 	allLower := true.
 	self ___do___: [:char |
 		| isLetter isLower |
-		isLetter := char perform: #isLetter env: 0.
+		isLetter := char @env0:isLetter.
 		isLetter ifTrue: [
 			hasCased := true.
-			isLower := char perform: #isLowercase env: 0.
+			isLower := char @env0:isLowercase.
 			isLower ifFalse: [ allLower := false ].
 		].
 	].
-	^ hasCased perform: #& env: 0 withArguments: {allLower}
+	^ hasCased @env0:& allLower
 %
 
 category: 'Python-String Test Methods'
@@ -554,7 +554,7 @@ isprintable
 		| cp |
 		cp := char ___codePoint___.
 		"Control characters and some special characters are not printable"
-		((cp ___lt___: 32) perform: #| env: 0 withArguments: {((cp ___ge___: 127) perform: #& env: 0 withArguments: {(cp ___lt___: 160)})}) ifTrue: [ allPrintable := false ].
+		((cp ___lt___: 32) @env0:| ((cp ___ge___: 127) @env0:& (cp ___lt___: 160))) ifTrue: [ allPrintable := false ].
 	].
 	^ allPrintable
 %
@@ -571,7 +571,7 @@ isspace
 	allSpace := true.
 	self ___do___: [:char |
 		| isSpace |
-		isSpace := char perform: #isSeparator env: 0.
+		isSpace := char @env0:isSeparator.
 		isSpace ifFalse: [ allSpace := false ].
 	].
 	^ allSpace
@@ -587,10 +587,10 @@ istitle
 	expectUpper := true.
 	self ___do___: [:char |
 		| isLetter isUpper isLower |
-		isLetter := char perform: #isLetter env: 0.
+		isLetter := char @env0:isLetter.
 		isLetter ifTrue: [
-			isUpper := char perform: #isUppercase env: 0.
-			isLower := char perform: #isLowercase env: 0.
+			isUpper := char @env0:isUppercase.
+			isLower := char @env0:isLowercase.
 			inWord ifTrue: [
 				isUpper ifTrue: [ ^ false ].
 			] ifFalse: [
@@ -614,14 +614,14 @@ isupper
 	allUpper := true.
 	self ___do___: [:char |
 		| isLetter isUpper |
-		isLetter := char perform: #isLetter env: 0.
+		isLetter := char @env0:isLetter.
 		isLetter ifTrue: [
 			hasCased := true.
-			isUpper := char perform: #isUppercase env: 0.
+			isUpper := char @env0:isUppercase.
 			isUpper ifFalse: [ allUpper := false ].
 		].
 	].
-	^ hasCased perform: #& env: 0 withArguments: {allUpper}
+	^ hasCased @env0:& allUpper
 %
 
 category: 'Python-String Methods'
@@ -667,7 +667,7 @@ method: CharacterCollection
 lower
 	"Return a copy of the string with all characters converted to lowercase."
 
-	^ self perform: #asLowercase env: 0
+	^ self @env0:asLowercase
 %
 
 category: 'Python-String Methods'
@@ -675,7 +675,7 @@ method: CharacterCollection
 lstrip
 	"Return a copy of the string with leading whitespace removed."
 
-	^ self perform: #trimLeft env: 0
+	^ self @env0:trimLeft
 %
 
 category: 'Python-String Methods'
@@ -725,7 +725,7 @@ method: CharacterCollection
 replace: old _: new
 	"Return a copy with all occurrences of substring old replaced by new."
 
-	^ self perform: #copyReplaceAll:with: env: 0 withArguments: { old. new }
+	^ self @env0:copyReplaceAll: old with: new
 %
 
 category: 'Python-String Methods'
@@ -791,7 +791,7 @@ rpartition: sep
 	].
 
 	(lastIndex ___eq___: 0) ifTrue: [
-		^ tuple perform: #with:with:with: env: 0 withArguments: { ''. ''. self }
+		^ tuple @env0:with: '' with: '' with: self
 	].
 
 	before := self ___copyFrom___: 1 to: (lastIndex ___minus___: 1).
@@ -813,7 +813,7 @@ method: CharacterCollection
 rstrip
 	"Return a copy of the string with trailing whitespace removed."
 
-	^ self perform: #trimRight env: 0
+	^ self @env0:trimRight
 %
 
 category: 'Python-String Methods'
@@ -822,7 +822,7 @@ split
 	"Return a list of words in the string, using whitespace as the delimiter."
 
 	| parts |
-	parts := self perform: #subStrings env: 0.
+	parts := self @env0:subStrings.
 	^ parts
 %
 
@@ -833,7 +833,7 @@ splitlines
 
 	| lines lf |
 	lf := Character ___lf___.
-	lines := self perform: #subStrings: env: 0 withArguments: {lf}.
+	lines := self @env0:subStrings: lf.
 	^ lines
 %
 
@@ -850,7 +850,7 @@ method: CharacterCollection
 strip
 	"Return a copy of the string with leading and trailing whitespace removed."
 
-	^ self perform: #trimBoth env: 0
+	^ self @env0:trimBoth
 %
 
 category: 'Python-String Methods'
@@ -862,7 +862,7 @@ swapcase
 	stream := WriteStream ___on___: (Unicode7 ___new___).
 	self ___do___: [:char |
 		| isUpper |
-		isUpper := char perform: #isUppercase env: 0.
+		isUpper := char @env0:isUppercase.
 		isUpper ifTrue: [
 			stream ___nextPut___: (char ___asLowercase___)
 		] ifFalse: [
@@ -882,7 +882,7 @@ title
 	inWord := false.
 	self ___do___: [:char |
 		| isAlpha |
-		isAlpha := char perform: #isLetter env: 0.
+		isAlpha := char @env0:isLetter.
 		isAlpha ifTrue: [
 			inWord ifTrue: [
 				stream ___nextPut___: (char ___asLowercase___)
@@ -911,7 +911,7 @@ method: CharacterCollection
 upper
 	"Return a copy of the string with all characters converted to uppercase."
 
-	^ self perform: #asUppercase env: 0
+	^ self @env0:asUppercase
 %
 
 category: 'Python-String Methods'
@@ -927,7 +927,7 @@ zfill: width
 	hasSign := false.
 	(mySize ___gt___: 0) ifTrue: [
 		firstChar := self ___first___.
-		hasSign := ((firstChar ___eq___: $+) perform: #| env: 0 withArguments: {(firstChar ___eq___: $-)}).
+		hasSign := ((firstChar ___eq___: $+) @env0:| (firstChar ___eq___: $-)).
 	].
 
 	padding := (width ___minus___: (mySize)).
@@ -938,7 +938,7 @@ zfill: width
 		padding ___timesRepeat___: [
 			stream ___nextPut___: $0
 		].
-		stream ___nextPutAll___: (self perform: #allButFirst env: 0).
+		stream ___nextPutAll___: (self @env0:allButFirst).
 	] ifFalse: [
 		padding ___timesRepeat___: [
 			stream ___nextPut___: $0

@@ -67,7 +67,7 @@ __new__fromString: str
 	"Helper method to convert string to float, handling special values"
 
 	| trimmed |
-	trimmed := str perform: #trimBoth env: 0.
+	trimmed := str @env0:trimBoth.
 
 	"Handle special string values - use GemStone's class variables"
 	(trimmed ___eq___: 'inf') ifTrue: [ ^ PlusInfinity ].
@@ -84,7 +84,7 @@ __new__fromString: str
 	^ ([:block :handler |
 		block ___on___: Error do: handler
 	] value: [
-		(trimmed perform: #asNumber env: 0) ___asFloat___
+		(trimmed @env0:asNumber) ___asFloat___
 	] value: [:ex |
 		self ___error___: ('ValueError: could not convert string to float: ''' ___concat___: str)
 	])
@@ -97,7 +97,7 @@ fromhex: hexString
 	Format: [sign] ['0x'] integer ['.' fraction] ['p' exponent]"
 
 	| str sign val exponent hasP parts intPart fracPart |
-	str := hexString perform: #trimBoth env: 0.
+	str := hexString @env0:trimBoth.
 
 	"Handle sign"
 	sign := 1.
@@ -111,14 +111,14 @@ fromhex: hexString
 
 	"Remove 0x or 0X prefix if present"
 	((str ___size___) ___ge___: 2) ifTrue: [
-		(((str ___copyFrom___: 1 to: 2) perform: #asLowercase env: 0) ___eq___: '0x') ifTrue: [
+		(((str ___copyFrom___: 1 to: 2) @env0:asLowercase) ___eq___: '0x') ifTrue: [
 			str := str ___copyFrom___: 3 to: str ___size___.
 		].
 	].
 
 	"Split on 'p' or 'P' for exponent"
-	hasP := (str perform: #includesString: env: 0 withArguments: {'p'}) or: [
-		str perform: #includesString: env: 0 withArguments: {'P'}
+	hasP := (str @env0:includesString: 'p') or: [
+		str @env0:includesString: 'P'
 	].
 
 	hasP ifTrue: [
@@ -127,7 +127,7 @@ fromhex: hexString
 	].
 
 	"Parse hex value (simplified)"
-	val := (str perform: #asNumber env: 0) ___asFloat___.
+	val := (str @env0:asNumber) ___asFloat___.
 	^ (val ___times___: sign) ___asFloat___
 %
 
@@ -160,7 +160,7 @@ method: float
 __ceil__
 	"Return ceiling (smallest integer >= self)."
 
-	^ self perform: #ceiling env: 0
+	^ self @env0:ceiling
 %
 
 category: 'Python-Arithmetic'
@@ -203,7 +203,7 @@ method: float
 __floor__
 	"Return floor (largest integer <= self)."
 
-	^ self perform: #floor env: 0
+	^ self @env0:floor
 %
 
 category: 'Python-Arithmetic'
@@ -357,8 +357,8 @@ __str__
 	str := self ___printString___.
 	"Handle -0.0 specially"
 	x := self ___eq___: 0.0.
-	y := (self perform: #signBit env: 0) == 1.
-	(x perform: #and: env: 0 withArguments: {[y]}) ifTrue: [
+	y := (self @env0:signBit) == 1.
+	(x @env0:and: [y]) ifTrue: [
 		str := '-0.0'.
 	].
 	^ str ___asUnicodeString___
@@ -394,8 +394,8 @@ as_integer_ratio
 	"Return (numerator, denominator) pair."
 
 	| frac |
-	frac := self perform: #asFraction env: 0.
-	^ tuple ___with___: (frac perform: #numerator env: 0) with: (frac perform: #denominator env: 0)
+	frac := self @env0:asFraction.
+	^ tuple ___with___: (frac @env0:numerator) with: (frac @env0:denominator)
 %
 
 category: 'Python-Float Methods'
@@ -413,7 +413,7 @@ hex
 
 	| sign absVal exponent mantissa hexStr kind |
 	"Handle special values using _getKind"
-	kind := self perform: #_getKind env: 0.
+	kind := self @env0:_getKind.
 
 	"Check for NaN (kind > 4)"
 	(kind ___gt___: 4) ifTrue: [
@@ -429,7 +429,7 @@ hex
 
 	"Handle zero"
 	(self ___eq___: 0.0) ifTrue: [
-		^ ((self perform: #signBit env: 0)
+		^ ((self @env0:signBit)
 			ifTrue: ['-0x0.0000000000000p+0']
 			ifFalse: ['0x0.0000000000000p+0']) ___asUnicodeString___
 	].

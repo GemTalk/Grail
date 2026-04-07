@@ -98,8 +98,7 @@ method: _bisect
 initialize_bisect_right
 	"bisect_right(a, x) -> int"
 	self ___at___: #bisect_right put: [:positional :keywords |
-		self ___class___ perform: #'callBisect:list:value:' env: 0
-			withArguments: { 'bisect_right' . positional ___at___: 1 . positional ___at___: 2 }
+		self ___class___ @env0:callBisect: 'bisect_right' list: (positional ___at___: 1) value: (positional ___at___: 2)
 	]
 %
 
@@ -108,8 +107,7 @@ method: _bisect
 initialize_bisect_left
 	"bisect_left(a, x) -> int"
 	self ___at___: #bisect_left put: [:positional :keywords |
-		self ___class___ perform: #'callBisect:list:value:' env: 0
-			withArguments: { 'bisect_left' . positional ___at___: 1 . positional ___at___: 2 }
+		self ___class___ @env0:callBisect: 'bisect_left' list: (positional ___at___: 1) value: (positional ___at___: 2)
 	]
 %
 
@@ -118,8 +116,7 @@ method: _bisect
 initialize_insort_right
 	"insort_right(a, x) -> None (modifies a in place)"
 	self ___at___: #insort_right put: [:positional :keywords |
-		self ___class___ perform: #'callInsort:list:value:' env: 0
-			withArguments: { 'insort_right' . positional ___at___: 1 . positional ___at___: 2 }.
+		self ___class___ @env0:callInsort: 'insort_right' list: (positional ___at___: 1) value: (positional ___at___: 2).
 		None
 	]
 %
@@ -129,8 +126,7 @@ method: _bisect
 initialize_insort_left
 	"insort_left(a, x) -> None (modifies a in place)"
 	self ___at___: #insort_left put: [:positional :keywords |
-		self ___class___ perform: #'callInsort:list:value:' env: 0
-			withArguments: { 'insort_left' . positional ___at___: 1 . positional ___at___: 2 }.
+		self ___class___ @env0:callInsort: 'insort_left' list: (positional ___at___: 1) value: (positional ___at___: 2).
 		None
 	]
 %

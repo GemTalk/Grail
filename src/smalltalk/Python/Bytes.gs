@@ -143,7 +143,7 @@ __new__: cls _: source _: encoding
 		encodingStr ___eq___: 'utf8'
 	]) ifTrue: [
 		| utf8Bytes |
-		utf8Bytes := source perform: #encodeAsUTF8 env: 0.
+		utf8Bytes := source @env0:encodeAsUTF8.
 		result := cls ___new___: (utf8Bytes ___size___).
 		1 ___to___: utf8Bytes ___size___ do: [:i |
 			result ___at___: i put: (utf8Bytes ___at___: i)
@@ -387,7 +387,7 @@ method: bytes
 __ne__: other
 	"Compare bytes for inequality"
 	| result |
-	result := self perform: #__eq__: env: 1 withArguments: {other}.
+	result := self @env1:__eq__: other.
 	^ result ___not___
 %
 
@@ -452,7 +452,7 @@ capitalize
 		^ bytes ___new___
 	].
 
-	result := self perform: #lower env: 1.
+	result := self @env1:lower.
 
 	"Capitalize first byte if it's a lowercase letter"
 	firstByte := result ___at___: 1.
@@ -565,7 +565,7 @@ category: 'Python-Encoding/Decoding'
 method: bytes
 decode
 	"Decode bytes to string using UTF-8"
-	^ self perform: #decode: env: 1 withArguments: {'utf-8'}
+	^ self @env1:decode: 'utf-8'
 %
 
 category: 'Python-Encoding/Decoding'
@@ -580,7 +580,7 @@ decode: encoding
 	((encodingStr ___eq___: 'utf-8') or: [
 		encodingStr ___eq___: 'utf8'
 	]) ifTrue: [
-		^ self perform: #decodeFromUTF8 env: 0
+		^ self @env0:decodeFromUTF8
 	].
 
 	"Support ASCII"
@@ -659,7 +659,7 @@ category: 'Python-String-like Methods'
 method: bytes
 expandtabs
 	"Expand tabs to spaces (default tabsize=8)"
-	^ self perform: #expandtabs: env: 1 withArguments: {8}
+	^ self @env1:expandtabs: 8
 %
 
 category: 'Python-String-like Methods'
@@ -791,7 +791,7 @@ method: bytes
 index: sub
 	"Find first occurrence of sub, raise ValueError if not found"
 	| result |
-	result := self perform: #find: env: 1 withArguments: {sub}.
+	result := self @env1:find: sub.
 	(result ___eq___: -1) ifTrue: [
 		ValueError ___signal___: 'subsection not found'
 	].
@@ -1198,7 +1198,7 @@ method: bytes
 partition: sep
 	"Partition bytes at first occurrence of sep, return tuple (before, sep, after)"
 	| idx before after mySize sepSize afterSize |
-	idx := self perform: #find: env: 1 withArguments: {sep}.
+	idx := self @env1:find: sep.
 
 	"Not found - return (self, empty, empty)"
 	(idx ___eq___: -1) ifTrue: [
@@ -1230,7 +1230,7 @@ method: bytes
 removeprefix: prefix
 	"Remove prefix if present, otherwise return copy"
 	| hasPrefix prefixSize mySize result |
-	hasPrefix := self perform: #startswith: env: 1 withArguments: {prefix}.
+	hasPrefix := self @env1:startswith: prefix.
 	hasPrefix ifFalse: [
 		^ self ___copy___
 	].
@@ -1251,7 +1251,7 @@ method: bytes
 removesuffix: suffix
 	"Remove suffix if present, otherwise return copy"
 	| hasSuffix suffixSize mySize result |
-	hasSuffix := self perform: #endswith: env: 1 withArguments: {suffix}.
+	hasSuffix := self @env1:endswith: suffix.
 	hasSuffix ifFalse: [
 		^ self ___copy___
 	].
@@ -1293,8 +1293,8 @@ replace: old _: new
 	].
 
 	"Split by old, then join with new"
-	parts := self perform: #split: env: 1 withArguments: {old}.
-	^ new perform: #join: env: 1 withArguments: {parts}
+	parts := self @env1:split: old.
+	^ new @env1:join: parts
 %
 
 category: 'Python-Search Methods'
@@ -1357,7 +1357,7 @@ method: bytes
 rindex: sub
 	"Find last occurrence of sub, raise ValueError if not found"
 	| result |
-	result := self perform: #rfind: env: 1 withArguments: {sub}.
+	result := self @env1:rfind: sub.
 	(result ___eq___: -1) ifTrue: [
 		ValueError ___signal___: 'subsection not found'
 	].
@@ -1398,7 +1398,7 @@ method: bytes
 rpartition: sep
 	"Partition bytes at last occurrence of sep, return tuple (before, sep, after)"
 	| idx before after mySize sepSize afterSize|
-	idx := self perform: #rfind: env: 1 withArguments: {sep}.
+	idx := self @env1:rfind: sep.
 
 	"Not found - return (empty, empty, self)"
 	(idx ___eq___: -1) ifTrue: [
@@ -1429,7 +1429,7 @@ category: 'Python-Splitting Methods'
 method: bytes
 rsplit: sep
 	"Split from right (same as split for now - full implementation would need maxsplit)"
-	^ self perform: #split: env: 1 withArguments: {sep}
+	^ self @env1:split: sep
 %
 
 category: 'Python-Splitting Methods'
@@ -1454,7 +1454,7 @@ rsplit: sep _: maxsplit
 
 	"If maxsplit is -1 or < 0, do unlimited split"
 	(maxsplit ___lt___: 0) ifTrue: [
-		^ self perform: #split: env: 1 withArguments: {sep}
+		^ self @env1:split: sep
 	].
 
 	"Find all separator positions from right to left"
@@ -1501,7 +1501,7 @@ rsplit: sep _: maxsplit
 		1 ___to___: partSize do: [:j |
 			part ___at___: j put: (self ___at___: (pos ___plus___: (sepSize ___plus___: (j ___minus___: (1)))))
 		].
-		parts perform: #addFirst: env: 0 withArguments: {part}.
+		parts @env0:addFirst: part.
 		lastEnd := pos
 	].
 
@@ -1511,7 +1511,7 @@ rsplit: sep _: maxsplit
 	1 ___to___: firstPartSize do: [:j |
 		firstPart ___at___: j put: (self ___at___: j)
 	].
-	parts perform: #addFirst: env: 0 withArguments: {firstPart}.
+	parts @env0:addFirst: firstPart.
 
 	^ parts
 %
@@ -1585,7 +1585,7 @@ split: sep
 		match := true.
 
 		"Check if separator matches at current position"
-		((i ___plus___: (sepSize ___minus___: (1))) perform: #<= env: 0  withArguments: {mySize}) ifTrue: [
+		((i ___plus___: (sepSize ___minus___: (1))) @env0:<= mySize) ifTrue: [
 			1 ___to___: sepSize do: [:j |
 				| myByte sepByte |
 				myByte := self ___at___: (i ___plus___: (j ___minus___: (1))).
@@ -1642,7 +1642,7 @@ split: sep _: maxsplit
 
 	"If maxsplit is -1 or < 0, do unlimited split"
 	(maxsplit ___lt___: 0) ifTrue: [
-		^ self perform: #split: env: 1 withArguments: {sep}
+		^ self @env1:split: sep
 	].
 
 	parts := list ___new___.

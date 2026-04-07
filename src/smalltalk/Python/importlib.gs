@@ -64,7 +64,7 @@ set compile_env: 0
 category: 'For Tests'
 classmethod: importlib
 ___lookupModule___: aName
-	^ self perform: #'lookupModule:' env: 1 withArguments: { aName }
+	^ self @env1:lookupModule: aName
 %
 
 category: 'AST-Generation'
@@ -113,8 +113,8 @@ hello
 
 	[
 		| module function hello |
-		module := importlib perform: #instance env: 1.
-		function := module perform: #import_module env: 1.
+		module := importlib @env1:instance.
+		function := module @env1:import_module.
 		hello := function value: { 'python.hello' } value: nil.
 		^hello
 	] on: AbstractException do: [:ex |
@@ -135,7 +135,7 @@ loadModuleFromPath: pathString name: moduleName
 	moduleAst := self astForPath: pathString.
 	moduleAst name: moduleName.
 	" Create module instance FIRST as the scope dictionary
-	moduleInstance := module perform: #new env: 0.
+	moduleInstance := module @env0:new.
 	moduleAst useTempsForBlock: false.
 	moduleAst ensureModuleScope: moduleInstance. "
 	"Set module metadata before execution (so __name__ etc. are visible)"
@@ -146,21 +146,21 @@ loadModuleFromPath: pathString name: moduleName
 
 	moduleAst executeWithScope: mySymbolList.
 	"Create a module instance"
-	moduleInstance := module perform: #new env: 0.
+	moduleInstance := module @env0:new.
 	nameParts := $. split: moduleName.
 	packageName := (nameParts size > 1)
-		ifTrue: ['.' perform: #join: env: 1 withArguments: { (nameParts copyFrom: 1 to: nameParts size - 1) }]
+		ifTrue: ['.' @env1:join: (nameParts copyFrom: 1 to: nameParts size - 1)]
 		ifFalse: [None].
 	moduleInstance
-		perform: #'__name__:' env: 1 withArguments: { moduleName };
-		perform: #'__package__:' env: 1 withArguments: { packageName }.
+		@env1:__name__: moduleName;
+		@env1:__package__: packageName.
 	"If this is a package (__init__.py), set __path__ to the package directory"
 	(pathString endsWith: '__init__.py') ifTrue: [
 		| dirPath |
 		dirPath := pathString copyFrom: 1 to: pathString size - '/__init__.py' size.
-		moduleInstance perform: #'__path__:' env: 1 withArguments: { { dirPath } }.
+		moduleInstance @env1:__path__: { dirPath }.
 		"For packages, __package__ is the module name itself"
-		moduleInstance perform: #'__package__:' env: 1 withArguments: { moduleName }.
+		moduleInstance @env1:__package__: moduleName.
 	].
 	"Register BEFORE execution so circular imports resolve"
 	self registerModule: moduleName with: moduleInstance.
@@ -184,8 +184,8 @@ category: 'Python-Module Registry'
 classmethod: importlib
 registerModule: aName with: aModule
 	"Register a module class in the module registry"
-	(self perform: #modules env: 1) 
-		at: aName asSymbol 
+	(self @env1:modules)
+		at: aName asSymbol
 		put: aModule
 %
 
@@ -265,10 +265,10 @@ ___moduleNameToPath___: aName
 	basePath := (grailDir ___concat___: '/') ___concat___: ('/' join: pathParts).
 	"Try name.py first"
 	pyPath := basePath ___concat___: '.py'.
-	(GsFile perform: #existsOnServer: env: 0 withArguments: { pyPath }) ifTrue: [^ pyPath].
+	(GsFile @env0:existsOnServer: pyPath) ifTrue: [^ pyPath].
 	"Try name/__init__.py (package)"
 	initPath := basePath ___concat___: '/__init__.py'.
-	(GsFile perform: #existsOnServer: env: 0 withArguments: { initPath }) ifTrue: [^ initPath].
+	(GsFile @env0:existsOnServer: initPath) ifTrue: [^ initPath].
 	^ nil
 %
 
@@ -280,7 +280,7 @@ ___moduleNameToSoPath___: aName
 	| filePath |
 	grailDir == nil ifTrue: [^ nil].
 	filePath := ((grailDir ___concat___: '/lib/') ___concat___: aName) ___concat___: '.so'.
-	(GsFile perform: #existsOnServer: env: 0 withArguments: { filePath }) ifTrue: [^ filePath].
+	(GsFile @env0:existsOnServer: filePath) ifTrue: [^ filePath].
 	^ nil
 %
 
@@ -414,24 +414,22 @@ initialize___import__
 
 		"Ensure parent packages are loaded for dotted names"
 		isDotted ifTrue: [
-			prefix := nameParts perform: #at: env: 0 withArguments: {1}.
+			prefix := nameParts @env0:at: 1.
 			(self ___class___ lookupModule: prefix) ifNil: [
 				parentFilePath := self ___class___ ___moduleNameToPath___: prefix.
 				parentFilePath notNil ifTrue: [
-					self ___class___ perform: #loadModuleFromPath:name: env: 0
-						withArguments: { parentFilePath. prefix. }.
+					self ___class___ @env0:loadModuleFromPath: parentFilePath name: prefix.
 				].
 			].
-			2 perform: #to:do: env: 0 withArguments: {nameParts __len__ - 1. [:i |
-				prefix := (prefix ___concat___: '.') ___concat___: (nameParts perform: #at: env: 0 withArguments: {i}).
+			2 @env0:to: nameParts __len__ - 1 do: [:i |
+				prefix := (prefix ___concat___: '.') ___concat___: (nameParts @env0:at: i).
 				(self ___class___ lookupModule: prefix) ifNil: [
 					parentFilePath := self ___class___ ___moduleNameToPath___: prefix.
 					parentFilePath notNil ifTrue: [
-						self ___class___ perform: #loadModuleFromPath:name: env: 0
-							withArguments: { parentFilePath. prefix. }.
+						self ___class___ @env0:loadModuleFromPath: parentFilePath name: prefix.
 					].
 				].
-			]}.
+			].
 		].
 
 		"Look up the module"
@@ -442,12 +440,12 @@ initialize___import__
 			"Module not found in registry - search filesystem for .py"
 			filePath := self ___class___ ___moduleNameToPath___: absoluteName.
 			filePath notNil ifTrue: [
-				result := self ___class___ perform: #loadModuleFromPath:name: env: 0 withArguments: { filePath. absoluteName. }.
+				result := self ___class___ @env0:loadModuleFromPath: filePath name: absoluteName.
 			] ifFalse: [
 				"Search filesystem for .so (C extension module)"
 				filePath := self ___class___ ___moduleNameToSoPath___: absoluteName.
 				filePath notNil ifTrue: [
-					result := self ___class___ perform: #loadDynamicModuleNamed:fromPath: env: 0 withArguments: { absoluteName. filePath. }.
+					result := self ___class___ @env0:loadDynamicModuleNamed: absoluteName fromPath: filePath.
 				] ifFalse: [
 					"Module not found in filesystem either"
 					ModuleNotFoundError ___signal___: (('No module named ''' ___concat___: absoluteName) ___concat___: '''')
@@ -457,9 +455,9 @@ initialize___import__
 
 		"Bind submodule as attribute on parent module"
 		isDotted ifTrue: [
-			parentParts := nameParts perform: #copyFrom:to: env: 0 withArguments: {1. nameParts __len__ - 1}.
-			parentName := '.' perform: #join: env: 0 withArguments: {parentParts}.
-			childName := nameParts perform: #last env: 0.
+			parentParts := nameParts @env0:copyFrom: 1 to: nameParts __len__ - 1.
+			parentName := '.' @env0:join: parentParts.
+			childName := nameParts @env0:last.
 			parentModule := self ___class___ lookupModule: parentName.
 			parentModule notNil ifTrue: [
 				parentModule ___at___: childName ___asSymbol___ put: result.

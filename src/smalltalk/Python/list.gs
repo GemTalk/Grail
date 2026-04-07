@@ -90,7 +90,7 @@ method: list
 __iter__
 	"Return an iterator over the list."
 
-	^ list_iterator perform: #___on: env: 1 withArguments: {self}
+	^ list_iterator @env1:___on: self
 %
 
 category: 'Python-String Representation'
@@ -102,14 +102,11 @@ __repr__
 	stream := WriteStream ___on___: (String ___new___).
 	stream ___nextPut___: $[.
 
-	self perform: #do:separatedBy: env: 0 withArguments: {
-		[:each |
+	self @env0:do: [:each |
 			| reprStr |
 			reprStr := each __repr__.
 			stream ___nextPutAll___: reprStr
-		].
-		[stream ___nextPutAll___: ', ']
-	}.
+		] separatedBy: [stream ___nextPutAll___: ', '].
 
 	stream ___nextPut___: $].
 	^ stream ___contents___
@@ -198,8 +195,8 @@ insert: index _: item
 
 	"Convert to 1-based Smalltalk index (add at position idx+1)"
 	(idx ___eq___: 0)
-		ifTrue: [self perform: #addFirst: env: 0 withArguments: {item}]
-		ifFalse: [self perform: #add:afterIndex: env: 0 withArguments: {item. idx}].
+		ifTrue: [self @env0:addFirst: item]
+		ifFalse: [self @env0:add: item afterIndex: idx].
 	^ nil
 %
 
@@ -214,7 +211,7 @@ pop
 		IndexError ___signal___: 'pop from empty list'
 	].
 
-	^ self perform: #removeLast env: 0
+	^ self @env0:removeLast
 %
 
 category: 'Python-List Methods'
@@ -250,10 +247,7 @@ method: list
 remove: value
 	"Remove the first occurrence of value. Raises ValueError if not found."
 
-	self perform: #remove:ifAbsent: env: 0 withArguments: {
-		value.
-		[ValueError ___signal___: 'list.remove(x): x not in list']
-	}.
+	self @env0:remove: value ifAbsent: [ValueError ___signal___: 'list.remove(x): x not in list'].
 	^ nil
 %
 
@@ -263,7 +257,7 @@ reverse
 	"Reverse the list in place."
 
 	| reversed |
-	reversed := self perform: #reversed env: 0.
+	reversed := self @env0:reversed.
 	self ___size___: 0.
 	self ___addAll___: reversed.
 	^ nil
@@ -274,7 +268,7 @@ method: list
 sort
 	"Sort the list in place using Python's __lt__ for comparison."
 
-	self ___sort___: [:a :b | a perform: #__lt__: env: 1 withArguments: {b}].
+	self ___sort___: [:a :b | a @env1:__lt__: b].
 	^ nil
 %
 

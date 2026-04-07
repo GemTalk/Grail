@@ -41,7 +41,7 @@ testAbs
 
 	| b absBlock result |
 	b := builtins ___instance___.
-	absBlock := b perform: #abs env: 1.
+	absBlock := b @env1:abs.
 
 	result := absBlock value: {5} value: nil.
 	self assert: result equals: 5.
@@ -63,7 +63,7 @@ testAll
 
 	| b allBlock result lst |
 	b := builtins ___instance___.
-	allBlock := b perform: #all env: 1.
+	allBlock := b @env1:all.
 
 	lst := list withAll: #(true true true).
 	result := allBlock value: {lst} value: nil.
@@ -85,7 +85,7 @@ testAny
 
 	| b anyBlock result lst |
 	b := builtins ___instance___.
-	anyBlock := b perform: #any env: 1.
+	anyBlock := b @env1:any.
 
 	lst := list withAll: #(false false true).
 	result := anyBlock value: {lst} value: nil.
@@ -107,7 +107,7 @@ testBin
 
 	| b binBlock result |
 	b := builtins ___instance___.
-	binBlock := b perform: #bin env: 1.
+	binBlock := b @env1:bin.
 
 	result := binBlock value: {5} value: nil.
 	self assert: result equals: '0b101'.
@@ -126,8 +126,8 @@ testCallable
 
 	| b callableBlock method result lst |
 	b := builtins ___instance___.
-	callableBlock := b perform: #callable env: 1.
-	method := b perform: #abs env: 1.
+	callableBlock := b @env1:callable.
+	method := b @env1:abs.
 	"Functions/methods are callable"
 	result := callableBlock value: {method} value: nil.
 	self assert: result.
@@ -148,7 +148,7 @@ testChr
 
 	| b chrBlock result |
 	b := builtins ___instance___.
-	chrBlock := b perform: #chr env: 1.
+	chrBlock := b @env1:chr.
 
 	result := chrBlock value: {65} value: nil.
 	self assert: result equals: 'A'.
@@ -167,17 +167,17 @@ testDivmod
 
 	| b divmodBlock result quotient remainder |
 	b := builtins ___instance___.
-	divmodBlock := b perform: #divmod env: 1.
+	divmodBlock := b @env1:divmod.
 
 	result := divmodBlock value: {10. 3} value: nil.
-	quotient := result perform: #__getitem__: env: 1 withArguments: {0}.
-	remainder := result perform: #__getitem__: env: 1 withArguments: {1}.
+	quotient := result @env1:__getitem__: 0.
+	remainder := result @env1:__getitem__: 1.
 	self assert: quotient equals: 3.
 	self assert: remainder equals: 1.
 
 	result := divmodBlock value: {17. 5} value: nil.
-	quotient := result perform: #__getitem__: env: 1 withArguments: {0}.
-	remainder := result perform: #__getitem__: env: 1 withArguments: {1}.
+	quotient := result @env1:__getitem__: 0.
+	remainder := result @env1:__getitem__: 1.
 	self assert: quotient equals: 3.
 	self assert: remainder equals: 2
 %
@@ -189,18 +189,18 @@ testEnumerate
 
 	| b enumerateBlock result lst iter first second |
 	b := builtins ___instance___.
-	enumerateBlock := b perform: #enumerate env: 1.
+	enumerateBlock := b @env1:enumerate.
 
 	lst := list withAll: #('a' 'b' 'c').
 	result := enumerateBlock value: {lst} value: nil.
 
-	first := result perform: #__next__ env: 1.
-	self assert: (first perform: #__getitem__: env: 1 withArguments: {0}) equals: 0.
-	self assert: (first perform: #__getitem__: env: 1 withArguments: {1}) equals: 'a'.
+	first := result @env1:__next__.
+	self assert: (first @env1:__getitem__: 0) equals: 0.
+	self assert: (first @env1:__getitem__: 1) equals: 'a'.
 
-	second := result perform: #__next__ env: 1.
-	self assert: (second perform: #__getitem__: env: 1 withArguments: {0}) equals: 1.
-	self assert: (second perform: #__getitem__: env: 1 withArguments: {1}) equals: 'b'
+	second := result @env1:__next__.
+	self assert: (second @env1:__getitem__: 0) equals: 1.
+	self assert: (second @env1:__getitem__: 1) equals: 'b'
 %
 
 category: 'Tests - Eval - Numeric Functions'
@@ -317,8 +317,8 @@ testEvalSorted
 
 	| result |
 	result := self eval: 'sorted([3, 1, 4, 1, 5])'.
-	self assert: (result perform: #__getitem__: env: 1 withArguments: {0}) equals: 1.
-	self assert: (result perform: #__getitem__: env: 1 withArguments: {4}) equals: 5.
+	self assert: (result @env1:__getitem__: 0) equals: 1.
+	self assert: (result @env1:__getitem__: 4) equals: 5.
 %
 
 category: 'Tests - Eval - String Functions'
@@ -346,7 +346,7 @@ testHash
 
 	| b hashBlock result |
 	b := builtins ___instance___.
-	hashBlock := b perform: #hash env: 1.
+	hashBlock := b @env1:hash.
 
 	result := hashBlock value: {42} value: nil.
 	self assert: (result isKindOf: Integer).
@@ -362,7 +362,7 @@ testHex
 
 	| b hexBlock result |
 	b := builtins ___instance___.
-	hexBlock := b perform: #hex env: 1.
+	hexBlock := b @env1:hex.
 
 	result := hexBlock value: {255} value: nil.
 	self assert: result equals: '0xff'.
@@ -381,7 +381,7 @@ testId
 
 	| b idBlock result obj1 obj2 id1 id2 |
 	b := builtins ___instance___.
-	idBlock := b perform: #id env: 1.
+	idBlock := b @env1:id.
 
 	obj1 := list new.
 	obj2 := list new.
@@ -401,7 +401,7 @@ testIsinstance
 
 	| b isinstanceBlock result lst |
 	b := builtins ___instance___.
-	isinstanceBlock := b perform: #isinstance env: 1.
+	isinstanceBlock := b @env1:isinstance.
 
 	result := isinstanceBlock value: {42. int} value: nil.
 	self assert: result.
@@ -424,15 +424,15 @@ testLen
 
 	| b lenBlock result lst |
 	b := builtins ___instance___.
-	lenBlock := b perform: #len env: 1.
+	lenBlock := b @env1:len.
 
 	result := lenBlock value: {'hello'} value: nil.
 	self assert: result equals: 5.
 
 	lst := list new.
-	lst perform: #append: env: 1 withArguments: {1}.
-	lst perform: #append: env: 1 withArguments: {2}.
-	lst perform: #append: env: 1 withArguments: {3}.
+	lst @env1:append: 1.
+	lst @env1:append: 2.
+	lst @env1:append: 3.
 	result := lenBlock value: {lst} value: nil.
 	self assert: result equals: 3
 %
@@ -444,7 +444,7 @@ testLenTypeError
 
 	| b lenBlock |
 	b := builtins ___instance___.
-	lenBlock := b perform: #len env: 1.
+	lenBlock := b @env1:len.
 
 	self should: [
 		lenBlock value: {42} value: nil.
@@ -458,7 +458,7 @@ testMax
 
 	| b maxBlock result lst |
 	b := builtins ___instance___.
-	maxBlock := b perform: #max env: 1.
+	maxBlock := b @env1:max.
 
 	lst := list withAll: #(5 2 8 1 9).
 	result := maxBlock value: {lst} value: nil.
@@ -476,7 +476,7 @@ testMin
 
 	| b minBlock result lst |
 	b := builtins ___instance___.
-	minBlock := b perform: #min env: 1.
+	minBlock := b @env1:min.
 
 	lst := list withAll: #(5 2 8 1 9).
 	result := minBlock value: {lst} value: nil.
@@ -494,7 +494,7 @@ testOct
 
 	| b octBlock result |
 	b := builtins ___instance___.
-	octBlock := b perform: #oct env: 1.
+	octBlock := b @env1:oct.
 
 	result := octBlock value: {8} value: nil.
 	self assert: result equals: '0o10'.
@@ -513,7 +513,7 @@ testOrd
 
 	| b ordBlock result |
 	b := builtins ___instance___.
-	ordBlock := b perform: #ord env: 1.
+	ordBlock := b @env1:ord.
 
 	result := ordBlock value: {'A'} value: nil.
 	self assert: result equals: 65.
@@ -532,7 +532,7 @@ testOrdTypeError
 
 	| b ordBlock |
 	b := builtins ___instance___.
-	ordBlock := b perform: #ord env: 1.
+	ordBlock := b @env1:ord.
 
 	self should: [
 		ordBlock value: {'hello'} value: nil.
@@ -550,7 +550,7 @@ testPow
 
 	| b powBlock result |
 	b := builtins ___instance___.
-	powBlock := b perform: #pow env: 1.
+	powBlock := b @env1:pow.
 
 	result := powBlock value: {2. 3} value: nil.
 	self assert: result equals: 8.
@@ -569,7 +569,7 @@ testPowWithModulo
 
 	| b powModBlock result |
 	b := builtins ___instance___.
-	powModBlock := b perform: #powWithMod env: 1.
+	powModBlock := b @env1:powWithMod.
 
 	result := powModBlock value: {2. 3. 5} value: nil.
 	self assert: result equals: 3.
@@ -585,12 +585,12 @@ testQuit
 
 	| b quitBlock callableBlock |
 	b := builtins ___instance___.
-	quitBlock := b perform: #quit env: 1.
+	quitBlock := b @env1:quit.
 	"Verify quit is defined"
 	self assert: quitBlock notNil.
 
 	"Verify quit is callable (responds to value:value:)"
-	callableBlock := b perform: #callable env: 1.
+	callableBlock := b @env1:callable.
 	self assert: (callableBlock value: {quitBlock} value: nil)
 %
 
@@ -601,7 +601,7 @@ testRepr
 
 	| b reprBlock result |
 	b := builtins ___instance___.
-	reprBlock := b perform: #repr env: 1.
+	reprBlock := b @env1:repr.
 
 	result := reprBlock value: {'hello'} value: nil.
 	self assert: (result includesString: 'hello').
@@ -617,7 +617,7 @@ testRound
 
 	| b roundBlock result |
 	b := builtins ___instance___.
-	roundBlock := b perform: #round env: 1.
+	roundBlock := b @env1:round.
 
 	result := roundBlock value: {3.7} value: nil.
 	self assert: result equals: 4.
@@ -636,21 +636,21 @@ testSorted
 
 	| b sortedBlock result lst |
 	b := builtins ___instance___.
-	sortedBlock := b perform: #sorted env: 1.
+	sortedBlock := b @env1:sorted.
 
 	lst := list withAll: #(3 1 4 1 5 9 2 6).
 	result := sortedBlock value: {lst} value: nil.
 
 	"Verify the result is sorted"
-	self assert: (result perform: #__getitem__: env: 1 withArguments: {0}) equals: 1.
-	self assert: (result perform: #__getitem__: env: 1 withArguments: {1}) equals: 1.
-	self assert: (result perform: #__getitem__: env: 1 withArguments: {2}) equals: 2.
+	self assert: (result @env1:__getitem__: 0) equals: 1.
+	self assert: (result @env1:__getitem__: 1) equals: 1.
+	self assert: (result @env1:__getitem__: 2) equals: 2.
 	self assert: result size equals: 8.
 
 	"Verify the original list is unchanged"
-	self assert: (lst perform: #__getitem__: env: 1 withArguments: {0}) equals: 3.
-	self assert: (lst perform: #__getitem__: env: 1 withArguments: {1}) equals: 1.
-	self assert: (lst perform: #__getitem__: env: 1 withArguments: {2}) equals: 4.
+	self assert: (lst @env1:__getitem__: 0) equals: 3.
+	self assert: (lst @env1:__getitem__: 1) equals: 1.
+	self assert: (lst @env1:__getitem__: 2) equals: 4.
 	self assert: lst size equals: 8
 %
 
@@ -661,7 +661,7 @@ testStr
 
 	| b strBlock result |
 	b := builtins ___instance___.
-	strBlock := b perform: #str env: 1.
+	strBlock := b @env1:str.
 
 	result := strBlock value: {42} value: nil.
 	self assert: result equals: '42'.
@@ -677,7 +677,7 @@ testSum
 
 	| b sumBlock result lst |
 	b := builtins ___instance___.
-	sumBlock := b perform: #sum env: 1.
+	sumBlock := b @env1:sum.
 
 	lst := list withAll: #(1 2 3 4 5).
 	result := sumBlock value: {lst} value: nil.
@@ -695,7 +695,7 @@ testType
 
 	| b typeBlock result |
 	b := builtins ___instance___.
-	typeBlock := b perform: #type env: 1.
+	typeBlock := b @env1:type.
 
 	result := typeBlock value: {42} value: nil.
 	self assert: (42 isKindOf: result).
@@ -714,7 +714,7 @@ testZip
 
 	| b zipBlock result lst1 lst2 iterables iter first |
 	b := builtins ___instance___.
-	zipBlock := b perform: #zip env: 1.
+	zipBlock := b @env1:zip.
 
 	lst1 := list withAll: #(1 2 3).
 	lst2 := list withAll: #('a' 'b' 'c').
@@ -722,7 +722,7 @@ testZip
 
 	result := zipBlock value: {iterables} value: nil.
 
-	first := result perform: #__next__ env: 1.
-	self assert: (first perform: #__getitem__: env: 1 withArguments: {0}) equals: 1.
-	self assert: (first perform: #__getitem__: env: 1 withArguments: {1}) equals: 'a'
+	first := result @env1:__next__.
+	self assert: (first @env1:__getitem__: 0) equals: 1.
+	self assert: (first @env1:__getitem__: 1) equals: 'a'
 %

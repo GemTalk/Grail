@@ -47,7 +47,7 @@ test__add__
 	tup1 := InvariantArray withAll: #(1 2).
 	tup2 := InvariantArray withAll: #(3 4).
 	
-	result := tup1 perform: #__add__: env: 1 withArguments: {tup2}.
+	result := tup1 @env1:__add__: tup2.
 	
 	self assert: result size equals: 4.
 	self assert: (result at: 1) equals: 1.
@@ -78,7 +78,7 @@ test__delitem__RaisesError
 	| tup |
 	tup := InvariantArray withAll: #(10 20 30).
 	
-	self should: [tup perform: #__delitem__: env: 1 withArguments: {0}] raise: TypeError.
+	self should: [tup @env1:__delitem__: 0] raise: TypeError.
 %
 
 category: 'Tests - Comparison'
@@ -93,13 +93,13 @@ test__eq__
 	lst := OrderedCollection withAll: #(1 2 3).
 	
 	"Same contents"
-	self assert: (tup1 perform: #__eq__: env: 1 withArguments: {tup2}).
+	self assert: (tup1 @env1:__eq__: tup2).
 	
 	"Different contents"
-	self deny: (tup1 perform: #__eq__: env: 1 withArguments: {tup3}).
+	self deny: (tup1 @env1:__eq__: tup3).
 	
 	"Different types (tuple vs list)"
-	self deny: (tup1 perform: #__eq__: env: 1 withArguments: {lst}).
+	self deny: (tup1 @env1:__eq__: lst).
 %
 
 category: 'Tests - Sequence Protocol'
@@ -111,17 +111,17 @@ test__getitem__
 	tup := InvariantArray withAll: #(10 20 30 40 50).
 	
 	"Positive indices"
-	self assert: (tup perform: #__getitem__: env: 1 withArguments: {0}) equals: 10.
-	self assert: (tup perform: #__getitem__: env: 1 withArguments: {2}) equals: 30.
-	self assert: (tup perform: #__getitem__: env: 1 withArguments: {4}) equals: 50.
+	self assert: (tup @env1:__getitem__: 0) equals: 10.
+	self assert: (tup @env1:__getitem__: 2) equals: 30.
+	self assert: (tup @env1:__getitem__: 4) equals: 50.
 	
 	"Negative indices"
-	self assert: (tup perform: #__getitem__: env: 1 withArguments: {-1}) equals: 50.
-	self assert: (tup perform: #__getitem__: env: 1 withArguments: {-5}) equals: 10.
+	self assert: (tup @env1:__getitem__: -1) equals: 50.
+	self assert: (tup @env1:__getitem__: -5) equals: 10.
 	
 	"Out of bounds"
-	self should: [tup perform: #__getitem__: env: 1 withArguments: {5}] raise: IndexError.
-	self should: [tup perform: #__getitem__: env: 1 withArguments: {-6}] raise: IndexError.
+	self should: [tup @env1:__getitem__: 5] raise: IndexError.
+	self should: [tup @env1:__getitem__: -6] raise: IndexError.
 %
 
 category: 'Tests - Hashing'
@@ -132,7 +132,7 @@ test__hash__
 	| tup hash |
 	tup := InvariantArray withAll: #(1 2 3).
 
-	hash := tup perform: #__hash__ env: 1.
+	hash := tup @env1:__hash__.
 
 	"Hash should be an integer"
 	self assert: hash class == SmallInteger.
@@ -159,7 +159,7 @@ test__mul__
 	| tup result |
 	tup := InvariantArray withAll: #(1 2).
 
-	result := tup perform: #__mul__: env: 1 withArguments: {3}.
+	result := tup @env1:__mul__: 3.
 
 	self assert: result size equals: 6.
 	self assert: (result at: 1) equals: 1.
@@ -179,18 +179,18 @@ test__repr__
 
 	"Regular tuple"
 	tup := InvariantArray withAll: #(1 2 3).
-	result := tup perform: #__repr__ env: 1.
+	result := tup @env1:__repr__.
 	self assert: (result includesString: '(').
 	self assert: (result includesString: ')').
 
 	"Single element tuple (should have trailing comma)"
 	tup := InvariantArray withAll: #(1).
-	result := tup perform: #__repr__ env: 1.
+	result := tup @env1:__repr__.
 	self assert: (result includesString: ',').
 
 	"Empty tuple"
 	tup := InvariantArray new.
-	result := tup perform: #__repr__ env: 1.
+	result := tup @env1:__repr__.
 	self assert: result equals: '()'.
 %
 
@@ -202,7 +202,7 @@ test__setitem__RaisesError
 	| tup |
 	tup := InvariantArray withAll: #(10 20 30).
 	
-	self should: [tup perform: #__setitem__:_: env: 1 withArguments: {0. 100}] raise: TypeError.
+	self should: [tup @env1:__setitem__: 0 _: 100] raise: TypeError.
 %
 
 category: 'Tests - Tuple Methods'
@@ -213,10 +213,10 @@ testCount
 	| tup result |
 	tup := InvariantArray withAll: #(1 2 2 3 2).
 
-	result := tup perform: #count: env: 1 withArguments: {2}.
+	result := tup @env1:count: 2.
 	self assert: result equals: 3.
 
-	result := tup perform: #count: env: 1 withArguments: {4}.
+	result := tup @env1:count: 4.
 	self assert: result equals: 0.
 %
 
@@ -239,8 +239,8 @@ testEvalTupleConcatenation
 	| result |
 	result := self eval: '(1, 2) + (3, 4)'.
 	self assert: result size equals: 4.
-	self assert: (result perform: #__getitem__: env: 1 withArguments: {0}) equals: 1.
-	self assert: (result perform: #__getitem__: env: 1 withArguments: {3}) equals: 4.
+	self assert: (result @env1:__getitem__: 0) equals: 1.
+	self assert: (result @env1:__getitem__: 3) equals: 4.
 %
 
 category: 'Tests - Eval - Tuple Operations'
@@ -280,8 +280,8 @@ testEvalTupleLiteral
 	result := self eval: '(1, 2, 3)'.
 	self assert: (result isKindOf: InvariantArray).
 	self assert: result size equals: 3.
-	self assert: (result perform: #__getitem__: env: 1 withArguments: {0}) equals: 1.
-	self assert: (result perform: #__getitem__: env: 1 withArguments: {2}) equals: 3.
+	self assert: (result @env1:__getitem__: 0) equals: 1.
+	self assert: (result @env1:__getitem__: 2) equals: 3.
 %
 
 category: 'Tests - Eval - Tuple Operations'
@@ -303,9 +303,9 @@ testIndex
 	tup := InvariantArray withAll: #(1 2 3 2).
 
 	"Find first occurrence"
-	result := tup perform: #index: env: 1 withArguments: {2}.
+	result := tup @env1:index: 2.
 	self assert: result equals: 1.  "0-based index"
 
 	"Not found"
-	self should: [tup perform: #index: env: 1 withArguments: {4}] raise: ValueError.
+	self should: [tup @env1:index: 4] raise: ValueError.
 %

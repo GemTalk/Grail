@@ -76,14 +76,11 @@ method: _statistics
 initialize__normal_dist_inv_cdf
 	"_normal_dist_inv_cdf(p, mu, sigma) -> float"
 	self ___at___: #_normal_dist_inv_cdf put: [:positional :keywords |
-		self ___class___ perform: #'callNormalDistInvCdf:' env: 0
-			withArguments: {
-				{
+		self ___class___ @env0:callNormalDistInvCdf: {
 					positional ___at___: 1 .
 					positional ___at___: 2 .
 					positional ___at___: 3
 				}
-			}
 	]
 %
 

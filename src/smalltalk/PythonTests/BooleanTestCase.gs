@@ -28,8 +28,8 @@ method: BooleanTestCase
 test__abs__
 	"Test bool.__abs__()"
 
-	self assert: (true perform: #__abs__ env: 1) equals: 1.
-	self assert: (false perform: #__abs__ env: 1) equals: 0.
+	self assert: (true @env1:__abs__) equals: 1.
+	self assert: (false @env1:__abs__) equals: 0.
 %
 
 category: 'Tests - Arithmetic'
@@ -38,14 +38,14 @@ test__add__
 	"Test bool.__add__()"
 
 	"With integers"
-	self assert: (true perform: #__add__: env: 1 withArguments: {5}) equals: 6.
-	self assert: (false perform: #__add__: env: 1 withArguments: {5}) equals: 5.
-	self assert: (true perform: #__add__: env: 1 withArguments: {true}) equals: 2.
-	self assert: (false perform: #__add__: env: 1 withArguments: {false}) equals: 0.
+	self assert: (true @env1:__add__: 5) equals: 6.
+	self assert: (false @env1:__add__: 5) equals: 5.
+	self assert: (true @env1:__add__: true) equals: 2.
+	self assert: (false @env1:__add__: false) equals: 0.
 
 	"With floats"
-	self assert: (true perform: #__add__: env: 1 withArguments: {3.5}) equals: 4.5.
-	self assert: (false perform: #__add__: env: 1 withArguments: {3.5}) equals: 3.5.
+	self assert: (true @env1:__add__: 3.5) equals: 4.5.
+	self assert: (false @env1:__add__: 3.5) equals: 3.5.
 %
 
 category: 'Tests - Bitwise'
@@ -53,9 +53,9 @@ method: BooleanTestCase
 test__and__
 	"Test bool.__and__() - bitwise AND"
 
-	self assert: (true perform: #__and__: env: 1 withArguments: {1}) equals: 1.
-	self assert: (true perform: #__and__: env: 1 withArguments: {0}) equals: 0.
-	self assert: (false perform: #__and__: env: 1 withArguments: {1}) equals: 0.
+	self assert: (true @env1:__and__: 1) equals: 1.
+	self assert: (true @env1:__and__: 0) equals: 0.
+	self assert: (false @env1:__and__: 1) equals: 0.
 %
 
 category: 'Tests - Conversion'
@@ -63,8 +63,8 @@ method: BooleanTestCase
 test__bool__
 	"Test bool.__bool__()"
 
-	self assert: (true perform: #__bool__ env: 1) equals: true.
-	self assert: (false perform: #__bool__ env: 1) equals: false.
+	self assert: (true @env1:__bool__) equals: true.
+	self assert: (false @env1:__bool__) equals: false.
 %
 
 category: 'Tests - Documentation'
@@ -73,7 +73,7 @@ test__doc__
 	"Test bool.__doc__"
 
 	| doc |
-	doc := Boolean perform: #__doc__ env: 1.
+	doc := Boolean @env1:__doc__.
 	self assert: (doc isKindOf: Unicode7).
 	self assert: (doc size > 0).
 %
@@ -83,12 +83,12 @@ method: BooleanTestCase
 test__eq__
 	"Test bool.__eq__() - True==1 and False==0 in Python"
 
-	self assert: (true perform: #__eq__: env: 1 withArguments: {1}).
-	self assert: (false perform: #__eq__: env: 1 withArguments: {0}).
-	self deny: (true perform: #__eq__: env: 1 withArguments: {0}).
-	self deny: (false perform: #__eq__: env: 1 withArguments: {1}).
-	self assert: (true perform: #__eq__: env: 1 withArguments: {true}).
-	self assert: (false perform: #__eq__: env: 1 withArguments: {false}).
+	self assert: (true @env1:__eq__: 1).
+	self assert: (false @env1:__eq__: 0).
+	self deny: (true @env1:__eq__: 0).
+	self deny: (false @env1:__eq__: 1).
+	self assert: (true @env1:__eq__: true).
+	self assert: (false @env1:__eq__: false).
 %
 
 category: 'Tests - Conversion'
@@ -96,8 +96,8 @@ method: BooleanTestCase
 test__float__
 	"Test bool.__float__()"
 
-	self assert: (true perform: #__float__ env: 1) equals: 1.0.
-	self assert: (false perform: #__float__ env: 1) equals: 0.0.
+	self assert: (true @env1:__float__) equals: 1.0.
+	self assert: (false @env1:__float__) equals: 0.0.
 %
 
 category: 'Tests - Arithmetic'
@@ -105,8 +105,8 @@ method: BooleanTestCase
 test__floordiv__
 	"Test bool.__floordiv__()"
 
-	self assert: (true perform: #__floordiv__: env: 1 withArguments: {2}) equals: 0.
-	self assert: (false perform: #__floordiv__: env: 1 withArguments: {2}) equals: 0.
+	self assert: (true @env1:__floordiv__: 2) equals: 0.
+	self assert: (false @env1:__floordiv__: 2) equals: 0.
 %
 
 category: 'Tests - Comparison'
@@ -114,9 +114,9 @@ method: BooleanTestCase
 test__ge__
 	"Test bool.__ge__()"
 
-	self assert: (true perform: #__ge__: env: 1 withArguments: {1}).
-	self assert: (false perform: #__ge__: env: 1 withArguments: {0}).
-	self assert: (true perform: #__ge__: env: 1 withArguments: {0}).
+	self assert: (true @env1:__ge__: 1).
+	self assert: (false @env1:__ge__: 0).
+	self assert: (true @env1:__ge__: 0).
 %
 
 category: 'Tests - Comparison'
@@ -124,9 +124,9 @@ method: BooleanTestCase
 test__gt__
 	"Test bool.__gt__()"
 
-	self assert: (true perform: #__gt__: env: 1 withArguments: {0}).
-	self deny: (false perform: #__gt__: env: 1 withArguments: {0}).
-	self deny: (true perform: #__gt__: env: 1 withArguments: {1}).
+	self assert: (true @env1:__gt__: 0).
+	self deny: (false @env1:__gt__: 0).
+	self deny: (true @env1:__gt__: 1).
 %
 
 category: 'Tests - Conversion'
@@ -134,8 +134,8 @@ method: BooleanTestCase
 test__index__
 	"Test bool.__index__()"
 
-	self assert: (true perform: #__index__ env: 1) equals: 1.
-	self assert: (false perform: #__index__ env: 1) equals: 0.
+	self assert: (true @env1:__index__) equals: 1.
+	self assert: (false @env1:__index__) equals: 0.
 %
 
 category: 'Tests - Conversion'
@@ -143,8 +143,8 @@ method: BooleanTestCase
 test__int__
 	"Test bool.__int__()"
 
-	self assert: (true perform: #__int__ env: 1) equals: 1.
-	self assert: (false perform: #__int__ env: 1) equals: 0.
+	self assert: (true @env1:__int__) equals: 1.
+	self assert: (false @env1:__int__) equals: 0.
 %
 
 category: 'Tests - Bitwise'
@@ -152,8 +152,8 @@ method: BooleanTestCase
 test__invert__
 	"Test bool.__invert__() - bitwise NOT"
 
-	self assert: (true perform: #__invert__ env: 1) equals: -2.
-	self assert: (false perform: #__invert__ env: 1) equals: -1.
+	self assert: (true @env1:__invert__) equals: -2.
+	self assert: (false @env1:__invert__) equals: -1.
 %
 
 category: 'Tests - Comparison'
@@ -161,9 +161,9 @@ method: BooleanTestCase
 test__le__
 	"Test bool.__le__()"
 
-	self assert: (false perform: #__le__: env: 1 withArguments: {0}).
-	self assert: (true perform: #__le__: env: 1 withArguments: {1}).
-	self assert: (false perform: #__le__: env: 1 withArguments: {1}).
+	self assert: (false @env1:__le__: 0).
+	self assert: (true @env1:__le__: 1).
+	self assert: (false @env1:__le__: 1).
 %
 
 category: 'Tests - Comparison'
@@ -171,10 +171,10 @@ method: BooleanTestCase
 test__lt__
 	"Test bool.__lt__()"
 
-	self assert: (false perform: #__lt__: env: 1 withArguments: {1}).
-	self assert: (false perform: #__lt__: env: 1 withArguments: {true}).
-	self deny: (true perform: #__lt__: env: 1 withArguments: {1}).
-	self deny: (true perform: #__lt__: env: 1 withArguments: {0}).
+	self assert: (false @env1:__lt__: 1).
+	self assert: (false @env1:__lt__: true).
+	self deny: (true @env1:__lt__: 1).
+	self deny: (true @env1:__lt__: 0).
 %
 
 category: 'Tests - Arithmetic'
@@ -182,8 +182,8 @@ method: BooleanTestCase
 test__mod__
 	"Test bool.__mod__()"
 
-	self assert: (true perform: #__mod__: env: 1 withArguments: {2}) equals: 1.
-	self assert: (false perform: #__mod__: env: 1 withArguments: {2}) equals: 0.
+	self assert: (true @env1:__mod__: 2) equals: 1.
+	self assert: (false @env1:__mod__: 2) equals: 0.
 %
 
 category: 'Tests - Arithmetic'
@@ -192,13 +192,13 @@ test__mul__
 	"Test bool.__mul__()"
 
 	"With integers"
-	self assert: (true perform: #__mul__: env: 1 withArguments: {5}) equals: 5.
-	self assert: (false perform: #__mul__: env: 1 withArguments: {5}) equals: 0.
-	self assert: (true perform: #__mul__: env: 1 withArguments: {true}) equals: 1.
+	self assert: (true @env1:__mul__: 5) equals: 5.
+	self assert: (false @env1:__mul__: 5) equals: 0.
+	self assert: (true @env1:__mul__: true) equals: 1.
 
 	"With floats"
-	self assert: (true perform: #__mul__: env: 1 withArguments: {2.5}) equals: 2.5.
-	self assert: (false perform: #__mul__: env: 1 withArguments: {2.5}) equals: 0.0.
+	self assert: (true @env1:__mul__: 2.5) equals: 2.5.
+	self assert: (false @env1:__mul__: 2.5) equals: 0.0.
 %
 
 category: 'Tests - Comparison'
@@ -206,10 +206,10 @@ method: BooleanTestCase
 test__ne__
 	"Test bool.__ne__()"
 
-	self deny: (true perform: #__ne__: env: 1 withArguments: {1}).
-	self deny: (false perform: #__ne__: env: 1 withArguments: {0}).
-	self assert: (true perform: #__ne__: env: 1 withArguments: {0}).
-	self assert: (false perform: #__ne__: env: 1 withArguments: {1}).
+	self deny: (true @env1:__ne__: 1).
+	self deny: (false @env1:__ne__: 0).
+	self assert: (true @env1:__ne__: 0).
+	self assert: (false @env1:__ne__: 1).
 %
 
 category: 'Tests - Arithmetic'
@@ -217,8 +217,8 @@ method: BooleanTestCase
 test__neg__
 	"Test bool.__neg__()"
 
-	self assert: (true perform: #__neg__ env: 1) equals: -1.
-	self assert: (false perform: #__neg__ env: 1) equals: 0.
+	self assert: (true @env1:__neg__) equals: -1.
+	self assert: (false @env1:__neg__) equals: 0.
 %
 
 category: 'Tests - Initialization'
@@ -227,7 +227,7 @@ test__new__
 	"Test bool() with no arguments returns False"
 
 	| result |
-	result := Boolean perform: #__new__ env: 1.
+	result := Boolean @env1:__new__.
 	self assert: result equals: false.
 %
 
@@ -280,9 +280,9 @@ method: BooleanTestCase
 test__or__
 	"Test bool.__or__() - bitwise OR"
 
-	self assert: (true perform: #__or__: env: 1 withArguments: {0}) equals: 1.
-	self assert: (false perform: #__or__: env: 1 withArguments: {1}) equals: 1.
-	self assert: (false perform: #__or__: env: 1 withArguments: {0}) equals: 0.
+	self assert: (true @env1:__or__: 0) equals: 1.
+	self assert: (false @env1:__or__: 1) equals: 1.
+	self assert: (false @env1:__or__: 0) equals: 0.
 %
 
 category: 'Tests - Arithmetic'
@@ -290,8 +290,8 @@ method: BooleanTestCase
 test__pos__
 	"Test bool.__pos__()"
 
-	self assert: (true perform: #__pos__ env: 1) equals: 1.
-	self assert: (false perform: #__pos__ env: 1) equals: 0.
+	self assert: (true @env1:__pos__) equals: 1.
+	self assert: (false @env1:__pos__) equals: 0.
 %
 
 category: 'Tests - Arithmetic'
@@ -299,8 +299,8 @@ method: BooleanTestCase
 test__pow__
 	"Test bool.__pow__()"
 
-	self assert: (true perform: #__pow__: env: 1 withArguments: {5}) equals: 1.
-	self assert: (false perform: #__pow__: env: 1 withArguments: {5}) equals: 0.
+	self assert: (true @env1:__pow__: 5) equals: 1.
+	self assert: (false @env1:__pow__: 5) equals: 0.
 %
 
 category: 'Tests - String Representation'
@@ -309,11 +309,11 @@ test__repr__
 	"Test bool.__repr__()"
 
 	| result |
-	result := true perform: #__repr__ env: 1.
+	result := true @env1:__repr__.
 	self assert: (result isKindOf: Unicode7).
 	self assert: result equals: 'True' asUnicodeString.
 	
-	result := false perform: #__repr__ env: 1.
+	result := false @env1:__repr__.
 	self assert: (result isKindOf: Unicode7).
 	self assert: result equals: 'False' asUnicodeString.
 %
@@ -324,10 +324,10 @@ test__str__
 	"Test bool.__str__()"
 
 	| result |
-	result := true perform: #__str__ env: 1.
+	result := true @env1:__str__.
 	self assert: result equals: 'True' asUnicodeString.
 	
-	result := false perform: #__str__ env: 1.
+	result := false @env1:__str__.
 	self assert: result equals: 'False' asUnicodeString.
 %
 
@@ -337,12 +337,12 @@ test__sub__
 	"Test bool.__sub__()"
 
 	"With integers"
-	self assert: (true perform: #__sub__: env: 1 withArguments: {1}) equals: 0.
-	self assert: (false perform: #__sub__: env: 1 withArguments: {1}) equals: -1.
+	self assert: (true @env1:__sub__: 1) equals: 0.
+	self assert: (false @env1:__sub__: 1) equals: -1.
 
 	"With floats"
-	self assert: (true perform: #__sub__: env: 1 withArguments: {0.5}) equals: 0.5.
-	self assert: (false perform: #__sub__: env: 1 withArguments: {0.5}) equals: -0.5.
+	self assert: (true @env1:__sub__: 0.5) equals: 0.5.
+	self assert: (false @env1:__sub__: 0.5) equals: -0.5.
 %
 
 category: 'Tests - Arithmetic'
@@ -350,8 +350,8 @@ method: BooleanTestCase
 test__truediv__
 	"Test bool.__truediv__()"
 
-	self assert: (true perform: #__truediv__: env: 1 withArguments: {2}) equals: 0.5.
-	self assert: (false perform: #__truediv__: env: 1 withArguments: {2}) equals: 0.0.
+	self assert: (true @env1:__truediv__: 2) equals: 0.5.
+	self assert: (false @env1:__truediv__: 2) equals: 0.0.
 %
 
 category: 'Tests - Bitwise'
@@ -359,9 +359,9 @@ method: BooleanTestCase
 test__xor__
 	"Test bool.__xor__() - bitwise XOR"
 
-	self assert: (true perform: #__xor__: env: 1 withArguments: {1}) equals: 0.
-	self assert: (true perform: #__xor__: env: 1 withArguments: {0}) equals: 1.
-	self assert: (false perform: #__xor__: env: 1 withArguments: {1}) equals: 1.
+	self assert: (true @env1:__xor__: 1) equals: 0.
+	self assert: (true @env1:__xor__: 0) equals: 1.
+	self assert: (false @env1:__xor__: 1) equals: 1.
 %
 
 category: 'Tests - Smalltalk Coercion'
@@ -901,6 +901,6 @@ testTypeIdentity
 	self assert: (false class) equals: Boolean.
 
 	"But True == 1 and False == 0"
-	self assert: (true perform: #__eq__: env: 1 withArguments: {1}).
-	self assert: (false perform: #__eq__: env: 1 withArguments: {0}).
+	self assert: (true @env1:__eq__: 1).
+	self assert: (false @env1:__eq__: 0).
 %

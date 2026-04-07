@@ -549,7 +549,7 @@ method: bool
 __invert__
 	"Bitwise NOT of bool (as int)."
 
-	^ (self ifTrue: [1] ifFalse: [0]) perform: #bitInvert env: 0
+	^ (self ifTrue: [1] ifFalse: [0]) @env0:bitInvert
 %
 
 category: 'Python-Comparison'
@@ -620,7 +620,7 @@ method: bool
 __or__: other
 	"Bitwise OR of bool (as int) with other."
 
-	^ (self ifTrue: [1] ifFalse: [0]) perform: #bitOr: env: 0 withArguments: {other}
+	^ (self ifTrue: [1] ifFalse: [0]) @env0:bitOr: other
 %
 
 category: 'Python-Arithmetic'
@@ -676,7 +676,7 @@ method: bool
 __xor__: other
 	"Bitwise XOR of bool (as int) with other."
 
-	^ (self ifTrue: [1] ifFalse: [0]) perform: #bitXor: env: 0 withArguments: {other}
+	^ (self ifTrue: [1] ifFalse: [0]) @env0:bitXor: other
 %
 
 set compile_env: 0

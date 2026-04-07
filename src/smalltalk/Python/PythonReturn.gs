@@ -67,9 +67,9 @@ category: 'Signalling'
 classmethod: PythonReturn
 ___signal___: aValue
 	| ex |
-	ex := self perform: #new env: 0.
-	ex perform: #'returnValue:' env: 0 withArguments: {aValue}.
-	ex perform: #signal env: 0.
+	ex := self @env0:new.
+	ex @env0:returnValue: aValue.
+	ex @env0:signal.
 %
 
 set compile_env: 0

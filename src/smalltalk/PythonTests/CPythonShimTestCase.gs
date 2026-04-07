@@ -1629,7 +1629,7 @@ testDynLoadModule
 	mod := CPythonShim loadDynamicModule: '_grail_demo' fromPath: soPath.
 	self assert: mod class name equals: #'_grail_demo'.
 	self assert: (mod class superclass == module).
-	addFunc := mod perform: #add env: 1.
+	addFunc := mod @env1:add.
 	result := addFunc value: { 10 . 20 } value: nil.
 	self assert: result equals: 30.
 %

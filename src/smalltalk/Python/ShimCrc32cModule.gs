@@ -94,8 +94,7 @@ method: _crc32c
 initialize_crc32c
 	"crc32c(data) -> int"
 	self ___at___: #crc32c put: [:positional :keywords |
-		self ___class___ perform: #'callCrc32c:' env: 0
-			withArguments: { positional ___at___: 1 }
+		self ___class___ @env0:callCrc32c: (positional ___at___: 1)
 	]
 %
 
@@ -104,8 +103,7 @@ method: _crc32c
 initialize_extend
 	"extend(crc, data) -> int"
 	self ___at___: #extend put: [:positional :keywords |
-		self ___class___ perform: #'callExtend:bytes:' env: 0
-			withArguments: { positional ___at___: 1 . positional ___at___: 2 }
+		self ___class___ @env0:callExtend: (positional ___at___: 1) bytes: (positional ___at___: 2)
 	]
 %
 

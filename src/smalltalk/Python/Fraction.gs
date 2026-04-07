@@ -24,7 +24,7 @@ classmethod: Fraction
 __new__: cls
 	"Fraction() -> Fraction(0, 1)"
 
-	^ 0 perform: #asFraction env: 0
+	^ 0 @env0:asFraction
 %
 
 category: 'Python-Instance Creation'
@@ -40,13 +40,11 @@ __new__: cls _: numerator _: denominator
 		ZeroDivisionError ___signal___: 'Fraction() denominator is zero'
 	].
 
-	result := (num perform: #asFraction env: 0)
-		perform: #/ env: 0
-		withArguments: {den perform: #asFraction env: 0}.
+	result := (num @env0:asFraction) @env0:/ (den @env0:asFraction).
 
 	"Ensure we always return a Fraction, not an Integer"
 	(result ___isKindOf___: AbstractFraction) ifFalse: [
-		result := result perform: #asFraction env: 0.
+		result := result @env0:asFraction.
 	].
 	^ result
 %
@@ -56,14 +54,14 @@ classmethod: Fraction
 __new__: cls _: value
 	"Fraction(value) -> rational equivalent of value"
 
-	value ifNil: [ ^ 0 perform: #asFraction env: 0 ].
+	value ifNil: [ ^ 0 @env0:asFraction ].
 	(value ___isKindOf___: Fraction) ifTrue: [ ^ value ].
 
 	"Try to use the Smalltalk asFraction conversion"
 	^ ([:block :handler |
 		block ___on___: Error do: handler
 	] value: [
-		value perform: #asFraction env: 0
+		value @env0:asFraction
 	] value: [:ex |
 		self ___error___: 'TypeError: cannot convert to Fraction'
 	])
@@ -142,7 +140,7 @@ __bool__
 	"Return False for 0, True otherwise."
 
 	| zero |
-	zero := 0 perform: #asFraction env: 0.
+	zero := 0 @env0:asFraction.
 	^ self ___ne___: zero
 %
 
@@ -153,11 +151,11 @@ __ceil__
 	Ceiling is -floor(-self)."
 
 	| n d negN |
-	n := self perform: #numerator env: 0.
-	d := self perform: #denominator env: 0.
+	n := self @env0:numerator.
+	d := self @env0:denominator.
 	"Use // (floor division) on negated numerator, then negate result"
-	negN := n perform: #negated env: 0.
-	^ (negN perform: #// env: 0 withArguments: {d}) perform: #negated env: 0
+	negN := n @env0:negated.
+	^ (negN @env0:// d) @env0:negated
 %
 
 category: 'Python-Conversion'
@@ -165,7 +163,7 @@ method: AbstractFraction
 __float__
 	"Convert Fraction to float."
 
-	^ self perform: #asFloat env: 0
+	^ self @env0:asFloat
 %
 
 category: 'Python-Rounding'
@@ -175,10 +173,10 @@ __floor__
 	Note: Python floor divides toward negative infinity, not toward zero."
 
 	| n d |
-	n := self perform: #numerator env: 0.
-	d := self perform: #denominator env: 0.
+	n := self @env0:numerator.
+	d := self @env0:denominator.
 	"Use // (floor division) which always rounds toward negative infinity"
-	^ n perform: #// env: 0 withArguments: {d}
+	^ n @env0:// d
 %
 
 category: 'Python-Format'
@@ -193,7 +191,7 @@ __format__: formatSpec
 		^ self __str__
 	].
 	"For other format specs, convert to float and format"
-	^ (self perform: #asFloat env: 0) perform: #__format__: env: 1 withArguments: {spec}
+	^ (self @env0:asFloat) @env1:__format__: spec
 %
 
 category: 'Python-Hash'
@@ -209,7 +207,7 @@ method: AbstractFraction
 __int__
 	"Convert Fraction to int by truncation toward zero."
 
-	^ self perform: #truncated env: 0
+	^ self @env0:truncated
 %
 
 category: 'Python-String Representation'
@@ -218,8 +216,8 @@ __repr__
 	"Return repr(Fraction) as 'Fraction(n, d)'."
 
 	| n d s |
-	n := self perform: #numerator env: 0.
-	d := self perform: #denominator env: 0.
+	n := self @env0:numerator.
+	d := self @env0:denominator.
 	s := 'Fraction('.
 	s := (s ___concat___: (n ___printString___)) ___concat___: ', '.
 	s := (s ___concat___: (d ___printString___)) ___concat___: ')'.
@@ -232,18 +230,18 @@ __round__
 	"Round to nearest integer, ties go to even."
 
 	| n d floor remainder doubleRemainder sign |
-	n := self perform: #numerator env: 0.
-	d := self perform: #denominator env: 0.
-	floor := n perform: #// env: 0 withArguments: {d}.
-	remainder := ((n perform: #- env: 0 withArguments: {floor perform: #* env: 0 withArguments: {d}}) perform: #abs env: 0).
-	doubleRemainder := remainder perform: #* env: 0 withArguments: {2}.
-	sign := (n perform: #>= env: 0 withArguments: {0}) ifTrue: [1] ifFalse: [-1].
-	(doubleRemainder perform: #< env: 0 withArguments: {d}) ifTrue: [ ^ floor ].
-	(doubleRemainder perform: #> env: 0 withArguments: {d}) ifTrue: [ ^ floor perform: #+ env: 0 withArguments: {sign} ].
+	n := self @env0:numerator.
+	d := self @env0:denominator.
+	floor := n @env0:// d.
+	remainder := ((n @env0:- (floor @env0:* d)) @env0:abs).
+	doubleRemainder := remainder @env0:* 2.
+	sign := (n @env0:>= 0) ifTrue: [1] ifFalse: [-1].
+	(doubleRemainder @env0:< d) ifTrue: [ ^ floor ].
+	(doubleRemainder @env0:> d) ifTrue: [ ^ floor @env0:+ sign ].
 	"Exactly halfway - round to even"
-	((floor perform: #bitAnd: env: 0 withArguments: {1}) perform: #= env: 0 withArguments: {0})
+	((floor @env0:bitAnd: 1) @env0:= 0)
 		ifTrue: [ ^ floor ]
-		ifFalse: [ ^ floor perform: #+ env: 0 withArguments: {sign} ]
+		ifFalse: [ ^ floor @env0:+ sign ]
 %
 
 category: 'Python-Rounding'
@@ -255,23 +253,23 @@ __round__: ndigits
 	ndigits ifNil: [ ^ self __round__ ].
 
 	"If ndigits is 0, return integer"
-	(ndigits perform: #= env: 0 withArguments: {0}) ifTrue: [
+	(ndigits @env0:= 0) ifTrue: [
 		^ self __round__
 	].
 
 	"Shift, round, shift back"
-	absDigits := (ndigits perform: #< env: 0 withArguments: {0})
-		ifTrue: [ndigits perform: #negated env: 0]
+	absDigits := (ndigits @env0:< 0)
+		ifTrue: [ndigits @env0:negated]
 		ifFalse: [ndigits].
-	shift := 10 perform: #raisedTo: env: 0 withArguments: {absDigits}.
-	(ndigits perform: #> env: 0 withArguments: {0}) ifTrue: [
-		shifted := self perform: #* env: 0 withArguments: {shift}.
+	shift := 10 @env0:raisedTo: absDigits.
+	(ndigits @env0:> 0) ifTrue: [
+		shifted := self @env0:* shift.
 		rounded := shifted __round__.
 		^ Fraction ___new___: Fraction _: rounded _: shift
 	] ifFalse: [
-		shifted := self perform: #/ env: 0 withArguments: {shift}.
+		shifted := self @env0:/ shift.
 		rounded := shifted __round__.
-		^ rounded perform: #* env: 0 withArguments: {shift}
+		^ rounded @env0:* shift
 	]
 %
 
@@ -289,7 +287,7 @@ as_integer_ratio
 	"Return a tuple (numerator, denominator) representing the fraction.
 	For Fraction, this is simply (numerator, denominator)."
 
-	^ tuple ___with___: (self perform: #numerator env: 0) with: (self perform: #denominator env: 0)
+	^ tuple ___with___: (self @env0:numerator) with: (self @env0:denominator)
 %
 
 category: 'Python-Properties'
@@ -297,7 +295,7 @@ method: AbstractFraction
 denominator
 	"Return the denominator of the fraction."
 
-	^ self perform: #denominator env: 0
+	^ self @env0:denominator
 %
 
 category: 'Python-Fraction Methods'
@@ -305,7 +303,7 @@ method: AbstractFraction
 is_integer
 	"Return True if the fraction represents an integer (denominator == 1)."
 
-	^ (self perform: #denominator env: 0) ___eq___: 1
+	^ (self @env0:denominator) ___eq___: 1
 %
 
 category: 'Python-Fraction Methods'
@@ -329,22 +327,22 @@ limit_denominator: maxDenominator
 	].
 
 	"If denominator is already within limit, return self"
-	((self perform: #denominator env: 0) ___le___: maxDenominator) ifTrue: [
+	((self @env0:denominator) ___le___: maxDenominator) ifTrue: [
 		^ self
 	].
 
 	p0 := 0. q0 := 1.
 	p1 := 1. q1 := 0.
-	n := self perform: #numerator env: 0.
-	d := self perform: #denominator env: 0.
+	n := self @env0:numerator.
+	d := self @env0:denominator.
 
 	"Continued fraction algorithm"
 	[true] ___whileTrue___: [
-		a := n perform: #quo: env: 0 withArguments: {d}.
+		a := n @env0:quo: d.
 		q2 := q0 ___plus___: (a ___times___: q1).
 		(q2 ___gt___: maxDenominator) ifTrue: [
 			"Found the bound, now find best approximation"
-			k := (maxDenominator ___minus___: q0) perform: #quo: env: 0 withArguments: {q1}.
+			k := (maxDenominator ___minus___: q0) @env0:quo: q1.
 			bound1 := Fraction ___new___: Fraction _: (p0 ___plus___: (k ___times___: p1)) _: (q0 ___plus___: (k ___times___: q1)).
 			bound2 := Fraction ___new___: Fraction _: p1 _: q1.
 			"Return whichever is closer to self"
@@ -369,7 +367,7 @@ method: AbstractFraction
 numerator
 	"Return the numerator of the fraction."
 
-	^ self perform: #numerator env: 0
+	^ self @env0:numerator
 %
 
 set compile_env: 0

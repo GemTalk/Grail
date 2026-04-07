@@ -61,15 +61,15 @@ testDictKeyIteratorBasicIteration
 
 	| d iter key1 key2 key3 keys |
 	d := dict new.
-	d perform: #__setitem__:_: env: 1 withArguments: {'a'. 1}.
-	d perform: #__setitem__:_: env: 1 withArguments: {'b'. 2}.
-	d perform: #__setitem__:_: env: 1 withArguments: {'c'. 3}.
+	d @env1:__setitem__: 'a' _: 1.
+	d @env1:__setitem__: 'b' _: 2.
+	d @env1:__setitem__: 'c' _: 3.
 
-	iter := d perform: #__iter__ env: 1.
+	iter := d @env1:__iter__.
 
-	key1 := iter perform: #__next__ env: 1.
-	key2 := iter perform: #__next__ env: 1.
-	key3 := iter perform: #__next__ env: 1.
+	key1 := iter @env1:__next__.
+	key2 := iter @env1:__next__.
+	key3 := iter @env1:__next__.
 
 	keys := { key1. key2. key3. }.
 
@@ -78,7 +78,7 @@ testDictKeyIteratorBasicIteration
 	self assert: (keys includes: 'c').
 
 	"Iterator should be exhausted"
-	self should: [iter perform: #__next__ env: 1] raise: StopIteration.
+	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
 category: 'Tests - Dict Key Iterator'
@@ -88,14 +88,14 @@ testDictKeyIteratorExhaustion
 
 	| d iter |
 	d := dict new.
-	d perform: #__setitem__:_: env: 1 withArguments: {'a'. 1}.
+	d @env1:__setitem__: 'a' _: 1.
 
-	iter := d perform: #__iter__ env: 1.
+	iter := d @env1:__iter__.
 
-	iter perform: #__next__ env: 1.
+	iter @env1:__next__.
 
-	self should: [iter perform: #__next__ env: 1] raise: StopIteration.
-	self should: [iter perform: #__next__ env: 1] raise: StopIteration.
+	self should: [iter @env1:__next__] raise: StopIteration.
+	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
 category: 'Tests - Dict Key Iterator'
@@ -105,14 +105,14 @@ testDictKeyIteratorIndependence
 
 	| d iter1 iter2 key1a key1b |
 	d := dict new.
-	d perform: #__setitem__:_: env: 1 withArguments: {'a'. 1}.
-	d perform: #__setitem__:_: env: 1 withArguments: {'b'. 2}.
+	d @env1:__setitem__: 'a' _: 1.
+	d @env1:__setitem__: 'b' _: 2.
 
-	iter1 := d perform: #__iter__ env: 1.
-	iter2 := d perform: #__iter__ env: 1.
+	iter1 := d @env1:__iter__.
+	iter2 := d @env1:__iter__.
 
-	key1a := iter1 perform: #__next__ env: 1.
-	key1b := iter2 perform: #__next__ env: 1.
+	key1a := iter1 @env1:__next__.
+	key1b := iter2 @env1:__next__.
 
 	self assert: key1a equals: key1b.
 	self deny: iter1 == iter2.
@@ -125,10 +125,10 @@ testEmptyDictKeyIterator
 
 	| d iter |
 	d := dict new.
-	iter := d perform: #__iter__ env: 1.
+	iter := d @env1:__iter__.
 
 	"Should immediately raise StopIteration"
-	self should: [iter perform: #__next__ env: 1] raise: StopIteration.
+	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
 category: 'Tests - Empty Iterators'
@@ -138,10 +138,10 @@ testEmptyFrozensetIterator
 
 	| fs iter |
 	fs := frozenset new.
-	iter := fs perform: #__iter__ env: 1.
+	iter := fs @env1:__iter__.
 
 	"Should immediately raise StopIteration"
-	self should: [iter perform: #__next__ env: 1] raise: StopIteration.
+	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
 category: 'Tests - Empty Iterators'
@@ -151,10 +151,10 @@ testEmptyListIterator
 
 	| lst iter |
 	lst := list new.
-	iter := lst perform: #__iter__ env: 1.
+	iter := lst @env1:__iter__.
 
 	"Should immediately raise StopIteration"
-	self should: [iter perform: #__next__ env: 1] raise: StopIteration.
+	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
 category: 'Tests - Empty Iterators'
@@ -164,10 +164,10 @@ testEmptyRangeIterator
 
 	| rng iter |
 	rng := range from: 0 to: -1 by: 1.
-	iter := rng perform: #__iter__ env: 1.
+	iter := rng @env1:__iter__.
 
 	"Should immediately raise StopIteration"
-	self should: [iter perform: #__next__ env: 1] raise: StopIteration.
+	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
 category: 'Tests - Empty Iterators'
@@ -177,10 +177,10 @@ testEmptySetIterator
 
 	| s iter |
 	s := set new.
-	iter := s perform: #__iter__ env: 1.
+	iter := s @env1:__iter__.
 
 	"Should immediately raise StopIteration"
-	self should: [iter perform: #__next__ env: 1] raise: StopIteration.
+	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
 category: 'Tests - Empty Iterators'
@@ -190,10 +190,10 @@ testEmptyStringIterator
 
 	| str iter |
 	str := ''.
-	iter := str perform: #__iter__ env: 1.
+	iter := str @env1:__iter__.
 
 	"Should immediately raise StopIteration"
-	self should: [iter perform: #__next__ env: 1] raise: StopIteration.
+	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
 category: 'Tests - Set Iterator'
@@ -207,14 +207,14 @@ testFrozensetIteratorBasicIteration
 	fs add: 2.
 	fs add: 3.
 
-	iter := fs perform: #__iter__ env: 1.
+	iter := fs @env1:__iter__.
 	items := list new.
 
 	[true] whileTrue: [
 		| item |
 		[
-			item := iter perform: #__next__ env: 1.
-			items perform: #append: env: 1 withArguments: {item}
+			item := iter @env1:__next__.
+			items @env1:append: item
 		] on: StopIteration do: [:ex | ^ nil]
 	].
 
@@ -231,7 +231,7 @@ testIteratorHasIterAndNext
 
 	| lst iter |
 	lst := list withAll: #(1 2 3).
-	iter := lst perform: #__iter__ env: 1.
+	iter := lst @env1:__iter__.
 
 	"Iterator should have __iter__"
 	self assert: (iter class whichClassIncludesSelector: #__iter__ environmentId: 1) notNil.
@@ -247,9 +247,9 @@ testIteratorIterReturnsSelf
 
 	| lst iter result |
 	lst := list withAll: #(1 2 3).
-	iter := lst perform: #__iter__ env: 1.
+	iter := lst @env1:__iter__.
 
-	result := iter perform: #__iter__ env: 1.
+	result := iter @env1:__iter__.
 
 	self assert: result == iter.
 %
@@ -269,15 +269,15 @@ testIteratorTypes
 	fs := frozenset new.
 	fs add: 1.
 	d := dict new.
-	d perform: #__setitem__:_: env: 1 withArguments: {'a'. 1}.
+	d @env1:__setitem__: 'a' _: 1.
 
-	lstIter := lst perform: #__iter__ env: 1.
-	tplIter := tpl perform: #__iter__ env: 1.
-	strIter := str perform: #__iter__ env: 1.
-	rngIter := rng perform: #__iter__ env: 1.
-	sIter := s perform: #__iter__ env: 1.
-	fsIter := fs perform: #__iter__ env: 1.
-	dIter := d perform: #__iter__ env: 1.
+	lstIter := lst @env1:__iter__.
+	tplIter := tpl @env1:__iter__.
+	strIter := str @env1:__iter__.
+	rngIter := rng @env1:__iter__.
+	sIter := s @env1:__iter__.
+	fsIter := fs @env1:__iter__.
+	dIter := d @env1:__iter__.
 
 	self assert: lstIter class name equals: #'list_iterator'.
 	self assert: tplIter class name equals: #'tuple_iterator'.
@@ -295,14 +295,14 @@ testListIteratorBasicIteration
 
 	| lst iter |
 	lst := list withAll: #(10 20 30).
-	iter := lst perform: #__iter__ env: 1.
+	iter := lst @env1:__iter__.
 
-	self assert: (iter perform: #__next__ env: 1) equals: 10.
-	self assert: (iter perform: #__next__ env: 1) equals: 20.
-	self assert: (iter perform: #__next__ env: 1) equals: 30.
+	self assert: (iter @env1:__next__) equals: 10.
+	self assert: (iter @env1:__next__) equals: 20.
+	self assert: (iter @env1:__next__) equals: 30.
 
 	"Should raise StopIteration when exhausted"
-	self should: [iter perform: #__next__ env: 1] raise: StopIteration.
+	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
 category: 'Tests - List Iterator'
@@ -312,17 +312,17 @@ testListIteratorExhaustion
 
 	| lst iter |
 	lst := list withAll: #(1 2).
-	iter := lst perform: #__iter__ env: 1.
+	iter := lst @env1:__iter__.
 
 	"Consume all items"
-	iter perform: #__next__ env: 1.
-	iter perform: #__next__ env: 1.
+	iter @env1:__next__.
+	iter @env1:__next__.
 
 	"First StopIteration"
-	self should: [iter perform: #__next__ env: 1] raise: StopIteration.
+	self should: [iter @env1:__next__] raise: StopIteration.
 
 	"Should still raise StopIteration"
-	self should: [iter perform: #__next__ env: 1] raise: StopIteration.
+	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
 category: 'Tests - List Iterator'
@@ -332,17 +332,17 @@ testListIteratorIndependence
 
 	| lst iter1 iter2 |
 	lst := list withAll: #(1 2 3).
-	iter1 := lst perform: #__iter__ env: 1.
-	iter2 := lst perform: #__iter__ env: 1.
+	iter1 := lst @env1:__iter__.
+	iter2 := lst @env1:__iter__.
 
 	"Iterators should be different objects"
 	self deny: iter1 == iter2.
 
 	"Advancing one doesn't affect the other"
-	self assert: (iter1 perform: #__next__ env: 1) equals: 1.
-	self assert: (iter2 perform: #__next__ env: 1) equals: 1.
-	self assert: (iter1 perform: #__next__ env: 1) equals: 2.
-	self assert: (iter2 perform: #__next__ env: 1) equals: 2.
+	self assert: (iter1 @env1:__next__) equals: 1.
+	self assert: (iter2 @env1:__next__) equals: 1.
+	self assert: (iter1 @env1:__next__) equals: 2.
+	self assert: (iter2 @env1:__next__) equals: 2.
 %
 
 category: 'Tests - Range Iterator'
@@ -352,14 +352,14 @@ testRangeIteratorBasicIteration
 
 	| rng iter |
 	rng := range from: 5 to: 7 by: 1.
-	iter := rng perform: #__iter__ env: 1.
+	iter := rng @env1:__iter__.
 
-	self assert: (iter perform: #__next__ env: 1) equals: 5.
-	self assert: (iter perform: #__next__ env: 1) equals: 6.
-	self assert: (iter perform: #__next__ env: 1) equals: 7.
+	self assert: (iter @env1:__next__) equals: 5.
+	self assert: (iter @env1:__next__) equals: 6.
+	self assert: (iter @env1:__next__) equals: 7.
 
 	"Should raise StopIteration when exhausted"
-	self should: [iter perform: #__next__ env: 1] raise: StopIteration.
+	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
 category: 'Tests - Range Iterator'
@@ -369,14 +369,14 @@ testRangeIteratorNegativeStep
 
 	| rng iter |
 	rng := range from: 10 to: 6 by: -2.
-	iter := rng perform: #__iter__ env: 1.
+	iter := rng @env1:__iter__.
 
-	self assert: (iter perform: #__next__ env: 1) equals: 10.
-	self assert: (iter perform: #__next__ env: 1) equals: 8.
-	self assert: (iter perform: #__next__ env: 1) equals: 6.
+	self assert: (iter @env1:__next__) equals: 10.
+	self assert: (iter @env1:__next__) equals: 8.
+	self assert: (iter @env1:__next__) equals: 6.
 
 	"Should raise StopIteration when exhausted"
-	self should: [iter perform: #__next__ env: 1] raise: StopIteration.
+	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
 category: 'Tests - Range Iterator'
@@ -386,16 +386,16 @@ testRangeIteratorWithStep
 
 	| rng iter |
 	rng := range from: 0 to: 8 by: 2.
-	iter := rng perform: #__iter__ env: 1.
+	iter := rng @env1:__iter__.
 
-	self assert: (iter perform: #__next__ env: 1) equals: 0.
-	self assert: (iter perform: #__next__ env: 1) equals: 2.
-	self assert: (iter perform: #__next__ env: 1) equals: 4.
-	self assert: (iter perform: #__next__ env: 1) equals: 6.
-	self assert: (iter perform: #__next__ env: 1) equals: 8.
+	self assert: (iter @env1:__next__) equals: 0.
+	self assert: (iter @env1:__next__) equals: 2.
+	self assert: (iter @env1:__next__) equals: 4.
+	self assert: (iter @env1:__next__) equals: 6.
+	self assert: (iter @env1:__next__) equals: 8.
 
 	"Should raise StopIteration when exhausted"
-	self should: [iter perform: #__next__ env: 1] raise: StopIteration.
+	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
 category: 'Tests - Set Iterator'
@@ -409,14 +409,14 @@ testSetIteratorBasicIteration
 	s add: 2.
 	s add: 3.
 
-	iter := s perform: #__iter__ env: 1.
+	iter := s @env1:__iter__.
 	items := list new.
 
 	[true] whileTrue: [
 		| item |
 		[
-			item := iter perform: #__next__ env: 1.
-			items perform: #append: env: 1 withArguments: {item}
+			item := iter @env1:__next__.
+			items @env1:append: item
 		] on: StopIteration do: [:ex | ^ nil]
 	].
 
@@ -436,17 +436,17 @@ testSetIteratorExhaustion
 	s add: 1.
 	s add: 2.
 
-	iter := s perform: #__iter__ env: 1.
+	iter := s @env1:__iter__.
 
 	"Consume all elements"
-	iter perform: #__next__ env: 1.
-	iter perform: #__next__ env: 1.
+	iter @env1:__next__.
+	iter @env1:__next__.
 
 	"Next call should raise StopIteration"
-	self should: [iter perform: #__next__ env: 1] raise: StopIteration.
+	self should: [iter @env1:__next__] raise: StopIteration.
 
 	"Subsequent calls should also raise StopIteration"
-	self should: [iter perform: #__next__ env: 1] raise: StopIteration.
+	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
 category: 'Tests - Set Iterator'
@@ -460,14 +460,14 @@ testSetIteratorIndependence
 	s add: 2.
 	s add: 3.
 
-	iter1 := s perform: #__iter__ env: 1.
-	iter2 := s perform: #__iter__ env: 1.
+	iter1 := s @env1:__iter__.
+	iter2 := s @env1:__iter__.
 
 	"Advance iter1 once"
-	item1 := iter1 perform: #__next__ env: 1.
+	item1 := iter1 @env1:__next__.
 
 	"iter2 should still be at the beginning"
-	item2 := iter2 perform: #__next__ env: 1.
+	item2 := iter2 @env1:__next__.
 
 	"Both should have gotten the first element (order may vary in sets)"
 	self assert: ((item1 = 1) or: [
@@ -484,14 +484,14 @@ testStringIteratorBasicIteration
 
 	| str iter |
 	str := 'abc'.
-	iter := str perform: #__iter__ env: 1.
+	iter := str @env1:__iter__.
 
-	self assert: (iter perform: #__next__ env: 1) equals: 'a'.
-	self assert: (iter perform: #__next__ env: 1) equals: 'b'.
-	self assert: (iter perform: #__next__ env: 1) equals: 'c'.
+	self assert: (iter @env1:__next__) equals: 'a'.
+	self assert: (iter @env1:__next__) equals: 'b'.
+	self assert: (iter @env1:__next__) equals: 'c'.
 
 	"Should raise StopIteration when exhausted"
-	self should: [iter perform: #__next__ env: 1] raise: StopIteration.
+	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
 category: 'Tests - String Iterator'
@@ -501,9 +501,9 @@ testStringIteratorReturnsStrings
 
 	| str iter result |
 	str := 'hello'.
-	iter := str perform: #__iter__ env: 1.
+	iter := str @env1:__iter__.
 
-	result := iter perform: #__next__ env: 1.
+	result := iter @env1:__next__.
 
 	"Result should be a string, not a character"
 	self assert: (result isKindOf: String).
@@ -518,14 +518,14 @@ testTupleIteratorBasicIteration
 
 	| tpl iter |
 	tpl := tuple withAll: #(10 20 30).
-	iter := tpl perform: #__iter__ env: 1.
+	iter := tpl @env1:__iter__.
 
-	self assert: (iter perform: #__next__ env: 1) equals: 10.
-	self assert: (iter perform: #__next__ env: 1) equals: 20.
-	self assert: (iter perform: #__next__ env: 1) equals: 30.
+	self assert: (iter @env1:__next__) equals: 10.
+	self assert: (iter @env1:__next__) equals: 20.
+	self assert: (iter @env1:__next__) equals: 30.
 
 	"Should raise StopIteration when exhausted"
-	self should: [iter perform: #__next__ env: 1] raise: StopIteration.
+	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
 category: 'Tests - Tuple Iterator'
@@ -535,13 +535,13 @@ testTupleIteratorIndependence
 
 	| tpl iter1 iter2 |
 	tpl := tuple withAll: #(1 2 3).
-	iter1 := tpl perform: #__iter__ env: 1.
-	iter2 := tpl perform: #__iter__ env: 1.
+	iter1 := tpl @env1:__iter__.
+	iter2 := tpl @env1:__iter__.
 
 	"Iterators should be different objects"
 	self deny: iter1 == iter2.
 
 	"Advancing one doesn't affect the other"
-	self assert: (iter1 perform: #__next__ env: 1) equals: 1.
-	self assert: (iter2 perform: #__next__ env: 1) equals: 1.
+	self assert: (iter1 @env1:__next__) equals: 1.
+	self assert: (iter2 @env1:__next__) equals: 1.
 %

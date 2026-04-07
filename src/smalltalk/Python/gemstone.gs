@@ -51,11 +51,11 @@ __delitem__: key
 	"Remove the object named key from UserGlobals. Raises KeyError if not found."
 
 	| name |
-	name := key perform: #'asSymbol' env: 0.
-	(UserGlobals perform: #'includesKey:' env: 0 withArguments: { name }) ifFalse: [
+	name := key @env0:asSymbol.
+	(UserGlobals @env0:includesKey: name) ifFalse: [
 		KeyError ___signal___: key
 	].
-	UserGlobals perform: #'removeKey:' env: 0 withArguments: { name }.
+	UserGlobals @env0:removeKey: name.
 	^ nil
 %
 
@@ -65,9 +65,9 @@ __getitem__: key
 	"Return the object named key from the current session. Raises KeyError if not found."
 
 	| name session result |
-	name := key perform: #'asSymbol' env: 0.
-	session := GsCurrentSession perform: #'currentSession' env: 0.
-	result := session perform: #'objectNamed:' env: 0 withArguments: { name }.
+	name := key @env0:asSymbol.
+	session := GsCurrentSession @env0:currentSession.
+	result := session @env0:objectNamed: name.
 	result ifNil: [
 		KeyError ___signal___: key
 	].
@@ -80,14 +80,14 @@ __setitem__: key _: value
 	"Set the object named key in the current session. If an Association exists, update it; otherwise add to UserGlobals."
 
 	| name session assoc |
-	name := key perform: #'asSymbol' env: 0.
-	session := GsCurrentSession perform: #'currentSession' env: 0.
-	assoc := session perform: #'resolveSymbol:' env: 0 withArguments: { name }.
+	name := key @env0:asSymbol.
+	session := GsCurrentSession @env0:currentSession.
+	assoc := session @env0:resolveSymbol: name.
 	assoc ifNotNil: [
-		assoc perform: #'value:' env: 0 withArguments: { value }.
+		assoc @env0:value: value.
 		^ nil
 	].
-	UserGlobals perform: #'at:put:' env: 0 withArguments: { name . value }.
+	UserGlobals @env0:at: name put: value.
 	^ nil
 %
 
@@ -134,7 +134,7 @@ method: gemstone
 initialize_abort
 
 	self ___at___: #'abort' put: [:positional :keywords |
-		System perform: #'abort' env: 0.
+		System @env0:abort.
 	]
 %
 
@@ -143,7 +143,7 @@ method: gemstone
 initialize_commit
 
 	self ___at___: #'commit' put: [:positional :keywords |
-		System perform: #'commit' env: 0.
+		System @env0:commit.
 	]
 %
 
@@ -151,7 +151,7 @@ category: 'Metadata'
 method: gemstone
 version
 	"Return the GemStone version."
-	^ str ___withAll___: (System perform: #'stoneVersionAt:' env: 0 withArguments: { 'gsVersion' })
+	^ str ___withAll___: (System @env0:stoneVersionAt: 'gsVersion')
 %
 
 set compile_env: 0
