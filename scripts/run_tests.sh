@@ -6,13 +6,21 @@ if [ -z "$GEMSTONE" ]; then
     echo "Error: \$GEMSTONE is not set. Set it to your GemStone installation directory (e.g., /path/to/GemStone64Bit3.7.x-arch.Darwin)."
     exit 1
 fi
-if [ -z "$GEMSTONE_GLOBAL_DIR" ]; then
+
+if [ -d /opt/gemstone/locks ]; then
+  if [ -z "$GEMSTONE_GLOBAL_DIR" ]; then
+    echo "using /opt/gemstone/locks"
+  else
+    echo "using GEMSTONE_GLOBAL_DIR = $GEMSTONE_GLOBAL_DIR"
+  fi
+else
+  echo "directory /opt/gemstone/locks does not exist"
+  if [ -z "$GEMSTONE_GLOBAL_DIR" ]; then
     echo "Error: \$GEMSTONE_GLOBAL_DIR is not set. Set it to the directory containing your GemStone locks and logs."
     exit 1
-fi
-if ! command -v topaz &>/dev/null; then
-    echo "Error: 'topaz' is not on your \$PATH. Add \$GEMSTONE/bin to your PATH (e.g., export PATH=\$GEMSTONE/bin:\$PATH)."
-    exit 1
+  else
+    echo "using GEMSTONE_GLOBAL_DIR = $GEMSTONE_GLOBAL_DIR"
+  fi
 fi
 
 topaz -lq <<EOF

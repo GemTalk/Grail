@@ -1,6 +1,6 @@
 CC = cc
 CXX = c++
-CFLAGS = -Wall -Wextra -fPIC -O2
+CFLAGS = -Wall -Wconversion -Wno-sign-conversion -Wextra -fPIC -O2
 UNAME_S := $(shell uname -s)
 comma := ,
 

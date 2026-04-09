@@ -1,14 +1,26 @@
 login
 run
-| args dashDashOfs |
-" Search for  --  in command line, expect args before that to be topaz config, etc"
+| args dashDashOfs haveDashD |
+" Search for  --  in command line, expect args before that to be topaz config, etc 
+
+  If -D is on command line after -- and script is interactive, pass errors to topaz for debugging.
+  If GEM_LISTEN_FOR_DEBUG is in the gem configuration, pass errors to interactive topaz for debugging,
+  else  wait for a topaz to attach .
+"
 args := System commandLineArguments.
 1 to: args size do:[:j | (args at: j) = '--' ifTrue:[ dashDashOfs := j ]].
 Transcript := GsFile stdout.
-dashDashOfs ifNil:[ ExitClientError signal:' "--"   not found on topaz command line ' ].
-dashDashOfs < args size ifTrue:[  "assume a file name after the -- "
-    | path |
-    path := args at: dashDashOfs + 1 .
+haveDashD := false .
+dashDashOfs ifNil:[ ExitClientError signal: ' "--"   not found on topaz command line ' ].
+dashDashOfs < args size ifTrue:[  
+    " after '--'  we expect optional -D  and a filename " 
+    | anArg path |
+    anArg := args at: dashDashOfs + 1 .
+    anArg = '-D' ifTrue:[
+      haveDashD := true .
+      anArg := args at: dashDashOfs + 2 .
+    ].
+    path := anArg .
     (GsFile exists: path) ifFalse: [
         GsFile stderr nextPutAll: path printString , ' not found!'; lf; flush.
         Error signal: 'Path not found!'.
@@ -19,6 +31,14 @@ dashDashOfs < args size ifTrue:[  "assume a file name after the -- "
         | msg |
         msg := ex messageText.
         GsFile stdout flush .
+        GsFile stderr flush .
+        (haveDashD or:[ (System gemConfigurationAt: 'GEM_LISTEN_FOR_DEBUG') == true]) ifTrue:[
+          GsFile stdinServer isTerminal ifTrue:[
+             ex pass "pass to topaz for interactive debugging"
+          ].
+          GsFile stderr nextPutAll: msg; lf ; flush.
+          System waitForDebug .  "wait for a topaz to attach"
+        ].
         GsFile stderr nextPutAll: msg; lf ; flush.
         ExitClientError signal: msg status: 1.
     ].
