@@ -462,12 +462,12 @@ extern "C" int PyFloat_Check(PyObject *obj) {
  * ==================================================================== */
 
 extern "C" PyObject *PyLong_FromSsize_t(Py_ssize_t v) {
-    OopType arg = GciI64ToOop((int64)v);
+    OopType arg = GciI64ToOop(v);
     return addr_to_pyobj(GciPerform(server, "PyLong_FromSsize_t:", &arg, 1));
 }
 
 extern "C" PyObject *PyLong_FromLong(long v) {
-    OopType arg = GciI64ToOop((int64)v);
+    OopType arg = GciI64ToOop(v);
     return addr_to_pyobj(GciPerform(server, "PyLong_FromSsize_t:", &arg, 1));
 }
 
@@ -530,7 +530,7 @@ extern "C" PyObject *PyBytes_FromStringAndSize(const char *data, Py_ssize_t len)
     /* GciCreateByteObj is not available inside user actions.
        Create the ByteArray via GciPerform(ByteArray, "new:", size),
        then copy data into it with GciStoreBytes. */
-    OopType sizeOop = GciI64ToOop((int64)len);
+    OopType sizeOop = GciI64ToOop(len);
     OopType oop = GciPerform(OOP_CLASS_BYTE_ARRAY, "new:", &sizeOop, 1);
     if (len > 0) {
         GciStoreBytes(oop, 1, (const ByteType *)data, (int64)len);
@@ -559,7 +559,7 @@ extern "C" int PyBytes_Check(PyObject *obj) {
  * ==================================================================== */
 
 extern "C" PyObject *PyList_New(Py_ssize_t len) {
-    OopType arg = GciI64ToOop((int64)len);
+    OopType arg = GciI64ToOop(len);
     return addr_to_pyobj(GciPerform(server, "PyList_New:", &arg, 1));
 }
 
@@ -570,18 +570,18 @@ extern "C" int PyList_Append(PyObject *list, PyObject *item) {
 }
 
 extern "C" PyObject *PyList_GetItem(PyObject *list, Py_ssize_t index) {
-    OopType args[2] = { pyobj_oop(list), GciI64ToOop((int64)index) };
+    OopType args[2] = { pyobj_oop(list), GciI64ToOop(index) };
     return addr_to_pyobj(GciPerform(server, "PyList_GetItem:at:", args, 2));
 }
 
 extern "C" int PyList_SetItem(PyObject *list, Py_ssize_t index, PyObject *item) {
-    OopType args[3] = { pyobj_oop(list), GciI64ToOop((int64)index), pyobj_oop(item) };
+    OopType args[3] = { pyobj_oop(list), GciI64ToOop(index), pyobj_oop(item) };
     GciPerform(server, "PyList_SetItem:at:put:", args, 3);
     return 0;
 }
 
 extern "C" int PyList_Insert(PyObject *list, Py_ssize_t index, PyObject *item) {
-    OopType args[3] = { pyobj_oop(list), GciI64ToOop((int64)index), pyobj_oop(item) };
+    OopType args[3] = { pyobj_oop(list), GciI64ToOop(index), pyobj_oop(item) };
     GciPerform(server, "PyList_Insert:at:item:", args, 3);
     return 0;
 }
@@ -590,8 +590,8 @@ extern "C" int PyList_SetSlice(PyObject *list, Py_ssize_t lo, Py_ssize_t hi,
                                PyObject *itemlist) {
     OopType args[4] = {
         pyobj_oop(list),
-        GciI64ToOop((int64)lo),
-        GciI64ToOop((int64)hi),
+        GciI64ToOop(lo),
+        GciI64ToOop(hi),
         itemlist ? pyobj_oop(itemlist) : OOP_NIL
     };
     GciPerform(server, "PyList_SetSlice:from:to:with:", args, 4);
@@ -672,18 +672,18 @@ extern "C" int PyDict_Check(PyObject *obj) {
  * ==================================================================== */
 
 extern "C" PyObject *PyTuple_New(Py_ssize_t len) {
-    OopType arg = GciI64ToOop((int64)len);
+    OopType arg = GciI64ToOop(len);
     return addr_to_pyobj(GciPerform(server, "PyTuple_New:", &arg, 1));
 }
 
 extern "C" int PyTuple_SetItem(PyObject *tuple, Py_ssize_t pos, PyObject *value) {
-    OopType args[3] = { pyobj_oop(tuple), GciI64ToOop((int64)pos), pyobj_oop(value) };
+    OopType args[3] = { pyobj_oop(tuple), GciI64ToOop(pos), pyobj_oop(value) };
     GciPerform(server, "PyTuple_SetItem:at:put:", args, 3);
     return 0;
 }
 
 extern "C" PyObject *PyTuple_GetItem(PyObject *tuple, Py_ssize_t pos) {
-    OopType args[2] = { pyobj_oop(tuple), GciI64ToOop((int64)pos) };
+    OopType args[2] = { pyobj_oop(tuple), GciI64ToOop(pos) };
     return addr_to_pyobj(GciPerform(server, "PyTuple_GetItem:at:", args, 2));
 }
 
@@ -742,7 +742,7 @@ extern "C" Py_ssize_t PyObject_Length(PyObject *obj) {
  * ==================================================================== */
 
 extern "C" int PyObject_RichCompareBool(PyObject *v, PyObject *w, int op) {
-    OopType args[3] = { pyobj_oop(v), pyobj_oop(w), GciI64ToOop((int64)op) };
+    OopType args[3] = { pyobj_oop(v), pyobj_oop(w), GciI64ToOop(op) };
     OopType result = GciPerform(server,
         "PyObject_RichCompareBool:with:op:", args, 3);
     if (check_gci_error()) return -1;
@@ -1125,7 +1125,7 @@ extern "C" void *_grail_PyUnicode_DATA(PyObject *op) {
 
 extern "C" PyObject *PyUnicode_FromStringAndSize(const char *str, Py_ssize_t len) {
     /* Create a GemStone String of the given length */
-    OopType sizeOop = GciI64ToOop((int64)len);
+    OopType sizeOop = GciI64ToOop(len);
     OopType oop = GciPerform(OOP_CLASS_STRING, "new:", &sizeOop, 1);
     if (len > 0) {
         GciStoreBytes(oop, 1, (const ByteType *)str, (int64)len);
@@ -1206,7 +1206,7 @@ extern "C" PyObject *PyTuple_Pack(Py_ssize_t n, ...) {
 extern "C" PyObject *PySequence_GetItem(PyObject *seq, Py_ssize_t i) {
     if (PyList_Check(seq)) return PyList_GetItem(seq, i);
     if (PyTuple_Check(seq)) return PyTuple_GetItem(seq, i);
-    OopType args[2] = { pyobj_oop(seq), GciI64ToOop((int64)i) };
+    OopType args[2] = { pyobj_oop(seq), GciI64ToOop(i) };
     return addr_to_pyobj(GciPerform(server, "PySequence_GetItem:at:", args, 2));
 }
 
@@ -1263,7 +1263,7 @@ extern "C" int PyCallable_Check(PyObject *obj) {
 }
 
 extern "C" PyObject *PyObject_RichCompare(PyObject *v, PyObject *w, int op) {
-    OopType args[3] = { pyobj_oop(v), pyobj_oop(w), GciI64ToOop((int64)op) };
+    OopType args[3] = { pyobj_oop(v), pyobj_oop(w), GciI64ToOop(op) };
     OopType result = GciPerform(server, "PyObject_RichCompare:with:op:", args, 3);
     if (check_gci_error()) return NULL;
     return addr_to_pyobj(result);
@@ -1344,15 +1344,15 @@ extern "C" int PyDict_Next(PyObject *dict, Py_ssize_t *ppos, PyObject **pkey,
                             PyObject **pvalue) {
     /* Iterate over a GemStone-backed dictionary.
        Delegate to server — it returns an Array { key, value } or nil. */
-    OopType args[2] = { pyobj_oop(dict), GciI64ToOop((int64)*ppos) };
+    OopType args[2] = { pyobj_oop(dict), GciI64ToOop(*ppos) };
     OopType result = GciPerform(server, "PyDict_Next:pos:", args, 2);
     if (check_gci_error()) return 0;
     if (result == OOP_NIL) return 0;
 
     /* Result is an Array of { key_addr, value_addr, next_pos } */
-    OopType keyAddr = GciPerform(result, "at:", (OopType[]){ GciI64ToOop(1) }, 1);
-    OopType valAddr = GciPerform(result, "at:", (OopType[]){ GciI64ToOop(2) }, 1);
-    OopType nextPos = GciPerform(result, "at:", (OopType[]){ GciI64ToOop(3) }, 1);
+    OopType keyAddr = GciPerform(result, "at:", (OopType[]){ OOP_One }, 1);
+    OopType valAddr = GciPerform(result, "at:", (OopType[]){ OOP_Two }, 1);
+    OopType nextPos = GciPerform(result, "at:", (OopType[]){ OOP_Three }, 1);
 
     *pkey = addr_to_pyobj(keyAddr);
     *pvalue = addr_to_pyobj(valAddr);
@@ -1684,11 +1684,11 @@ static OopType shimCall(OopType modOop, OopType methOop,
     /* 9. Return value: C pointer or GemStone OOP */
     if (!result) return OOP_NIL;
     if (result == Py_None) {
-        if (returnCPtr) return GciI64ToOop(0);
+        if (returnCPtr) return OOP_Zero;
         return OOP_NIL;
     }
     if (returnCPtr)
-        return GciI64ToOop((int64)(intptr_t)result);
+        return GciI64ToOop((intptr_t)result);
     return pyobj_oop(result);
 }
 
@@ -1761,8 +1761,8 @@ static OopType shimTypeAddr(OopType nameOop)
     else if (strcmp(name, "type")   == 0) type = &PyType_Type;
     else if (strcmp(name, "NoneType") == 0) type = &_PyNone_Type;
 
-    if (!type) return GciI64ToOop(0);
-    return GciI64ToOop((int64)(intptr_t)type);
+    if (!type) return OOP_Zero;
+    return GciI64ToOop((intptr_t)type);
 }
 
 /* ====================================================================
@@ -2007,7 +2007,7 @@ static OopType shimDynLoad(OopType pathOop, OopType nameOop)
             PyMethodDef *methods = def->m_methods;
             int count = 0;
             while (methods[count].ml_name) count++;
-            OopType sizeOop = GciI64ToOop((int64)count);
+            OopType sizeOop = GciI64ToOop(count);
             OopType arr = GciPerform(OOP_CLASS_ARRAY, "new:", &sizeOop, 1);
             for (int j = 0; j < count; j++) {
                 OopType nameStr = GciNewString(methods[j].ml_name);
@@ -2062,7 +2062,7 @@ static OopType shimDynLoad(OopType pathOop, OopType nameOop)
     int count = 0;
     while (methods[count].ml_name) count++;
 
-    OopType sizeOop = GciI64ToOop((int64)count);
+    OopType sizeOop = GciI64ToOop(count);
     OopType arr = GciPerform(OOP_CLASS_ARRAY, "new:", &sizeOop, 1);
     for (int i = 0; i < count; i++) {
         OopType nameStr = GciNewString(methods[i].ml_name);
@@ -2173,11 +2173,11 @@ static OopType shimCallTyped(OopType modOop, OopType typeOop, OopType methOop,
                     }
                     if (!result) return OOP_NIL;
                     if (result == Py_None) {
-                        if (returnCPtr) return GciI64ToOop(0);
+                        if (returnCPtr) return OOP_Zero;
                         return OOP_NIL;
                     }
                     if (returnCPtr)
-                        return GciI64ToOop((int64)(intptr_t)result);
+                        return GciI64ToOop((intptr_t)result);
                     return pyobj_oop(result);
                 }
             }
@@ -2211,13 +2211,13 @@ static OopType shimCallTyped(OopType modOop, OopType typeOop, OopType methOop,
     }
 
     if (!result || result == Py_None) {
-        if (returnCPtr) return GciI64ToOop(0);  /* 0 = no result */
+        if (returnCPtr) return OOP_Zero;  /* 0 = no result */
         return OOP_NIL;
     }
 
     /* Return value: either a C pointer or a GemStone OOP */
     if (returnCPtr)
-        return GciI64ToOop((int64)(intptr_t)result);
+        return GciI64ToOop((intptr_t)result);
     return pyobj_oop(result);
 }
 
@@ -2296,11 +2296,11 @@ static OopType shimCall6(OopType modMethodOop, OopType a1, OopType a2,
 
     if (!result) return OOP_NIL;
     if (result == Py_None) {
-        if (returnCPtr) return GciI64ToOop(0);
+        if (returnCPtr) return OOP_Zero;
         return OOP_NIL;
     }
     if (returnCPtr)
-        return GciI64ToOop((int64)(intptr_t)result);
+        return GciI64ToOop((intptr_t)result);
     return pyobj_oop(result);
 }
 

@@ -1190,4 +1190,14 @@ sel := aSelectorSymbol @env0:asSymbol.
 ^self @env0:_perform: sel env: environmentId withArguments: { anObject }
 %
 
+category: 'Debugging Methods'
+classmethod: object
+___pause___
+  "call ___pause___ from Python to have execution stop and if interactive control goes to topaz debugger.
+   Signals an instance of Smalltalk   Halt   .
+   Allows insertion of a Python source code level breakpoint , than can be continued from"
+  ^ self @env0:pause
+%
+
+
 set compile_env: 0
