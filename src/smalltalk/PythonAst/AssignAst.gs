@@ -83,8 +83,19 @@ printSmalltalkOn: aStream
 category: 'other'
 method: AssignAst
 printSmalltalkAttributeStoreOn: aStream target: tgt
-	"Generate: obj ___at___: #'attr' put: value."
+	"Generate attribute store.
 
+	When in class method context and target is self.x,
+	emit direct instVar assignment: `x := expr.`
+	Otherwise: `obj ___at___: #'attr' put: expr.`"
+
+	((tgt value isKindOf: NameAst) and: [CallAst isSelfReference: tgt value id]) ifTrue: [
+		aStream nextPutAll: tgt attr.
+		aStream nextPutAll: ' := '.
+		value printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPut: $..
+		^self
+	].
 	tgt value printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' ___at___: #'''.
 	aStream nextPutAll: tgt attr.

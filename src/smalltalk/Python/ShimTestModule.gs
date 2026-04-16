@@ -138,159 +138,75 @@ callTestListInsert: aList index: anIndex value: aValue
 set compile_env: 1
 
 category: 'Python-Initialization'
+
+category: 'Python-Initialization'
 method: _shimtest
 initialize
-	self
-		initialize_test_float;
-		initialize_test_int;
-		initialize_test_string_len;
-		initialize_test_list_sum;
-		initialize_test_list_modify;
-		initialize_test_bool_not;
-		initialize_test_none;
-		initialize_test_error;
-		initialize_test_bytes_len;
-		initialize_test_list_insert
+	"No-op — all methods are real fast-path methods."
 %
 
-category: 'Python-Initialization'
+! ===============================================================================
+! Fast-path callables
+! ===============================================================================
+
+category: 'Python-Built-in Functions'
 method: _shimtest
-initialize_test_float
-	self ___at___: #test_float put: [:positional :keywords |
-		self ___class___ @env0:callTestFloat: (positional ___at___: 1)
-	]
+test_float: x
+	^ self ___class___ @env0:callTestFloat: x
 %
 
-category: 'Python-Initialization'
+category: 'Python-Built-in Functions'
 method: _shimtest
-initialize_test_int
-	self ___at___: #test_int put: [:positional :keywords |
-		self ___class___ @env0:callTestInt: (positional ___at___: 1)
-	]
+test_int: n
+	^ self ___class___ @env0:callTestInt: n
 %
 
-category: 'Python-Initialization'
+category: 'Python-Built-in Functions'
 method: _shimtest
-initialize_test_string_len
-	self ___at___: #test_string_len put: [:positional :keywords |
-		self ___class___ @env0:callTestStringLen: (positional ___at___: 1)
-	]
+test_string_len: s
+	^ self ___class___ @env0:callTestStringLen: s
 %
 
-category: 'Python-Initialization'
+category: 'Python-Built-in Functions'
 method: _shimtest
-initialize_test_list_sum
-	self ___at___: #test_list_sum put: [:positional :keywords |
-		self ___class___ @env0:callTestListSum: (positional ___at___: 1)
-	]
+test_list_sum: n
+	^ self ___class___ @env0:callTestListSum: n
 %
 
-category: 'Python-Initialization'
+category: 'Python-Built-in Functions'
 method: _shimtest
-initialize_test_list_modify
-	self ___at___: #test_list_modify put: [:positional :keywords |
-		self ___class___ @env0:callTestListModify: (positional ___at___: 1) value: (positional ___at___: 2)
-	]
+test_list_modify: aList _: val
+	^ self ___class___ @env0:callTestListModify: aList value: val
 %
 
-category: 'Python-Initialization'
+category: 'Python-Built-in Functions'
 method: _shimtest
-initialize_test_bool_not
-	self ___at___: #test_bool_not put: [:positional :keywords |
-		self ___class___ @env0:callTestBoolNot: (positional ___at___: 1)
-	]
+test_bool_not: x
+	^ self ___class___ @env0:callTestBoolNot: x
 %
 
-category: 'Python-Initialization'
-method: _shimtest
-initialize_test_none
-	self ___at___: #test_none put: [:positional :keywords |
-		self ___class___ @env0:callTestNone
-	]
-%
-
-category: 'Python-Initialization'
-method: _shimtest
-initialize_test_error
-	self ___at___: #test_error put: [:positional :keywords |
-		self ___class___ @env0:callTestError
-	]
-%
-
-category: 'Python-Initialization'
-method: _shimtest
-initialize_test_bytes_len
-	self ___at___: #test_bytes_len put: [:positional :keywords |
-		self ___class___ @env0:callTestBytesLen: (positional ___at___: 1)
-	]
-%
-
-category: 'Python-Initialization'
-method: _shimtest
-initialize_test_list_insert
-	self ___at___: #test_list_insert put: [:positional :keywords |
-		self ___class___ @env0:callTestListInsert: (positional ___at___: 1) index: (positional ___at___: 2) value: (positional ___at___: 3)
-	]
-%
-
-category: 'Python-Accessors'
-method: _shimtest
-test_float
-	^ self ___at___: #test_float
-%
-
-category: 'Python-Accessors'
-method: _shimtest
-test_int
-	^ self ___at___: #test_int
-%
-
-category: 'Python-Accessors'
-method: _shimtest
-test_string_len
-	^ self ___at___: #test_string_len
-%
-
-category: 'Python-Accessors'
-method: _shimtest
-test_list_sum
-	^ self ___at___: #test_list_sum
-%
-
-category: 'Python-Accessors'
-method: _shimtest
-test_list_modify
-	^ self ___at___: #test_list_modify
-%
-
-category: 'Python-Accessors'
-method: _shimtest
-test_bool_not
-	^ self ___at___: #test_bool_not
-%
-
-category: 'Python-Accessors'
+category: 'Python-Built-in Functions'
 method: _shimtest
 test_none
-	^ self ___at___: #test_none
+	^ self ___class___ @env0:callTestNone
 %
 
-category: 'Python-Accessors'
+category: 'Python-Built-in Functions'
 method: _shimtest
 test_error
-	^ self ___at___: #test_error
+	^ self ___class___ @env0:callTestError
 %
 
-category: 'Python-Accessors'
+category: 'Python-Built-in Functions'
 method: _shimtest
-test_bytes_len
-	^ self ___at___: #test_bytes_len
+test_bytes_len: b
+	^ self ___class___ @env0:callTestBytesLen: b
 %
 
-category: 'Python-Accessors'
+category: 'Python-Built-in Functions'
 method: _shimtest
-test_list_insert
-	^ self ___at___: #test_list_insert
+test_list_insert: aList _: idx _: val
+	^ self ___class___ @env0:callTestListInsert: aList index: idx value: val
 %
 
 set compile_env: 0

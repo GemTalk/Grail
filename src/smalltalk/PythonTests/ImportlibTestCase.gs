@@ -70,13 +70,12 @@ testAstForSource
 category: 'Tests - __import__'
 method: ImportlibTestCase
 testBuiltinsImport
-	"Test builtins.__import__ function"
+	"Test builtins.__import__ — Phase-4 varargs fast-path direct method dispatch."
 
-	| b importBlock result |
+	| b result |
 	b := builtins ___instance___.
-	importBlock := b @env1:__import__.
 
-	result := importBlock value: {'math'} value: nil.
+	result := b @env1:___import__: { 'math' } kw: nil.
 
 	self assert: result class equals: math
 %
@@ -86,11 +85,10 @@ method: ImportlibTestCase
 testBuiltinsImportNotFound
 	"Test that builtins.__import__ raises ModuleNotFoundError for unknown modules"
 
-	| b importBlock |
+	| b |
 	b := builtins ___instance___.
-	importBlock := b @env1:__import__.
 
-	self should: [importBlock value: {'unknown_module'} value: nil]
+	self should: [b @env1:___import__: { 'unknown_module' } kw: nil]
 		raise: ModuleNotFoundError
 %
 
@@ -99,11 +97,10 @@ method: ImportlibTestCase
 testImportModuleBuiltins
 	"Test importing the builtins module"
 
-	| imp importModuleBlock result |
+	| imp result |
 	imp := importlib @env1:instance.
-	importModuleBlock := imp @env1:import_module.
 
-	result := importModuleBlock value: {'builtins'} value: nil.
+	result := imp @env1:import_module: 'builtins'.
 
 	self assert: result class equals: builtins
 %
@@ -113,11 +110,10 @@ method: ImportlibTestCase
 testImportModuleCmath
 	"Test importing the cmath module"
 
-	| imp importModuleBlock result |
+	| imp result |
 	imp := importlib @env1:instance.
-	importModuleBlock := imp @env1:import_module.
 
-	result := importModuleBlock value: {'cmath'} value: nil.
+	result := imp @env1:import_module: 'cmath'.
 
 	self assert: result class equals: cmath
 %
@@ -127,11 +123,10 @@ method: ImportlibTestCase
 testImportModuleMath
 	"Test importing the math module"
 
-	| imp importModuleBlock result |
+	| imp result |
 	imp := importlib @env1:instance.
-	importModuleBlock := imp @env1:import_module.
 
-	result := importModuleBlock value: {'math'} value: nil.
+	result := imp @env1:import_module: 'math'.
 
 	self assert: result class equals: math
 %
@@ -143,9 +138,8 @@ testImportModuleNotFound
 
 	| imp importModuleBlock |
 	imp := importlib @env1:instance.
-	importModuleBlock := imp @env1:import_module.
 
-	self should: [importModuleBlock value: {'nonexistent_module'} value: nil]
+	self should: [imp @env1:import_module: 'nonexistent_module']
 		raise: ModuleNotFoundError
 %
 
@@ -154,11 +148,10 @@ method: ImportlibTestCase
 testImportModuleOs
 	"Test importing the os module"
 
-	| imp importModuleBlock result |
+	| imp result |
 	imp := importlib @env1:instance.
-	importModuleBlock := imp @env1:import_module.
 
-	result := importModuleBlock value: {'os'} value: nil.
+	result := imp @env1:import_module: 'os'.
 
 	self assert: result class equals: os
 %
@@ -168,11 +161,10 @@ method: ImportlibTestCase
 testImportModuleSys
 	"Test importing the sys module"
 
-	| imp importModuleBlock result |
+	| imp result |
 	imp := importlib @env1:instance.
-	importModuleBlock := imp @env1:import_module.
 
-	result := importModuleBlock value: {'sys'} value: nil.
+	result := imp @env1:import_module: 'sys'.
 
 	self assert: result class equals: sys
 %
@@ -182,12 +174,9 @@ method: ImportlibTestCase
 testInvalidateCaches
 	"Test invalidate_caches (should be a no-op for built-in modules)"
 
-	| imp invalidateCachesBlock result |
+	| imp result |
 	imp := importlib @env1:instance.
-	invalidateCachesBlock := imp @env1:invalidate_caches.
-
-	result := invalidateCachesBlock value: {} value: nil.
-
+	result := imp @env1:invalidate_caches.
 	self assert: result equals: None
 %
 
@@ -235,12 +224,11 @@ method: ImportlibTestCase
 testReload
 	"Test reloading a module"
 
-	| imp reloadBlock mathInstance reloadedInstance |
+	| imp mathInstance reloadedInstance |
 	imp := importlib @env1:instance.
-	reloadBlock := imp @env1:reload.
 
 	mathInstance := math @env1:instance.
-	reloadedInstance := reloadBlock value: {mathInstance} value: nil.
+	reloadedInstance := imp @env1:reload: mathInstance.
 
 	"After reload, we should get a fresh instance"
 	self assert: reloadedInstance class equals: math

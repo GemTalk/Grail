@@ -28,6 +28,10 @@ implementation compiled against cpython.h.
 The C module operates on float lists. Python lists passed from Grail
 are converted to/from float arrays at the boundary.
 
+Methods on this class are real env-1 fast-path methods, dispatched
+directly via `_bisect.method(args)` Python calls compiled to
+`((_bisect) method: a _: x)` Smalltalk sends.
+
 Usage (from Python source):
     import _bisect
     idx = _bisect.bisect_right([1.0, 2.0, 3.0, 4.0, 5.0], 3.0)   # => 3
@@ -78,7 +82,7 @@ callInsort: methodName list: anOrderedCollection value: aFloat
 %
 
 ! ===============================================================================
-! env 2 instance methods — Python-compatible callables
+! env 1 instance methods — Python-compatible callables
 ! ===============================================================================
 
 set compile_env: 1
@@ -86,73 +90,53 @@ set compile_env: 1
 category: 'Python-Initialization'
 method: _bisect
 initialize
-	self
-		initialize_bisect_right;
-		initialize_bisect_left;
-		initialize_insort_right;
-		initialize_insort_left
+	"No-op. The `module>>instance` class method still calls
+	`initialize` on the newly-created instance, so this stub keeps
+	that contract."
 %
 
-category: 'Python-Initialization'
+! ===============================================================================
+! Fast-path methods
+! ===============================================================================
+
+category: 'Python-Built-in Functions'
 method: _bisect
-initialize_bisect_right
-	"bisect_right(a, x) -> int"
-	self ___at___: #bisect_right put: [:positional :keywords |
-		self ___class___ @env0:callBisect: 'bisect_right' list: (positional ___at___: 1) value: (positional ___at___: 2)
-	]
+bisect_right: a _: x
+	"Python _bisect.bisect_right(a, x) — fast path. Returns
+	the rightmost insertion point for x in sorted list a."
+
+	^ self ___class___ @env0:callBisect: 'bisect_right' list: a value: x
 %
 
-category: 'Python-Initialization'
+category: 'Python-Built-in Functions'
 method: _bisect
-initialize_bisect_left
-	"bisect_left(a, x) -> int"
-	self ___at___: #bisect_left put: [:positional :keywords |
-		self ___class___ @env0:callBisect: 'bisect_left' list: (positional ___at___: 1) value: (positional ___at___: 2)
-	]
+bisect_left: a _: x
+	"Python _bisect.bisect_left(a, x) — fast path. Returns
+	the leftmost insertion point for x in sorted list a."
+
+	^ self ___class___ @env0:callBisect: 'bisect_left' list: a value: x
 %
 
-category: 'Python-Initialization'
+category: 'Python-Built-in Functions'
 method: _bisect
-initialize_insort_right
-	"insort_right(a, x) -> None (modifies a in place)"
-	self ___at___: #insort_right put: [:positional :keywords |
-		self ___class___ @env0:callInsort: 'insort_right' list: (positional ___at___: 1) value: (positional ___at___: 2).
-		None
-	]
+insort_right: a _: x
+	"Python _bisect.insort_right(a, x) — fast path. Inserts
+	x into sorted list a at the rightmost insertion point. Modifies
+	the list in place; returns None."
+
+	self ___class___ @env0:callInsort: 'insort_right' list: a value: x.
+	^ None
 %
 
-category: 'Python-Initialization'
+category: 'Python-Built-in Functions'
 method: _bisect
-initialize_insort_left
-	"insort_left(a, x) -> None (modifies a in place)"
-	self ___at___: #insort_left put: [:positional :keywords |
-		self ___class___ @env0:callInsort: 'insort_left' list: (positional ___at___: 1) value: (positional ___at___: 2).
-		None
-	]
-%
+insort_left: a _: x
+	"Python _bisect.insort_left(a, x) — fast path. Inserts
+	x into sorted list a at the leftmost insertion point. Modifies
+	the list in place; returns None."
 
-category: 'Python-Accessors'
-method: _bisect
-bisect_right
-	^ self ___at___: #bisect_right
-%
-
-category: 'Python-Accessors'
-method: _bisect
-bisect_left
-	^ self ___at___: #bisect_left
-%
-
-category: 'Python-Accessors'
-method: _bisect
-insort_right
-	^ self ___at___: #insort_right
-%
-
-category: 'Python-Accessors'
-method: _bisect
-insort_left
-	^ self ___at___: #insort_left
+	self ___class___ @env0:callInsort: 'insort_left' list: a value: x.
+	^ None
 %
 
 set compile_env: 0

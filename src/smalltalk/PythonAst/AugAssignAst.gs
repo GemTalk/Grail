@@ -77,8 +77,22 @@ printSmalltalkOn: aStream
 category: 'other'
 method: AugAssignAst
 printSmalltalkAttributeAugAssignOn: aStream
-	"Generate: obj ___at___: #'attr' put: (obj attr op value)."
+	"Generate augmented attribute assignment.
 
+	When in class method context and target is self.x,
+	emit `x := x op expr.`
+	Otherwise: `obj ___at___: #'attr' put: (obj attr op value).`"
+
+	((target value isKindOf: NameAst) and: [CallAst isSelfReference: target value id]) ifTrue: [
+		aStream nextPutAll: target attr.
+		aStream nextPutAll: ' := ('.
+		aStream nextPutAll: target attr.
+		aStream nextPut: $).
+		op printSmalltalkOn: aStream.
+		value printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPut: $..
+		^self
+	].
 	target value printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' ___at___: #'''.
 	aStream nextPutAll: target attr.

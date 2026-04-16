@@ -1,5 +1,41 @@
 # TODO
 
+## Dispatch Rewrite — Open Limitations
+
+The core dispatch rewrite (Phases 1-5) is complete. These are known
+limitations that are not blockers but would improve completeness:
+
+- [ ] **`module` still inherits from `SymbolDictionary`** — deferred since
+  Phase 1. User modules (Phase 5a) and user classes (Phase 5c) use proper
+  Smalltalk classes. Only the 23 built-in modules still require
+  SymbolDictionary inheritance (for legacy `___at___:` storage of constants
+  like `sys.modules`). Restructuring to `Object` subclass would require
+  migrating those stored attributes to instVars or explicit methods.
+
+- [ ] **No inheritance for Phase 5c classes** — `class Foo(Bar):` ignores
+  `bases`. Generated Smalltalk classes are always `Object` subclasses.
+  Supporting single inheritance would require making `pyc_Foo` a subclass
+  of `pyc_Bar` and propagating instVars/methods from the parent.
+
+- [ ] **No `@classmethod` / `@staticmethod`** — only instance methods
+  (`InstanceFunctionDefAst`) are compiled as real methods. `@classmethod`
+  and `@staticmethod` decorators are recognized by the parser but not
+  handled by Phase 5c codegen.
+
+- [ ] **No dynamic attribute access on generated classes** — `setattr()`,
+  `getattr()`, and `delattr()` don't work on Phase 5c class instances.
+  Attributes are instVars, so dynamic access would need reflection
+  (`instVarAt:put:` via name lookup).
+
+- [ ] **Nested `def` stays as a block** — by design. A `def` inside another
+  `def` compiles to a Smalltalk block (closure), not a method. This is
+  correct for Python closures that capture the enclosing scope.
+
+- [ ] **`_sre.compile()` C integration incomplete** — `SrePattern`/`SreMatch`
+  methods are converted to real arity-specialized methods, but the
+  underlying `shimCall` path for `_sre.compile()` isn't wired up. See the
+  section below for details.
+
 ## `import re` — Regular Expression Support
 
 The `_sre` C extension module (CPython's regex engine) is forked, compiled,

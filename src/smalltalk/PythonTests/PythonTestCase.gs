@@ -64,12 +64,18 @@ suite
 category: 'helpers'
 method: PythonTestCase
 eval: pythonSource
-	"Parse and evaluate a Python source string, returning the result."
+	"Parse and evaluate a Python source string, returning the result.
+
+	Phase 4c: the previous version inserted `builtins ___instance___` at
+	position 2 in the symbol list so bare-name builtin references could
+	resolve through the SymbolDictionary protocol. With Phase 4 codegen,
+	all builtin calls go through `((builtins instance) name: …)` or
+	BoundMethod, and bare-name resolution for builtins is no longer used.
+	The insertion has been removed."
 
 	| moduleScope scope module |
 	moduleScope := SymbolDictionary new.
 	scope := System myUserProfile symbolList copy.
-	scope insertObject: builtins ___instance___ at: 1.
 	scope insertObject: moduleScope at: 1.
 	module := ModuleAst parseSource: pythonSource.
 	module useTempsForBlock: false.

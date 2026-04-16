@@ -37,145 +37,323 @@ set compile_env: 0
 category: 'Tests - Numeric Functions'
 method: BuiltinsTestCase
 testAbs
-	"Test abs() function"
+	"Test abs() function — Phase-2 fast-path direct method dispatch.
 
-	| b absBlock result |
+	After the dispatch rewrite, `builtins>>abs:` is a real env-1 method
+	that takes a number directly. This test exercises that method, which
+	is what the codegen now emits for `abs(x)` call sites."
+
+	| b result |
 	b := builtins ___instance___.
-	absBlock := b @env1:abs.
 
-	result := absBlock value: {5} value: nil.
+	result := b @env1:abs: 5.
 	self assert: result equals: 5.
 
-	result := absBlock value: {-5} value: nil.
+	result := b @env1:abs: -5.
 	self assert: result equals: 5.
 
-	result := absBlock value: {0} value: nil.
+	result := b @env1:abs: 0.
 	self assert: result equals: 0.
 
-	result := absBlock value: {-3.14} value: nil.
+	result := b @env1:abs: -3.14.
 	self assert: (result - 3.14) abs < 0.0001
 %
+
+category: 'Tests - Numeric Functions'
+method: BuiltinsTestCase
+testAbsViaEval
+	"Test that `abs(x)` Python source compiles to the Phase-2 fast path
+	and produces the right answers for the same inputs as testAbs."
+
+	self assert: (self eval: 'abs(5)') equals: 5.
+	self assert: (self eval: 'abs(-5)') equals: 5.
+	self assert: (self eval: 'abs(0)') equals: 0.
+	self assert: ((self eval: 'abs(-3.14)') - 3.14) abs < 0.0001
+%
+
+category: 'Tests - Numeric Functions'
+method: BuiltinsTestCase
+testAbsAsValue
+	"Test that abs can be used as a first-class value via the BoundMethod
+	path. The reference `f = abs` materializes a BoundMethod at compile
+	time; calling `f(-5)` forwards through `BoundMethod>>value:value:` to
+	the underlying `builtins>>abs:` method."
+
+	| result |
+	result := self eval: '
+f = abs
+f(-5)'.
+	self assert: result equals: 5.
+
+	result := self eval: '
+g = abs
+g(0)'.
+	self assert: result equals: 0
+%
+
+category: 'Tests - Numeric Functions'
+method: BuiltinsTestCase
+testAbsShadowed
+	"Test that a local named `abs` shadows the builtin. The codegen must
+	NOT apply the BoundMethod special case when the name is declared as
+	a local in any enclosing scope."
+
+	| result |
+	result := self eval: '
+abs = 42
+abs'.
+	self assert: result equals: 42
+%
+
+category: 'Tests - Backlog Fixes'
+method: BuiltinsTestCase
+testLambdaBasic
+	"Test that basic lambda expressions compile and execute correctly."
+
+	self assert: (self eval: '
+f = lambda x: x + 1
+f(5)
+') equals: 6
+%
+
+category: 'Tests - Backlog Fixes'
+method: BuiltinsTestCase
+testLambdaTwoArgs
+	"Test that lambda with two arguments works."
+
+	self assert: (self eval: '
+f = lambda x, y: x * y
+f(3, 4)
+') equals: 12
+%
+
+category: 'Tests - Backlog Fixes'
+method: BuiltinsTestCase
+testImportBuiltinsDoesNotBreak
+	"Test that `import builtins` does not break builtin calls. The
+	codegen now emits `(Python at: #builtins) instance` instead of
+	`builtins instance`, so the local variable shadow is harmless."
+
+	self assert: (self eval: '
+import builtins
+abs(-5)') equals: 5
+%
+
+category: 'Tests - Phase 4b Varargs'
+method: BuiltinsTestCase
+testEvalPow3Arg
+	"Phase 4b: pow(x, y, z) — varargs fast path. The 2-arg form goes
+	through the fixed-arity `pow:_:` (Phase 4a); the 3-arg form lands in
+	`_pow:kw:` (Phase 4b)."
+
+	self assert: (self eval: 'pow(2, 3, 5)') equals: 3.
+	self assert: (self eval: 'pow(10, 2, 7)') equals: 2.
+	self assert: (self eval: 'pow(2, 3)') equals: 8
+%
+
+category: 'Tests - Phase 4b Varargs'
+method: BuiltinsTestCase
+testEvalRound2Arg
+	"Phase 4b: round(x, n) — varargs fast path through `_round:kw:`."
+
+	| result |
+	result := self eval: 'round(3.14159, 2)'.
+	self assert: (result - 3.14) abs < 0.0001.
+	result := self eval: 'round(3.14159, 0)'.
+	self assert: result equals: 3.
+	self assert: (self eval: 'round(3.7)') equals: 4
+%
+
+category: 'Tests - Phase 4b Varargs'
+method: BuiltinsTestCase
+testEvalPrint
+	"Phase 4b: print(...) — varargs fast path through `_print:kw:`.
+	Just checks the call returns nil (the side effect on Transcript is
+	exercised but not asserted)."
+
+	self assert: (self eval: 'print(1, 2, 3)') == nil.
+	self assert: (self eval: 'print()') == nil.
+	self assert: (self eval: 'print("hello")') == nil
+%
+
+category: 'Tests - Phase 4b Varargs'
+method: BuiltinsTestCase
+testPrintAsValue
+	"Phase 4b: print can be used as a first-class value. The BoundMethod
+	indirect-call path must fall back to the `_print:kw:` varargs form
+	when no fixed-arity match is found."
+
+	self assert: (self eval: '
+f = print
+f(1, 2, 3)') == nil
+%
+
+category: 'Tests - Phase 4b Varargs'
+method: BuiltinsTestCase
+testPow3ArgAsValue
+	"Phase 4b: 3-arg pow() through a first-class function value.
+	Exercises BoundMethod's varargs fallback for indirect calls."
+
+	self assert: (self eval: '
+f = pow
+f(2, 3, 5)') equals: 3
+%
+
+category: 'Tests - Phase 4c Arity Errors'
+method: BuiltinsTestCase
+testAbsWrongArityRaisesTypeError
+	"Phase 4c (Phase 3 replacement): calling a fixed-arity builtin with
+	the wrong number of positional arguments raises a Python TypeError
+	at runtime, not a GemStone `undefined symbol` compile error."
+
+	self should: [self eval: 'abs(1, 2)'] raise: TypeError.
+	self should: [self eval: 'abs(1, 2, 3)'] raise: TypeError.
+	self should: [self eval: 'abs()'] raise: TypeError
+%
+
+category: 'Tests - Phase 4c Arity Errors'
+method: BuiltinsTestCase
+testFixedArityWithKwargsRaisesTypeError
+	"Phase 4c: passing kwargs to a fixed-arity-only builtin raises
+	TypeError. There is no `_abs:kw:` varargs form, so kwargs miss
+	the fast path entirely and the known-builtin error branch fires."
+
+	self should: [self eval: 'abs(x=5)'] raise: TypeError.
+	self should: [self eval: 'len(s="hi")'] raise: TypeError
+%
+
+category: 'Tests - Phase 4c Arity Errors'
+method: BuiltinsTestCase
+testTwoArgWrongArityRaisesTypeError
+	"Phase 4c: 2-arg builtins like `divmod` raise TypeError when called
+	with wrong arity. The 1-arg case has no `divmod:` method, so it
+	hits the known-builtin error branch."
+
+	self should: [self eval: 'divmod(10)'] raise: TypeError.
+	self should: [self eval: 'divmod(10, 3, 1)'] raise: TypeError
+%
+
 
 category: 'Tests - Aggregation Functions'
 method: BuiltinsTestCase
 testAll
-	"Test all() function"
+	"Test all() — Phase-4 fast-path direct method dispatch."
 
-	| b allBlock result lst |
+	| b result lst |
 	b := builtins ___instance___.
-	allBlock := b @env1:all.
 
 	lst := list withAll: #(true true true).
-	result := allBlock value: {lst} value: nil.
+	result := b @env1:all: lst.
 	self assert: result.
 
 	lst := list withAll: #(true false true).
-	result := allBlock value: {lst} value: nil.
+	result := b @env1:all: lst.
 	self deny: result.
 
 	lst := list withAll: #().
-	result := allBlock value: {lst} value: nil.
+	result := b @env1:all: lst.
 	self assert: result
 %
 
 category: 'Tests - Aggregation Functions'
 method: BuiltinsTestCase
 testAny
-	"Test any() function"
+	"Test any() — Phase-4 fast-path direct method dispatch."
 
-	| b anyBlock result lst |
+	| b result lst |
 	b := builtins ___instance___.
-	anyBlock := b @env1:any.
 
 	lst := list withAll: #(false false true).
-	result := anyBlock value: {lst} value: nil.
+	result := b @env1:any: lst.
 	self assert: result.
 
 	lst := list withAll: #(false false false).
-	result := anyBlock value: {lst} value: nil.
+	result := b @env1:any: lst.
 	self deny: result.
 
 	lst := list withAll: #().
-	result := anyBlock value: {lst} value: nil.
+	result := b @env1:any: lst.
 	self deny: result
 %
 
 category: 'Tests - Numeric Functions'
 method: BuiltinsTestCase
 testBin
-	"Test bin() function"
+	"Test bin() — Phase-4 fast-path direct method dispatch."
 
-	| b binBlock result |
+	| b result |
 	b := builtins ___instance___.
-	binBlock := b @env1:bin.
 
-	result := binBlock value: {5} value: nil.
+	result := b @env1:bin: 5.
 	self assert: result equals: '0b101'.
 
-	result := binBlock value: {8} value: nil.
+	result := b @env1:bin: 8.
 	self assert: result equals: '0b1000'.
 
-	result := binBlock value: {0} value: nil.
+	result := b @env1:bin: 0.
 	self assert: result equals: '0b0'
 %
 
 category: 'Tests - Introspection'
 method: BuiltinsTestCase
 testCallable
-	"Test callable() function"
+	"Test callable() — Phase-4 fast-path direct method dispatch.
 
-	| b callableBlock method result lst |
+	The first assertion uses a BoundMethod (the Phase-4 first-class
+	function value for `f = abs`) as the candidate to test, since the
+	new dispatch model no longer puts dispatchable callables in the
+	SymbolDictionary slot."
+
+	| b result lst boundAbs |
 	b := builtins ___instance___.
-	callableBlock := b @env1:callable.
-	method := b @env1:abs.
-	"Functions/methods are callable"
-	result := callableBlock value: {method} value: nil.
+
+	"BoundMethod for abs is callable (responds to value:value:)."
+	boundAbs := BoundMethod @env1:receiver: b selector: #abs.
+	result := b @env1:callable: boundAbs.
 	self assert: result.
 
 	"Regular objects are not callable"
-	result := callableBlock value: {42} value: nil.
+	result := b @env1:callable: 42.
 	self deny: result.
 
 	lst := list new.
-	result := callableBlock value: {lst} value: nil.
+	result := b @env1:callable: lst.
 	self deny: result
 %
 
 category: 'Tests - String Functions'
 method: BuiltinsTestCase
 testChr
-	"Test chr() function"
+	"Test chr() — Phase-4 fast-path direct method dispatch."
 
-	| b chrBlock result |
+	| b result |
 	b := builtins ___instance___.
-	chrBlock := b @env1:chr.
 
-	result := chrBlock value: {65} value: nil.
+	result := b @env1:chr: 65.
 	self assert: result equals: 'A'.
 
-	result := chrBlock value: {97} value: nil.
+	result := b @env1:chr: 97.
 	self assert: result equals: 'a'.
 
-	result := chrBlock value: {48} value: nil.
+	result := b @env1:chr: 48.
 	self assert: result equals: '0'
 %
 
 category: 'Tests - Math Functions'
 method: BuiltinsTestCase
 testDivmod
-	"Test divmod() function"
+	"Test divmod() — Phase-4 fast-path direct method dispatch."
 
-	| b divmodBlock result quotient remainder |
+	| b result quotient remainder |
 	b := builtins ___instance___.
-	divmodBlock := b @env1:divmod.
 
-	result := divmodBlock value: {10. 3} value: nil.
+	result := b @env1:divmod: 10 _: 3.
 	quotient := result @env1:__getitem__: 0.
 	remainder := result @env1:__getitem__: 1.
 	self assert: quotient equals: 3.
 	self assert: remainder equals: 1.
 
-	result := divmodBlock value: {17. 5} value: nil.
+	result := b @env1:divmod: 17 _: 5.
 	quotient := result @env1:__getitem__: 0.
 	remainder := result @env1:__getitem__: 1.
 	self assert: quotient equals: 3.
@@ -185,14 +363,13 @@ testDivmod
 category: 'Tests - Sequence Functions'
 method: BuiltinsTestCase
 testEnumerate
-	"Test enumerate() function"
+	"Test enumerate() — Phase-4 fast-path direct method dispatch."
 
-	| b enumerateBlock result lst iter first second |
+	| b result lst first second |
 	b := builtins ___instance___.
-	enumerateBlock := b @env1:enumerate.
 
 	lst := list withAll: #('a' 'b' 'c').
-	result := enumerateBlock value: {lst} value: nil.
+	result := b @env1:enumerate: lst.
 
 	first := result @env1:__next__.
 	self assert: (first @env1:__getitem__: 0) equals: 0.
@@ -342,52 +519,49 @@ testEvalSum
 category: 'Tests - Type Functions'
 method: BuiltinsTestCase
 testHash
-	"Test hash() function"
+	"Test hash() — Phase-4 fast-path direct method dispatch."
 
-	| b hashBlock result |
+	| b result |
 	b := builtins ___instance___.
-	hashBlock := b @env1:hash.
 
-	result := hashBlock value: {42} value: nil.
+	result := b @env1:hash: 42.
 	self assert: (result isKindOf: Integer).
 
-	result := hashBlock value: {'hello'} value: nil.
+	result := b @env1:hash: 'hello'.
 	self assert: (result isKindOf: Integer)
 %
 
 category: 'Tests - Numeric Functions'
 method: BuiltinsTestCase
 testHex
-	"Test hex() function"
+	"Test hex() — Phase-4 fast-path direct method dispatch."
 
-	| b hexBlock result |
+	| b result |
 	b := builtins ___instance___.
-	hexBlock := b @env1:hex.
 
-	result := hexBlock value: {255} value: nil.
+	result := b @env1:hex: 255.
 	self assert: result equals: '0xff'.
 
-	result := hexBlock value: {16} value: nil.
+	result := b @env1:hex: 16.
 	self assert: result equals: '0x10'.
 
-	result := hexBlock value: {0} value: nil.
+	result := b @env1:hex: 0.
 	self assert: result equals: '0x0'
 %
 
 category: 'Tests - Introspection'
 method: BuiltinsTestCase
 testId
-	"Test id() function"
+	"Test id() — Phase-4 fast-path direct method dispatch."
 
-	| b idBlock result obj1 obj2 id1 id2 |
+	| b obj1 obj2 id1 id2 |
 	b := builtins ___instance___.
-	idBlock := b @env1:id.
 
 	obj1 := list new.
 	obj2 := list new.
 
-	id1 := idBlock value: {obj1} value: nil.
-	id2 := idBlock value: {obj2} value: nil.
+	id1 := b @env1:id: obj1.
+	id2 := b @env1:id: obj2.
 
 	self assert: (id1 isKindOf: Integer).
 	self assert: (id2 isKindOf: Integer).
@@ -397,43 +571,41 @@ testId
 category: 'Tests - Type Checking'
 method: BuiltinsTestCase
 testIsinstance
-	"Test isinstance() function"
+	"Test isinstance() — Phase-4 fast-path direct method dispatch."
 
-	| b isinstanceBlock result lst |
+	| b result lst |
 	b := builtins ___instance___.
-	isinstanceBlock := b @env1:isinstance.
 
-	result := isinstanceBlock value: {42. int} value: nil.
+	result := b @env1:isinstance: 42 _: int.
 	self assert: result.
 
-	result := isinstanceBlock value: {'hello'. str} value: nil.
+	result := b @env1:isinstance: 'hello' _: str.
 	self assert: result.
 
 	lst := list new.
-	result := isinstanceBlock value: {lst. list} value: nil.
+	result := b @env1:isinstance: lst _: list.
 	self assert: result.
 
-	result := isinstanceBlock value: {42. str} value: nil.
+	result := b @env1:isinstance: 42 _: str.
 	self deny: result
 %
 
 category: 'Tests - Type Functions'
 method: BuiltinsTestCase
 testLen
-	"Test len() function"
+	"Test len() — Phase-4 fast-path direct method dispatch."
 
-	| b lenBlock result lst |
+	| b result lst |
 	b := builtins ___instance___.
-	lenBlock := b @env1:len.
 
-	result := lenBlock value: {'hello'} value: nil.
+	result := b @env1:len: 'hello'.
 	self assert: result equals: 5.
 
 	lst := list new.
 	lst @env1:append: 1.
 	lst @env1:append: 2.
 	lst @env1:append: 3.
-	result := lenBlock value: {lst} value: nil.
+	result := b @env1:len: lst.
 	self assert: result equals: 3
 %
 
@@ -442,86 +614,79 @@ method: BuiltinsTestCase
 testLenTypeError
 	"Test that len() raises TypeError for objects without __len__"
 
-	| b lenBlock |
+	| b |
 	b := builtins ___instance___.
-	lenBlock := b @env1:len.
 
-	self should: [
-		lenBlock value: {42} value: nil.
-	] raise: TypeError
+	self should: [b @env1:len: 42] raise: TypeError
 %
 
 category: 'Tests - Aggregation Functions'
 method: BuiltinsTestCase
 testMax
-	"Test max() function"
+	"Test max() — Phase-4 fast-path direct method dispatch."
 
-	| b maxBlock result lst |
+	| b result lst |
 	b := builtins ___instance___.
-	maxBlock := b @env1:max.
 
 	lst := list withAll: #(5 2 8 1 9).
-	result := maxBlock value: {lst} value: nil.
+	result := b @env1:max: lst.
 	self assert: result equals: 9.
 
 	lst := list withAll: #(-5 -2 -8).
-	result := maxBlock value: {lst} value: nil.
+	result := b @env1:max: lst.
 	self assert: result equals: -2
 %
 
 category: 'Tests - Aggregation Functions'
 method: BuiltinsTestCase
 testMin
-	"Test min() function"
+	"Test min() — Phase-4 fast-path direct method dispatch."
 
-	| b minBlock result lst |
+	| b result lst |
 	b := builtins ___instance___.
-	minBlock := b @env1:min.
 
 	lst := list withAll: #(5 2 8 1 9).
-	result := minBlock value: {lst} value: nil.
+	result := b @env1:min: lst.
 	self assert: result equals: 1.
 
 	lst := list withAll: #(-5 -2 -8).
-	result := minBlock value: {lst} value: nil.
+	result := b @env1:min: lst.
 	self assert: result equals: -8
 %
 
 category: 'Tests - Numeric Functions'
 method: BuiltinsTestCase
 testOct
-	"Test oct() function"
+	"Test oct() — Phase-4 fast-path direct method dispatch."
 
-	| b octBlock result |
+	| b result |
 	b := builtins ___instance___.
-	octBlock := b @env1:oct.
 
-	result := octBlock value: {8} value: nil.
+	result := b @env1:oct: 8.
 	self assert: result equals: '0o10'.
 
-	result := octBlock value: {64} value: nil.
+	result := b @env1:oct: 64.
 	self assert: result equals: '0o100'.
 
-	result := octBlock value: {0} value: nil.
+	result := b @env1:oct: 0.
 	self assert: result equals: '0o0'
 %
 
 category: 'Tests - String Functions'
 method: BuiltinsTestCase
 testOrd
-	"Test ord() function"
+	"Test ord() — Phase-4 fast-path direct method dispatch."
 
-	| b ordBlock result |
+	| b result |
 	b := builtins ___instance___.
-	ordBlock := b @env1:ord.
 
-	result := ordBlock value: {'A'} value: nil.
+	result := b @env1:ord: 'A'.
 	self assert: result equals: 65.
 
-	result := ordBlock value: {'a'} value: nil.
+	result := b @env1:ord: 'a'.
 	self assert: result equals: 97.
 
-	result := ordBlock value: {'0'} value: nil.
+	result := b @env1:ord: '0'.
 	self assert: result equals: 48
 %
 
@@ -530,116 +695,105 @@ method: BuiltinsTestCase
 testOrdTypeError
 	"Test that ord() raises TypeError for strings with length != 1"
 
-	| b ordBlock |
+	| b |
 	b := builtins ___instance___.
-	ordBlock := b @env1:ord.
 
-	self should: [
-		ordBlock value: {'hello'} value: nil.
-	] raise: TypeError.
-
-	self should: [
-		ordBlock value: {''} value: nil.
-	] raise: TypeError
+	self should: [b @env1:ord: 'hello'] raise: TypeError.
+	self should: [b @env1:ord: ''] raise: TypeError
 %
 
 category: 'Tests - Math Functions'
 method: BuiltinsTestCase
 testPow
-	"Test pow() function"
+	"Test pow() — Phase-4 fast-path direct method dispatch."
 
-	| b powBlock result |
+	| b result |
 	b := builtins ___instance___.
-	powBlock := b @env1:pow.
 
-	result := powBlock value: {2. 3} value: nil.
+	result := b @env1:pow: 2 _: 3.
 	self assert: result equals: 8.
 
-	result := powBlock value: {5. 2} value: nil.
+	result := b @env1:pow: 5 _: 2.
 	self assert: result equals: 25.
 
-	result := powBlock value: {10. 0} value: nil.
+	result := b @env1:pow: 10 _: 0.
 	self assert: result equals: 1
 %
 
 category: 'Tests - Math Functions'
 method: BuiltinsTestCase
 testPowWithModulo
-	"Test pow() function with modulo"
+	"Test pow(x, y, z) — Phase-4 varargs fast-path implementation."
 
-	| b powModBlock result |
+	| b result |
 	b := builtins ___instance___.
-	powModBlock := b @env1:powWithMod.
 
-	result := powModBlock value: {2. 3. 5} value: nil.
+	result := b @env1:_pow: #(2 3 5) kw: nil.
 	self assert: result equals: 3.
 
-	result := powModBlock value: {10. 2. 7} value: nil.
+	result := b @env1:_pow: #(10 2 7) kw: nil.
 	self assert: result equals: 2
 %
 
 category: 'Tests - System Functions'
 method: BuiltinsTestCase
 testQuit
-	"Test quit() function is defined and callable"
+	"Test quit() — Phase-4 varargs fast-path. The implementation lives at
+	`builtins>>_quit:kw:`. The unary `quit` getter is gone in Phase 4c;
+	to obtain a first-class value for `quit`, use a BoundMethod."
 
-	| b quitBlock callableBlock |
+	| b quitMethod |
 	b := builtins ___instance___.
-	quitBlock := b @env1:quit.
-	"Verify quit is defined"
-	self assert: quitBlock notNil.
-
-	"Verify quit is callable (responds to value:value:)"
-	callableBlock := b @env1:callable.
-	self assert: (callableBlock value: {quitBlock} value: nil)
+	"BoundMethod for quit is callable (responds to value:value:)."
+	quitMethod := BoundMethod @env1:receiver: b selector: #quit.
+	self assert: quitMethod notNil.
+	self assert: (b @env1:callable: quitMethod)
 %
 
 category: 'Tests - String Functions'
 method: BuiltinsTestCase
 testRepr
-	"Test repr() function"
+	"Test repr() — Phase-4 fast-path direct method dispatch."
 
-	| b reprBlock result |
+	| b result |
 	b := builtins ___instance___.
-	reprBlock := b @env1:repr.
 
-	result := reprBlock value: {'hello'} value: nil.
+	result := b @env1:repr: 'hello'.
 	self assert: (result includesString: 'hello').
 
-	result := reprBlock value: {42} value: nil.
+	result := b @env1:repr: 42.
 	self assert: result equals: '42'
 %
 
 category: 'Tests - Math Functions'
 method: BuiltinsTestCase
 testRound
-	"Test round() function"
+	"Test round() — Phase-4 fast-path direct method dispatch."
 
-	| b roundBlock result |
+	| b result |
 	b := builtins ___instance___.
-	roundBlock := b @env1:round.
 
-	result := roundBlock value: {3.7} value: nil.
+	result := b @env1:round: 3.7.
 	self assert: result equals: 4.
 
-	result := roundBlock value: {3.2} value: nil.
+	result := b @env1:round: 3.2.
 	self assert: result equals: 3.
 
-	result := roundBlock value: {-2.8} value: nil.
+	result := b @env1:round: -2.8.
 	self assert: result equals: -3
 %
 
 category: 'Tests - Sequence Functions'
 method: BuiltinsTestCase
 testSorted
-	"Test sorted() function - returns a new sorted list, leaving original unchanged"
+	"Test sorted() — Phase-4 fast-path direct method dispatch.
+	Returns a new sorted list, leaving the original unchanged."
 
-	| b sortedBlock result lst |
+	| b result lst |
 	b := builtins ___instance___.
-	sortedBlock := b @env1:sorted.
 
 	lst := list withAll: #(3 1 4 1 5 9 2 6).
-	result := sortedBlock value: {lst} value: nil.
+	result := b @env1:sorted: lst.
 
 	"Verify the result is sorted"
 	self assert: (result @env1:__getitem__: 0) equals: 1.
@@ -657,70 +811,67 @@ testSorted
 category: 'Tests - String Functions'
 method: BuiltinsTestCase
 testStr
-	"Test str() function"
+	"Test str() — Phase-4 fast-path direct method dispatch."
 
-	| b strBlock result |
+	| b result |
 	b := builtins ___instance___.
-	strBlock := b @env1:str.
 
-	result := strBlock value: {42} value: nil.
+	result := b @env1:str: 42.
 	self assert: result equals: '42'.
 
-	result := strBlock value: {'hello'} value: nil.
+	result := b @env1:str: 'hello'.
 	self assert: result equals: 'hello'
 %
 
 category: 'Tests - Aggregation Functions'
 method: BuiltinsTestCase
 testSum
-	"Test sum() function"
+	"Test sum() — Phase-4 fast-path direct method dispatch."
 
-	| b sumBlock result lst |
+	| b result lst |
 	b := builtins ___instance___.
-	sumBlock := b @env1:sum.
 
 	lst := list withAll: #(1 2 3 4 5).
-	result := sumBlock value: {lst} value: nil.
+	result := b @env1:sum: lst.
 	self assert: result equals: 15.
 
 	lst := list withAll: #().
-	result := sumBlock value: {lst} value: nil.
+	result := b @env1:sum: lst.
 	self assert: result equals: 0
 %
 
 category: 'Tests - Type Functions'
 method: BuiltinsTestCase
 testType
-	"Test type() function"
+	"Test type() — Phase-4 fast-path direct method dispatch."
 
-	| b typeBlock result |
+	| b result |
 	b := builtins ___instance___.
-	typeBlock := b @env1:type.
 
-	result := typeBlock value: {42} value: nil.
+	result := b @env1:type: 42.
 	self assert: (42 isKindOf: result).
 
-	result := typeBlock value: {'hello'} value: nil.
+	result := b @env1:type: 'hello'.
 	self assert: ('hello' isKindOf: result).
 
-	result := typeBlock value: {list new} value: nil.
+	result := b @env1:type: list new.
 	self assert: (list new isKindOf: result)
 %
 
 category: 'Tests - Sequence Functions'
 method: BuiltinsTestCase
 testZip
-	"Test zip() function"
+	"Test zip() — Phase-4 varargs fast-path direct method dispatch.
+	The new method takes individual iterables as positional args, matching
+	standard Python `zip(a, b)` semantics."
 
-	| b zipBlock result lst1 lst2 iterables iter first |
+	| b result lst1 lst2 first |
 	b := builtins ___instance___.
-	zipBlock := b @env1:zip.
 
 	lst1 := list withAll: #(1 2 3).
 	lst2 := list withAll: #('a' 'b' 'c').
-	iterables := list withAll: {lst1. lst2}.
 
-	result := zipBlock value: {iterables} value: nil.
+	result := b @env1:_zip: { lst1. lst2 } kw: nil.
 
 	first := result @env1:__next__.
 	self assert: (first @env1:__getitem__: 0) equals: 1.

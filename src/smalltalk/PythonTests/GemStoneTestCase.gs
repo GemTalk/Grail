@@ -131,13 +131,46 @@ method: GemStoneTestCase
 testGemstoneModuleIsAvailable
 	"Test that gemstone module is registered and importable"
 
-	| modules imp importModuleBlock result |
+	| modules imp result |
 	modules := importlib @env1:modules.
 	self assert: (modules includesKey: #gemstone).
 
 	imp := importlib @env1:instance.
-	importModuleBlock := imp @env1:import_module.
-	result := importModuleBlock value: {'gemstone'} value: nil.
+	result := imp @env1:import_module: 'gemstone'.
 
 	self assert: result class equals: gemstone
+%
+
+category: 'Tests - Phase 4d Attribute Calls'
+method: GemStoneTestCase
+testEvalGemstoneVersion
+	"Phase 4d: `gemstone.version` from Python source. Exercises the
+	attribute-read path on a converted module."
+
+	| result expected |
+	result := self eval: '
+import gemstone
+gemstone.version
+'.
+	expected := System @env0:stoneVersionAt: 'gsVersion'.
+	self assert: result equals: expected
+%
+
+category: 'Tests - Phase 4d Attribute Calls'
+method: GemStoneTestCase
+testEvalGemstoneSetGetDelItem
+	"Exercises __setitem__, __getitem__, and __delitem__ dunder methods
+	on a converted module via the subscript protocol."
+
+	| result |
+	result := self eval: '
+import gemstone
+gemstone["_grail_p4d_key"] = "p4d_value"
+v = gemstone["_grail_p4d_key"]
+del gemstone["_grail_p4d_key"]
+v
+'.
+	self assert: result equals: 'p4d_value'.
+	"Verify deletion: the key should no longer exist"
+	self deny: (UserGlobals @env0:includesKey: #'_grail_p4d_key')
 %

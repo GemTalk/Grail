@@ -41,7 +41,7 @@ testCorrelation
 
 	| s result |
 	s := statistics ___instance___.
-	result := (s @env1:correlation) value: {{1. 2. 3. 4. 5}. {2. 4. 6. 8. 10}} value: nil.
+	result := s @env1:correlation: {1. 2. 3. 4. 5} _: {2. 4. 6. 8. 10}.
 
 	"Perfect positive correlation"
 	self assert: (((result - 1.0) abs) < 0.00001).
@@ -54,7 +54,7 @@ testCorrelationNegative
 
 	| s result |
 	s := statistics ___instance___.
-	result := (s @env1:correlation) value: {{1. 2. 3. 4. 5}. {10. 8. 6. 4. 2}} value: nil.
+	result := s @env1:correlation: {1. 2. 3. 4. 5} _: {10. 8. 6. 4. 2}.
 
 	"Perfect negative correlation"
 	self assert: (((result - -1.0) abs) < 0.00001).
@@ -67,7 +67,7 @@ testCovariance
 
 	| s result |
 	s := statistics ___instance___.
-	result := (s @env1:covariance) value: {{1. 2. 3. 4. 5}. {2. 4. 6. 8. 10}} value: nil.
+	result := s @env1:covariance: {1. 2. 3. 4. 5} _: {2. 4. 6. 8. 10}.
 
 	"Covariance of x and y=2x should be 2 * variance(x) = 2 * 2.5 = 5.0"
 	self assert: (((result - 5.0) abs) < 0.00001).
@@ -80,7 +80,7 @@ testFmean
 
 	| s result |
 	s := statistics ___instance___.
-	result := (s @env1:fmean) value: {{1. 2. 3. 4. 5}} value: nil.
+	result := s @env1:fmean: {1. 2. 3. 4. 5}.
 
 	self assert: (((result - 3.0) abs) < 0.00001).
 %
@@ -92,7 +92,7 @@ testFmeanWithWeights
 
 	| s result expected |
 	s := statistics ___instance___.
-	result := (s @env1:fmean) value: {{1. 2. 3}} value: (Dictionary new at: #weights put: {1. 2. 3}; yourself).
+	result := s @env1:_fmean: {{1. 2. 3}} kw: (Dictionary new at: #weights put: {1. 2. 3}; yourself).
 
 	"Weighted mean: (1*1 + 2*2 + 3*3) / (1+2+3) = 14/6 = 2.333..."
 	expected := (14/6) asFloat.
@@ -106,7 +106,7 @@ testGeometricMean
 
 	| s result expected |
 	s := statistics ___instance___.
-	result := (s @env1:geometric_mean) value: {{1. 2. 4. 8}} value: nil.
+	result := s @env1:geometric_mean: {1. 2. 4. 8}.
 
 	"Geometric mean of 1,2,4,8 = (1*2*4*8)^(1/4) = 64^0.25 = 2.828..."
 	expected := 64 raisedTo: 0.25.
@@ -120,7 +120,7 @@ testHarmonicMean
 
 	| s result expected |
 	s := statistics ___instance___.
-	result := (s @env1:harmonic_mean) value: {{1. 2. 4}} value: nil.
+	result := s @env1:harmonic_mean: {1. 2. 4}.
 
 	"Harmonic mean: 3 / (1/1 + 1/2 + 1/4) = 3 / 1.75 = 1.714..."
 	expected := 3 / 1.75.
@@ -134,7 +134,7 @@ testLinearRegression
 
 	| s result slope intercept |
 	s := statistics ___instance___.
-	result := (s @env1:linear_regression) value: {{1. 2. 3. 4. 5}. {3. 5. 7. 9. 11}} value: nil.
+	result := s @env1:linear_regression: {1. 2. 3. 4. 5} _: {3. 5. 7. 9. 11}.
 
 	"y = 2x + 1, so slope=2, intercept=1"
 	slope := result at: 1.
@@ -150,7 +150,7 @@ testMean
 
 	| s result |
 	s := statistics ___instance___.
-	result := (s @env1:mean) value: {{1. 2. 3. 4. 5}} value: nil.
+	result := s @env1:mean: {1. 2. 3. 4. 5}.
 
 	self assert: result equals: 3.
 %
@@ -164,7 +164,7 @@ testMeanEmpty
 	s := statistics ___instance___.
 
 	self should: [
-		(s @env1:mean) value: {{}} value: nil
+		s @env1:mean: {}.
 	] raise: StatisticsError.
 %
 
@@ -175,7 +175,7 @@ testMeanFloat
 
 	| s result |
 	s := statistics ___instance___.
-	result := (s @env1:mean) value: {{1. 2. 3. 4}} value: nil.
+	result := s @env1:mean: {1. 2. 3. 4}.
 
 	self assert: (((result - 2.5) abs) < 0.00001).
 %
@@ -187,7 +187,7 @@ testMedianEven
 
 	| s result |
 	s := statistics ___instance___.
-	result := (s @env1:median) value: {{1. 2. 3. 4}} value: nil.
+	result := s @env1:median: {1. 2. 3. 4}.
 
 	self assert: (((result - 2.5) abs) < 0.00001).
 %
@@ -199,7 +199,7 @@ testMedianHigh
 
 	| s result |
 	s := statistics ___instance___.
-	result := (s @env1:median_high) value: {{1. 2. 3. 4}} value: nil.
+	result := s @env1:median_high: {1. 2. 3. 4}.
 
 	self assert: result equals: 3.
 %
@@ -211,7 +211,7 @@ testMedianLow
 
 	| s result |
 	s := statistics ___instance___.
-	result := (s @env1:median_low) value: {{1. 2. 3. 4}} value: nil.
+	result := s @env1:median_low: {1. 2. 3. 4}.
 
 	self assert: result equals: 2.
 %
@@ -223,7 +223,7 @@ testMedianOdd
 
 	| s result |
 	s := statistics ___instance___.
-	result := (s @env1:median) value: {{1. 3. 5. 7. 9}} value: nil.
+	result := s @env1:median: {1. 3. 5. 7. 9}.
 
 	self assert: result equals: 5.
 %
@@ -235,7 +235,7 @@ testPstdev
 
 	| s result |
 	s := statistics ___instance___.
-	result := (s @env1:pstdev) value: {{2. 4. 4. 4. 5. 5. 7. 9}} value: nil.
+	result := s @env1:pstdev: {2. 4. 4. 4. 5. 5. 7. 9}.
 
 	"Population stdev = sqrt(4.0) = 2.0"
 	self assert: (((result - 2.0) abs) < 0.00001).
@@ -248,7 +248,7 @@ testPvariance
 
 	| s result |
 	s := statistics ___instance___.
-	result := (s @env1:pvariance) value: {{2. 4. 4. 4. 5. 5. 7. 9}} value: nil.
+	result := s @env1:pvariance: {2. 4. 4. 4. 5. 5. 7. 9}.
 
 	"Population variance = 4.0"
 	self assert: (((result - 4.0) abs) < 0.00001).
@@ -261,7 +261,7 @@ testQuantiles
 
 	| s result |
 	s := statistics ___instance___.
-	result := (s @env1:quantiles) value: {{1. 2. 3. 4. 5. 6. 7. 8. 9. 10}} value: nil.
+	result := s @env1:quantiles: {1. 2. 3. 4. 5. 6. 7. 8. 9. 10}.
 
 	"Default n=4 gives quartiles (3 cut points)"
 	self assert: result size equals: 3.
@@ -274,7 +274,7 @@ testStdev
 
 	| s result expected |
 	s := statistics ___instance___.
-	result := (s @env1:stdev) value: {{2. 4. 4. 4. 5. 5. 7. 9}} value: nil.
+	result := s @env1:stdev: {2. 4. 4. 4. 5. 5. 7. 9}.
 
 	"Sample stdev = sqrt(4.571...) = 2.138..."
 	expected := 4.571428571428571 sqrt.
@@ -288,7 +288,7 @@ testVariance
 
 	| s result expected |
 	s := statistics ___instance___.
-	result := (s @env1:variance) value: {{2. 4. 4. 4. 5. 5. 7. 9}} value: nil.
+	result := s @env1:variance: {2. 4. 4. 4. 5. 5. 7. 9}.
 
 	"Sample variance of 2,4,4,4,5,5,7,9 = 4.571..."
 	expected := 4.571428571428571.

@@ -50,5 +50,41 @@ DeleteAst category: 'Parser'
 removeallmethods DeleteAst
 removeallclassmethods DeleteAst
 set compile_env: 0
-! ------------------- Class methods for DeleteAst
-! ------------------- Instance methods for DeleteAst
+
+category: 'Accessing'
+method: DeleteAst
+targets
+	^ targets
+%
+
+category: 'other'
+method: DeleteAst
+printSmalltalkOn: aStream
+	"Generate Smalltalk for `del target1, target2, ...`.
+
+	For each target:
+	  * SubscriptAst (del x[key]) → (x) __delitem__: (key)
+	  * NameAst (del name) → name := nil
+	  * AttributeAst (del obj.attr) → not yet supported, raises error
+
+	See https://docs.python.org/3/reference/simple_stmts.html#the-del-statement"
+
+	targets do: [:target |
+		(target isKindOf: SubscriptAst) ifTrue: [
+			"del x[key] → (x) __delitem__: (key)"
+			aStream nextPut: $(.
+			target value printSmalltalkWithParenthesisOn: aStream.
+			aStream nextPutAll: ') __delitem__: ('.
+			target slice printSmalltalkOn: aStream.
+			aStream nextPutAll: ').'.
+		] ifFalse: [
+			(target isKindOf: NameAst) ifTrue: [
+				"del name → name := nil"
+				aStream nextPutAll: target id; nextPutAll: ' := nil.'.
+			] ifFalse: [
+				self error: 'del for ', target class name, ' is not yet supported'
+			]
+		].
+		aStream lf.
+	].
+%

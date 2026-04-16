@@ -42,7 +42,7 @@ testBetavariate
 	| r result |
 	r := random ___instance___.
 
-	result := (r @env1:betavariate) value: {2. 5} value: nil.
+	result := r @env1:betavariate: 2 _: 5.
 	self assert: (result isKindOf: Float).
 	self assert: (result >= 0).
 	self assert: (result <= 1).  "Beta is always in [0, 1]"
@@ -56,17 +56,17 @@ testBinomialvariate
 	| r result |
 	r := random ___instance___.
 
-	result := (r @env1:binomialvariate) value: {10. 0.5} value: nil.
+	result := r @env1:binomialvariate: 10 _: 0.5.
 	self assert: (result isKindOf: Integer).
 	self assert: (result >= 0).
 	self assert: (result <= 10).
 
 	"p=0 should always return 0"
-	result := (r @env1:binomialvariate) value: {10. 0} value: nil.
+	result := r @env1:binomialvariate: 10 _: 0.
 	self assert: result equals: 0.
 
 	"p=1 should always return n"
-	result := (r @env1:binomialvariate) value: {10. 1} value: nil.
+	result := r @env1:binomialvariate: 10 _: 1.
 	self assert: result equals: 10.
 %
 
@@ -79,7 +79,7 @@ testChoice
 	r := random ___instance___.
 	seq := #(1 2 3 4 5).
 
-	result := (r @env1:choice) value: {seq} value: nil.
+	result := r @env1:choice: seq.
 	self assert: (seq includes: result).
 %
 
@@ -91,7 +91,7 @@ testChoiceEmptySequence
 	| r |
 	r := random ___instance___.
 
-	self should: [(r @env1:choice) value: {#()} value: nil] raise: IndexError.
+	self should: [r @env1:choice: #()] raise: IndexError.
 %
 
 category: 'Tests - Sequence'
@@ -102,7 +102,7 @@ testChoices
 	| r result |
 	r := random ___instance___.
 
-	result := (r @env1:choices) value: {#(1 2 3)} value: (Dictionary new at: #k put: 5; yourself).
+	result := r @env1:_choices: {#(1 2 3)} kw: (Dictionary new at: #k put: 5; yourself).
 	self assert: result size equals: 5.
 	result do: [:each | self assert: (#(1 2 3) includes: each)].
 %
@@ -116,7 +116,7 @@ testChoicesWithWeights
 	r := random ___instance___.
 	weights := #(1 0 0).  "Only first element should be chosen"
 
-	result := (r @env1:choices) value: {#(1 2 3)} value: (Dictionary new at: #weights put: weights; at: #k put: 10; yourself).
+	result := r @env1:_choices: {#(1 2 3)} kw: (Dictionary new at: #weights put: weights; at: #k put: 10; yourself).
 	self assert: result size equals: 10.
 	result do: [:each | self assert: each equals: 1].
 %
@@ -129,7 +129,7 @@ testExpovariate
 	| r result |
 	r := random ___instance___.
 
-	result := (r @env1:expovariate) value: {1} value: nil.
+	result := r @env1:expovariate: 1.
 	self assert: (result isKindOf: Float).
 	self assert: (result >= 0).  "Exponential is always non-negative"
 %
@@ -142,7 +142,7 @@ testGammavariate
 	| r result |
 	r := random ___instance___.
 
-	result := (r @env1:gammavariate) value: {2. 1} value: nil.
+	result := r @env1:gammavariate: 2 _: 1.
 	self assert: (result isKindOf: Float).
 	self assert: (result > 0).  "Gamma is always positive"
 %
@@ -155,7 +155,7 @@ testGauss
 	| r result |
 	r := random ___instance___.
 
-	result := (r @env1:gauss) value: {0. 1} value: nil.
+	result := r @env1:gauss: 0 _: 1.
 	self assert: (result isKindOf: Float).
 	"Gauss can return any value, but very unlikely to be outside -10 to 10 for mu=0, sigma=1"
 %
@@ -168,12 +168,12 @@ testGetrandbits
 	| r result |
 	r := random ___instance___.
 
-	result := (r @env1:getrandbits) value: {8} value: nil.
+	result := r @env1:getrandbits: 8.
 	self assert: (result isKindOf: Integer).
 	self assert: (result >= 0).
 	self assert: (result < 256).
 
-	result := (r @env1:getrandbits) value: {16} value: nil.
+	result := r @env1:getrandbits: 16.
 	self assert: (result >= 0).
 	self assert: (result < 65536).
 %
@@ -186,7 +186,7 @@ testGetrandbitsNegative
 	| r |
 	r := random ___instance___.
 
-	self should: [(r @env1:getrandbits) value: {-1} value: nil] raise: ValueError.
+	self should: [r @env1:getrandbits: -1] raise: ValueError.
 %
 
 category: 'Tests - Edge Cases'
@@ -197,7 +197,7 @@ testGetrandbitsZero
 	| r result |
 	r := random ___instance___.
 
-	result := (r @env1:getrandbits) value: {0} value: nil.
+	result := r @env1:getrandbits: 0.
 	self assert: result equals: 0.
 %
 
@@ -209,7 +209,7 @@ testGetstate
 	| r |
 	r := random ___instance___.
 
-	self should: [(r @env1:getstate) value: {} value: nil] raise: NotImplementedError.
+	self should: [r @env1:getstate] raise: NotImplementedError
 %
 
 category: 'Tests - Singleton'
@@ -232,7 +232,7 @@ testLognormvariate
 	| r result |
 	r := random ___instance___.
 
-	result := (r @env1:lognormvariate) value: {0. 1} value: nil.
+	result := r @env1:lognormvariate: 0 _: 1.
 	self assert: (result isKindOf: Float).
 	self assert: (result > 0).  "Log-normal is always positive"
 %
@@ -245,7 +245,7 @@ testNormalvariate
 	| r result |
 	r := random ___instance___.
 
-	result := (r @env1:normalvariate) value: {0. 1} value: nil.
+	result := r @env1:normalvariate: 0 _: 1.
 	self assert: (result isKindOf: Float).
 %
 
@@ -257,7 +257,7 @@ testParetovariate
 	| r result |
 	r := random ___instance___.
 
-	result := (r @env1:paretovariate) value: {2} value: nil.
+	result := r @env1:paretovariate: 2.
 	self assert: (result isKindOf: Float).
 	self assert: (result >= 1).  "Pareto with xm=1 is always >= 1"
 %
@@ -270,11 +270,11 @@ testRandbytes
 	| r result |
 	r := random ___instance___.
 
-	result := (r @env1:randbytes) value: {8} value: nil.
+	result := r @env1:randbytes: 8.
 	self assert: (result isKindOf: ByteArray).
 	self assert: result size equals: 8.
 
-	result := (r @env1:randbytes) value: {0} value: nil.
+	result := r @env1:randbytes: 0.
 	self assert: result size equals: 0.
 %
 
@@ -286,7 +286,7 @@ testRandbytesNegative
 	| r |
 	r := random ___instance___.
 
-	self should: [(r @env1:randbytes) value: {-1} value: nil] raise: ValueError.
+	self should: [r @env1:randbytes: -1] raise: ValueError.
 %
 
 category: 'Tests - Edge Cases'
@@ -297,7 +297,7 @@ testRandbytesZero
 	| r result |
 	r := random ___instance___.
 
-	result := (r @env1:randbytes) value: {0} value: nil.
+	result := r @env1:randbytes: 0.
 	self assert: (result isKindOf: ByteArray).
 	self assert: result size equals: 0.
 %
@@ -311,18 +311,18 @@ testRandint
 	r := random ___instance___.
 
 	"Test basic randint"
-	result := (r @env1:randint) value: {1. 10} value: nil.
+	result := r @env1:randint: 1 _: 10.
 	self assert: (result isKindOf: Integer).
 	self assert: (result >= 1).
 	self assert: (result <= 10).
 
 	"Test with negative numbers"
-	result := (r @env1:randint) value: {-10. -1} value: nil.
+	result := r @env1:randint: -10 _: -1.
 	self assert: (result >= -10).
 	self assert: (result <= -1).
 
 	"Test single value range"
-	result := (r @env1:randint) value: {5. 5} value: nil.
+	result := r @env1:randint: 5 _: 5.
 	self assert: result equals: 5.
 %
 
@@ -333,7 +333,7 @@ testRandom
 
 	| r result |
 	r := random ___instance___.
-	result := (r @env1:random) value: {} value: nil.
+	result := r @env1:random.
 
 	self assert: (result isKindOf: Float).
 	self assert: (result >= 0.0).
@@ -349,9 +349,9 @@ testRandrangeErrors
 	r := random ___instance___.
 
 	"Empty range should raise ValueError"
-	self should: [(r @env1:randrange) value: {0} value: nil] raise: ValueError.
-	self should: [(r @env1:randrange) value: {10. 5} value: nil] raise: ValueError.
-	self should: [(r @env1:randrange) value: {0. 10. -1} value: nil] raise: ValueError.
+	self should: [r @env1:_randrange: {0} kw: nil] raise: ValueError.
+	self should: [r @env1:_randrange: {10. 5} kw: nil] raise: ValueError.
+	self should: [r @env1:_randrange: {0. 10. -1} kw: nil] raise: ValueError.
 %
 
 category: 'Tests - Integer'
@@ -362,7 +362,7 @@ testRandrangeOneArg
 	| r result |
 	r := random ___instance___.
 
-	result := (r @env1:randrange) value: {10} value: nil.
+	result := r @env1:randrange: 10.
 	self assert: (result isKindOf: Integer).
 	self assert: (result >= 0).
 	self assert: (result < 10).
@@ -377,13 +377,13 @@ testRandrangeThreeArgs
 	r := random ___instance___.
 
 	"Step of 10: should get 0, 10, 20, ..., 90"
-	result := (r @env1:randrange) value: {0. 100. 10} value: nil.
+	result := r @env1:randrange: 0 _: 100 _: 10.
 	self assert: (result \\ 10) equals: 0.
 	self assert: (result >= 0).
 	self assert: (result < 100).
 
 	"Step of 2: should get even numbers"
-	result := (r @env1:randrange) value: {0. 10. 2} value: nil.
+	result := r @env1:randrange: 0 _: 10 _: 2.
 	self assert: (result \\ 2) equals: 0.
 %
 
@@ -395,7 +395,7 @@ testRandrangeTwoArgs
 	| r result |
 	r := random ___instance___.
 
-	result := (r @env1:randrange) value: {5. 15} value: nil.
+	result := r @env1:randrange: 5 _: 15.
 	self assert: (result >= 5).
 	self assert: (result < 15).
 %
@@ -408,7 +408,7 @@ testSample
 	| r result |
 	r := random ___instance___.
 
-	result := (r @env1:sample) value: {#(1 2 3 4 5). 3} value: nil.
+	result := r @env1:sample: #(1 2 3 4 5) _: 3.
 	self assert: result size equals: 3.
 
 	"Check all elements are unique"
@@ -427,7 +427,7 @@ testSampleErrors
 	r := random ___instance___.
 
 	"k larger than population should raise ValueError"
-	self should: [(r @env1:sample) value: {#(1 2 3). 5} value: nil] raise: ValueError.
+	self should: [r @env1:sample: #(1 2 3) _: 5] raise: ValueError.
 %
 
 category: 'Tests - Edge Cases'
@@ -438,7 +438,7 @@ testSampleZero
 	| r result |
 	r := random ___instance___.
 
-	result := (r @env1:sample) value: {#(1 2 3). 0} value: nil.
+	result := r @env1:sample: #(1 2 3) _: 0.
 	self assert: result size equals: 0.
 %
 
@@ -450,11 +450,11 @@ testSeed
 	| r val1 val2 |
 	r := random ___instance___.
 
-	(r @env1:seed) value: {42} value: nil.
-	val1 := (r @env1:random) value: {} value: nil.
+	r @env1:seed: 42.
+	val1 := r @env1:random.
 
-	(r @env1:seed) value: {42} value: nil.
-	val2 := (r @env1:random) value: {} value: nil.
+	r @env1:seed: 42.
+	val2 := r @env1:random.
 
 	self assert: val1 equals: val2.
 %
@@ -467,7 +467,7 @@ testSetstate
 	| r |
 	r := random ___instance___.
 
-	self should: [(r @env1:setstate) value: {#()} value: nil] raise: NotImplementedError.
+	self should: [r @env1:setstate] raise: NotImplementedError
 %
 
 category: 'Tests - Sequence'
@@ -480,7 +480,7 @@ testShuffle
 	list := OrderedCollection withAll: #(1 2 3 4 5).
 	original := list copy.
 
-	(r @env1:shuffle) value: {list} value: nil.
+	r @env1:shuffle: list.
 
 	"Should have same elements"
 	self assert: list size equals: original size.
@@ -495,7 +495,7 @@ testTriangular
 	| r result |
 	r := random ___instance___.
 
-	result := (r @env1:triangular) value: {0. 10. 5} value: nil.
+	result := r @env1:triangular: 0 _: 10 _: 5.
 	self assert: (result isKindOf: Float).
 	self assert: (result >= 0).
 	self assert: (result <= 10).
@@ -509,13 +509,13 @@ testUniform
 	| r result |
 	r := random ___instance___.
 
-	result := (r @env1:uniform) value: {0. 10} value: nil.
+	result := r @env1:uniform: 0 _: 10.
 	self assert: (result isKindOf: Float).
 	self assert: (result >= 0).
 	self assert: (result <= 10).
 
 	"Test with reversed order"
-	result := (r @env1:uniform) value: {10. 0} value: nil.
+	result := r @env1:uniform: 10 _: 0.
 	self assert: (result >= 0).
 	self assert: (result <= 10).
 %
@@ -528,7 +528,7 @@ testWeibullvariate
 	| r result |
 	r := random ___instance___.
 
-	result := (r @env1:weibullvariate) value: {1. 2} value: nil.
+	result := r @env1:weibullvariate: 1 _: 2.
 	self assert: (result isKindOf: Float).
 	self assert: (result >= 0).  "Weibull is always non-negative"
 %

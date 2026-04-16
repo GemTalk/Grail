@@ -21,13 +21,17 @@ doit
 _crc32c comment:
 'Python _crc32c C extension module.
 
-Provides CRC32C (Castagnoli) checksum computation.
-This wrapper delegates to CPythonShim which calls the C
-implementation compiled against cpython.h.
+Provides CRC32C (Castagnoli) checksum computation. This wrapper
+delegates to CPythonShim which calls the C implementation compiled
+against cpython.h.
 
 Functions:
   crc32c(data) -> int       Compute CRC32C of bytes data.
   extend(crc, data) -> int  Extend an existing CRC with more data.
+
+Methods on this class are real env-1 fast-path methods, dispatched
+directly via `_crc32c.method(args)` Python calls compiled to
+`((_crc32c) method: x)` Smalltalk sends.
 
 Usage (from Python source):
     import _crc32c
@@ -76,7 +80,7 @@ callExtend: anInteger bytes: aByteArray
 %
 
 ! ===============================================================================
-! env 2 instance methods — Python-compatible callables
+! env 1 instance methods — Python-compatible callables
 ! ===============================================================================
 
 set compile_env: 1
@@ -84,39 +88,31 @@ set compile_env: 1
 category: 'Python-Initialization'
 method: _crc32c
 initialize
-	self
-		initialize_crc32c;
-		initialize_extend
+	"No-op. The `module>>instance` class method still calls
+	`initialize` on the newly-created instance, so this stub keeps
+	that contract."
 %
 
-category: 'Python-Initialization'
+! ===============================================================================
+! Fast-path methods
+! ===============================================================================
+
+category: 'Python-Built-in Functions'
 method: _crc32c
-initialize_crc32c
-	"crc32c(data) -> int"
-	self ___at___: #crc32c put: [:positional :keywords |
-		self ___class___ @env0:callCrc32c: (positional ___at___: 1)
-	]
+crc32c: data
+	"Python _crc32c.crc32c(data) — fast path. Returns the
+	CRC32C of the bytes `data`."
+
+	^ self ___class___ @env0:callCrc32c: data
 %
 
-category: 'Python-Initialization'
+category: 'Python-Built-in Functions'
 method: _crc32c
-initialize_extend
-	"extend(crc, data) -> int"
-	self ___at___: #extend put: [:positional :keywords |
-		self ___class___ @env0:callExtend: (positional ___at___: 1) bytes: (positional ___at___: 2)
-	]
-%
+extend: crc _: data
+	"Python _crc32c.extend(crc, data) — fast path. Extends
+	the existing CRC with more bytes."
 
-category: 'Python-Accessors'
-method: _crc32c
-crc32c
-	^ self ___at___: #crc32c
-%
-
-category: 'Python-Accessors'
-method: _crc32c
-extend
-	^ self ___at___: #extend
+	^ self ___class___ @env0:callExtend: crc bytes: data
 %
 
 set compile_env: 0

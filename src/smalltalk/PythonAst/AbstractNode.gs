@@ -85,6 +85,13 @@ new
 	self error: 'Use #buildWithFields: instead'.
 %
 
+category: 'accessors'
+method: AbstractNode
+parent
+
+	^parent
+%
+
 category: 'other'
 method: AbstractNode
 allocateTemp
@@ -130,7 +137,12 @@ isNone
 category: 'initialization'
 method: AbstractNode
 isVariableIsDeclared: aSymbol
+	"Walk up the parent chain looking for an enclosing scope (a BlockAst)
+	that declares aSymbol as a local. Returns false if we reach the root
+	without finding a declaration — i.e., aSymbol is a free name (resolved
+	via the symbol list / builtins at runtime)."
 
+	parent isNil ifTrue: [^false].
 	^parent isVariableIsDeclared: aSymbol
 %
 

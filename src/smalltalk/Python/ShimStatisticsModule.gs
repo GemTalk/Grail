@@ -60,7 +60,7 @@ callNormalDistInvCdf: anArray
 %
 
 ! ===============================================================================
-! env 2 instance methods — Python-compatible callables
+! env 1 instance methods — fast-path callables
 ! ===============================================================================
 
 set compile_env: 1
@@ -68,26 +68,16 @@ set compile_env: 1
 category: 'Python-Initialization'
 method: _statistics
 initialize
-	self initialize__normal_dist_inv_cdf
+	"No-op — all methods are real fast-path methods."
 %
 
-category: 'Python-Initialization'
+category: 'Python-Built-in Functions'
 method: _statistics
-initialize__normal_dist_inv_cdf
-	"_normal_dist_inv_cdf(p, mu, sigma) -> float"
-	self ___at___: #_normal_dist_inv_cdf put: [:positional :keywords |
-		self ___class___ @env0:callNormalDistInvCdf: {
-					positional ___at___: 1 .
-					positional ___at___: 2 .
-					positional ___at___: 3
-				}
-	]
-%
+_normal_dist_inv_cdf: p _: mu _: sigma
+	"_normal_dist_inv_cdf(p, mu, sigma) -> float.
+	Fast path: 3-arg direct send."
 
-category: 'Python-Accessors'
-method: _statistics
-_normal_dist_inv_cdf
-	^ self ___at___: #_normal_dist_inv_cdf
+	^ self ___class___ @env0:callNormalDistInvCdf: { p. mu. sigma }
 %
 
 set compile_env: 0

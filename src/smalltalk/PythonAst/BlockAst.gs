@@ -47,6 +47,18 @@ declareVariable: aSymbol
 
 category: 'other'
 method: BlockAst
+isVariableIsDeclared: aSymbol
+	"Return true if aSymbol is declared as a local in this scope, or in any
+	enclosing scope. Used by NameAst/CallAst codegen to decide whether a
+	bare name like `abs` resolves to a builtin (apply the fast-path
+	special case) or has been shadowed by a local."
+
+	(variables includes: aSymbol) ifTrue: [^true].
+	^super isVariableIsDeclared: aSymbol
+%
+
+category: 'other'
+method: BlockAst
 printSmalltalkOn: aStream
 
 	self printSmalltalkOn: aStream useTemps: true.

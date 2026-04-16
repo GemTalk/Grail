@@ -1621,16 +1621,18 @@ testDynLoadCallAdd
 category: 'Tests - Dynamic Loading'
 method: CPythonShimTestCase
 testDynLoadModule
-	"loadDynamicModule:fromPath: should create a module subclass with compiled methods."
+	"loadDynamicModule:fromPath: should create a module subclass with compiled
+	methods. The generated methods use the `_name:kw:` varargs shape; calling
+	through the varargs entry point exercises the same path Phase 4d codegen
+	dispatches to for `module.method(args)` call sites."
 
-	| soPath mod addFunc result |
+	| soPath mod result |
 	soPath := importlib grailDir , '/lib/_grail_demo.so'.
 	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
 	mod := CPythonShim loadDynamicModule: '_grail_demo' fromPath: soPath.
 	self assert: mod class name equals: #'_grail_demo'.
 	self assert: (mod class superclass == module).
-	addFunc := mod @env1:add.
-	result := addFunc value: { 10 . 20 } value: nil.
+	result := mod @env1:_add: { 10 . 20 } kw: nil.
 	self assert: result equals: 30.
 %
 

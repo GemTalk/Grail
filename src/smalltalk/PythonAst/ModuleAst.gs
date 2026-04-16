@@ -85,13 +85,18 @@ parseSource: sourceString
 category: 'evaluation'
 classmethod: ModuleAst
 symbolListForModuleScope: aSymbolDictionary
-	"Return a SymbolList with module scope at the front, followed by builtins
-	and the full system symbol list (Python dict, Globals, etc.) so that
-	exception classes, PythonReturn, None, etc. are all resolvable."
+	"Return a SymbolList with module scope at the front, followed by the
+	full system symbol list (Python dict, Globals, etc.) so that exception
+	classes, PythonReturn, None, etc. are all resolvable.
+
+	Every builtin call is emitted as `((builtins instance) name: …)` or
+	via BoundMethod, so the symbol-list resolution path is not used for
+	builtins. The only symbol-list users are the module scope (for
+	user-defined globals) and the system Python dict (for class lookups
+	like Exception, None, etc.)."
 
 	| symbolList |
 	symbolList := System myUserProfile symbolList copy.
-	symbolList insertObject: builtins ___instance___ at: 1.
 	symbolList insertObject: aSymbolDictionary at: 1.
 	^symbolList
 %

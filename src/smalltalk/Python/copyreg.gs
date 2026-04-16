@@ -18,9 +18,20 @@ module subclass: 'copyreg'
 expectvalue /Class
 doit
 copyreg comment:
-'Python copyreg module (stub).
+'Python copyreg module.
 
 Provides pickle/copy dispatch table registration.
+
+Currently a minimal stub: `pickle(ob_type, pickle_function[,
+constructor])` records `ob_type → pickle_function` in `dispatch_table`,
+ignoring the `constructor` argument. The `re` module uses this to
+register a pickler for compiled regex patterns
+(`copyreg.pickle(Pattern, _pickle, _compile)`).
+
+Methods on this class are real env-1 fast-path methods, dispatched
+directly via `copyreg.method(args)` Python calls compiled to
+`((copyreg) method: args)` Smalltalk sends.
+
 See https://docs.python.org/3/library/copyreg.html
 '
 %
@@ -38,44 +49,59 @@ copyreg class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Accessors'
-method: copyreg
-dispatch_table
-	^ self ___at___: #dispatch_table
-%
-
-category: 'Python-Accessors'
-method: copyreg
-pickle
-	^ self ___at___: #pickle
-%
+! ===============================================================================
+! Singleton initialization
+! ===============================================================================
 
 category: 'Python-Initialization'
 method: copyreg
 initialize
-	self
-		initialize_dispatch_table;
-		initialize_pickle;
-		yourself
-%
+	"Create the empty dispatch_table dictionary. The `dispatch_table`
+	accessor reads this slot. The `pickle:_:` and `pickle:_:_:` methods
+	write to it."
 
-category: 'Python-Initialization'
-method: copyreg
-initialize_dispatch_table
 	self ___at___: #dispatch_table put: (KeyValueDictionary @env0:new)
 %
 
-category: 'Python-Initialization'
+! ===============================================================================
+! Stored attribute (not a callable)
+! ===============================================================================
+
+category: 'Python-Accessors'
 method: copyreg
-initialize_pickle
-	"pickle(ob_type, pickle_function, constructor_ob=None)"
-	self ___at___: #pickle put: [:positional :keywords |
-		| obType pickleFunc |
-		obType := positional ___at___: 1.
-		pickleFunc := positional ___at___: 2.
-		(self ___at___: #dispatch_table) @env0:at: obType put: pickleFunc.
-		nil
-	]
+dispatch_table
+	"Return the dispatch_table dictionary (stored attribute, populated
+	by `initialize`)."
+
+	^ self ___at___: #dispatch_table
+%
+
+! ===============================================================================
+! Fast-path methods
+! ===============================================================================
+
+category: 'Python-Built-in Functions'
+method: copyreg
+pickle: obType _: pickleFunc
+	"Python copyreg.pickle(ob_type, pickle_function) — fast path.
+	2-arg form. Records `obType → pickleFunc` in dispatch_table."
+
+	(self ___at___: #dispatch_table) @env0:at: obType put: pickleFunc.
+	^ nil
+%
+
+category: 'Python-Built-in Functions'
+method: copyreg
+pickle: obType _: pickleFunc _: constructor
+	"Python copyreg.pickle(ob_type, pickle_function, constructor_ob)
+	— fast path. 3-arg form. The `constructor` argument is currently
+	ignored.
+
+	The `re` module calls this form via
+	`copyreg.pickle(Pattern, _pickle, _compile)` to register a
+	pickler for compiled regex patterns."
+
+	^ self pickle: obType _: pickleFunc
 %
 
 set compile_env: 0

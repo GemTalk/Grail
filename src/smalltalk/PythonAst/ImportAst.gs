@@ -55,6 +55,10 @@ set compile_env: 0
 category: 'other'
 method: ImportAst
 printSmalltalkOn: aStream
+	"Emit Smalltalk for `import a, b.c, d as alias`. Each clause becomes
+	an assignment from a `___import__:kw:` call on the builtins singleton.
+	The varargs fast path is used directly here so that ImportAst does
+	not depend on `__import__` being resolvable through the symbol list."
 
 	names doWithIndex: [:each :index |
 		| importName targetName nameParts |
@@ -69,9 +73,9 @@ printSmalltalkOn: aStream
 		].
 		aStream
 			nextPutAll: targetName;
-			nextPutAll: ' := __import__ value: { ''';
+			nextPutAll: ' := ((Python @env0:at: #builtins) instance) ___import__: { ''';
 			nextPutAll: importName asString;
-			nextPutAll: ''' } value: nil.'.
+			nextPutAll: ''' } kw: nil.'.
 		index < names size ifTrue: [aStream lf].
 	].
 %

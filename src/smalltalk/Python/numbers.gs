@@ -324,12 +324,6 @@ Complex
 	^ self ___at___: #Complex
 %
 
-category: 'Python-Attributes'
-method: numbers
-Complex: aValue
-	"Set the Complex ABC."
-	self ___at___: #Complex put: aValue
-%
 
 category: 'Python-Initialization'
 method: numbers
@@ -387,12 +381,6 @@ Integral
 	^ self ___at___: #Integral
 %
 
-category: 'Python-Attributes'
-method: numbers
-Integral: aValue
-	"Set the Integral ABC."
-	self ___at___: #Integral put: aValue
-%
 
 category: 'Python-Attributes'
 method: numbers
@@ -401,12 +389,6 @@ Number
 	^ self ___at___: #Number
 %
 
-category: 'Python-Attributes'
-method: numbers
-Number: aValue
-	"Set the Number ABC."
-	self ___at___: #Number put: aValue
-%
 
 category: 'Python-Attributes'
 method: numbers
@@ -415,12 +397,6 @@ Rational
 	^ self ___at___: #Rational
 %
 
-category: 'Python-Attributes'
-method: numbers
-Rational: aValue
-	"Set the Rational ABC."
-	self ___at___: #Rational put: aValue
-%
 
 category: 'Python-Attributes'
 method: numbers
@@ -429,12 +405,6 @@ Real
 	^ self ___at___: #Real
 %
 
-category: 'Python-Attributes'
-method: numbers
-Real: aValue
-	"Set the Real ABC."
-	self ___at___: #Real put: aValue
-%
 
 category: 'Python-Initialization'
 method: numbers

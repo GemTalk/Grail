@@ -434,7 +434,8 @@ callModule: moduleName method: methodName extendCrc: anInteger withBytes: aByteA
 %
 
 ! ===============================================================================
-! Instance methods - 6-arg calling (via shimCall6)
+! Instance methods - 6-arg calling (uses the same shimCall user action; the
+! generic shimCall accepts up to 7 OOP args + an nargs slot, so 6 fits.)
 ! ===============================================================================
 
 category: 'Calling'
@@ -443,7 +444,7 @@ callModule6: modDotMethod with: a1 with: a2 with: a3 with: a4 with: a5 with: a6
 	"Call a module method with 6 arguments. modDotMethod is 'module.method'.
 	Returns a Smalltalk OOP (extracted from result PyObject offset 16)."
 
-	^ System userAction: #shimCall6 withArgs: {
+	^ System userAction: #shimCall withArgs: {
 		modDotMethod .
 		(self wrap: a1) memoryAddress .
 		(self wrap: a2) memoryAddress .
@@ -460,7 +461,7 @@ callModule6ReturnCPtr: modDotMethod with: a1 with: a2 with: a3 with: a4 with: a5
 	"Call a module method with 6 arguments. Returns a raw C pointer (SmallInteger).
 	modDotMethod is 'module.method'."
 
-	^ System userAction: #shimCall6 withArgs: {
+	^ System userAction: #shimCall withArgs: {
 		modDotMethod .
 		(self wrap: a1) memoryAddress .
 		(self wrap: a2) memoryAddress .
@@ -812,8 +813,13 @@ category: 'Dynamic Loading'
 classmethod: CPythonShim
 loadDynamicModule: moduleName fromPath: pathString
 	"Dynamically load a .so extension module.
-	Creates a module subclass with compiled env:2 methods for each C function.
-	Returns an instance of the new class."
+	Creates a module subclass with compiled env:1 methods for each C function.
+	Returns an instance of the new class.
+
+	Each C function is exposed as a `_name:kw:` varargs method on the module
+	class. Python call sites of the form `mymod.somefunc(args)` dispatch via
+	the attribute-call varargs fast path (see CallAst >>
+	attributeCallVarargsSelector)."
 
 	| methodNames moduleClass moduleInstance symbolList |
 	self current.
@@ -827,20 +833,40 @@ loadDynamicModule: moduleName fromPath: pathString
 		poolDictionaries: #()
 		inDictionary: UserGlobals
 		options: #().
-	"Compile an env:2 method for each C function.
-	Each method returns a callable block matching Python's call convention."
+	"Compile env:1 methods for each C function. Two selector shapes are
+	generated: a `_name:kw:` varargs method (for first-class use and kw
+	arg call sites), plus fixed-arity forwarders for arities 0..3 (which
+	is the hot path — `mymod.func(x)` compiles to `(mymod) func: x`).
+	Fixed-arity forwarders delegate to the varargs form so there is one
+	place where the actual C call happens."
 	symbolList := System myUserProfile symbolList.
 	methodNames do: [:methName |
-		| source |
-		source := methName , '
-	^ [:positional :keywords |
-		(CPythonShim perform: #current env: 0) perform: #callModuleDynamic:method:args: env: 0 withArguments: { ''' , moduleName , ''' . ''' , methName , ''' . positional }
-	]'.
+		| varargsSrc arity0Src arity1Src arity2Src arity3Src |
+		"Varargs form — actually invokes the C function."
+		varargsSrc := '_' , methName , ': positional kw: keywords
+	^ (CPythonShim @env0:current) @env0:callModuleDynamic: ''' , moduleName , ''' method: ''' , methName , ''' args: positional'.
 		moduleClass
-			compileMethod: source
+			compileMethod: varargsSrc
 			dictionaries: symbolList
 			category: 'C Extension'
 			environmentId: 1.
+
+		"Fixed-arity forwarders 0..3 — delegate to the varargs form."
+		arity0Src := methName , '
+	^ self _' , methName , ': #() kw: nil'.
+		arity1Src := methName , ': a1
+	^ self _' , methName , ': { a1 } kw: nil'.
+		arity2Src := methName , ': a1 _: a2
+	^ self _' , methName , ': { a1 . a2 } kw: nil'.
+		arity3Src := methName , ': a1 _: a2 _: a3
+	^ self _' , methName , ': { a1 . a2 . a3 } kw: nil'.
+		{ arity0Src . arity1Src . arity2Src . arity3Src } do: [:src |
+			moduleClass
+				compileMethod: src
+				dictionaries: symbolList
+				category: 'C Extension'
+				environmentId: 1.
+		].
 	].
 	"Create and initialize the instance"
 	moduleInstance := moduleClass @env0:new.

@@ -20,8 +20,14 @@ doit
 fractions comment:
 'Python fractions module.
 
-This class provides rational number functionality via the Fraction type.
-Currently implemented as an empty stub module.
+Provides rational number functionality via the Fraction type.
+
+This module exposes the GemStone Fraction class as `fractions.Fraction`.
+There are no callable methods on the module itself; `Fraction` is a
+stored attribute (a reference to the GemStone Fraction class) that the
+`Fraction` accessor method returns.
+
+See https://docs.python.org/3/library/fractions.html
 '
 %
 
@@ -29,14 +35,6 @@ expectvalue /Class
 doit
 fractions category: 'Modules'
 %
-
-! ===============================================================================
-! fractions Module (Python 'fractions' module)
-! ===============================================================================
-! This file contains the Python fractions module implementation.
-! The fractions module provides rational number arithmetic via the Fraction type.
-! This implementation exposes the GemStone Fraction class as fractions.Fraction.
-! ===============================================================================
 
 ! ------------------- Remove existing Python methods from fractions
 expectvalue /Metaclass3
@@ -47,34 +45,30 @@ fractions class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Types'
-method: fractions
-Fraction
-	"Return the Fraction type exposed by this module."
-	^ self ___at___: #fractionClass
-%
-
-category: 'Python-Types'
-method: fractions
-Fraction: aClass
-	"Set the Fraction type (for monkey patching or testing)."
-	self ___at___: #fractionClass put: aClass
-%
+! ===============================================================================
+! Singleton initialization
+! ===============================================================================
 
 category: 'Python-Initialization'
 method: fractions
 initialize
-	"Initialize all module attributes with their default values."
-	self
-		initialize_Fraction;
-		yourself
+	"Bind the Fraction attribute to GemStone's Fraction class. The
+	`Fraction` accessor reads this slot."
+
+	self ___at___: #fractionClass put: Fraction
 %
 
-category: 'Python-Initialization'
+! ===============================================================================
+! Stored attribute (not a callable)
+! ===============================================================================
+
+category: 'Python-Types'
 method: fractions
-initialize_Fraction
-	"Bind the Fraction attribute to GemStone's Fraction class."
-	self ___at___: #fractionClass put: Fraction
+Fraction
+	"Return the Fraction type exposed by this module (the GemStone
+	Fraction class, populated by `initialize`)."
+
+	^ self ___at___: #fractionClass
 %
 
 set compile_env: 0

@@ -59,15 +59,14 @@ method: MathTestCase
 testAcos
 	"Test math.acos()"
 
-	| m acosBlock result pi |
+	| m result pi |
 	m := math @env1:instance.
 	pi := m @env1:pi.
-	acosBlock := m @env1:acos.
 
-	result := acosBlock value: {1} value: nil.
+	result := m @env1:acos: 1.
 	self assert: ((result abs) < 0.00001).
 
-	result := acosBlock value: {0} value: nil.
+	result := m @env1:acos: 0.
 	self assert: (((result - (pi / 2)) abs)
 		< 0.00001)
 %
@@ -77,15 +76,14 @@ method: MathTestCase
 testAsin
 	"Test math.asin()"
 
-	| m asinBlock result pi |
+	| m result pi |
 	m := math @env1:instance.
 	pi := m @env1:pi.
-	asinBlock := m @env1:asin.
 
-	result := asinBlock value: {0} value: nil.
+	result := m @env1:asin: 0.
 	self assert: ((result abs) < 0.00001).
 
-	result := asinBlock value: {1} value: nil.
+	result := m @env1:asin: 1.
 	self assert: (((result - (pi / 2)) abs)
 		< 0.00001)
 %
@@ -95,15 +93,14 @@ method: MathTestCase
 testAtan
 	"Test math.atan()"
 
-	| m atanBlock result pi |
+	| m result pi |
 	m := math @env1:instance.
 	pi := m @env1:pi.
-	atanBlock := m @env1:atan.
 
-	result := atanBlock value: {0} value: nil.
+	result := m @env1:atan: 0.
 	self assert: ((result abs) < 0.00001).
 
-	result := atanBlock value: {1} value: nil.
+	result := m @env1:atan: 1.
 	self assert: (((result - (pi / 4)) abs)
 		< 0.00001)
 %
@@ -113,16 +110,15 @@ method: MathTestCase
 testAtan2
 	"Test math.atan2()"
 
-	| m atan2Block result pi |
+	| m result pi |
 	m := math @env1:instance.
 	pi := m @env1:pi.
-	atan2Block := m @env1:atan2.
 
-	result := atan2Block value: {1. 1} value: nil.
+	result := m @env1:atan2: 1 _: 1.
 	self assert: (((result - (pi / 4)) abs)
 		< 0.00001).
 
-	result := atan2Block value: {1. 0} value: nil.
+	result := m @env1:atan2: 1 _: 0.
 	self assert: (((result - (pi / 2)) abs)
 		< 0.00001)
 %
@@ -132,17 +128,16 @@ method: MathTestCase
 testCeil
 	"Test math.ceil()"
 
-	| m ceilBlock result |
+	| m result |
 	m := math @env1:instance.
-	ceilBlock := m @env1:ceil.
 
-	result := ceilBlock value: {3.2} value: nil.
+	result := m @env1:ceil: 3.2.
 	self assert: result equals: 4.
 
-	result := ceilBlock value: {3.8} value: nil.
+	result := m @env1:ceil: 3.8.
 	self assert: result equals: 4.
 
-	result := ceilBlock value: {-3.2} value: nil.
+	result := m @env1:ceil: -3.2.
 	self assert: result equals: -3
 %
 
@@ -151,16 +146,15 @@ method: MathTestCase
 testCos
 	"Test math.cos()"
 
-	| m cosBlock result pi |
+	| m result pi |
 	m := math @env1:instance.
 	pi := m @env1:pi.
-	cosBlock := m @env1:cos.
 
-	result := cosBlock value: {0} value: nil.
+	result := m @env1:cos: 0.
 	self assert: (((result - 1.0) abs)
 		< 0.00001).
 
-	result := cosBlock value: {pi} value: nil.
+	result := m @env1:cos: pi.
 	self assert: (((result + 1.0) abs)
 		< 0.00001)
 %
@@ -170,15 +164,14 @@ method: MathTestCase
 testCosh
 	"Test math.cosh()"
 
-	| m coshBlock result |
+	| m result |
 	m := math @env1:instance.
-	coshBlock := m @env1:cosh.
 
-	result := coshBlock value: {0} value: nil.
+	result := m @env1:cosh: 0.
 	self assert: (((result - 1.0) abs)
 		< 0.00001).
 
-	result := coshBlock value: {1} value: nil.
+	result := m @env1:cosh: 1.
 	self assert: (((result - 1.5430) abs)
 		< 0.001)
 %
@@ -188,16 +181,15 @@ method: MathTestCase
 testDegrees
 	"Test math.degrees()"
 
-	| m degreesBlock result pi |
+	| m result pi |
 	m := math @env1:instance.
 	pi := m @env1:pi.
-	degreesBlock := m @env1:degrees.
 
-	result := degreesBlock value: {pi} value: nil.
+	result := m @env1:degrees: pi.
 	self assert: (((result - 180.0) abs)
 		< 0.00001).
 
-	result := degreesBlock value: {(pi / 2)} value: nil.
+	result := m @env1:degrees: (pi / 2).
 	self assert: (((result - 90.0) abs)
 		< 0.00001)
 %
@@ -220,14 +212,13 @@ method: MathTestCase
 testExp
 	"Test math.exp()"
 
-	| m expBlock result |
+	| m result |
 	m := math @env1:instance.
-	expBlock := m @env1:exp.
 
-	result := expBlock value: {0} value: nil.
+	result := m @env1:exp: 0.
 	self assert: result equals: 1.0.
 
-	result := expBlock value: {1} value: nil.
+	result := m @env1:exp: 1.
 	self assert: (((result - 2.71828) abs)
 		< 0.001)
 %
@@ -237,14 +228,13 @@ method: MathTestCase
 testFabs
 	"Test math.fabs()"
 
-	| m fabsBlock result |
+	| m result |
 	m := math @env1:instance.
-	fabsBlock := m @env1:fabs.
 
-	result := fabsBlock value: {-5.5} value: nil.
+	result := m @env1:fabs: -5.5.
 	self assert: result equals: 5.5.
 
-	result := fabsBlock value: {3.2} value: nil.
+	result := m @env1:fabs: 3.2.
 	self assert: result equals: 3.2
 %
 
@@ -253,17 +243,16 @@ method: MathTestCase
 testFactorial
 	"Test math.factorial()"
 
-	| m factorialBlock result |
+	| m result |
 	m := math @env1:instance.
-	factorialBlock := m @env1:factorial.
 
-	result := factorialBlock value: {0} value: nil.
+	result := m @env1:factorial: 0.
 	self assert: result equals: 1.
 
-	result := factorialBlock value: {5} value: nil.
+	result := m @env1:factorial: 5.
 	self assert: result equals: 120.
 
-	result := factorialBlock value: {10} value: nil.
+	result := m @env1:factorial: 10.
 	self assert: result equals: 3628800
 %
 
@@ -272,17 +261,16 @@ method: MathTestCase
 testFloor
 	"Test math.floor()"
 
-	| m floorBlock result |
+	| m result |
 	m := math @env1:instance.
-	floorBlock := m @env1:floor.
 
-	result := floorBlock value: {3.2} value: nil.
+	result := m @env1:floor: 3.2.
 	self assert: result equals: 3.
 
-	result := floorBlock value: {3.8} value: nil.
+	result := m @env1:floor: 3.8.
 	self assert: result equals: 3.
 
-	result := floorBlock value: {-3.2} value: nil.
+	result := m @env1:floor: -3.2.
 	self assert: result equals: -4
 %
 
@@ -291,17 +279,16 @@ method: MathTestCase
 testGcd
 	"Test math.gcd()"
 
-	| m gcdBlock result |
+	| m result |
 	m := math @env1:instance.
-	gcdBlock := m @env1:gcd.
 
-	result := gcdBlock value: {12. 8} value: nil.
+	result := m @env1:gcd: 12 _: 8.
 	self assert: result equals: 4.
 
-	result := gcdBlock value: {15. 25} value: nil.
+	result := m @env1:gcd: 15 _: 25.
 	self assert: result equals: 5.
 
-	result := gcdBlock value: {7. 13} value: nil.
+	result := m @env1:gcd: 7 _: 13.
 	self assert: result equals: 1
 %
 
@@ -322,19 +309,18 @@ method: MathTestCase
 testIsfinite
 	"Test math.isfinite()"
 
-	| m isfiniteBlock result inf nan |
+	| m result inf nan |
 	m := math @env1:instance.
 	inf := m @env1:inf.
 	nan := m @env1:nan.
-	isfiniteBlock := m @env1:isfinite.
 
-	result := isfiniteBlock value: {5.5} value: nil.
+	result := m @env1:isfinite: 5.5.
 	self assert: result.
 
-	result := isfiniteBlock value: {inf} value: nil.
+	result := m @env1:isfinite: inf.
 	self deny: result.
 
-	result := isfiniteBlock value: {nan} value: nil.
+	result := m @env1:isfinite: nan.
 	self deny: result
 %
 
@@ -343,15 +329,14 @@ method: MathTestCase
 testIsinf
 	"Test math.isinf()"
 
-	| m isinfBlock result inf |
+	| m result inf |
 	m := math @env1:instance.
 	inf := m @env1:inf.
-	isinfBlock := m @env1:isinf.
 
-	result := isinfBlock value: {inf} value: nil.
+	result := m @env1:isinf: inf.
 	self assert: result.
 
-	result := isinfBlock value: {5.5} value: nil.
+	result := m @env1:isinf: 5.5.
 	self deny: result
 %
 
@@ -360,15 +345,14 @@ method: MathTestCase
 testIsnan
 	"Test math.isnan()"
 
-	| m isnanBlock result nan |
+	| m result nan |
 	m := math @env1:instance.
 	nan := m @env1:nan.
-	isnanBlock := m @env1:isnan.
 
-	result := isnanBlock value: {nan} value: nil.
+	result := m @env1:isnan: nan.
 	self assert: result.
 
-	result := isnanBlock value: {5.5} value: nil.
+	result := m @env1:isnan: 5.5.
 	self deny: result
 %
 
@@ -377,14 +361,13 @@ method: MathTestCase
 testLcm
 	"Test math.lcm()"
 
-	| m lcmBlock result |
+	| m result |
 	m := math @env1:instance.
-	lcmBlock := m @env1:lcm.
 
-	result := lcmBlock value: {12. 8} value: nil.
+	result := m @env1:lcm: 12 _: 8.
 	self assert: result equals: 24.
 
-	result := lcmBlock value: {15. 25} value: nil.
+	result := m @env1:lcm: 15 _: 25.
 	self assert: result equals: 75
 %
 
@@ -393,16 +376,14 @@ method: MathTestCase
 testLog
 	"Test math.log()"
 
-	| m logBlock logWithBaseBlock result |
+	| m result |
 	m := math @env1:instance.
-	logBlock := m @env1:log.
-		logWithBaseBlock := m @env1:logWithBase.
-
-	result := logBlock value: {2.71828} value: nil.
+	
+	result := m @env1:log: 2.71828.
 	self assert: (((result - 1.0) abs)
 		< 0.001).
 
-	result := logWithBaseBlock value: {100. 10} value: nil.
+	result := m @env1:log: 100 _: 10.
 	self assert: (((result - 2.0) abs)
 		< 0.001)
 %
@@ -412,15 +393,14 @@ method: MathTestCase
 testLog10
 	"Test math.log10()"
 
-	| m log10Block result |
+	| m result |
 	m := math @env1:instance.
-	log10Block := m @env1:log10.
 
-	result := log10Block value: {100} value: nil.
+	result := m @env1:log10: 100.
 	self assert: (((result - 2.0) abs)
 		< 0.00001).
 
-	result := log10Block value: {1000} value: nil.
+	result := m @env1:log10: 1000.
 	self assert: (((result - 3.0) abs)
 		< 0.00001)
 %
@@ -430,15 +410,14 @@ method: MathTestCase
 testLog2
 	"Test math.log2()"
 
-	| m log2Block result |
+	| m result |
 	m := math @env1:instance.
-	log2Block := m @env1:log2.
 
-	result := log2Block value: {8} value: nil.
+	result := m @env1:log2: 8.
 	self assert: (((result - 3.0) abs)
 		< 0.00001).
 
-	result := log2Block value: {16} value: nil.
+	result := m @env1:log2: 16.
 	self assert: (((result - 4.0) abs)
 		< 0.00001)
 %
@@ -473,17 +452,16 @@ method: MathTestCase
 testPow
 	"Test math.pow()"
 
-	| m powBlock result |
+	| m result |
 	m := math @env1:instance.
-	powBlock := m @env1:pow.
 
-	result := powBlock value: {2. 3} value: nil.
+	result := m @env1:pow: 2 _: 3.
 	self assert: result equals: 8.0.
 
-	result := powBlock value: {5. 2} value: nil.
+	result := m @env1:pow: 5 _: 2.
 	self assert: result equals: 25.0.
 
-	result := powBlock value: {10. 0} value: nil.
+	result := m @env1:pow: 10 _: 0.
 	self assert: result equals: 1.0
 %
 
@@ -518,16 +496,15 @@ method: MathTestCase
 testRadians
 	"Test math.radians()"
 
-	| m radiansBlock result pi |
+	| m result pi |
 	m := math @env1:instance.
 	pi := m @env1:pi.
-	radiansBlock := m @env1:radians.
 
-	result := radiansBlock value: {180} value: nil.
+	result := m @env1:radians: 180.
 	self assert: (((result - pi) abs)
 		< 0.00001).
 
-	result := radiansBlock value: {90} value: nil.
+	result := m @env1:radians: 90.
 	self assert: (((result - (pi / 2)) abs)
 		< 0.00001)
 %
@@ -537,15 +514,14 @@ method: MathTestCase
 testSin
 	"Test math.sin()"
 
-	| m sinBlock result pi |
+	| m result pi |
 	m := math @env1:instance.
 	pi := m @env1:pi.
-	sinBlock := m @env1:sin.
 
-	result := sinBlock value: {0} value: nil.
+	result := m @env1:sin: 0.
 	self assert: ((result abs) < 0.00001).
 
-	result := sinBlock value: {(pi / 2)} value: nil.
+	result := m @env1:sin: (pi / 2).
 	self assert: (((result - 1.0) abs)
 		< 0.00001)
 %
@@ -555,14 +531,13 @@ method: MathTestCase
 testSinh
 	"Test math.sinh()"
 
-	| m sinhBlock result |
+	| m result |
 	m := math @env1:instance.
-	sinhBlock := m @env1:sinh.
 
-	result := sinhBlock value: {0} value: nil.
+	result := m @env1:sinh: 0.
 	self assert: ((result abs) < 0.00001).
 
-	result := sinhBlock value: {1} value: nil.
+	result := m @env1:sinh: 1.
 	self assert: (((result - 1.1752) abs)
 		< 0.001)
 %
@@ -572,17 +547,16 @@ method: MathTestCase
 testSqrt
 	"Test math.sqrt()"
 
-	| m sqrtBlock result |
+	| m result |
 	m := math @env1:instance.
-	sqrtBlock := m @env1:sqrt.
 
-	result := sqrtBlock value: {4} value: nil.
+	result := m @env1:sqrt: 4.
 	self assert: result equals: 2.0.
 
-	result := sqrtBlock value: {9} value: nil.
+	result := m @env1:sqrt: 9.
 	self assert: result equals: 3.0.
 
-	result := sqrtBlock value: {2} value: nil.
+	result := m @env1:sqrt: 2.
 	self assert: (((result - 1.41421) abs)
 		< 0.001)
 %
@@ -592,15 +566,14 @@ method: MathTestCase
 testTan
 	"Test math.tan()"
 
-	| m tanBlock result pi |
+	| m result pi |
 	m := math @env1:instance.
 	pi := m @env1:pi.
-	tanBlock := m @env1:tan.
 
-	result := tanBlock value: {0} value: nil.
+	result := m @env1:tan: 0.
 	self assert: ((result abs) < 0.00001).
 
-	result := tanBlock value: {(pi / 4)} value: nil.
+	result := m @env1:tan: (pi / 4).
 	self assert: (((result - 1.0) abs)
 		< 0.00001)
 %
@@ -610,14 +583,13 @@ method: MathTestCase
 testTanh
 	"Test math.tanh()"
 
-	| m tanhBlock result |
+	| m result |
 	m := math @env1:instance.
-	tanhBlock := m @env1:tanh.
 
-	result := tanhBlock value: {0} value: nil.
+	result := m @env1:tanh: 0.
 	self assert: ((result abs) < 0.00001).
 
-	result := tanhBlock value: {1} value: nil.
+	result := m @env1:tanh: 1.
 	self assert: (((result - 0.7615) abs)
 		< 0.001)
 %
@@ -640,13 +612,12 @@ method: MathTestCase
 testTrunc
 	"Test math.trunc()"
 
-	| m truncBlock result |
+	| m result |
 	m := math @env1:instance.
-	truncBlock := m @env1:trunc.
 
-	result := truncBlock value: {3.7} value: nil.
+	result := m @env1:trunc: 3.7.
 	self assert: result equals: 3.
 
-	result := truncBlock value: {-3.7} value: nil.
+	result := m @env1:trunc: -3.7.
 	self assert: result equals: -3
 %

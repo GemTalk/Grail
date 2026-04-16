@@ -61,3 +61,46 @@ name
 
 	^'<lambda>'
 %
+
+category: 'other'
+method: LambdaAst
+printSmalltalkOn: aStream
+	"Generate Smalltalk for a lambda expression.
+
+	`lambda x, y: x + y` compiles to:
+	  [:positional :keywords |
+	    | x y |
+	    x := positional ___at___: 1.
+	    y := positional ___at___: 2.
+	    x __add__: y]
+
+	Only simple positional args are handled; *args, **kwargs, defaults,
+	keyword-only args, and positional-only args are not yet supported."
+
+	| argList |
+	argList := args args.
+	aStream nextPutAll: '[:positional :keywords |'.
+
+	"Declare locals for all parameter names"
+	argList isEmpty ifFalse: [
+		aStream nextPutAll: ' | '.
+		argList do: [:each | aStream nextPutAll: each name; space].
+		aStream nextPut: $|.
+	].
+	aStream lf.
+
+	"Unpack positional args into locals"
+	argList doWithIndex: [:each :i |
+		aStream
+			nextPutAll: each name;
+			nextPutAll: ' := positional ___at___: ';
+			nextPutAll: i printString;
+			nextPut: $.;
+			lf.
+	].
+
+	"Emit the body expression (single expression, not a statement list)"
+	body printSmalltalkOn: aStream.
+
+	aStream nextPut: $].
+%

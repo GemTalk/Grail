@@ -49,35 +49,47 @@ addVariableNamesTo: aStream
 category: 'code generation'
 method: ClassDefAst
 printSmalltalkOn: aStream
-	"Generate class creation code.
-	class Foo:
-	    def bar(self): return 42
-	->
-	Foo := [:___cls___ |
-	    | bar |
-	    bar := [:positional :keyword | ... ].
-	    ___cls___ ___at___: #'bar' put: bar.
-	    ___cls___ ___at___: #'__name__' put: #'Foo'.
-	    ___cls___
-	] value: (PythonClass perform: #new env: 0)."
+	"When compiling a module via loadModuleFromPath:, Python classes
+	are created as real Smalltalk classes at load time. In the initialize
+	method, just assign the class reference to the module instVar.
+
+	The class reference is looked up from UserGlobals using the sanitized
+	name ('pyc_ClassName'). This is set by loadModuleFromPath: before
+	compiling the initialize method."
+
+	(CallAst moduleClassBeingCompiled notNil) ifTrue: [
+		| className |
+		className := 'pyc_' , name.
+		aStream
+			nextPutAll: name;
+			nextPutAll: ' := (UserGlobals @env0:at: #''';
+			nextPutAll: className;
+			nextPutAll: ''').'.
+		^self
+	].
+	self printSmalltalkLegacyOn: aStream.
+%
+
+category: 'code generation'
+method: ClassDefAst
+printSmalltalkLegacyOn: aStream
+	"Legacy dict-based class creation (for eval: context or when not in
+	module compilation). Kept as fallback."
 
 	aStream nextPutAll: name.
 	aStream nextPutAll: ' := [:___cls___ |'; lf; increaseIndent.
 
-	"Declare temps from the body block"
 	body variables notEmpty ifTrue: [
 		aStream nextPut: $|.
 		body variables do: [:each | aStream space; nextPutAll: each].
 		aStream nextPutAll: ' |'; lf.
 	].
 
-	"Generate body statements"
 	body body do: [:each |
 		each printSmalltalkOn: aStream.
 		aStream lf.
 	].
 
-	"Store each variable into the class dict"
 	body variables do: [:each |
 		aStream nextPutAll: '___cls___ ___at___: #'''.
 		aStream nextPutAll: each.
@@ -86,15 +98,70 @@ printSmalltalkOn: aStream
 		aStream nextPut: $.; lf.
 	].
 
-	"Store __name__"
 	aStream nextPutAll: '___cls___ ___at___: #''__name__'' put: #'''.
 	aStream nextPutAll: name.
 	aStream nextPutAll: '''.'; lf.
 
-	"Return the class"
 	aStream nextPutAll: '___cls___'; lf.
 
 	aStream decreaseIndent; nextPutAll: '] value: (PythonClass perform: #new env: 0).'.
+%
+
+category: 'accessing'
+method: ClassDefAst
+body
+
+	^ body
+%
+
+category: 'Class Compilation'
+method: ClassDefAst
+instanceVarNamesFromInit
+	"Scan __init__ body for `self.attr = ...` assignments to determine
+	instance variable names for the generated Smalltalk class."
+
+	| initMethod initBody selfName result |
+	initMethod := body body detect: [:stmt |
+		(stmt isKindOf: FunctionDefAst) and: [stmt name asSymbol == #'__init__']
+	] ifNone: [^ #()].
+	selfName := initMethod allParameterNames first.
+	initBody := initMethod body.
+	result := IdentitySet new.
+	initBody body do: [:stmt |
+		(stmt isKindOf: AssignAst) ifTrue: [
+			| tgt |
+			tgt := stmt target.
+			((tgt isKindOf: AttributeAst) and: [
+				(tgt value isKindOf: NameAst) and: [tgt value id = selfName]
+			]) ifTrue: [
+				result add: tgt attr asSymbol.
+			].
+		].
+	].
+	^ result asArray
+%
+
+category: 'Class Compilation'
+method: ClassDefAst
+instanceMethodDefs
+	"Return all InstanceFunctionDefAst nodes from the class body."
+
+	^ body body select: [:stmt | stmt isKindOf: InstanceFunctionDefAst]
+%
+
+category: 'Class Compilation'
+method: ClassDefAst
+selfParameterName
+	"Return the self parameter name from __init__ (or the first instance method).
+	Conventionally 'self' but could be any name."
+
+	| initMethod paramNames |
+	initMethod := body body detect: [:stmt |
+		(stmt isKindOf: InstanceFunctionDefAst)
+	] ifNone: [^ #self].
+	paramNames := initMethod allParameterNames.
+	paramNames isEmpty ifTrue: [^ #self].
+	^ paramNames first asSymbol
 %
 
 category: 'other'

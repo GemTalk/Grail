@@ -75,19 +75,18 @@ testAsciiUppercase
 category: 'Tests - Utility Functions'
 method: StringModuleTestCase
 testCapwords
-	"Test string.capwords() function"
+	"Test string.capwords() — Phase-4 fast-path direct method dispatch."
 
-	| s capwordsBlock result |
+	| s result |
 	s := string @env1:instance.
-	capwordsBlock := s @env1:capwords.
 
-	result := capwordsBlock value: {'hello world'} value: nil.
+	result := s @env1:capwords: 'hello world'.
 	self assert: result equals: 'Hello World'.
 
-	result := capwordsBlock value: {'the quick brown fox'} value: nil.
+	result := s @env1:capwords: 'the quick brown fox'.
 	self assert: result equals: 'The Quick Brown Fox'.
 
-	result := capwordsBlock value: {'  multiple   spaces  '} value: nil.
+	result := s @env1:capwords: '  multiple   spaces  '.
 	self assert: result equals: 'Multiple Spaces'.
 %
 
@@ -96,11 +95,10 @@ method: StringModuleTestCase
 testCapwordsEmptyString
 	"Test string.capwords() with empty string"
 
-	| s capwordsBlock result |
+	| s result |
 	s := string @env1:instance.
-	capwordsBlock := s @env1:capwords.
 
-	result := capwordsBlock value: {''} value: nil.
+	result := s @env1:capwords: ''.
 	self assert: result equals: ''
 %
 
@@ -109,30 +107,29 @@ method: StringModuleTestCase
 testCapwordsSingleWord
 	"Test string.capwords() with single word"
 
-	| s capwordsBlock result |
+	| s result |
 	s := string @env1:instance.
-	capwordsBlock := s @env1:capwords.
 
-	result := capwordsBlock value: {'hello'} value: nil.
+	result := s @env1:capwords: 'hello'.
 	self assert: result equals: 'Hello'.
 
-	result := capwordsBlock value: {'HELLO'} value: nil.
+	result := s @env1:capwords: 'HELLO'.
 	self assert: result equals: 'Hello'
 %
 
 category: 'Tests - Utility Functions'
 method: StringModuleTestCase
 testCapwordsWithSep
-	"Test string.capwords() function with custom separator"
+	"Test string.capwords() with custom separator — uses the varargs
+	fast path `_capwords:kw:` since kwargs are involved."
 
-	| s capwordsBlock result |
+	| s result |
 	s := string @env1:instance.
-	capwordsBlock := s @env1:capwords.
 
-	result := capwordsBlock value: {'hello-world'} value: {#sep -> '-'}.
+	result := s @env1:_capwords: {'hello-world'} kw: {#sep -> '-'}.
 	self assert: result equals: 'Hello-World'.
 
-	result := capwordsBlock value: {'one.two.three'} value: {#sep -> '.'}.
+	result := s @env1:_capwords: {'one.two.three'} kw: {#sep -> '.'}.
 	self assert: result equals: 'One.Two.Three'
 %
 

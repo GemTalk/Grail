@@ -18,7 +18,7 @@ module subclass: 'functools'
 expectvalue /Class
 doit
 functools comment:
-'Python functools module (stub).
+'Python functools module.
 
 Provides higher-order functions and operations on callable objects.
 Currently implements lru_cache as a pass-through (no caching) and reduce.
@@ -39,66 +39,62 @@ functools class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Accessors'
-method: functools
-lru_cache
-	^ self ___at___: #lru_cache
-%
-
-category: 'Python-Accessors'
-method: functools
-reduce
-	^ self ___at___: #reduce
-%
-
 category: 'Python-Initialization'
 method: functools
 initialize
-	self
-		initialize_lru_cache;
-		initialize_reduce;
-		yourself
+	"No-op — all methods are real fast-path methods."
 %
 
-category: 'Python-Initialization'
-method: functools
-initialize_lru_cache
-	"lru_cache(maxsize=128) -> decorator
-	Stub: returns the function unwrapped (no caching)."
+! ===============================================================================
+! Fast-path callables
+! ===============================================================================
 
-	self ___at___: #lru_cache put: [:positional :keywords |
-		"lru_cache(maxsize) returns a decorator.
-		 The decorator returns the function unchanged (no caching yet)."
-		[:positional2 :keywords2 |
-			positional2 ___at___: 1
-		]
-	]
+category: 'Python-Built-in Functions'
+method: functools
+lru_cache: maxsize
+	"lru_cache(maxsize) -> decorator.
+	Stub: returns a decorator that passes the function through unchanged
+	(no caching). The decorator is a block that takes positional args
+	and returns the first arg (the function)."
+
+	^ [:positional2 :keywords2 | positional2 ___at___: 1]
 %
 
-category: 'Python-Initialization'
+category: 'Python-Built-in Functions'
 method: functools
-initialize_reduce
-	"reduce(function, iterable[, initial]) -> value"
+reduce: function _: iterable
+	"reduce(function, iterable) -> value.
+	Apply function of two arguments cumulatively to the items of
+	iterable, from left to right."
 
-	self ___at___: #reduce put: [:positional :keywords |
-		| function iterable result iter item hasInitial |
-		function := positional ___at___: 1.
-		iterable := positional ___at___: 2.
-		hasInitial := positional __len__ ___gt___: 2.
-		iter := iterable __iter__.
-		hasInitial ifTrue: [
-			result := positional ___at___: 3.
-		] ifFalse: [
-			result := iter __next__.
-		].
+	| result iter item |
+	iter := iterable __iter__.
+	result := iter __next__.
+	[
 		[
-			[
-				item := iter __next__.
-				result := function value: { result. item } value: nil.
-			] repeat.
-		] ___on___: StopIteration do: [:ex | "done" ].
-		result
-	]
+			item := iter __next__.
+			result := function value: { result. item } value: nil.
+		] repeat.
+	] ___on___: StopIteration do: [:ex | "done" ].
+	^ result
+%
+
+category: 'Python-Built-in Functions'
+method: functools
+reduce: function _: iterable _: initial
+	"reduce(function, iterable, initial) -> value.
+	Like reduce/2 but uses initial as the starting value."
+
+	| result iter item |
+	iter := iterable __iter__.
+	result := initial.
+	[
+		[
+			item := iter __next__.
+			result := function value: { result. item } value: nil.
+		] repeat.
+	] ___on___: StopIteration do: [:ex | "done" ].
+	^ result
 %
 
 set compile_env: 0

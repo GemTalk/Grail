@@ -86,6 +86,8 @@ SreMatch removeAllMethods.
 SreMatch class removeAllMethods.
 %
 
+set compile_env: 1
+
 ! ===============================================================================
 ! SrePattern - env 0 class methods
 ! ===============================================================================
@@ -115,156 +117,290 @@ cPtr
 
 ! ===============================================================================
 ! SrePattern - env 1 methods (Python-compatible)
+!
+! Each Python method is implemented as a set of arity-specialized Smalltalk
+! selectors (`match:`, `match:_:`, `match:_:_:`) plus a varargs fallback
+! (`_match:kw:`). The dispatch model rewrite (see docs/Rewrite_Dispatch_Model.md)
+! replaces the old "block returned from accessor" convention with real methods
+! that the codegen dispatches to directly. The varargs form handles first-class
+! calls (e.g. `f = pattern.match; f(s)`) and any call site with keyword args.
 ! ===============================================================================
 
 set compile_env: 1
 
+! --------- match -----------------------------------------------------------
+
 category: 'Python-Methods'
 method: SrePattern
-match
-	"match(string[, pos[, endpos]]) -> SreMatch or None"
-	^ [:positional :keywords |
-		| nargs result |
-		nargs := (positional @env0:size).
-		result := (nargs ___eq___: 1)
-			ifTrue: [
-				(CPythonShim @env0:current) @env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'match' selfPtr: cPtr with: (positional @env0:at: 1)
-			]
-			ifFalse: [ (nargs ___eq___: 2)
-				ifTrue: [
-					(CPythonShim @env0:current) @env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'match' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2)
-				]
-				ifFalse: [
-					(CPythonShim @env0:current) @env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'match' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2) with: (positional @env0:at: 3)
-				]
-			].
-		(result ___eq___: 0)
-			ifTrue: [nil]
-			ifFalse: [SreMatch @env0:newFromCPtr: result]
-	]
+match: aString
+	"match(string) -> SreMatch or None"
+	| result |
+	result := (CPythonShim @env0:current)
+		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'match' selfPtr: cPtr
+		with: aString.
+	^ (result ___eq___: 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
 category: 'Python-Methods'
 method: SrePattern
-search
-	"search(string[, pos[, endpos]]) -> SreMatch or None"
-	^ [:positional :keywords |
-		| nargs result |
-		nargs := (positional @env0:size).
-		result := (nargs ___eq___: 1)
-			ifTrue: [
-				(CPythonShim @env0:current) @env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'search' selfPtr: cPtr with: (positional @env0:at: 1)
-			]
-			ifFalse: [ (nargs ___eq___: 2)
-				ifTrue: [
-					(CPythonShim @env0:current) @env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'search' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2)
-				]
-				ifFalse: [
-					(CPythonShim @env0:current) @env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'search' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2) with: (positional @env0:at: 3)
-				]
-			].
-		(result ___eq___: 0)
-			ifTrue: [nil]
-			ifFalse: [SreMatch @env0:newFromCPtr: result]
-	]
+match: aString _: pos
+	"match(string, pos) -> SreMatch or None"
+	| result |
+	result := (CPythonShim @env0:current)
+		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'match' selfPtr: cPtr
+		with: aString with: pos.
+	^ (result ___eq___: 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
 category: 'Python-Methods'
 method: SrePattern
-fullmatch
-	"fullmatch(string[, pos[, endpos]]) -> SreMatch or None"
-	^ [:positional :keywords |
-		| nargs result |
-		nargs := (positional @env0:size).
-		result := (nargs ___eq___: 1)
-			ifTrue: [
-				(CPythonShim @env0:current) @env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'fullmatch' selfPtr: cPtr with: (positional @env0:at: 1)
-			]
-			ifFalse: [ (nargs ___eq___: 2)
-				ifTrue: [
-					(CPythonShim @env0:current) @env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'fullmatch' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2)
-				]
-				ifFalse: [
-					(CPythonShim @env0:current) @env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'fullmatch' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2) with: (positional @env0:at: 3)
-				]
-			].
-		(result ___eq___: 0)
-			ifTrue: [nil]
-			ifFalse: [SreMatch @env0:newFromCPtr: result]
-	]
+match: aString _: pos _: endpos
+	"match(string, pos, endpos) -> SreMatch or None"
+	| result |
+	result := (CPythonShim @env0:current)
+		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'match' selfPtr: cPtr
+		with: aString with: pos with: endpos.
+	^ (result ___eq___: 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
 category: 'Python-Methods'
 method: SrePattern
-findall
-	"findall(string[, pos[, endpos]]) -> list"
-	^ [:positional :keywords |
-		| nargs |
-		nargs := (positional @env0:size).
-		(nargs ___eq___: 1)
-			ifTrue: [
-				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'findall' selfPtr: cPtr with: (positional @env0:at: 1)
-			]
-			ifFalse: [ (nargs ___eq___: 2)
-				ifTrue: [
-					(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'findall' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2)
-				]
-				ifFalse: [
-					(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'findall' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2) with: (positional @env0:at: 3)
-				]
-			]
-	]
+_match: positional kw: keywords
+	"Varargs dispatcher for match() — used for first-class calls and keyword args."
+	| nargs |
+	nargs := positional @env0:size.
+	(nargs ___eq___: 1) ifTrue: [^ self match: (positional @env0:at: 1)].
+	(nargs ___eq___: 2) ifTrue: [^ self match: (positional @env0:at: 1) _: (positional @env0:at: 2)].
+	(nargs ___eq___: 3) ifTrue: [^ self match: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
+	TypeError ___signal___: 'match() takes 1 to 3 arguments'
+%
+
+! --------- search ----------------------------------------------------------
+
+category: 'Python-Methods'
+method: SrePattern
+search: aString
+	"search(string) -> SreMatch or None"
+	| result |
+	result := (CPythonShim @env0:current)
+		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'search' selfPtr: cPtr
+		with: aString.
+	^ (result ___eq___: 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
 category: 'Python-Methods'
 method: SrePattern
-sub
-	"sub(repl, string, count=0) -> str"
-	^ [:positional :keywords |
-		| nargs |
-		nargs := (positional @env0:size).
-		(nargs ___eq___: 2)
-			ifTrue: [
-				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'sub' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2)
-			]
-			ifFalse: [
-				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'sub' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2) with: (positional @env0:at: 3)
-			]
-	]
+search: aString _: pos
+	"search(string, pos) -> SreMatch or None"
+	| result |
+	result := (CPythonShim @env0:current)
+		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'search' selfPtr: cPtr
+		with: aString with: pos.
+	^ (result ___eq___: 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
 category: 'Python-Methods'
 method: SrePattern
-subn
-	"subn(repl, string, count=0) -> (str, int)"
-	^ [:positional :keywords |
-		| nargs |
-		nargs := (positional @env0:size).
-		(nargs ___eq___: 2)
-			ifTrue: [
-				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'subn' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2)
-			]
-			ifFalse: [
-				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'subn' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2) with: (positional @env0:at: 3)
-			]
-	]
+search: aString _: pos _: endpos
+	"search(string, pos, endpos) -> SreMatch or None"
+	| result |
+	result := (CPythonShim @env0:current)
+		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'search' selfPtr: cPtr
+		with: aString with: pos with: endpos.
+	^ (result ___eq___: 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
 category: 'Python-Methods'
 method: SrePattern
-split
-	"split(string, maxsplit=0) -> list"
-	^ [:positional :keywords |
-		| nargs |
-		nargs := (positional @env0:size).
-		(nargs ___eq___: 1)
-			ifTrue: [
-				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'split' selfPtr: cPtr with: (positional @env0:at: 1)
-			]
-			ifFalse: [
-				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'split' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2)
-			]
-	]
+_search: positional kw: keywords
+	"Varargs dispatcher for search()."
+	| nargs |
+	nargs := positional @env0:size.
+	(nargs ___eq___: 1) ifTrue: [^ self search: (positional @env0:at: 1)].
+	(nargs ___eq___: 2) ifTrue: [^ self search: (positional @env0:at: 1) _: (positional @env0:at: 2)].
+	(nargs ___eq___: 3) ifTrue: [^ self search: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
+	TypeError ___signal___: 'search() takes 1 to 3 arguments'
+%
+
+! --------- fullmatch -------------------------------------------------------
+
+category: 'Python-Methods'
+method: SrePattern
+fullmatch: aString
+	"fullmatch(string) -> SreMatch or None"
+	| result |
+	result := (CPythonShim @env0:current)
+		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'fullmatch' selfPtr: cPtr
+		with: aString.
+	^ (result ___eq___: 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
+%
+
+category: 'Python-Methods'
+method: SrePattern
+fullmatch: aString _: pos
+	"fullmatch(string, pos) -> SreMatch or None"
+	| result |
+	result := (CPythonShim @env0:current)
+		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'fullmatch' selfPtr: cPtr
+		with: aString with: pos.
+	^ (result ___eq___: 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
+%
+
+category: 'Python-Methods'
+method: SrePattern
+fullmatch: aString _: pos _: endpos
+	"fullmatch(string, pos, endpos) -> SreMatch or None"
+	| result |
+	result := (CPythonShim @env0:current)
+		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'fullmatch' selfPtr: cPtr
+		with: aString with: pos with: endpos.
+	^ (result ___eq___: 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
+%
+
+category: 'Python-Methods'
+method: SrePattern
+_fullmatch: positional kw: keywords
+	"Varargs dispatcher for fullmatch()."
+	| nargs |
+	nargs := positional @env0:size.
+	(nargs ___eq___: 1) ifTrue: [^ self fullmatch: (positional @env0:at: 1)].
+	(nargs ___eq___: 2) ifTrue: [^ self fullmatch: (positional @env0:at: 1) _: (positional @env0:at: 2)].
+	(nargs ___eq___: 3) ifTrue: [^ self fullmatch: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
+	TypeError ___signal___: 'fullmatch() takes 1 to 3 arguments'
+%
+
+! --------- findall ---------------------------------------------------------
+
+category: 'Python-Methods'
+method: SrePattern
+findall: aString
+	"findall(string) -> list"
+	^ (CPythonShim @env0:current)
+		@env0:callTyped: '_sre' type: 'Pattern' method: 'findall' selfPtr: cPtr
+		with: aString
+%
+
+category: 'Python-Methods'
+method: SrePattern
+findall: aString _: pos
+	"findall(string, pos) -> list"
+	^ (CPythonShim @env0:current)
+		@env0:callTyped: '_sre' type: 'Pattern' method: 'findall' selfPtr: cPtr
+		with: aString with: pos
+%
+
+category: 'Python-Methods'
+method: SrePattern
+findall: aString _: pos _: endpos
+	"findall(string, pos, endpos) -> list"
+	^ (CPythonShim @env0:current)
+		@env0:callTyped: '_sre' type: 'Pattern' method: 'findall' selfPtr: cPtr
+		with: aString with: pos with: endpos
+%
+
+category: 'Python-Methods'
+method: SrePattern
+_findall: positional kw: keywords
+	"Varargs dispatcher for findall()."
+	| nargs |
+	nargs := positional @env0:size.
+	(nargs ___eq___: 1) ifTrue: [^ self findall: (positional @env0:at: 1)].
+	(nargs ___eq___: 2) ifTrue: [^ self findall: (positional @env0:at: 1) _: (positional @env0:at: 2)].
+	(nargs ___eq___: 3) ifTrue: [^ self findall: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
+	TypeError ___signal___: 'findall() takes 1 to 3 arguments'
+%
+
+! --------- sub -------------------------------------------------------------
+
+category: 'Python-Methods'
+method: SrePattern
+sub: repl _: aString
+	"sub(repl, string) -> str"
+	^ (CPythonShim @env0:current)
+		@env0:callTyped: '_sre' type: 'Pattern' method: 'sub' selfPtr: cPtr
+		with: repl with: aString
+%
+
+category: 'Python-Methods'
+method: SrePattern
+sub: repl _: aString _: count
+	"sub(repl, string, count) -> str"
+	^ (CPythonShim @env0:current)
+		@env0:callTyped: '_sre' type: 'Pattern' method: 'sub' selfPtr: cPtr
+		with: repl with: aString with: count
+%
+
+category: 'Python-Methods'
+method: SrePattern
+_sub: positional kw: keywords
+	"Varargs dispatcher for sub()."
+	| nargs |
+	nargs := positional @env0:size.
+	(nargs ___eq___: 2) ifTrue: [^ self sub: (positional @env0:at: 1) _: (positional @env0:at: 2)].
+	(nargs ___eq___: 3) ifTrue: [^ self sub: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
+	TypeError ___signal___: 'sub() takes 2 or 3 arguments'
+%
+
+! --------- subn ------------------------------------------------------------
+
+category: 'Python-Methods'
+method: SrePattern
+subn: repl _: aString
+	"subn(repl, string) -> (str, int)"
+	^ (CPythonShim @env0:current)
+		@env0:callTyped: '_sre' type: 'Pattern' method: 'subn' selfPtr: cPtr
+		with: repl with: aString
+%
+
+category: 'Python-Methods'
+method: SrePattern
+subn: repl _: aString _: count
+	"subn(repl, string, count) -> (str, int)"
+	^ (CPythonShim @env0:current)
+		@env0:callTyped: '_sre' type: 'Pattern' method: 'subn' selfPtr: cPtr
+		with: repl with: aString with: count
+%
+
+category: 'Python-Methods'
+method: SrePattern
+_subn: positional kw: keywords
+	"Varargs dispatcher for subn()."
+	| nargs |
+	nargs := positional @env0:size.
+	(nargs ___eq___: 2) ifTrue: [^ self subn: (positional @env0:at: 1) _: (positional @env0:at: 2)].
+	(nargs ___eq___: 3) ifTrue: [^ self subn: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
+	TypeError ___signal___: 'subn() takes 2 or 3 arguments'
+%
+
+! --------- split -----------------------------------------------------------
+
+category: 'Python-Methods'
+method: SrePattern
+split: aString
+	"split(string) -> list"
+	^ (CPythonShim @env0:current)
+		@env0:callTyped: '_sre' type: 'Pattern' method: 'split' selfPtr: cPtr
+		with: aString
+%
+
+category: 'Python-Methods'
+method: SrePattern
+split: aString _: maxsplit
+	"split(string, maxsplit) -> list"
+	^ (CPythonShim @env0:current)
+		@env0:callTyped: '_sre' type: 'Pattern' method: 'split' selfPtr: cPtr
+		with: aString with: maxsplit
+%
+
+category: 'Python-Methods'
+method: SrePattern
+_split: positional kw: keywords
+	"Varargs dispatcher for split()."
+	| nargs |
+	nargs := positional @env0:size.
+	(nargs ___eq___: 1) ifTrue: [^ self split: (positional @env0:at: 1)].
+	(nargs ___eq___: 2) ifTrue: [^ self split: (positional @env0:at: 1) _: (positional @env0:at: 2)].
+	TypeError ___signal___: 'split() takes 1 or 2 arguments'
 %
 
 category: 'Python-Properties'
@@ -328,125 +464,222 @@ cPtr
 
 set compile_env: 1
 
+! --------- group -----------------------------------------------------------
+
 category: 'Python-Methods'
 method: SreMatch
 group
-	"group([group1, ...]) -> str or tuple"
-	^ [:positional :keywords |
-		| nargs |
-		nargs := (positional @env0:size).
-		(nargs ___eq___: 0)
-			ifTrue: [
-				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: cPtr
-			]
-			ifFalse: [ (nargs ___eq___: 1)
-				ifTrue: [
-					(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: cPtr with: (positional @env0:at: 1)
-				]
-				ifFalse: [ (nargs ___eq___: 2)
-					ifTrue: [
-						(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2)
-					]
-					ifFalse: [
-						(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: cPtr with: (positional @env0:at: 1) with: (positional @env0:at: 2) with: (positional @env0:at: 3)
-					]
-				]
-			]
-	]
+	"group() -> str (whole match, equivalent to group(0))"
+	^ (CPythonShim @env0:current)
+		@env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: cPtr
 %
+
+category: 'Python-Methods'
+method: SreMatch
+group: groupArg
+	"group(groupN) -> str"
+	^ (CPythonShim @env0:current)
+		@env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: cPtr
+		with: groupArg
+%
+
+category: 'Python-Methods'
+method: SreMatch
+group: g1 _: g2
+	"group(g1, g2) -> tuple"
+	^ (CPythonShim @env0:current)
+		@env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: cPtr
+		with: g1 with: g2
+%
+
+category: 'Python-Methods'
+method: SreMatch
+group: g1 _: g2 _: g3
+	"group(g1, g2, g3) -> tuple"
+	^ (CPythonShim @env0:current)
+		@env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: cPtr
+		with: g1 with: g2 with: g3
+%
+
+category: 'Python-Methods'
+method: SreMatch
+_group: positional kw: keywords
+	"Varargs dispatcher for group()."
+	| nargs |
+	nargs := positional @env0:size.
+	(nargs ___eq___: 0) ifTrue: [^ self group].
+	(nargs ___eq___: 1) ifTrue: [^ self group: (positional @env0:at: 1)].
+	(nargs ___eq___: 2) ifTrue: [^ self group: (positional @env0:at: 1) _: (positional @env0:at: 2)].
+	(nargs ___eq___: 3) ifTrue: [^ self group: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
+	TypeError ___signal___: 'group() takes 0 to 3 arguments'
+%
+
+! --------- groups ----------------------------------------------------------
 
 category: 'Python-Methods'
 method: SreMatch
 groups
-	"groups(default=None) -> tuple"
-	^ [:positional :keywords |
-		| nargs |
-		nargs := (positional @env0:size).
-		(nargs ___eq___: 0)
-			ifTrue: [
-				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'groups' selfPtr: cPtr
-			]
-			ifFalse: [
-				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'groups' selfPtr: cPtr with: (positional @env0:at: 1)
-			]
-	]
+	"groups() -> tuple"
+	^ (CPythonShim @env0:current)
+		@env0:callTyped: '_sre' type: 'Match' method: 'groups' selfPtr: cPtr
 %
+
+category: 'Python-Methods'
+method: SreMatch
+groups: defaultValue
+	"groups(default) -> tuple"
+	^ (CPythonShim @env0:current)
+		@env0:callTyped: '_sre' type: 'Match' method: 'groups' selfPtr: cPtr
+		with: defaultValue
+%
+
+category: 'Python-Methods'
+method: SreMatch
+_groups: positional kw: keywords
+	"Varargs dispatcher for groups()."
+	| nargs |
+	nargs := positional @env0:size.
+	(nargs ___eq___: 0) ifTrue: [^ self groups].
+	(nargs ___eq___: 1) ifTrue: [^ self groups: (positional @env0:at: 1)].
+	TypeError ___signal___: 'groups() takes 0 or 1 arguments'
+%
+
+! --------- groupdict -------------------------------------------------------
 
 category: 'Python-Methods'
 method: SreMatch
 groupdict
-	"groupdict(default=None) -> dict"
-	^ [:positional :keywords |
-		| nargs |
-		nargs := (positional @env0:size).
-		(nargs ___eq___: 0)
-			ifTrue: [
-				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'groupdict' selfPtr: cPtr
-			]
-			ifFalse: [
-				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'groupdict' selfPtr: cPtr with: (positional @env0:at: 1)
-			]
-	]
+	"groupdict() -> dict"
+	^ (CPythonShim @env0:current)
+		@env0:callTyped: '_sre' type: 'Match' method: 'groupdict' selfPtr: cPtr
 %
+
+category: 'Python-Methods'
+method: SreMatch
+groupdict: defaultValue
+	"groupdict(default) -> dict"
+	^ (CPythonShim @env0:current)
+		@env0:callTyped: '_sre' type: 'Match' method: 'groupdict' selfPtr: cPtr
+		with: defaultValue
+%
+
+category: 'Python-Methods'
+method: SreMatch
+_groupdict: positional kw: keywords
+	"Varargs dispatcher for groupdict()."
+	| nargs |
+	nargs := positional @env0:size.
+	(nargs ___eq___: 0) ifTrue: [^ self groupdict].
+	(nargs ___eq___: 1) ifTrue: [^ self groupdict: (positional @env0:at: 1)].
+	TypeError ___signal___: 'groupdict() takes 0 or 1 arguments'
+%
+
+! --------- start -----------------------------------------------------------
 
 category: 'Python-Methods'
 method: SreMatch
 start
-	"start(group=0) -> int"
-	^ [:positional :keywords |
-		| nargs |
-		nargs := (positional @env0:size).
-		(nargs ___eq___: 0)
-			ifTrue: [
-				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'start' selfPtr: cPtr
-			]
-			ifFalse: [
-				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'start' selfPtr: cPtr with: (positional @env0:at: 1)
-			]
-	]
+	"start() -> int"
+	^ (CPythonShim @env0:current)
+		@env0:callTyped: '_sre' type: 'Match' method: 'start' selfPtr: cPtr
 %
+
+category: 'Python-Methods'
+method: SreMatch
+start: groupArg
+	"start(group) -> int"
+	^ (CPythonShim @env0:current)
+		@env0:callTyped: '_sre' type: 'Match' method: 'start' selfPtr: cPtr
+		with: groupArg
+%
+
+category: 'Python-Methods'
+method: SreMatch
+_start: positional kw: keywords
+	"Varargs dispatcher for start()."
+	| nargs |
+	nargs := positional @env0:size.
+	(nargs ___eq___: 0) ifTrue: [^ self start].
+	(nargs ___eq___: 1) ifTrue: [^ self start: (positional @env0:at: 1)].
+	TypeError ___signal___: 'start() takes 0 or 1 arguments'
+%
+
+! --------- end -------------------------------------------------------------
 
 category: 'Python-Methods'
 method: SreMatch
 end
-	"end(group=0) -> int"
-	^ [:positional :keywords |
-		| nargs |
-		nargs := (positional @env0:size).
-		(nargs ___eq___: 0)
-			ifTrue: [
-				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'end' selfPtr: cPtr
-			]
-			ifFalse: [
-				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'end' selfPtr: cPtr with: (positional @env0:at: 1)
-			]
-	]
+	"end() -> int"
+	^ (CPythonShim @env0:current)
+		@env0:callTyped: '_sre' type: 'Match' method: 'end' selfPtr: cPtr
 %
+
+category: 'Python-Methods'
+method: SreMatch
+end: groupArg
+	"end(group) -> int"
+	^ (CPythonShim @env0:current)
+		@env0:callTyped: '_sre' type: 'Match' method: 'end' selfPtr: cPtr
+		with: groupArg
+%
+
+category: 'Python-Methods'
+method: SreMatch
+_end: positional kw: keywords
+	"Varargs dispatcher for end()."
+	| nargs |
+	nargs := positional @env0:size.
+	(nargs ___eq___: 0) ifTrue: [^ self end].
+	(nargs ___eq___: 1) ifTrue: [^ self end: (positional @env0:at: 1)].
+	TypeError ___signal___: 'end() takes 0 or 1 arguments'
+%
+
+! --------- span ------------------------------------------------------------
 
 category: 'Python-Methods'
 method: SreMatch
 span
-	"span(group=0) -> (int, int)"
-	^ [:positional :keywords |
-		| nargs |
-		nargs := (positional @env0:size).
-		(nargs ___eq___: 0)
-			ifTrue: [
-				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'span' selfPtr: cPtr
-			]
-			ifFalse: [
-				(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'span' selfPtr: cPtr with: (positional @env0:at: 1)
-			]
-	]
+	"span() -> (int, int)"
+	^ (CPythonShim @env0:current)
+		@env0:callTyped: '_sre' type: 'Match' method: 'span' selfPtr: cPtr
 %
 
 category: 'Python-Methods'
 method: SreMatch
-expand
+span: groupArg
+	"span(group) -> (int, int)"
+	^ (CPythonShim @env0:current)
+		@env0:callTyped: '_sre' type: 'Match' method: 'span' selfPtr: cPtr
+		with: groupArg
+%
+
+category: 'Python-Methods'
+method: SreMatch
+_span: positional kw: keywords
+	"Varargs dispatcher for span()."
+	| nargs |
+	nargs := positional @env0:size.
+	(nargs ___eq___: 0) ifTrue: [^ self span].
+	(nargs ___eq___: 1) ifTrue: [^ self span: (positional @env0:at: 1)].
+	TypeError ___signal___: 'span() takes 0 or 1 arguments'
+%
+
+! --------- expand ----------------------------------------------------------
+
+category: 'Python-Methods'
+method: SreMatch
+expand: template
 	"expand(template) -> str"
-	^ [:positional :keywords |
-		(CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'expand' selfPtr: cPtr with: (positional @env0:at: 1)
-	]
+	^ (CPythonShim @env0:current)
+		@env0:callTyped: '_sre' type: 'Match' method: 'expand' selfPtr: cPtr
+		with: template
+%
+
+category: 'Python-Methods'
+method: SreMatch
+_expand: positional kw: keywords
+	"Varargs dispatcher for expand()."
+	^ self expand: (positional @env0:at: 1)
 %
 
 category: 'Python-Properties'
@@ -581,118 +814,66 @@ set compile_env: 1
 category: 'Python-Initialization'
 method: _sre
 initialize
-	self
-		initialize_getcodesize;
-		initialize_ascii_iscased;
-		initialize_unicode_iscased;
-		initialize_ascii_tolower;
-		initialize_unicode_tolower;
-		initialize_compile;
-		initialize_constants;
-		yourself
-%
-
-category: 'Python-Initialization'
-method: _sre
-initialize_getcodesize
-	"getcodesize() -> int"
-	self ___at___: #getcodesize put: [:positional :keywords |
-		self ___class___ @env0:callGetcodesize
-	]
-%
-
-category: 'Python-Initialization'
-method: _sre
-initialize_ascii_iscased
-	"ascii_iscased(character) -> bool"
-	self ___at___: #ascii_iscased put: [:positional :keywords |
-		self ___class___ @env0:callAsciiIscased: (positional @env0:at: 1)
-	]
-%
-
-category: 'Python-Initialization'
-method: _sre
-initialize_unicode_iscased
-	"unicode_iscased(character) -> bool"
-	self ___at___: #unicode_iscased put: [:positional :keywords |
-		self ___class___ @env0:callUnicodeIscased: (positional @env0:at: 1)
-	]
-%
-
-category: 'Python-Initialization'
-method: _sre
-initialize_ascii_tolower
-	"ascii_tolower(character) -> int"
-	self ___at___: #ascii_tolower put: [:positional :keywords |
-		self ___class___ @env0:callAsciiTolower: (positional @env0:at: 1)
-	]
-%
-
-category: 'Python-Initialization'
-method: _sre
-initialize_unicode_tolower
-	"unicode_tolower(character) -> int"
-	self ___at___: #unicode_tolower put: [:positional :keywords |
-		self ___class___ @env0:callUnicodeTolower: (positional @env0:at: 1)
-	]
-%
-
-category: 'Python-Initialization'
-method: _sre
-initialize_compile
-	"compile(pattern, flags, code, groups, groupindex, indexgroup) -> SrePattern"
-	self ___at___: #compile put: [:positional :keywords |
-		| cPtr |
-		cPtr := self ___class___ @env0:callCompile: (positional @env0:at: 1) flags: (positional @env0:at: 2) code: (positional @env0:at: 3) groups: (positional @env0:at: 4) groupindex: (positional @env0:at: 5) indexgroup: (positional @env0:at: 6).
-		SrePattern @env0:newFromCPtr: cPtr
-	]
-%
-
-category: 'Python-Initialization'
-method: _sre
-initialize_constants
-	"Set module-level constants."
+	"Initialize module-level constants."
 	self ___at___: #MAGIC put: 20230612.
 	self ___at___: #CODESIZE put: 4.
 	self ___at___: #MAXREPEAT put: 4294967295.
 	self ___at___: #MAXGROUPS put: 1073741823.
 %
 
-category: 'Python-Accessors'
+! ===============================================================================
+! Module-level fast-path callables
+! ===============================================================================
+
+category: 'Python-Built-in Functions'
 method: _sre
 getcodesize
-	^ self ___at___: #getcodesize
+	"_sre.getcodesize() -> int"
+	^ self ___class___ @env0:callGetcodesize
 %
 
-category: 'Python-Accessors'
+category: 'Python-Built-in Functions'
 method: _sre
-ascii_iscased
-	^ self ___at___: #ascii_iscased
+ascii_iscased: character
+	"_sre.ascii_iscased(character) -> bool"
+	^ self ___class___ @env0:callAsciiIscased: character
 %
 
-category: 'Python-Accessors'
+category: 'Python-Built-in Functions'
 method: _sre
-unicode_iscased
-	^ self ___at___: #unicode_iscased
+unicode_iscased: character
+	"_sre.unicode_iscased(character) -> bool"
+	^ self ___class___ @env0:callUnicodeIscased: character
 %
 
-category: 'Python-Accessors'
+category: 'Python-Built-in Functions'
 method: _sre
-ascii_tolower
-	^ self ___at___: #ascii_tolower
+ascii_tolower: character
+	"_sre.ascii_tolower(character) -> int"
+	^ self ___class___ @env0:callAsciiTolower: character
 %
 
-category: 'Python-Accessors'
+category: 'Python-Built-in Functions'
 method: _sre
-unicode_tolower
-	^ self ___at___: #unicode_tolower
+unicode_tolower: character
+	"_sre.unicode_tolower(character) -> int"
+	^ self ___class___ @env0:callUnicodeTolower: character
 %
 
-category: 'Python-Accessors'
+category: 'Python-Built-in Functions'
 method: _sre
-compile
-	^ self ___at___: #compile
+compile: pattern _: flags _: code _: groups _: groupindex _: indexgroup
+	"_sre.compile(pattern, flags, code, groups, groupindex, indexgroup)
+	-> SrePattern"
+
+	| cPtr |
+	cPtr := self ___class___ @env0:callCompile: pattern flags: flags code: code groups: groups groupindex: groupindex indexgroup: indexgroup.
+	^ SrePattern @env0:newFromCPtr: cPtr
 %
+
+! ===============================================================================
+! Module-level stored-attribute accessors (constants)
+! ===============================================================================
 
 category: 'Python-Accessors'
 method: _sre

@@ -78,8 +78,7 @@ testImportPackage
 
 	| imp importFunc |
 	imp := importlib @env1:instance.
-	importFunc := imp @env1:__import__.
-	importFunc value: { 'src.python.mypkg' } value: nil.
+	imp @env1:___import__: { 'src.python.mypkg' } kw: nil.
 
 	self assert: (importlib ___lookupModule___: 'src.python.mypkg') notNil
 %
@@ -89,10 +88,9 @@ method: PackageImportTestCase
 testPackageHasPath
 	"Package module should have __path__ set to a list"
 
-	| imp importFunc pkg path |
+	| imp pkg path |
 	imp := importlib @env1:instance.
-	importFunc := imp @env1:__import__.
-	importFunc value: { 'src.python.mypkg' } value: nil.
+	imp @env1:___import__: { 'src.python.mypkg' } kw: nil.
 	pkg := importlib ___lookupModule___: 'src.python.mypkg'.
 
 	path := pkg @env1:__path__.
@@ -123,8 +121,7 @@ testImportSubmodule
 
 	| imp importFunc |
 	imp := importlib @env1:instance.
-	importFunc := imp @env1:__import__.
-	importFunc value: { 'src.python.mypkg.sub' } value: nil.
+	imp @env1:___import__: { 'src.python.mypkg.sub' } kw: nil.
 
 	self assert: (importlib ___lookupModule___: 'src.python.mypkg') notNil.
 	self assert: (importlib ___lookupModule___: 'src.python.mypkg.sub') notNil
@@ -140,8 +137,7 @@ testParentAutoLoaded
 	self assert: parentBefore equals: nil.
 
 	imp := importlib @env1:instance.
-	importFunc := imp @env1:__import__.
-	importFunc value: { 'src.python.mypkg.sub' } value: nil.
+	imp @env1:___import__: { 'src.python.mypkg.sub' } kw: nil.
 
 	self assert: (importlib ___lookupModule___: 'src.python.mypkg') notNil
 %
@@ -151,10 +147,9 @@ method: PackageImportTestCase
 testSubmoduleBoundOnParent
 	"After importing mypkg.sub, parent.sub should resolve"
 
-	| imp importFunc pkg subMod |
+	| imp pkg subMod |
 	imp := importlib @env1:instance.
-	importFunc := imp @env1:__import__.
-	importFunc value: { 'src.python.mypkg.sub' } value: nil.
+	imp @env1:___import__: { 'src.python.mypkg.sub' } kw: nil.
 
 	pkg := importlib ___lookupModule___: 'src.python.mypkg'.
 	subMod := pkg @env1:sub.
@@ -169,8 +164,7 @@ testImportNestedPackage
 
 	| imp importFunc |
 	imp := importlib @env1:instance.
-	importFunc := imp @env1:__import__.
-	importFunc value: { 'src.python.mypkg.nested.deep' } value: nil.
+	imp @env1:___import__: { 'src.python.mypkg.nested.deep' } kw: nil.
 
 	self assert: (importlib ___lookupModule___: 'src.python.mypkg') notNil.
 	self assert: (importlib ___lookupModule___: 'src.python.mypkg.nested') notNil.
@@ -183,13 +177,12 @@ testImportDottedReturnsTopLevel
 	"__import__('a.b') with empty fromlist returns the top-level module.
 	Use mypkg.nested where mypkg is a package with __init__.py."
 
-	| imp importFunc result topModule priorGrailDir |
+	| imp result topModule priorGrailDir |
 	priorGrailDir := importlib grailDir.
 	importlib grailDir: (importlib grailDir , '/src/python').
 	[
 		imp := importlib @env1:instance.
-		importFunc := imp @env1:__import__.
-		result := importFunc value: { 'mypkg.sub' } value: nil.
+		result := imp @env1:___import__: { 'mypkg.sub' } kw: nil.
 		topModule := importlib ___lookupModule___: 'mypkg'.
 		self assert: result == topModule.
 	] ensure: [
@@ -204,14 +197,13 @@ method: PackageImportTestCase
 testFromImportReturnsNamedModule
 	"__import__('a.b', fromlist=['y']) returns the named module, not top-level"
 
-	| imp importFunc result subModule priorGrailDir |
+	| imp result subModule priorGrailDir |
 	priorGrailDir := importlib grailDir.
 	importlib grailDir: (importlib grailDir , '/src/python').
 	[
 		imp := importlib @env1:instance.
-		importFunc := imp @env1:__import__.
 		"Call with fromlist as 4th positional arg"
-		result := importFunc value: { 'mypkg.sub'. nil. nil. { 'y' } } value: nil.
+		result := imp @env1:___import__: { 'mypkg.sub'. nil. nil. { 'y' } } kw: nil.
 		subModule := importlib ___lookupModule___: 'mypkg.sub'.
 		self assert: result == subModule.
 	] ensure: [
@@ -226,10 +218,9 @@ method: PackageImportTestCase
 testPackageInitExecuted
 	"Package __init__.py code should be executed"
 
-	| imp importFunc pkg |
+	| imp pkg |
 	imp := importlib @env1:instance.
-	importFunc := imp @env1:__import__.
-	importFunc value: { 'src.python.mypkg' } value: nil.
+	imp @env1:___import__: { 'src.python.mypkg' } kw: nil.
 
 	pkg := importlib ___lookupModule___: 'src.python.mypkg'.
 	"The __init__.py sets x = 'init' — but since the module is loaded via
@@ -244,10 +235,9 @@ method: PackageImportTestCase
 testPackageIsPackage
 	"Package module's __package__ should be the module name itself"
 
-	| imp importFunc pkg |
+	| imp pkg |
 	imp := importlib @env1:instance.
-	importFunc := imp @env1:__import__.
-	importFunc value: { 'src.python.mypkg' } value: nil.
+	imp @env1:___import__: { 'src.python.mypkg' } kw: nil.
 
 	pkg := importlib ___lookupModule___: 'src.python.mypkg'.
 	self assert: (pkg @env1:__package__) equals: 'src.python.mypkg'

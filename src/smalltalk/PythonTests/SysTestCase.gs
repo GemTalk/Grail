@@ -76,7 +76,7 @@ category: 'Setup'
 method: SysTestCase
 setUp
 	"Initialize the modules registry before each test"
-	sys @env1:modules
+	sys @env1:modules.
 %
 
 category: 'Tests - Runtime Info'
@@ -131,25 +131,17 @@ testCopyright
 category: 'Tests - Hooks'
 method: SysTestCase
 testDisplayhookExists
-	"Test sys.displayhook exists and is callable"
+	"Test sys.displayhook exists as a real method."
 
-	| s displayhookBlock |
-	s := sys @env1:instance.
-	displayhookBlock := s @env1:displayhook.
-
-	self assert: displayhookBlock notNil
+	self assert: ((sys methodDictForEnv: 1) includesKey: #'displayhook:')
 %
 
 category: 'Tests - Hooks'
 method: SysTestCase
 testExcepthookExists
-	"Test sys.excepthook exists and is callable"
+	"Test sys.excepthook exists as a real method."
 
-	| s excepthookBlock |
-	s := sys @env1:instance.
-	excepthookBlock := s @env1:excepthook.
-
-	self assert: excepthookBlock notNil
+	self assert: ((sys methodDictForEnv: 1) includesKey: #'excepthook:_:_:')
 %
 
 category: 'Tests - Functions'
@@ -157,11 +149,10 @@ method: SysTestCase
 testExcInfo
 	"Test sys.exc_info() returns a tuple"
 
-	| s excInfoBlock result |
+	| s result |
 	s := sys @env1:instance.
-	excInfoBlock := s @env1:exc_info.
 
-	result := excInfoBlock value: {} value: nil.
+	result := s @env1:exc_info.
 
 	self assert: (result isKindOf: tuple).
 	self assert: result size == 3
@@ -184,11 +175,10 @@ method: SysTestCase
 testExit
 	"Test sys.exit raises SystemExit"
 
-	| s exitBlock |
+	| s |
 	s := sys @env1:instance.
-	exitBlock := s @env1:exit.
 
-	self should: [exitBlock value: {} value: nil] raise: SystemExit
+	self should: [s @env1:exit] raise: SystemExit
 %
 
 category: 'Tests - Functions'
@@ -196,11 +186,10 @@ method: SysTestCase
 testExitWithCode
 	"Test sys.exit(code) raises SystemExit with code"
 
-	| s exitBlock |
+	| s |
 	s := sys @env1:instance.
-	exitBlock := s @env1:exit.
 
-	self should: [exitBlock value: {42} value: nil] raise: SystemExit
+	self should: [s @env1:exit: 42] raise: SystemExit.
 %
 
 category: 'Tests - Functions'
@@ -208,11 +197,10 @@ method: SysTestCase
 testGetdefaultencoding
 	"Test sys.getdefaultencoding() returns utf-8"
 
-	| s getdefaultencodingBlock result |
+	| s result |
 	s := sys @env1:instance.
-	getdefaultencodingBlock := s @env1:getdefaultencoding.
 
-	result := getdefaultencodingBlock value: {} value: nil.
+	result := s @env1:getdefaultencoding.
 
 	self assert: result equals: 'utf-8'
 %
@@ -222,11 +210,10 @@ method: SysTestCase
 testGetfilesystemencoding
 	"Test sys.getfilesystemencoding() returns utf-8"
 
-	| s getfilesystemencodingBlock result |
+	| s result |
 	s := sys @env1:instance.
-	getfilesystemencodingBlock := s @env1:getfilesystemencoding.
 
-	result := getfilesystemencodingBlock value: {} value: nil.
+	result := s @env1:getfilesystemencoding.
 
 	self assert: result equals: 'utf-8'
 %
@@ -236,11 +223,10 @@ method: SysTestCase
 testGetrecursionlimit
 	"Test sys.getrecursionlimit() returns a positive integer"
 
-	| s getrecursionlimitBlock result |
+	| s result |
 	s := sys @env1:instance.
-	getrecursionlimitBlock := s @env1:getrecursionlimit.
 
-	result := getrecursionlimitBlock value: {} value: nil.
+	result := s @env1:getrecursionlimit.
 
 	self assert: (result isKindOf: Integer).
 	self assert: result > 0
@@ -251,11 +237,10 @@ method: SysTestCase
 testGetsizeof
 	"Test sys.getsizeof() returns a size"
 
-	| s getsizeofBlock result |
+	| s result |
 	s := sys @env1:instance.
-	getsizeofBlock := s @env1:getsizeof.
 
-	result := getsizeofBlock value: {'hello'} value: nil.
+	result := s @env1:getsizeof: 'hello'.
 
 	self assert: (result isKindOf: Integer).
 	self assert: result >= 0
@@ -266,11 +251,10 @@ method: SysTestCase
 testImportSys
 	"Test importing sys module via importlib"
 
-	| imp importModuleBlock result |
+	| imp result |
 	imp := importlib @env1:instance.
-	importModuleBlock := imp @env1:import_module.
 
-	result := importModuleBlock value: {'sys'} value: nil.
+	result := imp @env1:import_module: 'sys'.
 
 	self assert: result class equals: sys
 %
@@ -292,11 +276,10 @@ method: SysTestCase
 testIntern
 	"Test sys.intern() returns the same string"
 
-	| s internBlock result |
+	| s result |
 	s := sys @env1:instance.
-	internBlock := s @env1:intern.
 
-	result := internBlock value: {'hello'} value: nil.
+	result := s @env1:intern: 'hello'.
 
 	self assert: result equals: 'hello'
 %
@@ -306,11 +289,10 @@ method: SysTestCase
 testIsFinalizing
 	"Test sys.is_finalizing() returns false during normal execution"
 
-	| s isFinalizingBlock result |
+	| s result |
 	s := sys @env1:instance.
-	isFinalizingBlock := s @env1:is_finalizing.
 
-	result := isFinalizingBlock value: {} value: nil.
+	result := s @env1:is_finalizing.
 
 	self assert: result equals: false
 %

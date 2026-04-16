@@ -50,20 +50,17 @@ testE
 category: 'Tests - Exponential'
 method: CMathTestCase
 testExp
-	"Test cmath.exp() with complex number"
+	"Test cmath.exp() — Phase-4 direct method dispatch."
 
-	| cm expBlock z result real imag |
+	| cm z result real imag |
 	cm := cmath @env1:instance.
-	expBlock := cm @env1:exp.
-	
-	"exp(0) = 1"
+
 	z := complex ___new___: 0.0 _: 0.0.
-	result := expBlock value: {z} value: nil.
+	result := cm @env1:exp: z.
 	real := result @env1:real.
 	imag := result @env1:imag.
-	
-	self assert: (((real - 1.0) abs) 
-		< 0.00001).
+
+	self assert: (((real - 1.0) abs) < 0.00001).
 	self assert: ((imag abs) < 0.00001)
 %
 
@@ -95,81 +92,70 @@ testInfj
 category: 'Tests - Classification'
 method: CMathTestCase
 testIsfinite
-	"Test cmath.isfinite()"
+	"Test cmath.isfinite() — Phase-4 direct method dispatch."
 
-	| cm isfiniteBlock z result inf |
+	| cm z result inf |
 	cm := cmath @env1:instance.
 	inf := cm @env1:inf.
-	isfiniteBlock := cm @env1:isfinite.
 
-	"isfinite(1+2j) = True"
 	z := complex ___new___: 1.0 _: 2.0.
-	result := isfiniteBlock value: {z} value: nil.
+	result := cm @env1:isfinite: z.
 	self assert: result.
 
-	"isfinite(inf+0j) = False"
 	z := complex ___new___: inf _: 0.0.
-	result := isfiniteBlock value: {z} value: nil.
+	result := cm @env1:isfinite: z.
 	self deny: result
 %
 
 category: 'Tests - Classification'
 method: CMathTestCase
 testIsinf
-	"Test cmath.isinf()"
+	"Test cmath.isinf() — Phase-4 direct method dispatch."
 
-	| cm isinfBlock z result inf |
+	| cm z result inf |
 	cm := cmath @env1:instance.
 	inf := cm @env1:inf.
-	isinfBlock := cm @env1:isinf.
 
-	"isinf(inf+0j) = True"
 	z := complex ___new___: inf _: 0.0.
-	result := isinfBlock value: {z} value: nil.
+	result := cm @env1:isinf: z.
 	self assert: result.
 
-	"isinf(1+0j) = False"
 	z := complex ___new___: 1.0 _: 0.0.
-	result := isinfBlock value: {z} value: nil.
+	result := cm @env1:isinf: z.
 	self deny: result
 %
 
 category: 'Tests - Classification'
 method: CMathTestCase
 testIsnan
-	"Test cmath.isnan()"
+	"Test cmath.isnan() — Phase-4 direct method dispatch."
 
-	| cm isnanBlock z result nan |
+	| cm z result nan |
 	cm := cmath @env1:instance.
 	nan := cm @env1:nan.
-	isnanBlock := cm @env1:isnan.
 
-	"isnan(nan+0j) = True"
 	z := complex ___new___: nan _: 0.0.
-	result := isnanBlock value: {z} value: nil.
+	result := cm @env1:isnan: z.
 	self assert: result.
 
-	"isnan(1+0j) = False"
 	z := complex ___new___: 1.0 _: 0.0.
-	result := isnanBlock value: {z} value: nil.
+	result := cm @env1:isnan: z.
 	self deny: result
 %
 
 category: 'Tests - Logarithmic'
 method: CMathTestCase
 testLog
-	"Test cmath.log() with complex number"
+	"Test cmath.log() — Phase-4 direct method dispatch."
 
-	| cm logBlock z result real imag |
+	| cm z result real imag |
 	cm := cmath @env1:instance.
-	logBlock := cm @env1:log.
-	
-	"log(1) = 0"
+
 	z := complex ___new___: 1.0 _: 0.0.
-	result := logBlock value: {z} value: nil.
+	result := cm @env1:log: z.
 	real := result @env1:real.
 	imag := result @env1:imag.
-	
+
 	self assert: ((real abs) < 0.00001).
 	self assert: ((imag abs) < 0.00001)
 %
@@ -202,23 +188,19 @@ testNanj
 category: 'Tests - Polar'
 method: CMathTestCase
 testPhase
-	"Test cmath.phase()"
+	"Test cmath.phase() — Phase-4 direct method dispatch."
 
-	| cm phaseBlock z result pi |
+	| cm z result pi |
 	cm := cmath @env1:instance.
 	pi := cm @env1:pi.
-	phaseBlock := cm @env1:phase.
 
-	"phase(1+0j) = 0"
 	z := complex ___new___: 1.0 _: 0.0.
-	result := phaseBlock value: {z} value: nil.
+	result := cm @env1:phase: z.
 	self assert: ((result abs) < 0.00001).
 
-	"phase(0+1j) = pi/2"
 	z := complex ___new___: 0.0 _: 1.0.
-	result := phaseBlock value: {z} value: nil.
-	self assert: (((result - (pi / 2.0)) abs)
-		< 0.00001)
+	result := cm @env1:phase: z.
+	self assert: (((result - (pi / 2.0)) abs) < 0.00001)
 %
 
 category: 'Tests - Constants'
@@ -237,59 +219,47 @@ testPi
 category: 'Tests - Polar'
 method: CMathTestCase
 testPolar
-	"Test cmath.polar()"
+	"Test cmath.polar() — Phase-4 direct method dispatch."
 
-	| cm polarBlock z result r theta |
+	| cm z result r |
 	cm := cmath @env1:instance.
-	polarBlock := cm @env1:polar.
 
-	"polar(3+4j) should give (5, atan(4/3))"
 	z := complex ___new___: 3.0 _: 4.0.
-	result := polarBlock value: {z} value: nil.
+	result := cm @env1:polar: z.
 
 	r := result @env1:__getitem__: 0.
-	theta := result @env1:__getitem__: 1.
-
-	self assert: (((r - 5.0) abs)
-		< 0.00001)
+	self assert: (((r - 5.0) abs) < 0.00001)
 %
 
 category: 'Tests - Polar'
 method: CMathTestCase
 testRect
-	"Test cmath.rect()"
+	"Test cmath.rect() — Phase-4 direct method dispatch."
 
-	| cm rectBlock result real imag pi |
+	| cm result real imag |
 	cm := cmath @env1:instance.
-	pi := cm @env1:pi.
-	rectBlock := cm @env1:rect.
 
-	"rect(1, 0) = 1+0j"
-	result := rectBlock value: {1.0. 0.0} value: nil.
+	result := cm @env1:rect: 1.0 _: 0.0.
 	real := result @env1:real.
 	imag := result @env1:imag.
 
-	self assert: (((real - 1.0) abs)
-		< 0.00001).
+	self assert: (((real - 1.0) abs) < 0.00001).
 	self assert: ((imag abs) < 0.00001)
 %
 
 category: 'Tests - Power'
 method: CMathTestCase
 testSqrt
-	"Test cmath.sqrt() with complex number"
+	"Test cmath.sqrt() — Phase-4 direct method dispatch."
 
-	| cm sqrtBlock z result real imag |
+	| cm z result real imag |
 	cm := cmath @env1:instance.
-	sqrtBlock := cm @env1:sqrt.
 
-	"sqrt(4) = 2"
 	z := complex ___new___: 4.0 _: 0.0.
-	result := sqrtBlock value: {z} value: nil.
+	result := cm @env1:sqrt: z.
 	real := result @env1:real.
 	imag := result @env1:imag.
 
-	self assert: (((real - 2.0) abs)
-		< 0.00001).
+	self assert: (((real - 2.0) abs) < 0.00001).
 	self assert: ((imag abs) < 0.00001)
 %

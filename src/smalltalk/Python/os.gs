@@ -20,10 +20,9 @@ doit
 os comment:
 'Python os module.
 
-This class provides access to operating system interfaces.
-Each method in this class corresponds to a Python os module function.
-
-See https://docs.python.org/3/library/os.html for the complete list.
+Provides operating system interfaces for file/directory operations,
+process management, and environment variables.
+See https://docs.python.org/3/library/os.html
 '
 %
 
@@ -31,14 +30,6 @@ expectvalue /Class
 doit
 os category: 'Modules'
 %
-
-! ===============================================================================
-! os Module (Python 'os' module)
-! ===============================================================================
-! This file contains the Python os module implementation.
-! The os module provides operating system interfaces for file and directory
-! operations, process management, and environment variables.
-! ===============================================================================
 
 set compile_env: 0
 
@@ -51,678 +42,309 @@ os class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-File and Directory Operations'
-method: os
-chdir
-	"Return the chdir function"
-	^ self ___at___: #chdir
-%
-
-category: 'Python-File and Directory Operations'
-method: os
-chdir: aBlock
-	"Set the chdir function (for monkey patching)"
-	self ___at___: #chdir put: aBlock
-%
-
-category: 'Python-File and Directory Operations'
-method: os
-exists
-	"Return the exists function"
-	^ self ___at___: #exists
-%
-
-category: 'Python-File and Directory Operations'
-method: os
-exists: aBlock
-	"Set the exists function (for monkey patching)"
-	self ___at___: #exists put: aBlock
-%
-
-category: 'Python-File and Directory Operations'
-method: os
-getcwd
-	"Return the getcwd function"
-	^ self ___at___: #getcwd
-%
-
-category: 'Python-File and Directory Operations'
-method: os
-getcwd: aBlock
-	"Set the getcwd function (for monkey patching)"
-	self ___at___: #getcwd put: aBlock
-%
-
-category: 'Python-Environment Variables'
-method: os
-getenv
-	"Return the getenv function"
-	^ self ___at___: #getenv
-%
-
-category: 'Python-Environment Variables'
-method: os
-getenv: aBlock
-	"Set the getenv function (for monkey patching)"
-	self ___at___: #getenv put: aBlock
-%
-
-category: 'Python-Environment Variables'
-method: os
-getenvWithDefault
-	"Return the getenvWithDefault function"
-	^ self ___at___: #getenvWithDefault
-%
-
-category: 'Python-Environment Variables'
-method: os
-getenvWithDefault: aBlock
-	"Set the getenvWithDefault function (for monkey patching)"
-	self ___at___: #getenvWithDefault put: aBlock
-%
+! ===============================================================================
+! Initialization — constants and stored attributes
+! ===============================================================================
 
 category: 'Python-Initialization'
 method: os
 initialize
-	"Initialize all module attributes with their default values"
-	self 
-		initialize_getcwd;
-		initialize_chdir;
-		initialize_listdir;
-		initialize_mkdir;
-		initialize_mkdirWithMode;
-		initialize_makedirs;
-		initialize_remove;
-		initialize_rmdir;
-		initialize_rename;
-		initialize_exists;
-		initialize_isdir;
-		initialize_isfile;
-		initialize_stat;
-		initialize_lstat;
-		initialize_system;
-		initialize_getenv;
-		initialize_getenvWithDefault;
-		initialize_putenv;
-		initialize_sep;
-		initialize_pathsep;
-		initialize_linesep;
-		initialize_path;
-		yourself
+	self ___at___: #sep put: '/'.
+	self ___at___: #pathsep put: ':'.
+	self ___at___: #linesep put: ((Character ___lf___) ___asString___).
+	self ___at___: #path put: (os_path instance).
 %
 
-category: 'Python-Initialization'
-method: os
-initialize_chdir
-	"Change the current working directory to path"
-	self ___at___: #chdir put: [:positional :keywords |
-		| path result |
-		path := positional ___at___: 1.
-		result := GsFile @env0:_directoryPrim: 0 with: path with: nil.
-		result == nil ifTrue: [
-			OSError ___signal___: ('Cannot change directory to: ' ___concat___: (path ___printString___))
-		].
-		nil
-	]
-%
-
-category: 'Python-Initialization'
-method: os
-initialize_exists
-	"Return True if path refers to an existing path"
-	self ___at___: #exists put: [:positional :keywords |
-		| path |
-		path := positional ___at___: 1.
-		GsFile ___existsOnServer___: path
-	]
-%
-
-category: 'Python-Initialization'
-method: os
-initialize_getcwd
-	"Return a string representing the current working directory"
-	self ___at___: #getcwd put: [:positional :keywords |
-		| result |
-		result := GsFile @env0:_directoryPrim: 2 with: nil with: nil.
-		(result ___isKindOf___: String) ifTrue: [result] ifFalse: [
-			(result ___isKindOf___: Utf8) ifTrue: [result ___decodeToUnicode___] ifFalse: [
-				(result ___isKindOf___: Utf16) ifTrue: [result ___decodeToUnicode___] ifFalse: [
-					result ___asUnicodeString___
-				]
-			]
-		]
-	]
-%
-
-category: 'Python-Initialization'
-method: os
-initialize_getenv
-	"Get an environment variable, return None if it doesn't exist"
-	self ___at___: #getenv put: [:positional :keywords |
-		| name result |
-		name := positional ___at___: 1.
-		result := System @env0:gemEnvironmentVariable: name.
-		result
-	]
-%
-
-category: 'Python-Initialization'
-method: os
-initialize_getenvWithDefault
-	"Get an environment variable, return default if it doesn't exist"
-	self ___at___: #getenvWithDefault put: [:positional :keywords |
-		| name default result |
-		name := positional ___at___: 1.
-		default := positional ___at___: 2.
-		result := System @env0:gemEnvironmentVariable: name.
-		result == nil ifTrue: [default] ifFalse: [result]
-	]
-%
-
-category: 'Python-Initialization'
-method: os
-initialize_isdir
-	"Return True if path is an existing directory"
-	self ___at___: #isdir put: [:positional :keywords |
-		| path exists |
-		path := positional ___at___: 1.
-		exists := GsFile ___existsOnServer___: path.
-		exists ifTrue: [
-			GsFile @env0:isServerDirectory: path
-		] ifFalse: [false]
-	]
-%
-
-category: 'Python-Initialization'
-method: os
-initialize_isfile
-	"Return True if path is an existing regular file"
-	self ___at___: #isfile put: [:positional :keywords |
-		| path exists isDir |
-		path := positional ___at___: 1.
-		exists := GsFile ___existsOnServer___: path.
-		exists ifTrue: [
-			isDir := GsFile @env0:isServerDirectory: path.
-			isDir == false
-		] ifFalse: [false]
-	]
-%
-
-category: 'Python-Initialization'
-method: os
-initialize_linesep
-	"The string used to separate (or, rather, terminate) lines on the current platform"
-	self ___at___: #linesep put: ((Character ___lf___) ___asString___)
-%
-
-category: 'Python-Initialization'
-method: os
-initialize_listdir
-	"Return a list containing the names of the entries in the directory given by path (or current directory if path is nil)"
-	self ___at___: #listdir put: [:positional :keywords |
-		| path dirContents result size i each decoded actualPath getcwdBlock |
-		path := (positional ___size___ ___ge___: 1) ifTrue: [positional ___at___: 1] ifFalse: [nil].
-		actualPath := path.
-		actualPath == nil ifTrue: [
-			getcwdBlock := self getcwd.
-			actualPath := getcwdBlock value: {} value: nil
-		].
-		dirContents := GsFile @env0:contentsOfDirectory: actualPath onClient: false.
-		(dirContents ___isKindOf___: Array) ifFalse: [
-			OSError ___signal___: ('Cannot list directory: ' ___concat___: (actualPath ___printString___))
-		].
-		result := list ___new___.
-		size := dirContents ___size___.
-		1 ___to___: size do: [:i | | basename lastSlashIndex reversedPath reversedSep index |
-			each := dirContents ___at___: i.
-			decoded := each.
-			(each ___isKindOf___: Utf8) ifTrue: [
-				decoded := each ___decodeToUnicode___
-			].
-			(each ___isKindOf___: Utf16) ifTrue: [
-				decoded := each ___decodeToUnicode___
-			].
-			(each ___isKindOf___: String) ifFalse: [
-				decoded := each ___asUnicodeString___
-			].
-			"Extract basename if decoded contains a path separator (reverse and find)"
-			reversedPath := decoded ___reverse___.
-			reversedSep := '/' ___reverse___.
-			index := reversedPath ___findString___: reversedSep startingAt: 1.
-			(index ___eq___: 0) ifFalse: [
-				"Convert back to original position: length - found_index + 1"
-				lastSlashIndex := ((decoded ___size___) ___minus___: (index)) ___plus___: 1.
-				basename := decoded ___copyFrom___: (lastSlashIndex ___plus___: 1) to: decoded ___size___.
-				decoded := basename
-			].
-			result append: decoded
-		].
-		result
-	]
-%
-
-category: 'Python-Initialization'
-method: os
-initialize_lstat
-	"Like stat(), but does not follow symbolic links"
-	self ___at___: #lstat put: [:positional :keywords |
-		| path statResult |
-		path := positional ___at___: 1.
-		statResult := GsFile @env0:stat: path isLstat: true.
-		statResult == nil ifTrue: [
-			OSError ___signal___: ('Cannot lstat: ' ___concat___: (path ___printString___))
-		].
-		statResult
-	]
-%
-
-category: 'Python-Initialization'
-method: os
-initialize_makedirs
-	"Recursive directory creation function"
-	self ___at___: #makedirs put: [:positional :keywords |
-		| path parts currentPath size i part sep mkdirBlock |
-		path := positional ___at___: 1.
-		sep := '/'.
-		parts := $/ ___split___: path.
-		currentPath := ''.
-		size := parts ___size___.
-		mkdirBlock := self mkdir.
-		1 ___to___: size do: [:i |
-			part := parts ___at___: i.
-			(part ___isEmpty___) ifFalse: [
-				currentPath := (currentPath ___isEmpty___)
-					ifTrue: [
-						"Check if path is absolute - if first part was empty, start with separator"
-						(path ___beginsWith___: sep)
-							ifTrue: [sep ___concat___: part]
-							ifFalse: [part]
-					]
-					ifFalse: [(currentPath ___concat___: sep) ___concat___: part].
-				(GsFile ___existsOnServer___: currentPath) ifFalse: [
-					mkdirBlock value: {currentPath} value: nil.
-				].
-			]
-		].
-		nil
-	]
-%
-
-category: 'Python-Initialization'
-method: os
-initialize_mkdir
-	"Create a directory named path"
-	self ___at___: #mkdir put: [:positional :keywords |
-		| path result |
-		path := positional ___at___: 1.
-		result := GsFile @env0:createServerDirectory: path.
-		result == nil ifTrue: [
-			OSError ___signal___: ('Cannot create directory: ' ___concat___: (path ___printString___))
-		].
-		nil
-	]
-%
-
-category: 'Python-Initialization'
-method: os
-initialize_mkdirWithMode
-	"Create a directory named path with numeric mode"
-	self ___at___: #mkdirWithMode put: [:positional :keywords |
-		| path mode result |
-		path := positional ___at___: 1.
-		mode := positional ___at___: 2.
-		result := GsFile @env0:createServerDirectory: path mode: mode.
-		result == nil ifTrue: [
-			OSError ___signal___: ('Cannot create directory: ' ___concat___: (path ___printString___))
-		].
-		nil
-	]
-%
-
-category: 'Python-Initialization'
-method: os
-initialize_path
-	"Return the os.path module instance"
-	self ___at___: #path put: (os_path instance)
-%
-
-category: 'Python-Initialization'
-method: os
-initialize_pathsep
-	"The character conventionally used by the operating system to separate search path components"
-	self ___at___: #pathsep put: ':'
-%
-
-category: 'Python-Initialization'
-method: os
-initialize_putenv
-	"Set the environment variable named name to the string value"
-	self ___at___: #putenv put: [:positional :keywords |
-		| name value |
-		name := positional ___at___: 1.
-		value := positional ___at___: 2.
-		System @env0:gemEnvironmentVariable: name put: value.
-		nil
-	]
-%
-
-category: 'Python-Initialization'
-method: os
-initialize_remove
-	"Remove (delete) the file path"
-	self ___at___: #remove put: [:positional :keywords |
-		| path result |
-		path := positional ___at___: 1.
-		result := GsFile @env0:removeServerFile: path.
-		result == nil ifTrue: [
-			OSError ___signal___: ('Cannot remove file: ' ___concat___: (path ___printString___))
-		].
-		nil
-	]
-%
-
-category: 'Python-Initialization'
-method: os
-initialize_rename
-	"Rename the file or directory from oldPath to newPath"
-	self ___at___: #rename put: [:positional :keywords |
-		| oldPath newPath result msg |
-		oldPath := positional ___at___: 1.
-		newPath := positional ___at___: 2.
-		result := GsFile @env0:renameFileOnServer: oldPath to: newPath.
-		result == nil ifTrue: [
-			msg := ((oldPath ___printString___) ___concat___: ' to ') ___concat___: (newPath ___printString___).
-			OSError ___signal___: ('Cannot rename: ' ___concat___: msg)
-		].
-		nil
-	]
-%
-
-category: 'Python-Initialization'
-method: os
-initialize_rmdir
-	"Remove (delete) the directory path"
-	self ___at___: #rmdir put: [:positional :keywords |
-		| path result |
-		path := positional ___at___: 1.
-		result := GsFile @env0:removeServerDirectory: path.
-		result == nil ifTrue: [
-			OSError ___signal___: ('Cannot remove directory: ' ___concat___: (path ___printString___))
-		].
-		nil
-	]
-%
-
-category: 'Python-Initialization'
-method: os
-initialize_sep
-	"The character used by the operating system to separate pathname components"
-	self ___at___: #sep put: '/'
-%
-
-category: 'Python-Initialization'
-method: os
-initialize_stat
-	"Get the status of a file or directory"
-	self ___at___: #stat put: [:positional :keywords |
-		| path statResult |
-		path := positional ___at___: 1.
-		statResult := GsFile @env0:stat: path isLstat: false.
-		statResult == nil ifTrue: [
-			OSError ___signal___: ('Cannot stat: ' ___concat___: (path ___printString___))
-		].
-		statResult
-	]
-%
-
-category: 'Python-Initialization'
-method: os
-initialize_system
-	"Execute the command (a string) in a subshell"
-	self ___at___: #system put: [:positional :keywords |
-		| command result |
-		command := positional ___at___: 1.
-		result := System @env0:performOnServer: command.
-		result
-	]
-%
-
-category: 'Python-File and Directory Operations'
-method: os
-isdir
-	"Return the isdir function"
-	^ self ___at___: #isdir
-%
-
-category: 'Python-File and Directory Operations'
-method: os
-isdir: aBlock
-	"Set the isdir function (for monkey patching)"
-	self ___at___: #isdir put: aBlock
-%
-
-category: 'Python-File and Directory Operations'
-method: os
-isfile
-	"Return the isfile function"
-	^ self ___at___: #isfile
-%
-
-category: 'Python-File and Directory Operations'
-method: os
-isfile: aBlock
-	"Set the isfile function (for monkey patching)"
-	self ___at___: #isfile put: aBlock
-%
-
-category: 'Python-Constants'
-method: os
-linesep
-	"The string used to separate (or, rather, terminate) lines on the current platform"
-	^ self ___at___: #linesep
-%
-
-category: 'Python-Constants'
-method: os
-linesep: aValue
-	"Set the linesep constant (for monkey patching)"
-	self ___at___: #linesep put: aValue
-%
-
-category: 'Python-File and Directory Operations'
-method: os
-listdir
-	"Return the listdir function"
-	^ self ___at___: #listdir
-%
-
-category: 'Python-File and Directory Operations'
-method: os
-listdir: aBlock
-	"Set the listdir function (for monkey patching)"
-	self ___at___: #listdir put: aBlock
-%
-
-category: 'Python-File and Directory Operations'
-method: os
-lstat
-	"Return the lstat function"
-	^ self ___at___: #lstat
-%
-
-category: 'Python-File and Directory Operations'
-method: os
-lstat: aBlock
-	"Set the lstat function (for monkey patching)"
-	self ___at___: #lstat put: aBlock
-%
-
-category: 'Python-File and Directory Operations'
-method: os
-makedirs
-	"Return the makedirs function"
-	^ self ___at___: #makedirs
-%
-
-category: 'Python-File and Directory Operations'
-method: os
-makedirs: aBlock
-	"Set the makedirs function (for monkey patching)"
-	self ___at___: #makedirs put: aBlock
-%
-
-category: 'Python-File and Directory Operations'
-method: os
-mkdir
-	"Return the mkdir function"
-	^ self ___at___: #mkdir
-%
-
-category: 'Python-File and Directory Operations'
-method: os
-mkdir: aBlock
-	"Set the mkdir function (for monkey patching)"
-	self ___at___: #mkdir put: aBlock
-%
-
-category: 'Python-File and Directory Operations'
-method: os
-mkdirWithMode
-	"Return the mkdirWithMode function"
-	^ self ___at___: #mkdirWithMode
-%
-
-category: 'Python-File and Directory Operations'
-method: os
-mkdirWithMode: aBlock
-	"Set the mkdirWithMode function (for monkey patching)"
-	self ___at___: #mkdirWithMode put: aBlock
-%
-
-category: 'Python-Path Module'
-method: os
-path
-	"Return the os.path module instance"
-	^ self ___at___: #path
-%
-
-category: 'Python-Path Module'
-method: os
-path: aValue
-	"Set the path module instance (for monkey patching)"
-	self ___at___: #path put: aValue
-%
-
-category: 'Python-Constants'
-method: os
-pathsep
-	"The character conventionally used by the operating system to separate search path components"
-	^ self ___at___: #pathsep
-%
-
-category: 'Python-Constants'
-method: os
-pathsep: aValue
-	"Set the pathsep constant (for monkey patching)"
-	self ___at___: #pathsep put: aValue
-%
-
-category: 'Python-Environment Variables'
-method: os
-putenv
-	"Return the putenv function"
-	^ self ___at___: #putenv
-%
-
-category: 'Python-Environment Variables'
-method: os
-putenv: aBlock
-	"Set the putenv function (for monkey patching)"
-	self ___at___: #putenv put: aBlock
-%
-
-category: 'Python-File and Directory Operations'
-method: os
-remove
-	"Return the remove function"
-	^ self ___at___: #remove
-%
-
-category: 'Python-File and Directory Operations'
-method: os
-remove: aBlock
-	"Set the remove function (for monkey patching)"
-	self ___at___: #remove put: aBlock
-%
-
-category: 'Python-File and Directory Operations'
-method: os
-rename
-	"Return the rename function"
-	^ self ___at___: #rename
-%
-
-category: 'Python-File and Directory Operations'
-method: os
-rename: aBlock
-	"Set the rename function (for monkey patching)"
-	self ___at___: #rename put: aBlock
-%
-
-category: 'Python-File and Directory Operations'
-method: os
-rmdir
-	"Return the rmdir function"
-	^ self ___at___: #rmdir
-%
-
-category: 'Python-File and Directory Operations'
-method: os
-rmdir: aBlock
-	"Set the rmdir function (for monkey patching)"
-	self ___at___: #rmdir put: aBlock
-%
+! ===============================================================================
+! Stored-attribute accessors
+! ===============================================================================
 
 category: 'Python-Constants'
 method: os
 sep
-	"The character used by the operating system to separate pathname components"
 	^ self ___at___: #sep
 %
 
 category: 'Python-Constants'
 method: os
-sep: aValue
-	"Set the sep constant (for monkey patching)"
-	self ___at___: #sep put: aValue
+pathsep
+	^ self ___at___: #pathsep
+%
+
+category: 'Python-Constants'
+method: os
+linesep
+	^ self ___at___: #linesep
+%
+
+category: 'Python-Path Module'
+method: os
+path
+	^ self ___at___: #path
+%
+
+! ===============================================================================
+! Fast-path callables — directory operations
+! ===============================================================================
+
+category: 'Python-File and Directory Operations'
+method: os
+getcwd
+	"os.getcwd() — return the current working directory."
+
+	| result |
+	result := GsFile @env0:_directoryPrim: 2 with: nil with: nil.
+	(result ___isKindOf___: String) ifTrue: [^ result].
+	(result ___isKindOf___: Utf8) ifTrue: [^ result ___decodeToUnicode___].
+	(result ___isKindOf___: Utf16) ifTrue: [^ result ___decodeToUnicode___].
+	^ result ___asUnicodeString___
 %
 
 category: 'Python-File and Directory Operations'
 method: os
-stat
-	"Return the stat function"
-	^ self ___at___: #stat
+chdir: path
+	"os.chdir(path) — change the current working directory."
+
+	| result |
+	result := GsFile @env0:_directoryPrim: 0 with: path with: nil.
+	result == nil ifTrue: [
+		OSError ___signal___: ('Cannot change directory to: ' ___concat___: (path ___printString___))
+	].
+	^ nil
 %
 
 category: 'Python-File and Directory Operations'
 method: os
-stat: aBlock
-	"Set the stat function (for monkey patching)"
-	self ___at___: #stat put: aBlock
+mkdir: path
+	"os.mkdir(path) — create a directory."
+
+	| result |
+	result := GsFile @env0:createServerDirectory: path.
+	result == nil ifTrue: [
+		OSError ___signal___: ('Cannot create directory: ' ___concat___: (path ___printString___))
+	].
+	^ nil
 %
+
+category: 'Python-File and Directory Operations'
+method: os
+mkdir: path _: mode
+	"os.mkdir(path, mode) — create a directory with numeric mode."
+
+	| result |
+	result := GsFile @env0:createServerDirectory: path mode: mode.
+	result == nil ifTrue: [
+		OSError ___signal___: ('Cannot create directory: ' ___concat___: (path ___printString___))
+	].
+	^ nil
+%
+
+category: 'Python-File and Directory Operations'
+method: os
+makedirs: path
+	"os.makedirs(path) — recursive directory creation."
+
+	| parts currentPath sep |
+	sep := '/'.
+	parts := $/ ___split___: path.
+	currentPath := ''.
+	parts ___do___: [:part |
+		(part ___isEmpty___) ifFalse: [
+			currentPath := (currentPath ___isEmpty___)
+				ifTrue: [
+					(path ___beginsWith___: sep)
+						ifTrue: [sep ___concat___: part]
+						ifFalse: [part]
+				]
+				ifFalse: [(currentPath ___concat___: sep) ___concat___: part].
+			(GsFile ___existsOnServer___: currentPath) ifFalse: [
+				self mkdir: currentPath
+			]
+		]
+	].
+	^ nil
+%
+
+category: 'Python-File and Directory Operations'
+method: os
+rmdir: path
+	"os.rmdir(path) — remove a directory."
+
+	| result |
+	result := GsFile @env0:removeServerDirectory: path.
+	result == nil ifTrue: [
+		OSError ___signal___: ('Cannot remove directory: ' ___concat___: (path ___printString___))
+	].
+	^ nil
+%
+
+category: 'Python-File and Directory Operations'
+method: os
+remove: path
+	"os.remove(path) — remove a file."
+
+	| result |
+	result := GsFile @env0:removeServerFile: path.
+	result == nil ifTrue: [
+		OSError ___signal___: ('Cannot remove file: ' ___concat___: (path ___printString___))
+	].
+	^ nil
+%
+
+category: 'Python-File and Directory Operations'
+method: os
+rename: oldPath _: newPath
+	"os.rename(old, new) — rename a file or directory."
+
+	| result msg |
+	result := GsFile @env0:renameFileOnServer: oldPath to: newPath.
+	result == nil ifTrue: [
+		msg := ((oldPath ___printString___) ___concat___: ' to ') ___concat___: (newPath ___printString___).
+		OSError ___signal___: ('Cannot rename: ' ___concat___: msg)
+	].
+	^ nil
+%
+
+category: 'Python-File and Directory Operations'
+method: os
+listdir: path
+	"os.listdir(path) — 1-arg fast path. Delegates to _listdir:kw:."
+
+	^ self _listdir: { path } kw: nil
+%
+
+category: 'Python-File and Directory Operations'
+method: os
+_listdir: positional kw: kwargs
+	"os.listdir([path]) — list directory contents. 0-arg uses cwd."
+
+	| actualPath dirContents result |
+	actualPath := (positional ___size___ ___ge___: 1) ifTrue: [positional ___at___: 1] ifFalse: [nil].
+	actualPath == nil ifTrue: [actualPath := self getcwd].
+	dirContents := GsFile @env0:contentsOfDirectory: actualPath onClient: false.
+	(dirContents ___isKindOf___: Array) ifFalse: [
+		OSError ___signal___: ('Cannot list directory: ' ___concat___: (actualPath ___printString___))
+	].
+	result := list ___new___.
+	dirContents ___do___: [:each |
+		| decoded basename reversedPath index lastSlashIndex |
+		decoded := each.
+		(each ___isKindOf___: Utf8) ifTrue: [decoded := each ___decodeToUnicode___].
+		(each ___isKindOf___: Utf16) ifTrue: [decoded := each ___decodeToUnicode___].
+		(each ___isKindOf___: String) ifFalse: [decoded := each ___asUnicodeString___].
+		reversedPath := decoded ___reverse___.
+		index := reversedPath ___findString___: '/' startingAt: 1.
+		(index ___eq___: 0) ifFalse: [
+			lastSlashIndex := ((decoded ___size___) ___minus___: (index)) ___plus___: 1.
+			decoded := decoded ___copyFrom___: (lastSlashIndex ___plus___: 1) to: decoded ___size___
+		].
+		result append: decoded
+	].
+	^ result
+%
+
+! ===============================================================================
+! Fast-path callables — file queries
+! ===============================================================================
+
+category: 'Python-File and Directory Operations'
+method: os
+exists: path
+	"os.path.exists(path) exposed as os.exists(path)."
+
+	^ GsFile ___existsOnServer___: path
+%
+
+category: 'Python-File and Directory Operations'
+method: os
+isdir: path
+	"os.path.isdir(path) exposed as os.isdir(path)."
+
+	(GsFile ___existsOnServer___: path) ifTrue: [
+		^ GsFile @env0:isServerDirectory: path
+	].
+	^ false
+%
+
+category: 'Python-File and Directory Operations'
+method: os
+isfile: path
+	"os.path.isfile(path) exposed as os.isfile(path)."
+
+	(GsFile ___existsOnServer___: path) ifTrue: [
+		^ (GsFile @env0:isServerDirectory: path) == false
+	].
+	^ false
+%
+
+category: 'Python-File and Directory Operations'
+method: os
+stat: path
+	"os.stat(path) — get file status."
+
+	| statResult |
+	statResult := GsFile @env0:stat: path isLstat: false.
+	statResult == nil ifTrue: [
+		OSError ___signal___: ('Cannot stat: ' ___concat___: (path ___printString___))
+	].
+	^ statResult
+%
+
+category: 'Python-File and Directory Operations'
+method: os
+lstat: path
+	"os.lstat(path) — like stat but does not follow symlinks."
+
+	| statResult |
+	statResult := GsFile @env0:stat: path isLstat: true.
+	statResult == nil ifTrue: [
+		OSError ___signal___: ('Cannot lstat: ' ___concat___: (path ___printString___))
+	].
+	^ statResult
+%
+
+! ===============================================================================
+! Fast-path callables — environment variables
+! ===============================================================================
+
+category: 'Python-Environment Variables'
+method: os
+getenv: name
+	"os.getenv(name) — get environment variable, return None if absent."
+
+	^ System @env0:gemEnvironmentVariable: name
+%
+
+category: 'Python-Environment Variables'
+method: os
+getenv: name _: default
+	"os.getenv(name, default) — get environment variable with default."
+
+	| result |
+	result := System @env0:gemEnvironmentVariable: name.
+	result == nil ifTrue: [^ default].
+	^ result
+%
+
+category: 'Python-Environment Variables'
+method: os
+putenv: name _: value
+	"os.putenv(name, value) — set environment variable."
+
+	System @env0:gemEnvironmentVariable: name put: value.
+	^ nil
+%
+
+! ===============================================================================
+! Fast-path callables — process management
+! ===============================================================================
 
 category: 'Python-Process Management'
 method: os
-system
-	"Return the system function"
-	^ self ___at___: #system
-%
+system: command
+	"os.system(command) — execute command in a subshell."
 
-category: 'Python-Process Management'
-method: os
-system: aBlock
-	"Set the system function (for monkey patching)"
-	self ___at___: #system put: aBlock
+	^ System @env0:performOnServer: command
 %
 
 set compile_env: 0

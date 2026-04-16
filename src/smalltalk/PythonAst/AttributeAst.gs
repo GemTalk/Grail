@@ -107,8 +107,14 @@ printOn: aStream
 category: 'other'
 method: AttributeAst
 printSmalltalkOn: aStream
+	"When in class method context and value is the self parameter,
+	emit just the attribute name (instVar read) instead of `(self) attr`."
 
 	self assertContextIsLoad.
+	((value isKindOf: NameAst) and: [CallAst isSelfReference: value id]) ifTrue: [
+		aStream nextPutAll: attr.
+		^self
+	].
 	value printSmalltalkWithParenthesisOn: aStream.
 	aStream space; nextPutAll: attr.
 %

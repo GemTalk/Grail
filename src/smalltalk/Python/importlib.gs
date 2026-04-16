@@ -128,25 +128,119 @@ loadModuleFromPath: pathString name: moduleName
 	"Load a module from a file path and register it.
 	Returns the module instance.
 
-	The module instance (a SymbolDictionary) is created FIRST and used as the
-	scope dictionary during execution. Variables declared in the module body
-	resolve to dictionary entries (not temps), so they persist after execution."
-	| moduleAst moduleInstance nameParts packageName mySymbolList |
+	Creates a real Smalltalk class per Python module. Module-level
+	globals become instance variables on the generated class. Top-level `def`
+	statements compile as real env-1 methods with arity-specialized selectors.
+	The remaining module body compiles as an `initialize` method on the class.
+
+	The class is registered in UserGlobals under a sanitized name derived
+	from the dotted module name (e.g. 'a.foo' → 'py_a_foo'). Re-import
+	returns the cached instance from sys.modules."
+
+	| moduleAst moduleClass moduleClassName moduleInstance nameParts packageName
+	  variables variableNames stream methodSource sl
+	  topLevelDefs functionNames lf |
 	moduleAst := self astForPath: pathString.
 	moduleAst name: moduleName.
-	" Create module instance FIRST as the scope dictionary
-	moduleInstance := module @env0:new.
 	moduleAst useTempsForBlock: false.
-	moduleAst ensureModuleScope: moduleInstance. "
-	"Set module metadata before execution (so __name__ etc. are visible)"
-	" mySymbolList := SymbolList with: builtins ___instance___. "
 
-	mySymbolList := System myUserProfile symbolList copy.
-	mySymbolList insertObject: builtins ___instance___ at: 1.
+	"Collect declared variable names from the module body"
+	moduleAst setParent: nil.
+	variables := moduleAst body variables.
+	variableNames := variables asArray.
 
-	moduleAst executeWithScope: mySymbolList.
-	"Create a module instance"
-	moduleInstance := module @env0:new.
+	"Build the Smalltalk class name: 'py_' prefix + module name with dots → underscores"
+	moduleClassName := ('py_' , (moduleName copyReplaceAll: '.' with: '_')) asSymbol.
+
+	"Create or reuse the Smalltalk class for this module"
+	moduleClass := UserGlobals at: moduleClassName ifAbsent: [nil].
+	moduleClass ifNil: [
+		moduleClass := module subclass: moduleClassName
+			instVarNames: variableNames
+			classVars: #()
+			classInstVars: #()
+			poolDictionaries: #()
+			inDictionary: UserGlobals
+			options: #().
+	].
+
+	"Compile top-level `def` statements as real methods on the
+	module class. Scan for FunctionDefAst nodes, pre-register stubs so
+	inter-function calls resolve, then compile real methods."
+	lf := Character lf asString.
+	sl := System myUserProfile symbolList copy.
+	topLevelDefs := moduleAst body body select: [:stmt |
+		stmt isKindOf: FunctionDefAst].
+	functionNames := IdentitySet new.
+	topLevelDefs do: [:stmt | functionNames add: stmt name asSymbol].
+
+	"Pre-register stub methods for each function so inter-function calls
+	resolve during codegen (avoids forward-reference timing issues)."
+	topLevelDefs do: [:stmt |
+		moduleClass compileMethod: stmt generateStubMethodSource
+			dictionaries: sl
+			category: 'Python-Methods'
+			environmentId: 1.
+	].
+
+	"Compile top-level `class` definitions as real Smalltalk classes."
+	self compileClassDefs: moduleAst body body symbolList: sl.
+
+	"Set compile-time context so CallAst and FunctionDefAst emit module-
+	aware code (self-sends, BoundMethod assignments)."
+	CallAst moduleClassBeingCompiled: moduleClass.
+	CallAst moduleFunctionNames: functionNames.
+	[
+		"Compile real methods for each top-level def.
+		Resume CompileWarning because function params may shadow module-
+		level instVars (e.g. `def f(x)` where `x` is also a module var).
+		Block temps can shadow instVars in GemStone but produce a warning."
+		topLevelDefs do: [:stmt |
+			| methodStream methodSource2 |
+			methodStream := PrettyWriteStream on: Unicode7 new.
+			stmt generateMethodSourceOn: methodStream.
+			methodSource2 := methodStream contents.
+			[moduleClass compileMethod: methodSource2
+				dictionaries: sl
+				category: 'Python-Methods'
+				environmentId: 1.
+			] on: CompileWarning do: [:ex | ex resume].
+		].
+
+		"Generate the module body as Smalltalk source for the initialize method.
+		Top-level defs emit BoundMethod assignments; calls emit self-sends."
+		stream := PrettyWriteStream on: Unicode7 new.
+		moduleAst printSmalltalkOn: stream.
+
+		"Compile the body as an env-1 `initialize` method on the new class."
+		methodSource := 'initialize' , lf , stream contents.
+		moduleClass compileMethod: methodSource
+			dictionaries: sl
+			category: 'Python-Module Body'
+			environmentId: 1.
+	] ensure: [
+		CallAst moduleClassBeingCompiled: nil.
+		CallAst moduleFunctionNames: nil.
+	].
+
+	"Generate unary accessor methods for each module-level variable so
+	attribute access like `module.x` resolves to an instVar read.
+	Skip function names — they have real methods + BoundMethod in instVar."
+	variableNames do: [:varName |
+		| accessorSource |
+		(functionNames includes: varName asSymbol) ifFalse: [
+			accessorSource := varName , lf , '	^ ' , varName.
+			moduleClass compileMethod: accessorSource
+				dictionaries: sl
+				category: 'Python-Accessors'
+				environmentId: 1.
+		].
+	].
+
+	"Create an instance, set metadata, register, then run.
+	Must use @env0:new (not basicNew) because module inherits from
+	SymbolDictionary, which requires internal structure initialization."
+	moduleInstance := moduleClass @env0:new.
 	nameParts := $. split: moduleName.
 	packageName := (nameParts size > 1)
 		ifTrue: ['.' @env1:join: (nameParts copyFrom: 1 to: nameParts size - 1)]
@@ -154,18 +248,16 @@ loadModuleFromPath: pathString name: moduleName
 	moduleInstance
 		@env1:__name__: moduleName;
 		@env1:__package__: packageName.
-	"If this is a package (__init__.py), set __path__ to the package directory"
 	(pathString endsWith: '__init__.py') ifTrue: [
 		| dirPath |
 		dirPath := pathString copyFrom: 1 to: pathString size - '/__init__.py' size.
 		moduleInstance @env1:__path__: { dirPath }.
-		"For packages, __package__ is the module name itself"
 		moduleInstance @env1:__package__: moduleName.
 	].
 	"Register BEFORE execution so circular imports resolve"
 	self registerModule: moduleName with: moduleInstance.
-	"Execute with module scope in SymbolList"
-	moduleAst evaluateWithScope: (ModuleAst symbolListForModuleScope: moduleInstance).
+	"Execute the module body"
+	moduleInstance @env1:initialize.
 	^ moduleInstance
 %
 
@@ -203,7 +295,11 @@ runPath: pathString
 	file := GsFile open: '/tmp/grail.st' mode: 'w' onClient: false.
 	file nextPutAll: stream contents.
 	file close.
-	mySymbolList := SymbolList with: (builtins @env1:instance) with: Python.
+	"Builtins are not resolved through the symbol list; the codegen
+	emits direct `((builtins instance) name: …)` sends. The symbol
+	list just needs the Python class dictionary for class lookups
+	(Exception, None, etc.)."
+	mySymbolList := SymbolList with: Python.
 	[
 		method := stream contents
 			_compileInContext: nil
@@ -249,6 +345,126 @@ smalltalkForSource: aString
 	stream := PrettyWriteStream on: Unicode7 new.
 	module printSmalltalkOn: stream.
 	^ stream contents
+%
+
+category: 'Class Compilation'
+classmethod: importlib
+compileClassDefs: bodyStatements symbolList: sl
+	"For each ClassDefAst in the module body, create a real
+	Smalltalk class with instance variables (from __init__), compile
+	instance methods, and generate a value:value: class-side method
+	for Python instantiation."
+
+	| classDefs |
+	classDefs := bodyStatements select: [:stmt | stmt isKindOf: ClassDefAst].
+	classDefs do: [:classDef |
+		self compileClassDef: classDef symbolList: sl.
+	].
+%
+
+category: 'Class Compilation'
+classmethod: importlib
+compileClassDef: classDef symbolList: sl
+	"Compile a single Python class definition as a real Smalltalk class."
+
+	| className pyClass ivarNames methodDefs selfParam funcNames linefeed initMethod initSelector |
+	linefeed := Character lf asString.
+	className := ('pyc_' , classDef name) asSymbol.
+	ivarNames := classDef instanceVarNamesFromInit.
+	methodDefs := classDef instanceMethodDefs.
+	selfParam := classDef selfParameterName.
+	funcNames := IdentitySet new.
+	methodDefs do: [:stmt | funcNames add: stmt name asSymbol].
+
+	"Create the Smalltalk class in UserGlobals (always recreate to pick up
+	instVar changes from modified source)"
+	UserGlobals removeKey: className ifAbsent: [].
+	pyClass := Object subclass: className
+		instVarNames: ivarNames
+		classVars: #()
+		classInstVars: #()
+		poolDictionaries: #()
+		inDictionary: UserGlobals
+		options: #().
+
+	"Pre-register stub methods"
+	methodDefs do: [:stmt |
+		[pyClass compileMethod: stmt generateClassMethodStubSource
+			dictionaries: sl
+			category: 'Python-Class Methods'
+			environmentId: 1.
+		] on: CompileWarning do: [:ex | ex resume].
+	].
+
+	"Set class compile context"
+	CallAst classBeingCompiled: pyClass.
+	CallAst classInstVarNames: (IdentitySet withAll: ivarNames).
+	CallAst classFunctionNames: funcNames.
+	CallAst selfParameterName: selfParam.
+	[
+		"Compile each instance method"
+		methodDefs do: [:stmt |
+			| methodStream methodSrc |
+			methodStream := PrettyWriteStream on: Unicode7 new.
+			stmt generateClassMethodSourceOn: methodStream.
+			methodSrc := methodStream contents.
+			[pyClass compileMethod: methodSrc
+				dictionaries: sl
+				category: 'Python-Class Methods'
+				environmentId: 1.
+			] on: CompileWarning do: [:ex | ex resume].
+		].
+	] ensure: [
+		CallAst classBeingCompiled: nil.
+		CallAst classInstVarNames: nil.
+		CallAst classFunctionNames: nil.
+		CallAst selfParameterName: nil.
+	].
+
+	"Generate unary accessor methods for each instance variable"
+	ivarNames do: [:varName |
+		| accessorSource |
+		accessorSource := varName , linefeed , '	^ ' , varName.
+		[pyClass compileMethod: accessorSource
+			dictionaries: sl
+			category: 'Python-Accessors'
+			environmentId: 1.
+		] on: CompileWarning do: [:ex | ex resume].
+	].
+
+	"Generate value:value: class-side method for Python instantiation.
+	Creates instance, calls __init__ if present, returns instance."
+	initMethod := methodDefs detect: [:stmt | stmt name asSymbol == #'__init__'] ifNone: [nil].
+	initSelector := initMethod ifNotNil: [initMethod classMethodSelector] ifNil: [nil].
+	self compileInstantiationMethodFor: pyClass initSelector: initSelector symbolList: sl.
+%
+
+category: 'Class Compilation'
+classmethod: importlib
+compileInstantiationMethodFor: pyClass initSelector: initSelector symbolList: sl
+	"Generate a class-side value:value: method for Python-style instantiation:
+		ClassName(args) compiles to → ClassName value: {args} value: kwargs
+
+	The generated method creates a new instance (via @env0:new to get
+	proper initialization) and dispatches to __init__ if defined."
+
+	| src |
+	src := WriteStream on: Unicode7 new.
+	src nextPutAll: 'value: positional value: keywords'; nextPut: Character lf.
+	src nextPutAll: '| instance |'; nextPut: Character lf.
+	src nextPutAll: 'instance := self @env0:new.'; nextPut: Character lf.
+	initSelector ifNotNil: [
+		src nextPutAll: 'instance perform: #'''.
+		src nextPutAll: initSelector asString.
+		src nextPutAll: ''' env: 1 withArguments: positional.'.
+		src nextPut: Character lf.
+	].
+	src nextPutAll: '^ instance'.
+	[pyClass class compileMethod: src contents
+		dictionaries: sl
+		category: 'Python-Instantiation'
+		environmentId: 1.
+	] on: CompileWarning do: [:ex | ex resume].
 %
 
 set compile_env: 1
@@ -333,233 +549,158 @@ ___resolve_name___: name package: package level: level
 		ifFalse: [('.' join: parentParts parentParts) ___concat___: '.' ___concat___: name]
 %
 
-category: 'Python-Accessors'
-method: importlib
-__import__
-	"Return the __import__ function"
-	^ self ___at___: #__import__
-%
-
-category: 'Python-Accessors'
-method: importlib
-__import__: aBlock
-	"Set the __import__ function (for monkey patching)"
-	self ___at___: #__import__ put: aBlock
-%
-
-category: 'Python-Accessors'
-method: importlib
-import_module
-	"Return the import_module function"
-	^ self ___at___: #import_module
-%
-
-category: 'Python-Accessors'
-method: importlib
-import_module: aBlock
-	"Set the import_module function (for monkey patching)"
-	self ___at___: #import_module put: aBlock
-%
 
 category: 'Python-Initialization'
 method: importlib
 initialize
-	"Initialize all module attributes with their default values"
-	self 
-		initialize_import_module;
-		initialize_reload;
-		initialize_invalidate_caches;
-		initialize___import__;
-		yourself
+	"No-op — all methods are real fast-path methods."
 %
 
-category: 'Python-Initialization'
+! ===============================================================================
+! Fast-path callable methods
+! ===============================================================================
+
+category: 'Python-Built-in Functions'
 method: importlib
-initialize___import__
-	"Low-level import function.
-	__import__(name, globals=None, locals=None, fromlist=(), level=0) -> module
+___import__: positional kw: kwargs
+	"Low-level import function (__import__).
+	__import__(name, globals=None, locals=None, fromlist=(), level=0) -> module"
 
-	This is the function invoked by the import statement."
-	self ___at___: #__import__ put: [:positional :keywords |
-		| name globals locals fromlist level absoluteName moduleInstance filePath result nameParts isDotted prefix parentFilePath idx parentParts parentName childName parentModule |
-		name := positional ___at___: 1.
-		globals := (positional __len__ ___gt___: 1)
-			ifTrue: [positional ___at___: 2]
-			ifFalse: [keywords ifNotNil: [keywords __getitem__: 'globals'] ifNil: [None]].
-		locals := (positional __len__ ___gt___: 2)
-			ifTrue: [positional ___at___: 3]
-			ifFalse: [keywords ifNotNil: [keywords __getitem__: 'locals'] ifNil: [None]].
-		fromlist := (positional __len__ ___gt___: 3)
-			ifTrue: [positional ___at___: 4]
-			ifFalse: [keywords ifNotNil: [keywords __getitem__: 'fromlist'] ifNil: [{}]].
-		level := (positional __len__ ___gt___: 4)
-			ifTrue: [positional ___at___: 5]
-			ifFalse: [keywords ifNotNil: [keywords __getitem__: 'level'] ifNil: [0]].
+	| name globals locals fromlist level absoluteName moduleInstance filePath result nameParts isDotted prefix parentFilePath parentParts parentName childName parentModule |
+	name := positional ___at___: 1.
+	globals := (positional __len__ ___gt___: 1)
+		ifTrue: [positional ___at___: 2]
+		ifFalse: [kwargs ifNotNil: [kwargs __getitem__: 'globals'] ifNil: [None]].
+	locals := (positional __len__ ___gt___: 2)
+		ifTrue: [positional ___at___: 3]
+		ifFalse: [kwargs ifNotNil: [kwargs __getitem__: 'locals'] ifNil: [None]].
+	fromlist := (positional __len__ ___gt___: 3)
+		ifTrue: [positional ___at___: 4]
+		ifFalse: [kwargs ifNotNil: [kwargs __getitem__: 'fromlist'] ifNil: [{}]].
+	level := (positional __len__ ___gt___: 4)
+		ifTrue: [positional ___at___: 5]
+		ifFalse: [kwargs ifNotNil: [kwargs __getitem__: 'level'] ifNil: [0]].
 
-		"Handle relative imports"
-		absoluteName := (level ___gt___: 0)
-			ifTrue: [
-				| package |
-				package := globals ifNotNil: [globals __getitem__: '__package__'] ifNil: [None].
-				package == None ifTrue: [
-					ImportError ___signal___: 'attempted relative import with no known parent package'
-				].
-				self ___resolve_name___: name package: package level: level
-			]
-			ifFalse: [name].
+	"Handle relative imports"
+	absoluteName := (level ___gt___: 0)
+		ifTrue: [
+			| package |
+			package := globals ifNotNil: [globals __getitem__: '__package__'] ifNil: [None].
+			package == None ifTrue: [
+				ImportError ___signal___: 'attempted relative import with no known parent package'
+			].
+			self ___resolve_name___: name package: package level: level
+		]
+		ifFalse: [name].
 
-		"Split the name into parts; detect dotted names"
-		nameParts := $. ___split___: absoluteName.
-		isDotted := nameParts __len__ ___gt___: 1.
+	"Split the name into parts; detect dotted names"
+	nameParts := $. ___split___: absoluteName.
+	isDotted := nameParts __len__ ___gt___: 1.
 
-		"Ensure parent packages are loaded for dotted names"
-		isDotted ifTrue: [
-			prefix := nameParts @env0:at: 1.
+	"Ensure parent packages are loaded for dotted names"
+	isDotted ifTrue: [
+		prefix := nameParts @env0:at: 1.
+		(self ___class___ lookupModule: prefix) ifNil: [
+			parentFilePath := self ___class___ ___moduleNameToPath___: prefix.
+			parentFilePath notNil ifTrue: [
+				self ___class___ @env0:loadModuleFromPath: parentFilePath name: prefix.
+			].
+		].
+		2 @env0:to: nameParts __len__ - 1 do: [:i |
+			prefix := (prefix ___concat___: '.') ___concat___: (nameParts @env0:at: i).
 			(self ___class___ lookupModule: prefix) ifNil: [
 				parentFilePath := self ___class___ ___moduleNameToPath___: prefix.
 				parentFilePath notNil ifTrue: [
 					self ___class___ @env0:loadModuleFromPath: parentFilePath name: prefix.
 				].
 			].
-			2 @env0:to: nameParts __len__ - 1 do: [:i |
-				prefix := (prefix ___concat___: '.') ___concat___: (nameParts @env0:at: i).
-				(self ___class___ lookupModule: prefix) ifNil: [
-					parentFilePath := self ___class___ ___moduleNameToPath___: prefix.
-					parentFilePath notNil ifTrue: [
-						self ___class___ @env0:loadModuleFromPath: parentFilePath name: prefix.
-					].
-				].
-			].
 		].
+	].
 
-		"Look up the module"
-		moduleInstance := self ___class___ lookupModule: absoluteName.
-		moduleInstance notNil ifTrue: [
-			result := moduleInstance
+	"Look up the module"
+	moduleInstance := self ___class___ lookupModule: absoluteName.
+	moduleInstance notNil ifTrue: [
+		result := moduleInstance
+	] ifFalse: [
+		"Module not found in registry - search filesystem for .py"
+		filePath := self ___class___ ___moduleNameToPath___: absoluteName.
+		filePath notNil ifTrue: [
+			result := self ___class___ @env0:loadModuleFromPath: filePath name: absoluteName.
 		] ifFalse: [
-			"Module not found in registry - search filesystem for .py"
-			filePath := self ___class___ ___moduleNameToPath___: absoluteName.
+			"Search filesystem for .so (C extension module)"
+			filePath := self ___class___ ___moduleNameToSoPath___: absoluteName.
 			filePath notNil ifTrue: [
-				result := self ___class___ @env0:loadModuleFromPath: filePath name: absoluteName.
+				result := self ___class___ @env0:loadDynamicModuleNamed: absoluteName fromPath: filePath.
 			] ifFalse: [
-				"Search filesystem for .so (C extension module)"
-				filePath := self ___class___ ___moduleNameToSoPath___: absoluteName.
-				filePath notNil ifTrue: [
-					result := self ___class___ @env0:loadDynamicModuleNamed: absoluteName fromPath: filePath.
-				] ifFalse: [
-					"Module not found in filesystem either"
-					ModuleNotFoundError ___signal___: (('No module named ''' ___concat___: absoluteName) ___concat___: '''')
-				]
+				"Module not found in filesystem either"
+				ModuleNotFoundError ___signal___: (('No module named ''' ___concat___: absoluteName) ___concat___: '''')
 			]
-		].
+		]
+	].
 
-		"Bind submodule as attribute on parent module"
-		isDotted ifTrue: [
-			parentParts := nameParts @env0:copyFrom: 1 to: nameParts __len__ - 1.
-			parentName := '.' @env0:join: parentParts.
-			childName := nameParts @env0:last.
-			parentModule := self ___class___ lookupModule: parentName.
-			parentModule notNil ifTrue: [
-				parentModule ___at___: childName ___asSymbol___ put: result.
+	"Bind submodule as attribute on parent module"
+	isDotted ifTrue: [
+		parentParts := nameParts @env0:copyFrom: 1 to: nameParts __len__ - 1.
+		parentName := '.' @env0:join: parentParts.
+		childName := nameParts @env0:last.
+		parentModule := self ___class___ lookupModule: parentName.
+		parentModule notNil ifTrue: [
+			parentModule ___at___: childName ___asSymbol___ put: result.
+		].
+	].
+
+	"Return the correct module per CPython semantics"
+	^ (isDotted and: [fromlist __len__ ___eq___: 0])
+		ifTrue: [self ___class___ lookupModule: (nameParts ___at___: 1)]
+		ifFalse: [result]
+%
+
+category: 'Python-Built-in Functions'
+method: importlib
+_import_module: positional kw: kwargs
+	"import_module(name, package=None) -> module.
+	Delegates to ___import__:kw:."
+
+	| name package absoluteName |
+	name := positional ___at___: 1.
+	package := (positional __len__ ___gt___: 1)
+		ifTrue: [positional ___at___: 2]
+		ifFalse: [kwargs ifNotNil: [kwargs __getitem__: 'package'] ifNil: [None]].
+
+	absoluteName := (name ___beginsWith___: '.')
+		ifTrue: [
+			package == None ifTrue: [
+				ImportError ___signal___: 'attempted relative import with no known parent package'
 			].
-		].
+			self ___resolve_name___: name package: package
+		]
+		ifFalse: [name].
 
-		"Return the correct module per CPython semantics:
-		 - import foo.bar (fromlist empty): return top-level 'foo'
-		 - from foo.bar import x (fromlist non-empty): return 'foo.bar'"
-		(isDotted and: [fromlist __len__ ___eq___: 0])
-			ifTrue: [self ___class___ lookupModule: (nameParts ___at___: 1)]
-			ifFalse: [result]
-	]
+	^ self ___import__: {absoluteName} kw: nil
 %
 
-category: 'Python-Initialization'
+category: 'Python-Built-in Functions'
 method: importlib
-initialize_import_module
-	"Import a module by name.
-	import_module(name, package=None) -> module
-	
-	The name argument specifies what module to import in absolute or relative terms.
-	If the name is specified in relative terms, then the package argument must be set."
-	self ___at___: #import_module put: [:positional :keywords |
-		| name package absoluteName importFunc |
-		name := positional ___at___: 1.
-		package := (positional __len__ ___gt___: 1)
-			ifTrue: [positional ___at___: 2]
-			ifFalse: [keywords ifNotNil: [keywords __getitem__: 'package'] ifNil: [None]].
-		
-		"Resolve relative imports using package, then delegate to __import__.
-		For now we simply return whatever __import__ returns (typically the
-		top-level module)."
-		absoluteName := (name ___beginsWith___: '.')
-			ifTrue: [
-				package == None ifTrue: [
-					ImportError ___signal___: 'attempted relative import with no known parent package'
-				].
-				self ___resolve_name___: name package: package
-			]
-			ifFalse: [name].
-		
-		importFunc := self __import__.
-		importFunc value: {absoluteName} value: nil
-	]
+import_module: name
+	"import_module(name) -> module. 1-arg fast path."
+	^ self _import_module: { name } kw: nil
 %
 
-category: 'Python-Initialization'
-method: importlib
-initialize_invalidate_caches
-	"Invalidate the caches of all finders.
-	invalidate_caches() -> None
-
-	For built-in modules, this is a no-op."
-	self ___at___: #invalidate_caches put: [:positional :keywords |
-		None
-	]
-%
-
-category: 'Python-Initialization'
-method: importlib
-initialize_reload
-	"Reload a previously imported module.
-	reload(module) -> module
-
-	The argument must be a module object."
-	self ___at___: #reload put: [:positional :keywords |
-		| aModule moduleClass |
-		aModule := positional ___at___: 1.
-		"For built-in modules, we can clear and reinitialize the instance"
-		moduleClass := aModule ___class___.
-		moduleClass clearInstance.
-		moduleClass instance
-	]
-%
-
-category: 'Python-Accessors'
+category: 'Python-Built-in Functions'
 method: importlib
 invalidate_caches
-	"Return the invalidate_caches function"
-	^ self ___at___: #invalidate_caches
+	"invalidate_caches() -> None. No-op for built-in modules."
+	^ None
 %
 
-category: 'Python-Accessors'
+category: 'Python-Built-in Functions'
 method: importlib
-invalidate_caches: aBlock
-	"Set the invalidate_caches function (for monkey patching)"
-	self ___at___: #invalidate_caches put: aBlock
-%
-
-category: 'Python-Accessors'
-method: importlib
-reload
-	"Return the reload function"
-	^ self ___at___: #reload
-%
-
-category: 'Python-Accessors'
-method: importlib
-reload: aBlock
-	"Set the reload function (for monkey patching)"
-	self ___at___: #reload put: aBlock
+reload: aModule
+	"reload(module) -> module. Clears and reinitializes the module."
+	| moduleClass |
+	moduleClass := aModule ___class___.
+	moduleClass clearInstance.
+	^ moduleClass instance
 %
 
 set compile_env: 0

@@ -40,6 +40,18 @@ enum class removeAllMethods: 1.
 
 set compile_env: 1
 
+category: 'Python-Initialization'
+method: enum
+initialize
+	"Initialize stored attributes."
+	self ___at___: #IntFlag put: int.
+	self ___at___: #KEEP put: #KEEP.
+%
+
+! ===============================================================================
+! Stored-attribute accessors
+! ===============================================================================
+
 category: 'Python-Accessors'
 method: enum
 IntFlag
@@ -52,64 +64,25 @@ KEEP
 	^ self ___at___: #KEEP
 %
 
-category: 'Python-Accessors'
+! ===============================================================================
+! Fast-path callables
+! ===============================================================================
+
+category: 'Python-Built-in Functions'
 method: enum
-global_enum
-	^ self ___at___: #global_enum
+global_enum: cls
+	"global_enum(cls) -> cls (no-op decorator)."
+	^ cls
 %
 
-category: 'Python-Accessors'
+category: 'Python-Built-in Functions'
 method: enum
-_simple_enum
-	^ self ___at___: #_simple_enum
-%
+_simple_enum: positional kw: kwargs
+	"_simple_enum(cls) or _simple_enum(cls, boundary=...) -> decorator.
+	Returns a decorator that returns the class unchanged.
+	Used by re module: @enum._simple_enum(IntFlag, boundary=enum.KEEP)"
 
-category: 'Python-Initialization'
-method: enum
-initialize
-	self
-		initialize_IntFlag;
-		initialize_KEEP;
-		initialize_global_enum;
-		initialize_simple_enum;
-		yourself
-%
-
-category: 'Python-Initialization'
-method: enum
-initialize_IntFlag
-	"IntFlag - a placeholder class for integer-based flags.
-	 Used by re.RegexFlag."
-	self ___at___: #IntFlag put: int
-%
-
-category: 'Python-Initialization'
-method: enum
-initialize_KEEP
-	"KEEP sentinel - used in enum boundary handling."
-	self ___at___: #KEEP put: #KEEP
-%
-
-category: 'Python-Initialization'
-method: enum
-initialize_global_enum
-	"global_enum(cls) -> cls  (no-op decorator)"
-	self ___at___: #global_enum put: [:positional :keywords |
-		positional ___at___: 1
-	]
-%
-
-category: 'Python-Initialization'
-method: enum
-initialize_simple_enum
-	"_simple_enum(cls) -> decorator that returns cls unchanged.
-	 Used by re module: @enum._simple_enum(IntFlag)"
-	self ___at___: #_simple_enum put: [:positional :keywords |
-		"Returns a decorator that returns the class unchanged."
-		[:positional2 :keywords2 |
-			positional2 ___at___: 1
-		]
-	]
+	^ [:positional2 :keywords2 | positional2 ___at___: 1]
 %
 
 set compile_env: 0

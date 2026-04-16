@@ -20,7 +20,12 @@ doit
 gemstone comment:
 'Python gemstone module.
 
-This class provides basic metadata about the Grail runtime.
+Provides basic metadata about the Grail runtime and convenience access
+to GemStone session features (commit/abort, namespace lookup).
+
+Methods on this class are real env-1 fast-path methods, dispatched
+directly via `gemstone.method(args)` Python calls compiled to
+`((gemstone instance) method: args)` Smalltalk sends.
 '
 %
 
@@ -32,9 +37,6 @@ gemstone category: 'Modules'
 ! ===============================================================================
 ! gemstone Module (Python 'gemstone' module)
 ! ===============================================================================
-! This file contains the Python gemstone module implementation.
-! The gemstone module provides basic metadata about the Grail runtime.
-! ===============================================================================
 
 ! ------------------- Remove existing Python methods from gemstone
 expectvalue /Metaclass3
@@ -44,6 +46,21 @@ gemstone class removeAllMethods: 1.
 %
 
 set compile_env: 1
+
+! ===============================================================================
+! Singleton initialization
+! ===============================================================================
+
+category: 'Initialization'
+method: gemstone
+initialize
+	"No-op. The `module>>instance` class method still calls `initialize`
+	on the newly-created instance, so this stub keeps that contract."
+%
+
+! ===============================================================================
+! Subscript protocol — namespace access via gemstone[name]
+! ===============================================================================
 
 category: 'Python-Subscript Protocol'
 method: gemstone
@@ -91,61 +108,31 @@ __setitem__: key _: value
 	^ nil
 %
 
-category: 'Accessors'
+! ===============================================================================
+! Fast-path methods
+! ===============================================================================
+
+category: 'Python-Built-in Functions'
 method: gemstone
 abort
+	"Python builtin gemstone.abort() — fast path. Aborts the current
+	GemStone session, discarding uncommitted changes."
 
-	^ self ___at___: #'abort'
+	^ System @env0:abort
 %
 
-category: 'Accessors'
-method: gemstone
-abort: aBlock
-
-	self ___at___: #'abort' put: aBlock.
-%
-
-category: 'Accessors'
+category: 'Python-Built-in Functions'
 method: gemstone
 commit
+	"Python builtin gemstone.commit() — fast path. Commits the current
+	GemStone session."
 
-	^ self ___at___: #'commit'
+	^ System @env0:commit
 %
 
-category: 'Accessors'
-method: gemstone
-commit: aBlock
-
-	self ___at___: #'commit' put: aBlock.
-%
-
-category: 'Initialization'
-method: gemstone
-initialize
-	"Initialize all module attributes with their default values."
-	self
-		initialize_abort;
-		initialize_commit;
-		yourself
-%
-
-category: 'Initialization'
-method: gemstone
-initialize_abort
-
-	self ___at___: #'abort' put: [:positional :keywords |
-		System @env0:abort.
-	]
-%
-
-category: 'Initialization'
-method: gemstone
-initialize_commit
-
-	self ___at___: #'commit' put: [:positional :keywords |
-		System @env0:commit.
-	]
-%
+! ===============================================================================
+! Metadata
+! ===============================================================================
 
 category: 'Metadata'
 method: gemstone

@@ -145,8 +145,99 @@ printSmalltalkAssignmentOn: aStream
 category: 'other'
 method: NameAst
 printSmalltalkOn: aStream
+	"Name dispatch — see docs/Rewrite_Dispatch_Model.md.
 
+	When a name in load context resolves to a fast-path builtin method,
+	emit a BoundMethod wrapper instead of the bare identifier. This makes
+	first-class function uses like `f = abs; f(-5)` work without going
+	through the legacy block-in-symbol-list path.
+
+	`Fast-path builtin' here means: the name is not shadowed by a local in
+	any enclosing scope, and the builtins class has at least one env-1
+	method whose Smalltalk selector base matches this name (`abs`, `abs:`,
+	`abs:_:`, etc.). The BoundMethod stores the unary selector (Python
+	0-arg form) by convention, and forwards calls via reflective dispatch;
+	a future revision can use the actual call-site arity if known.
+
+	Note: this method is the *load* path. Store contexts (LHS of assignment)
+	use `printSmalltalkAssignmentOn:`, which is unaffected. Direct call
+	sites like `abs(5)` are special-cased in `CallAst>>printSmalltalkOn:`
+	and bypass this method entirely."
+
+	"self parameter in class method → Smalltalk self"
+	(CallAst isSelfReference: id) ifTrue: [
+		aStream nextPutAll: 'self'.
+		^ self
+	].
+	(self isFastPathBuiltinName) ifTrue: [
+		aStream
+			nextPutAll: '(BoundMethod receiver: ((Python @env0:at: #builtins) instance) selector: #';
+			nextPutAll: id;
+			nextPutAll: ')'.
+		^ self
+	].
 	aStream nextPutAll: id.
+%
+
+category: 'other'
+method: NameAst
+isFastPathBuiltinName
+	"True if this load-context read names a builtin that the codegen
+	considers fast-path eligible (any arity), and is not shadowed by an
+	enclosing-scope local.
+
+	Returns false when this NameAst is the function position of a CallAst
+	— in that case, CallAst>>printSmalltalkOn: has already decided whether
+	to emit the fast path or fall through to the legacy varargs path. We
+	must not wrap the function in a BoundMethod and force the legacy path
+	through reflective dispatch."
+
+	(self isFunctionPositionOfCall) ifTrue: [^false].
+	(self isVariableIsDeclared: id) ifTrue: [^false].
+	^ self class isFastPathBuiltinName: id
+%
+
+category: 'other'
+method: NameAst
+isFunctionPositionOfCall
+	"True if this NameAst is the `function` of an enclosing CallAst (i.e.
+	`name(...)`-style call site). Used to suppress the BoundMethod special
+	case when the name is being called directly."
+
+	(parent isKindOf: CallAst) ifFalse: [^false].
+	^ parent function == self
+%
+
+category: 'other'
+classmethod: NameAst
+isFastPathBuiltinName: aSymbol
+	"Return true if `builtins` has any env-1 fast-path method matching
+	`aSymbol`. Delegates to the general form with builtins as the class."
+
+	^ self isFastPathBuiltinName: aSymbol on: builtins
+%
+
+category: 'other'
+classmethod: NameAst
+isFastPathBuiltinName: aSymbol on: aClass
+	"Return true if `aClass` has any env-1 fast-path method matching
+	`aSymbol`. We check the common fixed-arity keyword forms (`aSymbol:`,
+	`aSymbol:_:`, `aSymbol:_:_:`) plus the varargs form (`_aSymbol:kw:`),
+	since walking the entire env-1 method dict per Name reference would
+	be too expensive at codegen time.
+
+	Note: we deliberately do NOT check the bare unary `aSymbol` form,
+	because that selector may be a legacy block-getter on unconverted
+	modules, or a stored-attribute accessor on converted modules."
+
+	| md s |
+	md := aClass methodDictForEnv: 1.
+	s := aSymbol asString.
+	(md includesKey: (s , ':') asSymbol) ifTrue: [^true].
+	(md includesKey: (s , ':_:') asSymbol) ifTrue: [^true].
+	(md includesKey: (s , ':_:_:') asSymbol) ifTrue: [^true].
+	(md includesKey: ('_' , s , ':kw:') asSymbol) ifTrue: [^true].
+	^ false
 %
 
 category: 'other'

@@ -9,7 +9,9 @@ doit
 ExpressionAst subclass: 'CallAst'
   instVarNames: #( function arguments keywords)
   classVars: #()
-  classInstVars: #()
+  classInstVars: #('moduleClassBeingCompiled' 'moduleFunctionNames'
+                    'classBeingCompiled' 'classInstVarNames'
+                    'classFunctionNames' 'selfParameterName')
   poolDictionaries: #()
   inDictionary: PythonAst
   options: #()
@@ -79,9 +81,131 @@ keywords
 category: 'other'
 method: CallAst
 printSmalltalkOn: aStream
+	"Call dispatch — see docs/Rewrite_Dispatch_Model.md.
+
+	Five forms, in priority order:
+
+	  1. Bare-name fixed-arity fast path. If `builtins` has a method
+	     whose selector and arity match the call (e.g. `abs:` for
+	     `abs(x)`, `pow:_:` for `pow(x, y)`), emit a direct keyword send:
+	         ((builtins instance) name: arg1 _: arg2 _: arg3)
+
+	  2. Bare-name varargs fast path. If `builtins` has a varargs method
+	     matching the name (e.g. `_print:kw:`), emit a direct varargs send:
+	         ((builtins instance) _name: { arg1. arg2. } kw: kwargDict)
+
+	  3. Bare-name known-builtin arity error. If neither bare-name fast
+	     path matched but the name IS a known builtin (some env-1
+	     selector matches the base name), emit a TypeError raise
+	     directly. Catches calls like `abs(1, 2)` and produces a clean
+	     Python TypeError instead of a GemStone `undefined symbol`
+	     compile error from the legacy fallback.
+
+	  4. Attribute-call fast path. For attribute calls like
+	     `module.method(args)` where the receiver is a statically known
+	     module, emit a direct keyword send to the receiver:
+	         ((module) method: arg1 _: arg2)
+	     The discriminator is per-receiver introspection: the module
+	     class implements the keyword-form selector (`method:`,
+	     `method:_:`, etc.). See `attributeCallFastPathSelector`.
+
+	  5. Legacy fallback. Otherwise emit the historical block-call form:
+	         <func> value: { <args> } value: <kw>
+	     Used for unconverted attribute calls (`math.cos(0)`,
+	     `html.escape(s)` before conversion) and for first-class function
+	     calls through a local (`f = foo; f(x)`).
+
+	Bare-name forms (1, 2, 3) also require:
+	  * `function` is a `NameAst` (bare name, not `obj.method`).
+	  * The name is not shadowed by any enclosing-scope local.
+
+	The attribute-call form (4) requires:
+	  * `function` is an `AttributeAst` whose `value` is a `NameAst`.
+	  * The receiver name resolves to a `module` subclass in the Python
+	    dictionary at compile time.
+	  * The receiver class implements the candidate keyword-form selector
+	    for the attribute name and arity.
+	  * No keyword arguments at the call site (kwargs calls use the
+	    varargs form instead)."
+
+	| fastSelector knownBuiltinName |
+	fastSelector := self bareCallFastPathSelector.
+	fastSelector ifNotNil: [
+		^ self printBareCallFastPathOn: aStream selector: fastSelector
+	].
+
+	(self bareCallVarargsSelector) ifNotNil: [:varargsSel |
+		^ self printBareCallVarargsOn: aStream selector: varargsSel
+	].
+
+	"Both fast paths missed. If the name is a known builtin (some method
+	on builtins matches the base name), the call has wrong arity or kwarg
+	shape — emit a clean TypeError instead of falling through to the
+	legacy form. Without this branch, calls like `abs(1, 2)` would
+	produce a confusing `undefined symbol` compile error from the
+	bare-name fallback (since `builtins` is no longer in the symbol list)."
+	knownBuiltinName := self knownBuiltinName.
+	knownBuiltinName ifNotNil: [
+		^ self printArityMismatchErrorOn: aStream forName: knownBuiltinName
+	].
+
+	"Module self-send: `name(args)` → `(self name: args)` when
+	compiling a user module and `name` is a top-level def in that module."
+	(self moduleSelfSendSelector) ifNotNil: [:modSel |
+		^ self printModuleSelfSendOn: aStream selector: modSel
+	].
+	(self moduleSelfSendVarargsSelector) ifNotNil: [:modVarSel |
+		^ self printModuleSelfSendVarargsOn: aStream selector: modVarSel
+	].
+
+	"Class self-send: `self.method(args)` → `(self method: args)`
+	when compiling a class method and `method` is a known class function."
+	(self classSelfSendSelector) ifNotNil: [:clsSel |
+		^ self printClassSelfSendOn: aStream selector: clsSel
+	].
+	(self classSelfSendVarargsSelector) ifNotNil: [:clsVarSel |
+		^ self printClassSelfSendVarargsOn: aStream selector: clsVarSel
+	].
+
+	"Attribute-call fast path: `module.method(args)` →
+	`(module) method: args` when the module class implements `method:`."
+	(self attributeCallFastPathSelector) ifNotNil: [:attrSel |
+		^ self printAttributeCallFastPathOn: aStream selector: attrSel
+	].
+
+	"Attribute-call varargs: `module.method(args, kw=val)` →
+	`((module) _method: { args } kw: kwargDict)` when the module has
+	a `_method:kw:` varargs method."
+	(self attributeCallVarargsSelector) ifNotNil: [:varargsSel |
+		^ self printAttributeCallVarargsOn: aStream selector: varargsSel
+	].
+
+	"Attribute-call fallback: for any attribute call `obj.method(args)` where
+	the receiver's class isn't a statically-resolvable module, emit a direct
+	send instead of the legacy `(obj) method value: {args} value: kw`
+	block-fetch form.
+
+	No keyword args → fixed-arity `(obj) method: arg1 _: arg2` (matches the
+	shape of class methods, which have only fixed-arity forms).
+	Keyword args present → varargs `(obj) _method: { args } kw: kwargs`.
+
+	Converted wrapper classes (`SrePattern`, `SreMatch`) and dynamically
+	loaded C extension modules expose both shapes — fixed-arity for the hot
+	no-kw path and `_method:kw:` for keyword argument call sites.
+
+	If the receiver has no matching selector, MessageNotUnderstood is raised —
+	the correct Python AttributeError analog for an unknown method."
+	(function isKindOf: AttributeAst) ifTrue: [
+		keywords isEmpty ifTrue: [
+			^ self printAttributeCallFastPathOn: aStream
+				selector: (self class fastPathSelectorForAttr: function attr arity: arguments size)
+		].
+		^ self printAttributeCallVarargsOn: aStream
+			selector: (self class varargsSelectorForName: function attr)
+	].
 
 	function printSmalltalkOn: aStream.
-	
+
 	"Build positional arguments array"
 	aStream nextPutAll: ' value: { '.
 	arguments do: [:each |
@@ -89,7 +213,7 @@ printSmalltalkOn: aStream
 		aStream nextPut: $.; space.
 	].
 	aStream nextPutAll: '} value: '.
-	
+
 	keywords isEmpty ifTrue: [
 		aStream nextPutAll: 'nil'.
 	] ifFalse: [
@@ -101,4 +225,645 @@ printSmalltalkOn: aStream
 		].
 		aStream nextPutAll: ' yourself)'.
 	].
+%
+
+category: 'other'
+method: CallAst
+bareCallFastPathSelector
+	"Return the Smalltalk selector to use for fixed-arity fast-path
+	dispatch of this call, or nil if no fixed-arity match exists.
+
+	Eligibility requires:
+	  * `function` is a `NameAst` (a bare name like `abs`, not `obj.method`).
+	  * No keyword arguments at the call site (kwargs go through varargs).
+	  * `arguments size >= 1` (0-arg calls fall through to legacy or
+	    varargs — the unary `name` selector is reserved for the legacy
+	    block getter and cannot be repurposed as a 0-arg fast path
+	    without confusing it with `f = name` block-fetch reads).
+	  * The name is not shadowed by any enclosing-scope local.
+	  * `builtins` has an env-1 method whose Smalltalk selector matches
+	    the name and arity:
+	      1 arg   → `name:`
+	      2 args  → `name:_:`
+	      N args  → `name:` followed by `(N-1)` `_:` keywords."
+
+	| funcName nargs candidate |
+	(function isKindOf: NameAst) ifFalse: [^nil].
+	keywords isEmpty ifFalse: [^nil].
+	funcName := function id.
+	(self isVariableIsDeclared: funcName) ifTrue: [^nil].
+
+	nargs := arguments size.
+	nargs = 0 ifTrue: [^nil].
+	candidate := self class fastPathSelectorForName: funcName arity: nargs.
+	(self class builtinsHasFastPathSelector: candidate) ifFalse: [^nil].
+	^ candidate
+%
+
+category: 'other'
+method: CallAst
+bareCallVarargsSelector
+	"Return the Smalltalk selector to use for varargs fast-path dispatch
+	of this call, or nil if no varargs match exists.
+
+	The varargs selector convention is `_name:kw:` (one-underscore prefix
+	plus the bare name with two keywords for positional + kwargs). Used
+	for builtins that take a variable number of positional args (`print`,
+	`zip`), or that need access to kwargs (`round(x, ndigits=2)`), or
+	that have multiple supported arities (`pow(2, 3)` vs `pow(2, 3, 5)`).
+
+	Eligibility requires:
+	  * `function` is a `NameAst`.
+	  * The name is not shadowed by an enclosing-scope local.
+	  * `builtins` has an env-1 method `_name:kw:`."
+
+	| funcName candidate |
+	(function isKindOf: NameAst) ifFalse: [^nil].
+	funcName := function id.
+	(self isVariableIsDeclared: funcName) ifTrue: [^nil].
+	candidate := self class varargsSelectorForName: funcName.
+	(self class builtinsHasFastPathSelector: candidate) ifFalse: [^nil].
+	^ candidate
+%
+
+category: 'other'
+method: CallAst
+knownBuiltinName
+	"Return this call's function name as a Symbol if it is a NameAst whose
+	name resolves to a known builtin (some env-1 method on the `builtins`
+	class matches the base name) and is not shadowed by an enclosing-scope
+	local. Returns nil otherwise.
+
+	Used by codegen to decide whether a fast-path miss is an arity error
+	on a known builtin (clean TypeError) or a genuinely unknown name
+	(fall through to the legacy form, which today produces a GemStone
+	`undefined symbol` compile error). See `knownBuiltinName`'s
+	caller in `printSmalltalkOn:`."
+
+	| funcName |
+	(function isKindOf: NameAst) ifFalse: [^nil].
+	funcName := function id.
+	(self isVariableIsDeclared: funcName) ifTrue: [^nil].
+	(NameAst isFastPathBuiltinName: funcName) ifFalse: [^nil].
+	^ funcName
+%
+
+category: 'other'
+method: CallAst
+attributeCallFastPathSelector
+	"Return the keyword-form Smalltalk selector to use for an
+	attribute-call fast path, or nil if this call is not eligible.
+
+	Eligibility requires all of:
+	  * `function` is an `AttributeAst` (the `obj.method` shape).
+	  * `function value` is a `NameAst` (the receiver is a static name,
+	    not a chained expression).
+	  * The receiver name resolves to a class in the Python dictionary
+	    that is a subclass of `module`.
+	  * No keyword arguments at the call site.
+	  * The receiver class implements the candidate keyword-form selector
+	    for the attribute name and arity (`attr`, `attr:`, `attr:_:`, …).
+
+	Note: a local variable that shadows the receiver name (e.g.
+	`import gemstone` binds `gemstone` as a local pointing at the
+	gemstone instance) does NOT disable the fast path. At runtime the
+	local holds the same instance the class would return, so the
+	dispatch is identical. If the local is rebound to something else
+	entirely (`gemstone = 5; gemstone.commit()`), the runtime send
+	produces a `MessageNotUnderstood`, which is the correct
+	`AttributeError`-equivalent behavior."
+
+	| receiverName receiverClass candidate |
+	(function isKindOf: AttributeAst) ifFalse: [^nil].
+	(function value isKindOf: NameAst) ifFalse: [^nil].
+	keywords isEmpty ifFalse: [^nil].
+	receiverName := function value id.
+	receiverClass := self class resolveModuleClassForName: receiverName.
+	receiverClass ifNil: [^nil].
+	candidate := self class fastPathSelectorForAttr: function attr arity: arguments size.
+	((receiverClass methodDictForEnv: 1) includesKey: candidate) ifFalse: [^nil].
+	^ candidate
+%
+
+category: 'other'
+classmethod: CallAst
+resolveModuleClassForName: aReceiverName
+	"Return the `module` subclass registered under `aReceiverName` in the
+	Python dictionary, or nil if no such class exists. Used by codegen
+	to determine whether an attribute-call receiver is a statically
+	known module."
+
+	| candidate |
+	candidate := Python at: aReceiverName ifAbsent: [^nil].
+	(candidate isKindOf: Behavior) ifFalse: [^nil].
+	(candidate inheritsFrom: module) ifFalse: [^nil].
+	^ candidate
+%
+
+category: 'other'
+classmethod: CallAst
+fastPathSelectorForAttr: anAttrName arity: nargs
+	"Build the keyword-form selector for an attribute call.
+	Convention is the same as `fastPathSelectorForName:arity:`:
+	  0 args  →  #attr             (unary)
+	  1 arg   →  #attr:
+	  2 args  →  #attr:_:
+	  N args  →  #attr: followed by (N-1) `_:` keywords."
+
+	| sb |
+	nargs = 0 ifTrue: [^ anAttrName asSymbol].
+	sb := WriteStream on: String new.
+	sb nextPutAll: anAttrName asString; nextPut: $:.
+	2 to: nargs do: [:i | sb nextPutAll: '_:'].
+	^ sb contents asSymbol
+%
+
+category: 'other'
+method: CallAst
+printAttributeCallFastPathOn: aStream selector: aSelector
+	"Emit a direct keyword send for an attribute call:
+		((receiver) attr: arg1 _: arg2 _: arg3 ...)
+	or, for 0-arg methods:
+		((receiver) attr)
+	The receiver expression is `function value` (the AttributeAst's
+	value, which `attributeCallFastPathSelector` has already verified
+	is a static NameAst resolving to a module class)."
+
+	| attrName nargs |
+	attrName := function attr asString.
+	nargs := arguments size.
+	aStream nextPut: $(.
+	function value printSmalltalkWithParenthesisOn: aStream.
+	aStream space; nextPutAll: attrName.
+	nargs = 0 ifTrue: [
+		aStream nextPut: $).
+		^ self
+	].
+	aStream nextPut: $:; space.
+	(arguments at: 1) printSmalltalkWithParenthesisOn: aStream.
+	2 to: nargs do: [:i |
+		aStream nextPutAll: ' _: '.
+		(arguments at: i) printSmalltalkWithParenthesisOn: aStream.
+	].
+	aStream nextPut: $)
+%
+
+category: 'other'
+method: CallAst
+attributeCallVarargsSelector
+	"Return the varargs selector `_name:kw:` for an attribute call
+	on a module, or nil if not eligible.
+
+	Same eligibility as `attributeCallFastPathSelector` except:
+	  * Keywords ARE allowed (that's the whole point of varargs).
+	  * The receiver class must have `_name:kw:` in env 1."
+
+	| receiverName receiverClass candidate |
+	(function isKindOf: AttributeAst) ifFalse: [^nil].
+	(function value isKindOf: NameAst) ifFalse: [^nil].
+	receiverName := function value id.
+	receiverClass := self class resolveModuleClassForName: receiverName.
+	receiverClass ifNil: [^nil].
+	candidate := self class varargsSelectorForName: function attr.
+	((receiverClass methodDictForEnv: 1) includesKey: candidate) ifFalse: [^nil].
+	^ candidate
+%
+
+category: 'other'
+method: CallAst
+printAttributeCallVarargsOn: aStream selector: aSelector
+	"Emit a varargs send for an attribute call:
+		((receiver) _name: { arg1. arg2. } kw: kwargDict)"
+
+	| attrName |
+	attrName := function attr asString.
+	aStream nextPut: $(.
+	function value printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: ' _'; nextPutAll: attrName; nextPutAll: ': { '.
+	arguments do: [:each |
+		each printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPut: $.; space.
+	].
+	aStream nextPutAll: '} kw: '.
+	keywords isEmpty ifTrue: [
+		aStream nextPutAll: 'nil'.
+	] ifFalse: [
+		aStream nextPutAll: '(IdentityKeyValueDictionary new'.
+		keywords keysAndValuesDo: [:key :value |
+			aStream nextPutAll: ' at: #'; nextPutAll: key; nextPutAll: ' put: '.
+			value printSmalltalkWithParenthesisOn: aStream.
+			aStream nextPut: $;.
+		].
+		aStream nextPutAll: ' yourself)'.
+	].
+	aStream nextPut: $)
+%
+
+category: 'other'
+classmethod: CallAst
+fastPathSelectorForName: aName arity: nargs
+	"Build the Smalltalk fixed-arity fast-path selector for a Python call
+	`aName(...)` with `nargs` positional arguments. The convention is:
+	  1 arg   →  #aName:
+	  2 args  →  #aName:_:
+	  3 args  →  #aName:_:_:
+	(0 args is not handled by the fast path — see bareCallFastPathSelector.)"
+
+	| sb |
+	sb := WriteStream on: String new.
+	sb nextPutAll: aName asString; nextPut: $:.
+	2 to: nargs do: [:i | sb nextPutAll: '_:'].
+	^ sb contents asSymbol
+%
+
+category: 'other'
+classmethod: CallAst
+varargsSelectorForName: aName
+	"Build the Smalltalk varargs fast-path selector for a Python name.
+	The convention is `_aName:kw:` — one-underscore prefix, the bare
+	name, then two keywords for positional and kwargs."
+
+	^ ('_' , aName asString , ':kw:') asSymbol
+%
+
+category: 'other'
+classmethod: CallAst
+builtinsHasFastPathSelector: aSymbol
+	"Return true if the builtins class implements aSymbol as an env-1
+	method (i.e. there is a real fast-path implementation installed).
+	Used by codegen to decide whether to emit the fast path."
+
+	^ (builtins methodDictForEnv: 1) includesKey: aSymbol
+%
+
+category: 'other'
+method: CallAst
+printBareCallFastPathOn: aStream selector: aSelector
+	"Emit a fixed-arity keyword send to the builtins instance:
+		((builtins instance) funcName: arg1 _: arg2 _: arg3 ...)
+	`builtins` resolves to the class via the symbol list (Python dict);
+	`instance` is the env-1 class method that returns the singleton."
+
+	| funcName |
+	funcName := function id asString.
+	aStream nextPutAll: '(((Python @env0:at: #builtins) instance) '.
+	aStream nextPutAll: funcName; nextPut: $:; space.
+	(arguments at: 1) printSmalltalkWithParenthesisOn: aStream.
+	2 to: arguments size do: [:i |
+		aStream nextPutAll: ' _: '.
+		(arguments at: i) printSmalltalkWithParenthesisOn: aStream.
+	].
+	aStream nextPut: $)
+%
+
+category: 'other'
+method: CallAst
+printBareCallVarargsOn: aStream selector: aSelector
+	"Emit a varargs send to the builtins instance:
+		((builtins instance) _funcName: { arg1. arg2. } kw: kwargDict)
+	The receiver method takes (positionalArray, keywordsDict) — same
+	calling convention as the legacy block form, but as a real method
+	with a fixed selector instead of a SymbolDictionary lookup."
+
+	| funcName |
+	funcName := function id asString.
+	aStream nextPutAll: '(((Python @env0:at: #builtins) instance) _'.
+	aStream nextPutAll: funcName; nextPutAll: ': { '.
+	arguments do: [:each |
+		each printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPut: $.; space.
+	].
+	aStream nextPutAll: '} kw: '.
+	keywords isEmpty ifTrue: [
+		aStream nextPutAll: 'nil'.
+	] ifFalse: [
+		aStream nextPutAll: '(IdentityKeyValueDictionary new'.
+		keywords keysAndValuesDo: [:key :value |
+			aStream nextPutAll: ' at: #'; nextPutAll: key; nextPutAll: ' put: '.
+			value printSmalltalkWithParenthesisOn: aStream.
+			aStream nextPut: $;.
+		].
+		aStream nextPutAll: ' yourself)'.
+	].
+	aStream nextPut: $)
+%
+
+category: 'other'
+method: CallAst
+printArityMismatchErrorOn: aStream forName: aSymbol
+	"Emit a TypeError raise expression for a call to a known builtin
+	whose arity or kwarg shape does not match any installed selector.
+	The compiled code, when executed, raises a Python TypeError that
+	identifies the call site cleanly.
+
+	See docs/Rewrite_Dispatch_Model.md. Without this branch, calls like
+	`abs(1, 2)` would fall through to the legacy bare-name form and
+	(with `builtins` no longer in the symbol list) produce a confusing
+	GemStone `undefined symbol abs` compile error. Instead they produce
+	a Python TypeError describing the mismatch.
+
+	The message includes the function name, the positional arg count,
+	and the keyword arg count, but not the expected arity (computing
+	that would require enumerating all selectors on builtins matching
+	the base name)."
+
+	aStream nextPutAll: '(TypeError ___signal___: '''.
+	aStream nextPutAll: aSymbol asString.
+	aStream nextPutAll: '() takes wrong number of arguments ('.
+	aStream nextPutAll: arguments size printString.
+	aStream nextPutAll: ' positional, '.
+	aStream nextPutAll: keywords size printString.
+	aStream nextPutAll: ' keyword) - no matching builtins method'')'
+%
+
+! ===============================================================================
+! Module self-send fast path
+! ===============================================================================
+! When compiling a user Python module (loadModuleFromPath:), top-level `def`
+! statements become real methods on the module class. Bare-name calls to those
+! functions compile as `self name: arg` instead of block `value:value:` dispatch.
+!
+! `moduleClassBeingCompiled` holds the module class during codegen (nil otherwise).
+! `moduleFunctionNames` holds an IdentitySet of function name Symbols that will
+! be compiled as methods, so CallAst can emit self-sends without checking the
+! method dict (which may not be fully populated yet during codegen).
+! ===============================================================================
+
+category: 'Module Compile Context'
+classmethod: CallAst
+moduleClassBeingCompiled
+	^ moduleClassBeingCompiled
+%
+
+category: 'Module Compile Context'
+classmethod: CallAst
+moduleClassBeingCompiled: aClassOrNil
+	moduleClassBeingCompiled := aClassOrNil
+%
+
+category: 'Module Compile Context'
+classmethod: CallAst
+moduleFunctionNames
+	^ moduleFunctionNames
+%
+
+category: 'Module Compile Context'
+classmethod: CallAst
+moduleFunctionNames: aSetOrNil
+	moduleFunctionNames := aSetOrNil
+%
+
+! ===============================================================================
+! Class method compile context
+! ===============================================================================
+
+category: 'Class Compile Context'
+classmethod: CallAst
+classBeingCompiled
+	^ classBeingCompiled
+%
+
+category: 'Class Compile Context'
+classmethod: CallAst
+classBeingCompiled: aClassOrNil
+	classBeingCompiled := aClassOrNil
+%
+
+category: 'Class Compile Context'
+classmethod: CallAst
+classInstVarNames
+	^ classInstVarNames
+%
+
+category: 'Class Compile Context'
+classmethod: CallAst
+classInstVarNames: aSetOrNil
+	classInstVarNames := aSetOrNil
+%
+
+category: 'Class Compile Context'
+classmethod: CallAst
+classFunctionNames
+	^ classFunctionNames
+%
+
+category: 'Class Compile Context'
+classmethod: CallAst
+classFunctionNames: aSetOrNil
+	classFunctionNames := aSetOrNil
+%
+
+category: 'Class Compile Context'
+classmethod: CallAst
+selfParameterName
+	^ selfParameterName
+%
+
+category: 'Class Compile Context'
+classmethod: CallAst
+selfParameterName: aSymbolOrNil
+	selfParameterName := aSymbolOrNil
+%
+
+category: 'Class Compile Context'
+classmethod: CallAst
+isInClassMethodContext
+	^ classBeingCompiled notNil
+%
+
+category: 'Class Compile Context'
+classmethod: CallAst
+isSelfReference: aSymbol
+	^ classBeingCompiled notNil and: [aSymbol == selfParameterName]
+%
+
+category: 'Class Self-Send'
+method: CallAst
+classSelfSendSelector
+	"Return the selector for a self.method(args) call in class method context, or nil.
+
+	Eligibility:
+	  * classBeingCompiled is non-nil
+	  * function is an AttributeAst whose value is a NameAst matching selfParameterName
+	  * No keyword arguments (kwargs use varargs form)
+	  * The attribute name is in classFunctionNames"
+
+	| attrName |
+	(self class isInClassMethodContext) ifFalse: [^nil].
+	(function isKindOf: AttributeAst) ifFalse: [^nil].
+	(function value isKindOf: NameAst) ifFalse: [^nil].
+	(self class isSelfReference: function value id) ifFalse: [^nil].
+	attrName := function attr.
+	(self class classFunctionNames includes: attrName asSymbol) ifFalse: [^nil].
+	keywords isEmpty ifFalse: [^nil].
+	^ self class fastPathSelectorForAttr: attrName arity: arguments size
+%
+
+category: 'Class Self-Send'
+method: CallAst
+classSelfSendVarargsSelector
+	"Return the varargs selector for a self.method(args, kw=val) call, or nil."
+
+	| attrName candidate |
+	(self class isInClassMethodContext) ifFalse: [^nil].
+	(function isKindOf: AttributeAst) ifFalse: [^nil].
+	(function value isKindOf: NameAst) ifFalse: [^nil].
+	(self class isSelfReference: function value id) ifFalse: [^nil].
+	attrName := function attr.
+	(self class classFunctionNames includes: attrName asSymbol) ifFalse: [^nil].
+	candidate := self class varargsSelectorForName: attrName.
+	^ candidate
+%
+
+category: 'Class Self-Send'
+method: CallAst
+printClassSelfSendOn: aStream selector: aSelector
+	"Emit a self-send: (self method: arg1 _: arg2 ...)"
+
+	| attrName nargs |
+	attrName := function attr asString.
+	nargs := arguments size.
+	aStream nextPutAll: '(self '.
+	aStream nextPutAll: attrName.
+	nargs = 0 ifTrue: [
+		aStream nextPut: $).
+		^ self
+	].
+	aStream nextPut: $:; space.
+	(arguments at: 1) printSmalltalkWithParenthesisOn: aStream.
+	2 to: nargs do: [:i |
+		aStream nextPutAll: ' _: '.
+		(arguments at: i) printSmalltalkWithParenthesisOn: aStream.
+	].
+	aStream nextPut: $)
+%
+
+category: 'Class Self-Send'
+method: CallAst
+printClassSelfSendVarargsOn: aStream selector: aSelector
+	"Emit a varargs self-send: (self _method: { args } kw: kwargs)"
+
+	| attrName |
+	attrName := function attr asString.
+	aStream nextPutAll: '(self _'.
+	aStream nextPutAll: attrName; nextPutAll: ': { '.
+	arguments do: [:each |
+		each printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPut: $.; space.
+	].
+	aStream nextPutAll: '} kw: '.
+	keywords isEmpty ifTrue: [
+		aStream nextPutAll: 'nil'.
+	] ifFalse: [
+		aStream nextPutAll: '(IdentityKeyValueDictionary new'.
+		keywords keysAndValuesDo: [:key :value |
+			aStream nextPutAll: ' at: #'; nextPutAll: key; nextPutAll: ' put: '.
+			value printSmalltalkWithParenthesisOn: aStream.
+			aStream nextPut: $;.
+		].
+		aStream nextPutAll: ' yourself)'.
+	].
+	aStream nextPut: $)
+%
+
+category: 'Module Self-Send'
+method: CallAst
+moduleSelfSendSelector
+	"Return the Smalltalk selector for a module self-send fast path, or nil.
+
+	Eligibility:
+	  * `moduleClassBeingCompiled` is non-nil (we are compiling a user module).
+	  * `function` is a `NameAst` (bare name).
+	  * The name is in `moduleFunctionNames` (it is a top-level def).
+	  * No keyword arguments at the call site (kwargs use varargs).
+	  * The call-site arity matches the function's fixed-arity selector,
+	    OR the function has a varargs selector.
+
+	We check `moduleFunctionNames` (an IdentitySet pre-computed before codegen)
+	rather than the class method dict, because methods may not all be compiled
+	yet when we generate source for inter-function calls."
+
+	| funcName |
+	self class moduleClassBeingCompiled ifNil: [^nil].
+	(function isKindOf: NameAst) ifFalse: [^nil].
+	funcName := function id.
+	(self class moduleFunctionNames includes: funcName) ifFalse: [^nil].
+	keywords isEmpty ifFalse: [^nil].
+	"Build the fixed-arity selector and check the class method dict.
+	If the method is there (pre-registered stub or already compiled), use it."
+	^ self class fastPathSelectorForAttr: funcName arity: arguments size
+%
+
+category: 'Module Self-Send'
+method: CallAst
+moduleSelfSendVarargsSelector
+	"Return the varargs selector `_name:kw:` for a module self-send, or nil.
+
+	Same eligibility as `moduleSelfSendSelector` except keywords
+	ARE allowed and we check for the varargs form."
+
+	| funcName candidate |
+	self class moduleClassBeingCompiled ifNil: [^nil].
+	(function isKindOf: NameAst) ifFalse: [^nil].
+	funcName := function id.
+	(self class moduleFunctionNames includes: funcName) ifFalse: [^nil].
+	candidate := self class varargsSelectorForName: funcName.
+	((self class moduleClassBeingCompiled methodDictForEnv: 1) includesKey: candidate)
+		ifFalse: [^nil].
+	^ candidate
+%
+
+category: 'Module Self-Send'
+method: CallAst
+printModuleSelfSendOn: aStream selector: aSelector
+	"Emit a direct self-send for a module-level function call:
+		(self name: arg1 _: arg2 ...)
+	or for 0-arg:
+		(self name)"
+
+	| funcName nargs |
+	funcName := function id asString.
+	nargs := arguments size.
+	aStream nextPutAll: '(self '.
+	aStream nextPutAll: funcName.
+	nargs = 0 ifTrue: [
+		aStream nextPut: $).
+		^ self
+	].
+	aStream nextPut: $:; space.
+	(arguments at: 1) printSmalltalkWithParenthesisOn: aStream.
+	2 to: nargs do: [:i |
+		aStream nextPutAll: ' _: '.
+		(arguments at: i) printSmalltalkWithParenthesisOn: aStream.
+	].
+	aStream nextPut: $)
+%
+
+category: 'Module Self-Send'
+method: CallAst
+printModuleSelfSendVarargsOn: aStream selector: aSelector
+	"Emit a varargs self-send for a module function call:
+		(self _name: { arg1. arg2. } kw: kwargDict)"
+
+	| funcName |
+	funcName := function id asString.
+	aStream nextPutAll: '(self _'.
+	aStream nextPutAll: funcName; nextPutAll: ': { '.
+	arguments do: [:each |
+		each printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPut: $.; space.
+	].
+	aStream nextPutAll: '} kw: '.
+	keywords isEmpty ifTrue: [
+		aStream nextPutAll: 'nil'.
+	] ifFalse: [
+		aStream nextPutAll: '(IdentityKeyValueDictionary new'.
+		keywords keysAndValuesDo: [:key :value |
+			aStream nextPutAll: ' at: #'; nextPutAll: key; nextPutAll: ' put: '.
+			value printSmalltalkWithParenthesisOn: aStream.
+			aStream nextPut: $;.
+		].
+		aStream nextPutAll: ' yourself)'.
+	].
+	aStream nextPut: $)
 %
