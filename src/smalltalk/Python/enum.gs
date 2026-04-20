@@ -44,8 +44,8 @@ category: 'Python-Initialization'
 method: enum
 initialize
 	"Initialize stored attributes."
-	self ___at___: #IntFlag put: int.
-	self ___at___: #KEEP put: #KEEP.
+	self @env0:at: #IntFlag put: int.
+	self @env0:at: #KEEP put: #KEEP.
 %
 
 ! ===============================================================================
@@ -55,13 +55,13 @@ initialize
 category: 'Python-Accessors'
 method: enum
 IntFlag
-	^ self ___at___: #IntFlag
+	^ self @env0:at: #IntFlag
 %
 
 category: 'Python-Accessors'
 method: enum
 KEEP
-	^ self ___at___: #KEEP
+	^ self @env0:at: #KEEP
 %
 
 ! ===============================================================================
@@ -82,7 +82,7 @@ _simple_enum: positional kw: kwargs
 	Returns a decorator that returns the class unchanged.
 	Used by re module: @enum._simple_enum(IntFlag, boundary=enum.KEEP)"
 
-	^ [:positional2 :keywords2 | positional2 ___at___: 1]
+	^ [:positional2 :keywords2 | positional2 @env0:at: 1]
 %
 
 set compile_env: 0

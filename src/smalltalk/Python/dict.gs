@@ -31,7 +31,7 @@ category: 'Python-Collection Protocol'
 method: dict
 __contains__: key
 	"Return True if key is in the dictionary, else False"
-	^ self ___includesKey___: key
+	^ self @env0:includesKey: key
 %
 
 category: 'Python-Subscript Protocol'
@@ -40,7 +40,7 @@ __delitem__: key
 	"Remove d[key] from dictionary. Raises KeyError if key is not in the dictionary"
 
 	| hasKey |
-	hasKey := self ___includesKey___: key.
+	hasKey := self @env0:includesKey: key.
 	hasKey ifFalse: [
 		KeyError ___signal___: key
 	].
@@ -53,23 +53,23 @@ __eq__: other
 	"Return True if dictionaries have the same (key, value) pairs"
 
 	| mySize otherSize |
-	(other ___isKindOf___: dict) ifFalse: [
+	(other @env0:isKindOf: dict) ifFalse: [
 		^ false
 	].
 	
-	mySize := self ___size___.
-	otherSize := other ___size___.
-	(mySize ___eq___: otherSize) ifFalse: [
+	mySize := self @env0:size.
+	otherSize := other @env0:size.
+	(mySize @env0:= otherSize) ifFalse: [
 		^ false
 	].
 	
-	self ___keysAndValuesDo___: [:key :value |
+	self @env0:keysAndValuesDo: [:key :value |
 		| otherHasKey otherValue |
-		otherHasKey := other ___includesKey___: key.
+		otherHasKey := other @env0:includesKey: key.
 		otherHasKey ifFalse: [
 			^ false
 		].
-		otherValue := other ___at___: key.
+		otherValue := other @env0:at: key.
 		(value @env1:__eq__: otherValue) ifFalse: [
 			^ false
 		]
@@ -84,11 +84,11 @@ __getitem__: key
 	"Return the value for key. Raises KeyError if key is not in the dictionary"
 
 	| hasKey |
-	hasKey := self ___includesKey___: key.
+	hasKey := self @env0:includesKey: key.
 	hasKey ifFalse: [
 		KeyError ___signal___: key
 	].
-	^ self ___at___: key
+	^ self @env0:at: key
 %
 
 category: 'Python-Subscript Protocol'
@@ -110,14 +110,14 @@ category: 'Python-Collection Protocol'
 method: dict
 __len__
 	"Return the number of items in the dictionary"
-	^ self ___size___
+	^ self @env0:size
 %
 
 category: 'Python-Comparison'
 method: dict
 __ne__: other
 	"Return True if dictionaries do not have the same (key, value) pairs"
-	^ (self @env1:__eq__: other) ___not___
+	^ (self @env1:__eq__: other) @env0:not
 %
 
 category: 'Python-String Representation'
@@ -126,36 +126,36 @@ __repr__
 	"Return a string representation of the dictionary"
 
 	| stream isEmpty |
-	isEmpty := self ___isEmpty___.
+	isEmpty := self @env0:isEmpty.
 	isEmpty ifTrue: [
 		^ '{}'
 	].
 
-	stream := WriteStream ___on___: (String ___new___).
-	stream ___nextPutAll___: '{'.
+	stream := WriteStream @env0:on: (String ___new___).
+	stream @env0:nextPutAll: '{'.
 
-	self ___keysAndValuesDo___: [:key :value |
+	self @env0:keysAndValuesDo: [:key :value |
 		| keyRepr valueRepr |
 		keyRepr := key @env1:__repr__.
 		valueRepr := value @env1:__repr__.
-		stream ___nextPutAll___: keyRepr.
-		stream ___nextPutAll___: ': '.
-		stream ___nextPutAll___: valueRepr.
-		stream ___nextPutAll___: ', '
+		stream @env0:nextPutAll: keyRepr.
+		stream @env0:nextPutAll: ': '.
+		stream @env0:nextPutAll: valueRepr.
+		stream @env0:nextPutAll: ', '
 	].
 
 	"Remove the trailing ', '"
 	stream @env0:skip: -2.
-	stream ___nextPutAll___: '}'.
+	stream @env0:nextPutAll: '}'.
 
-	^ stream ___contents___
+	^ stream @env0:contents
 %
 
 category: 'Python-Subscript Protocol'
 method: dict
 __setitem__: key _: value
 	"Set d[key] to value"
-	self ___at___: key put: value.
+	self @env0:at: key put: value.
 	^ nil
 %
 
@@ -179,7 +179,7 @@ category: 'Python-Mutation Methods'
 method: dict
 copy
 	"Return a shallow copy of the dictionary"
-	^ self ___copy___
+	^ self @env0:copy
 %
 
 category: 'Python-Access Methods'
@@ -195,9 +195,9 @@ get: key _: default
 	"Return the value for key if key is in the dictionary, else default"
 
 	| hasKey |
-	hasKey := self ___includesKey___: key.
+	hasKey := self @env0:includesKey: key.
 	hasKey ifTrue: [
-		^ self ___at___: key
+		^ self @env0:at: key
 	].
 	^ default
 %
@@ -209,9 +209,9 @@ items
 
 	| itemsArray |
 	itemsArray := list ___new___.
-	self ___keysAndValuesDo___: [:key :value |
+	self @env0:keysAndValuesDo: [:key :value |
 		| pair |
-		pair := tuple ___with___: key with: value.
+		pair := tuple @env0:with: key with: value.
 		itemsArray append: pair
 	].
 	^ itemsArray
@@ -236,11 +236,11 @@ pop: key
 	"If key is in the dictionary, remove it and return its value, else raise KeyError"
 
 	| hasKey value |
-	hasKey := self ___includesKey___: key.
+	hasKey := self @env0:includesKey: key.
 	hasKey ifFalse: [
 		KeyError ___signal___: key
 	].
-		value := self ___at___: key.
+		value := self @env0:at: key.
 	self @env0:removeKey: key.
 	^ value
 %
@@ -251,11 +251,11 @@ pop: key _: default
 	"If key is in the dictionary, remove it and return its value, else return default"
 
 	| hasKey value |
-	hasKey := self ___includesKey___: key.
+	hasKey := self @env0:includesKey: key.
 	hasKey ifFalse: [
 		^ default
 	].
-		value := self ___at___: key.
+		value := self @env0:at: key.
 	self @env0:removeKey: key.
 	^ value
 %
@@ -267,20 +267,20 @@ popitem
 	Raises KeyError if the dictionary is empty"
 
 	| isEmpty lastKey lastValue pair |
-	isEmpty := self ___isEmpty___.
+	isEmpty := self @env0:isEmpty.
 	isEmpty ifTrue: [
 		KeyError ___signal___: 'popitem(): dictionary is empty'
 	].
 
 	lastKey := nil.
 	lastValue := nil.
-	self ___keysAndValuesDo___: [:key :value |
+	self @env0:keysAndValuesDo: [:key :value |
 		lastKey := key.
 		lastValue := value
 	].
 
 	self @env0:removeKey: lastKey.
-	pair := tuple ___with___: lastKey with: lastValue.
+	pair := tuple @env0:with: lastKey with: lastValue.
 	^ pair
 %
 
@@ -297,11 +297,11 @@ setdefault: key _: default
 	"If key is in the dictionary, return its value. If not, insert key with value default and return default"
 
 	| hasKey |
-	hasKey := self ___includesKey___: key.
+	hasKey := self @env0:includesKey: key.
 	hasKey ifTrue: [
-		^ self ___at___: key
+		^ self @env0:at: key
 	].
-	self ___at___: key put: default.
+	self @env0:at: key put: default.
 	^ default
 %
 
@@ -311,18 +311,18 @@ update: other
 	"Update the dictionary with key/value pairs from other, overwriting existing keys"
 
 	| isDict |
-	isDict := other ___isKindOf___: dict.
+	isDict := other @env0:isKindOf: dict.
 	isDict ifTrue: [
-		other ___keysAndValuesDo___: [:key :value |
-			self ___at___: key put: value
+		other @env0:keysAndValuesDo: [:key :value |
+			self @env0:at: key put: value
 		]
 	] ifFalse: [
 		"Assume other is an iterable of (key, value) pairs"
-		other ___do___: [:pair |
+		other @env0:do: [:pair |
 			| key value |
-			key := pair ___at___: 1.
-			value := pair ___at___: 2.
-			self ___at___: key put: value
+			key := pair @env0:at: 1.
+			value := pair @env0:at: 2.
+			self @env0:at: key put: value
 		]
 	]
 %

@@ -103,7 +103,7 @@ crc32c: data
 	"Python _crc32c.crc32c(data) — fast path. Returns the
 	CRC32C of the bytes `data`."
 
-	^ self ___class___ @env0:callCrc32c: data
+	^ self @env0:class @env0:callCrc32c: data
 %
 
 category: 'Python-Built-in Functions'
@@ -112,7 +112,7 @@ extend: crc _: data
 	"Python _crc32c.extend(crc, data) — fast path. Extends
 	the existing CRC with more bytes."
 
-	^ self ___class___ @env0:callExtend: crc bytes: data
+	^ self @env0:class @env0:callExtend: crc bytes: data
 %
 
 set compile_env: 0

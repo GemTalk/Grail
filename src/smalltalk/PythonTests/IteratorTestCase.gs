@@ -219,9 +219,9 @@ testFrozensetIteratorBasicIteration
 	].
 
 	self assert: items size equals: 3.
-	self assert: (items ___contains___: 1).
-	self assert: (items ___contains___: 2).
-	self assert: (items ___contains___: 3).
+	self assert: (items @env1:__contains__: 1).
+	self assert: (items @env1:__contains__: 2).
+	self assert: (items @env1:__contains__: 3).
 %
 
 category: 'Tests - Iterator Protocol'
@@ -421,9 +421,9 @@ testSetIteratorBasicIteration
 	].
 
 	self assert: items size equals: 3.
-	self assert: (items ___contains___: 1).
-	self assert: (items ___contains___: 2).
-	self assert: (items ___contains___: 3).
+	self assert: (items @env1:__contains__: 1).
+	self assert: (items @env1:__contains__: 2).
+	self assert: (items @env1:__contains__: 3).
 %
 
 category: 'Tests - Set Iterator'

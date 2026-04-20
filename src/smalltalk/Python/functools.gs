@@ -57,7 +57,7 @@ lru_cache: maxsize
 	(no caching). The decorator is a block that takes positional args
 	and returns the first arg (the function)."
 
-	^ [:positional2 :keywords2 | positional2 ___at___: 1]
+	^ [:positional2 :keywords2 | positional2 @env0:at: 1]
 %
 
 category: 'Python-Built-in Functions'
@@ -75,7 +75,7 @@ reduce: function _: iterable
 			item := iter __next__.
 			result := function value: { result. item } value: nil.
 		] repeat.
-	] ___on___: StopIteration do: [:ex | "done" ].
+	] @env0:on: StopIteration do: [:ex | "done" ].
 	^ result
 %
 
@@ -93,7 +93,7 @@ reduce: function _: iterable _: initial
 			item := iter __next__.
 			result := function value: { result. item } value: nil.
 		] repeat.
-	] ___on___: StopIteration do: [:ex | "done" ].
+	] @env0:on: StopIteration do: [:ex | "done" ].
 	^ result
 %
 

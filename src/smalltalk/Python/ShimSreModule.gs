@@ -138,7 +138,7 @@ match: aString
 	result := (CPythonShim @env0:current)
 		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'match' selfPtr: cPtr
 		with: aString.
-	^ (result ___eq___: 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
+	^ (result @env0:= 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
 category: 'Python-Methods'
@@ -149,7 +149,7 @@ match: aString _: pos
 	result := (CPythonShim @env0:current)
 		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'match' selfPtr: cPtr
 		with: aString with: pos.
-	^ (result ___eq___: 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
+	^ (result @env0:= 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
 category: 'Python-Methods'
@@ -160,7 +160,7 @@ match: aString _: pos _: endpos
 	result := (CPythonShim @env0:current)
 		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'match' selfPtr: cPtr
 		with: aString with: pos with: endpos.
-	^ (result ___eq___: 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
+	^ (result @env0:= 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
 category: 'Python-Methods'
@@ -169,9 +169,9 @@ _match: positional kw: keywords
 	"Varargs dispatcher for match() — used for first-class calls and keyword args."
 	| nargs |
 	nargs := positional @env0:size.
-	(nargs ___eq___: 1) ifTrue: [^ self match: (positional @env0:at: 1)].
-	(nargs ___eq___: 2) ifTrue: [^ self match: (positional @env0:at: 1) _: (positional @env0:at: 2)].
-	(nargs ___eq___: 3) ifTrue: [^ self match: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
+	(nargs @env0:= 1) ifTrue: [^ self match: (positional @env0:at: 1)].
+	(nargs @env0:= 2) ifTrue: [^ self match: (positional @env0:at: 1) _: (positional @env0:at: 2)].
+	(nargs @env0:= 3) ifTrue: [^ self match: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
 	TypeError ___signal___: 'match() takes 1 to 3 arguments'
 %
 
@@ -185,7 +185,7 @@ search: aString
 	result := (CPythonShim @env0:current)
 		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'search' selfPtr: cPtr
 		with: aString.
-	^ (result ___eq___: 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
+	^ (result @env0:= 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
 category: 'Python-Methods'
@@ -196,7 +196,7 @@ search: aString _: pos
 	result := (CPythonShim @env0:current)
 		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'search' selfPtr: cPtr
 		with: aString with: pos.
-	^ (result ___eq___: 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
+	^ (result @env0:= 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
 category: 'Python-Methods'
@@ -207,7 +207,7 @@ search: aString _: pos _: endpos
 	result := (CPythonShim @env0:current)
 		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'search' selfPtr: cPtr
 		with: aString with: pos with: endpos.
-	^ (result ___eq___: 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
+	^ (result @env0:= 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
 category: 'Python-Methods'
@@ -216,9 +216,9 @@ _search: positional kw: keywords
 	"Varargs dispatcher for search()."
 	| nargs |
 	nargs := positional @env0:size.
-	(nargs ___eq___: 1) ifTrue: [^ self search: (positional @env0:at: 1)].
-	(nargs ___eq___: 2) ifTrue: [^ self search: (positional @env0:at: 1) _: (positional @env0:at: 2)].
-	(nargs ___eq___: 3) ifTrue: [^ self search: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
+	(nargs @env0:= 1) ifTrue: [^ self search: (positional @env0:at: 1)].
+	(nargs @env0:= 2) ifTrue: [^ self search: (positional @env0:at: 1) _: (positional @env0:at: 2)].
+	(nargs @env0:= 3) ifTrue: [^ self search: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
 	TypeError ___signal___: 'search() takes 1 to 3 arguments'
 %
 
@@ -232,7 +232,7 @@ fullmatch: aString
 	result := (CPythonShim @env0:current)
 		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'fullmatch' selfPtr: cPtr
 		with: aString.
-	^ (result ___eq___: 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
+	^ (result @env0:= 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
 category: 'Python-Methods'
@@ -243,7 +243,7 @@ fullmatch: aString _: pos
 	result := (CPythonShim @env0:current)
 		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'fullmatch' selfPtr: cPtr
 		with: aString with: pos.
-	^ (result ___eq___: 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
+	^ (result @env0:= 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
 category: 'Python-Methods'
@@ -254,7 +254,7 @@ fullmatch: aString _: pos _: endpos
 	result := (CPythonShim @env0:current)
 		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'fullmatch' selfPtr: cPtr
 		with: aString with: pos with: endpos.
-	^ (result ___eq___: 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
+	^ (result @env0:= 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
 category: 'Python-Methods'
@@ -263,9 +263,9 @@ _fullmatch: positional kw: keywords
 	"Varargs dispatcher for fullmatch()."
 	| nargs |
 	nargs := positional @env0:size.
-	(nargs ___eq___: 1) ifTrue: [^ self fullmatch: (positional @env0:at: 1)].
-	(nargs ___eq___: 2) ifTrue: [^ self fullmatch: (positional @env0:at: 1) _: (positional @env0:at: 2)].
-	(nargs ___eq___: 3) ifTrue: [^ self fullmatch: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
+	(nargs @env0:= 1) ifTrue: [^ self fullmatch: (positional @env0:at: 1)].
+	(nargs @env0:= 2) ifTrue: [^ self fullmatch: (positional @env0:at: 1) _: (positional @env0:at: 2)].
+	(nargs @env0:= 3) ifTrue: [^ self fullmatch: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
 	TypeError ___signal___: 'fullmatch() takes 1 to 3 arguments'
 %
 
@@ -304,9 +304,9 @@ _findall: positional kw: keywords
 	"Varargs dispatcher for findall()."
 	| nargs |
 	nargs := positional @env0:size.
-	(nargs ___eq___: 1) ifTrue: [^ self findall: (positional @env0:at: 1)].
-	(nargs ___eq___: 2) ifTrue: [^ self findall: (positional @env0:at: 1) _: (positional @env0:at: 2)].
-	(nargs ___eq___: 3) ifTrue: [^ self findall: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
+	(nargs @env0:= 1) ifTrue: [^ self findall: (positional @env0:at: 1)].
+	(nargs @env0:= 2) ifTrue: [^ self findall: (positional @env0:at: 1) _: (positional @env0:at: 2)].
+	(nargs @env0:= 3) ifTrue: [^ self findall: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
 	TypeError ___signal___: 'findall() takes 1 to 3 arguments'
 %
 
@@ -336,8 +336,8 @@ _sub: positional kw: keywords
 	"Varargs dispatcher for sub()."
 	| nargs |
 	nargs := positional @env0:size.
-	(nargs ___eq___: 2) ifTrue: [^ self sub: (positional @env0:at: 1) _: (positional @env0:at: 2)].
-	(nargs ___eq___: 3) ifTrue: [^ self sub: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
+	(nargs @env0:= 2) ifTrue: [^ self sub: (positional @env0:at: 1) _: (positional @env0:at: 2)].
+	(nargs @env0:= 3) ifTrue: [^ self sub: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
 	TypeError ___signal___: 'sub() takes 2 or 3 arguments'
 %
 
@@ -367,8 +367,8 @@ _subn: positional kw: keywords
 	"Varargs dispatcher for subn()."
 	| nargs |
 	nargs := positional @env0:size.
-	(nargs ___eq___: 2) ifTrue: [^ self subn: (positional @env0:at: 1) _: (positional @env0:at: 2)].
-	(nargs ___eq___: 3) ifTrue: [^ self subn: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
+	(nargs @env0:= 2) ifTrue: [^ self subn: (positional @env0:at: 1) _: (positional @env0:at: 2)].
+	(nargs @env0:= 3) ifTrue: [^ self subn: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
 	TypeError ___signal___: 'subn() takes 2 or 3 arguments'
 %
 
@@ -398,8 +398,8 @@ _split: positional kw: keywords
 	"Varargs dispatcher for split()."
 	| nargs |
 	nargs := positional @env0:size.
-	(nargs ___eq___: 1) ifTrue: [^ self split: (positional @env0:at: 1)].
-	(nargs ___eq___: 2) ifTrue: [^ self split: (positional @env0:at: 1) _: (positional @env0:at: 2)].
+	(nargs @env0:= 1) ifTrue: [^ self split: (positional @env0:at: 1)].
+	(nargs @env0:= 2) ifTrue: [^ self split: (positional @env0:at: 1) _: (positional @env0:at: 2)].
 	TypeError ___signal___: 'split() takes 1 or 2 arguments'
 %
 
@@ -507,10 +507,10 @@ _group: positional kw: keywords
 	"Varargs dispatcher for group()."
 	| nargs |
 	nargs := positional @env0:size.
-	(nargs ___eq___: 0) ifTrue: [^ self group].
-	(nargs ___eq___: 1) ifTrue: [^ self group: (positional @env0:at: 1)].
-	(nargs ___eq___: 2) ifTrue: [^ self group: (positional @env0:at: 1) _: (positional @env0:at: 2)].
-	(nargs ___eq___: 3) ifTrue: [^ self group: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
+	(nargs @env0:= 0) ifTrue: [^ self group].
+	(nargs @env0:= 1) ifTrue: [^ self group: (positional @env0:at: 1)].
+	(nargs @env0:= 2) ifTrue: [^ self group: (positional @env0:at: 1) _: (positional @env0:at: 2)].
+	(nargs @env0:= 3) ifTrue: [^ self group: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
 	TypeError ___signal___: 'group() takes 0 to 3 arguments'
 %
 
@@ -539,8 +539,8 @@ _groups: positional kw: keywords
 	"Varargs dispatcher for groups()."
 	| nargs |
 	nargs := positional @env0:size.
-	(nargs ___eq___: 0) ifTrue: [^ self groups].
-	(nargs ___eq___: 1) ifTrue: [^ self groups: (positional @env0:at: 1)].
+	(nargs @env0:= 0) ifTrue: [^ self groups].
+	(nargs @env0:= 1) ifTrue: [^ self groups: (positional @env0:at: 1)].
 	TypeError ___signal___: 'groups() takes 0 or 1 arguments'
 %
 
@@ -569,8 +569,8 @@ _groupdict: positional kw: keywords
 	"Varargs dispatcher for groupdict()."
 	| nargs |
 	nargs := positional @env0:size.
-	(nargs ___eq___: 0) ifTrue: [^ self groupdict].
-	(nargs ___eq___: 1) ifTrue: [^ self groupdict: (positional @env0:at: 1)].
+	(nargs @env0:= 0) ifTrue: [^ self groupdict].
+	(nargs @env0:= 1) ifTrue: [^ self groupdict: (positional @env0:at: 1)].
 	TypeError ___signal___: 'groupdict() takes 0 or 1 arguments'
 %
 
@@ -599,8 +599,8 @@ _start: positional kw: keywords
 	"Varargs dispatcher for start()."
 	| nargs |
 	nargs := positional @env0:size.
-	(nargs ___eq___: 0) ifTrue: [^ self start].
-	(nargs ___eq___: 1) ifTrue: [^ self start: (positional @env0:at: 1)].
+	(nargs @env0:= 0) ifTrue: [^ self start].
+	(nargs @env0:= 1) ifTrue: [^ self start: (positional @env0:at: 1)].
 	TypeError ___signal___: 'start() takes 0 or 1 arguments'
 %
 
@@ -629,8 +629,8 @@ _end: positional kw: keywords
 	"Varargs dispatcher for end()."
 	| nargs |
 	nargs := positional @env0:size.
-	(nargs ___eq___: 0) ifTrue: [^ self end].
-	(nargs ___eq___: 1) ifTrue: [^ self end: (positional @env0:at: 1)].
+	(nargs @env0:= 0) ifTrue: [^ self end].
+	(nargs @env0:= 1) ifTrue: [^ self end: (positional @env0:at: 1)].
 	TypeError ___signal___: 'end() takes 0 or 1 arguments'
 %
 
@@ -659,8 +659,8 @@ _span: positional kw: keywords
 	"Varargs dispatcher for span()."
 	| nargs |
 	nargs := positional @env0:size.
-	(nargs ___eq___: 0) ifTrue: [^ self span].
-	(nargs ___eq___: 1) ifTrue: [^ self span: (positional @env0:at: 1)].
+	(nargs @env0:= 0) ifTrue: [^ self span].
+	(nargs @env0:= 1) ifTrue: [^ self span: (positional @env0:at: 1)].
 	TypeError ___signal___: 'span() takes 0 or 1 arguments'
 %
 
@@ -815,10 +815,10 @@ category: 'Python-Initialization'
 method: _sre
 initialize
 	"Initialize module-level constants."
-	self ___at___: #MAGIC put: 20230612.
-	self ___at___: #CODESIZE put: 4.
-	self ___at___: #MAXREPEAT put: 4294967295.
-	self ___at___: #MAXGROUPS put: 1073741823.
+	self @env0:at: #MAGIC put: 20230612.
+	self @env0:at: #CODESIZE put: 4.
+	self @env0:at: #MAXREPEAT put: 4294967295.
+	self @env0:at: #MAXGROUPS put: 1073741823.
 %
 
 ! ===============================================================================
@@ -829,35 +829,35 @@ category: 'Python-Built-in Functions'
 method: _sre
 getcodesize
 	"_sre.getcodesize() -> int"
-	^ self ___class___ @env0:callGetcodesize
+	^ self @env0:class @env0:callGetcodesize
 %
 
 category: 'Python-Built-in Functions'
 method: _sre
 ascii_iscased: character
 	"_sre.ascii_iscased(character) -> bool"
-	^ self ___class___ @env0:callAsciiIscased: character
+	^ self @env0:class @env0:callAsciiIscased: character
 %
 
 category: 'Python-Built-in Functions'
 method: _sre
 unicode_iscased: character
 	"_sre.unicode_iscased(character) -> bool"
-	^ self ___class___ @env0:callUnicodeIscased: character
+	^ self @env0:class @env0:callUnicodeIscased: character
 %
 
 category: 'Python-Built-in Functions'
 method: _sre
 ascii_tolower: character
 	"_sre.ascii_tolower(character) -> int"
-	^ self ___class___ @env0:callAsciiTolower: character
+	^ self @env0:class @env0:callAsciiTolower: character
 %
 
 category: 'Python-Built-in Functions'
 method: _sre
 unicode_tolower: character
 	"_sre.unicode_tolower(character) -> int"
-	^ self ___class___ @env0:callUnicodeTolower: character
+	^ self @env0:class @env0:callUnicodeTolower: character
 %
 
 category: 'Python-Built-in Functions'
@@ -867,7 +867,7 @@ compile: pattern _: flags _: code _: groups _: groupindex _: indexgroup
 	-> SrePattern"
 
 	| cPtr |
-	cPtr := self ___class___ @env0:callCompile: pattern flags: flags code: code groups: groups groupindex: groupindex indexgroup: indexgroup.
+	cPtr := self @env0:class @env0:callCompile: pattern flags: flags code: code groups: groups groupindex: groupindex indexgroup: indexgroup.
 	^ SrePattern @env0:newFromCPtr: cPtr
 %
 
@@ -878,25 +878,25 @@ compile: pattern _: flags _: code _: groups _: groupindex _: indexgroup
 category: 'Python-Accessors'
 method: _sre
 MAGIC
-	^ self ___at___: #MAGIC
+	^ self @env0:at: #MAGIC
 %
 
 category: 'Python-Accessors'
 method: _sre
 CODESIZE
-	^ self ___at___: #CODESIZE
+	^ self @env0:at: #CODESIZE
 %
 
 category: 'Python-Accessors'
 method: _sre
 MAXREPEAT
-	^ self ___at___: #MAXREPEAT
+	^ self @env0:at: #MAXREPEAT
 %
 
 category: 'Python-Accessors'
 method: _sre
 MAXGROUPS
-	^ self ___at___: #MAXGROUPS
+	^ self @env0:at: #MAXGROUPS
 %
 
 set compile_env: 0

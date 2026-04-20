@@ -62,9 +62,9 @@ testDictContains
 	d @env1:__setitem__: 'a' _: 1.
 	d @env1:__setitem__: 'b' _: 2.
 	
-	self assert: (d ___contains___: 'a').
-	self assert: (d ___contains___: 'b').
-	self deny: (d ___contains___: 'c')
+	self assert: (d @env1:__contains__: 'a').
+	self assert: (d @env1:__contains__: 'b').
+	self deny: (d @env1:__contains__: 'c')
 %
 
 category: 'Tests - Methods'
@@ -125,9 +125,9 @@ testDictDelItem
 	d @env1:__delitem__: 'b'.
 	
 	self assert: d size equals: 2.
-	self assert: (d ___contains___: 'a').
-	self deny: (d ___contains___: 'b').
-	self assert: (d ___contains___: 'c')
+	self assert: (d @env1:__contains__: 'a').
+	self deny: (d @env1:__contains__: 'b').
+	self assert: (d @env1:__contains__: 'c')
 %
 
 category: 'Tests - Mutation'
@@ -328,7 +328,7 @@ testDictPop
 
 	self assert: value equals: 1.
 	self assert: d size equals: 1.
-	self deny: (d ___contains___: 'a')
+	self deny: (d @env1:__contains__: 'a')
 %
 
 category: 'Tests - Methods'
@@ -351,7 +351,7 @@ testDictPopitem
 	key := pair at: 1.
 	value := pair at: 2.
 
-	self deny: (d ___contains___: key)
+	self deny: (d @env1:__contains__: key)
 %
 
 category: 'Tests - Methods'
@@ -424,7 +424,7 @@ testDictSetdefault
 
 	value := d @env1:setdefault: 'b' _: 2.
 	self assert: value equals: 2.
-	self assert: (d ___contains___: 'b').
+	self assert: (d @env1:__contains__: 'b').
 	self assert: (d @env1:__getitem__: 'b') equals: 2
 %
 

@@ -144,15 +144,15 @@ testSetAdd
 	| s |
 	s := set new.
 	
-	s ___add___: 1.
+	s @env1:add: 1.
 	self assert: s size equals: 1.
-	self assert: (s ___contains___: 1).
+	self assert: (s @env1:__contains__: 1).
 	
-	s ___add___: 2.
+	s @env1:add: 2.
 	self assert: s size equals: 2.
 	
 	"Adding duplicate should not increase size"
-	s ___add___: 1.
+	s @env1:add: 1.
 	self assert: s size equals: 2
 %
 
@@ -163,9 +163,9 @@ testSetClear
 
 	| s |
 	s := set new.
-	s ___add___: 1.
-	s ___add___: 2.
-	s ___add___: 3.
+	s @env1:add: 1.
+	s @env1:add: 2.
+	s @env1:add: 3.
 	
 	s @env1:clear.
 	self assert: s size equals: 0
@@ -180,9 +180,9 @@ testSetCreation
 	s1 := set new.
 	s2 := set new.
 	
-	s2 ___add___: 1.
-	s2 ___add___: 2.
-	s2 ___add___: 3.
+	s2 @env1:add: 1.
+	s2 @env1:add: 2.
+	s2 @env1:add: 3.
 	
 	self assert: s1 size equals: 0.
 	self assert: s2 size equals: 3
@@ -195,20 +195,20 @@ testSetDifferenceUpdate
 
 	| s1 s2 |
 	s1 := set new.
-	s1 ___add___: 1.
-	s1 ___add___: 2.
-	s1 ___add___: 3.
+	s1 @env1:add: 1.
+	s1 @env1:add: 2.
+	s1 @env1:add: 3.
 
 	s2 := set new.
-	s2 ___add___: 2.
-	s2 ___add___: 4.
+	s2 @env1:add: 2.
+	s2 @env1:add: 4.
 
 	s1 @env1:difference_update: s2.
 
 	self assert: s1 size equals: 2.
-	self assert: (s1 ___contains___: 1).
-	self assert: (s1 ___contains___: 3).
-	self deny: (s1 ___contains___: 2)
+	self assert: (s1 @env1:__contains__: 1).
+	self assert: (s1 @env1:__contains__: 3).
+	self deny: (s1 @env1:__contains__: 2)
 %
 
 category: 'Tests - Mutation'
@@ -218,8 +218,8 @@ testSetDiscard
 
 	| s |
 	s := set new.
-	s ___add___: 1.
-	s ___add___: 2.
+	s @env1:add: 1.
+	s @env1:add: 2.
 	
 	s @env1:discard: 2.
 	self assert: s size equals: 1.
@@ -250,13 +250,13 @@ testSetInPlaceOperators
 
 	"Test &= (intersection)"
 	s1 := set new.
-	s1 ___add___: 1.
-	s1 ___add___: 2.
-	s1 ___add___: 3.
+	s1 @env1:add: 1.
+	s1 @env1:add: 2.
+	s1 @env1:add: 3.
 
 	s2 := set new.
-	s2 ___add___: 2.
-	s2 ___add___: 3.
+	s2 @env1:add: 2.
+	s2 @env1:add: 3.
 
 	result := s1 @env1:__iand__: s2.
 	self assert: result == s1.
@@ -264,10 +264,10 @@ testSetInPlaceOperators
 
 	"Test |= (union)"
 	s1 := set new.
-	s1 ___add___: 1.
+	s1 @env1:add: 1.
 
 	s2 := set new.
-	s2 ___add___: 2.
+	s2 @env1:add: 2.
 
 	result := s1 @env1:__ior__: s2.
 	self assert: result == s1.
@@ -275,11 +275,11 @@ testSetInPlaceOperators
 
 	"Test -= (difference)"
 	s1 := set new.
-	s1 ___add___: 1.
-	s1 ___add___: 2.
+	s1 @env1:add: 1.
+	s1 @env1:add: 2.
 
 	s2 := set new.
-	s2 ___add___: 2.
+	s2 @env1:add: 2.
 
 	result := s1 @env1:__isub__: s2.
 	self assert: result == s1.
@@ -287,12 +287,12 @@ testSetInPlaceOperators
 
 	"Test ^= (symmetric difference)"
 	s1 := set new.
-	s1 ___add___: 1.
-	s1 ___add___: 2.
+	s1 @env1:add: 1.
+	s1 @env1:add: 2.
 
 	s2 := set new.
-	s2 ___add___: 2.
-	s2 ___add___: 3.
+	s2 @env1:add: 2.
+	s2 @env1:add: 3.
 
 	result := s1 @env1:__ixor__: s2.
 	self assert: result == s1.
@@ -306,21 +306,21 @@ testSetIntersectionUpdate
 
 	| s1 s2 |
 	s1 := set new.
-	s1 ___add___: 1.
-	s1 ___add___: 2.
-	s1 ___add___: 3.
+	s1 @env1:add: 1.
+	s1 @env1:add: 2.
+	s1 @env1:add: 3.
 
 	s2 := set new.
-	s2 ___add___: 2.
-	s2 ___add___: 3.
-	s2 ___add___: 4.
+	s2 @env1:add: 2.
+	s2 @env1:add: 3.
+	s2 @env1:add: 4.
 
 	s1 @env1:intersection_update: s2.
 
 	self assert: s1 size equals: 2.
-	self assert: (s1 ___contains___: 2).
-	self assert: (s1 ___contains___: 3).
-	self deny: (s1 ___contains___: 1)
+	self assert: (s1 @env1:__contains__: 2).
+	self assert: (s1 @env1:__contains__: 3).
+	self deny: (s1 @env1:__contains__: 1)
 %
 
 category: 'Tests - Iteration'
@@ -330,9 +330,9 @@ testSetIteration
 
 	| s iter items |
 	s := set new.
-	s ___add___: 1.
-	s ___add___: 2.
-	s ___add___: 3.
+	s @env1:add: 1.
+	s @env1:add: 2.
+	s @env1:add: 3.
 	
 	iter := s @env1:__iter__.
 	self assert: (iter class) name equals: #'set_iterator'.
@@ -356,7 +356,7 @@ testSetNotHashable
 
 	| s |
 	s := set new.
-	s ___add___: 1.
+	s @env1:add: 1.
 
 	self should: [s @env1:__hash__] raise: TypeError
 %
@@ -368,8 +368,8 @@ testSetPop
 
 	| s item |
 	s := set new.
-	s ___add___: 1.
-	s ___add___: 2.
+	s @env1:add: 1.
+	s @env1:add: 2.
 	
 	item := s @env1:pop.
 	self assert: s size equals: 1.
@@ -389,13 +389,13 @@ testSetRemove
 
 	| s |
 	s := set new.
-	s ___add___: 1.
-	s ___add___: 2.
-	s ___add___: 3.
+	s @env1:add: 1.
+	s @env1:add: 2.
+	s @env1:add: 3.
 	
 	s @env1:remove: 2.
 	self assert: s size equals: 2.
-	self deny: (s ___contains___: 2).
+	self deny: (s @env1:__contains__: 2).
 	
 	"Removing non-existent element should raise KeyError"
 	self should: [s @env1:remove: 99] raise: KeyError
@@ -408,8 +408,8 @@ testSetRepr
 
 	| s repr |
 	s := set new.
-	s ___add___: 1.
-	s ___add___: 2.
+	s @env1:add: 1.
+	s @env1:add: 2.
 
 	repr := s @env1:__repr__.
 
@@ -424,22 +424,22 @@ testSetSymmetricDifferenceUpdate
 
 	| s1 s2 |
 	s1 := set new.
-	s1 ___add___: 1.
-	s1 ___add___: 2.
-	s1 ___add___: 3.
+	s1 @env1:add: 1.
+	s1 @env1:add: 2.
+	s1 @env1:add: 3.
 
 	s2 := set new.
-	s2 ___add___: 2.
-	s2 ___add___: 3.
-	s2 ___add___: 4.
+	s2 @env1:add: 2.
+	s2 @env1:add: 3.
+	s2 @env1:add: 4.
 
 	s1 @env1:symmetric_difference_update: s2.
 
 	self assert: s1 size equals: 2.
-	self assert: (s1 ___contains___: 1).
-	self assert: (s1 ___contains___: 4).
-	self deny: (s1 ___contains___: 2).
-	self deny: (s1 ___contains___: 3)
+	self assert: (s1 @env1:__contains__: 1).
+	self assert: (s1 @env1:__contains__: 4).
+	self deny: (s1 @env1:__contains__: 2).
+	self deny: (s1 @env1:__contains__: 3)
 %
 
 category: 'Tests - Creation'
@@ -449,11 +449,11 @@ testSetUniqueness
 
 	| s |
 	s := set new.
-	s ___add___: 1.
-	s ___add___: 1.
-	s ___add___: 2.
-	s ___add___: 2.
-	s ___add___: 2.
+	s @env1:add: 1.
+	s @env1:add: 1.
+	s @env1:add: 2.
+	s @env1:add: 2.
+	s @env1:add: 2.
 	
 	self assert: s size equals: 2
 %
@@ -465,19 +465,19 @@ testSetUpdate
 
 	| s1 s2 |
 	s1 := set new.
-	s1 ___add___: 1.
-	s1 ___add___: 2.
+	s1 @env1:add: 1.
+	s1 @env1:add: 2.
 
 	s2 := set new.
-	s2 ___add___: 2.
-	s2 ___add___: 3.
-	s2 ___add___: 4.
+	s2 @env1:add: 2.
+	s2 @env1:add: 3.
+	s2 @env1:add: 4.
 
 	s1 @env1:update: s2.
 
 	self assert: s1 size equals: 4.
-	self assert: (s1 ___contains___: 1).
-	self assert: (s1 ___contains___: 2).
-	self assert: (s1 ___contains___: 3).
-	self assert: (s1 ___contains___: 4)
+	self assert: (s1 @env1:__contains__: 1).
+	self assert: (s1 @env1:__contains__: 2).
+	self assert: (s1 @env1:__contains__: 3).
+	self assert: (s1 @env1:__contains__: 4)
 %

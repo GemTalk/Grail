@@ -49,10 +49,10 @@ set compile_env: 1
 category: 'Python-Initialization'
 method: os
 initialize
-	self ___at___: #sep put: '/'.
-	self ___at___: #pathsep put: ':'.
-	self ___at___: #linesep put: ((Character ___lf___) ___asString___).
-	self ___at___: #path put: (os_path instance).
+	self @env0:at: #sep put: '/'.
+	self @env0:at: #pathsep put: ':'.
+	self @env0:at: #linesep put: ((Character @env0:lf) @env0:asString).
+	self @env0:at: #path put: (os_path instance).
 %
 
 ! ===============================================================================
@@ -62,25 +62,25 @@ initialize
 category: 'Python-Constants'
 method: os
 sep
-	^ self ___at___: #sep
+	^ self @env0:at: #sep
 %
 
 category: 'Python-Constants'
 method: os
 pathsep
-	^ self ___at___: #pathsep
+	^ self @env0:at: #pathsep
 %
 
 category: 'Python-Constants'
 method: os
 linesep
-	^ self ___at___: #linesep
+	^ self @env0:at: #linesep
 %
 
 category: 'Python-Path Module'
 method: os
 path
-	^ self ___at___: #path
+	^ self @env0:at: #path
 %
 
 ! ===============================================================================
@@ -94,10 +94,10 @@ getcwd
 
 	| result |
 	result := GsFile @env0:_directoryPrim: 2 with: nil with: nil.
-	(result ___isKindOf___: String) ifTrue: [^ result].
-	(result ___isKindOf___: Utf8) ifTrue: [^ result ___decodeToUnicode___].
-	(result ___isKindOf___: Utf16) ifTrue: [^ result ___decodeToUnicode___].
-	^ result ___asUnicodeString___
+	(result @env0:isKindOf: String) ifTrue: [^ result].
+	(result @env0:isKindOf: Utf8) ifTrue: [^ result @env0:decodeToUnicode].
+	(result @env0:isKindOf: Utf16) ifTrue: [^ result @env0:decodeToUnicode].
+	^ result @env0:asUnicodeString
 %
 
 category: 'Python-File and Directory Operations'
@@ -108,7 +108,7 @@ chdir: path
 	| result |
 	result := GsFile @env0:_directoryPrim: 0 with: path with: nil.
 	result == nil ifTrue: [
-		OSError ___signal___: ('Cannot change directory to: ' ___concat___: (path ___printString___))
+		OSError ___signal___: ('Cannot change directory to: ' @env0:, (path @env0:printString))
 	].
 	^ nil
 %
@@ -121,7 +121,7 @@ mkdir: path
 	| result |
 	result := GsFile @env0:createServerDirectory: path.
 	result == nil ifTrue: [
-		OSError ___signal___: ('Cannot create directory: ' ___concat___: (path ___printString___))
+		OSError ___signal___: ('Cannot create directory: ' @env0:, (path @env0:printString))
 	].
 	^ nil
 %
@@ -134,7 +134,7 @@ mkdir: path _: mode
 	| result |
 	result := GsFile @env0:createServerDirectory: path mode: mode.
 	result == nil ifTrue: [
-		OSError ___signal___: ('Cannot create directory: ' ___concat___: (path ___printString___))
+		OSError ___signal___: ('Cannot create directory: ' @env0:, (path @env0:printString))
 	].
 	^ nil
 %
@@ -146,18 +146,18 @@ makedirs: path
 
 	| parts currentPath sep |
 	sep := '/'.
-	parts := $/ ___split___: path.
+	parts := $/ @env0:split: path.
 	currentPath := ''.
-	parts ___do___: [:part |
-		(part ___isEmpty___) ifFalse: [
-			currentPath := (currentPath ___isEmpty___)
+	parts @env0:do: [:part |
+		(part @env0:isEmpty) ifFalse: [
+			currentPath := (currentPath @env0:isEmpty)
 				ifTrue: [
-					(path ___beginsWith___: sep)
-						ifTrue: [sep ___concat___: part]
+					(path @env0:beginsWith: sep)
+						ifTrue: [sep @env0:, part]
 						ifFalse: [part]
 				]
-				ifFalse: [(currentPath ___concat___: sep) ___concat___: part].
-			(GsFile ___existsOnServer___: currentPath) ifFalse: [
+				ifFalse: [(currentPath @env0:, sep) @env0:, part].
+			(GsFile @env0:existsOnServer: currentPath) ifFalse: [
 				self mkdir: currentPath
 			]
 		]
@@ -173,7 +173,7 @@ rmdir: path
 	| result |
 	result := GsFile @env0:removeServerDirectory: path.
 	result == nil ifTrue: [
-		OSError ___signal___: ('Cannot remove directory: ' ___concat___: (path ___printString___))
+		OSError ___signal___: ('Cannot remove directory: ' @env0:, (path @env0:printString))
 	].
 	^ nil
 %
@@ -186,7 +186,7 @@ remove: path
 	| result |
 	result := GsFile @env0:removeServerFile: path.
 	result == nil ifTrue: [
-		OSError ___signal___: ('Cannot remove file: ' ___concat___: (path ___printString___))
+		OSError ___signal___: ('Cannot remove file: ' @env0:, (path @env0:printString))
 	].
 	^ nil
 %
@@ -199,8 +199,8 @@ rename: oldPath _: newPath
 	| result msg |
 	result := GsFile @env0:renameFileOnServer: oldPath to: newPath.
 	result == nil ifTrue: [
-		msg := ((oldPath ___printString___) ___concat___: ' to ') ___concat___: (newPath ___printString___).
-		OSError ___signal___: ('Cannot rename: ' ___concat___: msg)
+		msg := ((oldPath @env0:printString) @env0:, ' to ') @env0:, (newPath @env0:printString).
+		OSError ___signal___: ('Cannot rename: ' @env0:, msg)
 	].
 	^ nil
 %
@@ -219,24 +219,24 @@ _listdir: positional kw: kwargs
 	"os.listdir([path]) — list directory contents. 0-arg uses cwd."
 
 	| actualPath dirContents result |
-	actualPath := (positional ___size___ ___ge___: 1) ifTrue: [positional ___at___: 1] ifFalse: [nil].
+	actualPath := (positional @env0:size @env0:>= 1) ifTrue: [positional @env0:at: 1] ifFalse: [nil].
 	actualPath == nil ifTrue: [actualPath := self getcwd].
 	dirContents := GsFile @env0:contentsOfDirectory: actualPath onClient: false.
-	(dirContents ___isKindOf___: Array) ifFalse: [
-		OSError ___signal___: ('Cannot list directory: ' ___concat___: (actualPath ___printString___))
+	(dirContents @env0:isKindOf: Array) ifFalse: [
+		OSError ___signal___: ('Cannot list directory: ' @env0:, (actualPath @env0:printString))
 	].
 	result := list ___new___.
-	dirContents ___do___: [:each |
+	dirContents @env0:do: [:each |
 		| decoded basename reversedPath index lastSlashIndex |
 		decoded := each.
-		(each ___isKindOf___: Utf8) ifTrue: [decoded := each ___decodeToUnicode___].
-		(each ___isKindOf___: Utf16) ifTrue: [decoded := each ___decodeToUnicode___].
-		(each ___isKindOf___: String) ifFalse: [decoded := each ___asUnicodeString___].
-		reversedPath := decoded ___reverse___.
-		index := reversedPath ___findString___: '/' startingAt: 1.
-		(index ___eq___: 0) ifFalse: [
-			lastSlashIndex := ((decoded ___size___) ___minus___: (index)) ___plus___: 1.
-			decoded := decoded ___copyFrom___: (lastSlashIndex ___plus___: 1) to: decoded ___size___
+		(each @env0:isKindOf: Utf8) ifTrue: [decoded := each @env0:decodeToUnicode].
+		(each @env0:isKindOf: Utf16) ifTrue: [decoded := each @env0:decodeToUnicode].
+		(each @env0:isKindOf: String) ifFalse: [decoded := each @env0:asUnicodeString].
+		reversedPath := decoded @env0:reverse.
+		index := reversedPath @env0:findString: '/' startingAt: 1.
+		(index @env0:= 0) ifFalse: [
+			lastSlashIndex := ((decoded @env0:size) @env0:- (index)) @env0:+ 1.
+			decoded := decoded @env0:copyFrom: (lastSlashIndex @env0:+ 1) to: decoded @env0:size
 		].
 		result append: decoded
 	].
@@ -252,7 +252,7 @@ method: os
 exists: path
 	"os.path.exists(path) exposed as os.exists(path)."
 
-	^ GsFile ___existsOnServer___: path
+	^ GsFile @env0:existsOnServer: path
 %
 
 category: 'Python-File and Directory Operations'
@@ -260,7 +260,7 @@ method: os
 isdir: path
 	"os.path.isdir(path) exposed as os.isdir(path)."
 
-	(GsFile ___existsOnServer___: path) ifTrue: [
+	(GsFile @env0:existsOnServer: path) ifTrue: [
 		^ GsFile @env0:isServerDirectory: path
 	].
 	^ false
@@ -271,7 +271,7 @@ method: os
 isfile: path
 	"os.path.isfile(path) exposed as os.isfile(path)."
 
-	(GsFile ___existsOnServer___: path) ifTrue: [
+	(GsFile @env0:existsOnServer: path) ifTrue: [
 		^ (GsFile @env0:isServerDirectory: path) == false
 	].
 	^ false
@@ -285,7 +285,7 @@ stat: path
 	| statResult |
 	statResult := GsFile @env0:stat: path isLstat: false.
 	statResult == nil ifTrue: [
-		OSError ___signal___: ('Cannot stat: ' ___concat___: (path ___printString___))
+		OSError ___signal___: ('Cannot stat: ' @env0:, (path @env0:printString))
 	].
 	^ statResult
 %
@@ -298,7 +298,7 @@ lstat: path
 	| statResult |
 	statResult := GsFile @env0:stat: path isLstat: true.
 	statResult == nil ifTrue: [
-		OSError ___signal___: ('Cannot lstat: ' ___concat___: (path ___printString___))
+		OSError ___signal___: ('Cannot lstat: ' @env0:, (path @env0:printString))
 	].
 	^ statResult
 %

@@ -59,7 +59,7 @@ method: RaiseAst
 printSmalltalkOn: aStream
 
 	exc ifNil: [
-		aStream nextPutAll: '___ex ___pass___.'.
+		aStream nextPutAll: '___ex @env0:pass.'.
 	] ifNotNil: [
 		(exc isKindOf: CallAst) ifTrue: [
 			"raise ExceptionClass(msg) → ExceptionClass ___signal___: msg"
@@ -69,12 +69,12 @@ printSmalltalkOn: aStream
 				exc arguments first printSmalltalkWithParenthesisOn: aStream.
 				aStream nextPut: $..
 			] ifFalse: [
-				aStream nextPutAll: ' ___signal___.'.
+				aStream nextPutAll: ' @env0:signal.'.
 			].
 		] ifFalse: [
-			"raise expr → expr ___signal___"
+			"raise expr → expr @env0:signal"
 			exc printSmalltalkWithParenthesisOn: aStream.
-			aStream nextPutAll: ' ___signal___.'.
+			aStream nextPutAll: ' @env0:signal.'.
 		].
 	].
 %

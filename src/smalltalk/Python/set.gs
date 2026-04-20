@@ -121,29 +121,29 @@ __repr__
 	"Return a string representation of the set: {item1, item2, ...}"
 
 	| stream first size |
-	size := self ___size___.
+	size := self @env0:size.
 
 	"Handle empty set specially"
-	(size ___eq___: 0) ifTrue: [
+	(size @env0:= 0) ifTrue: [
 		^ 'set()'
 	].
 
-	stream := WriteStream ___on___: (String ___new___).
-	stream ___nextPut___: ${.
+	stream := WriteStream @env0:on: (String ___new___).
+	stream @env0:nextPut: ${.
 
 	first := true.
-	self ___do___: [:each |
+	self @env0:do: [:each |
 		| reprStr |
 		first ifFalse: [
-			stream ___nextPutAll___: ', '
+			stream @env0:nextPutAll: ', '
 		].
 		reprStr := each @env1:__repr__.
-		stream ___nextPutAll___: reprStr.
+		stream @env0:nextPutAll: reprStr.
 		first := false
 	].
 
-	stream ___nextPut___: $}.
-	^ stream ___contents___
+	stream @env0:nextPut: $}.
+	^ stream @env0:contents
 %
 
 category: 'Python-Mutation Methods'
@@ -151,7 +151,7 @@ method: set
 add: item
 	"Add an element to the set."
 
-	self ___add___: item
+	self @env0:add: item
 %
 
 category: 'Python-Mutation Methods'
@@ -159,7 +159,7 @@ method: set
 clear
 	"Remove all elements from the set."
 
-	self ___removeAll___: self
+	self @env0:removeAll: self
 %
 
 category: 'Python-Mutation Methods'
@@ -170,14 +170,14 @@ difference_update: other
 	| toRemove |
 	toRemove := list ___new___.
 	
-	self ___do___: [:each |
+	self @env0:do: [:each |
 		(other __contains__: each) ifTrue: [
-			toRemove ___add___: each
+			toRemove @env0:add: each
 		]
 	].
 	
-	toRemove ___do___: [:each |
-		self ___remove___: each
+	toRemove @env0:do: [:each |
+		self @env0:remove: each
 	]
 %
 
@@ -186,9 +186,9 @@ method: set
 discard: item
 	"Remove an element from the set if it is present."
 
-	self ___do___: [:each |
+	self @env0:do: [:each |
 		(each @env1:__eq__: item) ifTrue: [
-			self ___remove___: each.
+			self @env0:remove: each.
 			^ nil
 		]
 	]
@@ -202,14 +202,14 @@ intersection_update: other
 	| toRemove |
 	toRemove := list ___new___.
 	
-	self ___do___: [:each |
+	self @env0:do: [:each |
 		(other __contains__: each) ifFalse: [
-			toRemove ___add___: each
+			toRemove @env0:add: each
 		]
 	].
 	
-	toRemove ___do___: [:each |
-		self ___remove___: each
+	toRemove @env0:do: [:each |
+		self @env0:remove: each
 	]
 %
 
@@ -220,18 +220,18 @@ pop
 	Raises KeyError if the set is empty."
 
 	| item |
-	(self ___isEmpty___) ifTrue: [
+	(self @env0:isEmpty) ifTrue: [
 		KeyError ___signal___: 'pop from an empty set'
 	].
 
 	item := nil.
-	self ___do___: [:each |
+	self @env0:do: [:each |
 		item isNil ifTrue: [
 			item := each
 		]
 	].
 
-	self ___remove___: item.
+	self @env0:remove: item.
 	^ item
 %
 
@@ -242,9 +242,9 @@ remove: item
 
 	| removed |
 	removed := false.
-	self ___do___: [:each |
+	self @env0:do: [:each |
 		(each @env1:__eq__: item) ifTrue: [
-			self ___remove___: each.
+			self @env0:remove: each.
 			removed := true.
 			^ nil
 		]
@@ -265,27 +265,27 @@ symmetric_difference_update: other
 	toRemove := list ___new___.
 
 	"Find elements in self that are also in other (to remove)"
-	self ___do___: [:each |
+	self @env0:do: [:each |
 		(other __contains__: each) ifTrue: [
-			toRemove ___add___: each
+			toRemove @env0:add: each
 		]
 	].
 
 	"Find elements in other that are not in self (to add)"
-	other ___do___: [:each |
+	other @env0:do: [:each |
 		(self __contains__: each) ifFalse: [
-			toAdd ___add___: each
+			toAdd @env0:add: each
 		]
 	].
 
 	"Remove common elements"
-	toRemove ___do___: [:each |
-		self ___remove___: each
+	toRemove @env0:do: [:each |
+		self @env0:remove: each
 	].
 
 	"Add unique elements from other"
-	toAdd ___do___: [:each |
-		self ___add___: each
+	toAdd @env0:do: [:each |
+		self @env0:add: each
 	]
 %
 
@@ -294,8 +294,8 @@ method: set
 update: other
 	"Update the set, adding elements from other."
 
-	other ___do___: [:each |
-		self ___add___: each
+	other @env0:do: [:each |
+		self @env0:add: each
 	]
 %
 

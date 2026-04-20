@@ -45,7 +45,7 @@ set compile_env: 1
 category: 'Python-Private'
 method: random
 _sequenceLength: seq
-	^ [seq __len__] ___on___: MessageNotUnderstood do: [:ex | seq ___size___]
+	^ [seq __len__] @env0:on: MessageNotUnderstood do: [:ex | seq @env0:size]
 %
 
 category: 'Python-Private'
@@ -53,10 +53,10 @@ method: random
 _generator
 	"Return the internal random generator, re-creating it if needed."
 	| gen |
-	gen := self ___at___: #_generator.
+	gen := self @env0:at: #_generator.
 	(gen == nil or: [(gen @env0:respondsTo: #isOpen) and: [(gen @env0:isOpen) not]]) ifTrue: [
 		gen := Random ___new___.
-		self ___at___: #_generator put: gen.
+		self @env0:at: #_generator put: gen.
 	].
 	^ gen
 %
@@ -69,7 +69,7 @@ category: 'Python-Initialization'
 method: random
 initialize
 	"Initialize the internal random generator."
-	self ___at___: #_generator put: (Random ___new___)
+	self @env0:at: #_generator put: (Random ___new___)
 %
 
 ! ===============================================================================
@@ -107,9 +107,9 @@ choice: seq
 	"choice(seq) -> random element from non-empty sequence."
 	| len idx |
 	len := self _sequenceLength: seq.
-	(len ___eq___: 0) ifTrue: [IndexError ___signal___: 'Cannot choose from an empty sequence'].
+	(len @env0:= 0) ifTrue: [IndexError ___signal___: 'Cannot choose from an empty sequence'].
 	idx := self _generator @env0:integerBetween: 1 and: len.
-	^ seq ___at___: idx
+	^ seq @env0:at: idx
 %
 
 category: 'Python-Built-in Functions'
@@ -118,10 +118,10 @@ shuffle: x
 	"shuffle(x) -> shuffle list x in place; return None."
 	| n |
 	n := self _sequenceLength: x.
-	n ___to___: 2 by: -1 do: [:i |
+	n @env0:to: 2 by: -1 do: [:i |
 		| j temp |
 		j := self _generator @env0:integerBetween: 1 and: i.
-		temp := x ___at___: i. x ___at___: i put: (x ___at___: j). x ___at___: j put: temp.
+		temp := x @env0:at: i. x @env0:at: i put: (x @env0:at: j). x @env0:at: j put: temp.
 	].
 	^ None
 %
@@ -131,15 +131,15 @@ method: random
 getrandbits: k
 	"getrandbits(k) -> non-negative integer with k random bits."
 	| result bitsNeeded |
-	(k ___lt___: 0) ifTrue: [ValueError ___signal___: 'number of bits must be non-negative'].
-	(k ___eq___: 0) ifTrue: [^ 0].
+	(k @env0:< 0) ifTrue: [ValueError ___signal___: 'number of bits must be non-negative'].
+	(k @env0:= 0) ifTrue: [^ 0].
 	result := 0. bitsNeeded := k.
-	[bitsNeeded ___gt___: 0] ___whileTrue___: [
+	[bitsNeeded @env0:> 0] @env0:whileTrue: [
 		| chunk bits |
 		chunk := self _generator @env0:integer.
-		bits := bitsNeeded ___min___: 32.
-		result := (result @env0:bitShift: bits) @env0:bitOr: (chunk @env0:bitAnd: ((1 @env0:bitShift: bits) ___minus___: 1)).
-		bitsNeeded := bitsNeeded ___minus___: 32.
+		bits := bitsNeeded @env0:min: 32.
+		result := (result @env0:bitShift: bits) @env0:bitOr: (chunk @env0:bitAnd: ((1 @env0:bitShift: bits) @env0:- 1)).
+		bitsNeeded := bitsNeeded @env0:- 32.
 	].
 	^ result
 %
@@ -149,11 +149,11 @@ method: random
 randbytes: n
 	"randbytes(n) -> n random bytes."
 	| result |
-	(n ___lt___: 0) ifTrue: [ValueError ___signal___: 'number of bytes must be non-negative'].
-	(n ___eq___: 0) ifTrue: [^ bytes ___new___].
+	(n @env0:< 0) ifTrue: [ValueError ___signal___: 'number of bytes must be non-negative'].
+	(n @env0:= 0) ifTrue: [^ bytes ___new___].
 	result := ByteArray ___new___: n.
-	1 ___to___: n do: [:i |
-		result ___at___: i put: ((self _generator @env0:integer) @env0:bitAnd: 16rFF)
+	1 @env0:to: n do: [:i |
+		result @env0:at: i put: ((self _generator @env0:integer) @env0:bitAnd: 16rFF)
 	].
 	^ result
 %
@@ -164,8 +164,8 @@ paretovariate: alpha
 	"paretovariate(alpha) -> random float from Pareto distribution."
 	| u |
 	u := self _generator @env0:float.
-	[u ___eq___: 0.0] ___whileTrue___: [u := self _generator @env0:float].
-	^ 1.0 @env0:/ (u ___raisedTo___: (1.0 @env0:/ alpha))
+	[u @env0:= 0.0] @env0:whileTrue: [u := self _generator @env0:float].
+	^ 1.0 @env0:/ (u @env0:raisedTo: (1.0 @env0:/ alpha))
 %
 
 category: 'Python-Built-in Functions'
@@ -174,8 +174,8 @@ expovariate: lambd
 	"expovariate(lambd) -> random float from exponential distribution."
 	| u |
 	u := self _generator @env0:float.
-	[u ___eq___: 0.0] ___whileTrue___: [u := self _generator @env0:float].
-	^ (((1.0 ___minus___: u) @env0:ln) @env0:negated) @env0:/ lambd
+	[u @env0:= 0.0] @env0:whileTrue: [u := self _generator @env0:float].
+	^ (((1.0 @env0:- u) @env0:ln) @env0:negated) @env0:/ lambd
 %
 
 ! ===============================================================================
@@ -193,7 +193,7 @@ category: 'Python-Built-in Functions'
 method: random
 uniform: a _: b
 	"uniform(a, b) -> random float N such that a <= N <= b."
-	^ a ___plus___: ((self _generator @env0:float) ___times___: (b ___minus___: a))
+	^ a @env0:+ ((self _generator @env0:float) @env0:* (b @env0:- a))
 %
 
 category: 'Python-Built-in Functions'
@@ -202,9 +202,9 @@ gauss: mu _: sigma
 	"gauss(mu, sigma) -> random float from Gaussian distribution."
 	| u1 u2 z |
 	u1 := self _generator @env0:float. u2 := self _generator @env0:float.
-	[u1 ___eq___: 0.0] ___whileTrue___: [u1 := self _generator @env0:float].
-	z := ((-2.0 ___times___: (u1 @env0:ln)) ___sqrt___) ___times___: (((2.0 ___times___: (Float @env0:pi)) ___times___: u2) @env0:cos).
-	^ mu ___plus___: (z ___times___: sigma)
+	[u1 @env0:= 0.0] @env0:whileTrue: [u1 := self _generator @env0:float].
+	z := ((-2.0 @env0:* (u1 @env0:ln)) @env0:sqrt) @env0:* (((2.0 @env0:* (Float @env0:pi)) @env0:* u2) @env0:cos).
+	^ mu @env0:+ (z @env0:* sigma)
 %
 
 category: 'Python-Built-in Functions'
@@ -227,8 +227,8 @@ betavariate: alpha _: beta
 	"betavariate(alpha, beta) -> random float from beta distribution."
 	| y |
 	y := self gammavariate: alpha _: 1.0.
-	(y ___eq___: 0) ifTrue: [^ 0.0].
-	^ y @env0:/ (y ___plus___: (self gammavariate: beta _: 1.0))
+	(y @env0:= 0) ifTrue: [^ 0.0].
+	^ y @env0:/ (y @env0:+ (self gammavariate: beta _: 1.0))
 %
 
 category: 'Python-Built-in Functions'
@@ -236,30 +236,30 @@ method: random
 gammavariate: alpha _: beta
 	"gammavariate(alpha, beta) -> random float from gamma distribution."
 	| result |
-	(alpha ___le___: 0) ifTrue: [ValueError ___signal___: 'gammavariate: alpha must be > 0'].
-	(beta ___le___: 0) ifTrue: [ValueError ___signal___: 'gammavariate: beta must be > 0'].
-	(alpha ___ge___: 1.0) ifTrue: [
+	(alpha @env0:<= 0) ifTrue: [ValueError ___signal___: 'gammavariate: alpha must be > 0'].
+	(beta @env0:<= 0) ifTrue: [ValueError ___signal___: 'gammavariate: beta must be > 0'].
+	(alpha @env0:>= 1.0) ifTrue: [
 		| d c x v u |
-		d := alpha ___minus___: (1.0 @env0:/ 3.0).
-		c := 1.0 @env0:/ (9.0 ___times___: d) ___sqrt___.
+		d := alpha @env0:- (1.0 @env0:/ 3.0).
+		c := 1.0 @env0:/ (9.0 @env0:* d) @env0:sqrt.
 		result := nil.
-		[result == nil] ___whileTrue___: [
+		[result == nil] @env0:whileTrue: [
 			x := self gauss: 0.0 _: 1.0.
-			v := (1.0 ___plus___: (c ___times___: x)) ___raisedTo___: 3.
-			(v ___gt___: 0) ifTrue: [
+			v := (1.0 @env0:+ (c @env0:* x)) @env0:raisedTo: 3.
+			(v @env0:> 0) ifTrue: [
 				u := self _generator @env0:float.
-				((u ___lt___: (1.0 ___minus___: ((0.0331 ___times___: (x ___times___: x)) ___times___: (x ___times___: x))))
-					or: [(u @env0:ln) ___lt___: (((0.5 ___times___: x) ___times___: x) ___plus___: (d ___times___: ((1.0 ___minus___: v) ___plus___: (v @env0:ln))))]) ifTrue: [
-					result := (d ___times___: v) ___times___: beta.
+				((u @env0:< (1.0 @env0:- ((0.0331 @env0:* (x @env0:* x)) @env0:* (x @env0:* x))))
+					or: [(u @env0:ln) @env0:< (((0.5 @env0:* x) @env0:* x) @env0:+ (d @env0:* ((1.0 @env0:- v) @env0:+ (v @env0:ln))))]) ifTrue: [
+					result := (d @env0:* v) @env0:* beta.
 				].
 			].
 		].
 	] ifFalse: [
 		| u g |
 		u := self _generator @env0:float.
-		[u ___eq___: 0.0] ___whileTrue___: [u := self _generator @env0:float].
-		g := self gammavariate: (alpha ___plus___: 1.0) _: 1.0.
-		result := (g ___times___: (u ___raisedTo___: (1.0 @env0:/ alpha))) ___times___: beta.
+		[u @env0:= 0.0] @env0:whileTrue: [u := self _generator @env0:float].
+		g := self gammavariate: (alpha @env0:+ 1.0) _: 1.0.
+		result := (g @env0:* (u @env0:raisedTo: (1.0 @env0:/ alpha))) @env0:* beta.
 	].
 	^ result
 %
@@ -270,8 +270,8 @@ weibullvariate: alpha _: beta
 	"weibullvariate(alpha, beta) -> random float from Weibull distribution."
 	| u |
 	u := self _generator @env0:float.
-	[u ___eq___: 0.0] ___whileTrue___: [u := self _generator @env0:float].
-	^ alpha ___times___: ((((1.0 ___minus___: u) @env0:ln) @env0:negated) ___raisedTo___: (1.0 @env0:/ beta))
+	[u @env0:= 0.0] @env0:whileTrue: [u := self _generator @env0:float].
+	^ alpha @env0:* ((((1.0 @env0:- u) @env0:ln) @env0:negated) @env0:raisedTo: (1.0 @env0:/ beta))
 %
 
 ! ===============================================================================
@@ -284,11 +284,11 @@ triangular: low _: high _: mode
 	"triangular(low, high, mode) -> random float from triangular distribution."
 	| u c |
 	u := self _generator @env0:float.
-	c := (mode ___minus___: low) @env0:/ (high ___minus___: low).
-	(u ___lt___: c) ifTrue: [
-		^ low ___plus___: (((u ___times___: (high ___minus___: low)) ___times___: (mode ___minus___: low)) ___sqrt___)
+	c := (mode @env0:- low) @env0:/ (high @env0:- low).
+	(u @env0:< c) ifTrue: [
+		^ low @env0:+ (((u @env0:* (high @env0:- low)) @env0:* (mode @env0:- low)) @env0:sqrt)
 	].
-	^ high ___minus___: ((((1.0 ___minus___: u) ___times___: (high ___minus___: low)) ___times___: (high ___minus___: mode)) ___sqrt___)
+	^ high @env0:- ((((1.0 @env0:- u) @env0:* (high @env0:- low)) @env0:* (high @env0:- mode)) @env0:sqrt)
 %
 
 ! ===============================================================================
@@ -307,11 +307,11 @@ method: random
 _seed: positional kw: kwargs
 	"seed(a=None) -> initialize internal state from a seed."
 	| a |
-	a := (positional ___size___ ___ge___: 1) ifTrue: [positional ___at___: 1] ifFalse: [nil].
+	a := (positional @env0:size @env0:>= 1) ifTrue: [positional @env0:at: 1] ifFalse: [nil].
 	(a == nil or: [a == None]) ifTrue: [
-		self ___at___: #_generator put: (Random ___new___)
+		self @env0:at: #_generator put: (Random ___new___)
 	] ifFalse: [
-		self ___at___: #_generator put: (Random @env0:seed: a ___asInteger___)
+		self @env0:at: #_generator put: (Random @env0:seed: a @env0:asInteger)
 	].
 	^ None
 %
@@ -328,36 +328,36 @@ method: random
 _sample: positional kw: kwargs
 	"sample(population, k=?) -> k-length list of unique elements."
 	| population k n result |
-	population := positional ___at___: 1.
-	k := (positional ___size___ ___ge___: 2)
-		ifTrue: [positional ___at___: 2]
+	population := positional @env0:at: 1.
+	k := (positional @env0:size @env0:>= 2)
+		ifTrue: [positional @env0:at: 2]
 		ifFalse: [
 			(kwargs notNil and: [kwargs @env0:includesKey: #k])
-				ifTrue: [kwargs ___at___: #k] ifFalse: [nil]
+				ifTrue: [kwargs @env0:at: #k] ifFalse: [nil]
 		].
 	k ifNil: [TypeError ___signal___: 'sample() missing required argument: k'].
 	n := self _sequenceLength: population.
-	(k ___lt___: 0) ifTrue: [ValueError ___signal___: 'Sample larger than population or is negative'].
-	(k ___gt___: n) ifTrue: [ValueError ___signal___: 'Sample larger than population or is negative'].
+	(k @env0:< 0) ifTrue: [ValueError ___signal___: 'Sample larger than population or is negative'].
+	(k @env0:> n) ifTrue: [ValueError ___signal___: 'Sample larger than population or is negative'].
 	result := list ___new___.
-	((k ___times___: 3) ___le___: n) ifTrue: [
+	((k @env0:* 3) @env0:<= n) ifTrue: [
 		| selected |
 		selected := IdentitySet ___new___.
-		[selected ___size___ ___lt___: k] ___whileTrue___: [
+		[selected @env0:size @env0:< k] @env0:whileTrue: [
 			| idx |
 			idx := self _generator @env0:integerBetween: 1 and: n.
 			(selected @env0:includes: idx) ifFalse: [
-				selected @env0:add: idx. result @env1:append: (population ___at___: idx).
+				selected @env0:add: idx. result @env1:append: (population @env0:at: idx).
 			].
 		].
 	] ifFalse: [
 		| pool |
 		pool := Array ___new___: n.
-		1 ___to___: n do: [:i | pool ___at___: i put: (population ___at___: i)].
-		1 ___to___: k do: [:i |
+		1 @env0:to: n do: [:i | pool @env0:at: i put: (population @env0:at: i)].
+		1 @env0:to: k do: [:i |
 			| j temp |
 			j := self _generator @env0:integerBetween: i and: n.
-			temp := pool ___at___: j. pool ___at___: j put: (pool ___at___: i). pool ___at___: i put: temp.
+			temp := pool @env0:at: j. pool @env0:at: j put: (pool @env0:at: i). pool @env0:at: i put: temp.
 			result @env1:append: temp.
 		].
 	].
@@ -369,41 +369,41 @@ method: random
 _choices: positional kw: kwargs
 	"choices(population, weights=None, cum_weights=None, k=1)."
 	| population weights cumWeights k result total n |
-	population := positional ___at___: 1.
+	population := positional @env0:at: 1.
 	n := self _sequenceLength: population.
-	(n ___eq___: 0) ifTrue: [IndexError ___signal___: 'Cannot choose from an empty population'].
+	(n @env0:= 0) ifTrue: [IndexError ___signal___: 'Cannot choose from an empty population'].
 	weights := (kwargs notNil and: [kwargs @env0:includesKey: #weights])
-		ifTrue: [kwargs ___at___: #weights] ifFalse: [nil].
+		ifTrue: [kwargs @env0:at: #weights] ifFalse: [nil].
 	cumWeights := (kwargs notNil and: [kwargs @env0:includesKey: #'cum_weights'])
-		ifTrue: [kwargs ___at___: #'cum_weights'] ifFalse: [nil].
+		ifTrue: [kwargs @env0:at: #'cum_weights'] ifFalse: [nil].
 	k := (kwargs notNil and: [kwargs @env0:includesKey: #k])
-		ifTrue: [kwargs ___at___: #k] ifFalse: [1].
+		ifTrue: [kwargs @env0:at: #k] ifFalse: [1].
 	(weights notNil and: [cumWeights notNil]) ifTrue: [
 		TypeError ___signal___: 'Cannot specify both weights and cum_weights'
 	].
 	weights notNil ifTrue: [
 		total := 0. cumWeights := Array ___new___: n.
-		1 ___to___: n do: [:i |
-			total := total ___plus___: (weights ___at___: i). cumWeights ___at___: i put: total.
+		1 @env0:to: n do: [:i |
+			total := total @env0:+ (weights @env0:at: i). cumWeights @env0:at: i put: total.
 		].
 	].
 	cumWeights notNil ifTrue: [
-		total := cumWeights ___at___: n.
-		(total ___le___: 0) ifTrue: [ValueError ___signal___: 'Total of weights must be greater than zero'].
+		total := cumWeights @env0:at: n.
+		(total @env0:<= 0) ifTrue: [ValueError ___signal___: 'Total of weights must be greater than zero'].
 		result := list ___new___.
-		1 ___to___: k do: [:unused |
+		1 @env0:to: k do: [:unused |
 			| r idx |
-			r := (self _generator @env0:float) ___times___: total.
+			r := (self _generator @env0:float) @env0:* total.
 			idx := 1.
-			[(idx ___lt___: n) and: [(cumWeights ___at___: idx) ___le___: r]] ___whileTrue___: [idx := idx ___plus___: 1].
-			result @env1:append: (population ___at___: idx).
+			[(idx @env0:< n) and: [(cumWeights @env0:at: idx) @env0:<= r]] @env0:whileTrue: [idx := idx @env0:+ 1].
+			result @env1:append: (population @env0:at: idx).
 		].
 	] ifFalse: [
 		result := list ___new___.
-		1 ___to___: k do: [:unused |
+		1 @env0:to: k do: [:unused |
 			| idx |
 			idx := self _generator @env0:integerBetween: 1 and: n.
-			result @env1:append: (population ___at___: idx).
+			result @env1:append: (population @env0:at: idx).
 		].
 	].
 	^ result
@@ -435,23 +435,23 @@ method: random
 _randrange: positional kw: kwargs
 	"randrange(stop) or randrange(start, stop[, step])."
 	| start stop step count r |
-	(positional ___size___ ___eq___: 1) ifTrue: [
-		start := 0. stop := positional ___at___: 1. step := 1.
+	(positional @env0:size @env0:= 1) ifTrue: [
+		start := 0. stop := positional @env0:at: 1. step := 1.
 	] ifFalse: [
-		start := positional ___at___: 1. stop := positional ___at___: 2.
-		step := (positional ___size___ ___ge___: 3) ifTrue: [positional ___at___: 3] ifFalse: [1].
+		start := positional @env0:at: 1. stop := positional @env0:at: 2.
+		step := (positional @env0:size @env0:>= 3) ifTrue: [positional @env0:at: 3] ifFalse: [1].
 	].
-	(step ___eq___: 0) ifTrue: [ValueError ___signal___: 'zero step for randrange()'].
-	(step ___gt___: 0) ifTrue: [
-		count := (((stop ___minus___: start) ___plus___: step) ___minus___: 1) @env0:// step.
+	(step @env0:= 0) ifTrue: [ValueError ___signal___: 'zero step for randrange()'].
+	(step @env0:> 0) ifTrue: [
+		count := (((stop @env0:- start) @env0:+ step) @env0:- 1) @env0:// step.
 	] ifFalse: [
 		| diff negStep |
-		diff := start ___minus___: stop. negStep := step @env0:negated.
-		count := ((diff ___plus___: negStep) ___minus___: 1) @env0:// negStep.
+		diff := start @env0:- stop. negStep := step @env0:negated.
+		count := ((diff @env0:+ negStep) @env0:- 1) @env0:// negStep.
 	].
-	(count ___le___: 0) ifTrue: [ValueError ___signal___: 'empty range for randrange()'].
-	r := self _generator @env0:integerBetween: 0 and: (count ___minus___: 1).
-	^ start ___plus___: (r ___times___: step)
+	(count @env0:<= 0) ifTrue: [ValueError ___signal___: 'empty range for randrange()'].
+	r := self _generator @env0:integerBetween: 0 and: (count @env0:- 1).
+	^ start @env0:+ (r @env0:* step)
 %
 
 category: 'Python-Built-in Functions'
@@ -466,13 +466,13 @@ method: random
 _binomialvariate: positional kw: kwargs
 	"binomialvariate(n=1, p=0.5)."
 	| n p successes |
-	n := (positional ___size___ ___ge___: 1) ifTrue: [positional ___at___: 1] ifFalse: [1].
-	p := (positional ___size___ ___ge___: 2) ifTrue: [positional ___at___: 2] ifFalse: [0.5].
-	(n ___lt___: 0) ifTrue: [ValueError ___signal___: 'n must be non-negative'].
-	((p ___lt___: 0) or: [p ___gt___: 1]) ifTrue: [ValueError ___signal___: 'p must be in range [0, 1]'].
+	n := (positional @env0:size @env0:>= 1) ifTrue: [positional @env0:at: 1] ifFalse: [1].
+	p := (positional @env0:size @env0:>= 2) ifTrue: [positional @env0:at: 2] ifFalse: [0.5].
+	(n @env0:< 0) ifTrue: [ValueError ___signal___: 'n must be non-negative'].
+	((p @env0:< 0) or: [p @env0:> 1]) ifTrue: [ValueError ___signal___: 'p must be in range [0, 1]'].
 	successes := 0.
-	1 ___to___: n do: [:unused |
-		((self _generator @env0:float) ___lt___: p) ifTrue: [successes := successes ___plus___: 1]
+	1 @env0:to: n do: [:unused |
+		((self _generator @env0:float) @env0:< p) ifTrue: [successes := successes @env0:+ 1]
 	].
 	^ successes
 %
@@ -482,10 +482,10 @@ method: random
 _triangular: positional kw: kwargs
 	"triangular(low=0.0, high=1.0, mode=None) — varargs form."
 	| low high mode |
-	low := (positional ___size___ ___ge___: 1) ifTrue: [positional ___at___: 1] ifFalse: [0.0].
-	high := (positional ___size___ ___ge___: 2) ifTrue: [positional ___at___: 2] ifFalse: [1.0].
-	mode := (positional ___size___ ___ge___: 3) ifTrue: [positional ___at___: 3] ifFalse: [nil].
-	(mode == nil or: [mode == None]) ifTrue: [mode := (low ___plus___: high) @env0:/ 2.0].
+	low := (positional @env0:size @env0:>= 1) ifTrue: [positional @env0:at: 1] ifFalse: [0.0].
+	high := (positional @env0:size @env0:>= 2) ifTrue: [positional @env0:at: 2] ifFalse: [1.0].
+	mode := (positional @env0:size @env0:>= 3) ifTrue: [positional @env0:at: 3] ifFalse: [nil].
+	(mode == nil or: [mode == None]) ifTrue: [mode := (low @env0:+ high) @env0:/ 2.0].
 	^ self triangular: low _: high _: mode
 %
 
@@ -494,8 +494,8 @@ method: random
 _gauss: positional kw: kwargs
 	"gauss(mu=0.0, sigma=1.0) — varargs form."
 	| mu sigma |
-	mu := (positional ___size___ ___ge___: 1) ifTrue: [positional ___at___: 1] ifFalse: [0.0].
-	sigma := (positional ___size___ ___ge___: 2) ifTrue: [positional ___at___: 2] ifFalse: [1.0].
+	mu := (positional @env0:size @env0:>= 1) ifTrue: [positional @env0:at: 1] ifFalse: [0.0].
+	sigma := (positional @env0:size @env0:>= 2) ifTrue: [positional @env0:at: 2] ifFalse: [1.0].
 	^ self gauss: mu _: sigma
 %
 
@@ -504,8 +504,8 @@ method: random
 _normalvariate: positional kw: kwargs
 	"normalvariate(mu=0.0, sigma=1.0) — varargs form."
 	| mu sigma |
-	mu := (positional ___size___ ___ge___: 1) ifTrue: [positional ___at___: 1] ifFalse: [0.0].
-	sigma := (positional ___size___ ___ge___: 2) ifTrue: [positional ___at___: 2] ifFalse: [1.0].
+	mu := (positional @env0:size @env0:>= 1) ifTrue: [positional @env0:at: 1] ifFalse: [0.0].
+	sigma := (positional @env0:size @env0:>= 2) ifTrue: [positional @env0:at: 2] ifFalse: [1.0].
 	^ self gauss: mu _: sigma
 %
 
@@ -514,7 +514,7 @@ method: random
 _expovariate: positional kw: kwargs
 	"expovariate(lambd=1.0) — varargs form."
 	| lambd |
-	lambd := (positional ___size___ ___ge___: 1) ifTrue: [positional ___at___: 1] ifFalse: [1.0].
+	lambd := (positional @env0:size @env0:>= 1) ifTrue: [positional @env0:at: 1] ifFalse: [1.0].
 	^ self expovariate: lambd
 %
 

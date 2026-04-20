@@ -91,14 +91,14 @@ printSmalltalkLegacyOn: aStream
 	].
 
 	body variables do: [:each |
-		aStream nextPutAll: '___cls___ ___at___: #'''.
+		aStream nextPutAll: '___cls___ @env0:at: #'''.
 		aStream nextPutAll: each.
 		aStream nextPutAll: ''' put: '.
 		aStream nextPutAll: each.
 		aStream nextPut: $.; lf.
 	].
 
-	aStream nextPutAll: '___cls___ ___at___: #''__name__'' put: #'''.
+	aStream nextPutAll: '___cls___ @env0:at: #''__name__'' put: #'''.
 	aStream nextPutAll: name.
 	aStream nextPutAll: '''.'; lf.
 

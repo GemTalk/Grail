@@ -66,8 +66,8 @@ test__contains__
 	| tup |
 	tup := InvariantArray withAll: #(1 2 3).
 	
-	self assert: (tup ___contains___: 2).
-	self deny: (tup ___contains___: 4).
+	self assert: (tup @env1:__contains__: 2).
+	self deny: (tup @env1:__contains__: 4).
 %
 
 category: 'Tests - Immutability'

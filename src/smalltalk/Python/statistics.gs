@@ -38,7 +38,7 @@ set compile_env: 1
 category: 'Python-Private'
 method: statistics
 _len: data
-	^ [data __len__] ___on___: MessageNotUnderstood do: [:ex | data ___size___]
+	^ [data __len__] @env0:on: MessageNotUnderstood do: [:ex | data @env0:size]
 %
 
 category: 'Python-Private'
@@ -46,7 +46,7 @@ method: statistics
 _sum: data
 	| total |
 	total := 0.
-	data ___do___: [:each | total := total ___plus___: each].
+	data @env0:do: [:each | total := total @env0:+ each].
 	^ total
 %
 
@@ -55,7 +55,7 @@ method: statistics
 _toList: data
 	| result |
 	result := OrderedCollection ___new___.
-	data ___do___: [:each | result ___add___: each].
+	data @env0:do: [:each | result @env0:add: each].
 	^ result
 %
 
@@ -78,9 +78,9 @@ method: statistics
 mean: data
 	| d n |
 	d := self _toList: data.
-	n := d ___size___.
-	(n ___eq___: 0) ifTrue: [StatisticsError ___signal___: 'mean requires at least one data point'].
-	^ (self _sum: d) ___divide___: n
+	n := d @env0:size.
+	(n @env0:= 0) ifTrue: [StatisticsError ___signal___: 'mean requires at least one data point'].
+	^ (self _sum: d) @env0:/ n
 %
 
 category: 'Python-Built-in Functions'
@@ -88,13 +88,13 @@ method: statistics
 median: data
 	| d sorted n mid |
 	d := self _toList: data.
-	n := d ___size___.
-	(n ___eq___: 0) ifTrue: [StatisticsError ___signal___: 'median requires at least one data point'].
+	n := d @env0:size.
+	(n @env0:= 0) ifTrue: [StatisticsError ___signal___: 'median requires at least one data point'].
 	sorted := d @env0:asSortedCollection.
-	mid := (n ___plus___: 1) ___divideInteger___: 2.
-	^ ((n ___modulo___: 2) ___eq___: 1)
-		ifTrue: [sorted ___at___: mid]
-		ifFalse: [((sorted ___at___: mid) ___plus___: (sorted ___at___: (mid ___plus___: 1))) ___divide___: 2.0]
+	mid := (n @env0:+ 1) @env0:// 2.
+	^ ((n @env0:\\ 2) @env0:= 1)
+		ifTrue: [sorted @env0:at: mid]
+		ifFalse: [((sorted @env0:at: mid) @env0:+ (sorted @env0:at: (mid @env0:+ 1))) @env0:/ 2.0]
 %
 
 category: 'Python-Built-in Functions'
@@ -102,11 +102,11 @@ method: statistics
 median_low: data
 	| d sorted n mid |
 	d := self _toList: data.
-	n := d ___size___.
-	(n ___eq___: 0) ifTrue: [StatisticsError ___signal___: 'median_low requires at least one data point'].
+	n := d @env0:size.
+	(n @env0:= 0) ifTrue: [StatisticsError ___signal___: 'median_low requires at least one data point'].
 	sorted := d @env0:asSortedCollection.
-	mid := (n ___plus___: 1) ___divideInteger___: 2.
-	^ sorted ___at___: mid
+	mid := (n @env0:+ 1) @env0:// 2.
+	^ sorted @env0:at: mid
 %
 
 category: 'Python-Built-in Functions'
@@ -114,12 +114,12 @@ method: statistics
 median_high: data
 	| d sorted n mid |
 	d := self _toList: data.
-	n := d ___size___.
-	(n ___eq___: 0) ifTrue: [StatisticsError ___signal___: 'median_high requires at least one data point'].
+	n := d @env0:size.
+	(n @env0:= 0) ifTrue: [StatisticsError ___signal___: 'median_high requires at least one data point'].
 	sorted := d @env0:asSortedCollection.
-	^ ((n ___modulo___: 2) ___eq___: 1)
-		ifTrue: [sorted ___at___: ((n ___plus___: 1) ___divideInteger___: 2)]
-		ifFalse: [sorted ___at___: ((n ___divideInteger___: 2) ___plus___: 1)]
+	^ ((n @env0:\\ 2) @env0:= 1)
+		ifTrue: [sorted @env0:at: ((n @env0:+ 1) @env0:// 2)]
+		ifFalse: [sorted @env0:at: ((n @env0:// 2) @env0:+ 1)]
 %
 
 category: 'Python-Built-in Functions'
@@ -127,16 +127,16 @@ method: statistics
 mode: data
 	| d counts maxCount modeValue |
 	d := self _toList: data.
-	(d ___size___ ___eq___: 0) ifTrue: [StatisticsError ___signal___: 'mode requires at least one data point'].
+	(d @env0:size @env0:= 0) ifTrue: [StatisticsError ___signal___: 'mode requires at least one data point'].
 	counts := Dictionary ___new___.
-	d ___do___: [:each |
+	d @env0:do: [:each |
 		| count |
-		count := counts ___at___: each ifAbsent: [0].
-		counts ___at___: each put: (count ___plus___: 1)
+		count := counts @env0:at: each ifAbsent: [0].
+		counts @env0:at: each put: (count @env0:+ 1)
 	].
 	maxCount := 0. modeValue := nil.
 	counts @env0:keysAndValuesDo: [:k :v |
-		(v ___gt___: maxCount) ifTrue: [maxCount := v. modeValue := k]
+		(v @env0:> maxCount) ifTrue: [maxCount := v. modeValue := k]
 	].
 	^ modeValue
 %
@@ -146,18 +146,18 @@ method: statistics
 multimode: data
 	| d counts maxCount modes |
 	d := self _toList: data.
-	(d ___size___ ___eq___: 0) ifTrue: [^ list ___new___].
+	(d @env0:size @env0:= 0) ifTrue: [^ list ___new___].
 	counts := Dictionary ___new___.
-	d ___do___: [:each |
+	d @env0:do: [:each |
 		| count |
-		count := counts ___at___: each ifAbsent: [0].
-		counts ___at___: each put: (count ___plus___: 1)
+		count := counts @env0:at: each ifAbsent: [0].
+		counts @env0:at: each put: (count @env0:+ 1)
 	].
 	maxCount := 0.
-	counts @env0:valuesDo: [:v | (v ___gt___: maxCount) ifTrue: [maxCount := v]].
+	counts @env0:valuesDo: [:v | (v @env0:> maxCount) ifTrue: [maxCount := v]].
 	modes := list ___new___.
 	counts @env0:keysAndValuesDo: [:k :v |
-		(v ___eq___: maxCount) ifTrue: [modes ___append___: k]
+		(v @env0:= maxCount) ifTrue: [modes ___append___: k]
 	].
 	^ modes
 %
@@ -167,16 +167,16 @@ method: statistics
 geometric_mean: data
 	| d n logSum |
 	d := self _toList: data.
-	n := d ___size___.
-	(n ___eq___: 0) ifTrue: [StatisticsError ___signal___: 'geometric_mean requires at least one data point'].
+	n := d @env0:size.
+	(n @env0:= 0) ifTrue: [StatisticsError ___signal___: 'geometric_mean requires at least one data point'].
 	logSum := 0.0.
-	d ___do___: [:each |
+	d @env0:do: [:each |
 		| val |
-		val := each ___asFloat___.
-		(val ___le___: 0) ifTrue: [StatisticsError ___signal___: 'geometric_mean requires strictly positive data'].
-		logSum := logSum ___plus___: (val ___ln___)
+		val := each @env0:asFloat.
+		(val @env0:<= 0) ifTrue: [StatisticsError ___signal___: 'geometric_mean requires strictly positive data'].
+		logSum := logSum @env0:+ (val @env0:ln)
 	].
-	^ (logSum ___divide___: n) @env0:exp
+	^ (logSum @env0:/ n) @env0:exp
 %
 
 ! ===============================================================================
@@ -188,18 +188,18 @@ method: statistics
 correlation: x _: y
 	| xd yd n xbar ybar sxx syy sxy |
 	xd := self _toList: x. yd := self _toList: y.
-	n := xd ___size___.
-	(n ___lt___: 2) ifTrue: [StatisticsError ___signal___: 'correlation requires at least two data points'].
-	(yd ___size___ ___ne___: n) ifTrue: [StatisticsError ___signal___: 'correlation requires that both inputs have same number of data points'].
-	xbar := (self _sum: xd) ___divide___: n. ybar := (self _sum: yd) ___divide___: n.
+	n := xd @env0:size.
+	(n @env0:< 2) ifTrue: [StatisticsError ___signal___: 'correlation requires at least two data points'].
+	(yd @env0:size @env0:~= n) ifTrue: [StatisticsError ___signal___: 'correlation requires that both inputs have same number of data points'].
+	xbar := (self _sum: xd) @env0:/ n. ybar := (self _sum: yd) @env0:/ n.
 	sxx := 0.0. syy := 0.0. sxy := 0.0.
-	1 ___to___: n do: [:i |
+	1 @env0:to: n do: [:i |
 		| dx dy |
-		dx := (xd ___at___: i) ___minus___: xbar. dy := (yd ___at___: i) ___minus___: ybar.
-		sxx := sxx ___plus___: (dx ___times___: dx). syy := syy ___plus___: (dy ___times___: dy). sxy := sxy ___plus___: (dx ___times___: dy)
+		dx := (xd @env0:at: i) @env0:- xbar. dy := (yd @env0:at: i) @env0:- ybar.
+		sxx := sxx @env0:+ (dx @env0:* dx). syy := syy @env0:+ (dy @env0:* dy). sxy := sxy @env0:+ (dx @env0:* dy)
 	].
-	((sxx ___eq___: 0) ___or___: [syy ___eq___: 0]) ifTrue: [StatisticsError ___signal___: 'at least one of the inputs is constant'].
-	^ sxy ___divide___: ((sxx ___times___: syy) @env0:sqrt)
+	((sxx @env0:= 0) ___or___: [syy @env0:= 0]) ifTrue: [StatisticsError ___signal___: 'at least one of the inputs is constant'].
+	^ sxy @env0:/ ((sxx @env0:* syy) @env0:sqrt)
 %
 
 category: 'Python-Built-in Functions'
@@ -207,17 +207,17 @@ method: statistics
 covariance: x _: y
 	| xd yd n xbar ybar total |
 	xd := self _toList: x. yd := self _toList: y.
-	n := xd ___size___.
-	(n ___lt___: 2) ifTrue: [StatisticsError ___signal___: 'covariance requires at least two data points'].
-	(yd ___size___ ___ne___: n) ifTrue: [StatisticsError ___signal___: 'covariance requires that both inputs have same number of data points'].
-	xbar := (self _sum: xd) ___divide___: n. ybar := (self _sum: yd) ___divide___: n.
+	n := xd @env0:size.
+	(n @env0:< 2) ifTrue: [StatisticsError ___signal___: 'covariance requires at least two data points'].
+	(yd @env0:size @env0:~= n) ifTrue: [StatisticsError ___signal___: 'covariance requires that both inputs have same number of data points'].
+	xbar := (self _sum: xd) @env0:/ n. ybar := (self _sum: yd) @env0:/ n.
 	total := 0.0.
-	1 ___to___: n do: [:i |
+	1 @env0:to: n do: [:i |
 		| dx dy |
-		dx := (xd ___at___: i) ___minus___: xbar. dy := (yd ___at___: i) ___minus___: ybar.
-		total := total ___plus___: (dx ___times___: dy)
+		dx := (xd @env0:at: i) @env0:- xbar. dy := (yd @env0:at: i) @env0:- ybar.
+		total := total @env0:+ (dx @env0:* dy)
 	].
-	^ total ___divide___: (n ___minus___: 1)
+	^ total @env0:/ (n @env0:- 1)
 %
 
 category: 'Python-Built-in Functions'
@@ -225,20 +225,20 @@ method: statistics
 linear_regression: x _: y
 	| xd yd n xbar ybar sxx sxy slope intercept |
 	xd := self _toList: x. yd := self _toList: y.
-	n := xd ___size___.
-	(n ___lt___: 2) ifTrue: [StatisticsError ___signal___: 'linear_regression requires at least two data points'].
-	(yd ___size___ ___ne___: n) ifTrue: [StatisticsError ___signal___: 'linear_regression requires that both inputs have same number of data points'].
-	xbar := (self _sum: xd) ___divide___: n. ybar := (self _sum: yd) ___divide___: n.
+	n := xd @env0:size.
+	(n @env0:< 2) ifTrue: [StatisticsError ___signal___: 'linear_regression requires at least two data points'].
+	(yd @env0:size @env0:~= n) ifTrue: [StatisticsError ___signal___: 'linear_regression requires that both inputs have same number of data points'].
+	xbar := (self _sum: xd) @env0:/ n. ybar := (self _sum: yd) @env0:/ n.
 	sxx := 0.0. sxy := 0.0.
-	1 ___to___: n do: [:i |
+	1 @env0:to: n do: [:i |
 		| dx dy |
-		dx := (xd ___at___: i) ___minus___: xbar. dy := (yd ___at___: i) ___minus___: ybar.
-		sxx := sxx ___plus___: (dx ___times___: dx). sxy := sxy ___plus___: (dx ___times___: dy)
+		dx := (xd @env0:at: i) @env0:- xbar. dy := (yd @env0:at: i) @env0:- ybar.
+		sxx := sxx @env0:+ (dx @env0:* dx). sxy := sxy @env0:+ (dx @env0:* dy)
 	].
-	(sxx ___eq___: 0) ifTrue: [StatisticsError ___signal___: 'x is constant'].
-	slope := sxy ___divide___: sxx.
-	intercept := ybar ___minus___: (slope ___times___: xbar).
-	^ tuple ___withAll___: {slope. intercept}
+	(sxx @env0:= 0) ifTrue: [StatisticsError ___signal___: 'x is constant'].
+	slope := sxy @env0:/ sxx.
+	intercept := ybar @env0:- (slope @env0:* xbar).
+	^ tuple @env0:withAll: {slope. intercept}
 %
 
 ! ===============================================================================
@@ -257,23 +257,23 @@ method: statistics
 _fmean: positional kw: kwargs
 	"fmean(data, weights=None)"
 	| data weights n total weightSum |
-	data := self _toList: (positional ___at___: 1).
-	n := data ___size___.
-	(n ___eq___: 0) ifTrue: [StatisticsError ___signal___: 'fmean requires at least one data point'].
-	weights := (kwargs == nil) ifTrue: [nil] ifFalse: [kwargs ___at___: #weights ifAbsent: [nil]].
+	data := self _toList: (positional @env0:at: 1).
+	n := data @env0:size.
+	(n @env0:= 0) ifTrue: [StatisticsError ___signal___: 'fmean requires at least one data point'].
+	weights := (kwargs == nil) ifTrue: [nil] ifFalse: [kwargs @env0:at: #weights ifAbsent: [nil]].
 	weights == nil ifTrue: [
 		total := 0.0.
-		data ___do___: [:each | total := total ___plus___: (each ___asFloat___)].
-		^ total ___divide___: n
+		data @env0:do: [:each | total := total @env0:+ (each @env0:asFloat)].
+		^ total @env0:/ n
 	].
-	(weights ___size___ ___ne___: n) ifTrue: [ValueError ___signal___: 'weights and data must be the same length'].
+	(weights @env0:size @env0:~= n) ifTrue: [ValueError ___signal___: 'weights and data must be the same length'].
 	total := 0.0. weightSum := 0.0.
-	1 ___to___: n do: [:i |
+	1 @env0:to: n do: [:i |
 		| w d |
-		w := (weights ___at___: i) ___asFloat___. d := (data ___at___: i) ___asFloat___.
-		total := total ___plus___: (w ___times___: d). weightSum := weightSum ___plus___: w
+		w := (weights @env0:at: i) @env0:asFloat. d := (data @env0:at: i) @env0:asFloat.
+		total := total @env0:+ (w @env0:* d). weightSum := weightSum @env0:+ w
 	].
-	^ total ___divide___: weightSum
+	^ total @env0:/ weightSum
 %
 
 category: 'Python-Built-in Functions'
@@ -288,31 +288,31 @@ method: statistics
 _harmonic_mean: positional kw: kwargs
 	"harmonic_mean(data, weights=None)"
 	| data weights n recipSum weightSum |
-	data := self _toList: (positional ___at___: 1).
-	n := data ___size___.
-	(n ___eq___: 0) ifTrue: [StatisticsError ___signal___: 'harmonic_mean requires at least one data point'].
-	weights := (kwargs == nil) ifTrue: [nil] ifFalse: [kwargs ___at___: #weights ifAbsent: [nil]].
+	data := self _toList: (positional @env0:at: 1).
+	n := data @env0:size.
+	(n @env0:= 0) ifTrue: [StatisticsError ___signal___: 'harmonic_mean requires at least one data point'].
+	weights := (kwargs == nil) ifTrue: [nil] ifFalse: [kwargs @env0:at: #weights ifAbsent: [nil]].
 	weights == nil ifTrue: [
 		recipSum := 0.0.
-		data ___do___: [:each |
+		data @env0:do: [:each |
 			| val |
-			val := each ___asFloat___.
-			(val ___eq___: 0) ifTrue: [^ 0.0].
-			(val ___lt___: 0) ifTrue: [StatisticsError ___signal___: 'harmonic_mean does not support negative values'].
-			recipSum := recipSum ___plus___: (1.0 ___divide___: val)
+			val := each @env0:asFloat.
+			(val @env0:= 0) ifTrue: [^ 0.0].
+			(val @env0:< 0) ifTrue: [StatisticsError ___signal___: 'harmonic_mean does not support negative values'].
+			recipSum := recipSum @env0:+ (1.0 @env0:/ val)
 		].
-		^ n ___divide___: recipSum
+		^ n @env0:/ recipSum
 	].
-	(weights ___size___ ___ne___: n) ifTrue: [ValueError ___signal___: 'weights and data must be the same length'].
+	(weights @env0:size @env0:~= n) ifTrue: [ValueError ___signal___: 'weights and data must be the same length'].
 	recipSum := 0.0. weightSum := 0.0.
-	1 ___to___: n do: [:i |
+	1 @env0:to: n do: [:i |
 		| w val |
-		w := (weights ___at___: i) ___asFloat___. val := (data ___at___: i) ___asFloat___.
-		(val ___eq___: 0) ifTrue: [^ 0.0].
-		(val ___lt___: 0) ifTrue: [StatisticsError ___signal___: 'harmonic_mean does not support negative values'].
-		recipSum := recipSum ___plus___: (w ___divide___: val). weightSum := weightSum ___plus___: w
+		w := (weights @env0:at: i) @env0:asFloat. val := (data @env0:at: i) @env0:asFloat.
+		(val @env0:= 0) ifTrue: [^ 0.0].
+		(val @env0:< 0) ifTrue: [StatisticsError ___signal___: 'harmonic_mean does not support negative values'].
+		recipSum := recipSum @env0:+ (w @env0:/ val). weightSum := weightSum @env0:+ w
 	].
-	^ weightSum ___divide___: recipSum
+	^ weightSum @env0:/ recipSum
 %
 
 category: 'Python-Built-in Functions'
@@ -327,16 +327,16 @@ method: statistics
 _pvariance: positional kw: kwargs
 	"pvariance(data, mu=None)"
 	| data mu n total |
-	data := self _toList: (positional ___at___: 1).
-	n := data ___size___.
-	(n ___lt___: 1) ifTrue: [StatisticsError ___signal___: 'pvariance requires at least one data point'].
-	mu := (positional ___size___ ___ge___: 2)
-		ifTrue: [positional ___at___: 2]
-		ifFalse: [(kwargs == nil) ifTrue: [nil] ifFalse: [kwargs ___at___: #mu ifAbsent: [nil]]].
-	mu == nil ifTrue: [mu := (self _sum: data) ___divide___: n].
+	data := self _toList: (positional @env0:at: 1).
+	n := data @env0:size.
+	(n @env0:< 1) ifTrue: [StatisticsError ___signal___: 'pvariance requires at least one data point'].
+	mu := (positional @env0:size @env0:>= 2)
+		ifTrue: [positional @env0:at: 2]
+		ifFalse: [(kwargs == nil) ifTrue: [nil] ifFalse: [kwargs @env0:at: #mu ifAbsent: [nil]]].
+	mu == nil ifTrue: [mu := (self _sum: data) @env0:/ n].
 	total := 0.0.
-	data ___do___: [:each | | diff | diff := each ___minus___: mu. total := total ___plus___: (diff ___times___: diff)].
-	^ total ___divide___: n
+	data @env0:do: [:each | | diff | diff := each @env0:- mu. total := total @env0:+ (diff @env0:* diff)].
+	^ total @env0:/ n
 %
 
 category: 'Python-Built-in Functions'
@@ -365,16 +365,16 @@ method: statistics
 _variance: positional kw: kwargs
 	"variance(data, xbar=None)"
 	| data xbar n total |
-	data := self _toList: (positional ___at___: 1).
-	n := data ___size___.
-	(n ___lt___: 2) ifTrue: [StatisticsError ___signal___: 'variance requires at least two data points'].
-	xbar := (positional ___size___ ___ge___: 2)
-		ifTrue: [positional ___at___: 2]
-		ifFalse: [(kwargs == nil) ifTrue: [nil] ifFalse: [kwargs ___at___: #xbar ifAbsent: [nil]]].
-	xbar == nil ifTrue: [xbar := (self _sum: data) ___divide___: n].
+	data := self _toList: (positional @env0:at: 1).
+	n := data @env0:size.
+	(n @env0:< 2) ifTrue: [StatisticsError ___signal___: 'variance requires at least two data points'].
+	xbar := (positional @env0:size @env0:>= 2)
+		ifTrue: [positional @env0:at: 2]
+		ifFalse: [(kwargs == nil) ifTrue: [nil] ifFalse: [kwargs @env0:at: #xbar ifAbsent: [nil]]].
+	xbar == nil ifTrue: [xbar := (self _sum: data) @env0:/ n].
 	total := 0.0.
-	data ___do___: [:each | | diff | diff := each ___minus___: xbar. total := total ___plus___: (diff ___times___: diff)].
-	^ total ___divide___: (n ___minus___: 1)
+	data @env0:do: [:each | | diff | diff := each @env0:- xbar. total := total @env0:+ (diff @env0:* diff)].
+	^ total @env0:/ (n @env0:- 1)
 %
 
 category: 'Python-Built-in Functions'
@@ -403,21 +403,21 @@ method: statistics
 _median_grouped: positional kw: kwargs
 	"median_grouped(data, interval=1.0)"
 	| data interval sorted n mid L cf freq |
-	data := self _toList: (positional ___at___: 1).
-	n := data ___size___.
-	(n ___eq___: 0) ifTrue: [StatisticsError ___signal___: 'median_grouped requires at least one data point'].
-	interval := (positional ___size___ ___ge___: 2)
-		ifTrue: [positional ___at___: 2]
-		ifFalse: [(kwargs == nil) ifTrue: [1.0] ifFalse: [kwargs ___at___: #interval ifAbsent: [1.0]]].
+	data := self _toList: (positional @env0:at: 1).
+	n := data @env0:size.
+	(n @env0:= 0) ifTrue: [StatisticsError ___signal___: 'median_grouped requires at least one data point'].
+	interval := (positional @env0:size @env0:>= 2)
+		ifTrue: [positional @env0:at: 2]
+		ifFalse: [(kwargs == nil) ifTrue: [1.0] ifFalse: [kwargs @env0:at: #interval ifAbsent: [1.0]]].
 	sorted := data @env0:asSortedCollection.
-	mid := (n ___plus___: 1) ___divideInteger___: 2.
-	L := (sorted ___at___: mid) ___minus___: (interval ___divide___: 2.0).
-	cf := mid ___minus___: 1.
+	mid := (n @env0:+ 1) @env0:// 2.
+	L := (sorted @env0:at: mid) @env0:- (interval @env0:/ 2.0).
+	cf := mid @env0:- 1.
 	freq := 1.
-	mid ___plus___: 1 ___to___: n do: [:i |
-		((sorted ___at___: i) ___eq___: (sorted ___at___: mid)) ifTrue: [freq := freq ___plus___: 1]
+	mid @env0:+ 1 @env0:to: n do: [:i |
+		((sorted @env0:at: i) @env0:= (sorted @env0:at: mid)) ifTrue: [freq := freq @env0:+ 1]
 	].
-	^ L ___plus___: ((((n ___divide___: 2.0) ___minus___: cf) ___divide___: freq) ___times___: interval)
+	^ L @env0:+ ((((n @env0:/ 2.0) @env0:- cf) @env0:/ freq) @env0:* interval)
 %
 
 category: 'Python-Built-in Functions'
@@ -432,28 +432,28 @@ method: statistics
 _quantiles: positional kw: kwargs
 	"quantiles(data, n=4, method='exclusive')"
 	| data n method sorted len result |
-	data := self _toList: (positional ___at___: 1).
-	len := data ___size___.
-	(len ___lt___: 2) ifTrue: [StatisticsError ___signal___: 'quantiles requires at least two data points'].
-	n := (positional ___size___ ___ge___: 2)
-		ifTrue: [positional ___at___: 2]
-		ifFalse: [(kwargs == nil) ifTrue: [4] ifFalse: [kwargs ___at___: #n ifAbsent: [4]]].
-	(n ___lt___: 1) ifTrue: [StatisticsError ___signal___: 'n must be at least 1'].
-	method := (kwargs == nil) ifTrue: ['exclusive'] ifFalse: [kwargs ___at___: #method ifAbsent: ['exclusive']].
+	data := self _toList: (positional @env0:at: 1).
+	len := data @env0:size.
+	(len @env0:< 2) ifTrue: [StatisticsError ___signal___: 'quantiles requires at least two data points'].
+	n := (positional @env0:size @env0:>= 2)
+		ifTrue: [positional @env0:at: 2]
+		ifFalse: [(kwargs == nil) ifTrue: [4] ifFalse: [kwargs @env0:at: #n ifAbsent: [4]]].
+	(n @env0:< 1) ifTrue: [StatisticsError ___signal___: 'n must be at least 1'].
+	method := (kwargs == nil) ifTrue: ['exclusive'] ifFalse: [kwargs @env0:at: #method ifAbsent: ['exclusive']].
 	sorted := (data @env0:asSortedCollection) @env0:asArray.
 	result := list ___new___.
-	1 ___to___: (n ___minus___: 1) do: [:i |
+	1 @env0:to: (n @env0:- 1) do: [:i |
 		| m j g |
-		(method ___eq___: 'inclusive') ifTrue: [
-			m := ((len ___minus___: 1) ___times___: i) ___divide___: n.
-			j := m @env0:truncated. g := m ___minus___: j.
-			result ___add___: (((sorted ___at___: (j ___plus___: 1)) ___times___: (1 ___minus___: g)) ___plus___: ((sorted ___at___: ((j ___plus___: 2) ___min___: len)) ___times___: g))
+		(method @env0:= 'inclusive') ifTrue: [
+			m := ((len @env0:- 1) @env0:* i) @env0:/ n.
+			j := m @env0:truncated. g := m @env0:- j.
+			result @env0:add: (((sorted @env0:at: (j @env0:+ 1)) @env0:* (1 @env0:- g)) @env0:+ ((sorted @env0:at: ((j @env0:+ 2) @env0:min: len)) @env0:* g))
 		] ifFalse: [
-			m := ((len ___plus___: 1) ___times___: i) ___divide___: n.
-			j := m @env0:truncated. g := m ___minus___: j.
-			(j ___lt___: 1) ifTrue: [result ___add___: (sorted ___at___: 1)]
-				ifFalse: [(j ___ge___: len) ifTrue: [result ___add___: (sorted ___at___: len)]
-					ifFalse: [result ___add___: (((sorted ___at___: j) ___times___: (1 ___minus___: g)) ___plus___: ((sorted ___at___: (j ___plus___: 1)) ___times___: g))]]
+			m := ((len @env0:+ 1) @env0:* i) @env0:/ n.
+			j := m @env0:truncated. g := m @env0:- j.
+			(j @env0:< 1) ifTrue: [result @env0:add: (sorted @env0:at: 1)]
+				ifFalse: [(j @env0:>= len) ifTrue: [result @env0:add: (sorted @env0:at: len)]
+					ifFalse: [result @env0:add: (((sorted @env0:at: j) @env0:* (1 @env0:- g)) @env0:+ ((sorted @env0:at: (j @env0:+ 1)) @env0:* g))]]
 		]
 	].
 	^ result

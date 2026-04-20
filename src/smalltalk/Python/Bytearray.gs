@@ -79,28 +79,28 @@ __new__: cls _: source
 	"bytearray(source) - create bytearray from various sources"
 
 	| result sourceClass |
-	sourceClass := source ___class___.
+	sourceClass := source @env0:class.
 
 	"If source is an integer, create bytearray of that size filled with zeros"
 	sourceClass == SmallInteger ifTrue: [
-		(source ___lt___: 0) ifTrue: [
+		(source @env0:< 0) ifTrue: [
 			ValueError ___signal___: 'negative count'
 		].
 		^ cls ___new___: source
 	].
 
 	"If source is a string, raise TypeError (need encoding)"
-	(source ___isKindOf___: String) ifTrue: [
+	(source @env0:isKindOf: String) ifTrue: [
 		TypeError ___signal___: 'string argument without an encoding'
 	].
 
 	"If source is bytes or bytearray, make a copy"
-	((sourceClass ___eq___: bytes) or: [
-		sourceClass ___eq___: bytearray
+	((sourceClass @env0:= bytes) or: [
+		sourceClass @env0:= bytearray
 	]) ifTrue: [
-		result := cls ___new___: (source ___size___).
-		1 ___to___: source ___size___ do: [:i |
-			result ___at___: i put: (source ___at___: i)
+		result := cls ___new___: (source @env0:size).
+		1 @env0:to: source @env0:size do: [:i |
+			result @env0:at: i put: (source @env0:at: i)
 		].
 		^ result
 	].
@@ -112,19 +112,19 @@ __new__: cls _: source
 		]
 	]) ifTrue: [
 		| ba size |
-		size := source ___size___.
+		size := source @env0:size.
 		ba := cls ___new___: size.
-		1 ___to___: size do: [:i |
+		1 @env0:to: size do: [:i |
 			| elem val |
-			elem := source ___at___: i.
+			elem := source @env0:at: i.
 			val := elem.
 			"Validate byte value (0-255)"
-			((val ___lt___: 0) or: [
-				val ___gt___: 255
+			((val @env0:< 0) or: [
+				val @env0:> 255
 			]) ifTrue: [
 				ValueError ___signal___: 'bytes must be in range(0, 256)'
 			].
-			ba ___at___: i put: val
+			ba @env0:at: i put: val
 		].
 		^ ba
 	].
@@ -132,18 +132,18 @@ __new__: cls _: source
 	"If source is a range, convert to bytearray"
 	(sourceClass == Interval) ifTrue: [
 		| ba size |
-		size := source ___size___.
+		size := source @env0:size.
 		ba := cls ___new___: size.
-		1 ___to___: size do: [:i |
+		1 @env0:to: size do: [:i |
 			| val |
-			val := source ___at___: i.
+			val := source @env0:at: i.
 			"Validate byte value (0-255)"
-			((val ___lt___: 0) or: [
-				val ___gt___: 255
+			((val @env0:< 0) or: [
+				val @env0:> 255
 			]) ifTrue: [
 				ValueError ___signal___: 'bytes must be in range(0, 256)'
 			].
-			ba ___at___: i put: val
+			ba @env0:at: i put: val
 		].
 		^ ba
 	].
@@ -158,10 +158,10 @@ __new__: cls _: source _: encoding
 	"bytearray(string, encoding) - encode string to bytearray"
 
 	| result sourceClass encodingStr |
-	sourceClass := source ___class___.
+	sourceClass := source @env0:class.
 
 	"Source must be a string"
-	((source ___isKindOf___: String) not) ifTrue: [
+	((source @env0:isKindOf: String) not) ifTrue: [
 		TypeError ___signal___: 'encoding without a string argument'
 	].
 
@@ -169,56 +169,56 @@ __new__: cls _: source _: encoding
 	encodingStr := encoding.
 
 	"Support ASCII encoding"
-	(encodingStr ___eq___: 'ascii') ifTrue: [
+	(encodingStr @env0:= 'ascii') ifTrue: [
 		| ba size |
-		size := source ___size___.
+		size := source @env0:size.
 		ba := cls __new__: cls _: size.
-		1 ___to___: size do: [:i |
+		1 @env0:to: size do: [:i |
 			| char codePoint |
-			char := source ___at___: i.
-			codePoint := char ___codePoint___.
-			(codePoint ___gt___: 127) ifTrue: [
+			char := source @env0:at: i.
+			codePoint := char @env0:codePoint.
+			(codePoint @env0:> 127) ifTrue: [
 				UnicodeEncodeError ___signal___: 'ordinal not in range(128)'
 			].
-			ba ___at___: i put: codePoint
+			ba @env0:at: i put: codePoint
 		].
 		^ ba
 	].
 
 	"Support UTF-8 encoding"
-	((encodingStr ___eq___: 'utf-8') or: [
-		encodingStr ___eq___: 'utf8'
+	((encodingStr @env0:= 'utf-8') or: [
+		encodingStr @env0:= 'utf8'
 	]) ifTrue: [
 		| utf8Bytes |
 		utf8Bytes := source @env0:encodeAsUTF8.
-		result := cls __new__: (utf8Bytes ___size___).
-		1 ___to___: utf8Bytes ___size___ do: [:i |
-			result ___at___: i put: (utf8Bytes ___at___: i)
+		result := cls __new__: (utf8Bytes @env0:size).
+		1 @env0:to: utf8Bytes @env0:size do: [:i |
+			result @env0:at: i put: (utf8Bytes @env0:at: i)
 		].
 		^ result
 	].
 
 	"Support Latin-1 encoding"
-	((encodingStr ___eq___: 'latin-1') or: [
-		encodingStr ___eq___: 'latin1'
+	((encodingStr @env0:= 'latin-1') or: [
+		encodingStr @env0:= 'latin1'
 	]) ifTrue: [
 		| ba size |
-		size := source ___size___.
+		size := source @env0:size.
 		ba := cls ___new___: size.
-		1 ___to___: size do: [:i |
+		1 @env0:to: size do: [:i |
 			| char codePoint |
-			char := source ___at___: i.
-			codePoint := char ___codePoint___.
-			(codePoint ___gt___: 255) ifTrue: [
+			char := source @env0:at: i.
+			codePoint := char @env0:codePoint.
+			(codePoint @env0:> 255) ifTrue: [
 				UnicodeEncodeError ___signal___: 'ordinal not in range(256)'
 			].
-			ba ___at___: i put: codePoint
+			ba @env0:at: i put: codePoint
 		].
 		^ ba
 	].
 
 	"Unsupported encoding"
-	LookupError ___signal___: ('unknown encoding: ' ___concat___: encodingStr)
+	LookupError ___signal___: ('unknown encoding: ' @env0:, encodingStr)
 %
 
 category: 'Python-Constructors'
@@ -228,24 +228,24 @@ fromhex: cls _: hexString
 
 	| cleaned size ba |
 	"Remove spaces from hex string"
-	cleaned := hexString ___select___: [:ch |
-		(ch ___ne___: $ )
+	cleaned := hexString @env0:select: [:ch |
+		(ch @env0:~= $ )
 	].
 
 	"Hex string must have even length"
-	size := cleaned ___size___.
-	((size ___modulo___: 2) ___ne___: 0) ifTrue: [
+	size := cleaned @env0:size.
+	((size @env0:\\ 2) @env0:~= 0) ifTrue: [
 		ValueError ___signal___: 'non-hexadecimal number found in fromhex() arg'
 	].
 
 	"Create bytearray and fill with hex values"
-	ba := cls ___new___: (size ___divideInteger___: 2).
-	1 ___to___: size by: 2 do: [:i |
+	ba := cls ___new___: (size @env0:// 2).
+	1 @env0:to: size by: 2 do: [:i |
 		| hexPair byte stream |
-		hexPair := cleaned ___copyFrom___: i to: (i ___plus___: 1).
-		stream := ReadStream ___on___: ('16r' ___concat___: hexPair).
-		byte := Integer ___fromStream___: stream.
-		ba ___at___: ((i ___plus___: 1) ___divideInteger___: 2) put: byte
+		hexPair := cleaned @env0:copyFrom: i to: (i @env0:+ 1).
+		stream := ReadStream @env0:on: ('16r' @env0:, hexPair).
+		byte := Integer @env0:fromStream: stream.
+		ba @env0:at: ((i @env0:+ 1) @env0:// 2) put: byte
 	].
 
 	^ ba
@@ -264,23 +264,23 @@ __delitem__: index
 	"Delete byte at index"
 
 	| idx size |
-	size := self ___size___.
+	size := self @env0:size.
 	idx := index.
 
 	"Handle negative indices"
-	(idx ___lt___: 0) ifTrue: [
-		idx := size ___plus___: idx
+	(idx @env0:< 0) ifTrue: [
+		idx := size @env0:+ idx
 	].
 
 	"Check bounds"
-	((idx ___lt___: 0) or: [
-		idx ___ge___: size
+	((idx @env0:< 0) or: [
+		idx @env0:>= size
 	]) ifTrue: [
 		IndexError ___signal___: 'bytearray index out of range'
 	].
 
 	"Remove (convert to 1-based)"
-	self ___removeAtIndex___: (idx ___plus___: 1)
+	self @env0:removeAtIndex: (idx @env0:+ 1)
 %
 
 category: 'Python-Concatenation'
@@ -289,13 +289,13 @@ __iadd__: other
 	"In-place concatenation"
 
 	| otherClass |
-	otherClass := other ___class___.
+	otherClass := other @env0:class.
 
 	"Can only concatenate with bytes or bytearray"
-	((otherClass ___eq___: bytes) or: [
-		otherClass ___eq___: bytearray
+	((otherClass @env0:= bytes) or: [
+		otherClass @env0:= bytearray
 	]) ifFalse: [
-		TypeError ___signal___: ('can''t concat bytearray to ' ___concat___: otherClass)
+		TypeError ___signal___: ('can''t concat bytearray to ' @env0:, otherClass)
 	].
 
 	self @env1:extend: other.
@@ -311,29 +311,29 @@ __imul__: count
 	n := count.
 
 	"Validate count is an integer"
-	(n ___class___) == SmallInteger ifFalse: [
+	(n @env0:class) == SmallInteger ifFalse: [
 		TypeError ___signal___: 'can''t multiply sequence by non-int'
 	].
 
 	"If count <= 1, nothing to do (or clear if <= 0)"
-	(n ___le___: 0) ifTrue: [
-		self ___size___: 0.
+	(n @env0:<= 0) ifTrue: [
+		self @env0:size: 0.
 		^ self
 	].
 
-	(n ___eq___: 1) ifTrue: [
+	(n @env0:= 1) ifTrue: [
 		^ self
 	].
 
 	"Save original content"
-	originalSize := self ___size___.
+	originalSize := self @env0:size.
 	original := bytearray ___new___: originalSize.
-	1 ___to___: originalSize do: [:i |
-		original ___at___: i put: (self ___at___: i)
+	1 @env0:to: originalSize do: [:i |
+		original @env0:at: i put: (self @env0:at: i)
 	].
 
 	"Repeat n-1 times"
-	2 ___to___: n do: [:rep |
+	2 @env0:to: n do: [:rep |
 		self @env1:extend: original
 	].
 
@@ -345,31 +345,31 @@ method: bytearray
 __setitem__: index _: value
 	"Set byte at index (mutable)"
 	| idx size val |
-	size := self ___size___.
+	size := self @env0:size.
 	idx := index.
 	val := value.
 
 	"Handle negative indices"
-	(idx ___lt___: 0) ifTrue: [
-		idx := size ___plus___: idx
+	(idx @env0:< 0) ifTrue: [
+		idx := size @env0:+ idx
 	].
 
 	"Check bounds"
-	((idx ___lt___: 0) or: [
-		idx ___ge___: size
+	((idx @env0:< 0) or: [
+		idx @env0:>= size
 	]) ifTrue: [
 		IndexError ___signal___: 'bytearray index out of range'
 	].
 
 	"Validate byte value"
 	((val @env0:< 0) or: [
-		val ___gt___: 255
+		val @env0:> 255
 	]) ifTrue: [
 		ValueError ___signal___: 'byte must be in range(0, 256)'
 	].
 
 	"Set value (convert to 1-based index)"
-	self ___at___: (idx ___plus___: 1) put: val.
+	self @env0:at: (idx @env0:+ 1) put: val.
 	^ nil
 %
 
@@ -383,13 +383,13 @@ append: item
 
 	"Validate byte value"
 	((val @env0:< 0) or: [
-		val ___gt___: 255
+		val @env0:> 255
 	]) ifTrue: [
 		ValueError ___signal___: 'byte must be in range(0, 256)'
 	].
 
 	"Add to end"
-	self ___add___: val
+	self @env0:add: val
 %
 
 category: 'Python-Mutation Methods'
@@ -397,7 +397,7 @@ method: bytearray
 clear
 	"Remove all bytes"
 
-	self ___size___: 0
+	self @env0:size: 0
 %
 
 category: 'Python-Mutation Methods'
@@ -406,10 +406,10 @@ copy
 	"Return a shallow copy"
 
 	| result size |
-	size := self ___size___.
+	size := self @env0:size.
 	result := bytearray ___new___: size.
-	1 ___to___: size do: [:i |
-		result ___at___: i put: (self ___at___: i)
+	1 @env0:to: size do: [:i |
+		result @env0:at: i put: (self @env0:at: i)
 	].
 	^ result
 %
@@ -420,32 +420,32 @@ extend: iterable
 	"Extend bytearray with bytes from iterable"
 
 	| iterClass size |
-	iterClass := iterable ___class___.
+	iterClass := iterable @env0:class.
 
 	"Handle bytes or bytearray"
-	((iterClass ___eq___: bytes) or: [
-		iterClass ___eq___: bytearray
+	((iterClass @env0:= bytes) or: [
+		iterClass @env0:= bytearray
 	]) ifTrue: [
-		size := iterable ___size___.
-		1 ___to___: size do: [:i |
+		size := iterable @env0:size.
+		1 @env0:to: size do: [:i |
 			| byte |
-			byte := iterable ___at___: i.
+			byte := iterable @env0:at: i.
 			self append: byte
 		].
 		^ nil
 	].
 
 	"Handle list or tuple"
-	((iterClass ___eq___: list) or: [
-		iterClass ___eq___: tuple
+	((iterClass @env0:= list) or: [
+		iterClass @env0:= tuple
 	]) ifTrue: [
-		size := iterable ___size___.
-		1 ___to___: size do: [:i |
+		size := iterable @env0:size.
+		1 @env0:to: size do: [:i |
 			| val |
-			val := iterable ___at___: i.
+			val := iterable @env0:at: i.
 			"Validate byte value"
-			((val ___lt___: 0) or: [
-				val ___gt___: 255
+			((val @env0:< 0) or: [
+				val @env0:> 255
 			]) ifTrue: [
 				ValueError ___signal___: 'byte must be in range(0, 256)'
 			].
@@ -463,32 +463,32 @@ insert: index _: item
 "Insert byte at index"
 
 	| idx size val |
-	size := self ___size___.
+	size := self @env0:size.
 	idx := index.
 	val := item.
 
 	"Handle negative indices"
-	(index ___lt___: 0) ifTrue: [
-		idx := size ___plus___: idx
+	(index @env0:< 0) ifTrue: [
+		idx := size @env0:+ idx
 	].
 
 	"Clamp to valid range"
-	(index ___lt___: 0) ifTrue: [
+	(index @env0:< 0) ifTrue: [
 		idx := 0
 	].
-	(index ___gt___: size) ifTrue: [
+	(index @env0:> size) ifTrue: [
 		idx := size
 	].
 
 	"Validate byte value"
 	((val @env0:< 0) or: [
-		val ___gt___: 255
+		val @env0:> 255
 	]) ifTrue: [
 		ValueError ___signal___: 'byte must be in range(0, 256)'
 	].
 
 	"Insert at position (convert to 1-based)"
-	self @env0:insertAll: (bytearray ___with___: val) at: (index ___plus___: 1)
+	self @env0:insertAll: (bytearray @env0:with: val) at: (index @env0:+ 1)
 %
 
 category: 'Python-Mutation Methods'
@@ -497,9 +497,9 @@ pop
 	"Remove and return last byte"
 
 	| size |
-	size := self ___size___.
+	size := self @env0:size.
 
-	(size ___eq___: 0) ifTrue: [
+	(size @env0:= 0) ifTrue: [
 		IndexError ___signal___: 'pop from empty bytearray'
 	].
 
@@ -512,24 +512,24 @@ pop: index
 	"Remove and return byte at index"
 
 	| idx size byte |
-	size := self ___size___.
+	size := self @env0:size.
 	idx := index.
 
 	"Handle negative indices"
-	(idx ___lt___: 0) ifTrue: [
-		idx := size ___plus___: idx
+	(idx @env0:< 0) ifTrue: [
+		idx := size @env0:+ idx
 	].
 
 	"Check bounds"
-	((idx ___lt___: 0) or: [
-		idx ___ge___: size
+	((idx @env0:< 0) or: [
+		idx @env0:>= size
 	]) ifTrue: [
 		IndexError ___signal___: 'pop index out of range'
 	].
 
 	"Get byte and remove (convert to 1-based)"
-	byte := self ___at___: (idx ___plus___: 1).
-	self ___removeAtIndex___: (idx ___plus___: 1).
+	byte := self @env0:at: (idx @env0:+ 1).
+	self @env0:removeAtIndex: (idx @env0:+ 1).
 	^ byte
 %
 
@@ -539,13 +539,13 @@ remove: value
 	"Remove first occurrence of value"
 
 	| size |
-	size := self ___size___.
+	size := self @env0:size.
 
-	1 ___to___: size do: [:i |
+	1 @env0:to: size do: [:i |
 		| byte |
-		byte := self ___at___: i.
-		(byte ___eq___: value) ifTrue: [
-			self ___removeAtIndex___: i.
+		byte := self @env0:at: i.
+		(byte @env0:= value) ifTrue: [
+			self @env0:removeAtIndex: i.
 			^ nil
 		]
 	].
@@ -559,14 +559,14 @@ reverse
 	"Reverse bytearray in place"
 
 	| size |
-	size := self ___size___.
+	size := self @env0:size.
 
-	1 ___to___: (size ___divideInteger___: 2) do: [:i |
+	1 @env0:to: (size @env0:// 2) do: [:i |
 		| temp j |
-		j := size ___minus___: (i ___minus___: 1).
-		temp := self ___at___: i.
-		self ___at___: i put: (self ___at___: j).
-		self ___at___: j put: temp
+		j := size @env0:- (i @env0:- 1).
+		temp := self @env0:at: i.
+		self @env0:at: i put: (self @env0:at: j).
+		self @env0:at: j put: temp
 	]
 %
 

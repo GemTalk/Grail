@@ -57,14 +57,14 @@ test__contains__
 
 	| r |
 	r := Interval @env1:__new__: Interval _: 0 _: 10.
-	self assert: (r ___contains___: 5).
-	self deny: (r ___contains___: 10).
-	self deny: (r ___contains___: -1).
+	self assert: (r @env1:__contains__: 5).
+	self deny: (r @env1:__contains__: 10).
+	self deny: (r @env1:__contains__: -1).
 
 	"Test with step"
 	r := Interval @env1:__new__: Interval _: 0 _: 10 _: 2.
-	self assert: (r ___contains___: 4).
-	self deny: (r ___contains___: 5).
+	self assert: (r @env1:__contains__: 4).
+	self deny: (r @env1:__contains__: 5).
 %
 
 category: 'Tests - Comparison'

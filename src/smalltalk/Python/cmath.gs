@@ -48,9 +48,9 @@ method: cmath
 ___asComplex: z
 	"Convert z to a complex number if it isn't already"
 	| zClass |
-	zClass := z ___class___.
-	(zClass ___eq___: complex) ifTrue: [^ z].
-	^ complex __new__: (z ___asFloat___) _: 0.0
+	zClass := z @env0:class.
+	(zClass @env0:= complex) ifTrue: [^ z].
+	^ complex __new__: (z @env0:asFloat) _: 0.0
 %
 
 ! ===============================================================================
@@ -60,13 +60,13 @@ ___asComplex: z
 category: 'Python-Initialization'
 method: cmath
 initialize
-	self ___at___: #pi put: (Float @env0:pi).
-	self ___at___: #e put: (1.0 @env0:exp).
-	self ___at___: #tau put: ((Float @env0:pi) ___times___: 2.0).
-	self ___at___: #inf put: PlusInfinity.
-	self ___at___: #infj put: (complex __new__: 0.0 _: PlusInfinity).
-	self ___at___: #nan put: PlusQuietNaN.
-	self ___at___: #nanj put: (complex __new__: 0.0 _: PlusQuietNaN).
+	self @env0:at: #pi put: (Float @env0:pi).
+	self @env0:at: #e put: (1.0 @env0:exp).
+	self @env0:at: #tau put: ((Float @env0:pi) @env0:* 2.0).
+	self @env0:at: #inf put: PlusInfinity.
+	self @env0:at: #infj put: (complex __new__: 0.0 _: PlusInfinity).
+	self @env0:at: #nan put: PlusQuietNaN.
+	self @env0:at: #nanj put: (complex __new__: 0.0 _: PlusQuietNaN).
 %
 
 ! ===============================================================================
@@ -76,43 +76,43 @@ initialize
 category: 'Python-Constants'
 method: cmath
 pi
-	^ self ___at___: #pi
+	^ self @env0:at: #pi
 %
 
 category: 'Python-Constants'
 method: cmath
 e
-	^ self ___at___: #e
+	^ self @env0:at: #e
 %
 
 category: 'Python-Constants'
 method: cmath
 tau
-	^ self ___at___: #tau
+	^ self @env0:at: #tau
 %
 
 category: 'Python-Constants'
 method: cmath
 inf
-	^ self ___at___: #inf
+	^ self @env0:at: #inf
 %
 
 category: 'Python-Constants'
 method: cmath
 infj
-	^ self ___at___: #infj
+	^ self @env0:at: #infj
 %
 
 category: 'Python-Constants'
 method: cmath
 nan
-	^ self ___at___: #nan
+	^ self @env0:at: #nan
 %
 
 category: 'Python-Constants'
 method: cmath
 nanj
-	^ self ___at___: #nanj
+	^ self @env0:at: #nanj
 %
 
 ! ===============================================================================
@@ -128,7 +128,7 @@ cos: z
 	zComplex := self ___asComplex: z.
 	real := zComplex real.
 	imag := zComplex imag.
-	^ complex __new__: ((real ___cos___) ___times___: (imag @env0:cosh)) _: (((real ___sin___) ___times___: (imag @env0:sinh)) ___negated___)
+	^ complex __new__: ((real @env0:cos) @env0:* (imag @env0:cosh)) _: (((real @env0:sin) @env0:* (imag @env0:sinh)) @env0:negated)
 %
 
 category: 'Python-Trigonometric Functions'
@@ -140,7 +140,7 @@ sin: z
 	zComplex := self ___asComplex: z.
 	real := zComplex real.
 	imag := zComplex imag.
-	^ complex __new__: ((real ___sin___) ___times___: (imag @env0:cosh)) _: ((real ___cos___) ___times___: (imag @env0:sinh))
+	^ complex __new__: ((real @env0:sin) @env0:* (imag @env0:cosh)) _: ((real @env0:cos) @env0:* (imag @env0:sinh))
 %
 
 category: 'Python-Trigonometric Functions'
@@ -164,7 +164,7 @@ cosh: z
 	zComplex := self ___asComplex: z.
 	real := zComplex real.
 	imag := zComplex imag.
-	^ complex __new__: ((real @env0:cosh) ___times___: (imag ___cos___)) _: ((real @env0:sinh) ___times___: (imag ___sin___))
+	^ complex __new__: ((real @env0:cosh) @env0:* (imag @env0:cos)) _: ((real @env0:sinh) @env0:* (imag @env0:sin))
 %
 
 category: 'Python-Hyperbolic Functions'
@@ -176,7 +176,7 @@ sinh: z
 	zComplex := self ___asComplex: z.
 	real := zComplex real.
 	imag := zComplex imag.
-	^ complex __new__: ((real @env0:sinh) ___times___: (imag ___cos___)) _: ((real @env0:cosh) ___times___: (imag ___sin___))
+	^ complex __new__: ((real @env0:sinh) @env0:* (imag @env0:cos)) _: ((real @env0:cosh) @env0:* (imag @env0:sin))
 %
 
 category: 'Python-Hyperbolic Functions'
@@ -201,7 +201,7 @@ exp: z
 	real := zComplex real.
 	imag := zComplex imag.
 	expReal := real @env0:exp.
-	^ complex __new__: (expReal ___times___: (imag ___cos___)) _: (expReal ___times___: (imag ___sin___))
+	^ complex __new__: (expReal @env0:* (imag @env0:cos)) _: (expReal @env0:* (imag @env0:sin))
 %
 
 category: 'Python-Exponential and Logarithmic'
@@ -213,9 +213,9 @@ log: z
 	zComplex := self ___asComplex: z.
 	real := zComplex real.
 	imag := zComplex imag.
-	r := (((real ___times___: real) ___plus___: (imag ___times___: imag)) ___sqrt___).
+	r := (((real @env0:* real) @env0:+ (imag @env0:* imag)) @env0:sqrt).
 	theta := imag @env0:arcTan2: real.
-	^ complex __new__: (r ___ln___) _: theta
+	^ complex __new__: (r @env0:ln) _: theta
 %
 
 category: 'Python-Exponential and Logarithmic'
@@ -225,7 +225,7 @@ log10: z
 
 	| logZ ln10 |
 	logZ := self log: z.
-	ln10 := 10.0 ___ln___.
+	ln10 := 10.0 @env0:ln.
 	^ logZ __truediv__: (complex __new__: ln10 _: 0.0)
 %
 
@@ -238,11 +238,11 @@ sqrt: z
 	zComplex := self ___asComplex: z.
 	real := zComplex real.
 	imag := zComplex imag.
-	r := (((real ___times___: real) ___plus___: (imag ___times___: imag)) ___sqrt___).
+	r := (((real @env0:* real) @env0:+ (imag @env0:* imag)) @env0:sqrt).
 	theta := imag @env0:arcTan2: real.
-	sqrtR := r ___sqrt___.
-	halfTheta := theta ___divide___: 2.0.
-	^ complex __new__: (sqrtR ___times___: (halfTheta ___cos___)) _: (sqrtR ___times___: (halfTheta ___sin___))
+	sqrtR := r @env0:sqrt.
+	halfTheta := theta @env0:/ 2.0.
+	^ complex __new__: (sqrtR @env0:* (halfTheta @env0:cos)) _: (sqrtR @env0:* (halfTheta @env0:sin))
 %
 
 ! ===============================================================================
@@ -270,9 +270,9 @@ polar: z
 	zComplex := self ___asComplex: z.
 	real := zComplex real.
 	imag := zComplex imag.
-	r := (((real ___times___: real) ___plus___: (imag ___times___: imag)) ___sqrt___).
+	r := (((real @env0:* real) @env0:+ (imag @env0:* imag)) @env0:sqrt).
 	theta := imag @env0:arcTan2: real.
-	^ tuple ___withAll___: (tuple ___with___: r with: theta)
+	^ tuple @env0:withAll: (tuple @env0:with: r with: theta)
 %
 
 category: 'Python-Polar Coordinates'
@@ -281,9 +281,9 @@ rect: r _: theta
 	"cmath.rect(r, theta) — convert polar to rectangular"
 
 	| rFloat thetaFloat |
-	rFloat := r ___asFloat___.
-	thetaFloat := theta ___asFloat___.
-	^ complex __new__: (rFloat ___times___: (thetaFloat ___cos___)) _: (rFloat ___times___: (thetaFloat ___sin___))
+	rFloat := r @env0:asFloat.
+	thetaFloat := theta @env0:asFloat.
+	^ complex __new__: (rFloat @env0:* (thetaFloat @env0:cos)) _: (rFloat @env0:* (thetaFloat @env0:sin))
 %
 
 ! ===============================================================================
@@ -301,8 +301,8 @@ isfinite: z
 	imag := zComplex imag.
 	realKind := real @env0:_getKind.
 	imagKind := imag @env0:_getKind.
-	^ ((realKind ___le___: 2) or: [realKind ___eq___: 4])
-		and: [(imagKind ___le___: 2) or: [imagKind ___eq___: 4]]
+	^ ((realKind @env0:<= 2) or: [realKind @env0:= 4])
+		and: [(imagKind @env0:<= 2) or: [imagKind @env0:= 4]]
 %
 
 category: 'Python-Classification'
@@ -316,7 +316,7 @@ isinf: z
 	imag := zComplex imag.
 	realKind := real @env0:_getKind.
 	imagKind := imag @env0:_getKind.
-	^ (realKind ___eq___: 3) or: [imagKind ___eq___: 3]
+	^ (realKind @env0:= 3) or: [imagKind @env0:= 3]
 %
 
 category: 'Python-Classification'

@@ -70,7 +70,7 @@ ___on: aSet
 	
 	"Convert set to array for iteration"
 	elementsArray := list ___new___.
-	aSet ___do___: [:each |
+	aSet @env0:do: [:each |
 		elementsArray append: each
 	].
 
@@ -115,11 +115,11 @@ __next__
 	If there are no further items, raise StopIteration."
 
 	| size item |
-	size := elements ___size___.
-	(position ___ge___: size) ifTrue: [
-		StopIteration ___signal___
+	size := elements @env0:size.
+	(position @env0:>= size) ifTrue: [
+		StopIteration @env0:signal
 	].
-	item := elements ___at___: (position + 1).
+	item := elements @env0:at: (position + 1).
 	position := position + 1.
 	^ item
 %
@@ -130,14 +130,14 @@ __repr__
 	"Return a string representation of the set iterator"
 
 	| className stream |
-	className := self ___class___ ___name___.
-	stream := WriteStream ___on___: (String ___new___).
-	stream ___nextPut___: $<.
-	stream ___nextPutAll___: className.
-	stream ___nextPutAll___: ' object at 0x'.
-	stream ___nextPutAll___: ((self ___identityHash___) ___printString___).
-	stream ___nextPut___: $>.
-	^ stream ___contents___
+	className := self @env0:class @env0:name.
+	stream := WriteStream @env0:on: (String ___new___).
+	stream @env0:nextPut: $<.
+	stream @env0:nextPutAll: className.
+	stream @env0:nextPutAll: ' object at 0x'.
+	stream @env0:nextPutAll: ((self @env0:identityHash) @env0:printString).
+	stream @env0:nextPut: $>.
+	^ stream @env0:contents
 %
 
 set compile_env: 0

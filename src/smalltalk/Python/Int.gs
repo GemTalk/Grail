@@ -38,34 +38,34 @@ __new__: obj
 	obj ifNil: [ ^ 0 ].
 
 	"If already an int, return it"
-	(obj ___isKindOf___: int) ifTrue: [
+	(obj @env0:isKindOf: int) ifTrue: [
 		^ obj
 	].
 
 	"Try to call __int__ on the object if it has one"
-	(obj ___respondsTo___: #__int__) ifTrue: [
+	(obj @env0:respondsTo: #__int__) ifTrue: [
 		result := obj __int__.
 		^ result
 	].
 
 	"Try to convert from float"
-	(obj ___isKindOf___: Float) ifTrue: [
-		^ obj ___truncated___
+	(obj @env0:isKindOf: Float) ifTrue: [
+		^ obj @env0:truncated
 	].
 
 	"Try to convert from string"
-	(obj ___isKindOf___: Unicode7) ifTrue: [
+	(obj @env0:isKindOf: Unicode7) ifTrue: [
 		^ ([:block :handler |
-			block ___on___: Error do: handler
+			block @env0:on: Error do: handler
 		] value: [
-			(obj @env0:asNumber) ___truncated___
+			(obj @env0:asNumber) @env0:truncated
 		] value: [:ex |
-			self ___error___: 'ValueError: invalid literal for int()'
+			self @env0:error: 'ValueError: invalid literal for int()'
 		])
 	].
 
 	"Otherwise, error"
-	self ___error___: 'TypeError: int() argument must be a string or a number'
+	self @env0:error: 'TypeError: int() argument must be a string or a number'
 %
 
 category: 'Python-Initialization'
@@ -76,36 +76,36 @@ __new__: obj _: base
 
 	| str baseInt |
 	"base must be an integer"
-	(base ___isKindOf___: int) ifFalse: [
-		self ___error___: 'TypeError: int() base must be an integer'
+	(base @env0:isKindOf: int) ifFalse: [
+		self @env0:error: 'TypeError: int() base must be an integer'
 	].
 
 	baseInt := base.
 
 	"base must be 0 or 2-36"
-	((baseInt ___eq___: 0) not and: [
-		(baseInt ___lt___: 2) or: [
-			baseInt ___gt___: 36
+	((baseInt @env0:= 0) not and: [
+		(baseInt @env0:< 2) or: [
+			baseInt @env0:> 36
 		]
 	]) ifTrue: [
-		self ___error___: 'ValueError: int() base must be >= 2 and <= 36, or 0'
+		self @env0:error: 'ValueError: int() base must be >= 2 and <= 36, or 0'
 	].
 
 	"obj must be a string"
-	(obj ___isKindOf___: Unicode7) ifFalse: [
-		self ___error___: 'TypeError: int() can''t convert non-string with explicit base'
+	(obj @env0:isKindOf: Unicode7) ifFalse: [
+		self @env0:error: 'TypeError: int() can''t convert non-string with explicit base'
 	].
 
 	str := obj @env0:trimBoth.
 
 	"Parse the string with the given base"
 	^ ([:block :handler |
-		block ___on___: Error do: handler
+		block @env0:on: Error do: handler
 	] value: [
-		baseInt ___eq___: 0
+		baseInt @env0:= 0
 			ifTrue: [
 				"Base 0: auto-detect from prefix"
-				(str @env0:asNumber) ___truncated___
+				(str @env0:asNumber) @env0:truncated
 			]
 			ifFalse: [
 				"Specific base"
@@ -113,8 +113,8 @@ __new__: obj _: base
 			]
 	] value: [:ex |
 		| msg |
-		msg := ('ValueError: invalid literal for int() with base ' ___concat___: (baseInt ___printString___)).
-		self ___error___: msg
+		msg := ('ValueError: invalid literal for int() with base ' @env0:, (baseInt @env0:printString)).
+		self @env0:error: msg
 	])
 %
 
@@ -135,39 +135,39 @@ from_bytes: bytes _: byteorder _: signed
 	| bytesArray result isBigEndian isSigned |
 	"Extract bytes - assuming bytes is a Python bytes object or similar"
 	bytesArray := bytes.
-	(bytesArray ___isKindOf___: tuple) ifFalse: [
-		self ___error___: 'TypeError: from_bytes() argument must be bytes-like'
+	(bytesArray @env0:isKindOf: tuple) ifFalse: [
+		self @env0:error: 'TypeError: from_bytes() argument must be bytes-like'
 	].
 
-	isBigEndian := (byteorder ___eq___: 'big').
-	isSigned := (signed ___eq___: true) or: [signed == true].
+	isBigEndian := (byteorder @env0:= 'big').
+	isSigned := (signed @env0:= true) or: [signed == true].
 
 	result := 0.
 	isBigEndian
 		ifTrue: [
-			bytesArray ___do___: [:each |
-				result := ((result ___bitShift___: 8) @env0:bitOr: each).
+			bytesArray @env0:do: [:each |
+				result := ((result @env0:bitShift: 8) @env0:bitOr: each).
 			].
 		]
 		ifFalse: [
 			| shift |
 			shift := 0.
-			bytesArray ___do___: [:each |
-				result := (result @env0:bitOr: (each ___bitShift___: shift)).
-				shift := (shift ___plus___: 8).
+			bytesArray @env0:do: [:each |
+				result := (result @env0:bitOr: (each @env0:bitShift: shift)).
+				shift := (shift @env0:+ 8).
 			].
 		].
 
 	"Handle signed conversion"
-	(isSigned and: [(bytesArray ___size___) ___gt___: 0]) ifTrue: [
+	(isSigned and: [(bytesArray @env0:size) @env0:> 0]) ifTrue: [
 		| highByte |
 		highByte := isBigEndian
-			ifTrue: [bytesArray ___first___]
+			ifTrue: [bytesArray @env0:first]
 			ifFalse: [bytesArray @env0:last].
-		((highByte ___bitAnd___: 16r80) ___ne___: 0) ifTrue: [
+		((highByte @env0:bitAnd: 16r80) @env0:~= 0) ifTrue: [
 			"Negative number - subtract 2^(numBits)"
-			result := (result ___minus___: 
-				(1 ___bitShift___: ((bytesArray ___size___) ___times___: 8))
+			result := (result @env0:- 
+				(1 @env0:bitShift: ((bytesArray @env0:size) @env0:* 8))
 			).
 		].
 	].
@@ -180,7 +180,7 @@ method: int
 __abs__
 	"Absolute value."
 
-	^ self ___abs___
+	^ self @env0:abs
 %
 
 category: 'Python-Arithmetic'
@@ -188,7 +188,7 @@ method: int
 __add__: other
 	"Add two integers or integer and other number."
 
-	^ self ___plus___: other
+	^ self @env0:+ other
 %
 
 category: 'Python-Bitwise Operations'
@@ -196,7 +196,7 @@ method: int
 __and__: other
 	"Bitwise AND."
 
-	^ self ___bitAnd___: other
+	^ self @env0:bitAnd: other
 %
 
 category: 'Python-Conversion'
@@ -204,7 +204,7 @@ method: int
 __bool__
 	"Return True if non-zero, False if zero."
 
-	^ self ___ne___: 0
+	^ self @env0:~= 0
 %
 
 category: 'Python-Rounding'
@@ -221,9 +221,9 @@ __divmod__: other
 	"Return (quotient, remainder) tuple."
 
 	| quot rem |
-	quot := self ___divideInteger___: other.
-	rem := self ___modulo___: other.
-	^ tuple ___with___: quot with: rem
+	quot := self @env0:// other.
+	rem := self @env0:\\ other.
+	^ tuple @env0:with: quot with: rem
 %
 
 category: 'Python-Documentation'
@@ -244,7 +244,7 @@ given base.  The literal can be preceded by ''+'' or ''-'' and be surrounded
 by whitespace.  The base defaults to 10.  Valid bases are 0 and 2-36.
 Base 0 means to interpret the base from the string as an integer literal.
 >>> int(''0b100'', base=0)
-4' ___asUnicodeString___
+4' @env0:asUnicodeString
 %
 
 category: 'Python-Comparison'
@@ -252,7 +252,7 @@ method: int
 __eq__: other
 	"Return self == other"
 
-	^ self ___eq___: other
+	^ self @env0:= other
 %
 
 category: 'Python-Conversion'
@@ -260,7 +260,7 @@ method: int
 __float__
 	"Convert to float."
 
-	^ self ___asFloat___
+	^ self @env0:asFloat
 %
 
 category: 'Python-Rounding'
@@ -276,7 +276,7 @@ method: int
 __floordiv__: other
 	"Floor division."
 
-	^ self ___divideInteger___: other
+	^ self @env0:// other
 %
 
 category: 'Python-String Representation'
@@ -293,7 +293,7 @@ method: int
 __ge__: other
 	"Return self >= other"
 
-	^ self ___ge___: other
+	^ self @env0:>= other
 %
 
 category: 'Python-Comparison'
@@ -301,7 +301,7 @@ method: int
 __gt__: other
 	"Return self > other"
 
-	^ self ___gt___: other
+	^ self @env0:> other
 %
 
 category: 'Python-Hashing'
@@ -309,7 +309,7 @@ method: int
 __hash__
 	"Return hash value (self for integers)."
 
-	^ self ___hash___
+	^ self @env0:hash
 %
 
 category: 'Python-Conversion'
@@ -359,7 +359,7 @@ method: int
 __le__: other
 	"Return self <= other"
 
-	^ self ___le___: other
+	^ self @env0:<= other
 %
 
 category: 'Python-Bitwise Operations'
@@ -367,7 +367,7 @@ method: int
 __lshift__: other
 	"Left shift."
 
-	^ self ___bitShift___: other
+	^ self @env0:bitShift: other
 %
 
 category: 'Python-Comparison'
@@ -375,7 +375,7 @@ method: int
 __lt__: other
 	"Return self < other"
 
-	^ self ___lt___: other
+	^ self @env0:< other
 %
 
 category: 'Python-Arithmetic'
@@ -383,7 +383,7 @@ method: int
 __mod__: other
 	"Modulo operation."
 
-	^ self ___modulo___: other
+	^ self @env0:\\ other
 %
 
 category: 'Python-Arithmetic'
@@ -391,7 +391,7 @@ method: int
 __mul__: other
 	"Multiply two integers or integer and other number."
 
-	^ self ___times___: other
+	^ self @env0:* other
 %
 
 category: 'Python-Comparison'
@@ -399,7 +399,7 @@ method: int
 __ne__: other
 	"Return self != other"
 
-	^ self ___ne___: other
+	^ self @env0:~= other
 %
 
 category: 'Python-Arithmetic'
@@ -407,7 +407,7 @@ method: int
 __neg__
 	"Unary negation."
 
-	^ self ___negated___
+	^ self @env0:negated
 %
 
 category: 'Python-Bitwise Operations'
@@ -431,7 +431,7 @@ method: int
 __pow__: other
 	"Raise to power."
 
-	^ self ___raisedTo___: other
+	^ self @env0:raisedTo: other
 %
 
 category: 'Python-Arithmetic'
@@ -440,9 +440,9 @@ __pow__: other _: mod
 	"Raise to power with modulo."
 
 	| result |
-	result := self ___raisedTo___: other.
+	result := self @env0:raisedTo: other.
 	mod ifNotNil: [
-		result := result ___modulo___: mod.
+		result := result @env0:\\ mod.
 	].
 	^ result
 %
@@ -452,7 +452,7 @@ method: int
 __radd__: other
 	"Reverse add (other + self)."
 
-	^ other ___plus___: self
+	^ other @env0:+ self
 %
 
 category: 'Python-Bitwise Operations - Reverse'
@@ -460,7 +460,7 @@ method: int
 __rand__: other
 	"Reverse bitwise AND (other & self)."
 
-	^ other ___bitAnd___: self
+	^ other @env0:bitAnd: self
 %
 
 category: 'Python-Arithmetic - Reverse'
@@ -469,9 +469,9 @@ __rdivmod__: other
 	"Reverse divmod (divmod(other, self))."
 
 	| quot rem |
-	quot := other ___divideInteger___: self.
-	rem := other ___modulo___: self.
-	^ tuple ___with___: quot with: rem
+	quot := other @env0:// self.
+	rem := other @env0:\\ self.
+	^ tuple @env0:with: quot with: rem
 %
 
 category: 'Python-String Representation'
@@ -479,7 +479,7 @@ method: int
 __repr__
 	"Return string representation of integer."
 
-	^ (self ___printString___) ___asUnicodeString___
+	^ (self @env0:printString) @env0:asUnicodeString
 %
 
 category: 'Python-Arithmetic - Reverse'
@@ -487,7 +487,7 @@ method: int
 __rfloordiv__: other
 	"Reverse floor division (other // self)."
 
-	^ other ___divideInteger___: self
+	^ other @env0:// self
 %
 
 category: 'Python-Bitwise Operations - Reverse'
@@ -495,7 +495,7 @@ method: int
 __rlshift__: other
 	"Reverse left shift (other << self)."
 
-	^ other ___bitShift___: self
+	^ other @env0:bitShift: self
 %
 
 category: 'Python-Arithmetic - Reverse'
@@ -503,7 +503,7 @@ method: int
 __rmod__: other
 	"Reverse modulo (other % self)."
 
-	^ other ___modulo___: self
+	^ other @env0:\\ self
 %
 
 category: 'Python-Arithmetic - Reverse'
@@ -511,7 +511,7 @@ method: int
 __rmul__: other
 	"Reverse multiply (other * self)."
 
-	^ other ___times___: self
+	^ other @env0:* self
 %
 
 category: 'Python-Bitwise Operations - Reverse'
@@ -538,11 +538,11 @@ __round__: ndigits
 	ndigits ifNil: [ ^ self ].
 
 	"If ndigits is negative, round to that many places left of decimal"
-	(ndigits ___lt___: 0) ifTrue: [
+	(ndigits @env0:< 0) ifTrue: [
 		| divisor |
-		divisor := (10 ___raisedTo___: (ndigits ___abs___)).
-		^ ((self ___divide___: divisor) ___rounded___)
-			___times___: divisor
+		divisor := (10 @env0:raisedTo: (ndigits @env0:abs)).
+		^ ((self @env0:/ divisor) @env0:rounded)
+			@env0:* divisor
 	].
 
 	"If ndigits is non-negative, just return self"
@@ -554,7 +554,7 @@ method: int
 __rpow__: other
 	"Reverse power (other ** self)."
 
-	^ other ___raisedTo___: self
+	^ other @env0:raisedTo: self
 %
 
 category: 'Python-Bitwise Operations - Reverse'
@@ -562,7 +562,7 @@ method: int
 __rrshift__: other
 	"Reverse right shift (other >> self)."
 
-	^ other ___bitShift___: (self ___negated___)
+	^ other @env0:bitShift: (self @env0:negated)
 %
 
 category: 'Python-Bitwise Operations'
@@ -570,7 +570,7 @@ method: int
 __rshift__: other
 	"Right shift."
 
-	^ self ___bitShift___: (other ___negated___)
+	^ self @env0:bitShift: (other @env0:negated)
 %
 
 category: 'Python-Arithmetic - Reverse'
@@ -578,7 +578,7 @@ method: int
 __rsub__: other
 	"Reverse subtract (other - self)."
 
-	^ other ___minus___: (self)
+	^ other @env0:- (self)
 %
 
 category: 'Python-Arithmetic - Reverse'
@@ -586,7 +586,7 @@ method: int
 __rtruediv__: other
 	"Reverse true division (other / self)."
 
-	^ other ___divide___: self
+	^ other @env0:/ self
 %
 
 category: 'Python-Bitwise Operations - Reverse'
@@ -602,7 +602,7 @@ method: int
 __str__
 	"Return string representation of integer."
 
-	^ (self ___printString___) ___asUnicodeString___
+	^ (self @env0:printString) @env0:asUnicodeString
 %
 
 category: 'Python-Arithmetic'
@@ -610,7 +610,7 @@ method: int
 __sub__: other
 	"Subtract other from self."
 
-	^ self ___minus___: (other)
+	^ self @env0:- (other)
 %
 
 category: 'Python-Arithmetic'
@@ -618,7 +618,7 @@ method: int
 __truediv__: other
 	"True division (returns float)."
 
-	^ self ___divide___: other
+	^ self @env0:/ other
 %
 
 category: 'Python-Rounding'
@@ -643,7 +643,7 @@ as_integer_ratio
 	"Return a pair of integers whose ratio is exactly equal to the original int.
 	For integers, this is (self, 1)."
 
-	^ tuple ___with___: self with: 1
+	^ tuple @env0:with: self with: 1
 %
 
 category: 'Python-Integer Methods'
@@ -652,13 +652,13 @@ bit_count
 	"Return the number of ones in the binary representation."
 
 	| n count |
-	n := self ___abs___.
+	n := self @env0:abs.
 	count := 0.
-	[(n ___gt___: 0)] whileTrue: [
-		((n ___bitAnd___: 1) ___eq___: 1) ifTrue: [
-			count := (count ___plus___: 1).
+	[(n @env0:> 0)] whileTrue: [
+		((n @env0:bitAnd: 1) @env0:= 1) ifTrue: [
+			count := (count @env0:+ 1).
 		].
-		n := n ___bitShift___: -1.
+		n := n @env0:bitShift: -1.
 	].
 	^ count
 %
@@ -669,11 +669,11 @@ bit_length
 	"Return the number of bits necessary to represent self in binary."
 
 	| n count |
-	n := self ___abs___.
+	n := self @env0:abs.
 	count := 0.
-	[(n ___gt___: 0)] whileTrue: [
-		n := n ___bitShift___: -1.
-		count := (count ___plus___: 1).
+	[(n @env0:> 0)] whileTrue: [
+		n := n @env0:bitShift: -1.
+		count := (count @env0:+ 1).
 	].
 	^ count
 %
@@ -742,37 +742,37 @@ to_bytes: length _: byteorder _: signed
 
 	| numBytes isBigEndian isSigned val result |
 	numBytes := length.
-	isBigEndian := (byteorder ___eq___: 'big').
-	isSigned := (signed ___eq___: true) or: [signed == true].
+	isBigEndian := (byteorder @env0:= 'big').
+	isSigned := (signed @env0:= true) or: [signed == true].
 	val := self.
 
 	"Handle negative numbers"
-	(val ___lt___: 0) ifTrue: [
+	(val @env0:< 0) ifTrue: [
 		isSigned ifFalse: [
-			self ___error___: 'OverflowError: can''t convert negative int to unsigned'
+			self @env0:error: 'OverflowError: can''t convert negative int to unsigned'
 		].
 		"Two's complement"
-		val := ((1 ___bitShift___: (numBytes ___times___: 8))
-			___plus___: val).
+		val := ((1 @env0:bitShift: (numBytes @env0:* 8))
+			@env0:+ val).
 	].
 
 	"Check if value fits in the given number of bytes"
-	((val ___lt___: 0) or: [
-		val ___ge___: (1 ___bitShift___: (numBytes ___times___: 8))
+	((val @env0:< 0) or: [
+		val @env0:>= (1 @env0:bitShift: (numBytes @env0:* 8))
 	]) ifTrue: [
-		self ___error___: 'OverflowError: int too big to convert'
+		self @env0:error: 'OverflowError: int too big to convert'
 	].
 
 	"Convert to bytes"
 	result := tuple ___new___: numBytes.
-	1 ___to___: numBytes do: [:i |
+	1 @env0:to: numBytes do: [:i |
 		| byteVal idx |
-		byteVal := (val ___bitAnd___: 16rFF).
+		byteVal := (val @env0:bitAnd: 16rFF).
 		idx := isBigEndian
-			ifTrue: [(numBytes ___minus___: (i ___minus___: 1))]
+			ifTrue: [(numBytes @env0:- (i @env0:- 1))]
 			ifFalse: [i].
-		result ___at___: idx put: byteVal.
-		val := val ___bitShift___: -8.
+		result @env0:at: idx put: byteVal.
+		val := val @env0:bitShift: -8.
 	].
 
 	^ result

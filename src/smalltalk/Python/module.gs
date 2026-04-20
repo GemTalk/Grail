@@ -110,7 +110,7 @@ new
 	"Modules are singletons; use `instance` instead of `new`."
 	TypeError ___signal___:
 		('Use #''instance'' instead of #''new'' for '
-			___concat___: (self ___name___ ___asString___ ___concat___: ' module'))
+			@env0:, (self @env0:name @env0:asString @env0:, ' module'))
 %
 
 category: 'Python-Accessors'
@@ -120,7 +120,7 @@ __doc__
 	if unset."
 
 	| doc |
-	doc := self ___at___: #__doc__.
+	doc := self @env0:at: #__doc__.
 	doc == nil ifTrue: [^ super __doc__].
 	^ doc
 %
@@ -128,43 +128,43 @@ __doc__
 category: 'Python-Accessors'
 method: module
 __doc__: aValue
-	self ___at___: #__doc__ put: aValue
+	self @env0:at: #__doc__ put: aValue
 %
 
 category: 'Python-Accessors'
 method: module
 __loader__
-	^ self ___at___: #__loader__
+	^ self @env0:at: #__loader__
 %
 
 category: 'Python-Accessors'
 method: module
 __loader__: aValue
-	self ___at___: #__loader__ put: aValue
+	self @env0:at: #__loader__ put: aValue
 %
 
 category: 'Python-Accessors'
 method: module
 __name__
-	^ self ___at___: #__name__
+	^ self @env0:at: #__name__
 %
 
 category: 'Python-Accessors'
 method: module
 __name__: aValue
-	self ___at___: #__name__ put: aValue
+	self @env0:at: #__name__ put: aValue
 %
 
 category: 'Python-Accessors'
 method: module
 __package__
-	^ self ___at___: #__package__
+	^ self @env0:at: #__package__
 %
 
 category: 'Python-Accessors'
 method: module
 __package__: aValue
-	self ___at___: #__package__ put: aValue
+	self @env0:at: #__package__ put: aValue
 %
 
 category: 'Python-Accessors'
@@ -174,26 +174,26 @@ __path__
 	are packages have a __path__; plain modules do not."
 
 	^ (self @env0:includesKey: #__path__)
-		ifTrue: [self ___at___: #__path__]
+		ifTrue: [self @env0:at: #__path__]
 		ifFalse: [nil]
 %
 
 category: 'Python-Accessors'
 method: module
 __path__: aValue
-	self ___at___: #__path__ put: aValue
+	self @env0:at: #__path__ put: aValue
 %
 
 category: 'Python-Accessors'
 method: module
 __spec__
-	^ self ___at___: #__spec__
+	^ self @env0:at: #__spec__
 %
 
 category: 'Python-Accessors'
 method: module
 __spec__: aValue
-	self ___at___: #__spec__ put: aValue
+	self @env0:at: #__spec__ put: aValue
 %
 
 set compile_env: 0

@@ -77,7 +77,7 @@ _normal_dist_inv_cdf: p _: mu _: sigma
 	"_normal_dist_inv_cdf(p, mu, sigma) -> float.
 	Fast path: 3-arg direct send."
 
-	^ self ___class___ @env0:callNormalDistInvCdf: { p. mu. sigma }
+	^ self @env0:class @env0:callNormalDistInvCdf: { p. mu. sigma }
 %
 
 set compile_env: 0

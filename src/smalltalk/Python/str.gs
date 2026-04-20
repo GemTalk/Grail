@@ -31,7 +31,7 @@ __new__
 	"Create a new empty str instance.
 	In Python: str() or str.__new__(str)"
 
-	^ '' ___copy___
+	^ '' @env0:copy
 %
 
 category: 'Python-Initialization'
@@ -41,10 +41,10 @@ __new__: obj
 	In Python: str(obj) or str.__new__(str, obj)"
 
 	| result |
-	obj ifNil: [ ^ '' ___copy___ ].
+	obj ifNil: [ ^ '' @env0:copy ].
 
 	"If already a string return it"
-	(obj ___isKindOf___: CharacterCollection) ifTrue: [
+	(obj @env0:isKindOf: CharacterCollection) ifTrue: [
 		^ obj
 	].
 
@@ -58,7 +58,7 @@ classmethod: CharacterCollection
 maketrans
 	"Create a translation table. Not yet implemented."
 
-	self ___error___: 'Not yet implemented: maketrans'
+	self @env0:error: 'Not yet implemented: maketrans'
 %
 
 category: 'Python-String Operations'
@@ -66,7 +66,7 @@ method: CharacterCollection
 __add__: other
 	"Concatenate two strings. In Python: str1 + str2"
 
-	^ self ___concat___: other
+	^ self @env0:, other
 %
 
 category: 'Python-Sequence Operations'
@@ -84,7 +84,7 @@ method: CharacterCollection
 __eq__: other
 	"Return self == other"
 
-	^ self ___eq___: other
+	^ self @env0:= other
 %
 
 category: 'Python-String Representation'
@@ -92,7 +92,7 @@ method: CharacterCollection
 __format__: formatSpec
 	"Return a formatted string representation"
 
-	self ___error___: 'Not yet implemented: __format__'
+	self @env0:error: 'Not yet implemented: __format__'
 %
 
 category: 'Python-Comparison'
@@ -111,27 +111,27 @@ __getitem__: index
 	Supports negative indices (counting from end)."
 
 	| size idx char charString |
-	size := self ___size___.
+	size := self @env0:size.
 	idx := index.
 
 	"Handle negative indices"
-	(idx ___lt___: 0) ifTrue: [
-		idx := size ___plus___: idx
+	(idx @env0:< 0) ifTrue: [
+		idx := size @env0:+ idx
 	].
 
 	"Check bounds (Python uses 0-based indexing)"
-	((idx ___lt___: 0) or: [
-		idx ___ge___: size
+	((idx @env0:< 0) or: [
+		idx @env0:>= size
 	]) ifTrue: [
 		IndexError ___signal___: 'string index out of range'
 	].
 
 	"Get character at 1-based Smalltalk index"
-	char := self ___at___: (idx ___plus___: 1).
+	char := self @env0:at: (idx @env0:+ 1).
 
 	"Convert character to a single-character string"
 	charString := Unicode7 ___new___: 1.
-	charString ___at___: 1 put: char.
+	charString @env0:at: 1 put: char.
 
 	^ charString
 %
@@ -149,7 +149,7 @@ method: CharacterCollection
 __hash__
 	"Return hash value for this string"
 
-	^ self ___hash___
+	^ self @env0:hash
 %
 
 category: 'Python-Initialization'
@@ -182,7 +182,7 @@ method: CharacterCollection
 __len__
 	"Return the length of the string. In Python: len(str)"
 
-	^ self ___size___
+	^ self @env0:size
 %
 
 category: 'Python-Comparison'
@@ -198,7 +198,7 @@ method: CharacterCollection
 __mod__: args
 	"String formatting using % operator. In Python: 'format %s' % args"
 
-	self ___error___: 'Not yet implemented: __mod__'
+	self @env0:error: 'Not yet implemented: __mod__'
 %
 
 category: 'Python-String Operations'
@@ -207,14 +207,14 @@ __mul__: n
 	"Repeat string n times. In Python: str * n"
 
 	| count result stream |
-	count := n ___asInteger___.
-	(count ___le___: 0) ifTrue: [ ^ '' ___copy___ ].
+	count := n @env0:asInteger.
+	(count @env0:<= 0) ifTrue: [ ^ '' @env0:copy ].
 
-	stream := WriteStream ___on___: (Unicode7 ___new___).
-	count ___timesRepeat___: [
-		stream ___nextPutAll___: self
+	stream := WriteStream @env0:on: (Unicode7 ___new___).
+	count @env0:timesRepeat: [
+		stream @env0:nextPutAll: self
 	].
-	result := stream ___contents___.
+	result := stream @env0:contents.
 	^ result
 %
 
@@ -223,7 +223,7 @@ method: CharacterCollection
 __ne__: other
 	"Return self != other"
 
-	^ self ___ne___: other
+	^ self @env0:~= other
 %
 
 category: 'Python-String Representation'
@@ -232,24 +232,24 @@ __repr__
 	"Return a string representation for debugging. In Python: repr(str)"
 
 	| stream |
-	stream := WriteStream ___on___: (Unicode7 ___new___).
-	stream ___nextPut___: $'.
-	self ___do___: [:char |
+	stream := WriteStream @env0:on: (Unicode7 ___new___).
+	stream @env0:nextPut: $'.
+	self @env0:do: [:char |
 		| cp |
-		cp := char ___codePoint___.
-		(cp ___eq___: 39) ifTrue: [  "apostrophe"
-			stream ___nextPutAll___: '\'.
-			stream ___nextPut___: $'.
+		cp := char @env0:codePoint.
+		(cp @env0:= 39) ifTrue: [  "apostrophe"
+			stream @env0:nextPutAll: '\'.
+			stream @env0:nextPut: $'.
 		] ifFalse: [
-			(cp ___eq___: 92) ifTrue: [  "backslash"
-				stream ___nextPutAll___: '\\'.
+			(cp @env0:= 92) ifTrue: [  "backslash"
+				stream @env0:nextPutAll: '\\'.
 			] ifFalse: [
-				stream ___nextPut___: char.
+				stream @env0:nextPut: char.
 			]
 		]
 	].
-	stream ___nextPut___: $'.
-	^ stream ___contents___
+	stream @env0:nextPut: $'.
+	^ stream @env0:contents
 %
 
 category: 'Python-String Operations'
@@ -257,7 +257,7 @@ method: CharacterCollection
 __rmod__: args
 	"String formatting (reverse). Not typically used."
 
-	self ___error___: 'Not yet implemented: __rmod__'
+	self @env0:error: 'Not yet implemented: __rmod__'
 %
 
 category: 'Python-String Operations'
@@ -282,16 +282,16 @@ capitalize
 	"Return a copy of the string with its first character capitalized and the rest lowercased."
 
 	| stream first rest |
-	(self ___isEmpty___) ifTrue: [ ^ self ].
+	(self @env0:isEmpty) ifTrue: [ ^ self ].
 
-	stream := WriteStream ___on___: (Unicode7 ___new___).
-	first := self ___first___.
+	stream := WriteStream @env0:on: (Unicode7 ___new___).
+	first := self @env0:first.
 	rest := self @env0:allButFirst.
 
-	stream ___nextPut___: (first ___asUppercase___).
-	stream ___nextPutAll___: (rest ___asLowercase___).
+	stream @env0:nextPut: (first @env0:asUppercase).
+	stream @env0:nextPutAll: (rest @env0:asLowercase).
 
-	^ stream ___contents___
+	^ stream @env0:contents
 %
 
 category: 'Python-String Methods'
@@ -308,22 +308,22 @@ center: width
 	"Return a centered string of length width, padded with spaces."
 
 	| totalPad leftPad rightPad stream mySize |
-	mySize := self ___size___.
-	(width ___le___: mySize) ifTrue: [ ^ self ].
+	mySize := self @env0:size.
+	(width @env0:<= mySize) ifTrue: [ ^ self ].
 
-	totalPad := (width ___minus___: (mySize)).
-	leftPad := totalPad ___divideInteger___: 2.
-	rightPad := (totalPad ___minus___: (leftPad)).
+	totalPad := (width @env0:- (mySize)).
+	leftPad := totalPad @env0:// 2.
+	rightPad := (totalPad @env0:- (leftPad)).
 
-	stream := WriteStream ___on___: (Unicode7 ___new___).
-	leftPad ___timesRepeat___: [
-		stream ___nextPut___: $ 
+	stream := WriteStream @env0:on: (Unicode7 ___new___).
+	leftPad @env0:timesRepeat: [
+		stream @env0:nextPut: $ 
 	].
-	stream ___nextPutAll___: self.
-	rightPad ___timesRepeat___: [
-		stream ___nextPut___: $ 
+	stream @env0:nextPutAll: self.
+	rightPad @env0:timesRepeat: [
+		stream @env0:nextPut: $ 
 	].
-	^ stream ___contents___
+	^ stream @env0:contents
 %
 
 category: 'Python-String Methods'
@@ -334,10 +334,10 @@ count: sub
 	| count index start |
 	count := 0.
 	start := 1.
-	[ index := self ___findString___: sub startingAt: start.
-	  (index ___gt___: 0) ] whileTrue: [
-		count := (count ___plus___: 1).
-		start := (index ___plus___: sub ___size___).
+	[ index := self @env0:findString: sub startingAt: start.
+	  (index @env0:> 0) ] whileTrue: [
+		count := (count @env0:+ 1).
+		start := (index @env0:+ sub @env0:size).
 	].
 	^ count
 %
@@ -347,7 +347,7 @@ method: CharacterCollection
 encode
 	"Encode the string to bytes. Not yet implemented."
 
-	self ___error___: 'Not yet implemented: encode'
+	self @env0:error: 'Not yet implemented: encode'
 %
 
 category: 'Python-String Methods'
@@ -355,7 +355,7 @@ method: CharacterCollection
 endswith: suffix
 	"Test whether string ends with the specified suffix."
 
-	^ self ___endsWith___: suffix
+	^ self @env0:endsWith: suffix
 %
 
 category: 'Python-String Methods'
@@ -363,7 +363,7 @@ method: CharacterCollection
 expandtabs
 	"Return a copy where all tab characters are replaced by spaces."
 
-	^ self @env0:copyReplaceAll: (Character @env0:tab) ___asString___ with: '        '
+	^ self @env0:copyReplaceAll: (Character @env0:tab) @env0:asString with: '        '
 %
 
 category: 'Python-String Methods'
@@ -372,9 +372,9 @@ find: sub
 	"Return the lowest index where substring sub is found, or -1 if not found."
 
 	| index |
-	index := self ___findString___: sub startingAt: 1.
-	(index ___eq___: 0) ifTrue: [ ^ -1 ].
-	^ (index ___minus___: (1))  "Convert to 0-based indexing"
+	index := self @env0:findString: sub startingAt: 1.
+	(index @env0:= 0) ifTrue: [ ^ -1 ].
+	^ (index @env0:- (1))  "Convert to 0-based indexing"
 %
 
 category: 'Python-String Methods'
@@ -382,7 +382,7 @@ method: CharacterCollection
 format
 	"String formatting using {} placeholders. Not yet implemented."
 
-	self ___error___: 'Not yet implemented: format'
+	self @env0:error: 'Not yet implemented: format'
 %
 
 category: 'Python-String Methods'
@@ -390,7 +390,7 @@ method: CharacterCollection
 format_map: mapping
 	"String formatting using a mapping. Not yet implemented."
 
-	self ___error___: 'Not yet implemented: format_map'
+	self @env0:error: 'Not yet implemented: format_map'
 %
 
 category: 'Python-String Methods'
@@ -400,8 +400,8 @@ index: sub
 
 	| idx |
 	idx := self find: sub.
-	(idx ___eq___: -1) ifTrue: [
-		self ___error___: 'ValueError: substring not found'
+	(idx @env0:= -1) ifTrue: [
+		self @env0:error: 'ValueError: substring not found'
 	].
 	^ idx
 %
@@ -412,11 +412,11 @@ isalnum
 	"Return True if all characters are alphanumeric and there is at least one character."
 
 	| isEmpty allAlnum |
-	isEmpty := self ___isEmpty___.
+	isEmpty := self @env0:isEmpty.
 	isEmpty ifTrue: [ ^ false ].
 
 	allAlnum := true.
-	self ___do___: [:char |
+	self @env0:do: [:char |
 		| isAlnum |
 		isAlnum := char @env0:isAlphaNumeric.
 		isAlnum ifFalse: [ allAlnum := false ].
@@ -430,11 +430,11 @@ isalpha
 	"Return True if all characters are alphabetic and there is at least one character."
 
 	| isEmpty allAlpha |
-	isEmpty := self ___isEmpty___.
+	isEmpty := self @env0:isEmpty.
 	isEmpty ifTrue: [ ^ false ].
 
 	allAlpha := true.
-	self ___do___: [:char |
+	self @env0:do: [:char |
 		| isAlpha |
 		isAlpha := char @env0:isLetter.
 		isAlpha ifFalse: [ allAlpha := false ].
@@ -449,10 +449,10 @@ isascii
 
 	| allAscii |
 	allAscii := true.
-	self ___do___: [:char |
+	self @env0:do: [:char |
 		| cp |
-		cp := char ___codePoint___.
-		(cp ___ge___: 128) ifTrue: [ allAscii := false ].
+		cp := char @env0:codePoint.
+		(cp @env0:>= 128) ifTrue: [ allAscii := false ].
 	].
 	^ allAscii
 %
@@ -463,11 +463,11 @@ isdecimal
 	"Return True if all characters are decimal characters."
 
 	| isEmpty allDecimal |
-	isEmpty := self ___isEmpty___.
+	isEmpty := self @env0:isEmpty.
 	isEmpty ifTrue: [ ^ false ].
 
 	allDecimal := true.
-	self ___do___: [:char |
+	self @env0:do: [:char |
 		| isDigit |
 		isDigit := char @env0:isDigit.
 		isDigit ifFalse: [ allDecimal := false ].
@@ -481,11 +481,11 @@ isdigit
 	"Return True if all characters are digits and there is at least one character."
 
 	| isEmpty allDigit |
-	isEmpty := self ___isEmpty___.
+	isEmpty := self @env0:isEmpty.
 	isEmpty ifTrue: [ ^ false ].
 
 	allDigit := true.
-	self ___do___: [:char |
+	self @env0:do: [:char |
 		| isDigit |
 		isDigit := char @env0:isDigit.
 		isDigit ifFalse: [ allDigit := false ].
@@ -499,17 +499,17 @@ isidentifier
 	"Return True if string is a valid Python identifier."
 
 	| isEmpty firstChar |
-	isEmpty := self ___isEmpty___.
+	isEmpty := self @env0:isEmpty.
 	isEmpty ifTrue: [ ^ false ].
 
 	"First character must be letter or underscore"
-	firstChar := self ___first___.
-	((firstChar @env0:isLetter) @env0:| (firstChar ___eq___: $_)) ifFalse: [ ^ false ].
+	firstChar := self @env0:first.
+	((firstChar @env0:isLetter) @env0:| (firstChar @env0:= $_)) ifFalse: [ ^ false ].
 
 	"Rest must be letters, digits, or underscores"
-	(self @env0:allButFirst) ___do___: [:char |
+	(self @env0:allButFirst) @env0:do: [:char |
 		| valid |
-		valid := ((char @env0:isAlphaNumeric) @env0:| (char ___eq___: $_)).
+		valid := ((char @env0:isAlphaNumeric) @env0:| (char @env0:= $_)).
 		valid ifFalse: [ ^ false ].
 	].
 	^ true
@@ -523,7 +523,7 @@ islower
 	| hasCased allLower |
 	hasCased := false.
 	allLower := true.
-	self ___do___: [:char |
+	self @env0:do: [:char |
 		| isLetter isLower |
 		isLetter := char @env0:isLetter.
 		isLetter ifTrue: [
@@ -550,11 +550,11 @@ isprintable
 
 	| allPrintable |
 	allPrintable := true.
-	self ___do___: [:char |
+	self @env0:do: [:char |
 		| cp |
-		cp := char ___codePoint___.
+		cp := char @env0:codePoint.
 		"Control characters and some special characters are not printable"
-		((cp ___lt___: 32) @env0:| ((cp ___ge___: 127) @env0:& (cp ___lt___: 160))) ifTrue: [ allPrintable := false ].
+		((cp @env0:< 32) @env0:| ((cp @env0:>= 127) @env0:& (cp @env0:< 160))) ifTrue: [ allPrintable := false ].
 	].
 	^ allPrintable
 %
@@ -565,11 +565,11 @@ isspace
 	"Return True if all characters are whitespace and there is at least one character."
 
 	| isEmpty allSpace |
-	isEmpty := self ___isEmpty___.
+	isEmpty := self @env0:isEmpty.
 	isEmpty ifTrue: [ ^ false ].
 
 	allSpace := true.
-	self ___do___: [:char |
+	self @env0:do: [:char |
 		| isSpace |
 		isSpace := char @env0:isSeparator.
 		isSpace ifFalse: [ allSpace := false ].
@@ -585,7 +585,7 @@ istitle
 	| inWord expectUpper |
 	inWord := false.
 	expectUpper := true.
-	self ___do___: [:char |
+	self @env0:do: [:char |
 		| isLetter isUpper isLower |
 		isLetter := char @env0:isLetter.
 		isLetter ifTrue: [
@@ -612,7 +612,7 @@ isupper
 	| hasCased allUpper |
 	hasCased := false.
 	allUpper := true.
-	self ___do___: [:char |
+	self @env0:do: [:char |
 		| isLetter isUpper |
 		isLetter := char @env0:isLetter.
 		isLetter ifTrue: [
@@ -630,18 +630,18 @@ join: iterable
 	"Concatenate any number of strings with self as separator."
 
 	| stream first |
-	stream := WriteStream ___on___: (Unicode7 ___new___).
+	stream := WriteStream @env0:on: (Unicode7 ___new___).
 	first := true.
 
-	iterable ___do___: [:each |
+	iterable @env0:do: [:each |
 		first ifFalse: [
-			stream ___nextPutAll___: self
+			stream @env0:nextPutAll: self
 		].
-		stream ___nextPutAll___: each.
+		stream @env0:nextPutAll: each.
 		first := false.
 	].
 
-	^ stream ___contents___
+	^ stream @env0:contents
 %
 
 category: 'Python-String Methods'
@@ -650,16 +650,16 @@ ljust: width
 	"Return a left-justified string of length width, padded with spaces."
 
 	| stream mySize padding |
-	mySize := self ___size___.
-	(width ___le___: mySize) ifTrue: [ ^ self ].
+	mySize := self @env0:size.
+	(width @env0:<= mySize) ifTrue: [ ^ self ].
 
-	padding := (width ___minus___: (mySize)).
-	stream := WriteStream ___on___: (Unicode7 ___new___).
-	stream ___nextPutAll___: self.
-	padding ___timesRepeat___: [
-		stream ___nextPut___: $ 
+	padding := (width @env0:- (mySize)).
+	stream := WriteStream @env0:on: (Unicode7 ___new___).
+	stream @env0:nextPutAll: self.
+	padding @env0:timesRepeat: [
+		stream @env0:nextPut: $ 
 	].
-	^ stream ___contents___
+	^ stream @env0:contents
 %
 
 category: 'Python-String Methods'
@@ -684,14 +684,14 @@ partition: sep
 	"Split the string at the first occurrence of sep, return (before, sep, after)."
 
 	| index before after |
-	index := self ___findString___: sep startingAt: 1.
-	(index ___eq___: 0) ifTrue: [
-		^ tuple ___with___: self with: '' with: ''
+	index := self @env0:findString: sep startingAt: 1.
+	(index @env0:= 0) ifTrue: [
+		^ tuple @env0:with: self with: '' with: ''
 	].
 
-	before := self ___copyFrom___: 1 to: (index ___minus___: 1).
-	after := self ___copyFrom___: (index ___plus___: sep ___size___) to: self ___size___.
-	^ tuple ___with___: before with: sep with: after
+	before := self @env0:copyFrom: 1 to: (index @env0:- 1).
+	after := self @env0:copyFrom: (index @env0:+ sep @env0:size) to: self @env0:size.
+	^ tuple @env0:with: before with: sep with: after
 %
 
 category: 'Python-String Methods'
@@ -700,9 +700,9 @@ removeprefix: prefix
 	"If the string starts with prefix, return string[len(prefix):], otherwise return a copy."
 
 	| starts |
-	starts := self ___beginsWith___: prefix.
+	starts := self @env0:beginsWith: prefix.
 	starts ifTrue: [
-		^ self ___copyFrom___: ((prefix ___size___) ___plus___: 1) to: self ___size___
+		^ self @env0:copyFrom: ((prefix @env0:size) @env0:+ 1) to: self @env0:size
 	].
 	^ self
 %
@@ -713,9 +713,9 @@ removesuffix: suffix
 	"If the string ends with suffix, return string[:-len(suffix)], otherwise return a copy."
 
 	| ends |
-	ends := self ___endsWith___: suffix.
+	ends := self @env0:endsWith: suffix.
 	ends ifTrue: [
-		^ self ___copyFrom___: 1 to: ((self ___size___) ___minus___: suffix ___size___)
+		^ self @env0:copyFrom: 1 to: ((self @env0:size) @env0:- suffix @env0:size)
 	].
 	^ self
 %
@@ -736,13 +736,13 @@ rfind: sub
 	| index lastIndex start |
 	lastIndex := 0.
 	start := 1.
-	[ index := self ___findString___: sub startingAt: start.
-	  (index ___gt___: 0) ] whileTrue: [
+	[ index := self @env0:findString: sub startingAt: start.
+	  (index @env0:> 0) ] whileTrue: [
 		lastIndex := index.
-		start := (index ___plus___: 1).
+		start := (index @env0:+ 1).
 	].
-	(lastIndex ___eq___: 0) ifTrue: [ ^ -1 ].
-	^ (lastIndex ___minus___: (1))  "Convert to 0-based indexing"
+	(lastIndex @env0:= 0) ifTrue: [ ^ -1 ].
+	^ (lastIndex @env0:- (1))  "Convert to 0-based indexing"
 %
 
 category: 'Python-String Methods'
@@ -752,8 +752,8 @@ rindex: sub
 
 	| idx |
 	idx := self rfind: sub.
-	(idx ___eq___: -1) ifTrue: [
-		self ___error___: 'ValueError: substring not found'
+	(idx @env0:= -1) ifTrue: [
+		self @env0:error: 'ValueError: substring not found'
 	].
 	^ idx
 %
@@ -764,16 +764,16 @@ rjust: width
 	"Return a right-justified string of length width, padded with spaces."
 
 	| stream mySize padding |
-	mySize := self ___size___.
-	(width ___le___: mySize) ifTrue: [ ^ self ].
+	mySize := self @env0:size.
+	(width @env0:<= mySize) ifTrue: [ ^ self ].
 
-	padding := (width ___minus___: (mySize)).
-	stream := WriteStream ___on___: (Unicode7 ___new___).
-	padding ___timesRepeat___: [
-		stream ___nextPut___: $ 
+	padding := (width @env0:- (mySize)).
+	stream := WriteStream @env0:on: (Unicode7 ___new___).
+	padding @env0:timesRepeat: [
+		stream @env0:nextPut: $ 
 	].
-	stream ___nextPutAll___: self.
-	^ stream ___contents___
+	stream @env0:nextPutAll: self.
+	^ stream @env0:contents
 %
 
 category: 'Python-String Methods'
@@ -784,19 +784,19 @@ rpartition: sep
 	| index before after start lastIndex |
 	lastIndex := 0.
 	start := 1.
-	[ index := self ___findString___: sep startingAt: start.
-	  (index ___gt___: 0) ] whileTrue: [
+	[ index := self @env0:findString: sep startingAt: start.
+	  (index @env0:> 0) ] whileTrue: [
 		lastIndex := index.
-		start := (index ___plus___: 1).
+		start := (index @env0:+ 1).
 	].
 
-	(lastIndex ___eq___: 0) ifTrue: [
+	(lastIndex @env0:= 0) ifTrue: [
 		^ tuple @env0:with: '' with: '' with: self
 	].
 
-	before := self ___copyFrom___: 1 to: (lastIndex ___minus___: 1).
-	after := self ___copyFrom___: (lastIndex ___plus___: sep ___size___) to: self ___size___.
-	^ tuple ___with___: before with: sep with: after
+	before := self @env0:copyFrom: 1 to: (lastIndex @env0:- 1).
+	after := self @env0:copyFrom: (lastIndex @env0:+ sep @env0:size) to: self @env0:size.
+	^ tuple @env0:with: before with: sep with: after
 %
 
 category: 'Python-String Methods'
@@ -832,7 +832,7 @@ splitlines
 	"Return a list of lines in the string, breaking at line boundaries."
 
 	| lines lf |
-	lf := Character ___lf___.
+	lf := Character @env0:lf.
 	lines := self @env0:subStrings: lf.
 	^ lines
 %
@@ -842,7 +842,7 @@ method: CharacterCollection
 startswith: prefix
 	"Test whether string starts with the specified prefix."
 
-	^ self ___beginsWith___: prefix
+	^ self @env0:beginsWith: prefix
 %
 
 category: 'Python-String Methods'
@@ -859,17 +859,17 @@ swapcase
 	"Return a copy with uppercase characters converted to lowercase and vice versa."
 
 	| stream |
-	stream := WriteStream ___on___: (Unicode7 ___new___).
-	self ___do___: [:char |
+	stream := WriteStream @env0:on: (Unicode7 ___new___).
+	self @env0:do: [:char |
 		| isUpper |
 		isUpper := char @env0:isUppercase.
 		isUpper ifTrue: [
-			stream ___nextPut___: (char ___asLowercase___)
+			stream @env0:nextPut: (char @env0:asLowercase)
 		] ifFalse: [
-			stream ___nextPut___: (char ___asUppercase___)
+			stream @env0:nextPut: (char @env0:asUppercase)
 		]
 	].
-	^ stream ___contents___
+	^ stream @env0:contents
 %
 
 category: 'Python-String Methods'
@@ -878,24 +878,24 @@ title
 	"Return a titlecased version of the string where words start with uppercase."
 
 	| stream inWord |
-	stream := WriteStream ___on___: (Unicode7 ___new___).
+	stream := WriteStream @env0:on: (Unicode7 ___new___).
 	inWord := false.
-	self ___do___: [:char |
+	self @env0:do: [:char |
 		| isAlpha |
 		isAlpha := char @env0:isLetter.
 		isAlpha ifTrue: [
 			inWord ifTrue: [
-				stream ___nextPut___: (char ___asLowercase___)
+				stream @env0:nextPut: (char @env0:asLowercase)
 			] ifFalse: [
-				stream ___nextPut___: (char ___asUppercase___).
+				stream @env0:nextPut: (char @env0:asUppercase).
 				inWord := true.
 			]
 		] ifFalse: [
-			stream ___nextPut___: char.
+			stream @env0:nextPut: char.
 			inWord := false.
 		]
 	].
-	^ stream ___contents___
+	^ stream @env0:contents
 %
 
 category: 'Python-String Methods'
@@ -903,7 +903,7 @@ method: CharacterCollection
 translate: table
 	"Return a copy with each character mapped through the translation table. Not yet implemented."
 
-	self ___error___: 'Not yet implemented: translate'
+	self @env0:error: 'Not yet implemented: translate'
 %
 
 category: 'Python-String Methods'
@@ -920,32 +920,32 @@ zfill: width
 	"Pad a numeric string with zeros on the left, to fill a field of the given width."
 
 	| stream mySize padding hasSign firstChar |
-	mySize := self ___size___.
-	(width ___le___: mySize) ifTrue: [ ^ self ].
+	mySize := self @env0:size.
+	(width @env0:<= mySize) ifTrue: [ ^ self ].
 
 	"Check if string starts with + or -"
 	hasSign := false.
-	(mySize ___gt___: 0) ifTrue: [
-		firstChar := self ___first___.
-		hasSign := ((firstChar ___eq___: $+) @env0:| (firstChar ___eq___: $-)).
+	(mySize @env0:> 0) ifTrue: [
+		firstChar := self @env0:first.
+		hasSign := ((firstChar @env0:= $+) @env0:| (firstChar @env0:= $-)).
 	].
 
-	padding := (width ___minus___: (mySize)).
-	stream := WriteStream ___on___: (Unicode7 ___new___).
+	padding := (width @env0:- (mySize)).
+	stream := WriteStream @env0:on: (Unicode7 ___new___).
 
 	hasSign ifTrue: [
-		stream ___nextPut___: firstChar.
-		padding ___timesRepeat___: [
-			stream ___nextPut___: $0
+		stream @env0:nextPut: firstChar.
+		padding @env0:timesRepeat: [
+			stream @env0:nextPut: $0
 		].
-		stream ___nextPutAll___: (self @env0:allButFirst).
+		stream @env0:nextPutAll: (self @env0:allButFirst).
 	] ifFalse: [
-		padding ___timesRepeat___: [
-			stream ___nextPut___: $0
+		padding @env0:timesRepeat: [
+			stream @env0:nextPut: $0
 		].
-		stream ___nextPutAll___: self.
+		stream @env0:nextPutAll: self.
 	].
-	^ stream ___contents___
+	^ stream @env0:contents
 %
 
 set compile_env: 0

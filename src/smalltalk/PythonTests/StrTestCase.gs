@@ -52,10 +52,10 @@ test__contains__
 
 	| s result |
 	s := 'hello world'.
-	result := s ___contains___:  'world' .
+	result := s @env1:__contains__:  'world' .
 	self assert: result equals: true.
 
-	result := s ___contains___:  'xyz' .
+	result := s @env1:__contains__:  'xyz' .
 	self assert: result equals: false.
 %
 

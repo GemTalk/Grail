@@ -105,7 +105,7 @@ bisect_right: a _: x
 	"Python _bisect.bisect_right(a, x) — fast path. Returns
 	the rightmost insertion point for x in sorted list a."
 
-	^ self ___class___ @env0:callBisect: 'bisect_right' list: a value: x
+	^ self @env0:class @env0:callBisect: 'bisect_right' list: a value: x
 %
 
 category: 'Python-Built-in Functions'
@@ -114,7 +114,7 @@ bisect_left: a _: x
 	"Python _bisect.bisect_left(a, x) — fast path. Returns
 	the leftmost insertion point for x in sorted list a."
 
-	^ self ___class___ @env0:callBisect: 'bisect_left' list: a value: x
+	^ self @env0:class @env0:callBisect: 'bisect_left' list: a value: x
 %
 
 category: 'Python-Built-in Functions'
@@ -124,7 +124,7 @@ insort_right: a _: x
 	x into sorted list a at the rightmost insertion point. Modifies
 	the list in place; returns None."
 
-	self ___class___ @env0:callInsort: 'insort_right' list: a value: x.
+	self @env0:class @env0:callInsort: 'insort_right' list: a value: x.
 	^ None
 %
 
@@ -135,7 +135,7 @@ insort_left: a _: x
 	x into sorted list a at the leftmost insertion point. Modifies
 	the list in place; returns None."
 
-	self ___class___ @env0:callInsort: 'insort_left' list: a value: x.
+	self @env0:class @env0:callInsort: 'insort_left' list: a value: x.
 	^ None
 %
 

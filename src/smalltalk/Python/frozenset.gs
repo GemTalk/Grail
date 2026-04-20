@@ -33,7 +33,7 @@ method: frozenset
 __contains__: item
 	"Test if item is in the frozenset."
 
-	^ self ___includes___: item
+	^ self @env0:includes: item
 %
 
 category: 'Python-Comparison'
@@ -42,15 +42,15 @@ __eq__: other
 	"Return True if self and other have the same elements."
 
 	| otherClass |
-	otherClass := other ___class___.
+	otherClass := other @env0:class.
 	
 	"Check if other is a set or frozenset"
-	((otherClass ___eq___: frozenset) or: [
-		otherClass ___eq___: set
+	((otherClass @env0:= frozenset) or: [
+		otherClass @env0:= set
 	]) ifFalse: [^ false].
 	
 	"Compare using Set's equality"
-	^ self ___eq___: other
+	^ self @env0:= other
 %
 
 category: 'Python-Comparison'
@@ -80,7 +80,7 @@ __hash__
 
 	| hash |
 	hash := 0.
-	self ___do___: [:each |
+	self @env0:do: [:each |
 		| elemHash |
 		elemHash := each __hash__.
 		hash := hash @env0:bitXor: elemHash
@@ -109,7 +109,7 @@ method: frozenset
 __len__
 	"Return the number of elements in the frozenset."
 
-	^ self ___size___
+	^ self @env0:size
 %
 
 category: 'Python-Comparison'
@@ -128,7 +128,7 @@ method: frozenset
 __ne__: other
 	"Return True if self and other have different elements."
 
-	^ (self __eq__: other) ___not___
+	^ (self __eq__: other) @env0:not
 %
 
 category: 'Python-Set Operations (Operators)'
@@ -153,22 +153,22 @@ __repr__
 	"Return a string representation of the frozenset: frozenset({item1, item2, ...})"
 
 	| stream first |
-	stream := WriteStream ___on___: (String ___new___).
-	stream ___nextPutAll___: 'frozenset({'.
+	stream := WriteStream @env0:on: (String ___new___).
+	stream @env0:nextPutAll: 'frozenset({'.
 
 	first := true.
-	self ___do___: [:each |
+	self @env0:do: [:each |
 		| reprStr |
 		first ifFalse: [
-			stream ___nextPutAll___: ', '
+			stream @env0:nextPutAll: ', '
 		].
 		reprStr := each __repr__.
-		stream ___nextPutAll___: reprStr.
+		stream @env0:nextPutAll: reprStr.
 		first := false
 	].
 
-	stream ___nextPutAll___: '})'.
-	^ stream ___contents___
+	stream @env0:nextPutAll: '})'.
+	^ stream @env0:contents
 %
 
 category: 'Python-Set Operations (Operators)'
@@ -216,7 +216,7 @@ method: frozenset
 copy
 	"Return a shallow copy of the frozenset."
 
-	^ self ___copy___
+	^ self @env0:copy
 %
 
 category: 'Python-Set Operations (Methods)'
@@ -226,9 +226,9 @@ difference: other
 
 	| result |
 	result := frozenset ___new___.
-	self ___do___: [:each |
+	self @env0:do: [:each |
 		(other __contains__: each) ifFalse: [
-			result ___add___: each
+			result @env0:add: each
 		]
 	].
 	^ result
@@ -241,9 +241,9 @@ intersection: other
 
 	| result |
 	result := frozenset ___new___.
-	self ___do___: [:each |
+	self @env0:do: [:each |
 		(other __contains__: each) ifTrue: [
-			result ___add___: each
+			result @env0:add: each
 		]
 	].
 	^ result
@@ -254,7 +254,7 @@ method: frozenset
 isdisjoint: other
 	"Return True if the set has no elements in common with other."
 
-	self ___do___: [:each |
+	self @env0:do: [:each |
 		(other __contains__: each) ifTrue: [
 			^ false
 		]
@@ -267,7 +267,7 @@ method: frozenset
 issubset: other
 	"Test whether every element in the set is in other."
 
-	self ___do___: [:each |
+	self @env0:do: [:each |
 		(other __contains__: each) ifFalse: [
 			^ false
 		]
@@ -280,7 +280,7 @@ method: frozenset
 issuperset: other
 	"Test whether every element in other is in the set."
 
-	other ___do___: [:each |
+	other @env0:do: [:each |
 		(self __contains__: each) ifFalse: [
 			^ false
 		]
@@ -297,16 +297,16 @@ symmetric_difference: other
 	result := frozenset ___new___.
 
 	"Add elements from self that are not in other"
-	self ___do___: [:each |
+	self @env0:do: [:each |
 		(other __contains__: each) ifFalse: [
-			result ___add___: each
+			result @env0:add: each
 		]
 	].
 
 	"Add elements from other that are not in self"
-	other ___do___: [:each |
+	other @env0:do: [:each |
 		(self __contains__: each) ifFalse: [
-			result ___add___: each
+			result @env0:add: each
 		]
 	].
 
@@ -319,9 +319,9 @@ union: other
 	"Return a new frozenset with elements from self and other."
 
 	| result |
-	result := self ___copy___.
-	other ___do___: [:each |
-		result ___add___: each
+	result := self @env0:copy.
+	other @env0:do: [:each |
+		result @env0:add: each
 	].
 	^ result
 %

@@ -477,13 +477,13 @@ ___moduleNameToPath___: aName
 	Returns the full path if found, or nil if not found."
 	| pathParts basePath pyPath initPath |
 	grailDir == nil ifTrue: [^ nil].
-	pathParts := $. ___split___: aName.
-	basePath := (grailDir ___concat___: '/') ___concat___: ('/' join: pathParts).
+	pathParts := $. @env0:split: aName.
+	basePath := (grailDir @env0:, '/') @env0:, ('/' join: pathParts).
 	"Try name.py first"
-	pyPath := basePath ___concat___: '.py'.
+	pyPath := basePath @env0:, '.py'.
 	(GsFile @env0:existsOnServer: pyPath) ifTrue: [^ pyPath].
 	"Try name/__init__.py (package)"
-	initPath := basePath ___concat___: '/__init__.py'.
+	initPath := basePath @env0:, '/__init__.py'.
 	(GsFile @env0:existsOnServer: initPath) ifTrue: [^ initPath].
 	^ nil
 %
@@ -495,7 +495,7 @@ ___moduleNameToSoPath___: aName
 	Returns the full path if found, or nil if not found."
 	| filePath |
 	grailDir == nil ifTrue: [^ nil].
-	filePath := ((grailDir ___concat___: '/lib/') ___concat___: aName) ___concat___: '.so'.
+	filePath := ((grailDir @env0:, '/lib/') @env0:, aName) @env0:, '.so'.
 	(GsFile @env0:existsOnServer: filePath) ifTrue: [^ filePath].
 	^ nil
 %
@@ -505,7 +505,7 @@ classmethod: importlib
 lookupModule: aName
 	"Look up a module by name in the registry.
 	Returns the module class or nil if not found."
-	^ self modules ___at___: aName ___asSymbol___ ifAbsent: [nil]
+	^ self modules @env0:at: aName @env0:asSymbol ifAbsent: [nil]
 %
 
 category: 'Python-Module Registry'
@@ -524,14 +524,14 @@ ___resolve_name___: name package: package
 	dots := 0.
 	name do: [:c | c = $. ifTrue: [dots := dots + 1] ifFalse: [^ self error: 'Invalid relative import']].
 	remaining := name copyFrom: dots + 1 to: name size.
-	parentParts := $. ___split___: package.
+	parentParts := $. @env0:split: package.
 	(dots > parentParts __len__) ifTrue: [
 		ImportError ___signal___: 'attempted relative import beyond top-level package'
 	].
-	parentParts := parentParts __getitem__: (0 ___to___: (parentParts __len__ - dots)).
+	parentParts := parentParts __getitem__: (0 @env0:to: (parentParts __len__ - dots)).
 	remaining isEmpty
 		ifTrue: ['.' join: parentParts]
-		ifFalse: [('.' join: parentParts parentParts) ___concat___: '.' ___concat___: remaining]
+		ifFalse: [('.' join: parentParts parentParts) @env0:, '.' @env0:, remaining]
 %
 
 category: 'Python-Private'
@@ -539,14 +539,14 @@ method: importlib
 ___resolve_name___: name package: package level: level
 	"Resolve a relative module name to an absolute name with explicit level"
 	| parentParts |
-	parentParts := $. ___split___: package.
+	parentParts := $. @env0:split: package.
 	(level > parentParts __len__) ifTrue: [
 		ImportError ___signal___: 'attempted relative import beyond top-level package'
 	].
-	parentParts := parentParts __getitem__: (0 ___to___: (parentParts __len__ - level + 1)).
+	parentParts := parentParts __getitem__: (0 @env0:to: (parentParts __len__ - level + 1)).
 	name isEmpty
 		ifTrue: ['.' join: parentParts parentParts]
-		ifFalse: [('.' join: parentParts parentParts) ___concat___: '.' ___concat___: name]
+		ifFalse: [('.' join: parentParts parentParts) @env0:, '.' @env0:, name]
 %
 
 
@@ -567,22 +567,22 @@ ___import__: positional kw: kwargs
 	__import__(name, globals=None, locals=None, fromlist=(), level=0) -> module"
 
 	| name globals locals fromlist level absoluteName moduleInstance filePath result nameParts isDotted prefix parentFilePath parentParts parentName childName parentModule |
-	name := positional ___at___: 1.
-	globals := (positional __len__ ___gt___: 1)
-		ifTrue: [positional ___at___: 2]
+	name := positional @env0:at: 1.
+	globals := (positional __len__ @env0:> 1)
+		ifTrue: [positional @env0:at: 2]
 		ifFalse: [kwargs ifNotNil: [kwargs __getitem__: 'globals'] ifNil: [None]].
-	locals := (positional __len__ ___gt___: 2)
-		ifTrue: [positional ___at___: 3]
+	locals := (positional __len__ @env0:> 2)
+		ifTrue: [positional @env0:at: 3]
 		ifFalse: [kwargs ifNotNil: [kwargs __getitem__: 'locals'] ifNil: [None]].
-	fromlist := (positional __len__ ___gt___: 3)
-		ifTrue: [positional ___at___: 4]
+	fromlist := (positional __len__ @env0:> 3)
+		ifTrue: [positional @env0:at: 4]
 		ifFalse: [kwargs ifNotNil: [kwargs __getitem__: 'fromlist'] ifNil: [{}]].
-	level := (positional __len__ ___gt___: 4)
-		ifTrue: [positional ___at___: 5]
+	level := (positional __len__ @env0:> 4)
+		ifTrue: [positional @env0:at: 5]
 		ifFalse: [kwargs ifNotNil: [kwargs __getitem__: 'level'] ifNil: [0]].
 
 	"Handle relative imports"
-	absoluteName := (level ___gt___: 0)
+	absoluteName := (level @env0:> 0)
 		ifTrue: [
 			| package |
 			package := globals ifNotNil: [globals __getitem__: '__package__'] ifNil: [None].
@@ -594,46 +594,46 @@ ___import__: positional kw: kwargs
 		ifFalse: [name].
 
 	"Split the name into parts; detect dotted names"
-	nameParts := $. ___split___: absoluteName.
-	isDotted := nameParts __len__ ___gt___: 1.
+	nameParts := $. @env0:split: absoluteName.
+	isDotted := nameParts __len__ @env0:> 1.
 
 	"Ensure parent packages are loaded for dotted names"
 	isDotted ifTrue: [
 		prefix := nameParts @env0:at: 1.
-		(self ___class___ lookupModule: prefix) ifNil: [
-			parentFilePath := self ___class___ ___moduleNameToPath___: prefix.
+		(self @env0:class lookupModule: prefix) ifNil: [
+			parentFilePath := self @env0:class ___moduleNameToPath___: prefix.
 			parentFilePath notNil ifTrue: [
-				self ___class___ @env0:loadModuleFromPath: parentFilePath name: prefix.
+				self @env0:class @env0:loadModuleFromPath: parentFilePath name: prefix.
 			].
 		].
 		2 @env0:to: nameParts __len__ - 1 do: [:i |
-			prefix := (prefix ___concat___: '.') ___concat___: (nameParts @env0:at: i).
-			(self ___class___ lookupModule: prefix) ifNil: [
-				parentFilePath := self ___class___ ___moduleNameToPath___: prefix.
+			prefix := (prefix @env0:, '.') @env0:, (nameParts @env0:at: i).
+			(self @env0:class lookupModule: prefix) ifNil: [
+				parentFilePath := self @env0:class ___moduleNameToPath___: prefix.
 				parentFilePath notNil ifTrue: [
-					self ___class___ @env0:loadModuleFromPath: parentFilePath name: prefix.
+					self @env0:class @env0:loadModuleFromPath: parentFilePath name: prefix.
 				].
 			].
 		].
 	].
 
 	"Look up the module"
-	moduleInstance := self ___class___ lookupModule: absoluteName.
+	moduleInstance := self @env0:class lookupModule: absoluteName.
 	moduleInstance notNil ifTrue: [
 		result := moduleInstance
 	] ifFalse: [
 		"Module not found in registry - search filesystem for .py"
-		filePath := self ___class___ ___moduleNameToPath___: absoluteName.
+		filePath := self @env0:class ___moduleNameToPath___: absoluteName.
 		filePath notNil ifTrue: [
-			result := self ___class___ @env0:loadModuleFromPath: filePath name: absoluteName.
+			result := self @env0:class @env0:loadModuleFromPath: filePath name: absoluteName.
 		] ifFalse: [
 			"Search filesystem for .so (C extension module)"
-			filePath := self ___class___ ___moduleNameToSoPath___: absoluteName.
+			filePath := self @env0:class ___moduleNameToSoPath___: absoluteName.
 			filePath notNil ifTrue: [
-				result := self ___class___ @env0:loadDynamicModuleNamed: absoluteName fromPath: filePath.
+				result := self @env0:class @env0:loadDynamicModuleNamed: absoluteName fromPath: filePath.
 			] ifFalse: [
 				"Module not found in filesystem either"
-				ModuleNotFoundError ___signal___: (('No module named ''' ___concat___: absoluteName) ___concat___: '''')
+				ModuleNotFoundError ___signal___: (('No module named ''' @env0:, absoluteName) @env0:, '''')
 			]
 		]
 	].
@@ -643,15 +643,15 @@ ___import__: positional kw: kwargs
 		parentParts := nameParts @env0:copyFrom: 1 to: nameParts __len__ - 1.
 		parentName := '.' @env0:join: parentParts.
 		childName := nameParts @env0:last.
-		parentModule := self ___class___ lookupModule: parentName.
+		parentModule := self @env0:class lookupModule: parentName.
 		parentModule notNil ifTrue: [
-			parentModule ___at___: childName ___asSymbol___ put: result.
+			parentModule @env0:at: childName @env0:asSymbol put: result.
 		].
 	].
 
 	"Return the correct module per CPython semantics"
-	^ (isDotted and: [fromlist __len__ ___eq___: 0])
-		ifTrue: [self ___class___ lookupModule: (nameParts ___at___: 1)]
+	^ (isDotted and: [fromlist __len__ @env0:= 0])
+		ifTrue: [self @env0:class lookupModule: (nameParts @env0:at: 1)]
 		ifFalse: [result]
 %
 
@@ -662,12 +662,12 @@ _import_module: positional kw: kwargs
 	Delegates to ___import__:kw:."
 
 	| name package absoluteName |
-	name := positional ___at___: 1.
-	package := (positional __len__ ___gt___: 1)
-		ifTrue: [positional ___at___: 2]
+	name := positional @env0:at: 1.
+	package := (positional __len__ @env0:> 1)
+		ifTrue: [positional @env0:at: 2]
 		ifFalse: [kwargs ifNotNil: [kwargs __getitem__: 'package'] ifNil: [None]].
 
-	absoluteName := (name ___beginsWith___: '.')
+	absoluteName := (name @env0:beginsWith: '.')
 		ifTrue: [
 			package == None ifTrue: [
 				ImportError ___signal___: 'attempted relative import with no known parent package'
@@ -698,7 +698,7 @@ method: importlib
 reload: aModule
 	"reload(module) -> module. Clears and reinitializes the module."
 	| moduleClass |
-	moduleClass := aModule ___class___.
+	moduleClass := aModule @env0:class.
 	moduleClass clearInstance.
 	^ moduleClass instance
 %

@@ -23,8 +23,8 @@ __add__: other
 	"Concatenate two sequences. Returns a new sequence of the same type."
 
 	| result x |
-	result := self ___copy___.
-	result ___addAll___: other.
+	result := self @env0:copy.
+	result @env0:addAll: other.
 	^ result
 %
 
@@ -33,7 +33,7 @@ method: SequenceableCollection
 __contains__: item
 	"Return True if item is in the sequence, False otherwise."
 
-	^ self ___includes___: item
+	^ self @env0:includes: item
 %
 
 category: 'Python-Other'
@@ -50,14 +50,14 @@ __eq__: other
 	"Return True if sequences are equal (same type, same length, same elements)."
 
 	| myClass otherClass |
-	myClass := self ___class___.
-	otherClass := other ___class___.
+	myClass := self @env0:class.
+	otherClass := other @env0:class.
 	
 	"Must be same class"
 	myClass == otherClass ifFalse: [^ false].
 	
 	"Use Smalltalk's = for comparison"
-	^ self ___eq___: other
+	^ self @env0:= other
 %
 
 category: 'Python-Comparison'
@@ -65,7 +65,7 @@ method: SequenceableCollection
 __ge__: other
 	"Lexicographic comparison: self >= other"
 
-	^ self ___ge___: other
+	^ self @env0:>= other
 %
 
 category: 'Python-Sequence Protocol'
@@ -76,23 +76,23 @@ __getitem__: index
 	TODO: Support slicing."
 
 	| size idx |
-	size := self ___size___.
+	size := self @env0:size.
 	idx := index.
 
 	"Handle negative indices"
-	(idx ___lt___: 0) ifTrue: [
-		idx := size ___plus___: idx
+	(idx @env0:< 0) ifTrue: [
+		idx := size @env0:+ idx
 	].
 
 	"Check bounds (Python uses 0-based indexing)"
-	((idx ___lt___: 0) or: [
-		idx ___ge___: size
+	((idx @env0:< 0) or: [
+		idx @env0:>= size
 	]) ifTrue: [
 		IndexError ___signal___: 'list index out of range'
 	].
 
 	"Convert to 1-based Smalltalk index"
-	^ self ___at___: (idx ___plus___: 1)
+	^ self @env0:at: (idx @env0:+ 1)
 %
 
 category: 'Python-Comparison'
@@ -100,7 +100,7 @@ method: SequenceableCollection
 __gt__: other
 	"Lexicographic comparison: self > other"
 
-	^ self ___gt___: other
+	^ self @env0:> other
 %
 
 category: 'Python-Sequence Protocol'
@@ -117,7 +117,7 @@ method: SequenceableCollection
 __le__: other
 	"Lexicographic comparison: self <= other"
 
-	^ self ___le___: other
+	^ self @env0:<= other
 %
 
 category: 'Python-Sequence Protocol'
@@ -125,7 +125,7 @@ method: SequenceableCollection
 __len__
 	"Return the length of the sequence."
 
-	^ self ___size___
+	^ self @env0:size
 %
 
 category: 'Python-Comparison'
@@ -133,7 +133,7 @@ method: SequenceableCollection
 __lt__: other
 	"Lexicographic comparison: self < other"
 
-	^ self ___lt___: other
+	^ self @env0:< other
 %
 
 category: 'Python-Sequence Operations'
@@ -143,11 +143,11 @@ __mul__: n
 
 	| result |
 	result := (self @env0:species) ___new___.
-	(n ___le___: 0) ifTrue: [
+	(n @env0:<= 0) ifTrue: [
 		^ result
 	].
 
-	n ___timesRepeat___: [result ___addAll___: self].
+	n @env0:timesRepeat: [result @env0:addAll: self].
 	^ result
 %
 
@@ -156,7 +156,7 @@ method: SequenceableCollection
 __ne__: other
 	"Return True if sequences are not equal."
 
-	^ (self __eq__: other) ___not___
+	^ (self __eq__: other) @env0:not
 %
 
 category: 'Python-String Representation'
@@ -166,17 +166,17 @@ __repr__
 	Subclasses override to provide list vs tuple formatting."
 
 	| stream |
-	stream := WriteStream ___on___: (String ___new___).
-	stream ___nextPut___: $[.
+	stream := WriteStream @env0:on: (String ___new___).
+	stream @env0:nextPut: $[.
 
 	self @env0:do: [:each |
 			| reprStr |
 			reprStr := each __repr__.
-			stream ___nextPutAll___: reprStr
-		] separatedBy: [stream ___nextPutAll___: ', '].
+			stream @env0:nextPutAll: reprStr
+		] separatedBy: [stream @env0:nextPutAll: ', '].
 
-	stream ___nextPut___: $].
-	^ stream ___contents___
+	stream @env0:nextPut: $].
+	^ stream @env0:contents
 %
 
 category: 'Python-Sequence Operations'
@@ -202,9 +202,9 @@ count: value
 
 	| count |
 	count := 0.
-	self ___do___: [:each |
-		(each ___eq___: value) ifTrue: [
-			count := count ___plus___: 1
+	self @env0:do: [:each |
+		(each @env0:= value) ifTrue: [
+			count := count @env0:+ 1
 		]
 	].
 	^ count
@@ -217,10 +217,10 @@ index: value
 	Raises ValueError if value is not found."
 
 	| idx |
-	idx := self ___indexOf___: value ifAbsent: [ValueError ___signal___: 'list.index(x): x not in list'].
+	idx := self @env0:indexOf: value ifAbsent: [ValueError ___signal___: 'list.index(x): x not in list'].
 
 	"Convert from 1-based Smalltalk to 0-based Python"
-	^ idx ___minus___: (1)
+	^ idx @env0:- (1)
 %
 
 set compile_env: 0

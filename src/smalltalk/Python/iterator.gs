@@ -61,7 +61,7 @@ method: iterator
 __class__
 	"Return the class of this iterator."
 
-	^ self ___class___
+	^ self @env0:class
 %
 
 category: 'Python-Iterator Protocol'
@@ -80,7 +80,7 @@ __next__
 	If there are no further items, raise StopIteration.
 	This is an abstract method that must be overridden by subclasses."
 
-	self ___error___: 'Subclass must implement __next__'
+	self @env0:error: 'Subclass must implement __next__'
 %
 
 category: 'Python-String Representation'
@@ -89,15 +89,15 @@ __repr__
 	"Return a string representation of the iterator."
 
 	| className stream |
-	className := self ___class___.
-	className := className ___name___.
-	stream := WriteStream ___on___: (String ___new___).
-	stream ___nextPut___: $<.
-	stream ___nextPutAll___: className.
-	stream ___nextPutAll___: ' object at 0x'.
-	stream ___nextPutAll___: (self ___identityHash___).
-	stream ___nextPut___: $>.
-	^ stream ___contents___
+	className := self @env0:class.
+	className := className @env0:name.
+	stream := WriteStream @env0:on: (String ___new___).
+	stream @env0:nextPut: $<.
+	stream @env0:nextPutAll: className.
+	stream @env0:nextPutAll: ' object at 0x'.
+	stream @env0:nextPutAll: (self @env0:identityHash).
+	stream @env0:nextPut: $>.
+	^ stream @env0:contents
 %
 
 set compile_env: 0

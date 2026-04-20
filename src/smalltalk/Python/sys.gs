@@ -64,20 +64,20 @@ classmethod: sys
 initializeBuiltinModules
 	"Initialize the registry with built-in modules"
 	modules
-		___at___: #builtins 	put: builtins 	instance;
-		___at___: #copyreg 		put: copyreg 	instance;
-		___at___: #math 		put: math 		instance;
-		___at___: #enum 		put: enum 		instance;
-		___at___: #fractions	put: fractions 	instance;
-		___at___: #functools	put: functools 	instance;
-		___at___: #gemstone 	put: gemstone 	instance;
-		___at___: #html 		put: html 		instance;
-		___at___: #cmath 		put: cmath 		instance;
-		___at___: #random 		put: random 	instance;
-		___at___: #os 			put: os 		instance;
-		___at___: #string 		put: string 	instance;
-		___at___: #sys 			put: sys 		instance;
-		___yourself___.
+		@env0:at: #builtins 	put: builtins 	instance;
+		@env0:at: #copyreg 		put: copyreg 	instance;
+		@env0:at: #math 		put: math 		instance;
+		@env0:at: #enum 		put: enum 		instance;
+		@env0:at: #fractions	put: fractions 	instance;
+		@env0:at: #functools	put: functools 	instance;
+		@env0:at: #gemstone 	put: gemstone 	instance;
+		@env0:at: #html 		put: html 		instance;
+		@env0:at: #cmath 		put: cmath 		instance;
+		@env0:at: #random 		put: random 	instance;
+		@env0:at: #os 			put: os 		instance;
+		@env0:at: #string 		put: string 	instance;
+		@env0:at: #sys 			put: sys 		instance;
+		@env0:yourself.
 %
 
 category: 'Python-Module Registry'
@@ -96,294 +96,294 @@ modules
 category: 'Python-Accessors'
 method: sys
 __breakpointhook__
-	^ self ___at___: #__breakpointhook__
+	^ self @env0:at: #__breakpointhook__
 %
 
 
 category: 'Python-Accessors'
 method: sys
 __displayhook__
-	^ self ___at___: #__displayhook__
+	^ self @env0:at: #__displayhook__
 %
 
 
 category: 'Python-Accessors'
 method: sys
 __excepthook__
-	^ self ___at___: #__excepthook__
+	^ self @env0:at: #__excepthook__
 %
 
 
 category: 'Python-Accessors'
 method: sys
 __stderr__
-	^ self ___at___: #__stderr__
+	^ self @env0:at: #__stderr__
 %
 
 
 category: 'Python-Accessors'
 method: sys
 __stdin__
-	^ self ___at___: #__stdin__
+	^ self @env0:at: #__stdin__
 %
 
 
 category: 'Python-Accessors'
 method: sys
 __stdout__
-	^ self ___at___: #__stdout__
+	^ self @env0:at: #__stdout__
 %
 
 
 category: 'Python-Accessors'
 method: sys
 __unraisablehook__
-	^ self ___at___: #__unraisablehook__
+	^ self @env0:at: #__unraisablehook__
 %
 
 
 category: 'Python-Accessors'
 method: sys
 addaudithook
-	^ self ___at___: #addaudithook
+	^ self @env0:at: #addaudithook
 %
 
 
 category: 'Python-Accessors'
 method: sys
 api_version
-	^ self ___at___: #api_version
+	^ self @env0:at: #api_version
 %
 
 
 category: 'Python-Accessors'
 method: sys
 argv
-	^ self ___at___: #argv
+	^ self @env0:at: #argv
 %
 
 
 category: 'Python-Accessors'
 method: sys
 audit
-	^ self ___at___: #audit
+	^ self @env0:at: #audit
 %
 
 
 category: 'Python-Accessors'
 method: sys
 base_exec_prefix
-	^ self ___at___: #base_exec_prefix
+	^ self @env0:at: #base_exec_prefix
 %
 
 
 category: 'Python-Accessors'
 method: sys
 base_prefix
-	^ self ___at___: #base_prefix
+	^ self @env0:at: #base_prefix
 %
 
 
 category: 'Python-Accessors'
 method: sys
 breakpointhook
-	^ self ___at___: #breakpointhook
+	^ self @env0:at: #breakpointhook
 %
 
 
 category: 'Python-Accessors'
 method: sys
 builtin_module_names
-	^ self ___at___: #builtin_module_names
+	^ self @env0:at: #builtin_module_names
 %
 
 
 category: 'Python-Accessors'
 method: sys
 byteorder
-	^ self ___at___: #byteorder
+	^ self @env0:at: #byteorder
 %
 
 
 category: 'Python-Accessors'
 method: sys
 call_tracing
-	^ self ___at___: #call_tracing
+	^ self @env0:at: #call_tracing
 %
 
 
 category: 'Python-Accessors'
 method: sys
 copyright
-	^ self ___at___: #copyright
+	^ self @env0:at: #copyright
 %
 
 
 category: 'Python-Accessors'
 method: sys
 displayhook
-	^ self ___at___: #displayhook
+	^ self @env0:at: #displayhook
 %
 
 
 category: 'Python-Accessors'
 method: sys
 dont_write_bytecode
-	^ self ___at___: #dont_write_bytecode
+	^ self @env0:at: #dont_write_bytecode
 %
 
 
 category: 'Python-Accessors'
 method: sys
 exc_info
-	^ self ___at___: #exc_info
+	^ self @env0:at: #exc_info
 %
 
 
 category: 'Python-Accessors'
 method: sys
 excepthook
-	^ self ___at___: #excepthook
+	^ self @env0:at: #excepthook
 %
 
 
 category: 'Python-Accessors'
 method: sys
 exception
-	^ self ___at___: #exception
+	^ self @env0:at: #exception
 %
 
 
 category: 'Python-Accessors'
 method: sys
 exec_prefix
-	^ self ___at___: #exec_prefix
+	^ self @env0:at: #exec_prefix
 %
 
 
 category: 'Python-Accessors'
 method: sys
 executable
-	^ self ___at___: #executable
+	^ self @env0:at: #executable
 %
 
 
 category: 'Python-Accessors'
 method: sys
 exit
-	^ self ___at___: #exit
+	^ self @env0:at: #exit
 %
 
 
 category: 'Python-Accessors'
 method: sys
 flags
-	^ self ___at___: #flags
+	^ self @env0:at: #flags
 %
 
 
 category: 'Python-Accessors'
 method: sys
 float_info
-	^ self ___at___: #float_info
+	^ self @env0:at: #float_info
 %
 
 
 category: 'Python-Accessors'
 method: sys
 float_repr_style
-	^ self ___at___: #float_repr_style
+	^ self @env0:at: #float_repr_style
 %
 
 
 category: 'Python-Accessors'
 method: sys
 get_int_max_str_digits
-	^ self ___at___: #get_int_max_str_digits
+	^ self @env0:at: #get_int_max_str_digits
 %
 
 
 category: 'Python-Accessors'
 method: sys
 getallocatedblocks
-	^ self ___at___: #getallocatedblocks
+	^ self @env0:at: #getallocatedblocks
 %
 
 
 category: 'Python-Accessors'
 method: sys
 getdefaultencoding
-	^ self ___at___: #getdefaultencoding
+	^ self @env0:at: #getdefaultencoding
 %
 
 
 category: 'Python-Accessors'
 method: sys
 getfilesystemencodeerrors
-	^ self ___at___: #getfilesystemencodeerrors
+	^ self @env0:at: #getfilesystemencodeerrors
 %
 
 
 category: 'Python-Accessors'
 method: sys
 getfilesystemencoding
-	^ self ___at___: #getfilesystemencoding
+	^ self @env0:at: #getfilesystemencoding
 %
 
 
 category: 'Python-Accessors'
 method: sys
 getprofile
-	^ self ___at___: #getprofile
+	^ self @env0:at: #getprofile
 %
 
 
 category: 'Python-Accessors'
 method: sys
 getrecursionlimit
-	^ self ___at___: #getrecursionlimit
+	^ self @env0:at: #getrecursionlimit
 %
 
 
 category: 'Python-Accessors'
 method: sys
 getrefcount
-	^ self ___at___: #getrefcount
+	^ self @env0:at: #getrefcount
 %
 
 
 category: 'Python-Accessors'
 method: sys
 getsizeof
-	^ self ___at___: #getsizeof
+	^ self @env0:at: #getsizeof
 %
 
 
 category: 'Python-Accessors'
 method: sys
 gettrace
-	^ self ___at___: #gettrace
+	^ self @env0:at: #gettrace
 %
 
 
 category: 'Python-Accessors'
 method: sys
 hash_info
-	^ self ___at___: #hash_info
+	^ self @env0:at: #hash_info
 %
 
 
 category: 'Python-Accessors'
 method: sys
 hexversion
-	^ self ___at___: #hexversion
+	^ self @env0:at: #hexversion
 %
 
 
 category: 'Python-Accessors'
 method: sys
 implementation
-	^ self ___at___: #implementation
+	^ self @env0:at: #implementation
 %
 
 
@@ -400,10 +400,10 @@ initialize
 		yourself.
 	"Store original hooks as dunder attributes (BoundMethod wraps the
 	receiver + selector so the hook can be called as a first-class value)."
-	self ___at___: #__breakpointhook__ put: (BoundMethod receiver: self selector: #breakpointhook).
-	self ___at___: #__displayhook__ put: (BoundMethod receiver: self selector: #displayhook).
-	self ___at___: #__excepthook__ put: (BoundMethod receiver: self selector: #excepthook).
-	self ___at___: #__unraisablehook__ put: (BoundMethod receiver: self selector: #unraisablehook).
+	self @env0:at: #__breakpointhook__ put: (BoundMethod receiver: self selector: #breakpointhook).
+	self @env0:at: #__displayhook__ put: (BoundMethod receiver: self selector: #displayhook).
+	self @env0:at: #__excepthook__ put: (BoundMethod receiver: self selector: #excepthook).
+	self @env0:at: #__unraisablehook__ put: (BoundMethod receiver: self selector: #unraisablehook).
 %
 
 ! ===============================================================================
@@ -437,7 +437,7 @@ category: 'Python-Built-in Functions'
 method: sys
 exc_info
 	"exc_info() -> (type, value, traceback)"
-	^ tuple ___withAll___: {None. None. None}
+	^ tuple @env0:withAll: {None. None. None}
 %
 
 category: 'Python-Built-in Functions'
@@ -614,8 +614,8 @@ method: sys
 _exit: positional kw: kwargs
 	"exit([arg]) - varargs form."
 	| arg |
-	arg := (positional __len__ ___gt___: 0)
-		ifTrue: [positional ___at___: 1]
+	arg := (positional __len__ @env0:> 0)
+		ifTrue: [positional @env0:at: 1]
 		ifFalse: [0].
 	^ SystemExit ___signal___: arg
 %
@@ -625,11 +625,11 @@ method: sys
 _getsizeof: positional kw: kwargs
 	"getsizeof(object[, default]) - Return size of object in bytes."
 	| obj default |
-	obj := positional ___at___: 1.
-	default := (positional __len__ ___gt___: 1)
-		ifTrue: [positional ___at___: 2]
+	obj := positional @env0:at: 1.
+	default := (positional __len__ @env0:> 1)
+		ifTrue: [positional @env0:at: 2]
 		ifFalse: [nil].
-	^ [obj @env0:physicalSize] ___on___: Error do: [:ex |
+	^ [obj @env0:physicalSize] @env0:on: Error do: [:ex |
 		default ifNil: [TypeError ___signal___: 'object does not provide size'].
 		default
 	]
@@ -652,13 +652,13 @@ initialize_version_info
 	"Initialize version-related attributes using GemStone version info"
 	| gsVersion gsVersionReport grailVersion |
 	gsVersionReport := System @env0:gemVersionReport.
-	gsVersion := gsVersionReport ___at___: #gsVersion ifAbsent: ['unknown'].
+	gsVersion := gsVersionReport @env0:at: #gsVersion ifAbsent: ['unknown'].
 	grailVersion := '0.1.0'.
-	self ___at___: #version put: (((('Grail ' ___concat___: grailVersion) ___concat___: ' (GemStone/S ') ___concat___: gsVersion) ___concat___: ')').
-	self ___at___: #version_info put: (tuple ___withAll___: {0. 1. 0. 'alpha'. 0}).
-	self ___at___: #api_version put: 0.
-	self ___at___: #hexversion put: 16r00010000.
-	self ___at___: #implementation put: None.
+	self @env0:at: #version put: (((('Grail ' @env0:, grailVersion) @env0:, ' (GemStone/S ') @env0:, gsVersion) @env0:, ')').
+	self @env0:at: #version_info put: (tuple @env0:withAll: {0. 1. 0. 'alpha'. 0}).
+	self @env0:at: #api_version put: 0.
+	self @env0:at: #hexversion put: 16r00010000.
+	self @env0:at: #implementation put: None.
 %
 
 category: 'Python-Initialization'
@@ -668,22 +668,22 @@ initialize_platform_info
 	| osName cpuArch |
 	osName := System @env0:gemVersionAt: #osName.
 	cpuArch := System @env0:gemVersionAt: #cpuArchitecture.
-	self ___at___: #platform put: ((osName ___eq___: 'Darwin')
+	self @env0:at: #platform put: ((osName @env0:= 'Darwin')
 		ifTrue: ['darwin']
-		ifFalse: [(osName ___eq___: 'Linux')
+		ifFalse: [(osName @env0:= 'Linux')
 			ifTrue: ['linux']
-			ifFalse: [(osName ___eq___: 'SunOS')
+			ifFalse: [(osName @env0:= 'SunOS')
 				ifTrue: ['sunos']
-				ifFalse: [(osName ___eq___: 'AIX')
+				ifFalse: [(osName @env0:= 'AIX')
 					ifTrue: ['aix']
 					ifFalse: [osName @env0:asLowercase]]]]).
-	self ___at___: #byteorder put: ((cpuArch ___eq___: 'SPARC')
+	self @env0:at: #byteorder put: ((cpuArch @env0:= 'SPARC')
 		ifTrue: ['big']
 		ifFalse: ['little']).
-	self ___at___: #maxsize put: (SmallInteger @env0:maximumValue).
-	self ___at___: #maxunicode put: 16r10FFFF.
-	self ___at___: #platlibdir put: 'lib'.
-	self ___at___: #float_repr_style put: 'short'.
+	self @env0:at: #maxsize put: (SmallInteger @env0:maximumValue).
+	self @env0:at: #maxunicode put: 16r10FFFF.
+	self @env0:at: #platlibdir put: 'lib'.
+	self @env0:at: #float_repr_style put: 'short'.
 %
 
 category: 'Python-Initialization'
@@ -692,18 +692,18 @@ initialize_path_info
 	"Initialize path-related attributes using GemStone info"
 	| gsVersionReport gemNativeCodePath |
 	gsVersionReport := System @env0:gemVersionReport.
-	gemNativeCodePath := gsVersionReport ___at___: 'gemNativeCodePath' ifAbsent: [''].
-	self ___at___: #prefix put: gemNativeCodePath.
-	self ___at___: #exec_prefix put: gemNativeCodePath.
-	self ___at___: #base_prefix put: gemNativeCodePath.
-	self ___at___: #base_exec_prefix put: gemNativeCodePath.
-	self ___at___: #executable put: gemNativeCodePath.
-	self ___at___: #path put: (list ___new___).
-	self ___at___: #path_hooks put: (list ___new___).
-	self ___at___: #path_importer_cache put: (KeyValueDictionary @env0:new).
-	self ___at___: #meta_path put: (list ___new___).
-	self ___at___: #pycache_prefix put: None.
-	self ___at___: #dont_write_bytecode put: true.
+	gemNativeCodePath := gsVersionReport @env0:at: 'gemNativeCodePath' ifAbsent: [''].
+	self @env0:at: #prefix put: gemNativeCodePath.
+	self @env0:at: #exec_prefix put: gemNativeCodePath.
+	self @env0:at: #base_prefix put: gemNativeCodePath.
+	self @env0:at: #base_exec_prefix put: gemNativeCodePath.
+	self @env0:at: #executable put: gemNativeCodePath.
+	self @env0:at: #path put: (list ___new___).
+	self @env0:at: #path_hooks put: (list ___new___).
+	self @env0:at: #path_importer_cache put: (KeyValueDictionary @env0:new).
+	self @env0:at: #meta_path put: (list ___new___).
+	self @env0:at: #pycache_prefix put: None.
+	self @env0:at: #dont_write_bytecode put: true.
 %
 
 category: 'Python-Initialization'
@@ -712,25 +712,25 @@ initialize_runtime_info
 	"Initialize runtime information attributes from GemStone"
 	| cmdArgs |
 	cmdArgs := System @env0:commandLineArguments.
-	self ___at___: #argv put: (list ___new___).
-	self ___at___: #orig_argv put: (list ___new___).
+	self @env0:at: #argv put: (list ___new___).
+	self @env0:at: #orig_argv put: (list ___new___).
 	cmdArgs @env0:do: [:arg |
-		(self ___at___: #argv) append: arg.
-		(self ___at___: #orig_argv) append: arg.
+		(self @env0:at: #argv) append: arg.
+		(self @env0:at: #orig_argv) append: arg.
 	].
-	self ___at___: #modules put: (sys modules).
-	self ___at___: #builtin_module_names put: (tuple ___withAll___: {'builtins'. 'cmath'. 'fractions'. 'gemstone'. 'importlib'. 'math'. 'os'. 'string'. 'sys'}).
-	self ___at___: #stdlib_module_names put: (frozenset ___new___).
-	self ___at___: #copyright put: 'Copyright (c) GemTalk Systems LLC. All rights reserved.'.
-	self ___at___: #flags put: None.
-	self ___at___: #float_info put: None.
-	self ___at___: #int_info put: None.
-	self ___at___: #hash_info put: None.
-	self ___at___: #thread_info put: None.
-	self ___at___: #warnoptions put: (list ___new___).
-	self ___at___: #tracebacklimit put: 1000.
-	self ___at___: #ps1 put: '>>> '.
-	self ___at___: #ps2 put: '... '.
+	self @env0:at: #modules put: (sys modules).
+	self @env0:at: #builtin_module_names put: (tuple @env0:withAll: {'builtins'. 'cmath'. 'fractions'. 'gemstone'. 'importlib'. 'math'. 'os'. 'string'. 'sys'}).
+	self @env0:at: #stdlib_module_names put: (frozenset ___new___).
+	self @env0:at: #copyright put: 'Copyright (c) GemTalk Systems LLC. All rights reserved.'.
+	self @env0:at: #flags put: None.
+	self @env0:at: #float_info put: None.
+	self @env0:at: #int_info put: None.
+	self @env0:at: #hash_info put: None.
+	self @env0:at: #thread_info put: None.
+	self @env0:at: #warnoptions put: (list ___new___).
+	self @env0:at: #tracebacklimit put: 1000.
+	self @env0:at: #ps1 put: '>>> '.
+	self @env0:at: #ps2 put: '... '.
 %
 
 

@@ -55,21 +55,21 @@ join: paths
 	"os.path.join(paths) — join path components. Takes a collection."
 
 	| result sep size |
-	(paths ___isEmpty___) ifTrue: [^ ''].
-	((paths ___size___) ___eq___: 1) ifTrue: [^ paths ___first___].
+	(paths @env0:isEmpty) ifTrue: [^ ''].
+	((paths @env0:size) @env0:= 1) ifTrue: [^ paths @env0:first].
 	sep := '/'.
-	result := paths ___first___.
-	size := paths ___size___.
-	2 ___to___: size do: [:i |
+	result := paths @env0:first.
+	size := paths @env0:size.
+	2 @env0:to: size do: [:i |
 		| each |
-		each := paths ___at___: i.
-		(each ___beginsWith___: sep) ifTrue: [
+		each := paths @env0:at: i.
+		(each @env0:beginsWith: sep) ifTrue: [
 			result := each
 		] ifFalse: [
-			(result ___endsWith___: sep) ifTrue: [
-				result := result ___concat___: each
+			(result @env0:endsWith: sep) ifTrue: [
+				result := result @env0:, each
 			] ifFalse: [
-				result := (result ___concat___: sep) ___concat___: each
+				result := (result @env0:, sep) @env0:, each
 			]
 		]
 	].
@@ -84,15 +84,15 @@ basename: path
 	| sep trimmedPath reversedPath index lastIndex |
 	sep := '/'.
 	trimmedPath := path.
-	(path ___endsWith___: sep) ifTrue: [
-		trimmedPath := path ___copyFrom___: 1 to: ((path ___size___) ___minus___: 1)
+	(path @env0:endsWith: sep) ifTrue: [
+		trimmedPath := path @env0:copyFrom: 1 to: ((path @env0:size) @env0:- 1)
 	].
-	(trimmedPath ___isEmpty___) ifTrue: [^ sep].
-	reversedPath := trimmedPath ___reverse___.
-	index := reversedPath ___findString___: sep startingAt: 1.
-	(index ___eq___: 0) ifTrue: [^ trimmedPath].
-	lastIndex := ((trimmedPath ___size___) ___minus___: (index)) ___plus___: 1.
-	^ trimmedPath ___copyFrom___: (lastIndex ___plus___: 1) to: trimmedPath ___size___
+	(trimmedPath @env0:isEmpty) ifTrue: [^ sep].
+	reversedPath := trimmedPath @env0:reverse.
+	index := reversedPath @env0:findString: sep startingAt: 1.
+	(index @env0:= 0) ifTrue: [^ trimmedPath].
+	lastIndex := ((trimmedPath @env0:size) @env0:- (index)) @env0:+ 1.
+	^ trimmedPath @env0:copyFrom: (lastIndex @env0:+ 1) to: trimmedPath @env0:size
 %
 
 category: 'Python-Path Manipulation'
@@ -103,16 +103,16 @@ dirname: path
 	| sep trimmedPath reversedPath index lastIndex |
 	sep := '/'.
 	trimmedPath := path.
-	(path ___endsWith___: sep) ifTrue: [
-		trimmedPath := path ___copyFrom___: 1 to: ((path ___size___) ___minus___: 1)
+	(path @env0:endsWith: sep) ifTrue: [
+		trimmedPath := path @env0:copyFrom: 1 to: ((path @env0:size) @env0:- 1)
 	].
-	(trimmedPath ___isEmpty___) ifTrue: [^ sep].
-	reversedPath := trimmedPath ___reverse___.
-	index := reversedPath ___findString___: sep startingAt: 1.
-	(index ___eq___: 0) ifTrue: [^ '.'].
-	lastIndex := ((trimmedPath ___size___) ___minus___: (index)) ___plus___: 1.
+	(trimmedPath @env0:isEmpty) ifTrue: [^ sep].
+	reversedPath := trimmedPath @env0:reverse.
+	index := reversedPath @env0:findString: sep startingAt: 1.
+	(index @env0:= 0) ifTrue: [^ '.'].
+	lastIndex := ((trimmedPath @env0:size) @env0:- (index)) @env0:+ 1.
 	(lastIndex == 1) ifTrue: [^ sep].
-	^ trimmedPath ___copyFrom___: 1 to: (lastIndex ___minus___: 1)
+	^ trimmedPath @env0:copyFrom: 1 to: (lastIndex @env0:- 1)
 %
 
 category: 'Python-Path Manipulation'
@@ -122,19 +122,19 @@ split: path
 
 	| sep pathSize reversedPath index lastIndex head tail |
 	sep := '/'.
-	pathSize := path ___size___.
-	reversedPath := path ___reverse___.
-	index := reversedPath ___findString___: sep startingAt: 1.
-	(index ___eq___: 0) ifTrue: [^ tuple ___with___: '' with: path].
-	lastIndex := (pathSize ___minus___: (index)) ___plus___: 1.
-	(lastIndex ___eq___: pathSize) ifTrue: [
-		head := path ___copyFrom___: 1 to: (lastIndex ___minus___: 1).
-		(head ___isEmpty___) ifTrue: [head := sep].
-		^ tuple ___with___: head with: ''
+	pathSize := path @env0:size.
+	reversedPath := path @env0:reverse.
+	index := reversedPath @env0:findString: sep startingAt: 1.
+	(index @env0:= 0) ifTrue: [^ tuple @env0:with: '' with: path].
+	lastIndex := (pathSize @env0:- (index)) @env0:+ 1.
+	(lastIndex @env0:= pathSize) ifTrue: [
+		head := path @env0:copyFrom: 1 to: (lastIndex @env0:- 1).
+		(head @env0:isEmpty) ifTrue: [head := sep].
+		^ tuple @env0:with: head with: ''
 	].
-	head := path ___copyFrom___: 1 to: (lastIndex ___minus___: 1).
-	tail := path ___copyFrom___: (lastIndex ___plus___: 1) to: pathSize.
-	^ tuple ___with___: head with: tail
+	head := path @env0:copyFrom: 1 to: (lastIndex @env0:- 1).
+	tail := path @env0:copyFrom: (lastIndex @env0:+ 1) to: pathSize.
+	^ tuple @env0:with: head with: tail
 %
 
 category: 'Python-Path Manipulation'
@@ -143,21 +143,21 @@ splitext: path
 	"os.path.splitext(path) — split into (root, ext)."
 
 	| pathSize reversedPath index lastDotIndex sepIndex root ext |
-	pathSize := path ___size___.
-	reversedPath := path ___reverse___.
-	index := reversedPath ___findString___: '.' startingAt: 1.
-	(index ___eq___: 0) ifTrue: [^ tuple ___with___: path with: ''].
-	lastDotIndex := (pathSize ___minus___: (index)) ___plus___: 1.
-	(lastDotIndex ___eq___: pathSize) ifTrue: [^ tuple ___with___: path with: ''].
+	pathSize := path @env0:size.
+	reversedPath := path @env0:reverse.
+	index := reversedPath @env0:findString: '.' startingAt: 1.
+	(index @env0:= 0) ifTrue: [^ tuple @env0:with: path with: ''].
+	lastDotIndex := (pathSize @env0:- (index)) @env0:+ 1.
+	(lastDotIndex @env0:= pathSize) ifTrue: [^ tuple @env0:with: path with: ''].
 	"Check for path separator after dot"
-	index := reversedPath ___findString___: '/' startingAt: 1.
-	(index ___eq___: 0) ifTrue: [sepIndex := 0]
-		ifFalse: [sepIndex := (pathSize ___minus___: (index)) ___plus___: 1].
-	(sepIndex ___gt___: lastDotIndex) ifTrue: [^ tuple ___with___: path with: ''].
-	(lastDotIndex ___eq___: 1) ifTrue: [^ tuple ___with___: path with: ''].
-	root := path ___copyFrom___: 1 to: (lastDotIndex ___minus___: 1).
-	ext := path ___copyFrom___: lastDotIndex to: pathSize.
-	^ tuple ___with___: root with: ext
+	index := reversedPath @env0:findString: '/' startingAt: 1.
+	(index @env0:= 0) ifTrue: [sepIndex := 0]
+		ifFalse: [sepIndex := (pathSize @env0:- (index)) @env0:+ 1].
+	(sepIndex @env0:> lastDotIndex) ifTrue: [^ tuple @env0:with: path with: ''].
+	(lastDotIndex @env0:= 1) ifTrue: [^ tuple @env0:with: path with: ''].
+	root := path @env0:copyFrom: 1 to: (lastDotIndex @env0:- 1).
+	ext := path @env0:copyFrom: lastDotIndex to: pathSize.
+	^ tuple @env0:with: root with: ext
 %
 
 category: 'Python-Path Manipulation'
@@ -165,7 +165,7 @@ method: os_path
 isabs: path
 	"os.path.isabs(path) — True if path is absolute."
 
-	^ path ___beginsWith___: '/'
+	^ path @env0:beginsWith: '/'
 %
 
 category: 'Python-Path Manipulation'
@@ -175,53 +175,53 @@ normpath: path
 
 	| parts sep isAbsolute earlyExit result dotDotIndex prevIndex |
 	sep := '/'.
-	parts := $/ ___split___: path.
-	isAbsolute := path ___beginsWith___: sep.
-	parts := parts @env0:reject: [:each | (each ___isEmpty___) or: [each ___eq___: '.']].
-	(isAbsolute and: [(parts ___isEmpty___) or: [((parts ___first___) ___isEmpty___) not]])
+	parts := $/ @env0:split: path.
+	isAbsolute := path @env0:beginsWith: sep.
+	parts := parts @env0:reject: [:each | (each @env0:isEmpty) or: [each @env0:= '.']].
+	(isAbsolute and: [(parts @env0:isEmpty) or: [((parts @env0:first) @env0:isEmpty) not]])
 		ifTrue: [parts @env0:addFirst: ''].
 	earlyExit := false.
 	result := nil.
-	[((parts ___indexOf___: '..' ifAbsent: [0]) ___eq___: 0) not] whileTrue: [
-		dotDotIndex := parts ___indexOf___: '..' ifAbsent: [0].
-		(dotDotIndex ___eq___: 1) ifTrue: [
+	[((parts @env0:indexOf: '..' ifAbsent: [0]) @env0:= 0) not] whileTrue: [
+		dotDotIndex := parts @env0:indexOf: '..' ifAbsent: [0].
+		(dotDotIndex @env0:= 1) ifTrue: [
 			isAbsolute ifTrue: [
-				parts ___removeAtIndex___: 1
+				parts @env0:removeAtIndex: 1
 			] ifFalse: [
-				result := parts ___inject___: (parts ___first___) into: [:acc :each |
-					((each ___eq___: (parts ___first___))) ifTrue: [acc]
-						ifFalse: [((acc ___concat___: sep) ___concat___: each)]
+				result := parts @env0:inject: (parts @env0:first) into: [:acc :each |
+					((each @env0:= (parts @env0:first))) ifTrue: [acc]
+						ifFalse: [((acc @env0:, sep) @env0:, each)]
 				].
 				earlyExit := true
 			]
 		] ifFalse: [
-			prevIndex := dotDotIndex ___minus___: (1).
-			((parts ___at___: prevIndex) ___isEmpty___) ifTrue: [
-				parts ___removeAtIndex___: dotDotIndex
+			prevIndex := dotDotIndex @env0:- (1).
+			((parts @env0:at: prevIndex) @env0:isEmpty) ifTrue: [
+				parts @env0:removeAtIndex: dotDotIndex
 			] ifFalse: [
-				parts ___removeAtIndex___: dotDotIndex.
-				parts ___removeAtIndex___: prevIndex
+				parts @env0:removeAtIndex: dotDotIndex.
+				parts @env0:removeAtIndex: prevIndex
 			]
 		].
 		earlyExit ifTrue: [parts := list ___new___]
 	].
 	earlyExit ifTrue: [^ result].
-	(parts ___isEmpty___) ifTrue: [^ '.'].
-	((parts ___size___) ___eq___: 1) ifTrue: [
-		^ ((parts ___first___) ___isEmpty___) ifTrue: [sep] ifFalse: [parts ___first___]
+	(parts @env0:isEmpty) ifTrue: [^ '.'].
+	((parts @env0:size) @env0:= 1) ifTrue: [
+		^ ((parts @env0:first) @env0:isEmpty) ifTrue: [sep] ifFalse: [parts @env0:first]
 	].
-	((parts ___first___) ___isEmpty___) ifTrue: [
+	((parts @env0:first) @env0:isEmpty) ifTrue: [
 		| rest |
-		rest := parts ___copyFrom___: 2 to: parts ___size___.
-		(rest ___isEmpty___) ifTrue: [^ sep].
-		^ rest ___inject___: (sep ___concat___: (rest ___first___)) into: [:acc :each |
-			((each ___eq___: (rest ___first___))) ifTrue: [acc]
-				ifFalse: [((acc ___concat___: sep) ___concat___: each)]
+		rest := parts @env0:copyFrom: 2 to: parts @env0:size.
+		(rest @env0:isEmpty) ifTrue: [^ sep].
+		^ rest @env0:inject: (sep @env0:, (rest @env0:first)) into: [:acc :each |
+			((each @env0:= (rest @env0:first))) ifTrue: [acc]
+				ifFalse: [((acc @env0:, sep) @env0:, each)]
 		]
 	].
-	^ parts ___inject___: (parts ___first___) into: [:acc :each |
-		((each ___eq___: (parts ___first___))) ifTrue: [acc]
-			ifFalse: [((acc ___concat___: sep) ___concat___: each)]
+	^ parts @env0:inject: (parts @env0:first) into: [:acc :each |
+		((each @env0:= (parts @env0:first))) ifTrue: [acc]
+			ifFalse: [((acc @env0:, sep) @env0:, each)]
 	]
 %
 
@@ -272,45 +272,45 @@ commonpath: paths
 	"os.path.commonpath(paths) — longest common sub-path."
 
 	| allParts firstSize minSize commonParts allPartsSize i firstPart allMatch |
-	(paths ___isEmpty___) ifTrue: [
+	(paths @env0:isEmpty) ifTrue: [
 		ValueError ___signal___: 'commonpath() arg is an empty sequence'
 	].
 	allParts := list ___new___.
-	paths ___do___: [:p |
+	paths @env0:do: [:p |
 		| normalized parts |
 		normalized := self normpath: p.
-		parts := $/ ___split___: normalized.
-		parts := parts ___select___: [:each | each @env0:notEmpty].
+		parts := $/ @env0:split: normalized.
+		parts := parts @env0:select: [:each | each @env0:notEmpty].
 		allParts append: parts
 	].
-	firstSize := (allParts ___first___) ___size___.
-	minSize := allParts ___inject___: firstSize into: [:min :parts |
-		(min ___min___: (parts ___size___))
+	firstSize := (allParts @env0:first) @env0:size.
+	minSize := allParts @env0:inject: firstSize into: [:min :parts |
+		(min @env0:min: (parts @env0:size))
 	].
 	commonParts := list ___new___.
-	allPartsSize := allParts ___size___.
+	allPartsSize := allParts @env0:size.
 	i := 1.
-	[(i ___le___: minSize)] ___whileTrue___: [
-		firstPart := (allParts ___first___) ___at___: i.
+	[(i @env0:<= minSize)] @env0:whileTrue: [
+		firstPart := (allParts @env0:first) @env0:at: i.
 		allMatch := true.
-		1 ___to___: allPartsSize do: [:j |
+		1 @env0:to: allPartsSize do: [:j |
 			| parts |
-			parts := allParts ___at___: j.
-			((parts ___at___: i) ___eq___: firstPart) ifFalse: [allMatch := false]
+			parts := allParts @env0:at: j.
+			((parts @env0:at: i) @env0:= firstPart) ifFalse: [allMatch := false]
 		].
 		allMatch ifTrue: [
 			commonParts append: firstPart.
-			i := i ___plus___: 1
+			i := i @env0:+ 1
 		] ifFalse: [
 			(i == 1) ifTrue: [
 				ValueError ___signal___: 'Paths do not start from a common point'
 			].
-			i := minSize ___plus___: 1
+			i := minSize @env0:+ 1
 		]
 	].
-	(commonParts ___isEmpty___) ifTrue: [^ '/'].
-	^ '/' ___concat___: (commonParts ___inject___: '' into: [:acc :each |
-		(acc ___isEmpty___) ifTrue: [each] ifFalse: [((acc ___concat___: '/') ___concat___: each)]
+	(commonParts @env0:isEmpty) ifTrue: [^ '/'].
+	^ '/' @env0:, (commonParts @env0:inject: '' into: [:acc :each |
+		(acc @env0:isEmpty) ifTrue: [each] ifFalse: [((acc @env0:, '/') @env0:, each)]
 	])
 %
 
@@ -320,25 +320,25 @@ commonprefix: paths
 	"os.path.commonprefix(paths) — longest path prefix (char-by-char)."
 
 	| pathsSize minLen prefix i char allMatch |
-	(paths ___isEmpty___) ifTrue: [^ ''].
-	pathsSize := paths ___size___.
-	(pathsSize ___eq___: 1) ifTrue: [^ paths ___first___].
-	minLen := paths ___inject___: ((paths ___first___) ___size___) into: [:min :p |
-		(min ___min___: (p ___size___))
+	(paths @env0:isEmpty) ifTrue: [^ ''].
+	pathsSize := paths @env0:size.
+	(pathsSize @env0:= 1) ifTrue: [^ paths @env0:first].
+	minLen := paths @env0:inject: ((paths @env0:first) @env0:size) into: [:min :p |
+		(min @env0:min: (p @env0:size))
 	].
 	prefix := ''.
 	i := 1.
-	[(i ___le___: minLen)] ___whileTrue___: [
-		char := (paths ___first___) ___at___: i.
+	[(i @env0:<= minLen)] @env0:whileTrue: [
+		char := (paths @env0:first) @env0:at: i.
 		allMatch := true.
-		1 ___to___: pathsSize do: [:j |
-			((((paths ___at___: j) ___at___: i) ___eq___: char)) ifFalse: [allMatch := false]
+		1 @env0:to: pathsSize do: [:j |
+			((((paths @env0:at: j) @env0:at: i) @env0:= char)) ifFalse: [allMatch := false]
 		].
 		allMatch ifTrue: [
-			prefix := prefix ___concat___: (char ___asString___).
-			i := i ___plus___: 1
+			prefix := prefix @env0:, (char @env0:asString).
+			i := i @env0:+ 1
 		] ifFalse: [
-			i := minLen ___plus___: 1
+			i := minLen @env0:+ 1
 		]
 	].
 	^ prefix
