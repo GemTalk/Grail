@@ -1,5 +1,7 @@
+output pushnew install.out only
 ! ===============================================================================
 ! Grail Installation Script
+!   file  src/smalltalk/install.gs
 ! ===============================================================================
 ! This script installs the Grail Python implementation in GemStone Smalltalk.
 ! It performs the following steps:
@@ -17,6 +19,23 @@
 ! - This script should be started as DataCurator
 ! - User switching to SystemUser is handled internally
 ! ===============================================================================
+
+fileformat utf8
+set user SystemUser pass swordfish
+iferr 1 exit 1
+login
+
+iferr 1 where
+iferr 2 output pop
+iferr 3 where
+iferr 4 exit 1
+
+send String enableUnicodeComparisonMode
+send Stream installPortableStreamImplementation
+commit
+logout
+set user DataCurator pass swordfish
+login
 
 ! ===============================================================================
 ! Step 1: Remove and recreate SymbolDictionaries
@@ -46,6 +65,15 @@ run
 ].
 
 Transcript show: 'Step 1 complete: Recreated dictionaries in correct order'.
+%
+
+run
+| symList |
+symList := System myUserProfile symbolList .
+(symList includesIdentical: GsCompilerClasses) ifFalse:[
+  symList add: GsCompilerClasses.
+  Transcript show: 'Added GsCompilerClasses dictionary to DataCurator''s symbol list'.
+].
 %
 
 ! ===============================================================================
@@ -596,6 +624,15 @@ systemUserProfile insertDictionary: pythonDict at: 1.
 Transcript show: 'Added Python dictionary to SystemUser''s symbol list'.
 %
 
+run
+| symList |
+symList := System myUserProfile symbolList .
+(symList includesIdentical: GsCompilerClasses) ifFalse:[
+  symList add: GsCompilerClasses.
+  Transcript show: 'Added GsCompilerClasses dictionary to DataCurator''s symbol list'.
+].
+%
+
 ! ------------------- GemStone base class methods (as SystemUser)
 input src/smalltalk/Python/Bool.gs
 input src/smalltalk/Python/builtin_function_or_method.gs
@@ -935,8 +972,35 @@ Transcript show: '==============================================='.
 ] ifFalse: [
 	Transcript show: 'PythonTests dictionary: MISSING!'.
 ].
-
+System commit .
 Transcript show: '==============================================='.
-Transcript show: 'Installation complete!'.
+Transcript show: ' Smalltail Installation complete!'.
+Transcript show: '==============================================='.
+%
+
+run
+| libPath pyPath |
+importlib grailDir: '$GRAIL_DIR'.
+libPath := System gemEnvironmentVariable:'SHIM_LIB_PATH'.
+libPath isEmpty ifFalse: [
+	CPythonShim libraryPath: libPath .
+	System loadUserActionLibrary: libPath .
+	importlib registerModule: '_statistics' with: _statistics ___instance___.
+	importlib registerModule: '_bisect' with: _bisect ___instance___.
+	importlib registerModule: '_crc32c' with: _crc32c ___instance___.
+	importlib registerModule: '_shimtest' with: _shimtest ___instance___.
+	importlib registerModule: '_sre' with: _sre ___instance___.
+].
+pyPath := System gemEnvironmentVariable:'PYTHON_LIB_PATH' .
+pyPath isEmpty ifFalse: [
+	CPythonLibrary libraryPath: pyPath .
+	CPythonLibrary pythonHomePath: (System gemEnvironmentVariable:'PYTHON_PREFIX') .
+].
+%
+commit
+
+run
+Transcript show: '==============================================='.
+Transcript show: ' CPythonShim Installation complete!'.
 Transcript show: '==============================================='.
 %
