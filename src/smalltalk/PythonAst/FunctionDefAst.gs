@@ -137,7 +137,7 @@ printSmalltalkOn: aStream
 			arg := args args at: i.
 			aStream
 				nextPutAll: arg name;
-				nextPutAll: ' := positional ___at___: ';
+				nextPutAll: ' := positional @env0:at: ';
 				print: i;
 				nextPut: $.;
 				lf.
@@ -158,7 +158,7 @@ printSmalltalkOn: aStream
 		lf.
 	aStream
 		decreaseIndent;
-		nextPutAll: '] ___on___: PythonReturn do: [:___ex___ | ___ex___ returnValue].';
+		nextPutAll: '] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue].';
 		lf.
 	aStream decreaseIndent; nextPutAll: '].'.
 %
@@ -278,18 +278,18 @@ generateMethodSourceOn: aStream
 			[
 			<body statements>
 			] value.
-			] ___on___: PythonReturn do: [:___ex___ | ___ex___ returnValue].
+			] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue].
 
 	For varargs (has *args, **kwargs, or defaults):
 		_name: positional kw: kwargs
 			| a b <body locals> |
-			a := positional ___at___: 1.
-			b := positional ___at___: 2.
+			a := positional @env0:at: 1.
+			b := positional @env0:at: 2.
 			^ [
 			[
 			<body statements>
 			] value.
-			] ___on___: PythonReturn do: [:___ex___ | ___ex___ returnValue]."
+			] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue]."
 
 	| paramNames bodyVars allLocals |
 	paramNames := self allParameterNames.
@@ -354,7 +354,7 @@ generateMethodSourceOn: aStream
 		1 to: paramNames size do: [:i |
 			aStream
 				nextPutAll: (paramNames at: i);
-				nextPutAll: ' := positional ___at___: ';
+				nextPutAll: ' := positional @env0:at: ';
 				nextPutAll: i printString;
 				nextPut: $.;
 				lf.
@@ -369,7 +369,7 @@ generateMethodSourceOn: aStream
 		aStream lf.
 	].
 	aStream nextPutAll: '] value.'; lf.
-	aStream nextPutAll: '] ___on___: PythonReturn do: [:___ex___ | ___ex___ returnValue].'; lf.
+	aStream nextPutAll: '] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue].'; lf.
 	aStream nextPutAll: '] value'.
 %
 
@@ -450,14 +450,14 @@ generateClassMethodSourceOn: aStream
 			a := ___1. b := ___2.
 			[
 			[<body>] value.
-			] ___on___: PythonReturn do: [:___ex___ | ___ex___ returnValue].
+			] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue].
 			] value
 
 	For varargs:
 		_foo: positional kw: kwargs
 			^ [| a b <body locals> |
-			a := positional ___at___: 1.
-			b := positional ___at___: 2.
+			a := positional @env0:at: 1.
+			b := positional @env0:at: 2.
 			...
 			] value"
 
@@ -533,7 +533,7 @@ generateClassMethodSourceOn: aStream
 		1 to: paramNames size do: [:i |
 			aStream
 				nextPutAll: (paramNames at: i);
-				nextPutAll: ' := positional ___at___: ';
+				nextPutAll: ' := positional @env0:at: ';
 				nextPutAll: i printString;
 				nextPut: $.;
 				lf.
@@ -547,6 +547,6 @@ generateClassMethodSourceOn: aStream
 		aStream lf.
 	].
 	aStream nextPutAll: '] value.'; lf.
-	aStream nextPutAll: '] ___on___: PythonReturn do: [:___ex___ | ___ex___ returnValue].'; lf.
+	aStream nextPutAll: '] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue].'; lf.
 	aStream nextPutAll: '] value'.
 %

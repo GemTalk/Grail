@@ -92,8 +92,8 @@ printSmalltalkOn: aStream
 		handler := handlers at: index.
 		aStream decreaseIndent.
 		index = 1
-			ifTrue: [aStream nextPutAll: '] ___on___: ']
-			ifFalse: [aStream nextPutAll: ']] ___on___: '].
+			ifTrue: [aStream nextPutAll: '] @env0:on: ']
+			ifFalse: [aStream nextPutAll: ']] @env0:on: '].
 		handler type
 			ifNil: [aStream nextPutAll: 'BaseException']
 			ifNotNil: [handler type printSmalltalkOn: aStream].
@@ -109,13 +109,13 @@ printSmalltalkOn: aStream
 		aStream decreaseIndent.
 		finalbody size > 0
 			ifTrue: [
-				aStream nextPutAll: ']] ___ensure___: ['; increaseIndent; lf.
+				aStream nextPutAll: ']] @env0:ensure: ['; increaseIndent; lf.
 				finalbody printSmalltalkOn: aStream.
 				aStream decreaseIndent; nextPutAll: '].']
 			ifFalse: [aStream nextPutAll: '].'].
 	] ifFalse: [
 		finalbody size > 0 ifTrue: [
-			aStream decreaseIndent; nextPutAll: '] ___ensure___: ['; increaseIndent; lf.
+			aStream decreaseIndent; nextPutAll: '] @env0:ensure: ['; increaseIndent; lf.
 			finalbody printSmalltalkOn: aStream.
 			aStream decreaseIndent; nextPutAll: '].'.
 		].

@@ -95,7 +95,7 @@ method: builtins
 abs: aNumber
 	"Python builtin abs(x) — fixed-arity fast path."
 
-	^ [aNumber __abs__] ___on___: MessageNotUnderstood do: [:ex | TypeError ___signal___]
+	^ [aNumber __abs__] @env0:on: MessageNotUnderstood do: [:ex | TypeError @env0:signal]
 %
 
 category: 'Python-Built-in Functions'
@@ -107,17 +107,17 @@ all: anIterable
 	iter := anIterable __iter__.
 	result := true.
 	done := false.
-	[done] ___whileFalse___: [
+	[done] @env0:whileFalse: [
 		| item isTruthy |
 		[
 			item := iter __next__.
 			[isTruthy := item __bool__]
-				___on___: MessageNotUnderstood do: [:ex | isTruthy := true].
+				@env0:on: MessageNotUnderstood do: [:ex | isTruthy := true].
 			isTruthy ifFalse: [
 				result := false.
 				done := true
 			]
-		] ___on___: StopIteration do: [:ex | done := true]
+		] @env0:on: StopIteration do: [:ex | done := true]
 	].
 	^ result
 %
@@ -131,17 +131,17 @@ any: anIterable
 	iter := anIterable __iter__.
 	result := false.
 	done := false.
-	[done] ___whileFalse___: [
+	[done] @env0:whileFalse: [
 		| item isTruthy |
 		[
 			item := iter __next__.
 			[isTruthy := item __bool__]
-				___on___: MessageNotUnderstood do: [:ex | isTruthy := true].
+				@env0:on: MessageNotUnderstood do: [:ex | isTruthy := true].
 			isTruthy ifTrue: [
 				result := true.
 				done := true
 			]
-		] ___on___: StopIteration do: [:ex | done := true]
+		] @env0:on: StopIteration do: [:ex | done := true]
 	].
 	^ result
 %
@@ -152,8 +152,8 @@ bin: aNumber
 	"Python builtin bin(x) — fixed-arity fast path."
 
 	| result |
-	result := aNumber ___printStringRadix___: 2.
-	^ '0b' ___concat___: result
+	result := aNumber @env0:printStringRadix: 2.
+	^ '0b' @env0:, result
 %
 
 category: 'Python-Built-in Functions'
@@ -162,7 +162,7 @@ callable: anObject
 	"Python builtin callable(x) — fixed-arity fast path."
 
 	| objClass |
-	objClass := anObject ___class___.
+	objClass := anObject @env0:class.
 	^ (objClass @env0:whichClassIncludesSelector: (#__call__:) environmentId: 1) notNil
 %
 
@@ -171,7 +171,7 @@ method: builtins
 chr: anInteger
 	"Python builtin chr(i) — fixed-arity fast path."
 
-	^ (Character ___codePoint___: anInteger) ___asString___
+	^ (Character @env0:codePoint: anInteger) @env0:asString
 %
 
 category: 'Python-Built-in Functions'
@@ -192,14 +192,14 @@ enumerate: anIterable
 	index := 0.
 	iter := anIterable __iter__.
 	done := false.
-	[done] ___whileFalse___: [
+	[done] @env0:whileFalse: [
 		| item pair |
 		[
 			item := iter __next__.
-			pair := tuple ___withAll___: {index. item}.
+			pair := tuple @env0:withAll: {index. item}.
 			lst append: pair.
-			index := index ___plus___: 1
-		] ___on___: StopIteration do: [:ex | done := true]
+			index := index @env0:+ 1
+		] @env0:on: StopIteration do: [:ex | done := true]
 	].
 	^ lst __iter__
 %
@@ -209,7 +209,7 @@ method: builtins
 hash: anObject
 	"Python builtin hash(x) — fixed-arity fast path."
 
-	^ [anObject __hash__] ___on___: MessageNotUnderstood do: [:ex |
+	^ [anObject __hash__] @env0:on: MessageNotUnderstood do: [:ex |
 		TypeError ___signal___: 'unhashable type'
 	]
 %
@@ -220,8 +220,8 @@ hex: aNumber
 	"Python builtin hex(x) — fixed-arity fast path."
 
 	| result |
-	result := aNumber ___printStringRadix___: 16.
-	^ '0x' ___concat___: (result @env0:asLowercase)
+	result := aNumber @env0:printStringRadix: 16.
+	^ '0x' @env0:, (result @env0:asLowercase)
 %
 
 category: 'Python-Built-in Functions'
@@ -229,7 +229,7 @@ method: builtins
 id: anObject
 	"Python builtin id(x) — fixed-arity fast path."
 
-	^ anObject ___identityHash___
+	^ anObject @env0:identityHash
 %
 
 category: 'Python-Built-in Functions'
@@ -238,10 +238,10 @@ len: anObject
 	"Python builtin len(x) — fixed-arity fast path."
 
 	| className errorMsg |
-	^ [anObject __len__] ___on___: MessageNotUnderstood do: [:ex |
-		className := (anObject ___class___) ___name___.
-		errorMsg := 'object of type ''' ___concat___: className.
-		errorMsg := errorMsg ___concat___: ''' has no len()'.
+	^ [anObject __len__] @env0:on: MessageNotUnderstood do: [:ex |
+		className := (anObject @env0:class) @env0:name.
+		errorMsg := 'object of type ''' @env0:, className.
+		errorMsg := errorMsg @env0:, ''' has no len()'.
 		TypeError ___signal___: errorMsg
 	]
 %
@@ -256,7 +256,7 @@ max: anIterable
 	first := true.
 	maxVal := nil.
 	done := false.
-	[done] ___whileFalse___: [
+	[done] @env0:whileFalse: [
 		| item |
 		[
 			item := iter __next__.
@@ -266,7 +266,7 @@ max: anIterable
 			] ifFalse: [
 				(item __gt__: maxVal) ifTrue: [maxVal := item]
 			]
-		] ___on___: StopIteration do: [:ex | done := true]
+		] @env0:on: StopIteration do: [:ex | done := true]
 	].
 	^ maxVal
 %
@@ -281,7 +281,7 @@ min: anIterable
 	first := true.
 	minVal := nil.
 	done := false.
-	[done] ___whileFalse___: [
+	[done] @env0:whileFalse: [
 		| item |
 		[
 			item := iter __next__.
@@ -291,7 +291,7 @@ min: anIterable
 			] ifFalse: [
 				(item __lt__: minVal) ifTrue: [minVal := item]
 			]
-		] ___on___: StopIteration do: [:ex | done := true]
+		] @env0:on: StopIteration do: [:ex | done := true]
 	].
 	^ minVal
 %
@@ -302,8 +302,8 @@ oct: aNumber
 	"Python builtin oct(x) — fixed-arity fast path."
 
 	| result |
-	result := aNumber ___printStringRadix___: 8.
-	^ '0o' ___concat___: result
+	result := aNumber @env0:printStringRadix: 8.
+	^ '0o' @env0:, result
 %
 
 category: 'Python-Built-in Functions'
@@ -312,15 +312,15 @@ ord: aString
 	"Python builtin ord(c) — fixed-arity fast path."
 
 	| size char errorMsg sizeStr |
-	size := aString ___size___.
-	(size ___eq___: 1) ifFalse: [
-		sizeStr := size ___asString___.
-		errorMsg := 'ord() expected a character, but string of length ' ___concat___: sizeStr.
-		errorMsg := errorMsg ___concat___: ' found'.
+	size := aString @env0:size.
+	(size @env0:= 1) ifFalse: [
+		sizeStr := size @env0:asString.
+		errorMsg := 'ord() expected a character, but string of length ' @env0:, sizeStr.
+		errorMsg := errorMsg @env0:, ' found'.
 		TypeError ___signal___: errorMsg
 	].
-	char := aString ___at___: 1.
-	^ char ___codePoint___
+	char := aString @env0:at: 1.
+	^ char @env0:codePoint
 %
 
 category: 'Python-Built-in Functions'
@@ -338,7 +338,7 @@ reversed: aSequence
 
 	| lst |
 	lst := list ___new___.
-	aSequence ___reverseDo___: [:item | lst append: item].
+	aSequence @env0:reverseDo: [:item | lst append: item].
 	^ lst __iter__
 %
 
@@ -348,7 +348,7 @@ round: aNumber
 	"Python builtin round(x) — fixed-arity fast path (1-arg form).
 	The 2-arg form `round(x, ndigits)` lives at `_round:kw:`."
 
-	^ aNumber ___rounded___
+	^ aNumber @env0:rounded
 %
 
 category: 'Python-Built-in Functions'
@@ -360,14 +360,14 @@ sorted: anIterable
 	lst := list ___new___.
 	iter := anIterable __iter__.
 	done := false.
-	[done] ___whileFalse___: [
+	[done] @env0:whileFalse: [
 		[
 			| item |
 			item := iter __next__.
 			lst append: item
-		] ___on___: StopIteration do: [:ex | done := true]
+		] @env0:on: StopIteration do: [:ex | done := true]
 	].
-	^ lst ___sort___: [:a :b | a __lt__: b]
+	^ lst @env0:sort: [:a :b | a __lt__: b]
 %
 
 category: 'Python-Built-in Functions'
@@ -375,7 +375,7 @@ method: builtins
 str: anObject
 	"Python builtin str(x) — fixed-arity fast path."
 
-	^ [anObject __str__] ___on___: MessageNotUnderstood do: [:ex | anObject __repr__]
+	^ [anObject __str__] @env0:on: MessageNotUnderstood do: [:ex | anObject __repr__]
 %
 
 category: 'Python-Built-in Functions'
@@ -387,12 +387,12 @@ sum: anIterable
 	total := 0.
 	iter := anIterable __iter__.
 	done := false.
-	[done] ___whileFalse___: [
+	[done] @env0:whileFalse: [
 		[
 			| item |
 			item := iter __next__.
 			total := total __add__: item
-		] ___on___: StopIteration do: [:ex | done := true]
+		] @env0:on: StopIteration do: [:ex | done := true]
 	].
 	^ total
 %
@@ -418,7 +418,7 @@ divmod: x _: y
 	| quotient remainder |
 	quotient := x __floordiv__: y.
 	remainder := x __mod__: y.
-	^ tuple ___withAll___: {quotient. remainder}
+	^ tuple @env0:withAll: {quotient. remainder}
 %
 
 category: 'Python-Built-in Functions'
@@ -428,9 +428,9 @@ isinstance: anObject _: aClassOrTuple
 	Supports Abstract Base Classes (ABCs) via __instancecheck__."
 
 	| result theMetaclass |
-	result := anObject ___isKindOf___: aClassOrTuple.
+	result := anObject @env0:isKindOf: aClassOrTuple.
 	result ifFalse: [
-		theMetaclass := aClassOrTuple ___class___.
+		theMetaclass := aClassOrTuple @env0:class.
 		(theMetaclass @env0:includesSelector: #'__instancecheck__:' environmentId: 2) ifTrue: [
 			result := aClassOrTuple __instancecheck__: anObject
 		]
@@ -473,15 +473,15 @@ _input: positional kw: kwargs
 	from stdin; 1-arg form writes the prompt to stdout first."
 
 	| nargs prompt stdout stdin |
-	nargs := positional ___size___.
-	(nargs ___ge___: 1) ifTrue: [
-		prompt := positional ___at___: 1.
-		stdout := System ___stdout___.
-		stdout ___nextPutAll___: prompt.
-		stdout ___flush___
+	nargs := positional @env0:size.
+	(nargs @env0:>= 1) ifTrue: [
+		prompt := positional @env0:at: 1.
+		stdout := System @env0:stdout.
+		stdout @env0:nextPutAll: prompt.
+		stdout @env0:flush
 	].
-	stdin := System ___stdin___.
-	^ stdin ___nextLine___
+	stdin := System @env0:stdin.
+	^ stdin @env0:nextLine
 %
 
 category: 'Python-Built-in Functions'
@@ -494,16 +494,16 @@ _pow: positional kw: kwargs
 	BoundMethod indirect calls."
 
 	| nargs x y z result |
-	nargs := positional ___size___.
-	(nargs ___eq___: 2) ifTrue: [
-		x := positional ___at___: 1.
-		y := positional ___at___: 2.
+	nargs := positional @env0:size.
+	(nargs @env0:= 2) ifTrue: [
+		x := positional @env0:at: 1.
+		y := positional @env0:at: 2.
 		^ x __pow__: y
 	].
-	(nargs ___eq___: 3) ifTrue: [
-		x := positional ___at___: 1.
-		y := positional ___at___: 2.
-		z := positional ___at___: 3.
+	(nargs @env0:= 3) ifTrue: [
+		x := positional @env0:at: 1.
+		y := positional @env0:at: 2.
+		z := positional @env0:at: 3.
 		result := x __pow__: y.
 		^ result __mod__: z
 	].
@@ -517,14 +517,14 @@ _print: positional kw: kwargs
 	path. Currently only honors positional args; sep/end/file/flush
 	kwargs are silently ignored, matching the legacy behavior."
 
-	positional ___do___: [:obj |
+	positional @env0:do: [:obj |
 		| strRep |
 		[strRep := obj __str__]
-			___on___: MessageNotUnderstood do: [:ex | strRep := obj __repr__].
-		Transcript ___nextPutAll___: strRep.
-		Transcript ___space___
+			@env0:on: MessageNotUnderstood do: [:ex | strRep := obj __repr__].
+		Transcript @env0:nextPutAll: strRep.
+		Transcript @env0:space
 	].
-	Transcript ___cr___.
+	Transcript @env0:cr.
 	^ nil
 %
 
@@ -545,17 +545,17 @@ _round: positional kw: kwargs
 	handles 2-arg calls and the kwarg form `round(x, ndigits=n)`."
 
 	| number ndigits multiplier |
-	number := positional ___at___: 1.
-	ndigits := (positional ___size___ ___ge___: 2)
-		ifTrue: [positional ___at___: 2]
+	number := positional @env0:at: 1.
+	ndigits := (positional @env0:size @env0:>= 2)
+		ifTrue: [positional @env0:at: 2]
 		ifFalse: [
 			(kwargs == nil)
 				ifTrue: [nil]
-				ifFalse: [kwargs ___at___: #ndigits ifAbsent: [nil]]
+				ifFalse: [kwargs @env0:at: #ndigits ifAbsent: [nil]]
 		].
-	ndigits ifNil: [^ number ___rounded___].
+	ndigits ifNil: [^ number @env0:rounded].
 	multiplier := 10 @env0:raisedTo: ndigits.
-	^ ((number ___times___: multiplier) ___rounded___) ___divide___: multiplier
+	^ ((number @env0:* multiplier) @env0:rounded) @env0:/ multiplier
 %
 
 category: 'Python-Built-in Functions'
@@ -567,23 +567,23 @@ _zip: positional kw: kwargs
 
 	| iterators result allDone |
 	iterators := list ___new___.
-	positional ___do___: [:iterable | iterators append: iterable __iter__].
+	positional @env0:do: [:iterable | iterators append: iterable __iter__].
 	result := list ___new___.
 	allDone := false.
-	[allDone] ___whileFalse___: [
+	[allDone] @env0:whileFalse: [
 		| items |
 		items := list ___new___.
-		iterators ___do___: [:iter |
+		iterators @env0:do: [:iter |
 			[
 				| item |
 				item := iter __next__.
 				items append: item
-			] ___on___: StopIteration do: [:ex | allDone := true]
+			] @env0:on: StopIteration do: [:ex | allDone := true]
 		].
 		allDone ifFalse: [
 			| itemsArray tup |
-			itemsArray := items ___asArray___.
-			tup := tuple ___withAll___: itemsArray.
+			itemsArray := items @env0:asArray.
+			tup := tuple @env0:withAll: itemsArray.
 			result append: tup
 		]
 	].

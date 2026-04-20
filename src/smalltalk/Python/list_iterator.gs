@@ -90,18 +90,18 @@ __next__
 	If there are no further items, raise StopIteration."
 
 	| size item |
-	size := collection ___size___.
+	size := collection @env0:size.
 
 	"Check if we've reached the end"
-	(position ___ge___: size) ifTrue: [
-		StopIteration ___signal___
+	(position @env0:>= size) ifTrue: [
+		StopIteration @env0:signal
 	].
 
 	"Get the item at current position (convert to 1-based Smalltalk index)"
-	item := collection ___at___: (position ___plus___: 1).
+	item := collection @env0:at: (position @env0:+ 1).
 
 	"Increment position"
-	position := position ___plus___: 1.
+	position := position @env0:+ 1.
 
 	^ item
 %

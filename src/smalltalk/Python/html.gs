@@ -58,7 +58,7 @@ initialize
 	this slot. This initialize is kept because `entities` is a stored
 	attribute (a reference to another module instance), not a callable."
 
-	self ___at___: #entities put: (html_entities @env1:instance)
+	self @env0:at: #entities put: (html_entities @env1:instance)
 %
 
 ! ===============================================================================
@@ -70,7 +70,7 @@ method: html
 entities
 	"Return the html.entities submodule (stored attribute, populated by
 	`initialize`)."
-	^ self ___at___: #entities
+	^ self @env0:at: #entities
 %
 
 ! ===============================================================================
@@ -113,39 +113,39 @@ unescape: s
 	Quick exit if no `&` in the input string."
 
 	| n2c out i len |
-	n2c := (self ___at___: #entities) ___at___: #name2codepoint.
+	n2c := (self @env0:at: #entities) @env0:at: #name2codepoint.
 
 	(s @env0:includesString: '&') ifFalse: [^ s].
 
 	out := WriteStream @env0:on: (Unicode7 @env0:new).
 	i := 1.
 	len := s @env0:size.
-	[i ___le___: len] ___whileTrue___: [
+	[i @env0:<= len] @env0:whileTrue: [
 		| ch |
 		ch := s @env0:at: i.
-		(ch ___eq___: $&) ifTrue: [
+		(ch @env0:= $&) ifTrue: [
 			| j semiPos ref replacement |
 			"Find the closing semicolon (max 32 chars ahead)"
 			semiPos := 0.
-			j := i ___plus___: 1.
-			[((j ___le___: len) and: [(j ___minus___: i) ___lt___: 32])] ___whileTrue___: [
-				((s @env0:at: j) ___eq___: $;) ifTrue: [
+			j := i @env0:+ 1.
+			[((j @env0:<= len) and: [(j @env0:- i) @env0:< 32])] @env0:whileTrue: [
+				((s @env0:at: j) @env0:= $;) ifTrue: [
 					semiPos := j.
-					j := len ___plus___: 1.  "break"
+					j := len @env0:+ 1.  "break"
 				] ifFalse: [
-					j := j ___plus___: 1.
+					j := j @env0:+ 1.
 				].
 			].
-			(semiPos ___gt___: 0) ifTrue: [
-				ref := s @env0:copyFrom: (i ___plus___: 1) to: (semiPos ___minus___: 1).
+			(semiPos @env0:> 0) ifTrue: [
+				ref := s @env0:copyFrom: (i @env0:+ 1) to: (semiPos @env0:- 1).
 				replacement := nil.
 				"Numeric reference: &#NNN; or &#xHHH;"
-				((ref @env0:at: 1) ___eq___: $#) ifTrue: [
+				((ref @env0:at: 1) @env0:= $#) ifTrue: [
 					| numStr codepoint |
 					numStr := ref @env0:copyFrom: 2 to: (ref @env0:size).
 					[
-						(((numStr @env0:at: 1) ___eq___: $x) or:
-						 [((numStr @env0:at: 1) ___eq___: $X)]) ifTrue: [
+						(((numStr @env0:at: 1) @env0:= $x) or:
+						 [((numStr @env0:at: 1) @env0:= $X)]) ifTrue: [
 							"Hex: &#xHHH; - prepend 16r for Smalltalk hex literal parsing"
 							| hexDigits |
 							hexDigits := numStr @env0:copyFrom: 2 to: (numStr @env0:size).
@@ -155,30 +155,30 @@ unescape: s
 							codepoint := numStr @env0:asInteger.
 						].
 						replacement := Character @env0:codePoint: codepoint.
-						replacement := replacement ___asString___.
-					] ___on___: Error do: [:ex | replacement := nil].
+						replacement := replacement @env0:asString.
+					] @env0:on: Error do: [:ex | replacement := nil].
 				] ifFalse: [
 					"Named reference: &name; — look up codepoint and convert"
 					| cp |
 					cp := n2c @env0:at: ref ifAbsent: [nil].
-					(cp ___eq___: nil) ifFalse: [
-						replacement := (Character @env0:codePoint: cp) ___asString___.
+					(cp @env0:= nil) ifFalse: [
+						replacement := (Character @env0:codePoint: cp) @env0:asString.
 					].
 				].
-				(replacement ___eq___: nil) ifFalse: [
+				(replacement @env0:= nil) ifFalse: [
 					out @env0:nextPutAll: replacement.
-					i := semiPos ___plus___: 1.
+					i := semiPos @env0:+ 1.
 				] ifTrue: [
 					out @env0:nextPut: $&.
-					i := i ___plus___: 1.
+					i := i @env0:+ 1.
 				].
 			] ifFalse: [
 				out @env0:nextPut: $&.
-				i := i ___plus___: 1.
+				i := i @env0:+ 1.
 			].
 		] ifFalse: [
 			out @env0:nextPut: ch.
-			i := i ___plus___: 1.
+			i := i @env0:+ 1.
 		].
 	].
 	^ out @env0:contents

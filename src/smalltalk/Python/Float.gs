@@ -37,28 +37,28 @@ __new__: obj
 	obj ifNil: [ ^ 0.0 ].
 
 	"If already a float, return it"
-	(obj ___isKindOf___: float) ifTrue: [
+	(obj @env0:isKindOf: float) ifTrue: [
 		^ obj
 	].
 
 	"Try to call __float__ on the object if it has one"
-	(obj ___respondsTo___: #__float__) ifTrue: [
+	(obj @env0:respondsTo: #__float__) ifTrue: [
 		result := obj __float__.
 		^ result
 	].
 
 	"Try to convert from integer"
-	(obj ___isKindOf___: Integer) ifTrue: [
-		^ obj ___asFloat___
+	(obj @env0:isKindOf: Integer) ifTrue: [
+		^ obj @env0:asFloat
 	].
 
 	"Try to convert from string"
-	(obj ___isKindOf___: Unicode7) ifTrue: [
+	(obj @env0:isKindOf: Unicode7) ifTrue: [
 		^ self __new__fromString: obj
 	].
 
 	"Otherwise, error"
-	self ___error___: 'TypeError: float() argument must be a string or a number'
+	self @env0:error: 'TypeError: float() argument must be a string or a number'
 %
 
 category: 'Python-Initialization'
@@ -70,23 +70,23 @@ __new__fromString: str
 	trimmed := str @env0:trimBoth.
 
 	"Handle special string values - use GemStone's class variables"
-	(trimmed ___eq___: 'inf') ifTrue: [ ^ PlusInfinity ].
-	(trimmed ___eq___: '+inf') ifTrue: [ ^ PlusInfinity ].
-	(trimmed ___eq___: '-inf') ifTrue: [ ^ MinusInfinity ].
-	(trimmed ___eq___: 'infinity') ifTrue: [ ^ PlusInfinity ].
-	(trimmed ___eq___: '+infinity') ifTrue: [ ^ PlusInfinity ].
-	(trimmed ___eq___: '-infinity') ifTrue: [ ^ MinusInfinity ].
-	(trimmed ___eq___: 'nan') ifTrue: [ ^ PlusQuietNaN ].
-	(trimmed ___eq___: '+nan') ifTrue: [ ^ PlusQuietNaN ].
-	(trimmed ___eq___: '-nan') ifTrue: [ ^ MinusQuietNaN ].
+	(trimmed @env0:= 'inf') ifTrue: [ ^ PlusInfinity ].
+	(trimmed @env0:= '+inf') ifTrue: [ ^ PlusInfinity ].
+	(trimmed @env0:= '-inf') ifTrue: [ ^ MinusInfinity ].
+	(trimmed @env0:= 'infinity') ifTrue: [ ^ PlusInfinity ].
+	(trimmed @env0:= '+infinity') ifTrue: [ ^ PlusInfinity ].
+	(trimmed @env0:= '-infinity') ifTrue: [ ^ MinusInfinity ].
+	(trimmed @env0:= 'nan') ifTrue: [ ^ PlusQuietNaN ].
+	(trimmed @env0:= '+nan') ifTrue: [ ^ PlusQuietNaN ].
+	(trimmed @env0:= '-nan') ifTrue: [ ^ MinusQuietNaN ].
 
 	"Try to parse as number"
 	^ ([:block :handler |
-		block ___on___: Error do: handler
+		block @env0:on: Error do: handler
 	] value: [
-		(trimmed @env0:asNumber) ___asFloat___
+		(trimmed @env0:asNumber) @env0:asFloat
 	] value: [:ex |
-		self ___error___: ('ValueError: could not convert string to float: ''' ___concat___: str)
+		self @env0:error: ('ValueError: could not convert string to float: ''' @env0:, str)
 	])
 %
 
@@ -101,18 +101,18 @@ fromhex: hexString
 
 	"Handle sign"
 	sign := 1.
-	((str ___at___: 1) ___eq___: $-) ifTrue: [
+	((str @env0:at: 1) @env0:= $-) ifTrue: [
 		sign := -1.
-		str := str ___copyFrom___: 2 to: str ___size___.
+		str := str @env0:copyFrom: 2 to: str @env0:size.
 	].
-	((str ___at___: 1) ___eq___: $+) ifTrue: [
-		str := str ___copyFrom___: 2 to: str ___size___.
+	((str @env0:at: 1) @env0:= $+) ifTrue: [
+		str := str @env0:copyFrom: 2 to: str @env0:size.
 	].
 
 	"Remove 0x or 0X prefix if present"
-	((str ___size___) ___ge___: 2) ifTrue: [
-		(((str ___copyFrom___: 1 to: 2) @env0:asLowercase) ___eq___: '0x') ifTrue: [
-			str := str ___copyFrom___: 3 to: str ___size___.
+	((str @env0:size) @env0:>= 2) ifTrue: [
+		(((str @env0:copyFrom: 1 to: 2) @env0:asLowercase) @env0:= '0x') ifTrue: [
+			str := str @env0:copyFrom: 3 to: str @env0:size.
 		].
 	].
 
@@ -123,12 +123,12 @@ fromhex: hexString
 
 	hasP ifTrue: [
 		"Implementation simplified - full hex float parsing is complex"
-		self ___error___: 'NotImplementedError: fromhex with exponent not fully implemented'
+		self @env0:error: 'NotImplementedError: fromhex with exponent not fully implemented'
 	].
 
 	"Parse hex value (simplified)"
-	val := (str @env0:asNumber) ___asFloat___.
-	^ (val ___times___: sign) ___asFloat___
+	val := (str @env0:asNumber) @env0:asFloat.
+	^ (val @env0:* sign) @env0:asFloat
 %
 
 category: 'Python-Arithmetic'
@@ -136,7 +136,7 @@ method: float
 __abs__
 	"Return absolute value."
 
-	^ self ___abs___
+	^ self @env0:abs
 %
 
 category: 'Python-Arithmetic'
@@ -144,7 +144,7 @@ method: float
 __add__: other
 	"Add two floats or float and other number."
 
-	^ self ___plus___: other
+	^ self @env0:+ other
 %
 
 category: 'Python-Conversion'
@@ -152,7 +152,7 @@ method: float
 __bool__
 	"Return True if float is non-zero."
 
-	^ (self ___ne___: 0.0)
+	^ (self @env0:~= 0.0)
 %
 
 category: 'Python-Rounding'
@@ -169,9 +169,9 @@ __divmod__: other
 	"Return (quotient, remainder) as a tuple."
 
 	| quot rem |
-	quot := self ___divideInteger___: other.
-	rem := self ___modulo___: other.
-	^ tuple ___with___: quot with: rem
+	quot := self @env0:// other.
+	rem := self @env0:\\ other.
+	^ tuple @env0:with: quot with: rem
 %
 
 category: 'Python-Documentation'
@@ -179,7 +179,7 @@ method: float
 __doc__
 	"Return documentation string for float type."
 
-	^ 'Convert a string or number to a floating-point number, if possible.' ___asUnicodeString___
+	^ 'Convert a string or number to a floating-point number, if possible.' @env0:asUnicodeString
 %
 
 category: 'Python-Comparison'
@@ -187,7 +187,7 @@ method: float
 __eq__: other
 	"Equality comparison."
 
-	^ self ___eq___: other
+	^ self @env0:= other
 %
 
 category: 'Python-Conversion'
@@ -211,7 +211,7 @@ method: float
 __floordiv__: other
 	"Floor division."
 
-	^ self ___divideInteger___: other
+	^ self @env0:// other
 %
 
 category: 'Python-Comparison'
@@ -219,7 +219,7 @@ method: float
 __ge__: other
 	"Greater than or equal comparison."
 
-	^ self ___ge___: other
+	^ self @env0:>= other
 %
 
 category: 'Python-Comparison'
@@ -227,7 +227,7 @@ method: float
 __gt__: other
 	"Greater than comparison."
 
-	^ self ___gt___: other
+	^ self @env0:> other
 %
 
 category: 'Python-Conversion'
@@ -235,7 +235,7 @@ method: float
 __int__
 	"Convert float to int by truncating."
 
-	^ self ___truncated___
+	^ self @env0:truncated
 %
 
 category: 'Python-Comparison'
@@ -243,7 +243,7 @@ method: float
 __le__: other
 	"Less than or equal comparison."
 
-	^ self ___le___: other
+	^ self @env0:<= other
 %
 
 category: 'Python-Comparison'
@@ -251,7 +251,7 @@ method: float
 __lt__: other
 	"Less than comparison."
 
-	^ self ___lt___: other
+	^ self @env0:< other
 %
 
 category: 'Python-Arithmetic'
@@ -259,7 +259,7 @@ method: float
 __mod__: other
 	"Modulo operation."
 
-	^ self ___modulo___: other
+	^ self @env0:\\ other
 %
 
 category: 'Python-Arithmetic'
@@ -267,7 +267,7 @@ method: float
 __mul__: other
 	"Multiply two floats or float and other number."
 
-	^ self ___times___: other
+	^ self @env0:* other
 %
 
 category: 'Python-Comparison'
@@ -275,7 +275,7 @@ method: float
 __ne__: other
 	"Not equal comparison."
 
-	^ self ___ne___: other
+	^ self @env0:~= other
 %
 
 category: 'Python-Arithmetic'
@@ -283,7 +283,7 @@ method: float
 __neg__
 	"Negate the float."
 
-	^ self ___negated___
+	^ self @env0:negated
 %
 
 category: 'Python-Arithmetic'
@@ -299,7 +299,7 @@ method: float
 __pow__: other
 	"Raise self to the power of other."
 
-	^ self ___raisedTo___: other
+	^ self @env0:raisedTo: other
 %
 
 category: 'Python-Arithmetic'
@@ -308,7 +308,7 @@ __pow__: other _: modulo
 	"Raise self to the power of other, modulo modulo.
 	Not supported for floats."
 
-	self ___error___: 'TypeError: pow() 3rd argument not allowed for float'
+	self @env0:error: 'TypeError: pow() 3rd argument not allowed for float'
 %
 
 category: 'Python-String Representation'
@@ -317,8 +317,8 @@ __repr__
 	"Return the official string representation of the float."
 
 	| str |
-	str := self ___printString___.
-	^ str ___asUnicodeString___
+	str := self @env0:printString.
+	^ str @env0:asUnicodeString
 %
 
 category: 'Python-Rounding'
@@ -326,7 +326,7 @@ method: float
 __round__
 	"Round to nearest integer."
 
-	^ self ___rounded___
+	^ self @env0:rounded
 %
 
 category: 'Python-Rounding'
@@ -338,14 +338,14 @@ __round__: ndigits
 	ndigits ifNil: [ ^ self __round__ ].
 
 	"If ndigits is 0, return integer"
-	(ndigits ___eq___: 0) ifTrue: [
-		^ self ___rounded___
+	(ndigits @env0:= 0) ifTrue: [
+		^ self @env0:rounded
 	].
 
 	"Round to n decimal places"
-	multiplier := 10 ___raisedTo___: ndigits.
-	^ ((self ___times___: multiplier) ___rounded___)
-		___divide___: multiplier
+	multiplier := 10 @env0:raisedTo: ndigits.
+	^ ((self @env0:* multiplier) @env0:rounded)
+		@env0:/ multiplier
 %
 
 category: 'Python-String Representation'
@@ -354,14 +354,14 @@ __str__
 	"Return the informal string representation of the float."
 
 	| str x y |
-	str := self ___printString___.
+	str := self @env0:printString.
 	"Handle -0.0 specially"
-	x := self ___eq___: 0.0.
+	x := self @env0:= 0.0.
 	y := (self @env0:signBit) == 1.
 	(x @env0:and: [y]) ifTrue: [
 		str := '-0.0'.
 	].
-	^ str ___asUnicodeString___
+	^ str @env0:asUnicodeString
 %
 
 category: 'Python-Arithmetic'
@@ -369,7 +369,7 @@ method: float
 __sub__: other
 	"Subtract other from self."
 
-	^ self ___minus___: (other)
+	^ self @env0:- (other)
 %
 
 category: 'Python-Arithmetic'
@@ -377,7 +377,7 @@ method: float
 __truediv__: other
 	"True division (always returns float)."
 
-	^ self ___divide___: other
+	^ self @env0:/ other
 %
 
 category: 'Python-Rounding'
@@ -385,7 +385,7 @@ method: float
 __trunc__
 	"Truncate to integer."
 
-	^ self ___truncated___
+	^ self @env0:truncated
 %
 
 category: 'Python-Float Methods'
@@ -395,7 +395,7 @@ as_integer_ratio
 
 	| frac |
 	frac := self @env0:asFraction.
-	^ tuple ___with___: (frac @env0:numerator) with: (frac @env0:denominator)
+	^ tuple @env0:with: (frac @env0:numerator) with: (frac @env0:denominator)
 %
 
 category: 'Python-Float Methods'
@@ -416,31 +416,31 @@ hex
 	kind := self @env0:_getKind.
 
 	"Check for NaN (kind > 4)"
-	(kind ___gt___: 4) ifTrue: [
-		^ 'nan' ___asUnicodeString___
+	(kind @env0:> 4) ifTrue: [
+		^ 'nan' @env0:asUnicodeString
 	].
 
 	"Check for infinity (kind == 3)"
-	(kind ___eq___: 3) ifTrue: [
-		^ ((self ___lt___: 0)
+	(kind @env0:= 3) ifTrue: [
+		^ ((self @env0:< 0)
 			ifTrue: ['-inf']
-			ifFalse: ['inf']) ___asUnicodeString___
+			ifFalse: ['inf']) @env0:asUnicodeString
 	].
 
 	"Handle zero"
-	(self ___eq___: 0.0) ifTrue: [
+	(self @env0:= 0.0) ifTrue: [
 		^ ((self @env0:signBit)
 			ifTrue: ['-0x0.0000000000000p+0']
-			ifFalse: ['0x0.0000000000000p+0']) ___asUnicodeString___
+			ifFalse: ['0x0.0000000000000p+0']) @env0:asUnicodeString
 	].
 
 	"Simplified hex representation - full implementation would use frexp"
-	sign := (self ___lt___: 0) ifTrue: ['-'] ifFalse: [''].
-	absVal := self ___abs___.
+	sign := (self @env0:< 0) ifTrue: ['-'] ifFalse: [''].
+	absVal := self @env0:abs.
 
 	"Use GemStone's printString as fallback"
-	hexStr := sign ___concat___: ('0x' ___concat___: (absVal ___printString___)).
-	^ hexStr ___asUnicodeString___
+	hexStr := sign @env0:, ('0x' @env0:, (absVal @env0:printString)).
+	^ hexStr @env0:asUnicodeString
 %
 
 category: 'Python-Properties'
@@ -456,7 +456,7 @@ method: float
 is_integer
 	"Return True if float value is an integer."
 
-	^ self ___eq___: ((self ___truncated___) ___asFloat___)
+	^ self @env0:= ((self @env0:truncated) @env0:asFloat)
 %
 
 category: 'Python-Properties'

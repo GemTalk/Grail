@@ -34,26 +34,26 @@ __new__: cls _: source
 	"bytes(source) - create bytes from various sources"
 
 	| result sourceClass |
-	sourceClass := source ___class___.
+	sourceClass := source @env0:class.
 
 	"If source is an integer, create bytes of that size filled with zeros"
 	sourceClass == SmallInteger ifTrue: [
-		(source ___lt___: 0) ifTrue: [
+		(source @env0:< 0) ifTrue: [
 			ValueError ___signal___: 'negative count'
 		].
 		^ cls ___new___: source
 	].
 
 	"If source is a string, raise TypeError (need encoding)"
-	(source ___isKindOf___: String) ifTrue: [
+	(source @env0:isKindOf: String) ifTrue: [
 		TypeError ___signal___: 'string argument without an encoding'
 	].
 
 	"If source is bytes, make a copy"
 	(sourceClass == bytes) ifTrue: [
-		result := cls ___new___: source ___size___.
-		1 ___to___: source ___size___ do: [:i |
-			result ___at___: i put: (source ___at___: i)
+		result := cls ___new___: source @env0:size.
+		1 @env0:to: source @env0:size do: [:i |
+			result @env0:at: i put: (source @env0:at: i)
 		].
 		^ result
 	].
@@ -65,38 +65,38 @@ __new__: cls _: source
 		]
 	]) ifTrue: [
 		| ba size |
-		size := source ___size___.
+		size := source @env0:size.
 		ba := cls ___new___: size.
-		1 ___to___: size do: [:i |
+		1 @env0:to: size do: [:i |
 			| elem val |
-			elem := source ___at___: i.
+			elem := source @env0:at: i.
 			val := elem.
 			"Validate byte value (0-255)"
-			((val ___lt___: 0) or: [
-				val ___gt___: 255
+			((val @env0:< 0) or: [
+				val @env0:> 255
 			]) ifTrue: [
 				ValueError ___signal___: 'bytes must be in range(0, 256)'
 			].
-			ba ___at___: i put: val
+			ba @env0:at: i put: val
 		].
 		^ ba
 	].
 
 	"If source is a range, convert to bytes"
-	(sourceClass ___eq___: Interval) ifTrue: [
+	(sourceClass @env0:= Interval) ifTrue: [
 		| ba size |
-		size := source ___size___.
+		size := source @env0:size.
 		ba := cls ___new___: size.
-		1 ___to___: size do: [:i |
+		1 @env0:to: size do: [:i |
 			| val |
-			val := source ___at___: i.
+			val := source @env0:at: i.
 			"Validate byte value (0-255)"
-			((val ___lt___: 0) or: [
-				val ___gt___: 255
+			((val @env0:< 0) or: [
+				val @env0:> 255
 			]) ifTrue: [
 				ValueError ___signal___: 'bytes must be in range(0, 256)'
 			].
-			ba ___at___: i put: val
+			ba @env0:at: i put: val
 		].
 		^ ba
 	].
@@ -111,10 +111,10 @@ __new__: cls _: source _: encoding
 	"bytes(string, encoding) - encode string to bytes"
 
 	| result sourceClass encodingStr |
-	sourceClass := source ___class___.
+	sourceClass := source @env0:class.
 
 	"Source must be a string (String or Unicode7)"
-	((source ___isKindOf___: String) not) ifTrue: [
+	((source @env0:isKindOf: String) not) ifTrue: [
 		TypeError ___signal___: 'encoding without a string argument'
 	].
 
@@ -122,56 +122,56 @@ __new__: cls _: source _: encoding
 	encodingStr := encoding.
 
 	"Support ASCII encoding"
-	(encodingStr ___eq___: 'ascii') ifTrue: [
+	(encodingStr @env0:= 'ascii') ifTrue: [
 		| ba size |
-		size := source ___size___.
+		size := source @env0:size.
 		ba := cls ___new___: size.
-		1 ___to___: size do: [:i |
+		1 @env0:to: size do: [:i |
 			| char codePoint |
-			char := source ___at___: i.
-			codePoint := char ___codePoint___.
-			(codePoint ___gt___: 127) ifTrue: [
+			char := source @env0:at: i.
+			codePoint := char @env0:codePoint.
+			(codePoint @env0:> 127) ifTrue: [
 				UnicodeEncodeError ___signal___: 'ordinal not in range(128)'
 			].
-			ba ___at___: i put: codePoint
+			ba @env0:at: i put: codePoint
 		].
 		^ ba
 	].
 
 	"Support UTF-8 encoding"
-	((encodingStr ___eq___: 'utf-8') or: [
-		encodingStr ___eq___: 'utf8'
+	((encodingStr @env0:= 'utf-8') or: [
+		encodingStr @env0:= 'utf8'
 	]) ifTrue: [
 		| utf8Bytes |
 		utf8Bytes := source @env0:encodeAsUTF8.
-		result := cls ___new___: (utf8Bytes ___size___).
-		1 ___to___: utf8Bytes ___size___ do: [:i |
-			result ___at___: i put: (utf8Bytes ___at___: i)
+		result := cls ___new___: (utf8Bytes @env0:size).
+		1 @env0:to: utf8Bytes @env0:size do: [:i |
+			result @env0:at: i put: (utf8Bytes @env0:at: i)
 		].
 		^ result
 	].
 
 	"Support Latin-1 encoding"
-	((encodingStr ___eq___: 'latin-1') or: [
-		encodingStr ___eq___: 'latin1'
+	((encodingStr @env0:= 'latin-1') or: [
+		encodingStr @env0:= 'latin1'
 	]) ifTrue: [
 		| ba size |
-		size := source ___size___.
+		size := source @env0:size.
 		ba := cls ___new___: size.
-		1 ___to___: size do: [:i |
+		1 @env0:to: size do: [:i |
 			| char codePoint |
-			char := source ___at___: i.
-			codePoint := char ___codePoint___.
-			(codePoint ___gt___: 255) ifTrue: [
+			char := source @env0:at: i.
+			codePoint := char @env0:codePoint.
+			(codePoint @env0:> 255) ifTrue: [
 				UnicodeEncodeError ___signal___: 'ordinal not in range(256)'
 			].
-			ba ___at___: i put: codePoint
+			ba @env0:at: i put: codePoint
 		].
 		^ ba
 	].
 
 	"Unsupported encoding"
-	LookupError ___signal___: ('unknown encoding: ' ___concat___: encodingStr)
+	LookupError ___signal___: ('unknown encoding: ' @env0:, encodingStr)
 %
 
 category: 'Python-Constructors'
@@ -181,24 +181,24 @@ fromhex: cls _: hexString
 
 	| cleaned size ba |
 	"Remove spaces from hex string"
-	cleaned := hexString ___select___: [:ch |
-		(ch ___ne___: $ )
+	cleaned := hexString @env0:select: [:ch |
+		(ch @env0:~= $ )
 	].
 
 	"Hex string must have even length"
-	size := cleaned ___size___.
-	((size ___modulo___: 2) ___ne___: 0) ifTrue: [
+	size := cleaned @env0:size.
+	((size @env0:\\ 2) @env0:~= 0) ifTrue: [
 		ValueError ___signal___: 'non-hexadecimal number found in fromhex() arg'
 	].
 
 	"Create bytes and fill with hex values"
-	ba := cls ___new___: (size ___divideInteger___: 2).
-	1 ___to___: size by: 2 do: [:i |
+	ba := cls ___new___: (size @env0:// 2).
+	1 @env0:to: size by: 2 do: [:i |
 		| hexPair byte stream |
-		hexPair := cleaned ___copyFrom___: i to: (i ___plus___: 1).
-		stream := ReadStream ___on___: ('16r' ___concat___: hexPair).
-		byte := Number ___fromStream___: stream.
-		ba ___at___: ((i ___plus___: 1) ___divideInteger___: 2) put: byte
+		hexPair := cleaned @env0:copyFrom: i to: (i @env0:+ 1).
+		stream := ReadStream @env0:on: ('16r' @env0:, hexPair).
+		byte := Number @env0:fromStream: stream.
+		ba @env0:at: ((i @env0:+ 1) @env0:// 2) put: byte
 	].
 
 	^ ba
@@ -211,26 +211,26 @@ maketrans: frm _: to
 	Note: This is actually a staticmethod in Python (doesn't receive cls),
 	but Grail doesn't have a staticmethod: directive for hand-written methods."
 	| frmSize toSize table |
-	frmSize := frm ___size___.
-	toSize := to ___size___.
+	frmSize := frm @env0:size.
+	toSize := to @env0:size.
 
 	"frm and to must be same size"
-	(frmSize ___eq___: toSize) ifFalse: [
+	(frmSize @env0:= toSize) ifFalse: [
 		ValueError ___signal___: 'maketrans arguments must have same length'
 	].
 
 	"Create identity table (0-255)"
 	table := bytes ___new___: 256.
-	0 ___to___: 255 do: [:i |
-		table ___at___: (i ___plus___: 1) put: i
+	0 @env0:to: 255 do: [:i |
+		table @env0:at: (i @env0:+ 1) put: i
 	].
 
 	"Apply replacements"
-	1 ___to___: frmSize do: [:i |
+	1 @env0:to: frmSize do: [:i |
 		| frmByte toByte |
-		frmByte := frm ___at___: i.
-		toByte := to ___at___: i.
-		table ___at___: (frmByte ___plus___: 1) put: toByte
+		frmByte := frm @env0:at: i.
+		toByte := to @env0:at: i.
+		table @env0:at: (frmByte @env0:+ 1) put: toByte
 	].
 
 	^ table
@@ -241,27 +241,27 @@ method: bytes
 __add__: other
 	"Concatenate bytes"
 	| otherClass size1 size2 result |
-	otherClass := other ___class___.
+	otherClass := other @env0:class.
 
 	"Can only concatenate with bytes or bytearray"
-	((otherClass ___eq___: bytes) or: [
-		otherClass ___eq___: bytearray
+	((otherClass @env0:= bytes) or: [
+		otherClass @env0:= bytearray
 	]) ifFalse: [
-		TypeError ___signal___: ('can''t concat bytes to ' ___concat___: otherClass)
+		TypeError ___signal___: ('can''t concat bytes to ' @env0:, otherClass)
 	].
 
-	size1 := self ___size___.
-	size2 := other ___size___.
-	result := (self ___class___) ___new___: (size1 ___plus___: size2).
+	size1 := self @env0:size.
+	size2 := other @env0:size.
+	result := (self @env0:class) ___new___: (size1 @env0:+ size2).
 
 	"Copy self"
-	1 ___to___: size1 do: [:i |
-		result ___at___: i put: (self ___at___: i)
+	1 @env0:to: size1 do: [:i |
+		result @env0:at: i put: (self @env0:at: i)
 	].
 
 	"Copy other"
-	1 ___to___: size2 do: [:i |
-		result ___at___: (size1 ___plus___: i) put: (other ___at___: i)
+	1 @env0:to: size2 do: [:i |
+		result @env0:at: (size1 @env0:+ i) put: (other @env0:at: i)
 	].
 
 	^ result
@@ -277,7 +277,7 @@ __class__
 category: 'Python-Sequence Protocol'
 method: bytes
 __contains__: item
-	^ self ___includes___: item
+	^ self @env0:includes: item
 %
 
 category: 'Python-Comparison'
@@ -285,27 +285,27 @@ method: bytes
 __eq__: other
 	"Compare bytes for equality"
 	| otherClass size |
-	otherClass := other ___class___.
+	otherClass := other @env0:class.
 
 	"Can only concatenate with bytes or bytearray"
-	((otherClass ___eq___: bytes) or: [
-		otherClass ___eq___: bytearray
+	((otherClass @env0:= bytes) or: [
+		otherClass @env0:= bytearray
 	]) ifFalse: [
 		^ false
 	].
 
 	"Check sizes"
-	size := self ___size___.
-	(size ___eq___: other ___size___) ifFalse: [
+	size := self @env0:size.
+	(size @env0:= other @env0:size) ifFalse: [
 		^ false
 	].
 
 	"Compare each byte"
-	1 ___to___: size do: [:i |
+	1 @env0:to: size do: [:i |
 		| myByte otherByte |
-		myByte := self ___at___: i.
-		otherByte := other ___at___: i.
-		(myByte ___eq___: otherByte) ifFalse: [
+		myByte := self @env0:at: i.
+		otherByte := other @env0:at: i.
+		(myByte @env0:= otherByte) ifFalse: [
 			^ false
 		]
 	].
@@ -318,37 +318,37 @@ method: bytes
 __getitem__: index
 	"Get byte at index (0-based, supports negative indices)"
 	| idx size |
-	size := self ___size___.
+	size := self @env0:size.
 	idx := index.
 
 	"Handle negative indices"
-	(idx ___lt___: 0) ifTrue: [
-		idx := size ___plus___: idx
+	(idx @env0:< 0) ifTrue: [
+		idx := size @env0:+ idx
 	].
 
 	"Check bounds"
-	((idx ___lt___: 0) or: [
-		idx ___ge___: size
+	((idx @env0:< 0) or: [
+		idx @env0:>= size
 	]) ifTrue: [
 		IndexError ___signal___: 'index out of range'
 	].
 
 	"Return byte value (convert to 1-based index)"
-	^ self ___at___: (idx ___plus___: 1)
+	^ self @env0:at: (idx @env0:+ 1)
 %
 
 category: 'Python-Hashing'
 method: bytes
 __hash__
 	"Return hash of bytes"
-	^ self ___hash___
+	^ self @env0:hash
 %
 
 category: 'Python-Sequence Protocol'
 method: bytes
 __len__
 	"Return the number of bytes"
-	^ self ___size___
+	^ self @env0:size
 %
 
 category: 'Python-Concatenation'
@@ -359,24 +359,24 @@ __mul__: count
 	n := count.
 
 	"Validate count is an integer"
-	(n ___class___) == SmallInteger ifFalse: [
+	(n @env0:class) == SmallInteger ifFalse: [
 		TypeError ___signal___: 'can''t multiply sequence by non-int'
 	].
 
 	"If count <= 0, return empty bytes"
-	(n ___le___: 0) ifTrue: [
+	(n @env0:<= 0) ifTrue: [
 		^ bytes ___new___
 	].
 
-	size := self ___size___.
-	result := bytes ___new___: (size ___times___: n).
+	size := self @env0:size.
+	result := bytes ___new___: (size @env0:* n).
 	offset := 0.
 
-	1 ___to___: n do: [:rep |
-		1 ___to___: size do: [:i |
-			result ___at___: (offset ___plus___: i) put: (self ___at___: i)
+	1 @env0:to: n do: [:rep |
+		1 @env0:to: size do: [:i |
+			result @env0:at: (offset @env0:+ i) put: (self @env0:at: i)
 		].
-		offset := offset ___plus___: size
+		offset := offset @env0:+ size
 	].
 
 	^ result
@@ -388,7 +388,7 @@ __ne__: other
 	"Compare bytes for inequality"
 	| result |
 	result := self @env1:__eq__: other.
-	^ result ___not___
+	^ result @env0:not
 %
 
 category: 'Python-String Representation'
@@ -397,40 +397,40 @@ __repr__
 	"Return string representation of bytes (e.g., b'hello')"
 	| result size |
 	result := 'b'''.
-	size := self ___size___.
+	size := self @env0:size.
 
-	1 ___to___: size do: [:i |
+	1 @env0:to: size do: [:i |
 		| byte |
-		byte := self ___at___: i.
+		byte := self @env0:at: i.
 
 		"Printable ASCII characters (32-126)"
-		((byte ___ge___: 32) and: [
-			byte ___le___: 126
+		((byte @env0:>= 32) and: [
+			byte @env0:<= 126
 		]) ifTrue: [
 			"Special cases that need escaping"
-			(byte ___eq___: 39) ifTrue: [  "single quote"
-				result := result ___concat___: '\'''
+			(byte @env0:= 39) ifTrue: [  "single quote"
+				result := result @env0:, '\'''
 			] ifFalse: [
-				(byte ___eq___: 92) ifTrue: [  "backslash"
-					result := result ___concat___: '\\'
+				(byte @env0:= 92) ifTrue: [  "backslash"
+					result := result @env0:, '\\'
 				] ifFalse: [
 					| char |
-					char := Character ___codePoint___: byte.
-					result := result ___concat___: (char ___asString___)
+					char := Character @env0:codePoint: byte.
+					result := result @env0:, (char @env0:asString)
 				]
 			]
 		] ifFalse: [
 			"Non-printable: use \xNN format"
 			| hex |
-			hex := byte ___printStringRadix___: 16.
-			((hex ___size___) ___eq___: 1) ifTrue: [
-				hex := '0' ___concat___: hex
+			hex := byte @env0:printStringRadix: 16.
+			((hex @env0:size) @env0:= 1) ifTrue: [
+				hex := '0' @env0:, hex
 			].
-			result := result ___concat___: ('\x' ___concat___: hex)
+			result := result @env0:, ('\x' @env0:, hex)
 		]
 	].
 
-	result := result ___concat___: ''''.
+	result := result @env0:, ''''.
 	^ result
 %
 
@@ -447,19 +447,19 @@ capitalize
 	"Return capitalized version (first byte uppercase, rest lowercase)"
 
 	| result size firstByte |
-	size := self ___size___.
-	(size ___eq___: 0) ifTrue: [
+	size := self @env0:size.
+	(size @env0:= 0) ifTrue: [
 		^ bytes ___new___
 	].
 
 	result := self @env1:lower.
 
 	"Capitalize first byte if it's a lowercase letter"
-	firstByte := result ___at___: 1.
-	((firstByte ___ge___: 97) and: [
-		firstByte ___le___: 122
+	firstByte := result @env0:at: 1.
+	((firstByte @env0:>= 97) and: [
+		firstByte @env0:<= 122
 	]) ifTrue: [
-		result ___at___: 1 put: (firstByte ___minus___: (32))
+		result @env0:at: 1 put: (firstByte @env0:- (32))
 	].
 
 	^ result
@@ -470,32 +470,32 @@ method: bytes
 center: width
 	"Center bytes in field of given width"
 	| mySize result totalPadding leftPadding rightPadding |
-	mySize := self ___size___.
+	mySize := self @env0:size.
 
 	"If already wide enough, return copy"
-	(width ___le___: mySize) ifTrue: [
-		^ self ___copy___
+	(width @env0:<= mySize) ifTrue: [
+		^ self @env0:copy
 	].
 
 	"Calculate padding"
-	totalPadding := width ___minus___: (mySize).
-	leftPadding := totalPadding ___divideInteger___: 2.
-	rightPadding := totalPadding ___minus___: (leftPadding).
+	totalPadding := width @env0:- (mySize).
+	leftPadding := totalPadding @env0:// 2.
+	rightPadding := totalPadding @env0:- (leftPadding).
 	result := bytes ___new___: width.
 
 	"Add left spaces"
-	1 ___to___: leftPadding do: [:i |
-		result ___at___: i put: 32
+	1 @env0:to: leftPadding do: [:i |
+		result @env0:at: i put: 32
 	].
 
 	"Copy original"
-	1 ___to___: mySize do: [:i |
-		result ___at___: (leftPadding ___plus___: i) put: (self ___at___: i)
+	1 @env0:to: mySize do: [:i |
+		result @env0:at: (leftPadding @env0:+ i) put: (self @env0:at: i)
 	].
 
 	"Add right spaces"
-	1 ___to___: rightPadding do: [:i |
-		result ___at___: (leftPadding ___plus___: (mySize ___plus___: i)) put: 32
+	1 @env0:to: rightPadding do: [:i |
+		result @env0:at: (leftPadding @env0:+ (mySize @env0:+ i)) put: 32
 	].
 
 	^ result
@@ -506,18 +506,18 @@ method: bytes
 count: sub
 	"Count non-overlapping occurrences of sub"
 	| subClass subSize mySize count i |
-	subClass := sub ___class___.
+	subClass := sub @env0:class.
 
 	"sub must be bytes or integer"
 	subClass == SmallInteger ifTrue: [
 		"Count occurrences of single byte"
 		count := 0.
-		mySize := self ___size___.
-		1 ___to___: mySize do: [:idx |
+		mySize := self @env0:size.
+		1 @env0:to: mySize do: [:idx |
 			| byte |
-			byte := self ___at___: idx.
-			(byte ___eq___: sub) ifTrue: [
-				count := count ___plus___: 1
+			byte := self @env0:at: idx.
+			(byte @env0:= sub) ifTrue: [
+				count := count @env0:+ 1
 			]
 		].
 		^ count
@@ -528,33 +528,33 @@ count: sub
 		TypeError ___signal___: 'argument should be bytes or integer'
 	].
 
-	subSize := sub ___size___.
-	mySize := self ___size___.
+	subSize := sub @env0:size.
+	mySize := self @env0:size.
 
 	"Empty sub always returns 0"
-	(subSize ___eq___: 0) ifTrue: [
+	(subSize @env0:= 0) ifTrue: [
 		^ 0
 	].
 
 	count := 0.
 	i := 1.
 
-	[i ___le___: (mySize ___minus___: (subSize ___minus___: 1))] ___whileTrue___: [
+	[i @env0:<= (mySize @env0:- (subSize @env0:- 1))] @env0:whileTrue: [
 		| match |
 		match := true.
-		1 ___to___: subSize do: [:j |
+		1 @env0:to: subSize do: [:j |
 			| myByte subByte |
-			myByte := self ___at___: (i ___plus___: (j ___minus___: (1))).
-			subByte := sub ___at___: j.
-			(myByte ___eq___: subByte) ifFalse: [
+			myByte := self @env0:at: (i @env0:+ (j @env0:- (1))).
+			subByte := sub @env0:at: j.
+			(myByte @env0:= subByte) ifFalse: [
 				match := false
 			]
 		].
 		match ifTrue: [
-			count := count ___plus___: 1.
-			i := i ___plus___: subSize
+			count := count @env0:+ 1.
+			i := i @env0:+ subSize
 		] ifFalse: [
-			i := i ___plus___: 1
+			i := i @env0:+ 1
 		]
 	].
 
@@ -577,47 +577,47 @@ decode: encoding
 	encodingStr := encoding.
 
 	"Support UTF-8"
-	((encodingStr ___eq___: 'utf-8') or: [
-		encodingStr ___eq___: 'utf8'
+	((encodingStr @env0:= 'utf-8') or: [
+		encodingStr @env0:= 'utf8'
 	]) ifTrue: [
 		^ self @env0:decodeFromUTF8
 	].
 
 	"Support ASCII"
-	(encodingStr ___eq___: 'ascii') ifTrue: [
+	(encodingStr @env0:= 'ascii') ifTrue: [
 		| result size |
-		size := self ___size___.
+		size := self @env0:size.
 		result := Unicode7 ___new___: size.
-		1 ___to___: size do: [:i |
+		1 @env0:to: size do: [:i |
 			| byte char |
-			byte := self ___at___: i.
-			(byte ___gt___: 127) ifTrue: [
+			byte := self @env0:at: i.
+			(byte @env0:> 127) ifTrue: [
 				UnicodeDecodeError ___signal___: 'ordinal not in range(128)'
 			].
-			char := Character ___codePoint___: byte.
-			result ___at___: i put: char
+			char := Character @env0:codePoint: byte.
+			result @env0:at: i put: char
 		].
 		^ result
 	].
 
 	"Support Latin-1"
-	((encodingStr ___eq___: 'latin-1') or: [
-		encodingStr ___eq___: 'latin1'
+	((encodingStr @env0:= 'latin-1') or: [
+		encodingStr @env0:= 'latin1'
 	]) ifTrue: [
 		| result size |
-		size := self ___size___.
+		size := self @env0:size.
 		result := Unicode7 ___new___: size.
-		1 ___to___: size do: [:i |
+		1 @env0:to: size do: [:i |
 			| byte char |
-			byte := self ___at___: i.
-			char := Character ___codePoint___: byte.
-			result ___at___: i put: char
+			byte := self @env0:at: i.
+			char := Character @env0:codePoint: byte.
+			result @env0:at: i put: char
 		].
 		^ result
 	].
 
 	"Unsupported encoding"
-	LookupError ___signal___: ('unknown encoding: ' ___concat___: encodingStr)
+	LookupError ___signal___: ('unknown encoding: ' @env0:, encodingStr)
 %
 
 category: 'Python-Prefix/Suffix Methods'
@@ -625,29 +625,29 @@ method: bytes
 endswith: suffix
 	"Check if bytes ends with suffix"
 	| suffixClass suffixSize mySize offset |
-	suffixClass := suffix ___class___.
+	suffixClass := suffix @env0:class.
 
 	"suffix must be bytes"
-	(suffixClass ___eq___: bytes) ifFalse: [
+	(suffixClass @env0:= bytes) ifFalse: [
 		TypeError ___signal___: 'argument should be bytes'
 	].
 
-	suffixSize := suffix ___size___.
-	mySize := self ___size___.
+	suffixSize := suffix @env0:size.
+	mySize := self @env0:size.
 
 	"If suffix is longer, can't match"
-	(suffixSize ___gt___: mySize) ifTrue: [
+	(suffixSize @env0:> mySize) ifTrue: [
 		^ false
 	].
 
-	offset := mySize ___minus___: (suffixSize).
+	offset := mySize @env0:- (suffixSize).
 
 	"Compare each byte"
-	1 ___to___: suffixSize do: [:i |
+	1 @env0:to: suffixSize do: [:i |
 		| myByte suffixByte |
-		myByte := self ___at___: (offset ___plus___: i).
-		suffixByte := suffix ___at___: i.
-		(myByte ___eq___: suffixByte) ifFalse: [
+		myByte := self @env0:at: (offset @env0:+ i).
+		suffixByte := suffix @env0:at: i.
+		(myByte @env0:= suffixByte) ifFalse: [
 			^ false
 		]
 	].
@@ -668,36 +668,36 @@ expandtabs: tabsize
 	"Expand tabs to spaces with given tabsize"
 	| result size column |
 	result := bytes ___new___.
-	size := self ___size___.
+	size := self @env0:size.
 	column := 0.
 
-	1 ___to___: size do: [:i |
+	1 @env0:to: size do: [:i |
 		| byte |
-		byte := self ___at___: i.
+		byte := self @env0:at: i.
 
-		(byte ___eq___: 9) ifTrue: [  "Tab"
+		(byte @env0:= 9) ifTrue: [  "Tab"
 			| spaces |
-			spaces := tabsize ___minus___: (column ___modulo___: tabsize).
-			1 ___to___: spaces do: [:j |
+			spaces := tabsize @env0:- (column @env0:\\ tabsize).
+			1 @env0:to: spaces do: [:j |
 				| newByte |
 				newByte := bytes ___new___: 1.
-				newByte ___at___: 1 put: 32.
-				result := result ___concat___: newByte
+				newByte @env0:at: 1 put: 32.
+				result := result @env0:, newByte
 			].
-			column := column ___plus___: spaces
+			column := column @env0:+ spaces
 		] ifFalse: [
-			(byte ___eq___: 10) ifTrue: [  "Newline"
+			(byte @env0:= 10) ifTrue: [  "Newline"
 				| newByte |
 				newByte := bytes ___new___: 1.
-				newByte ___at___: 1 put: byte.
-				result := result ___concat___: newByte.
+				newByte @env0:at: 1 put: byte.
+				result := result @env0:, newByte.
 				column := 0
 			] ifFalse: [
 				| newByte |
 				newByte := bytes ___new___: 1.
-				newByte ___at___: 1 put: byte.
-				result := result ___concat___: newByte.
-				column := column ___plus___: 1
+				newByte @env0:at: 1 put: byte.
+				result := result @env0:, newByte.
+				column := column @env0:+ 1
 			]
 		]
 	].
@@ -710,17 +710,17 @@ method: bytes
 find: sub
 	"Find first occurrence of sub, return index or -1"
 	| subClass subSize mySize i w x y z |
-	subClass := sub ___class___.
+	subClass := sub @env0:class.
 
 	"sub must be bytes or integer"
 	subClass == SmallInteger ifTrue: [
 		"Find first occurrence of single byte"
-		mySize := self ___size___.
-		1 ___to___: mySize do: [:idx |
+		mySize := self @env0:size.
+		1 @env0:to: mySize do: [:idx |
 			| byte |
-			byte := self ___at___: idx.
-			(byte ___eq___: sub) ifTrue: [
-				^ idx ___minus___: (1)  "Convert to 0-based"
+			byte := self @env0:at: idx.
+			(byte @env0:= sub) ifTrue: [
+				^ idx @env0:- (1)  "Convert to 0-based"
 			]
 		].
 		^ -1
@@ -735,30 +735,30 @@ find: sub
 		TypeError ___signal___: 'argument should be bytes, bytearray or int'
 	].
 
-	subSize := sub ___size___.
-	mySize := self ___size___.
+	subSize := sub @env0:size.
+	mySize := self @env0:size.
 
 	"Empty sub always returns 0"
-	(subSize ___eq___: 0) ifTrue: [
+	(subSize @env0:= 0) ifTrue: [
 		^ 0
 	].
 
 	i := 1.
-	[i ___le___: (mySize ___minus___: (subSize ___minus___: 1))] ___whileTrue___: [
+	[i @env0:<= (mySize @env0:- (subSize @env0:- 1))] @env0:whileTrue: [
 		| match |
 		match := true.
-		1 ___to___: subSize do: [:j |
+		1 @env0:to: subSize do: [:j |
 			| myByte subByte |
-			myByte := self ___at___: (i ___plus___: (j ___minus___: (1))).
-			subByte := sub ___at___: j.
-			(myByte ___eq___: subByte) ifFalse: [
+			myByte := self @env0:at: (i @env0:+ (j @env0:- (1))).
+			subByte := sub @env0:at: j.
+			(myByte @env0:= subByte) ifFalse: [
 				match := false
 			]
 		].
 		match ifTrue: [
-			^ i ___minus___: (1)  "Convert to 0-based"
+			^ i @env0:- (1)  "Convert to 0-based"
 		].
-		i := i ___plus___: 1
+		i := i @env0:+ 1
 	].
 
 	^ -1
@@ -770,17 +770,17 @@ hex
 	"Return hex representation of bytes"
 	| result size |
 	result := ''.
-	size := self ___size___.
+	size := self @env0:size.
 
-	1 ___to___: size do: [:i |
+	1 @env0:to: size do: [:i |
 		| byte hexStr |
-		byte := self ___at___: i.
-		hexStr := byte ___printStringRadix___: 16.
+		byte := self @env0:at: i.
+		hexStr := byte @env0:printStringRadix: 16.
 		"Pad with leading zero if needed"
-		((hexStr ___size___) ___eq___: 1) ifTrue: [
-			hexStr := '0' ___concat___: hexStr
+		((hexStr @env0:size) @env0:= 1) ifTrue: [
+			hexStr := '0' @env0:, hexStr
 		].
-		result := result ___concat___: hexStr
+		result := result @env0:, hexStr
 	].
 
 	^ result
@@ -792,7 +792,7 @@ index: sub
 	"Find first occurrence of sub, raise ValueError if not found"
 	| result |
 	result := self @env1:find: sub.
-	(result ___eq___: -1) ifTrue: [
+	(result @env0:= -1) ifTrue: [
 		ValueError ___signal___: 'subsection not found'
 	].
 	^ result
@@ -803,25 +803,25 @@ method: bytes
 isalnum
 	"Check if all bytes are alphanumeric ASCII"
 	| size |
-	size := self ___size___.
+	size := self @env0:size.
 
 	"Empty bytes returns False"
-	(size ___eq___: 0) ifTrue: [
+	(size @env0:= 0) ifTrue: [
 		^ false
 	].
 
-	1 ___to___: size do: [:i |
+	1 @env0:to: size do: [:i |
 		| byte |
-		byte := self ___at___: i.
+		byte := self @env0:at: i.
 		"Check if 0-9 (48-57), A-Z (65-90), or a-z (97-122)"
-		((byte ___ge___: 48) and: [
-			byte ___le___: 57
+		((byte @env0:>= 48) and: [
+			byte @env0:<= 57
 		]) ifFalse: [
-			((byte ___ge___: 65) and: [
-				byte ___le___: 90
+			((byte @env0:>= 65) and: [
+				byte @env0:<= 90
 			]) ifFalse: [
-				((byte ___ge___: 97) and: [
-					byte ___le___: 122
+				((byte @env0:>= 97) and: [
+					byte @env0:<= 122
 				]) ifFalse: [
 					^ false
 				]
@@ -837,22 +837,22 @@ method: bytes
 isalpha
 	"Check if all bytes are alphabetic ASCII (A-Z, a-z)"
 	| size |
-	size := self ___size___.
+	size := self @env0:size.
 
 	"Empty bytes returns False"
-	(size ___eq___: 0) ifTrue: [
+	(size @env0:= 0) ifTrue: [
 		^ false
 	].
 
-	1 ___to___: size do: [:i |
+	1 @env0:to: size do: [:i |
 		| byte |
-		byte := self ___at___: i.
+		byte := self @env0:at: i.
 		"Check if A-Z (65-90) or a-z (97-122)"
-		((byte ___ge___: 65) and: [
-			byte ___le___: 90
+		((byte @env0:>= 65) and: [
+			byte @env0:<= 90
 		]) ifFalse: [
-			((byte ___ge___: 97) and: [
-				byte ___le___: 122
+			((byte @env0:>= 97) and: [
+				byte @env0:<= 122
 			]) ifFalse: [
 				^ false
 			]
@@ -868,12 +868,12 @@ isascii
 	"Return True if the sequence is empty or all bytes are ASCII (0-127)"
 
 	| size |
-	size := self ___size___.
-	1 ___to___: size do: [:i |
+	size := self @env0:size.
+	1 @env0:to: size do: [:i |
 		| byte |
-		byte := self ___at___: i.
+		byte := self @env0:at: i.
 		"ASCII bytes are in the range 0-0x7F (0-127)"
-		(byte ___gt___: 127) ifTrue: [
+		(byte @env0:> 127) ifTrue: [
 			^ false
 		]
 	].
@@ -885,19 +885,19 @@ method: bytes
 isdigit
 	"Check if all bytes are digits (0-9)"
 	| size |
-	size := self ___size___.
+	size := self @env0:size.
 
 	"Empty bytes returns False"
-	(size ___eq___: 0) ifTrue: [
+	(size @env0:= 0) ifTrue: [
 		^ false
 	].
 
-	1 ___to___: size do: [:i |
+	1 @env0:to: size do: [:i |
 		| byte |
-		byte := self ___at___: i.
+		byte := self @env0:at: i.
 		"Check if 0-9 (48-57)"
-		((byte ___ge___: 48) and: [
-			byte ___le___: 57
+		((byte @env0:>= 48) and: [
+			byte @env0:<= 57
 		]) ifFalse: [
 			^ false
 		]
@@ -911,21 +911,21 @@ method: bytes
 islower
 	"Check if all cased bytes are lowercase"
 	| size hasCased |
-	size := self ___size___.
+	size := self @env0:size.
 	hasCased := false.
 
-	1 ___to___: size do: [:i |
+	1 @env0:to: size do: [:i |
 		| byte |
-		byte := self ___at___: i.
+		byte := self @env0:at: i.
 		"Check if uppercase (65-90)"
-		((byte ___ge___: 65) and: [
-			byte ___le___: 90
+		((byte @env0:>= 65) and: [
+			byte @env0:<= 90
 		]) ifTrue: [
 			^ false
 		].
 		"Check if lowercase (97-122)"
-		((byte ___ge___: 97) and: [
-			byte ___le___: 122
+		((byte @env0:>= 97) and: [
+			byte @env0:<= 122
 		]) ifTrue: [
 			hasCased := true
 		]
@@ -939,23 +939,23 @@ method: bytes
 isspace
 	"Check if all bytes are whitespace"
 	| size |
-	size := self ___size___.
+	size := self @env0:size.
 
 	"Empty bytes returns False"
-	(size ___eq___: 0) ifTrue: [
+	(size @env0:= 0) ifTrue: [
 		^ false
 	].
 
-	1 ___to___: size do: [:i |
+	1 @env0:to: size do: [:i |
 		| byte |
-		byte := self ___at___: i.
+		byte := self @env0:at: i.
 		"Whitespace: space(32), tab(9), newline(10), carriage return(13), form feed(12), vertical tab(11)"
-		((byte ___eq___: 32) or: [
-			(byte ___eq___: 9) or: [
-				(byte ___eq___: 10) or: [
-					(byte ___eq___: 13) or: [
-						(byte ___eq___: 12) or: [
-							byte ___eq___: 11
+		((byte @env0:= 32) or: [
+			(byte @env0:= 9) or: [
+				(byte @env0:= 10) or: [
+					(byte @env0:= 13) or: [
+						(byte @env0:= 12) or: [
+							byte @env0:= 11
 						]
 					]
 				]
@@ -973,19 +973,19 @@ method: bytes
 istitle
 	"Check if bytes is titlecased"
 	| size inWord hasCased |
-	size := self ___size___.
+	size := self @env0:size.
 	inWord := false.
 	hasCased := false.
 
-	1 ___to___: size do: [:i |
+	1 @env0:to: size do: [:i |
 		| byte isUpper isLower |
-		byte := self ___at___: i.
+		byte := self @env0:at: i.
 
-		isUpper := (byte ___ge___: 65) and: [
-			byte ___le___: 90
+		isUpper := (byte @env0:>= 65) and: [
+			byte @env0:<= 90
 		].
-		isLower := (byte ___ge___: 97) and: [
-			byte ___le___: 122
+		isLower := (byte @env0:>= 97) and: [
+			byte @env0:<= 122
 		].
 
 		(isUpper or: [isLower]) ifTrue: [
@@ -1015,21 +1015,21 @@ method: bytes
 isupper
 	"Check if all cased bytes are uppercase"
 	| size hasCased |
-	size := self ___size___.
+	size := self @env0:size.
 	hasCased := false.
 
-	1 ___to___: size do: [:i |
+	1 @env0:to: size do: [:i |
 		| byte |
-		byte := self ___at___: i.
+		byte := self @env0:at: i.
 		"Check if lowercase (97-122)"
-		((byte ___ge___: 97) and: [
-			byte ___le___: 122
+		((byte @env0:>= 97) and: [
+			byte @env0:<= 122
 		]) ifTrue: [
 			^ false
 		].
 		"Check if uppercase (65-90)"
-		((byte ___ge___: 65) and: [
-			byte ___le___: 90
+		((byte @env0:>= 65) and: [
+			byte @env0:<= 90
 		]) ifTrue: [
 			hasCased := true
 		]
@@ -1043,11 +1043,11 @@ method: bytes
 join: iterable
 	"Join iterable of bytes with self as separator"
 	| iterClass parts totalSize result offset |
-	iterClass := iterable ___class___.
+	iterClass := iterable @env0:class.
 
 	"iterable must be list or tuple"
-		((iterClass ___eq___: list) or: [
-		iterClass ___eq___: tuple
+		((iterClass @env0:= list) or: [
+		iterClass @env0:= tuple
 	]) ifFalse: [
 		TypeError ___signal___: 'can only join an iterable'
 	].
@@ -1055,18 +1055,18 @@ join: iterable
 	parts := iterable.
 
 	"Empty iterable"
-	((parts ___size___) ___eq___: 0) ifTrue: [
+	((parts @env0:size) @env0:= 0) ifTrue: [
 		^ bytes ___new___
 	].
 
 	"Calculate total size"
 	totalSize := 0.
-	1 ___to___: parts ___size___ do: [:i |
+	1 @env0:to: parts @env0:size do: [:i |
 		| part |
-		part := parts ___at___: i.
-		totalSize := totalSize ___plus___: part ___size___.
-		(i ___lt___: parts ___size___) ifTrue: [
-			totalSize := totalSize ___plus___: self ___size___
+		part := parts @env0:at: i.
+		totalSize := totalSize @env0:+ part @env0:size.
+		(i @env0:< parts @env0:size) ifTrue: [
+			totalSize := totalSize @env0:+ self @env0:size
 		]
 	].
 
@@ -1074,25 +1074,25 @@ join: iterable
 	result := bytes ___new___: totalSize.
 	offset := 0.
 
-	1 ___to___: parts ___size___ do: [:i |
+	1 @env0:to: parts @env0:size do: [:i |
 		| part partSize |
-		part := parts ___at___: i.
-		partSize := part ___size___.
+		part := parts @env0:at: i.
+		partSize := part @env0:size.
 
 		"Copy part"
-		1 ___to___: partSize do: [:j |
-			result ___at___: (offset ___plus___: j) put: (part ___at___: j)
+		1 @env0:to: partSize do: [:j |
+			result @env0:at: (offset @env0:+ j) put: (part @env0:at: j)
 		].
-		offset := offset ___plus___: partSize.
+		offset := offset @env0:+ partSize.
 
 		"Add separator (except after last part)"
-		(i ___lt___: parts ___size___) ifTrue: [
+		(i @env0:< parts @env0:size) ifTrue: [
 			| sepSize |
-			sepSize := self ___size___.
-			1 ___to___: sepSize do: [:j |
-				result ___at___: (offset ___plus___: j) put: (self ___at___: j)
+			sepSize := self @env0:size.
+			1 @env0:to: sepSize do: [:j |
+				result @env0:at: (offset @env0:+ j) put: (self @env0:at: j)
 			].
-			offset := offset ___plus___: sepSize
+			offset := offset @env0:+ sepSize
 		]
 	].
 
@@ -1104,25 +1104,25 @@ method: bytes
 ljust: width
 	"Left justify bytes in field of given width"
 	| mySize result padding |
-	mySize := self ___size___.
+	mySize := self @env0:size.
 
 	"If already wide enough, return copy"
-	(width ___le___: mySize) ifTrue: [
-		^ self ___copy___
+	(width @env0:<= mySize) ifTrue: [
+		^ self @env0:copy
 	].
 
 	"Pad with spaces"
-	padding := width ___minus___: (mySize).
+	padding := width @env0:- (mySize).
 	result := bytes ___new___: width.
 
 	"Copy original"
-	1 ___to___: mySize do: [:i |
-		result ___at___: i put: (self ___at___: i)
+	1 @env0:to: mySize do: [:i |
+		result @env0:at: i put: (self @env0:at: i)
 	].
 
 	"Add spaces"
-	1 ___to___: padding do: [:i |
-		result ___at___: (mySize ___plus___: i) put: 32
+	1 @env0:to: padding do: [:i |
+		result @env0:at: (mySize @env0:+ i) put: 32
 	].
 
 	^ result
@@ -1134,19 +1134,19 @@ lower
 	"Return lowercase version of bytes"
 
 	| result size |
-	size := self ___size___.
+	size := self @env0:size.
 	result := bytes ___new___: size.
 
-	1 ___to___: size do: [:i |
+	1 @env0:to: size do: [:i |
 		| byte |
-		byte := self ___at___: i.
+		byte := self @env0:at: i.
 		"Convert uppercase ASCII (65-90) to lowercase (97-122)"
-		((byte ___ge___: 65) and: [
-			byte ___le___: 90
+		((byte @env0:>= 65) and: [
+			byte @env0:<= 90
 		]) ifTrue: [
-			byte := byte ___plus___: 32
+			byte := byte @env0:+ 32
 		].
-		result ___at___: i put: byte
+		result @env0:at: i put: byte
 	].
 
 	^ result
@@ -1157,37 +1157,37 @@ method: bytes
 lstrip
 	"Remove leading whitespace bytes"
 	| start size result newSize |
-	size := self ___size___.
-	(size ___eq___: 0) ifTrue: [
+	size := self @env0:size.
+	(size @env0:= 0) ifTrue: [
 		^ bytes ___new___
 	].
 
 	"Find first non-whitespace"
 	start := 1.
-	[(start ___le___: size) and: [
+	[(start @env0:<= size) and: [
 		| byte |
-		byte := self ___at___: start.
-		(byte ___eq___: 32) or: [
-			(byte ___eq___: 9) or: [
-				(byte ___eq___: 10) or: [
-					byte ___eq___: 13
+		byte := self @env0:at: start.
+		(byte @env0:= 32) or: [
+			(byte @env0:= 9) or: [
+				(byte @env0:= 10) or: [
+					byte @env0:= 13
 				]
 			]
 		]
-	]] ___whileTrue___: [
-		start := start ___plus___: 1
+	]] @env0:whileTrue: [
+		start := start @env0:+ 1
 	].
 
 	"All whitespace"
-	(start ___gt___: size) ifTrue: [
+	(start @env0:> size) ifTrue: [
 		^ bytes ___new___
 	].
 
 	"Extract substring"
-	newSize := size ___minus___: (start ___minus___: 1).
+	newSize := size @env0:- (start @env0:- 1).
 	result := bytes ___new___: newSize.
-	1 ___to___: newSize do: [:i |
-		result ___at___: i put: (self ___at___: (start ___plus___: (i ___minus___: (1))))
+	1 @env0:to: newSize do: [:i |
+		result @env0:at: i put: (self @env0:at: (start @env0:+ (i @env0:- (1))))
 	].
 
 	^ result
@@ -1201,28 +1201,28 @@ partition: sep
 	idx := self @env1:find: sep.
 
 	"Not found - return (self, empty, empty)"
-	(idx ___eq___: -1) ifTrue: [
-		^ tuple ___with___: (self ___copy___) with: (bytes ___new___) with: (bytes ___new___)
+	(idx @env0:= -1) ifTrue: [
+		^ tuple @env0:with: (self @env0:copy) with: (bytes ___new___) with: (bytes ___new___)
 	].
 
 	"Found - split at separator"
-	mySize := self ___size___.
-	sepSize := sep ___size___.
+	mySize := self @env0:size.
+	sepSize := sep @env0:size.
 
 	"Before separator"
 	before := bytes ___new___: idx.
-	1 ___to___: idx do: [:i |
-		before ___at___: i put: (self ___at___: i)
+	1 @env0:to: idx do: [:i |
+		before @env0:at: i put: (self @env0:at: i)
 	].
 
 	"After separator"
-	afterSize := mySize ___minus___: (idx ___plus___: sepSize).
+	afterSize := mySize @env0:- (idx @env0:+ sepSize).
 	after := bytes ___new___: afterSize.
-	1 ___to___: afterSize do: [:i |
-		after ___at___: i put: (self ___at___: (idx ___plus___: (sepSize ___plus___: i)))
+	1 @env0:to: afterSize do: [:i |
+		after @env0:at: i put: (self @env0:at: (idx @env0:+ (sepSize @env0:+ i)))
 	].
 
-	^ tuple ___with___: before with: sep with: after
+	^ tuple @env0:with: before with: sep with: after
 %
 
 category: 'Python-Prefix/Suffix Methods'
@@ -1232,15 +1232,15 @@ removeprefix: prefix
 	| hasPrefix prefixSize mySize result |
 	hasPrefix := self @env1:startswith: prefix.
 	hasPrefix ifFalse: [
-		^ self ___copy___
+		^ self @env0:copy
 	].
 
-	prefixSize := prefix ___size___.
-	mySize := self ___size___.
-	result := bytes ___new___: (mySize ___minus___: prefixSize).
+	prefixSize := prefix @env0:size.
+	mySize := self @env0:size.
+	result := bytes ___new___: (mySize @env0:- prefixSize).
 
-	1 ___to___: (mySize ___minus___: prefixSize) do: [:i |
-		result ___at___: i put: (self ___at___: (prefixSize ___plus___: i))
+	1 @env0:to: (mySize @env0:- prefixSize) do: [:i |
+		result @env0:at: i put: (self @env0:at: (prefixSize @env0:+ i))
 	].
 
 	^ result
@@ -1253,15 +1253,15 @@ removesuffix: suffix
 	| hasSuffix suffixSize mySize result |
 	hasSuffix := self @env1:endswith: suffix.
 	hasSuffix ifFalse: [
-		^ self ___copy___
+		^ self @env0:copy
 	].
 
-	suffixSize := suffix ___size___.
-	mySize := self ___size___.
-	result := bytes ___new___: (mySize ___minus___: suffixSize).
+	suffixSize := suffix @env0:size.
+	mySize := self @env0:size.
+	result := bytes ___new___: (mySize @env0:- suffixSize).
 
-	1 ___to___: (mySize ___minus___: suffixSize) do: [:i |
-		result ___at___: i put: (self ___at___: i)
+	1 @env0:to: (mySize @env0:- suffixSize) do: [:i |
+		result @env0:at: i put: (self @env0:at: i)
 	].
 
 	^ result
@@ -1272,24 +1272,24 @@ method: bytes
 replace: old _: new
 	"Replace all occurrences of old with new"
 	| oldClass newClass oldSize newSize mySize parts i |
-	oldClass := old ___class___.
-	newClass := new ___class___.
+	oldClass := old @env0:class.
+	newClass := new @env0:class.
 
 	"old and new must be bytes"
-	(oldClass ___eq___: bytes) ifFalse: [
+	(oldClass @env0:= bytes) ifFalse: [
 		TypeError ___signal___: 'first argument must be bytes'
 	].
-	(newClass ___eq___: bytes) ifFalse: [
+	(newClass @env0:= bytes) ifFalse: [
 		TypeError ___signal___: 'second argument must be bytes'
 	].
 
-	oldSize := old ___size___.
-	newSize := new ___size___.
-	mySize := self ___size___.
+	oldSize := old @env0:size.
+	newSize := new @env0:size.
+	mySize := self @env0:size.
 
 	"Empty old not allowed"
-	(oldSize ___eq___: 0) ifTrue: [
-		^ self ___copy___
+	(oldSize @env0:= 0) ifTrue: [
+		^ self @env0:copy
 	].
 
 	"Split by old, then join with new"
@@ -1302,17 +1302,17 @@ method: bytes
 rfind: sub
 	"Find last occurrence of sub, return index or -1"
 	| subClass subSize mySize i |
-	subClass := sub ___class___.
+	subClass := sub @env0:class.
 
 	"sub must be bytes or integer"
 	subClass == SmallInteger ifTrue: [
 		"Find last occurrence of single byte"
-		mySize := self ___size___.
-		mySize ___to___: 1 by: -1 do: [:idx |
+		mySize := self @env0:size.
+		mySize @env0:to: 1 by: -1 do: [:idx |
 			| byte |
-			byte := self ___at___: idx.
-			(byte ___eq___: sub) ifTrue: [
-				^ idx ___minus___: (1)  "Convert to 0-based"
+			byte := self @env0:at: idx.
+			(byte @env0:= sub) ifTrue: [
+				^ idx @env0:- (1)  "Convert to 0-based"
 			]
 		].
 		^ -1
@@ -1323,30 +1323,30 @@ rfind: sub
 		TypeError ___signal___: 'argument should be bytes, bytearray or int'
 	].
 
-	subSize := sub ___size___.
-	mySize := self ___size___.
+	subSize := sub @env0:size.
+	mySize := self @env0:size.
 
 	"Empty sub always returns size"
-	(subSize ___eq___: 0) ifTrue: [
+	(subSize @env0:= 0) ifTrue: [
 		^ mySize
 	].
 
-	i := mySize ___minus___: (subSize ___minus___: 1).
-	[i ___ge___: 1] ___whileTrue___: [
+	i := mySize @env0:- (subSize @env0:- 1).
+	[i @env0:>= 1] @env0:whileTrue: [
 		| match |
 		match := true.
-		1 ___to___: subSize do: [:j |
+		1 @env0:to: subSize do: [:j |
 			| myByte subByte |
-			myByte := self ___at___: (i ___plus___: (j ___minus___: (1))).
-			subByte := sub ___at___: j.
-			(myByte ___eq___: subByte) ifFalse: [
+			myByte := self @env0:at: (i @env0:+ (j @env0:- (1))).
+			subByte := sub @env0:at: j.
+			(myByte @env0:= subByte) ifFalse: [
 				match := false
 			]
 		].
 		match ifTrue: [
-			^ i ___minus___: (1)  "Convert to 0-based"
+			^ i @env0:- (1)  "Convert to 0-based"
 		].
-		i := i ___minus___: (1)
+		i := i @env0:- (1)
 	].
 
 	^ -1
@@ -1358,7 +1358,7 @@ rindex: sub
 	"Find last occurrence of sub, raise ValueError if not found"
 	| result |
 	result := self @env1:rfind: sub.
-	(result ___eq___: -1) ifTrue: [
+	(result @env0:= -1) ifTrue: [
 		ValueError ___signal___: 'subsection not found'
 	].
 	^ result
@@ -1369,25 +1369,25 @@ method: bytes
 rjust: width
 	"Right justify bytes in field of given width"
 	| mySize result padding |
-	mySize := self ___size___.
+	mySize := self @env0:size.
 
 	"If already wide enough, return copy"
-	(width ___le___: mySize) ifTrue: [
-		^ self ___copy___
+	(width @env0:<= mySize) ifTrue: [
+		^ self @env0:copy
 	].
 
 	"Pad with spaces"
-	padding := width ___minus___: (mySize).
+	padding := width @env0:- (mySize).
 	result := bytes ___new___: width.
 
 	"Add spaces"
-	1 ___to___: padding do: [:i |
-		result ___at___: i put: 32
+	1 @env0:to: padding do: [:i |
+		result @env0:at: i put: 32
 	].
 
 	"Copy original"
-	1 ___to___: mySize do: [:i |
-		result ___at___: (padding ___plus___: i) put: (self ___at___: i)
+	1 @env0:to: mySize do: [:i |
+		result @env0:at: (padding @env0:+ i) put: (self @env0:at: i)
 	].
 
 	^ result
@@ -1401,28 +1401,28 @@ rpartition: sep
 	idx := self @env1:rfind: sep.
 
 	"Not found - return (empty, empty, self)"
-	(idx ___eq___: -1) ifTrue: [
-		^ tuple ___with___: (bytes ___new___) with: (bytes ___new___) with: self ___copy___
+	(idx @env0:= -1) ifTrue: [
+		^ tuple @env0:with: (bytes ___new___) with: (bytes ___new___) with: self @env0:copy
 	].
 
 	"Found - split at separator"
-	mySize := self ___size___.
-	sepSize := sep ___size___.
+	mySize := self @env0:size.
+	sepSize := sep @env0:size.
 
 	"Before separator"
 	before := bytes ___new___: idx.
-	1 ___to___: idx do: [:i |
-		before ___at___: i put: (self ___at___: i)
+	1 @env0:to: idx do: [:i |
+		before @env0:at: i put: (self @env0:at: i)
 	].
 
 	"After separator"
-	afterSize := mySize ___minus___: (idx ___plus___: sepSize).
+	afterSize := mySize @env0:- (idx @env0:+ sepSize).
 	after := bytes ___new___: afterSize.
-	1 ___to___: afterSize do: [:i |
-		after ___at___: i put: (self ___at___: (idx ___plus___: (sepSize ___plus___: i)))
+	1 @env0:to: afterSize do: [:i |
+		after @env0:at: i put: (self @env0:at: (idx @env0:+ (sepSize @env0:+ i)))
 	].
 
-	^ tuple ___with___: before with: sep with: after
+	^ tuple @env0:with: before with: sep with: after
 %
 
 category: 'Python-Splitting Methods'
@@ -1437,79 +1437,79 @@ method: bytes
 rsplit: sep _: maxsplit
 	"Split from right with maximum number of splits"
 	| sepClass sepSize mySize parts positions i actualSplits lastEnd firstPart firstPartSize |
-	sepClass := sep ___class___.
+	sepClass := sep @env0:class.
 
 	"sep must be bytes"
 	(sepClass == bytes) ifFalse: [
 		TypeError ___signal___: 'sep must be bytes'
 	].
 
-	sepSize := sep ___size___.
-	mySize := self ___size___.
+	sepSize := sep @env0:size.
+	mySize := self @env0:size.
 
 	"Empty separator not allowed"
-	(sepSize ___eq___: 0) ifTrue: [
+	(sepSize @env0:= 0) ifTrue: [
 		ValueError ___signal___: 'empty separator'
 	].
 
 	"If maxsplit is -1 or < 0, do unlimited split"
-	(maxsplit ___lt___: 0) ifTrue: [
+	(maxsplit @env0:< 0) ifTrue: [
 		^ self @env1:split: sep
 	].
 
 	"Find all separator positions from right to left"
 	positions := list ___new___.
-	i := mySize ___minus___: (sepSize ___minus___: 1).
+	i := mySize @env0:- (sepSize @env0:- 1).
 	
-	[i ___ge___: 1] ___whileTrue___: [
+	[i @env0:>= 1] @env0:whileTrue: [
 		| match |
 		match := true.
-				1 ___to___: sepSize do: [:j |
+				1 @env0:to: sepSize do: [:j |
 			| myByte sepByte |
-			myByte := self ___at___: (i ___plus___: (j ___minus___: (1))).
-			sepByte := sep ___at___: j.
-			(myByte ___eq___: sepByte) ifFalse: [
+			myByte := self @env0:at: (i @env0:+ (j @env0:- (1))).
+			sepByte := sep @env0:at: j.
+			(myByte @env0:= sepByte) ifFalse: [
 				match := false
 			]
 		].
 		match ifTrue: [
 			positions append: i
 		].
-		i := i ___minus___: (1)
+		i := i @env0:- (1)
 	].
 
 	"Limit to maxsplit splits (take first maxsplit positions since we collected from right)"
-	actualSplits := positions ___size___.
-	(actualSplits ___gt___: maxsplit) ifTrue: [
+	actualSplits := positions @env0:size.
+	(actualSplits @env0:> maxsplit) ifTrue: [
 		| newPositions |
 		newPositions := list ___new___.
-		1 ___to___: maxsplit do: [:idx |
-			newPositions append: (positions ___at___: idx)
+		1 @env0:to: maxsplit do: [:idx |
+			newPositions append: (positions @env0:at: idx)
 		].
 		positions := newPositions
 	].
 
 	"Build parts from right to left"
 	parts := list ___new___.
-	lastEnd := mySize ___plus___: 1.
+	lastEnd := mySize @env0:+ 1.
 	
-	1 ___to___: positions ___size___ do: [:idx |
+	1 @env0:to: positions @env0:size do: [:idx |
 		| pos part partSize |
-		pos := positions ___at___: idx.
-		partSize := lastEnd ___minus___: (pos ___plus___: sepSize).
+		pos := positions @env0:at: idx.
+		partSize := lastEnd @env0:- (pos @env0:+ sepSize).
 		part := bytes ___new___: partSize.
-		1 ___to___: partSize do: [:j |
-			part ___at___: j put: (self ___at___: (pos ___plus___: (sepSize ___plus___: (j ___minus___: (1)))))
+		1 @env0:to: partSize do: [:j |
+			part @env0:at: j put: (self @env0:at: (pos @env0:+ (sepSize @env0:+ (j @env0:- (1)))))
 		].
 		parts @env0:addFirst: part.
 		lastEnd := pos
 	].
 
 	"Add first part (everything before first split position)"
-	firstPartSize := lastEnd ___minus___: (1).
+	firstPartSize := lastEnd @env0:- (1).
 	firstPart := bytes ___new___: firstPartSize.
-	1 ___to___: firstPartSize do: [:j |
-		firstPart ___at___: j put: (self ___at___: j)
+	1 @env0:to: firstPartSize do: [:j |
+		firstPart @env0:at: j put: (self @env0:at: j)
 	].
 	parts @env0:addFirst: firstPart.
 
@@ -1521,36 +1521,36 @@ method: bytes
 rstrip
 	"Remove trailing whitespace bytes"
 	| end size result |
-	size := self ___size___.
-	(size ___eq___: 0) ifTrue: [
+	size := self @env0:size.
+	(size @env0:= 0) ifTrue: [
 		^ bytes ___new___
 	].
 
 	"Find last non-whitespace"
 	end := size.
-	[(end ___ge___: 1) and: [
+	[(end @env0:>= 1) and: [
 		| byte |
-		byte := self ___at___: end.
-		(byte ___eq___: 32) or: [
-			(byte ___eq___: 9) or: [
-				(byte ___eq___: 10) or: [
-					byte ___eq___: 13
+		byte := self @env0:at: end.
+		(byte @env0:= 32) or: [
+			(byte @env0:= 9) or: [
+				(byte @env0:= 10) or: [
+					byte @env0:= 13
 				]
 			]
 		]
-	]] ___whileTrue___: [
-		end := end ___minus___: (1)
+	]] @env0:whileTrue: [
+		end := end @env0:- (1)
 	].
 
 	"All whitespace"
-	(end ___lt___: 1) ifTrue: [
+	(end @env0:< 1) ifTrue: [
 		^ bytes ___new___
 	].
 
 	"Extract substring"
 	result := bytes ___new___: end.
-	1 ___to___: end do: [:i |
-		result ___at___: i put: (self ___at___: i)
+	1 @env0:to: end do: [:i |
+		result @env0:at: i put: (self @env0:at: i)
 	].
 
 	^ result
@@ -1561,18 +1561,18 @@ method: bytes
 split: sep
 	"Split bytes by separator, return list of bytes"
 	| sepClass sepSize mySize parts currentPart i |
-	sepClass := sep ___class___.
+	sepClass := sep @env0:class.
 
 	"sep must be bytes"
-	(sepClass ___eq___: bytes) ifFalse: [
+	(sepClass @env0:= bytes) ifFalse: [
 		TypeError ___signal___: 'sep must be bytes'
 	].
 
-	sepSize := sep ___size___.
-	mySize := self ___size___.
+	sepSize := sep @env0:size.
+	mySize := self @env0:size.
 
 	"Empty separator not allowed"
-	(sepSize ___eq___: 0) ifTrue: [
+	(sepSize @env0:= 0) ifTrue: [
 		ValueError ___signal___: 'empty separator'
 	].
 
@@ -1580,17 +1580,17 @@ split: sep
 	currentPart := bytes ___new___.
 	i := 1.
 
-	[i ___le___: mySize] ___whileTrue___: [
+	[i @env0:<= mySize] @env0:whileTrue: [
 		| match |
 		match := true.
 
 		"Check if separator matches at current position"
-		((i ___plus___: (sepSize ___minus___: (1))) @env0:<= mySize) ifTrue: [
-			1 ___to___: sepSize do: [:j |
+		((i @env0:+ (sepSize @env0:- (1))) @env0:<= mySize) ifTrue: [
+			1 @env0:to: sepSize do: [:j |
 				| myByte sepByte |
-				myByte := self ___at___: (i ___plus___: (j ___minus___: (1))).
-				sepByte := sep ___at___: j.
-				(myByte ___eq___: sepByte) ifFalse: [
+				myByte := self @env0:at: (i @env0:+ (j @env0:- (1))).
+				sepByte := sep @env0:at: j.
+				(myByte @env0:= sepByte) ifFalse: [
 					match := false
 				]
 			]
@@ -1602,15 +1602,15 @@ split: sep
 			"Found separator - add current part to list"
 			parts append: currentPart.
 			currentPart := bytes ___new___.
-			i := i ___plus___: sepSize
+			i := i @env0:+ sepSize
 		] ifFalse: [
 			"Add byte to current part"
 			| byte newByte |
-			byte := self ___at___: i.
+			byte := self @env0:at: i.
 			newByte := bytes ___new___: 1.
-			newByte ___at___: 1 put: byte.
-			currentPart := currentPart ___concat___: newByte.
-			i := i ___plus___: 1
+			newByte @env0:at: 1 put: byte.
+			currentPart := currentPart @env0:, newByte.
+			i := i @env0:+ 1
 		]
 	].
 
@@ -1625,23 +1625,23 @@ method: bytes
 split: sep _: maxsplit
 	"Split bytes by separator with maximum number of splits"
 	| sepClass sepSize mySize parts currentPart i splitCount match |
-	sepClass := sep ___class___.
+	sepClass := sep @env0:class.
 
 	"sep must be bytes"
 	(sepClass == bytes) ifFalse: [
 		TypeError ___signal___: 'sep must be bytes'
 	].
 
-	sepSize := sep ___size___.
-	mySize := self ___size___.
+	sepSize := sep @env0:size.
+	mySize := self @env0:size.
 
 	"Empty separator not allowed"
-	(sepSize ___eq___: 0) ifTrue: [
+	(sepSize @env0:= 0) ifTrue: [
 		ValueError ___signal___: 'empty separator'
 	].
 
 	"If maxsplit is -1 or < 0, do unlimited split"
-	(maxsplit ___lt___: 0) ifTrue: [
+	(maxsplit @env0:< 0) ifTrue: [
 		^ self @env1:split: sep
 	].
 
@@ -1650,20 +1650,20 @@ split: sep _: maxsplit
 	i := 1.
 	splitCount := 0.
 
-	[i ___le___: mySize] ___whileTrue___: [
+	[i @env0:<= mySize] @env0:whileTrue: [
 		match := true.
 
 		"Check if we've reached maxsplit"
-		(splitCount ___ge___: maxsplit) ifTrue: [
+		(splitCount @env0:>= maxsplit) ifTrue: [
 			match := false
 		] ifFalse: [
 			"Check if separator matches at current position"
-			((i ___plus___: (sepSize ___minus___: 1)) ___le___: mySize) ifTrue: [
-				1 ___to___: sepSize do: [:j |
+			((i @env0:+ (sepSize @env0:- 1)) @env0:<= mySize) ifTrue: [
+				1 @env0:to: sepSize do: [:j |
 					| myByte sepByte |
-					myByte := self ___at___: (i ___plus___: (j ___minus___: (1))).
-					sepByte := sep ___at___: j.
-					(myByte ___eq___: sepByte) ifFalse: [
+					myByte := self @env0:at: (i @env0:+ (j @env0:- (1))).
+					sepByte := sep @env0:at: j.
+					(myByte @env0:= sepByte) ifFalse: [
 						match := false
 					]
 				]
@@ -1676,16 +1676,16 @@ split: sep _: maxsplit
 			"Found separator - add current part to list"
 			parts append: currentPart.
 			currentPart := bytes ___new___.
-			i := i ___plus___: sepSize.
-			splitCount := splitCount ___plus___: 1
+			i := i @env0:+ sepSize.
+			splitCount := splitCount @env0:+ 1
 		] ifFalse: [
 			"Add byte to current part"
 			| byte newByte |
-			byte := self ___at___: i.
+			byte := self @env0:at: i.
 			newByte := bytes ___new___: 1.
-			newByte ___at___: 1 put: byte.
-			currentPart := currentPart ___concat___: newByte.
-			i := i ___plus___: 1
+			newByte @env0:at: 1 put: byte.
+			currentPart := currentPart @env0:, newByte.
+			i := i @env0:+ 1
 		]
 	].
 
@@ -1700,45 +1700,45 @@ method: bytes
 splitlines
 	"Split bytes at line boundaries, return list"
 	| parts currentPart size i |
-	size := self ___size___.
+	size := self @env0:size.
 	parts := list ___new___.
 	currentPart := bytes ___new___.
 	i := 1.
 
-	[i ___le___: size] ___whileTrue___: [
+	[i @env0:<= size] @env0:whileTrue: [
 		| byte |
-		byte := self ___at___: i.
+		byte := self @env0:at: i.
 
 		"Check for line endings"
-		(byte ___eq___: 10) ifTrue: [  "LF"
+		(byte @env0:= 10) ifTrue: [  "LF"
 			parts append: currentPart.
 			currentPart := bytes ___new___.
-			i := i ___plus___: 1
+			i := i @env0:+ 1
 		] ifFalse: [
-			(byte ___eq___: 13) ifTrue: [  "CR"
+			(byte @env0:= 13) ifTrue: [  "CR"
 				parts append: currentPart.
 				currentPart := bytes ___new___.
 				"Check for CRLF"
-				((i ___lt___: size) and: [
-					(self ___at___: (i ___plus___: 1)) ___eq___: 10
+				((i @env0:< size) and: [
+					(self @env0:at: (i @env0:+ 1)) @env0:= 10
 				]) ifTrue: [
-					i := i ___plus___: 2
+					i := i @env0:+ 2
 				] ifFalse: [
-					i := i ___plus___: 1
+					i := i @env0:+ 1
 				]
 			] ifFalse: [
 				"Regular character"
 				| newByte |
 				newByte := bytes ___new___: 1.
-				newByte ___at___: 1 put: byte.
-				currentPart := currentPart ___concat___: newByte.
-				i := i ___plus___: 1
+				newByte @env0:at: 1 put: byte.
+				currentPart := currentPart @env0:, newByte.
+				i := i @env0:+ 1
 			]
 		]
 	].
 
 	"Add final part if non-empty"
-		(currentPart ___size___ ___gt___: 0) ifTrue: [
+		(currentPart @env0:size @env0:> 0) ifTrue: [
 		parts append: currentPart
 	].
 
@@ -1750,27 +1750,27 @@ method: bytes
 startswith: prefix
 	"Check if bytes starts with prefix"
 	| prefixClass prefixSize mySize |
-	prefixClass := prefix ___class___.
+	prefixClass := prefix @env0:class.
 
 	"prefix must be bytes"
-	(prefixClass ___eq___: bytes) ifFalse: [
+	(prefixClass @env0:= bytes) ifFalse: [
 		TypeError ___signal___: 'argument should be bytes'
 	].
 
-	prefixSize := prefix ___size___.
-	mySize := self ___size___.
+	prefixSize := prefix @env0:size.
+	mySize := self @env0:size.
 
 	"If prefix is longer, can't match"
-	(prefixSize ___gt___: mySize) ifTrue: [
+	(prefixSize @env0:> mySize) ifTrue: [
 		^ false
 	].
 
 	"Compare each byte"
-	1 ___to___: prefixSize do: [:i |
+	1 @env0:to: prefixSize do: [:i |
 		| myByte prefixByte |
-		myByte := self ___at___: i.
-		prefixByte := prefix ___at___: i.
-		(myByte ___eq___: prefixByte) ifFalse: [
+		myByte := self @env0:at: i.
+		prefixByte := prefix @env0:at: i.
+		(myByte @env0:= prefixByte) ifFalse: [
 			^ false
 		]
 	].
@@ -1784,54 +1784,54 @@ strip
 	"Remove leading and trailing whitespace bytes"
 	| start end size result newSize |
 
-	size := self ___size___.
-	(size ___eq___: 0) ifTrue: [
+	size := self @env0:size.
+	(size @env0:= 0) ifTrue: [
 		^ bytes ___new___
 	].
 
 	"Find first non-whitespace"
 	start := 1.
-	[(start ___le___: size) and: [
+	[(start @env0:<= size) and: [
 		| byte |
-		byte := self ___at___: start.
+		byte := self @env0:at: start.
 		"Whitespace: space(32), tab(9), newline(10), carriage return(13)"
-		(byte ___eq___: 32) or: [
-			(byte ___eq___: 9) or: [
-				(byte ___eq___: 10) or: [
-					byte ___eq___: 13
+		(byte @env0:= 32) or: [
+			(byte @env0:= 9) or: [
+				(byte @env0:= 10) or: [
+					byte @env0:= 13
 				]
 			]
 		]
-	]] ___whileTrue___: [
-		start := start ___plus___: 1
+	]] @env0:whileTrue: [
+		start := start @env0:+ 1
 	].
 
 	"All whitespace"
-	(start ___gt___: size) ifTrue: [
+	(start @env0:> size) ifTrue: [
 		^ bytes ___new___
 	].
 
 	"Find last non-whitespace"
 	end := size.
-	[(end ___ge___: start) and: [
+	[(end @env0:>= start) and: [
 		| byte |
-		byte := self ___at___: end.
-		(byte ___eq___: 32) or: [
-			(byte ___eq___: 9) or: [
-				(byte ___eq___: 10) or: [
-					byte ___eq___: 13
+		byte := self @env0:at: end.
+		(byte @env0:= 32) or: [
+			(byte @env0:= 9) or: [
+				(byte @env0:= 10) or: [
+					byte @env0:= 13
 				]
 			]
 		]
-	]] ___whileTrue___: [
-		end := end ___minus___: (1)
+	]] @env0:whileTrue: [
+		end := end @env0:- (1)
 	].
 
 	"Extract substring"
-	newSize := end ___minus___: (start ___minus___: 1).
+	newSize := end @env0:- (start @env0:- 1).
 	result := bytes ___new___: newSize.
-	1 ___to___: newSize do: [:i |
-		result ___at___: i put: (self ___at___: (start ___plus___: (i ___minus___: (1))))
+	1 @env0:to: newSize do: [:i |
+		result @env0:at: i put: (self @env0:at: (start @env0:+ (i @env0:- (1))))
 	].
 
 	^ result
@@ -1842,26 +1842,26 @@ method: bytes
 swapcase
 	"Return bytes with case swapped"
 	| result size |
-	size := self ___size___.
+	size := self @env0:size.
 	result := bytes ___new___: size.
 
-	1 ___to___: size do: [:i |
+	1 @env0:to: size do: [:i |
 		| byte |
-		byte := self ___at___: i.
+		byte := self @env0:at: i.
 		"Uppercase to lowercase"
-		((byte ___ge___: 65) and: [
-			byte ___le___: 90
+		((byte @env0:>= 65) and: [
+			byte @env0:<= 90
 		]) ifTrue: [
-			byte := byte ___plus___: 32
+			byte := byte @env0:+ 32
 		] ifFalse: [
 			"Lowercase to uppercase"
-			((byte ___ge___: 97) and: [
-				byte ___le___: 122
+			((byte @env0:>= 97) and: [
+				byte @env0:<= 122
 			]) ifTrue: [
-				byte := byte ___minus___: (32)
+				byte := byte @env0:- (32)
 			]
 		].
-		result ___at___: i put: byte
+		result @env0:at: i put: byte
 	].
 
 	^ result
@@ -1872,45 +1872,45 @@ method: bytes
 title
 	"Return titlecased bytes (first letter of each word capitalized)"
 	| result size inWord |
-	size := self ___size___.
+	size := self @env0:size.
 	result := bytes ___new___: size.
 	inWord := false.
 
-	1 ___to___: size do: [:i |
+	1 @env0:to: size do: [:i |
 		| byte isAlpha |
-		byte := self ___at___: i.
+		byte := self @env0:at: i.
 
 		"Check if alphabetic"
-		isAlpha := ((byte ___ge___: 65) and: [
-			byte ___le___: 90
+		isAlpha := ((byte @env0:>= 65) and: [
+			byte @env0:<= 90
 		]) or: [
-			(byte ___ge___: 97) and: [
-				byte ___le___: 122
+			(byte @env0:>= 97) and: [
+				byte @env0:<= 122
 			]
 		].
 
 		isAlpha ifTrue: [
 			inWord ifFalse: [
 				"First letter of word - capitalize"
-				((byte ___ge___: 97) and: [
-					byte ___le___: 122
+				((byte @env0:>= 97) and: [
+					byte @env0:<= 122
 				]) ifTrue: [
-					byte := byte ___minus___: (32)
+					byte := byte @env0:- (32)
 				].
 				inWord := true
 			] ifTrue: [
 				"Not first letter - lowercase"
-				((byte ___ge___: 65) and: [
-					byte ___le___: 90
+				((byte @env0:>= 65) and: [
+					byte @env0:<= 90
 				]) ifTrue: [
-					byte := byte ___plus___: 32
+					byte := byte @env0:+ 32
 				]
 			]
 		] ifFalse: [
 			inWord := false
 		].
 
-		result ___at___: i put: byte
+		result @env0:at: i put: byte
 	].
 
 	^ result
@@ -1921,21 +1921,21 @@ method: bytes
 translate: table
 	"Translate bytes using translation table"
 	| tableSize mySize result |
-	tableSize := table ___size___.
-	mySize := self ___size___.
+	tableSize := table @env0:size.
+	mySize := self @env0:size.
 
 	"Table must be 256 bytes"
-	(tableSize ___eq___: 256) ifFalse: [
+	(tableSize @env0:= 256) ifFalse: [
 		ValueError ___signal___: 'translation table must be 256 characters long'
 	].
 
 	result := bytes ___new___: mySize.
 
-	1 ___to___: mySize do: [:i |
+	1 @env0:to: mySize do: [:i |
 		| byte newByte |
-		byte := self ___at___: i.
-		newByte := table ___at___: (byte ___plus___: 1).
-		result ___at___: i put: newByte
+		byte := self @env0:at: i.
+		newByte := table @env0:at: (byte @env0:+ 1).
+		result @env0:at: i put: newByte
 	].
 
 	^ result
@@ -1947,19 +1947,19 @@ upper
 	"Return uppercase version of bytes"
 
 	| result size |
-	size := self ___size___.
-	result := (self ___class___) ___new___: size.
+	size := self @env0:size.
+	result := (self @env0:class) ___new___: size.
 
-	1 ___to___: size do: [:i |
+	1 @env0:to: size do: [:i |
 		| byte |
-		byte := self ___at___: i.
+		byte := self @env0:at: i.
 		"Convert lowercase ASCII (97-122) to uppercase (65-90)"
-		((byte ___ge___: 97) and: [
-			byte ___le___: 122
+		((byte @env0:>= 97) and: [
+			byte @env0:<= 122
 		]) ifTrue: [
-			byte := byte ___minus___: (32)
+			byte := byte @env0:- (32)
 		].
-		result ___at___: i put: byte
+		result @env0:at: i put: byte
 	].
 
 	^ result
@@ -1970,25 +1970,25 @@ method: bytes
 zfill: width
 	"Pad bytes with zeros on the left to fill width"
 	| mySize result padding |
-	mySize := self ___size___.
+	mySize := self @env0:size.
 
 	"If already wide enough, return copy"
-	(width ___le___: mySize) ifTrue: [
-		^ self ___copy___
+	(width @env0:<= mySize) ifTrue: [
+		^ self @env0:copy
 	].
 
 	"Pad with zeros"
-	padding := width ___minus___: (mySize).
+	padding := width @env0:- (mySize).
 	result := bytes ___new___: width.
 
 	"Add zeros"
-	1 ___to___: padding do: [:i |
-		result ___at___: i put: 48  "ASCII '0'"
+	1 @env0:to: padding do: [:i |
+		result @env0:at: i put: 48  "ASCII '0'"
 	].
 
 	"Copy original"
-	1 ___to___: mySize do: [:i |
-		result ___at___: (padding ___plus___: i) put: (self ___at___: i)
+	1 @env0:to: mySize do: [:i |
+		result @env0:at: (padding @env0:+ i) put: (self @env0:at: i)
 	].
 
 	^ result

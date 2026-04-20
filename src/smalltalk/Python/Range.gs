@@ -34,7 +34,7 @@ __new__: cls _: start _: stop
 	stopVal := stop.
 
 	"Python's range(start, stop) goes from start to stop-1"
-	^ range ___from___: startVal to: (stopVal ___minus___: 1) by: 1
+	^ range @env0:from: startVal to: (stopVal @env0:- 1) by: 1
 %
 
 category: 'Python-Initialization'
@@ -48,7 +48,7 @@ __new__: cls _: start _: stop _: step
 	stepVal := step.
 
 	"Step cannot be zero"
-	(stepVal ___eq___: 0) ifTrue: [
+	(stepVal @env0:= 0) ifTrue: [
 		ValueError ___signal___: 'range() arg 3 must not be zero'
 	].
 
@@ -56,11 +56,11 @@ __new__: cls _: start _: stop _: step
 	 For positive step: to = stop - 1
 	 For negative step: to = stop + 1
 	 But we need to handle empty ranges correctly."
-	adjustedStop := (stepVal ___gt___: 0)
-		ifTrue: [stopVal ___minus___: (1)]
-		ifFalse: [stopVal ___plus___: 1].
+	adjustedStop := (stepVal @env0:> 0)
+		ifTrue: [stopVal @env0:- (1)]
+		ifFalse: [stopVal @env0:+ 1].
 
-	^ range ___from___: startVal to: adjustedStop by: stepVal
+	^ range @env0:from: startVal to: adjustedStop by: stepVal
 %
 
 category: 'Python-Initialization'
@@ -72,7 +72,7 @@ __new__: cls _: stop
 	stopVal := stop.
 
 	"Python's range(stop) goes from 0 to stop-1"
-	^ range ___from___: 0 to: (stopVal ___minus___: 1) by: 1
+	^ range @env0:from: 0 to: (stopVal @env0:- 1) by: 1
 %
 
 category: 'Python-Sequence Protocol'
@@ -81,8 +81,8 @@ __bool__
 	"Test if range is non-empty"
 
 	| size |
-	size := self ___size___.
-	^ size ___gt___: 0
+	size := self @env0:size.
+	^ size @env0:> 0
 %
 
 category: 'Python-Sequence Protocol'
@@ -90,7 +90,7 @@ method: range
 __contains__: value
 	"Test if value is in the range"
 
-	^ self ___includes___: value
+	^ self @env0:includes: value
 %
 
 category: 'Python-Comparison'
@@ -99,28 +99,28 @@ __eq__: other
 	"Test equality with another range"
 
 	| otherClass selfSize otherSize selfStart otherStart selfStep otherStep |
-	otherClass := other ___class___.
-	(otherClass ___eq___: range) ifFalse: [ ^ false ].
+	otherClass := other @env0:class.
+	(otherClass @env0:= range) ifFalse: [ ^ false ].
 
 	"Two ranges are equal if they produce the same sequence"
-	selfSize := self ___size___.
-	otherSize := other ___size___.
+	selfSize := self @env0:size.
+	otherSize := other @env0:size.
 
 	"Empty ranges are equal"
-	(selfSize ___eq___: 0) ifTrue: [
-		^ otherSize ___eq___: 0
+	(selfSize @env0:= 0) ifTrue: [
+		^ otherSize @env0:= 0
 	].
 
 	"Non-empty ranges must have same start, stop, and step"
 	selfStart := self @env1:start.
 	otherStart := other @env1:start.
-	(selfStart ___eq___: otherStart) ifFalse: [ ^ false ].
+	(selfStart @env0:= otherStart) ifFalse: [ ^ false ].
 
 	selfStep := self @env1:step.
 	otherStep := other @env1:step.
-	(selfStep ___eq___: otherStep) ifFalse: [ ^ false ].
+	(selfStep @env0:= otherStep) ifFalse: [ ^ false ].
 
-	^ selfSize ___eq___: otherSize
+	^ selfSize @env0:= otherSize
 %
 
 category: 'Python-Sequence Protocol'
@@ -129,28 +129,28 @@ __getitem__: index
 	"Return the item at the given index or a slice"
 
 	| idx size indexClass |
-	indexClass := index ___class___.
+	indexClass := index @env0:class.
 
 	"Check if this is a slice object - if slice class exists"
 	"For now, just handle integer indexing"
 
-	size := self ___size___.
+	size := self @env0:size.
 	idx := index.
 
 	"Handle negative indices"
-	(idx ___lt___: 0) ifTrue: [
-		idx := size ___plus___: idx
+	(idx @env0:< 0) ifTrue: [
+		idx := size @env0:+ idx
 	].
 
 	"Check bounds (Python uses 0-based indexing)"
-	((idx ___lt___: 0) or: [
-		idx ___ge___: size
+	((idx @env0:< 0) or: [
+		idx @env0:>= size
 	]) ifTrue: [
 		IndexError ___signal___: 'range object index out of range'
 	].
 
 	"Convert to 1-based Smalltalk index and get value"
-	^ self ___at___: (idx ___plus___: 1)
+	^ self @env0:at: (idx @env0:+ 1)
 %
 
 category: 'Python-Hashing'
@@ -158,7 +158,7 @@ method: range
 __hash__
 	"Return hash of the range"
 
-	^ self ___hash___
+	^ self @env0:hash
 %
 
 category: 'Python-Sequence Protocol'
@@ -173,7 +173,7 @@ category: 'Python-Sequence Protocol'
 method: range
 __len__
 	"Return the length of the range"
-	^ self ___size___
+	^ self @env0:size
 %
 
 category: 'Python-Comparison'
@@ -183,7 +183,7 @@ __ne__: other
 
 	| eq |
 	eq := self @env1:__eq__: other.
-	^ eq ___not___
+	^ eq @env0:not
 %
 
 category: 'Python-String Representation'
@@ -192,30 +192,30 @@ __repr__
 	"Return string representation of the range"
 
 	| stream |
-	stream := WriteStream ___on___: (Unicode7 ___new___).
+	stream := WriteStream @env0:on: (Unicode7 ___new___).
 
-	stream ___nextPutAll___: 'range('.
+	stream @env0:nextPutAll: 'range('.
 
 	"If start is 0 and step is 1, just show stop"
-	((from ___eq___: 0) and: [
-		by ___eq___: 1
+	((from @env0:= 0) and: [
+		by @env0:= 1
 	]) ifTrue: [
-		stream ___nextPutAll___: ((to ___plus___: 1) ___printString___)
+		stream @env0:nextPutAll: ((to @env0:+ 1) @env0:printString)
 	] ifFalse: [
 		"Show start and stop"
-		stream ___nextPutAll___: (from ___printString___).
-		stream ___nextPutAll___: ', '.
-		stream ___nextPutAll___: ((to ___plus___: 1) ___printString___).
+		stream @env0:nextPutAll: (from @env0:printString).
+		stream @env0:nextPutAll: ', '.
+		stream @env0:nextPutAll: ((to @env0:+ 1) @env0:printString).
 
 		"If step is not 1, show it too"
-		(by ___eq___: 1) ifFalse: [
-			stream ___nextPutAll___: ', '.
-			stream ___nextPutAll___: (by ___printString___).
+		(by @env0:= 1) ifFalse: [
+			stream @env0:nextPutAll: ', '.
+			stream @env0:nextPutAll: (by @env0:printString).
 		].
 	].
 
-	stream ___nextPut___: $).
-	^ stream ___contents___
+	stream @env0:nextPut: $).
+	^ stream @env0:contents
 %
 
 category: 'Python-Iteration'
@@ -224,10 +224,10 @@ __reversed__
 	"Return a reversed range"
 
 	| size startVal stepVal newStart newStop newStep |
-	size := self ___size___.
+	size := self @env0:size.
 
 	"Empty range returns empty range"
-	(size ___eq___: 0) ifTrue: [
+	(size @env0:= 0) ifTrue: [
 		^ range @env1:__new__: range _: 0 _: 0 _: 1
 	].
 
@@ -235,13 +235,13 @@ __reversed__
 	stepVal := self @env1:step.
 
 	"Calculate new start: original start + (size - 1) * step"
-	newStart := startVal  ___plus___: ((size ___minus___: 1) ___times___: stepVal).
+	newStart := startVal  @env0:+ ((size @env0:- 1) @env0:* stepVal).
 
 	"New step is negated"
-	newStep := stepVal ___negated___.
+	newStep := stepVal @env0:negated.
 
 	"New stop is original start + newStep (exclusive)"
-	newStop := startVal ___plus___: newStep.
+	newStop := startVal @env0:+ newStep.
 
 	^ range __new__: range _: newStart _: newStop _: newStep
 %
@@ -267,11 +267,11 @@ index: value
 
 	"Check if value is in range"
 	(self __contains__: value) ifFalse: [
-		ValueError ___signal___: ((value ___printString___) ___concat___: ' is not in range')
+		ValueError ___signal___: ((value @env0:printString) @env0:, ' is not in range')
 	].
 
 	"Calculate index: (value - start) / step"
-	idx := (value ___minus___: fromVal) ___divideInteger___: byVal.
+	idx := (value @env0:- fromVal) @env0:// byVal.
 	^ idx
 %
 
@@ -300,9 +300,9 @@ stop
 	toVal := self @env0:_to.
 
 	"Convert from inclusive 'to' to exclusive 'stop'"
-	^ (byVal ___gt___: 0)
-		ifTrue: [toVal ___plus___: 1]
-		ifFalse: [toVal ___minus___: (1)]
+	^ (byVal @env0:> 0)
+		ifTrue: [toVal @env0:+ 1]
+		ifFalse: [toVal @env0:- (1)]
 %
 
 set compile_env: 0

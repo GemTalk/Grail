@@ -79,37 +79,37 @@ check_unused_args: used_args _: args _: keywords
 	unused_kw := list ___new___.
 	
 	"Check positional args"
-	1 @env0:to: args ___size___ do: [:i |
+	1 @env0:to: args @env0:size do: [:i |
 		| arg_index |
-		arg_index := i ___minus___: 1.  "0-based index"
-		(used_args ___includes___: arg_index) ifFalse: [
+		arg_index := i @env0:- 1.  "0-based index"
+		(used_args @env0:includes: arg_index) ifFalse: [
 			unused_pos append: arg_index
 		]
 	].
 	
 	"Check keyword args"
 	keywords @env0:keysDo: [:key |
-		(used_args ___includes___: key) ifFalse: [
+		(used_args @env0:includes: key) ifFalse: [
 			unused_kw append: key
 		]
 	].
 	
 	"Raise error if unused args found"
-	(((unused_pos ___size___) ___gt___: 0) or: [
-		(unused_kw ___size___) ___gt___: 0
+	(((unused_pos @env0:size) @env0:> 0) or: [
+		(unused_kw @env0:size) @env0:> 0
 	]) ifTrue: [
 		| error_msg |
 		error_msg := 'Unused argument(s): '.
-		(((unused_pos ___size___) ___gt___: 0)) ifTrue: [
-			error_msg := error_msg ___concat___: 'positional '.
-			error_msg := error_msg ___concat___: (unused_pos @env1:__str__)
+		(((unused_pos @env0:size) @env0:> 0)) ifTrue: [
+			error_msg := error_msg @env0:, 'positional '.
+			error_msg := error_msg @env0:, (unused_pos @env1:__str__)
 		].
-		(((unused_kw ___size___) ___gt___: 0)) ifTrue: [
-			(((unused_pos ___size___) ___gt___: 0)) ifTrue: [
-				error_msg := error_msg ___concat___: ', '
+		(((unused_kw @env0:size) @env0:> 0)) ifTrue: [
+			(((unused_pos @env0:size) @env0:> 0)) ifTrue: [
+				error_msg := error_msg @env0:, ', '
 			].
-			error_msg := error_msg ___concat___: 'keyword '.
-			error_msg := error_msg ___concat___: (unused_kw @env1:__str__)
+			error_msg := error_msg @env0:, 'keyword '.
+			error_msg := error_msg @env0:, (unused_kw @env1:__str__)
 		].
 		ValueError ___signal___: error_msg
 	]
@@ -122,19 +122,19 @@ convert_field: value _: conversion
 	conversion can be 'r' (repr), 's' (str), or 'a' (ascii)."
 
 	| conv_char |
-	conv_char := conversion ___at___: 1.
+	conv_char := conversion @env0:at: 1.
 	
-	((conv_char ___eq___: $r)) ifTrue: [
+	((conv_char @env0:= $r)) ifTrue: [
 		^ value @env1:__repr__
 	] ifFalse: [
-		((conv_char ___eq___: $s)) ifTrue: [
+		((conv_char @env0:= $s)) ifTrue: [
 			^ value @env1:__str__
 		] ifFalse: [
-			((conv_char ___eq___: $a)) ifTrue: [
+			((conv_char @env0:= $a)) ifTrue: [
 				"ASCII conversion - same as repr for now"
 				^ value @env1:__repr__
 			] ifFalse: [
-				ValueError ___signal___: ('Unknown conversion specifier: ' ___concat___: conversion)
+				ValueError ___signal___: ('Unknown conversion specifier: ' @env0:, conversion)
 			]
 		]
 	]
@@ -185,13 +185,13 @@ get_field: field_name _: args _: keywords
 	"Try to parse as integer (positional arg)"
 	is_int := true.
 	int_value := 0.
-	((((field_name_str ___size___) ___gt___: 0))) ifTrue: [
-		field_name_str ___do___: [:char |
-			char_code := char ___codePoint___.
-			((char_code ___ge___: 48) and: [char_code ___le___: 57]) ifFalse: [
+	((((field_name_str @env0:size) @env0:> 0))) ifTrue: [
+		field_name_str @env0:do: [:char |
+			char_code := char @env0:codePoint.
+			((char_code @env0:>= 48) and: [char_code @env0:<= 57]) ifFalse: [
 				is_int := false
 			] ifTrue: [
-				int_value := (int_value ___times___: 10) ___plus___: (char_code ___minus___: 48)
+				int_value := (int_value @env0:* 10) @env0:+ (char_code @env0:- 48)
 			]
 		]
 	] ifFalse: [
@@ -201,30 +201,30 @@ get_field: field_name _: args _: keywords
 	is_int ifTrue: [
 		"Positional argument"
 		used_key := int_value.
-		((int_value ___ge___: (args ___size___))) ifTrue: [
+		((int_value @env0:>= (args @env0:size))) ifTrue: [
 			IndexError ___signal___: 'Replacement index out of range'
 		].
-		value := args ___at___: (int_value ___plus___: 1)  "1-based indexing"
+		value := args @env0:at: (int_value @env0:+ 1)  "1-based indexing"
 	] ifFalse: [
 		"Keyword argument or empty (auto-numbering not fully supported)"
-		(((field_name_str ___size___) ___eq___: 0)) ifTrue: [
+		(((field_name_str @env0:size) @env0:= 0)) ifTrue: [
 			"Auto-numbering - use first unused positional arg (simplified)"
 			used_key := 0.
-			(((args ___size___) ___gt___: 0)) ifTrue: [
-				value := args ___at___: 1
+			(((args @env0:size) @env0:> 0)) ifTrue: [
+				value := args @env0:at: 1
 			] ifFalse: [
 				IndexError ___signal___: 'Replacement index out of range'
 			]
 		] ifFalse: [
 			"Keyword argument"
 			used_key := field_name_str.
-			value := keywords ___at___: field_name_str ifAbsent: [
+			value := keywords @env0:at: field_name_str ifAbsent: [
 				KeyError ___signal___: field_name_str
 			]
 		]
 	].
 	
-	^ tuple ___with___: value with: used_key
+	^ tuple @env0:with: value with: used_key
 %
 
 category: 'Python-Formatting'
@@ -233,13 +233,13 @@ get_value: key _: args _: keywords
 	"Get value for a key from args or keywords.
 	key can be an integer (for positional args) or a string (for keyword args)."
 
-	(key ___isKindOf___: int) ifTrue: [
-		(key ___ge___: (args ___size___)) ifTrue: [
+	(key @env0:isKindOf: int) ifTrue: [
+		(key @env0:>= (args @env0:size)) ifTrue: [
 			IndexError ___signal___: 'Replacement index out of range'
 		].
-		^ args ___at___: (key ___plus___: 1)  "1-based indexing"
+		^ args @env0:at: (key @env0:+ 1)  "1-based indexing"
 	] ifFalse: [
-		^ keywords ___at___: key ifAbsent: [
+		^ keywords @env0:at: key ifAbsent: [
 			KeyError ___signal___: key
 		]
 	]
@@ -253,20 +253,20 @@ parse: format_string do: aBlock
 
 	| i len literal_text field_name format_spec conversion char conv_char conv_str nextChar char_char char_str spec_char spec_str field_name_str format_spec_str |
 	i := 1.
-	len := format_string ___size___.
+	len := format_string @env0:size.
 	literal_text := str ___new___.
 	
-	[i ___le___: len] ___whileTrue___: [
-		char := format_string ___at___: i.
+	[i @env0:<= len] @env0:whileTrue: [
+		char := format_string @env0:at: i.
 		
-		((char ___eq___: ${)) ifTrue: [
+		((char @env0:= ${)) ifTrue: [
 			"Start of field - save literal text"
 			aBlock value: literal_text value: nil value: nil value: nil.
 			literal_text := str ___new___.
 			
 			"Parse field name"
-			i := i ___plus___: 1.
-			((i ___gt___: len)) ifTrue: [
+			i := i @env0:+ 1.
+			((i @env0:> len)) ifTrue: [
 				ValueError ___signal___: 'Single "{" encountered in format string'
 			].
 			
@@ -275,73 +275,73 @@ parse: format_string do: aBlock
 			conversion := nil.
 			
 			"Check for conversion"
-			((format_string ___at___: i) ___eq___: $!) ifTrue: [
-				i := i ___plus___: 1.
-				((i ___gt___: len)) ifTrue: [
+			((format_string @env0:at: i) @env0:= $!) ifTrue: [
+				i := i @env0:+ 1.
+				((i @env0:> len)) ifTrue: [
 					ValueError ___signal___: 'Expected conversion specifier after "!"'
 				].
-				conv_char := format_string ___at___: i.
+				conv_char := format_string @env0:at: i.
 				conv_str := str ___new___: 1.
-				conv_str ___at___: 1 put: conv_char.
+				conv_str @env0:at: 1 put: conv_char.
 				conversion := conv_str.
-				i := i ___plus___: 1.
+				i := i @env0:+ 1.
 			].
 			
 			"Parse field name and format spec"
-			[(i ___le___: len) ifTrue: [
-				nextChar := format_string ___at___: i.
-				((nextChar ___ne___: $}) ifTrue: [
-					nextChar ___ne___: $:
+			[(i @env0:<= len) ifTrue: [
+				nextChar := format_string @env0:at: i.
+				((nextChar @env0:~= $}) ifTrue: [
+					nextChar @env0:~= $:
 				] ifFalse: [false])
-			] ifFalse: [false]] ___whileTrue___: [
-				char_char := format_string ___at___: i.
+			] ifFalse: [false]] @env0:whileTrue: [
+				char_char := format_string @env0:at: i.
 				char_str := str ___new___: 1.
-				char_str ___at___: 1 put: char_char.
-				field_name := field_name ___concat___: char_str.
-				i := i ___plus___: 1
+				char_str @env0:at: 1 put: char_char.
+				field_name := field_name @env0:, char_str.
+				i := i @env0:+ 1
 			].
 			
 			"Check for format spec"
-			((i ___le___: len)) ifTrue: [
-				(((format_string ___at___: i) ___eq___: $:)) ifTrue: [
-					i := i ___plus___: 1.
-					[(i ___le___: len) ifTrue: [
-						(format_string ___at___: i) ___ne___: $}
-					] ifFalse: [false]] ___whileTrue___: [
-						spec_char := format_string ___at___: i.
+			((i @env0:<= len)) ifTrue: [
+				(((format_string @env0:at: i) @env0:= $:)) ifTrue: [
+					i := i @env0:+ 1.
+					[(i @env0:<= len) ifTrue: [
+						(format_string @env0:at: i) @env0:~= $}
+					] ifFalse: [false]] @env0:whileTrue: [
+						spec_char := format_string @env0:at: i.
 						spec_str := str ___new___: 1.
-						spec_str ___at___: 1 put: spec_char.
-						format_spec := format_spec ___concat___: spec_str.
-						i := i ___plus___: 1
+						spec_str @env0:at: 1 put: spec_char.
+						format_spec := format_spec @env0:, spec_str.
+						i := i @env0:+ 1
 					]
 				]
 			].
 			
 			"Expect closing brace"
-			((i ___gt___: len)) ifTrue: [
+			((i @env0:> len)) ifTrue: [
 				ValueError ___signal___: 'Expected "}" to match "{"'
 			].
-			(((format_string ___at___: i) ___ne___: $})) ifTrue: [
+			(((format_string @env0:at: i) @env0:~= $})) ifTrue: [
 				ValueError ___signal___: 'Expected "}" to match "{"'
 			].
 			
 			"Call block with parsed field"
-			field_name_str := (((field_name ___size___) ___gt___: 0)) ifTrue: [field_name] ifFalse: [nil].
-			format_spec_str := (((format_spec ___size___) ___gt___: 0)) ifTrue: [format_spec] ifFalse: [nil].
+			field_name_str := (((field_name @env0:size) @env0:> 0)) ifTrue: [field_name] ifFalse: [nil].
+			format_spec_str := (((format_spec @env0:size) @env0:> 0)) ifTrue: [format_spec] ifFalse: [nil].
 			aBlock value: str ___new___ value: field_name_str value: format_spec_str value: conversion.
 			
-			i := i ___plus___: 1
+			i := i @env0:+ 1
 		] ifFalse: [
 			"Regular character - add to literal text"
 			char_str := str ___new___: 1.
-			char_str ___at___: 1 put: char.
-			literal_text := literal_text ___concat___: char_str.
-			i := i ___plus___: 1
+			char_str @env0:at: 1 put: char.
+			literal_text := literal_text @env0:, char_str.
+			i := i @env0:+ 1
 		]
 	].
 	
 	"Add remaining literal text"
-	(((literal_text ___size___) ___gt___: 0)) ifTrue: [
+	(((literal_text @env0:size) @env0:> 0)) ifTrue: [
 		aBlock value: literal_text value: nil value: nil value: nil
 	]
 %
@@ -361,15 +361,15 @@ vformat: format_string _: args _: keywords
 		| field_tuple field_value used_key formatted_value |
 		
 		"Add literal text"
-		result := result ___concat___: literal_text.
+		result := result @env0:, literal_text.
 		
 		"Process field if present"
 		field_name == nil ifFalse: [
 			field_tuple := self get_field: field_name _: args _: keywords.
-			field_value := field_tuple ___at___: 1.
-			used_key := field_tuple ___at___: 2.
+			field_value := field_tuple @env0:at: 1.
+			used_key := field_tuple @env0:at: 2.
 			formatted_value := self format_field: field_value _: format_spec _: conversion.
-			result := result ___concat___: formatted_value.
+			result := result @env0:, formatted_value.
 			
 			"Track used args"
 			used_args add: used_key

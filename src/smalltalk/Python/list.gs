@@ -27,23 +27,23 @@ __delitem__: index
 	Supports negative indices (counting from end)."
 
 	| size idx |
-	size := self ___size___.
+	size := self @env0:size.
 	idx := index.
 
 	"Handle negative indices"
-	(idx ___lt___: 0) ifTrue: [
-		idx := size ___plus___: idx
+	(idx @env0:< 0) ifTrue: [
+		idx := size @env0:+ idx
 	].
 
 	"Check bounds (Python uses 0-based indexing)"
-	((idx ___lt___: 0) or: [
-		idx ___ge___: size
+	((idx @env0:< 0) or: [
+		idx @env0:>= size
 	]) ifTrue: [
 		IndexError ___signal___: 'list assignment index out of range'
 	].
 
 	"Convert to 1-based Smalltalk index"
-	self ___removeAtIndex___: (idx ___plus___: 1).
+	self @env0:removeAtIndex: (idx @env0:+ 1).
 	^ nil
 %
 
@@ -63,7 +63,7 @@ method: list
 __iadd__: other
 	"In-place concatenation: self += other. Returns self."
 
-	self ___addAll___: other.
+	self @env0:addAll: other.
 	^ self
 %
 
@@ -73,14 +73,14 @@ __imul__: n
 	"In-place repetition: self *= n. Returns self."
 
 	| original |
-	(n ___le___: 0) ifTrue: [
-		self ___size___: 0.
+	(n @env0:<= 0) ifTrue: [
+		self @env0:size: 0.
 		^ self
 	].
 
-	original := self ___copy___.
-	(n ___minus___: 1) ___timesRepeat___: [
-		self ___addAll___: original.
+	original := self @env0:copy.
+	(n @env0:- 1) @env0:timesRepeat: [
+		self @env0:addAll: original.
 	].
 	^ self
 %
@@ -99,17 +99,17 @@ __repr__
 	"Return a string representation of the list: [item1, item2, ...]"
 
 	| stream |
-	stream := WriteStream ___on___: (String ___new___).
-	stream ___nextPut___: $[.
+	stream := WriteStream @env0:on: (String ___new___).
+	stream @env0:nextPut: $[.
 
 	self @env0:do: [:each |
 			| reprStr |
 			reprStr := each __repr__.
-			stream ___nextPutAll___: reprStr
-		] separatedBy: [stream ___nextPutAll___: ', '].
+			stream @env0:nextPutAll: reprStr
+		] separatedBy: [stream @env0:nextPutAll: ', '].
 
-	stream ___nextPut___: $].
-	^ stream ___contents___
+	stream @env0:nextPut: $].
+	^ stream @env0:contents
 %
 
 category: 'Python-Sequence Protocol'
@@ -119,23 +119,23 @@ __setitem__: index _: value
 	Supports negative indices (counting from end)."
 
 	| size idx |
-	size := self ___size___.
+	size := self @env0:size.
 	idx := index.
 
 	"Handle negative indices"
-	(idx ___lt___: 0) ifTrue: [
-		idx := size ___plus___: idx
+	(idx @env0:< 0) ifTrue: [
+		idx := size @env0:+ idx
 	].
 
 	"Check bounds (Python uses 0-based indexing)"
-	((idx ___lt___: 0) or: [
-		idx ___ge___: size
+	((idx @env0:< 0) or: [
+		idx @env0:>= size
 	]) ifTrue: [
 		IndexError ___signal___: 'list assignment index out of range'
 	].
 
 	"Convert to 1-based Smalltalk index"
-	self ___at___: (idx ___plus___: 1) put: value.
+	self @env0:at: (idx @env0:+ 1) put: value.
 	^ nil
 %
 
@@ -144,7 +144,7 @@ method: list
 append: item
 	"Add item to the end of the list."
 
-	self ___add___: item.
+	self @env0:add: item.
 	^ nil
 %
 
@@ -153,7 +153,7 @@ method: list
 clear
 	"Remove all items from the list."
 
-	self ___size___: 0.
+	self @env0:size: 0.
 	^ nil
 %
 
@@ -162,7 +162,7 @@ method: list
 copy
 	"Return a shallow copy of the list."
 
-	^ self ___copy___
+	^ self @env0:copy
 %
 
 category: 'Python-List Methods'
@@ -170,7 +170,7 @@ method: list
 extend: iterable
 	"Extend the list by appending all items from iterable."
 
-	self ___addAll___: iterable.
+	self @env0:addAll: iterable.
 	^ nil
 %
 
@@ -180,21 +180,21 @@ insert: index _: item
 	"Insert item before the given index."
 
 	| size idx temp |
-	size := self ___size___.
+	size := self @env0:size.
 	idx := index.
 
 	"Handle negative indices"
-	(idx ___lt___: 0) ifTrue: [
-		temp := size ___plus___: idx.
-		idx := temp ___max___: 0
+	(idx @env0:< 0) ifTrue: [
+		temp := size @env0:+ idx.
+		idx := temp @env0:max: 0
 	].
 
 	"Clamp to valid range"
-	temp := idx ___max___: 0.
-	idx := temp ___min___: size.
+	temp := idx @env0:max: 0.
+	idx := temp @env0:min: size.
 
 	"Convert to 1-based Smalltalk index (add at position idx+1)"
-	(idx ___eq___: 0)
+	(idx @env0:= 0)
 		ifTrue: [self @env0:addFirst: item]
 		ifFalse: [self @env0:add: item afterIndex: idx].
 	^ nil
@@ -206,8 +206,8 @@ pop
 	"Remove and return the last item. Raises IndexError if list is empty."
 
 	| size |
-	size := self ___size___.
-	(size ___eq___: 0) ifTrue: [
+	size := self @env0:size.
+	(size @env0:= 0) ifTrue: [
 		IndexError ___signal___: 'pop from empty list'
 	].
 
@@ -220,25 +220,25 @@ pop: index
 	"Remove and return the item at index. Raises IndexError if index is out of range."
 
 	| size idx item stIdx |
-	size := self ___size___.
+	size := self @env0:size.
 	idx := index.
 
 	"Handle negative indices"
-	(idx ___lt___: 0) ifTrue: [
-		idx := size ___plus___: idx
+	(idx @env0:< 0) ifTrue: [
+		idx := size @env0:+ idx
 	].
 
 	"Check bounds (Python uses 0-based indexing)"
-	((idx ___lt___: 0) or: [
-		idx ___ge___: size
+	((idx @env0:< 0) or: [
+		idx @env0:>= size
 	]) ifTrue: [
 		IndexError ___signal___: 'pop index out of range'
 	].
 
 	"Convert to 1-based Smalltalk index"
-	stIdx := idx ___plus___: 1.
-	item := self ___at___: stIdx.
-	self ___removeAtIndex___: stIdx.
+	stIdx := idx @env0:+ 1.
+	item := self @env0:at: stIdx.
+	self @env0:removeAtIndex: stIdx.
 	^ item
 %
 
@@ -258,8 +258,8 @@ reverse
 
 	| reversed |
 	reversed := self @env0:reversed.
-	self ___size___: 0.
-	self ___addAll___: reversed.
+	self @env0:size: 0.
+	self @env0:addAll: reversed.
 	^ nil
 %
 
@@ -268,7 +268,7 @@ method: list
 sort
 	"Sort the list in place using Python's __lt__ for comparison."
 
-	self ___sort___: [:a :b | a @env1:__lt__: b].
+	self @env0:sort: [:a :b | a @env1:__lt__: b].
 	^ nil
 %
 

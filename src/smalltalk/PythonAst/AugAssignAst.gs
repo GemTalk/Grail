@@ -81,7 +81,7 @@ printSmalltalkAttributeAugAssignOn: aStream
 
 	When in class method context and target is self.x,
 	emit `x := x op expr.`
-	Otherwise: `obj ___at___: #'attr' put: (obj attr op value).`"
+	Otherwise: `obj @env0:at: #'attr' put: (obj attr op value).`"
 
 	((target value isKindOf: NameAst) and: [CallAst isSelfReference: target value id]) ifTrue: [
 		aStream nextPutAll: target attr.
@@ -94,7 +94,7 @@ printSmalltalkAttributeAugAssignOn: aStream
 		^self
 	].
 	target value printSmalltalkWithParenthesisOn: aStream.
-	aStream nextPutAll: ' ___at___: #'''.
+	aStream nextPutAll: ' @env0:at: #'''.
 	aStream nextPutAll: target attr.
 	aStream nextPutAll: ''' put: (('.
 	target value printSmalltalkWithParenthesisOn: aStream.

@@ -36,14 +36,14 @@ __new__: cls _: numerator _: denominator
 	num := numerator.
 	den := denominator.
 	den ifNil: [ den := 1 ].
-	(den ___eq___: 0) ifTrue: [
+	(den @env0:= 0) ifTrue: [
 		ZeroDivisionError ___signal___: 'Fraction() denominator is zero'
 	].
 
 	result := (num @env0:asFraction) @env0:/ (den @env0:asFraction).
 
 	"Ensure we always return a Fraction, not an Integer"
-	(result ___isKindOf___: AbstractFraction) ifFalse: [
+	(result @env0:isKindOf: AbstractFraction) ifFalse: [
 		result := result @env0:asFraction.
 	].
 	^ result
@@ -55,15 +55,15 @@ __new__: cls _: value
 	"Fraction(value) -> rational equivalent of value"
 
 	value ifNil: [ ^ 0 @env0:asFraction ].
-	(value ___isKindOf___: Fraction) ifTrue: [ ^ value ].
+	(value @env0:isKindOf: Fraction) ifTrue: [ ^ value ].
 
 	"Try to use the Smalltalk asFraction conversion"
 	^ ([:block :handler |
-		block ___on___: Error do: handler
+		block @env0:on: Error do: handler
 	] value: [
 		value @env0:asFraction
 	] value: [:ex |
-		self ___error___: 'TypeError: cannot convert to Fraction'
+		self @env0:error: 'TypeError: cannot convert to Fraction'
 	])
 %
 
@@ -75,12 +75,12 @@ from_decimal: d
 
 	| frac |
 	"Must be a ScaledDecimal (Decimal)"
-	(d ___isScaledDecimal___) ifFalse: [
+	(d @env0:_isScaledDecimal) ifFalse: [
 		TypeError ___signal___: 'Fraction.from_decimal() argument must be a Decimal'
 	].
 
 	"Convert using GemStone's asFraction"
-	frac := d ___asFraction___.
+	frac := d @env0:asFraction.
 	^ frac
 %
 
@@ -92,26 +92,26 @@ from_float: f
 
 	| frac kind |
 	"Handle integers by converting to float first"
-	(f ___isKindOf___: Integer) ifTrue: [
+	(f @env0:isKindOf: Integer) ifTrue: [
 		^ Fraction ___new___: Fraction _: f _: 1
 	].
 
 	"Must be a float"
-	(f ___isKindOf___: Float) ifFalse: [
+	(f @env0:isKindOf: Float) ifFalse: [
 		TypeError ___signal___: 'Fraction.from_float() argument must be a float'
 	].
 
 	"Handle special float values using _getKind: 3=infinity, 5=NaN"
-	kind := f ___getKind___.
-	(kind ___eq___: 5) ifTrue: [
+	kind := f @env0:_getKind.
+	(kind @env0:= 5) ifTrue: [
 		ValueError ___signal___: 'cannot convert NaN to Fraction'
 	].
-	(kind ___eq___: 3) ifTrue: [
+	(kind @env0:= 3) ifTrue: [
 		ValueError ___signal___: 'cannot convert Infinity to Fraction'
 	].
 
 	"Convert using GemStone's asFraction"
-	frac := f ___asFraction___.
+	frac := f @env0:asFraction.
 	^ frac
 %
 
@@ -119,18 +119,12 @@ category: 'Python-Class Methods'
 classmethod: Fraction
 from_number: n
 	"Construct a Fraction from any number with as_integer_ratio method.
-	Raises TypeError if n doesn't have as_integer_ratio."
+	Raises AttributeError if n doesn't have as_integer_ratio."
 
 	| ratio num den |
-	"Check if it has as_integer_ratio method in env 2"
-	(n ___respondsToEnv1___: #as_integer_ratio) ifFalse: [
-		TypeError ___signal___: 'argument must have as_integer_ratio method'
-	].
-
-	"Call as_integer_ratio and construct fraction"
 	ratio := n as_integer_ratio.
-	num := ratio ___at___: 1.
-	den := ratio ___at___: 2.
+	num := ratio @env0:at: 1.
+	den := ratio @env0:at: 2.
 	^ Fraction ___new___: Fraction _: num _: den
 %
 
@@ -141,7 +135,7 @@ __bool__
 
 	| zero |
 	zero := 0 @env0:asFraction.
-	^ self ___ne___: zero
+	^ self @env0:~= zero
 %
 
 category: 'Python-Rounding'
@@ -187,7 +181,7 @@ __format__: formatSpec
 
 	| spec |
 	spec := formatSpec ifNil: [ '' ].
-	(spec ___eq___: '') ifTrue: [
+	(spec @env0:= '') ifTrue: [
 		^ self __str__
 	].
 	"For other format specs, convert to float and format"
@@ -199,7 +193,7 @@ method: AbstractFraction
 __hash__
 	"Return hash value."
 
-	^ self ___hash___
+	^ self @env0:hash
 %
 
 category: 'Python-Conversion'
@@ -219,9 +213,9 @@ __repr__
 	n := self @env0:numerator.
 	d := self @env0:denominator.
 	s := 'Fraction('.
-	s := (s ___concat___: (n ___printString___)) ___concat___: ', '.
-	s := (s ___concat___: (d ___printString___)) ___concat___: ')'.
-	^ s ___asUnicodeString___
+	s := (s @env0:, (n @env0:printString)) @env0:, ', '.
+	s := (s @env0:, (d @env0:printString)) @env0:, ')'.
+	^ s @env0:asUnicodeString
 %
 
 category: 'Python-Rounding'
@@ -278,7 +272,7 @@ method: AbstractFraction
 __str__
 	"Return string representation like '3/2'."
 
-	^ (self ___printString___) ___asUnicodeString___
+	^ (self @env0:printString) @env0:asUnicodeString
 %
 
 category: 'Python-Fraction Methods'
@@ -287,7 +281,7 @@ as_integer_ratio
 	"Return a tuple (numerator, denominator) representing the fraction.
 	For Fraction, this is simply (numerator, denominator)."
 
-	^ tuple ___with___: (self @env0:numerator) with: (self @env0:denominator)
+	^ tuple @env0:with: (self @env0:numerator) with: (self @env0:denominator)
 %
 
 category: 'Python-Properties'
@@ -303,7 +297,7 @@ method: AbstractFraction
 is_integer
 	"Return True if the fraction represents an integer (denominator == 1)."
 
-	^ (self @env0:denominator) ___eq___: 1
+	^ (self @env0:denominator) @env0:= 1
 %
 
 category: 'Python-Fraction Methods'
@@ -322,12 +316,12 @@ limit_denominator: maxDenominator
 
 	| p0 q0 p1 q1 n d a q2 k bound1 bound2 temp newP1 diff1 diff2 |
 	maxDenominator ifNil: [ ^ self limit_denominator ].
-	(maxDenominator ___lt___: 1) ifTrue: [
+	(maxDenominator @env0:< 1) ifTrue: [
 		ValueError ___signal___: 'max_denominator should be at least 1'
 	].
 
 	"If denominator is already within limit, return self"
-	((self @env0:denominator) ___le___: maxDenominator) ifTrue: [
+	((self @env0:denominator) @env0:<= maxDenominator) ifTrue: [
 		^ self
 	].
 
@@ -337,27 +331,27 @@ limit_denominator: maxDenominator
 	d := self @env0:denominator.
 
 	"Continued fraction algorithm"
-	[true] ___whileTrue___: [
+	[true] @env0:whileTrue: [
 		a := n @env0:quo: d.
-		q2 := q0 ___plus___: (a ___times___: q1).
-		(q2 ___gt___: maxDenominator) ifTrue: [
+		q2 := q0 @env0:+ (a @env0:* q1).
+		(q2 @env0:> maxDenominator) ifTrue: [
 			"Found the bound, now find best approximation"
-			k := (maxDenominator ___minus___: q0) @env0:quo: q1.
-			bound1 := Fraction ___new___: Fraction _: (p0 ___plus___: (k ___times___: p1)) _: (q0 ___plus___: (k ___times___: q1)).
+			k := (maxDenominator @env0:- q0) @env0:quo: q1.
+			bound1 := Fraction ___new___: Fraction _: (p0 @env0:+ (k @env0:* p1)) _: (q0 @env0:+ (k @env0:* q1)).
 			bound2 := Fraction ___new___: Fraction _: p1 _: q1.
 			"Return whichever is closer to self"
-			diff1 := (self ___minus___: bound1) ___abs___.
-			diff2 := (self ___minus___: bound2) ___abs___.
-			(diff2 ___le___: diff1)
+			diff1 := (self @env0:- bound1) @env0:abs.
+			diff2 := (self @env0:- bound2) @env0:abs.
+			(diff2 @env0:<= diff1)
 				ifTrue: [ ^ bound2 ]
 				ifFalse: [ ^ bound1 ]
 		].
 		"Update convergents: p0, q0 become old p1, q1; compute new p1, q1"
-		newP1 := p0 ___plus___: (a ___times___: p1).
+		newP1 := p0 @env0:+ (a @env0:* p1).
 		p0 := p1. q0 := q1. p1 := newP1. q1 := q2.
 		"Swap n and d for next iteration: n, d = d, n - a*d"
 		temp := d.
-		d := n ___minus___: (a ___times___: temp).
+		d := n @env0:- (a @env0:* temp).
 		n := temp.
 	].
 %

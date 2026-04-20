@@ -71,10 +71,10 @@ test__contains__
 
 	| b |
 	b :=  bytes withAll: {65. 66. 67}.
-	self assert: (b ___contains___: 65).
-	self assert: (b ___contains___: 66).
-	self deny: (b ___contains___: 68).
-	self deny: (b ___contains___: 256).
+	self assert: (b @env1:__contains__: 65).
+	self assert: (b @env1:__contains__: 66).
+	self deny: (b @env1:__contains__: 68).
+	self deny: (b @env1:__contains__: 256).
 %
 
 category: 'Tests - Comparison'

@@ -112,21 +112,21 @@ testReplOutput
 		evaluateSource: 'x = 1'
 		usingModuleScope: moduleScope.
 	result == None ifFalse: [
-		Transcript nextPutAll: result ___repr___; nextPut: Character lf.
+		Transcript nextPutAll: result @env1:__repr__; nextPut: Character lf.
 	].
 
 	result := ModuleAst
 		evaluateSource: 'x = x + 2'
 		usingModuleScope: moduleScope.
 	result == None ifFalse: [
-		Transcript nextPutAll: result ___repr___; nextPut: Character lf.
+		Transcript nextPutAll: result @env1:__repr__; nextPut: Character lf.
 	].
 
 	result := ModuleAst
 		evaluateSource: 'x'
 		usingModuleScope: moduleScope.
 	result == None ifFalse: [
-		Transcript nextPutAll: result ___repr___; nextPut: Character lf.
+		Transcript nextPutAll: result @env1:__repr__; nextPut: Character lf.
 	].
 
 	self assert: outputStream contents equals: '3', (String with: Character lf).

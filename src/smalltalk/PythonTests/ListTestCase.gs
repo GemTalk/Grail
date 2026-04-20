@@ -67,8 +67,8 @@ test__contains__
 	| lst |
 	lst := OrderedCollection withAll: #(1 2 3).
 	
-	self assert: (lst ___contains___: 2).
-	self deny: (lst ___contains___: 4).
+	self assert: (lst @env1:__contains__: 2).
+	self deny: (lst @env1:__contains__: 4).
 %
 
 category: 'Tests - Sequence Protocol'

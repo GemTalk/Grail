@@ -70,8 +70,8 @@ printSmalltalkOn: aStream
 	`lambda x, y: x + y` compiles to:
 	  [:positional :keywords |
 	    | x y |
-	    x := positional ___at___: 1.
-	    y := positional ___at___: 2.
+	    x := positional @env0:at: 1.
+	    y := positional @env0:at: 2.
 	    x __add__: y]
 
 	Only simple positional args are handled; *args, **kwargs, defaults,
@@ -93,7 +93,7 @@ printSmalltalkOn: aStream
 	argList doWithIndex: [:each :i |
 		aStream
 			nextPutAll: each name;
-			nextPutAll: ' := positional ___at___: ';
+			nextPutAll: ' := positional @env0:at: ';
 			nextPutAll: i printString;
 			nextPut: $.;
 			lf.

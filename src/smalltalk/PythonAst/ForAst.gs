@@ -46,7 +46,7 @@ printSmalltalkOn: aStream
 	     target := ___iter___ __next__.
 	     body.
 	   ].
-	  ] ___on___: StopIteration do: [:___ex___ | nil].
+	  ] @env0:on: StopIteration do: [:___ex___ | nil].
 
 	For tuple unpacking (for a, b in items), uses a temp ___item___
 	and unpacks with __getitem__:."
@@ -88,7 +88,7 @@ printSmalltalkOn: aStream
 	aStream decreaseIndent; nextPutAll: '].'; lf.
 
 	"Close handler block"
-	aStream decreaseIndent; nextPutAll: '] ___on___: StopIteration do: [:___ex___ | nil].'.
+	aStream decreaseIndent; nextPutAll: '] @env0:on: StopIteration do: [:___ex___ | nil].'.
 
 	"Else clause"
 	(orelse notNil and: [orelse size > 0]) ifTrue: [

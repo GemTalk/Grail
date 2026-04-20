@@ -138,7 +138,7 @@ category: 'Metadata'
 method: gemstone
 version
 	"Return the GemStone version."
-	^ str ___withAll___: (System @env0:stoneVersionAt: 'gsVersion')
+	^ str @env0:withAll: (System @env0:stoneVersionAt: 'gsVersion')
 %
 
 set compile_env: 0

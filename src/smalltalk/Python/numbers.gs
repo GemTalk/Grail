@@ -248,7 +248,7 @@ __instancecheck__: instance
 	or if instance's class has been registered with this ABC or any of its sub-ABCs."
 
 	| instanceClass |
-	instanceClass := instance ___class___.
+	instanceClass := instance @env0:class.
 
 	"Check normal inheritance - use env 0 for isSubclassOf:"
 	(instanceClass @env0:isSubclassOf: self) ifTrue: [^ true].
@@ -305,7 +305,7 @@ register: aClass
 	After registration, isinstance(instance, ABC) returns True."
 
 	registeredTypes == nil ifTrue: [registeredTypes := IdentitySet ___new___].
-	registeredTypes ___add___: aClass
+	registeredTypes @env0:add: aClass
 %
 
 category: 'Python-ABC'
@@ -321,7 +321,7 @@ category: 'Python-Attributes'
 method: numbers
 Complex
 	"Return the Complex ABC."
-	^ self ___at___: #Complex
+	^ self @env0:at: #Complex
 %
 
 
@@ -343,42 +343,42 @@ category: 'Python-Initialization'
 method: numbers
 initialize_Complex
 	"Bind the Complex ABC."
-	self ___at___: #Complex put: numbers_Complex
+	self @env0:at: #Complex put: numbers_Complex
 %
 
 category: 'Python-Initialization'
 method: numbers
 initialize_Integral
 	"Bind the Integral ABC."
-	self ___at___: #Integral put: numbers_Integral
+	self @env0:at: #Integral put: numbers_Integral
 %
 
 category: 'Python-Initialization'
 method: numbers
 initialize_Number
 	"Bind the Number ABC."
-	self ___at___: #Number put: numbers_Number
+	self @env0:at: #Number put: numbers_Number
 %
 
 category: 'Python-Initialization'
 method: numbers
 initialize_Rational
 	"Bind the Rational ABC."
-	self ___at___: #Rational put: numbers_Rational
+	self @env0:at: #Rational put: numbers_Rational
 %
 
 category: 'Python-Initialization'
 method: numbers
 initialize_Real
 	"Bind the Real ABC."
-	self ___at___: #Real put: numbers_Real
+	self @env0:at: #Real put: numbers_Real
 %
 
 category: 'Python-Attributes'
 method: numbers
 Integral
 	"Return the Integral ABC."
-	^ self ___at___: #Integral
+	^ self @env0:at: #Integral
 %
 
 
@@ -386,7 +386,7 @@ category: 'Python-Attributes'
 method: numbers
 Number
 	"Return the Number ABC."
-	^ self ___at___: #Number
+	^ self @env0:at: #Number
 %
 
 
@@ -394,7 +394,7 @@ category: 'Python-Attributes'
 method: numbers
 Rational
 	"Return the Rational ABC."
-	^ self ___at___: #Rational
+	^ self @env0:at: #Rational
 %
 
 
@@ -402,7 +402,7 @@ category: 'Python-Attributes'
 method: numbers
 Real
 	"Return the Real ABC."
-	^ self ___at___: #Real
+	^ self @env0:at: #Real
 %
 
 

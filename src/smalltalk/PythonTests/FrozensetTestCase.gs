@@ -47,8 +47,8 @@ testFrozensetCopy
 	fs2 := fs1 @env1:copy.
 
 	self assert: fs2 size equals: 2.
-	self assert: (fs2 ___contains___: 1).
-	self assert: (fs2 ___contains___: 2)
+	self assert: (fs2 @env1:__contains__: 1).
+	self assert: (fs2 @env1:__contains__: 2)
 %
 
 category: 'Tests - Creation'
@@ -92,9 +92,9 @@ testFrozensetDifference
 	result := fs1 @env1:difference: fs2.
 	
 	self assert: result size equals: 2.
-	self assert: (result ___contains___: 1).
-	self assert: (result ___contains___: 3).
-	self deny: (result ___contains___: 2)
+	self assert: (result @env1:__contains__: 1).
+	self assert: (result @env1:__contains__: 3).
+	self deny: (result @env1:__contains__: 2)
 %
 
 category: 'Tests - Comparison'
@@ -161,10 +161,10 @@ testFrozensetIntersection
 	result := fs1 @env1:intersection: fs2.
 	
 	self assert: result size equals: 2.
-	self assert: (result ___contains___: 2).
-	self assert: (result ___contains___: 3).
-	self deny: (result ___contains___: 1).
-	self deny: (result ___contains___: 4)
+	self assert: (result @env1:__contains__: 2).
+	self assert: (result @env1:__contains__: 3).
+	self deny: (result @env1:__contains__: 1).
+	self deny: (result @env1:__contains__: 4)
 %
 
 category: 'Tests - Comparison'
@@ -213,9 +213,9 @@ testFrozensetIteration
 	].
 	
 	self assert: items size equals: 3.
-	self assert: (items ___contains___: 1).
-	self assert: (items ___contains___: 2).
-	self assert: (items ___contains___: 3)
+	self assert: (items @env1:__contains__: 1).
+	self assert: (items @env1:__contains__: 2).
+	self assert: (items @env1:__contains__: 3)
 %
 
 category: 'Tests - Membership'
@@ -229,10 +229,10 @@ testFrozensetMembership
 	fs add: 2.
 	fs add: 3.
 	
-	self assert: (fs ___contains___: 1).
-	self assert: (fs ___contains___: 2).
-	self assert: (fs ___contains___: 3).
-	self deny: (fs ___contains___: 4)
+	self assert: (fs @env1:__contains__: 1).
+	self assert: (fs @env1:__contains__: 2).
+	self assert: (fs @env1:__contains__: 3).
+	self deny: (fs @env1:__contains__: 4)
 %
 
 category: 'Tests - Set Operations (Operators)'
@@ -334,10 +334,10 @@ testFrozensetSymmetricDifference
 	result := fs1 @env1:symmetric_difference: fs2.
 
 	self assert: result size equals: 2.
-	self assert: (result ___contains___: 1).
-	self assert: (result ___contains___: 4).
-	self deny: (result ___contains___: 2).
-	self deny: (result ___contains___: 3)
+	self assert: (result @env1:__contains__: 1).
+	self assert: (result @env1:__contains__: 4).
+	self deny: (result @env1:__contains__: 2).
+	self deny: (result @env1:__contains__: 3)
 %
 
 category: 'Tests - Set Operations'
@@ -357,7 +357,7 @@ testFrozensetUnion
 	result := fs1 @env1:union: fs2.
 	
 	self assert: result size equals: 3.
-	self assert: (result ___contains___: 1).
-	self assert: (result ___contains___: 2).
-	self assert: (result ___contains___: 3)
+	self assert: (result @env1:__contains__: 1).
+	self assert: (result @env1:__contains__: 2).
+	self assert: (result @env1:__contains__: 3)
 %

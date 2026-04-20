@@ -369,34 +369,34 @@ __new__: obj
 	obj ifNil: [ ^ false ].
 
 	"If already a bool, return it"
-	(obj ___isKindOf___: bool) ifTrue: [
+	(obj @env0:isKindOf: bool) ifTrue: [
 		^ obj
 	].
 
 	"Try to call __bool__ on the object if it has one"
-	(obj ___respondsTo___: #__bool__) ifTrue: [
+	(obj @env0:respondsTo: #__bool__) ifTrue: [
 		result := obj __bool__.
 		^ result
 	].
 
 	"For integers, 0 is False, everything else is True"
-	(obj ___isKindOf___: int) ifTrue: [
-		^ obj ___ne___: 0
+	(obj @env0:isKindOf: int) ifTrue: [
+		^ obj @env0:~= 0
 	].
 
 	"For floats, 0.0 is False, everything else is True"
-	(obj ___isKindOf___: Float) ifTrue: [
-		^ obj ___ne___: 0.0
+	(obj @env0:isKindOf: Float) ifTrue: [
+		^ obj @env0:~= 0.0
 	].
 
 	"For strings, empty string is False"
-	(obj ___isKindOf___: Unicode7) ifTrue: [
-		^ (obj ___size___) ___gt___: 0
+	(obj @env0:isKindOf: Unicode7) ifTrue: [
+		^ (obj @env0:size) @env0:> 0
 	].
 
 	"For collections, empty is False"
-	(obj ___isKindOf___: Collection) ifTrue: [
-		^ (obj ___size___) ___gt___: 0
+	(obj @env0:isKindOf: Collection) ifTrue: [
+		^ (obj @env0:size) @env0:> 0
 	].
 
 	"Default: everything else is True"
@@ -434,7 +434,7 @@ method: bool
 __add__: other
 	"Add bool (as int) to other."
 
-	^ (self ifTrue: [1] ifFalse: [0]) ___plus___: other
+	^ (self ifTrue: [1] ifFalse: [0]) @env0:+ other
 %
 
 category: 'Python-Bitwise'
@@ -442,7 +442,7 @@ method: bool
 __and__: other
 	"Bitwise AND of bool (as int) with other."
 
-	^ (self ifTrue: [1] ifFalse: [0]) ___bitAnd___: other
+	^ (self ifTrue: [1] ifFalse: [0]) @env0:bitAnd: other
 %
 
 category: 'Python-Conversion'
@@ -470,7 +470,7 @@ __doc__
 
 Returns True when the argument x is true, False otherwise.
 The builtins True and False are the only two instances of the class bool.
-The class bool is a subclass of the class int, and cannot be subclassed.' ___asUnicodeString___
+The class bool is a subclass of the class int, and cannot be subclassed.' @env0:asUnicodeString
 %
 
 category: 'Python-Comparison'
@@ -480,10 +480,10 @@ __eq__: other
 
 	| selfInt otherInt |
 	selfInt := self ifTrue: [1] ifFalse: [0].
-	otherInt := (other ___class___) == bool
+	otherInt := (other @env0:class) == bool
 		ifTrue: [other ifTrue: [1] ifFalse: [0]]
 		ifFalse: [other].
-	^ selfInt ___eq___: otherInt
+	^ selfInt @env0:= otherInt
 %
 
 category: 'Python-Conversion'
@@ -499,7 +499,7 @@ method: bool
 __floordiv__: other
 	"Floor division of bool (as int) by other."
 
-	^ (self ifTrue: [1] ifFalse: [0]) ___divideInteger___: other
+	^ (self ifTrue: [1] ifFalse: [0]) @env0:// other
 %
 
 category: 'Python-Comparison'
@@ -509,10 +509,10 @@ __ge__: other
 
 	| selfInt otherInt |
 	selfInt := self ifTrue: [1] ifFalse: [0].
-	otherInt := (other ___class___) == bool
+	otherInt := (other @env0:class) == bool
 		ifTrue: [other ifTrue: [1] ifFalse: [0]]
 		ifFalse: [other].
-	^ selfInt ___ge___: otherInt
+	^ selfInt @env0:>= otherInt
 %
 
 category: 'Python-Comparison'
@@ -522,10 +522,10 @@ __gt__: other
 
 	| selfInt otherInt |
 	selfInt := self ifTrue: [1] ifFalse: [0].
-	otherInt := (other ___class___) == bool
+	otherInt := (other @env0:class) == bool
 		ifTrue: [other ifTrue: [1] ifFalse: [0]]
 		ifFalse: [other].
-	^ selfInt ___gt___: otherInt
+	^ selfInt @env0:> otherInt
 %
 
 category: 'Python-Conversion'
@@ -559,10 +559,10 @@ __le__: other
 
 	| selfInt otherInt |
 	selfInt := self ifTrue: [1] ifFalse: [0].
-	otherInt := (other ___class___) == bool
+	otherInt := (other @env0:class) == bool
 		ifTrue: [other ifTrue: [1] ifFalse: [0]]
 		ifFalse: [other].
-	^ selfInt ___le___: otherInt
+	^ selfInt @env0:<= otherInt
 %
 
 category: 'Python-Comparison'
@@ -572,10 +572,10 @@ __lt__: other
 
 	| selfInt otherInt |
 	selfInt := self ifTrue: [1] ifFalse: [0].
-	otherInt := (other ___class___) == bool
+	otherInt := (other @env0:class) == bool
 		ifTrue: [other ifTrue: [1] ifFalse: [0]]
 		ifFalse: [other].
-	^ selfInt ___lt___: otherInt
+	^ selfInt @env0:< otherInt
 %
 
 category: 'Python-Arithmetic'
@@ -583,7 +583,7 @@ method: bool
 __mod__: other
 	"Modulo of bool (as int) by other."
 
-	^ (self ifTrue: [1] ifFalse: [0]) ___modulo___: other
+	^ (self ifTrue: [1] ifFalse: [0]) @env0:\\ other
 %
 
 category: 'Python-Arithmetic'
@@ -591,7 +591,7 @@ method: bool
 __mul__: other
 	"Multiply bool (as int) by other."
 
-	^ (self ifTrue: [1] ifFalse: [0]) ___times___: other
+	^ (self ifTrue: [1] ifFalse: [0]) @env0:* other
 %
 
 category: 'Python-Comparison'
@@ -601,10 +601,10 @@ __ne__: other
 
 	| selfInt otherInt |
 	selfInt := self ifTrue: [1] ifFalse: [0].
-	otherInt := (other ___class___) == bool
+	otherInt := (other @env0:class) == bool
 		ifTrue: [other ifTrue: [1] ifFalse: [0]]
 		ifFalse: [other].
-	^ selfInt ___ne___: otherInt
+	^ selfInt @env0:~= otherInt
 %
 
 category: 'Python-Arithmetic'
@@ -612,7 +612,7 @@ method: bool
 __neg__
 	"Negate bool (as int)."
 
-	^ (self ifTrue: [1] ifFalse: [0]) ___negated___
+	^ (self ifTrue: [1] ifFalse: [0]) @env0:negated
 %
 
 category: 'Python-Bitwise'
@@ -636,7 +636,7 @@ method: bool
 __pow__: other
 	"Raise bool (as int) to power of other."
 
-	^ (self ifTrue: [1] ifFalse: [0]) ___raisedTo___: other
+	^ (self ifTrue: [1] ifFalse: [0]) @env0:raisedTo: other
 %
 
 category: 'Python-String Representation'
@@ -644,7 +644,7 @@ method: bool
 __repr__
 	"Return the official string representation of the bool."
 
-	^ (self ifTrue: ['True'] ifFalse: ['False']) ___asUnicodeString___
+	^ (self ifTrue: ['True'] ifFalse: ['False']) @env0:asUnicodeString
 %
 
 category: 'Python-String Representation'
@@ -652,7 +652,7 @@ method: bool
 __str__
 	"Return the informal string representation of the bool."
 
-	^ (self ifTrue: ['True'] ifFalse: ['False']) ___asUnicodeString___
+	^ (self ifTrue: ['True'] ifFalse: ['False']) @env0:asUnicodeString
 %
 
 category: 'Python-Arithmetic'
@@ -660,7 +660,7 @@ method: bool
 __sub__: other
 	"Subtract other from bool (as int)."
 
-	^ (self ifTrue: [1] ifFalse: [0]) ___minus___: (other)
+	^ (self ifTrue: [1] ifFalse: [0]) @env0:- (other)
 %
 
 category: 'Python-Arithmetic'
@@ -668,7 +668,7 @@ method: bool
 __truediv__: other
 	"True division of bool (as int) by other."
 
-	^ (self ifTrue: [1] ifFalse: [0]) ___divide___: other
+	^ (self ifTrue: [1] ifFalse: [0]) @env0:/ other
 %
 
 category: 'Python-Bitwise'

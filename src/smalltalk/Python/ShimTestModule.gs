@@ -152,61 +152,61 @@ initialize
 category: 'Python-Built-in Functions'
 method: _shimtest
 test_float: x
-	^ self ___class___ @env0:callTestFloat: x
+	^ self @env0:class @env0:callTestFloat: x
 %
 
 category: 'Python-Built-in Functions'
 method: _shimtest
 test_int: n
-	^ self ___class___ @env0:callTestInt: n
+	^ self @env0:class @env0:callTestInt: n
 %
 
 category: 'Python-Built-in Functions'
 method: _shimtest
 test_string_len: s
-	^ self ___class___ @env0:callTestStringLen: s
+	^ self @env0:class @env0:callTestStringLen: s
 %
 
 category: 'Python-Built-in Functions'
 method: _shimtest
 test_list_sum: n
-	^ self ___class___ @env0:callTestListSum: n
+	^ self @env0:class @env0:callTestListSum: n
 %
 
 category: 'Python-Built-in Functions'
 method: _shimtest
 test_list_modify: aList _: val
-	^ self ___class___ @env0:callTestListModify: aList value: val
+	^ self @env0:class @env0:callTestListModify: aList value: val
 %
 
 category: 'Python-Built-in Functions'
 method: _shimtest
 test_bool_not: x
-	^ self ___class___ @env0:callTestBoolNot: x
+	^ self @env0:class @env0:callTestBoolNot: x
 %
 
 category: 'Python-Built-in Functions'
 method: _shimtest
 test_none
-	^ self ___class___ @env0:callTestNone
+	^ self @env0:class @env0:callTestNone
 %
 
 category: 'Python-Built-in Functions'
 method: _shimtest
 test_error
-	^ self ___class___ @env0:callTestError
+	^ self @env0:class @env0:callTestError
 %
 
 category: 'Python-Built-in Functions'
 method: _shimtest
 test_bytes_len: b
-	^ self ___class___ @env0:callTestBytesLen: b
+	^ self @env0:class @env0:callTestBytesLen: b
 %
 
 category: 'Python-Built-in Functions'
 method: _shimtest
 test_list_insert: aList _: idx _: val
-	^ self ___class___ @env0:callTestListInsert: aList index: idx value: val
+	^ self @env0:class @env0:callTestListInsert: aList index: idx value: val
 %
 
 set compile_env: 0

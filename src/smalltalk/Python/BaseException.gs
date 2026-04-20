@@ -79,7 +79,7 @@ __new__: cls
 	
 	| instance |
 	instance := cls ___new___.
-	instance ___args: #().
+	instance ___args___: #().
 	^ instance
 %
 
@@ -91,7 +91,7 @@ __new__: cls _: anArray
 	
 	| instance |
 	instance := cls ___new___.
-	instance ___args: { anArray ifNil: [ #() ] }.
+	instance ___args___: { anArray ifNil: [ #() ] }.
 	^ instance
 %
 
@@ -102,13 +102,13 @@ ___signal___: message
 
 	| instance |
 	instance := self ___new___.
-	instance ___args: { message }.
+	instance ___args___: { message }.
 	instance ___signal___: message.
 %
 
 category: 'Private'
 method: BaseException
-___args: anArray
+___args___: anArray
 	"Setter for args instance variable."
 
 	args := anArray
@@ -139,15 +139,15 @@ __eq__: other
 	Two exceptions are equal if they are the same class and have the same args."
 
 	| myClass otherClass myArgs otherArgs |
-	myClass := self ___class___.
-	otherClass := other ___class___.
+	myClass := self @env0:class.
+	otherClass := other @env0:class.
 
 	myClass == otherClass ifFalse: [ ^ false ].
 
 	myArgs := self @env1:args.
 	otherArgs := other @env1:args.
 
-	^ myArgs ___eq___: otherArgs
+	^ myArgs @env0:= otherArgs
 %
 
 category: 'Python-Initialization'
@@ -174,7 +174,7 @@ __ne__: other
 
 	| result |
 	result := self __eq__: other.
-	^ result ___not___
+	^ result @env0:not
 %
 
 category: 'Python-String Representation'
@@ -183,32 +183,32 @@ __repr__
 	"Return a detailed string representation of the exception."
 	
 	| className argsArray stream |
-	className := (self ___class___) ___name___.
+	className := (self @env0:class) @env0:name.
 	argsArray := self @env1:args.
-	stream := WriteStream ___on___: (Unicode7 ___new___).
+	stream := WriteStream @env0:on: (Unicode7 ___new___).
 	
-	stream ___nextPutAll___: className.
-	stream ___nextPut___: $(.
+	stream @env0:nextPutAll: className.
+	stream @env0:nextPut: $(.
 	
-	((argsArray ___size___) @env0:> 0) ifTrue: [
+	((argsArray @env0:size) @env0:> 0) ifTrue: [
 		argsArray @env0:doWithIndex: [:arg :idx |
 			| argRepr |
 			(idx @env0:> 1) ifTrue: [
-				stream ___nextPutAll___: ', '.
+				stream @env0:nextPutAll: ', '.
 			].
-			argRepr := arg ___asString___.
-			(arg ___isKindOf___: Unicode7) ifTrue: [
-				stream ___nextPut___: $'.
-				stream ___nextPutAll___: argRepr.
-				stream ___nextPut___: $'.
+			argRepr := arg @env0:asString.
+			(arg @env0:isKindOf: Unicode7) ifTrue: [
+				stream @env0:nextPut: $'.
+				stream @env0:nextPutAll: argRepr.
+				stream @env0:nextPut: $'.
 			] ifFalse: [
-				stream ___nextPutAll___: argRepr.
+				stream @env0:nextPutAll: argRepr.
 			].
 		].
 	].
 	
-	stream ___nextPut___: $).
-	^ stream ___contents___
+	stream @env0:nextPut: $).
+	^ stream @env0:contents
 %
 
 category: 'Python-String Representation'
@@ -221,13 +221,13 @@ __str__
 	
 	| argsArray size |
 	argsArray := self @env1:args.
-	size := argsArray ___size___.
+	size := argsArray @env0:size.
 	
 	size == 0 ifTrue: [ ^ '' ].
 	size == 1 ifTrue: [
-		^ ((argsArray ___at___: 1) ___asString___) ___asUnicodeString___
+		^ ((argsArray @env0:at: 1) @env0:asString) @env0:asUnicodeString
 	].
-	^ (argsArray ___asString___) ___asUnicodeString___
+	^ (argsArray @env0:asString) @env0:asUnicodeString
 %
 
 category: 'Python-Exception Chaining'

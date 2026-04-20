@@ -60,7 +60,7 @@ initialize
 	accessor reads this slot. The `pickle:_:` and `pickle:_:_:` methods
 	write to it."
 
-	self ___at___: #dispatch_table put: (KeyValueDictionary @env0:new)
+	self @env0:at: #dispatch_table put: (KeyValueDictionary @env0:new)
 %
 
 ! ===============================================================================
@@ -73,7 +73,7 @@ dispatch_table
 	"Return the dispatch_table dictionary (stored attribute, populated
 	by `initialize`)."
 
-	^ self ___at___: #dispatch_table
+	^ self @env0:at: #dispatch_table
 %
 
 ! ===============================================================================
@@ -86,7 +86,7 @@ pickle: obType _: pickleFunc
 	"Python copyreg.pickle(ob_type, pickle_function) — fast path.
 	2-arg form. Records `obType → pickleFunc` in dispatch_table."
 
-	(self ___at___: #dispatch_table) @env0:at: obType put: pickleFunc.
+	(self @env0:at: #dispatch_table) @env0:at: obType put: pickleFunc.
 	^ nil
 %
 

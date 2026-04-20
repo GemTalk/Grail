@@ -47,7 +47,7 @@ __getnewargs__
 	"Return arguments for unpickling.
 	For tuples, this is just the tuple itself as an argument."
 
-	^ tuple ___with___: self
+	^ tuple @env0:with: self
 %
 
 category: 'Python-Hashing'
@@ -57,7 +57,7 @@ __hash__
 	Tuples are hashable (unlike lists) because they are immutable."
 
 	| hash |
-	hash := self ___hash___.
+	hash := self @env0:hash.
 	^ hash
 %
 
@@ -76,26 +76,26 @@ __repr__
 	Special case: single-element tuples need a trailing comma."
 
 	| stream size |
-	size := self ___size___.
-	stream := WriteStream ___on___: (String ___new___).
-	stream ___nextPut___: $(.
+	size := self @env0:size.
+	stream := WriteStream @env0:on: (String ___new___).
+	stream @env0:nextPut: $(.
 
 	size == 1 ifTrue: [
 		"Single element tuple needs trailing comma"
 		| reprStr |
-		reprStr := (self ___at___: 1) __repr__.
-		stream ___nextPutAll___: reprStr.
-		stream ___nextPutAll___: ','.
+		reprStr := (self @env0:at: 1) __repr__.
+		stream @env0:nextPutAll: reprStr.
+		stream @env0:nextPutAll: ','.
 	] ifFalse: [
 		self @env0:do: [:each |
 				| reprStr |
 				reprStr := each __repr__.
-				stream ___nextPutAll___: reprStr
-			] separatedBy: [stream ___nextPutAll___: ', ']
+				stream @env0:nextPutAll: reprStr
+			] separatedBy: [stream @env0:nextPutAll: ', ']
 	].
 
-	stream ___nextPut___: $).
-	^ stream ___contents___
+	stream @env0:nextPut: $).
+	^ stream @env0:contents
 %
 
 category: 'Python-Sequence Protocol'

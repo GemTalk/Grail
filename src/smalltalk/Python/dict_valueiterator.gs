@@ -105,14 +105,14 @@ __next__
 	"Return the next value from the dictionary"
 
 	| size nextValue |
-	size := values ___size___.
-	position := position ___plus___: 1.
+	size := values @env0:size.
+	position := position @env0:+ 1.
 	
-	(position ___gt___: size) ifTrue: [
-		StopIteration ___signal___
+	(position @env0:> size) ifTrue: [
+		StopIteration @env0:signal
 	].
 	
-	nextValue := values ___at___: position.
+	nextValue := values @env0:at: position.
 	^ nextValue
 %
 

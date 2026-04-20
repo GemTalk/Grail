@@ -53,14 +53,14 @@ value: positional value: keywords
 	instance := SymbolDictionary @env0:new.
 	"Copy all entries from class to instance, wrapping closures as bound methods"
 	self @env0:keysAndValuesDo: [:k :v |
-		(v ___isKindOf___: ExecBlock) ifTrue: [
+		(v @env0:isKindOf: ExecBlock) ifTrue: [
 			"Wrap closure to auto-inject instance as first positional arg"
 			instance @env0:at: k put: [:pos :kw | v value: (({instance} @env0:, pos)) value: kw].
 		] ifFalse: [
 			instance @env0:at: k put: v.
 		].
 	].
-	instance ___at___: #'__class__' put: self.
+	instance @env0:at: #'__class__' put: self.
 	"Call __init__ if defined"
 	initFunc := self @env0:at: #'__init__' ifAbsent: [nil].
 	initFunc ifNotNil: [
@@ -72,7 +72,7 @@ value: positional value: keywords
 category: 'Python-Attribute Access'
 method: PythonClass
 __name__
-	^ self ___at___: #'__name__'
+	^ self @env0:at: #'__name__'
 %
 
 set compile_env: 0

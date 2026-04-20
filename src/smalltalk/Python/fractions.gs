@@ -55,7 +55,7 @@ initialize
 	"Bind the Fraction attribute to GemStone's Fraction class. The
 	`Fraction` accessor reads this slot."
 
-	self ___at___: #fractionClass put: Fraction
+	self @env0:at: #fractionClass put: Fraction
 %
 
 ! ===============================================================================
@@ -68,7 +68,7 @@ Fraction
 	"Return the Fraction type exposed by this module (the GemStone
 	Fraction class, populated by `initialize`)."
 
-	^ self ___at___: #fractionClass
+	^ self @env0:at: #fractionClass
 %
 
 set compile_env: 0

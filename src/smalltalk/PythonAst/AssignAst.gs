@@ -87,7 +87,7 @@ printSmalltalkAttributeStoreOn: aStream target: tgt
 
 	When in class method context and target is self.x,
 	emit direct instVar assignment: `x := expr.`
-	Otherwise: `obj ___at___: #'attr' put: expr.`"
+	Otherwise: `obj @env0:at: #'attr' put: expr.`"
 
 	((tgt value isKindOf: NameAst) and: [CallAst isSelfReference: tgt value id]) ifTrue: [
 		aStream nextPutAll: tgt attr.
@@ -97,7 +97,7 @@ printSmalltalkAttributeStoreOn: aStream target: tgt
 		^self
 	].
 	tgt value printSmalltalkWithParenthesisOn: aStream.
-	aStream nextPutAll: ' ___at___: #'''.
+	aStream nextPutAll: ' @env0:at: #'''.
 	aStream nextPutAll: tgt attr.
 	aStream nextPutAll: ''' put: '.
 	value printSmalltalkWithParenthesisOn: aStream.

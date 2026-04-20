@@ -91,22 +91,22 @@ __next__
 	If there are no further characters, raise StopIteration."
 
 	| size char charString |
-	size := collection ___size___.
+	size := collection @env0:size.
 
 	"Check if we've reached the end"
-	(position ___ge___: size) ifTrue: [
-		StopIteration ___signal___
+	(position @env0:>= size) ifTrue: [
+		StopIteration @env0:signal
 	].
 
 	"Get the character at current position (convert to 1-based Smalltalk index)"
-	char := collection ___at___: (position ___plus___: 1).
+	char := collection @env0:at: (position @env0:+ 1).
 
 	"Convert character to a single-character string"
 	charString := str ___new___: 1.
-	charString ___at___: 1 put: char.
+	charString @env0:at: 1 put: char.
 
 	"Increment position"
-	position := position ___plus___: 1.
+	position := position @env0:+ 1.
 
 	^ charString
 %

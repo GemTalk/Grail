@@ -50,5 +50,5 @@ method: NotAst
 printSmalltalkOn: aStream
 
 	operand printSmalltalkWithParenthesisOn: aStream.
-	aStream nextPutAll: ' ___not___'.
+	aStream nextPutAll: ' @env0:not'.
 %

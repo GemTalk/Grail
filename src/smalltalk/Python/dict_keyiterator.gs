@@ -105,14 +105,14 @@ __next__
 	"Return the next key from the dictionary"
 
 	| size nextKey |
-	size := keys ___size___.
-	position := position ___plus___: 1.
+	size := keys @env0:size.
+	position := position @env0:+ 1.
 	
-	(position ___gt___: size) ifTrue: [
-		StopIteration ___signal___
+	(position @env0:> size) ifTrue: [
+		StopIteration @env0:signal
 	].
 	
-	nextKey := keys ___at___: position.
+	nextKey := keys @env0:at: position.
 	^ nextKey
 %
 

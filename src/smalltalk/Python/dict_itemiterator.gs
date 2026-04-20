@@ -55,9 +55,9 @@ ___on: aDict
 	| iter itemsArray |
 	iter := self ___new___.
 	itemsArray := list ___new___.
-	aDict ___keysAndValuesDo___: [:key :value |
+	aDict @env0:keysAndValuesDo: [:key :value |
 		| pair |
-		pair := tuple ___with___: key with: value.
+		pair := tuple @env0:with: key with: value.
 		itemsArray append: pair
 	].
 	iter ___dict: aDict.
@@ -107,14 +107,14 @@ __next__
 	"Return the next (key, value) pair from the dictionary"
 
 	| size nextItem |
-	size := items ___size___.
-	position := position ___plus___: 1.
+	size := items @env0:size.
+	position := position @env0:+ 1.
 	
-	(position ___gt___: size) ifTrue: [
-		StopIteration ___signal___
+	(position @env0:> size) ifTrue: [
+		StopIteration @env0:signal
 	].
 	
-	nextItem := items ___at___: position.
+	nextItem := items @env0:at: position.
 	^ nextItem
 %
 

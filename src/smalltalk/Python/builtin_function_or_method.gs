@@ -47,7 +47,7 @@ __name__
 	"Return the name of the function/method"
 
 	selector ifNil: [^ '<anonymous>'].
-	^ selector ___asString___
+	^ selector @env0:asString
 %
 
 category: 'Python-Attributes'
@@ -59,13 +59,13 @@ __qualname__
 	selector ifNil: [^ '<anonymous>'].
 
 	inClass ifNil: [
-		^ selector ___asString___
+		^ selector @env0:asString
 	].
 
-	className := inClass ___name___.
-	selectorStr := selector ___asString___.
-	result := (className ___asString___) ___concat___: '.'.
-	result := result ___concat___: selectorStr.
+	className := inClass @env0:name.
+	selectorStr := selector @env0:asString.
+	result := (className @env0:asString) @env0:, '.'.
+	result := result @env0:, selectorStr.
 	^ result
 %
 
@@ -76,8 +76,8 @@ __repr__
 
 	| name result |
 	name := self __name__.
-	result := '<built-in function ' ___concat___: name.
-	result := result ___concat___: '>'.
+	result := '<built-in function ' @env0:, name.
+	result := result @env0:, '>'.
 	^ result
 %
 

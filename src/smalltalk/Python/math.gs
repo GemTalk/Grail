@@ -46,11 +46,11 @@ set compile_env: 1
 category: 'Python-Initialization'
 method: math
 initialize
-	self ___at___: #pi put: (Float @env0:pi).
-	self ___at___: #e put: (Float @env0:e).
-	self ___at___: #tau put: ((Float @env0:pi) ___times___: 2).
-	self ___at___: #inf put: PlusInfinity.
-	self ___at___: #nan put: PlusQuietNaN.
+	self @env0:at: #pi put: (Float @env0:pi).
+	self @env0:at: #e put: (Float @env0:e).
+	self @env0:at: #tau put: ((Float @env0:pi) @env0:* 2).
+	self @env0:at: #inf put: PlusInfinity.
+	self @env0:at: #nan put: PlusQuietNaN.
 %
 
 ! ===============================================================================
@@ -60,31 +60,31 @@ initialize
 category: 'Python-Mathematical Constants'
 method: math
 pi
-	^ self ___at___: #pi
+	^ self @env0:at: #pi
 %
 
 category: 'Python-Mathematical Constants'
 method: math
 e
-	^ self ___at___: #e
+	^ self @env0:at: #e
 %
 
 category: 'Python-Mathematical Constants'
 method: math
 tau
-	^ self ___at___: #tau
+	^ self @env0:at: #tau
 %
 
 category: 'Python-Mathematical Constants'
 method: math
 inf
-	^ self ___at___: #inf
+	^ self @env0:at: #inf
 %
 
 category: 'Python-Mathematical Constants'
 method: math
 nan
-	^ self ___at___: #nan
+	^ self @env0:at: #nan
 %
 
 ! ===============================================================================
@@ -94,13 +94,13 @@ nan
 category: 'Python-Trigonometric Functions'
 method: math
 sin: x
-	^ x ___sin___
+	^ x @env0:sin
 %
 
 category: 'Python-Trigonometric Functions'
 method: math
 cos: x
-	^ x ___cos___
+	^ x @env0:cos
 %
 
 category: 'Python-Trigonometric Functions'
@@ -130,7 +130,7 @@ atan: x
 category: 'Python-Trigonometric Functions'
 method: math
 atan2: y _: x
-	^ (y ___asFloat___) @env0:arcTan2: (x ___asFloat___)
+	^ (y @env0:asFloat) @env0:arcTan2: (x @env0:asFloat)
 %
 
 ! ===============================================================================
@@ -140,37 +140,37 @@ atan2: y _: x
 category: 'Python-Hyperbolic Functions'
 method: math
 sinh: x
-	^ (x ___asFloat___) @env0:sinh
+	^ (x @env0:asFloat) @env0:sinh
 %
 
 category: 'Python-Hyperbolic Functions'
 method: math
 cosh: x
-	^ (x ___asFloat___) @env0:cosh
+	^ (x @env0:asFloat) @env0:cosh
 %
 
 category: 'Python-Hyperbolic Functions'
 method: math
 tanh: x
-	^ (x ___asFloat___) @env0:tanh
+	^ (x @env0:asFloat) @env0:tanh
 %
 
 category: 'Python-Hyperbolic Functions'
 method: math
 asinh: x
-	^ (x ___asFloat___) @env0:arcSinh
+	^ (x @env0:asFloat) @env0:arcSinh
 %
 
 category: 'Python-Hyperbolic Functions'
 method: math
 acosh: x
-	^ (x ___asFloat___) @env0:arcCosh
+	^ (x @env0:asFloat) @env0:arcCosh
 %
 
 category: 'Python-Hyperbolic Functions'
 method: math
 atanh: x
-	^ (x ___asFloat___) @env0:arcTanh
+	^ (x @env0:asFloat) @env0:arcTanh
 %
 
 ! ===============================================================================
@@ -194,34 +194,34 @@ category: 'Python-Exponential and Logarithmic'
 method: math
 log: x _: base
 	"math.log(x, base) — logarithm of x to the given base."
-	^ (x ___ln___) ___divide___: (base ___ln___)
+	^ (x @env0:ln) @env0:/ (base @env0:ln)
 %
 
 category: 'Python-Exponential and Logarithmic'
 method: math
 log10: x
-	^ (x ___asFloat___) @env0:log10
+	^ (x @env0:asFloat) @env0:log10
 %
 
 category: 'Python-Exponential and Logarithmic'
 method: math
 log2: x
 	| ln2 |
-	ln2 := 2 ___ln___.
-	^ (x ___ln___) ___divide___: ln2
+	ln2 := 2 @env0:ln.
+	^ (x @env0:ln) @env0:/ ln2
 %
 
 category: 'Python-Exponential and Logarithmic'
 method: math
 sqrt: x
-	^ x ___sqrt___
+	^ x @env0:sqrt
 %
 
 category: 'Python-Exponential and Logarithmic'
 method: math
 pow: x _: y
 	"math.pow(x, y) — x raised to the power y (as float)."
-	^ (x ___asFloat___) ___raisedTo___: (y ___asFloat___)
+	^ (x @env0:asFloat) @env0:raisedTo: (y @env0:asFloat)
 %
 
 ! ===============================================================================
@@ -231,27 +231,27 @@ pow: x _: y
 category: 'Python-Rounding'
 method: math
 ceil: x
-	^ (x ___asFloat___) @env0:ceiling
+	^ (x @env0:asFloat) @env0:ceiling
 %
 
 category: 'Python-Rounding'
 method: math
 floor: x
-	^ (x ___asFloat___) @env0:floor
+	^ (x @env0:asFloat) @env0:floor
 %
 
 category: 'Python-Rounding'
 method: math
 trunc: x
-	^ (x ___asFloat___) ___truncated___
+	^ (x @env0:asFloat) @env0:truncated
 %
 
 category: 'Python-Rounding'
 method: math
 factorial: n
 	| nInt |
-	nInt := n ___asInteger___.
-	(nInt ___lt___: 0) ifTrue: [
+	nInt := n @env0:asInteger.
+	(nInt @env0:< 0) ifTrue: [
 		ValueError ___signal___: 'factorial() not defined for negative values'
 	].
 	^ nInt @env0:factorial
@@ -260,19 +260,19 @@ factorial: n
 category: 'Python-Number Theory'
 method: math
 gcd: a _: b
-	^ (a ___asInteger___) @env0:gcd: (b ___asInteger___)
+	^ (a @env0:asInteger) @env0:gcd: (b @env0:asInteger)
 %
 
 category: 'Python-Number Theory'
 method: math
 lcm: a _: b
-	^ (a ___asInteger___) @env0:lcm: (b ___asInteger___)
+	^ (a @env0:asInteger) @env0:lcm: (b @env0:asInteger)
 %
 
 category: 'Python-Floating Point Functions'
 method: math
 fabs: x
-	^ (x ___asFloat___) ___abs___
+	^ (x @env0:asFloat) @env0:abs
 %
 
 ! ===============================================================================
@@ -283,20 +283,20 @@ category: 'Python-Classification'
 method: math
 isfinite: x
 	| kind |
-	kind := (x ___asFloat___) @env0:_getKind.
-	^ (kind ___le___: 2) or: [kind ___eq___: 4]
+	kind := (x @env0:asFloat) @env0:_getKind.
+	^ (kind @env0:<= 2) or: [kind @env0:= 4]
 %
 
 category: 'Python-Classification'
 method: math
 isinf: x
-	^ ((x ___asFloat___) @env0:_getKind) ___eq___: 3
+	^ ((x @env0:asFloat) @env0:_getKind) @env0:= 3
 %
 
 category: 'Python-Classification'
 method: math
 isnan: x
-	^ (x ___asFloat___) @env0:_isNaN
+	^ (x @env0:asFloat) @env0:_isNaN
 %
 
 ! ===============================================================================
@@ -306,13 +306,13 @@ isnan: x
 category: 'Python-Angle Conversion'
 method: math
 degrees: x
-	^ (x ___asFloat___) @env0:radiansToDegrees
+	^ (x @env0:asFloat) @env0:radiansToDegrees
 %
 
 category: 'Python-Angle Conversion'
 method: math
 radians: x
-	^ (x ___asFloat___) @env0:degreesToRadians
+	^ (x @env0:asFloat) @env0:degreesToRadians
 %
 
 set compile_env: 0
