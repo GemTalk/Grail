@@ -530,6 +530,16 @@ _print: positional kw: kwargs
 
 category: 'Python-Built-in Functions'
 method: builtins
+_exit: positional kw: kwargs
+	"Python builtin exit() — varargs fast path. Alias for quit(); in
+	CPython both are added by site.py as instances of `_sitebuiltins.Quitter`
+	and are interchangeable. Ignores any positional/keyword args."
+
+	^ ExitClientError @env0:signal: 'exit()' status: 0
+%
+
+category: 'Python-Built-in Functions'
+method: builtins
 _quit: positional kw: kwargs
 	"Python builtin quit() — varargs fast path. Exits the interpreter
 	cleanly. Ignores any positional/keyword args."

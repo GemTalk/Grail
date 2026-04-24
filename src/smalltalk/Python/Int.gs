@@ -55,17 +55,13 @@ __new__: obj
 
 	"Try to convert from string"
 	(obj @env0:isKindOf: Unicode7) ifTrue: [
-		^ ([:block :handler |
-			block @env0:on: Error do: handler
-		] value: [
-			(obj @env0:asNumber) @env0:truncated
-		] value: [:ex |
-			self @env0:error: 'ValueError: invalid literal for int()'
-		])
+		^ [ (obj @env0:asNumber) @env0:truncated ]
+			@env0:on: Error
+			do: [:ex | ValueError @env0:signal: 'invalid literal for int()']
 	].
 
 	"Otherwise, error"
-	self @env0:error: 'TypeError: int() argument must be a string or a number'
+	TypeError @env0:signal: 'int() argument must be a string or a number'
 %
 
 category: 'Python-Initialization'
@@ -77,7 +73,7 @@ __new__: obj _: base
 	| str baseInt |
 	"base must be an integer"
 	(base @env0:isKindOf: int) ifFalse: [
-		self @env0:error: 'TypeError: int() base must be an integer'
+		TypeError @env0:signal: 'int() base must be an integer'
 	].
 
 	baseInt := base.
@@ -88,20 +84,18 @@ __new__: obj _: base
 			baseInt @env0:> 36
 		]
 	]) ifTrue: [
-		self @env0:error: 'ValueError: int() base must be >= 2 and <= 36, or 0'
+		ValueError @env0:signal: 'int() base must be >= 2 and <= 36, or 0'
 	].
 
 	"obj must be a string"
 	(obj @env0:isKindOf: Unicode7) ifFalse: [
-		self @env0:error: 'TypeError: int() can''t convert non-string with explicit base'
+		TypeError @env0:signal: 'int() can''t convert non-string with explicit base'
 	].
 
 	str := obj @env0:trimBoth.
 
 	"Parse the string with the given base"
-	^ ([:block :handler |
-		block @env0:on: Error do: handler
-	] value: [
+	^ [
 		baseInt @env0:= 0
 			ifTrue: [
 				"Base 0: auto-detect from prefix"
@@ -111,11 +105,9 @@ __new__: obj _: base
 				"Specific base"
 				int @env0:fromString: str radix: baseInt
 			]
-	] value: [:ex |
-		| msg |
-		msg := ('ValueError: invalid literal for int() with base ' @env0:, (baseInt @env0:printString)).
-		self @env0:error: msg
-	])
+	] @env0:on: Error do: [:ex |
+		ValueError @env0:signal: ('invalid literal for int() with base ' @env0:, (baseInt @env0:printString))
+	]
 %
 
 category: 'Python-Class Methods'
@@ -136,7 +128,7 @@ from_bytes: bytes _: byteorder _: signed
 	"Extract bytes - assuming bytes is a Python bytes object or similar"
 	bytesArray := bytes.
 	(bytesArray @env0:isKindOf: tuple) ifFalse: [
-		self @env0:error: 'TypeError: from_bytes() argument must be bytes-like'
+		TypeError @env0:signal: 'from_bytes() argument must be bytes-like'
 	].
 
 	isBigEndian := (byteorder @env0:= 'big').
@@ -749,7 +741,7 @@ to_bytes: length _: byteorder _: signed
 	"Handle negative numbers"
 	(val @env0:< 0) ifTrue: [
 		isSigned ifFalse: [
-			self @env0:error: 'OverflowError: can''t convert negative int to unsigned'
+			OverflowError @env0:signal: 'can''t convert negative int to unsigned'
 		].
 		"Two's complement"
 		val := ((1 @env0:bitShift: (numBytes @env0:* 8))
@@ -760,7 +752,7 @@ to_bytes: length _: byteorder _: signed
 	((val @env0:< 0) or: [
 		val @env0:>= (1 @env0:bitShift: (numBytes @env0:* 8))
 	]) ifTrue: [
-		self @env0:error: 'OverflowError: int too big to convert'
+		OverflowError @env0:signal: 'int too big to convert'
 	].
 
 	"Convert to bytes"

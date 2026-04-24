@@ -237,7 +237,7 @@ method: complex
 __ge__: other
 	"Complex numbers cannot be ordered - raise TypeError."
 
-	self error: 'TypeError: ''>='' not supported between instances of ''complex'' and ''complex'''
+	TypeError @env0:signal: '''>='' not supported between instances of ''complex'' and ''complex'''
 %
 
 category: 'Python-Serialization'
@@ -262,7 +262,7 @@ method: complex
 __gt__: other
 	"Complex numbers cannot be ordered - raise TypeError."
 
-	self error: 'TypeError: ''>'' not supported between instances of ''complex'' and ''complex'''
+	TypeError @env0:signal: '''>'' not supported between instances of ''complex'' and ''complex'''
 %
 
 category: 'Python-Initialization'
@@ -281,7 +281,7 @@ method: complex
 __le__: other
 	"Complex numbers cannot be ordered - raise TypeError."
 
-	self error: 'TypeError: ''<='' not supported between instances of ''complex'' and ''complex'''
+	TypeError @env0:signal: '''<='' not supported between instances of ''complex'' and ''complex'''
 %
 
 category: 'Python-Comparison'
@@ -289,7 +289,7 @@ method: complex
 __lt__: other
 	"Complex numbers cannot be ordered - raise TypeError."
 
-	self error: 'TypeError: ''<'' not supported between instances of ''complex'' and ''complex'''
+	TypeError @env0:signal: '''<'' not supported between instances of ''complex'' and ''complex'''
 %
 
 category: 'Python-Arithmetic'
@@ -423,7 +423,7 @@ __rpow__: other
 	"Right-hand power (other ** self).
 	This is complex and requires logarithms - stub for now."
 
-	self error: 'NotImplementedError: complex __rpow__ not yet implemented'
+	NotImplementedError @env0:signal: 'complex __rpow__ not yet implemented'
 %
 
 category: 'Python-Arithmetic'

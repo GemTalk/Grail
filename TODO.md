@@ -31,6 +31,24 @@ limitations that are not blockers but would improve completeness:
   `def` compiles to a Smalltalk block (closure), not a method. This is
   correct for Python closures that capture the enclosing scope.
 
+- [ ] **Comprehensions have no codegen** — `ListCompAst`, `DictCompAst`,
+  `SetCompAst`, `GeneratorExpAst`, and the helper `ComprehensionAst` parse
+  successfully but define no `printSmalltalkOn:`, so any comprehension
+  falls through to `AbstractNode`'s "abstract; subclasses must implement"
+  error at compile time. Need to emit the nested-loop-with-accumulator
+  form (list/dict/set init, then for/if scaffolding from `generators`,
+  then an append/at:put: of `elt`). `GeneratorExpAst` additionally needs
+  a generator/iterator protocol decision.
+
+- [ ] **Module dunders (`__name__`, `__file__`, etc.) not bound at module
+  scope** — bare references like `if __name__ == "__main__":` emit
+  `__name__` as a Smalltalk identifier and fail with
+  `CompileError 1001, undefined symbol __name__`. The attribute exists
+  (`module>>__name__` is set during import), so `NameAst`'s codegen needs
+  to resolve module-scope dunder reads to `((thisModule instance) @env1:__name__)`
+  (or special-case the small dunder set). Note from memory: NameAst
+  currently hardcodes `(builtins instance)` — this is the same area.
+
 - [ ] **`_sre.compile()` C integration incomplete** — `SrePattern`/`SreMatch`
   methods are converted to real arity-specialized methods, but the
   underlying `shimCall` path for `_sre.compile()` isn't wired up. See the

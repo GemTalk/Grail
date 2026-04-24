@@ -58,13 +58,9 @@ __new__: cls _: value
 	(value @env0:isKindOf: Fraction) ifTrue: [ ^ value ].
 
 	"Try to use the Smalltalk asFraction conversion"
-	^ ([:block :handler |
-		block @env0:on: Error do: handler
-	] value: [
-		value @env0:asFraction
-	] value: [:ex |
-		self @env0:error: 'TypeError: cannot convert to Fraction'
-	])
+	^ [ value @env0:asFraction ]
+		@env0:on: Error
+		do: [:ex | TypeError @env0:signal: 'cannot convert to Fraction']
 %
 
 category: 'Python-Class Methods'

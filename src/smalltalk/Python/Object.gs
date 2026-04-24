@@ -119,7 +119,7 @@ __delattr__: name
 	For base object, attributes are read-only."
 
 	"Python's object doesn't allow attribute deletion"
-	self @env0:error: 'AttributeError: readonly attribute'
+	AttributeError @env0:signal: 'readonly attribute'
 %
 
 category: 'Python-Attribute Access'
@@ -293,7 +293,7 @@ __setattr__: name _: value
 	For base object, attributes are read-only."
 
 	"Python's object doesn't allow attribute setting"
-	self @env0:error: 'AttributeError: readonly attribute'
+	AttributeError @env0:signal: 'readonly attribute'
 %
 
 category: 'Python-Other'

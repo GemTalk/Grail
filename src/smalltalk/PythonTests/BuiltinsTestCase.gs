@@ -737,6 +737,20 @@ testPowWithModulo
 
 category: 'Tests - System Functions'
 method: BuiltinsTestCase
+testExit
+	"Test exit() — Phase-4 varargs fast-path alias for quit(). The
+	implementation lives at `builtins>>_exit:kw:`. In CPython both quit
+	and exit come from site.py as instances of `_sitebuiltins.Quitter`."
+
+	| b exitMethod |
+	b := builtins ___instance___.
+	exitMethod := BoundMethod @env1:receiver: b selector: #exit.
+	self assert: exitMethod notNil.
+	self assert: (b @env1:callable: exitMethod)
+%
+
+category: 'Tests - System Functions'
+method: BuiltinsTestCase
 testQuit
 	"Test quit() — Phase-4 varargs fast-path. The implementation lives at
 	`builtins>>_quit:kw:`. The unary `quit` getter is gone in Phase 4c;

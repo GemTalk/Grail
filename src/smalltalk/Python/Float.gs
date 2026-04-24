@@ -58,7 +58,7 @@ __new__: obj
 	].
 
 	"Otherwise, error"
-	self @env0:error: 'TypeError: float() argument must be a string or a number'
+	TypeError @env0:signal: 'float() argument must be a string or a number'
 %
 
 category: 'Python-Initialization'
@@ -81,13 +81,9 @@ __new__fromString: str
 	(trimmed @env0:= '-nan') ifTrue: [ ^ MinusQuietNaN ].
 
 	"Try to parse as number"
-	^ ([:block :handler |
-		block @env0:on: Error do: handler
-	] value: [
-		(trimmed @env0:asNumber) @env0:asFloat
-	] value: [:ex |
-		self @env0:error: ('ValueError: could not convert string to float: ''' @env0:, str)
-	])
+	^ [ (trimmed @env0:asNumber) @env0:asFloat ]
+		@env0:on: Error
+		do: [:ex | ValueError @env0:signal: ('could not convert string to float: ''' @env0:, str)]
 %
 
 category: 'Python-Class Methods'
@@ -123,7 +119,7 @@ fromhex: hexString
 
 	hasP ifTrue: [
 		"Implementation simplified - full hex float parsing is complex"
-		self @env0:error: 'NotImplementedError: fromhex with exponent not fully implemented'
+		NotImplementedError @env0:signal: 'fromhex with exponent not fully implemented'
 	].
 
 	"Parse hex value (simplified)"
@@ -308,7 +304,7 @@ __pow__: other _: modulo
 	"Raise self to the power of other, modulo modulo.
 	Not supported for floats."
 
-	self @env0:error: 'TypeError: pow() 3rd argument not allowed for float'
+	TypeError @env0:signal: 'pow() 3rd argument not allowed for float'
 %
 
 category: 'Python-String Representation'

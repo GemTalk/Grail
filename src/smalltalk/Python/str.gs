@@ -401,7 +401,7 @@ index: sub
 	| idx |
 	idx := self find: sub.
 	(idx @env0:= -1) ifTrue: [
-		self @env0:error: 'ValueError: substring not found'
+		ValueError @env0:signal: 'substring not found'
 	].
 	^ idx
 %
@@ -753,7 +753,7 @@ rindex: sub
 	| idx |
 	idx := self rfind: sub.
 	(idx @env0:= -1) ifTrue: [
-		self @env0:error: 'ValueError: substring not found'
+		ValueError @env0:signal: 'substring not found'
 	].
 	^ idx
 %
