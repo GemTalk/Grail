@@ -1,12 +1,22 @@
 ! ------------------- Superclass check
 run
-frozenset ifNil: [self error: 'frozenset is not defined. Check file ordering.'].
+Set ifNil: [self error: 'Set is not defined.'].
 %
 
-! ------- set class (Python 'set' type - mutable set)
+! ===============================================================================
+! set class (Python 'set' type - mutable unordered collection)
+! ===============================================================================
+! Sibling of frozenset; both are direct subclasses of GemStone's Set.
+! Shared read-only and result-creating methods live on Set itself
+! (see SetProtocol.gs); this file adds set-specific overrides (__hash__
+! raising TypeError, __repr__ formatting), mutation methods, and the
+! in-place set operators.
+! ===============================================================================
+
+! ------- set class definition
 expectvalue /Class
 doit
-frozenset subclass: 'set'
+Set subclass: 'set'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -18,19 +28,14 @@ frozenset subclass: 'set'
 expectvalue /Class
 doit
 set comment:
-'Python set type - mutable unordered collection of unique hashable elements.
+'Python set type - mutable, unordered collection of unique hashable elements.
+A sibling of `frozenset` (both subclasses of GemStone Set); neither inherits
+from the other, matching Python.
 
-This is the mutable variant of frozenset. It inherits all methods from Set
-(which implements Python''s frozenset type) but allows mutation through add,
-remove, discard, pop, clear, and update methods.
-
-Unlike frozenset (Set), set instances:
-- Can be modified in place
-- Are not hashable (cannot be used as dict keys or set elements)
-- Support in-place set operations (&=, |=, -=, ^=)
-
-Set uses equality-based comparison (via __eq__ and __hash__) for membership
-testing, not identity-based comparison.
+Unlike frozenset, set instances:
+- Can be modified in place via add, remove, discard, pop, clear, update
+- Are not hashable (cannot be dict keys or set elements)
+- Support in-place set operators (&=, |=, -=, ^=)
 '
 %
 
@@ -39,23 +44,7 @@ doit
 set category: 'Collections-Unordered'
 %
 
-! ===============================================================================
-! set Methods (Python 'set' type - mutable set)
-! ===============================================================================
-! This file contains Python method implementations for the set class.
-! set is a mutable unordered collection of unique hashable elements.
-!
-! set inherits from frozenset (Set). Most methods are inherited from frozenset.
-! This file contains:
-!   1. Overrides for methods that differ (e.g., __hash__, __repr__)
-!   2. Additional mutation methods (add, remove, discard, pop, clear, update, etc.)
-!   3. In-place set operation methods (__iand__, __ior__, __isub__, __ixor__)
-!
-! These methods are compiled with environmentId 2 (Python) to keep them separate
-! from the base Smalltalk methods (environmentId 0).
-! ===============================================================================
-
-! ------------------- Remove existing Python methods from set
+! ------------------- Remove existing methods
 expectvalue /Metaclass3
 doit
 set removeAllMethods: 1.
@@ -63,13 +52,6 @@ set class removeAllMethods: 1.
 %
 
 set compile_env: 1
-
-category: 'Python-Type'
-method: set
-__class__
-	"Return the Python type for set"
-	^ set
-%
 
 category: 'Python-Hashing'
 method: set
@@ -118,7 +100,7 @@ __ixor__: other
 category: 'Python-String Representation'
 method: set
 __repr__
-	"Return a string representation of the set: {item1, item2, ...}"
+	"Return '{a, b, c}' or 'set()' for the empty set."
 
 	| stream first size |
 	size := self @env0:size.
@@ -133,12 +115,8 @@ __repr__
 
 	first := true.
 	self @env0:do: [:each |
-		| reprStr |
-		first ifFalse: [
-			stream @env0:nextPutAll: ', '
-		].
-		reprStr := each @env1:__repr__.
-		stream @env0:nextPutAll: reprStr.
+		first ifFalse: [stream @env0:nextPutAll: ', '].
+		stream @env0:nextPutAll: each @env1:__repr__.
 		first := false
 	].
 
@@ -169,13 +147,13 @@ difference_update: other
 
 	| toRemove |
 	toRemove := list ___new___.
-	
+
 	self @env0:do: [:each |
-		(other __contains__: each) ifTrue: [
+		(other @env1:__contains__: each) ifTrue: [
 			toRemove @env0:add: each
 		]
 	].
-	
+
 	toRemove @env0:do: [:each |
 		self @env0:remove: each
 	]
@@ -201,13 +179,13 @@ intersection_update: other
 
 	| toRemove |
 	toRemove := list ___new___.
-	
+
 	self @env0:do: [:each |
-		(other __contains__: each) ifFalse: [
+		(other @env1:__contains__: each) ifFalse: [
 			toRemove @env0:add: each
 		]
 	].
-	
+
 	toRemove @env0:do: [:each |
 		self @env0:remove: each
 	]
@@ -249,7 +227,7 @@ remove: item
 			^ nil
 		]
 	].
-	
+
 	removed ifFalse: [
 		KeyError ___signal___: item
 	]
@@ -266,14 +244,14 @@ symmetric_difference_update: other
 
 	"Find elements in self that are also in other (to remove)"
 	self @env0:do: [:each |
-		(other __contains__: each) ifTrue: [
+		(other @env1:__contains__: each) ifTrue: [
 			toRemove @env0:add: each
 		]
 	].
 
 	"Find elements in other that are not in self (to add)"
 	other @env0:do: [:each |
-		(self __contains__: each) ifFalse: [
+		(self @env1:__contains__: each) ifFalse: [
 			toAdd @env0:add: each
 		]
 	].

@@ -99,7 +99,7 @@ test__eq__
 	lst1 := OrderedCollection withAll: #(1 2 3).
 	lst2 := OrderedCollection withAll: #(1 2 3).
 	lst3 := OrderedCollection withAll: #(1 2 4).
-	tup := InvariantArray withAll: #(1 2 3).
+	tup := tuple withAll: #(1 2 3).
 	
 	"Same contents"
 	self assert: (lst1 @env1:__eq__: lst2).

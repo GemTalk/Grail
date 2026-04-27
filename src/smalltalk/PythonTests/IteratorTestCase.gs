@@ -202,10 +202,7 @@ testFrozensetIteratorBasicIteration
 	"Test basic iteration over a frozenset"
 
 	| fs iter items |
-	fs := frozenset new.
-	fs add: 1.
-	fs add: 2.
-	fs add: 3.
+	fs := frozenset withAll: #(1 2 3).
 
 	iter := fs @env1:__iter__.
 	items := list new.
@@ -266,8 +263,7 @@ testIteratorTypes
 	rng := range from: 0 to: 2 by: 1.
 	s := set new.
 	s add: 1.
-	fs := frozenset new.
-	fs add: 1.
+	fs := frozenset withAll: #(1).
 	d := dict new.
 	d @env1:__setitem__: 'a' _: 1.
 

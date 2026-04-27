@@ -20,7 +20,7 @@ doit
 tuple_iterator comment:
 'Python tuple_iterator type.
 
-An iterator over a tuple (InvariantArray). Created by calling iter() on a tuple.
+An iterator over a tuple. Created by calling iter() on a tuple.
 
 Instance variables:
   collection - the tuple being iterated over

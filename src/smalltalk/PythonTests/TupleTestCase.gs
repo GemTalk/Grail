@@ -22,9 +22,10 @@ TupleTestCase category: 'SUnit'
 %
 
 ! ===============================================================================
-! TupleTestCase - Tests for Python tuple (InvariantArray)
+! TupleTestCase - Tests for Python tuple
 ! ===============================================================================
-! This file contains tests for Python's tuple type implemented as InvariantArray.
+! This file contains tests for Python's tuple type (an Array subclass whose
+! instances are frozen via immediateInvariant by every constructor).
 ! Tests cover shared sequence methods and tuple-specific immutability/hashing.
 ! ===============================================================================
 
@@ -44,8 +45,8 @@ test__add__
 	"Test tuple.__add__(other) - concatenation"
 
 	| tup1 tup2 result |
-	tup1 := InvariantArray withAll: #(1 2).
-	tup2 := InvariantArray withAll: #(3 4).
+	tup1 := tuple withAll: #(1 2).
+	tup2 := tuple withAll: #(3 4).
 	
 	result := tup1 @env1:__add__: tup2.
 	
@@ -64,7 +65,7 @@ test__contains__
 	"Test tuple.__contains__(item)"
 
 	| tup |
-	tup := InvariantArray withAll: #(1 2 3).
+	tup := tuple withAll: #(1 2 3).
 	
 	self assert: (tup @env1:__contains__: 2).
 	self deny: (tup @env1:__contains__: 4).
@@ -76,7 +77,7 @@ test__delitem__RaisesError
 	"Test that tuple.__delitem__ raises TypeError (tuples are immutable)"
 
 	| tup |
-	tup := InvariantArray withAll: #(10 20 30).
+	tup := tuple withAll: #(10 20 30).
 	
 	self should: [tup @env1:__delitem__: 0] raise: TypeError.
 %
@@ -87,9 +88,9 @@ test__eq__
 	"Test tuple.__eq__(other)"
 
 	| tup1 tup2 tup3 lst |
-	tup1 := InvariantArray withAll: #(1 2 3).
-	tup2 := InvariantArray withAll: #(1 2 3).
-	tup3 := InvariantArray withAll: #(1 2 4).
+	tup1 := tuple withAll: #(1 2 3).
+	tup2 := tuple withAll: #(1 2 3).
+	tup3 := tuple withAll: #(1 2 4).
 	lst := OrderedCollection withAll: #(1 2 3).
 	
 	"Same contents"
@@ -108,7 +109,7 @@ test__getitem__
 	"Test tuple.__getitem__(index)"
 
 	| tup |
-	tup := InvariantArray withAll: #(10 20 30 40 50).
+	tup := tuple withAll: #(10 20 30 40 50).
 	
 	"Positive indices"
 	self assert: (tup @env1:__getitem__: 0) equals: 10.
@@ -130,7 +131,7 @@ test__hash__
 	"Test tuple.__hash__() - tuples are hashable"
 
 	| tup hash |
-	tup := InvariantArray withAll: #(1 2 3).
+	tup := tuple withAll: #(1 2 3).
 
 	hash := tup @env1:__hash__.
 
@@ -144,10 +145,10 @@ test__len__
 	"Test tuple.__len__()"
 
 	| tup |
-	tup := InvariantArray new.
+	tup := tuple new.
 	self assert: tup size equals: 0.
 	
-	tup := InvariantArray withAll: #(1 2 3).
+	tup := tuple withAll: #(1 2 3).
 	self assert: tup size equals: 3.
 %
 
@@ -157,7 +158,7 @@ test__mul__
 	"Test tuple.__mul__(n) - repetition"
 
 	| tup result |
-	tup := InvariantArray withAll: #(1 2).
+	tup := tuple withAll: #(1 2).
 
 	result := tup @env1:__mul__: 3.
 
@@ -178,18 +179,18 @@ test__repr__
 	| tup result |
 
 	"Regular tuple"
-	tup := InvariantArray withAll: #(1 2 3).
+	tup := tuple withAll: #(1 2 3).
 	result := tup @env1:__repr__.
 	self assert: (result includesString: '(').
 	self assert: (result includesString: ')').
 
 	"Single element tuple (should have trailing comma)"
-	tup := InvariantArray withAll: #(1).
+	tup := tuple withAll: #(1).
 	result := tup @env1:__repr__.
 	self assert: (result includesString: ',').
 
 	"Empty tuple"
-	tup := InvariantArray new.
+	tup := tuple new.
 	result := tup @env1:__repr__.
 	self assert: result equals: '()'.
 %
@@ -200,7 +201,7 @@ test__setitem__RaisesError
 	"Test that tuple.__setitem__ raises TypeError (tuples are immutable)"
 
 	| tup |
-	tup := InvariantArray withAll: #(10 20 30).
+	tup := tuple withAll: #(10 20 30).
 	
 	self should: [tup @env1:__setitem__: 0 _: 100] raise: TypeError.
 %
@@ -211,7 +212,7 @@ testCount
 	"Test tuple.count(value)"
 
 	| tup result |
-	tup := InvariantArray withAll: #(1 2 2 3 2).
+	tup := tuple withAll: #(1 2 2 3 2).
 
 	result := tup @env1:count: 2.
 	self assert: result equals: 3.
@@ -227,7 +228,7 @@ testEvalEmptyTuple
 
 	| result |
 	result := self eval: '()'.
-	self assert: (result isKindOf: InvariantArray).
+	self assert: (result isKindOf: tuple).
 	self assert: result size equals: 0.
 %
 
@@ -278,7 +279,7 @@ testEvalTupleLiteral
 
 	| result |
 	result := self eval: '(1, 2, 3)'.
-	self assert: (result isKindOf: InvariantArray).
+	self assert: (result isKindOf: tuple).
 	self assert: result size equals: 3.
 	self assert: (result @env1:__getitem__: 0) equals: 1.
 	self assert: (result @env1:__getitem__: 2) equals: 3.
@@ -300,7 +301,7 @@ testIndex
 	"Test tuple.index(value)"
 
 	| tup result |
-	tup := InvariantArray withAll: #(1 2 3 2).
+	tup := tuple withAll: #(1 2 3 2).
 
 	"Find first occurrence"
 	result := tup @env1:index: 2.

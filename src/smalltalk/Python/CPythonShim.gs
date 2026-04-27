@@ -241,8 +241,10 @@ initTypeAddresses
 	typeAddresses at: OrderedCollection put: (typeAddresses at: #list).
 	typeAddresses at: KeyValueDictionary put: (typeAddresses at: #dict).
 	typeAddresses at: IdentityKeyValueDictionary put: (typeAddresses at: #dict).
-	typeAddresses at: Array put: (typeAddresses at: #tuple).
-	typeAddresses at: InvariantArray put: (typeAddresses at: #tuple).
+	"Map Array and all subclasses (including the tuple class) to the tuple type."
+	addr := typeAddresses at: #tuple.
+	typeAddresses at: Array put: addr.
+	Array allSubclasses do: [:each | typeAddresses at: each put: addr].
 	"Patch singletons (created before types were known)"
 	noneWrapper int64At: 8 put: (typeAddresses at: UndefinedObject).
 	(valueToPyObject at: true) int64At: 8 put: (typeAddresses at: Boolean).

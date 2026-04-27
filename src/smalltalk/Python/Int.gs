@@ -755,19 +755,18 @@ to_bytes: length _: byteorder _: signed
 		OverflowError @env0:signal: 'int too big to convert'
 	].
 
-	"Convert to bytes"
-	result := tuple ___new___: numBytes.
-	1 @env0:to: numBytes do: [:i |
-		| byteVal idx |
-		byteVal := (val @env0:bitAnd: 16rFF).
-		idx := isBigEndian
-			ifTrue: [(numBytes @env0:- (i @env0:- 1))]
-			ifFalse: [i].
-		result @env0:at: idx put: byteVal.
-		val := val @env0:bitShift: -8.
-	].
-
-	^ result
+	"Convert to bytes - #'new:fill:' freezes it"
+	^ tuple @env0:new: numBytes fill: [:t |
+		1 @env0:to: numBytes do: [:i |
+			| byteVal idx |
+			byteVal := (val @env0:bitAnd: 16rFF).
+			idx := isBigEndian
+				ifTrue: [(numBytes @env0:- (i @env0:- 1))]
+				ifFalse: [i].
+			t @env0:at: idx put: byteVal.
+			val := val @env0:bitShift: -8.
+		].
+	]
 %
 
 set compile_env: 0
