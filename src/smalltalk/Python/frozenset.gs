@@ -45,8 +45,8 @@ __eq__: other
 	otherClass := other @env0:class.
 	
 	"Check if other is a set or frozenset"
-	((otherClass @env0:= frozenset) or: [
-		otherClass @env0:= set
+	((otherClass == frozenset) or: [
+		otherClass == set
 	]) ifFalse: [^ false].
 	
 	"Compare using Set's equality"

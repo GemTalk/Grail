@@ -124,7 +124,7 @@ __repr__
 	size := self @env0:size.
 
 	"Handle empty set specially"
-	(size @env0:= 0) ifTrue: [
+	(size == 0) ifTrue: [
 		^ 'set()'
 	].
 

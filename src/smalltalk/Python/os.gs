@@ -234,7 +234,7 @@ _listdir: positional kw: kwargs
 		(each @env0:isKindOf: String) ifFalse: [decoded := each @env0:asUnicodeString].
 		reversedPath := decoded @env0:reverse.
 		index := reversedPath @env0:findString: '/' startingAt: 1.
-		(index @env0:= 0) ifFalse: [
+		(index == 0) ifFalse: [
 			lastSlashIndex := ((decoded @env0:size) @env0:- (index)) @env0:+ 1.
 			decoded := decoded @env0:copyFrom: (lastSlashIndex @env0:+ 1) to: decoded @env0:size
 		].

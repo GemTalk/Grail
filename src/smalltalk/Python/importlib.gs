@@ -650,7 +650,7 @@ ___import__: positional kw: kwargs
 	].
 
 	"Return the correct module per CPython semantics"
-	^ (isDotted and: [fromlist __len__ @env0:= 0])
+	^ (isDotted and: [fromlist __len__ == 0])
 		ifTrue: [self @env0:class lookupModule: (nameParts @env0:at: 1)]
 		ifFalse: [result]
 %

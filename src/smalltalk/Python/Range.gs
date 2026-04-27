@@ -100,15 +100,15 @@ __eq__: other
 
 	| otherClass selfSize otherSize selfStart otherStart selfStep otherStep |
 	otherClass := other @env0:class.
-	(otherClass @env0:= range) ifFalse: [ ^ false ].
+	(otherClass == range) ifFalse: [ ^ false ].
 
 	"Two ranges are equal if they produce the same sequence"
 	selfSize := self @env0:size.
 	otherSize := other @env0:size.
 
 	"Empty ranges are equal"
-	(selfSize @env0:= 0) ifTrue: [
-		^ otherSize @env0:= 0
+	(selfSize == 0) ifTrue: [
+		^ otherSize == 0
 	].
 
 	"Non-empty ranges must have same start, stop, and step"
@@ -227,7 +227,7 @@ __reversed__
 	size := self @env0:size.
 
 	"Empty range returns empty range"
-	(size @env0:= 0) ifTrue: [
+	(size == 0) ifTrue: [
 		^ range @env1:__new__: range _: 0 _: 0 _: 1
 	].
 

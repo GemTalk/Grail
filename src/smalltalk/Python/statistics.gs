@@ -79,7 +79,7 @@ mean: data
 	| d n |
 	d := self _toList: data.
 	n := d @env0:size.
-	(n @env0:= 0) ifTrue: [StatisticsError ___signal___: 'mean requires at least one data point'].
+	(n == 0) ifTrue: [StatisticsError ___signal___: 'mean requires at least one data point'].
 	^ (self _sum: d) @env0:/ n
 %
 
@@ -89,10 +89,10 @@ median: data
 	| d sorted n mid |
 	d := self _toList: data.
 	n := d @env0:size.
-	(n @env0:= 0) ifTrue: [StatisticsError ___signal___: 'median requires at least one data point'].
+	(n == 0) ifTrue: [StatisticsError ___signal___: 'median requires at least one data point'].
 	sorted := d @env0:asSortedCollection.
 	mid := (n @env0:+ 1) @env0:// 2.
-	^ ((n @env0:\\ 2) @env0:= 1)
+	^ ((n @env0:\\ 2) == 1)
 		ifTrue: [sorted @env0:at: mid]
 		ifFalse: [((sorted @env0:at: mid) @env0:+ (sorted @env0:at: (mid @env0:+ 1))) @env0:/ 2.0]
 %
@@ -103,7 +103,7 @@ median_low: data
 	| d sorted n mid |
 	d := self _toList: data.
 	n := d @env0:size.
-	(n @env0:= 0) ifTrue: [StatisticsError ___signal___: 'median_low requires at least one data point'].
+	(n == 0) ifTrue: [StatisticsError ___signal___: 'median_low requires at least one data point'].
 	sorted := d @env0:asSortedCollection.
 	mid := (n @env0:+ 1) @env0:// 2.
 	^ sorted @env0:at: mid
@@ -115,9 +115,9 @@ median_high: data
 	| d sorted n mid |
 	d := self _toList: data.
 	n := d @env0:size.
-	(n @env0:= 0) ifTrue: [StatisticsError ___signal___: 'median_high requires at least one data point'].
+	(n == 0) ifTrue: [StatisticsError ___signal___: 'median_high requires at least one data point'].
 	sorted := d @env0:asSortedCollection.
-	^ ((n @env0:\\ 2) @env0:= 1)
+	^ ((n @env0:\\ 2) == 1)
 		ifTrue: [sorted @env0:at: ((n @env0:+ 1) @env0:// 2)]
 		ifFalse: [sorted @env0:at: ((n @env0:// 2) @env0:+ 1)]
 %
@@ -127,7 +127,7 @@ method: statistics
 mode: data
 	| d counts maxCount modeValue |
 	d := self _toList: data.
-	(d @env0:size @env0:= 0) ifTrue: [StatisticsError ___signal___: 'mode requires at least one data point'].
+	(d @env0:size == 0) ifTrue: [StatisticsError ___signal___: 'mode requires at least one data point'].
 	counts := Dictionary ___new___.
 	d @env0:do: [:each |
 		| count |
@@ -146,7 +146,7 @@ method: statistics
 multimode: data
 	| d counts maxCount modes |
 	d := self _toList: data.
-	(d @env0:size @env0:= 0) ifTrue: [^ list ___new___].
+	(d @env0:size == 0) ifTrue: [^ list ___new___].
 	counts := Dictionary ___new___.
 	d @env0:do: [:each |
 		| count |
@@ -168,7 +168,7 @@ geometric_mean: data
 	| d n logSum |
 	d := self _toList: data.
 	n := d @env0:size.
-	(n @env0:= 0) ifTrue: [StatisticsError ___signal___: 'geometric_mean requires at least one data point'].
+	(n == 0) ifTrue: [StatisticsError ___signal___: 'geometric_mean requires at least one data point'].
 	logSum := 0.0.
 	d @env0:do: [:each |
 		| val |
@@ -259,7 +259,7 @@ _fmean: positional kw: kwargs
 	| data weights n total weightSum |
 	data := self _toList: (positional @env0:at: 1).
 	n := data @env0:size.
-	(n @env0:= 0) ifTrue: [StatisticsError ___signal___: 'fmean requires at least one data point'].
+	(n == 0) ifTrue: [StatisticsError ___signal___: 'fmean requires at least one data point'].
 	weights := (kwargs == nil) ifTrue: [nil] ifFalse: [kwargs @env0:at: #weights ifAbsent: [nil]].
 	weights == nil ifTrue: [
 		total := 0.0.
@@ -290,7 +290,7 @@ _harmonic_mean: positional kw: kwargs
 	| data weights n recipSum weightSum |
 	data := self _toList: (positional @env0:at: 1).
 	n := data @env0:size.
-	(n @env0:= 0) ifTrue: [StatisticsError ___signal___: 'harmonic_mean requires at least one data point'].
+	(n == 0) ifTrue: [StatisticsError ___signal___: 'harmonic_mean requires at least one data point'].
 	weights := (kwargs == nil) ifTrue: [nil] ifFalse: [kwargs @env0:at: #weights ifAbsent: [nil]].
 	weights == nil ifTrue: [
 		recipSum := 0.0.
@@ -405,7 +405,7 @@ _median_grouped: positional kw: kwargs
 	| data interval sorted n mid L cf freq |
 	data := self _toList: (positional @env0:at: 1).
 	n := data @env0:size.
-	(n @env0:= 0) ifTrue: [StatisticsError ___signal___: 'median_grouped requires at least one data point'].
+	(n == 0) ifTrue: [StatisticsError ___signal___: 'median_grouped requires at least one data point'].
 	interval := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
 		ifFalse: [(kwargs == nil) ifTrue: [1.0] ifFalse: [kwargs @env0:at: #interval ifAbsent: [1.0]]].

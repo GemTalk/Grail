@@ -83,7 +83,7 @@ __new__: cls _: source
 	].
 
 	"If source is a range, convert to bytes"
-	(sourceClass @env0:= Interval) ifTrue: [
+	(sourceClass == Interval) ifTrue: [
 		| ba size |
 		size := source @env0:size.
 		ba := cls ___new___: size.
@@ -244,8 +244,8 @@ __add__: other
 	otherClass := other @env0:class.
 
 	"Can only concatenate with bytes or bytearray"
-	((otherClass @env0:= bytes) or: [
-		otherClass @env0:= bytearray
+	((otherClass == bytes) or: [
+		otherClass == bytearray
 	]) ifFalse: [
 		TypeError ___signal___: ('can''t concat bytes to ' @env0:, otherClass)
 	].
@@ -288,8 +288,8 @@ __eq__: other
 	otherClass := other @env0:class.
 
 	"Can only concatenate with bytes or bytearray"
-	((otherClass @env0:= bytes) or: [
-		otherClass @env0:= bytearray
+	((otherClass == bytes) or: [
+		otherClass == bytearray
 	]) ifFalse: [
 		^ false
 	].
@@ -408,10 +408,10 @@ __repr__
 			byte @env0:<= 126
 		]) ifTrue: [
 			"Special cases that need escaping"
-			(byte @env0:= 39) ifTrue: [  "single quote"
+			(byte == 39) ifTrue: [  "single quote"
 				result := result @env0:, '\'''
 			] ifFalse: [
-				(byte @env0:= 92) ifTrue: [  "backslash"
+				(byte == 92) ifTrue: [  "backslash"
 					result := result @env0:, '\\'
 				] ifFalse: [
 					| char |
@@ -423,7 +423,7 @@ __repr__
 			"Non-printable: use \xNN format"
 			| hex |
 			hex := byte @env0:printStringRadix: 16.
-			((hex @env0:size) @env0:= 1) ifTrue: [
+			((hex @env0:size) == 1) ifTrue: [
 				hex := '0' @env0:, hex
 			].
 			result := result @env0:, ('\x' @env0:, hex)
@@ -448,7 +448,7 @@ capitalize
 
 	| result size firstByte |
 	size := self @env0:size.
-	(size @env0:= 0) ifTrue: [
+	(size == 0) ifTrue: [
 		^ bytes ___new___
 	].
 
@@ -532,7 +532,7 @@ count: sub
 	mySize := self @env0:size.
 
 	"Empty sub always returns 0"
-	(subSize @env0:= 0) ifTrue: [
+	(subSize == 0) ifTrue: [
 		^ 0
 	].
 
@@ -628,7 +628,7 @@ endswith: suffix
 	suffixClass := suffix @env0:class.
 
 	"suffix must be bytes"
-	(suffixClass @env0:= bytes) ifFalse: [
+	(suffixClass == bytes) ifFalse: [
 		TypeError ___signal___: 'argument should be bytes'
 	].
 
@@ -675,7 +675,7 @@ expandtabs: tabsize
 		| byte |
 		byte := self @env0:at: i.
 
-		(byte @env0:= 9) ifTrue: [  "Tab"
+		(byte == 9) ifTrue: [  "Tab"
 			| spaces |
 			spaces := tabsize @env0:- (column @env0:\\ tabsize).
 			1 @env0:to: spaces do: [:j |
@@ -686,7 +686,7 @@ expandtabs: tabsize
 			].
 			column := column @env0:+ spaces
 		] ifFalse: [
-			(byte @env0:= 10) ifTrue: [  "Newline"
+			(byte == 10) ifTrue: [  "Newline"
 				| newByte |
 				newByte := bytes ___new___: 1.
 				newByte @env0:at: 1 put: byte.
@@ -739,7 +739,7 @@ find: sub
 	mySize := self @env0:size.
 
 	"Empty sub always returns 0"
-	(subSize @env0:= 0) ifTrue: [
+	(subSize == 0) ifTrue: [
 		^ 0
 	].
 
@@ -777,7 +777,7 @@ hex
 		byte := self @env0:at: i.
 		hexStr := byte @env0:printStringRadix: 16.
 		"Pad with leading zero if needed"
-		((hexStr @env0:size) @env0:= 1) ifTrue: [
+		((hexStr @env0:size) == 1) ifTrue: [
 			hexStr := '0' @env0:, hexStr
 		].
 		result := result @env0:, hexStr
@@ -792,7 +792,7 @@ index: sub
 	"Find first occurrence of sub, raise ValueError if not found"
 	| result |
 	result := self @env1:find: sub.
-	(result @env0:= -1) ifTrue: [
+	(result == -1) ifTrue: [
 		ValueError ___signal___: 'subsection not found'
 	].
 	^ result
@@ -806,7 +806,7 @@ isalnum
 	size := self @env0:size.
 
 	"Empty bytes returns False"
-	(size @env0:= 0) ifTrue: [
+	(size == 0) ifTrue: [
 		^ false
 	].
 
@@ -840,7 +840,7 @@ isalpha
 	size := self @env0:size.
 
 	"Empty bytes returns False"
-	(size @env0:= 0) ifTrue: [
+	(size == 0) ifTrue: [
 		^ false
 	].
 
@@ -888,7 +888,7 @@ isdigit
 	size := self @env0:size.
 
 	"Empty bytes returns False"
-	(size @env0:= 0) ifTrue: [
+	(size == 0) ifTrue: [
 		^ false
 	].
 
@@ -942,7 +942,7 @@ isspace
 	size := self @env0:size.
 
 	"Empty bytes returns False"
-	(size @env0:= 0) ifTrue: [
+	(size == 0) ifTrue: [
 		^ false
 	].
 
@@ -950,12 +950,12 @@ isspace
 		| byte |
 		byte := self @env0:at: i.
 		"Whitespace: space(32), tab(9), newline(10), carriage return(13), form feed(12), vertical tab(11)"
-		((byte @env0:= 32) or: [
-			(byte @env0:= 9) or: [
-				(byte @env0:= 10) or: [
-					(byte @env0:= 13) or: [
-						(byte @env0:= 12) or: [
-							byte @env0:= 11
+		((byte == 32) or: [
+			(byte == 9) or: [
+				(byte == 10) or: [
+					(byte == 13) or: [
+						(byte == 12) or: [
+							byte == 11
 						]
 					]
 				]
@@ -1046,8 +1046,8 @@ join: iterable
 	iterClass := iterable @env0:class.
 
 	"iterable must be list or tuple"
-		((iterClass @env0:= list) or: [
-		iterClass @env0:= tuple
+		((iterClass == list) or: [
+		iterClass == tuple
 	]) ifFalse: [
 		TypeError ___signal___: 'can only join an iterable'
 	].
@@ -1055,7 +1055,7 @@ join: iterable
 	parts := iterable.
 
 	"Empty iterable"
-	((parts @env0:size) @env0:= 0) ifTrue: [
+	((parts @env0:size) == 0) ifTrue: [
 		^ bytes ___new___
 	].
 
@@ -1158,7 +1158,7 @@ lstrip
 	"Remove leading whitespace bytes"
 	| start size result newSize |
 	size := self @env0:size.
-	(size @env0:= 0) ifTrue: [
+	(size == 0) ifTrue: [
 		^ bytes ___new___
 	].
 
@@ -1167,10 +1167,10 @@ lstrip
 	[(start @env0:<= size) and: [
 		| byte |
 		byte := self @env0:at: start.
-		(byte @env0:= 32) or: [
-			(byte @env0:= 9) or: [
-				(byte @env0:= 10) or: [
-					byte @env0:= 13
+		(byte == 32) or: [
+			(byte == 9) or: [
+				(byte == 10) or: [
+					byte == 13
 				]
 			]
 		]
@@ -1201,7 +1201,7 @@ partition: sep
 	idx := self @env1:find: sep.
 
 	"Not found - return (self, empty, empty)"
-	(idx @env0:= -1) ifTrue: [
+	(idx == -1) ifTrue: [
 		^ tuple @env0:with: (self @env0:copy) with: (bytes ___new___) with: (bytes ___new___)
 	].
 
@@ -1276,10 +1276,10 @@ replace: old _: new
 	newClass := new @env0:class.
 
 	"old and new must be bytes"
-	(oldClass @env0:= bytes) ifFalse: [
+	(oldClass == bytes) ifFalse: [
 		TypeError ___signal___: 'first argument must be bytes'
 	].
-	(newClass @env0:= bytes) ifFalse: [
+	(newClass == bytes) ifFalse: [
 		TypeError ___signal___: 'second argument must be bytes'
 	].
 
@@ -1288,7 +1288,7 @@ replace: old _: new
 	mySize := self @env0:size.
 
 	"Empty old not allowed"
-	(oldSize @env0:= 0) ifTrue: [
+	(oldSize == 0) ifTrue: [
 		^ self @env0:copy
 	].
 
@@ -1327,7 +1327,7 @@ rfind: sub
 	mySize := self @env0:size.
 
 	"Empty sub always returns size"
-	(subSize @env0:= 0) ifTrue: [
+	(subSize == 0) ifTrue: [
 		^ mySize
 	].
 
@@ -1358,7 +1358,7 @@ rindex: sub
 	"Find last occurrence of sub, raise ValueError if not found"
 	| result |
 	result := self @env1:rfind: sub.
-	(result @env0:= -1) ifTrue: [
+	(result == -1) ifTrue: [
 		ValueError ___signal___: 'subsection not found'
 	].
 	^ result
@@ -1401,7 +1401,7 @@ rpartition: sep
 	idx := self @env1:rfind: sep.
 
 	"Not found - return (empty, empty, self)"
-	(idx @env0:= -1) ifTrue: [
+	(idx == -1) ifTrue: [
 		^ tuple @env0:with: (bytes ___new___) with: (bytes ___new___) with: self @env0:copy
 	].
 
@@ -1448,7 +1448,7 @@ rsplit: sep _: maxsplit
 	mySize := self @env0:size.
 
 	"Empty separator not allowed"
-	(sepSize @env0:= 0) ifTrue: [
+	(sepSize == 0) ifTrue: [
 		ValueError ___signal___: 'empty separator'
 	].
 
@@ -1522,7 +1522,7 @@ rstrip
 	"Remove trailing whitespace bytes"
 	| end size result |
 	size := self @env0:size.
-	(size @env0:= 0) ifTrue: [
+	(size == 0) ifTrue: [
 		^ bytes ___new___
 	].
 
@@ -1531,10 +1531,10 @@ rstrip
 	[(end @env0:>= 1) and: [
 		| byte |
 		byte := self @env0:at: end.
-		(byte @env0:= 32) or: [
-			(byte @env0:= 9) or: [
-				(byte @env0:= 10) or: [
-					byte @env0:= 13
+		(byte == 32) or: [
+			(byte == 9) or: [
+				(byte == 10) or: [
+					byte == 13
 				]
 			]
 		]
@@ -1564,7 +1564,7 @@ split: sep
 	sepClass := sep @env0:class.
 
 	"sep must be bytes"
-	(sepClass @env0:= bytes) ifFalse: [
+	(sepClass == bytes) ifFalse: [
 		TypeError ___signal___: 'sep must be bytes'
 	].
 
@@ -1572,7 +1572,7 @@ split: sep
 	mySize := self @env0:size.
 
 	"Empty separator not allowed"
-	(sepSize @env0:= 0) ifTrue: [
+	(sepSize == 0) ifTrue: [
 		ValueError ___signal___: 'empty separator'
 	].
 
@@ -1636,7 +1636,7 @@ split: sep _: maxsplit
 	mySize := self @env0:size.
 
 	"Empty separator not allowed"
-	(sepSize @env0:= 0) ifTrue: [
+	(sepSize == 0) ifTrue: [
 		ValueError ___signal___: 'empty separator'
 	].
 
@@ -1710,17 +1710,17 @@ splitlines
 		byte := self @env0:at: i.
 
 		"Check for line endings"
-		(byte @env0:= 10) ifTrue: [  "LF"
+		(byte == 10) ifTrue: [  "LF"
 			parts append: currentPart.
 			currentPart := bytes ___new___.
 			i := i @env0:+ 1
 		] ifFalse: [
-			(byte @env0:= 13) ifTrue: [  "CR"
+			(byte == 13) ifTrue: [  "CR"
 				parts append: currentPart.
 				currentPart := bytes ___new___.
 				"Check for CRLF"
 				((i @env0:< size) and: [
-					(self @env0:at: (i @env0:+ 1)) @env0:= 10
+					(self @env0:at: (i @env0:+ 1)) == 10
 				]) ifTrue: [
 					i := i @env0:+ 2
 				] ifFalse: [
@@ -1753,7 +1753,7 @@ startswith: prefix
 	prefixClass := prefix @env0:class.
 
 	"prefix must be bytes"
-	(prefixClass @env0:= bytes) ifFalse: [
+	(prefixClass == bytes) ifFalse: [
 		TypeError ___signal___: 'argument should be bytes'
 	].
 
@@ -1785,7 +1785,7 @@ strip
 	| start end size result newSize |
 
 	size := self @env0:size.
-	(size @env0:= 0) ifTrue: [
+	(size == 0) ifTrue: [
 		^ bytes ___new___
 	].
 
@@ -1795,10 +1795,10 @@ strip
 		| byte |
 		byte := self @env0:at: start.
 		"Whitespace: space(32), tab(9), newline(10), carriage return(13)"
-		(byte @env0:= 32) or: [
-			(byte @env0:= 9) or: [
-				(byte @env0:= 10) or: [
-					byte @env0:= 13
+		(byte == 32) or: [
+			(byte == 9) or: [
+				(byte == 10) or: [
+					byte == 13
 				]
 			]
 		]
@@ -1816,10 +1816,10 @@ strip
 	[(end @env0:>= start) and: [
 		| byte |
 		byte := self @env0:at: end.
-		(byte @env0:= 32) or: [
-			(byte @env0:= 9) or: [
-				(byte @env0:= 10) or: [
-					byte @env0:= 13
+		(byte == 32) or: [
+			(byte == 9) or: [
+				(byte == 10) or: [
+					byte == 13
 				]
 			]
 		]
@@ -1925,7 +1925,7 @@ translate: table
 	mySize := self @env0:size.
 
 	"Table must be 256 bytes"
-	(tableSize @env0:= 256) ifFalse: [
+	(tableSize == 256) ifFalse: [
 		ValueError ___signal___: 'translation table must be 256 characters long'
 	].
 

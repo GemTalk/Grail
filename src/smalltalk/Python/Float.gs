@@ -97,11 +97,11 @@ fromhex: hexString
 
 	"Handle sign"
 	sign := 1.
-	((str @env0:at: 1) @env0:= $-) ifTrue: [
+	((str @env0:at: 1) == $-) ifTrue: [
 		sign := -1.
 		str := str @env0:copyFrom: 2 to: str @env0:size.
 	].
-	((str @env0:at: 1) @env0:= $+) ifTrue: [
+	((str @env0:at: 1) == $+) ifTrue: [
 		str := str @env0:copyFrom: 2 to: str @env0:size.
 	].
 
@@ -417,7 +417,7 @@ hex
 	].
 
 	"Check for infinity (kind == 3)"
-	(kind @env0:= 3) ifTrue: [
+	(kind == 3) ifTrue: [
 		^ ((self @env0:< 0)
 			ifTrue: ['-inf']
 			ifFalse: ['inf']) @env0:asUnicodeString

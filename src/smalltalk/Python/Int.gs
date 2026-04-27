@@ -79,7 +79,7 @@ __new__: obj _: base
 	baseInt := base.
 
 	"base must be 0 or 2-36"
-	((baseInt @env0:= 0) not and: [
+	((baseInt == 0) not and: [
 		(baseInt @env0:< 2) or: [
 			baseInt @env0:> 36
 		]
@@ -96,7 +96,7 @@ __new__: obj _: base
 
 	"Parse the string with the given base"
 	^ [
-		baseInt @env0:= 0
+		baseInt == 0
 			ifTrue: [
 				"Base 0: auto-detect from prefix"
 				(str @env0:asNumber) @env0:truncated
@@ -132,7 +132,7 @@ from_bytes: bytes _: byteorder _: signed
 	].
 
 	isBigEndian := (byteorder @env0:= 'big').
-	isSigned := (signed @env0:= true) or: [signed == true].
+	isSigned := (signed == true) or: [signed == true].
 
 	result := 0.
 	isBigEndian
@@ -647,7 +647,7 @@ bit_count
 	n := self @env0:abs.
 	count := 0.
 	[(n @env0:> 0)] whileTrue: [
-		((n @env0:bitAnd: 1) @env0:= 1) ifTrue: [
+		((n @env0:bitAnd: 1) == 1) ifTrue: [
 			count := (count @env0:+ 1).
 		].
 		n := n @env0:bitShift: -1.
@@ -735,7 +735,7 @@ to_bytes: length _: byteorder _: signed
 	| numBytes isBigEndian isSigned val result |
 	numBytes := length.
 	isBigEndian := (byteorder @env0:= 'big').
-	isSigned := (signed @env0:= true) or: [signed == true].
+	isSigned := (signed == true) or: [signed == true].
 	val := self.
 
 	"Handle negative numbers"
