@@ -173,6 +173,7 @@ run
 	at: #'copyreg' put: nil;
 	at: #'enum' put: nil;
 	at: #'fractions' put: nil;
+	at: #'frozenset' put: nil;
 	at: #'functools' put: nil;
 	at: #'dict_itemiterator' put: nil;
 	at: #'dict_keyiterator' put: nil;
@@ -203,6 +204,7 @@ run
 	at: #'string' put: nil;
 	at: #'string_formatter' put: nil;
 	at: #'sys' put: nil;
+	at: #'tuple' put: nil;
 	at: #'tuple_iterator' put: nil;
 	yourself.
 Transcript show: 'Forward references created for Python dictionary'.
@@ -475,13 +477,11 @@ run
 	at: #'Decimal'                    put: ScaledDecimal;
 	at: #'dict'                       put: KeyValueDictionary;
 	at: #'float'                      put: Float;
-	at: #'frozenset'                  put: Set;
 	at: #'int'                        put: Integer;
 	at: #'list'                       put: OrderedCollection;
 	at: #'object'                     put: Object;
 	at: #'range'                      put: Interval;
 	at: #'str'                        put: Unicode7;
-	at: #'tuple'                      put: InvariantArray;
 	yourself.
 Transcript show: 'Step 3 complete: Python type mappings created'.
 %
@@ -515,6 +515,7 @@ input src/smalltalk/Python/list_iterator.gs
 input src/smalltalk/Python/range_iterator.gs
 input src/smalltalk/Python/set_iterator.gs
 input src/smalltalk/Python/str_iterator.gs
+input src/smalltalk/Python/Tuple.gs
 input src/smalltalk/Python/tuple_iterator.gs
 input src/smalltalk/Python/builtins.gs
 input src/smalltalk/Python/copyreg.gs
@@ -642,6 +643,7 @@ input src/smalltalk/Python/Fraction.gs
 input src/smalltalk/Python/dict.gs
 input src/smalltalk/Python/ExecBlock.gs
 input src/smalltalk/Python/Float.gs
+input src/smalltalk/Python/SetProtocol.gs
 input src/smalltalk/Python/frozenset.gs
 input src/smalltalk/Python/Int.gs
 input src/smalltalk/Python/list.gs
@@ -650,7 +652,6 @@ input src/smalltalk/Python/Range.gs
 input src/smalltalk/Python/SequenceableCollection.gs
 input src/smalltalk/Python/set.gs
 input src/smalltalk/Python/str.gs
-input src/smalltalk/Python/Tuple.gs
 
 ! ------- Remove Python dictionary from SystemUser's symbol list
 run

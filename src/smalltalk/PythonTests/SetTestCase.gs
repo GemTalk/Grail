@@ -231,14 +231,18 @@ testSetDiscard
 
 category: 'Tests - Inheritance'
 method: SetTestCase
-testSetInheritsFromFrozenset
-	"Test that set inherits from frozenset"
+testSetAndFrozensetAreSiblings
+	"set and frozenset are siblings under GemStone Set, not parent/child.
+	This matches CPython, where isinstance distinguishes them."
 
-	| s |
+	| s fs |
 	s := set new.
+	fs := frozenset new.
 
-	self assert: (s isKindOf: frozenset).
-	self assert: (s isKindOf: set)
+	self assert: (s isKindOf: set).
+	self assert: (fs isKindOf: frozenset).
+	self deny: (s isKindOf: frozenset).
+	self deny: (fs isKindOf: set)
 %
 
 category: 'Tests - In-Place Operators'

@@ -96,10 +96,10 @@ method: TupleAst
 printSmalltalkOn: aStream
 
 	elts isEmpty ifTrue: [
-		aStream nextPutAll: '(InvariantArray perform: #new env: 0)'.
+		aStream nextPutAll: '(tuple perform: #new env: 0)'.
 		^self.
 	].
-	aStream nextPutAll: '(InvariantArray perform: #withAll: env: 0 withArguments: {{'.
+	aStream nextPutAll: '(tuple perform: #withAll: env: 0 withArguments: {{'.
 	elts doWithIndex: [:each :i |
 		i > 1 ifTrue: [aStream nextPutAll: '. '].
 		each printSmalltalkOn: aStream.

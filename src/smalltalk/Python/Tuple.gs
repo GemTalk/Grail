@@ -1,24 +1,181 @@
+! ------------------- Superclass check
+run
+Array ifNil: [self error: 'Array is not defined.'].
+%
+
 ! ===============================================================================
-! InvariantArray Methods (Python 'tuple' type)
+! tuple class (Python 'tuple' type - immutable sequence)
 ! ===============================================================================
-! This file contains Python method implementations for InvariantArray
-! to make it behave like Python's tuple type.
+! Implemented as a subclass of Array so that plain Smalltalk Arrays remain
+! mutable while tuple instances are frozen via immediateInvariant before
+! being returned by any class-side constructor. (InvariantArray is not
+! suitable here: its instances are only invariant after commit.)
 !
-! InvariantArray inherits shared sequence methods from SequenceableCollection.
-! This file adds tuple-specific methods (mainly __hash__ and immutability).
-!
-! These methods are compiled with environmentId 2 (Python) to keep them separate
-! from the base Smalltalk methods (environmentId 0).
+! Class-side instance creation methods are env:0 Smalltalk; the Python dunder
+! methods below are env:1.
 ! ===============================================================================
 
-! ------------------- Remove existing Python methods from tuple
+! ------- tuple class definition
+expectvalue /Class
+doit
+Array subclass: 'tuple'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+tuple comment:
+'Python tuple type - immutable sequence.
+
+Built-in immutable sequence. If no argument is given, the constructor returns
+an empty tuple. If iterable is specified the tuple is initialized from
+iterable''s items.
+
+Implemented as an Array subclass. All class-side constructors freeze the
+result via immediateInvariant before returning, so callers receive a fully
+immutable instance. The new: anInteger fill: aBlock builder supports the
+populate-then-freeze pattern.
+'
+%
+
+expectvalue /Class
+doit
+tuple category: 'Collections-Sequenceable'
+%
+
+! ------------------- Remove existing methods
 expectvalue /Metaclass3
 doit
 tuple removeAllMethods: 1.
 tuple class removeAllMethods: 1.
 %
 
+! ===============================================================================
+! Class-side instance creation (env:0 Smalltalk)
+! Each constructor freezes the result before returning.
+! ===============================================================================
+
+set compile_env: 0
+
+category: 'instance creation'
+classmethod: tuple
+new
+	"Return an empty, frozen tuple."
+
+	^ (self new: 0) immediateInvariant
+%
+
+category: 'instance creation'
+classmethod: tuple
+with: a
+
+	| inst |
+	inst := self new: 1.
+	inst at: 1 put: a.
+	^ inst immediateInvariant
+%
+
+category: 'instance creation'
+classmethod: tuple
+with: a with: b
+
+	| inst |
+	inst := self new: 2.
+	inst at: 1 put: a.
+	inst at: 2 put: b.
+	^ inst immediateInvariant
+%
+
+category: 'instance creation'
+classmethod: tuple
+with: a with: b with: c
+
+	| inst |
+	inst := self new: 3.
+	inst at: 1 put: a.
+	inst at: 2 put: b.
+	inst at: 3 put: c.
+	^ inst immediateInvariant
+%
+
+category: 'instance creation'
+classmethod: tuple
+with: a with: b with: c with: d
+
+	| inst |
+	inst := self new: 4.
+	inst at: 1 put: a.
+	inst at: 2 put: b.
+	inst at: 3 put: c.
+	inst at: 4 put: d.
+	^ inst immediateInvariant
+%
+
+category: 'instance creation'
+classmethod: tuple
+withAll: aCollection
+
+	| inst i |
+	inst := self new: aCollection size.
+	i := 1.
+	aCollection do: [:each |
+		inst at: i put: each.
+		i := i + 1.
+	].
+	^ inst immediateInvariant
+%
+
+category: 'instance creation'
+classmethod: tuple
+new: anInteger fill: aBlock
+	"Build a tuple of size anInteger by passing the mutable instance to
+	aBlock (which populates it via at:put:), then freeze and return.
+	Use this for the rare populate-then-freeze case where the elements
+	cannot be supplied as a single collection up front."
+
+	| inst |
+	inst := self new: anInteger.
+	aBlock value: inst.
+	^ inst immediateInvariant
+%
+
+! ===============================================================================
+! Python-level methods (env:1)
+! ===============================================================================
+
 set compile_env: 1
+
+category: 'Python-Sequence Operations'
+method: tuple
+__add__: other
+	"Concatenate two sequences. Returns a new (frozen) tuple."
+
+	| accumulator |
+	accumulator := OrderedCollection @env0:new.
+	accumulator @env0:addAll: self.
+	accumulator @env0:addAll: other.
+	^ tuple @env0:withAll: accumulator
+%
+
+category: 'Python-Sequence Operations'
+method: tuple
+__mul__: n
+	"Repeat the tuple n times. Returns a new (frozen) tuple.
+	Overrides the SequenceableCollection implementation, which builds the
+	result via species ___new___ + addAll: -- that path doesn't work for
+	tuples because the empty instance is already frozen."
+
+	| accumulator |
+	(n @env0:<= 0) ifTrue: [^ tuple @env0:new].
+	accumulator := OrderedCollection @env0:new.
+	n @env0:timesRepeat: [accumulator @env0:addAll: self].
+	^ tuple @env0:withAll: accumulator
+%
 
 category: 'Python-Sequence Protocol'
 method: tuple
