@@ -56,7 +56,7 @@ join: paths
 
 	| result sep size |
 	(paths @env0:isEmpty) ifTrue: [^ ''].
-	((paths @env0:size) @env0:= 1) ifTrue: [^ paths @env0:first].
+	((paths @env0:size) == 1) ifTrue: [^ paths @env0:first].
 	sep := '/'.
 	result := paths @env0:first.
 	size := paths @env0:size.
@@ -90,7 +90,7 @@ basename: path
 	(trimmedPath @env0:isEmpty) ifTrue: [^ sep].
 	reversedPath := trimmedPath @env0:reverse.
 	index := reversedPath @env0:findString: sep startingAt: 1.
-	(index @env0:= 0) ifTrue: [^ trimmedPath].
+	(index == 0) ifTrue: [^ trimmedPath].
 	lastIndex := ((trimmedPath @env0:size) @env0:- (index)) @env0:+ 1.
 	^ trimmedPath @env0:copyFrom: (lastIndex @env0:+ 1) to: trimmedPath @env0:size
 %
@@ -109,7 +109,7 @@ dirname: path
 	(trimmedPath @env0:isEmpty) ifTrue: [^ sep].
 	reversedPath := trimmedPath @env0:reverse.
 	index := reversedPath @env0:findString: sep startingAt: 1.
-	(index @env0:= 0) ifTrue: [^ '.'].
+	(index == 0) ifTrue: [^ '.'].
 	lastIndex := ((trimmedPath @env0:size) @env0:- (index)) @env0:+ 1.
 	(lastIndex == 1) ifTrue: [^ sep].
 	^ trimmedPath @env0:copyFrom: 1 to: (lastIndex @env0:- 1)
@@ -125,7 +125,7 @@ split: path
 	pathSize := path @env0:size.
 	reversedPath := path @env0:reverse.
 	index := reversedPath @env0:findString: sep startingAt: 1.
-	(index @env0:= 0) ifTrue: [^ tuple @env0:with: '' with: path].
+	(index == 0) ifTrue: [^ tuple @env0:with: '' with: path].
 	lastIndex := (pathSize @env0:- (index)) @env0:+ 1.
 	(lastIndex @env0:= pathSize) ifTrue: [
 		head := path @env0:copyFrom: 1 to: (lastIndex @env0:- 1).
@@ -146,15 +146,15 @@ splitext: path
 	pathSize := path @env0:size.
 	reversedPath := path @env0:reverse.
 	index := reversedPath @env0:findString: '.' startingAt: 1.
-	(index @env0:= 0) ifTrue: [^ tuple @env0:with: path with: ''].
+	(index == 0) ifTrue: [^ tuple @env0:with: path with: ''].
 	lastDotIndex := (pathSize @env0:- (index)) @env0:+ 1.
 	(lastDotIndex @env0:= pathSize) ifTrue: [^ tuple @env0:with: path with: ''].
 	"Check for path separator after dot"
 	index := reversedPath @env0:findString: '/' startingAt: 1.
-	(index @env0:= 0) ifTrue: [sepIndex := 0]
+	(index == 0) ifTrue: [sepIndex := 0]
 		ifFalse: [sepIndex := (pathSize @env0:- (index)) @env0:+ 1].
 	(sepIndex @env0:> lastDotIndex) ifTrue: [^ tuple @env0:with: path with: ''].
-	(lastDotIndex @env0:= 1) ifTrue: [^ tuple @env0:with: path with: ''].
+	(lastDotIndex == 1) ifTrue: [^ tuple @env0:with: path with: ''].
 	root := path @env0:copyFrom: 1 to: (lastDotIndex @env0:- 1).
 	ext := path @env0:copyFrom: lastDotIndex to: pathSize.
 	^ tuple @env0:with: root with: ext
@@ -182,9 +182,9 @@ normpath: path
 		ifTrue: [parts @env0:addFirst: ''].
 	earlyExit := false.
 	result := nil.
-	[((parts @env0:indexOf: '..' ifAbsent: [0]) @env0:= 0) not] whileTrue: [
+	[((parts @env0:indexOf: '..' ifAbsent: [0]) == 0) not] whileTrue: [
 		dotDotIndex := parts @env0:indexOf: '..' ifAbsent: [0].
-		(dotDotIndex @env0:= 1) ifTrue: [
+		(dotDotIndex == 1) ifTrue: [
 			isAbsolute ifTrue: [
 				parts @env0:removeAtIndex: 1
 			] ifFalse: [
@@ -207,7 +207,7 @@ normpath: path
 	].
 	earlyExit ifTrue: [^ result].
 	(parts @env0:isEmpty) ifTrue: [^ '.'].
-	((parts @env0:size) @env0:= 1) ifTrue: [
+	((parts @env0:size) == 1) ifTrue: [
 		^ ((parts @env0:first) @env0:isEmpty) ifTrue: [sep] ifFalse: [parts @env0:first]
 	].
 	((parts @env0:first) @env0:isEmpty) ifTrue: [
@@ -322,7 +322,7 @@ commonprefix: paths
 	| pathsSize minLen prefix i char allMatch |
 	(paths @env0:isEmpty) ifTrue: [^ ''].
 	pathsSize := paths @env0:size.
-	(pathsSize @env0:= 1) ifTrue: [^ paths @env0:first].
+	(pathsSize == 1) ifTrue: [^ paths @env0:first].
 	minLen := paths @env0:inject: ((paths @env0:first) @env0:size) into: [:min :p |
 		(min @env0:min: (p @env0:size))
 	].

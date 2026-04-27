@@ -124,13 +124,13 @@ convert_field: value _: conversion
 	| conv_char |
 	conv_char := conversion @env0:at: 1.
 	
-	((conv_char @env0:= $r)) ifTrue: [
+	((conv_char == $r)) ifTrue: [
 		^ value @env1:__repr__
 	] ifFalse: [
-		((conv_char @env0:= $s)) ifTrue: [
+		((conv_char == $s)) ifTrue: [
 			^ value @env1:__str__
 		] ifFalse: [
-			((conv_char @env0:= $a)) ifTrue: [
+			((conv_char == $a)) ifTrue: [
 				"ASCII conversion - same as repr for now"
 				^ value @env1:__repr__
 			] ifFalse: [
@@ -207,7 +207,7 @@ get_field: field_name _: args _: keywords
 		value := args @env0:at: (int_value @env0:+ 1)  "1-based indexing"
 	] ifFalse: [
 		"Keyword argument or empty (auto-numbering not fully supported)"
-		(((field_name_str @env0:size) @env0:= 0)) ifTrue: [
+		(((field_name_str @env0:size) == 0)) ifTrue: [
 			"Auto-numbering - use first unused positional arg (simplified)"
 			used_key := 0.
 			(((args @env0:size) @env0:> 0)) ifTrue: [
@@ -259,7 +259,7 @@ parse: format_string do: aBlock
 	[i @env0:<= len] @env0:whileTrue: [
 		char := format_string @env0:at: i.
 		
-		((char @env0:= ${)) ifTrue: [
+		((char == ${)) ifTrue: [
 			"Start of field - save literal text"
 			aBlock value: literal_text value: nil value: nil value: nil.
 			literal_text := str ___new___.
@@ -275,7 +275,7 @@ parse: format_string do: aBlock
 			conversion := nil.
 			
 			"Check for conversion"
-			((format_string @env0:at: i) @env0:= $!) ifTrue: [
+			((format_string @env0:at: i) == $!) ifTrue: [
 				i := i @env0:+ 1.
 				((i @env0:> len)) ifTrue: [
 					ValueError ___signal___: 'Expected conversion specifier after "!"'
@@ -303,7 +303,7 @@ parse: format_string do: aBlock
 			
 			"Check for format spec"
 			((i @env0:<= len)) ifTrue: [
-				(((format_string @env0:at: i) @env0:= $:)) ifTrue: [
+				(((format_string @env0:at: i) == $:)) ifTrue: [
 					i := i @env0:+ 1.
 					[(i @env0:<= len) ifTrue: [
 						(format_string @env0:at: i) @env0:~= $}

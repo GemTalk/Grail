@@ -49,7 +49,7 @@ ___asComplex: z
 	"Convert z to a complex number if it isn't already"
 	| zClass |
 	zClass := z @env0:class.
-	(zClass @env0:= complex) ifTrue: [^ z].
+	(zClass == complex) ifTrue: [^ z].
 	^ complex __new__: (z @env0:asFloat) _: 0.0
 %
 
@@ -301,8 +301,8 @@ isfinite: z
 	imag := zComplex imag.
 	realKind := real @env0:_getKind.
 	imagKind := imag @env0:_getKind.
-	^ ((realKind @env0:<= 2) or: [realKind @env0:= 4])
-		and: [(imagKind @env0:<= 2) or: [imagKind @env0:= 4]]
+	^ ((realKind @env0:<= 2) or: [realKind == 4])
+		and: [(imagKind @env0:<= 2) or: [imagKind == 4]]
 %
 
 category: 'Python-Classification'
@@ -316,7 +316,7 @@ isinf: z
 	imag := zComplex imag.
 	realKind := real @env0:_getKind.
 	imagKind := imag @env0:_getKind.
-	^ (realKind @env0:= 3) or: [imagKind @env0:= 3]
+	^ (realKind == 3) or: [imagKind == 3]
 %
 
 category: 'Python-Classification'

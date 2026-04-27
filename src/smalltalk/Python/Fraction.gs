@@ -99,10 +99,10 @@ from_float: f
 
 	"Handle special float values using _getKind: 3=infinity, 5=NaN"
 	kind := f @env0:_getKind.
-	(kind @env0:= 5) ifTrue: [
+	(kind == 5) ifTrue: [
 		ValueError ___signal___: 'cannot convert NaN to Fraction'
 	].
-	(kind @env0:= 3) ifTrue: [
+	(kind == 3) ifTrue: [
 		ValueError ___signal___: 'cannot convert Infinity to Fraction'
 	].
 
@@ -229,7 +229,7 @@ __round__
 	(doubleRemainder @env0:< d) ifTrue: [ ^ floor ].
 	(doubleRemainder @env0:> d) ifTrue: [ ^ floor @env0:+ sign ].
 	"Exactly halfway - round to even"
-	((floor @env0:bitAnd: 1) @env0:= 0)
+	((floor @env0:bitAnd: 1) == 0)
 		ifTrue: [ ^ floor ]
 		ifFalse: [ ^ floor @env0:+ sign ]
 %
@@ -293,7 +293,7 @@ method: AbstractFraction
 is_integer
 	"Return True if the fraction represents an integer (denominator == 1)."
 
-	^ (self @env0:denominator) @env0:= 1
+	^ (self @env0:denominator) == 1
 %
 
 category: 'Python-Fraction Methods'

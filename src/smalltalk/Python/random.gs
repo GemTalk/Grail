@@ -107,7 +107,7 @@ choice: seq
 	"choice(seq) -> random element from non-empty sequence."
 	| len idx |
 	len := self _sequenceLength: seq.
-	(len @env0:= 0) ifTrue: [IndexError ___signal___: 'Cannot choose from an empty sequence'].
+	(len == 0) ifTrue: [IndexError ___signal___: 'Cannot choose from an empty sequence'].
 	idx := self _generator @env0:integerBetween: 1 and: len.
 	^ seq @env0:at: idx
 %
@@ -371,7 +371,7 @@ _choices: positional kw: kwargs
 	| population weights cumWeights k result total n |
 	population := positional @env0:at: 1.
 	n := self _sequenceLength: population.
-	(n @env0:= 0) ifTrue: [IndexError ___signal___: 'Cannot choose from an empty population'].
+	(n == 0) ifTrue: [IndexError ___signal___: 'Cannot choose from an empty population'].
 	weights := (kwargs notNil and: [kwargs @env0:includesKey: #weights])
 		ifTrue: [kwargs @env0:at: #weights] ifFalse: [nil].
 	cumWeights := (kwargs notNil and: [kwargs @env0:includesKey: #'cum_weights'])
@@ -435,7 +435,7 @@ method: random
 _randrange: positional kw: kwargs
 	"randrange(stop) or randrange(start, stop[, step])."
 	| start stop step count r |
-	(positional @env0:size @env0:= 1) ifTrue: [
+	(positional @env0:size == 1) ifTrue: [
 		start := 0. stop := positional @env0:at: 1. step := 1.
 	] ifFalse: [
 		start := positional @env0:at: 1. stop := positional @env0:at: 2.

@@ -313,7 +313,7 @@ ord: aString
 
 	| size char errorMsg sizeStr |
 	size := aString @env0:size.
-	(size @env0:= 1) ifFalse: [
+	(size == 1) ifFalse: [
 		sizeStr := size @env0:asString.
 		errorMsg := 'ord() expected a character, but string of length ' @env0:, sizeStr.
 		errorMsg := errorMsg @env0:, ' found'.
@@ -495,12 +495,12 @@ _pow: positional kw: kwargs
 
 	| nargs x y z result |
 	nargs := positional @env0:size.
-	(nargs @env0:= 2) ifTrue: [
+	(nargs == 2) ifTrue: [
 		x := positional @env0:at: 1.
 		y := positional @env0:at: 2.
 		^ x __pow__: y
 	].
-	(nargs @env0:= 3) ifTrue: [
+	(nargs == 3) ifTrue: [
 		x := positional @env0:at: 1.
 		y := positional @env0:at: 2.
 		z := positional @env0:at: 3.

@@ -237,11 +237,11 @@ __repr__
 	self @env0:do: [:char |
 		| cp |
 		cp := char @env0:codePoint.
-		(cp @env0:= 39) ifTrue: [  "apostrophe"
+		(cp == 39) ifTrue: [  "apostrophe"
 			stream @env0:nextPutAll: '\'.
 			stream @env0:nextPut: $'.
 		] ifFalse: [
-			(cp @env0:= 92) ifTrue: [  "backslash"
+			(cp == 92) ifTrue: [  "backslash"
 				stream @env0:nextPutAll: '\\'.
 			] ifFalse: [
 				stream @env0:nextPut: char.
@@ -373,7 +373,7 @@ find: sub
 
 	| index |
 	index := self @env0:findString: sub startingAt: 1.
-	(index @env0:= 0) ifTrue: [ ^ -1 ].
+	(index == 0) ifTrue: [ ^ -1 ].
 	^ (index @env0:- (1))  "Convert to 0-based indexing"
 %
 
@@ -400,7 +400,7 @@ index: sub
 
 	| idx |
 	idx := self find: sub.
-	(idx @env0:= -1) ifTrue: [
+	(idx == -1) ifTrue: [
 		ValueError @env0:signal: 'substring not found'
 	].
 	^ idx
@@ -504,12 +504,12 @@ isidentifier
 
 	"First character must be letter or underscore"
 	firstChar := self @env0:first.
-	((firstChar @env0:isLetter) @env0:| (firstChar @env0:= $_)) ifFalse: [ ^ false ].
+	((firstChar @env0:isLetter) @env0:| (firstChar == $_)) ifFalse: [ ^ false ].
 
 	"Rest must be letters, digits, or underscores"
 	(self @env0:allButFirst) @env0:do: [:char |
 		| valid |
-		valid := ((char @env0:isAlphaNumeric) @env0:| (char @env0:= $_)).
+		valid := ((char @env0:isAlphaNumeric) @env0:| (char == $_)).
 		valid ifFalse: [ ^ false ].
 	].
 	^ true
@@ -685,7 +685,7 @@ partition: sep
 
 	| index before after |
 	index := self @env0:findString: sep startingAt: 1.
-	(index @env0:= 0) ifTrue: [
+	(index == 0) ifTrue: [
 		^ tuple @env0:with: self with: '' with: ''
 	].
 
@@ -741,7 +741,7 @@ rfind: sub
 		lastIndex := index.
 		start := (index @env0:+ 1).
 	].
-	(lastIndex @env0:= 0) ifTrue: [ ^ -1 ].
+	(lastIndex == 0) ifTrue: [ ^ -1 ].
 	^ (lastIndex @env0:- (1))  "Convert to 0-based indexing"
 %
 
@@ -752,7 +752,7 @@ rindex: sub
 
 	| idx |
 	idx := self rfind: sub.
-	(idx @env0:= -1) ifTrue: [
+	(idx == -1) ifTrue: [
 		ValueError @env0:signal: 'substring not found'
 	].
 	^ idx
@@ -790,7 +790,7 @@ rpartition: sep
 		start := (index @env0:+ 1).
 	].
 
-	(lastIndex @env0:= 0) ifTrue: [
+	(lastIndex == 0) ifTrue: [
 		^ tuple @env0:with: '' with: '' with: self
 	].
 
@@ -927,7 +927,7 @@ zfill: width
 	hasSign := false.
 	(mySize @env0:> 0) ifTrue: [
 		firstChar := self @env0:first.
-		hasSign := ((firstChar @env0:= $+) @env0:| (firstChar @env0:= $-)).
+		hasSign := ((firstChar == $+) @env0:| (firstChar == $-)).
 	].
 
 	padding := (width @env0:- (mySize)).

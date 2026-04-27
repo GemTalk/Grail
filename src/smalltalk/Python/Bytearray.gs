@@ -95,8 +95,8 @@ __new__: cls _: source
 	].
 
 	"If source is bytes or bytearray, make a copy"
-	((sourceClass @env0:= bytes) or: [
-		sourceClass @env0:= bytearray
+	((sourceClass == bytes) or: [
+		sourceClass == bytearray
 	]) ifTrue: [
 		result := cls ___new___: (source @env0:size).
 		1 @env0:to: source @env0:size do: [:i |
@@ -292,8 +292,8 @@ __iadd__: other
 	otherClass := other @env0:class.
 
 	"Can only concatenate with bytes or bytearray"
-	((otherClass @env0:= bytes) or: [
-		otherClass @env0:= bytearray
+	((otherClass == bytes) or: [
+		otherClass == bytearray
 	]) ifFalse: [
 		TypeError ___signal___: ('can''t concat bytearray to ' @env0:, otherClass)
 	].
@@ -321,7 +321,7 @@ __imul__: count
 		^ self
 	].
 
-	(n @env0:= 1) ifTrue: [
+	(n == 1) ifTrue: [
 		^ self
 	].
 
@@ -423,8 +423,8 @@ extend: iterable
 	iterClass := iterable @env0:class.
 
 	"Handle bytes or bytearray"
-	((iterClass @env0:= bytes) or: [
-		iterClass @env0:= bytearray
+	((iterClass == bytes) or: [
+		iterClass == bytearray
 	]) ifTrue: [
 		size := iterable @env0:size.
 		1 @env0:to: size do: [:i |
@@ -436,8 +436,8 @@ extend: iterable
 	].
 
 	"Handle list or tuple"
-	((iterClass @env0:= list) or: [
-		iterClass @env0:= tuple
+	((iterClass == list) or: [
+		iterClass == tuple
 	]) ifTrue: [
 		size := iterable @env0:size.
 		1 @env0:to: size do: [:i |
@@ -499,7 +499,7 @@ pop
 	| size |
 	size := self @env0:size.
 
-	(size @env0:= 0) ifTrue: [
+	(size == 0) ifTrue: [
 		IndexError ___signal___: 'pop from empty bytearray'
 	].
 

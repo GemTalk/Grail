@@ -207,7 +207,7 @@ pop
 
 	| size |
 	size := self @env0:size.
-	(size @env0:= 0) ifTrue: [
+	(size == 0) ifTrue: [
 		IndexError ___signal___: 'pop from empty list'
 	].
 

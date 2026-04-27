@@ -284,13 +284,13 @@ method: math
 isfinite: x
 	| kind |
 	kind := (x @env0:asFloat) @env0:_getKind.
-	^ (kind @env0:<= 2) or: [kind @env0:= 4]
+	^ (kind @env0:<= 2) or: [kind == 4]
 %
 
 category: 'Python-Classification'
 method: math
 isinf: x
-	^ ((x @env0:asFloat) @env0:_getKind) @env0:= 3
+	^ ((x @env0:asFloat) @env0:_getKind) == 3
 %
 
 category: 'Python-Classification'

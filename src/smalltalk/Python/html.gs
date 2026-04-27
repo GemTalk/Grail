@@ -123,13 +123,13 @@ unescape: s
 	[i @env0:<= len] @env0:whileTrue: [
 		| ch |
 		ch := s @env0:at: i.
-		(ch @env0:= $&) ifTrue: [
+		(ch == $&) ifTrue: [
 			| j semiPos ref replacement |
 			"Find the closing semicolon (max 32 chars ahead)"
 			semiPos := 0.
 			j := i @env0:+ 1.
 			[((j @env0:<= len) and: [(j @env0:- i) @env0:< 32])] @env0:whileTrue: [
-				((s @env0:at: j) @env0:= $;) ifTrue: [
+				((s @env0:at: j) == $;) ifTrue: [
 					semiPos := j.
 					j := len @env0:+ 1.  "break"
 				] ifFalse: [
@@ -140,12 +140,12 @@ unescape: s
 				ref := s @env0:copyFrom: (i @env0:+ 1) to: (semiPos @env0:- 1).
 				replacement := nil.
 				"Numeric reference: &#NNN; or &#xHHH;"
-				((ref @env0:at: 1) @env0:= $#) ifTrue: [
+				((ref @env0:at: 1) == $#) ifTrue: [
 					| numStr codepoint |
 					numStr := ref @env0:copyFrom: 2 to: (ref @env0:size).
 					[
-						(((numStr @env0:at: 1) @env0:= $x) or:
-						 [((numStr @env0:at: 1) @env0:= $X)]) ifTrue: [
+						(((numStr @env0:at: 1) == $x) or:
+						 [((numStr @env0:at: 1) == $X)]) ifTrue: [
 							"Hex: &#xHHH; - prepend 16r for Smalltalk hex literal parsing"
 							| hexDigits |
 							hexDigits := numStr @env0:copyFrom: 2 to: (numStr @env0:size).
@@ -161,11 +161,11 @@ unescape: s
 					"Named reference: &name; — look up codepoint and convert"
 					| cp |
 					cp := n2c @env0:at: ref ifAbsent: [nil].
-					(cp @env0:= nil) ifFalse: [
+					(cp == nil) ifFalse: [
 						replacement := (Character @env0:codePoint: cp) @env0:asString.
 					].
 				].
-				(replacement @env0:= nil) ifFalse: [
+				(replacement == nil) ifFalse: [
 					out @env0:nextPutAll: replacement.
 					i := semiPos @env0:+ 1.
 				] ifTrue: [
