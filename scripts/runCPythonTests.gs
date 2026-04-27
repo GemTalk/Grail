@@ -15,7 +15,7 @@ run
     Transcript show: 'CPythonTestCase: skipped (', ex messageText, ')'.
     ExitClientError signal: 'Skipped' status: 0.
 ].
-result := CPythonTestCase suite debug.
+result := CPythonTestCase suite run.
 result hasPassed ifTrue: [
     Transcript show: result printString.
     ExitClientError signal: 'Embedded tests passed!' status: 0.
