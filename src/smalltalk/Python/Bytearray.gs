@@ -52,7 +52,7 @@ bytearray category: 'Collections-Ordered'
 !   2. Additional mutation methods (append, extend, insert, remove, pop, etc.)
 !   3. Constructors that return bytearray instances
 !
-! These methods are compiled with environmentId 2 (Python) to keep them separate
+! These methods are compiled with environmentId 1 (Python) to keep them separate
 ! from the base Smalltalk methods (environmentId 0).
 ! ===============================================================================
 
@@ -370,7 +370,7 @@ __setitem__: index _: value
 
 	"Set value (convert to 1-based index)"
 	self @env0:at: (idx @env0:+ 1) put: val.
-	^ nil
+	^ None
 %
 
 category: 'Python-Mutation Methods'
@@ -432,7 +432,7 @@ extend: iterable
 			byte := iterable @env0:at: i.
 			self append: byte
 		].
-		^ nil
+		^ None
 	].
 
 	"Handle list or tuple"
@@ -451,7 +451,7 @@ extend: iterable
 			].
 			self append: val
 		].
-		^ nil
+		^ None
 	].
 
 	TypeError ___signal___: 'extend() argument must be iterable'

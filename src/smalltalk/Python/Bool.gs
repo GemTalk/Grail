@@ -7,7 +7,7 @@
 !
 ! In GemStone, Boolean is a separate class with singleton instances true and false.
 ! We map Python's True to true and False to false, and implement Python's bool
-! methods in environment 2.
+! methods in environment 1.
 !
 ! Key differences from Python:
 ! - In Python: bool is a subclass of int, True and False are instances of bool
@@ -366,7 +366,9 @@ __new__: obj
 	In Python: bool(obj) or bool.__new__(bool, obj)"
 
 	| result |
-	obj ifNil: [ ^ false ].
+	"None is falsy. Smalltalk nil (undefined) is treated the same here for
+	bridge robustness."
+	(obj == nil or: [obj == None]) ifTrue: [ ^ false ].
 
 	"If already a bool, return it"
 	(obj @env0:isKindOf: bool) ifTrue: [

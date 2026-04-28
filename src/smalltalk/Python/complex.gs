@@ -254,7 +254,7 @@ method: complex
 __getstate__
 	"Return state for pickling. Complex numbers have no additional state."
 
-	^ nil
+	^ None
 %
 
 category: 'Python-Comparison'
@@ -273,7 +273,7 @@ __init__: r _: i
 
 	real := r @env0:asFloat.
 	imag := i @env0:asFloat.
-	^ nil
+	^ None
 %
 
 category: 'Python-Comparison'

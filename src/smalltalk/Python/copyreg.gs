@@ -87,7 +87,7 @@ pickle: obType _: pickleFunc
 	2-arg form. Records `obType → pickleFunc` in dispatch_table."
 
 	(self @env0:at: #dispatch_table) @env0:at: obType put: pickleFunc.
-	^ nil
+	^ None
 %
 
 category: 'Python-Built-in Functions'

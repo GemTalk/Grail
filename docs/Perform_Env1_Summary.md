@@ -1,6 +1,6 @@
 # Summary of `perform:env: 1` Message Senders
 
-This document provides a comprehensive summary of all places in the codebase that use `perform:env: 1` to send messages to environment 2 (Python methods).
+This document provides a comprehensive summary of all places in the codebase that use `perform:env: 1` to send messages to environment 1 (Python methods).
 
 ## Overview
 
@@ -203,7 +203,7 @@ The majority of `perform:env: 1` calls are in test files, where Smalltalk test c
 Some AST nodes generate Smalltalk code that calls Python constructors (e.g., `ConstantAst.gs` for complex numbers).
 
 ### 3. Cross-Environment Communication
-When Smalltalk code (env 0) needs to interact with Python objects (env 2), it uses `perform:env: 1`.
+When Smalltalk code (env 0) needs to interact with Python objects (env 1), it uses `perform:env: 1`.
 
 ## Notes
 

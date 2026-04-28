@@ -179,7 +179,7 @@ testDictGet
 	self assert: value equals: 1.
 
 	value := d @env1:get: 'nonexistent'.
-	self assert: value isNil.
+	self assert: value equals: None.
 
 	value := d @env1:get: 'nonexistent' _: 'default'.
 	self assert: value equals: 'default'

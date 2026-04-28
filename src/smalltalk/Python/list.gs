@@ -7,7 +7,7 @@
 ! OrderedCollection inherits shared sequence methods from SequenceableCollection.
 ! This file adds list-specific mutating methods.
 !
-! These methods are compiled with environmentId 2 (Python) to keep them separate
+! These methods are compiled with environmentId 1 (Python) to keep them separate
 ! from the base Smalltalk methods (environmentId 0).
 ! ===============================================================================
 
@@ -44,7 +44,7 @@ __delitem__: index
 
 	"Convert to 1-based Smalltalk index"
 	self @env0:removeAtIndex: (idx @env0:+ 1).
-	^ nil
+	^ None
 %
 
 category: 'Python-Other'
@@ -136,7 +136,7 @@ __setitem__: index _: value
 
 	"Convert to 1-based Smalltalk index"
 	self @env0:at: (idx @env0:+ 1) put: value.
-	^ nil
+	^ None
 %
 
 category: 'Python-List Methods'
@@ -145,7 +145,7 @@ append: item
 	"Add item to the end of the list."
 
 	self @env0:add: item.
-	^ nil
+	^ None
 %
 
 category: 'Python-List Methods'
@@ -154,7 +154,7 @@ clear
 	"Remove all items from the list."
 
 	self @env0:size: 0.
-	^ nil
+	^ None
 %
 
 category: 'Python-List Methods'
@@ -171,7 +171,7 @@ extend: iterable
 	"Extend the list by appending all items from iterable."
 
 	self @env0:addAll: iterable.
-	^ nil
+	^ None
 %
 
 category: 'Python-List Methods'
@@ -197,7 +197,7 @@ insert: index _: item
 	(idx @env0:= 0)
 		ifTrue: [self @env0:addFirst: item]
 		ifFalse: [self @env0:add: item afterIndex: idx].
-	^ nil
+	^ None
 %
 
 category: 'Python-List Methods'
@@ -248,7 +248,7 @@ remove: value
 	"Remove the first occurrence of value. Raises ValueError if not found."
 
 	self @env0:remove: value ifAbsent: [ValueError ___signal___: 'list.remove(x): x not in list'].
-	^ nil
+	^ None
 %
 
 category: 'Python-List Methods'
@@ -260,7 +260,7 @@ reverse
 	reversed := self @env0:reversed.
 	self @env0:size: 0.
 	self @env0:addAll: reversed.
-	^ nil
+	^ None
 %
 
 category: 'Python-List Methods'
@@ -269,7 +269,7 @@ sort
 	"Sort the list in place using Python's __lt__ for comparison."
 
 	self @env0:sort: [:a :b | a @env1:__lt__: b].
-	^ nil
+	^ None
 %
 
 set compile_env: 0

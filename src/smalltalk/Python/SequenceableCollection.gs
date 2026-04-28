@@ -4,7 +4,7 @@
 ! This file contains Python method implementations for SequenceableCollection
 ! that are shared by both list (OrderedCollection) and tuple (Array subclass).
 !
-! These methods are compiled with environmentId 2 (Python) to keep them separate
+! These methods are compiled with environmentId 1 (Python) to keep them separate
 ! from the base Smalltalk methods (environmentId 0).
 ! ===============================================================================
 

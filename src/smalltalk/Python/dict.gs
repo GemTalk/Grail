@@ -7,7 +7,7 @@
 ! dict is a mutable mapping type that maps hashable keys to arbitrary values.
 ! Dictionaries preserve insertion order (as of Python 3.7).
 !
-! These methods are compiled with environmentId 2 (Python) to keep them separate
+! These methods are compiled with environmentId 1 (Python) to keep them separate
 ! from the base Smalltalk methods (environmentId 0).
 ! ===============================================================================
 
@@ -156,7 +156,7 @@ method: dict
 __setitem__: key _: value
 	"Set d[key] to value"
 	self @env0:at: key put: value.
-	^ nil
+	^ None
 %
 
 category: 'Python-Subscript Protocol'
@@ -165,7 +165,7 @@ __setitem__: key _: value
 	"Set d[key] to value"
 
 	super __setitem__: (key @env0:asSymbol) _: value.
-	^ nil
+	^ None
 %
 
 category: 'Python-Mutation Methods'
@@ -186,7 +186,7 @@ category: 'Python-Access Methods'
 method: dict
 get: key
 	"Return the value for key if key is in the dictionary, else None"
-	^ self @env1:get: key _: nil
+	^ self @env1:get: key _: None
 %
 
 category: 'Python-Access Methods'

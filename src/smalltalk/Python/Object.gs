@@ -5,7 +5,7 @@
 ! as the Python 'object' type. Since Object is a fundamental GemStone Smalltalk
 ! class, we only add Python-specific methods here.
 !
-! These methods are compiled with environmentId 2 (Python) to keep them separate
+! These methods are compiled with environmentId 1 (Python) to keep them separate
 ! from the base Smalltalk methods (environmentId 0).
 ! ===============================================================================
 
@@ -51,14 +51,14 @@ ___new___
 category: 'Convenience Methods'
 classmethod: object
 ___new___: arg1 _: arg2
-	"Convenience method for calling __new__:_: from env 2 code"
+	"Convenience method for calling __new__:_: from env 1 code"
 	^ self @env1:__new__: arg1 _: arg2
 %
 
 category: 'Convenience Methods'
 classmethod: object
 ___new___: arg1 _: arg2 _: arg3
-	"Convenience method for calling __new__:_:_: from env 2 code"
+	"Convenience method for calling __new__:_:_: from env 1 code"
 	^ self @env1:__new__: arg1 _: arg2 _: arg3
 %
 
@@ -69,7 +69,7 @@ __init_subclass__
 	This is a class method that receives the subclass as the receiver.
 	Default implementation does nothing."
 
-	^ nil
+	^ None
 %
 
 category: 'Python-Initialization'
@@ -126,7 +126,7 @@ category: 'Python-Attribute Access'
 method: object
 __dir__
 	"Return list of valid attributes for this object.
-	Returns an Array of Strings containing all method names for environment 2 (Python).
+	Returns an Array of Strings containing all method names for environment 1 (Python).
 	Excludes convenience methods (those starting with ___) that are internal implementation helpers."
 
 	| selectors result myClass |
@@ -228,7 +228,7 @@ __init__
 	In Python: instance.__init__(*args, **kwargs) initializes the instance.
 	Default implementation does nothing and returns None."
 
-	^ nil
+	^ None
 %
 
 category: 'Python-Comparison'

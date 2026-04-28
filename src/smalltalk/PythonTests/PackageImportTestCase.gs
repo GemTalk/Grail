@@ -102,16 +102,18 @@ testPackageHasPath
 category: 'Tests - Import Package'
 method: PackageImportTestCase
 testNonPackageNoPath
-	"Regular (non-package) module should not have __path__"
+	"Regular (non-package) module should not have __path__ — accessing it
+	yields the Python ``None`` singleton (Grail does not raise
+	AttributeError here, but the value should not be Smalltalk nil)."
 
 	| helloModule path |
-	importlib 
+	importlib
 		loadModuleFromPath: (importlib grailDir , '/src/python/hello.py')
 		name: 'python.hello'.
 	helloModule := importlib ___lookupModule___: 'python.hello'.
 
 	path := helloModule @env1:__path__.
-	self assert: path equals: nil
+	self assert: path equals: None
 %
 
 category: 'Tests - Import Submodule'

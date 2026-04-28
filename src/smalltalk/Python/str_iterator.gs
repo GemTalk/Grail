@@ -39,7 +39,7 @@ str_iterator category: 'Collections-Iterators'
 ! ===============================================================================
 ! This file contains method implementations for the str_iterator class.
 !
-! These methods are compiled with environmentId 2 (Python) to keep them separate
+! These methods are compiled with environmentId 1 (Python) to keep them separate
 ! from the base Smalltalk methods (environmentId 0).
 ! ===============================================================================
 

@@ -168,12 +168,12 @@ category: 'Tests - Phase 4b Varargs'
 method: BuiltinsTestCase
 testEvalPrint
 	"Phase 4b: print(...) — varargs fast path through `_print:kw:`.
-	Just checks the call returns nil (the side effect on Transcript is
-	exercised but not asserted)."
+	Just checks the call returns Python None (the side effect on Transcript
+	is exercised but not asserted)."
 
-	self assert: (self eval: 'print(1, 2, 3)') == nil.
-	self assert: (self eval: 'print()') == nil.
-	self assert: (self eval: 'print("hello")') == nil
+	self assert: (self eval: 'print(1, 2, 3)') == None.
+	self assert: (self eval: 'print()') == None.
+	self assert: (self eval: 'print("hello")') == None
 %
 
 category: 'Tests - Phase 4b Varargs'
@@ -185,7 +185,7 @@ testPrintAsValue
 
 	self assert: (self eval: '
 f = print
-f(1, 2, 3)') == nil
+f(1, 2, 3)') == None
 %
 
 category: 'Tests - Phase 4b Varargs'

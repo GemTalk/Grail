@@ -107,12 +107,24 @@ printOn: aStream
 category: 'other'
 method: AttributeAst
 printSmalltalkOn: aStream
-	"When in class method context and value is the self parameter,
-	emit just the attribute name (instVar read) instead of `(self) attr`."
+	"When in class method context and value is the self parameter, emit
+	an AttributeError-checked instVar read so an unset attribute raises
+	a Python-shaped error instead of silently flowing nil downstream.
+	(Phase C-3 — paired with Phase C-2 for unbound locals.)
+
+	Otherwise emit ``(value) attr`` so dispatch goes through the regular
+	Smalltalk message-send path; if attr is missing on a non-class-method
+	receiver, the env-1 DNU backstop converts the resulting nil into a
+	Python error if it reaches a message send."
 
 	self assertContextIsLoad.
 	((value isKindOf: NameAst) and: [CallAst isSelfReference: value id]) ifTrue: [
-		aStream nextPutAll: attr.
+		aStream
+			nextPutAll: '(AttributeError @env0:___checkAttr: ';
+			nextPutAll: attr;
+			nextPutAll: ' ofObject: self named: #';
+			nextPutAll: attr;
+			nextPutAll: ')'.
 		^self
 	].
 	value printSmalltalkWithParenthesisOn: aStream.

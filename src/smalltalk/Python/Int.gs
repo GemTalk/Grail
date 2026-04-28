@@ -6,7 +6,7 @@
 ! concrete subclasses SmallInteger and LargeInteger, providing arbitrary
 ! precision arithmetic just like Python's int.
 !
-! These methods are compiled with environmentId 2 (Python) to keep them separate
+! These methods are compiled with environmentId 1 (Python) to keep them separate
 ! from the base Smalltalk methods (environmentId 0).
 ! ===============================================================================
 
@@ -318,7 +318,7 @@ __init__
 	"Initialize an int instance (called after __new__).
 	Default implementation does nothing since __new__ handles everything."
 
-	^ nil
+	^ None
 %
 
 category: 'Python-Initialization'
@@ -327,7 +327,7 @@ __init__: obj
 	"Initialize an int instance (called after __new__).
 	Default implementation does nothing since __new__ handles everything."
 
-	^ nil
+	^ None
 %
 
 category: 'Python-Conversion'

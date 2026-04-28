@@ -110,7 +110,7 @@ chdir: path
 	result == nil ifTrue: [
 		OSError ___signal___: ('Cannot change directory to: ' @env0:, (path @env0:printString))
 	].
-	^ nil
+	^ None
 %
 
 category: 'Python-File and Directory Operations'
@@ -123,7 +123,7 @@ mkdir: path
 	result == nil ifTrue: [
 		OSError ___signal___: ('Cannot create directory: ' @env0:, (path @env0:printString))
 	].
-	^ nil
+	^ None
 %
 
 category: 'Python-File and Directory Operations'
@@ -136,7 +136,7 @@ mkdir: path _: mode
 	result == nil ifTrue: [
 		OSError ___signal___: ('Cannot create directory: ' @env0:, (path @env0:printString))
 	].
-	^ nil
+	^ None
 %
 
 category: 'Python-File and Directory Operations'
@@ -162,7 +162,7 @@ makedirs: path
 			]
 		]
 	].
-	^ nil
+	^ None
 %
 
 category: 'Python-File and Directory Operations'
@@ -175,7 +175,7 @@ rmdir: path
 	result == nil ifTrue: [
 		OSError ___signal___: ('Cannot remove directory: ' @env0:, (path @env0:printString))
 	].
-	^ nil
+	^ None
 %
 
 category: 'Python-File and Directory Operations'
@@ -188,7 +188,7 @@ remove: path
 	result == nil ifTrue: [
 		OSError ___signal___: ('Cannot remove file: ' @env0:, (path @env0:printString))
 	].
-	^ nil
+	^ None
 %
 
 category: 'Python-File and Directory Operations'
@@ -202,7 +202,7 @@ rename: oldPath _: newPath
 		msg := ((oldPath @env0:printString) @env0:, ' to ') @env0:, (newPath @env0:printString).
 		OSError ___signal___: ('Cannot rename: ' @env0:, msg)
 	].
-	^ nil
+	^ None
 %
 
 category: 'Python-File and Directory Operations'
@@ -312,7 +312,7 @@ method: os
 getenv: name
 	"os.getenv(name) — get environment variable, return None if absent."
 
-	^ System @env0:gemEnvironmentVariable: name
+	^ self @env1:getenv: name _: None
 %
 
 category: 'Python-Environment Variables'
@@ -332,7 +332,7 @@ putenv: name _: value
 	"os.putenv(name, value) — set environment variable."
 
 	System @env0:gemEnvironmentVariable: name put: value.
-	^ nil
+	^ None
 %
 
 ! ===============================================================================

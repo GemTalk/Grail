@@ -159,10 +159,14 @@ printSmalltalkOn: aStream
 	0-arg form) by convention, and forwards calls via reflective dispatch;
 	a future revision can use the actual call-site arity if known.
 
-	Note: this method is the *load* path. Store contexts (LHS of assignment)
-	use `printSmalltalkAssignmentOn:`, which is unaffected. Direct call
-	sites like `abs(5)` are special-cased in `CallAst>>printSmalltalkOn:`
-	and bypass this method entirely."
+	Note: this method is called for both load and store contexts —
+	`AssignAst >> printSmalltalkOn:` invokes it on its target (LHS) too.
+	The unbound-local check (Phase C-2) only applies in load context;
+	stores must emit the bare identifier so the surrounding
+	`<name> := <value>` is well-formed.
+
+	Direct call sites like `abs(5)` are special-cased in
+	`CallAst>>printSmalltalkOn:` and bypass this method entirely."
 
 	"self parameter in class method → Smalltalk self"
 	(CallAst isSelfReference: id) ifTrue: [
@@ -172,6 +176,20 @@ printSmalltalkOn: aStream
 	(self isFastPathBuiltinName) ifTrue: [
 		aStream
 			nextPutAll: '(BoundMethod receiver: ((Python @env0:at: #builtins) instance) selector: #';
+			nextPutAll: id;
+			nextPutAll: ')'.
+		^ self
+	].
+	"Phase C-2: in load context, wrap reads of declared locals with a
+	runtime nil-check that raises UnboundLocalError naming the variable.
+	Stores and undeclared (free / global / builtin) names emit the bare
+	identifier — those resolve through the symbol list and are caught by
+	the env-1 DNU backstop if they reach a message send while nil."
+	((ctx isKindOf: LoadAst) and: [self isVariableIsDeclared: id]) ifTrue: [
+		aStream
+			nextPutAll: '(UnboundLocalError @env0:___checkLocal: ';
+			nextPutAll: id;
+			nextPutAll: ' named: #';
 			nextPutAll: id;
 			nextPutAll: ')'.
 		^ self

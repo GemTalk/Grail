@@ -57,9 +57,9 @@ for file in smalltalk/classes/*.gs; do
         continue
     fi
     # Find the line numbers where env: 1 starts and ends
-    env2_lines=$(grep -n "set compile_env: 1" "$file" 2>/dev/null | cut -d: -f1)
+    env1_lines=$(grep -n "set compile_env: 1" "$file" 2>/dev/null | cut -d: -f1)
     env0_lines=$(grep -n "set compile_env: 0" "$file" 2>/dev/null | cut -d: -f1)
-    if [ -z "$env2_lines" ]; then
+    if [ -z "$env1_lines" ]; then
         continue
     fi
     grep -n "[^)] > \|[^)] < \|[^)] >= \|[^)] <=" "$file" 2>/dev/null | \
@@ -73,26 +73,26 @@ for file in smalltalk/classes/*.gs; do
           continue
         fi
         # Check if this line is in an env: 1 section
-        in_env2=false
-        for env2_line in $env2_lines; do
+        in_env1=false
+        for env1_line in $env1_lines; do
           # Find the next env: 0 line after this env: 1
           next_env0=""
           for env0_line in $env0_lines; do
-            if [ "$env0_line" -gt "$env2_line" ]; then
+            if [ "$env0_line" -gt "$env1_line" ]; then
               next_env0="$env0_line"
               break
             fi
           done
           # Check if our line is between env: 1 and next env: 0 (or end of file)
-          if [ "$line_num" -ge "$env2_line" ]; then
+          if [ "$line_num" -ge "$env1_line" ]; then
             if [ -z "$next_env0" ] || [ "$line_num" -lt "$next_env0" ]; then
-              in_env2=true
+              in_env1=true
               break
             fi
           fi
         done
         # Only flag if it's in env: 1 code
-        if [ "$in_env2" = true ]; then
+        if [ "$in_env1" = true ]; then
           echo "⚠️  Potential issue: $full_line"
           issues=$((issues + 1))
         fi

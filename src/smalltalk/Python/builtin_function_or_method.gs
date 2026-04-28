@@ -5,7 +5,7 @@
 ! builtin_function_or_method is mapped to GsNMethod in the Python dictionary.
 ! These methods provide Python semantics for GemStone methods.
 !
-! These methods are compiled with environmentId 2 (Python) to keep them separate
+! These methods are compiled with environmentId 1 (Python) to keep them separate
 ! from the base Smalltalk methods (environmentId 0).
 ! ===============================================================================
 
@@ -93,7 +93,7 @@ category: 'Python-Attributes'
 method: builtin_function_or_method
 __text_signature__
 	"Return the text signature (for now, return None)"
-	^ nil
+	^ None
 %
 
 set compile_env: 0

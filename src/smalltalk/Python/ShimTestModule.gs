@@ -132,7 +132,7 @@ callTestListInsert: aList index: anIndex value: aValue
 %
 
 ! ===============================================================================
-! env 2 instance methods — Python-compatible callables
+! env 1 instance methods — Python-compatible callables
 ! ===============================================================================
 
 set compile_env: 1

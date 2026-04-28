@@ -39,7 +39,7 @@ Exception category: 'Exceptions'
 ! Exception inherits from Python's BaseException and inherits most of its
 ! behavior. This file only adds or overrides methods specific to Exception.
 !
-! These methods are compiled with environmentId 2 (Python) to keep them separate
+! These methods are compiled with environmentId 1 (Python) to keep them separate
 ! from the base Smalltalk methods (environmentId 0).
 ! ===============================================================================
 
@@ -56,8 +56,9 @@ category: 'Python-Initialization'
 method: Exception
 __init__
 	"Initialize with no arguments."
-	
+
 	args := #().
+	^ None
 %
 
 category: 'Python-Initialization'
@@ -65,8 +66,9 @@ method: Exception
 __init__: a
 	"Initialize with arguments.
 	a should be a tuple (Array) of arguments."
-	
+
 	a ifNil: [ args := #() ] ifNotNil: [ args := a ].
+	^ None
 %
 
 set compile_env: 0

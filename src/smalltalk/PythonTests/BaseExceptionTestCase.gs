@@ -138,3 +138,46 @@ test_str_single_arg
 	str := exc @env1:__str__.
 	self assert: str equals: 'test'.
 %
+
+category: 'Python-Tests-BaseException'
+method: BaseExceptionTestCase
+test_cause_defaults_to_none
+	"Unset __cause__ surfaces as the Python None singleton, not Smalltalk nil."
+
+	| exc |
+	exc := BaseException ___new___: BaseException.
+	self assert: exc @env1:__cause__ equals: None.
+%
+
+category: 'Python-Tests-BaseException'
+method: BaseExceptionTestCase
+test_context_defaults_to_none
+	"Unset __context__ surfaces as the Python None singleton."
+
+	| exc |
+	exc := BaseException ___new___: BaseException.
+	self assert: exc @env1:__context__ equals: None.
+%
+
+category: 'Python-Tests-BaseException'
+method: BaseExceptionTestCase
+test_init_returns_none
+	"__init__ returns None (not the receiver instance), per Python protocol."
+
+	| exc result |
+	exc := BaseException ___new___: BaseException.
+	result := exc @env1:__init__.
+	self assert: result equals: None.
+%
+
+category: 'Python-Tests-BaseException'
+method: BaseExceptionTestCase
+test_init_with_args_returns_none
+	"__init__: a returns None — not self — so user code that captures the
+	return value (e.g. in a chained call) sees the Python value."
+
+	| exc result |
+	exc := BaseException ___new___: BaseException.
+	result := exc @env1:__init__: #('x').
+	self assert: result equals: None.
+%

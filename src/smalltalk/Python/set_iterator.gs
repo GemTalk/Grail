@@ -46,7 +46,7 @@ set_iterator category: 'Collections-Iterators'
 ! Since GemStone Sets don't support indexed access, we convert the set to an
 ! array when the iterator is created, then iterate over that array.
 !
-! These methods are compiled with environmentId 2 (Python) to keep them separate
+! These methods are compiled with environmentId 1 (Python) to keep them separate
 ! from the base Smalltalk methods (environmentId 0).
 ! ===============================================================================
 

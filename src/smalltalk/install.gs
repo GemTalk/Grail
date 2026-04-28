@@ -123,6 +123,8 @@ run
 	at: #'MemoryError' put: nil;
 	at: #'ModuleNotFoundError' put: nil;
 	at: #'NameError' put: nil;
+	at: #'None' put: nil;
+	at: #'NoneType' put: nil;
 	at: #'NotADirectoryError' put: nil;
 	at: #'NotImplementedError' put: nil;
 	at: #'OSError' put: nil;
@@ -394,6 +396,7 @@ run
 	at: #'ModuleNotFoundErrorTestCase' put: nil;
 	at: #'ModuleTestCase' put: nil;
 	at: #'NameErrorTestCase' put: nil;
+	at: #'NoneTypeTestCase' put: nil;
 	at: #'NotADirectoryErrorTestCase' put: nil;
 	at: #'NotImplementedErrorTestCase' put: nil;
 	at: #'NumbersTestCase' put: nil;
@@ -469,7 +472,6 @@ run
   "Python names that map to existing GemStone globals"
 	at: #'True'                       put: true;
 	at: #'False'                      put: false;
-	at: #'None'	                      put: nil;
   "Python names that map to existing GemStone classes"
 	at: #'bool'                       put: Boolean;
 	at: #'builtin_function_or_method' put: GsNMethod;
@@ -496,6 +498,10 @@ run
 Transcript show: 'Step 4: Loading Python built-in type classes...'.
 %
 
+! NoneType is loaded first so that the global ``None`` is bound to the
+! singleton before any subsequent class file (which may reference None
+! in method bodies) is compiled.
+input src/smalltalk/Python/NoneType.gs
 input src/smalltalk/Python/BaseException.gs
 input src/smalltalk/Python/Bytearray.gs
 input src/smalltalk/Python/complex.gs
@@ -652,6 +658,8 @@ input src/smalltalk/Python/Range.gs
 input src/smalltalk/Python/SequenceableCollection.gs
 input src/smalltalk/Python/set.gs
 input src/smalltalk/Python/str.gs
+input src/smalltalk/Python/Tuple.gs
+input src/smalltalk/Python/UndefinedObject.gs
 
 ! ------- Remove Python dictionary from SystemUser's symbol list
 run
@@ -845,6 +853,7 @@ input src/smalltalk/PythonTests/ListTestCase.gs
 input src/smalltalk/PythonTests/MathTestCase.gs
 input src/smalltalk/PythonTests/ModuleFunctionTestCase.gs
 input src/smalltalk/PythonTests/ModuleTestCase.gs
+input src/smalltalk/PythonTests/NoneTypeTestCase.gs
 input src/smalltalk/PythonTests/NumbersTestCase.gs
 input src/smalltalk/PythonTests/ObjectTestCase.gs
 input src/smalltalk/PythonTests/OsTestCase.gs
