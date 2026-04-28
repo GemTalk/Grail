@@ -119,8 +119,8 @@ test__init__
 	obj := object @env1:__new__.
 	result := obj @env1:__init__.
 
-	"Result should be nil (Python's None)"
-	self assert: result equals: nil
+	"Result should be Python None"
+	self assert: result equals: None
 %
 
 category: 'Python-Initialization'
@@ -132,8 +132,8 @@ test__init_subclass__
 	"Call __init_subclass__ as a class method on object"
 	result := object @env1:__init_subclass__.
 
-	"Result should be nil (Python's None)"
-	self assert: result equals: nil
+	"Result should be Python None"
+	self assert: result equals: None
 %
 
 category: 'Python-Comparison'

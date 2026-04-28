@@ -431,7 +431,7 @@ isinstance: anObject _: aClassOrTuple
 	result := anObject @env0:isKindOf: aClassOrTuple.
 	result ifFalse: [
 		theMetaclass := aClassOrTuple @env0:class.
-		(theMetaclass @env0:includesSelector: #'__instancecheck__:' environmentId: 2) ifTrue: [
+		(theMetaclass @env0:includesSelector: #'__instancecheck__:' environmentId: 1) ifTrue: [
 			result := aClassOrTuple __instancecheck__: anObject
 		]
 	].
@@ -525,7 +525,7 @@ _print: positional kw: kwargs
 		Transcript @env0:space
 	].
 	Transcript @env0:cr.
-	^ nil
+	^ None
 %
 
 category: 'Python-Built-in Functions'

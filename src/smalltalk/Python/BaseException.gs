@@ -59,7 +59,7 @@ BaseException category: 'Exceptions'
 ! BaseException inherits from GemStone's Exception to integrate with GemStone's
 ! exception handling mechanism.
 !
-! These methods are compiled with environmentId 2 (Python) to keep them separate
+! These methods are compiled with environmentId 1 (Python) to keep them separate
 ! from the base Smalltalk methods (environmentId 0).
 ! ===============================================================================
 
@@ -119,8 +119,8 @@ method: BaseException
 __cause__
 	"Return the exception that was the direct cause of this exception.
 	Set via 'raise ... from ...' syntax."
-	
-	^ nil  "TODO: implement exception chaining"
+
+	^ None  "TODO: implement exception chaining"
 %
 
 category: 'Python-Exception Chaining'
@@ -128,8 +128,8 @@ method: BaseException
 __context__
 	"Return the exception context (the exception that was being handled
 	when this exception was raised)."
-	
-	^ nil  "TODO: implement exception context"
+
+	^ None  "TODO: implement exception context"
 %
 
 category: 'Python-Comparison'
@@ -154,8 +154,9 @@ category: 'Python-Initialization'
 method: BaseException
 __init__
 	"Initialize with no arguments."
-	
+
 	args := #().
+	^ None
 %
 
 category: 'Python-Initialization'
@@ -163,8 +164,9 @@ method: BaseException
 __init__: a
 	"Initialize with arguments.
 	a should be a tuple (Array) of arguments."
-	
+
 	a ifNil: [ args := #() ] ifNotNil: [ args := a ].
+	^ None
 %
 
 category: 'Python-Comparison'
@@ -253,7 +255,7 @@ add_note: note
 	Notes are displayed in the traceback."
 
 	"TODO: implement exception notes"
-	^ nil
+	^ None
 %
 
 category: 'Python-Attribute Access'

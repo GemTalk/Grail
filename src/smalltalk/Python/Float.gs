@@ -5,7 +5,7 @@
 ! as the Python 'float' type. Float is a concrete class in GemStone representing
 ! IEEE 754 double-precision floating-point numbers, just like Python's float.
 !
-! These methods are compiled with environmentId 2 (Python) to keep them separate
+! These methods are compiled with environmentId 1 (Python) to keep them separate
 ! from the base Smalltalk methods (environmentId 0).
 ! ===============================================================================
 

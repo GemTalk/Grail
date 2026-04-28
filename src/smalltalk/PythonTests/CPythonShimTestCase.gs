@@ -612,12 +612,12 @@ testShimtestBoolNotFalse
 category: 'Tests - ShimTest API'
 method: CPythonShimTestCase
 testShimtestNone
-	"test_none() -> nil (Py_None = OOP_NIL)"
+	"test_none() -> Python ``None`` (Py_None round-trips to the singleton)"
 
 	| result |
 	result := CPythonShim current
 		callModule: '_shimtest' method: 'test_none'.
-	self assert: result equals: nil.
+	self assert: result equals: None.
 %
 
 category: 'Tests - ShimTest API'
@@ -1827,5 +1827,51 @@ result = _sre.ascii_tolower(90)
 result
 '.
 	self assert: result equals: 122.
+%
+
+! ===============================================================================
+! Tests - Py_None wrapping
+! ===============================================================================
+! Verify the bridge maps both Smalltalk nil and the Python None singleton to
+! the same Py_None wrapper, and that the embedded OOP is the singleton (so
+! C-side Py_None round-trips back to None, not nil).
+
+category: 'Tests - Py_None Wrapping'
+method: CPythonShimTestCase
+testWrapNoneReturnsNoneWrapper
+	"wrap: None returns the cached Py_None CByteArray."
+
+	| shim w1 w2 |
+	shim := CPythonShim current.
+	w1 := shim wrap: None.
+	w2 := shim wrap: None.
+	self assert: w1 == w2.
+	self assert: w1 class == CByteArray.
+%
+
+category: 'Tests - Py_None Wrapping'
+method: CPythonShimTestCase
+testWrapNilAliasesNone
+	"wrap: nil returns the same wrapper as wrap: None — both map to Py_None
+	at the bridge layer."
+
+	| shim |
+	shim := CPythonShim current.
+	self assert: (shim wrap: nil) == (shim wrap: None).
+%
+
+category: 'Tests - Py_None Wrapping'
+method: CPythonShimTestCase
+testNoneWrapperEmbedsSingletonOop
+	"The OOP stored at offset 16 of Py_None is the NoneType singleton's OOP,
+	so a C round-trip (e.g. test_none) yields None, not nil."
+
+	| wrapper signedOop oop |
+	wrapper := CPythonShim current wrap: None.
+	signedOop := wrapper int64At: 16.
+	oop := signedOop < 0
+		ifTrue: [signedOop + 16r10000000000000000]
+		ifFalse: [signedOop].
+	self assert: oop equals: None asOop.
 %
 

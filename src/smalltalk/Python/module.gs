@@ -170,12 +170,14 @@ __package__: aValue
 category: 'Python-Accessors'
 method: module
 __path__
-	"Return the module's __path__ if it has been set, else nil. Modules that
-	are packages have a __path__; plain modules do not."
+	"Return the module's __path__ if it has been set, else None. Modules
+	that are packages have a __path__; plain modules do not. (CPython
+	raises AttributeError instead, but None-as-absent is what existing
+	Grail callers rely on.)"
 
 	^ (self @env0:includesKey: #__path__)
 		ifTrue: [self @env0:at: #__path__]
-		ifFalse: [nil]
+		ifFalse: [None]
 %
 
 category: 'Python-Accessors'

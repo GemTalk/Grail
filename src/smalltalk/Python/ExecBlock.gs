@@ -5,7 +5,7 @@
 ! These methods allow code blocks returned from Python built-in functions to be
 ! called with arguments using Python-style syntax.
 !
-! These methods are compiled with environmentId 2 (Python) to keep them separate
+! These methods are compiled with environmentId 1 (Python) to keep them separate
 ! from the base Smalltalk methods (environmentId 0).
 ! ===============================================================================
 

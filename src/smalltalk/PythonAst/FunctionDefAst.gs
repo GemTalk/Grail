@@ -156,6 +156,9 @@ printSmalltalkOn: aStream
 		decreaseIndent;
 		nextPutAll: '] value.';
 		lf.
+	"Implicit fall-off return value is Python ``None``. Explicit ``return``
+	signals PythonReturn (caught by the outer handler) and bypasses this."
+	aStream nextPutAll: 'None.'; lf.
 	aStream
 		decreaseIndent;
 		nextPutAll: '] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue].';
@@ -361,7 +364,9 @@ generateMethodSourceOn: aStream
 		].
 	].
 
-	"Emit the PythonReturn handler wrapping the body, inside the block"
+	"Emit the PythonReturn handler wrapping the body, inside the block.
+	Append a trailing ``None`` so an implicit fall-off (no explicit
+	``return``) yields the Python None singleton, not Smalltalk nil."
 	aStream nextPutAll: '['; lf.
 	aStream nextPutAll: '['; lf.
 	body body do: [:each |
@@ -369,6 +374,7 @@ generateMethodSourceOn: aStream
 		aStream lf.
 	].
 	aStream nextPutAll: '] value.'; lf.
+	aStream nextPutAll: 'None.'; lf.
 	aStream nextPutAll: '] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue].'; lf.
 	aStream nextPutAll: '] value'.
 %
@@ -547,6 +553,8 @@ generateClassMethodSourceOn: aStream
 		aStream lf.
 	].
 	aStream nextPutAll: '] value.'; lf.
+	"Implicit fall-off return value is Python ``None``."
+	aStream nextPutAll: 'None.'; lf.
 	aStream nextPutAll: '] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue].'; lf.
 	aStream nextPutAll: '] value'.
 %

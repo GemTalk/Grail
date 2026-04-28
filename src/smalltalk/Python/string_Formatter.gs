@@ -48,7 +48,7 @@ string_formatter category: 'Modules-String'
 ! ===============================================================================
 ! This file contains method implementations for the string_formatter class.
 !
-! These methods are compiled with environmentId 2 (Python) to keep them separate
+! These methods are compiled with environmentId 1 (Python) to keep them separate
 ! from the base Smalltalk methods (environmentId 0).
 ! ===============================================================================
 

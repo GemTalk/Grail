@@ -127,7 +127,7 @@ ensureLoaded
 	"Always init for the current instance (idempotent on the C side)"
 	System userAction: #shimInit withArgs: {
 		current .
-		(current wrap: nil) memoryAddress .
+		(current wrap: None) memoryAddress .
 		(current wrap: true) memoryAddress .
 		(current wrap: false) memoryAddress
 	}.
@@ -157,15 +157,17 @@ method: CPythonShim
 wrap: aValue
 	"Look up or create a CByteArray wrapper for aValue.
 	Returns the CByteArray instance.
-	nil is handled separately since it cannot be a dictionary key."
+	nil and the Python ``None`` singleton both map to the same Py_None
+	wrapper, but the embedded OOP is the singleton — so a round-trip
+	through C yields ``None``, not nil."
 
 	| pyObj |
-	aValue ifNil: [
+	(aValue == nil or: [aValue == None]) ifTrue: [
 		noneWrapper ifNil: [
 			noneWrapper := CByteArray gcMalloc: 24.
 			noneWrapper int64At: 0 put: 1.
-			noneWrapper int64At: 8 put: (self typeAddrFor: aValue).
-			self storeOop: nil asOop in: noneWrapper at: 16.
+			noneWrapper int64At: 8 put: (self typeAddrFor: None).
+			self storeOop: None asOop in: noneWrapper at: 16.
 		].
 		^ noneWrapper
 	].
@@ -219,6 +221,7 @@ initTypeAddresses
 		].
 	"Map base classes"
 	typeAddresses at: Object put: (typeAddresses at: #object).
+	typeAddresses at: NoneType put: (typeAddresses at: #NoneType).
 	typeAddresses at: UndefinedObject put: (typeAddresses at: #NoneType).
 	typeAddresses at: Boolean put: (typeAddresses at: #bool).
 	"Map Float and all subclasses"

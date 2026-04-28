@@ -73,7 +73,7 @@ __delitem__: key
 		KeyError ___signal___: key
 	].
 	UserGlobals @env0:removeKey: name.
-	^ nil
+	^ None
 %
 
 category: 'Python-Subscript Protocol'
@@ -102,10 +102,10 @@ __setitem__: key _: value
 	assoc := session @env0:resolveSymbol: name.
 	assoc ifNotNil: [
 		assoc @env0:value: value.
-		^ nil
+		^ None
 	].
 	UserGlobals @env0:at: name put: value.
-	^ nil
+	^ None
 %
 
 ! ===============================================================================

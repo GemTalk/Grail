@@ -10,9 +10,13 @@ importlib grailDir: dir
 %
 level 0
 run
-| result |
-[CPythonLibrary libraryPath] on: Error do: [:ex |
+| result libPath |
+libPath := [CPythonLibrary libraryPath] on: Error do: [:ex |
     Transcript show: 'CPythonTestCase: skipped (', ex messageText, ')'.
+    ExitClientError signal: 'Skipped' status: 0.
+].
+(libPath isNil or: [libPath isEmpty or: [(GsFile existsOnServer: libPath) not]]) ifTrue: [
+    Transcript show: 'CPythonTestCase: skipped (library not found at ', libPath printString, ')'.
     ExitClientError signal: 'Skipped' status: 0.
 ].
 result := CPythonTestCase suite run.

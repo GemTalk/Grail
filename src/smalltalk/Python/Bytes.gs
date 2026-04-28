@@ -7,7 +7,7 @@
 ! Python's bytes is an immutable sequence of bytes (integers 0-255).
 ! ByteArray in GemStone is mutable, but we enforce immutability through Python methods.
 !
-! These methods are compiled with environmentId 2 (Python) to keep them separate
+! These methods are compiled with environmentId 1 (Python) to keep them separate
 ! from the base Smalltalk methods (environmentId 0).
 ! ===============================================================================
 

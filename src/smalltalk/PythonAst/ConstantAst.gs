@@ -50,7 +50,9 @@ printSmalltalkOn: aStream
 		^self.
 	].
 	value == nil ifTrue: [
-		aStream nextPutAll: 'nil'.
+		"Python ``None`` literal — emit a reference to the singleton bound
+		in the Python dictionary, not Smalltalk ``nil``."
+		aStream nextPutAll: 'None'.
 		^self.
 	].
 	(value isKindOf: String) ifTrue: [

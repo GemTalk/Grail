@@ -158,7 +158,7 @@ __init__: obj
 	"Initialize a str instance (called after __new__).
 	Default implementation does nothing since __new__ handles everything."
 
-	^ nil
+	^ None
 %
 
 category: 'Python-Sequence Operations'

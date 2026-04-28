@@ -24,7 +24,7 @@ grep -n "perform:.*env: 0.*ifTrue:\|perform:.*env: 0.*ifFalse:" smalltalk/classe
 ✅ GOOD: (result perform: #isEmpty env: 0) ifTrue: [...]
 ```
 
-### Pattern 2: Binary operators without `perform:env:0` (IN ENV: 2 CODE)
+### Pattern 2: Binary operators without `perform:env:0` (IN ENV: 1 CODE)
 
 ```bash
 # Search for binary operators that might need perform:env:0:
