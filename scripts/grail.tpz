@@ -43,9 +43,8 @@ dashDashOfs < args size ifTrue:[
         ExitClientError signal: msg status: 1.
     ].
 ] ifFalse: [
-    | replScope bufferStream inContinuation moduleScope lfCodepoint |
+    | bufferStream inContinuation moduleScope lfCodepoint |
     moduleScope := SymbolDictionary new.
-    replScope := ModuleAst symbolListForModuleScope: moduleScope.
     bufferStream := WriteStream on: Unicode7 new.
     inContinuation := false.
     lfCodepoint := Character lf codePoint .

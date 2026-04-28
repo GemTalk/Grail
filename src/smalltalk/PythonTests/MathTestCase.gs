@@ -470,11 +470,8 @@ method: MathTestCase
 testPythonMathCos
 	"Execute math.cos from Python source."
 
-	| moduleScope result |
-	moduleScope := SymbolDictionary new.
-	result := ModuleAst
-		evaluateSource: self math_cos_py
-		usingModuleScope: moduleScope.
+	| result |
+	result := ModuleAst evaluateSource: self math_cos_py.
 	self assert: ((result - 1.0) abs) < 0.00001.
 %
 
@@ -483,11 +480,8 @@ method: MathTestCase
 testPythonMathSqrt
 	"Execute math.sqrt from Python source."
 
-	| moduleScope result |
-	moduleScope := SymbolDictionary new.
-	result := ModuleAst
-		evaluateSource: self math_sqrt_py
-		usingModuleScope: moduleScope.
+	| result |
+	result := ModuleAst evaluateSource: self math_sqrt_py.
 	self assert: ((result - 3.0) abs) < 0.00001.
 %
 

@@ -63,8 +63,21 @@ evaluate: sourceString withScope: aSymbolList
 
 category: 'evaluation'
 classmethod: ModuleAst
+evaluateSource: sourceString
+	"Evaluate sourceString in a fresh module scope. Use this for one-shot
+	evaluations where no globals need to persist after the call."
+
+	^self evaluateSource: sourceString usingModuleScope: SymbolDictionary new
+%
+
+category: 'evaluation'
+classmethod: ModuleAst
 evaluateSource: sourceString usingModuleScope: aSymbolDictionary
-	"Evaluate sourceString in a persistent scope for REPL usage."
+	"Evaluate sourceString with aSymbolDictionary as the module scope.
+	The caller owns the dictionary and may pass the same instance to
+	successive calls so that user-defined globals persist across them —
+	this is the REPL contract (e.g. `x = 1` then `x + 2` resolving x).
+	One-shot callers should use #evaluateSource: instead."
 
 	| module symbolList |
 	module := self parseSource: sourceString.
@@ -132,12 +145,24 @@ evaluateWithScope: aSymbolList
 
 category: 'evaluation'
 method: ModuleAst
+smalltalkSource
+	"Return this module transpiled to Smalltalk source. Pure code
+	generation — no compilation, execution, or filesystem side effects.
+	Use this when you want to inspect the generated code without running it."
+
+	| writeStream |
+	writeStream := PrettyWriteStream on: Unicode7 new.
+	self printSmalltalkOn: writeStream.
+	^writeStream contents
+%
+
+category: 'evaluation'
+method: ModuleAst
 executeWithScope: aSymbolList
 	"Compile and execute this module, returning the raw execution result."
 
-	| tmpPath file writeStream compiledMethod result |
-	writeStream := PrettyWriteStream on: Unicode7 new.
-	self printSmalltalkOn: writeStream.
+	| code tmpPath file compiledMethod result |
+	code := self smalltalkSource.
 	tmpPath := '/tmp/grail'.
 	(GsFile isServerDirectory: tmpPath) ifNil: [
 		GsFile createServerDirectory: tmpPath.
@@ -148,10 +173,10 @@ executeWithScope: aSymbolList
 	].
 	"Write source to disk to allow debugging/inspecting"
 	file := GsFile open: tmpPath , '/' , name , '.gs' mode: 'w' onClient: false.
-	file nextPutAll: writeStream contents.
+	file nextPutAll: code.
 	file close.
 	[
-		compiledMethod := writeStream contents
+		compiledMethod := code
 			_compileInContext: nil
 			symbolList: aSymbolList
 			oldLitVars: nil
