@@ -74,6 +74,31 @@ testCreateAst
 
 category: 'Tests'
 method: ModuleTestCase
+testSmalltalkSource
+	"Transpile Python to Smalltalk without executing it."
+
+	| code |
+	code := (ModuleAst parseSource: 'x = 1') smalltalkSource.
+	self assert: code isString.
+	self assert: code isEmpty not.
+	self assert: (code indexOfSubCollection: 'x := 1') > 0.
+%
+
+category: 'Tests'
+method: ModuleTestCase
+testSmalltalkSourceHasNoSideEffects
+	"smalltalkSource is pure code generation — it must not execute the
+	module, so observable side effects (like print output) must not occur."
+
+	| outputStream |
+	outputStream := WriteStream on: Unicode7 new.
+	Transcript := outputStream.
+	(ModuleAst parseSource: 'print(''should not appear'')') smalltalkSource.
+	self assert: outputStream contents isEmpty.
+%
+
+category: 'Tests'
+method: ModuleTestCase
 testEvaluateWithPersistentScope
 	"Emulate REPL by reusing a scope across evaluations."
 
