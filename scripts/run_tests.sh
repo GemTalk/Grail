@@ -23,7 +23,10 @@ else
   fi
 fi
 
-topaz -lq -S scripts/runTests.gs < /dev/null
+EXIT=0
+topaz -lq -S scripts/runTests.gs < /dev/null || EXIT=$?
 
 # Run embedded CPython tests in a separate session (can't coexist with shim)
-topaz -lq -S scripts/runCPythonTests.gs < /dev/null
+topaz -lq -S scripts/runCPythonTests.gs < /dev/null || EXIT=$?
+
+exit $EXIT
