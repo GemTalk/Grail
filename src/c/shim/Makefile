@@ -25,8 +25,9 @@ OBJECTS = cpython.o $(EXT_OBJECTS)
 all: $(LIB)
 
 # cpython.cc implements the CPython C API + GCI User Actions (requires GEMSTONE)
+# -Wno-strict-aliasing / -Wno-unused-function suppress warnings from $(GEMSTONE)/include/gci*.h{f,t}
 cpython.o: cpython.cc cpython.h
-	$(CXX) -Wall -Wextra -Wno-unused-parameter -fPIC -O2 -I$(GEMSTONE)/include -c cpython.cc -o cpython.o
+	$(CXX) -Wall -Wextra -Wno-unused-parameter -Wno-strict-aliasing -Wno-unused-function -fPIC -O2 -I$(GEMSTONE)/include -c cpython.cc -o cpython.o
 
 # Extension modules get -Wno-unused-parameter since we don't control their source
 _statisticsmodule.o: _statisticsmodule.c cpython.h

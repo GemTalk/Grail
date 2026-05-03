@@ -35,12 +35,10 @@ export SHIM_LIB_PATH=""
 if [ -n "$GEMSTONE" ]; then
     echo "Building CPython shim library..."
     make -C "$GRAIL_DIR/src/c/shim" clean all GEMSTONE="$GEMSTONE"
-    if [ "$OSTYPE" = "linux" ]; then
-      export SHIM_LIB_PATH="$GRAIL_DIR/src/c/shim/libcpython_ua.so"
-    else
-      # Assume Darwin
-      export SHIM_LIB_PATH="$GRAIL_DIR/src/c/shim/libcpython_ua.dylib"
-    fi
+    case "$OSTYPE" in
+      linux*)  export SHIM_LIB_PATH="$GRAIL_DIR/src/c/shim/libcpython_ua.so" ;;
+      *)       export SHIM_LIB_PATH="$GRAIL_DIR/src/c/shim/libcpython_ua.dylib" ;;  # assume Darwin
+    esac
     if [ ! -f "$SHIM_LIB_PATH" ]; then
         echo "Warning: CPython shim library build failed. CPythonShim tests will be skipped."
         export SHIM_LIB_PATH=""

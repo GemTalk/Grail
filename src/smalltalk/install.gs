@@ -992,7 +992,7 @@ run
 | libPath pyPath |
 importlib grailDir: '$GRAIL_DIR'.
 libPath := System gemEnvironmentVariable:'SHIM_LIB_PATH'.
-libPath isEmpty ifFalse: [
+(libPath notNil and: [libPath notEmpty]) ifTrue: [
 	CPythonShim libraryPath: libPath .
 	System loadUserActionLibrary: libPath .
 	importlib registerModule: '_statistics' with: _statistics ___instance___.
@@ -1002,7 +1002,7 @@ libPath isEmpty ifFalse: [
 	importlib registerModule: '_sre' with: _sre ___instance___.
 ].
 pyPath := System gemEnvironmentVariable:'PYTHON_LIB_PATH' .
-pyPath isEmpty ifFalse: [
+(pyPath notNil and: [pyPath notEmpty]) ifTrue: [
 	CPythonLibrary libraryPath: pyPath .
 	CPythonLibrary pythonHomePath: (System gemEnvironmentVariable:'PYTHON_PREFIX') .
 ].

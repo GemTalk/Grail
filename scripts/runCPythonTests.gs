@@ -21,13 +21,14 @@ libPath := [CPythonLibrary libraryPath] on: Error do: [:ex |
 ].
 result := CPythonTestCase suite run.
 result hasPassed ifTrue: [
-    Transcript show: result printString.
+    Transcript show: result printString; cr.
     ExitClientError signal: 'Embedded tests passed!' status: 0.
 ] ifFalse: [
     Transcript nextPutAll: 'Embedded test failures:'; cr.
     result failures do: [:each | Transcript tab; show: each; cr.].
     Transcript nextPutAll: 'Embedded test errors:'; cr.
     result errors do: [:each | Transcript tab; show: each; cr.].
+    Transcript show: result printString; cr.
     ExitClientError signal: 'Embedded tests failed!' status: 1.
 ].
 %

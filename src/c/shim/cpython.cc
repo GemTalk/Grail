@@ -1474,8 +1474,7 @@ static PyObject *get_or_load_module(const char *name) {
         if (strcmp(module_registry[i].name, name) == 0) {
             PyObject *mod = module_registry[i].init();
             if (mod && num_modules < MAX_MODULES) {
-                strncpy(module_names[num_modules], name, 63);
-                module_names[num_modules][63] = '\0';
+                snprintf(module_names[num_modules], sizeof(module_names[num_modules]), "%s", name);
                 module_cache[num_modules] = mod;
                 num_modules++;
 
@@ -1977,8 +1976,7 @@ static OopType shimDynLoad(OopType pathOop, OopType nameOop)
         raise_error("Too many loaded modules (increase MAX_MODULES)");
         return OOP_NIL;
     }
-    strncpy(module_names[num_modules], name, 63);
-    module_names[num_modules][63] = '\0';
+    snprintf(module_names[num_modules], sizeof(module_names[num_modules]), "%s", name);
     module_cache[num_modules] = mod;
     num_modules++;
 

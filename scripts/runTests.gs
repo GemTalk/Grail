@@ -13,13 +13,14 @@ run
 | result |
 result := PythonTestCase suite run.
 result hasPassed ifTrue: [
-    Transcript show: result printString.
+    Transcript show: result printString; cr.
     ExitClientError signal: 'Tests passed!' status: 0.
 ] ifFalse: [
     Transcript nextPutAll: 'Test failures:'; cr.
     result failures do: [:each | Transcript tab; show: each; cr.].
     Transcript nextPutAll: 'Test errors:'; cr.
     result errors do: [:each | Transcript tab; show: each; cr.].
+    Transcript show: result printString; cr.
     ExitClientError signal: 'Tests failed!' status: 1.
 ].
 %
