@@ -15,6 +15,7 @@ else
   SHARED_FLAGS = -shared
   RPATH_FLAGS =
   UNDEF_ARGS =
+  CFLAGS += -I/usr/include/python3.14 -I/usr/include/python3.13
 endif
 
 EXT_OBJECTS = _statisticsmodule.o _bisectmodule.o _crc32cmodule.o _shimtestmodule.o _heapqmodule.o _grail_demo.o _sre.o
