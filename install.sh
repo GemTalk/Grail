@@ -68,7 +68,7 @@ fi
 echo "PYTHON_LIB_PATH = $PYTHON_LIB_PATH"
 echo "PYTHON_PREFIX = $PYTHON_PREFIX"
 
-topaz -lq -S src/smalltalk/install.gs 
+LC_ALL=C topaz -lq -S src/smalltalk/install.gs
 
 if [ $? -ne 0 ]; then
     echo ""
