@@ -67,7 +67,7 @@ dashDashOfs < args size ifTrue:[
                 result == None ifFalse: [
                     GsFile stdout 
                         nextPut: Character cr;
-                        nextPutAll: result ___repr___; 
+                        nextPutAll: result @env1:__repr__;
                         nextPut: Character cr;
                         nextPut: Character lf;
                         yourself.
