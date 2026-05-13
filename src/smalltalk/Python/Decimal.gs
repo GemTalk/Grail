@@ -16,25 +16,22 @@ set compile_env: 1
 
 category: 'Python-Instance Creation'
 classmethod: Decimal
-__new__: cls _: value
-	"Create a new Decimal (Decimal) from a value"
-	
-	| valueClass |
-	"Check the type of value"
-	valueClass := value @env0:class.
-	
+__new__: value
+	"Create a new Decimal from a value. Receiver is the class.
+	In Python: Decimal(value)."
+
 	"If it's already a Decimal, return it"
 	(value @env0:_isScaledDecimal) ifTrue: [
 		^ value
 	].
-	
+
 	"If it's a string, parse it"
 	(value @env0:isKindOf: String) ifTrue: [
-		^ Decimal @env0:_fromString: value decimalPoint: nil
+		^ self @env0:_fromString: value decimalPoint: nil
 	].
-	
+
 	"If it's a number, convert it with default scale of 28"
-	^ Decimal @env0:for: value scale: 28
+	^ self @env0:for: value scale: 28
 %
 
 category: 'Python-Arithmetic'

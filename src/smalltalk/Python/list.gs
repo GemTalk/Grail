@@ -20,6 +20,39 @@ list class removeAllMethods: 1.
 
 set compile_env: 1
 
+category: 'Python-Initialization'
+classmethod: list
+__new__
+	"list() — create an empty list. Receiver is the class."
+
+	^ self ___new___
+%
+
+category: 'Python-Initialization'
+classmethod: list
+__new__: iterable
+	"list(iterable) — create a list from the elements of iterable.
+	Receiver is the class."
+
+	| result iter done |
+	result := self ___new___.
+	"OrderedCollection-shaped iterables: copy directly for speed"
+	(iterable @env0:isKindOf: SequenceableCollection) ifTrue: [
+		1 @env0:to: iterable @env0:size do: [:i |
+			result @env0:add: (iterable @env0:at: i)
+		].
+		^ result
+	].
+	"Generic Python iterable protocol: walk __iter__/__next__"
+	iter := iterable __iter__.
+	done := false.
+	[done] @env0:whileFalse: [
+		[result @env0:add: iter __next__]
+			@env0:on: StopIteration do: [:ex | done := true]
+	].
+	^ result
+%
+
 category: 'Python-Sequence Protocol'
 method: list
 __delitem__: index

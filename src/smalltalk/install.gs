@@ -352,6 +352,7 @@ run
 	at: #'CPythonTestCase' put: nil;
 	at: #'CMathTestCase' put: nil;
 	at: #'ChildProcessErrorTestCase' put: nil;
+	at: #'ClassCallFastPathTestCase' put: nil;
 	at: #'ClassTestCase' put: nil;
 	at: #'ComplexTestCase' put: nil;
 	at: #'ConnectionAbortedErrorTestCase' put: nil;
@@ -831,6 +832,7 @@ input src/smalltalk/PythonTests/BooleanTestCase.gs
 input src/smalltalk/PythonTests/BuiltinsTestCase.gs
 input src/smalltalk/PythonTests/BytearrayTestCase.gs
 input src/smalltalk/PythonTests/BytesTestCase.gs
+input src/smalltalk/PythonTests/ClassCallFastPathTestCase.gs
 input src/smalltalk/PythonTests/ClassTestCase.gs
 input src/smalltalk/PythonTests/CMathTestCase.gs
 input src/smalltalk/PythonTests/ComplexTestCase.gs

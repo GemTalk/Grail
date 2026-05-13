@@ -150,6 +150,34 @@ new: anInteger fill: aBlock
 
 set compile_env: 1
 
+category: 'Python-Initialization'
+classmethod: tuple
+__new__
+	"tuple() — return an empty, frozen tuple. Receiver is the class."
+
+	^ self @env0:new
+%
+
+category: 'Python-Initialization'
+classmethod: tuple
+__new__: iterable
+	"tuple(iterable) — create a frozen tuple from iterable's items.
+	Receiver is the class."
+
+	| items iter done |
+	(iterable @env0:isKindOf: SequenceableCollection) ifTrue: [
+		^ self @env0:withAll: iterable
+	].
+	items := OrderedCollection @env0:new.
+	iter := iterable __iter__.
+	done := false.
+	[done] @env0:whileFalse: [
+		[items @env0:add: iter __next__]
+			@env0:on: StopIteration do: [:ex | done := true]
+	].
+	^ self @env0:withAll: items
+%
+
 category: 'Python-Sequence Operations'
 method: tuple
 __add__: other

@@ -22,16 +22,17 @@ set compile_env: 1
 
 category: 'Python-Constructors'
 classmethod: bytes
-__new__: cls
-	"bytes() - create empty bytes"
+__new__
+	"bytes() — create empty bytes. Receiver is the class."
 
-	^ cls ___new___
+	^ self ___new___
 %
 
 category: 'Python-Constructors'
 classmethod: bytes
-__new__: cls _: source
-	"bytes(source) - create bytes from various sources"
+__new__: source
+	"bytes(source) — create bytes from various sources. Receiver is
+	the class (so subclasses like bytearray instantiate themselves)."
 
 	| result sourceClass |
 	sourceClass := source @env0:class.
@@ -41,7 +42,7 @@ __new__: cls _: source
 		(source @env0:< 0) ifTrue: [
 			ValueError ___signal___: 'negative count'
 		].
-		^ cls ___new___: source
+		^ self ___new___: source
 	].
 
 	"If source is a string, raise TypeError (need encoding)"
@@ -51,7 +52,7 @@ __new__: cls _: source
 
 	"If source is bytes, make a copy"
 	(sourceClass == bytes) ifTrue: [
-		result := cls ___new___: source @env0:size.
+		result := self ___new___: source @env0:size.
 		1 @env0:to: source @env0:size do: [:i |
 			result @env0:at: i put: (source @env0:at: i)
 		].
@@ -66,7 +67,7 @@ __new__: cls _: source
 	]) ifTrue: [
 		| ba size |
 		size := source @env0:size.
-		ba := cls ___new___: size.
+		ba := self ___new___: size.
 		1 @env0:to: size do: [:i |
 			| elem val |
 			elem := source @env0:at: i.
@@ -86,7 +87,7 @@ __new__: cls _: source
 	(sourceClass == Interval) ifTrue: [
 		| ba size |
 		size := source @env0:size.
-		ba := cls ___new___: size.
+		ba := self ___new___: size.
 		1 @env0:to: size do: [:i |
 			| val |
 			val := source @env0:at: i.
@@ -102,17 +103,16 @@ __new__: cls _: source
 	].
 
 	"Default: empty bytes"
-	^ cls ___new___
+	^ self ___new___
 %
 
 category: 'Python-Constructors'
 classmethod: bytes
-__new__: cls _: source _: encoding
-	"bytes(string, encoding) - encode string to bytes"
+__new__: source _: encoding
+	"bytes(string, encoding) — encode string to bytes. Receiver is the
+	class (so subclasses like bytearray instantiate themselves)."
 
-	| result sourceClass encodingStr |
-	sourceClass := source @env0:class.
-
+	| result encodingStr |
 	"Source must be a string (String or Unicode7)"
 	((source @env0:isKindOf: String) not) ifTrue: [
 		TypeError ___signal___: 'encoding without a string argument'
@@ -125,7 +125,7 @@ __new__: cls _: source _: encoding
 	(encodingStr @env0:= 'ascii') ifTrue: [
 		| ba size |
 		size := source @env0:size.
-		ba := cls ___new___: size.
+		ba := self ___new___: size.
 		1 @env0:to: size do: [:i |
 			| char codePoint |
 			char := source @env0:at: i.
@@ -144,7 +144,7 @@ __new__: cls _: source _: encoding
 	]) ifTrue: [
 		| utf8Bytes |
 		utf8Bytes := source @env0:encodeAsUTF8.
-		result := cls ___new___: (utf8Bytes @env0:size).
+		result := self ___new___: (utf8Bytes @env0:size).
 		1 @env0:to: utf8Bytes @env0:size do: [:i |
 			result @env0:at: i put: (utf8Bytes @env0:at: i)
 		].
@@ -157,7 +157,7 @@ __new__: cls _: source _: encoding
 	]) ifTrue: [
 		| ba size |
 		size := source @env0:size.
-		ba := cls ___new___: size.
+		ba := self ___new___: size.
 		1 @env0:to: size do: [:i |
 			| char codePoint |
 			char := source @env0:at: i.
@@ -176,8 +176,9 @@ __new__: cls _: source _: encoding
 
 category: 'Python-Constructors'
 classmethod: bytes
-fromhex: cls _: hexString
-	"Create bytes from hex string (e.g., 'deadbeef')"
+fromhex: hexString
+	"Create bytes from hex string (e.g., 'deadbeef'). Receiver is the
+	class. In Python: bytes.fromhex('deadbeef')."
 
 	| cleaned size ba |
 	"Remove spaces from hex string"
@@ -192,7 +193,7 @@ fromhex: cls _: hexString
 	].
 
 	"Create bytes and fill with hex values"
-	ba := cls ___new___: (size @env0:// 2).
+	ba := self ___new___: (size @env0:// 2).
 	1 @env0:to: size by: 2 do: [:i |
 		| hexPair byte stream |
 		hexPair := cleaned @env0:copyFrom: i to: (i @env0:+ 1).

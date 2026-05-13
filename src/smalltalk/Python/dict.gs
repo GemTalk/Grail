@@ -20,6 +20,75 @@ dict class removeAllMethods: 1.
 
 set compile_env: 1
 
+category: 'Python-Initialization'
+classmethod: dict
+__new__
+	"dict() — create an empty dict. Receiver is the class."
+
+	^ self ___new___
+%
+
+category: 'Python-Initialization'
+classmethod: dict
+__new__: source
+	"dict(source) — create a dict from another mapping or from an
+	iterable of (key, value) pairs. Receiver is the class.
+
+	If `source` is a mapping (responds to `keys` / `__getitem__`), copy
+	its entries. Otherwise treat it as an iterable of 2-element
+	sequences."
+
+	| result iter done |
+	result := self ___new___.
+
+	"Mapping fast path: source is a dict (or KeyValueDictionary)"
+	(source @env0:isKindOf: KeyValueDictionary) ifTrue: [
+		source @env0:keysAndValuesDo: [:k :v |
+			result @env0:at: k put: v
+		].
+		^ result
+	].
+
+	"Iterable of 2-element sequences"
+	iter := source __iter__.
+	done := false.
+	[done] @env0:whileFalse: [
+		[
+			| pair |
+			pair := iter __next__.
+			(pair @env0:size @env0:= 2) ifFalse: [
+				ValueError ___signal___:
+					'dictionary update sequence element has wrong length'
+			].
+			result @env0:at: (pair @env0:at: 1) put: (pair @env0:at: 2)
+		] @env0:on: StopIteration do: [:ex | done := true]
+	].
+	^ result
+%
+
+category: 'Python-Initialization'
+classmethod: dict
+_new: positional kw: keywords
+	"dict(**kwargs) and dict(source, **kwargs) varargs entry point.
+	Builds a dict from any positional source plus keyword overrides.
+	Used by the class-call varargs fast path when keyword arguments
+	are passed (e.g. `dict(a=1, b=2)`)."
+
+	| result |
+	(positional @env0:size @env0:> 1) ifTrue: [
+		TypeError ___signal___: 'dict expected at most 1 positional argument'
+	].
+	result := positional @env0:isEmpty
+		ifTrue: [self ___new___]
+		ifFalse: [self @env1:__new__: (positional @env0:at: 1)].
+	keywords ifNotNil: [
+		keywords @env0:keysAndValuesDo: [:k :v |
+			result @env0:at: k put: v
+		]
+	].
+	^ result
+%
+
 category: 'Python-Type'
 method: dict
 __class__
