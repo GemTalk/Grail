@@ -93,7 +93,7 @@ test__iadd__
 	ba @env1:append: 65.
 	ba @env1:append: 66.
 
-	bytes := bytearray @env1:__new__: bytearray _: 'CD' _: 'ascii'.
+	bytes := bytearray @env1:__new__: 'CD' _: 'ascii'.
 	result := ba @env1:__iadd__: bytes.
 
 	"Should return same object"
@@ -161,8 +161,8 @@ test__new__fromBytes
 	"Test bytearray(b'hello') creates mutable copy"
 
 	| bytes result |
-	bytes := bytearray @env1:__new__: bytearray _: 'hello' _: 'ascii'.
-	result := bytearray ___new___: bytearray _: bytes.
+	bytes := bytearray @env1:__new__: 'hello' _: 'ascii'.
+	result := bytearray ___new___: bytes.
 
 	self assert: result size equals: 5.
 	self assert: (result at: 1) equals: 104.  "h"
@@ -174,7 +174,7 @@ test__new__fromInteger
 	"Test bytearray(n) - create n zero bytes"
 
 	| result |
-	result := bytearray ___new___: bytearray _: 5.
+	result := bytearray ___new___: 5.
 	self assert: result size equals: 5.
 	self assert: (result at: 1) equals: 0.
 	self assert: (result at: 5) equals: 0.
@@ -191,7 +191,7 @@ test__new__fromList
 	list add: 66.
 	list add: 67.
 
-	result := bytearray ___new___: bytearray _: list.
+	result := bytearray ___new___: list.
 	self assert: result size equals: 3.
 	self assert: (result at: 1) equals: 65.
 	self assert: (result at: 2) equals: 66.
@@ -204,7 +204,7 @@ test__setitem__
 	"Test that bytearray is mutable via __setitem__"
 
 	| ba |
-	ba := bytearray ___new___: bytearray _: 3.
+	ba := bytearray ___new___: 3.
 	
 	"Set values"
 	ba @env1:__setitem__: 0 _: 65.
@@ -222,7 +222,7 @@ test__setitem__invalidValue
 	"Test that setting invalid byte value raises ValueError"
 
 	| ba |
-	ba := bytearray ___new___: bytearray _: 3.
+	ba := bytearray ___new___: 3.
 	
 	self 
 		should: [ba @env1:__setitem__: 0 _: 256]
@@ -239,7 +239,7 @@ test__setitem__negativeIndex
 	"Test bytearray[-1] = 90"
 
 	| ba |
-	ba := bytearray ___new___: bytearray _: 3.
+	ba := bytearray ___new___: 3.
 	ba @env1:__setitem__: -1 _: 90.
 
 	self assert: (ba at: 3) equals: 90.
@@ -251,7 +251,7 @@ test__setitem__outOfRange
 	"Test that setting out of range raises IndexError"
 
 	| ba |
-	ba := bytearray ___new___: bytearray _: 3.
+	ba := bytearray ___new___: 3.
 	
 	self 
 		should: [ba @env1:__setitem__: 10 _: 65]
@@ -315,7 +315,7 @@ testConcatenation
 	ba @env1:append: 65.
 	ba @env1:append: 66.
 
-	bytes := bytearray @env1:__new__: bytearray _: 'CD' _: 'ascii'.
+	bytes := bytearray @env1:__new__: 'CD' _: 'ascii'.
 	result := ba @env1:__add__: bytes.
 
 	self assert: (result class) equals: bytearray.
@@ -374,7 +374,7 @@ testEqualityWithBytes
 	ba @env1:append: 65.
 	ba @env1:append: 66.
 
-	bytes := bytearray @env1:__new__: bytearray _: 'AB' _: 'ascii'.
+	bytes := bytearray @env1:__new__: 'AB' _: 'ascii'.
 
 	self assert: (ba @env1:__eq__: bytes).
 %
@@ -386,7 +386,7 @@ testExtendWithBytes
 
 	| ba bytes |
 	ba := bytearray ___new___: bytearray.
-	bytes := bytearray @env1:__new__: bytearray _: 'hello' _: 'ascii'.
+	bytes := bytearray @env1:__new__: 'hello' _: 'ascii'.
 
 	ba @env1:extend: bytes.
 
@@ -420,7 +420,7 @@ testFromhex
 	"Test bytearray.fromhex('48656c6c6f')"
 
 	| result |
-	result := bytearray @env1:fromhex: bytearray _: '48656c6c6f'.
+	result := bytearray @env1:fromhex: '48656c6c6f'.
 
 	self assert: result size equals: 5.
 	self assert: (result at: 1) equals: 72.   "H"
@@ -462,7 +462,7 @@ testInheritedFind
 	ba @env1:append: 108.  "l"
 	ba @env1:append: 111.  "o"
 
-	bytes := bytearray @env1:__new__: bytearray _: 'll' _: 'ascii'.
+	bytes := bytearray @env1:__new__: 'll' _: 'ascii'.
 	result := ba @env1:find: bytes.
 
 	self assert: result equals: 2.

@@ -9,18 +9,19 @@ instead so the work is meaningful to a fresh reader.
 
 These break programs that look ordinary in CPython.
 
-- [ ] **Class-mapped builtin calls fall through to a broken legacy path** —
-  `bool(x)`, `int(x)`, `str(x)`, etc. emit
-  `bool value: { (x). } value: nil` and signal
-  `MessageNotUnderstood: Boolean class does not understand value:value:`.
-  Affects every Python-callable type whose name resolves to a Smalltalk
-  class via `install.gs` Step 3 (`bool`, `int`, `float`, `str`, `bytes`,
-  `bytearray`, `list`, `tuple`, `dict`, `range`, `Decimal`, `frozenset`,
-  `object`). Builtin *functions* (`repr`, `len`, `hash`, …) work because
-  they go through `(builtins instance) name: arg`. The class-call path
-  needs the same fast-path treatment — emit `cls @env1:__new__: arg`
-  (or the varargs equivalent). See `CallAst >> printSmalltalkOn:` and
-  the `knownBuiltinName` discriminator.
+- [x] ~~**Class-mapped builtin calls fall through to a broken legacy
+  path**~~ — Done. `bool(x)`, `int(x)`, `float(x)`, `str(x)`,
+  `object()`, `Decimal(x)`, `range(...)`, `bytes(...)`, `bytearray(...)`,
+  `list(...)`, `tuple(...)`, `dict(...)`, `set(...)`, `frozenset(...)`
+  all emit `(cls @env1:__new__: arg ...)` via `bareCallClassNewSelector`
+  in `CallAst >> printSmalltalkOn:`. Arity mismatches on a known class
+  produce a Python `TypeError` instead of a `value:value:`
+  MessageNotUnderstood. Group A refactor (drop the leading `cls` first
+  argument from `__new__: cls _: arg` signatures on Decimal, range,
+  bytes, bytearray) and Group B (add `__new__` to list, tuple, dict,
+  frozenset; set inherits from frozenset) shipped together. The
+  discriminator walks the metaclass chain so inherited `__new__`
+  selectors are detected. Tests in `ClassCallFastPathTestCase`.
 
 - [ ] **Comprehensions have no codegen** — `ListCompAst`, `DictCompAst`,
   `SetCompAst`, `GeneratorExpAst`, and the helper `ComprehensionAst`

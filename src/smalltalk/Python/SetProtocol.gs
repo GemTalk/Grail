@@ -23,6 +23,42 @@ Set class removeAllMethods: 1.
 
 set compile_env: 1
 
+category: 'Python-Initialization'
+classmethod: Set
+__new__
+	"set() / frozenset() — return an empty instance. `self` is the actual
+	receiver class (set or frozenset), so the concrete type matches:
+	`set new` returns a mutable set, `frozenset new` returns an immutable
+	frozenset (frozenset's class-side `new` adds immediateInvariant)."
+
+	^ self @env0:new
+%
+
+category: 'Python-Initialization'
+classmethod: Set
+__new__: iterable
+	"set(iterable) / frozenset(iterable) — populate from iterable's
+	elements. Set semantics deduplicate equal elements. Concrete type
+	matches the receiver (`self` is set or frozenset).
+
+	The Collection fast path covers Smalltalk Arrays, OrderedCollections,
+	Sets, etc.; generic Python iterables fall through to the __iter__/
+	__next__ loop."
+
+	| items iter done |
+	(iterable @env0:isKindOf: Collection) ifTrue: [
+		^ self @env0:withAll: iterable
+	].
+	items := OrderedCollection @env0:new.
+	iter := iterable __iter__.
+	done := false.
+	[done] @env0:whileFalse: [
+		[items @env0:add: iter __next__]
+			@env0:on: StopIteration do: [:ex | done := true]
+	].
+	^ self @env0:withAll: items
+%
+
 category: 'Python-Type Information'
 method: Set
 __class__

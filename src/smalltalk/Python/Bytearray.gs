@@ -67,16 +67,17 @@ set compile_env: 1
 
 category: 'Python-Constructors'
 classmethod: bytearray
-__new__: cls
-	"bytearray() - create empty bytearray"
+__new__
+	"bytearray() — create empty bytearray. Receiver is the class."
 
-	^ cls ___new___
+	^ self ___new___
 %
 
 category: 'Python-Constructors'
 classmethod: bytearray
-__new__: cls _: source
-	"bytearray(source) - create bytearray from various sources"
+__new__: source
+	"bytearray(source) — create bytearray from various sources.
+	Receiver is the class."
 
 	| result sourceClass |
 	sourceClass := source @env0:class.
@@ -86,7 +87,7 @@ __new__: cls _: source
 		(source @env0:< 0) ifTrue: [
 			ValueError ___signal___: 'negative count'
 		].
-		^ cls ___new___: source
+		^ self ___new___: source
 	].
 
 	"If source is a string, raise TypeError (need encoding)"
@@ -98,7 +99,7 @@ __new__: cls _: source
 	((sourceClass == bytes) or: [
 		sourceClass == bytearray
 	]) ifTrue: [
-		result := cls ___new___: (source @env0:size).
+		result := self ___new___: (source @env0:size).
 		1 @env0:to: source @env0:size do: [:i |
 			result @env0:at: i put: (source @env0:at: i)
 		].
@@ -113,7 +114,7 @@ __new__: cls _: source
 	]) ifTrue: [
 		| ba size |
 		size := source @env0:size.
-		ba := cls ___new___: size.
+		ba := self ___new___: size.
 		1 @env0:to: size do: [:i |
 			| elem val |
 			elem := source @env0:at: i.
@@ -133,7 +134,7 @@ __new__: cls _: source
 	(sourceClass == Interval) ifTrue: [
 		| ba size |
 		size := source @env0:size.
-		ba := cls ___new___: size.
+		ba := self ___new___: size.
 		1 @env0:to: size do: [:i |
 			| val |
 			val := source @env0:at: i.
@@ -149,17 +150,16 @@ __new__: cls _: source
 	].
 
 	"Default: empty bytearray"
-	^ cls ___new___
+	^ self ___new___
 %
 
 category: 'Python-Constructors'
 classmethod: bytearray
-__new__: cls _: source _: encoding
-	"bytearray(string, encoding) - encode string to bytearray"
+__new__: source _: encoding
+	"bytearray(string, encoding) — encode string to bytearray.
+	Receiver is the class."
 
-	| result sourceClass encodingStr |
-	sourceClass := source @env0:class.
-
+	| result encodingStr |
 	"Source must be a string"
 	((source @env0:isKindOf: String) not) ifTrue: [
 		TypeError ___signal___: 'encoding without a string argument'
@@ -172,7 +172,7 @@ __new__: cls _: source _: encoding
 	(encodingStr @env0:= 'ascii') ifTrue: [
 		| ba size |
 		size := source @env0:size.
-		ba := cls __new__: cls _: size.
+		ba := self ___new___: size.
 		1 @env0:to: size do: [:i |
 			| char codePoint |
 			char := source @env0:at: i.
@@ -191,7 +191,7 @@ __new__: cls _: source _: encoding
 	]) ifTrue: [
 		| utf8Bytes |
 		utf8Bytes := source @env0:encodeAsUTF8.
-		result := cls __new__: (utf8Bytes @env0:size).
+		result := self ___new___: (utf8Bytes @env0:size).
 		1 @env0:to: utf8Bytes @env0:size do: [:i |
 			result @env0:at: i put: (utf8Bytes @env0:at: i)
 		].
@@ -204,7 +204,7 @@ __new__: cls _: source _: encoding
 	]) ifTrue: [
 		| ba size |
 		size := source @env0:size.
-		ba := cls ___new___: size.
+		ba := self ___new___: size.
 		1 @env0:to: size do: [:i |
 			| char codePoint |
 			char := source @env0:at: i.
@@ -223,8 +223,9 @@ __new__: cls _: source _: encoding
 
 category: 'Python-Constructors'
 classmethod: bytearray
-fromhex: cls _: hexString
-	"Create bytearray from hex string (e.g., 'deadbeef')"
+fromhex: hexString
+	"Create bytearray from hex string (e.g., 'deadbeef'). Receiver is
+	the class. In Python: bytearray.fromhex('deadbeef')."
 
 	| cleaned size ba |
 	"Remove spaces from hex string"
@@ -239,7 +240,7 @@ fromhex: cls _: hexString
 	].
 
 	"Create bytearray and fill with hex values"
-	ba := cls ___new___: (size @env0:// 2).
+	ba := self ___new___: (size @env0:// 2).
 	1 @env0:to: size by: 2 do: [:i |
 		| hexPair byte stream |
 		hexPair := cleaned @env0:copyFrom: i to: (i @env0:+ 1).

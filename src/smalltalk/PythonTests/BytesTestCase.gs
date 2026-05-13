@@ -148,7 +148,7 @@ test__len__
 	"Test len(bytes)"
 
 	| b |
-	b := bytes ___new___: bytes _: {1. 2. 3}.
+	b := bytes ___new___: {1. 2. 3}.
 	self assert: b size equals: 3.
 %
 
@@ -196,8 +196,8 @@ test__new__fromBytes
 	"Test bytes(b'hello') creates a copy"
 
 	| original copy |
-	original := bytes @env1:__new__: bytes _: 'hello' _: 'ascii'.
-	copy := bytes ___new___: bytes _: original.
+	original := bytes @env1:__new__: 'hello' _: 'ascii'.
+	copy := bytes ___new___: original.
 	
 	self assert: copy size equals: 5.
 	self assert: (copy @env1:__eq__: original).
@@ -210,7 +210,7 @@ test__new__fromInteger
 	"Test bytes(n) - create n zero bytes"
 
 	| result |
-	result := bytes ___new___: bytes _: 5.
+	result := bytes ___new___: 5.
 	self assert: result size equals: 5.
 	self assert: (result at: 1) equals: 0.
 	self assert: (result at: 5) equals: 0.
@@ -222,7 +222,7 @@ test__new__fromIntegerNegative
 	"Test bytes(-1) raises ValueError"
 
 	self 
-		should: [bytes ___new___: bytes _: -1]
+		should: [bytes ___new___: -1]
 		raise: ValueError.
 %
 
@@ -237,7 +237,7 @@ test__new__fromList
 	list add: 66.
 	list add: 67.
 	
-	result := bytes ___new___: bytes _: list.
+	result := bytes ___new___: list.
 	self assert: result size equals: 3.
 	self assert: (result at: 1) equals: 65.
 	self assert: (result at: 2) equals: 66.
@@ -254,7 +254,7 @@ test__new__fromListInvalidByte
 	list add: 256.
 	
 	self 
-		should: [bytes ___new___: bytes _: list]
+		should: [bytes ___new___: list]
 		raise: ValueError.
 %
 
@@ -264,9 +264,9 @@ test__new__fromRange
 	"Test bytes(range(65, 68)) creates b'ABC'"
 
 	| range result |
-	range := Interval @env1:__new__: Interval _: 65 _: 68 _: 1.
+	range := Interval @env1:__new__: 65 _: 68 _: 1.
 	
-	result := bytes ___new___: bytes _: range.
+	result := bytes ___new___: range.
 	self assert: result size equals: 3.
 	self assert: (result at: 1) equals: 65.
 	self assert: (result at: 2) equals: 66.
@@ -281,7 +281,7 @@ test__new__fromStringAscii
 	| str result |
 	str := 'hello'.
 	
-	result := bytes @env1:__new__: bytes _: str _: 'ascii'.
+	result := bytes @env1:__new__: str _: 'ascii'.
 	self assert: result size equals: 5.
 	self assert: (result at: 1) equals: 104.
 	self assert: (result at: 5) equals: 111.
@@ -295,7 +295,7 @@ test__new__fromStringLatin1
 	| str result |
 	str := 'hello'.
 
-	result := bytes @env1:__new__: bytes _: str _: 'latin-1'.
+	result := bytes @env1:__new__: str _: 'latin-1'.
 	self assert: result size equals: 5.
 %
 
@@ -308,7 +308,7 @@ test__new__fromStringNoEncoding
 	str := 'hello'.
 	
 	self 
-		should: [bytes ___new___: bytes _: str]
+		should: [bytes ___new___: str]
 		raise: TypeError.
 %
 
@@ -320,7 +320,7 @@ test__new__fromStringUtf8
 	| str result |
 	str := 'hello'.
 	
-	result := bytes @env1:__new__: bytes _: str _: 'utf-8'.
+	result := bytes @env1:__new__: str _: 'utf-8'.
 	self assert: result size equals: 5.
 %
 
@@ -330,7 +330,7 @@ test__repr__
 	"Test bytes.__repr__()"
 
 	| b result |
-	b := bytes @env1:__new__: bytes _: 'hello' _: 'ascii'.
+	b := bytes @env1:__new__: 'hello' _: 'ascii'.
 	result := b @env1:__repr__.
 
 	"Should start with b' and end with '"
@@ -391,7 +391,7 @@ test_decode_ascii
 	"Test bytes.decode('ascii')"
 
 	| b result |
-	b := bytes @env1:__new__: bytes _: 'hello' _: 'ascii'.
+	b := bytes @env1:__new__: 'hello' _: 'ascii'.
 	result := b @env1:decode: 'ascii'.
 	self assert: result equals: 'hello'.
 %
@@ -402,7 +402,7 @@ test_endswith
 	"Test bytes.endswith(suffix)"
 
 	| b suffix |
-	b := bytes @env1:__new__: bytes _: 'hello' _: 'ascii'.
+	b := bytes @env1:__new__: 'hello' _: 'ascii'.
 	suffix :=  bytes withAll: {108. 111}.
 
 	self assert: (b @env1:endswith: suffix).
@@ -429,7 +429,7 @@ test_find
 	"Test bytes.find(sub)"
 
 	| b sub |
-	b := bytes @env1:__new__: bytes _: 'hello' _: 'ascii'.
+	b := bytes @env1:__new__: 'hello' _: 'ascii'.
 	sub :=  bytes withAll: {108. 108}.
 
 	self assert: (b @env1:find: sub) equals: 2.
@@ -444,7 +444,7 @@ test_fromhex
 	"Test bytes.fromhex(string)"
 
 	| result |
-	result := bytes @env1:fromhex: bytes _: 'ff0010'.
+	result := bytes @env1:fromhex: 'ff0010'.
 
 	self assert: result size equals: 3.
 	self assert: (result at: 1) equals: 255.
@@ -597,10 +597,10 @@ test_join
 	"Test bytes.join(iterable)"
 
 	| sep parts result |
-	sep := bytes ___new___: bytes _: {44}.
+	sep := bytes ___new___: {44}.
 	parts := OrderedCollection new.
-	parts add: (bytes ___new___: bytes _: {97}).
-	parts add: (bytes ___new___: bytes _: {98}).
+	parts add: (bytes ___new___: {97}).
+	parts add: (bytes ___new___: {98}).
 
 	result := sep @env1:join: parts.
 	self assert: result size equals: 3.
@@ -668,7 +668,7 @@ test_partition
 
 	| b sep result |
 	b :=  bytes withAll: {104. 101. 108. 108. 111. 32. 119. 111. 114. 108. 100}.
-	sep := bytes ___new___: bytes _: {32}.
+	sep := bytes ___new___: {32}.
 
 	result := b @env1:partition: sep.
 	self assert: result size equals: 3.
@@ -726,7 +726,7 @@ test_rfind
 
 	| b sub |
 	b :=  bytes withAll: {97. 98. 97. 98. 99}.
-	sub := bytes ___new___: bytes _: {97}.
+	sub := bytes ___new___: {97}.
 
 	self assert: (b @env1:rfind: sub) equals: 2.
 %
@@ -738,7 +738,7 @@ test_rindex
 
 	| b sub |
 	b :=  bytes withAll: {97. 98. 97. 98. 99}.
-	sub := bytes ___new___: bytes _: {97}.
+	sub := bytes ___new___: {97}.
 
 	self assert: (b @env1:rindex: sub) equals: 2.
 %
@@ -750,7 +750,7 @@ test_rindexNotFound
 
 	| b sub |
 	b :=  bytes withAll: {1. 2. 3}.
-	sub := bytes ___new___: bytes _: {99}.
+	sub := bytes ___new___: {99}.
 
 	self should: [b @env1:rindex: sub] raise: ValueError.
 %
@@ -776,7 +776,7 @@ test_rpartition
 
 	| b sep result |
 	b :=  bytes withAll: {104. 101. 108. 108. 111. 32. 119. 111. 114. 108. 100}.
-	sep := bytes ___new___: bytes _: {32}.
+	sep := bytes ___new___: {32}.
 
 	result := b @env1:rpartition: sep.
 	self assert: (result size) equals: 3.
@@ -791,7 +791,7 @@ test_rsplit
 
 	| b sep result |
 	b :=  bytes withAll: {97. 44. 98. 44. 99. 44. 100}.
-	sep := bytes ___new___: bytes _: {44}.
+	sep := bytes ___new___: {44}.
 
 	result := b @env1:rsplit: sep _: 1.
 	self assert: (result size) equals: 2.
@@ -805,7 +805,7 @@ test_rsplit_maxsplit
 	| b sep result part0 part1 part2 |
 	"Test: b'a,b,c,d'.rsplit(b',', 2) should give [b'a,b', b'c', b'd']"
 	b :=  bytes withAll: {97. 44. 98. 44. 99. 44. 100}.
-	sep := bytes ___new___: bytes _: {44}.
+	sep := bytes ___new___: {44}.
 
 	result := b @env1:rsplit: sep _: 2.
 	self assert: (result size) equals: 3.
@@ -833,7 +833,7 @@ test_rsplit_maxsplit_negative
 	| b sep result |
 	"Test: b'a,b,c'.rsplit(b',', -1) should give [b'a', b'b', b'c']"
 	b :=  bytes withAll: {97. 44. 98. 44. 99}.
-	sep := bytes ___new___: bytes _: {44}.
+	sep := bytes ___new___: {44}.
 
 	result := b @env1:rsplit: sep _: -1.
 	self assert: (result size) equals: 3.
@@ -847,7 +847,7 @@ test_rsplit_maxsplit_one
 	| b sep result part0 part1 |
 	"Test: b'a,b,c,d'.rsplit(b',', 1) should give [b'a,b,c', b'd']"
 	b :=  bytes withAll: {97. 44. 98. 44. 99. 44. 100}.
-	sep := bytes ___new___: bytes _: {44}.
+	sep := bytes ___new___: {44}.
 
 	result := b @env1:rsplit: sep _: 1.
 	self assert: (result size) equals: 2.
@@ -881,7 +881,7 @@ test_split
 
 	| b sep result |
 	b :=  bytes withAll: {97. 44. 98. 44. 99}.
-	sep := bytes ___new___: bytes _: {44}.
+	sep := bytes ___new___: {44}.
 
 	result := b @env1:split: sep.
 	self assert: (result size) equals: 3.
@@ -895,7 +895,7 @@ test_split_maxsplit
 	| b sep result part0 part1 part2 |
 	"Test: b'a,b,c,d'.split(b',', 2) should give [b'a', b'b', b'c,d']"
 	b :=  bytes withAll: {97. 44. 98. 44. 99. 44. 100}.
-	sep := bytes ___new___: bytes _: {44}.
+	sep := bytes ___new___: {44}.
 
 	result := b @env1:split: sep _: 2.
 	self assert: (result size) equals: 3.
@@ -923,7 +923,7 @@ test_split_maxsplit_negative
 	| b sep result |
 	"Test: b'a,b,c'.split(b',', -1) should give [b'a', b'b', b'c']"
 	b :=  bytes withAll: {97. 44. 98. 44. 99}.
-	sep := bytes ___new___: bytes _: {44}.
+	sep := bytes ___new___: {44}.
 
 	result := b @env1:split: sep _: -1.
 	self assert: (result size) equals: 3.
@@ -937,7 +937,7 @@ test_split_maxsplit_one
 	| b sep result part0 part1 |
 	"Test: b'a,b,c,d'.split(b',', 1) should give [b'a', b'b,c,d']"
 	b :=  bytes withAll: {97. 44. 98. 44. 99. 44. 100}.
-	sep := bytes ___new___: bytes _: {44}.
+	sep := bytes ___new___: {44}.
 
 	result := b @env1:split: sep _: 1.
 	self assert: (result size) equals: 2.
@@ -970,7 +970,7 @@ test_startswith
 	"Test bytes.startswith(prefix)"
 
 	| b prefix |
-	b := bytes @env1:__new__: bytes _: 'hello' _: 'ascii'.
+	b := bytes @env1:__new__: 'hello' _: 'ascii'.
 	prefix :=  bytes withAll: {104. 101}.
 
 	self assert: (b @env1:startswith: prefix).
@@ -1039,7 +1039,7 @@ test_upper
 	"Test bytes.upper()"
 
 	| b result |
-	b := bytes @env1:__new__: bytes _: 'hello' _: 'ascii'.
+	b := bytes @env1:__new__: 'hello' _: 'ascii'.
 	result := b @env1:upper.
 	self assert: (result at: 1) equals: 72.
 	self assert: (result at: 2) equals: 69.

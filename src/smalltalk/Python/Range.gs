@@ -26,29 +26,23 @@ set compile_env: 1
 
 category: 'Python-Initialization'
 classmethod: range
-__new__: cls _: start _: stop
-	"range(start, stop) - creates range from start to stop-1 with step 1"
-
-	| startVal stopVal |
-	startVal := start.
-	stopVal := stop.
+__new__: start _: stop
+	"range(start, stop) — creates range from start to stop-1 with step 1.
+	Receiver is the class."
 
 	"Python's range(start, stop) goes from start to stop-1"
-	^ range @env0:from: startVal to: (stopVal @env0:- 1) by: 1
+	^ self @env0:from: start to: (stop @env0:- 1) by: 1
 %
 
 category: 'Python-Initialization'
 classmethod: range
-__new__: cls _: start _: stop _: step
-	"range(start, stop, step) - creates range from start to stop-1 with given step"
+__new__: start _: stop _: step
+	"range(start, stop, step) — creates range from start to stop-1 with
+	given step. Receiver is the class."
 
-	| startVal stopVal stepVal adjustedStop |
-	startVal := start.
-	stopVal := stop.
-	stepVal := step.
-
+	| adjustedStop |
 	"Step cannot be zero"
-	(stepVal @env0:= 0) ifTrue: [
+	(step @env0:= 0) ifTrue: [
 		ValueError ___signal___: 'range() arg 3 must not be zero'
 	].
 
@@ -56,23 +50,21 @@ __new__: cls _: start _: stop _: step
 	 For positive step: to = stop - 1
 	 For negative step: to = stop + 1
 	 But we need to handle empty ranges correctly."
-	adjustedStop := (stepVal @env0:> 0)
-		ifTrue: [stopVal @env0:- (1)]
-		ifFalse: [stopVal @env0:+ 1].
+	adjustedStop := (step @env0:> 0)
+		ifTrue: [stop @env0:- 1]
+		ifFalse: [stop @env0:+ 1].
 
-	^ range @env0:from: startVal to: adjustedStop by: stepVal
+	^ self @env0:from: start to: adjustedStop by: step
 %
 
 category: 'Python-Initialization'
 classmethod: range
-__new__: cls _: stop
-	"range(stop) - creates range from 0 to stop-1 with step 1"
-
-	| stopVal |
-	stopVal := stop.
+__new__: stop
+	"range(stop) — creates range from 0 to stop-1 with step 1.
+	Receiver is the class."
 
 	"Python's range(stop) goes from 0 to stop-1"
-	^ range @env0:from: 0 to: (stopVal @env0:- 1) by: 1
+	^ self @env0:from: 0 to: (stop @env0:- 1) by: 1
 %
 
 category: 'Python-Sequence Protocol'
@@ -228,7 +220,7 @@ __reversed__
 
 	"Empty range returns empty range"
 	(size == 0) ifTrue: [
-		^ range @env1:__new__: range _: 0 _: 0 _: 1
+		^ range @env1:__new__: 0 _: 0 _: 1
 	].
 
 	startVal := self @env1:start.
@@ -243,7 +235,7 @@ __reversed__
 	"New stop is original start + newStep (exclusive)"
 	newStop := startVal @env0:+ newStep.
 
-	^ range __new__: range _: newStart _: newStop _: newStep
+	^ range @env1:__new__: newStart _: newStop _: newStep
 %
 
 category: 'Python-Sequence Methods'

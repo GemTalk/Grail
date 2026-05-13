@@ -83,7 +83,7 @@ method: CallAst
 printSmalltalkOn: aStream
 	"Call dispatch — see docs/Rewrite_Dispatch_Model.md.
 
-	Five forms, in priority order:
+	Six forms, in priority order:
 
 	  1. Bare-name fixed-arity fast path. If `builtins` has a method
 	     whose selector and arity match the call (e.g. `abs:` for
@@ -109,7 +109,16 @@ printSmalltalkOn: aStream
 	     class implements the keyword-form selector (`method:`,
 	     `method:_:`, etc.). See `attributeCallFastPathSelector`.
 
-	  5. Legacy fallback. Otherwise emit the historical block-call form:
+	  5. Class-call fast path. If the bare name resolves (via the Python
+	     dictionary) to a GemStone class with a matching env-1 `__new__`
+	     selector for the call's arity, emit a direct send:
+	         (cls @env1:__new__: arg1 _: arg2 _: ...)
+	     Used for `bool(x)`, `int(x)`, `str(x)`, `object()`, etc. — names
+	     that map (via install.gs Step 3) to GemStone classes such as
+	     Boolean, Integer, Unicode7. A class-call arity mismatch on a
+	     known class emits a TypeError raise (analogous to form 3).
+
+	  6. Legacy fallback. Otherwise emit the historical block-call form:
 	         <func> value: { <args> } value: <kw>
 	     Used for unconverted attribute calls (`math.cos(0)`,
 	     `html.escape(s)` before conversion) and for first-class function
@@ -180,6 +189,16 @@ printSmalltalkOn: aStream
 		^ self printAttributeCallVarargsOn: aStream selector: varargsSel
 	].
 
+	"Class-call fast path: `cls(args)` where `cls` is a bare name resolving
+	to a GemStone class with a matching env-1 `__new__` selector. Emits
+		(cls @env1:__new__: arg1 _: arg2 ...)
+	Used for `bool(x)`, `int(x)`, `str(x)`, `object()`, etc. where the
+	name maps (via install.gs Step 3) to a Smalltalk class such as
+	Boolean, Integer, Unicode7, Object."
+	(self bareCallClassNewSelector) ifNotNil: [:newSel |
+		^ self printBareCallClassNewOn: aStream selector: newSel
+	].
+
 	"Attribute-call fallback: for any attribute call `obj.method(args)` where
 	the receiver's class isn't a statically-resolvable module, emit a direct
 	send instead of the legacy `(obj) method value: {args} value: kw`
@@ -202,6 +221,15 @@ printSmalltalkOn: aStream
 		].
 		^ self printAttributeCallVarargsOn: aStream
 			selector: (self class varargsSelectorForName: function attr)
+	].
+
+	"Class-call arity mismatch: bare name resolves to a class that has at
+	least one env-1 `__new__` selector, but none match this call's arity
+	or kwarg shape. Emit a clean Python TypeError instead of falling
+	through to the broken `cls value: { args } value: kw` form, which
+	signals MessageNotUnderstood on plain GemStone classes."
+	(self knownClassName) ifNotNil: [:knownCls |
+		^ self printArityMismatchErrorOn: aStream forName: knownCls
 	].
 
 	function printSmalltalkOn: aStream.
@@ -573,7 +601,149 @@ printArityMismatchErrorOn: aStream forName: aSymbol
 	aStream nextPutAll: arguments size printString.
 	aStream nextPutAll: ' positional, '.
 	aStream nextPutAll: keywords size printString.
-	aStream nextPutAll: ' keyword) - no matching builtins method'')'
+	aStream nextPutAll: ' keyword) - no matching method'')'
+%
+
+! ===============================================================================
+! Class-call fast path
+! ===============================================================================
+! When a bare name resolves (via the Python dictionary) to a GemStone class —
+! e.g. `bool` → Boolean, `int` → Integer, `str` → Unicode7, `object` → Object,
+! `range` → Interval — emit a direct env-1 `__new__` send instead of the legacy
+! `cls value: { args } value: kw` form. The legacy form would signal
+! MessageNotUnderstood on plain GemStone classes.
+!
+! Eligibility filters out `module` subclasses — those have their own dispatch
+! paths. User-defined Python classes (Phase 5c) are real Object subclasses that
+! also have `__new__` selectors and so go through this same fast path.
+! ===============================================================================
+
+category: 'Class-Call Fast Path'
+method: CallAst
+bareCallClassNewSelector
+	"Return the env-1 `__new__` selector to use for a class-call fast path,
+	or nil if not eligible.
+
+	Eligibility:
+	  * `function` is a `NameAst` (bare name like `bool`, not `obj.method`).
+	  * No keyword arguments (kwargs class calls are not yet supported here
+	    — none of the installed `__new__` methods take a `:kw:` form).
+	  * The name is not shadowed by an enclosing-scope local.
+	  * The name resolves in the Python dictionary to a class that is NOT
+	    a `module` subclass (those use the module/attribute-call paths).
+	  * The class implements the env-1 selector matching the call arity:
+	      0 args → #__new__
+	      1 arg  → #'__new__:'
+	      N args → #'__new__:' followed by (N-1) `_:` keywords."
+
+	| funcName cls candidate |
+	(function isKindOf: NameAst) ifFalse: [^nil].
+	keywords isEmpty ifFalse: [^nil].
+	funcName := function id.
+	(self isVariableIsDeclared: funcName) ifTrue: [^nil].
+	cls := self class resolveClassForName: funcName.
+	cls ifNil: [^nil].
+	candidate := self class classNewSelectorForArity: arguments size.
+	"Walk the metaclass chain so inherited __new__ methods are found
+	(e.g. `set` inherits __new__ from frozenset). Direct method-dict
+	lookup misses inherited selectors."
+	(cls class whichClassIncludesSelector: candidate environmentId: 1)
+		ifNil: [^nil].
+	^ candidate
+%
+
+category: 'Class-Call Fast Path'
+method: CallAst
+knownClassName
+	"Return the function name as a Symbol if it resolves to an eligible
+	class with at least one env-1 `__new__` selector (any arity), or nil.
+
+	Used for the class-call arity mismatch error: a call with the wrong
+	number of arguments (or kwargs) to a known class generates a clean
+	Python TypeError instead of falling through to the broken legacy
+	`cls value: { args } value: kw` path."
+
+	| funcName cls metacls |
+	(function isKindOf: NameAst) ifFalse: [^nil].
+	funcName := function id.
+	(self isVariableIsDeclared: funcName) ifTrue: [^nil].
+	cls := self class resolveClassForName: funcName.
+	cls ifNil: [^nil].
+	metacls := cls class.
+	"Walk the metaclass chain (inherited __new__ counts)."
+	(metacls whichClassIncludesSelector: #__new__ environmentId: 1)
+		ifNotNil: [^funcName].
+	(metacls whichClassIncludesSelector: #'__new__:' environmentId: 1)
+		ifNotNil: [^funcName].
+	(metacls whichClassIncludesSelector: #'__new__:_:' environmentId: 1)
+		ifNotNil: [^funcName].
+	(metacls whichClassIncludesSelector: #'__new__:_:_:' environmentId: 1)
+		ifNotNil: [^funcName].
+	^ nil
+%
+
+category: 'Class-Call Fast Path'
+classmethod: CallAst
+resolveClassForName: aReceiverName
+	"Return the GemStone class registered under `aReceiverName` in the
+	Python dictionary that is eligible for class-call `__new__` dispatch,
+	or nil. Excludes `module` subclasses (handled by the module-call
+	paths). Non-Behavior values (like `True` → true, `None` → nil) and
+	missing entries return nil."
+
+	| candidate |
+	candidate := Python at: aReceiverName ifAbsent: [^nil].
+	(candidate isKindOf: Behavior) ifFalse: [^nil].
+	(candidate inheritsFrom: module) ifTrue: [^nil].
+	candidate == module ifTrue: [^nil].
+	^ candidate
+%
+
+category: 'Class-Call Fast Path'
+classmethod: CallAst
+classNewSelectorForArity: nargs
+	"Build the env-1 `__new__` selector for a class call with `nargs`
+	positional arguments:
+	  0 args → #__new__
+	  1 arg  → #'__new__:'
+	  N args → #'__new__:' followed by (N-1) `_:` keywords."
+
+	| sb |
+	nargs = 0 ifTrue: [^ #__new__].
+	sb := WriteStream on: String new.
+	sb nextPutAll: '__new__:'.
+	2 to: nargs do: [:i | sb nextPutAll: '_:'].
+	^ sb contents asSymbol
+%
+
+category: 'Class-Call Fast Path'
+method: CallAst
+printBareCallClassNewOn: aStream selector: aSelector
+	"Emit a class-call fast path:
+	  0-arg: `(cls @env1:__new__)`
+	  1-arg: `(cls @env1:__new__: arg)`
+	  N-arg: `(cls @env1:__new__: arg1 _: arg2 _: ...)`
+
+	Receiver is the bare class name (`function id`); the symbol-list lookup
+	at compile time resolves it to the appropriate GemStone class."
+
+	| funcName nargs |
+	funcName := function id asString.
+	nargs := arguments size.
+	aStream nextPut: $(.
+	aStream nextPutAll: funcName.
+	aStream nextPutAll: ' @env1:__new__'.
+	nargs = 0 ifTrue: [
+		aStream nextPut: $).
+		^ self
+	].
+	aStream nextPut: $:; space.
+	(arguments at: 1) printSmalltalkWithParenthesisOn: aStream.
+	2 to: nargs do: [:i |
+		aStream nextPutAll: ' _: '.
+		(arguments at: i) printSmalltalkWithParenthesisOn: aStream.
+	].
+	aStream nextPut: $)
 %
 
 ! ===============================================================================
