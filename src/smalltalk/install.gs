@@ -992,7 +992,7 @@ Transcript show: '==============================================='.
 
 run
 | libPath pyPath |
-importlib grailDir: '$GRAIL_DIR'.
+importlib grailDir: (System gemEnvironmentVariable: 'GRAIL_DIR').
 libPath := System gemEnvironmentVariable:'SHIM_LIB_PATH'.
 (libPath notNil and: [libPath notEmpty]) ifTrue: [
 	CPythonShim libraryPath: libPath .
