@@ -479,6 +479,7 @@ run
 	at: #'RecursionErrorTestCase' put: nil;
 	at: #'ReferenceErrorTestCase' put: nil;
 	at: #'ResourceWarningTestCase' put: nil;
+	at: #'RuntimeClassCreationTestCase' put: nil;
 	at: #'RuntimeErrorTestCase' put: nil;
 	at: #'RuntimeWarningTestCase' put: nil;
 	at: #'SetTestCase' put: nil;
@@ -926,6 +927,7 @@ input src/smalltalk/PythonTests/RaiseTestCase.gs
 input src/smalltalk/PythonTests/RandomTestCase.gs
 input src/smalltalk/PythonTests/RangeTestCase.gs
 input src/smalltalk/PythonTests/ReturnTestCase.gs
+input src/smalltalk/PythonTests/RuntimeClassCreationTestCase.gs
 input src/smalltalk/PythonTests/SetTestCase.gs
 input src/smalltalk/PythonTests/StatisticsTestCase.gs
 input src/smalltalk/PythonTests/StrTestCase.gs
