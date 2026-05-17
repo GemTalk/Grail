@@ -507,6 +507,7 @@ run
 	at: #'StopIterationTestCase' put: nil;
 	at: #'StrTestCase' put: nil;
 	at: #'StringModuleTestCase' put: nil;
+	at: #'SubmoduleAutoBindTestCase' put: nil;
 	at: #'SyntaxErrorTestCase' put: nil;
 	at: #'SyntaxWarningTestCase' put: nil;
 	at: #'SysTestCase' put: nil;
@@ -967,6 +968,7 @@ input src/smalltalk/PythonTests/SreTestCase.gs
 input src/smalltalk/PythonTests/StatisticsTestCase.gs
 input src/smalltalk/PythonTests/StrTestCase.gs
 input src/smalltalk/PythonTests/StringModuleTestCase.gs
+input src/smalltalk/PythonTests/SubmoduleAutoBindTestCase.gs
 input src/smalltalk/PythonTests/SysTestCase.gs
 input src/smalltalk/PythonTests/TryTestCase.gs
 input src/smalltalk/PythonTests/TupleTestCase.gs

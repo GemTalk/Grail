@@ -96,12 +96,18 @@ These break programs that look ordinary in CPython.
   layout that needs more time than this branch had; see the
   `re-init-restore` branch history.
 
-- [ ] **Submodule auto-binding on parent package** — when
-  `pkg.sub` is loaded, `pkg.sub` should be reachable as an
-  attribute on `pkg` (CPython's behavior).  `importlib >>
-  registerModule:with:` currently only writes to `sys.modules`.
-  Hits `from . import sub` inside `pkg/__init__.py` when `sub`
-  isn't already cached via the file-path search.
+- [x] ~~**Submodule auto-binding on parent package**~~ —
+  `importlib >> registerModule:with:` now binds child on parent
+  in both orderings (child registered after parent → binds on
+  the cached parent; child registered before parent → orphan
+  scan when the parent later registers picks it up).  The bind
+  helper `___bind:onParent:as:` writes to both the parent's
+  SymbolDictionary slot AND the same-named instVar slot when one
+  exists — the instVar write is what makes `from . import sub`
+  inside a package's `__init__.py` actually see `sub` (the
+  generated module's `sub ^ sub` accessor was returning the
+  still-nil instVar otherwise).  See
+  `SubmoduleAutoBindTestCase`.
 
 - [x] ~~**Python `int` subclasses can't carry extra inst vars**~~ —
   Addressed for `_NamedIntConstant(int)` specifically via the

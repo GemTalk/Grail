@@ -383,10 +383,72 @@ loadDynamicModuleNamed: moduleName fromPath: pathString
 category: 'Grail-Module Registry'
 classmethod: importlib
 registerModule: aName with: aModule
-	"Register a module class in the module registry"
-	(self @env1:modules)
-		at: aName asSymbol
-		put: aModule
+	"Register a module in sys.modules and synchronise parent/child
+	attribute bindings.  CPython's import machinery sets ``pkg.sub``
+	on ``pkg`` implicitly as it imports; we centralise it here so
+	every entry point that registers a module (loadModuleFromPath:,
+	loadDynamicModuleNamed:, the recursive parent-loader inside
+	___import__:, test setUps) gets the binding for free, regardless
+	of whether parent or child is registered first.
+
+	Two cases:
+	  - This module's name is dotted (``pkg.sub``): if its parent
+	    package is already in sys.modules, bind self on the parent.
+	  - Otherwise: this module could be the parent of one or more
+	    previously-registered orphan submodules.  Scan sys.modules
+	    for any name that prefixes with ``aName + '.'`` and bind
+	    the leaf component as an attribute on aModule."
+
+	| parts parentName parent mods prefix |
+	mods := self @env1:modules.
+	mods @env0:at: aName @env0:asSymbol put: aModule.
+	parts := $. @env0:split: aName.
+	parts @env0:size @env0:> 1 ifTrue: [
+		parentName := '.' @env0:join: (parts @env0:copyFrom: 1 to: parts @env0:size - 1).
+		parent := self @env1:lookupModule: parentName.
+		parent notNil ifTrue: [
+			self @env0:___bind: aModule onParent: parent as: parts @env0:last
+		].
+	].
+	"Rescue previously-orphaned children: any sys.modules key of
+	form ``aName.child`` should be bound on aModule as `child`."
+	prefix := aName @env0:, '.'.
+	mods @env0:keysAndValuesDo: [:key :child |
+		| kStr |
+		kStr := key @env0:asString.
+		((kStr @env0:size @env0:> prefix @env0:size)
+			and: [(kStr @env0:copyFrom: 1 to: prefix @env0:size) @env0:= prefix
+			and: [(kStr @env0:indexOf: $. startingAt: prefix @env0:size + 1) @env0:= 0]])
+			ifTrue: [
+				| childLeafName |
+				childLeafName := kStr @env0:copyFrom: prefix @env0:size + 1 to: kStr @env0:size.
+				self @env0:___bind: child onParent: aModule as: childLeafName
+			]
+	].
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
+___bind: aChildModule onParent: aParent as: anAttrName
+	"Bind aChildModule on aParent under anAttrName.  Writes to
+	BOTH the parent's SymbolDictionary slot (so dynamic
+	`getattr`/`self at:` paths see it) AND, if the parent's class
+	has a same-named instVar (the generated module's static
+	accessor), the instVar slot too.  The instVar write is
+	necessary because Grail compiles a unary `name ^ name`
+	accessor for every declared module variable, and that accessor
+	would otherwise return the still-nil instVar — which is
+	exactly the scenario that defeats `from . import sub` inside
+	a package's __init__.py when `sub` was pre-registered."
+
+	| sym ivars idx |
+	sym := anAttrName @env0:asSymbol.
+	aParent @env0:at: sym put: aChildModule.
+	ivars := aParent @env0:class @env0:allInstVarNames.
+	idx := ivars @env0:indexOf: sym.
+	idx @env0:> 0 ifTrue: [
+		aParent @env0:instVarAt: idx put: aChildModule
+	].
 %
 
 category: 'Grail-Module Loading'
@@ -567,7 +629,7 @@ ___import__: positional kw: kwargs
 	"Low-level import function (__import__).
 	__import__(name, globals=None, locals=None, fromlist=(), level=0) -> module"
 
-	| name globals locals fromlist level absoluteName moduleInstance filePath result nameParts isDotted prefix parentFilePath parentParts parentName childName parentModule |
+	| name globals locals fromlist level absoluteName moduleInstance filePath result nameParts isDotted prefix parentFilePath |
 	name := positional @env0:at: 1.
 	globals := (positional __len__ @env0:> 1)
 		ifTrue: [positional @env0:at: 2]
@@ -639,32 +701,24 @@ ___import__: positional kw: kwargs
 		]
 	].
 
-	"Bind submodule as attribute on parent module"
-	isDotted ifTrue: [
-		parentParts := nameParts @env0:copyFrom: 1 to: nameParts __len__ - 1.
-		parentName := '.' @env0:join: parentParts.
-		childName := nameParts @env0:last.
-		parentModule := self @env0:class lookupModule: parentName.
-		parentModule notNil ifTrue: [
-			parentModule @env0:at: childName @env0:asSymbol put: result.
-		].
-	].
+	"Parent-binding of the just-loaded module is now handled inside
+	``registerModule:with:`` (which loadModuleFromPath: calls), so
+	the dotted-name binding here is no longer necessary.
 
-	"For `from PKG import name1, name2`, ensure each name in fromlist
-	that is a submodule (i.e. importable as PKG.name) is loaded and
-	bound on PKG so the subsequent attribute access in the importer
-	resolves.  CPython's `__import__` does this implicitly when
-	`fromlist` is non-empty."
+	For `from PKG import name1, name2`, ensure each name in fromlist
+	that is an as-yet-unloaded submodule is loaded so the subsequent
+	attribute access in the importer finds something.  Once
+	loadModuleFromPath: returns, the parent-binding has already
+	happened via registerModule:."
 	fromlist __len__ @env0:> 0 ifTrue: [
 		fromlist @env0:do: [:fromName |
-			| subName subPath subInstance |
+			| subName subPath |
 			subName := (absoluteName @env0:, '.') @env0:, fromName @env0:asString.
 			(self @env0:class lookupModule: subName) ifNil: [
 				subPath := self @env0:class ___moduleNameToPath___: subName.
 				subPath notNil ifTrue: [
-					subInstance := self @env0:class
+					self @env0:class
 						@env0:loadModuleFromPath: subPath name: subName.
-					result @env0:at: fromName @env0:asSymbol put: subInstance.
 				]
 			]
 		]
