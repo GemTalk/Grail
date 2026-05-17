@@ -49,11 +49,15 @@ set compile_env: 0
 category: 'Grail-other'
 method: AndAst
 printSmalltalkOn: aStream
+	"Python ``a and b`` returns the first falsy operand (preserving its
+	value), or the last operand if all are truthy.  Smalltalk's `and:`
+	requires Booleans and returns Boolean, so emit via the
+	value-preserving helper ``___pyAnd___:``."
 
 	1 to: values size - 1 do: [:i |
 		aStream nextPutAll: '(('.
 		(values at: i) printSmalltalkOn: aStream.
-		aStream nextPutAll: ') and: ['.
+		aStream nextPutAll: ') ___pyAnd___: ['.
 	].
 	values last printSmalltalkOn: aStream.
 	values size - 1 timesRepeat: [

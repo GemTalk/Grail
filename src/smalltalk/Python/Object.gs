@@ -91,6 +91,79 @@ ___isTruthy___
 	^ bool @env1:__new__: self
 %
 
+category: 'Grail-Convenience Methods - Boolean'
+method: object
+___pyOr___: alternativeBlock
+	"Python ``a or b`` semantics: return `a` if it is truthy, else
+	evaluate and return `b`.  Smalltalk's `or:` requires a Boolean
+	receiver and returns a Boolean, neither of which matches Python's
+	short-circuit value-preserving semantics."
+
+	^ self ___isTruthy___ ifTrue: [self] ifFalse: [alternativeBlock value]
+%
+
+category: 'Grail-Convenience Methods - Boolean'
+method: object
+___pyAnd___: alternativeBlock
+	"Python ``a and b`` semantics: return `a` if it is falsy, else
+	evaluate and return `b`."
+
+	^ self ___isTruthy___ ifTrue: [alternativeBlock value] ifFalse: [self]
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___pyAttrLoad___: aSym
+	"Python ``obj.attr`` load semantics, dispatching at runtime.
+	The presence of an ``attr:`` keyword method is ambiguous: on a
+	Grail-generated class (`pyc_*` user classes / `py_*` modules)
+	it is a synthesized setter that pairs with an instVar getter;
+	on a built-in like OrderedCollection or KeyValueDictionary
+	`attr:` is just a regular 1-arg method (e.g. ``append:``,
+	``add:``).  Differentiate by class name prefix:
+
+	  - Generated class with ``attr:`` setter → call the unary
+	    getter, return the value (covers instVars + @property).
+	  - Otherwise, if the class has a unary ``attr`` method,
+	    return a BoundMethod that wraps (receiver, selector).
+	  - Otherwise dispatch the unary message anyway and let DNU
+	    produce the appropriate error or fallback."
+
+	| md sym1 sym2 sym3 symVA name s isModule isGenerated |
+	md := self @env0:class @env0:methodDictForEnv: 1.
+	s := aSym @env0:asString.
+	sym1 := (s @env0:, ':') @env0:asSymbol.
+	sym2 := (s @env0:, ':_:') @env0:asSymbol.
+	sym3 := (s @env0:, ':_:_:') @env0:asSymbol.
+	symVA := ('_' @env0:, s @env0:, ':kw:') @env0:asSymbol.
+	name := self @env0:class @env0:name @env0:asString.
+	"Module instances (pre-installed Python modules like html/math, plus
+	loaded module classes derived from `module`) always treat unary
+	attribute reads as value reads (an attribute holds a function,
+	submodule, constant, ...).  Bound-method wrapping doesn't apply."
+	isModule := self @env0:isKindOf: module.
+	isModule ifTrue: [^ self @env0:perform: aSym env: 1].
+	"Generated `pyc_` user classes have synthesized `attr:` setters that
+	pair with attribute getters.  If the class has both, this is an
+	attribute access, call the unary getter and return the value."
+	isGenerated := (name @env0:size @env0:>= 4
+			and: [(name @env0:copyFrom: 1 to: 4) @env0:= 'pyc_'])
+		or: [self @env0:isKindOf: PythonInstance].
+	(isGenerated and: [md @env0:includesKey: sym1]) ifTrue: [
+		^ self @env0:perform: aSym env: 1
+	].
+	"Other classes (built-in collections, strings, ...): if the class
+	implements any same-named callable selector, return a BoundMethod
+	handle for `f = obj.method` patterns."
+	((md @env0:includesKey: aSym)
+		or: [(md @env0:includesKey: sym1)
+			or: [(md @env0:includesKey: sym2)
+				or: [(md @env0:includesKey: sym3)
+					or: [md @env0:includesKey: symVA]]]])
+		ifTrue: [^ BoundMethod @env1:receiver: self selector: aSym].
+	^ self @env0:perform: aSym env: 1
+%
+
 category: 'Grail-Convenience Methods - Keyword'
 method: object
 ___new___: size
@@ -380,5 +453,63 @@ sel := aSelectorSymbol @env0:asSymbol.
 ^self @env0:_perform: sel env: environmentId withArguments: { anObject }
 %
 
+set compile_env: 0
+
+category: 'Grail-Attribute Access'
+method: object
+doesNotUnderstand: aSelector args: anArray envId: envId
+	"Bound-method-via-attribute-load fallback.
+
+	In Python, ``obj.method`` (without calling) yields a bound method
+	that can be stored, passed around, or later invoked.  Our codegen
+	emits attribute reads as ``obj attr`` (a unary message send), so if
+	``attr`` names a method that takes arguments (e.g. OrderedCollection
+	>> append:), the bare unary form has no matching selector.  Rather
+	than emit an explicit BoundMethod wrapper at every attribute load
+	(most of which DO refer to instVar/property values), intercept at
+	DNU time and synthesize the BoundMethod only when the unary send
+	fails AND the class has a same-named callable selector (``attr:``,
+	``attr:_:`` etc., or the varargs form ``_attr:kw:``).
+	All other unknown sends fall through to super."
+
+	| s md cls |
+	envId @env0:= 1 ifFalse: [^ MessageNotUnderstood @env0:signal:
+	'env-1 ', aSelector @env0:printString, ' not understood by ', self @env0:class @env0:name @env0:asString].
+	s := aSelector @env0:asString.
+	cls := self @env0:class.
+	md := cls @env0:methodDictForEnv: 1.
+	(s @env0:size @env0:> 0 @env0:and: [s @env0:last @env0:= $:]) ifTrue: [
+		"Keyword selector like `name:_:_:` — the corresponding Python
+		function may have been compiled as varargs (`_name:kw:`) because
+		it has *args/**kwargs or defaults.  Extract the base name from
+		the selector (everything up to the first colon), look for the
+		varargs form on this class, and dispatch with positional={anArray}
+		and kwargs=nil."
+		| colonIdx baseName varargsSel |
+		colonIdx := s @env0:indexOf: $:.
+		baseName := s @env0:copyFrom: 1 to: colonIdx @env0:- 1.
+		varargsSel := ('_' @env0:, baseName @env0:, ':kw:') @env0:asSymbol.
+		(md @env0:includesKey: varargsSel) ifTrue: [
+			| wrapped |
+			wrapped := Array @env0:new: 2.
+			wrapped @env0:at: 1 put: anArray.
+			wrapped @env0:at: 2 put: nil.
+			^ self @env0:perform: varargsSel env: 1 withArguments: wrapped
+		].
+		^ MessageNotUnderstood @env0:signal:
+			'env-1 ', aSelector @env0:printString, ' not understood by ', cls @env0:name @env0:asString
+	].
+	"Unary selector with 0 args — return BoundMethod if class has any
+	same-named callable form (for `f = obj.method` patterns)."
+	anArray @env0:size @env0:= 0 ifFalse: [^ MessageNotUnderstood @env0:signal:
+		'env-1 ', aSelector @env0:printString, ' not understood by ', cls @env0:name @env0:asString].
+	((md @env0:includesKey: (s @env0:, ':') @env0:asSymbol)
+		@env0:or: [(md @env0:includesKey: (s @env0:, ':_:') @env0:asSymbol)
+			@env0:or: [(md @env0:includesKey: (s @env0:, ':_:_:') @env0:asSymbol)
+				@env0:or: [md @env0:includesKey: ('_' @env0:, s @env0:, ':kw:') @env0:asSymbol]]])
+		ifTrue: [^ BoundMethod @env1:receiver: self selector: aSelector].
+	^ MessageNotUnderstood @env0:signal:
+		'env-1 ', aSelector @env0:printString, ' not understood by ', cls @env0:name @env0:asString
+%
 
 set compile_env: 0

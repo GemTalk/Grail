@@ -92,8 +92,27 @@ declareVariable
 category: 'Grail-other'
 method: SubscriptAst
 printSmalltalkOn: aStream
+	"Plain index (`xs[i]`)  →  `(xs) __getitem__: (i)`.
+	Slice    (`xs[i:j:k]`) →  `(xs) __getslice__: lo _: hi _: st`,
+	emitting `nil` for each omitted bound (the runtime side normalizes).
+	`xs[i, j]` (tuple subscript) falls through to plain __getitem__ —
+	dict-style multi-key access; sequence slicing with steppy tuples is
+	out of scope until something needs it."
 
 	self assertContextIsLoad.
+	(slice isKindOf: SliceAst) ifTrue: [
+		value printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPutAll: ' __getslice__: '.
+		(slice lower) ifNil: [aStream nextPutAll: 'nil']
+			ifNotNil: [slice lower printSmalltalkWithParenthesisOn: aStream].
+		aStream nextPutAll: ' _: '.
+		(slice upper) ifNil: [aStream nextPutAll: 'nil']
+			ifNotNil: [slice upper printSmalltalkWithParenthesisOn: aStream].
+		aStream nextPutAll: ' _: '.
+		(slice step) ifNil: [aStream nextPutAll: 'nil']
+			ifNotNil: [slice step printSmalltalkWithParenthesisOn: aStream].
+		^self
+	].
 	value printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' __getitem__: '.
 	slice printSmalltalkWithParenthesisOn: aStream.

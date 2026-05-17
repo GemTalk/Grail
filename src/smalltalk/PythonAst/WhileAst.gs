@@ -59,17 +59,34 @@ set compile_env: 0
 category: 'Grail-other'
 method: WhileAst
 printSmalltalkOn: aStream
+	"Wrap the per-iteration body in a PythonContinue handler and the
+	whole loop in a PythonBreak handler, mirroring ForAst's structure
+	so `break` / `continue` inside the loop body behave correctly
+	without escaping the enclosing method."
 
+	aStream nextPutAll: '['; lf; increaseIndent.
 	aStream nextPut: $[.
 	test printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' ___isTruthy___] whileTrue: ['; increaseIndent; lf.
+	aStream nextPutAll: '['; lf; increaseIndent.
 	body printSmalltalkOn: aStream.
-	aStream decreaseIndent; nextPutAll: '].'.
+	aStream decreaseIndent; nextPutAll: '] @env0:on: PythonContinue do: [:___ex___ | nil].'; lf.
+	aStream decreaseIndent; nextPutAll: '].'; lf.
+	aStream decreaseIndent; nextPutAll: '] @env0:on: PythonBreak do: [:___ex___ | nil].'.
 	(orelse notNil and: [orelse size > 0]) ifTrue: [
 		aStream lf.
-		orelse do: [:stmt |
-			stmt printSmalltalkOn: aStream.
-			aStream lf.
-		].
+		"orelse may be either an Array of statements or a SuiteAst —
+		the parser produces both shapes depending on context.  Both
+		respond to printSmalltalkOn:, so route through that rather
+		than iterating directly.  KNOWN SEMANTIC GAP: this emits the
+		else body unconditionally, but Python's while-else should only
+		fire when the loop terminated WITHOUT break.  Tracked in
+		TODO.md (`while-else` / `for-else`)."
+		(orelse isKindOf: SuiteAst)
+			ifTrue: [orelse printSmalltalkOn: aStream]
+			ifFalse: [orelse do: [:stmt |
+				stmt printSmalltalkOn: aStream.
+				aStream lf.
+			]].
 	].
 %

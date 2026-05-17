@@ -190,6 +190,49 @@ __add__: other
 	^ tuple @env0:withAll: accumulator
 %
 
+category: 'Grail-Sequence Protocol'
+method: tuple
+__getslice__: lower _: upper _: step
+	"Slice a tuple — returns a new (frozen) tuple.  Overrides the
+	SequenceableCollection implementation, which builds via
+	``species new + add:``; that path fails on tuple because empty
+	tuples are already invariant.  Re-uses the inherited bounds
+	normalization by collecting into a mutable OrderedCollection
+	first, then freezing via ``tuple withAll:``."
+
+	| size lo hi st accumulator i |
+	size := self @env0:size.
+	st := step ifNil: [1].
+	st @env0:= 0 ifTrue: [ValueError ___signal___: 'slice step cannot be zero'].
+
+	lo := lower
+		ifNil: [st @env0:> 0 ifTrue: [0] ifFalse: [size @env0:- 1]]
+		ifNotNil: [lower @env0:< 0
+			ifTrue: [(size @env0:+ lower) @env0:max:
+				(st @env0:> 0 ifTrue: [0] ifFalse: [-1])]
+			ifFalse: [lower @env0:min:
+				(st @env0:> 0 ifTrue: [size] ifFalse: [size @env0:- 1])]].
+
+	hi := upper
+		ifNil: [st @env0:> 0 ifTrue: [size] ifFalse: [-1]]
+		ifNotNil: [upper @env0:< 0
+			ifTrue: [(size @env0:+ upper) @env0:max:
+				(st @env0:> 0 ifTrue: [0] ifFalse: [-1])]
+			ifFalse: [upper @env0:min:
+				(st @env0:> 0 ifTrue: [size] ifFalse: [size @env0:- 1])]].
+
+	accumulator := OrderedCollection @env0:new.
+	i := lo.
+	st @env0:> 0
+		ifTrue: [[i @env0:< hi] whileTrue: [
+			accumulator @env0:add: (self @env0:at: i @env0:+ 1).
+			i := i @env0:+ st]]
+		ifFalse: [[i @env0:> hi] whileTrue: [
+			accumulator @env0:add: (self @env0:at: i @env0:+ 1).
+			i := i @env0:+ st]].
+	^ tuple @env0:withAll: accumulator
+%
+
 category: 'Grail-Sequence Operations'
 method: tuple
 __mul__: n

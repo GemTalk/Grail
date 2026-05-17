@@ -273,6 +273,22 @@ max: anIterable
 
 category: 'Grail-Built-in Functions'
 method: builtins
+min: a _: b
+	"Python builtin min(a, b) — 2-arg fast path."
+
+	^ (a __lt__: b) ifTrue: [a] ifFalse: [b]
+%
+
+category: 'Python-Built-in Functions'
+method: builtins
+max: a _: b
+	"Python builtin max(a, b) — 2-arg fast path."
+
+	^ (a __gt__: b) ifTrue: [a] ifFalse: [b]
+%
+
+category: 'Python-Built-in Functions'
+method: builtins
 min: anIterable
 	"Python builtin min(iterable) — fixed-arity fast path."
 
@@ -353,6 +369,41 @@ round: aNumber
 
 category: 'Grail-Built-in Functions'
 method: builtins
+memoryview: aBytesObject
+	"Python builtin memoryview(b) — stub.
+	Returns the argument unchanged.  Used by re/_compiler.py only in
+	`_bytes_to_codes`, which optimizes character-class bytecode and
+	is not on the path for plain regex compile.  Patterns that hit
+	that path need a real memoryview with .cast()/.itemsize/.tolist();
+	revisit when something actually trips this."
+
+	^ aBytesObject
+%
+
+category: 'Python-Built-in Functions'
+method: builtins
+map: aFunction _: anIterable
+	"Python builtin map(func, iter) — fixed-arity fast path.
+	Materialize eagerly into a list; CPython returns a lazy iterator,
+	but Grail has no first-class generator type yet (see GeneratorExpAst
+	for the same trade-off)."
+
+	| lst iter done |
+	lst := list ___new___.
+	iter := anIterable __iter__.
+	done := false.
+	[done] @env0:whileFalse: [
+		[
+			| item |
+			item := iter __next__.
+			lst append: (aFunction value: { item } value: nil)
+		] @env0:on: StopIteration do: [:ex | done := true]
+	].
+	^ lst
+%
+
+category: 'Python-Built-in Functions'
+method: builtins
 sorted: anIterable
 	"Python builtin sorted(iterable) — fixed-arity fast path."
 
@@ -425,14 +476,49 @@ category: 'Grail-Built-in Functions'
 method: builtins
 isinstance: anObject _: aClassOrTuple
 	"Python builtin isinstance(obj, classinfo) — fixed-arity fast path.
-	Supports Abstract Base Classes (ABCs) via __instancecheck__."
+	Supports Abstract Base Classes (ABCs) via __instancecheck__.
+
+	`classinfo` may be either a single class or a tuple of classes.  Codegen
+	emits builtin class names like ``str`` / ``int`` as a BoundMethod on
+	``builtins`` (because they have a fast-path keyword form), so when we
+	see a BoundMethod here we unwrap to the underlying Smalltalk class via
+	``Python at: selector``.  Tuples are handled by recursing on each
+	element until a match is found."
+
+	| cls |
+	cls := self @env1:___resolveClassRef___: aClassOrTuple.
+	"Tuple-of-classes form: recurse, OR together."
+	(cls @env0:isKindOf: tuple) ifTrue: [
+		cls @env0:do: [:eachCls | (self isinstance: anObject _: eachCls) ifTrue: [^ true]].
+		^ false
+	].
+	^ self @env1:___isInstanceSingle___: anObject of: cls
+%
+
+category: 'Python-Built-in Functions'
+method: builtins
+___resolveClassRef___: aRef
+	"Helper for isinstance/issubclass: unwrap a BoundMethod wrapping a
+	builtin class name (e.g. BoundMethod(builtins, #str)) to the
+	underlying Smalltalk class.  Other inputs pass through unchanged."
+
+	(aRef @env0:isKindOf: BoundMethod) ifTrue: [
+		^ Python @env0:at: aRef @env0:selector ifAbsent: [aRef]
+	].
+	^ aRef
+%
+
+category: 'Python-Built-in Functions'
+method: builtins
+___isInstanceSingle___: anObject of: aClass
+	"isinstance with a single class argument (post-tuple-expansion)."
 
 	| result theMetaclass |
-	result := anObject @env0:isKindOf: aClassOrTuple.
+	result := anObject @env0:isKindOf: aClass.
 	result ifFalse: [
-		theMetaclass := aClassOrTuple @env0:class.
+		theMetaclass := aClass @env0:class.
 		(theMetaclass @env0:includesSelector: #'__instancecheck__:' environmentId: 1) ifTrue: [
-			result := aClassOrTuple __instancecheck__: anObject
+			result := aClass __instancecheck__: anObject
 		]
 	].
 	^ result

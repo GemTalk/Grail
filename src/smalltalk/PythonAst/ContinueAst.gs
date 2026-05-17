@@ -46,5 +46,13 @@ ContinueAst category: 'Grail-Parser'
 removeallmethods ContinueAst
 removeallclassmethods ContinueAst
 set compile_env: 0
-! ------------------- Class methods for ContinueAst
-! ------------------- Instance methods for ContinueAst
+
+category: 'code generation'
+method: ContinueAst
+printSmalltalkOn: aStream
+	"Signal PythonContinue; the enclosing ForAst (or WhileAst) wraps
+	the per-iteration body in `@env0:on: PythonContinue do: [:ex | nil]`,
+	so the signal jumps to the next iteration."
+
+	aStream nextPutAll: 'PythonContinue @env0:___signal___.'
+%

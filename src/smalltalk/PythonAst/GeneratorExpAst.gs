@@ -53,3 +53,29 @@ removeallclassmethods GeneratorExpAst
 set compile_env: 0
 ! ------------------- Class methods for GeneratorExpAst
 ! ------------------- Instance methods for GeneratorExpAst
+
+category: 'code generation'
+method: GeneratorExpAst
+printSmalltalkOn: aStream
+	"(expr for t in iter [if c]* ...) — Python generator expressions are
+	lazy iterators.  Grail has no first-class generator type, so we
+	materialize eagerly into an OrderedCollection.  This matches
+	semantics for any consumer that fully drains the iterator
+	(`sum(...)`, `list(...)`, `for x in (...)`); breaks if a caller
+	depends on lazy evaluation for side effects or unbounded sources.
+	Revisit when Grail grows real generator support."
+
+	aStream nextPutAll: '([| ___r___ |'; lf; increaseIndent.
+	aStream nextPutAll: '___r___ := (OrderedCollection perform: #new env: 0).'; lf.
+	ComprehensionAst
+		emitGenerators: generators
+		from: 1
+		on: aStream
+		innerBody: [
+			aStream nextPutAll: '___r___ @env0:add: ('.
+			elt printSmalltalkOn: aStream.
+			aStream nextPutAll: ').'; lf.
+		].
+	aStream nextPutAll: '___r___'; lf.
+	aStream decreaseIndent; nextPutAll: '] value)'
+%

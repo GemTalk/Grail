@@ -198,6 +198,31 @@ __spec__: aValue
 	self @env0:at: #__spec__ put: aValue
 %
 
+category: 'Python-Mutation Methods'
+method: module
+update: other
+	"Merge ``other`` (a dict-like) into this module's namespace.  Used by
+	Python sources that call `globals().update(...)`.  CallAst rewrites
+	bare `globals()` to `self` for module-method context, so this lands
+	on a module instance.
+
+	String keys are converted to Symbols since the underlying
+	SymbolDictionary only allows symbol keys."
+
+	| isDict |
+	isDict := other @env0:isKindOf: dict.
+	isDict ifTrue: [
+		other @env0:keysAndValuesDo: [:key :value |
+			self @env0:at: key @env0:asSymbol put: value
+		]
+	] ifFalse: [
+		"Iterable of (key, value) pairs"
+		other @env0:do: [:pair |
+			self @env0:at: (pair @env0:at: 1) @env0:asSymbol put: (pair @env0:at: 2)
+		]
+	]
+%
+
 set compile_env: 0
 
 category: 'Grail-Attribute Access'

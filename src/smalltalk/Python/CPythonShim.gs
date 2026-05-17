@@ -65,8 +65,15 @@ set compile_env: 0
 category: 'Grail-Instance Creation'
 classmethod: CPythonShim
 current
-	"Ensure the user action library is loaded and return the singleton."
+	"Ensure the user action library is loaded and return the singleton.
+	The cached singleton holds CByteArray wrappers backed by malloc'd C
+	memory. Those wrappers are dead pointers after a session restart, so
+	if the user action library isn't yet bound in this gem, drop the
+	singleton before re-initializing."
 
+	(current notNil and: [(System hasUserAction: #shimCall) not]) ifTrue: [
+		current := nil
+	].
 	current ifNil: [
 		current := self basicNew.
 		self ensureLoaded.
@@ -619,6 +626,19 @@ category: 'Grail-CPython API'
 method: CPythonShim
 PyUnicode_FromString: aString
 	^ (self wrap: aString) memoryAddress
+%
+
+category: 'CPython API'
+method: CPythonShim
+PyUnicode_Substring: aString from: start to: end
+	"Python slice semantics: 0-based, end exclusive, clamped to length."
+
+	| len lo hi |
+	len := aString size.
+	lo := start max: 0.
+	hi := end min: len.
+	hi < lo ifTrue: [hi := lo].
+	^ (self wrap: (aString copyFrom: lo + 1 to: hi)) memoryAddress
 %
 
 ! --------------- Bytes API ---------------

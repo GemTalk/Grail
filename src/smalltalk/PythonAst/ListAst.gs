@@ -54,6 +54,12 @@ removeallclassmethods ListAst
 
 set compile_env: 0
 
+category: 'Grail-accessing'
+method: ListAst
+elts
+	^elts
+%
+
 category: 'Grail-other'
 method: ListAst
 printSmalltalkOn: aStream

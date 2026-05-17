@@ -57,9 +57,43 @@ removeallclassmethods SliceAst
 
 set compile_env: 0
 
-category: 'Grail-other'
+category: 'Grail-accessing'
+method: SliceAst
+lower
+	^lower
+%
+
+category: 'Grail-accessing'
+method: SliceAst
+upper
+	^upper
+%
+
+category: 'Grail-accessing'
+method: SliceAst
+step
+	^step
+%
+
+category: 'other'
 method: SliceAst
 printSmalltalkOn: aStream
+	"Materialize a Python `slice` instance.  SubscriptAst's load path
+	special-cases SliceAst and emits `__getslice__:_:_:` directly for
+	the SequenceableCollection fast path; other contexts (store/del
+	subscripts, slices passed as values, `xs[a:b, c:d]` tuples) need
+	a real slice object so receivers' `__setitem__` / `__delitem__` /
+	custom `__getitem__` can pattern-match.  Emit nil for any omitted
+	bound; the slice class's `.indices(length)` normalizes at use."
 
-	self halt.
+	aStream nextPutAll: '(slice @env1:__new__: '.
+	lower ifNil: [aStream nextPutAll: 'None']
+		ifNotNil: [lower printSmalltalkWithParenthesisOn: aStream].
+	aStream nextPutAll: ' _: '.
+	upper ifNil: [aStream nextPutAll: 'None']
+		ifNotNil: [upper printSmalltalkWithParenthesisOn: aStream].
+	aStream nextPutAll: ' _: '.
+	step ifNil: [aStream nextPutAll: 'None']
+		ifNotNil: [step printSmalltalkWithParenthesisOn: aStream].
+	aStream nextPut: $)
 %

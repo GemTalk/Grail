@@ -45,17 +45,6 @@ addVariableNamesTo: aStream
 
 category: 'Grail-other'
 method: FunctionDefAst
-isVariableLocalToEnclosingFunction: aSymbol
-	"Stop the walk at this function: a name is local only if it
-	appears in this function body's variables (which include params
-	and locally-assigned names).  Names in further-out scopes are
-	free with respect to this method."
-
-	^ body variables includes: aSymbol
-%
-
-category: 'Grail-other'
-method: FunctionDefAst
 decoratorList
 
 	^decorator_list
@@ -123,6 +112,7 @@ printSmalltalkOn: aStream
 	assignment so the instVar holds a callable reference for first-class use
 	(e.g. `f = add; f(1, 2)`). Nested defs still use the block form."
 
+	| fixedCount paramNames |
 	(CallAst moduleClassBeingCompiled notNil and: [self isModuleLevelDef]) ifTrue: [
 		aStream
 			nextPutAll: name;
@@ -137,22 +127,44 @@ printSmalltalkOn: aStream
 		nextPutAll: ' := [:positional :keyword |';
 		lf;
 		increaseIndent.
-	args args notEmpty ifTrue: [
+	"Collect every name we need as a block temp: fixed positionals,
+	*vararg, **kwarg, AND every variable declared in the body.  The
+	body's BlockAst now includes parameter names (added by
+	PythonParser>>parseFunctionDefWithDecorators), so we must declare
+	all locals here in a single `| ... |` pane and emit the body's
+	statements without re-declaring temps."
+	fixedCount := args args size.
+	paramNames := OrderedCollection new.
+	args args do: [:arg | paramNames add: arg name].
+	args vararg ifNotNil: [paramNames add: args vararg name].
+	args kwarg ifNotNil: [paramNames add: args kwarg name].
+	"Merge bodyVars while preserving uniqueness."
+	body variables do: [:n |
+		(paramNames includes: n) ifFalse: [paramNames add: n].
+	].
+	paramNames isEmpty ifFalse: [
 		aStream nextPutAll: '| '.
-		args args do: [:arg |
-			aStream nextPutAll: arg name; space.
-		].
+		paramNames do: [:n | aStream nextPutAll: n; space].
 		aStream nextPut: $|; lf.
-		1 to: args args size do: [:i |
-			| arg |
-			arg := args args at: i.
-			aStream
-				nextPutAll: arg name;
-				nextPutAll: ' := positional @env0:at: ';
-				print: i;
-				nextPut: $.;
-				lf.
-		].
+	].
+	"Bind fixed positionals (with default fallback)."
+	self printPositionalUnpackingOn: aStream paramNames: (args args collect: [:a | a name]).
+	"Bind *vararg to the tail of positional, wrapped as a tuple. When
+	the call passed exactly the fixed args, the tail is empty."
+	args vararg ifNotNil: [
+		aStream
+			nextPutAll: args vararg name;
+			nextPutAll: ' := tuple perform: #withAll: env: 0 withArguments: { positional @env0:copyFrom: ';
+			print: fixedCount + 1;
+			nextPutAll: ' to: positional @env0:size }.';
+			lf.
+	].
+	"Bind **kwarg to the keyword dict (or an empty dict if nil was passed)."
+	args kwarg ifNotNil: [
+		aStream
+			nextPutAll: args kwarg name;
+			nextPutAll: ' := keyword ifNil: [(KeyValueDictionary perform: #new env: 0)].';
+			lf.
 	].
 	aStream
 		nextPutAll: '[';
@@ -162,7 +174,13 @@ printSmalltalkOn: aStream
 		nextPutAll: '[';
 		lf;
 		increaseIndent.
-	body printSmalltalkOn: aStream.
+	"Iterate body statements directly so BlockAst doesn't re-declare temps
+	(parameters are now in body.variables via the parser change, and the
+	outer `| ... |` above already declares them)."
+	body body do: [:stmt |
+		stmt printSmalltalkOn: aStream.
+		aStream lf.
+	].
 	aStream
 		decreaseIndent;
 		nextPutAll: '] value.';
@@ -281,6 +299,42 @@ allParameterNames
 
 category: 'Grail-Module Method Compilation'
 method: FunctionDefAst
+printPositionalUnpackingOn: aStream paramNames: paramNames
+	"Emit Smalltalk code that binds each named parameter from `positional`
+	with fall-through to the default expression for parameters that have one.
+	`args defaults` holds the default ASTs right-aligned across the combined
+	posonlyargs + args sequence (CPython semantics)."
+
+	| numParams numDefaults firstWithDefault |
+	numParams := paramNames size.
+	numDefaults := args defaults size.
+	firstWithDefault := numParams - numDefaults + 1.
+	1 to: numParams do: [:i |
+		| pname |
+		pname := paramNames at: i.
+		i < firstWithDefault ifTrue: [
+			aStream
+				nextPutAll: pname;
+				nextPutAll: ' := positional @env0:at: ';
+				print: i;
+				nextPut: $.;
+				lf
+		] ifFalse: [
+			aStream
+				nextPutAll: pname;
+				nextPutAll: ' := ((positional @env0:size) @env0:>= ';
+				print: i;
+				nextPutAll: ') ifTrue: [positional @env0:at: ';
+				print: i;
+				nextPutAll: '] ifFalse: ['.
+			(args defaults at: i - firstWithDefault + 1) printSmalltalkOn: aStream.
+			aStream nextPutAll: '].'; lf
+		]
+	]
+%
+
+category: 'Module Method Compilation'
+method: FunctionDefAst
 generateMethodSourceOn: aStream
 	"Generate the full method source for compiling this def as a real env-1
 	method on a module class.
@@ -353,8 +407,11 @@ generateMethodSourceOn: aStream
 		"Wrap in block for same instVar-shadowing reason"
 		aStream nextPutAll: '^ ['.
 
-		"Declare param locals + body locals as block temps"
+		"Declare param locals (positional + *vararg + **kwarg) + body locals
+		as block temps."
 		allLocals := OrderedCollection withAll: paramNames.
+		args vararg ifNotNil: [allLocals add: args vararg name].
+		args kwarg ifNotNil: [allLocals add: args kwarg name].
 		bodyVars do: [:each |
 			(allLocals includes: each) ifFalse: [allLocals add: each].
 		].
@@ -364,13 +421,22 @@ generateMethodSourceOn: aStream
 			aStream nextPut: $|; lf.
 		].
 
-		"Unpack positional args into locals"
-		1 to: paramNames size do: [:i |
+		"Unpack positional args into locals (with default-arg fallback)."
+		self printPositionalUnpackingOn: aStream paramNames: paramNames.
+		"Bind *vararg to the tail of positional, wrapped as a tuple."
+		args vararg ifNotNil: [
 			aStream
-				nextPutAll: (paramNames at: i);
-				nextPutAll: ' := positional @env0:at: ';
-				nextPutAll: i printString;
-				nextPut: $.;
+				nextPutAll: args vararg name;
+				nextPutAll: ' := tuple perform: #withAll: env: 0 withArguments: { positional @env0:copyFrom: ';
+				nextPutAll: (paramNames size + 1) printString;
+				nextPutAll: ' to: positional @env0:size }.';
+				lf.
+		].
+		"Bind **kwarg to the keyword dict (or empty)."
+		args kwarg ifNotNil: [
+			aStream
+				nextPutAll: args kwarg name;
+				nextPutAll: ' := kwargs ifNil: [(KeyValueDictionary perform: #new env: 0)].';
 				lf.
 		].
 	].
@@ -547,14 +613,7 @@ generateClassMethodSourceOn: aStream
 			aStream nextPut: $|; lf.
 		].
 
-		1 to: paramNames size do: [:i |
-			aStream
-				nextPutAll: (paramNames at: i);
-				nextPutAll: ' := positional @env0:at: ';
-				nextPutAll: i printString;
-				nextPut: $.;
-				lf.
-		].
+		self printPositionalUnpackingOn: aStream paramNames: paramNames.
 	].
 
 	aStream nextPutAll: '['; lf.

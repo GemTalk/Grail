@@ -1564,9 +1564,18 @@ static OopType shimCall(OopType modOop, OopType methOop,
 {
     char modName[64], methName[64];
 
-    /* 1. Fetch module and method names */
+    /* 1. Fetch module name. If it contains a '.', it carries the method
+       name too ("_sre.compile") — in that case, the methOop slot is reused
+       as the first call argument, giving us 6 arg slots instead of 5. */
     fetch_string(modOop, modName, sizeof(modName));
-    fetch_string(methOop, methName, sizeof(methName));
+    char *dot = strchr(modName, '.');
+    int combined = (dot != NULL);
+    if (combined) {
+        *dot = '\0';
+        snprintf(methName, sizeof(methName), "%s", dot + 1);
+    } else {
+        fetch_string(methOop, methName, sizeof(methName));
+    }
 
     /* 2. Load module */
     PyObject *module = get_or_load_module(modName);
@@ -1586,18 +1595,31 @@ static OopType shimCall(OopType modOop, OopType methOop,
         return OOP_NIL;
     }
 
-    /* 4. Decode flags — just nargs */
-    int nargs = GciOopToI32(flagsOop) & 0x7;
+    /* 4. Decode flags — bits 0-2 = nargs, bit 3 = return raw C pointer */
+    int flags = GciOopToI32(flagsOop);
+    int nargs = flags & 0x7;
+    int returnCPtr = (flags >> 3) & 1;
 
-    /* 5. Convert Integer addresses to PyObject* pointers.
-       Unused args are 0 (SmallInteger), which become NULL pointers. */
-    PyObject *pyArgs[5] = {
-        (PyObject *)(intptr_t)GciOopToI64(a1),
-        (PyObject *)(intptr_t)GciOopToI64(a2),
-        (PyObject *)(intptr_t)GciOopToI64(a3),
-        (PyObject *)(intptr_t)GciOopToI64(a4),
-        (PyObject *)(intptr_t)GciOopToI64(a5),
-    };
+    /* 5. Convert Integer addresses to PyObject* pointers. Unused args are
+       0 (SmallInteger), which become NULL pointers. In combined mode the
+       methOop slot is the first arg, freeing all five a1..a5 slots and
+       letting a6 (passed via the 8th user-action slot) fit. */
+    PyObject *pyArgs[6];
+    if (combined) {
+        pyArgs[0] = (PyObject *)(intptr_t)GciOopToI64(methOop);
+        pyArgs[1] = (PyObject *)(intptr_t)GciOopToI64(a1);
+        pyArgs[2] = (PyObject *)(intptr_t)GciOopToI64(a2);
+        pyArgs[3] = (PyObject *)(intptr_t)GciOopToI64(a3);
+        pyArgs[4] = (PyObject *)(intptr_t)GciOopToI64(a4);
+        pyArgs[5] = (PyObject *)(intptr_t)GciOopToI64(a5);
+    } else {
+        pyArgs[0] = (PyObject *)(intptr_t)GciOopToI64(a1);
+        pyArgs[1] = (PyObject *)(intptr_t)GciOopToI64(a2);
+        pyArgs[2] = (PyObject *)(intptr_t)GciOopToI64(a3);
+        pyArgs[3] = (PyObject *)(intptr_t)GciOopToI64(a4);
+        pyArgs[4] = (PyObject *)(intptr_t)GciOopToI64(a5);
+        pyArgs[5] = NULL;
+    }
 
     /* 6. Call the method */
     PyObject *result = call_method(module, methIdx, pyArgs, nargs);
@@ -1611,9 +1633,11 @@ static OopType shimCall(OopType modOop, OopType methOop,
         return OOP_NIL;  /* unreachable if exception raised */
     }
 
-    /* 9. Read target OOP from offset 16 of result PyObject */
+    /* 9. Return either the hidden OOP at offset 16, or the raw C pointer */
     if (!result)
         return OOP_NIL;
+    if (returnCPtr)
+        return GciI64ToOop((intptr_t)result);
     return pyobj_oop(result);
 }
 
@@ -2097,7 +2121,7 @@ static OopType shimCallTyped(OopType modOop, OopType typeOop, OopType methOop,
                     }
                     if (!result) return OOP_NIL;
                     if (returnCPtr)
-                        return GciI64ToOop((intptr_t)result);
+                        return GciI64ToOop(result == Py_None ? 0 : (intptr_t)result);
                     return pyobj_oop(result);
                 }
             }
@@ -2132,9 +2156,11 @@ static OopType shimCallTyped(OopType modOop, OopType typeOop, OopType methOop,
 
     if (!result) return OOP_NIL;
 
-    /* Return value: either a C pointer or a GemStone OOP */
+    /* Return value: either a C pointer or a GemStone OOP. Py_None as a
+       returned C pointer is reported as 0 — the convention used by the
+       Smalltalk wrappers to mean "no match / not present". */
     if (returnCPtr)
-        return GciI64ToOop((intptr_t)result);
+        return GciI64ToOop(result == Py_None ? 0 : (intptr_t)result);
     return pyobj_oop(result);
 }
 

@@ -46,5 +46,13 @@ BreakAst category: 'Grail-Parser'
 removeallmethods BreakAst
 removeallclassmethods BreakAst
 set compile_env: 0
-! ------------------- Class methods for BreakAst
-! ------------------- Instance methods for BreakAst
+
+category: 'code generation'
+method: BreakAst
+printSmalltalkOn: aStream
+	"Signal PythonBreak; the enclosing ForAst (or WhileAst) wraps the
+	whileTrue loop in an `@env0:on: PythonBreak do: [:ex | nil]`
+	handler, so the signal cleanly exits the innermost loop."
+
+	aStream nextPutAll: 'PythonBreak @env0:___signal___.'
+%

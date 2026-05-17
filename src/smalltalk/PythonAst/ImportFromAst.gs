@@ -55,23 +55,86 @@ removeallmethods ImportFromAst
 removeallclassmethods ImportFromAst
 set compile_env: 0
 
+category: 'Grail-accessing'
+method: ImportFromAst
+names
+	^names
+%
+
+category: 'Grail-accessing'
+method: ImportFromAst
+names: anArray
+	"Used by importlib.expandStarImports: to rewrite a `from X import *`
+	clause into an explicit list of aliases once X's exported names are
+	known."
+
+	names := anArray
+%
+
+category: 'Grail-other'
+method: ImportFromAst
+resolvedModuleName
+	"Return the absolute module name for this `from` import.
+	For absolute imports (level=0) this is just `module`.
+	For relative imports (level≥1) we walk the parent chain to find the
+	enclosing ModuleAst, derive the importing module's package, and
+	resolve the relative target against it.
+
+	Examples (with the importer at module name `re._parser`):
+	  `from ._constants import X`  (level=1, module='_constants')
+	    → 're._constants'
+	  `from . import _constants`   (level=1, module=nil)
+	    → 're'
+	  `from ..foo import X`        (level=2, module='foo')
+	    → 'foo' (parent package of `re`)"
+
+	| node modAst importerName parts packageParts effectiveLevel |
+	(level isNil or: [level = 0]) ifTrue: [^ module asString].
+	node := parent.
+	[node notNil and: [(node isKindOf: ModuleAst) not]] whileTrue: [
+		node := node parent
+	].
+	modAst := node.
+	importerName := modAst isNil ifTrue: [''] ifFalse: [modAst name asString].
+	parts := $. split: importerName.
+	"For an importing module `a.b.c`, the package is `a.b`. `level=1`
+	resolves against the package; `level=2` strips one more component."
+	packageParts := parts copyFrom: 1 to: ((parts size - 1) max: 0).
+	effectiveLevel := level - 1.
+	[effectiveLevel > 0 and: [packageParts notEmpty]] whileTrue: [
+		packageParts := packageParts copyFrom: 1 to: packageParts size - 1.
+		effectiveLevel := effectiveLevel - 1.
+	].
+	module isNil
+		ifTrue: [^ '.' join: packageParts]
+		ifFalse: [
+			packageParts isEmpty
+				ifTrue: [^ module asString]
+				ifFalse: [^ ('.' join: packageParts) , '.' , module asString]
+		]
+%
+
 category: 'Grail-other'
 method: ImportFromAst
 printSmalltalkOn: aStream
 	"Generate Smalltalk for 'from module import name1, name2 as alias2, ...'.
 
-	Each imported name is resolved by importing the module via the
-	`___import__:kw:` varargs selector on builtins, and then accessing
-	the attribute on the returned module object.
+	For relative imports (leading dots), resolve against the importer's
+	package at compile time so the runtime `___import__:` call always
+	receives an absolute name.  Each imported name then comes off the
+	imported module object via a unary send (stored attribute) or a
+	BoundMethod wrap (callable on a converted module).
 
-	Callable attributes on module classes no longer have unary getters
-	(the unary selector is reserved for the keyword-form method). When
-	the imported name is a callable on a module, emit a BoundMethod
-	wrapper instead of a bare unary send. For stored attributes, the
-	unary getter still exists, so the bare send works."
+	Star imports (`from X import *`) are intentionally NOT yet handled
+	here — they require a runtime walk of the imported module's
+	exported names (`__all__` or every non-underscore attribute) and
+	binding each one into the local namespace.  See TODO.md."
 
-	| moduleClass |
-	moduleClass := CallAst resolveModuleClassForName: module asSymbol.
+	| moduleClass absoluteName |
+	absoluteName := self resolvedModuleName.
+	moduleClass := module isNil
+		ifTrue: [nil]
+		ifFalse: [CallAst resolveModuleClassForName: module asSymbol].
 
 	names doWithIndex: [:each :index |
 		| targetName attrName |
@@ -79,20 +142,31 @@ printSmalltalkOn: aStream
 		attrName := each name asString.
 		aStream nextPutAll: targetName.
 
+		"Pass the imported name as a single-element fromlist so the
+		runtime importer returns the leaf submodule (`re._constants`)
+		rather than the top-level package (`re`).  Without this CPython-
+		standard distinction, dotted imports of submodules would always
+		bind names from the package's __init__.py instead of the actual
+		target."
+
 		(moduleClass notNil and: [NameAst isFastPathBuiltinName: attrName asSymbol on: moduleClass]) ifTrue: [
 			"Callable on a converted module — wrap in BoundMethod."
 			aStream
 				nextPutAll: ' := (BoundMethod receiver: (((Python @env0:at: #builtins) instance) ___import__: { ''';
-				nextPutAll: module asString;
-				nextPutAll: ''' } kw: nil) selector: #';
+				nextPutAll: absoluteName;
+				nextPutAll: '''. nil. nil. { ''';
+				nextPutAll: attrName;
+				nextPutAll: ''' }. 0 } kw: nil) selector: #';
 				nextPutAll: attrName;
 				nextPutAll: ').'.
 		] ifFalse: [
 			"Stored attribute or unconverted module — use bare unary send."
 			aStream
 				nextPutAll: ' := (((Python @env0:at: #builtins) instance) ___import__: { ''';
-				nextPutAll: module asString;
-				nextPutAll: ''' } kw: nil) ';
+				nextPutAll: absoluteName;
+				nextPutAll: '''. nil. nil. { ''';
+				nextPutAll: attrName;
+				nextPutAll: ''' }. 0 } kw: nil) ';
 				nextPutAll: attrName;
 				nextPutAll: '.'.
 		].

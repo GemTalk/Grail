@@ -799,6 +799,42 @@ testRound
 
 category: 'Grail-Tests - Sequence Functions'
 method: BuiltinsTestCase
+testMap
+	"map(func, iter) — applies func to each element of iter and
+	returns a list (Grail materializes eagerly; CPython returns a
+	lazy iterator).  The callable is invoked Python-style:
+	`value: positionalArray value: kwargs`, so the block destructures
+	the positional array."
+
+	| b result doubler |
+	b := builtins ___instance___.
+	doubler := [:positional :_kw | (positional @env0:at: 1) @env1:__mul__: 2].
+	result := b @env1:map: doubler _: (list @env0:withAll: #(1 2 3)).
+	self assert: (result @env1:__getitem__: 0) equals: 2.
+	self assert: (result @env1:__getitem__: 1) equals: 4.
+	self assert: (result @env1:__getitem__: 2) equals: 6.
+	self assert: result size equals: 3
+%
+
+category: 'Tests - Sequence Functions'
+method: BuiltinsTestCase
+testMemoryviewStub
+	"memoryview(b) is a Grail stub that returns its argument unchanged
+	(see builtins.gs for the rationale).  re/_compiler.py compiles
+	successfully because the bare name resolves; the stub is fine for
+	any pattern that doesn't hit `_bytes_to_codes`.  When that path
+	matters, replace this stub with a real memoryview class and tighten
+	the assertions accordingly."
+
+	| b bytes result |
+	b := builtins ___instance___.
+	bytes := ByteArray @env0:withAll: #(1 2 3 4).
+	result := b @env1:memoryview: bytes.
+	self assert: result == bytes
+%
+
+category: 'Tests - Sequence Functions'
+method: BuiltinsTestCase
 testSorted
 	"Test sorted() — Phase-4 fast-path direct method dispatch.
 	Returns a new sorted list, leaving the original unchanged."

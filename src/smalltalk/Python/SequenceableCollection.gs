@@ -72,8 +72,7 @@ category: 'Grail-Sequence Protocol'
 method: SequenceableCollection
 __getitem__: index
 	"Return the item at the given index.
-	Supports negative indices (counting from end).
-	TODO: Support slicing."
+	Supports negative indices (counting from end)."
 
 	| size idx |
 	size := self @env0:size.
@@ -95,6 +94,55 @@ __getitem__: index
 	^ self @env0:at: (idx @env0:+ 1)
 %
 
+category: 'Grail-Sequence Protocol'
+method: SequenceableCollection
+__getslice__: lower _: upper _: step
+	"Return a slice of self. lower/upper/step are integers or None for
+	defaults. Negative indices count from the end and are clamped to the
+	collection. Step must be non-zero; negative step yields a reverse
+	slice. Empty slices return an empty copy of the same species.
+
+	This is the runtime target for Python `self[lower:upper:step]`
+	expressions emitted by SubscriptAst when its slice is a SliceAst."
+
+	| size lo hi st result i |
+	size := self @env0:size.
+	st := step ifNil: [1].
+	st @env0:= 0 ifTrue: [ValueError ___signal___: 'slice step cannot be zero'].
+
+	"Normalize lower"
+	lo := lower
+		ifNil: [st @env0:> 0 ifTrue: [0] ifFalse: [size @env0:- 1]]
+		ifNotNil: [lower @env0:< 0
+			ifTrue: [(size @env0:+ lower) @env0:max:
+				(st @env0:> 0 ifTrue: [0] ifFalse: [-1])]
+			ifFalse: [lower @env0:min:
+				(st @env0:> 0 ifTrue: [size] ifFalse: [size @env0:- 1])]].
+
+	"Normalize upper"
+	hi := upper
+		ifNil: [st @env0:> 0 ifTrue: [size] ifFalse: [-1]]
+		ifNotNil: [upper @env0:< 0
+			ifTrue: [(size @env0:+ upper) @env0:max:
+				(st @env0:> 0 ifTrue: [0] ifFalse: [-1])]
+			ifFalse: [upper @env0:min:
+				(st @env0:> 0 ifTrue: [size] ifFalse: [size @env0:- 1])]].
+
+	"Walk lo, lo+st, lo+2st, ... while the index is on the correct side
+	of hi for the step direction. Result is an instance of the same
+	species (OrderedCollection for lists, String for strings, ...)."
+	result := self @env0:species @env0:new.
+	i := lo.
+	st @env0:> 0
+		ifTrue: [[i @env0:< hi] whileTrue: [
+			result @env0:add: (self @env0:at: i @env0:+ 1).
+			i := i @env0:+ st]]
+		ifFalse: [[i @env0:> hi] whileTrue: [
+			result @env0:add: (self @env0:at: i @env0:+ 1).
+			i := i @env0:+ st]].
+	^ result
+%
+
 category: 'Grail-Comparison'
 method: SequenceableCollection
 __gt__: other
@@ -106,10 +154,13 @@ __gt__: other
 category: 'Grail-Sequence Protocol'
 method: SequenceableCollection
 __iter__
-	"Return an iterator over the sequence.
-	Subclasses must override this to return an appropriate iterator instance."
+	"Return an iterator over the sequence.  Subclasses such as
+	OrderedCollection and tuple override this with a class-specific
+	iterator; concrete subclasses without an override (e.g. plain
+	Array, which is what Interval>>__getslice__ returns) fall through
+	to a generic tuple_iterator wrapping the receiver."
 
-	self @env0:subclassResponsibility
+	^ tuple_iterator @env1:___on: self
 %
 
 category: 'Grail-Comparison'

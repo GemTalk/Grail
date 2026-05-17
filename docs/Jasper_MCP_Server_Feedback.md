@@ -524,3 +524,97 @@ and confirmed every other claim against a fresh session.
 
 Follow-on test-coverage discussion for the Jasper side is in
 `Jasper_MCP_Test_Suggestions.md`.
+
+## Round 7 — session lifecycle gaps (2026-05-14)
+
+Session: finishing Grail's `_sre` integration so `_sre.compile()`
+round-trips and `SreTestCase` is 13/13 green. The C-side bug fix
+required rebuilding the shim `.dylib` and asking the gem to pick it
+up. That sequence is where I hit the most friction.
+
+### What I needed but couldn't do
+
+1. **Restart the active gem session.** When the C shim is rebuilt,
+   the gem's `dlopen`'d copy stays mapped — only a logout + login
+   picks up the new code. I had to ask the user to manually use
+   the VS Code Sessions pane to logout/login. **Three times** in
+   one session, because each new piece of debugging required the
+   rebuilt shim. A `mcp__gemstone__restart_session` tool that
+   replays the same login config would have collapsed those three
+   user interruptions to zero.
+
+   *Bonus value:* when the gem crashes (HostCoreDump → 
+   `socket read EOF`), the only way back is to relog. That's the
+   second use case for the same tool. I hit this 4× in one session
+   today.
+
+2. **Load / reload a user action library.** I had to write
+   `System loadUserActionLibrary: '/path/to/lib.dylib'` through
+   `execute_code`. It works once, then errors on every subsequent
+   call with `ImproperOperation 2171, 'User action library
+   ''...'' is already loaded'`. With a dedicated tool the server
+   can also tell me *which* version is currently mapped (mtime,
+   sha) so I know whether the rebuilt file is actually in process.
+
+3. **List / pick / inspect the configured Jasper sessions.**
+   Today I'm bound to whatever the user selected in the Sessions
+   pane. If a project has multiple stones (`gs64stone` for dev,
+   another for tests, etc.), there's no way for me to know they
+   exist, let alone switch. A `list_sessions` + `select_session`
+   pair would close this.
+
+4. **Read the last crash backtrace.** When `ensureLoaded` segfaulted
+   in `shimInit`, I had to:
+   - notice the next `status` call returned `socket read EOF`
+   - guess that the gem had crashed
+   - shell out to find the gem log
+     (`/Users/jfoster/Documents/GemStone/db-1/log/gemnetobject_*.log`)
+   - `grep -B2 -A20 "frame #" ...` to extract the C stack
+   - identify which function and offset crashed (`shimInit + 36`)
+
+   A `last_crash_backtrace` tool that returns the C stack + signal +
+   thread state from the most recent `HostCoreDump` would turn a 4–5
+   tool call investigation into one.
+
+### Smaller gaps
+
+5. **A `session_health` / `status` signal that the gem is dead.**
+   Right now `status` returns the *cached* user/stone info even
+   after the gem has died, and only fails when it actually tries
+   to send. A health check would let me detect death before issuing
+   a stray test run.
+
+6. **Tool to compose multiple compiles + commit atomically.** I
+   recompiled 9 test methods in this session, each via separate
+   `compile_method` calls. A `compile_methods` (batch) variant
+   would have made the "remove `self skip…` from every test" edit
+   a single tool call. Same shape as how `eval_python` collapses
+   multiple steps. Not a blocker — `compile_method` works.
+
+7. **VS Code command access.** Not strictly an MCP-server gap, but
+   relevant: a way for me to drive any registered VS Code command
+   (the Jasper extension already has `gemstone-ide.session.logout`
+   etc.). The cleanest fit is to surface them as MCP tools on the
+   `gemstone` server — that keeps the security model centralized.
+
+### What worked well this session
+
+- `compile_method` + `delete_method` for tight edit cycles. I made
+  ~15 method changes and never re-installed.
+- `run_test_class` after each fix. Caught two genuine bugs
+  (Py_None handling, wrong `groups` arg).
+- `execute_code` for ad-hoc Smalltalk: reading `instVarAt:`,
+  checking `(CPythonShim current) wrap: None`, etc. Fast.
+- `get_method_source` to diff against my Edit before recompiling.
+- `commit` was reliable. I committed 4× without surprises.
+
+### Cost of the gaps in this session
+
+Three relogs that required pinging the user, ~6 minutes of
+user-interrupting handoffs (relog requests + me guessing the gem
+had crashed before realizing it). One crash backtrace investigation
+that required four shell commands when one MCP call would have done
+it. Probably 15–20% of the session's wall clock.
+
+The gaps are all in the **session lifecycle / process control**
+column. The code-editing column is in great shape.

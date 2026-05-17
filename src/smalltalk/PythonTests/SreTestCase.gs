@@ -65,32 +65,13 @@ compilePattern: patternStr flags: flags code: codeArray groups: groups groupinde
 
 category: 'Grail-Helpers'
 method: SreTestCase
-skipIfCompileUnavailable
-	"Skip the calling test if _sre.compile() is not yet wired up at the C
-	level. The compile path returns a C-allocated PatternObject and depends
-	on shimCallTyped's returnCPtr support — see MEMORY.md `_sre Module` for
-	the current status."
-
-	[self compilePattern: 'a'
-		flags: 32
-		code: #(14 5 1 1 1 1 1 97 0 0 0 16 97 1)
-		groups: 1
-		groupindex: KeyValueDictionary new
-		indexgroup: (Array with: nil)
-	] on: AbstractException do: [:ex |
-		^ self skip: '_sre.compile() not yet wired up: ' , ex messageText
-	].
-%
-
-category: 'Grail-Helpers'
-method: SreTestCase
 abcPattern
-	"Return a compiled pattern for 'abc' (no groups)."
+	"Return a compiled pattern for 'abc' (no capture groups)."
 
 	^ self compilePattern: 'abc'
 		flags: 32
 		code: #(14 12 3 3 3 3 3 97 98 99 0 0 0 16 97 16 98 16 99 1)
-		groups: 1
+		groups: 0
 		groupindex: KeyValueDictionary new
 		indexgroup: (Array with: nil)
 %
@@ -103,7 +84,7 @@ abcGroupPattern
 	^ self compilePattern: 'a(b)c'
 		flags: 32
 		code: #(14 12 1 3 3 3 1 97 98 99 0 0 0 16 97 17 0 16 98 17 1 16 99 1)
-		groups: 2
+		groups: 1
 		groupindex: KeyValueDictionary new
 		indexgroup: (Array with: nil with: nil)
 %
@@ -154,8 +135,7 @@ testCompileLiteral
 	"Test that _sre.compile() returns a SrePattern object."
 
 	| pattern |
-	self skipIfCompileUnavailable.
-	pattern := self abcPattern.
+pattern := self abcPattern.
 	self assert: (pattern isKindOf: SrePattern).
 %
 
@@ -165,8 +145,7 @@ testPatternSearch
 	"Test that pattern.search() finds a match via the real search: method."
 
 	| match |
-	self skipIfCompileUnavailable.
-	match := self abcPattern @env1:search: 'xyzabc'.
+match := self abcPattern @env1:search: 'xyzabc'.
 	self assert: (match isKindOf: SreMatch).
 %
 
@@ -175,8 +154,7 @@ method: SreTestCase
 testPatternSearchNoMatch
 	"Test that pattern.search() returns nil when no match."
 
-	self skipIfCompileUnavailable.
-	self assert: (self abcPattern @env1:search: 'xyz') equals: nil.
+self assert: (self abcPattern @env1:search: 'xyz') equals: nil.
 %
 
 category: 'Grail-Tests - Search'
@@ -185,8 +163,7 @@ testPatternSearchVarargs
 	"Test the _search:kw: varargs dispatcher for first-class use."
 
 	| match |
-	self skipIfCompileUnavailable.
-	match := self abcPattern @env1:_search: {'xyzabc'} kw: nil.
+match := self abcPattern @env1:_search: {'xyzabc'} kw: nil.
 	self assert: (match isKindOf: SreMatch).
 %
 
@@ -196,8 +173,7 @@ testMatchGroup
 	"Test that match.group(0) returns the matched text."
 
 	| match |
-	self skipIfCompileUnavailable.
-	match := self abcPattern @env1:search: 'xyzabc123'.
+match := self abcPattern @env1:search: 'xyzabc123'.
 	self assert: (match @env1:group: 0) equals: 'abc'.
 %
 
@@ -207,8 +183,7 @@ testMatchGroupNoArg
 	"Test that match.group() (0-arg) returns the whole match."
 
 	| match |
-	self skipIfCompileUnavailable.
-	match := self abcPattern @env1:search: 'xyzabc123'.
+match := self abcPattern @env1:search: 'xyzabc123'.
 	self assert: match @env1:group equals: 'abc'.
 %
 
@@ -218,8 +193,7 @@ testMatchSpan
 	"Test that match.span(0) returns the correct (start, end) tuple."
 
 	| match result |
-	self skipIfCompileUnavailable.
-	match := self abcPattern @env1:search: 'xyzabc'.
+match := self abcPattern @env1:search: 'xyzabc'.
 	result := match @env1:span: 0.
 	self assert: (result at: 1) equals: 3.
 	self assert: (result at: 2) equals: 6.
@@ -231,8 +205,7 @@ testMatchWithGroups
 	"Test compile and match with capture groups: 'a(b)c'"
 
 	| match |
-	self skipIfCompileUnavailable.
-	match := self abcGroupPattern @env1:search: 'xyzabc123'.
+match := self abcGroupPattern @env1:search: 'xyzabc123'.
 	self assert: (match @env1:group: 0) equals: 'abc'.
 	self assert: (match @env1:group: 1) equals: 'b'.
 %
@@ -243,8 +216,7 @@ testPatternMatch
 	"Test that pattern.match() matches at the beginning only."
 
 	| pattern match |
-	self skipIfCompileUnavailable.
-	pattern := self abcPattern.
+pattern := self abcPattern.
 	"match() only matches at the beginning - should fail for 'xyzabc'"
 	self assert: (pattern @env1:match: 'xyzabc') equals: nil.
 	"match() should succeed for 'abcxyz'"

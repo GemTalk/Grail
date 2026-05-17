@@ -39,7 +39,7 @@ https://docs.python.org/3/reference/executionmodel.html#naming-and-binding'
 
 expectvalue /Class
 doit
-NameAst category: 'Grail-Parser'
+NameAst category: 'Parser'
 %
 
 ! ------------------- Remove existing behavior from NameAst
@@ -48,7 +48,7 @@ removeallclassmethods NameAst
 
 set compile_env: 0
 
-category: 'Grail-other'
+category: 'other'
 classmethod: NameAst
 with: aSymbol
 
@@ -57,7 +57,7 @@ with: aSymbol
 		yourself
 %
 
-category: 'Grail-other'
+category: 'other'
 method: NameAst
 addVariableNamesTo: aStream
 
@@ -65,49 +65,49 @@ addVariableNamesTo: aStream
 	aStream nextPutAll: id; space.
 %
 
-category: 'Grail-other'
+category: 'other'
 method: NameAst
 assertContextIsLoad
 
 	ctx assertIsLoad.
 %
 
-category: 'Grail-other'
+category: 'other'
 method: NameAst
 assertContextIsStore
 
 	ctx assertIsStore.
 %
 
-category: 'Grail-other'
+category: 'other'
 method: NameAst
 ctx: aContext
 
 	ctx := aContext.
 %
 
-category: 'Grail-other'
+category: 'other'
 method: NameAst
 declareVariable
 
 	parent declareVariable: id.
 %
 
-category: 'Grail-other'
+category: 'other'
 method: NameAst
 id
 
 	^id
 %
 
-category: 'Grail-other'
+category: 'other'
 method: NameAst
 id: aSymbol
 
 	id := aSymbol
 %
 
-category: 'Grail-other'
+category: 'other'
 method: NameAst
 injectSuperArguments: anArray scope: aScope
 
@@ -124,7 +124,7 @@ injectSuperArguments: anArray scope: aScope
 	].
 %
 
-category: 'Grail-other'
+category: 'other'
 method: NameAst
 printOn: aStream
 
@@ -134,7 +134,7 @@ printOn: aStream
 		nextPut: $).
 %
 
-category: 'Grail-other'
+category: 'other'
 method: NameAst
 printSmalltalkAssignmentOn: aStream
 
@@ -142,7 +142,7 @@ printSmalltalkAssignmentOn: aStream
 	aStream nextPutAll: 'value'.
 %
 
-category: 'Grail-other'
+category: 'other'
 method: NameAst
 printSmalltalkOn: aStream
 	"Name dispatch — see docs/Rewrite_Dispatch_Model.md.
@@ -180,24 +180,42 @@ printSmalltalkOn: aStream
 			nextPutAll: ')'.
 		^ self
 	].
-	"Inside a class method body, a free name (not a method-local, not
-	a class instVar) must resolve via the defining module's globals.
-	The class carries a `___pyModule___` class-side accessor returning
-	the module instance (set up by ClassDefAst codegen); read it and
-	dispatch the global's auto-generated unary accessor."
-	(CallAst classBeingCompiled notNil
-		and: [(ctx isKindOf: LoadAst)
-		and: [(self isVariableLocalToEnclosingFunction: id) not
-		and: [(CallAst classInstVarNames
-			ifNil: [false]
-			ifNotNil: [:ivars | ivars includes: id]) not]]]) ifTrue: [
-		aStream
-			nextPutAll: '((self @env0:class @env0:___pyModule___) @env1:';
-			nextPutAll: id;
-			nextPutAll: ')'.
-		^ self
-	].
-
+	"Class-method free-variable fast path: when compiling a Python class
+	body, a free name that isn't a local or a class inst var still
+	resolves through Python's LEGB rules to the enclosing module's
+	globals.  Detect that case BEFORE the UnboundLocalError wrap below —
+	otherwise `isVariableIsDeclared:` walks up to the module body's
+	BlockAst, sees the name declared there, and wraps it in a check that
+	reads the name as a Smalltalk local (which fails at compile time
+	because class methods don't have module inst vars in scope)."
+	((ctx isKindOf: LoadAst)
+		and: [CallAst classBeingCompiled notNil
+			and: [CallAst moduleClassBeingCompiled notNil
+				and: [self isModuleScopeName: id]]])
+		ifTrue: [
+			"For a module-level function name, emit a fresh BoundMethod
+			pointing at the module instance — there is no unary accessor
+			(adding one would shadow 0-arg call dispatch).  For other
+			module variables, fetch through the unary accessor."
+			(CallAst moduleFunctionNames notNil
+				and: [CallAst moduleFunctionNames includes: id asSymbol])
+				ifTrue: [
+					aStream
+						nextPutAll: '(BoundMethod receiver: (';
+						nextPutAll: CallAst moduleClassBeingCompiled name;
+						nextPutAll: ' @env0:___instance___) selector: #';
+						nextPutAll: id;
+						nextPutAll: ')'.
+				] ifFalse: [
+					aStream
+						nextPutAll: '((';
+						nextPutAll: CallAst moduleClassBeingCompiled name;
+						nextPutAll: ' @env0:___instance___) @env1:';
+						nextPutAll: id;
+						nextPutAll: ')'.
+				].
+			^self
+		].
 	"Phase C-2: in load context, wrap reads of declared locals with a
 	runtime nil-check that raises UnboundLocalError naming the variable.
 	Stores and undeclared (free / global / builtin) names emit the bare
@@ -215,7 +233,27 @@ printSmalltalkOn: aStream
 	aStream nextPutAll: id.
 %
 
-category: 'Grail-other'
+category: 'other'
+method: NameAst
+isModuleScopeName: aSymbol
+	"True if aSymbol is in the enclosing module class's inst vars.
+	Python's LEGB free-variable lookup inside a class method body
+	does NOT include the class scope — bare names skip past the
+	class to the module's globals.  So we do not shadow on class
+	inst vars or class method names; the only thing that takes
+	precedence is the self parameter (a real local of the method)."
+
+	| modCls |
+	modCls := CallAst moduleClassBeingCompiled.
+	modCls ifNil: [^false].
+	(modCls allInstVarNames includes: aSymbol asSymbol) ifFalse: [^false].
+	(CallAst selfParameterName notNil
+		and: [CallAst selfParameterName asSymbol = aSymbol asSymbol])
+			ifTrue: [^false].
+	^ true
+%
+
+category: 'other'
 method: NameAst
 isFastPathBuiltinName
 	"True if this load-context read names a builtin that the codegen
@@ -233,7 +271,7 @@ isFastPathBuiltinName
 	^ self class isFastPathBuiltinName: id
 %
 
-category: 'Grail-other'
+category: 'other'
 method: NameAst
 isFunctionPositionOfCall
 	"True if this NameAst is the `function` of an enclosing CallAst (i.e.
@@ -244,7 +282,7 @@ isFunctionPositionOfCall
 	^ parent function == self
 %
 
-category: 'Grail-other'
+category: 'other'
 classmethod: NameAst
 isFastPathBuiltinName: aSymbol
 	"Return true if `builtins` has any env-1 fast-path method matching
@@ -253,7 +291,7 @@ isFastPathBuiltinName: aSymbol
 	^ self isFastPathBuiltinName: aSymbol on: builtins
 %
 
-category: 'Grail-other'
+category: 'other'
 classmethod: NameAst
 isFastPathBuiltinName: aSymbol on: aClass
 	"Return true if `aClass` has any env-1 fast-path method matching
@@ -276,7 +314,7 @@ isFastPathBuiltinName: aSymbol on: aClass
 	^ false
 %
 
-category: 'Grail-other'
+category: 'other'
 method: NameAst
 setTo: aValue scope: aScope
 

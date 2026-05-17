@@ -156,6 +156,50 @@ hello
 
 category: 'Grail-Module Loading'
 classmethod: importlib
+expandStarImports: aModuleAst
+	"Rewrite every `from X import *` in aModuleAst's body into
+	`from X import a, b, c, ...` where the names are X's top-level
+	module variables.  Mutates the AliasAst list in-place and declares
+	each name on the importing body so it surfaces in body.variables.
+
+	X is resolved against the importing module's package by reusing
+	ImportFromAst's `resolvedModuleName`, which walks the parent chain
+	to find the ModuleAst (set up immediately above this call site).
+	If X's source file can't be located we leave the star alone — the
+	resulting Smalltalk compile-error gives a more useful diagnostic
+	than silently skipping the import would."
+
+	| body |
+	body := aModuleAst body.
+	body body do: [:stmt |
+		((stmt isKindOf: ImportFromAst) and: [
+			stmt names size = 1 and: [(stmt names first name) == #'*']])
+		ifTrue: [
+			| absName path subAst expandedNames newAliases |
+			absName := stmt resolvedModuleName.
+			path := self @env1:___moduleNameToPath___: absName.
+			path notNil ifTrue: [
+				subAst := self astForPath: path.
+				"Names exported by a star-import: every top-level variable
+				that isn't underscore-prefixed (matches CPython's default
+				when __all__ isn't set).  __all__ handling is a future
+				refinement."
+				expandedNames := subAst body variables asArray
+					select: [:n | (n size > 0) and: [(n at: 1) ~= $_]].
+				newAliases := expandedNames collect: [:n |
+					AliasAst buildWithFields: (IdentityKeyValueDictionary new
+						at: #name put: n asSymbol;
+						at: #asName put: nil;
+						yourself)].
+				stmt names: newAliases.
+				expandedNames do: [:n | body declareVariable: n asSymbol].
+			]
+		]
+	]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
 loadModuleFromPath: pathString name: moduleName
 	"Load a module from a file path and register it.
 	Returns the module instance.
@@ -179,8 +223,19 @@ loadModuleFromPath: pathString name: moduleName
 	moduleAst name: moduleName.
 	moduleAst useTempsForBlock: false.
 
-	"Collect declared variable names from the module body"
+	"Parent linkage must happen before star-import expansion so the
+	ImportFromAst nodes can find their enclosing ModuleAst (for relative
+	import resolution)."
 	moduleAst setParent: nil.
+
+	"Expand `from X import *` into explicit `from X import a, b, c`.
+	Done by parsing the target module's source, collecting its top-level
+	names, and rewriting the star AliasAst into one AliasAst per name.
+	Each name is also declared on the body so it shows up in body.variables
+	below (and therefore in the generated class's inst vars)."
+	self expandStarImports: moduleAst.
+
+	"Collect declared variable names from the module body"
 	variables := moduleAst body variables.
 	variableNames := variables asArray.
 
@@ -250,12 +305,18 @@ loadModuleFromPath: pathString name: moduleName
 		stream := PrettyWriteStream on: Unicode7 new.
 		moduleAst printSmalltalkOn: stream.
 
-		"Compile the body as an env-1 `initialize` method on the new class."
+		"Compile the body as an env-1 `initialize` method on the new class.
+		Resume CompileWarning the same way the per-def compilation above
+		does — module-level docstrings and other expression statements
+		that the Smalltalk compiler flags as `statement with no effect`
+		are valid Python (Python evaluates the expression and discards
+		the result)."
 		methodSource := 'initialize' , lf , stream contents.
-		moduleClass compileMethod: methodSource
+		[moduleClass compileMethod: methodSource
 			dictionaries: sl
 			category: 'Grail-Module Body'
 			environmentId: 1.
+		] on: CompileWarning do: [:ex | ex resume].
 	] ensure: [
 		CallAst moduleClassBeingCompiled: nil.
 		CallAst moduleFunctionNames: nil.
@@ -263,12 +324,21 @@ loadModuleFromPath: pathString name: moduleName
 
 	"Generate unary accessor methods for each module-level variable so
 	attribute access like `module.x` resolves to an instVar read.
-	Skip function names — they have real methods + BoundMethod in instVar."
+	Skip function names — they have real `name:` / `_name:kw:` methods
+	and adding a unary `name` accessor would steal the 0-arg call-site
+	dispatch (`f()` would return the BoundMethod instead of calling).
+	Class-method free-name reads handle functions specially in NameAst
+	by emitting a fresh BoundMethod."
 	variableNames do: [:varName |
-		| accessorSource |
+		| accessorSource setterSource |
 		(functionNames includes: varName asSymbol) ifFalse: [
 			accessorSource := varName , lf , '	^ ' , varName.
 			moduleClass compileMethod: accessorSource
+				dictionaries: sl
+				category: 'Grail-Accessors'
+				environmentId: 1.
+			setterSource := varName , ': ___1' , lf , '	' , varName , ' := ___1.'.
+			moduleClass compileMethod: setterSource
 				dictionaries: sl
 				category: 'Grail-Accessors'
 				environmentId: 1.
@@ -399,19 +469,23 @@ set compile_env: 1
 category: 'Grail-Module Loading'
 classmethod: importlib
 ___moduleNameToPath___: aName
-	"Convert a module name (e.g., 'python.hello') to a file path.
-	Checks for name.py first, then name/__init__.py (package).
-	Returns the full path if found, or nil if not found."
-	| pathParts basePath pyPath initPath |
+	"Convert a module name (e.g., 'python.hello' or 're') to a file path.
+	Search order: grailDir/<name> first, then grailDir/src/python/stdlib/<name>
+	(the bundled Python standard library ports). For each search root,
+	check name.py before name/__init__.py."
+	| pathParts joined searchRoots |
 	grailDir == nil ifTrue: [^ nil].
 	pathParts := $. @env0:split: aName.
-	basePath := (grailDir @env0:, '/') @env0:, ('/' join: pathParts).
-	"Try name.py first"
-	pyPath := basePath @env0:, '.py'.
-	(GsFile @env0:existsOnServer: pyPath) ifTrue: [^ pyPath].
-	"Try name/__init__.py (package)"
-	initPath := basePath @env0:, '/__init__.py'.
-	(GsFile @env0:existsOnServer: initPath) ifTrue: [^ initPath].
+	joined := '/' @env0:join: pathParts.
+	searchRoots := Array @env0:with: grailDir
+		with: (grailDir @env0:, '/src/python/stdlib').
+	searchRoots @env0:do: [:root | | base pyPath initPath |
+		base := (root @env0:, '/') @env0:, joined.
+		pyPath := base @env0:, '.py'.
+		(GsFile @env0:existsOnServer: pyPath) ifTrue: [^ pyPath].
+		initPath := base @env0:, '/__init__.py'.
+		(GsFile @env0:existsOnServer: initPath) ifTrue: [^ initPath].
+	].
 	^ nil
 %
 
@@ -574,6 +648,26 @@ ___import__: positional kw: kwargs
 		parentModule notNil ifTrue: [
 			parentModule @env0:at: childName @env0:asSymbol put: result.
 		].
+	].
+
+	"For `from PKG import name1, name2`, ensure each name in fromlist
+	that is a submodule (i.e. importable as PKG.name) is loaded and
+	bound on PKG so the subsequent attribute access in the importer
+	resolves.  CPython's `__import__` does this implicitly when
+	`fromlist` is non-empty."
+	fromlist __len__ @env0:> 0 ifTrue: [
+		fromlist @env0:do: [:fromName |
+			| subName subPath subInstance |
+			subName := (absoluteName @env0:, '.') @env0:, fromName @env0:asString.
+			(self @env0:class lookupModule: subName) ifNil: [
+				subPath := self @env0:class ___moduleNameToPath___: subName.
+				subPath notNil ifTrue: [
+					subInstance := self @env0:class
+						@env0:loadModuleFromPath: subPath name: subName.
+					result @env0:at: fromName @env0:asSymbol put: subInstance.
+				]
+			]
+		]
 	].
 
 	"Return the correct module per CPython semantics"

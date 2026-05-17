@@ -138,6 +138,17 @@ printSmalltalkOn: aStream
 	    varargs form instead)."
 
 	| fastSelector knownBuiltinName |
+	"0. `globals()` — return the enclosing module's namespace. Inside any
+	module-level def, `self` IS the module instance (a SymbolDictionary
+	subclass), so emit `self` directly. This is a hack: it only matches
+	the bare-name 0-arg call at compile time, and breaks down for
+	`globals` aliased through a local. Good enough for module
+	initialization code, which is where ports of CPython sources use it."
+	((function isKindOf: NameAst)
+		and: [function id = #'globals'
+			and: [arguments isEmpty and: [keywords isEmpty]]])
+				ifTrue: [aStream nextPutAll: 'self'. ^self].
+
 	fastSelector := self bareCallFastPathSelector.
 	fastSelector ifNotNil: [
 		^ self printBareCallFastPathOn: aStream selector: fastSelector
@@ -245,10 +256,17 @@ printSmalltalkOn: aStream
 	keywords isEmpty ifTrue: [
 		aStream nextPutAll: 'nil'.
 	] ifFalse: [
-		"Build keywords dictionary"
-		keywords keysAndValuesDo: [:key :value |
-			aStream nextPutAll: ' at: #'; nextPutAll: key; nextPutAll: ' put: '.
-			value printSmalltalkWithParenthesisOn: aStream.
+		"Build keywords dictionary (legacy block-fetch path's kwargs)."
+		"Use explicit env-0 dispatch — env-1 IdentityKeyValueDictionary
+		has no `new` / `at:put:` / `yourself`.  Each cascaded message is
+		prefixed with `@env0:` on the first keyword; subsequent keywords
+		in the same message do NOT take the prefix (Smalltalk merges them
+		into a single keyword selector by surface syntax)."
+		aStream nextPutAll: '((IdentityKeyValueDictionary @env0:new)'.
+		"keywords is an Array of KeywordAst; iterate element-wise."
+		keywords do: [:kwAst |
+			aStream nextPutAll: ' @env0:at: #'; nextPutAll: kwAst name asString; nextPutAll: ' put: '.
+			kwAst value printSmalltalkWithParenthesisOn: aStream.
 			aStream nextPut: $;.
 		].
 		aStream nextPutAll: ' yourself)'.
@@ -476,10 +494,16 @@ printAttributeCallVarargsOn: aStream selector: aSelector
 	keywords isEmpty ifTrue: [
 		aStream nextPutAll: 'nil'.
 	] ifFalse: [
-		aStream nextPutAll: '(IdentityKeyValueDictionary new'.
-		keywords keysAndValuesDo: [:key :value |
-			aStream nextPutAll: ' at: #'; nextPutAll: key; nextPutAll: ' put: '.
-			value printSmalltalkWithParenthesisOn: aStream.
+		"Use explicit env-0 dispatch — env-1 IdentityKeyValueDictionary
+		has no `new` / `at:put:` / `yourself`.  Each cascaded message is
+		prefixed with `@env0:` on the first keyword; subsequent keywords
+		in the same message do NOT take the prefix (Smalltalk merges them
+		into a single keyword selector by surface syntax)."
+		aStream nextPutAll: '((IdentityKeyValueDictionary @env0:new)'.
+		"keywords is an Array of KeywordAst; iterate element-wise."
+		keywords do: [:kwAst |
+			aStream nextPutAll: ' @env0:at: #'; nextPutAll: kwAst name asString; nextPutAll: ' put: '.
+			kwAst value printSmalltalkWithParenthesisOn: aStream.
 			aStream nextPut: $;.
 		].
 		aStream nextPutAll: ' yourself)'.
@@ -565,10 +589,16 @@ printBareCallVarargsOn: aStream selector: aSelector
 	keywords isEmpty ifTrue: [
 		aStream nextPutAll: 'nil'.
 	] ifFalse: [
-		aStream nextPutAll: '(IdentityKeyValueDictionary new'.
-		keywords keysAndValuesDo: [:key :value |
-			aStream nextPutAll: ' at: #'; nextPutAll: key; nextPutAll: ' put: '.
-			value printSmalltalkWithParenthesisOn: aStream.
+		"Use explicit env-0 dispatch — env-1 IdentityKeyValueDictionary
+		has no `new` / `at:put:` / `yourself`.  Each cascaded message is
+		prefixed with `@env0:` on the first keyword; subsequent keywords
+		in the same message do NOT take the prefix (Smalltalk merges them
+		into a single keyword selector by surface syntax)."
+		aStream nextPutAll: '((IdentityKeyValueDictionary @env0:new)'.
+		"keywords is an Array of KeywordAst; iterate element-wise."
+		keywords do: [:kwAst |
+			aStream nextPutAll: ' @env0:at: #'; nextPutAll: kwAst name asString; nextPutAll: ' put: '.
+			kwAst value printSmalltalkWithParenthesisOn: aStream.
 			aStream nextPut: $;.
 		].
 		aStream nextPutAll: ' yourself)'.
@@ -925,10 +955,16 @@ printClassSelfSendVarargsOn: aStream selector: aSelector
 	keywords isEmpty ifTrue: [
 		aStream nextPutAll: 'nil'.
 	] ifFalse: [
-		aStream nextPutAll: '(IdentityKeyValueDictionary new'.
-		keywords keysAndValuesDo: [:key :value |
-			aStream nextPutAll: ' at: #'; nextPutAll: key; nextPutAll: ' put: '.
-			value printSmalltalkWithParenthesisOn: aStream.
+		"Use explicit env-0 dispatch — env-1 IdentityKeyValueDictionary
+		has no `new` / `at:put:` / `yourself`.  Each cascaded message is
+		prefixed with `@env0:` on the first keyword; subsequent keywords
+		in the same message do NOT take the prefix (Smalltalk merges them
+		into a single keyword selector by surface syntax)."
+		aStream nextPutAll: '((IdentityKeyValueDictionary @env0:new)'.
+		"keywords is an Array of KeywordAst; iterate element-wise."
+		keywords do: [:kwAst |
+			aStream nextPutAll: ' @env0:at: #'; nextPutAll: kwAst name asString; nextPutAll: ' put: '.
+			kwAst value printSmalltalkWithParenthesisOn: aStream.
 			aStream nextPut: $;.
 		].
 		aStream nextPutAll: ' yourself)'.
@@ -953,15 +989,24 @@ moduleSelfSendSelector
 	rather than the class method dict, because methods may not all be compiled
 	yet when we generate source for inter-function calls."
 
-	| funcName |
+	| funcName candidate |
 	self class moduleClassBeingCompiled ifNil: [^nil].
+	"Don't self-send while compiling a class body — bare names there
+	follow Python's LEGB and resolve through the module singleton,
+	not as `self.X(...)`."
+	self class classBeingCompiled ifNotNil: [^nil].
 	(function isKindOf: NameAst) ifFalse: [^nil].
 	funcName := function id.
 	(self class moduleFunctionNames includes: funcName) ifFalse: [^nil].
 	keywords isEmpty ifFalse: [^nil].
-	"Build the fixed-arity selector and check the class method dict.
-	If the method is there (pre-registered stub or already compiled), use it."
-	^ self class fastPathSelectorForAttr: funcName arity: arguments size
+	"Build the fixed-arity selector and verify it exists in the class's
+	env-1 method dict. Functions defined with *args / **kwargs / defaults
+	only have the `_name:kw:` varargs form, so a fixed-arity call to them
+	must fall through to moduleSelfSendVarargsSelector below."
+	candidate := self class fastPathSelectorForAttr: funcName arity: arguments size.
+	((self class moduleClassBeingCompiled methodDictForEnv: 1) includesKey: candidate)
+		ifFalse: [^nil].
+	^ candidate
 %
 
 category: 'Grail-Module Self-Send'
@@ -974,6 +1019,10 @@ moduleSelfSendVarargsSelector
 
 	| funcName candidate |
 	self class moduleClassBeingCompiled ifNil: [^nil].
+	"Don't self-send while compiling a class body — bare names there
+	follow Python's LEGB and resolve through the module singleton,
+	not as `self.X(...)`."
+	self class classBeingCompiled ifNotNil: [^nil].
 	(function isKindOf: NameAst) ifFalse: [^nil].
 	funcName := function id.
 	(self class moduleFunctionNames includes: funcName) ifFalse: [^nil].
@@ -1027,10 +1076,16 @@ printModuleSelfSendVarargsOn: aStream selector: aSelector
 	keywords isEmpty ifTrue: [
 		aStream nextPutAll: 'nil'.
 	] ifFalse: [
-		aStream nextPutAll: '(IdentityKeyValueDictionary new'.
-		keywords keysAndValuesDo: [:key :value |
-			aStream nextPutAll: ' at: #'; nextPutAll: key; nextPutAll: ' put: '.
-			value printSmalltalkWithParenthesisOn: aStream.
+		"Use explicit env-0 dispatch — env-1 IdentityKeyValueDictionary
+		has no `new` / `at:put:` / `yourself`.  Each cascaded message is
+		prefixed with `@env0:` on the first keyword; subsequent keywords
+		in the same message do NOT take the prefix (Smalltalk merges them
+		into a single keyword selector by surface syntax)."
+		aStream nextPutAll: '((IdentityKeyValueDictionary @env0:new)'.
+		"keywords is an Array of KeywordAst; iterate element-wise."
+		keywords do: [:kwAst |
+			aStream nextPutAll: ' @env0:at: #'; nextPutAll: kwAst name asString; nextPutAll: ' put: '.
+			kwAst value printSmalltalkWithParenthesisOn: aStream.
 			aStream nextPut: $;.
 		].
 		aStream nextPutAll: ' yourself)'.

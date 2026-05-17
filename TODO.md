@@ -23,15 +23,93 @@ These break programs that look ordinary in CPython.
   discriminator walks the metaclass chain so inherited `__new__`
   selectors are detected. Tests in `ClassCallFastPathTestCase`.
 
-- [ ] **Comprehensions have no codegen** — `ListCompAst`, `DictCompAst`,
-  `SetCompAst`, `GeneratorExpAst`, and the helper `ComprehensionAst`
-  parse successfully but define no `printSmalltalkOn:`, so any
-  comprehension falls through to `AbstractNode`'s "abstract; subclasses
-  must implement" error at compile time. Emit the
-  nested-loop-with-accumulator form (list/dict/set init, then for/if
-  scaffolding from `generators`, then an append / `at:put:` of `elt`).
-  `GeneratorExpAst` additionally needs a generator/iterator protocol
-  decision.
+- [x] ~~**Comprehensions have no codegen**~~ — Done.
+  `ComprehensionAst class >> emitGenerators:from:on:innerBody:` emits
+  one nested `[true] whileTrue:` block per generator (with target
+  binding, tuple unpacking, `if`-chains, and a StopIteration handler),
+  and `ListCompAst`/`DictCompAst`/`SetCompAst`/`GeneratorExpAst` each
+  supply the deepest-body emitter (`OrderedCollection` add, dict
+  `at:put:`, set add). `GeneratorExpAst` materializes eagerly into an
+  `OrderedCollection`; revisit when Grail grows a real generator type.
+  Test coverage: `ComprehensionTestCase` (14 tests).
+
+- [ ] **Slice subscript assignment / del** — `SubscriptAst` reads
+  (`xs[i:j]`) work via `SequenceableCollection >> __getslice__:_:_:`
+  but stores (`xs[i:j] = ys`) and deletes (`del xs[i:j]`) are not
+  wired. Most ports don't need either; flag them with a clean error
+  if they do.
+
+- [ ] **`*args` / `**kwargs` only bound in `def` codegen** — the closure
+  emit and varargs-selector emit paths now bind both, but `LambdaAst`
+  doesn't, so `lambda *xs: xs` still emits a bare `xs` read. Mirror
+  the FunctionDefAst code paths.
+
+- [ ] **`super(Cls, self)` rejected at compile time** — the
+  class-name reference inside the class body fails the codegen's
+  name resolution. The no-arg `super()` form is accepted and produces
+  the same runtime call. Fix: when emitting a `super(...)` call,
+  resolve the first argument lazily (e.g., `___cls___` from the
+  enclosing class-compile scope) instead of as a bare name.
+
+- [ ] **`del` statement panics codegen** — Grail's parser accepts `del
+  x[-2:]` but there is no `printSmalltalkOn:` on the relevant AST
+  node, so codegen hits `AbstractNode is abstract …`. Implement for
+  the three common targets: name (`del x`), subscript (`del xs[i]`),
+  attribute (`del obj.x`).
+
+- [ ] **Dynamic module-level names resolve at compile time** —
+  `LITERAL` in a dict literal works only if Grail has already seen
+  `LITERAL = ...` higher in the same module. CPython's `globals().update()`
+  pattern adds names at *module-init* time, after the whole module
+  body is compiled, so any later reference compile-errors with
+  `undefined symbol`. Two options: (a) two-pass scan that pre-declares
+  module names mentioned by static analysis of `globals().update`
+  call sites; (b) emit unresolved bare-name reads as
+  `(self @env0:at: #name)` runtime lookups when the surrounding
+  scope is a module body.
+
+- [ ] **Dotted submodule loader names inst vars with a `.`** —
+  `import re._constants` fails with
+  `ArgumentError 2149, illegal identifier #'re._constants'`. Storing
+  the module under a dot-free key (or renaming the submodule's slot
+  to `re__constants` / a separate registry lookup) would fix the
+  inst-var naming clash.
+
+- [ ] **Relative imports** — `from ._constants import *` (leading
+  `.`) is not handled.
+
+- [ ] **Star imports** — `from X import *` not implemented. Needed
+  for CPython stdlib ports that re-export module-internal names.
+
+- [ ] **Python `int` subclasses can't carry extra inst vars** —
+  CPython's `class _NamedIntConstant(int)` stores `.name` on the
+  instance for debug repr. Grail represents Python `int` as
+  Smalltalk's `SmallInteger`, which has no inst-var slot. Either
+  (a) box int subclasses in a wrapper that holds the underlying int
+  + extra slots, or (b) document the limitation and require ports
+  to drop the wrapper.
+
+- [ ] **`slice` not a built-in class** — CPython exposes `slice` as
+  a real class so user code can do `isinstance(idx, slice)` (e.g.,
+  `re/_parser.py:169` `SubPattern.__getitem__`).  Grail handles
+  slice *expressions* (`xs[i:j]`) via `__getslice__:_:_:` codegen
+  but has no `slice` class to compare against. Add `slice` as a
+  built-in that:
+    * `slice(stop)` / `slice(start, stop[, step])` builds a value
+      object with `.start`, `.stop`, `.step` attributes.
+    * `__getslice__:_:_:` callers / `SliceAst` codegen can also
+      build one and pass it to `__getitem__` when the user defines
+      `__getitem__` rather than `__getslice__`.
+
+- [ ] **SubPattern.dump in re/_parser.py fails at module load**
+  (after stubbing dump it gets past, so the dump body has the
+  trigger).  The body is dense — `for op, av in self.data`, lots of
+  `print(... end='')`, tuple-unpack in nested for, `isinstance(av,
+  seqtypes)`, `is`-comparisons against IN / BRANCH /
+  GROUPREF_EXISTS.  Error surface is "SmallInteger does not
+  understand #do:" so something in codegen is iterating over a
+  literal integer it expected to be a collection.  Open question
+  which construct triggers; further bisection welcome.
 
 - [ ] **Module-level dunders (`__name__`, `__file__`, …) not bound at
   module scope** — `if __name__ == "__main__":` emits `__name__` as a
@@ -145,67 +223,47 @@ than fixable bugs.
 ## `import re` — Regular Expression Support
 
 The `_sre` C extension module (CPython's regex engine) is forked,
-compiled, and linked into `libcpython_ua.dylib`. Module-level functions
-work (`getcodesize`, `ascii_iscased`, `ascii_tolower`, `unicode_iscased`,
-`unicode_tolower`).
+compiled, and linked into `libcpython_ua.dylib`. End-to-end:
 
-What remains is `_sre.compile()`, which returns C-allocated
-`PatternObject` and `MatchObject` structs. These use `PyVarObject`
-(variable-length objects with `ob_size` at offset 16), which conflicts
-with the shim's hidden-OOP convention at offset 16. Moving the OOP to
-offset 24 won't work because `PatternObject`'s `groups` field occupies
-that offset and is accessed by compiled C code via struct layout.
+- [x] ~~Multi-phase init (`Py_mod_exec`), heap types
+  (Pattern/Match/Scanner), `PyType_FromModuleAndSpec()`~~ — done.
+- [x] ~~`shimCallTyped` (typed-object dispatch by C pointer)~~ — done.
+- [x] ~~`_sre.compile()` round-trip~~ — done. `SrePattern`/`SreMatch`
+  wrappers hold the raw C pointer in an inst var; `match`/`search`/
+  `findall`/`group`/`span`/etc. all work. Test coverage:
+  `SreTestCase` (13 tests).
 
-These objects don't need a hidden OOP — they live entirely in C memory.
-Smalltalk holds the raw C pointer address as a SmallInteger and passes
-it back for method dispatch.
+### Pure Python `re` port — current state
 
-### Shim extensions needed
+Bundled CPython 3.14 sources live under
+`src/python/stdlib/re/` and are loaded via `importlib`'s extended
+search path (see [`Support_Flask.md`](docs/Support_Flask.md)).
 
-1. **`shimCallTyped`** — extend `shimCall` (or add a new entry point) to:
-   - Accept a C pointer (SmallInteger) as `self` instead of a
-     PyObject-with-hidden-OOP
-   - Look up methods on heap types (Pattern_Type, Match_Type, Scanner_Type)
-     created during `_sre`'s multi-phase init (`Py_mod_exec`)
-   - Return raw C pointer addresses for results that are C-allocated
-     structs (controlled by a flag bit, e.g., bit 3 of the flags
-     argument)
+| File                | Status                                                              |
+|---------------------|---------------------------------------------------------------------|
+| `_constants.py`     | Loads (Strategy A — see deviations below).                          |
+| `_casefix.py`       | Loads unmodified (Strategy B).                                      |
+| `_parser.py`        | Doesn't load: needs `from ._constants import *` (relative + star) and dotted-submodule loader fix. |
+| `_compiler.py`      | Untried: blocked on `_parser`.                                       |
+| `__init__.py`       | Untried: blocked on `_parser` + `_compiler`.                         |
 
-2. **Multi-phase init** — `get_or_load_module()` needs to handle
-   `Py_mod_exec` slots: after calling `PyInit__sre()` (which returns a
-   `PyModuleDef*`), allocate module state (`malloc(m_size)`), then call
-   the exec function which creates the heap types and adds constants.
+Other pure-Python deps `re` pulls in: `enum`, `functools` (have shims),
+`copyreg` (have shim). None blocking.
 
-3. **Heap type support** — implement `PyType_FromModuleAndSpec()` which
-   `_sre`'s exec function calls to create Pattern_Type, Match_Type, and
-   Scanner_Type.
+### Stdlib port deviations (Strategy A)
 
-### Pure Python dependencies for `import re`
+Policy: prefer Strategy B (load CPython source unmodified, fix Grail
+when it breaks). Use Strategy A only when the underlying Grail change
+is genuinely architectural. Every Strategy A deviation gets a `# GRAIL:`
+block in the file and an entry here so the fork can shrink as Grail
+catches up.
 
-The `re` package (5 files: `__init__.py`, `_compiler.py`, `_parser.py`,
-`_constants.py`, `_casefix.py`) is pure Python from CPython's stdlib.
-It also requires:
-
-- `enum` — enumeration types (used for `re.RegexFlag`)
-- `functools` — `functools.lru_cache` (used in `_compiler.py`)
-- `copyreg` — pickle/copy support for compiled patterns
-
-These can be stubbed or implemented incrementally.
-
-### Dependency chain
-
-```
-import html
-  └─ import re
-       ├─ _sre.compile()     ← C-pointer protocol (this TODO)
-       ├─ re/_compiler.py    ← pure Python from CPython stdlib
-       ├─ re/_parser.py      ← pure Python from CPython stdlib
-       ├─ re/_constants.py   ← pure Python from CPython stdlib
-       ├─ re/_casefix.py     ← pure Python from CPython stdlib
-       ├─ enum               ← stdlib module (stub or implement)
-       ├─ functools          ← stdlib module (stub or implement)
-       └─ copyreg            ← stdlib module (stub or implement)
-```
+| File | Deviation | Why | Reverts when |
+|------|-----------|-----|--------------|
+| `src/python/stdlib/re/_constants.py` | Dropped `_NamedIntConstant(int)`. | `SmallInteger` has no inst-var slot for `.name`. | Grail supports int subclasses with extra inst vars (see *Bugs Blocking…* above). |
+| `src/python/stdlib/re/_constants.py` | Expanded `_makecodes(*names)` + `globals().update(...)` into explicit `NAME = N` constants and literal `OPCODES`/`ATCODES`/`CHCODES` lists. | Grail resolves module-name forward references at compile time; later dict literals can't see names added at module-init time. | Grail does dynamic module-name resolution (`(self @env0:at: #name)` fallback in `NameAst`). |
+| `src/python/stdlib/re/__init__.py` | Replaced with a 1-statement Grail stub.  CPython original archived alongside as `__init__.cpython.py`. | Class-method free-name resolution now works (commit `7235810` / merge `da86ed8`), and `count, *args = args` star-unpack codegen landed (this branch).  Remaining blockers when the upstream file is dropped in: (1) `@enum.global_enum` on `class RegexFlag` is supposed to inject the enum members (`DEBUG`, `ASCII`, `IGNORECASE`, …) into the module's globals — Grail doesn't run the decorator, so the later `if flags & DEBUG:` site compile-errors with `undefined symbol DEBUG`.  (2) `next()` and `iter()` aren't implemented as builtins, so `next(iter(_cache))` compile-errors with `undefined symbol`. | Grail implements `@enum.global_enum` (or a `globals().update(...)` shim that runs at module-init time) **and** ships `next` / `iter` as fast-path builtins.  Until then, either keep the stub or land a Strategy A patch that hand-injects the RegexFlag members as module constants and stubs `_compile`'s `next(iter(...))` line. |
+| `src/python/stdlib/re/_compiler.py` | `dis(code)` function body replaced with `raise NotImplementedError(...)`. | The original is a 150-line debug disassembler with two nested `def`s (`dis_`, `print_`), heavy free-variable closure references, `*args, to=None` (keyword-only after `*args`), and several `@` operators.  One or more of these trips an AbstractNode codegen branch.  `dis()` is never called by the regex compile path; it's an interactive printer for compiled bytecode. | Grail's codegen handles nested-def closures + `*args, kw_only=N` parameters end-to-end.  The function body is small once those land; restore from `__init__.cpython.py`-style archive (need to add one for `_compiler.py`). |
 
 ## `html.parser` Module
 

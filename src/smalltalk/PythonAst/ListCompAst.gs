@@ -53,3 +53,25 @@ removeallclassmethods ListCompAst
 set compile_env: 0
 ! ------------------- Class methods for ListCompAst
 ! ------------------- Instance methods for ListCompAst
+
+category: 'code generation'
+method: ListCompAst
+printSmalltalkOn: aStream
+	"[expr for t in iter [if c]* ...] -> an OrderedCollection. Wraps the
+	generators (see ComprehensionAst class>>emitGenerators:from:on:innerBody:)
+	around an inner body that appends elt to a private accumulator."
+
+	aStream nextPutAll: '([| ___r___ |'; lf; increaseIndent.
+	aStream nextPutAll: '___r___ := (OrderedCollection perform: #new env: 0).'; lf.
+	ComprehensionAst
+		emitGenerators: generators
+		from: 1
+		on: aStream
+		innerBody: [
+			aStream nextPutAll: '___r___ @env0:add: ('.
+			elt printSmalltalkOn: aStream.
+			aStream nextPutAll: ').'; lf.
+		].
+	aStream nextPutAll: '___r___'; lf.
+	aStream decreaseIndent; nextPutAll: '] value)'
+%

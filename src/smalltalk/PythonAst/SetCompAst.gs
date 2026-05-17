@@ -53,3 +53,24 @@ removeallclassmethods SetCompAst
 set compile_env: 0
 ! ------------------- Class methods for SetCompAst
 ! ------------------- Instance methods for SetCompAst
+
+category: 'code generation'
+method: SetCompAst
+printSmalltalkOn: aStream
+	"{expr for t in iter [if c]* ...} -> a Set. Wraps the generators
+	around an inner body that adds elt to the accumulator."
+
+	aStream nextPutAll: '([| ___r___ |'; lf; increaseIndent.
+	aStream nextPutAll: '___r___ := (Set perform: #new env: 0).'; lf.
+	ComprehensionAst
+		emitGenerators: generators
+		from: 1
+		on: aStream
+		innerBody: [
+			aStream nextPutAll: '___r___ @env0:add: ('.
+			elt printSmalltalkOn: aStream.
+			aStream nextPutAll: ').'; lf.
+		].
+	aStream nextPutAll: '___r___'; lf.
+	aStream decreaseIndent; nextPutAll: '] value)'
+%

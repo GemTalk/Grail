@@ -48,7 +48,13 @@ set compile_env: 0
 category: 'Grail-other'
 method: NotAst
 printSmalltalkOn: aStream
+	"Python ``not x`` coerces x to a Boolean via truthiness rules first,
+	then negates.  Emitting `x @env0:not` works for actual Booleans but
+	fails for any other type (Integer, String, OrderedCollection, ...)
+	because those don't implement `not`.  Funnel through ___isTruthy___
+	so the negation works on any operand."
 
+	aStream nextPutAll: '('.
 	operand printSmalltalkWithParenthesisOn: aStream.
-	aStream nextPutAll: ' @env0:not'.
+	aStream nextPutAll: ' ___isTruthy___) @env0:not'.
 %

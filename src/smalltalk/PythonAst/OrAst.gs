@@ -49,11 +49,15 @@ set compile_env: 0
 category: 'Grail-other'
 method: OrAst
 printSmalltalkOn: aStream
+	"Python ``a or b`` returns the first truthy operand (preserving its
+	value), or the last operand if none are truthy.  Smalltalk's `or:`
+	requires Booleans and returns Boolean, so emit via the
+	value-preserving helper ``___pyOr___:``."
 
 	1 to: values size - 1 do: [:i |
 		aStream nextPutAll: '(('.
 		(values at: i) printSmalltalkOn: aStream.
-		aStream nextPutAll: ') or: ['.
+		aStream nextPutAll: ') ___pyOr___: ['.
 	].
 	values last printSmalltalkOn: aStream.
 	values size - 1 timesRepeat: [

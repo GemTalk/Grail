@@ -117,15 +117,10 @@ printSmalltalkRuntimeOn: aStream
 	name is computed now (it's a pure function of the Python name)
 	and embedded as a literal symbol; `inDictionary: nil` keeps the
 	class out of any SymbolDictionary — the variable being assigned
-	is the sole handle.
-
-	`___pyModule___` is a class-instVar holding the defining module
-	instance, used by NameAst codegen to resolve free names through
-	the module's globals.  Only the root of a Python class chain
-	declares it (and compiles its accessor + setter); subclasses
-	inherit the slot and the class-side methods, and would error
-	with rtErrAddDupInstvar if they redeclared.  An empty `bases`
-	list marks the root case."
+	is the sole handle.  Free-name resolution inside this class's
+	methods goes through CallAst moduleClassBeingCompiled at codegen
+	time (see NameAst >> isModuleScopeName:), so no per-class module
+	reference needs to be stored on the new class."
 	aStream
 		nextPutAll: name;
 		nextPutAll: ' := '.
@@ -135,38 +130,7 @@ printSmalltalkRuntimeOn: aStream
 		nextPutAll: (importlib @env0:___asSmalltalkClassName___: name) asString;
 		nextPutAll: ''' instVarNames: '.
 	self printSymbolArray: ivarNames on: aStream.
-	aStream nextPutAll: ' classVars: #() classInstVars: '.
-	aStream nextPutAll: (bases isEmpty
-		ifTrue: ['#( ___pyModule___ )']
-		ifFalse: ['#()']).
-	aStream nextPutAll: ' poolDictionaries: #() inDictionary: nil options: #().'; lf.
-
-	"Compile the class-side accessor + setter only on the root
-	(where ___pyModule___ is introduced); subclasses inherit them."
-	bases isEmpty ifTrue: [
-		self
-			emitCompileMethodOn: name
-			source: '___pyModule___
-^ ___pyModule___'
-			category: 'Grail-Module Ref'
-			env: 0
-			classSide: true
-			onStream: aStream.
-		self
-			emitCompileMethodOn: name
-			source: '___pyModule___: aModule
-___pyModule___ := aModule'
-			category: 'Grail-Module Ref'
-			env: 0
-			classSide: true
-			onStream: aStream.
-	].
-	"Always point the new class at the defining module (`self` at
-	this point in the enclosing initialize method is the module
-	instance).  The setter is inherited when bases is non-empty."
-	aStream
-		nextPutAll: name;
-		nextPutAll: ' @env0:___pyModule___: self.'; lf.
+	aStream nextPutAll: ' classVars: #() classInstVars: #() poolDictionaries: #() inDictionary: nil options: #().'; lf.
 
 	"Compile each instance method as a real env-1 method on the new
 	class.  The source is embedded as a Smalltalk string literal."
@@ -180,11 +144,16 @@ ___pyModule___ := aModule'
 			onStream: aStream.
 	].
 
-	"Compile a unary accessor method per instance variable (so
-	`p.x` resolves to an instVar read)."
+	"Compile a unary accessor + 1-arg setter per instance variable.
+	The setter pairs with the accessor so ``___pyAttrLoad___:`` can
+	distinguish a value-attribute (has both getter and setter) from
+	a regular method (which would otherwise be wrapped in a
+	BoundMethod).  Also lets external code do ``obj.x = v`` via the
+	@env1:x: send."
 	ivarNames do: [:ivar |
-		| accessorSrc |
-		accessorSrc := ivar , (Character lf asString) , '	^ ' , ivar.
+		| lf accessorSrc setterSrc |
+		lf := Character lf asString.
+		accessorSrc := ivar , lf , '	^ ' , ivar.
 		self
 			emitCompileMethodOn: name
 			source: accessorSrc
@@ -192,6 +161,39 @@ ___pyModule___ := aModule'
 			env: 1
 			classSide: false
 			onStream: aStream.
+		setterSrc := ivar , ': ___1' , lf , '	' , ivar , ' := ___1.'.
+		self
+			emitCompileMethodOn: name
+			source: setterSrc
+			category: 'Grail-Accessors'
+			env: 1
+			classSide: false
+			onStream: aStream.
+	].
+
+	"For each @property method, compile a 1-arg setter that signals
+	AttributeError.  Pairing the @property getter with a setter makes
+	it look like an instVar to ``___pyAttrLoad___:`` so attribute
+	reads INVOKE the property method (returning its value) instead of
+	being wrapped in a BoundMethod.  Python @property without an
+	explicit @setter is read-only; signalling AttributeError on
+	assignment matches that."
+	methodDefs do: [:def |
+		(def decoratorList notNil
+			and: [def decoratorList includes: #'property']) ifTrue: [
+			| propSetterSrc lf2 |
+			lf2 := Character lf asString.
+			propSetterSrc := def name , ': ___1' , lf2 ,
+				'	AttributeError @env0:signal: ''property ''''',
+				def name , ''''' has no setter''.'.
+			self
+				emitCompileMethodOn: name
+				source: propSetterSrc
+				category: 'Grail-Property-ReadOnly'
+				env: 1
+				classSide: false
+				onStream: aStream.
+		].
 	].
 
 	"Compile the class-side value:value: method used for Python
@@ -212,10 +214,13 @@ category: 'Grail-code generation'
 method: ClassDefAst
 printSuperclassOn: aStream
 	"Emit a runtime expression for this class's superclass.  No
-	bases → Object.  Otherwise emit the first base's expression
-	(multi-inheritance is not modeled yet — first base wins)."
+	bases → PythonInstance (the Grail-only base class that provides
+	the __dict__ fallback for dynamic Python attributes that aren't
+	pre-discovered from __init__).  Otherwise emit the first base's
+	expression (multi-inheritance is not modeled yet — first base
+	wins, and the base is expected to chain back to PythonInstance)."
 
-	bases isEmpty ifTrue: [^ aStream nextPutAll: 'Object'].
+	bases isEmpty ifTrue: [^ aStream nextPutAll: 'PythonInstance'].
 	bases first printSmalltalkOn: aStream.
 %
 
@@ -261,11 +266,24 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 	src nextPutAll: '| instance |'; nextPutAll: lf.
 	src nextPutAll: 'instance := self @env0:new.'; nextPutAll: lf.
 	initSelector ifNotNil: [
-		src
-			nextPutAll: 'instance perform: #''';
-			nextPutAll: initSelector asString;
-			nextPutAll: ''' env: 1 withArguments: positional.';
-			nextPutAll: lf.
+		"Varargs __init__ (defaults, *args, or **kwargs) compiles to a
+		`___init__:kw:` selector that takes both positional and keyword
+		arrays; the fixed-arity form takes the positional values
+		spread."
+		(initSelector asString endsWith: ':kw:')
+			ifTrue: [
+				src
+					nextPutAll: 'instance perform: #''';
+					nextPutAll: initSelector asString;
+					nextPutAll: ''' env: 1 withArguments: (Array @env0:with: positional @env0:with: keywords).';
+					nextPutAll: lf.
+			] ifFalse: [
+				src
+					nextPutAll: 'instance perform: #''';
+					nextPutAll: initSelector asString;
+					nextPutAll: ''' env: 1 withArguments: positional.';
+					nextPutAll: lf.
+			].
 	].
 	src nextPutAll: '^ instance'.
 
@@ -341,7 +359,10 @@ category: 'Grail-Class Compilation'
 method: ClassDefAst
 instanceVarNamesFromInit
 	"Scan __init__ body for `self.attr = ...` assignments to determine
-	instance variable names for the generated Smalltalk class."
+	instance variable names for the generated Smalltalk class.  Other
+	attributes (set in non-__init__ methods or by external code such as
+	`obj.x = ...` from another module) are stashed in the per-instance
+	__dict__ fallback that PythonInstance provides."
 
 	| initMethod initBody selfName result |
 	initMethod := body body detect: [:stmt |

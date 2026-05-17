@@ -199,6 +199,8 @@ run
 	at: #'RuntimeWarning' put: nil;
 	at: #'StatisticsError' put: nil;
 	at: #'StopAsyncIteration' put: nil;
+	at: #'PythonBreak' put: nil;
+	at: #'PythonContinue' put: nil;
 	at: #'PythonReturn' put: nil;
 	at: #'StopIteration' put: nil;
 	at: #'SyntaxError' put: nil;
@@ -249,6 +251,7 @@ run
 	at: #'math' put: nil;
 	at: #'module' put: nil;
 	at: #'PythonClass' put: nil;
+	at: #'PythonInstance' put: nil;
 	at: #'numbers' put: nil;
 	at: #'numbers_Complex' put: nil;
 	at: #'numbers_Integral' put: nil;
@@ -261,6 +264,7 @@ run
 	at: #'range_iterator' put: nil;
 	at: #'set' put: nil;
 	at: #'set_iterator' put: nil;
+	at: #'slice' put: nil;
 	at: #'statistics' put: nil;
 	at: #'str_iterator' put: nil;
 	at: #'string' put: nil;
@@ -413,8 +417,11 @@ run
 	at: #'CMathTestCase' put: nil;
 	at: #'ChildProcessErrorTestCase' put: nil;
 	at: #'ClassCallFastPathTestCase' put: nil;
+	at: #'ClassScopeTestCase' put: nil;
 	at: #'ClassTestCase' put: nil;
 	at: #'ComplexTestCase' put: nil;
+	at: #'ComprehensionTestCase' put: nil;
+	at: #'DefaultsAndAttrsTestCase' put: nil;
 	at: #'ConnectionAbortedErrorTestCase' put: nil;
 	at: #'ConnectionErrorTestCase' put: nil;
 	at: #'ConnectionRefusedErrorTestCase' put: nil;
@@ -483,10 +490,8 @@ run
 	at: #'RuntimeErrorTestCase' put: nil;
 	at: #'RuntimeWarningTestCase' put: nil;
 	at: #'SetTestCase' put: nil;
-	"SreTestCase deferred — depends on _sre.compile() C integration which
-	 isn't wired up yet (see MEMORY.md `_sre Module`). The test file
-	 documents the new arity-specialized SrePattern/SreMatch dispatch model;
-	 enable the registration once the underlying compile path is complete."
+	at: #'SliceAndLoopsTestCase' put: nil;
+	at: #'SreTestCase' put: nil;
 	at: #'StatisticsTestCase' put: nil;
 	at: #'StopAsyncIterationTestCase' put: nil;
 	at: #'StopIterationTestCase' put: nil;
@@ -509,6 +514,7 @@ run
 	at: #'UnicodeTranslateErrorTestCase' put: nil;
 	at: #'UnicodeWarningTestCase' put: nil;
 	at: #'UserWarningTestCase' put: nil;
+	at: #'VarargsAndImportsTestCase' put: nil;
 	at: #'ValueErrorTestCase' put: nil;
 	at: #'WarningTestCase' put: nil;
 	at: #'ZeroDivisionErrorTestCase' put: nil;
@@ -567,8 +573,10 @@ input src/smalltalk/Python/NoneType.gs
 input src/smalltalk/Python/BaseException.gs
 input src/smalltalk/Python/Bytearray.gs
 input src/smalltalk/Python/complex.gs
+input src/smalltalk/Python/slice.gs
 input src/smalltalk/Python/iterator.gs
 input src/smalltalk/Python/module.gs
+input src/smalltalk/Python/PythonInstance.gs
 input src/smalltalk/Python/BoundMethod.gs
 input src/smalltalk/Python/string_Formatter.gs
 input src/smalltalk/Python/BaseExceptionGroup.gs
@@ -626,6 +634,8 @@ input src/smalltalk/Python/OSError.gs
 input src/smalltalk/Python/ReferenceError.gs
 input src/smalltalk/Python/RuntimeError.gs
 input src/smalltalk/Python/StopAsyncIteration.gs
+input src/smalltalk/Python/PythonBreak.gs
+input src/smalltalk/Python/PythonContinue.gs
 input src/smalltalk/Python/PythonReturn.gs
 input src/smalltalk/Python/StopIteration.gs
 input src/smalltalk/Python/SyntaxError.gs
@@ -894,9 +904,12 @@ input src/smalltalk/PythonTests/BuiltinsTestCase.gs
 input src/smalltalk/PythonTests/BytearrayTestCase.gs
 input src/smalltalk/PythonTests/BytesTestCase.gs
 input src/smalltalk/PythonTests/ClassCallFastPathTestCase.gs
+input src/smalltalk/PythonTests/ClassScopeTestCase.gs
 input src/smalltalk/PythonTests/ClassTestCase.gs
 input src/smalltalk/PythonTests/CMathTestCase.gs
 input src/smalltalk/PythonTests/ComplexTestCase.gs
+input src/smalltalk/PythonTests/ComprehensionTestCase.gs
+input src/smalltalk/PythonTests/DefaultsAndAttrsTestCase.gs
 input src/smalltalk/PythonTests/CopyregTestCase.gs
 input src/smalltalk/PythonTests/DecimalTestCase.gs
 input src/smalltalk/PythonTests/DictTestCase.gs
@@ -929,6 +942,8 @@ input src/smalltalk/PythonTests/RangeTestCase.gs
 input src/smalltalk/PythonTests/ReturnTestCase.gs
 input src/smalltalk/PythonTests/RuntimeClassCreationTestCase.gs
 input src/smalltalk/PythonTests/SetTestCase.gs
+input src/smalltalk/PythonTests/SliceAndLoopsTestCase.gs
+input src/smalltalk/PythonTests/SreTestCase.gs
 input src/smalltalk/PythonTests/StatisticsTestCase.gs
 input src/smalltalk/PythonTests/StrTestCase.gs
 input src/smalltalk/PythonTests/StringModuleTestCase.gs
@@ -1001,6 +1016,7 @@ input src/smalltalk/PythonTests/UnicodeErrorTestCase.gs
 input src/smalltalk/PythonTests/UnicodeTranslateErrorTestCase.gs
 input src/smalltalk/PythonTests/UnicodeWarningTestCase.gs
 input src/smalltalk/PythonTests/UserWarningTestCase.gs
+input src/smalltalk/PythonTests/VarargsAndImportsTestCase.gs
 input src/smalltalk/PythonTests/ValueErrorTestCase.gs
 input src/smalltalk/PythonTests/WarningTestCase.gs
 input src/smalltalk/PythonTests/ZeroDivisionErrorTestCase.gs

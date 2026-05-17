@@ -146,21 +146,6 @@ isVariableIsDeclared: aSymbol
 	^parent isVariableIsDeclared: aSymbol
 %
 
-category: 'Grail-initialization'
-method: AbstractNode
-isVariableLocalToEnclosingFunction: aSymbol
-	"True if aSymbol is declared as a param or body local of the
-	innermost enclosing FunctionDefAst.  Walks up the parent chain
-	but stops at the first FunctionDefAst (subclasses included) —
-	names in outer functions or at module scope do NOT count as
-	local from this method's perspective.  Used by NameAst codegen
-	to distinguish method-local reads from free names that must
-	resolve via the defining module's globals."
-
-	parent isNil ifTrue: [^false].
-	^parent isVariableLocalToEnclosingFunction: aSymbol
-%
-
 category: 'Grail-other'
 method: AbstractNode
 locals

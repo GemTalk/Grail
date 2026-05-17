@@ -54,3 +54,26 @@ removeallclassmethods DictCompAst
 set compile_env: 0
 ! ------------------- Class methods for DictCompAst
 ! ------------------- Instance methods for DictCompAst
+
+category: 'code generation'
+method: DictCompAst
+printSmalltalkOn: aStream
+	"{k: v for t in iter [if c]* ...} -> a KeyValueDictionary. Wraps the
+	generators around an inner body that stores k -> v in the accumulator."
+
+	aStream nextPutAll: '([| ___r___ |'; lf; increaseIndent.
+	aStream nextPutAll: '___r___ := (KeyValueDictionary perform: #new env: 0).'; lf.
+	ComprehensionAst
+		emitGenerators: generators
+		from: 1
+		on: aStream
+		innerBody: [
+			aStream nextPutAll: '___r___ @env0:at: ('.
+			key printSmalltalkOn: aStream.
+			aStream nextPutAll: ') @env0:put: ('.
+			value printSmalltalkOn: aStream.
+			aStream nextPutAll: ').'; lf.
+		].
+	aStream nextPutAll: '___r___'; lf.
+	aStream decreaseIndent; nextPutAll: '] value)'
+%

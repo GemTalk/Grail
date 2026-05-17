@@ -54,3 +54,17 @@ removeallclassmethods StarredAst
 set compile_env: 0
 ! ------------------- Class methods for StarredAst
 ! ------------------- Instance methods for StarredAst
+
+category: 'Grail-accessing'
+method: StarredAst
+value
+
+	^value
+%
+
+category: 'Grail-accessing'
+method: StarredAst
+ctx
+
+	^ctx
+%

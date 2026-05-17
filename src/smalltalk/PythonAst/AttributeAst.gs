@@ -119,6 +119,22 @@ printSmalltalkOn: aStream
 
 	self assertContextIsLoad.
 	((value isKindOf: NameAst) and: [CallAst isSelfReference: value id]) ifTrue: [
+		"`self.X` inside a class method:
+		  - X is an inst var       → AttributeError-checked instVar read.
+		  - X is a class method    → emit `(self X)` so it dispatches to
+		                              the method (covers @property and any
+		                              other parameterless method call).
+		  - X is neither           → fall through to the checked-attr form
+		                              and let the DNU backstop produce a
+		                              clean AttributeError at run time."
+		((CallAst classInstVarNames notNil
+			and: [CallAst classInstVarNames includes: attr asSymbol]) not
+			and: [CallAst classFunctionNames notNil
+				and: [CallAst classFunctionNames includes: attr asSymbol]])
+		ifTrue: [
+			aStream nextPutAll: '(self '; nextPutAll: attr; nextPutAll: ')'.
+			^self
+		].
 		aStream
 			nextPutAll: '(AttributeError @env0:___checkAttr: ';
 			nextPutAll: attr;
@@ -127,8 +143,16 @@ printSmalltalkOn: aStream
 			nextPutAll: ')'.
 		^self
 	].
+	"Dispatch attribute load through the ___pyAttrLoad___: runtime
+	helper.  It returns the value if `attr` is an instVar/property
+	(class has an `attr:` setter), or a BoundMethod if `attr` names a
+	regular method.  This is what makes `f = obj.method; f(...)` work
+	in Python idioms without prematurely calling the 0-arg method."
+
 	value printSmalltalkWithParenthesisOn: aStream.
-	aStream space; nextPutAll: attr.
+	aStream nextPutAll: ' @env1:___pyAttrLoad___: #'''.
+	aStream nextPutAll: attr.
+	aStream nextPutAll: ''''.
 %
 
 category: 'Grail-other'

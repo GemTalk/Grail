@@ -344,11 +344,17 @@ parseAtom
 			yourself) token: tok
 	].
 
-	"Identifiers"
+	"Identifiers.  Python `_` (the conventional 'unused' name) isn't a
+	valid Smalltalk identifier (Smalltalk requires letters), so rename
+	it consistently at parse time — every NameAst that referred to `_`
+	now refers to `___unused___`."
 	tok isName ifTrue: [
+		| nameSym |
 		self advance.
+		nameSym := tok value asSymbol.
+		nameSym = #'_' ifTrue: [nameSym := #'___unused___'].
 		^self buildNode: NameAst fields: (IdentityKeyValueDictionary new
-			at: #id put: tok value asSymbol;
+			at: #id put: nameSym;
 			at: #ctx put: self loadCtx;
 			yourself) token: tok
 	].
@@ -1176,6 +1182,15 @@ parseFunctionDefWithDecorators: decorators
 	].
 	self expect: #OP value: ':'.
 	self pushScope.
+	"Declare parameter names in the function body's scope so name
+	resolution treats parameters as locals (Python LEGB).  Without
+	this, a parameter shadowing a builtin (e.g. `def parse(str, ...)`)
+	would resolve to the builtin inside the body."
+	args posonlyargs do: [:a | self declareVariable: a name asSymbol].
+	args args do: [:a | self declareVariable: a name asSymbol].
+	args kwonlyargs do: [:a | self declareVariable: a name asSymbol].
+	args vararg ifNotNil: [self declareVariable: args vararg name asSymbol].
+	args kwarg ifNotNil: [self declareVariable: args kwarg name asSymbol].
 	body := self parseBlock.
 	variables := self popScope.
 	block := BlockAst buildWithFields: (IdentityKeyValueDictionary new
@@ -1334,7 +1349,14 @@ parseIf
 category: 'Grail-parsing - simple statements'
 method: PythonParser
 parseImport
-	"Parse: import name [as alias], ..."
+	"Parse: import name [as alias], ...
+
+	Python's binding for `import a.b.c` is the *top-level* package `a`,
+	not `a.b.c`. The dotted submodule is reachable as an attribute chain
+	(`a.b.c`) on the bound name. Only `import a.b.c as alias` binds the
+	alias to the leaf submodule. Without this split, Grail tries to declare
+	`a.b.c` as an instance variable on the enclosing module class and
+	GemStone rejects the dotted identifier."
 
 	| tok names |
 	tok := self advance. "consume 'import'"
@@ -1343,7 +1365,15 @@ parseImport
 	[self matchOp: ','] whileTrue: [
 		names add: self parseImportName.
 	].
-	names do: [:alias | self declareVariable: (alias asName ifNil: [alias name])].
+	names do: [:alias |
+		| bound |
+		bound := alias asName ifNil: [
+			(alias name includes: $.)
+				ifTrue: [($. split: alias name asString) first asSymbol]
+				ifFalse: [alias name]
+		].
+		self declareVariable: bound
+	].
 	^self buildNode: ImportAst fields: (IdentityKeyValueDictionary new
 		at: #names put: names;
 		yourself) from: tok to: self lastToken
@@ -1836,16 +1866,21 @@ parseSingleParam
 category: 'Grail-parsing - parameters'
 method: PythonParser
 parseSingleParamWithAnnotations: allowAnnotations
-	"Parse a single parameter: NAME [: annotation]"
+	"Parse a single parameter: NAME [: annotation].  Rename a bare
+	`_` parameter to `___unused___` so it doesn't break the emitted
+	Smalltalk (`_` alone isn't a valid Smalltalk identifier).  See
+	the same rename in parsePrimary's NameAst construction."
 
-	| nameTok annotation |
+	| nameTok annotation argName |
 	nameTok := self expectType: #NAME.
 	annotation := nil.
 	(allowAnnotations and: [self matchOp: ':']) ifTrue: [
 		annotation := self parseExpression.
 	].
+	argName := nameTok value asSymbol.
+	argName = #'_' ifTrue: [argName := #'___unused___'].
 	^self buildNode: ArgAst fields: (IdentityKeyValueDictionary new
-		at: #arg put: nameTok value asSymbol;
+		at: #arg put: argName;
 		at: #annotation put: annotation;
 		at: #type_comment put: nil;
 		yourself) from: nameTok to: self lastToken
