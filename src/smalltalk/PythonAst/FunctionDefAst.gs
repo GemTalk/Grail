@@ -45,6 +45,17 @@ addVariableNamesTo: aStream
 
 category: 'Grail-other'
 method: FunctionDefAst
+isVariableLocalToEnclosingFunction: aSymbol
+	"Stop the walk at this function: a name is local only if it
+	appears in this function body's variables (which include params
+	and locally-assigned names).  Names in further-out scopes are
+	free with respect to this method."
+
+	^ body variables includes: aSymbol
+%
+
+category: 'Grail-other'
+method: FunctionDefAst
 decoratorList
 
 	^decorator_list

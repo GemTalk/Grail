@@ -35,12 +35,8 @@ RuntimeClassCreationTestCase category: 'Grail-SUnit'
 !   (c) class definition inside a conditional branch
 !   (d) class-per-call (factory function returns a new class each call)
 !   (e) name collision across modules
+!   (f) class body / method references module-level global
 !   (g) inheritance via bases
-!
-! Pattern (f) — class method reading a module-level global — was
-! deferred: the fix lives in NameAst codegen (Python `__globals__`
-! lookup), not in class creation.  The test and fixture will return
-! with the follow-up branch that addresses it.
 ! ===============================================================================
 
 set compile_env: 0
@@ -167,6 +163,20 @@ testCollisionBothModulesIsolated
 	self assert: (instA perform: #kind env: 1) equals: 'A'.
 	self assert: (instB perform: #kind env: 1) equals: 'B'.
 	self deny: instA class == instB class.
+%
+
+! ---------------- (f) class references module global ----------------
+
+category: 'Grail-Tests - (f) Global Reference'
+method: RuntimeClassCreationTestCase
+testMethodReadsModuleGlobal
+	"An instance method that reads a bare name not declared in any
+	enclosing local scope should resolve it to the defining module's
+	global (the module instance's instVar of that name in Grail)."
+
+	| mod |
+	mod := self loadFixture: 'runtime_class_global_ref'.
+	self assert: (mod @env1:result) equals: 'hello'.
 %
 
 ! ---------------- (g) inheritance ----------------
