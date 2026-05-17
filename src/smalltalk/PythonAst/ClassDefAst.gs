@@ -117,7 +117,15 @@ printSmalltalkRuntimeOn: aStream
 	name is computed now (it's a pure function of the Python name)
 	and embedded as a literal symbol; `inDictionary: nil` keeps the
 	class out of any SymbolDictionary — the variable being assigned
-	is the sole handle."
+	is the sole handle.
+
+	`___pyModule___` is a class-instVar holding the defining module
+	instance, used by NameAst codegen to resolve free names through
+	the module's globals.  Only the root of a Python class chain
+	declares it (and compiles its accessor + setter); subclasses
+	inherit the slot and the class-side methods, and would error
+	with rtErrAddDupInstvar if they redeclared.  An empty `bases`
+	list marks the root case."
 	aStream
 		nextPutAll: name;
 		nextPutAll: ' := '.
@@ -127,7 +135,38 @@ printSmalltalkRuntimeOn: aStream
 		nextPutAll: (importlib @env0:___asSmalltalkClassName___: name) asString;
 		nextPutAll: ''' instVarNames: '.
 	self printSymbolArray: ivarNames on: aStream.
-	aStream nextPutAll: ' classVars: #() classInstVars: #() poolDictionaries: #() inDictionary: nil options: #().'; lf.
+	aStream nextPutAll: ' classVars: #() classInstVars: '.
+	aStream nextPutAll: (bases isEmpty
+		ifTrue: ['#( ___pyModule___ )']
+		ifFalse: ['#()']).
+	aStream nextPutAll: ' poolDictionaries: #() inDictionary: nil options: #().'; lf.
+
+	"Compile the class-side accessor + setter only on the root
+	(where ___pyModule___ is introduced); subclasses inherit them."
+	bases isEmpty ifTrue: [
+		self
+			emitCompileMethodOn: name
+			source: '___pyModule___
+^ ___pyModule___'
+			category: 'Grail-Module Ref'
+			env: 0
+			classSide: true
+			onStream: aStream.
+		self
+			emitCompileMethodOn: name
+			source: '___pyModule___: aModule
+___pyModule___ := aModule'
+			category: 'Grail-Module Ref'
+			env: 0
+			classSide: true
+			onStream: aStream.
+	].
+	"Always point the new class at the defining module (`self` at
+	this point in the enclosing initialize method is the module
+	instance).  The setter is inherited when bases is non-empty."
+	aStream
+		nextPutAll: name;
+		nextPutAll: ' @env0:___pyModule___: self.'; lf.
 
 	"Compile each instance method as a real env-1 method on the new
 	class.  The source is embedded as a Smalltalk string literal."

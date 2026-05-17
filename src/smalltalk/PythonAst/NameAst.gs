@@ -180,6 +180,24 @@ printSmalltalkOn: aStream
 			nextPutAll: ')'.
 		^ self
 	].
+	"Inside a class method body, a free name (not a method-local, not
+	a class instVar) must resolve via the defining module's globals.
+	The class carries a `___pyModule___` class-side accessor returning
+	the module instance (set up by ClassDefAst codegen); read it and
+	dispatch the global's auto-generated unary accessor."
+	(CallAst classBeingCompiled notNil
+		and: [(ctx isKindOf: LoadAst)
+		and: [(self isVariableLocalToEnclosingFunction: id) not
+		and: [(CallAst classInstVarNames
+			ifNil: [false]
+			ifNotNil: [:ivars | ivars includes: id]) not]]]) ifTrue: [
+		aStream
+			nextPutAll: '((self @env0:class @env0:___pyModule___) @env1:';
+			nextPutAll: id;
+			nextPutAll: ')'.
+		^ self
+	].
+
 	"Phase C-2: in load context, wrap reads of declared locals with a
 	runtime nil-check that raises UnboundLocalError naming the variable.
 	Stores and undeclared (free / global / builtin) names emit the bare
