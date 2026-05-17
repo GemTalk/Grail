@@ -210,8 +210,12 @@ isInClass
 category: 'Grail-querying'
 method: ModuleAst
 isPackage
+	"True if this module was loaded from a package __init__.py.
+	A package's __init__.py is its own package context — relative
+	imports from inside it don't strip a component the way they
+	would from a sibling submodule."
 
-	^false
+	^ path notNil and: [path asString endsWith: '/__init__.py']
 %
 
 category: 'Grail-variables'

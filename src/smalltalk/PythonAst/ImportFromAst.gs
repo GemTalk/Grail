@@ -98,8 +98,15 @@ resolvedModuleName
 	importerName := modAst isNil ifTrue: [''] ifFalse: [modAst name asString].
 	parts := $. split: importerName.
 	"For an importing module `a.b.c`, the package is `a.b`. `level=1`
-	resolves against the package; `level=2` strips one more component."
-	packageParts := parts copyFrom: 1 to: ((parts size - 1) max: 0).
+	resolves against the package; `level=2` strips one more component.
+	BUT if the importer is itself a package's __init__.py, its full
+	name IS the package — don't strip the last component for
+	level=1.  This matters for `from . import X` inside `re/__init__.py`
+	(importer name is `re`, the package is `re`, the resolved
+	target is `re.X`)."
+	packageParts := (modAst notNil and: [modAst isPackage])
+		ifTrue: [parts copy]
+		ifFalse: [parts copyFrom: 1 to: ((parts size - 1) max: 0)].
 	effectiveLevel := level - 1.
 	[effectiveLevel > 0 and: [packageParts notEmpty]] whileTrue: [
 		packageParts := packageParts copyFrom: 1 to: packageParts size - 1.

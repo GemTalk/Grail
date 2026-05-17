@@ -75,11 +75,33 @@ These break programs that look ordinary in CPython.
   to `re__constants` / a separate registry lookup) would fix the
   inst-var naming clash.
 
-- [ ] **Relative imports** — `from ._constants import *` (leading
-  `.`) is not handled.
+- [x] ~~**Relative imports**~~ — `from ._constants import *` (leading
+  `.`) handled by `ImportFromAst >> resolvedModuleName` which walks
+  the parent chain to find the enclosing ModuleAst and resolves
+  against the importer's package.  ALSO: `from . import X` inside
+  a package's `__init__.py` now resolves to `package.X` rather
+  than the parent's `X` (ModuleAst >> isPackage check) — see
+  `PkgRelativeInitTestCase`.
 
-- [ ] **Star imports** — `from X import *` not implemented. Needed
-  for CPython stdlib ports that re-export module-internal names.
+- [ ] **Star imports miss dynamic names** — `from X import *` is
+  expanded at parse time by `importlib.expandStarImports:`, which
+  inspects X's AST and pulls names out of `body.variables`.  Names
+  added at module-init time by `globals().update(...)` (the
+  `re._constants._makecodes` idiom, for example) aren't visible
+  to the parse-time analysis, so the importer doesn't get them.
+  Fix: emit a runtime merge step after the per-name imports,
+  copying any public attribute on the imported module that the
+  parse-time expansion didn't already bind.  An attempted
+  implementation hit interactions with the merge target's instVar
+  layout that needs more time than this branch had; see the
+  `re-init-restore` branch history.
+
+- [ ] **Submodule auto-binding on parent package** — when
+  `pkg.sub` is loaded, `pkg.sub` should be reachable as an
+  attribute on `pkg` (CPython's behavior).  `importlib >>
+  registerModule:with:` currently only writes to `sys.modules`.
+  Hits `from . import sub` inside `pkg/__init__.py` when `sub`
+  isn't already cached via the file-path search.
 
 - [x] ~~**Python `int` subclasses can't carry extra inst vars**~~ —
   Addressed for `_NamedIntConstant(int)` specifically via the
