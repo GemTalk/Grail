@@ -234,6 +234,53 @@ id: anObject
 
 category: 'Grail-Built-in Functions'
 method: builtins
+iter: anObject
+	"Python builtin iter(x) — return an iterator over x by calling
+	x.__iter__().  Raises TypeError if x has no __iter__ method.
+
+	The two-arg sentinel form ``iter(callable, sentinel)`` is not
+	implemented yet (see TODO.md) — none of the current Flask-path
+	modules use it."
+
+	"`whichClassIncludesSelector:environmentId:` walks the
+	inheritance chain — needed because ``__iter__`` lives on
+	CharacterCollection for strings, on SetProtocol for sets, etc.,
+	not on the leaf class."
+	(anObject @env0:class @env0:whichClassIncludesSelector: #'__iter__' environmentId: 1)
+		ifNil: [
+			TypeError @env0:signal: ('''' @env0:,
+				(anObject @env0:class @env0:name) @env0:,
+				''' object is not iterable')
+		].
+	^ anObject @env1:__iter__
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+next: anIterator
+	"Python builtin next(it) — call it.__next__().  Propagates
+	StopIteration when the iterator is exhausted; caller can wrap
+	in try/except or use the two-arg form below."
+
+	^ anIterator @env1:__next__
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+next: anIterator _: aDefault
+	"Python builtin next(it, default) — return default instead of
+	propagating StopIteration when the iterator is exhausted.
+	Used by re/__init__.py's `next(iter(_cache))` LRU pop pattern
+	(though that one always pops a real key, so the default path
+	is the safety net)."
+
+	^ [anIterator @env1:__next__]
+		@env0:on: StopIteration
+		do: [:ex | aDefault]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 len: anObject
 	"Python builtin len(x) — fixed-arity fast path."
 

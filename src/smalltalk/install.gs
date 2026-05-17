@@ -465,6 +465,7 @@ run
 	at: #'LookupErrorTestCase' put: nil;
 	at: #'MakecodesPatternTestCase' put: nil;
 	at: #'NamedIntConstantTestCase' put: nil;
+	at: #'NextIterTestCase' put: nil;
 	at: #'ReConstantsTestCase' put: nil;
 	at: #'MathTestCase' put: nil;
 	at: #'MemoryErrorTestCase' put: nil;
@@ -925,6 +926,7 @@ input src/smalltalk/PythonTests/DynamicGlobalsTestCase.gs
 input src/smalltalk/PythonTests/EnumGlobalInjectTestCase.gs
 input src/smalltalk/PythonTests/MakecodesPatternTestCase.gs
 input src/smalltalk/PythonTests/NamedIntConstantTestCase.gs
+input src/smalltalk/PythonTests/NextIterTestCase.gs
 input src/smalltalk/PythonTests/ReConstantsTestCase.gs
 input src/smalltalk/PythonTests/CopyregTestCase.gs
 input src/smalltalk/PythonTests/DecimalTestCase.gs
