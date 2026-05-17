@@ -81,13 +81,17 @@ These break programs that look ordinary in CPython.
 - [ ] **Star imports** — `from X import *` not implemented. Needed
   for CPython stdlib ports that re-export module-internal names.
 
-- [ ] **Python `int` subclasses can't carry extra inst vars** —
-  CPython's `class _NamedIntConstant(int)` stores `.name` on the
-  instance for debug repr. Grail represents Python `int` as
-  Smalltalk's `SmallInteger`, which has no inst-var slot. Either
-  (a) box int subclasses in a wrapper that holds the underlying int
-  + extra slots, or (b) document the limitation and require ports
-  to drop the wrapper.
+- [x] ~~**Python `int` subclasses can't carry extra inst vars**~~ —
+  Addressed for `_NamedIntConstant(int)` specifically via the
+  `NamedIntConstant` wrapper class (option (a) — non-int wrapper
+  with `value` + `name` instVars, DNU-forwarded numeric protocol).
+  The CPython shim's `PyLong_As*` extractors unbox at the C boundary
+  via `__index__` so `_sre.compile()` etc. see plain SmallIntegers.
+  General int-subclass support (a real Python-int wrapper class
+  applied to every int) is still missing — only opts-in via the
+  explicit `NamedIntConstant` class.  See its class comment for the
+  silent-failure caveats (arithmetic strips the name; reverse
+  comparisons through non-Int classes don't agree).
 
 - [ ] **`slice` not a built-in class** — CPython exposes `slice` as
   a real class so user code can do `isinstance(idx, slice)` (e.g.,
@@ -241,7 +245,7 @@ search path (see [`Support_Flask.md`](docs/Support_Flask.md)).
 
 | File                | Status                                                              |
 |---------------------|---------------------------------------------------------------------|
-| `_constants.py`     | Loads (Strategy A — see deviations below).                          |
+| `_constants.py`     | Loads (one tiny Strategy A — see deviations below).                |
 | `_casefix.py`       | Loads unmodified (Strategy B).                                      |
 | `_parser.py`        | Doesn't load: needs `from ._constants import *` (relative + star) and dotted-submodule loader fix. |
 | `_compiler.py`      | Untried: blocked on `_parser`.                                       |
@@ -260,8 +264,8 @@ catches up.
 
 | File | Deviation | Why | Reverts when |
 |------|-----------|-----|--------------|
-| `src/python/stdlib/re/_constants.py` | Dropped `_NamedIntConstant(int)`. | `SmallInteger` has no inst-var slot for `.name`. | Grail supports int subclasses with extra inst vars (see *Bugs Blocking…* above). |
-| `src/python/stdlib/re/_constants.py` | Expanded `_makecodes(*names)` + `globals().update(...)` into explicit `NAME = N` constants and literal `OPCODES`/`ATCODES`/`CHCODES` lists. | Grail resolves module-name forward references at compile time; later dict literals can't see names added at module-init time. | Grail does dynamic module-name resolution (`(self @env0:at: #name)` fallback in `NameAst`). |
+| `src/python/stdlib/re/_constants.py` | Rebound `_NamedIntConstant = NamedIntConstant` instead of subclassing int. | `SmallInteger` has no inst-var slot for `.name`; `NamedIntConstant` is Grail's wrapper that crosses the C boundary via `__index__`. | Grail boxes every Python `int` as a real heap class with extra-slot subclass support (project-wide effort). |
+| `src/python/stdlib/re/_constants.py` | `OPCODES = OPCODES[:-2]` instead of `del OPCODES[-2:]`. | Grail doesn't yet handle `del` on subscript targets with a slice index. | Grail implements `del` for subscript targets (see *Bugs Blocking…* above). |
 | `src/python/stdlib/re/__init__.py` | Replaced with a 1-statement Grail stub.  CPython original archived alongside as `__init__.cpython.py`. | Class-method free-name resolution now works (commit `7235810` / merge `da86ed8`), and `count, *args = args` star-unpack codegen landed (this branch).  Remaining blockers when the upstream file is dropped in: (1) `@enum.global_enum` on `class RegexFlag` is supposed to inject the enum members (`DEBUG`, `ASCII`, `IGNORECASE`, …) into the module's globals — Grail doesn't run the decorator, so the later `if flags & DEBUG:` site compile-errors with `undefined symbol DEBUG`.  (2) `next()` and `iter()` aren't implemented as builtins, so `next(iter(_cache))` compile-errors with `undefined symbol`. | Grail implements `@enum.global_enum` (or a `globals().update(...)` shim that runs at module-init time) **and** ships `next` / `iter` as fast-path builtins.  Until then, either keep the stub or land a Strategy A patch that hand-injects the RegexFlag members as module constants and stubs `_compile`'s `next(iter(...))` line. |
 | `src/python/stdlib/re/_compiler.py` | `dis(code)` function body replaced with `raise NotImplementedError(...)`. | The original is a 150-line debug disassembler with two nested `def`s (`dis_`, `print_`), heavy free-variable closure references, `*args, to=None` (keyword-only after `*args`), and several `@` operators.  One or more of these trips an AbstractNode codegen branch.  `dis()` is never called by the regex compile path; it's an interactive printer for compiled bytecode. | Grail's codegen handles nested-def closures + `*args, kw_only=N` parameters end-to-end.  The function body is small once those land; restore from `__init__.cpython.py`-style archive (need to add one for `_compiler.py`). |
 

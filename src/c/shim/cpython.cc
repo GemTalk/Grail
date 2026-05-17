@@ -471,12 +471,35 @@ extern "C" PyObject *PyLong_FromLong(long v) {
     return addr_to_pyobj(GciPerform(server, "PyLong_FromSsize_t:", &arg, 1));
 }
 
+/* Extract a 64-bit signed integer value from a Smalltalk OOP.
+ *
+ * Fast path: a tagged SmallInteger is unboxed in-place by GciOopToI64.
+ *
+ * Slow path: a non-SmallInteger OOP (a heap object — e.g.
+ * NamedIntConstant wrapping an opcode) is sent ``__index__`` in
+ * env 1, which is the Python contract for "I am conceptually an
+ * integer" (PEP 357).  The returned OOP is expected to be a
+ * SmallInteger; we unbox it the fast way.
+ *
+ * Centralising the wrapper-awareness here keeps every call site in
+ * the rest of the shim (and inside _sre/sre.c) ignorant of the
+ * wrapper class — they continue to call PyLong_AsLong /
+ * PyLong_AsSsize_t / PyLong_AsUnsignedLong as if the OOP were
+ * always a plain SmallInteger. */
+static int64 oopToLongWithIndex(OopType oop) {
+    if (GCI_OOP_IS_SMALL_INT(oop)) {
+        return GciOopToI64(oop);
+    }
+    OopType indexed = GciPerform_(oop, "__index__", NULL, 0, 1);
+    return GciOopToI64(indexed);
+}
+
 extern "C" Py_ssize_t PyLong_AsSsize_t(PyObject *obj) {
-    return (Py_ssize_t)GciOopToI64(pyobj_oop(obj));
+    return (Py_ssize_t)oopToLongWithIndex(pyobj_oop(obj));
 }
 
 extern "C" long PyLong_AsLong(PyObject *obj) {
-    return (long)GciOopToI64(pyobj_oop(obj));
+    return (long)oopToLongWithIndex(pyobj_oop(obj));
 }
 
 extern "C" int PyLong_Check(PyObject *obj) {
@@ -923,7 +946,7 @@ extern "C" PyObject *PyLong_FromUnsignedLong(unsigned long v) {
 }
 
 extern "C" unsigned long PyLong_AsUnsignedLong(PyObject *obj) {
-    return (unsigned long)GciOopToI64(pyobj_oop(obj));
+    return (unsigned long)oopToLongWithIndex(pyobj_oop(obj));
 }
 
 extern "C" int PyIndex_Check(PyObject *obj) {

@@ -252,6 +252,7 @@ run
 	at: #'module' put: nil;
 	at: #'PythonClass' put: nil;
 	at: #'PythonInstance' put: nil;
+	at: #'NamedIntConstant' put: nil;
 	at: #'numbers' put: nil;
 	at: #'numbers_Complex' put: nil;
 	at: #'numbers_Integral' put: nil;
@@ -463,6 +464,8 @@ run
 	at: #'ListTestCase' put: nil;
 	at: #'LookupErrorTestCase' put: nil;
 	at: #'MakecodesPatternTestCase' put: nil;
+	at: #'NamedIntConstantTestCase' put: nil;
+	at: #'ReConstantsTestCase' put: nil;
 	at: #'MathTestCase' put: nil;
 	at: #'MemoryErrorTestCase' put: nil;
 	at: #'ModuleFunctionTestCase' put: nil;
@@ -582,6 +585,7 @@ input src/smalltalk/Python/slice.gs
 input src/smalltalk/Python/iterator.gs
 input src/smalltalk/Python/module.gs
 input src/smalltalk/Python/PythonInstance.gs
+input src/smalltalk/Python/NamedIntConstant.gs
 input src/smalltalk/Python/BoundMethod.gs
 input src/smalltalk/Python/string_Formatter.gs
 input src/smalltalk/Python/BaseExceptionGroup.gs
@@ -920,6 +924,8 @@ input src/smalltalk/PythonTests/DefaultsAndAttrsTestCase.gs
 input src/smalltalk/PythonTests/DynamicGlobalsTestCase.gs
 input src/smalltalk/PythonTests/EnumGlobalInjectTestCase.gs
 input src/smalltalk/PythonTests/MakecodesPatternTestCase.gs
+input src/smalltalk/PythonTests/NamedIntConstantTestCase.gs
+input src/smalltalk/PythonTests/ReConstantsTestCase.gs
 input src/smalltalk/PythonTests/CopyregTestCase.gs
 input src/smalltalk/PythonTests/DecimalTestCase.gs
 input src/smalltalk/PythonTests/DictTestCase.gs

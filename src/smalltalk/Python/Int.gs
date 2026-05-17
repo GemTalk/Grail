@@ -42,9 +42,12 @@ __new__: obj
 		^ obj
 	].
 
-	"Try to call __int__ on the object if it has one"
-	(obj @env0:respondsTo: #__int__) ifTrue: [
-		result := obj __int__.
+	"Try to call __int__ on the object if it has one.  ``respondsTo:``
+	is env-0 only and would miss env-1 ``__int__`` implementations
+	(like the one on NamedIntConstant) — check the env-1 method
+	dict explicitly."
+	((obj @env0:class @env0:methodDictForEnv: 1) @env0:includesKey: #__int__) ifTrue: [
+		result := obj @env1:__int__.
 		^ result
 	].
 
@@ -242,9 +245,19 @@ Base 0 means to interpret the base from the string as an integer literal.
 category: 'Grail-Comparison'
 method: int
 __eq__: other
-	"Return self == other"
+	"Return self == other.  Compares as Smalltalk integers first;
+	on mismatch, if other declares itself integer-like via
+	``__index__`` (PEP 357 — e.g. NamedIntConstant from re._constants),
+	unwrap and re-compare.  This makes the reverse direction
+	``16 == LITERAL`` agree with ``LITERAL == 16``."
 
-	^ self @env0:= other
+	(self @env0:= other) ifTrue: [^ true].
+	(other @env0:isKindOf: SmallInteger) ifTrue: [^ false].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [
+		^ self @env0:= (other @env1:__index__)
+	].
+	^ false
 %
 
 category: 'Grail-Conversion'
