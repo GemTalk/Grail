@@ -60,17 +60,17 @@ testModuleLoads
 category: 'Grail-Tests - Class Creation'
 method: ClassTestCase
 testPointClassExists
-	"Test that Point was created in PythonModules."
+	"Test that Point was bound on the module."
 
-	self assert: (PythonModules at: #'Point' ifAbsent: [nil]) notNil.
+	self assert: (testModule @env1:Point) notNil.
 %
 
 category: 'Grail-Tests - Class Creation'
 method: ClassTestCase
 testCounterClassExists
-	"Test that Counter was created in PythonModules."
+	"Test that Counter was bound on the module."
 
-	self assert: (PythonModules at: #'Counter' ifAbsent: [nil]) notNil.
+	self assert: (testModule @env1:Counter) notNil.
 %
 
 category: 'Grail-Tests - Instance Variables'
@@ -79,7 +79,7 @@ testPointInstVars
 	"Test that Point has x and y as instance variables."
 
 	| cls varNames |
-	cls := PythonModules at: #'Point'.
+	cls := testModule @env1:Point.
 	varNames := cls allInstVarNames.
 	self assert: (varNames includes: #x).
 	self assert: (varNames includes: #y).
@@ -118,7 +118,7 @@ testPointSumIsRealMethod
 	"Test that sum is a real env-1 method on Point."
 
 	| cls md |
-	cls := PythonModules at: #'Point'.
+	cls := testModule @env1:Point.
 	md := cls methodDictForEnv: 1.
 	self assert: (md includesKey: #sum).
 %
@@ -129,7 +129,7 @@ testPointInitIsRealMethod
 	"Test that __init__ is a real env-1 method on Point."
 
 	| cls md |
-	cls := PythonModules at: #'Point'.
+	cls := testModule @env1:Point.
 	md := cls methodDictForEnv: 1.
 	self assert: (md includesKey: #'__init__:_:').
 %

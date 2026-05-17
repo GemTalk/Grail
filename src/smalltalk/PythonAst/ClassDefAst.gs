@@ -49,26 +49,209 @@ addVariableNamesTo: aStream
 category: 'Grail-code generation'
 method: ClassDefAst
 printSmalltalkOn: aStream
-	"When compiling a module via loadModuleFromPath:, Python classes
-	are created as real Smalltalk classes at load time. In the initialize
-	method, just assign the class reference to the module instVar.
-
-	The class reference is looked up from PythonModules using the
-	encoded class name (importlib ___asSmalltalkClassName___: name).
-	loadModuleFromPath: created the class there before compiling
-	the initialize method."
+	"A Python `class X:` statement is an executable statement that
+	creates a fresh class object on every execution.  Inside a module-
+	or function-body compilation we emit the GemStone equivalent
+	inline: an ``importlib ___subclassOf:`` call that produces a
+	gensym'd subclass, followed by a sequence of compileMethod: calls
+	for each instance method, accessor, and the class-side value:value:
+	instantiation method.  Outside that context (e.g. plain eval) we
+	fall back to the legacy dict-based representation."
 
 	(CallAst moduleClassBeingCompiled notNil) ifTrue: [
-		| className |
-		className := importlib @env0:___asSmalltalkClassName___: name.
-		aStream
-			nextPutAll: name;
-			nextPutAll: ' := (PythonModules @env0:at: #''';
-			nextPutAll: className @env0:asString;
-			nextPutAll: ''').'.
-		^self
+		^self printSmalltalkRuntimeOn: aStream
 	].
 	self printSmalltalkLegacyOn: aStream.
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+printSmalltalkRuntimeOn: aStream
+	"Emit code that, at run time, creates a fresh Smalltalk class for
+	this Python class definition and installs its methods.  Method
+	source strings are produced now (under a saved class-compile
+	context), then embedded as Smalltalk string literals in
+	compileMethod: calls in the emitted code."
+
+	| ivarNames methodDefs selfParam funcNames methodSources
+	  initMethod initSelector
+	  savedClass savedIvarNames savedFuncNames savedSelfParam |
+	ivarNames := self instanceVarNamesFromInit.
+	methodDefs := self instanceMethodDefs.
+	selfParam := self selfParameterName.
+	funcNames := IdentitySet new.
+	methodDefs do: [:def | funcNames add: def name asSymbol].
+
+	"Push the class-compile context that the per-method codegen reads
+	(CallAst consults these to decide how to dispatch self-sends,
+	instVar reads, etc.).  Save outer values so a class nested in
+	another class restores correctly."
+	savedClass := CallAst classBeingCompiled.
+	savedIvarNames := CallAst classInstVarNames.
+	savedFuncNames := CallAst classFunctionNames.
+	savedSelfParam := CallAst selfParameterName.
+
+	"classBeingCompiled is only used as a non-nil marker here; the
+	actual class doesn't exist until the emitted code runs."
+	CallAst classBeingCompiled: name asSymbol.
+	CallAst classInstVarNames: (IdentitySet withAll: ivarNames).
+	CallAst classFunctionNames: funcNames.
+	CallAst selfParameterName: selfParam.
+
+	methodSources := OrderedCollection new.
+	[
+		methodDefs do: [:def |
+			| s |
+			s := PrettyWriteStream on: Unicode7 new.
+			def generateClassMethodSourceOn: s.
+			methodSources add: def name asString -> s contents.
+		].
+	] ensure: [
+		CallAst classBeingCompiled: savedClass.
+		CallAst classInstVarNames: savedIvarNames.
+		CallAst classFunctionNames: savedFuncNames.
+		CallAst selfParameterName: savedSelfParam.
+	].
+
+	"Emit the GemStone subclass: call inline.  The encoded class
+	name is computed now (it's a pure function of the Python name)
+	and embedded as a literal symbol; `inDictionary: nil` keeps the
+	class out of any SymbolDictionary — the variable being assigned
+	is the sole handle."
+	aStream
+		nextPutAll: name;
+		nextPutAll: ' := '.
+	self printSuperclassOn: aStream.
+	aStream
+		nextPutAll: ' @env0:subclass: #''';
+		nextPutAll: (importlib @env0:___asSmalltalkClassName___: name) asString;
+		nextPutAll: ''' instVarNames: '.
+	self printSymbolArray: ivarNames on: aStream.
+	aStream nextPutAll: ' classVars: #() classInstVars: #() poolDictionaries: #() inDictionary: nil options: #().'; lf.
+
+	"Compile each instance method as a real env-1 method on the new
+	class.  The source is embedded as a Smalltalk string literal."
+	methodSources do: [:assoc |
+		self
+			emitCompileMethodOn: name
+			source: assoc value
+			category: 'Grail-Class Methods'
+			env: 1
+			classSide: false
+			onStream: aStream.
+	].
+
+	"Compile a unary accessor method per instance variable (so
+	`p.x` resolves to an instVar read)."
+	ivarNames do: [:ivar |
+		| accessorSrc |
+		accessorSrc := ivar , (Character lf asString) , '	^ ' , ivar.
+		self
+			emitCompileMethodOn: name
+			source: accessorSrc
+			category: 'Grail-Accessors'
+			env: 1
+			classSide: false
+			onStream: aStream.
+	].
+
+	"Compile the class-side value:value: method used for Python
+	instantiation: Bar(x, y) maps to (Bar value: {x. y} value: kwargs)."
+	initMethod := methodDefs
+		detect: [:def | def name asSymbol == #'__init__']
+		ifNone: [nil].
+	initSelector := initMethod
+		ifNotNil: [initMethod classMethodSelector]
+		ifNil: [nil].
+	self
+		emitInstantiationMethodFor: name
+		initSelector: initSelector
+		onStream: aStream.
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+printSuperclassOn: aStream
+	"Emit a runtime expression for this class's superclass.  No
+	bases → Object.  Otherwise emit the first base's expression
+	(multi-inheritance is not modeled yet — first base wins)."
+
+	bases isEmpty ifTrue: [^ aStream nextPutAll: 'Object'].
+	bases first printSmalltalkOn: aStream.
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+printSymbolArray: names on: aStream
+	"Emit a literal symbol array #( a b c ) for the given collection
+	of strings/symbols."
+
+	aStream nextPutAll: '#('.
+	names do: [:n | aStream space; nextPutAll: n asString].
+	aStream nextPutAll: ' )'.
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+emitCompileMethodOn: classVarName source: sourceString category: categoryString env: envId classSide: classSideBool onStream: aStream
+	"Emit a `<class> [class] compileMethod: '...' dictionaries: ...
+	category: ... environmentId: N.` statement."
+
+	aStream nextPutAll: classVarName.
+	classSideBool ifTrue: [aStream nextPutAll: ' @env0:class'].
+	aStream nextPutAll: ' @env0:compileMethod: '.
+	self printQuotedString: sourceString on: aStream.
+	aStream
+		nextPutAll: ' dictionaries: importlib @env0:___compilationSymbolList___ category: ''';
+		nextPutAll: categoryString;
+		nextPutAll: ''' environmentId: ';
+		nextPutAll: envId printString;
+		nextPutAll: '.'; lf.
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aStream
+	"Emit the class-side `value: positional value: keywords` method
+	used as the entry point when Python code instantiates the class."
+
+	| src lf |
+	lf := Character lf asString.
+	src := WriteStream on: Unicode7 new.
+	src nextPutAll: 'value: positional value: keywords'; nextPutAll: lf.
+	src nextPutAll: '| instance |'; nextPutAll: lf.
+	src nextPutAll: 'instance := self @env0:new.'; nextPutAll: lf.
+	initSelector ifNotNil: [
+		src
+			nextPutAll: 'instance perform: #''';
+			nextPutAll: initSelector asString;
+			nextPutAll: ''' env: 1 withArguments: positional.';
+			nextPutAll: lf.
+	].
+	src nextPutAll: '^ instance'.
+
+	self
+		emitCompileMethodOn: classVarName
+		source: src contents
+		category: 'Grail-Instantiation'
+		env: 1
+		classSide: true
+		onStream: aStream.
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+printQuotedString: aString on: aStream
+	"Emit aString as a Smalltalk string literal, escaping embedded
+	single quotes by doubling them."
+
+	aStream nextPut: $'.
+	aString do: [:c |
+		c = $'
+			ifTrue: [aStream nextPut: $'; nextPut: $']
+			ifFalse: [aStream nextPut: c].
+	].
+	aStream nextPut: $'.
 %
 
 category: 'Grail-code generation'

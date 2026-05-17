@@ -221,8 +221,8 @@ loadModuleFromPath: pathString name: moduleName
 			environmentId: 1.
 	].
 
-	"Compile top-level `class` definitions as real Smalltalk classes."
-	self compileClassDefs: moduleAst body body symbolList: sl.
+	"Class definitions are emitted as runtime statements in the module
+	body; no install-time class creation is required."
 
 	"Set compile-time context so CallAst and FunctionDefAst emit module-
 	aware code (self-sends, BoundMethod assignments)."
@@ -387,122 +387,11 @@ smalltalkForSource: aString
 
 category: 'Grail-Class Compilation'
 classmethod: importlib
-compileClassDefs: bodyStatements symbolList: sl
-	"For each ClassDefAst in the module body, create a real
-	Smalltalk class with instance variables (from __init__), compile
-	instance methods, and generate a value:value: class-side method
-	for Python instantiation."
+___compilationSymbolList___
+	"Symbol list used as the `dictionaries:` argument for compileMethod
+	calls emitted by ClassDefAst codegen."
 
-	| classDefs |
-	classDefs := bodyStatements select: [:stmt | stmt isKindOf: ClassDefAst].
-	classDefs do: [:classDef |
-		self compileClassDef: classDef symbolList: sl.
-	].
-%
-
-category: 'Grail-Class Compilation'
-classmethod: importlib
-compileClassDef: classDef symbolList: sl
-	"Compile a single Python class definition as a real Smalltalk class."
-
-	| className pyClass ivarNames methodDefs selfParam funcNames linefeed initMethod initSelector |
-	linefeed := Character lf asString.
-	className := self ___asSmalltalkClassName___: classDef name.
-	ivarNames := classDef instanceVarNamesFromInit.
-	methodDefs := classDef instanceMethodDefs.
-	selfParam := classDef selfParameterName.
-	funcNames := IdentitySet new.
-	methodDefs do: [:stmt | funcNames add: stmt name asSymbol].
-
-	"Create the Smalltalk class in PythonModules (always recreate to
-	pick up instVar changes from modified source)."
-	PythonModules removeKey: className ifAbsent: [].
-	pyClass := Object subclass: className
-		instVarNames: ivarNames
-		classVars: #()
-		classInstVars: #()
-		poolDictionaries: #()
-		inDictionary: PythonModules
-		options: #().
-
-	"Pre-register stub methods"
-	methodDefs do: [:stmt |
-		[pyClass compileMethod: stmt generateClassMethodStubSource
-			dictionaries: sl
-			category: 'Grail-Class Methods'
-			environmentId: 1.
-		] on: CompileWarning do: [:ex | ex resume].
-	].
-
-	"Set class compile context"
-	CallAst classBeingCompiled: pyClass.
-	CallAst classInstVarNames: (IdentitySet withAll: ivarNames).
-	CallAst classFunctionNames: funcNames.
-	CallAst selfParameterName: selfParam.
-	[
-		"Compile each instance method"
-		methodDefs do: [:stmt |
-			| methodStream methodSrc |
-			methodStream := PrettyWriteStream on: Unicode7 new.
-			stmt generateClassMethodSourceOn: methodStream.
-			methodSrc := methodStream contents.
-			[pyClass compileMethod: methodSrc
-				dictionaries: sl
-				category: 'Grail-Class Methods'
-				environmentId: 1.
-			] on: CompileWarning do: [:ex | ex resume].
-		].
-	] ensure: [
-		CallAst classBeingCompiled: nil.
-		CallAst classInstVarNames: nil.
-		CallAst classFunctionNames: nil.
-		CallAst selfParameterName: nil.
-	].
-
-	"Generate unary accessor methods for each instance variable"
-	ivarNames do: [:varName |
-		| accessorSource |
-		accessorSource := varName , linefeed , '	^ ' , varName.
-		[pyClass compileMethod: accessorSource
-			dictionaries: sl
-			category: 'Grail-Accessors'
-			environmentId: 1.
-		] on: CompileWarning do: [:ex | ex resume].
-	].
-
-	"Generate value:value: class-side method for Python instantiation.
-	Creates instance, calls __init__ if present, returns instance."
-	initMethod := methodDefs detect: [:stmt | stmt name asSymbol == #'__init__'] ifNone: [nil].
-	initSelector := initMethod ifNotNil: [initMethod classMethodSelector] ifNil: [nil].
-	self compileInstantiationMethodFor: pyClass initSelector: initSelector symbolList: sl.
-%
-
-category: 'Grail-Class Compilation'
-classmethod: importlib
-compileInstantiationMethodFor: pyClass initSelector: initSelector symbolList: sl
-	"Generate a class-side value:value: method for Python-style instantiation:
-		ClassName(args) compiles to → ClassName value: {args} value: kwargs
-
-	The generated method creates a new instance (via @env0:new to get
-	proper initialization) and dispatches to __init__ if defined."
-
-	| src |
-	src := WriteStream on: Unicode7 new.
-	src nextPutAll: 'value: positional value: keywords'; nextPut: Character lf.
-	src nextPutAll: '| instance |'; nextPut: Character lf.
-	src nextPutAll: 'instance := self @env0:new.'; nextPut: Character lf.
-	initSelector ifNotNil: [
-		src nextPutAll: 'instance perform: #'''.
-		src nextPutAll: initSelector asString.
-		src nextPutAll: ''' env: 1 withArguments: positional.'.
-		src nextPut: Character lf.
-	].
-	src nextPutAll: '^ instance'.
-	[pyClass class compileMethod: src contents
-		dictionaries: sl
-		category: 'Grail-Instantiation'
-		environmentId: 1.
-	] on: CompileWarning do: [:ex | ex resume].
+	^ System myUserProfile symbolList copy
 %
 
 set compile_env: 1
