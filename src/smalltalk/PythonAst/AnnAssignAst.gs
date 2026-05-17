@@ -50,7 +50,7 @@ Object
 
 expectvalue /Class
 doit
-AnnAssignAst category: 'Parser'
+AnnAssignAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from AnnAssignAst

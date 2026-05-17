@@ -38,7 +38,7 @@ correctness mechanically. Functions:
 
 expectvalue /Class
 doit
-_shimtest category: 'Modules'
+_shimtest category: 'Grail-Modules'
 %
 
 expectvalue /Metaclass3
@@ -53,7 +53,7 @@ _shimtest class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Private'
+category: 'Grail-Private'
 classmethod: _shimtest
 callTestFloat: aFloat
 	^ CPythonShim current
@@ -61,7 +61,7 @@ callTestFloat: aFloat
 		with: aFloat
 %
 
-category: 'Private'
+category: 'Grail-Private'
 classmethod: _shimtest
 callTestInt: anInteger
 	^ CPythonShim current
@@ -69,7 +69,7 @@ callTestInt: anInteger
 		with: anInteger
 %
 
-category: 'Private'
+category: 'Grail-Private'
 classmethod: _shimtest
 callTestStringLen: aString
 	^ CPythonShim current
@@ -77,7 +77,7 @@ callTestStringLen: aString
 		with: aString
 %
 
-category: 'Private'
+category: 'Grail-Private'
 classmethod: _shimtest
 callTestListSum: anInteger
 	^ CPythonShim current
@@ -85,7 +85,7 @@ callTestListSum: anInteger
 		with: anInteger
 %
 
-category: 'Private'
+category: 'Grail-Private'
 classmethod: _shimtest
 callTestListModify: aList value: aValue
 	^ CPythonShim current
@@ -93,7 +93,7 @@ callTestListModify: aList value: aValue
 		with: aList with: aValue
 %
 
-category: 'Private'
+category: 'Grail-Private'
 classmethod: _shimtest
 callTestBoolNot: aValue
 	^ CPythonShim current
@@ -101,21 +101,21 @@ callTestBoolNot: aValue
 		with: aValue
 %
 
-category: 'Private'
+category: 'Grail-Private'
 classmethod: _shimtest
 callTestNone
 	^ CPythonShim current
 		callModule: '_shimtest' method: 'test_none'
 %
 
-category: 'Private'
+category: 'Grail-Private'
 classmethod: _shimtest
 callTestError
 	^ CPythonShim current
 		callModule: '_shimtest' method: 'test_error'
 %
 
-category: 'Private'
+category: 'Grail-Private'
 classmethod: _shimtest
 callTestBytesLen: aByteArray
 	^ CPythonShim current
@@ -123,7 +123,7 @@ callTestBytesLen: aByteArray
 		with: aByteArray
 %
 
-category: 'Private'
+category: 'Grail-Private'
 classmethod: _shimtest
 callTestListInsert: aList index: anIndex value: aValue
 	^ CPythonShim current
@@ -137,9 +137,9 @@ callTestListInsert: aList index: anIndex value: aValue
 
 set compile_env: 1
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: _shimtest
 initialize
 	"No-op — all methods are real fast-path methods."
@@ -149,61 +149,61 @@ initialize
 ! Fast-path callables
 ! ===============================================================================
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: _shimtest
 test_float: x
 	^ self @env0:class @env0:callTestFloat: x
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: _shimtest
 test_int: n
 	^ self @env0:class @env0:callTestInt: n
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: _shimtest
 test_string_len: s
 	^ self @env0:class @env0:callTestStringLen: s
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: _shimtest
 test_list_sum: n
 	^ self @env0:class @env0:callTestListSum: n
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: _shimtest
 test_list_modify: aList _: val
 	^ self @env0:class @env0:callTestListModify: aList value: val
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: _shimtest
 test_bool_not: x
 	^ self @env0:class @env0:callTestBoolNot: x
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: _shimtest
 test_none
 	^ self @env0:class @env0:callTestNone
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: _shimtest
 test_error
 	^ self @env0:class @env0:callTestError
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: _shimtest
 test_bytes_len: b
 	^ self @env0:class @env0:callTestBytesLen: b
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: _shimtest
 test_list_insert: aList _: idx _: val
 	^ self @env0:class @env0:callTestListInsert: aList index: idx value: val

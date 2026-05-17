@@ -36,7 +36,7 @@ Object
 
 expectvalue /Class
 doit
-ParamAst category: 'Parser'
+ParamAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from ParamAst

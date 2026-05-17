@@ -18,7 +18,7 @@ ExecBlock class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Callable'
+category: 'Grail-Callable'
 method: ExecBlock
 __call__: args
 	"Call the block with the given arguments.
@@ -27,7 +27,7 @@ __call__: args
 	^ self @env0:valueWithArguments: args
 %
 
-category: 'Python-Block Evaluation'
+category: 'Grail-Block Evaluation'
 method: ExecBlock
 value
 	"Evaluate a zero-argument block"
@@ -35,7 +35,7 @@ value
 	^ self @env0:value
 %
 
-category: 'Python-Block Evaluation'
+category: 'Grail-Block Evaluation'
 method: ExecBlock
 value: arg1
 	"Evaluate a one-argument block"
@@ -43,7 +43,7 @@ value: arg1
 	^ self @env0:value: arg1
 %
 
-category: 'Python-Block Evaluation'
+category: 'Grail-Block Evaluation'
 method: ExecBlock
 value: arg1 value: arg2
 	"Evaluate a two-argument block"
@@ -51,7 +51,7 @@ value: arg1 value: arg2
 	^ self @env0:value: arg1 value: arg2
 %
 
-category: 'Python-Block Evaluation'
+category: 'Grail-Block Evaluation'
 method: ExecBlock
 value: arg1 value: arg2 value: arg3
 	"Evaluate a three-argument block"
@@ -59,7 +59,7 @@ value: arg1 value: arg2 value: arg3
 	^ self @env0:value: arg1 value: arg2 value: arg3
 %
 
-category: 'Python-Block Evaluation'
+category: 'Grail-Block Evaluation'
 method: ExecBlock
 value: arg1 value: arg2 value: arg3 value: arg4
 	"Evaluate a four-argument block"
@@ -67,7 +67,7 @@ value: arg1 value: arg2 value: arg3 value: arg4
 	^ self @env0:value: arg1 value: arg2 value: arg3 value: arg4
 %
 
-category: 'Python-Block Evaluation'
+category: 'Grail-Block Evaluation'
 method: ExecBlock
 value: arg1 value: arg2 value: arg3 value: arg4 value: arg5
 	"Evaluate a five-argument block"
@@ -75,7 +75,7 @@ value: arg1 value: arg2 value: arg3 value: arg4 value: arg5
 	^ self @env0:value: arg1 value: arg2 value: arg3 value: arg4 value: arg5
 %
 
-category: 'Python-Block Evaluation'
+category: 'Grail-Block Evaluation'
 method: ExecBlock
 valueWithArguments: anArray
 	"Evaluate the block with an array of arguments"

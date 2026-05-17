@@ -17,5 +17,5 @@ ValueError subclass: 'UnicodeError'
 
 expectvalue /Class
 doit
-UnicodeError category: 'Exceptions'
+UnicodeError category: 'Grail-Exceptions'
 %

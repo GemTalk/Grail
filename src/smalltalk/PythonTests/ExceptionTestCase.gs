@@ -17,7 +17,7 @@ PythonTestCase subclass: 'ExceptionTestCase'
 %
 expectvalue /Class
 doit
-ExceptionTestCase category: 'SUnit'
+ExceptionTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ ExceptionTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-Exception'
+category: 'Grail-Tests-Exception'
 method: ExceptionTestCase
 test_creation
 	"Test creating a Exception instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-Exception'
+category: 'Grail-Tests-Exception'
 method: ExceptionTestCase
 test_inheritance
 	"Test that Exception inherits from BaseException."

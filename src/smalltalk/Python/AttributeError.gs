@@ -17,13 +17,13 @@ Exception subclass: 'AttributeError'
 
 expectvalue /Class
 doit
-AttributeError category: 'Exceptions'
+AttributeError category: 'Grail-Exceptions'
 %
 
 ! ------------------- Helpers used by codegen for unset-instVar checks
 set compile_env: 0
 
-category: 'Unset-Attr Check'
+category: 'Grail-Unset-Attr Check'
 classmethod: AttributeError
 ___checkAttr: aValue ofObject: anObject named: aSymbol
 	"Codegen helper: return ``aValue`` unchanged if it is not Smalltalk nil,

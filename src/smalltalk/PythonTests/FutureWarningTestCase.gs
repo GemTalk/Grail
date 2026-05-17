@@ -17,7 +17,7 @@ PythonTestCase subclass: 'FutureWarningTestCase'
 %
 expectvalue /Class
 doit
-FutureWarningTestCase category: 'SUnit'
+FutureWarningTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ FutureWarningTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-FutureWarning'
+category: 'Grail-Tests-FutureWarning'
 method: FutureWarningTestCase
 test_creation
 	"Test creating a FutureWarning instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-FutureWarning'
+category: 'Grail-Tests-FutureWarning'
 method: FutureWarningTestCase
 test_inheritance
 	"Test that FutureWarning inherits from Warning."

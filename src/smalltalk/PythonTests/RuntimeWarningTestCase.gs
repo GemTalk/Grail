@@ -17,7 +17,7 @@ PythonTestCase subclass: 'RuntimeWarningTestCase'
 %
 expectvalue /Class
 doit
-RuntimeWarningTestCase category: 'SUnit'
+RuntimeWarningTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ RuntimeWarningTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-RuntimeWarning'
+category: 'Grail-Tests-RuntimeWarning'
 method: RuntimeWarningTestCase
 test_creation
 	"Test creating a RuntimeWarning instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-RuntimeWarning'
+category: 'Grail-Tests-RuntimeWarning'
 method: RuntimeWarningTestCase
 test_inheritance
 	"Test that RuntimeWarning inherits from Warning."

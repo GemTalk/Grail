@@ -17,7 +17,7 @@ PythonTestCase subclass: 'ConnectionRefusedErrorTestCase'
 %
 expectvalue /Class
 doit
-ConnectionRefusedErrorTestCase category: 'SUnit'
+ConnectionRefusedErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ ConnectionRefusedErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-ConnectionRefusedError'
+category: 'Grail-Tests-ConnectionRefusedError'
 method: ConnectionRefusedErrorTestCase
 test_creation
 	"Test creating a ConnectionRefusedError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-ConnectionRefusedError'
+category: 'Grail-Tests-ConnectionRefusedError'
 method: ConnectionRefusedErrorTestCase
 test_inheritance
 	"Test that ConnectionRefusedError inherits from ConnectionError."

@@ -17,7 +17,7 @@ PythonTestCase subclass: 'PassTestCase'
 %
 expectvalue /Class
 doit
-PassTestCase category: 'SUnit'
+PassTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ PassTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: PassTestCase
 testPass
 	"Test pass as a standalone statement."
@@ -43,7 +43,7 @@ testPass
 42') equals: 42.
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: PassTestCase
 testPassInIf
 	"Test pass in an if branch."
@@ -54,7 +54,7 @@ if x > 10:
 x') equals: 5.
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: PassTestCase
 testPassInFunction
 	"Test pass as a function body placeholder."

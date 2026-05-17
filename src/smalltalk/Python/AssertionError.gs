@@ -17,5 +17,5 @@ Exception subclass: 'AssertionError'
 
 expectvalue /Class
 doit
-AssertionError category: 'Exceptions'
+AssertionError category: 'Grail-Exceptions'
 %

@@ -48,7 +48,7 @@ Object
 
 expectvalue /Class
 doit
-CallAst category: 'Parser'
+CallAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from CallAst
@@ -57,28 +57,28 @@ removeallclassmethods CallAst
 
 set compile_env: 0
 
-category: 'Accessing'
+category: 'Grail-Accessing'
 method: CallAst
 arguments
 
 	^arguments
 %
 
-category: 'Accessing'
+category: 'Grail-Accessing'
 method: CallAst
 function
 
 	^function
 %
 
-category: 'Accessing'
+category: 'Grail-Accessing'
 method: CallAst
 keywords
 
 	^keywords
 %
 
-category: 'other'
+category: 'Grail-other'
 method: CallAst
 printSmalltalkOn: aStream
 	"Call dispatch — see docs/Rewrite_Dispatch_Model.md.
@@ -255,7 +255,7 @@ printSmalltalkOn: aStream
 	].
 %
 
-category: 'other'
+category: 'Grail-other'
 method: CallAst
 bareCallFastPathSelector
 	"Return the Smalltalk selector to use for fixed-arity fast-path
@@ -288,7 +288,7 @@ bareCallFastPathSelector
 	^ candidate
 %
 
-category: 'other'
+category: 'Grail-other'
 method: CallAst
 bareCallVarargsSelector
 	"Return the Smalltalk selector to use for varargs fast-path dispatch
@@ -314,7 +314,7 @@ bareCallVarargsSelector
 	^ candidate
 %
 
-category: 'other'
+category: 'Grail-other'
 method: CallAst
 knownBuiltinName
 	"Return this call's function name as a Symbol if it is a NameAst whose
@@ -336,7 +336,7 @@ knownBuiltinName
 	^ funcName
 %
 
-category: 'other'
+category: 'Grail-other'
 method: CallAst
 attributeCallFastPathSelector
 	"Return the keyword-form Smalltalk selector to use for an
@@ -373,7 +373,7 @@ attributeCallFastPathSelector
 	^ candidate
 %
 
-category: 'other'
+category: 'Grail-other'
 classmethod: CallAst
 resolveModuleClassForName: aReceiverName
 	"Return the `module` subclass registered under `aReceiverName` in the
@@ -388,7 +388,7 @@ resolveModuleClassForName: aReceiverName
 	^ candidate
 %
 
-category: 'other'
+category: 'Grail-other'
 classmethod: CallAst
 fastPathSelectorForAttr: anAttrName arity: nargs
 	"Build the keyword-form selector for an attribute call.
@@ -406,7 +406,7 @@ fastPathSelectorForAttr: anAttrName arity: nargs
 	^ sb contents asSymbol
 %
 
-category: 'other'
+category: 'Grail-other'
 method: CallAst
 printAttributeCallFastPathOn: aStream selector: aSelector
 	"Emit a direct keyword send for an attribute call:
@@ -436,7 +436,7 @@ printAttributeCallFastPathOn: aStream selector: aSelector
 	aStream nextPut: $)
 %
 
-category: 'other'
+category: 'Grail-other'
 method: CallAst
 attributeCallVarargsSelector
 	"Return the varargs selector `_name:kw:` for an attribute call
@@ -457,7 +457,7 @@ attributeCallVarargsSelector
 	^ candidate
 %
 
-category: 'other'
+category: 'Grail-other'
 method: CallAst
 printAttributeCallVarargsOn: aStream selector: aSelector
 	"Emit a varargs send for an attribute call:
@@ -487,7 +487,7 @@ printAttributeCallVarargsOn: aStream selector: aSelector
 	aStream nextPut: $)
 %
 
-category: 'other'
+category: 'Grail-other'
 classmethod: CallAst
 fastPathSelectorForName: aName arity: nargs
 	"Build the Smalltalk fixed-arity fast-path selector for a Python call
@@ -504,7 +504,7 @@ fastPathSelectorForName: aName arity: nargs
 	^ sb contents asSymbol
 %
 
-category: 'other'
+category: 'Grail-other'
 classmethod: CallAst
 varargsSelectorForName: aName
 	"Build the Smalltalk varargs fast-path selector for a Python name.
@@ -514,7 +514,7 @@ varargsSelectorForName: aName
 	^ ('_' , aName asString , ':kw:') asSymbol
 %
 
-category: 'other'
+category: 'Grail-other'
 classmethod: CallAst
 builtinsHasFastPathSelector: aSymbol
 	"Return true if the builtins class implements aSymbol as an env-1
@@ -524,7 +524,7 @@ builtinsHasFastPathSelector: aSymbol
 	^ (builtins methodDictForEnv: 1) includesKey: aSymbol
 %
 
-category: 'other'
+category: 'Grail-other'
 method: CallAst
 printBareCallFastPathOn: aStream selector: aSelector
 	"Emit a fixed-arity keyword send to the builtins instance:
@@ -544,7 +544,7 @@ printBareCallFastPathOn: aStream selector: aSelector
 	aStream nextPut: $)
 %
 
-category: 'other'
+category: 'Grail-other'
 method: CallAst
 printBareCallVarargsOn: aStream selector: aSelector
 	"Emit a varargs send to the builtins instance:
@@ -576,7 +576,7 @@ printBareCallVarargsOn: aStream selector: aSelector
 	aStream nextPut: $)
 %
 
-category: 'other'
+category: 'Grail-other'
 method: CallAst
 printArityMismatchErrorOn: aStream forName: aSymbol
 	"Emit a TypeError raise expression for a call to a known builtin
@@ -618,7 +618,7 @@ printArityMismatchErrorOn: aStream forName: aSymbol
 ! also have `__new__` selectors and so go through this same fast path.
 ! ===============================================================================
 
-category: 'Class-Call Fast Path'
+category: 'Grail-Class-Call Fast Path'
 method: CallAst
 bareCallClassNewSelector
 	"Return the env-1 `__new__` selector to use for a class-call fast path,
@@ -652,7 +652,7 @@ bareCallClassNewSelector
 	^ candidate
 %
 
-category: 'Class-Call Fast Path'
+category: 'Grail-Class-Call Fast Path'
 method: CallAst
 knownClassName
 	"Return the function name as a Symbol if it resolves to an eligible
@@ -682,7 +682,7 @@ knownClassName
 	^ nil
 %
 
-category: 'Class-Call Fast Path'
+category: 'Grail-Class-Call Fast Path'
 classmethod: CallAst
 resolveClassForName: aReceiverName
 	"Return the GemStone class registered under `aReceiverName` in the
@@ -699,7 +699,7 @@ resolveClassForName: aReceiverName
 	^ candidate
 %
 
-category: 'Class-Call Fast Path'
+category: 'Grail-Class-Call Fast Path'
 classmethod: CallAst
 classNewSelectorForArity: nargs
 	"Build the env-1 `__new__` selector for a class call with `nargs`
@@ -716,7 +716,7 @@ classNewSelectorForArity: nargs
 	^ sb contents asSymbol
 %
 
-category: 'Class-Call Fast Path'
+category: 'Grail-Class-Call Fast Path'
 method: CallAst
 printBareCallClassNewOn: aStream selector: aSelector
 	"Emit a class-call fast path:
@@ -759,25 +759,25 @@ printBareCallClassNewOn: aStream selector: aSelector
 ! method dict (which may not be fully populated yet during codegen).
 ! ===============================================================================
 
-category: 'Module Compile Context'
+category: 'Grail-Module Compile Context'
 classmethod: CallAst
 moduleClassBeingCompiled
 	^ moduleClassBeingCompiled
 %
 
-category: 'Module Compile Context'
+category: 'Grail-Module Compile Context'
 classmethod: CallAst
 moduleClassBeingCompiled: aClassOrNil
 	moduleClassBeingCompiled := aClassOrNil
 %
 
-category: 'Module Compile Context'
+category: 'Grail-Module Compile Context'
 classmethod: CallAst
 moduleFunctionNames
 	^ moduleFunctionNames
 %
 
-category: 'Module Compile Context'
+category: 'Grail-Module Compile Context'
 classmethod: CallAst
 moduleFunctionNames: aSetOrNil
 	moduleFunctionNames := aSetOrNil
@@ -787,67 +787,67 @@ moduleFunctionNames: aSetOrNil
 ! Class method compile context
 ! ===============================================================================
 
-category: 'Class Compile Context'
+category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classBeingCompiled
 	^ classBeingCompiled
 %
 
-category: 'Class Compile Context'
+category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classBeingCompiled: aClassOrNil
 	classBeingCompiled := aClassOrNil
 %
 
-category: 'Class Compile Context'
+category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classInstVarNames
 	^ classInstVarNames
 %
 
-category: 'Class Compile Context'
+category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classInstVarNames: aSetOrNil
 	classInstVarNames := aSetOrNil
 %
 
-category: 'Class Compile Context'
+category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classFunctionNames
 	^ classFunctionNames
 %
 
-category: 'Class Compile Context'
+category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classFunctionNames: aSetOrNil
 	classFunctionNames := aSetOrNil
 %
 
-category: 'Class Compile Context'
+category: 'Grail-Class Compile Context'
 classmethod: CallAst
 selfParameterName
 	^ selfParameterName
 %
 
-category: 'Class Compile Context'
+category: 'Grail-Class Compile Context'
 classmethod: CallAst
 selfParameterName: aSymbolOrNil
 	selfParameterName := aSymbolOrNil
 %
 
-category: 'Class Compile Context'
+category: 'Grail-Class Compile Context'
 classmethod: CallAst
 isInClassMethodContext
 	^ classBeingCompiled notNil
 %
 
-category: 'Class Compile Context'
+category: 'Grail-Class Compile Context'
 classmethod: CallAst
 isSelfReference: aSymbol
 	^ classBeingCompiled notNil and: [aSymbol == selfParameterName]
 %
 
-category: 'Class Self-Send'
+category: 'Grail-Class Self-Send'
 method: CallAst
 classSelfSendSelector
 	"Return the selector for a self.method(args) call in class method context, or nil.
@@ -869,7 +869,7 @@ classSelfSendSelector
 	^ self class fastPathSelectorForAttr: attrName arity: arguments size
 %
 
-category: 'Class Self-Send'
+category: 'Grail-Class Self-Send'
 method: CallAst
 classSelfSendVarargsSelector
 	"Return the varargs selector for a self.method(args, kw=val) call, or nil."
@@ -885,7 +885,7 @@ classSelfSendVarargsSelector
 	^ candidate
 %
 
-category: 'Class Self-Send'
+category: 'Grail-Class Self-Send'
 method: CallAst
 printClassSelfSendOn: aStream selector: aSelector
 	"Emit a self-send: (self method: arg1 _: arg2 ...)"
@@ -908,7 +908,7 @@ printClassSelfSendOn: aStream selector: aSelector
 	aStream nextPut: $)
 %
 
-category: 'Class Self-Send'
+category: 'Grail-Class Self-Send'
 method: CallAst
 printClassSelfSendVarargsOn: aStream selector: aSelector
 	"Emit a varargs self-send: (self _method: { args } kw: kwargs)"
@@ -936,7 +936,7 @@ printClassSelfSendVarargsOn: aStream selector: aSelector
 	aStream nextPut: $)
 %
 
-category: 'Module Self-Send'
+category: 'Grail-Module Self-Send'
 method: CallAst
 moduleSelfSendSelector
 	"Return the Smalltalk selector for a module self-send fast path, or nil.
@@ -964,7 +964,7 @@ moduleSelfSendSelector
 	^ self class fastPathSelectorForAttr: funcName arity: arguments size
 %
 
-category: 'Module Self-Send'
+category: 'Grail-Module Self-Send'
 method: CallAst
 moduleSelfSendVarargsSelector
 	"Return the varargs selector `_name:kw:` for a module self-send, or nil.
@@ -983,7 +983,7 @@ moduleSelfSendVarargsSelector
 	^ candidate
 %
 
-category: 'Module Self-Send'
+category: 'Grail-Module Self-Send'
 method: CallAst
 printModuleSelfSendOn: aStream selector: aSelector
 	"Emit a direct self-send for a module-level function call:
@@ -1009,7 +1009,7 @@ printModuleSelfSendOn: aStream selector: aSelector
 	aStream nextPut: $)
 %
 
-category: 'Module Self-Send'
+category: 'Grail-Module Self-Send'
 method: CallAst
 printModuleSelfSendVarargsOn: aStream selector: aSelector
 	"Emit a varargs self-send for a module function call:

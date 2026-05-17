@@ -17,7 +17,7 @@ PythonTestCase subclass: 'ResourceWarningTestCase'
 %
 expectvalue /Class
 doit
-ResourceWarningTestCase category: 'SUnit'
+ResourceWarningTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ ResourceWarningTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-ResourceWarning'
+category: 'Grail-Tests-ResourceWarning'
 method: ResourceWarningTestCase
 test_creation
 	"Test creating a ResourceWarning instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-ResourceWarning'
+category: 'Grail-Tests-ResourceWarning'
 method: ResourceWarningTestCase
 test_inheritance
 	"Test that ResourceWarning inherits from Warning."

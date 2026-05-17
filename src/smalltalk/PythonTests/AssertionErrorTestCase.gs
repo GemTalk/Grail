@@ -17,7 +17,7 @@ PythonTestCase subclass: 'AssertionErrorTestCase'
 %
 expectvalue /Class
 doit
-AssertionErrorTestCase category: 'SUnit'
+AssertionErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ AssertionErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-AssertionError'
+category: 'Grail-Tests-AssertionError'
 method: AssertionErrorTestCase
 test_creation
 	"Test creating a AssertionError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-AssertionError'
+category: 'Grail-Tests-AssertionError'
 method: AssertionErrorTestCase
 test_inheritance
 	"Test that AssertionError inherits from Exception."
@@ -54,7 +54,7 @@ test_inheritance
 	self assert: (exc isKindOf: Exception).
 %
 
-category: 'Python-Tests-AssertionError'
+category: 'Grail-Tests-AssertionError'
 method: AssertionErrorTestCase
 test_assert_true
 	"assert with a true condition should not raise."
@@ -62,7 +62,7 @@ test_assert_true
 	self eval: 'assert True'.
 %
 
-category: 'Python-Tests-AssertionError'
+category: 'Grail-Tests-AssertionError'
 method: AssertionErrorTestCase
 test_assert_false
 	"assert with a false condition should raise AssertionError."
@@ -70,7 +70,7 @@ test_assert_false
 	self should: [self eval: 'assert False'] raise: AssertionError.
 %
 
-category: 'Python-Tests-AssertionError'
+category: 'Grail-Tests-AssertionError'
 method: AssertionErrorTestCase
 test_assert_expression
 	"assert with a truthy expression should not raise."
@@ -79,7 +79,7 @@ test_assert_expression
 "ok"') equals: 'ok'.
 %
 
-category: 'Python-Tests-AssertionError'
+category: 'Grail-Tests-AssertionError'
 method: AssertionErrorTestCase
 test_assert_with_message
 	"assert False with a message should raise AssertionError."
@@ -93,7 +93,7 @@ test_assert_with_message
 	self assert: msg = 'AssertionError: expected error'.
 %
 
-category: 'Python-Tests-AssertionError'
+category: 'Grail-Tests-AssertionError'
 method: AssertionErrorTestCase
 test_assert_variable
 	"assert with a truthy variable should pass; falsy should raise."

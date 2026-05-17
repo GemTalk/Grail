@@ -17,5 +17,5 @@ Exception subclass: 'LookupError'
 
 expectvalue /Class
 doit
-LookupError category: 'Exceptions'
+LookupError category: 'Grail-Exceptions'
 %

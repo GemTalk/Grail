@@ -18,21 +18,21 @@ object class removeAllMethods: 1.
 
 set compile_env: 0
 
-category: 'Python-Bridge'
+category: 'Grail-Bridge'
 classmethod: object
 ___new___: arg
 	"Convenience method: self perform: #__new__: env: 1 withArguments: {arg}"
 	^ self @env1:__new__: arg
 %
 
-category: 'Python-Bridge'
+category: 'Grail-Bridge'
 classmethod: object
 ___new___: arg1 _: arg2
 	"Convenience method: self perform: #__new__:_: env: 1 withArguments: {arg1. arg2}"
 	^ self @env1:__new__: arg1 _: arg2
 %
 
-category: 'Python-Bridge'
+category: 'Grail-Bridge'
 classmethod: object
 ___new___: arg1 _: arg2 _: arg3
 	"Convenience method: self perform: #__new__:_:_: env: 1 withArguments: {arg1. arg2. arg3}"
@@ -41,28 +41,28 @@ ___new___: arg1 _: arg2 _: arg3
 
 set compile_env: 1
 
-category: 'Convenience Methods'
+category: 'Grail-Convenience Methods'
 classmethod: object
 ___new___
 
 	^ self @env0:new
 %
 
-category: 'Convenience Methods'
+category: 'Grail-Convenience Methods'
 classmethod: object
 ___new___: arg1 _: arg2
 	"Convenience method for calling __new__:_: from env 1 code"
 	^ self @env1:__new__: arg1 _: arg2
 %
 
-category: 'Convenience Methods'
+category: 'Grail-Convenience Methods'
 classmethod: object
 ___new___: arg1 _: arg2 _: arg3
 	"Convenience method for calling __new__:_:_: from env 1 code"
 	^ self @env1:__new__: arg1 _: arg2 _: arg3
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: object
 __init_subclass__
 	"Called when a class is subclassed.
@@ -72,7 +72,7 @@ __init_subclass__
 	^ None
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: object
 __new__
 	"Create a new instance of this class.
@@ -82,7 +82,7 @@ __new__
 	^ self @env0:new
 %
 
-category: 'Convenience Methods - Unary'
+category: 'Grail-Convenience Methods - Unary'
 method: object
 ___isTruthy___
 	"Convert any Python object to a Smalltalk Boolean for use in if/while conditions.
@@ -91,20 +91,20 @@ ___isTruthy___
 	^ bool @env1:__new__: self
 %
 
-category: 'Convenience Methods - Keyword'
+category: 'Grail-Convenience Methods - Keyword'
 method: object
 ___new___: size
 	"Convenience method: self perform: #new: env: 0 withArguments: {size}"
 	^ self @env0:new: size
 %
 
-category: 'Convenience Methods - Keyword'
+category: 'Grail-Convenience Methods - Keyword'
 method: object
 ___signal___: message
 	^ self @env0:signal: message
 %
 
-category: 'Python-Attribute Access'
+category: 'Grail-Attribute Access'
 method: object
 __class__
 	"Return the class of this object (Python type)"
@@ -112,7 +112,7 @@ __class__
 	^ self @env0:class
 %
 
-category: 'Python-Attribute Access'
+category: 'Grail-Attribute Access'
 method: object
 __delattr__: name
 	"Delete a named attribute. Called by del obj.name
@@ -122,7 +122,7 @@ __delattr__: name
 	AttributeError @env0:signal: 'readonly attribute'
 %
 
-category: 'Python-Attribute Access'
+category: 'Grail-Attribute Access'
 method: object
 __dir__
 	"Return list of valid attributes for this object.
@@ -152,7 +152,7 @@ __dir__
 	^ (result @env0:asSortedCollection) @env0:asArray
 %
 
-category: 'Python-Other'
+category: 'Grail-Other'
 method: object
 __doc__
 	"Return the docstring for this object"
@@ -164,7 +164,7 @@ instance that has no instance attributes and cannot be given any.
 '
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: object
 __eq__: other
 	"Return self == other"
@@ -172,7 +172,7 @@ __eq__: other
 	^ self @env0:= other
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: object
 __format__: formatSpec
 	"Return a formatted string representation"
@@ -180,7 +180,7 @@ __format__: formatSpec
 	self @env0:error: 'Not yet implemented: __format__'
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: object
 __ge__: other
 	"Return self >= other"
@@ -188,7 +188,7 @@ __ge__: other
 	self @env0:error: 'Not yet implemented: __ge__'
 %
 
-category: 'Python-Attribute Access'
+category: 'Grail-Attribute Access'
 method: object
 __getattribute__: name
 	"Get a named attribute. Called for obj.name"
@@ -196,7 +196,7 @@ __getattribute__: name
 	self @env0:error: 'Not yet implemented: __getattribute__'
 %
 
-category: 'Python-Serialization'
+category: 'Grail-Serialization'
 method: object
 __getstate__
 	"Return state for pickling"
@@ -204,7 +204,7 @@ __getstate__
 	self @env0:error: 'Not yet implemented: __getstate__'
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: object
 __gt__: other
 	"Return self > other"
@@ -212,7 +212,7 @@ __gt__: other
 	self @env0:error: 'Not yet implemented: __gt__'
 %
 
-category: 'Python-Hashing & Identity'
+category: 'Grail-Hashing & Identity'
 method: object
 __hash__
 	"Return hash value for this object"
@@ -220,7 +220,7 @@ __hash__
 	^ self @env0:hash
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: object
 __init__
 	"Initialize a new instance (called after __new__).
@@ -231,7 +231,7 @@ __init__
 	^ None
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: object
 __le__: other
 	"Return self <= other"
@@ -239,7 +239,7 @@ __le__: other
 	self @env0:error: 'Not yet implemented: __le__'
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: object
 __lt__: other
 	"Return self < other"
@@ -247,7 +247,7 @@ __lt__: other
 	self @env0:error: 'Not yet implemented: __lt__'
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: object
 __ne__: other
 	"Return self != other"
@@ -255,7 +255,7 @@ __ne__: other
 	^ (self @env0:= other) @env0:not
 %
 
-category: 'Python-Serialization'
+category: 'Grail-Serialization'
 method: object
 __reduce__
 	"Return state for pickling (protocol 2)"
@@ -263,7 +263,7 @@ __reduce__
 	self @env0:error: 'Not yet implemented: __reduce__'
 %
 
-category: 'Python-Serialization'
+category: 'Grail-Serialization'
 method: object
 __reduce_ex__: protocol
 	"Return state for pickling with protocol version"
@@ -271,7 +271,7 @@ __reduce_ex__: protocol
 	self @env0:error: 'Not yet implemented: __reduce_ex__'
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: object
 __repr__
 	"Return a string representation for debugging"
@@ -286,7 +286,7 @@ __repr__
 	^ stream @env0:contents
 %
 
-category: 'Python-Attribute Access'
+category: 'Grail-Attribute Access'
 method: object
 __setattr__: name _: value
 	"Set a named attribute. Called by obj.name = value
@@ -296,7 +296,7 @@ __setattr__: name _: value
 	AttributeError @env0:signal: 'readonly attribute'
 %
 
-category: 'Python-Other'
+category: 'Grail-Other'
 method: object
 __sizeof__
 	"Return the size of the object in memory, in bytes.
@@ -305,7 +305,7 @@ __sizeof__
 	^ self @env0:physicalSize
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: object
 __str__
 	"Return a string representation for display"
@@ -313,7 +313,7 @@ __str__
 	^ (self @env0:printString) @env0:asUnicodeString
 %
 
-category: 'Python-Other'
+category: 'Grail-Other'
 method: object
 __subclasshook__: subclass
 	"Customize issubclass() for abstract base classes.
@@ -323,7 +323,7 @@ __subclasshook__: subclass
 	self @env0:error: 'Not yet implemented: __subclasshook__ (needs NotImplemented singleton)'
 %
 
-category: 'Message Handling'
+category: 'Grail-Message Handling'
 method: object
 perform: aSelectorSymbol env: environmentId
 
@@ -339,7 +339,7 @@ perform: aSelectorSymbol env: environmentId
 ^self @env0:_perform: (aSelectorSymbol @env0:asSymbol) env: environmentId withArguments: #()
 %
 
-category: 'Message Handling'
+category: 'Grail-Message Handling'
 method: object
 perform: aSelectorSymbol env: environmentId withArguments: anArray
 
@@ -362,7 +362,7 @@ anArray @env0:_validateClass: Array.
 ^ self @env0:_perform: (aSelectorSymbol @env0:asSymbol) env: environmentId withArguments: anArray
 %
 
-category: 'Message Handling'
+category: 'Grail-Message Handling'
 method: object
 with: anObject perform: aSelectorSymbol env: environmentId
 

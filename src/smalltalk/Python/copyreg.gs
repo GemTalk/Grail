@@ -38,7 +38,7 @@ See https://docs.python.org/3/library/copyreg.html
 
 expectvalue /Class
 doit
-copyreg category: 'Modules'
+copyreg category: 'Grail-Modules'
 %
 
 expectvalue /Metaclass3
@@ -53,7 +53,7 @@ set compile_env: 1
 ! Singleton initialization
 ! ===============================================================================
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: copyreg
 initialize
 	"Create the empty dispatch_table dictionary. The `dispatch_table`
@@ -67,7 +67,7 @@ initialize
 ! Stored attribute (not a callable)
 ! ===============================================================================
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: copyreg
 dispatch_table
 	"Return the dispatch_table dictionary (stored attribute, populated
@@ -80,7 +80,7 @@ dispatch_table
 ! Fast-path methods
 ! ===============================================================================
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: copyreg
 pickle: obType _: pickleFunc
 	"Python copyreg.pickle(ob_type, pickle_function) — fast path.
@@ -90,7 +90,7 @@ pickle: obType _: pickleFunc
 	^ None
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: copyreg
 pickle: obType _: pickleFunc _: constructor
 	"Python copyreg.pickle(ob_type, pickle_function, constructor_ob)

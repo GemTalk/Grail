@@ -17,7 +17,7 @@ PythonTestCase subclass: 'FileNotFoundErrorTestCase'
 %
 expectvalue /Class
 doit
-FileNotFoundErrorTestCase category: 'SUnit'
+FileNotFoundErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ FileNotFoundErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-FileNotFoundError'
+category: 'Grail-Tests-FileNotFoundError'
 method: FileNotFoundErrorTestCase
 test_creation
 	"Test creating a FileNotFoundError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-FileNotFoundError'
+category: 'Grail-Tests-FileNotFoundError'
 method: FileNotFoundErrorTestCase
 test_inheritance
 	"Test that FileNotFoundError inherits from OSError."

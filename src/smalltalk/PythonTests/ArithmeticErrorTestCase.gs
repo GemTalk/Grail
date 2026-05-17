@@ -17,7 +17,7 @@ PythonTestCase subclass: 'ArithmeticErrorTestCase'
 %
 expectvalue /Class
 doit
-ArithmeticErrorTestCase category: 'SUnit'
+ArithmeticErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ ArithmeticErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-ArithmeticError'
+category: 'Grail-Tests-ArithmeticError'
 method: ArithmeticErrorTestCase
 test_creation
 	"Test creating a ArithmeticError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-ArithmeticError'
+category: 'Grail-Tests-ArithmeticError'
 method: ArithmeticErrorTestCase
 test_inheritance
 	"Test that ArithmeticError inherits from Exception."

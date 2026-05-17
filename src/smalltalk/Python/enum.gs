@@ -29,7 +29,7 @@ See https://docs.python.org/3/library/enum.html
 
 expectvalue /Class
 doit
-enum category: 'Modules'
+enum category: 'Grail-Modules'
 %
 
 expectvalue /Metaclass3
@@ -40,7 +40,7 @@ enum class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: enum
 initialize
 	"Initialize stored attributes."
@@ -52,13 +52,13 @@ initialize
 ! Stored-attribute accessors
 ! ===============================================================================
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: enum
 IntFlag
 	^ self @env0:at: #IntFlag
 %
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: enum
 KEEP
 	^ self @env0:at: #KEEP
@@ -68,14 +68,14 @@ KEEP
 ! Fast-path callables
 ! ===============================================================================
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: enum
 global_enum: cls
 	"global_enum(cls) -> cls (no-op decorator)."
 	^ cls
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: enum
 _simple_enum: positional kw: kwargs
 	"_simple_enum(cls) or _simple_enum(cls, boundary=...) -> decorator.

@@ -17,7 +17,7 @@ PythonTestCase subclass: 'PendingDeprecationWarningTestCase'
 %
 expectvalue /Class
 doit
-PendingDeprecationWarningTestCase category: 'SUnit'
+PendingDeprecationWarningTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ PendingDeprecationWarningTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-PendingDeprecationWarning'
+category: 'Grail-Tests-PendingDeprecationWarning'
 method: PendingDeprecationWarningTestCase
 test_creation
 	"Test creating a PendingDeprecationWarning instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-PendingDeprecationWarning'
+category: 'Grail-Tests-PendingDeprecationWarning'
 method: PendingDeprecationWarningTestCase
 test_inheritance
 	"Test that PendingDeprecationWarning inherits from Warning."

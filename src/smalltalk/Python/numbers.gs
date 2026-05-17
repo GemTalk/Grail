@@ -34,7 +34,7 @@ Class instance variable:
 
 expectvalue /Class
 doit
-numbers_Number category: 'Numbers-ABC'
+numbers_Number category: 'Grail-Numbers-ABC'
 %
 
 ! ------------------- Superclass check
@@ -68,7 +68,7 @@ conjugate(), ==, and !=.
 
 expectvalue /Class
 doit
-numbers_Complex category: 'Numbers-ABC'
+numbers_Complex category: 'Grail-Numbers-ABC'
 %
 
 ! ------------------- Superclass check
@@ -101,7 +101,7 @@ trunc(), floor(), ceil(), round(), divmod(), //, %, <, <=, >, >=.
 
 expectvalue /Class
 doit
-numbers_Real category: 'Numbers-ABC'
+numbers_Real category: 'Grail-Numbers-ABC'
 %
 
 ! ------------------- Superclass check
@@ -134,7 +134,7 @@ in lowest terms with a positive denominator.
 
 expectvalue /Class
 doit
-numbers_Rational category: 'Numbers-ABC'
+numbers_Rational category: 'Grail-Numbers-ABC'
 %
 
 ! ------------------- Superclass check
@@ -167,7 +167,7 @@ Adds conversion to int, pow with modulus, and bit-string operations:
 
 expectvalue /Class
 doit
-numbers_Integral category: 'Numbers-ABC'
+numbers_Integral category: 'Grail-Numbers-ABC'
 %
 
 ! ------------------- Superclass check
@@ -210,7 +210,7 @@ Use isinstance(x, numbers.Number) to check if x is any kind of number.
 
 expectvalue /Class
 doit
-numbers category: 'Modules'
+numbers category: 'Grail-Modules'
 %
 
 
@@ -240,7 +240,7 @@ numbers class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-ABC'
+category: 'Grail-ABC'
 classmethod: numbers_Number
 __instancecheck__: instance
 	"Check if instance is an instance of this ABC.
@@ -259,7 +259,7 @@ __instancecheck__: instance
 	^ false
 %
 
-category: 'Python-ABC'
+category: 'Grail-ABC'
 classmethod: numbers_Number
 __subclasscheck__: aClass
 	"Check if aClass is a subclass of this ABC.
@@ -275,7 +275,7 @@ __subclasscheck__: aClass
 	^ false
 %
 
-category: 'Python-ABC'
+category: 'Grail-ABC'
 classmethod: numbers_Number
 isClassRegistered: aClass
 	"Check if aClass or any of its superclasses is registered with this ABC or any ABC subclass of this ABC."
@@ -298,7 +298,7 @@ isClassRegistered: aClass
 	^ false
 %
 
-category: 'Python-ABC'
+category: 'Grail-ABC'
 classmethod: numbers_Number
 register: aClass
 	"Register a class as a virtual subclass of this ABC.
@@ -308,7 +308,7 @@ register: aClass
 	registeredTypes @env0:add: aClass
 %
 
-category: 'Python-ABC'
+category: 'Grail-ABC'
 classmethod: numbers_Number
 registeredTypes
 	"Return the set of registered types for this ABC."
@@ -317,7 +317,7 @@ registeredTypes
 	^ registeredTypes
 %
 
-category: 'Python-Attributes'
+category: 'Grail-Attributes'
 method: numbers
 Complex
 	"Return the Complex ABC."
@@ -325,7 +325,7 @@ Complex
 %
 
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: numbers
 initialize
 	"Initialize all module attributes and register built-in types with ABCs."
@@ -339,42 +339,42 @@ initialize
 		yourself
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: numbers
 initialize_Complex
 	"Bind the Complex ABC."
 	self @env0:at: #Complex put: numbers_Complex
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: numbers
 initialize_Integral
 	"Bind the Integral ABC."
 	self @env0:at: #Integral put: numbers_Integral
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: numbers
 initialize_Number
 	"Bind the Number ABC."
 	self @env0:at: #Number put: numbers_Number
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: numbers
 initialize_Rational
 	"Bind the Rational ABC."
 	self @env0:at: #Rational put: numbers_Rational
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: numbers
 initialize_Real
 	"Bind the Real ABC."
 	self @env0:at: #Real put: numbers_Real
 %
 
-category: 'Python-Attributes'
+category: 'Grail-Attributes'
 method: numbers
 Integral
 	"Return the Integral ABC."
@@ -382,7 +382,7 @@ Integral
 %
 
 
-category: 'Python-Attributes'
+category: 'Grail-Attributes'
 method: numbers
 Number
 	"Return the Number ABC."
@@ -390,7 +390,7 @@ Number
 %
 
 
-category: 'Python-Attributes'
+category: 'Grail-Attributes'
 method: numbers
 Rational
 	"Return the Rational ABC."
@@ -398,7 +398,7 @@ Rational
 %
 
 
-category: 'Python-Attributes'
+category: 'Grail-Attributes'
 method: numbers
 Real
 	"Return the Real ABC."
@@ -406,7 +406,7 @@ Real
 %
 
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: numbers
 registerBuiltinTypes
 	"Register built-in numeric types with the appropriate ABCs.

@@ -44,7 +44,7 @@ Object
 
 expectvalue /Class
 doit
-GeneratorExpAst category: 'Parser'
+GeneratorExpAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from GeneratorExpAst

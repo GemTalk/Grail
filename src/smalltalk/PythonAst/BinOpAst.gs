@@ -45,7 +45,7 @@ Object
 
 expectvalue /Class
 doit
-BinOpAst category: 'Parser'
+BinOpAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from BinOpAst
@@ -54,7 +54,7 @@ removeallclassmethods BinOpAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 classmethod: BinOpAst
 left: newLeft operand: operand right: newRight
 
@@ -64,7 +64,7 @@ left: newLeft operand: operand right: newRight
 		right: newRight.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: BinOpAst
 initializeLeft: newLeft operand: operand right: newRight
 
@@ -73,7 +73,7 @@ initializeLeft: newLeft operand: operand right: newRight
 	right := newRight.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: BinOpAst
 printSmalltalkOn: aStream
 

@@ -17,7 +17,7 @@ PythonTestCase subclass: 'WarningTestCase'
 %
 expectvalue /Class
 doit
-WarningTestCase category: 'SUnit'
+WarningTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ WarningTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-Warning'
+category: 'Grail-Tests-Warning'
 method: WarningTestCase
 test_creation
 	"Test creating a Warning instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-Warning'
+category: 'Grail-Tests-Warning'
 method: WarningTestCase
 test_inheritance
 	"Test that Warning inherits from Exception."

@@ -18,7 +18,7 @@ PythonTestCase subclass: 'RandomTestCase'
 
 expectvalue /Class
 doit
-RandomTestCase category: 'SUnit'
+RandomTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ RandomTestCase class removeAllMethods: 0.
 
 set compile_env: 0
 
-category: 'Tests - Distributions'
+category: 'Grail-Tests - Distributions'
 method: RandomTestCase
 testBetavariate
 	"Test random.betavariate(alpha, beta)"
@@ -48,7 +48,7 @@ testBetavariate
 	self assert: (result <= 1).  "Beta is always in [0, 1]"
 %
 
-category: 'Tests - Distributions'
+category: 'Grail-Tests - Distributions'
 method: RandomTestCase
 testBinomialvariate
 	"Test random.binomialvariate(n, p)"
@@ -70,7 +70,7 @@ testBinomialvariate
 	self assert: result equals: 10.
 %
 
-category: 'Tests - Sequence'
+category: 'Grail-Tests - Sequence'
 method: RandomTestCase
 testChoice
 	"Test random.choice(seq)"
@@ -83,7 +83,7 @@ testChoice
 	self assert: (seq includes: result).
 %
 
-category: 'Tests - Sequence'
+category: 'Grail-Tests - Sequence'
 method: RandomTestCase
 testChoiceEmptySequence
 	"Test random.choice() on empty sequence raises IndexError"
@@ -94,7 +94,7 @@ testChoiceEmptySequence
 	self should: [r @env1:choice: #()] raise: IndexError.
 %
 
-category: 'Tests - Sequence'
+category: 'Grail-Tests - Sequence'
 method: RandomTestCase
 testChoices
 	"Test random.choices(population, k=n)"
@@ -107,7 +107,7 @@ testChoices
 	result do: [:each | self assert: (#(1 2 3) includes: each)].
 %
 
-category: 'Tests - Sequence'
+category: 'Grail-Tests - Sequence'
 method: RandomTestCase
 testChoicesWithWeights
 	"Test random.choices() with weights"
@@ -121,7 +121,7 @@ testChoicesWithWeights
 	result do: [:each | self assert: each equals: 1].
 %
 
-category: 'Tests - Distributions'
+category: 'Grail-Tests - Distributions'
 method: RandomTestCase
 testExpovariate
 	"Test random.expovariate(lambd)"
@@ -134,7 +134,7 @@ testExpovariate
 	self assert: (result >= 0).  "Exponential is always non-negative"
 %
 
-category: 'Tests - Distributions'
+category: 'Grail-Tests - Distributions'
 method: RandomTestCase
 testGammavariate
 	"Test random.gammavariate(alpha, beta)"
@@ -147,7 +147,7 @@ testGammavariate
 	self assert: (result > 0).  "Gamma is always positive"
 %
 
-category: 'Tests - Distributions'
+category: 'Grail-Tests - Distributions'
 method: RandomTestCase
 testGauss
 	"Test random.gauss(mu, sigma)"
@@ -160,7 +160,7 @@ testGauss
 	"Gauss can return any value, but very unlikely to be outside -10 to 10 for mu=0, sigma=1"
 %
 
-category: 'Tests - Basic'
+category: 'Grail-Tests - Basic'
 method: RandomTestCase
 testGetrandbits
 	"Test random.getrandbits(k)"
@@ -178,7 +178,7 @@ testGetrandbits
 	self assert: (result < 65536).
 %
 
-category: 'Tests - Edge Cases'
+category: 'Grail-Tests - Edge Cases'
 method: RandomTestCase
 testGetrandbitsNegative
 	"Test random.getrandbits() with negative k raises ValueError"
@@ -189,7 +189,7 @@ testGetrandbitsNegative
 	self should: [r @env1:getrandbits: -1] raise: ValueError.
 %
 
-category: 'Tests - Edge Cases'
+category: 'Grail-Tests - Edge Cases'
 method: RandomTestCase
 testGetrandbitsZero
 	"Test random.getrandbits(0) returns 0"
@@ -201,7 +201,7 @@ testGetrandbitsZero
 	self assert: result equals: 0.
 %
 
-category: 'Tests - State'
+category: 'Grail-Tests - State'
 method: RandomTestCase
 testGetstate
 	"Test random.getstate() raises NotImplementedError"
@@ -212,7 +212,7 @@ testGetstate
 	self should: [r @env1:getstate] raise: NotImplementedError
 %
 
-category: 'Tests - Singleton'
+category: 'Grail-Tests - Singleton'
 method: RandomTestCase
 testInstance
 	"Test that random.___instance___ returns the singleton"
@@ -224,7 +224,7 @@ testInstance
 	self assert: r1 == r2.
 %
 
-category: 'Tests - Distributions'
+category: 'Grail-Tests - Distributions'
 method: RandomTestCase
 testLognormvariate
 	"Test random.lognormvariate(mu, sigma)"
@@ -237,7 +237,7 @@ testLognormvariate
 	self assert: (result > 0).  "Log-normal is always positive"
 %
 
-category: 'Tests - Distributions'
+category: 'Grail-Tests - Distributions'
 method: RandomTestCase
 testNormalvariate
 	"Test random.normalvariate(mu, sigma)"
@@ -249,7 +249,7 @@ testNormalvariate
 	self assert: (result isKindOf: Float).
 %
 
-category: 'Tests - Distributions'
+category: 'Grail-Tests - Distributions'
 method: RandomTestCase
 testParetovariate
 	"Test random.paretovariate(alpha)"
@@ -262,7 +262,7 @@ testParetovariate
 	self assert: (result >= 1).  "Pareto with xm=1 is always >= 1"
 %
 
-category: 'Tests - Basic'
+category: 'Grail-Tests - Basic'
 method: RandomTestCase
 testRandbytes
 	"Test random.randbytes(n)"
@@ -278,7 +278,7 @@ testRandbytes
 	self assert: result size equals: 0.
 %
 
-category: 'Tests - Edge Cases'
+category: 'Grail-Tests - Edge Cases'
 method: RandomTestCase
 testRandbytesNegative
 	"Test random.randbytes() with negative n raises ValueError"
@@ -289,7 +289,7 @@ testRandbytesNegative
 	self should: [r @env1:randbytes: -1] raise: ValueError.
 %
 
-category: 'Tests - Edge Cases'
+category: 'Grail-Tests - Edge Cases'
 method: RandomTestCase
 testRandbytesZero
 	"Test random.randbytes(0) returns empty bytes"
@@ -302,7 +302,7 @@ testRandbytesZero
 	self assert: result size equals: 0.
 %
 
-category: 'Tests - Integer'
+category: 'Grail-Tests - Integer'
 method: RandomTestCase
 testRandint
 	"Test random.randint(a, b)"
@@ -326,7 +326,7 @@ testRandint
 	self assert: result equals: 5.
 %
 
-category: 'Tests - Basic'
+category: 'Grail-Tests - Basic'
 method: RandomTestCase
 testRandom
 	"Test random.random() returns a float in [0, 1)"
@@ -340,7 +340,7 @@ testRandom
 	self assert: (result < 1.0).
 %
 
-category: 'Tests - Integer'
+category: 'Grail-Tests - Integer'
 method: RandomTestCase
 testRandrangeErrors
 	"Test random.randrange() error cases"
@@ -354,7 +354,7 @@ testRandrangeErrors
 	self should: [r @env1:_randrange: {0. 10. -1} kw: nil] raise: ValueError.
 %
 
-category: 'Tests - Integer'
+category: 'Grail-Tests - Integer'
 method: RandomTestCase
 testRandrangeOneArg
 	"Test random.randrange(stop)"
@@ -368,7 +368,7 @@ testRandrangeOneArg
 	self assert: (result < 10).
 %
 
-category: 'Tests - Integer'
+category: 'Grail-Tests - Integer'
 method: RandomTestCase
 testRandrangeThreeArgs
 	"Test random.randrange(start, stop, step)"
@@ -387,7 +387,7 @@ testRandrangeThreeArgs
 	self assert: (result \\ 2) equals: 0.
 %
 
-category: 'Tests - Integer'
+category: 'Grail-Tests - Integer'
 method: RandomTestCase
 testRandrangeTwoArgs
 	"Test random.randrange(start, stop)"
@@ -400,7 +400,7 @@ testRandrangeTwoArgs
 	self assert: (result < 15).
 %
 
-category: 'Tests - Sequence'
+category: 'Grail-Tests - Sequence'
 method: RandomTestCase
 testSample
 	"Test random.sample(population, k)"
@@ -418,7 +418,7 @@ testSample
 	result do: [:each | self assert: (#(1 2 3 4 5) includes: each)].
 %
 
-category: 'Tests - Sequence'
+category: 'Grail-Tests - Sequence'
 method: RandomTestCase
 testSampleErrors
 	"Test random.sample() error cases"
@@ -430,7 +430,7 @@ testSampleErrors
 	self should: [r @env1:sample: #(1 2 3) _: 5] raise: ValueError.
 %
 
-category: 'Tests - Edge Cases'
+category: 'Grail-Tests - Edge Cases'
 method: RandomTestCase
 testSampleZero
 	"Test random.sample() with k=0 returns empty list"
@@ -442,7 +442,7 @@ testSampleZero
 	self assert: result size equals: 0.
 %
 
-category: 'Tests - Basic'
+category: 'Grail-Tests - Basic'
 method: RandomTestCase
 testSeed
 	"Test random.seed() produces reproducible results"
@@ -459,7 +459,7 @@ testSeed
 	self assert: val1 equals: val2.
 %
 
-category: 'Tests - State'
+category: 'Grail-Tests - State'
 method: RandomTestCase
 testSetstate
 	"Test random.setstate() raises NotImplementedError"
@@ -470,7 +470,7 @@ testSetstate
 	self should: [r @env1:setstate] raise: NotImplementedError
 %
 
-category: 'Tests - Sequence'
+category: 'Grail-Tests - Sequence'
 method: RandomTestCase
 testShuffle
 	"Test random.shuffle(x)"
@@ -487,7 +487,7 @@ testShuffle
 	self assert: (list asSet) equals: (original asSet).
 %
 
-category: 'Tests - Distributions'
+category: 'Grail-Tests - Distributions'
 method: RandomTestCase
 testTriangular
 	"Test random.triangular(low, high, mode)"
@@ -501,7 +501,7 @@ testTriangular
 	self assert: (result <= 10).
 %
 
-category: 'Tests - Distributions'
+category: 'Grail-Tests - Distributions'
 method: RandomTestCase
 testUniform
 	"Test random.uniform(a, b)"
@@ -520,7 +520,7 @@ testUniform
 	self assert: (result <= 10).
 %
 
-category: 'Tests - Distributions'
+category: 'Grail-Tests - Distributions'
 method: RandomTestCase
 testWeibullvariate
 	"Test random.weibullvariate(alpha, beta)"

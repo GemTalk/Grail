@@ -17,7 +17,7 @@ PythonTestCase subclass: 'TabErrorTestCase'
 %
 expectvalue /Class
 doit
-TabErrorTestCase category: 'SUnit'
+TabErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ TabErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-TabError'
+category: 'Grail-Tests-TabError'
 method: TabErrorTestCase
 test_creation
 	"Test creating a TabError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-TabError'
+category: 'Grail-Tests-TabError'
 method: TabErrorTestCase
 test_inheritance
 	"Test that TabError inherits from IndentationError."

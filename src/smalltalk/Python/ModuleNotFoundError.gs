@@ -17,5 +17,5 @@ ImportError subclass: 'ModuleNotFoundError'
 
 expectvalue /Class
 doit
-ModuleNotFoundError category: 'Exceptions'
+ModuleNotFoundError category: 'Grail-Exceptions'
 %

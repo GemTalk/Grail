@@ -40,14 +40,14 @@ removeallclassmethods SuiteAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: SuiteAst
 body
 
 	^body
 %
 
-category: 'other'
+category: 'Grail-other'
 method: SuiteAst
 printSmalltalkOn: aStream
 
@@ -57,7 +57,7 @@ printSmalltalkOn: aStream
 	].
 %
 
-category: 'other'
+category: 'Grail-other'
 method: SuiteAst
 size
 

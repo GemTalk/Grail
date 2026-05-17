@@ -17,7 +17,7 @@ PythonTestCase subclass: 'DeprecationWarningTestCase'
 %
 expectvalue /Class
 doit
-DeprecationWarningTestCase category: 'SUnit'
+DeprecationWarningTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ DeprecationWarningTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-DeprecationWarning'
+category: 'Grail-Tests-DeprecationWarning'
 method: DeprecationWarningTestCase
 test_creation
 	"Test creating a DeprecationWarning instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-DeprecationWarning'
+category: 'Grail-Tests-DeprecationWarning'
 method: DeprecationWarningTestCase
 test_inheritance
 	"Test that DeprecationWarning inherits from Warning."

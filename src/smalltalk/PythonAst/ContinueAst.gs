@@ -39,7 +39,7 @@ Object
 
 expectvalue /Class
 doit
-ContinueAst category: 'Parser'
+ContinueAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from ContinueAst

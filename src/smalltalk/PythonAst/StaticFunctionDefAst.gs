@@ -18,7 +18,7 @@ FunctionDefAst subclass: 'StaticFunctionDefAst'
 
 expectvalue /Class
 doit
-StaticFunctionDefAst category: 'Parser'
+StaticFunctionDefAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from StaticFunctionDefAst

@@ -62,7 +62,7 @@ module singletons.
 
 expectvalue /Class
 doit
-module category: 'Modules'
+module category: 'Grail-Modules'
 %
 
 ! ------------------- Remove existing Python methods from module
@@ -74,7 +74,7 @@ module class removeAllMethods: 1.
 
 set compile_env: 0
 
-category: 'Convenience Methods'
+category: 'Grail-Convenience Methods'
 classmethod: module
 ___instance___
 	"env-0 entry point for the singleton accessor (callable from C/GciPerform)."
@@ -83,14 +83,14 @@ ___instance___
 
 set compile_env: 1
 
-category: 'Python-Singleton'
+category: 'Grail-Singleton'
 classmethod: module
 clearInstance
 	"Clear the singleton instance (useful for testing)."
 	instance := nil
 %
 
-category: 'Python-Singleton'
+category: 'Grail-Singleton'
 classmethod: module
 instance
 	"Return the singleton instance of this module subclass, creating it on
@@ -104,7 +104,7 @@ instance
 	^ instance
 %
 
-category: 'Python-Singleton'
+category: 'Grail-Singleton'
 classmethod: module
 new
 	"Modules are singletons; use `instance` instead of `new`."
@@ -113,7 +113,7 @@ new
 			@env0:, (self @env0:name @env0:asString @env0:, ' module'))
 %
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: module
 __doc__
 	"Return the module docstring, falling back to the base object docstring
@@ -125,49 +125,49 @@ __doc__
 	^ doc
 %
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: module
 __doc__: aValue
 	self @env0:at: #__doc__ put: aValue
 %
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: module
 __loader__
 	^ self @env0:at: #__loader__
 %
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: module
 __loader__: aValue
 	self @env0:at: #__loader__ put: aValue
 %
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: module
 __name__
 	^ self @env0:at: #__name__
 %
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: module
 __name__: aValue
 	self @env0:at: #__name__ put: aValue
 %
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: module
 __package__
 	^ self @env0:at: #__package__
 %
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: module
 __package__: aValue
 	self @env0:at: #__package__ put: aValue
 %
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: module
 __path__
 	"Return the module's __path__ if it has been set, else None. Modules
@@ -180,19 +180,19 @@ __path__
 		ifFalse: [None]
 %
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: module
 __path__: aValue
 	self @env0:at: #__path__ put: aValue
 %
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: module
 __spec__
 	^ self @env0:at: #__spec__
 %
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: module
 __spec__: aValue
 	self @env0:at: #__spec__ put: aValue
@@ -200,7 +200,7 @@ __spec__: aValue
 
 set compile_env: 0
 
-category: 'Python-Attribute Access'
+category: 'Grail-Attribute Access'
 method: module
 doesNotUnderstand: aSelector args: anArray envId: envId
 	"Fall back to dictionary lookup for unrecognized messages.
@@ -212,7 +212,7 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	^ super doesNotUnderstand: aSelector args: anArray envId: envId
 %
 
-category: 'Python-Attribute Access'
+category: 'Grail-Attribute Access'
 method: module
 cantPerform: aSymbol withArguments: anArray env: envId
 	"Fall back to dictionary lookup for unrecognized messages.

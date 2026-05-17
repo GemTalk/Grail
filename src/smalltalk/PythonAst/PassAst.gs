@@ -39,7 +39,7 @@ Object
 
 expectvalue /Class
 doit
-PassAst category: 'Parser'
+PassAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from PassAst
@@ -48,7 +48,7 @@ removeallclassmethods PassAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: PassAst
 printSmalltalkOn: aStream
 

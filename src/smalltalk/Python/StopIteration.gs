@@ -27,5 +27,5 @@ Instance variables:
 
 expectvalue /Class
 doit
-StopIteration category: 'Exceptions'
+StopIteration category: 'Grail-Exceptions'
 %

@@ -36,7 +36,7 @@ Object
 
 expectvalue /Class
 doit
-DelAst category: 'Parser'
+DelAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from DelAst

@@ -20,7 +20,7 @@ list class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: list
 __new__
 	"list() — create an empty list. Receiver is the class."
@@ -28,7 +28,7 @@ __new__
 	^ self ___new___
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: list
 __new__: iterable
 	"list(iterable) — create a list from the elements of iterable.
@@ -53,7 +53,7 @@ __new__: iterable
 	^ result
 %
 
-category: 'Python-Sequence Protocol'
+category: 'Grail-Sequence Protocol'
 method: list
 __delitem__: index
 	"Delete the item at the given index.
@@ -80,7 +80,7 @@ __delitem__: index
 	^ None
 %
 
-category: 'Python-Other'
+category: 'Grail-Other'
 method: list
 __doc__
 	"Return the docstring for list."
@@ -91,7 +91,7 @@ If no argument is given, the constructor creates a new empty list.
 The argument must be an iterable if specified.'
 %
 
-category: 'Python-Sequence Operations'
+category: 'Grail-Sequence Operations'
 method: list
 __iadd__: other
 	"In-place concatenation: self += other. Returns self."
@@ -100,7 +100,7 @@ __iadd__: other
 	^ self
 %
 
-category: 'Python-Sequence Operations'
+category: 'Grail-Sequence Operations'
 method: list
 __imul__: n
 	"In-place repetition: self *= n. Returns self."
@@ -118,7 +118,7 @@ __imul__: n
 	^ self
 %
 
-category: 'Python-Sequence Protocol'
+category: 'Grail-Sequence Protocol'
 method: list
 __iter__
 	"Return an iterator over the list."
@@ -126,7 +126,7 @@ __iter__
 	^ list_iterator @env1:___on: self
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: list
 __repr__
 	"Return a string representation of the list: [item1, item2, ...]"
@@ -145,7 +145,7 @@ __repr__
 	^ stream @env0:contents
 %
 
-category: 'Python-Sequence Protocol'
+category: 'Grail-Sequence Protocol'
 method: list
 __setitem__: index _: value
 	"Set the item at the given index.
@@ -172,7 +172,7 @@ __setitem__: index _: value
 	^ None
 %
 
-category: 'Python-List Methods'
+category: 'Grail-List Methods'
 method: list
 append: item
 	"Add item to the end of the list."
@@ -181,7 +181,7 @@ append: item
 	^ None
 %
 
-category: 'Python-List Methods'
+category: 'Grail-List Methods'
 method: list
 clear
 	"Remove all items from the list."
@@ -190,7 +190,7 @@ clear
 	^ None
 %
 
-category: 'Python-List Methods'
+category: 'Grail-List Methods'
 method: list
 copy
 	"Return a shallow copy of the list."
@@ -198,7 +198,7 @@ copy
 	^ self @env0:copy
 %
 
-category: 'Python-List Methods'
+category: 'Grail-List Methods'
 method: list
 extend: iterable
 	"Extend the list by appending all items from iterable."
@@ -207,7 +207,7 @@ extend: iterable
 	^ None
 %
 
-category: 'Python-List Methods'
+category: 'Grail-List Methods'
 method: list
 insert: index _: item
 	"Insert item before the given index."
@@ -233,7 +233,7 @@ insert: index _: item
 	^ None
 %
 
-category: 'Python-List Methods'
+category: 'Grail-List Methods'
 method: list
 pop
 	"Remove and return the last item. Raises IndexError if list is empty."
@@ -247,7 +247,7 @@ pop
 	^ self @env0:removeLast
 %
 
-category: 'Python-List Methods'
+category: 'Grail-List Methods'
 method: list
 pop: index
 	"Remove and return the item at index. Raises IndexError if index is out of range."
@@ -275,7 +275,7 @@ pop: index
 	^ item
 %
 
-category: 'Python-List Methods'
+category: 'Grail-List Methods'
 method: list
 remove: value
 	"Remove the first occurrence of value. Raises ValueError if not found."
@@ -284,7 +284,7 @@ remove: value
 	^ None
 %
 
-category: 'Python-List Methods'
+category: 'Grail-List Methods'
 method: list
 reverse
 	"Reverse the list in place."
@@ -296,7 +296,7 @@ reverse
 	^ None
 %
 
-category: 'Python-List Methods'
+category: 'Grail-List Methods'
 method: list
 sort
 	"Sort the list in place using Python's __lt__ for comparison."

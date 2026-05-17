@@ -17,5 +17,5 @@ ValueError subclass: 'StatisticsError'
 
 expectvalue /Class
 doit
-StatisticsError category: 'Exceptions'
+StatisticsError category: 'Grail-Exceptions'
 %

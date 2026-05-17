@@ -17,7 +17,7 @@ PythonTestCase subclass: 'MemoryErrorTestCase'
 %
 expectvalue /Class
 doit
-MemoryErrorTestCase category: 'SUnit'
+MemoryErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ MemoryErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-MemoryError'
+category: 'Grail-Tests-MemoryError'
 method: MemoryErrorTestCase
 test_creation
 	"Test creating a MemoryError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-MemoryError'
+category: 'Grail-Tests-MemoryError'
 method: MemoryErrorTestCase
 test_inheritance
 	"Test that MemoryError inherits from Exception."

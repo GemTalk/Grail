@@ -36,7 +36,7 @@ Object
 
 expectvalue /Class
 doit
-NotInAst category: 'Parser'
+NotInAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from NotInAst
@@ -45,14 +45,14 @@ removeallclassmethods NotInAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: NotInAst
 printSmalltalkOn: aStream
 
 	self error: 'NotInAst should be printed via printSmalltalkOn:left:rightList:'.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: NotInAst
 printSmalltalkOn: aStream left: left rightList: right rhsTemp: rhsName lhsTemp: lhsName
 

@@ -30,7 +30,7 @@ ClassDefAst comment:
 
 expectvalue /Class
 doit
-ClassDefAst category: 'Parser'
+ClassDefAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from ClassDefAst
@@ -39,14 +39,14 @@ removeallclassmethods ClassDefAst
 
 set compile_env: 0
 
-category: 'code generation'
+category: 'Grail-code generation'
 method: ClassDefAst
 addVariableNamesTo: aStream
 
 	aStream nextPutAll: name; space
 %
 
-category: 'code generation'
+category: 'Grail-code generation'
 method: ClassDefAst
 printSmalltalkOn: aStream
 	"When compiling a module via loadModuleFromPath:, Python classes
@@ -70,7 +70,7 @@ printSmalltalkOn: aStream
 	self printSmalltalkLegacyOn: aStream.
 %
 
-category: 'code generation'
+category: 'Grail-code generation'
 method: ClassDefAst
 printSmalltalkLegacyOn: aStream
 	"Legacy dict-based class creation (for eval: context or when not in
@@ -107,14 +107,14 @@ printSmalltalkLegacyOn: aStream
 	aStream decreaseIndent; nextPutAll: '] value: (PythonClass perform: #new env: 0).'.
 %
 
-category: 'accessing'
+category: 'Grail-accessing'
 method: ClassDefAst
 body
 
 	^ body
 %
 
-category: 'Class Compilation'
+category: 'Grail-Class Compilation'
 method: ClassDefAst
 instanceVarNamesFromInit
 	"Scan __init__ body for `self.attr = ...` assignments to determine
@@ -141,7 +141,7 @@ instanceVarNamesFromInit
 	^ result asArray
 %
 
-category: 'Class Compilation'
+category: 'Grail-Class Compilation'
 method: ClassDefAst
 instanceMethodDefs
 	"Return all InstanceFunctionDefAst nodes from the class body."
@@ -149,7 +149,7 @@ instanceMethodDefs
 	^ body body select: [:stmt | stmt isKindOf: InstanceFunctionDefAst]
 %
 
-category: 'Class Compilation'
+category: 'Grail-Class Compilation'
 method: ClassDefAst
 selfParameterName
 	"Return the self parameter name from __init__ (or the first instance method).
@@ -164,14 +164,14 @@ selfParameterName
 	^ paramNames first asSymbol
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ClassDefAst
 __eq__
 
 	^[:lhs :rhs | (lhs name = rhs name) ifTrue: [True] ifFalse: [False]]
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ClassDefAst
 __mro__
 
@@ -190,7 +190,7 @@ __mro__
 	"
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ClassDefAst
 __str__
 	"<class '__main__.MyClass'>"
@@ -205,21 +205,21 @@ __str__
 			contents)]
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ClassDefAst
 astNode
 
 	^self
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ClassDefAst
 bases
 
 	^bases
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ClassDefAst
 call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
 
@@ -232,21 +232,21 @@ call: aSymbol withArguments: anArray keywords: aSymbolDictionary scope: aScope
 		scope: aScope
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ClassDefAst
 classAst
 
 	^self
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ClassDefAst
 get: aSymbol
 
 	self halt.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ClassDefAst
 isDerivedFrom: aClass scope: aScope
 
@@ -259,21 +259,21 @@ isDerivedFrom: aClass scope: aScope
 	^false
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ClassDefAst
 isInClass
 
 	^true
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ClassDefAst
 name
 
 	^name
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ClassDefAst
 printOn: aStream
 
@@ -285,14 +285,14 @@ printOn: aStream
 		yourself.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ClassDefAst
 setBlock: aBlockAst
 
 	body := aBlockAst.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ClassDefAst
 value: posArgs value: keywordArgs value: aScope
 	"args are the parameters while arguments are the values"

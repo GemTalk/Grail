@@ -17,5 +17,5 @@ Exception subclass: 'ArithmeticError'
 
 expectvalue /Class
 doit
-ArithmeticError category: 'Exceptions'
+ArithmeticError category: 'Grail-Exceptions'
 %

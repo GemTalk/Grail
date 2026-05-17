@@ -17,5 +17,5 @@ OSError subclass: 'ConnectionError'
 
 expectvalue /Class
 doit
-ConnectionError category: 'Exceptions'
+ConnectionError category: 'Grail-Exceptions'
 %

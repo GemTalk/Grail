@@ -26,7 +26,7 @@ See https://docs.python.org/3/library/statistics.html
 
 expectvalue /Class
 doit
-statistics category: 'Modules'
+statistics category: 'Grail-Modules'
 %
 
 set compile_env: 1
@@ -35,13 +35,13 @@ set compile_env: 1
 ! Private helpers
 ! ===============================================================================
 
-category: 'Python-Private'
+category: 'Grail-Private'
 method: statistics
 _len: data
 	^ [data __len__] @env0:on: MessageNotUnderstood do: [:ex | data @env0:size]
 %
 
-category: 'Python-Private'
+category: 'Grail-Private'
 method: statistics
 _sum: data
 	| total |
@@ -50,7 +50,7 @@ _sum: data
 	^ total
 %
 
-category: 'Python-Private'
+category: 'Grail-Private'
 method: statistics
 _toList: data
 	| result |
@@ -63,7 +63,7 @@ _toList: data
 ! Initialization
 ! ===============================================================================
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: statistics
 initialize
 	"No-op — all methods are real fast-path methods."
@@ -73,7 +73,7 @@ initialize
 ! 1-arg fast-path callables (no kwargs)
 ! ===============================================================================
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: statistics
 mean: data
 	| d n |
@@ -83,7 +83,7 @@ mean: data
 	^ (self _sum: d) @env0:/ n
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: statistics
 median: data
 	| d sorted n mid |
@@ -97,7 +97,7 @@ median: data
 		ifFalse: [((sorted @env0:at: mid) @env0:+ (sorted @env0:at: (mid @env0:+ 1))) @env0:/ 2.0]
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: statistics
 median_low: data
 	| d sorted n mid |
@@ -109,7 +109,7 @@ median_low: data
 	^ sorted @env0:at: mid
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: statistics
 median_high: data
 	| d sorted n mid |
@@ -122,7 +122,7 @@ median_high: data
 		ifFalse: [sorted @env0:at: ((n @env0:// 2) @env0:+ 1)]
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: statistics
 mode: data
 	| d counts maxCount modeValue |
@@ -141,7 +141,7 @@ mode: data
 	^ modeValue
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: statistics
 multimode: data
 	| d counts maxCount modes |
@@ -162,7 +162,7 @@ multimode: data
 	^ modes
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: statistics
 geometric_mean: data
 	| d n logSum |
@@ -183,7 +183,7 @@ geometric_mean: data
 ! 2-arg fast-path callables (no kwargs)
 ! ===============================================================================
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: statistics
 correlation: x _: y
 	| xd yd n xbar ybar sxx syy sxy |
@@ -202,7 +202,7 @@ correlation: x _: y
 	^ sxy @env0:/ ((sxx @env0:* syy) @env0:sqrt)
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: statistics
 covariance: x _: y
 	| xd yd n xbar ybar total |
@@ -220,7 +220,7 @@ covariance: x _: y
 	^ total @env0:/ (n @env0:- 1)
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: statistics
 linear_regression: x _: y
 	| xd yd n xbar ybar sxx sxy slope intercept |
@@ -245,14 +245,14 @@ linear_regression: x _: y
 ! Varargs fast-path callables (kwargs-aware)
 ! ===============================================================================
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: statistics
 fmean: data
 	"1-arg fast path — delegates to varargs."
 	^ self _fmean: { data } kw: nil
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: statistics
 _fmean: positional kw: kwargs
 	"fmean(data, weights=None)"
@@ -276,14 +276,14 @@ _fmean: positional kw: kwargs
 	^ total @env0:/ weightSum
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: statistics
 harmonic_mean: data
 	"1-arg fast path — delegates to varargs."
 	^ self _harmonic_mean: { data } kw: nil
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: statistics
 _harmonic_mean: positional kw: kwargs
 	"harmonic_mean(data, weights=None)"
@@ -315,14 +315,14 @@ _harmonic_mean: positional kw: kwargs
 	^ weightSum @env0:/ recipSum
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: statistics
 pvariance: data
 	"1-arg fast path — delegates to varargs."
 	^ self _pvariance: { data } kw: nil
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: statistics
 _pvariance: positional kw: kwargs
 	"pvariance(data, mu=None)"
@@ -339,28 +339,28 @@ _pvariance: positional kw: kwargs
 	^ total @env0:/ n
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: statistics
 pstdev: data
 	"1-arg fast path. pstdev = sqrt(pvariance)."
 	^ (self pvariance: data) @env0:sqrt
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: statistics
 _pstdev: positional kw: kwargs
 	"pstdev(data, mu=None) — varargs, delegates to _pvariance:kw:."
 	^ (self _pvariance: positional kw: kwargs) @env0:sqrt
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: statistics
 variance: data
 	"1-arg fast path — delegates to varargs."
 	^ self _variance: { data } kw: nil
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: statistics
 _variance: positional kw: kwargs
 	"variance(data, xbar=None)"
@@ -377,28 +377,28 @@ _variance: positional kw: kwargs
 	^ total @env0:/ (n @env0:- 1)
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: statistics
 stdev: data
 	"1-arg fast path. stdev = sqrt(variance)."
 	^ (self variance: data) @env0:sqrt
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: statistics
 _stdev: positional kw: kwargs
 	"stdev(data, xbar=None) — varargs, delegates to _variance:kw:."
 	^ (self _variance: positional kw: kwargs) @env0:sqrt
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: statistics
 median_grouped: data
 	"1-arg fast path — delegates to varargs with interval=1.0."
 	^ self _median_grouped: { data } kw: nil
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: statistics
 _median_grouped: positional kw: kwargs
 	"median_grouped(data, interval=1.0)"
@@ -420,14 +420,14 @@ _median_grouped: positional kw: kwargs
 	^ L @env0:+ ((((n @env0:/ 2.0) @env0:- cf) @env0:/ freq) @env0:* interval)
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: statistics
 quantiles: data
 	"1-arg fast path — delegates to varargs with n=4, method='exclusive'."
 	^ self _quantiles: { data } kw: nil
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: statistics
 _quantiles: positional kw: kwargs
 	"quantiles(data, n=4, method='exclusive')"

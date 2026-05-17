@@ -27,5 +27,5 @@ instances (not BaseException instances like KeyboardInterrupt or SystemExit).
 
 expectvalue /Class
 doit
-ExceptionGroup category: 'Exceptions'
+ExceptionGroup category: 'Grail-Exceptions'
 %

@@ -18,12 +18,12 @@ PythonTestCase subclass: 'FloatTestCase'
 
 expectvalue /Class
 doit
-FloatTestCase category: 'SUnit'
+FloatTestCase category: 'Grail-SUnit'
 %
 
 set compile_env: 0
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: FloatTestCase
 test__abs__
 	"Test float.__abs__()"
@@ -33,7 +33,7 @@ test__abs__
 	self assert: (0.0 @env1:__abs__) equals: 0.0.
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: FloatTestCase
 test__add__
 	"Test float.__add__()"
@@ -44,7 +44,7 @@ test__add__
 	self assert: (0.0 @env1:__add__: 0.0) equals: 0.0.
 %
 
-category: 'Tests - Conversion'
+category: 'Grail-Tests - Conversion'
 method: FloatTestCase
 test__bool__
 	"Test float.__bool__()"
@@ -55,7 +55,7 @@ test__bool__
 	self deny: (0.0 @env1:__bool__).
 %
 
-category: 'Tests - Rounding'
+category: 'Grail-Tests - Rounding'
 method: FloatTestCase
 test__ceil__
 	"Test float.__ceil__()"
@@ -65,7 +65,7 @@ test__ceil__
 	self assert: (-3.9 @env1:__ceil__) equals: -3.
 %
 
-category: 'Tests - Introspection'
+category: 'Grail-Tests - Introspection'
 method: FloatTestCase
 test__dir__
 	"Test float.__dir__ - inherited from Object"
@@ -80,7 +80,7 @@ test__dir__
 	self assert: (result includes: 'is_integer').
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: FloatTestCase
 test__divmod__
 	"Test float.__divmod__()"
@@ -93,7 +93,7 @@ test__divmod__
 	self assert: ((result at: 2) - 1.5) abs < 0.0001.
 %
 
-category: 'Tests - Documentation'
+category: 'Grail-Tests - Documentation'
 method: FloatTestCase
 test__doc__
 	"Test float.__doc__"
@@ -104,7 +104,7 @@ test__doc__
 	self assert: (doc size > 0).
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: FloatTestCase
 test__eq__
 	"Test float.__eq__()"
@@ -113,7 +113,7 @@ test__eq__
 	self deny: (5.0 @env1:__eq__: 3.0).
 %
 
-category: 'Tests - Conversion'
+category: 'Grail-Tests - Conversion'
 method: FloatTestCase
 test__float__
 	"Test float.__float__()"
@@ -123,7 +123,7 @@ test__float__
 	self assert: (0.0 @env1:__float__) equals: 0.0.
 %
 
-category: 'Tests - Rounding'
+category: 'Grail-Tests - Rounding'
 method: FloatTestCase
 test__floor__
 	"Test float.__floor__()"
@@ -133,7 +133,7 @@ test__floor__
 	self assert: (-3.1 @env1:__floor__) equals: -4.
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: FloatTestCase
 test__floordiv__
 	"Test float.__floordiv__()"
@@ -143,7 +143,7 @@ test__floordiv__
 	self assert: ((-7.5) @env1:__floordiv__: 2.0) equals: -4.0.
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: FloatTestCase
 test__ge__
 	"Test float.__ge__()"
@@ -153,7 +153,7 @@ test__ge__
 	self deny: (3.0 @env1:__ge__: 5.0).
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: FloatTestCase
 test__gt__
 	"Test float.__gt__()"
@@ -163,7 +163,7 @@ test__gt__
 	self deny: (5.0 @env1:__gt__: 5.0).
 %
 
-category: 'Tests - Conversion'
+category: 'Grail-Tests - Conversion'
 method: FloatTestCase
 test__int__
 	"Test float.__int__()"
@@ -173,7 +173,7 @@ test__int__
 	self assert: (0.0 @env1:__int__) equals: 0.
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: FloatTestCase
 test__le__
 	"Test float.__le__()"
@@ -183,7 +183,7 @@ test__le__
 	self deny: (5.0 @env1:__le__: 3.0).
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: FloatTestCase
 test__lt__
 	"Test float.__lt__()"
@@ -193,7 +193,7 @@ test__lt__
 	self deny: (5.0 @env1:__lt__: 5.0).
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: FloatTestCase
 test__mod__
 	"Test float.__mod__()"
@@ -206,7 +206,7 @@ test__mod__
 	self assert: (result - 0.5) abs < 0.0001.
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: FloatTestCase
 test__mul__
 	"Test float.__mul__()"
@@ -216,7 +216,7 @@ test__mul__
 	self assert: (3.0 @env1:__mul__: 0.0) equals: 0.0.
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: FloatTestCase
 test__ne__
 	"Test float.__ne__()"
@@ -225,7 +225,7 @@ test__ne__
 	self deny: (5.0 @env1:__ne__: 5.0).
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: FloatTestCase
 test__neg__
 	"Test float.__neg__()"
@@ -235,7 +235,7 @@ test__neg__
 	self assert: (0.0 @env1:__neg__) equals: 0.0.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: FloatTestCase
 test__new__
 	"Test float() constructor"
@@ -254,7 +254,7 @@ test__new__
 	self assert: result equals: -5.5.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: FloatTestCase
 test__new__fromInteger
 	"Test float() from integer"
@@ -273,7 +273,7 @@ test__new__fromInteger
 	self assert: result equals: 0.0.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: FloatTestCase
 test__new__fromString
 	"Test float() from string"
@@ -292,7 +292,7 @@ test__new__fromString
 	self assert: result equals: 100.0.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: FloatTestCase
 test__new__fromStringSpecial
 	"Test float() from special string values"
@@ -315,7 +315,7 @@ test__new__fromStringSpecial
 	self assert: kind > 4.  "5 or 6 = NaN"
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: FloatTestCase
 test__pos__
 	"Test float.__pos__()"
@@ -325,7 +325,7 @@ test__pos__
 	self assert: (0.0 @env1:__pos__) equals: 0.0.
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: FloatTestCase
 test__pow__
 	"Test float.__pow__()"
@@ -336,7 +336,7 @@ test__pow__
 	self assert: (2.0 @env1:__pow__: 0.5) - 1.41421 abs < 0.001.
 %
 
-category: 'Tests - String Representation'
+category: 'Grail-Tests - String Representation'
 method: FloatTestCase
 test__repr__
 	"Test float.__repr__()"
@@ -353,7 +353,7 @@ test__repr__
 	self assert: (result includesString: '0').
 %
 
-category: 'Tests - Rounding'
+category: 'Grail-Tests - Rounding'
 method: FloatTestCase
 test__round__
 	"Test float.__round__()"
@@ -363,7 +363,7 @@ test__round__
 	self assert: (-3.5 @env1:__round__) equals: -4.
 %
 
-category: 'Tests - Rounding'
+category: 'Grail-Tests - Rounding'
 method: FloatTestCase
 test__round__ndigits
 	"Test float.__round__(ndigits)"
@@ -376,7 +376,7 @@ test__round__ndigits
 	self assert: result equals: 3.
 %
 
-category: 'Tests - String Representation'
+category: 'Grail-Tests - String Representation'
 method: FloatTestCase
 test__str__
 	"Test float.__str__()"
@@ -394,7 +394,7 @@ test__str__
 	self assert: result equals: '-0.0'.
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: FloatTestCase
 test__sub__
 	"Test float.__sub__()"
@@ -404,7 +404,7 @@ test__sub__
 	self assert: ((-3.5) @env1:__sub__: 2.5) equals: -6.0.
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: FloatTestCase
 test__truediv__
 	"Test float.__truediv__()"
@@ -414,7 +414,7 @@ test__truediv__
 	self assert: (1.0 @env1:__truediv__: 4.0) equals: 0.25.
 %
 
-category: 'Tests - Rounding'
+category: 'Grail-Tests - Rounding'
 method: FloatTestCase
 test__trunc__
 	"Test float.__trunc__()"
@@ -424,7 +424,7 @@ test__trunc__
 	self assert: (0.0 @env1:__trunc__) equals: 0.
 %
 
-category: 'Tests - Float Methods'
+category: 'Grail-Tests - Float Methods'
 method: FloatTestCase
 test_as_integer_ratio
 	"Test float.as_integer_ratio()"
@@ -437,7 +437,7 @@ test_as_integer_ratio
 	self assert: (result at: 2) equals: 2.
 %
 
-category: 'Tests - Float Methods'
+category: 'Grail-Tests - Float Methods'
 method: FloatTestCase
 test_conjugate
 	"Test float.conjugate()"
@@ -446,7 +446,7 @@ test_conjugate
 	self assert: (-5.5 @env1:conjugate) equals: -5.5.
 %
 
-category: 'Tests - Properties'
+category: 'Grail-Tests - Properties'
 method: FloatTestCase
 test_imag
 	"Test float.imag property"
@@ -455,7 +455,7 @@ test_imag
 	self assert: (-5.5 @env1:imag) equals: 0.0.
 %
 
-category: 'Tests - Float Methods'
+category: 'Grail-Tests - Float Methods'
 method: FloatTestCase
 test_is_integer
 	"Test float.is_integer()"
@@ -466,7 +466,7 @@ test_is_integer
 	self deny: (3.1 @env1:is_integer).
 %
 
-category: 'Tests - Properties'
+category: 'Grail-Tests - Properties'
 method: FloatTestCase
 test_real
 	"Test float.real property"
@@ -475,7 +475,7 @@ test_real
 	self assert: (-5.5 @env1:real) equals: -5.5.
 %
 
-category: 'Tests - Eval - Arithmetic'
+category: 'Grail-Tests - Eval - Arithmetic'
 method: FloatTestCase
 testEvalFloatArithmetic
 	"Test float arithmetic via Python source"
@@ -486,7 +486,7 @@ testEvalFloatArithmetic
 	self assert: (self eval: '10.0 / 4.0') equals: 2.5.
 %
 
-category: 'Tests - Eval - Comparison'
+category: 'Grail-Tests - Eval - Comparison'
 method: FloatTestCase
 testEvalFloatComparison
 	"Test float comparisons via Python source"
@@ -497,7 +497,7 @@ testEvalFloatComparison
 	self assert: (self eval: '3.14 != 2.5').
 %
 
-category: 'Tests - Eval - Functions'
+category: 'Grail-Tests - Eval - Functions'
 method: FloatTestCase
 testEvalFloatFunctions
 	"Test builtin functions on floats via Python source"
@@ -507,7 +507,7 @@ testEvalFloatFunctions
 	self assert: (self eval: 'round(3.2)') equals: 3.
 %
 
-category: 'Tests - Eval - Literals'
+category: 'Grail-Tests - Eval - Literals'
 method: FloatTestCase
 testEvalFloatLiteral
 	"Test float literal creation via Python source"
@@ -517,7 +517,7 @@ testEvalFloatLiteral
 	self assert: (self eval: '0.0') equals: 0.0.
 %
 
-category: 'Tests - Eval - Negation'
+category: 'Grail-Tests - Eval - Negation'
 method: FloatTestCase
 testEvalFloatNegation
 	"Test float negation via Python source"
@@ -526,7 +526,7 @@ testEvalFloatNegation
 	self assert: (self eval: '--3.14') equals: 3.14.
 %
 
-category: 'Tests - Eval - Mixed Arithmetic'
+category: 'Grail-Tests - Eval - Mixed Arithmetic'
 method: FloatTestCase
 testEvalMixedArithmetic
 	"Test mixed int/float arithmetic via Python source"

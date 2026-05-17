@@ -31,7 +31,7 @@ directly via `gemstone.method(args)` Python calls compiled to
 
 expectvalue /Class
 doit
-gemstone category: 'Modules'
+gemstone category: 'Grail-Modules'
 %
 
 ! ===============================================================================
@@ -51,7 +51,7 @@ set compile_env: 1
 ! Singleton initialization
 ! ===============================================================================
 
-category: 'Initialization'
+category: 'Grail-Initialization'
 method: gemstone
 initialize
 	"No-op. The `module>>instance` class method still calls `initialize`
@@ -62,7 +62,7 @@ initialize
 ! Subscript protocol — namespace access via gemstone[name]
 ! ===============================================================================
 
-category: 'Python-Subscript Protocol'
+category: 'Grail-Subscript Protocol'
 method: gemstone
 __delitem__: key
 	"Remove the object named key from UserGlobals. Raises KeyError if not found."
@@ -76,7 +76,7 @@ __delitem__: key
 	^ None
 %
 
-category: 'Python-Subscript Protocol'
+category: 'Grail-Subscript Protocol'
 method: gemstone
 __getitem__: key
 	"Return the object named key from the current session. Raises KeyError if not found."
@@ -91,7 +91,7 @@ __getitem__: key
 	^ result
 %
 
-category: 'Python-Subscript Protocol'
+category: 'Grail-Subscript Protocol'
 method: gemstone
 __setitem__: key _: value
 	"Set the object named key in the current session. If an Association exists, update it; otherwise add to UserGlobals."
@@ -112,7 +112,7 @@ __setitem__: key _: value
 ! Fast-path methods
 ! ===============================================================================
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: gemstone
 abort
 	"Python builtin gemstone.abort() — fast path. Aborts the current
@@ -121,7 +121,7 @@ abort
 	^ System @env0:abort
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: gemstone
 commit
 	"Python builtin gemstone.commit() — fast path. Commits the current
@@ -134,7 +134,7 @@ commit
 ! Metadata
 ! ===============================================================================
 
-category: 'Metadata'
+category: 'Grail-Metadata'
 method: gemstone
 version
 	"Return the GemStone version."

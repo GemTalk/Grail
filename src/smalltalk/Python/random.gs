@@ -26,7 +26,7 @@ See https://docs.python.org/3/library/random.html
 
 expectvalue /Class
 doit
-random category: 'Modules'
+random category: 'Grail-Modules'
 %
 
 ! ------------------- Remove existing Python methods from random
@@ -42,13 +42,13 @@ set compile_env: 1
 ! Private helpers
 ! ===============================================================================
 
-category: 'Python-Private'
+category: 'Grail-Private'
 method: random
 _sequenceLength: seq
 	^ [seq __len__] @env0:on: MessageNotUnderstood do: [:ex | seq @env0:size]
 %
 
-category: 'Python-Private'
+category: 'Grail-Private'
 method: random
 _generator
 	"Return the internal random generator, re-creating it if needed."
@@ -65,7 +65,7 @@ _generator
 ! Initialization
 ! ===============================================================================
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: random
 initialize
 	"Initialize the internal random generator."
@@ -76,21 +76,21 @@ initialize
 ! 0-arg fast-path callables
 ! ===============================================================================
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 random
 	"random() -> float in [0, 1)"
 	^ self _generator @env0:float
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 getstate
 	"getstate() -> internal state (not supported)."
 	^ NotImplementedError ___signal___: 'getstate() is not supported with GemStone''s Random'
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 setstate
 	"setstate(state) -> restore state (not supported)."
@@ -101,7 +101,7 @@ setstate
 ! 1-arg fast-path callables
 ! ===============================================================================
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 choice: seq
 	"choice(seq) -> random element from non-empty sequence."
@@ -112,7 +112,7 @@ choice: seq
 	^ seq @env0:at: idx
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 shuffle: x
 	"shuffle(x) -> shuffle list x in place; return None."
@@ -126,7 +126,7 @@ shuffle: x
 	^ None
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 getrandbits: k
 	"getrandbits(k) -> non-negative integer with k random bits."
@@ -144,7 +144,7 @@ getrandbits: k
 	^ result
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 randbytes: n
 	"randbytes(n) -> n random bytes."
@@ -158,7 +158,7 @@ randbytes: n
 	^ result
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 paretovariate: alpha
 	"paretovariate(alpha) -> random float from Pareto distribution."
@@ -168,7 +168,7 @@ paretovariate: alpha
 	^ 1.0 @env0:/ (u @env0:raisedTo: (1.0 @env0:/ alpha))
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 expovariate: lambd
 	"expovariate(lambd) -> random float from exponential distribution."
@@ -182,21 +182,21 @@ expovariate: lambd
 ! 2-arg fast-path callables
 ! ===============================================================================
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 randint: a _: b
 	"randint(a, b) -> random integer in [a, b]."
 	^ self _generator @env0:integerBetween: a and: b
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 uniform: a _: b
 	"uniform(a, b) -> random float N such that a <= N <= b."
 	^ a @env0:+ ((self _generator @env0:float) @env0:* (b @env0:- a))
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 gauss: mu _: sigma
 	"gauss(mu, sigma) -> random float from Gaussian distribution."
@@ -207,21 +207,21 @@ gauss: mu _: sigma
 	^ mu @env0:+ (z @env0:* sigma)
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 normalvariate: mu _: sigma
 	"normalvariate(mu, sigma) -> same as gauss."
 	^ self gauss: mu _: sigma
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 lognormvariate: mu _: sigma
 	"lognormvariate(mu, sigma) -> random float from log-normal distribution."
 	^ (self gauss: mu _: sigma) @env0:exp
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 betavariate: alpha _: beta
 	"betavariate(alpha, beta) -> random float from beta distribution."
@@ -231,7 +231,7 @@ betavariate: alpha _: beta
 	^ y @env0:/ (y @env0:+ (self gammavariate: beta _: 1.0))
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 gammavariate: alpha _: beta
 	"gammavariate(alpha, beta) -> random float from gamma distribution."
@@ -264,7 +264,7 @@ gammavariate: alpha _: beta
 	^ result
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 weibullvariate: alpha _: beta
 	"weibullvariate(alpha, beta) -> random float from Weibull distribution."
@@ -278,7 +278,7 @@ weibullvariate: alpha _: beta
 ! 3-arg fast-path callables
 ! ===============================================================================
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 triangular: low _: high _: mode
 	"triangular(low, high, mode) -> random float from triangular distribution."
@@ -295,14 +295,14 @@ triangular: low _: high _: mode
 ! Varargs fast-path callables (multiple arities or kwargs)
 ! ===============================================================================
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 seed: a
 	"seed(a) -> 1-arg fast path."
 	^ self _seed: { a } kw: nil
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 _seed: positional kw: kwargs
 	"seed(a=None) -> initialize internal state from a seed."
@@ -316,14 +316,14 @@ _seed: positional kw: kwargs
 	^ None
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 sample: population _: k
 	"sample(population, k) -> 2-arg fast path."
 	^ self _sample: { population. k } kw: nil
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 _sample: positional kw: kwargs
 	"sample(population, k=?) -> k-length list of unique elements."
@@ -364,7 +364,7 @@ _sample: positional kw: kwargs
 	^ result
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 _choices: positional kw: kwargs
 	"choices(population, weights=None, cum_weights=None, k=1)."
@@ -409,28 +409,28 @@ _choices: positional kw: kwargs
 	^ result
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 randrange: stop
 	"randrange(stop) -> 1-arg fast path."
 	^ self _randrange: { stop } kw: nil
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 randrange: start _: stop
 	"randrange(start, stop) -> 2-arg fast path."
 	^ self _randrange: { start. stop } kw: nil
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 randrange: start _: stop _: step
 	"randrange(start, stop, step) -> 3-arg fast path."
 	^ self _randrange: { start. stop. step } kw: nil
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 _randrange: positional kw: kwargs
 	"randrange(stop) or randrange(start, stop[, step])."
@@ -454,14 +454,14 @@ _randrange: positional kw: kwargs
 	^ start @env0:+ (r @env0:* step)
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 binomialvariate: n _: p
 	"binomialvariate(n, p) -> 2-arg fast path."
 	^ self _binomialvariate: { n. p } kw: nil
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 _binomialvariate: positional kw: kwargs
 	"binomialvariate(n=1, p=0.5)."
@@ -477,7 +477,7 @@ _binomialvariate: positional kw: kwargs
 	^ successes
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 _triangular: positional kw: kwargs
 	"triangular(low=0.0, high=1.0, mode=None) — varargs form."
@@ -489,7 +489,7 @@ _triangular: positional kw: kwargs
 	^ self triangular: low _: high _: mode
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 _gauss: positional kw: kwargs
 	"gauss(mu=0.0, sigma=1.0) — varargs form."
@@ -499,7 +499,7 @@ _gauss: positional kw: kwargs
 	^ self gauss: mu _: sigma
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 _normalvariate: positional kw: kwargs
 	"normalvariate(mu=0.0, sigma=1.0) — varargs form."
@@ -509,7 +509,7 @@ _normalvariate: positional kw: kwargs
 	^ self gauss: mu _: sigma
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: random
 _expovariate: positional kw: kwargs
 	"expovariate(lambd=1.0) — varargs form."

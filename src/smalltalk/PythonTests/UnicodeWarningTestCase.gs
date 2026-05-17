@@ -17,7 +17,7 @@ PythonTestCase subclass: 'UnicodeWarningTestCase'
 %
 expectvalue /Class
 doit
-UnicodeWarningTestCase category: 'SUnit'
+UnicodeWarningTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ UnicodeWarningTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-UnicodeWarning'
+category: 'Grail-Tests-UnicodeWarning'
 method: UnicodeWarningTestCase
 test_creation
 	"Test creating a UnicodeWarning instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-UnicodeWarning'
+category: 'Grail-Tests-UnicodeWarning'
 method: UnicodeWarningTestCase
 test_inheritance
 	"Test that UnicodeWarning inherits from Warning."

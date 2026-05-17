@@ -41,7 +41,7 @@ Usage (from Python source):
 
 expectvalue /Class
 doit
-_crc32c category: 'Modules'
+_crc32c category: 'Grail-Modules'
 %
 
 expectvalue /Metaclass3
@@ -56,7 +56,7 @@ _crc32c class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Private'
+category: 'Grail-Private'
 classmethod: _crc32c
 callCrc32c: aByteArray
 	"Compute CRC32C of aByteArray via CPythonShim."
@@ -67,7 +67,7 @@ callCrc32c: aByteArray
 		withBytes: aByteArray
 %
 
-category: 'Private'
+category: 'Grail-Private'
 classmethod: _crc32c
 callExtend: anInteger bytes: aByteArray
 	"Extend CRC with more data via CPythonShim."
@@ -85,7 +85,7 @@ callExtend: anInteger bytes: aByteArray
 
 set compile_env: 1
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: _crc32c
 initialize
 	"No-op. The `module>>instance` class method still calls
@@ -97,7 +97,7 @@ initialize
 ! Fast-path methods
 ! ===============================================================================
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: _crc32c
 crc32c: data
 	"Python _crc32c.crc32c(data) — fast path. Returns the
@@ -106,7 +106,7 @@ crc32c: data
 	^ self @env0:class @env0:callCrc32c: data
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: _crc32c
 extend: crc _: data
 	"Python _crc32c.extend(crc, data) — fast path. Extends

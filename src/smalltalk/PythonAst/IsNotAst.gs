@@ -36,7 +36,7 @@ Object
 
 expectvalue /Class
 doit
-IsNotAst category: 'Parser'
+IsNotAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from IsNotAst
@@ -45,7 +45,7 @@ removeallclassmethods IsNotAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: IsNotAst
 printSmalltalkOn: aStream
 

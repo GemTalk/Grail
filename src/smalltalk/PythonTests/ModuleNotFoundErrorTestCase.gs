@@ -17,7 +17,7 @@ PythonTestCase subclass: 'ModuleNotFoundErrorTestCase'
 %
 expectvalue /Class
 doit
-ModuleNotFoundErrorTestCase category: 'SUnit'
+ModuleNotFoundErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ ModuleNotFoundErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-ModuleNotFoundError'
+category: 'Grail-Tests-ModuleNotFoundError'
 method: ModuleNotFoundErrorTestCase
 test_creation
 	"Test creating a ModuleNotFoundError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-ModuleNotFoundError'
+category: 'Grail-Tests-ModuleNotFoundError'
 method: ModuleNotFoundErrorTestCase
 test_inheritance
 	"Test that ModuleNotFoundError inherits from ImportError."

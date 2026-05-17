@@ -39,7 +39,7 @@ https://docs.python.org/3/reference/executionmodel.html#naming-and-binding'
 
 expectvalue /Class
 doit
-NameAst category: 'Parser'
+NameAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from NameAst
@@ -48,7 +48,7 @@ removeallclassmethods NameAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 classmethod: NameAst
 with: aSymbol
 
@@ -57,7 +57,7 @@ with: aSymbol
 		yourself
 %
 
-category: 'other'
+category: 'Grail-other'
 method: NameAst
 addVariableNamesTo: aStream
 
@@ -65,49 +65,49 @@ addVariableNamesTo: aStream
 	aStream nextPutAll: id; space.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: NameAst
 assertContextIsLoad
 
 	ctx assertIsLoad.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: NameAst
 assertContextIsStore
 
 	ctx assertIsStore.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: NameAst
 ctx: aContext
 
 	ctx := aContext.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: NameAst
 declareVariable
 
 	parent declareVariable: id.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: NameAst
 id
 
 	^id
 %
 
-category: 'other'
+category: 'Grail-other'
 method: NameAst
 id: aSymbol
 
 	id := aSymbol
 %
 
-category: 'other'
+category: 'Grail-other'
 method: NameAst
 injectSuperArguments: anArray scope: aScope
 
@@ -124,7 +124,7 @@ injectSuperArguments: anArray scope: aScope
 	].
 %
 
-category: 'other'
+category: 'Grail-other'
 method: NameAst
 printOn: aStream
 
@@ -134,7 +134,7 @@ printOn: aStream
 		nextPut: $).
 %
 
-category: 'other'
+category: 'Grail-other'
 method: NameAst
 printSmalltalkAssignmentOn: aStream
 
@@ -142,7 +142,7 @@ printSmalltalkAssignmentOn: aStream
 	aStream nextPutAll: 'value'.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: NameAst
 printSmalltalkOn: aStream
 	"Name dispatch — see docs/Rewrite_Dispatch_Model.md.
@@ -197,7 +197,7 @@ printSmalltalkOn: aStream
 	aStream nextPutAll: id.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: NameAst
 isFastPathBuiltinName
 	"True if this load-context read names a builtin that the codegen
@@ -215,7 +215,7 @@ isFastPathBuiltinName
 	^ self class isFastPathBuiltinName: id
 %
 
-category: 'other'
+category: 'Grail-other'
 method: NameAst
 isFunctionPositionOfCall
 	"True if this NameAst is the `function` of an enclosing CallAst (i.e.
@@ -226,7 +226,7 @@ isFunctionPositionOfCall
 	^ parent function == self
 %
 
-category: 'other'
+category: 'Grail-other'
 classmethod: NameAst
 isFastPathBuiltinName: aSymbol
 	"Return true if `builtins` has any env-1 fast-path method matching
@@ -235,7 +235,7 @@ isFastPathBuiltinName: aSymbol
 	^ self isFastPathBuiltinName: aSymbol on: builtins
 %
 
-category: 'other'
+category: 'Grail-other'
 classmethod: NameAst
 isFastPathBuiltinName: aSymbol on: aClass
 	"Return true if `aClass` has any env-1 fast-path method matching
@@ -258,7 +258,7 @@ isFastPathBuiltinName: aSymbol on: aClass
 	^ false
 %
 
-category: 'other'
+category: 'Grail-other'
 method: NameAst
 setTo: aValue scope: aScope
 

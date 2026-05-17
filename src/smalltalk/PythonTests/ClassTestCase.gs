@@ -18,7 +18,7 @@ PythonTestCase subclass: 'ClassTestCase'
 
 expectvalue /Class
 doit
-ClassTestCase category: 'SUnit'
+ClassTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -35,7 +35,7 @@ ClassTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Setup'
+category: 'Grail-Setup'
 method: ClassTestCase
 setUp
 	"Load the test module and cache the instance."
@@ -50,7 +50,7 @@ setUp
 		name: 'module_with_classes'.
 %
 
-category: 'Tests - Module Loading'
+category: 'Grail-Tests - Module Loading'
 method: ClassTestCase
 testModuleLoads
 	"Test that the module with classes loads without error."
@@ -58,7 +58,7 @@ testModuleLoads
 	self assert: testModule notNil.
 %
 
-category: 'Tests - Class Creation'
+category: 'Grail-Tests - Class Creation'
 method: ClassTestCase
 testPointClassExists
 	"Test that pyc_Point was created in UserGlobals."
@@ -66,7 +66,7 @@ testPointClassExists
 	self assert: (UserGlobals at: #'pyc_Point' ifAbsent: [nil]) notNil.
 %
 
-category: 'Tests - Class Creation'
+category: 'Grail-Tests - Class Creation'
 method: ClassTestCase
 testCounterClassExists
 	"Test that pyc_Counter was created in UserGlobals."
@@ -74,7 +74,7 @@ testCounterClassExists
 	self assert: (UserGlobals at: #'pyc_Counter' ifAbsent: [nil]) notNil.
 %
 
-category: 'Tests - Instance Variables'
+category: 'Grail-Tests - Instance Variables'
 method: ClassTestCase
 testPointInstVars
 	"Test that pyc_Point has x and y as instance variables."
@@ -86,7 +86,7 @@ testPointInstVars
 	self assert: (varNames includes: #y).
 %
 
-category: 'Tests - Instantiation'
+category: 'Grail-Tests - Instantiation'
 method: ClassTestCase
 testPointCreatedDuringInit
 	"Test that p = Point(3, 4) created a Point with correct values."
@@ -97,7 +97,7 @@ testPointCreatedDuringInit
 	self assert: (p instVarAt: (p class allInstVarNames indexOf: #y)) equals: 4.
 %
 
-category: 'Tests - Method Calls'
+category: 'Grail-Tests - Method Calls'
 method: ClassTestCase
 testPointSumResult
 	"Test that p.sum() = 7 was stored during module init."
@@ -105,7 +105,7 @@ testPointSumResult
 	self assert: (testModule @env1:p_sum) equals: 7.
 %
 
-category: 'Tests - Counter'
+category: 'Grail-Tests - Counter'
 method: ClassTestCase
 testCounterResult
 	"Test that Counter inc/get works: 3 incs → count = 3."
@@ -113,7 +113,7 @@ testCounterResult
 	self assert: (testModule @env1:c_count) equals: 3.
 %
 
-category: 'Tests - Real Methods'
+category: 'Grail-Tests - Real Methods'
 method: ClassTestCase
 testPointSumIsRealMethod
 	"Test that sum is a real env-1 method on pyc_Point."
@@ -124,7 +124,7 @@ testPointSumIsRealMethod
 	self assert: (md includesKey: #sum).
 %
 
-category: 'Tests - Real Methods'
+category: 'Grail-Tests - Real Methods'
 method: ClassTestCase
 testPointInitIsRealMethod
 	"Test that __init__ is a real env-1 method on pyc_Point."
@@ -135,7 +135,7 @@ testPointInitIsRealMethod
 	self assert: (md includesKey: #'__init__:_:').
 %
 
-category: 'Tests - Direct Call'
+category: 'Grail-Tests - Direct Call'
 method: ClassTestCase
 testDirectMethodCall
 	"Test calling a method via perform on an instance."
@@ -145,7 +145,7 @@ testDirectMethodCall
 	self assert: (p perform: #sum env: 1) equals: 7.
 %
 
-category: 'Tests - Accessors'
+category: 'Grail-Tests - Accessors'
 method: ClassTestCase
 testPointAccessors
 	"Test that unary accessor methods work for instance variables."

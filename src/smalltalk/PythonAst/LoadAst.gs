@@ -36,7 +36,7 @@ Object
 
 expectvalue /Class
 doit
-LoadAst category: 'Parser'
+LoadAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from LoadAst
@@ -45,7 +45,7 @@ removeallclassmethods LoadAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: LoadAst
 assertIsLoad
 	"Override to avoid inherited error"

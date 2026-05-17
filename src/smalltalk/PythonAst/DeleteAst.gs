@@ -43,7 +43,7 @@ Object
 
 expectvalue /Class
 doit
-DeleteAst category: 'Parser'
+DeleteAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from DeleteAst
@@ -51,13 +51,13 @@ removeallmethods DeleteAst
 removeallclassmethods DeleteAst
 set compile_env: 0
 
-category: 'Accessing'
+category: 'Grail-Accessing'
 method: DeleteAst
 targets
 	^ targets
 %
 
-category: 'other'
+category: 'Grail-other'
 method: DeleteAst
 printSmalltalkOn: aStream
 	"Generate Smalltalk for `del target1, target2, ...`.

@@ -40,7 +40,7 @@ See https://docs.python.org/3/library/string.html#string.Formatter for documenta
 
 expectvalue /Class
 doit
-string_formatter category: 'Modules-String'
+string_formatter category: 'Grail-Modules-String'
 %
 
 ! ===============================================================================
@@ -61,14 +61,14 @@ string_formatter class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Type'
+category: 'Grail-Type'
 method: string_formatter
 __class__
 	"Return the Python type for string.Formatter"
 	^ string_formatter
 %
 
-category: 'Python-Formatting'
+category: 'Grail-Formatting'
 method: string_formatter
 check_unused_args: used_args _: args _: keywords
 	"Check for unused arguments and raise ValueError if any are found.
@@ -115,7 +115,7 @@ check_unused_args: used_args _: args _: keywords
 	]
 %
 
-category: 'Python-Formatting'
+category: 'Grail-Formatting'
 method: string_formatter
 convert_field: value _: conversion
 	"Convert a field value according to conversion specifier.
@@ -140,7 +140,7 @@ convert_field: value _: conversion
 	]
 %
 
-category: 'Python-Formatting'
+category: 'Grail-Formatting'
 method: string_formatter
 format: format_string _: args _: keywords
 	"Format a string using the format string and arguments.
@@ -149,7 +149,7 @@ format: format_string _: args _: keywords
 	^ self vformat: format_string _: args _: keywords
 %
 
-category: 'Python-Formatting'
+category: 'Grail-Formatting'
 method: string_formatter
 format_field: value _: format_spec _: conversion
 	"Format a field value according to format_spec and conversion.
@@ -172,7 +172,7 @@ format_field: value _: format_spec _: conversion
 	]
 %
 
-category: 'Python-Formatting'
+category: 'Grail-Formatting'
 method: string_formatter
 get_field: field_name _: args _: keywords
 	"Get the value for a field name from args or keywords.
@@ -227,7 +227,7 @@ get_field: field_name _: args _: keywords
 	^ tuple @env0:with: value with: used_key
 %
 
-category: 'Python-Formatting'
+category: 'Grail-Formatting'
 method: string_formatter
 get_value: key _: args _: keywords
 	"Get value for a key from args or keywords.
@@ -245,7 +245,7 @@ get_value: key _: args _: keywords
 	]
 %
 
-category: 'Python-Formatting'
+category: 'Grail-Formatting'
 method: string_formatter
 parse: format_string do: aBlock
 	"Parse format string and call block for each field.
@@ -346,7 +346,7 @@ parse: format_string do: aBlock
 	]
 %
 
-category: 'Python-Formatting'
+category: 'Grail-Formatting'
 method: string_formatter
 vformat: format_string _: args _: keywords
 	"Format a string using args tuple and keywords dictionary.

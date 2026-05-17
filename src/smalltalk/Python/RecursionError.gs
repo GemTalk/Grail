@@ -17,5 +17,5 @@ RuntimeError subclass: 'RecursionError'
 
 expectvalue /Class
 doit
-RecursionError category: 'Exceptions'
+RecursionError category: 'Grail-Exceptions'
 %

@@ -18,7 +18,7 @@ PythonTestCase subclass: 'SetTestCase'
 
 expectvalue /Class
 doit
-SetTestCase category: 'SUnit'
+SetTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ SetTestCase class removeAllMethods: 0.
 
 set compile_env: 0
 
-category: 'Tests - String Representation'
+category: 'Grail-Tests - String Representation'
 method: SetTestCase
 testEmptySetRepr
 	"Test string representation of empty set"
@@ -47,7 +47,7 @@ testEmptySetRepr
 	self assert: repr equals: 'set()'
 %
 
-category: 'Tests - Eval - Set Operations'
+category: 'Grail-Tests - Eval - Set Operations'
 method: SetTestCase
 testEvalSetContains
 	"Test in operator for sets via Python source"
@@ -56,7 +56,7 @@ testEvalSetContains
 	self deny: (self eval: '4 in {1, 2, 3}').
 %
 
-category: 'Tests - Eval - Set Operations'
+category: 'Grail-Tests - Eval - Set Operations'
 method: SetTestCase
 testEvalSetDifference
 	"Test set - set via Python source"
@@ -67,7 +67,7 @@ testEvalSetDifference
 	self assert: (result includes: 1).
 %
 
-category: 'Tests - Eval - Set Operations'
+category: 'Grail-Tests - Eval - Set Operations'
 method: SetTestCase
 testEvalSetIntersection
 	"Test set & set via Python source"
@@ -79,7 +79,7 @@ testEvalSetIntersection
 	self assert: (result includes: 3).
 %
 
-category: 'Tests - Eval - Set Operations'
+category: 'Grail-Tests - Eval - Set Operations'
 method: SetTestCase
 testEvalSetLen
 	"Test len() on sets via Python source"
@@ -88,7 +88,7 @@ testEvalSetLen
 	self assert: (self eval: 'len({1, 1, 1})') equals: 1.
 %
 
-category: 'Tests - Eval - Set Creation'
+category: 'Grail-Tests - Eval - Set Creation'
 method: SetTestCase
 testEvalSetLiteral
 	"Test set literal creation via Python source"
@@ -101,7 +101,7 @@ testEvalSetLiteral
 	self assert: (result includes: 3).
 %
 
-category: 'Tests - Eval - Set Operations'
+category: 'Grail-Tests - Eval - Set Operations'
 method: SetTestCase
 testEvalSetSymmetricDifference
 	"Test set ^ set via Python source"
@@ -113,7 +113,7 @@ testEvalSetSymmetricDifference
 	self assert: (result includes: 4).
 %
 
-category: 'Tests - Eval - Set Operations'
+category: 'Grail-Tests - Eval - Set Operations'
 method: SetTestCase
 testEvalSetUnion
 	"Test set | set via Python source"
@@ -126,7 +126,7 @@ testEvalSetUnion
 	self assert: (result includes: 3).
 %
 
-category: 'Tests - Eval - Set Creation'
+category: 'Grail-Tests - Eval - Set Creation'
 method: SetTestCase
 testEvalSetUniqueness
 	"Test that set literals deduplicate via Python source"
@@ -136,7 +136,7 @@ testEvalSetUniqueness
 	self assert: result size equals: 3.
 %
 
-category: 'Tests - Mutation'
+category: 'Grail-Tests - Mutation'
 method: SetTestCase
 testSetAdd
 	"Test adding elements to a set"
@@ -156,7 +156,7 @@ testSetAdd
 	self assert: s size equals: 2
 %
 
-category: 'Tests - Mutation'
+category: 'Grail-Tests - Mutation'
 method: SetTestCase
 testSetClear
 	"Test clearing a set"
@@ -171,7 +171,7 @@ testSetClear
 	self assert: s size equals: 0
 %
 
-category: 'Tests - Creation'
+category: 'Grail-Tests - Creation'
 method: SetTestCase
 testSetCreation
 	"Test creating sets"
@@ -188,7 +188,7 @@ testSetCreation
 	self assert: s2 size equals: 3
 %
 
-category: 'Tests - Update Methods'
+category: 'Grail-Tests - Update Methods'
 method: SetTestCase
 testSetDifferenceUpdate
 	"Test difference_update method"
@@ -211,7 +211,7 @@ testSetDifferenceUpdate
 	self deny: (s1 @env1:__contains__: 2)
 %
 
-category: 'Tests - Mutation'
+category: 'Grail-Tests - Mutation'
 method: SetTestCase
 testSetDiscard
 	"Test discarding elements from a set"
@@ -229,7 +229,7 @@ testSetDiscard
 	self assert: s size equals: 1
 %
 
-category: 'Tests - Inheritance'
+category: 'Grail-Tests - Inheritance'
 method: SetTestCase
 testSetAndFrozensetAreSiblings
 	"set and frozenset are siblings under GemStone Set, not parent/child.
@@ -245,7 +245,7 @@ testSetAndFrozensetAreSiblings
 	self deny: (fs isKindOf: set)
 %
 
-category: 'Tests - In-Place Operators'
+category: 'Grail-Tests - In-Place Operators'
 method: SetTestCase
 testSetInPlaceOperators
 	"Test in-place set operators (&=, |=, -=, ^=)"
@@ -303,7 +303,7 @@ testSetInPlaceOperators
 	self assert: s1 size equals: 2
 %
 
-category: 'Tests - Update Methods'
+category: 'Grail-Tests - Update Methods'
 method: SetTestCase
 testSetIntersectionUpdate
 	"Test intersection_update method"
@@ -327,7 +327,7 @@ testSetIntersectionUpdate
 	self deny: (s1 @env1:__contains__: 1)
 %
 
-category: 'Tests - Iteration'
+category: 'Grail-Tests - Iteration'
 method: SetTestCase
 testSetIteration
 	"Test iterating over a set"
@@ -353,7 +353,7 @@ testSetIteration
 	self assert: items size equals: 3
 %
 
-category: 'Tests - Hashing'
+category: 'Grail-Tests - Hashing'
 method: SetTestCase
 testSetNotHashable
 	"Test that set is not hashable"
@@ -365,7 +365,7 @@ testSetNotHashable
 	self should: [s @env1:__hash__] raise: TypeError
 %
 
-category: 'Tests - Mutation'
+category: 'Grail-Tests - Mutation'
 method: SetTestCase
 testSetPop
 	"Test popping an element from a set"
@@ -386,7 +386,7 @@ testSetPop
 	self should: [s @env1:pop] raise: KeyError
 %
 
-category: 'Tests - Mutation'
+category: 'Grail-Tests - Mutation'
 method: SetTestCase
 testSetRemove
 	"Test removing elements from a set"
@@ -405,7 +405,7 @@ testSetRemove
 	self should: [s @env1:remove: 99] raise: KeyError
 %
 
-category: 'Tests - String Representation'
+category: 'Grail-Tests - String Representation'
 method: SetTestCase
 testSetRepr
 	"Test string representation of set"
@@ -421,7 +421,7 @@ testSetRepr
 	self assert: (repr includesString: '}')
 %
 
-category: 'Tests - Update Methods'
+category: 'Grail-Tests - Update Methods'
 method: SetTestCase
 testSetSymmetricDifferenceUpdate
 	"Test symmetric_difference_update method"
@@ -446,7 +446,7 @@ testSetSymmetricDifferenceUpdate
 	self deny: (s1 @env1:__contains__: 3)
 %
 
-category: 'Tests - Creation'
+category: 'Grail-Tests - Creation'
 method: SetTestCase
 testSetUniqueness
 	"Test that sets only store unique elements"
@@ -462,7 +462,7 @@ testSetUniqueness
 	self assert: s size equals: 2
 %
 
-category: 'Tests - Update Methods'
+category: 'Grail-Tests - Update Methods'
 method: SetTestCase
 testSetUpdate
 	"Test updating a set with elements from another"

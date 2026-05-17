@@ -25,7 +25,7 @@ See https://docs.python.org/3/tutorial/modules.html#packages for details.'
 
 expectvalue /Class
 doit
-Package category: 'Parser'
+Package category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from Package

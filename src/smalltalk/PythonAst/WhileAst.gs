@@ -47,7 +47,7 @@ Object
 
 expectvalue /Class
 doit
-WhileAst category: 'Parser'
+WhileAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from WhileAst
@@ -56,7 +56,7 @@ removeallclassmethods WhileAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: WhileAst
 printSmalltalkOn: aStream
 

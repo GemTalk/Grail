@@ -17,5 +17,5 @@ Exception subclass: 'NameError'
 
 expectvalue /Class
 doit
-NameError category: 'Exceptions'
+NameError category: 'Grail-Exceptions'
 %

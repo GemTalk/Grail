@@ -17,7 +17,7 @@ PythonTestCase subclass: 'RuntimeErrorTestCase'
 %
 expectvalue /Class
 doit
-RuntimeErrorTestCase category: 'SUnit'
+RuntimeErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ RuntimeErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-RuntimeError'
+category: 'Grail-Tests-RuntimeError'
 method: RuntimeErrorTestCase
 test_creation
 	"Test creating a RuntimeError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-RuntimeError'
+category: 'Grail-Tests-RuntimeError'
 method: RuntimeErrorTestCase
 test_inheritance
 	"Test that RuntimeError inherits from Exception."

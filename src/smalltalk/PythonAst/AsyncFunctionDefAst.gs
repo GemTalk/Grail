@@ -27,7 +27,7 @@ AsyncFunctionDefAst comment:
 
 expectvalue /Class
 doit
-AsyncFunctionDefAst category: 'Parser'
+AsyncFunctionDefAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from AsyncFunctionDefAst

@@ -17,5 +17,5 @@ OSError subclass: 'ProcessLookupError'
 
 expectvalue /Class
 doit
-ProcessLookupError category: 'Exceptions'
+ProcessLookupError category: 'Grail-Exceptions'
 %

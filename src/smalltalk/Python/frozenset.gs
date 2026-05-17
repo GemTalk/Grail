@@ -41,7 +41,7 @@ returning. Use `frozenset withAll: aCollection` to build from an iterable.
 
 expectvalue /Class
 doit
-frozenset category: 'Collections-Unordered'
+frozenset category: 'Grail-Collections-Unordered'
 %
 
 ! ------------------- Remove existing methods
@@ -58,7 +58,7 @@ frozenset class removeAllMethods: 1.
 
 set compile_env: 0
 
-category: 'instance creation'
+category: 'Grail-instance creation'
 classmethod: frozenset
 new
 	"Return an empty, frozen frozenset."
@@ -66,7 +66,7 @@ new
 	^ super new immediateInvariant
 %
 
-category: 'instance creation'
+category: 'Grail-instance creation'
 classmethod: frozenset
 withAll: aCollection
 	"Build a frozenset containing every element of aCollection (no duplicates),
@@ -84,7 +84,7 @@ withAll: aCollection
 
 set compile_env: 1
 
-category: 'Python-Hashing'
+category: 'Grail-Hashing'
 method: frozenset
 __hash__
 	"Return a hash value. frozenset is hashable because it's immutable."
@@ -97,7 +97,7 @@ __hash__
 	^ hash
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: frozenset
 __repr__
 	"Return 'frozenset({a, b, c})' or 'frozenset()' for the empty set."

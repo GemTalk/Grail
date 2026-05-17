@@ -17,5 +17,5 @@ Warning subclass: 'RuntimeWarning'
 
 expectvalue /Class
 doit
-RuntimeWarning category: 'Exceptions'
+RuntimeWarning category: 'Grail-Exceptions'
 %

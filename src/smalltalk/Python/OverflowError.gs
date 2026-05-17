@@ -17,5 +17,5 @@ ArithmeticError subclass: 'OverflowError'
 
 expectvalue /Class
 doit
-OverflowError category: 'Exceptions'
+OverflowError category: 'Grail-Exceptions'
 %

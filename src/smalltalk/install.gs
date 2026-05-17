@@ -32,6 +32,52 @@ iferr 4 exit 1
 
 send String enableUnicodeComparisonMode
 send Stream installPortableStreamImplementation
+
+! ===============================================================================
+! Step 0: Hygiene — scrub Grail-tagged env-0 methods from every class
+! ===============================================================================
+! Per-file ``Foo removeAllMethods: 1`` directives at the top of each
+! source file clear env-1 methods on the class that owns the file
+! (e.g. ``NoneType``), so env-1 doesn't accumulate stale methods across
+! installs.  Env-0 is different: we deliberately can't do
+! ``Object removeAllMethods: 0`` — that would nuke GemStone's own
+! kernel.  So env-0 methods we previously added to shared GemStone
+! classes (Object, SequenceableCollection, ...) silently linger when
+! removed from source.
+!
+! Every Grail method is now categorised under the ``Grail-`` prefix.
+! Iterate every class, find env-0 methods whose category starts with
+! ``Grail-`` (or the legacy ``Python-`` prefix that pre-dates this
+! convention), and remove them.  The .gs files re-add them with
+! current source on the next pass, so nothing is lost.
+!
+! Runs as SystemUser because we mutate shared system classes.
+
+run
+| total |
+total := 0.
+Object @env0:allSubclasses do: [:cls |
+	| md toRemove |
+	md := cls @env0:methodDictForEnv: 0.
+	toRemove := OrderedCollection new.
+	md @env0:keysDo: [:sel |
+		| cat |
+		cat := cls @env0:categoryOfSelector: sel environmentId: 0.
+		cat notNil ifTrue: [
+			((cat @env0:beginsWith: 'Grail-')
+				or: [cat @env0:beginsWith: 'Python-'])
+				ifTrue: [toRemove @env0:add: sel]
+		]
+	].
+	toRemove @env0:do: [:sel |
+		cls @env0:removeSelector: sel environmentId: 0.
+		total := total @env0:+ 1
+	]
+].
+Transcript show: 'Step 0 hygiene: scrubbed ', total printString,
+	' Grail-tagged env-0 method(s) from shared classes'.
+%
+
 commit
 logout
 set user DataCurator pass swordfish
@@ -74,6 +120,33 @@ symList := System myUserProfile symbolList .
   symList add: GsCompilerClasses.
   Transcript show: 'Added GsCompilerClasses dictionary to DataCurator''s symbol list'.
 ].
+%
+
+! ===============================================================================
+! Step 1.5: Hygiene — drop orphan generated module classes from UserGlobals
+! ===============================================================================
+! Every Python module Grail loads creates a Smalltalk class named ``py_<name>``
+! (module classes) or ``pyc_<name>`` (Python user classes inside modules) in
+! UserGlobals.  They persist across installs.  When the Grail class
+! hierarchy changes — e.g. a new instVar on ``module`` — the old generated
+! class still inherits from the orphaned older version.  Drop them at
+! install time so the next ``loadModuleFromPath:`` / Python class
+! statement creates a fresh class against the current hierarchy.
+! Safe because both prefixes are 100% Grail-generated.
+
+run
+| toRemove |
+toRemove := OrderedCollection new.
+UserGlobals @env0:keysDo: [:k |
+	| s |
+	s := k @env0:asString.
+	((s @env0:size @env0:>= 4 and: [(s @env0:copyFrom: 1 to: 4) @env0:= 'pyc_'])
+		or: [s @env0:size @env0:>= 3 and: [(s @env0:copyFrom: 1 to: 3) @env0:= 'py_']])
+		ifTrue: [toRemove add: k].
+].
+toRemove do: [:k | UserGlobals removeKey: k ifAbsent: []].
+Transcript show: 'Step 1.5 hygiene: removed ', toRemove size printString,
+	' orphan py_*/pyc_* class(es) from UserGlobals'.
 %
 
 ! ===============================================================================

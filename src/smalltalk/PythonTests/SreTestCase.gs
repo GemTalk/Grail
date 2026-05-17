@@ -20,7 +20,7 @@ PythonTestCase subclass: 'SreTestCase'
 
 expectvalue /Class
 doit
-SreTestCase category: 'SUnit'
+SreTestCase category: 'Grail-SUnit'
 %
 
 set compile_env: 0
@@ -35,21 +35,21 @@ SreTestCase class removeAllMethods.
 ! Setup and helpers
 ! ===============================================================================
 
-category: 'Setup'
+category: 'Grail-Setup'
 method: SreTestCase
 setUp
 	"Ensure the shim library is loaded."
 	CPythonShim current.
 %
 
-category: 'Helpers'
+category: 'Grail-Helpers'
 method: SreTestCase
 sreInstance
 	"Return the _sre module instance."
 	^ _sre @env1:instance
 %
 
-category: 'Helpers'
+category: 'Grail-Helpers'
 method: SreTestCase
 compilePattern: patternStr flags: flags code: codeArray groups: groups groupindex: groupindex indexgroup: indexgroup
 	"Compile an SRE pattern from raw bytecode using the arity-specialized
@@ -63,7 +63,7 @@ compilePattern: patternStr flags: flags code: codeArray groups: groups groupinde
 		_: indexgroup
 %
 
-category: 'Helpers'
+category: 'Grail-Helpers'
 method: SreTestCase
 skipIfCompileUnavailable
 	"Skip the calling test if _sre.compile() is not yet wired up at the C
@@ -82,7 +82,7 @@ skipIfCompileUnavailable
 	].
 %
 
-category: 'Helpers'
+category: 'Grail-Helpers'
 method: SreTestCase
 abcPattern
 	"Return a compiled pattern for 'abc' (no groups)."
@@ -95,7 +95,7 @@ abcPattern
 		indexgroup: (Array with: nil)
 %
 
-category: 'Helpers'
+category: 'Grail-Helpers'
 method: SreTestCase
 abcGroupPattern
 	"Return a compiled pattern for 'a(b)c' (one capture group)."
@@ -112,7 +112,7 @@ abcGroupPattern
 ! Tests - Module Constants
 ! ===============================================================================
 
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: SreTestCase
 testMagic
 	"Test that _sre.MAGIC matches the C engine's magic number."
@@ -120,7 +120,7 @@ testMagic
 	self assert: (self sreInstance @env1:MAGIC) equals: 20230612.
 %
 
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: SreTestCase
 testCodesize
 	"Test that _sre.CODESIZE is 4."
@@ -128,7 +128,7 @@ testCodesize
 	self assert: (self sreInstance @env1:CODESIZE) equals: 4.
 %
 
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: SreTestCase
 testMaxrepeat
 	"Test that _sre.MAXREPEAT is set."
@@ -136,7 +136,7 @@ testMaxrepeat
 	self assert: (self sreInstance @env1:MAXREPEAT) equals: 4294967295.
 %
 
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: SreTestCase
 testMaxgroups
 	"Test that _sre.MAXGROUPS is set."
@@ -148,7 +148,7 @@ testMaxgroups
 ! Tests - Compile and Match
 ! ===============================================================================
 
-category: 'Tests - Compile'
+category: 'Grail-Tests - Compile'
 method: SreTestCase
 testCompileLiteral
 	"Test that _sre.compile() returns a SrePattern object."
@@ -159,7 +159,7 @@ testCompileLiteral
 	self assert: (pattern isKindOf: SrePattern).
 %
 
-category: 'Tests - Search'
+category: 'Grail-Tests - Search'
 method: SreTestCase
 testPatternSearch
 	"Test that pattern.search() finds a match via the real search: method."
@@ -170,7 +170,7 @@ testPatternSearch
 	self assert: (match isKindOf: SreMatch).
 %
 
-category: 'Tests - Search'
+category: 'Grail-Tests - Search'
 method: SreTestCase
 testPatternSearchNoMatch
 	"Test that pattern.search() returns nil when no match."
@@ -179,7 +179,7 @@ testPatternSearchNoMatch
 	self assert: (self abcPattern @env1:search: 'xyz') equals: nil.
 %
 
-category: 'Tests - Search'
+category: 'Grail-Tests - Search'
 method: SreTestCase
 testPatternSearchVarargs
 	"Test the _search:kw: varargs dispatcher for first-class use."
@@ -190,7 +190,7 @@ testPatternSearchVarargs
 	self assert: (match isKindOf: SreMatch).
 %
 
-category: 'Tests - Match'
+category: 'Grail-Tests - Match'
 method: SreTestCase
 testMatchGroup
 	"Test that match.group(0) returns the matched text."
@@ -201,7 +201,7 @@ testMatchGroup
 	self assert: (match @env1:group: 0) equals: 'abc'.
 %
 
-category: 'Tests - Match'
+category: 'Grail-Tests - Match'
 method: SreTestCase
 testMatchGroupNoArg
 	"Test that match.group() (0-arg) returns the whole match."
@@ -212,7 +212,7 @@ testMatchGroupNoArg
 	self assert: match @env1:group equals: 'abc'.
 %
 
-category: 'Tests - Match'
+category: 'Grail-Tests - Match'
 method: SreTestCase
 testMatchSpan
 	"Test that match.span(0) returns the correct (start, end) tuple."
@@ -225,7 +225,7 @@ testMatchSpan
 	self assert: (result at: 2) equals: 6.
 %
 
-category: 'Tests - Match'
+category: 'Grail-Tests - Match'
 method: SreTestCase
 testMatchWithGroups
 	"Test compile and match with capture groups: 'a(b)c'"
@@ -237,7 +237,7 @@ testMatchWithGroups
 	self assert: (match @env1:group: 1) equals: 'b'.
 %
 
-category: 'Tests - Match'
+category: 'Grail-Tests - Match'
 method: SreTestCase
 testPatternMatch
 	"Test that pattern.match() matches at the beginning only."

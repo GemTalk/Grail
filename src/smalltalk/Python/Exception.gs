@@ -27,7 +27,7 @@ All user-defined exceptions should also be derived from this class.
 
 expectvalue /Class
 doit
-Exception category: 'Exceptions'
+Exception category: 'Grail-Exceptions'
 %
 
 ! ===============================================================================
@@ -52,7 +52,7 @@ Exception class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: Exception
 __init__
 	"Initialize with no arguments."
@@ -61,7 +61,7 @@ __init__
 	^ None
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: Exception
 __init__: a
 	"Initialize with arguments.

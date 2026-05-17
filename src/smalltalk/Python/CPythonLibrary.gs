@@ -33,7 +33,7 @@ Usage:
 
 expectvalue /Class
 doit
-CPythonLibrary category: 'CPython'
+CPythonLibrary category: 'Grail-CPython'
 %
 
 ! ===============================================================================
@@ -50,7 +50,7 @@ set compile_env: 0
 
 ! ------------------- Class methods
 
-category: 'Instance Creation'
+category: 'Grail-Instance Creation'
 classmethod: CPythonLibrary
 current
 	"Return the singleton instance. Creates and initializes on first access."
@@ -61,7 +61,7 @@ current
 	^ current
 %
 
-category: 'Instance Creation'
+category: 'Grail-Instance Creation'
 classmethod: CPythonLibrary
 reset
 	"Finalize the Python interpreter and release the singleton."
@@ -72,7 +72,7 @@ reset
 	].
 %
 
-category: 'Configuration'
+category: 'Grail-Configuration'
 classmethod: CPythonLibrary
 libraryPath
 	"Return the path to the CPython shared library."
@@ -83,7 +83,7 @@ libraryPath
 	^ libraryPath
 %
 
-category: 'Configuration'
+category: 'Grail-Configuration'
 classmethod: CPythonLibrary
 libraryPath: aString
 	"Set the path to the CPython shared library."
@@ -91,7 +91,7 @@ libraryPath: aString
 	libraryPath := aString
 %
 
-category: 'Configuration'
+category: 'Grail-Configuration'
 classmethod: CPythonLibrary
 pythonHomePath
 	"Return the PYTHONHOME prefix for the embedded interpreter."
@@ -102,7 +102,7 @@ pythonHomePath
 	^ pythonHomePath
 %
 
-category: 'Configuration'
+category: 'Grail-Configuration'
 classmethod: CPythonLibrary
 pythonHomePath: aString
 	"Set the PYTHONHOME prefix for the embedded interpreter."
@@ -112,7 +112,7 @@ pythonHomePath: aString
 
 ! ------------------- Instance methods - Initialization
 
-category: 'Initialization'
+category: 'Grail-Initialization'
 method: CPythonLibrary
 initialize
 	"Open the shared library and initialize the Python interpreter."
@@ -131,7 +131,7 @@ initialize
 	].
 %
 
-category: 'Initialization'
+category: 'Grail-Initialization'
 method: CPythonLibrary
 setPythonHome
 	"Set PYTHONHOME via Py_SetPythonHome before initialization.
@@ -152,7 +152,7 @@ setPythonHome
 
 ! ------------------- Instance methods - Lifecycle
 
-category: 'Lifecycle'
+category: 'Grail-Lifecycle'
 method: CPythonLibrary
 isInitialized
 	"Return true if the Python interpreter is initialized."
@@ -163,7 +163,7 @@ isInitialized
 	^ result ~= 0
 %
 
-category: 'Lifecycle'
+category: 'Grail-Lifecycle'
 method: CPythonLibrary
 finalize
 	"Finalize the Python interpreter. Returns 0 on success, -1 on error."
@@ -172,7 +172,7 @@ finalize
 		callWith: #()
 %
 
-category: 'Lifecycle'
+category: 'Grail-Lifecycle'
 method: CPythonLibrary
 getVersion
 	"Return the CPython version string. Safe to call without initialization.
@@ -184,7 +184,7 @@ getVersion
 
 ! ------------------- Instance methods - Execution
 
-category: 'Execution'
+category: 'Grail-Execution'
 method: CPythonLibrary
 runSimpleString: aString
 	"Execute a Python source string. Signals Error on failure.
@@ -204,7 +204,7 @@ runSimpleString: aString
 	^ result
 %
 
-category: 'Execution'
+category: 'Grail-Execution'
 method: CPythonLibrary
 runString: aString
 	"Execute Python source in __main__'s namespace. Signals Error on failure.
@@ -226,7 +226,7 @@ runString: aString
 
 ! ------------------- Instance methods - Module Import
 
-category: 'Module Import'
+category: 'Grail-Module Import'
 method: CPythonLibrary
 importModule: aString
 	"Import a Python module by name. Returns a CPythonObject (new reference)."
@@ -240,7 +240,7 @@ importModule: aString
 
 ! ------------------- Instance methods - Constants
 
-category: 'Constants'
+category: 'Grail-Constants'
 method: CPythonLibrary
 none
 	"Return a CPythonObject wrapping Py_None (borrowed, so we IncRef)."
@@ -251,7 +251,7 @@ none
 	^ CPythonObject fromBorrowedReference: ptr
 %
 
-category: 'Constants'
+category: 'Grail-Constants'
 method: CPythonLibrary
 pyTrue
 	"Return a CPythonObject wrapping Py_True (borrowed, so we IncRef)."
@@ -262,7 +262,7 @@ pyTrue
 	^ CPythonObject fromBorrowedReference: ptr
 %
 
-category: 'Constants'
+category: 'Grail-Constants'
 method: CPythonLibrary
 pyFalse
 	"Return a CPythonObject wrapping Py_False (borrowed, so we IncRef)."
@@ -275,7 +275,7 @@ pyFalse
 
 ! ------------------- Instance methods - Error Checking
 
-category: 'Error Checking'
+category: 'Grail-Error Checking'
 method: CPythonLibrary
 checkPythonError
 	"If a Python error is set, fetch it and signal a Smalltalk Error.
@@ -318,7 +318,7 @@ checkPythonError
 
 ! ------------------- Class methods - Null pointer detection
 
-category: 'Testing'
+category: 'Grail-Testing'
 classmethod: CPythonLibrary
 isActive
 	"Return true if the embedded CPython singleton has been initialized."
@@ -326,7 +326,7 @@ isActive
 	^ current notNil
 %
 
-category: 'Private'
+category: 'Grail-Private'
 classmethod: CPythonLibrary
 isNullCPointer: aCPointer
 	"Return true if aCPointer is nil or a C NULL pointer (address 0).
@@ -337,7 +337,7 @@ isNullCPointer: aCPointer
 
 ! ------------------- Instance methods - Callout Factory
 
-category: 'Private'
+category: 'Grail-Private'
 method: CPythonLibrary
 calloutFor: functionName result: resultType args: argTypes
 	"Return a cached CCallout for the named function, creating it if needed."
@@ -351,7 +351,7 @@ calloutFor: functionName result: resultType args: argTypes
 	]
 %
 
-category: 'Accessing'
+category: 'Grail-Accessing'
 method: CPythonLibrary
 library
 	"Return the underlying CLibrary."

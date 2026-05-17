@@ -31,7 +31,7 @@ Instance variables:
 
 expectvalue /Class
 doit
-str_iterator category: 'Collections-Iterators'
+str_iterator category: 'Grail-Collections-Iterators'
 %
 
 ! ===============================================================================
@@ -52,7 +52,7 @@ str_iterator class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Instance Creation'
+category: 'Grail-Instance Creation'
 classmethod: str_iterator
 ___on: aCollection
 	"Create a new str_iterator for the given string.
@@ -66,7 +66,7 @@ ___on: aCollection
 	^ instance
 %
 
-category: 'Python-Private'
+category: 'Grail-Private'
 method: str_iterator
 ___collection: aCollection
 	"Set the collection being iterated over.
@@ -75,7 +75,7 @@ ___collection: aCollection
 	collection := aCollection
 %
 
-category: 'Python-Private'
+category: 'Grail-Private'
 method: str_iterator
 ___position: anInteger
 	"Set the current position.
@@ -84,7 +84,7 @@ ___position: anInteger
 	position := anInteger
 %
 
-category: 'Python-Iterator Protocol'
+category: 'Grail-Iterator Protocol'
 method: str_iterator
 __next__
 	"Return the next character from the string as a single-character string.

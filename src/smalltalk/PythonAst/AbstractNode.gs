@@ -45,7 +45,7 @@ Object
 
 expectvalue /Class
 doit
-AbstractNode category: 'Parser'
+AbstractNode category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from AbstractNode
@@ -54,7 +54,7 @@ removeallclassmethods AbstractNode
 
 set compile_env: 0
 
-category: 'parser construction'
+category: 'Grail-parser construction'
 classmethod: AbstractNode
 buildWithFields: aDictionary
 	"Create an AST node from a dictionary of field name -> value mappings.
@@ -71,70 +71,70 @@ buildWithFields: aDictionary
 	^node
 %
 
-category: 'other'
+category: 'Grail-other'
 classmethod: AbstractNode
 isAbstract
 
 	^self == AbstractNode
 %
 
-category: 'other'
+category: 'Grail-other'
 classmethod: AbstractNode
 new
 
 	self error: 'Use #buildWithFields: instead'.
 %
 
-category: 'accessors'
+category: 'Grail-accessors'
 method: AbstractNode
 parent
 
 	^parent
 %
 
-category: 'other'
+category: 'Grail-other'
 method: AbstractNode
 allocateTemp
 
 	^parent allocateTemp
 %
 
-category: 'initialization'
+category: 'Grail-initialization'
 method: AbstractNode
 declareVariable
 
 	parent declareVariable.
 %
 
-category: 'initialization'
+category: 'Grail-initialization'
 method: AbstractNode
 declareVariable: aSymbol
 
 	parent declareVariable: aSymbol.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: AbstractNode
 globals
 
 	^self module globals
 %
 
-category: 'testing'
+category: 'Grail-testing'
 method: AbstractNode
 isInClass
 
 	^parent isInClass
 %
 
-category: 'testing'
+category: 'Grail-testing'
 method: AbstractNode
 isNone
 
 	^false
 %
 
-category: 'initialization'
+category: 'Grail-initialization'
 method: AbstractNode
 isVariableIsDeclared: aSymbol
 	"Walk up the parent chain looking for an enclosing scope (a BlockAst)
@@ -146,21 +146,21 @@ isVariableIsDeclared: aSymbol
 	^parent isVariableIsDeclared: aSymbol
 %
 
-category: 'other'
+category: 'Grail-other'
 method: AbstractNode
 locals
 
 	^parent locals
 %
 
-category: 'other'
+category: 'Grail-other'
 method: AbstractNode
 module
 
 	^parent module
 %
 
-category: 'initialization'
+category: 'Grail-initialization'
 method: AbstractNode
 setParent: aNode
 	"Set parent and recursively set parent on all child AST nodes."
@@ -182,14 +182,14 @@ setParent: aNode
 	].
 %
 
-category: 'other'
+category: 'Grail-other'
 method: AbstractNode
 printSmalltalkOn: aStream
 
 	self error: 'AbstractNode is abstract; subclasses must implement printSmalltalkOn:'.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: AbstractNode
 printSmalltalkWithParenthesisOn: aStream
 
@@ -199,7 +199,7 @@ printSmalltalkWithParenthesisOn: aStream
 
 %
 
-category: 'other'
+category: 'Grail-other'
 method: AbstractNode
 setBlock: aBlock
 %

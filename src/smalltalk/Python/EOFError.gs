@@ -17,5 +17,5 @@ Exception subclass: 'EOFError'
 
 expectvalue /Class
 doit
-EOFError category: 'Exceptions'
+EOFError category: 'Grail-Exceptions'
 %

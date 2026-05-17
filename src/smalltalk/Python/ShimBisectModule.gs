@@ -40,7 +40,7 @@ Usage (from Python source):
 
 expectvalue /Class
 doit
-_bisect category: 'Modules'
+_bisect category: 'Grail-Modules'
 %
 
 expectvalue /Metaclass3
@@ -55,7 +55,7 @@ _bisect class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Private'
+category: 'Grail-Private'
 classmethod: _bisect
 callBisect: methodName list: anOrderedCollection value: aFloat
 	"Call bisect_left or bisect_right via CPythonShim.
@@ -68,7 +68,7 @@ callBisect: methodName list: anOrderedCollection value: aFloat
 		with: aFloat
 %
 
-category: 'Private'
+category: 'Grail-Private'
 classmethod: _bisect
 callInsort: methodName list: anOrderedCollection value: aFloat
 	"Call insort_left or insort_right via CPythonShim.
@@ -87,7 +87,7 @@ callInsort: methodName list: anOrderedCollection value: aFloat
 
 set compile_env: 1
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: _bisect
 initialize
 	"No-op. The `module>>instance` class method still calls
@@ -99,7 +99,7 @@ initialize
 ! Fast-path methods
 ! ===============================================================================
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: _bisect
 bisect_right: a _: x
 	"Python _bisect.bisect_right(a, x) — fast path. Returns
@@ -108,7 +108,7 @@ bisect_right: a _: x
 	^ self @env0:class @env0:callBisect: 'bisect_right' list: a value: x
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: _bisect
 bisect_left: a _: x
 	"Python _bisect.bisect_left(a, x) — fast path. Returns
@@ -117,7 +117,7 @@ bisect_left: a _: x
 	^ self @env0:class @env0:callBisect: 'bisect_left' list: a value: x
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: _bisect
 insort_right: a _: x
 	"Python _bisect.insort_right(a, x) — fast path. Inserts
@@ -128,7 +128,7 @@ insort_right: a _: x
 	^ None
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: _bisect
 insort_left: a _: x
 	"Python _bisect.insort_left(a, x) — fast path. Inserts

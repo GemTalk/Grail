@@ -42,7 +42,7 @@ Object
 
 expectvalue /Class
 doit
-SetAst category: 'Parser'
+SetAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from SetAst
@@ -51,7 +51,7 @@ removeallclassmethods SetAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: SetAst
 printSmalltalkOn: aStream
 

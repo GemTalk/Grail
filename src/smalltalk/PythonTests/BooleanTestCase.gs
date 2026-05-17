@@ -18,12 +18,12 @@ PythonTestCase subclass: 'BooleanTestCase'
 
 expectvalue /Class
 doit
-BooleanTestCase category: 'SUnit'
+BooleanTestCase category: 'Grail-SUnit'
 %
 
 set compile_env: 0
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: BooleanTestCase
 test__abs__
 	"Test bool.__abs__()"
@@ -32,7 +32,7 @@ test__abs__
 	self assert: (false @env1:__abs__) equals: 0.
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: BooleanTestCase
 test__add__
 	"Test bool.__add__()"
@@ -48,7 +48,7 @@ test__add__
 	self assert: (false @env1:__add__: 3.5) equals: 3.5.
 %
 
-category: 'Tests - Bitwise'
+category: 'Grail-Tests - Bitwise'
 method: BooleanTestCase
 test__and__
 	"Test bool.__and__() - bitwise AND"
@@ -58,7 +58,7 @@ test__and__
 	self assert: (false @env1:__and__: 1) equals: 0.
 %
 
-category: 'Tests - Conversion'
+category: 'Grail-Tests - Conversion'
 method: BooleanTestCase
 test__bool__
 	"Test bool.__bool__()"
@@ -67,7 +67,7 @@ test__bool__
 	self assert: (false @env1:__bool__) equals: false.
 %
 
-category: 'Tests - Documentation'
+category: 'Grail-Tests - Documentation'
 method: BooleanTestCase
 test__doc__
 	"Test bool.__doc__"
@@ -78,7 +78,7 @@ test__doc__
 	self assert: (doc size > 0).
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: BooleanTestCase
 test__eq__
 	"Test bool.__eq__() - True==1 and False==0 in Python"
@@ -91,7 +91,7 @@ test__eq__
 	self assert: (false @env1:__eq__: false).
 %
 
-category: 'Tests - Conversion'
+category: 'Grail-Tests - Conversion'
 method: BooleanTestCase
 test__float__
 	"Test bool.__float__()"
@@ -100,7 +100,7 @@ test__float__
 	self assert: (false @env1:__float__) equals: 0.0.
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: BooleanTestCase
 test__floordiv__
 	"Test bool.__floordiv__()"
@@ -109,7 +109,7 @@ test__floordiv__
 	self assert: (false @env1:__floordiv__: 2) equals: 0.
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: BooleanTestCase
 test__ge__
 	"Test bool.__ge__()"
@@ -119,7 +119,7 @@ test__ge__
 	self assert: (true @env1:__ge__: 0).
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: BooleanTestCase
 test__gt__
 	"Test bool.__gt__()"
@@ -129,7 +129,7 @@ test__gt__
 	self deny: (true @env1:__gt__: 1).
 %
 
-category: 'Tests - Conversion'
+category: 'Grail-Tests - Conversion'
 method: BooleanTestCase
 test__index__
 	"Test bool.__index__()"
@@ -138,7 +138,7 @@ test__index__
 	self assert: (false @env1:__index__) equals: 0.
 %
 
-category: 'Tests - Conversion'
+category: 'Grail-Tests - Conversion'
 method: BooleanTestCase
 test__int__
 	"Test bool.__int__()"
@@ -147,7 +147,7 @@ test__int__
 	self assert: (false @env1:__int__) equals: 0.
 %
 
-category: 'Tests - Bitwise'
+category: 'Grail-Tests - Bitwise'
 method: BooleanTestCase
 test__invert__
 	"Test bool.__invert__() - bitwise NOT"
@@ -156,7 +156,7 @@ test__invert__
 	self assert: (false @env1:__invert__) equals: -1.
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: BooleanTestCase
 test__le__
 	"Test bool.__le__()"
@@ -166,7 +166,7 @@ test__le__
 	self assert: (false @env1:__le__: 1).
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: BooleanTestCase
 test__lt__
 	"Test bool.__lt__()"
@@ -177,7 +177,7 @@ test__lt__
 	self deny: (true @env1:__lt__: 0).
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: BooleanTestCase
 test__mod__
 	"Test bool.__mod__()"
@@ -186,7 +186,7 @@ test__mod__
 	self assert: (false @env1:__mod__: 2) equals: 0.
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: BooleanTestCase
 test__mul__
 	"Test bool.__mul__()"
@@ -201,7 +201,7 @@ test__mul__
 	self assert: (false @env1:__mul__: 2.5) equals: 0.0.
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: BooleanTestCase
 test__ne__
 	"Test bool.__ne__()"
@@ -212,7 +212,7 @@ test__ne__
 	self assert: (false @env1:__ne__: 1).
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: BooleanTestCase
 test__neg__
 	"Test bool.__neg__()"
@@ -221,7 +221,7 @@ test__neg__
 	self assert: (false @env1:__neg__) equals: 0.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: BooleanTestCase
 test__new__
 	"Test bool() with no arguments returns False"
@@ -231,7 +231,7 @@ test__new__
 	self assert: result equals: false.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: BooleanTestCase
 test__new__fromBoolean
 	"Test bool(bool) returns the same boolean"
@@ -240,7 +240,7 @@ test__new__fromBoolean
 	self assert: (Boolean ___new___: false) equals: false.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: BooleanTestCase
 test__new__fromFloat
 	"Test bool(float) conversion"
@@ -251,7 +251,7 @@ test__new__fromFloat
 	self assert: (Boolean ___new___: -0.5) equals: true.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: BooleanTestCase
 test__new__fromInteger
 	"Test bool(int) conversion"
@@ -262,7 +262,7 @@ test__new__fromInteger
 	self assert: (Boolean ___new___: -1) equals: true.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: BooleanTestCase
 test__new__fromString
 	"Test bool(str) conversion"
@@ -275,7 +275,7 @@ test__new__fromString
 	self assert: (Boolean ___new___: nonEmptyStr) equals: true.
 %
 
-category: 'Tests - Bitwise'
+category: 'Grail-Tests - Bitwise'
 method: BooleanTestCase
 test__or__
 	"Test bool.__or__() - bitwise OR"
@@ -285,7 +285,7 @@ test__or__
 	self assert: (false @env1:__or__: 0) equals: 0.
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: BooleanTestCase
 test__pos__
 	"Test bool.__pos__()"
@@ -294,7 +294,7 @@ test__pos__
 	self assert: (false @env1:__pos__) equals: 0.
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: BooleanTestCase
 test__pow__
 	"Test bool.__pow__()"
@@ -303,7 +303,7 @@ test__pow__
 	self assert: (false @env1:__pow__: 5) equals: 0.
 %
 
-category: 'Tests - String Representation'
+category: 'Grail-Tests - String Representation'
 method: BooleanTestCase
 test__repr__
 	"Test bool.__repr__()"
@@ -318,7 +318,7 @@ test__repr__
 	self assert: result equals: 'False' asUnicodeString.
 %
 
-category: 'Tests - String Representation'
+category: 'Grail-Tests - String Representation'
 method: BooleanTestCase
 test__str__
 	"Test bool.__str__()"
@@ -331,7 +331,7 @@ test__str__
 	self assert: result equals: 'False' asUnicodeString.
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: BooleanTestCase
 test__sub__
 	"Test bool.__sub__()"
@@ -345,7 +345,7 @@ test__sub__
 	self assert: (false @env1:__sub__: 0.5) equals: -0.5.
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: BooleanTestCase
 test__truediv__
 	"Test bool.__truediv__()"
@@ -354,7 +354,7 @@ test__truediv__
 	self assert: (false @env1:__truediv__: 2) equals: 0.0.
 %
 
-category: 'Tests - Bitwise'
+category: 'Grail-Tests - Bitwise'
 method: BooleanTestCase
 test__xor__
 	"Test bool.__xor__() - bitwise XOR"
@@ -364,7 +364,7 @@ test__xor__
 	self assert: (false @env1:__xor__: 1) equals: 1.
 %
 
-category: 'Tests - Smalltalk Coercion'
+category: 'Grail-Tests - Smalltalk Coercion'
 method: BooleanTestCase
 test_coerce
 	"Test Boolean._coerce: for numeric coercion"
@@ -383,7 +383,7 @@ test_coerce
 	self assert: result equals: -2.
 %
 
-category: 'Tests - Smalltalk Coercion'
+category: 'Grail-Tests - Smalltalk Coercion'
 method: BooleanTestCase
 test_generality
 	"Test Boolean._generality for numeric coercion"
@@ -396,7 +396,7 @@ test_generality
 	self assert: true _generality < 20.
 %
 
-category: 'Tests - Smalltalk Arithmetic'
+category: 'Grail-Tests - Smalltalk Arithmetic'
 method: BooleanTestCase
 testAbs
 	"Test Boolean.abs"
@@ -405,7 +405,7 @@ testAbs
 	self assert: false abs equals: 0.
 %
 
-category: 'Tests - Arithmetic with Coercion'
+category: 'Grail-Tests - Arithmetic with Coercion'
 method: BooleanTestCase
 testArithmeticWithFloat
 	"Test that Boolean arithmetic with Float works via coercion (reverse operations)"
@@ -425,7 +425,7 @@ testArithmeticWithFloat
 	self assert: result equals: 0.0.
 %
 
-category: 'Tests - Arithmetic with Coercion'
+category: 'Grail-Tests - Arithmetic with Coercion'
 method: BooleanTestCase
 testArithmeticWithInteger
 	"Test that Boolean arithmetic with Integer works via coercion (reverse operations)"
@@ -438,7 +438,7 @@ testArithmeticWithInteger
 	self assert: 5 * false equals: 0.
 %
 
-category: 'Tests - Smalltalk Conversion'
+category: 'Grail-Tests - Smalltalk Conversion'
 method: BooleanTestCase
 testAsFloat
 	"Test Boolean.asFloat"
@@ -447,7 +447,7 @@ testAsFloat
 	self assert: false asFloat equals: 0.0.
 %
 
-category: 'Tests - Smalltalk Conversion'
+category: 'Grail-Tests - Smalltalk Conversion'
 method: BooleanTestCase
 testAsFraction
 	"Test Boolean.asFraction"
@@ -456,7 +456,7 @@ testAsFraction
 	self assert: false asFraction equals: 0.
 %
 
-category: 'Tests - Smalltalk Conversion'
+category: 'Grail-Tests - Smalltalk Conversion'
 method: BooleanTestCase
 testAsInteger
 	"Test Boolean.asInteger"
@@ -465,7 +465,7 @@ testAsInteger
 	self assert: false asInteger equals: 0.
 %
 
-category: 'Tests - Smalltalk Conversion'
+category: 'Grail-Tests - Smalltalk Conversion'
 method: BooleanTestCase
 testCeiling
 	"Test Boolean.ceiling"
@@ -474,7 +474,7 @@ testCeiling
 	self assert: false ceiling equals: 0.
 %
 
-category: 'Tests - Eval - And'
+category: 'Grail-Tests - Eval - And'
 method: BooleanTestCase
 testEvalAnd
 	"Test and operator via Python source"
@@ -485,7 +485,7 @@ testEvalAnd
 	self deny: (self eval: 'False and False').
 %
 
-category: 'Tests - Eval - And'
+category: 'Grail-Tests - Eval - And'
 method: BooleanTestCase
 testEvalChainedAnd
 	"Test chained and operator via Python source"
@@ -496,7 +496,7 @@ testEvalChainedAnd
 	self deny: (self eval: 'True and True and False').
 %
 
-category: 'Tests - Eval - Or'
+category: 'Grail-Tests - Eval - Or'
 method: BooleanTestCase
 testEvalChainedOr
 	"Test chained or operator via Python source"
@@ -507,7 +507,7 @@ testEvalChainedOr
 	self deny: (self eval: 'False or False or False').
 %
 
-category: 'Tests - Eval - Arithmetic'
+category: 'Grail-Tests - Eval - Arithmetic'
 method: BooleanTestCase
 testEvalBoolArithmetic
 	"Test boolean arithmetic via Python source"
@@ -518,7 +518,7 @@ testEvalBoolArithmetic
 	self assert: (self eval: 'False * 5') equals: 0.
 %
 
-category: 'Tests - Eval - Comparison'
+category: 'Grail-Tests - Eval - Comparison'
 method: BooleanTestCase
 testEvalBooleanComparison
 	"Test boolean comparisons via Python source"
@@ -528,7 +528,7 @@ testEvalBooleanComparison
 	self assert: (self eval: 'True != False').
 %
 
-category: 'Tests - Eval - Literals'
+category: 'Grail-Tests - Eval - Literals'
 method: BooleanTestCase
 testEvalBooleanLiterals
 	"Test True and False literals via Python source"
@@ -537,7 +537,7 @@ testEvalBooleanLiterals
 	self deny: (self eval: 'False').
 %
 
-category: 'Tests - Eval - Combined'
+category: 'Grail-Tests - Eval - Combined'
 method: BooleanTestCase
 testEvalCombinedLogic
 	"Test combined boolean logic via Python source"
@@ -548,7 +548,7 @@ testEvalCombinedLogic
 	self assert: (self eval: 'not (3 > 5)').
 %
 
-category: 'Tests - Eval - IfExp'
+category: 'Grail-Tests - Eval - IfExp'
 method: BooleanTestCase
 testEvalIfExpression
 	"Test ternary if expression via Python source"
@@ -558,7 +558,7 @@ testEvalIfExpression
 	self assert: (self eval: '"yes" if 3 > 2 else "no"') equals: 'yes'.
 %
 
-category: 'Tests - Eval - Truthiness'
+category: 'Grail-Tests - Eval - Truthiness'
 method: BooleanTestCase
 testIfTruthyInt
 	"if <non-zero int>: should take the true branch."
@@ -573,7 +573,7 @@ result
 ') equals: 'truthy'.
 %
 
-category: 'Tests - Eval - Truthiness'
+category: 'Grail-Tests - Eval - Truthiness'
 method: BooleanTestCase
 testIfFalsyZero
 	"if 0: should take the false branch."
@@ -588,7 +588,7 @@ result
 ') equals: 'falsy'.
 %
 
-category: 'Tests - Eval - Truthiness'
+category: 'Grail-Tests - Eval - Truthiness'
 method: BooleanTestCase
 testIfTruthyString
 	"if <non-empty string>: should take the true branch."
@@ -603,7 +603,7 @@ result
 ') equals: 'truthy'.
 %
 
-category: 'Tests - Eval - Truthiness'
+category: 'Grail-Tests - Eval - Truthiness'
 method: BooleanTestCase
 testIfFalsyEmptyString
 	"if '''': should take the false branch."
@@ -618,7 +618,7 @@ result
 ') equals: 'falsy'.
 %
 
-category: 'Tests - Eval - Truthiness'
+category: 'Grail-Tests - Eval - Truthiness'
 method: BooleanTestCase
 testWhileTruthyCountdown
 	"while with integer truthiness should loop until zero."
@@ -633,7 +633,7 @@ result
 ') equals: 6.
 %
 
-category: 'Tests - Eval - Not'
+category: 'Grail-Tests - Eval - Not'
 method: BooleanTestCase
 testEvalNot
 	"Test not operator via Python source"
@@ -642,7 +642,7 @@ testEvalNot
 	self assert: (self eval: 'not False').
 %
 
-category: 'Tests - Eval - Or'
+category: 'Grail-Tests - Eval - Or'
 method: BooleanTestCase
 testEvalOr
 	"Test or operator via Python source"
@@ -653,7 +653,7 @@ testEvalOr
 	self deny: (self eval: 'False or False').
 %
 
-category: 'Tests - Smalltalk Testing'
+category: 'Grail-Tests - Smalltalk Testing'
 method: BooleanTestCase
 testEven
 	"Test Boolean.even"
@@ -662,7 +662,7 @@ testEven
 	self assert: false even.
 %
 
-category: 'Tests - Smalltalk Conversion'
+category: 'Grail-Tests - Smalltalk Conversion'
 method: BooleanTestCase
 testFloor
 	"Test Boolean.floor"
@@ -671,7 +671,7 @@ testFloor
 	self assert: false floor equals: 0.
 %
 
-category: 'Tests - Smalltalk Coercion'
+category: 'Grail-Tests - Smalltalk Coercion'
 method: BooleanTestCase
 testIsNumber
 	"Test Boolean.isNumber (not _isNumber which is an optimized selector)"
@@ -681,7 +681,7 @@ testIsNumber
 	self assert: false isNumber.
 %
 
-category: 'Tests - Smalltalk Arithmetic'
+category: 'Grail-Tests - Smalltalk Arithmetic'
 method: BooleanTestCase
 testNegated
 	"Test Boolean.negated"
@@ -690,7 +690,7 @@ testNegated
 	self assert: false negated equals: 0.
 %
 
-category: 'Tests - Smalltalk Testing'
+category: 'Grail-Tests - Smalltalk Testing'
 method: BooleanTestCase
 testNegative
 	"Test Boolean.negative"
@@ -699,7 +699,7 @@ testNegative
 	self deny: false negative.
 %
 
-category: 'Tests - Smalltalk Testing'
+category: 'Grail-Tests - Smalltalk Testing'
 method: BooleanTestCase
 testOdd
 	"Test Boolean.odd"
@@ -708,7 +708,7 @@ testOdd
 	self deny: false odd.
 %
 
-category: 'Tests - Smalltalk Testing'
+category: 'Grail-Tests - Smalltalk Testing'
 method: BooleanTestCase
 testPositive
 	"Test Boolean.positive"
@@ -717,7 +717,7 @@ testPositive
 	self assert: false positive.
 %
 
-category: 'Tests - Smalltalk Arithmetic'
+category: 'Grail-Tests - Smalltalk Arithmetic'
 method: BooleanTestCase
 testReciprocal
 	"Test Boolean.reciprocal"
@@ -726,7 +726,7 @@ testReciprocal
 	"false.reciprocal would raise ZeroDivide error"
 %
 
-category: 'Tests - Smalltalk Conversion'
+category: 'Grail-Tests - Smalltalk Conversion'
 method: BooleanTestCase
 testRounded
 	"Test Boolean.rounded"
@@ -735,7 +735,7 @@ testRounded
 	self assert: false rounded equals: 0.
 %
 
-category: 'Tests - Smalltalk Arithmetic'
+category: 'Grail-Tests - Smalltalk Arithmetic'
 method: BooleanTestCase
 testSign
 	"Test Boolean.sign"
@@ -744,7 +744,7 @@ testSign
 	self assert: false sign equals: 0.
 %
 
-category: 'Tests - Smalltalk Operators'
+category: 'Grail-Tests - Smalltalk Operators'
 method: BooleanTestCase
 testSmalltalkArithmeticOperators
 	"Test Smalltalk arithmetic operators on Boolean"
@@ -782,7 +782,7 @@ testSmalltalkArithmeticOperators
 	self assert: (false raisedToInteger: 3) equals: 0.
 %
 
-category: 'Tests - Smalltalk Operators'
+category: 'Grail-Tests - Smalltalk Operators'
 method: BooleanTestCase
 testSmalltalkComparisonOperators
 	"Test Smalltalk comparison operators on Boolean"
@@ -842,7 +842,7 @@ testSmalltalkComparisonOperators
 	self deny: false ~= false.
 %
 
-category: 'Tests - Smalltalk Operators'
+category: 'Grail-Tests - Smalltalk Operators'
 method: BooleanTestCase
 testSmalltalkComparisonsWithBooleans
 	"Test that Boolean-to-Boolean comparisons work in Smalltalk.
@@ -862,7 +862,7 @@ testSmalltalkComparisonsWithBooleans
 	self deny: false = 1.
 %
 
-category: 'Tests - Smalltalk Operators'
+category: 'Grail-Tests - Smalltalk Operators'
 method: BooleanTestCase
 testSmalltalkMinMax
 	"Test Smalltalk min/max operators on Boolean"
@@ -873,7 +873,7 @@ testSmalltalkMinMax
 	self assert: (false max: 5) equals: 5.
 %
 
-category: 'Tests - Smalltalk Testing'
+category: 'Grail-Tests - Smalltalk Testing'
 method: BooleanTestCase
 testStrictlyPositive
 	"Test Boolean.strictlyPositive"
@@ -882,7 +882,7 @@ testStrictlyPositive
 	self deny: false strictlyPositive.
 %
 
-category: 'Tests - Smalltalk Conversion'
+category: 'Grail-Tests - Smalltalk Conversion'
 method: BooleanTestCase
 testTruncated
 	"Test Boolean.truncated"
@@ -891,7 +891,7 @@ testTruncated
 	self assert: false truncated equals: 0.
 %
 
-category: 'Tests - Type Identity'
+category: 'Grail-Tests - Type Identity'
 method: BooleanTestCase
 testTypeIdentity
 	"Test that True and False have the correct type"

@@ -17,7 +17,7 @@ PythonTestCase subclass: 'NameErrorTestCase'
 %
 expectvalue /Class
 doit
-NameErrorTestCase category: 'SUnit'
+NameErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ NameErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-NameError'
+category: 'Grail-Tests-NameError'
 method: NameErrorTestCase
 test_creation
 	"Test creating a NameError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-NameError'
+category: 'Grail-Tests-NameError'
 method: NameErrorTestCase
 test_inheritance
 	"Test that NameError inherits from Exception."

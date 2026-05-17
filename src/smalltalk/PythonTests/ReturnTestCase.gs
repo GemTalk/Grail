@@ -17,7 +17,7 @@ PythonTestCase subclass: 'ReturnTestCase'
 %
 expectvalue /Class
 doit
-ReturnTestCase category: 'SUnit'
+ReturnTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ ReturnTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: ReturnTestCase
 testReturnValue
 	"Test return statement in a function."
@@ -44,7 +44,7 @@ testReturnValue
 double(5)') equals: 10.
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: ReturnTestCase
 testReturnNone
 	"Test bare return returns None."
@@ -54,7 +54,7 @@ testReturnNone
 f()') equals: None.
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: ReturnTestCase
 testReturnEarly
 	"Test early return skips remaining statements."
@@ -71,7 +71,7 @@ f(5)') equals: 5.
 f(-3)') equals: 3.
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: ReturnTestCase
 testReturnExpression
 	"Test return with a computed expression."

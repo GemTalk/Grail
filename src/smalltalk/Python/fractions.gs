@@ -33,7 +33,7 @@ See https://docs.python.org/3/library/fractions.html
 
 expectvalue /Class
 doit
-fractions category: 'Modules'
+fractions category: 'Grail-Modules'
 %
 
 ! ------------------- Remove existing Python methods from fractions
@@ -49,7 +49,7 @@ set compile_env: 1
 ! Singleton initialization
 ! ===============================================================================
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: fractions
 initialize
 	"Bind the Fraction attribute to GemStone's Fraction class. The
@@ -62,7 +62,7 @@ initialize
 ! Stored attribute (not a callable)
 ! ===============================================================================
 
-category: 'Python-Types'
+category: 'Grail-Types'
 method: fractions
 Fraction
 	"Return the Fraction type exposed by this module (the GemStone

@@ -33,7 +33,7 @@ Exports:
 
 expectvalue /Class
 doit
-html_entities category: 'Modules'
+html_entities category: 'Grail-Modules'
 %
 
 ! ------------------- Remove existing Python methods from html_entities
@@ -45,31 +45,31 @@ html_entities class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: html_entities
 name2codepoint
 	^ self @env0:at: #name2codepoint
 %
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: html_entities
 codepoint2name
 	^ self @env0:at: #codepoint2name
 %
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: html_entities
 entitydefs
 	^ self @env0:at: #entitydefs
 %
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: html_entities
 html5
 	^ self @env0:at: #html5
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: html_entities
 initialize
 	self
@@ -80,7 +80,7 @@ initialize
 		yourself
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: html_entities
 initialize_name2codepoint
 	"Build the name2codepoint dictionary (252 HTML4 entities).
@@ -367,7 +367,7 @@ initialize_name2codepoint
 	self @env0:at: #name2codepoint put: d
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: html_entities
 initialize_codepoint2name
 	"Build the codepoint2name dictionary (reverse of name2codepoint).
@@ -382,7 +382,7 @@ initialize_codepoint2name
 	self @env0:at: #codepoint2name put: c2n
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: html_entities
 initialize_entitydefs
 	"Build the entitydefs dictionary.
@@ -398,7 +398,7 @@ initialize_entitydefs
 %
 
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: html_entities
 initialize_html5
 	"Build the html5 dictionary (2125 WHATWG HTML5 entities).

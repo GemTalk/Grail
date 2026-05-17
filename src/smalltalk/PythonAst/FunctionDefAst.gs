@@ -27,7 +27,7 @@ FunctionDefAst comment:
 
 expectvalue /Class
 doit
-FunctionDefAst category: 'Parser'
+FunctionDefAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from FunctionDefAst
@@ -36,28 +36,28 @@ removeallclassmethods FunctionDefAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: FunctionDefAst
 addVariableNamesTo: aStream
 
 	aStream nextPutAll: name; space
 %
 
-category: 'other'
+category: 'Grail-other'
 method: FunctionDefAst
 decoratorList
 
 	^decorator_list
 %
 
-category: 'other'
+category: 'Grail-other'
 method: FunctionDefAst
 name
 
 	^name
 %
 
-category: 'other'
+category: 'Grail-other'
 method: FunctionDefAst
 printArgList: anArray on: aStream
 
@@ -73,7 +73,7 @@ printArgList: anArray on: aStream
 	aStream nextPut: $}.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: FunctionDefAst
 printDefaultsList: anArray on: aStream
 
@@ -92,7 +92,7 @@ printDefaultsList: anArray on: aStream
 	aStream nextPut: $}.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: FunctionDefAst
 printOn: aStream
 
@@ -104,7 +104,7 @@ printOn: aStream
 		yourself.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: FunctionDefAst
 printSmalltalkOn: aStream
 	"When compiling a user module, top-level defs are compiled as
@@ -166,14 +166,14 @@ printSmalltalkOn: aStream
 	aStream decreaseIndent; nextPutAll: '].'.
 %
 
-category: 'accessing'
+category: 'Grail-accessing'
 method: FunctionDefAst
 body
 
 	^ body
 %
 
-category: 'other'
+category: 'Grail-other'
 method: FunctionDefAst
 setBlock: aBlockAst
 
@@ -184,7 +184,7 @@ setBlock: aBlockAst
 ! Module-level def → real Smalltalk method
 ! ===============================================================================
 
-category: 'Module Method Compilation'
+category: 'Grail-Module Method Compilation'
 method: FunctionDefAst
 isModuleLevelDef
 	"True if this def is a direct child of a module body (not nested inside
@@ -196,7 +196,7 @@ isModuleLevelDef
 	^ parent parent isKindOf: ModuleAst
 %
 
-category: 'Module Method Compilation'
+category: 'Grail-Module Method Compilation'
 method: FunctionDefAst
 isSimplePositionalArgs
 	"True if the function takes only simple positional args (no *args, **kwargs,
@@ -210,7 +210,7 @@ isSimplePositionalArgs
 	^ true
 %
 
-category: 'Module Method Compilation'
+category: 'Grail-Module Method Compilation'
 method: FunctionDefAst
 moduleMethodArity
 	"Return the total positional parameter count (posonlyargs + args)."
@@ -218,7 +218,7 @@ moduleMethodArity
 	^ args posonlyargs size + args args size
 %
 
-category: 'Module Method Compilation'
+category: 'Grail-Module Method Compilation'
 method: FunctionDefAst
 moduleMethodSelector
 	"Return the Smalltalk selector for this function when compiled as a module method.
@@ -231,7 +231,7 @@ moduleMethodSelector
 	^ CallAst varargsSelectorForName: name
 %
 
-category: 'Module Method Compilation'
+category: 'Grail-Module Method Compilation'
 method: FunctionDefAst
 generateStubMethodSource
 	"Generate a minimal stub method source for pre-registration on the module
@@ -256,7 +256,7 @@ generateStubMethodSource
 	^ stream contents
 %
 
-category: 'Module Method Compilation'
+category: 'Grail-Module Method Compilation'
 method: FunctionDefAst
 allParameterNames
 	"Return an Array of all parameter names in order: posonlyargs then args."
@@ -268,7 +268,7 @@ allParameterNames
 	^ result asArray
 %
 
-category: 'Module Method Compilation'
+category: 'Grail-Module Method Compilation'
 method: FunctionDefAst
 generateMethodSourceOn: aStream
 	"Generate the full method source for compiling this def as a real env-1
@@ -383,7 +383,7 @@ generateMethodSourceOn: aStream
 ! Class instance method → real Smalltalk method
 ! ===============================================================================
 
-category: 'Class Method Compilation'
+category: 'Grail-Class Method Compilation'
 method: FunctionDefAst
 classMethodParameterNames
 	"Return parameter names excluding the self parameter (first arg).
@@ -395,7 +395,7 @@ classMethodParameterNames
 	^ all copyFrom: 2 to: all size
 %
 
-category: 'Class Method Compilation'
+category: 'Grail-Class Method Compilation'
 method: FunctionDefAst
 classMethodArity
 	"Return the arity excluding the self parameter."
@@ -403,7 +403,7 @@ classMethodArity
 	^ self moduleMethodArity - 1 max: 0
 %
 
-category: 'Class Method Compilation'
+category: 'Grail-Class Method Compilation'
 method: FunctionDefAst
 classMethodSelector
 	"Return the Smalltalk selector for this function as a class instance method.
@@ -419,7 +419,7 @@ classMethodSelector
 	^ CallAst varargsSelectorForName: name
 %
 
-category: 'Class Method Compilation'
+category: 'Grail-Class Method Compilation'
 method: FunctionDefAst
 generateClassMethodStubSource
 	"Generate a stub for pre-registration (same idea as generateStubMethodSource
@@ -443,7 +443,7 @@ generateClassMethodStubSource
 	^ stream contents
 %
 
-category: 'Class Method Compilation'
+category: 'Grail-Class Method Compilation'
 method: FunctionDefAst
 generateClassMethodSourceOn: aStream
 	"Generate method source for a class instance method. Strips the self

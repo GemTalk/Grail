@@ -45,7 +45,7 @@ Object
 
 expectvalue /Class
 doit
-SubscriptAst category: 'Parser'
+SubscriptAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from SubscriptAst
@@ -54,42 +54,42 @@ removeallclassmethods SubscriptAst
 
 set compile_env: 0
 
-category: 'accessing'
+category: 'Grail-accessing'
 method: SubscriptAst
 slice
 
 	^slice
 %
 
-category: 'accessing'
+category: 'Grail-accessing'
 method: SubscriptAst
 value
 
 	^value
 %
 
-category: 'other'
+category: 'Grail-other'
 method: SubscriptAst
 assertContextIsLoad
 
 	ctx assertIsLoad.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: SubscriptAst
 assertContextIsStore
 
 	ctx assertIsStore.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: SubscriptAst
 declareVariable
 
 	value declareVariable.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: SubscriptAst
 printSmalltalkOn: aStream
 

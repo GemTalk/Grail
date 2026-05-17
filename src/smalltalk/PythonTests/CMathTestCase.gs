@@ -18,7 +18,7 @@ PythonTestCase subclass: 'CMathTestCase'
 
 expectvalue /Class
 doit
-CMathTestCase category: 'SUnit'
+CMathTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ CMathTestCase class removeAllMethods: 0.
 
 set compile_env: 0
 
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: CMathTestCase
 testE
 	"Test cmath.e constant"
@@ -47,7 +47,7 @@ testE
 		< 0.001)
 %
 
-category: 'Tests - Exponential'
+category: 'Grail-Tests - Exponential'
 method: CMathTestCase
 testExp
 	"Test cmath.exp() — Phase-4 direct method dispatch."
@@ -64,7 +64,7 @@ testExp
 	self assert: ((imag abs) < 0.00001)
 %
 
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: CMathTestCase
 testInf
 	"Test cmath.inf constant"
@@ -76,7 +76,7 @@ testInf
 	self assert: (result _getKind) equals: 3
 %
 
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: CMathTestCase
 testInfj
 	"Test cmath.infj constant"
@@ -89,7 +89,7 @@ testInfj
 	self assert: (imag _getKind) equals: 3
 %
 
-category: 'Tests - Classification'
+category: 'Grail-Tests - Classification'
 method: CMathTestCase
 testIsfinite
 	"Test cmath.isfinite() — Phase-4 direct method dispatch."
@@ -107,7 +107,7 @@ testIsfinite
 	self deny: result
 %
 
-category: 'Tests - Classification'
+category: 'Grail-Tests - Classification'
 method: CMathTestCase
 testIsinf
 	"Test cmath.isinf() — Phase-4 direct method dispatch."
@@ -125,7 +125,7 @@ testIsinf
 	self deny: result
 %
 
-category: 'Tests - Classification'
+category: 'Grail-Tests - Classification'
 method: CMathTestCase
 testIsnan
 	"Test cmath.isnan() — Phase-4 direct method dispatch."
@@ -143,7 +143,7 @@ testIsnan
 	self deny: result
 %
 
-category: 'Tests - Logarithmic'
+category: 'Grail-Tests - Logarithmic'
 method: CMathTestCase
 testLog
 	"Test cmath.log() — Phase-4 direct method dispatch."
@@ -160,7 +160,7 @@ testLog
 	self assert: ((imag abs) < 0.00001)
 %
 
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: CMathTestCase
 testNan
 	"Test cmath.nan constant"
@@ -172,7 +172,7 @@ testNan
 	self assert: (result _isNaN)
 %
 
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: CMathTestCase
 testNanj
 	"Test cmath.nanj constant"
@@ -185,7 +185,7 @@ testNanj
 	self assert: (imag _isNaN)
 %
 
-category: 'Tests - Polar'
+category: 'Grail-Tests - Polar'
 method: CMathTestCase
 testPhase
 	"Test cmath.phase() — Phase-4 direct method dispatch."
@@ -203,7 +203,7 @@ testPhase
 	self assert: (((result - (pi / 2.0)) abs) < 0.00001)
 %
 
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: CMathTestCase
 testPi
 	"Test cmath.pi constant"
@@ -216,7 +216,7 @@ testPi
 		< 0.001)
 %
 
-category: 'Tests - Polar'
+category: 'Grail-Tests - Polar'
 method: CMathTestCase
 testPolar
 	"Test cmath.polar() — Phase-4 direct method dispatch."
@@ -231,7 +231,7 @@ testPolar
 	self assert: (((r - 5.0) abs) < 0.00001)
 %
 
-category: 'Tests - Polar'
+category: 'Grail-Tests - Polar'
 method: CMathTestCase
 testRect
 	"Test cmath.rect() — Phase-4 direct method dispatch."
@@ -247,7 +247,7 @@ testRect
 	self assert: ((imag abs) < 0.00001)
 %
 
-category: 'Tests - Power'
+category: 'Grail-Tests - Power'
 method: CMathTestCase
 testSqrt
 	"Test cmath.sqrt() — Phase-4 direct method dispatch."

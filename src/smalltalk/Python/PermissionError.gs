@@ -17,5 +17,5 @@ OSError subclass: 'PermissionError'
 
 expectvalue /Class
 doit
-PermissionError category: 'Exceptions'
+PermissionError category: 'Grail-Exceptions'
 %

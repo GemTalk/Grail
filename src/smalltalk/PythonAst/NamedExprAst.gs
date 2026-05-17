@@ -18,7 +18,7 @@ ExpressionAst subclass: 'NamedExprAst'
 
 expectvalue /Class
 doit
-NamedExprAst category: 'Parser'
+NamedExprAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from NamedExprAst
@@ -27,14 +27,14 @@ removeallclassmethods NamedExprAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: NamedExprAst
 addVariableNamesTo: aStream
 
 	target addVariableNamesTo: aStream.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: NamedExprAst
 printSmalltalkOn: aStream
 

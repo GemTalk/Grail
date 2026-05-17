@@ -43,7 +43,7 @@ Object
 
 expectvalue /Class
 doit
-AwaitAst category: 'Parser'
+AwaitAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from AwaitAst

@@ -17,7 +17,7 @@ PythonTestCase subclass: 'PermissionErrorTestCase'
 %
 expectvalue /Class
 doit
-PermissionErrorTestCase category: 'SUnit'
+PermissionErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ PermissionErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-PermissionError'
+category: 'Grail-Tests-PermissionError'
 method: PermissionErrorTestCase
 test_creation
 	"Test creating a PermissionError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-PermissionError'
+category: 'Grail-Tests-PermissionError'
 method: PermissionErrorTestCase
 test_inheritance
 	"Test that PermissionError inherits from OSError."

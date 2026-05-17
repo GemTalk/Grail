@@ -17,7 +17,7 @@ PythonTestCase subclass: 'ImportErrorTestCase'
 %
 expectvalue /Class
 doit
-ImportErrorTestCase category: 'SUnit'
+ImportErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ ImportErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-ImportError'
+category: 'Grail-Tests-ImportError'
 method: ImportErrorTestCase
 test_creation
 	"Test creating a ImportError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-ImportError'
+category: 'Grail-Tests-ImportError'
 method: ImportErrorTestCase
 test_inheritance
 	"Test that ImportError inherits from Exception."

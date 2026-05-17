@@ -17,5 +17,5 @@ Warning subclass: 'UnicodeWarning'
 
 expectvalue /Class
 doit
-UnicodeWarning category: 'Exceptions'
+UnicodeWarning category: 'Grail-Exceptions'
 %

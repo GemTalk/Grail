@@ -17,7 +17,7 @@ PythonTestCase subclass: 'FloatingPointErrorTestCase'
 %
 expectvalue /Class
 doit
-FloatingPointErrorTestCase category: 'SUnit'
+FloatingPointErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ FloatingPointErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-FloatingPointError'
+category: 'Grail-Tests-FloatingPointError'
 method: FloatingPointErrorTestCase
 test_creation
 	"Test creating a FloatingPointError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-FloatingPointError'
+category: 'Grail-Tests-FloatingPointError'
 method: FloatingPointErrorTestCase
 test_inheritance
 	"Test that FloatingPointError inherits from Exception."

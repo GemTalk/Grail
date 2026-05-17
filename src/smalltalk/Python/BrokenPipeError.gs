@@ -17,5 +17,5 @@ ConnectionError subclass: 'BrokenPipeError'
 
 expectvalue /Class
 doit
-BrokenPipeError category: 'Exceptions'
+BrokenPipeError category: 'Grail-Exceptions'
 %

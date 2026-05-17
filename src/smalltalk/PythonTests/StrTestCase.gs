@@ -18,7 +18,7 @@ PythonTestCase subclass: 'StrTestCase'
 
 expectvalue /Class
 doit
-StrTestCase category: 'SUnit'
+StrTestCase category: 'Grail-SUnit'
 %
 
 ! ------------------- Remove existing behavior from StrTestCase
@@ -33,7 +33,7 @@ StrTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-String Operations'
+category: 'Grail-String Operations'
 method: StrTestCase
 test__add__
 	"Test string concatenation with +"
@@ -45,7 +45,7 @@ test__add__
 	self assert: result equals: 'hello world'.
 %
 
-category: 'Python-Sequence Operations'
+category: 'Grail-Sequence Operations'
 method: StrTestCase
 test__contains__
 	"Test substring containment"
@@ -59,7 +59,7 @@ test__contains__
 	self assert: result equals: false.
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: StrTestCase
 test__eq__
 	"Test string equality"
@@ -71,7 +71,7 @@ test__eq__
 	self assert: result equals: true.
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: StrTestCase
 test__ge__
 	"Test string greater than or equal"
@@ -83,7 +83,7 @@ test__ge__
 	self assert: result equals: true.
 %
 
-category: 'Python-Sequence Operations'
+category: 'Grail-Sequence Operations'
 method: StrTestCase
 test__getitem__
 	"Test string indexing: s[index]"
@@ -103,7 +103,7 @@ test__getitem__
 	self assert: result equals: 'o'.
 %
 
-category: 'Python-Sequence Operations'
+category: 'Grail-Sequence Operations'
 method: StrTestCase
 test__getitem__emptyString
 	"Test indexing on empty string raises IndexError"
@@ -115,7 +115,7 @@ test__getitem__emptyString
 	self should: [s @env1:__getitem__: -1] raise: IndexError.
 %
 
-category: 'Python-Sequence Operations'
+category: 'Grail-Sequence Operations'
 method: StrTestCase
 test__getitem__negative
 	"Test negative indexing: s[-1]"
@@ -134,7 +134,7 @@ test__getitem__negative
 	self assert: result equals: 'h'.
 %
 
-category: 'Python-Sequence Operations'
+category: 'Grail-Sequence Operations'
 method: StrTestCase
 test__getitem__outOfRange
 	"Test index out of range raises IndexError"
@@ -151,7 +151,7 @@ test__getitem__outOfRange
 	self should: [s @env1:__getitem__: -10] raise: IndexError.
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: StrTestCase
 test__gt__
 	"Test string greater than"
@@ -163,7 +163,7 @@ test__gt__
 	self assert: result equals: true.
 %
 
-category: 'Python-Hashing & Identity'
+category: 'Grail-Hashing & Identity'
 method: StrTestCase
 test__hash__
 	"Test that __hash__ returns a hash value"
@@ -174,7 +174,7 @@ test__hash__
 	self assert: result class equals: SmallInteger.
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: StrTestCase
 test__le__
 	"Test string less than or equal"
@@ -186,7 +186,7 @@ test__le__
 	self assert: result equals: true.
 %
 
-category: 'Python-Sequence Operations'
+category: 'Grail-Sequence Operations'
 method: StrTestCase
 test__len__
 	"Test string length"
@@ -197,7 +197,7 @@ test__len__
 	self assert: result equals: 5.
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: StrTestCase
 test__lt__
 	"Test string less than"
@@ -209,7 +209,7 @@ test__lt__
 	self assert: result equals: true.
 %
 
-category: 'Python-String Operations'
+category: 'Grail-String Operations'
 method: StrTestCase
 test__mul__
 	"Test string repetition with *"
@@ -220,7 +220,7 @@ test__mul__
 	self assert: result equals: 'ababab'.
 %
 
-category: 'Python-String Operations'
+category: 'Grail-String Operations'
 method: StrTestCase
 test__mul__Zero
 	"Test string repetition with 0"
@@ -231,7 +231,7 @@ test__mul__Zero
 	self assert: result equals: ''.
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: StrTestCase
 test__ne__
 	"Test string inequality"
@@ -243,7 +243,7 @@ test__ne__
 	self assert: result equals: true.
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: StrTestCase
 test__new__WithNil
 	"Test that str(None) returns empty string"
@@ -253,7 +253,7 @@ test__new__WithNil
 	self assert: result equals: ''.
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: StrTestCase
 test__new__WithString
 	"Test that str('hello') returns the same string"
@@ -263,7 +263,7 @@ test__new__WithString
 	self assert: result equals: 'hello'.
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: StrTestCase
 test__repr__
 	"Test __repr__ adds quotes"
@@ -274,7 +274,7 @@ test__repr__
 	self assert: result equals: '''hello'''.
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: StrTestCase
 test__repr__WithApostrophe
 	"Test __repr__ escapes apostrophes"
@@ -285,7 +285,7 @@ test__repr__WithApostrophe
 	self assert: result equals: '''it\''s'''.
 %
 
-category: 'Python-String Operations'
+category: 'Grail-String Operations'
 method: StrTestCase
 test__rmul__
 	"Test reverse string repetition"
@@ -296,7 +296,7 @@ test__rmul__
 	self assert: result equals: 'ababab'.
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: StrTestCase
 test__str__
 	"Test __str__ returns self"
@@ -307,7 +307,7 @@ test__str__
 	self assert: result equals: s.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testCapitalize
 	"Test capitalize() method"
@@ -318,7 +318,7 @@ testCapitalize
 	self assert: result equals: 'Hello world'.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testCasefold
 	"Test casefold() method"
@@ -329,7 +329,7 @@ testCasefold
 	self assert: result equals: 'hello'.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testCenter
 	"Test center() method"
@@ -341,7 +341,7 @@ testCenter
 	self assert: result trimBoth equals: 'hi'.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testCount
 	"Test count() method"
@@ -358,7 +358,7 @@ testCount
 	self assert: result equals: 0.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testEndswith
 	"Test endswith() method"
@@ -372,7 +372,7 @@ testEndswith
 	self assert: result equals: false.
 %
 
-category: 'Tests - Eval - String Methods'
+category: 'Grail-Tests - Eval - String Methods'
 method: StrTestCase
 testEvalLen
 	"Test len() on strings via Python source"
@@ -381,7 +381,7 @@ testEvalLen
 	self assert: (self eval: 'len("")') equals: 0.
 %
 
-category: 'Tests - Eval - String Operations'
+category: 'Grail-Tests - Eval - String Operations'
 method: StrTestCase
 testEvalStringConcatenation
 	"Test string + string via Python source"
@@ -389,7 +389,7 @@ testEvalStringConcatenation
 	self assert: (self eval: '"hello" + " world"') equals: 'hello world'.
 %
 
-category: 'Tests - Eval - String Operations'
+category: 'Grail-Tests - Eval - String Operations'
 method: StrTestCase
 testEvalStringContains
 	"Test in operator for strings via Python source"
@@ -398,7 +398,7 @@ testEvalStringContains
 	self deny: (self eval: '"xyz" in "hello world"').
 %
 
-category: 'Tests - Eval - String Operations'
+category: 'Grail-Tests - Eval - String Operations'
 method: StrTestCase
 testEvalStringIndexing
 	"Test string indexing via Python source"
@@ -408,7 +408,7 @@ testEvalStringIndexing
 	self assert: (self eval: '"hello"[-1]') equals: 'o'.
 %
 
-category: 'Tests - Eval - String Creation'
+category: 'Grail-Tests - Eval - String Creation'
 method: StrTestCase
 testEvalStringLiteral
 	"Test string literal creation via Python source"
@@ -417,7 +417,7 @@ testEvalStringLiteral
 	self assert: (self eval: '''hello''') equals: 'hello'.
 %
 
-category: 'Tests - Eval - String Operations'
+category: 'Grail-Tests - Eval - String Operations'
 method: StrTestCase
 testEvalStringRepetition
 	"Test string * n via Python source"
@@ -425,7 +425,7 @@ testEvalStringRepetition
 	self assert: (self eval: '"ab" * 3') equals: 'ababab'.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testExpandtabs
 	"Test expandtabs() method"
@@ -436,7 +436,7 @@ testExpandtabs
 	self assert: (result includesString: '	') equals: false.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testFind
 	"Test find() method"
@@ -450,7 +450,7 @@ testFind
 	self assert: result equals: -1.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testIndex
 	"Test index() method"
@@ -461,7 +461,7 @@ testIndex
 	self assert: result equals: 6.
 %
 
-category: 'Python-String Test Methods'
+category: 'Grail-String Test Methods'
 method: StrTestCase
 testIsalnum
 	"Test isalnum() method"
@@ -476,7 +476,7 @@ testIsalnum
 	self assert: result equals: false.
 %
 
-category: 'Python-String Test Methods'
+category: 'Grail-String Test Methods'
 method: StrTestCase
 testIsalpha
 	"Test isalpha() method"
@@ -491,7 +491,7 @@ testIsalpha
 	self assert: result equals: false.
 %
 
-category: 'Python-String Test Methods'
+category: 'Grail-String Test Methods'
 method: StrTestCase
 testIsascii
 	"Test isascii() method"
@@ -502,7 +502,7 @@ testIsascii
 	self assert: result equals: true.
 %
 
-category: 'Python-String Test Methods'
+category: 'Grail-String Test Methods'
 method: StrTestCase
 testIsdecimal
 	"Test isdecimal() method"
@@ -517,7 +517,7 @@ testIsdecimal
 	self assert: result equals: false.
 %
 
-category: 'Python-String Test Methods'
+category: 'Grail-String Test Methods'
 method: StrTestCase
 testIsdigit
 	"Test isdigit() method"
@@ -532,7 +532,7 @@ testIsdigit
 	self assert: result equals: false.
 %
 
-category: 'Python-String Test Methods'
+category: 'Grail-String Test Methods'
 method: StrTestCase
 testIsidentifier
 	"Test isidentifier() method"
@@ -547,7 +547,7 @@ testIsidentifier
 	self assert: result equals: false.
 %
 
-category: 'Python-String Test Methods'
+category: 'Grail-String Test Methods'
 method: StrTestCase
 testIslower
 	"Test islower() method"
@@ -562,7 +562,7 @@ testIslower
 	self assert: result equals: false.
 %
 
-category: 'Python-String Test Methods'
+category: 'Grail-String Test Methods'
 method: StrTestCase
 testIsnumeric
 	"Test isnumeric() method"
@@ -573,7 +573,7 @@ testIsnumeric
 	self assert: result equals: true.
 %
 
-category: 'Python-String Test Methods'
+category: 'Grail-String Test Methods'
 method: StrTestCase
 testIsprintable
 	"Test isprintable() method"
@@ -584,7 +584,7 @@ testIsprintable
 	self assert: result equals: true.
 %
 
-category: 'Python-String Test Methods'
+category: 'Grail-String Test Methods'
 method: StrTestCase
 testIsspace
 	"Test isspace() method"
@@ -599,7 +599,7 @@ testIsspace
 	self assert: result equals: false.
 %
 
-category: 'Python-String Test Methods'
+category: 'Grail-String Test Methods'
 method: StrTestCase
 testIstitle
 	"Test istitle() method"
@@ -614,7 +614,7 @@ testIstitle
 	self assert: result equals: false.
 %
 
-category: 'Python-String Test Methods'
+category: 'Grail-String Test Methods'
 method: StrTestCase
 testIsupper
 	"Test isupper() method"
@@ -629,7 +629,7 @@ testIsupper
 	self assert: result equals: false.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testJoin
 	"Test join() method"
@@ -641,7 +641,7 @@ testJoin
 	self assert: result equals: 'apple, banana, cherry'.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testLjust
 	"Test ljust() method"
@@ -653,7 +653,7 @@ testLjust
 	self assert: (result beginsWith: 'hi') equals: true.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testLower
 	"Test lower() method"
@@ -664,7 +664,7 @@ testLower
 	self assert: result equals: 'hello'.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testLstrip
 	"Test lstrip() method"
@@ -675,7 +675,7 @@ testLstrip
 	self assert: result equals: 'hello  '.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testPartition
 	"Test partition() method"
@@ -689,7 +689,7 @@ testPartition
 	self assert: (result at: 3) equals: 'world'.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testRemoveprefix
 	"Test removeprefix() method"
@@ -703,7 +703,7 @@ testRemoveprefix
 	self assert: result equals: 'hello world'.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testRemovesuffix
 	"Test removesuffix() method"
@@ -717,7 +717,7 @@ testRemovesuffix
 	self assert: result equals: 'hello world'.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testReplace
 	"Test replace() method"
@@ -728,7 +728,7 @@ testReplace
 	self assert: result equals: 'hello there'.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testRfind
 	"Test rfind() method"
@@ -742,7 +742,7 @@ testRfind
 	self assert: result equals: -1.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testRindex
 	"Test rindex() method"
@@ -753,7 +753,7 @@ testRindex
 	self assert: result equals: 12.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testRjust
 	"Test rjust() method"
@@ -765,7 +765,7 @@ testRjust
 	self assert: (result endsWith: 'hi') equals: true.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testRpartition
 	"Test rpartition() method"
@@ -779,7 +779,7 @@ testRpartition
 	self assert: (result at: 3) equals: 'foo'.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testRstrip
 	"Test rstrip() method"
@@ -790,7 +790,7 @@ testRstrip
 	self assert: result equals: '  hello'.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testSplit
 	"Test split() method"
@@ -804,7 +804,7 @@ testSplit
 	self assert: (result at: 3) equals: 'foo'.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testSplitlines
 	"Test splitlines() method"
@@ -818,7 +818,7 @@ world'.
 	self assert: (result at: 2) equals: 'world'.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testStartswith
 	"Test startswith() method"
@@ -832,7 +832,7 @@ testStartswith
 	self assert: result equals: false.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testStrip
 	"Test strip() method"
@@ -843,7 +843,7 @@ testStrip
 	self assert: result equals: 'hello'.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testSwapcase
 	"Test swapcase() method"
@@ -854,7 +854,7 @@ testSwapcase
 	self assert: result equals: 'hELLO wORLD'.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testTitle
 	"Test title() method"
@@ -865,7 +865,7 @@ testTitle
 	self assert: result equals: 'Hello World'.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testUpper
 	"Test upper() method"
@@ -876,7 +876,7 @@ testUpper
 	self assert: result equals: 'HELLO'.
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: StrTestCase
 testZfill
 	"Test zfill() method"

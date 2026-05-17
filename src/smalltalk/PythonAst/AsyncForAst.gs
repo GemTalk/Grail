@@ -25,7 +25,7 @@ AsyncForAst comment:
 
 expectvalue /Class
 doit
-AsyncForAst category: 'Parser'
+AsyncForAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from AsyncForAst

@@ -42,7 +42,7 @@ Object
 
 expectvalue /Class
 doit
-ClassFunctionDefAst category: 'Parser'
+ClassFunctionDefAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from ClassFunctionDefAst

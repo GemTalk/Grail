@@ -17,5 +17,5 @@ RuntimeError subclass: 'NotImplementedError'
 
 expectvalue /Class
 doit
-NotImplementedError category: 'Exceptions'
+NotImplementedError category: 'Grail-Exceptions'
 %

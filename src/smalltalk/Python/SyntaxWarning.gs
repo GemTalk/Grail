@@ -17,5 +17,5 @@ Warning subclass: 'SyntaxWarning'
 
 expectvalue /Class
 doit
-SyntaxWarning category: 'Exceptions'
+SyntaxWarning category: 'Grail-Exceptions'
 %

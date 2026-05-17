@@ -18,7 +18,7 @@ AbstractNode subclass: 'TypeIgnoreAst'
 
 expectvalue /Class
 doit
-TypeIgnoreAst category: 'Parser'
+TypeIgnoreAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from TypeIgnoreAst

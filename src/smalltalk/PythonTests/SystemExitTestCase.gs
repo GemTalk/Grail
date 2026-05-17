@@ -17,7 +17,7 @@ PythonTestCase subclass: 'SystemExitTestCase'
 %
 expectvalue /Class
 doit
-SystemExitTestCase category: 'SUnit'
+SystemExitTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ SystemExitTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-SystemExit'
+category: 'Grail-Tests-SystemExit'
 method: SystemExitTestCase
 test_creation
 	"Test creating a SystemExit instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-SystemExit'
+category: 'Grail-Tests-SystemExit'
 method: SystemExitTestCase
 test_inheritance
 	"Test that SystemExit inherits from BaseException."

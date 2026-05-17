@@ -20,7 +20,7 @@ dict class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: dict
 __new__
 	"dict() — create an empty dict. Receiver is the class."
@@ -28,7 +28,7 @@ __new__
 	^ self ___new___
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: dict
 __new__: source
 	"dict(source) — create a dict from another mapping or from an
@@ -66,7 +66,7 @@ __new__: source
 	^ result
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: dict
 _new: positional kw: keywords
 	"dict(**kwargs) and dict(source, **kwargs) varargs entry point.
@@ -89,21 +89,21 @@ _new: positional kw: keywords
 	^ result
 %
 
-category: 'Python-Type'
+category: 'Grail-Type'
 method: dict
 __class__
 	"Return the Python type for dict"
 	^ dict
 %
 
-category: 'Python-Collection Protocol'
+category: 'Grail-Collection Protocol'
 method: dict
 __contains__: key
 	"Return True if key is in the dictionary, else False"
 	^ self @env0:includesKey: key
 %
 
-category: 'Python-Subscript Protocol'
+category: 'Grail-Subscript Protocol'
 method: dict
 __delitem__: key
 	"Remove d[key] from dictionary. Raises KeyError if key is not in the dictionary"
@@ -116,7 +116,7 @@ __delitem__: key
 	self @env0:removeKey: key
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: dict
 __eq__: other
 	"Return True if dictionaries have the same (key, value) pairs"
@@ -147,7 +147,7 @@ __eq__: other
 	^ true
 %
 
-category: 'Python-Subscript Protocol'
+category: 'Grail-Subscript Protocol'
 method: dict
 __getitem__: key
 	"Return the value for key. Raises KeyError if key is not in the dictionary"
@@ -160,7 +160,7 @@ __getitem__: key
 	^ self @env0:at: key
 %
 
-category: 'Python-Subscript Protocol'
+category: 'Grail-Subscript Protocol'
 method: SymbolDictionary
 __getitem__: key
 	"Return the value for key. Raises KeyError if key is not in the dictionary"
@@ -168,28 +168,28 @@ __getitem__: key
 	^ super __getitem__: (key @env0:asSymbol)
 %
 
-category: 'Python-Iterator Protocol'
+category: 'Grail-Iterator Protocol'
 method: dict
 __iter__
 	"Return an iterator over the keys of the dictionary"
 	^ dict_keyiterator @env1:___on: self
 %
 
-category: 'Python-Collection Protocol'
+category: 'Grail-Collection Protocol'
 method: dict
 __len__
 	"Return the number of items in the dictionary"
 	^ self @env0:size
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: dict
 __ne__: other
 	"Return True if dictionaries do not have the same (key, value) pairs"
 	^ (self @env1:__eq__: other) @env0:not
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: dict
 __repr__
 	"Return a string representation of the dictionary"
@@ -220,7 +220,7 @@ __repr__
 	^ stream @env0:contents
 %
 
-category: 'Python-Subscript Protocol'
+category: 'Grail-Subscript Protocol'
 method: dict
 __setitem__: key _: value
 	"Set d[key] to value"
@@ -228,7 +228,7 @@ __setitem__: key _: value
 	^ None
 %
 
-category: 'Python-Subscript Protocol'
+category: 'Grail-Subscript Protocol'
 method: SymbolDictionary
 __setitem__: key _: value
 	"Set d[key] to value"
@@ -237,28 +237,28 @@ __setitem__: key _: value
 	^ None
 %
 
-category: 'Python-Mutation Methods'
+category: 'Grail-Mutation Methods'
 method: dict
 clear
 	"Remove all items from the dictionary"
 	self @env0:removeAllKeys: (self @env0:keys)
 %
 
-category: 'Python-Mutation Methods'
+category: 'Grail-Mutation Methods'
 method: dict
 copy
 	"Return a shallow copy of the dictionary"
 	^ self @env0:copy
 %
 
-category: 'Python-Access Methods'
+category: 'Grail-Access Methods'
 method: dict
 get: key
 	"Return the value for key if key is in the dictionary, else None"
 	^ self @env1:get: key _: None
 %
 
-category: 'Python-Access Methods'
+category: 'Grail-Access Methods'
 method: dict
 get: key _: default
 	"Return the value for key if key is in the dictionary, else default"
@@ -271,7 +271,7 @@ get: key _: default
 	^ default
 %
 
-category: 'Python-View Methods'
+category: 'Grail-View Methods'
 method: dict
 items
 	"Return a new view of the dictionary's (key, value) pairs"
@@ -286,7 +286,7 @@ items
 	^ itemsArray
 %
 
-category: 'Python-View Methods'
+category: 'Grail-View Methods'
 method: dict
 keys
 	"Return a new view of the dictionary's keys"
@@ -299,7 +299,7 @@ keys
 	^ keysArray
 %
 
-category: 'Python-Mutation Methods'
+category: 'Grail-Mutation Methods'
 method: dict
 pop: key
 	"If key is in the dictionary, remove it and return its value, else raise KeyError"
@@ -314,7 +314,7 @@ pop: key
 	^ value
 %
 
-category: 'Python-Mutation Methods'
+category: 'Grail-Mutation Methods'
 method: dict
 pop: key _: default
 	"If key is in the dictionary, remove it and return its value, else return default"
@@ -329,7 +329,7 @@ pop: key _: default
 	^ value
 %
 
-category: 'Python-Mutation Methods'
+category: 'Grail-Mutation Methods'
 method: dict
 popitem
 	"Remove and return a (key, value) pair from the dictionary in LIFO order.
@@ -353,14 +353,14 @@ popitem
 	^ pair
 %
 
-category: 'Python-Mutation Methods'
+category: 'Grail-Mutation Methods'
 method: dict
 setdefault: key
 	"If key is in the dictionary, return its value. If not, insert key with value None and return None"
 	^ self @env1:setdefault: key _: nil
 %
 
-category: 'Python-Mutation Methods'
+category: 'Grail-Mutation Methods'
 method: dict
 setdefault: key _: default
 	"If key is in the dictionary, return its value. If not, insert key with value default and return default"
@@ -374,7 +374,7 @@ setdefault: key _: default
 	^ default
 %
 
-category: 'Python-Mutation Methods'
+category: 'Grail-Mutation Methods'
 method: dict
 update: other
 	"Update the dictionary with key/value pairs from other, overwriting existing keys"
@@ -396,7 +396,7 @@ update: other
 	]
 %
 
-category: 'Python-View Methods'
+category: 'Grail-View Methods'
 method: dict
 values
 	"Return a new view of the dictionary's values"

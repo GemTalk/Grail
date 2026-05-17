@@ -17,5 +17,5 @@ ArithmeticError subclass: 'ZeroDivisionError'
 
 expectvalue /Class
 doit
-ZeroDivisionError category: 'Exceptions'
+ZeroDivisionError category: 'Grail-Exceptions'
 %

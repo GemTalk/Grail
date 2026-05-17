@@ -47,7 +47,7 @@ Object
 
 expectvalue /Class
 doit
-ImportFromAst category: 'Parser'
+ImportFromAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from ImportFromAst
@@ -55,7 +55,7 @@ removeallmethods ImportFromAst
 removeallclassmethods ImportFromAst
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: ImportFromAst
 printSmalltalkOn: aStream
 	"Generate Smalltalk for 'from module import name1, name2 as alias2, ...'.

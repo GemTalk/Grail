@@ -36,7 +36,7 @@ Object
 
 expectvalue /Class
 doit
-InvertAst category: 'Parser'
+InvertAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from InvertAst
@@ -45,7 +45,7 @@ removeallclassmethods InvertAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: InvertAst
 printSmalltalkOn: aStream
 

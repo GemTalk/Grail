@@ -17,7 +17,7 @@ PythonTestCase subclass: 'RecursionErrorTestCase'
 %
 expectvalue /Class
 doit
-RecursionErrorTestCase category: 'SUnit'
+RecursionErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ RecursionErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-RecursionError'
+category: 'Grail-Tests-RecursionError'
 method: RecursionErrorTestCase
 test_creation
 	"Test creating a RecursionError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-RecursionError'
+category: 'Grail-Tests-RecursionError'
 method: RecursionErrorTestCase
 test_inheritance
 	"Test that RecursionError inherits from RuntimeError."

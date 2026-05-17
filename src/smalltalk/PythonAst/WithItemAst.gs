@@ -47,7 +47,7 @@ Object
 
 expectvalue /Class
 doit
-WithItemAst category: 'Parser'
+WithItemAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from WithItemAst
@@ -56,14 +56,14 @@ removeallclassmethods WithItemAst
 
 set compile_env: 0
 
-category: 'Accessing'
+category: 'Grail-Accessing'
 method: WithItemAst
 context_expr
 
 	^context_expr
 %
 
-category: 'Accessing'
+category: 'Grail-Accessing'
 method: WithItemAst
 optional_vars
 

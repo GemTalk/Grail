@@ -45,7 +45,7 @@ Object
 
 expectvalue /Class
 doit
-AssertAst category: 'Parser'
+AssertAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from AssertAst
@@ -54,7 +54,7 @@ removeallclassmethods AssertAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: AssertAst
 printSmalltalkOn: aStream
 

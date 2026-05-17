@@ -50,7 +50,7 @@ Object
 
 expectvalue /Class
 doit
-ComprehensionAst category: 'Parser'
+ComprehensionAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from ComprehensionAst

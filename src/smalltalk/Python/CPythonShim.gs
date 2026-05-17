@@ -43,7 +43,7 @@ Usage:
 
 expectvalue /Class
 doit
-CPythonShim category: 'CPython'
+CPythonShim category: 'Grail-CPython'
 %
 
 ! ===============================================================================
@@ -62,7 +62,7 @@ set compile_env: 0
 ! Class methods
 ! ===============================================================================
 
-category: 'Instance Creation'
+category: 'Grail-Instance Creation'
 classmethod: CPythonShim
 current
 	"Ensure the user action library is loaded and return the singleton."
@@ -74,7 +74,7 @@ current
 	^ current
 %
 
-category: 'Instance Creation'
+category: 'Grail-Instance Creation'
 classmethod: CPythonShim
 reset
 	"Release the singleton."
@@ -82,7 +82,7 @@ reset
 	current := nil.
 %
 
-category: 'Configuration'
+category: 'Grail-Configuration'
 classmethod: CPythonShim
 libraryPath
 	"Return the path to the shim user action library."
@@ -93,7 +93,7 @@ libraryPath
 	^ libraryPath
 %
 
-category: 'Configuration'
+category: 'Grail-Configuration'
 classmethod: CPythonShim
 libraryPath: aString
 	"Set the path to the shim user action library."
@@ -102,7 +102,7 @@ libraryPath: aString
 	current := nil.
 %
 
-category: 'Testing'
+category: 'Grail-Testing'
 classmethod: CPythonShim
 isActive
 	"Return true if the shim singleton has been initialized."
@@ -110,7 +110,7 @@ isActive
 	^ current notNil
 %
 
-category: 'Loading'
+category: 'Grail-Loading'
 classmethod: CPythonShim
 ensureLoaded
 	"Load the user action library if needed, then init the server and types."
@@ -138,7 +138,7 @@ ensureLoaded
 ! Instance methods - PyObject wrapping
 ! ===============================================================================
 
-category: 'Private'
+category: 'Grail-Private'
 method: CPythonShim
 storeOop: anOop in: aCByteArray at: offset
 	"Store a 64-bit OOP into a CByteArray at the given byte offset.
@@ -152,7 +152,7 @@ storeOop: anOop in: aCByteArray at: offset
 	aCByteArray int64At: offset put: signed.
 %
 
-category: 'Wrapping'
+category: 'Grail-Wrapping'
 method: CPythonShim
 wrap: aValue
 	"Look up or create a CByteArray wrapper for aValue.
@@ -184,7 +184,7 @@ wrap: aValue
 	]
 %
 
-category: 'Wrapping'
+category: 'Grail-Wrapping'
 method: CPythonShim
 typeAddrFor: aValue
 	"Return the C type address for a Smalltalk value.
@@ -205,7 +205,7 @@ typeAddrFor: aValue
 ! Instance methods - Type address initialization
 ! ===============================================================================
 
-category: 'Initialization'
+category: 'Grail-Initialization'
 method: CPythonShim
 initTypeAddresses
 	"Fetch C type addresses via shimTypeAddr and build the class-to-address map.
@@ -258,7 +258,7 @@ initTypeAddresses
 ! Instance methods - Reference counting sweep
 ! ===============================================================================
 
-category: 'Management'
+category: 'Grail-Management'
 method: CPythonShim
 sweep
 	"Remove PyObject wrappers whose refcount has reached zero."
@@ -278,7 +278,7 @@ sweep
 ! Instance methods - General calling (0-5 args)
 ! ===============================================================================
 
-category: 'Calling'
+category: 'Grail-Calling'
 method: CPythonShim
 callModule: moduleName method: methodName
 	"Call a module method with no arguments."
@@ -290,7 +290,7 @@ callModule: moduleName method: methodName
 	}
 %
 
-category: 'Calling'
+category: 'Grail-Calling'
 method: CPythonShim
 callModule: moduleName method: methodName with: arg1
 	"Call a module method with 1 argument."
@@ -302,7 +302,7 @@ callModule: moduleName method: methodName with: arg1
 	}
 %
 
-category: 'Calling'
+category: 'Grail-Calling'
 method: CPythonShim
 callModule: moduleName method: methodName with: arg1 with: arg2
 	"Call a module method with 2 arguments."
@@ -315,7 +315,7 @@ callModule: moduleName method: methodName with: arg1 with: arg2
 	}
 %
 
-category: 'Calling'
+category: 'Grail-Calling'
 method: CPythonShim
 callModule: moduleName method: methodName with: arg1 with: arg2 with: arg3
 	"Call a module method with 3 arguments."
@@ -329,7 +329,7 @@ callModule: moduleName method: methodName with: arg1 with: arg2 with: arg3
 	}
 %
 
-category: 'Calling'
+category: 'Grail-Calling'
 method: CPythonShim
 callModule: moduleName method: methodName with: arg1 with: arg2 with: arg3 with: arg4
 	"Call a module method with 4 arguments."
@@ -343,7 +343,7 @@ callModule: moduleName method: methodName with: arg1 with: arg2 with: arg3 with:
 	}
 %
 
-category: 'Calling'
+category: 'Grail-Calling'
 method: CPythonShim
 callModule: moduleName method: methodName with: arg1 with: arg2 with: arg3 with: arg4 with: arg5
 	"Call a module method with 5 arguments."
@@ -362,7 +362,7 @@ callModule: moduleName method: methodName with: arg1 with: arg2 with: arg3 with:
 ! Instance methods - Backwards-compatible specialized calling
 ! ===============================================================================
 
-category: 'Calling'
+category: 'Grail-Calling'
 method: CPythonShim
 callModule: moduleName method: methodName doubles: anArrayOfDoubles
 	"Call a METH_FASTCALL method that takes 3 doubles and returns a double."
@@ -376,7 +376,7 @@ callModule: moduleName method: methodName doubles: anArrayOfDoubles
 	}
 %
 
-category: 'Calling'
+category: 'Grail-Calling'
 method: CPythonShim
 callModule: moduleName method: methodName withList: anArray andDouble: aFloat
 	"Call a method that takes (list, double) and returns an integer.
@@ -395,7 +395,7 @@ callModule: moduleName method: methodName withList: anArray andDouble: aFloat
 	}
 %
 
-category: 'Calling'
+category: 'Grail-Calling'
 method: CPythonShim
 callModule: moduleName method: methodName insortList: anArray value: aFloat
 	"Call a method that inserts a value into a sorted list.
@@ -413,7 +413,7 @@ callModule: moduleName method: methodName insortList: anArray value: aFloat
 	^ oc asArray
 %
 
-category: 'Calling'
+category: 'Grail-Calling'
 method: CPythonShim
 callModule: moduleName method: methodName withBytes: aByteArray
 	"Call a method that takes (bytes) and returns an integer."
@@ -425,7 +425,7 @@ callModule: moduleName method: methodName withBytes: aByteArray
 	}
 %
 
-category: 'Calling'
+category: 'Grail-Calling'
 method: CPythonShim
 callModule: moduleName method: methodName extendCrc: anInteger withBytes: aByteArray
 	"Call a method that takes (int, bytes) and returns an integer."
@@ -443,7 +443,7 @@ callModule: moduleName method: methodName extendCrc: anInteger withBytes: aByteA
 ! generic shimCall accepts up to 7 OOP args + an nargs slot, so 6 fits.)
 ! ===============================================================================
 
-category: 'Calling'
+category: 'Grail-Calling'
 method: CPythonShim
 callModule6: modDotMethod with: a1 with: a2 with: a3 with: a4 with: a5 with: a6
 	"Call a module method with 6 arguments. modDotMethod is 'module.method'.
@@ -460,7 +460,7 @@ callModule6: modDotMethod with: a1 with: a2 with: a3 with: a4 with: a5 with: a6
 	}
 %
 
-category: 'Calling'
+category: 'Grail-Calling'
 method: CPythonShim
 callModule6ReturnCPtr: modDotMethod with: a1 with: a2 with: a3 with: a4 with: a5 with: a6
 	"Call a module method with 6 arguments. Returns a raw C pointer (SmallInteger).
@@ -481,7 +481,7 @@ callModule6ReturnCPtr: modDotMethod with: a1 with: a2 with: a3 with: a4 with: a5
 ! Instance methods - Typed object calling (via shimCallTyped)
 ! ===============================================================================
 
-category: 'Calling'
+category: 'Grail-Calling'
 method: CPythonShim
 callTyped: moduleName type: typeName method: methName selfPtr: ptr
 	"Call a no-arg method on a C-allocated typed object. Returns a Smalltalk OOP."
@@ -492,7 +492,7 @@ callTyped: moduleName type: typeName method: methName selfPtr: ptr
 	}
 %
 
-category: 'Calling'
+category: 'Grail-Calling'
 method: CPythonShim
 callTyped: moduleName type: typeName method: methName selfPtr: ptr with: a1
 	"Call a 1-arg method on a C-allocated typed object. Returns a Smalltalk OOP."
@@ -503,7 +503,7 @@ callTyped: moduleName type: typeName method: methName selfPtr: ptr with: a1
 	}
 %
 
-category: 'Calling'
+category: 'Grail-Calling'
 method: CPythonShim
 callTyped: moduleName type: typeName method: methName selfPtr: ptr with: a1 with: a2
 	"Call a 2-arg method on a C-allocated typed object. Returns a Smalltalk OOP."
@@ -515,7 +515,7 @@ callTyped: moduleName type: typeName method: methName selfPtr: ptr with: a1 with
 	}
 %
 
-category: 'Calling'
+category: 'Grail-Calling'
 method: CPythonShim
 callTyped: moduleName type: typeName method: methName selfPtr: ptr with: a1 with: a2 with: a3
 	"Call a 3-arg method on a C-allocated typed object. Returns a Smalltalk OOP."
@@ -528,7 +528,7 @@ callTyped: moduleName type: typeName method: methName selfPtr: ptr with: a1 with
 	}
 %
 
-category: 'Calling'
+category: 'Grail-Calling'
 method: CPythonShim
 callTypedReturnCPtr: moduleName type: typeName method: methName selfPtr: ptr
 	"Call a no-arg method on a C-allocated typed object. Returns a raw C pointer."
@@ -539,7 +539,7 @@ callTypedReturnCPtr: moduleName type: typeName method: methName selfPtr: ptr
 	}
 %
 
-category: 'Calling'
+category: 'Grail-Calling'
 method: CPythonShim
 callTypedReturnCPtr: moduleName type: typeName method: methName selfPtr: ptr with: a1
 	"Call a 1-arg method on a C-allocated typed object. Returns a raw C pointer."
@@ -550,7 +550,7 @@ callTypedReturnCPtr: moduleName type: typeName method: methName selfPtr: ptr wit
 	}
 %
 
-category: 'Calling'
+category: 'Grail-Calling'
 method: CPythonShim
 callTypedReturnCPtr: moduleName type: typeName method: methName selfPtr: ptr with: a1 with: a2
 	"Call a 2-arg method on a C-allocated typed object. Returns a raw C pointer."
@@ -562,7 +562,7 @@ callTypedReturnCPtr: moduleName type: typeName method: methName selfPtr: ptr wit
 	}
 %
 
-category: 'Calling'
+category: 'Grail-Calling'
 method: CPythonShim
 callTypedReturnCPtr: moduleName type: typeName method: methName selfPtr: ptr with: a1 with: a2 with: a3
 	"Call a 3-arg method on a C-allocated typed object. Returns a raw C pointer."
@@ -579,7 +579,7 @@ callTypedReturnCPtr: moduleName type: typeName method: methName selfPtr: ptr wit
 ! Instance methods - Module Loading (for tests)
 ! ===============================================================================
 
-category: 'Module Loading'
+category: 'Grail-Module Loading'
 method: CPythonShim
 loadModule: moduleName
 	"Load a C extension module via the shimLoadModule user action.
@@ -599,7 +599,7 @@ loadModule: moduleName
 
 ! --------------- Float API ---------------
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyFloat_FromDouble: aFloat
 	^ (self wrap: aFloat) memoryAddress
@@ -607,7 +607,7 @@ PyFloat_FromDouble: aFloat
 
 ! --------------- Integer API ---------------
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyLong_FromSsize_t: anInteger
 	^ (self wrap: anInteger) memoryAddress
@@ -615,7 +615,7 @@ PyLong_FromSsize_t: anInteger
 
 ! --------------- String (Unicode) API ---------------
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyUnicode_FromString: aString
 	^ (self wrap: aString) memoryAddress
@@ -623,7 +623,7 @@ PyUnicode_FromString: aString
 
 ! --------------- Bytes API ---------------
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyBytes_FromStringAndSize: aByteArray
 	^ (self wrap: aByteArray) memoryAddress
@@ -631,43 +631,43 @@ PyBytes_FromStringAndSize: aByteArray
 
 ! --------------- List API ---------------
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyList_New: size
 	^ (self wrap: OrderedCollection new) memoryAddress
 %
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyList_Append: aList item: anItem
 	aList addLast: anItem.
 %
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyList_GetItem: aList at: zeroBasedIndex
 	^ (self wrap: (aList at: zeroBasedIndex + 1)) memoryAddress
 %
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyList_SetItem: aList at: zeroBasedIndex put: aValue
 	aList at: zeroBasedIndex + 1 put: aValue.
 %
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyList_Insert: aList at: zeroBasedIndex item: anItem
 	aList add: anItem beforeIndex: zeroBasedIndex + 1.
 %
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyList_Size: aList
 	^ aList size
 %
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyList_SetSlice: aList from: lo to: hi with: replacement
 	"Replace or delete elements in the range [lo, hi).
@@ -689,50 +689,50 @@ PyList_SetSlice: aList from: lo to: hi with: replacement
 
 ! --------------- Dict API ---------------
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyDict_New
 	^ (self wrap: KeyValueDictionary new) memoryAddress
 %
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyDict_SetItem: aDictionary key: aKey value: aValue
 	aDictionary at: aKey put: aValue.
 %
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyDict_SetItemString: aDictionary key: aString value: aValue
 	aDictionary at: aString put: aValue.
 %
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyDict_GetItem: aDictionary key: aKey
 	(aDictionary includesKey: aKey) ifFalse: [ ^ 0 ].
 	^ (self wrap: (aDictionary at: aKey)) memoryAddress
 %
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyDict_GetItemString: aDictionary key: aString
 	^ self PyDict_GetItem: aDictionary key: aString
 %
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyDict_Contains: aDictionary key: aKey
 	^ aDictionary includesKey: aKey
 %
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyDict_DelItem: aDictionary key: aKey
 	aDictionary removeKey: aKey.
 %
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyDict_Size: aDictionary
 	^ aDictionary size
@@ -740,19 +740,19 @@ PyDict_Size: aDictionary
 
 ! --------------- Tuple API ---------------
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyTuple_New: size
 	^ (self wrap: (Array new: size)) memoryAddress
 %
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyTuple_SetItem: anArray at: zeroBasedIndex put: aValue
 	anArray at: zeroBasedIndex + 1 put: aValue.
 %
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyTuple_GetItem: anArray at: zeroBasedIndex
 	^ (self wrap: (anArray at: zeroBasedIndex + 1)) memoryAddress
@@ -760,13 +760,13 @@ PyTuple_GetItem: anArray at: zeroBasedIndex
 
 ! --------------- Object protocol ---------------
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyObject_GetAttrString: obj name: nameString
 	^ (self wrap: (obj perform: nameString asSymbol env: 1)) memoryAddress
 %
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyObject_HasAttrString: obj name: nameString
 	^ [obj perform: nameString asSymbol env: 1. true]
@@ -774,19 +774,19 @@ PyObject_HasAttrString: obj name: nameString
 		do: [:e | false]
 %
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyObject_Repr: obj
 	^ (self wrap: (obj @env1:__repr__)) memoryAddress
 %
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyObject_Str: obj
 	^ (self wrap: (obj @env1:__str__)) memoryAddress
 %
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyObject_Length: obj
 	^ obj @env1:__len__
@@ -794,7 +794,7 @@ PyObject_Length: obj
 
 ! --------------- Dynamic module loading ---------------
 
-category: 'Dynamic Loading'
+category: 'Grail-Dynamic Loading'
 method: CPythonShim
 callModuleDynamic: moduleName method: methodName args: anArray
 	"Call a dynamically loaded module method with a variable number of arguments.
@@ -814,7 +814,7 @@ callModuleDynamic: moduleName method: methodName args: anArray
 	}
 %
 
-category: 'Dynamic Loading'
+category: 'Grail-Dynamic Loading'
 classmethod: CPythonShim
 loadDynamicModule: moduleName fromPath: pathString
 	"Dynamically load a .so extension module.
@@ -853,7 +853,7 @@ loadDynamicModule: moduleName fromPath: pathString
 		moduleClass
 			compileMethod: varargsSrc
 			dictionaries: symbolList
-			category: 'C Extension'
+			category: 'Grail-C Extension'
 			environmentId: 1.
 
 		"Fixed-arity forwarders 0..3 — delegate to the varargs form."
@@ -869,7 +869,7 @@ loadDynamicModule: moduleName fromPath: pathString
 			moduleClass
 				compileMethod: src
 				dictionaries: symbolList
-				category: 'C Extension'
+				category: 'Grail-C Extension'
 				environmentId: 1.
 		].
 	].
@@ -882,7 +882,7 @@ loadDynamicModule: moduleName fromPath: pathString
 
 ! --------------- Rich comparison ---------------
 
-category: 'CPython API'
+category: 'Grail-CPython API'
 method: CPythonShim
 PyObject_RichCompareBool: v with: w op: opInt
 	"Dispatch rich comparison to the appropriate Python dunder method.

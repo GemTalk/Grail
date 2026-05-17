@@ -36,7 +36,7 @@ Object
 
 expectvalue /Class
 doit
-ExpressionAst category: 'Parser'
+ExpressionAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from ExpressionAst
@@ -45,7 +45,7 @@ removeallclassmethods ExpressionAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 classmethod: ExpressionAst
 isAbstract
 

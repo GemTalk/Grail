@@ -17,5 +17,5 @@ IndentationError subclass: 'TabError'
 
 expectvalue /Class
 doit
-TabError category: 'Exceptions'
+TabError category: 'Grail-Exceptions'
 %

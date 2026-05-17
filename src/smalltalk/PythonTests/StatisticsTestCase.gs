@@ -18,7 +18,7 @@ PythonTestCase subclass: 'StatisticsTestCase'
 
 expectvalue /Class
 doit
-StatisticsTestCase category: 'SUnit'
+StatisticsTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ StatisticsTestCase class removeAllMethods: 0.
 
 set compile_env: 0
 
-category: 'Tests - Correlation'
+category: 'Grail-Tests - Correlation'
 method: StatisticsTestCase
 testCorrelation
 	"Test statistics.correlation()"
@@ -47,7 +47,7 @@ testCorrelation
 	self assert: (((result - 1.0) abs) < 0.00001).
 %
 
-category: 'Tests - Correlation'
+category: 'Grail-Tests - Correlation'
 method: StatisticsTestCase
 testCorrelationNegative
 	"Test statistics.correlation() with negative correlation"
@@ -60,7 +60,7 @@ testCorrelationNegative
 	self assert: (((result - -1.0) abs) < 0.00001).
 %
 
-category: 'Tests - Correlation'
+category: 'Grail-Tests - Correlation'
 method: StatisticsTestCase
 testCovariance
 	"Test statistics.covariance()"
@@ -73,7 +73,7 @@ testCovariance
 	self assert: (((result - 5.0) abs) < 0.00001).
 %
 
-category: 'Tests - Mean'
+category: 'Grail-Tests - Mean'
 method: StatisticsTestCase
 testFmean
 	"Test statistics.fmean() fast floating-point mean"
@@ -85,7 +85,7 @@ testFmean
 	self assert: (((result - 3.0) abs) < 0.00001).
 %
 
-category: 'Tests - Mean'
+category: 'Grail-Tests - Mean'
 method: StatisticsTestCase
 testFmeanWithWeights
 	"Test statistics.fmean() with weights"
@@ -99,7 +99,7 @@ testFmeanWithWeights
 	self assert: (((result - expected) abs) < 0.00001).
 %
 
-category: 'Tests - Mean'
+category: 'Grail-Tests - Mean'
 method: StatisticsTestCase
 testGeometricMean
 	"Test statistics.geometric_mean()"
@@ -113,7 +113,7 @@ testGeometricMean
 	self assert: (((result - expected) abs) < 0.00001).
 %
 
-category: 'Tests - Mean'
+category: 'Grail-Tests - Mean'
 method: StatisticsTestCase
 testHarmonicMean
 	"Test statistics.harmonic_mean()"
@@ -127,7 +127,7 @@ testHarmonicMean
 	self assert: (((result - expected) abs) < 0.00001).
 %
 
-category: 'Tests - Regression'
+category: 'Grail-Tests - Regression'
 method: StatisticsTestCase
 testLinearRegression
 	"Test statistics.linear_regression()"
@@ -143,7 +143,7 @@ testLinearRegression
 	self assert: (((intercept - 1.0) abs) < 0.00001).
 %
 
-category: 'Tests - Mean'
+category: 'Grail-Tests - Mean'
 method: StatisticsTestCase
 testMean
 	"Test statistics.mean() with simple data"
@@ -155,7 +155,7 @@ testMean
 	self assert: result equals: 3.
 %
 
-category: 'Tests - Mean'
+category: 'Grail-Tests - Mean'
 method: StatisticsTestCase
 testMeanEmpty
 	"Test statistics.mean() raises error for empty data"
@@ -168,7 +168,7 @@ testMeanEmpty
 	] raise: StatisticsError.
 %
 
-category: 'Tests - Mean'
+category: 'Grail-Tests - Mean'
 method: StatisticsTestCase
 testMeanFloat
 	"Test statistics.mean() returns correct float"
@@ -180,7 +180,7 @@ testMeanFloat
 	self assert: (((result - 2.5) abs) < 0.00001).
 %
 
-category: 'Tests - Median'
+category: 'Grail-Tests - Median'
 method: StatisticsTestCase
 testMedianEven
 	"Test statistics.median() with even number of elements"
@@ -192,7 +192,7 @@ testMedianEven
 	self assert: (((result - 2.5) abs) < 0.00001).
 %
 
-category: 'Tests - Median'
+category: 'Grail-Tests - Median'
 method: StatisticsTestCase
 testMedianHigh
 	"Test statistics.median_high()"
@@ -204,7 +204,7 @@ testMedianHigh
 	self assert: result equals: 3.
 %
 
-category: 'Tests - Median'
+category: 'Grail-Tests - Median'
 method: StatisticsTestCase
 testMedianLow
 	"Test statistics.median_low()"
@@ -216,7 +216,7 @@ testMedianLow
 	self assert: result equals: 2.
 %
 
-category: 'Tests - Median'
+category: 'Grail-Tests - Median'
 method: StatisticsTestCase
 testMedianOdd
 	"Test statistics.median() with odd number of elements"
@@ -228,7 +228,7 @@ testMedianOdd
 	self assert: result equals: 5.
 %
 
-category: 'Tests - Variance'
+category: 'Grail-Tests - Variance'
 method: StatisticsTestCase
 testPstdev
 	"Test statistics.pstdev() population standard deviation"
@@ -241,7 +241,7 @@ testPstdev
 	self assert: (((result - 2.0) abs) < 0.00001).
 %
 
-category: 'Tests - Variance'
+category: 'Grail-Tests - Variance'
 method: StatisticsTestCase
 testPvariance
 	"Test statistics.pvariance() population variance"
@@ -254,7 +254,7 @@ testPvariance
 	self assert: (((result - 4.0) abs) < 0.00001).
 %
 
-category: 'Tests - Quantiles'
+category: 'Grail-Tests - Quantiles'
 method: StatisticsTestCase
 testQuantiles
 	"Test statistics.quantiles() default quartiles"
@@ -267,7 +267,7 @@ testQuantiles
 	self assert: result size equals: 3.
 %
 
-category: 'Tests - Variance'
+category: 'Grail-Tests - Variance'
 method: StatisticsTestCase
 testStdev
 	"Test statistics.stdev() sample standard deviation"
@@ -281,7 +281,7 @@ testStdev
 	self assert: (((result - expected) abs) < 0.00001).
 %
 
-category: 'Tests - Variance'
+category: 'Grail-Tests - Variance'
 method: StatisticsTestCase
 testVariance
 	"Test statistics.variance() sample variance"

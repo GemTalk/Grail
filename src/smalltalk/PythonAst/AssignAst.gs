@@ -44,7 +44,7 @@ Object
 
 expectvalue /Class
 doit
-AssignAst category: 'Parser'
+AssignAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from AssignAst
@@ -53,7 +53,7 @@ removeallclassmethods AssignAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: AssignAst
 addVariableNamesTo: aStream
 
@@ -62,7 +62,7 @@ addVariableNamesTo: aStream
 	].
 %
 
-category: 'other'
+category: 'Grail-other'
 method: AssignAst
 printSmalltalkOn: aStream
 
@@ -80,7 +80,7 @@ printSmalltalkOn: aStream
 	aStream nextPut: $..
 %
 
-category: 'other'
+category: 'Grail-other'
 method: AssignAst
 printSmalltalkAttributeStoreOn: aStream target: tgt
 	"Generate attribute store.
@@ -104,7 +104,7 @@ printSmalltalkAttributeStoreOn: aStream target: tgt
 	aStream nextPut: $..
 %
 
-category: 'other'
+category: 'Grail-other'
 method: AssignAst
 printSmalltalkSubscriptStoreOn: aStream target: tgt
 	"Generate: obj __setitem__: slice _: value."
@@ -117,7 +117,7 @@ printSmalltalkSubscriptStoreOn: aStream target: tgt
 	aStream nextPut: $..
 %
 
-category: 'other'
+category: 'Grail-other'
 method: AssignAst
 target
 

@@ -27,7 +27,7 @@ See https://docs.python.org/3/library/cmath.html
 
 expectvalue /Class
 doit
-cmath category: 'Modules'
+cmath category: 'Grail-Modules'
 %
 
 ! ------------------- Remove existing Python methods from cmath
@@ -43,7 +43,7 @@ set compile_env: 1
 ! Private helper
 ! ===============================================================================
 
-category: 'Python-Private'
+category: 'Grail-Private'
 method: cmath
 ___asComplex: z
 	"Convert z to a complex number if it isn't already"
@@ -57,7 +57,7 @@ ___asComplex: z
 ! Initialization — constants only
 ! ===============================================================================
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: cmath
 initialize
 	self @env0:at: #pi put: (Float @env0:pi).
@@ -73,43 +73,43 @@ initialize
 ! Stored-attribute accessors (constants)
 ! ===============================================================================
 
-category: 'Python-Constants'
+category: 'Grail-Constants'
 method: cmath
 pi
 	^ self @env0:at: #pi
 %
 
-category: 'Python-Constants'
+category: 'Grail-Constants'
 method: cmath
 e
 	^ self @env0:at: #e
 %
 
-category: 'Python-Constants'
+category: 'Grail-Constants'
 method: cmath
 tau
 	^ self @env0:at: #tau
 %
 
-category: 'Python-Constants'
+category: 'Grail-Constants'
 method: cmath
 inf
 	^ self @env0:at: #inf
 %
 
-category: 'Python-Constants'
+category: 'Grail-Constants'
 method: cmath
 infj
 	^ self @env0:at: #infj
 %
 
-category: 'Python-Constants'
+category: 'Grail-Constants'
 method: cmath
 nan
 	^ self @env0:at: #nan
 %
 
-category: 'Python-Constants'
+category: 'Grail-Constants'
 method: cmath
 nanj
 	^ self @env0:at: #nanj
@@ -119,7 +119,7 @@ nanj
 ! Fast-path callables — trigonometric
 ! ===============================================================================
 
-category: 'Python-Trigonometric Functions'
+category: 'Grail-Trigonometric Functions'
 method: cmath
 cos: z
 	"cmath.cos(z) — cos(a+bi) = cos(a)*cosh(b) - i*sin(a)*sinh(b)"
@@ -131,7 +131,7 @@ cos: z
 	^ complex __new__: ((real @env0:cos) @env0:* (imag @env0:cosh)) _: (((real @env0:sin) @env0:* (imag @env0:sinh)) @env0:negated)
 %
 
-category: 'Python-Trigonometric Functions'
+category: 'Grail-Trigonometric Functions'
 method: cmath
 sin: z
 	"cmath.sin(z) — sin(a+bi) = sin(a)*cosh(b) + i*cos(a)*sinh(b)"
@@ -143,7 +143,7 @@ sin: z
 	^ complex __new__: ((real @env0:sin) @env0:* (imag @env0:cosh)) _: ((real @env0:cos) @env0:* (imag @env0:sinh))
 %
 
-category: 'Python-Trigonometric Functions'
+category: 'Grail-Trigonometric Functions'
 method: cmath
 tan: z
 	"cmath.tan(z) — sin(z) / cos(z)"
@@ -155,7 +155,7 @@ tan: z
 ! Fast-path callables — hyperbolic
 ! ===============================================================================
 
-category: 'Python-Hyperbolic Functions'
+category: 'Grail-Hyperbolic Functions'
 method: cmath
 cosh: z
 	"cmath.cosh(z) — cosh(a+bi) = cosh(a)*cos(b) + i*sinh(a)*sin(b)"
@@ -167,7 +167,7 @@ cosh: z
 	^ complex __new__: ((real @env0:cosh) @env0:* (imag @env0:cos)) _: ((real @env0:sinh) @env0:* (imag @env0:sin))
 %
 
-category: 'Python-Hyperbolic Functions'
+category: 'Grail-Hyperbolic Functions'
 method: cmath
 sinh: z
 	"cmath.sinh(z) — sinh(a+bi) = sinh(a)*cos(b) + i*cosh(a)*sin(b)"
@@ -179,7 +179,7 @@ sinh: z
 	^ complex __new__: ((real @env0:sinh) @env0:* (imag @env0:cos)) _: ((real @env0:cosh) @env0:* (imag @env0:sin))
 %
 
-category: 'Python-Hyperbolic Functions'
+category: 'Grail-Hyperbolic Functions'
 method: cmath
 tanh: z
 	"cmath.tanh(z) — sinh(z) / cosh(z)"
@@ -191,7 +191,7 @@ tanh: z
 ! Fast-path callables — exponential and logarithmic
 ! ===============================================================================
 
-category: 'Python-Exponential and Logarithmic'
+category: 'Grail-Exponential and Logarithmic'
 method: cmath
 exp: z
 	"cmath.exp(z) — exp(a+bi) = exp(a) * (cos(b) + i*sin(b))"
@@ -204,7 +204,7 @@ exp: z
 	^ complex __new__: (expReal @env0:* (imag @env0:cos)) _: (expReal @env0:* (imag @env0:sin))
 %
 
-category: 'Python-Exponential and Logarithmic'
+category: 'Grail-Exponential and Logarithmic'
 method: cmath
 log: z
 	"cmath.log(z) — log(|z|) + i*arg(z)"
@@ -218,7 +218,7 @@ log: z
 	^ complex __new__: (r @env0:ln) _: theta
 %
 
-category: 'Python-Exponential and Logarithmic'
+category: 'Grail-Exponential and Logarithmic'
 method: cmath
 log10: z
 	"cmath.log10(z) — log(z) / log(10)"
@@ -229,7 +229,7 @@ log10: z
 	^ logZ __truediv__: (complex __new__: ln10 _: 0.0)
 %
 
-category: 'Python-Exponential and Logarithmic'
+category: 'Grail-Exponential and Logarithmic'
 method: cmath
 sqrt: z
 	"cmath.sqrt(z) — sqrt(r) * (cos(theta/2) + i*sin(theta/2))"
@@ -249,7 +249,7 @@ sqrt: z
 ! Fast-path callables — polar coordinates
 ! ===============================================================================
 
-category: 'Python-Polar Coordinates'
+category: 'Grail-Polar Coordinates'
 method: cmath
 phase: z
 	"cmath.phase(z) — return the phase (argument) of z in radians"
@@ -261,7 +261,7 @@ phase: z
 	^ imag @env0:arcTan2: real
 %
 
-category: 'Python-Polar Coordinates'
+category: 'Grail-Polar Coordinates'
 method: cmath
 polar: z
 	"cmath.polar(z) — return (r, theta) as a tuple"
@@ -275,7 +275,7 @@ polar: z
 	^ tuple @env0:withAll: (tuple @env0:with: r with: theta)
 %
 
-category: 'Python-Polar Coordinates'
+category: 'Grail-Polar Coordinates'
 method: cmath
 rect: r _: theta
 	"cmath.rect(r, theta) — convert polar to rectangular"
@@ -290,7 +290,7 @@ rect: r _: theta
 ! Fast-path callables — classification
 ! ===============================================================================
 
-category: 'Python-Classification'
+category: 'Grail-Classification'
 method: cmath
 isfinite: z
 	"cmath.isfinite(z) — True if both real and imag parts are finite"
@@ -305,7 +305,7 @@ isfinite: z
 		and: [(imagKind @env0:<= 2) or: [imagKind == 4]]
 %
 
-category: 'Python-Classification'
+category: 'Grail-Classification'
 method: cmath
 isinf: z
 	"cmath.isinf(z) — True if either part is infinity"
@@ -319,7 +319,7 @@ isinf: z
 	^ (realKind == 3) or: [imagKind == 3]
 %
 
-category: 'Python-Classification'
+category: 'Grail-Classification'
 method: cmath
 isnan: z
 	"cmath.isnan(z) — True if either part is NaN"

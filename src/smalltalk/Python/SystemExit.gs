@@ -31,5 +31,5 @@ Instance variables:
 
 expectvalue /Class
 doit
-SystemExit category: 'Exceptions'
+SystemExit category: 'Grail-Exceptions'
 %

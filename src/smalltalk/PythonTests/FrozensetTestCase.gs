@@ -18,7 +18,7 @@ PythonTestCase subclass: 'FrozensetTestCase'
 
 expectvalue /Class
 doit
-FrozensetTestCase category: 'SUnit'
+FrozensetTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ FrozensetTestCase class removeAllMethods: 0.
 
 set compile_env: 0
 
-category: 'Tests - Copying'
+category: 'Grail-Tests - Copying'
 method: FrozensetTestCase
 testFrozensetCopy
 	"Test copying a frozenset"
@@ -49,7 +49,7 @@ testFrozensetCopy
 	self assert: (fs2 @env1:__contains__: 2)
 %
 
-category: 'Tests - Creation'
+category: 'Grail-Tests - Creation'
 method: FrozensetTestCase
 testFrozensetCreation
 	"Test creating frozensets"
@@ -64,7 +64,7 @@ testFrozensetCreation
 	self assert: fs3 size equals: 2
 %
 
-category: 'Tests - Immutability'
+category: 'Grail-Tests - Immutability'
 method: FrozensetTestCase
 testFrozensetImmutable
 	"frozenset instances must be immutable as soon as the constructor returns,
@@ -81,7 +81,7 @@ testFrozensetImmutable
 	self should: [fs add: 1] raise: Error
 %
 
-category: 'Tests - Type Identity'
+category: 'Grail-Tests - Type Identity'
 method: FrozensetTestCase
 testFrozensetIsNotSet
 	"frozenset and set are siblings, not parent/child. isinstance must
@@ -95,7 +95,7 @@ testFrozensetIsNotSet
 	self deny: (s isKindOf: frozenset)
 %
 
-category: 'Tests - Set Operations'
+category: 'Grail-Tests - Set Operations'
 method: FrozensetTestCase
 testFrozensetDifference
 	"Test difference operation"
@@ -115,7 +115,7 @@ testFrozensetDifference
 	self assert: result isInvariant
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: FrozensetTestCase
 testFrozensetEquality
 	"Test equality comparison"
@@ -131,7 +131,7 @@ testFrozensetEquality
 	self assert: (fs1 @env1:__ne__: fs3)
 %
 
-category: 'Tests - Hashing'
+category: 'Grail-Tests - Hashing'
 method: FrozensetTestCase
 testFrozensetHashable
 	"Test that frozenset is hashable"
@@ -147,7 +147,7 @@ testFrozensetHashable
 	self assert: hash1 equals: hash2
 %
 
-category: 'Tests - Set Operations'
+category: 'Grail-Tests - Set Operations'
 method: FrozensetTestCase
 testFrozensetIntersection
 	"Test intersection operation"
@@ -165,7 +165,7 @@ testFrozensetIntersection
 	self deny: (result @env1:__contains__: 4)
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: FrozensetTestCase
 testFrozensetIsdisjoint
 	"Test isdisjoint operation"
@@ -179,7 +179,7 @@ testFrozensetIsdisjoint
 	self deny: (fs1 @env1:isdisjoint: fs3)
 %
 
-category: 'Tests - Iteration'
+category: 'Grail-Tests - Iteration'
 method: FrozensetTestCase
 testFrozensetIteration
 	"Test iterating over a frozenset"
@@ -205,7 +205,7 @@ testFrozensetIteration
 	self assert: (items @env1:__contains__: 3)
 %
 
-category: 'Tests - Membership'
+category: 'Grail-Tests - Membership'
 method: FrozensetTestCase
 testFrozensetMembership
 	"Test membership testing in frozensets"
@@ -219,7 +219,7 @@ testFrozensetMembership
 	self deny: (fs @env1:__contains__: 4)
 %
 
-category: 'Tests - Set Operations (Operators)'
+category: 'Grail-Tests - Set Operations (Operators)'
 method: FrozensetTestCase
 testFrozensetOperators
 	"Test set operators (&, |, -, ^)"
@@ -241,7 +241,7 @@ testFrozensetOperators
 	self assert: (fs1 @env1:__xor__: fs2) size equals: 2
 %
 
-category: 'Tests - String Representation'
+category: 'Grail-Tests - String Representation'
 method: FrozensetTestCase
 testFrozensetRepr
 	"Test string representation of frozenset"
@@ -256,7 +256,7 @@ testFrozensetRepr
 	self assert: (repr includesString: '}')
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: FrozensetTestCase
 testFrozensetSubsetSuperset
 	"Test subset and superset operations"
@@ -284,7 +284,7 @@ testFrozensetSubsetSuperset
 	self deny: (fs1 @env1:__lt__: fs1)
 %
 
-category: 'Tests - Set Operations'
+category: 'Grail-Tests - Set Operations'
 method: FrozensetTestCase
 testFrozensetSymmetricDifference
 	"Test symmetric difference operation"
@@ -302,7 +302,7 @@ testFrozensetSymmetricDifference
 	self deny: (result @env1:__contains__: 3)
 %
 
-category: 'Tests - Set Operations'
+category: 'Grail-Tests - Set Operations'
 method: FrozensetTestCase
 testFrozensetUnion
 	"Test union operation"

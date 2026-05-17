@@ -17,7 +17,7 @@ PythonTestCase subclass: 'NotADirectoryErrorTestCase'
 %
 expectvalue /Class
 doit
-NotADirectoryErrorTestCase category: 'SUnit'
+NotADirectoryErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ NotADirectoryErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-NotADirectoryError'
+category: 'Grail-Tests-NotADirectoryError'
 method: NotADirectoryErrorTestCase
 test_creation
 	"Test creating a NotADirectoryError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-NotADirectoryError'
+category: 'Grail-Tests-NotADirectoryError'
 method: NotADirectoryErrorTestCase
 test_inheritance
 	"Test that NotADirectoryError inherits from OSError."

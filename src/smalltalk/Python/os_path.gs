@@ -27,7 +27,7 @@ See https://docs.python.org/3/library/os.path.html
 
 expectvalue /Class
 doit
-os_path category: 'Modules'
+os_path category: 'Grail-Modules'
 %
 
 ! ------------------- Remove existing Python methods from os_path
@@ -39,7 +39,7 @@ os_path class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: os_path
 initialize
 	"No-op — all methods are real env-1 fast-path methods."
@@ -49,7 +49,7 @@ initialize
 ! Fast-path callables — path manipulation
 ! ===============================================================================
 
-category: 'Python-Path Manipulation'
+category: 'Grail-Path Manipulation'
 method: os_path
 join: paths
 	"os.path.join(paths) — join path components. Takes a collection."
@@ -76,7 +76,7 @@ join: paths
 	^ result
 %
 
-category: 'Python-Path Manipulation'
+category: 'Grail-Path Manipulation'
 method: os_path
 basename: path
 	"os.path.basename(path) — return the base name of pathname."
@@ -95,7 +95,7 @@ basename: path
 	^ trimmedPath @env0:copyFrom: (lastIndex @env0:+ 1) to: trimmedPath @env0:size
 %
 
-category: 'Python-Path Manipulation'
+category: 'Grail-Path Manipulation'
 method: os_path
 dirname: path
 	"os.path.dirname(path) — return the directory name of pathname."
@@ -115,7 +115,7 @@ dirname: path
 	^ trimmedPath @env0:copyFrom: 1 to: (lastIndex @env0:- 1)
 %
 
-category: 'Python-Path Manipulation'
+category: 'Grail-Path Manipulation'
 method: os_path
 split: path
 	"os.path.split(path) — split into (head, tail)."
@@ -137,7 +137,7 @@ split: path
 	^ tuple @env0:with: head with: tail
 %
 
-category: 'Python-Path Manipulation'
+category: 'Grail-Path Manipulation'
 method: os_path
 splitext: path
 	"os.path.splitext(path) — split into (root, ext)."
@@ -160,7 +160,7 @@ splitext: path
 	^ tuple @env0:with: root with: ext
 %
 
-category: 'Python-Path Manipulation'
+category: 'Grail-Path Manipulation'
 method: os_path
 isabs: path
 	"os.path.isabs(path) — True if path is absolute."
@@ -168,7 +168,7 @@ isabs: path
 	^ path @env0:beginsWith: '/'
 %
 
-category: 'Python-Path Manipulation'
+category: 'Grail-Path Manipulation'
 method: os_path
 normpath: path
 	"os.path.normpath(path) — normalize a pathname."
@@ -225,7 +225,7 @@ normpath: path
 	]
 %
 
-category: 'Python-Path Manipulation'
+category: 'Grail-Path Manipulation'
 method: os_path
 abspath: path
 	"os.path.abspath(path) — return normalized absolute pathname."
@@ -238,7 +238,7 @@ abspath: path
 ! Fast-path callables — file queries (delegate to os)
 ! ===============================================================================
 
-category: 'Python-Path Manipulation'
+category: 'Grail-Path Manipulation'
 method: os_path
 exists: path
 	"os.path.exists(path) — delegates to os.exists."
@@ -246,7 +246,7 @@ exists: path
 	^ (os instance) exists: path
 %
 
-category: 'Python-Path Manipulation'
+category: 'Grail-Path Manipulation'
 method: os_path
 isdir: path
 	"os.path.isdir(path) — delegates to os.isdir."
@@ -254,7 +254,7 @@ isdir: path
 	^ (os instance) isdir: path
 %
 
-category: 'Python-Path Manipulation'
+category: 'Grail-Path Manipulation'
 method: os_path
 isfile: path
 	"os.path.isfile(path) — delegates to os.isfile."
@@ -266,7 +266,7 @@ isfile: path
 ! Fast-path callables — multi-path operations
 ! ===============================================================================
 
-category: 'Python-Path Manipulation'
+category: 'Grail-Path Manipulation'
 method: os_path
 commonpath: paths
 	"os.path.commonpath(paths) — longest common sub-path."
@@ -314,7 +314,7 @@ commonpath: paths
 	])
 %
 
-category: 'Python-Path Manipulation'
+category: 'Grail-Path Manipulation'
 method: os_path
 commonprefix: paths
 	"os.path.commonprefix(paths) — longest path prefix (char-by-char)."

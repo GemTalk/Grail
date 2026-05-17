@@ -36,7 +36,7 @@ Object
 
 expectvalue /Class
 doit
-BitOrAst category: 'Parser'
+BitOrAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from BitOrAst
@@ -45,7 +45,7 @@ removeallclassmethods BitOrAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: BitOrAst
 printSmalltalkOn: aStream
 

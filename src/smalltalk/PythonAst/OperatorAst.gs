@@ -37,7 +37,7 @@ Object
 
 expectvalue /Class
 doit
-OperatorAst category: 'Parser'
+OperatorAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from OperatorAst
@@ -46,7 +46,7 @@ removeallclassmethods OperatorAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 classmethod: OperatorAst
 isAbstract
 

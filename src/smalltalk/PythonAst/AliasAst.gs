@@ -38,7 +38,7 @@ Object
 
 expectvalue /Class
 doit
-AliasAst category: 'Parser'
+AliasAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from AliasAst
@@ -47,21 +47,21 @@ removeallclassmethods AliasAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: AliasAst
 asName
 
 	^asName
 %
 
-category: 'other'
+category: 'Grail-other'
 method: AliasAst
 name
 
 	^name
 %
 
-category: 'other'
+category: 'Grail-other'
 method: AliasAst
 printOn: aStream
 

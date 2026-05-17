@@ -17,7 +17,7 @@ SequenceableCollection class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Sequence Operations'
+category: 'Grail-Sequence Operations'
 method: SequenceableCollection
 __add__: other
 	"Concatenate two sequences. Returns a new sequence of the same type."
@@ -28,7 +28,7 @@ __add__: other
 	^ result
 %
 
-category: 'Python-Sequence Protocol'
+category: 'Grail-Sequence Protocol'
 method: SequenceableCollection
 __contains__: item
 	"Return True if item is in the sequence, False otherwise."
@@ -36,7 +36,7 @@ __contains__: item
 	^ self @env0:includes: item
 %
 
-category: 'Python-Other'
+category: 'Grail-Other'
 method: SequenceableCollection
 __doc__
 	"Return the docstring for SequenceableCollection."
@@ -44,7 +44,7 @@ __doc__
 	^ 'Base class for sequences (list, tuple, etc.)'
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: SequenceableCollection
 __eq__: other
 	"Return True if sequences are equal (same type, same length, same elements)."
@@ -60,7 +60,7 @@ __eq__: other
 	^ self @env0:= other
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: SequenceableCollection
 __ge__: other
 	"Lexicographic comparison: self >= other"
@@ -68,7 +68,7 @@ __ge__: other
 	^ self @env0:>= other
 %
 
-category: 'Python-Sequence Protocol'
+category: 'Grail-Sequence Protocol'
 method: SequenceableCollection
 __getitem__: index
 	"Return the item at the given index.
@@ -95,7 +95,7 @@ __getitem__: index
 	^ self @env0:at: (idx @env0:+ 1)
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: SequenceableCollection
 __gt__: other
 	"Lexicographic comparison: self > other"
@@ -103,7 +103,7 @@ __gt__: other
 	^ self @env0:> other
 %
 
-category: 'Python-Sequence Protocol'
+category: 'Grail-Sequence Protocol'
 method: SequenceableCollection
 __iter__
 	"Return an iterator over the sequence.
@@ -112,7 +112,7 @@ __iter__
 	self @env0:subclassResponsibility
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: SequenceableCollection
 __le__: other
 	"Lexicographic comparison: self <= other"
@@ -120,7 +120,7 @@ __le__: other
 	^ self @env0:<= other
 %
 
-category: 'Python-Sequence Protocol'
+category: 'Grail-Sequence Protocol'
 method: SequenceableCollection
 __len__
 	"Return the length of the sequence."
@@ -128,7 +128,7 @@ __len__
 	^ self @env0:size
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: SequenceableCollection
 __lt__: other
 	"Lexicographic comparison: self < other"
@@ -136,7 +136,7 @@ __lt__: other
 	^ self @env0:< other
 %
 
-category: 'Python-Sequence Operations'
+category: 'Grail-Sequence Operations'
 method: SequenceableCollection
 __mul__: n
 	"Repeat the sequence n times. Returns a new sequence."
@@ -151,7 +151,7 @@ __mul__: n
 	^ result
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: SequenceableCollection
 __ne__: other
 	"Return True if sequences are not equal."
@@ -159,7 +159,7 @@ __ne__: other
 	^ (self __eq__: other) @env0:not
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: SequenceableCollection
 __repr__
 	"Return a string representation of the sequence.
@@ -179,7 +179,7 @@ __repr__
 	^ stream @env0:contents
 %
 
-category: 'Python-Sequence Operations'
+category: 'Grail-Sequence Operations'
 method: SequenceableCollection
 __rmul__: n
 	"Reverse multiply: n * sequence. Same as __mul__."
@@ -187,7 +187,7 @@ __rmul__: n
 	^ self __mul__: n
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: SequenceableCollection
 __str__
 	"Return a string representation. Same as __repr__ for sequences."
@@ -195,7 +195,7 @@ __str__
 	^ self __repr__
 %
 
-category: 'Python-Sequence Methods'
+category: 'Grail-Sequence Methods'
 method: SequenceableCollection
 count: value
 	"Return the number of times value appears in the sequence."
@@ -210,7 +210,7 @@ count: value
 	^ count
 %
 
-category: 'Python-Sequence Methods'
+category: 'Grail-Sequence Methods'
 method: SequenceableCollection
 index: value
 	"Return the index of the first occurrence of value.

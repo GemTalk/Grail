@@ -50,7 +50,7 @@ Object
 
 expectvalue /Class
 doit
-TryAst category: 'Parser'
+TryAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from TryAst
@@ -59,7 +59,7 @@ removeallclassmethods TryAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: TryAst
 printSmalltalkOn: aStream
 

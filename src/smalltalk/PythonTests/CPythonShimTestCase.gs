@@ -19,7 +19,7 @@ PythonTestCase subclass: 'CPythonShimTestCase'
 
 expectvalue /Class
 doit
-CPythonShimTestCase category: 'SUnit'
+CPythonShimTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -40,7 +40,7 @@ set compile_env: 0
 ! Setup
 ! ===============================================================================
 
-category: 'Setup'
+category: 'Grail-Setup'
 method: CPythonShimTestCase
 setUp
 	"Ensure the shim library is loaded."
@@ -52,7 +52,7 @@ setUp
 ! Tests - Module Loading
 ! ===============================================================================
 
-category: 'Tests - Module Loading'
+category: 'Grail-Tests - Module Loading'
 method: CPythonShimTestCase
 testLoadStatistics
 	"The _statistics module should load successfully."
@@ -60,7 +60,7 @@ testLoadStatistics
 	self assert: (CPythonShim current loadModule: '_statistics') equals: true.
 %
 
-category: 'Tests - Module Loading'
+category: 'Grail-Tests - Module Loading'
 method: CPythonShimTestCase
 testLoadBisect
 	"The _bisect module should load successfully."
@@ -72,7 +72,7 @@ testLoadBisect
 ! Tests - _normal_dist_inv_cdf
 ! ===============================================================================
 
-category: 'Tests - Statistics'
+category: 'Grail-Tests - Statistics'
 method: CPythonShimTestCase
 testInvCdfMedian
 	"inv_cdf(0.5, 0, 1) = 0.0 — the median of the standard normal distribution."
@@ -85,7 +85,7 @@ testInvCdfMedian
 	self assert: result equals: 0.0.
 %
 
-category: 'Tests - Statistics'
+category: 'Grail-Tests - Statistics'
 method: CPythonShimTestCase
 testInvCdfMedianWithMu
 	"inv_cdf(0.5, mu, sigma) = mu — the median always equals mu."
@@ -98,7 +98,7 @@ testInvCdfMedianWithMu
 	self assert: result equals: 10.0.
 %
 
-category: 'Tests - Statistics'
+category: 'Grail-Tests - Statistics'
 method: CPythonShimTestCase
 testInvCdfSymmetry
 	"inv_cdf(p) and inv_cdf(1-p) should be symmetric around the mean."
@@ -112,7 +112,7 @@ testInvCdfSymmetry
 	self assert: (low + high) abs < 1e-10.
 %
 
-category: 'Tests - Statistics'
+category: 'Grail-Tests - Statistics'
 method: CPythonShimTestCase
 testInvCdfErrorAtZero
 	"inv_cdf(0.0, 0, 1) should raise a ValueError."
@@ -125,7 +125,7 @@ testInvCdfErrorAtZero
 	] raise: Error.
 %
 
-category: 'Tests - Statistics'
+category: 'Grail-Tests - Statistics'
 method: CPythonShimTestCase
 testInvCdfErrorAtOne
 	"inv_cdf(1.0, 0, 1) should raise a ValueError."
@@ -138,7 +138,7 @@ testInvCdfErrorAtOne
 	] raise: Error.
 %
 
-category: 'Tests - Statistics'
+category: 'Grail-Tests - Statistics'
 method: CPythonShimTestCase
 testInvCdfKnownValue
 	"inv_cdf(0.975, 0, 1) ≈ 1.96 — the 97.5th percentile of standard normal."
@@ -155,7 +155,7 @@ testInvCdfKnownValue
 ! Tests - _bisect
 ! ===============================================================================
 
-category: 'Tests - Bisect'
+category: 'Grail-Tests - Bisect'
 method: CPythonShimTestCase
 testBisectRightPresent
 	"bisect_right finds the insertion point after an existing element."
@@ -167,7 +167,7 @@ testBisectRightPresent
 	self assert: result equals: 3.
 %
 
-category: 'Tests - Bisect'
+category: 'Grail-Tests - Bisect'
 method: CPythonShimTestCase
 testBisectRightBetween
 	"bisect_right finds the insertion point for a value between elements."
@@ -179,7 +179,7 @@ testBisectRightBetween
 	self assert: result equals: 2.
 %
 
-category: 'Tests - Bisect'
+category: 'Grail-Tests - Bisect'
 method: CPythonShimTestCase
 testBisectLeftPresent
 	"bisect_left finds the insertion point before an existing element."
@@ -191,7 +191,7 @@ testBisectLeftPresent
 	self assert: result equals: 2.
 %
 
-category: 'Tests - Bisect'
+category: 'Grail-Tests - Bisect'
 method: CPythonShimTestCase
 testBisectLeftBetween
 	"bisect_left for a non-present value is the same as bisect_right."
@@ -203,7 +203,7 @@ testBisectLeftBetween
 	self assert: result equals: 2.
 %
 
-category: 'Tests - Bisect'
+category: 'Grail-Tests - Bisect'
 method: CPythonShimTestCase
 testBisectWithDuplicates
 	"bisect_left and bisect_right differ for duplicate elements."
@@ -218,7 +218,7 @@ testBisectWithDuplicates
 	self assert: right equals: 4.
 %
 
-category: 'Tests - Bisect'
+category: 'Grail-Tests - Bisect'
 method: CPythonShimTestCase
 testBisectRightEmptyList
 	"bisect_right on an empty list returns 0."
@@ -230,7 +230,7 @@ testBisectRightEmptyList
 	self assert: result equals: 0.
 %
 
-category: 'Tests - Bisect'
+category: 'Grail-Tests - Bisect'
 method: CPythonShimTestCase
 testInsortRight
 	"insort_right inserts a value into the correct position."
@@ -242,7 +242,7 @@ testInsortRight
 	self assert: result equals: #(1.0 3.0 4.0 5.0).
 %
 
-category: 'Tests - Bisect'
+category: 'Grail-Tests - Bisect'
 method: CPythonShimTestCase
 testInsortLeft
 	"insort_left inserts before an existing duplicate."
@@ -254,7 +254,7 @@ testInsortLeft
 	self assert: result equals: #(1.0 2.0 2.0 3.0).
 %
 
-category: 'Tests - Bisect'
+category: 'Grail-Tests - Bisect'
 method: CPythonShimTestCase
 testBisectRightBeforeAll
 	"bisect_right returns 0 when value is smaller than all elements."
@@ -266,7 +266,7 @@ testBisectRightBeforeAll
 	self assert: result equals: 0.
 %
 
-category: 'Tests - Bisect'
+category: 'Grail-Tests - Bisect'
 method: CPythonShimTestCase
 testBisectRightAfterAll
 	"bisect_right returns list size when value is larger than all elements."
@@ -282,7 +282,7 @@ testBisectRightAfterAll
 ! Tests - _crc32c (Module Loading)
 ! ===============================================================================
 
-category: 'Tests - Module Loading'
+category: 'Grail-Tests - Module Loading'
 method: CPythonShimTestCase
 testLoadCrc32c
 	"The _crc32c module should load successfully."
@@ -294,7 +294,7 @@ testLoadCrc32c
 ! Tests - _crc32c (Direct CCallout)
 ! ===============================================================================
 
-category: 'Tests - CRC32C'
+category: 'Grail-Tests - CRC32C'
 method: CPythonShimTestCase
 testCrc32cEmptyBytes
 	"crc32c of empty bytes should be 0."
@@ -306,7 +306,7 @@ testCrc32cEmptyBytes
 	self assert: result equals: 0.
 %
 
-category: 'Tests - CRC32C'
+category: 'Grail-Tests - CRC32C'
 method: CPythonShimTestCase
 testCrc32cKnownValue
 	"crc32c of '123456789' should be 0xE3069283 (standard check value)."
@@ -318,7 +318,7 @@ testCrc32cKnownValue
 	self assert: result equals: 16rE3069283.
 %
 
-category: 'Tests - CRC32C'
+category: 'Grail-Tests - CRC32C'
 method: CPythonShimTestCase
 testCrc32cExtendChaining
 	"Chaining extend should produce the same result as a single crc32c call."
@@ -332,7 +332,7 @@ testCrc32cExtendChaining
 	self assert: crc2 equals: 16rE3069283.
 %
 
-category: 'Tests - CRC32C'
+category: 'Grail-Tests - CRC32C'
 method: CPythonShimTestCase
 testCrc32cSingleByte
 	"crc32c of a single byte should return a valid checksum."
@@ -349,7 +349,7 @@ testCrc32cSingleByte
 ! Tests - Python eval (same source code that runs in CPython)
 ! ===============================================================================
 
-category: 'Tests - Python Eval'
+category: 'Grail-Tests - Python Eval'
 method: CPythonShimTestCase
 testEvalStatisticsFromImport
 	"Evaluate the same Python source that CPython uses for _statistics.
@@ -367,7 +367,7 @@ result
 	self assert: result equals: 0.0.
 %
 
-category: 'Tests - Python Eval'
+category: 'Grail-Tests - Python Eval'
 method: CPythonShimTestCase
 testEvalStatisticsKnownValue
 	"Evaluate _statistics with a known result through Python source.
@@ -385,7 +385,7 @@ result
 	self assert: (result - 1.959963984540054) abs < 1e-10.
 %
 
-category: 'Tests - Python Eval'
+category: 'Grail-Tests - Python Eval'
 method: CPythonShimTestCase
 testEvalBisectRight
 	"Evaluate the same Python source that CPython uses for _bisect.
@@ -403,7 +403,7 @@ result
 	self assert: result equals: 3.
 %
 
-category: 'Tests - Python Eval'
+category: 'Grail-Tests - Python Eval'
 method: CPythonShimTestCase
 testEvalBisectLeft
 	"Evaluate bisect_left through Python source.
@@ -421,7 +421,7 @@ result
 	self assert: result equals: 2.
 %
 
-category: 'Tests - Python Eval'
+category: 'Grail-Tests - Python Eval'
 method: CPythonShimTestCase
 testEvalInsortRight
 	"Evaluate insort_right through Python source — modifies list in place.
@@ -442,7 +442,7 @@ a
 	self assert: result asArray equals: #(1.0 3.0 4.0 5.0).
 %
 
-category: 'Tests - Python Eval'
+category: 'Grail-Tests - Python Eval'
 method: CPythonShimTestCase
 testEvalCrc32cBasic
 	"Evaluate crc32c through Python source with the standard check value.
@@ -460,7 +460,7 @@ result
 	self assert: result equals: 16rE3069283.
 %
 
-category: 'Tests - Python Eval'
+category: 'Grail-Tests - Python Eval'
 method: CPythonShimTestCase
 testEvalCrc32cEmpty
 	"Evaluate crc32c of empty bytes through Python source.
@@ -478,7 +478,7 @@ result
 	self assert: result equals: 0.
 %
 
-category: 'Tests - Python Eval'
+category: 'Grail-Tests - Python Eval'
 method: CPythonShimTestCase
 testEvalCrc32cExtend
 	"Evaluate crc32c extend chaining through Python source.
@@ -502,7 +502,7 @@ result
 ! Tests - _shimtest (API test module)
 ! ===============================================================================
 
-category: 'Tests - Module Loading'
+category: 'Grail-Tests - Module Loading'
 method: CPythonShimTestCase
 testLoadShimtest
 	"The _shimtest module should load successfully."
@@ -510,7 +510,7 @@ testLoadShimtest
 	self assert: (CPythonShim current loadModule: '_shimtest') equals: true.
 %
 
-category: 'Tests - ShimTest API'
+category: 'Grail-Tests - ShimTest API'
 method: CPythonShimTestCase
 testShimtestFloat
 	"test_float(x) -> x * 2.0"
@@ -522,7 +522,7 @@ testShimtestFloat
 	self assert: result equals: 6.28.
 %
 
-category: 'Tests - ShimTest API'
+category: 'Grail-Tests - ShimTest API'
 method: CPythonShimTestCase
 testShimtestFloatNegative
 	"test_float works with negative values."
@@ -534,7 +534,7 @@ testShimtestFloatNegative
 	self assert: result equals: -10.0.
 %
 
-category: 'Tests - ShimTest API'
+category: 'Grail-Tests - ShimTest API'
 method: CPythonShimTestCase
 testShimtestInt
 	"test_int(n) -> n + 1"
@@ -546,7 +546,7 @@ testShimtestInt
 	self assert: result equals: 42.
 %
 
-category: 'Tests - ShimTest API'
+category: 'Grail-Tests - ShimTest API'
 method: CPythonShimTestCase
 testShimtestStringLen
 	"test_string_len(s) -> len(s)"
@@ -558,7 +558,7 @@ testShimtestStringLen
 	self assert: result equals: 5.
 %
 
-category: 'Tests - ShimTest API'
+category: 'Grail-Tests - ShimTest API'
 method: CPythonShimTestCase
 testShimtestListSum
 	"test_list_sum(n) -> sum of [1..n] = n*(n+1)/2"
@@ -570,7 +570,7 @@ testShimtestListSum
 	self assert: result equals: 15.0.
 %
 
-category: 'Tests - ShimTest API'
+category: 'Grail-Tests - ShimTest API'
 method: CPythonShimTestCase
 testShimtestListModify
 	"test_list_modify appends to an existing list."
@@ -585,7 +585,7 @@ testShimtestListModify
 	self assert: (oc at: 4) equals: 4.0.
 %
 
-category: 'Tests - ShimTest API'
+category: 'Grail-Tests - ShimTest API'
 method: CPythonShimTestCase
 testShimtestBoolNotTrue
 	"test_bool_not(true) -> false"
@@ -597,7 +597,7 @@ testShimtestBoolNotTrue
 	self assert: result equals: false.
 %
 
-category: 'Tests - ShimTest API'
+category: 'Grail-Tests - ShimTest API'
 method: CPythonShimTestCase
 testShimtestBoolNotFalse
 	"test_bool_not(false) -> true"
@@ -609,7 +609,7 @@ testShimtestBoolNotFalse
 	self assert: result equals: true.
 %
 
-category: 'Tests - ShimTest API'
+category: 'Grail-Tests - ShimTest API'
 method: CPythonShimTestCase
 testShimtestNone
 	"test_none() -> Python ``None`` (Py_None round-trips to the singleton)"
@@ -620,7 +620,7 @@ testShimtestNone
 	self assert: result equals: None.
 %
 
-category: 'Tests - ShimTest API'
+category: 'Grail-Tests - ShimTest API'
 method: CPythonShimTestCase
 testShimtestError
 	"test_error() raises a ValueError."
@@ -631,7 +631,7 @@ testShimtestError
 	] raise: Error.
 %
 
-category: 'Tests - ShimTest API'
+category: 'Grail-Tests - ShimTest API'
 method: CPythonShimTestCase
 testShimtestBytesLen
 	"test_bytes_len(b) -> len(b)"
@@ -643,7 +643,7 @@ testShimtestBytesLen
 	self assert: result equals: 5.
 %
 
-category: 'Tests - ShimTest API'
+category: 'Grail-Tests - ShimTest API'
 method: CPythonShimTestCase
 testShimtestListInsert
 	"test_list_insert inserts a value at a given index."
@@ -660,7 +660,7 @@ testShimtestListInsert
 ! Tests - Dict API
 ! ===============================================================================
 
-category: 'Tests - Dict API'
+category: 'Grail-Tests - Dict API'
 method: CPythonShimTestCase
 testDictRoundtrip
 	"test_dict_roundtrip sets a key-value pair and retrieves it."
@@ -672,7 +672,7 @@ testDictRoundtrip
 	self assert: result equals: 42.
 %
 
-category: 'Tests - Dict API'
+category: 'Grail-Tests - Dict API'
 method: CPythonShimTestCase
 testDictRoundtripFloat
 	"test_dict_roundtrip with float values."
@@ -684,7 +684,7 @@ testDictRoundtripFloat
 	self assert: result equals: 3.14.
 %
 
-category: 'Tests - Dict API'
+category: 'Grail-Tests - Dict API'
 method: CPythonShimTestCase
 testDictStringKey
 	"test_dict_string_key sets via C string key and retrieves."
@@ -696,7 +696,7 @@ testDictStringKey
 	self assert: result equals: 99.
 %
 
-category: 'Tests - Dict API'
+category: 'Grail-Tests - Dict API'
 method: CPythonShimTestCase
 testDictContains
 	"test_dict_contains returns true after adding a key."
@@ -708,7 +708,7 @@ testDictContains
 	self assert: result equals: true.
 %
 
-category: 'Tests - Dict API'
+category: 'Grail-Tests - Dict API'
 method: CPythonShimTestCase
 testDictDel
 	"test_dict_del removes a key, size becomes 0."
@@ -724,7 +724,7 @@ testDictDel
 ! Tests - Tuple API
 ! ===============================================================================
 
-category: 'Tests - Tuple API'
+category: 'Grail-Tests - Tuple API'
 method: CPythonShimTestCase
 testTupleRoundtrip
 	"test_tuple_roundtrip(a,b,c) -> b"
@@ -736,7 +736,7 @@ testTupleRoundtrip
 	self assert: result equals: 20.
 %
 
-category: 'Tests - Tuple API'
+category: 'Grail-Tests - Tuple API'
 method: CPythonShimTestCase
 testTupleRoundtripStrings
 	"test_tuple_roundtrip works with strings."
@@ -748,7 +748,7 @@ testTupleRoundtripStrings
 	self assert: result equals: 'b'.
 %
 
-category: 'Tests - Tuple API'
+category: 'Grail-Tests - Tuple API'
 method: CPythonShimTestCase
 testTupleSize
 	"test_tuple_size(n) -> n"
@@ -760,7 +760,7 @@ testTupleSize
 	self assert: result equals: 5.
 %
 
-category: 'Tests - Tuple API'
+category: 'Grail-Tests - Tuple API'
 method: CPythonShimTestCase
 testTupleSizeZero
 	"test_tuple_size(0) -> 0"
@@ -776,7 +776,7 @@ testTupleSizeZero
 ! Tests - Object Protocol
 ! ===============================================================================
 
-category: 'Tests - Object Protocol'
+category: 'Grail-Tests - Object Protocol'
 method: CPythonShimTestCase
 testReprInteger
 	"test_repr on an integer returns its __repr__."
@@ -788,7 +788,7 @@ testReprInteger
 	self assert: result equals: '42'.
 %
 
-category: 'Tests - Object Protocol'
+category: 'Grail-Tests - Object Protocol'
 method: CPythonShimTestCase
 testReprString
 	"test_repr on a string returns a quoted representation."
@@ -800,7 +800,7 @@ testReprString
 	self assert: result equals: '''hello'''.
 %
 
-category: 'Tests - Object Protocol'
+category: 'Grail-Tests - Object Protocol'
 method: CPythonShimTestCase
 testStrInteger
 	"test_str on an integer returns its string form."
@@ -812,7 +812,7 @@ testStrInteger
 	self assert: result equals: '42'.
 %
 
-category: 'Tests - Object Protocol'
+category: 'Grail-Tests - Object Protocol'
 method: CPythonShimTestCase
 testStrString
 	"test_str on a string returns the string itself."
@@ -824,7 +824,7 @@ testStrString
 	self assert: result equals: 'hello'.
 %
 
-category: 'Tests - Object Protocol'
+category: 'Grail-Tests - Object Protocol'
 method: CPythonShimTestCase
 testLengthList
 	"test_length on a list returns its size."
@@ -837,7 +837,7 @@ testLengthList
 	self assert: result equals: 5.
 %
 
-category: 'Tests - Object Protocol'
+category: 'Grail-Tests - Object Protocol'
 method: CPythonShimTestCase
 testLengthString
 	"test_length on a string returns its size."
@@ -849,7 +849,7 @@ testLengthString
 	self assert: result equals: 5.
 %
 
-category: 'Tests - Object Protocol'
+category: 'Grail-Tests - Object Protocol'
 method: CPythonShimTestCase
 testHasattrTrue
 	"test_hasattr returns true for an existing attribute."
@@ -861,7 +861,7 @@ testHasattrTrue
 	self assert: result equals: true.
 %
 
-category: 'Tests - Object Protocol'
+category: 'Grail-Tests - Object Protocol'
 method: CPythonShimTestCase
 testHasattrFalse
 	"test_hasattr returns false for a non-existing attribute."
@@ -873,7 +873,7 @@ testHasattrFalse
 	self assert: result equals: false.
 %
 
-category: 'Tests - Object Protocol'
+category: 'Grail-Tests - Object Protocol'
 method: CPythonShimTestCase
 testGetattr
 	"test_getattr on an integer returns __class__."
@@ -889,7 +889,7 @@ testGetattr
 ! Tests - Type Checks
 ! ===============================================================================
 
-category: 'Tests - Type Checks'
+category: 'Grail-Tests - Type Checks'
 method: CPythonShimTestCase
 testTypeChecksFloat
 	"test_type_checks on a float returns bit0 (1)."
@@ -901,7 +901,7 @@ testTypeChecksFloat
 	self assert: (result bitAnd: 1) equals: 1.
 %
 
-category: 'Tests - Type Checks'
+category: 'Grail-Tests - Type Checks'
 method: CPythonShimTestCase
 testTypeChecksInt
 	"test_type_checks on an integer returns bit1 (2)."
@@ -913,7 +913,7 @@ testTypeChecksInt
 	self assert: (result bitAnd: 2) equals: 2.
 %
 
-category: 'Tests - Type Checks'
+category: 'Grail-Tests - Type Checks'
 method: CPythonShimTestCase
 testTypeChecksString
 	"test_type_checks on a string returns bit2 (4)."
@@ -925,7 +925,7 @@ testTypeChecksString
 	self assert: (result bitAnd: 4) equals: 4.
 %
 
-category: 'Tests - Type Checks'
+category: 'Grail-Tests - Type Checks'
 method: CPythonShimTestCase
 testTypeChecksBytes
 	"test_type_checks on a ByteArray returns bit3 (8)."
@@ -937,7 +937,7 @@ testTypeChecksBytes
 	self assert: (result bitAnd: 8) equals: 8.
 %
 
-category: 'Tests - Type Checks'
+category: 'Grail-Tests - Type Checks'
 method: CPythonShimTestCase
 testTypeChecksList
 	"test_type_checks on an OrderedCollection returns bit4 (16)."
@@ -949,7 +949,7 @@ testTypeChecksList
 	self assert: (result bitAnd: 16) equals: 16.
 %
 
-category: 'Tests - Type Checks'
+category: 'Grail-Tests - Type Checks'
 method: CPythonShimTestCase
 testTypeChecksDict
 	"test_type_checks on a KeyValueDictionary returns bit5 (32)."
@@ -961,7 +961,7 @@ testTypeChecksDict
 	self assert: (result bitAnd: 32) equals: 32.
 %
 
-category: 'Tests - Type Checks'
+category: 'Grail-Tests - Type Checks'
 method: CPythonShimTestCase
 testTypeChecksTuple
 	"test_type_checks on an Array returns bit6 (64)."
@@ -977,7 +977,7 @@ testTypeChecksTuple
 ! Tests - Additional API Coverage
 ! ===============================================================================
 
-category: 'Tests - ShimTest API'
+category: 'Grail-Tests - ShimTest API'
 method: CPythonShimTestCase
 testShimtestListSetItem
 	"test_list_setitem sets an element and returns it."
@@ -991,7 +991,7 @@ testShimtestListSetItem
 	self assert: (oc at: 2) equals: 99.0.
 %
 
-category: 'Tests - ShimTest API'
+category: 'Grail-Tests - ShimTest API'
 method: CPythonShimTestCase
 testShimtestStringRoundtrip
 	"test_string_roundtrip creates a new string from C and returns it."
@@ -1003,7 +1003,7 @@ testShimtestStringRoundtrip
 	self assert: result equals: 'hello world'.
 %
 
-category: 'Tests - ShimTest API'
+category: 'Grail-Tests - ShimTest API'
 method: CPythonShimTestCase
 testShimtestBytesRoundtrip
 	"test_bytes_roundtrip creates bytes from C and returns the size."
@@ -1015,7 +1015,7 @@ testShimtestBytesRoundtrip
 	self assert: result equals: 5.
 %
 
-category: 'Tests - ShimTest API'
+category: 'Grail-Tests - ShimTest API'
 method: CPythonShimTestCase
 testShimtestErrorFormat
 	"test_error_format raises a formatted TypeError."
@@ -1031,7 +1031,7 @@ testShimtestErrorFormat
 ! Tests - Rich Comparison
 ! ===============================================================================
 
-category: 'Tests - Rich Comparison'
+category: 'Grail-Tests - Rich Comparison'
 method: CPythonShimTestCase
 testRichCompareIntLt
 	"1 < 2 is true."
@@ -1043,7 +1043,7 @@ testRichCompareIntLt
 	self assert: result equals: true.
 %
 
-category: 'Tests - Rich Comparison'
+category: 'Grail-Tests - Rich Comparison'
 method: CPythonShimTestCase
 testRichCompareIntLtFalse
 	"2 < 1 is false."
@@ -1055,7 +1055,7 @@ testRichCompareIntLtFalse
 	self assert: result equals: false.
 %
 
-category: 'Tests - Rich Comparison'
+category: 'Grail-Tests - Rich Comparison'
 method: CPythonShimTestCase
 testRichCompareIntLe
 	"3 <= 3 is true."
@@ -1067,7 +1067,7 @@ testRichCompareIntLe
 	self assert: result equals: true.
 %
 
-category: 'Tests - Rich Comparison'
+category: 'Grail-Tests - Rich Comparison'
 method: CPythonShimTestCase
 testRichCompareIntEq
 	"7 == 7 is true."
@@ -1079,7 +1079,7 @@ testRichCompareIntEq
 	self assert: result equals: true.
 %
 
-category: 'Tests - Rich Comparison'
+category: 'Grail-Tests - Rich Comparison'
 method: CPythonShimTestCase
 testRichCompareIntNe
 	"3 != 5 is true."
@@ -1091,7 +1091,7 @@ testRichCompareIntNe
 	self assert: result equals: true.
 %
 
-category: 'Tests - Rich Comparison'
+category: 'Grail-Tests - Rich Comparison'
 method: CPythonShimTestCase
 testRichCompareIntGt
 	"5 > 3 is true."
@@ -1103,7 +1103,7 @@ testRichCompareIntGt
 	self assert: result equals: true.
 %
 
-category: 'Tests - Rich Comparison'
+category: 'Grail-Tests - Rich Comparison'
 method: CPythonShimTestCase
 testRichCompareIntGe
 	"5 >= 3 is true."
@@ -1115,7 +1115,7 @@ testRichCompareIntGe
 	self assert: result equals: true.
 %
 
-category: 'Tests - Rich Comparison'
+category: 'Grail-Tests - Rich Comparison'
 method: CPythonShimTestCase
 testRichCompareFloatLt
 	"1.5 < 2.5 is true."
@@ -1127,7 +1127,7 @@ testRichCompareFloatLt
 	self assert: result equals: true.
 %
 
-category: 'Tests - Rich Comparison'
+category: 'Grail-Tests - Rich Comparison'
 method: CPythonShimTestCase
 testRichCompareStringEq
 	"'abc' == 'abc' is true."
@@ -1139,7 +1139,7 @@ testRichCompareStringEq
 	self assert: result equals: true.
 %
 
-category: 'Tests - Rich Comparison'
+category: 'Grail-Tests - Rich Comparison'
 method: CPythonShimTestCase
 testRichCompareStringLt
 	"'abc' < 'def' is true."
@@ -1155,7 +1155,7 @@ testRichCompareStringLt
 ! Tests - _heapq (Heap Queue)
 ! ===============================================================================
 
-category: 'Tests - Module Loading'
+category: 'Grail-Tests - Module Loading'
 method: CPythonShimTestCase
 testLoadHeapq
 	"The _heapq module should load successfully."
@@ -1163,7 +1163,7 @@ testLoadHeapq
 	self assert: (CPythonShim current loadModule: '_heapq') equals: true.
 %
 
-category: 'Tests - Heapq'
+category: 'Grail-Tests - Heapq'
 method: CPythonShimTestCase
 testHeapqPushPop
 	"heappush + heappop maintains sorted order."
@@ -1182,7 +1182,7 @@ testHeapqPushPop
 	self assert: result equals: 3.0.
 %
 
-category: 'Tests - Heapq'
+category: 'Grail-Tests - Heapq'
 method: CPythonShimTestCase
 testHeapqHeapify
 	"heapify transforms a list into a heap in-place."
@@ -1196,7 +1196,7 @@ testHeapqHeapify
 	self assert: result equals: 1.0.
 %
 
-category: 'Tests - Heapq'
+category: 'Grail-Tests - Heapq'
 method: CPythonShimTestCase
 testHeapqHeapreplace
 	"heapreplace pops the smallest and pushes a new item."
@@ -1212,7 +1212,7 @@ testHeapqHeapreplace
 	self assert: result equals: 2.0.
 %
 
-category: 'Tests - Heapq'
+category: 'Grail-Tests - Heapq'
 method: CPythonShimTestCase
 testHeapqHeappushpop
 	"heappushpop pushes an item and then pops the smallest."
@@ -1229,7 +1229,7 @@ testHeapqHeappushpop
 	self assert: result equals: 2.0.
 %
 
-category: 'Tests - Heapq'
+category: 'Grail-Tests - Heapq'
 method: CPythonShimTestCase
 testHeapqSortIntegers
 	"Use heapq to sort a list of integers."
@@ -1247,7 +1247,7 @@ testHeapqSortIntegers
 	self assert: sorted asArray equals: #(1 2 3 4 5).
 %
 
-category: 'Tests - Heapq'
+category: 'Grail-Tests - Heapq'
 method: CPythonShimTestCase
 testHeapqSortStrings
 	"Use heapq to sort strings."
@@ -1265,7 +1265,7 @@ testHeapqSortStrings
 	self assert: sorted asArray equals: #('apple' 'banana' 'cherry' 'date').
 %
 
-category: 'Tests - Heapq'
+category: 'Grail-Tests - Heapq'
 method: CPythonShimTestCase
 testHeapqPopEmpty
 	"heappop on an empty heap raises IndexError."
@@ -1277,7 +1277,7 @@ testHeapqPopEmpty
 	] raise: Error.
 %
 
-category: 'Tests - Heapq'
+category: 'Grail-Tests - Heapq'
 method: CPythonShimTestCase
 testHeapqMaxHeap
 	"_heapify_max + _heappop_max gives elements in descending order."
@@ -1292,7 +1292,7 @@ testHeapqMaxHeap
 	self assert: result equals: 4.0.
 %
 
-category: 'Tests - Heapq'
+category: 'Grail-Tests - Heapq'
 method: CPythonShimTestCase
 testHeapqHeapifyPreservesAll
 	"heapify + repeated heappop returns all original elements sorted."
@@ -1312,7 +1312,7 @@ testHeapqHeapifyPreservesAll
 ! Tests - PyTypeObject (ob_type and type identity)
 ! ===============================================================================
 
-category: 'Tests - PyTypeObject'
+category: 'Grail-Tests - PyTypeObject'
 method: CPythonShimTestCase
 testObTypeFloat
 	"test_ob_type on a float returns 'float'."
@@ -1324,7 +1324,7 @@ testObTypeFloat
 	self assert: result equals: 'float'.
 %
 
-category: 'Tests - PyTypeObject'
+category: 'Grail-Tests - PyTypeObject'
 method: CPythonShimTestCase
 testObTypeInt
 	"test_ob_type on an integer returns 'int'."
@@ -1336,7 +1336,7 @@ testObTypeInt
 	self assert: result equals: 'int'.
 %
 
-category: 'Tests - PyTypeObject'
+category: 'Grail-Tests - PyTypeObject'
 method: CPythonShimTestCase
 testObTypeString
 	"test_ob_type on a string returns 'str'."
@@ -1348,7 +1348,7 @@ testObTypeString
 	self assert: result equals: 'str'.
 %
 
-category: 'Tests - PyTypeObject'
+category: 'Grail-Tests - PyTypeObject'
 method: CPythonShimTestCase
 testObTypeBytes
 	"test_ob_type on a ByteArray returns 'bytes'."
@@ -1360,7 +1360,7 @@ testObTypeBytes
 	self assert: result equals: 'bytes'.
 %
 
-category: 'Tests - PyTypeObject'
+category: 'Grail-Tests - PyTypeObject'
 method: CPythonShimTestCase
 testObTypeList
 	"test_ob_type on an OrderedCollection returns 'list'."
@@ -1372,7 +1372,7 @@ testObTypeList
 	self assert: result equals: 'list'.
 %
 
-category: 'Tests - PyTypeObject'
+category: 'Grail-Tests - PyTypeObject'
 method: CPythonShimTestCase
 testObTypeDict
 	"test_ob_type on a KeyValueDictionary returns 'dict'."
@@ -1384,7 +1384,7 @@ testObTypeDict
 	self assert: result equals: 'dict'.
 %
 
-category: 'Tests - PyTypeObject'
+category: 'Grail-Tests - PyTypeObject'
 method: CPythonShimTestCase
 testObTypeTuple
 	"test_ob_type on an Array returns 'tuple'."
@@ -1396,7 +1396,7 @@ testObTypeTuple
 	self assert: result equals: 'tuple'.
 %
 
-category: 'Tests - PyTypeObject'
+category: 'Grail-Tests - PyTypeObject'
 method: CPythonShimTestCase
 testObTypeBool
 	"test_ob_type on true returns 'bool'."
@@ -1408,7 +1408,7 @@ testObTypeBool
 	self assert: result equals: 'bool'.
 %
 
-category: 'Tests - PyTypeObject'
+category: 'Grail-Tests - PyTypeObject'
 method: CPythonShimTestCase
 testTypeIdentityFloat
 	"test_type_identity on a float returns 1 (PyFloat_Type)."
@@ -1420,7 +1420,7 @@ testTypeIdentityFloat
 	self assert: result equals: 1.
 %
 
-category: 'Tests - PyTypeObject'
+category: 'Grail-Tests - PyTypeObject'
 method: CPythonShimTestCase
 testTypeIdentityInt
 	"test_type_identity on an integer returns 2 (PyLong_Type)."
@@ -1432,7 +1432,7 @@ testTypeIdentityInt
 	self assert: result equals: 2.
 %
 
-category: 'Tests - PyTypeObject'
+category: 'Grail-Tests - PyTypeObject'
 method: CPythonShimTestCase
 testTypeIdentityBool
 	"test_type_identity on true returns 3 (PyBool_Type)."
@@ -1444,7 +1444,7 @@ testTypeIdentityBool
 	self assert: result equals: 3.
 %
 
-category: 'Tests - PyTypeObject'
+category: 'Grail-Tests - PyTypeObject'
 method: CPythonShimTestCase
 testTypeIdentityString
 	"test_type_identity on a string returns 4 (PyUnicode_Type)."
@@ -1456,7 +1456,7 @@ testTypeIdentityString
 	self assert: result equals: 4.
 %
 
-category: 'Tests - PyTypeObject'
+category: 'Grail-Tests - PyTypeObject'
 method: CPythonShimTestCase
 testTypeIdentityList
 	"test_type_identity on an OrderedCollection returns 6 (PyList_Type)."
@@ -1468,7 +1468,7 @@ testTypeIdentityList
 	self assert: result equals: 6.
 %
 
-category: 'Tests - PyTypeObject'
+category: 'Grail-Tests - PyTypeObject'
 method: CPythonShimTestCase
 testTypeIdentityNone
 	"test_ob_type on nil (Py_None) returns 'NoneType'."
@@ -1480,7 +1480,7 @@ testTypeIdentityNone
 	self assert: result equals: 'NoneType'.
 %
 
-category: 'Tests - PyTypeObject'
+category: 'Grail-Tests - PyTypeObject'
 method: CPythonShimTestCase
 testTpFlagsFloat
 	"Float type has BASETYPE and READY flags set."
@@ -1494,7 +1494,7 @@ testTpFlagsFloat
 	self assert: (flags bitAnd: 4096) equals: 4096.
 %
 
-category: 'Tests - PyTypeObject'
+category: 'Grail-Tests - PyTypeObject'
 method: CPythonShimTestCase
 testTpFlagsInt
 	"Int type has LONG_SUBCLASS, BASETYPE, and READY flags."
@@ -1509,7 +1509,7 @@ testTpFlagsInt
 	self assert: (flags bitAnd: 4096) equals: 4096.
 %
 
-category: 'Tests - PyTypeObject'
+category: 'Grail-Tests - PyTypeObject'
 method: CPythonShimTestCase
 testTpFlagsList
 	"List type has LIST_SUBCLASS, SEQUENCE, BASETYPE, and READY flags."
@@ -1524,7 +1524,7 @@ testTpFlagsList
 	self assert: (flags bitAnd: 4096) equals: 4096.
 %
 
-category: 'Tests - PyTypeObject'
+category: 'Grail-Tests - PyTypeObject'
 method: CPythonShimTestCase
 testTpFlagsDict
 	"Dict type has DICT_SUBCLASS and MAPPING flags."
@@ -1538,7 +1538,7 @@ testTpFlagsDict
 	self assert: (flags bitAnd: 64) equals: 64.
 %
 
-category: 'Tests - PyTypeObject'
+category: 'Grail-Tests - PyTypeObject'
 method: CPythonShimTestCase
 testTpBaseNameFloat
 	"Float's base type is 'object'."
@@ -1550,7 +1550,7 @@ testTpBaseNameFloat
 	self assert: result equals: 'object'.
 %
 
-category: 'Tests - PyTypeObject'
+category: 'Grail-Tests - PyTypeObject'
 method: CPythonShimTestCase
 testTpBaseNameBool
 	"Bool's base type is 'int' (bool subclasses int in Python)."
@@ -1562,7 +1562,7 @@ testTpBaseNameBool
 	self assert: result equals: 'int'.
 %
 
-category: 'Tests - PyTypeObject'
+category: 'Grail-Tests - PyTypeObject'
 method: CPythonShimTestCase
 testTypeReady
 	"PyType_Ready sets READY flag and assigns base type."
@@ -1573,7 +1573,7 @@ testTypeReady
 	self assert: result equals: 2.
 %
 
-category: 'Tests - PyTypeObject'
+category: 'Grail-Tests - PyTypeObject'
 method: CPythonShimTestCase
 testSizeofType
 	"sizeof(PyTypeObject) should be > 200 bytes (full CPython 3.14 layout)."
@@ -1588,7 +1588,7 @@ testSizeofType
 ! Tests - Dynamic Module Loading (shimDynLoad)
 ! ===============================================================================
 
-category: 'Tests - Dynamic Loading'
+category: 'Grail-Tests - Dynamic Loading'
 method: CPythonShimTestCase
 testDynLoadGrailDemo
 	"shimDynLoad should load _grail_demo.so and return method names."
@@ -1604,7 +1604,7 @@ testDynLoadGrailDemo
 	self assert: (methodNames includes: 'scale').
 %
 
-category: 'Tests - Dynamic Loading'
+category: 'Grail-Tests - Dynamic Loading'
 method: CPythonShimTestCase
 testDynLoadCallAdd
 	"Call _grail_demo.add(3, 4) via shimCall after dynamic loading."
@@ -1618,7 +1618,7 @@ testDynLoadCallAdd
 	self assert: result equals: 7.
 %
 
-category: 'Tests - Dynamic Loading'
+category: 'Grail-Tests - Dynamic Loading'
 method: CPythonShimTestCase
 testDynLoadModule
 	"loadDynamicModule:fromPath: should create a module subclass with compiled
@@ -1636,7 +1636,7 @@ testDynLoadModule
 	self assert: result equals: 30.
 %
 
-category: 'Tests - Dynamic Loading'
+category: 'Grail-Tests - Dynamic Loading'
 method: CPythonShimTestCase
 testEvalImportGrailDemo
 	"End-to-end: Python source 'import _grail_demo; _grail_demo.add(3, 4)' returns 7."
@@ -1652,7 +1652,7 @@ result
 	self assert: result equals: 7.
 %
 
-category: 'Tests - Dynamic Loading'
+category: 'Grail-Tests - Dynamic Loading'
 method: CPythonShimTestCase
 testEvalImportGrailDemoDotProduct
 	"End-to-end: dot_product via Python import."
@@ -1672,7 +1672,7 @@ result
 ! Tests - _sre (Regular Expression Engine)
 ! ===============================================================================
 
-category: 'Tests - Module Loading'
+category: 'Grail-Tests - Module Loading'
 method: CPythonShimTestCase
 testLoadSre
 	"The _sre module should load successfully."
@@ -1680,7 +1680,7 @@ testLoadSre
 	self assert: (CPythonShim current loadModule: '_sre') equals: true.
 %
 
-category: 'Tests - SRE'
+category: 'Grail-Tests - SRE'
 method: CPythonShimTestCase
 testSreGetcodesize
 	"getcodesize() returns sizeof(SRE_CODE), which is 4."
@@ -1691,7 +1691,7 @@ testSreGetcodesize
 	self assert: result equals: 4.
 %
 
-category: 'Tests - SRE'
+category: 'Grail-Tests - SRE'
 method: CPythonShimTestCase
 testSreAsciiIscasedUpperA
 	"ascii_iscased('A') => 1 (uppercase letter is cased)."
@@ -1703,7 +1703,7 @@ testSreAsciiIscasedUpperA
 	self assert: result equals: 1.
 %
 
-category: 'Tests - SRE'
+category: 'Grail-Tests - SRE'
 method: CPythonShimTestCase
 testSreAsciiIscasedLowerA
 	"ascii_iscased('a') => 1 (lowercase letter is cased)."
@@ -1715,7 +1715,7 @@ testSreAsciiIscasedLowerA
 	self assert: result equals: 1.
 %
 
-category: 'Tests - SRE'
+category: 'Grail-Tests - SRE'
 method: CPythonShimTestCase
 testSreAsciiIscasedDigit
 	"ascii_iscased('0') => 0 (digit is not cased)."
@@ -1727,7 +1727,7 @@ testSreAsciiIscasedDigit
 	self assert: result equals: 0.
 %
 
-category: 'Tests - SRE'
+category: 'Grail-Tests - SRE'
 method: CPythonShimTestCase
 testSreUnicodeIscasedUpperA
 	"unicode_iscased('A') => 1."
@@ -1739,7 +1739,7 @@ testSreUnicodeIscasedUpperA
 	self assert: result equals: 1.
 %
 
-category: 'Tests - SRE'
+category: 'Grail-Tests - SRE'
 method: CPythonShimTestCase
 testSreUnicodeIscasedDigit
 	"unicode_iscased('0') => 0."
@@ -1751,7 +1751,7 @@ testSreUnicodeIscasedDigit
 	self assert: result equals: 0.
 %
 
-category: 'Tests - SRE'
+category: 'Grail-Tests - SRE'
 method: CPythonShimTestCase
 testSreAsciiTolowerUpperA
 	"ascii_tolower('A'=65) => 'a'=97."
@@ -1763,7 +1763,7 @@ testSreAsciiTolowerUpperA
 	self assert: result equals: 97.
 %
 
-category: 'Tests - SRE'
+category: 'Grail-Tests - SRE'
 method: CPythonShimTestCase
 testSreAsciiTolowerAlreadyLower
 	"ascii_tolower('a'=97) => 97 (already lowercase)."
@@ -1775,7 +1775,7 @@ testSreAsciiTolowerAlreadyLower
 	self assert: result equals: 97.
 %
 
-category: 'Tests - SRE'
+category: 'Grail-Tests - SRE'
 method: CPythonShimTestCase
 testSreUnicodeTolowerUpperA
 	"unicode_tolower('A'=65) => 'a'=97."
@@ -1787,7 +1787,7 @@ testSreUnicodeTolowerUpperA
 	self assert: result equals: 97.
 %
 
-category: 'Tests - Python Eval'
+category: 'Grail-Tests - Python Eval'
 method: CPythonShimTestCase
 testEvalSreImport
 	"import _sre should succeed and module should be accessible."
@@ -1801,7 +1801,7 @@ result
 	self assert: result equals: 4.
 %
 
-category: 'Tests - Python Eval'
+category: 'Grail-Tests - Python Eval'
 method: CPythonShimTestCase
 testEvalSreAsciiIscased
 	"Evaluate _sre.ascii_iscased via Python source."
@@ -1815,7 +1815,7 @@ result
 	self assert: result equals: 1.
 %
 
-category: 'Tests - Python Eval'
+category: 'Grail-Tests - Python Eval'
 method: CPythonShimTestCase
 testEvalSreAsciiTolower
 	"Evaluate _sre.ascii_tolower via Python source."
@@ -1836,7 +1836,7 @@ result
 ! the same Py_None wrapper, and that the embedded OOP is the singleton (so
 ! C-side Py_None round-trips back to None, not nil).
 
-category: 'Tests - Py_None Wrapping'
+category: 'Grail-Tests - Py_None Wrapping'
 method: CPythonShimTestCase
 testWrapNoneReturnsNoneWrapper
 	"wrap: None returns the cached Py_None CByteArray."
@@ -1849,7 +1849,7 @@ testWrapNoneReturnsNoneWrapper
 	self assert: w1 class == CByteArray.
 %
 
-category: 'Tests - Py_None Wrapping'
+category: 'Grail-Tests - Py_None Wrapping'
 method: CPythonShimTestCase
 testWrapNilAliasesNone
 	"wrap: nil returns the same wrapper as wrap: None — both map to Py_None
@@ -1860,7 +1860,7 @@ testWrapNilAliasesNone
 	self assert: (shim wrap: nil) == (shim wrap: None).
 %
 
-category: 'Tests - Py_None Wrapping'
+category: 'Grail-Tests - Py_None Wrapping'
 method: CPythonShimTestCase
 testNoneWrapperEmbedsSingletonOop
 	"The OOP stored at offset 16 of Py_None is the NoneType singleton's OOP,

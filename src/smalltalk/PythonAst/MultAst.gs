@@ -36,7 +36,7 @@ Object
 
 expectvalue /Class
 doit
-MultAst category: 'Parser'
+MultAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from MultAst
@@ -45,7 +45,7 @@ removeallclassmethods MultAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: MultAst
 printSmalltalkOn: aStream
 

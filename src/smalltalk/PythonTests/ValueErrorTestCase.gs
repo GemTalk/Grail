@@ -17,7 +17,7 @@ PythonTestCase subclass: 'ValueErrorTestCase'
 %
 expectvalue /Class
 doit
-ValueErrorTestCase category: 'SUnit'
+ValueErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ ValueErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-ValueError'
+category: 'Grail-Tests-ValueError'
 method: ValueErrorTestCase
 test_creation
 	"Test creating a ValueError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-ValueError'
+category: 'Grail-Tests-ValueError'
 method: ValueErrorTestCase
 test_inheritance
 	"Test that ValueError inherits from Exception."

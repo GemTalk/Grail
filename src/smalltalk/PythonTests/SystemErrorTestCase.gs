@@ -17,7 +17,7 @@ PythonTestCase subclass: 'SystemErrorTestCase'
 %
 expectvalue /Class
 doit
-SystemErrorTestCase category: 'SUnit'
+SystemErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ SystemErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-SystemError'
+category: 'Grail-Tests-SystemError'
 method: SystemErrorTestCase
 test_creation
 	"Test creating a SystemError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-SystemError'
+category: 'Grail-Tests-SystemError'
 method: SystemErrorTestCase
 test_inheritance
 	"Test that SystemError inherits from Exception."

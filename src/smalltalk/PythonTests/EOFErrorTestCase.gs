@@ -17,7 +17,7 @@ PythonTestCase subclass: 'EOFErrorTestCase'
 %
 expectvalue /Class
 doit
-EOFErrorTestCase category: 'SUnit'
+EOFErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ EOFErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-EOFError'
+category: 'Grail-Tests-EOFError'
 method: EOFErrorTestCase
 test_creation
 	"Test creating a EOFError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-EOFError'
+category: 'Grail-Tests-EOFError'
 method: EOFErrorTestCase
 test_inheritance
 	"Test that EOFError inherits from Exception."

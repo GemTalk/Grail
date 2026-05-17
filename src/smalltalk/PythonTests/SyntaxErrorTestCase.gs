@@ -17,7 +17,7 @@ PythonTestCase subclass: 'SyntaxErrorTestCase'
 %
 expectvalue /Class
 doit
-SyntaxErrorTestCase category: 'SUnit'
+SyntaxErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ SyntaxErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-SyntaxError'
+category: 'Grail-Tests-SyntaxError'
 method: SyntaxErrorTestCase
 test_creation
 	"Test creating a SyntaxError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-SyntaxError'
+category: 'Grail-Tests-SyntaxError'
 method: SyntaxErrorTestCase
 test_inheritance
 	"Test that SyntaxError inherits from Exception."

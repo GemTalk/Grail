@@ -18,7 +18,7 @@ WriteStream subclass: 'PrettyWriteStream'
 
 expectvalue /Class
 doit
-PrettyWriteStream category: 'Tools'
+PrettyWriteStream category: 'Grail-Tools'
 %
 
 ! ------------------- Remove existing behavior from PrettyWriteStream
@@ -27,21 +27,21 @@ removeallclassmethods PrettyWriteStream
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: PrettyWriteStream
 decreaseIndent
 
 	indentCount := indentCount - 1.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: PrettyWriteStream
 increaseIndent
 
 	indentCount := indentCount + 1.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: PrettyWriteStream
 nextPut: aChar
 	"Add tabs if we are at the beginning of a line."
@@ -52,7 +52,7 @@ nextPut: aChar
 	super nextPut: aChar.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: PrettyWriteStream
 nextPutAll: aString
 	"Add tabs if we are at the beginning of a line."
@@ -63,7 +63,7 @@ nextPutAll: aString
 	super nextPutAll: aString.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: PrettyWriteStream
 on: aCollection
 	"override to initialize `indentCount`"
@@ -72,7 +72,7 @@ on: aCollection
 	indentCount := 0.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: PrettyWriteStream
 removeTrailingNone
 	"Remove trailing 'None.' followed by newline from the stream.
@@ -89,7 +89,7 @@ removeTrailingNone
 	].
 %
 
-category: 'other'
+category: 'Grail-other'
 method: PrettyWriteStream
 tab
 	"Adds a tab to the output stream, but avoids our #'nextPut:' method which calls this method (and would otherwise create an infinite recursion)."

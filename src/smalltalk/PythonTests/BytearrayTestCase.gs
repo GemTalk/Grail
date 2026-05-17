@@ -18,7 +18,7 @@ PythonTestCase subclass: 'BytearrayTestCase'
 
 expectvalue /Class
 doit
-BytearrayTestCase category: 'SUnit'
+BytearrayTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -35,7 +35,7 @@ BytearrayTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Tests - Type'
+category: 'Grail-Tests - Type'
 method: BytearrayTestCase
 test__class__
 	"Test that type(bytearray()) returns bytearray"
@@ -47,7 +47,7 @@ test__class__
 	self assert: cls equals: (Python at: #'bytearray').
 %
 
-category: 'Tests - Deletion'
+category: 'Grail-Tests - Deletion'
 method: BytearrayTestCase
 test__delitem__
 	"Test del bytearray[index]"
@@ -65,7 +65,7 @@ test__delitem__
 	self assert: (ba at: 2) equals: 67.
 %
 
-category: 'Tests - Deletion'
+category: 'Grail-Tests - Deletion'
 method: BytearrayTestCase
 test__delitem__negativeIndex
 	"Test del bytearray[-1]"
@@ -83,7 +83,7 @@ test__delitem__negativeIndex
 	self assert: (ba at: 2) equals: 66.
 %
 
-category: 'Tests - In-place Operations'
+category: 'Grail-Tests - In-place Operations'
 method: BytearrayTestCase
 test__iadd__
 	"Test bytearray += other"
@@ -106,7 +106,7 @@ test__iadd__
 	self assert: (ba at: 4) equals: 68.
 %
 
-category: 'Tests - In-place Operations'
+category: 'Grail-Tests - In-place Operations'
 method: BytearrayTestCase
 test__imul__
 	"Test bytearray *= count"
@@ -130,7 +130,7 @@ test__imul__
 	self assert: (ba at: 6) equals: 66.
 %
 
-category: 'Tests - In-place Operations'
+category: 'Grail-Tests - In-place Operations'
 method: BytearrayTestCase
 test__imul__zero
 	"Test bytearray *= 0 clears the bytearray"
@@ -145,7 +145,7 @@ test__imul__zero
 	self assert: ba size equals: 0.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: BytearrayTestCase
 test__new__empty
 	"Test bytearray() constructor"
@@ -155,7 +155,7 @@ test__new__empty
 	self assert: result size equals: 0.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: BytearrayTestCase
 test__new__fromBytes
 	"Test bytearray(b'hello') creates mutable copy"
@@ -168,7 +168,7 @@ test__new__fromBytes
 	self assert: (result at: 1) equals: 104.  "h"
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: BytearrayTestCase
 test__new__fromInteger
 	"Test bytearray(n) - create n zero bytes"
@@ -180,7 +180,7 @@ test__new__fromInteger
 	self assert: (result at: 5) equals: 0.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: BytearrayTestCase
 test__new__fromList
 	"Test bytearray([65, 66, 67]) creates bytearray(b'ABC')"
@@ -198,7 +198,7 @@ test__new__fromList
 	self assert: (result at: 3) equals: 67.
 %
 
-category: 'Tests - Mutability'
+category: 'Grail-Tests - Mutability'
 method: BytearrayTestCase
 test__setitem__
 	"Test that bytearray is mutable via __setitem__"
@@ -216,7 +216,7 @@ test__setitem__
 	self assert: (ba at: 3) equals: 67.
 %
 
-category: 'Tests - Mutability'
+category: 'Grail-Tests - Mutability'
 method: BytearrayTestCase
 test__setitem__invalidValue
 	"Test that setting invalid byte value raises ValueError"
@@ -233,7 +233,7 @@ test__setitem__invalidValue
 		raise: ValueError.
 %
 
-category: 'Tests - Mutability'
+category: 'Grail-Tests - Mutability'
 method: BytearrayTestCase
 test__setitem__negativeIndex
 	"Test bytearray[-1] = 90"
@@ -245,7 +245,7 @@ test__setitem__negativeIndex
 	self assert: (ba at: 3) equals: 90.
 %
 
-category: 'Tests - Mutability'
+category: 'Grail-Tests - Mutability'
 method: BytearrayTestCase
 test__setitem__outOfRange
 	"Test that setting out of range raises IndexError"
@@ -258,7 +258,7 @@ test__setitem__outOfRange
 		raise: IndexError.
 %
 
-category: 'Tests - Mutation Methods'
+category: 'Grail-Tests - Mutation Methods'
 method: BytearrayTestCase
 testAppend
 	"Test bytearray.append(byte)"
@@ -276,7 +276,7 @@ testAppend
 	self assert: (ba at: 3) equals: 67.
 %
 
-category: 'Tests - Mutation Methods'
+category: 'Grail-Tests - Mutation Methods'
 method: BytearrayTestCase
 testAppendInvalidValue
 	"Test that append with invalid value raises ValueError"
@@ -289,7 +289,7 @@ testAppendInvalidValue
 		raise: ValueError.
 %
 
-category: 'Tests - Mutation Methods'
+category: 'Grail-Tests - Mutation Methods'
 method: BytearrayTestCase
 testClear
 	"Test bytearray.clear()"
@@ -305,7 +305,7 @@ testClear
 	self assert: ba size equals: 0.
 %
 
-category: 'Tests - Concatenation'
+category: 'Grail-Tests - Concatenation'
 method: BytearrayTestCase
 testConcatenation
 	"Test bytearray + bytes returns new bytearray"
@@ -325,7 +325,7 @@ testConcatenation
 	self assert: ba size equals: 2.
 %
 
-category: 'Tests - Mutation Methods'
+category: 'Grail-Tests - Mutation Methods'
 method: BytearrayTestCase
 testCopy
 	"Test bytearray.copy()"
@@ -347,7 +347,7 @@ testCopy
 	self assert: (copy at: 1) equals: 90.
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: BytearrayTestCase
 testEqualityWithBytearray
 	"Test bytearray == bytearray comparison"
@@ -364,7 +364,7 @@ testEqualityWithBytearray
 	self assert: (ba1 @env1:__eq__: ba2).
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: BytearrayTestCase
 testEqualityWithBytes
 	"Test bytearray == bytes comparison"
@@ -379,7 +379,7 @@ testEqualityWithBytes
 	self assert: (ba @env1:__eq__: bytes).
 %
 
-category: 'Tests - Mutation Methods'
+category: 'Grail-Tests - Mutation Methods'
 method: BytearrayTestCase
 testExtendWithBytes
 	"Test bytearray.extend(b'hello')"
@@ -394,7 +394,7 @@ testExtendWithBytes
 	self assert: (ba at: 1) equals: 104.  "h"
 %
 
-category: 'Tests - Mutation Methods'
+category: 'Grail-Tests - Mutation Methods'
 method: BytearrayTestCase
 testExtendWithList
 	"Test bytearray.extend([65, 66, 67])"
@@ -414,7 +414,7 @@ testExtendWithList
 	self assert: (ba at: 3) equals: 67.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: BytearrayTestCase
 testFromhex
 	"Test bytearray.fromhex('48656c6c6f')"
@@ -430,7 +430,7 @@ testFromhex
 	self assert: (result at: 5) equals: 111.  "o"
 %
 
-category: 'Tests - Inherited Methods'
+category: 'Grail-Tests - Inherited Methods'
 method: BytearrayTestCase
 testInheritedDecode
 	"Test that bytearray inherits decode() from bytes"
@@ -449,7 +449,7 @@ testInheritedDecode
 	self assert: result equals: 'Hello'.
 %
 
-category: 'Tests - Inherited Methods'
+category: 'Grail-Tests - Inherited Methods'
 method: BytearrayTestCase
 testInheritedFind
 	"Test that bytearray inherits find() from bytes"
@@ -468,7 +468,7 @@ testInheritedFind
 	self assert: result equals: 2.
 %
 
-category: 'Tests - Inherited Methods'
+category: 'Grail-Tests - Inherited Methods'
 method: BytearrayTestCase
 testInheritedIsascii
 	"Test that bytearray inherits isascii() from bytes"
@@ -490,7 +490,7 @@ testInheritedIsascii
 	self deny: (ba2 @env1:isascii).
 %
 
-category: 'Tests - Inherited Methods'
+category: 'Grail-Tests - Inherited Methods'
 method: BytearrayTestCase
 testInheritedUpper
 	"Test that bytearray inherits upper() from bytes"
@@ -510,7 +510,7 @@ testInheritedUpper
 	self assert: (result at: 3) equals: 67.  "C"
 %
 
-category: 'Tests - Mutation Methods'
+category: 'Grail-Tests - Mutation Methods'
 method: BytearrayTestCase
 testInsert
 	"Test bytearray.insert(index, byte)"
@@ -529,7 +529,7 @@ testInsert
 	self assert: (ba at: 3) equals: 67.
 %
 
-category: 'Tests - Mutation Methods'
+category: 'Grail-Tests - Mutation Methods'
 method: BytearrayTestCase
 testPop
 	"Test bytearray.pop() - remove and return last byte"
@@ -546,7 +546,7 @@ testPop
 	self assert: ba size equals: 2.
 %
 
-category: 'Tests - Mutation Methods'
+category: 'Grail-Tests - Mutation Methods'
 method: BytearrayTestCase
 testPopEmpty
 	"Test that pop on empty bytearray raises IndexError"
@@ -559,7 +559,7 @@ testPopEmpty
 		raise: IndexError.
 %
 
-category: 'Tests - Mutation Methods'
+category: 'Grail-Tests - Mutation Methods'
 method: BytearrayTestCase
 testPopIndex
 	"Test bytearray.pop(index)"
@@ -578,7 +578,7 @@ testPopIndex
 	self assert: (ba at: 2) equals: 67.
 %
 
-category: 'Tests - Mutation Methods'
+category: 'Grail-Tests - Mutation Methods'
 method: BytearrayTestCase
 testRemove
 	"Test bytearray.remove(value)"
@@ -596,7 +596,7 @@ testRemove
 	self assert: (ba at: 2) equals: 67.
 %
 
-category: 'Tests - Mutation Methods'
+category: 'Grail-Tests - Mutation Methods'
 method: BytearrayTestCase
 testRemoveNotFound
 	"Test that remove raises ValueError if value not found"
@@ -610,7 +610,7 @@ testRemoveNotFound
 		raise: ValueError.
 %
 
-category: 'Tests - Mutation Methods'
+category: 'Grail-Tests - Mutation Methods'
 method: BytearrayTestCase
 testReverse
 	"Test bytearray.reverse()"

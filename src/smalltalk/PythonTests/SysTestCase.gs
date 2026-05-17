@@ -17,7 +17,7 @@ PythonTestCase subclass: 'SysTestCase'
 
 expectvalue /Class
 doit
-SysTestCase category: 'SUnit'
+SysTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -33,7 +33,7 @@ SysTestCase class removeAllMethods: 0.
 
 set compile_env: 0
 
-category: 'Tests - I/O Streams'
+category: 'Grail-Tests - I/O Streams'
 method: SysTestCase
 _testStderr
 	"Test sys.stderr is a GsFile"
@@ -46,7 +46,7 @@ _testStderr
 	self assert: (result isKindOf: GsFile)
 %
 
-category: 'Tests - I/O Streams'
+category: 'Grail-Tests - I/O Streams'
 method: SysTestCase
 _testStdin
 	"Test sys.stdin is a GsFile"
@@ -59,7 +59,7 @@ _testStdin
 	self assert: (result isKindOf: GsFile)
 %
 
-category: 'Tests - I/O Streams'
+category: 'Grail-Tests - I/O Streams'
 method: SysTestCase
 _testStdout
 	"Test sys.stdout is a GsFile"
@@ -72,14 +72,14 @@ _testStdout
 	self assert: (result isKindOf: GsFile)
 %
 
-category: 'Setup'
+category: 'Grail-Setup'
 method: SysTestCase
 setUp
 	"Initialize the modules registry before each test"
 	sys @env1:modules.
 %
 
-category: 'Tests - Runtime Info'
+category: 'Grail-Tests - Runtime Info'
 method: SysTestCase
 testArgv
 	"Test sys.argv is a list"
@@ -91,7 +91,7 @@ testArgv
 	self assert: (result isKindOf: list)
 %
 
-category: 'Tests - Runtime Info'
+category: 'Grail-Tests - Runtime Info'
 method: SysTestCase
 testBuiltinModuleNames
 	"Test sys.builtin_module_names contains expected modules"
@@ -103,7 +103,7 @@ testBuiltinModuleNames
 	self assert: (result isKindOf: tuple)
 %
 
-category: 'Tests - Platform Info'
+category: 'Grail-Tests - Platform Info'
 method: SysTestCase
 testByteorder
 	"Test sys.byteorder attribute"
@@ -115,7 +115,7 @@ testByteorder
 	self assert: ((result = 'little') or: [result = 'big'])
 %
 
-category: 'Tests - Runtime Info'
+category: 'Grail-Tests - Runtime Info'
 method: SysTestCase
 testCopyright
 	"Test sys.copyright attribute"
@@ -128,7 +128,7 @@ testCopyright
 	self assert: result size > 0
 %
 
-category: 'Tests - Hooks'
+category: 'Grail-Tests - Hooks'
 method: SysTestCase
 testDisplayhookExists
 	"Test sys.displayhook exists as a real method."
@@ -136,7 +136,7 @@ testDisplayhookExists
 	self assert: ((sys methodDictForEnv: 1) includesKey: #'displayhook:')
 %
 
-category: 'Tests - Hooks'
+category: 'Grail-Tests - Hooks'
 method: SysTestCase
 testExcepthookExists
 	"Test sys.excepthook exists as a real method."
@@ -144,7 +144,7 @@ testExcepthookExists
 	self assert: ((sys methodDictForEnv: 1) includesKey: #'excepthook:_:_:')
 %
 
-category: 'Tests - Functions'
+category: 'Grail-Tests - Functions'
 method: SysTestCase
 testExcInfo
 	"Test sys.exc_info() returns a tuple"
@@ -158,7 +158,7 @@ testExcInfo
 	self assert: result size == 3
 %
 
-category: 'Tests - Path Info'
+category: 'Grail-Tests - Path Info'
 method: SysTestCase
 testExecutable
 	"Test sys.executable is set from GemStone"
@@ -170,7 +170,7 @@ testExecutable
 	self assert: (result isKindOf: String)
 %
 
-category: 'Tests - Functions'
+category: 'Grail-Tests - Functions'
 method: SysTestCase
 testExit
 	"Test sys.exit raises SystemExit"
@@ -181,7 +181,7 @@ testExit
 	self should: [s @env1:exit] raise: SystemExit
 %
 
-category: 'Tests - Functions'
+category: 'Grail-Tests - Functions'
 method: SysTestCase
 testExitWithCode
 	"Test sys.exit(code) raises SystemExit with code"
@@ -192,7 +192,7 @@ testExitWithCode
 	self should: [s @env1:exit: 42] raise: SystemExit.
 %
 
-category: 'Tests - Functions'
+category: 'Grail-Tests - Functions'
 method: SysTestCase
 testGetdefaultencoding
 	"Test sys.getdefaultencoding() returns utf-8"
@@ -205,7 +205,7 @@ testGetdefaultencoding
 	self assert: result equals: 'utf-8'
 %
 
-category: 'Tests - Functions'
+category: 'Grail-Tests - Functions'
 method: SysTestCase
 testGetfilesystemencoding
 	"Test sys.getfilesystemencoding() returns utf-8"
@@ -218,7 +218,7 @@ testGetfilesystemencoding
 	self assert: result equals: 'utf-8'
 %
 
-category: 'Tests - Functions'
+category: 'Grail-Tests - Functions'
 method: SysTestCase
 testGetrecursionlimit
 	"Test sys.getrecursionlimit() returns a positive integer"
@@ -232,7 +232,7 @@ testGetrecursionlimit
 	self assert: result > 0
 %
 
-category: 'Tests - Functions'
+category: 'Grail-Tests - Functions'
 method: SysTestCase
 testGetsizeof
 	"Test sys.getsizeof() returns a size"
@@ -246,7 +246,7 @@ testGetsizeof
 	self assert: result >= 0
 %
 
-category: 'Tests - import_module'
+category: 'Grail-Tests - import_module'
 method: SysTestCase
 testImportSys
 	"Test importing sys module via importlib"
@@ -259,7 +259,7 @@ testImportSys
 	self assert: result class equals: sys
 %
 
-category: 'Tests - Singleton'
+category: 'Grail-Tests - Singleton'
 method: SysTestCase
 testInstance
 	"Test that sys module is a singleton"
@@ -271,7 +271,7 @@ testInstance
 	self assert: s1 == s2
 %
 
-category: 'Tests - Functions'
+category: 'Grail-Tests - Functions'
 method: SysTestCase
 testIntern
 	"Test sys.intern() returns the same string"
@@ -284,7 +284,7 @@ testIntern
 	self assert: result equals: 'hello'
 %
 
-category: 'Tests - Functions'
+category: 'Grail-Tests - Functions'
 method: SysTestCase
 testIsFinalizing
 	"Test sys.is_finalizing() returns false during normal execution"
@@ -297,7 +297,7 @@ testIsFinalizing
 	self assert: result equals: false
 %
 
-category: 'Tests - Platform Info'
+category: 'Grail-Tests - Platform Info'
 method: SysTestCase
 testMaxsize
 	"Test sys.maxsize attribute"
@@ -310,7 +310,7 @@ testMaxsize
 	self assert: result > 0
 %
 
-category: 'Tests - Path Info'
+category: 'Grail-Tests - Path Info'
 method: SysTestCase
 testModules
 	"Test sys.modules attribute is shared with importlib"
@@ -323,7 +323,7 @@ testModules
 	self assert: result == importModules
 %
 
-category: 'Tests - Singleton'
+category: 'Grail-Tests - Singleton'
 method: SysTestCase
 testNewRaisesError
 	"Test that sys.new raises TypeError"
@@ -331,7 +331,7 @@ testNewRaisesError
 	self should: [sys @env1:new] raise: TypeError
 %
 
-category: 'Tests - Path Info'
+category: 'Grail-Tests - Path Info'
 method: SysTestCase
 testPath
 	"Test sys.path attribute is a list"
@@ -343,7 +343,7 @@ testPath
 	self assert: (result isKindOf: list)
 %
 
-category: 'Tests - Platform Info'
+category: 'Grail-Tests - Platform Info'
 method: SysTestCase
 testPlatform
 	"Test sys.platform attribute"
@@ -356,7 +356,7 @@ testPlatform
 	self assert: ((result = 'darwin') or: [(result = 'linux') or: [result = 'win32']])
 %
 
-category: 'Tests - Platform Info'
+category: 'Grail-Tests - Platform Info'
 method: SysTestCase
 testPlatformFromGemStone
 	"Test sys.platform is derived from GemStone osName"
@@ -371,7 +371,7 @@ testPlatformFromGemStone
 	osName = 'Linux' ifTrue: [self assert: result equals: 'linux']
 %
 
-category: 'Tests - Path Info'
+category: 'Grail-Tests - Path Info'
 method: SysTestCase
 testPrefix
 	"Test sys.prefix is set"
@@ -383,7 +383,7 @@ testPrefix
 	self assert: (result isKindOf: String)
 %
 
-category: 'Tests - Module Registry'
+category: 'Grail-Tests - Module Registry'
 method: SysTestCase
 testSysInModuleRegistry
 	"Test that sys is registered in importlib modules"
@@ -394,7 +394,7 @@ testSysInModuleRegistry
 	self assert: (modules includesKey: #sys)
 %
 
-category: 'Tests - Version Info'
+category: 'Grail-Tests - Version Info'
 method: SysTestCase
 testVersion
 	"Test sys.version attribute"
@@ -407,7 +407,7 @@ testVersion
 	self assert: result size > 0
 %
 
-category: 'Tests - Version Info'
+category: 'Grail-Tests - Version Info'
 method: SysTestCase
 testVersionContainsGemStone
 	"Test sys.version contains GemStone identifier"
@@ -419,7 +419,7 @@ testVersionContainsGemStone
 	self assert: (result includesString: 'GemStone')
 %
 
-category: 'Tests - Version Info'
+category: 'Grail-Tests - Version Info'
 method: SysTestCase
 testVersionContainsGrail
 	"Test sys.version contains Grail identifier"
@@ -431,7 +431,7 @@ testVersionContainsGrail
 	self assert: (result includesString: 'Grail')
 %
 
-category: 'Tests - Version Info'
+category: 'Grail-Tests - Version Info'
 method: SysTestCase
 testVersionInfo
 	"Test sys.version_info attribute"

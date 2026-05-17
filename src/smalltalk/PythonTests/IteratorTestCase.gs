@@ -18,7 +18,7 @@ PythonTestCase subclass: 'IteratorTestCase'
 
 expectvalue /Class
 doit
-IteratorTestCase category: 'SUnit'
+IteratorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -39,7 +39,7 @@ IteratorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Tests - Iterator Protocol'
+category: 'Grail-Tests - Iterator Protocol'
 method: IteratorTestCase
 testCollectionsAreIterableNotIterators
 	"Test that collections have __iter__ but not __next__"
@@ -54,7 +54,7 @@ testCollectionsAreIterableNotIterators
 	self assert: (lst class whichClassIncludesSelector: #__next__ environmentId: 1) isNil.
 %
 
-category: 'Tests - Dict Key Iterator'
+category: 'Grail-Tests - Dict Key Iterator'
 method: IteratorTestCase
 testDictKeyIteratorBasicIteration
 	"Test basic iteration over dictionary keys"
@@ -81,7 +81,7 @@ testDictKeyIteratorBasicIteration
 	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
-category: 'Tests - Dict Key Iterator'
+category: 'Grail-Tests - Dict Key Iterator'
 method: IteratorTestCase
 testDictKeyIteratorExhaustion
 	"Test that dict_keyiterator raises StopIteration when exhausted"
@@ -98,7 +98,7 @@ testDictKeyIteratorExhaustion
 	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
-category: 'Tests - Dict Key Iterator'
+category: 'Grail-Tests - Dict Key Iterator'
 method: IteratorTestCase
 testDictKeyIteratorIndependence
 	"Test that multiple iterators over the same dict are independent"
@@ -118,7 +118,7 @@ testDictKeyIteratorIndependence
 	self deny: iter1 == iter2.
 %
 
-category: 'Tests - Dict Key Iterator'
+category: 'Grail-Tests - Dict Key Iterator'
 method: IteratorTestCase
 testEmptyDictKeyIterator
 	"Test iterator over empty dict"
@@ -131,7 +131,7 @@ testEmptyDictKeyIterator
 	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
-category: 'Tests - Empty Iterators'
+category: 'Grail-Tests - Empty Iterators'
 method: IteratorTestCase
 testEmptyFrozensetIterator
 	"Test iterator over empty frozenset"
@@ -144,7 +144,7 @@ testEmptyFrozensetIterator
 	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
-category: 'Tests - Empty Iterators'
+category: 'Grail-Tests - Empty Iterators'
 method: IteratorTestCase
 testEmptyListIterator
 	"Test iterator over empty list"
@@ -157,7 +157,7 @@ testEmptyListIterator
 	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
-category: 'Tests - Empty Iterators'
+category: 'Grail-Tests - Empty Iterators'
 method: IteratorTestCase
 testEmptyRangeIterator
 	"Test iterator over empty range"
@@ -170,7 +170,7 @@ testEmptyRangeIterator
 	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
-category: 'Tests - Empty Iterators'
+category: 'Grail-Tests - Empty Iterators'
 method: IteratorTestCase
 testEmptySetIterator
 	"Test iterator over empty set"
@@ -183,7 +183,7 @@ testEmptySetIterator
 	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
-category: 'Tests - Empty Iterators'
+category: 'Grail-Tests - Empty Iterators'
 method: IteratorTestCase
 testEmptyStringIterator
 	"Test iterator over empty string"
@@ -196,7 +196,7 @@ testEmptyStringIterator
 	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
-category: 'Tests - Set Iterator'
+category: 'Grail-Tests - Set Iterator'
 method: IteratorTestCase
 testFrozensetIteratorBasicIteration
 	"Test basic iteration over a frozenset"
@@ -221,7 +221,7 @@ testFrozensetIteratorBasicIteration
 	self assert: (items @env1:__contains__: 3).
 %
 
-category: 'Tests - Iterator Protocol'
+category: 'Grail-Tests - Iterator Protocol'
 method: IteratorTestCase
 testIteratorHasIterAndNext
 	"Test that iterators have __iter__ and __next__ methods"
@@ -237,7 +237,7 @@ testIteratorHasIterAndNext
 	self assert: (iter class whichClassIncludesSelector: #__next__ environmentId: 1) notNil.
 %
 
-category: 'Tests - Iterator Protocol'
+category: 'Grail-Tests - Iterator Protocol'
 method: IteratorTestCase
 testIteratorIterReturnsSelf
 	"Test that iterator.__iter__() returns the iterator itself"
@@ -251,7 +251,7 @@ testIteratorIterReturnsSelf
 	self assert: result == iter.
 %
 
-category: 'Tests - Iterator Protocol'
+category: 'Grail-Tests - Iterator Protocol'
 method: IteratorTestCase
 testIteratorTypes
 	"Test that iter() creates distinct iterator types for each collection type"
@@ -284,7 +284,7 @@ testIteratorTypes
 	self assert: dIter class name equals: #'dict_keyiterator'.
 %
 
-category: 'Tests - List Iterator'
+category: 'Grail-Tests - List Iterator'
 method: IteratorTestCase
 testListIteratorBasicIteration
 	"Test basic iteration over a list with next()"
@@ -301,7 +301,7 @@ testListIteratorBasicIteration
 	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
-category: 'Tests - List Iterator'
+category: 'Grail-Tests - List Iterator'
 method: IteratorTestCase
 testListIteratorExhaustion
 	"Test that iterator stays exhausted after StopIteration"
@@ -321,7 +321,7 @@ testListIteratorExhaustion
 	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
-category: 'Tests - List Iterator'
+category: 'Grail-Tests - List Iterator'
 method: IteratorTestCase
 testListIteratorIndependence
 	"Test that multiple iterators over the same list are independent"
@@ -341,7 +341,7 @@ testListIteratorIndependence
 	self assert: (iter2 @env1:__next__) equals: 2.
 %
 
-category: 'Tests - Range Iterator'
+category: 'Grail-Tests - Range Iterator'
 method: IteratorTestCase
 testRangeIteratorBasicIteration
 	"Test basic iteration over a range with next()"
@@ -358,7 +358,7 @@ testRangeIteratorBasicIteration
 	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
-category: 'Tests - Range Iterator'
+category: 'Grail-Tests - Range Iterator'
 method: IteratorTestCase
 testRangeIteratorNegativeStep
 	"Test iteration over a range with negative step"
@@ -375,7 +375,7 @@ testRangeIteratorNegativeStep
 	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
-category: 'Tests - Range Iterator'
+category: 'Grail-Tests - Range Iterator'
 method: IteratorTestCase
 testRangeIteratorWithStep
 	"Test iteration over a range with non-unit step"
@@ -394,7 +394,7 @@ testRangeIteratorWithStep
 	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
-category: 'Tests - Set Iterator'
+category: 'Grail-Tests - Set Iterator'
 method: IteratorTestCase
 testSetIteratorBasicIteration
 	"Test basic iteration over a set"
@@ -422,7 +422,7 @@ testSetIteratorBasicIteration
 	self assert: (items @env1:__contains__: 3).
 %
 
-category: 'Tests - Set Iterator'
+category: 'Grail-Tests - Set Iterator'
 method: IteratorTestCase
 testSetIteratorExhaustion
 	"Test that set iterator raises StopIteration when exhausted"
@@ -445,7 +445,7 @@ testSetIteratorExhaustion
 	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
-category: 'Tests - Set Iterator'
+category: 'Grail-Tests - Set Iterator'
 method: IteratorTestCase
 testSetIteratorIndependence
 	"Test that multiple iterators over the same set are independent"
@@ -473,7 +473,7 @@ testSetIteratorIndependence
 	])
 %
 
-category: 'Tests - String Iterator'
+category: 'Grail-Tests - String Iterator'
 method: IteratorTestCase
 testStringIteratorBasicIteration
 	"Test basic iteration over a string with next()"
@@ -490,7 +490,7 @@ testStringIteratorBasicIteration
 	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
-category: 'Tests - String Iterator'
+category: 'Grail-Tests - String Iterator'
 method: IteratorTestCase
 testStringIteratorReturnsStrings
 	"Test that string iterator returns single-character strings, not characters"
@@ -507,7 +507,7 @@ testStringIteratorReturnsStrings
 	self assert: result equals: 'h'.
 %
 
-category: 'Tests - Tuple Iterator'
+category: 'Grail-Tests - Tuple Iterator'
 method: IteratorTestCase
 testTupleIteratorBasicIteration
 	"Test basic iteration over a tuple with next()"
@@ -524,7 +524,7 @@ testTupleIteratorBasicIteration
 	self should: [iter @env1:__next__] raise: StopIteration.
 %
 
-category: 'Tests - Tuple Iterator'
+category: 'Grail-Tests - Tuple Iterator'
 method: IteratorTestCase
 testTupleIteratorIndependence
 	"Test that multiple iterators over the same tuple are independent"

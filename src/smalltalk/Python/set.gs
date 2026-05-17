@@ -41,7 +41,7 @@ Unlike frozenset, set instances:
 
 expectvalue /Class
 doit
-set category: 'Collections-Unordered'
+set category: 'Grail-Collections-Unordered'
 %
 
 ! ------------------- Remove existing methods
@@ -53,7 +53,7 @@ set class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Hashing'
+category: 'Grail-Hashing'
 method: set
 __hash__
 	"set is mutable and therefore not hashable."
@@ -61,7 +61,7 @@ __hash__
 	TypeError ___signal___: 'unhashable type: ''set'''
 %
 
-category: 'Python-In-Place Operators'
+category: 'Grail-In-Place Operators'
 method: set
 __iand__: other
 	"In-place intersection: self &= other. Returns self."
@@ -70,7 +70,7 @@ __iand__: other
 	^ self
 %
 
-category: 'Python-In-Place Operators'
+category: 'Grail-In-Place Operators'
 method: set
 __ior__: other
 	"In-place union: self |= other. Returns self."
@@ -79,7 +79,7 @@ __ior__: other
 	^ self
 %
 
-category: 'Python-In-Place Operators'
+category: 'Grail-In-Place Operators'
 method: set
 __isub__: other
 	"In-place difference: self -= other. Returns self."
@@ -88,7 +88,7 @@ __isub__: other
 	^ self
 %
 
-category: 'Python-In-Place Operators'
+category: 'Grail-In-Place Operators'
 method: set
 __ixor__: other
 	"In-place symmetric difference: self ^= other. Returns self."
@@ -97,7 +97,7 @@ __ixor__: other
 	^ self
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: set
 __repr__
 	"Return '{a, b, c}' or 'set()' for the empty set."
@@ -124,7 +124,7 @@ __repr__
 	^ stream @env0:contents
 %
 
-category: 'Python-Mutation Methods'
+category: 'Grail-Mutation Methods'
 method: set
 add: item
 	"Add an element to the set."
@@ -132,7 +132,7 @@ add: item
 	self @env0:add: item
 %
 
-category: 'Python-Mutation Methods'
+category: 'Grail-Mutation Methods'
 method: set
 clear
 	"Remove all elements from the set."
@@ -140,7 +140,7 @@ clear
 	self @env0:removeAll: self
 %
 
-category: 'Python-Mutation Methods'
+category: 'Grail-Mutation Methods'
 method: set
 difference_update: other
 	"Update the set, removing elements found in other."
@@ -159,7 +159,7 @@ difference_update: other
 	]
 %
 
-category: 'Python-Mutation Methods'
+category: 'Grail-Mutation Methods'
 method: set
 discard: item
 	"Remove an element from the set if it is present."
@@ -172,7 +172,7 @@ discard: item
 	]
 %
 
-category: 'Python-Mutation Methods'
+category: 'Grail-Mutation Methods'
 method: set
 intersection_update: other
 	"Update the set, keeping only elements found in it and other."
@@ -191,7 +191,7 @@ intersection_update: other
 	]
 %
 
-category: 'Python-Mutation Methods'
+category: 'Grail-Mutation Methods'
 method: set
 pop
 	"Remove and return an arbitrary element from the set.
@@ -213,7 +213,7 @@ pop
 	^ item
 %
 
-category: 'Python-Mutation Methods'
+category: 'Grail-Mutation Methods'
 method: set
 remove: item
 	"Remove an element from the set. Raises KeyError if not found."
@@ -233,7 +233,7 @@ remove: item
 	]
 %
 
-category: 'Python-Mutation Methods'
+category: 'Grail-Mutation Methods'
 method: set
 symmetric_difference_update: other
 	"Update the set, keeping only elements found in either set, but not in both."
@@ -267,7 +267,7 @@ symmetric_difference_update: other
 	]
 %
 
-category: 'Python-Mutation Methods'
+category: 'Grail-Mutation Methods'
 method: set
 update: other
 	"Update the set, adding elements from other."

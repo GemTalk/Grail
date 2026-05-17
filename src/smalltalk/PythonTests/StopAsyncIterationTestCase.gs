@@ -17,7 +17,7 @@ PythonTestCase subclass: 'StopAsyncIterationTestCase'
 %
 expectvalue /Class
 doit
-StopAsyncIterationTestCase category: 'SUnit'
+StopAsyncIterationTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ StopAsyncIterationTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-StopAsyncIteration'
+category: 'Grail-Tests-StopAsyncIteration'
 method: StopAsyncIterationTestCase
 test_creation
 	"Test creating a StopAsyncIteration instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-StopAsyncIteration'
+category: 'Grail-Tests-StopAsyncIteration'
 method: StopAsyncIterationTestCase
 test_inheritance
 	"Test that StopAsyncIteration inherits from Exception."

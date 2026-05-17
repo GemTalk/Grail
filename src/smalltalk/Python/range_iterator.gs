@@ -30,7 +30,7 @@ Instance variables:
 
 expectvalue /Class
 doit
-range_iterator category: 'Collections-Iterators'
+range_iterator category: 'Grail-Collections-Iterators'
 %
 
 ! ===============================================================================
@@ -51,7 +51,7 @@ range_iterator class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Instance Creation'
+category: 'Grail-Instance Creation'
 classmethod: range_iterator
 ___on: aCollection
 	"Create a new range_iterator for the given range (Interval).
@@ -65,7 +65,7 @@ ___on: aCollection
 	^ instance
 %
 
-category: 'Python-Private'
+category: 'Grail-Private'
 method: range_iterator
 ___collection: aCollection
 	"Set the collection being iterated over.
@@ -74,7 +74,7 @@ ___collection: aCollection
 	collection := aCollection
 %
 
-category: 'Python-Private'
+category: 'Grail-Private'
 method: range_iterator
 ___position: anInteger
 	"Set the current position.
@@ -83,7 +83,7 @@ ___position: anInteger
 	position := anInteger
 %
 
-category: 'Python-Iterator Protocol'
+category: 'Grail-Iterator Protocol'
 method: range_iterator
 __next__
 	"Return the next item from the range.

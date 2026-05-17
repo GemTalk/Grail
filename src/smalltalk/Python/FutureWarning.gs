@@ -17,5 +17,5 @@ Warning subclass: 'FutureWarning'
 
 expectvalue /Class
 doit
-FutureWarning category: 'Exceptions'
+FutureWarning category: 'Grail-Exceptions'
 %

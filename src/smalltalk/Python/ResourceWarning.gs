@@ -17,5 +17,5 @@ Warning subclass: 'ResourceWarning'
 
 expectvalue /Class
 doit
-ResourceWarning category: 'Exceptions'
+ResourceWarning category: 'Grail-Exceptions'
 %

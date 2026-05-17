@@ -17,5 +17,5 @@ OSError subclass: 'FileExistsError'
 
 expectvalue /Class
 doit
-FileExistsError category: 'Exceptions'
+FileExistsError category: 'Grail-Exceptions'
 %

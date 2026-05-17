@@ -18,7 +18,7 @@ PythonTestCase subclass: 'RangeTestCase'
 
 expectvalue /Class
 doit
-RangeTestCase category: 'SUnit'
+RangeTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -35,7 +35,7 @@ RangeTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Tests - Sequence Protocol'
+category: 'Grail-Tests - Sequence Protocol'
 method: RangeTestCase
 test__bool__
 	"Test bool(range(...))"
@@ -50,7 +50,7 @@ test__bool__
 	self assert: (r @env1:__bool__).
 %
 
-category: 'Tests - Sequence Protocol'
+category: 'Grail-Tests - Sequence Protocol'
 method: RangeTestCase
 test__contains__
 	"Test membership: x in range(...)"
@@ -67,7 +67,7 @@ test__contains__
 	self deny: (r @env1:__contains__: 5).
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: RangeTestCase
 test__eq__
 	"Test range equality"
@@ -89,7 +89,7 @@ test__eq__
 	self assert: (r1 @env1:__eq__: r2).
 %
 
-category: 'Tests - Sequence Protocol'
+category: 'Grail-Tests - Sequence Protocol'
 method: RangeTestCase
 test__getitem__
 	"Test indexing: r[i]"
@@ -102,7 +102,7 @@ test__getitem__
 	self assert: (r @env1:__getitem__: 4) equals: 9.
 %
 
-category: 'Tests - Sequence Protocol'
+category: 'Grail-Tests - Sequence Protocol'
 method: RangeTestCase
 test__getitem__negative
 	"Test negative indexing: r[-1]"
@@ -115,7 +115,7 @@ test__getitem__negative
 	self assert: (r @env1:__getitem__: -10) equals: 0.
 %
 
-category: 'Tests - Sequence Protocol'
+category: 'Grail-Tests - Sequence Protocol'
 method: RangeTestCase
 test__getitem__outOfRange
 	"Test index out of range raises IndexError"
@@ -126,7 +126,7 @@ test__getitem__outOfRange
 	self should: [r @env1:__getitem__: -10] raise: IndexError.
 %
 
-category: 'Tests - Hashing'
+category: 'Grail-Tests - Hashing'
 method: RangeTestCase
 test__hash__
 	"Test range hashing"
@@ -142,7 +142,7 @@ test__hash__
 	self assert: h1 equals: h2.
 %
 
-category: 'Tests - Sequence Protocol'
+category: 'Grail-Tests - Sequence Protocol'
 method: RangeTestCase
 test__len__
 	"Test len(range(...))"
@@ -158,7 +158,7 @@ test__len__
 	self assert: r size equals: 10.
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: RangeTestCase
 test__ne__
 	"Test range inequality"
@@ -171,7 +171,7 @@ test__ne__
 	self deny: (r1 @env1:__ne__: r1).
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: RangeTestCase
 test__new__emptyRange
 	"Test empty ranges"
@@ -186,7 +186,7 @@ test__new__emptyRange
 	self assert: result size equals: 0.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: RangeTestCase
 test__new__negativeStep
 	"Test range with negative step"
@@ -200,7 +200,7 @@ test__new__negativeStep
 	self assert: result size equals: 5.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: RangeTestCase
 test__new__oneArg
 	"Test range(stop)"
@@ -214,7 +214,7 @@ test__new__oneArg
 	self assert: result size equals: 5.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: RangeTestCase
 test__new__threeArgs
 	"Test range(start, stop, step)"
@@ -228,7 +228,7 @@ test__new__threeArgs
 	self assert: result size equals: 5.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: RangeTestCase
 test__new__twoArgs
 	"Test range(start, stop)"
@@ -242,7 +242,7 @@ test__new__twoArgs
 	self assert: result size equals: 5.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: RangeTestCase
 test__new__zeroStepRaisesError
 	"Test that step=0 raises ValueError"
@@ -252,7 +252,7 @@ test__new__zeroStepRaisesError
 		raise: ValueError.
 %
 
-category: 'Tests - String Representation'
+category: 'Grail-Tests - String Representation'
 method: RangeTestCase
 test__repr__
 	"Test repr(range(...))"
@@ -274,7 +274,7 @@ test__repr__
 	self assert: result equals: 'range(0, 10, 2)'.
 %
 
-category: 'Tests - Iteration'
+category: 'Grail-Tests - Iteration'
 method: RangeTestCase
 test__reversed__
 	"Test reversed(range(...))"
@@ -290,7 +290,7 @@ test__reversed__
 	self assert: rev size equals: 5.
 %
 
-category: 'Tests - Iteration'
+category: 'Grail-Tests - Iteration'
 method: RangeTestCase
 test__reversed__empty
 	"Test reversed() on empty range"
@@ -302,7 +302,7 @@ test__reversed__empty
 	self assert: rev size equals: 0.
 %
 
-category: 'Tests - Sequence Methods'
+category: 'Grail-Tests - Sequence Methods'
 method: RangeTestCase
 test_count
 	"Test range.count(x)"
@@ -314,7 +314,7 @@ test_count
 	self assert: (r @env1:count: -1) equals: 0.
 %
 
-category: 'Tests - Sequence Methods'
+category: 'Grail-Tests - Sequence Methods'
 method: RangeTestCase
 test_index
 	"Test range.index(x)"
@@ -327,7 +327,7 @@ test_index
 	self assert: (r @env1:index: 9) equals: 4.
 %
 
-category: 'Tests - Sequence Methods'
+category: 'Grail-Tests - Sequence Methods'
 method: RangeTestCase
 test_indexNotFound
 	"Test range.index(x) raises ValueError when not found"
@@ -338,7 +338,7 @@ test_indexNotFound
 	self should: [r @env1:index: -1] raise: ValueError.
 %
 
-category: 'Tests - Attributes'
+category: 'Grail-Tests - Attributes'
 method: RangeTestCase
 test_startStopStep
 	"Test start, stop, step attributes"

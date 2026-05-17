@@ -31,7 +31,7 @@ Instance variables:
 
 expectvalue /Class
 doit
-complex category: 'Numbers'
+complex category: 'Grail-Numbers'
 %
 
 ! ===============================================================================
@@ -50,7 +50,7 @@ complex class removeAllMethods: 1.
 
 set compile_env: 0
 
-category: 'Python-Arithmetic Operators'
+category: 'Grail-Arithmetic Operators'
 method: complex
 * aNumber
 	"Multiply complex by aNumber."
@@ -58,7 +58,7 @@ method: complex
 	^ self @env1:__mul__: aNumber
 %
 
-category: 'Python-Arithmetic Operators'
+category: 'Grail-Arithmetic Operators'
 method: complex
 + aNumber
 	"Add aNumber to complex."
@@ -66,7 +66,7 @@ method: complex
 	^ self @env1:__add__: aNumber
 %
 
-category: 'Python-Arithmetic Operators'
+category: 'Grail-Arithmetic Operators'
 method: complex
 - aNumber
 	"Subtract aNumber from complex."
@@ -74,7 +74,7 @@ method: complex
 	^ self @env1:__sub__: aNumber
 %
 
-category: 'Python-Arithmetic Operators'
+category: 'Grail-Arithmetic Operators'
 method: complex
 / aNumber
 	"Divide complex by aNumber."
@@ -82,7 +82,7 @@ method: complex
 	^ self @env1:__truediv__: aNumber
 %
 
-category: 'Python-Arithmetic Operators'
+category: 'Grail-Arithmetic Operators'
 method: complex
 = anObject
 	"Equality comparison."
@@ -90,7 +90,7 @@ method: complex
 	^ self @env1:__eq__: anObject
 %
 
-category: 'Python-Arithmetic Support'
+category: 'Grail-Arithmetic Support'
 method: complex
 _coerce: aNumber
 	"Coerce aNumber to complex.
@@ -99,7 +99,7 @@ _coerce: aNumber
 	^ complex @env1:__new__: aNumber _: 0.0
 %
 
-category: 'Python-Arithmetic Support'
+category: 'Grail-Arithmetic Support'
 method: complex
 _generality
 	"Return generality for complex in numeric hierarchy.
@@ -109,7 +109,7 @@ _generality
 	^ 90
 %
 
-category: 'Python-Arithmetic Operators'
+category: 'Grail-Arithmetic Operators'
 method: complex
 abs
 	"Return the magnitude of the complex number."
@@ -117,7 +117,7 @@ abs
 	^ self @env1:__abs__
 %
 
-category: 'Python-Arithmetic Support'
+category: 'Grail-Arithmetic Support'
 method: complex
 isNumber
 	"Return true - complex participates in arithmetic as a number."
@@ -125,7 +125,7 @@ isNumber
 	^ true
 %
 
-category: 'Python-Arithmetic Operators'
+category: 'Grail-Arithmetic Operators'
 method: complex
 negated
 	"Negate the complex number."
@@ -135,7 +135,7 @@ negated
 
 set compile_env: 1
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: complex
 __new__: r _: i
 	"Create a new complex number with given real and imaginary parts.
@@ -151,7 +151,7 @@ __new__: r _: i
 	^ instance
 %
 
-category: 'Python-Type Conversion'
+category: 'Grail-Type Conversion'
 classmethod: complex
 from_number: n
 	"Create a complex number from a real number.
@@ -161,7 +161,7 @@ from_number: n
 	^ self __new__: n _: 0.0
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: complex
 __abs__
 	"Return the magnitude (absolute value) of the complex number.
@@ -175,7 +175,7 @@ __abs__
 	^ magnitude
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: complex
 __add__: other
 	"Add two complex numbers or complex and real."
@@ -193,7 +193,7 @@ __add__: other
 	^ complex __new__: (real @env0:+ otherReal) _: (imag @env0:+ otherImag)
 %
 
-category: 'Python-Type Conversion'
+category: 'Grail-Type Conversion'
 method: complex
 __bool__
 	"Return True if complex number is non-zero, False otherwise."
@@ -202,7 +202,7 @@ __bool__
 		or: [imag @env0:~= 0.0]
 %
 
-category: 'Python-Type Conversion'
+category: 'Grail-Type Conversion'
 method: complex
 __complex__
 	"Return self (already a complex number)."
@@ -210,7 +210,7 @@ __complex__
 	^ self
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: complex
 __eq__: other
 	"Test equality with another complex number."
@@ -223,7 +223,7 @@ __eq__: other
 		and: [imag @env0:= otherImag]
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: complex
 __format__: formatSpec
 	"Format the complex number according to format specification.
@@ -232,7 +232,7 @@ __format__: formatSpec
 	^ self __repr__
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: complex
 __ge__: other
 	"Complex numbers cannot be ordered - raise TypeError."
@@ -240,7 +240,7 @@ __ge__: other
 	TypeError @env0:signal: '''>='' not supported between instances of ''complex'' and ''complex'''
 %
 
-category: 'Python-Serialization'
+category: 'Grail-Serialization'
 method: complex
 __getnewargs__
 	"Return arguments for pickling/unpickling."
@@ -249,7 +249,7 @@ __getnewargs__
 	^ {real. imag}
 %
 
-category: 'Python-Serialization'
+category: 'Grail-Serialization'
 method: complex
 __getstate__
 	"Return state for pickling. Complex numbers have no additional state."
@@ -257,7 +257,7 @@ __getstate__
 	^ None
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: complex
 __gt__: other
 	"Complex numbers cannot be ordered - raise TypeError."
@@ -265,7 +265,7 @@ __gt__: other
 	TypeError @env0:signal: '''>'' not supported between instances of ''complex'' and ''complex'''
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: complex
 __init__: r _: i
 	"Initialize a complex number with real and imaginary parts.
@@ -276,7 +276,7 @@ __init__: r _: i
 	^ None
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: complex
 __le__: other
 	"Complex numbers cannot be ordered - raise TypeError."
@@ -284,7 +284,7 @@ __le__: other
 	TypeError @env0:signal: '''<='' not supported between instances of ''complex'' and ''complex'''
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: complex
 __lt__: other
 	"Complex numbers cannot be ordered - raise TypeError."
@@ -292,7 +292,7 @@ __lt__: other
 	TypeError @env0:signal: '''<'' not supported between instances of ''complex'' and ''complex'''
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: complex
 __mul__: other
 	"Multiply two complex numbers or complex and real.
@@ -320,7 +320,7 @@ __mul__: other
 	^ complex __new__: newReal _: newImag
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: complex
 __ne__: other
 	"Test inequality with another complex number."
@@ -328,7 +328,7 @@ __ne__: other
 	^ (self __eq__: other) @env0:not
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: complex
 __neg__
 	"Negate the complex number."
@@ -336,7 +336,7 @@ __neg__
 	^ complex __new__: (real @env0:negated) _: (imag @env0:negated)
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: complex
 __pos__
 	"Unary plus (returns self)."
@@ -344,7 +344,7 @@ __pos__
 	^ self
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: complex
 __pow__: other
 	"Raise complex number to a power.
@@ -372,7 +372,7 @@ __pow__: other
 	^ result __truediv__: (self __pow__: (n @env0:negated))
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: complex
 __radd__: other
 	"Right-hand add (commutative, so same as __add__)."
@@ -380,7 +380,7 @@ __radd__: other
 	^ self __add__: other
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: complex
 __repr__
 	"Return string representation of complex number."
@@ -409,7 +409,7 @@ __repr__
 		]) @env0:asUnicodeString
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: complex
 __rmul__: other
 	"Right-hand multiply (commutative, so same as __mul__)."
@@ -417,7 +417,7 @@ __rmul__: other
 	^ self __mul__: other
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: complex
 __rpow__: other
 	"Right-hand power (other ** self).
@@ -426,7 +426,7 @@ __rpow__: other
 	NotImplementedError @env0:signal: 'complex __rpow__ not yet implemented'
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: complex
 __rsub__: other
 	"Right-hand subtract (other - self)."
@@ -444,7 +444,7 @@ __rsub__: other
 	^ complex __new__: (otherReal @env0:- real) _: (otherImag @env0:- imag)
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: complex
 __rtruediv__: other
 	"Right-hand divide (other / self)."
@@ -478,7 +478,7 @@ __rtruediv__: other
 	^ complex __new__: newReal _: newImag
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: complex
 __str__
 	"Return string representation (same as __repr__ for complex)."
@@ -486,7 +486,7 @@ __str__
 	^ self __repr__
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: complex
 __sub__: other
 	"Subtract two complex numbers or complex and real."
@@ -504,7 +504,7 @@ __sub__: other
 	^ complex __new__: (real @env0:- otherReal) _: (imag @env0:- otherImag)
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: complex
 __truediv__: other
 	"Divide two complex numbers or complex by real.
@@ -539,7 +539,7 @@ __truediv__: other
 	^ complex __new__: newReal _: newImag
 %
 
-category: 'Numbers'
+category: 'Grail-Numbers'
 method: complex
 conjugate
 	"Return the complex conjugate."
@@ -547,7 +547,7 @@ conjugate
 	^ complex __new__: real _: (imag @env0:negated)
 %
 
-category: 'Python-Attribute Access'
+category: 'Grail-Attribute Access'
 method: complex
 imag
 	"Return the imaginary part of the complex number."
@@ -555,7 +555,7 @@ imag
 	^ imag
 %
 
-category: 'Python-Attribute Access'
+category: 'Grail-Attribute Access'
 method: complex
 real
 	"Return the real part of the complex number."

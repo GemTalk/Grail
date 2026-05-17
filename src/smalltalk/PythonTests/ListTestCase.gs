@@ -18,7 +18,7 @@ PythonTestCase subclass: 'ListTestCase'
 
 expectvalue /Class
 doit
-ListTestCase category: 'SUnit'
+ListTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -39,7 +39,7 @@ ListTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Tests - Sequence Operations'
+category: 'Grail-Tests - Sequence Operations'
 method: ListTestCase
 test__add__
 	"Test list.__add__(other) - concatenation"
@@ -59,7 +59,7 @@ test__add__
 	self assert: lst2 size equals: 2.
 %
 
-category: 'Tests - Sequence Protocol'
+category: 'Grail-Tests - Sequence Protocol'
 method: ListTestCase
 test__contains__
 	"Test list.__contains__(item)"
@@ -71,7 +71,7 @@ test__contains__
 	self deny: (lst @env1:__contains__: 4).
 %
 
-category: 'Tests - Sequence Protocol'
+category: 'Grail-Tests - Sequence Protocol'
 method: ListTestCase
 test__delitem__
 	"Test list.__delitem__(index)"
@@ -90,7 +90,7 @@ test__delitem__
 	self assert: (lst at: 2) equals: 30.
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: ListTestCase
 test__eq__
 	"Test list.__eq__(other)"
@@ -111,7 +111,7 @@ test__eq__
 	self deny: (lst1 @env1:__eq__: tup).
 %
 
-category: 'Tests - Sequence Protocol'
+category: 'Grail-Tests - Sequence Protocol'
 method: ListTestCase
 test__getitem__
 	"Test list.__getitem__(index)"
@@ -133,7 +133,7 @@ test__getitem__
 	self should: [lst @env1:__getitem__: -6] raise: IndexError.
 %
 
-category: 'Tests - Sequence Operations'
+category: 'Grail-Tests - Sequence Operations'
 method: ListTestCase
 test__iadd__
 	"Test list.__iadd__(other) - in-place concatenation"
@@ -152,7 +152,7 @@ test__iadd__
 	self assert: (lst at: 4) equals: 4.
 %
 
-category: 'Tests - Sequence Operations'
+category: 'Grail-Tests - Sequence Operations'
 method: ListTestCase
 test__imul__
 	"Test list.__imul__(n) - in-place repetition"
@@ -170,7 +170,7 @@ test__imul__
 	self assert: lst size equals: 6.
 %
 
-category: 'Tests - Sequence Protocol'
+category: 'Grail-Tests - Sequence Protocol'
 method: ListTestCase
 test__len__
 	"Test list.__len__()"
@@ -183,7 +183,7 @@ test__len__
 	self assert: lst size equals: 3.
 %
 
-category: 'Tests - Sequence Operations'
+category: 'Grail-Tests - Sequence Operations'
 method: ListTestCase
 test__mul__
 	"Test list.__mul__(n) - repetition"
@@ -202,7 +202,7 @@ test__mul__
 	self assert: lst size equals: 2.
 %
 
-category: 'Tests - String Representation'
+category: 'Grail-Tests - String Representation'
 method: ListTestCase
 test__repr__
 	"Test list.__repr__()"
@@ -217,7 +217,7 @@ test__repr__
 	self assert: (result includesString: ']').
 %
 
-category: 'Tests - Sequence Protocol'
+category: 'Grail-Tests - Sequence Protocol'
 method: ListTestCase
 test__setitem__
 	"Test list.__setitem__(index, value)"
@@ -237,7 +237,7 @@ test__setitem__
 	self should: [lst @env1:__setitem__: 3 _: 400] raise: IndexError.
 %
 
-category: 'Tests - List Methods'
+category: 'Grail-Tests - List Methods'
 method: ListTestCase
 testAppend
 	"Test list.append(item)"
@@ -251,7 +251,7 @@ testAppend
 	self assert: (lst at: 4) equals: 4.
 %
 
-category: 'Tests - List Methods'
+category: 'Grail-Tests - List Methods'
 method: ListTestCase
 testClear
 	"Test list.clear()"
@@ -264,7 +264,7 @@ testClear
 	self assert: lst size equals: 0.
 %
 
-category: 'Tests - List Methods'
+category: 'Grail-Tests - List Methods'
 method: ListTestCase
 testCount
 	"Test list.count(value)"
@@ -279,7 +279,7 @@ testCount
 	self assert: result equals: 0.
 %
 
-category: 'Tests - Eval - List Creation'
+category: 'Grail-Tests - Eval - List Creation'
 method: ListTestCase
 testEvalEmptyList
 	"Test empty list creation via Python source"
@@ -289,7 +289,7 @@ testEvalEmptyList
 	self assert: result size equals: 0.
 %
 
-category: 'Tests - Eval - List Operations'
+category: 'Grail-Tests - Eval - List Operations'
 method: ListTestCase
 testEvalListConcatenation
 	"Test list + list via Python source"
@@ -301,7 +301,7 @@ testEvalListConcatenation
 	self assert: (result @env1:__getitem__: 3) equals: 4.
 %
 
-category: 'Tests - Eval - List Operations'
+category: 'Grail-Tests - Eval - List Operations'
 method: ListTestCase
 testEvalListContains
 	"Test in operator via Python source"
@@ -310,7 +310,7 @@ testEvalListContains
 	self deny: (self eval: '4 in [1, 2, 3]').
 %
 
-category: 'Tests - Eval - List Operations'
+category: 'Grail-Tests - Eval - List Operations'
 method: ListTestCase
 testEvalListIndexing
 	"Test list indexing via Python source"
@@ -320,7 +320,7 @@ testEvalListIndexing
 	self assert: (self eval: '[10, 20, 30][-1]') equals: 30.
 %
 
-category: 'Tests - Eval - List Creation'
+category: 'Grail-Tests - Eval - List Creation'
 method: ListTestCase
 testEvalListLiteral
 	"Test list literal creation via Python source"
@@ -332,7 +332,7 @@ testEvalListLiteral
 	self assert: (result @env1:__getitem__: 2) equals: 3.
 %
 
-category: 'Tests - Eval - List Operations'
+category: 'Grail-Tests - Eval - List Operations'
 method: ListTestCase
 testEvalListRepetition
 	"Test list * n via Python source"
@@ -342,7 +342,7 @@ testEvalListRepetition
 	self assert: result size equals: 6.
 %
 
-category: 'Tests - List Methods'
+category: 'Grail-Tests - List Methods'
 method: ListTestCase
 testExtend
 	"Test list.extend(iterable)"
@@ -356,7 +356,7 @@ testExtend
 	self assert: (lst at: 5) equals: 5.
 %
 
-category: 'Tests - List Methods'
+category: 'Grail-Tests - List Methods'
 method: ListTestCase
 testIndex
 	"Test list.index(value)"
@@ -372,7 +372,7 @@ testIndex
 	self should: [lst @env1:index: 4] raise: ValueError.
 %
 
-category: 'Tests - List Methods'
+category: 'Grail-Tests - List Methods'
 method: ListTestCase
 testInsert
 	"Test list.insert(index, item)"
@@ -390,7 +390,7 @@ testInsert
 	self assert: (lst at: 1) equals: 0.
 %
 
-category: 'Tests - List Methods'
+category: 'Grail-Tests - List Methods'
 method: ListTestCase
 testPop
 	"Test list.pop() and list.pop(index)"
@@ -413,7 +413,7 @@ testPop
 	self should: [lst @env1:pop] raise: IndexError.
 %
 
-category: 'Tests - List Methods'
+category: 'Grail-Tests - List Methods'
 method: ListTestCase
 testRemove
 	"Test list.remove(value)"
@@ -430,7 +430,7 @@ testRemove
 	self should: [lst @env1:remove: 99] raise: ValueError.
 %
 
-category: 'Tests - List Methods'
+category: 'Grail-Tests - List Methods'
 method: ListTestCase
 testReverse
 	"Test list.reverse()"

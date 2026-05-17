@@ -35,7 +35,7 @@ See https://docs.python.org/3/library/html.html for documentation.
 
 expectvalue /Class
 doit
-html category: 'Modules'
+html category: 'Grail-Modules'
 %
 
 ! ------------------- Remove existing Python methods from html
@@ -51,7 +51,7 @@ set compile_env: 1
 ! Singleton initialization
 ! ===============================================================================
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: html
 initialize
 	"Bind the html.entities submodule. The `entities` accessor reads
@@ -65,7 +65,7 @@ initialize
 ! Submodule attribute (stored data, not a callable)
 ! ===============================================================================
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: html
 entities
 	"Return the html.entities submodule (stored attribute, populated by
@@ -77,7 +77,7 @@ entities
 ! Fast-path methods
 ! ===============================================================================
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: html
 escape: s
 	"Python html.escape(s) — fast path. 1-arg form: replaces
@@ -86,7 +86,7 @@ escape: s
 	^ self escape: s _: true
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: html
 escape: s _: quote
 	"Python html.escape(s, quote) — fast path. 2-arg form.
@@ -105,7 +105,7 @@ escape: s _: quote
 	^ result
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: html
 unescape: s
 	"Python html.unescape(s) — fast path. Converts HTML

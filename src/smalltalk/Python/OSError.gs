@@ -30,5 +30,5 @@ Instance variables:
 
 expectvalue /Class
 doit
-OSError category: 'Exceptions'
+OSError category: 'Grail-Exceptions'
 %

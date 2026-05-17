@@ -42,7 +42,7 @@ Object
 
 expectvalue /Class
 doit
-ReturnAst category: 'Parser'
+ReturnAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from ReturnAst
@@ -51,7 +51,7 @@ removeallclassmethods ReturnAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: ReturnAst
 printSmalltalkOn: aStream
 

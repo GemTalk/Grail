@@ -33,7 +33,7 @@ Usage (from Python source):
 
 expectvalue /Class
 doit
-_statistics category: 'Modules'
+_statistics category: 'Grail-Modules'
 %
 
 expectvalue /Metaclass3
@@ -48,7 +48,7 @@ _statistics class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Private'
+category: 'Grail-Private'
 classmethod: _statistics
 callNormalDistInvCdf: anArray
 	"Call _normal_dist_inv_cdf(p, mu, sigma) via CPythonShim."
@@ -65,13 +65,13 @@ callNormalDistInvCdf: anArray
 
 set compile_env: 1
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: _statistics
 initialize
 	"No-op — all methods are real fast-path methods."
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: _statistics
 _normal_dist_inv_cdf: p _: mu _: sigma
 	"_normal_dist_inv_cdf(p, mu, sigma) -> float.

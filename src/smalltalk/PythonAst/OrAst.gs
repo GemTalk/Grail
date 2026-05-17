@@ -37,7 +37,7 @@ Object
 
 expectvalue /Class
 doit
-OrAst category: 'Parser'
+OrAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from OrAst
@@ -46,7 +46,7 @@ removeallclassmethods OrAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: OrAst
 printSmalltalkOn: aStream
 

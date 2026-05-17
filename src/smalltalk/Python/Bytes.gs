@@ -20,7 +20,7 @@ bytes class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Constructors'
+category: 'Grail-Constructors'
 classmethod: bytes
 __new__
 	"bytes() — create empty bytes. Receiver is the class."
@@ -28,7 +28,7 @@ __new__
 	^ self ___new___
 %
 
-category: 'Python-Constructors'
+category: 'Grail-Constructors'
 classmethod: bytes
 __new__: source
 	"bytes(source) — create bytes from various sources. Receiver is
@@ -106,7 +106,7 @@ __new__: source
 	^ self ___new___
 %
 
-category: 'Python-Constructors'
+category: 'Grail-Constructors'
 classmethod: bytes
 __new__: source _: encoding
 	"bytes(string, encoding) — encode string to bytes. Receiver is the
@@ -174,7 +174,7 @@ __new__: source _: encoding
 	LookupError ___signal___: ('unknown encoding: ' @env0:, encodingStr)
 %
 
-category: 'Python-Constructors'
+category: 'Grail-Constructors'
 classmethod: bytes
 fromhex: hexString
 	"Create bytes from hex string (e.g., 'deadbeef'). Receiver is the
@@ -205,7 +205,7 @@ fromhex: hexString
 	^ ba
 %
 
-category: 'Python-Translation Methods'
+category: 'Grail-Translation Methods'
 classmethod: bytes
 maketrans: frm _: to
 	"Create translation table (identity table with replacements)
@@ -237,7 +237,7 @@ maketrans: frm _: to
 	^ table
 %
 
-category: 'Python-Concatenation'
+category: 'Grail-Concatenation'
 method: bytes
 __add__: other
 	"Concatenate bytes"
@@ -268,20 +268,20 @@ __add__: other
 	^ result
 %
 
-category: 'Python-Type'
+category: 'Grail-Type'
 method: bytes
 __class__
 	"Return the Python type for bytes"
 	^ bytes
 %
 
-category: 'Python-Sequence Protocol'
+category: 'Grail-Sequence Protocol'
 method: bytes
 __contains__: item
 	^ self @env0:includes: item
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: bytes
 __eq__: other
 	"Compare bytes for equality"
@@ -314,7 +314,7 @@ __eq__: other
 	^ true
 %
 
-category: 'Python-Sequence Protocol'
+category: 'Grail-Sequence Protocol'
 method: bytes
 __getitem__: index
 	"Get byte at index (0-based, supports negative indices)"
@@ -338,21 +338,21 @@ __getitem__: index
 	^ self @env0:at: (idx @env0:+ 1)
 %
 
-category: 'Python-Hashing'
+category: 'Grail-Hashing'
 method: bytes
 __hash__
 	"Return hash of bytes"
 	^ self @env0:hash
 %
 
-category: 'Python-Sequence Protocol'
+category: 'Grail-Sequence Protocol'
 method: bytes
 __len__
 	"Return the number of bytes"
 	^ self @env0:size
 %
 
-category: 'Python-Concatenation'
+category: 'Grail-Concatenation'
 method: bytes
 __mul__: count
 	"Repeat bytes count times"
@@ -383,7 +383,7 @@ __mul__: count
 	^ result
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: bytes
 __ne__: other
 	"Compare bytes for inequality"
@@ -392,7 +392,7 @@ __ne__: other
 	^ result @env0:not
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: bytes
 __repr__
 	"Return string representation of bytes (e.g., b'hello')"
@@ -435,14 +435,14 @@ __repr__
 	^ result
 %
 
-category: 'Python-Sequence Protocol'
+category: 'Grail-Sequence Protocol'
 method: bytes
 __setitem__: index _: value
 	"bytes is immutable - raise TypeError"
 	TypeError ___signal___: '''bytes'' object does not support item assignment'
 %
 
-category: 'Python-String-like Methods'
+category: 'Grail-String-like Methods'
 method: bytes
 capitalize
 	"Return capitalized version (first byte uppercase, rest lowercase)"
@@ -466,7 +466,7 @@ capitalize
 	^ result
 %
 
-category: 'Python-Padding Methods'
+category: 'Grail-Padding Methods'
 method: bytes
 center: width
 	"Center bytes in field of given width"
@@ -502,7 +502,7 @@ center: width
 	^ result
 %
 
-category: 'Python-Search Methods'
+category: 'Grail-Search Methods'
 method: bytes
 count: sub
 	"Count non-overlapping occurrences of sub"
@@ -562,14 +562,14 @@ count: sub
 	^ count
 %
 
-category: 'Python-Encoding/Decoding'
+category: 'Grail-Encoding/Decoding'
 method: bytes
 decode
 	"Decode bytes to string using UTF-8"
 	^ self @env1:decode: 'utf-8'
 %
 
-category: 'Python-Encoding/Decoding'
+category: 'Grail-Encoding/Decoding'
 method: bytes
 decode: encoding
 	"Decode bytes to string using specified encoding"
@@ -621,7 +621,7 @@ decode: encoding
 	LookupError ___signal___: ('unknown encoding: ' @env0:, encodingStr)
 %
 
-category: 'Python-Prefix/Suffix Methods'
+category: 'Grail-Prefix/Suffix Methods'
 method: bytes
 endswith: suffix
 	"Check if bytes ends with suffix"
@@ -656,14 +656,14 @@ endswith: suffix
 	^ true
 %
 
-category: 'Python-String-like Methods'
+category: 'Grail-String-like Methods'
 method: bytes
 expandtabs
 	"Expand tabs to spaces (default tabsize=8)"
 	^ self @env1:expandtabs: 8
 %
 
-category: 'Python-String-like Methods'
+category: 'Grail-String-like Methods'
 method: bytes
 expandtabs: tabsize
 	"Expand tabs to spaces with given tabsize"
@@ -706,7 +706,7 @@ expandtabs: tabsize
 	^ result
 %
 
-category: 'Python-Search Methods'
+category: 'Grail-Search Methods'
 method: bytes
 find: sub
 	"Find first occurrence of sub, return index or -1"
@@ -765,7 +765,7 @@ find: sub
 	^ -1
 %
 
-category: 'Python-Encoding/Decoding'
+category: 'Grail-Encoding/Decoding'
 method: bytes
 hex
 	"Return hex representation of bytes"
@@ -787,7 +787,7 @@ hex
 	^ result
 %
 
-category: 'Python-Search Methods'
+category: 'Grail-Search Methods'
 method: bytes
 index: sub
 	"Find first occurrence of sub, raise ValueError if not found"
@@ -799,7 +799,7 @@ index: sub
 	^ result
 %
 
-category: 'Python-Testing Methods'
+category: 'Grail-Testing Methods'
 method: bytes
 isalnum
 	"Check if all bytes are alphanumeric ASCII"
@@ -833,7 +833,7 @@ isalnum
 	^ true
 %
 
-category: 'Python-Testing Methods'
+category: 'Grail-Testing Methods'
 method: bytes
 isalpha
 	"Check if all bytes are alphabetic ASCII (A-Z, a-z)"
@@ -863,7 +863,7 @@ isalpha
 	^ true
 %
 
-category: 'Python-Testing Methods'
+category: 'Grail-Testing Methods'
 method: bytes
 isascii
 	"Return True if the sequence is empty or all bytes are ASCII (0-127)"
@@ -881,7 +881,7 @@ isascii
 	^ true
 %
 
-category: 'Python-Testing Methods'
+category: 'Grail-Testing Methods'
 method: bytes
 isdigit
 	"Check if all bytes are digits (0-9)"
@@ -907,7 +907,7 @@ isdigit
 	^ true
 %
 
-category: 'Python-Testing Methods'
+category: 'Grail-Testing Methods'
 method: bytes
 islower
 	"Check if all cased bytes are lowercase"
@@ -935,7 +935,7 @@ islower
 	^ hasCased
 %
 
-category: 'Python-Testing Methods'
+category: 'Grail-Testing Methods'
 method: bytes
 isspace
 	"Check if all bytes are whitespace"
@@ -969,7 +969,7 @@ isspace
 	^ true
 %
 
-category: 'Python-Testing Methods'
+category: 'Grail-Testing Methods'
 method: bytes
 istitle
 	"Check if bytes is titlecased"
@@ -1011,7 +1011,7 @@ istitle
 	^ hasCased
 %
 
-category: 'Python-Testing Methods'
+category: 'Grail-Testing Methods'
 method: bytes
 isupper
 	"Check if all cased bytes are uppercase"
@@ -1039,7 +1039,7 @@ isupper
 	^ hasCased
 %
 
-category: 'Python-String-like Methods'
+category: 'Grail-String-like Methods'
 method: bytes
 join: iterable
 	"Join iterable of bytes with self as separator"
@@ -1100,7 +1100,7 @@ join: iterable
 	^ result
 %
 
-category: 'Python-Padding Methods'
+category: 'Grail-Padding Methods'
 method: bytes
 ljust: width
 	"Left justify bytes in field of given width"
@@ -1129,7 +1129,7 @@ ljust: width
 	^ result
 %
 
-category: 'Python-String-like Methods'
+category: 'Grail-String-like Methods'
 method: bytes
 lower
 	"Return lowercase version of bytes"
@@ -1153,7 +1153,7 @@ lower
 	^ result
 %
 
-category: 'Python-String-like Methods'
+category: 'Grail-String-like Methods'
 method: bytes
 lstrip
 	"Remove leading whitespace bytes"
@@ -1194,7 +1194,7 @@ lstrip
 	^ result
 %
 
-category: 'Python-Splitting Methods'
+category: 'Grail-Splitting Methods'
 method: bytes
 partition: sep
 	"Partition bytes at first occurrence of sep, return tuple (before, sep, after)"
@@ -1226,7 +1226,7 @@ partition: sep
 	^ tuple @env0:with: before with: sep with: after
 %
 
-category: 'Python-Prefix/Suffix Methods'
+category: 'Grail-Prefix/Suffix Methods'
 method: bytes
 removeprefix: prefix
 	"Remove prefix if present, otherwise return copy"
@@ -1247,7 +1247,7 @@ removeprefix: prefix
 	^ result
 %
 
-category: 'Python-Prefix/Suffix Methods'
+category: 'Grail-Prefix/Suffix Methods'
 method: bytes
 removesuffix: suffix
 	"Remove suffix if present, otherwise return copy"
@@ -1268,7 +1268,7 @@ removesuffix: suffix
 	^ result
 %
 
-category: 'Python-String-like Methods'
+category: 'Grail-String-like Methods'
 method: bytes
 replace: old _: new
 	"Replace all occurrences of old with new"
@@ -1298,7 +1298,7 @@ replace: old _: new
 	^ new @env1:join: parts
 %
 
-category: 'Python-Search Methods'
+category: 'Grail-Search Methods'
 method: bytes
 rfind: sub
 	"Find last occurrence of sub, return index or -1"
@@ -1353,7 +1353,7 @@ rfind: sub
 	^ -1
 %
 
-category: 'Python-Search Methods'
+category: 'Grail-Search Methods'
 method: bytes
 rindex: sub
 	"Find last occurrence of sub, raise ValueError if not found"
@@ -1365,7 +1365,7 @@ rindex: sub
 	^ result
 %
 
-category: 'Python-Padding Methods'
+category: 'Grail-Padding Methods'
 method: bytes
 rjust: width
 	"Right justify bytes in field of given width"
@@ -1394,7 +1394,7 @@ rjust: width
 	^ result
 %
 
-category: 'Python-Splitting Methods'
+category: 'Grail-Splitting Methods'
 method: bytes
 rpartition: sep
 	"Partition bytes at last occurrence of sep, return tuple (before, sep, after)"
@@ -1426,14 +1426,14 @@ rpartition: sep
 	^ tuple @env0:with: before with: sep with: after
 %
 
-category: 'Python-Splitting Methods'
+category: 'Grail-Splitting Methods'
 method: bytes
 rsplit: sep
 	"Split from right (same as split for now - full implementation would need maxsplit)"
 	^ self @env1:split: sep
 %
 
-category: 'Python-Splitting Methods'
+category: 'Grail-Splitting Methods'
 method: bytes
 rsplit: sep _: maxsplit
 	"Split from right with maximum number of splits"
@@ -1517,7 +1517,7 @@ rsplit: sep _: maxsplit
 	^ parts
 %
 
-category: 'Python-String-like Methods'
+category: 'Grail-String-like Methods'
 method: bytes
 rstrip
 	"Remove trailing whitespace bytes"
@@ -1557,7 +1557,7 @@ rstrip
 	^ result
 %
 
-category: 'Python-String-like Methods'
+category: 'Grail-String-like Methods'
 method: bytes
 split: sep
 	"Split bytes by separator, return list of bytes"
@@ -1621,7 +1621,7 @@ split: sep
 	^ parts
 %
 
-category: 'Python-String-like Methods'
+category: 'Grail-String-like Methods'
 method: bytes
 split: sep _: maxsplit
 	"Split bytes by separator with maximum number of splits"
@@ -1696,7 +1696,7 @@ split: sep _: maxsplit
 	^ parts
 %
 
-category: 'Python-Splitting Methods'
+category: 'Grail-Splitting Methods'
 method: bytes
 splitlines
 	"Split bytes at line boundaries, return list"
@@ -1746,7 +1746,7 @@ splitlines
 	^ parts
 %
 
-category: 'Python-Prefix/Suffix Methods'
+category: 'Grail-Prefix/Suffix Methods'
 method: bytes
 startswith: prefix
 	"Check if bytes starts with prefix"
@@ -1779,7 +1779,7 @@ startswith: prefix
 	^ true
 %
 
-category: 'Python-String-like Methods'
+category: 'Grail-String-like Methods'
 method: bytes
 strip
 	"Remove leading and trailing whitespace bytes"
@@ -1838,7 +1838,7 @@ strip
 	^ result
 %
 
-category: 'Python-String-like Methods'
+category: 'Grail-String-like Methods'
 method: bytes
 swapcase
 	"Return bytes with case swapped"
@@ -1868,7 +1868,7 @@ swapcase
 	^ result
 %
 
-category: 'Python-String-like Methods'
+category: 'Grail-String-like Methods'
 method: bytes
 title
 	"Return titlecased bytes (first letter of each word capitalized)"
@@ -1917,7 +1917,7 @@ title
 	^ result
 %
 
-category: 'Python-Translation Methods'
+category: 'Grail-Translation Methods'
 method: bytes
 translate: table
 	"Translate bytes using translation table"
@@ -1942,7 +1942,7 @@ translate: table
 	^ result
 %
 
-category: 'Python-String-like Methods'
+category: 'Grail-String-like Methods'
 method: bytes
 upper
 	"Return uppercase version of bytes"
@@ -1966,7 +1966,7 @@ upper
 	^ result
 %
 
-category: 'Python-Padding Methods'
+category: 'Grail-Padding Methods'
 method: bytes
 zfill: width
 	"Pad bytes with zeros on the left to fill width"

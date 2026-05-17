@@ -17,5 +17,5 @@ ArithmeticError subclass: 'FloatingPointError'
 
 expectvalue /Class
 doit
-FloatingPointError category: 'Exceptions'
+FloatingPointError category: 'Grail-Exceptions'
 %

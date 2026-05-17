@@ -18,7 +18,7 @@ PythonTestCase subclass: 'PythonParserTestCase'
 
 expectvalue /Class
 doit
-PythonParserTestCase category: 'SUnit'
+PythonParserTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -35,7 +35,7 @@ PythonParserTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'helpers'
+category: 'Grail-helpers'
 method: PythonParserTestCase
 fieldOf: anObject named: aSymbol
 	"Access an instance variable by name using reflection."
@@ -47,7 +47,7 @@ fieldOf: anObject named: aSymbol
 	^nil
 %
 
-category: 'helpers'
+category: 'Grail-helpers'
 method: PythonParserTestCase
 firstExprValue: aString
 	"Parse source and return the value of the first ExprAst statement."
@@ -57,7 +57,7 @@ firstExprValue: aString
 	^self fieldOf: stmt named: #value
 %
 
-category: 'helpers'
+category: 'Grail-helpers'
 method: PythonParserTestCase
 firstStatement: aString
 	"Parse source and return the first statement from the module body."
@@ -68,14 +68,14 @@ firstStatement: aString
 	^body first
 %
 
-category: 'helpers'
+category: 'Grail-helpers'
 method: PythonParserTestCase
 parse: aString
 
 	^PythonParser parse: aString
 %
 
-category: 'tests - binary ops'
+category: 'Grail-tests - binary ops'
 method: PythonParserTestCase
 test_addition
 	"Parse addition."
@@ -88,7 +88,7 @@ test_addition
 	self assert: ((self fieldOf: expr named: #right) isKindOf: ConstantAst).
 %
 
-category: 'tests - boolean ops'
+category: 'Grail-tests - boolean ops'
 method: PythonParserTestCase
 test_and
 	"Parse 'and' expression."
@@ -99,7 +99,7 @@ test_and
 	self assert: (self fieldOf: expr named: #values) size equals: 2.
 %
 
-category: 'tests - assignment'
+category: 'Grail-tests - assignment'
 method: PythonParserTestCase
 test_annotated_assignment
 	"Parse annotated assignment: x: int = 1."
@@ -110,7 +110,7 @@ test_annotated_assignment
 	self assert: ((self fieldOf: stmt named: #annotation) isKindOf: NameAst).
 %
 
-category: 'tests - simple statements'
+category: 'Grail-tests - simple statements'
 method: PythonParserTestCase
 test_assert
 	"Parse assert statement."
@@ -121,7 +121,7 @@ test_assert
 	self assert: (self fieldOf: stmt named: #test) notNil.
 %
 
-category: 'tests - simple statements'
+category: 'Grail-tests - simple statements'
 method: PythonParserTestCase
 test_assert_with_message
 	"Parse assert with message."
@@ -132,7 +132,7 @@ test_assert_with_message
 	self assert: (self fieldOf: stmt named: #msg) notNil.
 %
 
-category: 'tests - async'
+category: 'Grail-tests - async'
 method: PythonParserTestCase
 test_async_function
 	"Parse async function definition."
@@ -143,7 +143,7 @@ test_async_function
 	self assert: (stmt isKindOf: AsyncFunctionDefAst).
 %
 
-category: 'tests - attribute'
+category: 'Grail-tests - attribute'
 method: PythonParserTestCase
 test_attribute_access
 	"Parse attribute access: a.b."
@@ -154,7 +154,7 @@ test_attribute_access
 	self assert: (self fieldOf: expr named: #attr) equals: #b.
 %
 
-category: 'tests - assignment'
+category: 'Grail-tests - assignment'
 method: PythonParserTestCase
 test_augmented_assignment
 	"Parse augmented assignment: x += 1."
@@ -165,7 +165,7 @@ test_augmented_assignment
 	self assert: ((self fieldOf: stmt named: #op) isKindOf: AddAst).
 %
 
-category: 'tests - binary ops'
+category: 'Grail-tests - binary ops'
 method: PythonParserTestCase
 test_bitwise_and
 	"Parse bitwise AND."
@@ -176,7 +176,7 @@ test_bitwise_and
 	self assert: ((self fieldOf: expr named: #op) isKindOf: BitAndAst).
 %
 
-category: 'tests - binary ops'
+category: 'Grail-tests - binary ops'
 method: PythonParserTestCase
 test_bitwise_or
 	"Parse bitwise OR."
@@ -187,7 +187,7 @@ test_bitwise_or
 	self assert: ((self fieldOf: expr named: #op) isKindOf: BitOrAst).
 %
 
-category: 'tests - binary ops'
+category: 'Grail-tests - binary ops'
 method: PythonParserTestCase
 test_bitwise_xor
 	"Parse bitwise XOR."
@@ -198,7 +198,7 @@ test_bitwise_xor
 	self assert: ((self fieldOf: expr named: #op) isKindOf: BitXorAst).
 %
 
-category: 'tests - simple statements'
+category: 'Grail-tests - simple statements'
 method: PythonParserTestCase
 test_break
 	"Parse break statement."
@@ -208,7 +208,7 @@ test_break
 	self assert: (stmt isKindOf: BreakAst).
 %
 
-category: 'tests - calls'
+category: 'Grail-tests - calls'
 method: PythonParserTestCase
 test_call_double_star_kwargs
 	"Parse function call with **kwargs: f(**kwargs)."
@@ -221,7 +221,7 @@ test_call_double_star_kwargs
 	self assert: (self fieldOf: kw first named: #arg) isNil.
 %
 
-category: 'tests - calls'
+category: 'Grail-tests - calls'
 method: PythonParserTestCase
 test_call_keyword_args
 	"Parse function call with keyword args: f(x=1, y=2)."
@@ -232,7 +232,7 @@ test_call_keyword_args
 	self assert: (self fieldOf: expr named: #keywords) size equals: 2.
 %
 
-category: 'tests - calls'
+category: 'Grail-tests - calls'
 method: PythonParserTestCase
 test_call_no_args
 	"Parse function call with no args: f()."
@@ -244,7 +244,7 @@ test_call_no_args
 	self assert: (self fieldOf: expr named: #keywords) isEmpty.
 %
 
-category: 'tests - calls'
+category: 'Grail-tests - calls'
 method: PythonParserTestCase
 test_call_positional_args
 	"Parse function call with positional args: f(1, 2, 3)."
@@ -255,7 +255,7 @@ test_call_positional_args
 	self assert: (self fieldOf: expr named: #arguments) size equals: 3.
 %
 
-category: 'tests - calls'
+category: 'Grail-tests - calls'
 method: PythonParserTestCase
 test_call_star_args
 	"Parse function call with *args: f(*args)."
@@ -268,7 +268,7 @@ test_call_star_args
 	self assert: (args first isKindOf: StarredAst).
 %
 
-category: 'tests - boolean ops'
+category: 'Grail-tests - boolean ops'
 method: PythonParserTestCase
 test_chained_and
 	"Parse chained 'and': x and y and z."
@@ -279,7 +279,7 @@ test_chained_and
 	self assert: (self fieldOf: expr named: #values) size equals: 3.
 %
 
-category: 'tests - boolean ops'
+category: 'Grail-tests - boolean ops'
 method: PythonParserTestCase
 test_chained_or
 	"Parse chained 'or': x or y or z."
@@ -290,7 +290,7 @@ test_chained_or
 	self assert: (self fieldOf: expr named: #values) size equals: 3.
 %
 
-category: 'tests - assignment'
+category: 'Grail-tests - assignment'
 method: PythonParserTestCase
 test_chained_assignment
 	"Parse chained assignment: x = y = 1."
@@ -302,7 +302,7 @@ test_chained_assignment
 	self assert: targets size equals: 2.
 %
 
-category: 'tests - attribute'
+category: 'Grail-tests - attribute'
 method: PythonParserTestCase
 test_chained_attribute
 	"Parse chained attribute: a.b.c."
@@ -316,7 +316,7 @@ test_chained_attribute
 	self assert: (self fieldOf: inner named: #attr) equals: #b.
 %
 
-category: 'tests - comparisons'
+category: 'Grail-tests - comparisons'
 method: PythonParserTestCase
 test_chained_comparison
 	"Parse chained comparison: 1 < x < 10."
@@ -330,7 +330,7 @@ test_chained_comparison
 	self assert: (ops last isKindOf: LtAst).
 %
 
-category: 'tests - class def'
+category: 'Grail-tests - class def'
 method: PythonParserTestCase
 test_class_with_base
 	"Parse class with base class."
@@ -343,7 +343,7 @@ test_class_with_base
 	self assert: bases size equals: 1.
 %
 
-category: 'tests - class def'
+category: 'Grail-tests - class def'
 method: PythonParserTestCase
 test_class_with_metaclass
 	"Parse class with metaclass keyword."
@@ -356,7 +356,7 @@ test_class_with_metaclass
 	self assert: keywords size equals: 1.
 %
 
-category: 'tests - complex'
+category: 'Grail-tests - complex'
 method: PythonParserTestCase
 test_class_with_methods
 	"Parse a class with multiple methods."
@@ -376,7 +376,7 @@ test_class_with_methods
 	self assert: (body last isKindOf: InstanceFunctionDefAst).
 %
 
-category: 'tests - class nesting'
+category: 'Grail-tests - class nesting'
 method: PythonParserTestCase
 test_classmethod_decorator
 	"@classmethod produces ClassFunctionDefAst."
@@ -391,7 +391,7 @@ test_classmethod_decorator
 	self assert: (method isKindOf: ClassFunctionDefAst).
 %
 
-category: 'tests - comprehensions'
+category: 'Grail-tests - comprehensions'
 method: PythonParserTestCase
 test_comprehension_with_condition
 	"Parse list comprehension with if: [x for x in y if x > 0]."
@@ -404,7 +404,7 @@ test_comprehension_with_condition
 	self assert: ifs size equals: 1.
 %
 
-category: 'tests - simple statements'
+category: 'Grail-tests - simple statements'
 method: PythonParserTestCase
 test_continue
 	"Parse continue statement."
@@ -414,7 +414,7 @@ test_continue
 	self assert: (stmt isKindOf: ContinueAst).
 %
 
-category: 'tests - decorators'
+category: 'Grail-tests - decorators'
 method: PythonParserTestCase
 test_decorator_with_args
 	"Parse function with decorator that takes arguments."
@@ -428,7 +428,7 @@ def foo():
 	self assert: decList size equals: 1.
 %
 
-category: 'tests - simple statements'
+category: 'Grail-tests - simple statements'
 method: PythonParserTestCase
 test_delete
 	"Parse delete statement."
@@ -438,7 +438,7 @@ test_delete
 	self assert: (stmt isKindOf: DeleteAst).
 %
 
-category: 'tests - comprehensions'
+category: 'Grail-tests - comprehensions'
 method: PythonParserTestCase
 test_dict_comprehension
 	"Parse dict comprehension: {k: v for k, v in items}."
@@ -448,7 +448,7 @@ test_dict_comprehension
 	self assert: (expr isKindOf: DictCompAst).
 %
 
-category: 'tests - collections'
+category: 'Grail-tests - collections'
 method: PythonParserTestCase
 test_dict_with_entries
 	"Parse dict: {'a': 1, 'b': 2}."
@@ -460,7 +460,7 @@ test_dict_with_entries
 	self assert: (self fieldOf: expr named: #values) size equals: 2.
 %
 
-category: 'tests - binary ops'
+category: 'Grail-tests - binary ops'
 method: PythonParserTestCase
 test_division
 	"Parse division."
@@ -471,7 +471,7 @@ test_division
 	self assert: ((self fieldOf: expr named: #op) isKindOf: DivAst).
 %
 
-category: 'tests - literals'
+category: 'Grail-tests - literals'
 method: PythonParserTestCase
 test_ellipsis_literal
 	"Parse ellipsis literal (...)."
@@ -481,7 +481,7 @@ test_ellipsis_literal
 	self assert: (expr isKindOf: ConstantAst).
 %
 
-category: 'tests - collections'
+category: 'Grail-tests - collections'
 method: PythonParserTestCase
 test_empty_dict
 	"Parse empty dict: {}."
@@ -492,7 +492,7 @@ test_empty_dict
 	self assert: (self fieldOf: expr named: #keys) isEmpty.
 %
 
-category: 'tests - collections'
+category: 'Grail-tests - collections'
 method: PythonParserTestCase
 test_empty_list
 	"Parse empty list: []."
@@ -503,7 +503,7 @@ test_empty_list
 	self assert: (self fieldOf: expr named: #elts) isEmpty.
 %
 
-category: 'tests - module'
+category: 'Grail-tests - module'
 method: PythonParserTestCase
 test_empty_module
 	"Parsing empty string produces a ModuleAst."
@@ -515,7 +515,7 @@ test_empty_module
 	self assert: module body body isEmpty.
 %
 
-category: 'tests - collections'
+category: 'Grail-tests - collections'
 method: PythonParserTestCase
 test_empty_tuple
 	"Parse empty tuple: ()."
@@ -526,7 +526,7 @@ test_empty_tuple
 	self assert: (self fieldOf: expr named: #elts) isEmpty.
 %
 
-category: 'tests - comparisons'
+category: 'Grail-tests - comparisons'
 method: PythonParserTestCase
 test_equals
 	"Parse equality comparison."
@@ -537,7 +537,7 @@ test_equals
 	self assert: ((self fieldOf: expr named: #cmpopList) first isKindOf: EqAst).
 %
 
-category: 'tests - expr statement'
+category: 'Grail-tests - expr statement'
 method: PythonParserTestCase
 test_expression_statement
 	"Parse expression used as statement."
@@ -548,7 +548,7 @@ test_expression_statement
 	self assert: ((self fieldOf: stmt named: #value) isKindOf: CallAst).
 %
 
-category: 'tests - literals'
+category: 'Grail-tests - literals'
 method: PythonParserTestCase
 test_false_literal
 	"Parse False literal."
@@ -559,7 +559,7 @@ test_false_literal
 	self assert: (self fieldOf: expr named: #value) equals: false.
 %
 
-category: 'tests - complex'
+category: 'Grail-tests - complex'
 method: PythonParserTestCase
 test_fibonacci
 	"Parse a fibonacci function."
@@ -574,7 +574,7 @@ test_fibonacci
 	self assert: stmt name equals: #fib.
 %
 
-category: 'tests - literals'
+category: 'Grail-tests - literals'
 method: PythonParserTestCase
 test_float_literal
 	"Parse float literal."
@@ -585,7 +585,7 @@ test_float_literal
 	self assert: ((self fieldOf: expr named: #value) - 3.14) abs < 0.001.
 %
 
-category: 'tests - binary ops'
+category: 'Grail-tests - binary ops'
 method: PythonParserTestCase
 test_floor_division
 	"Parse floor division."
@@ -596,7 +596,7 @@ test_floor_division
 	self assert: ((self fieldOf: expr named: #op) isKindOf: FloorDivAst).
 %
 
-category: 'tests - for'
+category: 'Grail-tests - for'
 method: PythonParserTestCase
 test_for_loop
 	"Parse for loop."
@@ -609,7 +609,7 @@ test_for_loop
 	self assert: ((self fieldOf: stmt named: #iter) isKindOf: NameAst).
 %
 
-category: 'tests - for'
+category: 'Grail-tests - for'
 method: PythonParserTestCase
 test_for_tuple_unpack
 	"Parse for with tuple unpacking."
@@ -622,7 +622,7 @@ test_for_tuple_unpack
 	self assert: (target isKindOf: TupleAst).
 %
 
-category: 'tests - import'
+category: 'Grail-tests - import'
 method: PythonParserTestCase
 test_from_import
 	"Parse from...import statement."
@@ -633,7 +633,7 @@ test_from_import
 	self assert: (self fieldOf: stmt named: #module) equals: 'os'.
 %
 
-category: 'tests - import'
+category: 'Grail-tests - import'
 method: PythonParserTestCase
 test_from_import_star
 	"Parse from...import * statement."
@@ -646,7 +646,7 @@ test_from_import_star
 	self assert: names first name equals: #'*'.
 %
 
-category: 'tests - function def'
+category: 'Grail-tests - function def'
 method: PythonParserTestCase
 test_function_body_variables
 	"Function body has its own variable scope."
@@ -659,7 +659,7 @@ test_function_body_variables
 	self assert: (body variables includes: #x).
 %
 
-category: 'tests - function def'
+category: 'Grail-tests - function def'
 method: PythonParserTestCase
 test_function_registers_variable
 	"Function def registers function name as variable."
@@ -671,7 +671,7 @@ test_function_registers_variable
 	self assert: (vars includes: #foo).
 %
 
-category: 'tests - function def'
+category: 'Grail-tests - function def'
 method: PythonParserTestCase
 test_function_return_annotation
 	"Parse function with return type annotation."
@@ -683,7 +683,7 @@ test_function_return_annotation
 	self assert: (self fieldOf: stmt named: #returns) notNil.
 %
 
-category: 'tests - function def'
+category: 'Grail-tests - function def'
 method: PythonParserTestCase
 test_function_with_args
 	"Parse function with arguments."
@@ -696,7 +696,7 @@ test_function_with_args
 	self assert: (self fieldOf: args named: #args) size equals: 2.
 %
 
-category: 'tests - function def'
+category: 'Grail-tests - function def'
 method: PythonParserTestCase
 test_function_with_defaults
 	"Parse function with default arguments."
@@ -709,7 +709,7 @@ test_function_with_defaults
 	self assert: defaults size equals: 1.
 %
 
-category: 'tests - function def'
+category: 'Grail-tests - function def'
 method: PythonParserTestCase
 test_function_with_kwargs
 	"Parse function with **kwargs."
@@ -722,7 +722,7 @@ test_function_with_kwargs
 	self assert: kwarg notNil.
 %
 
-category: 'tests - function def'
+category: 'Grail-tests - function def'
 method: PythonParserTestCase
 test_function_with_star_args
 	"Parse function with *args."
@@ -735,7 +735,7 @@ test_function_with_star_args
 	self assert: vararg notNil.
 %
 
-category: 'tests - comprehensions'
+category: 'Grail-tests - comprehensions'
 method: PythonParserTestCase
 test_generator_expression
 	"Parse generator expression: (x for x in y)."
@@ -745,7 +745,7 @@ test_generator_expression
 	self assert: (expr isKindOf: GeneratorExpAst).
 %
 
-category: 'tests - simple statements'
+category: 'Grail-tests - simple statements'
 method: PythonParserTestCase
 test_global
 	"Parse global statement."
@@ -756,7 +756,7 @@ test_global
 	self assert: (self fieldOf: stmt named: #names) size equals: 2.
 %
 
-category: 'tests - literals'
+category: 'Grail-tests - literals'
 method: PythonParserTestCase
 test_hex_literal
 	"Parse hex integer literal."
@@ -767,7 +767,7 @@ test_hex_literal
 	self assert: (self fieldOf: expr named: #value) equals: 255.
 %
 
-category: 'tests - if'
+category: 'Grail-tests - if'
 method: PythonParserTestCase
 test_if_elif_else
 	"Parse if/elif/else chain."
@@ -786,7 +786,7 @@ else:
 	self assert: (elifStmt isKindOf: IfAst).
 %
 
-category: 'tests - if'
+category: 'Grail-tests - if'
 method: PythonParserTestCase
 test_if_else
 	"Parse if/else statement."
@@ -802,7 +802,7 @@ else:
 	self assert: orelse body notEmpty.
 %
 
-category: 'tests - import'
+category: 'Grail-tests - import'
 method: PythonParserTestCase
 test_import
 	"Parse import statement."
@@ -815,7 +815,7 @@ test_import
 	self assert: names first name equals: #os.
 %
 
-category: 'tests - import'
+category: 'Grail-tests - import'
 method: PythonParserTestCase
 test_import_as
 	"Parse import with alias."
@@ -828,7 +828,7 @@ test_import_as
 	self assert: alias asName equals: #operating_system.
 %
 
-category: 'tests - import'
+category: 'Grail-tests - import'
 method: PythonParserTestCase
 test_import_registers_variable
 	"Import registers module name as variable."
@@ -839,7 +839,7 @@ test_import_registers_variable
 	self assert: (vars includes: #os).
 %
 
-category: 'tests - comparisons'
+category: 'Grail-tests - comparisons'
 method: PythonParserTestCase
 test_in_operator
 	"Parse 'in' comparison."
@@ -850,7 +850,7 @@ test_in_operator
 	self assert: ((self fieldOf: expr named: #cmpopList) first isKindOf: InAst).
 %
 
-category: 'tests - literals'
+category: 'Grail-tests - literals'
 method: PythonParserTestCase
 test_integer_literal
 	"Parse integer literal."
@@ -861,7 +861,7 @@ test_integer_literal
 	self assert: (self fieldOf: expr named: #value) equals: 42.
 %
 
-category: 'tests - comparisons'
+category: 'Grail-tests - comparisons'
 method: PythonParserTestCase
 test_is_not_operator
 	"Parse 'is not' comparison."
@@ -872,7 +872,7 @@ test_is_not_operator
 	self assert: ((self fieldOf: expr named: #cmpopList) first isKindOf: IsNotAst).
 %
 
-category: 'tests - comparisons'
+category: 'Grail-tests - comparisons'
 method: PythonParserTestCase
 test_is_operator
 	"Parse 'is' comparison."
@@ -883,7 +883,7 @@ test_is_operator
 	self assert: ((self fieldOf: expr named: #cmpopList) first isKindOf: IsAst).
 %
 
-category: 'tests - lambda'
+category: 'Grail-tests - lambda'
 method: PythonParserTestCase
 test_lambda_no_args
 	"Parse lambda with no arguments."
@@ -894,7 +894,7 @@ test_lambda_no_args
 	self assert: (self fieldOf: (self fieldOf: expr named: #args) named: #args) isEmpty.
 %
 
-category: 'tests - lambda'
+category: 'Grail-tests - lambda'
 method: PythonParserTestCase
 test_lambda_with_args
 	"Parse lambda with arguments."
@@ -906,7 +906,7 @@ test_lambda_with_args
 	self assert: args size equals: 2.
 %
 
-category: 'tests - lambda'
+category: 'Grail-tests - lambda'
 method: PythonParserTestCase
 test_lambda_with_default
 	"Parse lambda with default argument."
@@ -918,7 +918,7 @@ test_lambda_with_default
 	self assert: defaults size equals: 1.
 %
 
-category: 'tests - binary ops'
+category: 'Grail-tests - binary ops'
 method: PythonParserTestCase
 test_left_shift
 	"Parse left shift."
@@ -929,7 +929,7 @@ test_left_shift
 	self assert: ((self fieldOf: expr named: #op) isKindOf: LShiftAst).
 %
 
-category: 'tests - comparisons'
+category: 'Grail-tests - comparisons'
 method: PythonParserTestCase
 test_less_than
 	"Parse less-than comparison."
@@ -940,7 +940,7 @@ test_less_than
 	self assert: ((self fieldOf: expr named: #cmpopList) first isKindOf: LtAst).
 %
 
-category: 'tests - comprehensions'
+category: 'Grail-tests - comprehensions'
 method: PythonParserTestCase
 test_list_comprehension
 	"Parse list comprehension: [x for x in y]."
@@ -950,7 +950,7 @@ test_list_comprehension
 	self assert: (expr isKindOf: ListCompAst).
 %
 
-category: 'tests - collections'
+category: 'Grail-tests - collections'
 method: PythonParserTestCase
 test_list_with_elements
 	"Parse list with elements: [1, 2, 3]."
@@ -961,7 +961,7 @@ test_list_with_elements
 	self assert: (self fieldOf: expr named: #elts) size equals: 3.
 %
 
-category: 'tests - class nesting'
+category: 'Grail-tests - class nesting'
 method: PythonParserTestCase
 test_method_becomes_instance_function
 	"Function inside class becomes InstanceFunctionDefAst."
@@ -975,7 +975,7 @@ test_method_becomes_instance_function
 	self assert: (method isKindOf: InstanceFunctionDefAst).
 %
 
-category: 'tests - module'
+category: 'Grail-tests - module'
 method: PythonParserTestCase
 test_module_body_is_block
 	"Module body should be a BlockAst."
@@ -985,7 +985,7 @@ test_module_body_is_block
 	self assert: (module body isKindOf: BlockAst).
 %
 
-category: 'tests - module'
+category: 'Grail-tests - module'
 method: PythonParserTestCase
 test_module_source
 	"Module retains the source string."
@@ -995,7 +995,7 @@ test_module_source
 	self assert: module source equals: 'x = 1'.
 %
 
-category: 'tests - module'
+category: 'Grail-tests - module'
 method: PythonParserTestCase
 test_module_variables
 	"Module-level assignments should register variables."
@@ -1008,7 +1008,7 @@ y = 2'.
 	self assert: (vars includes: #y).
 %
 
-category: 'tests - binary ops'
+category: 'Grail-tests - binary ops'
 method: PythonParserTestCase
 test_modulo
 	"Parse modulo."
@@ -1019,7 +1019,7 @@ test_modulo
 	self assert: ((self fieldOf: expr named: #op) isKindOf: ModAst).
 %
 
-category: 'tests - multiple statements'
+category: 'Grail-tests - multiple statements'
 method: PythonParserTestCase
 test_multiple_statements
 	"Parse multiple statements."
@@ -1032,7 +1032,7 @@ z = 3'.
 	self assert: body size equals: 3.
 %
 
-category: 'tests - binary ops'
+category: 'Grail-tests - binary ops'
 method: PythonParserTestCase
 test_multiplication
 	"Parse multiplication."
@@ -1043,7 +1043,7 @@ test_multiplication
 	self assert: ((self fieldOf: expr named: #op) isKindOf: MultAst).
 %
 
-category: 'tests - names'
+category: 'Grail-tests - names'
 method: PythonParserTestCase
 test_name_reference
 	"Parse name reference."
@@ -1055,7 +1055,7 @@ test_name_reference
 	self assert: ((self fieldOf: expr named: #ctx) isKindOf: LoadAst).
 %
 
-category: 'tests - literals'
+category: 'Grail-tests - literals'
 method: PythonParserTestCase
 test_negative_number
 	"Parse negative number (unary minus)."
@@ -1065,7 +1065,7 @@ test_negative_number
 	self assert: (expr isKindOf: USubAst).
 %
 
-category: 'tests - literals'
+category: 'Grail-tests - literals'
 method: PythonParserTestCase
 test_none_literal
 	"Parse None literal."
@@ -1076,7 +1076,7 @@ test_none_literal
 	self assert: (self fieldOf: expr named: #value) equals: nil.
 %
 
-category: 'tests - simple statements'
+category: 'Grail-tests - simple statements'
 method: PythonParserTestCase
 test_nonlocal
 	"Parse nonlocal statement."
@@ -1087,7 +1087,7 @@ test_nonlocal
 	self assert: (self fieldOf: stmt named: #names) size equals: 1.
 %
 
-category: 'tests - unary ops'
+category: 'Grail-tests - unary ops'
 method: PythonParserTestCase
 test_not
 	"Parse not operator."
@@ -1097,7 +1097,7 @@ test_not
 	self assert: (expr isKindOf: NotAst).
 %
 
-category: 'tests - comparisons'
+category: 'Grail-tests - comparisons'
 method: PythonParserTestCase
 test_not_equals
 	"Parse not-equals comparison."
@@ -1108,7 +1108,7 @@ test_not_equals
 	self assert: ((self fieldOf: expr named: #cmpopList) first isKindOf: NotEqAst).
 %
 
-category: 'tests - comparisons'
+category: 'Grail-tests - comparisons'
 method: PythonParserTestCase
 test_not_in_operator
 	"Parse 'not in' comparison."
@@ -1119,7 +1119,7 @@ test_not_in_operator
 	self assert: ((self fieldOf: expr named: #cmpopList) first isKindOf: NotInAst).
 %
 
-category: 'tests - boolean ops'
+category: 'Grail-tests - boolean ops'
 method: PythonParserTestCase
 test_or
 	"Parse 'or' expression."
@@ -1130,7 +1130,7 @@ test_or
 	self assert: (self fieldOf: expr named: #values) size equals: 2.
 %
 
-category: 'tests - binary ops'
+category: 'Grail-tests - binary ops'
 method: PythonParserTestCase
 test_parenthesized_precedence
 	"Parse (1 + 2) * 3."
@@ -1144,7 +1144,7 @@ test_parenthesized_precedence
 	self assert: ((self fieldOf: left named: #op) isKindOf: AddAst).
 %
 
-category: 'tests - simple statements'
+category: 'Grail-tests - simple statements'
 method: PythonParserTestCase
 test_pass
 	"Parse pass statement."
@@ -1154,7 +1154,7 @@ test_pass
 	self assert: (stmt isKindOf: PassAst).
 %
 
-category: 'tests - binary ops'
+category: 'Grail-tests - binary ops'
 method: PythonParserTestCase
 test_power
 	"Parse power operator."
@@ -1165,7 +1165,7 @@ test_power
 	self assert: ((self fieldOf: expr named: #op) isKindOf: PowAst).
 %
 
-category: 'tests - binary ops'
+category: 'Grail-tests - binary ops'
 method: PythonParserTestCase
 test_precedence
 	"Parse expression with precedence: 1 + 2 * 3 should be 1 + (2 * 3)."
@@ -1179,7 +1179,7 @@ test_precedence
 	self assert: ((self fieldOf: right named: #op) isKindOf: MultAst).
 %
 
-category: 'tests - simple statements'
+category: 'Grail-tests - simple statements'
 method: PythonParserTestCase
 test_raise
 	"Parse raise statement."
@@ -1190,7 +1190,7 @@ test_raise
 	self assert: (self fieldOf: stmt named: #exc) notNil.
 %
 
-category: 'tests - simple statements'
+category: 'Grail-tests - simple statements'
 method: PythonParserTestCase
 test_return
 	"Parse return statement."
@@ -1201,7 +1201,7 @@ test_return
 	self assert: ((self fieldOf: stmt named: #value) isKindOf: ConstantAst).
 %
 
-category: 'tests - simple statements'
+category: 'Grail-tests - simple statements'
 method: PythonParserTestCase
 test_return_none
 	"Parse bare return statement."
@@ -1212,7 +1212,7 @@ test_return_none
 	self assert: (self fieldOf: stmt named: #value) isNil.
 %
 
-category: 'tests - binary ops'
+category: 'Grail-tests - binary ops'
 method: PythonParserTestCase
 test_right_shift
 	"Parse right shift."
@@ -1223,7 +1223,7 @@ test_right_shift
 	self assert: ((self fieldOf: expr named: #op) isKindOf: RShiftAst).
 %
 
-category: 'tests - multiple statements'
+category: 'Grail-tests - multiple statements'
 method: PythonParserTestCase
 test_semicolon_separated
 	"Parse semicolon-separated statements."
@@ -1234,7 +1234,7 @@ test_semicolon_separated
 	self assert: body size equals: 2.
 %
 
-category: 'tests - comprehensions'
+category: 'Grail-tests - comprehensions'
 method: PythonParserTestCase
 test_set_comprehension
 	"Parse set comprehension: {x for x in y}."
@@ -1244,7 +1244,7 @@ test_set_comprehension
 	self assert: (expr isKindOf: SetCompAst).
 %
 
-category: 'tests - collections'
+category: 'Grail-tests - collections'
 method: PythonParserTestCase
 test_set_with_elements
 	"Parse set: {1, 2, 3}."
@@ -1255,7 +1255,7 @@ test_set_with_elements
 	self assert: (self fieldOf: expr named: #elts) size equals: 3.
 %
 
-category: 'tests - assignment'
+category: 'Grail-tests - assignment'
 method: PythonParserTestCase
 test_simple_assignment
 	"Parse simple assignment: x = 1."
@@ -1268,7 +1268,7 @@ test_simple_assignment
 	self assert: ((self fieldOf: stmt named: #targets) first id) equals: #x.
 %
 
-category: 'tests - class def'
+category: 'Grail-tests - class def'
 method: PythonParserTestCase
 test_simple_class
 	"Parse simple class definition."
@@ -1280,7 +1280,7 @@ test_simple_class
 	self assert: (self fieldOf: stmt named: #name) equals: #Foo.
 %
 
-category: 'tests - decorators'
+category: 'Grail-tests - decorators'
 method: PythonParserTestCase
 test_simple_decorator
 	"Parse function with simple decorator."
@@ -1294,7 +1294,7 @@ def foo():
 	self assert: decList size equals: 1.
 %
 
-category: 'tests - function def'
+category: 'Grail-tests - function def'
 method: PythonParserTestCase
 test_simple_function
 	"Parse simple function definition."
@@ -1306,7 +1306,7 @@ test_simple_function
 	self assert: stmt name equals: #foo.
 %
 
-category: 'tests - if'
+category: 'Grail-tests - if'
 method: PythonParserTestCase
 test_simple_if
 	"Parse simple if statement."
@@ -1318,7 +1318,7 @@ test_simple_if
 	self assert: ((self fieldOf: stmt named: #test) isKindOf: NameAst).
 %
 
-category: 'tests - collections'
+category: 'Grail-tests - collections'
 method: PythonParserTestCase
 test_single_element_tuple
 	"Parse single-element tuple: (1,)."
@@ -1329,7 +1329,7 @@ test_single_element_tuple
 	self assert: (self fieldOf: expr named: #elts) size equals: 1.
 %
 
-category: 'tests - single-line'
+category: 'Grail-tests - single-line'
 method: PythonParserTestCase
 test_single_line_def
 	"Parse single-line def: def f(): return 1."
@@ -1339,7 +1339,7 @@ test_single_line_def
 	self assert: (stmt isKindOf: FunctionDefAst).
 %
 
-category: 'tests - single-line'
+category: 'Grail-tests - single-line'
 method: PythonParserTestCase
 test_single_line_for
 	"Parse single-line for: for x in y: pass."
@@ -1349,7 +1349,7 @@ test_single_line_for
 	self assert: (stmt isKindOf: ForAst).
 %
 
-category: 'tests - single-line'
+category: 'Grail-tests - single-line'
 method: PythonParserTestCase
 test_single_line_if
 	"Parse single-line if: if x: pass."
@@ -1359,7 +1359,7 @@ test_single_line_if
 	self assert: (stmt isKindOf: IfAst).
 %
 
-category: 'tests - subscript'
+category: 'Grail-tests - subscript'
 method: PythonParserTestCase
 test_slice
 	"Parse slice: a[1:2]."
@@ -1374,7 +1374,7 @@ test_slice
 	self assert: (self fieldOf: slice named: #step) isNil.
 %
 
-category: 'tests - subscript'
+category: 'Grail-tests - subscript'
 method: PythonParserTestCase
 test_slice_open_ended
 	"Parse open-ended slice: a[:]."
@@ -1388,7 +1388,7 @@ test_slice_open_ended
 	self assert: (self fieldOf: slice named: #upper) isNil.
 %
 
-category: 'tests - subscript'
+category: 'Grail-tests - subscript'
 method: PythonParserTestCase
 test_slice_with_step
 	"Parse slice with step: a[1:10:2]."
@@ -1401,7 +1401,7 @@ test_slice_with_step
 	self assert: (self fieldOf: slice named: #step) notNil.
 %
 
-category: 'tests - starred'
+category: 'Grail-tests - starred'
 method: PythonParserTestCase
 test_starred_assignment
 	"Parse starred assignment target: *a, b = [1, 2, 3]."
@@ -1415,7 +1415,7 @@ test_starred_assignment
 	self assert: (elts first isKindOf: StarredAst).
 %
 
-category: 'tests - class nesting'
+category: 'Grail-tests - class nesting'
 method: PythonParserTestCase
 test_staticmethod_decorator
 	"@staticmethod produces StaticFunctionDefAst."
@@ -1430,7 +1430,7 @@ test_staticmethod_decorator
 	self assert: (method isKindOf: StaticFunctionDefAst).
 %
 
-category: 'tests - literals'
+category: 'Grail-tests - literals'
 method: PythonParserTestCase
 test_string_literal
 	"Parse string literal."
@@ -1441,7 +1441,7 @@ test_string_literal
 	self assert: (self fieldOf: expr named: #value) equals: 'hello'.
 %
 
-category: 'tests - subscript'
+category: 'Grail-tests - subscript'
 method: PythonParserTestCase
 test_subscript
 	"Parse subscript: a[0]."
@@ -1451,7 +1451,7 @@ test_subscript
 	self assert: (expr isKindOf: SubscriptAst).
 %
 
-category: 'tests - binary ops'
+category: 'Grail-tests - binary ops'
 method: PythonParserTestCase
 test_subtraction
 	"Parse subtraction."
@@ -1462,7 +1462,7 @@ test_subtraction
 	self assert: ((self fieldOf: expr named: #op) isKindOf: SubAst).
 %
 
-category: 'tests - ternary'
+category: 'Grail-tests - ternary'
 method: PythonParserTestCase
 test_ternary
 	"Parse ternary expression: a if b else c."
@@ -1473,7 +1473,7 @@ test_ternary
 	self assert: ((self fieldOf: expr named: #test) isKindOf: ConstantAst).
 %
 
-category: 'tests - class nesting'
+category: 'Grail-tests - class nesting'
 method: PythonParserTestCase
 test_top_level_function_stays_functiondef
 	"Top-level function stays FunctionDefAst (not InstanceFunctionDefAst)."
@@ -1484,7 +1484,7 @@ test_top_level_function_stays_functiondef
 	self assert: stmt class equals: FunctionDefAst.
 %
 
-category: 'tests - literals'
+category: 'Grail-tests - literals'
 method: PythonParserTestCase
 test_true_literal
 	"Parse True literal."
@@ -1495,7 +1495,7 @@ test_true_literal
 	self assert: (self fieldOf: expr named: #value) equals: true.
 %
 
-category: 'tests - try'
+category: 'Grail-tests - try'
 method: PythonParserTestCase
 test_try_except
 	"Parse try/except."
@@ -1510,7 +1510,7 @@ except:
 	self assert: handlers size equals: 1.
 %
 
-category: 'tests - try'
+category: 'Grail-tests - try'
 method: PythonParserTestCase
 test_try_except_as
 	"Parse try/except with as-binding."
@@ -1525,7 +1525,7 @@ except ValueError as e:
 	self assert: (self fieldOf: handler named: #name) equals: #e.
 %
 
-category: 'tests - try'
+category: 'Grail-tests - try'
 method: PythonParserTestCase
 test_try_except_typed
 	"Parse try/except with type."
@@ -1540,7 +1540,7 @@ except ValueError:
 	self assert: (self fieldOf: handler named: #type) notNil.
 %
 
-category: 'tests - try'
+category: 'Grail-tests - try'
 method: PythonParserTestCase
 test_try_finally
 	"Parse try/finally."
@@ -1556,7 +1556,7 @@ finally:
 	self assert: finalbody body notEmpty.
 %
 
-category: 'tests - assignment'
+category: 'Grail-tests - assignment'
 method: PythonParserTestCase
 test_tuple_unpacking
 	"Parse tuple unpacking: x, y = 1, 2."
@@ -1568,7 +1568,7 @@ test_tuple_unpacking
 	self assert: (target isKindOf: TupleAst).
 %
 
-category: 'tests - collections'
+category: 'Grail-tests - collections'
 method: PythonParserTestCase
 test_tuple_with_elements
 	"Parse tuple: (1, 2, 3)."
@@ -1579,7 +1579,7 @@ test_tuple_with_elements
 	self assert: (self fieldOf: expr named: #elts) size equals: 3.
 %
 
-category: 'tests - unary ops'
+category: 'Grail-tests - unary ops'
 method: PythonParserTestCase
 test_unary_invert
 	"Parse bitwise invert."
@@ -1589,7 +1589,7 @@ test_unary_invert
 	self assert: (expr isKindOf: InvertAst).
 %
 
-category: 'tests - unary ops'
+category: 'Grail-tests - unary ops'
 method: PythonParserTestCase
 test_unary_minus
 	"Parse unary minus."
@@ -1599,7 +1599,7 @@ test_unary_minus
 	self assert: (expr isKindOf: USubAst).
 %
 
-category: 'tests - unary ops'
+category: 'Grail-tests - unary ops'
 method: PythonParserTestCase
 test_unary_plus
 	"Parse unary plus."
@@ -1609,7 +1609,7 @@ test_unary_plus
 	self assert: (expr isKindOf: UAddAst).
 %
 
-category: 'tests - while'
+category: 'Grail-tests - while'
 method: PythonParserTestCase
 test_while_else
 	"Parse while/else."
@@ -1624,7 +1624,7 @@ else:
 	self assert: (orelse isKindOf: SuiteAst).
 %
 
-category: 'tests - while'
+category: 'Grail-tests - while'
 method: PythonParserTestCase
 test_while_loop
 	"Parse while loop."
@@ -1636,7 +1636,7 @@ test_while_loop
 	self assert: ((self fieldOf: stmt named: #test) isKindOf: ConstantAst).
 %
 
-category: 'tests - walrus'
+category: 'Grail-tests - walrus'
 method: PythonParserTestCase
 test_walrus_in_expression
 	"Parse walrus operator inside parenthesized expression: (x := 5)."
@@ -1648,7 +1648,7 @@ test_walrus_in_expression
 	self assert: ((self fieldOf: expr named: #value) isKindOf: ConstantAst).
 %
 
-category: 'tests - with'
+category: 'Grail-tests - with'
 method: PythonParserTestCase
 test_with_multiple
 	"Parse with statement with multiple items."
@@ -1661,7 +1661,7 @@ test_with_multiple
 	self assert: items size equals: 2.
 %
 
-category: 'tests - with'
+category: 'Grail-tests - with'
 method: PythonParserTestCase
 test_with_statement
 	"Parse with statement."

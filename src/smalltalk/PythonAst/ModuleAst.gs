@@ -41,7 +41,7 @@ Module(
 
 expectvalue /Class
 doit
-ModuleAst category: 'Parser'
+ModuleAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from ModuleAst
@@ -50,7 +50,7 @@ removeallclassmethods ModuleAst
 
 set compile_env: 0
 
-category: 'evaluation'
+category: 'Grail-evaluation'
 classmethod: ModuleAst
 evaluate: sourceString withScope: aSymbolList
 	"Evaluate sourceString in a persistent scope for REPL usage."
@@ -61,7 +61,7 @@ evaluate: sourceString withScope: aSymbolList
 	^module evaluateWithScope: aSymbolList
 %
 
-category: 'evaluation'
+category: 'Grail-evaluation'
 classmethod: ModuleAst
 evaluateSource: sourceString
 	"Evaluate sourceString in a fresh module scope. Use this for one-shot
@@ -70,7 +70,7 @@ evaluateSource: sourceString
 	^self evaluateSource: sourceString usingModuleScope: SymbolDictionary new
 %
 
-category: 'evaluation'
+category: 'Grail-evaluation'
 classmethod: ModuleAst
 evaluateSource: sourceString usingModuleScope: aSymbolDictionary
 	"Evaluate sourceString with aSymbolDictionary as the module scope.
@@ -87,7 +87,7 @@ evaluateSource: sourceString usingModuleScope: aSymbolDictionary
 	^module evaluateWithScope: symbolList
 %
 
-category: 'parsing'
+category: 'Grail-parsing'
 classmethod: ModuleAst
 parseSource: sourceString
 	"Parse Python source code and return a ModuleAst."
@@ -95,7 +95,7 @@ parseSource: sourceString
 	^PythonParser parse: sourceString
 %
 
-category: 'evaluation'
+category: 'Grail-evaluation'
 classmethod: ModuleAst
 symbolListForModuleScope: aSymbolDictionary
 	"Return a SymbolList with module scope at the front, followed by the
@@ -114,14 +114,14 @@ symbolListForModuleScope: aSymbolDictionary
 	^symbolList
 %
 
-category: 'accessors'
+category: 'Grail-accessors'
 method: ModuleAst
 body
 
 	^body
 %
 
-category: 'evaluation'
+category: 'Grail-evaluation'
 method: ModuleAst
 ensureModuleScope: aSymbolDictionary
 	"Ensure module scope has entries for declared variables."
@@ -130,7 +130,7 @@ ensureModuleScope: aSymbolDictionary
 	body variables do: [:each | aSymbolDictionary at: each ifAbsentPut: [nil] ].
 %
 
-category: 'evaluation'
+category: 'Grail-evaluation'
 method: ModuleAst
 evaluateWithScope: aSymbolList
 	"Evaluate this module using the provided symbol list."
@@ -143,7 +143,7 @@ evaluateWithScope: aSymbolList
 	^None.
 %
 
-category: 'evaluation'
+category: 'Grail-evaluation'
 method: ModuleAst
 smalltalkSource
 	"Return this module transpiled to Smalltalk source. Pure code
@@ -156,7 +156,7 @@ smalltalkSource
 	^writeStream contents
 %
 
-category: 'evaluation'
+category: 'Grail-evaluation'
 method: ModuleAst
 executeWithScope: aSymbolList
 	"Compile and execute this module, returning the raw execution result."
@@ -193,91 +193,91 @@ executeWithScope: aSymbolList
 	^result
 %
 
-category: 'variables'
+category: 'Grail-variables'
 method: ModuleAst
 globals
 
 	^body
 %
 
-category: 'querying'
+category: 'Grail-querying'
 method: ModuleAst
 isInClass
 
 	^false
 %
 
-category: 'querying'
+category: 'Grail-querying'
 method: ModuleAst
 isPackage
 
 	^false
 %
 
-category: 'variables'
+category: 'Grail-variables'
 method: ModuleAst
 locals
 
 	^body
 %
 
-category: 'accessors'
+category: 'Grail-accessors'
 method: ModuleAst
 module
 
 	^self
 %
 
-category: 'accessors'
+category: 'Grail-accessors'
 method: ModuleAst
 name
 
 	^name
 %
 
-category: 'accessors'
+category: 'Grail-accessors'
 method: ModuleAst
 name: aString
 
 	name := aString
 %
 
-category: 'accessors'
+category: 'Grail-accessors'
 method: ModuleAst
 path
 
 	^path
 %
 
-category: 'accessors'
+category: 'Grail-accessors'
 method: ModuleAst
 path: aString
 
 	path := aString
 %
 
-category: 'code generation'
+category: 'Grail-code generation'
 method: ModuleAst
 printSmalltalkOn: aStream
 
 	body printSmalltalkOn: aStream useTemps: useTempsForBlock.
 %
 
-category: 'variables'
+category: 'Grail-variables'
 method: ModuleAst
 set: aSymbol to: anObject
 
 	self halt.
 %
 
-category: 'accessors'
+category: 'Grail-accessors'
 method: ModuleAst
 setBlock: aBlockAst
 
 	body := aBlockAst.
 %
 
-category: 'evaluation'
+category: 'Grail-evaluation'
 method: ModuleAst
 shouldReturnExpressionResult
 
@@ -286,21 +286,21 @@ shouldReturnExpressionResult
 	^statements notEmpty and: [(statements last isKindOf: ExprAst)]
 %
 
-category: 'accessors'
+category: 'Grail-accessors'
 method: ModuleAst
 source
 
 	^source
 %
 
-category: 'accessors'
+category: 'Grail-accessors'
 method: ModuleAst
 source: aString
 
 	source := aString
 %
 
-category: 'variables'
+category: 'Grail-variables'
 method: ModuleAst
 useTempsForBlock: aBoolean
 

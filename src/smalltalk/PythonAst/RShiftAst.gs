@@ -36,7 +36,7 @@ Object
 
 expectvalue /Class
 doit
-RShiftAst category: 'Parser'
+RShiftAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from RShiftAst
@@ -45,7 +45,7 @@ removeallclassmethods RShiftAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: RShiftAst
 printSmalltalkOn: aStream
 

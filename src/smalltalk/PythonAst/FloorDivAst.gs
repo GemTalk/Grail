@@ -36,7 +36,7 @@ Object
 
 expectvalue /Class
 doit
-FloorDivAst category: 'Parser'
+FloorDivAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from FloorDivAst
@@ -45,7 +45,7 @@ removeallclassmethods FloorDivAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: FloorDivAst
 printSmalltalkOn: aStream
 

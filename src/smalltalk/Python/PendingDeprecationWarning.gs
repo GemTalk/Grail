@@ -17,5 +17,5 @@ Warning subclass: 'PendingDeprecationWarning'
 
 expectvalue /Class
 doit
-PendingDeprecationWarning category: 'Exceptions'
+PendingDeprecationWarning category: 'Grail-Exceptions'
 %

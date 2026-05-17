@@ -30,7 +30,7 @@ Instance variables:
 
 expectvalue /Class
 doit
-list_iterator category: 'Collections-Iterators'
+list_iterator category: 'Grail-Collections-Iterators'
 %
 
 ! ===============================================================================
@@ -51,7 +51,7 @@ list_iterator class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Instance Creation'
+category: 'Grail-Instance Creation'
 classmethod: list_iterator
 ___on: aCollection
 	"Create a new list_iterator for the given collection.
@@ -65,7 +65,7 @@ ___on: aCollection
 	^ instance
 %
 
-category: 'Python-Private'
+category: 'Grail-Private'
 method: list_iterator
 ___collection: aCollection
 	"Set the collection being iterated over.
@@ -74,7 +74,7 @@ ___collection: aCollection
 	collection := aCollection
 %
 
-category: 'Python-Private'
+category: 'Grail-Private'
 method: list_iterator
 ___position: anInteger
 	"Set the current position.
@@ -83,7 +83,7 @@ ___position: anInteger
 	position := anInteger
 %
 
-category: 'Python-Iterator Protocol'
+category: 'Grail-Iterator Protocol'
 method: list_iterator
 __next__
 	"Return the next item from the list.

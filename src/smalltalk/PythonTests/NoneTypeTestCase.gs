@@ -17,7 +17,7 @@ PythonTestCase subclass: 'NoneTypeTestCase'
 %
 expectvalue /Class
 doit
-NoneTypeTestCase category: 'SUnit'
+NoneTypeTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -49,7 +49,7 @@ set compile_env: 0
 ! Singleton identity & class
 ! ===============================================================================
 
-category: 'Tests - Singleton'
+category: 'Grail-Tests - Singleton'
 method: NoneTypeTestCase
 testInstanceIsSingleton
 	"`NoneType ___instance___` always returns the same object — the global
@@ -59,7 +59,7 @@ testInstanceIsSingleton
 	self assert: NoneType ___instance___ == NoneType ___instance___.
 %
 
-category: 'Tests - Singleton'
+category: 'Grail-Tests - Singleton'
 method: NoneTypeTestCase
 testNoneClass
 	"The class of None is NoneType."
@@ -67,7 +67,7 @@ testNoneClass
 	self assert: None class == NoneType.
 %
 
-category: 'Tests - Singleton'
+category: 'Grail-Tests - Singleton'
 method: NoneTypeTestCase
 testNewRaisesTypeError
 	"NoneType cannot be instantiated; ``new`` raises TypeError."
@@ -75,7 +75,7 @@ testNewRaisesTypeError
 	self should: [NoneType new] raise: TypeError.
 %
 
-category: 'Tests - Singleton'
+category: 'Grail-Tests - Singleton'
 method: NoneTypeTestCase
 testDistinctFromSmalltalkNil
 	"None is not the same object as Smalltalk nil — that distinction is the
@@ -89,7 +89,7 @@ testDistinctFromSmalltalkNil
 ! Python special methods (called directly via env-1 dispatch)
 ! ===============================================================================
 
-category: 'Tests - Special Methods'
+category: 'Grail-Tests - Special Methods'
 method: NoneTypeTestCase
 testBoolIsFalse
 	"Python: bool(None) is False; the protocol method __bool__ returns false."
@@ -97,7 +97,7 @@ testBoolIsFalse
 	self assert: None @env1:__bool__ == false.
 %
 
-category: 'Tests - Special Methods'
+category: 'Grail-Tests - Special Methods'
 method: NoneTypeTestCase
 testHashIsZero
 	"hash(None) is implementation-defined but constant. We pick 0."
@@ -105,7 +105,7 @@ testHashIsZero
 	self assert: None @env1:__hash__ equals: 0.
 %
 
-category: 'Tests - Special Methods'
+category: 'Grail-Tests - Special Methods'
 method: NoneTypeTestCase
 testReprIsNone
 	"repr(None) is the string 'None'."
@@ -113,7 +113,7 @@ testReprIsNone
 	self assert: None @env1:__repr__ equals: 'None'.
 %
 
-category: 'Tests - Special Methods'
+category: 'Grail-Tests - Special Methods'
 method: NoneTypeTestCase
 testStrIsNone
 	"str(None) is the string 'None'."
@@ -121,7 +121,7 @@ testStrIsNone
 	self assert: None @env1:__str__ equals: 'None'.
 %
 
-category: 'Tests - Special Methods'
+category: 'Grail-Tests - Special Methods'
 method: NoneTypeTestCase
 testEqSelf
 	"None equals None (identity-based)."
@@ -129,7 +129,7 @@ testEqSelf
 	self assert: (None @env1:__eq__: None) == true.
 %
 
-category: 'Tests - Special Methods'
+category: 'Grail-Tests - Special Methods'
 method: NoneTypeTestCase
 testEqOther
 	"None does not equal any non-None value."
@@ -139,13 +139,13 @@ testEqOther
 	self assert: (None @env1:__eq__: false) == false.
 %
 
-category: 'Tests - Special Methods'
+category: 'Grail-Tests - Special Methods'
 method: NoneTypeTestCase
 testNeSelf
 	self assert: (None @env1:__ne__: None) == false.
 %
 
-category: 'Tests - Special Methods'
+category: 'Grail-Tests - Special Methods'
 method: NoneTypeTestCase
 testNeOther
 	self assert: (None @env1:__ne__: 0) == true.
@@ -155,7 +155,7 @@ testNeOther
 ! Code generation: Python source compiles to references to the singleton
 ! ===============================================================================
 
-category: 'Tests - Codegen'
+category: 'Grail-Tests - Codegen'
 method: NoneTypeTestCase
 testNoneLiteralEvaluatesToSingleton
 	"The Python ``None`` keyword literal evaluates to the singleton."
@@ -163,7 +163,7 @@ testNoneLiteralEvaluatesToSingleton
 	self assert: (self eval: 'None') == None.
 %
 
-category: 'Tests - Codegen'
+category: 'Grail-Tests - Codegen'
 method: NoneTypeTestCase
 testIsNoneIsTrue
 	"``None is None`` is True (identity comparison)."
@@ -171,13 +171,13 @@ testIsNoneIsTrue
 	self assert: (self eval: 'None is None') == true.
 %
 
-category: 'Tests - Codegen'
+category: 'Grail-Tests - Codegen'
 method: NoneTypeTestCase
 testIsNotNoneIsFalse
 	self assert: (self eval: 'None is not None') == false.
 %
 
-category: 'Tests - Codegen'
+category: 'Grail-Tests - Codegen'
 method: NoneTypeTestCase
 testNoneEqualsNone
 	"``None == None`` returns True via __eq__."
@@ -185,13 +185,13 @@ testNoneEqualsNone
 	self assert: (self eval: 'None == None') == true.
 %
 
-category: 'Tests - Codegen'
+category: 'Grail-Tests - Codegen'
 method: NoneTypeTestCase
 testNoneNotEqualsZero
 	self assert: (self eval: 'None != 0') == true.
 %
 
-category: 'Tests - Codegen'
+category: 'Grail-Tests - Codegen'
 method: NoneTypeTestCase
 testReprNone
 	"Python: repr(None) → 'None'."
@@ -199,13 +199,13 @@ testReprNone
 	self assert: (self eval: 'repr(None)') equals: 'None'.
 %
 
-category: 'Tests - Codegen'
+category: 'Grail-Tests - Codegen'
 method: NoneTypeTestCase
 testStrNone
 	self assert: (self eval: 'str(None)') equals: 'None'.
 %
 
-category: 'Tests - Codegen'
+category: 'Grail-Tests - Codegen'
 method: NoneTypeTestCase
 testHashNone
 	self assert: (self eval: 'hash(None)') equals: 0.
@@ -215,7 +215,7 @@ testHashNone
 ! Function fall-off returns None (not nil)
 ! ===============================================================================
 
-category: 'Tests - Function Return'
+category: 'Grail-Tests - Function Return'
 method: NoneTypeTestCase
 testFallOffReturnsNone
 	"A function body that runs to the end without an explicit ``return``
@@ -226,7 +226,7 @@ testFallOffReturnsNone
 f()') == None.
 %
 
-category: 'Tests - Function Return'
+category: 'Grail-Tests - Function Return'
 method: NoneTypeTestCase
 testBareReturnReturnsNone
 	"A bare ``return`` statement yields None (already the case before the
@@ -237,7 +237,7 @@ testBareReturnReturnsNone
 f()') == None.
 %
 
-category: 'Tests - Function Return'
+category: 'Grail-Tests - Function Return'
 method: NoneTypeTestCase
 testReturnNoneLiteral
 	"Explicit ``return None`` yields the singleton (not Smalltalk nil)."
@@ -251,27 +251,27 @@ f()') == None.
 ! Mutator methods return None
 ! ===============================================================================
 
-category: 'Tests - Mutator Returns'
+category: 'Grail-Tests - Mutator Returns'
 method: NoneTypeTestCase
 testListAppendReturnsNone
 	self assert: (self eval: 'a = [1, 2]
 a.append(3)') == None.
 %
 
-category: 'Tests - Mutator Returns'
+category: 'Grail-Tests - Mutator Returns'
 method: NoneTypeTestCase
 testListSortReturnsNone
 	self assert: (self eval: '[3, 1, 2].sort()') == None.
 %
 
-category: 'Tests - Mutator Returns'
+category: 'Grail-Tests - Mutator Returns'
 method: NoneTypeTestCase
 testListClearReturnsNone
 	self assert: (self eval: 'a = [1, 2, 3]
 a.clear()') == None.
 %
 
-category: 'Tests - Mutator Returns'
+category: 'Grail-Tests - Mutator Returns'
 method: NoneTypeTestCase
 testDictGetMissingReturnsNone
 	"dict.get(missing-key) defaults to None when no default is supplied."
@@ -279,7 +279,7 @@ testDictGetMissingReturnsNone
 	self assert: (self eval: '{}.get("x")') == None.
 %
 
-category: 'Tests - Mutator Returns'
+category: 'Grail-Tests - Mutator Returns'
 method: NoneTypeTestCase
 testDictGetMissingWithDefault
 	"An explicit default still overrides the None default."
@@ -291,7 +291,7 @@ testDictGetMissingWithDefault
 ! Smalltalk-side debug printing
 ! ===============================================================================
 
-category: 'Tests - Smalltalk-side'
+category: 'Grail-Tests - Smalltalk-side'
 method: NoneTypeTestCase
 testPrintOnEmitsNone
 	"The Smalltalk-side ``printOn:`` emits 'None' for clarity in stack

@@ -17,5 +17,5 @@ OSError subclass: 'FileNotFoundError'
 
 expectvalue /Class
 doit
-FileNotFoundError category: 'Exceptions'
+FileNotFoundError category: 'Grail-Exceptions'
 %

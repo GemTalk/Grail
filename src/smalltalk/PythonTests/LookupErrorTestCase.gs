@@ -17,7 +17,7 @@ PythonTestCase subclass: 'LookupErrorTestCase'
 %
 expectvalue /Class
 doit
-LookupErrorTestCase category: 'SUnit'
+LookupErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ LookupErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-LookupError'
+category: 'Grail-Tests-LookupError'
 method: LookupErrorTestCase
 test_creation
 	"Test creating a LookupError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-LookupError'
+category: 'Grail-Tests-LookupError'
 method: LookupErrorTestCase
 test_inheritance
 	"Test that LookupError inherits from Exception."

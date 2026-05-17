@@ -18,7 +18,7 @@ PythonTestCase subclass: 'IntegerTestCase'
 
 expectvalue /Class
 doit
-IntegerTestCase category: 'SUnit'
+IntegerTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -35,7 +35,7 @@ IntegerTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: IntegerTestCase
 test__abs__
 	"Test int.__abs__()"
@@ -45,7 +45,7 @@ test__abs__
 	self assert: (0 @env1:__abs__) equals: 0.
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: IntegerTestCase
 test__add__
 	"Test int.__add__()"
@@ -56,7 +56,7 @@ test__add__
 	self assert: (0 @env1:__add__: 0) equals: 0.
 %
 
-category: 'Tests - Bitwise'
+category: 'Grail-Tests - Bitwise'
 method: IntegerTestCase
 test__and__
 	"Test int.__and__()"
@@ -65,7 +65,7 @@ test__and__
 	self assert: (5 @env1:__and__: 3) equals: 1.    "101 & 11 = 1"
 %
 
-category: 'Tests - Conversion'
+category: 'Grail-Tests - Conversion'
 method: IntegerTestCase
 test__bool__
 	"Test int.__bool__()"
@@ -76,7 +76,7 @@ test__bool__
 	self deny: (0 @env1:__bool__).
 %
 
-category: 'Tests - Rounding'
+category: 'Grail-Tests - Rounding'
 method: IntegerTestCase
 test__ceil__
 	"Test int.__ceil__()"
@@ -85,7 +85,7 @@ test__ceil__
 	self assert: (-5 @env1:__ceil__) equals: -5.
 %
 
-category: 'Tests - Introspection'
+category: 'Grail-Tests - Introspection'
 method: IntegerTestCase
 test__dir__
 	"Test int.__dir__ - inherited from Object"
@@ -99,7 +99,7 @@ test__dir__
 	self assert: (result includes: '__str__').
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: IntegerTestCase
 test__divmod__
 	"Test int.__divmod__()"
@@ -112,7 +112,7 @@ test__divmod__
 	self assert: (result at: 2) equals: 1.
 %
 
-category: 'Tests - Documentation'
+category: 'Grail-Tests - Documentation'
 method: IntegerTestCase
 test__doc__
 	"Test int.__doc__"
@@ -123,7 +123,7 @@ test__doc__
 	self assert: (doc size > 0).
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: IntegerTestCase
 test__eq__
 	"Test int.__eq__()"
@@ -132,7 +132,7 @@ test__eq__
 	self deny: (5 @env1:__eq__: 3).
 %
 
-category: 'Tests - Conversion'
+category: 'Grail-Tests - Conversion'
 method: IntegerTestCase
 test__float__
 	"Test int.__float__()"
@@ -146,7 +146,7 @@ test__float__
 	self assert: result equals: -5.0.
 %
 
-category: 'Tests - Rounding'
+category: 'Grail-Tests - Rounding'
 method: IntegerTestCase
 test__floor__
 	"Test int.__floor__()"
@@ -155,7 +155,7 @@ test__floor__
 	self assert: (-5 @env1:__floor__) equals: -5.
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: IntegerTestCase
 test__floordiv__
 	"Test int.__floordiv__()"
@@ -165,7 +165,7 @@ test__floordiv__
 	self assert: (7 @env1:__floordiv__: -3) equals: -3.
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: IntegerTestCase
 test__ge__
 	"Test int.__ge__()"
@@ -175,7 +175,7 @@ test__ge__
 	self deny: (3 @env1:__ge__: 5).
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: IntegerTestCase
 test__gt__
 	"Test int.__gt__()"
@@ -185,7 +185,7 @@ test__gt__
 	self deny: (5 @env1:__gt__: 5).
 %
 
-category: 'Tests - Conversion'
+category: 'Grail-Tests - Conversion'
 method: IntegerTestCase
 test__int__
 	"Test int.__int__()"
@@ -195,7 +195,7 @@ test__int__
 	self assert: (0 @env1:__int__) equals: 0.
 %
 
-category: 'Tests - Bitwise'
+category: 'Grail-Tests - Bitwise'
 method: IntegerTestCase
 test__invert__
 	"Test int.__invert__()"
@@ -205,7 +205,7 @@ test__invert__
 	self assert: (0 @env1:__invert__) equals: -1.
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: IntegerTestCase
 test__le__
 	"Test int.__le__()"
@@ -215,7 +215,7 @@ test__le__
 	self deny: (5 @env1:__le__: 3).
 %
 
-category: 'Tests - Bitwise'
+category: 'Grail-Tests - Bitwise'
 method: IntegerTestCase
 test__lshift__
 	"Test int.__lshift__()"
@@ -224,7 +224,7 @@ test__lshift__
 	self assert: (1 @env1:__lshift__: 3) equals: 8.
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: IntegerTestCase
 test__lt__
 	"Test int.__lt__()"
@@ -234,7 +234,7 @@ test__lt__
 	self deny: (5 @env1:__lt__: 5).
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: IntegerTestCase
 test__mod__
 	"Test int.__mod__()"
@@ -244,7 +244,7 @@ test__mod__
 	self assert: (7 @env1:__mod__: -3) equals: -2.
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: IntegerTestCase
 test__mul__
 	"Test int.__mul__()"
@@ -254,7 +254,7 @@ test__mul__
 	self assert: (3 @env1:__mul__: 0) equals: 0.
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: IntegerTestCase
 test__ne__
 	"Test int.__ne__()"
@@ -263,7 +263,7 @@ test__ne__
 	self deny: (5 @env1:__ne__: 5).
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: IntegerTestCase
 test__neg__
 	"Test int.__neg__()"
@@ -273,7 +273,7 @@ test__neg__
 	self assert: (0 @env1:__neg__) equals: 0.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: IntegerTestCase
 test__new__
 	"Test int() constructor"
@@ -292,7 +292,7 @@ test__new__
 	self assert: result equals: -5.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: IntegerTestCase
 test__new__fromFloat
 	"Test int() from float"
@@ -311,7 +311,7 @@ test__new__fromFloat
 	self assert: result equals: 3.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: IntegerTestCase
 test__new__fromString
 	"Test int() from string"
@@ -330,7 +330,7 @@ test__new__fromString
 	self assert: result equals: 100.
 %
 
-category: 'Tests - Bitwise'
+category: 'Grail-Tests - Bitwise'
 method: IntegerTestCase
 test__or__
 	"Test int.__or__()"
@@ -339,7 +339,7 @@ test__or__
 	self assert: (5 @env1:__or__: 3) equals: 7.     "101 | 11 = 111"
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: IntegerTestCase
 test__pos__
 	"Test int.__pos__()"
@@ -349,7 +349,7 @@ test__pos__
 	self assert: (0 @env1:__pos__) equals: 0.
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: IntegerTestCase
 test__pow__
 	"Test int.__pow__()"
@@ -360,7 +360,7 @@ test__pow__
 	self assert: (-2 @env1:__pow__: 3) equals: -8.
 %
 
-category: 'Tests - String Representation'
+category: 'Grail-Tests - String Representation'
 method: IntegerTestCase
 test__repr__
 	"Test int.__repr__()"
@@ -377,7 +377,7 @@ test__repr__
 	self assert: result equals: '0'.
 %
 
-category: 'Tests - Rounding'
+category: 'Grail-Tests - Rounding'
 method: IntegerTestCase
 test__round__
 	"Test int.__round__()"
@@ -386,7 +386,7 @@ test__round__
 	self assert: (-5 @env1:__round__) equals: -5.
 %
 
-category: 'Tests - Bitwise'
+category: 'Grail-Tests - Bitwise'
 method: IntegerTestCase
 test__rshift__
 	"Test int.__rshift__()"
@@ -395,7 +395,7 @@ test__rshift__
 	self assert: (8 @env1:__rshift__: 3) equals: 1.
 %
 
-category: 'Tests - String Representation'
+category: 'Grail-Tests - String Representation'
 method: IntegerTestCase
 test__str__
 	"Test int.__str__()"
@@ -409,7 +409,7 @@ test__str__
 	self assert: result equals: '-5'.
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: IntegerTestCase
 test__sub__
 	"Test int.__sub__()"
@@ -419,7 +419,7 @@ test__sub__
 	self assert: (-3 @env1:__sub__: 4) equals: -7.
 %
 
-category: 'Tests - Rounding'
+category: 'Grail-Tests - Rounding'
 method: IntegerTestCase
 test__trunc__
 	"Test int.__trunc__()"
@@ -428,7 +428,7 @@ test__trunc__
 	self assert: (-5 @env1:__trunc__) equals: -5.
 %
 
-category: 'Tests - Bitwise'
+category: 'Grail-Tests - Bitwise'
 method: IntegerTestCase
 test__xor__
 	"Test int.__xor__()"
@@ -437,7 +437,7 @@ test__xor__
 	self assert: (5 @env1:__xor__: 3) equals: 6.    "101 ^ 11 = 110"
 %
 
-category: 'Tests - Large Integers'
+category: 'Grail-Tests - Large Integers'
 method: IntegerTestCase
 test_arbitraryPrecision
 	"Test that int supports arbitrary precision like Python"
@@ -453,7 +453,7 @@ test_arbitraryPrecision
 	self assert: result > big.
 %
 
-category: 'Tests - Integer Methods'
+category: 'Grail-Tests - Integer Methods'
 method: IntegerTestCase
 test_as_integer_ratio
 	"Test int.as_integer_ratio()"
@@ -466,7 +466,7 @@ test_as_integer_ratio
 	self assert: (result at: 2) equals: 1.
 %
 
-category: 'Tests - Integer Methods'
+category: 'Grail-Tests - Integer Methods'
 method: IntegerTestCase
 test_bit_count
 	"Test int.bit_count()"
@@ -479,7 +479,7 @@ test_bit_count
 	self assert: (255 @env1:bit_count) equals: 8.
 %
 
-category: 'Tests - Integer Methods'
+category: 'Grail-Tests - Integer Methods'
 method: IntegerTestCase
 test_bit_length
 	"Test int.bit_length()"
@@ -494,7 +494,7 @@ test_bit_length
 	self assert: (255 @env1:bit_length) equals: 8.
 %
 
-category: 'Tests - Integer Methods'
+category: 'Grail-Tests - Integer Methods'
 method: IntegerTestCase
 test_conjugate
 	"Test int.conjugate()"
@@ -503,7 +503,7 @@ test_conjugate
 	self assert: (-5 @env1:conjugate) equals: -5.
 %
 
-category: 'Tests - Properties'
+category: 'Grail-Tests - Properties'
 method: IntegerTestCase
 test_denominator
 	"Test int.denominator property"
@@ -512,7 +512,7 @@ test_denominator
 	self assert: (-5 @env1:denominator) equals: 1.
 %
 
-category: 'Tests - Properties'
+category: 'Grail-Tests - Properties'
 method: IntegerTestCase
 test_imag
 	"Test int.imag property"
@@ -521,7 +521,7 @@ test_imag
 	self assert: (-5 @env1:imag) equals: 0.
 %
 
-category: 'Tests - Integer Methods'
+category: 'Grail-Tests - Integer Methods'
 method: IntegerTestCase
 test_is_integer
 	"Test int.is_integer()"
@@ -531,7 +531,7 @@ test_is_integer
 	self assert: (0 @env1:is_integer).
 %
 
-category: 'Tests - Properties'
+category: 'Grail-Tests - Properties'
 method: IntegerTestCase
 test_numerator
 	"Test int.numerator property"
@@ -540,7 +540,7 @@ test_numerator
 	self assert: (-5 @env1:numerator) equals: -5.
 %
 
-category: 'Tests - Properties'
+category: 'Grail-Tests - Properties'
 method: IntegerTestCase
 test_real
 	"Test int.real property"
@@ -549,7 +549,7 @@ test_real
 	self assert: (-5 @env1:real) equals: -5.
 %
 
-category: 'Tests - Eval - Arithmetic'
+category: 'Grail-Tests - Eval - Arithmetic'
 method: IntegerTestCase
 testEvalArithmetic
 	"Test basic integer arithmetic via Python source"
@@ -562,7 +562,7 @@ testEvalArithmetic
 	self assert: (self eval: '2 ** 10') equals: 1024.
 %
 
-category: 'Tests - Eval - Variables'
+category: 'Grail-Tests - Eval - Variables'
 method: IntegerTestCase
 testEvalAssignment
 	"Test integer variable assignment and use via Python source"
@@ -574,7 +574,7 @@ y = 20
 x + y') equals: 30.
 %
 
-category: 'Tests - Eval - Variables'
+category: 'Grail-Tests - Eval - Variables'
 method: IntegerTestCase
 testEvalAugmentedAssignment
 	"Test augmented assignment operators via Python source"
@@ -599,7 +599,7 @@ x **= 10
 x') equals: 1024.
 %
 
-category: 'Tests - Eval - Bitwise'
+category: 'Grail-Tests - Eval - Bitwise'
 method: IntegerTestCase
 testEvalBitwise
 	"Test bitwise operations via Python source"
@@ -612,7 +612,7 @@ testEvalBitwise
 	self assert: (self eval: '20 >> 2') equals: 5.
 %
 
-category: 'Tests - Eval - Comparison'
+category: 'Grail-Tests - Eval - Comparison'
 method: IntegerTestCase
 testEvalComparison
 	"Test integer comparisons via Python source"
@@ -626,7 +626,7 @@ testEvalComparison
 	self assert: (self eval: '5 != 3').
 %
 
-category: 'Tests - Eval - Comparison'
+category: 'Grail-Tests - Eval - Comparison'
 method: IntegerTestCase
 testEvalChainedComparison
 	"Test chained comparisons via Python source"
@@ -641,7 +641,7 @@ testEvalChainedComparison
 	self assert: (self eval: '1 != 2 != 3').
 %
 
-category: 'Tests - Eval - Comparison'
+category: 'Grail-Tests - Eval - Comparison'
 method: IntegerTestCase
 testEvalChainedComparisonEvaluatesOnce
 	"Test that middle operand is evaluated only once in chained comparison."
@@ -653,7 +653,7 @@ a < (a := a + 1) < 3
 a') equals: 2.
 %
 
-category: 'Tests - Eval - Variables'
+category: 'Grail-Tests - Eval - Variables'
 method: IntegerTestCase
 testEvalWalrusOperator
 	"Test walrus operator (:=) via Python source"
@@ -662,7 +662,7 @@ testEvalWalrusOperator
 	self assert: (self eval: '(x := 3) + x') equals: 6.
 %
 
-category: 'Tests - Eval - Arithmetic'
+category: 'Grail-Tests - Eval - Arithmetic'
 method: IntegerTestCase
 testEvalFloorDivNegative
 	"Test floor division with negative numbers via Python source"
@@ -671,7 +671,7 @@ testEvalFloorDivNegative
 	self assert: (self eval: '7 // -3') equals: -3.
 %
 
-category: 'Tests - Eval - Arithmetic'
+category: 'Grail-Tests - Eval - Arithmetic'
 method: IntegerTestCase
 testEvalNegation
 	"Test unary operators via Python source"

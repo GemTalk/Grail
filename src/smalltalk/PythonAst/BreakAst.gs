@@ -39,7 +39,7 @@ Object
 
 expectvalue /Class
 doit
-BreakAst category: 'Parser'
+BreakAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from BreakAst

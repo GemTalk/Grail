@@ -17,7 +17,7 @@ PythonTestCase subclass: 'ProcessLookupErrorTestCase'
 %
 expectvalue /Class
 doit
-ProcessLookupErrorTestCase category: 'SUnit'
+ProcessLookupErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ ProcessLookupErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-ProcessLookupError'
+category: 'Grail-Tests-ProcessLookupError'
 method: ProcessLookupErrorTestCase
 test_creation
 	"Test creating a ProcessLookupError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-ProcessLookupError'
+category: 'Grail-Tests-ProcessLookupError'
 method: ProcessLookupErrorTestCase
 test_inheritance
 	"Test that ProcessLookupError inherits from OSError."

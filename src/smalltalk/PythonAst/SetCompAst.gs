@@ -44,7 +44,7 @@ Object
 
 expectvalue /Class
 doit
-SetCompAst category: 'Parser'
+SetCompAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from SetCompAst
