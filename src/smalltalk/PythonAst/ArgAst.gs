@@ -37,7 +37,7 @@ Object
 
 expectvalue /Class
 doit
-ArgAst category: 'Parser'
+ArgAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from ArgAst
@@ -46,14 +46,14 @@ removeallclassmethods ArgAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: ArgAst
 name
 
 	^arg
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ArgAst
 printOn: aStream
 
@@ -65,7 +65,7 @@ printOn: aStream
 		yourself.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ArgAst
 setTo: anObject scope: aScope
 

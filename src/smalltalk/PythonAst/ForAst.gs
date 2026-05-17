@@ -26,7 +26,7 @@ For(expr target, expr iter, stmt* body, stmt* orelse, string? type_comment)	// 3
 
 expectvalue /Class
 doit
-ForAst category: 'Parser'
+ForAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from ForAst
@@ -35,7 +35,7 @@ removeallclassmethods ForAst
 
 set compile_env: 0
 
-category: 'code generation'
+category: 'Grail-code generation'
 method: ForAst
 printSmalltalkOn: aStream
 	"Generate: for target in iter: body
@@ -97,7 +97,7 @@ printSmalltalkOn: aStream
 	].
 %
 
-category: 'accessing'
+category: 'Grail-accessing'
 method: ForAst
 addVariableNamesTo: aStream
 	target addVariableNamesTo: aStream.

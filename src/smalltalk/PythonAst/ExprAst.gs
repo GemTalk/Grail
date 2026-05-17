@@ -42,7 +42,7 @@ Object
 
 expectvalue /Class
 doit
-ExprAst category: 'Parser'
+ExprAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from ExprAst
@@ -51,7 +51,7 @@ removeallclassmethods ExprAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: ExprAst
 messagePrecendence
 
@@ -59,7 +59,7 @@ messagePrecendence
 	^3
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ExprAst
 printSmalltalkOn: aStream
 

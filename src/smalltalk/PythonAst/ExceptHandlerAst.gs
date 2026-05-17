@@ -37,7 +37,7 @@ Object
 
 expectvalue /Class
 doit
-ExceptHandlerAst category: 'Parser'
+ExceptHandlerAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from ExceptHandlerAst
@@ -46,7 +46,7 @@ removeallclassmethods ExceptHandlerAst
 
 set compile_env: 0
 
-category: 'initialization'
+category: 'Grail-initialization'
 method: ExceptHandlerAst
 setParent: aNode
 
@@ -56,21 +56,21 @@ setParent: aNode
 	].
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ExceptHandlerAst
 body
 
 	^body
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ExceptHandlerAst
 name
 
 	^name
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ExceptHandlerAst
 type
 

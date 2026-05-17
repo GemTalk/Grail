@@ -34,7 +34,7 @@ types (list_iterator, tuple_iterator, etc.) inherit from this class.
 
 expectvalue /Class
 doit
-iterator category: 'Collections-Iterators'
+iterator category: 'Grail-Collections-Iterators'
 %
 
 ! ===============================================================================
@@ -56,7 +56,7 @@ iterator class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Type Information'
+category: 'Grail-Type Information'
 method: iterator
 __class__
 	"Return the class of this iterator."
@@ -64,7 +64,7 @@ __class__
 	^ self @env0:class
 %
 
-category: 'Python-Iterator Protocol'
+category: 'Grail-Iterator Protocol'
 method: iterator
 __iter__
 	"Return the iterator object itself.
@@ -73,7 +73,7 @@ __iter__
 	^ self
 %
 
-category: 'Python-Iterator Protocol'
+category: 'Grail-Iterator Protocol'
 method: iterator
 __next__
 	"Return the next item from the iterator.
@@ -83,7 +83,7 @@ __next__
 	self @env0:error: 'Subclass must implement __next__'
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: iterator
 __repr__
 	"Return a string representation of the iterator."

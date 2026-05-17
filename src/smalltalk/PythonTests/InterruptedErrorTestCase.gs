@@ -17,7 +17,7 @@ PythonTestCase subclass: 'InterruptedErrorTestCase'
 %
 expectvalue /Class
 doit
-InterruptedErrorTestCase category: 'SUnit'
+InterruptedErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ InterruptedErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-InterruptedError'
+category: 'Grail-Tests-InterruptedError'
 method: InterruptedErrorTestCase
 test_creation
 	"Test creating a InterruptedError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-InterruptedError'
+category: 'Grail-Tests-InterruptedError'
 method: InterruptedErrorTestCase
 test_inheritance
 	"Test that InterruptedError inherits from OSError."

@@ -17,7 +17,7 @@ PythonTestCase subclass: 'KeyboardInterruptTestCase'
 %
 expectvalue /Class
 doit
-KeyboardInterruptTestCase category: 'SUnit'
+KeyboardInterruptTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ KeyboardInterruptTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-KeyboardInterrupt'
+category: 'Grail-Tests-KeyboardInterrupt'
 method: KeyboardInterruptTestCase
 test_creation
 	"Test creating a KeyboardInterrupt instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-KeyboardInterrupt'
+category: 'Grail-Tests-KeyboardInterrupt'
 method: KeyboardInterruptTestCase
 test_inheritance
 	"Test that KeyboardInterrupt inherits from BaseException."

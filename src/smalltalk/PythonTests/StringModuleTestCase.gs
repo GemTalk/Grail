@@ -18,7 +18,7 @@ PythonTestCase subclass: 'StringModuleTestCase'
 
 expectvalue /Class
 doit
-StringModuleTestCase category: 'SUnit'
+StringModuleTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ StringModuleTestCase class removeAllMethods: 0.
 
 set compile_env: 0
 
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: StringModuleTestCase
 testAsciiLetters
 	"Test string.ascii_letters constant (should be lowercase + uppercase)"
@@ -48,7 +48,7 @@ testAsciiLetters
 	self assert: result equals: lowercase , uppercase
 %
 
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: StringModuleTestCase
 testAsciiLowercase
 	"Test string.ascii_lowercase constant"
@@ -60,7 +60,7 @@ testAsciiLowercase
 	self assert: result equals: 'abcdefghijklmnopqrstuvwxyz'
 %
 
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: StringModuleTestCase
 testAsciiUppercase
 	"Test string.ascii_uppercase constant"
@@ -72,7 +72,7 @@ testAsciiUppercase
 	self assert: result equals: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 %
 
-category: 'Tests - Utility Functions'
+category: 'Grail-Tests - Utility Functions'
 method: StringModuleTestCase
 testCapwords
 	"Test string.capwords() — Phase-4 fast-path direct method dispatch."
@@ -90,7 +90,7 @@ testCapwords
 	self assert: result equals: 'Multiple Spaces'.
 %
 
-category: 'Tests - Utility Functions'
+category: 'Grail-Tests - Utility Functions'
 method: StringModuleTestCase
 testCapwordsEmptyString
 	"Test string.capwords() with empty string"
@@ -102,7 +102,7 @@ testCapwordsEmptyString
 	self assert: result equals: ''
 %
 
-category: 'Tests - Utility Functions'
+category: 'Grail-Tests - Utility Functions'
 method: StringModuleTestCase
 testCapwordsSingleWord
 	"Test string.capwords() with single word"
@@ -117,7 +117,7 @@ testCapwordsSingleWord
 	self assert: result equals: 'Hello'
 %
 
-category: 'Tests - Utility Functions'
+category: 'Grail-Tests - Utility Functions'
 method: StringModuleTestCase
 testCapwordsWithSep
 	"Test string.capwords() with custom separator — uses the varargs
@@ -133,7 +133,7 @@ testCapwordsWithSep
 	self assert: result equals: 'One.Two.Three'
 %
 
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: StringModuleTestCase
 testDigits
 	"Test string.digits constant"
@@ -145,7 +145,7 @@ testDigits
 	self assert: result equals: '0123456789'
 %
 
-category: 'Tests - Formatter'
+category: 'Grail-Tests - Formatter'
 method: StringModuleTestCase
 testFormatterBasic
 	"Test string.Formatter basic functionality"
@@ -169,7 +169,7 @@ testFormatterBasic
 	self assert: result equals: 'Alice is 30'
 %
 
-category: 'Tests - Formatter'
+category: 'Grail-Tests - Formatter'
 method: StringModuleTestCase
 testFormatterKeywords
 	"Test string.Formatter with keyword arguments"
@@ -194,7 +194,7 @@ testFormatterKeywords
 	self assert: result equals: '5 + 3 = 8'
 %
 
-category: 'Tests - Formatter'
+category: 'Grail-Tests - Formatter'
 method: StringModuleTestCase
 testFormatterLiteral
 	"Test string.Formatter with literal text"
@@ -213,7 +213,7 @@ testFormatterLiteral
 	self assert: result equals: 'Hello world!'
 %
 
-category: 'Tests - Formatter'
+category: 'Grail-Tests - Formatter'
 method: StringModuleTestCase
 testFormatterPositional
 	"Test string.Formatter with positional arguments"
@@ -232,7 +232,7 @@ testFormatterPositional
 	self assert: result equals: 'third first second'
 %
 
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: StringModuleTestCase
 testHexdigits
 	"Test string.hexdigits constant"
@@ -244,7 +244,7 @@ testHexdigits
 	self assert: result equals: '0123456789abcdefABCDEF'
 %
 
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: StringModuleTestCase
 testOctdigits
 	"Test string.octdigits constant"
@@ -256,7 +256,7 @@ testOctdigits
 	self assert: result equals: '01234567'
 %
 
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: StringModuleTestCase
 testPrintable
 	"Test string.printable constant (should contain digits, letters, punctuation, whitespace)"
@@ -276,7 +276,7 @@ testPrintable
 	self assert: (result @env1:__contains__: whitespace)
 %
 
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: StringModuleTestCase
 testPunctuation
 	"Test string.punctuation constant"
@@ -291,7 +291,7 @@ testPunctuation
 	self assert: (result @env1:__contains__: '#')
 %
 
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: StringModuleTestCase
 testWhitespace
 	"Test string.whitespace constant"

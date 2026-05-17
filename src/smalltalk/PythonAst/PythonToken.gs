@@ -35,7 +35,7 @@ Object
 
 expectvalue /Class
 doit
-PythonToken category: 'Parser'
+PythonToken category: 'Grail-Parser'
 %
 
 ! ===============================================================================
@@ -50,14 +50,14 @@ removeallclassmethods PythonToken
 
 set compile_env: 0
 
-category: 'instance creation'
+category: 'Grail-instance creation'
 classmethod: PythonToken
 type: aSymbol value: aString line: aLine column: aColumn
 
 	^self type: aSymbol value: aString line: aLine column: aColumn endLine: aLine endColumn: aColumn + aString size
 %
 
-category: 'instance creation'
+category: 'Grail-instance creation'
 classmethod: PythonToken
 type: aSymbol value: aString line: aLine column: aColumn endLine: anEndLine endColumn: anEndColumn
 
@@ -71,119 +71,119 @@ type: aSymbol value: aString line: aLine column: aColumn endLine: anEndLine endC
 		yourself
 %
 
-category: 'accessors'
+category: 'Grail-accessors'
 method: PythonToken
 column
 
 	^column
 %
 
-category: 'accessors'
+category: 'Grail-accessors'
 method: PythonToken
 column: anInteger
 
 	column := anInteger
 %
 
-category: 'accessors'
+category: 'Grail-accessors'
 method: PythonToken
 endColumn
 
 	^endColumn
 %
 
-category: 'accessors'
+category: 'Grail-accessors'
 method: PythonToken
 endColumn: anInteger
 
 	endColumn := anInteger
 %
 
-category: 'accessors'
+category: 'Grail-accessors'
 method: PythonToken
 endLine
 
 	^endLine
 %
 
-category: 'accessors'
+category: 'Grail-accessors'
 method: PythonToken
 endLine: anInteger
 
 	endLine := anInteger
 %
 
-category: 'testing'
+category: 'Grail-testing'
 method: PythonToken
 isBytes
 
 	^type == #BYTES
 %
 
-category: 'testing'
+category: 'Grail-testing'
 method: PythonToken
 isEndMarker
 
 	^type == #ENDMARKER
 %
 
-category: 'testing'
+category: 'Grail-testing'
 method: PythonToken
 isKeyword: aString
 
 	^type == #KEYWORD and: [value = aString]
 %
 
-category: 'testing'
+category: 'Grail-testing'
 method: PythonToken
 isName
 
 	^type == #NAME
 %
 
-category: 'testing'
+category: 'Grail-testing'
 method: PythonToken
 isNewline
 
 	^type == #NEWLINE or: [type == #NL]
 %
 
-category: 'testing'
+category: 'Grail-testing'
 method: PythonToken
 isNumber
 
 	^type == #NUMBER
 %
 
-category: 'testing'
+category: 'Grail-testing'
 method: PythonToken
 isOp: aString
 
 	^type == #OP and: [value = aString]
 %
 
-category: 'testing'
+category: 'Grail-testing'
 method: PythonToken
 isString
 
 	^type == #STRING
 %
 
-category: 'accessors'
+category: 'Grail-accessors'
 method: PythonToken
 line
 
 	^line
 %
 
-category: 'accessors'
+category: 'Grail-accessors'
 method: PythonToken
 line: anInteger
 
 	line := anInteger
 %
 
-category: 'printing'
+category: 'Grail-printing'
 method: PythonToken
 printOn: aStream
 
@@ -196,28 +196,28 @@ printOn: aStream
 		nextPut: $).
 %
 
-category: 'accessors'
+category: 'Grail-accessors'
 method: PythonToken
 type
 
 	^type
 %
 
-category: 'accessors'
+category: 'Grail-accessors'
 method: PythonToken
 type: aSymbol
 
 	type := aSymbol
 %
 
-category: 'accessors'
+category: 'Grail-accessors'
 method: PythonToken
 value
 
 	^value
 %
 
-category: 'accessors'
+category: 'Grail-accessors'
 method: PythonToken
 value: anObject
 

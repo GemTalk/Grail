@@ -19,7 +19,7 @@ SmallFraction class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Instance Creation'
+category: 'Grail-Instance Creation'
 classmethod: Fraction
 __new__: cls
 	"Fraction() -> Fraction(0, 1)"
@@ -27,7 +27,7 @@ __new__: cls
 	^ 0 @env0:asFraction
 %
 
-category: 'Python-Instance Creation'
+category: 'Grail-Instance Creation'
 classmethod: Fraction
 __new__: cls _: numerator _: denominator
 	"Fraction(numerator, denominator) constructor"
@@ -49,7 +49,7 @@ __new__: cls _: numerator _: denominator
 	^ result
 %
 
-category: 'Python-Instance Creation'
+category: 'Grail-Instance Creation'
 classmethod: Fraction
 __new__: cls _: value
 	"Fraction(value) -> rational equivalent of value"
@@ -63,7 +63,7 @@ __new__: cls _: value
 		do: [:ex | TypeError @env0:signal: 'cannot convert to Fraction']
 %
 
-category: 'Python-Class Methods'
+category: 'Grail-Class Methods'
 classmethod: Fraction
 from_decimal: d
 	"Construct a Fraction from a Decimal.
@@ -80,7 +80,7 @@ from_decimal: d
 	^ frac
 %
 
-category: 'Python-Class Methods'
+category: 'Grail-Class Methods'
 classmethod: Fraction
 from_float: f
 	"Construct a Fraction from a float.
@@ -111,7 +111,7 @@ from_float: f
 	^ frac
 %
 
-category: 'Python-Class Methods'
+category: 'Grail-Class Methods'
 classmethod: Fraction
 from_number: n
 	"Construct a Fraction from any number with as_integer_ratio method.
@@ -124,7 +124,7 @@ from_number: n
 	^ Fraction ___new___: Fraction _: num _: den
 %
 
-category: 'Python-Conversion'
+category: 'Grail-Conversion'
 method: AbstractFraction
 __bool__
 	"Return False for 0, True otherwise."
@@ -134,7 +134,7 @@ __bool__
 	^ self @env0:~= zero
 %
 
-category: 'Python-Rounding'
+category: 'Grail-Rounding'
 method: AbstractFraction
 __ceil__
 	"Return the smallest integer >= self.
@@ -148,7 +148,7 @@ __ceil__
 	^ (negN @env0:// d) @env0:negated
 %
 
-category: 'Python-Conversion'
+category: 'Grail-Conversion'
 method: AbstractFraction
 __float__
 	"Convert Fraction to float."
@@ -156,7 +156,7 @@ __float__
 	^ self @env0:asFloat
 %
 
-category: 'Python-Rounding'
+category: 'Grail-Rounding'
 method: AbstractFraction
 __floor__
 	"Return the largest integer <= self.
@@ -169,7 +169,7 @@ __floor__
 	^ n @env0:// d
 %
 
-category: 'Python-Format'
+category: 'Grail-Format'
 method: AbstractFraction
 __format__: formatSpec
 	"Format the Fraction according to formatSpec.
@@ -184,7 +184,7 @@ __format__: formatSpec
 	^ (self @env0:asFloat) @env1:__format__: spec
 %
 
-category: 'Python-Hash'
+category: 'Grail-Hash'
 method: AbstractFraction
 __hash__
 	"Return hash value."
@@ -192,7 +192,7 @@ __hash__
 	^ self @env0:hash
 %
 
-category: 'Python-Conversion'
+category: 'Grail-Conversion'
 method: AbstractFraction
 __int__
 	"Convert Fraction to int by truncation toward zero."
@@ -200,7 +200,7 @@ __int__
 	^ self @env0:truncated
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: AbstractFraction
 __repr__
 	"Return repr(Fraction) as 'Fraction(n, d)'."
@@ -214,7 +214,7 @@ __repr__
 	^ s @env0:asUnicodeString
 %
 
-category: 'Python-Rounding'
+category: 'Grail-Rounding'
 method: AbstractFraction
 __round__
 	"Round to nearest integer, ties go to even."
@@ -234,7 +234,7 @@ __round__
 		ifFalse: [ ^ floor @env0:+ sign ]
 %
 
-category: 'Python-Rounding'
+category: 'Grail-Rounding'
 method: AbstractFraction
 __round__: ndigits
 	"Round to n digits after decimal point."
@@ -263,7 +263,7 @@ __round__: ndigits
 	]
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: AbstractFraction
 __str__
 	"Return string representation like '3/2'."
@@ -271,7 +271,7 @@ __str__
 	^ (self @env0:printString) @env0:asUnicodeString
 %
 
-category: 'Python-Fraction Methods'
+category: 'Grail-Fraction Methods'
 method: AbstractFraction
 as_integer_ratio
 	"Return a tuple (numerator, denominator) representing the fraction.
@@ -280,7 +280,7 @@ as_integer_ratio
 	^ tuple @env0:with: (self @env0:numerator) with: (self @env0:denominator)
 %
 
-category: 'Python-Properties'
+category: 'Grail-Properties'
 method: AbstractFraction
 denominator
 	"Return the denominator of the fraction."
@@ -288,7 +288,7 @@ denominator
 	^ self @env0:denominator
 %
 
-category: 'Python-Fraction Methods'
+category: 'Grail-Fraction Methods'
 method: AbstractFraction
 is_integer
 	"Return True if the fraction represents an integer (denominator == 1)."
@@ -296,7 +296,7 @@ is_integer
 	^ (self @env0:denominator) == 1
 %
 
-category: 'Python-Fraction Methods'
+category: 'Grail-Fraction Methods'
 method: AbstractFraction
 limit_denominator
 	"Find the closest rational with denominator at most 10**6 (default)."
@@ -304,7 +304,7 @@ limit_denominator
 	^ self limit_denominator: 1000000
 %
 
-category: 'Python-Fraction Methods'
+category: 'Grail-Fraction Methods'
 method: AbstractFraction
 limit_denominator: maxDenominator
 	"Find the closest rational with denominator at most maxDenominator.
@@ -352,7 +352,7 @@ limit_denominator: maxDenominator
 	].
 %
 
-category: 'Python-Properties'
+category: 'Grail-Properties'
 method: AbstractFraction
 numerator
 	"Return the numerator of the fraction."

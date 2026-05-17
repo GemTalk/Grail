@@ -39,7 +39,7 @@ Object
 
 expectvalue /Class
 doit
-AbstractLocationNode category: 'Parser'
+AbstractLocationNode category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from AbstractLocationNode
@@ -48,28 +48,28 @@ removeallclassmethods AbstractLocationNode
 
 set compile_env: 0
 
-category: 'accessors'
+category: 'Grail-accessors'
 method: AbstractLocationNode
 beginLine
 
 	^beginLine
 %
 
-category: 'accessors'
+category: 'Grail-accessors'
 method: AbstractLocationNode
 column
 
 	^beginColumn
 %
 
-category: 'accessors'
+category: 'Grail-accessors'
 method: AbstractLocationNode
 line
 
 	^beginLine
 %
 
-category: 'other'
+category: 'Grail-other'
 method: AbstractLocationNode
 printOn: aStream
 
@@ -80,7 +80,7 @@ printOn: aStream
 		yourself.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: AbstractLocationNode
 sourceLine
 

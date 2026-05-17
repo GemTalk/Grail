@@ -25,7 +25,7 @@ Unicode7 class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: CharacterCollection
 __new__
 	"Create a new empty str instance.
@@ -34,7 +34,7 @@ __new__
 	^ '' @env0:copy
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: CharacterCollection
 __new__: obj
 	"Create a new str instance from an object.
@@ -53,7 +53,7 @@ __new__: obj
 	^ result
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 classmethod: CharacterCollection
 maketrans
 	"Create a translation table. Not yet implemented."
@@ -61,7 +61,7 @@ maketrans
 	self @env0:error: 'Not yet implemented: maketrans'
 %
 
-category: 'Python-String Operations'
+category: 'Grail-String Operations'
 method: CharacterCollection
 __add__: other
 	"Concatenate two strings. In Python: str1 + str2"
@@ -69,7 +69,7 @@ __add__: other
 	^ self @env0:, other
 %
 
-category: 'Python-Sequence Operations'
+category: 'Grail-Sequence Operations'
 method: CharacterCollection
 __contains__: item
 	"Test if item is in string. In Python: item in str"
@@ -79,7 +79,7 @@ __contains__: item
 	^ result
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: CharacterCollection
 __eq__: other
 	"Return self == other"
@@ -87,7 +87,7 @@ __eq__: other
 	^ self @env0:= other
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: CharacterCollection
 __format__: formatSpec
 	"Return a formatted string representation"
@@ -95,7 +95,7 @@ __format__: formatSpec
 	self @env0:error: 'Not yet implemented: __format__'
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: CharacterCollection
 __ge__: other
 	"Return self >= other"
@@ -103,7 +103,7 @@ __ge__: other
 	^ self @env0:>= other
 %
 
-category: 'Python-Sequence Operations'
+category: 'Grail-Sequence Operations'
 method: CharacterCollection
 __getitem__: index
 	"Get character at index. In Python: str[index]
@@ -136,7 +136,7 @@ __getitem__: index
 	^ charString
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: CharacterCollection
 __gt__: other
 	"Return self > other"
@@ -144,7 +144,7 @@ __gt__: other
 	^ self @env0:> other
 %
 
-category: 'Python-Hashing & Identity'
+category: 'Grail-Hashing & Identity'
 method: CharacterCollection
 __hash__
 	"Return hash value for this string"
@@ -152,7 +152,7 @@ __hash__
 	^ self @env0:hash
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: CharacterCollection
 __init__: obj
 	"Initialize a str instance (called after __new__).
@@ -161,7 +161,7 @@ __init__: obj
 	^ None
 %
 
-category: 'Python-Sequence Operations'
+category: 'Grail-Sequence Operations'
 method: CharacterCollection
 __iter__
 	"Return an iterator over the string characters."
@@ -169,7 +169,7 @@ __iter__
 	^ str_iterator ___on: self
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: CharacterCollection
 __le__: other
 	"Return self <= other"
@@ -177,7 +177,7 @@ __le__: other
 	^ self @env0:<= other
 %
 
-category: 'Python-Sequence Operations'
+category: 'Grail-Sequence Operations'
 method: CharacterCollection
 __len__
 	"Return the length of the string. In Python: len(str)"
@@ -185,7 +185,7 @@ __len__
 	^ self @env0:size
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: CharacterCollection
 __lt__: other
 	"Return self < other"
@@ -193,7 +193,7 @@ __lt__: other
 	^ self @env0:< other
 %
 
-category: 'Python-String Operations'
+category: 'Grail-String Operations'
 method: CharacterCollection
 __mod__: args
 	"String formatting using % operator. In Python: 'format %s' % args"
@@ -201,7 +201,7 @@ __mod__: args
 	self @env0:error: 'Not yet implemented: __mod__'
 %
 
-category: 'Python-String Operations'
+category: 'Grail-String Operations'
 method: CharacterCollection
 __mul__: n
 	"Repeat string n times. In Python: str * n"
@@ -218,7 +218,7 @@ __mul__: n
 	^ result
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: CharacterCollection
 __ne__: other
 	"Return self != other"
@@ -226,7 +226,7 @@ __ne__: other
 	^ self @env0:~= other
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: CharacterCollection
 __repr__
 	"Return a string representation for debugging. In Python: repr(str)"
@@ -252,7 +252,7 @@ __repr__
 	^ stream @env0:contents
 %
 
-category: 'Python-String Operations'
+category: 'Grail-String Operations'
 method: CharacterCollection
 __rmod__: args
 	"String formatting (reverse). Not typically used."
@@ -260,7 +260,7 @@ __rmod__: args
 	self @env0:error: 'Not yet implemented: __rmod__'
 %
 
-category: 'Python-String Operations'
+category: 'Grail-String Operations'
 method: CharacterCollection
 __rmul__: n
 	"Repeat string n times (reverse). In Python: n * str"
@@ -268,7 +268,7 @@ __rmul__: n
 	^ self __mul__: n
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: CharacterCollection
 __str__
 	"Return a string representation for display. In Python: str(obj)"
@@ -276,7 +276,7 @@ __str__
 	^ self
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 capitalize
 	"Return a copy of the string with its first character capitalized and the rest lowercased."
@@ -294,7 +294,7 @@ capitalize
 	^ stream @env0:contents
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 casefold
 	"Return a casefolded copy of the string. Similar to lowercase but more aggressive."
@@ -302,7 +302,7 @@ casefold
 	^ self @env0:asLowercase
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 center: width
 	"Return a centered string of length width, padded with spaces."
@@ -326,7 +326,7 @@ center: width
 	^ stream @env0:contents
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 count: sub
 	"Return the number of non-overlapping occurrences of substring sub."
@@ -342,7 +342,7 @@ count: sub
 	^ count
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 encode
 	"Encode the string to bytes. Not yet implemented."
@@ -350,7 +350,7 @@ encode
 	self @env0:error: 'Not yet implemented: encode'
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 endswith: suffix
 	"Test whether string ends with the specified suffix."
@@ -358,7 +358,7 @@ endswith: suffix
 	^ self @env0:endsWith: suffix
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 expandtabs
 	"Return a copy where all tab characters are replaced by spaces."
@@ -366,7 +366,7 @@ expandtabs
 	^ self @env0:copyReplaceAll: (Character @env0:tab) @env0:asString with: '        '
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 find: sub
 	"Return the lowest index where substring sub is found, or -1 if not found."
@@ -377,7 +377,7 @@ find: sub
 	^ (index @env0:- (1))  "Convert to 0-based indexing"
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 format
 	"String formatting using {} placeholders. Not yet implemented."
@@ -385,7 +385,7 @@ format
 	self @env0:error: 'Not yet implemented: format'
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 format_map: mapping
 	"String formatting using a mapping. Not yet implemented."
@@ -393,7 +393,7 @@ format_map: mapping
 	self @env0:error: 'Not yet implemented: format_map'
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 index: sub
 	"Return the lowest index where substring sub is found. Raises ValueError if not found."
@@ -406,7 +406,7 @@ index: sub
 	^ idx
 %
 
-category: 'Python-String Test Methods'
+category: 'Grail-String Test Methods'
 method: CharacterCollection
 isalnum
 	"Return True if all characters are alphanumeric and there is at least one character."
@@ -424,7 +424,7 @@ isalnum
 	^ allAlnum
 %
 
-category: 'Python-String Test Methods'
+category: 'Grail-String Test Methods'
 method: CharacterCollection
 isalpha
 	"Return True if all characters are alphabetic and there is at least one character."
@@ -442,7 +442,7 @@ isalpha
 	^ allAlpha
 %
 
-category: 'Python-String Test Methods'
+category: 'Grail-String Test Methods'
 method: CharacterCollection
 isascii
 	"Return True if all characters are ASCII (code point < 128)."
@@ -457,7 +457,7 @@ isascii
 	^ allAscii
 %
 
-category: 'Python-String Test Methods'
+category: 'Grail-String Test Methods'
 method: CharacterCollection
 isdecimal
 	"Return True if all characters are decimal characters."
@@ -475,7 +475,7 @@ isdecimal
 	^ allDecimal
 %
 
-category: 'Python-String Test Methods'
+category: 'Grail-String Test Methods'
 method: CharacterCollection
 isdigit
 	"Return True if all characters are digits and there is at least one character."
@@ -493,7 +493,7 @@ isdigit
 	^ allDigit
 %
 
-category: 'Python-String Test Methods'
+category: 'Grail-String Test Methods'
 method: CharacterCollection
 isidentifier
 	"Return True if string is a valid Python identifier."
@@ -515,7 +515,7 @@ isidentifier
 	^ true
 %
 
-category: 'Python-String Test Methods'
+category: 'Grail-String Test Methods'
 method: CharacterCollection
 islower
 	"Return True if all cased characters are lowercase and there is at least one cased character."
@@ -535,7 +535,7 @@ islower
 	^ hasCased @env0:& allLower
 %
 
-category: 'Python-String Test Methods'
+category: 'Grail-String Test Methods'
 method: CharacterCollection
 isnumeric
 	"Return True if all characters are numeric characters."
@@ -543,7 +543,7 @@ isnumeric
 	^ self isdecimal
 %
 
-category: 'Python-String Test Methods'
+category: 'Grail-String Test Methods'
 method: CharacterCollection
 isprintable
 	"Return True if all characters are printable."
@@ -559,7 +559,7 @@ isprintable
 	^ allPrintable
 %
 
-category: 'Python-String Test Methods'
+category: 'Grail-String Test Methods'
 method: CharacterCollection
 isspace
 	"Return True if all characters are whitespace and there is at least one character."
@@ -577,7 +577,7 @@ isspace
 	^ allSpace
 %
 
-category: 'Python-String Test Methods'
+category: 'Grail-String Test Methods'
 method: CharacterCollection
 istitle
 	"Return True if string is titlecased."
@@ -604,7 +604,7 @@ istitle
 	^ true
 %
 
-category: 'Python-String Test Methods'
+category: 'Grail-String Test Methods'
 method: CharacterCollection
 isupper
 	"Return True if all cased characters are uppercase and there is at least one cased character."
@@ -624,7 +624,7 @@ isupper
 	^ hasCased @env0:& allUpper
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 join: iterable
 	"Concatenate any number of strings with self as separator."
@@ -644,7 +644,7 @@ join: iterable
 	^ stream @env0:contents
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 ljust: width
 	"Return a left-justified string of length width, padded with spaces."
@@ -662,7 +662,7 @@ ljust: width
 	^ stream @env0:contents
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 lower
 	"Return a copy of the string with all characters converted to lowercase."
@@ -670,7 +670,7 @@ lower
 	^ self @env0:asLowercase
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 lstrip
 	"Return a copy of the string with leading whitespace removed."
@@ -678,7 +678,7 @@ lstrip
 	^ self @env0:trimLeft
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 partition: sep
 	"Split the string at the first occurrence of sep, return (before, sep, after)."
@@ -694,7 +694,7 @@ partition: sep
 	^ tuple @env0:with: before with: sep with: after
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 removeprefix: prefix
 	"If the string starts with prefix, return string[len(prefix):], otherwise return a copy."
@@ -707,7 +707,7 @@ removeprefix: prefix
 	^ self
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 removesuffix: suffix
 	"If the string ends with suffix, return string[:-len(suffix)], otherwise return a copy."
@@ -720,7 +720,7 @@ removesuffix: suffix
 	^ self
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 replace: old _: new
 	"Return a copy with all occurrences of substring old replaced by new."
@@ -728,7 +728,7 @@ replace: old _: new
 	^ self @env0:copyReplaceAll: old with: new
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 rfind: sub
 	"Return the highest index where substring sub is found, or -1 if not found."
@@ -745,7 +745,7 @@ rfind: sub
 	^ (lastIndex @env0:- (1))  "Convert to 0-based indexing"
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 rindex: sub
 	"Return the highest index where substring sub is found. Raises ValueError if not found."
@@ -758,7 +758,7 @@ rindex: sub
 	^ idx
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 rjust: width
 	"Return a right-justified string of length width, padded with spaces."
@@ -776,7 +776,7 @@ rjust: width
 	^ stream @env0:contents
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 rpartition: sep
 	"Split the string at the last occurrence of sep, return (before, sep, after)."
@@ -799,7 +799,7 @@ rpartition: sep
 	^ tuple @env0:with: before with: sep with: after
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 rsplit
 	"Return a list of words in the string, using whitespace as the delimiter (from right)."
@@ -808,7 +808,7 @@ rsplit
 	^ self split
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 rstrip
 	"Return a copy of the string with trailing whitespace removed."
@@ -816,7 +816,7 @@ rstrip
 	^ self @env0:trimRight
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 split
 	"Return a list of words in the string, using whitespace as the delimiter."
@@ -826,7 +826,7 @@ split
 	^ parts
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 splitlines
 	"Return a list of lines in the string, breaking at line boundaries."
@@ -837,7 +837,7 @@ splitlines
 	^ lines
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 startswith: prefix
 	"Test whether string starts with the specified prefix."
@@ -845,7 +845,7 @@ startswith: prefix
 	^ self @env0:beginsWith: prefix
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 strip
 	"Return a copy of the string with leading and trailing whitespace removed."
@@ -853,7 +853,7 @@ strip
 	^ self @env0:trimBoth
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 swapcase
 	"Return a copy with uppercase characters converted to lowercase and vice versa."
@@ -872,7 +872,7 @@ swapcase
 	^ stream @env0:contents
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 title
 	"Return a titlecased version of the string where words start with uppercase."
@@ -898,7 +898,7 @@ title
 	^ stream @env0:contents
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 translate: table
 	"Return a copy with each character mapped through the translation table. Not yet implemented."
@@ -906,7 +906,7 @@ translate: table
 	self @env0:error: 'Not yet implemented: translate'
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 upper
 	"Return a copy of the string with all characters converted to uppercase."
@@ -914,7 +914,7 @@ upper
 	^ self @env0:asUppercase
 %
 
-category: 'Python-String Methods'
+category: 'Grail-String Methods'
 method: CharacterCollection
 zfill: width
 	"Pad a numeric string with zeros on the left, to fill a field of the given width."

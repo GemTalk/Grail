@@ -49,7 +49,7 @@ Object
 
 expectvalue /Class
 doit
-BoolOpAst category: 'Parser'
+BoolOpAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from BoolOpAst
@@ -58,7 +58,7 @@ removeallclassmethods BoolOpAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 classmethod: BoolOpAst
 isAbstract
 

@@ -17,7 +17,7 @@ PythonTestCase subclass: 'KeyErrorTestCase'
 %
 expectvalue /Class
 doit
-KeyErrorTestCase category: 'SUnit'
+KeyErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ KeyErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-KeyError'
+category: 'Grail-Tests-KeyError'
 method: KeyErrorTestCase
 test_creation
 	"Test creating a KeyError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-KeyError'
+category: 'Grail-Tests-KeyError'
 method: KeyErrorTestCase
 test_inheritance
 	"Test that KeyError inherits from LookupError."

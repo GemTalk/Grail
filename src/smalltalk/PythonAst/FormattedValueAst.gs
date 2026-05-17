@@ -42,7 +42,7 @@ Object
 
 expectvalue /Class
 doit
-FormattedValueAst category: 'Parser'
+FormattedValueAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from FormattedValueAst

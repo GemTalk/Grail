@@ -38,7 +38,7 @@ emits a reference to the global ``None``, not ``nil``.'
 
 expectvalue /Class
 doit
-NoneType category: 'Singleton'
+NoneType category: 'Grail-Singleton'
 %
 
 ! ------------------- Remove existing methods from NoneType
@@ -50,14 +50,14 @@ NoneType class removeAllMethods: 1.
 
 set compile_env: 0
 
-category: 'Python-Singleton'
+category: 'Grail-Singleton'
 classmethod: NoneType
 ___instance___
 	"env-0 entry point for the singleton accessor (callable from C/GciPerform)."
 	^ self @env1:instance
 %
 
-category: 'Python-Singleton'
+category: 'Grail-Singleton'
 classmethod: NoneType
 new
 	"Block env-0 ``NoneType new`` so it cannot bypass the env-1 method that
@@ -68,14 +68,14 @@ new
 
 set compile_env: 1
 
-category: 'Python-Singleton'
+category: 'Grail-Singleton'
 classmethod: NoneType
 clearInstance
 	"Clear the singleton instance (useful for testing only)."
 	instance := nil
 %
 
-category: 'Python-Singleton'
+category: 'Grail-Singleton'
 classmethod: NoneType
 instance
 	"Return the singleton ``None`` instance, allocating it on first access.
@@ -88,32 +88,32 @@ instance
 	^ instance
 %
 
-category: 'Python-Singleton'
+category: 'Grail-Singleton'
 classmethod: NoneType
 new
 	"NoneType is a singleton; ``None`` is its only instance."
 	TypeError ___signal___: 'cannot create ''NoneType'' instances'
 %
 
-category: 'Python-Special Methods'
+category: 'Grail-Special Methods'
 method: NoneType
 __bool__
 	^ false
 %
 
-category: 'Python-Special Methods'
+category: 'Grail-Special Methods'
 method: NoneType
 __eq__: other
 	^ other == self
 %
 
-category: 'Python-Special Methods'
+category: 'Grail-Special Methods'
 method: NoneType
 __ne__: other
 	^ other ~~ self
 %
 
-category: 'Python-Special Methods'
+category: 'Grail-Special Methods'
 method: NoneType
 __hash__
 	"Python's hash(None) is implementation-defined and constant within a
@@ -121,13 +121,13 @@ __hash__
 	^ 0
 %
 
-category: 'Python-Special Methods'
+category: 'Grail-Special Methods'
 method: NoneType
 __repr__
 	^ 'None'
 %
 
-category: 'Python-Special Methods'
+category: 'Grail-Special Methods'
 method: NoneType
 __str__
 	^ 'None'
@@ -135,7 +135,7 @@ __str__
 
 set compile_env: 0
 
-category: 'Printing'
+category: 'Grail-Printing'
 method: NoneType
 printOn: aStream
 	"Smalltalk-side debugging output."

@@ -17,7 +17,7 @@ PythonTestCase subclass: 'TypeErrorTestCase'
 %
 expectvalue /Class
 doit
-TypeErrorTestCase category: 'SUnit'
+TypeErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ TypeErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-TypeError'
+category: 'Grail-Tests-TypeError'
 method: TypeErrorTestCase
 test_creation
 	"Test creating a TypeError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-TypeError'
+category: 'Grail-Tests-TypeError'
 method: TypeErrorTestCase
 test_inheritance
 	"Test that TypeError inherits from Exception."

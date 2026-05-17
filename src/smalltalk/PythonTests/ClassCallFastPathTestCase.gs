@@ -18,7 +18,7 @@ PythonTestCase subclass: 'ClassCallFastPathTestCase'
 
 expectvalue /Class
 doit
-ClassCallFastPathTestCase category: 'SUnit'
+ClassCallFastPathTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -51,7 +51,7 @@ set compile_env: 0
 ! Helpers
 ! ===============================================================================
 
-category: 'Helpers'
+category: 'Grail-Helpers'
 method: ClassCallFastPathTestCase
 generatedSourceFor: pythonExpression
 	"Parse `pythonExpression` (a single Python expression statement),
@@ -75,7 +75,7 @@ generatedSourceFor: pythonExpression
 ! Discriminator unit tests
 ! ===============================================================================
 
-category: 'Tests - Discriminators'
+category: 'Grail-Tests - Discriminators'
 method: ClassCallFastPathTestCase
 testResolveClassForNameMapsToGemStoneClass
 	"`Python at: #bool` resolves to Boolean; `int` to Integer; `object`
@@ -88,7 +88,7 @@ testResolveClassForNameMapsToGemStoneClass
 	self assert: (CallAst resolveClassForName: #object) equals: Object
 %
 
-category: 'Tests - Discriminators'
+category: 'Grail-Tests - Discriminators'
 method: ClassCallFastPathTestCase
 testResolveClassForNameRejectsModuleSubclasses
 	"Module subclasses (`builtins`, `math`, etc.) have their own dispatch
@@ -99,7 +99,7 @@ testResolveClassForNameRejectsModuleSubclasses
 	self assert: (CallAst resolveClassForName: #math) equals: nil
 %
 
-category: 'Tests - Discriminators'
+category: 'Grail-Tests - Discriminators'
 method: ClassCallFastPathTestCase
 testResolveClassForNameReturnsNilForNonClassEntries
 	"`Python at: #True` is the boolean `true` (not a class); `None` is
@@ -110,7 +110,7 @@ testResolveClassForNameReturnsNilForNonClassEntries
 	self assert: (CallAst resolveClassForName: #thisNameDoesNotExist) equals: nil
 %
 
-category: 'Tests - Discriminators'
+category: 'Grail-Tests - Discriminators'
 method: ClassCallFastPathTestCase
 testClassNewSelectorForArity
 	"Selector convention: 0 args → #__new__, 1 arg → #__new__:,
@@ -126,7 +126,7 @@ testClassNewSelectorForArity
 ! Codegen output tests
 ! ===============================================================================
 
-category: 'Tests - Codegen'
+category: 'Grail-Tests - Codegen'
 method: ClassCallFastPathTestCase
 testCodegenBoolOneArg
 	"`bool(1)` emits `(bool @env1:__new__: arg)` because Boolean has a
@@ -139,7 +139,7 @@ testCodegenBoolOneArg
 	self deny: (src includesString: 'value: nil')
 %
 
-category: 'Tests - Codegen'
+category: 'Grail-Tests - Codegen'
 method: ClassCallFastPathTestCase
 testCodegenObjectZeroArg
 	"`object()` emits the no-colon form `(object @env1:__new__)`."
@@ -150,7 +150,7 @@ testCodegenObjectZeroArg
 	self deny: (src includesString: '__new__:')
 %
 
-category: 'Tests - Codegen'
+category: 'Grail-Tests - Codegen'
 method: ClassCallFastPathTestCase
 testCodegenIntTwoArg
 	"int( ff , 16) emits (int @env1:__new__: 'ff' _: 16) because
@@ -162,7 +162,7 @@ testCodegenIntTwoArg
 	self assert: (src includesString: ' _: ')
 %
 
-category: 'Tests - Codegen'
+category: 'Grail-Tests - Codegen'
 method: ClassCallFastPathTestCase
 testCodegenStrStillUsesBuiltinsFastPath
 	"`str(42)` must keep going through the builtins instance fast path
@@ -176,7 +176,7 @@ testCodegenStrStillUsesBuiltinsFastPath
 	self deny: (src includesString: '@env1:__new__')
 %
 
-category: 'Tests - Codegen'
+category: 'Grail-Tests - Codegen'
 method: ClassCallFastPathTestCase
 testCodegenArityMismatchEmitsTypeError
 	"`bool(1, 2)` has no matching `__new__:_:` on Boolean, so the codegen
@@ -194,7 +194,7 @@ testCodegenArityMismatchEmitsTypeError
 ! End-to-end runtime tests
 ! ===============================================================================
 
-category: 'Tests - Runtime'
+category: 'Grail-Tests - Runtime'
 method: ClassCallFastPathTestCase
 testEvalBoolOfTruthyValues
 	"bool(x) for truthy values returns True."
@@ -204,7 +204,7 @@ testEvalBoolOfTruthyValues
 	self assert: (self eval: 'bool(42)') equals: true
 %
 
-category: 'Tests - Runtime'
+category: 'Grail-Tests - Runtime'
 method: ClassCallFastPathTestCase
 testEvalBoolOfFalsyValues
 	"bool(x) for falsy values returns False."
@@ -213,7 +213,7 @@ testEvalBoolOfFalsyValues
 	self assert: (self eval: 'bool("")') equals: false
 %
 
-category: 'Tests - Runtime'
+category: 'Grail-Tests - Runtime'
 method: ClassCallFastPathTestCase
 testEvalIntOfStringDecimal
 	"int('123') parses the decimal string and returns 123."
@@ -222,7 +222,7 @@ testEvalIntOfStringDecimal
 	self assert: (self eval: 'int("0")') equals: 0
 %
 
-category: 'Tests - Runtime'
+category: 'Grail-Tests - Runtime'
 method: ClassCallFastPathTestCase
 testEvalFloatOfString
 	"float('3.14') parses the string and returns the float."
@@ -230,7 +230,7 @@ testEvalFloatOfString
 	self assert: ((self eval: 'float("3.14")') - 3.14) abs < 0.0001
 %
 
-category: 'Tests - Runtime'
+category: 'Grail-Tests - Runtime'
 method: ClassCallFastPathTestCase
 testEvalObjectZeroArg
 	"object() returns a fresh Object instance."
@@ -241,7 +241,7 @@ testEvalObjectZeroArg
 	self assert: (result isKindOf: Object)
 %
 
-category: 'Tests - Runtime'
+category: 'Grail-Tests - Runtime'
 method: ClassCallFastPathTestCase
 testEvalStrUnaffected
 	"str(42) still works (it routes through the builtins fast path).
@@ -255,7 +255,7 @@ testEvalStrUnaffected
 ! Negative tests
 ! ===============================================================================
 
-category: 'Tests - Negative'
+category: 'Grail-Tests - Negative'
 method: ClassCallFastPathTestCase
 testEvalBoolWrongArityRaisesTypeError
 	"`bool(1, 2)` raises Python TypeError instead of MessageNotUnderstood
@@ -264,7 +264,7 @@ testEvalBoolWrongArityRaisesTypeError
 	self should: [self eval: 'bool(1, 2)'] raise: TypeError
 %
 
-category: 'Tests - Negative'
+category: 'Grail-Tests - Negative'
 method: ClassCallFastPathTestCase
 testShadowedNameSkipsFastPath
 	"If a local rebinds `bool`, `bool(x)` resolves to the local — the
@@ -287,7 +287,7 @@ result = bool(1)']
 ! signatures (with cls as first argument). After refactor they have
 ! `__new__: arg` (receiver IS cls). Verify the bare-name class call works.
 
-category: 'Tests - Runtime - Group A refactor'
+category: 'Grail-Tests - Runtime - Group A refactor'
 method: ClassCallFastPathTestCase
 testEvalDecimalOfString
 	"Decimal('123.45') constructs a Decimal from a string. After the
@@ -300,7 +300,7 @@ testEvalDecimalOfString
 	self assert: d asString equals: '123.45'
 %
 
-category: 'Tests - Runtime - Group A refactor'
+category: 'Grail-Tests - Runtime - Group A refactor'
 method: ClassCallFastPathTestCase
 testEvalDecimalOfInteger
 	"Decimal(42) constructs from an integer."
@@ -311,7 +311,7 @@ testEvalDecimalOfInteger
 	self assert: d asInteger equals: 42
 %
 
-category: 'Tests - Runtime - Group A refactor'
+category: 'Grail-Tests - Runtime - Group A refactor'
 method: ClassCallFastPathTestCase
 testEvalRangeOneArg
 	"range(stop) creates an Interval from 0 to stop-1. After refactor
@@ -325,7 +325,7 @@ testEvalRangeOneArg
 	self assert: r last equals: 4
 %
 
-category: 'Tests - Runtime - Group A refactor'
+category: 'Grail-Tests - Runtime - Group A refactor'
 method: ClassCallFastPathTestCase
 testEvalRangeTwoArgs
 	"range(start, stop) creates an Interval from start to stop-1."
@@ -337,7 +337,7 @@ testEvalRangeTwoArgs
 	self assert: r last equals: 6
 %
 
-category: 'Tests - Runtime - Group A refactor'
+category: 'Grail-Tests - Runtime - Group A refactor'
 method: ClassCallFastPathTestCase
 testEvalRangeThreeArgs
 	"range(start, stop, step) creates an Interval with explicit step."
@@ -349,7 +349,7 @@ testEvalRangeThreeArgs
 	self assert: r last equals: 8
 %
 
-category: 'Tests - Runtime - Group A refactor'
+category: 'Grail-Tests - Runtime - Group A refactor'
 method: ClassCallFastPathTestCase
 testEvalBytesEmpty
 	"bytes() returns an empty ByteArray."
@@ -360,7 +360,7 @@ testEvalBytesEmpty
 	self assert: b size equals: 0
 %
 
-category: 'Tests - Runtime - Group A refactor'
+category: 'Grail-Tests - Runtime - Group A refactor'
 method: ClassCallFastPathTestCase
 testEvalBytesFromInteger
 	"bytes(5) creates 5 zero bytes."
@@ -372,7 +372,7 @@ testEvalBytesFromInteger
 	self assert: (b at: 5) equals: 0
 %
 
-category: 'Tests - Runtime - Group A refactor'
+category: 'Grail-Tests - Runtime - Group A refactor'
 method: ClassCallFastPathTestCase
 testEvalBytearrayEmpty
 	"bytearray() returns an empty bytearray."
@@ -390,7 +390,7 @@ testEvalBytearrayEmpty
 ! `value:value:` path and signalled MessageNotUnderstood. The fast path now
 ! finds the inherited or directly-defined __new__ and emits a clean send.
 
-category: 'Tests - Runtime - Collection __new__'
+category: 'Grail-Tests - Runtime - Collection __new__'
 method: ClassCallFastPathTestCase
 testEvalListEmpty
 	"list() returns an empty list."
@@ -401,7 +401,7 @@ testEvalListEmpty
 	self assert: lst size equals: 0
 %
 
-category: 'Tests - Runtime - Collection __new__'
+category: 'Grail-Tests - Runtime - Collection __new__'
 method: ClassCallFastPathTestCase
 testEvalListFromTuple
 	"list((1, 2, 3)) builds a list from the tuple's elements."
@@ -414,7 +414,7 @@ testEvalListFromTuple
 	self assert: (lst at: 3) equals: 3
 %
 
-category: 'Tests - Runtime - Collection __new__'
+category: 'Grail-Tests - Runtime - Collection __new__'
 method: ClassCallFastPathTestCase
 testEvalListFromString
 	"list('abc') builds a list of single-char strings, using the
@@ -425,7 +425,7 @@ testEvalListFromString
 	self assert: lst size equals: 3
 %
 
-category: 'Tests - Runtime - Collection __new__'
+category: 'Grail-Tests - Runtime - Collection __new__'
 method: ClassCallFastPathTestCase
 testEvalTupleEmpty
 	"tuple() returns an empty tuple of size 0."
@@ -436,7 +436,7 @@ testEvalTupleEmpty
 	self assert: t size equals: 0
 %
 
-category: 'Tests - Runtime - Collection __new__'
+category: 'Grail-Tests - Runtime - Collection __new__'
 method: ClassCallFastPathTestCase
 testEvalTupleFromList
 	"tuple([1, 2, 3]) builds a tuple from the list's elements."
@@ -449,7 +449,7 @@ testEvalTupleFromList
 	self assert: (t at: 3) equals: 3
 %
 
-category: 'Tests - Runtime - Collection __new__'
+category: 'Grail-Tests - Runtime - Collection __new__'
 method: ClassCallFastPathTestCase
 testEvalDictEmpty
 	"dict() returns an empty dict."
@@ -460,7 +460,7 @@ testEvalDictEmpty
 	self assert: d size equals: 0
 %
 
-category: 'Tests - Runtime - Collection __new__'
+category: 'Grail-Tests - Runtime - Collection __new__'
 method: ClassCallFastPathTestCase
 testEvalDictFromMapping
 	"dict({'a': 1, 'b': 2}) copies entries from another mapping."
@@ -473,7 +473,7 @@ testEvalDictFromMapping
 	self assert: (d at: 'b') equals: 2
 %
 
-category: 'Tests - Runtime - Collection __new__'
+category: 'Grail-Tests - Runtime - Collection __new__'
 method: ClassCallFastPathTestCase
 testEvalFrozensetEmpty
 	"frozenset() returns an empty Set."
@@ -484,7 +484,7 @@ testEvalFrozensetEmpty
 	self assert: s size equals: 0
 %
 
-category: 'Tests - Runtime - Collection __new__'
+category: 'Grail-Tests - Runtime - Collection __new__'
 method: ClassCallFastPathTestCase
 testEvalFrozensetFromList
 	"frozenset([1, 2, 2, 3]) deduplicates and produces a 3-element Set."
@@ -497,7 +497,7 @@ testEvalFrozensetFromList
 	self assert: (s includes: 3)
 %
 
-category: 'Tests - Runtime - Collection __new__'
+category: 'Grail-Tests - Runtime - Collection __new__'
 method: ClassCallFastPathTestCase
 testEvalSetEmpty
 	"set() returns an empty set (subclass of frozenset)."
@@ -508,7 +508,7 @@ testEvalSetEmpty
 	self assert: s size equals: 0
 %
 
-category: 'Tests - Runtime - Collection __new__'
+category: 'Grail-Tests - Runtime - Collection __new__'
 method: ClassCallFastPathTestCase
 testEvalSetFromList
 	"set([1, 2, 2, 3]) deduplicates. Inherits __new__ from Set (where
@@ -524,7 +524,7 @@ testEvalSetFromList
 ! Discriminator unit tests for inheritance walk
 ! ===============================================================================
 
-category: 'Tests - Discriminators'
+category: 'Grail-Tests - Discriminators'
 method: ClassCallFastPathTestCase
 testCodegenForInheritedNew
 	"`set` inherits __new__ from Set (its GemStone superclass — set

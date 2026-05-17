@@ -35,7 +35,7 @@ Object
 
 expectvalue /Class
 doit
-ExpressionContextAst category: 'Parser'
+ExpressionContextAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from ExpressionContextAst
@@ -44,28 +44,28 @@ removeallclassmethods ExpressionContextAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 classmethod: ExpressionContextAst
 isAbstract
 
 	^self == ExpressionContextAst
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ExpressionContextAst
 assertIsLoad
 
 	self error: 'Expression Context should be <Load> but is <' , self class name , '>'.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ExpressionContextAst
 assertIsStore
 
 	self error: 'Expression Context should be <Store> but is <' , self class name , '>'.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ExpressionContextAst
 isStoreCtx
 

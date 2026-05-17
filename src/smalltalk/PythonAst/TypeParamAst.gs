@@ -18,7 +18,7 @@ AbstractNode subclass: 'TypeParamAst'
 
 expectvalue /Class
 doit
-TypeParamAst category: 'Parser'
+TypeParamAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from TypeParamAst

@@ -18,7 +18,7 @@ PythonTestCase subclass: 'GemStoneTestCase'
 
 expectvalue /Class
 doit
-GemStoneTestCase category: 'SUnit'
+GemStoneTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -35,7 +35,7 @@ GemStoneTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: GemStoneTestCase
 test_delitem
 
@@ -53,7 +53,7 @@ test_delitem
 	] raise: KeyError
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: GemStoneTestCase
 test_delitem_keyError
 
@@ -64,7 +64,7 @@ test_delitem_keyError
 	] raise: KeyError
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: GemStoneTestCase
 test_getitem
 
@@ -74,7 +74,7 @@ test_getitem
 	self assert: userGlobals identical: UserGlobals.
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: GemStoneTestCase
 test_getitem_keyError
 
@@ -85,7 +85,7 @@ test_getitem_keyError
 	] raise: KeyError
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: GemStoneTestCase
 test_setitem_existing
 
@@ -99,7 +99,7 @@ test_setitem_existing
 	self assert: (gs @env1:__getitem__: (str withAll: 'UserGlobals')) identical: UserGlobals.
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: GemStoneTestCase
 test_setitem_new
 
@@ -115,7 +115,7 @@ test_setitem_new
 	UserGlobals @env0:removeKey: #'_grail_test_setitem'.
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: GemStoneTestCase
 test_version
 
@@ -126,7 +126,7 @@ test_version
 	self assert: result equals: expected.
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: GemStoneTestCase
 testGemstoneModuleIsAvailable
 	"Test that gemstone module is registered and importable"
@@ -141,7 +141,7 @@ testGemstoneModuleIsAvailable
 	self assert: result class equals: gemstone
 %
 
-category: 'Tests - Phase 4d Attribute Calls'
+category: 'Grail-Tests - Phase 4d Attribute Calls'
 method: GemStoneTestCase
 testEvalGemstoneVersion
 	"Phase 4d: `gemstone.version` from Python source. Exercises the
@@ -156,7 +156,7 @@ gemstone.version
 	self assert: result equals: expected
 %
 
-category: 'Tests - Phase 4d Attribute Calls'
+category: 'Grail-Tests - Phase 4d Attribute Calls'
 method: GemStoneTestCase
 testEvalGemstoneSetGetDelItem
 	"Exercises __setitem__, __getitem__, and __delitem__ dunder methods

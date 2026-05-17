@@ -58,7 +58,7 @@ list of Python built-in functions.
 
 expectvalue /Class
 doit
-builtins category: 'Modules'
+builtins category: 'Grail-Modules'
 %
 
 ! ===============================================================================
@@ -78,7 +78,7 @@ set compile_env: 1
 ! Singleton initialization
 ! ===============================================================================
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: builtins
 initialize
 	"No-op. The `module>>instance` class method still calls `initialize`
@@ -90,7 +90,7 @@ initialize
 ! Fixed-arity fast-path methods (1 positional argument)
 ! ===============================================================================
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 abs: aNumber
 	"Python builtin abs(x) — fixed-arity fast path."
@@ -98,7 +98,7 @@ abs: aNumber
 	^ [aNumber __abs__] @env0:on: MessageNotUnderstood do: [:ex | TypeError @env0:signal]
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 all: anIterable
 	"Python builtin all(iterable) — fixed-arity fast path."
@@ -122,7 +122,7 @@ all: anIterable
 	^ result
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 any: anIterable
 	"Python builtin any(iterable) — fixed-arity fast path."
@@ -146,7 +146,7 @@ any: anIterable
 	^ result
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 bin: aNumber
 	"Python builtin bin(x) — fixed-arity fast path."
@@ -156,7 +156,7 @@ bin: aNumber
 	^ '0b' @env0:, result
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 callable: anObject
 	"Python builtin callable(x) — fixed-arity fast path."
@@ -166,7 +166,7 @@ callable: anObject
 	^ (objClass @env0:whichClassIncludesSelector: (#__call__:) environmentId: 1) notNil
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 chr: anInteger
 	"Python builtin chr(i) — fixed-arity fast path."
@@ -174,7 +174,7 @@ chr: anInteger
 	^ (Character @env0:codePoint: anInteger) @env0:asString
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 dir: anObject
 	"Python builtin dir(x) — fixed-arity fast path."
@@ -182,7 +182,7 @@ dir: anObject
 	^ anObject __dir__
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 enumerate: anIterable
 	"Python builtin enumerate(iterable) — fixed-arity fast path."
@@ -204,7 +204,7 @@ enumerate: anIterable
 	^ lst __iter__
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 hash: anObject
 	"Python builtin hash(x) — fixed-arity fast path."
@@ -214,7 +214,7 @@ hash: anObject
 	]
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 hex: aNumber
 	"Python builtin hex(x) — fixed-arity fast path."
@@ -224,7 +224,7 @@ hex: aNumber
 	^ '0x' @env0:, (result @env0:asLowercase)
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 id: anObject
 	"Python builtin id(x) — fixed-arity fast path."
@@ -232,7 +232,7 @@ id: anObject
 	^ anObject @env0:identityHash
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 len: anObject
 	"Python builtin len(x) — fixed-arity fast path."
@@ -246,7 +246,7 @@ len: anObject
 	]
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 max: anIterable
 	"Python builtin max(iterable) — fixed-arity fast path."
@@ -271,7 +271,7 @@ max: anIterable
 	^ maxVal
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 min: anIterable
 	"Python builtin min(iterable) — fixed-arity fast path."
@@ -296,7 +296,7 @@ min: anIterable
 	^ minVal
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 oct: aNumber
 	"Python builtin oct(x) — fixed-arity fast path."
@@ -306,7 +306,7 @@ oct: aNumber
 	^ '0o' @env0:, result
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 ord: aString
 	"Python builtin ord(c) — fixed-arity fast path."
@@ -323,7 +323,7 @@ ord: aString
 	^ char @env0:codePoint
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 repr: anObject
 	"Python builtin repr(x) — fixed-arity fast path."
@@ -331,7 +331,7 @@ repr: anObject
 	^ anObject __repr__
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 reversed: aSequence
 	"Python builtin reversed(seq) — fixed-arity fast path."
@@ -342,7 +342,7 @@ reversed: aSequence
 	^ lst __iter__
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 round: aNumber
 	"Python builtin round(x) — fixed-arity fast path (1-arg form).
@@ -351,7 +351,7 @@ round: aNumber
 	^ aNumber @env0:rounded
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 sorted: anIterable
 	"Python builtin sorted(iterable) — fixed-arity fast path."
@@ -370,7 +370,7 @@ sorted: anIterable
 	^ lst @env0:sort: [:a :b | a __lt__: b]
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 str: anObject
 	"Python builtin str(x) — fixed-arity fast path."
@@ -378,7 +378,7 @@ str: anObject
 	^ [anObject __str__] @env0:on: MessageNotUnderstood do: [:ex | anObject __repr__]
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 sum: anIterable
 	"Python builtin sum(iterable) — fixed-arity fast path."
@@ -397,7 +397,7 @@ sum: anIterable
 	^ total
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 type: anObject
 	"Python builtin type(x) — fixed-arity fast path."
@@ -409,7 +409,7 @@ type: anObject
 ! Fixed-arity fast-path methods (2 positional arguments)
 ! ===============================================================================
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 divmod: x _: y
 	"Python builtin divmod(x, y) — fixed-arity fast path.
@@ -421,7 +421,7 @@ divmod: x _: y
 	^ tuple @env0:withAll: {quotient. remainder}
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 isinstance: anObject _: aClassOrTuple
 	"Python builtin isinstance(obj, classinfo) — fixed-arity fast path.
@@ -438,7 +438,7 @@ isinstance: anObject _: aClassOrTuple
 	^ result
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 pow: x _: y
 	"Python builtin pow(x, y) — fixed-arity fast path (2-arg form).
@@ -451,7 +451,7 @@ pow: x _: y
 ! Varargs fast-path methods (`_name:kw:` shape)
 ! ===============================================================================
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 ___import__: positional kw: kwargs
 	"Python builtin __import__(name, globals, locals, fromlist, level)
@@ -466,7 +466,7 @@ ___import__: positional kw: kwargs
 	^ (importlib instance) ___import__: positional kw: kwargs
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 _input: positional kw: kwargs
 	"Python builtin input([prompt]) — varargs fast path. 0-arg form reads
@@ -484,7 +484,7 @@ _input: positional kw: kwargs
 	^ stdin @env0:nextLine
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 _pow: positional kw: kwargs
 	"Python builtin pow(x, y[, z]) — varargs fast path. 2-arg case
@@ -510,7 +510,7 @@ _pow: positional kw: kwargs
 	TypeError ___signal___: 'pow expected 2 or 3 arguments'
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 _print: positional kw: kwargs
 	"Python builtin print(*objects, sep, end, file, flush) — varargs fast
@@ -528,7 +528,7 @@ _print: positional kw: kwargs
 	^ None
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 _exit: positional kw: kwargs
 	"Python builtin exit() — varargs fast path. Alias for quit(); in
@@ -538,7 +538,7 @@ _exit: positional kw: kwargs
 	^ ExitClientError @env0:signal: 'exit()' status: 0
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 _quit: positional kw: kwargs
 	"Python builtin quit() — varargs fast path. Exits the interpreter
@@ -547,7 +547,7 @@ _quit: positional kw: kwargs
 	^ ExitClientError @env0:signal: 'quit()' status: 0
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 _round: positional kw: kwargs
 	"Python builtin round(number[, ndigits]) — varargs fast path.
@@ -568,7 +568,7 @@ _round: positional kw: kwargs
 	^ ((number @env0:* multiplier) @env0:rounded) @env0:/ multiplier
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 _zip: positional kw: kwargs
 	"Python builtin zip(*iterables) — varargs fast path. Each positional

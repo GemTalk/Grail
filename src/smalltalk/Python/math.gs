@@ -27,7 +27,7 @@ See https://docs.python.org/3/library/math.html
 
 expectvalue /Class
 doit
-math category: 'Modules'
+math category: 'Grail-Modules'
 %
 
 ! ------------------- Remove existing Python methods from math
@@ -43,7 +43,7 @@ set compile_env: 1
 ! Initialization — constants only
 ! ===============================================================================
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: math
 initialize
 	self @env0:at: #pi put: (Float @env0:pi).
@@ -57,31 +57,31 @@ initialize
 ! Stored-attribute accessors (constants)
 ! ===============================================================================
 
-category: 'Python-Mathematical Constants'
+category: 'Grail-Mathematical Constants'
 method: math
 pi
 	^ self @env0:at: #pi
 %
 
-category: 'Python-Mathematical Constants'
+category: 'Grail-Mathematical Constants'
 method: math
 e
 	^ self @env0:at: #e
 %
 
-category: 'Python-Mathematical Constants'
+category: 'Grail-Mathematical Constants'
 method: math
 tau
 	^ self @env0:at: #tau
 %
 
-category: 'Python-Mathematical Constants'
+category: 'Grail-Mathematical Constants'
 method: math
 inf
 	^ self @env0:at: #inf
 %
 
-category: 'Python-Mathematical Constants'
+category: 'Grail-Mathematical Constants'
 method: math
 nan
 	^ self @env0:at: #nan
@@ -91,43 +91,43 @@ nan
 ! Fast-path callables — trigonometric
 ! ===============================================================================
 
-category: 'Python-Trigonometric Functions'
+category: 'Grail-Trigonometric Functions'
 method: math
 sin: x
 	^ x @env0:sin
 %
 
-category: 'Python-Trigonometric Functions'
+category: 'Grail-Trigonometric Functions'
 method: math
 cos: x
 	^ x @env0:cos
 %
 
-category: 'Python-Trigonometric Functions'
+category: 'Grail-Trigonometric Functions'
 method: math
 tan: x
 	^ x @env0:tan
 %
 
-category: 'Python-Trigonometric Functions'
+category: 'Grail-Trigonometric Functions'
 method: math
 asin: x
 	^ x @env0:arcSin
 %
 
-category: 'Python-Trigonometric Functions'
+category: 'Grail-Trigonometric Functions'
 method: math
 acos: x
 	^ x @env0:arcCos
 %
 
-category: 'Python-Trigonometric Functions'
+category: 'Grail-Trigonometric Functions'
 method: math
 atan: x
 	^ x @env0:arcTan
 %
 
-category: 'Python-Trigonometric Functions'
+category: 'Grail-Trigonometric Functions'
 method: math
 atan2: y _: x
 	^ (y @env0:asFloat) @env0:arcTan2: (x @env0:asFloat)
@@ -137,37 +137,37 @@ atan2: y _: x
 ! Fast-path callables — hyperbolic
 ! ===============================================================================
 
-category: 'Python-Hyperbolic Functions'
+category: 'Grail-Hyperbolic Functions'
 method: math
 sinh: x
 	^ (x @env0:asFloat) @env0:sinh
 %
 
-category: 'Python-Hyperbolic Functions'
+category: 'Grail-Hyperbolic Functions'
 method: math
 cosh: x
 	^ (x @env0:asFloat) @env0:cosh
 %
 
-category: 'Python-Hyperbolic Functions'
+category: 'Grail-Hyperbolic Functions'
 method: math
 tanh: x
 	^ (x @env0:asFloat) @env0:tanh
 %
 
-category: 'Python-Hyperbolic Functions'
+category: 'Grail-Hyperbolic Functions'
 method: math
 asinh: x
 	^ (x @env0:asFloat) @env0:arcSinh
 %
 
-category: 'Python-Hyperbolic Functions'
+category: 'Grail-Hyperbolic Functions'
 method: math
 acosh: x
 	^ (x @env0:asFloat) @env0:arcCosh
 %
 
-category: 'Python-Hyperbolic Functions'
+category: 'Grail-Hyperbolic Functions'
 method: math
 atanh: x
 	^ (x @env0:asFloat) @env0:arcTanh
@@ -177,33 +177,33 @@ atanh: x
 ! Fast-path callables — exponential and logarithmic
 ! ===============================================================================
 
-category: 'Python-Exponential and Logarithmic'
+category: 'Grail-Exponential and Logarithmic'
 method: math
 exp: x
 	^ x @env0:exp
 %
 
-category: 'Python-Exponential and Logarithmic'
+category: 'Grail-Exponential and Logarithmic'
 method: math
 log: x
 	"math.log(x) — natural logarithm. Delegates to log:_: with base e."
 	^ self log: x _: (self e)
 %
 
-category: 'Python-Exponential and Logarithmic'
+category: 'Grail-Exponential and Logarithmic'
 method: math
 log: x _: base
 	"math.log(x, base) — logarithm of x to the given base."
 	^ (x @env0:ln) @env0:/ (base @env0:ln)
 %
 
-category: 'Python-Exponential and Logarithmic'
+category: 'Grail-Exponential and Logarithmic'
 method: math
 log10: x
 	^ (x @env0:asFloat) @env0:log10
 %
 
-category: 'Python-Exponential and Logarithmic'
+category: 'Grail-Exponential and Logarithmic'
 method: math
 log2: x
 	| ln2 |
@@ -211,13 +211,13 @@ log2: x
 	^ (x @env0:ln) @env0:/ ln2
 %
 
-category: 'Python-Exponential and Logarithmic'
+category: 'Grail-Exponential and Logarithmic'
 method: math
 sqrt: x
 	^ x @env0:sqrt
 %
 
-category: 'Python-Exponential and Logarithmic'
+category: 'Grail-Exponential and Logarithmic'
 method: math
 pow: x _: y
 	"math.pow(x, y) — x raised to the power y (as float)."
@@ -228,25 +228,25 @@ pow: x _: y
 ! Fast-path callables — rounding and integer
 ! ===============================================================================
 
-category: 'Python-Rounding'
+category: 'Grail-Rounding'
 method: math
 ceil: x
 	^ (x @env0:asFloat) @env0:ceiling
 %
 
-category: 'Python-Rounding'
+category: 'Grail-Rounding'
 method: math
 floor: x
 	^ (x @env0:asFloat) @env0:floor
 %
 
-category: 'Python-Rounding'
+category: 'Grail-Rounding'
 method: math
 trunc: x
 	^ (x @env0:asFloat) @env0:truncated
 %
 
-category: 'Python-Rounding'
+category: 'Grail-Rounding'
 method: math
 factorial: n
 	| nInt |
@@ -257,19 +257,19 @@ factorial: n
 	^ nInt @env0:factorial
 %
 
-category: 'Python-Number Theory'
+category: 'Grail-Number Theory'
 method: math
 gcd: a _: b
 	^ (a @env0:asInteger) @env0:gcd: (b @env0:asInteger)
 %
 
-category: 'Python-Number Theory'
+category: 'Grail-Number Theory'
 method: math
 lcm: a _: b
 	^ (a @env0:asInteger) @env0:lcm: (b @env0:asInteger)
 %
 
-category: 'Python-Floating Point Functions'
+category: 'Grail-Floating Point Functions'
 method: math
 fabs: x
 	^ (x @env0:asFloat) @env0:abs
@@ -279,7 +279,7 @@ fabs: x
 ! Fast-path callables — classification
 ! ===============================================================================
 
-category: 'Python-Classification'
+category: 'Grail-Classification'
 method: math
 isfinite: x
 	| kind |
@@ -287,13 +287,13 @@ isfinite: x
 	^ (kind @env0:<= 2) or: [kind == 4]
 %
 
-category: 'Python-Classification'
+category: 'Grail-Classification'
 method: math
 isinf: x
 	^ ((x @env0:asFloat) @env0:_getKind) == 3
 %
 
-category: 'Python-Classification'
+category: 'Grail-Classification'
 method: math
 isnan: x
 	^ (x @env0:asFloat) @env0:_isNaN
@@ -303,13 +303,13 @@ isnan: x
 ! Fast-path callables — angle conversion
 ! ===============================================================================
 
-category: 'Python-Angle Conversion'
+category: 'Grail-Angle Conversion'
 method: math
 degrees: x
 	^ (x @env0:asFloat) @env0:radiansToDegrees
 %
 
-category: 'Python-Angle Conversion'
+category: 'Grail-Angle Conversion'
 method: math
 radians: x
 	^ (x @env0:asFloat) @env0:degreesToRadians

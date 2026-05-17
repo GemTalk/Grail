@@ -17,5 +17,5 @@ Exception subclass: 'RuntimeError'
 
 expectvalue /Class
 doit
-RuntimeError category: 'Exceptions'
+RuntimeError category: 'Grail-Exceptions'
 %

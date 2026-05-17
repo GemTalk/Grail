@@ -17,5 +17,5 @@ Exception subclass: 'BufferError'
 
 expectvalue /Class
 doit
-BufferError category: 'Exceptions'
+BufferError category: 'Grail-Exceptions'
 %

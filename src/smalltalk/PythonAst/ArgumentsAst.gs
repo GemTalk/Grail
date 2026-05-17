@@ -26,7 +26,7 @@ ArgumentsAst comment:
 
 expectvalue /Class
 doit
-ArgumentsAst category: 'Parser'
+ArgumentsAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from ArgumentsAst
@@ -35,49 +35,49 @@ removeallclassmethods ArgumentsAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: ArgumentsAst
 args
 
 	^args
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ArgumentsAst
 defaults
 
 	^defaults
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ArgumentsAst
 kw_defaults
 
 	^kw_defaults
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ArgumentsAst
 kwarg
 
 	^kwarg
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ArgumentsAst
 kwonlyargs
 
 	^kwonlyargs
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ArgumentsAst
 posonlyargs
 
 	^posonlyargs
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ArgumentsAst
 vararg
 

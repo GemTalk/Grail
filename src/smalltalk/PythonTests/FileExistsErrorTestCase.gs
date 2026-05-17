@@ -17,7 +17,7 @@ PythonTestCase subclass: 'FileExistsErrorTestCase'
 %
 expectvalue /Class
 doit
-FileExistsErrorTestCase category: 'SUnit'
+FileExistsErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ FileExistsErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-FileExistsError'
+category: 'Grail-Tests-FileExistsError'
 method: FileExistsErrorTestCase
 test_creation
 	"Test creating a FileExistsError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-FileExistsError'
+category: 'Grail-Tests-FileExistsError'
 method: FileExistsErrorTestCase
 test_inheritance
 	"Test that FileExistsError inherits from OSError."

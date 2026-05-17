@@ -17,7 +17,7 @@ PythonTestCase subclass: 'ZeroDivisionErrorTestCase'
 %
 expectvalue /Class
 doit
-ZeroDivisionErrorTestCase category: 'SUnit'
+ZeroDivisionErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ ZeroDivisionErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-ZeroDivisionError'
+category: 'Grail-Tests-ZeroDivisionError'
 method: ZeroDivisionErrorTestCase
 test_creation
 	"Test creating a ZeroDivisionError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-ZeroDivisionError'
+category: 'Grail-Tests-ZeroDivisionError'
 method: ZeroDivisionErrorTestCase
 test_inheritance
 	"Test that ZeroDivisionError inherits from Exception."

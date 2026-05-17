@@ -18,7 +18,7 @@ builtin_function_or_method class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Callable'
+category: 'Grail-Callable'
 method: builtin_function_or_method
 __call__: args
 	"Call the method with the given arguments"
@@ -27,21 +27,21 @@ __call__: args
 	^ self @env0:valueWithArguments: args
 %
 
-category: 'Python-Type'
+category: 'Grail-Type'
 method: builtin_function_or_method
 __class__
 	"Return the Python type for builtin_function_or_method"
 	^ builtin_function_or_method
 %
 
-category: 'Python-Attributes'
+category: 'Grail-Attributes'
 method: builtin_function_or_method
 __module__
 	"Return the module name (for now, return 'builtins')"
 	^ 'builtins'
 %
 
-category: 'Python-Attributes'
+category: 'Grail-Attributes'
 method: builtin_function_or_method
 __name__
 	"Return the name of the function/method"
@@ -50,7 +50,7 @@ __name__
 	^ selector @env0:asString
 %
 
-category: 'Python-Attributes'
+category: 'Grail-Attributes'
 method: builtin_function_or_method
 __qualname__
 	"Return the qualified name of the function/method"
@@ -69,7 +69,7 @@ __qualname__
 	^ result
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: builtin_function_or_method
 __repr__
 	"Return a string representation of the function/method"
@@ -81,7 +81,7 @@ __repr__
 	^ result
 %
 
-category: 'Python-Attributes'
+category: 'Grail-Attributes'
 method: builtin_function_or_method
 __self__
 	"Return the object the method is bound to"
@@ -89,7 +89,7 @@ __self__
 	AttributeError ___signal___: '__self__'
 %
 
-category: 'Python-Attributes'
+category: 'Grail-Attributes'
 method: builtin_function_or_method
 __text_signature__
 	"Return the text signature (for now, return None)"

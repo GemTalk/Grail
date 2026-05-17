@@ -17,5 +17,5 @@ Warning subclass: 'EncodingWarning'
 
 expectvalue /Class
 doit
-EncodingWarning category: 'Exceptions'
+EncodingWarning category: 'Grail-Exceptions'
 %

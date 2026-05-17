@@ -18,7 +18,7 @@ PythonTestCase subclass: 'HtmlTestCase'
 
 expectvalue /Class
 doit
-HtmlTestCase category: 'SUnit'
+HtmlTestCase category: 'Grail-SUnit'
 %
 
 set compile_env: 0
@@ -27,7 +27,7 @@ set compile_env: 0
 ! Tests - html.escape
 ! ===============================================================================
 
-category: 'Tests - escape'
+category: 'Grail-Tests - escape'
 method: HtmlTestCase
 testEscapeBasic
 	"Test escaping basic HTML special characters."
@@ -39,7 +39,7 @@ result
 ') equals: '&lt;div&gt;'.
 %
 
-category: 'Tests - escape'
+category: 'Grail-Tests - escape'
 method: HtmlTestCase
 testEscapeAmpersand
 	"Test that & is escaped and does not double-escape."
@@ -51,7 +51,7 @@ result
 ') equals: 'AT&amp;T'.
 %
 
-category: 'Tests - escape'
+category: 'Grail-Tests - escape'
 method: HtmlTestCase
 testEscapeQuotes
 	"Test that quotes are escaped by default."
@@ -63,7 +63,7 @@ result
 ') equals: '&lt;div class=&quot;x&quot;&gt;'.
 %
 
-category: 'Tests - escape'
+category: 'Grail-Tests - escape'
 method: HtmlTestCase
 testEscapeSingleQuotes
 	"Test that single quotes are escaped by default."
@@ -75,7 +75,7 @@ result
 ') equals: 'it&#x27;s'.
 %
 
-category: 'Tests - escape'
+category: 'Grail-Tests - escape'
 method: HtmlTestCase
 testEscapeNoQuotes
 	"Test that quotes are not escaped when quote=False."
@@ -87,7 +87,7 @@ result
 ') equals: '&lt;b&gt;"bold"&lt;/b&gt;'.
 %
 
-category: 'Tests - escape'
+category: 'Grail-Tests - escape'
 method: HtmlTestCase
 testEscapeNoSpecialChars
 	"Test that plain text is returned unchanged."
@@ -103,7 +103,7 @@ result
 ! Tests - html.unescape
 ! ===============================================================================
 
-category: 'Tests - unescape'
+category: 'Grail-Tests - unescape'
 method: HtmlTestCase
 testUnescapeBasic
 	"Test unescaping basic HTML entities."
@@ -115,7 +115,7 @@ result
 ') equals: '<&>'.
 %
 
-category: 'Tests - unescape'
+category: 'Grail-Tests - unescape'
 method: HtmlTestCase
 testUnescapeDecimal
 	"Test unescaping decimal numeric references."
@@ -127,7 +127,7 @@ result
 ') equals: '<'.
 %
 
-category: 'Tests - unescape'
+category: 'Grail-Tests - unescape'
 method: HtmlTestCase
 testUnescapeHex
 	"Test unescaping hex numeric references."
@@ -139,7 +139,7 @@ result
 ') equals: '<'.
 %
 
-category: 'Tests - unescape'
+category: 'Grail-Tests - unescape'
 method: HtmlTestCase
 testUnescapeQuot
 	"Test unescaping &quot; entity."
@@ -151,7 +151,7 @@ result
 ') equals: '"hello"'.
 %
 
-category: 'Tests - unescape'
+category: 'Grail-Tests - unescape'
 method: HtmlTestCase
 testUnescapeNoEntities
 	"Test that plain text is returned unchanged."
@@ -163,7 +163,7 @@ result
 ') equals: 'hello world'.
 %
 
-category: 'Tests - unescape'
+category: 'Grail-Tests - unescape'
 method: HtmlTestCase
 testUnescapeUnknownEntity
 	"Test that unknown entities are left as-is."
@@ -175,7 +175,7 @@ result
 ') equals: '&unknown;'.
 %
 
-category: 'Tests - roundtrip'
+category: 'Grail-Tests - roundtrip'
 method: HtmlTestCase
 testRoundtrip
 	"Test that unescape(escape(s)) returns the original string."
@@ -192,7 +192,7 @@ result
 ! Tests - html.entities
 ! ===============================================================================
 
-category: 'Tests - entities'
+category: 'Grail-Tests - entities'
 method: HtmlTestCase
 testEntitiesName2Codepoint
 	"Test that name2codepoint maps entity names to codepoints."
@@ -204,7 +204,7 @@ result
 ') equals: 38.
 %
 
-category: 'Tests - entities'
+category: 'Grail-Tests - entities'
 method: HtmlTestCase
 testEntitiesName2CodepointGreek
 	"Test that Greek entities are in name2codepoint."
@@ -216,7 +216,7 @@ result
 ') equals: 952.
 %
 
-category: 'Tests - entities'
+category: 'Grail-Tests - entities'
 method: HtmlTestCase
 testEntitiesCodepoint2Name
 	"Test that codepoint2name maps codepoints to entity names."
@@ -228,7 +228,7 @@ result
 ') equals: 'lt'.
 %
 
-category: 'Tests - entities'
+category: 'Grail-Tests - entities'
 method: HtmlTestCase
 testEntitiesEntitydefs
 	"Test that entitydefs maps entity names to character strings."
@@ -240,7 +240,7 @@ result
 ') equals: '&'.
 %
 
-category: 'Tests - entities'
+category: 'Grail-Tests - entities'
 method: HtmlTestCase
 testUnescapeGreekEntity
 	"Test that unescape handles Greek entities from the full table."
@@ -256,7 +256,7 @@ result
 ).
 %
 
-category: 'Tests - entities'
+category: 'Grail-Tests - entities'
 method: HtmlTestCase
 testUnicode16StrMethod
 	"Test that __str__ works on Unicode16 strings (not just Unicode7)."
@@ -272,7 +272,7 @@ testUnicode16StrMethod
 	self assert: result equals: greek.
 %
 
-category: 'Tests - entities'
+category: 'Grail-Tests - entities'
 method: HtmlTestCase
 testUnicode16ReprMethod
 	"Test that __repr__ works on Unicode16 strings."
@@ -285,7 +285,7 @@ testUnicode16ReprMethod
 	self assert: (result includesString: '''').
 %
 
-category: 'Tests - entities'
+category: 'Grail-Tests - entities'
 method: HtmlTestCase
 testUnicode16LenMethod
 	"Test that __len__ works on Unicode16 strings."
@@ -302,7 +302,7 @@ testUnicode16LenMethod
 ! Tests - html5 entity dict
 ! ===============================================================================
 
-category: 'Tests - html5'
+category: 'Grail-Tests - html5'
 method: HtmlTestCase
 testHtml5SingleCodepoint
 	"Test html5 dict for a single-codepoint entity."
@@ -314,7 +314,7 @@ result
 ') equals: '<'.
 %
 
-category: 'Tests - html5'
+category: 'Grail-Tests - html5'
 method: HtmlTestCase
 testHtml5Amp
 	"Test html5 dict for amp entity."
@@ -326,7 +326,7 @@ result
 ') equals: '&'.
 %
 
-category: 'Tests - html5'
+category: 'Grail-Tests - html5'
 method: HtmlTestCase
 testHtml5MultiCodepoint
 	"Test html5 dict for a multi-codepoint entity (acE = U+223E U+0333)."
@@ -340,7 +340,7 @@ len(result)
 	self assert: result equals: 2.
 %
 
-category: 'Tests - html5'
+category: 'Grail-Tests - html5'
 method: HtmlTestCase
 testHtml5Size
 	"Test html5 dict has the expected number of entries."

@@ -18,7 +18,7 @@ PythonTestCase subclass: 'BytesTestCase'
 
 expectvalue /Class
 doit
-BytesTestCase category: 'SUnit'
+BytesTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -35,7 +35,7 @@ BytesTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Tests - Concatenation'
+category: 'Grail-Tests - Concatenation'
 method: BytesTestCase
 test__add__
 	"Test bytes concatenation: b1 + b2"
@@ -50,7 +50,7 @@ test__add__
 	self assert: (result at: 4) equals: 4.
 %
 
-category: 'Tests - Type'
+category: 'Grail-Tests - Type'
 method: BytesTestCase
 test__class__
 	"Test that bytes.__class__ returns bytes type"
@@ -64,7 +64,7 @@ test__class__
 	self assert: result equals: bytes.
 %
 
-category: 'Tests - Sequence Protocol'
+category: 'Grail-Tests - Sequence Protocol'
 method: BytesTestCase
 test__contains__
 	"Test membership: x in bytes"
@@ -77,7 +77,7 @@ test__contains__
 	self deny: (b @env1:__contains__: 256).
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: BytesTestCase
 test__eq__
 	"Test bytes equality"
@@ -91,7 +91,7 @@ test__eq__
 	self deny: (b1 @env1:__eq__: b3).
 %
 
-category: 'Tests - Sequence Protocol'
+category: 'Grail-Tests - Sequence Protocol'
 method: BytesTestCase
 test__getitem__
 	"Test indexing: b[i]"
@@ -103,7 +103,7 @@ test__getitem__
 	self assert: (b @env1:__getitem__: 2) equals: 67.
 %
 
-category: 'Tests - Sequence Protocol'
+category: 'Grail-Tests - Sequence Protocol'
 method: BytesTestCase
 test__getitem__negative
 	"Test negative indexing: b[-1]"
@@ -115,7 +115,7 @@ test__getitem__negative
 	self assert: (b @env1:__getitem__: -3) equals: 65.
 %
 
-category: 'Tests - Sequence Protocol'
+category: 'Grail-Tests - Sequence Protocol'
 method: BytesTestCase
 test__getitem__outOfRange
 	"Test index out of range raises IndexError"
@@ -126,7 +126,7 @@ test__getitem__outOfRange
 	self should: [b @env1:__getitem__: -10] raise: IndexError.
 %
 
-category: 'Tests - Hashing'
+category: 'Grail-Tests - Hashing'
 method: BytesTestCase
 test__hash__
 	"Test bytes hashing"
@@ -142,7 +142,7 @@ test__hash__
 	self assert: h1 equals: h2.
 %
 
-category: 'Tests - Sequence Protocol'
+category: 'Grail-Tests - Sequence Protocol'
 method: BytesTestCase
 test__len__
 	"Test len(bytes)"
@@ -152,7 +152,7 @@ test__len__
 	self assert: b size equals: 3.
 %
 
-category: 'Tests - Concatenation'
+category: 'Grail-Tests - Concatenation'
 method: BytesTestCase
 test__mul__
 	"Test bytes repetition: b * n"
@@ -167,7 +167,7 @@ test__mul__
 	self assert: (result at: 5) equals: 1.
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: BytesTestCase
 test__ne__
 	"Test bytes inequality"
@@ -180,7 +180,7 @@ test__ne__
 	self deny: (b1 @env1:__ne__: b1).
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: BytesTestCase
 test__new__empty
 	"Test bytes() constructor"
@@ -190,7 +190,7 @@ test__new__empty
 	self assert: result size equals: 0.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: BytesTestCase
 test__new__fromBytes
 	"Test bytes(b'hello') creates a copy"
@@ -204,7 +204,7 @@ test__new__fromBytes
 	self deny: (copy == original).
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: BytesTestCase
 test__new__fromInteger
 	"Test bytes(n) - create n zero bytes"
@@ -216,7 +216,7 @@ test__new__fromInteger
 	self assert: (result at: 5) equals: 0.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: BytesTestCase
 test__new__fromIntegerNegative
 	"Test bytes(-1) raises ValueError"
@@ -226,7 +226,7 @@ test__new__fromIntegerNegative
 		raise: ValueError.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: BytesTestCase
 test__new__fromList
 	"Test bytes([65, 66, 67]) creates b'ABC'"
@@ -244,7 +244,7 @@ test__new__fromList
 	self assert: (result at: 3) equals: 67.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: BytesTestCase
 test__new__fromListInvalidByte
 	"Test bytes([256]) raises ValueError"
@@ -258,7 +258,7 @@ test__new__fromListInvalidByte
 		raise: ValueError.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: BytesTestCase
 test__new__fromRange
 	"Test bytes(range(65, 68)) creates b'ABC'"
@@ -273,7 +273,7 @@ test__new__fromRange
 	self assert: (result at: 3) equals: 67.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: BytesTestCase
 test__new__fromStringAscii
 	"Test bytes('hello', 'ascii')"
@@ -287,7 +287,7 @@ test__new__fromStringAscii
 	self assert: (result at: 5) equals: 111.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: BytesTestCase
 test__new__fromStringLatin1
 	"Test bytes('hello', 'latin-1')"
@@ -299,7 +299,7 @@ test__new__fromStringLatin1
 	self assert: result size equals: 5.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: BytesTestCase
 test__new__fromStringNoEncoding
 	"Test bytes('hello') raises TypeError"
@@ -312,7 +312,7 @@ test__new__fromStringNoEncoding
 		raise: TypeError.
 %
 
-category: 'Tests - Initialization'
+category: 'Grail-Tests - Initialization'
 method: BytesTestCase
 test__new__fromStringUtf8
 	"Test bytes('hello', 'utf-8')"
@@ -324,7 +324,7 @@ test__new__fromStringUtf8
 	self assert: result size equals: 5.
 %
 
-category: 'Tests - String Representation'
+category: 'Grail-Tests - String Representation'
 method: BytesTestCase
 test__repr__
 	"Test bytes.__repr__()"
@@ -338,7 +338,7 @@ test__repr__
 	self assert: ((result at: 2) codePoint) == 39.
 %
 
-category: 'Tests - Sequence Protocol'
+category: 'Grail-Tests - Sequence Protocol'
 method: BytesTestCase
 test__setitem__immutable
 	"Test that bytes is immutable"
@@ -348,7 +348,7 @@ test__setitem__immutable
 	self should: [b @env1:__setitem__: 0 _: 99] raise: TypeError.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_capitalize
 	"Test bytes.capitalize()"
@@ -360,7 +360,7 @@ test_capitalize
 	self assert: (result at: 7) equals: 119.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_center
 	"Test bytes.center(width)"
@@ -373,7 +373,7 @@ test_center
 	self assert: (result at: 4) equals: 97.
 %
 
-category: 'Tests - Sequence Methods'
+category: 'Grail-Tests - Sequence Methods'
 method: BytesTestCase
 test_count
 	"Test bytes.count(x)"
@@ -385,7 +385,7 @@ test_count
 	self assert: (b @env1:count: 68) equals: 0.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_decode_ascii
 	"Test bytes.decode('ascii')"
@@ -396,7 +396,7 @@ test_decode_ascii
 	self assert: result equals: 'hello'.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_endswith
 	"Test bytes.endswith(suffix)"
@@ -411,7 +411,7 @@ test_endswith
 	self deny: (b @env1:endswith: suffix).
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_expandtabs
 	"Test bytes.expandtabs()"
@@ -423,7 +423,7 @@ test_expandtabs
 	self assert: result size > 9.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_find
 	"Test bytes.find(sub)"
@@ -438,7 +438,7 @@ test_find
 	self assert: (b @env1:find: sub) equals: -1.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_fromhex
 	"Test bytes.fromhex(string)"
@@ -452,7 +452,7 @@ test_fromhex
 	self assert: (result at: 3) equals: 16.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_hex
 	"Test bytes.hex()"
@@ -463,7 +463,7 @@ test_hex
 	self assert: result equals: 'FF0010'.
 %
 
-category: 'Tests - Sequence Methods'
+category: 'Grail-Tests - Sequence Methods'
 method: BytesTestCase
 test_index
 	"Test bytes.index(x)"
@@ -475,7 +475,7 @@ test_index
 	self assert: (b @env1:index: 67) equals: 2.
 %
 
-category: 'Tests - Sequence Methods'
+category: 'Grail-Tests - Sequence Methods'
 method: BytesTestCase
 test_indexNotFound
 	"Test bytes.index(x) raises ValueError when not found"
@@ -485,7 +485,7 @@ test_indexNotFound
 	self should: [b @env1:index: 99] raise: ValueError.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_isalnum
 	"Test bytes.isalnum()"
@@ -498,7 +498,7 @@ test_isalnum
 	self deny: (b2 @env1:isalnum).
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_isalpha
 	"Test bytes.isalpha()"
@@ -511,7 +511,7 @@ test_isalpha
 	self deny: (b2 @env1:isalpha).
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_isascii
 	"Test bytes.isascii()"
@@ -524,7 +524,7 @@ test_isascii
 	self deny: (b2 @env1:isascii).
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_isdigit
 	"Test bytes.isdigit()"
@@ -537,7 +537,7 @@ test_isdigit
 	self deny: (b2 @env1:isdigit).
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_islower
 	"Test bytes.islower()"
@@ -550,7 +550,7 @@ test_islower
 	self deny: (b2 @env1:islower).
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_isspace
 	"Test bytes.isspace()"
@@ -563,7 +563,7 @@ test_isspace
 	self deny: (b2 @env1:isspace).
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_istitle
 	"Test bytes.istitle()"
@@ -578,7 +578,7 @@ test_istitle
 	self deny: (b3 @env1:istitle).
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_isupper
 	"Test bytes.isupper()"
@@ -591,7 +591,7 @@ test_isupper
 	self deny: (b2 @env1:isupper).
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_join
 	"Test bytes.join(iterable)"
@@ -609,7 +609,7 @@ test_join
 	self assert: (result at: 3) equals: 98.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_ljust
 	"Test bytes.ljust(width)"
@@ -623,7 +623,7 @@ test_ljust
 	self assert: (result at: 10) equals: 32.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_lower
 	"Test bytes.lower()"
@@ -635,7 +635,7 @@ test_lower
 	self assert: (result at: 2) equals: 101.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_lstrip
 	"Test bytes.lstrip()"
@@ -647,7 +647,7 @@ test_lstrip
 	self assert: (result at: 1) equals: 97.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_maketrans
 	"Test bytes.maketrans(from, to)"
@@ -661,7 +661,7 @@ test_maketrans
 	self assert: (table at: 98) equals: 49.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_partition
 	"Test bytes.partition(sep)"
@@ -676,7 +676,7 @@ test_partition
 	self assert: (result at: 3) size equals: 5.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_removeprefix
 	"Test bytes.removeprefix(prefix)"
@@ -690,7 +690,7 @@ test_removeprefix
 	self assert: (result at: 1) equals: 119.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_removesuffix
 	"Test bytes.removesuffix(suffix)"
@@ -704,7 +704,7 @@ test_removesuffix
 	self assert: (result at: 1) equals: 104.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_replace
 	"Test bytes.replace(old, new)"
@@ -719,7 +719,7 @@ test_replace
 	self assert: (result at: 4) equals: 120.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_rfind
 	"Test bytes.rfind(sub)"
@@ -731,7 +731,7 @@ test_rfind
 	self assert: (b @env1:rfind: sub) equals: 2.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_rindex
 	"Test bytes.rindex(sub)"
@@ -743,7 +743,7 @@ test_rindex
 	self assert: (b @env1:rindex: sub) equals: 2.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_rindexNotFound
 	"Test bytes.rindex(sub) raises ValueError when not found"
@@ -755,7 +755,7 @@ test_rindexNotFound
 	self should: [b @env1:rindex: sub] raise: ValueError.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_rjust
 	"Test bytes.rjust(width)"
@@ -769,7 +769,7 @@ test_rjust
 	self assert: (result at: 10) equals: 99.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_rpartition
 	"Test bytes.rpartition(sep)"
@@ -784,7 +784,7 @@ test_rpartition
 	self assert: (result at: 3) size equals: 5.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_rsplit
 	"Test bytes.rsplit(sep, maxsplit)"
@@ -797,7 +797,7 @@ test_rsplit
 	self assert: (result size) equals: 2.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_rsplit_maxsplit
 	"Test bytes.rsplit(sep, maxsplit) - split from right with limit"
@@ -825,7 +825,7 @@ test_rsplit_maxsplit
 	self assert: (part2 at: 1) equals: 100. "d"
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_rsplit_maxsplit_negative
 	"Test bytes.rsplit(sep, -1) - negative maxsplit means unlimited"
@@ -839,7 +839,7 @@ test_rsplit_maxsplit_negative
 	self assert: (result size) equals: 3.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_rsplit_maxsplit_one
 	"Test bytes.rsplit(sep, 1) - split only once from right"
@@ -862,7 +862,7 @@ test_rsplit_maxsplit_one
 	self assert: (part1 at: 1) equals: 100. "d"
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_rstrip
 	"Test bytes.rstrip()"
@@ -874,7 +874,7 @@ test_rstrip
 	self assert: (result at: 4) equals: 99.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_split
 	"Test bytes.split(sep)"
@@ -887,7 +887,7 @@ test_split
 	self assert: (result size) equals: 3.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_split_maxsplit
 	"Test bytes.split(sep, maxsplit) - split from left with limit"
@@ -915,7 +915,7 @@ test_split_maxsplit
 	self assert: (part2 at: 3) equals: 100. "d"
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_split_maxsplit_negative
 	"Test bytes.split(sep, -1) - negative maxsplit means unlimited"
@@ -929,7 +929,7 @@ test_split_maxsplit_negative
 	self assert: (result size) equals: 3.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_split_maxsplit_one
 	"Test bytes.split(sep, 1) - split only once from left"
@@ -951,7 +951,7 @@ test_split_maxsplit_one
 	self assert: (part1 at: 1) equals: 98.  "b"
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_splitlines
 	"Test bytes.splitlines()"
@@ -964,7 +964,7 @@ test_splitlines
 	self assert: (result at: 1) size equals: 5.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_startswith
 	"Test bytes.startswith(prefix)"
@@ -979,7 +979,7 @@ test_startswith
 	self deny: (b @env1:startswith: prefix).
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_strip
 	"Test bytes.strip()"
@@ -991,7 +991,7 @@ test_strip
 	self assert: (result at: 1) equals: 97.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_swapcase
 	"Test bytes.swapcase()"
@@ -1003,7 +1003,7 @@ test_swapcase
 	self assert: (result at: 7) equals: 119.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_title
 	"Test bytes.title()"
@@ -1015,7 +1015,7 @@ test_title
 	self assert: (result at: 7) equals: 87.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_translate
 	"Test bytes.translate(table)"
@@ -1033,7 +1033,7 @@ test_translate
 	self assert: (result at: 3) equals: 51.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_upper
 	"Test bytes.upper()"
@@ -1045,7 +1045,7 @@ test_upper
 	self assert: (result at: 2) equals: 69.
 %
 
-category: 'Tests - Bytes Methods'
+category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_zfill
 	"Test bytes.zfill(width)"
@@ -1059,7 +1059,7 @@ test_zfill
 	self assert: (result at: 4) equals: 52.
 %
 
-category: 'Tests - Eval'
+category: 'Grail-Tests - Eval'
 method: BytesTestCase
 testEvalBytesConcatenation
 	"Test bytes + bytes via Python source"
@@ -1069,7 +1069,7 @@ testEvalBytesConcatenation
 	self assert: result size equals: 11.
 %
 
-category: 'Tests - Eval'
+category: 'Grail-Tests - Eval'
 method: BytesTestCase
 testEvalBytesContains
 	"Test in operator for bytes via Python source"
@@ -1078,7 +1078,7 @@ testEvalBytesContains
 	self deny: (self eval: '68 in b''ABC''').
 %
 
-category: 'Tests - Eval'
+category: 'Grail-Tests - Eval'
 method: BytesTestCase
 testEvalBytesEquality
 	"Test bytes equality via Python source"
@@ -1087,7 +1087,7 @@ testEvalBytesEquality
 	self deny: (self eval: 'b''abc'' == b''def''').
 %
 
-category: 'Tests - Eval'
+category: 'Grail-Tests - Eval'
 method: BytesTestCase
 testEvalBytesIndexing
 	"Test bytes indexing via Python source"
@@ -1097,7 +1097,7 @@ testEvalBytesIndexing
 	self assert: (self eval: 'b''ABC''[-1]') equals: 67.
 %
 
-category: 'Tests - Eval'
+category: 'Grail-Tests - Eval'
 method: BytesTestCase
 testEvalBytesLen
 	"Test len() on bytes via Python source"
@@ -1106,7 +1106,7 @@ testEvalBytesLen
 	self assert: (self eval: 'len(b'''')') equals: 0.
 %
 
-category: 'Tests - Eval'
+category: 'Grail-Tests - Eval'
 method: BytesTestCase
 testEvalBytesLiteral
 	"Test bytes literal via Python source"
@@ -1119,7 +1119,7 @@ testEvalBytesLiteral
 	self assert: (result at: 5) equals: 111.
 %
 
-category: 'Tests - Eval'
+category: 'Grail-Tests - Eval'
 method: BytesTestCase
 testEvalBytesRepetition
 	"Test bytes * n via Python source"
@@ -1129,7 +1129,7 @@ testEvalBytesRepetition
 	self assert: result size equals: 6.
 %
 
-category: 'Tests - Eval'
+category: 'Grail-Tests - Eval'
 method: BytesTestCase
 testEvalEmptyBytes
 	"Test empty bytes literal via Python source"

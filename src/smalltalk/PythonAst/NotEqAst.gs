@@ -36,7 +36,7 @@ Object
 
 expectvalue /Class
 doit
-NotEqAst category: 'Parser'
+NotEqAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from NotEqAst
@@ -45,7 +45,7 @@ removeallclassmethods NotEqAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: NotEqAst
 printSmalltalkOn: aStream
 

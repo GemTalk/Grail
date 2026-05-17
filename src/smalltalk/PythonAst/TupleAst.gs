@@ -45,7 +45,7 @@ Object
 
 expectvalue /Class
 doit
-TupleAst category: 'Parser'
+TupleAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from TupleAst
@@ -54,14 +54,14 @@ removeallclassmethods TupleAst
 
 set compile_env: 0
 
-category: 'accessing'
+category: 'Grail-accessing'
 method: TupleAst
 elts
 
 	^elts
 %
 
-category: 'other'
+category: 'Grail-other'
 method: TupleAst
 addVariableNamesTo: aStream
 
@@ -70,14 +70,14 @@ addVariableNamesTo: aStream
 	].
 %
 
-category: 'other'
+category: 'Grail-other'
 method: TupleAst
 declareVariable
 
 	elts do: [:each | each declareVariable].
 %
 
-category: 'other'
+category: 'Grail-other'
 method: TupleAst
 printSmalltalkAssignmentOn: aStream 
 
@@ -91,7 +91,7 @@ printSmalltalkAssignmentOn: aStream
 	aStream skip: -2.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: TupleAst
 printSmalltalkOn: aStream
 
@@ -107,7 +107,7 @@ printSmalltalkOn: aStream
 	aStream nextPutAll: '}})'.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: TupleAst
 setTo: aValue scope: aScope
 

@@ -19,7 +19,7 @@ TestCase subclass: 'CPythonTestCase'
 
 expectvalue /Class
 doit
-CPythonTestCase category: 'SUnit'
+CPythonTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -40,7 +40,7 @@ set compile_env: 0
 ! Setup
 ! ===============================================================================
 
-category: 'Setup'
+category: 'Grail-Setup'
 method: CPythonTestCase
 setUp
 	"Ensure the Python interpreter is initialized."
@@ -52,7 +52,7 @@ setUp
 ! Tests - Lifecycle
 ! ===============================================================================
 
-category: 'Tests - Lifecycle'
+category: 'Grail-Tests - Lifecycle'
 method: CPythonTestCase
 testInitialize
 	"The interpreter should be initialized after accessing CPythonLibrary current."
@@ -62,7 +62,7 @@ testInitialize
 	self assert: lib notNil.
 %
 
-category: 'Tests - Lifecycle'
+category: 'Grail-Tests - Lifecycle'
 method: CPythonTestCase
 testIsInitialized
 	"isInitialized should return true."
@@ -74,7 +74,7 @@ testIsInitialized
 ! Tests - Simple Execution
 ! ===============================================================================
 
-category: 'Tests - Simple Execution'
+category: 'Grail-Tests - Simple Execution'
 method: CPythonTestCase
 testRunSimpleString
 	"Running valid Python code should return 0 (success)."
@@ -84,7 +84,7 @@ testRunSimpleString
 	self assert: result equals: 0.
 %
 
-category: 'Tests - Simple Execution'
+category: 'Grail-Tests - Simple Execution'
 method: CPythonTestCase
 testRunSimpleStringError
 	"Running code that raises should signal CPythonError.
@@ -102,7 +102,7 @@ testRunSimpleStringError
 	].
 %
 
-category: 'Tests - Simple Execution'
+category: 'Grail-Tests - Simple Execution'
 method: CPythonTestCase
 testRunSimpleStringSyntaxError
 	"Running invalid syntax should signal CPythonError.
@@ -120,7 +120,7 @@ testRunSimpleStringSyntaxError
 	].
 %
 
-category: 'Tests - Simple Execution'
+category: 'Grail-Tests - Simple Execution'
 method: CPythonTestCase
 testRunStringError
 	"runString: should signal CPythonError with error details preserved."
@@ -130,7 +130,7 @@ testRunStringError
 	] raise: Error.
 %
 
-category: 'Tests - Simple Execution'
+category: 'Grail-Tests - Simple Execution'
 method: CPythonTestCase
 testRunStringSyntaxError
 	"runString: with invalid syntax should signal CPythonError."
@@ -144,7 +144,7 @@ testRunStringSyntaxError
 ! Tests - Integer Conversion
 ! ===============================================================================
 
-category: 'Tests - Integer Conversion'
+category: 'Grail-Tests - Integer Conversion'
 method: CPythonTestCase
 testIntegerFromSmallInt
 	"Create a Python int from 42, read it back."
@@ -155,7 +155,7 @@ testIntegerFromSmallInt
 		ensure: [ obj release ].
 %
 
-category: 'Tests - Integer Conversion'
+category: 'Grail-Tests - Integer Conversion'
 method: CPythonTestCase
 testIntegerFromNegative
 	"Negative integers should round-trip."
@@ -166,7 +166,7 @@ testIntegerFromNegative
 		ensure: [ obj release ].
 %
 
-category: 'Tests - Integer Conversion'
+category: 'Grail-Tests - Integer Conversion'
 method: CPythonTestCase
 testIntegerFromZero
 	"Zero should round-trip."
@@ -177,7 +177,7 @@ testIntegerFromZero
 		ensure: [ obj release ].
 %
 
-category: 'Tests - Integer Conversion'
+category: 'Grail-Tests - Integer Conversion'
 method: CPythonTestCase
 testIntegerRoundTrip
 	"Create a Python int, convert to str, read back as Smalltalk String."
@@ -195,7 +195,7 @@ testIntegerRoundTrip
 ! Tests - Float Conversion
 ! ===============================================================================
 
-category: 'Tests - Float Conversion'
+category: 'Grail-Tests - Float Conversion'
 method: CPythonTestCase
 testFloatFromDouble
 	"Create a Python float from 3.14, read it back."
@@ -206,7 +206,7 @@ testFloatFromDouble
 		ensure: [ obj release ].
 %
 
-category: 'Tests - Float Conversion'
+category: 'Grail-Tests - Float Conversion'
 method: CPythonTestCase
 testFloatFromNegative
 	"Negative floats should round-trip."
@@ -217,7 +217,7 @@ testFloatFromNegative
 		ensure: [ obj release ].
 %
 
-category: 'Tests - Float Conversion'
+category: 'Grail-Tests - Float Conversion'
 method: CPythonTestCase
 testFloatFromZero
 	"Float zero should round-trip."
@@ -232,7 +232,7 @@ testFloatFromZero
 ! Tests - String Conversion
 ! ===============================================================================
 
-category: 'Tests - String Conversion'
+category: 'Grail-Tests - String Conversion'
 method: CPythonTestCase
 testStringFromString
 	"Create a Python str from 'hello', read it back."
@@ -243,7 +243,7 @@ testStringFromString
 		ensure: [ obj release ].
 %
 
-category: 'Tests - String Conversion'
+category: 'Grail-Tests - String Conversion'
 method: CPythonTestCase
 testStringEmpty
 	"Empty string should round-trip."
@@ -258,7 +258,7 @@ testStringEmpty
 ! Tests - Boolean Conversion
 ! ===============================================================================
 
-category: 'Tests - Boolean Conversion'
+category: 'Grail-Tests - Boolean Conversion'
 method: CPythonTestCase
 testBooleanTrue
 	"Python True should convert to Smalltalk true."
@@ -269,7 +269,7 @@ testBooleanTrue
 		ensure: [ obj release ].
 %
 
-category: 'Tests - Boolean Conversion'
+category: 'Grail-Tests - Boolean Conversion'
 method: CPythonTestCase
 testBooleanFalse
 	"Python False should convert to Smalltalk false."
@@ -284,7 +284,7 @@ testBooleanFalse
 ! Tests - None
 ! ===============================================================================
 
-category: 'Tests - None'
+category: 'Grail-Tests - None'
 method: CPythonTestCase
 testNone
 	"Py_None should be non-nil and falsy."
@@ -297,7 +297,7 @@ testNone
 	] ensure: [ obj release ].
 %
 
-category: 'Tests - None'
+category: 'Grail-Tests - None'
 method: CPythonTestCase
 testNoneStr
 	"str(None) should return 'None'."
@@ -315,7 +315,7 @@ testNoneStr
 ! Tests - Module Import
 ! ===============================================================================
 
-category: 'Tests - Module Import'
+category: 'Grail-Tests - Module Import'
 method: CPythonTestCase
 testImportMath
 	"Should import the math module."
@@ -328,7 +328,7 @@ testImportMath
 	] ensure: [ mod release ].
 %
 
-category: 'Tests - Module Import'
+category: 'Grail-Tests - Module Import'
 method: CPythonTestCase
 testImportSys
 	"Should import the sys module."
@@ -339,7 +339,7 @@ testImportSys
 		ensure: [ mod release ].
 %
 
-category: 'Tests - Module Import'
+category: 'Grail-Tests - Module Import'
 method: CPythonTestCase
 testImportNonexistent
 	"Importing a nonexistent module should signal CPythonError."
@@ -353,7 +353,7 @@ testImportNonexistent
 ! Tests - Attribute Access
 ! ===============================================================================
 
-category: 'Tests - Attribute Access'
+category: 'Grail-Tests - Attribute Access'
 method: CPythonTestCase
 testGetAttribute
 	"Get math.pi and verify it is approximately 3.14159."
@@ -367,7 +367,7 @@ testGetAttribute
 	] ensure: [ mod release ].
 %
 
-category: 'Tests - Attribute Access'
+category: 'Grail-Tests - Attribute Access'
 method: CPythonTestCase
 testSetAttribute
 	"Set and read back a custom attribute on a module."
@@ -386,7 +386,7 @@ testSetAttribute
 	].
 %
 
-category: 'Tests - Attribute Access'
+category: 'Grail-Tests - Attribute Access'
 method: CPythonTestCase
 testGetAttributeNonexistent
 	"Getting a nonexistent attribute should signal CPythonError."
@@ -404,7 +404,7 @@ testGetAttributeNonexistent
 ! Tests - Calling
 ! ===============================================================================
 
-category: 'Tests - Calling'
+category: 'Grail-Tests - Calling'
 method: CPythonTestCase
 testCallFunction
 	"Call math.sqrt(25.0) and verify the result is 5.0."
@@ -426,7 +426,7 @@ testCallFunction
 	] ensure: [ mod release ].
 %
 
-category: 'Tests - Calling'
+category: 'Grail-Tests - Calling'
 method: CPythonTestCase
 testCallWithNoArgs
 	"Call sys.getrecursionlimit() and verify it returns a positive integer."
@@ -443,7 +443,7 @@ testCallWithNoArgs
 	] ensure: [ mod release ].
 %
 
-category: 'Tests - Calling'
+category: 'Grail-Tests - Calling'
 method: CPythonTestCase
 testCallNonCallable
 	"Calling a non-callable should signal CPythonError."
@@ -459,7 +459,7 @@ testCallNonCallable
 ! Tests - Tuple
 ! ===============================================================================
 
-category: 'Tests - Tuple'
+category: 'Grail-Tests - Tuple'
 method: CPythonTestCase
 testTupleCreate
 	"Create a tuple of size 2, set items, verify size."
@@ -473,7 +473,7 @@ testTupleCreate
 	] ensure: [ tuple release ].
 %
 
-category: 'Tests - Tuple'
+category: 'Grail-Tests - Tuple'
 method: CPythonTestCase
 testTupleGetItem
 	"Create a tuple, set items, get them back."
@@ -492,7 +492,7 @@ testTupleGetItem
 	] ensure: [ tuple release ].
 %
 
-category: 'Tests - Tuple'
+category: 'Grail-Tests - Tuple'
 method: CPythonTestCase
 testTupleAsArg
 	"Use a tuple as argument to math.sqrt."
@@ -517,7 +517,7 @@ testTupleAsArg
 ! Tests - List
 ! ===============================================================================
 
-category: 'Tests - List'
+category: 'Grail-Tests - List'
 method: CPythonTestCase
 testListCreate
 	"Create a list, set items, verify size."
@@ -531,7 +531,7 @@ testListCreate
 	] ensure: [ list release ].
 %
 
-category: 'Tests - List'
+category: 'Grail-Tests - List'
 method: CPythonTestCase
 testListAppend
 	"Create an empty list, append items, verify size."
@@ -552,7 +552,7 @@ testListAppend
 ! Tests - Dict
 ! ===============================================================================
 
-category: 'Tests - Dict'
+category: 'Grail-Tests - Dict'
 method: CPythonTestCase
 testDictCreate
 	"Create a dict, add entries, verify size."
@@ -569,7 +569,7 @@ testDictCreate
 	].
 %
 
-category: 'Tests - Dict'
+category: 'Grail-Tests - Dict'
 method: CPythonTestCase
 testDictGetItem
 	"Set a dict item and get it back."
@@ -588,7 +588,7 @@ testDictGetItem
 	].
 %
 
-category: 'Tests - Dict'
+category: 'Grail-Tests - Dict'
 method: CPythonTestCase
 testDictGetItemMissing
 	"Getting a missing key should return nil (not signal an error)."
@@ -605,7 +605,7 @@ testDictGetItemMissing
 ! Tests - Type Inspection
 ! ===============================================================================
 
-category: 'Tests - Type Inspection'
+category: 'Grail-Tests - Type Inspection'
 method: CPythonTestCase
 testType
 	"Get the type of an integer object."
@@ -622,7 +622,7 @@ testType
 	] ensure: [ obj release ].
 %
 
-category: 'Tests - Type Inspection'
+category: 'Grail-Tests - Type Inspection'
 method: CPythonTestCase
 testIsCallable
 	"An integer is not callable; math.sqrt is."
@@ -640,7 +640,7 @@ testIsCallable
 	] ensure: [ mod release ].
 %
 
-category: 'Tests - Type Inspection'
+category: 'Grail-Tests - Type Inspection'
 method: CPythonTestCase
 testStr
 	"str(42) should return '42'."
@@ -654,7 +654,7 @@ testStr
 	] ensure: [ obj release ].
 %
 
-category: 'Tests - Type Inspection'
+category: 'Grail-Tests - Type Inspection'
 method: CPythonTestCase
 testRepr
 	"repr('hello') should return the quoted form."
@@ -672,7 +672,7 @@ testRepr
 ! Tests - Error Handling
 ! ===============================================================================
 
-category: 'Tests - Error Handling'
+category: 'Grail-Tests - Error Handling'
 method: CPythonTestCase
 testErrorTypeName
 	"A ValueError should produce an Error whose message includes 'ValueError'."
@@ -686,7 +686,7 @@ testErrorTypeName
 	self assert: false description: 'Expected Error was not signaled'.
 %
 
-category: 'Tests - Error Handling'
+category: 'Grail-Tests - Error Handling'
 method: CPythonTestCase
 testErrorMessage
 	"The error message should be propagated."
@@ -700,7 +700,7 @@ testErrorMessage
 	self assert: false description: 'Expected Error was not signaled'.
 %
 
-category: 'Tests - Error Handling'
+category: 'Grail-Tests - Error Handling'
 method: CPythonTestCase
 testDivisionByZero
 	"1/0 should raise ZeroDivisionError."
@@ -718,7 +718,7 @@ testDivisionByZero
 ! Tests - Reference Counting
 ! ===============================================================================
 
-category: 'Tests - Reference Counting'
+category: 'Grail-Tests - Reference Counting'
 method: CPythonTestCase
 testRelease
 	"After release, pointer should be nil."
@@ -729,7 +729,7 @@ testRelease
 	self assert: obj pointer equals: nil.
 %
 
-category: 'Tests - Reference Counting'
+category: 'Grail-Tests - Reference Counting'
 method: CPythonTestCase
 testDoubleReleaseSafe
 	"Releasing twice should not crash."
@@ -741,7 +741,7 @@ testDoubleReleaseSafe
 	self assert: obj pointer equals: nil.
 %
 
-category: 'Tests - Reference Counting'
+category: 'Grail-Tests - Reference Counting'
 method: CPythonTestCase
 testTupleSetItemStealsReference
 	"After tupleAt:put:, the inserted object should no longer be owned."
@@ -760,7 +760,7 @@ testTupleSetItemStealsReference
 ! Tests - Integration
 ! ===============================================================================
 
-category: 'Tests - Integration'
+category: 'Grail-Tests - Integration'
 method: CPythonTestCase
 testCallMathSqrt
 	"Full round-trip: import math, get sqrt, build args, call, extract result."
@@ -782,7 +782,7 @@ testCallMathSqrt
 	] ensure: [ mod release ].
 %
 
-category: 'Tests - Integration'
+category: 'Grail-Tests - Integration'
 method: CPythonTestCase
 testEvalAndExtractResult
 	"Execute Python code, then extract a variable from __main__."
@@ -798,7 +798,7 @@ testEvalAndExtractResult
 	] ensure: [ mainModule release ].
 %
 
-category: 'Tests - Integration'
+category: 'Grail-Tests - Integration'
 method: CPythonTestCase
 testDictRoundTrip
 	"Build a Python dict in Smalltalk, set multiple entries, read them back."
@@ -824,7 +824,7 @@ testDictRoundTrip
 	].
 %
 
-category: 'Tests - Integration'
+category: 'Grail-Tests - Integration'
 method: CPythonTestCase
 testListRoundTrip
 	"Build a Python list, append items, read them back."
@@ -850,7 +850,7 @@ testListRoundTrip
 	].
 %
 
-category: 'Tests - C Extension'
+category: 'Grail-Tests - C Extension'
 method: CPythonTestCase
 testHashlibSha256
 	"Use the hashlib C extension (wraps OpenSSL) to compute a SHA-256 hash.
@@ -867,7 +867,7 @@ testHashlibSha256
 	] ensure: [ mainModule release ].
 %
 
-category: 'Tests - C Extension'
+category: 'Grail-Tests - C Extension'
 method: CPythonTestCase
 testZlibCrc32
 	"Use the zlib C extension to compute a CRC-32 checksum.
@@ -884,7 +884,7 @@ testZlibCrc32
 	] ensure: [ mainModule release ].
 %
 
-category: 'Tests - C Extension'
+category: 'Grail-Tests - C Extension'
 method: CPythonTestCase
 testJsonRoundTrip
 	"Use the json module (backed by the _json C accelerator) for serialization.

@@ -17,5 +17,5 @@ LookupError subclass: 'KeyError'
 
 expectvalue /Class
 doit
-KeyError category: 'Exceptions'
+KeyError category: 'Grail-Exceptions'
 %

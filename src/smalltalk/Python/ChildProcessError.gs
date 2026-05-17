@@ -17,5 +17,5 @@ OSError subclass: 'ChildProcessError'
 
 expectvalue /Class
 doit
-ChildProcessError category: 'Exceptions'
+ChildProcessError category: 'Grail-Exceptions'
 %

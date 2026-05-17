@@ -34,7 +34,7 @@ Instance variables:
 
 expectvalue /Class
 doit
-set_iterator category: 'Collections-Iterators'
+set_iterator category: 'Grail-Collections-Iterators'
 %
 
 ! ===============================================================================
@@ -59,7 +59,7 @@ set_iterator class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Instance Creation'
+category: 'Grail-Instance Creation'
 classmethod: set_iterator
 ___on: aSet
 	"Create a new set_iterator for the given set/frozenset.
@@ -80,35 +80,35 @@ ___on: aSet
 	^ iter
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: set_iterator
 ___collection: aSet
 	"Set the collection being iterated over"
 	collection := aSet
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: set_iterator
 ___elements: anArray
 	"Set the array of elements to iterate over"
 	elements := anArray
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: set_iterator
 ___position: anInteger
 	"Set the current position"
 	position := anInteger
 %
 
-category: 'Python-Type'
+category: 'Grail-Type'
 method: set_iterator
 __class__
 	"Return the Python type for set_iterator"
 	^ set_iterator
 %
 
-category: 'Python-Iterator Protocol'
+category: 'Grail-Iterator Protocol'
 method: set_iterator
 __next__
 	"Return the next item from the set.
@@ -124,7 +124,7 @@ __next__
 	^ item
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: set_iterator
 __repr__
 	"Return a string representation of the set iterator"

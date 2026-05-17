@@ -34,5 +34,5 @@ Wrapping state and methods live on CPythonShim (the singleton).'
 
 expectvalue /Class
 doit
-PyObject category: 'CPython'
+PyObject category: 'Grail-CPython'
 %

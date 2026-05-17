@@ -37,7 +37,7 @@ Object
 
 expectvalue /Class
 doit
-CmpOpAst category: 'Parser'
+CmpOpAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from CmpOpAst
@@ -46,14 +46,14 @@ removeallclassmethods CmpOpAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 classmethod: CmpOpAst
 isAbstract
 
 	^self == CmpOpAst
 %
 
-category: 'other'
+category: 'Grail-other'
 method: CmpOpAst
 printSmalltalkOn: aStream left: left rightList: right rhsTemp: rhsName lhsTemp: lhsName
 

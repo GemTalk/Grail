@@ -17,7 +17,7 @@ PythonTestCase subclass: 'BufferErrorTestCase'
 %
 expectvalue /Class
 doit
-BufferErrorTestCase category: 'SUnit'
+BufferErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ BufferErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-BufferError'
+category: 'Grail-Tests-BufferError'
 method: BufferErrorTestCase
 test_creation
 	"Test creating a BufferError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-BufferError'
+category: 'Grail-Tests-BufferError'
 method: BufferErrorTestCase
 test_inheritance
 	"Test that BufferError inherits from Exception."

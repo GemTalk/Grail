@@ -36,7 +36,7 @@ Object
 
 expectvalue /Class
 doit
-StoreAst category: 'Parser'
+StoreAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from StoreAst
@@ -45,7 +45,7 @@ removeallclassmethods StoreAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: StoreAst
 assertIsStore
 	"Overide to avoid error"

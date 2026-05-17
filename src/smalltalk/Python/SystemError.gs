@@ -17,5 +17,5 @@ Exception subclass: 'SystemError'
 
 expectvalue /Class
 doit
-SystemError category: 'Exceptions'
+SystemError category: 'Grail-Exceptions'
 %

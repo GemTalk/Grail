@@ -17,5 +17,5 @@ OSError subclass: 'InterruptedError'
 
 expectvalue /Class
 doit
-InterruptedError category: 'Exceptions'
+InterruptedError category: 'Grail-Exceptions'
 %

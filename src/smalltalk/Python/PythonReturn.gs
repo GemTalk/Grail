@@ -34,7 +34,7 @@ Instance variables:
 
 expectvalue /Class
 doit
-PythonReturn category: 'Exceptions'
+PythonReturn category: 'Grail-Exceptions'
 %
 
 ! ------------------- Remove existing behavior from PythonReturn
@@ -43,13 +43,13 @@ removeallclassmethods PythonReturn
 
 set compile_env: 0
 
-category: 'Accessing'
+category: 'Grail-Accessing'
 method: PythonReturn
 returnValue
 	^ returnValue
 %
 
-category: 'Accessing'
+category: 'Grail-Accessing'
 method: PythonReturn
 returnValue: aValue
 	returnValue := aValue
@@ -57,13 +57,13 @@ returnValue: aValue
 
 set compile_env: 1
 
-category: 'Accessing'
+category: 'Grail-Accessing'
 method: PythonReturn
 returnValue
 	^ returnValue
 %
 
-category: 'Signalling'
+category: 'Grail-Signalling'
 classmethod: PythonReturn
 ___signal___: aValue
 	| ex |

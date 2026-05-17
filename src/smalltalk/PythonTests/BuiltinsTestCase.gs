@@ -18,7 +18,7 @@ PythonTestCase subclass: 'BuiltinsTestCase'
 
 expectvalue /Class
 doit
-BuiltinsTestCase category: 'SUnit'
+BuiltinsTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ BuiltinsTestCase class removeAllMethods: 0.
 
 set compile_env: 0
 
-category: 'Tests - Numeric Functions'
+category: 'Grail-Tests - Numeric Functions'
 method: BuiltinsTestCase
 testAbs
 	"Test abs() function — Phase-2 fast-path direct method dispatch.
@@ -59,7 +59,7 @@ testAbs
 	self assert: (result - 3.14) abs < 0.0001
 %
 
-category: 'Tests - Numeric Functions'
+category: 'Grail-Tests - Numeric Functions'
 method: BuiltinsTestCase
 testAbsViaEval
 	"Test that `abs(x)` Python source compiles to the Phase-2 fast path
@@ -71,7 +71,7 @@ testAbsViaEval
 	self assert: ((self eval: 'abs(-3.14)') - 3.14) abs < 0.0001
 %
 
-category: 'Tests - Numeric Functions'
+category: 'Grail-Tests - Numeric Functions'
 method: BuiltinsTestCase
 testAbsAsValue
 	"Test that abs can be used as a first-class value via the BoundMethod
@@ -91,7 +91,7 @@ g(0)'.
 	self assert: result equals: 0
 %
 
-category: 'Tests - Numeric Functions'
+category: 'Grail-Tests - Numeric Functions'
 method: BuiltinsTestCase
 testAbsShadowed
 	"Test that a local named `abs` shadows the builtin. The codegen must
@@ -105,7 +105,7 @@ abs'.
 	self assert: result equals: 42
 %
 
-category: 'Tests - Backlog Fixes'
+category: 'Grail-Tests - Backlog Fixes'
 method: BuiltinsTestCase
 testLambdaBasic
 	"Test that basic lambda expressions compile and execute correctly."
@@ -116,7 +116,7 @@ f(5)
 ') equals: 6
 %
 
-category: 'Tests - Backlog Fixes'
+category: 'Grail-Tests - Backlog Fixes'
 method: BuiltinsTestCase
 testLambdaTwoArgs
 	"Test that lambda with two arguments works."
@@ -127,7 +127,7 @@ f(3, 4)
 ') equals: 12
 %
 
-category: 'Tests - Backlog Fixes'
+category: 'Grail-Tests - Backlog Fixes'
 method: BuiltinsTestCase
 testImportBuiltinsDoesNotBreak
 	"Test that `import builtins` does not break builtin calls. The
@@ -139,7 +139,7 @@ import builtins
 abs(-5)') equals: 5
 %
 
-category: 'Tests - Phase 4b Varargs'
+category: 'Grail-Tests - Phase 4b Varargs'
 method: BuiltinsTestCase
 testEvalPow3Arg
 	"Phase 4b: pow(x, y, z) — varargs fast path. The 2-arg form goes
@@ -151,7 +151,7 @@ testEvalPow3Arg
 	self assert: (self eval: 'pow(2, 3)') equals: 8
 %
 
-category: 'Tests - Phase 4b Varargs'
+category: 'Grail-Tests - Phase 4b Varargs'
 method: BuiltinsTestCase
 testEvalRound2Arg
 	"Phase 4b: round(x, n) — varargs fast path through `_round:kw:`."
@@ -164,7 +164,7 @@ testEvalRound2Arg
 	self assert: (self eval: 'round(3.7)') equals: 4
 %
 
-category: 'Tests - Phase 4b Varargs'
+category: 'Grail-Tests - Phase 4b Varargs'
 method: BuiltinsTestCase
 testEvalPrint
 	"Phase 4b: print(...) — varargs fast path through `_print:kw:`.
@@ -176,7 +176,7 @@ testEvalPrint
 	self assert: (self eval: 'print("hello")') == None
 %
 
-category: 'Tests - Phase 4b Varargs'
+category: 'Grail-Tests - Phase 4b Varargs'
 method: BuiltinsTestCase
 testPrintAsValue
 	"Phase 4b: print can be used as a first-class value. The BoundMethod
@@ -188,7 +188,7 @@ f = print
 f(1, 2, 3)') == None
 %
 
-category: 'Tests - Phase 4b Varargs'
+category: 'Grail-Tests - Phase 4b Varargs'
 method: BuiltinsTestCase
 testPow3ArgAsValue
 	"Phase 4b: 3-arg pow() through a first-class function value.
@@ -199,7 +199,7 @@ f = pow
 f(2, 3, 5)') equals: 3
 %
 
-category: 'Tests - Phase 4c Arity Errors'
+category: 'Grail-Tests - Phase 4c Arity Errors'
 method: BuiltinsTestCase
 testAbsWrongArityRaisesTypeError
 	"Phase 4c (Phase 3 replacement): calling a fixed-arity builtin with
@@ -211,7 +211,7 @@ testAbsWrongArityRaisesTypeError
 	self should: [self eval: 'abs()'] raise: TypeError
 %
 
-category: 'Tests - Phase 4c Arity Errors'
+category: 'Grail-Tests - Phase 4c Arity Errors'
 method: BuiltinsTestCase
 testFixedArityWithKwargsRaisesTypeError
 	"Phase 4c: passing kwargs to a fixed-arity-only builtin raises
@@ -222,7 +222,7 @@ testFixedArityWithKwargsRaisesTypeError
 	self should: [self eval: 'len(s="hi")'] raise: TypeError
 %
 
-category: 'Tests - Phase 4c Arity Errors'
+category: 'Grail-Tests - Phase 4c Arity Errors'
 method: BuiltinsTestCase
 testTwoArgWrongArityRaisesTypeError
 	"Phase 4c: 2-arg builtins like `divmod` raise TypeError when called
@@ -234,7 +234,7 @@ testTwoArgWrongArityRaisesTypeError
 %
 
 
-category: 'Tests - Aggregation Functions'
+category: 'Grail-Tests - Aggregation Functions'
 method: BuiltinsTestCase
 testAll
 	"Test all() — Phase-4 fast-path direct method dispatch."
@@ -255,7 +255,7 @@ testAll
 	self assert: result
 %
 
-category: 'Tests - Aggregation Functions'
+category: 'Grail-Tests - Aggregation Functions'
 method: BuiltinsTestCase
 testAny
 	"Test any() — Phase-4 fast-path direct method dispatch."
@@ -276,7 +276,7 @@ testAny
 	self deny: result
 %
 
-category: 'Tests - Numeric Functions'
+category: 'Grail-Tests - Numeric Functions'
 method: BuiltinsTestCase
 testBin
 	"Test bin() — Phase-4 fast-path direct method dispatch."
@@ -294,7 +294,7 @@ testBin
 	self assert: result equals: '0b0'
 %
 
-category: 'Tests - Introspection'
+category: 'Grail-Tests - Introspection'
 method: BuiltinsTestCase
 testCallable
 	"Test callable() — Phase-4 fast-path direct method dispatch.
@@ -321,7 +321,7 @@ testCallable
 	self deny: result
 %
 
-category: 'Tests - String Functions'
+category: 'Grail-Tests - String Functions'
 method: BuiltinsTestCase
 testChr
 	"Test chr() — Phase-4 fast-path direct method dispatch."
@@ -339,7 +339,7 @@ testChr
 	self assert: result equals: '0'
 %
 
-category: 'Tests - Math Functions'
+category: 'Grail-Tests - Math Functions'
 method: BuiltinsTestCase
 testDivmod
 	"Test divmod() — Phase-4 fast-path direct method dispatch."
@@ -360,7 +360,7 @@ testDivmod
 	self assert: remainder equals: 2
 %
 
-category: 'Tests - Sequence Functions'
+category: 'Grail-Tests - Sequence Functions'
 method: BuiltinsTestCase
 testEnumerate
 	"Test enumerate() — Phase-4 fast-path direct method dispatch."
@@ -380,7 +380,7 @@ testEnumerate
 	self assert: (second @env1:__getitem__: 1) equals: 'b'
 %
 
-category: 'Tests - Eval - Numeric Functions'
+category: 'Grail-Tests - Eval - Numeric Functions'
 method: BuiltinsTestCase
 testEvalAbs
 	"Test abs() via Python source"
@@ -390,7 +390,7 @@ testEvalAbs
 	self assert: (self eval: 'abs(0)') equals: 0.
 %
 
-category: 'Tests - Eval - Numeric Functions'
+category: 'Grail-Tests - Eval - Numeric Functions'
 method: BuiltinsTestCase
 testEvalBin
 	"Test bin() via Python source"
@@ -399,7 +399,7 @@ testEvalBin
 	self assert: (self eval: 'bin(0)') equals: '0b0'.
 %
 
-category: 'Tests - Eval - String Functions'
+category: 'Grail-Tests - Eval - String Functions'
 method: BuiltinsTestCase
 testEvalChr
 	"Test chr() via Python source"
@@ -408,7 +408,7 @@ testEvalChr
 	self assert: (self eval: 'chr(97)') equals: 'a'.
 %
 
-category: 'Tests - Eval - Numeric Functions'
+category: 'Grail-Tests - Eval - Numeric Functions'
 method: BuiltinsTestCase
 testEvalHex
 	"Test hex() via Python source"
@@ -417,7 +417,7 @@ testEvalHex
 	self assert: (self eval: 'hex(0)') equals: '0x0'.
 %
 
-category: 'Tests - Eval - Type Functions'
+category: 'Grail-Tests - Eval - Type Functions'
 method: BuiltinsTestCase
 testEvalLen
 	"Test len() via Python source"
@@ -427,7 +427,7 @@ testEvalLen
 	self assert: (self eval: 'len("")') equals: 0.
 %
 
-category: 'Tests - Eval - Aggregation Functions'
+category: 'Grail-Tests - Eval - Aggregation Functions'
 method: BuiltinsTestCase
 testEvalMax
 	"Test max() via Python source"
@@ -435,7 +435,7 @@ testEvalMax
 	self assert: (self eval: 'max([5, 2, 8, 1, 9])') equals: 9.
 %
 
-category: 'Tests - Eval - Aggregation Functions'
+category: 'Grail-Tests - Eval - Aggregation Functions'
 method: BuiltinsTestCase
 testEvalMin
 	"Test min() via Python source"
@@ -443,7 +443,7 @@ testEvalMin
 	self assert: (self eval: 'min([5, 2, 8, 1, 9])') equals: 1.
 %
 
-category: 'Tests - Eval - Numeric Functions'
+category: 'Grail-Tests - Eval - Numeric Functions'
 method: BuiltinsTestCase
 testEvalOct
 	"Test oct() via Python source"
@@ -452,7 +452,7 @@ testEvalOct
 	self assert: (self eval: 'oct(0)') equals: '0o0'.
 %
 
-category: 'Tests - Eval - String Functions'
+category: 'Grail-Tests - Eval - String Functions'
 method: BuiltinsTestCase
 testEvalOrd
 	"Test ord() via Python source"
@@ -461,7 +461,7 @@ testEvalOrd
 	self assert: (self eval: 'ord("a")') equals: 97.
 %
 
-category: 'Tests - Eval - Math Functions'
+category: 'Grail-Tests - Eval - Math Functions'
 method: BuiltinsTestCase
 testEvalPow
 	"Test pow() via Python source"
@@ -470,7 +470,7 @@ testEvalPow
 	self assert: (self eval: 'pow(10, 0)') equals: 1.
 %
 
-category: 'Tests - Eval - String Functions'
+category: 'Grail-Tests - Eval - String Functions'
 method: BuiltinsTestCase
 testEvalRepr
 	"Test repr() via Python source"
@@ -478,7 +478,7 @@ testEvalRepr
 	self assert: (self eval: 'repr(42)') equals: '42'.
 %
 
-category: 'Tests - Eval - Math Functions'
+category: 'Grail-Tests - Eval - Math Functions'
 method: BuiltinsTestCase
 testEvalRound
 	"Test round() via Python source"
@@ -487,7 +487,7 @@ testEvalRound
 	self assert: (self eval: 'round(3.2)') equals: 3.
 %
 
-category: 'Tests - Eval - Sequence Functions'
+category: 'Grail-Tests - Eval - Sequence Functions'
 method: BuiltinsTestCase
 testEvalSorted
 	"Test sorted() via Python source"
@@ -498,7 +498,7 @@ testEvalSorted
 	self assert: (result @env1:__getitem__: 4) equals: 5.
 %
 
-category: 'Tests - Eval - String Functions'
+category: 'Grail-Tests - Eval - String Functions'
 method: BuiltinsTestCase
 testEvalStr
 	"Test str() via Python source"
@@ -507,7 +507,7 @@ testEvalStr
 	self assert: (self eval: 'str(True)') equals: 'True'.
 %
 
-category: 'Tests - Eval - Aggregation Functions'
+category: 'Grail-Tests - Eval - Aggregation Functions'
 method: BuiltinsTestCase
 testEvalSum
 	"Test sum() via Python source"
@@ -516,7 +516,7 @@ testEvalSum
 	self assert: (self eval: 'sum([])') equals: 0.
 %
 
-category: 'Tests - Type Functions'
+category: 'Grail-Tests - Type Functions'
 method: BuiltinsTestCase
 testHash
 	"Test hash() — Phase-4 fast-path direct method dispatch."
@@ -531,7 +531,7 @@ testHash
 	self assert: (result isKindOf: Integer)
 %
 
-category: 'Tests - Numeric Functions'
+category: 'Grail-Tests - Numeric Functions'
 method: BuiltinsTestCase
 testHex
 	"Test hex() — Phase-4 fast-path direct method dispatch."
@@ -549,7 +549,7 @@ testHex
 	self assert: result equals: '0x0'
 %
 
-category: 'Tests - Introspection'
+category: 'Grail-Tests - Introspection'
 method: BuiltinsTestCase
 testId
 	"Test id() — Phase-4 fast-path direct method dispatch."
@@ -568,7 +568,7 @@ testId
 	self deny: id1 == id2
 %
 
-category: 'Tests - Type Checking'
+category: 'Grail-Tests - Type Checking'
 method: BuiltinsTestCase
 testIsinstance
 	"Test isinstance() — Phase-4 fast-path direct method dispatch."
@@ -590,7 +590,7 @@ testIsinstance
 	self deny: result
 %
 
-category: 'Tests - Type Functions'
+category: 'Grail-Tests - Type Functions'
 method: BuiltinsTestCase
 testLen
 	"Test len() — Phase-4 fast-path direct method dispatch."
@@ -609,7 +609,7 @@ testLen
 	self assert: result equals: 3
 %
 
-category: 'Tests - Type Functions'
+category: 'Grail-Tests - Type Functions'
 method: BuiltinsTestCase
 testLenTypeError
 	"Test that len() raises TypeError for objects without __len__"
@@ -620,7 +620,7 @@ testLenTypeError
 	self should: [b @env1:len: 42] raise: TypeError
 %
 
-category: 'Tests - Aggregation Functions'
+category: 'Grail-Tests - Aggregation Functions'
 method: BuiltinsTestCase
 testMax
 	"Test max() — Phase-4 fast-path direct method dispatch."
@@ -637,7 +637,7 @@ testMax
 	self assert: result equals: -2
 %
 
-category: 'Tests - Aggregation Functions'
+category: 'Grail-Tests - Aggregation Functions'
 method: BuiltinsTestCase
 testMin
 	"Test min() — Phase-4 fast-path direct method dispatch."
@@ -654,7 +654,7 @@ testMin
 	self assert: result equals: -8
 %
 
-category: 'Tests - Numeric Functions'
+category: 'Grail-Tests - Numeric Functions'
 method: BuiltinsTestCase
 testOct
 	"Test oct() — Phase-4 fast-path direct method dispatch."
@@ -672,7 +672,7 @@ testOct
 	self assert: result equals: '0o0'
 %
 
-category: 'Tests - String Functions'
+category: 'Grail-Tests - String Functions'
 method: BuiltinsTestCase
 testOrd
 	"Test ord() — Phase-4 fast-path direct method dispatch."
@@ -690,7 +690,7 @@ testOrd
 	self assert: result equals: 48
 %
 
-category: 'Tests - String Functions'
+category: 'Grail-Tests - String Functions'
 method: BuiltinsTestCase
 testOrdTypeError
 	"Test that ord() raises TypeError for strings with length != 1"
@@ -702,7 +702,7 @@ testOrdTypeError
 	self should: [b @env1:ord: ''] raise: TypeError
 %
 
-category: 'Tests - Math Functions'
+category: 'Grail-Tests - Math Functions'
 method: BuiltinsTestCase
 testPow
 	"Test pow() — Phase-4 fast-path direct method dispatch."
@@ -720,7 +720,7 @@ testPow
 	self assert: result equals: 1
 %
 
-category: 'Tests - Math Functions'
+category: 'Grail-Tests - Math Functions'
 method: BuiltinsTestCase
 testPowWithModulo
 	"Test pow(x, y, z) — Phase-4 varargs fast-path implementation."
@@ -735,7 +735,7 @@ testPowWithModulo
 	self assert: result equals: 2
 %
 
-category: 'Tests - System Functions'
+category: 'Grail-Tests - System Functions'
 method: BuiltinsTestCase
 testExit
 	"Test exit() — Phase-4 varargs fast-path alias for quit(). The
@@ -749,7 +749,7 @@ testExit
 	self assert: (b @env1:callable: exitMethod)
 %
 
-category: 'Tests - System Functions'
+category: 'Grail-Tests - System Functions'
 method: BuiltinsTestCase
 testQuit
 	"Test quit() — Phase-4 varargs fast-path. The implementation lives at
@@ -764,7 +764,7 @@ testQuit
 	self assert: (b @env1:callable: quitMethod)
 %
 
-category: 'Tests - String Functions'
+category: 'Grail-Tests - String Functions'
 method: BuiltinsTestCase
 testRepr
 	"Test repr() — Phase-4 fast-path direct method dispatch."
@@ -779,7 +779,7 @@ testRepr
 	self assert: result equals: '42'
 %
 
-category: 'Tests - Math Functions'
+category: 'Grail-Tests - Math Functions'
 method: BuiltinsTestCase
 testRound
 	"Test round() — Phase-4 fast-path direct method dispatch."
@@ -797,7 +797,7 @@ testRound
 	self assert: result equals: -3
 %
 
-category: 'Tests - Sequence Functions'
+category: 'Grail-Tests - Sequence Functions'
 method: BuiltinsTestCase
 testSorted
 	"Test sorted() — Phase-4 fast-path direct method dispatch.
@@ -822,7 +822,7 @@ testSorted
 	self assert: lst size equals: 8
 %
 
-category: 'Tests - String Functions'
+category: 'Grail-Tests - String Functions'
 method: BuiltinsTestCase
 testStr
 	"Test str() — Phase-4 fast-path direct method dispatch."
@@ -837,7 +837,7 @@ testStr
 	self assert: result equals: 'hello'
 %
 
-category: 'Tests - Aggregation Functions'
+category: 'Grail-Tests - Aggregation Functions'
 method: BuiltinsTestCase
 testSum
 	"Test sum() — Phase-4 fast-path direct method dispatch."
@@ -854,7 +854,7 @@ testSum
 	self assert: result equals: 0
 %
 
-category: 'Tests - Type Functions'
+category: 'Grail-Tests - Type Functions'
 method: BuiltinsTestCase
 testType
 	"Test type() — Phase-4 fast-path direct method dispatch."
@@ -872,7 +872,7 @@ testType
 	self assert: (list new isKindOf: result)
 %
 
-category: 'Tests - Sequence Functions'
+category: 'Grail-Tests - Sequence Functions'
 method: BuiltinsTestCase
 testZip
 	"Test zip() — Phase-4 varargs fast-path direct method dispatch.

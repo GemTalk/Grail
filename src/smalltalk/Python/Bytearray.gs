@@ -37,7 +37,7 @@ Unlike bytes (ByteArray), bytearray instances can be modified in place.
 
 expectvalue /Class
 doit
-bytearray category: 'Collections-Ordered'
+bytearray category: 'Grail-Collections-Ordered'
 %
 
 ! ===============================================================================
@@ -65,7 +65,7 @@ bytearray class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Constructors'
+category: 'Grail-Constructors'
 classmethod: bytearray
 __new__
 	"bytearray() — create empty bytearray. Receiver is the class."
@@ -73,7 +73,7 @@ __new__
 	^ self ___new___
 %
 
-category: 'Python-Constructors'
+category: 'Grail-Constructors'
 classmethod: bytearray
 __new__: source
 	"bytearray(source) — create bytearray from various sources.
@@ -153,7 +153,7 @@ __new__: source
 	^ self ___new___
 %
 
-category: 'Python-Constructors'
+category: 'Grail-Constructors'
 classmethod: bytearray
 __new__: source _: encoding
 	"bytearray(string, encoding) — encode string to bytearray.
@@ -221,7 +221,7 @@ __new__: source _: encoding
 	LookupError ___signal___: ('unknown encoding: ' @env0:, encodingStr)
 %
 
-category: 'Python-Constructors'
+category: 'Grail-Constructors'
 classmethod: bytearray
 fromhex: hexString
 	"Create bytearray from hex string (e.g., 'deadbeef'). Receiver is
@@ -252,14 +252,14 @@ fromhex: hexString
 	^ ba
 %
 
-category: 'Python-Type'
+category: 'Grail-Type'
 method: bytearray
 __class__
 	"Return the Python type for bytearray"
 	^ bytearray
 %
 
-category: 'Python-Sequence Protocol'
+category: 'Grail-Sequence Protocol'
 method: bytearray
 __delitem__: index
 	"Delete byte at index"
@@ -284,7 +284,7 @@ __delitem__: index
 	self @env0:removeAtIndex: (idx @env0:+ 1)
 %
 
-category: 'Python-Concatenation'
+category: 'Grail-Concatenation'
 method: bytearray
 __iadd__: other
 	"In-place concatenation"
@@ -303,7 +303,7 @@ __iadd__: other
 	^ self
 %
 
-category: 'Python-Concatenation'
+category: 'Grail-Concatenation'
 method: bytearray
 __imul__: count
 	"In-place repetition"
@@ -341,7 +341,7 @@ __imul__: count
 	^ self
 %
 
-category: 'Python-Sequence Protocol'
+category: 'Grail-Sequence Protocol'
 method: bytearray
 __setitem__: index _: value
 	"Set byte at index (mutable)"
@@ -374,7 +374,7 @@ __setitem__: index _: value
 	^ None
 %
 
-category: 'Python-Mutation Methods'
+category: 'Grail-Mutation Methods'
 method: bytearray
 append: item
 	"Append a single byte to the end"
@@ -393,7 +393,7 @@ append: item
 	self @env0:add: val
 %
 
-category: 'Python-Mutation Methods'
+category: 'Grail-Mutation Methods'
 method: bytearray
 clear
 	"Remove all bytes"
@@ -401,7 +401,7 @@ clear
 	self @env0:size: 0
 %
 
-category: 'Python-Mutation Methods'
+category: 'Grail-Mutation Methods'
 method: bytearray
 copy
 	"Return a shallow copy"
@@ -415,7 +415,7 @@ copy
 	^ result
 %
 
-category: 'Python-Mutation Methods'
+category: 'Grail-Mutation Methods'
 method: bytearray
 extend: iterable
 	"Extend bytearray with bytes from iterable"
@@ -458,7 +458,7 @@ extend: iterable
 	TypeError ___signal___: 'extend() argument must be iterable'
 %
 
-category: 'Python-Mutation Methods'
+category: 'Grail-Mutation Methods'
 method: bytearray
 insert: index _: item
 "Insert byte at index"
@@ -492,7 +492,7 @@ insert: index _: item
 	self @env0:insertAll: (bytearray @env0:with: val) at: (index @env0:+ 1)
 %
 
-category: 'Python-Mutation Methods'
+category: 'Grail-Mutation Methods'
 method: bytearray
 pop
 	"Remove and return last byte"
@@ -507,7 +507,7 @@ pop
 	^ self @env0:removeLast
 %
 
-category: 'Python-Mutation Methods'
+category: 'Grail-Mutation Methods'
 method: bytearray
 pop: index
 	"Remove and return byte at index"
@@ -534,7 +534,7 @@ pop: index
 	^ byte
 %
 
-category: 'Python-Mutation Methods'
+category: 'Grail-Mutation Methods'
 method: bytearray
 remove: value
 	"Remove first occurrence of value"
@@ -554,7 +554,7 @@ remove: value
 	ValueError ___signal___: 'value not in bytearray'
 %
 
-category: 'Python-Mutation Methods'
+category: 'Grail-Mutation Methods'
 method: bytearray
 reverse
 	"Reverse bytearray in place"

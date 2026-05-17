@@ -17,5 +17,5 @@ Exception subclass: 'MemoryError'
 
 expectvalue /Class
 doit
-MemoryError category: 'Exceptions'
+MemoryError category: 'Grail-Exceptions'
 %

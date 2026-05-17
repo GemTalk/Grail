@@ -18,7 +18,7 @@ SuiteAst subclass: 'BlockAst'
 
 expectvalue /Class
 doit
-BlockAst category: 'Parser'
+BlockAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from BlockAst
@@ -27,7 +27,7 @@ removeallclassmethods BlockAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: BlockAst
 allocateTemp
 
@@ -38,14 +38,14 @@ allocateTemp
 	^name
 %
 
-category: 'other'
+category: 'Grail-other'
 method: BlockAst
 declareVariable: aSymbol
 
 	variables add: aSymbol.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: BlockAst
 isVariableIsDeclared: aSymbol
 	"Return true if aSymbol is declared as a local in this scope, or in any
@@ -57,14 +57,14 @@ isVariableIsDeclared: aSymbol
 	^super isVariableIsDeclared: aSymbol
 %
 
-category: 'other'
+category: 'Grail-other'
 method: BlockAst
 printSmalltalkOn: aStream
 
 	self printSmalltalkOn: aStream useTemps: true.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: BlockAst
 printSmalltalkOn: aStream useTemps: aBoolean
 
@@ -79,7 +79,7 @@ printSmalltalkOn: aStream useTemps: aBoolean
 	].
 %
 
-category: 'other'
+category: 'Grail-other'
 method: BlockAst
 variables
 

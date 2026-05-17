@@ -18,5 +18,5 @@ OSError subclass: 'BlockingIOError'
 
 expectvalue /Class
 doit
-BlockingIOError category: 'Exceptions'
+BlockingIOError category: 'Grail-Exceptions'
 %

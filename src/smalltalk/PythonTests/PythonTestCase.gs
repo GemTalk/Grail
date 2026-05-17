@@ -18,7 +18,7 @@ TestCase subclass: 'PythonTestCase'
 
 expectvalue /Class
 doit
-PythonTestCase category: 'SUnit'
+PythonTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -35,7 +35,7 @@ PythonTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Testing'
+category: 'Grail-Testing'
 classmethod: PythonTestCase
 isAbstract
 	"Override to true if a TestCase subclass is Abstract and should not have
@@ -44,7 +44,7 @@ isAbstract
 	^self sunitName == #PythonTestCase
 %
 
-category: 'Testing'
+category: 'Grail-Testing'
 classmethod: PythonTestCase
 suite
 	"Return a test suite for all PythonTestCase subclasses.
@@ -61,7 +61,7 @@ suite
 	^ super suite
 %
 
-category: 'helpers'
+category: 'Grail-helpers'
 method: PythonTestCase
 eval: pythonSource
 	"Parse and evaluate a Python source string, returning the result.
@@ -83,7 +83,7 @@ eval: pythonSource
 	^module evaluateWithScope: scope
 %
 
-category: 'testing'
+category: 'Grail-testing'
 method: PythonTestCase
 performTest
 

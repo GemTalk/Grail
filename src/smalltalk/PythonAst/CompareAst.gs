@@ -46,7 +46,7 @@ Object
 
 expectvalue /Class
 doit
-CompareAst category: 'Parser'
+CompareAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from CompareAst
@@ -55,7 +55,7 @@ removeallclassmethods CompareAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: CompareAst
 printSmalltalkOn: aStream
 
@@ -70,7 +70,7 @@ printSmalltalkOn: aStream
 	cmpopList size - 1 timesRepeat: [aStream nextPutAll: ']'].
 %
 
-category: 'initialization'
+category: 'Grail-initialization'
 method: CompareAst
 setParent: aNode
 

@@ -28,7 +28,7 @@ container types (tuples and frozensets) if all of their elements are constant."'
 
 expectvalue /Class
 doit
-ConstantAst category: 'Parser'
+ConstantAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from ConstantAst
@@ -37,7 +37,7 @@ removeallclassmethods ConstantAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: ConstantAst
 printSmalltalkOn: aStream
 
@@ -80,7 +80,7 @@ printSmalltalkOn: aStream
 	aStream print: value.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ConstantAst
 set: container to: anObject scope: aScope
 
@@ -89,7 +89,7 @@ set: container to: anObject scope: aScope
 		to: anObject.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: ConstantAst
 value
 

@@ -17,7 +17,7 @@ PythonTestCase subclass: 'AttributeErrorTestCase'
 %
 expectvalue /Class
 doit
-AttributeErrorTestCase category: 'SUnit'
+AttributeErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ AttributeErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-AttributeError'
+category: 'Grail-Tests-AttributeError'
 method: AttributeErrorTestCase
 test_creation
 	"Test creating a AttributeError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-AttributeError'
+category: 'Grail-Tests-AttributeError'
 method: AttributeErrorTestCase
 test_inheritance
 	"Test that AttributeError inherits from Exception."
@@ -61,7 +61,7 @@ test_inheritance
 ! methods. Returns the value when set, raises AttributeError naming the
 ! class and attribute when the underlying instVar is nil (= unset).
 
-category: 'Python-Tests-Unset-Attr'
+category: 'Grail-Tests-Unset-Attr'
 method: AttributeErrorTestCase
 test_check_attr_returns_value_when_set
 	"The check is transparent for non-nil values."
@@ -74,7 +74,7 @@ test_check_attr_returns_value_when_set
 		equals: 'hi'.
 %
 
-category: 'Python-Tests-Unset-Attr'
+category: 'Grail-Tests-Unset-Attr'
 method: AttributeErrorTestCase
 test_check_attr_returns_none_when_none
 	"None — the singleton — is a legitimate value, not unset. Distinct
@@ -84,7 +84,7 @@ test_check_attr_returns_none_when_none
 		assert: (AttributeError @env0:___checkAttr: None ofObject: self named: #x) == None.
 %
 
-category: 'Python-Tests-Unset-Attr'
+category: 'Grail-Tests-Unset-Attr'
 method: AttributeErrorTestCase
 test_check_attr_raises_when_nil
 	"nil triggers AttributeError."
@@ -94,7 +94,7 @@ test_check_attr_raises_when_nil
 		raise: AttributeError.
 %
 
-category: 'Python-Tests-Unset-Attr'
+category: 'Grail-Tests-Unset-Attr'
 method: AttributeErrorTestCase
 test_check_attr_message_names_attribute
 	"The error message follows CPython's format and includes the

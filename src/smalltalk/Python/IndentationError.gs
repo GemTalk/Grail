@@ -17,5 +17,5 @@ SyntaxError subclass: 'IndentationError'
 
 expectvalue /Class
 doit
-IndentationError category: 'Exceptions'
+IndentationError category: 'Grail-Exceptions'
 %

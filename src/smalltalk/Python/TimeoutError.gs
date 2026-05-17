@@ -17,5 +17,5 @@ OSError subclass: 'TimeoutError'
 
 expectvalue /Class
 doit
-TimeoutError category: 'Exceptions'
+TimeoutError category: 'Grail-Exceptions'
 %

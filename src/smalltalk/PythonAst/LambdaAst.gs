@@ -46,7 +46,7 @@ Object
 
 expectvalue /Class
 doit
-LambdaAst category: 'Parser'
+LambdaAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from LambdaAst
@@ -55,14 +55,14 @@ removeallclassmethods LambdaAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: LambdaAst
 name
 
 	^'<lambda>'
 %
 
-category: 'other'
+category: 'Grail-other'
 method: LambdaAst
 printSmalltalkOn: aStream
 	"Generate Smalltalk for a lambda expression.

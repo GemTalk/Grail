@@ -18,7 +18,7 @@ PythonTestCase subclass: 'FractionTestCase'
 
 expectvalue /Class
 doit
-FractionTestCase category: 'SUnit'
+FractionTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -35,7 +35,7 @@ FractionTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Tests - Rounding'
+category: 'Grail-Tests - Rounding'
 method: FractionTestCase
 test__ceil__
 	"Test __ceil__ returns smallest integer >= self"
@@ -61,7 +61,7 @@ test__ceil__
 	self assert: (f @env1:__ceil__) equals: -5.
 %
 
-category: 'Tests - Rounding'
+category: 'Grail-Tests - Rounding'
 method: FractionTestCase
 test__floor__
 	"Test __floor__ returns largest integer <= self"
@@ -87,7 +87,7 @@ test__floor__
 	self assert: (f @env1:__floor__) equals: -5.
 %
 
-category: 'Tests - Format'
+category: 'Grail-Tests - Format'
 method: FractionTestCase
 test__format__Empty
 	"Test __format__('') returns str(self)"
@@ -101,7 +101,7 @@ test__format__Empty
 	self assert: result equals: '3/2'.
 %
 
-category: 'Tests - Format'
+category: 'Grail-Tests - Format'
 method: FractionTestCase
 test__format__Nil
 	"Test __format__(nil) returns str(self)"
@@ -115,7 +115,7 @@ test__format__Nil
 	self assert: result equals: '3/2'.
 %
 
-category: 'Tests - Hash'
+category: 'Grail-Tests - Hash'
 method: FractionTestCase
 test__hash__
 	"Test __hash__ returns an integer"
@@ -128,7 +128,7 @@ test__hash__
 	self assert: (result isKindOf: Integer).
 %
 
-category: 'Tests - Repr'
+category: 'Grail-Tests - Repr'
 method: FractionTestCase
 test__repr__
 	"Test repr(Fraction) format matches CPython: 'Fraction(n, d)'"
@@ -149,7 +149,7 @@ test__repr__
 	 because GemStone canonicalizes fractions equivalent to integers"
 %
 
-category: 'Tests - Rounding'
+category: 'Grail-Tests - Rounding'
 method: FractionTestCase
 test__round__
 	"Test __round__ rounds to nearest integer, ties to even"
@@ -179,7 +179,7 @@ test__round__
 	self assert: (f @env1:__round__) equals: -2.
 %
 
-category: 'Tests - Rounding'
+category: 'Grail-Tests - Rounding'
 method: FractionTestCase
 test__round__WithNdigits
 	"Test __round__(ndigits)"
@@ -201,7 +201,7 @@ test__round__WithNdigits
 	self assert: result equals: 2.
 %
 
-category: 'Tests - Fraction Methods'
+category: 'Grail-Tests - Fraction Methods'
 method: FractionTestCase
 testAs_integer_ratio
 	"Test as_integer_ratio returns (numerator, denominator) tuple"
@@ -222,7 +222,7 @@ testAs_integer_ratio
 	self assert: (result @env1:__getitem__: 1) equals: 4.
 %
 
-category: 'Tests - Negative Conversion'
+category: 'Grail-Tests - Negative Conversion'
 method: FractionTestCase
 testBoolNegative
 	"Test __bool__ for negative fractions (any non-zero is True)"
@@ -238,7 +238,7 @@ testBoolNegative
 	self assert: (f @env1:__bool__).
 %
 
-category: 'Tests - Canonical Form & Signs'
+category: 'Grail-Tests - Canonical Form & Signs'
 method: FractionTestCase
 testCanonicalFormEquality
 	"Test that equivalent fractions are equal (e.g., 1/2 == 2/4)"
@@ -254,7 +254,7 @@ testCanonicalFormEquality
 	self assert: (f1 @env1:denominator) equals: (f2 @env1:denominator).
 %
 
-category: 'Tests - Conversion'
+category: 'Grail-Tests - Conversion'
 method: FractionTestCase
 testConversionsAndBool
 	"Test __int__, __float__ and __bool__ on Fraction"
@@ -270,7 +270,7 @@ testConversionsAndBool
 	self deny: (f @env1:__bool__).
 %
 
-category: 'Tests - Creation'
+category: 'Grail-Tests - Creation'
 method: FractionTestCase
 testCreateFromFraction
 	"Test Fraction(Fraction(1, 3)) returns an equivalent fraction"
@@ -283,7 +283,7 @@ testCreateFromFraction
 	self assert: (f2 @env1:__eq__: f1).
 %
 
-category: 'Tests - Creation'
+category: 'Grail-Tests - Creation'
 method: FractionTestCase
 testCreateFromIntegers
 	"Test Fraction(1, 2) construction"
@@ -297,7 +297,7 @@ testCreateFromIntegers
 	self assert: (f @env1:__str__) equals: '1/2'.
 %
 
-category: 'Tests - Creation'
+category: 'Grail-Tests - Creation'
 method: FractionTestCase
 testCreateFromSingleInteger
 	"Test Fraction(3) construction"
@@ -310,7 +310,7 @@ testCreateFromSingleInteger
 	self assert: (f @env1:__float__) equals: 3.0.
 %
 
-category: 'Tests - Negative Conversion'
+category: 'Grail-Tests - Negative Conversion'
 method: FractionTestCase
 testFloatNegative
 	"Test __float__ for negative fractions"
@@ -326,7 +326,7 @@ testFloatNegative
 	self assert: ((f @env1:__float__) - -0.25) abs < 0.0001.
 %
 
-category: 'Tests - Module Binding'
+category: 'Grail-Tests - Module Binding'
 method: FractionTestCase
 testFractionsModuleProvidesFraction
 	"Test that fractions module exposes the Fraction type"
@@ -337,7 +337,7 @@ testFractionsModuleProvidesFraction
 	self assert: fracClass equals: Fraction.
 %
 
-category: 'Tests - Class Methods'
+category: 'Grail-Tests - Class Methods'
 method: FractionTestCase
 testFrom_decimal
 	"Test Fraction.from_decimal() class method"
@@ -352,7 +352,7 @@ testFrom_decimal
 	self assert: ((f @env1:__float__) - 0.5) abs < 0.0001.
 %
 
-category: 'Tests - Class Methods'
+category: 'Grail-Tests - Class Methods'
 method: FractionTestCase
 testFrom_float
 	"Test Fraction.from_float() class method"
@@ -377,7 +377,7 @@ testFrom_float
 	self assert: (f @env1:denominator) equals: 4.
 %
 
-category: 'Tests - Class Methods'
+category: 'Grail-Tests - Class Methods'
 method: FractionTestCase
 testFrom_floatRaisesOnInfinity
 	"Test Fraction.from_float() raises on Infinity"
@@ -391,7 +391,7 @@ testFrom_floatRaisesOnInfinity
 		raise: ValueError.
 %
 
-category: 'Tests - Class Methods'
+category: 'Grail-Tests - Class Methods'
 method: FractionTestCase
 testFrom_floatRaisesOnNaN
 	"Test Fraction.from_float() raises on NaN"
@@ -405,7 +405,7 @@ testFrom_floatRaisesOnNaN
 		raise: ValueError.
 %
 
-category: 'Tests - Class Methods'
+category: 'Grail-Tests - Class Methods'
 method: FractionTestCase
 testFrom_number
 	"Test Fraction.from_number() class method with objects having as_integer_ratio"
@@ -425,7 +425,7 @@ testFrom_number
 	self assert: (f @env1:__eq__: origFrac).
 %
 
-category: 'Tests - Hash'
+category: 'Grail-Tests - Hash'
 method: FractionTestCase
 testHashEqualityConsistency
 	"Test that equal fractions have equal hashes"
@@ -449,7 +449,7 @@ testHashEqualityConsistency
 	self assert: h1 equals: h3.
 %
 
-category: 'Tests - Negative Conversion'
+category: 'Grail-Tests - Negative Conversion'
 method: FractionTestCase
 testIntTruncationTowardZeroNegative
 	"Test __int__ truncates toward zero for negative fractions (CPython behavior)"
@@ -471,7 +471,7 @@ testIntTruncationTowardZeroNegative
 	self assert: (f @env1:__int__) equals: -1.
 %
 
-category: 'Tests - Fraction Methods'
+category: 'Grail-Tests - Fraction Methods'
 method: FractionTestCase
 testIs_integer
 	"Test is_integer returns True when denominator is 1"
@@ -494,7 +494,7 @@ testIs_integer
 	self assert: (f @env1:is_integer).
 %
 
-category: 'Tests - Limit Denominator'
+category: 'Grail-Tests - Limit Denominator'
 method: FractionTestCase
 testLimit_denominatorDefault
 	"Test limit_denominator() with default max (10**6)"
@@ -509,7 +509,7 @@ testLimit_denominatorDefault
 	self assert: (result @env1:__eq__: f).
 %
 
-category: 'Tests - Limit Denominator'
+category: 'Grail-Tests - Limit Denominator'
 method: FractionTestCase
 testLimit_denominatorSmall
 	"Test limit_denominator with small max values"
@@ -524,7 +524,7 @@ testLimit_denominatorSmall
 	self assert: (result @env1:denominator) <= 2.
 %
 
-category: 'Tests - Limit Denominator'
+category: 'Grail-Tests - Limit Denominator'
 method: FractionTestCase
 testLimit_denominatorWithMax
 	"Test limit_denominator(max_denominator)"
@@ -541,7 +541,7 @@ testLimit_denominatorWithMax
 	self assert: (result @env1:denominator) equals: 113.
 %
 
-category: 'Tests - Canonical Form & Signs'
+category: 'Grail-Tests - Canonical Form & Signs'
 method: FractionTestCase
 testNegativeFractionEquality
 	"Test equality of negative fractions with different sign positions"
@@ -560,7 +560,7 @@ testNegativeFractionEquality
 	self deny: (f3 @env1:__eq__: f1).
 %
 
-category: 'Tests - Zero and One Argument Forms'
+category: 'Grail-Tests - Zero and One Argument Forms'
 method: FractionTestCase
 testOneArgumentFormNegative
 	"Test Fraction(-3) returns -3/1"
@@ -574,7 +574,7 @@ testOneArgumentFormNegative
 	self assert: (f @env1:__int__) equals: -3.
 %
 
-category: 'Tests - Zero and One Argument Forms'
+category: 'Grail-Tests - Zero and One Argument Forms'
 method: FractionTestCase
 testOneArgumentFormNegativeFraction
 	"Test Fraction(Fraction(-3, 2)) returns -3/2"
@@ -589,7 +589,7 @@ testOneArgumentFormNegativeFraction
 	self assert: (f2 @env1:denominator) equals: 2.
 %
 
-category: 'Tests - Zero and One Argument Forms'
+category: 'Grail-Tests - Zero and One Argument Forms'
 method: FractionTestCase
 testOneArgumentFormZero
 	"Test Fraction(0) returns 0/1"
@@ -602,7 +602,7 @@ testOneArgumentFormZero
 	self assert: (f @env1:denominator) equals: 1.
 %
 
-category: 'Tests - Canonical Form & Signs'
+category: 'Grail-Tests - Canonical Form & Signs'
 method: FractionTestCase
 testSignNormalization
 	"Test that sign is always in numerator, denominator always positive per CPython rules"
@@ -627,7 +627,7 @@ testSignNormalization
 	self assert: (f @env1:denominator) equals: 2.
 %
 
-category: 'Tests - Zero and One Argument Forms'
+category: 'Grail-Tests - Zero and One Argument Forms'
 method: FractionTestCase
 testZeroArgumentForm
 	"Test Fraction() returns 0/1"
@@ -641,7 +641,7 @@ testZeroArgumentForm
 	self assert: (f @env1:__int__) equals: 0.
 %
 
-category: 'Tests - Errors'
+category: 'Grail-Tests - Errors'
 method: FractionTestCase
 testZeroDenominatorRaises
 	"Test that Fraction(1, 0) raises ZeroDivisionError"

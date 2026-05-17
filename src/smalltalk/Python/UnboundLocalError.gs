@@ -17,13 +17,13 @@ NameError subclass: 'UnboundLocalError'
 
 expectvalue /Class
 doit
-UnboundLocalError category: 'Exceptions'
+UnboundLocalError category: 'Grail-Exceptions'
 %
 
 ! ------------------- Helpers used by codegen for definite-assignment checks
 set compile_env: 0
 
-category: 'Definite-Assignment Check'
+category: 'Grail-Definite-Assignment Check'
 classmethod: UnboundLocalError
 ___checkLocal: aValue named: aSymbol
 	"Codegen helper: return ``aValue`` unchanged if it is not Smalltalk nil,

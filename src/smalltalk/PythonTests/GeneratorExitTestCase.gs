@@ -17,7 +17,7 @@ PythonTestCase subclass: 'GeneratorExitTestCase'
 %
 expectvalue /Class
 doit
-GeneratorExitTestCase category: 'SUnit'
+GeneratorExitTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ GeneratorExitTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-GeneratorExit'
+category: 'Grail-Tests-GeneratorExit'
 method: GeneratorExitTestCase
 test_creation
 	"Test creating a GeneratorExit instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-GeneratorExit'
+category: 'Grail-Tests-GeneratorExit'
 method: GeneratorExitTestCase
 test_inheritance
 	"Test that GeneratorExit inherits from BaseException."

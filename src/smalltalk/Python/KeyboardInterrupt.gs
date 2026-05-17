@@ -28,5 +28,5 @@ accidentally caught by code that catches Exception.
 
 expectvalue /Class
 doit
-KeyboardInterrupt category: 'Exceptions'
+KeyboardInterrupt category: 'Grail-Exceptions'
 %

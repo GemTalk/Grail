@@ -17,7 +17,7 @@ PythonTestCase subclass: 'TimeoutErrorTestCase'
 %
 expectvalue /Class
 doit
-TimeoutErrorTestCase category: 'SUnit'
+TimeoutErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ TimeoutErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-TimeoutError'
+category: 'Grail-Tests-TimeoutError'
 method: TimeoutErrorTestCase
 test_creation
 	"Test creating a TimeoutError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-TimeoutError'
+category: 'Grail-Tests-TimeoutError'
 method: TimeoutErrorTestCase
 test_inheritance
 	"Test that TimeoutError inherits from OSError."

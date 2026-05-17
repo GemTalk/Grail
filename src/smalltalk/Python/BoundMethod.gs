@@ -46,7 +46,7 @@ precomputed).
 
 expectvalue /Class
 doit
-BoundMethod category: 'Modules'
+BoundMethod category: 'Grail-Modules'
 %
 
 ! ------------------- Remove existing behavior from BoundMethod
@@ -57,7 +57,7 @@ set compile_env: 0
 
 ! ------------------- Instance methods (env 0 — internal setup and accessors)
 
-category: 'Private'
+category: 'Grail-Private'
 method: BoundMethod
 _setReceiver: aReceiver selector: aSymbol
 	"Initialize and precompute arity-resolved selectors for arities 0..3
@@ -75,19 +75,19 @@ _setReceiver: aReceiver selector: aSymbol
 	selVarargs := ('_' , s , ':kw:') asSymbol.
 %
 
-category: 'Accessing'
+category: 'Grail-Accessing'
 method: BoundMethod
 receiver
 	^ receiver
 %
 
-category: 'Accessing'
+category: 'Grail-Accessing'
 method: BoundMethod
 selector
 	^ selector
 %
 
-category: 'Private'
+category: 'Grail-Private'
 method: BoundMethod
 _selectorForArgCount: nargs
 	"Return the precomputed selector for the given arity, or nil if
@@ -100,7 +100,7 @@ _selectorForArgCount: nargs
 	^ nil
 %
 
-category: 'Private'
+category: 'Grail-Private'
 method: BoundMethod
 _receiverHasSelector: aSymbol
 	"True if the receiver's class implements `aSymbol` in env 1."
@@ -112,7 +112,7 @@ set compile_env: 1
 
 ! ------------------- Class methods (env 1 — called from generated Python code)
 
-category: 'Instance Creation'
+category: 'Grail-Instance Creation'
 classmethod: BoundMethod
 receiver: aReceiver selector: aSymbol
 	"Create a BoundMethod that, when called, will send `aSymbol` to
@@ -131,7 +131,7 @@ set compile_env: 0
 
 set compile_env: 1
 
-category: 'Calling'
+category: 'Grail-Calling'
 method: BoundMethod
 value: positional value: kwargs
 	"Forward an indirect call to the underlying receiver/selector.
@@ -155,7 +155,7 @@ value: positional value: kwargs
 	^ receiver perform: selVarargs env: 1 withArguments: { positional. kwargs }
 %
 
-category: 'Python-Callable'
+category: 'Grail-Callable'
 method: BoundMethod
 __call__: positional
 	"Make BoundMethod respond to Python's `callable(...)` protocol.

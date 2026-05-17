@@ -17,7 +17,7 @@ PythonTestCase subclass: 'UnboundLocalErrorTestCase'
 %
 expectvalue /Class
 doit
-UnboundLocalErrorTestCase category: 'SUnit'
+UnboundLocalErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ UnboundLocalErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-UnboundLocalError'
+category: 'Grail-Tests-UnboundLocalError'
 method: UnboundLocalErrorTestCase
 test_creation
 	"Test creating a UnboundLocalError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-UnboundLocalError'
+category: 'Grail-Tests-UnboundLocalError'
 method: UnboundLocalErrorTestCase
 test_inheritance
 	"Test that UnboundLocalError inherits from NameError."
@@ -63,7 +63,7 @@ test_inheritance
 ! Smalltalk MessageNotUnderstood. The backstop is independent of (and
 ! complementary to) Phase C-2's load-site definite-assignment check.
 
-category: 'Python-Tests-DNU Backstop'
+category: 'Grail-Tests-DNU Backstop'
 method: UnboundLocalErrorTestCase
 test_env1_message_to_nil_raises
 	"Sending any env-1 Python protocol message to nil raises
@@ -72,7 +72,7 @@ test_env1_message_to_nil_raises
 	self should: [nil @env1:__bool__] raise: UnboundLocalError.
 %
 
-category: 'Python-Tests-DNU Backstop'
+category: 'Grail-Tests-DNU Backstop'
 method: UnboundLocalErrorTestCase
 test_env1_keyword_message_to_nil_raises
 	"Multi-argument env-1 sends to nil also surface as UnboundLocalError."
@@ -80,7 +80,7 @@ test_env1_keyword_message_to_nil_raises
 	self should: [nil @env1:__add__: 1] raise: UnboundLocalError.
 %
 
-category: 'Python-Tests-DNU Backstop'
+category: 'Grail-Tests-DNU Backstop'
 method: UnboundLocalErrorTestCase
 test_unbound_local_inherits_from_name_error
 	"The DNU backstop raises a real Python UnboundLocalError, which is
@@ -90,7 +90,7 @@ test_unbound_local_inherits_from_name_error
 	self should: [nil @env1:__bool__] raise: NameError.
 %
 
-category: 'Python-Tests-DNU Backstop'
+category: 'Grail-Tests-DNU Backstop'
 method: UnboundLocalErrorTestCase
 test_env0_message_to_nil_unaffected
 	"env-0 messages to nil still raise MessageNotUnderstood — the
@@ -100,7 +100,7 @@ test_env0_message_to_nil_unaffected
 	self should: [nil @env0:__bool__] raise: MessageNotUnderstood.
 %
 
-category: 'Python-Tests-DNU Backstop'
+category: 'Grail-Tests-DNU Backstop'
 method: UnboundLocalErrorTestCase
 test_perform_env1_to_nil_raises
 	"Reflective dispatch via perform:env:withArguments: on nil also goes
@@ -110,7 +110,7 @@ test_perform_env1_to_nil_raises
 		raise: UnboundLocalError.
 %
 
-category: 'Python-Tests-DNU Backstop'
+category: 'Grail-Tests-DNU Backstop'
 method: UnboundLocalErrorTestCase
 test_python_unbound_local_use_raises
 	"A Python local that is never assigned (because the assignment is
@@ -127,7 +127,7 @@ f(False)']
 		raise: UnboundLocalError.
 %
 
-category: 'Python-Tests-Load-Site Check'
+category: 'Grail-Tests-Load-Site Check'
 method: UnboundLocalErrorTestCase
 test_python_explicit_none_does_not_raise
 	"Sanity: a local assigned to None — the singleton — does not trigger
@@ -139,7 +139,7 @@ test_python_explicit_none_does_not_raise
 f()') == true.
 %
 
-category: 'Python-Tests-Load-Site Check'
+category: 'Grail-Tests-Load-Site Check'
 method: UnboundLocalErrorTestCase
 test_python_unbound_local_names_the_variable
 	"Phase C-2: the load-site check raises an error whose message names
@@ -158,7 +158,7 @@ f(False)']
 	self assert: false description: 'Expected UnboundLocalError'
 %
 
-category: 'Python-Tests-Load-Site Check'
+category: 'Grail-Tests-Load-Site Check'
 method: UnboundLocalErrorTestCase
 test_python_assigned_local_does_not_raise
 	"A local that is unconditionally assigned before use reads cleanly —
@@ -170,7 +170,7 @@ test_python_assigned_local_does_not_raise
 f()') equals: 42.
 %
 
-category: 'Python-Tests-Load-Site Check'
+category: 'Grail-Tests-Load-Site Check'
 method: UnboundLocalErrorTestCase
 test_python_parameter_does_not_raise
 	"Function parameters are bound by the call. The codegen emits a check
@@ -181,7 +181,7 @@ test_python_parameter_does_not_raise
 f(7)') equals: 7.
 %
 
-category: 'Python-Tests-Load-Site Check'
+category: 'Grail-Tests-Load-Site Check'
 method: UnboundLocalErrorTestCase
 test_python_aug_assign_unbound_raises
 	"Augmented assignment ``x += 1`` reads x first, so an unbound

@@ -18,7 +18,7 @@ PythonTestCase subclass: 'FunctoolsTestCase'
 
 expectvalue /Class
 doit
-FunctoolsTestCase category: 'SUnit'
+FunctoolsTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -39,7 +39,7 @@ FunctoolsTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Tests - Module'
+category: 'Grail-Tests - Module'
 method: FunctoolsTestCase
 testFunctoolsModuleExists
 	"Test that functools module is registered."
@@ -49,7 +49,7 @@ testFunctoolsModuleExists
 	self assert: (modules includesKey: #functools)
 %
 
-category: 'Tests - reduce'
+category: 'Grail-Tests - reduce'
 method: FunctoolsTestCase
 testReduceSum
 	"Test functools.reduce() to sum a list."
@@ -60,7 +60,7 @@ testReduceSum
 	self assert: result equals: 15
 %
 
-category: 'Tests - reduce'
+category: 'Grail-Tests - reduce'
 method: FunctoolsTestCase
 testReduceWithInitial
 	"Test functools.reduce() with initial value."
@@ -71,7 +71,7 @@ testReduceWithInitial
 	self assert: result equals: 16
 %
 
-category: 'Tests - reduce'
+category: 'Grail-Tests - reduce'
 method: FunctoolsTestCase
 testReduceSingleElement
 	"Test functools.reduce() with single-element iterable returns that element."
@@ -82,7 +82,7 @@ testReduceSingleElement
 	self assert: result equals: 42
 %
 
-category: 'Tests - lru_cache'
+category: 'Grail-Tests - lru_cache'
 method: FunctoolsTestCase
 testLruCacheReturnsDecorator
 	"Test functools.lru_cache(maxsize) returns a decorator (callable)."
@@ -95,7 +95,7 @@ testLruCacheReturnsDecorator
 	self assert: (decorator isKindOf: ExecBlock)
 %
 
-category: 'Tests - lru_cache'
+category: 'Grail-Tests - lru_cache'
 method: FunctoolsTestCase
 testLruCacheDecoratorPassesThrough
 	"Test that the lru_cache decorator returns the function unchanged (stub)."
@@ -108,7 +108,7 @@ testLruCacheDecoratorPassesThrough
 	self assert: result == fn
 %
 
-category: 'Tests - Phase 4d Attribute Calls'
+category: 'Grail-Tests - Phase 4d Attribute Calls'
 method: FunctoolsTestCase
 testEvalReduceSum
 	"Phase 4d: functools.reduce(fn, iterable) from Python source.

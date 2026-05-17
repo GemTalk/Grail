@@ -17,7 +17,7 @@ PythonTestCase subclass: 'OSErrorTestCase'
 %
 expectvalue /Class
 doit
-OSErrorTestCase category: 'SUnit'
+OSErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ OSErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-OSError'
+category: 'Grail-Tests-OSError'
 method: OSErrorTestCase
 test_creation
 	"Test creating a OSError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-OSError'
+category: 'Grail-Tests-OSError'
 method: OSErrorTestCase
 test_inheritance
 	"Test that OSError inherits from Exception."

@@ -17,7 +17,7 @@ PythonTestCase subclass: 'BaseExceptionTestCase'
 %
 expectvalue /Class
 doit
-BaseExceptionTestCase category: 'SUnit'
+BaseExceptionTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ BaseExceptionTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-BaseException'
+category: 'Grail-Tests-BaseException'
 method: BaseExceptionTestCase
 test_creation_no_args
 	"Test creating a BaseException with no arguments."
@@ -47,7 +47,7 @@ test_creation_no_args
 	self assert: args isEmpty.
 %
 
-category: 'Python-Tests-BaseException'
+category: 'Grail-Tests-BaseException'
 method: BaseExceptionTestCase
 test_creation_with_args
 	"Test creating a BaseException with arguments."
@@ -61,7 +61,7 @@ test_creation_with_args
 	self assert: (args at: 1) equals: 'error message'.
 %
 
-category: 'Python-Tests-BaseException'
+category: 'Grail-Tests-BaseException'
 method: BaseExceptionTestCase
 test_equality
 	"Test exception equality comparison."
@@ -80,7 +80,7 @@ test_equality
 	self assert: (exc1 @env1:__ne__: exc3).
 %
 
-category: 'Python-Tests-BaseException'
+category: 'Grail-Tests-BaseException'
 method: BaseExceptionTestCase
 test_inheritance
 	"Test that BaseException inherits from GemStone's Exception."
@@ -90,7 +90,7 @@ test_inheritance
 	self assert: (exc isKindOf: (Globals at: #Exception)).
 %
 
-category: 'Python-Tests-BaseException'
+category: 'Grail-Tests-BaseException'
 method: BaseExceptionTestCase
 test_repr
 	"Test __repr__ method."
@@ -104,7 +104,7 @@ test_repr
 	self assert: (repr includesString: 'test message').
 %
 
-category: 'Python-Tests-BaseException'
+category: 'Grail-Tests-BaseException'
 method: BaseExceptionTestCase
 test_str_empty
 	"Test __str__ with no arguments."
@@ -115,7 +115,7 @@ test_str_empty
 	self assert: str isEmpty.
 %
 
-category: 'Python-Tests-BaseException'
+category: 'Grail-Tests-BaseException'
 method: BaseExceptionTestCase
 test_str_multiple_args
 	"Test __str__ with multiple arguments."
@@ -127,7 +127,7 @@ test_str_multiple_args
 	self assert: str notEmpty.
 %
 
-category: 'Python-Tests-BaseException'
+category: 'Grail-Tests-BaseException'
 method: BaseExceptionTestCase
 test_str_single_arg
 	"Test __str__ with single argument."
@@ -139,7 +139,7 @@ test_str_single_arg
 	self assert: str equals: 'test'.
 %
 
-category: 'Python-Tests-BaseException'
+category: 'Grail-Tests-BaseException'
 method: BaseExceptionTestCase
 test_cause_defaults_to_none
 	"Unset __cause__ surfaces as the Python None singleton, not Smalltalk nil."
@@ -149,7 +149,7 @@ test_cause_defaults_to_none
 	self assert: exc @env1:__cause__ equals: None.
 %
 
-category: 'Python-Tests-BaseException'
+category: 'Grail-Tests-BaseException'
 method: BaseExceptionTestCase
 test_context_defaults_to_none
 	"Unset __context__ surfaces as the Python None singleton."
@@ -159,7 +159,7 @@ test_context_defaults_to_none
 	self assert: exc @env1:__context__ equals: None.
 %
 
-category: 'Python-Tests-BaseException'
+category: 'Grail-Tests-BaseException'
 method: BaseExceptionTestCase
 test_init_returns_none
 	"__init__ returns None (not the receiver instance), per Python protocol."
@@ -170,7 +170,7 @@ test_init_returns_none
 	self assert: result equals: None.
 %
 
-category: 'Python-Tests-BaseException'
+category: 'Grail-Tests-BaseException'
 method: BaseExceptionTestCase
 test_init_with_args_returns_none
 	"__init__: a returns None — not self — so user code that captures the

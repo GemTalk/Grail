@@ -39,7 +39,7 @@ See https://docs.python.org/3/library/sys.html for the complete list.
 
 expectvalue /Class
 doit
-sys category: 'Modules'
+sys category: 'Grail-Modules'
 %
 
 ! ===============================================================================
@@ -59,7 +59,7 @@ sys class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Module Registry'
+category: 'Grail-Module Registry'
 classmethod: sys
 initializeBuiltinModules
 	"Initialize the registry with built-in modules"
@@ -80,7 +80,7 @@ initializeBuiltinModules
 		@env0:yourself.
 %
 
-category: 'Python-Module Registry'
+category: 'Grail-Module Registry'
 classmethod: sys
 modules
 	"Return the module registry (sys.modules).
@@ -93,294 +93,294 @@ modules
 	^ modules
 %
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 __breakpointhook__
 	^ self @env0:at: #__breakpointhook__
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 __displayhook__
 	^ self @env0:at: #__displayhook__
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 __excepthook__
 	^ self @env0:at: #__excepthook__
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 __stderr__
 	^ self @env0:at: #__stderr__
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 __stdin__
 	^ self @env0:at: #__stdin__
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 __stdout__
 	^ self @env0:at: #__stdout__
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 __unraisablehook__
 	^ self @env0:at: #__unraisablehook__
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 addaudithook
 	^ self @env0:at: #addaudithook
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 api_version
 	^ self @env0:at: #api_version
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 argv
 	^ self @env0:at: #argv
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 audit
 	^ self @env0:at: #audit
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 base_exec_prefix
 	^ self @env0:at: #base_exec_prefix
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 base_prefix
 	^ self @env0:at: #base_prefix
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 breakpointhook
 	^ self @env0:at: #breakpointhook
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 builtin_module_names
 	^ self @env0:at: #builtin_module_names
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 byteorder
 	^ self @env0:at: #byteorder
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 call_tracing
 	^ self @env0:at: #call_tracing
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 copyright
 	^ self @env0:at: #copyright
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 displayhook
 	^ self @env0:at: #displayhook
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 dont_write_bytecode
 	^ self @env0:at: #dont_write_bytecode
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 exc_info
 	^ self @env0:at: #exc_info
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 excepthook
 	^ self @env0:at: #excepthook
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 exception
 	^ self @env0:at: #exception
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 exec_prefix
 	^ self @env0:at: #exec_prefix
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 executable
 	^ self @env0:at: #executable
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 exit
 	^ self @env0:at: #exit
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 flags
 	^ self @env0:at: #flags
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 float_info
 	^ self @env0:at: #float_info
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 float_repr_style
 	^ self @env0:at: #float_repr_style
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 get_int_max_str_digits
 	^ self @env0:at: #get_int_max_str_digits
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 getallocatedblocks
 	^ self @env0:at: #getallocatedblocks
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 getdefaultencoding
 	^ self @env0:at: #getdefaultencoding
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 getfilesystemencodeerrors
 	^ self @env0:at: #getfilesystemencodeerrors
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 getfilesystemencoding
 	^ self @env0:at: #getfilesystemencoding
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 getprofile
 	^ self @env0:at: #getprofile
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 getrecursionlimit
 	^ self @env0:at: #getrecursionlimit
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 getrefcount
 	^ self @env0:at: #getrefcount
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 getsizeof
 	^ self @env0:at: #getsizeof
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 gettrace
 	^ self @env0:at: #gettrace
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 hash_info
 	^ self @env0:at: #hash_info
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 hexversion
 	^ self @env0:at: #hexversion
 %
 
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: sys
 implementation
 	^ self @env0:at: #implementation
@@ -388,7 +388,7 @@ implementation
 
 
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: sys
 initialize
 	"Initialize all module attributes with their default values"
@@ -412,112 +412,112 @@ initialize
 
 ! --- 0-arg callables ---
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 addaudithook
 	"addaudithook(hook) - stub, auditing not implemented."
 	^ None
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 audit
 	"audit(event, *args) - stub, auditing not implemented."
 	^ None
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 breakpointhook
 	"breakpointhook(*args, **kws) - stub."
 	^ None
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 exc_info
 	"exc_info() -> (type, value, traceback)"
 	^ tuple @env0:withAll: {None. None. None}
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 exception
 	"exception() -> current exception instance"
 	^ None
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 get_int_max_str_digits
 	"get_int_max_str_digits() -> 4300"
 	^ 4300
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 getallocatedblocks
 	"getallocatedblocks() -> 0 (GemStone manages memory differently)"
 	^ 0
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 getdefaultencoding
 	"getdefaultencoding() -> 'utf-8'"
 	^ 'utf-8'
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 getfilesystemencodeerrors
 	"getfilesystemencodeerrors() -> 'surrogateescape'"
 	^ 'surrogateescape'
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 getfilesystemencoding
 	"getfilesystemencoding() -> 'utf-8'"
 	^ 'utf-8'
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 getprofile
 	"getprofile() -> None"
 	^ None
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 getrecursionlimit
 	"getrecursionlimit() -> 1000"
 	^ 1000
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 gettrace
 	"gettrace() -> None"
 	^ None
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 is_finalizing
 	"is_finalizing() -> False"
 	^ false
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 setprofile
 	"setprofile(profilefunc) - stub."
 	^ None
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 settrace
 	"settrace(tracefunc) - stub."
@@ -526,7 +526,7 @@ settrace
 
 ! --- 1-arg callables ---
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 displayhook: value
 	"displayhook(value) - print value to stdout."
@@ -539,35 +539,35 @@ displayhook: value
 	^ None
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 getrefcount: obj
 	"getrefcount(object) -> 1 (GemStone uses GC, not refcounting)"
 	^ 1
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 intern: aString
 	"intern(string) -> interned string"
 	^ (aString @env0:asSymbol) @env0:asString
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 set_int_max_str_digits: maxdigits
 	"set_int_max_str_digits(maxdigits) - stub."
 	^ None
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 setrecursionlimit: limit
 	"setrecursionlimit(limit) - stub."
 	^ None
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 unraisablehook: unraisable
 	"unraisablehook(unraisable) - stub."
@@ -576,7 +576,7 @@ unraisablehook: unraisable
 
 ! --- 2-arg callables ---
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 call_tracing: func _: args
 	"call_tracing(func, args) - call function (tracing not implemented)."
@@ -585,7 +585,7 @@ call_tracing: func _: args
 
 ! --- 3-arg callables ---
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 excepthook: excType _: excValue _: excTb
 	"excepthook(type, value, traceback) - print exception to stderr."
@@ -595,21 +595,21 @@ excepthook: excType _: excValue _: excTb
 
 ! --- Varargs callables ---
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 exit
 	"exit() -> 0-arg fast path. Raise SystemExit with code 0."
 	^ SystemExit ___signal___: 0
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 exit: code
 	"exit(code) -> 1-arg fast path. Raise SystemExit with given code."
 	^ SystemExit ___signal___: code
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 _exit: positional kw: kwargs
 	"exit([arg]) - varargs form."
@@ -620,7 +620,7 @@ _exit: positional kw: kwargs
 	^ SystemExit ___signal___: arg
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 _getsizeof: positional kw: kwargs
 	"getsizeof(object[, default]) - Return size of object in bytes."
@@ -635,7 +635,7 @@ _getsizeof: positional kw: kwargs
 	]
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: sys
 getsizeof: obj
 	"getsizeof(obj) -> 1-arg fast path."
@@ -646,7 +646,7 @@ getsizeof: obj
 ! Data-population initializers (kept from legacy — these populate stored attrs)
 ! ===============================================================================
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: sys
 initialize_version_info
 	"Initialize version-related attributes using GemStone version info"
@@ -661,7 +661,7 @@ initialize_version_info
 	self @env0:at: #implementation put: None.
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: sys
 initialize_platform_info
 	"Initialize platform-related attributes using GemStone system info"
@@ -686,7 +686,7 @@ initialize_platform_info
 	self @env0:at: #float_repr_style put: 'short'.
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: sys
 initialize_path_info
 	"Initialize path-related attributes using GemStone info"
@@ -706,7 +706,7 @@ initialize_path_info
 	self @env0:at: #dont_write_bytecode put: true.
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: sys
 initialize_runtime_info
 	"Initialize runtime information attributes from GemStone"

@@ -17,7 +17,7 @@ PythonTestCase subclass: 'RaiseTestCase'
 %
 expectvalue /Class
 doit
-RaiseTestCase category: 'SUnit'
+RaiseTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ RaiseTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: RaiseTestCase
 testRaiseInstance
 	"Test raise with an exception instance."
@@ -42,7 +42,7 @@ testRaiseInstance
 	self should: [self eval: 'raise ValueError("bad value")'] raise: ValueError.
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: RaiseTestCase
 testRaiseClass
 	"Test raise with just an exception class (no args)."
@@ -50,7 +50,7 @@ testRaiseClass
 	self should: [self eval: 'raise TypeError'] raise: TypeError.
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: RaiseTestCase
 testRaiseMessage
 	"Test that the message from raise is preserved."
@@ -64,7 +64,7 @@ testRaiseMessage
 	self assert: msg = 'ValueError: test message'.
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: RaiseTestCase
 testRaiseInFunction
 	"Test raise inside a function."
@@ -74,7 +74,7 @@ testRaiseInFunction
 fail()'] raise: ValueError.
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: RaiseTestCase
 testBareRaise
 	"Test bare raise re-raises the current exception."

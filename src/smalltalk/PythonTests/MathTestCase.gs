@@ -18,7 +18,7 @@ PythonTestCase subclass: 'MathTestCase'
 
 expectvalue /Class
 doit
-MathTestCase category: 'SUnit'
+MathTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ MathTestCase class removeAllMethods: 0.
 
 set compile_env: 0
 
-category: 'Source'
+category: 'Grail-Source'
 method: MathTestCase
 math_cos_py
 
@@ -44,7 +44,7 @@ result
 '
 %
 
-category: 'Source'
+category: 'Grail-Source'
 method: MathTestCase
 math_sqrt_py
 
@@ -54,7 +54,7 @@ result
 '
 %
 
-category: 'Tests - Trigonometric'
+category: 'Grail-Tests - Trigonometric'
 method: MathTestCase
 testAcos
 	"Test math.acos()"
@@ -71,7 +71,7 @@ testAcos
 		< 0.00001)
 %
 
-category: 'Tests - Trigonometric'
+category: 'Grail-Tests - Trigonometric'
 method: MathTestCase
 testAsin
 	"Test math.asin()"
@@ -88,7 +88,7 @@ testAsin
 		< 0.00001)
 %
 
-category: 'Tests - Trigonometric'
+category: 'Grail-Tests - Trigonometric'
 method: MathTestCase
 testAtan
 	"Test math.atan()"
@@ -105,7 +105,7 @@ testAtan
 		< 0.00001)
 %
 
-category: 'Tests - Trigonometric'
+category: 'Grail-Tests - Trigonometric'
 method: MathTestCase
 testAtan2
 	"Test math.atan2()"
@@ -123,7 +123,7 @@ testAtan2
 		< 0.00001)
 %
 
-category: 'Tests - Rounding'
+category: 'Grail-Tests - Rounding'
 method: MathTestCase
 testCeil
 	"Test math.ceil()"
@@ -141,7 +141,7 @@ testCeil
 	self assert: result equals: -3
 %
 
-category: 'Tests - Trigonometric'
+category: 'Grail-Tests - Trigonometric'
 method: MathTestCase
 testCos
 	"Test math.cos()"
@@ -159,7 +159,7 @@ testCos
 		< 0.00001)
 %
 
-category: 'Tests - Hyperbolic'
+category: 'Grail-Tests - Hyperbolic'
 method: MathTestCase
 testCosh
 	"Test math.cosh()"
@@ -176,7 +176,7 @@ testCosh
 		< 0.001)
 %
 
-category: 'Tests - Angular Conversion'
+category: 'Grail-Tests - Angular Conversion'
 method: MathTestCase
 testDegrees
 	"Test math.degrees()"
@@ -194,7 +194,7 @@ testDegrees
 		< 0.00001)
 %
 
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: MathTestCase
 testE
 	"Test math.e constant"
@@ -207,7 +207,7 @@ testE
 		< 0.001)
 %
 
-category: 'Tests - Power and Logarithmic'
+category: 'Grail-Tests - Power and Logarithmic'
 method: MathTestCase
 testExp
 	"Test math.exp()"
@@ -223,7 +223,7 @@ testExp
 		< 0.001)
 %
 
-category: 'Tests - Floating Point'
+category: 'Grail-Tests - Floating Point'
 method: MathTestCase
 testFabs
 	"Test math.fabs()"
@@ -238,7 +238,7 @@ testFabs
 	self assert: result equals: 3.2
 %
 
-category: 'Tests - Number Theory'
+category: 'Grail-Tests - Number Theory'
 method: MathTestCase
 testFactorial
 	"Test math.factorial()"
@@ -256,7 +256,7 @@ testFactorial
 	self assert: result equals: 3628800
 %
 
-category: 'Tests - Rounding'
+category: 'Grail-Tests - Rounding'
 method: MathTestCase
 testFloor
 	"Test math.floor()"
@@ -274,7 +274,7 @@ testFloor
 	self assert: result equals: -4
 %
 
-category: 'Tests - Number Theory'
+category: 'Grail-Tests - Number Theory'
 method: MathTestCase
 testGcd
 	"Test math.gcd()"
@@ -292,7 +292,7 @@ testGcd
 	self assert: result equals: 1
 %
 
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: MathTestCase
 testInf
 	"Test math.inf constant"
@@ -304,7 +304,7 @@ testInf
 	self assert: (result _getKind) equals: 3
 %
 
-category: 'Tests - Floating Point'
+category: 'Grail-Tests - Floating Point'
 method: MathTestCase
 testIsfinite
 	"Test math.isfinite()"
@@ -324,7 +324,7 @@ testIsfinite
 	self deny: result
 %
 
-category: 'Tests - Floating Point'
+category: 'Grail-Tests - Floating Point'
 method: MathTestCase
 testIsinf
 	"Test math.isinf()"
@@ -340,7 +340,7 @@ testIsinf
 	self deny: result
 %
 
-category: 'Tests - Floating Point'
+category: 'Grail-Tests - Floating Point'
 method: MathTestCase
 testIsnan
 	"Test math.isnan()"
@@ -356,7 +356,7 @@ testIsnan
 	self deny: result
 %
 
-category: 'Tests - Number Theory'
+category: 'Grail-Tests - Number Theory'
 method: MathTestCase
 testLcm
 	"Test math.lcm()"
@@ -371,7 +371,7 @@ testLcm
 	self assert: result equals: 75
 %
 
-category: 'Tests - Power and Logarithmic'
+category: 'Grail-Tests - Power and Logarithmic'
 method: MathTestCase
 testLog
 	"Test math.log()"
@@ -388,7 +388,7 @@ testLog
 		< 0.001)
 %
 
-category: 'Tests - Power and Logarithmic'
+category: 'Grail-Tests - Power and Logarithmic'
 method: MathTestCase
 testLog10
 	"Test math.log10()"
@@ -405,7 +405,7 @@ testLog10
 		< 0.00001)
 %
 
-category: 'Tests - Power and Logarithmic'
+category: 'Grail-Tests - Power and Logarithmic'
 method: MathTestCase
 testLog2
 	"Test math.log2()"
@@ -422,7 +422,7 @@ testLog2
 		< 0.00001)
 %
 
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: MathTestCase
 testNan
 	"Test math.nan constant"
@@ -434,7 +434,7 @@ testNan
 	self assert: (result _isNaN)
 %
 
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: MathTestCase
 testPi
 	"Test math.pi constant"
@@ -447,7 +447,7 @@ testPi
 		< 0.001)
 %
 
-category: 'Tests - Power and Logarithmic'
+category: 'Grail-Tests - Power and Logarithmic'
 method: MathTestCase
 testPow
 	"Test math.pow()"
@@ -465,7 +465,7 @@ testPow
 	self assert: result equals: 1.0
 %
 
-category: 'Tests - Python Source'
+category: 'Grail-Tests - Python Source'
 method: MathTestCase
 testPythonMathCos
 	"Execute math.cos from Python source."
@@ -475,7 +475,7 @@ testPythonMathCos
 	self assert: ((result - 1.0) abs) < 0.00001.
 %
 
-category: 'Tests - Python Source'
+category: 'Grail-Tests - Python Source'
 method: MathTestCase
 testPythonMathSqrt
 	"Execute math.sqrt from Python source."
@@ -485,7 +485,7 @@ testPythonMathSqrt
 	self assert: ((result - 3.0) abs) < 0.00001.
 %
 
-category: 'Tests - Angular Conversion'
+category: 'Grail-Tests - Angular Conversion'
 method: MathTestCase
 testRadians
 	"Test math.radians()"
@@ -503,7 +503,7 @@ testRadians
 		< 0.00001)
 %
 
-category: 'Tests - Trigonometric'
+category: 'Grail-Tests - Trigonometric'
 method: MathTestCase
 testSin
 	"Test math.sin()"
@@ -520,7 +520,7 @@ testSin
 		< 0.00001)
 %
 
-category: 'Tests - Hyperbolic'
+category: 'Grail-Tests - Hyperbolic'
 method: MathTestCase
 testSinh
 	"Test math.sinh()"
@@ -536,7 +536,7 @@ testSinh
 		< 0.001)
 %
 
-category: 'Tests - Power and Logarithmic'
+category: 'Grail-Tests - Power and Logarithmic'
 method: MathTestCase
 testSqrt
 	"Test math.sqrt()"
@@ -555,7 +555,7 @@ testSqrt
 		< 0.001)
 %
 
-category: 'Tests - Trigonometric'
+category: 'Grail-Tests - Trigonometric'
 method: MathTestCase
 testTan
 	"Test math.tan()"
@@ -572,7 +572,7 @@ testTan
 		< 0.00001)
 %
 
-category: 'Tests - Hyperbolic'
+category: 'Grail-Tests - Hyperbolic'
 method: MathTestCase
 testTanh
 	"Test math.tanh()"
@@ -588,7 +588,7 @@ testTanh
 		< 0.001)
 %
 
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: MathTestCase
 testTau
 	"Test math.tau constant (2*pi)"
@@ -601,7 +601,7 @@ testTau
 	self assert: result - (pi * 2) abs < 0.00001
 %
 
-category: 'Tests - Rounding'
+category: 'Grail-Tests - Rounding'
 method: MathTestCase
 testTrunc
 	"Test math.trunc()"

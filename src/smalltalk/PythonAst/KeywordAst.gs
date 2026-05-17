@@ -46,7 +46,7 @@ Object
 
 expectvalue /Class
 doit
-KeywordAst category: 'Parser'
+KeywordAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from KeywordAst
@@ -55,14 +55,14 @@ removeallclassmethods KeywordAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: KeywordAst
 name
 
 	^arg
 %
 
-category: 'other'
+category: 'Grail-other'
 method: KeywordAst
 value
 

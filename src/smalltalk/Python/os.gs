@@ -28,7 +28,7 @@ See https://docs.python.org/3/library/os.html
 
 expectvalue /Class
 doit
-os category: 'Modules'
+os category: 'Grail-Modules'
 %
 
 set compile_env: 0
@@ -46,7 +46,7 @@ set compile_env: 1
 ! Initialization — constants and stored attributes
 ! ===============================================================================
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: os
 initialize
 	self @env0:at: #sep put: '/'.
@@ -59,25 +59,25 @@ initialize
 ! Stored-attribute accessors
 ! ===============================================================================
 
-category: 'Python-Constants'
+category: 'Grail-Constants'
 method: os
 sep
 	^ self @env0:at: #sep
 %
 
-category: 'Python-Constants'
+category: 'Grail-Constants'
 method: os
 pathsep
 	^ self @env0:at: #pathsep
 %
 
-category: 'Python-Constants'
+category: 'Grail-Constants'
 method: os
 linesep
 	^ self @env0:at: #linesep
 %
 
-category: 'Python-Path Module'
+category: 'Grail-Path Module'
 method: os
 path
 	^ self @env0:at: #path
@@ -87,7 +87,7 @@ path
 ! Fast-path callables — directory operations
 ! ===============================================================================
 
-category: 'Python-File and Directory Operations'
+category: 'Grail-File and Directory Operations'
 method: os
 getcwd
 	"os.getcwd() — return the current working directory."
@@ -100,7 +100,7 @@ getcwd
 	^ result @env0:asUnicodeString
 %
 
-category: 'Python-File and Directory Operations'
+category: 'Grail-File and Directory Operations'
 method: os
 chdir: path
 	"os.chdir(path) — change the current working directory."
@@ -113,7 +113,7 @@ chdir: path
 	^ None
 %
 
-category: 'Python-File and Directory Operations'
+category: 'Grail-File and Directory Operations'
 method: os
 mkdir: path
 	"os.mkdir(path) — create a directory."
@@ -126,7 +126,7 @@ mkdir: path
 	^ None
 %
 
-category: 'Python-File and Directory Operations'
+category: 'Grail-File and Directory Operations'
 method: os
 mkdir: path _: mode
 	"os.mkdir(path, mode) — create a directory with numeric mode."
@@ -139,7 +139,7 @@ mkdir: path _: mode
 	^ None
 %
 
-category: 'Python-File and Directory Operations'
+category: 'Grail-File and Directory Operations'
 method: os
 makedirs: path
 	"os.makedirs(path) — recursive directory creation."
@@ -165,7 +165,7 @@ makedirs: path
 	^ None
 %
 
-category: 'Python-File and Directory Operations'
+category: 'Grail-File and Directory Operations'
 method: os
 rmdir: path
 	"os.rmdir(path) — remove a directory."
@@ -178,7 +178,7 @@ rmdir: path
 	^ None
 %
 
-category: 'Python-File and Directory Operations'
+category: 'Grail-File and Directory Operations'
 method: os
 remove: path
 	"os.remove(path) — remove a file."
@@ -191,7 +191,7 @@ remove: path
 	^ None
 %
 
-category: 'Python-File and Directory Operations'
+category: 'Grail-File and Directory Operations'
 method: os
 rename: oldPath _: newPath
 	"os.rename(old, new) — rename a file or directory."
@@ -205,7 +205,7 @@ rename: oldPath _: newPath
 	^ None
 %
 
-category: 'Python-File and Directory Operations'
+category: 'Grail-File and Directory Operations'
 method: os
 listdir: path
 	"os.listdir(path) — 1-arg fast path. Delegates to _listdir:kw:."
@@ -213,7 +213,7 @@ listdir: path
 	^ self _listdir: { path } kw: nil
 %
 
-category: 'Python-File and Directory Operations'
+category: 'Grail-File and Directory Operations'
 method: os
 _listdir: positional kw: kwargs
 	"os.listdir([path]) — list directory contents. 0-arg uses cwd."
@@ -247,7 +247,7 @@ _listdir: positional kw: kwargs
 ! Fast-path callables — file queries
 ! ===============================================================================
 
-category: 'Python-File and Directory Operations'
+category: 'Grail-File and Directory Operations'
 method: os
 exists: path
 	"os.path.exists(path) exposed as os.exists(path)."
@@ -255,7 +255,7 @@ exists: path
 	^ GsFile @env0:existsOnServer: path
 %
 
-category: 'Python-File and Directory Operations'
+category: 'Grail-File and Directory Operations'
 method: os
 isdir: path
 	"os.path.isdir(path) exposed as os.isdir(path)."
@@ -266,7 +266,7 @@ isdir: path
 	^ false
 %
 
-category: 'Python-File and Directory Operations'
+category: 'Grail-File and Directory Operations'
 method: os
 isfile: path
 	"os.path.isfile(path) exposed as os.isfile(path)."
@@ -277,7 +277,7 @@ isfile: path
 	^ false
 %
 
-category: 'Python-File and Directory Operations'
+category: 'Grail-File and Directory Operations'
 method: os
 stat: path
 	"os.stat(path) — get file status."
@@ -290,7 +290,7 @@ stat: path
 	^ statResult
 %
 
-category: 'Python-File and Directory Operations'
+category: 'Grail-File and Directory Operations'
 method: os
 lstat: path
 	"os.lstat(path) — like stat but does not follow symlinks."
@@ -307,7 +307,7 @@ lstat: path
 ! Fast-path callables — environment variables
 ! ===============================================================================
 
-category: 'Python-Environment Variables'
+category: 'Grail-Environment Variables'
 method: os
 getenv: name
 	"os.getenv(name) — get environment variable, return None if absent."
@@ -315,7 +315,7 @@ getenv: name
 	^ self @env1:getenv: name _: None
 %
 
-category: 'Python-Environment Variables'
+category: 'Grail-Environment Variables'
 method: os
 getenv: name _: default
 	"os.getenv(name, default) — get environment variable with default."
@@ -326,7 +326,7 @@ getenv: name _: default
 	^ result
 %
 
-category: 'Python-Environment Variables'
+category: 'Grail-Environment Variables'
 method: os
 putenv: name _: value
 	"os.putenv(name, value) — set environment variable."
@@ -339,7 +339,7 @@ putenv: name _: value
 ! Fast-path callables — process management
 ! ===============================================================================
 
-category: 'Python-Process Management'
+category: 'Grail-Process Management'
 method: os
 system: command
 	"os.system(command) — execute command in a subshell."

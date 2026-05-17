@@ -41,7 +41,7 @@ Object
 
 expectvalue /Class
 doit
-YieldAst category: 'Parser'
+YieldAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from YieldAst

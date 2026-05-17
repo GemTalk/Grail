@@ -47,7 +47,7 @@ Object
 
 expectvalue /Class
 doit
-AugAssignAst category: 'Parser'
+AugAssignAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from AugAssignAst
@@ -56,7 +56,7 @@ removeallclassmethods AugAssignAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: AugAssignAst
 printSmalltalkOn: aStream
 
@@ -74,7 +74,7 @@ printSmalltalkOn: aStream
 	aStream nextPut: $..
 %
 
-category: 'other'
+category: 'Grail-other'
 method: AugAssignAst
 printSmalltalkAttributeAugAssignOn: aStream
 	"Generate augmented attribute assignment.
@@ -105,7 +105,7 @@ printSmalltalkAttributeAugAssignOn: aStream
 	aStream nextPutAll: ').'.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: AugAssignAst
 printSmalltalkSubscriptAugAssignOn: aStream
 	"Generate: obj __setitem__: slice _: (obj __getitem__: slice op value)."

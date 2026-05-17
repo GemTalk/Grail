@@ -18,7 +18,7 @@ PythonTestCase subclass: 'TupleTestCase'
 
 expectvalue /Class
 doit
-TupleTestCase category: 'SUnit'
+TupleTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -39,7 +39,7 @@ TupleTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Tests - Sequence Operations'
+category: 'Grail-Tests - Sequence Operations'
 method: TupleTestCase
 test__add__
 	"Test tuple.__add__(other) - concatenation"
@@ -59,7 +59,7 @@ test__add__
 	self assert: tup2 size equals: 2.
 %
 
-category: 'Tests - Sequence Protocol'
+category: 'Grail-Tests - Sequence Protocol'
 method: TupleTestCase
 test__contains__
 	"Test tuple.__contains__(item)"
@@ -71,7 +71,7 @@ test__contains__
 	self deny: (tup @env1:__contains__: 4).
 %
 
-category: 'Tests - Immutability'
+category: 'Grail-Tests - Immutability'
 method: TupleTestCase
 test__delitem__RaisesError
 	"Test that tuple.__delitem__ raises TypeError (tuples are immutable)"
@@ -82,7 +82,7 @@ test__delitem__RaisesError
 	self should: [tup @env1:__delitem__: 0] raise: TypeError.
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: TupleTestCase
 test__eq__
 	"Test tuple.__eq__(other)"
@@ -103,7 +103,7 @@ test__eq__
 	self deny: (tup1 @env1:__eq__: lst).
 %
 
-category: 'Tests - Sequence Protocol'
+category: 'Grail-Tests - Sequence Protocol'
 method: TupleTestCase
 test__getitem__
 	"Test tuple.__getitem__(index)"
@@ -125,7 +125,7 @@ test__getitem__
 	self should: [tup @env1:__getitem__: -6] raise: IndexError.
 %
 
-category: 'Tests - Hashing'
+category: 'Grail-Tests - Hashing'
 method: TupleTestCase
 test__hash__
 	"Test tuple.__hash__() - tuples are hashable"
@@ -139,7 +139,7 @@ test__hash__
 	self assert: hash class == SmallInteger.
 %
 
-category: 'Tests - Sequence Protocol'
+category: 'Grail-Tests - Sequence Protocol'
 method: TupleTestCase
 test__len__
 	"Test tuple.__len__()"
@@ -152,7 +152,7 @@ test__len__
 	self assert: tup size equals: 3.
 %
 
-category: 'Tests - Sequence Operations'
+category: 'Grail-Tests - Sequence Operations'
 method: TupleTestCase
 test__mul__
 	"Test tuple.__mul__(n) - repetition"
@@ -171,7 +171,7 @@ test__mul__
 	self assert: tup size equals: 2.
 %
 
-category: 'Tests - String Representation'
+category: 'Grail-Tests - String Representation'
 method: TupleTestCase
 test__repr__
 	"Test tuple.__repr__()"
@@ -195,7 +195,7 @@ test__repr__
 	self assert: result equals: '()'.
 %
 
-category: 'Tests - Immutability'
+category: 'Grail-Tests - Immutability'
 method: TupleTestCase
 test__setitem__RaisesError
 	"Test that tuple.__setitem__ raises TypeError (tuples are immutable)"
@@ -206,7 +206,7 @@ test__setitem__RaisesError
 	self should: [tup @env1:__setitem__: 0 _: 100] raise: TypeError.
 %
 
-category: 'Tests - Tuple Methods'
+category: 'Grail-Tests - Tuple Methods'
 method: TupleTestCase
 testCount
 	"Test tuple.count(value)"
@@ -221,7 +221,7 @@ testCount
 	self assert: result equals: 0.
 %
 
-category: 'Tests - Eval - Tuple Creation'
+category: 'Grail-Tests - Eval - Tuple Creation'
 method: TupleTestCase
 testEvalEmptyTuple
 	"Test empty tuple creation via Python source"
@@ -232,7 +232,7 @@ testEvalEmptyTuple
 	self assert: result size equals: 0.
 %
 
-category: 'Tests - Eval - Tuple Operations'
+category: 'Grail-Tests - Eval - Tuple Operations'
 method: TupleTestCase
 testEvalTupleConcatenation
 	"Test tuple + tuple via Python source"
@@ -244,7 +244,7 @@ testEvalTupleConcatenation
 	self assert: (result @env1:__getitem__: 3) equals: 4.
 %
 
-category: 'Tests - Eval - Tuple Operations'
+category: 'Grail-Tests - Eval - Tuple Operations'
 method: TupleTestCase
 testEvalTupleContains
 	"Test in operator for tuples via Python source"
@@ -253,7 +253,7 @@ testEvalTupleContains
 	self deny: (self eval: '4 in (1, 2, 3)').
 %
 
-category: 'Tests - Eval - Tuple Operations'
+category: 'Grail-Tests - Eval - Tuple Operations'
 method: TupleTestCase
 testEvalTupleIndexing
 	"Test tuple indexing via Python source"
@@ -263,7 +263,7 @@ testEvalTupleIndexing
 	self assert: (self eval: '(10, 20, 30)[-1]') equals: 30.
 %
 
-category: 'Tests - Eval - Tuple Operations'
+category: 'Grail-Tests - Eval - Tuple Operations'
 method: TupleTestCase
 testEvalTupleLen
 	"Test len() on tuples via Python source"
@@ -272,7 +272,7 @@ testEvalTupleLen
 	self assert: (self eval: 'len(())') equals: 0.
 %
 
-category: 'Tests - Eval - Tuple Creation'
+category: 'Grail-Tests - Eval - Tuple Creation'
 method: TupleTestCase
 testEvalTupleLiteral
 	"Test tuple literal creation via Python source"
@@ -285,7 +285,7 @@ testEvalTupleLiteral
 	self assert: (result @env1:__getitem__: 2) equals: 3.
 %
 
-category: 'Tests - Eval - Tuple Operations'
+category: 'Grail-Tests - Eval - Tuple Operations'
 method: TupleTestCase
 testEvalTupleRepetition
 	"Test tuple * n via Python source"
@@ -295,7 +295,7 @@ testEvalTupleRepetition
 	self assert: result size equals: 6.
 %
 
-category: 'Tests - Tuple Methods'
+category: 'Grail-Tests - Tuple Methods'
 method: TupleTestCase
 testIndex
 	"Test tuple.index(value)"

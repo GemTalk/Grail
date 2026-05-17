@@ -17,5 +17,5 @@ Exception subclass: 'StopAsyncIteration'
 
 expectvalue /Class
 doit
-StopAsyncIteration category: 'Exceptions'
+StopAsyncIteration category: 'Grail-Exceptions'
 %

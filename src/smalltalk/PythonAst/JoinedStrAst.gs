@@ -46,7 +46,7 @@ Object
 
 expectvalue /Class
 doit
-JoinedStrAst category: 'Parser'
+JoinedStrAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from JoinedStrAst

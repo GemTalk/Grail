@@ -36,7 +36,7 @@ Object
 
 expectvalue /Class
 doit
-ModAst category: 'Parser'
+ModAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from ModAst
@@ -45,7 +45,7 @@ removeallclassmethods ModAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: ModAst
 printSmalltalkOn: aStream
 

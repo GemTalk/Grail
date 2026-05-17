@@ -18,7 +18,7 @@ PythonTestCase subclass: 'ImportlibTestCase'
 
 expectvalue /Class
 doit
-ImportlibTestCase category: 'SUnit'
+ImportlibTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,14 +34,14 @@ ImportlibTestCase class removeAllMethods: 0.
 
 set compile_env: 0
 
-category: 'Setup'
+category: 'Grail-Setup'
 method: ImportlibTestCase
 setUp
 	"Initialize the builtin modules before each test"
 	importlib @env1:modules
 %
 
-category: 'Tests - AST Generation'
+category: 'Grail-Tests - AST Generation'
 method: ImportlibTestCase
 testAstForPath
 	"Test creating a ModuleAst from hello.py"
@@ -55,7 +55,7 @@ testAstForPath
 	self assert: moduleAst path equals: testFilePath
 %
 
-category: 'Tests - AST Generation'
+category: 'Grail-Tests - AST Generation'
 method: ImportlibTestCase
 testAstForSource
 	"Test creating a ModuleAst from Python source code"
@@ -67,7 +67,7 @@ testAstForSource
 	self assert: moduleAst name equals: '__main__'
 %
 
-category: 'Tests - __import__'
+category: 'Grail-Tests - __import__'
 method: ImportlibTestCase
 testBuiltinsImport
 	"Test builtins.__import__ — Phase-4 varargs fast-path direct method dispatch."
@@ -80,7 +80,7 @@ testBuiltinsImport
 	self assert: result class equals: math
 %
 
-category: 'Tests - __import__'
+category: 'Grail-Tests - __import__'
 method: ImportlibTestCase
 testBuiltinsImportNotFound
 	"Test that builtins.__import__ raises ModuleNotFoundError for unknown modules"
@@ -92,7 +92,7 @@ testBuiltinsImportNotFound
 		raise: ModuleNotFoundError
 %
 
-category: 'Tests - import_module'
+category: 'Grail-Tests - import_module'
 method: ImportlibTestCase
 testImportModuleBuiltins
 	"Test importing the builtins module"
@@ -105,7 +105,7 @@ testImportModuleBuiltins
 	self assert: result class equals: builtins
 %
 
-category: 'Tests - import_module'
+category: 'Grail-Tests - import_module'
 method: ImportlibTestCase
 testImportModuleCmath
 	"Test importing the cmath module"
@@ -118,7 +118,7 @@ testImportModuleCmath
 	self assert: result class equals: cmath
 %
 
-category: 'Tests - import_module'
+category: 'Grail-Tests - import_module'
 method: ImportlibTestCase
 testImportModuleMath
 	"Test importing the math module"
@@ -131,7 +131,7 @@ testImportModuleMath
 	self assert: result class equals: math
 %
 
-category: 'Tests - import_module'
+category: 'Grail-Tests - import_module'
 method: ImportlibTestCase
 testImportModuleNotFound
 	"Test that importing a non-existent module raises ModuleNotFoundError"
@@ -143,7 +143,7 @@ testImportModuleNotFound
 		raise: ModuleNotFoundError
 %
 
-category: 'Tests - import_module'
+category: 'Grail-Tests - import_module'
 method: ImportlibTestCase
 testImportModuleOs
 	"Test importing the os module"
@@ -156,7 +156,7 @@ testImportModuleOs
 	self assert: result class equals: os
 %
 
-category: 'Tests - import_module'
+category: 'Grail-Tests - import_module'
 method: ImportlibTestCase
 testImportModuleSys
 	"Test importing the sys module"
@@ -169,7 +169,7 @@ testImportModuleSys
 	self assert: result class equals: sys
 %
 
-category: 'Tests - invalidate_caches'
+category: 'Grail-Tests - invalidate_caches'
 method: ImportlibTestCase
 testInvalidateCaches
 	"Test invalidate_caches (should be a no-op for built-in modules)"
@@ -180,7 +180,7 @@ testInvalidateCaches
 	self assert: result equals: None
 %
 
-category: 'Tests - Module Registry'
+category: 'Grail-Tests - Module Registry'
 method: ImportlibTestCase
 testLookupModule
 	"Test looking up modules by name"
@@ -195,7 +195,7 @@ testLookupModule
 	self assert: unknownModule equals: nil
 %
 
-category: 'Tests - Module Registry'
+category: 'Grail-Tests - Module Registry'
 method: ImportlibTestCase
 testModulesRegistry
 	"Test that the modules registry exists and contains built-in modules"
@@ -210,7 +210,7 @@ testModulesRegistry
 	self assert: (modules includesKey: #sys)
 %
 
-category: 'Tests - Singleton'
+category: 'Grail-Tests - Singleton'
 method: ImportlibTestCase
 testNewRaisesTypeError
 	"Test that importlib.new raises TypeError"
@@ -219,7 +219,7 @@ testNewRaisesTypeError
 		raise: TypeError
 %
 
-category: 'Tests - reload'
+category: 'Grail-Tests - reload'
 method: ImportlibTestCase
 testReload
 	"Test reloading a module"
@@ -234,7 +234,7 @@ testReload
 	self assert: reloadedInstance class equals: math
 %
 
-category: 'Tests - Singleton'
+category: 'Grail-Tests - Singleton'
 method: ImportlibTestCase
 testSingleton
 	"Test that importlib.instance returns the same instance"
@@ -246,7 +246,7 @@ testSingleton
 	self assert: instance1 == instance2
 %
 
-category: 'Tests - Module Loading'
+category: 'Grail-Tests - Module Loading'
 method: ImportlibTestCase
 testSmalltalkForPath
 	"Test generating Smalltalk code from hello.py"
@@ -260,7 +260,7 @@ testSmalltalkForPath
 	self assert: smalltalkCode notEmpty
 %
 
-category: 'Tests - Module Loading'
+category: 'Grail-Tests - Module Loading'
 method: ImportlibTestCase
 testSmalltalkForSource
 	"Test generating Smalltalk code from Python source"

@@ -37,7 +37,7 @@ Object
 
 expectvalue /Class
 doit
-PythonTokenizer category: 'Parser'
+PythonTokenizer category: 'Grail-Parser'
 %
 
 ! ===============================================================================
@@ -54,7 +54,7 @@ removeallclassmethods PythonTokenizer
 
 set compile_env: 0
 
-category: 'private'
+category: 'Grail-private'
 classmethod: PythonTokenizer
 keywords
 
@@ -65,7 +65,7 @@ keywords
 	   'try' 'while' 'with' 'yield')
 %
 
-category: 'instance creation'
+category: 'Grail-instance creation'
 classmethod: PythonTokenizer
 on: aString
 
@@ -74,14 +74,14 @@ on: aString
 		yourself
 %
 
-category: 'tokenizing'
+category: 'Grail-tokenizing'
 classmethod: PythonTokenizer
 tokenize: aString
 
 	^(self on: aString) tokenize
 %
 
-category: 'private'
+category: 'Grail-private'
 method: PythonTokenizer
 addToken: aType value: aValue line: aLine column: aCol endLine: anEndLine endColumn: anEndCol
 
@@ -94,7 +94,7 @@ addToken: aType value: aValue line: aLine column: aCol endLine: anEndLine endCol
 		endColumn: anEndCol).
 %
 
-category: 'private'
+category: 'Grail-private'
 method: PythonTokenizer
 advance
 
@@ -110,21 +110,21 @@ advance
 	^char
 %
 
-category: 'private'
+category: 'Grail-private'
 method: PythonTokenizer
 atEnd
 
 	^position > source size
 %
 
-category: 'private'
+category: 'Grail-private'
 method: PythonTokenizer
 currentChar
 
 	^source at: position
 %
 
-category: 'tokenizing'
+category: 'Grail-tokenizing'
 method: PythonTokenizer
 handleIndentation: indent
 	"Emit INDENT or DEDENT tokens based on the new indentation level."
@@ -145,7 +145,7 @@ handleIndentation: indent
 	].
 %
 
-category: 'private'
+category: 'Grail-private'
 method: PythonTokenizer
 isDigit: aChar
 
@@ -153,7 +153,7 @@ isDigit: aChar
 	^aChar isDigit
 %
 
-category: 'private'
+category: 'Grail-private'
 method: PythonTokenizer
 isIdentifierPart: aChar
 
@@ -161,7 +161,7 @@ isIdentifierPart: aChar
 	^aChar isLetter or: [aChar isDigit or: [aChar == $_]]
 %
 
-category: 'private'
+category: 'Grail-private'
 method: PythonTokenizer
 isIdentifierStart: aChar
 
@@ -169,7 +169,7 @@ isIdentifierStart: aChar
 	^aChar isLetter or: [aChar == $_]
 %
 
-category: 'tokenizing'
+category: 'Grail-tokenizing'
 method: PythonTokenizer
 isStringStart
 	"Check if current position starts a string literal."
@@ -199,7 +199,7 @@ isStringStart
 	^false
 %
 
-category: 'private'
+category: 'Grail-private'
 method: PythonTokenizer
 peek
 
@@ -207,7 +207,7 @@ peek
 	^source at: position
 %
 
-category: 'private'
+category: 'Grail-private'
 method: PythonTokenizer
 peekAt: offset
 
@@ -217,7 +217,7 @@ peekAt: offset
 	^source at: pos
 %
 
-category: 'tokenizing'
+category: 'Grail-tokenizing'
 method: PythonTokenizer
 readIndentation
 	"Read whitespace at the beginning of a line and return the indent level."
@@ -233,7 +233,7 @@ readIndentation
 	^indent
 %
 
-category: 'tokenizing'
+category: 'Grail-tokenizing'
 method: PythonTokenizer
 skipComment
 	"Skip a comment (from # to end of line)."
@@ -243,7 +243,7 @@ skipComment
 	].
 %
 
-category: 'tokenizing'
+category: 'Grail-tokenizing'
 method: PythonTokenizer
 skipNewline
 	"Skip a newline character and emit NEWLINE token if not inside parens."
@@ -265,7 +265,7 @@ skipNewline
 	].
 %
 
-category: 'accessors'
+category: 'Grail-accessors'
 method: PythonTokenizer
 source: aString
 
@@ -280,14 +280,14 @@ source: aString
 	atLineStart := true.
 %
 
-category: 'private'
+category: 'Grail-private'
 method: PythonTokenizer
 sourceSize
 
 	^source size
 %
 
-category: 'tokenizing'
+category: 'Grail-tokenizing'
 method: PythonTokenizer
 tokenize
 	"Main entry point: tokenize the entire source string.
@@ -305,7 +305,7 @@ tokenize
 	^tokens
 %
 
-category: 'tokenizing'
+category: 'Grail-tokenizing'
 method: PythonTokenizer
 tokenizeIdentifier
 	"Tokenize an identifier or keyword."
@@ -323,7 +323,7 @@ tokenizeIdentifier
 		ifFalse: [self addToken: #NAME value: name line: startLine column: startCol endLine: line endColumn: column].
 %
 
-category: 'tokenizing'
+category: 'Grail-tokenizing'
 method: PythonTokenizer
 tokenizeLine
 	"Tokenize a single logical line."
@@ -363,7 +363,7 @@ tokenizeLine
 	atLineStart := true.
 %
 
-category: 'tokenizing'
+category: 'Grail-tokenizing'
 method: PythonTokenizer
 tokenizeNumber
 	"Tokenize a numeric literal (int, float, hex, oct, bin, complex)."
@@ -471,7 +471,7 @@ tokenizeNumber
 	self addToken: #NUMBER value: writeStream contents line: startLine column: startCol endLine: line endColumn: column.
 %
 
-category: 'tokenizing'
+category: 'Grail-tokenizing'
 method: PythonTokenizer
 tokenizeOne
 	"Tokenize a single token from the current position."
@@ -527,7 +527,7 @@ tokenizeOne
 	self tokenizeOperator.
 %
 
-category: 'tokenizing'
+category: 'Grail-tokenizing'
 method: PythonTokenizer
 tokenizeOperator
 	"Tokenize an operator or delimiter."
@@ -577,7 +577,7 @@ tokenizeOperator
 	self addToken: #OP value: char asString line: startLine column: startCol endLine: line endColumn: column.
 %
 
-category: 'tokenizing'
+category: 'Grail-tokenizing'
 method: PythonTokenizer
 tokenizeString
 	"Tokenize a string literal (handles prefixes, single/double/triple quotes, escapes)."

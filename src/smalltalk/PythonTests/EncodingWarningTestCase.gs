@@ -17,7 +17,7 @@ PythonTestCase subclass: 'EncodingWarningTestCase'
 %
 expectvalue /Class
 doit
-EncodingWarningTestCase category: 'SUnit'
+EncodingWarningTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ EncodingWarningTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-EncodingWarning'
+category: 'Grail-Tests-EncodingWarning'
 method: EncodingWarningTestCase
 test_creation
 	"Test creating a EncodingWarning instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-EncodingWarning'
+category: 'Grail-Tests-EncodingWarning'
 method: EncodingWarningTestCase
 test_inheritance
 	"Test that EncodingWarning inherits from Warning."

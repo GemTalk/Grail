@@ -35,7 +35,7 @@ copies methods (wrapping closures to bind self), and calls __init__.
 
 expectvalue /Class
 doit
-PythonClass category: 'Python'
+PythonClass category: 'Grail-Python'
 %
 
 ! ------------------- Remove existing behavior from PythonClass
@@ -44,7 +44,7 @@ removeallclassmethods PythonClass
 
 set compile_env: 1
 
-category: 'Python-Instantiation'
+category: 'Grail-Instantiation'
 method: PythonClass
 value: positional value: keywords
 	"Instantiate this class: create instance dict, copy methods, call __init__."
@@ -69,7 +69,7 @@ value: positional value: keywords
 	^ instance
 %
 
-category: 'Python-Attribute Access'
+category: 'Grail-Attribute Access'
 method: PythonClass
 __name__
 	^ self @env0:at: #'__name__'
@@ -77,7 +77,7 @@ __name__
 
 set compile_env: 0
 
-category: 'Python-Attribute Access'
+category: 'Grail-Attribute Access'
 method: PythonClass
 doesNotUnderstand: aSelector args: anArray envId: envId
 	"Fall back to dictionary lookup for unrecognized messages."
@@ -86,7 +86,7 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	^ super doesNotUnderstand: aSelector args: anArray envId: envId
 %
 
-category: 'Python-Attribute Access'
+category: 'Grail-Attribute Access'
 method: PythonClass
 cantPerform: aSymbol withArguments: anArray env: envId
 	"Fall back to dictionary lookup for unrecognized messages."

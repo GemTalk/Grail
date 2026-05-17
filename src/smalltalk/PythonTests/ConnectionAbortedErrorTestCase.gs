@@ -17,7 +17,7 @@ PythonTestCase subclass: 'ConnectionAbortedErrorTestCase'
 %
 expectvalue /Class
 doit
-ConnectionAbortedErrorTestCase category: 'SUnit'
+ConnectionAbortedErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ ConnectionAbortedErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-ConnectionAbortedError'
+category: 'Grail-Tests-ConnectionAbortedError'
 method: ConnectionAbortedErrorTestCase
 test_creation
 	"Test creating a ConnectionAbortedError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-ConnectionAbortedError'
+category: 'Grail-Tests-ConnectionAbortedError'
 method: ConnectionAbortedErrorTestCase
 test_inheritance
 	"Test that ConnectionAbortedError inherits from ConnectionError."

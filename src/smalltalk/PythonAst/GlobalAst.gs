@@ -42,7 +42,7 @@ Object
 
 expectvalue /Class
 doit
-GlobalAst category: 'Parser'
+GlobalAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from GlobalAst
@@ -51,7 +51,7 @@ removeallclassmethods GlobalAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: GlobalAst
 printSmalltalkOn: aStream
 

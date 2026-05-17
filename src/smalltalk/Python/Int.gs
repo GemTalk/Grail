@@ -19,7 +19,7 @@ int class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: int
 __new__
 	"Create a new int instance with default value 0.
@@ -28,7 +28,7 @@ __new__
 	^ 0
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: int
 __new__: obj
 	"Create a new int instance from an object.
@@ -64,7 +64,7 @@ __new__: obj
 	TypeError @env0:signal: 'int() argument must be a string or a number'
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: int
 __new__: obj _: base
 	"Create a new int instance from a string with a given base.
@@ -110,7 +110,7 @@ __new__: obj _: base
 	]
 %
 
-category: 'Python-Class Methods'
+category: 'Grail-Class Methods'
 classmethod: int
 from_bytes: bytes _: byteorder
 	"int.from_bytes(bytes, byteorder='big', *, signed=False)"
@@ -118,7 +118,7 @@ from_bytes: bytes _: byteorder
 	^ self from_bytes: bytes byteorder: byteorder signed: false
 %
 
-category: 'Python-Class Methods'
+category: 'Grail-Class Methods'
 classmethod: int
 from_bytes: bytes _: byteorder _: signed
 	"int.from_bytes(bytes, byteorder='big', *, signed=False)
@@ -167,7 +167,7 @@ from_bytes: bytes _: byteorder _: signed
 	^ result
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: int
 __abs__
 	"Absolute value."
@@ -175,7 +175,7 @@ __abs__
 	^ self @env0:abs
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: int
 __add__: other
 	"Add two integers or integer and other number."
@@ -183,7 +183,7 @@ __add__: other
 	^ self @env0:+ other
 %
 
-category: 'Python-Bitwise Operations'
+category: 'Grail-Bitwise Operations'
 method: int
 __and__: other
 	"Bitwise AND."
@@ -191,7 +191,7 @@ __and__: other
 	^ self @env0:bitAnd: other
 %
 
-category: 'Python-Conversion'
+category: 'Grail-Conversion'
 method: int
 __bool__
 	"Return True if non-zero, False if zero."
@@ -199,7 +199,7 @@ __bool__
 	^ self @env0:~= 0
 %
 
-category: 'Python-Rounding'
+category: 'Grail-Rounding'
 method: int
 __ceil__
 	"Ceiling (returns self)."
@@ -207,7 +207,7 @@ __ceil__
 	^ self
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: int
 __divmod__: other
 	"Return (quotient, remainder) tuple."
@@ -218,7 +218,7 @@ __divmod__: other
 	^ tuple @env0:with: quot with: rem
 %
 
-category: 'Python-Documentation'
+category: 'Grail-Documentation'
 method: int
 __doc__
 	"Return documentation string for int type."
@@ -239,7 +239,7 @@ Base 0 means to interpret the base from the string as an integer literal.
 4' @env0:asUnicodeString
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: int
 __eq__: other
 	"Return self == other"
@@ -247,7 +247,7 @@ __eq__: other
 	^ self @env0:= other
 %
 
-category: 'Python-Conversion'
+category: 'Grail-Conversion'
 method: int
 __float__
 	"Convert to float."
@@ -255,7 +255,7 @@ __float__
 	^ self @env0:asFloat
 %
 
-category: 'Python-Rounding'
+category: 'Grail-Rounding'
 method: int
 __floor__
 	"Floor (returns self)."
@@ -263,7 +263,7 @@ __floor__
 	^ self
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: int
 __floordiv__: other
 	"Floor division."
@@ -271,7 +271,7 @@ __floordiv__: other
 	^ self @env0:// other
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: int
 __format__: formatSpec
 	"Format the integer according to format specification."
@@ -280,7 +280,7 @@ __format__: formatSpec
 	^ self __repr__
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: int
 __ge__: other
 	"Return self >= other"
@@ -288,7 +288,7 @@ __ge__: other
 	^ self @env0:>= other
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: int
 __gt__: other
 	"Return self > other"
@@ -296,7 +296,7 @@ __gt__: other
 	^ self @env0:> other
 %
 
-category: 'Python-Hashing'
+category: 'Grail-Hashing'
 method: int
 __hash__
 	"Return hash value (self for integers)."
@@ -304,7 +304,7 @@ __hash__
 	^ self @env0:hash
 %
 
-category: 'Python-Conversion'
+category: 'Grail-Conversion'
 method: int
 __index__
 	"Return self (used for indexing)."
@@ -312,7 +312,7 @@ __index__
 	^ self
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: int
 __init__
 	"Initialize an int instance (called after __new__).
@@ -321,7 +321,7 @@ __init__
 	^ None
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: int
 __init__: obj
 	"Initialize an int instance (called after __new__).
@@ -330,7 +330,7 @@ __init__: obj
 	^ None
 %
 
-category: 'Python-Conversion'
+category: 'Grail-Conversion'
 method: int
 __int__
 	"Return self (already an integer)."
@@ -338,7 +338,7 @@ __int__
 	^ self
 %
 
-category: 'Python-Bitwise Operations'
+category: 'Grail-Bitwise Operations'
 method: int
 __invert__
 	"Bitwise NOT (one's complement)."
@@ -346,7 +346,7 @@ __invert__
 	^ self @env0:bitInvert
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: int
 __le__: other
 	"Return self <= other"
@@ -354,7 +354,7 @@ __le__: other
 	^ self @env0:<= other
 %
 
-category: 'Python-Bitwise Operations'
+category: 'Grail-Bitwise Operations'
 method: int
 __lshift__: other
 	"Left shift."
@@ -362,7 +362,7 @@ __lshift__: other
 	^ self @env0:bitShift: other
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: int
 __lt__: other
 	"Return self < other"
@@ -370,7 +370,7 @@ __lt__: other
 	^ self @env0:< other
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: int
 __mod__: other
 	"Modulo operation."
@@ -378,7 +378,7 @@ __mod__: other
 	^ self @env0:\\ other
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: int
 __mul__: other
 	"Multiply two integers or integer and other number."
@@ -386,7 +386,7 @@ __mul__: other
 	^ self @env0:* other
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: int
 __ne__: other
 	"Return self != other"
@@ -394,7 +394,7 @@ __ne__: other
 	^ self @env0:~= other
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: int
 __neg__
 	"Unary negation."
@@ -402,7 +402,7 @@ __neg__
 	^ self @env0:negated
 %
 
-category: 'Python-Bitwise Operations'
+category: 'Grail-Bitwise Operations'
 method: int
 __or__: other
 	"Bitwise OR."
@@ -410,7 +410,7 @@ __or__: other
 	^ self @env0:bitOr: other
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: int
 __pos__
 	"Unary plus (return self)."
@@ -418,7 +418,7 @@ __pos__
 	^ self
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: int
 __pow__: other
 	"Raise to power."
@@ -426,7 +426,7 @@ __pow__: other
 	^ self @env0:raisedTo: other
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: int
 __pow__: other _: mod
 	"Raise to power with modulo."
@@ -439,7 +439,7 @@ __pow__: other _: mod
 	^ result
 %
 
-category: 'Python-Arithmetic - Reverse'
+category: 'Grail-Arithmetic - Reverse'
 method: int
 __radd__: other
 	"Reverse add (other + self)."
@@ -447,7 +447,7 @@ __radd__: other
 	^ other @env0:+ self
 %
 
-category: 'Python-Bitwise Operations - Reverse'
+category: 'Grail-Bitwise Operations - Reverse'
 method: int
 __rand__: other
 	"Reverse bitwise AND (other & self)."
@@ -455,7 +455,7 @@ __rand__: other
 	^ other @env0:bitAnd: self
 %
 
-category: 'Python-Arithmetic - Reverse'
+category: 'Grail-Arithmetic - Reverse'
 method: int
 __rdivmod__: other
 	"Reverse divmod (divmod(other, self))."
@@ -466,7 +466,7 @@ __rdivmod__: other
 	^ tuple @env0:with: quot with: rem
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: int
 __repr__
 	"Return string representation of integer."
@@ -474,7 +474,7 @@ __repr__
 	^ (self @env0:printString) @env0:asUnicodeString
 %
 
-category: 'Python-Arithmetic - Reverse'
+category: 'Grail-Arithmetic - Reverse'
 method: int
 __rfloordiv__: other
 	"Reverse floor division (other // self)."
@@ -482,7 +482,7 @@ __rfloordiv__: other
 	^ other @env0:// self
 %
 
-category: 'Python-Bitwise Operations - Reverse'
+category: 'Grail-Bitwise Operations - Reverse'
 method: int
 __rlshift__: other
 	"Reverse left shift (other << self)."
@@ -490,7 +490,7 @@ __rlshift__: other
 	^ other @env0:bitShift: self
 %
 
-category: 'Python-Arithmetic - Reverse'
+category: 'Grail-Arithmetic - Reverse'
 method: int
 __rmod__: other
 	"Reverse modulo (other % self)."
@@ -498,7 +498,7 @@ __rmod__: other
 	^ other @env0:\\ self
 %
 
-category: 'Python-Arithmetic - Reverse'
+category: 'Grail-Arithmetic - Reverse'
 method: int
 __rmul__: other
 	"Reverse multiply (other * self)."
@@ -506,7 +506,7 @@ __rmul__: other
 	^ other @env0:* self
 %
 
-category: 'Python-Bitwise Operations - Reverse'
+category: 'Grail-Bitwise Operations - Reverse'
 method: int
 __ror__: other
 	"Reverse bitwise OR (other | self)."
@@ -514,7 +514,7 @@ __ror__: other
 	^ other @env0:bitOr: self
 %
 
-category: 'Python-Rounding'
+category: 'Grail-Rounding'
 method: int
 __round__
 	"Round to nearest integer (returns self)."
@@ -522,7 +522,7 @@ __round__
 	^ self
 %
 
-category: 'Python-Rounding'
+category: 'Grail-Rounding'
 method: int
 __round__: ndigits
 	"Round to n digits."
@@ -541,7 +541,7 @@ __round__: ndigits
 	^ self
 %
 
-category: 'Python-Arithmetic - Reverse'
+category: 'Grail-Arithmetic - Reverse'
 method: int
 __rpow__: other
 	"Reverse power (other ** self)."
@@ -549,7 +549,7 @@ __rpow__: other
 	^ other @env0:raisedTo: self
 %
 
-category: 'Python-Bitwise Operations - Reverse'
+category: 'Grail-Bitwise Operations - Reverse'
 method: int
 __rrshift__: other
 	"Reverse right shift (other >> self)."
@@ -557,7 +557,7 @@ __rrshift__: other
 	^ other @env0:bitShift: (self @env0:negated)
 %
 
-category: 'Python-Bitwise Operations'
+category: 'Grail-Bitwise Operations'
 method: int
 __rshift__: other
 	"Right shift."
@@ -565,7 +565,7 @@ __rshift__: other
 	^ self @env0:bitShift: (other @env0:negated)
 %
 
-category: 'Python-Arithmetic - Reverse'
+category: 'Grail-Arithmetic - Reverse'
 method: int
 __rsub__: other
 	"Reverse subtract (other - self)."
@@ -573,7 +573,7 @@ __rsub__: other
 	^ other @env0:- (self)
 %
 
-category: 'Python-Arithmetic - Reverse'
+category: 'Grail-Arithmetic - Reverse'
 method: int
 __rtruediv__: other
 	"Reverse true division (other / self)."
@@ -581,7 +581,7 @@ __rtruediv__: other
 	^ other @env0:/ self
 %
 
-category: 'Python-Bitwise Operations - Reverse'
+category: 'Grail-Bitwise Operations - Reverse'
 method: int
 __rxor__: other
 	"Reverse bitwise XOR (other ^ self)."
@@ -589,7 +589,7 @@ __rxor__: other
 	^ other @env0:bitXor: self
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: int
 __str__
 	"Return string representation of integer."
@@ -597,7 +597,7 @@ __str__
 	^ (self @env0:printString) @env0:asUnicodeString
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: int
 __sub__: other
 	"Subtract other from self."
@@ -605,7 +605,7 @@ __sub__: other
 	^ self @env0:- (other)
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: int
 __truediv__: other
 	"True division (returns float)."
@@ -613,7 +613,7 @@ __truediv__: other
 	^ self @env0:/ other
 %
 
-category: 'Python-Rounding'
+category: 'Grail-Rounding'
 method: int
 __trunc__
 	"Truncate to integer (returns self)."
@@ -621,7 +621,7 @@ __trunc__
 	^ self
 %
 
-category: 'Python-Bitwise Operations'
+category: 'Grail-Bitwise Operations'
 method: int
 __xor__: other
 	"Bitwise XOR."
@@ -629,7 +629,7 @@ __xor__: other
 	^ self @env0:bitXor: other
 %
 
-category: 'Python-Integer Methods'
+category: 'Grail-Integer Methods'
 method: int
 as_integer_ratio
 	"Return a pair of integers whose ratio is exactly equal to the original int.
@@ -638,7 +638,7 @@ as_integer_ratio
 	^ tuple @env0:with: self with: 1
 %
 
-category: 'Python-Integer Methods'
+category: 'Grail-Integer Methods'
 method: int
 bit_count
 	"Return the number of ones in the binary representation."
@@ -655,7 +655,7 @@ bit_count
 	^ count
 %
 
-category: 'Python-Integer Methods'
+category: 'Grail-Integer Methods'
 method: int
 bit_length
 	"Return the number of bits necessary to represent self in binary."
@@ -670,7 +670,7 @@ bit_length
 	^ count
 %
 
-category: 'Python-Integer Methods'
+category: 'Grail-Integer Methods'
 method: int
 conjugate
 	"Return the complex conjugate (self for real numbers)."
@@ -678,7 +678,7 @@ conjugate
 	^ self
 %
 
-category: 'Python-Properties'
+category: 'Grail-Properties'
 method: int
 denominator
 	"Return the denominator (1)."
@@ -686,7 +686,7 @@ denominator
 	^ 1
 %
 
-category: 'Python-Properties'
+category: 'Grail-Properties'
 method: int
 imag
 	"Return the imaginary part (0)."
@@ -694,7 +694,7 @@ imag
 	^ 0
 %
 
-category: 'Python-Integer Methods'
+category: 'Grail-Integer Methods'
 method: int
 is_integer
 	"Return True (integers are always integers)."
@@ -702,7 +702,7 @@ is_integer
 	^ true
 %
 
-category: 'Python-Properties'
+category: 'Grail-Properties'
 method: int
 numerator
 	"Return the numerator (self)."
@@ -710,7 +710,7 @@ numerator
 	^ self
 %
 
-category: 'Python-Properties'
+category: 'Grail-Properties'
 method: int
 real
 	"Return the real part (self)."
@@ -718,7 +718,7 @@ real
 	^ self
 %
 
-category: 'Python-Integer Methods'
+category: 'Grail-Integer Methods'
 method: int
 to_bytes: length _: byteorder
 	"int.to_bytes(length, byteorder='big', *, signed=False)"
@@ -726,7 +726,7 @@ to_bytes: length _: byteorder
 	^ self to_bytes: length byteorder: byteorder signed: false
 %
 
-category: 'Python-Integer Methods'
+category: 'Grail-Integer Methods'
 method: int
 to_bytes: length _: byteorder _: signed
 	"int.to_bytes(length, byteorder='big', *, signed=False)

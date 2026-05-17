@@ -35,7 +35,7 @@ Usage (from Python source):
 
 expectvalue /Class
 doit
-_sre category: 'Modules'
+_sre category: 'Grail-Modules'
 %
 
 ! ------- SrePattern class (wraps C PatternObject*)
@@ -94,7 +94,7 @@ set compile_env: 1
 
 set compile_env: 0
 
-category: 'Instance Creation'
+category: 'Grail-Instance Creation'
 classmethod: SrePattern
 newFromCPtr: aCPtr
 	"Create a pattern wrapper from a C pointer. Returns nil if pointer is 0."
@@ -103,13 +103,13 @@ newFromCPtr: aCPtr
 	^ self basicNew initCPtr: aCPtr
 %
 
-category: 'Private'
+category: 'Grail-Private'
 method: SrePattern
 initCPtr: aCPtr
 	cPtr := aCPtr
 %
 
-category: 'Accessing'
+category: 'Grail-Accessing'
 method: SrePattern
 cPtr
 	^ cPtr
@@ -130,7 +130,7 @@ set compile_env: 1
 
 ! --------- match -----------------------------------------------------------
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SrePattern
 match: aString
 	"match(string) -> SreMatch or None"
@@ -141,7 +141,7 @@ match: aString
 	^ (result == 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SrePattern
 match: aString _: pos
 	"match(string, pos) -> SreMatch or None"
@@ -152,7 +152,7 @@ match: aString _: pos
 	^ (result == 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SrePattern
 match: aString _: pos _: endpos
 	"match(string, pos, endpos) -> SreMatch or None"
@@ -163,7 +163,7 @@ match: aString _: pos _: endpos
 	^ (result == 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SrePattern
 _match: positional kw: keywords
 	"Varargs dispatcher for match() — used for first-class calls and keyword args."
@@ -177,7 +177,7 @@ _match: positional kw: keywords
 
 ! --------- search ----------------------------------------------------------
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SrePattern
 search: aString
 	"search(string) -> SreMatch or None"
@@ -188,7 +188,7 @@ search: aString
 	^ (result == 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SrePattern
 search: aString _: pos
 	"search(string, pos) -> SreMatch or None"
@@ -199,7 +199,7 @@ search: aString _: pos
 	^ (result == 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SrePattern
 search: aString _: pos _: endpos
 	"search(string, pos, endpos) -> SreMatch or None"
@@ -210,7 +210,7 @@ search: aString _: pos _: endpos
 	^ (result == 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SrePattern
 _search: positional kw: keywords
 	"Varargs dispatcher for search()."
@@ -224,7 +224,7 @@ _search: positional kw: keywords
 
 ! --------- fullmatch -------------------------------------------------------
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SrePattern
 fullmatch: aString
 	"fullmatch(string) -> SreMatch or None"
@@ -235,7 +235,7 @@ fullmatch: aString
 	^ (result == 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SrePattern
 fullmatch: aString _: pos
 	"fullmatch(string, pos) -> SreMatch or None"
@@ -246,7 +246,7 @@ fullmatch: aString _: pos
 	^ (result == 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SrePattern
 fullmatch: aString _: pos _: endpos
 	"fullmatch(string, pos, endpos) -> SreMatch or None"
@@ -257,7 +257,7 @@ fullmatch: aString _: pos _: endpos
 	^ (result == 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SrePattern
 _fullmatch: positional kw: keywords
 	"Varargs dispatcher for fullmatch()."
@@ -271,7 +271,7 @@ _fullmatch: positional kw: keywords
 
 ! --------- findall ---------------------------------------------------------
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SrePattern
 findall: aString
 	"findall(string) -> list"
@@ -280,7 +280,7 @@ findall: aString
 		with: aString
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SrePattern
 findall: aString _: pos
 	"findall(string, pos) -> list"
@@ -289,7 +289,7 @@ findall: aString _: pos
 		with: aString with: pos
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SrePattern
 findall: aString _: pos _: endpos
 	"findall(string, pos, endpos) -> list"
@@ -298,7 +298,7 @@ findall: aString _: pos _: endpos
 		with: aString with: pos with: endpos
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SrePattern
 _findall: positional kw: keywords
 	"Varargs dispatcher for findall()."
@@ -312,7 +312,7 @@ _findall: positional kw: keywords
 
 ! --------- sub -------------------------------------------------------------
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SrePattern
 sub: repl _: aString
 	"sub(repl, string) -> str"
@@ -321,7 +321,7 @@ sub: repl _: aString
 		with: repl with: aString
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SrePattern
 sub: repl _: aString _: count
 	"sub(repl, string, count) -> str"
@@ -330,7 +330,7 @@ sub: repl _: aString _: count
 		with: repl with: aString with: count
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SrePattern
 _sub: positional kw: keywords
 	"Varargs dispatcher for sub()."
@@ -343,7 +343,7 @@ _sub: positional kw: keywords
 
 ! --------- subn ------------------------------------------------------------
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SrePattern
 subn: repl _: aString
 	"subn(repl, string) -> (str, int)"
@@ -352,7 +352,7 @@ subn: repl _: aString
 		with: repl with: aString
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SrePattern
 subn: repl _: aString _: count
 	"subn(repl, string, count) -> (str, int)"
@@ -361,7 +361,7 @@ subn: repl _: aString _: count
 		with: repl with: aString with: count
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SrePattern
 _subn: positional kw: keywords
 	"Varargs dispatcher for subn()."
@@ -374,7 +374,7 @@ _subn: positional kw: keywords
 
 ! --------- split -----------------------------------------------------------
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SrePattern
 split: aString
 	"split(string) -> list"
@@ -383,7 +383,7 @@ split: aString
 		with: aString
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SrePattern
 split: aString _: maxsplit
 	"split(string, maxsplit) -> list"
@@ -392,7 +392,7 @@ split: aString _: maxsplit
 		with: aString with: maxsplit
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SrePattern
 _split: positional kw: keywords
 	"Varargs dispatcher for split()."
@@ -403,28 +403,28 @@ _split: positional kw: keywords
 	TypeError ___signal___: 'split() takes 1 or 2 arguments'
 %
 
-category: 'Python-Properties'
+category: 'Grail-Properties'
 method: SrePattern
 pattern
 	"The pattern string from which the RE object was compiled."
 	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'pattern' selfPtr: cPtr
 %
 
-category: 'Python-Properties'
+category: 'Grail-Properties'
 method: SrePattern
 flags
 	"The regex matching flags."
 	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'flags' selfPtr: cPtr
 %
 
-category: 'Python-Properties'
+category: 'Grail-Properties'
 method: SrePattern
 groups
 	"The number of capturing groups in the pattern."
 	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'groups' selfPtr: cPtr
 %
 
-category: 'Python-Properties'
+category: 'Grail-Properties'
 method: SrePattern
 groupindex
 	"A dictionary mapping group names to group numbers."
@@ -437,7 +437,7 @@ groupindex
 
 set compile_env: 0
 
-category: 'Instance Creation'
+category: 'Grail-Instance Creation'
 classmethod: SreMatch
 newFromCPtr: aCPtr
 	"Create a match wrapper from a C pointer. Returns nil if pointer is 0."
@@ -446,13 +446,13 @@ newFromCPtr: aCPtr
 	^ self basicNew initCPtr: aCPtr
 %
 
-category: 'Private'
+category: 'Grail-Private'
 method: SreMatch
 initCPtr: aCPtr
 	cPtr := aCPtr
 %
 
-category: 'Accessing'
+category: 'Grail-Accessing'
 method: SreMatch
 cPtr
 	^ cPtr
@@ -466,7 +466,7 @@ set compile_env: 1
 
 ! --------- group -----------------------------------------------------------
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SreMatch
 group
 	"group() -> str (whole match, equivalent to group(0))"
@@ -474,7 +474,7 @@ group
 		@env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: cPtr
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SreMatch
 group: groupArg
 	"group(groupN) -> str"
@@ -483,7 +483,7 @@ group: groupArg
 		with: groupArg
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SreMatch
 group: g1 _: g2
 	"group(g1, g2) -> tuple"
@@ -492,7 +492,7 @@ group: g1 _: g2
 		with: g1 with: g2
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SreMatch
 group: g1 _: g2 _: g3
 	"group(g1, g2, g3) -> tuple"
@@ -501,7 +501,7 @@ group: g1 _: g2 _: g3
 		with: g1 with: g2 with: g3
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SreMatch
 _group: positional kw: keywords
 	"Varargs dispatcher for group()."
@@ -516,7 +516,7 @@ _group: positional kw: keywords
 
 ! --------- groups ----------------------------------------------------------
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SreMatch
 groups
 	"groups() -> tuple"
@@ -524,7 +524,7 @@ groups
 		@env0:callTyped: '_sre' type: 'Match' method: 'groups' selfPtr: cPtr
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SreMatch
 groups: defaultValue
 	"groups(default) -> tuple"
@@ -533,7 +533,7 @@ groups: defaultValue
 		with: defaultValue
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SreMatch
 _groups: positional kw: keywords
 	"Varargs dispatcher for groups()."
@@ -546,7 +546,7 @@ _groups: positional kw: keywords
 
 ! --------- groupdict -------------------------------------------------------
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SreMatch
 groupdict
 	"groupdict() -> dict"
@@ -554,7 +554,7 @@ groupdict
 		@env0:callTyped: '_sre' type: 'Match' method: 'groupdict' selfPtr: cPtr
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SreMatch
 groupdict: defaultValue
 	"groupdict(default) -> dict"
@@ -563,7 +563,7 @@ groupdict: defaultValue
 		with: defaultValue
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SreMatch
 _groupdict: positional kw: keywords
 	"Varargs dispatcher for groupdict()."
@@ -576,7 +576,7 @@ _groupdict: positional kw: keywords
 
 ! --------- start -----------------------------------------------------------
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SreMatch
 start
 	"start() -> int"
@@ -584,7 +584,7 @@ start
 		@env0:callTyped: '_sre' type: 'Match' method: 'start' selfPtr: cPtr
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SreMatch
 start: groupArg
 	"start(group) -> int"
@@ -593,7 +593,7 @@ start: groupArg
 		with: groupArg
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SreMatch
 _start: positional kw: keywords
 	"Varargs dispatcher for start()."
@@ -606,7 +606,7 @@ _start: positional kw: keywords
 
 ! --------- end -------------------------------------------------------------
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SreMatch
 end
 	"end() -> int"
@@ -614,7 +614,7 @@ end
 		@env0:callTyped: '_sre' type: 'Match' method: 'end' selfPtr: cPtr
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SreMatch
 end: groupArg
 	"end(group) -> int"
@@ -623,7 +623,7 @@ end: groupArg
 		with: groupArg
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SreMatch
 _end: positional kw: keywords
 	"Varargs dispatcher for end()."
@@ -636,7 +636,7 @@ _end: positional kw: keywords
 
 ! --------- span ------------------------------------------------------------
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SreMatch
 span
 	"span() -> (int, int)"
@@ -644,7 +644,7 @@ span
 		@env0:callTyped: '_sre' type: 'Match' method: 'span' selfPtr: cPtr
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SreMatch
 span: groupArg
 	"span(group) -> (int, int)"
@@ -653,7 +653,7 @@ span: groupArg
 		with: groupArg
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SreMatch
 _span: positional kw: keywords
 	"Varargs dispatcher for span()."
@@ -666,7 +666,7 @@ _span: positional kw: keywords
 
 ! --------- expand ----------------------------------------------------------
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SreMatch
 expand: template
 	"expand(template) -> str"
@@ -675,21 +675,21 @@ expand: template
 		with: template
 %
 
-category: 'Python-Methods'
+category: 'Grail-Methods'
 method: SreMatch
 _expand: positional kw: keywords
 	"Varargs dispatcher for expand()."
 	^ self expand: (positional @env0:at: 1)
 %
 
-category: 'Python-Properties'
+category: 'Grail-Properties'
 method: SreMatch
 string
 	"The string passed to match() or search()."
 	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'string' selfPtr: cPtr
 %
 
-category: 'Python-Properties'
+category: 'Grail-Properties'
 method: SreMatch
 re
 	"The regular expression object."
@@ -699,35 +699,35 @@ re
 	^ SrePattern @env0:newFromCPtr: patCPtr
 %
 
-category: 'Python-Properties'
+category: 'Grail-Properties'
 method: SreMatch
 pos
 	"The value of pos passed to search() or match()."
 	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'pos' selfPtr: cPtr
 %
 
-category: 'Python-Properties'
+category: 'Grail-Properties'
 method: SreMatch
 endpos
 	"The value of endpos passed to search() or match()."
 	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'endpos' selfPtr: cPtr
 %
 
-category: 'Python-Properties'
+category: 'Grail-Properties'
 method: SreMatch
 lastindex
 	"The integer index of the last matched capturing group."
 	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'lastindex' selfPtr: cPtr
 %
 
-category: 'Python-Properties'
+category: 'Grail-Properties'
 method: SreMatch
 lastgroup
 	"The name of the last matched capturing group."
 	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'lastgroup' selfPtr: cPtr
 %
 
-category: 'Python-Properties'
+category: 'Grail-Properties'
 method: SreMatch
 regs
 	"A tuple of (start, end) for each group."
@@ -740,7 +740,7 @@ regs
 
 set compile_env: 0
 
-category: 'Private'
+category: 'Grail-Private'
 classmethod: _sre
 callGetcodesize
 	"Call _sre.getcodesize() via CPythonShim."
@@ -750,7 +750,7 @@ callGetcodesize
 		method: 'getcodesize'
 %
 
-category: 'Private'
+category: 'Grail-Private'
 classmethod: _sre
 callAsciiIscased: character
 	"Call _sre.ascii_iscased(character) via CPythonShim."
@@ -761,7 +761,7 @@ callAsciiIscased: character
 		with: character
 %
 
-category: 'Private'
+category: 'Grail-Private'
 classmethod: _sre
 callUnicodeIscased: character
 	"Call _sre.unicode_iscased(character) via CPythonShim."
@@ -772,7 +772,7 @@ callUnicodeIscased: character
 		with: character
 %
 
-category: 'Private'
+category: 'Grail-Private'
 classmethod: _sre
 callAsciiTolower: character
 	"Call _sre.ascii_tolower(character) via CPythonShim."
@@ -783,7 +783,7 @@ callAsciiTolower: character
 		with: character
 %
 
-category: 'Private'
+category: 'Grail-Private'
 classmethod: _sre
 callUnicodeTolower: character
 	"Call _sre.unicode_tolower(character) via CPythonShim."
@@ -794,7 +794,7 @@ callUnicodeTolower: character
 		with: character
 %
 
-category: 'Private'
+category: 'Grail-Private'
 classmethod: _sre
 callCompile: pattern flags: flags code: code groups: groups groupindex: groupindex indexgroup: indexgroup
 	"Call _sre.compile(...) → returns C pointer (SmallInteger)."
@@ -811,7 +811,7 @@ callCompile: pattern flags: flags code: code groups: groups groupindex: groupind
 
 set compile_env: 1
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: _sre
 initialize
 	"Initialize module-level constants."
@@ -825,42 +825,42 @@ initialize
 ! Module-level fast-path callables
 ! ===============================================================================
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: _sre
 getcodesize
 	"_sre.getcodesize() -> int"
 	^ self @env0:class @env0:callGetcodesize
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: _sre
 ascii_iscased: character
 	"_sre.ascii_iscased(character) -> bool"
 	^ self @env0:class @env0:callAsciiIscased: character
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: _sre
 unicode_iscased: character
 	"_sre.unicode_iscased(character) -> bool"
 	^ self @env0:class @env0:callUnicodeIscased: character
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: _sre
 ascii_tolower: character
 	"_sre.ascii_tolower(character) -> int"
 	^ self @env0:class @env0:callAsciiTolower: character
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: _sre
 unicode_tolower: character
 	"_sre.unicode_tolower(character) -> int"
 	^ self @env0:class @env0:callUnicodeTolower: character
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: _sre
 compile: pattern _: flags _: code _: groups _: groupindex _: indexgroup
 	"_sre.compile(pattern, flags, code, groups, groupindex, indexgroup)
@@ -875,25 +875,25 @@ compile: pattern _: flags _: code _: groups _: groupindex _: indexgroup
 ! Module-level stored-attribute accessors (constants)
 ! ===============================================================================
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: _sre
 MAGIC
 	^ self @env0:at: #MAGIC
 %
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: _sre
 CODESIZE
 	^ self @env0:at: #CODESIZE
 %
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: _sre
 MAXREPEAT
 	^ self @env0:at: #MAXREPEAT
 %
 
-category: 'Python-Accessors'
+category: 'Grail-Accessors'
 method: _sre
 MAXGROUPS
 	^ self @env0:at: #MAXGROUPS

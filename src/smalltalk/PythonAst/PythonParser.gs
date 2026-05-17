@@ -36,7 +36,7 @@ Object
 
 expectvalue /Class
 doit
-PythonParser category: 'Parser'
+PythonParser category: 'Grail-Parser'
 %
 
 ! ===============================================================================
@@ -56,7 +56,7 @@ removeallclassmethods PythonParser
 
 set compile_env: 0
 
-category: 'parsing'
+category: 'Grail-parsing'
 classmethod: PythonParser
 parse: aString
 
@@ -65,7 +65,7 @@ parse: aString
 		parseModule
 %
 
-category: 'token access'
+category: 'Grail-token access'
 method: PythonParser
 advance
 	"Consume and return the current token."
@@ -76,7 +76,7 @@ advance
 	^tok
 %
 
-category: 'token access'
+category: 'Grail-token access'
 method: PythonParser
 atKeyword: aString
 	"Check if the current token is the given keyword without consuming."
@@ -86,7 +86,7 @@ atKeyword: aString
 	^tok notNil and: [tok isKeyword: aString]
 %
 
-category: 'token access'
+category: 'Grail-token access'
 method: PythonParser
 atOp: aString
 	"Check if the current token is the given operator without consuming."
@@ -96,7 +96,7 @@ atOp: aString
 	^tok notNil and: [tok isOp: aString]
 %
 
-category: 'node construction'
+category: 'Grail-node construction'
 method: PythonParser
 buildNode: aClass fields: aDictionary
 	"Build an AST node of the given class with the given field values."
@@ -104,7 +104,7 @@ buildNode: aClass fields: aDictionary
 	^aClass buildWithFields: aDictionary
 %
 
-category: 'node construction'
+category: 'Grail-node construction'
 method: PythonParser
 buildNode: aClass fields: aDictionary from: startToken to: endToken
 	"Build an AST node with location info spanning two tokens."
@@ -118,7 +118,7 @@ buildNode: aClass fields: aDictionary from: startToken to: endToken
 	^aClass buildWithFields: dict
 %
 
-category: 'node construction'
+category: 'Grail-node construction'
 method: PythonParser
 buildNode: aClass fields: aDictionary token: aToken
 	"Build an AST node with location info from a token."
@@ -132,7 +132,7 @@ buildNode: aClass fields: aDictionary token: aToken
 	^aClass buildWithFields: dict
 %
 
-category: 'node construction'
+category: 'Grail-node construction'
 method: PythonParser
 declareVariable: aSymbol
 	"Register a variable name with the current scope."
@@ -140,14 +140,14 @@ declareVariable: aSymbol
 	variableStack last add: aSymbol.
 %
 
-category: 'node construction'
+category: 'Grail-node construction'
 method: PythonParser
 delCtx
 
 	^DelAst basicNew
 %
 
-category: 'token access'
+category: 'Grail-token access'
 method: PythonParser
 expect: aType value: aValue
 	"Consume a token matching the given type and value, or signal an error."
@@ -160,7 +160,7 @@ expect: aType value: aValue
 	^tok
 %
 
-category: 'token access'
+category: 'Grail-token access'
 method: PythonParser
 expectType: aType
 	"Consume a token of the given type, or signal an error."
@@ -173,7 +173,7 @@ expectType: aType
 	^tok
 %
 
-category: 'node construction'
+category: 'Grail-node construction'
 method: PythonParser
 lastToken
 	"Return the most recently consumed token."
@@ -181,14 +181,14 @@ lastToken
 	^tokens at: position - 1
 %
 
-category: 'node construction'
+category: 'Grail-node construction'
 method: PythonParser
 loadCtx
 
 	^LoadAst basicNew
 %
 
-category: 'token access'
+category: 'Grail-token access'
 method: PythonParser
 matchKeyword: aString
 	"If the current token is the given keyword, consume it and return true."
@@ -202,7 +202,7 @@ matchKeyword: aString
 	^false
 %
 
-category: 'token access'
+category: 'Grail-token access'
 method: PythonParser
 matchOp: aString
 	"If the current token is the given operator, consume it and return true."
@@ -216,7 +216,7 @@ matchOp: aString
 	^false
 %
 
-category: 'parsing - helpers'
+category: 'Grail-parsing - helpers'
 method: PythonParser
 operatorClassFor: opString
 	"Return the operator AST class for the given operator string."
@@ -237,7 +237,7 @@ operatorClassFor: opString
 	SyntaxError signal: 'Unknown operator: ' , opString.
 %
 
-category: 'parsing - simple statements'
+category: 'Grail-parsing - simple statements'
 method: PythonParser
 parseAssert
 	"Parse: assert expr [, expr]"
@@ -255,7 +255,7 @@ parseAssert
 		yourself) from: tok to: self lastToken
 %
 
-category: 'parsing - compound statements'
+category: 'Grail-parsing - compound statements'
 method: PythonParser
 parseAsync
 	"Parse: async def/for/with"
@@ -284,7 +284,7 @@ parseAsync
 	SyntaxError signal: 'Expected def, for, or with after async at line ' , tok line printString.
 %
 
-category: 'parsing - expressions'
+category: 'Grail-parsing - expressions'
 method: PythonParser
 parseAtom
 	"Parse an atomic expression: literal, name, parenthesized, list, dict, set."
@@ -397,7 +397,7 @@ parseAtom
 	SyntaxError signal: 'Unexpected token: ' , tok type , ' ''' , tok value , ''' at line ' , tok line printString.
 %
 
-category: 'parsing - expressions'
+category: 'Grail-parsing - expressions'
 method: PythonParser
 parseBitwiseAnd
 	"Parse: shift_expr ('&' shift_expr)*"
@@ -418,7 +418,7 @@ parseBitwiseAnd
 	^left
 %
 
-category: 'parsing - expressions'
+category: 'Grail-parsing - expressions'
 method: PythonParser
 parseBitwiseOr
 	"Parse: bitwise_xor ('|' bitwise_xor)*"
@@ -439,7 +439,7 @@ parseBitwiseOr
 	^left
 %
 
-category: 'parsing - expressions'
+category: 'Grail-parsing - expressions'
 method: PythonParser
 parseBitwiseXor
 	"Parse: bitwise_and ('^' bitwise_and)*"
@@ -460,7 +460,7 @@ parseBitwiseXor
 	^left
 %
 
-category: 'parsing - compound statements'
+category: 'Grail-parsing - compound statements'
 method: PythonParser
 parseBlock
 	"Parse an indented block or a single-line body.
@@ -480,7 +480,7 @@ parseBlock
 	^stmts
 %
 
-category: 'parsing - simple statements'
+category: 'Grail-parsing - simple statements'
 method: PythonParser
 parseBreak
 
@@ -489,7 +489,7 @@ parseBreak
 	^self buildNode: BreakAst fields: IdentityKeyValueDictionary new token: tok
 %
 
-category: 'parsing - atoms'
+category: 'Grail-parsing - atoms'
 method: PythonParser
 parseBytesLiteral
 	"Parse one or more adjacent bytes tokens (implicit concatenation)."
@@ -509,7 +509,7 @@ parseBytesLiteral
 		yourself) from: startTok to: self lastToken
 %
 
-category: 'parsing - arguments'
+category: 'Grail-parsing - arguments'
 method: PythonParser
 parseCallArgList
 	"Parse function call arguments. Returns an Array of {positional. keywords}."
@@ -569,7 +569,7 @@ parseCallArgList
 	^Array with: args with: kwargs
 %
 
-category: 'parsing - compound statements'
+category: 'Grail-parsing - compound statements'
 method: PythonParser
 parseClassDef
 	"Parse: class name[(bases)]: body"
@@ -577,7 +577,7 @@ parseClassDef
 	^self parseClassDefWithDecorators: Array new
 %
 
-category: 'parsing - compound statements'
+category: 'Grail-parsing - compound statements'
 method: PythonParser
 parseClassDefWithDecorators: decorators
 	"Parse a class definition with already-parsed decorators."
@@ -615,7 +615,7 @@ parseClassDefWithDecorators: decorators
 		yourself) from: tok to: self lastToken
 %
 
-category: 'parsing - expressions'
+category: 'Grail-parsing - expressions'
 method: PythonParser
 parseComparison
 	"Parse: bitwise_or (comp_op bitwise_or)*"
@@ -640,7 +640,7 @@ parseComparison
 		yourself) from: startTok to: self lastToken
 %
 
-category: 'parsing - expressions'
+category: 'Grail-parsing - expressions'
 method: PythonParser
 parseComparisonOp
 	"Parse a comparison operator and return its AST node."
@@ -667,7 +667,7 @@ parseComparisonOp
 	SyntaxError signal: 'Expected comparison operator'.
 %
 
-category: 'parsing - comprehensions'
+category: 'Grail-parsing - comprehensions'
 method: PythonParser
 parseComprehensions
 	"Parse one or more 'for target in iter [if cond]*' clauses."
@@ -701,7 +701,7 @@ parseComprehensions
 	^generators
 %
 
-category: 'parsing - expressions'
+category: 'Grail-parsing - expressions'
 method: PythonParser
 parseConjunction
 	"Parse: inversion ('and' inversion)*"
@@ -720,7 +720,7 @@ parseConjunction
 		yourself) from: startTok to: self lastToken
 %
 
-category: 'parsing - simple statements'
+category: 'Grail-parsing - simple statements'
 method: PythonParser
 parseContinue
 
@@ -729,7 +729,7 @@ parseContinue
 	^self buildNode: ContinueAst fields: IdentityKeyValueDictionary new token: tok
 %
 
-category: 'parsing - compound statements'
+category: 'Grail-parsing - compound statements'
 method: PythonParser
 parseDecorated
 	"Parse a decorated function or class definition."
@@ -752,7 +752,7 @@ parseDecorated
 	SyntaxError signal: 'Expected function or class definition after decorator'.
 %
 
-category: 'parsing - compound statements'
+category: 'Grail-parsing - compound statements'
 method: PythonParser
 parseDecorators
 	"Parse decorator list: @expr NEWLINE ..."
@@ -767,7 +767,7 @@ parseDecorators
 	^decorators
 %
 
-category: 'parsing - simple statements'
+category: 'Grail-parsing - simple statements'
 method: PythonParser
 parseDelete
 	"Parse: del target_list"
@@ -786,7 +786,7 @@ parseDelete
 		yourself) from: tok to: self lastToken
 %
 
-category: 'parsing - atoms'
+category: 'Grail-parsing - atoms'
 method: PythonParser
 parseDictDisplayFromStar: startTok
 	"Parse dict display starting with **unpack."
@@ -817,7 +817,7 @@ parseDictDisplayFromStar: startTok
 		yourself) from: startTok to: self lastToken
 %
 
-category: 'parsing - atoms'
+category: 'Grail-parsing - atoms'
 method: PythonParser
 parseDictOrSetDisplay
 	"Parse dict/set display: {k:v, ...}, {expr, ...}, {k:v for ...}, {expr for ...}"
@@ -909,7 +909,7 @@ parseDictOrSetDisplay
 		yourself) from: startTok to: self lastToken
 %
 
-category: 'parsing - expressions'
+category: 'Grail-parsing - expressions'
 method: PythonParser
 parseDisjunction
 	"Parse: conjunction ('or' conjunction)*"
@@ -928,7 +928,7 @@ parseDisjunction
 		yourself) from: startTok to: self lastToken
 %
 
-category: 'parsing - compound statements'
+category: 'Grail-parsing - compound statements'
 method: PythonParser
 parseElif
 	"Parse an elif clause as a nested IfAst."
@@ -954,7 +954,7 @@ parseElif
 		yourself) from: tok to: self lastToken
 %
 
-category: 'parsing - expressions'
+category: 'Grail-parsing - expressions'
 method: PythonParser
 parseExpression
 	"Parse an expression (handles ternary if/else, lambda, and walrus :=)."
@@ -980,7 +980,7 @@ parseExpression
 	^expr
 %
 
-category: 'parsing - statements'
+category: 'Grail-parsing - statements'
 method: PythonParser
 parseExpressionOrAssignment
 	"Parse an expression statement, assignment, augmented assignment, or annotated assignment."
@@ -1072,7 +1072,7 @@ parseExpressionOrAssignment
 		yourself) from: startTok to: self lastToken
 %
 
-category: 'parsing - expressions'
+category: 'Grail-parsing - expressions'
 method: PythonParser
 parseFactor
 	"Parse: ('+' | '-' | '~') factor | power"
@@ -1106,7 +1106,7 @@ parseFactor
 	^self parsePower
 %
 
-category: 'parsing - compound statements'
+category: 'Grail-parsing - compound statements'
 method: PythonParser
 parseFor
 	"Parse: for target in iter: body [else: body]"
@@ -1133,7 +1133,7 @@ parseFor
 		yourself) from: tok to: self lastToken
 %
 
-category: 'parsing - simple statements'
+category: 'Grail-parsing - simple statements'
 method: PythonParser
 parseFromImportName
 	"Parse: NAME ['as' NAME]"
@@ -1150,7 +1150,7 @@ parseFromImportName
 		yourself) from: nameTok to: self lastToken
 %
 
-category: 'parsing - compound statements'
+category: 'Grail-parsing - compound statements'
 method: PythonParser
 parseFunctionDef
 	"Parse: def name(params) [-> type]: body"
@@ -1158,7 +1158,7 @@ parseFunctionDef
 	^self parseFunctionDefWithDecorators: Array new
 %
 
-category: 'parsing - compound statements'
+category: 'Grail-parsing - compound statements'
 method: PythonParser
 parseFunctionDefWithDecorators: decorators
 	"Parse a function definition with already-parsed decorators."
@@ -1205,7 +1205,7 @@ parseFunctionDefWithDecorators: decorators
 	^funcNode
 %
 
-category: 'parsing - parameters'
+category: 'Grail-parsing - parameters'
 method: PythonParser
 parseFunctionParametersUntil: endOp
 	"Parse function parameters until endOp (')' for def, ':' for lambda).
@@ -1288,7 +1288,7 @@ parseFunctionParametersUntil: endOp
 		yourself)
 %
 
-category: 'parsing - simple statements'
+category: 'Grail-parsing - simple statements'
 method: PythonParser
 parseGlobal
 	"Parse: global name, ..."
@@ -1305,7 +1305,7 @@ parseGlobal
 		yourself) from: tok to: self lastToken
 %
 
-category: 'parsing - compound statements'
+category: 'Grail-parsing - compound statements'
 method: PythonParser
 parseIf
 	"Parse: if test: body [elif test: body]* [else: body]"
@@ -1331,7 +1331,7 @@ parseIf
 		yourself) from: tok to: self lastToken
 %
 
-category: 'parsing - simple statements'
+category: 'Grail-parsing - simple statements'
 method: PythonParser
 parseImport
 	"Parse: import name [as alias], ..."
@@ -1349,7 +1349,7 @@ parseImport
 		yourself) from: tok to: self lastToken
 %
 
-category: 'parsing - simple statements'
+category: 'Grail-parsing - simple statements'
 method: PythonParser
 parseImportFrom
 	"Parse: from [dots] [module] import names"
@@ -1403,7 +1403,7 @@ parseImportFrom
 		yourself) from: tok to: self lastToken
 %
 
-category: 'parsing - simple statements'
+category: 'Grail-parsing - simple statements'
 method: PythonParser
 parseImportName
 	"Parse: dotted_name ['as' NAME]"
@@ -1424,7 +1424,7 @@ parseImportName
 		yourself) from: nameTok to: self lastToken
 %
 
-category: 'parsing - expressions'
+category: 'Grail-parsing - expressions'
 method: PythonParser
 parseInversion
 	"Parse: 'not' inversion | comparison"
@@ -1442,7 +1442,7 @@ parseInversion
 	^self parseComparison
 %
 
-category: 'parsing - lambda'
+category: 'Grail-parsing - lambda'
 method: PythonParser
 parseLambda
 	"Parse: lambda [params]: expr"
@@ -1470,7 +1470,7 @@ parseLambda
 		yourself) from: tok to: self lastToken
 %
 
-category: 'parsing - atoms'
+category: 'Grail-parsing - atoms'
 method: PythonParser
 parseListDisplay
 	"Parse list display: [expr, ...] or [expr for ...]"
@@ -1515,7 +1515,7 @@ parseListDisplay
 		yourself) from: startTok to: self lastToken
 %
 
-category: 'parsing - module'
+category: 'Grail-parsing - module'
 method: PythonParser
 parseModule
 	"Parse a complete module. Returns a ModuleAst."
@@ -1538,7 +1538,7 @@ parseModule
 	^module
 %
 
-category: 'parsing - simple statements'
+category: 'Grail-parsing - simple statements'
 method: PythonParser
 parseNonlocal
 	"Parse: nonlocal name, ..."
@@ -1555,7 +1555,7 @@ parseNonlocal
 		yourself) from: tok to: self lastToken
 %
 
-category: 'parsing - atoms'
+category: 'Grail-parsing - atoms'
 method: PythonParser
 parseNumberValue: aString
 	"Convert a number string to a Smalltalk number."
@@ -1589,7 +1589,7 @@ parseNumberValue: aString
 	^str asNumber
 %
 
-category: 'parsing - atoms'
+category: 'Grail-parsing - atoms'
 method: PythonParser
 parseParenExpr
 	"Parse parenthesized expression, tuple, or generator."
@@ -1644,7 +1644,7 @@ parseParenExpr
 	].
 %
 
-category: 'parsing - simple statements'
+category: 'Grail-parsing - simple statements'
 method: PythonParser
 parsePass
 
@@ -1653,7 +1653,7 @@ parsePass
 	^self buildNode: PassAst fields: IdentityKeyValueDictionary new token: tok
 %
 
-category: 'parsing - expressions'
+category: 'Grail-parsing - expressions'
 method: PythonParser
 parsePower
 	"Parse: primary ['**' factor]"
@@ -1674,7 +1674,7 @@ parsePower
 	^left
 %
 
-category: 'parsing - expressions'
+category: 'Grail-parsing - expressions'
 method: PythonParser
 parsePrimary
 	"Parse: atom trailer* where trailer is .name, [subscript], or (args)"
@@ -1722,7 +1722,7 @@ parsePrimary
 	^expr
 %
 
-category: 'parsing - simple statements'
+category: 'Grail-parsing - simple statements'
 method: PythonParser
 parseRaise
 	"Parse: raise [expr ['from' expr]]"
@@ -1743,7 +1743,7 @@ parseRaise
 		yourself) from: tok to: self lastToken
 %
 
-category: 'parsing - simple statements'
+category: 'Grail-parsing - simple statements'
 method: PythonParser
 parseReturn
 	"Parse: return [expr]"
@@ -1759,7 +1759,7 @@ parseReturn
 		yourself) from: tok to: self lastToken
 %
 
-category: 'parsing - expressions'
+category: 'Grail-parsing - expressions'
 method: PythonParser
 parseShift
 	"Parse: sum (('<<' | '>>') sum)*"
@@ -1781,7 +1781,7 @@ parseShift
 	^left
 %
 
-category: 'parsing - statements'
+category: 'Grail-parsing - statements'
 method: PythonParser
 parseSimpleStatement
 	"Parse a single simple statement."
@@ -1806,7 +1806,7 @@ parseSimpleStatement
 	^self parseExpressionOrAssignment
 %
 
-category: 'parsing - statements'
+category: 'Grail-parsing - statements'
 method: PythonParser
 parseSimpleStatements
 	"Parse one or more simple statements separated by ';'."
@@ -1825,7 +1825,7 @@ parseSimpleStatements
 	^stmts
 %
 
-category: 'parsing - parameters'
+category: 'Grail-parsing - parameters'
 method: PythonParser
 parseSingleParam
 	"Parse a single parameter: NAME [: annotation]"
@@ -1833,7 +1833,7 @@ parseSingleParam
 	^self parseSingleParamWithAnnotations: true
 %
 
-category: 'parsing - parameters'
+category: 'Grail-parsing - parameters'
 method: PythonParser
 parseSingleParamWithAnnotations: allowAnnotations
 	"Parse a single parameter: NAME [: annotation]"
@@ -1851,7 +1851,7 @@ parseSingleParamWithAnnotations: allowAnnotations
 		yourself) from: nameTok to: self lastToken
 %
 
-category: 'parsing - subscript'
+category: 'Grail-parsing - subscript'
 method: PythonParser
 parseSliceOrExpr
 	"Parse either a slice (lower:upper[:step]) or a regular expression."
@@ -1896,7 +1896,7 @@ parseSliceOrExpr
 		yourself) from: startTok to: self lastToken
 %
 
-category: 'parsing - star expressions'
+category: 'Grail-parsing - star expressions'
 method: PythonParser
 parseStarExpression
 	"Parse: '*' bitwise_or | expression"
@@ -1915,7 +1915,7 @@ parseStarExpression
 	^self parseExpression
 %
 
-category: 'parsing - star expressions'
+category: 'Grail-parsing - star expressions'
 method: PythonParser
 parseStarExpressions
 	"Parse comma-separated expressions, possibly starred.
@@ -1940,7 +1940,7 @@ parseStarExpressions
 		yourself) from: startTok to: self lastToken
 %
 
-category: 'parsing - star expressions'
+category: 'Grail-parsing - star expressions'
 method: PythonParser
 parseStarTarget
 	"Parse: '*' primary | primary"
@@ -1959,7 +1959,7 @@ parseStarTarget
 	^self parsePrimary
 %
 
-category: 'parsing - star expressions'
+category: 'Grail-parsing - star expressions'
 method: PythonParser
 parseStarTargets
 	"Parse assignment targets, possibly starred, possibly as tuple."
@@ -1982,7 +1982,7 @@ parseStarTargets
 		yourself) from: startTok to: self lastToken
 %
 
-category: 'parsing - statements'
+category: 'Grail-parsing - statements'
 method: PythonParser
 parseStatement
 	"Parse a single statement. Returns an array of statements
@@ -2007,7 +2007,7 @@ parseStatement
 	^self parseSimpleStatements
 %
 
-category: 'parsing - statements'
+category: 'Grail-parsing - statements'
 method: PythonParser
 parseStatements
 	"Parse a sequence of statements until ENDMARKER or DEDENT."
@@ -2022,7 +2022,7 @@ parseStatements
 	^stmts
 %
 
-category: 'parsing - atoms'
+category: 'Grail-parsing - atoms'
 method: PythonParser
 parseStringLiteral
 	"Parse one or more adjacent string tokens (implicit concatenation)."
@@ -2039,7 +2039,7 @@ parseStringLiteral
 		yourself) from: startTok to: self lastToken
 %
 
-category: 'parsing - subscript'
+category: 'Grail-parsing - subscript'
 method: PythonParser
 parseSubscript
 	"Parse a subscript expression which may be a slice or a regular expression.
@@ -2069,7 +2069,7 @@ parseSubscript
 	^first
 %
 
-category: 'parsing - expressions'
+category: 'Grail-parsing - expressions'
 method: PythonParser
 parseSum
 	"Parse: term (('+' | '-') term)*"
@@ -2091,7 +2091,7 @@ parseSum
 	^left
 %
 
-category: 'parsing - expressions'
+category: 'Grail-parsing - expressions'
 method: PythonParser
 parseTerm
 	"Parse: factor (('*' | '/' | '//' | '%' | '@') factor)*"
@@ -2113,7 +2113,7 @@ parseTerm
 	^left
 %
 
-category: 'parsing - expressions'
+category: 'Grail-parsing - expressions'
 method: PythonParser
 parseTernary
 	"Parse: expr ['if' condition 'else' expr]"
@@ -2136,7 +2136,7 @@ parseTernary
 	^expr
 %
 
-category: 'parsing - compound statements'
+category: 'Grail-parsing - compound statements'
 method: PythonParser
 parseTry
 	"Parse: try: body [except [type [as name]]: body]+ [else: body] [finally: body]"
@@ -2190,7 +2190,7 @@ parseTry
 		yourself) from: tok to: self lastToken
 %
 
-category: 'parsing - compound statements'
+category: 'Grail-parsing - compound statements'
 method: PythonParser
 parseWhile
 	"Parse: while test: body [else: body]"
@@ -2212,7 +2212,7 @@ parseWhile
 		yourself) from: tok to: self lastToken
 %
 
-category: 'parsing - compound statements'
+category: 'Grail-parsing - compound statements'
 method: PythonParser
 parseWith
 	"Parse: with expr [as target], ...: body"
@@ -2233,7 +2233,7 @@ parseWith
 		yourself) from: tok to: self lastToken
 %
 
-category: 'parsing - compound statements'
+category: 'Grail-parsing - compound statements'
 method: PythonParser
 parseWithItem
 	"Parse: expr ['as' target]"
@@ -2252,7 +2252,7 @@ parseWithItem
 		yourself) from: startTok to: self lastToken
 %
 
-category: 'parsing - yield'
+category: 'Grail-parsing - yield'
 method: PythonParser
 parseYieldExpression
 	"Parse: yield [from expr] | yield [expr_list]"
@@ -2274,7 +2274,7 @@ parseYieldExpression
 		yourself) from: tok to: self lastToken
 %
 
-category: 'parsing - simple statements'
+category: 'Grail-parsing - simple statements'
 method: PythonParser
 parseYieldStatement
 	"Parse yield as a statement (wraps in ExprAst)."
@@ -2287,7 +2287,7 @@ parseYieldStatement
 		yourself) from: tok to: self lastToken
 %
 
-category: 'token access'
+category: 'Grail-token access'
 method: PythonParser
 peek
 	"Return the current token without consuming it."
@@ -2296,7 +2296,7 @@ peek
 	^tokens at: position
 %
 
-category: 'parsing - expressions'
+category: 'Grail-parsing - expressions'
 method: PythonParser
 peekComparisonOp
 	"Return a comparison operator class if one is at the current position, else nil."
@@ -2328,7 +2328,7 @@ peekComparisonOp
 	^nil
 %
 
-category: 'token access'
+category: 'Grail-token access'
 method: PythonParser
 peekType
 	"Return the type of the current token."
@@ -2339,7 +2339,7 @@ peekType
 	^tok type
 %
 
-category: 'token access'
+category: 'Grail-token access'
 method: PythonParser
 peekValue
 	"Return the value of the current token."
@@ -2350,7 +2350,7 @@ peekValue
 	^tok value
 %
 
-category: 'node construction'
+category: 'Grail-node construction'
 method: PythonParser
 popScope
 	"Pop and return the current variable scope."
@@ -2358,7 +2358,7 @@ popScope
 	^variableStack removeLast
 %
 
-category: 'node construction'
+category: 'Grail-node construction'
 method: PythonParser
 pushScope
 	"Push a new variable scope."
@@ -2366,7 +2366,7 @@ pushScope
 	variableStack add: IdentitySet new.
 %
 
-category: 'node construction'
+category: 'Grail-node construction'
 method: PythonParser
 setDelCtx: anExpr
 	"Change an expression's context to Del."
@@ -2378,7 +2378,7 @@ setDelCtx: anExpr
 	^anExpr
 %
 
-category: 'node construction'
+category: 'Grail-node construction'
 method: PythonParser
 setStoreCtx: anExpr
 	"Change an expression's context to Store (for assignment targets).
@@ -2410,7 +2410,7 @@ setStoreCtx: anExpr
 	^anExpr
 %
 
-category: 'token access'
+category: 'Grail-token access'
 method: PythonParser
 skipNewlines
 	"Skip any NEWLINE and NL tokens."
@@ -2420,7 +2420,7 @@ skipNewlines
 	].
 %
 
-category: 'initialization'
+category: 'Grail-initialization'
 method: PythonParser
 source: aString
 
@@ -2432,14 +2432,14 @@ source: aString
 	classNesting := 0.
 %
 
-category: 'node construction'
+category: 'Grail-node construction'
 method: PythonParser
 storeCtx
 
 	^StoreAst basicNew
 %
 
-category: 'parsing - helpers'
+category: 'Grail-parsing - helpers'
 method: PythonParser
 wrapSuite: statementsArray
 	"Wrap an array of statements into a SuiteAst."

@@ -17,7 +17,7 @@ PythonTestCase subclass: 'IndentationErrorTestCase'
 %
 expectvalue /Class
 doit
-IndentationErrorTestCase category: 'SUnit'
+IndentationErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ IndentationErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-IndentationError'
+category: 'Grail-Tests-IndentationError'
 method: IndentationErrorTestCase
 test_creation
 	"Test creating a IndentationError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-IndentationError'
+category: 'Grail-Tests-IndentationError'
 method: IndentationErrorTestCase
 test_inheritance
 	"Test that IndentationError inherits from SyntaxError."

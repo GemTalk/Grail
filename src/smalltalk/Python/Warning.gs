@@ -17,5 +17,5 @@ Exception subclass: 'Warning'
 
 expectvalue /Class
 doit
-Warning category: 'Exceptions'
+Warning category: 'Grail-Exceptions'
 %

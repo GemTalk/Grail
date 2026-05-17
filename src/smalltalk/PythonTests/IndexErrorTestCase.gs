@@ -17,7 +17,7 @@ PythonTestCase subclass: 'IndexErrorTestCase'
 %
 expectvalue /Class
 doit
-IndexErrorTestCase category: 'SUnit'
+IndexErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ IndexErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-IndexError'
+category: 'Grail-Tests-IndexError'
 method: IndexErrorTestCase
 test_creation
 	"Test creating a IndexError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-IndexError'
+category: 'Grail-Tests-IndexError'
 method: IndexErrorTestCase
 test_inheritance
 	"Test that IndexError inherits from LookupError."

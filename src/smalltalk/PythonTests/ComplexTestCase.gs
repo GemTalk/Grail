@@ -18,7 +18,7 @@ PythonTestCase subclass: 'ComplexTestCase'
 
 expectvalue /Class
 doit
-ComplexTestCase category: 'SUnit'
+ComplexTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -33,7 +33,7 @@ removeallclassmethods ComplexTestCase
 
 set compile_env: 0
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: ComplexTestCase
 test___real_imaginary
 	"Test Smalltalk-side constructor"
@@ -45,7 +45,7 @@ test___real_imaginary
 	self assert: (c @env1:imag) equals: 12.0.
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: ComplexTestCase
 test__abs__
 	"Test absolute value (magnitude): |3+4i| = 5"
@@ -56,7 +56,7 @@ test__abs__
 	self assert: result equals: 5.0.
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: ComplexTestCase
 test__add__complex
 	"Test adding two complex numbers"
@@ -69,7 +69,7 @@ test__add__complex
 	self assert: (result @env1:imag) equals: 6.0.
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: ComplexTestCase
 test__add__real
 	"Test adding complex and real number"
@@ -81,7 +81,7 @@ test__add__real
 	self assert: (result @env1:imag) equals: 4.0.
 %
 
-category: 'Python-Type Conversion'
+category: 'Grail-Type Conversion'
 method: ComplexTestCase
 test__bool__nonzero
 	"Test __bool__ returns true for non-zero complex"
@@ -91,7 +91,7 @@ test__bool__nonzero
 	self assert: (c @env1:__bool__).
 %
 
-category: 'Python-Type Conversion'
+category: 'Grail-Type Conversion'
 method: ComplexTestCase
 test__bool__zero
 	"Test __bool__ returns false for zero complex"
@@ -101,7 +101,7 @@ test__bool__zero
 	self deny: (c @env1:__bool__).
 %
 
-category: 'Python-Type Conversion'
+category: 'Grail-Type Conversion'
 method: ComplexTestCase
 test__complex__
 	"Test __complex__ returns self"
@@ -112,7 +112,7 @@ test__complex__
 	self assert: result equals: c.
 %
 
-category: 'Python-Attribute Access'
+category: 'Grail-Attribute Access'
 method: ComplexTestCase
 test__dir__
 	"Test that __dir__ returns list of attributes including complex methods"
@@ -136,7 +136,7 @@ test__dir__
 	self assert: (dirResult includes: '__class__').
 %
 
-category: 'Python-Attribute Access'
+category: 'Grail-Attribute Access'
 method: ComplexTestCase
 test__dir__sorted
 	"Test that __dir__ returns sorted list"
@@ -149,7 +149,7 @@ test__dir__sorted
 	self assert: dirResult first equals: '__abs__'.
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: ComplexTestCase
 test__eq__different_imag
 	"Test inequality with different imaginary parts"
@@ -160,7 +160,7 @@ test__eq__different_imag
 	self deny: (c1 @env1:__eq__: c2).
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: ComplexTestCase
 test__eq__different_real
 	"Test inequality with different real parts"
@@ -171,7 +171,7 @@ test__eq__different_real
 	self deny: (c1 @env1:__eq__: c2).
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: ComplexTestCase
 test__eq__different_type
 	"Test inequality with different type"
@@ -181,7 +181,7 @@ test__eq__different_type
 	self deny: (c @env1:__eq__: 42).
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: ComplexTestCase
 test__eq__same_values
 	"Test equality with same values"
@@ -192,7 +192,7 @@ test__eq__same_values
 	self assert: (c1 @env1:__eq__: c2).
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: ComplexTestCase
 test__mul__complex
 	"Test multiplying two complex numbers: (3+4i)(1+2i) = -5+10i"
@@ -205,7 +205,7 @@ test__mul__complex
 	self assert: (result @env1:imag) equals: 10.0.
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: ComplexTestCase
 test__mul__real
 	"Test multiplying complex by real number"
@@ -217,7 +217,7 @@ test__mul__real
 	self assert: (result @env1:imag) equals: 8.0.
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: ComplexTestCase
 test__ne__different_values
 	"Test inequality with different values"
@@ -228,7 +228,7 @@ test__ne__different_values
 	self assert: (c1 @env1:__ne__: c2).
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: ComplexTestCase
 test__ne__same_values
 	"Test inequality returns false for same values"
@@ -239,7 +239,7 @@ test__ne__same_values
 	self deny: (c1 @env1:__ne__: c2).
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: ComplexTestCase
 test__neg__
 	"Test negation of complex number"
@@ -251,7 +251,7 @@ test__neg__
 	self assert: (result @env1:imag) equals: -4.0.
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: ComplexTestCase
 test__new__
 	"Test that __new__ creates a complex number"
@@ -263,7 +263,7 @@ test__new__
 	self assert: (c @env1:imag) equals: 4.0.
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: ComplexTestCase
 test__new__defaults
 	"Test that __new__ handles nil arguments with defaults"
@@ -274,7 +274,7 @@ test__new__defaults
 	self assert: (c @env1:imag) equals: 0.0.
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: ComplexTestCase
 test__pos__
 	"Test unary plus returns self"
@@ -285,7 +285,7 @@ test__pos__
 	self assert: result equals: c.
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: ComplexTestCase
 test__pow__positive
 	"Test raising to positive integer power: (1+1i)^2 = 2i"
@@ -301,7 +301,7 @@ test__pow__positive
 	self assert: (imagPart - 2.0) abs < 0.0001.
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: ComplexTestCase
 test__repr__negative_imag
 	"Test __repr__ with negative imaginary part"
@@ -312,7 +312,7 @@ test__repr__negative_imag
 	self assert: repr equals: '(3.0-4.0j)'.
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: ComplexTestCase
 test__repr__positive_imag
 	"Test __repr__ with positive imaginary part"
@@ -323,7 +323,7 @@ test__repr__positive_imag
 	self assert: repr equals: '(3.0+4.0j)'.
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: ComplexTestCase
 test__repr__pure_imaginary
 	"Test __repr__ for pure imaginary number"
@@ -334,7 +334,7 @@ test__repr__pure_imaginary
 	self assert: repr equals: '5.0j'.
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: ComplexTestCase
 test__str__
 	"Test that __str__ returns same as __repr__"
@@ -346,7 +346,7 @@ test__str__
 	self assert: str equals: repr.
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: ComplexTestCase
 test__sub__complex
 	"Test subtracting two complex numbers"
@@ -359,7 +359,7 @@ test__sub__complex
 	self assert: (result @env1:imag) equals: 4.0.
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: ComplexTestCase
 test__truediv__real
 	"Test dividing complex by real number"
@@ -371,7 +371,7 @@ test__truediv__real
 	self assert: (result @env1:imag) equals: 4.0.
 %
 
-category: 'Numbers'
+category: 'Grail-Numbers'
 method: ComplexTestCase
 test_conjugate
 	"Test complex conjugate"
@@ -383,7 +383,7 @@ test_conjugate
 	self assert: (conj @env1:imag) equals: -4.0.
 %
 
-category: 'Numbers'
+category: 'Grail-Numbers'
 method: ComplexTestCase
 test_conjugate_negative_imag
 	"Test conjugate with negative imaginary part"
@@ -395,7 +395,7 @@ test_conjugate_negative_imag
 	self assert: (conj @env1:imag) equals: 5.0.
 %
 
-category: 'Python-Type Conversion'
+category: 'Grail-Type Conversion'
 method: ComplexTestCase
 test_from_number
 	"Test class method from_number"
@@ -406,7 +406,7 @@ test_from_number
 	self assert: (c @env1:imag) equals: 0.0.
 %
 
-category: 'Python-Attribute Access'
+category: 'Grail-Attribute Access'
 method: ComplexTestCase
 test_imag
 	"Test that imag returns the imaginary part"
@@ -416,7 +416,7 @@ test_imag
 	self assert: (c @env1:imag) equals: 4.0.
 %
 
-category: 'Python-Inheritance'
+category: 'Grail-Inheritance'
 method: ComplexTestCase
 test_inherits_from_object
 	"Test that complex inherits from object"
@@ -426,7 +426,7 @@ test_inherits_from_object
 	self assert: superclass equals: object.
 %
 
-category: 'Python-Edge Cases'
+category: 'Grail-Edge Cases'
 method: ComplexTestCase
 test_negative_both
 	"Test complex number with both parts negative"
@@ -437,7 +437,7 @@ test_negative_both
 	self assert: (c @env1:imag) equals: -4.0.
 %
 
-category: 'Python-Edge Cases'
+category: 'Grail-Edge Cases'
 method: ComplexTestCase
 test_negative_real
 	"Test complex number with negative real part"
@@ -448,7 +448,7 @@ test_negative_real
 	self assert: (c @env1:imag) equals: 4.0.
 %
 
-category: 'Python-Attribute Access'
+category: 'Grail-Attribute Access'
 method: ComplexTestCase
 test_real
 	"Test that real returns the real part"
@@ -458,7 +458,7 @@ test_real
 	self assert: (c @env1:real) equals: 3.0.
 %
 
-category: 'Python-Edge Cases'
+category: 'Grail-Edge Cases'
 method: ComplexTestCase
 test_zero_complex
 	"Test complex number with zero real and imaginary parts"
@@ -470,7 +470,7 @@ test_zero_complex
 	self assert: (c @env1:__repr__) equals: '0.0j'.
 %
 
-category: 'Tests - Eval - Complex Functions'
+category: 'Grail-Tests - Eval - Complex Functions'
 method: ComplexTestCase
 testEvalComplexAbs
 	"Test abs() on complex number via Python source"
@@ -478,7 +478,7 @@ testEvalComplexAbs
 	self assert: (self eval: 'abs(3 + 4j)') equals: 5.0.
 %
 
-category: 'Tests - Eval - Complex Arithmetic'
+category: 'Grail-Tests - Eval - Complex Arithmetic'
 method: ComplexTestCase
 testEvalComplexArithmetic
 	"Test complex arithmetic via Python source"
@@ -489,7 +489,7 @@ testEvalComplexArithmetic
 	self assert: (result @env1:imag) equals: 6.0.
 %
 
-category: 'Tests - Eval - Complex Creation'
+category: 'Grail-Tests - Eval - Complex Creation'
 method: ComplexTestCase
 testEvalComplexCreation
 	"Test complex number via real + imaginary syntax"
@@ -501,7 +501,7 @@ testEvalComplexCreation
 	self assert: (result @env1:imag) equals: 4.0.
 %
 
-category: 'Tests - Eval - Complex Comparison'
+category: 'Grail-Tests - Eval - Complex Comparison'
 method: ComplexTestCase
 testEvalComplexEquality
 	"Test complex equality via Python source"
@@ -510,7 +510,7 @@ testEvalComplexEquality
 	self assert: (self eval: '(3 + 4j) != (1 + 2j)').
 %
 
-category: 'Tests - Eval - Complex Creation'
+category: 'Grail-Tests - Eval - Complex Creation'
 method: ComplexTestCase
 testEvalComplexLiteral
 	"Test complex literal creation via Python source"
@@ -522,7 +522,7 @@ testEvalComplexLiteral
 	self assert: (result @env1:imag) equals: 5.0.
 %
 
-category: 'Tests - Eval - Complex Arithmetic'
+category: 'Grail-Tests - Eval - Complex Arithmetic'
 method: ComplexTestCase
 testEvalComplexMultiplication
 	"Test complex multiplication via Python source"
@@ -533,7 +533,7 @@ testEvalComplexMultiplication
 	self assert: (result @env1:imag) equals: 6.0.
 %
 
-category: 'Tests - Eval - Complex Arithmetic'
+category: 'Grail-Tests - Eval - Complex Arithmetic'
 method: ComplexTestCase
 testEvalComplexNegation
 	"Test complex negation via Python source"

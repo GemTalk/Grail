@@ -17,7 +17,7 @@ PythonTestCase subclass: 'StopIterationTestCase'
 %
 expectvalue /Class
 doit
-StopIterationTestCase category: 'SUnit'
+StopIterationTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ StopIterationTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-StopIteration'
+category: 'Grail-Tests-StopIteration'
 method: StopIterationTestCase
 test_creation
 	"Test creating a StopIteration instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-StopIteration'
+category: 'Grail-Tests-StopIteration'
 method: StopIterationTestCase
 test_inheritance
 	"Test that StopIteration inherits from Exception."

@@ -36,7 +36,7 @@ See https://docs.python.org/3/library/string.html for documentation.
 
 expectvalue /Class
 doit
-string category: 'Modules'
+string category: 'Grail-Modules'
 %
 
 ! ------------------- Remove existing Python methods from string
@@ -52,7 +52,7 @@ set compile_env: 1
 ! Singleton initialization
 ! ===============================================================================
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: string
 initialize
 	"Initialize all stored-attribute constants."
@@ -71,56 +71,56 @@ initialize
 		yourself
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: string
 initialize_ascii_lowercase
 	self @env0:at: #ascii_lowercase put: 'abcdefghijklmnopqrstuvwxyz'
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: string
 initialize_ascii_uppercase
 	self @env0:at: #ascii_uppercase put: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: string
 initialize_ascii_letters
 	"Concatenation of ascii_lowercase and ascii_uppercase"
 	self @env0:at: #ascii_letters put: ((self @env0:at: #ascii_lowercase) @env0:, (self @env0:at: #ascii_uppercase))
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: string
 initialize_digits
 	self @env0:at: #digits put: '0123456789'
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: string
 initialize_hexdigits
 	self @env0:at: #hexdigits put: '0123456789abcdefABCDEF'
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: string
 initialize_octdigits
 	self @env0:at: #octdigits put: '01234567'
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: string
 initialize_punctuation
 	self @env0:at: #punctuation put: '!"#$%&''()*+,-./:;<=>?@[\]^_`{|}~'
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: string
 initialize_whitespace
 	self @env0:at: #whitespace put: ' \t\n\r\x0b\x0c'
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: string
 initialize_printable
 	| temp |
@@ -129,13 +129,13 @@ initialize_printable
 	self @env0:at: #printable put: (temp @env0:, (self @env0:at: #whitespace))
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: string
 initialize_Formatter
 	self @env0:at: #Formatter put: string_formatter
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: string
 initialize_Template
 	self @env0:at: #Template put: None
@@ -145,67 +145,67 @@ initialize_Template
 ! Stored-attribute accessors (not callables)
 ! ===============================================================================
 
-category: 'Python-String Constants'
+category: 'Grail-String Constants'
 method: string
 ascii_letters
 	^ self @env0:at: #ascii_letters
 %
 
-category: 'Python-String Constants'
+category: 'Grail-String Constants'
 method: string
 ascii_lowercase
 	^ self @env0:at: #ascii_lowercase
 %
 
-category: 'Python-String Constants'
+category: 'Grail-String Constants'
 method: string
 ascii_uppercase
 	^ self @env0:at: #ascii_uppercase
 %
 
-category: 'Python-String Constants'
+category: 'Grail-String Constants'
 method: string
 digits
 	^ self @env0:at: #digits
 %
 
-category: 'Python-String Constants'
+category: 'Grail-String Constants'
 method: string
 hexdigits
 	^ self @env0:at: #hexdigits
 %
 
-category: 'Python-String Constants'
+category: 'Grail-String Constants'
 method: string
 octdigits
 	^ self @env0:at: #octdigits
 %
 
-category: 'Python-String Constants'
+category: 'Grail-String Constants'
 method: string
 printable
 	^ self @env0:at: #printable
 %
 
-category: 'Python-String Constants'
+category: 'Grail-String Constants'
 method: string
 punctuation
 	^ self @env0:at: #punctuation
 %
 
-category: 'Python-String Constants'
+category: 'Grail-String Constants'
 method: string
 whitespace
 	^ self @env0:at: #whitespace
 %
 
-category: 'Python-Utility Classes'
+category: 'Grail-Utility Classes'
 method: string
 Formatter
 	^ self @env0:at: #Formatter
 %
 
-category: 'Python-Utility Classes'
+category: 'Grail-Utility Classes'
 method: string
 Template
 	^ self @env0:at: #Template
@@ -215,7 +215,7 @@ Template
 ! Fast-path callable methods
 ! ===============================================================================
 
-category: 'Python-Utility Functions'
+category: 'Grail-Utility Functions'
 method: string
 capwords: s
 	"Python string.capwords(s) — fast path, 1-arg form.
@@ -224,7 +224,7 @@ capwords: s
 	^ self _capwords: { s } kw: nil
 %
 
-category: 'Python-Utility Functions'
+category: 'Grail-Utility Functions'
 method: string
 _capwords: positional kw: kwargs
 	"Python string.capwords(s, sep=None) — varargs fast path.
@@ -281,7 +281,7 @@ _capwords: positional kw: kwargs
 ! Helper methods (Smalltalk-side, not Python callables)
 ! ===============================================================================
 
-category: 'Python-Helpers'
+category: 'Grail-Helpers'
 method: string
 splitString: aString by: separator
 	"Helper method to split a string by a separator, returning a list"

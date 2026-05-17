@@ -36,7 +36,7 @@ Object
 
 expectvalue /Class
 doit
-MatMultAst category: 'Parser'
+MatMultAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from MatMultAst

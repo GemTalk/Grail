@@ -45,7 +45,7 @@ populate-then-freeze pattern.
 
 expectvalue /Class
 doit
-tuple category: 'Collections-Sequenceable'
+tuple category: 'Grail-Collections-Sequenceable'
 %
 
 ! ------------------- Remove existing methods
@@ -62,7 +62,7 @@ tuple class removeAllMethods: 1.
 
 set compile_env: 0
 
-category: 'instance creation'
+category: 'Grail-instance creation'
 classmethod: tuple
 new
 	"Return an empty, frozen tuple."
@@ -70,7 +70,7 @@ new
 	^ (self new: 0) immediateInvariant
 %
 
-category: 'instance creation'
+category: 'Grail-instance creation'
 classmethod: tuple
 with: a
 
@@ -80,7 +80,7 @@ with: a
 	^ inst immediateInvariant
 %
 
-category: 'instance creation'
+category: 'Grail-instance creation'
 classmethod: tuple
 with: a with: b
 
@@ -91,7 +91,7 @@ with: a with: b
 	^ inst immediateInvariant
 %
 
-category: 'instance creation'
+category: 'Grail-instance creation'
 classmethod: tuple
 with: a with: b with: c
 
@@ -103,7 +103,7 @@ with: a with: b with: c
 	^ inst immediateInvariant
 %
 
-category: 'instance creation'
+category: 'Grail-instance creation'
 classmethod: tuple
 with: a with: b with: c with: d
 
@@ -116,7 +116,7 @@ with: a with: b with: c with: d
 	^ inst immediateInvariant
 %
 
-category: 'instance creation'
+category: 'Grail-instance creation'
 classmethod: tuple
 withAll: aCollection
 
@@ -130,7 +130,7 @@ withAll: aCollection
 	^ inst immediateInvariant
 %
 
-category: 'instance creation'
+category: 'Grail-instance creation'
 classmethod: tuple
 new: anInteger fill: aBlock
 	"Build a tuple of size anInteger by passing the mutable instance to
@@ -150,7 +150,7 @@ new: anInteger fill: aBlock
 
 set compile_env: 1
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: tuple
 __new__
 	"tuple() — return an empty, frozen tuple. Receiver is the class."
@@ -158,7 +158,7 @@ __new__
 	^ self @env0:new
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: tuple
 __new__: iterable
 	"tuple(iterable) — create a frozen tuple from iterable's items.
@@ -178,7 +178,7 @@ __new__: iterable
 	^ self @env0:withAll: items
 %
 
-category: 'Python-Sequence Operations'
+category: 'Grail-Sequence Operations'
 method: tuple
 __add__: other
 	"Concatenate two sequences. Returns a new (frozen) tuple."
@@ -190,7 +190,7 @@ __add__: other
 	^ tuple @env0:withAll: accumulator
 %
 
-category: 'Python-Sequence Operations'
+category: 'Grail-Sequence Operations'
 method: tuple
 __mul__: n
 	"Repeat the tuple n times. Returns a new (frozen) tuple.
@@ -205,7 +205,7 @@ __mul__: n
 	^ tuple @env0:withAll: accumulator
 %
 
-category: 'Python-Sequence Protocol'
+category: 'Grail-Sequence Protocol'
 method: tuple
 __delitem__: index
 	"Tuples are immutable - raise TypeError."
@@ -213,7 +213,7 @@ __delitem__: index
 	TypeError ___signal___: '''tuple'' object doesn''t support item deletion'
 %
 
-category: 'Python-Other'
+category: 'Grail-Other'
 method: tuple
 __doc__
 	"Return the docstring for tuple."
@@ -226,7 +226,7 @@ If iterable is specified the tuple is initialized from iterable''s items.
 If the argument is a tuple, the return value is the same object.'
 %
 
-category: 'Python-Serialization'
+category: 'Grail-Serialization'
 method: tuple
 __getnewargs__
 	"Return arguments for unpickling.
@@ -235,7 +235,7 @@ __getnewargs__
 	^ tuple @env0:with: self
 %
 
-category: 'Python-Hashing'
+category: 'Grail-Hashing'
 method: tuple
 __hash__
 	"Return a hash value for the tuple.
@@ -246,7 +246,7 @@ __hash__
 	^ hash
 %
 
-category: 'Python-Sequence Protocol'
+category: 'Grail-Sequence Protocol'
 method: tuple
 __iter__
 	"Return an iterator over the tuple."
@@ -254,7 +254,7 @@ __iter__
 	^ tuple_iterator ___on: self
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: tuple
 __repr__
 	"Return a string representation of the tuple: (item1, item2, ...)
@@ -283,7 +283,7 @@ __repr__
 	^ stream @env0:contents
 %
 
-category: 'Python-Sequence Protocol'
+category: 'Grail-Sequence Protocol'
 method: tuple
 __setitem__: index _: value
 	"Tuples are immutable - raise TypeError."

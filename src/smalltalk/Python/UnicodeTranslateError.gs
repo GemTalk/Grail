@@ -17,5 +17,5 @@ UnicodeError subclass: 'UnicodeTranslateError'
 
 expectvalue /Class
 doit
-UnicodeTranslateError category: 'Exceptions'
+UnicodeTranslateError category: 'Grail-Exceptions'
 %

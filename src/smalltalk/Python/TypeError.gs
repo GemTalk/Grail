@@ -17,5 +17,5 @@ Exception subclass: 'TypeError'
 
 expectvalue /Class
 doit
-TypeError category: 'Exceptions'
+TypeError category: 'Grail-Exceptions'
 %

@@ -46,7 +46,7 @@ Object
 
 expectvalue /Class
 doit
-AttributeAst category: 'Parser'
+AttributeAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from AttributeAst
@@ -55,42 +55,42 @@ removeallclassmethods AttributeAst
 
 set compile_env: 0
 
-category: 'accessing'
+category: 'Grail-accessing'
 method: AttributeAst
 attr
 
 	^attr
 %
 
-category: 'accessing'
+category: 'Grail-accessing'
 method: AttributeAst
 value
 
 	^value
 %
 
-category: 'other'
+category: 'Grail-other'
 method: AttributeAst
 assertContextIsLoad
 
 	ctx assertIsLoad.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: AttributeAst
 declareVariable
 
 	value declareVariable.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: AttributeAst
 id
 
 	^attr
 %
 
-category: 'other'
+category: 'Grail-other'
 method: AttributeAst
 printOn: aStream
 
@@ -104,7 +104,7 @@ printOn: aStream
 		yourself.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: AttributeAst
 printSmalltalkOn: aStream
 	"When in class method context and value is the self parameter, emit
@@ -131,7 +131,7 @@ printSmalltalkOn: aStream
 	aStream space; nextPutAll: attr.
 %
 
-category: 'other'
+category: 'Grail-other'
 method: AttributeAst
 setSuperInfo: aScope
 

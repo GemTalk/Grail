@@ -17,7 +17,7 @@ PythonTestCase subclass: 'NotImplementedErrorTestCase'
 %
 expectvalue /Class
 doit
-NotImplementedErrorTestCase category: 'SUnit'
+NotImplementedErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ NotImplementedErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-NotImplementedError'
+category: 'Grail-Tests-NotImplementedError'
 method: NotImplementedErrorTestCase
 test_creation
 	"Test creating a NotImplementedError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-NotImplementedError'
+category: 'Grail-Tests-NotImplementedError'
 method: NotImplementedErrorTestCase
 test_inheritance
 	"Test that NotImplementedError inherits from RuntimeError."

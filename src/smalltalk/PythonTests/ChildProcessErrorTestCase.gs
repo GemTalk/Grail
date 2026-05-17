@@ -17,7 +17,7 @@ PythonTestCase subclass: 'ChildProcessErrorTestCase'
 %
 expectvalue /Class
 doit
-ChildProcessErrorTestCase category: 'SUnit'
+ChildProcessErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ ChildProcessErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-ChildProcessError'
+category: 'Grail-Tests-ChildProcessError'
 method: ChildProcessErrorTestCase
 test_creation
 	"Test creating a ChildProcessError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-ChildProcessError'
+category: 'Grail-Tests-ChildProcessError'
 method: ChildProcessErrorTestCase
 test_inheritance
 	"Test that ChildProcessError inherits from OSError."

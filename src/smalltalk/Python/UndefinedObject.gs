@@ -25,7 +25,7 @@
 
 set compile_env: 0
 
-category: 'Python-Bridge'
+category: 'Grail-Bridge'
 method: UndefinedObject
 doesNotUnderstand: aSymbol args: anArray envId: envId
 	"Catch env-1 message sends to nil and raise UnboundLocalError. For env-0
@@ -41,7 +41,7 @@ doesNotUnderstand: aSymbol args: anArray envId: envId
 			, ' on nil)')
 %
 
-category: 'Python-Bridge'
+category: 'Grail-Bridge'
 method: UndefinedObject
 cantPerform: aSymbol withArguments: anArray env: envId
 	"Symmetric handler for the perform:env: dispatch path."

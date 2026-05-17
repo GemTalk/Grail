@@ -42,7 +42,7 @@ See https://docs.python.org/3/library/importlib.html for documentation.
 
 expectvalue /Class
 doit
-importlib category: 'Modules'
+importlib category: 'Grail-Modules'
 %
 
 ! ===============================================================================
@@ -61,13 +61,13 @@ importlib class removeAllMethods.
 
 set compile_env: 0
 
-category: 'For Tests'
+category: 'Grail-For Tests'
 classmethod: importlib
 ___lookupModule___: aName
 	^ self @env1:lookupModule: aName
 %
 
-category: 'AST-Generation'
+category: 'Grail-AST-Generation'
 classmethod: importlib
 astForPath: pathString
 	"Create a ModuleAst from a Python file path.
@@ -83,7 +83,7 @@ astForPath: pathString
 		^module
 %
 
-category: 'AST-Generation'
+category: 'Grail-AST-Generation'
 classmethod: importlib
 astForSource: aString
 	"Create a ModuleAst from Python source code.
@@ -93,21 +93,21 @@ astForSource: aString
 		^ModuleAst parseSource: aString
 %
 
-category: 'For Tests'
+category: 'Grail-For Tests'
 classmethod: importlib
 grailDir
 	"Return the absolute path to the Grail project directory."
 	^ grailDir
 %
 
-category: 'Configuration'
+category: 'Grail-Configuration'
 classmethod: importlib
 grailDir: aString
 	"Set the absolute path to the Grail project directory."
 	grailDir := aString
 %
 
-category: 'Demo'
+category: 'Grail-Demo'
 classmethod: importlib
 hello
 
@@ -122,7 +122,7 @@ hello
 	].
 %
 
-category: 'Module Loading'
+category: 'Grail-Module Loading'
 classmethod: importlib
 loadModuleFromPath: pathString name: moduleName
 	"Load a module from a file path and register it.
@@ -179,7 +179,7 @@ loadModuleFromPath: pathString name: moduleName
 	topLevelDefs do: [:stmt |
 		moduleClass compileMethod: stmt generateStubMethodSource
 			dictionaries: sl
-			category: 'Python-Methods'
+			category: 'Grail-Methods'
 			environmentId: 1.
 	].
 
@@ -202,7 +202,7 @@ loadModuleFromPath: pathString name: moduleName
 			methodSource2 := methodStream contents.
 			[moduleClass compileMethod: methodSource2
 				dictionaries: sl
-				category: 'Python-Methods'
+				category: 'Grail-Methods'
 				environmentId: 1.
 			] on: CompileWarning do: [:ex | ex resume].
 		].
@@ -216,7 +216,7 @@ loadModuleFromPath: pathString name: moduleName
 		methodSource := 'initialize' , lf , stream contents.
 		moduleClass compileMethod: methodSource
 			dictionaries: sl
-			category: 'Python-Module Body'
+			category: 'Grail-Module Body'
 			environmentId: 1.
 	] ensure: [
 		CallAst moduleClassBeingCompiled: nil.
@@ -232,7 +232,7 @@ loadModuleFromPath: pathString name: moduleName
 			accessorSource := varName , lf , '	^ ' , varName.
 			moduleClass compileMethod: accessorSource
 				dictionaries: sl
-				category: 'Python-Accessors'
+				category: 'Grail-Accessors'
 				environmentId: 1.
 		].
 	].
@@ -261,7 +261,7 @@ loadModuleFromPath: pathString name: moduleName
 	^ moduleInstance
 %
 
-category: 'Module Loading'
+category: 'Grail-Module Loading'
 classmethod: importlib
 loadDynamicModuleNamed: moduleName fromPath: pathString
 	"Load a .so C extension module via CPythonShim and register it."
@@ -272,7 +272,7 @@ loadDynamicModuleNamed: moduleName fromPath: pathString
 	^ moduleInstance
 %
 
-category: 'Python-Module Registry'
+category: 'Grail-Module Registry'
 classmethod: importlib
 registerModule: aName with: aModule
 	"Register a module class in the module registry"
@@ -281,7 +281,7 @@ registerModule: aName with: aModule
 		put: aModule
 %
 
-category: 'Module Loading'
+category: 'Grail-Module Loading'
 classmethod: importlib
 runPath: pathString
 	"Execute a Python file as __main__ (like running 'python3 file.py').
@@ -317,7 +317,7 @@ runPath: pathString
 	].
 %
 
-category: 'Module Loading'
+category: 'Grail-Module Loading'
 classmethod: importlib
 smalltalkForPath: pathString
 	"Generate Smalltalk code from a Python file.
@@ -332,7 +332,7 @@ smalltalkForPath: pathString
 	^ stream contents
 %
 
-category: 'Module Loading'
+category: 'Grail-Module Loading'
 classmethod: importlib
 smalltalkForSource: aString
 	"Generate Smalltalk code from Python source code.
@@ -347,7 +347,7 @@ smalltalkForSource: aString
 	^ stream contents
 %
 
-category: 'Class Compilation'
+category: 'Grail-Class Compilation'
 classmethod: importlib
 compileClassDefs: bodyStatements symbolList: sl
 	"For each ClassDefAst in the module body, create a real
@@ -362,7 +362,7 @@ compileClassDefs: bodyStatements symbolList: sl
 	].
 %
 
-category: 'Class Compilation'
+category: 'Grail-Class Compilation'
 classmethod: importlib
 compileClassDef: classDef symbolList: sl
 	"Compile a single Python class definition as a real Smalltalk class."
@@ -391,7 +391,7 @@ compileClassDef: classDef symbolList: sl
 	methodDefs do: [:stmt |
 		[pyClass compileMethod: stmt generateClassMethodStubSource
 			dictionaries: sl
-			category: 'Python-Class Methods'
+			category: 'Grail-Class Methods'
 			environmentId: 1.
 		] on: CompileWarning do: [:ex | ex resume].
 	].
@@ -410,7 +410,7 @@ compileClassDef: classDef symbolList: sl
 			methodSrc := methodStream contents.
 			[pyClass compileMethod: methodSrc
 				dictionaries: sl
-				category: 'Python-Class Methods'
+				category: 'Grail-Class Methods'
 				environmentId: 1.
 			] on: CompileWarning do: [:ex | ex resume].
 		].
@@ -427,7 +427,7 @@ compileClassDef: classDef symbolList: sl
 		accessorSource := varName , linefeed , '	^ ' , varName.
 		[pyClass compileMethod: accessorSource
 			dictionaries: sl
-			category: 'Python-Accessors'
+			category: 'Grail-Accessors'
 			environmentId: 1.
 		] on: CompileWarning do: [:ex | ex resume].
 	].
@@ -439,7 +439,7 @@ compileClassDef: classDef symbolList: sl
 	self compileInstantiationMethodFor: pyClass initSelector: initSelector symbolList: sl.
 %
 
-category: 'Class Compilation'
+category: 'Grail-Class Compilation'
 classmethod: importlib
 compileInstantiationMethodFor: pyClass initSelector: initSelector symbolList: sl
 	"Generate a class-side value:value: method for Python-style instantiation:
@@ -462,14 +462,14 @@ compileInstantiationMethodFor: pyClass initSelector: initSelector symbolList: sl
 	src nextPutAll: '^ instance'.
 	[pyClass class compileMethod: src contents
 		dictionaries: sl
-		category: 'Python-Instantiation'
+		category: 'Grail-Instantiation'
 		environmentId: 1.
 	] on: CompileWarning do: [:ex | ex resume].
 %
 
 set compile_env: 1
 
-category: 'Module Loading'
+category: 'Grail-Module Loading'
 classmethod: importlib
 ___moduleNameToPath___: aName
 	"Convert a module name (e.g., 'python.hello') to a file path.
@@ -488,7 +488,7 @@ ___moduleNameToPath___: aName
 	^ nil
 %
 
-category: 'Module Loading'
+category: 'Grail-Module Loading'
 classmethod: importlib
 ___moduleNameToSoPath___: aName
 	"Search for a .so extension module in the lib/ directory.
@@ -500,7 +500,7 @@ ___moduleNameToSoPath___: aName
 	^ nil
 %
 
-category: 'Python-Module Registry'
+category: 'Grail-Module Registry'
 classmethod: importlib
 lookupModule: aName
 	"Look up a module by name in the registry.
@@ -508,7 +508,7 @@ lookupModule: aName
 	^ self modules @env0:at: aName @env0:asSymbol ifAbsent: [nil]
 %
 
-category: 'Python-Module Registry'
+category: 'Grail-Module Registry'
 classmethod: importlib
 modules
 	"Return the module registry (delegates to sys.modules).
@@ -516,7 +516,7 @@ modules
 	^ sys modules
 %
 
-category: 'Python-Private'
+category: 'Grail-Private'
 method: importlib
 ___resolve_name___: name package: package
 	"Resolve a relative module name to an absolute name"
@@ -534,7 +534,7 @@ ___resolve_name___: name package: package
 		ifFalse: [('.' join: parentParts parentParts) @env0:, '.' @env0:, remaining]
 %
 
-category: 'Python-Private'
+category: 'Grail-Private'
 method: importlib
 ___resolve_name___: name package: package level: level
 	"Resolve a relative module name to an absolute name with explicit level"
@@ -550,7 +550,7 @@ ___resolve_name___: name package: package level: level
 %
 
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: importlib
 initialize
 	"No-op — all methods are real fast-path methods."
@@ -560,7 +560,7 @@ initialize
 ! Fast-path callable methods
 ! ===============================================================================
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: importlib
 ___import__: positional kw: kwargs
 	"Low-level import function (__import__).
@@ -655,7 +655,7 @@ ___import__: positional kw: kwargs
 		ifFalse: [result]
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: importlib
 _import_module: positional kw: kwargs
 	"import_module(name, package=None) -> module.
@@ -679,21 +679,21 @@ _import_module: positional kw: kwargs
 	^ self ___import__: {absoluteName} kw: nil
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: importlib
 import_module: name
 	"import_module(name) -> module. 1-arg fast path."
 	^ self _import_module: { name } kw: nil
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: importlib
 invalidate_caches
 	"invalidate_caches() -> None. No-op for built-in modules."
 	^ None
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: importlib
 reload: aModule
 	"reload(module) -> module. Clears and reinitializes the module."

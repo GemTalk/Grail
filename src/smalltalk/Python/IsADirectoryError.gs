@@ -17,5 +17,5 @@ OSError subclass: 'IsADirectoryError'
 
 expectvalue /Class
 doit
-IsADirectoryError category: 'Exceptions'
+IsADirectoryError category: 'Grail-Exceptions'
 %

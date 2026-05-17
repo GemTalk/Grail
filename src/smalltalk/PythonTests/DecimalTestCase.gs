@@ -18,7 +18,7 @@ PythonTestCase subclass: 'DecimalTestCase'
 
 expectvalue /Class
 doit
-DecimalTestCase category: 'SUnit'
+DecimalTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ DecimalTestCase class removeAllMethods: 0.
 
 set compile_env: 0
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: DecimalTestCase
 testAbsoluteValue
 	"Test Decimal absolute value"
@@ -47,7 +47,7 @@ testAbsoluteValue
 	self assert: (result @env1:__str__) equals: '42.5'
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: DecimalTestCase
 testAddition
 	"Test Decimal addition"
@@ -63,7 +63,7 @@ testAddition
 	self assert: (result @env1:__str__) equals: '30.8'
 %
 
-category: 'Tests - Creation'
+category: 'Grail-Tests - Creation'
 method: DecimalTestCase
 testCreateFromFloat
 	"Test creating Decimal from float"
@@ -75,7 +75,7 @@ testCreateFromFloat
 	self assert: ((d @env1:__float__) - 3.14) abs < 0.01
 %
 
-category: 'Tests - Creation'
+category: 'Grail-Tests - Creation'
 method: DecimalTestCase
 testCreateFromInteger
 	"Test creating Decimal from integer"
@@ -86,7 +86,7 @@ testCreateFromInteger
 	self assert: (d @env1:__int__) = 42
 %
 
-category: 'Tests - Creation'
+category: 'Grail-Tests - Creation'
 method: DecimalTestCase
 testCreateFromString
 	"Test creating Decimal from string"
@@ -97,7 +97,7 @@ testCreateFromString
 	self assert: (d @env1:__str__) equals: '123.45'
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: DecimalTestCase
 testDivision
 	"Test Decimal division"
@@ -111,7 +111,7 @@ testDivision
 	self assert: (result @env1:__str__) equals: '2.5'
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: DecimalTestCase
 testEquality
 	"Test Decimal equality"
@@ -125,7 +125,7 @@ testEquality
 	self deny: (d1 @env1:__eq__: d3)
 %
 
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: DecimalTestCase
 testLessThan
 	"Test Decimal less than comparison"
@@ -138,7 +138,7 @@ testLessThan
 	self deny: (d2 @env1:__lt__: d1)
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: DecimalTestCase
 testMultiplication
 	"Test Decimal multiplication"
@@ -152,7 +152,7 @@ testMultiplication
 	self assert: (result @env1:__str__) equals: '7.0'
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: DecimalTestCase
 testNegation
 	"Test Decimal negation"
@@ -165,7 +165,7 @@ testNegation
 	self assert: (result @env1:__str__) equals: '-42.5'
 %
 
-category: 'Tests - Arithmetic'
+category: 'Grail-Tests - Arithmetic'
 method: DecimalTestCase
 testSubtraction
 	"Test Decimal subtraction"

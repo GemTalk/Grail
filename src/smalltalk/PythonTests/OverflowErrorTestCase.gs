@@ -17,7 +17,7 @@ PythonTestCase subclass: 'OverflowErrorTestCase'
 %
 expectvalue /Class
 doit
-OverflowErrorTestCase category: 'SUnit'
+OverflowErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ OverflowErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-OverflowError'
+category: 'Grail-Tests-OverflowError'
 method: OverflowErrorTestCase
 test_creation
 	"Test creating a OverflowError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-OverflowError'
+category: 'Grail-Tests-OverflowError'
 method: OverflowErrorTestCase
 test_inheritance
 	"Test that OverflowError inherits from ArithmeticError."

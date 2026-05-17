@@ -43,7 +43,7 @@ Object
 
 expectvalue /Class
 doit
-ImportAst category: 'Parser'
+ImportAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from ImportAst
@@ -52,7 +52,7 @@ removeallclassmethods ImportAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: ImportAst
 printSmalltalkOn: aStream
 	"Emit Smalltalk for `import a, b.c, d as alias`. Each clause becomes

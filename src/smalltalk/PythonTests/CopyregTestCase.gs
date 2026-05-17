@@ -18,7 +18,7 @@ PythonTestCase subclass: 'CopyregTestCase'
 
 expectvalue /Class
 doit
-CopyregTestCase category: 'SUnit'
+CopyregTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -41,7 +41,7 @@ CopyregTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Tests - Module Registration'
+category: 'Grail-Tests - Module Registration'
 method: CopyregTestCase
 testCopyregModuleIsAvailable
 	"Test that copyreg module is registered and importable."
@@ -51,7 +51,7 @@ testCopyregModuleIsAvailable
 	self assert: (modules includesKey: #copyreg)
 %
 
-category: 'Tests - dispatch_table'
+category: 'Grail-Tests - dispatch_table'
 method: CopyregTestCase
 testDispatchTableExists
 	"After initialize, dispatch_table is a non-nil dictionary."
@@ -63,7 +63,7 @@ testDispatchTableExists
 	self assert: (dt isKindOf: KeyValueDictionary)
 %
 
-category: 'Tests - pickle: 2-arg'
+category: 'Grail-Tests - pickle: 2-arg'
 method: CopyregTestCase
 testPickleTwoArgRegisters
 	"copyreg.pickle(ob_type, pickle_function) records the mapping in
@@ -83,7 +83,7 @@ testPickleTwoArgRegisters
 	dt @env0:removeKey: key ifAbsent: []
 %
 
-category: 'Tests - pickle: 3-arg'
+category: 'Grail-Tests - pickle: 3-arg'
 method: CopyregTestCase
 testPickleThreeArgRegisters
 	"copyreg.pickle(ob_type, pickle_function, constructor) records the
@@ -108,7 +108,7 @@ testPickleThreeArgRegisters
 	dt @env0:removeKey: key ifAbsent: []
 %
 
-category: 'Tests - Phase 4d Attribute Calls'
+category: 'Grail-Tests - Phase 4d Attribute Calls'
 method: CopyregTestCase
 testEvalCopyregPickleTwoArg
 	"Phase 4d: `copyreg.pickle(t, fn)` from Python source. Exercises
@@ -134,7 +134,7 @@ copyreg.pickle(int, str)
 	dt @env0:removeKey: key ifAbsent: []
 %
 
-category: 'Tests - Phase 4d Attribute Calls'
+category: 'Grail-Tests - Phase 4d Attribute Calls'
 method: CopyregTestCase
 testEvalCopyregDispatchTableAccess
 	"Phase 4d: `copyreg.dispatch_table` attribute read from Python

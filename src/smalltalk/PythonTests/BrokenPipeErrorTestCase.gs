@@ -17,7 +17,7 @@ PythonTestCase subclass: 'BrokenPipeErrorTestCase'
 %
 expectvalue /Class
 doit
-BrokenPipeErrorTestCase category: 'SUnit'
+BrokenPipeErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ BrokenPipeErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-BrokenPipeError'
+category: 'Grail-Tests-BrokenPipeError'
 method: BrokenPipeErrorTestCase
 test_creation
 	"Test creating a BrokenPipeError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-BrokenPipeError'
+category: 'Grail-Tests-BrokenPipeError'
 method: BrokenPipeErrorTestCase
 test_inheritance
 	"Test that BrokenPipeError inherits from ConnectionError."

@@ -30,5 +30,5 @@ Instance variables:
 
 expectvalue /Class
 doit
-BaseExceptionGroup category: 'Exceptions'
+BaseExceptionGroup category: 'Grail-Exceptions'
 %

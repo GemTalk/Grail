@@ -29,5 +29,5 @@ Instance variables:
 
 expectvalue /Class
 doit
-ImportError category: 'Exceptions'
+ImportError category: 'Grail-Exceptions'
 %

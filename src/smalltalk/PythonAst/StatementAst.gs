@@ -35,7 +35,7 @@ Object
 
 expectvalue /Class
 doit
-StatementAst category: 'Parser'
+StatementAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from StatementAst
@@ -44,7 +44,7 @@ removeallclassmethods StatementAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: StatementAst
 addVariableNamesTo: aStream
 %

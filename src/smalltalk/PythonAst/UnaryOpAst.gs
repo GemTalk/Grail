@@ -44,7 +44,7 @@ Object
 
 expectvalue /Class
 doit
-UnaryOpAst category: 'Parser'
+UnaryOpAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from UnaryOpAst
@@ -53,14 +53,14 @@ removeallclassmethods UnaryOpAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 classmethod: UnaryOpAst
 isAbstract
 
 	^self == UnaryOpAst
 %
 
-category: 'other'
+category: 'Grail-other'
 method: UnaryOpAst
 printSmalltalkOn: aStream
 

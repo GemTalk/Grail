@@ -31,7 +31,7 @@ Instance variables:
 
 expectvalue /Class
 doit
-dict_valueiterator category: 'Collections-Iterators'
+dict_valueiterator category: 'Grail-Collections-Iterators'
 %
 
 ! ===============================================================================
@@ -47,7 +47,7 @@ dict_valueiterator class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Instance Creation'
+category: 'Grail-Instance Creation'
 classmethod: dict_valueiterator
 ___on: aDict
 	"Create a new dict_valueiterator for the given dictionary"
@@ -64,42 +64,42 @@ ___on: aDict
 	^ iter
 %
 
-category: 'Python-Internal'
+category: 'Grail-Internal'
 method: dict_valueiterator
 ___dict: aDict
 	"Set the dictionary being iterated over"
 	dict := aDict
 %
 
-category: 'Python-Internal'
+category: 'Grail-Internal'
 method: dict_valueiterator
 ___position: anInteger
 	"Set the current position in the iteration"
 	position := anInteger
 %
 
-category: 'Python-Internal'
+category: 'Grail-Internal'
 method: dict_valueiterator
 ___values: valuesArray
 	"Set the values array (snapshot of values at iterator creation)"
 	values := valuesArray
 %
 
-category: 'Python-Type'
+category: 'Grail-Type'
 method: dict_valueiterator
 __class__
 	"Return the Python type for dict_valueiterator"
 	^ dict_valueiterator
 %
 
-category: 'Python-Iterator Protocol'
+category: 'Grail-Iterator Protocol'
 method: dict_valueiterator
 __iter__
 	"Return self (iterators are their own iterators)"
 	^ self
 %
 
-category: 'Python-Iterator Protocol'
+category: 'Grail-Iterator Protocol'
 method: dict_valueiterator
 __next__
 	"Return the next value from the dictionary"

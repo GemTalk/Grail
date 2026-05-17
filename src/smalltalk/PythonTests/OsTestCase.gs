@@ -17,7 +17,7 @@ PythonTestCase subclass: 'OsTestCase'
 
 expectvalue /Class
 doit
-OsTestCase category: 'SUnit'
+OsTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -33,7 +33,7 @@ OsTestCase class removeAllMethods: 0.
 
 set compile_env: 0
 
-category: 'Tests - File and Directory Operations'
+category: 'Grail-Tests - File and Directory Operations'
 method: OsTestCase
 testChdir
 	"Test os.chdir()"
@@ -53,7 +53,7 @@ testChdir
 	o @env1:chdir: originalCwd.
 %
 
-category: 'Tests - File and Directory Operations'
+category: 'Grail-Tests - File and Directory Operations'
 method: OsTestCase
 testExists
 	"Test os.exists()"
@@ -68,7 +68,7 @@ testExists
 	self deny: (o @env1:exists: '/tmp/grail_os_test_nonexistent_xyz123')
 %
 
-category: 'Tests - Integration'
+category: 'Grail-Tests - Integration'
 method: OsTestCase
 testFileOperationsSequence
 	"Test a sequence of file operations"
@@ -116,7 +116,7 @@ testFileOperationsSequence
 	self deny: (o @env1:exists: testDir)
 %
 
-category: 'Tests - File and Directory Operations'
+category: 'Grail-Tests - File and Directory Operations'
 method: OsTestCase
 testGetcwd
 	"Test os.getcwd()"
@@ -129,7 +129,7 @@ testGetcwd
 	self deny: result isEmpty
 %
 
-category: 'Tests - Environment Variables'
+category: 'Grail-Tests - Environment Variables'
 method: OsTestCase
 testGetenv
 	"Test os.getenv() - get environment variable"
@@ -146,7 +146,7 @@ testGetenv
 	]
 %
 
-category: 'Tests - Environment Variables'
+category: 'Grail-Tests - Environment Variables'
 method: OsTestCase
 testGetenvWithDefault
 	"Test os.getenv() with default value"
@@ -162,7 +162,7 @@ testGetenvWithDefault
 	self assert: result equals: default
 %
 
-category: 'Tests - File and Directory Operations'
+category: 'Grail-Tests - File and Directory Operations'
 method: OsTestCase
 testIsdir
 	"Test os.isdir()"
@@ -187,7 +187,7 @@ testIsdir
 	o @env1:rmdir: testDir
 %
 
-category: 'Tests - File and Directory Operations'
+category: 'Grail-Tests - File and Directory Operations'
 method: OsTestCase
 testIsfile
 	"Test os.isfile()"
@@ -217,7 +217,7 @@ testIsfile
 	o @env1:remove: testFile
 %
 
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: OsTestCase
 testLinesep
 	"Test os.linesep constant"
@@ -229,7 +229,7 @@ testLinesep
 	self assert: (result size) equals: 1
 %
 
-category: 'Tests - File and Directory Operations'
+category: 'Grail-Tests - File and Directory Operations'
 method: OsTestCase
 testListdir
 	"Test os.listdir() with no argument (uses current directory)"
@@ -242,7 +242,7 @@ testListdir
 	self deny: result isEmpty
 %
 
-category: 'Tests - File and Directory Operations'
+category: 'Grail-Tests - File and Directory Operations'
 method: OsTestCase
 testListdirWithPath
 	"Test os.listdir() with path"
@@ -254,7 +254,7 @@ testListdirWithPath
 	self assert: (result isKindOf: OrderedCollection)
 %
 
-category: 'Tests - File and Directory Operations'
+category: 'Grail-Tests - File and Directory Operations'
 method: OsTestCase
 testLstat
 	"Test os.lstat()"
@@ -283,7 +283,7 @@ testLstat
 	o @env1:remove: testFile
 %
 
-category: 'Tests - File and Directory Operations'
+category: 'Grail-Tests - File and Directory Operations'
 method: OsTestCase
 testMakedirs
 	"Test os.makedirs() - recursive directory creation"
@@ -313,7 +313,7 @@ testMakedirs
 	o @env1:rmdir: '/tmp/grail_os_test_makedirs'
 %
 
-category: 'Tests - File and Directory Operations'
+category: 'Grail-Tests - File and Directory Operations'
 method: OsTestCase
 testMkdir
 	"Test os.mkdir()"
@@ -338,7 +338,7 @@ testMkdir
 	o @env1:rmdir: testDir
 %
 
-category: 'Tests - File and Directory Operations'
+category: 'Grail-Tests - File and Directory Operations'
 method: OsTestCase
 testMkdirWithMode
 	"Test os.mkdir() with mode"
@@ -362,7 +362,7 @@ testMkdirWithMode
 	o @env1:rmdir: testDir
 %
 
-category: 'Tests - Path Manipulation'
+category: 'Grail-Tests - Path Manipulation'
 method: OsTestCase
 testPathAbspath
 	"Test os.path.abspath()"
@@ -382,7 +382,7 @@ testPathAbspath
 	self assert: (result endsWith: 'file.txt')
 %
 
-category: 'Tests - Path Manipulation'
+category: 'Grail-Tests - Path Manipulation'
 method: OsTestCase
 testPathBasename
 	"Test os.path.basename()"
@@ -404,7 +404,7 @@ testPathBasename
 	self assert: result equals: 'python'
 %
 
-category: 'Tests - Path Manipulation'
+category: 'Grail-Tests - Path Manipulation'
 method: OsTestCase
 testPathCommonpath
 	"Test os.path.commonpath()"
@@ -422,7 +422,7 @@ testPathCommonpath
 	self assert: result equals: '/usr'
 %
 
-category: 'Tests - Path Manipulation'
+category: 'Grail-Tests - Path Manipulation'
 method: OsTestCase
 testPathCommonprefix
 	"Test os.path.commonprefix()"
@@ -444,7 +444,7 @@ testPathCommonprefix
 	self assert: result equals: 'file'
 %
 
-category: 'Tests - Path Manipulation'
+category: 'Grail-Tests - Path Manipulation'
 method: OsTestCase
 testPathDirname
 	"Test os.path.dirname()"
@@ -466,7 +466,7 @@ testPathDirname
 	self assert: result equals: '/'
 %
 
-category: 'Tests - Path Manipulation'
+category: 'Grail-Tests - Path Manipulation'
 method: OsTestCase
 testPathExists
 	"Test os.path.exists()"
@@ -482,7 +482,7 @@ testPathExists
 	self deny: (o @env1:exists: '/tmp/grail_os_path_test_nonexistent_xyz123')
 %
 
-category: 'Tests - Path Manipulation'
+category: 'Grail-Tests - Path Manipulation'
 method: OsTestCase
 testPathIntegration
 	"Test integration of multiple os.path functions"
@@ -510,7 +510,7 @@ testPathIntegration
 	self assert: (path @env1:isabs: result)
 %
 
-category: 'Tests - Path Manipulation'
+category: 'Grail-Tests - Path Manipulation'
 method: OsTestCase
 testPathIsabs
 	"Test os.path.isabs()"
@@ -525,7 +525,7 @@ testPathIsabs
 	self deny: (path @env1:isabs: 'file.txt')
 %
 
-category: 'Tests - Path Manipulation'
+category: 'Grail-Tests - Path Manipulation'
 method: OsTestCase
 testPathIsdir
 	"Test os.path.isdir()"
@@ -551,7 +551,7 @@ testPathIsdir
 	o @env1:rmdir: testDir
 %
 
-category: 'Tests - Path Manipulation'
+category: 'Grail-Tests - Path Manipulation'
 method: OsTestCase
 testPathIsfile
 	"Test os.path.isfile()"
@@ -582,7 +582,7 @@ testPathIsfile
 	o @env1:remove: testFile
 %
 
-category: 'Tests - Path Manipulation'
+category: 'Grail-Tests - Path Manipulation'
 method: OsTestCase
 testPathJoin
 	"Test os.path.join() with paths"
@@ -604,7 +604,7 @@ testPathJoin
 	self assert: result equals: '/bin'
 %
 
-category: 'Tests - Path Manipulation'
+category: 'Grail-Tests - Path Manipulation'
 method: OsTestCase
 testPathJoinAll
 	"Test os.path.join() with collection (already covered by testPathJoinMultiple, but keeping for completeness)"
@@ -626,7 +626,7 @@ testPathJoinAll
 	self assert: result equals: '/usr/'
 %
 
-category: 'Tests - Path Manipulation'
+category: 'Grail-Tests - Path Manipulation'
 method: OsTestCase
 testPathJoinMultiple
 	"Test os.path.join() with multiple paths"
@@ -644,7 +644,7 @@ testPathJoinMultiple
 	self assert: result equals: 'home/user/docs/file.txt'
 %
 
-category: 'Tests - Path Manipulation'
+category: 'Grail-Tests - Path Manipulation'
 method: OsTestCase
 testPathNormpath
 	"Test os.path.normpath()"
@@ -675,7 +675,7 @@ testPathNormpath
 	self assert: result equals: '.'
 %
 
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: OsTestCase
 testPathsep
 	"Test os.pathsep constant"
@@ -687,7 +687,7 @@ testPathsep
 	self assert: result equals: ':'
 %
 
-category: 'Tests - Path Manipulation'
+category: 'Grail-Tests - Path Manipulation'
 method: OsTestCase
 testPathSplit
 	"Test os.path.split()"
@@ -710,7 +710,7 @@ testPathSplit
 	self assert: (result at: 2) equals: 'python'
 %
 
-category: 'Tests - Path Manipulation'
+category: 'Grail-Tests - Path Manipulation'
 method: OsTestCase
 testPathSplitext
 	"Test os.path.splitext()"
@@ -737,7 +737,7 @@ testPathSplitext
 	self assert: (result at: 2) equals: ''
 %
 
-category: 'Tests - Environment Variables'
+category: 'Grail-Tests - Environment Variables'
 method: OsTestCase
 testPutenv
 	"Test os.putenv() - set environment variable"
@@ -757,7 +757,7 @@ testPutenv
 	self assert: result equals: testValue
 %
 
-category: 'Tests - File and Directory Operations'
+category: 'Grail-Tests - File and Directory Operations'
 method: OsTestCase
 testRemove
 	"Test os.remove() - remove file"
@@ -781,7 +781,7 @@ testRemove
 	self deny: (o @env1:exists: testFile)
 %
 
-category: 'Tests - File and Directory Operations'
+category: 'Grail-Tests - File and Directory Operations'
 method: OsTestCase
 testRename
 	"Test os.rename() - rename file"
@@ -818,7 +818,7 @@ testRename
 	o @env1:remove: newPath
 %
 
-category: 'Tests - File and Directory Operations'
+category: 'Grail-Tests - File and Directory Operations'
 method: OsTestCase
 testRmdir
 	"Test os.rmdir() - remove directory"
@@ -845,7 +845,7 @@ testRmdir
 	self deny: (o @env1:exists: testDir)
 %
 
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: OsTestCase
 testSep
 	"Test os.sep constant"
@@ -857,7 +857,7 @@ testSep
 	self assert: result equals: '/'
 %
 
-category: 'Tests - File and Directory Operations'
+category: 'Grail-Tests - File and Directory Operations'
 method: OsTestCase
 testStat
 	"Test os.stat()"
@@ -886,7 +886,7 @@ testStat
 	o @env1:remove: testFile
 %
 
-category: 'Tests - Process Management'
+category: 'Grail-Tests - Process Management'
 method: OsTestCase
 testSystem
 	"Test os.system() - execute shell command"

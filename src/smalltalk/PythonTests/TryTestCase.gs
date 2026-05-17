@@ -17,7 +17,7 @@ PythonTestCase subclass: 'TryTestCase'
 %
 expectvalue /Class
 doit
-TryTestCase category: 'SUnit'
+TryTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ TryTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: TryTestCase
 testTryExceptCaught
 	"Test that a matching except clause catches the exception."
@@ -46,7 +46,7 @@ except ValueError:
 x') equals: 42.
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: TryTestCase
 testTryExceptNotRaised
 	"Test try body runs normally when no exception is raised."
@@ -58,7 +58,7 @@ except ValueError:
 x') equals: 10.
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: TryTestCase
 testTryExceptAs
 	"Test except with as clause binds the exception."
@@ -70,7 +70,7 @@ except ValueError as e:
 x') equals: 'hello'.
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: TryTestCase
 testTryExceptNoMatch
 	"Test that an unmatched exception propagates."
@@ -81,7 +81,7 @@ except ValueError:
     x = 42'] raise: TypeError.
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: TryTestCase
 testTryExceptBare
 	"Test bare except catches any exception."
@@ -93,7 +93,7 @@ except:
 x') equals: 1.
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: TryTestCase
 testTryFinally
 	"Test finally clause always runs."
@@ -106,7 +106,7 @@ finally:
 x') equals: 11.
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: TryTestCase
 testTryFinallyWithException
 	"Test finally runs even when exception is raised."
@@ -122,7 +122,7 @@ except ValueError:
 x') equals: 99.
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: TryTestCase
 testTryElse
 	"Test else clause runs when no exception is raised."
@@ -136,7 +136,7 @@ else:
 x') equals: 3.
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: TryTestCase
 testTryElseSkippedOnException
 	"Test else clause is skipped when exception is raised."
@@ -150,7 +150,7 @@ else:
 x') equals: 2.
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: TryTestCase
 testTryMultipleExcepts
 	"Test multiple except clauses."

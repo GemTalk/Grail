@@ -46,7 +46,7 @@ Object
 
 expectvalue /Class
 doit
-AsyncWithAst category: 'Parser'
+AsyncWithAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from AsyncWithAst

@@ -36,7 +36,7 @@ Object
 
 expectvalue /Class
 doit
-LtEAst category: 'Parser'
+LtEAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from LtEAst
@@ -45,7 +45,7 @@ removeallclassmethods LtEAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: LtEAst
 printSmalltalkOn: aStream
 

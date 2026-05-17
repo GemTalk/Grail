@@ -29,5 +29,5 @@ technically not an error.
 
 expectvalue /Class
 doit
-GeneratorExit category: 'Exceptions'
+GeneratorExit category: 'Grail-Exceptions'
 %

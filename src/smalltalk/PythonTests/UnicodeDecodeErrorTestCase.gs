@@ -17,7 +17,7 @@ PythonTestCase subclass: 'UnicodeDecodeErrorTestCase'
 %
 expectvalue /Class
 doit
-UnicodeDecodeErrorTestCase category: 'SUnit'
+UnicodeDecodeErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ UnicodeDecodeErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-UnicodeDecodeError'
+category: 'Grail-Tests-UnicodeDecodeError'
 method: UnicodeDecodeErrorTestCase
 test_creation
 	"Test creating a UnicodeDecodeError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-UnicodeDecodeError'
+category: 'Grail-Tests-UnicodeDecodeError'
 method: UnicodeDecodeErrorTestCase
 test_inheritance
 	"Test that UnicodeDecodeError inherits from UnicodeError."

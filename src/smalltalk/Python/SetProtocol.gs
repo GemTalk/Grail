@@ -23,7 +23,7 @@ Set class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: Set
 __new__
 	"set() / frozenset() — return an empty instance. `self` is the actual
@@ -34,7 +34,7 @@ __new__
 	^ self @env0:new
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: Set
 __new__: iterable
 	"set(iterable) / frozenset(iterable) — populate from iterable's
@@ -59,7 +59,7 @@ __new__: iterable
 	^ self @env0:withAll: items
 %
 
-category: 'Python-Type Information'
+category: 'Grail-Type Information'
 method: Set
 __class__
 	"Return the actual Python class (set or frozenset)."
@@ -67,7 +67,7 @@ __class__
 	^ self @env0:class
 %
 
-category: 'Python-Set Operations (Operators)'
+category: 'Grail-Set Operations (Operators)'
 method: Set
 __and__: other
 	"Intersection: self & other."
@@ -75,7 +75,7 @@ __and__: other
 	^ self @env1:intersection: other
 %
 
-category: 'Python-Collection Protocol'
+category: 'Grail-Collection Protocol'
 method: Set
 __contains__: item
 	"Test if item is in the set."
@@ -83,7 +83,7 @@ __contains__: item
 	^ self @env0:includes: item
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: Set
 __eq__: other
 	"True iff self and other are both sets with the same elements."
@@ -92,7 +92,7 @@ __eq__: other
 	^ self @env0:= other
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: Set
 __ge__: other
 	"Superset test: every element of other is in self."
@@ -100,7 +100,7 @@ __ge__: other
 	^ self @env1:issuperset: other
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: Set
 __gt__: other
 	"Proper superset test."
@@ -108,7 +108,7 @@ __gt__: other
 	^ (self @env1:issuperset: other) @env0:and: [(self @env1:__eq__: other) @env0:not]
 %
 
-category: 'Python-Iterator Protocol'
+category: 'Grail-Iterator Protocol'
 method: Set
 __iter__
 	"Return an iterator over the set."
@@ -116,7 +116,7 @@ __iter__
 	^ set_iterator ___on: self
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: Set
 __le__: other
 	"Subset test: every element of self is in other."
@@ -124,7 +124,7 @@ __le__: other
 	^ self @env1:issubset: other
 %
 
-category: 'Python-Collection Protocol'
+category: 'Grail-Collection Protocol'
 method: Set
 __len__
 	"Number of elements."
@@ -132,7 +132,7 @@ __len__
 	^ self @env0:size
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: Set
 __lt__: other
 	"Proper subset test."
@@ -140,7 +140,7 @@ __lt__: other
 	^ (self @env1:issubset: other) @env0:and: [(self @env1:__eq__: other) @env0:not]
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: Set
 __ne__: other
 	"True iff self and other differ."
@@ -148,7 +148,7 @@ __ne__: other
 	^ (self @env1:__eq__: other) @env0:not
 %
 
-category: 'Python-Set Operations (Operators)'
+category: 'Grail-Set Operations (Operators)'
 method: Set
 __or__: other
 	"Union: self | other."
@@ -156,7 +156,7 @@ __or__: other
 	^ self @env1:union: other
 %
 
-category: 'Python-Set Operations (Operators)'
+category: 'Grail-Set Operations (Operators)'
 method: Set
 __rand__: other
 	"Reverse intersection: other & self."
@@ -164,7 +164,7 @@ __rand__: other
 	^ other @env1:intersection: self
 %
 
-category: 'Python-Set Operations (Operators)'
+category: 'Grail-Set Operations (Operators)'
 method: Set
 __ror__: other
 	"Reverse union: other | self."
@@ -172,7 +172,7 @@ __ror__: other
 	^ other @env1:union: self
 %
 
-category: 'Python-Set Operations (Operators)'
+category: 'Grail-Set Operations (Operators)'
 method: Set
 __rsub__: other
 	"Reverse difference: other - self."
@@ -180,7 +180,7 @@ __rsub__: other
 	^ other @env1:difference: self
 %
 
-category: 'Python-Set Operations (Operators)'
+category: 'Grail-Set Operations (Operators)'
 method: Set
 __rxor__: other
 	"Reverse symmetric difference: other ^ self."
@@ -188,7 +188,7 @@ __rxor__: other
 	^ other @env1:symmetric_difference: self
 %
 
-category: 'Python-Set Operations (Operators)'
+category: 'Grail-Set Operations (Operators)'
 method: Set
 __sub__: other
 	"Difference: self - other."
@@ -196,7 +196,7 @@ __sub__: other
 	^ self @env1:difference: other
 %
 
-category: 'Python-Set Operations (Operators)'
+category: 'Grail-Set Operations (Operators)'
 method: Set
 __xor__: other
 	"Symmetric difference: self ^ other."
@@ -204,7 +204,7 @@ __xor__: other
 	^ self @env1:symmetric_difference: other
 %
 
-category: 'Python-Copying'
+category: 'Grail-Copying'
 method: Set
 copy
 	"Shallow copy. Same Python type as the receiver (set or frozenset)."
@@ -212,7 +212,7 @@ copy
 	^ (self @env0:class) @env0:withAll: self
 %
 
-category: 'Python-Set Operations (Methods)'
+category: 'Grail-Set Operations (Methods)'
 method: Set
 difference: other
 	"Elements in self but not in other. Result type matches self."
@@ -227,7 +227,7 @@ difference: other
 	^ (self @env0:class) @env0:withAll: accumulator
 %
 
-category: 'Python-Set Operations (Methods)'
+category: 'Grail-Set Operations (Methods)'
 method: Set
 intersection: other
 	"Elements common to self and other. Result type matches self."
@@ -242,7 +242,7 @@ intersection: other
 	^ (self @env0:class) @env0:withAll: accumulator
 %
 
-category: 'Python-Set Tests'
+category: 'Grail-Set Tests'
 method: Set
 isdisjoint: other
 	"True iff self and other share no elements."
@@ -253,7 +253,7 @@ isdisjoint: other
 	^ true
 %
 
-category: 'Python-Set Tests'
+category: 'Grail-Set Tests'
 method: Set
 issubset: other
 	"True iff every element of self is in other."
@@ -264,7 +264,7 @@ issubset: other
 	^ true
 %
 
-category: 'Python-Set Tests'
+category: 'Grail-Set Tests'
 method: Set
 issuperset: other
 	"True iff every element of other is in self."
@@ -275,7 +275,7 @@ issuperset: other
 	^ true
 %
 
-category: 'Python-Set Operations (Methods)'
+category: 'Grail-Set Operations (Methods)'
 method: Set
 symmetric_difference: other
 	"Elements in either self or other but not both. Result type matches self."
@@ -295,7 +295,7 @@ symmetric_difference: other
 	^ (self @env0:class) @env0:withAll: accumulator
 %
 
-category: 'Python-Set Operations (Methods)'
+category: 'Grail-Set Operations (Methods)'
 method: Set
 union: other
 	"Elements from self and other. Result type matches self."

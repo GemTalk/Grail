@@ -31,7 +31,7 @@ Instance variables:
 
 expectvalue /Class
 doit
-dict_keyiterator category: 'Collections-Iterators'
+dict_keyiterator category: 'Grail-Collections-Iterators'
 %
 
 ! ===============================================================================
@@ -47,7 +47,7 @@ dict_keyiterator class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Instance Creation'
+category: 'Grail-Instance Creation'
 classmethod: dict_keyiterator
 ___on: aDict
 	"Create a new dict_keyiterator for the given dictionary"
@@ -64,42 +64,42 @@ ___on: aDict
 	^ iter
 %
 
-category: 'Python-Internal'
+category: 'Grail-Internal'
 method: dict_keyiterator
 ___dict: aDict
 	"Set the dictionary being iterated over"
 	dict := aDict
 %
 
-category: 'Python-Internal'
+category: 'Grail-Internal'
 method: dict_keyiterator
 ___keys: keysArray
 	"Set the keys array (snapshot of keys at iterator creation)"
 	keys := keysArray
 %
 
-category: 'Python-Internal'
+category: 'Grail-Internal'
 method: dict_keyiterator
 ___position: anInteger
 	"Set the current position in the iteration"
 	position := anInteger
 %
 
-category: 'Python-Type'
+category: 'Grail-Type'
 method: dict_keyiterator
 __class__
 	"Return the Python type for dict_keyiterator"
 	^ dict_keyiterator
 %
 
-category: 'Python-Iterator Protocol'
+category: 'Grail-Iterator Protocol'
 method: dict_keyiterator
 __iter__
 	"Return self (iterators are their own iterators)"
 	^ self
 %
 
-category: 'Python-Iterator Protocol'
+category: 'Grail-Iterator Protocol'
 method: dict_keyiterator
 __next__
 	"Return the next key from the dictionary"

@@ -18,7 +18,7 @@ PythonTestCase subclass: 'ObjectTestCase'
 
 expectvalue /Class
 doit
-ObjectTestCase category: 'SUnit'
+ObjectTestCase category: 'Grail-SUnit'
 %
 
 ! ------------------- Remove existing behavior from ObjectTestCase
@@ -33,7 +33,7 @@ ObjectTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Attribute Access'
+category: 'Grail-Attribute Access'
 method: ObjectTestCase
 test__class__
 	"Test that __class__ returns the class of the object"
@@ -44,7 +44,7 @@ test__class__
 	self assert: result equals: object
 %
 
-category: 'Python-Attribute Access'
+category: 'Grail-Attribute Access'
 method: ObjectTestCase
 test__dir__
 	"Test that __dir__ returns a sorted array of method names"
@@ -64,7 +64,7 @@ test__dir__
 	self assert: (result includes: '__repr__')
 %
 
-category: 'Python-Other'
+category: 'Grail-Other'
 method: ObjectTestCase
 test__doc__
 	"Test that __doc__ returns the docstring"
@@ -80,7 +80,7 @@ test__doc__
 	self assert: (result includesString: 'base class')
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: ObjectTestCase
 test__eq__
 	"Test that __eq__ works correctly"
@@ -97,7 +97,7 @@ test__eq__
 	self deny: (obj1 @env1:__eq__: obj2)
 %
 
-category: 'Python-Hashing & Identity'
+category: 'Grail-Hashing & Identity'
 method: ObjectTestCase
 test__hash__
 	"Test that __hash__ returns a hash value"
@@ -110,7 +110,7 @@ test__hash__
 	self assert: result class equals: SmallInteger
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: ObjectTestCase
 test__init__
 	"Test that __init__ initializes an instance (instance method)"
@@ -123,7 +123,7 @@ test__init__
 	self assert: result equals: None
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: ObjectTestCase
 test__init_subclass__
 	"Test that __init_subclass__ is a class method"
@@ -136,7 +136,7 @@ test__init_subclass__
 	self assert: result equals: None
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: ObjectTestCase
 test__ne__
 	"Test that __ne__ works correctly"
@@ -153,7 +153,7 @@ test__ne__
 	self assert: (obj1 @env1:__ne__: obj2)
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: ObjectTestCase
 test__new__
 	"Test that __new__ creates a new instance (class method)"
@@ -171,7 +171,7 @@ test__new__
 	self deny: obj1 == obj2
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: ObjectTestCase
 test__repr__
 	"Test that __repr__ returns a string representation"
@@ -188,7 +188,7 @@ test__repr__
 	self assert: (result includesString: 'object')
 %
 
-category: 'Python-Other'
+category: 'Grail-Other'
 method: ObjectTestCase
 test__sizeof__
 	"Test that __sizeof__ returns a size in bytes"
@@ -204,7 +204,7 @@ test__sizeof__
 	self assert: result > 0
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: ObjectTestCase
 test__str__
 	"Test that __str__ returns a string representation"

@@ -36,7 +36,7 @@ Object
 
 expectvalue /Class
 doit
-UAddAst category: 'Parser'
+UAddAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from UAddAst
@@ -45,7 +45,7 @@ removeallclassmethods UAddAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: UAddAst
 printSmalltalkOn: aStream
 

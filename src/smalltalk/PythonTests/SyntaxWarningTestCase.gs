@@ -17,7 +17,7 @@ PythonTestCase subclass: 'SyntaxWarningTestCase'
 %
 expectvalue /Class
 doit
-SyntaxWarningTestCase category: 'SUnit'
+SyntaxWarningTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ SyntaxWarningTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-SyntaxWarning'
+category: 'Grail-Tests-SyntaxWarning'
 method: SyntaxWarningTestCase
 test_creation
 	"Test creating a SyntaxWarning instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-SyntaxWarning'
+category: 'Grail-Tests-SyntaxWarning'
 method: SyntaxWarningTestCase
 test_inheritance
 	"Test that SyntaxWarning inherits from Warning."

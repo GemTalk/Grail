@@ -17,7 +17,7 @@ PythonTestCase subclass: 'ImportWarningTestCase'
 %
 expectvalue /Class
 doit
-ImportWarningTestCase category: 'SUnit'
+ImportWarningTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ ImportWarningTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-ImportWarning'
+category: 'Grail-Tests-ImportWarning'
 method: ImportWarningTestCase
 test_creation
 	"Test creating a ImportWarning instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-ImportWarning'
+category: 'Grail-Tests-ImportWarning'
 method: ImportWarningTestCase
 test_inheritance
 	"Test that ImportWarning inherits from Warning."

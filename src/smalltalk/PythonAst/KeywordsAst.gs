@@ -35,7 +35,7 @@ Object
 
 expectvalue /Class
 doit
-KeywordsAst category: 'Parser'
+KeywordsAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from KeywordsAst
@@ -44,14 +44,14 @@ removeallclassmethods KeywordsAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 classmethod: KeywordsAst
 from: anArray
 
 	^anArray first value changeClassTo: self
 %
 
-category: 'other'
+category: 'Grail-other'
 method: KeywordsAst
 do: aBlock
 	"provide the protocol of a SymbolDictionary"

@@ -17,7 +17,7 @@ PythonTestCase subclass: 'ReferenceErrorTestCase'
 %
 expectvalue /Class
 doit
-ReferenceErrorTestCase category: 'SUnit'
+ReferenceErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ ReferenceErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-ReferenceError'
+category: 'Grail-Tests-ReferenceError'
 method: ReferenceErrorTestCase
 test_creation
 	"Test creating a ReferenceError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-ReferenceError'
+category: 'Grail-Tests-ReferenceError'
 method: ReferenceErrorTestCase
 test_inheritance
 	"Test that ReferenceError inherits from Exception."

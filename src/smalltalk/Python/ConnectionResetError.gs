@@ -17,5 +17,5 @@ ConnectionError subclass: 'ConnectionResetError'
 
 expectvalue /Class
 doit
-ConnectionResetError category: 'Exceptions'
+ConnectionResetError category: 'Grail-Exceptions'
 %

@@ -17,7 +17,7 @@ PythonTestCase subclass: 'BytesWarningTestCase'
 %
 expectvalue /Class
 doit
-BytesWarningTestCase category: 'SUnit'
+BytesWarningTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ BytesWarningTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-BytesWarning'
+category: 'Grail-Tests-BytesWarning'
 method: BytesWarningTestCase
 test_creation
 	"Test creating a BytesWarning instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-BytesWarning'
+category: 'Grail-Tests-BytesWarning'
 method: BytesWarningTestCase
 test_inheritance
 	"Test that BytesWarning inherits from Warning."

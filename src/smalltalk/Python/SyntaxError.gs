@@ -33,5 +33,5 @@ Instance variables:
 
 expectvalue /Class
 doit
-SyntaxError category: 'Exceptions'
+SyntaxError category: 'Grail-Exceptions'
 %

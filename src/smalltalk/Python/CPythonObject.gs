@@ -34,7 +34,7 @@ Callers must explicitly call #release when done, or use ensure: blocks:
 
 expectvalue /Class
 doit
-CPythonObject category: 'CPython'
+CPythonObject category: 'Grail-CPython'
 %
 
 ! ===============================================================================
@@ -53,7 +53,7 @@ set compile_env: 0
 ! Class methods - Constructors
 ! ===============================================================================
 
-category: 'Instance Creation'
+category: 'Grail-Instance Creation'
 classmethod: CPythonObject
 fromNewReference: aCPointer
 	"Wrap a PyObject* that we own (new reference). We will DecRef on release."
@@ -62,7 +62,7 @@ fromNewReference: aCPointer
 	^ self basicNew initPointer: aCPointer owned: true
 %
 
-category: 'Instance Creation'
+category: 'Grail-Instance Creation'
 classmethod: CPythonObject
 fromBorrowedReference: aCPointer
 	"Wrap a PyObject* that we do not own. IncRef it so we can safely hold it."
@@ -77,7 +77,7 @@ fromBorrowedReference: aCPointer
 
 ! ------------------- Type constructors
 
-category: 'Instance Creation'
+category: 'Grail-Instance Creation'
 classmethod: CPythonObject
 fromInteger: anInteger
 	"Create a Python int from a Smalltalk Integer."
@@ -88,7 +88,7 @@ fromInteger: anInteger
 	^ self fromNewReference: ptr
 %
 
-category: 'Instance Creation'
+category: 'Grail-Instance Creation'
 classmethod: CPythonObject
 fromFloat: aFloat
 	"Create a Python float from a Smalltalk Float."
@@ -99,7 +99,7 @@ fromFloat: aFloat
 	^ self fromNewReference: ptr
 %
 
-category: 'Instance Creation'
+category: 'Grail-Instance Creation'
 classmethod: CPythonObject
 fromString: aString
 	"Create a Python str from a Smalltalk String."
@@ -110,7 +110,7 @@ fromString: aString
 	^ self fromNewReference: ptr
 %
 
-category: 'Instance Creation'
+category: 'Grail-Instance Creation'
 classmethod: CPythonObject
 fromBoolean: aBoolean
 	"Create a Python bool from a Smalltalk Boolean."
@@ -122,7 +122,7 @@ fromBoolean: aBoolean
 	^ self fromNewReference: ptr
 %
 
-category: 'Instance Creation'
+category: 'Grail-Instance Creation'
 classmethod: CPythonObject
 none
 	"Return a CPythonObject wrapping Py_None."
@@ -132,7 +132,7 @@ none
 
 ! ------------------- Collection constructors
 
-category: 'Instance Creation'
+category: 'Grail-Instance Creation'
 classmethod: CPythonObject
 newTuple: size
 	"Create an empty Python tuple of the given size."
@@ -143,7 +143,7 @@ newTuple: size
 	^ self fromNewReference: ptr
 %
 
-category: 'Instance Creation'
+category: 'Grail-Instance Creation'
 classmethod: CPythonObject
 newList: size
 	"Create a Python list of the given initial size."
@@ -154,7 +154,7 @@ newList: size
 	^ self fromNewReference: ptr
 %
 
-category: 'Instance Creation'
+category: 'Grail-Instance Creation'
 classmethod: CPythonObject
 newDict
 	"Create an empty Python dict."
@@ -169,7 +169,7 @@ newDict
 ! Instance methods - Initialization and Cleanup
 ! ===============================================================================
 
-category: 'Initialization'
+category: 'Grail-Initialization'
 method: CPythonObject
 initPointer: aCPointer owned: aBoolean
 
@@ -177,7 +177,7 @@ initPointer: aCPointer owned: aBoolean
 	isOwned := aBoolean.
 %
 
-category: 'Resource Management'
+category: 'Grail-Resource Management'
 method: CPythonObject
 release
 	"Decrement the reference count if we own this reference."
@@ -190,7 +190,7 @@ release
 	].
 %
 
-category: 'Resource Management'
+category: 'Grail-Resource Management'
 method: CPythonObject
 markStolen
 	"Mark that this reference has been stolen (e.g. by PyTuple_SetItem).
@@ -203,7 +203,7 @@ markStolen
 ! Instance methods - Accessing
 ! ===============================================================================
 
-category: 'Accessing'
+category: 'Grail-Accessing'
 method: CPythonObject
 pointer
 	"Return the raw CPointer (PyObject*)."
@@ -211,7 +211,7 @@ pointer
 	^ pointer
 %
 
-category: 'Accessing'
+category: 'Grail-Accessing'
 method: CPythonObject
 isOwned
 	"Return whether we own the reference."
@@ -223,7 +223,7 @@ isOwned
 ! Instance methods - Attribute Access
 ! ===============================================================================
 
-category: 'Attribute Access'
+category: 'Grail-Attribute Access'
 method: CPythonObject
 getAttribute: aString
 	"Return the named attribute as a new CPythonObject."
@@ -235,7 +235,7 @@ getAttribute: aString
 	^ CPythonObject fromNewReference: ptr
 %
 
-category: 'Attribute Access'
+category: 'Grail-Attribute Access'
 method: CPythonObject
 setAttribute: aString to: aCPythonObject
 	"Set the named attribute to the given value."
@@ -250,7 +250,7 @@ setAttribute: aString to: aCPythonObject
 ! Instance methods - Calling
 ! ===============================================================================
 
-category: 'Calling'
+category: 'Grail-Calling'
 method: CPythonObject
 call
 	"Call this object with no arguments."
@@ -258,7 +258,7 @@ call
 	^ self callWith: nil
 %
 
-category: 'Calling'
+category: 'Grail-Calling'
 method: CPythonObject
 callWith: argTupleOrNil
 	"Call this object with a tuple of arguments (or nil for no args).
@@ -276,7 +276,7 @@ callWith: argTupleOrNil
 ! Instance methods - Type Conversion (Python to Smalltalk)
 ! ===============================================================================
 
-category: 'Converting'
+category: 'Grail-Converting'
 method: CPythonObject
 asInteger
 	"Return the Python int value as a Smalltalk Integer."
@@ -285,7 +285,7 @@ asInteger
 		callWith: { pointer }
 %
 
-category: 'Converting'
+category: 'Grail-Converting'
 method: CPythonObject
 asFloat
 	"Return the Python float value as a Smalltalk Float."
@@ -294,7 +294,7 @@ asFloat
 		callWith: { pointer }
 %
 
-category: 'Converting'
+category: 'Grail-Converting'
 method: CPythonObject
 asString
 	"Return the Python str value as a Smalltalk String."
@@ -303,7 +303,7 @@ asString
 		callWith: { pointer }
 %
 
-category: 'Converting'
+category: 'Grail-Converting'
 method: CPythonObject
 asBool
 	"Return the Python truthiness as a Smalltalk Boolean."
@@ -319,7 +319,7 @@ asBool
 ! Instance methods - Inspection
 ! ===============================================================================
 
-category: 'Inspection'
+category: 'Grail-Inspection'
 method: CPythonObject
 str
 	"Return str(self) as a new CPythonObject (Python string)."
@@ -331,7 +331,7 @@ str
 	^ CPythonObject fromNewReference: ptr
 %
 
-category: 'Inspection'
+category: 'Grail-Inspection'
 method: CPythonObject
 repr
 	"Return repr(self) as a new CPythonObject (Python string)."
@@ -343,7 +343,7 @@ repr
 	^ CPythonObject fromNewReference: ptr
 %
 
-category: 'Inspection'
+category: 'Grail-Inspection'
 method: CPythonObject
 type
 	"Return the type of this object as a new CPythonObject."
@@ -354,7 +354,7 @@ type
 	^ CPythonObject fromNewReference: ptr
 %
 
-category: 'Inspection'
+category: 'Grail-Inspection'
 method: CPythonObject
 isCallable
 	"Return true if this object is callable."
@@ -365,7 +365,7 @@ isCallable
 	^ result = 1
 %
 
-category: 'Inspection'
+category: 'Grail-Inspection'
 method: CPythonObject
 isInstance: typeObj
 	"Return true if this object is an instance of typeObj."
@@ -377,7 +377,7 @@ isInstance: typeObj
 	^ result = 1
 %
 
-category: 'Printing'
+category: 'Grail-Printing'
 method: CPythonObject
 printOn: aStream
 	"Print a human-readable representation."
@@ -399,7 +399,7 @@ printOn: aStream
 ! Instance methods - Tuple Operations
 ! ===============================================================================
 
-category: 'Tuple'
+category: 'Grail-Tuple'
 method: CPythonObject
 tupleAt: index put: aCPythonObject
 	"Set tuple item at index (0-based). STEALS the reference from aCPythonObject."
@@ -411,7 +411,7 @@ tupleAt: index put: aCPythonObject
 	result = -1 ifTrue: [ CPythonLibrary current checkPythonError ].
 %
 
-category: 'Tuple'
+category: 'Grail-Tuple'
 method: CPythonObject
 tupleAt: index
 	"Get tuple item at index (0-based). Returns a borrowed reference."
@@ -423,7 +423,7 @@ tupleAt: index
 	^ CPythonObject fromBorrowedReference: ptr
 %
 
-category: 'Tuple'
+category: 'Grail-Tuple'
 method: CPythonObject
 tupleSize
 	"Return the size of this tuple."
@@ -436,7 +436,7 @@ tupleSize
 ! Instance methods - List Operations
 ! ===============================================================================
 
-category: 'List'
+category: 'Grail-List'
 method: CPythonObject
 listAt: index put: aCPythonObject
 	"Set list item at index (0-based). STEALS the reference from aCPythonObject."
@@ -448,7 +448,7 @@ listAt: index put: aCPythonObject
 	result = -1 ifTrue: [ CPythonLibrary current checkPythonError ].
 %
 
-category: 'List'
+category: 'Grail-List'
 method: CPythonObject
 listAt: index
 	"Get list item at index (0-based). Returns a borrowed reference."
@@ -460,7 +460,7 @@ listAt: index
 	^ CPythonObject fromBorrowedReference: ptr
 %
 
-category: 'List'
+category: 'Grail-List'
 method: CPythonObject
 listAppend: aCPythonObject
 	"Append an item to this list. Does NOT steal the reference."
@@ -471,7 +471,7 @@ listAppend: aCPythonObject
 	result = -1 ifTrue: [ CPythonLibrary current checkPythonError ].
 %
 
-category: 'List'
+category: 'Grail-List'
 method: CPythonObject
 listSize
 	"Return the size of this list."
@@ -484,7 +484,7 @@ listSize
 ! Instance methods - Dict Operations
 ! ===============================================================================
 
-category: 'Dict'
+category: 'Grail-Dict'
 method: CPythonObject
 dictAt: keyString put: aCPythonObject
 	"Set a dict item by string key. Does NOT steal the reference."
@@ -495,7 +495,7 @@ dictAt: keyString put: aCPythonObject
 	result = -1 ifTrue: [ CPythonLibrary current checkPythonError ].
 %
 
-category: 'Dict'
+category: 'Grail-Dict'
 method: CPythonObject
 dictAt: keyString
 	"Get a dict item by string key. Returns nil if key is missing (no error).
@@ -508,7 +508,7 @@ dictAt: keyString
 	^ CPythonObject fromBorrowedReference: ptr
 %
 
-category: 'Dict'
+category: 'Grail-Dict'
 method: CPythonObject
 dictSize
 	"Return the number of items in this dict."

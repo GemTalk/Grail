@@ -17,5 +17,5 @@ LookupError subclass: 'IndexError'
 
 expectvalue /Class
 doit
-IndexError category: 'Exceptions'
+IndexError category: 'Grail-Exceptions'
 %

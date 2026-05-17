@@ -45,7 +45,7 @@ Object
 
 expectvalue /Class
 doit
-StarredAst category: 'Parser'
+StarredAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from StarredAst

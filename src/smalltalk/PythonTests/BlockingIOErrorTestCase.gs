@@ -17,7 +17,7 @@ PythonTestCase subclass: 'BlockingIOErrorTestCase'
 %
 expectvalue /Class
 doit
-BlockingIOErrorTestCase category: 'SUnit'
+BlockingIOErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ BlockingIOErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-BlockingIOError'
+category: 'Grail-Tests-BlockingIOError'
 method: BlockingIOErrorTestCase
 test_creation
 	"Test creating a BlockingIOError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-BlockingIOError'
+category: 'Grail-Tests-BlockingIOError'
 method: BlockingIOErrorTestCase
 test_inheritance
 	"Test that BlockingIOError inherits from OSError."

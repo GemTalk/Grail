@@ -24,7 +24,7 @@ range class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: range
 __new__: start _: stop
 	"range(start, stop) — creates range from start to stop-1 with step 1.
@@ -34,7 +34,7 @@ __new__: start _: stop
 	^ self @env0:from: start to: (stop @env0:- 1) by: 1
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: range
 __new__: start _: stop _: step
 	"range(start, stop, step) — creates range from start to stop-1 with
@@ -57,7 +57,7 @@ __new__: start _: stop _: step
 	^ self @env0:from: start to: adjustedStop by: step
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: range
 __new__: stop
 	"range(stop) — creates range from 0 to stop-1 with step 1.
@@ -67,7 +67,7 @@ __new__: stop
 	^ self @env0:from: 0 to: (stop @env0:- 1) by: 1
 %
 
-category: 'Python-Sequence Protocol'
+category: 'Grail-Sequence Protocol'
 method: range
 __bool__
 	"Test if range is non-empty"
@@ -77,7 +77,7 @@ __bool__
 	^ size @env0:> 0
 %
 
-category: 'Python-Sequence Protocol'
+category: 'Grail-Sequence Protocol'
 method: range
 __contains__: value
 	"Test if value is in the range"
@@ -85,7 +85,7 @@ __contains__: value
 	^ self @env0:includes: value
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: range
 __eq__: other
 	"Test equality with another range"
@@ -115,7 +115,7 @@ __eq__: other
 	^ selfSize @env0:= otherSize
 %
 
-category: 'Python-Sequence Protocol'
+category: 'Grail-Sequence Protocol'
 method: range
 __getitem__: index
 	"Return the item at the given index or a slice"
@@ -145,7 +145,7 @@ __getitem__: index
 	^ self @env0:at: (idx @env0:+ 1)
 %
 
-category: 'Python-Hashing'
+category: 'Grail-Hashing'
 method: range
 __hash__
 	"Return hash of the range"
@@ -153,7 +153,7 @@ __hash__
 	^ self @env0:hash
 %
 
-category: 'Python-Sequence Protocol'
+category: 'Grail-Sequence Protocol'
 method: range
 __iter__
 	"Return an iterator over the range."
@@ -161,14 +161,14 @@ __iter__
 	^ range_iterator @env1:___on: self
 %
 
-category: 'Python-Sequence Protocol'
+category: 'Grail-Sequence Protocol'
 method: range
 __len__
 	"Return the length of the range"
 	^ self @env0:size
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: range
 __ne__: other
 	"Test inequality with another range"
@@ -178,7 +178,7 @@ __ne__: other
 	^ eq @env0:not
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: range
 __repr__
 	"Return string representation of the range"
@@ -210,7 +210,7 @@ __repr__
 	^ stream @env0:contents
 %
 
-category: 'Python-Iteration'
+category: 'Grail-Iteration'
 method: range
 __reversed__
 	"Return a reversed range"
@@ -238,7 +238,7 @@ __reversed__
 	^ range @env1:__new__: newStart _: newStop _: newStep
 %
 
-category: 'Python-Sequence Methods'
+category: 'Grail-Sequence Methods'
 method: range
 count: value
 	"Return the number of times value appears in the range (0 or 1)"
@@ -248,7 +248,7 @@ count: value
 	^ contains ifTrue: [1] ifFalse: [0]
 %
 
-category: 'Python-Sequence Methods'
+category: 'Grail-Sequence Methods'
 method: range
 index: value
 	"Return the index of value in the range. Raises ValueError if not found."
@@ -267,21 +267,21 @@ index: value
 	^ idx
 %
 
-category: 'Python-Attributes'
+category: 'Grail-Attributes'
 method: range
 start
 	"Return the start value (Python's start attribute)"
 	^ self @env0:_from
 %
 
-category: 'Python-Attributes'
+category: 'Grail-Attributes'
 method: range
 step
 	"Return the step value (Python's step attribute)"
 	^ self @env0:increment
 %
 
-category: 'Python-Attributes'
+category: 'Grail-Attributes'
 method: range
 stop
 	"Return the stop value (Python's stop attribute - exclusive)"

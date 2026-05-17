@@ -18,7 +18,7 @@ PythonTestCase subclass: 'PackageImportTestCase'
 
 expectvalue /Class
 doit
-PackageImportTestCase category: 'SUnit'
+PackageImportTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ PackageImportTestCase class removeAllMethods: 0.
 
 set compile_env: 0
 
-category: 'Setup'
+category: 'Grail-Setup'
 method: PackageImportTestCase
 setUp
 	"Initialize modules and clean up any test package entries from prior runs"
@@ -48,7 +48,7 @@ setUp
 	keysToRemove do: [:k | mods removeKey: k ifAbsent: []].
 %
 
-category: 'Tests - Package Detection'
+category: 'Grail-Tests - Package Detection'
 method: PackageImportTestCase
 testModuleNameToPathFindsPackage
 	"___moduleNameToPath___: should find a package's __init__.py"
@@ -59,7 +59,7 @@ testModuleNameToPathFindsPackage
 	self assert: (path endsWith: '__init__.py')
 %
 
-category: 'Tests - Package Detection'
+category: 'Grail-Tests - Package Detection'
 method: PackageImportTestCase
 testModuleNameToPathPrefersFile
 	"___moduleNameToPath___: should prefer name.py over name/__init__.py"
@@ -71,7 +71,7 @@ testModuleNameToPathPrefersFile
 	self deny: (path endsWith: '__init__.py')
 %
 
-category: 'Tests - Import Package'
+category: 'Grail-Tests - Import Package'
 method: PackageImportTestCase
 testImportPackage
 	"Importing a package loads its __init__.py and registers it"
@@ -83,7 +83,7 @@ testImportPackage
 	self assert: (importlib ___lookupModule___: 'src.python.mypkg') notNil
 %
 
-category: 'Tests - Import Package'
+category: 'Grail-Tests - Import Package'
 method: PackageImportTestCase
 testPackageHasPath
 	"Package module should have __path__ set to a list"
@@ -99,7 +99,7 @@ testPackageHasPath
 	self assert: (path first endsWith: 'src/python/mypkg')
 %
 
-category: 'Tests - Import Package'
+category: 'Grail-Tests - Import Package'
 method: PackageImportTestCase
 testNonPackageNoPath
 	"Regular (non-package) module should not have __path__ — accessing it
@@ -116,7 +116,7 @@ testNonPackageNoPath
 	self assert: path equals: None
 %
 
-category: 'Tests - Import Submodule'
+category: 'Grail-Tests - Import Submodule'
 method: PackageImportTestCase
 testImportSubmodule
 	"import mypkg.sub should register both mypkg and mypkg.sub"
@@ -129,7 +129,7 @@ testImportSubmodule
 	self assert: (importlib ___lookupModule___: 'src.python.mypkg.sub') notNil
 %
 
-category: 'Tests - Import Submodule'
+category: 'Grail-Tests - Import Submodule'
 method: PackageImportTestCase
 testParentAutoLoaded
 	"Importing a submodule auto-loads parent packages"
@@ -144,7 +144,7 @@ testParentAutoLoaded
 	self assert: (importlib ___lookupModule___: 'src.python.mypkg') notNil
 %
 
-category: 'Tests - Import Submodule'
+category: 'Grail-Tests - Import Submodule'
 method: PackageImportTestCase
 testSubmoduleBoundOnParent
 	"After importing mypkg.sub, parent.sub should resolve"
@@ -159,7 +159,7 @@ testSubmoduleBoundOnParent
 	self assert: subMod == (importlib ___lookupModule___: 'src.python.mypkg.sub')
 %
 
-category: 'Tests - Import Nested'
+category: 'Grail-Tests - Import Nested'
 method: PackageImportTestCase
 testImportNestedPackage
 	"import mypkg.nested.deep should register all three levels"
@@ -173,7 +173,7 @@ testImportNestedPackage
 	self assert: (importlib ___lookupModule___: 'src.python.mypkg.nested.deep') notNil
 %
 
-category: 'Tests - Return Value Semantics'
+category: 'Grail-Tests - Return Value Semantics'
 method: PackageImportTestCase
 testImportDottedReturnsTopLevel
 	"__import__('a.b') with empty fromlist returns the top-level module.
@@ -194,7 +194,7 @@ testImportDottedReturnsTopLevel
 	].
 %
 
-category: 'Tests - Return Value Semantics'
+category: 'Grail-Tests - Return Value Semantics'
 method: PackageImportTestCase
 testFromImportReturnsNamedModule
 	"__import__('a.b', fromlist=['y']) returns the named module, not top-level"
@@ -215,7 +215,7 @@ testFromImportReturnsNamedModule
 	].
 %
 
-category: 'Tests - Package Contents'
+category: 'Grail-Tests - Package Contents'
 method: PackageImportTestCase
 testPackageInitExecuted
 	"Package __init__.py code should be executed"
@@ -232,7 +232,7 @@ testPackageInitExecuted
 	self assert: (pkg @env1:__name__) equals: 'src.python.mypkg'
 %
 
-category: 'Tests - Package Contents'
+category: 'Grail-Tests - Package Contents'
 method: PackageImportTestCase
 testPackageIsPackage
 	"Package module's __package__ should be the module name itself"

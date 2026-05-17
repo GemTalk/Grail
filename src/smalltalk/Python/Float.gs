@@ -18,7 +18,7 @@ float class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: float
 __new__
 	"Create a new float instance with default value 0.0.
@@ -27,7 +27,7 @@ __new__
 	^ 0.0
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: float
 __new__: obj
 	"Create a new float instance from an object.
@@ -61,7 +61,7 @@ __new__: obj
 	TypeError @env0:signal: 'float() argument must be a string or a number'
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: float
 __new__fromString: str
 	"Helper method to convert string to float, handling special values"
@@ -86,7 +86,7 @@ __new__fromString: str
 		do: [:ex | ValueError @env0:signal: ('could not convert string to float: ''' @env0:, str)]
 %
 
-category: 'Python-Class Methods'
+category: 'Grail-Class Methods'
 classmethod: float
 fromhex: hexString
 	"Create a floating-point number from a hexadecimal string.
@@ -127,7 +127,7 @@ fromhex: hexString
 	^ (val @env0:* sign) @env0:asFloat
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: float
 __abs__
 	"Return absolute value."
@@ -135,7 +135,7 @@ __abs__
 	^ self @env0:abs
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: float
 __add__: other
 	"Add two floats or float and other number."
@@ -143,7 +143,7 @@ __add__: other
 	^ self @env0:+ other
 %
 
-category: 'Python-Conversion'
+category: 'Grail-Conversion'
 method: float
 __bool__
 	"Return True if float is non-zero."
@@ -151,7 +151,7 @@ __bool__
 	^ (self @env0:~= 0.0)
 %
 
-category: 'Python-Rounding'
+category: 'Grail-Rounding'
 method: float
 __ceil__
 	"Return ceiling (smallest integer >= self)."
@@ -159,7 +159,7 @@ __ceil__
 	^ self @env0:ceiling
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: float
 __divmod__: other
 	"Return (quotient, remainder) as a tuple."
@@ -170,7 +170,7 @@ __divmod__: other
 	^ tuple @env0:with: quot with: rem
 %
 
-category: 'Python-Documentation'
+category: 'Grail-Documentation'
 method: float
 __doc__
 	"Return documentation string for float type."
@@ -178,7 +178,7 @@ __doc__
 	^ 'Convert a string or number to a floating-point number, if possible.' @env0:asUnicodeString
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: float
 __eq__: other
 	"Equality comparison."
@@ -186,7 +186,7 @@ __eq__: other
 	^ self @env0:= other
 %
 
-category: 'Python-Conversion'
+category: 'Grail-Conversion'
 method: float
 __float__
 	"Return self (already a float)."
@@ -194,7 +194,7 @@ __float__
 	^ self
 %
 
-category: 'Python-Rounding'
+category: 'Grail-Rounding'
 method: float
 __floor__
 	"Return floor (largest integer <= self)."
@@ -202,7 +202,7 @@ __floor__
 	^ self @env0:floor
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: float
 __floordiv__: other
 	"Floor division."
@@ -210,7 +210,7 @@ __floordiv__: other
 	^ self @env0:// other
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: float
 __ge__: other
 	"Greater than or equal comparison."
@@ -218,7 +218,7 @@ __ge__: other
 	^ self @env0:>= other
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: float
 __gt__: other
 	"Greater than comparison."
@@ -226,7 +226,7 @@ __gt__: other
 	^ self @env0:> other
 %
 
-category: 'Python-Conversion'
+category: 'Grail-Conversion'
 method: float
 __int__
 	"Convert float to int by truncating."
@@ -234,7 +234,7 @@ __int__
 	^ self @env0:truncated
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: float
 __le__: other
 	"Less than or equal comparison."
@@ -242,7 +242,7 @@ __le__: other
 	^ self @env0:<= other
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: float
 __lt__: other
 	"Less than comparison."
@@ -250,7 +250,7 @@ __lt__: other
 	^ self @env0:< other
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: float
 __mod__: other
 	"Modulo operation."
@@ -258,7 +258,7 @@ __mod__: other
 	^ self @env0:\\ other
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: float
 __mul__: other
 	"Multiply two floats or float and other number."
@@ -266,7 +266,7 @@ __mul__: other
 	^ self @env0:* other
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: float
 __ne__: other
 	"Not equal comparison."
@@ -274,7 +274,7 @@ __ne__: other
 	^ self @env0:~= other
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: float
 __neg__
 	"Negate the float."
@@ -282,7 +282,7 @@ __neg__
 	^ self @env0:negated
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: float
 __pos__
 	"Unary plus (return self)."
@@ -290,7 +290,7 @@ __pos__
 	^ self
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: float
 __pow__: other
 	"Raise self to the power of other."
@@ -298,7 +298,7 @@ __pow__: other
 	^ self @env0:raisedTo: other
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: float
 __pow__: other _: modulo
 	"Raise self to the power of other, modulo modulo.
@@ -307,7 +307,7 @@ __pow__: other _: modulo
 	TypeError @env0:signal: 'pow() 3rd argument not allowed for float'
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: float
 __repr__
 	"Return the official string representation of the float."
@@ -317,7 +317,7 @@ __repr__
 	^ str @env0:asUnicodeString
 %
 
-category: 'Python-Rounding'
+category: 'Grail-Rounding'
 method: float
 __round__
 	"Round to nearest integer."
@@ -325,7 +325,7 @@ __round__
 	^ self @env0:rounded
 %
 
-category: 'Python-Rounding'
+category: 'Grail-Rounding'
 method: float
 __round__: ndigits
 	"Round to n digits after decimal point."
@@ -344,7 +344,7 @@ __round__: ndigits
 		@env0:/ multiplier
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: float
 __str__
 	"Return the informal string representation of the float."
@@ -360,7 +360,7 @@ __str__
 	^ str @env0:asUnicodeString
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: float
 __sub__: other
 	"Subtract other from self."
@@ -368,7 +368,7 @@ __sub__: other
 	^ self @env0:- (other)
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: float
 __truediv__: other
 	"True division (always returns float)."
@@ -376,7 +376,7 @@ __truediv__: other
 	^ self @env0:/ other
 %
 
-category: 'Python-Rounding'
+category: 'Grail-Rounding'
 method: float
 __trunc__
 	"Truncate to integer."
@@ -384,7 +384,7 @@ __trunc__
 	^ self @env0:truncated
 %
 
-category: 'Python-Float Methods'
+category: 'Grail-Float Methods'
 method: float
 as_integer_ratio
 	"Return (numerator, denominator) pair."
@@ -394,7 +394,7 @@ as_integer_ratio
 	^ tuple @env0:with: (frac @env0:numerator) with: (frac @env0:denominator)
 %
 
-category: 'Python-Float Methods'
+category: 'Grail-Float Methods'
 method: float
 conjugate
 	"Return the complex conjugate (for float, just return self)."
@@ -402,7 +402,7 @@ conjugate
 	^ self
 %
 
-category: 'Python-Float Methods'
+category: 'Grail-Float Methods'
 method: float
 hex
 	"Return hexadecimal representation of float."
@@ -439,7 +439,7 @@ hex
 	^ hexStr @env0:asUnicodeString
 %
 
-category: 'Python-Properties'
+category: 'Grail-Properties'
 method: float
 imag
 	"Return the imaginary part (for float, always 0.0)."
@@ -447,7 +447,7 @@ imag
 	^ 0.0
 %
 
-category: 'Python-Float Methods'
+category: 'Grail-Float Methods'
 method: float
 is_integer
 	"Return True if float value is an integer."
@@ -455,7 +455,7 @@ is_integer
 	^ self @env0:= ((self @env0:truncated) @env0:asFloat)
 %
 
-category: 'Python-Properties'
+category: 'Grail-Properties'
 method: float
 real
 	"Return the real part (for float, just return self)."

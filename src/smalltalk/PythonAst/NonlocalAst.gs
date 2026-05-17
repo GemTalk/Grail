@@ -42,7 +42,7 @@ Object
 
 expectvalue /Class
 doit
-NonlocalAst category: 'Parser'
+NonlocalAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from NonlocalAst
@@ -51,7 +51,7 @@ removeallclassmethods NonlocalAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: NonlocalAst
 printSmalltalkOn: aStream
 

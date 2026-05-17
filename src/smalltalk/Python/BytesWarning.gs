@@ -17,5 +17,5 @@ Warning subclass: 'BytesWarning'
 
 expectvalue /Class
 doit
-BytesWarning category: 'Exceptions'
+BytesWarning category: 'Grail-Exceptions'
 %

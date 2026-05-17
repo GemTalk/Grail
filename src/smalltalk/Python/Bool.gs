@@ -24,7 +24,7 @@ bool class removeAllMethods: 1.
 
 set compile_env: 0
 
-category: 'Python-Arithmetic Operators'
+category: 'Grail-Arithmetic Operators'
 method: bool
 * aNumber
 	"Multiply bool (as integer) by aNumber."
@@ -32,7 +32,7 @@ method: bool
 	^ self asInteger * aNumber
 %
 
-category: 'Python-Arithmetic Operators'
+category: 'Grail-Arithmetic Operators'
 method: bool
 + aNumber
 	"Add bool (as integer) to aNumber."
@@ -40,7 +40,7 @@ method: bool
 	^ self asInteger + aNumber
 %
 
-category: 'Python-Arithmetic Operators'
+category: 'Grail-Arithmetic Operators'
 method: bool
 - aNumber
 	"Subtract aNumber from bool (as integer)."
@@ -48,7 +48,7 @@ method: bool
 	^ self asInteger - aNumber
 %
 
-category: 'Python-Arithmetic Operators'
+category: 'Grail-Arithmetic Operators'
 method: bool
 / aNumber
 	"Divide bool (as integer) by aNumber."
@@ -56,7 +56,7 @@ method: bool
 	^ self asInteger / aNumber
 %
 
-category: 'Python-Arithmetic Operators'
+category: 'Grail-Arithmetic Operators'
 method: bool
 // aNumber
 	"Integer division of bool (as integer) by aNumber."
@@ -64,7 +64,7 @@ method: bool
 	^ self asInteger // aNumber
 %
 
-category: 'Python-Arithmetic Operators'
+category: 'Grail-Arithmetic Operators'
 method: bool
 < aNumber
 	"Less than comparison."
@@ -76,7 +76,7 @@ method: bool
 	^ self asInteger < otherInt
 %
 
-category: 'Python-Arithmetic Operators'
+category: 'Grail-Arithmetic Operators'
 method: bool
 <= aNumber
 	"Less than or equal comparison."
@@ -88,7 +88,7 @@ method: bool
 	^ self asInteger <= otherInt
 %
 
-category: 'Python-Arithmetic Operators'
+category: 'Grail-Arithmetic Operators'
 method: bool
 = anObject
 	"Equality comparison. Handle bool specially, otherwise compare as integer."
@@ -100,7 +100,7 @@ method: bool
 	^ self asInteger = otherInt
 %
 
-category: 'Python-Arithmetic Operators'
+category: 'Grail-Arithmetic Operators'
 method: bool
 > aNumber
 	"Greater than comparison."
@@ -112,7 +112,7 @@ method: bool
 	^ self asInteger > otherInt
 %
 
-category: 'Python-Arithmetic Operators'
+category: 'Grail-Arithmetic Operators'
 method: bool
 >= aNumber
 	"Greater than or equal comparison."
@@ -124,7 +124,7 @@ method: bool
 	^ self asInteger >= otherInt
 %
 
-category: 'Python-Arithmetic Operators'
+category: 'Grail-Arithmetic Operators'
 method: bool
 \\ aNumber
 	"Modulo of bool (as integer) by aNumber."
@@ -132,7 +132,7 @@ method: bool
 	^ self asInteger \\ aNumber
 %
 
-category: 'Python-Arithmetic Support'
+category: 'Grail-Arithmetic Support'
 method: bool
 _coerce: aNumber
 	"Coerce aNumber to be compatible with bool (as integer).
@@ -141,7 +141,7 @@ _coerce: aNumber
 	^ aNumber asInteger
 %
 
-category: 'Python-Arithmetic Support'
+category: 'Grail-Arithmetic Support'
 method: bool
 _generality
 	"Return generality for bool in numeric hierarchy.
@@ -151,7 +151,7 @@ _generality
 	^ 10
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: bool
 abs
 	"Return absolute value (true=1, false=0)."
@@ -159,7 +159,7 @@ abs
 	^ self asInteger
 %
 
-category: 'Python-Conversion'
+category: 'Grail-Conversion'
 method: bool
 asFixedPoint: scale
 	"Convert bool to FixedPoint."
@@ -167,7 +167,7 @@ asFixedPoint: scale
 	^ self asInteger asFixedPoint: scale
 %
 
-category: 'Python-Conversion'
+category: 'Grail-Conversion'
 method: bool
 asFloat
 	"Convert bool to Float (true=1.0, false=0.0)."
@@ -175,7 +175,7 @@ asFloat
 	^ self ifTrue: [1.0] ifFalse: [0.0]
 %
 
-category: 'Python-Conversion'
+category: 'Grail-Conversion'
 method: bool
 asFraction
 	"Convert bool to Fraction (true=1, false=0)."
@@ -183,7 +183,7 @@ asFraction
 	^ self asInteger
 %
 
-category: 'Python-Conversion'
+category: 'Grail-Conversion'
 method: bool
 asInteger
 	"Convert bool to int (true=1, false=0)."
@@ -191,7 +191,7 @@ asInteger
 	^ self ifTrue: [1] ifFalse: [0]
 %
 
-category: 'Python-Conversion'
+category: 'Grail-Conversion'
 method: bool
 asScaledDecimal: scale
 	"Convert bool to ScaledDecimal."
@@ -199,7 +199,7 @@ asScaledDecimal: scale
 	^ self asInteger asScaledDecimal: scale
 %
 
-category: 'Python-Conversion'
+category: 'Grail-Conversion'
 method: bool
 ceiling
 	"Return integer value (true=1, false=0)."
@@ -207,7 +207,7 @@ ceiling
 	^ self asInteger
 %
 
-category: 'Python-Testing'
+category: 'Grail-Testing'
 method: bool
 even
 	"Return true if even (true=1 is odd, false=0 is even)."
@@ -215,7 +215,7 @@ even
 	^ self not
 %
 
-category: 'Python-Conversion'
+category: 'Grail-Conversion'
 method: bool
 floor
 	"Return integer value (true=1, false=0)."
@@ -223,7 +223,7 @@ floor
 	^ self asInteger
 %
 
-category: 'Python-Arithmetic Support'
+category: 'Grail-Arithmetic Support'
 method: bool
 isNumber
 	"Return true - bool participates in arithmetic as a number.
@@ -232,7 +232,7 @@ isNumber
 	^ true
 %
 
-category: 'Python-Arithmetic Operators'
+category: 'Grail-Arithmetic Operators'
 method: bool
 max: aNumber
 	"Return maximum of bool (as integer) and aNumber."
@@ -240,7 +240,7 @@ max: aNumber
 	^ self asInteger max: aNumber
 %
 
-category: 'Python-Arithmetic Operators'
+category: 'Grail-Arithmetic Operators'
 method: bool
 min: aNumber
 	"Return minimum of bool (as integer) and aNumber."
@@ -248,7 +248,7 @@ min: aNumber
 	^ self asInteger min: aNumber
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: bool
 negated
 	"Return negation (true=-1, false=0)."
@@ -256,7 +256,7 @@ negated
 	^ self asInteger negated
 %
 
-category: 'Python-Testing'
+category: 'Grail-Testing'
 method: bool
 negative
 	"Return false - booleans as integers are never negative."
@@ -264,7 +264,7 @@ negative
 	^ false
 %
 
-category: 'Python-Testing'
+category: 'Grail-Testing'
 method: bool
 odd
 	"Return true if odd (true=1 is odd, false=0 is even)."
@@ -272,7 +272,7 @@ odd
 	^ self
 %
 
-category: 'Python-Testing'
+category: 'Grail-Testing'
 method: bool
 positive
 	"Return true if self is true or false (equivalent to >= 0)."
@@ -280,7 +280,7 @@ positive
 	^ true
 %
 
-category: 'Python-Arithmetic Operators'
+category: 'Grail-Arithmetic Operators'
 method: bool
 raisedTo: aNumber
 	"Raise bool (as integer) to the power of aNumber."
@@ -288,7 +288,7 @@ raisedTo: aNumber
 	^ self asInteger raisedTo: aNumber
 %
 
-category: 'Python-Arithmetic Operators'
+category: 'Grail-Arithmetic Operators'
 method: bool
 raisedToInteger: aNumber
 	"Raise bool (as integer) to the power of aNumber (integer)."
@@ -296,7 +296,7 @@ raisedToInteger: aNumber
 	^ self asInteger raisedToInteger: aNumber
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: bool
 reciprocal
 	"Return reciprocal (true=1, false=error)."
@@ -304,7 +304,7 @@ reciprocal
 	^ self asInteger reciprocal
 %
 
-category: 'Python-Conversion'
+category: 'Grail-Conversion'
 method: bool
 rounded
 	"Return integer value (true=1, false=0)."
@@ -312,7 +312,7 @@ rounded
 	^ self asInteger
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: bool
 sign
 	"Return sign (true=1, false=0)."
@@ -320,7 +320,7 @@ sign
 	^ self asInteger
 %
 
-category: 'Python-Testing'
+category: 'Grail-Testing'
 method: bool
 strictlyPositive
 	"Return true if self is true (equivalent to > 0)."
@@ -328,7 +328,7 @@ strictlyPositive
 	^ self
 %
 
-category: 'Python-Conversion'
+category: 'Grail-Conversion'
 method: bool
 truncated
 	"Return integer value (true=1, false=0)."
@@ -336,7 +336,7 @@ truncated
 	^ self asInteger
 %
 
-category: 'Python-Arithmetic Operators'
+category: 'Grail-Arithmetic Operators'
 method: bool
 ~= anObject
 	"Inequality comparison. Handle bool specially, otherwise compare as integer."
@@ -350,7 +350,7 @@ method: bool
 
 set compile_env: 1
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: bool
 __new__
 	"Create a bool instance with default value False.
@@ -359,7 +359,7 @@ __new__
 	^ false
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: bool
 __new__: obj
 	"Create a bool instance from an object by calling its __bool__ method.
@@ -405,7 +405,7 @@ __new__: obj
 	^ true
 %
 
-category: 'Python-Logical Operators'
+category: 'Grail-Logical Operators'
 method: bool
 ___and___: aBlock
 	"Short-circuit logical AND. If self is false, return false.
@@ -414,7 +414,7 @@ ___and___: aBlock
 	^ self ifTrue: [aBlock value] ifFalse: [false]
 %
 
-category: 'Python-Logical Operators'
+category: 'Grail-Logical Operators'
 method: bool
 ___or___: aBlock
 	"Short-circuit logical OR. If self is true, return true.
@@ -423,7 +423,7 @@ ___or___: aBlock
 	^ self ifTrue: [true] ifFalse: [aBlock value]
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: bool
 __abs__
 	"Absolute value of bool (as int)."
@@ -431,7 +431,7 @@ __abs__
 	^ self ifTrue: [1] ifFalse: [0]
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: bool
 __add__: other
 	"Add bool (as int) to other."
@@ -439,7 +439,7 @@ __add__: other
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:+ other
 %
 
-category: 'Python-Bitwise'
+category: 'Grail-Bitwise'
 method: bool
 __and__: other
 	"Bitwise AND of bool (as int) with other."
@@ -447,7 +447,7 @@ __and__: other
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:bitAnd: other
 %
 
-category: 'Python-Conversion'
+category: 'Grail-Conversion'
 method: bool
 __bool__
 	"Return self (already a bool)."
@@ -455,7 +455,7 @@ __bool__
 	^ self
 %
 
-category: 'Python-Bridge'
+category: 'Grail-Bridge'
 method: bool
 ___isTruthy___
 	"Boolean is already a Smalltalk Boolean."
@@ -463,7 +463,7 @@ ___isTruthy___
 	^ self
 %
 
-category: 'Python-Documentation'
+category: 'Grail-Documentation'
 method: bool
 __doc__
 	"Return documentation string for bool type."
@@ -475,7 +475,7 @@ The builtins True and False are the only two instances of the class bool.
 The class bool is a subclass of the class int, and cannot be subclassed.' @env0:asUnicodeString
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: bool
 __eq__: other
 	"Equality comparison. True==1 and False==0 in Python."
@@ -488,7 +488,7 @@ __eq__: other
 	^ selfInt @env0:= otherInt
 %
 
-category: 'Python-Conversion'
+category: 'Grail-Conversion'
 method: bool
 __float__
 	"Convert bool to float (True=1.0, False=0.0)."
@@ -496,7 +496,7 @@ __float__
 	^ self ifTrue: [1.0] ifFalse: [0.0]
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: bool
 __floordiv__: other
 	"Floor division of bool (as int) by other."
@@ -504,7 +504,7 @@ __floordiv__: other
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:// other
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: bool
 __ge__: other
 	"Greater than or equal comparison."
@@ -517,7 +517,7 @@ __ge__: other
 	^ selfInt @env0:>= otherInt
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: bool
 __gt__: other
 	"Greater than comparison."
@@ -530,7 +530,7 @@ __gt__: other
 	^ selfInt @env0:> otherInt
 %
 
-category: 'Python-Conversion'
+category: 'Grail-Conversion'
 method: bool
 __index__
 	"Return int value (used for indexing). True=1, False=0."
@@ -538,7 +538,7 @@ __index__
 	^ self ifTrue: [1] ifFalse: [0]
 %
 
-category: 'Python-Conversion'
+category: 'Grail-Conversion'
 method: bool
 __int__
 	"Convert bool to int (True=1, False=0)."
@@ -546,7 +546,7 @@ __int__
 	^ self ifTrue: [1] ifFalse: [0]
 %
 
-category: 'Python-Bitwise'
+category: 'Grail-Bitwise'
 method: bool
 __invert__
 	"Bitwise NOT of bool (as int)."
@@ -554,7 +554,7 @@ __invert__
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:bitInvert
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: bool
 __le__: other
 	"Less than or equal comparison."
@@ -567,7 +567,7 @@ __le__: other
 	^ selfInt @env0:<= otherInt
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: bool
 __lt__: other
 	"Less than comparison."
@@ -580,7 +580,7 @@ __lt__: other
 	^ selfInt @env0:< otherInt
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: bool
 __mod__: other
 	"Modulo of bool (as int) by other."
@@ -588,7 +588,7 @@ __mod__: other
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:\\ other
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: bool
 __mul__: other
 	"Multiply bool (as int) by other."
@@ -596,7 +596,7 @@ __mul__: other
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:* other
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: bool
 __ne__: other
 	"Inequality comparison."
@@ -609,7 +609,7 @@ __ne__: other
 	^ selfInt @env0:~= otherInt
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: bool
 __neg__
 	"Negate bool (as int)."
@@ -617,7 +617,7 @@ __neg__
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:negated
 %
 
-category: 'Python-Bitwise'
+category: 'Grail-Bitwise'
 method: bool
 __or__: other
 	"Bitwise OR of bool (as int) with other."
@@ -625,7 +625,7 @@ __or__: other
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:bitOr: other
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: bool
 __pos__
 	"Unary plus of bool (as int)."
@@ -633,7 +633,7 @@ __pos__
 	^ self ifTrue: [1] ifFalse: [0]
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: bool
 __pow__: other
 	"Raise bool (as int) to power of other."
@@ -641,7 +641,7 @@ __pow__: other
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:raisedTo: other
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: bool
 __repr__
 	"Return the official string representation of the bool."
@@ -649,7 +649,7 @@ __repr__
 	^ (self ifTrue: ['True'] ifFalse: ['False']) @env0:asUnicodeString
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: bool
 __str__
 	"Return the informal string representation of the bool."
@@ -657,7 +657,7 @@ __str__
 	^ (self ifTrue: ['True'] ifFalse: ['False']) @env0:asUnicodeString
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: bool
 __sub__: other
 	"Subtract other from bool (as int)."
@@ -665,7 +665,7 @@ __sub__: other
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:- (other)
 %
 
-category: 'Python-Arithmetic'
+category: 'Grail-Arithmetic'
 method: bool
 __truediv__: other
 	"True division of bool (as int) by other."
@@ -673,7 +673,7 @@ __truediv__: other
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:/ other
 %
 
-category: 'Python-Bitwise'
+category: 'Grail-Bitwise'
 method: bool
 __xor__: other
 	"Bitwise XOR of bool (as int) with other."

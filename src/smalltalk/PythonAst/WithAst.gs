@@ -24,7 +24,7 @@ WithAst comment:
 
 expectvalue /Class
 doit
-WithAst category: 'Parser'
+WithAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from WithAst
@@ -33,7 +33,7 @@ removeallclassmethods WithAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: WithAst
 printSmalltalkOn: aStream
 

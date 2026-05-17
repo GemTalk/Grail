@@ -17,5 +17,5 @@ Warning subclass: 'ImportWarning'
 
 expectvalue /Class
 doit
-ImportWarning category: 'Exceptions'
+ImportWarning category: 'Grail-Exceptions'
 %

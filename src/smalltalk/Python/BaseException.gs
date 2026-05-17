@@ -47,7 +47,7 @@ Instance variables:
 
 expectvalue /Class
 doit
-BaseException category: 'Exceptions'
+BaseException category: 'Grail-Exceptions'
 %
 
 ! ===============================================================================
@@ -72,7 +72,7 @@ BaseException class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: BaseException
 __new__: cls
 	"Create a new BaseException instance with no arguments."
@@ -83,7 +83,7 @@ __new__: cls
 	^ instance
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: BaseException
 __new__: cls _: anArray
 	"Create a new BaseException instance with arguments.
@@ -95,7 +95,7 @@ __new__: cls _: anArray
 	^ instance
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 classmethod: BaseException
 ___signal___: message
 	"Create and signal an exception with proper Python args."
@@ -106,7 +106,7 @@ ___signal___: message
 	instance ___signal___: message.
 %
 
-category: 'Private'
+category: 'Grail-Private'
 method: BaseException
 ___args___: anArray
 	"Setter for args instance variable."
@@ -114,7 +114,7 @@ ___args___: anArray
 	args := anArray
 %
 
-category: 'Python-Exception Chaining'
+category: 'Grail-Exception Chaining'
 method: BaseException
 __cause__
 	"Return the exception that was the direct cause of this exception.
@@ -123,7 +123,7 @@ __cause__
 	^ None  "TODO: implement exception chaining"
 %
 
-category: 'Python-Exception Chaining'
+category: 'Grail-Exception Chaining'
 method: BaseException
 __context__
 	"Return the exception context (the exception that was being handled
@@ -132,7 +132,7 @@ __context__
 	^ None  "TODO: implement exception context"
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: BaseException
 __eq__: other
 	"Compare exceptions for equality.
@@ -150,7 +150,7 @@ __eq__: other
 	^ myArgs @env0:= otherArgs
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: BaseException
 __init__
 	"Initialize with no arguments."
@@ -159,7 +159,7 @@ __init__
 	^ None
 %
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: BaseException
 __init__: a
 	"Initialize with arguments.
@@ -169,7 +169,7 @@ __init__: a
 	^ None
 %
 
-category: 'Python-Comparison'
+category: 'Grail-Comparison'
 method: BaseException
 __ne__: other
 	"Compare exceptions for inequality."
@@ -179,7 +179,7 @@ __ne__: other
 	^ result @env0:not
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: BaseException
 __repr__
 	"Return a detailed string representation of the exception."
@@ -213,7 +213,7 @@ __repr__
 	^ stream @env0:contents
 %
 
-category: 'Python-String Representation'
+category: 'Grail-String Representation'
 method: BaseException
 __str__
 	"Return a string representation of the exception.
@@ -232,7 +232,7 @@ __str__
 	^ (argsArray @env0:asString) @env0:asUnicodeString
 %
 
-category: 'Python-Exception Chaining'
+category: 'Grail-Exception Chaining'
 method: BaseException
 __suppress_context__
 	"Return whether to suppress the exception context in tracebacks."
@@ -240,7 +240,7 @@ __suppress_context__
 	^ false  "TODO: implement context suppression"
 %
 
-category: 'Python-Exception Chaining'
+category: 'Grail-Exception Chaining'
 method: BaseException
 __traceback__
 	"Return the traceback object for this exception."
@@ -248,7 +248,7 @@ __traceback__
 	^ nil  "TODO: implement traceback support"
 %
 
-category: 'Python-Exception Methods'
+category: 'Grail-Exception Methods'
 method: BaseException
 add_note: note
 	"Add a note to the exception (Python 3.11+).
@@ -258,7 +258,7 @@ add_note: note
 	^ None
 %
 
-category: 'Python-Attribute Access'
+category: 'Grail-Attribute Access'
 method: BaseException
 args
 	"Return the tuple of arguments passed to the exception."
@@ -266,7 +266,7 @@ args
 	^ args ifNil: [ #() ]
 %
 
-category: 'Python-Exception Methods'
+category: 'Grail-Exception Methods'
 method: BaseException
 with_traceback: tb
 	"Set the traceback for this exception and return self.

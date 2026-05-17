@@ -36,7 +36,7 @@ Object
 
 expectvalue /Class
 doit
-PowAst category: 'Parser'
+PowAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from PowAst
@@ -45,7 +45,7 @@ removeallclassmethods PowAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: PowAst
 printSmalltalkOn: aStream
 

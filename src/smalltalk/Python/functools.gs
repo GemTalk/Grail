@@ -28,7 +28,7 @@ See https://docs.python.org/3/library/functools.html
 
 expectvalue /Class
 doit
-functools category: 'Modules'
+functools category: 'Grail-Modules'
 %
 
 expectvalue /Metaclass3
@@ -39,7 +39,7 @@ functools class removeAllMethods: 1.
 
 set compile_env: 1
 
-category: 'Python-Initialization'
+category: 'Grail-Initialization'
 method: functools
 initialize
 	"No-op — all methods are real fast-path methods."
@@ -49,7 +49,7 @@ initialize
 ! Fast-path callables
 ! ===============================================================================
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: functools
 lru_cache: maxsize
 	"lru_cache(maxsize) -> decorator.
@@ -60,7 +60,7 @@ lru_cache: maxsize
 	^ [:positional2 :keywords2 | positional2 @env0:at: 1]
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: functools
 reduce: function _: iterable
 	"reduce(function, iterable) -> value.
@@ -79,7 +79,7 @@ reduce: function _: iterable
 	^ result
 %
 
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: functools
 reduce: function _: iterable _: initial
 	"reduce(function, iterable, initial) -> value.

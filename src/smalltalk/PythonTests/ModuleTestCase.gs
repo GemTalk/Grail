@@ -18,7 +18,7 @@ PythonTestCase subclass: 'ModuleTestCase'
 
 expectvalue /Class
 doit
-ModuleTestCase category: 'SUnit'
+ModuleTestCase category: 'Grail-SUnit'
 %
 
 ! ------------------- Remove existing behavior from ModuleTestCase
@@ -33,7 +33,7 @@ ModuleTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Source'
+category: 'Grail-Source'
 method: ModuleTestCase
 hello_py
 
@@ -49,21 +49,21 @@ say_hello(to, True)
 '
 %
 
-category: 'Setup'
+category: 'Grail-Setup'
 method: ModuleTestCase
 setUp
 
 	priorTranscript := Transcript.
 %
 
-category: 'Setup'
+category: 'Grail-Setup'
 method: ModuleTestCase
 tearDown
 
 	Transcript := priorTranscript.
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: ModuleTestCase
 testCreateAst
 
@@ -72,7 +72,7 @@ testCreateAst
 	self assert: ast class == ModuleAst.
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: ModuleTestCase
 testSmalltalkSource
 	"Transpile Python to Smalltalk without executing it."
@@ -84,7 +84,7 @@ testSmalltalkSource
 	self assert: (code indexOfSubCollection: 'x := 1') > 0.
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: ModuleTestCase
 testSmalltalkSourceHasNoSideEffects
 	"smalltalkSource is pure code generation — it must not execute the
@@ -97,7 +97,7 @@ testSmalltalkSourceHasNoSideEffects
 	self assert: outputStream contents isEmpty.
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: ModuleTestCase
 testEvaluateWithPersistentScope
 	"Emulate REPL by reusing a scope across evaluations."
@@ -121,7 +121,7 @@ testEvaluateWithPersistentScope
 	self assert: result = 3.
 %
 
-category: 'Tests'
+category: 'Grail-Tests'
 method: ModuleTestCase
 testReplOutput
 	"REPL should print only expression results."

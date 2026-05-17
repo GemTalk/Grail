@@ -17,5 +17,5 @@ Exception subclass: 'ReferenceError'
 
 expectvalue /Class
 doit
-ReferenceError category: 'Exceptions'
+ReferenceError category: 'Grail-Exceptions'
 %

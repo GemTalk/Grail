@@ -18,7 +18,7 @@ PythonTestCase subclass: 'PythonTokenizerTestCase'
 
 expectvalue /Class
 doit
-PythonTokenizerTestCase category: 'SUnit'
+PythonTokenizerTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -35,14 +35,14 @@ PythonTokenizerTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'helpers'
+category: 'Grail-helpers'
 method: PythonTokenizerTestCase
 findToken: aSymbol value: aString in: tokens
 
 	^tokens detect: [:t | t type == aSymbol and: [t value = aString]] ifNone: [nil]
 %
 
-category: 'tests - basic tokens'
+category: 'Grail-tests - basic tokens'
 method: PythonTokenizerTestCase
 test_all_keywords
 	"All Python keywords should be recognized."
@@ -60,7 +60,7 @@ test_all_keywords
 	].
 %
 
-category: 'tests - numbers'
+category: 'Grail-tests - numbers'
 method: PythonTokenizerTestCase
 test_binary_number
 	"Tokenize binary numbers."
@@ -71,7 +71,7 @@ test_binary_number
 	self assert: numTok value equals: '0b1010'.
 %
 
-category: 'tests - edge cases'
+category: 'Grail-tests - edge cases'
 method: PythonTokenizerTestCase
 test_blank_lines_ignored
 	"Blank lines should not produce NEWLINE tokens between statements."
@@ -84,7 +84,7 @@ y'.
 	self assert: nameToks size equals: 2.
 %
 
-category: 'tests - structure'
+category: 'Grail-tests - structure'
 method: PythonTokenizerTestCase
 test_bracket_suppresses_newline
 	"Newlines inside brackets should produce NL, not NEWLINE."
@@ -96,7 +96,7 @@ test_bracket_suppresses_newline
 	self assert: newlines size <= 1.
 %
 
-category: 'tests - strings'
+category: 'Grail-tests - strings'
 method: PythonTokenizerTestCase
 test_byte_string
 	"Tokenize byte string prefix."
@@ -107,7 +107,7 @@ test_byte_string
 	self assert: strTok value equals: 'hello'.
 %
 
-category: 'tests - positions'
+category: 'Grail-tests - positions'
 method: PythonTokenizerTestCase
 test_column_numbers
 	"Tokens should have correct column numbers."
@@ -120,7 +120,7 @@ test_column_numbers
 	self assert: yTok column equals: 6.
 %
 
-category: 'tests - structure'
+category: 'Grail-tests - structure'
 method: PythonTokenizerTestCase
 test_comment_ignored
 	"Comments should not produce tokens."
@@ -134,7 +134,7 @@ y'.
 	self assert: nameToks last value equals: 'y'.
 %
 
-category: 'tests - numbers'
+category: 'Grail-tests - numbers'
 method: PythonTokenizerTestCase
 test_complex_number
 	"Tokenize complex number literals."
@@ -145,7 +145,7 @@ test_complex_number
 	self assert: numTok value equals: '3.14j'.
 %
 
-category: 'tests - operators'
+category: 'Grail-tests - operators'
 method: PythonTokenizerTestCase
 test_delimiters
 	"Tokenize parentheses, brackets, braces."
@@ -156,7 +156,7 @@ test_delimiters
 	self assert: opToks size equals: 10.
 %
 
-category: 'tests - operators'
+category: 'Grail-tests - operators'
 method: PythonTokenizerTestCase
 test_ellipsis
 	"Tokenize ellipsis (...)."
@@ -167,7 +167,7 @@ test_ellipsis
 	self assert: opTok value equals: '...'.
 %
 
-category: 'tests - basic tokens'
+category: 'Grail-tests - basic tokens'
 method: PythonTokenizerTestCase
 test_empty_source
 	"Tokenizing empty string produces ENDMARKER."
@@ -177,7 +177,7 @@ test_empty_source
 	self assert: tokens last type equals: #ENDMARKER.
 %
 
-category: 'tests - strings'
+category: 'Grail-tests - strings'
 method: PythonTokenizerTestCase
 test_empty_string
 	"Tokenize empty strings."
@@ -188,7 +188,7 @@ test_empty_string
 	self assert: strTok value equals: ''.
 %
 
-category: 'tests - basic tokens'
+category: 'Grail-tests - basic tokens'
 method: PythonTokenizerTestCase
 test_endmarker
 	"Every token stream ends with ENDMARKER."
@@ -198,7 +198,7 @@ test_endmarker
 	self assert: tokens last type equals: #ENDMARKER.
 %
 
-category: 'tests - strings'
+category: 'Grail-tests - strings'
 method: PythonTokenizerTestCase
 test_escape_sequences
 	"Tokenize strings with escape sequences."
@@ -209,7 +209,7 @@ test_escape_sequences
 	self assert: (strTok value includes: Character lf).
 %
 
-category: 'tests - numbers'
+category: 'Grail-tests - numbers'
 method: PythonTokenizerTestCase
 test_float_dot_only
 	"Tokenize float starting with dot."
@@ -220,7 +220,7 @@ test_float_dot_only
 	self assert: numTok value equals: '.5'.
 %
 
-category: 'tests - basic tokens'
+category: 'Grail-tests - basic tokens'
 method: PythonTokenizerTestCase
 test_float_literal
 	"Tokenize float literals."
@@ -232,7 +232,7 @@ test_float_literal
 	self assert: numToks first value equals: '3.14'.
 %
 
-category: 'tests - numbers'
+category: 'Grail-tests - numbers'
 method: PythonTokenizerTestCase
 test_float_with_exponent
 	"Tokenize float with exponent."
@@ -243,7 +243,7 @@ test_float_with_exponent
 	self assert: numTok value equals: '1e10'.
 %
 
-category: 'tests - numbers'
+category: 'Grail-tests - numbers'
 method: PythonTokenizerTestCase
 test_hex_number
 	"Tokenize hexadecimal numbers."
@@ -254,7 +254,7 @@ test_hex_number
 	self assert: numTok value equals: '0xFF'.
 %
 
-category: 'tests - indentation'
+category: 'Grail-tests - indentation'
 method: PythonTokenizerTestCase
 test_indent_dedent
 	"Indented block produces INDENT and DEDENT tokens."
@@ -269,7 +269,7 @@ z'.
 	self assert: dedents size equals: 1.
 %
 
-category: 'tests - basic tokens'
+category: 'Grail-tests - basic tokens'
 method: PythonTokenizerTestCase
 test_integer_literal
 	"Tokenize integer literals."
@@ -281,7 +281,7 @@ test_integer_literal
 	self assert: numToks first value equals: '42'.
 %
 
-category: 'tests - basic tokens'
+category: 'Grail-tests - basic tokens'
 method: PythonTokenizerTestCase
 test_keyword_recognition
 	"Keywords should be tokenized as KEYWORD type."
@@ -295,7 +295,7 @@ test_keyword_recognition
 	self assert: kwToks last value equals: 'while'.
 %
 
-category: 'tests - structure'
+category: 'Grail-tests - structure'
 method: PythonTokenizerTestCase
 test_line_continuation
 	"Backslash-newline joins lines."
@@ -307,7 +307,7 @@ test_line_continuation
 	self assert: nameToks size equals: 2.
 %
 
-category: 'tests - positions'
+category: 'Grail-tests - positions'
 method: PythonTokenizerTestCase
 test_line_numbers
 	"Tokens should have correct line numbers."
@@ -321,7 +321,7 @@ y'.
 	self assert: second line equals: 2.
 %
 
-category: 'tests - edge cases'
+category: 'Grail-tests - edge cases'
 method: PythonTokenizerTestCase
 test_mixed_expression
 	"Tokenize a complex expression."
@@ -338,7 +338,7 @@ test_mixed_expression
 	self assert: (self findToken: #OP value: ')' in: tokens) notNil.
 %
 
-category: 'tests - indentation'
+category: 'Grail-tests - indentation'
 method: PythonTokenizerTestCase
 test_multiple_dedent
 	"Dedenting multiple levels at once."
@@ -354,7 +354,7 @@ a'.
 	self assert: dedents size equals: 2.
 %
 
-category: 'tests - basic tokens'
+category: 'Grail-tests - basic tokens'
 method: PythonTokenizerTestCase
 test_multiple_names
 	"Tokenize multiple identifiers."
@@ -368,7 +368,7 @@ test_multiple_names
 	self assert: nameToks last value equals: 'baz'.
 %
 
-category: 'tests - indentation'
+category: 'Grail-tests - indentation'
 method: PythonTokenizerTestCase
 test_nested_indent
 	"Nested indentation produces multiple INDENT/DEDENT pairs."
@@ -384,7 +384,7 @@ test_nested_indent
 	self assert: dedents size equals: 2.
 %
 
-category: 'tests - basic tokens'
+category: 'Grail-tests - basic tokens'
 method: PythonTokenizerTestCase
 test_newline_token
 	"Statement-ending newline produces NEWLINE token."
@@ -396,7 +396,7 @@ y'.
 	self assert: nlToks size >= 1.
 %
 
-category: 'tests - numbers'
+category: 'Grail-tests - numbers'
 method: PythonTokenizerTestCase
 test_octal_number
 	"Tokenize octal numbers."
@@ -407,7 +407,7 @@ test_octal_number
 	self assert: numTok value equals: '0o77'.
 %
 
-category: 'tests - basic tokens'
+category: 'Grail-tests - basic tokens'
 method: PythonTokenizerTestCase
 test_operators
 	"Tokenize basic operators."
@@ -422,7 +422,7 @@ test_operators
 	self assert: (opToks at: 4) value equals: '/'.
 %
 
-category: 'tests - structure'
+category: 'Grail-tests - structure'
 method: PythonTokenizerTestCase
 test_paren_suppresses_newline
 	"Newlines inside parentheses should produce NL, not NEWLINE."
@@ -435,7 +435,7 @@ test_paren_suppresses_newline
 	self assert: newlines size <= 1.
 %
 
-category: 'tests - strings'
+category: 'Grail-tests - strings'
 method: PythonTokenizerTestCase
 test_raw_string
 	"Tokenize raw strings (backslash not interpreted)."
@@ -446,7 +446,7 @@ test_raw_string
 	self assert: (strTok value includes: $\).
 %
 
-category: 'tests - basic tokens'
+category: 'Grail-tests - basic tokens'
 method: PythonTokenizerTestCase
 test_single_name
 	"Tokenize a single identifier."
@@ -458,7 +458,7 @@ test_single_name
 	self assert: nameToks first value equals: 'hello'.
 %
 
-category: 'tests - basic tokens'
+category: 'Grail-tests - basic tokens'
 method: PythonTokenizerTestCase
 test_string_double_quotes
 	"Tokenize double-quoted strings."
@@ -470,7 +470,7 @@ test_string_double_quotes
 	self assert: strToks first value equals: 'hello'.
 %
 
-category: 'tests - basic tokens'
+category: 'Grail-tests - basic tokens'
 method: PythonTokenizerTestCase
 test_string_single_quotes
 	"Tokenize single-quoted strings."
@@ -482,7 +482,7 @@ test_string_single_quotes
 	self assert: strToks first value equals: 'hello'.
 %
 
-category: 'tests - operators'
+category: 'Grail-tests - operators'
 method: PythonTokenizerTestCase
 test_three_char_operators
 	"Tokenize three-character operators."
@@ -497,7 +497,7 @@ test_three_char_operators
 	].
 %
 
-category: 'tests - strings'
+category: 'Grail-tests - strings'
 method: PythonTokenizerTestCase
 test_triple_single_quoted
 	"Tokenize triple single-quoted strings."
@@ -509,7 +509,7 @@ test_triple_single_quoted
 	self assert: strToks first value equals: 'hello world'.
 %
 
-category: 'tests - operators'
+category: 'Grail-tests - operators'
 method: PythonTokenizerTestCase
 test_two_char_operators
 	"Tokenize two-character operators."
@@ -524,7 +524,7 @@ test_two_char_operators
 	].
 %
 
-category: 'tests - numbers'
+category: 'Grail-tests - numbers'
 method: PythonTokenizerTestCase
 test_underscore_in_number
 	"Tokenize numbers with underscores."
@@ -535,14 +535,14 @@ test_underscore_in_number
 	self assert: numTok value equals: '1000000'.
 %
 
-category: 'helpers'
+category: 'Grail-helpers'
 method: PythonTokenizerTestCase
 tokenize: aString
 
 	^PythonTokenizer tokenize: aString
 %
 
-category: 'helpers'
+category: 'Grail-helpers'
 method: PythonTokenizerTestCase
 tokensOfType: aSymbol from: tokens
 

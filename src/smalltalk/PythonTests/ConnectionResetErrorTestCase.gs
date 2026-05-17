@@ -17,7 +17,7 @@ PythonTestCase subclass: 'ConnectionResetErrorTestCase'
 %
 expectvalue /Class
 doit
-ConnectionResetErrorTestCase category: 'SUnit'
+ConnectionResetErrorTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
@@ -34,7 +34,7 @@ ConnectionResetErrorTestCase class removeAllMethods.
 
 set compile_env: 0
 
-category: 'Python-Tests-ConnectionResetError'
+category: 'Grail-Tests-ConnectionResetError'
 method: ConnectionResetErrorTestCase
 test_creation
 	"Test creating a ConnectionResetError instance."
@@ -44,7 +44,7 @@ test_creation
 	self assert: exc notNil.
 %
 
-category: 'Python-Tests-ConnectionResetError'
+category: 'Grail-Tests-ConnectionResetError'
 method: ConnectionResetErrorTestCase
 test_inheritance
 	"Test that ConnectionResetError inherits from ConnectionError."

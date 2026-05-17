@@ -45,7 +45,7 @@ Object
 
 expectvalue /Class
 doit
-DictCompAst category: 'Parser'
+DictCompAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from DictCompAst

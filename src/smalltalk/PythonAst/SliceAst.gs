@@ -48,7 +48,7 @@ Object
 
 expectvalue /Class
 doit
-SliceAst category: 'Parser'
+SliceAst category: 'Grail-Parser'
 %
 
 ! ------------------- Remove existing behavior from SliceAst
@@ -57,7 +57,7 @@ removeallclassmethods SliceAst
 
 set compile_env: 0
 
-category: 'other'
+category: 'Grail-other'
 method: SliceAst
 printSmalltalkOn: aStream
 
