@@ -42,9 +42,8 @@ setUp
 	| mods |
 	mods := importlib @env1:modules.
 	mods removeKey: #'module_with_classes' ifAbsent: [].
-	UserGlobals removeKey: #'py_module_with_classes' ifAbsent: [].
-	UserGlobals removeKey: #'pyc_Point' ifAbsent: [].
-	UserGlobals removeKey: #'pyc_Counter' ifAbsent: [].
+	"The classes live in the PythonModules SymbolDictionary, which is
+	dropped and recreated by install.gs; nothing to clean up by hand."
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/module_with_classes.py')
 		name: 'module_with_classes'.
@@ -61,26 +60,26 @@ testModuleLoads
 category: 'Grail-Tests - Class Creation'
 method: ClassTestCase
 testPointClassExists
-	"Test that pyc_Point was created in UserGlobals."
+	"Test that Point was created in PythonModules."
 
-	self assert: (UserGlobals at: #'pyc_Point' ifAbsent: [nil]) notNil.
+	self assert: (PythonModules at: #'Point' ifAbsent: [nil]) notNil.
 %
 
 category: 'Grail-Tests - Class Creation'
 method: ClassTestCase
 testCounterClassExists
-	"Test that pyc_Counter was created in UserGlobals."
+	"Test that Counter was created in PythonModules."
 
-	self assert: (UserGlobals at: #'pyc_Counter' ifAbsent: [nil]) notNil.
+	self assert: (PythonModules at: #'Counter' ifAbsent: [nil]) notNil.
 %
 
 category: 'Grail-Tests - Instance Variables'
 method: ClassTestCase
 testPointInstVars
-	"Test that pyc_Point has x and y as instance variables."
+	"Test that Point has x and y as instance variables."
 
 	| cls varNames |
-	cls := UserGlobals at: #'pyc_Point'.
+	cls := PythonModules at: #'Point'.
 	varNames := cls allInstVarNames.
 	self assert: (varNames includes: #x).
 	self assert: (varNames includes: #y).
@@ -116,10 +115,10 @@ testCounterResult
 category: 'Grail-Tests - Real Methods'
 method: ClassTestCase
 testPointSumIsRealMethod
-	"Test that sum is a real env-1 method on pyc_Point."
+	"Test that sum is a real env-1 method on Point."
 
 	| cls md |
-	cls := UserGlobals at: #'pyc_Point'.
+	cls := PythonModules at: #'Point'.
 	md := cls methodDictForEnv: 1.
 	self assert: (md includesKey: #sum).
 %
@@ -127,10 +126,10 @@ testPointSumIsRealMethod
 category: 'Grail-Tests - Real Methods'
 method: ClassTestCase
 testPointInitIsRealMethod
-	"Test that __init__ is a real env-1 method on pyc_Point."
+	"Test that __init__ is a real env-1 method on Point."
 
 	| cls md |
-	cls := UserGlobals at: #'pyc_Point'.
+	cls := PythonModules at: #'Point'.
 	md := cls methodDictForEnv: 1.
 	self assert: (md includesKey: #'__init__:_:').
 %

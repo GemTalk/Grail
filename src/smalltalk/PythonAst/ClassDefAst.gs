@@ -53,17 +53,18 @@ printSmalltalkOn: aStream
 	are created as real Smalltalk classes at load time. In the initialize
 	method, just assign the class reference to the module instVar.
 
-	The class reference is looked up from UserGlobals using the sanitized
-	name ('pyc_ClassName'). This is set by loadModuleFromPath: before
-	compiling the initialize method."
+	The class reference is looked up from PythonModules using the
+	encoded class name (importlib ___asSmalltalkClassName___: name).
+	loadModuleFromPath: created the class there before compiling
+	the initialize method."
 
 	(CallAst moduleClassBeingCompiled notNil) ifTrue: [
 		| className |
-		className := 'pyc_' , name.
+		className := importlib @env0:___asSmalltalkClassName___: name.
 		aStream
 			nextPutAll: name;
-			nextPutAll: ' := (UserGlobals @env0:at: #''';
-			nextPutAll: className;
+			nextPutAll: ' := (PythonModules @env0:at: #''';
+			nextPutAll: className @env0:asString;
 			nextPutAll: ''').'.
 		^self
 	].

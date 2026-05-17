@@ -86,9 +86,21 @@ login
 ! ===============================================================================
 ! Step 1: Remove and recreate SymbolDictionaries
 ! ===============================================================================
+! Four dictionaries belong to Grail:
+!   Python         — Python type classes (str, int, list, ...)
+!   PythonAst      — AST node classes
+!   PythonTests    — SUnit TestCase classes
+!   PythonModules  — Smalltalk classes generated at runtime for each
+!                    imported Python module (``loadModuleFromPath:``) and
+!                    each Python ``class`` statement (``compileClassDef``).
+!                    Recreating the dict each install drops every
+!                    orphan generated class — the next module import or
+!                    class statement rebuilds the class against the
+!                    current Grail hierarchy.  Replaces the previous
+!                    `py_*` / `pyc_*` UserGlobals scheme.
 run
-"Remove Python dictionary if it exists"
-#(#'Python' #'PythonAst' #'PythonTests') do: [:each |
+"Remove Python dictionaries if they exist"
+#(#'Python' #'PythonAst' #'PythonTests' #'PythonModules') do: [:each |
 	| symbolList names |
 	symbolList := System myUserProfile symbolList.
 	names := symbolList names.
@@ -102,8 +114,10 @@ run
 %
 
 run
-"Create Python dictionaries in reverse order"
-#(#'PythonTests' #'PythonAst' #'Python') do: [:each |
+"Create Python dictionaries in reverse order (so each ends up nearer the
+ front of the symbol list than the next; importlib classes resolve
+ from Python before falling through to PythonModules at runtime)."
+#(#'PythonModules' #'PythonTests' #'PythonAst' #'Python') do: [:each |
 	| dict |
 	dict := SymbolDictionary new name: each; yourself.
 	System myUserProfile insertDictionary: dict at: 1.
@@ -120,33 +134,6 @@ symList := System myUserProfile symbolList .
   symList add: GsCompilerClasses.
   Transcript show: 'Added GsCompilerClasses dictionary to DataCurator''s symbol list'.
 ].
-%
-
-! ===============================================================================
-! Step 1.5: Hygiene — drop orphan generated module classes from UserGlobals
-! ===============================================================================
-! Every Python module Grail loads creates a Smalltalk class named ``py_<name>``
-! (module classes) or ``pyc_<name>`` (Python user classes inside modules) in
-! UserGlobals.  They persist across installs.  When the Grail class
-! hierarchy changes — e.g. a new instVar on ``module`` — the old generated
-! class still inherits from the orphaned older version.  Drop them at
-! install time so the next ``loadModuleFromPath:`` / Python class
-! statement creates a fresh class against the current hierarchy.
-! Safe because both prefixes are 100% Grail-generated.
-
-run
-| toRemove |
-toRemove := OrderedCollection new.
-UserGlobals @env0:keysDo: [:k |
-	| s |
-	s := k @env0:asString.
-	((s @env0:size @env0:>= 4 and: [(s @env0:copyFrom: 1 to: 4) @env0:= 'pyc_'])
-		or: [s @env0:size @env0:>= 3 and: [(s @env0:copyFrom: 1 to: 3) @env0:= 'py_']])
-		ifTrue: [toRemove add: k].
-].
-toRemove do: [:k | UserGlobals removeKey: k ifAbsent: []].
-Transcript show: 'Step 1.5 hygiene: removed ', toRemove size printString,
-	' orphan py_*/pyc_* class(es) from UserGlobals'.
 %
 
 ! ===============================================================================

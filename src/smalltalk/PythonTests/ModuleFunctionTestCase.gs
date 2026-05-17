@@ -42,7 +42,8 @@ setUp
 	| mods |
 	mods := importlib @env1:modules.
 	mods removeKey: #'module_with_functions' ifAbsent: [].
-	UserGlobals removeKey: #'py_module_with_functions' ifAbsent: [].
+	"PythonModules SymbolDictionary owns the generated class; install
+	recreates that dictionary, so nothing to remove by hand here."
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/module_with_functions.py')
 		name: 'module_with_functions'.

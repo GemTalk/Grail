@@ -275,3 +275,81 @@ testSmalltalkForSource
 	"The generated code should contain addition"
 	self assert: (smalltalkCode includesString: ' __add__: ')
 %
+
+! ===============================================================================
+! Tests - ___asSmalltalkClassName___:
+! ===============================================================================
+! The encoder transforms a Python module or class name into a legal
+! GemStone class-name Symbol used as the key into PythonModules.
+
+category: 'Grail-Tests - Class Name Encoding'
+method: ImportlibTestCase
+testEncodeAlreadyValidUserClass
+	"A Python user class name that's already a valid Smalltalk class
+	name passes through unchanged."
+
+	self assert: (importlib ___asSmalltalkClassName___: 'MyClass')
+		equals: #'MyClass'
+%
+
+category: 'Grail-Tests - Class Name Encoding'
+method: ImportlibTestCase
+testEncodeLowercaseModuleName
+	"A lowercase Python module name gets its first character capitalized
+	so it parses as a Smalltalk class name."
+
+	self assert: (importlib ___asSmalltalkClassName___: 'hello')
+		equals: #'Hello'
+%
+
+category: 'Grail-Tests - Class Name Encoding'
+method: ImportlibTestCase
+testEncodeDottedModuleName
+	"Dots in a Python package path become underscores; the first
+	character of the leading segment is capitalized."
+
+	self assert: (importlib ___asSmalltalkClassName___: 're._parser')
+		equals: #'Re__parser'
+%
+
+category: 'Grail-Tests - Class Name Encoding'
+method: ImportlibTestCase
+testEncodeLeadingUnderscore
+	"GemStone accepts an underscore as the first character of a class
+	name, so a Python name like ``_constants`` needs no transform."
+
+	self assert: (importlib ___asSmalltalkClassName___: '_constants')
+		equals: #'_constants'
+%
+
+category: 'Grail-Tests - Class Name Encoding'
+method: ImportlibTestCase
+testEncodeReturnsSymbol
+	"Result is a Symbol regardless of input type — class-creation APIs
+	require a Symbol class name."
+
+	self assert: (importlib ___asSmalltalkClassName___: 'hello') isSymbol.
+	self assert: (importlib ___asSmalltalkClassName___: 'MyClass') isSymbol
+%
+
+! ===============================================================================
+! Tests - Generated classes live in PythonModules (not UserGlobals)
+! ===============================================================================
+
+category: 'Grail-Tests - Generated Class Location'
+method: ImportlibTestCase
+testGeneratedModuleClassInPythonModules
+	"loadModuleFromPath: registers the generated module class in the
+	PythonModules SymbolDictionary, keyed by the encoded class name —
+	not in UserGlobals."
+
+	| mods |
+	mods := importlib @env1:modules.
+	mods removeKey: #'python.hello' ifAbsent: [].
+	importlib loadModuleFromPath: (importlib grailDir , '/src/python/hello.py')
+		name: 'python.hello'.
+
+	self assert: (PythonModules at: #'Python_hello' ifAbsent: [nil]) notNil.
+	self assert: (UserGlobals at: #'Python_hello' ifAbsent: [nil]) isNil.
+	self assert: (UserGlobals at: #'py_python_hello' ifAbsent: [nil]) isNil
+%
