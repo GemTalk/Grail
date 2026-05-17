@@ -417,11 +417,14 @@ run
 	at: #'CMathTestCase' put: nil;
 	at: #'ChildProcessErrorTestCase' put: nil;
 	at: #'ClassCallFastPathTestCase' put: nil;
+	at: #'ClassAttrsTestCase' put: nil;
+	at: #'ClassDecoratorTestCase' put: nil;
 	at: #'ClassScopeTestCase' put: nil;
 	at: #'ClassTestCase' put: nil;
 	at: #'ComplexTestCase' put: nil;
 	at: #'ComprehensionTestCase' put: nil;
 	at: #'DefaultsAndAttrsTestCase' put: nil;
+	at: #'DynamicGlobalsTestCase' put: nil;
 	at: #'ConnectionAbortedErrorTestCase' put: nil;
 	at: #'ConnectionErrorTestCase' put: nil;
 	at: #'ConnectionRefusedErrorTestCase' put: nil;
@@ -432,6 +435,7 @@ run
 	at: #'DictTestCase' put: nil;
 	at: #'EOFErrorTestCase' put: nil;
 	at: #'EncodingWarningTestCase' put: nil;
+	at: #'EnumGlobalInjectTestCase' put: nil;
 	at: #'ExceptionGroupTestCase' put: nil;
 	at: #'ExceptionTestCase' put: nil;
 	at: #'FileExistsErrorTestCase' put: nil;
@@ -458,6 +462,7 @@ run
 	at: #'KeyboardInterruptTestCase' put: nil;
 	at: #'ListTestCase' put: nil;
 	at: #'LookupErrorTestCase' put: nil;
+	at: #'MakecodesPatternTestCase' put: nil;
 	at: #'MathTestCase' put: nil;
 	at: #'MemoryErrorTestCase' put: nil;
 	at: #'ModuleFunctionTestCase' put: nil;
@@ -903,6 +908,8 @@ input src/smalltalk/PythonTests/BooleanTestCase.gs
 input src/smalltalk/PythonTests/BuiltinsTestCase.gs
 input src/smalltalk/PythonTests/BytearrayTestCase.gs
 input src/smalltalk/PythonTests/BytesTestCase.gs
+input src/smalltalk/PythonTests/ClassAttrsTestCase.gs
+input src/smalltalk/PythonTests/ClassDecoratorTestCase.gs
 input src/smalltalk/PythonTests/ClassCallFastPathTestCase.gs
 input src/smalltalk/PythonTests/ClassScopeTestCase.gs
 input src/smalltalk/PythonTests/ClassTestCase.gs
@@ -910,6 +917,9 @@ input src/smalltalk/PythonTests/CMathTestCase.gs
 input src/smalltalk/PythonTests/ComplexTestCase.gs
 input src/smalltalk/PythonTests/ComprehensionTestCase.gs
 input src/smalltalk/PythonTests/DefaultsAndAttrsTestCase.gs
+input src/smalltalk/PythonTests/DynamicGlobalsTestCase.gs
+input src/smalltalk/PythonTests/EnumGlobalInjectTestCase.gs
+input src/smalltalk/PythonTests/MakecodesPatternTestCase.gs
 input src/smalltalk/PythonTests/CopyregTestCase.gs
 input src/smalltalk/PythonTests/DecimalTestCase.gs
 input src/smalltalk/PythonTests/DictTestCase.gs

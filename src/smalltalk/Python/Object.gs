@@ -142,7 +142,46 @@ ___pyAttrLoad___: aSym
 	attribute reads as value reads (an attribute holds a function,
 	submodule, constant, ...).  Bound-method wrapping doesn't apply."
 	isModule := self @env0:isKindOf: module.
-	isModule ifTrue: [^ self @env0:perform: aSym env: 1].
+	isModule ifTrue: [
+		"Module attribute load.  A module attribute can be either a
+		stored value (a variable — has a unary accessor compiled by
+		loadModuleFromPath:) or a callable method (a function — has
+		selectors like ``name:`` / ``name:_:`` / ``_name:kw:``).
+		Stored values get invoked through the unary accessor;
+		callables get wrapped in a BoundMethod so call sites like
+		``enum.global_enum(cls)`` work.  Names that are neither fall
+		through to ``self at:``, which the SymbolDictionary
+		inheritance provides for dynamically-added attributes."
+		(md @env0:includesKey: aSym) ifTrue: [
+			^ self @env0:perform: aSym env: 1
+		].
+		((md @env0:includesKey: sym1)
+			or: [(md @env0:includesKey: sym2)
+			or: [(md @env0:includesKey: sym3)
+			or: [md @env0:includesKey: symVA]]]) ifTrue: [
+			^ BoundMethod @env1:receiver: self selector: aSym
+		].
+		^ self @env0:at: aSym ifAbsent: [
+			AttributeError ___signal___: 'module has no attribute ''' @env0:, s @env0:, ''''
+		]
+	].
+	"Class receivers — `Cls.X` where Cls is a Python user class —
+	consult the class's own class-side accessors (which are the
+	metaclass's instance methods).  A paired ``X``/``X:`` accessor +
+	setter is a class-level attribute (e.g. ``class Color: RED = 1``);
+	invoke the unary form to return the value.  Without this branch
+	the fallback would wrap the accessor in a BoundMethod and Python
+	expressions like ``Color.RED`` would yield a callable rather
+	than the int 1."
+	((self @env0:isKindOf: Behavior)
+		and: [self @env0:inheritsFrom: PythonInstance]) ifTrue: [
+		| classMd |
+		classMd := self @env0:class @env0:methodDictForEnv: 1.
+		((classMd @env0:includesKey: aSym)
+			and: [classMd @env0:includesKey: sym1]) ifTrue: [
+			^ self @env0:perform: aSym env: 1
+		].
+	].
 	"Generated `pyc_` user classes have synthesized `attr:` setters that
 	pair with attribute getters.  If the class has both, this is an
 	attribute access, call the unary getter and return the value."
@@ -151,6 +190,20 @@ ___pyAttrLoad___: aSym
 		or: [self @env0:isKindOf: PythonInstance].
 	(isGenerated and: [md @env0:includesKey: sym1]) ifTrue: [
 		^ self @env0:perform: aSym env: 1
+	].
+	"Instance falling through to a class-side attribute.  When the
+	receiver is an instance of a Python user class and the attribute
+	isn't on the instance side, consult the class-side accessor pair
+	on the metaclass.  Mirrors Python's instance→class attribute
+	lookup chain — `Color()`.RED finds the class attribute `RED = 1`
+	declared in the class body."
+	(self @env0:isKindOf: PythonInstance) ifTrue: [
+		| classClassMd |
+		classClassMd := self @env0:class @env0:class @env0:methodDictForEnv: 1.
+		((classClassMd @env0:includesKey: aSym)
+			and: [classClassMd @env0:includesKey: sym1]) ifTrue: [
+			^ self @env0:class @env0:perform: aSym env: 1
+		].
 	].
 	"Other classes (built-in collections, strings, ...): if the class
 	implements any same-named callable selector, return a BoundMethod

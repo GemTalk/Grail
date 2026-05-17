@@ -74,13 +74,18 @@ printSmalltalkRuntimeOn: aStream
 	compileMethod: calls in the emitted code."
 
 	| ivarNames methodDefs selfParam funcNames methodSources
-	  initMethod initSelector
+	  initMethod initSelector classAttrs allClassInstVars
 	  savedClass savedIvarNames savedFuncNames savedSelfParam |
 	ivarNames := self instanceVarNamesFromInit.
 	methodDefs := self instanceMethodDefs.
 	selfParam := self selfParameterName.
 	funcNames := IdentitySet new.
 	methodDefs do: [:def | funcNames add: def name asSymbol].
+	"Scan body for class-level simple assignments (`NAME = value`,
+	or chained `A = B = value`).  Each declared name becomes a
+	class-side attribute (Smalltalk classInstVar + class-side getter/
+	setter)."
+	classAttrs := self classBodyAttributes.
 
 	"Push the class-compile context that the per-method codegen reads
 	(CallAst consults these to decide how to dispatch self-sends,
@@ -130,7 +135,17 @@ printSmalltalkRuntimeOn: aStream
 		nextPutAll: (importlib @env0:___asSmalltalkClassName___: name) asString;
 		nextPutAll: ''' instVarNames: '.
 	self printSymbolArray: ivarNames on: aStream.
-	aStream nextPutAll: ' classVars: #() classInstVars: #() poolDictionaries: #() inDictionary: nil options: #().'; lf.
+	aStream nextPutAll: ' classVars: #() classInstVars: '.
+	"Class-side slots: user-declared class attrs, plus the synthetic
+	``__module__`` slot on the root of a Python class chain.
+	``__module__`` lets decorators and introspection paths reach the
+	defining module instance (set right after class creation, below).
+	Only the root declares the slot; subclasses inherit it and would
+	otherwise error with rtErrAddDupInstvar."
+	allClassInstVars := (classAttrs collect: [:p | p key]) asOrderedCollection.
+	bases isEmpty ifTrue: [allClassInstVars add: #'__module__'].
+	self printSymbolArray: allClassInstVars on: aStream.
+	aStream nextPutAll: ' poolDictionaries: #() inDictionary: nil options: #().'; lf.
 
 	"Compile each instance method as a real env-1 method on the new
 	class.  The source is embedded as a Smalltalk string literal."
@@ -143,6 +158,69 @@ printSmalltalkRuntimeOn: aStream
 			classSide: false
 			onStream: aStream.
 	].
+
+	"Compile class-side unary accessor + 1-arg setter for each class
+	attribute (e.g. `class Color: RED = 1`), then evaluate each
+	value expression inline and store via the setter.  The
+	accessor/setter pair lets ``___pyAttrLoad___:`` treat the class
+	attribute as a value when read through Python attribute syntax."
+	classAttrs do: [:pair |
+		| attrName lf accessorSrc setterSrc |
+		attrName := pair key.
+		lf := Character lf asString.
+		accessorSrc := attrName , lf , '	^ ' , attrName.
+		self
+			emitCompileMethodOn: name
+			source: accessorSrc
+			category: 'Grail-Class Attrs'
+			env: 1
+			classSide: true
+			onStream: aStream.
+		setterSrc := attrName , ': ___1' , lf , '	' , attrName , ' := ___1.'.
+		self
+			emitCompileMethodOn: name
+			source: setterSrc
+			category: 'Grail-Class Attrs'
+			env: 1
+			classSide: true
+			onStream: aStream.
+	].
+	"Initialize each class attribute by evaluating the value
+	expression in the surrounding module context and sending the
+	setter to the class object."
+	classAttrs do: [:pair |
+		aStream nextPutAll: name; nextPutAll: ' '; nextPutAll: pair key; nextPutAll: ': '.
+		pair value printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPutAll: '.'; lf.
+	].
+
+	"Compile + initialize the synthetic ``__module__`` slot on the
+	root of a Python class chain — subclasses inherit it (the slot
+	itself wasn't redeclared above for them).  This stamps every
+	Python user class with a reference to its defining module
+	instance, so decorators (e.g. ``enum.global_enum``) and any
+	introspection paths can reach the module's namespace."
+	bases isEmpty ifTrue: [
+		self
+			emitCompileMethodOn: name
+			source: '__module__
+	^ __module__'
+			category: 'Grail-Class Attrs'
+			env: 1
+			classSide: true
+			onStream: aStream.
+		self
+			emitCompileMethodOn: name
+			source: '__module__: ___1
+	__module__ := ___1.'
+			category: 'Grail-Class Attrs'
+			env: 1
+			classSide: true
+			onStream: aStream.
+	].
+	"Always point the new class at the defining module.  The setter
+	is inherited when bases is non-empty."
+	aStream nextPutAll: name; nextPutAll: ' __module__: self.'; lf.
 
 	"Compile a unary accessor + 1-arg setter per instance variable.
 	The setter pairs with the accessor so ``___pyAttrLoad___:`` can
@@ -208,6 +286,18 @@ printSmalltalkRuntimeOn: aStream
 		emitInstantiationMethodFor: name
 		initSelector: initSelector
 		onStream: aStream.
+
+	"Apply class decorators bottom-up.  Python's ``@A @B class C:``
+	rebinds C to ``A(B(C))`` — the decorator closest to the class
+	(B, last in source order) runs first, then its result is passed
+	to the next one out (A).  Iterating decorator_list in REVERSE
+	order yields that semantics: each iteration evaluates one
+	decorator and re-assigns the result to the class name."
+	decorator_list reverseDo: [:deco |
+		aStream nextPutAll: name; nextPutAll: ' := '.
+		deco printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPutAll: ' value: { '; nextPutAll: name; nextPutAll: ' } value: nil.'; lf.
+	].
 %
 
 category: 'Grail-code generation'
@@ -309,6 +399,33 @@ printQuotedString: aString on: aStream
 			ifFalse: [aStream nextPut: c].
 	].
 	aStream nextPut: $'.
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+classBodyAttributes
+	"Scan the class body for simple-assignment statements and return
+	an OrderedCollection of (Symbol -> ExpressionAst) associations,
+	one per declared name in source order.  A simple assignment is
+	an AssignAst whose every target is a bare NameAst — chained
+	assignments like `A = B = expr` yield two entries pointing at
+	the same value AST.  Tuple, attribute, and subscript targets are
+	skipped.  Used by codegen to materialize class-level attributes
+	(e.g. ``class Color: RED = 1``) as Smalltalk classInstVars +
+	class-side accessor/setter pairs on the new class."
+
+	| pairs |
+	pairs := OrderedCollection new.
+	body body do: [:stmt |
+		(stmt isKindOf: AssignAst) ifTrue: [
+			(stmt targets allSatisfy: [:t | t isKindOf: NameAst]) ifTrue: [
+				stmt targets do: [:t |
+					pairs add: t id asSymbol -> stmt value.
+				].
+			].
+		].
+	].
+	^ pairs
 %
 
 category: 'Grail-code generation'

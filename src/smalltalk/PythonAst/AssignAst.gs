@@ -226,3 +226,17 @@ target
 
 	^targets at: 1
 %
+
+category: 'Grail-accessing'
+method: AssignAst
+targets
+
+	^targets
+%
+
+category: 'Grail-accessing'
+method: AssignAst
+value
+
+	^value
+%

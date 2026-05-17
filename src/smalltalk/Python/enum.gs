@@ -71,16 +71,54 @@ KEEP
 category: 'Grail-Built-in Functions'
 method: enum
 global_enum: cls
-	"global_enum(cls) -> cls (no-op decorator)."
+	"global_enum(cls) — injects each of cls's class-side attributes
+	into the defining module's globals, then returns the class.
+
+	Equivalent of CPython's ``@enum.global_enum``: after the
+	decorator runs, every enum member is reachable both as
+	``Cls.MEMBER`` and as a bare module-level ``MEMBER`` name.  In
+	Grail the class-side attributes are paired ``X`` / ``X:``
+	methods on the metaclass (compiled by ClassDefAst codegen for
+	each class-body ``NAME = value`` statement); we iterate those
+	pairs, read each value via the unary getter, and store it on
+	the module instance (which is a SymbolDictionary).
+
+	The defining module is read from the synthetic ``__module__``
+	class slot that ClassDefAst stamps on every Python user class.
+	Names starting with ``_`` are skipped — they're not enum members
+	(internal ones include ``__module__`` itself)."
+
+	| module classMd processed |
+	module := cls @env0:perform: #'__module__' env: 1.
+	classMd := cls @env0:class @env0:methodDictForEnv: 1.
+	processed := IdentitySet @env0:new.
+	classMd @env0:keysDo: [:sel |
+		| nameStr setter |
+		nameStr := sel @env0:asString.
+		((nameStr @env0:size @env0:> 0
+			and: [(nameStr @env0:at: 1) @env0:= $_]) not
+			and: [(processed @env0:includes: sel) not]) ifTrue: [
+			setter := (nameStr @env0:, ':') @env0:asSymbol.
+			(classMd @env0:includesKey: setter) ifTrue: [
+				| val |
+				val := cls @env0:perform: sel env: 1.
+				module @env0:at: sel put: val.
+				processed @env0:add: sel.
+			].
+		].
+	].
 	^ cls
 %
 
 category: 'Grail-Built-in Functions'
 method: enum
-_simple_enum: positional kw: kwargs
+__simple_enum: positional kw: kwargs
 	"_simple_enum(cls) or _simple_enum(cls, boundary=...) -> decorator.
 	Returns a decorator that returns the class unchanged.
-	Used by re module: @enum._simple_enum(IntFlag, boundary=enum.KEEP)"
+	Used by re module: @enum._simple_enum(IntFlag, boundary=enum.KEEP).
+	Grail's varargs-selector convention prepends one underscore to
+	the Python name, so the Python ``_simple_enum`` becomes the
+	Smalltalk selector ``__simple_enum:kw:``."
 
 	^ [:positional2 :keywords2 | positional2 @env0:at: 1]
 %

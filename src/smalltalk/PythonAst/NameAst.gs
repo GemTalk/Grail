@@ -57,6 +57,20 @@ with: aSymbol
 		yourself
 %
 
+category: 'Grail-codegen helpers'
+classmethod: NameAst
+isResolvableSymbol: aSymbol
+	"True if aSymbol names something the GemStone method compiler can
+	resolve at compile time — i.e., it's defined in some
+	SymbolDictionary on the user's symbol list (a class name, a
+	pre-installed Python module, a Globals binding, etc.).  Used by
+	the late-module-name-binding fallback in `printSmalltalkOn:` to
+	avoid emitting a runtime self-at-lookup for names that already
+	resolve as bare identifiers."
+
+	^ (System myUserProfile symbolList @env0:objectNamed: aSymbol) notNil
+%
+
 category: 'other'
 method: NameAst
 addVariableNamesTo: aStream
@@ -228,6 +242,32 @@ printSmalltalkOn: aStream
 			nextPutAll: ' named: #';
 			nextPutAll: id;
 			nextPutAll: ')'.
+		^ self
+	].
+	"Late module-name binding.  In a module-body or module-method
+	context (compiling `initialize` or a top-level def, NOT inside a
+	user class), a load of a name that didn't resolve statically AND
+	can't be resolved through the user's symbol list at compile time
+	(so the bare identifier would CompileError as `undefined symbol`)
+	falls back to a runtime lookup on the module instance.  module
+	inherits from SymbolDictionary, so `self at:` finds names added
+	dynamically — e.g. by `globals().update({...})` or decorators
+	that mutate module globals (`@enum.global_enum`).  Misses raise
+	Python NameError, matching CPython semantics."
+	((ctx isKindOf: LoadAst)
+		and: [CallAst moduleClassBeingCompiled notNil
+		and: [CallAst classBeingCompiled isNil
+		and: [(self class isResolvableSymbol: id asSymbol) not]]]) ifTrue: [
+		aStream
+			nextPutAll: '(self @env0:at: #''';
+			nextPutAll: id;
+			nextPutAll: ''' ifAbsent: [NameError ___signal___: ''name ';
+			nextPut: $';
+			nextPut: $';
+			nextPutAll: id;
+			nextPut: $';
+			nextPut: $';
+			nextPutAll: ' is not defined''])'.
 		^ self
 	].
 	aStream nextPutAll: id.
