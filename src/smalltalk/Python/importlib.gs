@@ -93,6 +93,38 @@ astForSource: aString
 		^ModuleAst parseSource: aString
 %
 
+category: 'Grail-Naming'
+classmethod: importlib
+___asSmalltalkClassName___: aPythonName
+	"Encode a Python module or class name into a GemStone class name.
+	GemStone class names must start with a letter (any case is accepted
+	in practice, but uppercase is conventional) and contain only letters,
+	digits, and underscores.  Dots are not legal.
+
+	Rules:
+	  * Replace every `.` with `_`  (e.g. ``re._parser`` → ``re__parser``).
+	  * Capitalize the first character if it is a lowercase ASCII letter
+	    (e.g. ``hello`` → ``Hello``).  Other first characters (uppercase,
+	    underscore, digit) pass through unchanged; GemStone accepts an
+	    underscore as the first character of a class name.
+
+	Examples:
+	  ``hello``         → ``Hello``
+	  ``re._parser``    → ``Re__parser``
+	  ``MyClass``       → ``MyClass``  (already valid)
+	  ``_constants``    → ``_constants``"
+
+	| s first |
+	s := aPythonName @env0:asString @env0:copyReplaceAll: '.' with: '_'.
+	s @env0:isEmpty ifTrue: [^ s @env0:asSymbol].
+	first := s @env0:at: 1.
+	(first @env0:isLetter and: [first @env0:isLowercase]) ifTrue: [
+		s := first @env0:asUppercase @env0:asString @env0:,
+			(s @env0:copyFrom: 2 to: s @env0:size).
+	].
+	^ s @env0:asSymbol
+%
+
 category: 'Grail-For Tests'
 classmethod: importlib
 grailDir
@@ -128,14 +160,17 @@ loadModuleFromPath: pathString name: moduleName
 	"Load a module from a file path and register it.
 	Returns the module instance.
 
-	Creates a real Smalltalk class per Python module. Module-level
-	globals become instance variables on the generated class. Top-level `def`
-	statements compile as real env-1 methods with arity-specialized selectors.
-	The remaining module body compiles as an `initialize` method on the class.
+	Creates a real Smalltalk class per Python module.  Module-level
+	globals become instance variables on the generated class.  Top-level
+	`def` statements compile as real env-1 methods with arity-specialized
+	selectors.  The remaining module body compiles as an `initialize`
+	method on the class.
 
-	The class is registered in UserGlobals under a sanitized name derived
-	from the dotted module name (e.g. 'a.foo' → 'py_a_foo'). Re-import
-	returns the cached instance from sys.modules."
+	The generated class lives in the ``PythonModules`` SymbolDictionary,
+	keyed by an encoded form of the Python name (``moduleName
+	asSmalltalkClassName``).  Re-import returns the cached instance from
+	sys.modules; the Smalltalk class is only consulted to allocate
+	new instances when the cache is missed."
 
 	| moduleAst moduleClass moduleClassName moduleInstance nameParts packageName
 	  variables variableNames stream methodSource sl
@@ -149,20 +184,23 @@ loadModuleFromPath: pathString name: moduleName
 	variables := moduleAst body variables.
 	variableNames := variables asArray.
 
-	"Build the Smalltalk class name: 'py_' prefix + module name with dots → underscores"
-	moduleClassName := ('py_' , (moduleName copyReplaceAll: '.' with: '_')) asSymbol.
+	"Build the Smalltalk class name from the Python module name."
+	moduleClassName := self ___asSmalltalkClassName___: moduleName.
 
-	"Create or reuse the Smalltalk class for this module"
-	moduleClass := UserGlobals at: moduleClassName ifAbsent: [nil].
-	moduleClass ifNil: [
-		moduleClass := module subclass: moduleClassName
-			instVarNames: variableNames
-			classVars: #()
-			classInstVars: #()
-			poolDictionaries: #()
-			inDictionary: UserGlobals
-			options: #().
-	].
+	"Create or recreate the Smalltalk class for this module.  Always go
+	through ``module subclass:`` rather than reusing a previously-
+	registered binding — when the Grail class hierarchy has shifted
+	(e.g. a new instVar on ``module``), Smalltalk's ``subclass:``
+	re-parents the existing class on the current ``module``, sweeping
+	up the orphan and restoring the singleton invariant for any code
+	path that flows through this class."
+	moduleClass := module subclass: moduleClassName
+		instVarNames: variableNames
+		classVars: #()
+		classInstVars: #()
+		poolDictionaries: #()
+		inDictionary: PythonModules
+		options: #().
 
 	"Compile top-level `def` statements as real methods on the
 	module class. Scan for FunctionDefAst nodes, pre-register stubs so
@@ -369,22 +407,22 @@ compileClassDef: classDef symbolList: sl
 
 	| className pyClass ivarNames methodDefs selfParam funcNames linefeed initMethod initSelector |
 	linefeed := Character lf asString.
-	className := ('pyc_' , classDef name) asSymbol.
+	className := self ___asSmalltalkClassName___: classDef name.
 	ivarNames := classDef instanceVarNamesFromInit.
 	methodDefs := classDef instanceMethodDefs.
 	selfParam := classDef selfParameterName.
 	funcNames := IdentitySet new.
 	methodDefs do: [:stmt | funcNames add: stmt name asSymbol].
 
-	"Create the Smalltalk class in UserGlobals (always recreate to pick up
-	instVar changes from modified source)"
-	UserGlobals removeKey: className ifAbsent: [].
+	"Create the Smalltalk class in PythonModules (always recreate to
+	pick up instVar changes from modified source)."
+	PythonModules removeKey: className ifAbsent: [].
 	pyClass := Object subclass: className
 		instVarNames: ivarNames
 		classVars: #()
 		classInstVars: #()
 		poolDictionaries: #()
-		inDictionary: UserGlobals
+		inDictionary: PythonModules
 		options: #().
 
 	"Pre-register stub methods"
