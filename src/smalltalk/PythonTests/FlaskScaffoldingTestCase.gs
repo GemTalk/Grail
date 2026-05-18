@@ -413,6 +413,64 @@ testGeneratorInsideClassMethod
 	self assert: (items @env0:at: 3) equals: 'item_2'.
 %
 
+! --- Generator protocol: send / throw / close ------------------------------
+
+category: 'Grail-Tests - Generators'
+method: FlaskScaffoldingTestCase
+testGeneratorSend
+	"``gen.send(value)`` resumes the generator with ``value`` as the
+	yield expression's value.  Adder generator accumulates sent
+	values; first ``next()`` reaches the initial yield (total=0),
+	subsequent ``send(x)`` updates total and yields the new total."
+
+	| mod g first second third |
+	mod := self loadFixture: 'generator_protocol'.
+	g := mod @env1:adder.
+	first := g @env1:__next__.
+	second := g @env1:send: 10.
+	third := g @env1:send: 5.
+	self assert: first equals: 0.
+	self assert: second equals: 10.
+	self assert: third equals: 15.
+%
+
+category: 'Grail-Tests - Generators'
+method: FlaskScaffoldingTestCase
+testGeneratorThrowCaught
+	"``gen.throw(ex)`` injects ``ex`` at the suspended yield point.
+	Generators that wrap a yield in try/except can catch the thrown
+	exception and continue yielding past it."
+
+	| mod g first afterCatch tail |
+	mod := self loadFixture: 'generator_protocol'.
+	g := mod @env1:catches_throw.
+	first := g @env1:__next__.
+	afterCatch := g @env1:throw: (ValueError @env0:new).
+	tail := g @env1:__next__.
+	self assert: first equals: 'before'.
+	self assert: afterCatch equals: 'caught'.
+	self assert: tail equals: 'after'.
+%
+
+category: 'Grail-Tests - Generators'
+method: FlaskScaffoldingTestCase
+testGeneratorClose
+	"``gen.close()`` injects GeneratorExit at the suspended yield
+	point.  Body ``finally`` clauses fire as the exception unwinds,
+	so cleanup runs even though the consumer never drains the
+	generator to StopIteration."
+
+	| mod holder g closeResult |
+	mod := self loadFixture: 'generator_protocol'.
+	holder := OrderedCollection new add: 'open'; yourself.
+	g := mod @env1:cleanup_marker: holder.
+	g @env1:__next__.
+	g @env1:__next__.
+	closeResult := g @env1:close.
+	self assert: closeResult equals: None.
+	self assert: (holder @env0:at: 1) equals: 'closed'.
+%
+
 ! --- FunctionDefAst: varargs method prologue (kwargs fallback, *args, **kwargs) ---
 
 category: 'Grail-Tests - Varargs'
