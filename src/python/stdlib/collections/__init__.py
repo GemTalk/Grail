@@ -29,7 +29,9 @@ class defaultdict(dict):
 
     def __getitem__(self, key):
         if key in self:
-            return dict.__getitem__(self, key)
+            # Use super().__getitem__(key) to bypass our own override
+            # and reach dict's instance-side lookup.
+            return super().__getitem__(key)
         return self.__missing__(key)
 
 

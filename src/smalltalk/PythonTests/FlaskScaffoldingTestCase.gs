@@ -346,6 +346,46 @@ testInstanceVarsFromCls
 	self assert: (cls @env0:allInstVarNames @env0:includes: #last_doc).
 %
 
+! --- Class/instance introspection: __name__ and __dict__ -------------------
+
+category: 'Grail-Tests - Introspection'
+method: FlaskScaffoldingTestCase
+testBuiltinClassName
+	"``cls.__name__`` works on built-in Python types via the
+	``object class >> __name__`` (env-1) fallback inherited
+	through the metaclass chain."
+
+	self assert: (OrderedCollection @env1:__name__) equals: 'OrderedCollection'.
+	self assert: (KeyValueDictionary @env1:__name__) equals: 'KeyValueDictionary'.
+	self assert: (ExecBlock @env1:__name__) equals: 'ExecBlock'.
+	self assert: (BoundMethod @env1:__name__) equals: 'BoundMethod'.
+%
+
+category: 'Grail-Tests - Introspection'
+method: FlaskScaffoldingTestCase
+testInstanceDict
+	"`obj.__dict__` returns the per-instance attribute dictionary
+	(``___dict___``).  Attributes written through PythonInstance's
+	DNU dispatch path land here; class-compile-time-discovered
+	instVars do not (documented limitation).  Used by blinker's
+	cached-property idiom ``if 'X' in self.__dict__:``."
+
+	| mod cls obj d |
+	mod := self loadFixture: 'cls_self'.
+	cls := mod @env1:FirstParamSelf.
+	obj := cls @env1:value: { 'label-value' } value: nil.
+	"`label` was discovered as an inst var from `self.label = label` —
+	stored as a Smalltalk instVar, NOT in ___dict___, so __dict__ is
+	expected to be empty here."
+	d := obj @env1:__dict__.
+	self assert: (d @env0:isKindOf: KeyValueDictionary).
+	"Add a runtime attribute via the DNU setter path — that DOES land
+	in ___dict___."
+	obj @env1:dynamicAttr: 42.
+	d := obj @env1:__dict__.
+	self assert: (d @env0:at: #dynamicAttr) equals: 42.
+%
+
 ! --- CallAst: bare zero-arg super() ---------------------------------------
 
 category: 'Grail-Tests - SuperCall'

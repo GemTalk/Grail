@@ -110,3 +110,25 @@ cantPerform: aSymbol withArguments: anArray env: envId
 
 	^ self doesNotUnderstand: aSymbol args: anArray envId: envId
 %
+
+set compile_env: 1
+
+category: 'Python-Introspection'
+method: PythonInstance
+__dict__
+	"Python ``obj.__dict__`` introspection — return the per-instance
+	attribute dictionary, materializing it on first access.
+
+	Limitation: only attributes routed through ``___dict___`` (set via
+	the DNU dispatch path) appear here.  Attributes stored as actual
+	Smalltalk instVars — the ones synthesized from ``self.X = …``
+	writes discovered at class-compile time by AttributeAst's
+	``declareInstanceVar:`` propagation — are NOT included.  Most
+	downstream usage (``if 'X' in obj.__dict__:`` cached-property
+	idiom in blinker) only checks for runtime-added attrs, which all
+	land in ``___dict___``."
+
+	^ self @env0:___ensureDict___
+%
+
+set compile_env: 0

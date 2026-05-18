@@ -82,6 +82,26 @@ __new__
 	^ self @env0:new
 %
 
+category: 'Grail-Introspection'
+classmethod: object
+__name__
+	"Python ``cls.__name__`` returns the class's short name as a string.
+	Inherited through the metaclass chain to every class, so
+	``OrderedCollection.__name__`` answers 'OrderedCollection',
+	``ExecBlock.__name__`` answers 'ExecBlock', etc.  Grail uses the
+	Smalltalk class name unchanged — downstream inspect.ismethod /
+	isfunction stubs are written to match the Smalltalk names
+	('BoundMethod', 'ExecBlock').
+
+	User Python classes (created via ClassDefAst) get a unique
+	encoded name (e.g. ``Blinker_base_Signal``); their ``__name__``
+	therefore reflects the encoded form, not the original Python
+	identifier.  Python-side code that compares __name__ to a
+	literal (rare outside introspection helpers) may need updating."
+
+	^ self @env0:name @env0:asString
+%
+
 category: 'Grail-Callable'
 classmethod: object
 value: positional value: kwargs
