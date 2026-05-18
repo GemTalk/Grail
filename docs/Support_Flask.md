@@ -134,10 +134,42 @@ the critical path for almost every package — without working regexes, blinker,
 MarkupSafe, click, Jinja2 and Werkzeug all fail at import time.
 
 ### Tier 0 — unblock everything (must do first)
-1. **Finish `_sre` + a Python-level `re` module.** Needed by every dep below.
-   *Without this, nothing else here matters.*
+1. **`re` module — DONE (2026-05-17).** The full Python-level `re` API
+   round-trips through the upstream `_constants` / `_casefix` / `_parser` /
+   `_compiler` stack onto the C-level `_sre` engine: `compile`, `match`,
+   `search`, `fullmatch`, `findall`, `finditer`, `split`, `sub`, `subn`,
+   `group`/`span` by index and name, character classes, quantifiers,
+   anchors, named groups, numeric and named backreferences (`\1`,
+   `\g<name>`), callable replacements, count caps.  Coverage:
+   `ReModuleTestCase` (25 tests) plus `SreTestCase` (13 tests).
 
-   **State as of 2026-05-14:** The C-level `_sre` engine is fully wired —
+   **Known deviations** (still upstream-compatible behaviour):
+   * Non-literal `sub`/`subn` replacements expand on the Grail side
+     instead of going through the C `TemplateObject` +
+     `expand_template` path (would need a dedicated `SreTemplate`
+     wrapper with bespoke `wrap` / `pyobj_oop` marshalling).  Behaviour
+     matches CPython; performance is per-match Python loop instead of
+     compiled bytecode.
+   * `re/__init__.py` carries two small Grail patches: `_ZeroSentinel(int)`
+     rewritten as a plain marker class (Grail can't subclass `int`), and
+     three `__text_signature__ = '…'` assignments commented out
+     (`BoundMethod` has no attribute slot).
+   * `re/_parser.py` carries a one-liner `__iter__` on `SubPattern`
+     (CPython's `iter()` falls back to the sequence protocol, Grail's
+     `ForAst` codegen emits a direct `__iter__` send).
+   * `re/_compiler.py` `dis(code)` body still stubbed (`raise
+     NotImplementedError`); debug-only, never on the regex hot path.
+
+   With the language fixes that landed during this push (slice as a
+   real class, `list.__setitem__`/`__delitem__` slice support, dict
+   `fromkeys`, bytearray `find`, keyword-only varargs codegen,
+   `___pythonValueAttrs___` hook for shim wrappers, `tp_members`
+   support in `shimCallTyped`, frozenset(str) yielding 1-char
+   substrings, `PythonInstance` DNU preferring `_name:kw:` over
+   setter, `PyCallable_Check` filtering value types, …) the rest of
+   the stack should hit far fewer compiler-level surprises.
+
+   **Original state as of 2026-05-14:** The C-level `_sre` engine is fully wired —
    `_sre.compile()` produces a `SrePattern`, and `.match`/`.search`/`.group`/
    `.span`/etc. round-trip correctly through the shim. `SreTestCase` is all
    green (13/13) and registered in `install.gs`. The fixes that got us here

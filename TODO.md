@@ -33,11 +33,11 @@ These break programs that look ordinary in CPython.
   `OrderedCollection`; revisit when Grail grows a real generator type.
   Test coverage: `ComprehensionTestCase` (14 tests).
 
-- [ ] **Slice subscript assignment / del** — `SubscriptAst` reads
-  (`xs[i:j]`) work via `SequenceableCollection >> __getslice__:_:_:`
-  but stores (`xs[i:j] = ys`) and deletes (`del xs[i:j]`) are not
-  wired. Most ports don't need either; flag them with a clean error
-  if they do.
+- [x] ~~**Slice subscript assignment / del**~~ — `list.__setitem__`
+  and `list.__delitem__` now handle slice indices (used by
+  `re._parser` for `subpattern[i:i+1] = p` and `del literal[:]`).
+  Contiguous (step=1) and extended-step paths both work; tests in
+  `ListTestCase >> test__delitem__slice`.
 
 - [ ] **`*args` / `**kwargs` only bound in `def` codegen** — the closure
   emit and varargs-selector emit paths now bind both, but `LambdaAst`
@@ -57,23 +57,23 @@ These break programs that look ordinary in CPython.
   the three common targets: name (`del x`), subscript (`del xs[i]`),
   attribute (`del obj.x`).
 
-- [ ] **Dynamic module-level names resolve at compile time** —
-  `LITERAL` in a dict literal works only if Grail has already seen
-  `LITERAL = ...` higher in the same module. CPython's `globals().update()`
-  pattern adds names at *module-init* time, after the whole module
-  body is compiled, so any later reference compile-errors with
-  `undefined symbol`. Two options: (a) two-pass scan that pre-declares
-  module names mentioned by static analysis of `globals().update`
-  call sites; (b) emit unresolved bare-name reads as
-  `(self @env0:at: #name)` runtime lookups when the surrounding
-  scope is a module body.
+- [x] ~~**Dynamic module-level names resolve at compile time**~~ —
+  option (b) landed.  `NameAst`'s module-body load path emits an
+  `at:ifAbsent:` runtime lookup on the module instance for any
+  unresolved bare name (the *late module-name binding* path);
+  inside class methods, the parallel hook on the class-method
+  free-variable path does the same against `(ModuleClass
+  ___instance___)`.  Catches the `re._constants._makecodes` idiom
+  where opcodes like `IN` / `BRANCH` are referenced before
+  `globals().update()` ever runs.  See `ClassMethodGlobalFallbackTestCase`.
 
-- [ ] **Dotted submodule loader names inst vars with a `.`** —
-  `import re._constants` fails with
-  `ArgumentError 2149, illegal identifier #'re._constants'`. Storing
-  the module under a dot-free key (or renaming the submodule's slot
-  to `re__constants` / a separate registry lookup) would fix the
-  inst-var naming clash.
+- [x] ~~**Dotted submodule loader names inst vars with a `.`**~~ —
+  `loadModuleFromPath:name:` now maps dotted module names to a
+  flat Smalltalk class name (e.g. `re._constants` → `Re__constants`)
+  via `___asSmalltalkClassName___:`, and the parent package binds
+  the leaf in its dict slot under the short name through
+  `importlib >> registerModule:with:`.  `import re._constants` /
+  `from re import _constants` round-trips cleanly.
 
 - [x] ~~**Relative imports**~~ — `from ._constants import *` (leading
   `.`) handled by `ImportFromAst >> resolvedModuleName` which walks
@@ -131,15 +131,14 @@ These break programs that look ordinary in CPython.
   that override `__getitem__` (`re._parser.SubPattern`) get to
   branch on `isinstance(index, slice)` exactly as CPython does.
 
-- [ ] **SubPattern.dump in re/_parser.py fails at module load**
-  (after stubbing dump it gets past, so the dump body has the
-  trigger).  The body is dense — `for op, av in self.data`, lots of
-  `print(... end='')`, tuple-unpack in nested for, `isinstance(av,
-  seqtypes)`, `is`-comparisons against IN / BRANCH /
-  GROUPREF_EXISTS.  Error surface is "SmallInteger does not
-  understand #do:" so something in codegen is iterating over a
-  literal integer it expected to be a collection.  Open question
-  which construct triggers; further bisection welcome.
+- [x] ~~**SubPattern.dump in re/_parser.py fails at module load**~~ —
+  the dispatch / varargs / class-method-global / iter-protocol
+  fixes that landed during the `re` push collectively let the
+  entire `_parser.py` (including SubPattern.dump) compile clean.
+  re._parser loads end-to-end; `_dump:kw:` is on SubPattern's
+  env-1 method dict.  (dump itself isn't on the regex hot path,
+  so we don't exercise it in tests — covered by the broader
+  re-module suite.)
 
 - [ ] **Module-level dunders (`__name__`, `__file__`, …) not bound at
   module scope** — `if __name__ == "__main__":` emits `__name__` as a
