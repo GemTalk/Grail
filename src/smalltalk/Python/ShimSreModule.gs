@@ -335,18 +335,28 @@ category: 'Grail-Methods'
 method: SrePattern
 sub: repl _: aString
 	"sub(repl, string) -> str"
-	^ (CPythonShim @env0:current)
-		@env0:callTyped: '_sre' type: 'Pattern' method: 'sub' selfPtr: cPtr
-		with: repl with: aString
+	^ self @env1:sub: repl _: aString _: 0
 %
 
 category: 'Grail-Methods'
 method: SrePattern
 sub: repl _: aString _: count
-	"sub(repl, string, count) -> str"
-	^ (CPythonShim @env0:current)
-		@env0:callTyped: '_sre' type: 'Pattern' method: 'sub' selfPtr: cPtr
-		with: repl with: aString with: count
+	"sub(repl, string, count) -> str.
+
+	Non-literal (`\1` / `\g<name>`) or callable replacements are
+	expanded on the Grail side: the C-level template machinery
+	relies on a `TemplateObject` allocated by
+	`PyObject_GC_NewVar` and ferried through a `PyObject_Vectorcall`
+	that round-trips back into the shim — a path the shim's
+	OOP-marshalling can't carry without an SreTemplate wrapper.
+	Literal replacements still take the C fast path."
+
+	(self @env1:___isLiteralRepl___: repl) ifTrue: [
+		^ (CPythonShim @env0:current)
+			@env0:callTyped: '_sre' type: 'Pattern' method: 'sub' selfPtr: cPtr
+			with: repl with: aString with: count
+	].
+	^ (self @env1:___subWithExpansion___: repl in: aString count: count subn: false)
 %
 
 category: 'Grail-Methods'
@@ -366,18 +376,21 @@ category: 'Grail-Methods'
 method: SrePattern
 subn: repl _: aString
 	"subn(repl, string) -> (str, int)"
-	^ (CPythonShim @env0:current)
-		@env0:callTyped: '_sre' type: 'Pattern' method: 'subn' selfPtr: cPtr
-		with: repl with: aString
+	^ self @env1:subn: repl _: aString _: 0
 %
 
 category: 'Grail-Methods'
 method: SrePattern
 subn: repl _: aString _: count
-	"subn(repl, string, count) -> (str, int)"
-	^ (CPythonShim @env0:current)
-		@env0:callTyped: '_sre' type: 'Pattern' method: 'subn' selfPtr: cPtr
-		with: repl with: aString with: count
+	"subn(repl, string, count) -> (str, int).  See sub:_:_: for
+	why non-literal replacements expand on the Grail side."
+
+	(self @env1:___isLiteralRepl___: repl) ifTrue: [
+		^ (CPythonShim @env0:current)
+			@env0:callTyped: '_sre' type: 'Pattern' method: 'subn' selfPtr: cPtr
+			with: repl with: aString with: count
+	].
+	^ (self @env1:___subWithExpansion___: repl in: aString count: count subn: true)
 %
 
 category: 'Grail-Methods'
@@ -389,6 +402,125 @@ _subn: positional kw: keywords
 	(nargs == 2) ifTrue: [^ self subn: (positional @env0:at: 1) _: (positional @env0:at: 2)].
 	(nargs == 3) ifTrue: [^ self subn: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
 	TypeError ___signal___: 'subn() takes 2 or 3 arguments'
+%
+
+! --------- sub/subn: Smalltalk-side expansion helpers ---------------------
+! See sub:_:_: for the rationale. The literal vs. non-literal split is
+! a Grail workaround for the missing TemplateObject marshalling — the C
+! side handles the literal case (no template object needed); we walk
+! the matches in Smalltalk for the non-literal case.
+
+category: 'Grail-Methods - Private'
+classmethod: SrePattern
+___isLiteralRepl___: repl
+	"Class-side mirror so instance and other receivers share the rule.
+	A literal replacement (Python's sub fast path) is a string-shaped
+	value containing no backslash and not callable.  Callables and
+	templates with `\` references both need full expansion."
+
+	(repl @env0:isKindOf: CharacterCollection) ifFalse: [^ false].
+	^ (repl @env0:indexOf: $\) @env0:= 0
+%
+
+category: 'Grail-Methods - Private'
+method: SrePattern
+___isLiteralRepl___: repl
+	"Forward to the class-side rule so subn:_:_: shares it too."
+
+	^ self @env0:class @env1:___isLiteralRepl___: repl
+%
+
+category: 'Grail-Methods - Private'
+method: SrePattern
+___subWithExpansion___: repl in: aString count: count subn: returnTuple
+	"Walk every match in aString (or the first `count` if count > 0)
+	and rebuild the result string with each match replaced by the
+	expansion of `repl`.  Mirrors CPython's pattern_subx for the
+	non-literal / callable replacement path, but without going through
+	the C TemplateObject — that round trip needs a Smalltalk wrapper
+	for the heap-allocated template that the shim doesn't yet
+	support.  Returns a String when ``returnTuple`` is false, or a
+	(String, count) tuple when true (the subn return shape)."
+
+	| parser template parts pos m mEnd mStart expanded numSubs result tail |
+	parser := importlib @env1:modules @env0:at: #'re._parser'.
+	"For callable repl we use template=nil as the marker; otherwise
+	parse the replacement string once."
+	((repl @env0:isKindOf: BoundMethod)
+		or: [(repl @env0:isKindOf: ExecBlock)
+			or: [repl @env0:isKindOf: GsNMethod]])
+		ifTrue: [template := nil]
+		ifFalse: [template := parser @env1:parse_template: repl _: self].
+	parts := OrderedCollection @env0:new.
+	pos := 0.
+	numSubs := 0.
+	[
+		(count @env0:> 0 and: [numSubs @env0:>= count]) ifTrue: [
+			"Reached count limit; break with tail kept."
+			parts @env0:add: (aString @env0:copyFrom: pos @env0:+ 1 to: aString @env0:size).
+			^ returnTuple
+				ifTrue: [(tuple @env0:withAll: { ('' @env1:join: parts). numSubs })]
+				ifFalse: ['' @env1:join: parts]
+		].
+		m := self @env1:search: aString _: pos.
+		m @env0:== nil ifTrue: [
+			parts @env0:add: (aString @env0:copyFrom: pos @env0:+ 1 to: aString @env0:size).
+			^ returnTuple
+				ifTrue: [(tuple @env0:withAll: { ('' @env1:join: parts). numSubs })]
+				ifFalse: ['' @env1:join: parts]
+		].
+		mStart := m @env1:start.
+		mEnd := m @env1:end.
+		"Prefix from pos to match start."
+		mStart @env0:> pos ifTrue: [
+			parts @env0:add: (aString @env0:copyFrom: pos @env0:+ 1 to: mStart)
+		].
+		"Expand the replacement."
+		template @env0:== nil
+			ifTrue: [
+				"Callable repl: call with match, expect a string back.
+				BoundMethod uses value:value:; plain ExecBlocks (Smalltalk
+				blocks) use value:; both shapes show up in practice."
+				expanded := (repl @env0:isKindOf: ExecBlock)
+					ifTrue: [repl @env0:value: m]
+					ifFalse: [repl @env1:value: { m } value: nil]
+			]
+			ifFalse: [
+				expanded := self @env1:___expandTemplate___: template withMatch: m
+			].
+		parts @env0:add: expanded.
+		numSubs := numSubs @env0:+ 1.
+		"Advance past the match — handle zero-width matches by stepping 1."
+		pos := mEnd @env0:= mStart
+			ifTrue: [
+				mStart @env0:< aString @env0:size ifTrue: [
+					parts @env0:add: (aString @env0:copyFrom: mStart @env0:+ 1 to: mStart @env0:+ 1)
+				].
+				mEnd @env0:+ 1
+			]
+			ifFalse: [mEnd]
+	] @env0:repeat
+%
+
+category: 'Grail-Methods - Private'
+method: SrePattern
+___expandTemplate___: aTemplate withMatch: m
+	"Walk the template list (interleaved string literals and integer
+	group indices, as produced by re._parser.parse_template) and
+	build the replacement string for this match."
+
+	| parts |
+	parts := OrderedCollection @env0:new.
+	aTemplate @env0:do: [:item |
+		(item @env0:isKindOf: SmallInteger)
+			ifTrue: [
+				| g |
+				g := m @env1:group: item.
+				g @env0:== nil ifFalse: [parts @env0:add: g]
+			]
+			ifFalse: [parts @env0:add: item]
+	].
+	^ '' @env1:join: parts
 %
 
 ! --------- split -----------------------------------------------------------

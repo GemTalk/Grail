@@ -263,6 +263,72 @@ testSubn
 	self assert: (result @env0:at: 2) equals: 3.
 %
 
+category: 'Grail-Tests - sub with templates'
+method: ReModuleTestCase
+testSubBackrefNumbered
+	"`\1` references the first capture group.  The C-level template
+	machinery is bypassed in favour of Grail-side expansion (see
+	SrePattern >> sub:_:_: for why)."
+
+	self assert: (re @env1:sub: '(\w+)' _: '<\1>' _: 'hello')
+		equals: '<hello>'.
+	self assert: (re @env1:sub: '(\w+)' _: '<\1>' _: 'hello world')
+		equals: '<hello> <world>'.
+%
+
+category: 'Grail-Tests - sub with templates'
+method: ReModuleTestCase
+testSubMultipleBackrefs
+	"`\2-\1` swaps two capture groups in each match."
+
+	self assert: (re @env1:sub: '(\d)(\w)' _: '\2-\1' _: 'a1b2c3')
+		equals: 'ab-1c-23'.
+%
+
+category: 'Grail-Tests - sub with templates'
+method: ReModuleTestCase
+testSubNamedBackref
+	"`\g<name>` references a named capture group."
+
+	self assert: (re @env1:sub: '(?P<word>\w+)' _: '[\g<word>]' _: 'hi there')
+		equals: '[hi] [there]'.
+%
+
+category: 'Grail-Tests - sub with templates'
+method: ReModuleTestCase
+testSubCallableRepl
+	"Replacement can be any callable that takes a Match and returns
+	a string.  Grail blocks (ExecBlock) and BoundMethods both qualify."
+
+	| result |
+	result := re @env1:sub: '\d+'
+		_: [:m | (m @env1:group: 0) , '!']
+		_: 'a1 b22'.
+	self assert: result equals: 'a1! b22!'.
+%
+
+category: 'Grail-Tests - sub with templates'
+method: ReModuleTestCase
+testSubnBackref
+	"subn with a backref template returns (str, count)."
+
+	| result |
+	result := re @env1:subn: '(\w+)' _: '<\1>' _: 'hello world'.
+	self assert: (result @env0:at: 1) equals: '<hello> <world>'.
+	self assert: (result @env0:at: 2) equals: 2.
+%
+
+category: 'Grail-Tests - sub with templates'
+method: ReModuleTestCase
+testSubCountCapsBackref
+	"With a count limit, only the first N matches are substituted;
+	the tail is preserved untouched."
+
+	| result |
+	result := (re @env1:compile: '(\w+)') @env1:sub: '<\1>' _: 'a b c d' _: 2.
+	self assert: result equals: '<a> <b> c d'.
+%
+
 category: 'Grail-Tests - Pattern attributes'
 method: ReModuleTestCase
 testPatternGroups
