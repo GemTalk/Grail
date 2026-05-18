@@ -214,6 +214,55 @@ testSplit
 		equals: (OrderedCollection new add: 'a'; add: 'b'; add: 'c'; add: 'd'; yourself).
 %
 
+category: 'Grail-Tests - Module-level helpers'
+method: ReModuleTestCase
+testSubLiteralRepl
+	"re.sub with a literal replacement string.  Used to fail with
+	a marshalled-OOP error because PyCallable_Check returned true
+	for every PyObject, so pattern_subx took the CALLABLE branch
+	and tried to call the str as a function."
+
+	self assert: (re @env1:sub: 'a' _: 'X' _: 'banana') equals: 'bXnXnX'.
+%
+
+category: 'Grail-Tests - Module-level helpers'
+method: ReModuleTestCase
+testSubMultiCharRepl
+	"Multi-character replacement, still literal path."
+
+	self assert: (re @env1:sub: 'a' _: 'XX' _: 'banana') equals: 'bXXnXXnXX'.
+%
+
+category: 'Grail-Tests - Module-level helpers'
+method: ReModuleTestCase
+testSubEmptyRepl
+	"Replace every match with the empty string — effectively a
+	delete-matches operation."
+
+	self assert: (re @env1:sub: 'a' _: '' _: 'banana') equals: 'bnn'.
+%
+
+category: 'Grail-Tests - Module-level helpers'
+method: ReModuleTestCase
+testSubWithCount
+	"sub(pat, repl, str, count=N) caps the substitution at N
+	matches; the rest of the string is left intact."
+
+	self assert: ((re @env1:compile: 'a') @env1:sub: 'X' _: 'aaaaa' _: 2)
+		equals: 'XXaaa'.
+%
+
+category: 'Grail-Tests - Module-level helpers'
+method: ReModuleTestCase
+testSubn
+	"subn returns (new_string, number_of_substitutions)."
+
+	| result |
+	result := re @env1:subn: 'a' _: 'X' _: 'banana'.
+	self assert: (result @env0:at: 1) equals: 'bXnXnX'.
+	self assert: (result @env0:at: 2) equals: 3.
+%
+
 category: 'Grail-Tests - Capture groups'
 method: ReModuleTestCase
 testGroupSpan

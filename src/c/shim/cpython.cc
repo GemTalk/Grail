@@ -440,6 +440,7 @@ static int check_gci_error(void) {
     return 0;
 }
 
+
 /* ====================================================================
  * CPython API implementations — Float
  * ==================================================================== */
@@ -1210,9 +1211,28 @@ extern "C" int PyObject_SetAttrString(PyObject *obj, const char *name,
 }
 
 extern "C" int PyCallable_Check(PyObject *obj) {
-    (void)obj;
-    /* Simplified: assume all objects might be callable. */
-    return 1;
+    /* Common non-callables: strings, bytes, ints, floats, lists, tuples,
+       dicts, None, bool.  Real callables include functions, BoundMethods,
+       callable classes — the server is the source of truth, so delegate
+       for anything we don't recognise as a non-callable.  re.sub relies
+       on this returning 0 for a literal-string replacement: the CALLABLE
+       path tries to send the str as a function, which trips a
+       "no Symbol" error inside GciPerform. */
+    if (!obj) return 0;
+    if (obj == Py_None || obj == Py_True || obj == Py_False) return 0;
+    PyTypeObject *t = Py_TYPE(obj);
+    if (t == &PyUnicode_Type) return 0;
+    if (t == &PyBytes_Type) return 0;
+    if (t == &PyLong_Type) return 0;
+    if (t == &PyFloat_Type) return 0;
+    if (t == &PyList_Type) return 0;
+    if (t == &PyTuple_Type) return 0;
+    if (t == &PyDict_Type) return 0;
+    /* Anything else: ask the server. */
+    OopType arg = pyobj_oop(obj);
+    OopType result = GciPerform(server, "PyCallable_Check:", &arg, 1);
+    if (check_gci_error()) return 0;
+    return result == OOP_TRUE ? 1 : 0;
 }
 
 extern "C" PyObject *PyObject_RichCompare(PyObject *v, PyObject *w, int op) {

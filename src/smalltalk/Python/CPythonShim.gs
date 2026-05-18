@@ -782,6 +782,25 @@ PyTuple_GetItem: anArray at: zeroBasedIndex
 
 category: 'Grail-CPython API'
 method: CPythonShim
+PyCallable_Check: obj
+	"Server-side fallback for PyCallable_Check.  Returns true for
+	anything callable from Python — Smalltalk BoundMethods, plain
+	CompiledMethods, classes, and the legacy block-based callables
+	stored in module dicts.  Used by re.sub to decide whether the
+	replacement is a literal template or a function to apply per
+	match.  Pure-value types (str/bytes/int/...) are filtered out
+	on the C side before we get here."
+
+	(obj @env0:isKindOf: BoundMethod) ifTrue: [^ true].
+	(obj @env0:isKindOf: ExecBlock) ifTrue: [^ true].
+	(obj @env0:isKindOf: GsNMethod) ifTrue: [^ true].
+	(obj @env0:isKindOf: Behavior) ifTrue: [^ true].
+	"Anything else: not callable."
+	^ false
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
 PyObject_GetAttrString: obj name: nameString
 	^ (self wrap: (obj perform: nameString asSymbol env: 1)) memoryAddress
 %
