@@ -237,6 +237,23 @@ testSelfReadOfClassSideAttribute
 
 category: 'Grail-Tests - AttributeAst'
 method: FlaskScaffoldingTestCase
+testCallOfClassSideAttribute
+	"`self.set_class()` — load the class-side attribute (`list`)
+	through ___pyAttrLoad___:, then invoke it.  Built-in classes
+	gain callability through ``Object class >> value:value:``,
+	which dispatches to ``__new__`` based on arity."
+
+	| mod cls inst result |
+	mod := self loadFixture: 'cls_self'.
+	cls := mod @env1:ClassSideAttr.
+	inst := cls @env1:value: #() value: nil.
+	result := inst @env1:make_via_class_attr.
+	self assert: result class equals: OrderedCollection.
+	self assert: result @env0:size equals: 0.
+%
+
+category: 'Grail-Tests - AttributeAst'
+method: FlaskScaffoldingTestCase
 testSelfAttributeStillWorksWhenClassHasNew
 	"When a class defines __new__ (whose first param is `cls` by
 	convention), the WHOLE class's selfParameterName had been

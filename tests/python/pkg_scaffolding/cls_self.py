@@ -53,3 +53,6 @@ class ClassSideAttr:
 
     def read_class_attr(self):
         return self.set_class
+
+    def make_via_class_attr(self):
+        return self.set_class()

@@ -82,6 +82,44 @@ __new__
 	^ self @env0:new
 %
 
+category: 'Grail-Callable'
+classmethod: object
+value: positional value: kwargs
+	"Python `cls(*positional, **kwargs)` semantics on a class object,
+	via the legacy callable form `func value: { args } value: kw`.
+
+	Grail user classes (subclasses of PythonInstance) get a per-class
+	`value:value:` synthesized by ClassDefAst (see
+	emitInstantiationMethodFor:); this method is the fallback for
+	built-in classes mapped from Python types (e.g. ``list`` →
+	OrderedCollection, ``dict`` → KeyValueDictionary), which need to
+	be callable through the same indirect path so that code like
+	``f = obj.cls_attr; f()`` works when ``cls_attr`` resolved to a
+	built-in class.
+
+	Dispatch order:
+	  1. With kwargs present: forward to ``_new:kw:`` if implemented
+	     (dict, set — varargs entry point).
+	  2. No kwargs, 0 positional: ``__new__``.
+	  3. No kwargs, 1 positional: ``__new__:``.
+	  4. No kwargs, 2..N positional: ``__new__:_:_:…`` keyword form
+	     built per the standard fast-path convention.
+	  5. None of the above resolve → MessageNotUnderstood (mapped to
+	     Python TypeError at the env-1 DNU backstop)."
+
+	| nargs sel |
+	(kwargs == nil or: [kwargs @env0:isEmpty]) ifFalse: [
+		^ self @env1:_new: positional kw: kwargs
+	].
+	nargs := positional @env0:size.
+	nargs @env0:= 0 ifTrue: [^ self @env1:__new__].
+	nargs @env0:= 1 ifTrue: [^ self @env1:__new__: (positional @env0:at: 1)].
+	sel := WriteStream @env0:on: String @env0:new.
+	sel @env0:nextPutAll: '__new__:'.
+	2 @env0:to: nargs do: [:i | sel @env0:nextPutAll: '_:'].
+	^ self @env0:perform: sel @env0:contents @env0:asSymbol env: 1 withArguments: positional
+%
+
 category: 'Grail-Convenience Methods - Unary'
 method: object
 ___isTruthy___
