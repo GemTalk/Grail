@@ -226,3 +226,80 @@ testSelfAttributeStillWorksWhenClassHasNew
 	inst := cls @env1:value: { 'world' } value: nil.
 	self assert: (inst @env1:read_self_attr) equals: 'world'.
 %
+
+! --- Deep instance-variable discovery --------------------------------------
+
+category: 'Grail-Tests - Instance var discovery'
+method: FlaskScaffoldingTestCase
+testInstanceVarsFromConditionalAssign
+	"`if doc: self.doc = doc` inside __init__ — old scan missed
+	the nested write; new chain propagates from AttributeAst up
+	through the IfAst to ClassDefAst."
+
+	| mod cls obj |
+	mod := self loadFixture: 'deep_instance_vars'.
+	cls := mod @env1:DeepInit.
+	"Construction triggers __init__; if doc isn't a real
+	instVar the conditional write would silently fail with an
+	'undefined symbol doc' compile error before runtime."
+	self assert: (cls @env0:allInstVarNames @env0:includes: #doc).
+	obj := mod @env1:make.
+	self assert: (obj @env1:___pyAttrLoad___: #doc) equals: 'hello'.
+%
+
+category: 'Grail-Tests - Instance var discovery'
+method: FlaskScaffoldingTestCase
+testInstanceVarsFromAnnAssign
+	"AnnAssign on self.X (`self.tags: list = []`) — different
+	AST node from plain Assign; old scan only recognised
+	AssignAst targets."
+
+	| mod cls |
+	mod := self loadFixture: 'deep_instance_vars'.
+	cls := mod @env1:DeepInit.
+	self assert: (cls @env0:allInstVarNames @env0:includes: #tags).
+%
+
+category: 'Grail-Tests - Instance var discovery'
+method: FlaskScaffoldingTestCase
+testInstanceVarsFromNestedCompound
+	"`try / for / self.last_index = i` — write buried two
+	compound statements deep inside __init__.  Propagation
+	walks through every IfAst / ForAst / TryAst body branch."
+
+	| mod cls |
+	mod := self loadFixture: 'deep_instance_vars'.
+	cls := mod @env1:DeepInit.
+	self assert: (cls @env0:allInstVarNames @env0:includes: #last_index).
+%
+
+category: 'Grail-Tests - Instance var discovery'
+method: FlaskScaffoldingTestCase
+testInstanceVarsFromMethodOutsideInit
+	"`self.name = name` in `configure(self, name)` — old scan
+	walked __init__ only.  New walk covers every method body
+	in the class."
+
+	| mod cls obj |
+	mod := self loadFixture: 'deep_instance_vars'.
+	cls := mod @env1:DeepInit.
+	self assert: (cls @env0:allInstVarNames @env0:includes: #name).
+	obj := mod @env1:make.
+	self assert: (obj @env1:___pyAttrLoad___: #name) equals: 'the-name'.
+%
+
+category: 'Grail-Tests - Instance var discovery'
+method: FlaskScaffoldingTestCase
+testInstanceVarsFromCls
+	"`cls.last_doc = doc` inside __new__ — `cls` is the
+	conventional class-attribute receiver name, but for
+	instance-var discovery the AttributeAst chain treats it
+	the same as `self`.  (Whether the runtime store actually
+	hits the class side is a separate question handled by
+	___pyAttrLoad___:.)"
+
+	| mod cls |
+	mod := self loadFixture: 'deep_instance_vars'.
+	cls := mod @env1:DeepInit.
+	self assert: (cls @env0:allInstVarNames @env0:includes: #last_doc).
+%

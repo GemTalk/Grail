@@ -8,7 +8,8 @@ expectvalue /Class
 doit
 StatementAst subclass: 'ClassDefAst'
   instVarNames: #( name bases keywords
-                    body decorator_list type_params)
+                    body decorator_list type_params
+                    instanceVariables)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -493,32 +494,83 @@ body
 
 category: 'Grail-Class Compilation'
 method: ClassDefAst
-instanceVarNamesFromInit
-	"Scan __init__ body for `self.attr = ...` assignments to determine
-	instance variable names for the generated Smalltalk class.  Other
-	attributes (set in non-__init__ methods or by external code such as
-	`obj.x = ...` from another module) are stashed in the per-instance
-	__dict__ fallback that PythonInstance provides."
+declareInstanceVar: aSymbol
+	"Sink for the `declareInstanceVar:` chain.  Called from inside
+	this class's body whenever an `<receiver>.X = …` write where
+	<receiver> is `self` or `cls` is discovered by walking the
+	body.  Stops the upward propagation here — instance vars of
+	a nested class belong to the nested class, not its parent."
 
-	| initMethod initBody selfName result |
-	initMethod := body body detect: [:stmt |
-		(stmt isKindOf: FunctionDefAst) and: [stmt name asSymbol == #'__init__']
-	] ifNone: [^ #()].
-	selfName := initMethod allParameterNames first.
-	initBody := initMethod body.
-	result := IdentitySet new.
-	initBody body do: [:stmt |
-		(stmt isKindOf: AssignAst) ifTrue: [
-			| tgt |
-			tgt := stmt target.
-			((tgt isKindOf: AttributeAst) and: [
-				(tgt value isKindOf: NameAst) and: [tgt value id = selfName]
-			]) ifTrue: [
-				result add: tgt attr asSymbol.
-			].
-		].
+	instanceVariables ifNil: [instanceVariables := IdentitySet new].
+	instanceVariables add: aSymbol asSymbol
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+instanceVarNamesFromInit
+	"Return the inst-var name set discovered by walking the class
+	body.  Triggers the walk lazily on first call.  Name kept for
+	backward compatibility — the walk no longer stops at __init__,
+	it covers every method body and every nested compound statement
+	in the class.  Discovery itself flows through the
+	`declareInstanceVar:` chain (see AttributeAst >> declareVariable
+	and AbstractNode >> declareInstanceVar:)."
+
+	instanceVariables ifNil: [
+		instanceVariables := IdentitySet new.
+		body body do: [:stmt | self walkForInstanceVars: stmt].
 	].
-	^ result asArray
+	^ instanceVariables asArray
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+walkForInstanceVars: aNode
+	"Recursively trigger `declareVariable` on every assignment
+	target inside aNode, so AttributeAst's chain can surface
+	self.X / cls.X writes via `declareInstanceVar:`.  Recurses
+	into compound statements (If/While/For/Try/With) and method
+	bodies, but NOT into nested class defs — those collect their
+	own instance vars."
+
+	aNode ifNil: [^ self].
+	(aNode isKindOf: ClassDefAst) ifTrue: [^ self].
+	(aNode isKindOf: AssignAst) ifTrue: [
+		aNode targets do: [:t | t declareVariable].
+		^ self
+	].
+	(aNode isKindOf: AnnAssignAst) ifTrue: [
+		aNode target declareVariable.
+		^ self
+	].
+	(aNode isKindOf: AugAssignAst) ifTrue: [
+		aNode target declareVariable.
+		^ self
+	].
+	"Compound statements: recurse into substatement collections by
+	walking every instVar that holds an AbstractNode or an Array
+	of AbstractNodes.  Catches IfAst/WhileAst/ForAst/TryAst/WithAst
+	branches plus FunctionDefAst bodies without enumerating every
+	concrete subclass."
+	2 to: aNode class allInstVarNames size do: [:i |
+		| val |
+		val := aNode instVarAt: i.
+		(val isKindOf: AbstractNode) ifTrue: [
+			self walkForInstanceVars: val
+		] ifFalse: [
+			(val isKindOf: Array) ifTrue: [
+				val do: [:each |
+					(each isKindOf: AbstractNode) ifTrue: [
+						self walkForInstanceVars: each
+					]
+				]
+			] ifFalse: [
+				(val isKindOf: BlockAst) ifTrue: [
+					val body do: [:sub | self walkForInstanceVars: sub]
+				]
+			]
+		]
+	]
 %
 
 category: 'Grail-Class Compilation'

@@ -56,6 +56,24 @@ removeallclassmethods AugAssignAst
 
 set compile_env: 0
 
+category: 'Grail-accessing'
+method: AugAssignAst
+target
+	^ target
+%
+
+category: 'Grail-accessing'
+method: AugAssignAst
+value
+	^ value
+%
+
+category: 'Grail-accessing'
+method: AugAssignAst
+op
+	^ op
+%
+
 category: 'Grail-other'
 method: AugAssignAst
 printSmalltalkOn: aStream

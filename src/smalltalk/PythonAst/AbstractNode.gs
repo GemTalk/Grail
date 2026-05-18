@@ -113,6 +113,17 @@ declareVariable: aSymbol
 	parent declareVariable: aSymbol.
 %
 
+category: 'Grail-initialization'
+method: AbstractNode
+declareInstanceVar: aSymbol
+	"Propagate an instance-attribute write (`self.X = …` or
+	`self.X: T = …`) up the parent chain to the enclosing
+	ClassDefAst, which collects them.  Default: forward.  Stops
+	at the root (parent is nil)."
+
+	parent ifNotNil: [parent declareInstanceVar: aSymbol]
+%
+
 category: 'Grail-other'
 method: AbstractNode
 globals

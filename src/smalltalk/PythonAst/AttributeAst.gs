@@ -79,7 +79,18 @@ assertContextIsLoad
 category: 'Grail-other'
 method: AttributeAst
 declareVariable
+	"`self.X = expr` (or `cls.X = expr`) is the canonical Python
+	idiom for declaring an instance attribute.  Propagate `X` up
+	the parent chain via `declareInstanceVar:` so the enclosing
+	ClassDefAst can collect it as a Smalltalk instVar.  Forward
+	`declareVariable` on the receiver as before so the receiver's
+	own name (`self` / `cls`) still surfaces as a local in the
+	enclosing function scope."
 
+	((value isKindOf: NameAst)
+		and: [value id == #self or: [value id == #cls]]) ifTrue: [
+		parent ifNotNil: [parent declareInstanceVar: attr asSymbol]
+	].
 	value declareVariable.
 %
 

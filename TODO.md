@@ -195,14 +195,19 @@ doesn't preserve.
 The DNU backstop, load-site definite-assignment check, and instVar
 AttributeError check are in. Edge cases left:
 
-- [ ] **blinker import: instance-var detection too shallow** —
-  `ClassDefAst >> instanceVarNamesFromInit` only walks top-level
-  `self.X = …` statements in `__init__`.  Blinker's `Signal.__init__`
-  uses conditional (`if doc: self.__doc__ = doc`) and AnnAssign
-  (`self.receivers: dict[...] = {}`) forms; both need to register
-  the inst var.  Also `set_class: type[set] = set` is a class-level
-  AnnAssign whose annotation references heavy typing generics that
-  Grail still evaluates eagerly — needs further deferral.
+- [x] ~~**blinker import: instance-var detection too shallow**~~ —
+  `self.X = …` writes now propagate up via a new
+  `declareInstanceVar:` chain (AbstractNode forwards, ClassDefAst
+  is the sink).  `AttributeAst >> declareVariable` detects
+  `self.X` / `cls.X` patterns and fires the chain;
+  `ClassDefAst >> walkForInstanceVars:` recursively walks the
+  class body — including IfAst / WhileAst / ForAst / TryAst /
+  WithAst branches and every method body — so conditional,
+  AnnAssign, AugAssign, and outside-__init__ writes all
+  register.  Covered by `FlaskScaffoldingTestCase >>
+  testInstanceVarsFrom*` (5 tests).  Blinker import still has
+  other blockers ahead (eager annotation evaluation of complex
+  typing generics like `type[set[t.Any]]`).
 
 - [ ] **AugAssign target reads slip past the load-site check** —
   `x += 1` reads `x` on the RHS through the same `NameAst` that is
