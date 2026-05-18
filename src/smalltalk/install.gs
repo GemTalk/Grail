@@ -91,13 +91,13 @@ login
 !   PythonAst      — AST node classes
 !   PythonTests    — SUnit TestCase classes
 !   PythonModules  — Smalltalk classes generated at runtime for each
-!                    imported Python module (``loadModuleFromPath:``) and
-!                    each Python ``class`` statement (``compileClassDef``).
-!                    Recreating the dict each install drops every
-!                    orphan generated class — the next module import or
-!                    class statement rebuilds the class against the
-!                    current Grail hierarchy.  Replaces the previous
-!                    `py_*` / `pyc_*` UserGlobals scheme.
+!                    imported Python module (``loadModuleFromPath:``).
+!                    Recreating the dict each install drops orphan
+!                    module classes — the next ``import`` rebuilds the
+!                    class against the current Grail hierarchy.  User
+!                    classes from Python ``class`` statements are
+!                    *anonymous* (``inDictionary: nil``); only the
+!                    module instance's instVar holds the reference.
 run
 "Remove Python dictionaries if they exist"
 #(#'Python' #'PythonAst' #'PythonTests' #'PythonModules') do: [:each |

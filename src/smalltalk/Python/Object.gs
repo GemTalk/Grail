@@ -174,27 +174,26 @@ method: object
 ___pyAttrLoad___: aSym
 	"Python ``obj.attr`` load semantics, dispatching at runtime.
 	The presence of an ``attr:`` keyword method is ambiguous: on a
-	Grail-generated class (`pyc_*` user classes / `py_*` modules)
-	it is a synthesized setter that pairs with an instVar getter;
-	on a built-in like OrderedCollection or KeyValueDictionary
-	`attr:` is just a regular 1-arg method (e.g. ``append:``,
-	``add:``).  Differentiate by class name prefix:
+	Python user class (PythonInstance subclass) it is a synthesized
+	setter that pairs with an instVar getter; on a built-in like
+	OrderedCollection or KeyValueDictionary `attr:` is just a regular
+	1-arg method (e.g. ``append:``, ``add:``).  Discriminate by
+	receiver kind:
 
-	  - Generated class with ``attr:`` setter → call the unary
-	    getter, return the value (covers instVars + @property).
-	  - Otherwise, if the class has a unary ``attr`` method,
-	    return a BoundMethod that wraps (receiver, selector).
+	  - PythonInstance with ``attr:`` setter → call the unary getter,
+	    return the value (covers instVars + @property).
+	  - Otherwise, if the class chain has a unary/keyword ``attr``
+	    method, return a BoundMethod that wraps (receiver, selector).
 	  - Otherwise dispatch the unary message anyway and let DNU
 	    produce the appropriate error or fallback."
 
-	| md sym1 sym2 sym3 symVA name s isModule isGenerated |
+	| md sym1 sym2 sym3 symVA s isModule isGenerated |
 	md := self @env0:class @env0:methodDictForEnv: 1.
 	s := aSym @env0:asString.
 	sym1 := (s @env0:, ':') @env0:asSymbol.
 	sym2 := (s @env0:, ':_:') @env0:asSymbol.
 	sym3 := (s @env0:, ':_:_:') @env0:asSymbol.
 	symVA := ('_' @env0:, s @env0:, ':kw:') @env0:asSymbol.
-	name := self @env0:class @env0:name @env0:asString.
 	"Module instances (pre-installed Python modules like html/math, plus
 	loaded module classes derived from `module`) always treat unary
 	attribute reads as value reads (an attribute holds a function,
@@ -240,12 +239,11 @@ ___pyAttrLoad___: aSym
 			^ self @env0:perform: aSym env: 1
 		].
 	].
-	"Generated `pyc_` user classes have synthesized `attr:` setters that
-	pair with attribute getters.  If the class has both, this is an
-	attribute access, call the unary getter and return the value."
-	isGenerated := (name @env0:size @env0:>= 4
-			and: [(name @env0:copyFrom: 1 to: 4) @env0:= 'pyc_'])
-		or: [self @env0:isKindOf: PythonInstance].
+	"Python user classes (PythonInstance subclasses) have synthesized
+	``attr:`` setters that pair with attribute getters.  If the class
+	has both, this is an attribute access — call the unary getter and
+	return the value."
+	isGenerated := self @env0:isKindOf: PythonInstance.
 	(isGenerated and: [md @env0:includesKey: sym1]) ifTrue: [
 		^ self @env0:perform: aSym env: 1
 	].

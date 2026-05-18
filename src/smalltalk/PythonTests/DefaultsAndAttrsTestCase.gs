@@ -40,10 +40,6 @@ setUp
 	| mods |
 	mods := importlib @env1:modules.
 	mods removeKey: #'defaults_and_attrs' ifAbsent: [].
-	UserGlobals removeKey: #'py_defaults_and_attrs' ifAbsent: [].
-	UserGlobals removeKey: #'pyc_Box' ifAbsent: [].
-	UserGlobals removeKey: #'pyc_Pair' ifAbsent: [].
-	UserGlobals removeKey: #'pyc__ChainBox' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/defaults_and_attrs.py')
 		name: 'defaults_and_attrs'.

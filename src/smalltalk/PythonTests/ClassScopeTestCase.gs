@@ -36,10 +36,6 @@ setUp
 	| mods |
 	mods := importlib @env1:modules.
 	mods removeKey: #'class_scope' ifAbsent: [].
-	UserGlobals removeKey: #'py_class_scope' ifAbsent: [].
-	UserGlobals removeKey: #'pyc_Foo' ifAbsent: [].
-	UserGlobals removeKey: #'pyc_CsToken' ifAbsent: [].
-	UserGlobals removeKey: #'pyc_Box' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/class_scope.py')
 		name: 'class_scope'.
