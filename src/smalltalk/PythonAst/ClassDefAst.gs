@@ -129,10 +129,10 @@ printSmalltalkRuntimeOn: aStream
 	reference needs to be stored on the new class."
 	aStream
 		nextPutAll: name;
-		nextPutAll: ' := '.
+		nextPutAll: ' := ('.
 	self printSuperclassOn: aStream.
 	aStream
-		nextPutAll: ' @env0:subclass: #''';
+		nextPutAll: ') @env0:subclass: #''';
 		nextPutAll: (importlib @env0:___asSmalltalkClassName___: name) asString;
 		nextPutAll: ''' instVarNames: '.
 	self printSymbolArray: ivarNames on: aStream.

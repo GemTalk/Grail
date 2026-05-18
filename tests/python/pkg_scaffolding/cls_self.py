@@ -33,3 +33,23 @@ class HasNewAndInit:
 
     def read_self_attr(self):
         return self.label
+
+
+class ClassSideAttr:
+    """`set_class: type = set` is a class-level annotated assign
+    that becomes a Smalltalk classInstVar — it lives on the
+    class side, NOT in the instance layout.  An instance method
+    reading `self.set_class` must therefore fall through to the
+    runtime ___pyAttrLoad___: dispatch (which walks
+    instance → class → metaclass) instead of trying the
+    instVar fast path.  Before the AttributeAst fallback fix,
+    the codegen emitted a bare `set_class` identifier and
+    Smalltalk compile-errored with `undefined symbol set_class`."""
+
+    set_class: type = list
+
+    def __init__(self):
+        pass
+
+    def read_class_attr(self):
+        return self.set_class

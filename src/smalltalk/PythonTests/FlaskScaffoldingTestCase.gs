@@ -212,6 +212,31 @@ testSelfAttributeStillFastPath
 
 category: 'Grail-Tests - AttributeAst'
 method: FlaskScaffoldingTestCase
+testSelfReadOfClassSideAttribute
+	"`self.set_class` where `set_class` was declared at class
+	body level (`set_class: type = list`) lives on the Smalltalk
+	class side, not in instance layout.  Reading it from an
+	instance method has to go through ___pyAttrLoad___: at
+	runtime; before the AttributeAst fallback fix, the codegen
+	emitted bare `set_class` and Smalltalk compile-errored with
+	`undefined symbol set_class`.  The CallAst exclusion makes
+	sure `self.<unknown-attr>(...)` doesn't take the direct
+	unary-send fastpath either — that path bypasses
+	___pyAttrLoad___: and would DNU on the metaclass."
+
+	| mod cls inst result |
+	mod := self loadFixture: 'cls_self'.
+	cls := mod @env1:ClassSideAttr.
+	inst := cls @env1:value: #() value: nil.
+	"`self.set_class` resolves through ___pyAttrLoad___: to the
+	class-side attribute value (the built-in ``list`` class,
+	which is OrderedCollection in Grail)."
+	result := inst @env1:read_class_attr.
+	self assert: result equals: OrderedCollection.
+%
+
+category: 'Grail-Tests - AttributeAst'
+method: FlaskScaffoldingTestCase
 testSelfAttributeStillWorksWhenClassHasNew
 	"When a class defines __new__ (whose first param is `cls` by
 	convention), the WHOLE class's selfParameterName had been

@@ -142,27 +142,43 @@ printSmalltalkOn: aStream
 		and: [(CallAst isSelfReference: value id)
 			and: [CallAst selfParameterName == #self]]) ifTrue: [
 		"`self.X` inside an instance method:
-		  - X is an inst var       → AttributeError-checked instVar read.
+		  - X is an inst var       → AttributeError-checked instVar read
+		                              (fast path; the check fires a Python-
+		                              shaped error if the slot is still nil).
 		  - X is a class method    → emit `(self X)` so it dispatches to
 		                              the method (covers @property and any
 		                              other parameterless method call).
-		  - X is neither           → fall through to the checked-attr form
-		                              and let the DNU backstop produce a
-		                              clean AttributeError at run time."
-		((CallAst classInstVarNames notNil
-			and: [CallAst classInstVarNames includes: attr asSymbol]) not
-			and: [CallAst classFunctionNames notNil
-				and: [CallAst classFunctionNames includes: attr asSymbol]])
-		ifTrue: [
+		  - X is neither           → fall through to the runtime
+		                              ___pyAttrLoad___: dispatch, which
+		                              walks instance → class → metaclass
+		                              and raises AttributeError on miss.
+		                              Catches class-side attributes
+		                              declared at class-body scope
+		                              (e.g. ``set_class: type = set`` in
+		                              blinker.Signal), which Grail stores
+		                              as Smalltalk classInstVars — not
+		                              reachable from an instance method's
+		                              instVar lookup."
+		(CallAst classInstVarNames notNil
+			and: [CallAst classInstVarNames includes: attr asSymbol]) ifTrue: [
+			aStream
+				nextPutAll: '(AttributeError @env0:___checkAttr: ';
+				nextPutAll: attr;
+				nextPutAll: ' ofObject: self named: #';
+				nextPutAll: attr;
+				nextPutAll: ')'.
+			^self
+		].
+		(CallAst classFunctionNames notNil
+			and: [CallAst classFunctionNames includes: attr asSymbol]) ifTrue: [
 			aStream nextPutAll: '(self '; nextPutAll: attr; nextPutAll: ')'.
 			^self
 		].
+		"Unknown attr on self — runtime dispatch."
 		aStream
-			nextPutAll: '(AttributeError @env0:___checkAttr: ';
+			nextPutAll: '(self @env1:___pyAttrLoad___: #''';
 			nextPutAll: attr;
-			nextPutAll: ' ofObject: self named: #';
-			nextPutAll: attr;
-			nextPutAll: ')'.
+			nextPutAll: ''')'.
 		^self
 	].
 	"Dispatch attribute load through the ___pyAttrLoad___: runtime

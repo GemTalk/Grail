@@ -224,8 +224,19 @@ printSmalltalkOn: aStream
 	no-kw path and `_method:kw:` for keyword argument call sites.
 
 	If the receiver has no matching selector, MessageNotUnderstood is raised —
-	the correct Python AttributeError analog for an unknown method."
-	(function isKindOf: AttributeAst) ifTrue: [
+	the correct Python AttributeError analog for an unknown method.
+
+	Exclusion: `self.X(args)` / `cls.X(args)` inside a class method where
+	X is NOT a known instance method falls through to the legacy form.
+	That routes the attribute load through AttributeAst's printSmalltalkOn:,
+	which emits ``(self @env1:___pyAttrLoad___: #X) value: { args } value: kw``
+	— picking up class-side attributes (e.g. ``set_class: type = list`` at
+	class-body scope) by going through ___pyAttrLoad___:'s instance →
+	class → metaclass walk.  Without this carve-out we'd emit
+	``((self) X args)`` and DNU."
+	((function isKindOf: AttributeAst)
+		and: [self isSelfOrClsAttributeCallOutsideClassFunctions not])
+			ifTrue: [
 		keywords isEmpty ifTrue: [
 			^ self printAttributeCallFastPathOn: aStream
 				selector: (self class fastPathSelectorForAttr: function attr arity: arguments size)
@@ -913,6 +924,26 @@ classSelfSendVarargsSelector
 	(self class classFunctionNames includes: attrName asSymbol) ifFalse: [^nil].
 	candidate := self class varargsSelectorForName: attrName.
 	^ candidate
+%
+
+category: 'Grail-Class Self-Send'
+method: CallAst
+isSelfOrClsAttributeCallOutsideClassFunctions
+	"Return true for `self.X(args)` / `cls.X(args)` where, inside a
+	class-method codegen context, X is NOT one of the class's own
+	instance method names.  Such calls must NOT take the direct unary
+	send fastpath (`((self) X args)`) because X is most likely a
+	class-side attribute (e.g. ``set_class: type = list``) — the load
+	has to flow through AttributeAst's ___pyAttrLoad___: dispatch so
+	the metaclass class-side accessor is consulted."
+
+	| attrName |
+	(self class isInClassMethodContext) ifFalse: [^false].
+	(function isKindOf: AttributeAst) ifFalse: [^false].
+	(function value isKindOf: NameAst) ifFalse: [^false].
+	(self class isSelfReference: function value id) ifFalse: [^false].
+	attrName := function attr.
+	^ (self class classFunctionNames includes: attrName asSymbol) not
 %
 
 category: 'Grail-Class Self-Send'
