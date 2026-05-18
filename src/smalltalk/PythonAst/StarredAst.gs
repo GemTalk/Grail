@@ -68,3 +68,21 @@ ctx
 
 	^ctx
 %
+
+category: 'Grail-other'
+method: StarredAst
+printSmalltalkOn: aStream
+	"GRAIL STUB: `*x` in a call site should splice x's elements
+	into the argument list.  Proper handling needs CallAst to
+	detect StarredAst arguments and emit a concatenation
+	(`{a. b.} , x asArray , {c. d.}`) rather than the brace-array
+	literal it uses today.  Until then, emit a TypeError that
+	fires at runtime — that lets modules that *declare* methods
+	using `*x` in call sites (blinker's send/send_async carry it
+	for forwarded kwargs through the keyword-only marker path,
+	even though the actual call sites use only `**kwargs`) load
+	end-to-end without crashing the codegen with an abstract-node
+	error."
+
+	aStream nextPutAll: '(TypeError ___signal___: ''*-unpack in call sites is not yet supported'')'
+%

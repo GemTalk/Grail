@@ -61,21 +61,33 @@ printSmalltalkOn: aStream
 	not depend on `__import__` being resolvable through the symbol list."
 
 	names doWithIndex: [:each :index |
-		| importName targetName nameParts |
+		| importName targetName nameParts asName |
 		importName := each name.
-		targetName := each asName ifNil: [
-			(importName includes: $.)
-				ifTrue: [
-					nameParts := $. split: importName asString.
-					nameParts first asSymbol
-				]
-				ifFalse: [importName]
-		].
+		asName := each asName.
+		nameParts := $. split: importName asString.
+		targetName := asName ifNil: [nameParts first asSymbol].
+		"`__import__('a.b.c')` returns the TOP-level package (`a`).
+		Python's `import a.b.c` statement binds the top-level name
+		unaliased (so `a` is bound to the top), while
+		`import a.b.c as x` binds the LEAF to the alias.  Mirror
+		that here: for the aliased form, follow the dotted path
+		after the import to reach the leaf."
 		aStream
 			nextPutAll: targetName;
-			nextPutAll: ' := ((Python @env0:at: #builtins) instance) ___import__: { ''';
+			nextPutAll: ' := '.
+		(asName notNil and: [nameParts size > 1]) ifTrue: [aStream nextPut: $(].
+		aStream
+			nextPutAll: '((Python @env0:at: #builtins) instance) ___import__: { ''';
 			nextPutAll: importName asString;
-			nextPutAll: ''' } kw: nil.'.
+			nextPutAll: ''' } kw: nil'.
+		(asName notNil and: [nameParts size > 1]) ifTrue: [
+			"Walk the dotted segments to bind the leaf."
+			aStream nextPut: $).
+			2 to: nameParts size do: [:i |
+				aStream nextPutAll: ' @env1:'; nextPutAll: (nameParts at: i)
+			]
+		].
+		aStream nextPut: $..
 		index < names size ifTrue: [aStream lf].
 	].
 %

@@ -118,8 +118,19 @@ printSmalltalkOn: aStream
 	Python error if it reaches a message send."
 
 	self assertContextIsLoad.
-	((value isKindOf: NameAst) and: [CallAst isSelfReference: value id]) ifTrue: [
-		"`self.X` inside a class method:
+	"`self.X` inside a class method gets the instVar-read fast path,
+	but only when the first parameter is literally `self` —
+	conventionally an instance method.  When the method's first
+	param is `cls` (e.g. `def __new__(cls, name):`), the first arg
+	is the class object, NOT an instance, and `cls.X` should resolve
+	through the normal attribute-load path so a class-level
+	attribute (like ``Symbol.symbols`` in blinker._utilities) reaches
+	the class-side accessor rather than chasing an instance instVar
+	that doesn't exist."
+	((value isKindOf: NameAst)
+		and: [(CallAst isSelfReference: value id)
+			and: [CallAst selfParameterName == #self]]) ifTrue: [
+		"`self.X` inside an instance method:
 		  - X is an inst var       → AttributeError-checked instVar read.
 		  - X is a class method    → emit `(self X)` so it dispatches to
 		                              the method (covers @property and any

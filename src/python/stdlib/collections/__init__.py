@@ -1,0 +1,36 @@
+# GRAIL minimal collections stub.
+#
+# CPython's `collections` exposes specialised container classes
+# (OrderedDict, deque, namedtuple, Counter, defaultdict, ChainMap).
+# Grail only needs the subset that downstream Flask packages
+# (blinker, werkzeug, itsdangerous) actually touch.  Expand on
+# demand.
+
+
+class defaultdict(dict):
+    """Minimal defaultdict: dict that auto-creates missing keys
+    by calling default_factory().
+    """
+
+    def __init__(self, default_factory=None, *args, **kwargs):
+        super().__init__()
+        self.default_factory = default_factory
+        if args:
+            self.update(args[0])
+        if kwargs:
+            self.update(kwargs)
+
+    def __missing__(self, key):
+        if self.default_factory is None:
+            raise KeyError(key)
+        value = self.default_factory()
+        self[key] = value
+        return value
+
+    def __getitem__(self, key):
+        if key in self:
+            return dict.__getitem__(self, key)
+        return self.__missing__(key)
+
+
+__all__ = ['defaultdict']

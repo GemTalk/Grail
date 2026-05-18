@@ -132,16 +132,18 @@ printSmalltalkRuntimeOn: aStream
 	self printSuperclassOn: aStream.
 	aStream
 		nextPutAll: ' @env0:subclass: #''';
+		nextPutAll: 'pyc_';
 		nextPutAll: (importlib @env0:___asSmalltalkClassName___: name) asString;
 		nextPutAll: ''' instVarNames: '.
 	self printSymbolArray: ivarNames on: aStream.
 	aStream nextPutAll: ' classVars: #() classInstVars: '.
 	"Class-side slots: user-declared class attrs, plus the synthetic
-	``__module__`` slot on the root of a Python class chain.
-	``__module__`` lets decorators and introspection paths reach the
-	defining module instance (set right after class creation, below).
-	Only the root declares the slot; subclasses inherit it and would
-	otherwise error with rtErrAddDupInstvar."
+	``__module__`` slot on the root of a Python class chain.  Only
+	the root declares the slot; subclasses inherit it and would
+	otherwise error with rtErrAddDupInstvar.  Inheriting from a
+	built-in (e.g. ``class Foo(dict)``) doesn't pick up the
+	accessor pair, so the ``__module__: self`` stamp below is
+	wrapped in an error handler for that case."
 	allClassInstVars := (classAttrs collect: [:p | p key]) asOrderedCollection.
 	bases isEmpty ifTrue: [allClassInstVars add: #'__module__'].
 	self printSymbolArray: allClassInstVars on: aStream.
@@ -196,10 +198,7 @@ printSmalltalkRuntimeOn: aStream
 
 	"Compile + initialize the synthetic ``__module__`` slot on the
 	root of a Python class chain — subclasses inherit it (the slot
-	itself wasn't redeclared above for them).  This stamps every
-	Python user class with a reference to its defining module
-	instance, so decorators (e.g. ``enum.global_enum``) and any
-	introspection paths can reach the module's namespace."
+	itself wasn't redeclared above for them)."
 	bases isEmpty ifTrue: [
 		self
 			emitCompileMethodOn: name
@@ -219,8 +218,13 @@ printSmalltalkRuntimeOn: aStream
 			onStream: aStream.
 	].
 	"Always point the new class at the defining module.  The setter
-	is inherited when bases is non-empty."
-	aStream nextPutAll: name; nextPutAll: ' __module__: self.'; lf.
+	is inherited when the first base is itself a Python user class
+	(it brings the __module__ slot + setter along the metaclass
+	chain); when the first base is a built-in (e.g. ``dict``,
+	``int``) the setter isn't there, and we swallow the resulting
+	MessageNotUnderstood quietly — losing __module__ on that class
+	is a known Grail limitation but doesn't block import."
+	aStream nextPutAll: '['; nextPutAll: name; nextPutAll: ' __module__: self] @env0:on: MessageNotUnderstood do: [:___ex___ | ___ex___ @env0:return: nil].'; lf.
 
 	"Compile a unary accessor + 1-arg setter per instance variable.
 	The setter pairs with the accessor so ``___pyAttrLoad___:`` can
@@ -329,8 +333,15 @@ category: 'Grail-code generation'
 method: ClassDefAst
 emitCompileMethodOn: classVarName source: sourceString category: categoryString env: envId classSide: classSideBool onStream: aStream
 	"Emit a `<class> [class] compileMethod: '...' dictionaries: ...
-	category: ... environmentId: N.` statement."
+	category: ... environmentId: N.` statement.  Wrap the compile
+	in a CompileWarning handler that resumes — module-body
+	compilation does the same (see loadModuleFromPath:); without
+	this, an upstream-shaped class body that ends up shadowing a
+	method argument (e.g. `kwargs` rebinding from a varargs
+	signature) aborts the whole module load.  matches the same
+	rule the module-body compile already follows."
 
+	aStream nextPutAll: '['.
 	aStream nextPutAll: classVarName.
 	classSideBool ifTrue: [aStream nextPutAll: ' @env0:class'].
 	aStream nextPutAll: ' @env0:compileMethod: '.
@@ -340,7 +351,7 @@ emitCompileMethodOn: classVarName source: sourceString category: categoryString 
 		nextPutAll: categoryString;
 		nextPutAll: ''' environmentId: ';
 		nextPutAll: envId printString;
-		nextPutAll: '.'; lf.
+		nextPutAll: '] @env0:on: CompileWarning do: [:___ex___ | ___ex___ @env0:resume].'; lf.
 %
 
 category: 'Grail-code generation'
@@ -423,6 +434,15 @@ classBodyAttributes
 					pairs add: t id asSymbol -> stmt value.
 				].
 			].
+		].
+		"Class-level annotated assignment (`x: int = 5`) — strip
+		the annotation, treat as a regular class attribute.  Bare
+		annotations (`x: int` with no value) are pure type hints
+		and don't materialize a class attribute."
+		((stmt isKindOf: AnnAssignAst)
+			and: [stmt value notNil
+				and: [stmt target isKindOf: NameAst]]) ifTrue: [
+			pairs add: stmt target id asSymbol -> stmt value
 		].
 	].
 	^ pairs
@@ -513,16 +533,34 @@ instanceMethodDefs
 category: 'Grail-Class Compilation'
 method: ClassDefAst
 selfParameterName
-	"Return the self parameter name from __init__ (or the first instance method).
-	Conventionally 'self' but could be any name."
+	"Return the self parameter name from __init__ (or the first
+	non-__new__ instance method).  Conventionally `self`, but
+	classes that override only __new__ would otherwise pick up
+	`cls` here and turn every `self` reference in their other
+	methods into a UnboundLocal access."
 
-	| initMethod paramNames |
+	| initMethod fallback paramNames |
+	"Prefer __init__ explicitly when present."
 	initMethod := body body detect: [:stmt |
 		(stmt isKindOf: InstanceFunctionDefAst)
-	] ifNone: [^ #self].
-	paramNames := initMethod allParameterNames.
-	paramNames isEmpty ifTrue: [^ #self].
-	^ paramNames first asSymbol
+			and: [stmt name asString = '__init__']
+	] ifNone: [nil].
+	initMethod ifNotNil: [
+		paramNames := initMethod allParameterNames.
+		paramNames isEmpty ifFalse: [^ paramNames first asSymbol]
+	].
+	"No __init__: fall back to the first instance method whose first
+	parameter is `self`, ignoring __new__ (whose first parameter is
+	`cls` by convention)."
+	fallback := body body detect: [:stmt |
+		(stmt isKindOf: InstanceFunctionDefAst)
+			and: [stmt name asString ~= '__new__']
+	] ifNone: [nil].
+	fallback ifNotNil: [
+		paramNames := fallback allParameterNames.
+		paramNames isEmpty ifFalse: [^ paramNames first asSymbol]
+	].
+	^ #self
 %
 
 category: 'Grail-other'

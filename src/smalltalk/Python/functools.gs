@@ -62,6 +62,39 @@ lru_cache: maxsize
 
 category: 'Grail-Built-in Functions'
 method: functools
+cached_property: aFunction
+	"cached_property(fn) — CPython decorator that turns a unary
+	method into a lazily-computed, per-instance cached attribute.
+	Grail stub: pass the function through as-is.  Callers that
+	read `obj.attr` get a BoundMethod they can call; nothing
+	gets cached.  Replace with real semantics if we start
+	hitting hot-path attribute reads."
+
+	^ aFunction
+%
+
+category: 'Grail-Built-in Functions'
+method: functools
+wraps: wrapped
+	"wraps(wrapped) → decorator that copies metadata from wrapped
+	onto the wrapper.  Stub: identity decorator."
+
+	^ [:positional :keywords | positional @env0:at: 1]
+%
+
+category: 'Grail-Built-in Functions'
+method: functools
+partial: aFunction
+	"partial(fn, *args, **kwargs) — bind some arguments now and
+	return a callable that fills the rest in later.  Stub: 1-arg
+	form (no pre-bound args) returns the function untouched.
+	Expand on demand."
+
+	^ aFunction
+%
+
+category: 'Grail-Built-in Functions'
+method: functools
 reduce: function _: iterable
 	"reduce(function, iterable) -> value.
 	Apply function of two arguments cumulatively to the items of

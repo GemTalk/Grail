@@ -195,6 +195,15 @@ doesn't preserve.
 The DNU backstop, load-site definite-assignment check, and instVar
 AttributeError check are in. Edge cases left:
 
+- [ ] **blinker import: instance-var detection too shallow** —
+  `ClassDefAst >> instanceVarNamesFromInit` only walks top-level
+  `self.X = …` statements in `__init__`.  Blinker's `Signal.__init__`
+  uses conditional (`if doc: self.__doc__ = doc`) and AnnAssign
+  (`self.receivers: dict[...] = {}`) forms; both need to register
+  the inst var.  Also `set_class: type[set] = set` is a class-level
+  AnnAssign whose annotation references heavy typing generics that
+  Grail still evaluates eagerly — needs further deferral.
+
 - [ ] **AugAssign target reads slip past the load-site check** —
   `x += 1` reads `x` on the RHS through the same `NameAst` that is
   the store target, so `ctx` is `StoreAst` and the wrapper is not
