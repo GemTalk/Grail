@@ -54,14 +54,23 @@ set compile_env: 0
 category: 'Grail-other'
 method: YieldAst
 printSmalltalkOn: aStream
-	"`yield expr` — Grail doesn't have a generator/coroutine
-	runtime yet, so emit a TypeError that fires when the
-	containing function actually runs.  This lets modules that
-	*declare* generator functions (blinker uses `@contextmanager`
-	on `Signal.connected_to` and `Signal.muted`) at least load,
-	even though the generator methods themselves can't be
-	called.  Replace with a real generator emit once Grail
-	grows the runtime support."
+	"``yield expr`` — emits a call to the surrounding generator
+	proxy's ___yield___: that hands ``expr`` to the consumer and
+	suspends the producer until the next ``__next__`` resumes us.
 
-	aStream nextPutAll: '(TypeError ___signal___: ''yield is not yet supported in Grail'')'
+	The ``___gen___`` name is the parameter bound by the wrapper
+	block FunctionDefAst emits for generator functions (see
+	``isGenerator`` / ``emitGeneratorWrapperOn:``).  Outside a
+	generator function the surrounding codegen never wraps with
+	that block, so ``yield`` at module top level (or in an
+	expression context outside a def) will fall through to a
+	Smalltalk compile error on the unbound ``___gen___`` — the
+	closest analog of Python's ``SyntaxError: 'yield' outside
+	function``."
+
+	aStream nextPutAll: '(___gen___ @env1:___yield___: '.
+	value isNil
+		ifTrue: [aStream nextPutAll: 'None']
+		ifFalse: [value printSmalltalkWithParenthesisOn: aStream].
+	aStream nextPut: $)
 %

@@ -346,6 +346,73 @@ testInstanceVarsFromCls
 	self assert: (cls @env0:allInstVarNames @env0:includes: #last_doc).
 %
 
+! --- Generators: yield in function body --------------------------------------
+
+category: 'Grail-Tests - Generators'
+method: FlaskScaffoldingTestCase
+testGeneratorThreeYields
+	"Three consecutive yields drained via __next__ until StopIteration.
+	The body runs in a forked GsProcess; consumer and producer
+	synchronise through a pair of Semaphores."
+
+	| mod gen v1 v2 v3 stopped |
+	mod := self loadFixture: 'generators'.
+	gen := mod @env1:make_three.
+	self assert: gen @env0:class equals: PythonGenerator.
+	v1 := gen @env1:__next__.
+	v2 := gen @env1:__next__.
+	v3 := gen @env1:__next__.
+	self assert: v1 equals: 'a'.
+	self assert: v2 equals: 'b'.
+	self assert: v3 equals: 'c'.
+	stopped := [gen @env1:__next__. false]
+		on: StopIteration do: [:ex | true].
+	self assert: stopped.
+%
+
+category: 'Grail-Tests - Generators'
+method: FlaskScaffoldingTestCase
+testGeneratorLocalStateAcrossYields
+	"`count_up(n)` keeps a local `i` across yields, proving the
+	GsProcess preserves the producer's stack between resumes."
+
+	| mod gen result done |
+	mod := self loadFixture: 'generators'.
+	gen := mod @env1:count_up: 4.
+	result := OrderedCollection new.
+	done := false.
+	[done] whileFalse: [
+		[result add: gen @env1:__next__]
+			on: StopIteration do: [:ex | done := true]
+	].
+	self assert: result @env0:size equals: 4.
+	self assert: (result @env0:at: 1) equals: 0.
+	self assert: (result @env0:at: 4) equals: 3.
+%
+
+category: 'Grail-Tests - Generators'
+method: FlaskScaffoldingTestCase
+testGeneratorInsideClassMethod
+	"Generator declared as an instance method must close over the
+	class's ``self`` correctly (the body block captures the receiver
+	of the enclosing method)."
+
+	| mod Counter c gen items done |
+	mod := self loadFixture: 'generators'.
+	Counter := mod @env1:Counter.
+	c := Counter @env1:value: { 'item' } value: nil.
+	gen := c @env1:labelled: 3.
+	items := OrderedCollection new.
+	done := false.
+	[done] whileFalse: [
+		[items add: gen @env1:__next__]
+			on: StopIteration do: [:ex | done := true]
+	].
+	self assert: items @env0:size equals: 3.
+	self assert: (items @env0:at: 1) equals: 'item_0'.
+	self assert: (items @env0:at: 3) equals: 'item_2'.
+%
+
 ! --- FunctionDefAst: varargs method prologue (kwargs fallback, *args, **kwargs) ---
 
 category: 'Grail-Tests - Varargs'

@@ -492,7 +492,85 @@ generateMethodSourceOn: aStream
 
 	"Emit the PythonReturn handler wrapping the body, inside the block.
 	Append a trailing ``None`` so an implicit fall-off (no explicit
-	``return``) yields the Python None singleton, not Smalltalk nil."
+	``return``) yields the Python None singleton, not Smalltalk nil.
+
+	For generator functions (body contains ``yield``), the body itself
+	doesn't run on call — it's wrapped in a 1-arg block that takes a
+	``___gen___`` parameter (the PythonGenerator), and the outer
+	expression returns the generator.  ``yield`` inside the body emits
+	``___gen___ ___yield___: value``."
+	self printBodyOn: aStream.
+	aStream nextPutAll: '] value'.
+%
+
+category: 'Grail-Module Method Compilation'
+method: FunctionDefAst
+isGenerator
+	"True if this function''s body contains a ``yield`` (or
+	``yield from``) expression — not counting yields inside
+	*nested* defs, which belong to their own generator scope."
+
+	^ self bodyContainsYieldExceptNestedDefs: body body
+%
+
+category: 'Grail-Module Method Compilation'
+method: FunctionDefAst
+bodyContainsYieldExceptNestedDefs: stmts
+	"Walk an array of statements (or a single statement) looking
+	for YieldAst / YieldFromAst, but don't descend into FunctionDefAst
+	or LambdaAst — yield in a nested def belongs to that def."
+
+	stmts isNil ifTrue: [^false].
+	(stmts isKindOf: SequenceableCollection) ifFalse: [
+		^ self nodeContainsYieldExceptNestedDefs: stmts
+	].
+	stmts do: [:stmt |
+		(self nodeContainsYieldExceptNestedDefs: stmt) ifTrue: [^true]
+	].
+	^false
+%
+
+category: 'Grail-Module Method Compilation'
+method: FunctionDefAst
+nodeContainsYieldExceptNestedDefs: node
+	"Recursive walk over a single AST node looking for yield without
+	descending into nested defs/lambdas."
+
+	node isNil ifTrue: [^false].
+	(node isKindOf: YieldAst) ifTrue: [^true].
+	(node isKindOf: YieldFromAst) ifTrue: [^true].
+	((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+		ifTrue: [^false].
+	"Walk all instVars of this AST node; recurse into AbstractNode
+	children and SequenceableCollection containers.  Skip the
+	``parent`` back-pointer to avoid cycling up the tree."
+	node @env0:class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			| child |
+			child := node @env0:instVarAt: i.
+			(child isKindOf: AbstractNode) ifTrue: [
+				(self nodeContainsYieldExceptNestedDefs: child) ifTrue: [^true]
+			] ifFalse: [
+				(child isKindOf: SequenceableCollection) ifTrue: [
+					(self bodyContainsYieldExceptNestedDefs: child) ifTrue: [^true]
+				]
+			]
+		]
+	].
+	^false
+%
+
+category: 'Grail-Module Method Compilation'
+method: FunctionDefAst
+printBodyOn: aStream
+	"Emit the function body wrapped in the PythonReturn handler.
+	For generator functions, wrap the whole thing in a
+	``PythonGenerator withBlock: [:___gen___ | ...]`` so the call
+	returns a generator instead of running the body."
+
+	self isGenerator ifTrue: [
+		aStream nextPutAll: 'PythonGenerator @env1:withBlock: [:___gen___ |'; lf.
+	].
 	aStream nextPutAll: '['; lf.
 	aStream nextPutAll: '['; lf.
 	body body do: [:each |
@@ -501,8 +579,11 @@ generateMethodSourceOn: aStream
 	].
 	aStream nextPutAll: '] value.'; lf.
 	aStream nextPutAll: 'None.'; lf.
-	aStream nextPutAll: '] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue].'; lf.
-	aStream nextPutAll: '] value'.
+	aStream nextPutAll: '] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue]'.
+	self isGenerator ifTrue: [
+		aStream nextPutAll: ']'.
+	].
+	aStream nextPutAll: '.'; lf.
 %
 
 ! ===============================================================================
@@ -729,15 +810,6 @@ generateClassMethodSourceOn: aStream
 		].
 	].
 
-	aStream nextPutAll: '['; lf.
-	aStream nextPutAll: '['; lf.
-	body body do: [:each |
-		each printSmalltalkOn: aStream.
-		aStream lf.
-	].
-	aStream nextPutAll: '] value.'; lf.
-	"Implicit fall-off return value is Python ``None``."
-	aStream nextPutAll: 'None.'; lf.
-	aStream nextPutAll: '] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue].'; lf.
+	self printBodyOn: aStream.
 	aStream nextPutAll: '] value'.
 %
