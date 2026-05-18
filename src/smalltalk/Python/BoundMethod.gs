@@ -103,9 +103,12 @@ _selectorForArgCount: nargs
 category: 'Grail-Private'
 method: BoundMethod
 _receiverHasSelector: aSymbol
-	"True if the receiver's class implements `aSymbol` in env 1."
+	"True if the receiver's class chain implements `aSymbol` in env 1.
+	Walks ``whichClassIncludesSelector:environmentId:`` so inherited
+	methods (e.g. ``values`` on KeyValueDictionary, invoked through
+	an IdentityKeyValueDictionary instance) are visible."
 
-	^ ((receiver class) methodDictForEnv: 1) includesKey: aSymbol
+	^ ((receiver class) whichClassIncludesSelector: aSymbol environmentId: 1) notNil
 %
 
 set compile_env: 1

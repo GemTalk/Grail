@@ -249,16 +249,31 @@ printSmalltalkOn: aStream
 	If the receiver has no matching selector, MessageNotUnderstood is raised —
 	the correct Python AttributeError analog for an unknown method.
 
-	Exclusion: `self.X(args)` / `cls.X(args)` inside a class method where
-	X is NOT a known instance method falls through to the legacy form.
-	That routes the attribute load through AttributeAst's printSmalltalkOn:,
-	which emits ``(self @env1:___pyAttrLoad___: #X) value: { args } value: kw``
-	— picking up class-side attributes (e.g. ``set_class: type = list`` at
-	class-body scope) by going through ___pyAttrLoad___:'s instance →
-	class → metaclass walk.  Without this carve-out we'd emit
-	``((self) X args)`` and DNU."
+	Exclusions, both falling through to the legacy form below:
+
+	1. ``self.X(args)`` / ``cls.X(args)`` inside a class method where X
+	   isn't a known instance method — routes through AttributeAst's
+	   ``___pyAttrLoad___:`` emit so class-side attrs (e.g.
+	   ``set_class: type = list``) reach the metaclass-side accessor.
+
+	2. 0-arg attribute calls (``obj.X()``) — Python semantics is
+	   *load then call*: ``X`` might resolve to an instance method
+	   (the direct unary send was correct), to a class (the direct
+	   send returns the class without invoking ``__new__``), or to a
+	   class-attr value.  The legacy form ``(obj.___pyAttrLoad___ #X)
+	   value: {} value: nil`` routes all three through the unified
+	   call protocol — instance methods return a BoundMethod that
+	   ``value:value:`` invokes; classes go through ``Object class
+	   value:value:`` to ``__new__``; non-callable values surface a
+	   clean Smalltalk DNU on ``value:value:``.
+
+	Multi-arg attribute calls keep the direct fast-path send.  Class
+	constructors with explicit args (``blinker.Signal('doc')``) are
+	still broken under that path; revisit when a real call site hits
+	it."
 	((function isKindOf: AttributeAst)
-		and: [self isSelfOrClsAttributeCallOutsideClassFunctions not])
+		and: [self isSelfOrClsAttributeCallOutsideClassFunctions not
+			and: [arguments isEmpty not or: [keywords isEmpty not]]])
 			ifTrue: [
 		keywords isEmpty ifTrue: [
 			^ self printAttributeCallFastPathOn: aStream
@@ -277,10 +292,28 @@ printSmalltalkOn: aStream
 		^ self printArityMismatchErrorOn: aStream forName: knownCls
 	].
 
-	function printSmalltalkOn: aStream.
+	"AttributeAst's printSmalltalkOn emits ``(value) @env1:___pyAttrLoad___:
+	#'attr'`` — a keyword message.  Without surrounding parens the
+	following ``value:value:`` keywords merge into one selector
+	``___pyAttrLoad___:value:value:``, which dispatches the wrong
+	message.  Wrap the function expression in parens for attribute
+	calls so the load is a complete unit before value:value: is sent
+	to its result."
+	(function isKindOf: AttributeAst)
+		ifTrue: [
+			aStream nextPut: $(.
+			function printSmalltalkOn: aStream.
+			aStream nextPut: $)
+		]
+		ifFalse: [function printSmalltalkOn: aStream].
 
-	"Build positional arguments array"
-	aStream nextPutAll: ' value: { '.
+	"Dispatch via ``@env1:value:value:`` so BoundMethod, ``Object
+	class >> value:value:`` (built-in classes), synthesized Python-
+	user-class ``value:value:``, and ExecBlock's env-1 forwarder all
+	resolve consistently.  Bare ``value:value:`` was env-0 dispatch,
+	which only ExecBlock implemented — so callables returned from
+	``___pyAttrLoad___:`` (BoundMethods, classes) failed to invoke."
+	aStream nextPutAll: ' @env1:value: { '.
 	arguments do: [:each |
 		each printSmalltalkWithParenthesisOn: aStream.
 		aStream nextPut: $.; space.

@@ -132,3 +132,17 @@ __dict__
 %
 
 set compile_env: 0
+
+category: 'Python-Introspection'
+classmethod: PythonInstance
+___pythonValueAttrs___
+	"Selectors that ___pyAttrLoad___ should treat as *value* attribute
+	reads rather than BoundMethod wraps.  ``__dict__`` is the canonical
+	example — Python introspection (``if 'X' in self.__dict__:``)
+	expects the dict back, not a callable that would yield the dict
+	if invoked.  Returns an IdentitySet of symbols."
+
+	^ IdentitySet new
+		add: #'__dict__';
+		yourself
+%

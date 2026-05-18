@@ -413,6 +413,26 @@ testGeneratorInsideClassMethod
 	self assert: (items @env0:at: 3) equals: 'item_2'.
 %
 
+! --- Unified attribute-call protocol --------------------------------------
+
+category: 'Grail-Tests - AttrCall'
+method: FlaskScaffoldingTestCase
+testAttrCallInvokesClassValue
+	"``obj.X()`` where X resolves to a class (class-side attribute
+	holding a class) must invoke ``__new__`` to construct, not just
+	read the class.  The unified call protocol routes 0-arg
+	attribute calls through ___pyAttrLoad___ + ``value:value:`` —
+	classes respond to ``value:value:`` via ``object class``."
+
+	| mod h inst Inner |
+	mod := self loadFixture: 'attr_call_protocol'.
+	h := mod @env1:make.
+	inst := h @env1:make_inner.
+	Inner := mod @env1:Inner.
+	self assert: inst class equals: Inner.
+	self assert: (inst @env1:label) equals: 'inner-built'.
+%
+
 ! --- Generator protocol: send / throw / close ------------------------------
 
 category: 'Grail-Tests - Generators'

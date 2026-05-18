@@ -275,14 +275,19 @@ ___pyAttrLoad___: aSym
 	((self @env0:class @env0:respondsTo: #'___pythonValueAttrs___')
 		and: [(self @env0:class @env0:___pythonValueAttrs___) @env0:includes: aSym])
 		ifTrue: [^ self @env0:perform: aSym env: 1].
-	"Other classes (built-in collections, strings, ...): if the class
-	implements any same-named callable selector, return a BoundMethod
-	handle for `f = obj.method` patterns."
-	((md @env0:includesKey: aSym)
-		or: [(md @env0:includesKey: sym1)
-			or: [(md @env0:includesKey: sym2)
-				or: [(md @env0:includesKey: sym3)
-					or: [md @env0:includesKey: symVA]]]])
+	"Other classes (built-in collections, strings, ...): if any class
+	in the receiver's class chain implements a same-named callable
+	selector, return a BoundMethod handle for `f = obj.method`
+	patterns.  Inherited methods (e.g. ``values`` on KeyValueDictionary
+	from an IdentityKeyValueDictionary instance) must be picked up
+	here — otherwise the bare ``perform:`` fallback below runs the
+	method instead of wrapping it, and downstream ``value:value:``
+	tries to invoke the *result* rather than the method."
+	((self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
+		or: [(self @env0:class @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil
+			or: [(self @env0:class @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil
+				or: [(self @env0:class @env0:whichClassIncludesSelector: sym3 environmentId: 1) notNil
+					or: [(self @env0:class @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil]]]])
 		ifTrue: [^ BoundMethod @env1:receiver: self selector: aSym].
 	^ self @env0:perform: aSym env: 1
 %
