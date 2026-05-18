@@ -67,6 +67,7 @@ initializeBuiltinModules
 		@env0:at: #builtins 	put: builtins 	instance;
 		@env0:at: #copyreg 		put: copyreg 	instance;
 		@env0:at: #math 		put: math 		instance;
+		@env0:at: #hashlib 		put: hashlib 	instance;
 		@env0:at: #enum 		put: enum 		instance;
 		@env0:at: #fractions	put: fractions 	instance;
 		@env0:at: #functools	put: functools 	instance;

@@ -413,6 +413,70 @@ testGeneratorInsideClassMethod
 	self assert: (items @env0:at: 3) equals: 'item_2'.
 %
 
+! --- hashlib (Tier 1.5) ---------------------------------------------------
+
+category: 'Grail-Tests - hashlib'
+method: FlaskScaffoldingTestCase
+testHashlibKnownVectors
+	"``hashlib.sha256`` / ``md5`` should produce CPython-compatible
+	hex digests."
+
+	| mod |
+	mod := self loadFixture: 'use_hashlib'.
+	self assert: (mod @env1:sha256_of: 'hello' asByteArray)
+		equals: '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824'.
+	self assert: (mod @env1:md5_of: 'hello' asByteArray)
+		equals: '5d41402abc4b2a76b9719d911017c592'.
+%
+
+category: 'Grail-Tests - hashlib'
+method: FlaskScaffoldingTestCase
+testHashlibStreamingUpdate
+	"Multiple ``update()`` calls feed into the same digest — the
+	streaming pattern HMAC and incremental APIs depend on."
+
+	| mod parts result |
+	mod := self loadFixture: 'use_hashlib'.
+	parts := OrderedCollection new
+		add: 'hello' asByteArray;
+		add: ' world' asByteArray;
+		yourself.
+	result := mod @env1:streamed_sha256: parts.
+	self assert: result
+		equals: 'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9'.
+%
+
+category: 'Grail-Tests - hashlib'
+method: FlaskScaffoldingTestCase
+testHashlibBlockAndDigestSizes
+	"``digest_size`` / ``block_size`` are *value* attributes (not
+	BoundMethod wraps) — exercises ``___pythonValueAttrs___`` on
+	Hash class."
+
+	| mod sizes |
+	mod := self loadFixture: 'use_hashlib'.
+	sizes := mod @env1:block_sizes.
+	self assert: (sizes @env0:at: 1) equals: 64.   "md5"
+	self assert: (sizes @env0:at: 2) equals: 64.   "sha256"
+	self assert: (sizes @env0:at: 3) equals: 128.  "sha512"
+	sizes := mod @env1:digest_sizes.
+	self assert: (sizes @env0:at: 1) equals: 16.   "md5"
+	self assert: (sizes @env0:at: 2) equals: 32.   "sha256"
+	self assert: (sizes @env0:at: 3) equals: 64.   "sha512"
+%
+
+category: 'Grail-Tests - hashlib'
+method: FlaskScaffoldingTestCase
+testHashlibByName
+	"``hashlib.new('sha256', data)`` factory with the algorithm
+	supplied as a string."
+
+	| mod |
+	mod := self loadFixture: 'use_hashlib'.
+	self assert: (mod @env1:by_name)
+		equals: '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824'.
+%
+
 ! --- Blinker end-to-end (Tier 1) ------------------------------------------
 
 category: 'Grail-Tests - Blinker'

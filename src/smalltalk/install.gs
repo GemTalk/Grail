@@ -251,6 +251,8 @@ run
 	at: #'importlib' put: nil;
 	at: #'iterator' put: nil;
 	at: #'list_iterator' put: nil;
+	at: #'hashlib' put: nil;
+	at: #'Hash' put: nil;
 	at: #'math' put: nil;
 	at: #'module' put: nil;
 	at: #'PythonClass' put: nil;
@@ -632,6 +634,7 @@ input src/smalltalk/Python/ShimCrc32cModule.gs
 input src/smalltalk/Python/ShimTestModule.gs
 input src/smalltalk/Python/ShimSreModule.gs
 input src/smalltalk/Python/importlib.gs
+input src/smalltalk/Python/hashlib.gs
 input src/smalltalk/Python/math.gs
 input src/smalltalk/Python/numbers.gs
 input src/smalltalk/Python/os.gs
@@ -1102,6 +1105,15 @@ System commit .
 Transcript show: '==============================================='.
 Transcript show: ' Smalltail Installation complete!'.
 Transcript show: '==============================================='.
+%
+
+! Register hashlib in sys.modules.  ``sys class >> modules`` lazy-inits
+! on first access and caches; after the cache is committed an
+! installer-edit can't add new entries unless we either reset the
+! cache or post-bind the missing entries.  Post-binding is safer
+! (won't drop transient registrations from earlier in the session).
+run
+(sys @env1:modules) @env0:at: #'hashlib' put: hashlib @env1:instance.
 %
 
 run

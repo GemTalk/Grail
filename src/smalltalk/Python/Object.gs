@@ -293,10 +293,19 @@ ___pyAttrLoad___: aSym
 	"Python user classes (PythonInstance subclasses) have synthesized
 	``attr:`` setters that pair with attribute getters.  If the class
 	has both, this is an attribute access — call the unary getter and
-	return the value."
+	return the value.
+
+	Disambiguate from a regular 1-arg method named ``attr:`` by also
+	checking whether ``aSym`` (unary) is in the receiver's class
+	chain.  If yes, the pair is a value-accessor (synthesized getter
+	+ setter).  If no, ``attr:`` is just a method that happens to take
+	one arg — fall through to the ``BoundMethod`` wrap below."
 	isGenerated := self @env0:isKindOf: PythonInstance.
-	(isGenerated and: [md @env0:includesKey: sym1]) ifTrue: [
-		^ self @env0:perform: aSym env: 1
+	(isGenerated
+		and: [(md @env0:includesKey: sym1)
+			and: [(self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil]])
+		ifTrue: [
+			^ self @env0:perform: aSym env: 1
 	].
 	"Instance falling through to a class-side attribute.  When the
 	receiver is an instance of a Python user class and the attribute
