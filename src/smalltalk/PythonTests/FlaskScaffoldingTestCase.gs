@@ -614,6 +614,104 @@ testBase64DecodeStrInput
 	self assert: result equals: 'hello' asByteArray.
 %
 
+! --- time module ----------------------------------------------------------
+
+category: 'Grail-Tests - time'
+method: FlaskScaffoldingTestCase
+testTimeCurrentMatchesNs
+	"time() and time_ns() should agree within a second on the moment of
+	the call (both read DateTime now sequentially)."
+
+	| mod secs nanos |
+	mod := self loadFixture: 'use_time'.
+	secs := mod @env1:get_time.
+	nanos := mod @env1:get_time_ns.
+	self assert: ((nanos / 1000000000) asFloat - secs) abs < 1.0.
+	"Sanity: we should be after 2020 and before 2100."
+	self assert: secs > 1577836800.
+	self assert: secs < 4102444800
+%
+
+category: 'Grail-Tests - time'
+method: FlaskScaffoldingTestCase
+testTimeMonotonicProgresses
+	"monotonic() never goes backwards across two successive reads."
+
+	| mod m1 m2 |
+	mod := self loadFixture: 'use_time'.
+	m1 := mod @env1:get_monotonic.
+	m2 := mod @env1:get_monotonic.
+	self assert: m2 >= m1
+%
+
+category: 'Grail-Tests - time'
+method: FlaskScaffoldingTestCase
+testTimeSleepAdvances
+	"sleep(0.1) elapses at least 0.05 seconds (loose lower bound to
+	survive scheduling jitter on busy CI)."
+
+	| mod elapsed |
+	mod := self loadFixture: 'use_time'.
+	elapsed := mod @env1:measure_sleep: 0.1.
+	self assert: elapsed >= 0.05.
+	self assert: elapsed < 5.0
+%
+
+category: 'Grail-Tests - time'
+method: FlaskScaffoldingTestCase
+testTimeGmtimeStruct
+	"gmtime() returns a 9-tuple with year/month/day/hour/min/sec/wday/yday/isdst."
+
+	| mod t |
+	mod := self loadFixture: 'use_time'.
+	t := mod @env1:get_gmtime.
+	self assert: t size equals: 9.
+	self assert: (t @env1:__getitem__: 0) > 2020.
+	"Month 1..12."
+	self assert: ((t @env1:__getitem__: 1) between: 1 and: 12).
+	"isdst -1 = unknown."
+	self assert: (t @env1:__getitem__: 8) equals: -1
+%
+
+category: 'Grail-Tests - time'
+method: FlaskScaffoldingTestCase
+testTimeGmtimeKnownEpoch
+	"gmtime(0) is 1970-01-01 00:00:00 UTC."
+
+	| mod t |
+	mod := self loadFixture: 'use_time'.
+	t := mod @env1:get_gmtime_of: 0.
+	self assert: (t @env1:__getitem__: 0) equals: 1970.
+	self assert: (t @env1:__getitem__: 1) equals: 1.
+	self assert: (t @env1:__getitem__: 2) equals: 1.
+	self assert: (t @env1:__getitem__: 3) equals: 0.
+	self assert: (t @env1:__getitem__: 4) equals: 0.
+	self assert: (t @env1:__getitem__: 5) equals: 0
+%
+
+category: 'Grail-Tests - time'
+method: FlaskScaffoldingTestCase
+testTimeStrftimeIso
+	"strftime renders a fixed instant as expected ISO-style text."
+
+	| mod s |
+	mod := self loadFixture: 'use_time'.
+	"1700000000 = 2023-11-14 22:13:20 UTC"
+	s := mod @env1:format_gmtime: 1700000000 _: '%Y-%m-%d %H:%M:%S'.
+	self assert: s equals: '2023-11-14 22:13:20'
+%
+
+category: 'Grail-Tests - time'
+method: FlaskScaffoldingTestCase
+testTimeAsctimeOfEpoch
+	"asctime(gmtime(0)) renders 'Thu Jan 01 00:00:00 1970'."
+
+	| mod s |
+	mod := self loadFixture: 'use_time'.
+	s := mod @env1:asctime_of: 0.
+	self assert: s equals: 'Thu Jan 01 00:00:00 1970'
+%
+
 ! --- contextlib + with-statement ------------------------------------------
 
 category: 'Grail-Tests - contextlib'
