@@ -712,6 +712,133 @@ testTimeAsctimeOfEpoch
 	self assert: s equals: 'Thu Jan 01 00:00:00 1970'
 %
 
+! --- io module ------------------------------------------------------------
+
+category: 'Grail-Tests - io'
+method: FlaskScaffoldingTestCase
+testStringIORoundtrip
+	"StringIO write + seek(0) + read returns the same text."
+
+	| mod |
+	mod := self loadFixture: 'use_io'.
+	self assert: (mod @env1:stringio_roundtrip: 'hello world') equals: 'hello world'
+%
+
+category: 'Grail-Tests - io'
+method: FlaskScaffoldingTestCase
+testStringIOInitial
+	"StringIO(initial).read() returns the initial seed."
+
+	| mod |
+	mod := self loadFixture: 'use_io'.
+	self assert: (mod @env1:stringio_initial: 'seed') equals: 'seed'
+%
+
+category: 'Grail-Tests - io'
+method: FlaskScaffoldingTestCase
+testStringIOTellSeek
+	"tell() after a write equals the byte count; seek(0) resets."
+
+	| mod result |
+	mod := self loadFixture: 'use_io'.
+	result := mod @env1:stringio_tell_seek.
+	self assert: (result @env1:__getitem__: 0) equals: 5.
+	self assert: (result @env1:__getitem__: 1) equals: 0
+%
+
+category: 'Grail-Tests - io'
+method: FlaskScaffoldingTestCase
+testStringIOOverwrite
+	"Writing at a seek point overwrites the existing bytes in place."
+
+	| mod |
+	mod := self loadFixture: 'use_io'.
+	self assert: mod @env1:stringio_getvalue_after_seek equals: 'HEllo'
+%
+
+category: 'Grail-Tests - io'
+method: FlaskScaffoldingTestCase
+testStringIOIteration
+	"Iterating a StringIO yields one line at a time, \\n included."
+
+	| mod lines |
+	mod := self loadFixture: 'use_io'.
+	lines := mod @env1:stringio_readline_iter.
+	self assert: lines size equals: 3.
+	self assert: (lines @env1:__getitem__: 0) equals: 'a
+'
+%
+
+category: 'Grail-Tests - io'
+method: FlaskScaffoldingTestCase
+testStringIOWritelines
+	"writelines concatenates each iterable element."
+
+	| mod |
+	mod := self loadFixture: 'use_io'.
+	self assert: mod @env1:stringio_writelines equals: 'abc'
+%
+
+category: 'Grail-Tests - io'
+method: FlaskScaffoldingTestCase
+testBytesIORoundtrip
+	"BytesIO write + seek + read."
+
+	| mod data |
+	mod := self loadFixture: 'use_io'.
+	data := #[1 2 3 4 5] asByteArray.
+	self assert: (mod @env1:bytesio_roundtrip: data) equals: data
+%
+
+category: 'Grail-Tests - io'
+method: FlaskScaffoldingTestCase
+testBytesIOPartialRead
+	"read(n) returns at most n bytes."
+
+	| mod data |
+	mod := self loadFixture: 'use_io'.
+	data := #[10 20 30 40 50] asByteArray.
+	self assert: (mod @env1:bytesio_partial_read: data _: 3) equals: #[10 20 30] asByteArray
+%
+
+category: 'Grail-Tests - io'
+method: FlaskScaffoldingTestCase
+testBytesIOReadline
+	"readline splits at \\n bytes, includes the delimiter."
+
+	| mod lines |
+	mod := self loadFixture: 'use_io'.
+	lines := mod @env1:bytesio_readline.
+	self assert: (lines @env1:__getitem__: 0) equals: 'line1
+' asByteArray.
+	self assert: (lines @env1:__getitem__: 1) equals: 'line2
+' asByteArray.
+	self assert: (lines @env1:__getitem__: 2) equals: 'line3' asByteArray.
+	self assert: (lines @env1:__getitem__: 3) equals: #[] asByteArray
+%
+
+category: 'Grail-Tests - io'
+method: FlaskScaffoldingTestCase
+testBytesIOWithBlock
+	"with io.BytesIO(...) as buf: ... auto-closes on exit."
+
+	| mod result |
+	mod := self loadFixture: 'use_io'.
+	result := mod @env1:bytesio_with_block: 'abcd' asByteArray.
+	self assert: (result @env1:__getitem__: 0) equals: 'ab' asByteArray.
+	self assert: (result @env1:__getitem__: 1) equals: true
+%
+
+category: 'Grail-Tests - io'
+method: FlaskScaffoldingTestCase
+testBytesIOTruncate
+	"truncate() drops bytes past the current position."
+
+	| mod |
+	mod := self loadFixture: 'use_io'.
+	self assert: mod @env1:bytesio_seek_end_then_truncate equals: 'abc' asByteArray
+%
+
 ! --- json module ----------------------------------------------------------
 
 category: 'Grail-Tests - json'
