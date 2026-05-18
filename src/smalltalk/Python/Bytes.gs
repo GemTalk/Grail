@@ -317,8 +317,13 @@ __eq__: other
 category: 'Grail-Sequence Protocol'
 method: bytes
 __getitem__: index
-	"Get byte at index (0-based, supports negative indices)"
+	"Get byte at index (0-based, supports negative indices) or a slice."
 	| idx size |
+	(index @env0:isKindOf: slice) ifTrue: [
+		^ self @env1:__getslice__: index @env1:start
+			_: index @env1:stop
+			_: index @env1:step
+	].
 	size := self @env0:size.
 	idx := index.
 

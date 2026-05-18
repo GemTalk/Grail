@@ -123,17 +123,13 @@ These break programs that look ordinary in CPython.
   silent-failure caveats (arithmetic strips the name; reverse
   comparisons through non-Int classes don't agree).
 
-- [ ] **`slice` not a built-in class** — CPython exposes `slice` as
-  a real class so user code can do `isinstance(idx, slice)` (e.g.,
-  `re/_parser.py:169` `SubPattern.__getitem__`).  Grail handles
-  slice *expressions* (`xs[i:j]`) via `__getslice__:_:_:` codegen
-  but has no `slice` class to compare against. Add `slice` as a
-  built-in that:
-    * `slice(stop)` / `slice(start, stop[, step])` builds a value
-      object with `.start`, `.stop`, `.step` attributes.
-    * `__getslice__:_:_:` callers / `SliceAst` codegen can also
-      build one and pass it to `__getitem__` when the user defines
-      `__getitem__` rather than `__getslice__`.
+- [x] ~~**`slice` not a built-in class**~~ — `SubscriptAst` now
+  builds a real `slice` instance for every slice subscript and
+  calls `__getitem__:` with it; `SequenceableCollection`, `range`,
+  `bytes`, `CharacterCollection`, and `list` all dispatch on a
+  slice index by delegating to `__getslice__:_:_:`.  User classes
+  that override `__getitem__` (`re._parser.SubPattern`) get to
+  branch on `isinstance(index, slice)` exactly as CPython does.
 
 - [ ] **SubPattern.dump in re/_parser.py fails at module load**
   (after stubbing dump it gets past, so the dump body has the
@@ -296,7 +292,7 @@ catches up.
 |------|-----------|-----|--------------|
 | `src/python/stdlib/re/_constants.py` | Rebound `_NamedIntConstant = NamedIntConstant` instead of subclassing int. | `SmallInteger` has no inst-var slot for `.name`; `NamedIntConstant` is Grail's wrapper that crosses the C boundary via `__index__`. | Grail boxes every Python `int` as a real heap class with extra-slot subclass support (project-wide effort). |
 | `src/python/stdlib/re/_constants.py` | `OPCODES = OPCODES[:-2]` instead of `del OPCODES[-2:]`. | Grail doesn't yet handle `del` on subscript targets with a slice index. | Grail implements `del` for subscript targets (see *Bugs Blocking…* above). |
-| `src/python/stdlib/re/__init__.py` | Replaced with a 1-statement Grail stub.  CPython original archived alongside as `__init__.cpython.py`. | The four original blockers (class-method free-name resolution, star-unpack, `@enum.global_enum`, `next`/`iter` builtins) have all landed.  Restoration is now blocked only on whatever new blockers surface from actually trying — needs an exploration pass. | Try dropping the upstream file in; surface remaining gaps via test. |
+| `src/python/stdlib/re/__init__.py` | Restored to upstream form (428 lines) with two small GRAIL deviations: `_ZeroSentinel(int)` rewritten as a plain marker class (Grail can't subclass int) with sentinel-to-zero coercion at the three call sites that need it, and three `func.__text_signature__ = '…'` lines commented out (`BoundMethod` has no attribute slot — pure introspection, no functional impact). The `__init__.cpython.py` archive is still present for reference. `ReModuleTestCase` locks in module loading + literal patterns with capture groups. Regex character classes / quantifiers / `findall`/`sub`/`split` are still ahead — they trip a separate set of `bytes`/`bytearray` protocol gaps. |
 | `src/python/stdlib/re/_compiler.py` | `dis(code)` function body replaced with `raise NotImplementedError(...)`. | The original is a 150-line debug disassembler with two nested `def`s (`dis_`, `print_`), heavy free-variable closure references, `*args, to=None` (keyword-only after `*args`), and several `@` operators.  One or more of these trips an AbstractNode codegen branch.  `dis()` is never called by the regex compile path; it's an interactive printer for compiled bytecode. | Grail's codegen handles nested-def closures + `*args, kw_only=N` parameters end-to-end.  The function body is small once those land; restore from `__init__.cpython.py`-style archive (need to add one for `_compiler.py`). |
 
 ## `html.parser` Module

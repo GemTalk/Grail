@@ -223,10 +223,14 @@ method: NamedIntConstant
 __eq__: other
 	"Value-based equality.  Unwrap other if it's also a
 	NamedIntConstant, otherwise dispatch to the underlying int's
-	__eq__ which handles SmallInteger vs SmallInteger comparison."
+	__eq__ which handles SmallInteger vs SmallInteger comparison.
+	Use explicit @env0 for the `value` accessor — `value` is an
+	env-0 method, and an implicit env-1 unary send would miss
+	(NamedIntConstant's env-1 DNU forwards `value` to the wrapped
+	SmallInteger, which doesn't respond to it at env-1)."
 
 	(other isKindOf: NamedIntConstant) ifTrue: [
-		^ value @env1:__eq__: other value
+		^ value @env1:__eq__: (other @env0:value)
 	].
 	^ value @env1:__eq__: other
 %

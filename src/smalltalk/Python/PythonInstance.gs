@@ -58,7 +58,16 @@ category: 'Python-Attribute Access'
 method: PythonInstance
 doesNotUnderstand: aSelector args: anArray envId: envId
 	"Route unknown env-1 messages through the per-instance __dict__:
-	`name:` (1 arg) → setter; bare `name` (0 args) → getter."
+	`name:` (1 arg) → setter; bare `name` (0 args) → getter.
+
+	BEFORE treating `name:` as a setter, check whether the class
+	defines a varargs `_name:kw:` form.  Grail codegen emits
+	``receiver foo: arg`` for any Python call ``receiver.foo(arg)``,
+	even when the target method is varargs (e.g. an `(arg=None)`
+	signature compiles to `_foo:kw:`).  Without this redirect, every
+	such call would be misinterpreted as a __dict__ setter — the
+	re._parser.State.opengroup case, which silently dropped every
+	group-open call so capture groups never registered."
 
 	| s |
 	envId = 1 ifFalse: [
@@ -67,6 +76,15 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	s := aSelector asString.
 	s size > 0 ifTrue: [
 		(s last = $:) ifTrue: [
+			| selBase varargSel |
+			"Strip trailing colons and look for a matching `_name:kw:`."
+			selBase := s copyFrom: 1 to: s size - (s occurrencesOf: $:).
+			varargSel := ('_' @env0:, selBase @env0:, ':kw:') asSymbol.
+			((self @env0:class @env0:whichClassIncludesSelector: varargSel environmentId: 1) notNil) ifTrue: [
+				^ self @env0:perform: varargSel
+					env: 1
+					withArguments: { anArray @env0:asArray. nil }
+			].
 			"Setter — single trailing colon, no other colons."
 			((s occurrencesOf: $:) = 1 and: [anArray size = 1]) ifTrue: [
 				| key |

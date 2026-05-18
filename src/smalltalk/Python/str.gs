@@ -106,11 +106,16 @@ __ge__: other
 category: 'Grail-Sequence Operations'
 method: CharacterCollection
 __getitem__: index
-	"Get character at index. In Python: str[index]
-	Returns a single-character string.
+	"Get character at index, or a substring for slice indices.
+	Returns a single-character string for integer indices.
 	Supports negative indices (counting from end)."
 
 	| size idx char charString |
+	(index @env0:isKindOf: slice) ifTrue: [
+		^ self @env1:__getslice__: index @env1:start
+			_: index @env1:stop
+			_: index @env1:step
+	].
 	size := self @env0:size.
 	idx := index.
 

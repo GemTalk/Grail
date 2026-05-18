@@ -72,9 +72,17 @@ category: 'Grail-Sequence Protocol'
 method: SequenceableCollection
 __getitem__: index
 	"Return the item at the given index.
-	Supports negative indices (counting from end)."
+	Supports negative indices (counting from end) and slice
+	subscripts (``xs[i:j:k]`` — codegen now passes a real
+	``slice`` instance instead of three separate bounds, so
+	receivers that want list-style slicing dispatch here)."
 
 	| size idx |
+	(index @env0:isKindOf: slice) ifTrue: [
+		^ self @env1:__getslice__: index @env1:start
+			_: index @env1:stop
+			_: index @env1:step
+	].
 	size := self @env0:size.
 	idx := index.
 

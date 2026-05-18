@@ -118,14 +118,14 @@ __eq__: other
 category: 'Grail-Sequence Protocol'
 method: range
 __getitem__: index
-	"Return the item at the given index or a slice"
+	"Return the item at the given index or a slice."
 
-	| idx size indexClass |
-	indexClass := index @env0:class.
-
-	"Check if this is a slice object - if slice class exists"
-	"For now, just handle integer indexing"
-
+	| idx size |
+	(index @env0:isKindOf: slice) ifTrue: [
+		^ self @env1:__getslice__: index @env1:start
+			_: index @env1:stop
+			_: index @env1:step
+	].
 	size := self @env0:size.
 	idx := index.
 

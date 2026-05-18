@@ -32,25 +32,48 @@ category: 'Grail-Initialization'
 classmethod: list
 __new__: iterable
 	"list(iterable) — create a list from the elements of iterable.
-	Receiver is the class."
+	Receiver is the class.
 
-	| result iter done |
+	Three iteration shapes are recognised, in priority order:
+	  1. SequenceableCollection — copy by index for speed.
+	  2. Python ``__iter__`` / ``__next__`` protocol — the most
+	     general path, used for generators and built-in iterators.
+	  3. Python sequence-protocol fallback — when the class
+	     defines ``__len__`` + ``__getitem__`` but not ``__iter__``
+	     (the re._parser SubPattern idiom).  Walks indices 0..n-1
+	     calling __getitem__ on each, matching CPython's iter()
+	     behaviour for classes that lack __iter__."
+
+	| result iter done cls hasIter hasGetitem |
 	result := self ___new___.
-	"OrderedCollection-shaped iterables: copy directly for speed"
 	(iterable @env0:isKindOf: SequenceableCollection) ifTrue: [
 		1 @env0:to: iterable @env0:size do: [:i |
 			result @env0:add: (iterable @env0:at: i)
 		].
 		^ result
 	].
-	"Generic Python iterable protocol: walk __iter__/__next__"
-	iter := iterable __iter__.
-	done := false.
-	[done] @env0:whileFalse: [
-		[result @env0:add: iter __next__]
-			@env0:on: StopIteration do: [:ex | done := true]
+	cls := iterable @env0:class.
+	hasIter := (cls @env0:whichClassIncludesSelector: #'__iter__' environmentId: 1) notNil.
+	hasIter ifTrue: [
+		iter := iterable __iter__.
+		done := false.
+		[done] @env0:whileFalse: [
+			[result @env0:add: iter __next__]
+				@env0:on: StopIteration do: [:ex | done := true]
+		].
+		^ result
 	].
-	^ result
+	hasGetitem := (cls @env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1) notNil.
+	hasGetitem ifTrue: [
+		| n |
+		n := iterable __len__.
+		0 @env0:to: n @env0:- 1 do: [:i |
+			result @env0:add: (iterable @env1:__getitem__: i)
+		].
+		^ result
+	].
+	TypeError ___signal___:
+		('''' @env0:, cls @env0:name @env0:, ''' object is not iterable')
 %
 
 category: 'Grail-Sequence Protocol'
@@ -149,9 +172,16 @@ category: 'Grail-Sequence Protocol'
 method: list
 __setitem__: index _: value
 	"Set the item at the given index.
-	Supports negative indices (counting from end)."
+	Supports negative indices (counting from end) and slice
+	assignment (``lst[i:j] = iterable`` and ``lst[i:j:k] = iterable``).
+	Used by re._parser, which rewrites parts of a SubPattern in-place
+	via ``subpattern[i:i+1] = p``."
 
 	| size idx |
+	(index @env0:isKindOf: slice) ifTrue: [
+		^ self @env1:___setSlice___: index _: value
+	].
+
 	size := self @env0:size.
 	idx := index.
 
@@ -169,6 +199,59 @@ __setitem__: index _: value
 
 	"Convert to 1-based Smalltalk index"
 	self @env0:at: (idx @env0:+ 1) put: value.
+	^ None
+%
+
+category: 'Grail-Sequence Protocol'
+method: list
+___setSlice___: aSlice _: anIterable
+	"Slice assignment.  Replaces self[lo..hi] with anIterable's
+	items, growing or shrinking as needed.  For the simple
+	contiguous case (step = 1, the only case re._parser uses) it
+	delegates to OrderedCollection's removeFrom:to: + addAll:.  An
+	extended slice (step != 1) requires len(iterable) == slice
+	length and replaces one-for-one."
+
+	| size indices lo hi st values len indicesArray |
+	size := self @env0:size.
+	indices := aSlice @env1:indices: size.
+	lo := indices @env0:at: 1.
+	hi := indices @env0:at: 2.
+	st := indices @env0:at: 3.
+	"Coerce anIterable to an array.  Python iterables that aren't
+	SequenceableCollections (e.g. re._parser SubPattern, which exposes
+	its data through an env-1 __iter__/__next__ pair) need to go
+	through the list constructor's iteration loop, not Smalltalk
+	asArray.  list __new__: already handles both shapes."
+	values := (anIterable @env0:isKindOf: SequenceableCollection)
+		ifTrue: [anIterable @env0:asArray]
+		ifFalse: [(list @env1:__new__: anIterable) @env0:asArray].
+	len := values @env0:size.
+	(st @env0:= 1) ifTrue: [
+		"Contiguous: remove [lo..hi) then insert new items at lo."
+		hi @env0:> lo ifTrue: [
+			self @env0:removeFrom: lo @env0:+ 1 to: hi
+		].
+		1 @env0:to: len do: [:i |
+			self @env0:add: (values @env0:at: i)
+				beforeIndex: lo @env0:+ i
+		].
+		^ None
+	].
+	"Extended slice: must match length."
+	indicesArray := OrderedCollection new.
+	lo @env0:to: hi @env0:- 1 by: st do: [:i | indicesArray @env0:add: i].
+	indicesArray @env0:size = len ifFalse: [
+		ValueError ___signal___:
+			('attempt to assign sequence of size ' @env0:,
+				len @env0:printString @env0:,
+				' to extended slice of size ' @env0:,
+				indicesArray @env0:size @env0:printString)
+	].
+	1 @env0:to: len do: [:i |
+		self @env0:at: (indicesArray @env0:at: i) @env0:+ 1
+			put: (values @env0:at: i)
+	].
 	^ None
 %
 

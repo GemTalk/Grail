@@ -163,6 +163,12 @@ class SubPattern:
         return repr(self.data)
     def __len__(self):
         return len(self.data)
+    # GRAIL: CPython's iter() falls back to the sequence protocol
+    # (__len__ + __getitem__) when __iter__ is absent.  Grail's
+    # ForAst codegen emits a direct `__iter__` send instead of going
+    # through iter(), so SubPattern needs an explicit __iter__.
+    def __iter__(self):
+        return iter(self.data)
     def __delitem__(self, index):
         del self.data[index]
     def __getitem__(self, index):

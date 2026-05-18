@@ -93,24 +93,32 @@ category: 'Grail-other'
 method: SubscriptAst
 printSmalltalkOn: aStream
 	"Plain index (`xs[i]`)  →  `(xs) __getitem__: (i)`.
-	Slice    (`xs[i:j:k]`) →  `(xs) __getslice__: lo _: hi _: st`,
-	emitting `nil` for each omitted bound (the runtime side normalizes).
+	Slice    (`xs[i:j:k]`) →  `(xs) __getitem__: (slice ___newStart: lo
+	stop: hi step: st)`, building a real Python ``slice`` instance.
+	Receivers that want sequence-style slicing handle it inside their
+	own __getitem__ (SequenceableCollection delegates to __getslice__);
+	user classes such as re._parser.SubPattern dispatch on
+	``isinstance(index, slice)`` themselves.  Emitting a slice object
+	(rather than splaying lo/hi/st across separate selector keywords)
+	keeps the public sequence protocol identical to CPython's and
+	bypasses Grail's UnboundLocalError wrap on parameter reads when
+	bounds arrive as nil.
 	`xs[i, j]` (tuple subscript) falls through to plain __getitem__ —
-	dict-style multi-key access; sequence slicing with steppy tuples is
-	out of scope until something needs it."
+	dict-style multi-key access."
 
 	self assertContextIsLoad.
 	(slice isKindOf: SliceAst) ifTrue: [
 		value printSmalltalkWithParenthesisOn: aStream.
-		aStream nextPutAll: ' __getslice__: '.
+		aStream nextPutAll: ' __getitem__: (slice @env0:___newStart: '.
 		(slice lower) ifNil: [aStream nextPutAll: 'nil']
 			ifNotNil: [slice lower printSmalltalkWithParenthesisOn: aStream].
-		aStream nextPutAll: ' _: '.
+		aStream nextPutAll: ' stop: '.
 		(slice upper) ifNil: [aStream nextPutAll: 'nil']
 			ifNotNil: [slice upper printSmalltalkWithParenthesisOn: aStream].
-		aStream nextPutAll: ' _: '.
+		aStream nextPutAll: ' step: '.
 		(slice step) ifNil: [aStream nextPutAll: 'nil']
 			ifNotNil: [slice step printSmalltalkWithParenthesisOn: aStream].
+		aStream nextPutAll: ')'.
 		^self
 	].
 	value printSmalltalkWithParenthesisOn: aStream.
