@@ -346,6 +346,90 @@ testInstanceVarsFromCls
 	self assert: (cls @env0:allInstVarNames @env0:includes: #last_doc).
 %
 
+! --- FunctionDefAst: varargs method prologue (kwargs fallback, *args, **kwargs) ---
+
+category: 'Grail-Tests - Varargs'
+method: FlaskScaffoldingTestCase
+testKwargFallbackForNamedParam
+	"A named parameter (with default) is satisfied by a keyword
+	argument when not passed positionally.  Before the fix, the
+	varargs prologue ignored kwargs for named params and the
+	default fired even when the caller had supplied the keyword."
+
+	| mod cls obj result |
+	mod := self loadFixture: 'varargs_unpack'.
+	cls := mod @env1:Sigs.
+	obj := cls @env1:value: #() value: nil.
+	"Pass `a` positionally, `b` and `c` as kwargs."
+	result := obj
+		@env1:_by_default: { 1 }
+		kw: (IdentityKeyValueDictionary new
+			at: #b put: 20;
+			at: #c put: 300;
+			yourself).
+	self assert: (result @env0:at: 1) equals: 1.
+	self assert: (result @env0:at: 2) equals: 20.
+	self assert: (result @env0:at: 3) equals: 300.
+	"Defaults still fire when no kwargs supplied."
+	result := obj @env1:_by_default: { 1 } kw: nil.
+	self assert: (result @env0:at: 1) equals: 1.
+	self assert: (result @env0:at: 2) equals: 2.
+	self assert: (result @env0:at: 3) equals: 3.
+%
+
+category: 'Grail-Tests - Varargs'
+method: FlaskScaffoldingTestCase
+testStarArgsAndStarStarKwargs
+	"*args collects leftover positionals as a tuple; **kwargs
+	collects unused keyword args into a dict.  Both bindings were
+	missing from the class-method varargs path before the codegen
+	parity fix."
+
+	| mod cls obj result tail kw |
+	mod := self loadFixture: 'varargs_unpack'.
+	cls := mod @env1:Sigs.
+	obj := cls @env1:value: #() value: nil.
+	result := obj
+		@env1:_collect_extra: { 'h'. 'a'. 'b' }
+		kw: (IdentityKeyValueDictionary new
+			at: #extra put: 99;
+			yourself).
+	self assert: (result @env0:at: 1) equals: 'h'.
+	tail := result @env0:at: 2.
+	self assert: tail @env0:size equals: 2.
+	self assert: (tail @env0:at: 1) equals: 'a'.
+	self assert: (tail @env0:at: 2) equals: 'b'.
+	kw := result @env0:at: 3.
+	self assert: (kw @env0:at: #extra) equals: 99.
+%
+
+category: 'Grail-Tests - Varargs'
+method: FlaskScaffoldingTestCase
+testKwonlyArgs
+	"Keyword-only arguments must come from kwargs (no positional
+	fallback); missing required kwonly raises TypeError."
+
+	| mod cls obj result |
+	mod := self loadFixture: 'varargs_unpack'.
+	cls := mod @env1:Sigs.
+	obj := cls @env1:value: #() value: nil.
+	"Supply both."
+	result := obj
+		@env1:_kwonly: #()
+		kw: (IdentityKeyValueDictionary new
+			at: #x put: 10;
+			at: #y put: 200;
+			yourself).
+	self assert: (result @env0:at: 1) equals: 10.
+	self assert: (result @env0:at: 2) equals: 200.
+	"y has a default."
+	result := obj
+		@env1:_kwonly: #()
+		kw: (IdentityKeyValueDictionary new at: #x put: 11; yourself).
+	self assert: (result @env0:at: 1) equals: 11.
+	self assert: (result @env0:at: 2) equals: 20.
+%
+
 ! --- Class/instance introspection: __name__ and __dict__ -------------------
 
 category: 'Grail-Tests - Introspection'

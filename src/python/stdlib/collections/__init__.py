@@ -12,13 +12,13 @@ class defaultdict(dict):
     by calling default_factory().
     """
 
-    def __init__(self, default_factory=None):
-        # GRAIL: stub drops upstream's `*args, **kwargs` flexibility.
-        # Grail's varargs method-prologue codegen doesn't yet bind
-        # *args/**kwargs locals, and downstream Flask packages only
-        # call `defaultdict(factory)` (single positional).
+    def __init__(self, default_factory=None, *args, **kwargs):
         super().__init__()
         self.default_factory = default_factory
+        if args:
+            self.update(args[0])
+        if kwargs:
+            self.update(kwargs)
 
     def __missing__(self, key):
         if self.default_factory is None:

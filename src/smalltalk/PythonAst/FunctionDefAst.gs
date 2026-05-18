@@ -124,7 +124,7 @@ printSmalltalkOn: aStream
 
 	aStream
 		nextPutAll: name;
-		nextPutAll: ' := [:positional :keyword |';
+		nextPutAll: ' := [:positional :kwargs |';
 		lf;
 		increaseIndent.
 	"Collect every name we need as a block temp: fixed positionals,
@@ -163,7 +163,7 @@ printSmalltalkOn: aStream
 	args kwarg ifNotNil: [
 		aStream
 			nextPutAll: args kwarg name;
-			nextPutAll: ' := keyword ifNil: [(KeyValueDictionary perform: #new env: 0)].';
+			nextPutAll: ' := kwargs ifNil: [(KeyValueDictionary perform: #new env: 0)].';
 			lf.
 	].
 	aStream
@@ -300,36 +300,49 @@ allParameterNames
 category: 'Grail-Module Method Compilation'
 method: FunctionDefAst
 printPositionalUnpackingOn: aStream paramNames: paramNames
-	"Emit Smalltalk code that binds each named parameter from `positional`
-	with fall-through to the default expression for parameters that have one.
+	"Emit Smalltalk code that binds each named parameter, in priority order:
+	  1. positional[i] when the call site passed at least i positional args
+	  2. kwargs[#name] when kwargs is non-nil and contains the param name
+	  3. the parameter's default expression (if it has one)
+	  4. TypeError (missing required argument)
+
 	`args defaults` holds the default ASTs right-aligned across the combined
-	posonlyargs + args sequence (CPython semantics)."
+	posonlyargs + args sequence (CPython semantics): the last N parameters
+	have defaults, the earlier ones are required."
 
 	| numParams numDefaults firstWithDefault |
 	numParams := paramNames size.
 	numDefaults := args defaults size.
 	firstWithDefault := numParams - numDefaults + 1.
 	1 to: numParams do: [:i |
-		| pname |
+		| pname hasDefault |
 		pname := paramNames at: i.
-		i < firstWithDefault ifTrue: [
-			aStream
-				nextPutAll: pname;
-				nextPutAll: ' := positional @env0:at: ';
-				print: i;
-				nextPut: $.;
-				lf
+		hasDefault := i >= firstWithDefault.
+		"Open the positional gate."
+		aStream
+			nextPutAll: pname;
+			nextPutAll: ' := ((positional @env0:size) @env0:>= ';
+			print: i;
+			nextPutAll: ') ifTrue: [positional @env0:at: ';
+			print: i;
+			nextPutAll: '] ifFalse: ['.
+		"Kwargs fallback — only if kwargs may be non-nil at the call
+		site (varargs methods accept both)."
+		aStream
+			nextPutAll: '(kwargs @env0:isNil @env0:not and: [kwargs @env0:includesKey: #';
+			nextPutAll: pname;
+			nextPutAll: ']) ifTrue: [kwargs @env0:at: #';
+			nextPutAll: pname;
+			nextPutAll: '] ifFalse: ['.
+		hasDefault ifTrue: [
+			(args defaults at: i - firstWithDefault + 1) printSmalltalkOn: aStream
 		] ifFalse: [
 			aStream
+				nextPutAll: 'TypeError ___signal___: ''missing required argument: ';
 				nextPutAll: pname;
-				nextPutAll: ' := ((positional @env0:size) @env0:>= ';
-				print: i;
-				nextPutAll: ') ifTrue: [positional @env0:at: ';
-				print: i;
-				nextPutAll: '] ifFalse: ['.
-			(args defaults at: i - firstWithDefault + 1) printSmalltalkOn: aStream.
-			aStream nextPutAll: '].'; lf
-		]
+				nextPutAll: ''''
+		].
+		aStream nextPutAll: ']].'; lf
 	]
 %
 
@@ -632,9 +645,26 @@ generateClassMethodSourceOn: aStream
 
 		aStream nextPutAll: '^ ['.
 
+		"Declare param locals (positional + *vararg + kwonly + **kwarg)
+		+ body locals as block temps.  Match the module-method path so
+		every parameter shape — defaults, *args, kwonly, **kwargs — has
+		a binding emitted below."
 		allLocals := OrderedCollection new.
 		paramNames do: [:each |
 			(classIvars includes: each asSymbol) ifFalse: [allLocals add: each].
+		].
+		args vararg ifNotNil: [
+			(classIvars includes: args vararg name asSymbol) ifFalse: [
+				allLocals add: args vararg name].
+		].
+		args kwonlyargs do: [:each |
+			((allLocals includes: each name)
+				or: [classIvars includes: each name asSymbol]) ifFalse: [
+					allLocals add: each name].
+		].
+		args kwarg ifNotNil: [
+			(classIvars includes: args kwarg name asSymbol) ifFalse: [
+				allLocals add: args kwarg name].
 		].
 		bodyVars do: [:each |
 			(allLocals includes: each) ifFalse: [
@@ -649,7 +679,54 @@ generateClassMethodSourceOn: aStream
 			aStream nextPut: $|; lf.
 		].
 
+		"Positional / kwargs / default unpacking for the named params."
 		self printPositionalUnpackingOn: aStream paramNames: paramNames.
+		"Bind *vararg to the tail of positional, wrapped as a tuple."
+		args vararg ifNotNil: [
+			aStream
+				nextPutAll: args vararg name;
+				nextPutAll: ' := tuple perform: #withAll: env: 0 withArguments: { positional @env0:copyFrom: ';
+				nextPutAll: (paramNames size + 1) printString;
+				nextPutAll: ' to: positional @env0:size }.';
+				lf.
+		].
+		"Bind keyword-only args from the kwargs dict, falling back to
+		the corresponding kw_default expression."
+		args kwonlyargs doWithIndex: [:each :i |
+			| def |
+			def := args kw_defaults at: i ifAbsent: [nil].
+			aStream
+				nextPutAll: each name;
+				nextPutAll: ' := kwargs ifNil: ['.
+			def isNil ifTrue: [
+				aStream
+					nextPutAll: 'TypeError ___signal___: ''missing keyword-only argument: ';
+					nextPutAll: each name;
+					nextPutAll: ''''
+			] ifFalse: [
+				def printSmalltalkOn: aStream
+			].
+			aStream
+				nextPutAll: '] ifNotNil: [kwargs @env0:at: #';
+				nextPutAll: each name;
+				nextPutAll: ' ifAbsent: ['.
+			def isNil ifTrue: [
+				aStream
+					nextPutAll: 'TypeError ___signal___: ''missing keyword-only argument: ';
+					nextPutAll: each name;
+					nextPutAll: ''''
+			] ifFalse: [
+				def printSmalltalkOn: aStream
+			].
+			aStream nextPutAll: ']].'; lf.
+		].
+		"Bind **kwarg to the keyword dict (or empty)."
+		args kwarg ifNotNil: [
+			aStream
+				nextPutAll: args kwarg name;
+				nextPutAll: ' := kwargs ifNil: [(KeyValueDictionary perform: #new env: 0)].';
+				lf.
+		].
 	].
 
 	aStream nextPutAll: '['; lf.
