@@ -266,6 +266,7 @@ run
 	at: #'PyDateTime' put: nil;
 	at: #'PyTimedelta' put: nil;
 	at: #'PyTimezone' put: nil;
+	at: #'json' put: nil;
 	at: #'math' put: nil;
 	at: #'module' put: nil;
 	at: #'PythonClass' put: nil;
@@ -655,6 +656,7 @@ input src/smalltalk/Python/struct.gs
 input src/smalltalk/Python/mimetypes.gs
 input src/smalltalk/Python/ipaddress.gs
 input src/smalltalk/Python/datetime_module.gs
+input src/smalltalk/Python/json_module.gs
 input src/smalltalk/Python/math.gs
 input src/smalltalk/Python/numbers.gs
 input src/smalltalk/Python/os.gs
@@ -1141,6 +1143,7 @@ run
 (sys @env1:modules) @env0:at: #'mimetypes' put: mimetypes @env1:instance.
 (sys @env1:modules) @env0:at: #'ipaddress' put: ipaddress @env1:instance.
 (sys @env1:modules) @env0:at: #'datetime' put: datetime @env1:instance.
+(sys @env1:modules) @env0:at: #'json' put: json @env1:instance.
 %
 
 run

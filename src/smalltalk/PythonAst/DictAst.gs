@@ -66,10 +66,13 @@ printSmalltalkOn: aStream
 	].
 	aStream nextPutAll: '([:___d | '.
 	1 to: keys size do: [:i |
+		"Wrap both key and value in parens so keyword-form expressions
+		(e.g. AttributeAst's ``obj @env1:___pyAttrLoad___: #x``) don't
+		merge with the surrounding ``__setitem__:_:`` selector."
 		aStream nextPutAll: '___d __setitem__: '.
-		(keys at: i) printSmalltalkOn: aStream.
+		(keys at: i) printSmalltalkWithParenthesisOn: aStream.
 		aStream nextPutAll: ' _: '.
-		(values at: i) printSmalltalkOn: aStream.
+		(values at: i) printSmalltalkWithParenthesisOn: aStream.
 		aStream nextPutAll: '. '.
 	].
 	aStream nextPutAll: '___d] value: (KeyValueDictionary perform: #new env: 0))'.

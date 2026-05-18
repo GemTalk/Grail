@@ -712,6 +712,154 @@ testTimeAsctimeOfEpoch
 	self assert: s equals: 'Thu Jan 01 00:00:00 1970'
 %
 
+! --- json module ----------------------------------------------------------
+
+category: 'Grail-Tests - json'
+method: FlaskScaffoldingTestCase
+testJsonDumpsList
+	"dumps emits JSON for a list of primitives."
+
+	| mod |
+	mod := self loadFixture: 'use_json'.
+	self assert: mod @env1:dumps_list equals: '[1, 2, 3, "x"]'
+%
+
+category: 'Grail-Tests - json'
+method: FlaskScaffoldingTestCase
+testJsonDumpsSorted
+	"sort_keys=True returns keys in sorted order."
+
+	| mod |
+	mod := self loadFixture: 'use_json'.
+	self assert: mod @env1:dumps_sorted equals: '{"a": 1, "b": 2, "c": 3}'
+%
+
+category: 'Grail-Tests - json'
+method: FlaskScaffoldingTestCase
+testJsonDumpsIndent
+	"indent=2 inserts newlines and per-depth spaces."
+
+	| mod expected |
+	mod := self loadFixture: 'use_json'.
+	expected := '{
+  "a": 1,
+  "b": 2
+}'.
+	self assert: mod @env1:dumps_indent equals: expected
+%
+
+category: 'Grail-Tests - json'
+method: FlaskScaffoldingTestCase
+testJsonDumpsUnicodeEscape
+	"ensure_ascii=True (default) escapes non-ASCII to \\uXXXX."
+
+	| mod |
+	mod := self loadFixture: 'use_json'.
+	self assert: mod @env1:dumps_unicode_escape equals: '"\u00e9"'
+%
+
+category: 'Grail-Tests - json'
+method: FlaskScaffoldingTestCase
+testJsonLoadsSimple
+	"loads parses primitives and dict membership."
+
+	| mod result |
+	mod := self loadFixture: 'use_json'.
+	result := mod @env1:loads_simple.
+	self assert: (result @env1:__getitem__: 'a') equals: 1.
+	self assert: (result @env1:__getitem__: 'b') equals: 'two'.
+	self assert: (result @env1:__getitem__: 'c') equals: None.
+	self assert: (result @env1:__getitem__: 'd') equals: true
+%
+
+category: 'Grail-Tests - json'
+method: FlaskScaffoldingTestCase
+testJsonLoadsList
+	"loads parses array with mixed primitives."
+
+	| mod result |
+	mod := self loadFixture: 'use_json'.
+	result := mod @env1:loads_list.
+	self assert: (result @env1:__getitem__: 0) equals: 1.
+	self assert: (result @env1:__getitem__: 1) equals: 2.5.
+	self assert: (result @env1:__getitem__: 2) equals: -3.
+	self assert: (result @env1:__getitem__: 3) equals: 'x'
+%
+
+category: 'Grail-Tests - json'
+method: FlaskScaffoldingTestCase
+testJsonLoadsNested
+	"loads handles nested arrays inside objects."
+
+	| mod result inner middle |
+	mod := self loadFixture: 'use_json'.
+	result := mod @env1:loads_nested.
+	inner := result @env1:__getitem__: 'a'.
+	self assert: (inner @env1:__getitem__: 0) equals: 1.
+	self assert: (inner @env1:__getitem__: 1) equals: 2.
+	middle := inner @env1:__getitem__: 2.
+	self assert: (middle @env1:__getitem__: 'b') equals: 'c'
+%
+
+category: 'Grail-Tests - json'
+method: FlaskScaffoldingTestCase
+testJsonLoadsStringEscapes
+	"loads expands JSON escape sequences."
+
+	| mod result |
+	mod := self loadFixture: 'use_json'.
+	result := mod @env1:loads_string_escapes.
+	self assert: result equals: ('hello' , (String with: Character lf) , (String with: Character tab) , 'world' , (String with: (Character codePoint: 16rE9)))
+%
+
+category: 'Grail-Tests - json'
+method: FlaskScaffoldingTestCase
+testJsonLoadsWhitespace
+	"loads tolerates arbitrary whitespace between tokens."
+
+	| mod result |
+	mod := self loadFixture: 'use_json'.
+	result := mod @env1:loads_with_whitespace.
+	self assert: (result @env1:__getitem__: 'a') equals: 1.
+	self assert: ((result @env1:__getitem__: 'b') @env1:__getitem__: 0) equals: 2.
+	self assert: ((result @env1:__getitem__: 'b') @env1:__getitem__: 1) equals: 3
+%
+
+category: 'Grail-Tests - json'
+method: FlaskScaffoldingTestCase
+testJsonRoundtripPrimitives
+	"loads(dumps(x)) preserves primitive values."
+
+	| mod result |
+	mod := self loadFixture: 'use_json'.
+	result := mod @env1:roundtrip: 42.
+	self assert: result equals: 42.
+	result := mod @env1:roundtrip: 'hello'.
+	self assert: result equals: 'hello'.
+	result := mod @env1:roundtrip: true.
+	self assert: result equals: true
+%
+
+category: 'Grail-Tests - json'
+method: FlaskScaffoldingTestCase
+testJsonRejectsExtra
+	"loads raises ValueError for trailing data."
+
+	| mod |
+	mod := self loadFixture: 'use_json'.
+	self assert: mod @env1:reject_extra equals: 'caught'
+%
+
+category: 'Grail-Tests - json'
+method: FlaskScaffoldingTestCase
+testJsonDumpsDefault
+	"dumps(obj, default=fn) calls fn for unknown types."
+
+	| mod |
+	mod := self loadFixture: 'use_json'.
+	self assert: mod @env1:dumps_with_default equals: '{"thing": 42}'
+%
+
 ! --- datetime module ------------------------------------------------------
 
 category: 'Grail-Tests - datetime'
