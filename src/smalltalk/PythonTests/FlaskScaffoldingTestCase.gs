@@ -712,6 +712,130 @@ testTimeAsctimeOfEpoch
 	self assert: s equals: 'Thu Jan 01 00:00:00 1970'
 %
 
+! --- struct module --------------------------------------------------------
+
+category: 'Grail-Tests - struct'
+method: FlaskScaffoldingTestCase
+testStructCalcsizeBasic
+	"calcsize reports format-string byte counts."
+
+	| mod |
+	mod := self loadFixture: 'use_struct'.
+	self assert: (mod @env1:calc_size: '!Q') equals: 8.
+	self assert: (mod @env1:calc_size: '<H') equals: 2.
+	self assert: (mod @env1:calc_size: '>IHB') equals: 7.
+	self assert: (mod @env1:calc_size: '5s') equals: 5.
+	self assert: (mod @env1:calc_size: '>BxH') equals: 4
+%
+
+category: 'Grail-Tests - struct'
+method: FlaskScaffoldingTestCase
+testStructPackUnsignedQ
+	"!Q (big-endian unsigned 8-byte) round-trip."
+
+	| mod packed |
+	mod := self loadFixture: 'use_struct'.
+	packed := mod @env1:pack_be_q: 16r12345678AABBCCDD.
+	self assert: packed equals: #[16r12 16r34 16r56 16r78 16rAA 16rBB 16rCC 16rDD] asByteArray.
+	self assert: (mod @env1:unpack_be_q: packed) equals: 16r12345678AABBCCDD
+%
+
+category: 'Grail-Tests - struct'
+method: FlaskScaffoldingTestCase
+testStructPackLittleEndianH
+	"<H (little-endian unsigned 2-byte) writes low byte first."
+
+	| mod packed |
+	mod := self loadFixture: 'use_struct'.
+	packed := mod @env1:pack_le_h: 16rCAFE.
+	self assert: packed equals: #[16rFE 16rCA] asByteArray
+%
+
+category: 'Grail-Tests - struct'
+method: FlaskScaffoldingTestCase
+testStructSignedByteRoundtrip
+	"b (signed char): -1 packs to 0xFF and unpacks back to -1."
+
+	| mod packed |
+	mod := self loadFixture: 'use_struct'.
+	packed := mod @env1:pack_signed_byte: -1.
+	self assert: packed equals: #[16rFF] asByteArray.
+	self assert: (mod @env1:unpack_signed_byte: packed) equals: -1
+%
+
+category: 'Grail-Tests - struct'
+method: FlaskScaffoldingTestCase
+testStructUnsignedByteHigh
+	"B with a positive value above 127."
+
+	| mod |
+	mod := self loadFixture: 'use_struct'.
+	self assert: (mod @env1:pack_unsigned_byte: 255) equals: #[16rFF] asByteArray
+%
+
+category: 'Grail-Tests - struct'
+method: FlaskScaffoldingTestCase
+testStructString
+	"5s packs exactly 5 bytes (zero-pads short input, no terminator)."
+
+	| mod packed |
+	mod := self loadFixture: 'use_struct'.
+	packed := mod @env1:pack_string: 'abc' asByteArray.
+	self assert: packed equals: #[97 98 99 0 0] asByteArray.
+	self assert: (mod @env1:unpack_string: 'hello' asByteArray) equals: 'hello' asByteArray
+%
+
+category: 'Grail-Tests - struct'
+method: FlaskScaffoldingTestCase
+testStructDoubleRoundtrip
+	">d round-trips IEEE 754 double exactly for representable values."
+
+	| mod packed unpacked |
+	mod := self loadFixture: 'use_struct'.
+	packed := mod @env1:pack_double: 3.14.
+	self assert: packed size equals: 8.
+	unpacked := mod @env1:unpack_double: packed.
+	self assert: (unpacked - 3.14) abs < 1.0e-12
+%
+
+category: 'Grail-Tests - struct'
+method: FlaskScaffoldingTestCase
+testStructMixedFormat
+	">IHB packs a mixed-width tuple in declaration order."
+
+	| mod packed unpacked |
+	mod := self loadFixture: 'use_struct'.
+	packed := mod @env1:pack_mixed: 16rDEADBEEF _: 16rABCD _: 16r42.
+	self assert: packed size equals: 7.
+	self assert: packed equals: #[16rDE 16rAD 16rBE 16rEF 16rAB 16rCD 16r42] asByteArray.
+	unpacked := mod @env1:unpack_mixed: packed.
+	self assert: (unpacked @env1:__getitem__: 0) equals: 16rDEADBEEF.
+	self assert: (unpacked @env1:__getitem__: 1) equals: 16rABCD.
+	self assert: (unpacked @env1:__getitem__: 2) equals: 16r42
+%
+
+category: 'Grail-Tests - struct'
+method: FlaskScaffoldingTestCase
+testStructPaddingByte
+	"`x` inserts a single zero byte and consumes no value."
+
+	| mod |
+	mod := self loadFixture: 'use_struct'.
+	self assert: mod @env1:pack_with_padding equals: #[1 0 16rCA 16rFE] asByteArray
+%
+
+category: 'Grail-Tests - struct'
+method: FlaskScaffoldingTestCase
+testStructTimestampRoundtrip
+	"itsdangerous-style: pack a Unix epoch into a big-endian Q,
+	round-trip back."
+
+	| mod ts |
+	mod := self loadFixture: 'use_struct'.
+	ts := 1700000000.
+	self assert: (mod @env1:roundtrip_timestamp: ts) equals: ts
+%
+
 ! --- warnings module ------------------------------------------------------
 
 category: 'Grail-Tests - warnings'
