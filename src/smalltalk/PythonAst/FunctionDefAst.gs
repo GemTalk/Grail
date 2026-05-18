@@ -407,10 +407,13 @@ generateMethodSourceOn: aStream
 		"Wrap in block for same instVar-shadowing reason"
 		aStream nextPutAll: '^ ['.
 
-		"Declare param locals (positional + *vararg + **kwarg) + body locals
-		as block temps."
+		"Declare param locals (positional + *vararg + kwonly + **kwarg)
+		+ body locals as block temps."
 		allLocals := OrderedCollection withAll: paramNames.
 		args vararg ifNotNil: [allLocals add: args vararg name].
+		args kwonlyargs do: [:each |
+			(allLocals includes: each name) ifFalse: [allLocals add: each name].
+		].
 		args kwarg ifNotNil: [allLocals add: args kwarg name].
 		bodyVars do: [:each |
 			(allLocals includes: each) ifFalse: [allLocals add: each].
@@ -431,6 +434,39 @@ generateMethodSourceOn: aStream
 				nextPutAll: (paramNames size + 1) printString;
 				nextPutAll: ' to: positional @env0:size }.';
 				lf.
+		].
+		"Bind keyword-only args from the kwargs dict, falling back to
+		the corresponding kw_default expression.  A nil entry in
+		kw_defaults means the kwonly arg is required (no default) —
+		emit a TypeError if missing.  Lookup keys are symbols since
+		kwargs dicts are built with symbol keys."
+		args kwonlyargs doWithIndex: [:each :i |
+			| def |
+			def := args kw_defaults at: i ifAbsent: [nil].
+			aStream
+				nextPutAll: each name;
+				nextPutAll: ' := kwargs ifNil: ['.
+			def isNil ifTrue: [
+				aStream
+					nextPutAll: 'TypeError ___signal___: ''missing keyword-only argument: ';
+					nextPutAll: each name;
+					nextPutAll: ''''
+			] ifFalse: [
+				def printSmalltalkOn: aStream
+			].
+			aStream
+				nextPutAll: '] ifNotNil: [kwargs @env0:at: #';
+				nextPutAll: each name;
+				nextPutAll: ' ifAbsent: ['.
+			def isNil ifTrue: [
+				aStream
+					nextPutAll: 'TypeError ___signal___: ''missing keyword-only argument: ';
+					nextPutAll: each name;
+					nextPutAll: ''''
+			] ifFalse: [
+				def printSmalltalkOn: aStream
+			].
+			aStream nextPutAll: ']].'; lf.
 		].
 		"Bind **kwarg to the keyword dict (or empty)."
 		args kwarg ifNotNil: [

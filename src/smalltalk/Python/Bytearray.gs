@@ -571,4 +571,65 @@ reverse
 	]
 %
 
+! ===============================================================================
+! find — Python bytearray.find(sub[, start[, end]])
+! Returns the lowest index where ``sub`` is found in self[start:end],
+! or -1 if not found.  ``sub`` may be a single int byte (the
+! re._compiler usage) or a bytes/bytearray-like sub-sequence.
+! ===============================================================================
+
+category: 'Grail-Search Methods'
+method: bytearray
+find: sub
+	"find(sub) → first index where sub occurs, or -1."
+
+	^ self @env1:find: sub _: 0 _: self @env0:size
+%
+
+category: 'Grail-Search Methods'
+method: bytearray
+find: sub _: start
+	"find(sub, start) → first index >= start where sub occurs, or -1."
+
+	^ self @env1:find: sub _: start _: self @env0:size
+%
+
+category: 'Grail-Search Methods'
+method: bytearray
+find: sub _: start _: end
+	"find(sub, start, end) → first index in [start, end) where ``sub``
+	matches, or -1.  Single-int ``sub`` searches for that byte value;
+	a sequence ``sub`` searches for the contiguous run."
+
+	| size lo hi subSize |
+	size := self @env0:size.
+	lo := start @env0:max: 0.
+	hi := end @env0:min: size.
+	"Single byte value: linear scan."
+	(sub @env0:isKindOf: SmallInteger) ifTrue: [
+		lo @env0:+ 1 @env0:to: hi do: [:i |
+			(self @env0:at: i) @env0:= sub ifTrue: [
+				^ i @env0:- 1
+			]
+		].
+		^ -1
+	].
+	"Sub-sequence: O(n*m) scan.  ``sub`` is itself a bytes /
+	bytearray / sequence of ints."
+	subSize := sub @env0:size.
+	subSize @env0:= 0 ifTrue: [^ lo].
+	subSize @env0:> (hi @env0:- lo) ifTrue: [^ -1].
+	lo @env0:+ 1 @env0:to: hi @env0:- subSize @env0:+ 1 do: [:i |
+		| match |
+		match := true.
+		1 @env0:to: subSize do: [:j |
+			(self @env0:at: i @env0:+ j @env0:- 1) @env0:= (sub @env0:at: j) ifFalse: [
+				match := false
+			]
+		].
+		match ifTrue: [^ i @env0:- 1]
+	].
+	^ -1
+%
+
 set compile_env: 0

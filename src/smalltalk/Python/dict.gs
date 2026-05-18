@@ -68,6 +68,39 @@ __new__: source
 
 category: 'Grail-Initialization'
 classmethod: dict
+fromkeys: iterable
+	"dict.fromkeys(iterable) — return a new dict with keys from
+	iterable, each mapped to None.  Used by re._parser to dedupe
+	a list while preserving insertion order (`list(dict.fromkeys(xs))`)."
+
+	^ self @env1:fromkeys: iterable _: None
+%
+
+category: 'Grail-Initialization'
+classmethod: dict
+fromkeys: iterable _: value
+	"dict.fromkeys(iterable, value) — return a new dict with keys
+	from iterable, each mapped to ``value``."
+
+	| result iter done |
+	result := self ___new___.
+	(iterable @env0:isKindOf: SequenceableCollection) ifTrue: [
+		1 @env0:to: iterable @env0:size do: [:i |
+			result @env0:at: (iterable @env0:at: i) put: value
+		].
+		^ result
+	].
+	iter := iterable __iter__.
+	done := false.
+	[done] @env0:whileFalse: [
+		[result @env0:at: iter __next__ put: value]
+			@env0:on: StopIteration do: [:ex | done := true]
+	].
+	^ result
+%
+
+category: 'Grail-Initialization'
+classmethod: dict
 _new: positional kw: keywords
 	"dict(**kwargs) and dict(source, **kwargs) varargs entry point.
 	Builds a dict from any positional source plus keyword overrides.

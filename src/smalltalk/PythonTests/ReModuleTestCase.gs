@@ -148,6 +148,74 @@ testMultipleCaptureGroups
 
 category: 'Grail-Tests - Capture groups'
 method: ReModuleTestCase
+testNamedCaptureGroup
+	"Named capture group (?P<name>...): group accessor takes the name."
+
+	| m |
+	m := (re @env1:compile: '(?P<num>\d+)') @env1:match: '42abc'.
+	self assert: m notNil.
+	self assert: (m @env1:group: 'num') equals: '42'.
+%
+
+category: 'Grail-Tests - Character classes & quantifiers'
+method: ReModuleTestCase
+testCharacterClass
+	"Character class `[abc]+` matches a run of any of a, b, c.
+	Exercises the bytes/bytearray.find path in _compiler's
+	_optimize_charset."
+
+	| m |
+	m := re @env1:search: '[abc]+' _: 'xyzabcdef'.
+	self assert: m notNil.
+	self assert: (m @env1:group: 0) equals: 'abc'.
+%
+
+category: 'Grail-Tests - Character classes & quantifiers'
+method: ReModuleTestCase
+testDigitClass
+	"Digit shorthand `\d+` returns the consecutive digit run."
+
+	| m |
+	m := re @env1:search: '\d+' _: 'abc123def'.
+	self assert: m notNil.
+	self assert: (m @env1:group: 0) equals: '123'.
+%
+
+category: 'Grail-Tests - Character classes & quantifiers'
+method: ReModuleTestCase
+testDotPlusGreedy
+	"`h.+o` matches greedily from `h` through the last `o`."
+
+	| m |
+	m := (re @env1:compile: 'h.+o') @env1:match: 'hello'.
+	self assert: m notNil.
+	self assert: (m @env1:group: 0) equals: 'hello'.
+%
+
+category: 'Grail-Tests - Module-level helpers'
+method: ReModuleTestCase
+testFindall
+	"re.findall returns every non-overlapping match as a list of
+	strings (or tuples when there are capture groups)."
+
+	self assert: (re @env1:findall: '\d+' _: 'a12b34c5')
+		equals: (OrderedCollection new add: '12'; add: '34'; add: '5'; yourself).
+%
+
+category: 'Grail-Tests - Module-level helpers'
+method: ReModuleTestCase
+testSplit
+	"re.split divides the source at every match of the pattern.
+	Exercises the keyword-only varargs argument binding
+	(maxsplit / flags after *args) added on this branch — without
+	it `maxsplit` was unbound on the no-args call path."
+
+	self assert: (re @env1:split: ',' _: 'a,b,c,d')
+		equals: (OrderedCollection new add: 'a'; add: 'b'; add: 'c'; add: 'd'; yourself).
+%
+
+category: 'Grail-Tests - Capture groups'
+method: ReModuleTestCase
 testGroupSpan
 	"match.span(N) returns (start, end) for each group."
 
