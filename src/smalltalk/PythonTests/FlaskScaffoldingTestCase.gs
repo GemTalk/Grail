@@ -477,6 +477,72 @@ testHashlibByName
 		equals: '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824'.
 %
 
+category: 'Grail-Tests - hashlib'
+method: FlaskScaffoldingTestCase
+testHashlibCopyIndependent
+	"``Hash.copy()`` clones independently — mutating the original
+	after a copy must not affect the clone's digest.  HMAC depends
+	on this."
+
+	| mod result clone divergent |
+	mod := self loadFixture: 'use_hashlib'.
+	result := mod @env1:hash_copy.
+	clone := result @env0:at: 1.
+	divergent := result @env0:at: 2.
+	"Clone keeps sha256('hello') digest"
+	self assert: clone
+		equals: '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824'.
+	"Original got 'hello world' appended"
+	self assert: divergent
+		equals: 'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9'.
+%
+
+! --- hmac (Tier 1.5) ------------------------------------------------------
+
+category: 'Grail-Tests - hmac'
+method: FlaskScaffoldingTestCase
+testHmacKnownVectorSha256
+	"``hmac.new(key, msg, 'sha256').hexdigest()`` matches RFC 4231
+	test vector parity with CPython."
+
+	| mod result |
+	mod := self loadFixture: 'use_hmac'.
+	result := mod @env1:basic_sha256: 'secret' asByteArray _: 'message' asByteArray.
+	self assert: result asLowercase
+		equals: '8b5f48702995c1598c573db1e21866a9b825d4a794d169d7060a03605796360b'.
+%
+
+category: 'Grail-Tests - hmac'
+method: FlaskScaffoldingTestCase
+testHmacStreaming
+	"Multiple update() calls accumulate into the same MAC."
+
+	| mod parts result |
+	mod := self loadFixture: 'use_hmac'.
+	parts := OrderedCollection new
+		add: 'hello' asByteArray;
+		add: ' ' asByteArray;
+		add: 'world' asByteArray;
+		yourself.
+	result := mod @env1:streaming: 'k' asByteArray _: parts.
+	self assert: result asLowercase
+		equals: (mod @env1:basic_sha256: 'k' asByteArray _: 'hello world' asByteArray) asLowercase.
+%
+
+category: 'Grail-Tests - hmac'
+method: FlaskScaffoldingTestCase
+testHmacCompareDigestConstantTime
+	"``hmac.compare_digest`` returns True for equal inputs, False
+	for unequal — the basic correctness check (timing-leak resistance
+	is the implementation's purpose; we just verify the answer)."
+
+	| mod |
+	mod := self loadFixture: 'use_hmac'.
+	self assert: (mod @env1:constant_time_eq: 'abc' asByteArray _: 'abc' asByteArray).
+	self deny: (mod @env1:constant_time_eq: 'abc' asByteArray _: 'abd' asByteArray).
+	self deny: (mod @env1:constant_time_eq: 'abc' asByteArray _: 'abcd' asByteArray).
+%
+
 ! --- Blinker end-to-end (Tier 1) ------------------------------------------
 
 category: 'Grail-Tests - Blinker'

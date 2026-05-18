@@ -41,3 +41,12 @@ def digest_sizes():
 def by_name():
     """``hashlib.new(name)`` should round-trip the same digest."""
     return hashlib.new('sha256', b'hello').hexdigest()
+
+
+def hash_copy():
+    """``Hash.copy()`` clones independently — update on the original
+    after copy must not change the clone's digest."""
+    h = hashlib.sha256(b'hello')
+    clone = h.copy()
+    h.update(b' world')   # diverge
+    return (clone.hexdigest(), h.hexdigest())

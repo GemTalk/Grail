@@ -209,9 +209,11 @@ copy
 	| h |
 	h := Hash @env0:new.
 	h @env0:_initAlgo: algo data: nil.
-	"Copy buffer manually so the clone has its own ByteArray."
+	"Copy buffer manually so the clone has its own ByteArray.  Use
+	``@env1:update:`` so dispatch finds the env-1 method (env-0 has
+	no ``update:`` on Hash)."
 	(buffer @env0:size @env0:> 0) ifTrue: [
-		h @env0:update: (buffer @env0:copyFrom: 1 to: buffer @env0:size)
+		h @env1:update: (buffer @env0:copyFrom: 1 to: buffer @env0:size)
 	].
 	^ h
 %
