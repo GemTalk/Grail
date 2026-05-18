@@ -712,6 +712,242 @@ testTimeAsctimeOfEpoch
 	self assert: s equals: 'Thu Jan 01 00:00:00 1970'
 %
 
+! --- ipaddress module -----------------------------------------------------
+
+category: 'Grail-Tests - ipaddress'
+method: FlaskScaffoldingTestCase
+testIpaddressParseAndPrint
+	"Round-trip a dotted-quad through ip_address(str(...))."
+
+	| mod |
+	mod := self loadFixture: 'use_ipaddress'.
+	self assert: (mod @env1:parse_ipv4: '192.168.1.1') equals: '192.168.1.1'.
+	self assert: (mod @env1:parse_ipv4: '0.0.0.0') equals: '0.0.0.0'.
+	self assert: (mod @env1:parse_ipv4: '255.255.255.255') equals: '255.255.255.255'
+%
+
+category: 'Grail-Tests - ipaddress'
+method: FlaskScaffoldingTestCase
+testIpaddressPackedInt
+	"int(IPv4Address) returns the 32-bit packed value."
+
+	| mod |
+	mod := self loadFixture: 'use_ipaddress'.
+	self assert: (mod @env1:packed_int: '0.0.0.1') equals: 1.
+	self assert: (mod @env1:packed_int: '1.0.0.0') equals: 16r01000000.
+	self assert: (mod @env1:packed_int: '192.168.1.1') equals: 16rC0A80101
+%
+
+category: 'Grail-Tests - ipaddress'
+method: FlaskScaffoldingTestCase
+testIpaddressLoopback
+	"127.x.x.x is loopback."
+
+	| mod |
+	mod := self loadFixture: 'use_ipaddress'.
+	self assert: (mod @env1:is_loopback: '127.0.0.1') equals: true.
+	self assert: (mod @env1:is_loopback: '127.255.255.255') equals: true.
+	self assert: (mod @env1:is_loopback: '128.0.0.0') equals: false
+%
+
+category: 'Grail-Tests - ipaddress'
+method: FlaskScaffoldingTestCase
+testIpaddressPrivate
+	"RFC 1918 ranges (+ loopback / link-local) are private."
+
+	| mod |
+	mod := self loadFixture: 'use_ipaddress'.
+	self assert: (mod @env1:is_private: '10.0.0.1') equals: true.
+	self assert: (mod @env1:is_private: '172.16.0.1') equals: true.
+	self assert: (mod @env1:is_private: '172.31.255.255') equals: true.
+	self assert: (mod @env1:is_private: '172.32.0.1') equals: false.
+	self assert: (mod @env1:is_private: '192.168.1.1') equals: true.
+	self assert: (mod @env1:is_private: '8.8.8.8') equals: false
+%
+
+category: 'Grail-Tests - ipaddress'
+method: FlaskScaffoldingTestCase
+testIpaddressGlobal
+	"Public addresses are global; private/multicast/reserved aren't."
+
+	| mod |
+	mod := self loadFixture: 'use_ipaddress'.
+	self assert: (mod @env1:is_global: '8.8.8.8') equals: true.
+	self assert: (mod @env1:is_global: '192.168.1.1') equals: false
+%
+
+category: 'Grail-Tests - ipaddress'
+method: FlaskScaffoldingTestCase
+testIpaddressLinkLocalAndMulticast
+	"169.254/16 is link-local; 224/4 is multicast."
+
+	| mod |
+	mod := self loadFixture: 'use_ipaddress'.
+	self assert: (mod @env1:is_link_local: '169.254.1.1') equals: true.
+	self assert: (mod @env1:is_link_local: '10.0.0.1') equals: false.
+	self assert: (mod @env1:is_multicast: '224.0.0.1') equals: true.
+	self assert: (mod @env1:is_multicast: '192.168.1.1') equals: false
+%
+
+category: 'Grail-Tests - ipaddress'
+method: FlaskScaffoldingTestCase
+testIpaddressNetworkString
+	"ip_network round-trips through str()."
+
+	| mod |
+	mod := self loadFixture: 'use_ipaddress'.
+	self assert: (mod @env1:network_str: '192.168.1.0/24') equals: '192.168.1.0/24'.
+	self assert: (mod @env1:network_str: '10.0.0.0/8') equals: '10.0.0.0/8'
+%
+
+category: 'Grail-Tests - ipaddress'
+method: FlaskScaffoldingTestCase
+testIpaddressNetworkContains
+	"addr in network for matching / non-matching addresses."
+
+	| mod |
+	mod := self loadFixture: 'use_ipaddress'.
+	self assert: (mod @env1:network_contains: '192.168.1.0/24' _: '192.168.1.50') equals: true.
+	self assert: (mod @env1:network_contains: '192.168.1.0/24' _: '192.168.2.1') equals: false.
+	self assert: (mod @env1:network_contains: '10.0.0.0/8' _: '10.99.0.1') equals: true
+%
+
+category: 'Grail-Tests - ipaddress'
+method: FlaskScaffoldingTestCase
+testIpaddressBroadcastAddress
+	"Network broadcast is the last address in the block."
+
+	| mod |
+	mod := self loadFixture: 'use_ipaddress'.
+	self assert: (mod @env1:network_broadcast: '192.168.1.0/24') equals: '192.168.1.255'.
+	self assert: (mod @env1:network_broadcast: '10.0.0.0/8') equals: '10.255.255.255'
+%
+
+category: 'Grail-Tests - ipaddress'
+method: FlaskScaffoldingTestCase
+testIpaddressRejectsIPv6
+	"IPv6 is not supported yet; ip_address raises ValueError."
+
+	| mod |
+	mod := self loadFixture: 'use_ipaddress'.
+	self assert: mod @env1:reject_ipv6 equals: 'rejected'
+%
+
+category: 'Grail-Tests - ipaddress'
+method: FlaskScaffoldingTestCase
+testIpaddressRejectsBadOctet
+	"Out-of-range octet raises ValueError."
+
+	| mod |
+	mod := self loadFixture: 'use_ipaddress'.
+	self assert: mod @env1:reject_bad_octet equals: 'rejected'
+%
+
+! --- mimetypes module -----------------------------------------------------
+
+category: 'Grail-Tests - mimetypes'
+method: FlaskScaffoldingTestCase
+testMimetypesGuessHtml
+	"index.html resolves to text/html with no encoding."
+
+	| mod result |
+	mod := self loadFixture: 'use_mimetypes'.
+	result := mod @env1:guess_html.
+	self assert: (result @env1:__getitem__: 0) equals: 'text/html'.
+	self assert: (result @env1:__getitem__: 1) equals: None
+%
+
+category: 'Grail-Tests - mimetypes'
+method: FlaskScaffoldingTestCase
+testMimetypesGuessPng
+	"img/header.png walks into the directory and finds image/png."
+
+	| mod result |
+	mod := self loadFixture: 'use_mimetypes'.
+	result := mod @env1:guess_png.
+	self assert: (result @env1:__getitem__: 0) equals: 'image/png'
+%
+
+category: 'Grail-Tests - mimetypes'
+method: FlaskScaffoldingTestCase
+testMimetypesWithEncoding
+	"archive.tar.gz -> (application/x-tar, gzip).  The encoding map
+	strips .gz to expose the underlying type."
+
+	| mod result |
+	mod := self loadFixture: 'use_mimetypes'.
+	result := mod @env1:guess_with_encoding.
+	self assert: (result @env1:__getitem__: 0) equals: 'application/x-tar'.
+	self assert: (result @env1:__getitem__: 1) equals: 'gzip'
+%
+
+category: 'Grail-Tests - mimetypes'
+method: FlaskScaffoldingTestCase
+testMimetypesUnknown
+	"Unknown extensions return (None, None)."
+
+	| mod result |
+	mod := self loadFixture: 'use_mimetypes'.
+	result := mod @env1:guess_unknown.
+	self assert: (result @env1:__getitem__: 0) equals: None.
+	self assert: (result @env1:__getitem__: 1) equals: None
+%
+
+category: 'Grail-Tests - mimetypes'
+method: FlaskScaffoldingTestCase
+testMimetypesExtensionless
+	"Files with no extension return (None, None)."
+
+	| mod result |
+	mod := self loadFixture: 'use_mimetypes'.
+	result := mod @env1:guess_extensionless.
+	self assert: (result @env1:__getitem__: 0) equals: None.
+	self assert: (result @env1:__getitem__: 1) equals: None
+%
+
+category: 'Grail-Tests - mimetypes'
+method: FlaskScaffoldingTestCase
+testMimetypesStripsQuery
+	"Query-string suffixes do not block extension detection."
+
+	| mod result |
+	mod := self loadFixture: 'use_mimetypes'.
+	result := mod @env1:guess_through_query.
+	self assert: (result @env1:__getitem__: 0) equals: 'text/css'
+%
+
+category: 'Grail-Tests - mimetypes'
+method: FlaskScaffoldingTestCase
+testMimetypesGuessExtension
+	"image/jpeg reverse-resolves to one of the known extensions."
+
+	| mod result |
+	mod := self loadFixture: 'use_mimetypes'.
+	result := mod @env1:guess_ext_of_jpeg.
+	self assert: (#('.jpeg' '.jpg') includes: result)
+%
+
+category: 'Grail-Tests - mimetypes'
+method: FlaskScaffoldingTestCase
+testMimetypesAddType
+	"add_type extends the runtime map."
+
+	| mod result |
+	mod := self loadFixture: 'use_mimetypes'.
+	result := mod @env1:add_custom_then_guess.
+	self assert: (result @env1:__getitem__: 0) equals: 'application/x-grail'
+%
+
+category: 'Grail-Tests - mimetypes'
+method: FlaskScaffoldingTestCase
+testMimetypesInited
+	"mimetypes.inited is True after the module loads."
+
+	| mod |
+	mod := self loadFixture: 'use_mimetypes'.
+	self assert: mod @env1:inited_after_import equals: true
+%
+
 ! --- struct module --------------------------------------------------------
 
 category: 'Grail-Tests - struct'
