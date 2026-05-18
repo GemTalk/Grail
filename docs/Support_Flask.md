@@ -73,7 +73,7 @@ Known deviations (all upstream-compatible behaviour):
 * `re/_compiler.py`: `dis(code)` body stubbed (debug-only, never on
   the regex hot path).
 
-### Tier 1 — blinker (IN PROGRESS)
+### Tier 1 — blinker (DONE)
 
 End-to-end user code works:
 
@@ -118,21 +118,56 @@ Stubs in `src/python/stdlib/` for blinker's other imports
 (`collections`, `collections.abc`, `weakref`, `inspect`, `typing`,
 `__future__`) — enough for `import blinker` to succeed.
 
-### Tier 2 + — not yet started
+### Tier 1.5 — small isolated stdlib (DONE)
 
-Everything below depends on bringing up more stdlib.  Implementation
-order, cheapest-first:
+All the small modules `itsdangerous` and Werkzeug import are in.
+Most are Smalltalk-backed (wrap a GemStone primitive); a couple are
+pure-Python ports.
 
-**Small, isolated stdlib (Tier 1.5):**
-* `typing` (stub already; extend if any Tier 2 dep trips on it),
-  `contextlib` (`contextmanager`, `closing`, `suppress`, `ExitStack`),
-  `warnings`, `base64`, `struct`, `hashlib`, `hmac`, `secrets`,
-  `time`, `mimetypes`, `ipaddress`, `inspect` (extend the stub).
+* `base64` — list-accumulator port (works around Grail's empty
+  `bytes(bytearray)`); `str.encode(encoding)` added on
+  `CharacterCollection` for str inputs.
+* `contextlib` — `closing`, `suppress`, `nullcontext`, `ExitStack`,
+  and a real `@contextmanager` built on the generator runtime.  The
+  with-statement codegen for `WithAst` landed in the same commit
+  (was a `self halt` stub previously).
+* `time` — wall-clock / `monotonic` / `perf_counter` / `sleep`
+  (Delay-backed) / `gmtime` / `localtime` / `mktime` / `strftime`
+  with the directives HTTP-date and cookie expiration need.
+* `secrets` — `token_bytes` / `token_hex` / `token_urlsafe` (DEFAULT
+  ENTROPY=32), `choice` / `randbelow` / `randbits`, constant-time
+  `compare_digest` accepting str or bytes.  Backed by HostRandom.
+* `warnings` — `warn` / `warn_explicit`, filter management
+  (`simplefilter` / `filterwarnings` / `resetwarnings`), and a
+  `catch_warnings` context manager that snapshots and restores
+  filter state.
+* `struct` — `pack` / `unpack` / `unpack_from` / `calcsize` with
+  `@ = < > !` byte-order prefixes; `b B h H i I l L q Q` ints,
+  `f d` IEEE 754 floats, `s` counted bytes, `c ?` byte/bool, `x`
+  padding.  Repeat counts supported.
+* `mimetypes` — `guess_type` / `guess_extension` / `add_type` /
+  `init` with a built-in extension map covering HTML / images /
+  fonts / archives / etc.  Strips query/fragment, peels encoding
+  suffixes (`.gz` / `.bz2` / `.xz` / `.Z` / `.br`).
+* `ipaddress` — `IPv4Address` / `IPv4Network` with `is_loopback` /
+  `is_private` / `is_global` / `is_link_local` / `is_multicast` /
+  etc. exposed as value attrs.  IPv6 not implemented — `ip_address`
+  with a colon raises `ValueError` (Werkzeug catches and falls
+  through to the raw string).
+* `hashlib` — landed earlier this push; md5 / sha1 / sha256 / sha512
+  / sha3 family via GemStone `ByteArray` hash primitives.
+* `hmac` — pure-Python port over hashlib (compare_digest reuses
+  secrets'-shape comparator).
 
-**Bigger stdlib (Tier 2):**
+Existing stub modules that need extending later: `typing`,
+`inspect` (still skeleton); they suffice for current import chains.
+
+### Tier 2 — not yet started
+
+**Bigger stdlib:**
 * `datetime` — large, fiddly; hard dep of `itsdangerous` + Werkzeug.
   Easiest path: Smalltalk-backed wrapping GemStone's `DateTime`.
-* `json` — pure-Python in CPython, works once `re` is in.
+* `json` — pure-Python in CPython, works once `re` is in (it is).
 * `collections` (full) — `OrderedDict`, `deque`, `namedtuple`,
   `ChainMap`, `Counter` (`defaultdict` already stubbed).
 * `io` — `StringIO`, `BytesIO`.
@@ -180,6 +215,9 @@ order, cheapest-first:
 
 - **M1 — `re` works.**  Done.
 - **M2 — `import blinker` + roundtrip basic signals.**  Done.
+- **M2.5 — Tier 1.5 stdlib in place** (base64 / contextlib / time /
+  secrets / warnings / struct / mimetypes / ipaddress / hashlib /
+  hmac).  Done.  Unblocks `itsdangerous` at the stdlib layer.
 - **M3 — `import itsdangerous` + `import markupsafe`.**
 - **M4 — Jinja2 renders a template** standalone, no Flask yet.
 - **M5 — `werkzeug.wrappers.Request/Response` round-trip a WSGI
