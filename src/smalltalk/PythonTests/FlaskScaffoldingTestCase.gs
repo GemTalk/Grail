@@ -712,6 +712,137 @@ testTimeAsctimeOfEpoch
 	self assert: s equals: 'Thu Jan 01 00:00:00 1970'
 %
 
+! --- secrets module -------------------------------------------------------
+
+category: 'Grail-Tests - secrets'
+method: FlaskScaffoldingTestCase
+testSecretsTokenBytesDefault
+	"token_bytes() returns 32 bytes by default."
+
+	| mod result |
+	mod := self loadFixture: 'use_secrets'.
+	result := mod @env1:token_default.
+	self assert: (result isKindOf: ByteArray).
+	self assert: result size equals: 32
+%
+
+category: 'Grail-Tests - secrets'
+method: FlaskScaffoldingTestCase
+testSecretsTokenBytesNbytes
+	"token_bytes(n) returns exactly n bytes."
+
+	| mod result |
+	mod := self loadFixture: 'use_secrets'.
+	result := mod @env1:token_bytes_n: 8.
+	self assert: result size equals: 8
+%
+
+category: 'Grail-Tests - secrets'
+method: FlaskScaffoldingTestCase
+testSecretsTokenHexLength
+	"token_hex(n) returns a 2*n-character lowercase hex string."
+
+	| mod result n |
+	mod := self loadFixture: 'use_secrets'.
+	n := 16.
+	result := mod @env1:token_hex_n: n.
+	self assert: result size equals: n * 2.
+	"All chars in [0-9a-f]"
+	result do: [:c |
+		self assert: ((c >= $0 and: [c <= $9]) or: [c >= $a and: [c <= $f]])
+	]
+%
+
+category: 'Grail-Tests - secrets'
+method: FlaskScaffoldingTestCase
+testSecretsTokenUrlsafeAlphabet
+	"token_urlsafe(n) returns base64-urlsafe chars only ([A-Za-z0-9-_])."
+
+	| mod result |
+	mod := self loadFixture: 'use_secrets'.
+	result := mod @env1:token_urlsafe_n: 12.
+	"Length: ceil(n*4/3) without padding = 16 for n=12"
+	self assert: result size equals: 16.
+	result do: [:c |
+		self assert:
+			((c >= $A and: [c <= $Z])
+				or: [(c >= $a and: [c <= $z])
+				or: [(c >= $0 and: [c <= $9])
+				or: [c = $- or: [c = $_]]]])
+	]
+%
+
+category: 'Grail-Tests - secrets'
+method: FlaskScaffoldingTestCase
+testSecretsTokensAreRandom
+	"Two consecutive token_bytes calls should produce different
+	results (overwhelmingly likely - 1 in 2^128)."
+
+	| mod |
+	mod := self loadFixture: 'use_secrets'.
+	self assert: mod @env1:two_tokens_differ equals: true
+%
+
+category: 'Grail-Tests - secrets'
+method: FlaskScaffoldingTestCase
+testSecretsChoice
+	"choice returns a member of the input sequence."
+
+	| mod result seq |
+	mod := self loadFixture: 'use_secrets'.
+	seq := list @env1:value: { #( 'a' 'b' 'c' 'd' 'e' ) @env0:asOrderedCollection } value: nil.
+	result := mod @env1:choice_from: seq.
+	self assert: (#('a' 'b' 'c' 'd' 'e') includes: result)
+%
+
+category: 'Grail-Tests - secrets'
+method: FlaskScaffoldingTestCase
+testSecretsRandbelow
+	"randbelow(n) returns an integer in [0, n)."
+
+	| mod result |
+	mod := self loadFixture: 'use_secrets'.
+	1 to: 20 do: [:i |
+		result := mod @env1:randbelow_n: 10.
+		self assert: result >= 0.
+		self assert: result < 10
+	]
+%
+
+category: 'Grail-Tests - secrets'
+method: FlaskScaffoldingTestCase
+testSecretsRandbits
+	"randbits(k) returns a non-negative int < 2^k."
+
+	| mod result |
+	mod := self loadFixture: 'use_secrets'.
+	result := mod @env1:randbits_k: 8.
+	self assert: result >= 0.
+	self assert: result < 256
+%
+
+category: 'Grail-Tests - secrets'
+method: FlaskScaffoldingTestCase
+testSecretsCompareDigestEqual
+	"compare_digest returns true for equal inputs."
+
+	| mod |
+	mod := self loadFixture: 'use_secrets'.
+	self assert: (mod @env1:compare_equal: 'hello' _: 'hello') equals: true.
+	self assert: (mod @env1:compare_equal: 'hello' asByteArray _: 'hello' asByteArray) equals: true
+%
+
+category: 'Grail-Tests - secrets'
+method: FlaskScaffoldingTestCase
+testSecretsCompareDigestDiffers
+	"compare_digest returns false for different inputs."
+
+	| mod |
+	mod := self loadFixture: 'use_secrets'.
+	self assert: (mod @env1:compare_equal: 'hello' _: 'world') equals: false.
+	self assert: (mod @env1:compare_equal: 'hello' _: 'helloo') equals: false
+%
+
 ! --- contextlib + with-statement ------------------------------------------
 
 category: 'Grail-Tests - contextlib'

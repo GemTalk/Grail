@@ -69,6 +69,7 @@ initializeBuiltinModules
 		@env0:at: #math 		put: math 		instance;
 		@env0:at: #hashlib 		put: hashlib 	instance;
 		@env0:at: #time 		put: time 		instance;
+		@env0:at: #secrets 		put: secrets 	instance;
 		@env0:at: #enum 		put: enum 		instance;
 		@env0:at: #fractions	put: fractions 	instance;
 		@env0:at: #functools	put: functools 	instance;
