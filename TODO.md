@@ -83,18 +83,20 @@ These break programs that look ordinary in CPython.
   than the parent's `X` (ModuleAst >> isPackage check) — see
   `PkgRelativeInitTestCase`.
 
-- [ ] **Star imports miss dynamic names** — `from X import *` is
-  expanded at parse time by `importlib.expandStarImports:`, which
-  inspects X's AST and pulls names out of `body.variables`.  Names
-  added at module-init time by `globals().update(...)` (the
-  `re._constants._makecodes` idiom, for example) aren't visible
-  to the parse-time analysis, so the importer doesn't get them.
-  Fix: emit a runtime merge step after the per-name imports,
-  copying any public attribute on the imported module that the
-  parse-time expansion didn't already bind.  An attempted
-  implementation hit interactions with the merge target's instVar
-  layout that needs more time than this branch had; see the
-  `re-init-restore` branch history.
+- [x] ~~**Star imports miss dynamic names**~~ — `from X import *`
+  now emits a runtime merge step in addition to the parse-time
+  per-name expansion.  `ImportFromAst` carries a `wasStarImport`
+  flag (set by `importlib.expandStarImports:`) that triggers
+  codegen of `self ___mergePublicAttrsFrom: X` after the static
+  imports.  The merge walks BOTH X's own declared instVars
+  (skipping the inherited SymbolDictionary structural slots) AND
+  its dynamic dict entries, copying every public attribute into
+  the importer via `importlib.___bind:onParent:as:` (which writes
+  to both the importer's dict slot and same-named instVar slot).
+  The `___import__` call uses `('*',)` as fromlist to pull the
+  leaf submodule rather than the top-level package.  Covered by
+  `StarImportDynamicNamesTestCase` (fixtures under
+  `tests/python/pkg_star_dyn/`).
 
 - [x] ~~**Submodule auto-binding on parent package**~~ —
   `importlib >> registerModule:with:` now binds child on parent

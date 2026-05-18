@@ -7,7 +7,7 @@ StatementAst ifNil: [self error: 'StatementAst is not defined. Check file orderi
 expectvalue /Class
 doit
 StatementAst subclass: 'ImportFromAst'
-  instVarNames: #( module names level)
+  instVarNames: #( module names level wasStarImport)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -69,6 +69,27 @@ names: anArray
 	known."
 
 	names := anArray
+%
+
+category: 'Grail-accessing'
+method: ImportFromAst
+wasStarImport
+
+	^wasStarImport ifNil: [false]
+%
+
+category: 'Grail-accessing'
+method: ImportFromAst
+wasStarImport: aBoolean
+	"Set by importlib.expandStarImports: on any statement that
+	was originally a star import (`from X import *`), regardless
+	of whether the parse-time expansion succeeded.  Codegen then
+	emits an additional runtime merge step that copies any
+	non-statically-declared public attributes from the source
+	module — picks up dynamic names that parse-time analysis
+	can't see (e.g. opcodes injected via globals().update())."
+
+	wasStarImport := aBoolean
 %
 
 category: 'Grail-other'
@@ -178,5 +199,20 @@ printSmalltalkOn: aStream
 				nextPutAll: '.'.
 		].
 		index < names size ifTrue: [aStream lf].
+	].
+	"For statements that were originally `from X import *`, emit
+	a runtime merge step that copies any public attribute from X
+	into self.  Catches dynamic names that parse-time expansion
+	missed (e.g. opcodes injected via globals().update())."
+	self wasStarImport ifTrue: [
+		names isEmpty ifFalse: [aStream lf].
+		"Pass `('*',)` as fromlist so the importer returns the leaf
+		submodule (matches CPython semantics for `from X import *`)
+		rather than the top-level package, which is what an empty
+		fromlist on a dotted name would yield."
+		aStream
+			nextPutAll: 'self @env1:___mergePublicAttrsFrom: (((Python @env0:at: #builtins) instance) ___import__: { ''';
+			nextPutAll: absoluteName;
+			nextPutAll: '''. nil. nil. { ''*'' }. 0 } kw: nil).'.
 	].
 %

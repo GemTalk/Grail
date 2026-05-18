@@ -223,6 +223,53 @@ update: other
 	]
 %
 
+category: 'Python-Mutation Methods'
+method: module
+___mergePublicAttrsFrom: aModule
+	"Copy every public (non-underscore-prefixed) attribute from
+	aModule's namespace into self.  Used by `from X import *`
+	codegen to pick up dynamically-injected names that parse-time
+	star-import expansion missed (e.g. names added by
+	`globals().update(...)` via a helper like re._constants._makecodes).
+
+	Walks both the underlying SymbolDictionary keys (dynamic
+	attributes) AND the static instVar slots (names declared by
+	module-level assignments in the source).  For each name found,
+	uses the centralized `importlib.___bind:onParent:as:` helper
+	so the new attribute lands in both self's dict slot AND the
+	same-named instVar slot when one exists (the latter is what
+	makes the importer's compiled `name ^ name` accessor return
+	the merged value rather than the still-nil instVar)."
+
+	| ownIvars inheritedCount |
+	"Only the OWN instVars of the source's class are user-declared
+	module variables — inherited slots like `numElements` from
+	SymbolDictionary aren't.  Iterate just the own ones; the
+	absolute instVarAt: index is `inheritedCount + ownIndex`."
+	ownIvars := aModule @env0:class @env0:instVarNames.
+	inheritedCount := (aModule @env0:class @env0:allInstVarNames @env0:size)
+		@env0:- (ownIvars @env0:size).
+	ownIvars @env0:doWithIndex: [:nm :i |
+		| s val |
+		s := nm @env0:asString.
+		(s @env0:size @env0:> 0
+			and: [(s @env0:at: 1) @env0:~= $_]) ifTrue: [
+			val := aModule @env0:instVarAt: inheritedCount @env0:+ i.
+			val @env0:== nil ifFalse: [
+				importlib @env0:___bind: val onParent: self as: nm @env0:asSymbol
+			]
+		]
+	].
+	aModule @env0:keysAndValuesDo: [:key :value |
+		| s |
+		s := key @env0:asString.
+		(s @env0:size @env0:> 0
+			and: [(s @env0:at: 1) @env0:~= $_]) ifTrue: [
+			importlib @env0:___bind: value onParent: self as: key @env0:asSymbol
+		]
+	]
+%
+
 set compile_env: 0
 
 category: 'Grail-Attribute Access'

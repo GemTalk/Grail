@@ -176,6 +176,12 @@ expandStarImports: aModuleAst
 			stmt names size = 1 and: [(stmt names first name) == #'*']])
 		ifTrue: [
 			| absName path subAst expandedNames newAliases |
+			"Mark the statement as a star import even before we know
+			whether parse-time expansion succeeds — codegen emits a
+			runtime merge step too, which picks up dynamic names that
+			static analysis can't see (e.g. ``globals().update(...)``
+			from a helper like re._constants._makecodes)."
+			stmt wasStarImport: true.
 			absName := stmt resolvedModuleName.
 			path := self @env1:___moduleNameToPath___: absName.
 			path notNil ifTrue: [
@@ -193,6 +199,12 @@ expandStarImports: aModuleAst
 						yourself)].
 				stmt names: newAliases.
 				expandedNames do: [:n | body declareVariable: n asSymbol].
+			] ifFalse: [
+				"Source not on the loader search path — drop the bogus
+				`*` alias.  The runtime merge step is the only thing
+				that runs for this case, and per-name codegen for `*`
+				would emit invalid Smalltalk."
+				stmt names: #()
 			]
 		]
 	]

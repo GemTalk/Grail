@@ -506,6 +506,7 @@ run
 	at: #'StopAsyncIterationTestCase' put: nil;
 	at: #'StopIterationTestCase' put: nil;
 	at: #'StrTestCase' put: nil;
+	at: #'StarImportDynamicNamesTestCase' put: nil;
 	at: #'StringModuleTestCase' put: nil;
 	at: #'SubmoduleAutoBindTestCase' put: nil;
 	at: #'SyntaxErrorTestCase' put: nil;
@@ -967,6 +968,7 @@ input src/smalltalk/PythonTests/SliceAndLoopsTestCase.gs
 input src/smalltalk/PythonTests/SreTestCase.gs
 input src/smalltalk/PythonTests/StatisticsTestCase.gs
 input src/smalltalk/PythonTests/StrTestCase.gs
+input src/smalltalk/PythonTests/StarImportDynamicNamesTestCase.gs
 input src/smalltalk/PythonTests/StringModuleTestCase.gs
 input src/smalltalk/PythonTests/SubmoduleAutoBindTestCase.gs
 input src/smalltalk/PythonTests/SysTestCase.gs
