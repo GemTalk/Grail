@@ -507,6 +507,7 @@ run
 	at: #'StopIterationTestCase' put: nil;
 	at: #'StrTestCase' put: nil;
 	at: #'ClassMethodGlobalFallbackTestCase' put: nil;
+	at: #'FlaskScaffoldingTestCase' put: nil;
 	at: #'ReModuleTestCase' put: nil;
 	at: #'StarImportDynamicNamesTestCase' put: nil;
 	at: #'StringModuleTestCase' put: nil;
@@ -971,6 +972,7 @@ input src/smalltalk/PythonTests/SreTestCase.gs
 input src/smalltalk/PythonTests/StatisticsTestCase.gs
 input src/smalltalk/PythonTests/StrTestCase.gs
 input src/smalltalk/PythonTests/ClassMethodGlobalFallbackTestCase.gs
+input src/smalltalk/PythonTests/FlaskScaffoldingTestCase.gs
 input src/smalltalk/PythonTests/ReModuleTestCase.gs
 input src/smalltalk/PythonTests/StarImportDynamicNamesTestCase.gs
 input src/smalltalk/PythonTests/StringModuleTestCase.gs
