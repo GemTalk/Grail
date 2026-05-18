@@ -194,23 +194,34 @@ printSmalltalkOn: aStream
 			nextPutAll: ')'.
 		^ self
 	].
-	"Class-method free-variable fast path: when compiling a Python class
+	"Class-method free-variable path: when compiling a Python class
 	body, a free name that isn't a local or a class inst var still
 	resolves through Python's LEGB rules to the enclosing module's
-	globals.  Detect that case BEFORE the UnboundLocalError wrap below —
+	globals.  Three sub-cases, in priority order:
+	  (1) Module-level function name → emit BoundMethod pointing at
+	      the module instance (no unary accessor exists; adding one
+	      would shadow 0-arg call dispatch).
+	  (2) Statically-declared module instVar → emit the unary
+	      accessor for direct instVar read.
+	  (3) Unknown name that doesn't resolve as a Smalltalk global
+	      and isn't a local in any enclosing scope → emit a runtime
+	      dict lookup on the module instance with a NameError on
+	      miss.  Catches module globals injected after parse time
+	      (e.g. by `globals().update(...)` in a helper called from
+	      the source's body — the `re._constants._makecodes` idiom,
+	      where opcodes like `IN` / `BRANCH` are referenced in class
+	      methods on `SubPattern` but only added to the module's
+	      namespace at module-init time).
+	Detect all three BEFORE the UnboundLocalError wrap below —
 	otherwise `isVariableIsDeclared:` walks up to the module body's
-	BlockAst, sees the name declared there, and wraps it in a check that
-	reads the name as a Smalltalk local (which fails at compile time
-	because class methods don't have module inst vars in scope)."
+	BlockAst, sees the name declared there, and wraps it in a check
+	that reads the name as a Smalltalk local (which fails at
+	compile time because class methods don't have module inst vars
+	in scope)."
 	((ctx isKindOf: LoadAst)
 		and: [CallAst classBeingCompiled notNil
-			and: [CallAst moduleClassBeingCompiled notNil
-				and: [self isModuleScopeName: id]]])
+			and: [CallAst moduleClassBeingCompiled notNil]])
 		ifTrue: [
-			"For a module-level function name, emit a fresh BoundMethod
-			pointing at the module instance — there is no unary accessor
-			(adding one would shadow 0-arg call dispatch).  For other
-			module variables, fetch through the unary accessor."
 			(CallAst moduleFunctionNames notNil
 				and: [CallAst moduleFunctionNames includes: id asSymbol])
 				ifTrue: [
@@ -220,15 +231,40 @@ printSmalltalkOn: aStream
 						nextPutAll: ' @env0:___instance___) selector: #';
 						nextPutAll: id;
 						nextPutAll: ')'.
-				] ifFalse: [
+					^self
+				].
+			(self isModuleScopeName: id) ifTrue: [
+				aStream
+					nextPutAll: '((';
+					nextPutAll: CallAst moduleClassBeingCompiled name;
+					nextPutAll: ' @env0:___instance___) @env1:';
+					nextPutAll: id;
+					nextPutAll: ')'.
+				^self
+			].
+			"Free name with no static binding.  Skip the runtime
+			lookup when the name IS a local of some enclosing scope
+			(parameter or assignment target — handled by the bare
+			emit below) OR resolves as a Smalltalk global (class
+			names, exception classes, etc. — emit bare so the
+			compiler resolves them through the symbol list)."
+			((self isVariableIsDeclared: id) not
+				and: [(self class isResolvableSymbol: id asSymbol) not])
+				ifTrue: [
 					aStream
 						nextPutAll: '((';
 						nextPutAll: CallAst moduleClassBeingCompiled name;
-						nextPutAll: ' @env0:___instance___) @env1:';
+						nextPutAll: ' @env0:___instance___) @env0:at: #''';
 						nextPutAll: id;
-						nextPutAll: ')'.
-				].
-			^self
+						nextPutAll: ''' ifAbsent: [NameError ___signal___: ''name ';
+						nextPut: $';
+						nextPut: $';
+						nextPutAll: id;
+						nextPut: $';
+						nextPut: $';
+						nextPutAll: ' is not defined''])'.
+					^self
+				]
 		].
 	"Phase C-2: in load context, wrap reads of declared locals with a
 	runtime nil-check that raises UnboundLocalError naming the variable.
