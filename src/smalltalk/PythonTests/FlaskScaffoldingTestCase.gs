@@ -712,6 +712,169 @@ testTimeAsctimeOfEpoch
 	self assert: s equals: 'Thu Jan 01 00:00:00 1970'
 %
 
+! --- datetime module ------------------------------------------------------
+
+category: 'Grail-Tests - datetime'
+method: FlaskScaffoldingTestCase
+testDatetimeConstructor
+	"datetime(year, month, day, hour, minute, second) builds a value
+	with the expected fields."
+
+	| mod dt fields |
+	mod := self loadFixture: 'use_datetime'.
+	dt := mod @env1:make_datetime.
+	fields := mod @env1:datetime_fields: dt.
+	self assert: (fields @env1:__getitem__: 0) equals: 2024.
+	self assert: (fields @env1:__getitem__: 1) equals: 5.
+	self assert: (fields @env1:__getitem__: 2) equals: 18.
+	self assert: (fields @env1:__getitem__: 3) equals: 13.
+	self assert: (fields @env1:__getitem__: 4) equals: 45.
+	self assert: (fields @env1:__getitem__: 5) equals: 30
+%
+
+category: 'Grail-Tests - datetime'
+method: FlaskScaffoldingTestCase
+testDatetimeIsoformat
+	"datetime.isoformat() emits YYYY-MM-DDTHH:MM:SS."
+
+	| mod dt |
+	mod := self loadFixture: 'use_datetime'.
+	dt := mod @env1:make_datetime.
+	self assert: (mod @env1:isoformat_of: dt) equals: '2024-05-18T13:45:30'
+%
+
+category: 'Grail-Tests - datetime'
+method: FlaskScaffoldingTestCase
+testDatetimeFromIsoRoundtrip
+	"fromisoformat parses what isoformat emits."
+
+	| mod |
+	mod := self loadFixture: 'use_datetime'.
+	self assert: mod @env1:round_trip_iso equals: '2024-05-18T13:45:30'
+%
+
+category: 'Grail-Tests - datetime'
+method: FlaskScaffoldingTestCase
+testDatetimeNow
+	"datetime.now() returns a current-year value."
+
+	| mod |
+	mod := self loadFixture: 'use_datetime'.
+	self assert: mod @env1:now_is_recent equals: true
+%
+
+category: 'Grail-Tests - datetime'
+method: FlaskScaffoldingTestCase
+testDatetimeTimestampRoundtrip
+	"fromtimestamp(ts).timestamp() ~ ts."
+
+	| mod ts result |
+	mod := self loadFixture: 'use_datetime'.
+	ts := 1700000000.0.
+	result := mod @env1:timestamp_roundtrip: ts.
+	self assert: (result - ts) abs < 1.0
+%
+
+category: 'Grail-Tests - datetime'
+method: FlaskScaffoldingTestCase
+testTimedeltaConstructor
+	"timedelta(days=2, hours=3, minutes=15) totals to 2.135... days."
+
+	| mod td total |
+	mod := self loadFixture: 'use_datetime'.
+	td := mod @env1:make_timedelta.
+	total := mod @env1:timedelta_total_seconds: td.
+	self assert: total equals: ((2 * 86400) + (3 * 3600) + (15 * 60))
+%
+
+category: 'Grail-Tests - datetime'
+method: FlaskScaffoldingTestCase
+testDatetimePlusTimedelta
+	"datetime + timedelta returns a new datetime offset by the delta."
+
+	| mod dt fields |
+	mod := self loadFixture: 'use_datetime'.
+	dt := mod @env1:add_timedelta.
+	fields := mod @env1:datetime_fields: dt.
+	self assert: (fields @env1:__getitem__: 0) equals: 2024.
+	self assert: (fields @env1:__getitem__: 1) equals: 1.
+	self assert: (fields @env1:__getitem__: 2) equals: 11.
+	self assert: (fields @env1:__getitem__: 3) equals: 5
+%
+
+category: 'Grail-Tests - datetime'
+method: FlaskScaffoldingTestCase
+testDatetimeSubtraction
+	"datetime - datetime returns a timedelta in seconds."
+
+	| mod result |
+	mod := self loadFixture: 'use_datetime'.
+	result := mod @env1:subtract_datetimes.
+	self assert: result equals: 10 * 86400 + (5 * 3600)
+%
+
+category: 'Grail-Tests - datetime'
+method: FlaskScaffoldingTestCase
+testTimezoneUtc
+	"datetime.timezone.utc is a singleton."
+
+	| mod tz |
+	mod := self loadFixture: 'use_datetime'.
+	tz := mod @env1:utc_timezone.
+	self assert: tz equals: mod @env1:utc_timezone.
+	self assert: (tz @env1:tzname: nil) equals: 'UTC'
+%
+
+category: 'Grail-Tests - datetime'
+method: FlaskScaffoldingTestCase
+testDatetimeWithTz
+	"datetime(..., tzinfo=timezone.utc) stores the tz and includes
+	the offset in isoformat."
+
+	| mod dt iso |
+	mod := self loadFixture: 'use_datetime'.
+	dt := mod @env1:datetime_with_tz.
+	iso := dt @env1:isoformat.
+	self assert: iso equals: '2024-05-18T12:00:00+00:00'
+%
+
+category: 'Grail-Tests - datetime'
+method: FlaskScaffoldingTestCase
+testDatetimeNowWithUtc
+	"datetime.now(timezone.utc) attaches the supplied tz."
+
+	| mod tz |
+	mod := self loadFixture: 'use_datetime'.
+	tz := mod @env1:datetime_now_utc.
+	self assert: (tz @env1:tzname: nil) equals: 'UTC'
+%
+
+category: 'Grail-Tests - datetime'
+method: FlaskScaffoldingTestCase
+testIsoformatParsesTz
+	"fromisoformat extracts +00:00 and Z as UTC, fixed offsets as
+	timezone(timedelta(...))."
+
+	| mod tz |
+	mod := self loadFixture: 'use_datetime'.
+	tz := mod @env1:iso_with_tz: '2024-05-18T12:00:00Z'.
+	self assert: (tz @env1:tzname: nil) equals: 'UTC'.
+	tz := mod @env1:iso_with_tz: '2024-05-18T12:00:00+00:00'.
+	self assert: (tz @env1:tzname: nil) equals: 'UTC'
+%
+
+category: 'Grail-Tests - datetime'
+method: FlaskScaffoldingTestCase
+testTimedeltaArithmetic
+	"timedelta + timedelta / timedelta - timedelta."
+
+	| mod result |
+	mod := self loadFixture: 'use_datetime'.
+	result := mod @env1:timedelta_arithmetic.
+	self assert: (result @env1:__getitem__: 0) equals: 45.0.
+	self assert: (result @env1:__getitem__: 1) equals: 15.0
+%
+
 ! --- ipaddress module -----------------------------------------------------
 
 category: 'Grail-Tests - ipaddress'

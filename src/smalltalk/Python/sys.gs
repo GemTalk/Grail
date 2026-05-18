@@ -74,6 +74,7 @@ initializeBuiltinModules
 		@env0:at: #struct 		put: struct 	instance;
 		@env0:at: #mimetypes 	put: mimetypes 	instance;
 		@env0:at: #ipaddress 	put: ipaddress 	instance;
+		@env0:at: #datetime 	put: datetime 	instance;
 		@env0:at: #enum 		put: enum 		instance;
 		@env0:at: #fractions	put: fractions 	instance;
 		@env0:at: #functools	put: functools 	instance;
