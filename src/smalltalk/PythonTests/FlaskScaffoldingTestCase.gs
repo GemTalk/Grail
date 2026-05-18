@@ -328,3 +328,24 @@ testInstanceVarsFromCls
 	cls := mod @env1:DeepInit.
 	self assert: (cls @env0:allInstVarNames @env0:includes: #last_doc).
 %
+
+! --- SubscriptAst: class-subscript as base ---------------------------------
+
+category: 'Grail-Tests - SubscriptAst'
+method: FlaskScaffoldingTestCase
+testSubscriptedBuiltinAsBaseClass
+	"`class X(dict[K, V]):` evaluates ``dict[K, V]`` at runtime as
+	part of the base-class list.  Grail's dict class-side
+	__getitem__: stub returns the class itself so the parameterized
+	base resolves to the origin class (KeyValueDictionary).  Without
+	the stub, class-statement execution DNUs on the metaclass."
+
+	| mod cls inst |
+	mod := self loadFixture: 'subscripted_base'.
+	cls := mod @env1:StringKeyedDict.
+	"The class inherits from KeyValueDictionary (Grail's dict)."
+	self assert: cls superclass equals: KeyValueDictionary.
+	inst := mod @env1:make.
+	self assert: (inst @env0:at: 'k') equals: 1.
+	self assert: (inst @env1:label) equals: 'string-keyed'.
+%

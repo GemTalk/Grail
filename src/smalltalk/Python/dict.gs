@@ -122,6 +122,21 @@ _new: positional kw: keywords
 	^ result
 %
 
+category: 'Grail-Generics'
+classmethod: dict
+__getitem__: item
+	"`dict[K, V]` is a parameterized type alias.  Python's
+	``dict.__class_getitem__`` returns a ``types.GenericAlias``
+	wrapping ``dict`` with the type args, but for our purposes
+	(class-statement bases, runtime annotation evaluation) the
+	origin class is sufficient — code that subscripts a built-in
+	collection at runtime is doing so for typing scaffolding, not
+	for actual element lookup.  Returning the class lets
+	``class Namespace(dict[str, Foo]):`` inherit from dict cleanly."
+
+	^ self
+%
+
 category: 'Grail-Type'
 method: dict
 __class__
