@@ -614,6 +614,91 @@ testBase64DecodeStrInput
 	self assert: result equals: 'hello' asByteArray.
 %
 
+! --- contextlib + with-statement ------------------------------------------
+
+category: 'Grail-Tests - contextlib'
+method: FlaskScaffoldingTestCase
+testWithClosing
+	"`with closing(t) as obj:` calls __enter__ (returns wrapped object),
+	runs body, then __exit__ which closes t."
+
+	| mod result |
+	mod := self loadFixture: 'use_contextlib'.
+	result := mod @env1:closing_works.
+	self assert: (result @env1:__getitem__: 0) equals: true.
+	self assert: (result @env1:__getitem__: 1) equals: 7
+%
+
+category: 'Grail-Tests - contextlib'
+method: FlaskScaffoldingTestCase
+testWithSuppressCatches
+	"`with suppress(ValueError):` swallows the matching exception so
+	control resumes after the with-block."
+
+	| mod |
+	mod := self loadFixture: 'use_contextlib'.
+	self assert: mod @env1:suppress_catches equals: true
+%
+
+category: 'Grail-Tests - contextlib'
+method: FlaskScaffoldingTestCase
+testWithSuppressLetsOtherThrough
+	"suppress(ValueError) re-raises TypeError so the enclosing
+	try/except sees it."
+
+	| mod |
+	mod := self loadFixture: 'use_contextlib'.
+	self assert: mod @env1:suppress_lets_other_through equals: 'caught'
+%
+
+category: 'Grail-Tests - contextlib'
+method: FlaskScaffoldingTestCase
+testWithNullcontextYieldsValue
+	"`with nullcontext(42) as v:` binds v to the enter result."
+
+	| mod |
+	mod := self loadFixture: 'use_contextlib'.
+	self assert: mod @env1:nullcontext_yields equals: 42
+%
+
+category: 'Grail-Tests - contextlib'
+method: FlaskScaffoldingTestCase
+testExitStackOrders
+	"ExitStack runs callbacks in LIFO order on exit."
+
+	| mod order |
+	mod := self loadFixture: 'use_contextlib'.
+	order := mod @env1:exitstack_orders.
+	self assert: order size equals: 3.
+	self assert: (order @env1:__getitem__: 0) equals: 'c'.
+	self assert: (order @env1:__getitem__: 1) equals: 'b'.
+	self assert: (order @env1:__getitem__: 2) equals: 'a'
+%
+
+category: 'Grail-Tests - contextlib'
+method: FlaskScaffoldingTestCase
+testContextmanagerYieldsValue
+	"@contextmanager turns `yield value` into __enter__'s return."
+
+	| mod |
+	mod := self loadFixture: 'use_contextlib'.
+	self assert: mod @env1:contextmanager_yields equals: 99
+%
+
+category: 'Grail-Tests - contextlib'
+method: FlaskScaffoldingTestCase
+testContextmanagerRunsCleanup
+	"@contextmanager's finally-after-yield runs on exit."
+
+	| mod log |
+	mod := self loadFixture: 'use_contextlib'.
+	log := mod @env1:contextmanager_runs_cleanup.
+	self assert: log size equals: 3.
+	self assert: (log @env1:__getitem__: 0) equals: 'enter'.
+	self assert: (log @env1:__getitem__: 1) equals: 'body'.
+	self assert: (log @env1:__getitem__: 2) equals: 'exit'
+%
+
 ! --- Blinker end-to-end (Tier 1) ------------------------------------------
 
 category: 'Grail-Tests - Blinker'
