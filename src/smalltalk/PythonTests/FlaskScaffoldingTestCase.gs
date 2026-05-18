@@ -151,37 +151,40 @@ testUnaliasedDottedImport
 	self assert: (mod @env1:ABC_VIA_TOP) equals: 'collections.abc'.
 %
 
-! --- ClassDefAst pyc_ prefix -----------------------------------------------
+! --- ClassDefAst: Python class doesn't clobber built-ins -----------------
 
 category: 'Grail-Tests - ClassDefAst'
 method: FlaskScaffoldingTestCase
-testPycPrefixAvoidsBuiltinCollision
-	"`class Symbol:` should NOT clobber GemStone's built-in
-	Symbol class.  The Python class lives at #pyc_Symbol in
-	Globals; the module-level name `Symbol` is bound to it via
-	the module's instVar."
+testClassNameDoesNotClobberBuiltin
+	"`class Symbol:` and `class Set:` are deliberately named to
+	collide with GemStone built-ins.  The codegen emits
+	``Object subclass: 'Symbol' inDictionary: nil`` — the `nil`
+	dictionary makes the class anonymous (no SymbolList entry),
+	so the built-ins are untouched and the Python class is
+	reachable only through the module's instVar."
 
-	| mod cls builtin |
-	mod := self loadFixture: 'pyc_prefix'.
-	cls := mod @env1:Symbol.
-	self assert: cls @env0:name equals: #pyc_Symbol.
-
-	"The actual built-in Symbol class is untouched and still
-	behaves like a String subclass — picking it up via the
-	Smalltalk symbolList must not return the Python class."
+	| mod sym builtin |
+	mod := self loadFixture: 'builtin_collision'.
+	sym := mod @env1:Symbol.
+	"The built-in Symbol class still resolves via the symbol
+	list — and it's NOT the Python class."
 	builtin := System myUserProfile symbolList @env0:objectNamed: #Symbol.
-	self deny: builtin == cls.
+	self assert: builtin notNil.
+	self deny: builtin == sym.
+	"The Python class is the one the module instVar holds, not
+	a clone of the built-in."
+	self assert: sym superclass equals: PythonInstance.
 %
 
 category: 'Grail-Tests - ClassDefAst'
 method: FlaskScaffoldingTestCase
-testPycPrefixedClassConstructs
-	"The pyc_-prefixed class is fully usable from Python code:
-	__init__ runs, instance attrs land in the right slots, and
-	module-level construction wires up correctly."
+testCollidingClassConstructs
+	"The anonymous Python class is fully usable: __init__ runs,
+	instance attrs land in the right slots, module-level
+	construction wires up correctly."
 
 	| mod a b set |
-	mod := self loadFixture: 'pyc_prefix'.
+	mod := self loadFixture: 'builtin_collision'.
 	a := mod @env1:make_a.
 	b := mod @env1:make_b.
 	set := mod @env1:both.

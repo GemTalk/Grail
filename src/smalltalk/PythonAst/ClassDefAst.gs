@@ -132,7 +132,6 @@ printSmalltalkRuntimeOn: aStream
 	self printSuperclassOn: aStream.
 	aStream
 		nextPutAll: ' @env0:subclass: #''';
-		nextPutAll: 'pyc_';
 		nextPutAll: (importlib @env0:___asSmalltalkClassName___: name) asString;
 		nextPutAll: ''' instVarNames: '.
 	self printSymbolArray: ivarNames on: aStream.

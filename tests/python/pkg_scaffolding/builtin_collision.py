@@ -1,9 +1,10 @@
-# Exercises ClassDefAst's `pyc_` prefix.
-#
-# Without the prefix, `class Symbol:` would try to subclass-into
-# GemStone's built-in Symbol class.  With it, the class is created
-# as `pyc_Symbol` in Globals and the module-level name `Symbol`
-# is bound to it via the module instance's instVar.
+# Verifies that Python user classes whose names happen to
+# collide with GemStone built-ins (Symbol, Set, …) don't clobber
+# the built-in.  ClassDefAst emits
+# ``Object subclass: 'Symbol' inDictionary: nil`` — the nil
+# dictionary keeps the class anonymous (no SymbolList entry),
+# so built-ins keep working and the Python class is reachable
+# only through the module's instVar.
 
 
 class Symbol:
