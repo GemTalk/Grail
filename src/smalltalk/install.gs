@@ -230,6 +230,8 @@ run
 	at: #'_shimtest' put: nil;
 	at: #'_sre' put: nil;
 	at: #'BoundMethod' put: nil;
+	at: #'Super' put: nil;
+	at: #'SuperBoundMethod' put: nil;
 	at: #'builtins' put: nil;
 	at: #'bytearray' put: nil;
 	at: #'cmath' put: nil;
@@ -594,6 +596,8 @@ input src/smalltalk/Python/module.gs
 input src/smalltalk/Python/PythonInstance.gs
 input src/smalltalk/Python/NamedIntConstant.gs
 input src/smalltalk/Python/BoundMethod.gs
+input src/smalltalk/Python/SuperBoundMethod.gs
+input src/smalltalk/Python/Super.gs
 input src/smalltalk/Python/string_Formatter.gs
 input src/smalltalk/Python/BaseExceptionGroup.gs
 input src/smalltalk/Python/Exception.gs

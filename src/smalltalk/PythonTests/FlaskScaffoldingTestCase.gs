@@ -346,6 +346,41 @@ testInstanceVarsFromCls
 	self assert: (cls @env0:allInstVarNames @env0:includes: #last_doc).
 %
 
+! --- CallAst: bare zero-arg super() ---------------------------------------
+
+category: 'Grail-Tests - SuperCall'
+method: FlaskScaffoldingTestCase
+testSuperOneArgInit
+	"`super().__init__(x)` from a subclass — codegen rewrites the
+	bare ``super()`` to a Super proxy bound to (lexical class, self),
+	and the direct unary send ``__init__: x`` routes through Super''s
+	DNU which dispatches via ``with:performMethod:`` to the parent
+	class's compiled ``__init__:`` with `obj` substituted as receiver
+	(bypassing the override that triggered the super call)."
+
+	| mod Derived inst |
+	mod := self loadFixture: 'super_calls'.
+	Derived := mod @env1:Derived.
+	inst := Derived @env1:value: { 10. 20 } value: nil.
+	self assert: (inst @env1:x) equals: 10.
+	self assert: (inst @env1:y) equals: 20.
+%
+
+category: 'Grail-Tests - SuperCall'
+method: FlaskScaffoldingTestCase
+testSuperZeroArgInit
+	"`super().__init__()` with no args — Super DNU dispatches via
+	``performMethod:`` (the 0-arg primitive form) to the parent
+	class's ``__init__``.  Used by collections.defaultdict.__init__
+	to invoke object.__init__."
+
+	| mod ZeroArg inst |
+	mod := self loadFixture: 'super_calls'.
+	ZeroArg := mod @env1:ZeroArgSuper.
+	inst := ZeroArg @env1:value: #() value: nil.
+	self assert: (inst @env1:flag) equals: true.
+%
+
 ! --- SubscriptAst: class-subscript as base ---------------------------------
 
 category: 'Grail-Tests - SubscriptAst'

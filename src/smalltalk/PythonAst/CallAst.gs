@@ -149,6 +149,29 @@ printSmalltalkOn: aStream
 			and: [arguments isEmpty and: [keywords isEmpty]]])
 				ifTrue: [aStream nextPutAll: 'self'. ^self].
 
+	"Bare zero-arg ``super()`` inside a class method.  Rewrite to a
+	Super proxy bound to (lexical class, first-arg-of-method).  The
+	lexical class is reachable via the module instance's class-name
+	instVar; the first arg is conventionally `self` or `cls`, both
+	of which emit as Smalltalk `self` (see NameAst >> printSmalltalkOn:).
+	Outside class-method context, fall through to the normal call
+	dispatch (super will resolve to whatever the surrounding scope
+	binds it to, typically NameError)."
+	((function isKindOf: NameAst)
+		and: [function id = #'super'
+			and: [arguments isEmpty
+				and: [keywords isEmpty
+					and: [CallAst classBeingCompiled notNil
+						and: [CallAst moduleClassBeingCompiled notNil]]]]])
+		ifTrue: [
+			aStream
+				nextPutAll: '(Super @env1:cls: ((';
+				nextPutAll: CallAst moduleClassBeingCompiled name;
+				nextPutAll: ' @env0:___instance___) @env1:';
+				nextPutAll: CallAst classBeingCompiled asString;
+				nextPutAll: ') obj: self)'.
+			^self].
+
 	fastSelector := self bareCallFastPathSelector.
 	fastSelector ifNotNil: [
 		^ self printBareCallFastPathOn: aStream selector: fastSelector
