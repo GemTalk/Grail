@@ -413,6 +413,43 @@ testGeneratorInsideClassMethod
 	self assert: (items @env0:at: 3) equals: 'item_2'.
 %
 
+! --- Blinker end-to-end (Tier 1) ------------------------------------------
+
+category: 'Grail-Tests - Blinker'
+method: FlaskScaffoldingTestCase
+testBlinkerNamedSignal
+	"``blinker.NamedSignal(name, doc)`` constructs through Signal's
+	super-routed __init__ — exercises the Super-via-varargs
+	dispatch (``___init__:kw:`` parent + ``with:with:performMethod:``
+	bypass) and the metaclass-chain walk for ``self.set_class`` from
+	a subclass instance (class-side instVars are per-class)."
+
+	| blinker NS ns |
+	importlib loadModuleFromPath: (importlib grailDir , '/src/python/stdlib/blinker/__init__.py') name: 'blinker'.
+	blinker := (importlib @env1:modules) @env0:at: 'blinker' @env0:asSymbol.
+	NS := blinker @env1:NamedSignal.
+	ns := NS @env1:value: { 'my_event'. 'docstring' } value: nil.
+	self assert: (ns @env1:name) equals: 'my_event'.
+%
+
+category: 'Grail-Tests - Blinker'
+method: FlaskScaffoldingTestCase
+testBlinkerNamespaceSignalFactory
+	"``Namespace().signal(name)`` round-trips: Namespace subclasses
+	dict[str, NamedSignal] (subscripted base via dict.__getitem__),
+	signal() looks up or creates a NamedSignal under that name."
+
+	| blinker Namespace space sig |
+	importlib loadModuleFromPath: (importlib grailDir , '/src/python/stdlib/blinker/__init__.py') name: 'blinker'.
+	blinker := (importlib @env1:modules) @env0:at: 'blinker' @env0:asSymbol.
+	Namespace := blinker @env1:Namespace.
+	space := Namespace @env1:value: #() value: nil.
+	sig := space @env1:signal: 'foo'.
+	self assert: (sig @env1:name) equals: 'foo'.
+	"Repeat lookup returns the SAME signal."
+	self assert: (space @env1:signal: 'foo') == sig.
+%
+
 ! --- Unified attribute-call protocol --------------------------------------
 
 category: 'Grail-Tests - AttrCall'

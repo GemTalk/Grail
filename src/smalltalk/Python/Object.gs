@@ -39,6 +39,49 @@ ___new___: arg1 _: arg2 _: arg3
 	^ self @env1:__new__: arg1 _: arg2 _: arg3
 %
 
+! ------- performMethod variants for higher arities -------
+! GemStone ships ``performMethod:`` (0-arg) and ``with:performMethod:``
+! (1-arg) on Object env-0.  Both invoke primitive 2027, which dispatches
+! by inspecting the supplied selector's arity.  Add 2- through 4-arg
+! variants so ``Super >> doesNotUnderstand:args:envId:`` can invoke a
+! parent class's compiled method on the substituted receiver without
+! going through the receiver's class dispatch (which would re-fire the
+! same override).  These fit on the SystemUser side of install.gs;
+! DataCurator can't modify Object.
+
+category: 'Grail-perform method'
+method: object
+with: argOne with: argTwo performMethod: aGsNMethod
+	"Execute aGsNMethod as if it were a 2-arg keyword send to self."
+
+	<primitive: 2027>
+	aGsNMethod _validateClass: GsNMethod.
+	^ self _primitiveFailed: #'with:with:performMethod:'
+		args: { argOne. argTwo. aGsNMethod }
+%
+
+category: 'Grail-perform method'
+method: object
+with: argOne with: argTwo with: argThree performMethod: aGsNMethod
+	"Execute aGsNMethod as if it were a 3-arg keyword send to self."
+
+	<primitive: 2027>
+	aGsNMethod _validateClass: GsNMethod.
+	^ self _primitiveFailed: #'with:with:with:performMethod:'
+		args: { argOne. argTwo. argThree. aGsNMethod }
+%
+
+category: 'Grail-perform method'
+method: object
+with: argOne with: argTwo with: argThree with: argFour performMethod: aGsNMethod
+	"Execute aGsNMethod as if it were a 4-arg keyword send to self."
+
+	<primitive: 2027>
+	aGsNMethod _validateClass: GsNMethod.
+	^ self _primitiveFailed: #'with:with:with:with:performMethod:'
+		args: { argOne. argTwo. argThree. argFour. aGsNMethod }
+%
+
 set compile_env: 1
 
 category: 'Grail-Convenience Methods'
@@ -209,13 +252,21 @@ ___pyAttrLoad___: aSym
 		``enum.global_enum(cls)`` work.  Names that are neither fall
 		through to ``self at:``, which the SymbolDictionary
 		inheritance provides for dynamically-added attributes."
-		(md @env0:includesKey: aSym) ifTrue: [
+		"A module attr that publishes a varargs ``_<name>:kw:`` selector
+		is a callable forwarder (C extension function or Python module
+		function); wrap it as a BoundMethod so the caller's
+		``value:value:`` dispatches with the right arity.  Otherwise
+		the attribute is a stored value (synthesized ``X ^ X`` accessor
+		for module variables) — invoke the unary to fetch the value."
+		((self @env0:class @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil) ifTrue: [
+			^ BoundMethod @env1:receiver: self selector: aSym
+		].
+		((self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil) ifTrue: [
 			^ self @env0:perform: aSym env: 1
 		].
-		((md @env0:includesKey: sym1)
-			or: [(md @env0:includesKey: sym2)
-			or: [(md @env0:includesKey: sym3)
-			or: [md @env0:includesKey: symVA]]]) ifTrue: [
+		(((self @env0:class @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil)
+			or: [(self @env0:class @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil
+			or: [(self @env0:class @env0:whichClassIncludesSelector: sym3 environmentId: 1) notNil]]) ifTrue: [
 			^ BoundMethod @env1:receiver: self selector: aSym
 		].
 		^ self @env0:at: aSym ifAbsent: [
@@ -250,15 +301,21 @@ ___pyAttrLoad___: aSym
 	"Instance falling through to a class-side attribute.  When the
 	receiver is an instance of a Python user class and the attribute
 	isn't on the instance side, consult the class-side accessor pair
-	on the metaclass.  Mirrors Python's instance→class attribute
-	lookup chain — `Color()`.RED finds the class attribute `RED = 1`
-	declared in the class body."
+	*walking the metaclass chain*.  Crucially: class-side instVars
+	are *per-class* in Smalltalk, not inherited like Python class
+	attributes.  Calling the accessor on ``self class`` would return
+	the subclass's own (nil) slot instead of the parent's value.
+	Find the defining metaclass via ``whichClassIncludesSelector:``,
+	then call the accessor on its ``thisClass`` so a NamedSignal
+	instance reading ``self.set_class`` reaches Signal class's slot
+	where ``set_class`` was actually initialized."
 	(self @env0:isKindOf: PythonInstance) ifTrue: [
-		| classClassMd |
-		classClassMd := self @env0:class @env0:class @env0:methodDictForEnv: 1.
-		((classClassMd @env0:includesKey: aSym)
-			and: [classClassMd @env0:includesKey: sym1]) ifTrue: [
-			^ self @env0:class @env0:perform: aSym env: 1
+		| metaclass definingMeta |
+		metaclass := self @env0:class @env0:class.
+		definingMeta := metaclass @env0:whichClassIncludesSelector: aSym environmentId: 1.
+		(definingMeta notNil
+			and: [(metaclass @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil]) ifTrue: [
+			^ definingMeta @env0:thisClass @env0:perform: aSym env: 1
 		].
 	].
 	"Shim wrapper classes (SrePattern, SreMatch, ...) advertise the

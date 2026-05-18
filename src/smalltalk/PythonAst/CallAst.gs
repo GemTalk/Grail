@@ -256,32 +256,23 @@ printSmalltalkOn: aStream
 	   ``___pyAttrLoad___:`` emit so class-side attrs (e.g.
 	   ``set_class: type = list``) reach the metaclass-side accessor.
 
-	2. 0-arg attribute calls (``obj.X()``) — Python semantics is
-	   *load then call*: ``X`` might resolve to an instance method
-	   (the direct unary send was correct), to a class (the direct
-	   send returns the class without invoking ``__new__``), or to a
-	   class-attr value.  The legacy form ``(obj.___pyAttrLoad___ #X)
-	   value: {} value: nil`` routes all three through the unified
-	   call protocol — instance methods return a BoundMethod that
-	   ``value:value:`` invokes; classes go through ``Object class
-	   value:value:`` to ``__new__``; non-callable values surface a
-	   clean Smalltalk DNU on ``value:value:``.
+	2. Any-arity attribute calls (``obj.X()`` / ``obj.X(a, b)``) —
+	   Python semantics is *load then call*: ``X`` might resolve to
+	   an instance method (the direct keyword send was correct), to
+	   a class (the direct send fails — class doesn't have an
+	   ``X:_:`` method, only the underlying ``__new__:`` family), or
+	   to a callable value held in an attribute.  The legacy form
+	   ``(obj.___pyAttrLoad___ #X) @env1:value: { args } value: kw``
+	   routes all three through the unified call protocol — instance
+	   methods return a BoundMethod that ``value:value:`` invokes;
+	   classes go through ``Object class value:value:`` to
+	   ``__new__``; non-callable values surface a clean DNU.
 
-	Multi-arg attribute calls keep the direct fast-path send.  Class
-	constructors with explicit args (``blinker.Signal('doc')``) are
-	still broken under that path; revisit when a real call site hits
-	it."
-	((function isKindOf: AttributeAst)
-		and: [self isSelfOrClsAttributeCallOutsideClassFunctions not
-			and: [arguments isEmpty not or: [keywords isEmpty not]]])
-			ifTrue: [
-		keywords isEmpty ifTrue: [
-			^ self printAttributeCallFastPathOn: aStream
-				selector: (self class fastPathSelectorForAttr: function attr arity: arguments size)
-		].
-		^ self printAttributeCallVarargsOn: aStream
-			selector: (self class varargsSelectorForName: function attr)
-	].
+	The carve-out for ``self.method(args)`` inside a class method
+	(case 1) still applies — that path goes through
+	``classSelfSendSelector`` which emits a direct fast-path send,
+	bypassing this fallback entirely.  All other attribute calls
+	fall through to the legacy form below."
 
 	"Class-call arity mismatch: bare name resolves to a class that has at
 	least one env-1 `__new__` selector, but none match this call's arity

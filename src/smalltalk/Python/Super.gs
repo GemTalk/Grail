@@ -68,6 +68,21 @@ _setCls: aClass obj: anObject
 
 category: 'Grail-Private'
 method: Super
+_varargsSelectorFor: aSelector
+	"Strip the trailing colons from a fixed-arity keyword selector and
+	wrap in the ``_<base>:kw:`` varargs convention.  Returns nil for
+	a 0-arg selector (no trailing colon — no varargs form to try)."
+
+	| s colonIdx base |
+	s := aSelector @env0:asString.
+	colonIdx := s @env0:indexOf: $:.
+	colonIdx @env0:= 0 ifTrue: [^ nil].
+	base := s @env0:copyFrom: 1 to: colonIdx @env0:- 1.
+	^ ('_' @env0:, base @env0:, ':kw:') @env0:asSymbol
+%
+
+category: 'Grail-Private'
+method: Super
 _lookupMethod: aSym
 	"Walk the superClass chain starting from cls's parent, looking for
 	the first class whose env-1 methodDict has aSym.  Returns the
@@ -101,20 +116,52 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	envId 0 falls through to default DNU — Smalltalk-side sends to
 	the proxy aren't part of the Python protocol."
 
-	| method nargs |
+	| method nargs varargsSel |
 	envId = 1 ifFalse: [
 		^ super doesNotUnderstand: aSelector args: anArray envId: envId
 	].
 	method := self _lookupMethod: aSelector.
-	method ifNil: [
-		^ super doesNotUnderstand: aSelector args: anArray envId: envId
+	method ifNotNil: [
+		nargs := anArray size.
+		nargs = 0 ifTrue: [^ obj performMethod: method].
+		nargs = 1 ifTrue: [^ obj with: (anArray at: 1) performMethod: method].
+		nargs = 2 ifTrue: [
+			^ obj
+				with: (anArray at: 1)
+				with: (anArray at: 2)
+				performMethod: method].
+		nargs = 3 ifTrue: [
+			^ obj
+				with: (anArray at: 1)
+				with: (anArray at: 2)
+				with: (anArray at: 3)
+				performMethod: method].
+		nargs = 4 ifTrue: [
+			^ obj
+				with: (anArray at: 1)
+				with: (anArray at: 2)
+				with: (anArray at: 3)
+				with: (anArray at: 4)
+				performMethod: method].
+		"5+ args: no performMethod primitive variant.  Fall back to
+		``perform:env:withArguments:`` which re-enters dispatch — works
+		when the parent method doesn't itself call super()."
+		^ obj perform: aSelector env: 1 withArguments: anArray
 	].
-	nargs := anArray size.
-	nargs = 0 ifTrue: [^ obj performMethod: method].
-	nargs = 1 ifTrue: [^ obj with: (anArray at: 1) performMethod: method].
-	"Fallback for 2+ args — relies on parent method not recursing
-	through super() to dispatch correctly via normal lookup."
-	^ obj perform: aSelector env: 1 withArguments: anArray
+	"Fixed-arity miss — fall back to the varargs ``_<base>:kw:`` form
+	the parent might publish instead.  Signal.__init__ (with a default
+	value) compiles to ``___init__:kw:``, so ``super().__init__(x)``
+	from NamedSignal lands here.  ``with:with:performMethod:`` (2-arg)
+	bypasses obj's class dispatch so the parent runs without re-firing
+	the override."
+	varargsSel := self _varargsSelectorFor: aSelector.
+	varargsSel ifNotNil: [
+		method := self _lookupMethod: varargsSel.
+		method ifNotNil: [
+			^ obj with: anArray with: nil performMethod: method
+		]
+	].
+	^ super doesNotUnderstand: aSelector args: anArray envId: envId
 %
 
 set compile_env: 1

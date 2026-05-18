@@ -67,9 +67,20 @@ category: 'Grail-Calling'
 method: SuperBoundMethod
 value: positional value: kwargs
 	"Resolve the parent method matching the actual call arity,
-	then execute it with obj as the receiver."
+	then execute it with ``obj`` substituted as the receiver.
 
-	| nargs kwOk method ctx |
+	Dispatch shape is determined by the *resolved method's selector*,
+	not the call-site arity, so a varargs parent (e.g.
+	``Signal.___init__:kw:`` resolved from ``super().__init__(doc)``)
+	is invoked through ``with:with:performMethod:`` with (positional,
+	kwargs) — even though the call site passed 1 positional arg.
+
+	Uses ``performMethod:`` / ``with:[with:…]performMethod:`` (env-0
+	primitives) so the parent method runs without re-dispatching
+	through ``obj``'s class (which would re-fire the override).
+	The 0..4-arg variants cover the same range Super >> DNU does."
+
+	| nargs kwOk method resolvedSel |
 	nargs := positional @env0:size.
 	kwOk := kwargs == nil or: [kwargs @env0:isEmpty].
 	method := resolver @env0:value: nargs value: kwOk.
@@ -77,20 +88,40 @@ value: positional value: kwargs
 		AttributeError @env1:___signal___:
 			'super(): no parent method ''' @env0:, selector @env0:asString @env0:, ''''
 	].
-	"Build the args Array: [obj. positional...].  If kwargs present,
-	use the varargs convention (obj, positional, kwargs)."
-	(kwOk not) ifTrue: [
-		ctx := Array @env0:new: 3.
-		ctx @env0:at: 1 put: obj.
-		ctx @env0:at: 2 put: positional.
-		ctx @env0:at: 3 put: kwargs.
-		^ method @env0:_executeInContext: ctx
+	"Varargs parent: dispatch as (positional, kwargs) via the 2-arg
+	primitive, regardless of the call-site arity."
+	resolvedSel := method @env0:selector.
+	(resolvedSel @env0:asString @env0:endsWith: ':kw:') ifTrue: [
+		^ obj @env0:with: positional with: (kwargs ifNil: [nil]) performMethod: method
 	].
-	ctx := Array @env0:new: nargs @env0:+ 1.
-	ctx @env0:at: 1 put: obj.
-	1 @env0:to: nargs do: [:i |
-		ctx @env0:at: i @env0:+ 1 put: (positional @env0:at: i)].
-	^ method @env0:_executeInContext: ctx
+	"Fixed-arity parent: pick the primitive variant matching the
+	call-site positional count."
+	nargs @env0:= 0 ifTrue: [^ obj @env0:performMethod: method].
+	nargs @env0:= 1 ifTrue: [
+		^ obj @env0:with: (positional @env0:at: 1) performMethod: method].
+	nargs @env0:= 2 ifTrue: [
+		^ obj
+			@env0:with: (positional @env0:at: 1)
+			with: (positional @env0:at: 2)
+			performMethod: method].
+	nargs @env0:= 3 ifTrue: [
+		^ obj
+			@env0:with: (positional @env0:at: 1)
+			with: (positional @env0:at: 2)
+			with: (positional @env0:at: 3)
+			performMethod: method].
+	nargs @env0:= 4 ifTrue: [
+		^ obj
+			@env0:with: (positional @env0:at: 1)
+			with: (positional @env0:at: 2)
+			with: (positional @env0:at: 3)
+			with: (positional @env0:at: 4)
+			performMethod: method].
+	"5+ args: no performMethod primitive variant.  Fall through to
+	plain perform — works when the parent method doesn't itself
+	call super() (which would otherwise re-dispatch through obj's
+	override and infinite-recurse)."
+	^ obj @env0:perform: resolvedSel env: 1 withArguments: positional
 %
 
 set compile_env: 0

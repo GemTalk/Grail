@@ -113,6 +113,47 @@ cantPerform: aSymbol withArguments: anArray env: envId
 
 set compile_env: 1
 
+category: 'Python-Callable'
+method: PythonInstance
+value: positional value: kwargs
+	"Python ``obj(...)`` semantics on a user-class instance: dispatch
+	to ``__call__`` if defined.  Built-in callables (ExecBlock,
+	BoundMethod, classes) implement ``value:value:`` directly; this
+	bridges Python user classes that override ``__call__`` (e.g.
+	``weakref.ref.__call__(self): return self._obj``) into the same
+	unified call protocol.
+
+	Dispatch shape mirrors ``BoundMethod >> value:value:``: pick
+	the fixed-arity ``__call__:_:_:`` selector for 0..3 positional
+	args with no kwargs; otherwise fall through to ``___call___:kw:``
+	varargs if present.  Raises a TypeError-shaped DNU if the
+	class doesn't implement ``__call__`` at all."
+
+	| nargs cls callSel varargsSel |
+	cls := self @env0:class.
+	(kwargs == nil or: [kwargs @env0:isEmpty]) ifTrue: [
+		nargs := positional @env0:size.
+		callSel := nargs @env0:= 0
+			ifTrue: [#'__call__']
+			ifFalse: [
+				| s |
+				s := WriteStream @env0:on: String @env0:new.
+				s @env0:nextPutAll: '__call__:'.
+				2 @env0:to: nargs do: [:i | s @env0:nextPutAll: '_:'].
+				s @env0:contents @env0:asSymbol].
+		((cls @env0:whichClassIncludesSelector: callSel environmentId: 1) notNil) ifTrue: [
+			^ self @env0:perform: callSel env: 1 withArguments: positional
+		].
+	].
+	varargsSel := #'___call___:kw:'.
+	((cls @env0:whichClassIncludesSelector: varargsSel environmentId: 1) notNil) ifTrue: [
+		^ self @env0:perform: varargsSel env: 1 withArguments: { positional. kwargs }
+	].
+	"No __call__ — surface as a Python-shaped TypeError via the
+	standard DNU path on the original selector."
+	^ self @env0:perform: #'__call__' env: 1 withArguments: positional
+%
+
 category: 'Python-Introspection'
 method: PythonInstance
 __dict__
