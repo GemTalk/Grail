@@ -255,6 +255,8 @@ run
 	at: #'Hash' put: nil;
 	at: #'time' put: nil;
 	at: #'secrets' put: nil;
+	at: #'warnings' put: nil;
+	at: #'CatchWarnings' put: nil;
 	at: #'math' put: nil;
 	at: #'module' put: nil;
 	at: #'PythonClass' put: nil;
@@ -639,6 +641,7 @@ input src/smalltalk/Python/importlib.gs
 input src/smalltalk/Python/hashlib.gs
 input src/smalltalk/Python/time.gs
 input src/smalltalk/Python/secrets.gs
+input src/smalltalk/Python/warnings.gs
 input src/smalltalk/Python/math.gs
 input src/smalltalk/Python/numbers.gs
 input src/smalltalk/Python/os.gs
@@ -1120,6 +1123,7 @@ run
 (sys @env1:modules) @env0:at: #'hashlib' put: hashlib @env1:instance.
 (sys @env1:modules) @env0:at: #'time' put: time @env1:instance.
 (sys @env1:modules) @env0:at: #'secrets' put: secrets @env1:instance.
+(sys @env1:modules) @env0:at: #'warnings' put: warnings @env1:instance.
 %
 
 run

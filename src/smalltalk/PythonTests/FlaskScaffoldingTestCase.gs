@@ -712,6 +712,72 @@ testTimeAsctimeOfEpoch
 	self assert: s equals: 'Thu Jan 01 00:00:00 1970'
 %
 
+! --- warnings module ------------------------------------------------------
+
+category: 'Grail-Tests - warnings'
+method: FlaskScaffoldingTestCase
+testWarningsWarnDefault
+	"warn() with default UserWarning category prints to Transcript and
+	returns normally."
+
+	| mod |
+	mod := self loadFixture: 'use_warnings'.
+	self assert: mod @env1:warn_default equals: 'ok'
+%
+
+category: 'Grail-Tests - warnings'
+method: FlaskScaffoldingTestCase
+testWarningsWarnCategory
+	"warn(message, DeprecationWarning) accepts an explicit category."
+
+	| mod |
+	mod := self loadFixture: 'use_warnings'.
+	self assert: mod @env1:warn_with_category equals: 'ok'
+%
+
+category: 'Grail-Tests - warnings'
+method: FlaskScaffoldingTestCase
+testWarningsIgnore
+	"simplefilter('ignore') silently drops warnings."
+
+	| mod |
+	mod := self loadFixture: 'use_warnings'.
+	self assert: mod @env1:warn_ignored equals: 'ok'
+%
+
+category: 'Grail-Tests - warnings'
+method: FlaskScaffoldingTestCase
+testWarningsErrorFilter
+	"simplefilter('error') turns warnings into exceptions."
+
+	| mod |
+	mod := self loadFixture: 'use_warnings'.
+	self assert: mod @env1:warn_as_error equals: 'caught'
+%
+
+category: 'Grail-Tests - warnings'
+method: FlaskScaffoldingTestCase
+testWarningsCatchRestoresFilters
+	"catch_warnings() restores the filter list on __exit__."
+
+	| mod result |
+	mod := self loadFixture: 'use_warnings'.
+	result := mod @env1:warn_catch_restores.
+	self assert: (result @env1:__getitem__: 0) equals: 0.
+	self assert: (result @env1:__getitem__: 1) equals: 1.
+	self assert: (result @env1:__getitem__: 2) equals: 0
+%
+
+category: 'Grail-Tests - warnings'
+method: FlaskScaffoldingTestCase
+testWarningsFormatwarning
+	"formatwarning() produces the CPython-style text."
+
+	| mod |
+	mod := self loadFixture: 'use_warnings'.
+	self assert: mod @env1:format_a_warning equals: 'file.py:42: UserWarning: msg'
+%
+
 ! --- secrets module -------------------------------------------------------
 
 category: 'Grail-Tests - secrets'
