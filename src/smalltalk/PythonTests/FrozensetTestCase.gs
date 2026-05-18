@@ -64,6 +64,26 @@ testFrozensetCreation
 	self assert: fs3 size equals: 2
 %
 
+category: 'Grail-Tests - Creation'
+method: FrozensetTestCase
+testFrozensetFromString
+	"``frozenset('abc')`` yields the 1-character substrings
+	``{'a', 'b', 'c'}`` per CPython semantics — NOT the Smalltalk
+	Characters $a, $b, $c.  Without this, ``'a' in frozenset('abc')``
+	is always false (Character != String) and re._parser's
+	``DIGITS = frozenset('0123456789')`` silently mis-classifies
+	every digit character."
+
+	| fs |
+	fs := frozenset @env1:__new__: '0123456789'.
+	self assert: fs size equals: 10.
+	self assert: (fs @env1:__contains__: '0').
+	self assert: (fs @env1:__contains__: '9').
+	self assert: (fs @env1:__contains__: '5').
+	"Make sure we don't store Characters."
+	self deny: (fs @env1:__contains__: $0).
+%
+
 category: 'Grail-Tests - Immutability'
 method: FrozensetTestCase
 testFrozensetImmutable

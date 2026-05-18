@@ -41,11 +41,29 @@ __new__: iterable
 	elements. Set semantics deduplicate equal elements. Concrete type
 	matches the receiver (`self` is set or frozenset).
 
+	Strings are a CPython quirk: ``frozenset('abc')`` yields the
+	*1-character substrings* ``{'a', 'b', 'c'}``, not the characters.
+	Smalltalk's string iteration yields Characters, so we copy
+	character-by-character into Unicode7 wrappers — otherwise
+	``'X' in frozenset('XYZ')`` is always false (Character $X != 'X')
+	and constructs like re._parser's ``DIGITS = frozenset('0123456789')``
+	silently misbehave.
+
 	The Collection fast path covers Smalltalk Arrays, OrderedCollections,
 	Sets, etc.; generic Python iterables fall through to the __iter__/
 	__next__ loop."
 
 	| items iter done |
+	(iterable @env0:isKindOf: CharacterCollection) ifTrue: [
+		items := OrderedCollection @env0:new.
+		1 @env0:to: iterable @env0:size do: [:i |
+			| s |
+			s := Unicode7 ___new___: 1.
+			s @env0:at: 1 put: (iterable @env0:at: i).
+			items @env0:add: s
+		].
+		^ self @env0:withAll: items
+	].
 	(iterable @env0:isKindOf: Collection) ifTrue: [
 		^ self @env0:withAll: iterable
 	].

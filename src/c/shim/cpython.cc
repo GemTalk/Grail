@@ -2170,6 +2170,45 @@ static OopType shimCallTyped(OopType modOop, OopType typeOop, OopType methOop,
             }
         }
 
+        /* tp_members — struct fields exposed as attributes
+           (PyMemberDef).  re._compiler.compile asks for
+           pattern.groups which is a Py_T_PYSSIZET member; the
+           template compiler in turn rejects backref indices that
+           exceed it.  Read the field at the documented offset and
+           box it according to its declared type. */
+        PyMemberDef *members = targetType->tp_members;
+        if (members) {
+            PyObject *self = (PyObject *)(intptr_t)GciOopToI64(selfOop);
+            for (int i = 0; members[i].name; i++) {
+                if (strcmp(members[i].name, methName) == 0) {
+                    char *base = (char *)self + members[i].offset;
+                    switch (members[i].type) {
+                        case Py_T_PYSSIZET: {
+                            Py_ssize_t v = *(Py_ssize_t *)base;
+                            return GciI64ToOop((int64)v);
+                        }
+                        case Py_T_INT: {
+                            int v = *(int *)base;
+                            return GciI64ToOop((int64)v);
+                        }
+                        case Py_T_LONG: {
+                            long v = *(long *)base;
+                            return GciI64ToOop((int64)v);
+                        }
+                        case _Py_T_OBJECT: {
+                            PyObject *v = *(PyObject **)base;
+                            if (!v) return OOP_NIL;
+                            return pyobj_oop(v);
+                        }
+                        default:
+                            /* Unsupported member type — fall through to
+                               not-found and let raise_error fire. */
+                            break;
+                    }
+                }
+            }
+        }
+
         char msg[256];
         snprintf(msg, sizeof(msg), "Method not found: %s.%s", typeName, methName);
         raise_error(msg);

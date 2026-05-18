@@ -78,16 +78,41 @@ test__delitem__
 
 	| lst |
 	lst := OrderedCollection withAll: #(10 20 30 40).
-	
+
 	"Delete by positive index"
 	lst @env1:__delitem__: 1.
 	self assert: lst size equals: 3.
 	self assert: (lst at: 2) equals: 30.
-	
+
 	"Delete by negative index"
 	lst @env1:__delitem__: -1.
 	self assert: lst size equals: 2.
 	self assert: (lst at: 2) equals: 30.
+%
+
+category: 'Grail-Tests - Sequence Protocol'
+method: ListTestCase
+test__delitem__slice
+	"``del lst[:]`` and friends — slice deletion.  Used by
+	re._parser.parse_template's addliteral to reset the literal
+	buffer.  Step=1 paths remove a contiguous range; extended-step
+	paths remove the indexed elements only."
+
+	| lst |
+	"del lst[:] — clear all."
+	lst := OrderedCollection withAll: #(10 20 30 40).
+	lst @env1:__delitem__: (slice @env0:___newStart: None stop: None step: None).
+	self assert: lst size equals: 0.
+
+	"del lst[1:3] — remove indices 1..2 inclusive."
+	lst := OrderedCollection withAll: #(10 20 30 40 50).
+	lst @env1:__delitem__: (slice @env0:___newStart: 1 stop: 3 step: None).
+	self assert: lst asArray equals: #(10 40 50).
+
+	"del lst[::2] — step=2."
+	lst := OrderedCollection withAll: #(10 20 30 40 50).
+	lst @env1:__delitem__: (slice @env0:___newStart: None stop: None step: 2).
+	self assert: lst asArray equals: #(20 40).
 %
 
 category: 'Grail-Tests - Comparison'

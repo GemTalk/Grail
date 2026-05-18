@@ -79,10 +79,15 @@ __new__: iterable
 category: 'Grail-Sequence Protocol'
 method: list
 __delitem__: index
-	"Delete the item at the given index.
-	Supports negative indices (counting from end)."
+	"Delete the item at the given index, or every item in a slice.
+	Supports negative indices (counting from end).  Slice deletion
+	is what ``del lst[:]`` (used by re._parser.parse_template's
+	literal-buffer reset) and friends compile to."
 
 	| size idx |
+	(index @env0:isKindOf: slice) ifTrue: [
+		^ self @env1:___delSlice___: index
+	].
 	size := self @env0:size.
 	idx := index.
 
@@ -100,6 +105,36 @@ __delitem__: index
 
 	"Convert to 1-based Smalltalk index"
 	self @env0:removeAtIndex: (idx @env0:+ 1).
+	^ None
+%
+
+category: 'Grail-Sequence Protocol'
+method: list
+___delSlice___: aSlice
+	"Slice deletion.  Normalises the slice against self's size and
+	removes every visited index.  For step=1 (the common case) it
+	delegates to removeFrom:to:.  Extended-step deletion walks the
+	indices in descending order so earlier removes don't shift the
+	later ones."
+
+	| size indices lo hi st indicesArray |
+	size := self @env0:size.
+	indices := aSlice @env1:indices: size.
+	lo := indices @env0:at: 1.
+	hi := indices @env0:at: 2.
+	st := indices @env0:at: 3.
+	(st @env0:= 1) ifTrue: [
+		hi @env0:> lo ifTrue: [
+			self @env0:removeFrom: lo @env0:+ 1 to: hi
+		].
+		^ None
+	].
+	indicesArray := OrderedCollection @env0:new.
+	lo @env0:to: hi @env0:- 1 by: st do: [:i | indicesArray @env0:add: i].
+	"Delete in descending index order to avoid renumbering."
+	indicesArray @env0:size @env0:to: 1 by: -1 do: [:k |
+		self @env0:removeAtIndex: (indicesArray @env0:at: k) @env0:+ 1
+	].
 	^ None
 %
 
@@ -239,7 +274,7 @@ ___setSlice___: aSlice _: anIterable
 		^ None
 	].
 	"Extended slice: must match length."
-	indicesArray := OrderedCollection new.
+	indicesArray := OrderedCollection @env0:new.
 	lo @env0:to: hi @env0:- 1 by: st do: [:i | indicesArray @env0:add: i].
 	indicesArray @env0:size = len ifFalse: [
 		ValueError ___signal___:

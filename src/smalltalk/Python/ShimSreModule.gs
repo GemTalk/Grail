@@ -103,6 +103,25 @@ newFromCPtr: aCPtr
 	^ self basicNew initCPtr: aCPtr
 %
 
+category: 'Grail-Python Attribute Hook'
+classmethod: SrePattern
+___pythonValueAttrs___
+	"Selectors whose Smalltalk methods are exposed to Python as
+	*value* attributes rather than bound methods.  Without this
+	hook, ``pattern.groups`` would yield a BoundMethod wrapping
+	the getter — but the CPython API exposes ``groups`` as a
+	struct member (Py_T_PYSSIZET), so ``pattern.groups`` must be
+	the int.  Same story for ``groupindex``, ``flags``, and
+	``pattern`` (the source string)."
+
+	^ IdentitySet new
+		add: #groups;
+		add: #groupindex;
+		add: #flags;
+		add: #pattern;
+		yourself
+%
+
 category: 'Grail-Private'
 method: SrePattern
 initCPtr: aCPtr
@@ -444,6 +463,25 @@ newFromCPtr: aCPtr
 
 	aCPtr = 0 ifTrue: [^ nil].
 	^ self basicNew initCPtr: aCPtr
+%
+
+category: 'Grail-Python Attribute Hook'
+classmethod: SreMatch
+___pythonValueAttrs___
+	"Selectors whose Smalltalk methods are exposed to Python as
+	*value* attributes rather than bound methods.  Mirrors
+	CPython's `Match` struct members: pos / endpos / lastindex /
+	lastgroup / re / string / regs."
+
+	^ IdentitySet new
+		add: #pos;
+		add: #endpos;
+		add: #lastindex;
+		add: #lastgroup;
+		add: #re;
+		add: #string;
+		add: #regs;
+		yourself
 %
 
 category: 'Grail-Private'

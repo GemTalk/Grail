@@ -263,6 +263,22 @@ testSubn
 	self assert: (result @env0:at: 2) equals: 3.
 %
 
+category: 'Grail-Tests - Pattern attributes'
+method: ReModuleTestCase
+testPatternGroups
+	"Pattern.groups is a Py_T_PYSSIZET struct member, exposed
+	through tp_members.  Without that path through shimCallTyped
+	the call returned 'Method not found: Pattern.groups'; without
+	the ___pythonValueAttrs___ hook on SrePattern, the attribute
+	access returned a BoundMethod wrapping the getter (which
+	tripped Smalltalk arithmetic in re._parser.parse_template's
+	`if index > pattern.groups:` check)."
+
+	self assert: ((re @env1:compile: '(\w+)') @env1:groups) equals: 1.
+	self assert: ((re @env1:compile: '(a)(b)(c)') @env1:groups) equals: 3.
+	self assert: ((re @env1:compile: 'no-groups') @env1:groups) equals: 0.
+%
+
 category: 'Grail-Tests - Capture groups'
 method: ReModuleTestCase
 testGroupSpan

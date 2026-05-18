@@ -205,6 +205,18 @@ ___pyAttrLoad___: aSym
 			^ self @env0:class @env0:perform: aSym env: 1
 		].
 	].
+	"Shim wrapper classes (SrePattern, SreMatch, ...) advertise the
+	subset of their unary methods that should be treated as Python
+	*value* attributes (struct-member reads, computed properties)
+	rather than callable methods.  Without this, `pattern.groups`
+	would always wrap the getter in a BoundMethod instead of
+	returning the int — breaking `if index > pattern.groups:` in
+	re._parser.parse_template.  The class-side hook returns a
+	Smalltalk Set of selector symbols; absent or empty hooks behave
+	as today."
+	((self @env0:class @env0:respondsTo: #'___pythonValueAttrs___')
+		and: [(self @env0:class @env0:___pythonValueAttrs___) @env0:includes: aSym])
+		ifTrue: [^ self @env0:perform: aSym env: 1].
 	"Other classes (built-in collections, strings, ...): if the class
 	implements any same-named callable selector, return a BoundMethod
 	handle for `f = obj.method` patterns."
