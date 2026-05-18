@@ -350,9 +350,47 @@ count: sub
 category: 'Grail-String Methods'
 method: CharacterCollection
 encode
-	"Encode the string to bytes. Not yet implemented."
+	"``s.encode()`` with no args — Python default is 'utf-8'."
 
-	self @env0:error: 'Not yet implemented: encode'
+	^ self @env1:encode: 'utf-8'
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+encode: encoding
+	"``s.encode(encoding)`` — return the bytes representation under
+	``encoding``.  ASCII and UTF-8 cover the Tier 1.5 use cases
+	(base64 / hmac / hashlib); other encodings raise NotImplementedError
+	until something asks.
+
+	Implementation: walk the receiver's characters, raise UnicodeEncodeError
+	on ASCII when a non-ASCII codepoint shows up, otherwise pack into
+	a ByteArray.  UTF-8 currently shares the ASCII path (Grail's
+	Unicode7 stores ASCII directly; higher codepoints would need
+	a real UTF-8 encoder)."
+
+	| enc size result |
+	enc := encoding @env0:asLowercase.
+	size := self @env0:size.
+	((enc @env0:= 'ascii') or: [enc @env0:= 'utf-8' or: [enc @env0:= 'utf8']]) ifFalse: [
+		(LookupError ___isKindOf___: NotImplementedError) ifTrue: [
+			NotImplementedError ___signal___: 'encoding not supported: ' , encoding
+		].
+		ValueError ___signal___: 'encoding not supported: ' , encoding
+	].
+	result := ByteArray @env0:new: size.
+	1 @env0:to: size do: [:i |
+		| cv |
+		cv := (self @env0:at: i) @env0:asInteger.
+		(enc @env0:= 'ascii' and: [cv @env0:> 127]) ifTrue: [
+			UnicodeEncodeError ___signal___: 'ascii codec can''t encode non-ASCII byte'
+		].
+		(cv @env0:> 255) ifTrue: [
+			UnicodeEncodeError ___signal___: 'codec can''t encode codepoint > 255 (UTF-8 multi-byte not yet supported)'
+		].
+		result @env0:at: i put: cv
+	].
+	^ result
 %
 
 category: 'Grail-String Methods'

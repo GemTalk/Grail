@@ -543,6 +543,77 @@ testHmacCompareDigestConstantTime
 	self deny: (mod @env1:constant_time_eq: 'abc' asByteArray _: 'abcd' asByteArray).
 %
 
+! --- base64 (Tier 1.5) ----------------------------------------------------
+
+category: 'Grail-Tests - base64'
+method: FlaskScaffoldingTestCase
+testBase64StandardEncode
+	"``base64.b64encode(b'hello world')`` matches the RFC 4648
+	expected output (with trailing '=' padding)."
+
+	| mod result |
+	mod := self loadFixture: 'use_base64'.
+	result := mod @env1:encode_standard: 'hello world' asByteArray.
+	self assert: result equals: 'aGVsbG8gd29ybGQ=' asByteArray.
+%
+
+category: 'Grail-Tests - base64'
+method: FlaskScaffoldingTestCase
+testBase64StandardDecode
+	"``base64.b64decode`` reverses the encoding, stripping '='."
+
+	| mod result |
+	mod := self loadFixture: 'use_base64'.
+	result := mod @env1:decode_standard: 'aGVsbG8gd29ybGQ=' asByteArray.
+	self assert: result equals: 'hello world' asByteArray.
+%
+
+category: 'Grail-Tests - base64'
+method: FlaskScaffoldingTestCase
+testBase64Roundtrip
+	"Various lengths exercise the 0/1/2 byte tail cases."
+
+	| mod |
+	mod := self loadFixture: 'use_base64'.
+	#('a' 'ab' 'abc' 'abcd' 'abcde' 'abcdef' '' 'hello world!') do: [:s |
+		self assert: (mod @env1:roundtrip: s asByteArray)
+			description: 'roundtrip failed for: ' , s
+	]
+%
+
+category: 'Grail-Tests - base64'
+method: FlaskScaffoldingTestCase
+testBase64UrlsafeAlphabet
+	"URL-safe variant: ``+`` → ``-``, ``/`` → ``_``.  Bytes that
+	produce both characters in the standard alphabet differ in the
+	URL-safe form."
+
+	| mod safeEnc stdEnc data |
+	mod := self loadFixture: 'use_base64'.
+	"0xFB 0xEF 0xFF → '++//' in standard b64."
+	data := ByteArray new: 3.
+	data @env0:at: 1 put: 16rFB.
+	data @env0:at: 2 put: 16rEF.
+	data @env0:at: 3 put: 16rFF.
+	stdEnc := mod @env1:encode_standard: data.
+	safeEnc := mod @env1:encode_urlsafe: data.
+	self assert: stdEnc equals: '++//' asByteArray.
+	self assert: safeEnc equals: '--__' asByteArray.
+	self assert: (mod @env1:decode_urlsafe: safeEnc) equals: data.
+%
+
+category: 'Grail-Tests - base64'
+method: FlaskScaffoldingTestCase
+testBase64DecodeStrInput
+	"Decoder accepts a Python str (Grail Unicode7), encoded to ASCII
+	internally."
+
+	| mod result |
+	mod := self loadFixture: 'use_base64'.
+	result := mod @env1:decode_from_str: 'aGVsbG8='.
+	self assert: result equals: 'hello' asByteArray.
+%
+
 ! --- Blinker end-to-end (Tier 1) ------------------------------------------
 
 category: 'Grail-Tests - Blinker'
