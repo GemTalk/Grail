@@ -201,9 +201,137 @@ __lt__: other
 category: 'Grail-String Operations'
 method: CharacterCollection
 __mod__: args
-	"String formatting using % operator. In Python: 'format %s' % args"
+	"String formatting using % operator.  In Python: 'format %s' % args.
 
-	self @env0:error: 'Not yet implemented: __mod__'
+	Supported conversion characters: s (str), r (repr), d (int),
+	i (int), x / X (hex), o (octal), f (float), %.  Mapping form
+	'%(key)s' indexes args as a dict; sequence form '%s %d'
+	consumes positionally.  Anything more elaborate (width / precision
+	specifiers, flags) is passed through verbatim - good enough for
+	logging Formatter and the modest printf usage in itsdangerous /
+	Werkzeug."
+
+	| stream src n i ch isMap argSeq argIdx |
+	src := self @env0:asString.
+	n := src @env0:size.
+	stream := WriteStream @env0:on: Unicode7 @env0:new.
+	isMap := args @env0:isKindOf: KeyValueDictionary.
+	"Python treats a string on the RHS as a single positional, not a
+	sequence of characters; same for ByteArray."
+	(isMap not @env0:and: [
+		(args @env0:isKindOf: Array) @env0:or: [
+			(args @env0:isKindOf: OrderedCollection)
+				@env0:or: [args @env0:isKindOf: tuple]
+		]
+	]) ifTrue: [argSeq := args]
+	ifFalse: [
+		isMap ifTrue: [argSeq := nil]
+		ifFalse: [argSeq := Array @env0:with: args]
+	].
+	argIdx := 1.
+	i := 1.
+	[i @env0:<= n] @env0:whileTrue: [
+		ch := src @env0:at: i.
+		ch @env0:= $% ifFalse: [
+			stream @env0:nextPut: ch.
+			i := i @env0:+ 1
+		] ifTrue: [
+			| key value conv |
+			i := i @env0:+ 1.
+			i @env0:> n ifTrue: [
+				ValueError @env1:___signal___: 'incomplete format'
+			].
+			key := nil.
+			"Optional mapping key '(name)'."
+			(src @env0:at: i) @env0:= $( ifTrue: [
+				| keyStart keyEnd |
+				keyStart := i @env0:+ 1.
+				keyEnd := keyStart.
+				[keyEnd @env0:<= n @env0:and: [(src @env0:at: keyEnd) @env0:~= $)]]
+					@env0:whileTrue: [keyEnd := keyEnd @env0:+ 1].
+				key := src @env0:copyFrom: keyStart to: keyEnd @env0:- 1.
+				i := keyEnd @env0:+ 1
+			].
+			"Skip optional width/precision/flag chars - bare passthrough
+			to keep the implementation small.  CPython's spec is rich; we
+			only need to read past digits / '.' / '-' / ' ' / '+' / '#'."
+			[i @env0:<= n @env0:and: [
+				| c |
+				c := src @env0:at: i.
+				(c @env0:= $-) @env0:or: [
+					(c @env0:= $+) @env0:or: [
+						(c @env0:= Character @env0:space) @env0:or: [
+							(c @env0:= $#) @env0:or: [
+								(c @env0:= $.) @env0:or: [
+									(c @env0:asInteger @env0:>= $0 @env0:asInteger)
+										@env0:and: [c @env0:asInteger @env0:<= $9 @env0:asInteger]
+								]
+							]
+						]
+					]
+				]
+			]] @env0:whileTrue: [i := i @env0:+ 1].
+			i @env0:> n ifTrue: [
+				ValueError @env1:___signal___: 'incomplete format'
+			].
+			conv := src @env0:at: i.
+			i := i @env0:+ 1.
+			conv @env0:= $% ifTrue: [stream @env0:nextPut: $%]
+			ifFalse: [
+				key @env0:notNil
+					ifTrue: [value := args @env0:at: key @env0:asSymbol ifAbsent: [args @env0:at: key]]
+					ifFalse: [
+						argSeq @env0:isNil ifTrue: [
+							TypeError @env1:___signal___: 'format requires a mapping'
+						].
+						argIdx @env0:> argSeq @env0:size ifTrue: [
+							TypeError @env1:___signal___: 'not enough arguments for format string'
+						].
+						value := argSeq @env0:at: argIdx.
+						argIdx := argIdx @env0:+ 1
+					].
+				stream @env0:nextPutAll: (self @env1:___convert___: value with: conv)
+			]
+		]
+	].
+	^ stream @env0:contents
+%
+
+category: 'Grail-String Operations'
+method: CharacterCollection
+___convert___: value with: conv
+	"Format `value` per the printf conversion character.  Width and
+	precision specifiers are ignored; just produce the bare rendering."
+
+	conv @env0:= $s ifTrue: [^ value @env0:asString].
+	conv @env0:= $r ifTrue: [^ value @env0:printString].
+	(conv @env0:= $d @env0:or: [conv @env0:= $i]) ifTrue: [^ value @env0:asInteger @env0:printString].
+	conv @env0:= $f ifTrue: [^ value @env0:asFloat @env0:printString].
+	conv @env0:= $x ifTrue: [
+		| digits n s |
+		digits := '0123456789abcdef'.
+		n := value @env0:asInteger.
+		n @env0:= 0 ifTrue: [^ '0'].
+		s := Unicode7 @env0:new.
+		[n @env0:> 0] @env0:whileTrue: [
+			s := (Unicode7 @env0:with: (digits @env0:at: (n @env0:bitAnd: 15) @env0:+ 1)) @env0:, s.
+			n := n @env0:bitShift: -4
+		].
+		^ s
+	].
+	conv @env0:= $X ifTrue: [^ (self @env1:___convert___: value with: $x) @env0:asUppercase].
+	conv @env0:= $o ifTrue: [
+		| n s |
+		n := value @env0:asInteger.
+		n @env0:= 0 ifTrue: [^ '0'].
+		s := Unicode7 @env0:new.
+		[n @env0:> 0] @env0:whileTrue: [
+			s := (Unicode7 @env0:with: (Character @env0:codePoint: (n @env0:bitAnd: 7) @env0:+ $0 @env0:asInteger)) @env0:, s.
+			n := n @env0:bitShift: -3
+		].
+		^ s
+	].
+	^ value @env0:asString
 %
 
 category: 'Grail-String Operations'
@@ -867,6 +995,37 @@ split
 	| parts |
 	parts := self @env0:subStrings.
 	^ parts
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+split: sep
+	"split(sep) - return a list of substrings using sep as the
+	delimiter.  Multi-character separators are honoured.  An empty
+	sep raises ValueError per CPython."
+
+	| sepStr sepSize text n result start i |
+	sepStr := sep @env0:asString.
+	sepSize := sepStr @env0:size.
+	sepSize @env0:= 0 ifTrue: [
+		ValueError @env1:___signal___: 'empty separator'
+	].
+	text := self @env0:asString.
+	n := text @env0:size.
+	result := OrderedCollection @env0:new.
+	start := 1.
+	i := 1.
+	[i @env0:+ sepSize @env0:- 1 @env0:<= n] @env0:whileTrue: [
+		(text @env0:copyFrom: i to: i @env0:+ sepSize @env0:- 1) @env0:= sepStr ifTrue: [
+			result @env0:add: (text @env0:copyFrom: start to: i @env0:- 1).
+			i := i @env0:+ sepSize.
+			start := i
+		] ifFalse: [
+			i := i @env0:+ 1
+		]
+	].
+	result @env0:add: (text @env0:copyFrom: start to: n).
+	^ result
 %
 
 category: 'Grail-String Methods'

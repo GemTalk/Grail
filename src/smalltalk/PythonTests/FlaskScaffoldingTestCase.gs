@@ -712,6 +712,147 @@ testTimeAsctimeOfEpoch
 	self assert: s equals: 'Thu Jan 01 00:00:00 1970'
 %
 
+! --- logging module -------------------------------------------------------
+
+category: 'Grail-Tests - logging'
+method: FlaskScaffoldingTestCase
+testLoggingRootDefaultLevel
+	"Fresh root logger sits at WARNING."
+
+	| mod |
+	mod := self loadFixture: 'use_logging'.
+	self assert: mod @env1:root_default_level equals: 30
+%
+
+category: 'Grail-Tests - logging'
+method: FlaskScaffoldingTestCase
+testLoggingNamedHasParentChain
+	"getLogger('myapp.module').parent.name == 'myapp'."
+
+	| mod |
+	mod := self loadFixture: 'use_logging'.
+	self assert: mod @env1:parent_chain equals: 'myapp'
+%
+
+category: 'Grail-Tests - logging'
+method: FlaskScaffoldingTestCase
+testLoggingIsEnabledFor
+	"setLevel(WARNING) -> DEBUG disabled, WARNING/ERROR enabled."
+
+	| mod result |
+	mod := self loadFixture: 'use_logging'.
+	result := mod @env1:is_enabled_for.
+	self assert: (result @env1:__getitem__: 0) equals: false.
+	self assert: (result @env1:__getitem__: 1) equals: true.
+	self assert: (result @env1:__getitem__: 2) equals: true
+%
+
+category: 'Grail-Tests - logging'
+method: FlaskScaffoldingTestCase
+testLoggingNullHandler
+	"NullHandler swallows records without raising."
+
+	| mod |
+	mod := self loadFixture: 'use_logging'.
+	self assert: mod @env1:null_handler_silences equals: 'ok'
+%
+
+category: 'Grail-Tests - logging'
+method: FlaskScaffoldingTestCase
+testLoggingRecordMessage
+	"LogRecord.getMessage interpolates %-args."
+
+	| mod |
+	mod := self loadFixture: 'use_logging'.
+	self assert: mod @env1:format_record equals: 'hello world'
+%
+
+category: 'Grail-Tests - logging'
+method: FlaskScaffoldingTestCase
+testLoggingFormatterDefault
+	"Default formatter is 'LEVEL:NAME:MESSAGE'."
+
+	| mod |
+	mod := self loadFixture: 'use_logging'.
+	self assert: mod @env1:formatter_default equals: 'INFO:app:msg'
+%
+
+category: 'Grail-Tests - logging'
+method: FlaskScaffoldingTestCase
+testLoggingFormatterCustom
+	"Custom formatter slots in name / level / message in any order."
+
+	| mod |
+	mod := self loadFixture: 'use_logging'.
+	self assert: mod @env1:formatter_custom equals: 'a.b|ERROR|oops'
+%
+
+category: 'Grail-Tests - logging'
+method: FlaskScaffoldingTestCase
+testLoggingLevelConstants
+	"DEBUG=10 / INFO=20 / WARNING=30 / ERROR=40 / CRITICAL=50."
+
+	| mod tup |
+	mod := self loadFixture: 'use_logging'.
+	tup := mod @env1:level_constants.
+	self assert: (tup @env1:__getitem__: 0) equals: 10.
+	self assert: (tup @env1:__getitem__: 1) equals: 20.
+	self assert: (tup @env1:__getitem__: 2) equals: 30.
+	self assert: (tup @env1:__getitem__: 3) equals: 40.
+	self assert: (tup @env1:__getitem__: 4) equals: 50
+%
+
+category: 'Grail-Tests - logging'
+method: FlaskScaffoldingTestCase
+testLoggingGetLevelName
+	"getLevelName(WARNING) -> 'WARNING'."
+
+	| mod |
+	mod := self loadFixture: 'use_logging'.
+	self assert: mod @env1:get_level_name equals: 'WARNING'
+%
+
+! --- traceback module -----------------------------------------------------
+
+category: 'Grail-Tests - traceback'
+method: FlaskScaffoldingTestCase
+testTracebackFormatExceptionOnly
+	"format_exception_only renders 'Type: message\\n' as a single-entry list."
+
+	| mod lines |
+	mod := self loadFixture: 'use_traceback'.
+	lines := mod @env1:format_exception_lines.
+	self assert: lines size equals: 1.
+	self assert: (lines @env1:__getitem__: 0) equals: 'ValueError: bad value
+'
+%
+
+category: 'Grail-Tests - traceback'
+method: FlaskScaffoldingTestCase
+testTracebackFormatExcInHandler
+	"format_exc() inside an except block returns a string (active
+	exception tracking via sys.exc_info() is a stub in Grail, so the
+	content is 'None\\n' rather than the traceback - but the call
+	itself must not raise)."
+
+	| mod text |
+	mod := self loadFixture: 'use_traceback'.
+	text := mod @env1:format_exc_in_handler.
+	self assert: (text isKindOf: String).
+	self assert: text size > 0
+%
+
+category: 'Grail-Tests - traceback'
+method: FlaskScaffoldingTestCase
+testTracebackExtractTbEmpty
+	"extract_tb is a stub returning [] - it should not raise."
+
+	| mod result |
+	mod := self loadFixture: 'use_traceback'.
+	result := mod @env1:extract_tb_empty.
+	self assert: result size equals: 0
+%
+
 ! --- collections module ---------------------------------------------------
 
 category: 'Grail-Tests - collections'
