@@ -68,6 +68,9 @@ fi
 echo "PYTHON_LIB_PATH = $PYTHON_LIB_PATH"
 echo "PYTHON_PREFIX = $PYTHON_PREFIX"
 
+export PYTHON_PACKAGE_PATH="$GRAIL_DIR/src/python"
+echo "PYTHON_PACKAGE_PATH = $PYTHON_PACKAGE_PATH"
+
 LC_ALL=C topaz -lq -S src/smalltalk/install.gs
 
 if [ $? -ne 0 ]; then

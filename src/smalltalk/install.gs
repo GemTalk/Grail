@@ -5,8 +5,8 @@ output pushnew install.out only
 ! ===============================================================================
 ! This script installs the Grail Python implementation in GemStone Smalltalk.
 ! It performs the following steps:
-! 1. Removes existing SymbolDictionaries (Python, PythonAst, PythonTests)
-!    and creates fresh ones in the correct order
+! 1. Removes existing SymbolDictionaries (Python, PythonAst, EmbeddedPython,
+!    PythonTests, EmbeddedPythonTests) and creates fresh ones in the correct order
 ! 2. Creates forward references for ALL dictionaries (so names resolve
 !    during method compilation before actual classes are defined)
 ! 3. Maps Python type names to existing GemStone classes
@@ -99,8 +99,8 @@ login
 !                    *anonymous* (``inDictionary: nil``); only the
 !                    module instance's instVar holds the reference.
 run
-"Remove Python dictionaries if they exist"
-#(#'Python' #'PythonAst' #'PythonTests' #'PythonModules') do: [:each |
+"Remove Grail dictionaries if they exist"
+#(#'Python' #'PythonAst' #'EmbeddedPython' #'PythonTests' #'EmbeddedPythonTests' #'PythonModules') do: [:each |
 	| symbolList names |
 	symbolList := System myUserProfile symbolList.
 	names := symbolList names.
@@ -114,10 +114,10 @@ run
 %
 
 run
-"Create Python dictionaries in reverse order (so each ends up nearer the
+"Create Grail dictionaries in reverse order (so each ends up nearer the
  front of the symbol list than the next; importlib classes resolve
  from Python before falling through to PythonModules at runtime)."
-#(#'PythonModules' #'PythonTests' #'PythonAst' #'Python') do: [:each |
+#(#'PythonModules' #'EmbeddedPythonTests' #'PythonTests' #'EmbeddedPython' #'PythonAst' #'Python') do: [:each |
 	| dict |
 	dict := SymbolDictionary new name: each; yourself.
 	System myUserProfile insertDictionary: dict at: 1.
@@ -221,8 +221,6 @@ run
 	at: #'Warning' put: nil;
 	at: #'ZeroDivisionError' put: nil;
 	at: #'CPythonShim' put: nil;
-	at: #'CPythonLibrary' put: nil;
-	at: #'CPythonObject' put: nil;
 	at: #'PyObject' put: nil;
 	at: #'_statistics' put: nil;
 	at: #'_bisect' put: nil;
@@ -437,7 +435,6 @@ run
 	at: #'BytesTestCase' put: nil;
 	at: #'BytesWarningTestCase' put: nil;
 	at: #'CPythonShimTestCase' put: nil;
-	at: #'CPythonTestCase' put: nil;
 	at: #'CMathTestCase' put: nil;
 	at: #'ChildProcessErrorTestCase' put: nil;
 	at: #'ClassCallFastPathTestCase' put: nil;
@@ -560,6 +557,30 @@ run
 Transcript show: 'Forward references created for PythonTests dictionary'.
 %
 
+! ------------------- Forward references for EmbeddedPython dictionary
+run
+(System myUserProfile symbolList objectNamed: #'EmbeddedPython')
+	at: #'CPythonException' put: nil;
+	at: #'CPythonLibrary' put: nil;
+	at: #'CPythonObject' put: nil;
+	at: #'CPythonRepl' put: nil;
+	at: #'PythonReplicator' put: nil;
+	at: #'PythonStore' put: nil;
+	yourself.
+Transcript show: 'Forward references created for EmbeddedPython dictionary'.
+%
+
+! ------------------- Forward references for EmbeddedPythonTests dictionary
+run
+(System myUserProfile symbolList objectNamed: #'EmbeddedPythonTests')
+	at: #'CPythonTestCase' put: nil;
+	at: #'CPythonLibraryTestCase' put: nil;
+	at: #'CPythonReplTestCase' put: nil;
+	at: #'PythonStoreTestCase' put: nil;
+	yourself.
+Transcript show: 'Forward references created for EmbeddedPythonTests dictionary'.
+%
+
 run
 Transcript show: 'Step 2 complete: All forward references created'.
 %
@@ -644,8 +665,12 @@ input src/smalltalk/Python/functools.gs
 input src/smalltalk/Python/gemstone.gs
 input src/smalltalk/Python/PyObject.gs
 input src/smalltalk/Python/CPythonShim.gs
-input src/smalltalk/Python/CPythonLibrary.gs
-input src/smalltalk/Python/CPythonObject.gs
+input src/smalltalk/EmbeddedPython/CPythonException.gs
+input src/smalltalk/EmbeddedPython/CPythonLibrary.gs
+input src/smalltalk/EmbeddedPython/CPythonObject.gs
+input src/smalltalk/EmbeddedPython/CPythonRepl.gs
+input src/smalltalk/EmbeddedPython/PythonReplicator.gs
+input src/smalltalk/EmbeddedPython/PythonStore.gs
 input src/smalltalk/Python/ShimStatisticsModule.gs
 input src/smalltalk/Python/ShimBisectModule.gs
 input src/smalltalk/Python/ShimCrc32cModule.gs
@@ -981,7 +1006,10 @@ input src/smalltalk/PythonTests/FunctoolsTestCase.gs
 input src/smalltalk/PythonTests/GemStoneTestCase.gs
 input src/smalltalk/PythonTests/HtmlTestCase.gs
 input src/smalltalk/PythonTests/CPythonShimTestCase.gs
-input src/smalltalk/PythonTests/CPythonTestCase.gs
+input src/smalltalk/EmbeddedPythonTests/CPythonTestCase.gs
+input src/smalltalk/EmbeddedPythonTests/CPythonLibraryTestCase.gs
+input src/smalltalk/EmbeddedPythonTests/CPythonReplTestCase.gs
+input src/smalltalk/EmbeddedPythonTests/PythonStoreTestCase.gs
 input src/smalltalk/PythonTests/ImportlibTestCase.gs
 input src/smalltalk/PythonTests/PackageImportTestCase.gs
 input src/smalltalk/PythonTests/IntegerTestCase.gs
@@ -1095,7 +1123,7 @@ Transcript show: 'Step 6 complete: Test classes loaded'.
 ! Step 7: Verify installation
 ! ===============================================================================
 run
-| userProfile symbolList names pythonDict pythonASTDict pythonTestsDict |
+| userProfile symbolList names pythonDict pythonASTDict embeddedPythonDict pythonTestsDict embeddedPythonTestsDict |
 userProfile := System myUserProfile.
 symbolList := userProfile symbolList.
 names := symbolList names.
@@ -1121,12 +1149,28 @@ Transcript show: '==============================================='.
 	Transcript show: 'PythonAst dictionary: MISSING!'.
 ].
 
+"Check EmbeddedPython dictionary (embedded-CPython production classes)"
+(names includes: #'EmbeddedPython') ifTrue: [
+	embeddedPythonDict := symbolList objectNamed: #'EmbeddedPython'.
+	Transcript show: 'EmbeddedPython dictionary: OK (', embeddedPythonDict size printString, ' classes)'.
+] ifFalse: [
+	Transcript show: 'EmbeddedPython dictionary: MISSING!'.
+].
+
 "Check PythonTests dictionary (loaded last, can reference both Python and PythonAst)"
 (names includes: #'PythonTests') ifTrue: [
 	pythonTestsDict := symbolList objectNamed: #'PythonTests'.
 	Transcript show: 'PythonTests dictionary: OK (', pythonTestsDict size printString, ' test classes)'.
 ] ifFalse: [
 	Transcript show: 'PythonTests dictionary: MISSING!'.
+].
+
+"Check EmbeddedPythonTests dictionary (embedded-CPython test classes)"
+(names includes: #'EmbeddedPythonTests') ifTrue: [
+	embeddedPythonTestsDict := symbolList objectNamed: #'EmbeddedPythonTests'.
+	Transcript show: 'EmbeddedPythonTests dictionary: OK (', embeddedPythonTestsDict size printString, ' test classes)'.
+] ifFalse: [
+	Transcript show: 'EmbeddedPythonTests dictionary: MISSING!'.
 ].
 System commit .
 Transcript show: '==============================================='.
@@ -1153,6 +1197,26 @@ run
 %
 
 run
+"Assert no name overlap between Python/EmbeddedPython or PythonTests/EmbeddedPythonTests.
+(an accidental duplicate should fail fast rather than shadow silently)."
+| symbolList overlapBetween |
+symbolList := System myUserProfile symbolList.
+overlapBetween := [:nameA :nameB |
+	| a b |
+	a := (symbolList objectNamed: nameA) keys.
+	b := (symbolList objectNamed: nameB) keys.
+	a select: [:k | b includes: k]
+].
+(overlapBetween value: #'Python' value: #'EmbeddedPython') ifNotEmpty: [:overlap |
+	self error: 'Name overlap between Python and EmbeddedPython: ', overlap printString.
+].
+(overlapBetween value: #'PythonTests' value: #'EmbeddedPythonTests') ifNotEmpty: [:overlap |
+	self error: 'Name overlap between PythonTests and EmbeddedPythonTests: ', overlap printString.
+].
+Transcript show: 'No-overlap assertion: OK'.
+%
+
+run
 | libPath pyPath |
 importlib grailDir: (System gemEnvironmentVariable: 'GRAIL_DIR').
 libPath := System gemEnvironmentVariable:'SHIM_LIB_PATH'.
@@ -1169,6 +1233,7 @@ pyPath := System gemEnvironmentVariable:'PYTHON_LIB_PATH' .
 (pyPath notNil and: [pyPath notEmpty]) ifTrue: [
 	CPythonLibrary libraryPath: pyPath .
 	CPythonLibrary pythonHomePath: (System gemEnvironmentVariable:'PYTHON_PREFIX') .
+	CPythonLibrary pythonPackagePath: (System gemEnvironmentVariable:'PYTHON_PACKAGE_PATH') .
 ].
 %
 commit
