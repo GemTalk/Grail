@@ -712,6 +712,199 @@ testTimeAsctimeOfEpoch
 	self assert: s equals: 'Thu Jan 01 00:00:00 1970'
 %
 
+! --- collections module ---------------------------------------------------
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsOrderedDictKeepsOrder
+	"OrderedDict preserves insertion order on .keys()."
+
+	| mod result |
+	mod := self loadFixture: 'use_collections'.
+	result := mod @env1:ordered_dict_keeps_order.
+	self assert: (result @env1:__getitem__: 0) equals: 'c'.
+	self assert: (result @env1:__getitem__: 1) equals: 'a'.
+	self assert: (result @env1:__getitem__: 2) equals: 'b'
+%
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsOrderedDictMoveToEnd
+	"move_to_end(k) reseats k as the last key."
+
+	| mod result |
+	mod := self loadFixture: 'use_collections'.
+	result := mod @env1:ordered_dict_move_to_end.
+	self assert: (result @env1:__getitem__: 0) equals: 'b'.
+	self assert: (result @env1:__getitem__: 1) equals: 'c'.
+	self assert: (result @env1:__getitem__: 2) equals: 'a'
+%
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsDequeBasic
+	"appendleft seeds the front; iteration walks left-to-right."
+
+	| mod result |
+	mod := self loadFixture: 'use_collections'.
+	result := mod @env1:deque_basic_ops.
+	self assert: (result @env1:__getitem__: 0) equals: 0.
+	self assert: (result @env1:__getitem__: 1) equals: 1.
+	self assert: (result @env1:__getitem__: 2) equals: 2
+%
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsDequePop
+	"popleft drains the front, pop the back."
+
+	| mod result tail |
+	mod := self loadFixture: 'use_collections'.
+	result := mod @env1:deque_pop_both_ends.
+	self assert: (result @env1:__getitem__: 0) equals: 10.
+	self assert: (result @env1:__getitem__: 1) equals: 50.
+	tail := result @env1:__getitem__: 2.
+	self assert: (tail @env1:__getitem__: 0) equals: 20.
+	self assert: (tail @env1:__getitem__: 1) equals: 30.
+	self assert: (tail @env1:__getitem__: 2) equals: 40
+%
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsDequeMaxlen
+	"maxlen=N drops the leftmost when appending past capacity."
+
+	| mod result |
+	mod := self loadFixture: 'use_collections'.
+	result := mod @env1:deque_maxlen.
+	self assert: result size equals: 3.
+	self assert: (result @env1:__getitem__: 0) equals: 3.
+	self assert: (result @env1:__getitem__: 1) equals: 4.
+	self assert: (result @env1:__getitem__: 2) equals: 5
+%
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsDequeRotate
+	"rotate(2) moves the last 2 elements to the front."
+
+	| mod result |
+	mod := self loadFixture: 'use_collections'.
+	result := mod @env1:deque_rotate.
+	self assert: (result @env1:__getitem__: 0) equals: 4.
+	self assert: (result @env1:__getitem__: 1) equals: 5.
+	self assert: (result @env1:__getitem__: 2) equals: 1.
+	self assert: (result @env1:__getitem__: 3) equals: 2.
+	self assert: (result @env1:__getitem__: 4) equals: 3
+%
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsNamedtupleBasic
+	"Point(3, 4) supports indexed access + _fields / len()."
+
+	| mod result fields |
+	mod := self loadFixture: 'use_collections'.
+	result := mod @env1:namedtuple_basic.
+	self assert: (result @env1:__getitem__: 0) equals: 3.
+	self assert: (result @env1:__getitem__: 1) equals: 4.
+	fields := result @env1:__getitem__: 2.
+	self assert: (fields @env1:__getitem__: 0) equals: 'x'.
+	self assert: (fields @env1:__getitem__: 1) equals: 'y'.
+	self assert: (result @env1:__getitem__: 3) equals: 2
+%
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsNamedtupleFromString
+	"namedtuple accepts space-separated field names as a string."
+
+	| mod result fields |
+	mod := self loadFixture: 'use_collections'.
+	result := mod @env1:namedtuple_from_string.
+	self assert: (result @env1:__getitem__: 0) equals: 'a'.
+	self assert: (result @env1:__getitem__: 1) equals: 'b'.
+	fields := result @env1:__getitem__: 2.
+	self assert: (fields @env1:__getitem__: 0) equals: 'first'.
+	self assert: (fields @env1:__getitem__: 1) equals: 'second'
+%
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsCounterCount
+	"Counter from a string counts each char; missing key returns 0."
+
+	| mod result |
+	mod := self loadFixture: 'use_collections'.
+	result := mod @env1:counter_count_iterable.
+	self assert: (result @env1:__getitem__: 0) equals: 5.
+	self assert: (result @env1:__getitem__: 1) equals: 2.
+	self assert: (result @env1:__getitem__: 2) equals: 2.
+	self assert: (result @env1:__getitem__: 3) equals: 0
+%
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsCounterMostCommon
+	"most_common(n) returns the top n (key, count) pairs."
+
+	| mod result first |
+	mod := self loadFixture: 'use_collections'.
+	result := mod @env1:counter_most_common.
+	self assert: result size equals: 2.
+	first := result @env1:__getitem__: 0.
+	self assert: (first @env1:__getitem__: 0) equals: 'a'.
+	self assert: (first @env1:__getitem__: 1) equals: 3
+%
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsCounterTotal
+	"total() sums all counts."
+
+	| mod |
+	mod := self loadFixture: 'use_collections'.
+	self assert: mod @env1:counter_total equals: 6
+%
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsChainMapLookup
+	"First map wins on conflicting keys; later maps fill misses."
+
+	| mod result |
+	mod := self loadFixture: 'use_collections'.
+	result := mod @env1:chainmap_lookup.
+	self assert: (result @env1:__getitem__: 0) equals: 1.
+	self assert: (result @env1:__getitem__: 1) equals: 20
+%
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsChainMapWrite
+	"Writes target the first map only."
+
+	| mod result |
+	mod := self loadFixture: 'use_collections'.
+	result := mod @env1:chainmap_write_goes_first.
+	self assert: (result @env1:__getitem__: 0) equals: 99.
+	self assert: (result @env1:__getitem__: 1) equals: true.
+	self assert: (result @env1:__getitem__: 2) equals: false
+%
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsDefaultdictStillWorks
+	"The pre-existing defaultdict keeps working alongside the new types."
+
+	| mod result |
+	mod := self loadFixture: 'use_collections'.
+	result := mod @env1:defaultdict_still_works.
+	self assert: ((result @env1:__getitem__: 0) size) equals: 2.
+	self assert: ((result @env1:__getitem__: 1) size) equals: 1.
+	self assert: (result @env1:__getitem__: 2) equals: 2
+%
+
 ! --- io module ------------------------------------------------------------
 
 category: 'Grail-Tests - io'
