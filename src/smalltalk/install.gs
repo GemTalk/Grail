@@ -258,6 +258,7 @@ run
 	at: #'warnings' put: nil;
 	at: #'CatchWarnings' put: nil;
 	at: #'struct' put: nil;
+	at: #'PyStruct' put: nil;
 	at: #'mimetypes' put: nil;
 	at: #'ipaddress' put: nil;
 	at: #'IPv4Address' put: nil;

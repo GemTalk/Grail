@@ -55,6 +55,13 @@ set compile_env: 1
 category: 'Grail-Initialization'
 method: struct
 initialize
+	"Store the precompiled Struct class as a module attribute so
+	`struct.Struct(fmt)` reaches a class.  Following the io module
+	pattern: a unary method accessor would get collapsed by the
+	attribute-call fast path; a dict entry forces routing through
+	___pyAttrLoad___ + value:value:."
+
+	self @env0:at: #Struct put: PyStruct
 %
 
 ! ===============================================================================
@@ -508,6 +515,101 @@ category: 'Grail-Private'
 method: struct
 _raiseError: msg
 	^ ValueError @env1:___signal___: msg
+%
+
+set compile_env: 0
+
+! ===============================================================================
+! PyStruct - precompiled struct format
+! ===============================================================================
+
+expectvalue /Class
+doit
+Object subclass: 'PyStruct'
+  instVarNames: #( _format )
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+PyStruct category: 'Grail-Modules'
+%
+
+expectvalue /Metaclass3
+doit
+PyStruct removeAllMethods: 0.
+PyStruct removeAllMethods: 1.
+PyStruct class removeAllMethods: 0.
+PyStruct class removeAllMethods: 1.
+%
+
+set compile_env: 0
+
+category: 'Grail-Introspection'
+classmethod: PyStruct
+___pythonValueAttrs___
+	^ IdentitySet new
+		add: #format;
+		add: #size;
+		yourself
+%
+
+set compile_env: 1
+
+category: 'Grail-Initialization'
+classmethod: PyStruct
+__new__: fmt
+	"Struct(format) - precompile a struct format string."
+
+	| inst |
+	inst := self @env0:new.
+	inst @env0:instVarAt: 1 put: fmt @env0:asString.
+	^ inst
+%
+
+category: 'Grail-Accessors'
+method: PyStruct
+format
+	^ _format
+%
+
+category: 'Grail-Accessors'
+method: PyStruct
+size
+	^ struct @env1:instance @env1:calcsize: _format
+%
+
+category: 'Grail-Public'
+method: PyStruct
+_pack: positional kw: kwargs
+	"Struct.pack(*values) - forward to struct.pack with our format."
+
+	| args |
+	args := { _format }.
+	positional @env0:do: [:v | args := args @env0:, (Array @env0:with: v)].
+	^ struct @env1:instance @env1:_pack: args kw: kwargs
+%
+
+category: 'Grail-Public'
+method: PyStruct
+unpack: buffer
+	^ struct @env1:instance @env1:unpack: _format _: buffer
+%
+
+category: 'Grail-Public'
+method: PyStruct
+unpack_from: buffer
+	^ struct @env1:instance @env1:unpack_from: _format _: buffer _: 0
+%
+
+category: 'Grail-Public'
+method: PyStruct
+unpack_from: buffer _: offset
+	^ struct @env1:instance @env1:unpack_from: _format _: buffer _: offset
 %
 
 set compile_env: 0

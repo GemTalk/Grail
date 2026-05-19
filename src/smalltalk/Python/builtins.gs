@@ -580,6 +580,39 @@ pow: x _: y
 	^ x __pow__: y
 %
 
+category: 'Grail-Built-in Functions'
+method: builtins
+staticmethod: fn
+	"Python @staticmethod / staticmethod(fn) - Grail doesn't honor
+	decorators at codegen, so this is the identity: return the
+	function unchanged.  Calling sites that do `Cls(args)` on a
+	'static method'-named attribute work because Grail's attribute
+	access already returns the function/value."
+
+	^ fn
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+classmethod: fn
+	"Python @classmethod / classmethod(fn) - same identity treatment
+	as staticmethod.  Grail doesn't yet thread cls through method
+	dispatch, but the stored attribute is still callable."
+
+	^ fn
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+property: fn
+	"Python @property / property(fn) - identity stub.  Grail can't
+	transparently call the getter on attribute reads (no descriptor
+	protocol yet), but callers can still invoke the function
+	explicitly via `obj.prop()`."
+
+	^ fn
+%
+
 ! ===============================================================================
 ! Varargs fast-path methods (`_name:kw:` shape)
 ! ===============================================================================
