@@ -74,14 +74,23 @@ printSmalltalkRuntimeOn: aStream
 	context), then embedded as Smalltalk string literals in
 	compileMethod: calls in the emitted code."
 
-	| ivarNames methodDefs selfParam funcNames methodSources
+	| ivarNames methodDefs selfParam funcNames varargsFuncNames methodSources
 	  initMethod initSelector classAttrs allClassInstVars
-	  savedClass savedIvarNames savedFuncNames savedSelfParam |
+	  savedClass savedIvarNames savedFuncNames savedVarargsFuncNames savedSelfParam |
 	ivarNames := self instanceVarNamesFromInit.
 	methodDefs := self instanceMethodDefs.
 	selfParam := self selfParameterName.
 	funcNames := IdentitySet new.
-	methodDefs do: [:def | funcNames add: def name asSymbol].
+	varargsFuncNames := IdentitySet new.
+	methodDefs do: [:def |
+		funcNames add: def name asSymbol.
+		"A def with *args / **kwargs / defaults compiles to ``_name:kw:``
+		only - mark it so classSelfSendSelector doesn't emit a unary
+		send into thin air."
+		def isSimplePositionalArgs ifFalse: [
+			varargsFuncNames add: def name asSymbol
+		].
+	].
 	"Scan body for class-level simple assignments (`NAME = value`,
 	or chained `A = B = value`).  Each declared name becomes a
 	class-side attribute (Smalltalk classInstVar + class-side getter/
@@ -95,6 +104,7 @@ printSmalltalkRuntimeOn: aStream
 	savedClass := CallAst classBeingCompiled.
 	savedIvarNames := CallAst classInstVarNames.
 	savedFuncNames := CallAst classFunctionNames.
+	savedVarargsFuncNames := CallAst classVarargsFunctionNames.
 	savedSelfParam := CallAst selfParameterName.
 
 	"classBeingCompiled is only used as a non-nil marker here; the
@@ -102,6 +112,7 @@ printSmalltalkRuntimeOn: aStream
 	CallAst classBeingCompiled: name asSymbol.
 	CallAst classInstVarNames: (IdentitySet withAll: ivarNames).
 	CallAst classFunctionNames: funcNames.
+	CallAst classVarargsFunctionNames: varargsFuncNames.
 	CallAst selfParameterName: selfParam.
 
 	methodSources := OrderedCollection new.
@@ -116,6 +127,7 @@ printSmalltalkRuntimeOn: aStream
 		CallAst classBeingCompiled: savedClass.
 		CallAst classInstVarNames: savedIvarNames.
 		CallAst classFunctionNames: savedFuncNames.
+		CallAst classVarargsFunctionNames: savedVarargsFuncNames.
 		CallAst selfParameterName: savedSelfParam.
 	].
 
@@ -197,14 +209,6 @@ printSmalltalkRuntimeOn: aStream
 		attrName := pair key.
 		lf := Character lf asString.
 		accessorSrc := attrName , lf , '	^ ' , attrName.
-		bases isEmpty ifFalse: [
-			aStream
-				nextPutAll: '((';
-				nextPutAll: name;
-				nextPutAll: ' @env0:superclass @env0:class @env0:allInstVarNames @env0:includes: #';
-				nextPutAll: attrName;
-				nextPutAll: ') @env0:not) ifTrue: ['; lf
-		].
 		self
 			emitCompileMethodOn: name
 			source: accessorSrc
@@ -220,7 +224,6 @@ printSmalltalkRuntimeOn: aStream
 			env: 1
 			classSide: true
 			onStream: aStream.
-		bases isEmpty ifFalse: [aStream nextPutAll: '].'; lf]
 	].
 	"Initialize each class attribute by evaluating the value
 	expression in the surrounding module context and sending the
@@ -231,35 +234,17 @@ printSmalltalkRuntimeOn: aStream
 		aStream nextPutAll: '.'; lf.
 	].
 	"For class attrs the parent declares but we didn't redeclare,
-	copy the parent's current value into our slot.  Smalltalk
-	class-side instVars are per-class storage, so without this the
-	subclass's inherited slot stays nil (Python's MRO lookup would
-	have returned the parent's value instead).
-
-	Filter against env-1 accessor presence: a Python-declared class
-	attr always has an env-1 unary accessor compiled by ClassDefAst,
-	while Smalltalk system slots (Metaclass3's superClass / format /
-	..., Exception's userId / classCategory / etc.) only have env-0
-	accessors and so naturally skip out.  __module__ is also skipped
-	— the explicit `__module__: self` stamp emitted below handles it."
+	copy the parent's current value into our slot via the importlib
+	helper (factored out to keep per-class generated-code size small).
+	Smalltalk class-side instVars are per-class storage, so without
+	this the subclass's inherited slot stays nil."
 	bases isEmpty ifFalse: [
 		aStream
-			nextPutAll: '(';
+			nextPutAll: 'importlib @env0:___inheritClassAttrs___: ';
 			nextPutAll: name;
-			nextPutAll: ' @env0:superclass @env0:class @env0:allInstVarNames) @env0:do: [:___n___ |
-	(((';
-			nextPutAll: name;
-			nextPutAll: ' @env0:superclass @env0:class @env0:whichClassIncludesSelector: ___n___ environmentId: 1) @env0:notNil)
-		@env0:and: [(___n___ @env0:= #''__module__'') @env0:not
-		@env0:and: [('.
+			nextPutAll: ' exclude: '.
 		self printSymbolArray: (classAttrs collect: [:p | p key]) on: aStream.
-		aStream nextPutAll:
-' @env0:includes: ___n___) @env0:not]]) ifTrue: [
-		| ___v___ |
-		___v___ := '; nextPutAll: name; nextPutAll: ' @env0:superclass @env0:perform: ___n___ @env0:env: 1.
-		'; nextPutAll: name; nextPutAll: ' @env0:perform: (___n___ @env0:asString @env0:, '':'') @env0:asSymbol @env0:env: 1 @env0:withArguments: { ___v___ }
-	]
-].'; lf
+		aStream nextPutAll: '.'; lf
 	].
 
 	"Compile + initialize the synthetic ``__module__`` slot on the

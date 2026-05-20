@@ -11,7 +11,8 @@ ExpressionAst subclass: 'CallAst'
   classVars: #()
   classInstVars: #('moduleClassBeingCompiled' 'moduleFunctionNames'
                     'classBeingCompiled' 'classInstVarNames'
-                    'classFunctionNames' 'selfParameterName')
+                    'classFunctionNames' 'classVarargsFunctionNames'
+                    'selfParameterName')
   poolDictionaries: #()
   inDictionary: PythonAst
   options: #()
@@ -913,6 +914,22 @@ classFunctionNames: aSetOrNil
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
+classVarargsFunctionNames
+	"Subset of classFunctionNames whose def shape compiles to the
+	`_name:kw:` varargs form (defs with *args / **kwargs / defaults).
+	classSelfSendSelector consults this so it doesn't emit a
+	fixed-arity send for a method that only has the varargs entry."
+	^ classVarargsFunctionNames
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classVarargsFunctionNames: aSetOrNil
+	classVarargsFunctionNames := aSetOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
 selfParameterName
 	^ selfParameterName
 %
@@ -944,15 +961,23 @@ classSelfSendSelector
 	  * classBeingCompiled is non-nil
 	  * function is an AttributeAst whose value is a NameAst matching selfParameterName
 	  * No keyword arguments (kwargs use varargs form)
-	  * The attribute name is in classFunctionNames"
+	  * The attribute name is in classFunctionNames
+	  * The attribute is NOT one of the varargs-shaped functions (those
+	    compile to ``_name:kw:`` only; the fast path would otherwise
+	    emit a unary send that lands on the BoundMethod-wrap DNU
+	    fallback and break ``self.derive_key()`` in itsdangerous /
+	    similar)."
 
-	| attrName |
+	| attrName attrSym |
 	(self class isInClassMethodContext) ifFalse: [^nil].
 	(function isKindOf: AttributeAst) ifFalse: [^nil].
 	(function value isKindOf: NameAst) ifFalse: [^nil].
 	(self class isSelfReference: function value id) ifFalse: [^nil].
 	attrName := function attr.
-	(self class classFunctionNames includes: attrName asSymbol) ifFalse: [^nil].
+	attrSym := attrName asSymbol.
+	(self class classFunctionNames includes: attrSym) ifFalse: [^nil].
+	((self class classVarargsFunctionNames notNil
+		and: [self class classVarargsFunctionNames includes: attrSym])) ifTrue: [^nil].
 	keywords isEmpty ifFalse: [^nil].
 	^ self class fastPathSelectorForAttr: attrName arity: arguments size
 %

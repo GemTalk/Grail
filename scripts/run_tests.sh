@@ -23,10 +23,16 @@ else
   fi
 fi
 
+# Lift the gem's transient code-gen area: a full suite run compiles enough
+# Python methods + doit blocks (notably importing itsdangerous / Werkzeug /
+# Flask once each) to overflow the default 20%-of-cache code space.  Topaz
+# `-C` overrides take precedence over gem.conf.
+TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=150000;"
+
 EXIT=0
-LC_ALL=C topaz -lq -S scripts/runTests.gs < /dev/null || EXIT=$?
+LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S scripts/runTests.gs < /dev/null || EXIT=$?
 
 # Run embedded CPython tests in a separate session (can't coexist with shim)
-LC_ALL=C topaz -lq -S scripts/runCPythonTests.gs < /dev/null || EXIT=$?
+LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S scripts/runCPythonTests.gs < /dev/null || EXIT=$?
 
 exit $EXIT

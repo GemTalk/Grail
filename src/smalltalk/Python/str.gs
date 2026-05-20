@@ -485,6 +485,18 @@ encode
 
 category: 'Grail-String Methods'
 method: CharacterCollection
+encode: encoding _: errors
+	"``s.encode(encoding, errors)`` - the `errors` argument is
+	accepted for CPython parity but ignored.  Grail's encoder only
+	emits ASCII/UTF-8-clean output; the only situation that would
+	exercise an error-handling policy is a non-ASCII codepoint, and
+	in those cases we already raise UnicodeEncodeError regardless."
+
+	^ self @env1:encode: encoding
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
 encode: encoding
 	"``s.encode(encoding)`` — return the bytes representation under
 	``encoding``.  ASCII and UTF-8 cover the Tier 1.5 use cases

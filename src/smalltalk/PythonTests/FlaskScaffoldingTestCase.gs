@@ -43,18 +43,23 @@ set compile_env: 0
 category: 'Grail-Helpers'
 method: FlaskScaffoldingTestCase
 loadFixture: fixtureName
-	"Load tests/python/pkg_scaffolding/<fixtureName>.py fresh, returning
-	the module instance.  Drops any prior load so the test is hermetic."
+	"Load tests/python/pkg_scaffolding/<fixtureName>.py once per suite
+	run and return the cached module instance.  Fixtures are read-only
+	function-evaluators, so a single import is enough — recompiling the
+	module (and any transitively-imported stdlib package such as
+	``itsdangerous``) on every test would fill the gem's transient code
+	space (doits_meths) and OOM the suite."
 
-	| mods fullName |
+	| mods fullName cached |
 	fullName := 'pkg_scaffolding.' , fixtureName.
 	mods := importlib @env1:modules.
-	#( 'pkg_scaffolding' ) do: [:n |
-		mods @env0:removeKey: n @env0:asSymbol ifAbsent: []].
-	mods @env0:removeKey: fullName @env0:asSymbol ifAbsent: [].
-	importlib
-		loadModuleFromPath: (importlib grailDir , '/tests/python/pkg_scaffolding/__init__.py')
-		name: 'pkg_scaffolding'.
+	cached := mods @env0:at: fullName @env0:asSymbol ifAbsent: [nil].
+	cached @env0:notNil ifTrue: [^ cached].
+	(mods @env0:includesKey: #'pkg_scaffolding') ifFalse: [
+		importlib
+			loadModuleFromPath: (importlib grailDir , '/tests/python/pkg_scaffolding/__init__.py')
+			name: 'pkg_scaffolding'
+	].
 	^ importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/pkg_scaffolding/' , fixtureName , '.py')
 		name: fullName
@@ -149,6 +154,64 @@ testUnaliasedDottedImport
 	mod := self loadFixture: 'dotted_import'.
 	self assert: (mod @env1:TOP_NAME) equals: 'collections'.
 	self assert: (mod @env1:ABC_VIA_TOP) equals: 'collections.abc'.
+%
+
+! --- itsdangerous Signer round-trip (M3 partial) ------------------------
+
+category: 'Grail-Tests - itsdangerous'
+method: FlaskScaffoldingTestCase
+testItsdangerousSignRoundtrip
+	"Signer.sign + unsign returns the original payload as bytes."
+
+	| mod |
+	mod := self loadFixture: 'use_itsdangerous'.
+	self assert: mod @env1:sign_round_trip equals: 'hello world' asByteArray
+%
+
+category: 'Grail-Tests - itsdangerous'
+method: FlaskScaffoldingTestCase
+testItsdangerousSignedStartsWithPayload
+	"The signed token has shape ``<payload>.<base64-signature>``."
+
+	| mod |
+	mod := self loadFixture: 'use_itsdangerous'.
+	self assert: mod @env1:signed_contains_payload equals: true
+%
+
+category: 'Grail-Tests - itsdangerous'
+method: FlaskScaffoldingTestCase
+testItsdangerousValidate
+	"validate(token) returns True for an intact token, False after
+	tampering."
+
+	| mod |
+	mod := self loadFixture: 'use_itsdangerous'.
+	self assert: mod @env1:validate_intact equals: true.
+	self assert: mod @env1:validate_tampered equals: false
+%
+
+category: 'Grail-Tests - itsdangerous'
+method: FlaskScaffoldingTestCase
+testItsdangerousDifferentKeysRejectEachOther
+	"A signature from key A doesn't validate under key B."
+
+	| mod |
+	mod := self loadFixture: 'use_itsdangerous'.
+	self assert: mod @env1:different_keys_dont_match equals: false
+%
+
+category: 'Grail-Tests - itsdangerous'
+method: FlaskScaffoldingTestCase
+testItsdangerousClassAttrOverride
+	"Serializer.default_signer is Signer; TimedSerializer overrides
+	to TimestampSigner via class-attribute redeclaration that
+	ClassDefAst's inheritance-copy fix now honors."
+
+	| mod result |
+	mod := self loadFixture: 'use_itsdangerous'.
+	result := mod @env1:class_attr_override_serializer_signer.
+	self assert: (result @env1:__getitem__: 0) equals: true.
+	self assert: (result @env1:__getitem__: 1) equals: true
 %
 
 ! --- ClassDefAst: subclass class-attribute redeclaration ----------------

@@ -38,8 +38,14 @@ def base64_decode(string: str | bytes) -> bytes:
         raise BadData("Invalid base64-encoded data") from e
 
 
-# The alphabet used by base64.urlsafe_*
-_base64_alphabet = f"{string.ascii_letters}{string.digits}-_=".encode("ascii")
+# The alphabet used by base64.urlsafe_*.
+# Grail patch (f-strings are passed through literally today): spell out
+# the alphabet so Signer's `self.sep in _base64_alphabet` check works.
+_base64_alphabet = (
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "abcdefghijklmnopqrstuvwxyz"
+    "0123456789-_="
+).encode("ascii")
 
 _int64_struct = struct.Struct(">Q")
 _int_to_bytes = _int64_struct.pack

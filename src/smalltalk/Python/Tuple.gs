@@ -144,6 +144,22 @@ new: anInteger fill: aBlock
 	^ inst immediateInvariant
 %
 
+category: 'Grail-Exception handling'
+method: tuple
+handles: anException
+	"Python ``except (TypeError, ValueError):`` builds a tuple of
+	exception classes and uses it as the ``on:do:`` selector pattern
+	(see TryAst codegen).  GemStone's handler-match protocol asks
+	the handler class ``handles: anException``; without this method
+	the lookup ends in MNU.  Delegate to each element: the tuple
+	matches if any contained class would."
+
+	self do: [:each |
+		(each handles: anException) ifTrue: [^ true]
+	].
+	^ false
+%
+
 ! ===============================================================================
 ! Python-level methods (env:1)
 ! ===============================================================================

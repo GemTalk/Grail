@@ -278,6 +278,22 @@ __class__
 category: 'Grail-Sequence Protocol'
 method: bytes
 __contains__: item
+	"Python: `int in bytes` checks for that byte; `bytes/bytearray
+	in bytes` does substring search.  Without the substring branch
+	itsdangerous's `self.sep not in signed_value` (with sep = b'.')
+	always reports false because indexOfSubCollection: only handles
+	subcollection-against-subcollection."
+
+	(item @env0:isKindOf: Integer) ifTrue: [
+		^ self @env0:includes: item
+	].
+	((item @env0:isKindOf: ByteArray) @env0:or: [item @env0:isKindOf: CharacterCollection]) ifTrue: [
+		| needle |
+		needle := (item @env0:isKindOf: ByteArray)
+			ifTrue: [item]
+			ifFalse: [item @env0:asByteArray].
+		^ (self @env0:indexOfSubCollection: needle) @env0:> 0
+	].
 	^ self @env0:includes: item
 %
 
@@ -1841,6 +1857,57 @@ strip
 	].
 
 	^ result
+%
+
+category: 'Grail-String-like Methods'
+method: bytes
+rstrip: chars
+	"``bytes.rstrip(chars)`` - drop trailing bytes matching any byte
+	in `chars`.  itsdangerous uses this with the b'=' padding from
+	base64.urlsafe_b64encode."
+
+	| charsBytes size end result |
+	charsBytes := (chars @env0:isKindOf: ByteArray)
+		ifTrue: [chars]
+		ifFalse: [chars @env0:asByteArray].
+	size := self @env0:size.
+	end := size.
+	[(end @env0:>= 1) @env0:and: [charsBytes @env0:includes: (self @env0:at: end)]]
+		@env0:whileTrue: [end := end @env0:- 1].
+	end @env0:= size ifTrue: [^ self].
+	result := bytes @env0:___new___: end.
+	1 @env0:to: end do: [:i | result @env0:at: i put: (self @env0:at: i)].
+	^ result
+%
+
+category: 'Grail-String-like Methods'
+method: bytes
+lstrip: chars
+	"``bytes.lstrip(chars)`` - drop leading bytes matching any byte
+	in `chars`."
+
+	| charsBytes size start result newSize |
+	charsBytes := (chars @env0:isKindOf: ByteArray)
+		ifTrue: [chars]
+		ifFalse: [chars @env0:asByteArray].
+	size := self @env0:size.
+	start := 1.
+	[(start @env0:<= size) @env0:and: [charsBytes @env0:includes: (self @env0:at: start)]]
+		@env0:whileTrue: [start := start @env0:+ 1].
+	start @env0:= 1 ifTrue: [^ self].
+	newSize := size @env0:- start @env0:+ 1.
+	result := bytes @env0:___new___: newSize.
+	1 @env0:to: newSize do: [:i | result @env0:at: i put: (self @env0:at: start @env0:+ i @env0:- 1)].
+	^ result
+%
+
+category: 'Grail-String-like Methods'
+method: bytes
+strip: chars
+	"``bytes.strip(chars)`` - drop leading + trailing bytes matching
+	any byte in `chars`."
+
+	^ (self @env1:lstrip: chars) @env1:rstrip: chars
 %
 
 category: 'Grail-String-like Methods'

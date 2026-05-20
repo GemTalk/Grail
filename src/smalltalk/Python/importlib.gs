@@ -538,6 +538,34 @@ ___compilationSymbolList___
 	^ System myUserProfile symbolList copy
 %
 
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___inheritClassAttrs___: aClass exclude: ownAttrs
+	"Copy parent metaclass class-side instVar values into aClass's
+	matching slot for every name the parent declares (via env-1
+	accessor) that aClass did NOT redeclare in its own class body.
+	Smalltalk class-side instVars are per-class storage, so without
+	this an unredeclared inherited Python class attr stays nil.
+	Filter against env-1 accessor presence so Smalltalk system slots
+	(superClass / format / userId / classCategory / ...) don't
+	participate.  __module__ is handled separately by ClassDefAst.
+
+	Factored out of inline emit so each generated class only pays a
+	single send instead of ~600 chars of inlined code (keeps the
+	gem's transient doits_meths code space from overflowing on heavy
+	imports like itsdangerous + Werkzeug)."
+
+	aClass superclass class allInstVarNames do: [:n |
+		(((aClass superclass class whichClassIncludesSelector: n environmentId: 1) notNil)
+			and: [n ~= #'__module__'
+			and: [(ownAttrs includes: n) not]]) ifTrue: [
+			| v |
+			v := aClass superclass perform: n env: 1.
+			aClass perform: (n asString , ':') asSymbol env: 1 withArguments: { v }
+		]
+	]
+%
+
 set compile_env: 1
 
 category: 'Grail-Module Loading'
