@@ -17,11 +17,12 @@
 
 LIB_DIR="${1:-$(pwd)/lib}"
 
-# Grail's CPython FFI calls APIs introduced in Python 3.13
-# (Py_GetConstantBorrowed) and 3.12 (PyErr_GetRaisedException), so anything
-# older fails at runtime with "symbol not found".
+# Grail's CPython FFI calls APIs introduced in Python 3.14 (PyInitConfig
+# from PEP 741), 3.13 (Py_GetConstantBorrowed), and 3.12
+# (PyErr_GetRaisedException), so anything older fails at runtime with
+# "undefined symbol: PyInitConfig_Create".
 MIN_MAJOR=3
-MIN_MINOR=13
+MIN_MINOR=14
 
 # Search order:
 #   1. Versioned binaries on PATH (highest first), so we can skip past an
