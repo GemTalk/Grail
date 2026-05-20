@@ -280,14 +280,19 @@ ___pyAttrLoad___: aSym
 	invoke the unary form to return the value.  Without this branch
 	the fallback would wrap the accessor in a BoundMethod and Python
 	expressions like ``Color.RED`` would yield a callable rather
-	than the int 1."
+	than the int 1.
+
+	Walk the metaclass chain via ``whichClassIncludesSelector:`` so
+	a subclass that *inherits* a class-attr accessor pair (no own
+	redeclaration in ClassDefAst) still resolves through this branch
+	— per-class slot storage means ``B.X`` calls the inherited
+	accessor on B and reads B's own slot."
 	((self @env0:isKindOf: Behavior)
 		and: [self @env0:inheritsFrom: PythonInstance]) ifTrue: [
-		| classMd |
-		classMd := self @env0:class @env0:methodDictForEnv: 1.
-		((classMd @env0:includesKey: aSym)
-			and: [classMd @env0:includesKey: sym1]) ifTrue: [
-			^ self @env0:perform: aSym env: 1
+		((self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
+			and: [(self @env0:class @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil])
+			ifTrue: [
+				^ self @env0:perform: aSym env: 1
 		].
 	].
 	"Python user classes (PythonInstance subclasses) have synthesized
@@ -310,21 +315,19 @@ ___pyAttrLoad___: aSym
 	"Instance falling through to a class-side attribute.  When the
 	receiver is an instance of a Python user class and the attribute
 	isn't on the instance side, consult the class-side accessor pair
-	*walking the metaclass chain*.  Crucially: class-side instVars
-	are *per-class* in Smalltalk, not inherited like Python class
-	attributes.  Calling the accessor on ``self class`` would return
-	the subclass's own (nil) slot instead of the parent's value.
-	Find the defining metaclass via ``whichClassIncludesSelector:``,
-	then call the accessor on its ``thisClass`` so a NamedSignal
-	instance reading ``self.set_class`` reaches Signal class's slot
-	where ``set_class`` was actually initialized."
+	*walking the metaclass chain*.  Class-side instVars are
+	per-class storage in Smalltalk; ClassDefAst copies inherited
+	parent values into the subclass's own slot at class-build time,
+	so calling the accessor on ``self class`` (the immediate class,
+	not the metaclass that defined the accessor) returns the
+	subclass's per-class value — matching Python's per-class
+	override semantics (B.x can differ from A.x)."
 	(self @env0:isKindOf: PythonInstance) ifTrue: [
-		| metaclass definingMeta |
+		| metaclass |
 		metaclass := self @env0:class @env0:class.
-		definingMeta := metaclass @env0:whichClassIncludesSelector: aSym environmentId: 1.
-		(definingMeta notNil
+		((metaclass @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
 			and: [(metaclass @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil]) ifTrue: [
-			^ definingMeta @env0:thisClass @env0:perform: aSym env: 1
+			^ self @env0:class @env0:perform: aSym env: 1
 		].
 	].
 	"Shim wrapper classes (SrePattern, SreMatch, ...) advertise the

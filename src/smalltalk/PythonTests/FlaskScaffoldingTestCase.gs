@@ -151,6 +151,73 @@ testUnaliasedDottedImport
 	self assert: (mod @env1:ABC_VIA_TOP) equals: 'collections.abc'.
 %
 
+! --- ClassDefAst: subclass class-attribute redeclaration ----------------
+
+category: 'Grail-Tests - ClassDefAst'
+method: FlaskScaffoldingTestCase
+testSubclassRedeclaresClassAttr
+	"`class B(A): label = ...` rebinds the same name on B's metaclass
+	(per-class storage, name inherited from A's metaclass).  Before
+	the ClassDefAst fix this raised rtErrAddDupInstvar."
+
+	| mod |
+	mod := self loadFixture: 'subclass_class_attrs'.
+	self assert: mod @env1:class_label_a equals: 'A-label'.
+	self assert: mod @env1:class_label_b equals: 'B-label'
+%
+
+category: 'Grail-Tests - ClassDefAst'
+method: FlaskScaffoldingTestCase
+testSubclassRedeclaresChain
+	"A.counter=1, B(A).counter=2, C(B).counter=3 - each class holds
+	its own per-class value."
+
+	| mod result |
+	mod := self loadFixture: 'subclass_class_attrs'.
+	result := mod @env1:class_counter_chain.
+	self assert: (result @env1:__getitem__: 0) equals: 1.
+	self assert: (result @env1:__getitem__: 1) equals: 2.
+	self assert: (result @env1:__getitem__: 2) equals: 3
+%
+
+category: 'Grail-Tests - ClassDefAst'
+method: FlaskScaffoldingTestCase
+testSubclassInheritsWhenNotRedeclared
+	"C(B) doesn't redeclare `label`; reading C.label walks the MRO
+	and finds B's value."
+
+	| mod |
+	mod := self loadFixture: 'subclass_class_attrs'.
+	self assert: mod @env1:class_label_c_inherits_from_b equals: 'B-label'
+%
+
+category: 'Grail-Tests - ClassDefAst'
+method: FlaskScaffoldingTestCase
+testSubclassAddsNewClassAttr
+	"D(A) adds `extra` without a parent slot to collide with -
+	regression test that the new ClassDefAst path still works for
+	purely-new class attrs."
+
+	| mod |
+	mod := self loadFixture: 'subclass_class_attrs'.
+	self assert: mod @env1:class_d_new_attr equals: 'D-only'.
+	self assert: mod @env1:class_d_inherits_a_label equals: 'A-label'
+%
+
+category: 'Grail-Tests - ClassDefAst'
+method: FlaskScaffoldingTestCase
+testInstanceReadsClassAttr
+	"Instance attribute reads see the class attr through Grail's
+	instance->class fallthrough.  A() reads A.label = 'A-label';
+	B() reads B.label = 'B-label' (per-class override visible
+	through normal attribute lookup)."
+
+	| mod |
+	mod := self loadFixture: 'subclass_class_attrs'.
+	self assert: mod @env1:instance_reads_class_attr_a equals: 'A-label'.
+	self assert: mod @env1:instance_reads_class_attr_b equals: 'B-label'
+%
+
 ! --- ClassDefAst: Python class doesn't clobber built-ins -----------------
 
 category: 'Grail-Tests - ClassDefAst'

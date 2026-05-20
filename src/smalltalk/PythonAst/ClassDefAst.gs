@@ -230,6 +230,37 @@ printSmalltalkRuntimeOn: aStream
 		pair value printSmalltalkWithParenthesisOn: aStream.
 		aStream nextPutAll: '.'; lf.
 	].
+	"For class attrs the parent declares but we didn't redeclare,
+	copy the parent's current value into our slot.  Smalltalk
+	class-side instVars are per-class storage, so without this the
+	subclass's inherited slot stays nil (Python's MRO lookup would
+	have returned the parent's value instead).
+
+	Filter against env-1 accessor presence: a Python-declared class
+	attr always has an env-1 unary accessor compiled by ClassDefAst,
+	while Smalltalk system slots (Metaclass3's superClass / format /
+	..., Exception's userId / classCategory / etc.) only have env-0
+	accessors and so naturally skip out.  __module__ is also skipped
+	— the explicit `__module__: self` stamp emitted below handles it."
+	bases isEmpty ifFalse: [
+		aStream
+			nextPutAll: '(';
+			nextPutAll: name;
+			nextPutAll: ' @env0:superclass @env0:class @env0:allInstVarNames) @env0:do: [:___n___ |
+	(((';
+			nextPutAll: name;
+			nextPutAll: ' @env0:superclass @env0:class @env0:whichClassIncludesSelector: ___n___ environmentId: 1) @env0:notNil)
+		@env0:and: [(___n___ @env0:= #''__module__'') @env0:not
+		@env0:and: [('.
+		self printSymbolArray: (classAttrs collect: [:p | p key]) on: aStream.
+		aStream nextPutAll:
+' @env0:includes: ___n___) @env0:not]]) ifTrue: [
+		| ___v___ |
+		___v___ := '; nextPutAll: name; nextPutAll: ' @env0:superclass @env0:perform: ___n___ @env0:env: 1.
+		'; nextPutAll: name; nextPutAll: ' @env0:perform: (___n___ @env0:asString @env0:, '':'') @env0:asSymbol @env0:env: 1 @env0:withArguments: { ___v___ }
+	]
+].'; lf
+	].
 
 	"Compile + initialize the synthetic ``__module__`` slot on the
 	root of a Python class chain — subclasses inherit it (the slot
