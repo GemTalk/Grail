@@ -172,12 +172,7 @@ class TimedSerializer(Serializer[_TSerialized]):
     :class:`.Signer`.
     """
 
-    # Grail patch: don't re-declare default_signer at class scope (parent's
-    # instVar of the same name would duplicate).  Override via __init__ so
-    # the instance picks up the right signer factory.
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.default_signer = TimestampSigner
+    default_signer: type[TimestampSigner] = TimestampSigner
 
     def iter_unsigners(
         self, salt: str | bytes | None = None

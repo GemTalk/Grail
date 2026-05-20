@@ -126,28 +126,46 @@ printSmalltalkRuntimeOn: aStream
 	is the sole handle.  Free-name resolution inside this class's
 	methods goes through CallAst moduleClassBeingCompiled at codegen
 	time (see NameAst >> isModuleScopeName:), so no per-class module
-	reference needs to be stored on the new class."
+	reference needs to be stored on the new class.
+
+	The subclass: call is wrapped in
+	  ``[:___parent | ___parent subclass: ... classInstVars:
+	         (<all attr names> reject:
+	             [:n | ___parent class allInstVarNames includes: n])
+	         ...] value: <parent expr>``
+	so subclass declarations that rebind a class attribute the parent
+	already exposes (``class TimedSerializer(Serializer):
+	default_signer = X``) don't re-declare the slot — Smalltalk's
+	``subclass:...classInstVars:`` rejects names already present in
+	the parent metaclass with rtErrAddDupInstvar.  The init line
+	emitted further below still fires the inherited setter so the
+	new class gets its own per-class value (Smalltalk class-side
+	instVars are per-class storage, matching Python's
+	``A.attr != B.attr`` semantics)."
+	allClassInstVars := (classAttrs collect: [:p | p key]) asOrderedCollection.
+	bases isEmpty ifTrue: [allClassInstVars add: #'__module__'].
 	aStream
 		nextPutAll: name;
-		nextPutAll: ' := ('.
-	self printSuperclassOn: aStream.
-	aStream
-		nextPutAll: ') @env0:subclass: #''';
+		nextPutAll: ' := [:___parent___ | ___parent___ @env0:subclass: #''';
 		nextPutAll: (importlib @env0:___asSmalltalkClassName___: name) asString;
 		nextPutAll: ''' instVarNames: '.
 	self printSymbolArray: ivarNames on: aStream.
 	aStream nextPutAll: ' classVars: #() classInstVars: '.
-	"Class-side slots: user-declared class attrs, plus the synthetic
-	``__module__`` slot on the root of a Python class chain.  Only
-	the root declares the slot; subclasses inherit it and would
-	otherwise error with rtErrAddDupInstvar.  Inheriting from a
-	built-in (e.g. ``class Foo(dict)``) doesn't pick up the
-	accessor pair, so the ``__module__: self`` stamp below is
-	wrapped in an error handler for that case."
-	allClassInstVars := (classAttrs collect: [:p | p key]) asOrderedCollection.
-	bases isEmpty ifTrue: [allClassInstVars add: #'__module__'].
-	self printSymbolArray: allClassInstVars on: aStream.
-	aStream nextPutAll: ' poolDictionaries: #() inDictionary: nil options: #().'; lf.
+	bases isEmpty ifTrue: [
+		"No Python parent — PythonInstance doesn't carry per-class
+		attr slots so no filtering needed; emit the literal list."
+		self printSymbolArray: allClassInstVars on: aStream
+	] ifFalse: [
+		"Filter out names already declared on the parent's metaclass."
+		aStream nextPut: $(.
+		self printSymbolArray: allClassInstVars on: aStream.
+		aStream nextPutAll:
+' @env0:reject: [:___n___ | ___parent___ @env0:class @env0:allInstVarNames @env0:includes: ___n___])'
+	].
+	aStream
+		nextPutAll: ' poolDictionaries: #() inDictionary: nil options: #()] @env0:value: ('.
+	self printSuperclassOn: aStream.
+	aStream nextPutAll: ').'; lf.
 
 	"Compile each instance method as a real env-1 method on the new
 	class.  The source is embedded as a Smalltalk string literal."
@@ -165,12 +183,28 @@ printSmalltalkRuntimeOn: aStream
 	attribute (e.g. `class Color: RED = 1`), then evaluate each
 	value expression inline and store via the setter.  The
 	accessor/setter pair lets ``___pyAttrLoad___:`` treat the class
-	attribute as a value when read through Python attribute syntax."
+	attribute as a value when read through Python attribute syntax.
+
+	When the parent's metaclass already declares this slot (subclass
+	redeclaration like ``default_signer = TimestampSigner``), skip
+	the compile — the accessor/setter inherit from the parent, and
+	emitting fresh ones would just replace inherited methods with
+	identical sources.  The runtime check uses ``<class> superclass
+	class allInstVarNames`` because the class itself exists by this
+	point (assigned in the block above)."
 	classAttrs do: [:pair |
 		| attrName lf accessorSrc setterSrc |
 		attrName := pair key.
 		lf := Character lf asString.
 		accessorSrc := attrName , lf , '	^ ' , attrName.
+		bases isEmpty ifFalse: [
+			aStream
+				nextPutAll: '((';
+				nextPutAll: name;
+				nextPutAll: ' @env0:superclass @env0:class @env0:allInstVarNames @env0:includes: #';
+				nextPutAll: attrName;
+				nextPutAll: ') @env0:not) ifTrue: ['; lf
+		].
 		self
 			emitCompileMethodOn: name
 			source: accessorSrc
@@ -186,6 +220,7 @@ printSmalltalkRuntimeOn: aStream
 			env: 1
 			classSide: true
 			onStream: aStream.
+		bases isEmpty ifFalse: [aStream nextPutAll: '].'; lf]
 	].
 	"Initialize each class attribute by evaluating the value
 	expression in the surrounding module context and sending the

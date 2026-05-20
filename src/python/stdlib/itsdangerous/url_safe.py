@@ -16,16 +16,9 @@ class URLSafeSerializerMixin(Serializer[str]):
     """Mixed in with a regular serializer it will attempt to zlib
     compress the string to make it shorter if necessary. It will also
     base64 encode the string so that it can safely be placed in a URL.
-
-    Grail patch (class-attribute override): we cannot redeclare
-    ``default_serializer`` at class scope because the parent's
-    instVar slot of the same name would collide; assign in __init__
-    instead.
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.default_serializer = _CompactJSON
+    default_serializer: _PDataSerializer[str] = _CompactJSON
 
     def load_payload(
         self,
