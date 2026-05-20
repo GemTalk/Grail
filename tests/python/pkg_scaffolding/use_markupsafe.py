@@ -35,3 +35,23 @@ def builtin_hasattr_on_plain_string():
 
 def builtin_getattr_on_plain_string():
     return getattr("hi", "upper")()
+
+
+def escape_returns_populated_markup():
+    # The full escape() round-trip — exercises NameAst's
+    # base-of-classdef fix, CharacterCollection __new__: self-typing,
+    # and ClassDefAst's str-subclass instantiation path that routes
+    # Markup("text") through str.__new__(Markup, "text").
+    return str(markupsafe.escape("<hello>"))
+
+
+def escape_preserves_safe_html():
+    return str(markupsafe.escape("plain & simple"))
+
+
+def markup_carries_string_content():
+    # Direct Markup(value) call (no escape) — the str-subclass
+    # instantiation path must produce a Markup whose characters are
+    # the input string.
+    m = markupsafe.Markup("hello world")
+    return (str(m), len(m), type(m) is markupsafe.Markup)

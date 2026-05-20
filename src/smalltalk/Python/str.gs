@@ -37,19 +37,34 @@ __new__
 category: 'Grail-Initialization'
 classmethod: CharacterCollection
 __new__: obj
-	"Create a new str instance from an object.
-	In Python: str(obj) or str.__new__(str, obj)"
+	"Create a new instance of `self` (the cls argument) whose content
+	is ``str(obj)``.  For ``str(obj)`` the receiver is the canonical
+	concrete str class (Unicode7), and the result is just a string;
+	for ``str.__new__(Markup, obj)`` the receiver is Markup, and the
+	result is a Markup instance carrying the same characters.  This
+	is what makes ``super().__new__(cls, value)`` produce a populated
+	instance of the subclass in user code like markupsafe.Markup."
 
-	| result |
-	obj ifNil: [ ^ '' @env0:copy ].
-
-	"If already a string return it"
-	(obj @env0:isKindOf: CharacterCollection) ifTrue: [
-		^ obj
+	| source result |
+	obj @env0:ifNil: [source := ''].
+	obj @env0:ifNotNil: [
+		(obj @env0:isKindOf: CharacterCollection)
+			ifTrue: [source := obj]
+			ifFalse: [source := obj @env1:__str__].
 	].
-
-	"Try to call __str__ on the object"
-	result := obj @env1:__str__.
+	"Allocate a self-typed string of the right size via Behavior's
+	primitive ``new:`` and copy bytes.  Do NOT route through
+	``___new___:`` here — Object's class-side bridge of that name
+	dispatches back to env-1 ``__new__:``, which would re-enter this
+	method via subclass instantiation and stack-overflow."
+	result := self @env0:new: source @env0:size.
+	source @env0:size @env0:> 0 ifTrue: [
+		result
+			@env0:replaceFrom: 1
+			to: source @env0:size
+			with: source
+			startingAt: 1
+	].
 	^ result
 %
 

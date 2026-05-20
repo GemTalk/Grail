@@ -409,14 +409,32 @@ category: 'Grail-code generation'
 method: ClassDefAst
 emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aStream
 	"Emit the class-side `value: positional value: keywords` method
-	used as the entry point when Python code instantiates the class."
+	used as the entry point when Python code instantiates the class.
+
+	str subclasses are special-cased: ``self new`` returns an empty
+	byte object with no way for Grail to back-fill the string content
+	from positional[0] without going through ``str.__new__(cls, v)``.
+	For ``class Markup(str):`` we emit ``instance := self __new__:
+	positional[0]`` (or an empty value when no arg is supplied),
+	which routes through CharacterCollection >> __new__: — the env-1
+	allocator that creates a self-typed string carrying the input
+	content.  Markup's own (instance-side) ``__new__`` override is
+	intentionally bypassed; the user-defined ``__html__`` detour
+	does not fire here and is a known limitation worth revisiting
+	once Python ``__new__`` becomes a first-class class method."
 
 	| src lf |
 	lf := Character lf asString.
 	src := WriteStream on: Unicode7 new.
 	src nextPutAll: 'value: positional value: keywords'; nextPutAll: lf.
 	src nextPutAll: '| instance |'; nextPutAll: lf.
-	src nextPutAll: 'instance := self @env0:new.'; nextPutAll: lf.
+	self firstBaseIsStr
+		ifTrue: [
+			src
+				nextPutAll: 'instance := self @env1:__new__: ((positional @env0:size @env0:>= 1) ifTrue: [positional @env0:at: 1] ifFalse: ['''']).';
+				nextPutAll: lf
+		]
+		ifFalse: [src nextPutAll: 'instance := self @env0:new.'; nextPutAll: lf].
 	initSelector ifNotNil: [
 		"Varargs __init__ (defaults, *args, or **kwargs) compiles to a
 		`___init__:kw:` selector that takes both positional and keyword
@@ -630,6 +648,20 @@ instanceMethodDefs
 	"Return all InstanceFunctionDefAst nodes from the class body."
 
 	^ body body select: [:stmt | stmt isKindOf: InstanceFunctionDefAst]
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+firstBaseIsStr
+	"True when this class is a direct ``str`` subclass — used to gate
+	the str-specific value:value: instantiation path that creates a
+	self-typed string carrying the first positional argument.  Static
+	check on the bases list; Grail can't resolve transitive ancestry
+	at codegen time."
+
+	bases isEmpty ifTrue: [^ false].
+	^ (bases first isKindOf: NameAst)
+		and: [bases first id asSymbol = #'str']
 %
 
 category: 'Grail-Class Compilation'

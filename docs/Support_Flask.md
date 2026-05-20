@@ -219,14 +219,15 @@ Existing stub modules that need extending later: `typing`,
   secrets / warnings / struct / mimetypes / ipaddress / hashlib /
   hmac).  Done.  Unblocks `itsdangerous` at the stdlib layer.
 - **M3 — `import itsdangerous` + `import markupsafe`.**  Both
-  import; `itsdangerous.Signer` sign/unsign round-trip works end-
-  to-end.  `markupsafe._native._escape_inner` produces the
-  HTML-escaped string; `markupsafe.escape()` itself returns an
-  empty `Markup` instance because Grail does not yet honor
-  `__new__` for `str` subclasses (the instance is created via
-  Smalltalk `Class new` and the `super().__new__(cls, value)`
-  call inside `Markup.__new__` is bypassed).  Workaround for
-  Jinja2 is to teach Grail to invoke `__new__` when defined.
+  import.  `itsdangerous.Signer` sign/unsign round-trips end-to-
+  end.  `markupsafe.escape()` returns a populated `Markup`
+  instance: `class Markup(str):` instantiation now routes through
+  `str.__new__(Markup, value)` (a class-side
+  `CharacterCollection >> __new__:` that allocates a self-typed
+  byte object and copies the input bytes), bypassing Markup's
+  user-defined `__new__` body.  The `__html__` detour on objects
+  that implement that hook is therefore skipped — revisit when
+  Python `__new__` becomes a first-class class method.
 - **M4 — Jinja2 renders a template** standalone, no Flask yet.
 - **M5 — `werkzeug.wrappers.Request/Response` round-trip a WSGI
   environ.**

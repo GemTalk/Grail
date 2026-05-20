@@ -229,6 +229,43 @@ testBuiltinGetattr
 	self assert: mod @env1:builtin_getattr_on_plain_string equals: 'HI'
 %
 
+category: 'Grail-Tests - markupsafe'
+method: FlaskScaffoldingTestCase
+testMarkupsafeEscapeFullRoundTrip
+	"``markupsafe.escape('<hello>')`` returns a populated Markup
+	instance carrying the escaped string.  Until the str-subclass
+	instantiation path landed, the Markup came back empty (the
+	default ``self new`` returned a zero-byte instance with no way
+	to carry positional[0]).  Verifies both branches: HTML markers
+	get escaped, plain text passes through with ``&`` properly
+	collapsed."
+
+	| mod |
+	mod := self loadFixture: 'use_markupsafe'.
+	self
+		assert: mod @env1:escape_returns_populated_markup
+		equals: '&lt;hello&gt;'.
+	self
+		assert: mod @env1:escape_preserves_safe_html
+		equals: 'plain &amp; simple'
+%
+
+category: 'Grail-Tests - markupsafe'
+method: FlaskScaffoldingTestCase
+testMarkupsafeMarkupCarriesContent
+	"``Markup('hello world')`` (no escape) — the str-subclass
+	instantiation path produces a Markup whose characters are the
+	input string.  The previous behavior returned an empty
+	zero-byte Markup."
+
+	| mod result |
+	mod := self loadFixture: 'use_markupsafe'.
+	result := mod @env1:markup_carries_string_content.
+	self assert: (result @env1:__getitem__: 0) equals: 'hello world'.
+	self assert: (result @env1:__getitem__: 1) equals: 11.
+	self assert: (result @env1:__getitem__: 2) equals: true
+%
+
 ! --- itsdangerous Signer round-trip (M3 partial) ------------------------
 
 category: 'Grail-Tests - itsdangerous'
