@@ -343,8 +343,23 @@ isFastPathBuiltinName
 	through reflective dispatch."
 
 	(self isFunctionPositionOfCall) ifTrue: [^false].
+	(self isBaseOfClassDef) ifTrue: [^false].
 	(self isVariableIsDeclared: id) ifTrue: [^false].
 	^ self class isFastPathBuiltinName: id
+%
+
+category: 'other'
+method: NameAst
+isBaseOfClassDef
+	"True if this NameAst is one of the `bases` of an enclosing
+	ClassDefAst (i.e. ``class Markup(str):`` — `str` is the base).
+	Used to suppress the BoundMethod fast-path so the bare class
+	identifier (resolved through the symbol list to e.g. Unicode7)
+	is emitted as the parent expression of the ``subclass:`` send."
+
+	(parent isKindOf: ClassDefAst) ifFalse: [^false].
+	parent bases isNil ifTrue: [^false].
+	^ parent bases includes: self
 %
 
 category: 'other'

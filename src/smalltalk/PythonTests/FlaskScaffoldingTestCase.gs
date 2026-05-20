@@ -156,6 +156,79 @@ testUnaliasedDottedImport
 	self assert: (mod @env1:ABC_VIA_TOP) equals: 'collections.abc'.
 %
 
+! --- MarkupSafe import + escape backbone (M3 partial) -------------------
+
+category: 'Grail-Tests - markupsafe'
+method: FlaskScaffoldingTestCase
+testMarkupsafePublicSurfaceImports
+	"The drop-in markupsafe package imports cleanly and exposes the
+	functions Flask / Jinja2 reach for at import time."
+
+	| mod result |
+	mod := self loadFixture: 'use_markupsafe'.
+	result := mod @env1:import_attributes_exist.
+	self assert: (result @env1:__getitem__: 0) equals: true.
+	self assert: (result @env1:__getitem__: 1) equals: true.
+	self assert: (result @env1:__getitem__: 2) equals: true.
+	self assert: (result @env1:__getitem__: 3) equals: true
+%
+
+category: 'Grail-Tests - markupsafe'
+method: FlaskScaffoldingTestCase
+testMarkupsafeEscapeInnerRoundTrip
+	"markupsafe._native._escape_inner is the pure-Python fallback
+	escape() takes when the C speedups extension is absent.  Grail
+	never ships the speedups, so this is the live codepath."
+
+	| mod |
+	mod := self loadFixture: 'use_markupsafe'.
+	self
+		assert: mod @env1:escape_inner_round_trip
+		equals: '&lt;a href=&#39;&amp;&#39;&gt;&#34;x&#34;&lt;/a&gt;'.
+	self
+		assert: mod @env1:escape_inner_no_specials
+		equals: 'plain text 123'
+%
+
+category: 'Grail-Tests - markupsafe'
+method: FlaskScaffoldingTestCase
+testMarkupsafeMarkupSubclassesStr
+	"``class Markup(str):`` — locks in the NameAst fix that emits
+	bare class identifiers (resolved through the symbol list) as the
+	parent of a ClassDefAst's ``subclass:`` send instead of the
+	fast-path BoundMethod wrapper used at call sites."
+
+	| mod |
+	mod := self loadFixture: 'use_markupsafe'.
+	self assert: mod @env1:markup_subclasses_str equals: true
+%
+
+category: 'Grail-Tests - markupsafe'
+method: FlaskScaffoldingTestCase
+testBuiltinHasattr
+	"hasattr(obj, name) — used by markupsafe.escape() to detect
+	__html__.  Returns True/False without leaking the underlying
+	AttributeError."
+
+	| mod result |
+	mod := self loadFixture: 'use_markupsafe'.
+	result := mod @env1:builtin_hasattr_on_plain_string.
+	self assert: (result @env1:__getitem__: 0) equals: true.
+	self assert: (result @env1:__getitem__: 1) equals: false
+%
+
+category: 'Grail-Tests - markupsafe'
+method: FlaskScaffoldingTestCase
+testBuiltinGetattr
+	"getattr(obj, name) — 2-arg form returns the attribute (or
+	BoundMethod for a method).  Test by calling the returned
+	BoundMethod via the round-trip ``getattr('hi', 'upper')()``."
+
+	| mod |
+	mod := self loadFixture: 'use_markupsafe'.
+	self assert: mod @env1:builtin_getattr_on_plain_string equals: 'HI'
+%
+
 ! --- itsdangerous Signer round-trip (M3 partial) ------------------------
 
 category: 'Grail-Tests - itsdangerous'

@@ -613,6 +613,70 @@ property: fn
 	^ fn
 %
 
+category: 'Grail-Built-in Functions'
+method: builtins
+hasattr: anObject _: aName
+	"Python builtin hasattr(obj, name) — return True if obj has an
+	attribute named `name`, False if accessing the attribute raises
+	any exception (CPython 3 behavior: only AttributeError, but
+	Grail collapses ``except (TypeError, AttributeError):`` paths
+	through env-1 dispatch errors that show up as MNUs here too).
+
+	Used heavily by MarkupSafe, itsdangerous, and Werkzeug to detect
+	``__html__`` / ``__call__`` / duck-typed protocols."
+
+	^ [anObject @env1:___pyAttrLoad___: aName @env0:asSymbol.
+	   true]
+		@env0:on: Error
+		do: [:___ex___ | false]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+getattr: anObject _: aName
+	"Python builtin getattr(obj, name) — 2-arg form.  Raises
+	AttributeError on miss; the 3-arg form (with default) lives at
+	``_getattr:kw:``."
+
+	^ anObject @env1:___pyAttrLoad___: aName @env0:asSymbol
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+issubclass: aClass _: aClassOrTuple
+	"Python builtin issubclass(cls, classinfo) — True if `cls` is a
+	subclass of `classinfo` (or any class in the tuple form).  Mirrors
+	the BoundMethod-unwrap + tuple-recursion shape of `isinstance:_:`.
+	When `cls` is a BoundMethod wrapping a builtin class name (Grail
+	emits ``str`` / ``int`` as such), unwrap to the underlying class
+	before walking the hierarchy."
+
+	| sub target |
+	sub := self @env1:___resolveClassRef___: aClass.
+	target := self @env1:___resolveClassRef___: aClassOrTuple.
+	(target @env0:isKindOf: tuple) ifTrue: [
+		target @env0:do: [:eachCls |
+			(sub @env0:== eachCls) ifTrue: [^ true].
+			(sub @env0:inheritsFrom: eachCls) ifTrue: [^ true]
+		].
+		^ false
+	].
+	(sub @env0:== target) ifTrue: [^ true].
+	^ sub @env0:inheritsFrom: target
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+setattr: anObject _: aName _: aValue
+	"Python builtin setattr(obj, name, value) — sends the env-1
+	setter ``aName:`` (which is what AttributeAst emits for the
+	``obj.name = value`` syntactic form)."
+
+	^ anObject @env0:perform: (aName @env0:asString @env0:, ':') @env0:asSymbol
+		@env0:env: 1
+		@env0:withArguments: { aValue }
+%
+
 ! ===============================================================================
 ! Varargs fast-path methods (`_name:kw:` shape)
 ! ===============================================================================

@@ -218,7 +218,15 @@ Existing stub modules that need extending later: `typing`,
 - **M2.5 — Tier 1.5 stdlib in place** (base64 / contextlib / time /
   secrets / warnings / struct / mimetypes / ipaddress / hashlib /
   hmac).  Done.  Unblocks `itsdangerous` at the stdlib layer.
-- **M3 — `import itsdangerous` + `import markupsafe`.**
+- **M3 — `import itsdangerous` + `import markupsafe`.**  Both
+  import; `itsdangerous.Signer` sign/unsign round-trip works end-
+  to-end.  `markupsafe._native._escape_inner` produces the
+  HTML-escaped string; `markupsafe.escape()` itself returns an
+  empty `Markup` instance because Grail does not yet honor
+  `__new__` for `str` subclasses (the instance is created via
+  Smalltalk `Class new` and the `super().__new__(cls, value)`
+  call inside `Markup.__new__` is bypassed).  Workaround for
+  Jinja2 is to teach Grail to invoke `__new__` when defined.
 - **M4 — Jinja2 renders a template** standalone, no Flask yet.
 - **M5 — `werkzeug.wrappers.Request/Response` round-trip a WSGI
   environ.**
