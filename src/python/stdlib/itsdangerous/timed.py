@@ -167,7 +167,7 @@ class TimestampSigner(Signer):
             return False
 
 
-class TimedSerializer(Serializer):  # Grail patch: drop Serializer[T] subscript
+class TimedSerializer(Serializer[_TSerialized]):
     """Uses :class:`TimestampSigner` instead of the default
     :class:`.Signer`.
     """

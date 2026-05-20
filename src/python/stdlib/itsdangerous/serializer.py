@@ -23,10 +23,7 @@ else:
     _TSerialized = t.TypeVar("_TSerialized", bound=t.Union[str, bytes])
 
 
-# Grail patch: drop the subscripted Protocol[_TSerialized] - our
-# typing stub treats Protocol as a class and `Protocol[T]` would call
-# `__getitem__:` on the class, which has no class-side handler yet.
-class _PDataSerializer(t.Protocol):
+class _PDataSerializer(t.Protocol[_TSerialized]):
     def loads(self, payload: _TSerialized, /) -> t.Any: ...
     # A signature with additional arguments is not handled correctly by type
     # checkers right now, so an overload is used below for serializers that
@@ -42,7 +39,7 @@ def is_text_serializer(
     return isinstance(serializer.dumps({}), str)
 
 
-class Serializer(t.Generic):  # Grail patch: drop Generic[T] subscript
+class Serializer(t.Generic[_TSerialized]):
     """A serializer wraps a :class:`~itsdangerous.signer.Signer` to
     enable serializing and securely signing data other than bytes. It
     can unsign to verify that the data hasn't been changed.

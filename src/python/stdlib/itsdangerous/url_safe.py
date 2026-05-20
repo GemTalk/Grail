@@ -12,14 +12,15 @@ from .serializer import Serializer
 from .timed import TimedSerializer
 
 
-class URLSafeSerializerMixin(Serializer):
+class URLSafeSerializerMixin(Serializer[str]):
     """Mixed in with a regular serializer it will attempt to zlib
     compress the string to make it shorter if necessary. It will also
     base64 encode the string so that it can safely be placed in a URL.
 
-    Grail patch: dropped Serializer[str] subscript from bases; moved
-    `default_serializer` override into __init__ to avoid the parent's
-    instVar slot clashing.
+    Grail patch (class-attribute override): we cannot redeclare
+    ``default_serializer`` at class scope because the parent's
+    instVar slot of the same name would collide; assign in __init__
+    instead.
     """
 
     def __init__(self, *args, **kwargs):
@@ -75,14 +76,14 @@ class URLSafeSerializerMixin(Serializer):
         return base64d
 
 
-class URLSafeSerializer(URLSafeSerializerMixin, Serializer):  # Grail patch: drop subscript
+class URLSafeSerializer(URLSafeSerializerMixin, Serializer[str]):
     """Works like :class:`.Serializer` but dumps and loads into a URL
     safe string consisting of the upper and lowercase character of the
     alphabet as well as ``'_'``, ``'-'`` and ``'.'``.
     """
 
 
-class URLSafeTimedSerializer(URLSafeSerializerMixin, TimedSerializer):  # Grail patch: drop subscript
+class URLSafeTimedSerializer(URLSafeSerializerMixin, TimedSerializer[str]):
     """Works like :class:`.TimedSerializer` but dumps and loads into a
     URL safe string consisting of the upper and lowercase character of
     the alphabet as well as ``'_'``, ``'-'`` and ``'.'``.

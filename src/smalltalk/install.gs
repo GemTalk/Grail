@@ -807,6 +807,7 @@ input src/smalltalk/Python/Range.gs
 input src/smalltalk/Python/SequenceableCollection.gs
 input src/smalltalk/Python/set.gs
 input src/smalltalk/Python/str.gs
+input src/smalltalk/Python/Subscript.gs
 input src/smalltalk/Python/Tuple.gs
 input src/smalltalk/Python/UndefinedObject.gs
 
