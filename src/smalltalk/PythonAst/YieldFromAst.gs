@@ -48,5 +48,21 @@ YieldFromAst category: 'Grail-Parser'
 removeallmethods YieldFromAst
 removeallclassmethods YieldFromAst
 set compile_env: 0
-! ------------------- Class methods for YieldFromAst
-! ------------------- Instance methods for YieldFromAst
+
+category: 'Grail-code generation'
+method: YieldFromAst
+printSmalltalkOn: aStream
+	"``yield from iterable`` — Grail has no real generator delegation
+	yet; treat it as ``for x in iterable: yield x`` open-coded into a
+	loop that hands each item to ``___gen___ ___yield___:``.  Matches
+	the surrounding YieldAst convention (see YieldAst >>
+	printSmalltalkOn:); inside a regular def the surrounding codegen
+	never binds ``___gen___`` so a top-level ``yield from`` falls
+	through to a Smalltalk compile error, mirroring Python's
+	``SyntaxError: 'yield' outside function``."
+
+	aStream nextPutAll: '(['.
+	value printSmalltalkWithParenthesisOn: aStream.
+	aStream
+		nextPutAll: ' @env0:do: [:___each___ | ___gen___ @env1:___yield___: ___each___]. None] @env0:value)'
+%

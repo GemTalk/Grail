@@ -163,17 +163,16 @@ printSmalltalkRuntimeOn: aStream
 		nextPutAll: ''' instVarNames: '.
 	self printSymbolArray: ivarNames on: aStream.
 	aStream nextPutAll: ' classVars: #() classInstVars: '.
-	bases isEmpty ifTrue: [
-		"No Python parent — PythonInstance doesn't carry per-class
-		attr slots so no filtering needed; emit the literal list."
-		self printSymbolArray: allClassInstVars on: aStream
-	] ifFalse: [
-		"Filter out names already declared on the parent's metaclass."
-		aStream nextPut: $(.
-		self printSymbolArray: allClassInstVars on: aStream.
-		aStream nextPutAll:
-' @env0:reject: [:___n___ | ___parent___ @env0:class @env0:allInstVarNames @env0:includes: ___n___])'
-	].
+	"Filter out names already declared on the parent's metaclass —
+	in the bases-empty case the parent is PythonInstance, whose
+	metaclass still inherits Smalltalk Behavior slots like ``name``
+	that a Python class body might re-declare as a class attribute
+	(Jinja2's ``threading._Thread.name = 'MainThread'`` shape).
+	Without the filter, Smalltalk raises rtErrAddDupInstvar."
+	aStream nextPut: $(.
+	self printSymbolArray: allClassInstVars on: aStream.
+	aStream nextPutAll:
+' @env0:reject: [:___n___ | ___parent___ @env0:class @env0:allInstVarNames @env0:includes: ___n___])'.
 	aStream
 		nextPutAll: ' poolDictionaries: #() inDictionary: nil options: #()] @env0:value: ('.
 	self printSuperclassOn: aStream.

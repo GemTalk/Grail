@@ -266,6 +266,86 @@ testMarkupsafeMarkupCarriesContent
 	self assert: (result @env1:__getitem__: 2) equals: true
 %
 
+! --- M4 plumbing: stdlib stubs added for Jinja2 import -----------------
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testErrnoExposesConstants
+	"errno is a CPython built-in module Grail had no analogue for;
+	the stub exposes the OS error codes Jinja2 / Werkzeug reach for
+	at import time (EEXIST is the canonical check inside bccache)."
+
+	| mod |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	self assert: mod @env1:errno_exists equals: true
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testFnmatchFilter
+	"fnmatch.filter(names, pattern) — used by Jinja2's
+	FileSystemBytecodeCache.clear() to find stale cache files.
+	Glob-style ``*.py`` wildcard expansion."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:fnmatch_glob.
+	self assert: result @env0:size equals: 2.
+	self assert: (result @env0:at: 1) equals: 'a.py'.
+	self assert: (result @env0:at: 2) equals: 'c.py'
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testOperatorArithmetic
+	"operator.add / mul / truediv — Jinja2's sandbox + nodes.py
+	dispatch tables map binop tokens to these function objects."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:operator_arithmetic.
+	self assert: (result @env1:__getitem__: 0) equals: 5.
+	self assert: (result @env1:__getitem__: 1) equals: 20.
+	self assert: (result @env1:__getitem__: 2) equals: 2.5
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testThreadingLockContextManager
+	"threading.Lock context-manager protocol — Jinja2's LRUCache
+	wraps every mutating operation in ``with self._lock:``.  The
+	stub locks are no-ops (single-threaded gem) but they have to
+	at least honor the context-manager contract."
+
+	| mod |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	self assert: mod @env1:threading_lock_context equals: true
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testUrllibQuoteFromBytes
+	"urllib.parse.quote_from_bytes — Jinja2 url_quote filter uses
+	it directly.  Percent-escapes everything outside the safe set."
+
+	| mod |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	self
+		assert: mod @env1:urllib_quote_round_trip
+		equals: '%3Chello%20world%3E'
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testUrllibQuotePlus
+	"urllib.parse.quote_plus — space gets ``+`` instead of ``%20``;
+	the query-string encoder."
+
+	| mod |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	self assert: mod @env1:urllib_quote_plus equals: 'hello+world'
+%
+
 ! --- itsdangerous Signer round-trip (M3 partial) ------------------------
 
 category: 'Grail-Tests - itsdangerous'

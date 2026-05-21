@@ -1,13 +1,17 @@
 ! ------------------- Superclass check
 run
-StatementAst ifNil: [self error: 'StatementAst is not defined. Check file ordering.'].
+WithAst ifNil: [self error: 'WithAst is not defined. Check file ordering.'].
 %
 
 ! ------------------- Class definition for AsyncWithAst
+! Inherits all fields + the standard ``printSmalltalkOn:`` codegen from
+! WithAst.  Grail has no async context managers today, so ``async with``
+! is emitted as a regular ``with`` block.  Adequate for the import-only
+! Jinja2 / Werkzeug / Flask story.
 expectvalue /Class
 doit
-StatementAst subclass: 'AsyncWithAst'
-  instVarNames: #( items body type_comment)
+WithAst subclass: 'AsyncWithAst'
+  instVarNames: #()
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()

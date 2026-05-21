@@ -50,5 +50,17 @@ AwaitAst category: 'Grail-Parser'
 removeallmethods AwaitAst
 removeallclassmethods AwaitAst
 set compile_env: 0
-! ------------------- Class methods for AwaitAst
-! ------------------- Instance methods for AwaitAst
+
+category: 'Grail-code generation'
+method: AwaitAst
+printSmalltalkOn: aStream
+	"Grail has no async runtime — emit just the awaited expression so
+	the resulting Smalltalk evaluates the inner value synchronously.
+	The surrounding ``async def`` is itself codegen'd as a regular
+	``def`` (see AsyncFunctionDefAst), so the body runs to completion
+	without ever actually awaiting.  Adequate for the import-only
+	Jinja2 / Werkzeug / Flask story; revisit if a real coroutine
+	runtime lands."
+
+	value printSmalltalkOn: aStream
+%

@@ -196,8 +196,16 @@ setParent: aNode
 category: 'Grail-other'
 method: AbstractNode
 printSmalltalkOn: aStream
+	"Default backstop — every concrete AST node should override
+	printSmalltalkOn:.  When a newly-parsed shape (e.g. async
+	comprehensions, ``yield from``, ``@`` matmul) lands without
+	an override, this default fires; quote the receiver's class
+	name in the message so grep across src/smalltalk/PythonAst
+	finds the file to add the override in without a debugger trip."
 
-	self error: 'AbstractNode is abstract; subclasses must implement printSmalltalkOn:'.
+	self error:
+		'AbstractNode is abstract; subclasses must implement printSmalltalkOn: -- offender = '
+		, self class name asString.
 %
 
 category: 'Grail-other'

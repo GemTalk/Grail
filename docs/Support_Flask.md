@@ -229,6 +229,25 @@ Existing stub modules that need extending later: `typing`,
   that implement that hook is therefore skipped — revisit when
   Python `__new__` becomes a first-class class method.
 - **M4 — Jinja2 renders a template** standalone, no Flask yet.
+  *In progress.*  Source dropped into `src/python/stdlib/jinja2/`;
+  the parser learned async comprehensions (`[n async for n in s]`)
+  and `yield from` codegen; `AsyncFunctionDefAst` /
+  `AsyncForAst` / `AsyncWithAst` now subclass their sync
+  counterparts so codegen reuses the same `printSmalltalkOn:`;
+  `MatMultAst` got a stub; `ClassDefAst` filters duplicate
+  classInstVars against the parent's metaclass even when the
+  Python parent is implicit (`PythonInstance`); new stdlib stubs:
+  `errno`, `fnmatch`, `marshal`, `pickle`, `stat`, `tempfile`,
+  `types`, `threading`, `operator`, `urllib.parse`; `enum` extended
+  with `Enum` / `IntEnum` / `StrEnum` / `Flag` / `auto`.
+  Remaining blocker: jinja2's lexer compiles a handful of regex
+  literals at import time and one of them (the verbose `integer_re`
+  or `float_re`, likely) trips an `IndexError` deep in
+  `re._parser._parse_sub` (`SubPattern.__getitem__` indexes past
+  empty data).  Fixing that — possibly by adding `re.VERBOSE`
+  handling to our pure-Python re engine, or routing the failing
+  pattern through the `_sre` C shim — unblocks the rest of the
+  Jinja2 import chain.
 - **M5 — `werkzeug.wrappers.Request/Response` round-trip a WSGI
   environ.**
 - **M6 — Flask hello-world responds via `werkzeug.test.Client`.**

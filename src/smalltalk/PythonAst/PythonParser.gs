@@ -554,8 +554,8 @@ parseCallArgList
 							at: #value put: value;
 							yourself) from: self lastToken to: self lastToken).
 					] ifFalse: [
-						"Check for comprehension in generator expression"
-						(self atKeyword: 'for') ifTrue: [
+						"Check for comprehension in generator expression — either ``for`` or ``async for``"
+						((self atKeyword: 'for') or: [self atKeyword: 'async']) ifTrue: [
 							| generators |
 							generators := self parseComprehensions.
 							args add: (self buildNode: GeneratorExpAst fields: (IdentityKeyValueDictionary new
@@ -676,11 +676,12 @@ parseComparisonOp
 category: 'Grail-parsing - comprehensions'
 method: PythonParser
 parseComprehensions
-	"Parse one or more 'for target in iter [if cond]*' clauses."
+	"Parse one or more 'for target in iter [if cond]*' or
+	'async for target in iter [if cond]*' clauses."
 
 	| generators |
 	generators := Array new.
-	[self atKeyword: 'for'] whileTrue: [
+	[(self atKeyword: 'for') or: [self atKeyword: 'async']] whileTrue: [
 		| forTok target iter ifs isAsync |
 		isAsync := 0.
 		(self atKeyword: 'async') ifTrue: [
@@ -853,8 +854,8 @@ parseDictOrSetDisplay
 
 		value := self parseExpression.
 
-		"Dict comprehension"
-		(self atKeyword: 'for') ifTrue: [
+		"Dict comprehension — ``for`` or ``async for`` opens the clause"
+		((self atKeyword: 'for') or: [self atKeyword: 'async']) ifTrue: [
 			| generators |
 			generators := self parseComprehensions.
 			self expect: #OP value: '}'.
@@ -890,8 +891,8 @@ parseDictOrSetDisplay
 			yourself) from: startTok to: self lastToken
 	].
 
-	"Set comprehension"
-	(self atKeyword: 'for') ifTrue: [
+	"Set comprehension — ``for`` or ``async for`` opens the clause"
+	((self atKeyword: 'for') or: [self atKeyword: 'async']) ifTrue: [
 		| generators |
 		generators := self parseComprehensions.
 		self expect: #OP value: '}'.
@@ -1519,8 +1520,8 @@ parseListDisplay
 
 	expr := self parseStarExpression.
 
-	"List comprehension"
-	(self atKeyword: 'for') ifTrue: [
+	"List comprehension — either ``for`` or ``async for`` opens the clause"
+	((self atKeyword: 'for') or: [self atKeyword: 'async']) ifTrue: [
 		| generators |
 		generators := self parseComprehensions.
 		self expect: #OP value: ']'.
@@ -1638,8 +1639,8 @@ parseParenExpr
 
 	expr := self parseStarExpression.
 
-	"Check for comprehension (generator expression)"
-	(self atKeyword: 'for') ifTrue: [
+	"Check for comprehension (generator expression) — ``for`` or ``async for`` opens the clause"
+	((self atKeyword: 'for') or: [self atKeyword: 'async']) ifTrue: [
 		| generators |
 		generators := self parseComprehensions.
 		self expect: #OP value: ')'.

@@ -1,14 +1,19 @@
 ! ------------------- Superclass check
 run
-StatementAst ifNil: [self error: 'StatementAst is not defined. Check file ordering.'].
+FunctionDefAst ifNil: [self error: 'FunctionDefAst is not defined. Check file ordering.'].
 %
 
 ! ------------------- Class definition for AsyncFunctionDefAst
+! Inherits all fields + the standard ``printSmalltalkOn:`` codegen from
+! FunctionDefAst.  Grail has no async runtime today, so ``async def`` is
+! emitted as a regular ``def``; the method body still runs synchronously
+! when invoked.  Sufficient for Jinja2 / Werkzeug / Flask import-time
+! parsing, where async paths are guarded behind ``is_async`` checks
+! that never fire on the hello-world render path.
 expectvalue /Class
 doit
-StatementAst subclass: 'AsyncFunctionDefAst'
-  instVarNames: #( name args body
-                    decorator_list returns type_comment type_params)
+FunctionDefAst subclass: 'AsyncFunctionDefAst'
+  instVarNames: #()
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()

@@ -928,9 +928,6 @@ input src/smalltalk/PythonAst/YieldFromAst.gs
 input src/smalltalk/PythonAst/AnnAssignAst.gs
 input src/smalltalk/PythonAst/AssertAst.gs
 input src/smalltalk/PythonAst/AssignAst.gs
-input src/smalltalk/PythonAst/AsyncForAst.gs
-input src/smalltalk/PythonAst/AsyncFunctionDefAst.gs
-input src/smalltalk/PythonAst/AsyncWithAst.gs
 input src/smalltalk/PythonAst/AugAssignAst.gs
 input src/smalltalk/PythonAst/BreakAst.gs
 input src/smalltalk/PythonAst/ClassDefAst.gs
@@ -950,6 +947,11 @@ input src/smalltalk/PythonAst/ReturnAst.gs
 input src/smalltalk/PythonAst/TryAst.gs
 input src/smalltalk/PythonAst/WhileAst.gs
 input src/smalltalk/PythonAst/WithAst.gs
+! Async statement variants — load AFTER their sync counterparts since
+! they now inherit from them (see AsyncForAst.gs etc.).
+input src/smalltalk/PythonAst/AsyncForAst.gs
+input src/smalltalk/PythonAst/AsyncFunctionDefAst.gs
+input src/smalltalk/PythonAst/AsyncWithAst.gs
 input src/smalltalk/PythonAst/AndAst.gs
 input src/smalltalk/PythonAst/OrAst.gs
 input src/smalltalk/PythonAst/KeywordsAst.gs

@@ -43,5 +43,15 @@ MatMultAst category: 'Grail-Parser'
 removeallmethods MatMultAst
 removeallclassmethods MatMultAst
 set compile_env: 0
-! ------------------- Class methods for MatMultAst
-! ------------------- Instance methods for MatMultAst
+
+category: 'Grail-code generation'
+method: MatMultAst
+printSmalltalkOn: aStream
+	"Python ``@`` matrix-mul binary operator — dispatches to the
+	standard ``__matmul__:`` method on the left operand.  Grail has
+	no matrix type out of the box but the codegen needs to compile
+	cleanly for modules that mention ``@`` in passing (Jinja2's
+	nodes.py touches the operator dict)."
+
+	aStream nextPutAll: ' __matmul__: '.
+%

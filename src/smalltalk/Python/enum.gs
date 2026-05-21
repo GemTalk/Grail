@@ -46,6 +46,17 @@ initialize
 	"Initialize stored attributes."
 	self @env0:at: #IntFlag put: int.
 	self @env0:at: #KEEP put: #KEEP.
+	"Enum / IntEnum / StrEnum / Flag — Jinja2 uses ``enum.Enum`` as
+	a marker base class for module-private states like
+	``_PassArg(enum.Enum): context = enum.auto()``.  Grail has no
+	enum machinery yet; alias them to ``PythonInstance`` so user
+	classes can subclass without erroring at import time.  The
+	per-member ``auto()`` calls just produce unique integers (see
+	``auto`` below) — sufficient for membership-style dispatch."
+	self @env0:at: #Enum put: PythonInstance.
+	self @env0:at: #IntEnum put: int.
+	self @env0:at: #StrEnum put: Unicode7.
+	self @env0:at: #Flag put: PythonInstance.
 %
 
 ! ===============================================================================
@@ -62,6 +73,44 @@ category: 'Grail-Accessors'
 method: enum
 KEEP
 	^ self @env0:at: #KEEP
+%
+
+category: 'Grail-Accessors'
+method: enum
+Enum
+	^ self @env0:at: #Enum
+%
+
+category: 'Grail-Accessors'
+method: enum
+IntEnum
+	^ self @env0:at: #IntEnum
+%
+
+category: 'Grail-Accessors'
+method: enum
+StrEnum
+	^ self @env0:at: #StrEnum
+%
+
+category: 'Grail-Accessors'
+method: enum
+Flag
+	^ self @env0:at: #Flag
+%
+
+category: 'Grail-Built-in Functions'
+method: enum
+auto
+	"``enum.auto()`` — return a fresh unique integer.  CPython
+	tracks per-class counters; here we use a process-global counter
+	stored on the module instance.  Adequate for Jinja2's
+	``_PassArg`` membership-test usage."
+
+	| counter |
+	counter := (self @env0:at: #'__auto_counter' otherwise: 0) @env0:+ 1.
+	self @env0:at: #'__auto_counter' put: counter.
+	^ counter
 %
 
 ! ===============================================================================

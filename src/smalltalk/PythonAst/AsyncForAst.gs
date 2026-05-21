@@ -1,14 +1,18 @@
 ! ------------------- Superclass check
 run
-StatementAst ifNil: [self error: 'StatementAst is not defined. Check file ordering.'].
+ForAst ifNil: [self error: 'ForAst is not defined. Check file ordering.'].
 %
 
 ! ------------------- Class definition for AsyncForAst
+! Inherits all fields + the standard ``printSmalltalkOn:`` codegen from
+! ForAst.  Grail has no async iteration today, so ``async for`` is
+! emitted as a regular ``for`` loop — the iterable is treated as if it
+! were a sync iterator, matching the import-only Jinja2 / Werkzeug /
+! Flask story.
 expectvalue /Class
 doit
-StatementAst subclass: 'AsyncForAst'
-  instVarNames: #( target iter body
-                    orelse type_comment)
+ForAst subclass: 'AsyncForAst'
+  instVarNames: #()
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
