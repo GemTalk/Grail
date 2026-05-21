@@ -59,6 +59,23 @@ isVariableIsDeclared: aSymbol
 
 category: 'Grail-other'
 method: BlockAst
+isVariableIsDeclaredFromMethod: aSymbol
+	"Same walk as isVariableIsDeclared: but Python class scope is
+	invisible from inside method bodies — when transiting through a
+	class body's BlockAst (parent is ClassDefAst), skip its own
+	variables and continue at the enclosing scope (module body).
+	NameAst / CallAst use this entry when the query originates
+	inside a function def nested in a class."
+
+	(parent notNil and: [parent isKindOf: ClassDefAst]) ifFalse: [
+		(variables includes: aSymbol) ifTrue: [^true].
+	].
+	parent isNil ifTrue: [^false].
+	^ parent isVariableIsDeclaredFromMethod: aSymbol
+%
+
+category: 'Grail-other'
+method: BlockAst
 printSmalltalkOn: aStream
 
 	self printSmalltalkOn: aStream useTemps: true.

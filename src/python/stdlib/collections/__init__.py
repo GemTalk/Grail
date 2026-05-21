@@ -145,6 +145,35 @@ class deque:
     def clear(self):
         self._items = []
 
+    def remove(self, value):
+        """Remove the first occurrence of value.  Raises ValueError
+        if absent — matches CPython's list / deque ``remove`` semantics."""
+        for i, x in enumerate(self._items):
+            if x == value:
+                del self._items[i]
+                return
+        raise ValueError("deque.remove(x): x not in deque")
+
+    def count(self, value):
+        return sum(1 for x in self._items if x == value)
+
+    def index(self, value, start=0, stop=None):
+        if stop is None:
+            stop = len(self._items)
+        for i in range(start, stop):
+            if self._items[i] == value:
+                return i
+        raise ValueError("deque.index(x): x not in deque")
+
+    def insert(self, i, value):
+        self._items.insert(i, value)
+        if self.maxlen is not None and len(self._items) > self.maxlen:
+            raise IndexError("deque already at its maximum size")
+
+    def copy(self):
+        new = deque(self._items, self.maxlen)
+        return new
+
     def rotate(self, n=1):
         if not self._items:
             return

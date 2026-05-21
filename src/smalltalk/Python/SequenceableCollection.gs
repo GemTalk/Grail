@@ -63,9 +63,76 @@ __eq__: other
 category: 'Grail-Comparison'
 method: SequenceableCollection
 __ge__: other
-	"Lexicographic comparison: self >= other"
+	"Lexicographic comparison: self >= other.  GemStone
+	SequenceableCollection doesn't expose ``>=`` directly, so
+	implement Python's element-by-element rule explicitly:
+	compare prefix elements until one differs, then the result is
+	the elements' comparison; if the prefix is identical the
+	longer (or equal-length) sequence wins."
 
-	^ self @env0:>= other
+	| size otherSize minSize i a b |
+	size := self @env0:size.
+	otherSize := other @env0:size.
+	minSize := size @env0:min: otherSize.
+	i := 1.
+	[i @env0:<= minSize] @env0:whileTrue: [
+		a := self @env0:at: i.
+		b := other @env0:at: i.
+		(a @env0:= b) ifFalse: [^ a @env1:__ge__: b].
+		i := i @env0:+ 1
+	].
+	^ size @env0:>= otherSize
+%
+
+category: 'Grail-Comparison'
+method: SequenceableCollection
+__gt__: other
+	| size otherSize minSize i a b |
+	size := self @env0:size.
+	otherSize := other @env0:size.
+	minSize := size @env0:min: otherSize.
+	i := 1.
+	[i @env0:<= minSize] @env0:whileTrue: [
+		a := self @env0:at: i.
+		b := other @env0:at: i.
+		(a @env0:= b) ifFalse: [^ a @env1:__gt__: b].
+		i := i @env0:+ 1
+	].
+	^ size @env0:> otherSize
+%
+
+category: 'Grail-Comparison'
+method: SequenceableCollection
+__le__: other
+	| size otherSize minSize i a b |
+	size := self @env0:size.
+	otherSize := other @env0:size.
+	minSize := size @env0:min: otherSize.
+	i := 1.
+	[i @env0:<= minSize] @env0:whileTrue: [
+		a := self @env0:at: i.
+		b := other @env0:at: i.
+		(a @env0:= b) ifFalse: [^ a @env1:__le__: b].
+		i := i @env0:+ 1
+	].
+	^ size @env0:<= otherSize
+%
+
+category: 'Grail-Comparison'
+method: SequenceableCollection
+__lt__: other
+	| size otherSize minSize i a b |
+	size := self @env0:size.
+	otherSize := other @env0:size.
+	minSize := size @env0:min: otherSize.
+	i := 1.
+	[i @env0:<= minSize] @env0:whileTrue: [
+		a := self @env0:at: i.
+		b := other @env0:at: i.
+		(a @env0:= b) ifFalse: [^ a @env1:__lt__: b].
+		i := i @env0:+ 1
+	].
+	^ size @env0:< otherSize
 %
 
 category: 'Grail-Sequence Protocol'

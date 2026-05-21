@@ -278,10 +278,34 @@ Existing stub modules that need extending later: `typing`,
   `WRAPPER_UPDATES`; `inspect.getattr_static` stub;
   `jinja2.{compiler,idtracking,runtime}` patched to replace
   class-body `X = Y = method_name` aliases with delegating
-  methods.  Current blocker: somewhere later in jinja2 init a
-  `KeyValueDictionary class` receives an env-1 `keys` message
-  (likely `dict.keys` referenced as an unbound method); next
-  bisection pass.
+  methods.  Past several more blockers: jinja2.runtime's
+  `dict.keys` / `dict.values` / `dict.items` descriptor-pattern
+  aliases replaced with delegating methods; the chained
+  `__iter__ = __str__ = ... = Undefined._fail_with_undefined_error`
+  rewrite extended to `DebugUndefined`; `typing.NamedTuple` /
+  `TypedDict` stubs; `numbers` (abstract numeric tower stub);
+  `ast` (literal_eval + parse) stub; `posixpath` + `zipimport`
+  stubs; Python-side `importlib` / `importlib.util` facade with
+  `import_module` / `find_spec` / `spec_from_file_location`;
+  `collections.deque` gained `remove` / `count` / `index` /
+  `insert` / `copy`; `SequenceableCollection` got
+  `__ge__:` / `__gt__:` / `__le__:` / `__lt__:` doing real
+  element-by-element lexicographic comparison; ClassDefAst
+  emits `(Python at: #importlib)` instead of bare `importlib`
+  so user modules with `import importlib` don't shadow the
+  loader; ClassDefAst now materializes bare class-level
+  annotations (`template_class: t.Type[T]`) as nilable
+  classInstVars so later `Cls.attr = ...` assignments find the
+  setter; BlockAst's variable-declaration walk now stops at
+  class-body boundaries when called from a function-def
+  descendant (Python class scope isn't visible inside method
+  bodies; the `getitem(self, obj, argument)` method's bare
+  `getattr` reference was wrongly resolving as a local because
+  the surrounding class defined a `getattr` method).  Current
+  blocker: jinja2 calls `lru_cache(...)(...).cache_clear` —
+  Grail's `lru_cache` stub passes the function through
+  untouched, so the resulting BoundMethod lacks the
+  `cache_clear` attribute; next pass.
 - **M5 — `werkzeug.wrappers.Request/Response` round-trip a WSGI
   environ.**
 - **M6 — Flask hello-world responds via `werkzeug.test.Client`.**

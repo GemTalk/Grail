@@ -236,9 +236,14 @@ printSmalltalkRuntimeOn: aStream
 	expression in the surrounding module context and sending the
 	setter to the class object."
 	classAttrs do: [:pair |
-		aStream nextPutAll: name; nextPutAll: ' '; nextPutAll: pair key; nextPutAll: ': '.
-		pair value printSmalltalkWithParenthesisOn: aStream.
-		aStream nextPutAll: '.'; lf.
+		"pair value is nil for bare annotations (``x: int`` with no
+		assignment) — skip the init emit; the slot stays nil until
+		some later assignment fills it."
+		pair value ifNotNil: [
+			aStream nextPutAll: name; nextPutAll: ' '; nextPutAll: pair key; nextPutAll: ': '.
+			pair value printSmalltalkWithParenthesisOn: aStream.
+			aStream nextPutAll: '.'; lf
+		].
 	].
 	"For class attrs the parent declares but we didn't redeclare,
 	copy the parent's current value into our slot via the importlib
@@ -246,8 +251,12 @@ printSmalltalkRuntimeOn: aStream
 	Smalltalk class-side instVars are per-class storage, so without
 	this the subclass's inherited slot stays nil."
 	bases isEmpty ifFalse: [
+		"Use ``(Python at: #importlib)`` rather than the bare
+		``importlib`` identifier — a user module that did
+		``import importlib`` would shadow the latter with the
+		Python-level facade."
 		aStream
-			nextPutAll: 'importlib @env0:___inheritClassAttrs___: ';
+			nextPutAll: '(Python @env0:at: #importlib) @env0:___inheritClassAttrs___: ';
 			nextPutAll: name;
 			nextPutAll: ' exclude: '.
 		self printSymbolArray: (classAttrs collect: [:p | p key]) on: aStream.
@@ -404,8 +413,13 @@ emitCompileMethodOn: classVarName source: sourceString category: categoryString 
 	classSideBool ifTrue: [aStream nextPutAll: ' @env0:class'].
 	aStream nextPutAll: ' @env0:compileMethod: '.
 	self printQuotedString: sourceString on: aStream.
+	"Resolve ``importlib`` via the Python namespace lookup rather
+	than a bare identifier — the bare ``importlib`` would be
+	shadowed inside any module that has ``import importlib`` (the
+	user's Python-level facade), which redirects the call to the
+	Python module instance instead of the Smalltalk loader."
 	aStream
-		nextPutAll: ' dictionaries: importlib @env0:___compilationSymbolList___ category: ''';
+		nextPutAll: ' dictionaries: (Python @env0:at: #importlib) @env0:___compilationSymbolList___ category: ''';
 		nextPutAll: categoryString;
 		nextPutAll: ''' environmentId: ';
 		nextPutAll: envId printString;
@@ -513,11 +527,13 @@ classBodyAttributes
 		].
 		"Class-level annotated assignment (`x: int = 5`) — strip
 		the annotation, treat as a regular class attribute.  Bare
-		annotations (`x: int` with no value) are pure type hints
-		and don't materialize a class attribute."
+		annotations (`x: int` with no value) ALSO materialize a
+		class-side slot (with a nil initializer); they're commonly
+		used as forward-declared placeholders that get assigned
+		from outside the class body later (Jinja2's
+		``Environment.template_class = Template``)."
 		((stmt isKindOf: AnnAssignAst)
-			and: [stmt value notNil
-				and: [stmt target isKindOf: NameAst]]) ifTrue: [
+			and: [stmt target isKindOf: NameAst]) ifTrue: [
 			pairs add: stmt target id asSymbol -> stmt value
 		].
 	].

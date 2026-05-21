@@ -151,10 +151,29 @@ isVariableIsDeclared: aSymbol
 	"Walk up the parent chain looking for an enclosing scope (a BlockAst)
 	that declares aSymbol as a local. Returns false if we reach the root
 	without finding a declaration — i.e., aSymbol is a free name (resolved
-	via the symbol list / builtins at runtime)."
+	via the symbol list / builtins at runtime).
+
+	When the walk crosses a FunctionDefAst boundary (we are climbing out
+	of a function into its surrounding scope), switch to the
+	``FromMethod`` variant on BlockAst nodes so any enclosing class
+	body is invisible — Python class scope doesn't propagate into
+	method bodies."
 
 	parent isNil ifTrue: [^false].
+	((self isKindOf: FunctionDefAst) or: [self isKindOf: LambdaAst]) ifTrue: [
+		^ parent isVariableIsDeclaredFromMethod: aSymbol
+	].
 	^parent isVariableIsDeclared: aSymbol
+%
+
+category: 'Grail-initialization'
+method: AbstractNode
+isVariableIsDeclaredFromMethod: aSymbol
+	"Default propagation for the ``FromMethod`` walk — delegate to
+	parent.  BlockAst overrides to skip class-body locals."
+
+	parent isNil ifTrue: [^false].
+	^ parent isVariableIsDeclaredFromMethod: aSymbol
 %
 
 category: 'Grail-other'

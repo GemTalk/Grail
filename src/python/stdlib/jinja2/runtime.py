@@ -319,9 +319,18 @@ class Context:
         context.blocks.update((k, list(v)) for k, v in self.blocks.items())
         return context
 
-    keys = _dict_method_all(dict.keys)
-    values = _dict_method_all(dict.values)
-    items = _dict_method_all(dict.items)
+    # GRAIL: ``dict.keys`` referenced as an unbound method
+    # (descriptor pattern Grail doesn't expose — class-side
+    # attribute access on ``dict`` MNUs on ``keys``).  Inline the
+    # ``return self.get_all().keys()`` shape directly.
+    def keys(self):
+        return self.get_all().keys()
+
+    def values(self):
+        return self.get_all().values()
+
+    def items(self):
+        return self.get_all().items()
 
     def __contains__(self, name: str) -> bool:
         return name in self.vars or name in self.parent
@@ -1125,6 +1134,32 @@ class StrictUndefined(Undefined):
     """
 
     __slots__ = ()
-    __iter__ = __str__ = __len__ = Undefined._fail_with_undefined_error
-    __eq__ = __ne__ = __bool__ = __hash__ = Undefined._fail_with_undefined_error
-    __contains__ = Undefined._fail_with_undefined_error
+
+    # GRAIL: ``Undefined._fail_with_undefined_error`` referenced as an
+    # unbound method to alias multiple dunders.  Grail has no
+    # descriptor pattern — class-side attribute access doesn't find
+    # the instance method.  Wrap each dunder as a delegating method
+    # instead, matching the conversion in the Undefined base class.
+    def __iter__(self):
+        return self._fail_with_undefined_error()
+
+    def __str__(self):
+        return self._fail_with_undefined_error()
+
+    def __len__(self):
+        return self._fail_with_undefined_error()
+
+    def __eq__(self, other):
+        return self._fail_with_undefined_error()
+
+    def __ne__(self, other):
+        return self._fail_with_undefined_error()
+
+    def __bool__(self):
+        return self._fail_with_undefined_error()
+
+    def __hash__(self):
+        return self._fail_with_undefined_error()
+
+    def __contains__(self, item):
+        return self._fail_with_undefined_error()

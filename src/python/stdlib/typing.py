@@ -123,3 +123,40 @@ def no_type_check(arg):
 
 
 TYPE_CHECKING = False
+
+
+# typing.NamedTuple — CPython supports both the class-statement
+# form (``class T(NamedTuple): name: str``) and the functional
+# constructor (``NamedTuple('T', [('name', str)])``).  Grail's
+# class-statement codegen doesn't honor metaclass kwargs, so the
+# class form here just produces a plain class; instance fields
+# stay attribute-readable through the normal ``self.x = ...``
+# path.  Adequate for jinja2's compile-time uses (lexer.Token,
+# compiler._FinalizeInfo) where instances are constructed via
+# positional args and then read by attribute.
+class NamedTuple:
+    """Stand-in NamedTuple base — instances behave like regular
+    Python objects.  ``__init_subclass__`` is not implemented;
+    subclasses inherit ``__init__`` from this stub which accepts
+    any positional + keyword args and stores them on
+    ``__dict__``-style attributes."""
+
+    def __init__(self, *args, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+        # Positional args are recorded under their declared field
+        # names if the subclass exposes ``_fields``; otherwise as
+        # ``f0``, ``f1``, ... fallbacks.
+        fields = getattr(type(self), '_fields', None)
+        if fields is None:
+            for i, v in enumerate(args):
+                setattr(self, 'f' + str(i), v)
+        else:
+            for name, v in zip(fields, args):
+                setattr(self, name, v)
+
+
+class TypedDict:
+    """Stand-in TypedDict — same shape as NamedTuple above."""
+
+    pass
