@@ -539,6 +539,117 @@ testSubclassRedeclaresInstvar
 	self assert: (result @env0:at: 2) equals: 'b'
 %
 
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testClassScopeInvisibleInMethods
+	"Python class scope is NOT visible from inside method bodies.
+	An unqualified ``getattr`` reference inside a class method
+	should resolve to the builtin even when the class itself
+	defines a ``getattr`` method.  Before the BlockAst walk gate,
+	the surrounding class body's variables were treated as locals
+	visible from the method, which made NameAst wrap the call in
+	an UnboundLocal check that errored at compile time."
+
+	| mod |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	self assert: mod @env1:class_scope_invisible_in_methods equals: true
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testLateBoundClassAnnotation
+	"``class C: x: int`` (bare annotation, no value) used to
+	materialize NO slot.  External assignment ``C.x = ...`` then
+	failed because the setter didn't exist.  ClassDefAst now
+	declares the slot with a nil initializer; the setter is
+	compiled like any other class attribute."
+
+	| mod |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	self assert: mod @env1:late_bound_class_annotation equals: 7
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testTupleLexicographicCompare
+	"Tuple comparison used to MNU because
+	``SequenceableCollection >> __ge__:`` forwarded to GS ``>=``
+	which Array doesn't expose.  Now element-by-element."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:tuple_lexicographic_compare.
+	self assert: (result @env1:__getitem__: 0) equals: true.
+	self assert: (result @env1:__getitem__: 1) equals: true.
+	self assert: (result @env1:__getitem__: 2) equals: true.
+	self assert: (result @env1:__getitem__: 3) equals: true
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testDequeRemoveCountIndex
+	"``collections.deque`` gained ``remove`` / ``count`` /
+	``index`` so jinja2 (and other downstream consumers) can use
+	the full CPython surface."
+
+	| mod result remaining |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:deque_remove_count_index.
+	"After removing the first 2 from [1,2,3,2,4]: list is [1,3,2,4],
+	 count of 2 is 1, index of 4 is 3."
+	remaining := result @env1:__getitem__: 0.
+	self assert: remaining @env0:size equals: 4.
+	self assert: (remaining @env0:at: 1) equals: 1.
+	self assert: (remaining @env0:at: 2) equals: 3.
+	self assert: (remaining @env0:at: 3) equals: 2.
+	self assert: (remaining @env0:at: 4) equals: 4.
+	self assert: (result @env1:__getitem__: 1) equals: 1.
+	self assert: (result @env1:__getitem__: 2) equals: 3
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testAstLiteralEvalRoundTrip
+	"``ast.literal_eval`` parses the common literal forms.  Stub
+	implementation is recursive descent over int / str / list /
+	tuple / True / None — all the shapes Jinja2 / Werkzeug touch."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:ast_literal_eval_round_trip.
+	self assert: (result @env1:__getitem__: 0) equals: 42.
+	self assert: (result @env1:__getitem__: 1) equals: 'hello'.
+	self assert: (result @env1:__getitem__: 4) equals: true
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testPosixpathJoinAndNormpath
+	"``posixpath.join`` / ``normpath`` / ``basename`` — Jinja2's
+	FileSystemLoader assembles template paths through these
+	helpers regardless of host OS."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:posixpath_join_and_normpath.
+	self assert: (result @env1:__getitem__: 0) equals: 'a/b/c'.
+	self assert: (result @env1:__getitem__: 1) equals: '/root/a/b'.
+	self assert: (result @env1:__getitem__: 2) equals: 'a/c'.
+	self assert: (result @env1:__getitem__: 3) equals: 'z.txt'
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testPythonImportlibFacadeCallable
+	"``import importlib`` from user code hits Grail's Python-side
+	facade rather than the Smalltalk loader directly.
+	``import_module`` is the public entry point."
+
+	| mod |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	self assert: mod @env1:python_importlib_facade_callable equals: true
+%
+
 ! --- itsdangerous Signer round-trip (M3 partial) ------------------------
 
 category: 'Grail-Tests - itsdangerous'

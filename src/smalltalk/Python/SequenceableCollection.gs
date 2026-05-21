@@ -218,14 +218,6 @@ __getslice__: lower _: upper _: step
 	^ result
 %
 
-category: 'Grail-Comparison'
-method: SequenceableCollection
-__gt__: other
-	"Lexicographic comparison: self > other"
-
-	^ self @env0:> other
-%
-
 category: 'Grail-Sequence Protocol'
 method: SequenceableCollection
 __iter__
@@ -238,28 +230,12 @@ __iter__
 	^ tuple_iterator @env1:___on: self
 %
 
-category: 'Grail-Comparison'
-method: SequenceableCollection
-__le__: other
-	"Lexicographic comparison: self <= other"
-
-	^ self @env0:<= other
-%
-
 category: 'Grail-Sequence Protocol'
 method: SequenceableCollection
 __len__
 	"Return the length of the sequence."
 
 	^ self @env0:size
-%
-
-category: 'Grail-Comparison'
-method: SequenceableCollection
-__lt__: other
-	"Lexicographic comparison: self < other"
-
-	^ self @env0:< other
 %
 
 category: 'Grail-Sequence Operations'

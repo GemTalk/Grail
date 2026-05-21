@@ -207,3 +207,91 @@ class _DupChild(_DupParent):
 def subclass_redeclares_instvar():
     c = _DupChild(['a', 'b'])
     return list(c.templates)
+
+
+class _ShadowingClass:
+    """Class scope must not leak into method bodies.  An unqualified
+    ``getattr`` inside ``read`` should resolve to the builtin even
+    though the class also defines a ``getattr`` method."""
+
+    def getattr(self, obj, name):
+        return ('method', name)
+
+    def read(self, obj, name):
+        return getattr(obj, name)
+
+
+def class_scope_invisible_in_methods():
+    h = _ShadowingClass()
+    # ``self.getattr(obj, 'upper')`` would call the method
+    # (returning the marker tuple); ``getattr(obj, 'upper')`` from
+    # inside ``read`` should call the BUILTIN and yield the bound
+    # ``upper`` method.  Check that what came back is NOT the
+    # class-method's marker tuple — that distinguishes the two
+    # resolution paths without depending on Grail's
+    # bound-method-call dispatch (whose call-site codegen for
+    # ``f()()`` chains still has rough edges).
+    m = h.read('hi', 'upper')
+    return not isinstance(m, tuple)
+
+
+class _LateBoundAttrs:
+    """Bare class-level annotation (no value) should still create a
+    class-side slot; an external assignment binds the attribute
+    afterwards."""
+
+    later: int
+
+
+_LateBoundAttrs.later = 7
+
+
+def late_bound_class_annotation():
+    return _LateBoundAttrs.later
+
+
+def tuple_lexicographic_compare():
+    # Tuple lexicographic comparison — used to MNU on tuple >= tuple
+    # because SequenceableCollection __ge__: forwarded to GS ``>=``
+    # which Array doesn't expose.  Now element-by-element.
+    return (
+        (1, 2) < (1, 3),
+        (1, 2) >= (1, 2),
+        (1, 2, 0) > (1, 2),
+        (1, 1) <= (1, 2),
+    )
+
+
+def deque_remove_count_index():
+    from collections import deque
+    d = deque([1, 2, 3, 2, 4])
+    d.remove(2)
+    return (list(d), d.count(2), d.index(4))
+
+
+def ast_literal_eval_round_trip():
+    import ast as _ast
+    return (
+        _ast.literal_eval("42"),
+        _ast.literal_eval("'hello'"),
+        _ast.literal_eval("[1, 2, 3]"),
+        _ast.literal_eval("(1, 2, 3)"),
+        _ast.literal_eval("True"),
+    )
+
+
+def posixpath_join_and_normpath():
+    import posixpath
+    return (
+        posixpath.join('a', 'b', 'c'),
+        posixpath.join('/root', 'a', 'b'),
+        posixpath.normpath('a/b/../c'),
+        posixpath.basename('/x/y/z.txt'),
+    )
+
+
+def python_importlib_facade_callable():
+    # ``import importlib`` from user code hits the Python facade.
+    # ``import_module`` is the public entry point.
+    import importlib
+    return callable(importlib.import_module)
