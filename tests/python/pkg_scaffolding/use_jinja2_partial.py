@@ -52,3 +52,48 @@ def urllib_quote_round_trip():
 
 def urllib_quote_plus():
     return quote_plus('hello world')
+
+
+def for_else_skips_on_break():
+    # ``for-else`` must NOT run the else clause when the loop breaks.
+    # Grail's codegen used to catch both StopIteration and PythonBreak
+    # in the same handler, then run the else unconditionally — broke
+    # CPython re's _parse_sub common-prefix loop, which depends on the
+    # else NOT firing after break.
+    log = []
+    for x in [1, 2, 3]:
+        if x == 2:
+            log.append('broke')
+            break
+    else:
+        log.append('else')
+    return tuple(log)
+
+
+def for_else_runs_on_natural_drain():
+    log = []
+    for x in [1, 2]:
+        log.append(x)
+    else:
+        log.append('done')
+    return tuple(log)
+
+
+def int_parse_binary_string():
+    # int(s, 2) for str + bytes.  Grail used to error
+    # "can't convert non-string with explicit base" when given bytes,
+    # blocking _re.compiler._mk_bitmap.
+    return (int('0101', 2), int(b'1010', 2))
+
+
+def int_parse_hex_with_prefix():
+    return int('0xff', 16)
+
+
+def int_compares_with_named_int_constant():
+    # The reverse direction (int >= NamedIntConstant-style wrapper)
+    # used to ArgumentTypeError because GS Integer >= rejects
+    # non-Number RHS.  __index__ fallback handles it now.  Use
+    # MAXREPEAT from re._constants as the wrapper.
+    from re._constants import MAXREPEAT
+    return (10 < MAXREPEAT, 10 <= MAXREPEAT, 10 > MAXREPEAT, 10 >= MAXREPEAT)

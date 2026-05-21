@@ -397,17 +397,36 @@ def _optimize_charset(charset, iscased=None, fixup=None, fixes=None):
 _CODEBITS = _sre.CODESIZE * 8
 MAXCODE = (1 << _CODEBITS) - 1
 _BITS_TRANS = b'0' + b'1' * 255
-def _mk_bitmap(bits, _CODEBITS=_CODEBITS, _int=int):
+
+# GRAIL: CPython binds module globals as default-arg locals for a
+# small perf win (``_CODEBITS=_CODEBITS, _int=int``).  Grail's
+# NameAst sees the parameter name shadowing the module global and
+# wraps the default-RHS read in an UnboundLocalError check that
+# fires before the function is even called, so the module load
+# blows up at def time.  Rename the parameters to break the
+# collision — same behavior, no shadow.
+def _mk_bitmap(bits, _cb=_CODEBITS, _int=int):
     s = bits.translate(_BITS_TRANS)[::-1]
-    return [_int(s[i - _CODEBITS: i], 2)
-            for i in range(len(s), 0, -_CODEBITS)]
+    return [_int(s[i - _cb: i], 2)
+            for i in range(len(s), 0, -_cb)]
 
 def _bytes_to_codes(b):
-    # Convert block indices to word array
-    a = memoryview(b).cast('I')
-    assert a.itemsize == _sre.CODESIZE
-    assert len(a) * a.itemsize == len(b)
-    return a.tolist()
+    # Convert block indices to a list of CODESIZE-byte words.
+    # GRAIL: CPython uses ``memoryview(b).cast('I')`` to reinterpret
+    # the byte buffer; Grail's bytearray has no ``cast`` and we don't
+    # ship memoryview today.  Unpack manually instead — little-endian
+    # word order matches what _sre expects.
+    sz = _sre.CODESIZE
+    codes = []
+    i = 0
+    n = len(b)
+    while i < n:
+        v = 0
+        for j in range(sz):
+            v |= b[i + j] << (8 * j)
+        codes.append(v)
+        i += sz
+    return codes
 
 def _simple(p):
     # check if this subpattern is a "simple" operator

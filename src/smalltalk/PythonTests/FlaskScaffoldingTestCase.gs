@@ -346,6 +346,84 @@ testUrllibQuotePlus
 	self assert: mod @env1:urllib_quote_plus equals: 'hello+world'
 %
 
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testForElseSkipsOnBreak
+	"Python ``for-else`` semantics: the else clause runs ONLY if the
+	loop drained naturally.  Before the codegen fix in ForAst, the
+	else clause ran unconditionally — both StopIteration and
+	PythonBreak reached the same handler, then the else body executed.
+	Broke re._parser's common-prefix loop in _parse_sub (the loop
+	relies on the else NOT firing when a break inside it fires)."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:for_else_skips_on_break.
+	self assert: (result @env1:__getitem__: 0) equals: 'broke'.
+	"No 'else' element — only 'broke' should be in the log."
+	self assert: result @env0:size equals: 1
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testForElseRunsOnNaturalDrain
+	"The complement of testForElseSkipsOnBreak: when no break fires
+	the else clause MUST run."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:for_else_runs_on_natural_drain.
+	self assert: result @env0:size equals: 3.
+	self assert: (result @env1:__getitem__: 0) equals: 1.
+	self assert: (result @env1:__getitem__: 1) equals: 2.
+	self assert: (result @env1:__getitem__: 2) equals: 'done'
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testIntParseBinaryString
+	"int(s, base) for str + bytes — Grail used to error
+	``can't convert non-string with explicit base`` when given bytes,
+	blocking re._compiler._mk_bitmap which feeds char-class bitmaps
+	through ``int(bits[i:j], 2)``."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:int_parse_binary_string.
+	self assert: (result @env1:__getitem__: 0) equals: 5.
+	self assert: (result @env1:__getitem__: 1) equals: 10
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testIntParseHexWithPrefix
+	"int(s, 16) — Grail had no public radix-aware Integer parser;
+	added a hand-rolled ___parseInt:radix: that handles the same
+	prefix grammar CPython accepts."
+
+	| mod |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	self assert: mod @env1:int_parse_hex_with_prefix equals: 255
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testIntComparesWithNamedIntConstant
+	"int.__ge__ / __gt__ / __le__ / __lt__ now fall back through
+	__index__ when the RHS isn't a Number — matches __eq__'s
+	existing PEP 357 fallback.  Lets ``min >= MAXREPEAT`` work in
+	re._parser without ArgumentTypeError."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:int_compares_with_named_int_constant.
+	"MAXREPEAT is much larger than 10, so <, <= are true; >, >= are false."
+	self assert: (result @env1:__getitem__: 0) equals: true.
+	self assert: (result @env1:__getitem__: 1) equals: true.
+	self assert: (result @env1:__getitem__: 2) equals: false.
+	self assert: (result @env1:__getitem__: 3) equals: false
+%
+
 ! --- itsdangerous Signer round-trip (M3 partial) ------------------------
 
 category: 'Grail-Tests - itsdangerous'

@@ -38,21 +38,33 @@ set compile_env: 0
 category: 'Grail-code generation'
 method: ForAst
 printSmalltalkOn: aStream
-	"Generate: for target in iter: body
+	"Generate: for target in iter: body [else: else_body]
+
 	Translates to:
-	  [| ___iter___ |
-	   ___iter___ := iter __iter__.
-	   [true] whileTrue: [
-	     target := ___iter___ __next__.
-	     body.
-	   ].
-	  ] @env0:on: StopIteration do: [:___ex___ | nil].
+	  [
+	   [| ___iter___ |
+	    ___iter___ := iter __iter__.
+	    [true] whileTrue: [
+	      [target := ___iter___ __next__. body]
+	          @env0:on: PythonContinue do: [...].
+	    ].
+	   ] @env0:on: StopIteration do: [:___ex___ | nil].
+	   else_body.   ""only runs when the loop drained naturally""
+	  ] @env0:on: PythonBreak do: [:___ex___ | nil].
+
+	Python ``for-else`` requires the else clause to execute ONLY
+	when the loop drains naturally — ``break`` must skip it.  Catch
+	StopIteration (natural end) on the INNER handler, let
+	PythonBreak propagate through it to an OUTER handler that wraps
+	BOTH the loop and the else clause; the outer handler catches
+	the break and the else clause never runs.
 
 	For tuple unpacking (for a, b in items), uses a temp ___item___
 	and unpacks with __getitem__:."
 
-	| isTupleTarget depth iterTemp itemTemp p |
+	| isTupleTarget depth iterTemp itemTemp p hasElse |
 	isTupleTarget := target isKindOf: TupleAst.
+	hasElse := orelse notNil and: [orelse size > 0].
 
 	"Walk the AST parent chain to count enclosing ForAst nodes — depth
 	is used to disambiguate `___iter___` / `___item___` temp names from
@@ -67,7 +79,11 @@ printSmalltalkOn: aStream
 	iterTemp := '___iter' , depth printString , '___'.
 	itemTemp := '___item' , depth printString , '___'.
 
-	"Open the StopIteration handler block"
+	"Outer PythonBreak handler — wraps the iteration AND the else
+	clause so a ``break`` from the body skips both."
+	aStream nextPutAll: '['; lf; increaseIndent.
+
+	"Inner StopIteration handler block"
 	aStream nextPutAll: '[| '; nextPutAll: iterTemp.
 	isTupleTarget ifTrue: [aStream space; nextPutAll: itemTemp].
 	aStream nextPutAll: ' |'; lf; increaseIndent.
@@ -107,16 +123,18 @@ printSmalltalkOn: aStream
 	"Close whileTrue:"
 	aStream decreaseIndent; nextPutAll: '].'; lf.
 
-	"Close outer block with both StopIteration (loop end) and
-	PythonBreak (early exit) handlers.  The `,` between exception
-	classes must dispatch env-0 — env-1 doesn't have that selector."
-	aStream decreaseIndent; nextPutAll: '] @env0:on: (StopIteration @env0:, PythonBreak) do: [:___ex___ | nil].'.
+	"Close inner block with StopIteration handler only — PythonBreak
+	propagates past this handler so the else clause is skipped."
+	aStream decreaseIndent; nextPutAll: '] @env0:on: StopIteration do: [:___ex___ | nil].'; lf.
 
-	"Else clause"
-	(orelse notNil and: [orelse size > 0]) ifTrue: [
-		aStream lf.
+	"Else clause — runs only after a natural loop drain."
+	hasElse ifTrue: [
 		orelse printSmalltalkOn: aStream.
+		aStream lf.
 	].
+
+	"Close outer block with PythonBreak handler."
+	aStream decreaseIndent; nextPutAll: '] @env0:on: PythonBreak do: [:___ex___ | nil].'.
 %
 
 category: 'Grail-accessing'

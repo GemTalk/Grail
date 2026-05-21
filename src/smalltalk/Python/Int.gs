@@ -90,27 +90,86 @@ __new__: obj _: base
 		ValueError @env0:signal: 'int() base must be >= 2 and <= 36, or 0'
 	].
 
-	"obj must be a string"
-	(obj @env0:isKindOf: Unicode7) ifFalse: [
-		TypeError @env0:signal: 'int() can''t convert non-string with explicit base'
+	"obj must be a string or bytes-like.  CPython accepts both —
+	bytes are interpreted as ASCII characters (b'101' → 5 in base 2)
+	exactly as the equivalent str would be.  For bytes we build a
+	String character-by-character (GS's ``ByteArray asString``
+	returns the printString, not a re-interpretation of the bytes
+	as characters)."
+	(obj @env0:isKindOf: CharacterCollection) ifTrue: [
+		str := obj
+	] ifFalse: [
+		(obj @env0:isKindOf: ByteArray) ifTrue: [
+			str := String @env0:new: obj @env0:size.
+			1 @env0:to: obj @env0:size do: [:i |
+				str @env0:at: i put: (Character @env0:codePoint: (obj @env0:at: i))
+			]
+		] ifFalse: [
+			TypeError @env0:signal: 'int() can''t convert non-string with explicit base'
+		]
 	].
 
-	str := obj @env0:trimBoth.
+	str := str @env0:trimBoth.
 
-	"Parse the string with the given base"
-	^ [
-		baseInt == 0
-			ifTrue: [
-				"Base 0: auto-detect from prefix"
-				(str @env0:asNumber) @env0:truncated
-			]
-			ifFalse: [
-				"Specific base"
-				int @env0:fromString: str radix: baseInt
-			]
+	"Parse the string with the given base.  GemStone has no public
+	radix-aware Integer parser (only ``fromString:`` for base 10 and
+	``fromHexString:`` for base 16), so for the other bases we walk
+	the digits ourselves — same routine handles negative + ``+``
+	prefixes and Python's ``0b``/``0o``/``0x`` discriminators."
+	^ [self ___parseInt: str radix: baseInt
 	] @env0:on: Error do: [:ex |
 		ValueError @env0:signal: ('invalid literal for int() with base ' @env0:, (baseInt @env0:printString))
 	]
+%
+
+category: 'Grail-Initialization'
+classmethod: int
+___parseInt: aString radix: baseInt
+	"Parse aString as an integer in the given base.  baseInt = 0
+	means infer from prefix (``0b`` / ``0o`` / ``0x``) and fall back
+	to base 10.  Raises if the result has no digits or contains a
+	non-digit for the chosen base."
+
+	| chars sign idx effectiveBase result digitChars ch d pfxChar |
+	chars := aString.
+	idx := 1.
+	sign := 1.
+	(chars @env0:size @env0:>= 1) ifTrue: [
+		((chars @env0:at: 1) @env0:= $-) ifTrue: [sign := -1. idx := 2].
+		((chars @env0:at: 1) @env0:= $+) ifTrue: [idx := 2].
+	].
+	effectiveBase := baseInt.
+	"Python ``0b`` / ``0o`` / ``0x`` prefix handling — only for
+	base 0 (auto-detect) and the matching explicit base."
+	((baseInt @env0:= 0)
+		or: [(baseInt @env0:= 2)
+		or: [(baseInt @env0:= 8)
+		or: [baseInt @env0:= 16]]]) ifTrue: [
+		(chars @env0:size @env0:>= (idx @env0:+ 1)) ifTrue: [
+			((chars @env0:at: idx) @env0:= $0) ifTrue: [
+				pfxChar := (chars @env0:at: idx @env0:+ 1) @env0:asLowercase.
+				pfxChar @env0:= $b ifTrue: [effectiveBase := 2. idx := idx @env0:+ 2].
+				pfxChar @env0:= $o ifTrue: [effectiveBase := 8. idx := idx @env0:+ 2].
+				pfxChar @env0:= $x ifTrue: [effectiveBase := 16. idx := idx @env0:+ 2].
+			].
+		].
+	].
+	effectiveBase @env0:= 0 ifTrue: [effectiveBase := 10].
+	digitChars := '0123456789abcdefghijklmnopqrstuvwxyz' @env0:copyFrom: 1 to: effectiveBase.
+	(idx @env0:> chars @env0:size) ifTrue: [
+		^ self @env0:error: 'no digits'
+	].
+	result := 0.
+	[idx @env0:<= chars @env0:size] @env0:whileTrue: [
+		ch := (chars @env0:at: idx) @env0:asLowercase.
+		(ch @env0:= $_) ifFalse: [
+			d := digitChars @env0:indexOf: ch.
+			(d @env0:= 0) ifTrue: [^ self @env0:error: 'bad digit'].
+			result := (result @env0:* effectiveBase) @env0:+ (d @env0:- 1).
+		].
+		idx := idx @env0:+ 1.
+	].
+	^ sign @env0:* result
 %
 
 category: 'Grail-Class Methods'
@@ -296,16 +355,28 @@ __format__: formatSpec
 category: 'Grail-Comparison'
 method: int
 __ge__: other
-	"Return self >= other"
+	"Return self >= other.  Mirrors the __eq__: __index__ fallback
+	so the reverse direction ``10 >= MAXREPEAT`` works when
+	MAXREPEAT is a NamedIntConstant (or any other PEP 357 wrapper)."
 
+	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:>= other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [
+		^ self @env0:>= (other @env1:__index__)
+	].
 	^ self @env0:>= other
 %
 
 category: 'Grail-Comparison'
 method: int
 __gt__: other
-	"Return self > other"
+	"Return self > other.  Same __index__ fallback as __ge__:."
 
+	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:> other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [
+		^ self @env0:> (other @env1:__index__)
+	].
 	^ self @env0:> other
 %
 
@@ -362,8 +433,13 @@ __invert__
 category: 'Grail-Comparison'
 method: int
 __le__: other
-	"Return self <= other"
+	"Return self <= other.  Same __index__ fallback as __ge__:."
 
+	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:<= other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [
+		^ self @env0:<= (other @env1:__index__)
+	].
 	^ self @env0:<= other
 %
 
@@ -378,8 +454,13 @@ __lshift__: other
 category: 'Grail-Comparison'
 method: int
 __lt__: other
-	"Return self < other"
+	"Return self < other.  Same __index__ fallback as __ge__:."
 
+	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:< other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [
+		^ self @env0:< (other @env1:__index__)
+	].
 	^ self @env0:< other
 %
 

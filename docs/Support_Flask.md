@@ -240,14 +240,22 @@ Existing stub modules that need extending later: `typing`,
   `errno`, `fnmatch`, `marshal`, `pickle`, `stat`, `tempfile`,
   `types`, `threading`, `operator`, `urllib.parse`; `enum` extended
   with `Enum` / `IntEnum` / `StrEnum` / `Flag` / `auto`.
-  Remaining blocker: jinja2's lexer compiles a handful of regex
-  literals at import time and one of them (the verbose `integer_re`
-  or `float_re`, likely) trips an `IndexError` deep in
-  `re._parser._parse_sub` (`SubPattern.__getitem__` indexes past
-  empty data).  Fixing that — possibly by adding `re.VERBOSE`
-  handling to our pure-Python re engine, or routing the failing
-  pattern through the `_sre` C shim — unblocks the rest of the
-  Jinja2 import chain.
+  Several regex / parser blockers down: ForAst's `for-else`
+  codegen no longer runs the else clause when `break` fires
+  (broke `re._parser._parse_sub`'s common-prefix loop); `int`'s
+  comparison operators fall back through `__index__` so
+  `min >= MAXREPEAT` works against `NamedIntConstant` wrappers;
+  `int(bytes, base)` now accepts a bytes-like input (CPython
+  semantics); hand-rolled `___parseInt:radix:` covers the bases
+  GemStone's stock Integer parser doesn't (the GS class only
+  exposes `fromString:` for base 10 and `fromHexString:` for 16);
+  `re._compiler` patched (`_mk_bitmap` shadow rename,
+  `_bytes_to_codes` re-implemented without `memoryview.cast`).
+  Current blocker: `_sre.compile()` returns "RuntimeError:
+  invalid SRE code" on the resulting code list — likely a byte-
+  order or opcode-encoding mismatch in `_bytes_to_codes`'s
+  hand-packed words.  Inspecting the bytecode the shim expects vs
+  what `_compile` produces is the next step.
 - **M5 — `werkzeug.wrappers.Request/Response` round-trip a WSGI
   environ.**
 - **M6 — Flask hello-world responds via `werkzeug.test.Client`.**
