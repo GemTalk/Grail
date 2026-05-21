@@ -251,6 +251,18 @@ printSmalltalkOn: aStream
 			((self isVariableIsDeclared: id) not
 				and: [(self class isResolvableSymbol: id asSymbol) not])
 				ifTrue: [
+					"Builtins names (``type``, ``len``, ``hasattr``, ...)
+					aren't stored as module attributes — they live as
+					methods on the ``builtins`` class.  Wrap as a
+					BoundMethod so direct calls dispatch through env-1
+					arity resolution."
+					(self class isFastPathBuiltinName: id asSymbol) ifTrue: [
+						aStream
+							nextPutAll: '(BoundMethod receiver: ((Python @env0:at: #builtins) instance) selector: #';
+							nextPutAll: id;
+							nextPutAll: ')'.
+						^self
+					].
 					aStream
 						nextPutAll: '((';
 						nextPutAll: CallAst moduleClassBeingCompiled name;
@@ -294,6 +306,19 @@ printSmalltalkOn: aStream
 		and: [CallAst moduleClassBeingCompiled notNil
 		and: [CallAst classBeingCompiled isNil
 		and: [(self class isResolvableSymbol: id asSymbol) not]]]) ifTrue: [
+		"Builtins (``type``, ``len``, ...) are methods on the
+		builtins class — emit a BoundMethod so direct call sites
+		dispatch through env-1 arity resolution rather than a
+		failing ``at:`` lookup.  Suppressed when this NameAst is
+		the base of an enclosing ClassDefAst (a class needs the
+		actual class object, not a callable wrapper)."
+		(self isFastPathBuiltinName) ifTrue: [
+			aStream
+				nextPutAll: '(BoundMethod receiver: ((Python @env0:at: #builtins) instance) selector: #';
+				nextPutAll: id;
+				nextPutAll: ')'.
+			^self
+		].
 		aStream
 			nextPutAll: '(self @env0:at: #''';
 			nextPutAll: id;

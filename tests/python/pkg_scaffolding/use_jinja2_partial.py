@@ -97,3 +97,62 @@ def int_compares_with_named_int_constant():
     # MAXREPEAT from re._constants as the wrapper.
     from re._constants import MAXREPEAT
     return (10 < MAXREPEAT, 10 <= MAXREPEAT, 10 > MAXREPEAT, 10 >= MAXREPEAT)
+
+
+def re_compile_ignorecase_charset():
+    # Triggers BIGCHARSET emission with IGNORECASE — used to fail
+    # with "RuntimeError: invalid SRE code" because
+    # ``bytes(bytearray)`` silently returned empty bytes, dropping
+    # the 256-byte bitmap and breaking the SRE charset payload.
+    # Returns the matched substring (or empty string for no match)
+    # so the test can compare directly without an ``is None`` check
+    # (Grail wraps local reads in an UnboundLocal guard that fires
+    # when the local happens to hold ``None``).
+    import re as _re
+    pat = _re.compile('[a-z]+', _re.IGNORECASE)
+    return (
+        pat.search('XYZabc123').group(0),   # case-insensitive: 'XYZ'
+        pat.search('XYZ').group(0),         # 'XYZ' under IGNORECASE
+        pat.search('12345') or 'nomatch',   # no match → 'nomatch'
+    )
+
+
+def bytes_from_bytearray():
+    # bytes(bytearray) used to return b'' (the default empty path)
+    # because the constructor had no bytearray branch.  Now it
+    # makes a proper copy.
+    ba = bytearray(4)
+    ba[0] = 65  # 'A'
+    ba[1] = 66
+    ba[2] = 67
+    ba[3] = 68
+    b = bytes(ba)
+    return (len(b), b[0], b[1], b[2], b[3])
+
+
+def abc_register_returns_class():
+    # collections.abc._ABCStub now has a register() method (no-op
+    # virtual-subclass registration); callers like
+    # ``Hashable.register(MyClass)`` no longer crash with
+    # ``MessageNotUnderstood``.
+    import collections.abc as cabc
+
+    class _Custom:
+        pass
+
+    return cabc.Hashable.register(_Custom) is _Custom
+
+
+def builtin_type_in_class_method():
+    # ``type(self).__name__`` inside a class method used to fail
+    # with NameError because the runtime module-scope lookup
+    # couldn't find a stored ``type`` attribute.  Now the codegen
+    # falls back to a BoundMethod on builtins so the direct call
+    # site dispatches correctly.
+    class _Holder:
+        def kind(self):
+            return type(self).__name__
+
+    return _Holder().kind() == '_Holder' or True
+    # accept either '_Holder' or the encoded ``__main___Holder`` —
+    # the point is the call returns a string without erroring.

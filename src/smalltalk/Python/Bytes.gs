@@ -50,8 +50,13 @@ __new__: source
 		TypeError ___signal___: 'string argument without an encoding'
 	].
 
-	"If source is bytes, make a copy"
-	(sourceClass == bytes) ifTrue: [
+	"If source is bytes (or bytearray — same byte-storage layout),
+	make a copy.  Previously the bytearray path fell through to the
+	default empty-bytes branch, which silently produced ``bytes(0)``
+	from any bytearray and broke re._compiler._optimize_charset's
+	BIGCHARSET path (``charmap = bytes(charmap)`` lost all 256 bytes
+	of the bitmap)."
+	((sourceClass == bytes) or: [source @env0:isKindOf: bytearray]) ifTrue: [
 		result := self ___new___: source @env0:size.
 		1 @env0:to: source @env0:size do: [:i |
 			result @env0:at: i put: (source @env0:at: i)

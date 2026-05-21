@@ -251,11 +251,21 @@ Existing stub modules that need extending later: `typing`,
   exposes `fromString:` for base 10 and `fromHexString:` for 16);
   `re._compiler` patched (`_mk_bitmap` shadow rename,
   `_bytes_to_codes` re-implemented without `memoryview.cast`).
-  Current blocker: `_sre.compile()` returns "RuntimeError:
-  invalid SRE code" on the resulting code list — likely a byte-
-  order or opcode-encoding mismatch in `_bytes_to_codes`'s
-  hand-packed words.  Inspecting the bytecode the shim expects vs
-  what `_compile` produces is the next step.
+  More blockers down: the SRE "invalid code" error was
+  `bytes(bytearray)` silently returning `b''` (no bytearray branch
+  in the constructor), which dropped the 256-byte BIGCHARSET
+  bitmap; `NameAst` runtime module-scope fallback now wraps
+  fast-path builtins (`type`, `len`, ...) in a `BoundMethod`
+  instead of raising `NameError`; `collections.abc._ABCStub` gains
+  a `register()` no-op; `jinja2.nodes.NodeType` stubbed as a plain
+  class (real `class NodeType(type):` requires metaclass support
+  Grail doesn't have); `jinja2.utils.Namespace.__init__` rewritten
+  with a conventional `self` parameter (Grail's codegen rejects
+  the upstream `def __init__(*args, **kwargs): self, args = ...`
+  trick with "expected an assignable variable").  Current blocker:
+  `jinja2.compiler` triggers a Smalltalk `CompileError: variable
+  has already been declared` mid-compile — needs the next
+  bisection pass.
 - **M5 — `werkzeug.wrappers.Request/Response` round-trip a WSGI
   environ.**
 - **M6 — Flask hello-world responds via `werkzeug.test.Client`.**

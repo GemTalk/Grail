@@ -424,6 +424,67 @@ testIntComparesWithNamedIntConstant
 	self assert: (result @env1:__getitem__: 3) equals: false
 %
 
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testReCompileIgnorecaseCharset
+	"``[a-z]+`` with re.IGNORECASE used to crash with
+	``RuntimeError: invalid SRE code`` because the BIGCHARSET
+	payload was 8 codes short (the bitmap got dropped).  Root
+	cause was ``bytes(bytearray)`` returning empty bytes; both
+	parts now flow through correctly and the resulting pattern
+	matches case-insensitively."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:re_compile_ignorecase_charset.
+	"Greedy ``[a-z]+`` over 'XYZabc123' matches the full letter run."
+	self assert: (result @env1:__getitem__: 0) equals: 'XYZabc'.
+	self assert: (result @env1:__getitem__: 1) equals: 'XYZ'.
+	self assert: (result @env1:__getitem__: 2) equals: 'nomatch'
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testBytesFromBytearray
+	"``bytes(bytearray)`` now makes a proper byte-for-byte copy
+	instead of silently returning ``b''`` (the default branch).
+	Same constructor fix that unblocked the re compiler."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:bytes_from_bytearray.
+	self assert: (result @env1:__getitem__: 0) equals: 4.
+	self assert: (result @env1:__getitem__: 1) equals: 65.
+	self assert: (result @env1:__getitem__: 2) equals: 66.
+	self assert: (result @env1:__getitem__: 3) equals: 67.
+	self assert: (result @env1:__getitem__: 4) equals: 68
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testAbcRegister
+	"collections.abc._ABCStub.register(cls) — no-op stub returning
+	cls (the documented API), so callers like
+	``Hashable.register(MyClass)`` don't MNU."
+
+	| mod |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	self assert: mod @env1:abc_register_returns_class equals: true
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testBuiltinTypeInClassMethod
+	"``type(self).__name__`` inside a class method.  The runtime
+	module-scope NameAst fallback now consults builtins for
+	fast-path names before raising NameError, so the BoundMethod
+	dispatch resolves correctly."
+
+	| mod |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	self assert: mod @env1:builtin_type_in_class_method equals: true
+%
+
 ! --- itsdangerous Signer round-trip (M3 partial) ------------------------
 
 category: 'Grail-Tests - itsdangerous'

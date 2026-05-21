@@ -754,8 +754,12 @@ class Namespace:
     """A namespace object that can hold arbitrary attributes.  It may be
     initialized from a dictionary or with keyword arguments."""
 
-    def __init__(*args: t.Any, **kwargs: t.Any) -> None:  # noqa: B902
-        self, args = args[0], args[1:]
+    # Grail: upstream uses ``def __init__(*args, **kwargs)`` without a
+    # named ``self`` so callers can pass ``self=`` as a keyword.  Grail's
+    # codegen rejects re-assigning to ``self`` (`expected an assignable
+    # variable`) — flip to a conventional signature.  Loses the ``self=``
+    # kwarg path, which nothing on the Flask hello-world route uses.
+    def __init__(self, *args: t.Any, **kwargs: t.Any) -> None:
         self.__attrs = dict(*args, **kwargs)
 
     def __getattribute__(self, name: str) -> t.Any:

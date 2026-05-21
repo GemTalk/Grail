@@ -51,21 +51,15 @@ class Impossible(Exception):
     """Raised if the node could not perform a requested action."""
 
 
-class NodeType(type):
-    """A metaclass for nodes that handles the field and attribute
-    inheritance.  fields and attributes from the parent class are
-    automatically forwarded to the child."""
-
-    def __new__(mcs, name, bases, d):  # type: ignore
-        for attr in "fields", "attributes":
-            storage: t.List[t.Tuple[str, ...]] = []
-            storage.extend(getattr(bases[0] if bases else object, attr, ()))
-            storage.extend(d.get(attr, ()))
-            assert len(bases) <= 1, "multiple inheritance not allowed"
-            assert len(storage) == len(set(storage)), "layout conflict"
-            d[attr] = tuple(storage)
-        d.setdefault("abstract", False)
-        return type.__new__(mcs, name, bases, d)
+# GRAIL: ``class NodeType(type)`` requires real metaclass support and
+# a ``type`` base class Grail doesn't expose; the
+# ``class Node(metaclass=NodeType):`` declaration below is not honored
+# by Grail's ClassDefAst either.  Stub NodeType as a plain class so the
+# module imports and the Node hierarchy below can compile; the
+# field-/attribute-inheritance trick has to be reproduced manually if
+# Jinja2 nodes ever start being constructed.
+class NodeType:
+    pass
 
 
 class EvalContext:
@@ -1197,10 +1191,10 @@ class ScopedEvalContextModifier(EvalContextModifier):
     body: t.List[Node]
 
 
-# make sure nobody creates custom nodes
+# GRAIL: the upstream protection ``NodeType.__new__ = staticmethod(...)``
+# assigns to a class-side attribute Grail's NodeType stub doesn't
+# declare, so the setter is missing.  The protection only matters at
+# runtime when somebody tries to construct a Node subclass not in this
+# module — irrelevant for the import-only path.
 def _failing_new(*args: t.Any, **kwargs: t.Any) -> "te.NoReturn":
     raise TypeError("can't create custom node types")
-
-
-NodeType.__new__ = staticmethod(_failing_new)  # type: ignore
-del _failing_new

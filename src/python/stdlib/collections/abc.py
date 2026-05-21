@@ -29,6 +29,16 @@ class _ABCStub:
     def __call__(self, *args, **kwargs):
         return self
 
+    def register(self, cls):
+        """Mimic ABC.register(cls) — CPython records cls as a virtual
+        subclass.  Grail's stub doesn't track membership so it just
+        returns cls (the documented API) and is a no-op for
+        isinstance dispatch (which always returns False here)."""
+        return cls
+
+    def __subclasshook__(self, cls):
+        return NotImplemented
+
 
 Hashable = _ABCStub('Hashable')
 Callable = _ABCStub('Callable')
