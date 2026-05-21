@@ -686,6 +686,26 @@ getattr: anObject _: aName
 
 category: 'Grail-Built-in Functions'
 method: builtins
+_getattr: positional kw: kwargs
+	"Python builtin getattr(obj, name, default=MISSING) — varargs
+	entry covering the 3-arg form (default), invoked when a Smalltalk
+	call site sees ``getattr(obj, name, default)`` from Python.
+	Returns ``default`` instead of raising AttributeError on miss."
+
+	| anObject aName |
+	anObject := positional @env0:at: 1.
+	aName := positional @env0:at: 2.
+	(positional @env0:size) @env0:>= 3 ifTrue: [
+		| default |
+		default := positional @env0:at: 3.
+		^ [anObject @env1:___pyAttrLoad___: aName @env0:asSymbol]
+			@env0:on: AttributeError do: [:ex | ex @env0:return: default]
+	].
+	^ anObject @env1:___pyAttrLoad___: aName @env0:asSymbol
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 issubclass: aClass _: aClassOrTuple
 	"Python builtin issubclass(cls, classinfo) — True if `cls` is a
 	subclass of `classinfo` (or any class in the tuple form).  Mirrors

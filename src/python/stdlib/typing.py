@@ -135,25 +135,41 @@ TYPE_CHECKING = False
 # compiler._FinalizeInfo) where instances are constructed via
 # positional args and then read by attribute.
 class NamedTuple:
-    """Stand-in NamedTuple base — instances behave like regular
-    Python objects.  ``__init_subclass__`` is not implemented;
-    subclasses inherit ``__init__`` from this stub which accepts
-    any positional + keyword args and stores them on
-    ``__dict__``-style attributes."""
+    """Stand-in NamedTuple base.  ClassDefAst emits a ``_fields``
+    tuple of bare-annotation names in declaration order for any
+    subclass, so positional args bind to attribute names and the
+    sequence protocol below (``__iter__``, ``__getitem__``, ``__len__``)
+    yields values in that same order — enough for jinja2's tuple-
+    unpacking ``for regex, tokens, new_state in rule:`` idiom."""
 
     def __init__(self, *args, **kwargs):
         for k, v in kwargs.items():
             setattr(self, k, v)
-        # Positional args are recorded under their declared field
-        # names if the subclass exposes ``_fields``; otherwise as
-        # ``f0``, ``f1``, ... fallbacks.
+        # Positional args bind to declared field names if available.
+        # Also store the ordered tuple of values on ``_values`` for
+        # constant-time __iter__ / __getitem__ — Grail's
+        # ``self.__dict__[name]`` lookup fails when ``name`` is a
+        # Python str (the underlying IdentityKeyValueDictionary keys
+        # are Smalltalk Symbols), so we keep a parallel positional
+        # store rather than translating string<->symbol per call.
         fields = getattr(type(self), '_fields', None)
         if fields is None:
             for i, v in enumerate(args):
                 setattr(self, 'f' + str(i), v)
+            self._values = tuple(args)
         else:
             for name, v in zip(fields, args):
                 setattr(self, name, v)
+            self._values = tuple(args)
+
+    def __iter__(self):
+        return iter(self._values)
+
+    def __getitem__(self, index):
+        return self._values[index]
+
+    def __len__(self):
+        return len(self._values)
 
 
 class TypedDict:

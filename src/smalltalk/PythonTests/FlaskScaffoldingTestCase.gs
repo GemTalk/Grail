@@ -716,6 +716,32 @@ testStrTranslateBasic
 
 category: 'Grail-Tests - jinja2 plumbing'
 method: FlaskScaffoldingTestCase
+testTypingNamedTupleUnpacks
+	"Regression: ``class _Rule(t.NamedTuple): pattern: ...; ...``
+	subclass support.  ClassDefAst emits ``_fields`` from bare
+	annotations; the typing.NamedTuple stub stores positional args
+	on ``_values`` so __iter__ / __getitem__ / __len__ work.  Jinja2's
+	lexer ``for regex, tokens, new_state in statetokens:`` depends on
+	this."
+
+	| mod result items out |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:typing_namedtuple_unpacks.
+	out := result @env1:__getitem__: 0.
+	items := result @env1:__getitem__: 1.
+	"Iterated values in declaration order."
+	self assert: (out @env1:__getitem__: 0) equals: 1.
+	self assert: (out @env1:__getitem__: 1) equals: 'x'.
+	self assert: (out @env1:__getitem__: 2) equals: None.
+	"Indexed access."
+	self assert: (items @env1:__getitem__: 0) equals: 1.
+	self assert: (items @env1:__getitem__: 1) equals: 'x'.
+	"len."
+	self assert: (result @env1:__getitem__: 2) equals: 3
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
 testEmptyUserContainerIsFalsy
 	"Regression: ``bool(obj)`` used env-0 ``respondsTo: #__bool__``
 	which couldn't see env-1 Python ``__bool__`` methods on user

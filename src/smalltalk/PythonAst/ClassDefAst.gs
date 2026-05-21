@@ -212,6 +212,13 @@ printSmalltalkRuntimeOn: aStream
 	``A.attr != B.attr`` semantics)."
 	allClassInstVars := (classAttrs collect: [:p | p key]) asOrderedCollection.
 	bases isEmpty ifTrue: [allClassInstVars add: #'__module__'].
+	"Add ``_fields`` slot so NamedTuple-style subclasses can introspect
+	their bare-annotation field layout in declaration order.  Skipped
+	when the user already declared ``_fields`` themselves.  See the
+	matching accessor/setter + init emit further below."
+	((classAttrs anySatisfy: [:p | p value isNil])
+		and: [(classAttrs anySatisfy: [:p | p key == #'_fields']) not])
+			ifTrue: [allClassInstVars add: #'_fields'].
 	aStream
 		nextPutAll: name;
 		nextPutAll: ' := [:___parent___ | ___parent___ @env0:subclass: #''';
@@ -314,6 +321,39 @@ printSmalltalkRuntimeOn: aStream
 			pair value printSmalltalkWithParenthesisOn: aStream.
 			aStream nextPutAll: '.'; lf
 		].
+	].
+	"Compile + init ``_fields`` accessor/setter for NamedTuple-style
+	subclasses.  The slot was added to allClassInstVars above."
+	((classAttrs anySatisfy: [:p | p value isNil])
+		and: [(classAttrs anySatisfy: [:p | p key == #'_fields']) not])
+			ifTrue: [
+		| lf accessorSrc setterSrc bareNames |
+		lf := Character lf asString.
+		accessorSrc := '_fields' , lf , '	^ _fields'.
+		self
+			emitCompileMethodOn: name
+			source: accessorSrc
+			category: 'Grail-NamedTuple'
+			env: 1
+			classSide: true
+			onStream: aStream.
+		setterSrc := '_fields: ___1' , lf , '	_fields := ___1.'.
+		self
+			emitCompileMethodOn: name
+			source: setterSrc
+			category: 'Grail-NamedTuple'
+			env: 1
+			classSide: true
+			onStream: aStream.
+		"Init the slot with a tuple of declaration-order names."
+		bareNames := (classAttrs select: [:p | p value isNil])
+			collect: [:p | p key].
+		aStream
+			nextPutAll: name;
+			nextPutAll: ' _fields: (tuple @env0:withAll: #('.
+		bareNames do: [:n |
+			aStream space; nextPutAll: ''''; nextPutAll: n asString; nextPutAll: '''' ].
+		aStream nextPutAll: ' )).'; lf.
 	].
 	"For class attrs the parent declares but we didn't redeclare,
 	copy the parent's current value into our slot via the importlib
@@ -545,6 +585,17 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 					nextPutAll: ''' env: 1 withArguments: positional.';
 					nextPutAll: lf.
 			].
+	] ifNil: [
+		"No __init__ defined locally — still dispatch to an inherited
+		varargs ___init__:kw: if any ancestor provides one (e.g. typing.
+		NamedTuple subclasses inherit field-binding init from the
+		stub).  MessageNotUnderstood is swallowed so plain-old data
+		classes without any __init__ in the hierarchy keep their
+		zero-arg ``new`` semantics."
+		src
+			nextPutAll: '[instance perform: #''___init__:kw:'' env: 1 withArguments:';
+			nextPutAll: ' (Array @env0:with: positional @env0:with: keywords)] @env0:on: MessageNotUnderstood do: [:___ex | nil].';
+			nextPutAll: lf.
 	].
 	src nextPutAll: '^ instance'.
 

@@ -386,6 +386,34 @@ def str_translate_basic():
     return 'aeiou'.translate(table)
 
 
+import typing as _typing_for_nt
+
+
+class _Triple(_typing_for_nt.NamedTuple):
+    a: int
+    b: str
+    c: object
+
+
+def typing_namedtuple_unpacks():
+    # Regression: jinja2's lexer uses ``class _Rule(t.NamedTuple): pattern:
+    # ...; tokens: ...; command: ...`` and unpacks with ``for regex, tokens,
+    # new_state in statetokens:``.  ClassDefAst now emits a ``_fields``
+    # tuple of bare-annotation names; the typing.NamedTuple stub stores
+    # positional args in declaration order on ``_values`` so __iter__ /
+    # __getitem__ / __len__ work.
+    t1 = _Triple(1, 'x', None)
+    # Tuple unpacking via for-loop
+    out = []
+    for v in t1:
+        out.append(v)
+    # Indexed access
+    items = (t1[0], t1[1], t1[2])
+    # Len
+    n = len(t1)
+    return (out, items, n)
+
+
 def empty_user_container_is_falsy():
     # Regression: Grail's ``bool(obj)`` deferred to env-0 ``respondsTo:
     # #__bool__`` which can't see env-1 Python ``__bool__`` methods on
