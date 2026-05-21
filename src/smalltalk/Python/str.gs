@@ -1130,9 +1130,34 @@ title
 category: 'Grail-String Methods'
 method: CharacterCollection
 translate: table
-	"Return a copy with each character mapped through the translation table. Not yet implemented."
+	"Return a copy with each character mapped through the translation
+	table.  ``table`` is a mapping from int (Unicode codepoint) to
+	either a replacement string, an int (codepoint), or None
+	(delete).  Codepoints not in the table pass through unchanged.
 
-	self @env0:error: 'Not yet implemented: translate'
+	Implementation: walks the receiver once, looks up each char's
+	codepoint via ``@env1:__getitem__:`` (so dict / KVD / any object
+	implementing the mapping protocol works), and appends the
+	replacement to an output stream."
+
+	| stream |
+	stream := WriteStream @env0:on: Unicode7 @env0:new.
+	self @env0:do: [:ch |
+		| cp replacement |
+		cp := ch @env0:codePoint.
+		replacement := [table @env1:__getitem__: cp]
+			@env0:on: KeyError do: [:ex | ex @env0:return: ch].
+		replacement == ch ifTrue: [stream @env0:nextPut: ch] ifFalse: [
+			replacement == None ifFalse: [
+				(replacement @env0:isKindOf: Integer) ifTrue: [
+					stream @env0:nextPut: (Character @env0:codePoint: replacement)
+				] ifFalse: [
+					stream @env0:nextPutAll: replacement
+				]
+			]
+		]
+	].
+	^ stream @env0:contents
 %
 
 category: 'Grail-String Methods'

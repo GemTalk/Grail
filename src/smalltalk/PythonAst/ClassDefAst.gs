@@ -74,11 +74,13 @@ printSmalltalkRuntimeOn: aStream
 	context), then embedded as Smalltalk string literals in
 	compileMethod: calls in the emitted code."
 
-	| ivarNames methodDefs selfParam funcNames varargsFuncNames methodSources
+	| ivarNames methodDefs classMethodDefs selfParam funcNames varargsFuncNames
+	  methodSources classMethodSources
 	  initMethod initSelector classAttrs allClassInstVars
 	  savedClass savedIvarNames savedFuncNames savedVarargsFuncNames savedSelfParam |
 	ivarNames := self instanceVarNamesFromInit.
 	methodDefs := self instanceMethodDefs.
+	classMethodDefs := self classMethodDefs.
 	selfParam := self selfParameterName.
 	funcNames := IdentitySet new.
 	varargsFuncNames := IdentitySet new.
@@ -87,6 +89,16 @@ printSmalltalkRuntimeOn: aStream
 		"A def with *args / **kwargs / defaults compiles to ``_name:kw:``
 		only - mark it so classSelfSendSelector doesn't emit a unary
 		send into thin air."
+		def isSimplePositionalArgs ifFalse: [
+			varargsFuncNames add: def name asSymbol
+		].
+	].
+	"Track @classmethod-decorated funcs in the same name set so a
+	self-send like ``cls.foo`` from another method resolves to a
+	known function name (and uses the correct varargs/fixed-arity
+	selector below)."
+	classMethodDefs do: [:def |
+		funcNames add: def name asSymbol.
 		def isSimplePositionalArgs ifFalse: [
 			varargsFuncNames add: def name asSymbol
 		].
@@ -116,12 +128,56 @@ printSmalltalkRuntimeOn: aStream
 	CallAst selfParameterName: selfParam.
 
 	methodSources := OrderedCollection new.
+	classMethodSources := OrderedCollection new.
 	[
 		methodDefs do: [:def |
 			| s |
 			s := PrettyWriteStream on: Unicode7 new.
 			def generateClassMethodSourceOn: s.
 			methodSources add: def name asString -> s contents.
+		].
+		"@classmethod bodies use the same per-method source generator
+		(both strip the first positional — ``self`` or ``cls`` — and
+		the Smalltalk receiver IS the class for class-side methods, so
+		``cls`` becomes the implicit ``self``).  Compile target is
+		class-side; see the classSide: true emit further below.
+
+		Clear ``classInstVarNames`` during the classmethod compile —
+		those names live on *instances*, not on the metaclass, so a
+		classmethod parameter that happens to share a name with an
+		instance instVar (``def stamped(cls, label)`` against
+		``__init__(self, label)``) must be declared as a real temp.
+		If it stayed filtered out as if it were an instVar, the
+		generated source would read ``label := ___1`` and the
+		Smalltalk compiler would reject ``label`` as an undefined
+		symbol on the metaclass side."
+		classMethodDefs isEmpty ifFalse: [
+			| savedForCM |
+			savedForCM := CallAst classInstVarNames.
+			CallAst classInstVarNames: IdentitySet new.
+			[
+				classMethodDefs do: [:def |
+					| s savedSelfForCM |
+					"For each classmethod, switch ``selfParameterName`` to its
+					own first argument (typically ``cls``) so NameAst maps
+					body references like ``cls(...)`` and ``cls.X`` to
+					Smalltalk ``self`` (which on a class-side method IS the
+					class)."
+					savedSelfForCM := CallAst selfParameterName.
+					CallAst selfParameterName: (def allParameterNames isEmpty
+						ifTrue: [#cls asSymbol]
+						ifFalse: [def allParameterNames first asSymbol]).
+					[
+						s := PrettyWriteStream on: Unicode7 new.
+						def generateClassMethodSourceOn: s.
+						classMethodSources add: def name asString -> s contents.
+					] ensure: [
+						CallAst selfParameterName: savedSelfForCM.
+					].
+				]
+			] ensure: [
+				CallAst classInstVarNames: savedForCM.
+			].
 		].
 	] ensure: [
 		CallAst classBeingCompiled: savedClass.
@@ -195,6 +251,20 @@ printSmalltalkRuntimeOn: aStream
 			category: 'Grail-Class Methods'
 			env: 1
 			classSide: false
+			onStream: aStream.
+	].
+
+	"Compile each @classmethod onto the metaclass.  ``self`` inside
+	the body refers to the class (matches Python's ``cls``), so the
+	source generated for class methods is identical in shape to the
+	instance-method source — only the compile target differs."
+	classMethodSources do: [:assoc |
+		self
+			emitCompileMethodOn: name
+			source: assoc value
+			category: 'Grail-Class Methods'
+			env: 1
+			classSide: true
 			onStream: aStream.
 	].
 
@@ -671,6 +741,17 @@ instanceMethodDefs
 	"Return all InstanceFunctionDefAst nodes from the class body."
 
 	^ body body select: [:stmt | stmt isKindOf: InstanceFunctionDefAst]
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+classMethodDefs
+	"Return all ClassFunctionDefAst nodes from the class body.
+	These are ``@classmethod``-decorated functions that the parser
+	re-classed at parse time (see PythonParser >>
+	parseFunctionDefWithDecorators:)."
+
+	^ body body select: [:stmt | stmt isKindOf: ClassFunctionDefAst]
 %
 
 category: 'Grail-Class Compilation'

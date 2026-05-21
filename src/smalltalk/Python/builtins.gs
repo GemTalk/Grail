@@ -468,6 +468,49 @@ sorted: anIterable
 	^ lst @env0:sort: [:a :b | a __lt__: b]
 %
 
+category: 'Python-Built-in Functions'
+method: builtins
+_sorted: positional kw: kwargs
+	"Python builtin sorted(iterable, *, key=None, reverse=False) —
+	varargs entry handling ``key=`` and ``reverse=`` kwargs that
+	the fixed-arity sorted: can't accept.  Jinja2's compiler iterates
+	``sorted(self.extensions.values(), key=lambda x: x.priority)``
+	at template-load time."
+
+	| iterable keyFn reverse lst iter done sortBlock |
+	iterable := positional @env0:at: 1.
+	keyFn := kwargs isNil
+		ifTrue: [nil]
+		ifFalse: [kwargs @env0:at: #key ifAbsent: [nil]].
+	reverse := kwargs isNil
+		ifTrue: [false]
+		ifFalse: [kwargs @env0:at: #reverse ifAbsent: [false]].
+	lst := list ___new___.
+	iter := iterable __iter__.
+	done := false.
+	[done] @env0:whileFalse: [
+		[
+			| item |
+			item := iter __next__.
+			lst append: item
+		] @env0:on: StopIteration do: [:ex | done := true]
+	].
+	sortBlock := keyFn isNil
+		ifTrue: [
+			reverse ___isTruthy___
+				ifTrue: [[:a :b | b __lt__: a]]
+				ifFalse: [[:a :b | a __lt__: b]]]
+		ifFalse: [
+			reverse ___isTruthy___
+				ifTrue: [[:a :b |
+					(keyFn @env1:value: { b } value: nil)
+						__lt__: (keyFn @env1:value: { a } value: nil)]]
+				ifFalse: [[:a :b |
+					(keyFn @env1:value: { a } value: nil)
+						__lt__: (keyFn @env1:value: { b } value: nil)]]].
+	^ lst @env0:sort: sortBlock
+%
+
 category: 'Grail-Built-in Functions'
 method: builtins
 str: anObject

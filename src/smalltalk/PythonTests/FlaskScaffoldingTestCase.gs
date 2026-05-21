@@ -672,6 +672,50 @@ testLruCacheWrapperHasCacheClear
 
 category: 'Grail-Tests - jinja2 plumbing'
 method: FlaskScaffoldingTestCase
+testClassMethodConstructorRoundTrip
+	"Regression: ClassDefAst was ignoring ClassFunctionDefAst
+	bodies, so a ``@classmethod`` never made it onto the
+	metaclass.  jinja2.Template.from_code was the first call site
+	to actually need it (env.from_string -> cls.from_code)."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:classmethod_constructor_round_trip.
+	self assert: (result @env1:__getitem__: 0) equals: '[hi]'.
+	self assert: (result @env1:__getitem__: 1) equals: true
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testSortedWithKeyKwarg
+	"Regression: ``sorted(iterable, key=fn)`` requires the varargs
+	``_sorted:kw:`` entry point; jinja2.environment.iter_extensions
+	calls it on the extensions dict."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:sorted_with_key_kwarg.
+	self assert: (result @env1:__getitem__: 0) equals: 'a'.
+	self assert: (result @env1:__getitem__: 1) equals: 'c'.
+	self assert: (result @env1:__getitem__: 2) equals: 'c'
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testStrTranslateBasic
+	"Regression: ``str.translate(dict)`` must walk the receiver,
+	look up each code point in the table, and emit a replacement
+	(string / int / None=delete).  re.escape uses this; the
+	jinja2 lexer pulls in re.escape transitively."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:str_translate_basic.
+	self assert: result equals: 'Xiou'
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
 testChainedCompareInMethodParam
 	"Regression: a class method that takes parameters AND uses a
 	chained comparison in the body.  CompareAst.allocateTemp used

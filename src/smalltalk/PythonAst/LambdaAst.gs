@@ -64,6 +64,37 @@ name
 
 category: 'Grail-other'
 method: LambdaAst
+isVariableIsDeclared: aSymbol
+	"A lambda's parameter list IS its scope.  NameAst's load-context
+	walk asks every ancestor whether the name is declared so it can
+	choose between a local read and the module-symbol fallback.
+	Without this override the lambda body falls through to the
+	enclosing function's scope; ``lambda p: p[0]`` would treat ``p``
+	as a free name, emit ``(self at: #'p' ifAbsent: [NameError ...])``,
+	and raise NameError at call time."
+
+	(args args anySatisfy: [:a | a name asSymbol == aSymbol asSymbol])
+		ifTrue: [^ true].
+	args vararg ifNotNil: [
+		args vararg name asSymbol == aSymbol asSymbol ifTrue: [^ true]].
+	(args kwonlyargs anySatisfy: [:a | a name asSymbol == aSymbol asSymbol])
+		ifTrue: [^ true].
+	args kwarg ifNotNil: [
+		args kwarg name asSymbol == aSymbol asSymbol ifTrue: [^ true]].
+	^ super isVariableIsDeclared: aSymbol
+%
+
+category: 'Grail-other'
+method: LambdaAst
+isVariableIsDeclaredFromMethod: aSymbol
+	"Same scope test as ``isVariableIsDeclared:`` — a lambda hides
+	its params from the enclosing-method walk too."
+
+	^ self isVariableIsDeclared: aSymbol
+%
+
+category: 'Grail-other'
+method: LambdaAst
 printSmalltalkOn: aStream
 	"Generate Smalltalk for a lambda expression.
 

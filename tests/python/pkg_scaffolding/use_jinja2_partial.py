@@ -346,3 +346,41 @@ def chained_compare_in_method_param():
         obj.differ(1, 1, 3),  # False (a == b)
         obj.differ(1, 2, 2),  # False (b == c)
     )
+
+
+class _Maker:
+    # Repro for missing @classmethod codegen: ClassDefAst was
+    # ignoring ClassFunctionDefAst nodes entirely, so a
+    # @classmethod-decorated function never made it onto the
+    # metaclass.  jinja2.Template.from_code was the trigger
+    # (env.from_string -> cls.from_code).
+    def __init__(self, label):
+        self.label = label
+
+    @classmethod
+    def stamped(cls, label):
+        obj = cls(label)
+        obj.label = '[' + label + ']'
+        return obj
+
+
+def classmethod_constructor_round_trip():
+    obj = _Maker.stamped('hi')
+    return (obj.label, isinstance(obj, _Maker))
+
+
+def sorted_with_key_kwarg():
+    # ``sorted(iterable, key=fn)`` exercises the varargs ``_sorted:kw:``
+    # entry point — Jinja2's environment.iter_extensions does this on
+    # the loaded extensions dict.
+    data = [(3, 'c'), (1, 'a'), (2, 'b')]
+    by_first = sorted(data, key=lambda p: p[0])
+    by_first_rev = sorted(data, key=lambda p: p[0], reverse=True)
+    return (by_first[0][1], by_first[2][1], by_first_rev[0][1])
+
+
+def str_translate_basic():
+    # ``str.translate`` with a dict mapping ord->replacement.  re.escape
+    # uses this; jinja2's lexer pulls in re.escape transitively.
+    table = {ord('a'): 'X', ord('e'): None, ord('i'): 105}  # i->i (no-op via int)
+    return 'aeiou'.translate(table)

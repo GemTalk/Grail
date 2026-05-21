@@ -1476,7 +1476,13 @@ parseInversion
 category: 'Grail-parsing - lambda'
 method: PythonParser
 parseLambda
-	"Parse: lambda [params]: expr"
+	"Parse: lambda [params]: expr.
+
+	Pushes a fresh scope so the lambda's parameters resolve as
+	locals inside the body — without this, ``lambda p: p[0]`` would
+	emit a module symbol-lookup for ``p`` (NameAst treats undeclared
+	names as free / global), trip the NameError fallback at call
+	time, and report ``name 'p' is not defined``."
 
 	| tok args body |
 	tok := self advance. "consume 'lambda'"
@@ -1494,7 +1500,14 @@ parseLambda
 		args := self parseFunctionParametersUntil: ':'.
 	].
 	self expect: #OP value: ':'.
+	self pushScope.
+	args posonlyargs do: [:a | self declareVariable: a name asSymbol].
+	args args do: [:a | self declareVariable: a name asSymbol].
+	args kwonlyargs do: [:a | self declareVariable: a name asSymbol].
+	args vararg ifNotNil: [self declareVariable: args vararg name asSymbol].
+	args kwarg ifNotNil: [self declareVariable: args kwarg name asSymbol].
 	body := self parseExpression.
+	self popScope.
 	^self buildNode: LambdaAst fields: (IdentityKeyValueDictionary new
 		at: #args put: args;
 		at: #body put: body;
