@@ -30,10 +30,17 @@ set compile_env: 0
 category: 'Grail-other'
 method: BlockAst
 allocateTemp
+	"Allocate a fresh, scoped temp name for codegen helpers (chained
+	comparison cache, etc).  Prefix is ``___t_`` rather than bare
+	``___N`` to avoid colliding with the numbered parameter
+	placeholders FunctionDefAst emits for class-method headers
+	(``foo: ___1 _: ___2 ...``).  A bare ``___1`` here would
+	re-declare the placeholder as a block temp, shadowing the
+	incoming argument with nil."
 
 	| name |
 	tempCount := (tempCount ifNil: [0]) + 1.
-	name := ('___' , tempCount printString) asSymbol.
+	name := ('___t_' , tempCount printString) asSymbol.
 	variables add: name.
 	^name
 %

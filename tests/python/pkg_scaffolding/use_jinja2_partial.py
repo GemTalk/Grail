@@ -326,3 +326,23 @@ def jinja2_imports_cleanly():
         hasattr(jinja2, 'DictLoader'),
         hasattr(jinja2, 'StrictUndefined'),
     )
+
+
+class _ChainedCmpInMethod:
+    # Repro for the codegen bug Environment.__init__ tripped over:
+    # a class method that takes parameters AND uses a chained
+    # comparison in the body.  Grail rewrites the method as
+    # ``foo: ___1 _: ___2 ...`` and CompareAst.allocateTemp used to
+    # return ``___1`` for the chain-cache temp, redeclaring it as a
+    # block local and shadowing the incoming parameter with nil.
+    def differ(self, a, b, c):
+        return a != b != c
+
+
+def chained_compare_in_method_param():
+    obj = _ChainedCmpInMethod()
+    return (
+        obj.differ(1, 2, 3),  # True (all different)
+        obj.differ(1, 1, 3),  # False (a == b)
+        obj.differ(1, 2, 2),  # False (b == c)
+    )

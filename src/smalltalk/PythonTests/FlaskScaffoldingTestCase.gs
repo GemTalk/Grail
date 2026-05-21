@@ -672,6 +672,26 @@ testLruCacheWrapperHasCacheClear
 
 category: 'Grail-Tests - jinja2 plumbing'
 method: FlaskScaffoldingTestCase
+testChainedCompareInMethodParam
+	"Regression: a class method that takes parameters AND uses a
+	chained comparison in the body.  CompareAst.allocateTemp used
+	to return ``___1`` for the chain-cache temp, redeclaring the
+	method's first positional placeholder as a block-local and
+	shadowing the incoming argument with nil.  Pre-fix this was
+	the blocker for ``Environment()`` instantiation (whose
+	``_environment_config_check(self)`` does ``a != b != c`` over
+	three self.* attributes)."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:chained_compare_in_method_param.
+	self assert: (result @env1:__getitem__: 0) equals: true.
+	self assert: (result @env1:__getitem__: 1) equals: false.
+	self assert: (result @env1:__getitem__: 2) equals: false
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
 testJinja2ImportsCleanly
 	"M4 partial — ``import jinja2`` succeeds and exposes the
 	public surface Flask hello-world reaches for.  Pre-template-
