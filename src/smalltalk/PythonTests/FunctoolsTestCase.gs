@@ -98,14 +98,25 @@ testLruCacheReturnsDecorator
 category: 'Grail-Tests - lru_cache'
 method: FunctoolsTestCase
 testLruCacheDecoratorPassesThrough
-	"Test that the lru_cache decorator returns the function unchanged (stub)."
+	"``functools.lru_cache(...)`` wraps the user function in an
+	LruCacheWrapper that delegates calls to the original.  The
+	wrapper exposes ``cache_clear`` / ``cache_info`` /
+	``__wrapped__`` so Jinja2 + downstream consumers can treat
+	the decorated function the way CPython does."
 
 	| f decorator fn result |
 	f := functools @env1:instance.
 	decorator := f @env1:lru_cache: 128.
 	fn := [:pos :kw | 42].
 	result := decorator value: {fn} value: nil.
-	self assert: result == fn
+	"The wrapper is an LruCacheWrapper, not the original block."
+	self assert: (result @env0:isKindOf: LruCacheWrapper).
+	"Calling the wrapper delegates to the wrapped function."
+	self assert: (result @env1:value: #() value: nil) equals: 42.
+	"The wrapper exposes ``cache_clear`` as a no-op and
+	``__wrapped__`` as the original function."
+	self assert: result @env1:cache_clear equals: None.
+	self assert: result @env1:__wrapped__ == fn
 %
 
 category: 'Grail-Tests - Phase 4d Attribute Calls'

@@ -74,11 +74,26 @@ category: 'Grail-Built-in Functions'
 method: functools
 lru_cache: maxsize
 	"lru_cache(maxsize) -> decorator.
-	Stub: returns a decorator that passes the function through unchanged
-	(no caching). The decorator is a block that takes positional args
-	and returns the first arg (the function)."
+	The decorator wraps the user function in a LruCacheWrapper that
+	is callable (delegates to the wrapped function) and exposes the
+	``cache_clear`` / ``cache_info`` attributes Jinja2 + downstream
+	consumers expect.  Caching itself is a no-op for now — every
+	call re-invokes the wrapped function.  Adequate for Flask
+	hello-world; revisit when render perf matters."
 
-	^ [:positional2 :keywords2 | positional2 @env0:at: 1]
+	^ [:positional2 :keywords2 |
+		LruCacheWrapper @env1:___wrap___: (positional2 @env0:at: 1)]
+%
+
+category: 'Grail-Built-in Functions'
+method: functools
+_lru_cache: positional kw: kwargs
+	"Varargs entry — ``lru_cache(maxsize=128, typed=False)`` from
+	user code.  Ignores the keyword args; returns the same wrapper-
+	emitting decorator the fixed-arity form does."
+
+	^ [:positional2 :keywords2 |
+		LruCacheWrapper @env1:___wrap___: (positional2 @env0:at: 1)]
 %
 
 category: 'Grail-Built-in Functions'

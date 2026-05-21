@@ -228,6 +228,7 @@ run
 	at: #'_shimtest' put: nil;
 	at: #'_sre' put: nil;
 	at: #'BoundMethod' put: nil;
+	at: #'LruCacheWrapper' put: nil;
 	at: #'Super' put: nil;
 	at: #'SuperBoundMethod' put: nil;
 	at: #'PythonGenerator' put: nil;
@@ -661,6 +662,9 @@ input src/smalltalk/Python/copyreg.gs
 input src/smalltalk/Python/cmath.gs
 input src/smalltalk/Python/enum.gs
 input src/smalltalk/Python/fractions.gs
+! LruCacheWrapper must load before functools — functools.lru_cache
+! references it from its decorator-builder closure.
+input src/smalltalk/Python/LruCacheWrapper.gs
 input src/smalltalk/Python/functools.gs
 input src/smalltalk/Python/gemstone.gs
 input src/smalltalk/Python/PyObject.gs

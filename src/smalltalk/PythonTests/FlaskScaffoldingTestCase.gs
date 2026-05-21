@@ -650,6 +650,43 @@ testPythonImportlibFacadeCallable
 	self assert: mod @env1:python_importlib_facade_callable equals: true
 %
 
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testLruCacheWrapperHasCacheClear
+	"``functools.lru_cache`` returns a wrapper exposing
+	``cache_clear`` / ``cache_info`` / ``__wrapped__`` so
+	Jinja2's ``utils.clear_caches`` (and other consumers) can
+	call ``fn.cache_clear()`` without MessageNotUnderstood.
+	Caching itself is a no-op stub; this test just locks in the
+	attribute surface."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:lru_cache_wrapper_has_cache_clear.
+	"a = fib(3) = 4, info is a 4-tuple, hits/currsize = 0 (stub)."
+	self assert: (result @env1:__getitem__: 0) equals: 4.
+	self assert: (result @env1:__getitem__: 1) equals: 4.
+	self assert: (result @env1:__getitem__: 2) equals: 0.
+	self assert: (result @env1:__getitem__: 3) equals: 0
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testJinja2ImportsCleanly
+	"M4 partial — ``import jinja2`` succeeds and exposes the
+	public surface Flask hello-world reaches for.  Pre-template-
+	render milestone; running ``Template(...).render(...)`` is the
+	next step."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:jinja2_imports_cleanly.
+	self assert: (result @env1:__getitem__: 0) equals: true.
+	self assert: (result @env1:__getitem__: 1) equals: true.
+	self assert: (result @env1:__getitem__: 2) equals: true.
+	self assert: (result @env1:__getitem__: 3) equals: true
+%
+
 ! --- itsdangerous Signer round-trip (M3 partial) ------------------------
 
 category: 'Grail-Tests - itsdangerous'

@@ -295,3 +295,34 @@ def python_importlib_facade_callable():
     # ``import_module`` is the public entry point.
     import importlib
     return callable(importlib.import_module)
+
+
+def lru_cache_wrapper_has_cache_clear():
+    # ``functools.lru_cache(maxsize=N)`` returns a wrapper that
+    # exposes ``cache_clear`` / ``cache_info`` / ``__wrapped__``
+    # so consumers (jinja2.utils.clear_caches) can call
+    # ``fn.cache_clear()`` without MNU.  Caching itself is a no-op
+    # for now — every call re-invokes the underlying function.
+    import functools
+
+    @functools.lru_cache(maxsize=10)
+    def fib(n):
+        return n + 1
+
+    a = fib(3)
+    fib.cache_clear()           # no-op, must not error
+    info = fib.cache_info()     # (hits, misses, maxsize, currsize)
+    return (a, len(info), info[0], info[3])
+
+
+def jinja2_imports_cleanly():
+    # End-to-end: ``import jinja2`` succeeds and exposes the public
+    # surface Flask hello-world reaches for.  Pre-template-render
+    # milestone for M4.
+    import jinja2
+    return (
+        hasattr(jinja2, 'Environment'),
+        hasattr(jinja2, 'Template'),
+        hasattr(jinja2, 'DictLoader'),
+        hasattr(jinja2, 'StrictUndefined'),
+    )

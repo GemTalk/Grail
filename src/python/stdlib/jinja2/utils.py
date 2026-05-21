@@ -129,12 +129,21 @@ def clear_caches() -> None:
     used so that Jinja doesn't have to recreate environments and lexers all
     the time.  Normally you don't have to care about that but if you are
     measuring memory consumption you may want to clean the caches.
-    """
-    from .environment import get_spontaneous_environment
-    from .lexer import _lexer_cache
 
-    get_spontaneous_environment.cache_clear()
-    _lexer_cache.clear()
+    GRAIL: ``from .utils import clear_caches`` in jinja2/__init__.py
+    is compiled as a unary attribute read on the utils module class,
+    which under Grail's converted-module dispatch *invokes* the
+    function at import time rather than fetching a reference.  The
+    real body's ``get_spontaneous_environment.cache_clear()`` then
+    fires during ``import jinja2`` and crashes because Grail's
+    ``BoundMethod`` doesn't have a ``cache_clear`` attribute (even
+    with the LruCacheWrapper in place, the from-import-via-unary
+    path returns the bare wrapped function).  Stubbed as a no-op
+    until ImportFromAst learns to wrap 0-arg callables in
+    BoundMethod without breaking the regex engine's MAXREPEAT
+    constant fetch (which the naive ``unary-without-setter == 0-arg
+    fn`` discriminator confused with stored attributes)."""
+    return None
 
 
 def import_string(import_name: str, silent: bool = False) -> t.Any:

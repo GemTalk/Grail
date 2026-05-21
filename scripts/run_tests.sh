@@ -27,7 +27,11 @@ fi
 # Python methods + doit blocks (notably importing itsdangerous / Werkzeug /
 # Flask once each) to overflow the default 20%-of-cache code space.  Topaz
 # `-C` overrides take precedence over gem.conf.
-TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=150000;"
+#
+# CACHE_SIZE bumped to 100MB (default 50MB) so the suite finishes without
+# spurious markSweep-exhaustion errors in late ReModule / VarargsAndImports
+# tests once the cumulative ~1988-test working set crosses ~37MB old gen.
+TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=150000;GEM_TEMPOBJ_CACHE_SIZE=100000;"
 
 EXIT=0
 LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S scripts/runTests.gs < /dev/null || EXIT=$?

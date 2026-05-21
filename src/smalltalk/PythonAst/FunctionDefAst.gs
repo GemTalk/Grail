@@ -119,6 +119,13 @@ printSmalltalkOn: aStream
 			nextPutAll: ' := (BoundMethod receiver: self selector: #';
 			nextPutAll: name;
 			nextPutAll: ').'.
+		"NOTE: module-level decorators on top-level defs are NOT yet
+		applied here.  ``self.name`` resolves to the real method on the
+		module class via Phase-4d dispatch, which would bypass any
+		runtime wrapper rebound into the local ``name``.  Wiring this up
+		needs an attribute-load shim that consults the wrapper-holding
+		instVar before falling through to the BoundMethod; deferred
+		until a module-level @decorator is actually load-bearing."
 		^self
 	].
 
@@ -206,6 +213,45 @@ printSmalltalkOn: aStream
 		nextPutAll: '] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue].';
 		lf.
 	aStream decreaseIndent; nextPutAll: '].'.
+	"Apply decorators bottom-up.  ``@A @B def f: ...`` rebinds f to
+	``A(B(f))`` — the decorator nearest the def (B) runs first, so
+	iterate in reverse.  Skip Symbol entries that are class-body
+	special markers (``staticmethod`` / ``classmethod`` / ``property``);
+	those mutate the function's *class* via changeClassTo: at parse
+	time and must NOT be re-applied as runtime calls."
+	decorator_list isNil ifFalse: [
+		decorator_list reverseDo: [:deco |
+			(self isClassDeclarativeDecorator: deco) ifFalse: [
+				aStream
+					lf;
+					nextPutAll: name;
+					nextPutAll: ' := '.
+				(deco isKindOf: Symbol)
+					ifTrue: [aStream nextPutAll: deco asString]
+					ifFalse: [deco printSmalltalkWithParenthesisOn: aStream].
+				aStream
+					nextPutAll: ' value: { ';
+					nextPutAll: name;
+					nextPutAll: ' } value: nil.'.
+			].
+		].
+	].
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+isClassDeclarativeDecorator: deco
+	"True if ``deco`` is a bare-name decorator that Grail handles at
+	parse time by re-classing the FunctionDefAst (staticmethod /
+	classmethod / property).  Those must NOT be re-applied as
+	runtime decorator calls — the AST node is already a
+	StaticFunctionDefAst / ClassFunctionDefAst, and the @property
+	getter is paired with an auto-generated setter."
+
+	| s |
+	(deco isKindOf: Symbol) ifFalse: [^ false].
+	s := deco asSymbol.
+	^ s == #'staticmethod' or: [s == #'classmethod' or: [s == #'property']]
 %
 
 category: 'Grail-accessing'
