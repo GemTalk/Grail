@@ -375,11 +375,21 @@ __new__: obj
 		^ obj
 	].
 
-	"Try to call __bool__ on the object if it has one"
-	(obj @env0:respondsTo: #__bool__) ifTrue: [
-		result := obj __bool__.
-		^ result
-	].
+	"Try to call __bool__ on the object via env-1 dispatch.  env-0
+	``respondsTo:`` only inspects env-0 method dictionaries; Python's
+	``__bool__`` is compiled in env 1 on user classes (e.g. Grail's
+	collections.deque), so the check used to miss and fall through to
+	the unconditional ``true`` below — leaving every empty user
+	container truthy."
+	result := [obj __bool__]
+		@env0:on: MessageNotUnderstood do: [:ex | ex @env0:return: #__noBool__].
+	result == #__noBool__ ifFalse: [^ result].
+
+	"Try __len__ next: ``bool(x)`` defers to ``len(x) != 0`` when
+	__bool__ is absent — matches CPython's PEP-3119 fallback."
+	result := [obj __len__]
+		@env0:on: MessageNotUnderstood do: [:ex | ex @env0:return: #__noLen__].
+	result == #__noLen__ ifFalse: [^ result @env0:~= 0].
 
 	"For integers, 0 is False, everything else is True"
 	(obj @env0:isKindOf: int) ifTrue: [

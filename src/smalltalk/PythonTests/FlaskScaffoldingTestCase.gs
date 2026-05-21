@@ -716,6 +716,23 @@ testStrTranslateBasic
 
 category: 'Grail-Tests - jinja2 plumbing'
 method: FlaskScaffoldingTestCase
+testEmptyUserContainerIsFalsy
+	"Regression: ``bool(obj)`` used env-0 ``respondsTo: #__bool__``
+	which couldn't see env-1 Python ``__bool__`` methods on user
+	classes, then fell through to the unconditional ``true``.
+	jinja2's TokenStream relied on ``if self._pushed:`` (deque)
+	being falsy when empty; the bug triggered ``popleft`` on the
+	empty deque immediately after init."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:empty_user_container_is_falsy.
+	self assert: (result @env1:__getitem__: 0) equals: false.
+	self assert: (result @env1:__getitem__: 1) equals: true
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
 testChainedCompareInMethodParam
 	"Regression: a class method that takes parameters AND uses a
 	chained comparison in the body.  CompareAst.allocateTemp used

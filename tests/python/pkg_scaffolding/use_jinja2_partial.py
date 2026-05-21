@@ -384,3 +384,18 @@ def str_translate_basic():
     # uses this; jinja2's lexer pulls in re.escape transitively.
     table = {ord('a'): 'X', ord('e'): None, ord('i'): 105}  # i->i (no-op via int)
     return 'aeiou'.translate(table)
+
+
+def empty_user_container_is_falsy():
+    # Regression: Grail's ``bool(obj)`` deferred to env-0 ``respondsTo:
+    # #__bool__`` which can't see env-1 Python ``__bool__`` methods on
+    # user classes, then fell through to the unconditional ``true``.
+    # Result: ``if my_deque:`` always ran the truthy branch, and
+    # jinja2's TokenStream tripped ``popleft`` on an empty ``_pushed``
+    # deque immediately after init.
+    from collections import deque
+    d = deque()
+    empty_truthy = bool(d)
+    d.append(1)
+    nonempty_truthy = bool(d)
+    return (empty_truthy, nonempty_truthy)
