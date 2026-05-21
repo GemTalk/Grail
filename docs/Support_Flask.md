@@ -262,9 +262,25 @@ Existing stub modules that need extending later: `typing`,
   Grail doesn't have); `jinja2.utils.Namespace.__init__` rewritten
   with a conventional `self` parameter (Grail's codegen rejects
   the upstream `def __init__(*args, **kwargs): self, args = ...`
-  trick with "expected an assignable variable").  Current blocker:
-  `jinja2.compiler` triggers a Smalltalk `CompileError: variable
-  has already been declared` mid-compile — needs the next
+  trick with "expected an assignable variable").  More blockers down: closure block params renamed to
+  `___positional___` / `___kwargs___` sentinels (the upstream
+  `def new_func(self, ..., **kwargs):` inside a `@optimizeconst`
+  decorator collided with the dispatch temp `kwargs`); ForAst
+  recurses into nested tuple targets (`for target, (action,
+  param) in items`); AssignAst tuple-store path dispatches per
+  element (Attribute / Subscript / nested Tuple) instead of
+  calling `printSmalltalkOn:` on a Store-context node; ClassDefAst
+  filters `instVarNames:` against the parent's
+  `allInstVarNames` (the subclass walker rediscovers parent ivars
+  like `self.templates` on jinja2's TemplatesNotFound); stdlib
+  stubs added for `itertools`, `keyword`; `functools` gains
+  `update_wrapper` (no-op) + `WRAPPER_ASSIGNMENTS` /
+  `WRAPPER_UPDATES`; `inspect.getattr_static` stub;
+  `jinja2.{compiler,idtracking,runtime}` patched to replace
+  class-body `X = Y = method_name` aliases with delegating
+  methods.  Current blocker: somewhere later in jinja2 init a
+  `KeyValueDictionary class` receives an env-1 `keys` message
+  (likely `dict.keys` referenced as an unbound method); next
   bisection pass.
 - **M5 — `werkzeug.wrappers.Request/Response` round-trip a WSGI
   environ.**

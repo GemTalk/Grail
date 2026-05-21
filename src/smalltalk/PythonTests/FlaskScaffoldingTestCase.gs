@@ -485,6 +485,60 @@ testBuiltinTypeInClassMethod
 	self assert: mod @env1:builtin_type_in_class_method equals: true
 %
 
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testClosureWithUserKwargsParam
+	"Nested ``def inner(self, **kwargs):`` used to fail Smalltalk
+	compile with 'variable has already been declared' because the
+	closure header emitted ``[:positional :kwargs |`` and then
+	redeclared ``kwargs`` as a block temp.  Closure block params
+	are now sentinels (``___positional___`` / ``___kwargs___``)."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:closure_with_user_kwargs_param.
+	self assert: result equals: 'compiled-ok'
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testNestedForTupleUnpack
+	"``for target, (action, param) in items:`` — nested tuple
+	unpacking in for-loop targets.  ForAst's unpack codegen now
+	recurses into nested tuples (it used to assume each element
+	was a NameAst and ``elt id`` MNU'd on the inner TupleAst)."
+
+	| mod result first second |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:nested_for_tuple_unpack.
+	self assert: result @env0:size equals: 2.
+	first := result @env1:__getitem__: 0.
+	self assert: (first @env1:__getitem__: 0) equals: 'a'.
+	self assert: (first @env1:__getitem__: 1) equals: 'load'.
+	self assert: (first @env1:__getitem__: 2) equals: 1.
+	second := result @env1:__getitem__: 1.
+	self assert: (second @env1:__getitem__: 0) equals: 'b'.
+	self assert: (second @env1:__getitem__: 1) equals: 'store'.
+	self assert: (second @env1:__getitem__: 2) equals: 2
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testSubclassRedeclaresInstvar
+	"``class Sub(Parent):`` where both classes have a ``self.x =``
+	assignment used to fail with rtErrAddDupInstvar because the
+	subclass walker rediscovered ``x`` and ClassDefAst emitted it
+	back into ``instVarNames:``.  Filtered against the parent's
+	allInstVarNames now."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:subclass_redeclares_instvar.
+	self assert: result @env0:size equals: 2.
+	self assert: (result @env0:at: 1) equals: 'a'.
+	self assert: (result @env0:at: 2) equals: 'b'
+%
+
 ! --- itsdangerous Signer round-trip (M3 partial) ------------------------
 
 category: 'Grail-Tests - itsdangerous'

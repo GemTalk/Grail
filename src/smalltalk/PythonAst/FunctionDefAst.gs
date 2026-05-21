@@ -122,9 +122,17 @@ printSmalltalkOn: aStream
 		^self
 	].
 
+	"Block params are renamed to underscored sentinels so a user
+	parameter named ``positional`` or ``kwargs`` (Jinja2's
+	``optimizeconst`` wraps ``def new_func(self, node, frame,
+	**kwargs):``) doesn't collide with the dispatch temps —
+	Smalltalk rejects a block where the same name appears as both
+	a parameter and a declared temp.  The dispatch code below
+	(printPositionalUnpackingOn: + the *vararg / **kwarg bindings)
+	is rerouted to the sentinel names to match."
 	aStream
 		nextPutAll: name;
-		nextPutAll: ' := [:positional :kwargs |';
+		nextPutAll: ' := [:___positional___ :___kwargs___ |';
 		lf;
 		increaseIndent.
 	"Collect every name we need as a block temp: fixed positionals,
@@ -147,23 +155,28 @@ printSmalltalkOn: aStream
 		paramNames do: [:n | aStream nextPutAll: n; space].
 		aStream nextPut: $|; lf.
 	].
-	"Bind fixed positionals (with default fallback)."
-	self printPositionalUnpackingOn: aStream paramNames: (args args collect: [:a | a name]).
+	"Bind fixed positionals (with default fallback) — closure path
+	uses the underscored sentinels declared as block params."
+	self
+		printPositionalUnpackingOn: aStream
+		paramNames: (args args collect: [:a | a name])
+		positionalName: '___positional___'
+		kwargsName: '___kwargs___'.
 	"Bind *vararg to the tail of positional, wrapped as a tuple. When
 	the call passed exactly the fixed args, the tail is empty."
 	args vararg ifNotNil: [
 		aStream
 			nextPutAll: args vararg name;
-			nextPutAll: ' := tuple perform: #withAll: env: 0 withArguments: { positional @env0:copyFrom: ';
+			nextPutAll: ' := tuple perform: #withAll: env: 0 withArguments: { ___positional___ @env0:copyFrom: ';
 			print: fixedCount + 1;
-			nextPutAll: ' to: positional @env0:size }.';
+			nextPutAll: ' to: ___positional___ @env0:size }.';
 			lf.
 	].
 	"Bind **kwarg to the keyword dict (or an empty dict if nil was passed)."
 	args kwarg ifNotNil: [
 		aStream
 			nextPutAll: args kwarg name;
-			nextPutAll: ' := kwargs ifNil: [(KeyValueDictionary perform: #new env: 0)].';
+			nextPutAll: ' := ___kwargs___ ifNil: [(KeyValueDictionary perform: #new env: 0)].';
 			lf.
 	].
 	aStream
@@ -300,6 +313,19 @@ allParameterNames
 category: 'Grail-Module Method Compilation'
 method: FunctionDefAst
 printPositionalUnpackingOn: aStream paramNames: paramNames
+	"Module / class method form — uses the canonical ``positional``
+	and ``kwargs`` parameter names that Grail's method headers bind."
+
+	^ self
+		printPositionalUnpackingOn: aStream
+		paramNames: paramNames
+		positionalName: 'positional'
+		kwargsName: 'kwargs'
+%
+
+category: 'Grail-Module Method Compilation'
+method: FunctionDefAst
+printPositionalUnpackingOn: aStream paramNames: paramNames positionalName: posName kwargsName: kwName
 	"Emit Smalltalk code that binds each named parameter, in priority order:
 	  1. positional[i] when the call site passed at least i positional args
 	  2. kwargs[#name] when kwargs is non-nil and contains the param name
@@ -308,7 +334,13 @@ printPositionalUnpackingOn: aStream paramNames: paramNames
 
 	`args defaults` holds the default ASTs right-aligned across the combined
 	posonlyargs + args sequence (CPython semantics): the last N parameters
-	have defaults, the earlier ones are required."
+	have defaults, the earlier ones are required.
+
+	``posName`` / ``kwName`` are the Smalltalk identifiers that hold the
+	positional Array + keyword Dictionary at this codegen point.  The
+	closure path passes underscored sentinels (``___positional___`` /
+	``___kwargs___``) so a user parameter named ``positional`` or ``kwargs``
+	doesn't collide with the dispatch temps."
 
 	| numParams numDefaults firstWithDefault |
 	numParams := paramNames size.
@@ -321,17 +353,27 @@ printPositionalUnpackingOn: aStream paramNames: paramNames
 		"Open the positional gate."
 		aStream
 			nextPutAll: pname;
-			nextPutAll: ' := ((positional @env0:size) @env0:>= ';
+			nextPutAll: ' := ((';
+			nextPutAll: posName;
+			nextPutAll: ' @env0:size) @env0:>= ';
 			print: i;
-			nextPutAll: ') ifTrue: [positional @env0:at: ';
+			nextPutAll: ') ifTrue: [';
+			nextPutAll: posName;
+			nextPutAll: ' @env0:at: ';
 			print: i;
 			nextPutAll: '] ifFalse: ['.
 		"Kwargs fallback — only if kwargs may be non-nil at the call
 		site (varargs methods accept both)."
 		aStream
-			nextPutAll: '(kwargs @env0:isNil @env0:not and: [kwargs @env0:includesKey: #';
+			nextPutAll: '(';
+			nextPutAll: kwName;
+			nextPutAll: ' @env0:isNil @env0:not and: [';
+			nextPutAll: kwName;
+			nextPutAll: ' @env0:includesKey: #';
 			nextPutAll: pname;
-			nextPutAll: ']) ifTrue: [kwargs @env0:at: #';
+			nextPutAll: ']) ifTrue: [';
+			nextPutAll: kwName;
+			nextPutAll: ' @env0:at: #';
 			nextPutAll: pname;
 			nextPutAll: '] ifFalse: ['.
 		hasDefault ifTrue: [

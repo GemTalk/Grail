@@ -179,13 +179,30 @@ class RootVisitor(NodeVisitor):
         for child in node.iter_child_nodes():
             self.sym_visitor.visit(child)
 
-    visit_Template = _simple_visit
-    visit_Block = _simple_visit
-    visit_Macro = _simple_visit
-    visit_FilterBlock = _simple_visit
-    visit_Scope = _simple_visit
-    visit_If = _simple_visit
-    visit_ScopedEvalContextModifier = _simple_visit
+    # GRAIL: ``visit_X = _simple_visit`` aliases inside the class
+    # body don't compile — Grail's NameAst can't resolve a
+    # class-scope def as a module-scope local at the alias point.
+    # Wrap each visitor as a delegating method instead.
+    def visit_Template(self, node, **kwargs):
+        return self._simple_visit(node, **kwargs)
+
+    def visit_Block(self, node, **kwargs):
+        return self._simple_visit(node, **kwargs)
+
+    def visit_Macro(self, node, **kwargs):
+        return self._simple_visit(node, **kwargs)
+
+    def visit_FilterBlock(self, node, **kwargs):
+        return self._simple_visit(node, **kwargs)
+
+    def visit_Scope(self, node, **kwargs):
+        return self._simple_visit(node, **kwargs)
+
+    def visit_If(self, node, **kwargs):
+        return self._simple_visit(node, **kwargs)
+
+    def visit_ScopedEvalContextModifier(self, node, **kwargs):
+        return self._simple_visit(node, **kwargs)
 
     def visit_AssignBlock(self, node: nodes.AssignBlock, **kwargs: t.Any) -> None:
         for child in node.body:

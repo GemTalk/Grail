@@ -145,39 +145,121 @@ printSmalltalkTupleStoreOn: aStream target: tgt
 	aStream nextPutAll: '. '.
 	starIdx = 0 ifTrue: [
 		elts doWithIndex: [:elt :i |
-			elt printSmalltalkOn: aStream.
-			aStream nextPutAll: ' := '; nextPutAll: holder; nextPutAll: ' __getitem__: '; print: i - 1; nextPutAll: '. '.
+			self
+				emitTupleElementStoreOn: aStream
+				target: elt
+				holder: holder
+				indexExpr: (i - 1) printString
 		].
 	] ifFalse: [
 		elts doWithIndex: [:elt :i |
 			i < starIdx ifTrue: [
 				"Before the star — positive index from start."
-				elt printSmalltalkOn: aStream.
-				aStream nextPutAll: ' := '; nextPutAll: holder; nextPutAll: ' __getitem__: '; print: i - 1; nextPutAll: '. '.
+				self
+					emitTupleElementStoreOn: aStream
+					target: elt
+					holder: holder
+					indexExpr: (i - 1) printString
 			] ifFalse: [(i = starIdx)
 				ifTrue: [
 					"Star itself: slice from current index to (size-after-star) before end."
-					| afterCount |
+					| afterCount sliceExpr |
 					afterCount := elts size - i.
-					elt value printSmalltalkOn: aStream.
-					aStream nextPutAll: ' := '; nextPutAll: holder; nextPutAll: ' __getslice__: '; print: i - 1; nextPutAll: ' _: '.
-					afterCount = 0
-						ifTrue: [aStream nextPutAll: 'nil']
-						ifFalse: [aStream nextPutAll: '-'; print: afterCount].
-					aStream nextPutAll: ' _: nil. '.
+					sliceExpr := holder , ' __getslice__: ' , (i - 1) printString , ' _: '
+						, (afterCount = 0 ifTrue: ['nil'] ifFalse: ['-' , afterCount printString])
+						, ' _: nil'.
+					self
+						emitTupleElementStoreOn: aStream
+						target: elt value
+						holder: holder
+						indexExpr: nil
+						directRhs: sliceExpr
 				] ifFalse: [
-					"After the star — negative index from end.  i is
-					1-based and the last element is offset 1 from end, so
-					the offset is `elts size - i + 1`."
+					"After the star — negative index from end."
 					| offsetFromEnd |
 					offsetFromEnd := elts size - i + 1.
-					elt printSmalltalkOn: aStream.
-					aStream nextPutAll: ' := '; nextPutAll: holder; nextPutAll: ' __getitem__: -'; print: offsetFromEnd; nextPutAll: '. '.
+					self
+						emitTupleElementStoreOn: aStream
+						target: elt
+						holder: holder
+						indexExpr: '-' , offsetFromEnd printString
 				]
 			].
 		].
 	].
 	aStream nextPutAll: '] value.'
+%
+
+category: 'other'
+method: AssignAst
+emitTupleElementStoreOn: aStream target: aTarget holder: holder indexExpr: indexExpr
+	"Convenience entry for the regular (non-star) per-element store
+	— builds the holder __getitem__: <index> RHS."
+
+	^ self
+		emitTupleElementStoreOn: aStream
+		target: aTarget
+		holder: holder
+		indexExpr: indexExpr
+		directRhs: nil
+%
+
+category: 'other'
+method: AssignAst
+emitTupleElementStoreOn: aStream target: aTarget holder: holder indexExpr: indexExpr directRhs: directRhs
+	"Emit a single target's store inside a tuple-unpack.  Handles
+	NameAst (plain assignment), AttributeAst (env-1 setter or
+	classmethod self-ref instVar write), SubscriptAst
+	(``obj[i] = ...``), and nested Tuple/List targets (recurse).
+
+	``directRhs`` is a pre-built Smalltalk source expression used
+	for the star-slice path; when nil, the RHS is
+	``holder __getitem__: indexExpr``."
+
+	| rhs |
+	rhs := directRhs ifNil: [holder , ' __getitem__: ' , indexExpr].
+	(aTarget isKindOf: AttributeAst) ifTrue: [
+		"obj.attr = rhs — use the attribute-store helper."
+		((aTarget value isKindOf: NameAst)
+			and: [CallAst isSelfReference: aTarget value id]) ifTrue: [
+			aStream nextPutAll: aTarget attr; nextPutAll: ' := '; nextPutAll: rhs; nextPutAll: '. '.
+			^ self
+		].
+		aTarget value printSmalltalkWithParenthesisOn: aStream.
+		aStream
+			nextPutAll: ' @env1:';
+			nextPutAll: aTarget attr;
+			nextPutAll: ': (';
+			nextPutAll: rhs;
+			nextPutAll: '). '.
+		^ self
+	].
+	(aTarget isKindOf: SubscriptAst) ifTrue: [
+		"obj[idx] = rhs — __setitem__:_: dispatch."
+		aTarget value printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPutAll: ' __setitem__: '.
+		aTarget slice printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPutAll: ' _: ('; nextPutAll: rhs; nextPutAll: '). '.
+		^ self
+	].
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		"Nested unpacking: recurse using a fresh holder."
+		| nestedHolder |
+		nestedHolder := holder , '_n'.
+		aStream nextPutAll: '[| '; nextPutAll: nestedHolder; nextPutAll: ' | '; nextPutAll: nestedHolder; nextPutAll: ' := '; nextPutAll: rhs; nextPutAll: '. '.
+		aTarget elts doWithIndex: [:innerElt :j |
+			self
+				emitTupleElementStoreOn: aStream
+				target: innerElt
+				holder: nestedHolder
+				indexExpr: (j - 1) printString
+		].
+		aStream nextPutAll: '] value. '.
+		^ self
+	].
+	"Default: NameAst / starred wrapper — bare assignment."
+	aTarget printSmalltalkOn: aStream.
+	aStream nextPutAll: ' := '; nextPutAll: rhs; nextPutAll: '. '
 %
 
 category: 'Grail-other'

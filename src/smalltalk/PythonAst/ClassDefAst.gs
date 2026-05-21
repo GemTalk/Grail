@@ -161,7 +161,15 @@ printSmalltalkRuntimeOn: aStream
 		nextPutAll: ' := [:___parent___ | ___parent___ @env0:subclass: #''';
 		nextPutAll: (importlib @env0:___asSmalltalkClassName___: name) asString;
 		nextPutAll: ''' instVarNames: '.
+	"Filter instVar names against the parent's existing instVar
+	list — Smalltalk rejects re-declaration with rtErrAddDupInstvar
+	when a subclass walker rediscovers an instVar the parent already
+	declared (e.g. ``self.templates`` defined in both Jinja2's
+	TemplateNotFound and TemplatesNotFound)."
+	aStream nextPut: $(.
 	self printSymbolArray: ivarNames on: aStream.
+	aStream nextPutAll:
+' @env0:reject: [:___n___ | ___parent___ @env0:allInstVarNames @env0:includes: ___n___])'.
 	aStream nextPutAll: ' classVars: #() classInstVars: '.
 	"Filter out names already declared on the parent's metaclass —
 	in the bases-empty case the parent is PythonInstance, whose

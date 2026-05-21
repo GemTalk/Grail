@@ -869,16 +869,84 @@ class Undefined:
 
         return self._fail_with_undefined_error()
 
-    __add__ = __radd__ = __sub__ = __rsub__ = _fail_with_undefined_error
-    __mul__ = __rmul__ = __div__ = __rdiv__ = _fail_with_undefined_error
-    __truediv__ = __rtruediv__ = _fail_with_undefined_error
-    __floordiv__ = __rfloordiv__ = _fail_with_undefined_error
-    __mod__ = __rmod__ = _fail_with_undefined_error
-    __pos__ = __neg__ = _fail_with_undefined_error
-    __call__ = __getitem__ = _fail_with_undefined_error
-    __lt__ = __le__ = __gt__ = __ge__ = _fail_with_undefined_error
-    __int__ = __float__ = __complex__ = _fail_with_undefined_error
-    __pow__ = __rpow__ = _fail_with_undefined_error
+    # GRAIL: ``X = Y = _fail_with_undefined_error`` chained class-body
+    # aliases don't compile (the alias target is a class-body def,
+    # not a module-scope local).  Replace each with a delegating
+    # method.  Many dunders to cover; keep the list explicit.
+    def __add__(self, other):
+        return self._fail_with_undefined_error()
+
+    def __radd__(self, other):
+        return self._fail_with_undefined_error()
+
+    def __sub__(self, other):
+        return self._fail_with_undefined_error()
+
+    def __rsub__(self, other):
+        return self._fail_with_undefined_error()
+
+    def __mul__(self, other):
+        return self._fail_with_undefined_error()
+
+    def __rmul__(self, other):
+        return self._fail_with_undefined_error()
+
+    def __truediv__(self, other):
+        return self._fail_with_undefined_error()
+
+    def __rtruediv__(self, other):
+        return self._fail_with_undefined_error()
+
+    def __floordiv__(self, other):
+        return self._fail_with_undefined_error()
+
+    def __rfloordiv__(self, other):
+        return self._fail_with_undefined_error()
+
+    def __mod__(self, other):
+        return self._fail_with_undefined_error()
+
+    def __rmod__(self, other):
+        return self._fail_with_undefined_error()
+
+    def __pos__(self):
+        return self._fail_with_undefined_error()
+
+    def __neg__(self):
+        return self._fail_with_undefined_error()
+
+    def __call__(self, *args, **kwargs):
+        return self._fail_with_undefined_error()
+
+    def __getitem__(self, key):
+        return self._fail_with_undefined_error()
+
+    def __lt__(self, other):
+        return self._fail_with_undefined_error()
+
+    def __le__(self, other):
+        return self._fail_with_undefined_error()
+
+    def __gt__(self, other):
+        return self._fail_with_undefined_error()
+
+    def __ge__(self, other):
+        return self._fail_with_undefined_error()
+
+    def __int__(self):
+        return self._fail_with_undefined_error()
+
+    def __float__(self):
+        return self._fail_with_undefined_error()
+
+    def __complex__(self):
+        return self._fail_with_undefined_error()
+
+    def __pow__(self, other):
+        return self._fail_with_undefined_error()
+
+    def __rpow__(self, other):
+        return self._fail_with_undefined_error()
 
     def __eq__(self, other: t.Any) -> bool:
         return type(self) is type(other)

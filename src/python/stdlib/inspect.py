@@ -112,3 +112,15 @@ def stack():
 
 def currentframe():
     return None
+
+
+def getattr_static(obj, name, default=None):
+    """``inspect.getattr_static(obj, name)`` — CPython's
+    descriptor-bypassing attribute lookup.  Grail has no descriptor
+    machinery and getattr() already returns the underlying value
+    rather than running descriptors, so the stub just delegates to
+    builtin ``getattr`` with the same default-fallback semantics."""
+    try:
+        return getattr(obj, name)
+    except AttributeError:
+        return default

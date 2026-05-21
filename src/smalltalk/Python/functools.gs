@@ -45,6 +45,27 @@ initialize
 	"No-op — all methods are real fast-path methods."
 %
 
+category: 'Grail-Built-in Functions'
+method: functools
+WRAPPER_ASSIGNMENTS
+	"Tuple of attribute names ``functools.update_wrapper`` copies
+	from wrapped to wrapper.  Matches CPython 3.x.  Grail's
+	update_wrapper stub doesn't actually copy anything, but the
+	constant is exported for callers that read it (jinja2.compiler
+	splices it into a decorator's signature)."
+
+	^ tuple @env0:withAll: #('__module__' '__name__' '__qualname__' '__annotations__' '__type_params__' '__doc__')
+%
+
+category: 'Grail-Built-in Functions'
+method: functools
+WRAPPER_UPDATES
+	"Tuple of attribute names ``functools.update_wrapper`` MERGES
+	from wrapped into wrapper (default: just ``__dict__``)."
+
+	^ tuple @env0:withAll: #('__dict__')
+%
+
 ! ===============================================================================
 ! Fast-path callables
 ! ===============================================================================
@@ -80,6 +101,30 @@ wraps: wrapped
 	onto the wrapper.  Stub: identity decorator."
 
 	^ [:positional :keywords | positional @env0:at: 1]
+%
+
+category: 'Grail-Built-in Functions'
+method: functools
+update_wrapper: wrapper _: wrapped
+	"functools.update_wrapper(wrapper, wrapped[, ...]) — copy
+	identifying metadata (``__module__``, ``__name__``, ``__doc__``,
+	``__dict__``, ``__wrapped__``) from wrapped onto wrapper.  Used
+	by Jinja2's ``optimizeconst`` (and the rest of the decorator
+	ecosystem) at module-init time.  Stub: return wrapper
+	unchanged.  Grail's BoundMethod / closure shapes don't honor
+	user-stamped ``__name__`` anyway, so the copy is a no-op until
+	there's a real need."
+
+	^ wrapper
+%
+
+category: 'Grail-Built-in Functions'
+method: functools
+_update_wrapper: positional kw: kwargs
+	"Varargs form of update_wrapper for the ``assigned=`` /
+	``updated=`` keyword variants — same identity stub."
+
+	^ positional @env0:at: 1
 %
 
 category: 'Grail-Built-in Functions'

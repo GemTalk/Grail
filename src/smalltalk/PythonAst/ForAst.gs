@@ -104,10 +104,13 @@ printSmalltalkOn: aStream
 	isTupleTarget ifTrue: [
 		"Tuple unpacking: item := iter __next__."
 		aStream nextPutAll: itemTemp; nextPutAll: ' := '; nextPutAll: iterTemp; nextPutAll: ' __next__.'; lf.
-		"Unpack each element"
-		target elts doWithIndex: [:elt :i |
-			aStream nextPutAll: elt id; nextPutAll: ' := '; nextPutAll: itemTemp; nextPutAll: ' __getitem__: '; print: i - 1; nextPut: $.; lf.
-		].
+		"Unpack each element, recursing into nested tuples like
+		``for target, (action, param) in items``."
+		self
+			emitUnpackOn: aStream
+			target: target
+			source: itemTemp
+			depth: depth.
 	] ifFalse: [
 		"Simple: target := iter __next__."
 		target printSmalltalkOn: aStream.
@@ -141,4 +144,41 @@ category: 'Grail-accessing'
 method: ForAst
 addVariableNamesTo: aStream
 	target addVariableNamesTo: aStream.
+%
+
+category: 'Grail-code generation'
+method: ForAst
+emitUnpackOn: aStream target: aTarget source: sourceExpr depth: aDepth
+	"Recursively unpack ``aTarget`` (a NameAst or a nested
+	TupleAst / ListAst) by reading from the parenthesized
+	Smalltalk expression ``sourceExpr``.  For a plain NameAst emit
+	a single assignment; for a tuple-shaped target generate
+	per-element ``__getitem__:`` reads, and recurse for nested
+	tuples by reusing the wrapped subscript expression as the
+	source.  Re-evaluates the subscript per name on each level —
+	acceptable because the source is typically a fast indexable
+	(tuple / list) and the alternative would require declaring
+	fresh outer-block temps after the temp pane has been emitted."
+
+	(aTarget isKindOf: NameAst) ifTrue: [
+		aStream nextPutAll: aTarget id; nextPutAll: ' := '; nextPutAll: sourceExpr; nextPut: $.; lf.
+		^ self
+	].
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		aTarget elts doWithIndex: [:elt :i |
+			| childExpr |
+			childExpr := '(' , sourceExpr , ' __getitem__: ' , (i - 1) printString , ')'.
+			self
+				emitUnpackOn: aStream
+				target: elt
+				source: childExpr
+				depth: aDepth
+		].
+		^ self
+	].
+	"Fallback: emit a single assignment via the target's own
+	printSmalltalkOn:.  Covers attribute / subscript targets that
+	the parser rarely produces in for-loops but might appear."
+	aTarget printSmalltalkOn: aStream.
+	aStream nextPutAll: ' := '; nextPutAll: sourceExpr; nextPut: $.; lf
 %

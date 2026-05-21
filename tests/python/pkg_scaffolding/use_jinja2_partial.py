@@ -156,3 +156,54 @@ def builtin_type_in_class_method():
     return _Holder().kind() == '_Holder' or True
     # accept either '_Holder' or the encoded ``__main___Holder`` —
     # the point is the call returns a string without erroring.
+
+
+def closure_with_user_kwargs_param():
+    # ``def inner(self, **kwargs):`` nested inside another def used
+    # to fail Smalltalk compile with "variable has already been
+    # declared" because the closure header emitted
+    # ``[:positional :kwargs |`` and then declared ``kwargs`` as a
+    # block temp.  Closure block params are now sentinels
+    # (``___positional___`` / ``___kwargs___``) so a user parameter
+    # named ``kwargs`` is fine — closure compiles and is callable.
+    # (Keyword-arg call-site routing is a separate concern; this
+    # test just verifies the compile barrier is past.)
+    def inner(self, **kwargs):
+        return self
+    return inner('compiled-ok')
+
+
+def nested_for_tuple_unpack():
+    # ``for target, (action, param) in items:`` — used to fail with
+    # ``TupleAst does not understand #id`` because ForAst's unpack
+    # codegen assumed every element was a NameAst.  Now recurses
+    # into nested tuple targets.
+    items = [
+        ('a', ('load', 1)),
+        ('b', ('store', 2)),
+    ]
+    out = []
+    for target, (action, param) in items:
+        out.append((target, action, param))
+    return tuple(out)
+
+
+class _DupParent:
+    def __init__(self, name):
+        self.templates = [name]
+
+
+class _DupChild(_DupParent):
+    def __init__(self, names):
+        super().__init__(names[0])
+        # GRAIL: the parent already discovered ``templates`` as an
+        # instVar; the subclass walker rediscovers it.  ClassDefAst
+        # filters the subclass's ivar list against parent's
+        # allInstVarNames so the subclass: call doesn't fail with
+        # rtErrAddDupInstvar.
+        self.templates = list(names)
+
+
+def subclass_redeclares_instvar():
+    c = _DupChild(['a', 'b'])
+    return list(c.templates)

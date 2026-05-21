@@ -242,7 +242,11 @@ class Frame:
         rv.soft_frame = True
         return rv
 
-    __copy__ = copy
+    # GRAIL: ``__copy__ = copy`` class-body alias doesn't compile —
+    # the alias target is a class-body def, not a module-scope local.
+    # Wrap as a delegating method.
+    def __copy__(self):
+        return self.copy()
 
 
 class VisitorExit(RuntimeError):
