@@ -234,13 +234,25 @@ printSmalltalkOn: aStream
 					^self
 				].
 			(self isModuleScopeName: id) ifTrue: [
-				aStream
-					nextPutAll: '((';
-					nextPutAll: CallAst moduleClassBeingCompiled name;
-					nextPutAll: ' @env0:___instance___) @env1:';
-					nextPutAll: id;
-					nextPutAll: ')'.
-				^self
+				"BUT: if the name is also declared as a local in an
+				enclosing function (parameter or assignment target),
+				the function's local shadows the module attribute —
+				Python's LEGB lookup gives local priority.  Fall
+				through to the regular declared-local branch in that
+				case.  Without this guard, a function parameter named
+				``x`` whose name happens to collide with a module-
+				level loop variable (e.g. from a generator expression
+				elsewhere in the file) would read the module instVar
+				instead of the parameter."
+				(self ___declaredInEnclosingFunction___: id) ifFalse: [
+					aStream
+						nextPutAll: '((';
+						nextPutAll: CallAst moduleClassBeingCompiled name;
+						nextPutAll: ' @env0:___instance___) @env1:';
+						nextPutAll: id;
+						nextPutAll: ')'.
+					^self
+				].
 			].
 			"Free name with no static binding.  Skip the runtime
 			lookup when the name IS a local of some enclosing scope
@@ -332,6 +344,76 @@ printSmalltalkOn: aStream
 		^ self
 	].
 	aStream nextPutAll: id.
+%
+
+category: 'other'
+method: NameAst
+___declaredInEnclosingFunction___: aSymbol
+	"True if aSymbol is declared as a local in some FunctionDefAst
+	or LambdaAst between this NameAst and the surrounding module
+	body — i.e. some enclosing function parameter or assignment
+	target.  Used by the load-context codegen to prefer a function-
+	local read over the module-scope-name shortcut so a function
+	parameter named ``x`` doesn't get read as a module instVar just
+	because ``x`` also appears as a comprehension loop var somewhere
+	in the same module."
+
+	| node |
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [
+				"At a function/lambda boundary, check whether the
+				function's body BlockAst (or its params) declares
+				aSymbol.  Stop here either way — outer functions
+				and the module scope are not 'enclosing function'
+				for the purpose of this check."
+				^ self ___functionDeclaresLocal___: node named: aSymbol].
+		node := node parent.
+	].
+	^ false
+%
+
+category: 'other'
+method: NameAst
+___functionDeclaresLocal___: funcAst named: aSymbol
+	"True iff the given FunctionDefAst or LambdaAst declares
+	aSymbol as a parameter or in its body's BlockAst variables.
+	Uses instVar access (no public getters on AST nodes)."
+
+	| ivars argsIdx bodyIdx argsNode bodyNode argsIvars |
+	ivars := funcAst class allInstVarNames.
+	argsIdx := ivars indexOf: #args.
+	bodyIdx := ivars indexOf: #body.
+	argsNode := argsIdx > 0 ifTrue: [funcAst instVarAt: argsIdx] ifFalse: [nil].
+	bodyNode := bodyIdx > 0 ifTrue: [funcAst instVarAt: bodyIdx] ifFalse: [nil].
+	argsNode ifNotNil: [
+		argsIvars := argsNode class allInstVarNames.
+		#(#args #posonlyargs #kwonlyargs) do: [:fld |
+			| idx list |
+			idx := argsIvars indexOf: fld.
+			idx > 0 ifTrue: [
+				list := argsNode instVarAt: idx.
+				list ifNotNil: [
+					(list anySatisfy: [:a | a name asSymbol == aSymbol asSymbol])
+						ifTrue: [^ true]
+				].
+			].
+		].
+		#(#vararg #kwarg) do: [:fld |
+			| idx v |
+			idx := argsIvars indexOf: fld.
+			idx > 0 ifTrue: [
+				v := argsNode instVarAt: idx.
+				(v notNil and: [v name asSymbol == aSymbol asSymbol])
+					ifTrue: [^ true].
+			].
+		].
+	].
+	((bodyNode isKindOf: BlockAst)
+		and: [bodyNode variables includes: aSymbol asSymbol])
+			ifTrue: [^ true].
+	^ false
 %
 
 category: 'other'

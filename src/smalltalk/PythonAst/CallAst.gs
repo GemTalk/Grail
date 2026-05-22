@@ -771,7 +771,15 @@ knownClassName
 	Used for the class-call arity mismatch error: a call with the wrong
 	number of arguments (or kwargs) to a known class generates a clean
 	Python TypeError instead of falling through to the broken legacy
-	`cls value: { args } value: kw` path."
+	`cls value: { args } value: kw` path.
+
+	When kwargs are present at the call site AND the class implements
+	a varargs ``_new:kw:`` (or ``___new__:kw:``) entry point, return
+	nil so the legacy ``value:value:`` form fires — Object class's
+	``value:value:`` routes kwargs-bearing class calls through
+	``_new:kw:``.  Without this, ``dict(*args, **kwargs)`` would
+	trip the arity-mismatch error even though dict.class has
+	``_new:kw:``."
 
 	| funcName cls metacls |
 	(function isKindOf: NameAst) ifFalse: [^nil].
@@ -780,6 +788,11 @@ knownClassName
 	cls := self class resolveClassForName: funcName.
 	cls ifNil: [^nil].
 	metacls := cls class.
+	keywords isEmpty ifFalse: [
+		((metacls whichClassIncludesSelector: #'_new:kw:' environmentId: 1) notNil
+			or: [(metacls whichClassIncludesSelector: #'___new__:kw:' environmentId: 1) notNil])
+				ifTrue: [^nil].
+	].
 	"Walk the metaclass chain (inherited __new__ counts)."
 	(metacls whichClassIncludesSelector: #__new__ environmentId: 1)
 		ifNotNil: [^funcName].

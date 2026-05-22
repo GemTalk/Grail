@@ -93,6 +93,28 @@ ___new___
 
 category: 'Grail-Convenience Methods'
 classmethod: object
+__new__: cls
+	"Python ``object.__new__(cls)`` — create a fresh instance of
+	``cls`` without running ``__init__``.  jinja2's Template
+	._from_namespace uses this to materialize a Template object
+	whose attributes get filled by the exec'd namespace."
+
+	^ cls @env0:new
+%
+
+category: 'Grail-Convenience Methods'
+classmethod: object
+___new__: positional kw: kwargs
+	"Varargs entry for ``object.__new__(cls, *args, **kwargs)`` —
+	called when the call site can't determine arity statically.
+	Ignores extra positional / keyword args (object.__new__ accepts
+	them silently when __init__ is overridden)."
+
+	^ (positional @env0:at: 1) @env0:new
+%
+
+category: 'Grail-Convenience Methods'
+classmethod: object
 ___new___: arg1 _: arg2
 	"Convenience method for calling __new__:_: from env 1 code"
 	^ self @env1:__new__: arg1 _: arg2

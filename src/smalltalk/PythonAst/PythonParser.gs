@@ -1186,7 +1186,8 @@ method: PythonParser
 parseFunctionDefWithDecorators: decorators
 	"Parse a function definition with already-parsed decorators."
 
-	| tok nameTok args returns body block funcNode decoratorNames variables |
+	| tok nameTok args returns body block funcNode decoratorNames variables
+	  savedNesting |
 	tok := self advance. "consume 'def'"
 	nameTok := self expectType: #NAME.
 	self declareVariable: nameTok value asSymbol.
@@ -1208,7 +1209,16 @@ parseFunctionDefWithDecorators: decorators
 	args kwonlyargs do: [:a | self declareVariable: a name asSymbol].
 	args vararg ifNotNil: [self declareVariable: args vararg name asSymbol].
 	args kwarg ifNotNil: [self declareVariable: args kwarg name asSymbol].
-	body := self parseBlock.
+	"Save + zero classNesting around the body parse so nested ``def
+	c(x):`` inside a method body doesn't get re-classed as an
+	InstanceFunctionDefAst (which would emit instance-style
+	dispatch + treat `x` as an instVar fallback).  Restored before
+	the InstanceFunctionDefAst conversion check below — that check
+	still uses the original (now-restored) nesting to decide
+	whether THIS def is at class-body level."
+	savedNesting := classNesting.
+	classNesting := 0.
+	body := [self parseBlock] ensure: [classNesting := savedNesting].
 	variables := self popScope.
 	block := BlockAst buildWithFields: (IdentityKeyValueDictionary new
 		at: #body put: body;

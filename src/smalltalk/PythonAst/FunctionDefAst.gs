@@ -186,6 +186,17 @@ printSmalltalkOn: aStream
 			nextPutAll: ' := ___kwargs___ ifNil: [(KeyValueDictionary perform: #new env: 0)].';
 			lf.
 	].
+	"Generator functions wrap the entire body in ``PythonGenerator
+	@env1:withBlock: [:___gen___ | ... ]`` so a call returns a lazy
+	generator instead of running the body to completion.  Matches
+	the module-method path's ``printBodyOn:``; without this, a
+	closure-form ``def gen(): yield x`` would emit ``___gen___
+	___yield___:`` references with no surrounding declaration —
+	compile error ``undefined symbol ___gen___``.  Eval and exec
+	paths both flow through this closure form."
+	self isGenerator ifTrue: [
+		aStream nextPutAll: 'PythonGenerator @env1:withBlock: [:___gen___ |'; lf.
+	].
 	aStream
 		nextPutAll: '[';
 		lf;
@@ -210,8 +221,12 @@ printSmalltalkOn: aStream
 	aStream nextPutAll: 'None.'; lf.
 	aStream
 		decreaseIndent;
-		nextPutAll: '] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue].';
+		nextPutAll: '] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue]';
 		lf.
+	self isGenerator ifTrue: [
+		aStream nextPutAll: ']'.
+	].
+	aStream nextPutAll: '.'; lf.
 	aStream decreaseIndent; nextPutAll: '].'.
 	"Apply decorators bottom-up.  ``@A @B def f: ...`` rebinds f to
 	``A(B(f))`` — the decorator nearest the def (B) runs first, so
