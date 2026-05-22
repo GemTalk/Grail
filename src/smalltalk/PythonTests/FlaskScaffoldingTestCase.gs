@@ -716,6 +716,28 @@ testStrTranslateBasic
 
 category: 'Grail-Tests - jinja2 plumbing'
 method: FlaskScaffoldingTestCase
+testKwargsSplatForwardsToFixedArity
+	"Regression: ``f(*args, **kwargs)`` used to wrap the **splat as
+	``{nil → kwargs}`` and BoundMethod's value:value: would fall back
+	to the varargs form, missing fixed-arity selectors like
+	``visit_X:_:``.  printKeywordsDictOn: now collapses a sole
+	**splat to the dict directly — the receiver method's ``kw:`` slot
+	sees the real kwargs (or nil/empty) and dispatch finds the right
+	selector."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:kwargs_splat_forwards_to_fixed_arity.
+	"forwarder(3, 4) → inner(3, 4) → 3 + 40 = 43"
+	self assert: (result @env1:__getitem__: 0) equals: 43.
+	"forwarder(1, b=2) → inner(1, b=2) → 1 + 20 = 21"
+	self assert: (result @env1:__getitem__: 1) equals: 21.
+	"forwarder(a=5, b=6) → inner(a=5, b=6) → 5 + 60 = 65"
+	self assert: (result @env1:__getitem__: 2) equals: 65
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
 testStarUnpackInCall
 	"Regression: ``f(*args)`` used to compile to a runtime TypeError
 	stub.  CallAst's new printArgumentsArrayOn: helper concatenates

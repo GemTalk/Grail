@@ -414,6 +414,27 @@ def typing_namedtuple_unpacks():
     return (out, items, n)
 
 
+def kwargs_splat_forwards_to_fixed_arity():
+    # Regression: ``f(*args, **kwargs)`` used to wrap the **splat as
+    # ``((IKVD new) at: #nil put: kwargs; yourself)`` — the receiver
+    # method saw a one-entry dict with a bogus #nil key instead of the
+    # actual kwargs.  BoundMethod's value:value: also saw a non-empty
+    # kwargs and fell back to the varargs form, missing fixed-arity
+    # selectors like ``visit_X:_:``.  CallAst printKeywordsDictOn:
+    # now collapses a sole **splat to the dict directly.  This is the
+    # forwarder shape jinja2's NodeVisitor.visit relies on.
+    def inner(a, b):
+        # Fixed-arity 2-positional method — caller-side dispatch must
+        # find this selector despite going through *args + **kwargs.
+        return a + b * 10
+
+    def forwarder(*args, **kwargs):
+        return inner(*args, **kwargs)
+
+    # No real kwargs at the call site, just the forwarder's pass-through.
+    return (forwarder(3, 4), forwarder(1, b=2), forwarder(a=5, b=6))
+
+
 def star_unpack_in_call():
     # Regression: ``f(*args)`` used to compile to ``(TypeError signal:
     # '*-unpack in call sites is not yet supported')``.  CallAst now
