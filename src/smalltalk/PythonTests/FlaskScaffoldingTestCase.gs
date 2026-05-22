@@ -3440,3 +3440,68 @@ testSubscriptedBuiltinAsBaseClass
 	self assert: (inst @env0:at: 'k') equals: 1.
 	self assert: (inst @env1:label) equals: 'string-keyed'.
 %
+
+! --- jinja2 trivial template render (M4) -----------------------------------
+
+category: 'Grail-Tests - jinja2 render'
+method: FlaskScaffoldingTestCase
+testJinja2RenderTrivialTemplate
+	"M4 milestone: ``env.from_string('Hello world').render()`` returns
+	the rendered string.  Establishes the end-to-end path through
+	the compiler, exec'd code, generator iteration, and ``''.join``
+	on the PythonGenerator."
+
+	| mod |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	self assert: mod @env1:jinja2_render_trivial equals: 'Hello world'
+%
+
+! --- ClassMethod param shadowing (FunctionDefAst fix) ---------------------
+
+category: 'Grail-Tests - Parameter shadowing'
+method: FlaskScaffoldingTestCase
+testParamNameShadowsInstVar
+	"A class method parameter whose name matches a class instVar
+	must shadow the instVar — Python parameters are always locals.
+	Hits FunctionDefAst generateClassMethodSourceOn:'s temp-list
+	build and AssignAst/AttributeAst's accessor-routing for self.X
+	reads + writes."
+
+	| mod tup |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	tup := mod @env1:param_name_shadows_instvar.
+	self assert: (tup @env1:__getitem__: 0) equals: 99.
+	self assert: (tup @env1:__getitem__: 1) equals: 7
+%
+
+! --- Default capture for X=X (FunctionDefAst closure-form fix) ------------
+
+category: 'Grail-Tests - Default captures'
+method: FlaskScaffoldingTestCase
+testDefaultCapturesOuterSameName
+	"``def inner(x=outer):`` captures ``outer`` at def-time; later
+	mutations of ``outer`` don't affect the default.  Closure-form
+	FunctionDefAst now pre-evaluates defaults in the enclosing
+	scope so a ``X=X`` default (jinja2's ``missing=missing``) sees
+	the outer binding rather than the unbound inner local."
+
+	| mod |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	self assert: mod @env1:default_captures_outer_same_name equals: 42
+%
+
+! --- try/except passes PythonReturn (TryAst fix) --------------------------
+
+category: 'Grail-Tests - Control-flow signals'
+method: FlaskScaffoldingTestCase
+testTryExceptDoesNotSwallowReturn
+	"Grail's PythonReturn / PythonBreak / PythonContinue are Exception
+	subclasses; without an explicit re-raise in TryAst handlers, a
+	Python ``try: return X; except Exception: …`` would trap the
+	return and run the handler.  jinja2's render() wraps its
+	body in exactly this shape."
+
+	| mod |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	self assert: mod @env1:try_except_does_not_swallow_return equals: 'from-try'
+%

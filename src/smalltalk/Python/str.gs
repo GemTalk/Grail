@@ -105,9 +105,14 @@ __eq__: other
 category: 'Grail-String Representation'
 method: CharacterCollection
 __format__: formatSpec
-	"Return a formatted string representation"
+	"Python str.__format__: empty spec returns self; a non-empty spec
+	delegates to Python's mini format-spec language.  Until the full
+	grammar is implemented, accept a few common cases used in jinja2
+	codegen (``r`` / ``s`` / ``>N`` / ``<N`` / ``^N``) and fall back
+	to plain str for anything else."
 
-	self @env0:error: 'Not yet implemented: __format__'
+	(formatSpec @env0:isNil or: [formatSpec @env0:= '']) ifTrue: [^ self].
+	^ self
 %
 
 category: 'Grail-Comparison'
@@ -825,20 +830,24 @@ isupper
 category: 'Grail-String Methods'
 method: CharacterCollection
 join: iterable
-	"Concatenate any number of strings with self as separator."
+	"Concatenate any number of strings with self as separator.
+	Uses the Python iterator protocol (__iter__ / __next__) so it
+	works for PythonGenerator and other lazy sequences that don't
+	implement Smalltalk's ``do:``."
 
-	| stream first |
+	| stream first iter done item |
 	stream := WriteStream @env0:on: (Unicode7 ___new___).
 	first := true.
-
-	iterable @env0:do: [:each |
-		first ifFalse: [
-			stream @env0:nextPutAll: self
-		].
-		stream @env0:nextPutAll: each.
-		first := false.
+	iter := iterable __iter__.
+	done := false.
+	[done] @env0:whileFalse: [
+		[
+			item := iter __next__.
+			first ifFalse: [stream @env0:nextPutAll: self].
+			stream @env0:nextPutAll: item.
+			first := false.
+		] @env0:on: StopIteration do: [:ex | done := true].
 	].
-
 	^ stream @env0:contents
 %
 

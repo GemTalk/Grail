@@ -38,13 +38,31 @@ __new__: source
 	its entries. Otherwise treat it as an iterable of 2-element
 	sequences."
 
-	| result iter done |
+	| result iter done keysMethod keysIter k |
 	result := self ___new___.
 
 	"Mapping fast path: source is a dict (or KeyValueDictionary)"
 	(source @env0:isKindOf: KeyValueDictionary) ifTrue: [
-		source @env0:keysAndValuesDo: [:k :v |
-			result @env0:at: k put: v
+		source @env0:keysAndValuesDo: [:_k :_v |
+			result @env0:at: _k put: _v
+		].
+		^ result
+	].
+
+	"Python mapping protocol: source has a ``keys`` method.  Iterate
+	keys and copy each via ``__getitem__``.  Catches collections.
+	ChainMap, OrderedDict subclasses, and any user mapping that
+	exposes ``keys`` + ``__getitem__`` (jinja2's render path passes
+	a ChainMap through ``dict(globals, **{})``)."
+	keysMethod := [source @env1:keys] @env0:on: MessageNotUnderstood do: [:ex | ex @env0:return: #__noKeys__].
+	keysMethod == #__noKeys__ ifFalse: [
+		keysIter := keysMethod __iter__.
+		done := false.
+		[done] @env0:whileFalse: [
+			[
+				k := keysIter __next__.
+				result @env0:at: k put: (source @env1:__getitem__: k).
+			] @env0:on: StopIteration do: [:ex | done := true].
 		].
 		^ result
 	].

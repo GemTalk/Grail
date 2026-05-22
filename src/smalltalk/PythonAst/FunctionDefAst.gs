@@ -136,10 +136,42 @@ printSmalltalkOn: aStream
 	Smalltalk rejects a block where the same name appears as both
 	a parameter and a declared temp.  The dispatch code below
 	(printPositionalUnpackingOn: + the *vararg / **kwarg bindings)
-	is rerouted to the sentinel names to match."
+	is rerouted to the sentinel names to match.
+
+	Defaults are pre-evaluated in the OUTER scope (wrapped in a
+	zero-arg outer block invoked immediately with ``value``) so a
+	default expression that references its own parameter name —
+	jinja2's ``def root(context, missing=missing):`` — sees the
+	enclosing module binding rather than the (nil) inner temp.
+	Python's semantics evaluate defaults at def-time in the
+	enclosing scope; matching that here is the only way ``X=X``
+	default-capture works without raising UnboundLocalError."
 	aStream
 		nextPutAll: name;
-		nextPutAll: ' := [:___positional___ :___kwargs___ |';
+		nextPutAll: ' := '.
+	"Emit a def-time default-capture outer block when there are
+	defaults.  The outer block runs immediately (``] value``) and
+	returns the inner function block; defaults that reference the
+	enclosing scope (jinja2's ``missing=missing``) resolve there
+	at def-time instead of failing in the inner block where the
+	same name is the local being bound."
+	(args defaults notNil and: [args defaults @env0:notEmpty]) ifTrue: [
+		| numDefaults firstWithDefault |
+		numDefaults := args defaults size.
+		firstWithDefault := args args size - numDefaults + 1.
+		aStream nextPut: $[; lf; nextPutAll: '| '.
+		1 to: numDefaults do: [:i |
+			aStream nextPutAll: '___default_'; nextPutAll: (args args at: firstWithDefault + i - 1) name; nextPutAll: '___ '].
+		aStream nextPutAll: '|'; lf.
+		1 to: numDefaults do: [:i |
+			| pname |
+			pname := (args args at: firstWithDefault + i - 1) name.
+			aStream nextPutAll: '___default_'; nextPutAll: pname; nextPutAll: '___ := '.
+			(args defaults at: i) printSmalltalkOn: aStream.
+			aStream nextPut: $.; lf].
+	].
+	aStream
+		nextPutAll: '[:___positional___ :___kwargs___ |';
 		lf;
 		increaseIndent.
 	"Collect every name we need as a block temp: fixed positionals,
@@ -227,7 +259,16 @@ printSmalltalkOn: aStream
 		aStream nextPutAll: ']'.
 	].
 	aStream nextPutAll: '.'; lf.
-	aStream decreaseIndent; nextPutAll: '].'.
+	aStream decreaseIndent; nextPutAll: ']'.
+	"Close the default-pre-eval outer block if any.  When defaults
+	exist, ``name := [ ___default_X___ := X. [inner] ] value`` —
+	the outer block evaluates immediately to capture defaults at
+	def-time, returning the inner block as the actual callable.
+	With no defaults the outer wrapper is the inner block directly."
+	(args defaults notNil and: [args defaults @env0:notEmpty]) ifTrue: [
+		aStream nextPutAll: '] value'.
+	].
+	aStream nextPutAll: '.'.
 	"Apply decorators bottom-up.  ``@A @B def f: ...`` rebinds f to
 	``A(B(f))`` — the decorator nearest the def (B) runs first, so
 	iterate in reverse.  Skip Symbol entries that are class-body
@@ -438,7 +479,19 @@ printPositionalUnpackingOn: aStream paramNames: paramNames positionalName: posNa
 			nextPutAll: pname;
 			nextPutAll: '] ifFalse: ['.
 		hasDefault ifTrue: [
-			(args defaults at: i - firstWithDefault + 1) printSmalltalkOn: aStream
+			"Reference the pre-evaluated default temp captured by the
+			enclosing block (closure form only — the closure path wraps
+			in an outer block that binds ``___default_<pname>___`` at
+			def-time).  Module/class-method generators still emit the
+			default expr inline; the closure path is the only one that
+			needs def-time evaluation because that's the only form
+			where ``X=X`` defaults reference the enclosing scope."
+			(posName @env0:= '___positional___')
+				ifTrue: [
+					aStream nextPutAll: '___default_'; nextPutAll: pname; nextPutAll: '___'
+				] ifFalse: [
+					(args defaults at: i - firstWithDefault + 1) printSmalltalkOn: aStream
+				]
 		] ifFalse: [
 			aStream
 				nextPutAll: 'TypeError ___signal___: ''missing required argument: ';
@@ -794,13 +847,18 @@ generateClassMethodSourceOn: aStream
 
 		aStream nextPutAll: '^ ['.
 
-		"Declare parameter names + body locals as block temps, EXCLUDING
-		names that are instVars on the class (those resolve as instVar
-		accesses and must not be shadowed by block temps)."
+		"Declare parameter names + body locals as block temps.  Parameter
+		names ALWAYS become block temps — Python parameters are always
+		locals and must shadow any class-instVar of the same name.  Body
+		variables that happen to match a classIvar are *excluded* so
+		that bare-name reads/writes of those names continue to flow
+		through the instVar path (Grail's implicit ``self.X`` shorthand
+		inside instance methods).  Without the parameter override,
+		``def from_string(self, source, globals=None, ...)`` would assign
+		None to the enclosing class's ``globals`` instVar instead of
+		binding the local."
 		allLocals := OrderedCollection new.
-		paramNames do: [:each |
-			(classIvars includes: each asSymbol) ifFalse: [allLocals add: each].
-		].
+		paramNames do: [:each | allLocals add: each].
 		bodyVars do: [:each |
 			(allLocals includes: each) ifFalse: [
 				(CallAst isSelfReference: each) ifFalse: [
@@ -832,24 +890,16 @@ generateClassMethodSourceOn: aStream
 		"Declare param locals (positional + *vararg + kwonly + **kwarg)
 		+ body locals as block temps.  Match the module-method path so
 		every parameter shape — defaults, *args, kwonly, **kwargs — has
-		a binding emitted below."
+		a binding emitted below.  Parameters always become block temps
+		(see the simple-positional branch for the rationale)."
 		allLocals := OrderedCollection new.
-		paramNames do: [:each |
-			(classIvars includes: each asSymbol) ifFalse: [allLocals add: each].
-		].
-		args vararg ifNotNil: [
-			(classIvars includes: args vararg name asSymbol) ifFalse: [
-				allLocals add: args vararg name].
-		].
+		paramNames do: [:each | allLocals add: each].
+		args vararg ifNotNil: [allLocals add: args vararg name].
 		args kwonlyargs do: [:each |
-			((allLocals includes: each name)
-				or: [classIvars includes: each name asSymbol]) ifFalse: [
-					allLocals add: each name].
+			(allLocals includes: each name) ifFalse: [
+				allLocals add: each name].
 		].
-		args kwarg ifNotNil: [
-			(classIvars includes: args kwarg name asSymbol) ifFalse: [
-				allLocals add: args kwarg name].
-		].
+		args kwarg ifNotNil: [allLocals add: args kwarg name].
 		bodyVars do: [:each |
 			(allLocals includes: each) ifFalse: [
 				(CallAst isSelfReference: each) ifFalse: [

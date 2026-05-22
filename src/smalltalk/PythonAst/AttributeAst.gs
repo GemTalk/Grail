@@ -180,10 +180,14 @@ printSmalltalkOn: aStream
 		].
 		(CallAst classInstVarNames notNil
 			and: [CallAst classInstVarNames includes: attr asSymbol]) ifTrue: [
+			"Route through the generated accessor (``self attr``) rather
+			than a bare instVar read.  Block temps (Python parameters)
+			can shadow same-named instVars; the accessor is a method,
+			so dispatch ignores lexical scope and always sees the slot."
 			aStream
-				nextPutAll: '(AttributeError @env0:___checkAttr: ';
+				nextPutAll: '(AttributeError @env0:___checkAttr: (self ';
 				nextPutAll: attr;
-				nextPutAll: ' ofObject: self named: #';
+				nextPutAll: ') ofObject: self named: #';
 				nextPutAll: attr;
 				nextPutAll: ')'.
 			^self

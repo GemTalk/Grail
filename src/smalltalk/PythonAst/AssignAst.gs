@@ -275,8 +275,27 @@ printSmalltalkAttributeStoreOn: aStream target: tgt
 	via the per-name accessor generation in loadModuleFromPath)."
 
 	((tgt value isKindOf: NameAst) and: [CallAst isSelfReference: tgt value id]) ifTrue: [
+		"Route through the generated setter rather than a bare instVar
+		write.  Python parameters can be declared as block temps that
+		shadow same-named instVars (see FunctionDefAst
+		generateClassMethodSourceOn:); the setter is a method, so
+		dispatch bypasses lexical scope and reaches the slot.  When
+		the attr is a class-side declaration (in classAttrNames) we
+		need the env-1 attribute path so the metaclass setter fires —
+		fall through to the runtime form for that case."
+		(CallAst classAttrNames notNil
+			and: [CallAst classAttrNames includes: tgt attr asSymbol])
+			ifTrue: [
+				aStream nextPutAll: 'self @env1:'.
+				aStream nextPutAll: tgt attr.
+				aStream nextPutAll: ': '.
+				value printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPut: $..
+				^self
+			].
+		aStream nextPutAll: 'self '.
 		aStream nextPutAll: tgt attr.
-		aStream nextPutAll: ' := '.
+		aStream nextPutAll: ': '.
 		value printSmalltalkWithParenthesisOn: aStream.
 		aStream nextPut: $..
 		^self

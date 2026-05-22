@@ -518,9 +518,14 @@ __eq__: other
 category: 'Grail-String Representation'
 method: object
 __format__: formatSpec
-	"Return a formatted string representation"
+	"Default Python object.__format__: empty spec returns str(self),
+	non-empty spec raises TypeError (per CPython 3.4+)."
 
-	self @env0:error: 'Not yet implemented: __format__'
+	(formatSpec @env0:isNil or: [formatSpec @env0:= '']) ifTrue: [
+		^ self __str__
+	].
+	TypeError ___signal___:
+		'unsupported format string passed to ', self __class__ __name__, '.__format__'
 %
 
 category: 'Grail-Comparison'

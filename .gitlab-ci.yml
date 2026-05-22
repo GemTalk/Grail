@@ -25,7 +25,7 @@ stages:
 
 test:
   stage: test
-  image: registry.gemtalksystems.com/gemstone/containers/qa/ubuntu:22.04
+  image: container.gemtalksystems.com/gemstone/containers/qa/ubuntu:22.04
   before_script:
     # The QA Ubuntu 22.04 image ships only Python 3.10 and no C toolchain.
     # Grail needs `make`/`cc` to build the CPython shim, and Python >= 3.14

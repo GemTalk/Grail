@@ -456,6 +456,24 @@ repr: anObject
 
 category: 'Grail-Built-in Functions'
 method: builtins
+format: aValue
+	"Python builtin format(value) — defaults to format-spec ''''."
+
+	^ aValue @env1:__format__: ''
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+format: aValue _: aFormatSpec
+	"Python builtin format(value, spec) — fixed-arity fast path.
+	Delegates to value.__format__(spec).  Emitted by f-string codegen
+	for placeholders that carry a format spec (e.g. ``f''{x:>4d}''``)."
+
+	^ aValue @env1:__format__: aFormatSpec
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 reversed: aSequence
 	"Python builtin reversed(seq) — fixed-arity fast path."
 

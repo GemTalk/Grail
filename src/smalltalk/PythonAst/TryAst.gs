@@ -98,6 +98,15 @@ printSmalltalkOn: aStream
 			ifNil: [aStream nextPutAll: 'BaseException']
 			ifNotNil: [handler type printSmalltalkOn: aStream].
 		aStream nextPutAll: ' do: [:___ex |'; increaseIndent; lf.
+		"Always re-raise Grail's control-flow signals so a Python
+		``except Exception`` doesn't swallow a pending ``return`` /
+		``break`` / ``continue``.  Without this guard, jinja2's
+		``try: ... except Exception: handle_exception()`` traps the
+		PythonReturn that carries the render result and dispatches
+		into the handler with a BoundMethod-shaped ``___ex``."
+		aStream
+			nextPutAll: '((___ex @env0:isKindOf: PythonReturn) or: [(___ex @env0:isKindOf: PythonBreak) or: [___ex @env0:isKindOf: PythonContinue]]) ifTrue: [___ex @env0:pass].';
+			lf.
 		handler name ifNotNil: [
 			aStream nextPutAll: handler name; nextPutAll: ' := ___ex.'; lf.
 		].

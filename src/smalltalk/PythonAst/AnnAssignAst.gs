@@ -112,10 +112,24 @@ printSmalltalkOn: aStream
 		((target value isKindOf: NameAst)
 			and: [CallAst isSelfReference: target value id])
 			ifTrue: [
-				aStream nextPutAll: target attr.
-				aStream nextPutAll: ' := '.
-				value printSmalltalkWithParenthesisOn: aStream.
-				aStream nextPut: $..
+				"Route through the generated setter rather than a bare
+				instVar write so block temps (Python parameters) of
+				the same name don't shadow the slot."
+				(CallAst classAttrNames notNil
+					and: [CallAst classAttrNames includes: target attr asSymbol])
+					ifTrue: [
+						aStream nextPutAll: 'self @env1:'.
+						aStream nextPutAll: target attr.
+						aStream nextPutAll: ': '.
+						value printSmalltalkWithParenthesisOn: aStream.
+						aStream nextPut: $..
+					] ifFalse: [
+						aStream nextPutAll: 'self '.
+						aStream nextPutAll: target attr.
+						aStream nextPutAll: ': '.
+						value printSmalltalkWithParenthesisOn: aStream.
+						aStream nextPut: $..
+					].
 			] ifFalse: [
 				target value printSmalltalkWithParenthesisOn: aStream.
 				aStream nextPutAll: ' @env1:'.

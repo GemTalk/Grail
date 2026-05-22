@@ -651,3 +651,74 @@ def empty_user_container_is_falsy():
     d.append(1)
     nonempty_truthy = bool(d)
     return (empty_truthy, nonempty_truthy)
+
+
+def jinja2_render_trivial():
+    # M4 milestone: ``Template.render()`` returns the rendered string.
+    # Required four fixes to land:
+    #   1. ``format`` / ``object.__format__`` for f-string format-spec
+    #      callsites the jinja2 lexer hits at first env init.
+    #   2. ``dict.__new__`` mapping-protocol path so ``dict(globals,
+    #      **{})`` accepts a ChainMap.
+    #   3. ClassMethod-form parameter unpacking declares ALL params as
+    #      block temps (shadowing same-named instVars) and routes
+    #      ``self.X = …`` through the generated setter — otherwise
+    #      ``Environment.from_string(self, source, globals=None, …)``
+    #      writes ``None`` to the enclosing class's ``globals`` slot.
+    #   4. Closure-form FunctionDefAst pre-evaluates defaults in the
+    #      enclosing scope so ``def root(context, missing=missing):``
+    #      sees the imported ``missing`` instead of the (unbound) local.
+    #   5. TryAst handlers re-raise PythonReturn / PythonBreak /
+    #      PythonContinue so ``try: return env.concat(…) except
+    #      Exception: handle_exception()`` doesn't trap the return.
+    import jinja2
+    env = jinja2.Environment()
+    tmpl = env.from_string("Hello world")
+    return tmpl.render()
+
+
+def param_name_shadows_instvar():
+    # Regression: a method parameter whose name matches a class instVar
+    # used to be filtered from the block-temp list, so the assignment
+    # ``globals := None`` from the default-unpack landed on the
+    # instVar.  Reproduce on a minimal class.
+    class Bag:
+        slot = 0
+
+        def __init__(self, slot=99):
+            self.slot = slot
+
+        def get(self):
+            return self.slot
+
+    b1 = Bag()
+    b2 = Bag(slot=7)
+    return (b1.get(), b2.get())
+
+
+def default_captures_outer_same_name():
+    # ``def f(x=x):`` — Python evaluates ``x`` (the default) at def-
+    # time in the enclosing scope.  Grail's closure-form codegen now
+    # pre-evaluates defaults via an outer block so the inner local
+    # ``x`` doesn't shadow.
+    outer = 42
+
+    def inner(x=outer):
+        return x
+
+    outer = 999  # mutating outer must NOT change the captured default
+    return inner()
+
+
+def try_except_does_not_swallow_return():
+    # Regression: PythonReturn is an Exception subclass (used as a
+    # non-local return signal); a Python ``try: ... except Exception:``
+    # would catch it and run the handler, dropping the return value.
+    # TryAst handlers now re-raise control-flow signals.
+    def f():
+        try:
+            return "from-try"
+        except Exception:
+            return "from-except"
+
+    return f()
