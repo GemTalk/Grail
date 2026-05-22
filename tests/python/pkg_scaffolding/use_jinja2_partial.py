@@ -414,6 +414,75 @@ def typing_namedtuple_unpacks():
     return (out, items, n)
 
 
+def star_unpack_in_call():
+    # Regression: ``f(*args)`` used to compile to ``(TypeError signal:
+    # '*-unpack in call sites is not yet supported')``.  CallAst now
+    # concatenates brace literals with each starred expression's
+    # asArray, so the visitor pattern's ``f(node, *args, **kwargs)``
+    # forwards correctly.
+    def collect(*items):
+        return list(items)
+    head = (1, 2)
+    tail = [4, 5]
+    return collect(0, *head, 3, *tail, 6)
+
+
+def dict_pop_string_key_on_symbol_dict():
+    # Regression: kwargs dicts built from Smalltalk-side call sites
+    # use Symbol keys, but Python source calling ``kwargs.pop('name',
+    # default)`` passes a String.  dict.pop:_: now falls back to the
+    # Symbol form on a String miss.  jinja2's Node.__init__ does
+    # exactly ``attributes.pop(attr, None)`` over the kwargs it
+    # received, so this MUST work for any node construction.
+    def f(**kwargs):
+        return (kwargs.pop('a', 'missing-a'),
+                kwargs.pop('b', 'missing-b'),
+                len(kwargs))
+    return f(a=1, b=2)
+
+
+def class_dunder_name_unwraps():
+    # Regression: ``cls.__name__`` used to wrap the inherited
+    # Behavior-side getter in a BoundMethod, breaking visitor
+    # dispatch (``getattr(self, 'visit_' + type(node).__name__)``).
+    # ___pyAttrLoad___ now treats __name__ / __module__ / __qualname__
+    # on any Behavior receiver as value attributes.
+    class _Foo:
+        pass
+    return (type(_Foo()).__name__,
+            'visit_' + type(_Foo()).__name__)
+
+
+def getattr_missing_raises_attribute_error():
+    # Regression: a complete attribute miss used to fall through to a
+    # bare GS ``perform:`` and DNU as MessageNotUnderstood, bypassing
+    # Python's standard hasattr/getattr fallback.  ___pyAttrLoad___
+    # now raises AttributeError at the end.
+    class _Empty:
+        pass
+    obj = _Empty()
+    raised = False
+    try:
+        getattr(obj, 'no_such_attribute_here')
+    except AttributeError:
+        raised = True
+    return (raised, getattr(obj, 'no_such_attribute_here', 'fallback'))
+
+
+def instance_dict_shadows_class_attr():
+    # Regression: bare-annotation class attributes used to mask
+    # per-instance values set via __init__'s setattr (Python's order
+    # is __dict__ first, then class).  ___pyAttrLoad___ now consults
+    # the instance __dict__ for any PythonInstance subclass before
+    # the class-side accessor.  Hits the same code path that drives
+    # typing.NamedTuple subclass attribute reads.
+    class _Holder:
+        x: int  # bare annotation → class-side slot with nil default
+    h = _Holder()
+    h.x = 42
+    return h.x
+
+
 def empty_user_container_is_falsy():
     # Regression: Grail's ``bool(obj)`` deferred to env-0 ``respondsTo:
     # #__bool__`` which can't see env-1 Python ``__bool__`` methods on

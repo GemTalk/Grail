@@ -716,6 +716,86 @@ testStrTranslateBasic
 
 category: 'Grail-Tests - jinja2 plumbing'
 method: FlaskScaffoldingTestCase
+testStarUnpackInCall
+	"Regression: ``f(*args)`` used to compile to a runtime TypeError
+	stub.  CallAst's new printArgumentsArrayOn: helper concatenates
+	brace literals with each starred expression's asArray so the
+	jinja2 visitor pattern ``f(node, *args, **kwargs)`` forwards
+	correctly."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:star_unpack_in_call.
+	self assert: (result @env1:__getitem__: 0) equals: 0.
+	self assert: (result @env1:__getitem__: 1) equals: 1.
+	self assert: (result @env1:__getitem__: 2) equals: 2.
+	self assert: (result @env1:__getitem__: 3) equals: 3.
+	self assert: (result @env1:__getitem__: 4) equals: 4.
+	self assert: (result @env1:__getitem__: 5) equals: 5.
+	self assert: (result @env1:__getitem__: 6) equals: 6
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testDictPopStringKeyOnSymbolDict
+	"Regression: kwargs dicts use Symbol keys; Python's ``kwargs.pop(
+	'name', default)`` passes a String.  dict.pop:_: now tries the
+	Symbol form on a String miss.  jinja2's Node.__init__ depends on
+	this for every node construction."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:dict_pop_string_key_on_symbol_dict.
+	self assert: (result @env1:__getitem__: 0) equals: 1.
+	self assert: (result @env1:__getitem__: 1) equals: 2.
+	self assert: (result @env1:__getitem__: 2) equals: 0
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testClassDunderNameUnwraps
+	"Regression: ``cls.__name__`` used to wrap the inherited
+	Behavior-side getter in a BoundMethod, breaking
+	``getattr(self, 'visit_' + type(node).__name__)`` in jinja2's
+	visitor dispatch."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:class_dunder_name_unwraps.
+	self assert: (result @env1:__getitem__: 0) equals: '_Foo'.
+	self assert: (result @env1:__getitem__: 1) equals: 'visit__Foo'
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testGetattrMissingRaisesAttributeError
+	"Regression: a complete attribute miss now raises Python
+	AttributeError instead of MNU-ing.  getattr(obj, name, default)
+	catches it cleanly."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:getattr_missing_raises_attribute_error.
+	self assert: (result @env1:__getitem__: 0) equals: true.
+	self assert: (result @env1:__getitem__: 1) equals: 'fallback'
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testInstanceDictShadowsClassAttr
+	"Regression: Python attribute lookup checks instance __dict__
+	BEFORE the class.  Without this, bare-annotation class slots
+	(value nil) masked per-instance values set via setattr.  The
+	NamedTuple subclass-instance-attribute path lives or dies here."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:instance_dict_shadows_class_attr.
+	self assert: result equals: 42
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
 testTypingNamedTupleUnpacks
 	"Regression: ``class _Rule(t.NamedTuple): pattern: ...; ...``
 	subclass support.  ClassDefAst emits ``_fields`` from bare
