@@ -320,7 +320,22 @@ ___pyAttrLoad___: aSym
 		and: [(md @env0:includesKey: sym1)
 			and: [(self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil]])
 		ifTrue: [
-			^ self @env0:perform: aSym env: 1
+			| instVal metaclass |
+			instVal := self @env0:perform: aSym env: 1.
+			"If the per-instance slot is still nil, fall back to the
+			class-side accessor for the class-level default — matches
+			Python's instance.__dict__-then-class lookup for any name
+			declared as a class attribute (``X: type = expr`` body) AND
+			discovered as an instance attribute through ``self.X = …``
+			writes.  Without the fallback the instance-slot nil masks
+			the class-level default."
+			instVal == nil ifTrue: [
+				metaclass := self @env0:class @env0:class.
+				((metaclass @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
+					and: [(metaclass @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil])
+					ifTrue: [^ self @env0:class @env0:perform: aSym env: 1].
+			].
+			^ instVal
 	].
 	"Instance falling through to a class-side attribute.  When the
 	receiver is an instance of a Python user class and the attribute

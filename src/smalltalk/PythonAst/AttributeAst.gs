@@ -159,6 +159,25 @@ printSmalltalkOn: aStream
 		                              as Smalltalk classInstVars — not
 		                              reachable from an instance method's
 		                              instVar lookup."
+		"A name in classAttrNames is declared at class-body scope
+		(``X = expr`` or ``X: type = expr``).  Grail stores it as a
+		class-side instVar with a class-side accessor pair on the
+		metaclass.  ``self.X`` for such a name must NOT take the
+		instance-instVar fast path even when X is ALSO discovered as
+		an instance instVar via a later ``self.X = …`` write —
+		otherwise the read pulls the (nil) instance slot and the
+		AttributeError guard fires, masking the class-level default.
+		Route through ___pyAttrLoad___ which checks instance __dict__
+		first, then the class-side accessor."
+		(CallAst classAttrNames notNil
+			and: [CallAst classAttrNames includes: attr asSymbol])
+			ifTrue: [
+				aStream
+					nextPutAll: '(self @env1:___pyAttrLoad___: #''';
+					nextPutAll: attr;
+					nextPutAll: ''')'.
+				^self
+		].
 		(CallAst classInstVarNames notNil
 			and: [CallAst classInstVarNames includes: attr asSymbol]) ifTrue: [
 			aStream

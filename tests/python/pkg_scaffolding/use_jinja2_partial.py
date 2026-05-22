@@ -414,6 +414,28 @@ def typing_namedtuple_unpacks():
     return (out, items, n)
 
 
+class _ClassAttrShadow:
+    # Bare class-body declaration + later instance write — the same
+    # shape jinja2's CodeGenerator uses for ``_finalize: t.Optional[...] = None``.
+    # AttributeAst used to take the instance-instVar fast path for the
+    # read (since ``self.cached =`` discovers the name), then trip
+    # ``AttributeError: '_ClassAttrShadow' object has no attribute 'cached'``
+    # before the instance write ever ran.
+    cached: object = 'class-default'
+
+    def get(self):
+        return self.cached
+
+    def set_and_get(self, v):
+        self.cached = v
+        return self.cached
+
+
+def class_attr_with_instance_write_site():
+    a = _ClassAttrShadow()
+    return (a.get(), a.set_and_get('inst-value'))
+
+
 def kwargs_splat_forwards_to_fixed_arity():
     # Regression: ``f(*args, **kwargs)`` used to wrap the **splat as
     # ``((IKVD new) at: #nil put: kwargs; yourself)`` — the receiver

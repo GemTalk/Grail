@@ -12,7 +12,7 @@ ExpressionAst subclass: 'CallAst'
   classInstVars: #('moduleClassBeingCompiled' 'moduleFunctionNames'
                     'classBeingCompiled' 'classInstVarNames'
                     'classFunctionNames' 'classVarargsFunctionNames'
-                    'selfParameterName')
+                    'classAttrNames' 'selfParameterName')
   poolDictionaries: #()
   inDictionary: PythonAst
   options: #()
@@ -947,6 +947,37 @@ category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classVarargsFunctionNames: aSetOrNil
 	classVarargsFunctionNames := aSetOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classAttrNames
+	"Set of attribute names declared at class-body scope (``X = expr``
+	or ``X: type = expr`` / bare ``X: type``).  Grail stores these as
+	class-side instVars with their own getter/setter pair on the
+	metaclass.  AttributeAst consults this set so a ``self.X`` read
+	for a name with both an instance write site AND a class-body
+	declaration routes through ___pyAttrLoad___ (which checks the
+	instance __dict__ first, then the class-side accessor) instead
+	of the AttributeError-checked instance instVar fast path.
+
+	Without this, jinja2's
+	  ``class CodeGenerator: _finalize: t.Optional[...] = None
+	    def _make_finalize(self):
+	        if self._finalize is not None: ...
+	        self._finalize = ...``
+	would have ``_finalize`` in BOTH classInstVarNames (from the
+	``self._finalize =`` write) AND classAttrNames (from the class-
+	body declaration), and the AttributeAst class-instvar-fast-path
+	would read a nil instance slot instead of the class-side default."
+
+	^ classAttrNames
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classAttrNames: aSetOrNil
+	classAttrNames := aSetOrNil
 %
 
 category: 'Grail-Class Compile Context'

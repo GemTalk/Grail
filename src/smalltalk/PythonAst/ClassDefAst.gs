@@ -77,7 +77,8 @@ printSmalltalkRuntimeOn: aStream
 	| ivarNames methodDefs classMethodDefs selfParam funcNames varargsFuncNames
 	  methodSources classMethodSources
 	  initMethod initSelector classAttrs allClassInstVars
-	  savedClass savedIvarNames savedFuncNames savedVarargsFuncNames savedSelfParam |
+	  savedClass savedIvarNames savedFuncNames savedVarargsFuncNames
+	  savedSelfParam savedClassAttrNames |
 	ivarNames := self instanceVarNamesFromInit.
 	methodDefs := self instanceMethodDefs.
 	classMethodDefs := self classMethodDefs.
@@ -117,6 +118,7 @@ printSmalltalkRuntimeOn: aStream
 	savedIvarNames := CallAst classInstVarNames.
 	savedFuncNames := CallAst classFunctionNames.
 	savedVarargsFuncNames := CallAst classVarargsFunctionNames.
+	savedClassAttrNames := CallAst classAttrNames.
 	savedSelfParam := CallAst selfParameterName.
 
 	"classBeingCompiled is only used as a non-nil marker here; the
@@ -125,6 +127,7 @@ printSmalltalkRuntimeOn: aStream
 	CallAst classInstVarNames: (IdentitySet withAll: ivarNames).
 	CallAst classFunctionNames: funcNames.
 	CallAst classVarargsFunctionNames: varargsFuncNames.
+	CallAst classAttrNames: (IdentitySet withAll: (classAttrs collect: [:p | p key])).
 	CallAst selfParameterName: selfParam.
 
 	methodSources := OrderedCollection new.
@@ -184,6 +187,7 @@ printSmalltalkRuntimeOn: aStream
 		CallAst classInstVarNames: savedIvarNames.
 		CallAst classFunctionNames: savedFuncNames.
 		CallAst classVarargsFunctionNames: savedVarargsFuncNames.
+		CallAst classAttrNames: savedClassAttrNames.
 		CallAst selfParameterName: savedSelfParam.
 	].
 

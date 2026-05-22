@@ -716,6 +716,30 @@ testStrTranslateBasic
 
 category: 'Grail-Tests - jinja2 plumbing'
 method: FlaskScaffoldingTestCase
+testClassAttrWithInstanceWriteSite
+	"Regression: ``self.X`` where X is declared at class body scope
+	(``X: type = expr`` or ``X = expr``) AND also has an instance-side
+	write somewhere in the class.  AttributeAst used to take the
+	instance-instVar fast path for the read and fire
+	AttributeError before the instance write ran (the per-instance
+	slot was nil; the class-side default was unreachable).
+	Now AttributeAst routes such reads through ___pyAttrLoad___ which
+	checks the per-instance slot's accessor and falls through to the
+	class-side default on miss.
+
+	This is the shape jinja2's CodeGenerator uses for
+	``_finalize: t.Optional[_FinalizeInfo] = None`` with later
+	``self._finalize = ...`` writes."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:class_attr_with_instance_write_site.
+	self assert: (result @env1:__getitem__: 0) equals: 'class-default'.
+	self assert: (result @env1:__getitem__: 1) equals: 'inst-value'
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
 testKwargsSplatForwardsToFixedArity
 	"Regression: ``f(*args, **kwargs)`` used to wrap the **splat as
 	``{nil → kwargs}`` and BoundMethod's value:value: would fall back
