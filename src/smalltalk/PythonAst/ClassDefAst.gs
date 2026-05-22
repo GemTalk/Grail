@@ -74,14 +74,16 @@ printSmalltalkRuntimeOn: aStream
 	context), then embedded as Smalltalk string literals in
 	compileMethod: calls in the emitted code."
 
-	| ivarNames methodDefs classMethodDefs selfParam funcNames varargsFuncNames
-	  methodSources classMethodSources
+	| ivarNames methodDefs classMethodDefs staticMethodDefs selfParam
+	  funcNames varargsFuncNames
+	  methodSources classMethodSources staticMethodSources
 	  initMethod initSelector classAttrs allClassInstVars
 	  savedClass savedIvarNames savedFuncNames savedVarargsFuncNames
 	  savedSelfParam savedClassAttrNames |
 	ivarNames := self instanceVarNamesFromInit.
 	methodDefs := self instanceMethodDefs.
 	classMethodDefs := self classMethodDefs.
+	staticMethodDefs := self staticMethodDefs.
 	selfParam := self selfParameterName.
 	funcNames := IdentitySet new.
 	varargsFuncNames := IdentitySet new.
@@ -132,6 +134,7 @@ printSmalltalkRuntimeOn: aStream
 
 	methodSources := OrderedCollection new.
 	classMethodSources := OrderedCollection new.
+	staticMethodSources := OrderedCollection new.
 	[
 		methodDefs do: [:def |
 			| s |
@@ -180,6 +183,31 @@ printSmalltalkRuntimeOn: aStream
 				]
 			] ensure: [
 				CallAst classInstVarNames: savedForCM.
+			].
+		].
+		"@staticmethod bodies have no implicit ``self``/``cls`` —
+		first arg is a regular parameter.  Use the module-method
+		source generator (no first-param strip).  Clear ONLY
+		classInstVarNames + selfParameterName so the body's
+		bare-name resolution still finds module-scope names
+		(class-level dispatch context stays intact for
+		``ClassName.X`` references)."
+		staticMethodDefs isEmpty ifFalse: [
+			| savedIvarForSM savedSelfForSM |
+			savedIvarForSM := CallAst classInstVarNames.
+			savedSelfForSM := CallAst selfParameterName.
+			CallAst classInstVarNames: IdentitySet new.
+			CallAst selfParameterName: nil.
+			[
+				staticMethodDefs do: [:def |
+					| s |
+					s := PrettyWriteStream on: Unicode7 new.
+					def generateMethodSourceOn: s.
+					staticMethodSources add: def name asString -> s contents.
+				]
+			] ensure: [
+				CallAst classInstVarNames: savedIvarForSM.
+				CallAst selfParameterName: savedSelfForSM.
 			].
 		].
 	] ensure: [
@@ -270,6 +298,19 @@ printSmalltalkRuntimeOn: aStream
 	source generated for class methods is identical in shape to the
 	instance-method source — only the compile target differs."
 	classMethodSources do: [:assoc |
+		self
+			emitCompileMethodOn: name
+			source: assoc value
+			category: 'Grail-Class Methods'
+			env: 1
+			classSide: true
+			onStream: aStream.
+	].
+
+	"Compile each @staticmethod onto the metaclass.  Body has no
+	implicit ``self`` — generateMethodSourceOn: (module form, no
+	first-param strip) is what was used to build the source."
+	staticMethodSources do: [:assoc |
 		self
 			emitCompileMethodOn: name
 			source: assoc value
@@ -807,6 +848,18 @@ classMethodDefs
 	parseFunctionDefWithDecorators:)."
 
 	^ body body select: [:stmt | stmt isKindOf: ClassFunctionDefAst]
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+staticMethodDefs
+	"Return all StaticFunctionDefAst nodes from the class body.
+	@staticmethod-decorated functions take no implicit first arg
+	(no ``self`` or ``cls``); they're compiled onto the metaclass
+	exactly as written so a Python ``Cls.X(args)`` send dispatches
+	to a class-side Smalltalk method with the same arity."
+
+	^ body body select: [:stmt | stmt isKindOf: StaticFunctionDefAst]
 %
 
 category: 'Grail-Class Compilation'

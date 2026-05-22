@@ -365,6 +365,16 @@ ___pyAttrLoad___: aSym
 			and: [(metaclass @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil]) ifTrue: [
 			^ self @env0:class @env0:perform: aSym env: 1
 		].
+		"@classmethod / @staticmethod live on the metaclass with
+		``name:`` or ``_name:kw:`` selectors but NO paired unary
+		setter (so the value-attr branch above doesn't catch them).
+		Wrap as a BoundMethod whose receiver is the class object so
+		``self.cls_method(args)`` dispatches correctly."
+		((metaclass @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil
+			or: [(metaclass @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil
+				or: [(metaclass @env0:whichClassIncludesSelector: sym3 environmentId: 1) notNil
+					or: [(metaclass @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil]]])
+			ifTrue: [^ BoundMethod @env1:receiver: self @env0:class selector: aSym].
 	].
 	"Shim wrapper classes (SrePattern, SreMatch, ...) advertise the
 	subset of their unary methods that should be treated as Python

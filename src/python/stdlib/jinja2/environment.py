@@ -1223,8 +1223,17 @@ class Template:
     ) -> "Template":
         """Creates a template object from compiled code and the globals.  This
         is used by the loaders and environment to create a template object.
+
+        GRAIL: ``compile()`` returns the source string (no real code
+        object), so ``code.co_filename`` would AttributeError — fall
+        back to a generic placeholder.  exec() on a string runs through
+        the same Python AST loader anyway.
         """
-        namespace = {"environment": environment, "__file__": code.co_filename}
+        if hasattr(code, 'co_filename'):
+            filename = code.co_filename
+        else:
+            filename = '<template>'
+        namespace = {"environment": environment, "__file__": filename}
         exec(code, namespace)
         rv = cls._from_namespace(environment, namespace, globals)
         rv._uptodate = uptodate

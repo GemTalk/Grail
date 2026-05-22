@@ -253,6 +253,15 @@ class VisitorExit(RuntimeError):
     """Exception used by the `UndeclaredNameVisitor` to signal a stop."""
 
 
+# GRAIL: hoisted out of CodeGenerator (Grail's ClassDefAst doesn't
+# compile nested class definitions inside another class body).  The
+# CodeGenerator.X = X rebind further down keeps the original
+# attribute-access shape (``self._FinalizeInfo(...)``).
+class _FinalizeInfo(t.NamedTuple):
+    const: t.Optional[t.Callable[..., str]]
+    src: t.Optional[str]
+
+
 class DependencyFinderVisitor(NodeVisitor):
     """A visitor that collects filter and test calls."""
 
@@ -1397,9 +1406,11 @@ class CodeGenerator(NodeVisitor):
         self.newline(node)
         self.visit(node.node, frame)
 
-    class _FinalizeInfo(t.NamedTuple):
-        const: t.Optional[t.Callable[..., str]]
-        src: t.Optional[str]
+    # GRAIL: nested class defs inside another class aren't compiled by
+    # ClassDefAst — see ``_FinalizeInfo`` hoisted to module scope at the
+    # top of this file.  ``self._FinalizeInfo`` is rebound below as a
+    # class attribute so ``self._FinalizeInfo(...)`` still works.
+    _FinalizeInfo = _FinalizeInfo  # noqa: F811
 
     @staticmethod
     def _default_finalize(value: t.Any) -> t.Any:
