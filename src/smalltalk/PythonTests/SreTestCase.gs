@@ -152,9 +152,11 @@ match := self abcPattern @env1:search: 'xyzabc'.
 category: 'Grail-Tests - Search'
 method: SreTestCase
 testPatternSearchNoMatch
-	"Test that pattern.search() returns nil when no match."
+	"Test that pattern.search() returns Python None when no match.
+	Returning Smalltalk nil would trip ___checkLocal: in Python source
+	that does ``m = pattern.search(...); if m is None: ...``."
 
-self assert: (self abcPattern @env1:search: 'xyz') equals: nil.
+self assert: (self abcPattern @env1:search: 'xyz') equals: None.
 %
 
 category: 'Grail-Tests - Search'
@@ -213,12 +215,15 @@ match := self abcGroupPattern @env1:search: 'xyzabc123'.
 category: 'Grail-Tests - Match'
 method: SreTestCase
 testPatternMatch
-	"Test that pattern.match() matches at the beginning only."
+	"Test that pattern.match() matches at the beginning only.
+	Returns Python None on no match (not Smalltalk nil — the
+	difference matters once Python source consumes the result and
+	NameAst wraps the read in ___checkLocal:)."
 
 	| pattern match |
 pattern := self abcPattern.
 	"match() only matches at the beginning - should fail for 'xyzabc'"
-	self assert: (pattern @env1:match: 'xyzabc') equals: nil.
+	self assert: (pattern @env1:match: 'xyzabc') equals: None.
 	"match() should succeed for 'abcxyz'"
 	match := pattern @env1:match: 'abcxyz'.
 	self assert: (match isKindOf: SreMatch).

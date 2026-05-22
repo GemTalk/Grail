@@ -105,13 +105,14 @@ testMatchLiteral
 category: 'Grail-Tests - Match'
 method: ReModuleTestCase
 testMatchNoMatchReturnsNone
-	"A non-matching pattern at the start returns None
-	(== Smalltalk nil at the C boundary, mapped through SrePattern
-	match's null-pointer check)."
+	"A non-matching pattern returns Python None — distinct from
+	Smalltalk nil so Python source that does
+	``m = pat.match(...); if m is None: ...`` sees a bound value
+	through Grail's ___checkLocal: read guard."
 
 	| m |
 	m := (re @env1:compile: 'foo') @env1:match: 'hello world'.
-	self assert: m isNil.
+	self assert: m equals: None.
 %
 
 category: 'Grail-Tests - Capture groups'

@@ -157,7 +157,7 @@ match: aString
 	result := (CPythonShim @env0:current)
 		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'match' selfPtr: cPtr
 		with: aString.
-	^ (result == 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
+	^ (result == 0) ifTrue: [None] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
 category: 'Grail-Methods'
@@ -168,7 +168,7 @@ match: aString _: pos
 	result := (CPythonShim @env0:current)
 		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'match' selfPtr: cPtr
 		with: aString with: pos.
-	^ (result == 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
+	^ (result == 0) ifTrue: [None] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
 category: 'Grail-Methods'
@@ -179,7 +179,7 @@ match: aString _: pos _: endpos
 	result := (CPythonShim @env0:current)
 		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'match' selfPtr: cPtr
 		with: aString with: pos with: endpos.
-	^ (result == 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
+	^ (result == 0) ifTrue: [None] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
 category: 'Grail-Methods'
@@ -204,7 +204,7 @@ search: aString
 	result := (CPythonShim @env0:current)
 		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'search' selfPtr: cPtr
 		with: aString.
-	^ (result == 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
+	^ (result == 0) ifTrue: [None] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
 category: 'Grail-Methods'
@@ -215,7 +215,7 @@ search: aString _: pos
 	result := (CPythonShim @env0:current)
 		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'search' selfPtr: cPtr
 		with: aString with: pos.
-	^ (result == 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
+	^ (result == 0) ifTrue: [None] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
 category: 'Grail-Methods'
@@ -226,7 +226,7 @@ search: aString _: pos _: endpos
 	result := (CPythonShim @env0:current)
 		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'search' selfPtr: cPtr
 		with: aString with: pos with: endpos.
-	^ (result == 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
+	^ (result == 0) ifTrue: [None] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
 category: 'Grail-Methods'
@@ -251,7 +251,7 @@ fullmatch: aString
 	result := (CPythonShim @env0:current)
 		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'fullmatch' selfPtr: cPtr
 		with: aString.
-	^ (result == 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
+	^ (result == 0) ifTrue: [None] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
 category: 'Grail-Methods'
@@ -262,7 +262,7 @@ fullmatch: aString _: pos
 	result := (CPythonShim @env0:current)
 		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'fullmatch' selfPtr: cPtr
 		with: aString with: pos.
-	^ (result == 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
+	^ (result == 0) ifTrue: [None] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
 category: 'Grail-Methods'
@@ -273,7 +273,7 @@ fullmatch: aString _: pos _: endpos
 	result := (CPythonShim @env0:current)
 		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'fullmatch' selfPtr: cPtr
 		with: aString with: pos with: endpos.
-	^ (result == 0) ifTrue: [nil] ifFalse: [SreMatch @env0:newFromCPtr: result]
+	^ (result == 0) ifTrue: [None] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
 category: 'Grail-Methods'
@@ -463,7 +463,7 @@ ___subWithExpansion___: repl in: aString count: count subn: returnTuple
 				ifFalse: ['' @env1:join: parts]
 		].
 		m := self @env1:search: aString _: pos.
-		m @env0:== nil ifTrue: [
+		(m @env0:== nil or: [m @env0:== None]) ifTrue: [
 			parts @env0:add: (aString @env0:copyFrom: pos @env0:+ 1 to: aString @env0:size).
 			^ returnTuple
 				ifTrue: [(tuple @env0:withAll: { ('' @env1:join: parts). numSubs })]
