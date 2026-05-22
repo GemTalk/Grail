@@ -3550,3 +3550,39 @@ testReMatchGroupdictNamedCaptures
 	self assert: (gd @env1:__getitem__: 'foo') equals: 'x'.
 	self assert: (gd @env1:__getitem__: 'bar') equals: 'y'
 %
+
+! --- Module-singleton duplicate-class bug (xfail regression) -------------
+
+category: 'Grail-Tests - Module singleton'
+method: FlaskScaffoldingTestCase
+testModuleSingletonReturnsSameClass
+	"Regression marker for the duplicate-class bug diagnosed alongside
+	the M4 lexer chain.  A class referenced from inside its OWN
+	method body resolves through ``(modCls ___instance___)
+	@env1:ClassName`` — and ``instance`` lazily creates a SECOND
+	module instance because ``loadModuleFromPath:`` never sets the
+	classInstVar.  The second instance's ``initialize`` runs again
+	and produces a parallel ``_ModuleSingletonProbe`` class, distinct
+	from the one external callers see.
+
+	Currently asserts the BUGGY behaviour: ``from_outside is
+	from_inside`` is False.  When the singleton fix lands, flip the
+	assertion to ``equals: true`` (and update the docstring) — the
+	test is intentionally written to fail loudly the moment the
+	bug is fixed, so it can't silently regress.
+
+	Symptom in jinja2: ``Node.iter_child_nodes`` calls
+	``isinstance(item, Node)`` which compares against the wrong
+	Node class and yields no children → ``FrameSymbolVisitor``
+	never visits the ``Name`` node → ``Symbols.refs`` empty →
+	``Symbols.ref('name')`` raises AssertionError.  Blocks
+	``env.compile('Hello {{ name }}!')`` and therefore any
+	non-trivial template render."
+
+	| mod tup same |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	tup := mod @env1:module_singleton_returns_same_class.
+	same := tup @env1:__getitem__: 2.
+	"BUG present: the two references are NOT the same class."
+	self assert: same equals: false
+%

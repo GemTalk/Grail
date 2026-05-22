@@ -756,3 +756,35 @@ def jinja2_match_groupdict_named_capture():
     import re
     m = re.compile(r"(?P<foo>x)(?P<bar>y)").match("xy")
     return m.groupdict()
+
+
+class _ModuleSingletonProbe:
+    """Probe class used by ``module_singleton_returns_same_class`` —
+    references its own class name from inside a method body, which
+    surfaces Grail's duplicate-class bug when ``loadModuleFromPath:``
+    bypasses the module-class ``instance`` classInstVar.  The bug:
+    the lazy ``instance`` accessor mints a SECOND module instance
+    the first time a compiled method body sends ``___instance___``,
+    re-runs ``initialize``, and creates a PARALLEL set of every
+    class the module defines.  Sound like a stretch — but jinja2's
+    ``Node.iter_child_nodes`` does exactly this with
+    ``isinstance(item, Node)`` and trips it on every {{ }} template.
+    """
+
+    def returns_self_class(self):
+        # Module-level reference (``_ModuleSingletonProbe`` here) is
+        # resolved via ``(<modCls> ___instance___) @env1:_ModuleSingletonProbe``
+        # at codegen time — see NameAst >> printSmalltalkOn:.
+        return _ModuleSingletonProbe
+
+
+def module_singleton_returns_same_class():
+    # Drive the probe both from module-scope (returns the externally-
+    # accessible class) and from a method body (returns the singleton's
+    # version).  When the duplicate-class bug is fixed these will be
+    # identical.  Until then the test marker below asserts the CURRENT
+    # buggy behaviour so the fix has something concrete to flip.
+    probe = _ModuleSingletonProbe()
+    from_outside = _ModuleSingletonProbe
+    from_inside = probe.returns_self_class()
+    return (from_outside, from_inside, from_outside is from_inside)
