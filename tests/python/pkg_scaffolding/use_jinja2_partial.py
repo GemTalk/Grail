@@ -722,3 +722,37 @@ def try_except_does_not_swallow_return():
             return "from-except"
 
     return f()
+
+
+def jinja2_lex_variable_template():
+    # Lexing a ``{{ name }}`` template — past the M4 trivial-render
+    # milestone, this exercises four plumbing fixes:
+    #   1. ``OptionalLStrip`` rewritten as a factory function over a
+    #      ``_OptionalLStripTuple`` subclass, so Grail's class
+    #      instantiation honours the tuple-iterable construction
+    #      without needing user ``__new__`` support.
+    #   2. ``ClassDefAst`` ``firstBaseIsTuple`` special-case so any
+    #      tuple subclass instantiated with a single iterable
+    #      positional populates from that iterable.
+    #   3. ``CPythonShim >> PyDict_Next:pos:`` so the C-side
+    #      ``PyDict_Next`` iterates a Smalltalk-backed dict — needed
+    #      by ``Match.groupdict()`` which walks ``pattern->groupindex``.
+    #   4. ``str._split:kw:`` varargs entry — the lexer pre-splits the
+    #      source on newlines via the call-site varargs dispatch.
+    # The original ``next(g for g in groups[2::2] if g is not None)``
+    # generator-expression idiom in tokeniter was also rewritten to an
+    # explicit loop (PythonGenerator's lazy-iteration path was raising
+    # a nil-DNU that escaped all handlers).
+    import jinja2
+    env = jinja2.Environment()
+    return [(t[1], t[2]) for t in env.lex("Hello {{ name }}!")]
+
+
+def jinja2_match_groupdict_named_capture():
+    # Regression for the M4 lexer chain: ``re`` matches with named
+    # captures used to fail in ``Match.groupdict()`` because the C
+    # shim's ``PyDict_Next`` had no Smalltalk-side method to delegate
+    # to — calling it returned a GciPerform error.
+    import re
+    m = re.compile(r"(?P<foo>x)(?P<bar>y)").match("xy")
+    return m.groupdict()

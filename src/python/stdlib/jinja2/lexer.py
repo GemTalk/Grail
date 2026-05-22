@@ -449,17 +449,34 @@ def get_lexer(environment: "Environment") -> "Lexer":
     return lexer
 
 
-class OptionalLStrip(tuple):  # type: ignore[type-arg]
+class _OptionalLStripTuple(tuple):  # type: ignore[type-arg]
     """A special tuple for marking a point in the state that can have
     lstrip applied.
+
+    GRAIL: the original idiom (``class OptionalLStrip(tuple): def __new__(
+    cls, *members, **kwargs): return super().__new__(cls, members)``)
+    relied on subclassing tuple with a user-defined ``__new__`` that
+    captures ``*members`` and forwards them as an iterable to
+    ``tuple.__new__``.  Grail doesn't invoke user-defined ``__new__``
+    when a class is instantiated (instantiation always uses ``self
+    new`` + ``__init__``), so that idiom would produce a 0-element
+    instance.  Instead, we keep the marker subclass and expose a
+    factory function ``OptionalLStrip`` that constructs the marker
+    tuple via the inherited ``tuple(iterable)`` constructor.
     """
 
     __slots__ = ()
 
-    # Even though it looks like a no-op, creating instances fails
-    # without this.
-    def __new__(cls, *members, **kwargs):  # type: ignore
-        return super().__new__(cls, members)
+
+def OptionalLStrip(*members):  # noqa: N802  (mimics original class name)
+    """Factory: build the marker tuple from positional members.
+
+    GRAIL: replaces the original class call site so we avoid the
+    user-defined ``__new__`` Grail doesn't honour.  Returns a
+    ``_OptionalLStripTuple`` so ``isinstance(x, _OptionalLStripTuple)``
+    still distinguishes lstrip-eligible rules from plain tuples.
+    """
+    return _OptionalLStripTuple(members)
 
 
 class _Rule(t.NamedTuple):
@@ -724,14 +741,22 @@ class Lexer:
                 if isinstance(tokens, tuple):
                     groups: t.Sequence[str] = m.groups()
 
-                    if isinstance(tokens, OptionalLStrip):
+                    if isinstance(tokens, _OptionalLStripTuple):
                         # Rule supports lstrip. Match will look like
                         # text, block type, whitespace control, type, control, ...
                         text = groups[0]
-                        # Skipping the text and first type, every other group is the
-                        # whitespace control for each type. One of the groups will be
-                        # -, +, or empty string instead of None.
-                        strip_sign = next(g for g in groups[2::2] if g is not None)
+                        # GRAIL: replaced ``next(g for g in groups[2::2] if g
+                        # is not None)`` with an explicit loop.  The genexp +
+                        # ``next()`` pattern was failing inside Grail's
+                        # PythonGenerator with a nil-DNU that escapes all
+                        # handlers; the explicit form has identical
+                        # semantics (first non-None whitespace control group
+                        # wins) and stays out of the lazy-iterator path.
+                        strip_sign = None
+                        for _g in groups[2::2]:
+                            if _g is not None:
+                                strip_sign = _g
+                                break
 
                         if strip_sign == "-":
                             # Strip all whitespace between the text and the tag.

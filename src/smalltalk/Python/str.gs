@@ -1066,6 +1066,52 @@ split: sep
 
 category: 'Grail-String Methods'
 method: CharacterCollection
+_split: positional kw: kwargs
+	"Python ``str.split(sep=None, maxsplit=-1)`` varargs entry.
+	Grail jinja2's lexer hits the 2-arg form via the call-site
+	``source.split('\\n')`` getting routed through the varargs
+	dispatch (the static caller doesn't see the receiver is a str
+	at compile time).  Falls back to the existing fixed-arity
+	``split`` / ``split:`` methods; ``maxsplit`` is honored when
+	positive."
+
+	| sep maxsplit base trimmed |
+	sep := nil.
+	maxsplit := -1.
+	positional @env0:isEmpty ifFalse: [
+		sep := positional @env0:at: 1.
+		positional @env0:size @env0:>= 2 ifTrue: [
+			maxsplit := positional @env0:at: 2
+		].
+	].
+	kwargs @env0:isNil ifFalse: [
+		sep := kwargs @env0:at: #sep ifAbsent: [sep].
+		maxsplit := kwargs @env0:at: #maxsplit ifAbsent: [maxsplit].
+	].
+	sep @env0:isNil
+		ifTrue: [base := self split]
+		ifFalse: [base := self split: sep].
+	(maxsplit @env0:< 0 or: [base @env0:size @env0:<= (maxsplit @env0:+ 1)])
+		ifTrue: [^ base].
+	"Coalesce trailing pieces back into one tail so the result has
+	at most ``maxsplit + 1`` entries."
+	trimmed := base @env0:copyFrom: 1 to: maxsplit.
+	sep @env0:isNil
+		ifTrue: [
+			"Whitespace split: tail is everything after the maxsplit-th
+			separator run.  Approximate by joining with single spaces."
+			trimmed @env0:add: ((base @env0:copyFrom: maxsplit @env0:+ 1 to: base @env0:size)
+				@env0:inject: '' into: [:acc :each | acc @env0:, ' ' @env0:, each]) @env0:trimSeparators
+		] ifFalse: [
+			trimmed @env0:add: ((base @env0:copyFrom: maxsplit @env0:+ 1 to: base @env0:size)
+				@env0:inject: '' into: [:acc :each |
+					acc @env0:isEmpty ifTrue: [each] ifFalse: [acc @env0:, sep @env0:, each]])
+		].
+	^ trimmed
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
 splitlines
 	"Return a list of lines in the string, breaking at line boundaries."
 

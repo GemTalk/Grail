@@ -610,7 +610,19 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 				nextPutAll: 'instance := self @env1:__new__: ((positional @env0:size @env0:>= 1) ifTrue: [positional @env0:at: 1] ifFalse: ['''']).';
 				nextPutAll: lf
 		]
-		ifFalse: [src nextPutAll: 'instance := self @env0:new.'; nextPutAll: lf].
+		ifFalse: [self firstBaseIsTuple
+			ifTrue: [
+				"Tuple subclasses — route a single-positional construction
+				through tuple's ``__new__:`` so the iterable populates the
+				instance (matches CPython's ``tuple(iterable)`` semantics).
+				Used by jinja2's ``OptionalLStrip`` factory which builds a
+				marker tuple from an iterable.  Empty positional yields
+				the empty-tuple fast path."
+				src
+					nextPutAll: 'instance := positional @env0:size @env0:= 0 ifTrue: [self @env0:new] ifFalse: [self @env1:__new__: (positional @env0:at: 1)].';
+					nextPutAll: lf
+			]
+			ifFalse: [src nextPutAll: 'instance := self @env0:new.'; nextPutAll: lf]].
 	initSelector ifNotNil: [
 		"Varargs __init__ (defaults, *args, or **kwargs) compiles to a
 		`___init__:kw:` selector that takes both positional and keyword
@@ -874,6 +886,20 @@ firstBaseIsStr
 	bases isEmpty ifTrue: [^ false].
 	^ (bases first isKindOf: NameAst)
 		and: [bases first id asSymbol = #'str']
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+firstBaseIsTuple
+	"True when this class is a direct ``tuple`` subclass.  Gates the
+	tuple-specific value:value: path that routes single-positional
+	construction through tuple's ``__new__: iterable`` so the
+	instance carries the iterable's elements (the Smalltalk
+	allocator returns an empty 0-size Array otherwise)."
+
+	bases isEmpty ifTrue: [^ false].
+	^ (bases first isKindOf: NameAst)
+		and: [bases first id asSymbol = #'tuple']
 %
 
 category: 'Grail-Class Compilation'

@@ -3505,3 +3505,48 @@ testTryExceptDoesNotSwallowReturn
 	mod := self loadFixture: 'use_jinja2_partial'.
 	self assert: mod @env1:try_except_does_not_swallow_return equals: 'from-try'
 %
+
+! --- jinja2 lexer end-to-end on a variable template (M4 follow-up) -------
+
+category: 'Grail-Tests - jinja2 lexer'
+method: FlaskScaffoldingTestCase
+testJinja2LexVariableTemplate
+	"M4 follow-up: ``env.lex('Hello {{ name }}!')`` produces the full
+	7-token stream (data, variable_begin, whitespace, name,
+	whitespace, variable_end, data).  Past the trivial-render
+	milestone — exercises the OptionalLStrip factory rewrite,
+	ClassDefAst firstBaseIsTuple, the PyDict_Next plumbing
+	(``Match.groupdict()`` works again), and the explicit-loop
+	rewrite of the lstrip-rule scan that the tokeniter generator
+	used to perform via ``next(genexp)``."
+
+	| mod toks |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	toks := mod @env1:jinja2_lex_variable_template.
+	self assert: toks size equals: 7.
+	self assert: ((toks @env1:__getitem__: 0) @env1:__getitem__: 0) equals: 'data'.
+	self assert: ((toks @env1:__getitem__: 0) @env1:__getitem__: 1) equals: 'Hello '.
+	self assert: ((toks @env1:__getitem__: 1) @env1:__getitem__: 0) equals: 'variable_begin'.
+	self assert: ((toks @env1:__getitem__: 3) @env1:__getitem__: 0) equals: 'name'.
+	self assert: ((toks @env1:__getitem__: 3) @env1:__getitem__: 1) equals: 'name'.
+	self assert: ((toks @env1:__getitem__: 5) @env1:__getitem__: 0) equals: 'variable_end'.
+	self assert: ((toks @env1:__getitem__: 6) @env1:__getitem__: 1) equals: '!'
+%
+
+! --- re Match.groupdict round-trip (CPythonShim PyDict_Next) -------------
+
+category: 'Grail-Tests - re groupdict'
+method: FlaskScaffoldingTestCase
+testReMatchGroupdictNamedCaptures
+	"``CPythonShim >> PyDict_Next:pos:`` makes Match.groupdict()
+	work by giving the C-side ``PyDict_Next`` something to delegate
+	to.  Previously every named-capture groupdict raised an
+	InternalError (``no Symbol with the specified value``) coming
+	out of the unimplemented dispatch."
+
+	| mod gd |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	gd := mod @env1:jinja2_match_groupdict_named_capture.
+	self assert: (gd @env1:__getitem__: 'foo') equals: 'x'.
+	self assert: (gd @env1:__getitem__: 'bar') equals: 'y'
+%

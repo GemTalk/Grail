@@ -723,6 +723,32 @@ PyDict_SetItem: aDictionary key: aKey value: aValue
 
 category: 'Grail-CPython API'
 method: CPythonShim
+PyDict_Next: aDictionary pos: posOop
+	"Iterator helper for the C-side ``PyDict_Next``.  Returns
+	``{ keyAddr. valueAddr. nextPos }`` for the entry at the given
+	1-based position, or ``nil`` when the position is past the end.
+	The caller threads the returned ``nextPos`` back in.
+
+	The C side packages the key/value via ``addr_to_pyobj`` so they
+	travel as PyObject* on the wire.  We wrap each value through
+	``self wrap:`` to materialise a PyObject sized to expose the
+	underlying OOP at offset 16 — keeping the round-trip lossless."
+
+	| keys n key value |
+	keys := aDictionary @env0:keys @env0:asArray.
+	n := keys @env0:size.
+	posOop @env0:>= n ifTrue: [^ nil].
+	key := keys @env0:at: posOop @env0:+ 1.
+	value := aDictionary @env0:at: key.
+	^ {
+		(self @env0:wrap: key) memoryAddress.
+		(self @env0:wrap: value) memoryAddress.
+		posOop @env0:+ 1.
+	}
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
 PyDict_SetItemString: aDictionary key: aString value: aValue
 	aDictionary at: aString put: aValue.
 %
