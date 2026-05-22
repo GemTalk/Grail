@@ -414,6 +414,19 @@ def typing_namedtuple_unpacks():
     return (out, items, n)
 
 
+def exec_source_populates_globals():
+    # Regression: ``exec(source, globals)`` used to NameError on
+    # ``exec`` itself.  Grail now wraps ModuleAst's parse+execute
+    # machinery as a builtin that reflects every module-level binding
+    # produced by ``source`` back into the ``globals`` mapping.
+    # jinja2's Template.from_code depends on this to populate the
+    # template namespace with ``root``, ``blocks``, etc.
+    ns = {'seed': 7}
+    exec('result = seed + 10\ndef double(x):\n    return x * 2\n', ns)
+    doubler = ns['double']
+    return (ns['result'], doubler(21))
+
+
 class _StaticHolder:
     # ClassDefAst now compiles @staticmethod onto the metaclass with
     # the module-method shape (no first-param strip).  Calling

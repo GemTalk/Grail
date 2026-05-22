@@ -100,6 +100,51 @@ abs: aNumber
 
 category: 'Grail-Built-in Functions'
 method: builtins
+_exec: positional kw: kwargs
+	"Python builtin exec(source_or_code, globals=None, locals=None).
+	Grail implementation: parse ``source`` as a module body, evaluate
+	it in a fresh module scope pre-populated with ``globals``, then
+	reflect every binding produced by the body back into the
+	``globals`` mapping.  ``locals`` is ignored (the Python contract
+	already permits aliasing globals==locals at module-level exec).
+
+	The load-bearing caller is jinja2's
+	``Template.from_code(env, code, ...)`` which compiles the
+	generated template-render source and exec's it into a fresh
+	dict so the dict ends up populated with ``root``, ``blocks``,
+	``name``, ``debug_info`` etc.
+
+	Without exec, jinja2 template rendering can't progress past the
+	from_code step regardless of how much of the compiler runs."
+
+	| source globalsDict scope sym k |
+	source := positional @env0:at: 1.
+	globalsDict := (positional @env0:size @env0:>= 2)
+		ifTrue: [positional @env0:at: 2]
+		ifFalse: [nil].
+	(globalsDict @env0:isNil) ifTrue: [
+		globalsDict := KeyValueDictionary @env0:new
+	].
+	"Build a SymbolDictionary seeded from the globals mapping; module
+	scope must use Symbol keys."
+	scope := SymbolDictionary @env0:new.
+	(globalsDict @env0:isKindOf: KeyValueDictionary) ifTrue: [
+		globalsDict @env0:keysAndValuesDo: [:key :value |
+			sym := key @env0:isSymbol ifTrue: [key] ifFalse: [key @env0:asString @env0:asSymbol].
+			scope @env0:at: sym put: value]
+	].
+	"Run the source as a module body in the seeded scope."
+	ModuleAst @env0:evaluateSource: source usingModuleScope: scope.
+	"Reflect every binding back into the original globals dict using
+	string keys (Python convention)."
+	scope @env0:keysAndValuesDo: [:key :value |
+		k := key @env0:asString.
+		globalsDict @env0:at: k put: value].
+	^ None
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 _compile: positional kw: kwargs
 	"Python builtin compile(source, filename, mode, ...).  Grail has
 	no real bytecode compiler, so return the source string unchanged

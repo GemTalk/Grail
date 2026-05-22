@@ -716,6 +716,24 @@ testStrTranslateBasic
 
 category: 'Grail-Tests - jinja2 plumbing'
 method: FlaskScaffoldingTestCase
+testExecSourcePopulatesGlobals
+	"Regression: ``exec(source, globals)`` used to NameError on
+	``exec`` itself.  builtins now implements ``_exec:kw:`` by
+	wrapping ModuleAst's parse+execute machinery — pre-seeds a
+	scope from the globals mapping, runs source as a module body,
+	and reflects every binding back into globals.  jinja2's
+	Template.from_code depends on this for the template namespace
+	(``root``, ``blocks``, ``debug_info``, ...)."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:exec_source_populates_globals.
+	self assert: (result @env1:__getitem__: 0) equals: 17.
+	self assert: (result @env1:__getitem__: 1) equals: 42
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
 testStaticmethodViaInstanceAndClass
 	"Regression: @staticmethod-decorated functions were silently
 	dropped by ClassDefAst (only InstanceFunctionDefAst and the
