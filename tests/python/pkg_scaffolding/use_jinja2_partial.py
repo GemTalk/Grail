@@ -414,6 +414,24 @@ def typing_namedtuple_unpacks():
     return (out, items, n)
 
 
+class _StaticHolder:
+    # ClassDefAst now compiles @staticmethod onto the metaclass with
+    # the module-method shape (no first-param strip).  Calling
+    # ``self.bump(x)`` from an instance method routes through
+    # ___pyAttrLoad___'s class-side BoundMethod wrap.
+    @staticmethod
+    def bump(x):
+        return x + 100
+
+    def via_instance(self, x):
+        return self.bump(x)
+
+
+def staticmethod_via_instance_and_class():
+    h = _StaticHolder()
+    return (_StaticHolder.bump(3), h.bump(7), h.via_instance(15))
+
+
 class _ClassAttrShadow:
     # Bare class-body declaration + later instance write — the same
     # shape jinja2's CodeGenerator uses for ``_finalize: t.Optional[...] = None``.

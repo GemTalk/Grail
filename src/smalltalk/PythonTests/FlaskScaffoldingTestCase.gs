@@ -716,6 +716,30 @@ testStrTranslateBasic
 
 category: 'Grail-Tests - jinja2 plumbing'
 method: FlaskScaffoldingTestCase
+testStaticmethodViaInstanceAndClass
+	"Regression: @staticmethod-decorated functions were silently
+	dropped by ClassDefAst (only InstanceFunctionDefAst and the
+	just-added ClassFunctionDefAst paths emitted anything).  Now
+	StaticFunctionDefAst nodes are compiled onto the metaclass via
+	the module-method source generator (no first-arg strip), and
+	``self.X(args)`` from an instance method routes through a
+	class-side BoundMethod wrap in ___pyAttrLoad___.
+
+	Both call shapes — ``Cls.method(args)`` and
+	``instance.method(args)`` — must dispatch to the same metaclass
+	selector.  jinja2's CodeGenerator._default_finalize is the
+	first load-bearing call site."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:staticmethod_via_instance_and_class.
+	self assert: (result @env1:__getitem__: 0) equals: 103.
+	self assert: (result @env1:__getitem__: 1) equals: 107.
+	self assert: (result @env1:__getitem__: 2) equals: 115
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
 testClassAttrWithInstanceWriteSite
 	"Regression: ``self.X`` where X is declared at class body scope
 	(``X: type = expr`` or ``X = expr``) AND also has an instance-side
