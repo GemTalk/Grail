@@ -443,13 +443,16 @@ class CodeGenerator(NodeVisitor):
         self.write(s)
         self.end_write(frame)
 
-    def blockvisit(self, nodes: t.Iterable[nodes.Node], frame: Frame) -> None:
+    def blockvisit(self, block_nodes: t.Iterable[nodes.Node], frame: Frame) -> None:
         """Visit a list of nodes as block in a frame.  If the current frame
         is no buffer a dummy ``if 0: yield None`` is written automatically.
+
+        GRAIL: parameter renamed from ``nodes`` to ``block_nodes`` —
+        same module-shadow issue as pull_dependencies.
         """
         try:
             self.writeline("pass")
-            for node in nodes:
+            for node in block_nodes:
                 self.visit(node, frame)
         except CompilerExit:
             pass
@@ -539,7 +542,7 @@ class CodeGenerator(NodeVisitor):
             self.write(", **")
             self.visit(node.dyn_kwargs, frame)
 
-    def pull_dependencies(self, nodes: t.Iterable[nodes.Node]) -> None:
+    def pull_dependencies(self, dep_nodes: t.Iterable[nodes.Node]) -> None:
         """Find all filter and test names used in the template and
         assign them to variables in the compiled namespace. Checking
         that the names are registered with the environment is done when
@@ -549,10 +552,17 @@ class CodeGenerator(NodeVisitor):
         .. versionchanged:: 3.0
             Filters and tests in If and CondExpr nodes are checked at
             runtime instead of compile time.
+
+        GRAIL: parameter renamed from ``nodes`` to ``dep_nodes`` to
+        avoid shadowing the module-level ``nodes`` import.  Grail's
+        NameAst resolves the body's ``for node in nodes:`` against the
+        module-scope name (the imported jinja2.nodes module) rather
+        than the parameter, so iteration would walk the module and
+        produce symbols.
         """
         visitor = DependencyFinderVisitor()
 
-        for node in nodes:
+        for node in dep_nodes:
             visitor.visit(node)
 
         for id_map, names, dependency in (

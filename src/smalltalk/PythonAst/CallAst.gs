@@ -304,25 +304,7 @@ printSmalltalkOn: aStream
 	aStream nextPutAll: ' @env1:value: '.
 	self printArgumentsArrayOn: aStream.
 	aStream nextPutAll: ' value: '.
-
-	keywords isEmpty ifTrue: [
-		aStream nextPutAll: 'nil'.
-	] ifFalse: [
-		"Build keywords dictionary (legacy block-fetch path's kwargs)."
-		"Use explicit env-0 dispatch — env-1 IdentityKeyValueDictionary
-		has no `new` / `at:put:` / `yourself`.  Each cascaded message is
-		prefixed with `@env0:` on the first keyword; subsequent keywords
-		in the same message do NOT take the prefix (Smalltalk merges them
-		into a single keyword selector by surface syntax)."
-		aStream nextPutAll: '((IdentityKeyValueDictionary @env0:new)'.
-		"keywords is an Array of KeywordAst; iterate element-wise."
-		keywords do: [:kwAst |
-			aStream nextPutAll: ' @env0:at: #'; nextPutAll: kwAst name asString; nextPutAll: ' put: '.
-			kwAst value printSmalltalkWithParenthesisOn: aStream.
-			aStream nextPut: $;.
-		].
-		aStream nextPutAll: ' yourself)'.
-	].
+	self printKeywordsDictOn: aStream.
 %
 
 category: 'Grail-other'
@@ -540,23 +522,7 @@ printAttributeCallVarargsOn: aStream selector: aSelector
 	aStream nextPutAll: ' _'; nextPutAll: attrName; nextPutAll: ': '.
 	self printArgumentsArrayOn: aStream.
 	aStream nextPutAll: ' kw: '.
-	keywords isEmpty ifTrue: [
-		aStream nextPutAll: 'nil'.
-	] ifFalse: [
-		"Use explicit env-0 dispatch — env-1 IdentityKeyValueDictionary
-		has no `new` / `at:put:` / `yourself`.  Each cascaded message is
-		prefixed with `@env0:` on the first keyword; subsequent keywords
-		in the same message do NOT take the prefix (Smalltalk merges them
-		into a single keyword selector by surface syntax)."
-		aStream nextPutAll: '((IdentityKeyValueDictionary @env0:new)'.
-		"keywords is an Array of KeywordAst; iterate element-wise."
-		keywords do: [:kwAst |
-			aStream nextPutAll: ' @env0:at: #'; nextPutAll: kwAst name asString; nextPutAll: ' put: '.
-			kwAst value printSmalltalkWithParenthesisOn: aStream.
-			aStream nextPut: $;.
-		].
-		aStream nextPutAll: ' yourself)'.
-	].
+	self printKeywordsDictOn: aStream.
 	aStream nextPut: $)
 %
 
@@ -632,24 +598,47 @@ printBareCallVarargsOn: aStream selector: aSelector
 	aStream nextPutAll: funcName; nextPutAll: ': '.
 	self printArgumentsArrayOn: aStream.
 	aStream nextPutAll: ' kw: '.
+	self printKeywordsDictOn: aStream.
+	aStream nextPut: $)
+%
+
+category: 'Grail-other'
+method: CallAst
+printKeywordsDictOn: aStream
+	"Emit the kwargs expression for a varargs ``_name: ... kw: <expr>``
+	call.  Three cases:
+
+	- Empty keywords list → ``nil`` (no kwargs).
+	- Exactly one **splat (KeywordAst with arg=nil) and nothing else →
+	  the splatted expression directly (no wrapping dict).  This is
+	  the common case ``f(*args, **kwargs)`` from forwarder patterns
+	  like jinja2's NodeVisitor.visit; without this the splat would
+	  be wrapped as ``{nil → kwargs}`` and the receiver would see a
+	  single bogus #nil-keyed entry instead of the actual kwargs.
+	- Otherwise → build a fresh KeyValueDictionary with the named
+	  entries (and skip any **splat for now — multi-source merge
+	  isn't modeled yet)."
+
 	keywords isEmpty ifTrue: [
 		aStream nextPutAll: 'nil'.
-	] ifFalse: [
-		"Use explicit env-0 dispatch — env-1 IdentityKeyValueDictionary
-		has no `new` / `at:put:` / `yourself`.  Each cascaded message is
-		prefixed with `@env0:` on the first keyword; subsequent keywords
-		in the same message do NOT take the prefix (Smalltalk merges them
-		into a single keyword selector by surface syntax)."
-		aStream nextPutAll: '((IdentityKeyValueDictionary @env0:new)'.
-		"keywords is an Array of KeywordAst; iterate element-wise."
-		keywords do: [:kwAst |
+		^ self
+	].
+	(keywords size = 1 and: [keywords first name isNil]) ifTrue: [
+		keywords first value printSmalltalkWithParenthesisOn: aStream.
+		^ self
+	].
+	"Use explicit env-0 dispatch — env-1 IdentityKeyValueDictionary
+	has no `new` / `at:put:` / `yourself`.  Skip splat entries
+	silently."
+	aStream nextPutAll: '((IdentityKeyValueDictionary @env0:new)'.
+	keywords do: [:kwAst |
+		kwAst name ifNotNil: [
 			aStream nextPutAll: ' @env0:at: #'; nextPutAll: kwAst name asString; nextPutAll: ' put: '.
 			kwAst value printSmalltalkWithParenthesisOn: aStream.
 			aStream nextPut: $;.
 		].
-		aStream nextPutAll: ' yourself)'.
 	].
-	aStream nextPut: $)
+	aStream nextPutAll: ' yourself)'.
 %
 
 category: 'Grail-other'
@@ -1084,23 +1073,7 @@ printClassSelfSendVarargsOn: aStream selector: aSelector
 	aStream nextPutAll: attrName; nextPutAll: ': '.
 	self printArgumentsArrayOn: aStream.
 	aStream nextPutAll: ' kw: '.
-	keywords isEmpty ifTrue: [
-		aStream nextPutAll: 'nil'.
-	] ifFalse: [
-		"Use explicit env-0 dispatch — env-1 IdentityKeyValueDictionary
-		has no `new` / `at:put:` / `yourself`.  Each cascaded message is
-		prefixed with `@env0:` on the first keyword; subsequent keywords
-		in the same message do NOT take the prefix (Smalltalk merges them
-		into a single keyword selector by surface syntax)."
-		aStream nextPutAll: '((IdentityKeyValueDictionary @env0:new)'.
-		"keywords is an Array of KeywordAst; iterate element-wise."
-		keywords do: [:kwAst |
-			aStream nextPutAll: ' @env0:at: #'; nextPutAll: kwAst name asString; nextPutAll: ' put: '.
-			kwAst value printSmalltalkWithParenthesisOn: aStream.
-			aStream nextPut: $;.
-		].
-		aStream nextPutAll: ' yourself)'.
-	].
+	self printKeywordsDictOn: aStream.
 	aStream nextPut: $)
 %
 
@@ -1202,22 +1175,6 @@ printModuleSelfSendVarargsOn: aStream selector: aSelector
 	aStream nextPutAll: funcName; nextPutAll: ': '.
 	self printArgumentsArrayOn: aStream.
 	aStream nextPutAll: ' kw: '.
-	keywords isEmpty ifTrue: [
-		aStream nextPutAll: 'nil'.
-	] ifFalse: [
-		"Use explicit env-0 dispatch — env-1 IdentityKeyValueDictionary
-		has no `new` / `at:put:` / `yourself`.  Each cascaded message is
-		prefixed with `@env0:` on the first keyword; subsequent keywords
-		in the same message do NOT take the prefix (Smalltalk merges them
-		into a single keyword selector by surface syntax)."
-		aStream nextPutAll: '((IdentityKeyValueDictionary @env0:new)'.
-		"keywords is an Array of KeywordAst; iterate element-wise."
-		keywords do: [:kwAst |
-			aStream nextPutAll: ' @env0:at: #'; nextPutAll: kwAst name asString; nextPutAll: ' put: '.
-			kwAst value printSmalltalkWithParenthesisOn: aStream.
-			aStream nextPut: $;.
-		].
-		aStream nextPutAll: ' yourself)'.
-	].
+	self printKeywordsDictOn: aStream.
 	aStream nextPut: $)
 %
