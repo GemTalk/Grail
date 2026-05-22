@@ -414,6 +414,62 @@ def typing_namedtuple_unpacks():
     return (out, items, n)
 
 
+# Module-level name `_shadow_target` that a sibling comprehension
+# also uses as its loop variable.  Used by nested_fn_param_shadows
+# below to confirm a function parameter wins over the module instVar.
+_shadow_target = 'module-value'
+_shadow_seed = [_shadow_target for _shadow_target in ('a', 'b', 'c')]
+
+
+def nested_fn_param_shadows_module_attr():
+    # Regression: ``def c(x):`` nested inside ``def outer():`` was
+    # being re-classed as InstanceFunctionDefAst when outer lived in
+    # a class.  Plus ``isModuleScopeName:`` would route a function
+    # parameter through the module instVar accessor when the name
+    # was also recorded as a module-level binding (comprehension
+    # loop variable elsewhere in the file).  ``c(x)``'s body must
+    # read the parameter, not the module instVar.
+    def c(_shadow_target):
+        return ('param: ' + _shadow_target,
+                'module: ' + _shadow_target.upper())
+    return c('local-value')
+
+
+def generator_in_closure_form():
+    # Regression: ``def gen(): yield ...`` at function-body / eval /
+    # exec context emitted ``___gen___ ___yield___:`` references
+    # without the surrounding ``PythonGenerator withBlock:`` wrap —
+    # ``undefined symbol ___gen___`` compile error.  Closure form
+    # now matches the module-method path's body emission.
+    def gen():
+        yield 1
+        yield 2
+        yield 3
+    return list(gen())
+
+
+def object_new_classmethod():
+    # Regression: ``object.__new__(cls)`` is what jinja2's
+    # ``Template._from_namespace`` uses to materialize a Template
+    # instance the exec'd namespace then populates.  Object class
+    # didn't expose ``__new__:`` or the varargs ``___new__:kw:``.
+    class _Empty:
+        pass
+    inst = object.__new__(_Empty)
+    return (type(inst).__name__, isinstance(inst, _Empty))
+
+
+def kwargs_class_call_routes_through_new():
+    # Regression: ``dict(*args, **kwargs)`` tripped the CallAst
+    # class-call arity-mismatch error because the static check
+    # didn't consider kwargs-bearing varargs ``_new:kw:`` entries.
+    # The legacy ``cls value:{args} value:kw`` path now fires for
+    # built-in classes that expose ``_new:kw:`` (dict, set).
+    base = {'a': 1}
+    extras = {'b': 2, 'c': 3}
+    return dict(base, **extras)
+
+
 def fstring_interpolation_basic():
     # Regression: f-strings used to be tokenized as plain STRING and
     # the placeholders left as literal ``{x}`` text.  Parser now

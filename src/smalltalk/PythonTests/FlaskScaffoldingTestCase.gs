@@ -716,6 +716,70 @@ testStrTranslateBasic
 
 category: 'Grail-Tests - jinja2 plumbing'
 method: FlaskScaffoldingTestCase
+testNestedFnParamShadowsModuleAttr
+	"Regression: a function parameter named the same as a sibling
+	comprehension's loop variable (which Grail captured as a module
+	instVar) used to read the module instVar instead of the
+	parameter.  NameAst now defers to enclosing-function locals
+	even when ``isModuleScopeName:`` would fire."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:nested_fn_param_shadows_module_attr.
+	self assert: (result @env1:__getitem__: 0) equals: 'param: local-value'.
+	self assert: (result @env1:__getitem__: 1) equals: 'module: LOCAL-VALUE'
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testGeneratorInClosureForm
+	"Regression: ``def gen(): yield ...`` at function-body / eval /
+	exec context emitted ``___gen___ ___yield___:`` references
+	without the surrounding ``PythonGenerator withBlock:`` wrap.
+	The closure form now matches the module-method body emit."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:generator_in_closure_form.
+	self assert: (result @env1:__getitem__: 0) equals: 1.
+	self assert: (result @env1:__getitem__: 1) equals: 2.
+	self assert: (result @env1:__getitem__: 2) equals: 3
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testObjectNewClassmethod
+	"Regression: ``object.__new__(cls)`` is the Template constructor
+	jinja2's ``_from_namespace`` uses to materialize an instance the
+	exec'd namespace then populates.  Object class now exposes
+	``__new__:`` + ``___new__:kw:``."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:object_new_classmethod.
+	self assert: (result @env1:__getitem__: 0) equals: '_Empty'.
+	self assert: (result @env1:__getitem__: 1) equals: true
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
+testKwargsClassCallRoutesThroughNew
+	"Regression: ``dict(*args, **kwargs)`` used to trip
+	the class-call arity-mismatch error.  CallAst now skips
+	the static check when the class exposes a varargs
+	``_new:kw:`` and lets Object class>>value:value: route the
+	call through it."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:kwargs_class_call_routes_through_new.
+	self assert: (result @env1:__getitem__: 'a') equals: 1.
+	self assert: (result @env1:__getitem__: 'b') equals: 2.
+	self assert: (result @env1:__getitem__: 'c') equals: 3
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
 testFStringInterpolationBasic
 	"Regression: f-strings used to round-trip as literal
 	``{placeholder}`` text.  Parser now tokenizes FSTRING, scans
