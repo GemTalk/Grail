@@ -300,17 +300,10 @@ printSmalltalkOn: aStream
 		ifFalse: [function printSmalltalkOn: aStream].
 
 	"Dispatch via ``@env1:value:value:`` so BoundMethod, ``Object
-	class >> value:value:`` (built-in classes), synthesized Python-
-	user-class ``value:value:``, and ExecBlock's env-1 forwarder all
-	resolve consistently.  Bare ``value:value:`` was env-0 dispatch,
-	which only ExecBlock implemented — so callables returned from
-	``___pyAttrLoad___:`` (BoundMethods, classes) failed to invoke."
-	aStream nextPutAll: ' @env1:value: { '.
-	arguments do: [:each |
-		each printSmalltalkWithParenthesisOn: aStream.
-		aStream nextPut: $.; space.
-	].
-	aStream nextPutAll: '} value: '.
+	class >> value:value:``, etc. resolve consistently."
+	aStream nextPutAll: ' @env1:value: '.
+	self printArgumentsArrayOn: aStream.
+	aStream nextPutAll: ' value: '.
 
 	keywords isEmpty ifTrue: [
 		aStream nextPutAll: 'nil'.
@@ -544,12 +537,9 @@ printAttributeCallVarargsOn: aStream selector: aSelector
 	attrName := function attr asString.
 	aStream nextPut: $(.
 	function value printSmalltalkWithParenthesisOn: aStream.
-	aStream nextPutAll: ' _'; nextPutAll: attrName; nextPutAll: ': { '.
-	arguments do: [:each |
-		each printSmalltalkWithParenthesisOn: aStream.
-		aStream nextPut: $.; space.
-	].
-	aStream nextPutAll: '} kw: '.
+	aStream nextPutAll: ' _'; nextPutAll: attrName; nextPutAll: ': '.
+	self printArgumentsArrayOn: aStream.
+	aStream nextPutAll: ' kw: '.
 	keywords isEmpty ifTrue: [
 		aStream nextPutAll: 'nil'.
 	] ifFalse: [
@@ -639,12 +629,9 @@ printBareCallVarargsOn: aStream selector: aSelector
 	| funcName |
 	funcName := function id asString.
 	aStream nextPutAll: '(((Python @env0:at: #builtins) instance) _'.
-	aStream nextPutAll: funcName; nextPutAll: ': { '.
-	arguments do: [:each |
-		each printSmalltalkWithParenthesisOn: aStream.
-		aStream nextPut: $.; space.
-	].
-	aStream nextPutAll: '} kw: '.
+	aStream nextPutAll: funcName; nextPutAll: ': '.
+	self printArgumentsArrayOn: aStream.
+	aStream nextPutAll: ' kw: '.
 	keywords isEmpty ifTrue: [
 		aStream nextPutAll: 'nil'.
 	] ifFalse: [
@@ -663,6 +650,51 @@ printBareCallVarargsOn: aStream selector: aSelector
 		aStream nextPutAll: ' yourself)'.
 	].
 	aStream nextPut: $)
+%
+
+category: 'Grail-other'
+method: CallAst
+printArgumentsArrayOn: aStream
+	"Emit the positional arguments as a Smalltalk Array expression
+	suitable for ``@env1:value:value:``.  In the common case (no
+	``*x`` splat among the args) this is a brace literal
+	``{a. b. c.}``.  When any argument is a StarredAst, splice its
+	value's ``asArray`` into the list via ``,`` concatenation
+	(grouping consecutive non-starred args into sub-array literals
+	to keep the output compact).  Without this the StarredAst stub
+	emitted a runtime TypeError that fired the moment Python source
+	used ``f(*args)`` — pervasive in the jinja2 visitor pattern."
+
+	| hasStar |
+	hasStar := arguments anySatisfy: [:each | each isKindOf: StarredAst].
+	hasStar ifFalse: [
+		aStream nextPutAll: '{ '.
+		arguments do: [:each |
+			each printSmalltalkWithParenthesisOn: aStream.
+			aStream nextPut: $.; space.
+		].
+		aStream nextPutAll: '}'.
+		^ self
+	].
+	"Splat path: emit ``({a. b.} @env0:, (splat @env0:asArray) @env0:, {c.})``.
+	Inject an empty seed so the result is always parenthesized.
+	``@env0:,`` dispatches the env-0 Array concatenation; bare ``,``
+	would resolve to env-1 where Array has no comma method."
+	aStream nextPutAll: '({} '.
+	arguments do: [:each |
+		aStream nextPutAll: '@env0:, '.
+		(each isKindOf: StarredAst)
+			ifTrue: [
+				aStream nextPut: $(.
+				each value printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPutAll: ' @env0:asArray) '.
+			] ifFalse: [
+				aStream nextPutAll: '{ '.
+				each printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPutAll: '. } '.
+			].
+	].
+	aStream nextPut: $).
 %
 
 category: 'Grail-other'
@@ -1049,12 +1081,9 @@ printClassSelfSendVarargsOn: aStream selector: aSelector
 	| attrName |
 	attrName := function attr asString.
 	aStream nextPutAll: '(self _'.
-	aStream nextPutAll: attrName; nextPutAll: ': { '.
-	arguments do: [:each |
-		each printSmalltalkWithParenthesisOn: aStream.
-		aStream nextPut: $.; space.
-	].
-	aStream nextPutAll: '} kw: '.
+	aStream nextPutAll: attrName; nextPutAll: ': '.
+	self printArgumentsArrayOn: aStream.
+	aStream nextPutAll: ' kw: '.
 	keywords isEmpty ifTrue: [
 		aStream nextPutAll: 'nil'.
 	] ifFalse: [
@@ -1170,12 +1199,9 @@ printModuleSelfSendVarargsOn: aStream selector: aSelector
 	| funcName |
 	funcName := function id asString.
 	aStream nextPutAll: '(self _'.
-	aStream nextPutAll: funcName; nextPutAll: ': { '.
-	arguments do: [:each |
-		each printSmalltalkWithParenthesisOn: aStream.
-		aStream nextPut: $.; space.
-	].
-	aStream nextPutAll: '} kw: '.
+	aStream nextPutAll: funcName; nextPutAll: ': '.
+	self printArgumentsArrayOn: aStream.
+	aStream nextPutAll: ' kw: '.
 	keywords isEmpty ifTrue: [
 		aStream nextPutAll: 'nil'.
 	] ifFalse: [

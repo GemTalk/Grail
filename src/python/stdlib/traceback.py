@@ -15,13 +15,13 @@ def format_exception_only(exc_type, value):
 
     type_name = ''
     if exc_type is not None:
-        # Class-side `__name__` returns a BoundMethod when read as an
-        # attribute in Grail (metaclass attr load doesn't unwrap class
-        # methods to values yet), so fall straight to str() of the
-        # class which calls Object's __str__ -> class name.
+        # ``cls.__name__`` returns the class's name string directly
+        # (Grail's ___pyAttrLoad___ unwraps Behavior-side __name__ to
+        # a value).  Fall back to str(cls) if the attribute read
+        # raises for any reason — covers exotic shim classes that
+        # don't expose __name__.
         try:
-            raw = exc_type.__name__()
-            type_name = str(raw)
+            type_name = exc_type.__name__
         except Exception:
             type_name = str(exc_type)
     msg = str(value) if value is not None else ''

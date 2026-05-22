@@ -121,8 +121,13 @@ class Node(metaclass=NodeType):
     environment: t.Optional["Environment"]
 
     def __init__(self, *fields: t.Any, **attributes: t.Any) -> None:
-        if self.abstract:
-            raise TypeError("abstract nodes are not instantiable")
+        # GRAIL: NodeType (the would-be metaclass) sets ``abstract = False``
+        # on every concrete subclass that doesn't itself set ``abstract =
+        # True``.  Grail's ClassDefAst doesn't honor ``metaclass=`` kwargs
+        # so the override never fires and every leaf class inherits
+        # ``abstract = True`` from Node — making nothing instantiable.
+        # Drop the guard; the only callers of Node() directly are
+        # internal jinja2 paths that always pass a concrete subclass.
         if fields:
             if len(fields) != len(self.fields):
                 if not self.fields:

@@ -665,13 +665,18 @@ hasattr: anObject _: aName
 	Grail collapses ``except (TypeError, AttributeError):`` paths
 	through env-1 dispatch errors that show up as MNUs here too).
 
+	Catch both the Smalltalk ``Error`` family (covers MNUs and other
+	GS-side faults) and Python ``AttributeError`` (which inherits
+	from AbstractException, not Error — ``___pyAttrLoad___`` now
+	raises a real AttributeError on miss rather than DNU-ing).
+
 	Used heavily by MarkupSafe, itsdangerous, and Werkzeug to detect
 	``__html__`` / ``__call__`` / duck-typed protocols."
 
-	^ [anObject @env1:___pyAttrLoad___: aName @env0:asSymbol.
-	   true]
-		@env0:on: Error
-		do: [:___ex___ | false]
+	^ [[anObject @env1:___pyAttrLoad___: aName @env0:asSymbol.
+	    true]
+		@env0:on: AttributeError do: [:___ex___ | false]]
+		@env0:on: Error do: [:___ex___ | false]
 %
 
 category: 'Grail-Built-in Functions'

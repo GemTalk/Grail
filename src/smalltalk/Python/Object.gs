@@ -287,10 +287,20 @@ ___pyAttrLoad___: aSym
 	redeclaration in ClassDefAst) still resolves through this branch
 	— per-class slot storage means ``B.X`` calls the inherited
 	accessor on B and reads B's own slot."
-	((self @env0:isKindOf: Behavior)
-		and: [self @env0:inheritsFrom: PythonInstance]) ifTrue: [
-		((self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
-			and: [(self @env0:class @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil])
+	(self @env0:isKindOf: Behavior) ifTrue: [
+		"Class-level dunders that should always read as values, never
+		wrap as BoundMethods.  Without this, ``type(node).__name__``
+		on any class would wrap the inherited Behavior-side getter
+		and break visitor dispatch
+		(``getattr(self, 'visit_' + type(node).__name__)``)."
+		((s @env0:= '__name__' or: [s @env0:= '__module__' or: [s @env0:= '__qualname__']])
+			and: [(self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil])
+				ifTrue: [^ self @env0:perform: aSym env: 1].
+		"Setter-paired class-level accessor on a Python user class —
+		value attribute (``class C: X = 1``)."
+		((self @env0:inheritsFrom: PythonInstance)
+			and: [(self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
+				and: [(self @env0:class @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil]])
 			ifTrue: [
 				^ self @env0:perform: aSym env: 1
 		].
@@ -321,9 +331,20 @@ ___pyAttrLoad___: aSym
 	so calling the accessor on ``self class`` (the immediate class,
 	not the metaclass that defined the accessor) returns the
 	subclass's per-class value — matching Python's per-class
-	override semantics (B.x can differ from A.x)."
+	override semantics (B.x can differ from A.x).
+
+	BUT: Python's lookup order is ``instance.__dict__`` first, then
+	class.  ``class _Rule(NamedTuple): pattern: t.Pattern`` declares
+	``pattern`` as a class-side slot (bare annotation, init=nil) AND
+	NamedTuple.__init__ writes ``self.pattern`` through the instance
+	__dict__.  Without consulting __dict__ here, ``r.pattern``
+	would always return the class-side nil and mask the per-instance
+	value.  Check __dict__ explicitly before the class-side dispatch."
 	(self @env0:isKindOf: PythonInstance) ifTrue: [
-		| metaclass |
+		| metaclass dict |
+		dict := self @env0:___ensureDict___.
+		(dict @env0:includesKey: aSym @env0:asSymbol)
+			ifTrue: [^ dict @env0:at: aSym @env0:asSymbol].
 		metaclass := self @env0:class @env0:class.
 		((metaclass @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
 			and: [(metaclass @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil]) ifTrue: [
@@ -356,7 +377,14 @@ ___pyAttrLoad___: aSym
 				or: [(self @env0:class @env0:whichClassIncludesSelector: sym3 environmentId: 1) notNil
 					or: [(self @env0:class @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil]]]])
 		ifTrue: [^ BoundMethod @env1:receiver: self selector: aSym].
-	^ self @env0:perform: aSym env: 1
+	"No callable selector matched anywhere in the receiver's class
+	chain.  Raise AttributeError instead of falling through to a
+	bare ``perform:`` (which would DNU as MessageNotUnderstood and
+	bypass Python's standard attribute-miss protocol — breaking
+	``getattr(obj, name, default)`` and ``hasattr(obj, name)``)."
+	^ AttributeError @env1:___signal___:
+		(self @env0:class @env0:name @env0:asString @env0:,
+			' object has no attribute ''' @env0:, s @env0:, '''')
 %
 
 category: 'Grail-Convenience Methods - Keyword'

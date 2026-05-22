@@ -30,7 +30,11 @@ class NodeVisitor:
         exists for this node.  In that case the generic visit function is
         used instead.
         """
-        return getattr(self, f"visit_{type(node).__name__}", None)
+        # GRAIL: f-string interpolation not implemented in the codegen;
+        # use string concat so the resulting selector is the real method
+        # name (``visit_TemplateData`` etc.) rather than the literal
+        # ``visit_{type(node).__name__}``.
+        return getattr(self, 'visit_' + type(node).__name__, None)
 
     def visit(self, node: Node, *args: t.Any, **kwargs: t.Any) -> t.Any:
         """Visit a node."""

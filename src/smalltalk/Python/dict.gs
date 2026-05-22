@@ -365,16 +365,28 @@ pop: key
 category: 'Grail-Mutation Methods'
 method: dict
 pop: key _: default
-	"If key is in the dictionary, remove it and return its value, else return default"
+	"If key is in the dictionary, remove it and return its value, else
+	return default.
 
-	| hasKey value |
-	hasKey := self @env0:includesKey: key.
-	hasKey ifFalse: [
-		^ default
-	].
+	GRAIL: also try the symbol form of the key — kwargs dicts built
+	from Smalltalk-side ``__init__:kw:`` callers store keys as
+	Symbols, but Python source calling ``kwargs.pop('name', default)``
+	passes a String.  Symbol = String for human eyes but distinct
+	OOPs for identity-keyed dictionaries."
+
+	| value |
+	(self @env0:includesKey: key) ifTrue: [
 		value := self @env0:at: key.
-	self @env0:removeKey: key.
-	^ value
+		self @env0:removeKey: key.
+		^ value
+	].
+	((key @env0:isKindOf: String) and: [self @env0:includesKey: key @env0:asSymbol])
+		ifTrue: [
+			value := self @env0:at: key @env0:asSymbol.
+			self @env0:removeKey: key @env0:asSymbol.
+			^ value
+		].
+	^ default
 %
 
 category: 'Grail-Mutation Methods'
