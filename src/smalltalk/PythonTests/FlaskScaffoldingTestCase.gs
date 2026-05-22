@@ -716,6 +716,26 @@ testStrTranslateBasic
 
 category: 'Grail-Tests - jinja2 plumbing'
 method: FlaskScaffoldingTestCase
+testFStringInterpolationBasic
+	"Regression: f-strings used to round-trip as literal
+	``{placeholder}`` text.  Parser now tokenizes FSTRING, scans
+	placeholders at parse time, and emits a string-concat chain
+	with str/repr/ascii/format wrapping.  Comprehension targets
+	declared inside placeholders propagate into the outer scope
+	(else NameError at runtime)."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:fstring_interpolation_basic.
+	self assert: (result @env1:__getitem__: 0) equals: 'x is 42'.
+	self assert: (result @env1:__getitem__: 1) equals: 'hi ''Grail'', len=5'.
+	self assert: (result @env1:__getitem__: 2) equals: '(A|B|C)'.
+	self assert: (result @env1:__getitem__: 3) equals: 'prefix: v=42'.
+	self assert: (result @env1:__getitem__: 4) equals: 'slice = [''a'', ''b'']'
+%
+
+category: 'Grail-Tests - jinja2 plumbing'
+method: FlaskScaffoldingTestCase
 testExecSourcePopulatesGlobals
 	"Regression: ``exec(source, globals)`` used to NameError on
 	``exec`` itself.  builtins now implements ``_exec:kw:`` by

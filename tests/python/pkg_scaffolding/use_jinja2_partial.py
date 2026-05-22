@@ -414,6 +414,31 @@ def typing_namedtuple_unpacks():
     return (out, items, n)
 
 
+def fstring_interpolation_basic():
+    # Regression: f-strings used to be tokenized as plain STRING and
+    # the placeholders left as literal ``{x}`` text.  Parser now
+    # tokenizes FSTRING separately, scans each ``{expr}`` (and
+    # ``{expr!r}`` / ``{expr!s}`` / ``{expr!a}`` / ``{expr:fmt}``)
+    # at parse time, and builds a left-folded ``+`` chain of
+    # str()/repr()/ascii()/format() over each piece.  Adjacent
+    # STRING and FSTRING tokens implicit-concatenate; comprehension
+    # / generator targets declared inside placeholders are
+    # propagated into the outer scope so the spliced AST resolves
+    # them as locals at codegen time.
+    x = 42
+    name = "Grail"
+    items = ["a", "b", "c"]
+    return (
+        f"x is {x}",
+        f"hi {name!r}, len={len(name)}",
+        f"({'|'.join(s.upper() for s in items)})",
+        # Adjacent STRING + FSTRING concatenation.
+        "prefix: " f"v={x}",
+        # Slice ``:`` inside placeholder must not trigger format spec.
+        f"slice = {items[:2]}",
+    )
+
+
 def exec_source_populates_globals():
     # Regression: ``exec(source, globals)`` used to NameError on
     # ``exec`` itself.  Grail now wraps ModuleAst's parse+execute

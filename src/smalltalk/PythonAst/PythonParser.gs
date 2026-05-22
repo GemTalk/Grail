@@ -325,9 +325,25 @@ parseAtom
 			yourself) token: tok
 	].
 
-	"String literals (may be multiple concatenated)"
-	tok isString ifTrue: [
-		^self parseStringLiteral
+	"String literals (may be multiple concatenated).  When any
+	adjacent token is an FSTRING, drop into the f-string parser
+	which handles mixed STRING+FSTRING runs and emits a concat
+	chain."
+	(tok isString or: [tok isFString]) ifTrue: [
+		"Look ahead: if any token in the adjacent string run is an
+		FSTRING, route through parseFStringLiteral; otherwise the
+		fast path produces a plain ConstantAst."
+		| scan anyF |
+		scan := position.
+		anyF := false.
+		[scan <= tokens @env0:size
+			and: [(tokens @env0:at: scan) isString
+				or: [(tokens @env0:at: scan) isFString]]] whileTrue: [
+			(tokens @env0:at: scan) isFString ifTrue: [anyF := true].
+			scan := scan + 1.
+		].
+		anyF ifTrue: [^ self parseFStringLiteral].
+		^ self parseStringLiteral
 	].
 
 	"Bytes literals"
@@ -2086,6 +2102,265 @@ parseStringLiteral
 		at: #value put: writeStream contents;
 		at: #kind put: nil;
 		yourself) from: startTok to: self lastToken
+%
+
+category: 'Grail-token access'
+method: PythonParser
+___variableStack___
+	"Read access to the parser's variableStack — used by the
+	f-string parser to harvest declared variables from a child
+	parser back into the outer scope."
+
+	^ variableStack
+%
+
+category: 'Grail-parsing - atoms'
+method: PythonParser
+parseFStringLiteral
+	"Parse a sequence of one or more adjacent string-like tokens
+	(STRING / FSTRING) and emit a concatenation chain.  Each
+	``{expr}`` inside an FSTRING becomes ``str(expr)`` (or
+	``repr(expr)`` / ``ascii(expr)`` for ``!r`` / ``!a``); a
+	format spec wraps as ``format(value, 'spec')``.  ``{{`` /
+	``}}`` escape to literal ``{`` / ``}``.
+
+	Implicit concatenation (``f'a' 'b' f'c'``) is supported by
+	walking forward while the token is STRING or FSTRING."
+
+	| startTok tok value parts pos len ch result piece converted
+	  innerParser exprAst exprText conversion formatSpec exprStart
+	  specBuf inSpec bracketDepth strQuote exprEnd c2 backCount |
+	startTok := self peek.
+	parts := OrderedCollection new.
+	[self peek notNil and: [self peek isString or: [self peek isFString]]] whileTrue: [
+		tok := self advance.
+		value := tok value.
+		len := value @env0:size.
+		tok isFString ifFalse: [
+			"Plain string token — append as a literal segment."
+			parts add: #literal -> value.
+		] ifTrue: [
+	pos := 1.
+	[pos <= len] whileTrue: [
+		ch := value @env0:at: pos.
+		ch == ${ ifTrue: [
+			"``{{`` is a literal ``{``."
+			((pos < len) and: [(value @env0:at: pos + 1) == ${]) ifTrue: [
+				parts add: #literal -> '{'.
+				pos := pos + 2.
+			] ifFalse: [
+				"Placeholder: scan to the matching unescaped right-brace
+				while tracking nested brackets so slice ``:`` inside
+				``value[:n]`` doesn't trigger the format-spec opener,
+				and tracking string-literal quotes so a right-brace
+				inside an embedded string literal doesn't end the
+				placeholder early."
+				| bracketDepth strQuote exprEnd |
+				pos := pos + 1.
+				exprStart := pos.
+				bracketDepth := 0.
+				strQuote := nil.
+				conversion := nil.
+				formatSpec := nil.
+				inSpec := false.
+				exprEnd := nil.
+				specBuf := WriteStream on: Unicode7 new.
+				[pos <= len and: [exprEnd isNil]] whileTrue: [
+					ch := value @env0:at: pos.
+					strQuote ifNotNil: [
+						"Inside a string literal — only the matching quote
+						closes it.  Escapes (``\\``) skip one char."
+						ch == $\ ifTrue: [
+							inSpec ifTrue: [specBuf nextPut: ch].
+							pos := pos + 1.
+							pos <= len ifTrue: [
+								inSpec ifTrue: [specBuf nextPut: (value @env0:at: pos)].
+								pos := pos + 1.
+							].
+						] ifFalse: [
+							ch == strQuote ifTrue: [strQuote := nil].
+							inSpec ifTrue: [specBuf nextPut: ch].
+							pos := pos + 1.
+						].
+					] ifNil: [
+						(ch == $' or: [ch == $"]) ifTrue: [
+							strQuote := ch.
+							inSpec ifTrue: [specBuf nextPut: ch].
+							pos := pos + 1.
+						] ifFalse: [
+							(ch == $( or: [ch == $[ or: [ch == ${]])
+								ifTrue: [bracketDepth := bracketDepth + 1].
+							(ch == $) or: [ch == $] or: [ch == $}]])
+								ifTrue: [
+									ch == $} ifTrue: [
+										bracketDepth == 0 ifTrue: [
+											"End of placeholder."
+											exprEnd := pos.
+										] ifFalse: [bracketDepth := bracketDepth - 1].
+									] ifFalse: [
+										bracketDepth := bracketDepth - 1.
+									].
+								].
+							exprEnd isNil ifTrue: [
+								inSpec ifTrue: [specBuf nextPut: ch. pos := pos + 1] ifFalse: [
+									"Conversion flag: ``!r`` / ``!s`` / ``!a``
+									(only at depth 0, after the expression)."
+									(ch == $! and: [bracketDepth == 0
+										and: [(pos < len) and: [
+											| c2 |
+											c2 := value @env0:at: pos + 1.
+											c2 == $r or: [c2 == $s or: [c2 == $a]]]]])
+										ifTrue: [
+											conversion := value @env0:at: pos + 1.
+											pos := pos + 2.
+									] ifFalse: [
+										"Format spec opener: ``:`` at depth 0."
+										(ch == $: and: [bracketDepth == 0]) ifTrue: [
+											inSpec := true.
+											pos := pos + 1.
+										] ifFalse: [
+											pos := pos + 1.
+										].
+									].
+								].
+							].
+						].
+					].
+				].
+				"After loop, pos is at the position past ``}``."
+				pos := exprEnd ifNil: [pos] ifNotNil: [exprEnd + 1].
+				exprText := value @env0:copyFrom: exprStart to: (exprEnd ifNil: [pos - 1] ifNotNil: [
+					"Trim trailing conversion+spec text from the expression
+					if either was present.  Walk back through specBuf and the
+					conversion bytes from exprEnd."
+					| backCount |
+					backCount := specBuf contents @env0:size.
+					inSpec ifTrue: [backCount := backCount + 1].
+					conversion ifNotNil: [backCount := backCount + 2].
+					exprEnd - 1 - backCount
+				]).
+				formatSpec := inSpec ifTrue: [specBuf contents] ifFalse: [nil].
+				"Parse the inner expression with a child parser.  Uses
+				the same tokenizer pipeline as the top-level parse so
+				operators, names, calls, and attribute reads all
+				resolve through standard PythonParser productions.
+				After parsing, propagate the child's freshly-declared
+				variables (e.g. comprehension loop targets like ``x``)
+				into the OUTER parser's current scope so isVariable
+				IsDeclared finds them via the parent BlockAst walk
+				at codegen time — otherwise the spliced-in NameAst
+				reads fall back to the module-symbol-lookup path and
+				raise NameError at runtime."
+				innerParser := PythonParser basicNew source: exprText asString.
+				exprAst := innerParser parseExpression.
+				innerParser ___variableStack___ do: [:innerScope |
+					innerScope do: [:varName | self declareVariable: varName]].
+				"Apply conversion / format spec."
+				converted := self ___wrapFStringExpr: exprAst conversion: conversion formatSpec: formatSpec at: tok.
+				parts add: #expr -> converted.
+			]
+		] ifFalse: [
+			ch == $} ifTrue: [
+				"``}}`` literal — single ``}`` outside placeholder is a
+				syntax error, but we forgive it (Grail not strict)."
+				((pos < len) and: [(value @env0:at: pos + 1) == $}]) ifTrue: [
+					parts add: #literal -> '}'.
+					pos := pos + 2.
+				] ifFalse: [
+					parts add: #literal -> '}' asString.
+					pos := pos + 1.
+				]
+			] ifFalse: [
+				"Plain literal run."
+				| runStart |
+				runStart := pos.
+				[pos <= len
+					and: [(value @env0:at: pos) ~= ${ and: [(value @env0:at: pos) ~= $}]]]
+					whileTrue: [pos := pos + 1].
+				parts add: #literal -> (value @env0:copyFrom: runStart to: pos - 1).
+			]
+		]
+	].
+	].
+	].
+	"Empty f-string → empty literal."
+	parts isEmpty ifTrue: [
+		^self buildNode: ConstantAst fields: (IdentityKeyValueDictionary new
+			at: #value put: '';
+			at: #kind put: nil;
+			yourself) from: startTok to: self lastToken
+	].
+	"Build a left-folded chain of BinOp(+) over each piece."
+	result := self ___fstringPartToAst: parts first from: startTok.
+	2 to: parts size do: [:i |
+		piece := self ___fstringPartToAst: (parts at: i) from: startTok.
+		result := self buildNode: BinOpAst fields: (IdentityKeyValueDictionary new
+			at: #left put: result;
+			at: #op put: (self buildNode: AddAst fields: IdentityKeyValueDictionary new from: startTok to: startTok);
+			at: #right put: piece;
+			yourself) from: startTok to: self lastToken.
+	].
+	^ result
+%
+
+category: 'Grail-parsing - atoms'
+method: PythonParser
+___fstringPartToAst: assoc from: startTok
+	"Turn a (#literal -> string) or (#expr -> exprAst) pair into the
+	matching AST node — literals become a ConstantAst, expr-parts are
+	already AST nodes ready for the BinOp chain."
+
+	assoc key == #literal ifTrue: [
+		^ self buildNode: ConstantAst fields: (IdentityKeyValueDictionary new
+			at: #value put: assoc value;
+			at: #kind put: nil;
+			yourself) from: startTok to: startTok
+	].
+	^ assoc value
+%
+
+category: 'Grail-parsing - atoms'
+method: PythonParser
+___wrapFStringExpr: exprAst conversion: conversionChar formatSpec: formatSpec at: locTok
+	"Wrap an f-string placeholder expression in the conversion /
+	format pipeline.  ``!r`` → repr(expr), ``!a`` → ascii(expr),
+	``!s`` and the default → str(expr).  A non-nil formatSpec wraps
+	in format(value, spec_string).  ``locTok`` is a real PythonToken
+	(the source f-string token) used for AST location info."
+
+	| inner builtinName callNode |
+	builtinName := conversionChar isNil
+		ifTrue: ['str']
+		ifFalse: [conversionChar == $r
+			ifTrue: ['repr']
+			ifFalse: [conversionChar == $a
+				ifTrue: ['ascii']
+				ifFalse: ['str']]].
+	"NameAst for the chosen builtin — looked up at runtime via the
+	Python dict / module-scope fallback."
+	inner := self buildNode: CallAst fields: (IdentityKeyValueDictionary new
+		at: #function put: (self buildNode: NameAst fields: (IdentityKeyValueDictionary new
+			at: #id put: builtinName asSymbol;
+			at: #ctx put: self loadCtx;
+			yourself) from: locTok to: locTok);
+		at: #arguments put: { exprAst };
+		at: #keywords put: Array new;
+		yourself) from: locTok to: locTok.
+	formatSpec ifNil: [^ inner].
+	"format(value, spec) wrap."
+	callNode := self buildNode: CallAst fields: (IdentityKeyValueDictionary new
+		at: #function put: (self buildNode: NameAst fields: (IdentityKeyValueDictionary new
+			at: #id put: #format;
+			at: #ctx put: self loadCtx;
+			yourself) from: locTok to: locTok);
+		at: #arguments put: { exprAst.
+			self buildNode: ConstantAst fields: (IdentityKeyValueDictionary new
+				at: #value put: formatSpec;
+				at: #kind put: nil;
+				yourself) from: locTok to: locTok };
+		at: #keywords put: Array new;
+		yourself) from: locTok to: locTok.
+	^ callNode
 %
 
 category: 'Grail-parsing - subscript'

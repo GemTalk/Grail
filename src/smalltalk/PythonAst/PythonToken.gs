@@ -169,6 +169,13 @@ isString
 	^type == #STRING
 %
 
+category: 'Grail-testing'
+method: PythonToken
+isFString
+
+	^type == #FSTRING
+%
+
 category: 'Grail-accessors'
 method: PythonToken
 line

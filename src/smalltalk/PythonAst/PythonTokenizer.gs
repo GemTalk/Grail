@@ -601,7 +601,9 @@ tokenizeString
 		c == $r ifTrue: [isRaw := true].
 		c == $b ifTrue: [isBytes := true].
 	].
-	tokenType := isBytes ifTrue: [#BYTES] ifFalse: [#STRING].
+	tokenType := isBytes
+		ifTrue: [#BYTES]
+		ifFalse: [isFString ifTrue: [#FSTRING] ifFalse: [#STRING]].
 
 	"Read quote character"
 	quoteChar := self advance.
