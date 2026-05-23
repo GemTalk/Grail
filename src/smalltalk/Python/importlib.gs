@@ -318,6 +318,24 @@ loadModuleFromPath: pathString name: moduleName
 				nextPutAll: '! /tmp/grail.tpz — methods compiled by loadModuleFromPath:'; lf;
 				nextPutAll: '! Module: '; nextPutAll: moduleName;
 				nextPutAll: '   Class: '; nextPutAll: debugClassName; lf; lf;
+				"The subclass: call that loadModuleFromPath: makes to create
+				the module class.  Emitting it here makes the file self-
+				describing — a reader can see exactly which names become
+				instVars on the class (and therefore which Python parameters
+				will get the ``_X'' transport rename to avoid shadowing)."
+				nextPutAll: 'doit'; lf;
+				nextPutAll: 'module subclass: '''; nextPutAll: debugClassName; nextPutAll: ''''; lf;
+				nextPutAll: '  instVarNames: #('.
+			variableNames do: [:n |
+				debugStream space; nextPutAll: n asString].
+			debugStream
+				nextPutAll: ' )'; lf;
+				nextPutAll: '  classVars: #()'; lf;
+				nextPutAll: '  classInstVars: #()'; lf;
+				nextPutAll: '  poolDictionaries: #()'; lf;
+				nextPutAll: '  inDictionary: PythonModules'; lf;
+				nextPutAll: '  options: #()'; lf;
+				nextPutAll: '%'; lf; lf;
 				nextPutAll: 'set compile_env: 1'; lf; lf.
 		].
 
