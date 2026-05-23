@@ -296,6 +296,15 @@ loadModuleFromPath: pathString name: moduleName
 	CallAst moduleClassBeingCompiled: moduleClass.
 	CallAst moduleFunctionNames: functionNames.
 	[
+		| debugStream |
+		"When running as __main__ (``grail file.py``) accumulate every
+		method source we hand to compileMethod: into a single debug
+		stream so the user can see what was actually compiled.
+		Ordinary imports get a nil stream and skip the capture."
+		debugStream := moduleName = '__main__'
+			ifTrue: [WriteStream on: Unicode7 new]
+			ifFalse: [nil].
+
 		"Compile real methods for each top-level def.
 		Resume CompileWarning because function params may shadow module-
 		level instVars (e.g. `def f(x)` where `x` is also a module var).
@@ -305,6 +314,13 @@ loadModuleFromPath: pathString name: moduleName
 			methodStream := PrettyWriteStream on: Unicode7 new.
 			stmt generateMethodSourceOn: methodStream.
 			methodSource2 := methodStream contents.
+			debugStream ifNotNil: [
+				debugStream
+					nextPutAll: '"--- ';
+					nextPutAll: stmt name;
+					nextPutAll: ' ---"'; lf;
+					nextPutAll: methodSource2; lf; lf.
+			].
 			[moduleClass compileMethod: methodSource2
 				dictionaries: sl
 				category: 'Grail-Methods'
@@ -317,17 +333,6 @@ loadModuleFromPath: pathString name: moduleName
 		stream := PrettyWriteStream on: Unicode7 new.
 		moduleAst printSmalltalkOn: stream.
 
-		"Debug aid: when running as __main__ (e.g. ``grail file.py``),
-		mirror the generated body source to /tmp/grail.st so the user can
-		inspect what was actually compiled.  Skipped for ordinary imports
-		so /tmp/grail.st keeps reflecting the script under inspection."
-		moduleName = '__main__' ifTrue: [
-			| debugFile |
-			debugFile := GsFile open: '/tmp/grail.st' mode: 'w' onClient: false.
-			debugFile nextPutAll: stream contents.
-			debugFile close.
-		].
-
 		"Compile the body as an env-1 `initialize` method on the new class.
 		Resume CompileWarning the same way the per-def compilation above
 		does — module-level docstrings and other expression statements
@@ -335,6 +340,14 @@ loadModuleFromPath: pathString name: moduleName
 		are valid Python (Python evaluates the expression and discards
 		the result)."
 		methodSource := 'initialize' , lf , stream contents.
+		debugStream ifNotNil: [
+			debugStream
+				nextPutAll: '"--- initialize (module body) ---"'; lf;
+				nextPutAll: methodSource; lf; lf.
+			(GsFile open: '/tmp/grail.st' mode: 'w' onClient: false)
+				nextPutAll: debugStream contents;
+				close.
+		].
 		[moduleClass compileMethod: methodSource
 			dictionaries: sl
 			category: 'Grail-Module Body'
