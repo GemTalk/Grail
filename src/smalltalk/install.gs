@@ -78,6 +78,14 @@ Transcript show: 'Step 0 hygiene: scrubbed ', total printString,
 	' Grail-tagged env-0 method(s) from shared classes'.
 %
 
+! ------------------- Grail extensions to GemStone system classes
+! Filed in as SystemUser because shared classes like ``Class'' are
+! owned by SystemUser and DataCurator can't compile env-0 methods on
+! them.  The Step 0 hygiene loop above will scrub these on the next
+! install (the methods carry the ``Grail-'' category prefix), and
+! this input re-adds them.
+input src/smalltalk/Python/Class.gs
+
 commit
 logout
 set user DataCurator pass swordfish
