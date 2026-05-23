@@ -296,14 +296,30 @@ loadModuleFromPath: pathString name: moduleName
 	CallAst moduleClassBeingCompiled: moduleClass.
 	CallAst moduleFunctionNames: functionNames.
 	[
-		| debugStream |
+		| debugStream debugClassName |
 		"When running as __main__ (``grail file.py``) accumulate every
-		method source we hand to compileMethod: into a single debug
-		stream so the user can see what was actually compiled.
-		Ordinary imports get a nil stream and skip the capture."
+		method source we hand to compileMethod: into a single Topaz-
+		style input file so the user can see what was actually compiled
+		— and could replay it through topaz to reproduce.  Ordinary
+		imports skip the capture.
+
+		The file is NOT a literal replay of what loadModuleFromPath:
+		does — the module class is created here at runtime via
+		``module subclass: ...'', not via a topaz ``doit''.  The
+		``category:'' / ``method:'' / ``%'' framing is a debugging aid
+		that mirrors what GemStone would see if you compiled the
+		methods by hand."
 		debugStream := moduleName = '__main__'
 			ifTrue: [WriteStream on: Unicode7 new]
 			ifFalse: [nil].
+		debugClassName := moduleClassName asString.
+		debugStream ifNotNil: [
+			debugStream
+				nextPutAll: '! /tmp/grail.tpz — methods compiled by loadModuleFromPath:'; lf;
+				nextPutAll: '! Module: '; nextPutAll: moduleName;
+				nextPutAll: '   Class: '; nextPutAll: debugClassName; lf; lf;
+				nextPutAll: 'set compile_env: 1'; lf; lf.
+		].
 
 		"Compile real methods for each top-level def.
 		Resume CompileWarning because function params may shadow module-
@@ -316,10 +332,10 @@ loadModuleFromPath: pathString name: moduleName
 			methodSource2 := methodStream contents.
 			debugStream ifNotNil: [
 				debugStream
-					nextPutAll: '"--- ';
-					nextPutAll: stmt name;
-					nextPutAll: ' ---"'; lf;
-					nextPutAll: methodSource2; lf; lf.
+					nextPutAll: 'category: ''Grail-Methods'''; lf;
+					nextPutAll: 'method: '; nextPutAll: debugClassName; lf;
+					nextPutAll: methodSource2; lf;
+					nextPutAll: '%'; lf; lf.
 			].
 			[moduleClass compileMethod: methodSource2
 				dictionaries: sl
@@ -341,12 +357,17 @@ loadModuleFromPath: pathString name: moduleName
 		the result)."
 		methodSource := 'initialize' , lf , stream contents.
 		debugStream ifNotNil: [
+			| tpzFile |
 			debugStream
-				nextPutAll: '"--- initialize (module body) ---"'; lf;
-				nextPutAll: methodSource; lf; lf.
-			(GsFile open: '/tmp/grail.st' mode: 'w' onClient: false)
-				nextPutAll: debugStream contents;
-				close.
+				nextPutAll: 'category: ''Grail-Module Body'''; lf;
+				nextPutAll: 'method: '; nextPutAll: debugClassName; lf;
+				nextPutAll: methodSource; lf;
+				nextPutAll: '%'; lf.
+			"Write as UTF-8 bytes so editors that don't auto-detect
+			UTF-16 (most of them) render the file correctly."
+			tpzFile := GsFile open: '/tmp/grail.tpz' mode: 'wb' onClient: false.
+			tpzFile nextPutAll: debugStream contents encodeAsUTF8.
+			tpzFile close.
 		].
 		[moduleClass compileMethod: methodSource
 			dictionaries: sl
@@ -505,9 +526,10 @@ runPath: pathString
 
 	Routes through loadModuleFromPath: so class definitions, top-level
 	`def`s, and module body share one codegen path.  As a side effect,
-	loadModuleFromPath: (when name = '__main__') captures the body's
-	generated Smalltalk to /tmp/grail.st and its IR tree to
-	/tmp/grail.ir for post-mortem inspection.
+	loadModuleFromPath: (when name = '__main__') captures every method
+	source it compiles to /tmp/grail.tpz (Topaz-style framing with
+	``category:'' / ``method:'' / ``%'') and the body initialize IR
+	tree to /tmp/grail.ir for post-mortem inspection.
 
 	importlib runPath: '/path/to/script.py'.
 	"

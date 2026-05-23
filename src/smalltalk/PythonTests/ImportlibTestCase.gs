@@ -344,30 +344,35 @@ testRunPathClassDefinition
 category: 'Grail-Tests - Module Loading'
 method: ImportlibTestCase
 testRunPathWritesDebugFiles
-	"runPath: captures the generated Smalltalk in /tmp/grail.st and the
-	last IR tree in /tmp/grail.ir for debugging.  Drive runPath: on
-	hello.py and verify both files were written with content that
-	reflects the Python source."
+	"runPath: captures every compiled method source in /tmp/grail.tpz
+	(Topaz-style framing) and the last IR tree in /tmp/grail.ir for
+	post-mortem inspection.  Drive runPath: on hello.py and verify
+	both files were written with content that reflects the Python
+	source."
 
-	| testFilePath stPath irPath stFile stContents irFile irContents |
+	| testFilePath tpzPath irPath tpzFile tpzContents irFile irContents |
 	testFilePath := importlib grailDir , '/src/python/hello.py'.
-	stPath := '/tmp/grail.st'.
+	tpzPath := '/tmp/grail.tpz'.
 	irPath := '/tmp/grail.ir'.
 
 	"Clear any leftover files so we know runPath: actually wrote them."
-	(GsFile existsOnServer: stPath) ifTrue: [GsFile removeServerFile: stPath].
+	(GsFile existsOnServer: tpzPath) ifTrue: [GsFile removeServerFile: tpzPath].
 	(GsFile existsOnServer: irPath) ifTrue: [GsFile removeServerFile: irPath].
 
 	importlib runPath: testFilePath.
 
-	self assert: (GsFile existsOnServer: stPath).
+	self assert: (GsFile existsOnServer: tpzPath).
 	self assert: (GsFile existsOnServer: irPath).
 
-	stFile := GsFile open: stPath mode: 'rb' onClient: false.
-	stContents := stFile contentsAsUtf8 decodeToUnicode.
-	stFile close.
-	self assert: (stContents includesString: 'say_hello').
-	self assert: (stContents includesString: 'Allen').
+	tpzFile := GsFile open: tpzPath mode: 'rb' onClient: false.
+	tpzContents := tpzFile contentsAsUtf8 decodeToUnicode.
+	tpzFile close.
+	"Topaz framing markers are present, along with the Python source
+	identifiers."
+	self assert: (tpzContents includesString: 'method: __main__').
+	self assert: (tpzContents includesString: 'category: ''Grail-Methods''').
+	self assert: (tpzContents includesString: 'say_hello').
+	self assert: (tpzContents includesString: 'Allen').
 
 	"The IR captured here is for the module body's `initialize` method.
 	Top-level `def`s compile as separate env-1 methods, so the body
