@@ -310,7 +310,7 @@ loadModuleFromPath: pathString name: moduleName
 		that mirrors what GemStone would see if you compiled the
 		methods by hand."
 		debugStream := moduleName = '__main__'
-			ifTrue: [WriteStream on: Unicode7 new]
+			ifTrue: [PrettyWriteStream on: Unicode7 new]
 			ifFalse: [nil].
 		debugClassName := moduleClassName asString.
 		debugStream ifNotNil: [
@@ -333,9 +333,9 @@ loadModuleFromPath: pathString name: moduleName
 			debugStream ifNotNil: [
 				debugStream
 					nextPutAll: 'category: ''Grail-Methods'''; lf;
-					nextPutAll: 'method: '; nextPutAll: debugClassName; lf;
-					nextPutAll: methodSource2; lf;
-					nextPutAll: '%'; lf; lf.
+					nextPutAll: 'method: '; nextPutAll: debugClassName; lf.
+				self ___writeMethodSource: methodSource2 on: debugStream.
+				debugStream nextPutAll: '%'; lf; lf.
 			].
 			[moduleClass compileMethod: methodSource2
 				dictionaries: sl
@@ -360,9 +360,9 @@ loadModuleFromPath: pathString name: moduleName
 			| tpzFile |
 			debugStream
 				nextPutAll: 'category: ''Grail-Module Body'''; lf;
-				nextPutAll: 'method: '; nextPutAll: debugClassName; lf;
-				nextPutAll: methodSource; lf;
-				nextPutAll: '%'; lf.
+				nextPutAll: 'method: '; nextPutAll: debugClassName; lf.
+			self ___writeMethodSource: methodSource on: debugStream.
+			debugStream nextPutAll: '%'; lf.
 			"Write as UTF-8 bytes so editors that don't auto-detect
 			UTF-16 (most of them) render the file correctly."
 			tpzFile := GsFile open: '/tmp/grail.tpz' mode: 'wb' onClient: false.
@@ -587,6 +587,46 @@ irForPath: pathString
 		environmentId: 1
 		flags: 0.
 	^ System __sessionStateAt: 19
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___writeMethodSource: aSource on: aStream
+	"Emit a Smalltalk method source onto aStream — a PrettyWriteStream
+	whose ``increaseIndent'' / ``decreaseIndent'' we use to indent the
+	body.  Format:
+
+	  <selector>
+	  (blank)
+	  <indented body>
+
+	Called by the /tmp/grail.tpz debug capture in loadModuleFromPath:
+	so each method written to that file reads like a hand-written
+	Topaz method definition rather than a flat source dump."
+
+	| firstLf |
+	firstLf := aSource @env0:indexOf: Character lf @env0:ifAbsent: [0].
+	firstLf @env0:= 0 ifTrue: [
+		"Degenerate: source has no body, just the selector."
+		^ aStream nextPutAll: aSource; lf.
+	].
+	aStream
+		nextPutAll: (aSource @env0:copyFrom: 1 to: firstLf - 1);
+		lf; lf.
+	aStream @env0:increaseIndent.
+	firstLf + 1 to: aSource @env0:size do: [:i |
+		| ch |
+		ch := aSource @env0:at: i.
+		ch @env0:== Character lf
+			ifTrue: [aStream lf]
+			ifFalse: [aStream nextPut: ch]
+	].
+	"Ensure the body ends on its own line — the caller emits ``%''
+	right after this on what should be a fresh line."
+	(aSource @env0:isEmpty
+		or: [aSource @env0:last @env0:== Character lf])
+		ifFalse: [aStream lf].
+	aStream @env0:decreaseIndent.
 %
 
 category: 'Grail-Class Compilation'
