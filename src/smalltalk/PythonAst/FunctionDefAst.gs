@@ -599,6 +599,7 @@ generateMethodSourceOn: aStream
 		ifFalse: [IdentitySet new].
 
 	self isSimplePositionalArgs ifTrue: [
+		| transportNames |
 		"Compute per-parameter ``needs a block temp'' decisions.  See
 		paramNeedsTemp:assigned:instVars: for the three conditions that
 		force a temp; otherwise the param serves as the Smalltalk method
@@ -611,20 +612,50 @@ generateMethodSourceOn: aStream
 				ifTrue: [self paramNeedsTemp: each assigned: assignedNames instVars: instVarNames]
 				ifFalse: [true]].
 
+		"For each param that needs a temp, pick the method-arg name used
+		to transport the value into the block.  When canOptimise is
+		true (module-level def whose target class's instVars we can
+		fully enumerate), prefer ``_X'' so the selector and the copy
+		line read traceably; fall back to ``___N'' if ``_X'' would
+		collide with another parameter, a body local, or an instVar.
+		When canOptimise is false (class method body, target class's
+		instVars include unknown inherited slots), stay on ``___N''
+		— a collision against an inherited instVar would otherwise
+		surface as a CompileError at runtime.
+
+		Real-world collision the instVar check catches: urllib.parse
+		does ``import string as _string'' at module level, so
+		``_string'' is an instVar; a later ``def unquote_to_bytes(
+		string):'' would otherwise emit ``unquote_to_bytes: _string''
+		and clash."
+		transportNames := paramNames collect: [:each | each].
+		1 to: paramNames size do: [:i |
+			(needsTemp at: i) ifTrue: [
+				| candidate |
+				candidate := '_' , (paramNames at: i).
+				(canOptimise
+					and: [(paramNames includes: candidate) not
+					and: [(bodyVars includes: candidate asSymbol) not
+					and: [(instVarNames includes: candidate asSymbol) not]]])
+					ifTrue: [transportNames at: i put: candidate]
+					ifFalse: [transportNames at: i put: '___' , i printString].
+			].
+		].
+
 		"Emit selector line.  Each keyword's argument is either the real
 		parameter name (when the param is read-only inside the body and
-		not a Smalltalk pseudo-var) or a ``___N`` positional placeholder
-		that will be unpacked into a block temp below."
+		not a Smalltalk pseudo-var) or the ``_X'' (or ``___N'') transport
+		name that will be unpacked into a block temp below."
 		aStream nextPutAll: name.
 		paramNames isEmpty ifFalse: [
 			aStream nextPutAll: ': '.
 			aStream nextPutAll: ((needsTemp at: 1)
-				ifTrue: ['___1']
+				ifTrue: [transportNames at: 1]
 				ifFalse: [paramNames first]).
 			2 to: paramNames size do: [:i |
 				aStream nextPutAll: ' _: '.
 				aStream nextPutAll: ((needsTemp at: i)
-					ifTrue: ['___' , i printString]
+					ifTrue: [transportNames at: i]
 					ifFalse: [paramNames at: i]).
 			].
 		].
@@ -655,13 +686,13 @@ generateMethodSourceOn: aStream
 			aStream nextPutAll: '| '.
 			allLocals do: [:each | aStream nextPutAll: each; space].
 			aStream nextPut: $|; lf.
-			"Unpack the ___N placeholders for the params that need temps."
+			"Unpack each transported param into its block-local temp."
 			1 to: paramNames size do: [:i |
 				(needsTemp at: i) ifTrue: [
 					aStream
 						nextPutAll: (paramNames at: i);
-						nextPutAll: ' := ___';
-						nextPutAll: i printString;
+						nextPutAll: ' := ';
+						nextPutAll: (transportNames at: i);
 						nextPut: $.;
 						lf.
 				].
