@@ -241,3 +241,80 @@ category: 'Grail-other'
 method: AbstractNode
 setBlock: aBlock
 %
+
+category: 'Grail-other'
+method: AbstractNode
+collectStoreNamesInto: aSet
+	"Add to aSet the id (Symbol) of every name bound in the enclosing
+	scope at or below self.  ``Bound'' means any of:
+	  - NameAst with Store ctx (assignment / augmented-assign / for-
+	    target / walrus / except-as / with-as)
+	  - FunctionDefAst.name or ClassDefAst.name (the def/class
+	    statement binds its name in the enclosing scope)
+	  - ImportAst / ImportFromAst alias names (each `as`-name binds in
+	    the enclosing scope)
+
+	Recurses through all AST children.  Conservative scoping: descends
+	into nested function / lambda / class bodies and comprehensions, so
+	a nested scope's own assignment to a name matching an outer
+	parameter marks the outer param as ``reassigned'' — a false
+	positive that costs the method-arg optimization in that case but
+	never produces wrong code."
+
+	((self isKindOf: NameAst) and: [self ctx isStoreCtx]) ifTrue: [
+		aSet add: self id asSymbol.
+	].
+	((self isKindOf: FunctionDefAst) or: [self isKindOf: ClassDefAst]) ifTrue: [
+		aSet add: self name asSymbol.
+	].
+	((self isKindOf: ImportAst) or: [self isKindOf: ImportFromAst]) ifTrue: [
+		self collectImportBindingsInto: aSet.
+	].
+	2 to: self class allInstVarNames size do: [:i |
+		| val |
+		val := self instVarAt: i.
+		(val isKindOf: AbstractNode) ifTrue: [
+			val collectStoreNamesInto: aSet.
+		].
+		(val isKindOf: Array) ifTrue: [
+			val do: [:each |
+				(each isKindOf: AbstractNode) ifTrue: [
+					each collectStoreNamesInto: aSet.
+				].
+			].
+		].
+	].
+%
+
+category: 'Grail-other'
+method: AbstractNode
+collectImportBindingsInto: aSet
+	"For ``import a as x, b'' / ``from m import a as x, b'' the
+	enclosing-scope bindings are the alias's asName when present,
+	otherwise the leading dotted component of name (``import a.b''
+	binds ``a'').  Walks the receiver's `names` collection of
+	AliasAst entries."
+
+	| namesIdx aliases |
+	namesIdx := self class allInstVarNames indexOf: #names.
+	namesIdx = 0 ifTrue: [^ self].
+	aliases := self instVarAt: namesIdx.
+	aliases isNil ifTrue: [^ self].
+	aliases do: [:alias |
+		| nameIdx asNameIdx aliasName aliasAsName binding |
+		nameIdx := alias class allInstVarNames indexOf: #name.
+		asNameIdx := alias class allInstVarNames indexOf: #asName.
+		aliasName := nameIdx > 0 ifTrue: [alias instVarAt: nameIdx] ifFalse: [nil].
+		aliasAsName := asNameIdx > 0 ifTrue: [alias instVarAt: asNameIdx] ifFalse: [nil].
+		binding := aliasAsName
+			ifNil: [
+				aliasName isNil ifTrue: [nil] ifFalse: [
+					| dotIdx |
+					dotIdx := aliasName indexOf: $..
+					dotIdx = 0
+						ifTrue: [aliasName]
+						ifFalse: [aliasName copyFrom: 1 to: dotIdx - 1]]]
+			ifNotNil: [aliasAsName].
+		binding ifNotNil: [aSet add: binding asSymbol].
+	].
+%

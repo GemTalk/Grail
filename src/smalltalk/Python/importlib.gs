@@ -317,6 +317,17 @@ loadModuleFromPath: pathString name: moduleName
 		stream := PrettyWriteStream on: Unicode7 new.
 		moduleAst printSmalltalkOn: stream.
 
+		"Debug aid: when running as __main__ (e.g. ``grail file.py``),
+		mirror the generated body source to /tmp/grail.st so the user can
+		inspect what was actually compiled.  Skipped for ordinary imports
+		so /tmp/grail.st keeps reflecting the script under inspection."
+		moduleName = '__main__' ifTrue: [
+			| debugFile |
+			debugFile := GsFile open: '/tmp/grail.st' mode: 'w' onClient: false.
+			debugFile nextPutAll: stream contents.
+			debugFile close.
+		].
+
 		"Compile the body as an env-1 `initialize` method on the new class.
 		Resume CompileWarning the same way the per-def compilation above
 		does — module-level docstrings and other expression statements
@@ -329,6 +340,17 @@ loadModuleFromPath: pathString name: moduleName
 			category: 'Grail-Module Body'
 			environmentId: 1.
 		] on: CompileWarning do: [:ex | ex resume].
+
+		"Debug aid: when running as __main__, capture the IR tree for the
+		body's initialize method (the last thing compiled here, before the
+		accessor sweep below).  Snapshot now so subsequent compileMethod:
+		calls don't overwrite __sessionStateAt: 19."
+		moduleName = '__main__' ifTrue: [
+			| irFile |
+			irFile := GsFile open: '/tmp/grail.ir' mode: 'w' onClient: false.
+			irFile nextPutAll: (System __sessionStateAt: 19) printString.
+			irFile close.
+		].
 	] ensure: [
 		CallAst moduleClassBeingCompiled: nil.
 		CallAst moduleFunctionNames: nil.
@@ -468,35 +490,15 @@ classmethod: importlib
 runPath: pathString
 	"Execute a Python file as __main__ (like running 'python3 file.py').
 
+	Routes through loadModuleFromPath: so class definitions, top-level
+	`def`s, and module body share one codegen path.  As a side effect,
+	loadModuleFromPath: (when name = '__main__') captures the body's
+	generated Smalltalk to /tmp/grail.st and its IR tree to
+	/tmp/grail.ir for post-mortem inspection.
+
 	importlib runPath: '/path/to/script.py'.
 	"
-	| file module stream method mySymbolList |
-	module := self astForPath: pathString.
-	stream := PrettyWriteStream on: Unicode7 new.
-	module printSmalltalkOn: stream.
-	file := GsFile open: '/tmp/grail.st' mode: 'w' onClient: false.
-	file nextPutAll: stream contents.
-	file close.
-	"Builtins are not resolved through the symbol list; the codegen
-	emits direct `((builtins instance) name: …)` sends. The symbol
-	list just needs the Python class dictionary for class lookups
-	(Exception, None, etc.)."
-	mySymbolList := SymbolList with: Python.
-	[
-		method := stream contents
-			_compileInContext: nil
-			symbolList: mySymbolList
-			oldLitVars: nil
-			environmentId: 1
-			flags: 0.
-	] on: AbstractException do: [:ex |
-		ex pass. "Code is here to allow a breakpoint"
-	].
-	[
-		^ method _executeInContext: nil
-	] on: AbstractException do: [:ex |
-		ex pass. "Code is here to allow a breakpoint"
-	].
+	^ self loadModuleFromPath: pathString name: '__main__'
 %
 
 category: 'Grail-Module Loading'
@@ -527,6 +529,29 @@ smalltalkForSource: aString
 	stream := PrettyWriteStream on: Unicode7 new.
 	module printSmalltalkOn: stream.
 	^ stream contents
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+irForPath: pathString
+	"Compile (but do not execute) a Python file and return the last IR
+	tree produced by the Smalltalk compiler.  Useful for debugging
+	the transpiler's downstream codegen.
+
+	importlib irForPath: '/path/to/script.py'.
+	"
+	| module stream mySymbolList |
+	module := self astForPath: pathString.
+	stream := PrettyWriteStream on: Unicode7 new.
+	module printSmalltalkOn: stream.
+	mySymbolList := SymbolList with: Python.
+	stream contents
+		_compileInContext: nil
+		symbolList: mySymbolList
+		oldLitVars: nil
+		environmentId: 1
+		flags: 0.
+	^ System __sessionStateAt: 19
 %
 
 category: 'Grail-Class Compilation'

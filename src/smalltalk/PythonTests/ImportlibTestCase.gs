@@ -249,15 +249,137 @@ testSingleton
 category: 'Grail-Tests - Module Loading'
 method: ImportlibTestCase
 testSmalltalkForPath
-	"Test generating Smalltalk code from hello.py"
+	"Test generating Smalltalk code from hello.py — sanity-check that
+	identifiers from the source survive into the generated Smalltalk."
 
 	| smalltalkCode testFilePath |
 	testFilePath := importlib grailDir , '/src/python/hello.py'.
 	smalltalkCode := importlib smalltalkForPath: testFilePath.
 
-	"The generated code should be a non-empty string"
 	self assert: smalltalkCode isString.
-	self assert: smalltalkCode notEmpty
+	self assert: smalltalkCode notEmpty.
+	self assert: (smalltalkCode includesString: 'say_hello').
+	self assert: (smalltalkCode includesString: 'trailing_character').
+	self assert: (smalltalkCode includesString: 'Hello ').
+	self assert: (smalltalkCode includesString: 'Allen')
+%
+
+category: 'Grail-Tests - Module Loading'
+method: ImportlibTestCase
+testIrForPath
+	"Test that compiling hello.py produces an IR tree whose printString
+	reflects the Python source.  Exercises the full transpile +
+	Smalltalk-compile pipeline without executing the program."
+
+	| ir irString testFilePath |
+	testFilePath := importlib grailDir , '/src/python/hello.py'.
+	ir := importlib irForPath: testFilePath.
+
+	self assert: ir notNil.
+	irString := ir printString.
+	self assert: irString isString.
+	self assert: irString notEmpty.
+	self assert: (irString includesString: 'Allen').
+	self assert: (irString includesString: 'Hello ')
+%
+
+category: 'Grail-Tests - Module Loading'
+method: ImportlibTestCase
+testRunPathParamReassignment
+	"Direct coverage for the method-arg optimisation in
+	FunctionDefAst >> generateMethodSourceOn:.  Three shapes exercise
+	the three temp-forcing conditions:
+
+	  - ``bump(x)`` rebinds the parameter (``x = x + 1``).  Detected
+	    via the NameAst-store walk; the param must round-trip through
+	    a ``___1`` placeholder + block temp because Smalltalk method
+	    args are read-only.
+	  - ``squash(predicate)`` rebinds the parameter via a nested
+	    ``def predicate(...)`` — exercises the FunctionDefAst.name
+	    branch of the walk (NameAst-store would miss this, since the
+	    nested def's name isn't a NameAst).
+	  - ``passthrough(value)`` does not rebind, so the optimisation
+	    fires: ``value`` serves as the Smalltalk method argument
+	    directly.
+
+	A wrong-temp generation would either reject at Smalltalk compile
+	time (assigning to a method arg) or silently use a stale value;
+	the value assertions detect both."
+
+	| testFilePath module |
+	testFilePath := importlib grailDir , '/tests/python/param_reassignment.py'.
+	importlib @env1:modules removeKey: #'__main__' ifAbsent: [].
+
+	module := importlib runPath: testFilePath.
+
+	self assert: module notNil.
+	self assert: (module @env1:bumped) equals: 11.
+	self assert: (module @env1:squashed) equals: 'replaced'.
+	self assert: (module @env1:passed_through) equals: 42
+%
+
+category: 'Grail-Tests - Module Loading'
+method: ImportlibTestCase
+testRunPathClassDefinition
+	"`grail tests/python/module_with_classes.py` must succeed end-to-end.
+	Class methods take `self` as their first Python parameter, which the
+	legacy doit-based codegen emitted as a Smalltalk block temp — and
+	`self` is a reserved pseudo-variable, so the Smalltalk compiler
+	rejected the whole module.  runPath: must route the class through
+	the loadModuleFromPath: machinery (which emits real env-1 methods
+	where `self` is the receiver, not a temp)."
+
+	| testFilePath module |
+	testFilePath := importlib grailDir , '/tests/python/module_with_classes.py'.
+	importlib @env1:modules removeKey: #'__main__' ifAbsent: [].
+
+	module := importlib runPath: testFilePath.
+
+	self assert: module notNil.
+	"Module body ran: Point(3, 4).sum() == 7, three Counter.inc()s give 3."
+	self assert: (module @env1:p_sum) equals: 7.
+	self assert: (module @env1:c_count) equals: 3
+%
+
+category: 'Grail-Tests - Module Loading'
+method: ImportlibTestCase
+testRunPathWritesDebugFiles
+	"runPath: captures the generated Smalltalk in /tmp/grail.st and the
+	last IR tree in /tmp/grail.ir for debugging.  Drive runPath: on
+	hello.py and verify both files were written with content that
+	reflects the Python source."
+
+	| testFilePath stPath irPath stFile stContents irFile irContents |
+	testFilePath := importlib grailDir , '/src/python/hello.py'.
+	stPath := '/tmp/grail.st'.
+	irPath := '/tmp/grail.ir'.
+
+	"Clear any leftover files so we know runPath: actually wrote them."
+	(GsFile existsOnServer: stPath) ifTrue: [GsFile removeServerFile: stPath].
+	(GsFile existsOnServer: irPath) ifTrue: [GsFile removeServerFile: irPath].
+
+	importlib runPath: testFilePath.
+
+	self assert: (GsFile existsOnServer: stPath).
+	self assert: (GsFile existsOnServer: irPath).
+
+	stFile := GsFile open: stPath mode: 'rb' onClient: false.
+	stContents := stFile contentsAsUtf8 decodeToUnicode.
+	stFile close.
+	self assert: (stContents includesString: 'say_hello').
+	self assert: (stContents includesString: 'Allen').
+
+	"The IR captured here is for the module body's `initialize` method.
+	Top-level `def`s compile as separate env-1 methods, so the body
+	references them by selector but does not embed their literals — we
+	look for the literal `'Allen'` and the `say_hello` selector, not
+	the `'Hello '` string that lives inside say_hello's body."
+	irFile := GsFile open: irPath mode: 'rb' onClient: false.
+	irContents := irFile contentsAsUtf8 decodeToUnicode.
+	irFile close.
+	self assert: irContents notEmpty.
+	self assert: (irContents includesString: 'Allen').
+	self assert: (irContents includesString: 'say_hello')
 %
 
 category: 'Grail-Tests - Module Loading'

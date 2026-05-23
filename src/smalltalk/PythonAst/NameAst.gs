@@ -95,6 +95,13 @@ assertContextIsStore
 
 category: 'other'
 method: NameAst
+ctx
+
+	^ ctx
+%
+
+category: 'other'
+method: NameAst
 ctx: aContext
 
 	ctx := aContext.

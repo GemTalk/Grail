@@ -504,6 +504,55 @@ printPositionalUnpackingOn: aStream paramNames: paramNames positionalName: posNa
 
 category: 'Module Method Compilation'
 method: FunctionDefAst
+assignedNamesInBody
+	"Return an IdentitySet of every name (Symbol) that appears as a
+	NameAst with Store ctx anywhere in the body — i.e., names that
+	are assigned, augmented-assigned, used as a for-loop target,
+	except-as target, or with-as target.  Excludes the parameter
+	declarations themselves (they're recorded on body.variables at
+	parse time but don't appear as Store-ctx NameAst nodes unless
+	the body genuinely reassigns them)."
+
+	| result |
+	result := IdentitySet new.
+	body collectStoreNamesInto: result.
+	^ result
+%
+
+category: 'Module Method Compilation'
+method: FunctionDefAst
+isSmalltalkReservedIdentifier: aString
+	"Smalltalk pseudo-variables and other identifiers that can't be
+	used as method-argument names without ambiguity.  When a Python
+	parameter has one of these names, fall back to the ``___N``
+	positional placeholder + block-temp copy."
+
+	^ #(#'self' #'super' #'thisContext' #'nil' #'true' #'false')
+		includes: aString asSymbol
+%
+
+category: 'Module Method Compilation'
+method: FunctionDefAst
+paramNeedsTemp: aName assigned: assignedNames instVars: instVarNames
+	"Return true if Python parameter aName needs to be a block-local
+	temp rather than serving as the Smalltalk method argument
+	directly.  Three cases force the temp:
+	  - The body rebinds the parameter (Smalltalk method args are
+	    read-only; Python parameters are rebindable).
+	  - The parameter name collides with a Smalltalk pseudo-variable
+	    (self / super / nil / true / false / thisContext).
+	  - The parameter name matches an instVar of the enclosing class
+	    (GemStone forbids method args from shadowing instVars; block
+	    temps may, which is why the fallback works)."
+
+	(assignedNames includes: aName asSymbol) ifTrue: [^ true].
+	(self isSmalltalkReservedIdentifier: aName) ifTrue: [^ true].
+	(instVarNames includes: aName asSymbol) ifTrue: [^ true].
+	^ false
+%
+
+category: 'Module Method Compilation'
+method: FunctionDefAst
 generateMethodSourceOn: aStream
 	"Generate the full method source for compiling this def as a real env-1
 	method on a module class.
@@ -528,46 +577,94 @@ generateMethodSourceOn: aStream
 			] value.
 			] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue]."
 
-	| paramNames bodyVars allLocals |
+	| paramNames bodyVars allLocals assignedNames needsTemp instVarNames canOptimise |
 	paramNames := self allParameterNames.
 	bodyVars := body variables.
+	"Whether to apply the method-arg optimisation (use the real Python
+	parameter name as the Smalltalk method argument when it's read-only
+	and not a pseudo-var).  Only safe when we know exactly which class
+	the resulting method will live on — module-level defs compile onto
+	moduleClassBeingCompiled, whose allInstVarNames we can enumerate.
+	@staticmethod / @classmethod bodies also go through this generator
+	but compile onto a Python class's metaclass (signalled by
+	classBeingCompiled being non-nil), whose instVar set we can't
+	enumerate at codegen time."
+	canOptimise := CallAst moduleClassBeingCompiled notNil
+		and: [CallAst classBeingCompiled isNil].
+	instVarNames := canOptimise
+		ifTrue: [IdentitySet withAll:
+			(CallAst moduleClassBeingCompiled allInstVarNames
+				collect: [:each | each asSymbol])]
+		ifFalse: [IdentitySet new].
 
 	self isSimplePositionalArgs ifTrue: [
-		"Emit selector line with numbered placeholder parameters. Real
-		parameter names become block locals below (GemStone does not allow
-		method temps to shadow instVars, but block temps can)."
+		"Compute per-parameter ``needs a block temp'' decisions.  See
+		paramNeedsTemp:assigned:instVars: for the three conditions that
+		force a temp; otherwise the param serves as the Smalltalk method
+		argument directly.  When the optimisation isn't safe (see
+		``canOptimise'' above), force a temp for every param — the
+		original conservative behaviour."
+		assignedNames := self assignedNamesInBody.
+		needsTemp := paramNames collect: [:each |
+			canOptimise
+				ifTrue: [self paramNeedsTemp: each assigned: assignedNames instVars: instVarNames]
+				ifFalse: [true]].
+
+		"Emit selector line.  Each keyword's argument is either the real
+		parameter name (when the param is read-only inside the body and
+		not a Smalltalk pseudo-var) or a ``___N`` positional placeholder
+		that will be unpacked into a block temp below."
 		aStream nextPutAll: name.
 		paramNames isEmpty ifFalse: [
-			aStream nextPutAll: ': ___1'.
+			aStream nextPutAll: ': '.
+			aStream nextPutAll: ((needsTemp at: 1)
+				ifTrue: ['___1']
+				ifFalse: [paramNames first]).
 			2 to: paramNames size do: [:i |
-				aStream nextPutAll: ' _: ___'; nextPutAll: i printString.
+				aStream nextPutAll: ' _: '.
+				aStream nextPutAll: ((needsTemp at: i)
+					ifTrue: ['___' , i printString]
+					ifFalse: [paramNames at: i]).
 			].
 		].
 		aStream lf.
 
-		"Wrap everything in a block so locals are block temps (can shadow
-		instVars on the module class without compile errors)."
-		aStream nextPutAll: '^ ['.
-
-		"Declare all parameter names + body locals as block temps"
-		allLocals := OrderedCollection withAll: paramNames.
-		bodyVars do: [:each |
-			(allLocals includes: each) ifFalse: [allLocals add: each].
+		"Build outer-block locals: reassigned/reserved params (need a
+		writable temp) followed by body-only locals (excluding ones that
+		are direct method arguments)."
+		allLocals := OrderedCollection new.
+		1 to: paramNames size do: [:i |
+			(needsTemp at: i) ifTrue: [allLocals add: (paramNames at: i)].
 		].
-		allLocals isEmpty ifFalse: [
+		bodyVars do: [:each |
+			(allLocals includes: each) ifFalse: [
+				((paramNames includes: each) and: [
+					(needsTemp at: (paramNames indexOf: each)) not]) ifFalse: [
+					allLocals add: each.
+				].
+			].
+		].
+
+		"If we need any temps, wrap in an outer block; otherwise emit the
+		body's on:do: expression directly after ^."
+		allLocals isEmpty ifTrue: [
+			aStream nextPutAll: '^ '.
+		] ifFalse: [
+			aStream nextPutAll: '^ ['.
 			aStream nextPutAll: '| '.
 			allLocals do: [:each | aStream nextPutAll: each; space].
 			aStream nextPut: $|; lf.
-		].
-
-		"Unpack numbered parameters into named locals"
-		1 to: paramNames size do: [:i |
-			aStream
-				nextPutAll: (paramNames at: i);
-				nextPutAll: ' := ___';
-				nextPutAll: i printString;
-				nextPut: $.;
-				lf.
+			"Unpack the ___N placeholders for the params that need temps."
+			1 to: paramNames size do: [:i |
+				(needsTemp at: i) ifTrue: [
+					aStream
+						nextPutAll: (paramNames at: i);
+						nextPutAll: ' := ___';
+						nextPutAll: i printString;
+						nextPut: $.;
+						lf.
+				].
+			].
 		].
 	] ifFalse: [
 		"Varargs selector: _name: positional kw: kwargs"
@@ -646,9 +743,13 @@ generateMethodSourceOn: aStream
 		].
 	].
 
-	"Emit the PythonReturn handler wrapping the body, inside the block.
-	Append a trailing ``None`` so an implicit fall-off (no explicit
-	``return``) yields the Python None singleton, not Smalltalk nil.
+	"Emit the PythonReturn handler wrapping the body.  When there are
+	no outer-block locals (no reassigned/reserved params and no body
+	locals), the on:do: expression sits directly after ^ — no outer
+	block wrapper needed.  Otherwise it's nested inside the outer
+	``[| temps | ... ] value`` block opened above.  Append a trailing
+	``None`` so an implicit fall-off (no explicit ``return``) yields
+	the Python None singleton, not Smalltalk nil.
 
 	For generator functions (body contains ``yield``), the body itself
 	doesn't run on call — it's wrapped in a 1-arg block that takes a
@@ -656,7 +757,9 @@ generateMethodSourceOn: aStream
 	expression returns the generator.  ``yield`` inside the body emits
 	``___gen___ ___yield___: value``."
 	self printBodyOn: aStream.
-	aStream nextPutAll: '] value'.
+	allLocals isEmpty ifFalse: [
+		aStream nextPutAll: '] value'.
+	].
 %
 
 category: 'Grail-Module Method Compilation'
@@ -722,18 +825,23 @@ printBodyOn: aStream
 	"Emit the function body wrapped in the PythonReturn handler.
 	For generator functions, wrap the whole thing in a
 	``PythonGenerator withBlock: [:___gen___ | ...]`` so the call
-	returns a generator instead of running the body."
+	returns a generator instead of running the body.
+
+	Body locals are hoisted into the enclosing function block by
+	generateClassMethodSourceOn: / generateMethodSourceOn:, so the
+	body statements sit directly inside the on:do: block — no
+	separate ``[ <stmts> ] value`` scope wrapper is needed.  The
+	trailing ``None.`` is the implicit fall-through return value
+	when no Python ``return`` fires."
 
 	self isGenerator ifTrue: [
 		aStream nextPutAll: 'PythonGenerator @env1:withBlock: [:___gen___ |'; lf.
 	].
 	aStream nextPutAll: '['; lf.
-	aStream nextPutAll: '['; lf.
 	body body do: [:each |
 		each printSmalltalkOn: aStream.
 		aStream lf.
 	].
-	aStream nextPutAll: '] value.'; lf.
 	aStream nextPutAll: 'None.'; lf.
 	aStream nextPutAll: '] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue]'.
 	self isGenerator ifTrue: [
@@ -836,6 +944,16 @@ generateClassMethodSourceOn: aStream
 	classIvars := CallAst classInstVarNames ifNil: [IdentitySet new].
 
 	self isSimplePositionalArgs ifTrue: [
+		"Class methods always use ``___N`` placeholders + block-temp
+		copies for parameters, even when the body doesn't rebind them.
+		The module-method path optimises away the temp when safe, but
+		that check needs the full set of inherited instVars of the
+		class being defined — and at codegen time the class doesn't
+		exist yet (its parent is an arbitrary Python expression).
+		Without a way to enumerate inherited slots, we'd risk emitting
+		a method arg that silently shadows an inherited instVar — a
+		GemStone compile error.  Stick with the conservative shape
+		here; the optimisation is mostly a module-method win anyway."
 		aStream nextPutAll: name.
 		paramNames isEmpty ifFalse: [
 			aStream nextPutAll: ': ___1'.
@@ -963,6 +1081,9 @@ generateClassMethodSourceOn: aStream
 		].
 	].
 
+	"Class methods always use the outer ``^ [ ... ] value`` block (see
+	the simple-positional branch above for why the optimisation is
+	restricted to module methods)."
 	self printBodyOn: aStream.
 	aStream nextPutAll: '] value'.
 %

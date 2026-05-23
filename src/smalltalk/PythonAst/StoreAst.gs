@@ -50,3 +50,10 @@ method: StoreAst
 assertIsStore
 	"Overide to avoid error"
 %
+
+category: 'Grail-other'
+method: StoreAst
+isStoreCtx
+
+	^true
+%

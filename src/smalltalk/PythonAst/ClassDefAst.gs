@@ -251,35 +251,63 @@ printSmalltalkRuntimeOn: aStream
 	((classAttrs anySatisfy: [:p | p value isNil])
 		and: [(classAttrs anySatisfy: [:p | p key == #'_fields']) not])
 			ifTrue: [allClassInstVars add: #'_fields'].
+	"Emit the subclass: call inside a block with three temps so the
+	parent expression is evaluated exactly once and the instVar /
+	classInstVar filter expressions read top-to-bottom.
+
+	Why filter at all?  Python and Smalltalk model instance state
+	differently:
+
+	  - Python has no per-class instVar declaration.  Attributes live
+	    in the per-instance __dict__ (or __slots__), created on the
+	    fly by ``self.x = ...``.  Exactly one ``x`` exists per
+	    instance regardless of which class's method wrote it; an
+	    inherited method reading ``self.x`` and a subclass method
+	    writing ``self.x`` reference the same attribute.
+
+	  - GemStone Smalltalk allocates instVar slots per class at
+	    subclass time and rejects re-declaration with
+	    rtErrAddDupInstvar (e.g. ``self.templates`` declared by both
+	    Jinja2's TemplateNotFound and TemplatesNotFound).
+
+	The filter maps Python's semantics onto Smalltalk's: by dropping
+	names the parent already declares, the subclass reuses the
+	parent's slot, so ``self.x = 2`` in B writes to the same place an
+	A method later reads.  Allocating a fresh slot in B (if Smalltalk
+	allowed it) would silently break Python — A's methods and B's
+	methods on the same instance would see different ``x``s.
+
+	The classInstVar filter is on the metaclass side and exists for a
+	different reason: in the bases-empty fallback the parent is
+	PythonInstance, whose metaclass still inherits Smalltalk Behavior
+	slots like ``name`` that a Python class body might re-declare as
+	a class attribute (Jinja2's ``threading._Thread.name =
+	'MainThread'`` shape).  Class attributes in Python *do* shadow
+	per-class (``A.x != B.x`` is allowed and expected) — we preserve
+	that by firing the inherited setter at init time below, so each
+	class gets its own per-class value even when the slot itself is
+	inherited."
 	aStream
 		nextPutAll: name;
-		nextPutAll: ' := [:___parent___ | ___parent___ @env0:subclass: #''';
-		nextPutAll: (importlib @env0:___asSmalltalkClassName___: name) asString;
-		nextPutAll: ''' instVarNames: '.
-	"Filter instVar names against the parent's existing instVar
-	list — Smalltalk rejects re-declaration with rtErrAddDupInstvar
-	when a subclass walker rediscovers an instVar the parent already
-	declared (e.g. ``self.templates`` defined in both Jinja2's
-	TemplateNotFound and TemplatesNotFound)."
+		nextPutAll: ' := [| ___parent___ ___instVars___ ___classInstVars___ |'; lf;
+		nextPutAll: '	___parent___ := '.
+	self printSuperclassOn: aStream.
+	aStream
+		nextPutAll: '.'; lf;
+		nextPutAll: '	___instVars___ := '.
 	aStream nextPut: $(.
 	self printSymbolArray: ivarNames on: aStream.
 	aStream nextPutAll:
-' @env0:reject: [:___n___ | ___parent___ @env0:allInstVarNames @env0:includes: ___n___])'.
-	aStream nextPutAll: ' classVars: #() classInstVars: '.
-	"Filter out names already declared on the parent's metaclass —
-	in the bases-empty case the parent is PythonInstance, whose
-	metaclass still inherits Smalltalk Behavior slots like ``name``
-	that a Python class body might re-declare as a class attribute
-	(Jinja2's ``threading._Thread.name = 'MainThread'`` shape).
-	Without the filter, Smalltalk raises rtErrAddDupInstvar."
+' @env0:reject: [:___n___ | ___parent___ @env0:allInstVarNames @env0:includes: ___n___]).'; lf;
+		nextPutAll: '	___classInstVars___ := '.
 	aStream nextPut: $(.
 	self printSymbolArray: allClassInstVars on: aStream.
 	aStream nextPutAll:
-' @env0:reject: [:___n___ | ___parent___ @env0:class @env0:allInstVarNames @env0:includes: ___n___])'.
+' @env0:reject: [:___n___ | ___parent___ @env0:class @env0:allInstVarNames @env0:includes: ___n___]).'; lf;
+		nextPutAll: '	___parent___ @env0:subclass: #'''.
 	aStream
-		nextPutAll: ' poolDictionaries: #() inDictionary: nil options: #()] @env0:value: ('.
-	self printSuperclassOn: aStream.
-	aStream nextPutAll: ').'; lf.
+		nextPutAll: (importlib @env0:___asSmalltalkClassName___: name) asString;
+		nextPutAll: ''' instVarNames: ___instVars___ classVars: #() classInstVars: ___classInstVars___ poolDictionaries: #() inDictionary: nil options: #()] @env0:value.'; lf.
 
 	"Compile each instance method as a real env-1 method on the new
 	class.  The source is embedded as a Smalltalk string literal."

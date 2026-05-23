@@ -6,6 +6,8 @@ tmp/
 .setenv
 pyperf*
 .claude/settings.local.json
+grail.ir
+grail.st
 
 # Build artifacts
 lib/
