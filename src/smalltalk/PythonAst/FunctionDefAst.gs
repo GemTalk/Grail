@@ -505,18 +505,19 @@ printPositionalUnpackingOn: aStream paramNames: paramNames positionalName: posNa
 category: 'Module Method Compilation'
 method: FunctionDefAst
 assignedNamesInBody
-	"Return an IdentitySet of every name (Symbol) that appears as a
-	NameAst with Store ctx anywhere in the body — i.e., names that
-	are assigned, augmented-assigned, used as a for-loop target,
-	except-as target, or with-as target.  Excludes the parameter
-	declarations themselves (they're recorded on body.variables at
-	parse time but don't appear as Store-ctx NameAst nodes unless
-	the body genuinely reassigns them)."
+	"Return the IdentitySet of names bound anywhere in the body — i.e.
+	names that are assigned, augmented-assigned, used as a for-loop
+	target, walrus target, except-as / with-as target, or bound by a
+	nested ``def`` / ``class`` / ``import`` statement.
 
-	| result |
-	result := IdentitySet new.
-	body collectStoreNamesInto: result.
-	^ result
+	The parser's declareWrite: calls populate body.writes at every
+	such binding site; this accessor just exposes that set.  Excludes
+	parameter declarations (those use declareVariable:, which lands
+	in body.variables but not body.writes — see PythonParser >>
+	parseFunctionDefWithDecorators:).  May be nil for hand-built
+	BlockAst nodes that predate write-tracking; treat nil as empty."
+
+	^ body writes ifNil: [IdentitySet new]
 %
 
 category: 'Module Method Compilation'

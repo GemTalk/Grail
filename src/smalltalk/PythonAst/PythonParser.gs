@@ -7,7 +7,7 @@ Object ifNil: [self error: 'Object is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 Object subclass: 'PythonParser'
-  instVarNames: #( source tokens position variableStack classNesting)
+  instVarNames: #( source tokens position variableStack classNesting writeStack)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -135,9 +135,35 @@ buildNode: aClass fields: aDictionary token: aToken
 category: 'Grail-node construction'
 method: PythonParser
 declareVariable: aSymbol
-	"Register a variable name with the current scope."
+	"Register a name as ``in scope'' here — used for name resolution.
+	Adds to the current scope's variable set only.  Use this for
+	parameter declarations (the name is bound externally, so it
+	shouldn't count as a body write) and for scope-resolution hints
+	like names propagated from inner parsers (f-string expressions).
+
+	For genuine body bindings — NameAst store ctx, walrus targets,
+	def/class/import names — use declareWrite: instead so the binding
+	also lands in the block's write set."
 
 	variableStack last add: aSymbol.
+%
+
+category: 'Grail-node construction'
+method: PythonParser
+declareWrite: aSymbol
+	"Register a name as both ``in scope'' and ``written in this
+	scope''.  Use this for any binding-creating form whose name is a
+	body-local write — assignment targets (via setStoreCtx:), walrus
+	targets, def/class statement names, import aliases, etc.
+
+	The duplicated variableStack registration keeps existing name-
+	resolution callers (isVariableIsDeclared:, NameAst codegen)
+	working unchanged; the writeStack entry feeds
+	FunctionDefAst >> assignedNamesInBody and is what the method-arg
+	optimisation consults to decide whether a param needs a temp."
+
+	variableStack last add: aSymbol.
+	writeStack last add: aSymbol.
 %
 
 category: 'Grail-node construction'
@@ -604,10 +630,10 @@ method: PythonParser
 parseClassDefWithDecorators: decorators
 	"Parse a class definition with already-parsed decorators."
 
-	| tok nameTok bases keywords body block variables |
+	| tok nameTok bases keywords body block variables writes scope |
 	tok := self advance. "consume 'class'"
 	nameTok := self expectType: #NAME.
-	self declareVariable: nameTok value asSymbol.
+	self declareWrite: nameTok value asSymbol.
 	bases := Array new.
 	keywords := Array new.
 	(self matchOp: '(') ifTrue: [
@@ -622,10 +648,13 @@ parseClassDefWithDecorators: decorators
 	classNesting := classNesting + 1.
 	body := self parseBlock.
 	classNesting := classNesting - 1.
-	variables := self popScope.
+	scope := self popScope.
+	variables := scope first.
+	writes := scope last.
 	block := BlockAst buildWithFields: (IdentityKeyValueDictionary new
 		at: #body put: body;
 		at: #variables put: variables;
+		at: #writes put: writes;
 		yourself).
 	^self buildNode: ClassDefAst fields: (IdentityKeyValueDictionary new
 		at: #name put: nameTok value asSymbol;
@@ -1186,11 +1215,11 @@ method: PythonParser
 parseFunctionDefWithDecorators: decorators
 	"Parse a function definition with already-parsed decorators."
 
-	| tok nameTok args returns body block funcNode decoratorNames variables
+	| tok nameTok args returns body block funcNode decoratorNames variables writes scope
 	  savedNesting |
 	tok := self advance. "consume 'def'"
 	nameTok := self expectType: #NAME.
-	self declareVariable: nameTok value asSymbol.
+	self declareWrite: nameTok value asSymbol.
 	self expect: #OP value: '('.
 	args := self parseFunctionParametersUntil: ')'.
 	self expect: #OP value: ')'.
@@ -1203,7 +1232,10 @@ parseFunctionDefWithDecorators: decorators
 	"Declare parameter names in the function body's scope so name
 	resolution treats parameters as locals (Python LEGB).  Without
 	this, a parameter shadowing a builtin (e.g. `def parse(str, ...)`)
-	would resolve to the builtin inside the body."
+	would resolve to the builtin inside the body.  Use declareVariable:
+	(scope-only) rather than declareWrite: so the params don't show up
+	in body.writes — the writeSet is meant to flag *body* rebinds, not
+	parameter declarations."
 	args posonlyargs do: [:a | self declareVariable: a name asSymbol].
 	args args do: [:a | self declareVariable: a name asSymbol].
 	args kwonlyargs do: [:a | self declareVariable: a name asSymbol].
@@ -1219,10 +1251,13 @@ parseFunctionDefWithDecorators: decorators
 	savedNesting := classNesting.
 	classNesting := 0.
 	body := [self parseBlock] ensure: [classNesting := savedNesting].
-	variables := self popScope.
+	scope := self popScope.
+	variables := scope first.
+	writes := scope last.
 	block := BlockAst buildWithFields: (IdentityKeyValueDictionary new
 		at: #body put: body;
 		at: #variables put: variables;
+		at: #writes put: writes;
 		yourself).
 	decoratorNames := decorators collect: [:each |
 		(each isKindOf: NameAst) ifTrue: [each id] ifFalse: [each]
@@ -1399,7 +1434,7 @@ parseImport
 				ifTrue: [($. split: alias name asString) first asSymbol]
 				ifFalse: [alias name]
 		].
-		self declareVariable: bound
+		self declareWrite: bound
 	].
 	^self buildNode: ImportAst fields: (IdentityKeyValueDictionary new
 		at: #names put: names;
@@ -1450,7 +1485,7 @@ parseImportFrom
 	].
 	names do: [:alias |
 		alias name ~~ #'*' ifTrue: [
-			self declareVariable: (alias asName ifNil: [alias name]).
+			self declareWrite: (alias asName ifNil: [alias name]).
 		].
 	].
 	^self buildNode: ImportFromAst fields: (IdentityKeyValueDictionary new
@@ -1590,13 +1625,16 @@ method: PythonParser
 parseModule
 	"Parse a complete module. Returns a ModuleAst."
 
-	| body block module variables |
+	| body block module variables writes scope |
 	self skipNewlines.
 	body := self parseStatements.
-	variables := self popScope.
+	scope := self popScope.
+	variables := scope first.
+	writes := scope last.
 	block := BlockAst buildWithFields: (IdentityKeyValueDictionary new
 		at: #body put: body;
 		at: #variables put: variables;
+		at: #writes put: writes;
 		yourself).
 	module := ModuleAst basicNew.
 	module
@@ -2687,17 +2725,24 @@ peekValue
 category: 'Grail-node construction'
 method: PythonParser
 popScope
-	"Pop and return the current variable scope."
+	"Pop the current variable and write scopes in lockstep and
+	return them as a 2-element Array {variables. writes.}.  Callers
+	that only care about the variable set can just `first` the
+	result; callers that build a BlockAst pass both onto the node so
+	the optimiser can read body writes directly."
 
-	^variableStack removeLast
+	^ Array
+		with: variableStack removeLast
+		with: writeStack removeLast
 %
 
 category: 'Grail-node construction'
 method: PythonParser
 pushScope
-	"Push a new variable scope."
+	"Push a new variable scope (and the parallel write scope)."
 
 	variableStack add: IdentitySet new.
+	writeStack add: IdentitySet new.
 %
 
 category: 'Grail-node construction'
@@ -2722,9 +2767,11 @@ setStoreCtx: anExpr
 	varNames := anExpr class allInstVarNames.
 	index := varNames indexOf: #ctx.
 	index > 0 ifTrue: [anExpr instVarAt: index put: self storeCtx].
-	"Register variable name"
+	"Register variable name as a write — this NameAst is in store
+	context (assignment target, for-loop target, augmented-assign
+	target, walrus, except-as, with-as, ...)."
 	(anExpr isKindOf: NameAst) ifTrue: [
-		self declareVariable: anExpr id.
+		self declareWrite: anExpr id.
 	].
 	"Recurse into tuples and lists (use instVarAt for elts)"
 	((anExpr isKindOf: TupleAst) or: [anExpr isKindOf: ListAst]) ifTrue: [
@@ -2763,6 +2810,8 @@ source: aString
 	position := 1.
 	variableStack := Array new.
 	variableStack add: IdentitySet new.
+	writeStack := Array new.
+	writeStack add: IdentitySet new.
 	classNesting := 0.
 %
 

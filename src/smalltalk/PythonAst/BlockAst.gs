@@ -7,7 +7,7 @@ SuiteAst ifNil: [self error: 'SuiteAst is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 SuiteAst subclass: 'BlockAst'
-  instVarNames: #( variables tempCount)
+  instVarNames: #( variables tempCount writes)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -108,4 +108,23 @@ method: BlockAst
 variables
 
 	^variables
+%
+
+category: 'Grail-other'
+method: BlockAst
+writes
+	"Names that are written in this scope — assignment targets,
+	augmented-assign targets, for-loop targets, walrus targets,
+	except-as / with-as targets, function/class definition names,
+	and import alias names.  Distinct from ``variables'', which also
+	includes parameters declared on this scope (parameters live on
+	the enclosing FunctionDefAst's args; we'd double-count if writes
+	included them too).
+
+	Populated by the parser's declareWrite: calls at each binding
+	site.  May be nil for blocks built without write tracking (e.g.
+	hand-constructed ASTs in older tests); callers should treat nil
+	as an empty set."
+
+	^ writes
 %
