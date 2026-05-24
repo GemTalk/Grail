@@ -10,7 +10,7 @@ AbstractNode subclass: 'ModuleAst'
   instVarNames: #(body name path
                     source type_ignore useTempsForBlock)
   classVars: #()
-  classInstVars: #()
+  classInstVars: #(execCounter evalCounter doitCounter)
   poolDictionaries: #()
   inDictionary: PythonAst
   options: #()
@@ -79,12 +79,78 @@ evaluateSource: sourceString usingModuleScope: aSymbolDictionary
 	this is the REPL contract (e.g. `x = 1` then `x + 2` resolving x).
 	One-shot callers should use #evaluateSource: instead."
 
+	^ self
+		evaluateSource: sourceString
+		usingModuleScope: aSymbolDictionary
+		as: #doit
+%
+
+category: 'Grail-evaluation'
+classmethod: ModuleAst
+evaluateSource: sourceString usingModuleScope: aSymbolDictionary as: aKind
+	"Three-arg variant used by entry points that want their doit
+	tagged in the /tmp/grail/ debug capture — aKind is a Symbol
+	(#exec / #eval / #doit) that determines the filename prefix.
+	Python's ``exec()'' passes #exec; Python's ``eval()'' passes
+	#eval; everything else (the REPL, test helpers) defaults to
+	#doit via the 2-arg form."
+
 	| module symbolList |
 	module := self parseSource: sourceString.
 	module useTempsForBlock: false.
 	module ensureModuleScope: aSymbolDictionary.
 	symbolList := self symbolListForModuleScope: aSymbolDictionary.
-	^module evaluateWithScope: symbolList
+	^module evaluateWithScope: symbolList as: aKind
+%
+
+category: 'Grail-evaluation'
+classmethod: ModuleAst
+evaluateExpressionSource: sourceString
+	"One-shot evaluation of a single Python expression — Python's
+	eval() with no globals.  Uses a fresh module scope."
+
+	^ self
+		evaluateExpressionSource: sourceString
+		usingModuleScope: SymbolDictionary new
+%
+
+category: 'Grail-evaluation'
+classmethod: ModuleAst
+evaluateExpressionSource: sourceString usingModuleScope: aSymbolDictionary
+	"Parse sourceString as a single Python expression and evaluate
+	it in aSymbolDictionary's scope, returning the expression's
+	value.  Raises SyntaxError if the source is anything other than
+	a bare expression (assignments, multiple statements, etc.).
+	Used to implement Python's eval() builtin."
+
+	| module |
+	module := self parseSource: sourceString.
+	module isSingleExpressionBody ifFalse: [
+		SyntaxError @env1:___signal___:
+			'eval() arg 1 must be a single expression: ' , sourceString].
+	module useTempsForBlock: false.
+	module ensureModuleScope: aSymbolDictionary.
+	^ module
+		evaluateWithScope: (self symbolListForModuleScope: aSymbolDictionary)
+		as: #eval
+%
+
+category: 'Grail-evaluation'
+classmethod: ModuleAst
+nextSeqFor: aKind
+	"Bump and return the per-session counter for aKind (#exec /
+	#eval / #doit).  Counters reset on install (classInstVars are
+	cleared when the class is re-subclassed) so each install gets a
+	fresh sequence."
+
+	aKind == #exec ifTrue: [
+		execCounter := (execCounter ifNil: [0]) + 1.
+		^ execCounter].
+	aKind == #eval ifTrue: [
+		evalCounter := (evalCounter ifNil: [0]) + 1.
+		^ evalCounter].
+	doitCounter := (doitCounter ifNil: [0]) + 1.
+	^ doitCounter
 %
 
 category: 'Grail-parsing'
@@ -133,14 +199,26 @@ ensureModuleScope: aSymbolDictionary
 category: 'Grail-evaluation'
 method: ModuleAst
 evaluateWithScope: aSymbolList
-	"Evaluate this module using the provided symbol list."
+	"Evaluate this module using the provided symbol list.  Backward-
+	compat 1-arg form — tags the debug capture as #doit."
+
+	^ self evaluateWithScope: aSymbolList as: #doit
+%
+
+category: 'Grail-evaluation'
+method: ModuleAst
+evaluateWithScope: aSymbolList as: aKind
+	"Evaluate this module using the provided symbol list, tagging the
+	debug capture with aKind (#exec / #eval / #doit).  Returns the
+	expression value if the body's last statement is a bare
+	expression (REPL convention — ``x'' returns the value of x);
+	returns None for statement-only bodies (``x = 1'' returns None
+	per Python ``exec()'' semantics)."
 
 	| result |
-	result := self executeWithScope: aSymbolList.
-	self shouldReturnExpressionResult ifTrue: [
-		^result
-	].
-	^None.
+	result := self executeWithScope: aSymbolList as: aKind.
+	self shouldReturnExpressionResult ifTrue: [^ result].
+	^ None
 %
 
 category: 'Grail-evaluation'
@@ -159,38 +237,69 @@ smalltalkSource
 category: 'Grail-evaluation'
 method: ModuleAst
 executeWithScope: aSymbolList
-	"Compile and execute this module, returning the raw execution result."
+	"Compile and execute this module, returning the raw execution
+	result.  Backward-compat 1-arg form — tags the debug capture as
+	#doit (REPL, test helpers, ad-hoc callers).  Use the :as:
+	variant from Python's exec()/eval() entry points so the file
+	name reflects which Python builtin produced the doit."
 
-	| code tmpPath file compiledMethod result |
+	^ self executeWithScope: aSymbolList as: #doit
+%
+
+category: 'Grail-evaluation'
+method: ModuleAst
+executeWithScope: aSymbolList as: aKind
+	"Compile and execute this module, returning the raw execution
+	result.  aKind is a Symbol (#exec / #eval / #doit) that
+	identifies the entry point — used to name the debug capture
+	files under /tmp/grail/ as ___<kind>_<N>___.tpz and matching
+	.ir.  Each call gets its own sequence number so successive
+	exec/eval/doit calls accumulate instead of overwriting (the
+	previous behaviour wrote /tmp/grail/<name>.gs and clobbered
+	earlier executions sharing the same module name)."
+
+	| code tmpPath seq tpzPath irPath compiledMethod result tpzSource |
 	code := self smalltalkSource.
 	tmpPath := '/tmp/grail'.
 	(GsFile isServerDirectory: tmpPath) ifNil: [
-		GsFile createServerDirectory: tmpPath.
-	] ifNotNil: [
-		(GsFile isServerDirectory: tmpPath) ifFalse: [
-			self error: '/tmp/grail should be a directory!'.
-		].
-	].
-	"Write source to disk to allow debugging/inspecting"
-	file := GsFile open: tmpPath , '/' , name , '.gs' mode: 'w' onClient: false.
-	file nextPutAll: code.
-	file close.
-	[
-		compiledMethod := code
-			_compileInContext: nil
-			symbolList: aSymbolList
-			oldLitVars: nil
-			environmentId: 1
-			flags: 0.
+		GsFile createServerDirectory: tmpPath].
+	seq := ModuleAst nextSeqFor: aKind.
+	tpzPath := tmpPath , '/___' , aKind asString , '_' , seq printString , '___.tpz'.
+	irPath := tmpPath , '/___' , aKind asString , '_' , seq printString , '___.ir'.
+	"Topaz-style wrapping: the doit framing matches what topaz
+	would see if you fed the file through it.  Caveat: the symbol
+	list passed to _compileInContext: isn't reproduced here, so
+	free-name resolution may differ in a true topaz run; the file
+	is for inspection rather than literal replay."
+	tpzSource := (WriteStream on: Unicode7 new)
+		nextPutAll: '! '; nextPutAll: tpzPath;
+		nextPutAll: '   (Module: '; nextPutAll: name;
+		nextPut: $); lf; lf;
+		nextPutAll: 'doit'; lf;
+		nextPutAll: code; lf;
+		nextPutAll: '%'; lf;
+		yourself.
+	tpzSource := tpzSource contents.
+	(GsFile open: tpzPath mode: 'wb' onClient: false)
+		nextPutAll: tpzSource encodeAsUTF8;
+		close.
+	[compiledMethod := code
+		_compileInContext: nil
+		symbolList: aSymbolList
+		oldLitVars: nil
+		environmentId: 1
+		flags: 0
 	] on: AbstractException do: [:ex |
-		ex pass. "Code is here to allow a breakpoint"
-	].
-	[
-		result := compiledMethod _executeInContext: nil.
+		ex pass. "Code is here to allow a breakpoint"].
+	"Snapshot IR for the freshly-compiled doit before any later
+	compile overwrites __sessionStateAt: 19."
+	(GsFile open: irPath mode: 'w' onClient: false)
+		nextPutAll: (System __sessionStateAt: 19) printString;
+		close.
+	[result := compiledMethod _executeInContext: nil
 	] on: AbstractException do: [:ex |
-		ex pass. "Code is here to allow a breakpoint"
-	].
-	^result
+		ex pass. "Code is here to allow a breakpoint"].
+	^ result
 %
 
 category: 'Grail-variables'
@@ -288,6 +397,19 @@ shouldReturnExpressionResult
 	| statements |
 	statements := body body.
 	^statements notEmpty and: [(statements last isKindOf: ExprAst)]
+%
+
+category: 'Grail-evaluation'
+method: ModuleAst
+isSingleExpressionBody
+	"True iff the body is exactly one statement and that statement
+	is a bare expression (ExprAst).  Anything else — assignment,
+	for-loop, def, multiple statements — fails Python's eval()
+	contract."
+
+	| statements |
+	statements := body body.
+	^ statements size = 1 and: [statements first isKindOf: ExprAst]
 %
 
 category: 'Grail-accessors'

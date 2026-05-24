@@ -278,7 +278,7 @@ printSmalltalkAttributeStoreOn: aStream target: tgt
 		"Route through the generated setter rather than a bare instVar
 		write.  Python parameters can be declared as block temps that
 		shadow same-named instVars (see FunctionDefAst
-		generateClassMethodSourceOn:); the setter is a method, so
+		generateMethodSourceOn:); the setter is a method, so
 		dispatch bypasses lexical scope and reaches the slot.  When
 		the attr is a class-side declaration (in classAttrNames) we
 		need the env-1 attribute path so the metaclass setter fires —

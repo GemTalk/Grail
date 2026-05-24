@@ -12,7 +12,8 @@ ExpressionAst subclass: 'CallAst'
   classInstVars: #('moduleClassBeingCompiled' 'moduleFunctionNames'
                     'classBeingCompiled' 'classInstVarNames'
                     'classFunctionNames' 'classVarargsFunctionNames'
-                    'classAttrNames' 'selfParameterName')
+                    'classAttrNames' 'selfParameterName'
+                    'returnEmitMode')
   poolDictionaries: #()
   inDictionary: PythonAst
   options: #()
@@ -904,6 +905,40 @@ category: 'Grail-Module Compile Context'
 classmethod: CallAst
 moduleFunctionNames: aSetOrNil
 	moduleFunctionNames := aSetOrNil
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
+returnEmitMode
+	"How ReturnAst should emit Python ``return value'' statements:
+
+	  #direct    — emit ``^ value.''.  Used inside real Smalltalk
+	               methods (top-level defs, class instance methods,
+	               @classmethod/@staticmethod) where the enclosing
+	               activation IS the function the return targets.
+	               The Smalltalk non-local-return semantics escape
+	               out of nested blocks (if/while/for) back to the
+	               method, matching Python's return.
+
+	  #exception — emit ``PythonReturn ___signal___: value.''.  Used
+	               inside block-form bodies (nested def closures,
+	               generator coroutines) where ``^'' would target
+	               the wrong activation.  A surrounding
+	               ``[ ... ] on: PythonReturn do: [...]'' handler
+	               catches and yields the return value as the
+	               block's value.
+
+	Defaults to #exception when nil — preserves the historical
+	behaviour for eval/exec doits and any caller that doesn't push
+	a mode before invoking ReturnAst codegen."
+
+	^ returnEmitMode
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
+returnEmitMode: aSymbolOrNil
+	returnEmitMode := aSymbolOrNil
 %
 
 ! ===============================================================================

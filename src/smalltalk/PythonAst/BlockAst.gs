@@ -7,7 +7,7 @@ SuiteAst ifNil: [self error: 'SuiteAst is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 SuiteAst subclass: 'BlockAst'
-  instVarNames: #( variables tempCount writes)
+  instVarNames: #( variables tempCount writes hasReturnBlocking)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -108,6 +108,29 @@ method: BlockAst
 variables
 
 	^variables
+%
+
+category: 'Grail-other'
+method: BlockAst
+hasReturnBlocking
+	"True iff parsing encountered a node within this scope whose
+	codegen emits statements AFTER the inlined body content in the
+	same Smalltalk block — currently ``with'' and ``try'' with a
+	non-empty ``finally:'' clause.  When this is true, a Python
+	``return X'' inside the body MUST compile to ``PythonReturn
+	___signal___: X'' rather than Smalltalk ``^ X.'', because
+	GemStone rejects unreachable statements after ``^'' at parse
+	time and the post-body cleanup would be exactly that.
+
+	Set by the parser bottom-up via ``markScopeReturnBlocking'' at
+	each ``with'' / ``try-finally'' parse point; propagation stops
+	at the enclosing function/lambda/class boundary because each
+	pushScope starts a fresh stack frame.
+
+	May be nil for hand-built BlockAst nodes that predate the
+	flag; callers should treat nil as false."
+
+	^ hasReturnBlocking
 %
 
 category: 'Grail-other'

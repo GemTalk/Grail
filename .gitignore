@@ -2,12 +2,10 @@
 *.out
 __pycache__
 stdout.txt
-tmp/
+.tmp/*
 .setenv
 pyperf*
 .claude/settings.local.json
-grail.ir
-grail.tpz
 
 # Build artifacts
 lib/

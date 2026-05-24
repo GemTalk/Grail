@@ -304,7 +304,7 @@ printSmalltalkOn: aStream
 	the env-1 DNU backstop if they reach a message send while nil."
 	((ctx isKindOf: LoadAst) and: [self isVariableIsDeclared: id]) ifTrue: [
 		aStream
-			nextPutAll: '(UnboundLocalError @env0:___checkLocal: ';
+			nextPutAll: '(UnboundLocalError ___checkLocal: ';
 			nextPutAll: id;
 			nextPutAll: ' named: #';
 			nextPutAll: id;

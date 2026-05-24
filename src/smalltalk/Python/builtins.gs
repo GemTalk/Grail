@@ -133,14 +133,56 @@ _exec: positional kw: kwargs
 			sym := key @env0:isSymbol ifTrue: [key] ifFalse: [key @env0:asString @env0:asSymbol].
 			scope @env0:at: sym put: value]
 	].
-	"Run the source as a module body in the seeded scope."
-	ModuleAst @env0:evaluateSource: source usingModuleScope: scope.
+	"Run the source as a module body in the seeded scope.  Tag the
+	debug capture as #exec so the .tpz / .ir files under /tmp/grail/
+	carry the ___exec_N___ prefix."
+	ModuleAst @env0:evaluateSource: source usingModuleScope: scope as: #exec.
 	"Reflect every binding back into the original globals dict using
 	string keys (Python convention)."
 	scope @env0:keysAndValuesDo: [:key :value |
 		k := key @env0:asString.
 		globalsDict @env0:at: k put: value].
 	^ None
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+_eval: positional kw: kwargs
+	"Python builtin eval(expression, globals=None, locals=None) —
+	parse ``expression'' as a SINGLE Python expression, evaluate it
+	in the supplied ``globals'' scope, return the value.  Raises
+	SyntaxError if the source is anything other than a bare
+	expression (assignments / multiple statements belong to exec()).
+	``locals'' is currently ignored — matches the approximation
+	_exec uses (Python permits aliasing globals==locals at module
+	level, and a finer-grained Locals shadow isn't yet wired up).
+
+	Walrus-expression bindings (``(x := 5) + 1'') and any other
+	side-effect bindings inside the expression land in ``globals''
+	via the same reflect-back loop _exec uses."
+
+	| source globalsDict scope sym k result |
+	source := positional @env0:at: 1.
+	globalsDict := (positional @env0:size @env0:>= 2)
+		ifTrue: [positional @env0:at: 2]
+		ifFalse: [nil].
+	globalsDict @env0:isNil ifTrue: [
+		globalsDict := KeyValueDictionary @env0:new].
+	"Seed a fresh SymbolDictionary scope from globals."
+	scope := SymbolDictionary @env0:new.
+	(globalsDict @env0:isKindOf: KeyValueDictionary) ifTrue: [
+		globalsDict @env0:keysAndValuesDo: [:key :value |
+			sym := key @env0:isSymbol
+				ifTrue: [key]
+				ifFalse: [key @env0:asString @env0:asSymbol].
+			scope @env0:at: sym put: value]].
+	result := ModuleAst @env0:evaluateExpressionSource: source usingModuleScope: scope.
+	"Reflect any bindings produced inside the expression (walrus, etc.)
+	back into globals using string keys."
+	scope @env0:keysAndValuesDo: [:key :value |
+		k := key @env0:asString.
+		globalsDict @env0:at: k put: value].
+	^ result
 %
 
 category: 'Grail-Built-in Functions'

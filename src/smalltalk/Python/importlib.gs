@@ -282,7 +282,7 @@ loadModuleFromPath: pathString name: moduleName
 	"Pre-register stub methods for each function so inter-function calls
 	resolve during codegen (avoids forward-reference timing issues)."
 	topLevelDefs do: [:stmt |
-		moduleClass compileMethod: stmt generateStubMethodSource
+		moduleClass compileMethod: stmt generateModuleMethodStubSource
 			dictionaries: sl
 			category: 'Grail-Methods'
 			environmentId: 1.
@@ -296,12 +296,12 @@ loadModuleFromPath: pathString name: moduleName
 	CallAst moduleClassBeingCompiled: moduleClass.
 	CallAst moduleFunctionNames: functionNames.
 	[
-		| debugStream debugClassName |
-		"When running as __main__ (``grail file.py``) accumulate every
-		method source we hand to compileMethod: into a single Topaz-
-		style input file so the user can see what was actually compiled
-		— and could replay it through topaz to reproduce.  Ordinary
-		imports skip the capture.
+		| debugStream debugClassName tpzPath irPath |
+		"Accumulate every method source we hand to compileMethod: into a
+		Topaz-style input file under /tmp/grail/.  One file per module
+		(``__main__'' for the script under runPath:, plus every
+		transitively imported module), keyed by Python name, so a
+		reader can see all the generated Smalltalk in one place.
 
 		The file is NOT a literal replay of what loadModuleFromPath:
 		does — the module class is created here at runtime via
@@ -309,35 +309,35 @@ loadModuleFromPath: pathString name: moduleName
 		``category:'' / ``method:'' / ``%'' framing is a debugging aid
 		that mirrors what GemStone would see if you compiled the
 		methods by hand."
-		debugStream := moduleName = '__main__'
-			ifTrue: [PrettyWriteStream on: Unicode7 new]
-			ifFalse: [nil].
+		self ___ensureDebugDirectory___.
+		tpzPath := '/tmp/grail/' , moduleName , '.tpz'.
+		irPath := '/tmp/grail/' , moduleName , '.ir'.
+		debugStream := PrettyWriteStream on: Unicode7 new.
 		debugClassName := moduleClassName asString.
-		debugStream ifNotNil: [
-			debugStream
-				nextPutAll: '! /tmp/grail.tpz — methods compiled by loadModuleFromPath:'; lf;
-				nextPutAll: '! Module: '; nextPutAll: moduleName;
-				nextPutAll: '   Class: '; nextPutAll: debugClassName; lf; lf;
-				"The subclass: call that loadModuleFromPath: makes to create
-				the module class.  Emitting it here makes the file self-
-				describing — a reader can see exactly which names become
-				instVars on the class (and therefore which Python parameters
-				will get the ``_X'' transport rename to avoid shadowing)."
-				nextPutAll: 'doit'; lf;
-				nextPutAll: 'module subclass: '''; nextPutAll: debugClassName; nextPutAll: ''''; lf;
-				nextPutAll: '  instVarNames: #('.
-			variableNames do: [:n |
-				debugStream space; nextPutAll: n asString].
-			debugStream
-				nextPutAll: ' )'; lf;
-				nextPutAll: '  classVars: #()'; lf;
-				nextPutAll: '  classInstVars: #()'; lf;
-				nextPutAll: '  poolDictionaries: #()'; lf;
-				nextPutAll: '  inDictionary: PythonModules'; lf;
-				nextPutAll: '  options: #()'; lf;
-				nextPutAll: '%'; lf; lf;
-				nextPutAll: 'set compile_env: 1'; lf; lf.
-		].
+		debugStream
+			nextPutAll: '! '; nextPutAll: tpzPath;
+			nextPutAll: ' — methods compiled by loadModuleFromPath:'; lf;
+			nextPutAll: '! Module: '; nextPutAll: moduleName;
+			nextPutAll: '   Class: '; nextPutAll: debugClassName; lf; lf;
+			"The subclass: call that loadModuleFromPath: makes to create
+			the module class.  Emitting it here makes the file self-
+			describing — a reader can see exactly which names become
+			instVars on the class (and therefore which Python parameters
+			will get the ``_X'' transport rename to avoid shadowing)."
+			nextPutAll: 'doit'; lf;
+			nextPutAll: 'module subclass: '''; nextPutAll: debugClassName; nextPutAll: ''''; lf;
+			nextPutAll: '  instVarNames: #('.
+		variableNames do: [:n |
+			debugStream space; nextPutAll: n asString].
+		debugStream
+			nextPutAll: ' )'; lf;
+			nextPutAll: '  classVars: #()'; lf;
+			nextPutAll: '  classInstVars: #()'; lf;
+			nextPutAll: '  poolDictionaries: #()'; lf;
+			nextPutAll: '  inDictionary: PythonModules'; lf;
+			nextPutAll: '  options: #()'; lf;
+			nextPutAll: '%'; lf; lf;
+			nextPutAll: 'set compile_env: 1'; lf; lf.
 
 		"Compile real methods for each top-level def.
 		Resume CompileWarning because function params may shadow module-
@@ -346,15 +346,13 @@ loadModuleFromPath: pathString name: moduleName
 		topLevelDefs do: [:stmt |
 			| methodStream methodSource2 |
 			methodStream := PrettyWriteStream on: Unicode7 new.
-			stmt generateMethodSourceOn: methodStream.
+			stmt generateModuleMethodSourceOn: methodStream.
 			methodSource2 := methodStream contents.
-			debugStream ifNotNil: [
-				debugStream
-					nextPutAll: 'category: ''Grail-Methods'''; lf;
-					nextPutAll: 'method: '; nextPutAll: debugClassName; lf.
-				self ___writeMethodSource: methodSource2 on: debugStream.
-				debugStream nextPutAll: '%'; lf; lf.
-			].
+			debugStream
+				nextPutAll: 'category: ''Grail-Methods'''; lf;
+				nextPutAll: 'method: '; nextPutAll: debugClassName; lf.
+			self ___writeMethodSource: methodSource2 on: debugStream.
+			debugStream nextPutAll: '%'; lf; lf.
 			[moduleClass compileMethod: methodSource2
 				dictionaries: sl
 				category: 'Grail-Methods'
@@ -374,35 +372,29 @@ loadModuleFromPath: pathString name: moduleName
 		are valid Python (Python evaluates the expression and discards
 		the result)."
 		methodSource := 'initialize' , lf , stream contents.
-		debugStream ifNotNil: [
-			| tpzFile |
-			debugStream
-				nextPutAll: 'category: ''Grail-Module Body'''; lf;
-				nextPutAll: 'method: '; nextPutAll: debugClassName; lf.
-			self ___writeMethodSource: methodSource on: debugStream.
-			debugStream nextPutAll: '%'; lf.
-			"Write as UTF-8 bytes so editors that don't auto-detect
-			UTF-16 (most of them) render the file correctly."
-			tpzFile := GsFile open: '/tmp/grail.tpz' mode: 'wb' onClient: false.
-			tpzFile nextPutAll: debugStream contents encodeAsUTF8.
-			tpzFile close.
-		].
+		debugStream
+			nextPutAll: 'category: ''Grail-Module Body'''; lf;
+			nextPutAll: 'method: '; nextPutAll: debugClassName; lf.
+		self ___writeMethodSource: methodSource on: debugStream.
+		debugStream nextPutAll: '%'; lf.
+		"Write as UTF-8 bytes so editors that don't auto-detect
+		UTF-16 (most of them) render the file correctly."
+		(GsFile open: tpzPath mode: 'wb' onClient: false)
+			nextPutAll: debugStream contents encodeAsUTF8;
+			close.
 		[moduleClass compileMethod: methodSource
 			dictionaries: sl
 			category: 'Grail-Module Body'
 			environmentId: 1.
 		] on: CompileWarning do: [:ex | ex resume].
 
-		"Debug aid: when running as __main__, capture the IR tree for the
-		body's initialize method (the last thing compiled here, before the
-		accessor sweep below).  Snapshot now so subsequent compileMethod:
-		calls don't overwrite __sessionStateAt: 19."
-		moduleName = '__main__' ifTrue: [
-			| irFile |
-			irFile := GsFile open: '/tmp/grail.ir' mode: 'w' onClient: false.
-			irFile nextPutAll: (System __sessionStateAt: 19) printString.
-			irFile close.
-		].
+		"Debug aid: capture the IR tree for the body's initialize method
+		(the last thing compiled here, before the accessor sweep below).
+		Snapshot now so subsequent compileMethod: calls don't overwrite
+		__sessionStateAt: 19.  One IR file per module under /tmp/grail/."
+		(GsFile open: irPath mode: 'w' onClient: false)
+			nextPutAll: (System __sessionStateAt: 19) printString;
+			close.
 	] ensure: [
 		CallAst moduleClassBeingCompiled: nil.
 		CallAst moduleFunctionNames: nil.
@@ -544,10 +536,12 @@ runPath: pathString
 
 	Routes through loadModuleFromPath: so class definitions, top-level
 	`def`s, and module body share one codegen path.  As a side effect,
-	loadModuleFromPath: (when name = '__main__') captures every method
-	source it compiles to /tmp/grail.tpz (Topaz-style framing with
-	``category:'' / ``method:'' / ``%'') and the body initialize IR
-	tree to /tmp/grail.ir for post-mortem inspection.
+	loadModuleFromPath: captures every method source it compiles to
+	/tmp/grail/<module>.tpz (Topaz-style framing with ``category:'' /
+	``method:'' / ``%'') and the body initialize IR tree to
+	/tmp/grail/<module>.ir.  ``runPath:'' itself sees a file at
+	/tmp/grail/__main__.tpz; transitively imported modules show up
+	beside it (itertools.tpz, urllib.parse.tpz, ...).
 
 	importlib runPath: '/path/to/script.py'.
 	"
@@ -609,6 +603,19 @@ irForPath: pathString
 
 category: 'Grail-Class Compilation'
 classmethod: importlib
+___ensureDebugDirectory___
+	"Create /tmp/grail/ if it doesn't already exist.  Called once
+	per loadModuleFromPath: to make the debug-file write safe even
+	on a fresh /tmp.  Idempotent: createServerDirectory: is skipped
+	when the directory already exists."
+
+	(GsFile existsOnServer: '/tmp/grail') ifFalse: [
+		GsFile createServerDirectory: '/tmp/grail'
+	].
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
 ___writeMethodSource: aSource on: aStream
 	"Emit a Smalltalk method source onto aStream — a PrettyWriteStream
 	whose ``increaseIndent'' / ``decreaseIndent'' we use to indent the
@@ -620,24 +627,29 @@ ___writeMethodSource: aSource on: aStream
 
 	Called by the /tmp/grail.tpz debug capture in loadModuleFromPath:
 	so each method written to that file reads like a hand-written
-	Topaz method definition rather than a flat source dump."
+	Topaz method definition rather than a flat source dump.
 
-	| firstLf |
-	firstLf := aSource @env0:indexOf: Character lf @env0:ifAbsent: [0].
-	firstLf @env0:= 0 ifTrue: [
-		"Degenerate: source has no body, just the selector."
-		^ aStream nextPutAll: aSource; lf.
-	].
-	aStream
-		nextPutAll: (aSource @env0:copyFrom: 1 to: firstLf - 1);
-		lf; lf.
+	Emits the body LINE-BY-LINE (one ``nextPutAll:'' per line)
+	instead of character-by-character.  A previous char-by-char
+	version was O(n²) — each ``nextPut:'' triggered PrettyWriteStream
+	bookkeeping that did per-char work — and hung the test suite on
+	large generated methods (re._parser's __parse: clocks in at
+	~53k chars)."
+
+	| lines first |
+	lines := aSource @env0:subStrings: Character lf.
+	lines @env0:isEmpty ifTrue: [^ self].
+	first := lines @env0:first.
+	"Selector line, blank line, then indented body."
+	aStream nextPutAll: first; lf; lf.
 	aStream @env0:increaseIndent.
-	firstLf + 1 to: aSource @env0:size do: [:i |
-		| ch |
-		ch := aSource @env0:at: i.
-		ch @env0:== Character lf
+	2 to: lines @env0:size do: [:i |
+		| line |
+		line := lines @env0:at: i.
+		"Empty lines stay empty (no spurious indent on blanks)."
+		line @env0:isEmpty
 			ifTrue: [aStream lf]
-			ifFalse: [aStream nextPut: ch]
+			ifFalse: [aStream nextPutAll: line; lf].
 	].
 	"Ensure the body ends on its own line — the caller emits ``%''
 	right after this on what should be a fresh line."

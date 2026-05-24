@@ -3463,7 +3463,7 @@ method: FlaskScaffoldingTestCase
 testParamNameShadowsInstVar
 	"A class method parameter whose name matches a class instVar
 	must shadow the instVar — Python parameters are always locals.
-	Hits FunctionDefAst generateClassMethodSourceOn:'s temp-list
+	Hits FunctionDefAst generateMethodSourceOn:'s temp-list
 	build and AssignAst/AttributeAst's accessor-routing for self.X
 	reads + writes."
 

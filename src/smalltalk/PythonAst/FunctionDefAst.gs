@@ -112,7 +112,7 @@ printSmalltalkOn: aStream
 	assignment so the instVar holds a callable reference for first-class use
 	(e.g. `f = add; f(1, 2)`). Nested defs still use the block form."
 
-	| fixedCount paramNames |
+	| fixedCount paramNames savedReturnMode |
 	(CallAst moduleClassBeingCompiled notNil and: [self isModuleLevelDef]) ifTrue: [
 		aStream
 			nextPutAll: name;
@@ -239,11 +239,24 @@ printSmalltalkOn: aStream
 		increaseIndent.
 	"Iterate body statements directly so BlockAst doesn't re-declare temps
 	(parameters are now in body.variables via the parser change, and the
-	outer `| ... |` above already declares them)."
-	body body do: [:stmt |
-		stmt printSmalltalkOn: aStream.
-		aStream lf.
-	].
+	outer `| ... |` above already declares them).
+
+	Force #exception return-emit mode here: this body is a Smalltalk
+	*block*, not a method.  A ``^'' inside would do a non-local return
+	out of the enclosing Smalltalk method (the wrong frame from
+	Python's standpoint — Python's ``return'' should only exit this
+	nested function, not its containing scope).  The surrounding
+	``[...] on: PythonReturn do: [...]'' handler catches PythonReturn
+	and yields the value as the block's result, which is what the
+	caller of the nested function sees."
+	savedReturnMode := CallAst returnEmitMode.
+	[
+		CallAst returnEmitMode: #exception.
+		body body do: [:stmt |
+			stmt printSmalltalkOn: aStream.
+			aStream lf.
+		].
+	] ensure: [CallAst returnEmitMode: savedReturnMode].
 	aStream
 		decreaseIndent;
 		nextPutAll: '] value.';
@@ -377,7 +390,7 @@ moduleMethodSelector
 
 category: 'Grail-Module Method Compilation'
 method: FunctionDefAst
-generateStubMethodSource
+generateModuleMethodStubSource
 	"Generate a minimal stub method source for pre-registration on the module
 	class. The stub has the correct selector header with parameter names but
 	just returns nil. It gets replaced by the real method after codegen."
@@ -554,7 +567,7 @@ paramNeedsTemp: aName assigned: assignedNames instVars: instVarNames
 
 category: 'Module Method Compilation'
 method: FunctionDefAst
-generateMethodSourceOn: aStream
+generateModuleMethodSourceOn: aStream
 	"Generate the full method source for compiling this def as a real env-1
 	method on a module class.
 
@@ -578,7 +591,8 @@ generateMethodSourceOn: aStream
 			] value.
 			] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue]."
 
-	| paramNames bodyVars allLocals assignedNames needsTemp instVarNames canOptimise |
+	| paramNames bodyVars allLocals assignedNames needsTemp instVarNames canOptimise
+	  savedReturnMode useDirectReturn useMethodTemps |
 	paramNames := self allParameterNames.
 	bodyVars := body variables.
 	"Whether to apply the method-arg optimisation (use the real Python
@@ -677,16 +691,34 @@ generateMethodSourceOn: aStream
 			].
 		].
 
-		"If we need any temps, wrap in an outer block; otherwise emit the
-		body's on:do: expression directly after ^."
-		allLocals isEmpty ifTrue: [
-			aStream nextPutAll: '^ '.
-		] ifFalse: [
-			aStream nextPutAll: '^ ['.
-			aStream nextPutAll: '| '.
-			allLocals do: [:each | aStream nextPutAll: each; space].
-			aStream nextPut: $|; lf.
-			"Unpack each transported param into its block-local temp."
+		"Decide between method-scope temps and an outer block wrapper.
+
+		Method temps are simpler (no ``^ [ ... ] value'' wrap, just
+		``selector | temps | inits. body. ^ None.'') but GemStone
+		forbids them from shadowing instVars.  When every entry in
+		allLocals is safe (matches no instVar of the moduleClass),
+		emit at method scope; otherwise fall back to the outer block
+		form whose block temps ARE allowed to shadow.  The optimisation
+		is gated on canOptimise (we need the instVar set) and on
+		useDirect (the method-scope form needs the ``^''-return path —
+		generator and with/try-finally bodies still need the wrapper)."
+		useDirectReturn := (self isGenerator not)
+			and: [body hasReturnBlocking ~~ true].
+		useMethodTemps := canOptimise
+			and: [useDirectReturn
+			and: [(allLocals anySatisfy: [:n |
+				instVarNames includes: n asSymbol]) not]].
+
+		useMethodTemps ifTrue: [
+			"Method scope: temps at the top, params transported in
+			directly, body inline.  Trailing ``^ None.'' (or just
+			``^ X.'' when the body ends with a return) comes from
+			printBodyOn: in #directMethod mode."
+			allLocals isEmpty ifFalse: [
+				aStream nextPutAll: '| '.
+				allLocals do: [:each | aStream nextPutAll: each; space].
+				aStream nextPut: $|; lf.
+			].
 			1 to: paramNames size do: [:i |
 				(needsTemp at: i) ifTrue: [
 					aStream
@@ -695,6 +727,26 @@ generateMethodSourceOn: aStream
 						nextPutAll: (transportNames at: i);
 						nextPut: $.;
 						lf.
+				].
+			].
+		] ifFalse: [
+			"Outer-block form: wrap so block temps can shadow instVars
+			and so the method has a single ``^ <expr>'' shape even when
+			the body contains multiple statements or a generator wrap."
+			aStream nextPutAll: '^ ['.
+			allLocals isEmpty ifFalse: [
+				aStream nextPutAll: '| '.
+				allLocals do: [:each | aStream nextPutAll: each; space].
+				aStream nextPut: $|; lf.
+				1 to: paramNames size do: [:i |
+					(needsTemp at: i) ifTrue: [
+						aStream
+							nextPutAll: (paramNames at: i);
+							nextPutAll: ' := ';
+							nextPutAll: (transportNames at: i);
+							nextPut: $.;
+							lf.
+					].
 				].
 			].
 		].
@@ -787,11 +839,34 @@ generateMethodSourceOn: aStream
 	doesn't run on call — it's wrapped in a 1-arg block that takes a
 	``___gen___`` parameter (the PythonGenerator), and the outer
 	expression returns the generator.  ``yield`` inside the body emits
-	``___gen___ ___yield___: value``."
-	self printBodyOn: aStream.
-	allLocals isEmpty ifFalse: [
-		aStream nextPutAll: '] value'.
-	].
+	``___gen___ ___yield___: value``.
+
+	Push #direct return-emit mode for non-generator bodies (a Smalltalk
+	``^'' inside the body returns from this method — the right frame
+	for Python's ``return'').  Two cases force the conservative
+	#exception path back:
+	  - Generators: body runs in a forked GsProcess where ``^''
+	    targets the wrong activation.
+	  - Bodies containing ``with'' or ``try/finally'': those
+	    codegens emit cleanup statements AFTER the inlined body in
+	    the same Smalltalk block, so a ``^'' inside the body would
+	    leave dead code that GemStone rejects at parse time.
+
+	#directMethod is picked when useMethodTemps decided method-scope
+	temps are safe — body sits at method scope, no outer block."
+	savedReturnMode := CallAst returnEmitMode.
+	[
+		CallAst returnEmitMode:
+			(useMethodTemps == true
+				ifTrue: [#directMethod]
+				ifFalse: [
+					(self isGenerator or: [body hasReturnBlocking == true])
+						ifTrue: [#exception]
+						ifFalse: [#direct]]).
+		self printBodyOn: aStream.
+	] ensure: [CallAst returnEmitMode: savedReturnMode].
+	"Close the outer block only when we opened one."
+	useMethodTemps == true ifFalse: [aStream nextPutAll: '] value'].
 %
 
 category: 'Grail-Module Method Compilation'
@@ -854,32 +929,71 @@ nodeContainsYieldExceptNestedDefs: node
 category: 'Grail-Module Method Compilation'
 method: FunctionDefAst
 printBodyOn: aStream
-	"Emit the function body wrapped in the PythonReturn handler.
-	For generator functions, wrap the whole thing in a
-	``PythonGenerator withBlock: [:___gen___ | ...]`` so the call
-	returns a generator instead of running the body.
+	"Emit the function body.
+
+	Two shapes, picked by ``CallAst returnEmitMode'':
+
+	  #direct   — body statements emit directly; ``return X'' inside
+	              the body emits ``^ X.'' (Smalltalk non-local return
+	              targets the surrounding real method).  No on:do:
+	              wrapper is needed — the Smalltalk method's own
+	              return semantics carry the value out.  Used for
+	              top-level defs and class methods that aren't
+	              generators.
+
+	  default   — body wraps in ``[ ... ] on: PythonReturn do: [...]''
+	              and ``return X'' raises PythonReturn.  Required for
+	              block-form bodies (nested def closures) and
+	              generator coroutines where ``^'' would target the
+	              wrong frame.
 
 	Body locals are hoisted into the enclosing function block by
-	generateClassMethodSourceOn: / generateMethodSourceOn:, so the
-	body statements sit directly inside the on:do: block — no
-	separate ``[ <stmts> ] value`` scope wrapper is needed.  The
-	trailing ``None.`` is the implicit fall-through return value
-	when no Python ``return`` fires."
+	generateMethodSourceOn: / generateModuleMethodSourceOn:, so the
+	body statements sit directly inside the block.  The trailing
+	``None.'' is the implicit fall-through return value when no
+	Python ``return'' fires."
+
+	| mode useDirect useMethod lastIsReturn |
+	mode := CallAst returnEmitMode.
+	useDirect := mode == #direct.
+	useMethod := mode == #directMethod.
+	"In any ``^''-based mode the body's final ``return X'' compiles to
+	``^ X.'' — and GemStone requires ``^'' to be the last statement of
+	its enclosing block.  When the body's last top-level statement IS
+	a ReturnAst we therefore omit the trailing fall-through (it would
+	be unreachable and the compiler would reject it).  Functions whose
+	last statement isn't a return — most decorators, side-effecting
+	routines — still get a fall-through (``None.'' inside the block in
+	#direct mode, ``^ None.'' at method scope in #directMethod mode)
+	so the implicit return matches Python's ``return None''."
+	lastIsReturn := (useDirect or: [useMethod])
+		and: [body body notEmpty
+		and: [body body last isKindOf: ReturnAst]].
 
 	self isGenerator ifTrue: [
 		aStream nextPutAll: 'PythonGenerator @env1:withBlock: [:___gen___ |'; lf.
 	].
-	aStream nextPutAll: '['; lf.
+	(useDirect or: [useMethod]) ifFalse: [
+		aStream nextPutAll: '['; lf.
+	].
 	body body do: [:each |
 		each printSmalltalkOn: aStream.
 		aStream lf.
 	].
-	aStream nextPutAll: 'None.'; lf.
-	aStream nextPutAll: '] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue]'.
+	lastIsReturn ifFalse: [
+		useMethod
+			ifTrue: [aStream nextPutAll: '^ None.'; lf]
+			ifFalse: [aStream nextPutAll: 'None.'; lf].
+	].
+	(useDirect or: [useMethod]) ifFalse: [
+		aStream nextPutAll: '] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue]'.
+	].
 	self isGenerator ifTrue: [
 		aStream nextPutAll: ']'.
 	].
-	aStream nextPutAll: '.'; lf.
+	(useDirect or: [useMethod]) ifFalse: [
+		aStream nextPutAll: '.'; lf.
+	].
 %
 
 ! ===============================================================================
@@ -888,7 +1002,7 @@ printBodyOn: aStream
 
 category: 'Grail-Class Method Compilation'
 method: FunctionDefAst
-classMethodParameterNames
+instanceMethodParameterNames
 	"Return parameter names excluding the self parameter (first arg).
 	For `def foo(self, a, b):` returns #('a' 'b')."
 
@@ -900,7 +1014,7 @@ classMethodParameterNames
 
 category: 'Grail-Class Method Compilation'
 method: FunctionDefAst
-classMethodArity
+instanceMethodArity
 	"Return the arity excluding the self parameter."
 
 	^ self moduleMethodArity - 1 max: 0
@@ -908,7 +1022,7 @@ classMethodArity
 
 category: 'Grail-Class Method Compilation'
 method: FunctionDefAst
-classMethodSelector
+instanceMethodSelector
 	"Return the Smalltalk selector for this function as a class instance method.
 	Same convention as module methods but with self stripped:
 	  def foo(self): → #foo (0 real args)
@@ -917,21 +1031,21 @@ classMethodSelector
 	For complex signatures → #_foo:kw: (varargs)."
 
 	self isSimplePositionalArgs ifTrue: [
-		^ CallAst fastPathSelectorForAttr: name arity: self classMethodArity
+		^ CallAst fastPathSelectorForAttr: name arity: self instanceMethodArity
 	].
 	^ CallAst varargsSelectorForName: name
 %
 
 category: 'Grail-Class Method Compilation'
 method: FunctionDefAst
-generateClassMethodStubSource
-	"Generate a stub for pre-registration (same idea as generateStubMethodSource
+generateMethodStubSource
+	"Generate a stub for pre-registration (same idea as generateModuleMethodStubSource
 	but with self stripped from parameters)."
 
 	| stream paramNames |
 	stream := WriteStream on: Unicode7 new.
 	self isSimplePositionalArgs ifTrue: [
-		paramNames := self classMethodParameterNames.
+		paramNames := self instanceMethodParameterNames.
 		stream nextPutAll: name.
 		paramNames isEmpty ifFalse: [
 			stream nextPutAll: ': ___1'.
@@ -948,7 +1062,7 @@ generateClassMethodStubSource
 
 category: 'Grail-Class Method Compilation'
 method: FunctionDefAst
-generateClassMethodSourceOn: aStream
+generateMethodSourceOn: aStream
 	"Generate method source for a class instance method. Strips the self
 	parameter (first arg of the Python function). The Smalltalk `self`
 	serves as the Python instance.
@@ -970,43 +1084,54 @@ generateClassMethodSourceOn: aStream
 			...
 			] value"
 
-	| paramNames bodyVars allLocals classIvars |
-	paramNames := self classMethodParameterNames.
+	| paramNames bodyVars allLocals classIvars savedReturnMode
+	  useDirectReturn useMethodTemps |
+	paramNames := self instanceMethodParameterNames.
 	bodyVars := body variables.
 	classIvars := CallAst classInstVarNames ifNil: [IdentitySet new].
 
 	self isSimplePositionalArgs ifTrue: [
-		"Class methods always use ``___N`` placeholders + block-temp
-		copies for parameters, even when the body doesn't rebind them.
-		The module-method path optimises away the temp when safe, but
-		that check needs the full set of inherited instVars of the
-		class being defined — and at codegen time the class doesn't
-		exist yet (its parent is an arbitrary Python expression).
-		Without a way to enumerate inherited slots, we'd risk emitting
-		a method arg that silently shadows an inherited instVar — a
-		GemStone compile error.  Stick with the conservative shape
-		here; the optimisation is mostly a module-method win anyway."
+		| transportNames |
+		"Pick a per-parameter transport name (the Smalltalk method-arg
+		identifier that carries the value into the block temp).  Prefer
+		the underscore-prefixed form (``_x'' for Python ``x'') so the
+		selector reads traceably; fall back to the ``___N'' positional
+		placeholder when ``_x'' would collide with another parameter, a
+		body local, or a locally-declared instVar.
+
+		Note on inherited instVars: at codegen time the class doesn't
+		yet exist (its parent is an arbitrary Python expression), so we
+		can't fully enumerate inherited slots.  An inherited slot named
+		``_x'' would surface here as a GemStone compile error at the
+		moment the method is installed (loud, not silent) — accepted as
+		a rare-in-practice cost for the readability win.  Underscore-
+		prefixed instVars are atypical of Grail's stdlib ports."
+		transportNames := paramNames collect: [:each |
+			| candidate |
+			candidate := '_' , each.
+			((paramNames includes: candidate)
+				or: [(bodyVars includes: candidate asSymbol)
+				or: [classIvars includes: candidate asSymbol]])
+				ifTrue: [nil]
+				ifFalse: [candidate]].
+		1 to: paramNames size do: [:i |
+			(transportNames at: i) isNil ifTrue: [
+				transportNames at: i put: '___' , i printString].
+		].
+
 		aStream nextPutAll: name.
 		paramNames isEmpty ifFalse: [
-			aStream nextPutAll: ': ___1'.
+			aStream nextPutAll: ': '; nextPutAll: (transportNames at: 1).
 			2 to: paramNames size do: [:i |
-				aStream nextPutAll: ' _: ___'; nextPutAll: i printString.
+				aStream nextPutAll: ' _: '; nextPutAll: (transportNames at: i).
 			].
 		].
 		aStream lf.
 
-		aStream nextPutAll: '^ ['.
-
-		"Declare parameter names + body locals as block temps.  Parameter
-		names ALWAYS become block temps — Python parameters are always
-		locals and must shadow any class-instVar of the same name.  Body
-		variables that happen to match a classIvar are *excluded* so
-		that bare-name reads/writes of those names continue to flow
-		through the instVar path (Grail's implicit ``self.X`` shorthand
-		inside instance methods).  Without the parameter override,
-		``def from_string(self, source, globals=None, ...)`` would assign
-		None to the enclosing class's ``globals`` instVar instead of
-		binding the local."
+		"Build the locals set — paramNames (always declared as block
+		temps for the no-shadow rule) + body locals (excluding self/cls
+		refs and class-instVar names so bare-name reads/writes flow
+		through the instVar path)."
 		allLocals := OrderedCollection new.
 		paramNames do: [:each | allLocals add: each].
 		bodyVars do: [:each |
@@ -1016,19 +1141,35 @@ generateClassMethodSourceOn: aStream
 				].
 			].
 		].
-		allLocals isEmpty ifFalse: [
-			aStream nextPutAll: '| '.
-			allLocals do: [:each | aStream nextPutAll: each; space].
-			aStream nextPut: $|; lf.
-		].
 
-		1 to: paramNames size do: [:i |
-			aStream
-				nextPutAll: (paramNames at: i);
-				nextPutAll: ' := ___';
-				nextPutAll: i printString;
-				nextPut: $.;
-				lf.
+		"Drop the outer ``^ [ ... ] value'' wrapper when there's
+		nothing to put inside it — no params, no body locals, and
+		``^''-return is safe (non-generator, no with/try-finally).
+		Body sits directly at method scope.  Helps zero-other-arg
+		Python instance methods like ``def sum(self): return self.x
+		+ self.y'' which previously emitted ``^ [^ X.] value'' for
+		no gain.  (Despite this method's name, ``class method'' here
+		means ``method of a Python class'' — covers instance methods,
+		@classmethod, and @staticmethod alike.)"
+		useDirectReturn := (self isGenerator not)
+			and: [body hasReturnBlocking ~~ true].
+		useMethodTemps := useDirectReturn and: [allLocals isEmpty].
+
+		useMethodTemps ifFalse: [
+			aStream nextPutAll: '^ ['.
+			allLocals isEmpty ifFalse: [
+				aStream nextPutAll: '| '.
+				allLocals do: [:each | aStream nextPutAll: each; space].
+				aStream nextPut: $|; lf.
+			].
+			1 to: paramNames size do: [:i |
+				aStream
+					nextPutAll: (paramNames at: i);
+					nextPutAll: ' := ';
+					nextPutAll: (transportNames at: i);
+					nextPut: $.;
+					lf.
+			].
 		].
 	] ifFalse: [
 		| classIvars |
@@ -1113,9 +1254,22 @@ generateClassMethodSourceOn: aStream
 		].
 	].
 
-	"Class methods always use the outer ``^ [ ... ] value`` block (see
-	the simple-positional branch above for why the optimisation is
-	restricted to module methods)."
-	self printBodyOn: aStream.
-	aStream nextPutAll: '] value'.
+	"Push the return-emit mode.  #directMethod when useMethodTemps is
+	set (body at method scope, no wrapper); #direct otherwise (body
+	inside the outer ``^ [ ... ] value'' block).  #exception when
+	``^'' can't safely escape the body (generator or
+	with/try-finally — those still need the PythonReturn handler)."
+	savedReturnMode := CallAst returnEmitMode.
+	[
+		CallAst returnEmitMode:
+			(useMethodTemps == true
+				ifTrue: [#directMethod]
+				ifFalse: [
+					(self isGenerator or: [body hasReturnBlocking == true])
+						ifTrue: [#exception]
+						ifFalse: [#direct]]).
+		self printBodyOn: aStream.
+	] ensure: [CallAst returnEmitMode: savedReturnMode].
+	"Close the outer block only when one was opened."
+	useMethodTemps == true ifFalse: [aStream nextPutAll: '] value'].
 %

@@ -34,6 +34,7 @@ fi
 TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=150000;GEM_TEMPOBJ_CACHE_SIZE=100000;"
 
 EXIT=0
+
 LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S scripts/runTests.gs < /dev/null || EXIT=$?
 
 # Run embedded CPython tests in a separate session (can't coexist with shim)

@@ -287,7 +287,7 @@ category: 'Grail-Tests - Module Loading'
 method: ImportlibTestCase
 testRunPathParamReassignment
 	"Direct coverage for the method-arg optimisation in
-	FunctionDefAst >> generateMethodSourceOn:.  Three shapes exercise
+	FunctionDefAst >> generateModuleMethodSourceOn:.  Three shapes exercise
 	the three temp-forcing conditions:
 
 	  - ``bump(x)`` rebinds the parameter (``x = x + 1``).  Detected
@@ -343,17 +343,134 @@ testRunPathClassDefinition
 
 category: 'Grail-Tests - Module Loading'
 method: ImportlibTestCase
+testClassMethodCompileForm
+	"Regression: ClassDefAst codegen emits compile calls in the
+	compact ``Foo [class] ___compileMethod: '...' category: '...'.''
+	form (Behavior >> ___compileMethod:category: helper) rather than
+	the long inline ``[Foo compileMethod: ... dictionaries: ... env: 1]
+	on: CompileWarning do: ...'' boilerplate.  Both forms compile to
+	the same install behavior; the helper just hides ~200 chars of
+	repeated machinery per method.  Also verifies the helper is
+	reachable from both Class-side and Metaclass3-side receivers
+	(installed on Behavior so ``Foo'' AND ``Foo class'' resolve it)."
+
+	| testFilePath tpzPath tpzContents |
+	testFilePath := importlib grailDir , '/tests/python/module_with_classes.py'.
+	tpzPath := '/tmp/grail/__main__.tpz'.
+
+	importlib @env1:modules removeKey: #'__main__' ifAbsent: [].
+	(GsFile existsOnServer: tpzPath) ifTrue: [GsFile removeServerFile: tpzPath].
+	importlib runPath: testFilePath.
+
+	tpzContents := (GsFile open: tpzPath mode: 'rb' onClient: false)
+		contentsAsUtf8 decodeToUnicode.
+
+	"Compact helper form is used (instance side and class side)."
+	self assert: (tpzContents includesString: 'Point ___compileMethod: ').
+	self assert: (tpzContents includesString: 'Point @env0:class ___compileMethod: ').
+
+	"The long inline boilerplate is gone — neither the
+	``dictionaries: (Python at: #importlib) ___compilationSymbolList___''
+	chain nor the ``environmentId: 1] on: CompileWarning'' tail should
+	appear in any generated class compile."
+	self deny: (tpzContents includesString: '___compilationSymbolList___').
+	self deny: (tpzContents includesString: 'environmentId: 1] @env0:on: CompileWarning')
+%
+
+category: 'Grail-Tests - Module Loading'
+method: ImportlibTestCase
+testInstanceMethodUnderscoreParamNames
+	"Regression: FunctionDefAst >> generateMethodSourceOn: (the
+	class-method form) picks ``_x'' transport names for Python
+	parameters that need a block-local copy (because they collide
+	with an instVar or get reassigned), rather than the older
+	``___N'' positional placeholder.  The selector reads
+	traceably, and the copy line below reads
+	``x := _x.'' instead of ``x := ___1.''.
+
+	Verified on Point's ``__init__(self, x, y)'' — both ``x'' and
+	``y'' are instVars (assigned via ``self.x = x'' in the body),
+	so both need temps; both pick the ``_<name>'' transport because
+	no conflicting param/local/instVar would shadow it."
+
+	| testFilePath tpzPath tpzContents |
+	testFilePath := importlib grailDir , '/tests/python/module_with_classes.py'.
+	tpzPath := '/tmp/grail/__main__.tpz'.
+
+	importlib @env1:modules removeKey: #'__main__' ifAbsent: [].
+	(GsFile existsOnServer: tpzPath) ifTrue: [GsFile removeServerFile: tpzPath].
+	importlib runPath: testFilePath.
+
+	tpzContents := (GsFile open: tpzPath mode: 'rb' onClient: false)
+		contentsAsUtf8 decodeToUnicode.
+
+	"New shape: ``__init__: _x _: _y'' (underscore-prefixed transport)
+	plus block-temp copies that mention the same ``_x'' / ``_y'' names.
+	Old shape used ``___1'' / ``___2'' positional placeholders."
+	self assert: (tpzContents includesString: '__init__: _x _: _y').
+	self assert: (tpzContents includesString: '	x := _x.').
+	self assert: (tpzContents includesString: '	y := _y.').
+	self deny: (tpzContents includesString: '__init__: ___1 _: ___2')
+%
+
+category: 'Grail-Tests - Module Loading'
+method: ImportlibTestCase
+testInstanceMethodNoOuterBlock
+	"Regression: FunctionDefAst >> generateMethodSourceOn: omits the
+	outer ``[ | locals | ... ] value'' wrapper when the method body
+	has no locals.  Without the optimisation, every instance method
+	paid for an outer block invocation even when there were no temps
+	to declare; with it, the method body is the method body.
+
+	The Point class's ``sum`` method body is a single ``return
+	self.x + self.y'' with no locals — its compiled source must
+	start with ``^'' (a direct return), not ``^ [...] value'' (the
+	old block-wrapped shape)."
+
+	| testFilePath tpzPath tpzContents sumStart |
+	testFilePath := importlib grailDir , '/tests/python/module_with_classes.py'.
+	tpzPath := '/tmp/grail/__main__.tpz'.
+
+	importlib @env1:modules removeKey: #'__main__' ifAbsent: [].
+	(GsFile existsOnServer: tpzPath) ifTrue: [GsFile removeServerFile: tpzPath].
+	importlib runPath: testFilePath.
+
+	tpzContents := (GsFile open: tpzPath mode: 'rb' onClient: false)
+		contentsAsUtf8 decodeToUnicode.
+
+	"Slice out the ``sum'' method source as embedded in the helper
+	call: ``Point ___compileMethod: 'sum<lf>...''.  Verify the body
+	immediately after the selector and tab/newline is a direct ``^''
+	return (the optimised shape), not a ``^ [...] value'' wrap."
+	sumStart := tpzContents indexOfSubCollection: 'Point ___compileMethod: ''sum'.
+	self assert: sumStart > 0.
+	"Body shape after the optimisation: ``sum<lf>\t^ ...'' — assert the
+	tab+caret pattern, and assert the old ``^ [|...| ... ] value'' wrap
+	is NOT present anywhere in this method's source."
+	self assert: (tpzContents
+		copyFrom: sumStart
+		to: sumStart + 31) equals: 'Point ___compileMethod: ''sum
+	^ '.
+
+	"The Counter class's ``get'' method has the same shape — single
+	return, no locals — and must also skip the wrapper."
+	self assert: (tpzContents includesString: 'Counter ___compileMethod: ''get
+	^ ')
+%
+
+category: 'Grail-Tests - Module Loading'
+method: ImportlibTestCase
 testRunPathWritesDebugFiles
-	"runPath: captures every compiled method source in /tmp/grail.tpz
-	(Topaz-style framing) and the last IR tree in /tmp/grail.ir for
-	post-mortem inspection.  Drive runPath: on hello.py and verify
-	both files were written with content that reflects the Python
-	source."
+	"runPath: captures every compiled method source in
+	/tmp/grail/<module>.tpz (Topaz-style framing) and the last IR
+	tree in /tmp/grail/<module>.ir for post-mortem inspection.
+	Drive runPath: on hello.py and verify both files were written
+	with content that reflects the Python source."
 
 	| testFilePath tpzPath irPath tpzFile tpzContents irFile irContents |
 	testFilePath := importlib grailDir , '/src/python/hello.py'.
-	tpzPath := '/tmp/grail.tpz'.
-	irPath := '/tmp/grail.ir'.
+	tpzPath := '/tmp/grail/__main__.tpz'.
+	irPath := '/tmp/grail/__main__.ir'.
 
 	"Clear any leftover files so we know runPath: actually wrote them."
 	(GsFile existsOnServer: tpzPath) ifTrue: [GsFile removeServerFile: tpzPath].
@@ -385,6 +502,37 @@ testRunPathWritesDebugFiles
 	self assert: irContents notEmpty.
 	self assert: (irContents includesString: 'Allen').
 	self assert: (irContents includesString: 'say_hello')
+%
+
+category: 'Grail-Tests - Module Loading'
+method: ImportlibTestCase
+testLoadModuleWritesPerModuleDebugFiles
+	"loadModuleFromPath: writes /tmp/grail/<module>.tpz and .ir for
+	EVERY Python module it compiles, not just __main__.  Drive a
+	fresh import of itertools (a stdlib module that compiles from
+	src/python/stdlib/itertools.py) and verify its per-module debug
+	files appear with the expected Topaz framing."
+
+	| tpzPath irPath tpzContents |
+	tpzPath := '/tmp/grail/itertools.tpz'.
+	irPath := '/tmp/grail/itertools.ir'.
+	(GsFile existsOnServer: tpzPath) ifTrue: [GsFile removeServerFile: tpzPath].
+	(GsFile existsOnServer: irPath) ifTrue: [GsFile removeServerFile: irPath].
+
+	"Force a re-load — drop the cached singleton so loadModuleFromPath:
+	(and therefore the debug capture) runs again."
+	importlib @env1:modules removeKey: #'itertools' ifAbsent: [].
+	importlib @env1:instance @env1:import_module: 'itertools'.
+
+	self assert: (GsFile existsOnServer: tpzPath).
+	self assert: (GsFile existsOnServer: irPath).
+
+	tpzContents := (GsFile open: tpzPath mode: 'rb' onClient: false)
+		contentsAsUtf8 decodeToUnicode.
+	self assert: (tpzContents includesString: 'module subclass: ''Itertools''').
+	self assert: (tpzContents includesString: 'method: Itertools').
+	self assert: (tpzContents includesString: 'chain').
+	self assert: (tpzContents includesString: 'repeat')
 %
 
 category: 'Grail-Tests - Module Loading'

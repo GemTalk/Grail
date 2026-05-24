@@ -54,8 +54,30 @@ set compile_env: 0
 category: 'Grail-other'
 method: ReturnAst
 printSmalltalkOn: aStream
+	"Emit Python ``return value''.  Two shapes depending on
+	``CallAst returnEmitMode'':
 
-	aStream nextPutAll: 'PythonReturn ___signal___: '.
+	  #direct        — ``^ value.''.  Body is inside an outer
+	                   ``^ [ ... ] value'' block; the ``^'' inside
+	                   does a non-local return out of the enclosing
+	                   real method (which IS the Python function).
+
+	  #directMethod  — ``^ value.''.  Body sits directly at method
+	                   scope (no outer block — used when no temps
+	                   collide with instVars).  Same return target.
+
+	  default        — ``PythonReturn ___signal___: value.''.  An
+	                   outer on:PythonReturn-do: handler catches
+	                   it; used for block-form bodies (nested def
+	                   closures, generator coroutines) where the
+	                   Smalltalk method on the stack is NOT the
+	                   Python function the user wants to return
+	                   from."
+
+	((CallAst returnEmitMode @env0:== #direct)
+		or: [CallAst returnEmitMode @env0:== #directMethod])
+		ifTrue: [aStream nextPutAll: '^ ']
+		ifFalse: [aStream nextPutAll: 'PythonReturn ___signal___: '].
 	value ifNil: [
 		aStream nextPutAll: 'None'.
 	] ifNotNil: [

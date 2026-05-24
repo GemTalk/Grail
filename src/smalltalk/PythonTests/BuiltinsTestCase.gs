@@ -927,3 +927,79 @@ testZip
 	self assert: (first @env1:__getitem__: 0) equals: 1.
 	self assert: (first @env1:__getitem__: 1) equals: 'a'
 %
+
+category: 'Grail-Tests - Eval and Exec'
+method: BuiltinsTestCase
+testEvalArithmeticExpression
+	"Python eval() evaluates a single expression and returns its value."
+
+	self assert: (self eval: 'eval("1 + 2")') equals: 3.
+	self assert: (self eval: 'eval("10 * 4")') equals: 40.
+	self assert: (self eval: 'eval("\"hi\" + \"!\"")') equals: 'hi!'
+%
+
+category: 'Grail-Tests - Eval and Exec'
+method: BuiltinsTestCase
+testEvalWithGlobals
+	"eval() reads names from the supplied globals dict."
+
+	self assert: (self eval: 'eval("x * 2", {"x": 5})') equals: 10.
+	self assert: (self eval: 'eval("a + b", {"a": 7, "b": 8})') equals: 15
+%
+
+category: 'Grail-Tests - Eval and Exec'
+method: BuiltinsTestCase
+testEvalReturnsNotNone
+	"Distinguishes from exec: eval returns the value, not None."
+
+	self deny: (self eval: 'eval("1 + 2")') == None.
+	"By contrast exec returns None."
+	self assert: (self eval: 'exec("y = 1 + 2")') == None
+%
+
+category: 'Grail-Tests - Eval and Exec'
+method: BuiltinsTestCase
+testEvalRejectsAssignment
+	"Python's eval() requires an expression; assignment statements
+	raise SyntaxError."
+
+	self should: [self eval: 'eval("x = 1")'] raise: SyntaxError
+%
+
+category: 'Grail-Tests - Eval and Exec'
+method: BuiltinsTestCase
+testEvalRejectsMultipleStatements
+	"Two statements separated by a newline are not a single
+	expression — eval() rejects this where exec() would accept."
+
+	| src |
+	src := 'eval("1\n2")'.
+	self should: [self eval: src] raise: SyntaxError
+%
+
+category: 'Grail-Tests - Eval and Exec'
+method: BuiltinsTestCase
+testEvalWalrusReflectsBack
+	"A walrus inside the expression binds in the supplied globals
+	mapping (mirrors what exec() does for ordinary assignments)."
+
+	| evalSrc outcome |
+	evalSrc := 'g = {}
+result = eval("(captured := 99)", g)
+[result, g["captured"]]'.
+	outcome := self eval: evalSrc.
+	self assert: (outcome @env1:__getitem__: 0) equals: 99.
+	self assert: (outcome @env1:__getitem__: 1) equals: 99
+%
+
+category: 'Grail-Tests - Eval and Exec'
+method: BuiltinsTestCase
+testModuleAstEvaluateExpressionSource
+	"Class-side helper used by the eval() builtin — direct AST entry
+	point.  Useful for callers that want the eval() semantics
+	without going through the Python builtin dispatch."
+
+	self assert: (ModuleAst evaluateExpressionSource: '1 + 2') equals: 3.
+	self assert: (ModuleAst evaluateExpressionSource: '"hello"') equals: 'hello'.
+	self should: [ModuleAst evaluateExpressionSource: 'x = 1'] raise: SyntaxError
+%

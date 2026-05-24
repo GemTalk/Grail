@@ -1,5 +1,9 @@
 output pushnew runTests.out
 ! file scripts/runTests.gs
+iferr 1 where
+iferr 2 output pop
+iferr 3 where
+iferr 4 exit 1
 login
 run
 | dir |

@@ -139,7 +139,7 @@ printSmalltalkRuntimeOn: aStream
 		methodDefs do: [:def |
 			| s |
 			s := PrettyWriteStream on: Unicode7 new.
-			def generateClassMethodSourceOn: s.
+			def generateMethodSourceOn: s.
 			methodSources add: def name asString -> s contents.
 		].
 		"@classmethod bodies use the same per-method source generator
@@ -175,7 +175,7 @@ printSmalltalkRuntimeOn: aStream
 						ifFalse: [def allParameterNames first asSymbol]).
 					[
 						s := PrettyWriteStream on: Unicode7 new.
-						def generateClassMethodSourceOn: s.
+						def generateMethodSourceOn: s.
 						classMethodSources add: def name asString -> s contents.
 					] ensure: [
 						CallAst selfParameterName: savedSelfForCM.
@@ -202,7 +202,7 @@ printSmalltalkRuntimeOn: aStream
 				staticMethodDefs do: [:def |
 					| s |
 					s := PrettyWriteStream on: Unicode7 new.
-					def generateMethodSourceOn: s.
+					def generateModuleMethodSourceOn: s.
 					staticMethodSources add: def name asString -> s contents.
 				]
 			] ensure: [
@@ -243,7 +243,18 @@ printSmalltalkRuntimeOn: aStream
 	instVars are per-class storage, matching Python's
 	``A.attr != B.attr`` semantics)."
 	allClassInstVars := (classAttrs collect: [:p | p key]) asOrderedCollection.
-	bases isEmpty ifTrue: [allClassInstVars add: #'__module__'].
+	"Always request a ``__module__'' slot — unless the user already
+	declared one in the class body (e.g. re._constants's
+	``class PatternError(Exception): __module__ = 're''').
+	``___subclass___:'' filters names the parent metaclass already
+	declares, so this is a no-op for subclasses of a Python user class
+	(they inherit the slot) and creates a fresh slot for subclasses of
+	a built-in (whose metaclass doesn't have one).  Pairing this with
+	an unconditional accessor + setter emit below means ``Foo
+	__module__: self'' always resolves — no MessageNotUnderstood
+	handler needed at the call site."
+	(allClassInstVars includes: #'__module__') ifFalse: [
+		allClassInstVars add: #'__module__'].
 	"Add ``_fields`` slot so NamedTuple-style subclasses can introspect
 	their bare-annotation field layout in declaration order.  Skipped
 	when the user already declared ``_fields`` themselves.  See the
@@ -301,7 +312,7 @@ printSmalltalkRuntimeOn: aStream
 	].
 
 	"Compile each @staticmethod onto the metaclass.  Body has no
-	implicit ``self`` — generateMethodSourceOn: (module form, no
+	implicit ``self`` — generateModuleMethodSourceOn: (module form, no
 	first-param strip) is what was used to build the source."
 	staticMethodSources do: [:assoc |
 		self
@@ -411,10 +422,20 @@ printSmalltalkRuntimeOn: aStream
 		aStream nextPutAll: '.'; lf
 	].
 
-	"Compile + initialize the synthetic ``__module__`` slot on the
-	root of a Python class chain — subclasses inherit it (the slot
-	itself wasn't redeclared above for them)."
-	bases isEmpty ifTrue: [
+	"Compile the synthetic ``__module__'' accessor + setter on every
+	class (unless the user already declared ``__module__'' in the
+	class body — re._constants's ``class PatternError(Exception):
+	__module__ = 're'`` — in which case the classAttrs loop above
+	already emitted them and the init line already stored the user's
+	value, which must not be clobbered).  The slot itself is declared
+	above (filtered by ``___subclass___:'' if the parent already has
+	it, so subclasses of a Python user class reuse the inherited slot;
+	subclasses of a built-in like ``int''/``dict'' get a fresh one).
+	Re-emitting the methods on every class costs a small compile per
+	subclass but guarantees ``Foo __module__: self'' always resolves —
+	no MessageNotUnderstood handler needed for the built-in-parent
+	case."
+	(classAttrs anySatisfy: [:p | p key == #'__module__']) ifFalse: [
 		self
 			emitCompileMethodOn: name
 			source: '__module__
@@ -431,15 +452,8 @@ printSmalltalkRuntimeOn: aStream
 			env: 1
 			classSide: true
 			onStream: aStream.
+		aStream nextPutAll: name; nextPutAll: ' __module__: self.'; lf.
 	].
-	"Always point the new class at the defining module.  The setter
-	is inherited when the first base is itself a Python user class
-	(it brings the __module__ slot + setter along the metaclass
-	chain); when the first base is a built-in (e.g. ``dict``,
-	``int``) the setter isn't there, and we swallow the resulting
-	MessageNotUnderstood quietly — losing __module__ on that class
-	is a known Grail limitation but doesn't block import."
-	aStream nextPutAll: '['; nextPutAll: name; nextPutAll: ' __module__: self] @env0:on: MessageNotUnderstood do: [:___ex___ | ___ex___ @env0:return: nil].'; lf.
 
 	"Compile a unary accessor + 1-arg setter per instance variable.
 	The setter pairs with the accessor so ``___pyAttrLoad___:`` can
@@ -499,7 +513,7 @@ printSmalltalkRuntimeOn: aStream
 		detect: [:def | def name asSymbol == #'__init__']
 		ifNone: [nil].
 	initSelector := initMethod
-		ifNotNil: [initMethod classMethodSelector]
+		ifNotNil: [initMethod instanceMethodSelector]
 		ifNil: [nil].
 	self
 		emitInstantiationMethodFor: name
@@ -547,31 +561,25 @@ printSymbolArray: names on: aStream
 category: 'Grail-code generation'
 method: ClassDefAst
 emitCompileMethodOn: classVarName source: sourceString category: categoryString env: envId classSide: classSideBool onStream: aStream
-	"Emit a `<class> [class] compileMethod: '...' dictionaries: ...
-	category: ... environmentId: N.` statement.  Wrap the compile
-	in a CompileWarning handler that resumes — module-body
-	compilation does the same (see loadModuleFromPath:); without
-	this, an upstream-shaped class body that ends up shadowing a
-	method argument (e.g. `kwargs` rebinding from a varargs
-	signature) aborts the whole module load.  matches the same
-	rule the module-body compile already follows."
+	"Emit a `<class> [class] ___compileMethod: '...' category: '...'.`
+	statement that calls the Class >> ___compileMethod:category:
+	helper.  The helper compiles env-1, uses the Grail symbol list,
+	and wraps in a CompileWarning handler that resumes — the same
+	machinery the module-body compile uses (an upstream-shaped class
+	body that shadows a method argument would otherwise abort the
+	whole module load).  ``envId'' is currently unused — the helper
+	hardcodes env-1, which matches every emit site here today; if a
+	non-env-1 compile target ever appears, lift the env into the
+	helper's signature."
 
-	aStream nextPutAll: '['.
 	aStream nextPutAll: classVarName.
 	classSideBool ifTrue: [aStream nextPutAll: ' @env0:class'].
-	aStream nextPutAll: ' @env0:compileMethod: '.
+	aStream nextPutAll: ' ___compileMethod: '.
 	self printQuotedString: sourceString on: aStream.
-	"Resolve ``importlib`` via the Python namespace lookup rather
-	than a bare identifier — the bare ``importlib`` would be
-	shadowed inside any module that has ``import importlib`` (the
-	user's Python-level facade), which redirects the call to the
-	Python module instance instead of the Smalltalk loader."
 	aStream
-		nextPutAll: ' dictionaries: (Python @env0:at: #importlib) @env0:___compilationSymbolList___ category: ''';
+		nextPutAll: ' category: ''';
 		nextPutAll: categoryString;
-		nextPutAll: ''' environmentId: ';
-		nextPutAll: envId printString;
-		nextPutAll: '] @env0:on: CompileWarning do: [:___ex___ | ___ex___ @env0:resume].'; lf.
+		nextPutAll: '''.'; lf.
 %
 
 category: 'Grail-code generation'

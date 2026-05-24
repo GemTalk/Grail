@@ -85,3 +85,51 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 		inDictionary: nil
 		options: #()
 %
+
+category: 'Grail-Class Compilation'
+method: Behavior
+___compileMethod: aSource category: aCategory
+	"Compile aSource as a method on the receiver, env-1, using the
+	Grail compilation symbol list, wrapped in a CompileWarning
+	handler that resumes (matches the module-body compile path —
+	without this an upstream-shaped class body that shadows a
+	method argument aborts the whole module load).  Returns the
+	receiver.
+
+	Installed on Behavior, not Class, so the class-side form
+	``Foo class ___compileMethod: ...'' works too — ``Foo class''
+	is a Metaclass3 instance, and Metaclass3's class chain
+	(Metaclass3 < Module < Behavior) does NOT include Class.  Both
+	Class and Metaclass3 inherit from Behavior, so a Behavior
+	method covers ``Foo ___compileMethod:'' (instance side) and
+	``Foo class ___compileMethod:'' (class side) uniformly.
+
+	Hides the per-method boilerplate ClassDefAst codegen used to
+	inline at every emit site:
+
+	  [Foo @env0:compileMethod: '...'
+	      dictionaries: (Python @env0:at: #importlib)
+	          @env0:___compilationSymbolList___
+	      category: '...' environmentId: 1
+	  ] @env0:on: CompileWarning do: [:___ex___ | ___ex___ @env0:resume]
+
+	becomes
+
+	  Foo ___compileMethod: '...' category: '...'
+
+	~250 chars per method → ~50.  Class-side compiles use ``Foo class
+	___compileMethod: ...''."
+
+	"Resolve the symbol list locally rather than calling
+	``importlib ___compilationSymbolList___'' — Class.gs files in
+	early during install (as SystemUser, before the Python /
+	importlib globals exist), so the bare ``Python at: #importlib''
+	would fail to compile here.  The user-profile symbol list is the
+	same value importlib's helper would return."
+	[self @env0:compileMethod: aSource
+		dictionaries: System @env0:myUserProfile @env0:symbolList @env0:copy
+		category: aCategory
+		environmentId: 1.
+	] @env0:on: CompileWarning do: [:ex | ex @env0:resume].
+	^ self
+%

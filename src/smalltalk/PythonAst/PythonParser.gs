@@ -7,7 +7,8 @@ Object ifNil: [self error: 'Object is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 Object subclass: 'PythonParser'
-  instVarNames: #( source tokens position variableStack classNesting writeStack)
+  instVarNames: #( source tokens position variableStack classNesting writeStack
+                    blockingStack)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -630,7 +631,7 @@ method: PythonParser
 parseClassDefWithDecorators: decorators
 	"Parse a class definition with already-parsed decorators."
 
-	| tok nameTok bases keywords body block variables writes scope |
+	| tok nameTok bases keywords body block variables writes blocking scope |
 	tok := self advance. "consume 'class'"
 	nameTok := self expectType: #NAME.
 	self declareWrite: nameTok value asSymbol.
@@ -649,12 +650,14 @@ parseClassDefWithDecorators: decorators
 	body := self parseBlock.
 	classNesting := classNesting - 1.
 	scope := self popScope.
-	variables := scope first.
-	writes := scope last.
+	variables := scope at: 1.
+	writes := scope at: 2.
+	blocking := scope at: 3.
 	block := BlockAst buildWithFields: (IdentityKeyValueDictionary new
 		at: #body put: body;
 		at: #variables put: variables;
 		at: #writes put: writes;
+		at: #hasReturnBlocking put: blocking;
 		yourself).
 	^self buildNode: ClassDefAst fields: (IdentityKeyValueDictionary new
 		at: #name put: nameTok value asSymbol;
@@ -1215,7 +1218,7 @@ method: PythonParser
 parseFunctionDefWithDecorators: decorators
 	"Parse a function definition with already-parsed decorators."
 
-	| tok nameTok args returns body block funcNode decoratorNames variables writes scope
+	| tok nameTok args returns body block funcNode decoratorNames variables writes blocking scope
 	  savedNesting |
 	tok := self advance. "consume 'def'"
 	nameTok := self expectType: #NAME.
@@ -1252,12 +1255,14 @@ parseFunctionDefWithDecorators: decorators
 	classNesting := 0.
 	body := [self parseBlock] ensure: [classNesting := savedNesting].
 	scope := self popScope.
-	variables := scope first.
-	writes := scope last.
+	variables := scope at: 1.
+	writes := scope at: 2.
+	blocking := scope at: 3.
 	block := BlockAst buildWithFields: (IdentityKeyValueDictionary new
 		at: #body put: body;
 		at: #variables put: variables;
 		at: #writes put: writes;
+		at: #hasReturnBlocking put: blocking;
 		yourself).
 	decoratorNames := decorators collect: [:each |
 		(each isKindOf: NameAst) ifTrue: [each id] ifFalse: [each]
@@ -1625,16 +1630,18 @@ method: PythonParser
 parseModule
 	"Parse a complete module. Returns a ModuleAst."
 
-	| body block module variables writes scope |
+	| body block module variables writes blocking scope |
 	self skipNewlines.
 	body := self parseStatements.
 	scope := self popScope.
-	variables := scope first.
-	writes := scope last.
+	variables := scope at: 1.
+	writes := scope at: 2.
+	blocking := scope at: 3.
 	block := BlockAst buildWithFields: (IdentityKeyValueDictionary new
 		at: #body put: body;
 		at: #variables put: variables;
 		at: #writes put: writes;
+		at: #hasReturnBlocking put: blocking;
 		yourself).
 	module := ModuleAst basicNew.
 	module
@@ -2552,6 +2559,10 @@ parseTry
 	(self matchKeyword: 'finally') ifTrue: [
 		self expect: #OP value: ':'.
 		finalbody := self parseBlock.
+		"Flag the enclosing scope as return-blocking — the finally
+		cleanup is emitted AFTER the try body, the same pattern that
+		makes ``^''-style returns produce dead code."
+		self markScopeReturnBlocking.
 	].
 
 	^self buildNode: TryAst fields: (IdentityKeyValueDictionary new
@@ -2591,6 +2602,12 @@ parseWith
 
 	| tok items body |
 	tok := self advance. "consume 'with'"
+	"Flag the enclosing scope as ``return-blocking'' — WithAst's
+	codegen emits the context manager's __exit__ call AFTER the
+	body, which is the post-body cleanup that ``^''-style returns
+	can't coexist with.  FunctionDefAst reads this off the body's
+	BlockAst to choose PythonReturn-exception return codegen."
+	self markScopeReturnBlocking.
 	items := Array new.
 	items add: self parseWithItem.
 	[self matchOp: ','] whileTrue: [
@@ -2725,24 +2742,41 @@ peekValue
 category: 'Grail-node construction'
 method: PythonParser
 popScope
-	"Pop the current variable and write scopes in lockstep and
-	return them as a 2-element Array {variables. writes.}.  Callers
-	that only care about the variable set can just `first` the
-	result; callers that build a BlockAst pass both onto the node so
-	the optimiser can read body writes directly."
+	"Pop the current variable, write, and return-blocking scopes in
+	lockstep and return them as a 3-element Array
+	{variables. writes. hasReturnBlocking.}.  Callers that only care
+	about the variable set can ``first'' the result; callers that
+	build a BlockAst pass all three onto the node so codegen can
+	read body writes and the return-blocking flag directly."
 
 	^ Array
 		with: variableStack removeLast
 		with: writeStack removeLast
+		with: blockingStack removeLast
 %
 
 category: 'Grail-node construction'
 method: PythonParser
 pushScope
-	"Push a new variable scope (and the parallel write scope)."
+	"Push a new variable scope (and the parallel write and
+	return-blocking scopes)."
 
 	variableStack add: IdentitySet new.
 	writeStack add: IdentitySet new.
+	blockingStack add: false.
+%
+
+category: 'Grail-node construction'
+method: PythonParser
+markScopeReturnBlocking
+	"Mark the current scope as containing a node whose codegen places
+	statements AFTER the inlined body in the same Smalltalk block
+	(``with'', ``try-finally'').  When the enclosing function body's
+	BlockAst is built, its ``hasReturnBlocking'' is set to true and
+	FunctionDefAst falls back to PythonReturn-exception ``return''
+	codegen rather than Smalltalk ``^ X.''."
+
+	blockingStack at: blockingStack size put: true.
 %
 
 category: 'Grail-node construction'
@@ -2812,6 +2846,8 @@ source: aString
 	variableStack add: IdentitySet new.
 	writeStack := Array new.
 	writeStack add: IdentitySet new.
+	blockingStack := Array new.
+	blockingStack add: false.
 	classNesting := 0.
 %
 
