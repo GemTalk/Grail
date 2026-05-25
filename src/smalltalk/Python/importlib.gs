@@ -680,15 +680,30 @@ ___inheritClassAttrs___: aClass exclude: ownAttrs
 	(superClass / format / userId / classCategory / ...) don't
 	participate.  __module__ is handled separately by ClassDefAst.
 
+	Also filter against kernel metaclass instVar names (``name'',
+	``category'', ``classCategory'', ...) — a Python class body that
+	declares ``name: str'' (e.g. jinja2.nodes._FilterTestCommon)
+	gets an auto-generated ``name'' env-1 accessor that READS the
+	Smalltalk-kernel ``name'' instVar (= the class's printed name).
+	Inheriting that value into a subclass via this copy would
+	overwrite the subclass's actual class name and break
+	``cls.__name__'' / ``type(node).__name__'' dispatch.  See
+	jinja2.nodes.Filter subclass of _FilterTestCommon — pre-fix,
+	Filter's ``__name__'' reported '_FilterTestCommon' and the
+	compiler couldn't tell Filter and Test nodes apart at all.
+
 	Factored out of inline emit so each generated class only pays a
 	single send instead of ~600 chars of inlined code (keeps the
 	gem's transient doits_meths code space from overflowing on heavy
 	imports like itsdangerous + Werkzeug)."
 
+	| kernelSlots |
+	kernelSlots := Object class allInstVarNames asIdentitySet.
 	aClass superclass class allInstVarNames do: [:n |
 		(((aClass superclass class whichClassIncludesSelector: n environmentId: 1) notNil)
 			and: [n ~= #'__module__'
-			and: [(ownAttrs includes: n) not]]) ifTrue: [
+			and: [(ownAttrs includes: n) not
+			and: [(kernelSlots includes: n) not]]]) ifTrue: [
 			| v |
 			v := aClass superclass perform: n env: 1.
 			aClass perform: (n asString , ':') asSymbol env: 1 withArguments: { v }
