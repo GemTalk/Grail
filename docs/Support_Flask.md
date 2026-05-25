@@ -229,89 +229,125 @@ Existing stub modules that need extending later: `typing`,
   that implement that hook is therefore skipped — revisit when
   Python `__new__` becomes a first-class class method.
 - **M4 — Jinja2 renders a template** standalone, no Flask yet.
-  *In progress.*  Source dropped into `src/python/stdlib/jinja2/`;
-  the parser learned async comprehensions (`[n async for n in s]`)
-  and `yield from` codegen; `AsyncFunctionDefAst` /
-  `AsyncForAst` / `AsyncWithAst` now subclass their sync
-  counterparts so codegen reuses the same `printSmalltalkOn:`;
-  `MatMultAst` got a stub; `ClassDefAst` filters duplicate
-  classInstVars against the parent's metaclass even when the
-  Python parent is implicit (`PythonInstance`); new stdlib stubs:
-  `errno`, `fnmatch`, `marshal`, `pickle`, `stat`, `tempfile`,
-  `types`, `threading`, `operator`, `urllib.parse`; `enum` extended
-  with `Enum` / `IntEnum` / `StrEnum` / `Flag` / `auto`.
-  Several regex / parser blockers down: ForAst's `for-else`
-  codegen no longer runs the else clause when `break` fires
-  (broke `re._parser._parse_sub`'s common-prefix loop); `int`'s
-  comparison operators fall back through `__index__` so
-  `min >= MAXREPEAT` works against `NamedIntConstant` wrappers;
-  `int(bytes, base)` now accepts a bytes-like input (CPython
-  semantics); hand-rolled `___parseInt:radix:` covers the bases
-  GemStone's stock Integer parser doesn't (the GS class only
-  exposes `fromString:` for base 10 and `fromHexString:` for 16);
-  `re._compiler` patched (`_mk_bitmap` shadow rename,
-  `_bytes_to_codes` re-implemented without `memoryview.cast`).
-  More blockers down: the SRE "invalid code" error was
-  `bytes(bytearray)` silently returning `b''` (no bytearray branch
-  in the constructor), which dropped the 256-byte BIGCHARSET
-  bitmap; `NameAst` runtime module-scope fallback now wraps
-  fast-path builtins (`type`, `len`, ...) in a `BoundMethod`
-  instead of raising `NameError`; `collections.abc._ABCStub` gains
-  a `register()` no-op; `jinja2.nodes.NodeType` stubbed as a plain
-  class (real `class NodeType(type):` requires metaclass support
-  Grail doesn't have); `jinja2.utils.Namespace.__init__` rewritten
-  with a conventional `self` parameter (Grail's codegen rejects
-  the upstream `def __init__(*args, **kwargs): self, args = ...`
-  trick with "expected an assignable variable").  More blockers down: closure block params renamed to
-  `___positional___` / `___kwargs___` sentinels (the upstream
-  `def new_func(self, ..., **kwargs):` inside a `@optimizeconst`
-  decorator collided with the dispatch temp `kwargs`); ForAst
-  recurses into nested tuple targets (`for target, (action,
-  param) in items`); AssignAst tuple-store path dispatches per
-  element (Attribute / Subscript / nested Tuple) instead of
-  calling `printSmalltalkOn:` on a Store-context node; ClassDefAst
-  filters `instVarNames:` against the parent's
-  `allInstVarNames` (the subclass walker rediscovers parent ivars
-  like `self.templates` on jinja2's TemplatesNotFound); stdlib
-  stubs added for `itertools`, `keyword`; `functools` gains
-  `update_wrapper` (no-op) + `WRAPPER_ASSIGNMENTS` /
-  `WRAPPER_UPDATES`; `inspect.getattr_static` stub;
-  `jinja2.{compiler,idtracking,runtime}` patched to replace
-  class-body `X = Y = method_name` aliases with delegating
-  methods.  Past several more blockers: jinja2.runtime's
-  `dict.keys` / `dict.values` / `dict.items` descriptor-pattern
-  aliases replaced with delegating methods; the chained
-  `__iter__ = __str__ = ... = Undefined._fail_with_undefined_error`
-  rewrite extended to `DebugUndefined`; `typing.NamedTuple` /
-  `TypedDict` stubs; `numbers` (abstract numeric tower stub);
-  `ast` (literal_eval + parse) stub; `posixpath` + `zipimport`
-  stubs; Python-side `importlib` / `importlib.util` facade with
-  `import_module` / `find_spec` / `spec_from_file_location`;
-  `collections.deque` gained `remove` / `count` / `index` /
-  `insert` / `copy`; `SequenceableCollection` got
-  `__ge__:` / `__gt__:` / `__le__:` / `__lt__:` doing real
-  element-by-element lexicographic comparison; ClassDefAst
-  emits `(Python at: #importlib)` instead of bare `importlib`
-  so user modules with `import importlib` don't shadow the
-  loader; ClassDefAst now materializes bare class-level
-  annotations (`template_class: t.Type[T]`) as nilable
-  classInstVars so later `Cls.attr = ...` assignments find the
-  setter; BlockAst's variable-declaration walk now stops at
-  class-body boundaries when called from a function-def
-  descendant (Python class scope isn't visible inside method
-  bodies; the `getitem(self, obj, argument)` method's bare
-  `getattr` reference was wrongly resolving as a local because
-  the surrounding class defined a `getattr` method).  Current
-  blocker: jinja2 calls `lru_cache(...)(...).cache_clear` —
-  Grail's `lru_cache` stub passes the function through
-  untouched, so the resulting BoundMethod lacks the
-  `cache_clear` attribute; next pass.
-- **M5 — `werkzeug.wrappers.Request/Response` round-trip a WSGI
-  environ.**
-- **M6 — Flask hello-world responds via `werkzeug.test.Client`.**
-  Flask "working" without a live socket.
-- **M7 — `flask run` serves a real HTTP request.**
+  **Done.** `env.from_string('Hello world').render()` worked since
+  the M4 trivial-template push.  Coverage broadened on
+  `jinja2-pass-x` (squashed to main as `4025c06`) to a wide range
+  of common templates:
 
-Calendar balance: M3–M4 are weeks; M5 is the bulk (Werkzeug is the
-largest single dep); M7 is comparatively small once everything else
-is in.
+  *Expressions:* `{{ var }}`, `{{ x + 1 }}`, `{{ x * 2 }}`,
+  `{{ 'A' + 'B' }}`, `{{ items[0] }}`, `{{ items[0:2] }}`,
+  `{{ name.upper() }}`, `{{ name ~ "!" }}`, `{{ 5 % 3 }}`,
+  `{{ '%d' % 5 }}`, `{{ "{:>4}".format(42) }}`, ternary
+  expressions, comparison operators.
+
+  *Filters working:* `upper`, `lower`, `trim`, `capitalize`,
+  `title`, `center`, `escape`, `forceescape`, `safe`, `striptags`,
+  `length`, `count`, `wordcount`, `replace`, `truncate`, `default`,
+  `tojson`, `int`, `float`, `string`, `format`, `list`,
+  `reverse`, `first`, `last`, `join`, `sort`, `unique`, `sum`,
+  `min`, `max`, `map`, `select`, `reject`, `selectattr`,
+  `rejectattr`, `slice`, `batch`, `groupby`, `round`.
+
+  *Control flow:* `{% if %} / {% elif %} / {% else %}`,
+  `{% for %} / {% else %}`, `{% set %}`, `{% with %}`,
+  `{% block %}`, `{% macro %}`, comments, `is`-tests
+  (`is odd`, `is iterable`, `is string`).
+
+  *Render-path internals:* `__class__` as value-attr, live
+  `__dict__` view (`PyInstanceDict`), kernel-metaclass-slot
+  exclusion for inherited Python class attrs.
+
+  Codegen / Object-protocol fixes that landed alongside (general,
+  benefit any Python user):
+
+  * `StarredAst` in list / tuple literals splats correctly
+    (`[a, *b, c]` concatenates instead of stubbing to TypeError).
+  * `CallAst.func` parenthesises any non-`NameAst` function
+    expression so `f[k](args)` doesn't fuse `__getitem__:` with
+    `value:value:` into one selector.
+  * `Object>>___pyAttrLoad___` recognises the unbound-class-method
+    descriptor read (`Cls.method(instance)`) — returns a closure
+    that splats the first positional as `self` and dispatches the
+    *exact* method compiled on the class via `performMethod:`
+    (bypasses MRO; subclass overrides don't re-enter).  Metaclass-
+    bound `@classmethod` lookup keeps precedence.
+  * Narrow module-level decorator support for `@pass_environment`
+    / `@pass_eval_context` / `@pass_context` (the whitelist of
+    decorators that just mutate `f.jinja_pass_arg` and return
+    `f`).  Decorator runs at module-body time, calls the closure
+    on the BoundMethod, stores the tagged BoundMethod back in the
+    dynamic instVar.  Wider decorator support deliberately not
+    enabled — cascades into ExecBlock callability and
+    `functools.wraps` kwargs issues; see commit `4025c06`.
+  * `ExecBlock>>___pyCallValue___:kw:` dispatches 2-arg blocks
+    (decorator factory closures) via `value:value:`, N-arg blocks
+    via `valueWithArguments:`.
+  * `PythonInstance>>value:value:` fix: `__call__` varargs
+    selector is `___call__:kw:` (one underscore prefix from the
+    BoundMethod convention + `__call__`'s two trailing
+    underscores), not `___call___:kw:` — unblocked
+    `{% macro %}` dispatch.
+  * `bytes.decode('unicode-escape')` codec implemented (jinja2's
+    lexer round-trips every TOKEN_STRING through it).
+  * `str.format()` with `[fill][<|>|^][width]` spec subset,
+    auto/explicit positional indices, `{name}` keyword fields,
+    `!r` / `!s` / `!a` conversion flags, `{{` / `}}` escapes;
+    `int.__format__` routes through the same spec helper.
+  * `str.strip(chars)` 1-arg form (`None` → whitespace), `round`
+    preserves Float over Fraction, `sum(iterable, start=0)`
+    two-positional / kwarg form, `min` / `max` varargs with
+    `key=` / `default=`.
+  * `__debug__ = True` in the Grail builtin globals — jinja2's
+    `Context.call` opens with `if __debug__:`.
+
+  Jinja2 source patches (still needed; the underlying gaps are
+  documented in commit `4025c06` for later cleanup):
+
+  * `jinja2/filters.py`: filter dispatch table retargeted at
+    `sync_do_X` for the dozen `@async_variant`-decorated filters
+    (Grail drops the wrapper, so the bare `async def` would
+    otherwise be dispatched).
+  * `jinja2/filters.py`: `_GroupTuple.__repr__` rewritten to
+    build the tuple repr explicitly (tuple's own `__repr__` uses
+    env-1 `do:separatedBy:` which DNUs when `self` is a
+    NamedTuple subclass).
+  * `jinja2/compiler.py`: 12 `visit_Add = _make_binop(...)`
+    factory-assigned class attributes expanded to explicit method
+    bodies (Grail doesn't descriptor-bind a class-stored ExecBlock
+    to instances).
+
+  Known remaining gaps (none blocking Flask hello-world):
+
+  * `|wordwrap` needs the `textwrap` stdlib stub.
+  * `{% include %}` needs an environment loader (`DictLoader` etc.
+    import but aren't wired up to template lookup yet).
+  * `|map(attribute=...)` returns a `PythonGenerator` whose
+    `__str__` is the class name rather than the eagerly-rendered
+    list; users chain `|list` for now.
+  * Template-side bare `str` / `list` / `int` aren't reachable as
+    type-constructor names (`{{ str(x) }}` raises `UndefinedError`).
+  * `{% block %}` doesn't yet detect duplicate block names
+    (raises a TemplateAssertionError that tunnels through
+    `Environment._handle_exception` and trips a BoundMethod-
+    doesn't-understand-`signal` DNU; affects only malformed
+    templates).
+- **M5 — `datetime` + small Tier-2 stdlib in place** (`datetime`,
+  `json`, `io`, partial `collections`, `logging` / `traceback`
+  shims).  Unblocks `itsdangerous` deeper paths and the
+  Werkzeug import chain.  *Next.*
+- **M6 — `werkzeug.wrappers.Request/Response` round-trip a WSGI
+  environ.**  Long pole.  Source dropped under
+  `src/python/stdlib/werkzeug/`; bring up `http.*` / `email.*` /
+  `wsgiref.*` minimally; `werkzeug.datastructures` → `urls`/`http`
+  → `wrappers` → `routing` → `exceptions` → `test`.
+- **M7 — Flask hello-world responds via `werkzeug.test.Client`.**
+  Flask "working" without a live socket.  Source under
+  `src/python/stdlib/flask/`; bring up `app`, `blueprints`,
+  `config`, `helpers`, `json`, `sessions`, `templating`,
+  `wrappers`.
+- **M8 — `flask run` serves a real HTTP request.**  Requires
+  `socket` / `socketserver` / `signal` on top of M7.
+
+Calendar balance: M5 is medium (each Tier-2 stdlib is bounded);
+M6 is the bulk (Werkzeug is the largest single dep); M8 is
+comparatively small once everything else is in.
