@@ -81,6 +81,24 @@ ___instance___
 	^ self @env1:instance
 %
 
+category: 'Grail-Singleton'
+classmethod: module
+___adoptInstance___: anInstance
+	"Register an already-created instance as the singleton.  Called by
+	importlib's ``loadModuleFromPath:'' BEFORE running the module body's
+	``initialize'' — without this, any code in the body that resolves a
+	module-scope name (e.g. ``self _Foo''  in
+	``isinstance(item, _Foo)'' from a method body) goes through
+	``self class ___instance___'' which then sees a nil classInstVar
+	and mints a SECOND instance, runs initialize on it, and ends up
+	with two parallel copies of every class the module defines.
+	The xfail regression
+	``FlaskScaffoldingTestCase >> testModuleSingletonReturnsSameClass''
+	flips to green when this hook is wired."
+
+	instance := anInstance
+%
+
 set compile_env: 1
 
 category: 'Grail-Singleton'

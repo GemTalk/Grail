@@ -748,6 +748,23 @@ def jinja2_lex_variable_template():
     return [(t[1], t[2]) for t in env.lex("Hello {{ name }}!")]
 
 
+def jinja2_render_interpolated():
+    # Compiles + renders a template with a ``{{ name }}`` interpolation.
+    # Was blocked behind the module-singleton duplicate-class bug — jinja2's
+    # ``Node.iter_child_nodes`` used ``isinstance(item, Node)`` against a
+    # parallel ``Node`` class that ``loadModuleFromPath:`` never told the
+    # singleton accessor about, so child traversal returned empty and
+    # ``Symbols.refs`` was empty when the compiler tried to resolve
+    # ``name'' — ``AssertionError: Tried to resolve a name to a reference
+    # that was unknown to the frame``.  Fix: importlib now calls
+    # ``moduleClass ___adoptInstance___: moduleInstance'' before running
+    # the body's initialize.
+    import jinja2
+    env = jinja2.Environment()
+    tmpl = env.from_string("Hello {{ name }}!")
+    return tmpl.render(name="World")
+
+
 def jinja2_match_groupdict_named_capture():
     # Regression for the M4 lexer chain: ``re`` matches with named
     # captures used to fail in ``Match.groupdict()`` because the C

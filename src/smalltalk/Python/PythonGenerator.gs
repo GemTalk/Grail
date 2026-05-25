@@ -61,6 +61,23 @@ removeallclassmethods PythonGenerator
 
 set compile_env: 0
 
+category: 'Grail-Iterator Protocol'
+method: PythonGenerator
+do: aBlock
+	"Smalltalk iteration protocol — walk the generator via send: until
+	StopIteration, calling aBlock with each yielded value.  Used by
+	YieldFromAst's ``yield from'' codegen, which emits
+	``<iter> @env0:do: [:each | ___gen___ ___yield___: each]'' so
+	any Smalltalk-side iterable (Array, OrderedCollection, ...) and
+	any Python-side iterator (PythonGenerator) both flow through the
+	same call shape.  Compiled env-0 to match the codegen's
+	``@env0:do:'' send."
+
+	[
+		[aBlock @env0:value: (self @env1:__next__)] @env0:repeat
+	] @env0:on: StopIteration do: [:___ex___ | ^ self]
+%
+
 category: 'Grail-Private'
 method: PythonGenerator
 _initWithBlock: aBlock

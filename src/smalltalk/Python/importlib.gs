@@ -424,6 +424,15 @@ loadModuleFromPath: pathString name: moduleName
 	Must use @env0:new (not basicNew) because module inherits from
 	SymbolDictionary, which requires internal structure initialization."
 	moduleInstance := moduleClass @env0:new.
+	"Adopt as the class's singleton BEFORE running initialize.  Module
+	body code that references its own class names through
+	``(modCls @env0:___instance___) @env1:Foo'' (NameAst's emit for
+	module-scope free names in class-method context) would otherwise
+	trigger ``instance''s lazy-create path, mint a SECOND instance,
+	run initialize on it, and produce parallel copies of every class
+	the module defines.  See FlaskScaffoldingTestCase >>
+	testModuleSingletonReturnsSameClass for the regression fixture."
+	moduleClass @env0:___adoptInstance___: moduleInstance.
 	nameParts := $. split: moduleName.
 	packageName := (nameParts size > 1)
 		ifTrue: ['.' @env1:join: (nameParts copyFrom: 1 to: nameParts size - 1)]

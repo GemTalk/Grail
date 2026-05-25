@@ -3522,6 +3522,31 @@ testJinja2LexVariableTemplate
 	self assert: ((toks @env1:__getitem__: 6) @env1:__getitem__: 1) equals: '!'
 %
 
+! --- Jinja2 render with interpolation -----------------------------------
+
+category: 'Grail-Tests - Jinja2 render'
+method: FlaskScaffoldingTestCase
+testJinja2RenderInterpolatedTemplate
+	"``env.from_string('Hello {{ name }}!').render(name='World')''
+	returns ``'Hello World!'''.  Was blocked behind the module-
+	singleton duplicate-class bug: jinja2's ``Node.iter_child_nodes''
+	compared an externally-accessible ``Node'' against the singleton's
+	``Node'' and yielded nothing, so the compiler's
+	``FrameSymbolVisitor'' never visited the ``Name'' node and
+	``Symbols.refs'' was empty when ``ref('name')'' fired.
+
+	Fix landed in importlib's ``loadModuleFromPath:'' (calls
+	``moduleClass ___adoptInstance___: moduleInstance'' before
+	running initialize).  Paired with PythonGenerator >> do: so the
+	``yield from'' codegen path (which uses ``@env0:do:'') works
+	for inner-generator delegation."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:jinja2_render_interpolated.
+	self assert: result equals: 'Hello World!'
+%
+
 ! --- re Match.groupdict round-trip (CPythonShim PyDict_Next) -------------
 
 category: 'Grail-Tests - re groupdict'
@@ -3545,33 +3570,24 @@ testReMatchGroupdictNamedCaptures
 category: 'Grail-Tests - Module singleton'
 method: FlaskScaffoldingTestCase
 testModuleSingletonReturnsSameClass
-	"Regression marker for the duplicate-class bug diagnosed alongside
-	the M4 lexer chain.  A class referenced from inside its OWN
-	method body resolves through ``(modCls ___instance___)
-	@env1:ClassName`` — and ``instance`` lazily creates a SECOND
-	module instance because ``loadModuleFromPath:`` never sets the
-	classInstVar.  The second instance's ``initialize`` runs again
-	and produces a parallel ``_ModuleSingletonProbe`` class, distinct
-	from the one external callers see.
+	"A class referenced from inside its OWN method body resolves
+	through ``(modCls ___instance___) @env1:ClassName'' — and must
+	land on the SAME class object external callers see.
 
-	Currently asserts the BUGGY behaviour: ``from_outside is
-	from_inside`` is False.  When the singleton fix lands, flip the
-	assertion to ``equals: true`` (and update the docstring) — the
-	test is intentionally written to fail loudly the moment the
-	bug is fixed, so it can't silently regress.
+	Fixed by ``importlib >> loadModuleFromPath:'' calling
+	``moduleClass ___adoptInstance___: moduleInstance'' before
+	running initialize.  Without it, any compiled body code that
+	resolved a module-scope name would trigger the lazy ``instance''
+	mint path, run initialize a second time on a fresh instance,
+	and produce a parallel copy of every class the module defines.
 
-	Symptom in jinja2: ``Node.iter_child_nodes`` calls
-	``isinstance(item, Node)`` which compares against the wrong
-	Node class and yields no children → ``FrameSymbolVisitor``
-	never visits the ``Name`` node → ``Symbols.refs`` empty →
-	``Symbols.ref('name')`` raises AssertionError.  Blocks
-	``env.compile('Hello {{ name }}!')`` and therefore any
-	non-trivial template render."
+	Was the M4 jinja2 blocker — ``Node.iter_child_nodes'' compared
+	an externally-accessible ``Node`` against the singleton's
+	``Node`` and returned False on every child."
 
 	| mod tup same |
 	mod := self loadFixture: 'use_jinja2_partial'.
 	tup := mod @env1:module_singleton_returns_same_class.
 	same := tup @env1:__getitem__: 2.
-	"BUG present: the two references are NOT the same class."
-	self assert: same equals: false
+	self assert: same equals: true
 %

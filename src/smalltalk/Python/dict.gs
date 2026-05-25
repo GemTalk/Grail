@@ -123,7 +123,14 @@ _new: positional kw: keywords
 	"dict(**kwargs) and dict(source, **kwargs) varargs entry point.
 	Builds a dict from any positional source plus keyword overrides.
 	Used by the class-call varargs fast path when keyword arguments
-	are passed (e.g. `dict(a=1, b=2)`)."
+	are passed (e.g. `dict(a=1, b=2)`).
+
+	Per CPython, the resulting dict's keys are Python ``str''s — even
+	though CallAst's varargs codegen builds the kwargs IdentityKeyValueDictionary
+	with Symbol keys for fast Smalltalk-side lookup, the dict() boundary
+	converts those to Strings so subsequent Python-level
+	``dict[key]'' / ``key in dict'' lookups by string literal match
+	(jinja2's render-context lookup is exactly this shape)."
 
 	| result |
 	(positional @env0:size @env0:> 1) ifTrue: [
@@ -134,7 +141,7 @@ _new: positional kw: keywords
 		ifFalse: [self @env1:__new__: (positional @env0:at: 1)].
 	keywords ifNotNil: [
 		keywords @env0:keysAndValuesDo: [:k :v |
-			result @env0:at: k put: v
+			result @env0:at: k @env0:asString put: v
 		]
 	].
 	^ result

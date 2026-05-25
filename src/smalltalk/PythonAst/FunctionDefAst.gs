@@ -871,8 +871,20 @@ generateModuleMethodSourceOn: aStream
 			].
 		].
 	] ifFalse: [
-		"Varargs selector: _name: positional kw: kwargs"
-		aStream nextPut: $_; nextPutAll: name; nextPutAll: ': positional kw: kwargs'; lf.
+		"Varargs selector.  Method-param names are normally ``positional''
+		and ``kwargs''; when the user's *vararg or **kwarg name collides
+		(``def render(self, *args, **kwargs):'' makes ``kwargs'' both
+		the method param AND a block temp, which shadows the param so
+		``kwargs := kwargs ifNil: [...]'' reads nil), rename the method
+		params to internal sentinels that body code never names."
+		| posMethodParam kwMethodParam |
+		posMethodParam := (args vararg notNil and: [args vararg name @env0:asString @env0:= 'positional'])
+			ifTrue: ['___pos___'] ifFalse: ['positional'].
+		kwMethodParam := (args kwarg notNil and: [args kwarg name @env0:asString @env0:= 'kwargs'])
+			ifTrue: ['___kw___'] ifFalse: ['kwargs'].
+		aStream nextPut: $_; nextPutAll: name;
+			nextPutAll: ': '; nextPutAll: posMethodParam;
+			nextPutAll: ' kw: '; nextPutAll: kwMethodParam; lf.
 
 		"Wrap in block for same instVar-shadowing reason"
 		aStream nextPutAll: '^ ['.
@@ -895,14 +907,21 @@ generateModuleMethodSourceOn: aStream
 		].
 
 		"Unpack positional args into locals (with default-arg fallback)."
-		self printPositionalUnpackingOn: aStream paramNames: paramNames.
+		self printPositionalUnpackingOn: aStream
+			paramNames: paramNames
+			positionalName: posMethodParam
+			kwargsName: kwMethodParam.
 		"Bind *vararg to the tail of positional, wrapped as a tuple."
 		args vararg ifNotNil: [
 			aStream
 				nextPutAll: args vararg name;
-				nextPutAll: ' := tuple perform: #withAll: env: 0 withArguments: { positional @env0:copyFrom: ';
+				nextPutAll: ' := tuple perform: #withAll: env: 0 withArguments: { ';
+				nextPutAll: posMethodParam;
+				nextPutAll: ' @env0:copyFrom: ';
 				nextPutAll: (paramNames size + 1) printString;
-				nextPutAll: ' to: positional @env0:size }.';
+				nextPutAll: ' to: ';
+				nextPutAll: posMethodParam;
+				nextPutAll: ' @env0:size }.';
 				lf.
 		].
 		"Bind keyword-only args from the kwargs dict, falling back to
@@ -915,7 +934,8 @@ generateModuleMethodSourceOn: aStream
 			def := args kw_defaults at: i ifAbsent: [nil].
 			aStream
 				nextPutAll: each name;
-				nextPutAll: ' := kwargs ifNil: ['.
+				nextPutAll: ' := '; nextPutAll: kwMethodParam;
+				nextPutAll: ' ifNil: ['.
 			def isNil ifTrue: [
 				aStream
 					nextPutAll: 'TypeError ___signal___: ''missing keyword-only argument: ';
@@ -925,7 +945,8 @@ generateModuleMethodSourceOn: aStream
 				def printSmalltalkOn: aStream
 			].
 			aStream
-				nextPutAll: '] ifNotNil: [kwargs @env0:at: #';
+				nextPutAll: '] ifNotNil: ['; nextPutAll: kwMethodParam;
+				nextPutAll: ' @env0:at: #';
 				nextPutAll: each name;
 				nextPutAll: ' ifAbsent: ['.
 			def isNil ifTrue: [
@@ -942,7 +963,8 @@ generateModuleMethodSourceOn: aStream
 		args kwarg ifNotNil: [
 			aStream
 				nextPutAll: args kwarg name;
-				nextPutAll: ' := kwargs ifNil: [(KeyValueDictionary perform: #new env: 0)].';
+				nextPutAll: ' := '; nextPutAll: kwMethodParam;
+				nextPutAll: ' ifNil: [(KeyValueDictionary perform: #new env: 0)].';
 				lf.
 		].
 	].
@@ -1288,7 +1310,17 @@ generateMethodSourceOn: aStream
 			].
 		].
 	] ifFalse: [
-		aStream nextPut: $_; nextPutAll: name; nextPutAll: ': positional kw: kwargs'; lf.
+		"Varargs selector.  Rename method params to internal sentinels
+		when the user's *vararg / **kwarg name would collide — same
+		rationale as the module-method varargs branch."
+		| posMethodParam kwMethodParam |
+		posMethodParam := (args vararg notNil and: [args vararg name @env0:asString @env0:= 'positional'])
+			ifTrue: ['___pos___'] ifFalse: ['positional'].
+		kwMethodParam := (args kwarg notNil and: [args kwarg name @env0:asString @env0:= 'kwargs'])
+			ifTrue: ['___kw___'] ifFalse: ['kwargs'].
+		aStream nextPut: $_; nextPutAll: name;
+			nextPutAll: ': '; nextPutAll: posMethodParam;
+			nextPutAll: ' kw: '; nextPutAll: kwMethodParam; lf.
 
 		aStream nextPutAll: '^ ['.
 
@@ -1322,14 +1354,21 @@ generateMethodSourceOn: aStream
 		].
 
 		"Positional / kwargs / default unpacking for the named params."
-		self printPositionalUnpackingOn: aStream paramNames: paramNames.
+		self printPositionalUnpackingOn: aStream
+			paramNames: paramNames
+			positionalName: posMethodParam
+			kwargsName: kwMethodParam.
 		"Bind *vararg to the tail of positional, wrapped as a tuple."
 		args vararg ifNotNil: [
 			aStream
 				nextPutAll: args vararg name;
-				nextPutAll: ' := tuple perform: #withAll: env: 0 withArguments: { positional @env0:copyFrom: ';
+				nextPutAll: ' := tuple perform: #withAll: env: 0 withArguments: { ';
+				nextPutAll: posMethodParam;
+				nextPutAll: ' @env0:copyFrom: ';
 				nextPutAll: (paramNames size + 1) printString;
-				nextPutAll: ' to: positional @env0:size }.';
+				nextPutAll: ' to: ';
+				nextPutAll: posMethodParam;
+				nextPutAll: ' @env0:size }.';
 				lf.
 		].
 		"Bind keyword-only args from the kwargs dict, falling back to
@@ -1339,7 +1378,8 @@ generateMethodSourceOn: aStream
 			def := args kw_defaults at: i ifAbsent: [nil].
 			aStream
 				nextPutAll: each name;
-				nextPutAll: ' := kwargs ifNil: ['.
+				nextPutAll: ' := '; nextPutAll: kwMethodParam;
+				nextPutAll: ' ifNil: ['.
 			def isNil ifTrue: [
 				aStream
 					nextPutAll: 'TypeError ___signal___: ''missing keyword-only argument: ';
@@ -1349,7 +1389,8 @@ generateMethodSourceOn: aStream
 				def printSmalltalkOn: aStream
 			].
 			aStream
-				nextPutAll: '] ifNotNil: [kwargs @env0:at: #';
+				nextPutAll: '] ifNotNil: ['; nextPutAll: kwMethodParam;
+				nextPutAll: ' @env0:at: #';
 				nextPutAll: each name;
 				nextPutAll: ' ifAbsent: ['.
 			def isNil ifTrue: [
@@ -1366,7 +1407,8 @@ generateMethodSourceOn: aStream
 		args kwarg ifNotNil: [
 			aStream
 				nextPutAll: args kwarg name;
-				nextPutAll: ' := kwargs ifNil: [(KeyValueDictionary perform: #new env: 0)].';
+				nextPutAll: ' := '; nextPutAll: kwMethodParam;
+				nextPutAll: ' ifNil: [(KeyValueDictionary perform: #new env: 0)].';
 				lf.
 		].
 	].
