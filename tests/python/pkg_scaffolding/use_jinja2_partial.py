@@ -765,6 +765,22 @@ def jinja2_render_interpolated():
     return tmpl.render(name="World")
 
 
+def jinja2_render_for_loop():
+    # ``{% for x in items %}[{{ x }}]{% endfor %}'' with items=[1,2,3]
+    # → '[1][2][3]'.  Was a fan-out blocker behind the for-loop
+    # interpolation gap that surfaced when M4 kwargs were migrated
+    # to String keys: jinja2's idtracking forwards
+    # ``self.sym_visitor.visit(node.target, store_as_param=True)''
+    # through *args/**kwargs forwarders, so the loop variable was
+    # registered as VAR_LOAD_UNDEFINED instead of VAR_LOAD_PARAMETER
+    # and the compiled template emitted ``l_1_x = missing'' inside
+    # the loop body — clobbering each iteration's binding.
+    import jinja2
+    env = jinja2.Environment()
+    tmpl = env.from_string('{% for x in items %}[{{ x }}]{% endfor %}')
+    return tmpl.render(items=[1, 2, 3])
+
+
 def jinja2_match_groupdict_named_capture():
     # Regression for the M4 lexer chain: ``re`` matches with named
     # captures used to fail in ``Match.groupdict()`` because the C

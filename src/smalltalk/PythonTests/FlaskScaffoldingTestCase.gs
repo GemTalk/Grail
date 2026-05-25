@@ -3267,9 +3267,9 @@ testKwargFallbackForNamedParam
 	"Pass `a` positionally, `b` and `c` as kwargs."
 	result := obj
 		@env1:_by_default: { 1 }
-		kw: (IdentityKeyValueDictionary new
-			at: #b put: 20;
-			at: #c put: 300;
+		kw: (KeyValueDictionary new
+			at: 'b' put: 20;
+			at: 'c' put: 300;
 			yourself).
 	self assert: (result @env0:at: 1) equals: 1.
 	self assert: (result @env0:at: 2) equals: 20.
@@ -3300,8 +3300,8 @@ testStarArgsAndStarStarKwargs
 	obj := cls @env1:value: #() value: nil.
 	result := obj
 		@env1:_collect_extra: { 'h'. 'a'. 'b' }
-		kw: (IdentityKeyValueDictionary new
-			at: #extra put: 99;
+		kw: (KeyValueDictionary new
+			at: 'extra' put: 99;
 			yourself).
 	self assert: (result @env0:at: 1) equals: 'h'.
 	tail := result @env0:at: 2.
@@ -3325,16 +3325,16 @@ testKwonlyArgs
 	"Supply both."
 	result := obj
 		@env1:_kwonly: #()
-		kw: (IdentityKeyValueDictionary new
-			at: #x put: 10;
-			at: #y put: 200;
+		kw: (KeyValueDictionary new
+			at: 'x' put: 10;
+			at: 'y' put: 200;
 			yourself).
 	self assert: (result @env0:at: 1) equals: 10.
 	self assert: (result @env0:at: 2) equals: 200.
 	"y has a default."
 	result := obj
 		@env1:_kwonly: #()
-		kw: (IdentityKeyValueDictionary new at: #x put: 11; yourself).
+		kw: (KeyValueDictionary new at: 'x' put: 11; yourself).
 	self assert: (result @env0:at: 1) equals: 11.
 	self assert: (result @env0:at: 2) equals: 20.
 %
@@ -3550,6 +3550,25 @@ testJinja2RenderInterpolatedTemplate
 	mod := self loadFixture: 'use_jinja2_partial'.
 	result := mod @env1:jinja2_render_interpolated.
 	self assert: result equals: 'Hello World!'
+%
+
+! --- Jinja2 for-loop render -----------------------------------------------
+
+category: 'Grail-Tests - Jinja2 render'
+method: FlaskScaffoldingTestCase
+testJinja2RenderForLoopTemplate
+	"``{% for x in items %}[{{ x }}]{% endfor %}'' with items=[1,2,3]
+	→ '[1][2][3]'.  Pre-fix the rendered template emitted
+	``[][][]'' because jinja2's idtracking forwarded
+	``store_as_param=True'' through ``f(*args, **kwargs)'' and the
+	Symbol-keyed kwargs missed the String-keyed extraction in the
+	callee.  Loop variable registered as VAR_LOAD_UNDEFINED and the
+	compiled template clobbered each iteration with ``l_1_x = missing''."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:jinja2_render_for_loop.
+	self assert: result equals: '[1][2][3]'
 %
 
 ! --- re Match.groupdict round-trip (CPythonShim PyDict_Next) -------------

@@ -598,19 +598,21 @@ printPositionalUnpackingOn: aStream paramNames: paramNames positionalName: posNa
 			print: i;
 			nextPutAll: '] ifFalse: ['.
 		"Kwargs fallback — only if kwargs may be non-nil at the call
-		site (varargs methods accept both)."
+		site (varargs methods accept both).  Lookup keys are Python
+		``str''s (per CPython spec); CallAst's printKeywordsDictOn:
+		builds the kwargs dict with String keys to match."
 		aStream
 			nextPutAll: '(';
 			nextPutAll: kwName;
 			nextPutAll: ' @env0:isNil @env0:not and: [';
 			nextPutAll: kwName;
-			nextPutAll: ' @env0:includesKey: #';
+			nextPutAll: ' @env0:includesKey: ''';
 			nextPutAll: pname;
-			nextPutAll: ']) ifTrue: [';
+			nextPutAll: ''']) ifTrue: [';
 			nextPutAll: kwName;
-			nextPutAll: ' @env0:at: #';
+			nextPutAll: ' @env0:at: ''';
 			nextPutAll: pname;
-			nextPutAll: '] ifFalse: ['.
+			nextPutAll: '''] ifFalse: ['.
 		hasDefault ifTrue: [
 			"Reference the pre-evaluated default temp captured by the
 			enclosing block (closure form only — the closure path wraps
@@ -946,9 +948,9 @@ generateModuleMethodSourceOn: aStream
 			].
 			aStream
 				nextPutAll: '] ifNotNil: ['; nextPutAll: kwMethodParam;
-				nextPutAll: ' @env0:at: #';
+				nextPutAll: ' @env0:at: ''';
 				nextPutAll: each name;
-				nextPutAll: ' ifAbsent: ['.
+				nextPutAll: ''' ifAbsent: ['.
 			def isNil ifTrue: [
 				aStream
 					nextPutAll: 'TypeError ___signal___: ''missing keyword-only argument: ';
@@ -959,17 +961,13 @@ generateModuleMethodSourceOn: aStream
 			].
 			aStream nextPutAll: ']].'; lf.
 		].
-		"Bind **kwarg to the user-visible dict.  Per CPython, kwargs keys
-		are Python ``str''s — Grail's internal kwargs IdentityKeyValueDictionary
-		has Symbol keys for fast Smalltalk-side ``at: #name'' unpacking
-		(see the keyword-only-arg dispatch above).  Convert at the
-		user-facing boundary via ``dict._new: #() kw: <kwargs>'' so
-		``kwargs.get('name', ...)'' uses string equality."
+		"Bind **kwarg to the user-visible dict — pass-through (kwargs
+		keys are already String per the codegen convention)."
 		args kwarg ifNotNil: [
 			aStream
 				nextPutAll: args kwarg name;
-				nextPutAll: ' := dict @env1:_new: #() kw: '; nextPutAll: kwMethodParam;
-				nextPut: $.;
+				nextPutAll: ' := '; nextPutAll: kwMethodParam;
+				nextPutAll: ' ifNil: [(KeyValueDictionary perform: #new env: 0)].';
 				lf.
 		].
 	].
@@ -1395,9 +1393,9 @@ generateMethodSourceOn: aStream
 			].
 			aStream
 				nextPutAll: '] ifNotNil: ['; nextPutAll: kwMethodParam;
-				nextPutAll: ' @env0:at: #';
+				nextPutAll: ' @env0:at: ''';
 				nextPutAll: each name;
-				nextPutAll: ' ifAbsent: ['.
+				nextPutAll: ''' ifAbsent: ['.
 			def isNil ifTrue: [
 				aStream
 					nextPutAll: 'TypeError ___signal___: ''missing keyword-only argument: ';
@@ -1408,14 +1406,13 @@ generateMethodSourceOn: aStream
 			].
 			aStream nextPutAll: ']].'; lf.
 		].
-		"Bind **kwarg to the user-visible dict.  Convert Symbol keys
-		to Python ``str''s at the boundary (see the module-method
-		branch above for the rationale)."
+		"Bind **kwarg to the user-visible dict — pass-through (kwargs
+		keys are already String per the codegen convention)."
 		args kwarg ifNotNil: [
 			aStream
 				nextPutAll: args kwarg name;
-				nextPutAll: ' := dict @env1:_new: #() kw: '; nextPutAll: kwMethodParam;
-				nextPut: $.;
+				nextPutAll: ' := '; nextPutAll: kwMethodParam;
+				nextPutAll: ' ifNil: [(KeyValueDictionary perform: #new env: 0)].';
 				lf.
 		].
 	].

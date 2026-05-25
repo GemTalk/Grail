@@ -260,7 +260,7 @@ _fmean: positional kw: kwargs
 	data := self _toList: (positional @env0:at: 1).
 	n := data @env0:size.
 	(n == 0) ifTrue: [StatisticsError ___signal___: 'fmean requires at least one data point'].
-	weights := (kwargs == nil) ifTrue: [nil] ifFalse: [kwargs @env0:at: #weights ifAbsent: [nil]].
+	weights := (kwargs == nil) ifTrue: [nil] ifFalse: [kwargs @env0:at: 'weights' ifAbsent: [nil]].
 	weights == nil ifTrue: [
 		total := 0.0.
 		data @env0:do: [:each | total := total @env0:+ (each @env0:asFloat)].
@@ -291,7 +291,7 @@ _harmonic_mean: positional kw: kwargs
 	data := self _toList: (positional @env0:at: 1).
 	n := data @env0:size.
 	(n == 0) ifTrue: [StatisticsError ___signal___: 'harmonic_mean requires at least one data point'].
-	weights := (kwargs == nil) ifTrue: [nil] ifFalse: [kwargs @env0:at: #weights ifAbsent: [nil]].
+	weights := (kwargs == nil) ifTrue: [nil] ifFalse: [kwargs @env0:at: 'weights' ifAbsent: [nil]].
 	weights == nil ifTrue: [
 		recipSum := 0.0.
 		data @env0:do: [:each |
@@ -332,7 +332,7 @@ _pvariance: positional kw: kwargs
 	(n @env0:< 1) ifTrue: [StatisticsError ___signal___: 'pvariance requires at least one data point'].
 	mu := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
-		ifFalse: [(kwargs == nil) ifTrue: [nil] ifFalse: [kwargs @env0:at: #mu ifAbsent: [nil]]].
+		ifFalse: [(kwargs == nil) ifTrue: [nil] ifFalse: [kwargs @env0:at: 'mu' ifAbsent: [nil]]].
 	mu == nil ifTrue: [mu := (self _sum: data) @env0:/ n].
 	total := 0.0.
 	data @env0:do: [:each | | diff | diff := each @env0:- mu. total := total @env0:+ (diff @env0:* diff)].
@@ -370,7 +370,7 @@ _variance: positional kw: kwargs
 	(n @env0:< 2) ifTrue: [StatisticsError ___signal___: 'variance requires at least two data points'].
 	xbar := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
-		ifFalse: [(kwargs == nil) ifTrue: [nil] ifFalse: [kwargs @env0:at: #xbar ifAbsent: [nil]]].
+		ifFalse: [(kwargs == nil) ifTrue: [nil] ifFalse: [kwargs @env0:at: 'xbar' ifAbsent: [nil]]].
 	xbar == nil ifTrue: [xbar := (self _sum: data) @env0:/ n].
 	total := 0.0.
 	data @env0:do: [:each | | diff | diff := each @env0:- xbar. total := total @env0:+ (diff @env0:* diff)].
@@ -408,7 +408,7 @@ _median_grouped: positional kw: kwargs
 	(n == 0) ifTrue: [StatisticsError ___signal___: 'median_grouped requires at least one data point'].
 	interval := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
-		ifFalse: [(kwargs == nil) ifTrue: [1.0] ifFalse: [kwargs @env0:at: #interval ifAbsent: [1.0]]].
+		ifFalse: [(kwargs == nil) ifTrue: [1.0] ifFalse: [kwargs @env0:at: 'interval' ifAbsent: [1.0]]].
 	sorted := data @env0:asSortedCollection.
 	mid := (n @env0:+ 1) @env0:// 2.
 	L := (sorted @env0:at: mid) @env0:- (interval @env0:/ 2.0).
@@ -437,9 +437,9 @@ _quantiles: positional kw: kwargs
 	(len @env0:< 2) ifTrue: [StatisticsError ___signal___: 'quantiles requires at least two data points'].
 	n := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
-		ifFalse: [(kwargs == nil) ifTrue: [4] ifFalse: [kwargs @env0:at: #n ifAbsent: [4]]].
+		ifFalse: [(kwargs == nil) ifTrue: [4] ifFalse: [kwargs @env0:at: 'n' ifAbsent: [4]]].
 	(n @env0:< 1) ifTrue: [StatisticsError ___signal___: 'n must be at least 1'].
-	method := (kwargs == nil) ifTrue: ['exclusive'] ifFalse: [kwargs @env0:at: #method ifAbsent: ['exclusive']].
+	method := (kwargs == nil) ifTrue: ['exclusive'] ifFalse: [kwargs @env0:at: 'method' ifAbsent: ['exclusive']].
 	sorted := (data @env0:asSortedCollection) @env0:asArray.
 	result := list ___new___.
 	1 @env0:to: (n @env0:- 1) do: [:i |

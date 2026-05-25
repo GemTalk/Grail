@@ -92,7 +92,7 @@ testFmeanWithWeights
 
 	| s result expected |
 	s := statistics ___instance___.
-	result := s @env1:_fmean: {{1. 2. 3}} kw: (Dictionary new at: #weights put: {1. 2. 3}; yourself).
+	result := s @env1:_fmean: {{1. 2. 3}} kw: (KeyValueDictionary new at: 'weights' put: {1. 2. 3}; yourself).
 
 	"Weighted mean: (1*1 + 2*2 + 3*3) / (1+2+3) = 14/6 = 2.333..."
 	expected := (14/6) asFloat.

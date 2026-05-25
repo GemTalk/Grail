@@ -1085,8 +1085,8 @@ _split: positional kw: kwargs
 		].
 	].
 	kwargs @env0:isNil ifFalse: [
-		sep := kwargs @env0:at: #sep ifAbsent: [sep].
-		maxsplit := kwargs @env0:at: #maxsplit ifAbsent: [maxsplit].
+		sep := kwargs @env0:at: 'sep' ifAbsent: [sep].
+		maxsplit := kwargs @env0:at: 'maxsplit' ifAbsent: [maxsplit].
 	].
 	sep @env0:isNil
 		ifTrue: [base := self split]

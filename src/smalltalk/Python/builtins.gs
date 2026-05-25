@@ -601,10 +601,10 @@ _sorted: positional kw: kwargs
 	iterable := positional @env0:at: 1.
 	keyFn := kwargs isNil
 		ifTrue: [nil]
-		ifFalse: [kwargs @env0:at: #key ifAbsent: [nil]].
+		ifFalse: [kwargs @env0:at: 'key' ifAbsent: [nil]].
 	reverse := kwargs isNil
 		ifTrue: [false]
-		ifFalse: [kwargs @env0:at: #reverse ifAbsent: [false]].
+		ifFalse: [kwargs @env0:at: 'reverse' ifAbsent: [false]].
 	lst := list ___new___.
 	iter := iterable __iter__.
 	done := false.
@@ -996,7 +996,7 @@ _round: positional kw: kwargs
 		ifFalse: [
 			(kwargs == nil)
 				ifTrue: [nil]
-				ifFalse: [kwargs @env0:at: #ndigits ifAbsent: [nil]]
+				ifFalse: [kwargs @env0:at: 'ndigits' ifAbsent: [nil]]
 		].
 	ndigits ifNil: [^ number @env0:rounded].
 	multiplier := 10 @env0:raisedTo: ndigits.

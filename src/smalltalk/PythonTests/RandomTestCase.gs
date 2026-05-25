@@ -102,7 +102,7 @@ testChoices
 	| r result |
 	r := random ___instance___.
 
-	result := r @env1:_choices: {#(1 2 3)} kw: (Dictionary new at: #k put: 5; yourself).
+	result := r @env1:_choices: {#(1 2 3)} kw: (KeyValueDictionary new at: 'k' put: 5; yourself).
 	self assert: result size equals: 5.
 	result do: [:each | self assert: (#(1 2 3) includes: each)].
 %
@@ -116,7 +116,7 @@ testChoicesWithWeights
 	r := random ___instance___.
 	weights := #(1 0 0).  "Only first element should be chosen"
 
-	result := r @env1:_choices: {#(1 2 3)} kw: (Dictionary new at: #weights put: weights; at: #k put: 10; yourself).
+	result := r @env1:_choices: {#(1 2 3)} kw: (KeyValueDictionary new at: 'weights' put: weights; at: 'k' put: 10; yourself).
 	self assert: result size equals: 10.
 	result do: [:each | self assert: each equals: 1].
 %

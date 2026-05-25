@@ -89,13 +89,13 @@ _dumps: positional kw: kwargs
 	ensureAscii := true.
 	default := nil.
 	kwargs @env0:isNil ifFalse: [
-		indent := kwargs @env0:at: #indent ifAbsent: [nil].
+		indent := kwargs @env0:at: 'indent' ifAbsent: [nil].
 		indent @env0:== None ifTrue: [indent := nil].
-		separators := kwargs @env0:at: #separators ifAbsent: [nil].
+		separators := kwargs @env0:at: 'separators' ifAbsent: [nil].
 		separators @env0:== None ifTrue: [separators := nil].
-		sortKeys := (kwargs @env0:at: #sort_keys ifAbsent: [false]) @env0:== true.
-		ensureAscii := (kwargs @env0:at: #ensure_ascii ifAbsent: [true]) @env0:~~ false.
-		default := kwargs @env0:at: #default ifAbsent: [nil].
+		sortKeys := (kwargs @env0:at: 'sort_keys' ifAbsent: [false]) @env0:== true.
+		ensureAscii := (kwargs @env0:at: 'ensure_ascii' ifAbsent: [true]) @env0:~~ false.
+		default := kwargs @env0:at: 'default' ifAbsent: [nil].
 		default @env0:== None ifTrue: [default := nil]
 	].
 	stream := WriteStream @env0:on: Unicode7 @env0:new.

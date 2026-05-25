@@ -332,8 +332,8 @@ _sample: positional kw: kwargs
 	k := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
 		ifFalse: [
-			(kwargs notNil and: [kwargs @env0:includesKey: #k])
-				ifTrue: [kwargs @env0:at: #k] ifFalse: [nil]
+			(kwargs notNil and: [kwargs @env0:includesKey: 'k'])
+				ifTrue: [kwargs @env0:at: 'k'] ifFalse: [nil]
 		].
 	k ifNil: [TypeError ___signal___: 'sample() missing required argument: k'].
 	n := self _sequenceLength: population.
@@ -372,12 +372,12 @@ _choices: positional kw: kwargs
 	population := positional @env0:at: 1.
 	n := self _sequenceLength: population.
 	(n == 0) ifTrue: [IndexError ___signal___: 'Cannot choose from an empty population'].
-	weights := (kwargs notNil and: [kwargs @env0:includesKey: #weights])
-		ifTrue: [kwargs @env0:at: #weights] ifFalse: [nil].
-	cumWeights := (kwargs notNil and: [kwargs @env0:includesKey: #'cum_weights'])
-		ifTrue: [kwargs @env0:at: #'cum_weights'] ifFalse: [nil].
-	k := (kwargs notNil and: [kwargs @env0:includesKey: #k])
-		ifTrue: [kwargs @env0:at: #k] ifFalse: [1].
+	weights := (kwargs notNil and: [kwargs @env0:includesKey: 'weights'])
+		ifTrue: [kwargs @env0:at: 'weights'] ifFalse: [nil].
+	cumWeights := (kwargs notNil and: [kwargs @env0:includesKey: 'cum_weights'])
+		ifTrue: [kwargs @env0:at: 'cum_weights'] ifFalse: [nil].
+	k := (kwargs notNil and: [kwargs @env0:includesKey: 'k'])
+		ifTrue: [kwargs @env0:at: 'k'] ifFalse: [1].
 	(weights notNil and: [cumWeights notNil]) ifTrue: [
 		TypeError ___signal___: 'Cannot specify both weights and cum_weights'
 	].

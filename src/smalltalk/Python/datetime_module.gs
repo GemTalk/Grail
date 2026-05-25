@@ -112,15 +112,20 @@ set compile_env: 0
 category: 'Grail-Private'
 classmethod: PyTimedelta
 ___multiplier___: unit
-	"Microseconds-per-<unit>."
+	"Microseconds-per-<unit>.  Accepts either Symbol (Smalltalk-internal
+	positional keys) or String (Python kwargs keys — the codegen now
+	builds kwargs dicts with String keys to match CPython spec).
+	Normalise to Symbol before dispatch."
 
-	unit @env0:= #days ifTrue: [^ 86400000000].
-	unit @env0:= #seconds ifTrue: [^ 1000000].
-	unit @env0:= #microseconds ifTrue: [^ 1].
-	unit @env0:= #milliseconds ifTrue: [^ 1000].
-	unit @env0:= #minutes ifTrue: [^ 60000000].
-	unit @env0:= #hours ifTrue: [^ 3600000000].
-	unit @env0:= #weeks ifTrue: [^ 604800000000].
+	| sym |
+	sym := unit @env0:asSymbol.
+	sym @env0:= #days ifTrue: [^ 86400000000].
+	sym @env0:= #seconds ifTrue: [^ 1000000].
+	sym @env0:= #microseconds ifTrue: [^ 1].
+	sym @env0:= #milliseconds ifTrue: [^ 1000].
+	sym @env0:= #minutes ifTrue: [^ 60000000].
+	sym @env0:= #hours ifTrue: [^ 3600000000].
+	sym @env0:= #weeks ifTrue: [^ 604800000000].
 	^ TypeError @env1:___signal___: 'unsupported timedelta unit: ' @env0:, unit @env0:asString
 %
 
@@ -496,11 +501,11 @@ _datetime: positional kw: kwargs
 	micro := positional @env0:size @env0:>= 7 ifTrue: [positional @env0:at: 7] ifFalse: [0].
 	tz := positional @env0:size @env0:>= 8 ifTrue: [positional @env0:at: 8] ifFalse: [nil].
 	kwargs @env0:isNil ifFalse: [
-		hour := kwargs @env0:at: #hour ifAbsent: [hour].
-		minute := kwargs @env0:at: #minute ifAbsent: [minute].
-		second := kwargs @env0:at: #second ifAbsent: [second].
-		micro := kwargs @env0:at: #microsecond ifAbsent: [micro].
-		tz := kwargs @env0:at: #tzinfo ifAbsent: [tz]
+		hour := kwargs @env0:at: 'hour' ifAbsent: [hour].
+		minute := kwargs @env0:at: 'minute' ifAbsent: [minute].
+		second := kwargs @env0:at: 'second' ifAbsent: [second].
+		micro := kwargs @env0:at: 'microsecond' ifAbsent: [micro].
+		tz := kwargs @env0:at: 'tzinfo' ifAbsent: [tz]
 	].
 	tz @env0:== None ifTrue: [tz := nil].
 	^ self @env0:___fromFields___: year _: month _: day _: hour _: minute _: second _: micro _: tz
@@ -881,14 +886,14 @@ _replace: positional kw: kwargs
 	y := (self @env0:dynamicInstVarAt: #_year). mo := (self @env0:dynamicInstVarAt: #_month). d := (self @env0:dynamicInstVarAt: #_day).
 	h := (self @env0:dynamicInstVarAt: #_hour). mi := (self @env0:dynamicInstVarAt: #_minute). s := (self @env0:dynamicInstVarAt: #_second). us := (self @env0:dynamicInstVarAt: #_microsecond). tz := (self @env0:dynamicInstVarAt: #_tzinfo).
 	kwargs @env0:isNil ifFalse: [
-		y := kwargs @env0:at: #year ifAbsent: [y].
-		mo := kwargs @env0:at: #month ifAbsent: [mo].
-		d := kwargs @env0:at: #day ifAbsent: [d].
-		h := kwargs @env0:at: #hour ifAbsent: [h].
-		mi := kwargs @env0:at: #minute ifAbsent: [mi].
-		s := kwargs @env0:at: #second ifAbsent: [s].
-		us := kwargs @env0:at: #microsecond ifAbsent: [us].
-		tz := kwargs @env0:at: #tzinfo ifAbsent: [tz].
+		y := kwargs @env0:at: 'year' ifAbsent: [y].
+		mo := kwargs @env0:at: 'month' ifAbsent: [mo].
+		d := kwargs @env0:at: 'day' ifAbsent: [d].
+		h := kwargs @env0:at: 'hour' ifAbsent: [h].
+		mi := kwargs @env0:at: 'minute' ifAbsent: [mi].
+		s := kwargs @env0:at: 'second' ifAbsent: [s].
+		us := kwargs @env0:at: 'microsecond' ifAbsent: [us].
+		tz := kwargs @env0:at: 'tzinfo' ifAbsent: [tz].
 		tz @env0:== None ifTrue: [tz := nil]
 	].
 	^ PyDateTime @env0:___fromFields___: y _: mo _: d _: h _: mi _: s _: us _: tz

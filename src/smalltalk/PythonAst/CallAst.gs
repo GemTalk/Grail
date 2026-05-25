@@ -629,13 +629,24 @@ printKeywordsDictOn: aStream
 		keywords first value printSmalltalkWithParenthesisOn: aStream.
 		^ self
 	].
-	"Use explicit env-0 dispatch — env-1 IdentityKeyValueDictionary
-	has no `new` / `at:put:` / `yourself`.  Skip splat entries
-	silently."
-	aStream nextPutAll: '((IdentityKeyValueDictionary @env0:new)'.
+	"Build with Python ``str'' (Smalltalk String) keys to match
+	CPython's kwargs semantics — internal Grail extraction in
+	FunctionDefAst's printPositionalUnpackingOn: and the kwonly
+	dispatch path likewise use String lookups, and user code that
+	does ``kwargs['name']'' / ``kwargs.get('name')'' sees the
+	expected string keys.
+
+	Use **KeyValueDictionary**, not IdentityKeyValueDictionary —
+	identity-keyed dicts compare with ``=='', which only works for
+	interned Symbol literals.  String literals are NOT interned
+	(``'foo' == 'foo''' is false even though ``'foo' = 'foo''' is
+	true), so a call-site ``at: 'name''' and a callee
+	``includesKey: 'name''' would miss in an Identity dict.  Use
+	``=''-keyed KeyValueDictionary instead."
+	aStream nextPutAll: '((KeyValueDictionary @env0:new)'.
 	keywords do: [:kwAst |
 		kwAst name ifNotNil: [
-			aStream nextPutAll: ' @env0:at: #'; nextPutAll: kwAst name asString; nextPutAll: ' put: '.
+			aStream nextPutAll: ' @env0:at: '''; nextPutAll: kwAst name asString; nextPutAll: ''' put: '.
 			kwAst value printSmalltalkWithParenthesisOn: aStream.
 			aStream nextPut: $;.
 		].
