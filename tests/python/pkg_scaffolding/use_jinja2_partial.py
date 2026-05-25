@@ -802,6 +802,22 @@ def jinja2_render_if_truthy():
     return tmpl.render(x=True)
 
 
+def jinja2_render_template_with_string_literal():
+    # ``{{ name ~ "!" }}'' with name='hi' → 'hi!'.  Renders a template
+    # that contains a Jinja2 string literal token.  Was blocked behind
+    # the lexer's TOKEN_STRING normalize path, which round-trips every
+    # quoted literal through .encode("ascii", "backslashreplace").
+    # decode("unicode-escape") — and ByteArray>>decode: (env-1, on bytes)
+    # only knew about 'utf-8', 'ascii', and 'latin-1'.  An unknown
+    # codec raised LookupError inside the lexer's PythonGenerator fork,
+    # bubbled up as TemplateSyntaxError("unicode-escape"), and no jinja2
+    # template that mentioned a string literal could be compiled.
+    import jinja2
+    env = jinja2.Environment()
+    tmpl = env.from_string('{{ name ~ "!" }}')
+    return tmpl.render(name='hi')
+
+
 def jinja2_match_groupdict_named_capture():
     # Regression for the M4 lexer chain: ``re`` matches with named
     # captures used to fail in ``Match.groupdict()`` because the C

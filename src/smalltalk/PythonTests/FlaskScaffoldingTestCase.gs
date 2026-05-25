@@ -3596,6 +3596,26 @@ testJinja2RenderFilterUpper
 	self assert: result equals: 'HELLO'
 %
 
+! --- Jinja2 render of a template containing a string literal ------------
+
+category: 'Grail-Tests - Jinja2 render'
+method: FlaskScaffoldingTestCase
+testJinja2RenderTemplateWithStringLiteral
+	"A template containing a Jinja2 string literal renders.  Lexing the
+	embedded string token routes through jinja2's
+	.encode(''ascii'', ''backslashreplace'').decode(''unicode-escape'')
+	normalization.  Pre-fix, bytes (ByteArray) had no unicode-escape
+	codec; the resulting LookupError tunneled out of the lexer''s
+	PythonGenerator fork as a TemplateSyntaxError that no on:do: could
+	trap from the caller''s stack.  Fix: ByteArray>>decode: now
+	dispatches the unicode-escape codec to ___decodeUnicodeEscape___."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:jinja2_render_template_with_string_literal.
+	self assert: result equals: 'hi!'
+%
+
 ! --- Jinja2 if-block render (current blocker) -----------------------------
 
 category: 'Grail-Tests - Jinja2 render'

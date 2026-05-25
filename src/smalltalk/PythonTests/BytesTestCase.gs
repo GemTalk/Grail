@@ -398,6 +398,34 @@ test_decode_ascii
 
 category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
+test_decode_unicode_escape
+	"bytes.decode('unicode-escape') interprets Python-source backslash
+	escapes.  Required by jinja2's lexer, which round-trips every
+	TOKEN_STRING through .encode('ascii', 'backslashreplace').decode(
+	'unicode-escape') to convert source-form '\\n' into a real newline."
+
+	| b |
+	b := bytes @env1:__new__: 'hello' _: 'ascii'.
+	self assert: (b @env1:decode: 'unicode-escape') equals: 'hello'.
+
+	b := bytes @env1:__new__: 'a\nb' _: 'ascii'.
+	self assert: (b @env1:decode: 'unicode-escape') equals: (String new
+		add: $a; add: (Character codePoint: 10); add: $b; yourself).
+
+	b := bytes @env1:__new__: 'A\x41' _: 'ascii'.
+	self assert: (b @env1:decode: 'unicode-escape') equals: 'AA'.
+
+	b := bytes @env1:__new__: '\xe9' _: 'ascii'.
+	self assert: (b @env1:decode: 'unicode-escape')
+		equals: (String new add: (Character codePoint: 16r00e9); yourself).
+
+	b := bytes @env1:__new__: '\t\\\"' _: 'ascii'.
+	self assert: (b @env1:decode: 'unicode-escape')
+		equals: (String new add: (Character codePoint: 9); add: $\; add: $"; yourself)
+%
+
+category: 'Grail-Tests - Bytes Methods'
+method: BytesTestCase
 test_endswith
 	"Test bytes.endswith(suffix)"
 

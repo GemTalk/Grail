@@ -643,9 +643,114 @@ decode: encoding
 		^ result
 	].
 
+	"Support unicode-escape: interpret Python source-style backslash
+	escapes (n, t, r, b, f, v, a, hex xHH, uHHHH, UHHHHHHHH, octal ooo).
+	Non-backslash bytes pass through as Latin-1 code points."
+	((encodingStr @env0:= 'unicode-escape') or: [
+		encodingStr @env0:= 'unicode_escape'
+	]) ifTrue: [
+		^ self @env0:___decodeUnicodeEscape___
+	].
+
 	"Unsupported encoding"
 	LookupError ___signal___: ('unknown encoding: ' @env0:, encodingStr)
 %
+
+set compile_env: 0
+
+category: 'Grail-Encoding/Decoding'
+method: bytes
+___decodeUnicodeEscape___
+	"unicode-escape decoder.  Pure env-0 helper called by decode:."
+
+	| size out i byte |
+	size := self size.
+	out := WriteStream on: (Unicode32 new: size).
+	i := 1.
+	[i <= size] whileTrue: [
+		byte := self at: i.
+		(byte = 92 and: [i < size]) ifTrue: [
+			| next codeUnit hexN |
+			next := self at: i + 1.
+			"Simple single-char escapes."
+			(next = 110) ifTrue: [out nextPut: (Character codePoint: 10).  i := i + 2] ifFalse: [
+			(next = 116) ifTrue: [out nextPut: (Character codePoint: 9).   i := i + 2] ifFalse: [
+			(next = 114) ifTrue: [out nextPut: (Character codePoint: 13).  i := i + 2] ifFalse: [
+			(next = 98)  ifTrue: [out nextPut: (Character codePoint: 8).   i := i + 2] ifFalse: [
+			(next = 102) ifTrue: [out nextPut: (Character codePoint: 12).  i := i + 2] ifFalse: [
+			(next = 118) ifTrue: [out nextPut: (Character codePoint: 11).  i := i + 2] ifFalse: [
+			(next = 97)  ifTrue: [out nextPut: (Character codePoint: 7).   i := i + 2] ifFalse: [
+			(next = 92)  ifTrue: [out nextPut: (Character codePoint: 92).  i := i + 2] ifFalse: [
+			(next = 39)  ifTrue: [out nextPut: (Character codePoint: 39).  i := i + 2] ifFalse: [
+			(next = 34)  ifTrue: [out nextPut: (Character codePoint: 34).  i := i + 2] ifFalse: [
+			"\\x — 2 hex digits."
+			(next = 120) ifTrue: [
+				(i + 3 <= size) ifFalse: [
+					UnicodeDecodeError ___signal___: 'truncated \\xXX escape'].
+				hexN := self ___parseHex___: i + 2 length: 2.
+				out nextPut: (Character codePoint: hexN).
+				i := i + 4
+			] ifFalse: [
+			"\\u — 4 hex digits."
+			(next = 117) ifTrue: [
+				(i + 5 <= size) ifFalse: [
+					UnicodeDecodeError ___signal___: 'truncated \\uXXXX escape'].
+				codeUnit := self ___parseHex___: i + 2 length: 4.
+				out nextPut: (Character codePoint: codeUnit).
+				i := i + 6
+			] ifFalse: [
+			"\\U — 8 hex digits."
+			(next = 85) ifTrue: [
+				(i + 9 <= size) ifFalse: [
+					UnicodeDecodeError ___signal___: 'truncated \\UXXXXXXXX escape'].
+				codeUnit := self ___parseHex___: i + 2 length: 8.
+				out nextPut: (Character codePoint: codeUnit).
+				i := i + 10
+			] ifFalse: [
+			"\\0..\\7 — octal up to 3 digits."
+			(next >= 48 and: [next <= 55]) ifTrue: [
+				| octVal j endIdx |
+				octVal := 0.
+				endIdx := (i + 4) min: size + 1.
+				j := i + 1.
+				[j < endIdx and: [(self at: j) >= 48 and: [(self at: j) <= 55]]]
+					whileTrue: [
+						octVal := (octVal * 8) + ((self at: j) - 48).
+						j := j + 1].
+				out nextPut: (Character codePoint: octVal).
+				i := j
+			] ifFalse: [
+				"Unknown escape — emit backslash literally and rescan from next."
+				out nextPut: (Character codePoint: 92).
+				i := i + 1
+			]]]]]]]]]]]]]]
+		] ifFalse: [
+			out nextPut: (Character codePoint: byte).
+			i := i + 1
+		]
+	].
+	^ out contents
+%
+
+category: 'Grail-Encoding/Decoding'
+method: bytes
+___parseHex___: startIdx length: n
+	"Parse n hex digits starting at byte index startIdx; return the integer value."
+
+	| value byte digit |
+	value := 0.
+	1 to: n do: [:k |
+		byte := self at: startIdx + k - 1.
+		(byte >= 48 and: [byte <= 57]) ifTrue: [digit := byte - 48] ifFalse: [
+		(byte >= 97 and: [byte <= 102]) ifTrue: [digit := byte - 87] ifFalse: [
+		(byte >= 65 and: [byte <= 70]) ifTrue: [digit := byte - 55] ifFalse: [
+			UnicodeDecodeError ___signal___: 'invalid hex digit in escape']]].
+		value := (value * 16) + digit
+	].
+	^ value
+%
+
+set compile_env: 1
 
 category: 'Grail-Prefix/Suffix Methods'
 method: bytes
