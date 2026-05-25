@@ -781,6 +781,19 @@ def jinja2_render_for_loop():
     return tmpl.render(items=[1, 2, 3])
 
 
+def jinja2_render_filter_upper():
+    # ``{{ name|upper }}'' with name='hello' → 'HELLO'.  Required:
+    # (1) Filter class's __name__ correctly resolves to 'Filter' (not
+    # '_FilterTestCommon') so visitor dispatch picks visit_Filter;
+    # (2) the @contextmanager-using _filter_test_common was split into
+    # explicit _filter_test_pre/_filter_test_post helpers because
+    # ClassDefAst doesn't yet honor arbitrary method-level decorators.
+    import jinja2
+    env = jinja2.Environment()
+    tmpl = env.from_string('{{ name|upper }}')
+    return tmpl.render(name='hello')
+
+
 def jinja2_render_if_truthy():
     # ``{% if x %}YES{% endif %}'' with x=True → 'YES'.
     import jinja2

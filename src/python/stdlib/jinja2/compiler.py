@@ -1816,10 +1816,16 @@ class CodeGenerator(NodeVisitor):
             self.write(":")
             self.visit(node.step, frame)
 
-    @contextmanager
-    def _filter_test_common(
+    # GRAIL: original was a single ``@contextmanager`` method
+    # (``_filter_test_common``).  Grail's ClassDefAst doesn't yet apply
+    # arbitrary method-level decorators (other than @property /
+    # @classmethod / @staticmethod), so the decorator gets dropped and
+    # ``with self._filter_test_common(...):'' tries to call __enter__
+    # on a raw PythonGenerator.  Split into explicit pre/post helpers
+    # that the call sites call directly, sidestepping the decorator.
+    def _filter_test_pre(
         self, node: t.Union[nodes.Filter, nodes.Test], frame: Frame, is_filter: bool
-    ) -> t.Iterator[None]:
+    ) -> None:
         if self.environment.is_async:
             self.write("(await auto_await(")
 
@@ -1848,10 +1854,9 @@ class CodeGenerator(NodeVisitor):
         if pass_arg is not None:
             self.write(f"{pass_arg}, ")
 
-        # Back to the visitor function to handle visiting the target of
-        # the filter or test.
-        yield
-
+    def _filter_test_post(
+        self, node: t.Union[nodes.Filter, nodes.Test], frame: Frame
+    ) -> None:
         self.signature(node, frame)
         self.write(")")
 
@@ -1860,25 +1865,27 @@ class CodeGenerator(NodeVisitor):
 
     @optimizeconst
     def visit_Filter(self, node: nodes.Filter, frame: Frame) -> None:
-        with self._filter_test_common(node, frame, True):
-            # if the filter node is None we are inside a filter block
-            # and want to write to the current buffer
-            if node.node is not None:
-                self.visit(node.node, frame)
-            elif frame.eval_ctx.volatile:
-                self.write(
-                    f"(Markup(concat({frame.buffer}))"
-                    f" if context.eval_ctx.autoescape else concat({frame.buffer}))"
-                )
-            elif frame.eval_ctx.autoescape:
-                self.write(f"Markup(concat({frame.buffer}))")
-            else:
-                self.write(f"concat({frame.buffer})")
+        self._filter_test_pre(node, frame, True)
+        # if the filter node is None we are inside a filter block
+        # and want to write to the current buffer
+        if node.node is not None:
+            self.visit(node.node, frame)
+        elif frame.eval_ctx.volatile:
+            self.write(
+                f"(Markup(concat({frame.buffer}))"
+                f" if context.eval_ctx.autoescape else concat({frame.buffer}))"
+            )
+        elif frame.eval_ctx.autoescape:
+            self.write(f"Markup(concat({frame.buffer}))")
+        else:
+            self.write(f"concat({frame.buffer})")
+        self._filter_test_post(node, frame)
 
     @optimizeconst
     def visit_Test(self, node: nodes.Test, frame: Frame) -> None:
-        with self._filter_test_common(node, frame, False):
-            self.visit(node.node, frame)
+        self._filter_test_pre(node, frame, False)
+        self.visit(node.node, frame)
+        self._filter_test_post(node, frame)
 
     @optimizeconst
     def visit_CondExpr(self, node: nodes.CondExpr, frame: Frame) -> None:

@@ -3578,6 +3578,24 @@ testJinja2RenderForLoopTemplate
 	self assert: result equals: '[1][2][3]'
 %
 
+! --- Jinja2 filter render ------------------------------------------------
+
+category: 'Grail-Tests - Jinja2 render'
+method: FlaskScaffoldingTestCase
+testJinja2RenderFilterUpper
+	"``{{ name|upper }}'' with name='hello' renders 'HELLO'.  Required
+	two fixes: (1) Filter class __name__ correctly resolves to 'Filter'
+	(not '_FilterTestCommon' inherited via kernel-metaclass-slot leak);
+	(2) jinja2.compiler's _filter_test_common @contextmanager method
+	split into explicit pre/post helpers (ClassDefAst doesn't honor
+	arbitrary class-method decorators yet)."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:jinja2_render_filter_upper.
+	self assert: result equals: 'HELLO'
+%
+
 ! --- Jinja2 if-block render (current blocker) -----------------------------
 
 category: 'Grail-Tests - Jinja2 render'
