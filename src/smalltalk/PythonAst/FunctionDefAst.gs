@@ -959,12 +959,17 @@ generateModuleMethodSourceOn: aStream
 			].
 			aStream nextPutAll: ']].'; lf.
 		].
-		"Bind **kwarg to the keyword dict (or empty)."
+		"Bind **kwarg to the user-visible dict.  Per CPython, kwargs keys
+		are Python ``str''s — Grail's internal kwargs IdentityKeyValueDictionary
+		has Symbol keys for fast Smalltalk-side ``at: #name'' unpacking
+		(see the keyword-only-arg dispatch above).  Convert at the
+		user-facing boundary via ``dict._new: #() kw: <kwargs>'' so
+		``kwargs.get('name', ...)'' uses string equality."
 		args kwarg ifNotNil: [
 			aStream
 				nextPutAll: args kwarg name;
-				nextPutAll: ' := '; nextPutAll: kwMethodParam;
-				nextPutAll: ' ifNil: [(KeyValueDictionary perform: #new env: 0)].';
+				nextPutAll: ' := dict @env1:_new: #() kw: '; nextPutAll: kwMethodParam;
+				nextPut: $.;
 				lf.
 		].
 	].
@@ -1403,12 +1408,14 @@ generateMethodSourceOn: aStream
 			].
 			aStream nextPutAll: ']].'; lf.
 		].
-		"Bind **kwarg to the keyword dict (or empty)."
+		"Bind **kwarg to the user-visible dict.  Convert Symbol keys
+		to Python ``str''s at the boundary (see the module-method
+		branch above for the rationale)."
 		args kwarg ifNotNil: [
 			aStream
 				nextPutAll: args kwarg name;
-				nextPutAll: ' := '; nextPutAll: kwMethodParam;
-				nextPutAll: ' ifNil: [(KeyValueDictionary perform: #new env: 0)].';
+				nextPutAll: ' := dict @env1:_new: #() kw: '; nextPutAll: kwMethodParam;
+				nextPut: $.;
 				lf.
 		].
 	].

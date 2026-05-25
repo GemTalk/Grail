@@ -462,7 +462,11 @@ run
 	at: #'ClassAttributeTestCase' put: nil;
 	at: #'AttributeProtocolTestCase' put: nil;
 	at: #'AttributeStoreTestCase' put: nil;
+	at: #'DictKwargsTestCase' put: nil;
 	at: #'FunctionRebindingTestCase' put: nil;
+	at: #'TernaryTruthinessTestCase' put: nil;
+	at: #'VarargsNamingTestCase' put: nil;
+	at: #'YieldFromTestCase' put: nil;
 	at: #'ConnectionAbortedErrorTestCase' put: nil;
 	at: #'ConnectionErrorTestCase' put: nil;
 	at: #'ConnectionRefusedErrorTestCase' put: nil;
@@ -1020,7 +1024,11 @@ input src/smalltalk/PythonTests/AttributePropertyTestCase.gs
 input src/smalltalk/PythonTests/ClassAttributeTestCase.gs
 input src/smalltalk/PythonTests/AttributeProtocolTestCase.gs
 input src/smalltalk/PythonTests/AttributeStoreTestCase.gs
+input src/smalltalk/PythonTests/DictKwargsTestCase.gs
 input src/smalltalk/PythonTests/FunctionRebindingTestCase.gs
+input src/smalltalk/PythonTests/TernaryTruthinessTestCase.gs
+input src/smalltalk/PythonTests/VarargsNamingTestCase.gs
+input src/smalltalk/PythonTests/YieldFromTestCase.gs
 input src/smalltalk/PythonTests/EnumGlobalInjectTestCase.gs
 input src/smalltalk/PythonTests/MakecodesPatternTestCase.gs
 input src/smalltalk/PythonTests/NamedIntConstantTestCase.gs

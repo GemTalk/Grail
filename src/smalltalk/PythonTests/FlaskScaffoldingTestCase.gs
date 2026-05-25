@@ -3287,7 +3287,12 @@ testStarArgsAndStarStarKwargs
 	"*args collects leftover positionals as a tuple; **kwargs
 	collects unused keyword args into a dict.  Both bindings were
 	missing from the class-method varargs path before the codegen
-	parity fix."
+	parity fix.
+
+	Updated post-commit a9e96e5: the user-visible kwargs dict is
+	now String-keyed (Python ``str'' per CPython spec) — the
+	codegen converts Symbol→String at the **kwargs binding
+	boundary.  Test lookup matches with String key 'extra'."
 
 	| mod cls obj result tail kw |
 	mod := self loadFixture: 'varargs_unpack'.
@@ -3304,7 +3309,7 @@ testStarArgsAndStarStarKwargs
 	self assert: (tail @env0:at: 1) equals: 'a'.
 	self assert: (tail @env0:at: 2) equals: 'b'.
 	kw := result @env0:at: 3.
-	self assert: (kw @env0:at: #extra) equals: 99.
+	self assert: (kw @env0:at: 'extra') equals: 99.
 %
 
 category: 'Grail-Tests - Varargs'

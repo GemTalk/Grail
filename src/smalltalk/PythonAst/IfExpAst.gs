@@ -58,10 +58,18 @@ set compile_env: 0
 category: 'Grail-other'
 method: IfExpAst
 printSmalltalkOn: aStream
+	"Conditional expression ``body if test else orelse''.  The ``test''
+	is evaluated for Python truthiness — None / 0 / empty containers /
+	empty strings are falsy, everything else is truthy unless a user
+	class overrides via __bool__ / __len__.  Smalltalk's
+	``ifTrue:ifFalse:'' demands a Boolean, so route ``test'' through
+	the universal ``___isTruthy___'' helper (defined on Object) before
+	the conditional.  Mirrors what IfAst / WhileAst already emit; see
+	TernaryTruthinessTestCase."
 
-	aStream nextPutAll: '('.
+	aStream nextPutAll: '(('.
 	test printSmalltalkWithParenthesisOn: aStream.
-	aStream nextPutAll: ' ifTrue: ['.
+	aStream nextPutAll: ') ___isTruthy___ ifTrue: ['.
 	body printSmalltalkOn: aStream.
 	aStream nextPutAll: '] ifFalse: ['.
 	orelse printSmalltalkOn: aStream.
