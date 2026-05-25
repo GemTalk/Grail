@@ -781,6 +781,14 @@ def jinja2_render_for_loop():
     return tmpl.render(items=[1, 2, 3])
 
 
+def jinja2_render_if_truthy():
+    # ``{% if x %}YES{% endif %}'' with x=True → 'YES'.
+    import jinja2
+    env = jinja2.Environment()
+    tmpl = env.from_string('{% if x %}YES{% endif %}')
+    return tmpl.render(x=True)
+
+
 def jinja2_match_groupdict_named_capture():
     # Regression for the M4 lexer chain: ``re`` matches with named
     # captures used to fail in ``Match.groupdict()`` because the C

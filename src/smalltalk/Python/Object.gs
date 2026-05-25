@@ -369,6 +369,18 @@ ___pyAttrLoad___: aSym
 	redeclaration in ClassDefAst) still resolves through this branch
 	— per-class slot storage means ``B.X`` calls the inherited
 	accessor on B and reads B's own slot."
+	"Instance-level dunders that always return values, never wrap as
+	BoundMethods.  ``self.__class__'' / ``self.__doc__'' are
+	value-attribute reads regardless of receiver kind; without this
+	check the BoundMethod-wrap branch below catches them and
+	downstream code (``object.__new__(self.__class__)'') tries to
+	send messages to the wrapper instead of the underlying value.
+	Surfaced as the jinja2 ``{% if %}'' compile blocker —
+	idtracking.Symbols.copy() does ``object.__new__(self.__class__)''
+	and trips the BoundMethod-wrap fallback."
+	((s @env0:= '__class__' or: [s @env0:= '__doc__'])
+		and: [(self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil])
+			ifTrue: [^ self @env0:perform: aSym env: 1].
 	(self @env0:isKindOf: Behavior) ifTrue: [
 		"Class-level dunders that should always read as values, never
 		wrap as BoundMethods.  Without this, ``type(node).__name__``

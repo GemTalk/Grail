@@ -3357,18 +3357,25 @@ testBuiltinClassName
 category: 'Grail-Tests - Introspection'
 method: FlaskScaffoldingTestCase
 testInstanceDict
-	"`obj.__dict__` returns a view of the instance's attributes.
+	"`obj.__dict__` returns a LIVE view of the instance's attributes.
 	Phase B: all attributes (both __init__-discovered ones and
 	runtime-added ones) live in dynamic-instVar storage and surface
 	through __dict__ uniformly.  Used by blinker's cached-property
-	idiom ``if 'X' in self.__dict__:''."
+	idiom ``if 'X' in self.__dict__:'' and jinja2's
+	``rv.__dict__.update(self.__dict__)'' copy idiom.
+
+	Updated from the snapshot-only KeyValueDictionary return to a
+	live PyInstanceDict proxy that propagates writes back into the
+	instance — the previous snapshot silently dropped
+	``rv.__dict__.update(self.__dict__)'' writes, which broke jinja2
+	Frame.copy() and the ``{% if %}'' compile path."
 
 	| mod cls obj d |
 	mod := self loadFixture: 'cls_self'.
 	cls := mod @env1:FirstParamSelf.
 	obj := cls @env1:value: { 'label-value' } value: nil.
 	d := obj @env1:__dict__.
-	self assert: (d @env0:isKindOf: KeyValueDictionary).
+	self assert: (d @env0:isKindOf: PyInstanceDict).
 	"Phase B: ``label'' set in __init__ also shows up here (the old
 	``Smalltalk instVar vs ___dict___'' split is gone — everything
 	lives in dynamic-instVar storage)."
@@ -3569,6 +3576,21 @@ testJinja2RenderForLoopTemplate
 	mod := self loadFixture: 'use_jinja2_partial'.
 	result := mod @env1:jinja2_render_for_loop.
 	self assert: result equals: '[1][2][3]'
+%
+
+! --- Jinja2 if-block render (current blocker) -----------------------------
+
+category: 'Grail-Tests - Jinja2 render'
+method: FlaskScaffoldingTestCase
+testJinja2RenderIfTruthyTemplate
+	"``{% if x %}YES{% endif %}'' with x=True → 'YES'.  Current
+	blocker after for-loop interpolation landed in 46d394f — at
+	compile time hits ``a BoundMethod does not understand #'new'''."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:jinja2_render_if_truthy.
+	self assert: result equals: 'YES'
 %
 
 ! --- re Match.groupdict round-trip (CPythonShim PyDict_Next) -------------

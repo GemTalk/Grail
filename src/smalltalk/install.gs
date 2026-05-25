@@ -282,6 +282,7 @@ run
 	at: #'module' put: nil;
 	at: #'PythonClass' put: nil;
 	at: #'PythonInstance' put: nil;
+	at: #'PyInstanceDict' put: nil;
 	at: #'NamedIntConstant' put: nil;
 	at: #'numbers' put: nil;
 	at: #'numbers_Complex' put: nil;
@@ -658,6 +659,7 @@ input src/smalltalk/Python/slice.gs
 input src/smalltalk/Python/iterator.gs
 input src/smalltalk/Python/module.gs
 input src/smalltalk/Python/PythonInstance.gs
+input src/smalltalk/Python/PyInstanceDict.gs
 input src/smalltalk/Python/NamedIntConstant.gs
 input src/smalltalk/Python/BoundMethod.gs
 input src/smalltalk/Python/SuperBoundMethod.gs

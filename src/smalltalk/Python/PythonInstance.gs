@@ -155,18 +155,17 @@ value: positional value: kwargs
 category: 'Python-Introspection'
 method: PythonInstance
 __dict__
-	"Python ``obj.__dict__'' — return a dict view of the instance's
-	attributes.  Phase B: instance attributes live in dynamic-instVar
-	storage; build a fresh KeyValueDictionary from
-	``dynamicInstVarPairs'' so every attribute store is visible here."
+	"Python ``obj.__dict__'' — return a LIVE view of the instance's
+	dynamic-instVar storage.  Reads probe the instance directly;
+	writes (``self.__dict__['x'] = v'') and bulk updates
+	(``rv.__dict__.update(self.__dict__)'') propagate back into the
+	instance's dynamic-instVar storage.  A snapshot-only KeyValueDictionary
+	silently dropped writes — jinja2's Frame.copy() / Symbols.copy()
+	idiom (``rv = object.__new__(cls); rv.__dict__.update(self.__dict__)'')
+	left rv empty, which broke ``{% if %}'' template compilation
+	through Frame's require_output_check accessor."
 
-	| pairs d |
-	pairs := self @env0:dynamicInstVarPairs.
-	d := KeyValueDictionary @env0:new.
-	1 to: pairs @env0:size by: 2 do: [:i |
-		d @env0:at: (pairs @env0:at: i) put: (pairs @env0:at: i + 1)
-	].
-	^ d
+	^ PyInstanceDict @env0:on: self
 %
 
 set compile_env: 0
