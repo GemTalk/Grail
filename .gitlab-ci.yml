@@ -21,24 +21,36 @@ variables:
   GS_VERSION: "3.7.6"
 
 stages:
+  - build
   - test
+
+# Builds tests/gitlab/Dockerfile and pushes it to this project's container
+# registry as $CI_REGISTRY_IMAGE/ci-base:latest (plus a SHA-pinned tag).
+# Manual: only runs when you click "play" on it from the pipeline page.
+build-ci-image:
+  stage: build
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
+  rules:
+    - when: manual
+      allow_failure: true
+  script:
+    - mkdir -p /kaniko/.docker
+    - |
+      cat > /kaniko/.docker/config.json <<EOF
+      {"auths":{"$CI_REGISTRY":{"username":"$CI_REGISTRY_USER","password":"$CI_REGISTRY_PASSWORD"}}}
+      EOF
+    - /kaniko/executor
+        --context "$CI_PROJECT_DIR"
+        --dockerfile "$CI_PROJECT_DIR/tests/gitlab/Dockerfile"
+        --destination "$CI_REGISTRY_IMAGE/ci-base:latest"
+        --destination "$CI_REGISTRY_IMAGE/ci-base:$CI_COMMIT_SHORT_SHA"
 
 test:
   stage: test
-  image: container.gemtalksystems.com/gemstone/containers/qa/ubuntu:22.04
+  image: $CI_REGISTRY_IMAGE/ci-base:latest
   before_script:
-    # The QA Ubuntu 22.04 image ships only Python 3.10 and no C toolchain.
-    # Grail needs `make`/`cc` to build the CPython shim, and Python >= 3.14
-    # for the embedded-CPython FFI (PyInitConfig from PEP 741).  3.13 has
-    # Py_GetConstantBorrowed but lacks PyInitConfig_Create, so init fails
-    # at first call with "undefined symbol".  Long-term these should be
-    # baked into the image.
-    - sudo apt-get update
-    - sudo apt-get install -y --no-install-recommends build-essential software-properties-common gnupg
-    - sudo add-apt-repository -y ppa:deadsnakes/ppa
-    - sudo apt-get install -y --no-install-recommends python3.14 python3.14-dev
-    - sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.14 1
-    - sudo update-alternatives --install /usr/bin/python3-config python3-config /usr/bin/python3.14-config 1
     - source $CI_PROJECT_DIR/tests/gitlab/setup-testing-env.sh
     - cd "$CI_PROJECT_DIR/testing"
     - startstone -e stone.conf gs64stone
