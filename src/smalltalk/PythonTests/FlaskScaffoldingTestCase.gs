@@ -1996,6 +1996,102 @@ testTracebackExtractTbEmpty
 	self assert: result size equals: 0
 %
 
+category: 'Grail-Tests - traceback'
+method: FlaskScaffoldingTestCase
+testTracebackFormatExceptionThreeArg
+	"Legacy 3-arg form: format_exception(type, value, tb) emits
+	the ``Traceback (most recent call last):'' header plus the
+	exception class + message lines."
+
+	| mod result |
+	mod := self loadFixture: 'use_traceback'.
+	result := mod @env1:format_exception_three_arg.
+	self assert: result size equals: 2.
+	self assert: (result @env1:__getitem__: 0)
+		equals: 'Traceback (most recent call last):
+'.
+	self assert: (result @env1:__getitem__: 1)
+		equals: 'RuntimeError: legacy
+'
+%
+
+category: 'Grail-Tests - traceback'
+method: FlaskScaffoldingTestCase
+testTracebackFormatExceptionSingleArg
+	"3.10+ single-exception form: format_exception(exc) infers the
+	type from the instance and produces the same output as the
+	legacy 3-arg form."
+
+	| mod result |
+	mod := self loadFixture: 'use_traceback'.
+	result := mod @env1:format_exception_single_arg.
+	self assert: (result @env1:__getitem__: 0)
+		equals: 'Traceback (most recent call last):
+'.
+	self assert: (result @env1:__getitem__: 1)
+		equals: 'ValueError: modern
+'
+%
+
+category: 'Grail-Tests - traceback'
+method: FlaskScaffoldingTestCase
+testTracebackFormatList
+	"format_list indents each entry with two spaces and appends a
+	newline."
+
+	| mod result |
+	mod := self loadFixture: 'use_traceback'.
+	result := mod @env1:format_list_renders.
+	self assert: (result @env1:__getitem__: 0) equals: '  frame-one
+'.
+	self assert: (result @env1:__getitem__: 1) equals: '  frame-two
+'
+%
+
+category: 'Grail-Tests - traceback'
+method: FlaskScaffoldingTestCase
+testTracebackWalkTbReturnsIterator
+	"walk_tb returns an iterator (empty in Grail — no real frames)."
+
+	| mod result |
+	mod := self loadFixture: 'use_traceback'.
+	result := mod @env1:walk_tb_returns_iterator.
+	self assert: result size equals: 0
+%
+
+category: 'Grail-Tests - traceback'
+method: FlaskScaffoldingTestCase
+testTracebackExceptionFromException
+	"TracebackException.from_exception(e) captures the type/value
+	for deferred rendering; format() emits the same lines as
+	format_exception."
+
+	| mod result |
+	mod := self loadFixture: 'use_traceback'.
+	result := mod @env1:tracebackexception_from_exception.
+	self assert: (result @env1:__getitem__: 0)
+		equals: 'Traceback (most recent call last):
+'.
+	self assert: (result @env1:__getitem__: 1)
+		equals: 'TypeError: captured
+'
+%
+
+category: 'Grail-Tests - traceback'
+method: FlaskScaffoldingTestCase
+testTracebackExceptionFormatExceptionOnly
+	"format_exception_only returns just the ``Type: message'' line
+	(no Traceback header)."
+
+	| mod result |
+	mod := self loadFixture: 'use_traceback'.
+	result := mod @env1:tracebackexception_format_only.
+	self assert: result size equals: 1.
+	self assert: (result @env1:__getitem__: 0)
+		equals: 'KeyError: x
+'
+%
+
 ! --- collections module ---------------------------------------------------
 
 category: 'Grail-Tests - collections'

@@ -30,12 +30,34 @@ def format_exception_only(exc_type, value):
     return [type_name + '\n']
 
 
+def _unpack_exc_args(exc_type, value, tb):
+    """Resolve the (type, value, tb) triple from either legacy
+    3-arg ``format_exception(type, value, tb)'' or the 3.10+ single-
+    exception ``format_exception(exc)'' form.  Returns the triple
+    with None-safe defaults.
+
+    Grail's exception objects don't carry a real ``__traceback__''
+    object — they expose the attribute as a BoundMethod accessor.
+    Skip the auto-pull of tb and leave it as the caller supplied
+    (most callers pass None anyway)."""
+    # 3.10+ single-arg form: a BaseException instance in exc_type.
+    if isinstance(exc_type, BaseException):
+        exc = exc_type
+        exc_type = type(exc)
+        if value is None:
+            value = exc
+    return exc_type, value, tb
+
+
 def format_exception(exc_type, value=None, tb=None):
-    """Return a list of strings ready to be joined.  Without a real
-    traceback object the frame list is empty - we still emit the
-    'Traceback (most recent call last):' header so the output looks
+    """Return a list of strings ready to be joined.  Accepts either
+    the legacy 3-arg ``(type, value, tb)'' shape or the 3.10+
+    single-argument ``(exc)'' shape.  Without a real traceback
+    object the frame list is empty — we still emit the ``Traceback
+    (most recent call last):'' header so the output looks
     familiar."""
 
+    exc_type, value, tb = _unpack_exc_args(exc_type, value, tb)
     lines = ['Traceback (most recent call last):\n']
     if tb is not None:
         # If a list-like has been passed (some callers pass
@@ -70,6 +92,9 @@ def format_exc(*args):
 
 
 def print_exception(exc_type, value=None, tb=None, file=None):
+    """Print exception lines to ``file'' (default sys.stderr).
+    Accepts either the legacy 3-arg form or the 3.10+ single-
+    exception form."""
     if file is None:
         file = sys.stderr
     for line in format_exception(exc_type, value, tb):
@@ -100,8 +125,81 @@ def format_stack(f=None, limit=None):
     return []
 
 
+def format_list(extracted_list):
+    """Format a list of FrameSummary-like entries.  Each entry is
+    rendered with a two-space indent — matches CPython's output
+    layout.  Accepts any iterable of values that respond to
+    ``__str__''."""
+    return ['  ' + str(entry) + '\n' for entry in (extracted_list or [])]
+
+
+def print_list(extracted_list, file=None):
+    if file is None:
+        file = sys.stderr
+    for line in format_list(extracted_list):
+        file.write(line)
+
+
+def walk_tb(tb):
+    """Yield (frame, lineno) pairs walking the traceback.  Grail has
+    no real traceback objects so the generator is empty."""
+    return iter(())
+
+
+def walk_stack(f):
+    """Yield (frame, lineno) pairs walking the stack starting at ``f''.
+    Grail has no real frame objects so the generator is empty."""
+    return iter(())
+
+
+class TracebackException:
+    """CPython's reusable exception-formatting helper.  Captures the
+    exception's type / value (and chain) at construction time so the
+    rendering can be deferred or repeated.  Grail's minimal version
+    skips the frame walk; ``format()'' produces the same shape as
+    ``format_exception''."""
+
+    def __init__(self, exc_type, exc_value, exc_traceback,
+                 limit=None, lookup_lines=True, capture_locals=False,
+                 compact=False):
+        # Use the same input unpacking as format_exception so
+        # ``TracebackException(exc)'' single-arg works.
+        exc_type, exc_value, exc_traceback = _unpack_exc_args(
+            exc_type, exc_value, exc_traceback)
+        self.exc_type = exc_type
+        # CPython exposes ``value'' (the message) plus the chain
+        # attributes (__cause__ / __context__ / __suppress_context__).
+        # Without real chained-exception support and with Grail's
+        # exception attributes accessible only as BoundMethods, we
+        # leave the chain attrs at None.
+        self._value = exc_value
+        self._tb = exc_traceback
+        self.__cause__ = None
+        self.__context__ = None
+        self.__suppress_context__ = False
+        self.stack = []  # FrameSummary list; empty without real tb
+
+    @classmethod
+    def from_exception(cls, exc, **kwargs):
+        return cls(type(exc), exc, None, **kwargs)
+
+    def format_exception_only(self):
+        return format_exception_only(self.exc_type, self._value)
+
+    def format(self, chain=True):
+        """Yield strings (header / frames / message).  Generators
+        aren't iterated by CPython callers that join the result, so
+        return a flat list — easier to test, identical from the
+        caller's perspective."""
+        lines = ['Traceback (most recent call last):\n']
+        lines.extend(self.format_exception_only())
+        return lines
+
+
 __all__ = [
     'format_exception_only', 'format_exception', 'format_exc',
     'print_exception', 'print_exc',
     'extract_tb', 'extract_stack', 'format_tb', 'format_stack',
+    'format_list', 'print_list', 'walk_tb', 'walk_stack',
+    'TracebackException',
 ]
