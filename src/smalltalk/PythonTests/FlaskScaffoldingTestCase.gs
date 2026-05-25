@@ -1821,6 +1821,140 @@ testLoggingGetLevelName
 	self assert: mod @env1:get_level_name equals: 'WARNING'
 %
 
+! --- logging end-to-end (emit / handler pipeline) ------------------------
+
+category: 'Grail-Tests - logging'
+method: FlaskScaffoldingTestCase
+testLoggingLoggerInfoEmits
+	"logger.info(...) / debug / warning route records through the
+	logger's handlers when the logger's effective level permits."
+
+	| mod result |
+	mod := self loadFixture: 'use_logging'.
+	result := mod @env1:logger_info_emits.
+	self assert: result size equals: 3.
+	self assert: (result @env1:__getitem__: 0)
+		equals: 'INFO:emit.info:hello world'.
+	self assert: (result @env1:__getitem__: 1)
+		equals: 'DEBUG:emit.info:debug-level'.
+	self assert: (result @env1:__getitem__: 2)
+		equals: 'WARNING:emit.info:warn'
+%
+
+category: 'Grail-Tests - logging'
+method: FlaskScaffoldingTestCase
+testLoggingHandlerSetFormatter
+	"Handler.setFormatter overrides the default ``LEVEL:name:msg''
+	template."
+
+	| mod result |
+	mod := self loadFixture: 'use_logging'.
+	result := mod @env1:handler_set_formatter_custom.
+	self assert: result equals: #('[INFO] hi') asOrderedCollection
+%
+
+category: 'Grail-Tests - logging'
+method: FlaskScaffoldingTestCase
+testLoggingHandlerSetLevelFilters
+	"Handler.setLevel suppresses records below the threshold even
+	when the logger admits them."
+
+	| mod result |
+	mod := self loadFixture: 'use_logging'.
+	result := mod @env1:handler_set_level_filters.
+	self assert: result equals: #(30 40) asOrderedCollection
+%
+
+category: 'Grail-Tests - logging'
+method: FlaskScaffoldingTestCase
+testLoggingLoggerExceptionLogsAtError
+	"logger.exception(...) logs the message at ERROR.  Grail's
+	implementation drops the traceback (CPython attaches exc_info);
+	the message + level routing must still fire."
+
+	| mod result |
+	mod := self loadFixture: 'use_logging'.
+	result := mod @env1:logger_exception_logs_at_error.
+	self assert: result equals: #('ERROR:emit.exc:caught: failure') asOrderedCollection
+%
+
+category: 'Grail-Tests - logging'
+method: FlaskScaffoldingTestCase
+testLoggingRootPropagation
+	"By default a child logger's records propagate up to the root's
+	handlers."
+
+	| mod result |
+	mod := self loadFixture: 'use_logging'.
+	result := mod @env1:root_propagation_to_root_handler.
+	self assert: result size equals: 1.
+	self assert: (result @env1:__getitem__: 0)
+		equals: 'INFO:emit.prop.child:from child'
+%
+
+category: 'Grail-Tests - logging'
+method: FlaskScaffoldingTestCase
+testLoggingRemoveHandler
+	"removeHandler(h) drops emit routing through that handler.
+	Test isolates the logger with propagate=False so root handlers
+	don't double-count."
+
+	| mod result |
+	mod := self loadFixture: 'use_logging'.
+	result := mod @env1:remove_handler_stops_emit.
+	self assert: result equals: #('INFO:emit.rmv:before') asOrderedCollection
+%
+
+category: 'Grail-Tests - logging'
+method: FlaskScaffoldingTestCase
+testLoggingHasHandlersWalksChain
+	"hasHandlers() walks the parent chain, returning True when any
+	ancestor has at least one handler (and propagation isn't
+	blocked along the way)."
+
+	| mod result |
+	mod := self loadFixture: 'use_logging'.
+	result := mod @env1:has_handlers_walks_chain.
+	self assert: (result @env1:__getitem__: 0) equals: false.
+	self assert: (result @env1:__getitem__: 1) equals: true
+%
+
+category: 'Grail-Tests - logging'
+method: FlaskScaffoldingTestCase
+testLoggingHasHandlersStopsAtPropagateFalse
+	"hasHandlers() stops walking once it hits a logger with
+	propagate=False, returning False if that logger has no
+	handlers of its own."
+
+	| mod |
+	mod := self loadFixture: 'use_logging'.
+	self assert: mod @env1:has_handlers_stops_when_propagation_off
+		equals: false
+%
+
+category: 'Grail-Tests - logging'
+method: FlaskScaffoldingTestCase
+testLoggingFormatterAsctime
+	"Formatter resolves ``%(asctime)s'' via time.strftime against
+	the record's ``created'' field.  Default datefmt is
+	``%Y-%m-%d %H:%M:%S''."
+
+	| mod |
+	mod := self loadFixture: 'use_logging'.
+	self assert: mod @env1:formatter_asctime_shape equals: true
+%
+
+category: 'Grail-Tests - logging'
+method: FlaskScaffoldingTestCase
+testLoggingLogRecordArgsTuple
+	"LogRecord.getMessage applies %-formatting against the args
+	tuple — multi-element form."
+
+	| mod |
+	mod := self loadFixture: 'use_logging'.
+	self assert: mod @env1:log_record_args_tuple equals: 'hi and 7'
+%
+
 ! --- traceback module -----------------------------------------------------
 
 category: 'Grail-Tests - traceback'

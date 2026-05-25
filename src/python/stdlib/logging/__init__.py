@@ -45,11 +45,13 @@ class LogRecord:
     """Plain record of a logging event - what Formatter formats."""
 
     def __init__(self, name, lvl, msg, args):
+        import time
         self.name = name
         self.levelno = lvl
         self.levelname = getLevelName(lvl)
         self.msg = msg
         self.args = args
+        self.created = time.time()
 
     def getMessage(self):
         if not self.args:
@@ -63,12 +65,26 @@ class LogRecord:
 
 class Formatter:
     """Minimal %-style Formatter.  Supported fields: %(name)s,
-    %(levelname)s, %(levelno)d, %(message)s, %(asctime)s (best-effort
-    placeholder; real timestamps need time module fields)."""
+    %(levelname)s, %(levelno)d, %(message)s, %(asctime)s (rendered
+    via ``time.strftime'' from the record's ``created'' field when
+    present).  ``datefmt'' controls asctime formatting; default is
+    ISO-like ``%Y-%m-%d %H:%M:%S,SSS''."""
+
+    _default_datefmt = '%Y-%m-%d %H:%M:%S'
 
     def __init__(self, fmt=None, datefmt=None):
         self._fmt = fmt if fmt is not None else '%(levelname)s:%(name)s:%(message)s'
         self.datefmt = datefmt
+
+    def formatTime(self, record, datefmt=None):
+        import time
+        ct = getattr(record, 'created', None)
+        if ct is None:
+            ct = time.time()
+        local = time.localtime(ct)
+        if datefmt is None:
+            datefmt = self.datefmt if self.datefmt is not None else self._default_datefmt
+        return time.strftime(datefmt, local)
 
     def format(self, record):
         fields = {
@@ -76,7 +92,7 @@ class Formatter:
             'levelname': record.levelname,
             'levelno': record.levelno,
             'message': record.getMessage(),
-            'asctime': '',
+            'asctime': self.formatTime(record),
         }
         return self._fmt % fields
 
@@ -212,6 +228,19 @@ class Logger:
     def removeHandler(self, handler):
         if handler in self.handlers:
             self.handlers.remove(handler)
+
+    def hasHandlers(self):
+        """True if this logger or any propagated ancestor has at least
+        one handler.  CPython framework code consults this before
+        falling back to the lastResort handler."""
+        logger = self
+        while logger is not None:
+            if logger.handlers:
+                return True
+            if not logger.propagate:
+                return False
+            logger = logger.parent
+        return False
 
     def _log(self, lvl, msg, args):
         if not self.isEnabledFor(lvl):
