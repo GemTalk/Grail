@@ -106,13 +106,13 @@ category: 'Grail-String Representation'
 method: CharacterCollection
 __format__: formatSpec
 	"Python str.__format__: empty spec returns self; a non-empty spec
-	delegates to Python's mini format-spec language.  Until the full
-	grammar is implemented, accept a few common cases used in jinja2
-	codegen (``r`` / ``s`` / ``>N`` / ``<N`` / ``^N``) and fall back
-	to plain str for anything else."
+	delegates to ___applyAlignWidthFormat___: for the
+	[fill][<|>|^][width] subset that jinja2 / common Python code
+	hits.  Other spec syntax (precision, type, etc.) falls back
+	to plain self."
 
 	(formatSpec @env0:isNil or: [formatSpec @env0:= '']) ifTrue: [^ self].
-	^ self
+	^ self @env1:___applyAlignWidthFormat___: formatSpec
 %
 
 category: 'Grail-Comparison'
@@ -583,9 +583,207 @@ find: sub
 category: 'Grail-String Methods'
 method: CharacterCollection
 format
-	"String formatting using {} placeholders. Not yet implemented."
+	"Python ``str.format()'' with no arguments — placeholders are
+	rendered as literal text only if no ``{'' / ``}'' appears.
+	Round-trips ``{{'' / ``}}'' escapes."
 
-	self @env0:error: 'Not yet implemented: format'
+	^ self @env1:_format: #() kw: nil
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+_format: positional kw: kwargs
+	"Python ``str.format(*args, **kwargs)'' — replace ``{...}''
+	placeholders in self with values from positional / kwargs.
+
+	Supported placeholder shapes:
+	  * ``{}'' (auto-index positional)
+	  * ``{N}'' (explicit positional index)
+	  * ``{name}'' (keyword)
+	  * Any of the above plus ``:spec'' (format spec) and/or ``!r''
+	    / ``!s'' / ``!a'' conversion flags.
+	  * ``{{'' / ``}}'' → literal ``{'' / ``}''.
+
+	Field access (``{0.attr}'', ``{0[i]}'') is NOT yet supported."
+
+	| size out i ch nextAuto |
+	size := self @env0:size.
+	out := WriteStream @env0:on: (Unicode7 ___new___).
+	i := 1.
+	nextAuto := 0.
+	[i @env0:<= size] @env0:whileTrue: [
+		ch := self @env0:at: i.
+		(ch @env0:== ${ and: [
+			(i @env0:< size) and: [(self @env0:at: i @env0:+ 1) @env0:== ${]])
+			ifTrue: [
+				out @env0:nextPut: ${.
+				i := i @env0:+ 2
+			] ifFalse: [
+		(ch @env0:== $} and: [
+			(i @env0:< size) and: [(self @env0:at: i @env0:+ 1) @env0:== $}]])
+			ifTrue: [
+				out @env0:nextPut: $}.
+				i := i @env0:+ 2
+			] ifFalse: [
+		(ch @env0:== ${) ifTrue: [
+			| endIdx field convFlag spec value autoIdx |
+			endIdx := self @env0:___findFormatBraceEnd___: i @env0:+ 1.
+			endIdx @env0:isNil ifTrue: [
+				ValueError ___signal___: 'unmatched ''{'' in format string'].
+			"field = name/index, optional !conv, optional :spec."
+			field := self @env0:copyFrom: i @env0:+ 1 to: endIdx @env0:- 1.
+			convFlag := nil.
+			spec := ''.
+			"Split field on ':' (first occurrence)."
+			(field @env0:indexOf: $:) @env0:> 0 ifTrue: [
+				| colonIdx |
+				colonIdx := field @env0:indexOf: $:.
+				spec := field @env0:copyFrom: colonIdx @env0:+ 1 to: field @env0:size.
+				field := field @env0:copyFrom: 1 to: colonIdx @env0:- 1.
+			].
+			"Then split field on '!' for conversion flag."
+			(field @env0:indexOf: $!) @env0:> 0 ifTrue: [
+				| bangIdx |
+				bangIdx := field @env0:indexOf: $!.
+				convFlag := field @env0:copyFrom: bangIdx @env0:+ 1 to: field @env0:size.
+				field := field @env0:copyFrom: 1 to: bangIdx @env0:- 1.
+			].
+			"Resolve the field name to a value."
+			value := self
+				@env1:___resolveFormatField___: field
+				positional: positional
+				kwargs: kwargs
+				autoIdx: nextAuto.
+			field @env0:isEmpty ifTrue: [nextAuto := nextAuto @env0:+ 1].
+			"Apply conversion flag (r → repr, s → str, a → ascii)."
+			convFlag @env0:isNil ifFalse: [
+				convFlag @env0:= 'r' @env0:ifTrue: [value := value @env1:__repr__].
+				convFlag @env0:= 's' @env0:ifTrue: [value := value @env1:__str__].
+			].
+			"Format-spec dispatch.  Delegate to value.__format__(spec)."
+			out @env0:nextPutAll: (value @env1:__format__: spec) @env0:asString.
+			i := endIdx @env0:+ 1
+		] ifFalse: [
+			out @env0:nextPut: ch.
+			i := i @env0:+ 1
+		]]].
+	].
+	^ out @env0:contents
+%
+
+set compile_env: 0
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___formatPad___: count with: fillChar
+	"Return a `count`-long string of `fillChar`s.  Helper for
+	___applyAlignWidthFormat___ — GemStone's String class doesn't
+	expose ``new:withAll:'', so use the two-step new+atAllPut form."
+
+	| s |
+	count <= 0 ifTrue: [^ ''].
+	s := String new: count.
+	s atAllPut: fillChar.
+	^ s
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___findFormatBraceEnd___: startIdx
+	"Return the index of the matching ``}'' starting from startIdx,
+	or nil if none.  Respects nested braces inside format specs (one
+	level only — Python's spec mini-language allows nested
+	``{...}'' in the precision slot)."
+
+	| size i depth ch |
+	size := self size.
+	i := startIdx.
+	depth := 0.
+	[i <= size] whileTrue: [
+		ch := self at: i.
+		ch == ${ ifTrue: [depth := depth + 1].
+		ch == $} ifTrue: [
+			depth == 0 ifTrue: [^ i].
+			depth := depth - 1].
+		i := i + 1].
+	^ nil
+%
+
+set compile_env: 1
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___applyAlignWidthFormat___: spec
+	"Apply the [fill][<|>|^][width] subset of Python's format-spec
+	mini-language to self.  Returns self unchanged when the spec
+	uses any unsupported syntax (sign, precision, type, ``0''
+	pad-left, ``,'' thousands separator, ...) — caller can layer
+	on its own type-specific formatting first."
+
+	| size align fill widthStr width padCount leftPad rightPad allDigits |
+	size := spec @env0:size.
+	size @env0:= 0 ifTrue: [^ self].
+	"Detect [fill]align: align is one of < > ^ at index 1 or 2."
+	(size @env0:>= 2 and: [
+		#($< $> $^) @env0:includes: (spec @env0:at: 2)])
+		ifTrue: [
+			fill := spec @env0:at: 1.
+			align := spec @env0:at: 2.
+			widthStr := spec @env0:copyFrom: 3 to: size]
+		ifFalse: [(#($< $> $^) @env0:includes: (spec @env0:at: 1))
+			ifTrue: [
+				fill := $ .
+				align := spec @env0:at: 1.
+				widthStr := spec @env0:copyFrom: 2 to: size]
+			ifFalse: [
+				fill := $ .
+				align := $>.   "Numbers default to right-align."
+				widthStr := spec]].
+	widthStr @env0:isEmpty ifTrue: [^ self].
+	"Width must be all decimal digits; reject otherwise."
+	allDigits := true.
+	widthStr @env0:do: [:c | (c @env0:isDigit) ifFalse: [allDigits := false]].
+	allDigits ifFalse: [^ self].
+	width := widthStr @env0:asNumber.
+	(self @env0:size @env0:>= width) ifTrue: [^ self].
+	padCount := width @env0:- self @env0:size.
+	align @env0:= $> ifTrue: [
+		^ ((self @env0:___formatPad___: padCount with: fill) @env0:, self) @env0:asString].
+	align @env0:= $< ifTrue: [
+		^ (self @env0:, (self @env0:___formatPad___: padCount with: fill)) @env0:asString].
+	"Center: split padCount between left and right (right gets the
+	extra when padCount is odd)."
+	leftPad := padCount @env0:// 2.
+	rightPad := padCount @env0:- leftPad.
+	^ ((self @env0:___formatPad___: leftPad with: fill) @env0:,
+		self @env0:, (self @env0:___formatPad___: rightPad with: fill)) @env0:asString
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___resolveFormatField___: field positional: positional kwargs: kwargs autoIdx: autoIdx
+	"Look up a format field name in positional / kwargs.  Empty
+	field → auto-index positional; numeric field → explicit
+	positional index; otherwise keyword."
+
+	| idx |
+	field @env0:isEmpty ifTrue: [
+		(autoIdx @env0:>= positional @env0:size) ifTrue: [
+			IndexError ___signal___: 'Replacement index ' @env0:,
+				autoIdx printString @env0:, ' out of range for positional args tuple'].
+		^ positional @env0:at: autoIdx @env0:+ 1].
+	"Numeric field — explicit positional index."
+	(field @env0:first @env0:isDigit) ifTrue: [
+		idx := field @env0:asNumber.
+		(idx @env0:>= positional @env0:size) ifTrue: [
+			IndexError ___signal___: 'Replacement index ' @env0:,
+				idx printString @env0:, ' out of range for positional args tuple'].
+		^ positional @env0:at: idx @env0:+ 1].
+	"Keyword field."
+	kwargs @env0:isNil ifTrue: [
+		KeyError ___signal___: '''' @env0:, field @env0:asString @env0:, ''''].
+	^ kwargs @env0:at: field @env0:asString ifAbsent: [
+		KeyError ___signal___: '''' @env0:, field @env0:asString @env0:, '''']
 %
 
 category: 'Grail-String Methods'

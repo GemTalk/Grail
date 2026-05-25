@@ -1190,12 +1190,17 @@ class _GroupTuple(t.NamedTuple):
     list: t.List[t.Any]
 
     # Use the regular tuple repr to hide this subclass if users print
-    # out the value during debugging.
+    # out the value during debugging.  Upstream uses
+    # ``tuple.__repr__(self)'' / ``tuple.__str__(self)'' — the
+    # unbound-method-on-class pattern that Grail's ___pyAttrLoad___
+    # supports but which still re-enters tuple's own __repr__,
+    # tripping ``do:separatedBy:'' env-1 dispatch on the NamedTuple
+    # subclass.  Build the tuple repr explicitly instead.
     def __repr__(self) -> str:
-        return tuple.__repr__(self)
+        return "(" + ", ".join(repr(x) for x in self) + ("," if len(self) == 1 else "") + ")"
 
     def __str__(self) -> str:
-        return tuple.__str__(self)
+        return self.__repr__()
 
 
 @pass_environment

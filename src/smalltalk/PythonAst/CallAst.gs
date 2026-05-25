@@ -287,19 +287,22 @@ printSmalltalkOn: aStream
 	].
 
 	"AttributeAst's printSmalltalkOn emits ``(value) @env1:___pyAttrLoad___:
-	#'attr'`` — a keyword message.  Without surrounding parens the
-	following ``value:value:`` keywords merge into one selector
-	``___pyAttrLoad___:value:value:``, which dispatches the wrong
-	message.  Wrap the function expression in parens for attribute
-	calls so the load is a complete unit before value:value: is sent
-	to its result."
-	(function isKindOf: AttributeAst)
-		ifTrue: [
+	#'attr'`` — a keyword message.  SubscriptAst emits
+	``(value) __getitem__: idx'' — also a keyword.  Without surrounding
+	parens the following ``value:value:`` keywords merge into one
+	selector (e.g. ``___pyAttrLoad___:value:value:'' or
+	``__getitem__:value:value:''), dispatching the wrong message.
+	Wrap the function expression in parens so the load / index
+	is a complete unit before value:value: is sent to its result.
+	NameAst (a plain identifier) needs no parens — bare name reads
+	don't emit a keyword message."
+	(function isKindOf: NameAst)
+		ifTrue: [function printSmalltalkOn: aStream]
+		ifFalse: [
 			aStream nextPut: $(.
 			function printSmalltalkOn: aStream.
 			aStream nextPut: $)
-		]
-		ifFalse: [function printSmalltalkOn: aStream].
+		].
 
 	"Dispatch via ``@env1:value:value:`` so BoundMethod, ``Object
 	class >> value:value:``, etc. resolve consistently."

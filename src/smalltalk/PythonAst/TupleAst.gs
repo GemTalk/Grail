@@ -95,16 +95,38 @@ category: 'Grail-other'
 method: TupleAst
 printSmalltalkOn: aStream
 
+	| hasStar |
 	elts isEmpty ifTrue: [
 		aStream nextPutAll: '(tuple perform: #new env: 0)'.
 		^self.
 	].
-	aStream nextPutAll: '(tuple perform: #withAll: env: 0 withArguments: {{'.
-	elts doWithIndex: [:each :i |
-		i > 1 ifTrue: [aStream nextPutAll: '. '].
-		each printSmalltalkOn: aStream.
+	hasStar := elts anySatisfy: [:each | each isKindOf: StarredAst].
+	hasStar ifFalse: [
+		aStream nextPutAll: '(tuple perform: #withAll: env: 0 withArguments: {{'.
+		elts doWithIndex: [:each :i |
+			i > 1 ifTrue: [aStream nextPutAll: '. '].
+			each printSmalltalkOn: aStream.
+		].
+		aStream nextPutAll: '}})'.
+		^ self.
 	].
-	aStream nextPutAll: '}})'.
+	"Splat path: ``(a, *b, c)'' → concatenate run-arrays around each
+	starred expression's asArray, then wrap as a tuple."
+	aStream nextPutAll: '(tuple perform: #withAll: env: 0 withArguments: {(({}'.
+	elts do: [:each |
+		aStream nextPutAll: ' @env0:, '.
+		(each isKindOf: StarredAst)
+			ifTrue: [
+				aStream nextPut: $(.
+				each value printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPutAll: ' @env0:asArray)'.
+			] ifFalse: [
+				aStream nextPutAll: '{ '.
+				each printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPutAll: '. }'.
+			].
+	].
+	aStream nextPutAll: ')})'.
 %
 
 category: 'Grail-other'

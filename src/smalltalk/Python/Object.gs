@@ -274,6 +274,91 @@ ___pyAnd___: alternativeBlock
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
+___unboundMethodClosure___: aSym
+	"Return a 2-arg closure that runs ``self''-class env-1 method
+	`aSym' on the first positional argument, with the remaining
+	positionals as call args.  Python's ``Cls.method'' descriptor
+	read — used by ___pyAttrLoad___ when the receiver is a class
+	and `aSym' resolves to an instance method on that class.
+
+	Critically dispatches the EXACT method compiled on ``self''
+	(captured here) — not the MRO-resolved method on the first arg's
+	class — so ``tuple.__repr__(self)'' inside ``_GroupTuple.__repr__''
+	does not infinitely re-enter the subclass override.  Uses
+	``performMethod:'' primitives (env 0) to bypass the normal
+	dispatch chain.  Falls back to ``perform:'' for arity > 4 — those
+	can't reach the same dispatch primitives but also never recurse
+	through the override (caller-class method is invoked explicitly)."
+
+	| definingClass |
+	definingClass := self.
+	"Block uses no ``^'' (would return from this method's activation,
+	which is gone by the time the closure runs).  Result is the
+	value of whichever branch evaluates last."
+	^ [:___positional___ :___kwargs___ |
+		| instance method nargs s sym varargsMethod |
+		instance := ___positional___ @env0:at: 1.
+		nargs := ___positional___ @env0:size @env0:- 1.
+		s := aSym @env0:asString.
+		sym := nargs @env0:= 0
+			@env0:ifTrue: [aSym]
+			@env0:ifFalse: [
+				| stream i |
+				stream := WriteStream @env0:on: String @env0:new.
+				stream @env0:nextPutAll: s.
+				stream @env0:nextPut: $:.
+				i := 1.
+				[i @env0:< nargs] @env0:whileTrue: [
+					stream @env0:nextPutAll: '_:'. i := i @env0:+ 1].
+				stream @env0:contents @env0:asSymbol].
+		method := definingClass @env0:compiledMethodAt: sym
+			environmentId: 1 otherwise: nil.
+		method @env0:isNil
+			@env0:ifTrue: [
+				"Fall back to the varargs form ``_<name>:kw:''."
+				varargsMethod := definingClass @env0:compiledMethodAt:
+						('_' @env0:, s @env0:, ':kw:') @env0:asSymbol
+					environmentId: 1 otherwise: nil.
+				varargsMethod @env0:isNil
+					@env0:ifTrue: [
+						AttributeError @env1:___signal___:
+							definingClass @env0:name @env0:asString @env0:,
+							' has no attribute ''' @env0:, s @env0:, '''']
+					@env0:ifFalse: [
+						instance
+							@env0:with: (___positional___ @env0:copyFrom: 2 to: ___positional___ @env0:size)
+							with: ___kwargs___
+							performMethod: varargsMethod]]
+			@env0:ifFalse: [
+				"Fixed-arity dispatch via performMethod: primitives."
+				nargs @env0:= 0 @env0:ifTrue: [
+					instance @env0:performMethod: method
+				] @env0:ifFalse: [nargs @env0:= 1 @env0:ifTrue: [
+					instance
+						@env0:with: (___positional___ @env0:at: 2)
+						performMethod: method
+				] @env0:ifFalse: [nargs @env0:= 2 @env0:ifTrue: [
+					instance
+						@env0:with: (___positional___ @env0:at: 2)
+						with: (___positional___ @env0:at: 3)
+						performMethod: method
+				] @env0:ifFalse: [nargs @env0:= 3 @env0:ifTrue: [
+					instance
+						@env0:with: (___positional___ @env0:at: 2)
+						with: (___positional___ @env0:at: 3)
+						with: (___positional___ @env0:at: 4)
+						performMethod: method
+				] @env0:ifFalse: [
+					"4+: no compatible primitive — fall back to perform:
+					which re-enters MRO.  Acceptable for now: the
+					load-bearing call (tuple.__repr__) is unary."
+					instance @env0:perform: sym env: 1
+						withArguments: (___positional___ @env0:copyFrom: 2 to: ___positional___ @env0:size)
+				]]]]]]
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
 ___pyAttrLoad___: aSym
 	"Python ``obj.attr`` load semantics, dispatching at runtime.
 	The presence of an ``attr:`` keyword method is ambiguous: on a
@@ -485,13 +570,38 @@ ___pyAttrLoad___: aSym
 	from an IdentityKeyValueDictionary instance) must be picked up
 	here — otherwise the bare ``perform:`` fallback below runs the
 	method instead of wrapping it, and downstream ``value:value:``
-	tries to invoke the *result* rather than the method."
+	tries to invoke the *result* rather than the method.
+
+	For a class receiver this picks up @classmethod selectors on the
+	metaclass (``Cls.classmeth()'' returns a bound class method),
+	taking precedence over the unbound-instance-method branch below."
 	((self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
 		or: [(self @env0:class @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil
 			or: [(self @env0:class @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil
 				or: [(self @env0:class @env0:whichClassIncludesSelector: sym3 environmentId: 1) notNil
 					or: [(self @env0:class @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil]]]])
 		ifTrue: [^ BoundMethod @env1:receiver: self selector: aSym].
+	"Unbound class-method lookup: ``Cls.method'' where ``method'' is
+	an instance method defined on Cls itself (env 1).  Python returns
+	a function that, when called with ``(instance, args...)'', runs
+	``method'' with ``instance'' as self — the descriptor protocol's
+	__get__ on a function.  Routes through a closure that dispatches
+	the EXACT method compiled on this class via ``performMethod:''
+	primitives (bypassing MRO).
+
+	Load-bearing for the jinja2 idiom ``tuple.__repr__(self)'' in
+	``_GroupTuple.__repr__'' (skip NamedTuple's auto repr and use
+	plain tuple's) — without this branch the call falls through to
+	AttributeError."
+	((self @env0:isKindOf: Behavior)
+		and: [(self @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
+			or: [(self @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil
+				or: [(self @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil
+					or: [(self @env0:whichClassIncludesSelector: sym3 environmentId: 1) notNil
+						or: [(self @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil]]]]])
+		ifTrue: [
+			^ self ___unboundMethodClosure___: aSym
+		].
 	"dynInstVars probe — walks the class chain to honor Python's
 	attribute inheritance.  Two receiver kinds:
 	  * Class receiver (B is a class) — walk B → B's superClass → ...

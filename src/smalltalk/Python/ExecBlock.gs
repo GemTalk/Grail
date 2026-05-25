@@ -27,6 +27,31 @@ __call__: args
 	^ self @env0:valueWithArguments: args
 %
 
+category: 'Grail-Callable'
+method: ExecBlock
+___pyCallValue___: positional kw: kwargs
+	"Polymorphic Python call.  A Smalltalk block stored as a Python
+	callable comes in two shapes:
+
+	  (1) A block produced by Grail's CallAst.printKeywordsDictOn:
+	      pattern — ``[:positional2 :keywords2 | <body>]'' that
+	      takes two args (the positional array and the kwargs dict).
+	      Decorator factories like ``functools.lru_cache(N)'' return
+	      this shape so a subsequent decorator invocation ``deco(fn)''
+	      can route uniformly through ``___pyCallValue___:kw:''.
+	  (2) A bare block whose arity matches ``positional size''.
+
+	Dispatch on numArgs to pick the right shape: when the block
+	takes exactly 2 args, forward as (positional, kwargs);
+	otherwise splat ``positional'' via ``valueWithArguments:''.
+	Kwargs are dropped in case (2) — the call shape doesn't carry
+	them."
+
+	^ self @env0:numArgs == 2
+		@env0:ifTrue: [self @env0:value: positional value: kwargs]
+		@env0:ifFalse: [self @env0:valueWithArguments: positional]
+%
+
 category: 'Grail-Block Evaluation'
 method: ExecBlock
 value

@@ -64,14 +64,38 @@ category: 'Grail-other'
 method: ListAst
 printSmalltalkOn: aStream
 
+	| hasStar |
 	elts isEmpty ifTrue: [
 		aStream nextPutAll: '(OrderedCollection perform: #new env: 0)'.
 		^self.
 	].
-	aStream nextPutAll: '({'.
-	elts doWithIndex: [:each :i |
-		i > 1 ifTrue: [aStream nextPutAll: '. '].
-		each printSmalltalkOn: aStream.
+	hasStar := elts anySatisfy: [:each | each isKindOf: StarredAst].
+	hasStar ifFalse: [
+		aStream nextPutAll: '({'.
+		elts doWithIndex: [:each :i |
+			i > 1 ifTrue: [aStream nextPutAll: '. '].
+			each printSmalltalkOn: aStream.
+		].
+		aStream nextPutAll: '} perform: #asOrderedCollection env: 0)'.
+		^ self.
 	].
-	aStream nextPutAll: '} perform: #asOrderedCollection env: 0)'.
+	"Splat path: ``[a, *b, c]'' → concatenate run-arrays around each
+	starred expression's asArray.  Same shape as
+	CallAst>>printArgumentsArrayOn: — keeps the empty-seed Array so
+	the result is always parenthesised."
+	aStream nextPutAll: '(({}'.
+	elts do: [:each |
+		aStream nextPutAll: ' @env0:, '.
+		(each isKindOf: StarredAst)
+			ifTrue: [
+				aStream nextPut: $(.
+				each value printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPutAll: ' @env0:asArray)'.
+			] ifFalse: [
+				aStream nextPutAll: '{ '.
+				each printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPutAll: '. }'.
+			].
+	].
+	aStream nextPutAll: ') perform: #asOrderedCollection env: 0)'.
 %

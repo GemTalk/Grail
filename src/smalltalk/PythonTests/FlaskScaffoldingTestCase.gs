@@ -3687,6 +3687,224 @@ testJinja2RenderUsesDebugBuiltin
 	self assert: result equals: 'HELLO'
 %
 
+! --- Jinja2 @pass_X-decorated filters (module-level decorator support) ---
+
+category: 'Grail-Tests - Jinja2 render'
+method: FlaskScaffoldingTestCase
+testJinja2RenderFirstFilter
+	"|first calls sync_do_first, which is @pass_environment-decorated.
+	Grail used to drop module-level decorators, so jinja2's
+	Context.call didn''t inject the environment argument and the
+	function received only ``seq'' (raising MNU _sync_do_first:kw:
+	or TypeError missing argument).  Fix: FunctionDefAst applies a
+	narrow whitelist of attribute-only decorators (pass_environment,
+	pass_eval_context, pass_context) at module body time, calling
+	the decorator on the BoundMethod so f.jinja_pass_arg is set."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:jinja2_render_first_filter.
+	self assert: result equals: '10'
+%
+
+category: 'Grail-Tests - Jinja2 render'
+method: FlaskScaffoldingTestCase
+testJinja2RenderJoinFilter
+	"|join exercises @pass_eval_context — same fix as |first."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:jinja2_render_join_filter.
+	self assert: result equals: '10-20-30'
+%
+
+category: 'Grail-Tests - Jinja2 render'
+method: FlaskScaffoldingTestCase
+testJinja2RenderSortFilter
+	"|sort exercises @pass_environment — same fix as |first."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:jinja2_render_sort_filter.
+	self assert: result equals: '[10, 20, 30]'
+%
+
+category: 'Grail-Tests - Jinja2 render'
+method: FlaskScaffoldingTestCase
+testJinja2RenderSumFilter
+	"|sum builtin needs ``sum(iterable, start=0)'' two-positional /
+	kwarg form so the @pass_environment dispatch can pass through."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:jinja2_render_sum_filter.
+	self assert: result equals: '60'
+%
+
+category: 'Grail-Tests - Jinja2 render'
+method: FlaskScaffoldingTestCase
+testJinja2RenderMinFilter
+	"|min needs (a) varargs ``_min:kw:'' builtin and (b) ExecBlock
+	___pyCallValue___:kw: so jinja2's make_attrgetter closure is
+	callable from _min_or_max."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:jinja2_render_min_filter.
+	self assert: result equals: '10'
+%
+
+category: 'Grail-Tests - Jinja2 render'
+method: FlaskScaffoldingTestCase
+testJinja2RenderMaxFilter
+	"|max — symmetric to |min."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:jinja2_render_max_filter.
+	self assert: result equals: '30'
+%
+
+category: 'Grail-Tests - Jinja2 render'
+method: FlaskScaffoldingTestCase
+testJinja2RenderMapFilter
+	"|map needs StarredAst inside ListAst:
+	``args = [value, *(args if args is not None else ())]''.  Pre-
+	fix, ListAst.printSmalltalkOn: didn''t recognise StarredAst
+	elements and the codegen fell through to the runtime stub
+	(TypeError ``*-unpack in call sites is not yet supported'')."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:jinja2_render_map_filter.
+	self assert: result equals: '[''10'', ''20'', ''30'']'
+%
+
+category: 'Grail-Tests - Jinja2 render'
+method: FlaskScaffoldingTestCase
+testJinja2RenderRejectFilter
+	"|reject exercises the same ListAst-with-Starred splat path."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:jinja2_render_reject_filter.
+	self assert: result equals: '[10, 20, 30]'
+%
+
+category: 'Grail-Tests - Jinja2 render'
+method: FlaskScaffoldingTestCase
+testJinja2RenderRoundFilter
+	"|round on a Float must yield a Float — Grail used to render
+	``1.234|round(2)'' as the Fraction ''123/100'' because the 2-arg
+	round divided two Integers.  Fixed by coercing the multiplier to
+	Float when the input is a Float."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:jinja2_render_round_filter.
+	self assert: result equals: '1.23'
+%
+
+! --- Jinja2 macros (PythonInstance __call__ dispatch fix) -----------------
+
+category: 'Grail-Tests - Jinja2 render'
+method: FlaskScaffoldingTestCase
+testJinja2RenderMacroBasic
+	"{% macro %} renders by allocating a jinja2.runtime.Macro
+	instance and dispatching via Context.call → PythonInstance>>
+	value:value:.  Pre-fix, value:value: looked up the varargs
+	selector as ``___call___:kw:'' (3 trailing underscores) but the
+	BoundMethod convention emits ``___call__:kw:'' (2 trailing
+	underscores: ``_'' prefix + ``__call__'' itself), so the
+	lookup missed and the call fell through to a bare ``__call__''
+	unary that DNU'd."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:jinja2_render_macro_basic.
+	self assert: result equals: 'hi world'
+%
+
+category: 'Grail-Tests - Jinja2 render'
+method: FlaskScaffoldingTestCase
+testJinja2RenderMacroInLoop
+	"Invoking a macro from inside a {% for %} loop — exercises the
+	__call__ dispatch on every iteration."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:jinja2_render_macro_in_loop.
+	self assert: result equals: 'hi a;hi b;hi c;'
+%
+
+! --- Jinja2 {% block %} (CallAst.func paren-wrap for SubscriptAst) -------
+
+category: 'Grail-Tests - Jinja2 render'
+method: FlaskScaffoldingTestCase
+testJinja2RenderBlockBasic
+	"{% block %} compiles to ``yield from
+	context.blocks['hdr'][0](context)'' — a SubscriptAst-of-
+	SubscriptAst applied as a function.  Pre-fix CallAst only
+	parenthesised AttributeAst functions, so the trailing
+	``value:value:'' fused with the inner ``__getitem__:'' into
+	one 3-keyword selector ``__getitem__:value:value:'', which
+	OrderedCollection didn't understand → MNU nil."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:jinja2_render_block_basic.
+	self assert: result equals: 'body'
+%
+
+category: 'Grail-Tests - Jinja2 render'
+method: FlaskScaffoldingTestCase
+testJinja2RenderTwoBlocks
+	"Two adjacent blocks — same SubscriptAst-call path twice."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:jinja2_render_two_blocks.
+	self assert: result equals: 'A|B'
+%
+
+! --- Jinja2 |groupby + unbound-class-method (Cls.method(self)) -----------
+
+category: 'Grail-Tests - Jinja2 render'
+method: FlaskScaffoldingTestCase
+testJinja2RenderGroupbyFilter
+	"|groupby was blocked behind the Python ``tuple.__repr__(self)''
+	descriptor-read idiom inside jinja2's _GroupTuple.__repr__.
+	Unblocked by (1) Object>>___pyAttrLoad___ recognising
+	unbound-class-method reads (return a closure that dispatches the
+	EXACT method compiled on the class via performMethod:); (2)
+	rewriting _GroupTuple.__repr__ in filters.py to build the tuple
+	repr explicitly instead of routing through tuple.__repr__'s env-1
+	do:separatedBy:."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:jinja2_render_groupby_filter.
+	self assert: result equals:
+		'[(25, [{''name'': ''Carol'', ''age'': 25}]), (30, [{''name'': ''Bob'', ''age'': 30}, {''name'': ''Alice'', ''age'': 30}])]'
+%
+
+category: 'Grail-Tests - Jinja2 render'
+method: FlaskScaffoldingTestCase
+testUnboundClassMethodBypassesMRO
+	"Direct test of the unbound-class-method descriptor read:
+	``A.name(b)'' must call A's name, not B's, even though b is
+	a B (and B overrides name).  Without performMethod: bypass,
+	the BoundMethod dispatch path would re-enter the subclass
+	override and recurse infinitely (or just return the wrong
+	value)."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:unbound_class_method_basic.
+	self assert: (result @env1:__getitem__: 0) equals: 'B'.
+	self assert: (result @env1:__getitem__: 1) equals: 'A'
+%
+
 ! --- Jinja2 if-block render (current blocker) -----------------------------
 
 category: 'Grail-Tests - Jinja2 render'

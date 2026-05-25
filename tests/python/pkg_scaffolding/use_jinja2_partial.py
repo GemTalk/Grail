@@ -871,6 +871,214 @@ def jinja2_render_debug_builtin():
     return tmpl.render(name='hello')
 
 
+def jinja2_render_first_filter():
+    # ``{{ items|first }}'' was blocked behind the @pass_environment
+    # module-level decorator gap.  jinja2's sync_do_first signature is
+    # ``(environment, seq)'' with @pass_environment tagging it for
+    # Context.call to inject the environment.  Grail dropped module-
+    # level decorators on the floor, so the dispatch sent the unwrapped
+    # sync_do_first which then expected (env, seq) but received only
+    # the seq — raised TypeError ``missing required argument: seq''
+    # (or worse, MNU _sync_do_first:kw:).  Fix: FunctionDefAst now
+    # applies the narrow @pass_X whitelist
+    # (pass_environment / pass_eval_context / pass_context) at module
+    # body time, calling the decorator to mutate the BoundMethod's
+    # jinja_pass_arg attribute and storing the tagged BoundMethod in
+    # the module's dynamic instVar slot.
+    import jinja2
+    env = jinja2.Environment()
+    tmpl = env.from_string('{{ items|first }}')
+    return tmpl.render(items=[10, 20, 30])
+
+
+def jinja2_render_join_filter():
+    # ``{{ items|join("-") }}'' depends on @pass_eval_context for
+    # sync_do_join — same fix path as |first.
+    import jinja2
+    env = jinja2.Environment()
+    tmpl = env.from_string('{{ items|join("-") }}')
+    return tmpl.render(items=[10, 20, 30])
+
+
+def jinja2_render_sort_filter():
+    # ``{{ items|sort }}'' depends on @pass_environment for sync_do_sort
+    # (used for case-sensitive comparisons).  Same fix path as |first.
+    import jinja2
+    env = jinja2.Environment()
+    tmpl = env.from_string('{{ items|sort }}')
+    return tmpl.render(items=[30, 10, 20])
+
+
+def jinja2_render_sum_filter():
+    # ``{{ items|sum }}'' was blocked by missing ``sum(iterable,
+    # start=0)'' two-positional / kwarg form in builtins.gs.  Added
+    # ``sum: anIterable _: start'' and ``_sum: positional kw: kwargs''
+    # entries so the @pass_environment dispatch routes correctly.
+    import jinja2
+    env = jinja2.Environment()
+    tmpl = env.from_string('{{ items|sum }}')
+    return tmpl.render(items=[10, 20, 30])
+
+
+def jinja2_render_min_filter():
+    # ``{{ items|min }}'' required (1) varargs ``_min:kw:''
+    # builtin accepting ``key=...'' / ``default=...''; (2) ExecBlock
+    # ___pyCallValue___:kw: so the closure key_func returned by
+    # jinja2's make_attrgetter is callable.  Without (2), the call
+    # chain inside ``_min_or_max'' raised TypeError(''ExecBlock
+    # object is not callable'').
+    import jinja2
+    env = jinja2.Environment()
+    tmpl = env.from_string('{{ items|min }}')
+    return tmpl.render(items=[30, 10, 20])
+
+
+def jinja2_render_max_filter():
+    # ``{{ items|max }}'' — symmetric counterpart to |min.
+    import jinja2
+    env = jinja2.Environment()
+    tmpl = env.from_string('{{ items|max }}')
+    return tmpl.render(items=[10, 30, 20])
+
+
+def jinja2_render_map_filter():
+    # ``{{ items|map("string")|list }}'' — jinja2's
+    # Environment._filter_test_common does ``args = [value, *(args
+    # if args is not None else ())]'' to prepend the filtered value
+    # to the user-supplied tail.  StarredAst inside a list literal
+    # used to emit a runtime TypeError (``*-unpack in call sites is
+    # not yet supported'') because ListAst>>printSmalltalkOn:
+    # didn't recognise StarredAst elements.  Fix: ListAst and
+    # TupleAst now mirror CallAst's splat path (build a brace-array
+    # run, concatenate via ``@env0:,'' around each starred
+    # expression's asArray, materialise as OrderedCollection /
+    # tuple).
+    import jinja2
+    env = jinja2.Environment()
+    tmpl = env.from_string('{{ items|map("string")|list }}')
+    return tmpl.render(items=[10, 20, 30])
+
+
+def jinja2_render_reject_filter():
+    # ``{{ items|reject("odd")|list }}'' exercises the same
+    # ListAst-with-Starred splat path.  prepare_select_or_reject
+    # routes through _filter_test_common which does the
+    # ``[value, *args]'' splat.
+    import jinja2
+    env = jinja2.Environment()
+    tmpl = env.from_string('{{ items|reject("odd")|list }}')
+    return tmpl.render(items=[10, 20, 30])
+
+
+def jinja2_render_macro_basic():
+    # ``{% macro greet(name) %}hi {{ name }}{% endmacro %}{{ greet("world") }}''
+    # — a macro is a callable instance of jinja2.runtime.Macro.
+    # Context.call invokes the macro via ``obj(args...)'' which lands
+    # in PythonInstance>>value:value:, which then tries to dispatch
+    # the varargs ``__call__'' selector.  Before fix that selector
+    # was ``___call___:kw:'' (3 trailing underscores) instead of
+    # ``___call__:kw:'' (2 trailing underscores) — the canonical
+    # BoundMethod varargs convention is ``_'' + ``__call__'' +
+    # ``:kw:'' = ``___call__:kw:''.  Off-by-one underscore.
+    import jinja2
+    env = jinja2.Environment()
+    tmpl = env.from_string('{% macro greet(name) %}hi {{ name }}{% endmacro %}{{ greet("world") }}')
+    return tmpl.render()
+
+
+def jinja2_render_macro_in_loop():
+    # Re-invoke a macro from inside a {% for %} loop — exercises the
+    # __call__ dispatch on every iteration.
+    import jinja2
+    env = jinja2.Environment()
+    tmpl = env.from_string('{% macro greet(n) %}hi {{ n }};{% endmacro %}{% for n in items %}{{ greet(n) }}{% endfor %}')
+    return tmpl.render(items=['a', 'b', 'c'])
+
+
+def jinja2_render_block_basic():
+    # {% block %} renders by emitting ``yield from
+    # context.blocks['hdr'][0](context)'' in the root function.
+    # That's three keyword sends stacked: __getitem__('hdr'),
+    # __getitem__(0), then value:value:.  Pre-fix CallAst only
+    # parenthesised the function expression when it was an
+    # AttributeAst — SubscriptAst (the [...] case) was emitted
+    # bare, so Smalltalk fused the trailing ``__getitem__: 0
+    # value: { ctx } value: nil'' into a single 3-keyword
+    # selector ``__getitem__:value:value:''.  Now CallAst
+    # parenthesises any function expression that isn't a plain
+    # NameAst.
+    import jinja2
+    env = jinja2.Environment()
+    tmpl = env.from_string('{% block hdr %}body{% endblock %}')
+    return tmpl.render()
+
+
+def jinja2_render_two_blocks():
+    # Two adjacent blocks — same SubscriptAst-call path twice.
+    import jinja2
+    env = jinja2.Environment()
+    tmpl = env.from_string('{% block x %}A{% endblock %}|{% block y %}B{% endblock %}')
+    return tmpl.render()
+
+
+def jinja2_render_groupby_filter():
+    # |groupby builds _GroupTuple items (a NamedTuple subclass).  Pre-
+    # fix, _GroupTuple's __repr__ called ``tuple.__repr__(self)'' —
+    # the unbound-method-on-class idiom that Grail's ___pyAttrLoad___
+    # didn't handle for class receivers.  ``tuple.__repr__'' would
+    # fall through to a no-arg BoundMethod that DNU'd on
+    # ``tuple class >> ___repr__:kw:''.  Two-part fix:
+    #
+    # (1) Object>>___pyAttrLoad___ adds an unbound-class-method
+    #     branch: when the receiver is a class and the attribute is
+    #     an env-1 method defined on that class, return a closure
+    #     that splats the first positional as ``self'' and
+    #     dispatches the EXACT method via ``performMethod:''
+    #     primitives (bypassing MRO so subclass overrides don't
+    #     re-enter).
+    # (2) jinja2/filters.py _GroupTuple.__repr__ rewritten to build
+    #     the tuple repr explicitly instead of routing through
+    #     tuple.__repr__'s env-1 ``do:separatedBy:'' (which DNU's
+    #     when self is a NamedTuple subclass — separate issue).
+    import jinja2
+    env = jinja2.Environment()
+    tmpl = env.from_string('{{ people|groupby("age")|list }}')
+    return tmpl.render(people=[
+        {'name': 'Alice', 'age': 30},
+        {'name': 'Bob', 'age': 30},
+        {'name': 'Carol', 'age': 25},
+    ])
+
+
+def unbound_class_method_basic():
+    # Direct exercise of ``Cls.method(instance)'' — the descriptor
+    # protocol's __get__ on a function.  Picks the EXACT method
+    # compiled on ``Cls'' rather than MRO-dispatching on the
+    # instance's class, so subclass overrides don't re-enter.
+    class A:
+        def name(self):
+            return 'A'
+    class B(A):
+        def name(self):
+            return 'B'
+    b = B()
+    return (b.name(), A.name(b))
+
+
+def jinja2_render_round_filter():
+    # ``{{ 1.234|round(2) }}'' must render '1.23' — a Float, not the
+    # Fraction ``123/100''.  Smalltalk's ``Integer / Integer'' returns
+    # a Fraction, and Grail's old _round:kw: divided the rounded
+    # ``(value * multiplier)'' by an Integer multiplier.  Fix: when
+    # the input is a Float, coerce the divisor to Float so the
+    # result preserves the input numeric type, matching CPython's
+    # ``round(1.234, 2) -> 1.23''.
+    import jinja2
+    env = jinja2.Environment()
+    tmpl = env.from_string('{{ value|round(2) }}')
+    return tmpl.render(value=1.234)
+
+
 def jinja2_match_groupdict_named_capture():
     # Regression for the M4 lexer chain: ``re`` matches with named
     # captures used to fail in ``Match.groupdict()`` because the C

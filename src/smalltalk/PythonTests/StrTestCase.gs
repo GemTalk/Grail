@@ -860,6 +860,95 @@ testStripWithChars
 
 category: 'Grail-String Methods'
 method: StrTestCase
+testFormatBasic
+	"str.format() — auto-indexed and explicit-indexed positional fields."
+
+	self assert: ('{} world' perform: #'_format:kw:' env: 1
+		withArguments: { #('hello'). nil }) equals: 'hello world'.
+	self assert: ('{0} {1} {0}' perform: #'_format:kw:' env: 1
+		withArguments: { #('a' 'b'). nil }) equals: 'a b a'
+%
+
+category: 'Grail-String Methods'
+method: StrTestCase
+testFormatSpec
+	"str.format() with [fill]align[width] spec subset.  Right-/left-/
+	center-alignment, default and explicit fill character."
+
+	self assert: ('{:>4}' perform: #'_format:kw:' env: 1
+		withArguments: { #(42). nil }) equals: '  42'.
+	self assert: ('{:<4}' perform: #'_format:kw:' env: 1
+		withArguments: { #(42). nil }) equals: '42  '.
+	self assert: ('{:^5}' perform: #'_format:kw:' env: 1
+		withArguments: { #('hi'). nil }) equals: ' hi  '.
+	self assert: ('{0:*>5}' perform: #'_format:kw:' env: 1
+		withArguments: { #(42). nil }) equals: '***42'
+%
+
+category: 'Grail-String Methods'
+method: StrTestCase
+testFormatKeyword
+	"str.format() with keyword fields."
+
+	| kw |
+	kw := KeyValueDictionary new.
+	kw at: 'name' put: 'Alice'.
+	self assert: ('Hello, {name}!' perform: #'_format:kw:' env: 1
+		withArguments: { #(). kw }) equals: 'Hello, Alice!'
+%
+
+category: 'Grail-String Methods'
+method: StrTestCase
+testFormatConversion
+	"str.format() with !r conversion flag — applies __repr__."
+
+	self assert: ('{0}={1!r}' perform: #'_format:kw:' env: 1
+		withArguments: { #('x' 'y'). nil }) equals: 'x=''y'''
+%
+
+category: 'Grail-String Methods'
+method: StrTestCase
+testFormatBraceEscapes
+	"``{{'' / ``}}'' are literal-brace escapes in str.format().  No
+	field substitution should run when both braces are doubled —
+	common idiom for emitting JSON-like literals from format strings."
+
+	self assert: ('{{}}' perform: #'_format:kw:' env: 1
+		withArguments: { #(). nil }) equals: '{}'.
+	self assert: ('{{{0}}}' perform: #'_format:kw:' env: 1
+		withArguments: { #('x'). nil }) equals: '{x}'.
+	self assert: ('a {{ b }} c' perform: #'_format:kw:' env: 1
+		withArguments: { #(). nil }) equals: 'a { b } c'
+%
+
+category: 'Grail-String Methods'
+method: StrTestCase
+testFormatNoArgs
+	"format() unary form on a literal with no placeholders is a
+	no-op that returns self.  Doubled-brace escapes still collapse."
+
+	self assert: 'plain text' @env1:format equals: 'plain text'.
+	self assert: '' @env1:format equals: ''.
+	self assert: '{{escaped}}' @env1:format equals: '{escaped}'
+%
+
+category: 'Grail-String Methods'
+method: StrTestCase
+testIntFormatSpec
+	"``int.__format__'' direct invocation — empty spec returns
+	__str__, non-empty spec routes through the shared
+	[fill][<|>|^][width] helper.  Covers the integer-input path
+	independent of str.format's field-parsing."
+
+	self assert: (42 @env1:__format__: '') equals: '42'.
+	self assert: (42 @env1:__format__: '>4') equals: '  42'.
+	self assert: (42 @env1:__format__: '<4') equals: '42  '.
+	self assert: (7 @env1:__format__: '*>3') equals: '**7'.
+	self assert: (5 @env1:__format__: '^5') equals: '  5  '
+%
+
+category: 'Grail-String Methods'
+method: StrTestCase
 testSwapcase
 	"Test swapcase() method"
 

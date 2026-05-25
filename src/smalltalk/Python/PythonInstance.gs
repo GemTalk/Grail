@@ -123,7 +123,7 @@ value: positional value: kwargs
 
 	Dispatch shape mirrors ``BoundMethod >> value:value:``: pick
 	the fixed-arity ``__call__:_:_:`` selector for 0..3 positional
-	args with no kwargs; otherwise fall through to ``___call___:kw:``
+	args with no kwargs; otherwise fall through to ``___call__:kw:``
 	varargs if present.  Raises a TypeError-shaped DNU if the
 	class doesn't implement ``__call__`` at all."
 
@@ -143,7 +143,11 @@ value: positional value: kwargs
 			^ self @env0:perform: callSel env: 1 withArguments: positional
 		].
 	].
-	varargsSel := #'___call___:kw:'.
+	"Three underscore prefix from BoundMethod's ``'_' , '__call__'
+	, ':kw:''' convention: 1 (underscore) + 2 (__call__'s leading
+	underscores) = 3 leading underscores; trailing underscores
+	unchanged."
+	varargsSel := #'___call__:kw:'.
 	((cls @env0:whichClassIncludesSelector: varargsSel environmentId: 1) notNil) ifTrue: [
 		^ self @env0:perform: varargsSel env: 1 withArguments: { positional. kwargs }
 	].

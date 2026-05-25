@@ -436,6 +436,68 @@ max: a _: b
 	^ (a __gt__: b) ifTrue: [a] ifFalse: [b]
 %
 
+category: 'Grail-Built-in Functions'
+method: builtins
+_min: positional kw: kwargs
+	"Python ``min(iterable, *, key=None, default=...)'' varargs form.
+	Single positional → reduce iterable; multiple positionals →
+	pick smallest by ``key'' (if given) or natural comparison.
+	``default'' only consulted when iterable is empty."
+
+	^ self @env1:___minOrMax___: positional kw: kwargs lessThan: true
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+_max: positional kw: kwargs
+	"Python ``max(iterable, *, key=None, default=...)'' varargs form."
+
+	^ self @env1:___minOrMax___: positional kw: kwargs lessThan: false
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___minOrMax___: positional kw: kwargs lessThan: pickSmaller
+	"Shared helper for the varargs forms of min and max."
+
+	| iterable keyFn default iter best done bestKey hasDefault gotAny |
+	keyFn := (kwargs @env0:notNil and: [kwargs @env0:includesKey: 'key'])
+		@env0:ifTrue: [kwargs @env0:at: 'key']
+		@env0:ifFalse: [nil].
+	hasDefault := kwargs @env0:notNil and: [kwargs @env0:includesKey: 'default'].
+	default := hasDefault @env0:ifTrue: [kwargs @env0:at: 'default'] @env0:ifFalse: [nil].
+	iterable := (positional @env0:size) @env0:= 1
+		@env0:ifTrue: [positional @env0:at: 1]
+		@env0:ifFalse: [positional].
+	iter := iterable @env1:__iter__.
+	gotAny := false.
+	done := false.
+	best := nil.
+	bestKey := nil.
+	[done] @env0:whileFalse: [
+		[
+			| item itemKey isBetter |
+			item := iter @env1:__next__.
+			itemKey := keyFn @env0:isNil @env0:ifTrue: [item] @env0:ifFalse: [
+				keyFn @env1:___pyCallValue___: { item } kw: nil].
+			gotAny @env0:ifFalse: [
+				best := item.
+				bestKey := itemKey.
+				gotAny := true
+			] @env0:ifTrue: [
+				isBetter := pickSmaller
+					@env0:ifTrue: [itemKey @env1:__lt__: bestKey]
+					@env0:ifFalse: [itemKey @env1:__gt__: bestKey].
+				isBetter @env0:ifTrue: [best := item. bestKey := itemKey]
+			]
+		] @env0:on: StopIteration do: [:ex | done := true]
+	].
+	gotAny @env0:ifFalse: [
+		hasDefault @env0:ifTrue: [^ default].
+		ValueError ___signal___: 'arg is an empty sequence'].
+	^ best
+%
+
 category: 'Python-Built-in Functions'
 method: builtins
 min: anIterable
@@ -644,8 +706,16 @@ method: builtins
 sum: anIterable
 	"Python builtin sum(iterable) — fixed-arity fast path."
 
+	^ self @env1:sum: anIterable _: 0
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+sum: anIterable _: start
+	"Python ``sum(iterable, start=0)'' two-positional form."
+
 	| iter total done |
-	total := 0.
+	total := start.
 	iter := anIterable __iter__.
 	done := false.
 	[done] @env0:whileFalse: [
@@ -656,6 +726,23 @@ sum: anIterable
 		] @env0:on: StopIteration do: [:ex | done := true]
 	].
 	^ total
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+_sum: positional kw: kwargs
+	"Python ``sum(iterable, /, start=0)'' varargs form — covers the
+	keyword call ``sum(items, start=0)'' used by jinja2's
+	sync_do_sum once the @pass_environment shim injects environment."
+
+	| iterable start |
+	iterable := positional @env0:at: 1.
+	start := positional @env0:size >= 2
+		ifTrue: [positional @env0:at: 2]
+		ifFalse: [(kwargs notNil and: [kwargs includesKey: 'start'])
+			ifTrue: [kwargs at: 'start']
+			ifFalse: [0]].
+	^ self @env1:sum: iterable _: start
 %
 
 category: 'Grail-Built-in Functions'
@@ -1000,7 +1087,15 @@ _round: positional kw: kwargs
 		].
 	ndigits ifNil: [^ number @env0:rounded].
 	multiplier := 10 @env0:raisedTo: ndigits.
-	^ ((number @env0:* multiplier) @env0:rounded) @env0:/ multiplier
+	"Match CPython: ``round(1.234, 2)'' returns the Float 1.23.
+	Smalltalk's ``Integer / Integer'' returns a Fraction, so divide
+	by the Float form of the multiplier when the input is a Float."
+	^ (number @env0:isKindOf: Float)
+		@env0:ifTrue: [
+			((number @env0:* multiplier) @env0:rounded @env0:asFloat)
+				@env0:/ multiplier @env0:asFloat]
+		@env0:ifFalse: [
+			((number @env0:* multiplier) @env0:rounded) @env0:/ multiplier]
 %
 
 category: 'Grail-Built-in Functions'
