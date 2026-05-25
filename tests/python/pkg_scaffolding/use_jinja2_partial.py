@@ -843,6 +843,23 @@ def jinja2_render_trim_filter():
     return tmpl.render(name='  hello  ')
 
 
+def jinja2_render_list_filter():
+    # ``{{ items|list }}'' renders a list to its repr.  The filter
+    # dispatch table mapped ``"list": do_list'' to the @async_variant
+    # wrapper around ``sync_do_list''; Grail's module-level decorator
+    # gap leaves @async_variant inert, so the dispatch bound the
+    # async coroutine instead of the sync function.  Calling it
+    # tunneled through ``auto_to_list'' / ``_IteratorToAsyncIterator''
+    # and crashed inside the async-iterator scaffolding with
+    # ``UndefinedObject does not understand nil''.  Fix: point the
+    # filter table entries for filters with an @async_variant pair
+    # at the underlying ``sync_do_X'' instead of the async wrapper.
+    import jinja2
+    env = jinja2.Environment()
+    tmpl = env.from_string('{{ items|list }}')
+    return tmpl.render(items=[10, 20, 30])
+
+
 def jinja2_render_debug_builtin():
     # jinja2/runtime.py's ``Context.call`` opens with ``if __debug__:''.
     # Grail had no __debug__ builtin so any attribute-call path through

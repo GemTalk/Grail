@@ -3653,6 +3653,24 @@ testJinja2RenderTrimFilter
 	self assert: result equals: 'hello'
 %
 
+! --- Jinja2 |list filter (async-variant unwrap) --------------------------
+
+category: 'Grail-Tests - Jinja2 render'
+method: FlaskScaffoldingTestCase
+testJinja2RenderListFilter
+	"|list filter was bound to the async coroutine wrapper rather
+	than ``sync_do_list'' because @async_variant is a module-level
+	decorator that Grail drops on the floor.  The async wrapper
+	tunneled through ``auto_to_list'' / ``_IteratorToAsyncIterator''
+	and crashed inside async scaffolding.  Fix: dispatch table now
+	points at sync_do_X directly for the dozen @async_variant pairs."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:jinja2_render_list_filter.
+	self assert: result equals: '[10, 20, 30]'
+%
+
 ! --- Jinja2 __debug__ builtin ---------------------------------------------
 
 category: 'Grail-Tests - Jinja2 render'
