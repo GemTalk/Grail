@@ -2591,6 +2591,189 @@ testTimedeltaArithmetic
 	self assert: (result @env1:__getitem__: 1) equals: 15.0
 %
 
+! --- datetime.date class -------------------------------------------------
+
+category: 'Grail-Tests - datetime date'
+method: FlaskScaffoldingTestCase
+testDateConstructor
+	"datetime.date(2024, 5, 18) — three-positional constructor."
+
+	| mod result fields |
+	mod := self loadFixture: 'use_datetime'.
+	result := mod @env1:make_date.
+	fields := mod @env1:date_fields: result.
+	self assert: (fields @env1:__getitem__: 0) equals: 2024.
+	self assert: (fields @env1:__getitem__: 1) equals: 5.
+	self assert: (fields @env1:__getitem__: 2) equals: 18
+%
+
+category: 'Grail-Tests - datetime date'
+method: FlaskScaffoldingTestCase
+testDateIsoformat
+	"date.isoformat() → 'YYYY-MM-DD' zero-padded."
+
+	| mod result |
+	mod := self loadFixture: 'use_datetime'.
+	result := mod @env1:date_isoformat: (mod @env1:make_date).
+	self assert: result equals: '2024-05-18'
+%
+
+category: 'Grail-Tests - datetime date'
+method: FlaskScaffoldingTestCase
+testDateToday
+	"datetime.date.today() returns a date in the current era."
+
+	| mod result |
+	mod := self loadFixture: 'use_datetime'.
+	result := mod @env1:date_today_is_recent.
+	self assert: result equals: true
+%
+
+category: 'Grail-Tests - datetime date'
+method: FlaskScaffoldingTestCase
+testDateFromIso
+	"date.fromisoformat parses 'YYYY-MM-DD'."
+
+	| mod result |
+	mod := self loadFixture: 'use_datetime'.
+	result := mod @env1:date_iso_roundtrip.
+	self assert: result equals: '2024-05-18'
+%
+
+category: 'Grail-Tests - datetime date'
+method: FlaskScaffoldingTestCase
+testDateWeekday
+	"date.weekday() — Monday=0..Sunday=6.  2024-05-18 was Saturday."
+
+	| mod d |
+	mod := self loadFixture: 'use_datetime'.
+	d := mod @env1:make_date.
+	self assert: (mod @env1:date_weekday: d) equals: 5.
+	self assert: (mod @env1:date_isoweekday: d) equals: 6
+%
+
+category: 'Grail-Tests - datetime date'
+method: FlaskScaffoldingTestCase
+testDateToordinal
+	"Proleptic Gregorian ordinal: 0001-01-01 = 1.  Round-trips via
+	fromordinal."
+
+	| mod d |
+	mod := self loadFixture: 'use_datetime'.
+	d := mod @env1:make_date.
+	self assert: (mod @env1:date_toordinal: d) equals: 739024.
+	self assert: (mod @env1:date_fromordinal_roundtrip: d)
+		equals: '2024-05-18'
+%
+
+category: 'Grail-Tests - datetime date'
+method: FlaskScaffoldingTestCase
+testDatePlusTimedelta
+	"date + timedelta(days=N) → date."
+
+	| mod result |
+	mod := self loadFixture: 'use_datetime'.
+	result := mod @env1:date_plus_timedelta.
+	self assert: result equals: '2024-01-11'
+%
+
+category: 'Grail-Tests - datetime date'
+method: FlaskScaffoldingTestCase
+testDateMinusDate
+	"date - date → timedelta whose ``days'' is the integer
+	difference."
+
+	| mod result |
+	mod := self loadFixture: 'use_datetime'.
+	result := mod @env1:date_minus_date.
+	self assert: result equals: 10
+%
+
+category: 'Grail-Tests - datetime date'
+method: FlaskScaffoldingTestCase
+testDateEquality
+	"==, <, > on dates use ordinal comparison."
+
+	| mod result |
+	mod := self loadFixture: 'use_datetime'.
+	result := mod @env1:date_equality.
+	self assert: (result @env1:__getitem__: 0) equals: true.
+	self assert: (result @env1:__getitem__: 1) equals: false.
+	self assert: (result @env1:__getitem__: 2) equals: true.
+	self assert: (result @env1:__getitem__: 3) equals: true
+%
+
+category: 'Grail-Tests - datetime date'
+method: FlaskScaffoldingTestCase
+testDateReplace
+	"date.replace(year=...) returns a fresh date with the override."
+
+	| mod result |
+	mod := self loadFixture: 'use_datetime'.
+	result := mod @env1:date_replace.
+	self assert: result equals: '2025-05-18'
+%
+
+! --- datetime.time class -------------------------------------------------
+
+category: 'Grail-Tests - datetime time'
+method: FlaskScaffoldingTestCase
+testTimeConstructor
+	"datetime.time(12, 30, 45) — accessors return the components."
+
+	| mod t fields |
+	mod := self loadFixture: 'use_datetime'.
+	t := mod @env1:make_time.
+	fields := mod @env1:time_fields: t.
+	self assert: (fields @env1:__getitem__: 0) equals: 12.
+	self assert: (fields @env1:__getitem__: 1) equals: 30.
+	self assert: (fields @env1:__getitem__: 2) equals: 45.
+	self assert: (fields @env1:__getitem__: 3) equals: 0
+%
+
+category: 'Grail-Tests - datetime time'
+method: FlaskScaffoldingTestCase
+testTimeIsoformat
+	"time.isoformat() → 'HH:MM:SS', adds '.ffffff' when microseconds
+	are non-zero."
+
+	| mod |
+	mod := self loadFixture: 'use_datetime'.
+	self assert: (mod @env1:time_isoformat: (mod @env1:make_time))
+		equals: '12:30:45'.
+	self assert: mod @env1:time_with_micros
+		equals: '12:30:45.123456'
+%
+
+category: 'Grail-Tests - datetime time'
+method: FlaskScaffoldingTestCase
+testTimeFromIso
+	"time.fromisoformat parses 'HH:MM', 'HH:MM:SS', and the
+	fractional-seconds form."
+
+	| mod |
+	mod := self loadFixture: 'use_datetime'.
+	self assert: (mod @env1:time_from_iso: '12:30') equals: '12:30:00'.
+	self assert: (mod @env1:time_from_iso: '12:30:45')
+		equals: '12:30:45'.
+	self assert: (mod @env1:time_from_iso: '12:30:45.123456')
+		equals: '12:30:45.123456'
+%
+
+category: 'Grail-Tests - datetime time'
+method: FlaskScaffoldingTestCase
+testTimeEquality
+	"time == time compares all four components; cross-type
+	comparisons return false."
+
+	| mod result |
+	mod := self loadFixture: 'use_datetime'.
+	result := mod @env1:time_equality.
+	self assert: (result @env1:__getitem__: 0) equals: true.
+	self assert: (result @env1:__getitem__: 1) equals: false.
+	self assert: (result @env1:__getitem__: 2) equals: false
+%
+
 ! --- ipaddress module -----------------------------------------------------
 
 category: 'Grail-Tests - ipaddress'

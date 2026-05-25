@@ -81,3 +81,104 @@ def timedelta_arithmetic():
     a = datetime.timedelta(seconds=30)
     b = datetime.timedelta(seconds=15)
     return (a + b).total_seconds(), (a - b).total_seconds()
+
+
+# ---------------------------------------------------------------------------
+# date class
+
+def make_date():
+    return datetime.date(2024, 5, 18)
+
+
+def date_fields(d):
+    return (d.year, d.month, d.day)
+
+
+def date_isoformat(d):
+    return d.isoformat()
+
+
+def date_today_is_recent():
+    today = datetime.date.today()
+    return today.year > 2020 and today.year < 2100
+
+
+def date_from_iso(s):
+    return datetime.date.fromisoformat(s)
+
+
+def date_iso_roundtrip():
+    s = "2024-05-18"
+    return datetime.date.fromisoformat(s).isoformat()
+
+
+def date_weekday(d):
+    # Python convention: Monday=0..Sunday=6.  2024-05-18 was Saturday.
+    return d.weekday()
+
+
+def date_isoweekday(d):
+    # ISO 8601: Monday=1..Sunday=7.
+    return d.isoweekday()
+
+
+def date_toordinal(d):
+    # Proleptic Gregorian ordinal; 0001-01-01 is day 1.
+    return d.toordinal()
+
+
+def date_fromordinal_roundtrip(d):
+    return datetime.date.fromordinal(d.toordinal()).isoformat()
+
+
+def date_plus_timedelta():
+    d = datetime.date(2024, 1, 1)
+    return (d + datetime.timedelta(days=10)).isoformat()
+
+
+def date_minus_date():
+    a = datetime.date(2024, 1, 11)
+    b = datetime.date(2024, 1, 1)
+    return (a - b).days
+
+
+def date_equality():
+    a = datetime.date(2024, 5, 18)
+    b = datetime.date(2024, 5, 18)
+    c = datetime.date(2024, 5, 19)
+    return (a == b, a == c, a < c, c > a)
+
+
+def date_replace():
+    d = datetime.date(2024, 5, 18)
+    return d.replace(year=2025).isoformat()
+
+
+# ---------------------------------------------------------------------------
+# time class
+
+def make_time():
+    return datetime.time(12, 30, 45)
+
+
+def time_fields(t):
+    return (t.hour, t.minute, t.second, t.microsecond)
+
+
+def time_isoformat(t):
+    return t.isoformat()
+
+
+def time_with_micros():
+    return datetime.time(12, 30, 45, 123456).isoformat()
+
+
+def time_from_iso(s):
+    return datetime.time.fromisoformat(s).isoformat()
+
+
+def time_equality():
+    a = datetime.time(12, 30)
+    b = datetime.time(12, 30, 0, 0)
+    c = datetime.time(13, 0)
+    return (a == b, a == c, a == 'string')

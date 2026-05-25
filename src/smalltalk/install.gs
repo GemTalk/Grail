@@ -271,7 +271,9 @@ run
 	at: #'IPv4Address' put: nil;
 	at: #'IPv4Network' put: nil;
 	at: #'datetime' put: nil;
+	at: #'PyDate' put: nil;
 	at: #'PyDateTime' put: nil;
+	at: #'PyTime' put: nil;
 	at: #'PyTimedelta' put: nil;
 	at: #'PyTimezone' put: nil;
 	at: #'json' put: nil;

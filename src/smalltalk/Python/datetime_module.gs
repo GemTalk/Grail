@@ -944,6 +944,573 @@ ___dayOfYear___
 set compile_env: 0
 
 ! ===============================================================================
+! PyDate - Python `datetime.date`.  Naive year/month/day with no time
+! component.  Backed by GemStone's Date for weekday / ordinal arithmetic.
+! ===============================================================================
+
+expectvalue /Class
+doit
+Object subclass: 'PyDate'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+PyDate category: 'Grail-Modules'
+%
+
+expectvalue /Metaclass3
+doit
+PyDate removeAllMethods: 0.
+PyDate removeAllMethods: 1.
+PyDate class removeAllMethods: 0.
+PyDate class removeAllMethods: 1.
+%
+
+set compile_env: 0
+
+category: 'Grail-Introspection'
+classmethod: PyDate
+___pythonValueAttrs___
+	^ IdentitySet new
+		add: #year;
+		add: #month;
+		add: #day;
+		yourself
+%
+
+category: 'Grail-Private'
+classmethod: PyDate
+___fromFields___: y _: m _: d
+	| inst |
+	inst := self @env0:new.
+	inst @env0:_year: y _month: m _day: d.
+	^ inst
+%
+
+category: 'Grail-Private'
+method: PyDate
+_year: y _month: m _day: d
+	self @env0:dynamicInstVarAt: #_year put: y.
+	self @env0:dynamicInstVarAt: #_month put: m.
+	self @env0:dynamicInstVarAt: #_day put: d.
+	^ self
+%
+
+set compile_env: 1
+
+! ------- Constructors
+
+category: 'Grail-Callable'
+classmethod: PyDate
+value: positional value: kwargs
+	"date(year, month, day) — three positionals required."
+
+	| y m d |
+	y := positional @env0:at: 1.
+	m := positional @env0:at: 2.
+	d := positional @env0:at: 3.
+	kwargs @env0:isNil ifFalse: [
+		y := kwargs @env0:at: 'year' ifAbsent: [y].
+		m := kwargs @env0:at: 'month' ifAbsent: [m].
+		d := kwargs @env0:at: 'day' ifAbsent: [d]].
+	^ self @env0:___fromFields___: y _: m _: d
+%
+
+category: 'Grail-Initialization'
+classmethod: PyDate
+today
+	"Local-time date of today."
+
+	| d |
+	d := Date @env0:today.
+	^ self @env0:___fromFields___:
+		d @env0:year _: d @env0:monthIndex _: d @env0:dayOfMonth
+%
+
+category: 'Grail-Initialization'
+classmethod: PyDate
+fromisoformat: s
+	"date.fromisoformat('YYYY-MM-DD')."
+
+	| y m d |
+	(s @env0:size) @env0:= 10 @env0:ifFalse: [
+		ValueError ___signal___: 'Invalid isoformat string: ''' @env0:, s @env0:, ''''].
+	y := (s @env0:copyFrom: 1 to: 4) @env0:asNumber.
+	m := (s @env0:copyFrom: 6 to: 7) @env0:asNumber.
+	d := (s @env0:copyFrom: 9 to: 10) @env0:asNumber.
+	^ self @env0:___fromFields___: y _: m _: d
+%
+
+category: 'Grail-Initialization'
+classmethod: PyDate
+fromordinal: ordinal
+	"Proleptic Gregorian ordinal: 0001-01-01 is day 1.  Build via
+	GemStone Date arithmetic from the 0001-01-01 anchor."
+
+	| epoch result |
+	epoch := Date @env0:newDay: 1 monthNumber: 1 year: 1.
+	result := epoch @env0:addDays: (ordinal @env0:- 1).
+	^ self @env0:___fromFields___:
+		result @env0:year
+		_: result @env0:monthIndex
+		_: result @env0:dayOfMonth
+%
+
+category: 'Grail-Initialization'
+classmethod: PyDate
+fromtimestamp: ts
+	"Local-time date from POSIX timestamp."
+
+	| epoch dt d |
+	epoch := DateTime @env0:newGmtWithYear: 1970 month: 1 day: 1 hours: 0 minutes: 0 seconds: 0.
+	dt := epoch @env0:+ (Duration @env0:fromSeconds: ts).
+	d := dt @env0:asDate.
+	^ self @env0:___fromFields___:
+		d @env0:year _: d @env0:monthIndex _: d @env0:dayOfMonth
+%
+
+! ------- Accessors
+
+category: 'Grail-Accessors'
+method: PyDate
+year
+	^ self @env0:dynamicInstVarAt: #_year
+%
+
+category: 'Grail-Accessors'
+method: PyDate
+month
+	^ self @env0:dynamicInstVarAt: #_month
+%
+
+category: 'Grail-Accessors'
+method: PyDate
+day
+	^ self @env0:dynamicInstVarAt: #_day
+%
+
+! ------- ISO / string
+
+category: 'Grail-Conversion'
+method: PyDate
+isoformat
+	"'YYYY-MM-DD' zero-padded."
+
+	^ (self @env0:___pad___: (self @env0:dynamicInstVarAt: #_year) width: 4) @env0:,
+		'-' @env0:,
+		(self @env0:___pad___: (self @env0:dynamicInstVarAt: #_month) width: 2) @env0:,
+		'-' @env0:,
+		(self @env0:___pad___: (self @env0:dynamicInstVarAt: #_day) width: 2)
+%
+
+category: 'Grail-Conversion'
+method: PyDate
+__str__
+	^ self @env1:isoformat
+%
+
+category: 'Grail-Conversion'
+method: PyDate
+__repr__
+	^ 'datetime.date(' @env0:,
+		(self @env0:dynamicInstVarAt: #_year) @env0:printString @env0:, ', ' @env0:,
+		(self @env0:dynamicInstVarAt: #_month) @env0:printString @env0:, ', ' @env0:,
+		(self @env0:dynamicInstVarAt: #_day) @env0:printString @env0:, ')'
+%
+
+! ------- Ordinal / weekday helpers
+
+category: 'Grail-Accessors'
+method: PyDate
+toordinal
+	"Proleptic Gregorian ordinal: 0001-01-01 is day 1.  GemStone's
+	Date asDays uses a different epoch (asDays of 0001-01-01 is
+	-693960), so anchor the Python ordinal by subtracting the
+	GemStone-side asDays for 0001-01-01."
+
+	| epochAsDays |
+	epochAsDays := -693960.
+	^ (self @env0:___asDate___) @env0:asDays @env0:- epochAsDays @env0:+ 1
+%
+
+category: 'Grail-Accessors'
+method: PyDate
+weekday
+	"Python convention: Monday=0..Sunday=6."
+
+	| dow |
+	dow := (self @env0:___asDate___) @env0:dayOfWeek.
+	^ dow @env0:= 1 ifTrue: [6] ifFalse: [dow @env0:- 2]
+%
+
+category: 'Grail-Accessors'
+method: PyDate
+isoweekday
+	"ISO 8601: Monday=1..Sunday=7."
+
+	^ (self @env1:weekday) @env0:+ 1
+%
+
+set compile_env: 0
+
+category: 'Grail-Private'
+method: PyDate
+___pad___: n width: w
+	| s |
+	s := n @env0:printString.
+	[s @env0:size @env0:< w] @env0:whileTrue: [s := '0' @env0:, s].
+	^ s
+%
+
+category: 'Grail-Private'
+method: PyDate
+___asDate___
+	"Materialise a GemStone Date for weekday / ordinal arithmetic."
+
+	^ Date
+		@env0:newDay: (self @env0:dynamicInstVarAt: #_day)
+		monthNumber: (self @env0:dynamicInstVarAt: #_month)
+		year: (self @env0:dynamicInstVarAt: #_year)
+%
+
+set compile_env: 1
+
+! ------- Replace + arithmetic
+
+category: 'Grail-Mutation'
+method: PyDate
+_replace: positional kw: kwargs
+	"date.replace(year=..., month=..., day=...)."
+
+	| y m d |
+	y := (self @env0:dynamicInstVarAt: #_year).
+	m := (self @env0:dynamicInstVarAt: #_month).
+	d := (self @env0:dynamicInstVarAt: #_day).
+	kwargs @env0:isNil ifFalse: [
+		y := kwargs @env0:at: 'year' ifAbsent: [y].
+		m := kwargs @env0:at: 'month' ifAbsent: [m].
+		d := kwargs @env0:at: 'day' ifAbsent: [d]].
+	^ PyDate @env0:___fromFields___: y _: m _: d
+%
+
+category: 'Grail-Arithmetic'
+method: PyDate
+__add__: other
+	"date + timedelta → date (days component only)."
+
+	| days newOrdinal |
+	(other @env0:isKindOf: PyTimedelta) ifFalse: [
+		TypeError ___signal___: 'unsupported operand type(s) for +: ''date'' and non-timedelta'].
+	days := other @env1:days.
+	newOrdinal := (self @env1:toordinal) @env0:+ days.
+	^ PyDate @env1:fromordinal: newOrdinal
+%
+
+category: 'Grail-Arithmetic'
+method: PyDate
+__sub__: other
+	"date - timedelta → date; date - date → timedelta."
+
+	(other @env0:isKindOf: PyTimedelta) ifTrue: [
+		| neg |
+		neg := other @env1:__neg__.
+		^ self @env1:__add__: neg].
+	(other @env0:isKindOf: PyDate) ifTrue: [
+		| diff |
+		diff := (self @env1:toordinal) @env0:- (other @env1:toordinal).
+		^ PyTimedelta @env0:___fromTotalMicros___:
+			diff @env0:* 86400 @env0:* 1000000].
+	TypeError ___signal___: 'unsupported operand type(s) for -: ''date'''
+%
+
+! ------- Equality / hashing
+
+category: 'Grail-Equality'
+method: PyDate
+__eq__: other
+	(other @env0:isKindOf: PyDate) ifFalse: [^ false].
+	^ (self @env1:toordinal) @env0:= (other @env1:toordinal)
+%
+
+category: 'Grail-Equality'
+method: PyDate
+__lt__: other
+	(other @env0:isKindOf: PyDate) ifFalse: [
+		TypeError ___signal___: 'can''t compare date to non-date'].
+	^ (self @env1:toordinal) @env0:< (other @env1:toordinal)
+%
+
+category: 'Grail-Equality'
+method: PyDate
+__le__: other
+	(other @env0:isKindOf: PyDate) ifFalse: [
+		TypeError ___signal___: 'can''t compare date to non-date'].
+	^ (self @env1:toordinal) @env0:<= (other @env1:toordinal)
+%
+
+category: 'Grail-Equality'
+method: PyDate
+__gt__: other
+	(other @env0:isKindOf: PyDate) ifFalse: [
+		TypeError ___signal___: 'can''t compare date to non-date'].
+	^ (self @env1:toordinal) @env0:> (other @env1:toordinal)
+%
+
+category: 'Grail-Equality'
+method: PyDate
+__ge__: other
+	(other @env0:isKindOf: PyDate) ifFalse: [
+		TypeError ___signal___: 'can''t compare date to non-date'].
+	^ (self @env1:toordinal) @env0:>= (other @env1:toordinal)
+%
+
+category: 'Grail-Equality'
+method: PyDate
+__ne__: other
+	^ (self @env1:__eq__: other) @env0:not
+%
+
+category: 'Grail-Equality'
+method: PyDate
+__hash__
+	^ self @env1:toordinal
+%
+
+set compile_env: 0
+
+! ===============================================================================
+! PyTime - Python `datetime.time`.  Naive time-of-day with optional tzinfo.
+! Stored as (hour, minute, second, microsecond, tzinfo).
+! ===============================================================================
+
+expectvalue /Class
+doit
+Object subclass: 'PyTime'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+PyTime category: 'Grail-Modules'
+%
+
+expectvalue /Metaclass3
+doit
+PyTime removeAllMethods: 0.
+PyTime removeAllMethods: 1.
+PyTime class removeAllMethods: 0.
+PyTime class removeAllMethods: 1.
+%
+
+set compile_env: 0
+
+category: 'Grail-Introspection'
+classmethod: PyTime
+___pythonValueAttrs___
+	^ IdentitySet new
+		add: #hour;
+		add: #minute;
+		add: #second;
+		add: #microsecond;
+		add: #tzinfo;
+		yourself
+%
+
+category: 'Grail-Private'
+classmethod: PyTime
+___fromFields___: h _: mi _: s _: us _: tz
+	| inst |
+	inst := self @env0:new.
+	inst @env0:_hour: h _minute: mi _second: s _microsecond: us _tzinfo: tz.
+	^ inst
+%
+
+category: 'Grail-Private'
+method: PyTime
+_hour: h _minute: mi _second: s _microsecond: us _tzinfo: tz
+	self @env0:dynamicInstVarAt: #_hour put: h.
+	self @env0:dynamicInstVarAt: #_minute put: mi.
+	self @env0:dynamicInstVarAt: #_second put: s.
+	self @env0:dynamicInstVarAt: #_microsecond put: us.
+	self @env0:dynamicInstVarAt: #_tzinfo put: tz.
+	^ self
+%
+
+set compile_env: 1
+
+! ------- Constructors
+
+category: 'Grail-Callable'
+classmethod: PyTime
+value: positional value: kwargs
+	"time(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)."
+
+	| h mi s us tz |
+	h := positional @env0:size @env0:>= 1 ifTrue: [positional @env0:at: 1] ifFalse: [0].
+	mi := positional @env0:size @env0:>= 2 ifTrue: [positional @env0:at: 2] ifFalse: [0].
+	s := positional @env0:size @env0:>= 3 ifTrue: [positional @env0:at: 3] ifFalse: [0].
+	us := positional @env0:size @env0:>= 4 ifTrue: [positional @env0:at: 4] ifFalse: [0].
+	tz := positional @env0:size @env0:>= 5 ifTrue: [positional @env0:at: 5] ifFalse: [nil].
+	kwargs @env0:isNil ifFalse: [
+		h := kwargs @env0:at: 'hour' ifAbsent: [h].
+		mi := kwargs @env0:at: 'minute' ifAbsent: [mi].
+		s := kwargs @env0:at: 'second' ifAbsent: [s].
+		us := kwargs @env0:at: 'microsecond' ifAbsent: [us].
+		tz := kwargs @env0:at: 'tzinfo' ifAbsent: [tz]].
+	tz @env0:== None ifTrue: [tz := nil].
+	^ self @env0:___fromFields___: h _: mi _: s _: us _: tz
+%
+
+category: 'Grail-Initialization'
+classmethod: PyTime
+fromisoformat: s
+	"time.fromisoformat('HH:MM[:SS[.ffffff]][+HH:MM]') — simple subset.
+	Accepts 'HH:MM', 'HH:MM:SS', 'HH:MM:SS.ffffff'.  Timezone suffix
+	not yet parsed."
+
+	| size h mi sec us frac padded endIdx |
+	size := s @env0:size.
+	(size @env0:>= 5) @env0:ifFalse: [
+		ValueError ___signal___: 'Invalid isoformat string: ''' @env0:, s @env0:, ''''].
+	h := (s @env0:copyFrom: 1 to: 2) @env0:asNumber.
+	mi := (s @env0:copyFrom: 4 to: 5) @env0:asNumber.
+	sec := 0.
+	us := 0.
+	size @env0:>= 8 @env0:ifTrue: [
+		sec := (s @env0:copyFrom: 7 to: 8) @env0:asNumber.
+		size @env0:>= 10 @env0:ifTrue: [
+			"Microseconds: 1-6 fractional digits after the dot.  Truncate at 6."
+			endIdx := size @env0:min: 15.
+			frac := s @env0:copyFrom: 10 to: endIdx.
+			padded := frac.
+			[padded @env0:size @env0:< 6] @env0:whileTrue: [
+				padded := padded @env0:, '0'].
+			us := padded @env0:asNumber]].
+	^ self @env0:___fromFields___: h _: mi _: sec _: us _: nil
+%
+
+! ------- Accessors
+
+category: 'Grail-Accessors'
+method: PyTime
+hour
+	^ self @env0:dynamicInstVarAt: #_hour
+%
+
+category: 'Grail-Accessors'
+method: PyTime
+minute
+	^ self @env0:dynamicInstVarAt: #_minute
+%
+
+category: 'Grail-Accessors'
+method: PyTime
+second
+	^ self @env0:dynamicInstVarAt: #_second
+%
+
+category: 'Grail-Accessors'
+method: PyTime
+microsecond
+	^ self @env0:dynamicInstVarAt: #_microsecond
+%
+
+category: 'Grail-Accessors'
+method: PyTime
+tzinfo
+	"None when naive; the configured tzinfo otherwise."
+
+	| tz |
+	tz := self @env0:dynamicInstVarAt: #_tzinfo.
+	^ tz @env0:isNil ifTrue: [None] ifFalse: [tz]
+%
+
+! ------- ISO / string
+
+category: 'Grail-Conversion'
+method: PyTime
+isoformat
+	"'HH:MM:SS' or 'HH:MM:SS.ffffff' when microseconds are non-zero."
+
+	| us body |
+	us := self @env0:dynamicInstVarAt: #_microsecond.
+	body := (self @env0:___pad___: (self @env0:dynamicInstVarAt: #_hour) width: 2) @env0:,
+		':' @env0:,
+		(self @env0:___pad___: (self @env0:dynamicInstVarAt: #_minute) width: 2) @env0:,
+		':' @env0:,
+		(self @env0:___pad___: (self @env0:dynamicInstVarAt: #_second) width: 2).
+	us @env0:= 0 ifTrue: [^ body].
+	^ body @env0:, '.' @env0:, (self @env0:___pad___: us width: 6)
+%
+
+category: 'Grail-Conversion'
+method: PyTime
+__str__
+	^ self @env1:isoformat
+%
+
+category: 'Grail-Conversion'
+method: PyTime
+__repr__
+	| h mi s us body |
+	h := self @env0:dynamicInstVarAt: #_hour.
+	mi := self @env0:dynamicInstVarAt: #_minute.
+	s := self @env0:dynamicInstVarAt: #_second.
+	us := self @env0:dynamicInstVarAt: #_microsecond.
+	body := h @env0:printString @env0:, ', ' @env0:, mi @env0:printString.
+	(s @env0:~= 0 or: [us @env0:~= 0]) ifTrue: [
+		body := body @env0:, ', ' @env0:, s @env0:printString.
+		us @env0:~= 0 ifTrue: [body := body @env0:, ', ' @env0:, us @env0:printString]].
+	^ 'datetime.time(' @env0:, body @env0:, ')'
+%
+
+set compile_env: 0
+
+category: 'Grail-Private'
+method: PyTime
+___pad___: n width: w
+	| s |
+	s := n @env0:printString.
+	[s @env0:size @env0:< w] @env0:whileTrue: [s := '0' @env0:, s].
+	^ s
+%
+
+set compile_env: 1
+
+! ------- Equality / hashing
+
+category: 'Grail-Equality'
+method: PyTime
+__eq__: other
+	(other @env0:isKindOf: PyTime) ifFalse: [^ false].
+	^ (self @env0:dynamicInstVarAt: #_hour) @env0:= (other @env0:dynamicInstVarAt: #_hour)
+		and: [(self @env0:dynamicInstVarAt: #_minute) @env0:= (other @env0:dynamicInstVarAt: #_minute)
+		and: [(self @env0:dynamicInstVarAt: #_second) @env0:= (other @env0:dynamicInstVarAt: #_second)
+		and: [(self @env0:dynamicInstVarAt: #_microsecond) @env0:= (other @env0:dynamicInstVarAt: #_microsecond)]]]
+%
+
+category: 'Grail-Equality'
+method: PyTime
+__hash__
+	^ ((self @env0:dynamicInstVarAt: #_hour) @env0:* 3600
+		@env0:+ ((self @env0:dynamicInstVarAt: #_minute) @env0:* 60)
+		@env0:+ (self @env0:dynamicInstVarAt: #_second)) @env0:hash
+%
+
+set compile_env: 0
+
+! ===============================================================================
 ! datetime module - exposes the three classes + constants
 ! ===============================================================================
 
@@ -963,14 +1530,17 @@ doit
 datetime comment:
 'Python datetime module - date/time arithmetic.
 
-Provides timedelta / datetime / timezone (skipping standalone date /
-time / tzinfo for now - itsdangerous, Werkzeug, Flask use the
-combined datetime form throughout).  Smalltalk-backed; arithmetic
-goes through PyTimedelta normalized integer microseconds.
+Provides date / time / datetime / timedelta / timezone.  Smalltalk-
+backed; arithmetic goes through PyTimedelta normalized integer
+microseconds.  tzinfo is the canonical abstract base; concrete
+subclasses (PyTimezone) provide ``utcoffset(dt)'' / ``tzname(dt)''
+/ ``dst(dt)''.
 
 Common access:
   datetime.datetime.now(datetime.timezone.utc)
   datetime.datetime.fromisoformat(s)
+  datetime.date.today()
+  datetime.time(12, 30)
   datetime.timedelta(seconds=N)
   datetime.timezone.utc
 '
@@ -998,6 +1568,8 @@ ___pythonValueAttrs___
 	resolves the class then calls __new__ on it."
 
 	^ IdentitySet new
+		add: #date;
+		add: #time;
 		add: #datetime;
 		add: #timedelta;
 		add: #timezone;
@@ -1011,6 +1583,18 @@ set compile_env: 1
 category: 'Grail-Initialization'
 method: datetime
 initialize
+%
+
+category: 'Grail-Accessors'
+method: datetime
+date
+	^ PyDate
+%
+
+category: 'Grail-Accessors'
+method: datetime
+time
+	^ PyTime
 %
 
 category: 'Grail-Accessors'
