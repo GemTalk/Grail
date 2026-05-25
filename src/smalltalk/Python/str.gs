@@ -1139,6 +1139,48 @@ strip
 
 category: 'Grail-String Methods'
 method: CharacterCollection
+strip: chars
+	"Return a copy with the characters in `chars' stripped from both
+	ends.  None / nil means whitespace, matching Python's str.strip().
+	Empty string strips nothing."
+
+	(chars @env0:== nil or: [chars @env0:== None])
+		ifTrue: [^ self @env0:trimBoth].
+	^ (self @env0:___lstripChars___: chars) @env0:___rstripChars___: chars
+%
+
+set compile_env: 0
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___lstripChars___: chars
+	"Helper: strip leading occurrences of any character in `chars'."
+
+	| size i |
+	size := self size.
+	i := 1.
+	[i <= size and: [chars includes: (self at: i)]] whileTrue: [
+		i := i + 1].
+	^ i = 1 ifTrue: [self] ifFalse: [self copyFrom: i to: size]
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___rstripChars___: chars
+	"Helper: strip trailing occurrences of any character in `chars'."
+
+	| size i |
+	size := self size.
+	i := size.
+	[i >= 1 and: [chars includes: (self at: i)]] whileTrue: [
+		i := i - 1].
+	^ i = size ifTrue: [self] ifFalse: [self copyFrom: 1 to: i]
+%
+
+set compile_env: 1
+
+category: 'Grail-String Methods'
+method: CharacterCollection
 swapcase
 	"Return a copy with uppercase characters converted to lowercase and vice versa."
 

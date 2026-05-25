@@ -3616,6 +3616,59 @@ testJinja2RenderTemplateWithStringLiteral
 	self assert: result equals: 'hi!'
 %
 
+! --- Jinja2 binop render (factory-assigned visit method) -----------------
+
+category: 'Grail-Tests - Jinja2 render'
+method: FlaskScaffoldingTestCase
+testJinja2RenderBinopAdd
+	"Pre-fix, every BinOp/UnaryOp visitor was assigned at class scope
+	via ``visit_Add = _make_binop(''+'')''.  Grail does not apply the
+	descriptor protocol when an ExecBlock is stored as a class
+	attribute, so ``self.visit_Add(node, frame)'' invoked the inner
+	closure with ``(node, frame)'' — losing the bound ``self'' and
+	raising TypeError(''missing required argument: frame'').  Fixed
+	by expanding each binding to an explicit method body in
+	jinja2/compiler.py that delegates to a shared helper."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:jinja2_render_binop_add.
+	self assert: result equals: '6'
+%
+
+! --- Jinja2 trim filter (str.strip(chars)) -------------------------------
+
+category: 'Grail-Tests - Jinja2 render'
+method: FlaskScaffoldingTestCase
+testJinja2RenderTrimFilter
+	"|trim filter routes through soft_str(value).strip(chars) with
+	chars=None.  CharacterCollection had only the no-arg ``strip'';
+	the one-arg form ``strip:'' was missing.  Added ``strip: chars''
+	(env-1) that delegates to ___lstripChars___/___rstripChars___
+	helpers (env-0) for non-None chars; None falls back to trimBoth."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:jinja2_render_trim_filter.
+	self assert: result equals: 'hello'
+%
+
+! --- Jinja2 __debug__ builtin ---------------------------------------------
+
+category: 'Grail-Tests - Jinja2 render'
+method: FlaskScaffoldingTestCase
+testJinja2RenderUsesDebugBuiltin
+	"jinja2.runtime.Context.call opens with ``if __debug__:'' so any
+	attribute-call routed through Context.call raised NameError(name
+	''__debug__'' is not defined).  Fixed by binding __debug__ to
+	True in Grail's builtin globals (install.gs)."
+
+	| mod result |
+	mod := self loadFixture: 'use_jinja2_partial'.
+	result := mod @env1:jinja2_render_debug_builtin.
+	self assert: result equals: 'HELLO'
+%
+
 ! --- Jinja2 if-block render (current blocker) -----------------------------
 
 category: 'Grail-Tests - Jinja2 render'

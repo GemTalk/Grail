@@ -845,6 +845,21 @@ testStrip
 
 category: 'Grail-String Methods'
 method: StrTestCase
+testStripWithChars
+	"str.strip(chars) strips any character in chars from both ends.
+	None means whitespace (matches str.strip()).  Required by jinja2's
+	|trim filter which calls .strip(chars) with chars=None as the
+	@pass_eval_context default."
+
+	self assert: ('xxhelloxx' @env1:strip: 'x') equals: 'hello'.
+	self assert: ('  hi  ' @env1:strip: None) equals: 'hi'.
+	self assert: ('++--abc++' @env1:strip: '+-') equals: 'abc'.
+	self assert: ('hello' @env1:strip: '') equals: 'hello'.
+	self assert: ('aaa' @env1:strip: 'a') equals: ''
+%
+
+category: 'Grail-String Methods'
+method: StrTestCase
 testSwapcase
 	"Test swapcase() method"
 

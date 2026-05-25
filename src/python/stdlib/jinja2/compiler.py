@@ -1734,18 +1734,87 @@ class CodeGenerator(NodeVisitor):
             self.visit(item.value, frame)
         self.write("}")
 
-    visit_Add = _make_binop("+")
-    visit_Sub = _make_binop("-")
-    visit_Mul = _make_binop("*")
-    visit_Div = _make_binop("/")
-    visit_FloorDiv = _make_binop("//")
-    visit_Pow = _make_binop("**")
-    visit_Mod = _make_binop("%")
-    visit_And = _make_binop("and")
-    visit_Or = _make_binop("or")
-    visit_Pos = _make_unop("+")
-    visit_Neg = _make_unop("-")
-    visit_Not = _make_unop("not ")
+    # Upstream uses ``visit_Add = _make_binop("+")`` etc. to assign a
+    # factory-built function as a class attribute.  Grail's class-attr
+    # access doesn't apply the descriptor protocol to ExecBlocks stored
+    # on a class, so the inner ``self`` argument is never bound.
+    # Expand each binding to an explicit method that delegates to the
+    # corresponding helper.
+    def _emit_binop(self, op, node, frame):
+        if (
+            self.environment.sandboxed
+            and op in self.environment.intercepted_binops
+        ):
+            self.write(f"environment.call_binop(context, {op!r}, ")
+            self.visit(node.left, frame)
+            self.write(", ")
+            self.visit(node.right, frame)
+        else:
+            self.write("(")
+            self.visit(node.left, frame)
+            self.write(f" {op} ")
+            self.visit(node.right, frame)
+        self.write(")")
+
+    def _emit_unop(self, op, node, frame):
+        if (
+            self.environment.sandboxed
+            and op in self.environment.intercepted_unops
+        ):
+            self.write(f"environment.call_unop(context, {op!r}, ")
+            self.visit(node.node, frame)
+        else:
+            self.write("(" + op)
+            self.visit(node.node, frame)
+        self.write(")")
+
+    @optimizeconst
+    def visit_Add(self, node, frame):
+        self._emit_binop("+", node, frame)
+
+    @optimizeconst
+    def visit_Sub(self, node, frame):
+        self._emit_binop("-", node, frame)
+
+    @optimizeconst
+    def visit_Mul(self, node, frame):
+        self._emit_binop("*", node, frame)
+
+    @optimizeconst
+    def visit_Div(self, node, frame):
+        self._emit_binop("/", node, frame)
+
+    @optimizeconst
+    def visit_FloorDiv(self, node, frame):
+        self._emit_binop("//", node, frame)
+
+    @optimizeconst
+    def visit_Pow(self, node, frame):
+        self._emit_binop("**", node, frame)
+
+    @optimizeconst
+    def visit_Mod(self, node, frame):
+        self._emit_binop("%", node, frame)
+
+    @optimizeconst
+    def visit_And(self, node, frame):
+        self._emit_binop("and", node, frame)
+
+    @optimizeconst
+    def visit_Or(self, node, frame):
+        self._emit_binop("or", node, frame)
+
+    @optimizeconst
+    def visit_Pos(self, node, frame):
+        self._emit_unop("+", node, frame)
+
+    @optimizeconst
+    def visit_Neg(self, node, frame):
+        self._emit_unop("-", node, frame)
+
+    @optimizeconst
+    def visit_Not(self, node, frame):
+        self._emit_unop("not ", node, frame)
 
     @optimizeconst
     def visit_Concat(self, node: nodes.Concat, frame: Frame) -> None:

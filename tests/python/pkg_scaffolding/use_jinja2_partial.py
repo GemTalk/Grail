@@ -818,6 +818,42 @@ def jinja2_render_template_with_string_literal():
     return tmpl.render(name='hi')
 
 
+def jinja2_render_binop_add():
+    # ``{{ x + 1 }}'' with x=5 → '6'.  Exercises the visit_Add path in
+    # jinja2's CodeGenerator.  Upstream used the
+    # ``visit_Add = _make_binop("+")`` factory-assigned shortcut,
+    # which Grail's class-attribute access doesn't descriptor-bind to
+    # the instance — the inner ``(self, node, frame)'' closure received
+    # ``(node, frame)'' instead and raised TypeError("missing required
+    # argument: frame").  Patched compiler.py to emit each visit_BinOp
+    # / visit_UnaryOp as an explicit method body.
+    import jinja2
+    env = jinja2.Environment()
+    tmpl = env.from_string('{{ x + 1 }}')
+    return tmpl.render(x=5)
+
+
+def jinja2_render_trim_filter():
+    # ``{{ name|trim }}'' strips surrounding whitespace; jinja2's
+    # do_trim calls soft_str(value).strip(chars) with chars=None.
+    # Required str.strip(chars=None) — added to CharacterCollection.
+    import jinja2
+    env = jinja2.Environment()
+    tmpl = env.from_string('{{ name|trim }}')
+    return tmpl.render(name='  hello  ')
+
+
+def jinja2_render_debug_builtin():
+    # jinja2/runtime.py's ``Context.call`` opens with ``if __debug__:''.
+    # Grail had no __debug__ builtin so any attribute-call path through
+    # Context.call raised NameError.  Added __debug__ = true in
+    # install.gs's builtin globals.
+    import jinja2
+    env = jinja2.Environment()
+    tmpl = env.from_string('{{ name.upper() }}')
+    return tmpl.render(name='hello')
+
+
 def jinja2_match_groupdict_named_capture():
     # Regression for the M4 lexer chain: ``re`` matches with named
     # captures used to fail in ``Match.groupdict()`` because the C

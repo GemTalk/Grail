@@ -625,6 +625,7 @@ run
   "Python names that map to existing GemStone globals"
 	at: #'True'                       put: true;
 	at: #'False'                      put: false;
+	at: #'__debug__'                  put: true;
   "Python names that map to existing GemStone classes"
 	at: #'bool'                       put: Boolean;
 	at: #'builtin_function_or_method' put: GsNMethod;
