@@ -189,6 +189,9 @@ class deque:
     def __iter__(self):
         return iter(self._items)
 
+    def __reversed__(self):
+        return iter(list(reversed(self._items)))
+
     def __getitem__(self, i):
         return self._items[i]
 
@@ -255,18 +258,32 @@ def namedtuple(typename, field_names):
                 result[self._fields[i]] = self._values[i]
             return result
 
+        @classmethod
+        def _make(cls, iterable):
+            """Build a new instance from any iterable of the right
+            length.  CPython's namedtuple exposes this as a class
+            method that takes a sequence.  Splats the values back
+            through __init__ so we don't have to round-trip through
+            the unbound ``cls.__new__(cls)'' descriptor read."""
+            values = list(iterable)
+            if len(values) != len(cls._fields):
+                raise TypeError(
+                    cls._typename + '._make expected ' + str(len(cls._fields))
+                    + ' values, got ' + str(len(values))
+                )
+            return cls(*values)
+
         def _replace(self, **kwargs):
             values = list(self._values)
             for k in kwargs:
                 values[self._fields.index(k)] = kwargs[k]
-            # Build the new instance via `type(self).__new__(...)`
-            # so the class reference comes from the live instance
-            # rather than a free name (Grail can't lift nested-class
-            # names into the enclosing function's symbol table).
+            # Re-instantiate via the regular constructor (splats the
+            # updated values back through __init__).  Using ``cls(*values)''
+            # rather than ``cls.__new__(cls)'' avoids the unbound
+            # descriptor-read path that Grail handles differently for
+            # cls.__new__ on a Python user class.
             cls = type(self)
-            new = cls.__new__(cls)
-            new._values = values
-            return new
+            return cls(*values)
 
         def __repr__(self):
             parts = []
@@ -281,10 +298,14 @@ class Counter(dict):
     """Dict subclass for counting hashable objects.  Missing keys
     return 0 instead of raising KeyError."""
 
-    def __init__(self, iterable=None):
+    def __init__(self, *args, **kwargs):
         super().__init__()
-        if iterable is not None:
-            self.update(iterable)
+        if args:
+            iterable = args[0]
+            if iterable is not None:
+                self.update(iterable)
+        if kwargs:
+            self.update(kwargs)
 
     def __missing__(self, key):
         return 0
@@ -301,6 +322,17 @@ class Counter(dict):
         else:
             for item in iterable:
                 self[item] = self[item] + 1
+
+    def subtract(self, iterable):
+        """Subtract counts from an iterable / mapping.  Both inputs and
+        outputs may be zero or negative — unlike ``__sub__`` which
+        drops non-positive counts."""
+        if isinstance(iterable, dict):
+            for k in iterable:
+                self[k] = self[k] - iterable[k]
+        else:
+            for item in iterable:
+                self[item] = self[item] - 1
 
     def most_common(self, n=None):
         # list.sort(key=...) varargs is missing in Grail; do a simple
@@ -333,6 +365,59 @@ class Counter(dict):
         for k in self:
             for _ in range(self[k]):
                 result.append(k)
+        return result
+
+    # Arithmetic operators — Counter algebra per CPython.  ``+'' / ``-''
+    # drop zero and negative counts from the result; ``&'' / ``|'' do
+    # not (they produce element-wise min / max regardless of sign).
+
+    def __add__(self, other):
+        result = Counter()
+        for k in self:
+            v = self[k] + other[k]
+            if v > 0:
+                result[k] = v
+        for k in other:
+            if k not in self:
+                v = other[k]
+                if v > 0:
+                    result[k] = v
+        return result
+
+    def __sub__(self, other):
+        result = Counter()
+        for k in self:
+            v = self[k] - other[k]
+            if v > 0:
+                result[k] = v
+        return result
+
+    def __and__(self, other):
+        # element-wise min, drop zero/negative
+        result = Counter()
+        for k in self:
+            if k in other:
+                a = self[k]
+                b = other[k]
+                v = a if a < b else b
+                if v > 0:
+                    result[k] = v
+        return result
+
+    def __or__(self, other):
+        # element-wise max, drop zero/negative
+        result = Counter()
+        for k in self:
+            a = self[k]
+            b = other[k]
+            v = a if a > b else b
+            if v > 0:
+                result[k] = v
+        for k in other:
+            if k not in self:
+                v = other[k]
+                if v > 0:
+                    result[k] = v
         return result
 
 
@@ -405,6 +490,42 @@ class ChainMap:
         for old in self.maps:
             child.maps.append(old)
         return child
+
+    # CPython exposes ``parents'' as a property; Grail's property
+    # codegen on a class-body method is incomplete, so expose it as a
+    # plain unary method.  Returns a fresh ChainMap over self.maps[1:]
+    # (drops the first / writable map).
+    def parents(self):
+        result = ChainMap()
+        result.maps = list(self.maps[1:])
+        if not result.maps:
+            result.maps = [{}]
+        return result
+
+    def pop(self, key, *args):
+        """Pop from the first map; KeyError if absent.  Optional default
+        suppresses the KeyError."""
+        if key in self.maps[0]:
+            v = self.maps[0][key]
+            del self.maps[0][key]
+            return v
+        if args:
+            return args[0]
+        raise KeyError(key)
+
+    def popitem(self):
+        """Pop an arbitrary (key, value) pair from the first map.
+        Raises KeyError if the first map is empty."""
+        if not self.maps[0]:
+            raise KeyError('No keys found in the first mapping.')
+        # dict.popitem returns the last-inserted pair (LIFO since 3.7);
+        # rely on the first map's own popitem.
+        return self.maps[0].popitem()
+
+    def clear(self):
+        """Clear only the first map — other maps in the chain are
+        untouched, mirroring CPython semantics."""
+        self.maps[0].clear()
 
 
 __all__ = [

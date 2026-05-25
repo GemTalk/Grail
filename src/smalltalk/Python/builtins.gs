@@ -579,9 +579,17 @@ format: aValue _: aFormatSpec
 category: 'Grail-Built-in Functions'
 method: builtins
 reversed: aSequence
-	"Python builtin reversed(seq) — fixed-arity fast path."
+	"Python builtin reversed(seq) — fixed-arity fast path.  Prefer
+	the receiver's own __reversed__ (the Python protocol); fall back
+	to reverseDo: for native Smalltalk SequenceableCollections that
+	don't override.  Without the __reversed__ branch, Python user
+	classes like collections.deque (which has __reversed__ but no
+	env-0 reverseDo:) hit MNU."
 
-	| lst |
+	| cls lst |
+	cls := aSequence @env0:class.
+	((cls @env0:whichClassIncludesSelector: #'__reversed__' environmentId: 1) notNil)
+		ifTrue: [^ aSequence @env1:__reversed__].
 	lst := list ___new___.
 	aSequence @env0:reverseDo: [:item | lst append: item].
 	^ lst __iter__

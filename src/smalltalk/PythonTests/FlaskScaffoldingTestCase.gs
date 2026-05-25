@@ -2055,6 +2055,203 @@ testCollectionsDefaultdictStillWorks
 	self assert: (result @env1:__getitem__: 2) equals: 2
 %
 
+! --- ChainMap extras ------------------------------------------------------
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsChainMapParents
+	"ChainMap.parents() drops the first / writable map.  CPython's
+	property form isn't yet supported on Grail nested-class
+	accessors so it's exposed as a plain method."
+
+	| mod result |
+	mod := self loadFixture: 'use_collections'.
+	result := mod @env1:chainmap_parents.
+	self assert: result size equals: 1.
+	self assert: ((result @env1:__getitem__: 0) @env1:__getitem__: 'y') equals: 2
+%
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsChainMapPop
+	"pop only consults the first map; KeyError if absent (or
+	optional default suppresses)."
+
+	| mod result |
+	mod := self loadFixture: 'use_collections'.
+	result := mod @env1:chainmap_pop.
+	self assert: (result @env1:__getitem__: 0) equals: 1.
+	self assert: (result @env1:__getitem__: 1) equals: false.
+	self assert: (result @env1:__getitem__: 2) equals: 2
+%
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsChainMapPopitem
+	"popitem also targets only the first map."
+
+	| mod result |
+	mod := self loadFixture: 'use_collections'.
+	result := mod @env1:chainmap_popitem.
+	self assert: (result @env1:__getitem__: 0) equals: 'x'.
+	self assert: (result @env1:__getitem__: 1) equals: 1
+%
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsChainMapClear
+	"clear empties only the first map; later maps in the chain
+	remain visible."
+
+	| mod result |
+	mod := self loadFixture: 'use_collections'.
+	result := mod @env1:chainmap_clear.
+	self assert: (result @env1:__getitem__: 0) size equals: 0.
+	self assert: (result @env1:__getitem__: 1) equals: true
+%
+
+! --- Counter extras (kwargs constructor + arithmetic) --------------------
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsCounterKwargsInit
+	"Counter(a=4, b=2, ...) — kwargs initialiser sets counts
+	directly (no iteration)."
+
+	| mod result |
+	mod := self loadFixture: 'use_collections'.
+	result := mod @env1:counter_kwargs_init.
+	self assert: (result @env1:__getitem__: 0) equals: 4.
+	self assert: (result @env1:__getitem__: 1) equals: 2.
+	self assert: (result @env1:__getitem__: 2) equals: 0.
+	self assert: (result @env1:__getitem__: 3) equals: -2
+%
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsCounterSubtract
+	"Counter.subtract(other) subtracts counts in-place — zero /
+	negative values are preserved (unlike __sub__ which drops them)."
+
+	| mod result |
+	mod := self loadFixture: 'use_collections'.
+	result := mod @env1:counter_subtract.
+	self assert: (result @env1:__getitem__: 0) equals: 3.
+	self assert: (result @env1:__getitem__: 1) equals: 0.
+	self assert: (result @env1:__getitem__: 2) equals: -3.
+	self assert: (result @env1:__getitem__: 3) equals: -6
+%
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsCounterAddOp
+	"Counter + Counter — element-wise add, drop zero/negative
+	in the result."
+
+	| mod result |
+	mod := self loadFixture: 'use_collections'.
+	result := mod @env1:counter_add_op.
+	self assert: (result @env1:__getitem__: 'a') equals: 4.
+	self assert: (result @env1:__getitem__: 'b') equals: 3
+%
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsCounterSubOp
+	"Counter - Counter — element-wise subtract, drop zero/negative."
+
+	| mod result |
+	mod := self loadFixture: 'use_collections'.
+	result := mod @env1:counter_sub_op.
+	self assert: result size equals: 1.
+	self assert: (result @env1:__getitem__: 'a') equals: 3
+%
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsCounterAndOrOp
+	"Counter & Counter is element-wise min (intersection); | is max
+	(union); both drop zero/negative."
+
+	| mod andResult orResult |
+	mod := self loadFixture: 'use_collections'.
+	andResult := mod @env1:counter_and_op.
+	orResult := mod @env1:counter_or_op.
+	self assert: (andResult @env1:__getitem__: 'b') equals: 2.
+	self assert: (andResult @env1:__getitem__: 'c') equals: 1.
+	self assert: (orResult @env1:__getitem__: 'a') equals: 1.
+	self assert: (orResult @env1:__getitem__: 'd') equals: 5
+%
+
+! --- deque extras (reversed + negative rotate) ---------------------------
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsDequeReversed
+	"reversed(deque) — routes through deque.__reversed__ (a Python-
+	level method on the Deque class).  builtins.reversed: now
+	checks for __reversed__ on the receiver's class before falling
+	back to env-0 reverseDo:."
+
+	| mod result |
+	mod := self loadFixture: 'use_collections'.
+	result := mod @env1:deque_reversed_builtin.
+	self assert: result equals: #(5 4 3 2 1) asOrderedCollection
+%
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsDequeRotateNegative
+	"rotate(-N) shifts left by N."
+
+	| mod result |
+	mod := self loadFixture: 'use_collections'.
+	result := mod @env1:deque_rotate_negative.
+	self assert: result equals: #(3 4 5 1 2) asOrderedCollection
+%
+
+! --- namedtuple + OrderedDict extras -------------------------------------
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsNamedtupleMakeClassmethod
+	"NT._make(iterable) builds an instance from any iterable of the
+	right length.  Implementation goes through cls(*values) rather
+	than cls.__new__(cls) to avoid the unbound-descriptor read path
+	for Python user classes."
+
+	| mod result |
+	mod := self loadFixture: 'use_collections'.
+	result := mod @env1:namedtuple_make_classmethod.
+	self assert: (result @env1:__getitem__: 0) equals: 10.
+	self assert: (result @env1:__getitem__: 1) equals: 20
+%
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsNamedtupleReplaceKwargs
+	"p._replace(field=value) returns a fresh instance with the named
+	field overridden."
+
+	| mod result |
+	mod := self loadFixture: 'use_collections'.
+	result := mod @env1:namedtuple_replace_kwargs.
+	self assert: (result @env1:__getitem__: 0) equals: 3.
+	self assert: (result @env1:__getitem__: 1) equals: 99
+%
+
+category: 'Grail-Tests - collections'
+method: FlaskScaffoldingTestCase
+testCollectionsOrderedDictPopitemFirst
+	"popitem(last=False) pops from the front (FIFO order)."
+
+	| mod result |
+	mod := self loadFixture: 'use_collections'.
+	result := mod @env1:ordered_dict_popitem_first.
+	self assert: (result @env1:__getitem__: 0) equals: 'a'.
+	self assert: (result @env1:__getitem__: 1) equals: 1
+%
+
 ! --- io module ------------------------------------------------------------
 
 category: 'Grail-Tests - io'
