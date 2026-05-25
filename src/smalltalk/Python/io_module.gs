@@ -476,6 +476,18 @@ getvalue
 
 category: 'Grail-State'
 method: BytesIO
+getbuffer
+	"Return a view of the buffer.  CPython returns a memoryview;
+	Grail has no memoryview yet, so return a bytes copy that callers
+	can pass through ``bytes(buf.getbuffer())'' (the most common
+	idiom; the round-trip is functionally identical when no in-place
+	mutation is involved)."
+
+	^ (self @env0:dynamicInstVarAt: #_buffer) @env0:copy
+%
+
+category: 'Grail-State'
+method: BytesIO
 close
 	self @env0:dynamicInstVarAt: #_closed put: (true).
 	^ None
@@ -578,10 +590,17 @@ initialize
 	method accessors) so the CallAst attribute-call fast path doesn't
 	collapse ``io.StringIO()`` to a unary read.  Reads fall through
 	the module ``___pyAttrLoad___`` chain to ``self at:``, returning
-	the class; the call site then invokes value:value: on it."
+	the class; the call site then invokes value:value: on it.
+
+	Seek whence constants mirror CPython: SEEK_SET=0 (from start),
+	SEEK_CUR=1 (from current), SEEK_END=2 (from end).  Used by
+	Werkzeug for file-upload streaming and request.stream.seek."
 
 	self @env0:at: #StringIO put: StringIO.
-	self @env0:at: #BytesIO put: BytesIO
+	self @env0:at: #BytesIO put: BytesIO.
+	self @env0:at: #SEEK_SET put: 0.
+	self @env0:at: #SEEK_CUR put: 1.
+	self @env0:at: #SEEK_END put: 2
 %
 
 set compile_env: 0

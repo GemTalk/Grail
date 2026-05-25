@@ -2182,6 +2182,60 @@ testBytesIOTruncate
 	self assert: mod @env1:bytesio_seek_end_then_truncate equals: 'abc' asByteArray
 %
 
+category: 'Grail-Tests - io'
+method: FlaskScaffoldingTestCase
+testIoSeekConstants
+	"io.SEEK_SET / SEEK_CUR / SEEK_END expose 0 / 1 / 2 — module-
+	level constants Werkzeug uses for relative seeks against
+	request.stream."
+
+	| mod result |
+	mod := self loadFixture: 'use_io'.
+	result := mod @env1:io_seek_constants.
+	self assert: (result @env1:__getitem__: 0) equals: 0.
+	self assert: (result @env1:__getitem__: 1) equals: 1.
+	self assert: (result @env1:__getitem__: 2) equals: 2
+%
+
+category: 'Grail-Tests - io'
+method: FlaskScaffoldingTestCase
+testBytesIOSeekEndRelative
+	"buf.seek(-2, io.SEEK_END) → read trailing 2 bytes.  Exercises
+	the seek(offset, whence) two-positional form and the SEEK_END
+	constant together."
+
+	| mod result |
+	mod := self loadFixture: 'use_io'.
+	result := mod @env1:bytesio_seek_end_relative.
+	self assert: (result @env1:__getitem__: 0) equals: 6.
+	self assert: (result @env1:__getitem__: 1) equals: 'ef' asByteArray
+%
+
+category: 'Grail-Tests - io'
+method: FlaskScaffoldingTestCase
+testStringIOCloseThenRead
+	"Reading from a closed buffer raises ValueError (CPython's
+	``I/O operation on closed file'' shape).  Werkzeug relies on
+	this for request-lifecycle assertions."
+
+	| mod |
+	mod := self loadFixture: 'use_io'.
+	self assert: mod @env1:stringio_close_then_read equals: 'caught'
+%
+
+category: 'Grail-Tests - io'
+method: FlaskScaffoldingTestCase
+testBytesIOGetbuffer
+	"buf.getbuffer() returns a memoryview-equivalent that round-trips
+	through bytes().  Grail's getbuffer returns a bytes copy (no
+	memoryview yet); functionally identical for the common
+	``bytes(buf.getbuffer())'' idiom."
+
+	| mod |
+	mod := self loadFixture: 'use_io'.
+	self assert: mod @env1:bytesio_getbuffer equals: 'hello' asByteArray
+%
+
 ! --- json module ----------------------------------------------------------
 
 category: 'Grail-Tests - json'
