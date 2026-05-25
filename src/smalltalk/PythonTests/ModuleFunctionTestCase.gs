@@ -144,21 +144,27 @@ testDirectCallZeroArgs
 category: 'Grail-Tests - BoundMethod'
 method: ModuleFunctionTestCase
 testFunctionInstVarIsBoundMethod
-	"Test that the function name instVar holds a BoundMethod."
+	"Reading a top-level def name through the module's public Python
+	attribute API yields a BoundMethod.  The dynamic-instVar slot
+	itself is nil until an explicit rebinding — top-level defs are
+	lazy-wrapped on read so first-class function value semantics
+	hold without blocking later rebinds (see [[function_rebinding]])."
 
 	| addValue |
-	addValue := testModule instVarAt: (testModule class allInstVarNames indexOf: #add).
+	addValue := testModule @env1:add.
 	self assert: (addValue isKindOf: BoundMethod).
+	"Confirm the raw slot is still empty — no pre-store at def time."
+	self assert: (testModule @env0:dynamicInstVarAt: #add) equals: nil.
 %
 
 category: 'Grail-Tests - BoundMethod'
 method: ModuleFunctionTestCase
 testBoundMethodCallable
-	"Test that the BoundMethod stored in the instVar can be called.
+	"The lazily-wrapped BoundMethod can be called.
 	BoundMethod>>value:value: is env 1, so use @env1: send."
 
 	| addValue result |
-	addValue := testModule instVarAt: (testModule class allInstVarNames indexOf: #add).
+	addValue := testModule @env1:add.
 	result := addValue @env1:value: {100. 200} value: nil.
 	self assert: result equals: 300.
 %

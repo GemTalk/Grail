@@ -7,7 +7,7 @@ object ifNil: [self error: 'object is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 object subclass: 'slice'
-  instVarNames: #( start stop step)
+  instVarNames: #()
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -61,13 +61,17 @@ category: 'Instance Creation'
 classmethod: slice
 ___newStart: aStart stop: aStop step: aStep
 	"env-0 entry point used by codegen for SliceAst when we eventually
-	emit slice instances for receivers that override __getitem__."
+	emit slice instances for receivers that override __getitem__.
+	Phase B+1: stores start/stop/step into dynamic-instVar storage so
+	``slice(1,10,2).start'' Python attribute reads find the values
+	directly via the ___pyAttrLoad___ dynamic probe."
 
-	^ self @env0:new
-		instVarAt: 1 put: aStart;
-		instVarAt: 2 put: aStop;
-		instVarAt: 3 put: aStep;
-		yourself
+	| inst |
+	inst := self @env0:new.
+	inst @env0:dynamicInstVarAt: #start put: aStart.
+	inst @env0:dynamicInstVarAt: #stop put: aStop.
+	inst @env0:dynamicInstVarAt: #step put: aStep.
+	^ inst
 %
 
 set compile_env: 1
@@ -105,19 +109,19 @@ set compile_env: 1
 category: 'Python-Attribute Access'
 method: slice
 start
-	^ start
+	^ self @env0:dynamicInstVarAt: #start
 %
 
 category: 'Python-Attribute Access'
 method: slice
 stop
-	^ stop
+	^ self @env0:dynamicInstVarAt: #stop
 %
 
 category: 'Python-Attribute Access'
 method: slice
 step
-	^ step
+	^ self @env0:dynamicInstVarAt: #step
 %
 
 ! ===============================================================================
@@ -132,9 +136,9 @@ __repr__
 	| sep |
 	sep := ', '.
 	^ ('slice(' @env0:,
-		(start @env1:__repr__) @env0:, sep @env0:,
-		(stop @env1:__repr__) @env0:, sep @env0:,
-		(step @env1:__repr__)) @env0:, ')'
+		(self start @env1:__repr__) @env0:, sep @env0:,
+		(self stop @env1:__repr__) @env0:, sep @env0:,
+		(self step @env1:__repr__)) @env0:, ')'
 %
 
 category: 'Python-Conversion'
@@ -150,9 +154,9 @@ __eq__: other
 	equal under Python equality rules."
 
 	(other @env0:isKindOf: slice) ifFalse: [^ false].
-	^ ((start = other @env1:start)
-		and: [stop = other @env1:stop])
-		and: [step = other @env1:step]
+	^ ((self start = other @env1:start)
+		and: [self stop = other @env1:stop])
+		and: [self step = other @env1:step]
 %
 
 category: 'Python-Methods'
@@ -165,23 +169,23 @@ indices: length
 	wrap and bounds clamping."
 
 	| st lo hi |
-	st := step @env0:= None ifTrue: [1] ifFalse: [step].
+	st := self step @env0:= None ifTrue: [1] ifFalse: [self step].
 	(st @env0:= 0) ifTrue: [
 		ValueError ___signal___: 'slice step cannot be zero'
 	].
-	lo := start @env0:= None
+	lo := self start @env0:= None
 		ifTrue: [st @env0:> 0 ifTrue: [0] ifFalse: [length @env0:- 1]]
-		ifFalse: [start @env0:< 0
-			ifTrue: [(length @env0:+ start) @env0:max:
+		ifFalse: [self start @env0:< 0
+			ifTrue: [(length @env0:+ self start) @env0:max:
 				(st @env0:> 0 ifTrue: [0] ifFalse: [-1])]
-			ifFalse: [start @env0:min:
+			ifFalse: [self start @env0:min:
 				(st @env0:> 0 ifTrue: [length] ifFalse: [length @env0:- 1])]].
-	hi := stop @env0:= None
+	hi := self stop @env0:= None
 		ifTrue: [st @env0:> 0 ifTrue: [length] ifFalse: [-1]]
-		ifFalse: [stop @env0:< 0
-			ifTrue: [(length @env0:+ stop) @env0:max:
+		ifFalse: [self stop @env0:< 0
+			ifTrue: [(length @env0:+ self stop) @env0:max:
 				(st @env0:> 0 ifTrue: [0] ifFalse: [-1])]
-			ifFalse: [stop @env0:min:
+			ifFalse: [self stop @env0:min:
 				(st @env0:> 0 ifTrue: [length] ifFalse: [length @env0:- 1])]].
 	^ tuple @env0:with: lo with: hi with: st
 %

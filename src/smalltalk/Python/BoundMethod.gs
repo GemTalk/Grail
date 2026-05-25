@@ -167,4 +167,15 @@ __call__: positional
 	^ self value: positional value: nil
 %
 
+category: 'Grail-Callable'
+method: BoundMethod
+___pyCallValue___: positional kw: kwargs
+	"Forward the Python ``f(args, **kw)'' call to the bound receiver/
+	selector via the standard ``value:value:'' entry point.  Overrides
+	the default Object>>___pyCallValue___:kw: which raises TypeError —
+	BoundMethod IS the canonical callable wrapper."
+
+	^ self @env1:value: positional value: kwargs
+%
+
 set compile_env: 0

@@ -78,24 +78,6 @@ assertContextIsLoad
 
 category: 'Grail-other'
 method: AttributeAst
-declareVariable
-	"`self.X = expr` (or `cls.X = expr`) is the canonical Python
-	idiom for declaring an instance attribute.  Propagate `X` up
-	the parent chain via `declareInstanceVar:` so the enclosing
-	ClassDefAst can collect it as a Smalltalk instVar.  Forward
-	`declareVariable` on the receiver as before so the receiver's
-	own name (`self` / `cls`) still surfaces as a local in the
-	enclosing function scope."
-
-	((value isKindOf: NameAst)
-		and: [value id == #self or: [value id == #cls]]) ifTrue: [
-		parent ifNotNil: [parent declareInstanceVar: attr asSymbol]
-	].
-	value declareVariable.
-%
-
-category: 'Grail-other'
-method: AttributeAst
 id
 
 	^attr
@@ -141,67 +123,26 @@ printSmalltalkOn: aStream
 	((value isKindOf: NameAst)
 		and: [(CallAst isSelfReference: value id)
 			and: [CallAst selfParameterName == #self]]) ifTrue: [
-		"`self.X` inside an instance method:
-		  - X is an inst var       → AttributeError-checked instVar read
-		                              (fast path; the check fires a Python-
-		                              shaped error if the slot is still nil).
-		  - X is a class method    → emit `(self X)` so it dispatches to
-		                              the method (covers @property and any
-		                              other parameterless method call).
-		  - X is neither           → fall through to the runtime
-		                              ___pyAttrLoad___: dispatch, which
-		                              walks instance → class → metaclass
-		                              and raises AttributeError on miss.
-		                              Catches class-side attributes
-		                              declared at class-body scope
-		                              (e.g. ``set_class: type = set`` in
-		                              blinker.Signal), which Grail stores
-		                              as Smalltalk classInstVars — not
-		                              reachable from an instance method's
-		                              instVar lookup."
-		"A name in classAttrNames is declared at class-body scope
-		(``X = expr`` or ``X: type = expr``).  Grail stores it as a
-		class-side instVar with a class-side accessor pair on the
-		metaclass.  ``self.X`` for such a name must NOT take the
-		instance-instVar fast path even when X is ALSO discovered as
-		an instance instVar via a later ``self.X = …`` write —
-		otherwise the read pulls the (nil) instance slot and the
-		AttributeError guard fires, masking the class-level default.
-		Route through ___pyAttrLoad___ which checks instance __dict__
-		first, then the class-side accessor."
-		(CallAst classAttrNames notNil
-			and: [CallAst classAttrNames includes: attr asSymbol])
-			ifTrue: [
-				aStream
-					nextPutAll: '(self @env1:___pyAttrLoad___: #''';
-					nextPutAll: attr;
-					nextPutAll: ''')'.
-				^self
-		].
-		(CallAst classInstVarNames notNil
-			and: [CallAst classInstVarNames includes: attr asSymbol]) ifTrue: [
-			"Route through the generated accessor (``self attr``) rather
-			than a bare instVar read.  Block temps (Python parameters)
-			can shadow same-named instVars; the accessor is a method,
-			so dispatch ignores lexical scope and always sees the slot."
-			aStream
-				nextPutAll: '(AttributeError @env0:___checkAttr: (self ';
-				nextPutAll: attr;
-				nextPutAll: ') ofObject: self named: #';
-				nextPutAll: attr;
-				nextPutAll: ')'.
-			^self
-		].
-		(CallAst classFunctionNames notNil
-			and: [CallAst classFunctionNames includes: attr asSymbol]) ifTrue: [
-			aStream nextPutAll: '(self '; nextPutAll: attr; nextPutAll: ')'.
-			^self
-		].
-		"Unknown attr on self — runtime dispatch."
+		"Phase B: ``self.attr'' inside an instance method is a Python
+		attribute load.  The new model collapses all the old
+		discriminators (classAttrNames / classInstVarNames /
+		classFunctionNames) into a uniform two-step lookup that mirrors
+		CPython's MRO walk:
+		  (1) Probe the instance's dynamic-instVar storage — this is
+		      the canonical home for any value the instance was bound
+		      to (whether via ``self.attr = ...'', ``setattr(obj, ...)'',
+		      or a class-level default migrated at class-init time).
+		  (2) On absent (nil per the nil-as-absent convention), fall
+		      through to ``self @env1:___pyAttrLoad___:'' which walks
+		      the class method dict, wraps callables as BoundMethods,
+		      handles class-level dunders, and raises AttributeError
+		      on miss."
 		aStream
-			nextPutAll: '(self @env1:___pyAttrLoad___: #''';
+			nextPutAll: '(self @env0:dynamicInstVarAt: #''';
 			nextPutAll: attr;
-			nextPutAll: ''')'.
+			nextPutAll: ''' ifAbsent: [self @env1:___pyAttrLoad___: #''';
+			nextPutAll: attr;
+			nextPutAll: '''])'.
 		^self
 	].
 	"Dispatch attribute load through the ___pyAttrLoad___: runtime

@@ -18,6 +18,44 @@ object class removeAllMethods: 1.
 
 set compile_env: 0
 
+! ------------------- Phase A: dynamicInstVarAt:ifAbsent: on Smalltalk Object
+! GS Smalltalk ships ``dynamicInstVarAt:'' (returns nil when the slot
+! doesn't exist) and ``dynamicInstVarAt:put:'' / ``removeDynamicInstVar:''.
+! It does NOT ship an ``ifAbsent:'' variant.  Grail adds one here so
+! Phase A NameAst codegen can emit ``self @env0:dynamicInstVarAt: #'x'
+! ifAbsent: [NameError ___signal___: 'name ''x'' is not defined']'' for
+! module-global reads.  Filed at env-0 so the env-1 module-body /
+! top-level-def methods can reach it via the ``@env0:'' prefix.
+!
+! Per the project nil-as-absent convention (Smalltalk nil is never a
+! valid Python value), a nil read can only mean ``slot does not
+! exist'' — so the check is O(1): one primitive + one identity check.
+
+category: 'Grail-Phase A Dynamic InstVars'
+method: object
+dynamicInstVarAt: aSymbol ifAbsent: absentBlock
+	"Return the value of aSymbol's dynamic instance variable.  If no
+	such instance variable exists, evaluate absentBlock and return
+	its value.
+
+	Treats Smalltalk ``nil'' as equivalent to ``absent'': Python's
+	``None'' is a distinct NoneType singleton, never Smalltalk nil,
+	so a nil read from dynamic-instVar storage can only mean ``slot
+	does not exist''.  The nil-as-absent convention is enforced by
+	Grail's own runtime helpers; Python user code can't violate it
+	because the bridge never wraps Smalltalk nil into a Python-
+	visible value.
+
+	Used by Phase A NameAst codegen to raise NameError when a
+	module-scope read names a binding that ``del'' removed (or that
+	was never created)."
+
+	| val |
+	val := self dynamicInstVarAt: aSymbol.
+	val == nil ifTrue: [^ absentBlock value].
+	^ val
+%
+
 category: 'Grail-Bridge'
 classmethod: object
 ___new___: arg
@@ -252,7 +290,18 @@ ___pyAttrLoad___: aSym
 	  - Otherwise dispatch the unary message anyway and let DNU
 	    produce the appropriate error or fallback."
 
-	| md sym1 sym2 sym3 symVA s isModule isGenerated |
+	| md sym1 sym2 sym3 symVA s isModule isGenerated dynValue walker |
+	"Phase B: probe the receiver's dynamic-instVar storage first.
+	After Phase A + Phase B this is the canonical home for module
+	globals (any receiver of class module), instance attributes (any
+	PythonInstance subclass), and class attributes (any class object,
+	since classes are objects too).  Per the nil-as-absent convention
+	a nil read means the slot is unset — fall through to the legacy
+	resolution chain below for built-in receivers / method dispatch /
+	AttributeError.  Reading from special objects (SmallInteger etc.)
+	returns nil here, so the probe is safe for all receiver kinds."
+	dynValue := self @env0:dynamicInstVarAt: aSym.
+	dynValue == nil ifFalse: [^ dynValue].
 	md := self @env0:class @env0:methodDictForEnv: 1.
 	s := aSym @env0:asString.
 	sym1 := (s @env0:, ':') @env0:asSymbol.
@@ -265,24 +314,35 @@ ___pyAttrLoad___: aSym
 	submodule, constant, ...).  Bound-method wrapping doesn't apply."
 	isModule := self @env0:isKindOf: module.
 	isModule ifTrue: [
-		"Module attribute load.  A module attribute can be either a
-		stored value (a variable — has a unary accessor compiled by
-		loadModuleFromPath:) or a callable method (a function — has
-		selectors like ``name:`` / ``name:_:`` / ``_name:kw:``).
-		Stored values get invoked through the unary accessor;
-		callables get wrapped in a BoundMethod so call sites like
-		``enum.global_enum(cls)`` work.  Names that are neither fall
-		through to ``self at:``, which the SymbolDictionary
-		inheritance provides for dynamically-added attributes."
-		"A module attr that publishes a varargs ``_<name>:kw:`` selector
-		is a callable forwarder (C extension function or Python module
-		function); wrap it as a BoundMethod so the caller's
-		``value:value:`` dispatches with the right arity.  Otherwise
-		the attribute is a stored value (synthesized ``X ^ X`` accessor
-		for module variables) — invoke the unary to fetch the value."
+		"Phase A module attribute load.  Resolution order:
+		  (1) Varargs callable forwarder ``_<name>:kw:`` — C extension
+		      function or Python module function with arbitrary arity.
+		      Wrap as BoundMethod.
+		  (2) Dynamic instVar storage (Phase A canonical store for
+		      module globals).  Present → return the stored value.
+		  (3) Unary ``name'' selector — dunder accessors like
+		      ``__name__'', ``__doc__'' (hand-written getters on the
+		      ``module'' class) that read from the SymbolDictionary
+		      slot.  Perform and return the value.
+		  (4) Fixed-arity callable ``name:`` / ``name:_:`` /
+		      ``name:_:_:`` — top-level def compiled as a real method.
+		      Wrap as BoundMethod for first-class function semantics.
+		  (5) SymbolDictionary ``self at:'' fallback (legacy bridge
+		      for built-in modules that still rely on dict-style
+		      storage; also catches names that landed in the dict
+		      slot via the SymbolDictionary at:put: path).
+		  (6) AttributeError."
+
+		| dynValue |
 		((self @env0:class @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil) ifTrue: [
 			^ BoundMethod @env1:receiver: self selector: aSym
 		].
+		"Phase A: dynamic-instVar storage is the canonical home for
+		module globals.  Per the project nil-as-absent convention, a
+		nil read can only mean the slot is unset — no sentinel dance
+		needed."
+		dynValue := self @env0:dynamicInstVarAt: aSym.
+		dynValue == nil ifFalse: [^ dynValue].
 		((self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil) ifTrue: [
 			^ self @env0:perform: aSym env: 1
 		].
@@ -370,18 +430,14 @@ ___pyAttrLoad___: aSym
 	subclass's per-class value — matching Python's per-class
 	override semantics (B.x can differ from A.x).
 
-	BUT: Python's lookup order is ``instance.__dict__`` first, then
-	class.  ``class _Rule(NamedTuple): pattern: t.Pattern`` declares
-	``pattern`` as a class-side slot (bare annotation, init=nil) AND
-	NamedTuple.__init__ writes ``self.pattern`` through the instance
-	__dict__.  Without consulting __dict__ here, ``r.pattern``
-	would always return the class-side nil and mask the per-instance
-	value.  Check __dict__ explicitly before the class-side dispatch."
+	Python's lookup order is ``instance.__dict__'' first, then class.
+	Phase B: the instance-side check is handled by the top-level
+	``dynamicInstVarAt:'' probe at the start of this method, so by
+	the time we reach the PythonInstance branch the instance store
+	has already missed — fall through to the class-side metaclass
+	lookup directly."
 	(self @env0:isKindOf: PythonInstance) ifTrue: [
-		| metaclass dict |
-		dict := self @env0:___ensureDict___.
-		(dict @env0:includesKey: aSym @env0:asSymbol)
-			ifTrue: [^ dict @env0:at: aSym @env0:asSymbol].
+		| metaclass |
 		metaclass := self @env0:class @env0:class.
 		((metaclass @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
 			and: [(metaclass @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil]) ifTrue: [
@@ -424,11 +480,44 @@ ___pyAttrLoad___: aSym
 				or: [(self @env0:class @env0:whichClassIncludesSelector: sym3 environmentId: 1) notNil
 					or: [(self @env0:class @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil]]]])
 		ifTrue: [^ BoundMethod @env1:receiver: self selector: aSym].
+	"dynInstVars probe — walks the class chain to honor Python's
+	attribute inheritance.  Two receiver kinds:
+	  * Class receiver (B is a class) — walk B → B's superClass → ...
+	    probing each level's ``dynInstVars'' dict.  Stops on the first
+	    hit so a subclass override (``B.x = 'from-B''') shadows the
+	    parent value (``A.x = 'from-A''').
+	  * Instance receiver (b is an instance of B) — same walk
+	    starting at b's class.  Used after the instance dict miss
+	    and class-side accessor miss above to find values dynamically
+	    stored on the class chain (``A.x = 42; b = A(); b.x''
+	    must return 42 — see AttributeInheritanceTestCase)."
+	walker := (self @env0:isKindOf: Behavior)
+		ifTrue: [self]
+		ifFalse: [self @env0:class].
+	[walker @env0:== nil] whileFalse: [
+		((walker @env0:class @env0:whichClassIncludesSelector: #dynInstVars environmentId: 1) notNil)
+			ifTrue: [
+				| holder dynValue |
+				holder := walker @env0:perform: #dynInstVars env: 1.
+				holder @env0:== nil ifFalse: [
+					dynValue := holder @env0:dynamicInstVarAt: aSym.
+					dynValue @env0:== nil ifFalse: [^ dynValue]
+				]
+			].
+		walker := walker @env0:superClass
+	].
 	"No callable selector matched anywhere in the receiver's class
-	chain.  Raise AttributeError instead of falling through to a
-	bare ``perform:`` (which would DNU as MessageNotUnderstood and
-	bypass Python's standard attribute-miss protocol — breaking
-	``getattr(obj, name, default)`` and ``hasattr(obj, name)``)."
+	chain.  Before raising AttributeError, give a user-defined
+	``__getattr__'' a chance to handle the miss — matches CPython's
+	__getattribute__ → __getattr__ fallback protocol.  The default
+	``object>>__getattr__:'' raises AttributeError, so this only
+	changes behavior for classes that override __getattr__ (e.g.
+	the Thermometer in AttributeProtocolTestCase that computes
+	``fahrenheit'' on demand from the stored ``celsius'')."
+	((self @env0:class @env0:whichClassIncludesSelector: #'__getattr__:' environmentId: 1) notNil
+		and: [(self @env0:class @env0:whichClassIncludesSelector: #'__getattr__:' environmentId: 1)
+			@env0:~~ object])
+		ifTrue: [^ self @env1:__getattr__: s].
 	^ AttributeError @env1:___signal___:
 		(self @env0:class @env0:name @env0:asString @env0:,
 			' object has no attribute ''' @env0:, s @env0:, '''')
@@ -458,11 +547,29 @@ __class__
 category: 'Grail-Attribute Access'
 method: object
 __delattr__: name
-	"Delete a named attribute. Called by del obj.name
-	For base object, attributes are read-only."
+	"Python ``object.__delattr__'' default — called by ``del obj.name''
+	and ``delattr(obj, name)''.  Delegates to the polymorphic helper
+	which removes the dynamic-instVar slot (or raises AttributeError
+	if it was never bound).  Subclasses may override to intercept
+	deletion (validation, audit, etc.); to bypass the override and
+	hit the default behavior, call ``super().__delattr__(name)''."
 
-	"Python's object doesn't allow attribute deletion"
-	AttributeError @env0:signal: 'readonly attribute'
+	^ self @env1:___pyAttrDelete___: name
+%
+
+category: 'Grail-Attribute Access'
+method: object
+__getattr__: name
+	"Python ``object.__getattr__'' default — invoked by
+	``___pyAttrLoad___'' as the FALLBACK when the normal lookup chain
+	doesn't find the attribute (instance dict miss, class chain miss).
+	The default raises AttributeError — subclasses override to compute
+	missing attributes lazily (proxy patterns, virtual properties like
+	the Fahrenheit/Celsius example in AttributeProtocolTestCase)."
+
+	^ AttributeError @env1:___signal___:
+		(self @env0:class @env0:name @env0:asString @env0:,
+			' object has no attribute ''' @env0:, name @env0:asString @env0:, '''')
 %
 
 category: 'Grail-Attribute Access'
@@ -637,11 +744,32 @@ __repr__
 category: 'Grail-Attribute Access'
 method: object
 __setattr__: name _: value
-	"Set a named attribute. Called by obj.name = value
-	For base object, attributes are read-only."
+	"Python ``object.__setattr__'' default — called by ``obj.name = value''
+	and ``setattr(obj, name, value)''.
 
-	"Python's object doesn't allow attribute setting"
-	AttributeError @env0:signal: 'readonly attribute'
+	Two cases, in order:
+	  (1) Data-descriptor (``@property'' with both getter and setter) —
+	      detected as a paired unary ``name'' getter + 1-arg ``name:''
+	      setter on the class chain.  Dispatch to the setter so the
+	      property semantics are honored.  Matches CPython's
+	      __setattr__ → type(obj).__getattribute__'s data-descriptor
+	      precedence over the instance dict.
+	  (2) Otherwise fall through to the polymorphic helper which writes
+	      to dynamic-instVar storage (instance receivers) or the env-1
+	      class-side setter (class receivers).
+
+	Subclasses may override to intercept stores entirely (validation,
+	conversion, audit, etc.); to bypass the override and hit the
+	default behavior, call ``super().__setattr__(name, value)''."
+
+	| sym setterSym cls |
+	sym := name @env0:asSymbol.
+	setterSym := (name @env0:asString @env0:, ':') @env0:asSymbol.
+	cls := self @env0:class.
+	((cls @env0:whichClassIncludesSelector: sym environmentId: 1) notNil
+		and: [(cls @env0:whichClassIncludesSelector: setterSym environmentId: 1) notNil])
+		ifTrue: [^ self @env0:perform: setterSym env: 1 withArguments: { value }].
+	^ self @env1:___pyAttrStore___: name put: value
 %
 
 category: 'Grail-Other'
@@ -651,6 +779,121 @@ __sizeof__
 	Uses GemStone's physicalSize which returns bytes required to represent the object."
 
 	^ self @env0:physicalSize
+%
+
+category: 'Grail-Callable'
+method: object
+___pyCallValue___: positional kw: kwargs
+	"Default: receiver is not a Python callable.  Raise TypeError
+	matching CPython's ``'<typename>' object is not callable''.
+
+	Overridden on BoundMethod (and other callable wrappers) to
+	forward the call.  Used by CallAst's probe-then-branch dispatch
+	when a top-level def name has been rebound to a non-callable
+	value (e.g. ``def foo(): ...; foo = 21; foo(5)'' must TypeError)."
+
+	TypeError @env1:___signal___:
+		'''' @env0:, self @env0:class @env0:name @env0:asString
+			@env0:, ''' object is not callable'
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___pyAttrDelete___: aName
+	"Remove the named attribute from the instance's dynamic-instVar
+	storage.  Raises Python AttributeError if no such attribute is
+	bound — matches CPython's ``del obj.attr'' / ``delattr(obj, name)''
+	semantics where a missing attribute is an error, not a silent no-op.
+
+	Per the project nil-as-absent convention, an unset slot reads as
+	nil; checking ``dynamicInstVarAt: == nil'' before removing
+	distinguishes ``never bound'' from ``explicitly bound to None''
+	(None is a distinct singleton, never the Smalltalk nil).
+
+	Class receivers (Behavior or subclass) raise AttributeError —
+	GemStone classes don't support dynamicInstVar removal and the
+	auto-generated class-side setters have no removal counterpart.
+	Add a class-side delete mechanism alongside the metaclass dynamic
+	store (see [[dynInstVars-on-metaclass]]) if/when that lands."
+
+	| sym |
+	sym := aName @env0:asSymbol.
+	(self @env0:isKindOf: Behavior) ifTrue: [
+		"Class receiver — remove from dynInstVars dict (Python user
+		class).  Built-in / non-Python classes have no dynInstVars
+		slot and immediately AttributeError."
+		((self @env0:class @env0:whichClassIncludesSelector: #dynInstVars environmentId: 1) notNil)
+			ifTrue: [
+				| holder |
+				holder := self @env0:perform: #dynInstVars env: 1.
+				(holder @env0:== nil) ifFalse: [
+					(holder @env0:dynamicInstVarAt: sym) @env0:== nil ifFalse: [
+						^ holder @env0:removeDynamicInstVar: sym
+					]
+				]
+			].
+		^ AttributeError @env1:___signal___:
+			'type object ''' @env0:, self @env0:name @env0:asString @env0:,
+				''' has no attribute ''' @env0:, aName @env0:asString @env0:, ''''
+	].
+	(self @env0:dynamicInstVarAt: sym) @env0:== nil ifTrue: [
+		AttributeError @env1:___signal___:
+			'''' @env0:, aName @env0:asString @env0:, ''''
+	].
+	self @env0:removeDynamicInstVar: sym
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___pyAttrStore___: aName put: aValue
+	"Polymorphic attribute store called by AssignAst / builtins.setattr
+	for ``obj.attr = value'' codegen.
+
+	Three cases:
+	  * Instance receiver — write straight to dynamic-instVar storage.
+	    Matches CPython's ``object.__setattr__'' default (store into
+	    instance dict).  A regular method ``attr:'' on the class is
+	    NOT a data descriptor and must not intercept the store; see
+	    AttributeStoreTestCase.
+	  * Class receiver with an explicit env-1 setter ``attr:'' —
+	    dispatch to it.  Covers class-body-declared attributes and
+	    @property pairs (the auto-generated setter writes to the
+	    classInstVar slot).
+	  * Class receiver without a static setter — write to the
+	    per-class ``dynInstVars'' dict (an Object whose dynamic
+	    instVars hold the class-level attribute store).  Every
+	    generated Python class declares a ``dynInstVars''
+	    classInstVar initialised at class-build time; see
+	    [[class-side-dynamic-attrs]] for the design rationale.
+
+	Returns aValue so the codegen can use this as an expression
+	(e.g. inside a tuple unpack or chained assignment)."
+
+	(self @env0:isKindOf: Behavior) ifTrue: [
+		| setterSym metaclass |
+		setterSym := (aName @env0:asString @env0:, ':') @env0:asSymbol.
+		metaclass := self @env0:class.
+		(metaclass @env0:whichClassIncludesSelector: setterSym environmentId: 1) notNil
+			ifTrue: [^ self @env0:perform: setterSym env: 1 withArguments: { aValue }].
+		"Python user class — store in the per-class dynInstVars dict."
+		(metaclass @env0:whichClassIncludesSelector: #dynInstVars environmentId: 1) notNil
+			ifTrue: [
+				| holder |
+				holder := self @env0:perform: #dynInstVars env: 1.
+				holder == nil ifTrue: [
+					holder := Object @env0:new.
+					self @env0:perform: #dynInstVars: env: 1 withArguments: { holder }
+				].
+				holder @env0:dynamicInstVarAt: aName @env0:asSymbol put: aValue.
+				^ aValue
+			].
+		"Built-in / non-Python class with no setter — AttributeError."
+		^ AttributeError @env1:___signal___:
+			'''' @env0:, self @env0:name @env0:asString @env0:,
+				''' object has no attribute ''' @env0:, aName @env0:asString @env0:, ''''
+	].
+	self @env0:dynamicInstVarAt: aName @env0:asSymbol put: aValue.
+	^ aValue
 %
 
 category: 'Grail-String Representation'

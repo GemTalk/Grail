@@ -7,7 +7,7 @@ PythonInstance ifNil: [self error: 'PythonInstance is not defined. Check file or
 expectvalue /Class
 doit
 PythonInstance subclass: 'NamedIntConstant'
-  instVarNames: #( value name )
+  instVarNames: #()
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -88,17 +88,18 @@ category: 'Grail-Accessors'
 method: NamedIntConstant
 setValue: aValue name: aName
 
-	value := aValue.
-	name := aName.
+	self @env0:dynamicInstVarAt: #value put: aValue.
+	self @env0:dynamicInstVarAt: #name put: aName.
 %
 
 category: 'Grail-Accessors'
 method: NamedIntConstant
 value
 	"The underlying SmallInteger.  Used by the CPython shim
-	when crossing into C — see ``PyLong_AsLong`` in cpython.cc."
+	when crossing into C — see ``PyLong_AsLong`` in cpython.cc.
+	Phase B+1: reads from dynamic-instVar storage."
 
-	^ value
+	^ self @env0:dynamicInstVarAt: #value
 %
 
 ! ------------------- Smalltalk-level equality and hashing
@@ -112,15 +113,15 @@ category: 'Grail-Comparison'
 method: NamedIntConstant
 = other
 
-	(other isKindOf: NamedIntConstant) ifTrue: [^ value = other value].
-	^ value = other
+	(other isKindOf: NamedIntConstant) ifTrue: [^ self @env0:value = other @env0:value].
+	^ self @env0:value = other
 %
 
 category: 'Grail-Hashing'
 method: NamedIntConstant
 hash
 
-	^ value hash
+	^ self @env0:value hash
 %
 
 set compile_env: 1
@@ -155,18 +156,21 @@ category: 'Grail-Python Protocol'
 method: NamedIntConstant
 name
 	"Python attribute access — ``constant.name`` returns the
-	symbolic name passed at construction."
+	symbolic name passed at construction.  Phase B+1: reads from
+	dynamic-instVar storage."
 
-	^ name
+	^ self @env0:dynamicInstVarAt: #name
 %
 
 category: 'Grail-Python Protocol'
 method: NamedIntConstant
 name: aValue
-	"The ``name`` slot is read-only; the setter exists only so
-	``___pyAttrLoad___:`` treats ``name`` as a value attribute
-	rather than wrapping the getter in a BoundMethod.  Same
-	pattern as @property's AttributeError setter."
+	"The ``name`` slot is read-only.  Phase B+1: the synthesized-
+	accessor-pair disambiguation pattern no longer applies (the
+	dynamic-instVar probe in ___pyAttrLoad___ returns the value
+	directly).  The setter is preserved purely to enforce the
+	read-only contract — Python ``setattr(c, 'name', x)'' hits this
+	method and gets AttributeError instead of silently overwriting."
 
 	AttributeError ___signal___: 'attribute ''name'' is read-only on NamedIntConstant'
 %
@@ -178,7 +182,7 @@ __index__
 	uses this when a C API needs ``Py_ssize_t``; we use it for
 	the same purpose in the shim.  Always returns a SmallInteger."
 
-	^ value
+	^ self @env0:value
 %
 
 category: 'Grail-Python Protocol'
@@ -186,7 +190,7 @@ method: NamedIntConstant
 __int__
 	"`int(named)` — defers to __index__ for the SmallInteger value."
 
-	^ value
+	^ self @env0:value
 %
 
 category: 'Grail-Python Protocol'
@@ -195,7 +199,7 @@ __repr__
 	"`repr(named)` — the symbolic name.  This is the whole point
 	of the wrapper: debug dumps show ``LITERAL`` rather than ``16``."
 
-	^ name
+	^ self name
 %
 
 category: 'Grail-Python Protocol'
@@ -205,7 +209,7 @@ __str__
 	the string of the integer value, not the name.  The name
 	only surfaces via repr()."
 
-	^ value @env1:__str__
+	^ self @env0:value @env1:__str__
 %
 
 category: 'Grail-Python Protocol'
@@ -215,7 +219,7 @@ __hash__
 	integer value collide in dict/set membership consistently
 	with __eq__."
 
-	^ value @env1:__hash__
+	^ self @env0:value @env1:__hash__
 %
 
 category: 'Grail-Python Protocol'
@@ -223,16 +227,12 @@ method: NamedIntConstant
 __eq__: other
 	"Value-based equality.  Unwrap other if it's also a
 	NamedIntConstant, otherwise dispatch to the underlying int's
-	__eq__ which handles SmallInteger vs SmallInteger comparison.
-	Use explicit @env0 for the `value` accessor — `value` is an
-	env-0 method, and an implicit env-1 unary send would miss
-	(NamedIntConstant's env-1 DNU forwards `value` to the wrapped
-	SmallInteger, which doesn't respond to it at env-1)."
+	__eq__ which handles SmallInteger vs SmallInteger comparison."
 
 	(other isKindOf: NamedIntConstant) ifTrue: [
-		^ value @env1:__eq__: (other @env0:value)
+		^ self @env0:value @env1:__eq__: (other @env0:value)
 	].
-	^ value @env1:__eq__: other
+	^ self @env0:value @env1:__eq__: other
 %
 
 category: 'Grail-Python Protocol'
@@ -257,9 +257,9 @@ method: NamedIntConstant
 __lt__: other
 
 	(other isKindOf: NamedIntConstant) ifTrue: [
-		^ value @env1:__lt__: other value
+		^ self @env0:value @env1:__lt__: other @env0:value
 	].
-	^ value @env1:__lt__: other
+	^ self @env0:value @env1:__lt__: other
 %
 
 category: 'Grail-Python Protocol'
@@ -267,9 +267,9 @@ method: NamedIntConstant
 __le__: other
 
 	(other isKindOf: NamedIntConstant) ifTrue: [
-		^ value @env1:__le__: other value
+		^ self @env0:value @env1:__le__: other @env0:value
 	].
-	^ value @env1:__le__: other
+	^ self @env0:value @env1:__le__: other
 %
 
 category: 'Grail-Python Protocol'
@@ -277,9 +277,9 @@ method: NamedIntConstant
 __gt__: other
 
 	(other isKindOf: NamedIntConstant) ifTrue: [
-		^ value @env1:__gt__: other value
+		^ self @env0:value @env1:__gt__: other @env0:value
 	].
-	^ value @env1:__gt__: other
+	^ self @env0:value @env1:__gt__: other
 %
 
 category: 'Grail-Python Protocol'
@@ -287,9 +287,9 @@ method: NamedIntConstant
 __ge__: other
 
 	(other isKindOf: NamedIntConstant) ifTrue: [
-		^ value @env1:__ge__: other value
+		^ self @env0:value @env1:__ge__: other @env0:value
 	].
-	^ value @env1:__ge__: other
+	^ self @env0:value @env1:__ge__: other
 %
 
 set compile_env: 0
@@ -316,7 +316,7 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	envId = 1 ifFalse: [
 		^ super doesNotUnderstand: aSelector args: anArray envId: envId
 	].
-	^ value perform: aSelector env: 1 withArguments: anArray
+	^ self @env0:value perform: aSelector env: 1 withArguments: anArray
 %
 
 category: 'Grail-Python Protocol'

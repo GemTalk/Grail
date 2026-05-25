@@ -14,7 +14,7 @@ module ifNil: [self error: 'module is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 Object subclass: 'PyTimedelta'
-  instVarNames: #( _days _seconds _microseconds )
+  instVarNames: #()
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -66,9 +66,9 @@ ___fromTotalMicros___: totalMicros
 category: 'Grail-Private'
 method: PyTimedelta
 _days: d _seconds: s _microseconds: us
-	_days := d.
-	_seconds := s.
-	_microseconds := us.
+	self @env0:dynamicInstVarAt: #_days put: (d).
+	self @env0:dynamicInstVarAt: #_seconds put: (s).
+	self @env0:dynamicInstVarAt: #_microseconds put: (us).
 	^ self
 %
 
@@ -129,19 +129,19 @@ set compile_env: 1
 category: 'Grail-Accessors'
 method: PyTimedelta
 days
-	^ _days
+	^ (self @env0:dynamicInstVarAt: #_days)
 %
 
 category: 'Grail-Accessors'
 method: PyTimedelta
 seconds
-	^ _seconds
+	^ (self @env0:dynamicInstVarAt: #_seconds)
 %
 
 category: 'Grail-Accessors'
 method: PyTimedelta
 microseconds
-	^ _microseconds
+	^ (self @env0:dynamicInstVarAt: #_microseconds)
 %
 
 category: 'Grail-Accessors'
@@ -149,8 +149,8 @@ method: PyTimedelta
 total_seconds
 	"Float total over all stored fields."
 
-	^ (_days @env0:* 86400 @env0:+ _seconds) @env0:asFloat
-		@env0:+ (_microseconds @env0:asFloat @env0:/ 1000000.0)
+	^ ((self @env0:dynamicInstVarAt: #_days) @env0:* 86400 @env0:+ (self @env0:dynamicInstVarAt: #_seconds)) @env0:asFloat
+		@env0:+ ((self @env0:dynamicInstVarAt: #_microseconds) @env0:asFloat @env0:/ 1000000.0)
 %
 
 category: 'Grail-Accessors'
@@ -158,7 +158,7 @@ method: PyTimedelta
 ___totalMicros___
 	"Internal: signed total microseconds."
 
-	^ (_days @env0:* 86400000000) @env0:+ (_seconds @env0:* 1000000) @env0:+ _microseconds
+	^ ((self @env0:dynamicInstVarAt: #_days) @env0:* 86400000000) @env0:+ ((self @env0:dynamicInstVarAt: #_seconds) @env0:* 1000000) @env0:+ (self @env0:dynamicInstVarAt: #_microseconds)
 %
 
 category: 'Grail-Arithmetic'
@@ -272,7 +272,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 Object subclass: 'PyTimezone'
-  instVarNames: #( _offset _name )
+  instVarNames: #()
   classVars: #( '_utc' )
   classInstVars: #()
   poolDictionaries: #()
@@ -306,8 +306,8 @@ ___pythonValueAttrs___
 category: 'Grail-Private'
 method: PyTimezone
 _offset: tdelta _name: nameOrNil
-	_offset := tdelta.
-	_name := nameOrNil.
+	self @env0:dynamicInstVarAt: #_offset put: (tdelta).
+	self @env0:dynamicInstVarAt: #_name put: (nameOrNil).
 	^ self
 %
 
@@ -346,7 +346,7 @@ method: PyTimezone
 utcoffset: dt
 	"Return the configured offset (independent of `dt`)."
 
-	^ _offset
+	^ (self @env0:dynamicInstVarAt: #_offset)
 %
 
 category: 'Grail-Accessors'
@@ -354,8 +354,8 @@ method: PyTimezone
 tzname: dt
 	"Return the human-readable name, e.g. 'UTC' or 'UTC+02:00'."
 
-	_name @env0:isNil ifFalse: [^ _name].
-	^ self @env1:___formatOffset___: _offset
+	(self @env0:dynamicInstVarAt: #_name) @env0:isNil ifFalse: [^ (self @env0:dynamicInstVarAt: #_name)].
+	^ self @env1:___formatOffset___: (self @env0:dynamicInstVarAt: #_offset)
 %
 
 category: 'Grail-Accessors'
@@ -402,7 +402,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 Object subclass: 'PyDateTime'
-  instVarNames: #( _year _month _day _hour _minute _second _microsecond _tzinfo )
+  instVarNames: #()
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -455,14 +455,14 @@ ___fromFields___: y _: mo _: d _: h _: mi _: s _: us _: tz
 category: 'Grail-Private'
 method: PyDateTime
 _year: y _month: mo _day: d _hour: h _minute: mi _second: s _microsecond: us _tzinfo: tz
-	_year := y.
-	_month := mo.
-	_day := d.
-	_hour := h.
-	_minute := mi.
-	_second := s.
-	_microsecond := us.
-	_tzinfo := tz.
+	self @env0:dynamicInstVarAt: #_year put: (y).
+	self @env0:dynamicInstVarAt: #_month put: (mo).
+	self @env0:dynamicInstVarAt: #_day put: (d).
+	self @env0:dynamicInstVarAt: #_hour put: (h).
+	self @env0:dynamicInstVarAt: #_minute put: (mi).
+	self @env0:dynamicInstVarAt: #_second put: (s).
+	self @env0:dynamicInstVarAt: #_microsecond put: (us).
+	self @env0:dynamicInstVarAt: #_tzinfo put: (tz).
 	^ self
 %
 
@@ -652,50 +652,50 @@ fromisoformat: s
 category: 'Grail-Accessors'
 method: PyDateTime
 year
-	^ _year
+	^ (self @env0:dynamicInstVarAt: #_year)
 %
 
 category: 'Grail-Accessors'
 method: PyDateTime
 month
-	^ _month
+	^ (self @env0:dynamicInstVarAt: #_month)
 %
 
 category: 'Grail-Accessors'
 method: PyDateTime
 day
-	^ _day
+	^ (self @env0:dynamicInstVarAt: #_day)
 %
 
 category: 'Grail-Accessors'
 method: PyDateTime
 hour
-	^ _hour
+	^ (self @env0:dynamicInstVarAt: #_hour)
 %
 
 category: 'Grail-Accessors'
 method: PyDateTime
 minute
-	^ _minute
+	^ (self @env0:dynamicInstVarAt: #_minute)
 %
 
 category: 'Grail-Accessors'
 method: PyDateTime
 second
-	^ _second
+	^ (self @env0:dynamicInstVarAt: #_second)
 %
 
 category: 'Grail-Accessors'
 method: PyDateTime
 microsecond
-	^ _microsecond
+	^ (self @env0:dynamicInstVarAt: #_microsecond)
 %
 
 category: 'Grail-Accessors'
 method: PyDateTime
 tzinfo
-	_tzinfo @env0:isNil ifTrue: [^ None].
-	^ _tzinfo
+	(self @env0:dynamicInstVarAt: #_tzinfo) @env0:isNil ifTrue: [^ None].
+	^ (self @env0:dynamicInstVarAt: #_tzinfo)
 %
 
 ! ------- Conversion
@@ -717,14 +717,14 @@ timestamp
 		minutes: 0
 		seconds: 0.
 	dt := DateTime
-		@env0:newGmtWithYear: _year
-		month: _month
-		day: _day
-		hours: _hour
-		minutes: _minute
-		seconds: _second.
+		@env0:newGmtWithYear: (self @env0:dynamicInstVarAt: #_year)
+		month: (self @env0:dynamicInstVarAt: #_month)
+		day: (self @env0:dynamicInstVarAt: #_day)
+		hours: (self @env0:dynamicInstVarAt: #_hour)
+		minutes: (self @env0:dynamicInstVarAt: #_minute)
+		seconds: (self @env0:dynamicInstVarAt: #_second).
 	^ (dt @env0:asSeconds @env0:- epoch @env0:asSeconds)
-		@env0:asFloat @env0:+ (_microsecond @env0:asFloat @env0:/ 1000000.0)
+		@env0:asFloat @env0:+ ((self @env0:dynamicInstVarAt: #_microsecond) @env0:asFloat @env0:/ 1000000.0)
 %
 
 category: 'Grail-Conversion'
@@ -740,25 +740,25 @@ isoformat: sep
 
 	| stream micros tzStr |
 	stream := WriteStream @env0:on: Unicode7 @env0:new.
-	stream @env0:nextPutAll: (self @env1:___pad___: _year width: 4).
+	stream @env0:nextPutAll: (self @env1:___pad___: (self @env0:dynamicInstVarAt: #_year) width: 4).
 	stream @env0:nextPut: $-.
-	stream @env0:nextPutAll: (self @env1:___pad___: _month width: 2).
+	stream @env0:nextPutAll: (self @env1:___pad___: (self @env0:dynamicInstVarAt: #_month) width: 2).
 	stream @env0:nextPut: $-.
-	stream @env0:nextPutAll: (self @env1:___pad___: _day width: 2).
+	stream @env0:nextPutAll: (self @env1:___pad___: (self @env0:dynamicInstVarAt: #_day) width: 2).
 	stream @env0:nextPut: (sep @env0:isString ifTrue: [sep @env0:first] ifFalse: [sep]).
-	stream @env0:nextPutAll: (self @env1:___pad___: _hour width: 2).
+	stream @env0:nextPutAll: (self @env1:___pad___: (self @env0:dynamicInstVarAt: #_hour) width: 2).
 	stream @env0:nextPut: $:.
-	stream @env0:nextPutAll: (self @env1:___pad___: _minute width: 2).
+	stream @env0:nextPutAll: (self @env1:___pad___: (self @env0:dynamicInstVarAt: #_minute) width: 2).
 	stream @env0:nextPut: $:.
-	stream @env0:nextPutAll: (self @env1:___pad___: _second width: 2).
-	_microsecond @env0:= 0 ifFalse: [
+	stream @env0:nextPutAll: (self @env1:___pad___: (self @env0:dynamicInstVarAt: #_second) width: 2).
+	(self @env0:dynamicInstVarAt: #_microsecond) @env0:= 0 ifFalse: [
 		stream @env0:nextPut: $..
-		micros := _microsecond @env0:printString.
+		micros := (self @env0:dynamicInstVarAt: #_microsecond) @env0:printString.
 		[micros @env0:size @env0:< 6] @env0:whileTrue: [micros := '0' @env0:, micros].
 		stream @env0:nextPutAll: micros
 	].
-	_tzinfo @env0:isNil ifFalse: [
-		tzStr := _tzinfo @env1:tzname: self.
+	(self @env0:dynamicInstVarAt: #_tzinfo) @env0:isNil ifFalse: [
+		tzStr := (self @env0:dynamicInstVarAt: #_tzinfo) @env1:tzname: self.
 		tzStr @env0:= 'UTC' ifTrue: [
 			stream @env0:nextPutAll: '+00:00'
 		] ifFalse: [
@@ -781,12 +781,12 @@ category: 'Grail-Conversion'
 method: PyDateTime
 __repr__
 	^ 'datetime.datetime(' @env0:,
-		_year @env0:printString @env0:, ', ' @env0:,
-		_month @env0:printString @env0:, ', ' @env0:,
-		_day @env0:printString @env0:, ', ' @env0:,
-		_hour @env0:printString @env0:, ', ' @env0:,
-		_minute @env0:printString @env0:, ', ' @env0:,
-		_second @env0:printString @env0:, ')'
+		(self @env0:dynamicInstVarAt: #_year) @env0:printString @env0:, ', ' @env0:,
+		(self @env0:dynamicInstVarAt: #_month) @env0:printString @env0:, ', ' @env0:,
+		(self @env0:dynamicInstVarAt: #_day) @env0:printString @env0:, ', ' @env0:,
+		(self @env0:dynamicInstVarAt: #_hour) @env0:printString @env0:, ', ' @env0:,
+		(self @env0:dynamicInstVarAt: #_minute) @env0:printString @env0:, ', ' @env0:,
+		(self @env0:dynamicInstVarAt: #_second) @env0:printString @env0:, ')'
 %
 
 category: 'Grail-Conversion'
@@ -799,7 +799,7 @@ strftime: format
 
 	| structTime |
 	structTime := tuple @env0:withAll: {
-		_year. _month. _day. _hour. _minute. _second.
+		(self @env0:dynamicInstVarAt: #_year). (self @env0:dynamicInstVarAt: #_month). (self @env0:dynamicInstVarAt: #_day). (self @env0:dynamicInstVarAt: #_hour). (self @env0:dynamicInstVarAt: #_minute). (self @env0:dynamicInstVarAt: #_second).
 		(self @env1:___pyDayOfWeek___).
 		(self @env1:___dayOfYear___).
 		-1
@@ -821,7 +821,7 @@ __add__: other
 		^ TypeError @env1:___signal___: 'unsupported operand for +'
 	].
 	newTs := self @env1:timestamp @env0:+ other @env1:total_seconds.
-	result := PyDateTime @env1:fromtimestamp: newTs _: _tzinfo.
+	result := PyDateTime @env1:fromtimestamp: newTs _: (self @env0:dynamicInstVarAt: #_tzinfo).
 	^ result
 %
 
@@ -866,7 +866,7 @@ method: PyDateTime
 ___compareKey___
 	"Tuple of fields suitable for ordering."
 
-	^ Array @env0:with: _year with: _month with: _day with: _hour with: _minute with: _second with: _microsecond
+	^ Array @env0:with: (self @env0:dynamicInstVarAt: #_year) with: (self @env0:dynamicInstVarAt: #_month) with: (self @env0:dynamicInstVarAt: #_day) with: (self @env0:dynamicInstVarAt: #_hour) with: (self @env0:dynamicInstVarAt: #_minute) with: (self @env0:dynamicInstVarAt: #_second) with: (self @env0:dynamicInstVarAt: #_microsecond)
 %
 
 ! ------- Replace
@@ -878,8 +878,8 @@ _replace: positional kw: kwargs
 	datetime with the named fields overridden."
 
 	| y mo d h mi s us tz |
-	y := _year. mo := _month. d := _day.
-	h := _hour. mi := _minute. s := _second. us := _microsecond. tz := _tzinfo.
+	y := (self @env0:dynamicInstVarAt: #_year). mo := (self @env0:dynamicInstVarAt: #_month). d := (self @env0:dynamicInstVarAt: #_day).
+	h := (self @env0:dynamicInstVarAt: #_hour). mi := (self @env0:dynamicInstVarAt: #_minute). s := (self @env0:dynamicInstVarAt: #_second). us := (self @env0:dynamicInstVarAt: #_microsecond). tz := (self @env0:dynamicInstVarAt: #_tzinfo).
 	kwargs @env0:isNil ifFalse: [
 		y := kwargs @env0:at: #year ifAbsent: [y].
 		mo := kwargs @env0:at: #month ifAbsent: [mo].
@@ -912,9 +912,9 @@ ___pyDayOfWeek___
 
 	| dt dow |
 	dt := DateTime
-		@env0:newGmtWithYear: _year
-		month: _month
-		day: _day
+		@env0:newGmtWithYear: (self @env0:dynamicInstVarAt: #_year)
+		month: (self @env0:dynamicInstVarAt: #_month)
+		day: (self @env0:dynamicInstVarAt: #_day)
 		hours: 0
 		minutes: 0
 		seconds: 0.
@@ -927,9 +927,9 @@ method: PyDateTime
 ___dayOfYear___
 	| dt |
 	dt := DateTime
-		@env0:newGmtWithYear: _year
-		month: _month
-		day: _day
+		@env0:newGmtWithYear: (self @env0:dynamicInstVarAt: #_year)
+		month: (self @env0:dynamicInstVarAt: #_month)
+		day: (self @env0:dynamicInstVarAt: #_day)
 		hours: 0
 		minutes: 0
 		seconds: 0.

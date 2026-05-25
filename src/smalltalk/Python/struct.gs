@@ -526,7 +526,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 Object subclass: 'PyStruct'
-  instVarNames: #( _format )
+  instVarNames: #()
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -563,24 +563,27 @@ set compile_env: 1
 category: 'Grail-Initialization'
 classmethod: PyStruct
 __new__: fmt
-	"Struct(format) - precompile a struct format string."
+	"Struct(format) - precompile a struct format string.  Phase B+1:
+	stores the format into dynamic-instVar storage."
 
 	| inst |
 	inst := self @env0:new.
-	inst @env0:instVarAt: 1 put: fmt @env0:asString.
+	inst @env0:dynamicInstVarAt: #_format put: fmt @env0:asString.
 	^ inst
 %
 
 category: 'Grail-Accessors'
 method: PyStruct
 format
-	^ _format
+	"Phase B+1: read from dynamic-instVar storage."
+
+	^ self @env0:dynamicInstVarAt: #_format
 %
 
 category: 'Grail-Accessors'
 method: PyStruct
 size
-	^ struct @env1:instance @env1:calcsize: _format
+	^ struct @env1:instance @env1:calcsize: self format
 %
 
 category: 'Grail-Public'
@@ -589,7 +592,7 @@ _pack: positional kw: kwargs
 	"Struct.pack(*values) - forward to struct.pack with our format."
 
 	| args |
-	args := { _format }.
+	args := { self format }.
 	positional @env0:do: [:v | args := args @env0:, (Array @env0:with: v)].
 	^ struct @env1:instance @env1:_pack: args kw: kwargs
 %
@@ -597,19 +600,19 @@ _pack: positional kw: kwargs
 category: 'Grail-Public'
 method: PyStruct
 unpack: buffer
-	^ struct @env1:instance @env1:unpack: _format _: buffer
+	^ struct @env1:instance @env1:unpack: self format _: buffer
 %
 
 category: 'Grail-Public'
 method: PyStruct
 unpack_from: buffer
-	^ struct @env1:instance @env1:unpack_from: _format _: buffer _: 0
+	^ struct @env1:instance @env1:unpack_from: self format _: buffer _: 0
 %
 
 category: 'Grail-Public'
 method: PyStruct
 unpack_from: buffer _: offset
-	^ struct @env1:instance @env1:unpack_from: _format _: buffer _: offset
+	^ struct @env1:instance @env1:unpack_from: self format _: buffer _: offset
 %
 
 set compile_env: 0

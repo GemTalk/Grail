@@ -114,18 +114,20 @@ printSmalltalkOn: aStream
 
 	| fixedCount paramNames savedReturnMode |
 	(CallAst moduleClassBeingCompiled notNil and: [self isModuleLevelDef]) ifTrue: [
-		aStream
-			nextPutAll: name;
-			nextPutAll: ' := (BoundMethod receiver: self selector: #';
-			nextPutAll: name;
-			nextPutAll: ').'.
-		"NOTE: module-level decorators on top-level defs are NOT yet
-		applied here.  ``self.name`` resolves to the real method on the
-		module class via Phase-4d dispatch, which would bypass any
-		runtime wrapper rebound into the local ``name``.  Wiring this up
-		needs an attribute-load shim that consults the wrapper-holding
-		instVar before falling through to the BoundMethod; deferred
-		until a module-level @decorator is actually load-bearing."
+		"Top-level def: the real env-1 method has already been
+		compiled on the module class (by importlib's topLevelDefs
+		pass).  Emit nothing in the module body — no dynamic-instVar
+		pre-store at def time, by design.  The CallAst bare-call
+		dispatcher probes the dynamic instVar at call time: an
+		absent slot means ``original def, take the fast self-send
+		path''; a present slot means ``rebound, call whatever's
+		there''.  Lazy-wrap of the def as a first-class function
+		value happens on read via module>>___moduleAttrLoad___:.
+
+		NOTE: module-level decorators on top-level defs are still
+		not applied here.  Wiring them up means having the decorator
+		emit write the wrapped value to the dynamic instVar — that
+		then surfaces through the rebinding-aware dispatch path."
 		^self
 	].
 
@@ -146,9 +148,23 @@ printSmalltalkOn: aStream
 	Python's semantics evaluate defaults at def-time in the
 	enclosing scope; matching that here is the only way ``X=X``
 	default-capture works without raising UnboundLocalError."
-	aStream
-		nextPutAll: name;
-		nextPutAll: ' := '.
+	"Phase A: nested-def assignment target (inside an `if`/`for`/etc.
+	at module scope) needs to route through dynamicInstVarAt:put: when
+	the parser declared the name in module body variables.  Without
+	this, the bare ``<name> := ...'' wouldn't compile (no Smalltalk
+	temp / instVar slot).  Function-local nested defs keep the bare
+	assignment because the surrounding function declares the name as
+	a block temp."
+	(self isModuleScopeNestedDefTarget) ifTrue: [
+		aStream
+			nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+			nextPutAll: name;
+			nextPutAll: ''' put: ('
+	] ifFalse: [
+		aStream
+			nextPutAll: name;
+			nextPutAll: ' := '
+	].
 	"Emit a def-time default-capture outer block when there are
 	defaults.  The outer block runs immediately (``] value``) and
 	returns the inner function block; defaults that reference the
@@ -281,7 +297,12 @@ printSmalltalkOn: aStream
 	(args defaults notNil and: [args defaults @env0:notEmpty]) ifTrue: [
 		aStream nextPutAll: '] value'.
 	].
-	aStream nextPutAll: '.'.
+	"Phase A: close the dynamicInstVarAt:put: paren opened above when
+	this is a module-scope nested def; otherwise just emit the
+	statement-terminating period."
+	(self isModuleScopeNestedDefTarget)
+		ifTrue: [aStream nextPutAll: ').']
+		ifFalse: [aStream nextPutAll: '.'].
 	"Apply decorators bottom-up.  ``@A @B def f: ...`` rebinds f to
 	``A(B(f))`` — the decorator nearest the def (B) runs first, so
 	iterate in reverse.  Skip Symbol entries that are class-body
@@ -291,20 +312,119 @@ printSmalltalkOn: aStream
 	decorator_list isNil ifFalse: [
 		decorator_list reverseDo: [:deco |
 			(self isClassDeclarativeDecorator: deco) ifFalse: [
-				aStream
-					lf;
-					nextPutAll: name;
-					nextPutAll: ' := '.
+				"Phase A: decorator re-bind uses dynamicInstVarAt:put: when
+				the target name is module-scope (parser-declared in module
+				body and not shadowed by an enclosing function)."
+				(self isModuleScopeNestedDefTarget) ifTrue: [
+					aStream
+						lf;
+						nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+						nextPutAll: name;
+						nextPutAll: ''' put: ('
+				] ifFalse: [
+					aStream
+						lf;
+						nextPutAll: name;
+						nextPutAll: ' := '
+				].
 				(deco isKindOf: Symbol)
-					ifTrue: [aStream nextPutAll: deco asString]
+					ifTrue: [
+						"Phase A: a Symbol decorator (parser stored the bare
+						name as a Symbol rather than a NameAst) that names a
+						module-scope global needs to read through the module
+						instance's dynamic-instVar storage — bare emit would
+						compile-fail with ``undefined symbol''.  Route via
+						``___moduleAttrLoad___:'' so top-level defs lazy-wrap
+						as BoundMethods (the typical decorator case)."
+						(CallAst moduleVariableNames notNil
+							and: [CallAst moduleVariableNames includes: deco asSymbol])
+							ifTrue: [
+								aStream
+									nextPutAll: '((';
+									nextPutAll: CallAst moduleClassBeingCompiled name;
+									nextPutAll: ' @env0:___instance___) @env1:___moduleAttrLoad___: #''';
+									nextPutAll: deco asString;
+									nextPutAll: ''')'
+							]
+							ifFalse: [aStream nextPutAll: deco asString]
+					]
 					ifFalse: [deco printSmalltalkWithParenthesisOn: aStream].
-				aStream
-					nextPutAll: ' value: { ';
-					nextPutAll: name;
-					nextPutAll: ' } value: nil.'.
+				"Phase A: when the target is module-scope, the value-block
+				arg ``{ name }'' reads the just-defined function through
+				dynamicInstVarAt: (no Smalltalk temp exists), and the
+				trailing ``)'' closes the dynamicInstVarAt:put: paren
+				opened above.  Function-local targets keep the bare
+				``{ name }'' form."
+				(self isModuleScopeNestedDefTarget) ifTrue: [
+					aStream
+						nextPutAll: ' value: { (self @env0:dynamicInstVarAt: #''';
+						nextPutAll: name;
+						nextPutAll: ''' ifAbsent: [nil]) } value: nil).'
+				] ifFalse: [
+					aStream
+						nextPutAll: ' value: { ';
+						nextPutAll: name;
+						nextPutAll: ' } value: nil.'
+				].
 			].
 		].
 	].
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+isModuleScopeNestedDefTarget
+	"Phase A: true if this nested (non-isModuleLevelDef) def lands at
+	module scope — the parser declared its name in module body
+	variables, no enclosing function shadows it, and we're inside a
+	module-body compile (not a user class body).  Drives whether the
+	bare ``<name> := ...'' emit gets rewritten to a
+	dynamicInstVarAt:put: store."
+
+	| node |
+	CallAst moduleClassBeingCompiled ifNil: [^ false].
+	CallAst classBeingCompiled ifNotNil: [^ false].
+	CallAst moduleVariableNames ifNil: [^ false].
+	(CallAst moduleVariableNames includes: name asSymbol) ifFalse: [^ false].
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [
+				(self ___enclosingDefDeclares___: node named: name asSymbol)
+					ifTrue: [^ false]
+			].
+		node := node parent.
+	].
+	^ true
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___enclosingDefDeclares___: funcAst named: aSymbol
+	"True iff funcAst (a FunctionDef/Lambda) declares aSymbol as a
+	parameter or body local.  Mirrors NameAst's __functionDeclaresLocal:."
+
+	| ivars idx argsNode bodyNode |
+	ivars := funcAst class allInstVarNames.
+	idx := ivars indexOf: #body.
+	bodyNode := idx > 0 ifTrue: [funcAst instVarAt: idx] ifFalse: [nil].
+	((bodyNode isKindOf: BlockAst) and: [bodyNode variables includes: aSymbol])
+		ifTrue: [^ true].
+	idx := ivars indexOf: #args.
+	argsNode := idx > 0 ifTrue: [funcAst instVarAt: idx] ifFalse: [nil].
+	argsNode ifNil: [^ false].
+	#(#args #posonlyargs #kwonlyargs) do: [:fld |
+		| fldIdx list |
+		fldIdx := argsNode class allInstVarNames indexOf: fld.
+		fldIdx > 0 ifTrue: [
+			list := argsNode instVarAt: fldIdx.
+			list ifNotNil: [
+				(list anySatisfy: [:a | a name asSymbol == aSymbol])
+					ifTrue: [^ true]
+			]
+		]
+	].
+	^ false
 %
 
 category: 'Grail-code generation'
@@ -1084,11 +1204,10 @@ generateMethodSourceOn: aStream
 			...
 			] value"
 
-	| paramNames bodyVars allLocals classIvars savedReturnMode
+	| paramNames bodyVars allLocals savedReturnMode
 	  useDirectReturn useMethodTemps |
 	paramNames := self instanceMethodParameterNames.
 	bodyVars := body variables.
-	classIvars := CallAst classInstVarNames ifNil: [IdentitySet new].
 
 	self isSimplePositionalArgs ifTrue: [
 		| transportNames |
@@ -1096,22 +1215,15 @@ generateMethodSourceOn: aStream
 		identifier that carries the value into the block temp).  Prefer
 		the underscore-prefixed form (``_x'' for Python ``x'') so the
 		selector reads traceably; fall back to the ``___N'' positional
-		placeholder when ``_x'' would collide with another parameter, a
-		body local, or a locally-declared instVar.
-
-		Note on inherited instVars: at codegen time the class doesn't
-		yet exist (its parent is an arbitrary Python expression), so we
-		can't fully enumerate inherited slots.  An inherited slot named
-		``_x'' would surface here as a GemStone compile error at the
-		moment the method is installed (loud, not silent) — accepted as
-		a rare-in-practice cost for the readability win.  Underscore-
-		prefixed instVars are atypical of Grail's stdlib ports."
+		placeholder when ``_x'' would collide with another parameter or
+		a body local.  Phase B: instance attributes live in dynamic-
+		instVar storage (not static slots), so no per-class instVar
+		collision check is necessary."
 		transportNames := paramNames collect: [:each |
 			| candidate |
 			candidate := '_' , each.
 			((paramNames includes: candidate)
-				or: [(bodyVars includes: candidate asSymbol)
-				or: [classIvars includes: candidate asSymbol]])
+				or: [bodyVars includes: candidate asSymbol])
 				ifTrue: [nil]
 				ifFalse: [candidate]].
 		1 to: paramNames size do: [:i |
@@ -1129,17 +1241,21 @@ generateMethodSourceOn: aStream
 		aStream lf.
 
 		"Build the locals set — paramNames (always declared as block
-		temps for the no-shadow rule) + body locals (excluding self/cls
-		refs and class-instVar names so bare-name reads/writes flow
-		through the instVar path)."
+		temps for the no-shadow rule) + body locals.  Phase B: no
+		longer filter against classIvars; instance attributes live in
+		dynamic-instVar storage, not in static instVar slots, so a
+		bare-name body local (``x = ...; print(x)'') must always be
+		declared as a Smalltalk temp.  ``self.x = ...'' goes through
+		AttributeAst's dynamicInstVarAt:put: emit and is a separate
+		write target from the bare-name local."
 		allLocals := OrderedCollection new.
 		paramNames do: [:each | allLocals add: each].
 		bodyVars do: [:each |
 			(allLocals includes: each) ifFalse: [
 				(CallAst isSelfReference: each) ifFalse: [
-					(classIvars includes: each asSymbol) ifFalse: [allLocals add: each].
-				].
-			].
+					allLocals add: each
+				]
+			]
 		].
 
 		"Drop the outer ``^ [ ... ] value'' wrapper when there's
@@ -1172,8 +1288,6 @@ generateMethodSourceOn: aStream
 			].
 		].
 	] ifFalse: [
-		| classIvars |
-		classIvars := CallAst classInstVarNames ifNil: [IdentitySet new].
 		aStream nextPut: $_; nextPutAll: name; nextPutAll: ': positional kw: kwargs'; lf.
 
 		aStream nextPutAll: '^ ['.
@@ -1194,9 +1308,12 @@ generateMethodSourceOn: aStream
 		bodyVars do: [:each |
 			(allLocals includes: each) ifFalse: [
 				(CallAst isSelfReference: each) ifFalse: [
-					(classIvars includes: each asSymbol) ifFalse: [allLocals add: each].
-				].
-			].
+					"Phase B: body locals are always temps — no
+					classIvars filter; instance state lives in dynamic
+					instVar storage now."
+					allLocals add: each
+				]
+			]
 		].
 		allLocals isEmpty ifFalse: [
 			aStream nextPutAll: '| '.

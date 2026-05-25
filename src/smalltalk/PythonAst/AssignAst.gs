@@ -88,6 +88,10 @@ printSmalltalkOn: aStream
 		(tgt isKindOf: ListAst) ifTrue: [
 			^self printSmalltalkTupleStoreOn: aStream target: tgt.
 		].
+		((tgt isKindOf: NameAst) and: [self isModuleScopeStoreTarget: tgt])
+			ifTrue: [
+				^ self printSmalltalkModuleStoreOn: aStream target: tgt
+			].
 		tgt printSmalltalkOn: aStream.
 		aStream nextPutAll: ' := '.
 		value printSmalltalkOn: aStream.
@@ -100,15 +104,22 @@ printSmalltalkOn: aStream
 	aStream nextPutAll: '. '.
 	targets do: [:eachTgt |
 		(eachTgt isKindOf: AttributeAst) ifTrue: [
+			"Chained ``...X = rest = value'' attribute store: write straight
+			to dynamicInstVarAt:put: for both self and foreign-receiver
+			targets — mirrors single-target's bypass of the ``attr:''
+			setter dispatch (see printSmalltalkAttributeStoreOn:)."
 			((eachTgt value isKindOf: NameAst)
 				and: [CallAst isSelfReference: eachTgt value id])
 				ifTrue: [
-					aStream nextPutAll: eachTgt attr; nextPutAll: ' := ___chain___. '
+					aStream
+						nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+						nextPutAll: eachTgt attr;
+						nextPutAll: ''' put: ___chain___. '
 				]
 				ifFalse: [
 					eachTgt value printSmalltalkWithParenthesisOn: aStream.
-					aStream nextPutAll: ' @env1:'; nextPutAll: eachTgt attr;
-						nextPutAll: ': ___chain___. '
+					aStream nextPutAll: ' @env1:__setattr__: '''; nextPutAll: eachTgt attr;
+						nextPutAll: ''' _: ___chain___. '
 				]
 		] ifFalse: [
 			(eachTgt isKindOf: SubscriptAst) ifTrue: [
@@ -118,12 +129,54 @@ printSmalltalkOn: aStream
 				aStream nextPutAll: ' _: ___chain___. '
 			] ifFalse: [
 				"Plain NameAst (or TupleAst/ListAst — rare chained with tuples)."
-				eachTgt printSmalltalkOn: aStream.
-				aStream nextPutAll: ' := ___chain___. '
+				((eachTgt isKindOf: NameAst)
+					and: [self isModuleScopeStoreTarget: eachTgt])
+					ifTrue: [
+						aStream nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+							nextPutAll: eachTgt id;
+							nextPutAll: ''' put: ___chain___. '
+					]
+					ifFalse: [
+						eachTgt printSmalltalkOn: aStream.
+						aStream nextPutAll: ' := ___chain___. '
+					]
 			]
 		]
 	].
 	aStream nextPutAll: '] value.'.
+%
+
+category: 'Grail-other'
+method: AssignAst
+isModuleScopeStoreTarget: aNameAst
+	"Phase A: true if this assignment target is a module-scope name —
+	i.e. we're compiling inside a module body or top-level def (not a
+	user class method), and the name was declared in the module body's
+	scope (parser-recorded into ``CallAst moduleVariableNames''), and
+	no enclosing function shadows it as a local."
+
+	CallAst moduleClassBeingCompiled ifNil: [^ false].
+	CallAst classBeingCompiled ifNotNil: [^ false].
+	(aNameAst isModuleVariableName: aNameAst id) ifFalse: [^ false].
+	(aNameAst ___declaredInEnclosingFunction___: aNameAst id) ifTrue: [^ false].
+	^ true
+%
+
+category: 'Grail-other'
+method: AssignAst
+printSmalltalkModuleStoreOn: aStream target: tgt
+	"Phase A: emit a module-global write as
+	``self dynamicInstVarAt: #name put: value''.  Inside the module
+	body's initialize method (and inside a top-level def compiled as
+	an env-1 method on the module class), ``self'' IS the module
+	instance, so the store lands in the canonical dynamic-instVar
+	storage that NameAst loads probe."
+
+	aStream nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+		nextPutAll: tgt id;
+		nextPutAll: ''' put: '.
+	value printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPut: $..
 %
 
 category: 'other'
@@ -219,17 +272,24 @@ emitTupleElementStoreOn: aStream target: aTarget holder: holder indexExpr: index
 	| rhs |
 	rhs := directRhs ifNil: [holder , ' __getitem__: ' , indexExpr].
 	(aTarget isKindOf: AttributeAst) ifTrue: [
-		"obj.attr = rhs — use the attribute-store helper."
+		"obj.attr = rhs (per-element store inside a tuple unpack) — write
+		straight to dynamicInstVarAt:put: for both self and foreign
+		receivers, matching the single-target attribute-store path."
 		((aTarget value isKindOf: NameAst)
 			and: [CallAst isSelfReference: aTarget value id]) ifTrue: [
-			aStream nextPutAll: aTarget attr; nextPutAll: ' := '; nextPutAll: rhs; nextPutAll: '. '.
+			aStream
+				nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+				nextPutAll: aTarget attr;
+				nextPutAll: ''' put: (';
+				nextPutAll: rhs;
+				nextPutAll: '). '.
 			^ self
 		].
 		aTarget value printSmalltalkWithParenthesisOn: aStream.
 		aStream
-			nextPutAll: ' @env1:';
+			nextPutAll: ' @env1:__setattr__: ''';
 			nextPutAll: aTarget attr;
-			nextPutAll: ': (';
+			nextPutAll: ''' _: (';
 			nextPutAll: rhs;
 			nextPutAll: '). '.
 		^ self
@@ -257,7 +317,19 @@ emitTupleElementStoreOn: aStream target: aTarget holder: holder indexExpr: index
 		aStream nextPutAll: '] value. '.
 		^ self
 	].
-	"Default: NameAst / starred wrapper — bare assignment."
+	"Default: NameAst / starred wrapper — bare assignment OR Phase A
+	module-scope dynamicInstVarAt:put: when the target is a module
+	global."
+	((aTarget isKindOf: NameAst) and: [self isModuleScopeStoreTarget: aTarget])
+		ifTrue: [
+			aStream
+				nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+				nextPutAll: aTarget id;
+				nextPutAll: ''' put: (';
+				nextPutAll: rhs;
+				nextPutAll: '). '.
+			^ self
+		].
 	aTarget printSmalltalkOn: aStream.
 	aStream nextPutAll: ' := '; nextPutAll: rhs; nextPutAll: '. '
 %
@@ -267,43 +339,42 @@ method: AssignAst
 printSmalltalkAttributeStoreOn: aStream target: tgt
 	"Generate attribute store.
 
-	When in class method context and target is self.x,
-	emit direct instVar assignment: `x := expr.`
-	Otherwise: emit a setter send `obj @env1:attr: expr.` — generated
-	classes have explicit setters compiled by compileClassDef.  This
-	also works for module instVars (modules also receive setters
-	via the per-name accessor generation in loadModuleFromPath)."
+	Python's data model: ``obj.attr = value'' writes via
+	``type(obj).__setattr__(obj, 'attr', value)'', which by default
+	stores into the instance dict.  A regular class method named
+	``attr'' is NOT a data descriptor — the store does NOT dispatch
+	to it; subsequent reads see the instance attribute shadowing the
+	method.
+
+	So: BOTH the ``self.attr = ...'' and the foreign-receiver
+	``obj.attr = ...'' cases write straight to dynamicInstVarAt:put:.
+	The presence of an ``attr:'' selector on the class is irrelevant
+	to the store path (it remains relevant to call sites that send
+	``obj attr: x'' directly via Smalltalk-style keyword)."
 
 	((tgt value isKindOf: NameAst) and: [CallAst isSelfReference: tgt value id]) ifTrue: [
-		"Route through the generated setter rather than a bare instVar
-		write.  Python parameters can be declared as block temps that
-		shadow same-named instVars (see FunctionDefAst
-		generateMethodSourceOn:); the setter is a method, so
-		dispatch bypasses lexical scope and reaches the slot.  When
-		the attr is a class-side declaration (in classAttrNames) we
-		need the env-1 attribute path so the metaclass setter fires —
-		fall through to the runtime form for that case."
-		(CallAst classAttrNames notNil
-			and: [CallAst classAttrNames includes: tgt attr asSymbol])
-			ifTrue: [
-				aStream nextPutAll: 'self @env1:'.
-				aStream nextPutAll: tgt attr.
-				aStream nextPutAll: ': '.
-				value printSmalltalkWithParenthesisOn: aStream.
-				aStream nextPut: $..
-				^self
-			].
-		aStream nextPutAll: 'self '.
+		aStream nextPutAll: 'self @env0:dynamicInstVarAt: #'''.
 		aStream nextPutAll: tgt attr.
-		aStream nextPutAll: ': '.
+		aStream nextPutAll: ''' put: '.
 		value printSmalltalkWithParenthesisOn: aStream.
 		aStream nextPut: $..
 		^self
 	].
+	"Foreign receiver: route through Python's ``__setattr__'' protocol
+	so user overrides intercept the store (validation, conversion,
+	audit, etc. — see AttributeProtocolTestCase).  Default
+	``object>>__setattr__:_:'' falls through to the polymorphic
+	``___pyAttrStore___:put:'' helper (instance → dynamicInstVarAt:put:;
+	class → env-1 class-side setter).
+
+	The attribute name is passed as a Smalltalk String (Python ``str''),
+	NOT a Symbol — user overrides typically compare with
+	``name == 'fahrenheit''' which is str-vs-str in Python, and a
+	Symbol receiver would fail that ``__eq__'' check."
 	tgt value printSmalltalkWithParenthesisOn: aStream.
-	aStream nextPutAll: ' @env1:'.
+	aStream nextPutAll: ' @env1:__setattr__: '''.
 	aStream nextPutAll: tgt attr.
-	aStream nextPutAll: ': '.
+	aStream nextPutAll: ''' _: '.
 	value printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPut: $..
 %

@@ -260,9 +260,15 @@ loadModuleFromPath: pathString name: moduleName
 	(e.g. a new instVar on ``module``), Smalltalk's ``subclass:``
 	re-parents the existing class on the current ``module``, sweeping
 	up the orphan and restoring the singleton invariant for any code
-	path that flows through this class."
+	path that flows through this class.
+
+	Phase A: module globals live in dynamicInstVarAt: storage on the
+	instance — NOT in static instVar slots.  This matches Python's
+	module-as-dict semantics: setattr/delattr/hasattr all reach the
+	same backing store, and `del x` truly removes the binding rather
+	than nilling a slot."
 	moduleClass := module subclass: moduleClassName
-		instVarNames: variableNames
+		instVarNames: #()
 		classVars: #()
 		classInstVars: #()
 		poolDictionaries: #()
@@ -292,9 +298,18 @@ loadModuleFromPath: pathString name: moduleName
 	body; no install-time class creation is required."
 
 	"Set compile-time context so CallAst and FunctionDefAst emit module-
-	aware code (self-sends, BoundMethod assignments)."
+	aware code (self-sends, BoundMethod assignments).  Phase A:
+	moduleVariableNames tells NameAst/AssignAst/DeleteAst which bare
+	names are module-scope (route through dynamicInstVarAt:) versus
+	function-local (Smalltalk temps).  Include function names too —
+	their BoundMethod handles live in the same dynamic-instVar store
+	as plain values, so bare-name reads of ``add'' (`f = add`) emit
+	the same dynamicInstVarAt:ifAbsent: probe.  Direct call sites
+	`add(...)` are intercepted by CallAst's bare-call dispatcher
+	separately and rewritten to ``self add:'' self-sends."
 	CallAst moduleClassBeingCompiled: moduleClass.
 	CallAst moduleFunctionNames: functionNames.
+	CallAst moduleVariableNames: variables.
 	[
 		| debugStream debugClassName tpzPath irPath |
 		"Accumulate every method source we hand to compileMethod: into a
@@ -320,17 +335,17 @@ loadModuleFromPath: pathString name: moduleName
 			nextPutAll: '! Module: '; nextPutAll: moduleName;
 			nextPutAll: '   Class: '; nextPutAll: debugClassName; lf; lf;
 			"The subclass: call that loadModuleFromPath: makes to create
-			the module class.  Emitting it here makes the file self-
-			describing — a reader can see exactly which names become
-			instVars on the class (and therefore which Python parameters
-			will get the ``_X'' transport rename to avoid shadowing)."
-			nextPutAll: 'doit'; lf;
-			nextPutAll: 'module subclass: '''; nextPutAll: debugClassName; nextPutAll: ''''; lf;
-			nextPutAll: '  instVarNames: #('.
+			the module class.  Phase A: instVarNames is empty — module
+			globals live in dynamicInstVarAt: storage.  The parser-seen
+			names are emitted as a header comment for reference."
+			nextPutAll: '! Phase A module-scope names ('.
 		variableNames do: [:n |
 			debugStream space; nextPutAll: n asString].
 		debugStream
-			nextPutAll: ' )'; lf;
+			nextPutAll: ' ) — stored via dynamicInstVarAt:put:'; lf;
+			nextPutAll: 'doit'; lf;
+			nextPutAll: 'module subclass: '''; nextPutAll: debugClassName; nextPutAll: ''''; lf;
+			nextPutAll: '  instVarNames: #()'; lf;
 			nextPutAll: '  classVars: #()'; lf;
 			nextPutAll: '  classInstVars: #()'; lf;
 			nextPutAll: '  poolDictionaries: #()'; lf;
@@ -398,30 +413,12 @@ loadModuleFromPath: pathString name: moduleName
 	] ensure: [
 		CallAst moduleClassBeingCompiled: nil.
 		CallAst moduleFunctionNames: nil.
+		CallAst moduleVariableNames: nil.
 	].
 
-	"Generate unary accessor methods for each module-level variable so
-	attribute access like `module.x` resolves to an instVar read.
-	Skip function names — they have real `name:` / `_name:kw:` methods
-	and adding a unary `name` accessor would steal the 0-arg call-site
-	dispatch (`f()` would return the BoundMethod instead of calling).
-	Class-method free-name reads handle functions specially in NameAst
-	by emitting a fresh BoundMethod."
-	variableNames do: [:varName |
-		| accessorSource setterSource |
-		(functionNames includes: varName asSymbol) ifFalse: [
-			accessorSource := varName , lf , '	^ ' , varName.
-			moduleClass compileMethod: accessorSource
-				dictionaries: sl
-				category: 'Grail-Accessors'
-				environmentId: 1.
-			setterSource := varName , ': ___1' , lf , '	' , varName , ' := ___1.'.
-			moduleClass compileMethod: setterSource
-				dictionaries: sl
-				category: 'Grail-Accessors'
-				environmentId: 1.
-		].
-	].
+	"Phase A: no per-variable accessor methods are generated.  Module
+	globals live in dynamicInstVarAt: storage and are read/written
+	directly via the codegen in NameAst/AssignAst/DeleteAst."
 
 	"Create an instance, set metadata, register, then run.
 	Must use @env0:new (not basicNew) because module inherits from
@@ -509,24 +506,18 @@ category: 'Grail-Module Registry'
 classmethod: importlib
 ___bind: aChildModule onParent: aParent as: anAttrName
 	"Bind aChildModule on aParent under anAttrName.  Writes to
-	BOTH the parent's SymbolDictionary slot (so dynamic
-	`getattr`/`self at:` paths see it) AND, if the parent's class
-	has a same-named instVar (the generated module's static
-	accessor), the instVar slot too.  The instVar write is
-	necessary because Grail compiles a unary `name ^ name`
-	accessor for every declared module variable, and that accessor
-	would otherwise return the still-nil instVar — which is
-	exactly the scenario that defeats `from . import sub` inside
-	a package's __init__.py when `sub` was pre-registered."
+	BOTH the parent's SymbolDictionary slot (so `self at:`
+	fallbacks see it) AND the parent's dynamic instVar storage (so
+	Phase A attribute reads via `dynamicInstVarAt:ifAbsent:` find
+	the child module).  Both writes matter for cross-module
+	resolution: SymbolDictionary inheritance still backs legacy
+	read paths, and dynamic instVars are the Phase A canonical
+	storage that NameAst / AssignAst codegen consult."
 
-	| sym ivars idx |
+	| sym |
 	sym := anAttrName @env0:asSymbol.
 	aParent @env0:at: sym put: aChildModule.
-	ivars := aParent @env0:class @env0:allInstVarNames.
-	idx := ivars @env0:indexOf: sym.
-	idx @env0:> 0 ifTrue: [
-		aParent @env0:instVarAt: idx put: aChildModule
-	].
+	aParent @env0:dynamicInstVarAt: sym put: aChildModule.
 %
 
 category: 'Grail-Module Loading'

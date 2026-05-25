@@ -147,8 +147,10 @@ testInitAttribute
 category: 'Tests - Dynamic Attrs'
 method: DefaultsAndAttrsTestCase
 testDynamicAttribute
-	"Box(7).y = 'late' — `y` is NOT discovered by the __init__ scan, so
-	it must flow through the PythonInstance ___dict___ fallback."
+	"Box(7).y = 'late' — `y` is added after construction (not seen
+	by __init__).  Phase B: all instance attributes live in dynamic-
+	instVar storage, so post-init additions reach the same backing
+	store as __init__ writes — no separate ___dict___ fallback."
 	self assert: (testModule @env1:b_y) equals: 'late'.
 %
 

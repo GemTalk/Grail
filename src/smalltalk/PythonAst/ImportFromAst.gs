@@ -165,10 +165,25 @@ printSmalltalkOn: aStream
 		ifFalse: [CallAst resolveModuleClassForName: module asSymbol].
 
 	names doWithIndex: [:each :index |
-		| targetName attrName |
+		| targetName attrName isModuleStore |
 		targetName := each asName ifNil: [each name].
 		attrName := each name asString.
-		aStream nextPutAll: targetName.
+		"Phase A: module-scope target binds into the module's dynamic-
+		instVar storage rather than a non-existent Smalltalk temp."
+		isModuleStore := CallAst moduleClassBeingCompiled notNil
+			and: [CallAst classBeingCompiled isNil
+			and: [CallAst moduleVariableNames notNil
+			and: [CallAst moduleVariableNames includes: targetName asSymbol]]].
+		isModuleStore
+			ifTrue: [
+				aStream
+					nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+					nextPutAll: targetName;
+					nextPutAll: ''' put: ('
+			]
+			ifFalse: [
+				aStream nextPutAll: targetName; nextPutAll: ' := '
+			].
 
 		"Pass the imported name as a single-element fromlist so the
 		runtime importer returns the leaf submodule (`re._constants`)
@@ -180,24 +195,25 @@ printSmalltalkOn: aStream
 		(moduleClass notNil and: [NameAst isFastPathBuiltinName: attrName asSymbol on: moduleClass]) ifTrue: [
 			"Callable on a converted module — wrap in BoundMethod."
 			aStream
-				nextPutAll: ' := (BoundMethod receiver: (((Python @env0:at: #builtins) instance) ___import__: { ''';
+				nextPutAll: '(BoundMethod receiver: (((Python @env0:at: #builtins) instance) ___import__: { ''';
 				nextPutAll: absoluteName;
 				nextPutAll: '''. nil. nil. { ''';
 				nextPutAll: attrName;
 				nextPutAll: ''' }. 0 } kw: nil) selector: #';
 				nextPutAll: attrName;
-				nextPutAll: ').'.
+				nextPutAll: ')'.
 		] ifFalse: [
 			"Stored attribute or unconverted module — use bare unary send."
 			aStream
-				nextPutAll: ' := (((Python @env0:at: #builtins) instance) ___import__: { ''';
+				nextPutAll: '(((Python @env0:at: #builtins) instance) ___import__: { ''';
 				nextPutAll: absoluteName;
 				nextPutAll: '''. nil. nil. { ''';
 				nextPutAll: attrName;
 				nextPutAll: ''' }. 0 } kw: nil) ';
-				nextPutAll: attrName;
-				nextPutAll: '.'.
+				nextPutAll: attrName.
 		].
+		isModuleStore ifTrue: [aStream nextPut: $)].
+		aStream nextPut: $..
 		index < names size ifTrue: [aStream lf].
 	].
 	"For statements that were originally `from X import *`, emit

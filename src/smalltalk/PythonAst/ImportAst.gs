@@ -61,20 +61,39 @@ printSmalltalkOn: aStream
 	not depend on `__import__` being resolvable through the symbol list."
 
 	names doWithIndex: [:each :index |
-		| importName targetName nameParts asName |
+		| importName targetName nameParts asName isModuleStore |
 		importName := each name.
 		asName := each asName.
 		nameParts := $. split: importName asString.
 		targetName := asName ifNil: [nameParts first asSymbol].
+		"Phase A: when the binding lands at module scope (we're
+		compiling the module body or a top-level def, and the parser
+		recorded targetName as a module variable), emit the store as
+		``self dynamicInstVarAt: #name put: ...'' so the import lands
+		in the module instance's dynamic-instVar storage rather than
+		a non-existent Smalltalk temp."
+		isModuleStore := CallAst moduleClassBeingCompiled notNil
+			and: [CallAst classBeingCompiled isNil
+			and: [CallAst moduleVariableNames notNil
+			and: [CallAst moduleVariableNames includes: targetName asSymbol]]].
 		"`__import__('a.b.c')` returns the TOP-level package (`a`).
 		Python's `import a.b.c` statement binds the top-level name
 		unaliased (so `a` is bound to the top), while
 		`import a.b.c as x` binds the LEAF to the alias.  Mirror
 		that here: for the aliased form, follow the dotted path
 		after the import to reach the leaf."
-		aStream
-			nextPutAll: targetName;
-			nextPutAll: ' := '.
+		isModuleStore
+			ifTrue: [
+				aStream
+					nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+					nextPutAll: targetName;
+					nextPutAll: ''' put: ('
+			]
+			ifFalse: [
+				aStream
+					nextPutAll: targetName;
+					nextPutAll: ' := '
+			].
 		(asName notNil and: [nameParts size > 1]) ifTrue: [aStream nextPut: $(].
 		aStream
 			nextPutAll: '((Python @env0:at: #builtins) instance) ___import__: { ''';
@@ -87,6 +106,7 @@ printSmalltalkOn: aStream
 				aStream nextPutAll: ' @env1:'; nextPutAll: (nameParts at: i)
 			]
 		].
+		isModuleStore ifTrue: [aStream nextPut: $)].
 		aStream nextPut: $..
 		index < names size ifTrue: [aStream lf].
 	].

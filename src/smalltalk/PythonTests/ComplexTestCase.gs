@@ -45,6 +45,43 @@ test___real_imaginary
 	self assert: (c @env1:imag) equals: 12.0.
 %
 
+category: 'Grail-Initialization'
+method: ComplexTestCase
+testPythonAttrLoadReturnsValue
+	"Phase B+1 red light: ``cpx.real'' from Python should return the
+	float value, not a BoundMethod.  Before the dynamic-instVar sweep
+	of value-type wrappers, ``real'' was a unary method on complex
+	with no paired ``real:'' setter — ___pyAttrLoad___ wrapped it as
+	a BoundMethod (treating it as a callable method instead of a value
+	attribute).  After the sweep, real/imag live in dynamic-instVar
+	storage and ___pyAttrLoad___'s top-level probe returns the value
+	directly."
+
+	| c |
+	c := complex ___new___: 5 _: 12.
+	self assert: (c @env1:___pyAttrLoad___: #real) equals: 5.0.
+	self assert: (c @env1:___pyAttrLoad___: #imag) equals: 12.0.
+%
+
+category: 'Grail-Initialization'
+method: ComplexTestCase
+testSetattrOverridesRealImag
+	"Phase B+1: ``setattr(cpx, 'real', 99)'' from outside writes to
+	the same dynamic-instVar storage that __init__ wrote to.  Before
+	the sweep, real was a static instVar with a synthesized setter
+	(``real:''), but setattr's perform: would target ``real:'' (which
+	complex didn't actually define, so setattr fell back to writing
+	a dynamic instVar — but reads still came from the static slot,
+	so the set was invisible)."
+
+	| c bi |
+	c := complex ___new___: 5 _: 12.
+	bi := (Python @env0:at: #builtins) @env0:___instance___.
+	bi @env1:setattr: c _: 'real' _: 99.0.
+	self assert: (c @env1:___pyAttrLoad___: #real) equals: 99.0.
+	self assert: (c @env1:real) equals: 99.0.
+%
+
 category: 'Grail-Arithmetic'
 method: ComplexTestCase
 test__abs__

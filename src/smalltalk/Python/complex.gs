@@ -7,7 +7,7 @@ object ifNil: [self error: 'object is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 object subclass: 'complex'
-  instVarNames: #( real imag)
+  instVarNames: #()
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -21,11 +21,11 @@ complex comment:
 'Python complex number type.
 
 Represents complex numbers with real and imaginary parts.
-Both parts are stored as Float values internally.
-
-Instance variables:
-  real - the real part (Float)
-  imag - the imaginary part (Float)
+Both parts are stored as Float values internally via dynamic
+instance variables (#real, #imag), so ``cpx.real'' from Python
+returns the float value directly through ___pyAttrLoad___''s
+dynamic-instVar probe (not a BoundMethod), and ``del cpx.real''
+truly removes the binding.
 '
 %
 
@@ -168,8 +168,8 @@ __abs__
 	|a+bi| = sqrt(a² + b²)"
 
 	| realSquared imagSquared sumSquares magnitude |
-	realSquared := real @env0:* real.
-	imagSquared := imag @env0:* imag.
+	realSquared := (self real) @env0:* (self real).
+	imagSquared := (self imag) @env0:* (self imag).
 	sumSquares := realSquared @env0:+ imagSquared.
 	magnitude := sumSquares @env0:sqrt.
 	^ magnitude
@@ -190,7 +190,7 @@ __add__: other
 			otherReal := other @env0:asFloat.
 			otherImag := 0.0.
 		].
-	^ complex __new__: (real @env0:+ otherReal) _: (imag @env0:+ otherImag)
+	^ complex __new__: ((self real) @env0:+ otherReal) _: ((self imag) @env0:+ otherImag)
 %
 
 category: 'Grail-Type Conversion'
@@ -198,8 +198,8 @@ method: complex
 __bool__
 	"Return True if complex number is non-zero, False otherwise."
 
-	^ (real @env0:~= 0.0)
-		or: [imag @env0:~= 0.0]
+	^ ((self real) @env0:~= 0.0)
+		or: [(self imag) @env0:~= 0.0]
 %
 
 category: 'Grail-Type Conversion'
@@ -219,8 +219,8 @@ __eq__: other
 	(other @env0:class) == complex ifFalse: [^ false].
 	otherReal := other real.
 	otherImag := other imag.
-	^ (real @env0:= otherReal) 
-		and: [imag @env0:= otherImag]
+	^ ((self real) @env0:= otherReal) 
+		and: [(self imag) @env0:= otherImag]
 %
 
 category: 'Grail-String Representation'
@@ -246,7 +246,7 @@ __getnewargs__
 	"Return arguments for pickling/unpickling."
 
 	"Return a tuple (array) of (real, imag) for reconstruction"
-	^ {real. imag}
+	^ {self real. self imag}
 %
 
 category: 'Grail-Serialization'
@@ -269,10 +269,13 @@ category: 'Grail-Initialization'
 method: complex
 __init__: r _: i
 	"Initialize a complex number with real and imaginary parts.
-	Called after __new__ in Python, or directly from Smalltalk constructor."
+	Called after __new__ in Python, or directly from Smalltalk
+	constructor.  Phase B+1: stores into dynamic instVars so
+	``cpx.real'' / ``cpx.imag'' Python attribute reads find the
+	values directly via the ___pyAttrLoad___ dynamic probe."
 
-	real := r @env0:asFloat.
-	imag := i @env0:asFloat.
+	self @env0:dynamicInstVarAt: #real put: r @env0:asFloat.
+	self @env0:dynamicInstVarAt: #imag put: i @env0:asFloat.
 	^ None
 %
 
@@ -309,10 +312,10 @@ __mul__: other
 			otherImag := 0.0.
 		].
 
-	ac := real @env0:* otherReal.
-	bd := imag @env0:* otherImag.
-	ad := real @env0:* otherImag.
-	bc := imag @env0:* otherReal.
+	ac := (self real) @env0:* otherReal.
+	bd := (self imag) @env0:* otherImag.
+	ad := (self real) @env0:* otherImag.
+	bc := (self imag) @env0:* otherReal.
 
 	newReal := ac @env0:- (bd).
 	newImag := ad @env0:+ bc.
@@ -333,7 +336,7 @@ method: complex
 __neg__
 	"Negate the complex number."
 
-	^ complex __new__: (real @env0:negated) _: (imag @env0:negated)
+	^ complex __new__: ((self real) @env0:negated) _: ((self imag) @env0:negated)
 %
 
 category: 'Grail-Arithmetic'
@@ -386,14 +389,14 @@ __repr__
 	"Return string representation of complex number."
 
 	| realStr imagStr |
-	realStr := real @env0:printString.
-	imagStr := imag @env0:abs.
+	realStr := (self real) @env0:printString.
+	imagStr := (self imag) @env0:abs.
 	imagStr := imagStr @env0:printString.
 
-	^ ((real @env0:= 0.0)
+	^ (((self real) @env0:= 0.0)
 		ifTrue: [imagStr @env0:, 'j']
 		ifFalse: [
-			(imag @env0:>= 0.0)
+			((self imag) @env0:>= 0.0)
 				ifTrue: [
 					(((('(' @env0:, realStr)
 						@env0:, '+')
@@ -441,7 +444,7 @@ __rsub__: other
 			otherReal := other @env0:asFloat.
 			otherImag := 0.0.
 		].
-	^ complex __new__: (otherReal @env0:- real) _: (otherImag @env0:- imag)
+	^ complex __new__: (otherReal @env0:- (self real)) _: (otherImag @env0:- (self imag))
 %
 
 category: 'Grail-Arithmetic'
@@ -461,14 +464,14 @@ __rtruediv__: other
 		].
 
 	"Calculate denominator: a² + b² (self's magnitude squared)"
-	denom := (real @env0:* real)
-		@env0:+ (imag @env0:* imag).
+	denom := ((self real) @env0:* (self real))
+		@env0:+ ((self imag) @env0:* (self imag)).
 
 	"Calculate numerator components for other / self"
-	ac := otherReal @env0:* real.
-	bd := otherImag @env0:* imag.
-	bc := otherImag @env0:* real.
-	ad := otherReal @env0:* imag.
+	ac := otherReal @env0:* (self real).
+	bd := otherImag @env0:* (self imag).
+	bc := otherImag @env0:* (self real).
+	ad := otherReal @env0:* (self imag).
 
 	newReal := (ac @env0:+ bd)
 		@env0:/ denom.
@@ -501,7 +504,7 @@ __sub__: other
 			otherReal := other @env0:asFloat.
 			otherImag := 0.0.
 		].
-	^ complex __new__: (real @env0:- otherReal) _: (imag @env0:- otherImag)
+	^ complex __new__: ((self real) @env0:- otherReal) _: ((self imag) @env0:- otherImag)
 %
 
 category: 'Grail-Arithmetic'
@@ -526,10 +529,10 @@ __truediv__: other
 		@env0:+ (otherImag @env0:* otherImag).
 
 	"Calculate numerator components"
-	ac := real @env0:* otherReal.
-	bd := imag @env0:* otherImag.
-	bc := imag @env0:* otherReal.
-	ad := real @env0:* otherImag.
+	ac := (self real) @env0:* otherReal.
+	bd := (self imag) @env0:* otherImag.
+	bc := (self imag) @env0:* otherReal.
+	ad := (self real) @env0:* otherImag.
 
 	newReal := (ac @env0:+ bd)
 		@env0:/ denom.
@@ -544,23 +547,27 @@ method: complex
 conjugate
 	"Return the complex conjugate."
 
-	^ complex __new__: real _: (imag @env0:negated)
+	^ complex __new__: (self real) _: ((self imag) @env0:negated)
 %
 
 category: 'Grail-Attribute Access'
 method: complex
 imag
-	"Return the imaginary part of the complex number."
-	
-	^ imag
+	"Return the imaginary part of the complex number.  Phase B+1:
+	reads from dynamic-instVar storage; symmetrical with the
+	``cpx.imag'' Python attribute load path."
+
+	^ self @env0:dynamicInstVarAt: #imag
 %
 
 category: 'Grail-Attribute Access'
 method: complex
 real
-	"Return the real part of the complex number."
-	
-	^ real
+	"Return the real part of the complex number.  Phase B+1: reads
+	from dynamic-instVar storage; symmetrical with the ``cpx.real''
+	Python attribute load path."
+
+	^ self @env0:dynamicInstVarAt: #real
 %
 
 set compile_env: 0

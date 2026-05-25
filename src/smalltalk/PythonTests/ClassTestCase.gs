@@ -76,24 +76,26 @@ testCounterClassExists
 category: 'Grail-Tests - Instance Variables'
 method: ClassTestCase
 testPointInstVars
-	"Test that Point has x and y as instance variables."
+	"Phase B: Point instances expose x and y as Python attributes.
+	Storage is dynamic-instVars on each instance — the class itself
+	has no static instVar declarations for these names."
 
-	| cls varNames |
-	cls := testModule @env1:Point.
-	varNames := cls allInstVarNames.
-	self assert: (varNames includes: #x).
-	self assert: (varNames includes: #y).
+	| p |
+	p := testModule @env0:dynamicInstVarAt: #p.
+	self assert: (p @env1:___pyAttrLoad___: #x) equals: 3.
+	self assert: (p @env1:___pyAttrLoad___: #y) equals: 4.
 %
 
 category: 'Grail-Tests - Instantiation'
 method: ClassTestCase
 testPointCreatedDuringInit
-	"Test that p = Point(3, 4) created a Point with correct values."
+	"Phase B: p = Point(3, 4) creates a Point with x=3, y=4 stored
+	in the instance's dynamic-instVar storage."
 
 	| p |
-	p := testModule instVarAt: (testModule class allInstVarNames indexOf: #p).
-	self assert: (p instVarAt: (p class allInstVarNames indexOf: #x)) equals: 3.
-	self assert: (p instVarAt: (p class allInstVarNames indexOf: #y)) equals: 4.
+	p := testModule @env0:dynamicInstVarAt: #p.
+	self assert: (p @env0:dynamicInstVarAt: #x) equals: 3.
+	self assert: (p @env0:dynamicInstVarAt: #y) equals: 4.
 %
 
 category: 'Grail-Tests - Method Calls'
@@ -140,7 +142,7 @@ testDirectMethodCall
 	"Test calling a method via perform on an instance."
 
 	| p |
-	p := testModule instVarAt: (testModule class allInstVarNames indexOf: #p).
+	p := testModule @env0:dynamicInstVarAt: #p.
 	self assert: (p perform: #sum env: 1) equals: 7.
 %
 
@@ -150,7 +152,7 @@ testPointAccessors
 	"Test that unary accessor methods work for instance variables."
 
 	| p |
-	p := testModule instVarAt: (testModule class allInstVarNames indexOf: #p).
+	p := testModule @env0:dynamicInstVarAt: #p.
 	self assert: (p perform: #x env: 1) equals: 3.
 	self assert: (p perform: #y env: 1) equals: 4.
 %

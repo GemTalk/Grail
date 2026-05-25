@@ -86,13 +86,6 @@ simple
 
 category: 'Grail-other'
 method: AnnAssignAst
-declareVariable
-
-	target declareVariable.
-%
-
-category: 'Grail-other'
-method: AnnAssignAst
 printSmalltalkOn: aStream
 	"``x: int = expr`` → emit the assignment, drop the annotation.
 	Grail doesn't materialize __annotations__; the annotation is
@@ -112,9 +105,11 @@ printSmalltalkOn: aStream
 		((target value isKindOf: NameAst)
 			and: [CallAst isSelfReference: target value id])
 			ifTrue: [
-				"Route through the generated setter rather than a bare
-				instVar write so block temps (Python parameters) of
-				the same name don't shadow the slot."
+				"Phase B: ``self.attr: T = value'' annotated store on a
+				self-reference goes through the instance's dynamic-instVar
+				storage.  Class-side attrs (in classAttrNames) still use
+				the synthesized env-1 setter because class objects can't
+				hold dynamic instVars."
 				(CallAst classAttrNames notNil
 					and: [CallAst classAttrNames includes: target attr asSymbol])
 					ifTrue: [
@@ -124,9 +119,9 @@ printSmalltalkOn: aStream
 						value printSmalltalkWithParenthesisOn: aStream.
 						aStream nextPut: $..
 					] ifFalse: [
-						aStream nextPutAll: 'self '.
+						aStream nextPutAll: 'self @env0:dynamicInstVarAt: #'''.
 						aStream nextPutAll: target attr.
-						aStream nextPutAll: ': '.
+						aStream nextPutAll: ''' put: '.
 						value printSmalltalkWithParenthesisOn: aStream.
 						aStream nextPut: $..
 					].
@@ -149,8 +144,34 @@ printSmalltalkOn: aStream
 		aStream nextPut: $..
 		^ self
 	].
+	"Phase A: module-scope plain NameAst target writes through the
+	module instance's dynamic-instVar storage rather than a bare
+	assignment (no static instVar slot exists for the name)."
+	((target isKindOf: NameAst) and: [self isModuleScopeAnnTarget: target])
+		ifTrue: [
+			aStream
+				nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+				nextPutAll: target id;
+				nextPutAll: ''' put: '.
+			value printSmalltalkWithParenthesisOn: aStream.
+			aStream nextPut: $..
+			^ self
+		].
 	target printSmalltalkOn: aStream.
 	aStream nextPutAll: ' := '.
 	value printSmalltalkOn: aStream.
 	aStream nextPut: $..
+%
+
+category: 'Grail-other'
+method: AnnAssignAst
+isModuleScopeAnnTarget: aNameAst
+	"Phase A: true if this annotated-assign target is a module-scope
+	name — same discriminator as AssignAst's isModuleScopeStoreTarget:."
+
+	CallAst moduleClassBeingCompiled ifNil: [^ false].
+	CallAst classBeingCompiled ifNotNil: [^ false].
+	(aNameAst isModuleVariableName: aNameAst id) ifFalse: [^ false].
+	(aNameAst ___declaredInEnclosingFunction___: aNameAst id) ifTrue: [^ false].
+	^ true
 %

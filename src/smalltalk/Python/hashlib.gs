@@ -8,7 +8,7 @@ PythonInstance ifNil: [self error: 'PythonInstance is not defined.  Check file o
 expectvalue /Class
 doit
 PythonInstance subclass: 'Hash'
-  instVarNames: #( algo buffer )
+  instVarNames: #()
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -64,15 +64,15 @@ ___pythonValueAttrs___
 category: 'Grail-Private'
 method: Hash
 _initAlgo: algoSym data: someBytes
-	algo := algoSym.
-	buffer := ByteArray @env0:new.
+self @env0:dynamicInstVarAt: #algo put: algoSym.
+self @env0:dynamicInstVarAt: #buffer put: ByteArray @env0:new.
 	someBytes ifNotNil: [
 		(someBytes @env0:isKindOf: ByteArray) ifTrue: [
-			buffer := buffer @env0:, someBytes
+			self @env0:dynamicInstVarAt: #buffer put: ((self @env0:dynamicInstVarAt: #buffer) @env0:, someBytes)
 		] ifFalse: [
 			"Treat str-shaped input as UTF-8; CPython hashes only bytes,
 			so this is a permissive convenience."
-			buffer := buffer @env0:, someBytes @env0:asByteArray
+			self @env0:dynamicInstVarAt: #buffer put: ((self @env0:dynamicInstVarAt: #buffer) @env0:, someBytes @env0:asByteArray)
 		]
 	].
 %
@@ -83,16 +83,16 @@ _digestBytes
 	"Run the hash algorithm against the current buffer.  Returns a
 	ByteArray.  Unknown algo raises ValueError."
 
-	algo == #md5 ifTrue: [^ buffer @env0:md5sumBytes].
-	algo == #sha1 ifTrue: [^ buffer @env0:sha1SumBytes].
-	algo == #sha256 ifTrue: [^ buffer @env0:sha256SumBytes].
-	algo == #sha512 ifTrue: [^ buffer @env0:sha512SumBytes].
-	algo == #sha3_224 ifTrue: [^ buffer @env0:sha3_224SumBytes].
-	algo == #sha3_256 ifTrue: [^ buffer @env0:sha3_256SumBytes].
-	algo == #sha3_384 ifTrue: [^ buffer @env0:sha3_384SumBytes].
-	algo == #sha3_512 ifTrue: [^ buffer @env0:sha3_512SumBytes].
+	(self @env0:dynamicInstVarAt: #algo) == #md5 ifTrue: [^ (self @env0:dynamicInstVarAt: #buffer) @env0:md5sumBytes].
+	(self @env0:dynamicInstVarAt: #algo) == #sha1 ifTrue: [^ (self @env0:dynamicInstVarAt: #buffer) @env0:sha1SumBytes].
+	(self @env0:dynamicInstVarAt: #algo) == #sha256 ifTrue: [^ (self @env0:dynamicInstVarAt: #buffer) @env0:sha256SumBytes].
+	(self @env0:dynamicInstVarAt: #algo) == #sha512 ifTrue: [^ (self @env0:dynamicInstVarAt: #buffer) @env0:sha512SumBytes].
+	(self @env0:dynamicInstVarAt: #algo) == #sha3_224 ifTrue: [^ (self @env0:dynamicInstVarAt: #buffer) @env0:sha3_224SumBytes].
+	(self @env0:dynamicInstVarAt: #algo) == #sha3_256 ifTrue: [^ (self @env0:dynamicInstVarAt: #buffer) @env0:sha3_256SumBytes].
+	(self @env0:dynamicInstVarAt: #algo) == #sha3_384 ifTrue: [^ (self @env0:dynamicInstVarAt: #buffer) @env0:sha3_384SumBytes].
+	(self @env0:dynamicInstVarAt: #algo) == #sha3_512 ifTrue: [^ (self @env0:dynamicInstVarAt: #buffer) @env0:sha3_512SumBytes].
 	ValueError @env1:___signal___:
-		'unsupported hash algorithm ''' @env0:, algo @env0:asString @env0:, ''''
+		'unsupported hash algorithm ''' @env0:, (self @env0:dynamicInstVarAt: #algo) @env0:asString @env0:, ''''
 %
 
 set compile_env: 1
@@ -114,7 +114,7 @@ method: Hash
 name
 	"Return the algorithm name (lowercase string, matching CPython)."
 
-	^ algo @env0:asString
+	^ (self @env0:dynamicInstVarAt: #algo) @env0:asString
 %
 
 category: 'Grail-Hash Protocol'
@@ -122,14 +122,14 @@ method: Hash
 digest_size
 	"Output size of ``digest()`` in bytes."
 
-	algo == #md5 ifTrue: [^ 16].
-	algo == #sha1 ifTrue: [^ 20].
-	algo == #sha256 ifTrue: [^ 32].
-	algo == #sha512 ifTrue: [^ 64].
-	algo == #sha3_224 ifTrue: [^ 28].
-	algo == #sha3_256 ifTrue: [^ 32].
-	algo == #sha3_384 ifTrue: [^ 48].
-	algo == #sha3_512 ifTrue: [^ 64].
+	(self @env0:dynamicInstVarAt: #algo) == #md5 ifTrue: [^ 16].
+	(self @env0:dynamicInstVarAt: #algo) == #sha1 ifTrue: [^ 20].
+	(self @env0:dynamicInstVarAt: #algo) == #sha256 ifTrue: [^ 32].
+	(self @env0:dynamicInstVarAt: #algo) == #sha512 ifTrue: [^ 64].
+	(self @env0:dynamicInstVarAt: #algo) == #sha3_224 ifTrue: [^ 28].
+	(self @env0:dynamicInstVarAt: #algo) == #sha3_256 ifTrue: [^ 32].
+	(self @env0:dynamicInstVarAt: #algo) == #sha3_384 ifTrue: [^ 48].
+	(self @env0:dynamicInstVarAt: #algo) == #sha3_512 ifTrue: [^ 64].
 	^ 0
 %
 
@@ -138,14 +138,14 @@ method: Hash
 block_size
 	"Internal block size in bytes (matters for HMAC keys)."
 
-	algo == #md5 ifTrue: [^ 64].
-	algo == #sha1 ifTrue: [^ 64].
-	algo == #sha256 ifTrue: [^ 64].
-	algo == #sha512 ifTrue: [^ 128].
-	algo == #sha3_224 ifTrue: [^ 144].
-	algo == #sha3_256 ifTrue: [^ 136].
-	algo == #sha3_384 ifTrue: [^ 104].
-	algo == #sha3_512 ifTrue: [^ 72].
+	(self @env0:dynamicInstVarAt: #algo) == #md5 ifTrue: [^ 64].
+	(self @env0:dynamicInstVarAt: #algo) == #sha1 ifTrue: [^ 64].
+	(self @env0:dynamicInstVarAt: #algo) == #sha256 ifTrue: [^ 64].
+	(self @env0:dynamicInstVarAt: #algo) == #sha512 ifTrue: [^ 128].
+	(self @env0:dynamicInstVarAt: #algo) == #sha3_224 ifTrue: [^ 144].
+	(self @env0:dynamicInstVarAt: #algo) == #sha3_256 ifTrue: [^ 136].
+	(self @env0:dynamicInstVarAt: #algo) == #sha3_384 ifTrue: [^ 104].
+	(self @env0:dynamicInstVarAt: #algo) == #sha3_512 ifTrue: [^ 72].
 	^ 0
 %
 
@@ -156,9 +156,9 @@ update: data
 
 	data ifNil: [^ None].
 	(data @env0:isKindOf: ByteArray) ifTrue: [
-		buffer := buffer @env0:, data
+		self @env0:dynamicInstVarAt: #buffer put: ((self @env0:dynamicInstVarAt: #buffer) @env0:, data)
 	] ifFalse: [
-		buffer := buffer @env0:, data @env0:asByteArray
+		self @env0:dynamicInstVarAt: #buffer put: ((self @env0:dynamicInstVarAt: #buffer) @env0:, data @env0:asByteArray)
 	].
 	^ None
 %
@@ -208,12 +208,12 @@ copy
 
 	| h |
 	h := Hash @env0:new.
-	h @env0:_initAlgo: algo data: nil.
+	h @env0:_initAlgo: (self @env0:dynamicInstVarAt: #algo) data: nil.
 	"Copy buffer manually so the clone has its own ByteArray.  Use
 	``@env1:update:`` so dispatch finds the env-1 method (env-0 has
 	no ``update:`` on Hash)."
-	(buffer @env0:size @env0:> 0) ifTrue: [
-		h @env1:update: (buffer @env0:copyFrom: 1 to: buffer @env0:size)
+	((self @env0:dynamicInstVarAt: #buffer) @env0:size @env0:> 0) ifTrue: [
+		h @env1:update: ((self @env0:dynamicInstVarAt: #buffer) @env0:copyFrom: 1 to: (self @env0:dynamicInstVarAt: #buffer) @env0:size)
 	].
 	^ h
 %

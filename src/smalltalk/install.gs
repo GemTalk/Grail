@@ -455,6 +455,14 @@ run
 	at: #'ComprehensionTestCase' put: nil;
 	at: #'DefaultsAndAttrsTestCase' put: nil;
 	at: #'DynamicGlobalsTestCase' put: nil;
+	at: #'DynamicInstanceAttrsTestCase' put: nil;
+	at: #'AttributeAccessTestCase' put: nil;
+	at: #'AttributeInheritanceTestCase' put: nil;
+	at: #'AttributePropertyTestCase' put: nil;
+	at: #'ClassAttributeTestCase' put: nil;
+	at: #'AttributeProtocolTestCase' put: nil;
+	at: #'AttributeStoreTestCase' put: nil;
+	at: #'FunctionRebindingTestCase' put: nil;
 	at: #'ConnectionAbortedErrorTestCase' put: nil;
 	at: #'ConnectionErrorTestCase' put: nil;
 	at: #'ConnectionRefusedErrorTestCase' put: nil;
@@ -1005,6 +1013,14 @@ input src/smalltalk/PythonTests/ComplexTestCase.gs
 input src/smalltalk/PythonTests/ComprehensionTestCase.gs
 input src/smalltalk/PythonTests/DefaultsAndAttrsTestCase.gs
 input src/smalltalk/PythonTests/DynamicGlobalsTestCase.gs
+input src/smalltalk/PythonTests/DynamicInstanceAttrsTestCase.gs
+input src/smalltalk/PythonTests/AttributeAccessTestCase.gs
+input src/smalltalk/PythonTests/AttributeInheritanceTestCase.gs
+input src/smalltalk/PythonTests/AttributePropertyTestCase.gs
+input src/smalltalk/PythonTests/ClassAttributeTestCase.gs
+input src/smalltalk/PythonTests/AttributeProtocolTestCase.gs
+input src/smalltalk/PythonTests/AttributeStoreTestCase.gs
+input src/smalltalk/PythonTests/FunctionRebindingTestCase.gs
 input src/smalltalk/PythonTests/EnumGlobalInjectTestCase.gs
 input src/smalltalk/PythonTests/MakecodesPatternTestCase.gs
 input src/smalltalk/PythonTests/NamedIntConstantTestCase.gs

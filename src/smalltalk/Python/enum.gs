@@ -151,7 +151,7 @@ global_enum: cls
 			(classMd @env0:includesKey: setter) ifTrue: [
 				| val |
 				val := cls @env0:perform: sel env: 1.
-				module @env0:at: sel put: val.
+				module @env0:dynamicInstVarAt: sel put: val.
 				processed @env0:add: sel.
 			].
 		].

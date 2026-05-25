@@ -8,8 +8,7 @@ expectvalue /Class
 doit
 StatementAst subclass: 'ClassDefAst'
   instVarNames: #( name bases keywords
-                    body decorator_list type_params
-                    instanceVariables)
+                    body decorator_list type_params)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -74,13 +73,12 @@ printSmalltalkRuntimeOn: aStream
 	context), then embedded as Smalltalk string literals in
 	compileMethod: calls in the emitted code."
 
-	| ivarNames methodDefs classMethodDefs staticMethodDefs selfParam
+	| methodDefs classMethodDefs staticMethodDefs selfParam
 	  funcNames varargsFuncNames
 	  methodSources classMethodSources staticMethodSources
 	  initMethod initSelector classAttrs allClassInstVars
-	  savedClass savedIvarNames savedFuncNames savedVarargsFuncNames
-	  savedSelfParam savedClassAttrNames |
-	ivarNames := self instanceVarNamesFromInit.
+	  savedClass savedFuncNames savedVarargsFuncNames
+	  savedSelfParam savedClassAttrNames settersByName |
 	methodDefs := self instanceMethodDefs.
 	classMethodDefs := self classMethodDefs.
 	staticMethodDefs := self staticMethodDefs.
@@ -114,10 +112,9 @@ printSmalltalkRuntimeOn: aStream
 
 	"Push the class-compile context that the per-method codegen reads
 	(CallAst consults these to decide how to dispatch self-sends,
-	instVar reads, etc.).  Save outer values so a class nested in
-	another class restores correctly."
+	etc.).  Save outer values so a class nested in another class
+	restores correctly."
 	savedClass := CallAst classBeingCompiled.
-	savedIvarNames := CallAst classInstVarNames.
 	savedFuncNames := CallAst classFunctionNames.
 	savedVarargsFuncNames := CallAst classVarargsFunctionNames.
 	savedClassAttrNames := CallAst classAttrNames.
@@ -126,7 +123,6 @@ printSmalltalkRuntimeOn: aStream
 	"classBeingCompiled is only used as a non-nil marker here; the
 	actual class doesn't exist until the emitted code runs."
 	CallAst classBeingCompiled: name asSymbol.
-	CallAst classInstVarNames: (IdentitySet withAll: ivarNames).
 	CallAst classFunctionNames: funcNames.
 	CallAst classVarargsFunctionNames: varargsFuncNames.
 	CallAst classAttrNames: (IdentitySet withAll: (classAttrs collect: [:p | p key])).
@@ -146,57 +142,37 @@ printSmalltalkRuntimeOn: aStream
 		(both strip the first positional — ``self`` or ``cls`` — and
 		the Smalltalk receiver IS the class for class-side methods, so
 		``cls`` becomes the implicit ``self``).  Compile target is
-		class-side; see the classSide: true emit further below.
-
-		Clear ``classInstVarNames`` during the classmethod compile —
-		those names live on *instances*, not on the metaclass, so a
-		classmethod parameter that happens to share a name with an
-		instance instVar (``def stamped(cls, label)`` against
-		``__init__(self, label)``) must be declared as a real temp.
-		If it stayed filtered out as if it were an instVar, the
-		generated source would read ``label := ___1`` and the
-		Smalltalk compiler would reject ``label`` as an undefined
-		symbol on the metaclass side."
+		class-side; see the classSide: true emit further below."
 		classMethodDefs isEmpty ifFalse: [
-			| savedForCM |
-			savedForCM := CallAst classInstVarNames.
-			CallAst classInstVarNames: IdentitySet new.
-			[
-				classMethodDefs do: [:def |
-					| s savedSelfForCM |
-					"For each classmethod, switch ``selfParameterName`` to its
-					own first argument (typically ``cls``) so NameAst maps
-					body references like ``cls(...)`` and ``cls.X`` to
-					Smalltalk ``self`` (which on a class-side method IS the
-					class)."
-					savedSelfForCM := CallAst selfParameterName.
-					CallAst selfParameterName: (def allParameterNames isEmpty
-						ifTrue: [#cls asSymbol]
-						ifFalse: [def allParameterNames first asSymbol]).
-					[
-						s := PrettyWriteStream on: Unicode7 new.
-						def generateMethodSourceOn: s.
-						classMethodSources add: def name asString -> s contents.
-					] ensure: [
-						CallAst selfParameterName: savedSelfForCM.
-					].
-				]
-			] ensure: [
-				CallAst classInstVarNames: savedForCM.
-			].
+			classMethodDefs do: [:def |
+				| s savedSelfForCM |
+				"For each classmethod, switch ``selfParameterName'' to its
+				own first argument (typically ``cls'') so NameAst maps
+				body references like ``cls(...)'' and ``cls.X'' to
+				Smalltalk ``self'' (which on a class-side method IS the
+				class)."
+				savedSelfForCM := CallAst selfParameterName.
+				CallAst selfParameterName: (def allParameterNames isEmpty
+					ifTrue: [#cls asSymbol]
+					ifFalse: [def allParameterNames first asSymbol]).
+				[
+					s := PrettyWriteStream on: Unicode7 new.
+					def generateMethodSourceOn: s.
+					classMethodSources add: def name asString -> s contents.
+				] ensure: [
+					CallAst selfParameterName: savedSelfForCM.
+				].
+			]
 		].
 		"@staticmethod bodies have no implicit ``self``/``cls`` —
 		first arg is a regular parameter.  Use the module-method
-		source generator (no first-param strip).  Clear ONLY
-		classInstVarNames + selfParameterName so the body's
-		bare-name resolution still finds module-scope names
-		(class-level dispatch context stays intact for
-		``ClassName.X`` references)."
+		source generator (no first-param strip).  Clear
+		selfParameterName so the body's bare-name resolution still
+		finds module-scope names (class-level dispatch context stays
+		intact for ``ClassName.X'' references)."
 		staticMethodDefs isEmpty ifFalse: [
-			| savedIvarForSM savedSelfForSM |
-			savedIvarForSM := CallAst classInstVarNames.
+			| savedSelfForSM |
 			savedSelfForSM := CallAst selfParameterName.
-			CallAst classInstVarNames: IdentitySet new.
 			CallAst selfParameterName: nil.
 			[
 				staticMethodDefs do: [:def |
@@ -206,13 +182,11 @@ printSmalltalkRuntimeOn: aStream
 					staticMethodSources add: def name asString -> s contents.
 				]
 			] ensure: [
-				CallAst classInstVarNames: savedIvarForSM.
 				CallAst selfParameterName: savedSelfForSM.
 			].
 		].
 	] ensure: [
 		CallAst classBeingCompiled: savedClass.
-		CallAst classInstVarNames: savedIvarNames.
 		CallAst classFunctionNames: savedFuncNames.
 		CallAst classVarargsFunctionNames: savedVarargsFuncNames.
 		CallAst classAttrNames: savedClassAttrNames.
@@ -255,6 +229,15 @@ printSmalltalkRuntimeOn: aStream
 	handler needed at the call site."
 	(allClassInstVars includes: #'__module__') ifFalse: [
 		allClassInstVars add: #'__module__'].
+	"Always request a ``dynInstVars'' slot to hold the per-class
+	dynamic-attribute dict (an Object whose dynamicInstVars provide
+	the storage).  Each class gets its own slot — see
+	[[class-side-dynamic-attrs]].  GemStone classes don't support
+	dynamicInstVarAt:put: directly; this Object new sits in the
+	classInstVar and gives us the same dictionary semantics for
+	class-level Python attribute stores."
+	(allClassInstVars includes: #'dynInstVars') ifFalse: [
+		allClassInstVars add: #'dynInstVars'].
 	"Add ``_fields`` slot so NamedTuple-style subclasses can introspect
 	their bare-annotation field layout in declaration order.  Skipped
 	when the user already declared ``_fields`` themselves.  See the
@@ -274,14 +257,31 @@ printSmalltalkRuntimeOn: aStream
 	keyword send like ``Typing @env1:___pyAttrLoad___: #'NamedTuple'''
 	the unparenthesized form would merge the keywords with ours into
 	one big selector (``___pyAttrLoad___:___subclass___:...'')."
+	"Phase A: when this class def lands at module scope, the Python
+	name has no static instVar to hold the class object — wrap the
+	entire emit in a block that declares ``<name>'' as a Smalltalk
+	temp, performs all class setup against that temp, and at the end
+	stores the (possibly decorator-wrapped) class into the module
+	instance via dynamicInstVarAt:put:.  For non-module-scope class
+	defs (nested inside a function or another class) the existing
+	bare-assignment emit works because the parser declares the
+	enclosing scope's variable."
+	(self isModuleScopeClassDef) ifTrue: [
+		aStream nextPutAll: '[| '; nextPutAll: name; nextPutAll: ' | '.
+	].
+	"Phase B: instance attributes live in dynamic-instVar storage on
+	each instance (created on first write via ``dynamicInstVarAt:put:'').
+	Instance instVarNames is therefore empty — no pre-declaration
+	needed.  Class attributes (``class C: X = 1'') still allocate
+	classInstVar slots because GemStone prohibits dynamic instVars on
+	Behavior / Class receivers (error 2484); accessor/setter pairs
+	keep the read/write path working for class-side attrs."
 	aStream nextPutAll: name; nextPutAll: ' := ('.
 	self printSuperclassOn: aStream.
 	aStream
 		nextPutAll: ') ___subclass___: #''';
 		nextPutAll: (importlib @env0:___asSmalltalkClassName___: name) asString;
-		nextPutAll: ''' instVarNames: '.
-	self printSymbolArray: ivarNames on: aStream.
-	aStream nextPutAll: ' classInstVarNames: '.
+		nextPutAll: ''' instVarNames: #() classInstVarNames: '.
 	self printSymbolArray: allClassInstVars on: aStream.
 	aStream nextPutAll: '.'; lf.
 
@@ -337,6 +337,11 @@ printSmalltalkRuntimeOn: aStream
 	identical sources.  The runtime check uses ``<class> superclass
 	class allInstVarNames`` because the class itself exists by this
 	point (assigned in the block above)."
+	"Class attributes (``class C: X = 1'') still need accessor/setter
+	pairs on the metaclass because GemStone prohibits dynamic instVars
+	on Behavior/Class receivers.  Each pair lets ``___pyAttrLoad___:''
+	distinguish a value-attribute (paired getter+setter) from a
+	regular method (which would be wrapped as a BoundMethod)."
 	classAttrs do: [:pair |
 		| attrName lf accessorSrc setterSrc |
 		attrName := pair key.
@@ -358,11 +363,8 @@ printSmalltalkRuntimeOn: aStream
 			classSide: true
 			onStream: aStream.
 	].
-	"Initialize each class attribute by evaluating the value
-	expression in the surrounding module context and sending the
-	setter to the class object."
 	classAttrs do: [:pair |
-		"pair value is nil for bare annotations (``x: int`` with no
+		"pair value is nil for bare annotations (``x: int'' with no
 		assignment) — skip the init emit; the slot stays nil until
 		some later assignment fills it."
 		pair value ifNotNil: [
@@ -371,8 +373,11 @@ printSmalltalkRuntimeOn: aStream
 			aStream nextPutAll: '.'; lf
 		].
 	].
-	"Compile + init ``_fields`` accessor/setter for NamedTuple-style
-	subclasses.  The slot was added to allClassInstVars above."
+	"NamedTuple-style classes get a ``_fields'' accessor/setter pair
+	on the metaclass, initialised to a tuple of declaration-order
+	bare-annotation names.  The slot was added to allClassInstVars
+	above (filtered by ___subclass___: if a parent already declared
+	it)."
 	((classAttrs anySatisfy: [:p | p value isNil])
 		and: [(classAttrs anySatisfy: [:p | p key == #'_fields']) not])
 			ifTrue: [
@@ -394,7 +399,6 @@ printSmalltalkRuntimeOn: aStream
 			env: 1
 			classSide: true
 			onStream: aStream.
-		"Init the slot with a tuple of declaration-order names."
 		bareNames := (classAttrs select: [:p | p value isNil])
 			collect: [:p | p key].
 		aStream
@@ -404,16 +408,10 @@ printSmalltalkRuntimeOn: aStream
 			aStream space; nextPutAll: ''''; nextPutAll: n asString; nextPutAll: '''' ].
 		aStream nextPutAll: ' )).'; lf.
 	].
-	"For class attrs the parent declares but we didn't redeclare,
-	copy the parent's current value into our slot via the importlib
-	helper (factored out to keep per-class generated-code size small).
-	Smalltalk class-side instVars are per-class storage, so without
-	this the subclass's inherited slot stays nil."
+	"Inherit parent class-attr values into our slot.  Smalltalk
+	class-side instVars are per-class storage; without this the
+	subclass's inherited slot stays nil."
 	bases isEmpty ifFalse: [
-		"Use ``(Python at: #importlib)`` rather than the bare
-		``importlib`` identifier — a user module that did
-		``import importlib`` would shadow the latter with the
-		Python-level facade."
 		aStream
 			nextPutAll: '(Python @env0:at: #importlib) @env0:___inheritClassAttrs___: ';
 			nextPutAll: name;
@@ -424,17 +422,9 @@ printSmalltalkRuntimeOn: aStream
 
 	"Compile the synthetic ``__module__'' accessor + setter on every
 	class (unless the user already declared ``__module__'' in the
-	class body — re._constants's ``class PatternError(Exception):
-	__module__ = 're'`` — in which case the classAttrs loop above
-	already emitted them and the init line already stored the user's
-	value, which must not be clobbered).  The slot itself is declared
-	above (filtered by ``___subclass___:'' if the parent already has
-	it, so subclasses of a Python user class reuse the inherited slot;
-	subclasses of a built-in like ``int''/``dict'' get a fresh one).
-	Re-emitting the methods on every class costs a small compile per
-	subclass but guarantees ``Foo __module__: self'' always resolves —
-	no MessageNotUnderstood handler needed for the built-in-parent
-	case."
+	class body — re._constants's PatternError sets ``__module__ =
+	're''').  The slot itself is added to allClassInstVars via the
+	unconditional ``add: #'__module__''' above."
 	(classAttrs anySatisfy: [:p | p key == #'__module__']) ifFalse: [
 		self
 			emitCompileMethodOn: name
@@ -455,32 +445,29 @@ printSmalltalkRuntimeOn: aStream
 		aStream nextPutAll: name; nextPutAll: ' __module__: self.'; lf.
 	].
 
-	"Compile a unary accessor + 1-arg setter per instance variable.
-	The setter pairs with the accessor so ``___pyAttrLoad___:`` can
-	distinguish a value-attribute (has both getter and setter) from
-	a regular method (which would otherwise be wrapped in a
-	BoundMethod).  Also lets external code do ``obj.x = v`` via the
-	@env1:x: send."
-	ivarNames do: [:ivar |
-		| lf accessorSrc setterSrc |
-		lf := Character lf asString.
-		accessorSrc := ivar , lf , '	^ ' , ivar.
-		self
-			emitCompileMethodOn: name
-			source: accessorSrc
-			category: 'Grail-Accessors'
-			env: 1
-			classSide: false
-			onStream: aStream.
-		setterSrc := ivar , ': ___1' , lf , '	' , ivar , ' := ___1.'.
-		self
-			emitCompileMethodOn: name
-			source: setterSrc
-			category: 'Grail-Accessors'
-			env: 1
-			classSide: false
-			onStream: aStream.
-	].
+	"Compile the ``dynInstVars'' accessor + setter pair on every class.
+	The slot holds an Object new whose dynamic instVars serve as the
+	per-class dictionary for dynamically-set Python attributes
+	(``C.brand_new = 42'').  See [[class-side-dynamic-attrs]] —
+	GemStone classes don't support ``dynamicInstVarAt:put:'' directly,
+	so this Object proxy gives us the same dict semantics."
+	self
+		emitCompileMethodOn: name
+		source: 'dynInstVars
+	^ dynInstVars'
+		category: 'Grail-Class Attrs'
+		env: 1
+		classSide: true
+		onStream: aStream.
+	self
+		emitCompileMethodOn: name
+		source: 'dynInstVars: ___1
+	dynInstVars := ___1.'
+		category: 'Grail-Class Attrs'
+		env: 1
+		classSide: true
+		onStream: aStream.
+	aStream nextPutAll: name; nextPutAll: ' dynInstVars: (Object @env0:new).'; lf.
 
 	"For each @property method, compile a 1-arg setter that signals
 	AttributeError.  Pairing the @property getter with a setter makes
@@ -488,10 +475,29 @@ printSmalltalkRuntimeOn: aStream
 	reads INVOKE the property method (returning its value) instead of
 	being wrapped in a BoundMethod.  Python @property without an
 	explicit @setter is read-only; signalling AttributeError on
-	assignment matches that."
+	assignment matches that.
+
+	Skip the stub when ``@<name>.setter'' supplied an explicit setter
+	method def — the explicit setter compiles to the same ``name:''
+	selector and the stub would overwrite it.  Detect @x.setter by
+	an AttributeAst decorator whose attr is 'setter' and whose value
+	is a NameAst matching the property name."
+
+	settersByName := IdentitySet new.
 	methodDefs do: [:def |
-		(def decoratorList notNil
-			and: [def decoratorList includes: #'property']) ifTrue: [
+		def decoratorList isNil ifFalse: [
+			def decoratorList do: [:deco |
+				((deco isKindOf: AttributeAst)
+					and: [deco attr asString = 'setter'
+					and: [deco value isKindOf: NameAst]])
+					ifTrue: [settersByName add: deco value id asSymbol]
+			]
+		]
+	].
+	methodDefs do: [:def |
+		((def decoratorList notNil
+			and: [def decoratorList includes: #'property'])
+			and: [(settersByName includes: def name asSymbol) not]) ifTrue: [
 			| propSetterSrc lf2 |
 			lf2 := Character lf asString.
 			propSetterSrc := def name , ': ___1' , lf2 ,
@@ -531,6 +537,42 @@ printSmalltalkRuntimeOn: aStream
 		deco printSmalltalkWithParenthesisOn: aStream.
 		aStream nextPutAll: ' value: { '; nextPutAll: name; nextPutAll: ' } value: nil.'; lf.
 	].
+	"Phase A: close the wrapping block (opened at the top of this
+	method) and store the final class object into the module
+	instance's dynamic-instVar storage."
+	(self isModuleScopeClassDef) ifTrue: [
+		aStream
+			nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+			nextPutAll: name;
+			nextPutAll: ''' put: '; nextPutAll: name;
+			nextPutAll: '.] value.'; lf.
+	].
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+isModuleScopeClassDef
+	"Phase A: true when this class definition lands directly at module
+	scope (top-level of the module body, not nested inside another
+	class body or a function/method).  Used to decide whether to wrap
+	the emit in a block-with-temp + dynamicInstVarAt:put: epilogue
+	(module-scope) or leave the existing bare-assignment emit
+	in place (nested — declares ``<name>'' in the enclosing scope's
+	Smalltalk temps via parser declareWrite)."
+
+	| node |
+	CallAst moduleClassBeingCompiled ifNil: [^ false].
+	CallAst classBeingCompiled ifNotNil: [^ false].
+	"Walk up to see if any enclosing scope is a function/lambda — if
+	so we're nested and the function's BlockAst declares <name> as a
+	Smalltalk temp."
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [^ false].
+		node := node parent.
+	].
+	^ true
 %
 
 category: 'Grail-code generation'
@@ -761,87 +803,6 @@ method: ClassDefAst
 body
 
 	^ body
-%
-
-category: 'Grail-Class Compilation'
-method: ClassDefAst
-declareInstanceVar: aSymbol
-	"Sink for the `declareInstanceVar:` chain.  Called from inside
-	this class's body whenever an `<receiver>.X = …` write where
-	<receiver> is `self` or `cls` is discovered by walking the
-	body.  Stops the upward propagation here — instance vars of
-	a nested class belong to the nested class, not its parent."
-
-	instanceVariables ifNil: [instanceVariables := IdentitySet new].
-	instanceVariables add: aSymbol asSymbol
-%
-
-category: 'Grail-Class Compilation'
-method: ClassDefAst
-instanceVarNamesFromInit
-	"Return the inst-var name set discovered by walking the class
-	body.  Triggers the walk lazily on first call.  Name kept for
-	backward compatibility — the walk no longer stops at __init__,
-	it covers every method body and every nested compound statement
-	in the class.  Discovery itself flows through the
-	`declareInstanceVar:` chain (see AttributeAst >> declareVariable
-	and AbstractNode >> declareInstanceVar:)."
-
-	instanceVariables ifNil: [
-		instanceVariables := IdentitySet new.
-		body body do: [:stmt | self walkForInstanceVars: stmt].
-	].
-	^ instanceVariables asArray
-%
-
-category: 'Grail-Class Compilation'
-method: ClassDefAst
-walkForInstanceVars: aNode
-	"Recursively trigger `declareVariable` on every assignment
-	target inside aNode, so AttributeAst's chain can surface
-	self.X / cls.X writes via `declareInstanceVar:`.  Recurses
-	into compound statements (If/While/For/Try/With) and method
-	bodies, but NOT into nested class defs — those collect their
-	own instance vars."
-
-	aNode ifNil: [^ self].
-	(aNode isKindOf: ClassDefAst) ifTrue: [^ self].
-	(aNode isKindOf: AssignAst) ifTrue: [
-		aNode targets do: [:t | t declareVariable].
-		^ self
-	].
-	(aNode isKindOf: AnnAssignAst) ifTrue: [
-		aNode target declareVariable.
-		^ self
-	].
-	(aNode isKindOf: AugAssignAst) ifTrue: [
-		aNode target declareVariable.
-		^ self
-	].
-	"Compound statements: recurse into substatement collections by
-	walking every instVar that holds an AbstractNode or an Array
-	of AbstractNodes.  Catches IfAst/WhileAst/ForAst/TryAst/WithAst
-	branches plus FunctionDefAst bodies without enumerating every
-	concrete subclass."
-	2 to: aNode class allInstVarNames size do: [:i |
-		| val |
-		val := aNode instVarAt: i.
-		(val isKindOf: AbstractNode) ifTrue: [
-			self walkForInstanceVars: val
-		] ifFalse: [
-			(val isKindOf: Array) ifTrue: [
-				val do: [:each |
-					(each isKindOf: AbstractNode) ifTrue: [
-						self walkForInstanceVars: each
-					]
-				]
-			] ifFalse: [
-				(val isKindOf: BlockAst) ifTrue: [
-					val body do: [:sub | self walkForInstanceVars: sub]
-				]
-			]
-		]
-	]
 %
 
 category: 'Grail-Class Compilation'

@@ -10,7 +10,8 @@ ExpressionAst subclass: 'CallAst'
   instVarNames: #( function arguments keywords)
   classVars: #()
   classInstVars: #('moduleClassBeingCompiled' 'moduleFunctionNames'
-                    'classBeingCompiled' 'classInstVarNames'
+                    'moduleVariableNames'
+                    'classBeingCompiled'
                     'classFunctionNames' 'classVarargsFunctionNames'
                     'classAttrNames' 'selfParameterName'
                     'returnEmitMode')
@@ -909,6 +910,24 @@ moduleFunctionNames: aSetOrNil
 
 category: 'Grail-Module Compile Context'
 classmethod: CallAst
+moduleVariableNames
+	"Phase A: IdentitySet of Symbol names declared in the module body's
+	BlockAst (excluding function names — those are in moduleFunctionNames).
+	NameAst / AssignAst / DeleteAst consult this to discriminate
+	module-scope names (route through dynamicInstVarAt:) from
+	function-local names (emit bare identifier as a Smalltalk temp)."
+
+	^ moduleVariableNames
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
+moduleVariableNames: aSetOrNil
+	moduleVariableNames := aSetOrNil
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
 returnEmitMode
 	"How ReturnAst should emit Python ``return value'' statements:
 
@@ -955,18 +974,6 @@ category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classBeingCompiled: aClassOrNil
 	classBeingCompiled := aClassOrNil
-%
-
-category: 'Grail-Class Compile Context'
-classmethod: CallAst
-classInstVarNames
-	^ classInstVarNames
-%
-
-category: 'Grail-Class Compile Context'
-classmethod: CallAst
-classInstVarNames: aSetOrNil
-	classInstVarNames := aSetOrNil
 %
 
 category: 'Grail-Class Compile Context'
@@ -1219,41 +1226,64 @@ moduleSelfSendVarargsSelector
 category: 'Grail-Module Self-Send'
 method: CallAst
 printModuleSelfSendOn: aStream selector: aSelector
-	"Emit a direct self-send for a module-level function call:
-		(self name: arg1 _: arg2 ...)
-	or for 0-arg:
-		(self name)"
+	"Emit a probe-then-branch self-send for a module-level function
+	call.  Probes the module's dynamic-instVar storage at the call
+	site: absent → fast self-send to the def's compiled method;
+	present → call whatever value the name was rebound to.  Pre-fix,
+	this emitted an unconditional ``(self name: args)'' which bypassed
+	any later ``name = <other>'' rebinding and called the original
+	def.
+
+	Shape (1 arg shown — generalises to N args / 0 args):
+		([:___f___ | ___f___ == nil
+			ifTrue: [self name: arg]
+			ifFalse: [___f___ @env1:___pyCallValue___: { arg } kw: nil]]
+			value: (self @env0:dynamicInstVarAt: #name))
+
+	``___pyCallValue___:kw:'' is defined on Object to raise TypeError
+	(``'<typename>' object is not callable'') and overridden on
+	BoundMethod to dispatch via the standard ``value:value:'' protocol —
+	so a rebound int handle TypeErrors instead of MNU."
 
 	| funcName nargs |
 	funcName := function id asString.
 	nargs := arguments size.
-	aStream nextPutAll: '(self '.
+	aStream nextPutAll: '([:___f___ | ___f___ == nil ifTrue: [self '.
 	aStream nextPutAll: funcName.
-	nargs = 0 ifTrue: [
-		aStream nextPut: $).
-		^ self
+	nargs = 0 ifFalse: [
+		aStream nextPut: $:; space.
+		(arguments at: 1) printSmalltalkWithParenthesisOn: aStream.
+		2 to: nargs do: [:i |
+			aStream nextPutAll: ' _: '.
+			(arguments at: i) printSmalltalkWithParenthesisOn: aStream.
+		].
 	].
-	aStream nextPut: $:; space.
-	(arguments at: 1) printSmalltalkWithParenthesisOn: aStream.
-	2 to: nargs do: [:i |
-		aStream nextPutAll: ' _: '.
-		(arguments at: i) printSmalltalkWithParenthesisOn: aStream.
-	].
-	aStream nextPut: $)
+	aStream nextPutAll: '] ifFalse: [___f___ @env1:___pyCallValue___: '.
+	self printArgumentsArrayOn: aStream.
+	aStream nextPutAll: ' kw: nil]] value: (self @env0:dynamicInstVarAt: #'.
+	aStream nextPutAll: funcName.
+	aStream nextPutAll: '))'
 %
 
 category: 'Grail-Module Self-Send'
 method: CallAst
 printModuleSelfSendVarargsOn: aStream selector: aSelector
-	"Emit a varargs self-send for a module function call:
-		(self _name: { arg1. arg2. } kw: kwargDict)"
+	"Probe-then-branch varargs self-send.  Same rationale as the
+	fixed-arity case: probe dynamic instVar, fast path on absent,
+	call the rebound value on present."
 
 	| funcName |
 	funcName := function id asString.
-	aStream nextPutAll: '(self _'.
+	aStream nextPutAll: '([:___f___ | ___f___ == nil ifTrue: [self _'.
 	aStream nextPutAll: funcName; nextPutAll: ': '.
 	self printArgumentsArrayOn: aStream.
 	aStream nextPutAll: ' kw: '.
 	self printKeywordsDictOn: aStream.
-	aStream nextPut: $)
+	aStream nextPutAll: '] ifFalse: [___f___ @env1:___pyCallValue___: '.
+	self printArgumentsArrayOn: aStream.
+	aStream nextPutAll: ' kw: '.
+	self printKeywordsDictOn: aStream.
+	aStream nextPutAll: ']] value: (self @env0:dynamicInstVarAt: #'.
+	aStream nextPutAll: funcName.
+	aStream nextPutAll: '))'
 %

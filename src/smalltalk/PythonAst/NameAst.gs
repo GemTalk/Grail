@@ -109,13 +109,6 @@ ctx: aContext
 
 category: 'other'
 method: NameAst
-declareVariable
-
-	parent declareVariable: id.
-%
-
-category: 'other'
-method: NameAst
 id
 
 	^id
@@ -252,12 +245,13 @@ printSmalltalkOn: aStream
 				elsewhere in the file) would read the module instVar
 				instead of the parameter."
 				(self ___declaredInEnclosingFunction___: id) ifFalse: [
-					aStream
-						nextPutAll: '((';
-						nextPutAll: CallAst moduleClassBeingCompiled name;
-						nextPutAll: ' @env0:___instance___) @env1:';
-						nextPutAll: id;
-						nextPutAll: ')'.
+					"Phase A: module globals live in dynamic instVar
+					storage on the module instance.  Read through
+					dynamicInstVarAt:ifAbsent: so `del` truly unbinds
+					the name (probe returns absent → NameError)."
+					self emitModuleAttrLoad: id
+						receiverExpr: CallAst moduleClassBeingCompiled name , ' @env0:___instance___'
+						on: aStream.
 					^self
 				].
 			].
@@ -282,33 +276,40 @@ printSmalltalkOn: aStream
 							nextPutAll: ')'.
 						^self
 					].
-					aStream
-						nextPutAll: '((';
-						nextPutAll: CallAst moduleClassBeingCompiled name;
-						nextPutAll: ' @env0:___instance___) @env0:at: #''';
-						nextPutAll: id;
-						nextPutAll: ''' ifAbsent: [NameError ___signal___: ''name ';
-						nextPut: $';
-						nextPut: $';
-						nextPutAll: id;
-						nextPut: $';
-						nextPut: $';
-						nextPutAll: ' is not defined''])'.
+					"Phase A: probe module dynamic-instVar storage."
+					self emitModuleAttrLoad: id
+						receiverExpr: CallAst moduleClassBeingCompiled name , ' @env0:___instance___'
+						on: aStream.
 					^self
 				]
 		].
-	"Phase C-2: in load context, wrap reads of declared locals with a
-	runtime nil-check that raises UnboundLocalError naming the variable.
-	Stores and undeclared (free / global / builtin) names emit the bare
-	identifier — those resolve through the symbol list and are caught by
-	the env-1 DNU backstop if they reach a message send while nil."
-	((ctx isKindOf: LoadAst) and: [self isVariableIsDeclared: id]) ifTrue: [
+	"Phase C-2 / Phase A: in load context, wrap reads of declared
+	FUNCTION locals (parameter or assignment target inside an enclosing
+	function/lambda) with a runtime nil-check that raises
+	UnboundLocalError naming the variable.  Module-body declarations
+	are NOT covered here — they route through the dynamicInstVarAt:
+	branches below so `del` truly unbinds the name (a probe of an
+	absent dynamic instVar raises NameError, the Python-correct
+	exception for module-scope ``del x; x'')."
+	((ctx isKindOf: LoadAst) and: [self ___declaredInEnclosingFunction___: id]) ifTrue: [
 		aStream
 			nextPutAll: '(UnboundLocalError ___checkLocal: ';
 			nextPutAll: id;
 			nextPutAll: ' named: #';
 			nextPutAll: id;
 			nextPutAll: ')'.
+		^ self
+	].
+	"Phase A: comprehension loop variables (the target of any enclosing
+	List/Dict/Set/Generator comprehension) are emitted as bare
+	identifiers because ComprehensionAst's codegen binds them as
+	Smalltalk block locals.  Without this check, a comprehension
+	target name that also appears in moduleVariableNames (parser
+	records it via declareWrite at parse time) would route through
+	the module's dynamicInstVarAt: storage and miss the closure
+	binding."
+	((ctx isKindOf: LoadAst) and: [self ___isEnclosingComprehensionTarget___: id]) ifTrue: [
+		aStream nextPutAll: id.
 		^ self
 	].
 	"Late module-name binding.  In a module-body or module-method
@@ -338,19 +339,67 @@ printSmalltalkOn: aStream
 				nextPutAll: ')'.
 			^self
 		].
-		aStream
-			nextPutAll: '(self @env0:at: #''';
-			nextPutAll: id;
-			nextPutAll: ''' ifAbsent: [NameError ___signal___: ''name ';
-			nextPut: $';
-			nextPut: $';
-			nextPutAll: id;
-			nextPut: $';
-			nextPut: $';
-			nextPutAll: ' is not defined''])'.
+		"Phase A: module attribute load goes through dynamicInstVarAt:."
+		self emitModuleAttrLoad: id receiverExpr: 'self' on: aStream.
 		^ self
 	].
+	"Phase A: module-body load of a name declared in the module body
+	(via assignment, for-target, etc.) — route through self's dynamic
+	instVar storage so `del` truly unbinds.  We're here only when no
+	earlier branch fired and we're compiling either the module-body
+	initialize or a top-level def (CallAst classBeingCompiled is nil
+	AND moduleClassBeingCompiled is not nil).  Skip when the name is
+	a function-local (declared in an enclosing function scope) — that
+	stays a Smalltalk temp and uses the UnboundLocalError check above."
+	((ctx isKindOf: LoadAst)
+		and: [CallAst moduleClassBeingCompiled notNil
+		and: [CallAst classBeingCompiled isNil
+		and: [(self isModuleVariableName: id)
+		and: [(self ___declaredInEnclosingFunction___: id) not]]]]) ifTrue: [
+			self emitModuleAttrLoad: id receiverExpr: 'self' on: aStream.
+			^ self
+		].
 	aStream nextPutAll: id.
+%
+
+category: 'Grail-codegen helpers'
+method: NameAst
+emitModuleAttrLoad: aSymbol receiverExpr: receiverString on: aStream
+	"Phase A emit pattern for module attribute loads:
+		(<receiver> @env0:dynamicInstVarAt: #'name' ifAbsent: [NameError ___signal___: ...])
+	receiverString is the Smalltalk source for the receiver expression
+	(``self'' from inside the module body / a top-level def, or
+	``<ModuleClass> @env0:___instance___'' from inside a user class
+	method that references a module global).
+
+	Routes through ``module>>___moduleAttrLoad___:'' which probes
+	dynamic-instVar storage, falls through to class-method lookup
+	(lazy-wrapping top-level defs as BoundMethods), and raises
+	NameError on miss.  The class-fallback step is what makes
+	``def foo: ...; f = foo'' work without pre-storing a BoundMethod
+	at def time — which would in turn block rebinding detection in
+	CallAst's bare-call dispatch."
+
+	aStream
+		nextPutAll: '(';
+		nextPutAll: receiverString;
+		nextPutAll: ' @env1:___moduleAttrLoad___: #''';
+		nextPutAll: aSymbol;
+		nextPutAll: ''')'.
+%
+
+category: 'Grail-codegen helpers'
+method: NameAst
+isModuleVariableName: aSymbol
+	"Phase A: true if aSymbol was declared in the module body's scope
+	(as recorded by the parser into ``CallAst moduleVariableNames'').
+	Function names are tracked separately in ``moduleFunctionNames'' —
+	this returns false for them."
+
+	| names |
+	names := CallAst moduleVariableNames.
+	names ifNil: [^ false].
+	^ names includes: aSymbol asSymbol
 %
 
 category: 'other'
@@ -370,13 +419,79 @@ ___declaredInEnclosingFunction___: aSymbol
 	[node notNil] whileTrue: [
 		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
 			ifTrue: [
-				"At a function/lambda boundary, check whether the
-				function's body BlockAst (or its params) declares
-				aSymbol.  Stop here either way — outer functions
-				and the module scope are not 'enclosing function'
-				for the purpose of this check."
-				^ self ___functionDeclaresLocal___: node named: aSymbol].
+				"Python LEGB closure rule: a name defined in ANY
+				enclosing function (parameter or assignment target) is
+				accessible from a nested function/lambda via Smalltalk
+				closure capture, so emit the bare identifier rather
+				than routing through module dynamicInstVarAt:.  Keep
+				walking past the first enclosing function so a name
+				declared two scopes out still wins over a same-named
+				module global."
+				(self ___functionDeclaresLocal___: node named: aSymbol)
+					ifTrue: [^ true].
+				"Stop at the outermost FunctionDef/Lambda — beyond that
+				is module scope or class scope, neither of which
+				counts as an ``enclosing function'' for this check."
+			].
 		node := node parent.
+	].
+	^ false
+%
+
+category: 'other'
+method: NameAst
+___isEnclosingComprehensionTarget___: aSymbol
+	"Phase A: true if aSymbol is the target (loop variable) of any
+	enclosing ListComp / DictComp / SetComp / GeneratorExp.
+	Comprehension targets are bound as Smalltalk block locals by
+	ComprehensionAst codegen, so reads of them should emit the bare
+	identifier instead of routing through module dynamicInstVarAt:.
+
+	Walks the parent chain looking for a node whose class name
+	includes ``Comp'' or ``GeneratorExp'', then checks that node's
+	`generators' field (a sequence of ComprehensionAst, each with a
+	`target' field that is either a NameAst or a TupleAst of NameAst)."
+
+	| node |
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: ListCompAst)
+			or: [(node isKindOf: DictCompAst)
+			or: [(node isKindOf: SetCompAst)
+			or: [node isKindOf: GeneratorExpAst]]])
+			ifTrue: [
+				(self ___compNodeBindsTarget___: node named: aSymbol)
+					ifTrue: [^ true]
+			].
+		node := node parent.
+	].
+	^ false
+%
+
+category: 'other'
+method: NameAst
+___compNodeBindsTarget___: compNode named: aSymbol
+	"True if compNode (a ListComp/DictComp/SetComp/GeneratorExp) has
+	any generator whose target binds aSymbol.  The target is either
+	a NameAst (`for x in xs') or a TupleAst (`for k, v in pairs')."
+
+	| ivars idx gens |
+	ivars := compNode class allInstVarNames.
+	idx := ivars indexOf: #generators.
+	idx = 0 ifTrue: [^ false].
+	gens := compNode instVarAt: idx.
+	gens ifNil: [^ false].
+	gens do: [:gen |
+		| tgt |
+		tgt := gen target.
+		((tgt isKindOf: NameAst) and: [tgt id asSymbol == aSymbol asSymbol])
+			ifTrue: [^ true].
+		(tgt isKindOf: TupleAst) ifTrue: [
+			tgt elts do: [:elt |
+				((elt isKindOf: NameAst) and: [elt id asSymbol == aSymbol asSymbol])
+					ifTrue: [^ true]
+			]
+		]
 	].
 	^ false
 %
@@ -426,17 +541,21 @@ ___functionDeclaresLocal___: funcAst named: aSymbol
 category: 'other'
 method: NameAst
 isModuleScopeName: aSymbol
-	"True if aSymbol is in the enclosing module class's inst vars.
+	"True if aSymbol was declared in the enclosing module body's
+	scope (recorded by the parser into ``CallAst moduleVariableNames'').
 	Python's LEGB free-variable lookup inside a class method body
 	does NOT include the class scope — bare names skip past the
 	class to the module's globals.  So we do not shadow on class
 	inst vars or class method names; the only thing that takes
-	precedence is the self parameter (a real local of the method)."
+	precedence is the self parameter (a real local of the method).
 
-	| modCls |
-	modCls := CallAst moduleClassBeingCompiled.
-	modCls ifNil: [^false].
-	(modCls allInstVarNames includes: aSymbol asSymbol) ifFalse: [^false].
+	Phase A: module globals live in dynamicInstVarAt: storage rather
+	than static instVars on the module class, so the discriminator
+	queries ``CallAst moduleVariableNames'' rather than
+	``modCls allInstVarNames''."
+
+	(CallAst moduleClassBeingCompiled) ifNil: [^false].
+	(self isModuleVariableName: aSymbol) ifFalse: [^false].
 	(CallAst selfParameterName notNil
 		and: [CallAst selfParameterName asSymbol = aSymbol asSymbol])
 			ifTrue: [^false].

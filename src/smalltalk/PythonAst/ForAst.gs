@@ -112,9 +112,14 @@ printSmalltalkOn: aStream
 			source: itemTemp
 			depth: depth.
 	] ifFalse: [
-		"Simple: target := iter __next__."
-		target printSmalltalkOn: aStream.
-		aStream nextPutAll: ' := '; nextPutAll: iterTemp; nextPutAll: ' __next__.'; lf.
+		"Simple: target := iter __next__.  Phase A: when the target is
+		a module-scope name (declared in body variables, not shadowed
+		by an enclosing function), route the per-iteration binding
+		through the module instance's dynamic-instVar storage."
+		self
+			emitForTargetStore: target
+			source: iterTemp , ' __next__'
+			on: aStream.
 	].
 
 	"Body"
@@ -148,6 +153,47 @@ addVariableNamesTo: aStream
 
 category: 'Grail-code generation'
 method: ForAst
+emitForTargetStore: aNameAst source: sourceExpr on: aStream
+	"Phase A: emit ``target := sourceExpr.'' OR
+	``self @env0:dynamicInstVarAt: #'target' put: sourceExpr.''
+	depending on whether the for-loop target is a module-scope name.
+	sourceExpr is a raw Smalltalk fragment (already evaluated to the
+	next iteration value), not parenthesized — wrap it here when the
+	store needs the value as a keyword-message arg."
+
+	(self isModuleScopeForTarget: aNameAst) ifTrue: [
+		aStream
+			nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+			nextPutAll: aNameAst id;
+			nextPutAll: ''' put: (';
+			nextPutAll: sourceExpr;
+			nextPutAll: ').'; lf.
+		^ self
+	].
+	aStream
+		nextPutAll: aNameAst id;
+		nextPutAll: ' := ';
+		nextPutAll: sourceExpr;
+		nextPut: $.; lf.
+%
+
+category: 'Grail-code generation'
+method: ForAst
+isModuleScopeForTarget: aNameAst
+	"True if this for-loop target is a module-scope name: we're
+	compiling inside a module body (no enclosing user class method),
+	the name is declared in the module body's scope, and no
+	enclosing function shadows it."
+
+	CallAst moduleClassBeingCompiled ifNil: [^ false].
+	CallAst classBeingCompiled ifNotNil: [^ false].
+	(aNameAst isModuleVariableName: aNameAst id) ifFalse: [^ false].
+	(aNameAst ___declaredInEnclosingFunction___: aNameAst id) ifTrue: [^ false].
+	^ true
+%
+
+category: 'Grail-code generation'
+method: ForAst
 emitUnpackOn: aStream target: aTarget source: sourceExpr depth: aDepth
 	"Recursively unpack ``aTarget`` (a NameAst or a nested
 	TupleAst / ListAst) by reading from the parenthesized
@@ -161,7 +207,7 @@ emitUnpackOn: aStream target: aTarget source: sourceExpr depth: aDepth
 	fresh outer-block temps after the temp pane has been emitted."
 
 	(aTarget isKindOf: NameAst) ifTrue: [
-		aStream nextPutAll: aTarget id; nextPutAll: ' := '; nextPutAll: sourceExpr; nextPut: $.; lf.
+		self emitForTargetStore: aTarget source: sourceExpr on: aStream.
 		^ self
 	].
 	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [

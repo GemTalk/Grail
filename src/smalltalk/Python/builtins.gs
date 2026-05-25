@@ -778,6 +778,19 @@ property: fn
 
 category: 'Grail-Built-in Functions'
 method: builtins
+delattr: anObject _: aName
+	"Python builtin delattr(obj, name).  Dispatches through the
+	``__delattr__'' protocol so user overrides intercept.  Default
+	``object>>__delattr__:'' falls through to ``___pyAttrDelete___:''
+	which removes the dynamic-instVar slot (raising AttributeError
+	if it was never bound).  Returns None per CPython."
+
+	anObject @env1:__delattr__: aName.
+	^ None
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 hasattr: anObject _: aName
 	"Python builtin hasattr(obj, name) — return True if obj has an
 	attribute named `name`, False if accessing the attribute raises
@@ -856,13 +869,17 @@ issubclass: aClass _: aClassOrTuple
 category: 'Grail-Built-in Functions'
 method: builtins
 setattr: anObject _: aName _: aValue
-	"Python builtin setattr(obj, name, value) — sends the env-1
-	setter ``aName:`` (which is what AttributeAst emits for the
-	``obj.name = value`` syntactic form)."
+	"Python builtin setattr(obj, name, value).  Dispatches through the
+	``__setattr__'' protocol so user overrides intercept (see
+	AttributeProtocolTestCase).  Default ``object>>__setattr__:_:''
+	falls through to ``___pyAttrStore___:put:'' (instance →
+	dynamicInstVarAt:put:; class → env-1 class-side setter).
 
-	^ anObject @env0:perform: (aName @env0:asString @env0:, ':') @env0:asSymbol
-		@env0:env: 1
-		@env0:withArguments: { aValue }
+	Per CPython, setattr returns None regardless of the underlying
+	store's internal return — discard whatever __setattr__ yields."
+
+	anObject @env1:__setattr__: aName _: aValue.
+	^ None
 %
 
 ! ===============================================================================

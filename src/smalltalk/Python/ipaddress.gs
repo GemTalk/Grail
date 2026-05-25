@@ -7,7 +7,7 @@ module ifNil: [self error: 'module is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 Object subclass: 'IPv4Address'
-  instVarNames: #( _packed )
+  instVarNames: #()
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -98,7 +98,7 @@ ___fromString___: aString
 category: 'Grail-Private'
 method: IPv4Address
 _packed: anInt
-	_packed := anInt.
+	self @env0:dynamicInstVarAt: #_packed put: anInt.
 	^ self
 %
 
@@ -109,13 +109,13 @@ method: IPv4Address
 packed
 	"32-bit unsigned int representation."
 
-	^ _packed
+	^ (self @env0:dynamicInstVarAt: #_packed)
 %
 
 category: 'Grail-Accessors'
 method: IPv4Address
 __int__
-	^ _packed
+	^ (self @env0:dynamicInstVarAt: #_packed)
 %
 
 category: 'Grail-Accessors'
@@ -123,13 +123,13 @@ method: IPv4Address
 __str__
 	| stream |
 	stream := WriteStream @env0:on: Unicode7 @env0:new.
-	stream @env0:nextPutAll: ((_packed @env0:bitShift: -24) @env0:bitAnd: 16rFF) @env0:printString.
+	stream @env0:nextPutAll: (((self @env0:dynamicInstVarAt: #_packed) @env0:bitShift: -24) @env0:bitAnd: 16rFF) @env0:printString.
 	stream @env0:nextPut: $..
-	stream @env0:nextPutAll: ((_packed @env0:bitShift: -16) @env0:bitAnd: 16rFF) @env0:printString.
+	stream @env0:nextPutAll: (((self @env0:dynamicInstVarAt: #_packed) @env0:bitShift: -16) @env0:bitAnd: 16rFF) @env0:printString.
 	stream @env0:nextPut: $..
-	stream @env0:nextPutAll: ((_packed @env0:bitShift: -8) @env0:bitAnd: 16rFF) @env0:printString.
+	stream @env0:nextPutAll: (((self @env0:dynamicInstVarAt: #_packed) @env0:bitShift: -8) @env0:bitAnd: 16rFF) @env0:printString.
 	stream @env0:nextPut: $..
-	stream @env0:nextPutAll: (_packed @env0:bitAnd: 16rFF) @env0:printString.
+	stream @env0:nextPutAll: ((self @env0:dynamicInstVarAt: #_packed) @env0:bitAnd: 16rFF) @env0:printString.
 	^ stream @env0:contents
 %
 
@@ -155,19 +155,19 @@ category: 'Grail-Equality'
 method: IPv4Address
 __eq__: other
 	(other @env0:isKindOf: IPv4Address) ifFalse: [^ false].
-	^ _packed @env0:= other @env1:packed
+	^ (self @env0:dynamicInstVarAt: #_packed) @env0:= other @env1:packed
 %
 
 category: 'Grail-Equality'
 method: IPv4Address
 __hash__
-	^ _packed @env0:hash
+	^ (self @env0:dynamicInstVarAt: #_packed) @env0:hash
 %
 
 category: 'Grail-Equality'
 method: IPv4Address
 __lt__: other
-	^ _packed @env0:< other @env1:packed
+	^ (self @env0:dynamicInstVarAt: #_packed) @env0:< other @env1:packed
 %
 
 category: 'Grail-Categories'
@@ -175,7 +175,7 @@ method: IPv4Address
 is_loopback
 	"127.0.0.0/8."
 
-	^ ((_packed @env0:bitShift: -24) @env0:bitAnd: 16rFF) @env0:= 127
+	^ (((self @env0:dynamicInstVarAt: #_packed) @env0:bitShift: -24) @env0:bitAnd: 16rFF) @env0:= 127
 %
 
 category: 'Grail-Categories'
@@ -183,7 +183,7 @@ method: IPv4Address
 is_link_local
 	"169.254.0.0/16."
 
-	^ ((_packed @env0:bitShift: -16) @env0:bitAnd: 16rFFFF) @env0:= 16rA9FE
+	^ (((self @env0:dynamicInstVarAt: #_packed) @env0:bitShift: -16) @env0:bitAnd: 16rFFFF) @env0:= 16rA9FE
 %
 
 category: 'Grail-Categories'
@@ -191,7 +191,7 @@ method: IPv4Address
 is_multicast
 	"224.0.0.0/4."
 
-	^ ((_packed @env0:bitShift: -28) @env0:bitAnd: 16rF) @env0:= 14
+	^ (((self @env0:dynamicInstVarAt: #_packed) @env0:bitShift: -28) @env0:bitAnd: 16rF) @env0:= 14
 %
 
 category: 'Grail-Categories'
@@ -199,7 +199,7 @@ method: IPv4Address
 is_unspecified
 	"0.0.0.0."
 
-	^ _packed @env0:= 0
+	^ (self @env0:dynamicInstVarAt: #_packed) @env0:= 0
 %
 
 category: 'Grail-Categories'
@@ -207,7 +207,7 @@ method: IPv4Address
 is_reserved
 	"240.0.0.0/4 (Class E and 255.255.255.255)."
 
-	^ ((_packed @env0:bitShift: -28) @env0:bitAnd: 16rF) @env0:= 15
+	^ (((self @env0:dynamicInstVarAt: #_packed) @env0:bitShift: -28) @env0:bitAnd: 16rF) @env0:= 15
 %
 
 category: 'Grail-Categories'
@@ -217,14 +217,14 @@ is_private
 	plus loopback / link-local / unspecified."
 
 	| top |
-	top := (_packed @env0:bitShift: -24) @env0:bitAnd: 16rFF.
+	top := ((self @env0:dynamicInstVarAt: #_packed) @env0:bitShift: -24) @env0:bitAnd: 16rFF.
 	top @env0:= 10 ifTrue: [^ true].
 	top @env0:= 127 ifTrue: [^ true].
 	top @env0:= 0 ifTrue: [^ true].
-	(top @env0:= 172 @env0:and: [(((_packed @env0:bitShift: -16) @env0:bitAnd: 16rFF) @env0:bitAnd: 16rF0) @env0:= 16r10]) ifTrue: [^ true].
-	(top @env0:= 192 @env0:and: [((_packed @env0:bitShift: -16) @env0:bitAnd: 16rFF) @env0:= 168]) ifTrue: [^ true].
-	(top @env0:= 169 @env0:and: [((_packed @env0:bitShift: -16) @env0:bitAnd: 16rFF) @env0:= 254]) ifTrue: [^ true].
-	(top @env0:= 100 @env0:and: [(((_packed @env0:bitShift: -16) @env0:bitAnd: 16rFF) @env0:bitAnd: 16rC0) @env0:= 16r40]) ifTrue: [^ true].
+	(top @env0:= 172 @env0:and: [((((self @env0:dynamicInstVarAt: #_packed) @env0:bitShift: -16) @env0:bitAnd: 16rFF) @env0:bitAnd: 16rF0) @env0:= 16r10]) ifTrue: [^ true].
+	(top @env0:= 192 @env0:and: [(((self @env0:dynamicInstVarAt: #_packed) @env0:bitShift: -16) @env0:bitAnd: 16rFF) @env0:= 168]) ifTrue: [^ true].
+	(top @env0:= 169 @env0:and: [(((self @env0:dynamicInstVarAt: #_packed) @env0:bitShift: -16) @env0:bitAnd: 16rFF) @env0:= 254]) ifTrue: [^ true].
+	(top @env0:= 100 @env0:and: [((((self @env0:dynamicInstVarAt: #_packed) @env0:bitShift: -16) @env0:bitAnd: 16rFF) @env0:bitAnd: 16rC0) @env0:= 16r40]) ifTrue: [^ true].
 	^ false
 %
 
@@ -244,7 +244,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 Object subclass: 'IPv4Network'
-  instVarNames: #( _network _prefix )
+  instVarNames: #()
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -326,8 +326,8 @@ ___fromAddr___: addrInst prefix: prefixInt
 category: 'Grail-Private'
 method: IPv4Network
 _network: addrInst _prefix: prefixInt
-	_network := addrInst.
-	_prefix := prefixInt.
+	self @env0:dynamicInstVarAt: #_network put: addrInst.
+	self @env0:dynamicInstVarAt: #_prefix put: prefixInt.
 	^ self
 %
 
@@ -336,13 +336,13 @@ set compile_env: 1
 category: 'Grail-Accessors'
 method: IPv4Network
 network_address
-	^ _network
+	^ (self @env0:dynamicInstVarAt: #_network)
 %
 
 category: 'Grail-Accessors'
 method: IPv4Network
 prefixlen
-	^ _prefix
+	^ (self @env0:dynamicInstVarAt: #_prefix)
 %
 
 category: 'Grail-Accessors'
@@ -357,21 +357,21 @@ broadcast_address
 	"Last address in the block."
 
 	| hostBits |
-	hostBits := 32 @env0:- _prefix.
+	hostBits := 32 @env0:- (self @env0:dynamicInstVarAt: #_prefix).
 	^ IPv4Address @env0:___fromPacked___:
-		(_network @env1:packed @env0:bitOr: ((1 @env0:bitShift: hostBits) @env0:- 1))
+		((self @env0:dynamicInstVarAt: #_network) @env1:packed @env0:bitOr: ((1 @env0:bitShift: hostBits) @env0:- 1))
 %
 
 category: 'Grail-Accessors'
 method: IPv4Network
 num_addresses
-	^ 1 @env0:bitShift: 32 @env0:- _prefix
+	^ 1 @env0:bitShift: 32 @env0:- (self @env0:dynamicInstVarAt: #_prefix)
 %
 
 category: 'Grail-Accessors'
 method: IPv4Network
 __str__
-	^ _network @env1:__str__ @env0:, '/' @env0:, _prefix @env0:printString
+	^ (self @env0:dynamicInstVarAt: #_network) @env1:__str__ @env0:, '/' @env0:, (self @env0:dynamicInstVarAt: #_prefix) @env0:printString
 %
 
 category: 'Grail-Membership'
@@ -382,12 +382,12 @@ __contains__: anAddress
 	| addrPacked mask |
 	(anAddress @env0:isKindOf: IPv4Address) ifFalse: [^ false].
 	addrPacked := anAddress @env1:packed.
-	mask := _prefix @env0:= 0
+	mask := (self @env0:dynamicInstVarAt: #_prefix) @env0:= 0
 		ifTrue: [0]
 		ifFalse: [
-			((1 @env0:bitShift: _prefix) @env0:- 1) @env0:bitShift: 32 @env0:- _prefix
+			((1 @env0:bitShift: (self @env0:dynamicInstVarAt: #_prefix)) @env0:- 1) @env0:bitShift: 32 @env0:- (self @env0:dynamicInstVarAt: #_prefix)
 		].
-	^ (addrPacked @env0:bitAnd: mask) @env0:= _network @env1:packed
+	^ (addrPacked @env0:bitAnd: mask) @env0:= (self @env0:dynamicInstVarAt: #_network) @env1:packed
 %
 
 set compile_env: 0

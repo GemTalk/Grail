@@ -6,17 +6,18 @@ It records the motivation, the benchmark measurements that justify the change,
 the resulting class model, selector conventions, first-class-function story,
 known limitations, and the phased migration plan.
 
-## Current Status (2026-04-14)
+## Current Status (2026-05-25)
 
-Phases 0–5 are complete. The rewrite has landed end-to-end; what remains
-is naming/cleanup work, not functional conversion.
+Phases 0–5 + Phase A/B + the attribute-protocol arc are complete. The
+rewrite has landed end-to-end; the attribute model now honors Python's
+data model (descriptors, user-overridable hooks, class-chain walk).
 
 | Phase | Topic | Status |
 |-------|-------|--------|
 | 0     | Design and benchmarks | complete |
 | 1     | Design doc / intent | complete |
 | 2     | `abs` end-to-end spike | complete |
-| 3     | DNU fallback | superseded by Phase 4 |
+| 3     | DNU fallback | superseded by Phase A/B |
 | 4a    | Codegen generalization + fixed-arity builtins | complete |
 | 4b    | Varargs selector convention | complete |
 | 4c    | Structural cleanup | complete |
@@ -24,7 +25,17 @@ is naming/cleanup work, not functional conversion.
 | 5a    | User Python modules → Smalltalk classes | complete (commit `4759f48`) |
 | 5b    | Module-level `def` → real Smalltalk methods | complete (commit `1671b8c`) |
 | 5c    | Python class defs → real Smalltalk classes | complete (commit `ad729e4`) |
-| 6     | Remaining `value:value:` call sites | subsumed by Phase 4d/5; only `PythonClass>>value:value:` remains (class-instantiation protocol, stays) |
+| 6     | Remaining `value:value:` call sites | subsumed by Phase 4d/5; `BoundMethod>>value:value:` is the surviving call protocol for first-class function values |
+| A     | Module globals via `dynamicInstVarAt:put:` | complete (commit `760f779`) |
+| B     | Instance attributes via `dynamicInstVarAt:put:` | complete (commit `3ac3cd0`) |
+| B+1   | Value-type sweep (complex, slice, PyStruct, Hash, ipaddress, io_module, datetime_module) | complete |
+| AP-1  | Function rebinding: probe-then-branch + lazy-wrap | complete (commit `3ebe05d`) |
+| AP-2  | Attribute store bypasses class methods | complete (commit `620a194`) |
+| AP-3  | `del` / `delattr` symmetry + `delattr` builtin | complete (commit `bcc9b58`) |
+| AP-4  | User-overridable `__setattr__` / `__getattr__` / `__delattr__` | complete (commit `5d94848`) |
+| AP-5  | `@property` data descriptors honored | complete (commit `3c3addf`) |
+| AP-6  | Class-side dynamic attrs via `dynInstVars` slot | complete (commit `58b3e77`) |
+| AP-7  | Class-chain walk on attribute load | complete (commit `d36e502`) |
 
 ## Motivation
 
@@ -270,52 +281,110 @@ via `perform:with:`, hitting `abs:` at ~16 ns total. Paid only when
 calling through a variable; direct `abs(-5)` still hits `self abs: -5`
 at ~8 ns.
 
-### Dynamic attribute fallback (DNU)
+### Dynamic attribute storage
 
 Python supports `setattr(module, 'newname', value)`, `globals()['x'] = 5`,
-and `from m import *`. These can create attributes the compiler never saw.
-They cannot become Smalltalk instance variables retroactively (without
-recompiling the class, which is too expensive for the common case).
+`from m import *`, and arbitrary `obj.x = v` on instances and classes —
+all of which can create attributes the compiler never saw.  These
+cannot become statically-declared Smalltalk instance variables (which
+would require recompiling the class), so Grail uses GemStone's
+**dynamic instance variable** primitives.
 
-The answer is a per-module-instance `_dynamic` dictionary instance variable
-plus a `doesNotUnderstand:` (or `cantPerform:...envId:`) handler on `module`
-that routes unknown selectors — both `:_:...` shapes and plain getters —
-to dictionary lookup. DNU fires only when the fast-path dispatch misses,
-so the common case stays at ~8 ns and dynamic attributes pay the reflective
-cost once per access.
+| Layer            | Storage                                                | Probe                                                          |
+|------------------|--------------------------------------------------------|----------------------------------------------------------------|
+| Module global    | `dynamicInstVarAt: #name put: v` on the module instance | `dynamicInstVarAt: #name` (Phase A)                            |
+| Instance attr    | `dynamicInstVarAt: #name put: v` on the instance        | `dynamicInstVarAt: #name`, then class chain (Phase B)          |
+| Class attr       | `cls dynInstVars dynamicInstVarAt: #name put: v` (an `Object new` proxy held in a classInstVar) | Class chain walk on `dynInstVars` |
 
-The DNU handler also implements **arity repack for the varargs fallback**:
-if a call site optimistically emits `self foo: 1 _: 2` but the installed
-method is actually `_foo:kw:`, DNU catches the miss, repacks `{1. 2.}` as
-positional and empty kwargs, and retries via the varargs selector. This
-lets codegen emit fast-path selectors without having to prove arity in
-every case.
+The same storage is reached from every entry point:
+
+- `obj.x = v` codegen → `obj @env1:__setattr__: 'x' _: v` →
+  `object>>__setattr__:_:` → polymorphic helper `___pyAttrStore___:put:`
+- `setattr(obj, 'x', v)` builtin → same `__setattr__` dispatch (returns `None`)
+- `del obj.x` codegen and `delattr(obj, 'x')` → `__delattr__:` →
+  `___pyAttrDelete___:`
+
+The dispatch through `__setattr__` / `__delattr__` lets user classes
+override the protocol (validation, lazy conversion, computed
+attributes — see the Fahrenheit/Celsius Thermometer in
+`AttributeProtocolTestCase`).  The default `object>>__setattr__:_:` checks
+for a paired unary getter + 1-arg setter on the class chain — a data
+descriptor signature (`@property` with a setter, or a body-declared
+classInstVar with auto-generated accessors) — and dispatches to it
+before falling through to the dict store.
+
+Reads route through `___pyAttrLoad___` which probes (in order):
+
+1. The instance's own `dynamicInstVarAt:` (the fastest path — direct slot read)
+2. Module dunders (`__name__`, etc.) on module receivers
+3. Class-side accessor pairs (`name` getter + `name:` setter) — value attrs
+4. Metaclass walk for `@classmethod` / `@staticmethod` BoundMethod wrap
+5. `___pythonValueAttrs___` shim hook for built-in wrapper classes
+6. Generic class-chain BoundMethod wrap for callable selectors
+7. The **`dynInstVars` chain walk** — for both class and instance receivers,
+   walk `self`-or-`self class` → superClass → ..., probing each level's
+   `dynInstVars dynamicInstVarAt:`.  This honors Python's class-chain
+   attribute inheritance.
+8. User-defined `__getattr__` as the final fallback (default raises
+   AttributeError).
+
+This replaces the original Phase-1 plan's `_dynamic` dictionary +
+`doesNotUnderstand:` design.  The dynamic-instVar primitive
+outperforms a Smalltalk Dictionary lookup (~3-4× per measurement) and
+preserves the nil-as-absent convention without sentinels.  See
+[Built-in Functions.md](Built-in%20Functions.md) for the full attribute
+protocol reference and `AttributeStoreTestCase` /
+`AttributeAccessTestCase` / `AttributeProtocolTestCase` /
+`AttributePropertyTestCase` / `ClassAttributeTestCase` /
+`AttributeInheritanceTestCase` for the pinned semantics.
 
 ## Known Limitations (documented, not bugs)
 
 These are deliberate v1 simplifications. Each has a clear failure mode so
 users see a loud error rather than silent wrong behavior.
 
-### Monkey-patching is not supported
+### Monkey-patching of module-level defs *is* supported (Phase AP-1)
 
-Python permits replacing a function on a module or class at runtime:
-`builtins.abs = my_abs`. In the new dispatch model, direct call sites
-compile to `self abs: x`, which always hits the CompiledMethod in the
-method dictionary. Reassigning the `abs` instance variable would affect
-only first-class-function reads (`f = abs`), producing a silent
-inconsistency where `abs(5)` sees the old body and `(lambda: abs)()(5)`
-sees the new one.
+The original limitation — that `def foo(): ...; foo = 21` would silently
+keep calling the original — was lifted by the function-rebinding fix
+(commit `3ebe05d`).  Module-level bare-name call sites now compile to a
+**probe-then-branch** dispatch:
 
-Rather than accept that inconsistency or pay a trampoline cost on every
-call, **Grail v1 does not support monkey-patching of module-level names
-that are bound to `def`s.** Monkey-patching of dict entries, instance
-attributes, and locals continues to work normally.
+```smalltalk
+([:___f___ |
+    ___f___ == nil
+        ifTrue:  [self foo: arg]                       " fast path "
+        ifFalse: [___f___ @env1:___pyCallValue___: { arg } kw: nil]]
+    value: (self @env0:dynamicInstVarAt: #foo))
+```
 
-**Failure mode:** loud, not silent. Attempted assignment to a name that
-resolves to a compiled module method should raise `TypeError` (or similar)
-at runtime. Future work could add a trampoline mode or a recompile-on-
-assign path if the feature turns out to be load-bearing for an important
-use case (mocking, library shims).
+An absent slot keeps the fast self-send to the def's compiled method
+(zero overhead vs. pre-rewrite).  A present slot calls the rebound value
+via the new `___pyCallValue___:kw:` protocol — `BoundMethod` overrides
+it to forward via `value:value:`; the default on `object` raises
+`TypeError("'<typename>' object is not callable")` to match CPython.
+
+Top-level `def`s are no longer pre-stored as `BoundMethod`s at module
+init; the slot stays nil until an explicit rebind writes to it.  Reading
+the name through Python attribute access (`mod.foo` or
+`module>>doesNotUnderstand:`) lazy-wraps the class method as a
+`BoundMethod` on demand — preserving first-class function semantics
+without blocking rebinding detection.
+
+What's still **not** supported:
+
+- Rebinding `builtins.abs = my_abs` at module load — `abs` is a class
+  method on `builtins`, not a stored value, and the call site
+  optimistically emits `(builtins instance) abs: x`.  Rebinding the
+  module instance attribute via `builtins.abs = my_abs` lands in
+  `(builtins instance)`'s `dynInstVars` but the fast call path skips
+  the probe-then-branch for builtins-class calls.
+- Rebinding class methods at runtime (`C.foo = new_foo` then
+  `c.foo()`) — class-side dispatch goes direct, not through the
+  rebinding-aware probe.
+
+For user module top-level defs, rebinding fully works; see
+`FunctionRebindingTestCase` for the pinned semantics.
 
 ### `global` and `nonlocal` are not supported
 
@@ -340,12 +409,19 @@ fast-path speedup.
 
 Lambdas are likewise blocks, not methods.
 
-### Dynamic attributes pay the DNU cost
+### Dynamic attributes use `dynamicInstVarAt:put:` (no DNU)
 
-`setattr`, `from m import *`, and `globals()[...] = ...` work via the
-`_dynamic` dictionary + DNU fallback described above. Reading or writing
-a dynamic attribute costs ~16 ns instead of ~3 ns. Acceptable; the common
-case is unaffected.
+The original Phase-1 design called for a `_dynamic` dictionary plus a
+`doesNotUnderstand:` handler.  Phase A/B replaced that with GemStone's
+**dynamic instance variable** primitives (`dynamicInstVarAt:put:` /
+`dynamicInstVarPairs` / `removeDynamicInstVar:`), which outperform a
+Dictionary lookup and integrate cleanly with the nil-as-absent
+convention.
+
+Reading a dynamic attribute is a direct slot probe, not a reflective
+send — so the cost is comparable to a regular instance-variable read,
+not the ~16 ns DNU price the original design accepted.  See "Dynamic
+attribute storage" in the Design Overview.
 
 ## Migration Plan
 
@@ -1366,6 +1442,126 @@ were converted in Phase 4d. The only remaining `value:value:` site is
 `PythonClass>>value:value:`, which is the class instantiation protocol
 (not dispatch) and stays as-is.
 
+### Phase A / Phase B — Storage refactor (completed)
+
+After the dispatch rewrite landed, the storage model was still split:
+module globals lived in the SymbolDictionary slot inherited from
+`module`, and instance attributes lived in pre-declared classInstVars
+auto-generated by `ClassDefAst` (one slot per name seen at parse time).
+Both stores were "near" but not actually GemStone's idiomatic
+dynamic-attribute primitive.
+
+- **Phase A** (commit `760f779`) — Module globals migrated to
+  `self dynamicInstVarAt: #name put: v` on the module instance.  The
+  SymbolDictionary slot remains for built-in modules' dunder metadata
+  (`__name__`, `__doc__`, etc.) only.
+- **Phase B** (commit `3ac3cd0`) — Instance attributes migrated to
+  the same primitive on instance receivers.  `self.attr = v` inside a
+  method now emits `self @env0:dynamicInstVarAt: #attr put: v` directly,
+  bypassing any setter method discriminator.
+- **Phase B+1 sweep** — Built-in value-type wrappers (`complex`,
+  `slice`, `NamedIntConstant`, `PyStruct`, `Hash`, `ipaddress`,
+  `io_module`, `datetime_module`) converted from pre-declared
+  instVars to dynamic.
+
+Convention: per project memory `[[nil_as_absent]]`, the Smalltalk `nil`
+is never a valid Python value.  An unset slot reads as nil; `del`
+removes the slot via `removeDynamicInstVar:`; `Python None` is the
+distinct singleton.
+
+### Attribute Protocol (AP-1 through AP-7)
+
+A coherent arc that finishes Python's data model on top of Phase A/B's
+storage.  Each piece has a dedicated TestCase pinning the semantics —
+see the Status table above for commit hashes.
+
+#### AP-1: Function rebinding (`FunctionRebindingTestCase`)
+
+Module-level `def foo(): ...` followed by `foo = 21` must rebind such
+that `foo(5)` raises `TypeError("'int' object is not callable")` rather
+than calling the original.  See the revised "Monkey-patching" note in
+Known Limitations for the probe-then-branch shape that achieves this.
+
+Top-level defs are NO LONGER pre-stored as `BoundMethod`s at module
+init.  The slot stays nil until an explicit rebind writes to it;
+reading a top-level def name through `module>>doesNotUnderstand:` or
+`___moduleAttrLoad___:` lazy-wraps the class method on demand.
+
+#### AP-2: Attribute store bypasses class methods (`AttributeStoreTestCase`)
+
+`obj.foo = 42` writes straight to the instance dict regardless of
+whether the class has a `foo:` method (a regular method is NOT a data
+descriptor — it must not intercept the store).  Same invariant for
+`setattr(obj, 'foo', 42)`.
+
+For class receivers (`C.attr = v`), the helper falls back to the env-1
+class-side setter if one exists (preserving body-declared classInstVars
+and `@property` pairs); see AP-6 for the brand-new-attr fallback.
+
+#### AP-3: `del` / `delattr` symmetry (`AttributeAccessTestCase`)
+
+`del obj.attr` and `delattr(obj, 'attr')` route through
+`object>>__delattr__:` → `___pyAttrDelete___:` which raises
+AttributeError on miss (matching CPython) and removes the slot via
+`removeDynamicInstVar:` otherwise.  Added the missing `delattr`
+builtin.  `setattr` / `delattr` both return `None` per the CPython
+contract.
+
+#### AP-4: User-overridable protocol (`AttributeProtocolTestCase`)
+
+The codegen routes through the Python protocol methods, not the
+low-level helpers directly:
+
+| Operation         | Codegen emits                                | Default falls through to |
+|-------------------|----------------------------------------------|---------------------------|
+| `obj.x = v`       | `obj @env1:__setattr__: 'x' _: v`            | `___pyAttrStore___:put:`  |
+| `del obj.x`       | `obj @env1:__delattr__: 'x'`                 | `___pyAttrDelete___:`     |
+| `obj.x` (load)    | `obj @env1:___pyAttrLoad___: #x`             | on miss → `__getattr__:`  |
+
+User classes override `__setattr__:_:` / `__delattr__:` / `__getattr__:`
+on the class to intercept.  The default `object>>` methods do the
+direct dict store/delete; the read path's `___pyAttrLoad___` calls
+`__getattr__:` as a FALLBACK only when normal lookup misses.
+
+The codegen passes the attribute name as a Python **`str`** (Smalltalk
+String), not a Symbol — user override checks like `name == 'fahrenheit'`
+are str-vs-str in Python; `Symbol __eq__ String` returns `false` and
+would silently bypass every name-keyed branch.  Pinned by
+`testFahrenheitOverwriteUpdatesCelsius`.
+
+#### AP-5: `@property` descriptors (`AttributePropertyTestCase`)
+
+`object>>__setattr__:_:` checks for a paired unary getter + 1-arg
+setter on the class chain — Grail's data-descriptor signature, matching
+the existing `___pyAttrLoad___` recognition.  When matched, dispatch
+to the setter via `perform: setterSym env: 1` so the property's setter
+runs and stores wherever it likes (typically a `_underscore_prefixed`
+backing slot).
+
+`ClassDefAst` was also fixed to stop the read-only stub from clobbering
+explicit `@<name>.setter` methods — pre-fix, both compiled to the same
+`name:` selector and the stub overwrote the user's setter.
+
+#### AP-6: Class-side dynamic attrs (`ClassAttributeTestCase`)
+
+GemStone classes do not support `dynamicInstVarAt:put:` directly.  Each
+generated Python class now gets a class instVar **`dynInstVars`**
+holding an `Object new` whose own dynamic instVars provide the dict
+storage for class-level Python attributes.  Initialized at class-build
+time; auto-generated `dynInstVars` / `dynInstVars:` class-side
+accessors give the polymorphic helpers read/write access.
+
+This closes `C.brand_new_attr = 42` for any class — previously it MNU'd
+because no pre-declared classInstVar matched.
+
+#### AP-7: Class-chain walk on load (`AttributeInheritanceTestCase`)
+
+The dynInstVars storage is per-class but Python attribute lookup walks
+the class chain.  `___pyAttrLoad___` now walks `self`-or-`self class` →
+superClass → ..., probing each level's `dynInstVars dict`.  First hit
+wins, so subclass overrides shadow without mutating the parent and
+instance shadows hide class attrs until `del` reveals them again.
+
 ## Follow-ups (completed)
 
 ### End-to-end benchmark refresh
@@ -1417,3 +1613,24 @@ cost is acceptable.
   once-per-method cache would eliminate this. Not attempted yet because
   it is orthogonal to the dispatch model; it applies equally to the old
   block-based and new method-based codegen.
+- **`__getattribute__`.** Grail supports `__getattr__` as a load-miss
+  fallback but not `__getattribute__` (the always-called variant).
+  Adding it would route every `obj.x` read through user code on classes
+  that override it, at a non-trivial dispatch cost.  Wait for a real
+  use case before implementing.
+- **General descriptor protocol.** AP-5 honors `@property` (the
+  paired-getter+setter signature) but not arbitrary user-defined
+  descriptors with `__get__` / `__set__` / `__delete__` methods.
+  CPython's data-descriptor precedence rule would generalize the
+  existing check; the heavy lifting is detecting "object whose class
+  defines `__set__`" at the right point in `___pyAttrLoad___` /
+  `__setattr__`.
+- **MRO walk.** AP-7's class-chain walk uses GemStone's `superClass`
+  pointer, which is single-inheritance.  Python's C3 linearization
+  for multiple inheritance is not yet implemented; classes with
+  diamond hierarchies will see inconsistent attribute lookup.  The
+  Super proxy has the same limitation (see `Super.gs` comment).
+- **Monkey-patching `builtins`.** The `builtins.abs = my_abs` pattern
+  still bypasses fast-path call sites (which optimistically emit
+  direct `abs:` sends).  Extending the probe-then-branch shape to
+  builtins-class calls would close the gap at some dispatch cost.

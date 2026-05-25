@@ -1294,17 +1294,13 @@ testSelfAttributeStillWorksWhenClassHasNew
 category: 'Grail-Tests - Instance var discovery'
 method: FlaskScaffoldingTestCase
 testInstanceVarsFromConditionalAssign
-	"`if doc: self.doc = doc` inside __init__ — old scan missed
-	the nested write; new chain propagates from AttributeAst up
-	through the IfAst to ClassDefAst."
+	"Phase B: `if doc: self.doc = doc` inside __init__ — the
+	conditional write must reach the instance's attribute namespace
+	even though it's nested.  Construction with a truthy ``doc''
+	argument should leave ``obj.doc'' readable."
 
-	| mod cls obj |
+	| mod obj |
 	mod := self loadFixture: 'deep_instance_vars'.
-	cls := mod @env1:DeepInit.
-	"Construction triggers __init__; if doc isn't a real
-	instVar the conditional write would silently fail with an
-	'undefined symbol doc' compile error before runtime."
-	self assert: (cls @env0:allInstVarNames @env0:includes: #doc).
 	obj := mod @env1:make.
 	self assert: (obj @env1:___pyAttrLoad___: #doc) equals: 'hello'.
 %
@@ -1312,59 +1308,52 @@ testInstanceVarsFromConditionalAssign
 category: 'Grail-Tests - Instance var discovery'
 method: FlaskScaffoldingTestCase
 testInstanceVarsFromAnnAssign
-	"AnnAssign on self.X (`self.tags: list = []`) — different
-	AST node from plain Assign; old scan only recognised
-	AssignAst targets."
+	"Phase B: AnnAssign on self.X (`self.tags: list = []`) — the
+	annotated assignment is a different AST node from plain Assign;
+	codegen must still emit a dynamic-instVar store so ``obj.tags''
+	round-trips."
 
-	| mod cls |
+	| mod obj |
 	mod := self loadFixture: 'deep_instance_vars'.
-	cls := mod @env1:DeepInit.
-	self assert: (cls @env0:allInstVarNames @env0:includes: #tags).
+	obj := mod @env1:make.
+	self assert: (obj @env1:___pyAttrLoad___: #tags) equals: #() asOrderedCollection.
 %
 
 category: 'Grail-Tests - Instance var discovery'
 method: FlaskScaffoldingTestCase
 testInstanceVarsFromNestedCompound
-	"`try / for / self.last_index = i` — write buried two
-	compound statements deep inside __init__.  Propagation
-	walks through every IfAst / ForAst / TryAst body branch."
+	"Phase B: `try / for / self.last_index = i` — write buried two
+	compound statements deep inside __init__ still reaches the
+	instance's attribute namespace.  The for loop runs 0..1; the
+	last write is i=1."
 
-	| mod cls |
+	| mod obj |
 	mod := self loadFixture: 'deep_instance_vars'.
-	cls := mod @env1:DeepInit.
-	self assert: (cls @env0:allInstVarNames @env0:includes: #last_index).
+	obj := mod @env1:make.
+	self assert: (obj @env1:___pyAttrLoad___: #last_index) equals: 1.
 %
 
 category: 'Grail-Tests - Instance var discovery'
 method: FlaskScaffoldingTestCase
 testInstanceVarsFromMethodOutsideInit
-	"`self.name = name` in `configure(self, name)` — old scan
-	walked __init__ only.  New walk covers every method body
-	in the class."
+	"Phase B: `self.name = name` in `configure(self, name)` — an
+	instance attribute set outside __init__ must reach the same
+	dynamic-instVar storage."
 
-	| mod cls obj |
+	| mod obj |
 	mod := self loadFixture: 'deep_instance_vars'.
-	cls := mod @env1:DeepInit.
-	self assert: (cls @env0:allInstVarNames @env0:includes: #name).
 	obj := mod @env1:make.
 	self assert: (obj @env1:___pyAttrLoad___: #name) equals: 'the-name'.
 %
 
-category: 'Grail-Tests - Instance var discovery'
-method: FlaskScaffoldingTestCase
-testInstanceVarsFromCls
-	"`cls.last_doc = doc` inside __new__ — `cls` is the
-	conventional class-attribute receiver name, but for
-	instance-var discovery the AttributeAst chain treats it
-	the same as `self`.  (Whether the runtime store actually
-	hits the class side is a separate question handled by
-	___pyAttrLoad___:.)"
-
-	| mod cls |
-	mod := self loadFixture: 'deep_instance_vars'.
-	cls := mod @env1:DeepInit.
-	self assert: (cls @env0:allInstVarNames @env0:includes: #last_doc).
-%
+! Phase B: removed testInstanceVarsFromCls — its assertion checked
+! the pre-Phase-B parser-propagation behavior where `cls.X = ...`
+! inside a method body was lifted into the class's classInstVar
+! list at compile time.  Phase B drops that propagation for instance
+! attributes (now dynamic instVars per instance).  Class attributes
+! from method-body `cls.X = ...` writes are a separate concern
+! (Behavior can't hold dynamic instVars; needs explicit class-body
+! declaration or a dedicated mechanism) — see Phase B+1 follow-up.
 
 ! --- Generators: yield in function body --------------------------------------
 
@@ -3363,23 +3352,23 @@ testBuiltinClassName
 category: 'Grail-Tests - Introspection'
 method: FlaskScaffoldingTestCase
 testInstanceDict
-	"`obj.__dict__` returns the per-instance attribute dictionary
-	(``___dict___``).  Attributes written through PythonInstance's
-	DNU dispatch path land here; class-compile-time-discovered
-	instVars do not (documented limitation).  Used by blinker's
-	cached-property idiom ``if 'X' in self.__dict__:``."
+	"`obj.__dict__` returns a view of the instance's attributes.
+	Phase B: all attributes (both __init__-discovered ones and
+	runtime-added ones) live in dynamic-instVar storage and surface
+	through __dict__ uniformly.  Used by blinker's cached-property
+	idiom ``if 'X' in self.__dict__:''."
 
 	| mod cls obj d |
 	mod := self loadFixture: 'cls_self'.
 	cls := mod @env1:FirstParamSelf.
 	obj := cls @env1:value: { 'label-value' } value: nil.
-	"`label` was discovered as an inst var from `self.label = label` —
-	stored as a Smalltalk instVar, NOT in ___dict___, so __dict__ is
-	expected to be empty here."
 	d := obj @env1:__dict__.
 	self assert: (d @env0:isKindOf: KeyValueDictionary).
-	"Add a runtime attribute via the DNU setter path — that DOES land
-	in ___dict___."
+	"Phase B: ``label'' set in __init__ also shows up here (the old
+	``Smalltalk instVar vs ___dict___'' split is gone — everything
+	lives in dynamic-instVar storage)."
+	self assert: (d @env0:at: #label) equals: 'label-value'.
+	"Runtime attribute through the DNU setter path also lands here."
 	obj @env1:dynamicAttr: 42.
 	d := obj @env1:__dict__.
 	self assert: (d @env0:at: #dynamicAttr) equals: 42.
