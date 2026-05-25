@@ -31,7 +31,7 @@ rm -rf GemStone64Bit* product || true
 # Get the product tree
 BASE="GemStone64Bit${GS_VERSION}-x86_64.Linux"
 ZIP="${BASE}.zip"
-curl --fail --show-error \
+curl --fail --show-error --location \
   --output "$ZIP" \
   --header "JOB-TOKEN: $CI_JOB_TOKEN" \
   "$CI_API_V4_URL/projects/$GEMSTONE_PROJECT_ID/packages/generic/GemStone64Bit/$GS_VERSION/$ZIP"
@@ -41,14 +41,6 @@ cd product
 export GEMSTONE=$(pwd)
 export PATH="$GEMSTONE/bin:$PATH"
 cd ..
-
-# Get the hidden directory (private headers, etc.)
-ZIP="GemStone64Bit${GS_VERSION}-x86_64.Linux-hidden.zip"
-curl --fail --show-error \
-  --output "$ZIP" \
-  --header "JOB-TOKEN: $CI_JOB_TOKEN" \
-  "$CI_API_V4_URL/projects/$GEMSTONE_PROJECT_ID/packages/generic/GemStone64Bit/$GS_VERSION/$ZIP"
-unzip -q -o "$ZIP"
 
 # Provision a fresh stone in $CI_PROJECT_DIR/testing
 mkdir -p "$CI_PROJECT_DIR/testing"
