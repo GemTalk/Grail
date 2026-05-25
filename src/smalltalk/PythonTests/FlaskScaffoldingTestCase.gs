@@ -2330,6 +2330,104 @@ testJsonDumpsDefault
 	self assert: mod @env1:dumps_with_default equals: '{"thing": 42}'
 %
 
+category: 'Grail-Tests - json'
+method: FlaskScaffoldingTestCase
+testJsonLoadsBytesInput
+	"json.loads accepts bytes (UTF-8 decoded) per CPython 3.6+.
+	itsdangerous _CompactJSON.loads relies on this."
+
+	| mod result |
+	mod := self loadFixture: 'use_json'.
+	result := mod @env1:loads_bytes_input.
+	self assert: (result @env1:__getitem__: 'x') equals: 1.
+	self assert: (result @env1:__getitem__: 'y') equals: 'hi'
+%
+
+category: 'Grail-Tests - json'
+method: FlaskScaffoldingTestCase
+testJsonLoadsBytearrayInput
+	"json.loads also accepts bytearray."
+
+	| mod result |
+	mod := self loadFixture: 'use_json'.
+	result := mod @env1:loads_bytearray_input.
+	self assert: (result @env1:__getitem__: 0) equals: 1.
+	self assert: (result @env1:__getitem__: 1) equals: 2.
+	self assert: (result @env1:__getitem__: 2) equals: 3
+%
+
+category: 'Grail-Tests - json'
+method: FlaskScaffoldingTestCase
+testJsonDumpsSeparatorsCompact
+	"Explicit ``separators=(',', ':')'' tuple strips all whitespace."
+
+	| mod |
+	mod := self loadFixture: 'use_json'.
+	self assert: mod @env1:dumps_separators_compact
+		equals: '{"a":1,"b":2}'
+%
+
+category: 'Grail-Tests - json'
+method: FlaskScaffoldingTestCase
+testJsonDumpsUnicodePassthrough
+	"ensure_ascii=False emits the raw character instead of \\uXXXX."
+
+	| mod |
+	mod := self loadFixture: 'use_json'.
+	self assert: mod @env1:dumps_unicode_passthrough
+		equals: '"é"'
+%
+
+category: 'Grail-Tests - json'
+method: FlaskScaffoldingTestCase
+testJsonDumpsFloatInfinity
+	"CPython emits ``Infinity'' / ``-Infinity'' / ``NaN'' for non-
+	finite floats (not strict JSON, but the default behavior).
+	GemStone Float lacks the standard isInfinite / isNaN predicates;
+	encode-float now uses the private _isNaN + printString tags
+	(``PlusInfinity'' / ``MinusInfinity'') to detect non-finite
+	values instead."
+
+	| mod |
+	mod := self loadFixture: 'use_json'.
+	self assert: mod @env1:dumps_float_inf equals: 'Infinity'.
+	self assert: mod @env1:dumps_negative_zero equals: '-0.0'
+%
+
+category: 'Grail-Tests - json'
+method: FlaskScaffoldingTestCase
+testJsonDumpsLargeInt
+	"Arbitrary-precision ints round-trip as decimal digits."
+
+	| mod |
+	mod := self loadFixture: 'use_json'.
+	self assert: mod @env1:dumps_large_int
+		equals: '100000000000000000000000000000000000000000000000000'
+%
+
+category: 'Grail-Tests - json'
+method: FlaskScaffoldingTestCase
+testJsonDumpToStream
+	"json.dump(obj, fp) writes via fp.write(...)."
+
+	| mod |
+	mod := self loadFixture: 'use_json'.
+	self assert: mod @env1:dump_to_stringio equals: '{"x": 1}'
+%
+
+category: 'Grail-Tests - json'
+method: FlaskScaffoldingTestCase
+testJsonLoadFromStream
+	"json.load(fp) reads via fp.read() and parses."
+
+	| mod result |
+	mod := self loadFixture: 'use_json'.
+	result := mod @env1:load_from_stringio.
+	self assert: (result @env1:__getitem__: 'x') equals: 1.
+	self assert: ((result @env1:__getitem__: 'y') @env1:__getitem__: 0) equals: 2.
+	self assert: ((result @env1:__getitem__: 'y') @env1:__getitem__: 1) equals: 3
+%
+
 ! --- datetime module ------------------------------------------------------
 
 category: 'Grail-Tests - datetime'

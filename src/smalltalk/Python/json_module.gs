@@ -111,11 +111,43 @@ _dumps: positional kw: kwargs
 
 category: 'Grail-Public'
 method: json
-loads: s
-	"loads(s) - parse JSON text into Python values."
+load: fp
+	"load(fp) - read JSON from a file-like object's ``read()'' and
+	parse.  fp is any object with a no-arg ``read()'' method that
+	returns the full JSON text (str or bytes)."
 
-	| state result |
-	state := Array @env0:with: s @env0:asString with: 1.
+	^ self @env1:loads: (fp @env1:read)
+%
+
+category: 'Grail-Public'
+method: json
+_dump: positional kw: kwargs
+	"dump(obj, fp, **kwargs) - serialise ``obj'' as JSON and write to
+	``fp'' via fp.write(chunk).  All other kwargs forward to
+	dumps; we materialise the full string once then write it (no
+	chunking).  Flask / itsdangerous never depend on iterencode-
+	style streaming."
+
+	| obj fp text dumpsArgs |
+	obj := positional @env0:at: 1.
+	fp := positional @env0:at: 2.
+	dumpsArgs := Array @env0:with: obj.
+	text := self @env1:_dumps: dumpsArgs kw: kwargs.
+	^ fp @env1:write: text
+%
+
+category: 'Grail-Public'
+method: json
+loads: s
+	"loads(s) - parse JSON text into Python values.  Accepts str,
+	bytes, or bytearray inputs; bytes/bytearray are decoded as UTF-8
+	per CPython 3.6+."
+
+	| text state result |
+	text := (s @env0:isKindOf: ByteArray)
+		@env0:ifTrue: [s @env1:decode: 'utf-8']
+		@env0:ifFalse: [s @env0:asString].
+	state := Array @env0:with: text with: 1.
 	self @env1:_skipWs: state.
 	result := self @env1:_parseValue: state.
 	self @env1:_skipWs: state.
@@ -190,14 +222,16 @@ category: 'Grail-Private'
 method: json
 _encodeFloat: f onto: stream
 	"NaN -> NaN, +Inf -> Infinity, -Inf -> -Infinity, others use
-	standard print form."
+	standard print form.  GemStone Float lacks isInfinite / isNaN
+	(but has the private _isNaN); detect infinity by comparing
+	against the largest finite Float."
 
-	f @env0:isNaN ifTrue: [^ stream @env0:nextPutAll: 'NaN'].
-	f @env0:isInfinite ifTrue: [
-		^ stream @env0:nextPutAll:
-			(f @env0:< 0 ifTrue: ['-Infinity'] ifFalse: ['Infinity'])
-	].
-	^ stream @env0:nextPutAll: f @env0:printString
+	| pstr |
+	f @env0:_isNaN ifTrue: [^ stream @env0:nextPutAll: 'NaN'].
+	pstr := f @env0:printString.
+	pstr @env0:= 'PlusInfinity' ifTrue: [^ stream @env0:nextPutAll: 'Infinity'].
+	pstr @env0:= 'MinusInfinity' ifTrue: [^ stream @env0:nextPutAll: '-Infinity'].
+	^ stream @env0:nextPutAll: pstr
 %
 
 category: 'Grail-Private'
