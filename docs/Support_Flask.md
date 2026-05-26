@@ -162,36 +162,91 @@ pure-Python ports.
 Existing stub modules that need extending later: `typing`,
 `inspect` (still skeleton); they suffice for current import chains.
 
-### Tier 2 — not yet started
+### Tier 2 — partial / mostly done
 
 **Bigger stdlib:**
-* `datetime` — large, fiddly; hard dep of `itsdangerous` + Werkzeug.
-  Easiest path: Smalltalk-backed wrapping GemStone's `DateTime`.
-* `json` — pure-Python in CPython, works once `re` is in (it is).
-* `collections` (full) — `OrderedDict`, `deque`, `namedtuple`,
-  `ChainMap`, `Counter` (`defaultdict` already stubbed).
-* `io` — `StringIO`, `BytesIO`.
-* `logging`, `traceback` — minimal implementations.
-* `weakref` — currently a strong-ref stub; needs real semantics if
-  long-running processes start depending on cleanup.
+* `datetime` — **done.**  Combined `datetime` + `timedelta` +
+  `timezone` (Smalltalk-backed, wrapping GemStone DateTime/Duration)
+  plus standalone `date` / `time` classes.  See merged `datetime`
+  branch.
+* `json` — **done.**  Smalltalk-backed dumps/loads with bytes/
+  bytearray inputs, ``dump`` / ``load`` file-IO variants,
+  Infinity/-Infinity/NaN encoding.
+* `collections` (full) — **done.**  `defaultdict`, `OrderedDict`,
+  `deque`, `namedtuple`, `Counter` (with kwargs init + arithmetic),
+  `ChainMap` (with parents/pop/popitem/clear).
+* `io` — **done.**  `StringIO` / `BytesIO` + `SEEK_SET` / `SEEK_CUR`
+  / `SEEK_END` constants + `getbuffer`.
+* `logging` — **done.**  Full Logger / Handler / Formatter /
+  LogRecord with handler-pipeline tests, `hasHandlers`, asctime via
+  `time.strftime`.
+* `traceback` — **done.**  3.10+ single-exception form,
+  `format_list` / `walk_tb` / `TracebackException`.
+* `weakref` — strong-ref stub; deferred.  See [Weakref.md] for
+  the GemStone ephemeron mechanism that could back a real
+  implementation and the four reasons we're parked on the stub.
+
+[Weakref.md]: Weakref.md
 
 **Direct deps (Tier 3):**
-* `itsdangerous`, `MarkupSafe` once Tier 1.5/2 are in.
-* `dataclasses` — pure-Python in CPython; required by Werkzeug 3.x.
+* `itsdangerous`, `MarkupSafe` already imported and exercised.
+* `dataclasses` — **not yet started.**  Pure-Python in CPython;
+  required by Werkzeug 3.x.
 
 **Jinja2 (Tier 4):**
-* `urllib.parse`, `pprint`, `decimal`, `ast` (stub).
-* Disable async templates and bytecode cache (skip `asyncio`,
+* `urllib.parse` — done.  `pprint`, `decimal`, `ast` — stubs in
+  place.
+* Async templates and bytecode cache stay disabled (skip `asyncio`,
   `pickle`).
 
 **click (Tier 5):**
-* `gettext` (stub), `shutil` (subset).
+* `gettext` (stub), `shutil` (subset).  Only needed for `flask run`.
 
 **Werkzeug (Tier 6, long pole):**
-* `http.*`, `email.*`, `wsgiref.*` — staged.
-* `werkzeug.datastructures` → `urls`/`http` → `wrappers` →
-  `routing` → `exceptions` → `test` (test client).
-* `serving` last, optional, needs `socket`/`socketserver`/`signal`.
+* Stdlib gaps that Werkzeug import will hit (need at least a stub
+  each):
+  * `http.client` (status codes, `HTTPException` shells),
+    `http.cookies` (`SimpleCookie`, `Morsel`).
+  * `email.utils` (`parsedate_to_datetime`, `formatdate`,
+    `parseaddr`, `quote`), `email.message` (`Message` for
+    multipart parsing).
+  * `wsgiref.util` (`request_uri`, `application_uri`,
+    `setup_testing_defaults`), `wsgiref.headers` (`Headers`).
+  * `socket` — light usage in environ defaults; can stub as
+    blocking-disabled.
+  * `cgi` — deprecated but Werkzeug 3.x has a fallback path that
+    still imports.  Stub `cgi.parse_multipart` or rewrite the
+    Werkzeug call sites to avoid it.
+* `dataclasses` (Tier 3) blocks Werkzeug 3.x's typed wrapper
+  classes (`werkzeug.test.EnvironBuilder` and friends).  Could
+  port the pure-Python implementation from CPython or backport
+  a Werkzeug 2.x compatible layer that avoids dataclasses
+  on the load-bearing types.
+* Werkzeug source drop order (each step ends in a probe run):
+  1. `werkzeug._internal` (assorted helpers, type aliases) +
+     `werkzeug.urls` (URL parsing wrappers over urllib.parse).
+  2. `werkzeug.datastructures.*` (`MultiDict` /
+     `ImmutableMultiDict` / `Headers` / `EnvironHeaders` / …).
+     Largest single chunk — ~3500 LOC, mostly self-contained.
+  3. `werkzeug.http` (HTTP date / cookie / Accept / Authorization /
+     ETag / Range / If-Match parsing).  Pulls in `email.utils`.
+  4. `werkzeug.wsgi` (WSGI environ helpers — `get_input_stream`,
+     `get_host`, `get_current_url`).
+  5. `werkzeug.exceptions` (`HTTPException` hierarchy).  Used by
+     Flask error handlers.
+  6. `werkzeug.wrappers` (`Request` / `Response` — the core).
+  7. `werkzeug.routing` (`Rule` / `Map` / converters — Flask
+     needs this for `@app.route('/')`).
+  8. `werkzeug.local` (`Local` / `LocalStack` / `LocalProxy` —
+     app context).  May trip on threading-local semantics; can
+     stub thread-local to a plain dict for single-session use.
+  9. `werkzeug.utils` (`redirect`, `secure_filename`,
+     `cached_property`, …).
+  10. `werkzeug.test` (`Client` + `EnvironBuilder`).  M6 finish
+      line: build an environ, route through a WSGI callable,
+      get a Response back.
+  11. `werkzeug.serving` — **deferred to M8.**  Real HTTP server
+      with socket / socketserver / signal.
 
 **Flask (Tier 7):**
 * `importlib.metadata` stub returning a fixed version.
@@ -202,10 +257,13 @@ Existing stub modules that need extending later: `typing`,
 
 - **`flask run` vs `werkzeug.test.Client`?**  Test client only skips
   Tier 5 (`click`) and the socket-server pieces of Werkzeug.
-- **Smalltalk-backed vs port the source?**  `datetime`, `collections`,
-  `weakref`, `json` are all candidates for Smalltalk-backed
-  implementations.  Faster + likely fewer bugs, but loses CPython
-  exactness.
+- **Smalltalk-backed vs port the source?**  `datetime` (Smalltalk-
+  backed, wrapping GemStone DateTime) and `json` (pure-Smalltalk
+  recursive descent) went the Smalltalk route — faster and fewer
+  bugs.  `collections`, `logging`, `traceback` went the port route
+  for closer CPython parity.  `weakref` would need either a
+  Smalltalk-backed ephemeron implementation or stay a port-side
+  stub; see [Weakref.md] for the trade-offs.
 - **MarkupSafe `_speedups`** — stays off.  Pure-Python fallback is
   fine and the C extension uses CPython internals we don't shim.
 - **`asyncio` / `pickle` / `zlib`** — none required for the minimum
@@ -331,23 +389,27 @@ Existing stub modules that need extending later: `typing`,
     `Environment._handle_exception` and trips a BoundMethod-
     doesn't-understand-`signal` DNU; affects only malformed
     templates).
-- **M5 — `datetime` + small Tier-2 stdlib in place** (`datetime`,
-  `json`, `io`, partial `collections`, `logging` / `traceback`
-  shims).  Unblocks `itsdangerous` deeper paths and the
-  Werkzeug import chain.  *Next.*
+- **M5 — Tier-2 stdlib in place.**  Done across the `datetime`,
+  `json`, `io`, `collections`, `logging`, `traceback` branches
+  (each squash-merged to main).  Suite at 2237 / 2237 after the
+  last merge.  `weakref` parked at the strong-ref stub — see
+  [Weakref.md] for the ephemeron-based path forward and why
+  it's deferred.
 - **M6 — `werkzeug.wrappers.Request/Response` round-trip a WSGI
-  environ.**  Long pole.  Source dropped under
-  `src/python/stdlib/werkzeug/`; bring up `http.*` / `email.*` /
-  `wsgiref.*` minimally; `werkzeug.datastructures` → `urls`/`http`
-  → `wrappers` → `routing` → `exceptions` → `test`.
+  environ.**  Long pole.  Pre-requisite stdlib gaps and Werkzeug
+  source-drop order detailed in the *Werkzeug (Tier 6)* section
+  above.  `dataclasses` (Tier 3) is the first sub-blocker:
+  Werkzeug 3.x's typed wrappers require it.
 - **M7 — Flask hello-world responds via `werkzeug.test.Client`.**
   Flask "working" without a live socket.  Source under
   `src/python/stdlib/flask/`; bring up `app`, `blueprints`,
   `config`, `helpers`, `json`, `sessions`, `templating`,
   `wrappers`.
 - **M8 — `flask run` serves a real HTTP request.**  Requires
-  `socket` / `socketserver` / `signal` on top of M7.
+  `socket` / `socketserver` / `signal` on top of M7.  Probably
+  also forces a real `weakref` implementation (see Weakref.md
+  triggers).
 
-Calendar balance: M5 is medium (each Tier-2 stdlib is bounded);
-M6 is the bulk (Werkzeug is the largest single dep); M8 is
-comparatively small once everything else is in.
+Calendar balance: M6 is the bulk (Werkzeug is the largest single
+dep, ~50k LOC of which the test-client path touches maybe 8k);
+M8 is comparatively small once everything else is in.

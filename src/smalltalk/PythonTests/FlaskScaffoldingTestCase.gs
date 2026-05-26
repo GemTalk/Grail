@@ -2092,6 +2092,182 @@ testTracebackExceptionFormatExceptionOnly
 '
 %
 
+! --- dataclasses module --------------------------------------------------
+
+category: 'Grail-Tests - dataclasses'
+method: FlaskScaffoldingTestCase
+testDataclassesIsDataclassRecognises
+	"is_dataclass(decorated_class) is True; is_dataclass(instance)
+	is also True (CPython surface)."
+
+	| mod |
+	mod := self loadFixture: 'use_dataclasses'.
+	self assert: mod @env1:is_dataclass_recognises_class equals: true.
+	self assert: mod @env1:is_dataclass_recognises_instance equals: true
+%
+
+category: 'Grail-Tests - dataclasses'
+method: FlaskScaffoldingTestCase
+testDataclassesIsDataclassRejects
+	"is_dataclass returns False for plain ints / undecorated
+	classes — doesn't raise."
+
+	| mod |
+	mod := self loadFixture: 'use_dataclasses'.
+	self assert: mod @env1:is_dataclass_rejects_plain_int equals: false.
+	self assert: mod @env1:is_dataclass_rejects_plain_class equals: false
+%
+
+category: 'Grail-Tests - dataclasses'
+method: FlaskScaffoldingTestCase
+testDataclassesFields
+	"fields(cls) enumerates Field descriptors in declaration order."
+
+	| mod result |
+	mod := self loadFixture: 'use_dataclasses'.
+	result := mod @env1:fields_returns_descriptor_objects.
+	self assert: result equals: #('x' 'y') asOrderedCollection.
+	self assert: mod @env1:fields_each_is_a_Field_instance equals: true
+%
+
+category: 'Grail-Tests - dataclasses'
+method: FlaskScaffoldingTestCase
+testDataclassesAsdict
+	"asdict reads each field via getattr — depends on the user's
+	__init__ having stored the attribute."
+
+	| mod result |
+	mod := self loadFixture: 'use_dataclasses'.
+	result := mod @env1:asdict_returns_field_value_dict.
+	self assert: (result @env1:__getitem__: 'x') equals: 7.
+	self assert: (result @env1:__getitem__: 'y') equals: 8
+%
+
+category: 'Grail-Tests - dataclasses'
+method: FlaskScaffoldingTestCase
+testDataclassesAstuple
+	"astuple returns a tuple in field declaration order."
+
+	| mod result |
+	mod := self loadFixture: 'use_dataclasses'.
+	result := mod @env1:astuple_returns_field_value_tuple.
+	self assert: (result @env1:__getitem__: 0) equals: 7.
+	self assert: (result @env1:__getitem__: 1) equals: 8
+%
+
+category: 'Grail-Tests - dataclasses'
+method: FlaskScaffoldingTestCase
+testDataclassesReplaceOverrides
+	"replace(p, y=99) returns a fresh instance with y overridden
+	and the unchanged fields copied.  Uses positional dispatch
+	(field declaration order) rather than kwargs so the user's
+	__init__ doesn't need a varargs kwarg signature."
+
+	| mod result |
+	mod := self loadFixture: 'use_dataclasses'.
+	result := mod @env1:replace_overrides_one_field.
+	self assert: (result @env1:__getitem__: 0) equals: 1.
+	self assert: (result @env1:__getitem__: 1) equals: 99
+%
+
+category: 'Grail-Tests - dataclasses'
+method: FlaskScaffoldingTestCase
+testDataclassesReplaceNoChanges
+	"replace(p) with no kwargs returns a fresh instance with the
+	same field values."
+
+	| mod result |
+	mod := self loadFixture: 'use_dataclasses'.
+	result := mod @env1:replace_preserves_unchanged_fields.
+	self assert: (result @env1:__getitem__: 0) equals: 5.
+	self assert: (result @env1:__getitem__: 1) equals: 6
+%
+
+category: 'Grail-Tests - dataclasses'
+method: FlaskScaffoldingTestCase
+testDataclassesFieldFactory
+	"field(default=...) builds a Field descriptor with the
+	supplied defaults; init / repr default to True."
+
+	| mod result |
+	mod := self loadFixture: 'use_dataclasses'.
+	result := mod @env1:field_factory_defaults.
+	self assert: (result @env1:__getitem__: 0) equals: 42.
+	self assert: (result @env1:__getitem__: 1) equals: true.
+	self assert: (result @env1:__getitem__: 2) equals: true
+%
+
+category: 'Grail-Tests - dataclasses'
+method: FlaskScaffoldingTestCase
+testDataclassesFieldRejectsBothDefaults
+	"field(default=X, default_factory=Y) is a ValueError per
+	CPython."
+
+	| mod |
+	mod := self loadFixture: 'use_dataclasses'.
+	self assert: mod @env1:field_factory_rejects_both_defaults
+		equals: 'caught'
+%
+
+category: 'Grail-Tests - dataclasses'
+method: FlaskScaffoldingTestCase
+testDataclassesMissingSentinel
+	"MISSING is a typed singleton — distinguishes ``no default''
+	from ``default of None''."
+
+	| mod result |
+	mod := self loadFixture: 'use_dataclasses'.
+	result := mod @env1:missing_sentinel_singleton.
+	self assert: (result @env1:__getitem__: 0) equals: 'MISSING'.
+	self assert: (result @env1:__getitem__: 1) equals: true
+%
+
+category: 'Grail-Tests - dataclasses'
+method: FlaskScaffoldingTestCase
+testDataclassesMakeDataclassStub
+	"make_dataclass raises NotImplementedError — Grail doesn't
+	expose 3-arg type(name, bases, ns) class creation."
+
+	| mod |
+	mod := self loadFixture: 'use_dataclasses'.
+	self assert: mod @env1:make_dataclass_is_stub equals: 'caught'
+%
+
+category: 'Grail-Tests - dataclasses'
+method: FlaskScaffoldingTestCase
+testDataclassesFrozenError
+	"FrozenInstanceError subclasses AttributeError per CPython."
+
+	| mod |
+	mod := self loadFixture: 'use_dataclasses'.
+	self assert: mod @env1:frozen_error_is_attribute_error equals: true
+%
+
+category: 'Grail-Tests - dataclasses'
+method: FlaskScaffoldingTestCase
+testDataclassesDecoratorKwargsForm
+	"@dataclass(frozen=True) — the decorator-with-arguments
+	branch (the inner ``wrap'' returned when _cls is None)."
+
+	| mod |
+	mod := self loadFixture: 'use_dataclasses'.
+	self assert: mod @env1:decorator_kwargs_form equals: true
+%
+
+category: 'Grail-Tests - dataclasses'
+method: FlaskScaffoldingTestCase
+testDataclassesParamsCaptured
+	"__dataclass_params__ records the decorator kwargs for
+	introspection."
+
+	| mod result |
+	mod := self loadFixture: 'use_dataclasses'.
+	result := mod @env1:dataclass_params_captured.
+	self assert: (result @env1:__getitem__: 0) equals: true.
+	self assert: (result @env1:__getitem__: 1) equals: true.
+	self assert: (result @env1:__getitem__: 2) equals: true
+%
+
 ! --- collections module ---------------------------------------------------
 
 category: 'Grail-Tests - collections'
