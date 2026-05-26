@@ -155,6 +155,22 @@ class RegexFlag:
     __str__ = object.__str__
     _numeric_repr_ = hex
 
+# Grail-specific: ``@enum.global_enum'' in CPython injects the
+# RegexFlag members as module-level attributes (``re.ASCII'',
+# ``re.A'', ``re.MULTILINE'', ...).  Grail's enum stub doesn't yet
+# perform that injection, so spell the bindings out explicitly here
+# — Werkzeug's http module uses ``re.ASCII'' / ``re.A'' / ``re.VERBOSE''
+# at module-init time and would otherwise fail with AttributeError.
+NOFLAG = RegexFlag.NOFLAG
+ASCII = A = RegexFlag.ASCII
+IGNORECASE = I = RegexFlag.IGNORECASE
+LOCALE = L = RegexFlag.LOCALE
+UNICODE = U = RegexFlag.UNICODE
+MULTILINE = M = RegexFlag.MULTILINE
+DOTALL = S = RegexFlag.DOTALL
+VERBOSE = X = RegexFlag.VERBOSE
+DEBUG = RegexFlag.DEBUG
+
 # sre exception
 PatternError = error = _compiler.PatternError
 

@@ -643,6 +643,19 @@ tokenizeString
 				SyntaxError signal: 'EOL while scanning string literal at line ' , startLine printString.
 			].
 		].
+		"Raw strings: backslash followed by anything is a two-char
+		unit, kept verbatim.  If the next char is the quote it does
+		NOT terminate the string (CPython raw-string rule).  Handled
+		here as a parallel case to the non-raw escape branch below —
+		both consume their characters in a single block so the
+		default-fallthrough consumer at the bottom doesn't run."
+		(char == $\ and: [isRaw]) ifTrue: [
+			| nextCh |
+			self advance.
+			self atEnd ifTrue: [SyntaxError signal: 'unterminated string literal'].
+			nextCh := self advance.
+			writeStream nextPut: $\; nextPut: nextCh
+		] ifFalse: [
 		"Handle escape sequences"
 		(char == $\ and: [isRaw not]) ifTrue: [
 			| escaped |
@@ -676,7 +689,7 @@ tokenizeString
 			]]]]]]]]]]]]].
 		] ifFalse: [
 			writeStream nextPut: self advance.
-		].
+		]].
 		true
 	] whileTrue.
 %

@@ -4965,9 +4965,20 @@ testWerkzeugDatastructuresImports
 	"werkzeug.datastructures — re-exports MultiDict, ImmutableDict,
 	iter_multi_items and the mixin types via the thinned __init__.
 	Known gaps (super() through dict-subclass constructor;
-	isinstance against the cabc stubs) are documented in the fixture."
+	isinstance against the cabc stubs) are documented in the fixture.
 
-	| mod |
+	Clears the cached werkzeug submodules before the load so the
+	package __init__ runs fresh — without this, prior-test
+	caching can leave the package in a partial state where the
+	re-exports never re-populate."
+
+	| mod mods keys |
+	mods := importlib @env1:modules.
+	keys := mods @env0:keys @env0:select: [:k |
+		(k @env0:asString @env0:= 'werkzeug')
+			@env0:or: [(k @env0:asString @env0:indexOfSubCollection: 'werkzeug.') @env0:> 0]].
+	keys @env0:do: [:k | mods @env0:removeKey: k ifAbsent: []].
+	mods @env0:removeKey: #'use_werkzeug_datastructures' ifAbsent: [].
 	mod := self loadFixture: 'use_werkzeug_datastructures'.
 	self assert: mod @env1:import_succeeded equals: true.
 	self assert: mod @env1:multidict_class_resolves equals: true.
