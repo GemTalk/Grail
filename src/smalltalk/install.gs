@@ -467,6 +467,7 @@ run
 	at: #'AttributeStoreTestCase' put: nil;
 	at: #'DictKwargsTestCase' put: nil;
 	at: #'DunderClassTestCase' put: nil;
+	at: #'ClassFunctionBindingTestCase' put: nil;
 	at: #'FunctionRebindingTestCase' put: nil;
 	at: #'LiveDictTestCase' put: nil;
 	at: #'KwargsSplatTestCase' put: nil;
@@ -1035,6 +1036,7 @@ input src/smalltalk/PythonTests/AttributeProtocolTestCase.gs
 input src/smalltalk/PythonTests/AttributeStoreTestCase.gs
 input src/smalltalk/PythonTests/DictKwargsTestCase.gs
 input src/smalltalk/PythonTests/DunderClassTestCase.gs
+input src/smalltalk/PythonTests/ClassFunctionBindingTestCase.gs
 input src/smalltalk/PythonTests/FunctionRebindingTestCase.gs
 input src/smalltalk/PythonTests/KwargsSplatTestCase.gs
 input src/smalltalk/PythonTests/SubclassNameAttrTestCase.gs
