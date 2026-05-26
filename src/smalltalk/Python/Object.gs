@@ -274,6 +274,39 @@ ___pyAnd___: alternativeBlock
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
+___dynamicClassAttr___: aSym
+	"Walk self's class chain looking for aSym in the per-class
+	``dynInstVars'' store.  Returns the raw value if found, nil
+	otherwise.  Used by class instantiation to detect a setattr'd
+	override (e.g. ``Cls.__init__ = synthesized_fn'') before falling
+	back to the statically-compiled dispatch.
+
+	Self may be either a class (Behavior — walk starting at self) or
+	an instance (walk starting at self's class).  No descriptor
+	binding is applied; the caller is responsible for handling the
+	raw callable (typically by prepending the receiver itself)."
+
+	| walker |
+	walker := (self @env0:isKindOf: Behavior)
+		ifTrue: [self]
+		ifFalse: [self @env0:class].
+	[walker @env0:== nil] whileFalse: [
+		((walker @env0:class @env0:whichClassIncludesSelector: #dynInstVars environmentId: 1) notNil)
+			ifTrue: [
+				| holder dynValue |
+				holder := walker @env0:perform: #dynInstVars env: 1.
+				holder @env0:== nil ifFalse: [
+					dynValue := holder @env0:dynamicInstVarAt: aSym.
+					dynValue @env0:== nil ifFalse: [^ dynValue]
+				]
+			].
+		walker := walker @env0:superClass
+	].
+	^ nil
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
 ___isDescriptorCallable___: aValue
 	"True if aValue is a callable that should bind via Python's
 	descriptor protocol when accessed through an instance via the

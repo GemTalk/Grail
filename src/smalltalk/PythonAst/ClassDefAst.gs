@@ -646,7 +646,7 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 	lf := Character lf asString.
 	src := WriteStream on: Unicode7 new.
 	src nextPutAll: 'value: positional value: keywords'; nextPutAll: lf.
-	src nextPutAll: '| instance |'; nextPutAll: lf.
+	src nextPutAll: '| instance dynInit |'; nextPutAll: lf.
 	self firstBaseIsStr
 		ifTrue: [
 			src
@@ -666,6 +666,21 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 					nextPutAll: lf
 			]
 			ifFalse: [src nextPutAll: 'instance := self @env0:new.'; nextPutAll: lf]].
+	"Descriptor-bound __init__ override: a setattr-installed
+	``cls.__init__ = synth_fn'' lands in the class''s dynInstVars
+	store.  Probe for it BEFORE the static dispatch so dataclass-
+	style synthesis (or any runtime mutation of __init__) takes
+	effect.  When found, prepend the instance to positional args and
+	forward via ___pyCallValue___ — matches CPython''s descriptor
+	read.  When absent (the common case), fall through to the
+	statically-compiled dispatch below."
+	src
+		nextPutAll: 'dynInit := self @env1:___dynamicClassAttr___: #''__init__''.';
+		nextPutAll: lf;
+		nextPutAll: 'dynInit @env0:== nil ifFalse: [';
+		nextPutAll: 'dynInit @env1:___pyCallValue___: ({ instance } @env0:, positional) kw: keywords.';
+		nextPutAll: '^ instance].';
+		nextPutAll: lf.
 	initSelector ifNotNil: [
 		"Varargs __init__ (defaults, *args, or **kwargs) compiles to a
 		`___init__:kw:` selector that takes both positional and keyword
