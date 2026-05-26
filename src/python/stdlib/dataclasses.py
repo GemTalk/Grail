@@ -262,14 +262,84 @@ def _collect_fields(cls):
     return result
 
 
+def _make_synthesized_init(field_dict):
+    """Build a synthesized ``__init__'' closure that binds fields in
+    declaration order from positional args, then by keyword name, then
+    by the field's default / default_factory.  Stored as a class-side
+    callable via ``setattr(cls, '__init__', fn)'' — descriptor binding
+    in ___pyAttrLoad___ prepends the instance at call time, and the
+    class-instantiation dispatch (ClassDefAst's value:value:) routes
+    Cls(args) through this override before falling back to the static
+    __init__."""
+
+    field_names = []
+    for name in field_dict:
+        field_names.append(name)
+
+    def __init__(self, *args, **kwargs):
+        for i, name in enumerate(field_names):
+            if i < len(args):
+                setattr(self, name, args[i])
+            elif name in kwargs:
+                setattr(self, name, kwargs[name])
+            else:
+                f = field_dict[name]
+                if f.default is not MISSING:
+                    setattr(self, name, f.default)
+                elif f.default_factory is not MISSING:
+                    setattr(self, name, f.default_factory())
+                else:
+                    raise TypeError(
+                        '__init__() missing required argument: ' + name)
+
+    return __init__
+
+
+def _make_synthesized_repr(cls_name, field_dict):
+    """``Cls(x=1, y=2)'' style repr for dataclasses."""
+
+    field_names = []
+    for name in field_dict:
+        field_names.append(name)
+
+    def __repr__(self):
+        parts = []
+        for name in field_names:
+            parts.append(name + '=' + repr(getattr(self, name, None)))
+        return cls_name + '(' + ', '.join(parts) + ')'
+
+    return __repr__
+
+
+def _make_synthesized_eq(field_dict):
+    """Structural equality across all fields, gated on identical
+    class.  Returns NotImplemented when types differ (matches
+    CPython's dataclass __eq__)."""
+
+    field_names = []
+    for name in field_dict:
+        field_names.append(name)
+
+    def __eq__(self, other):
+        if type(self) is not type(other):
+            return NotImplemented
+        for name in field_names:
+            if getattr(self, name, None) != getattr(other, name, None):
+                return False
+        return True
+
+    return __eq__
+
+
 def dataclass(_cls=None, *, init=True, repr=True, eq=True, order=False,
               unsafe_hash=False, frozen=False, match_args=True,
               kw_only=False, slots=False, weakref_slot=False):
-    """Tag a class as a dataclass.  Grail stub: walks ``_fields'' to
-    populate ``__dataclass_fields__'' for is_dataclass / fields /
-    asdict / astuple / replace introspection.  Does NOT synthesize
-    __init__ / __repr__ / __eq__ — the user's class body must
-    supply those."""
+    """Tag a class as a dataclass.  Synthesizes ``__init__'' /
+    ``__repr__'' / ``__eq__'' as setattr-installed closures (the
+    descriptor binding in ___pyAttrLoad___ wraps them as bound
+    methods at lookup time).  Walks ``_fields'' to populate
+    ``__dataclass_fields__'' for is_dataclass / fields / asdict /
+    astuple / replace introspection."""
 
     def wrap(cls):
         field_dict = _collect_fields(cls)
@@ -279,6 +349,13 @@ def dataclass(_cls=None, *, init=True, repr=True, eq=True, order=False,
             unsafe_hash=unsafe_hash, frozen=frozen,
             match_args=match_args, kw_only=kw_only,
             slots=slots, weakref_slot=weakref_slot))
+        if init:
+            setattr(cls, '__init__', _make_synthesized_init(field_dict))
+        if repr:
+            setattr(cls, '__repr__',
+                    _make_synthesized_repr(cls.__name__, field_dict))
+        if eq:
+            setattr(cls, '__eq__', _make_synthesized_eq(field_dict))
         return cls
 
     # Support both ``@dataclass'' and ``@dataclass(frozen=True)''.

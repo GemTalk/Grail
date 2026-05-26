@@ -8,15 +8,13 @@ from dataclasses import (
 
 @dataclass
 class Point:
-    """Plain dataclass — user supplies __init__ because Grail's
-    decorator is metadata-only (it can't synthesize methods via
-    dynamic attribute injection)."""
+    """Plain dataclass — Grail's decorator synthesizes __init__,
+    __repr__, __eq__ via setattr.  The descriptor binding in
+    ___pyAttrLoad___ wraps the setattr'd functions as bound methods
+    at attribute lookup time, and ClassDefAst's class-instantiation
+    dispatch routes Cls(args) through the dyn __init__ override."""
     x: int
     y: int
-
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
 
 
 @dataclass(frozen=True)
@@ -24,9 +22,6 @@ class Tag:
     """Decorator with kwargs form — frozen=True is recorded in
     __dataclass_params__ but not enforced by Grail."""
     value: str
-
-    def __init__(self, value):
-        self.value = value
 
 
 def is_dataclass_recognises_class():
