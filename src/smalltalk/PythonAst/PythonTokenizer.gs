@@ -553,11 +553,16 @@ tokenizeOperator
 	next notNil ifTrue: [
 		| two |
 		two := char asString , next asString.
+		"``..'' is intentionally NOT in the two-char OP set even though
+		earlier versions of this tokenizer treated it as one — Python
+		has no such operator, and merging the two dots blocks relative
+		imports like ``from .. import x'' (the parser counts single
+		dots to compute the import level)."
 		(two = '==' or: [two = '!=' or: [two = '<=' or: [two = '>=' or: [
 		 two = '+=' or: [two = '-=' or: [two = '*=' or: [two = '/=' or: [
 		 two = '%=' or: [two = '&=' or: [two = '|=' or: [two = '^=' or: [
 		 two = '@=' or: [two = '->' or: [two = '//' or: [two = '**' or: [
-		 two = '<<' or: [two = '>>' or: [two = ':=' or: [two = '..']]]]]]]]]]]]]]]]]]]) ifTrue: [
+		 two = '<<' or: [two = '>>' or: [two = ':=']]]]]]]]]]]]]]]]]]) ifTrue: [
 			self advance.
 			self addToken: #OP value: two line: startLine column: startCol endLine: line endColumn: column.
 			^self

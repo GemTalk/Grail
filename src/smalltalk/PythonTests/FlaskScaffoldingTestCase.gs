@@ -4937,3 +4937,40 @@ testModuleSingletonReturnsSameClass
 	same := tup @env1:__getitem__: 2.
 	self assert: same equals: true
 %
+
+! --- Werkzeug staging (M6) ------------------------------------------------
+!
+! Step 1: ``werkzeug._internal'' + WSGI encoding-dance helpers.
+! Step 2: ``werkzeug.datastructures'' (``mixins'' + ``structures'' so
+! far; the rest of the upstream re-exports arrive as Steps 3-9 land
+! their respective submodules — http, wsgi, exceptions, ...).
+
+category: 'Grail-Tests - werkzeug'
+method: FlaskScaffoldingTestCase
+testWerkzeugInternalImports
+	"werkzeug._internal — the smallest Werkzeug submodule.  Probes
+	the import path and the WSGI encoding-dance helpers."
+
+	| mod |
+	mod := self loadFixture: 'use_werkzeug_internal'.
+	self assert: mod @env1:import_succeeded equals: true.
+	self assert: mod @env1:missing_repr equals: 'no value'.
+	self assert: mod @env1:wsgi_encoding_dance equals: 'hello'.
+	self assert: mod @env1:wsgi_decoding_dance equals: 'hello'
+%
+
+category: 'Grail-Tests - werkzeug'
+method: FlaskScaffoldingTestCase
+testWerkzeugDatastructuresImports
+	"werkzeug.datastructures — re-exports MultiDict, ImmutableDict,
+	iter_multi_items and the mixin types via the thinned __init__.
+	Known gaps (super() through dict-subclass constructor;
+	isinstance against the cabc stubs) are documented in the fixture."
+
+	| mod |
+	mod := self loadFixture: 'use_werkzeug_datastructures'.
+	self assert: mod @env1:import_succeeded equals: true.
+	self assert: mod @env1:multidict_class_resolves equals: true.
+	self assert: mod @env1:immutable_dict_rejects_set equals: 'caught'.
+	self assert: mod @env1:iter_multi_items_runs equals: true
+%

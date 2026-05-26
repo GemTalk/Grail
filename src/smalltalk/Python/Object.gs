@@ -131,6 +131,25 @@ ___new___
 
 category: 'Grail-Convenience Methods'
 classmethod: object
+__class_getitem__: item
+	"Python's class subscription protocol — ``list[int]'' /
+	``dict[K, V]'' / ``MyClass[T]''.  CPython returns a
+	``types.GenericAlias'' that round-trips through ``__mro_entries__''
+	to its origin class when used as a base.  Grail collapses both
+	steps: return self.  ``class Foo(list[V]):'' compiles to
+	``class Foo(list):'', which is what we want — Grail doesn't
+	enforce generic type parameters at runtime, so the discarded
+	subscript carries no semantics.
+
+	Used by Werkzeug's datastructures (``MultiDict[K, V]'',
+	``ImmutableList[V]''), every dataclasses field annotation, and
+	any other generic-base or generic-alias use site."
+
+	^ self
+%
+
+category: 'Grail-Convenience Methods'
+classmethod: object
 __new__: cls
 	"Python ``object.__new__(cls)`` — create a fresh instance of
 	``cls`` without running ``__init__``.  jinja2's Template

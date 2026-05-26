@@ -212,8 +212,13 @@ printSmalltalkOn: aStream
 	Smalltalk pseudo-variables can't be declared as temps or used as
 	assignment targets.  Body references to the Python name resolve
 	to the transport identifier via NameAst's reserved-param rename."
-	fixedCount := args args size.
+	"Combined positional sequence: posonlyargs come before args (the
+	regular positional params).  Both feed the same ___positional___
+	unpacking below — Python's ``/'' is a parse-time marker, not a
+	runtime dispatch boundary."
+	fixedCount := args posonlyargs size + args args size.
 	paramNames := OrderedCollection new.
+	args posonlyargs do: [:arg | paramNames add: (self transportParamName: arg name)].
 	args args do: [:arg | paramNames add: (self transportParamName: arg name)].
 	args vararg ifNotNil: [paramNames add: (self transportParamName: args vararg name)].
 	args kwarg ifNotNil: [paramNames add: (self transportParamName: args kwarg name)].
@@ -241,7 +246,8 @@ printSmalltalkOn: aStream
 	``_<name>'' temp the body actually references."
 	self
 		printPositionalUnpackingOn: aStream
-		paramNames: (args args collect: [:a | self transportParamName: a name])
+		paramNames: ((args posonlyargs, args args)
+			collect: [:a | self transportParamName: a name])
 		positionalName: '___positional___'
 		kwargsName: '___kwargs___'.
 	"Bind *vararg to the tail of positional, wrapped as a tuple. When

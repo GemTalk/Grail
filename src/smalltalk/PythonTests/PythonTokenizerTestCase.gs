@@ -169,6 +169,24 @@ test_ellipsis
 
 category: 'Grail-tests - basic tokens'
 method: PythonTokenizerTestCase
+test_double_dot_is_two_single_dots
+	"``..'' is NOT a Python operator — it must tokenize as two
+	separate single-dot OPs so the parser can count them as the
+	relative-import level in ``from .. import x''.  Regression:
+	the tokenizer's two-char-op table previously included ``..''
+	and merged them, blocking every relative import with level>=2
+	(Werkzeug's ``from .. import exceptions'' tripped this)."
+
+	| tokens ops |
+	tokens := self tokenize: '..'.
+	ops := self tokensOfType: #OP from: tokens.
+	self assert: ops size equals: 2.
+	self assert: (ops first) value equals: '.'.
+	self assert: (ops second) value equals: '.'.
+%
+
+category: 'Grail-tests - basic tokens'
+method: PythonTokenizerTestCase
 test_empty_source
 	"Tokenizing empty string produces ENDMARKER."
 
