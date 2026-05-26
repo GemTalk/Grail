@@ -115,3 +115,40 @@ def dataclass_params_captured():
     introspection / CPython parity)."""
     params = Tag.__dataclass_params__
     return params.frozen, params.init, params.eq
+
+
+def synth_init_positional():
+    """Positional call to the synthesized __init__."""
+    p = Point(7, 8)
+    return p.x, p.y
+
+
+def synth_init_keyword():
+    """Keyword call binds by name."""
+    p = Point(x=10, y=20)
+    return p.x, p.y
+
+
+def synth_init_missing_required():
+    """Missing required field raises TypeError."""
+    try:
+        Point(7)
+        return 'no-error'
+    except TypeError:
+        return 'caught'
+
+
+# Note on __repr__ / __eq__ synthesis:
+# The dataclass decorator stamps synthesized __repr__ and __eq__ onto
+# the class via setattr.  They participate in Grail's descriptor
+# binding (``cls.__repr__`` returns the function; ``inst.__repr__``
+# wraps as a MethodBinding) — but the ``repr()'' builtin and the
+# ``==''/``!='' operators dispatch via static Smalltalk message sends
+# (``anObject __repr__'', ``a __eq__: b'') that walk the env-1
+# method dictionary before checking dynInstVars.  Object's default
+# __repr__ / __eq__ therefore shadow the setattr override.
+#
+# Making these reach the synth requires changing the lookup
+# precedence in ___pyAttrLoad___ (class dynInstVars before
+# methodDict), or per-builtin dyn-attr probes.  Either is a separate
+# task with broader test-suite implications.

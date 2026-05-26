@@ -334,12 +334,22 @@ def _make_synthesized_eq(field_dict):
 def dataclass(_cls=None, *, init=True, repr=True, eq=True, order=False,
               unsafe_hash=False, frozen=False, match_args=True,
               kw_only=False, slots=False, weakref_slot=False):
-    """Tag a class as a dataclass.  Synthesizes ``__init__'' /
-    ``__repr__'' / ``__eq__'' as setattr-installed closures (the
-    descriptor binding in ___pyAttrLoad___ wraps them as bound
-    methods at lookup time).  Walks ``_fields'' to populate
-    ``__dataclass_fields__'' for is_dataclass / fields / asdict /
-    astuple / replace introspection."""
+    """Tag a class as a dataclass.
+
+    Synthesizes ``__init__'' as a setattr-installed closure: the
+    descriptor binding in ___pyAttrLoad___ wraps it as a bound
+    method at lookup time, and ClassDefAst's class-instantiation
+    dispatch routes ``Cls(args)'' through the dyn-attr override
+    before falling back to the static dispatch.
+
+    __repr__ and __eq__ are also installed via setattr but Grail's
+    ``repr()'' builtin and ``=='' operator dispatch statically (via
+    env-1 method dictionary), so they do not reach setattr overrides
+    today.  The functions are installed regardless so calls through
+    direct attribute access (``inst.__repr__()'') resolve them, and
+    so the precedence-fix follow-up (class dynInstVars before
+    methodDict in ___pyAttrLoad___) lights them up without further
+    changes here."""
 
     def wrap(cls):
         field_dict = _collect_fields(cls)

@@ -2268,6 +2268,41 @@ testDataclassesParamsCaptured
 	self assert: (result @env1:__getitem__: 2) equals: true
 %
 
+category: 'Grail-Tests - dataclasses'
+method: FlaskScaffoldingTestCase
+testDataclassesSynthInitPositional
+	"Synthesized __init__ binds positional args in declaration order."
+
+	| mod result |
+	mod := self loadFixture: 'use_dataclasses'.
+	result := mod @env1:synth_init_positional.
+	self assert: (result @env1:__getitem__: 0) equals: 7.
+	self assert: (result @env1:__getitem__: 1) equals: 8
+%
+
+category: 'Grail-Tests - dataclasses'
+method: FlaskScaffoldingTestCase
+testDataclassesSynthInitKeyword
+	"Synthesized __init__ accepts keyword args by field name."
+
+	| mod result |
+	mod := self loadFixture: 'use_dataclasses'.
+	result := mod @env1:synth_init_keyword.
+	self assert: (result @env1:__getitem__: 0) equals: 10.
+	self assert: (result @env1:__getitem__: 1) equals: 20
+%
+
+category: 'Grail-Tests - dataclasses'
+method: FlaskScaffoldingTestCase
+testDataclassesSynthInitMissingRequired
+	"Synthesized __init__ raises TypeError for missing required
+	fields (no default / no default_factory)."
+
+	| mod |
+	mod := self loadFixture: 'use_dataclasses'.
+	self assert: mod @env1:synth_init_missing_required equals: 'caught'
+%
+
 ! --- collections module ---------------------------------------------------
 
 category: 'Grail-Tests - collections'
