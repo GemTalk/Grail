@@ -205,15 +205,30 @@ printSmalltalkOn: aStream
 	body's BlockAst now includes parameter names (added by
 	PythonParser>>parseFunctionDefWithDecorators), so we must declare
 	all locals here in a single `| ... |` pane and emit the body's
-	statements without re-declaring temps."
+	statements without re-declaring temps.
+
+	Reserved-name params (``self'', ``super'', ``nil'', ``true'',
+	``false'', ``thisContext'') are transported as ``_<name>'' — the
+	Smalltalk pseudo-variables can't be declared as temps or used as
+	assignment targets.  Body references to the Python name resolve
+	to the transport identifier via NameAst's reserved-param rename."
 	fixedCount := args args size.
 	paramNames := OrderedCollection new.
-	args args do: [:arg | paramNames add: arg name].
-	args vararg ifNotNil: [paramNames add: args vararg name].
-	args kwarg ifNotNil: [paramNames add: args kwarg name].
-	"Merge bodyVars while preserving uniqueness."
+	args args do: [:arg | paramNames add: (self transportParamName: arg name)].
+	args vararg ifNotNil: [paramNames add: (self transportParamName: args vararg name)].
+	args kwarg ifNotNil: [paramNames add: (self transportParamName: args kwarg name)].
+	"Merge bodyVars while preserving uniqueness.  Skip reserved-name
+	body locals — they ALWAYS resolve via NameAst's reserved-param
+	rename (parameters of the surrounding def) or its
+	isReservedSmalltalkIdentifier-tripped rename in any nested
+	function; declaring them as temps would be a parse error."
 	body variables do: [:n |
-		(paramNames includes: n) ifFalse: [paramNames add: n].
+		((paramNames includes: n)
+			or: [paramNames includes: (self transportParamName: n)])
+			ifFalse: [
+				(NameAst isReservedSmalltalkIdentifier: n)
+					ifFalse: [paramNames add: n]
+			].
 	].
 	paramNames isEmpty ifFalse: [
 		aStream nextPutAll: '| '.
@@ -221,17 +236,19 @@ printSmalltalkOn: aStream
 		aStream nextPut: $|; lf.
 	].
 	"Bind fixed positionals (with default fallback) — closure path
-	uses the underscored sentinels declared as block params."
+	uses the underscored sentinels declared as block params.  Pass
+	transported param names so reserved-name params resolve to the
+	``_<name>'' temp the body actually references."
 	self
 		printPositionalUnpackingOn: aStream
-		paramNames: (args args collect: [:a | a name])
+		paramNames: (args args collect: [:a | self transportParamName: a name])
 		positionalName: '___positional___'
 		kwargsName: '___kwargs___'.
 	"Bind *vararg to the tail of positional, wrapped as a tuple. When
 	the call passed exactly the fixed args, the tail is empty."
 	args vararg ifNotNil: [
 		aStream
-			nextPutAll: args vararg name;
+			nextPutAll: (self transportParamName: args vararg name);
 			nextPutAll: ' := tuple perform: #withAll: env: 0 withArguments: { ___positional___ @env0:copyFrom: ';
 			print: fixedCount + 1;
 			nextPutAll: ' to: ___positional___ @env0:size }.';
@@ -240,7 +257,7 @@ printSmalltalkOn: aStream
 	"Bind **kwarg to the keyword dict (or an empty dict if nil was passed)."
 	args kwarg ifNotNil: [
 		aStream
-			nextPutAll: args kwarg name;
+			nextPutAll: (self transportParamName: args kwarg name);
 			nextPutAll: ' := ___kwargs___ ifNil: [(KeyValueDictionary perform: #new env: 0)].';
 			lf.
 	].
@@ -756,6 +773,21 @@ assignedNamesInBody
 
 category: 'Module Method Compilation'
 method: FunctionDefAst
+transportParamName: aName
+	"Return the Smalltalk identifier that holds a Python parameter
+	value.  Reserved-name params (``self'', ``super'', ``nil'',
+	``true'', ``false'', ``thisContext'') become ``_<name>'' — they
+	can't be declared as temps or used as assignment targets in
+	Smalltalk.  NameAst's reserved-param rename matches this so body
+	references read the transport identifier."
+
+	^ (self isSmalltalkReservedIdentifier: aName)
+		ifTrue: ['_' , aName asString]
+		ifFalse: [aName asString]
+%
+
+category: 'Module Method Compilation'
+method: FunctionDefAst
 isSmalltalkReservedIdentifier: aString
 	"Smalltalk pseudo-variables and other identifiers that can't be
 	used as method-argument names without ambiguity.  When a Python
@@ -898,16 +930,28 @@ generateModuleMethodSourceOn: aStream
 
 		"Build outer-block locals: reassigned/reserved params (need a
 		writable temp) followed by body-only locals (excluding ones that
-		are direct method arguments)."
+		are direct method arguments).
+
+		Pseudo-variable param names (``self'', ``super'', ``nil'',
+		``true'', ``false'', ``thisContext'') are EXCLUDED here even
+		though needsTemp is true for them — Smalltalk forbids declaring
+		them as temps or assigning to them.  Body references to the
+		Python parameter resolve to the transport identifier directly,
+		via NameAst's reserved-param rename (see NameAst >>
+		emitTransportNameForReservedParam:on:)."
 		allLocals := OrderedCollection new.
 		1 to: paramNames size do: [:i |
-			(needsTemp at: i) ifTrue: [allLocals add: (paramNames at: i)].
+			((needsTemp at: i)
+				and: [(self isSmalltalkReservedIdentifier: (paramNames at: i)) not])
+				ifTrue: [allLocals add: (paramNames at: i)].
 		].
 		bodyVars do: [:each |
 			(allLocals includes: each) ifFalse: [
 				((paramNames includes: each) and: [
 					(needsTemp at: (paramNames indexOf: each)) not]) ifFalse: [
-					allLocals add: each.
+					(self isSmalltalkReservedIdentifier: each) ifFalse: [
+						allLocals add: each
+					]
 				].
 			].
 		].
@@ -940,14 +984,20 @@ generateModuleMethodSourceOn: aStream
 				allLocals do: [:each | aStream nextPutAll: each; space].
 				aStream nextPut: $|; lf.
 			].
+			"Pseudo-variable params (``self'', ``super'', ...) skip
+			the copy line — they aren't temps; body references resolve
+			to the transport identifier via NameAst's reserved-param
+			rename."
 			1 to: paramNames size do: [:i |
-				(needsTemp at: i) ifTrue: [
-					aStream
-						nextPutAll: (paramNames at: i);
-						nextPutAll: ' := ';
-						nextPutAll: (transportNames at: i);
-						nextPut: $.;
-						lf.
+				((needsTemp at: i)
+					and: [(self isSmalltalkReservedIdentifier: (paramNames at: i)) not])
+					ifTrue: [
+						aStream
+							nextPutAll: (paramNames at: i);
+							nextPutAll: ' := ';
+							nextPutAll: (transportNames at: i);
+							nextPut: $.;
+							lf.
 				].
 			].
 		] ifFalse: [
@@ -960,13 +1010,15 @@ generateModuleMethodSourceOn: aStream
 				allLocals do: [:each | aStream nextPutAll: each; space].
 				aStream nextPut: $|; lf.
 				1 to: paramNames size do: [:i |
-					(needsTemp at: i) ifTrue: [
-						aStream
-							nextPutAll: (paramNames at: i);
-							nextPutAll: ' := ';
-							nextPutAll: (transportNames at: i);
-							nextPut: $.;
-							lf.
+					((needsTemp at: i)
+						and: [(self isSmalltalkReservedIdentifier: (paramNames at: i)) not])
+						ifTrue: [
+							aStream
+								nextPutAll: (paramNames at: i);
+								nextPutAll: ' := ';
+								nextPutAll: (transportNames at: i);
+								nextPut: $.;
+								lf.
 					].
 				].
 			].

@@ -187,6 +187,20 @@ printSmalltalkOn: aStream
 		aStream nextPutAll: 'self'.
 		^ self
 	].
+	"Reserved-name parameter rename: when the Python parameter name is
+	a Smalltalk pseudo-variable (``self'', ``super'', ``nil'', ``true'',
+	``false'', ``thisContext'') — typically ``def f(self, ...)'' at
+	module level — the method-arg slot is renamed to ``_<name>'' (the
+	transport identifier).  Body references to the original Python
+	name must emit the transport form so they read the actual value
+	instead of Smalltalk's pseudo-variable.  Applies to load and store
+	contexts alike; without this, ``self`` in a module-level def's
+	body would read Smalltalk's implicit self (the module instance),
+	not the first call argument."
+	(self ___enclosingFuncDeclaresReservedParam___: id) ifTrue: [
+		aStream nextPut: $_; nextPutAll: id.
+		^ self
+	].
 	(self isFastPathBuiltinName) ifTrue: [
 		aStream
 			nextPutAll: '(BoundMethod receiver: ((Python @env0:at: #builtins) instance) selector: #';
@@ -400,6 +414,76 @@ isModuleVariableName: aSymbol
 	names := CallAst moduleVariableNames.
 	names ifNil: [^ false].
 	^ names includes: aSymbol asSymbol
+%
+
+category: 'other'
+classmethod: NameAst
+isReservedSmalltalkIdentifier: aSymbol
+	"True if aSymbol names a Smalltalk pseudo-variable.  Mirrors
+	FunctionDefAst's instance-side check; lifted to class side so the
+	body-rename test in printSmalltalkOn: can call it without an
+	AST-context instance."
+
+	^ #(#'self' #'super' #'thisContext' #'nil' #'true' #'false')
+		includes: aSymbol asSymbol
+%
+
+category: 'other'
+method: NameAst
+___enclosingFuncDeclaresReservedParam___: aSymbol
+	"True iff aSymbol is a Smalltalk pseudo-variable (``self'', etc.)
+	AND some enclosing FunctionDef/Lambda declares it as a PARAMETER
+	AND we are in module-method codegen context (not in-class method
+	context).  Drives the body rename: references to the original
+	Python name emit the transport identifier ``_<name>'' rather than
+	Smalltalk's pseudo-variable, matching what
+	FunctionDefAst>>generateModuleMethodSourceOn: places in the
+	selector.
+
+	Class method context is excluded because the in-class def emitter
+	strips the first Python parameter (``self'') and relies on
+	Smalltalk's implicit ``self'' for the receiver — CallAst's
+	isSelfReference: check above handles that path."
+
+	| node ivars idx argsNode argsIvars |
+	(NameAst isReservedSmalltalkIdentifier: aSymbol) ifFalse: [^ false].
+	CallAst classBeingCompiled ifNotNil: [^ false].
+	CallAst moduleClassBeingCompiled ifNil: [^ false].
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [
+				ivars := node class allInstVarNames.
+				idx := ivars indexOf: #args.
+				argsNode := idx > 0 ifTrue: [node instVarAt: idx] ifFalse: [nil].
+				argsNode ifNotNil: [
+					argsIvars := argsNode class allInstVarNames.
+					#(#args #posonlyargs #kwonlyargs) do: [:fld |
+						| fldIdx list |
+						fldIdx := argsIvars indexOf: fld.
+						fldIdx > 0 ifTrue: [
+							list := argsNode instVarAt: fldIdx.
+							list ifNotNil: [
+								(list anySatisfy:
+									[:a | a name asSymbol == aSymbol asSymbol])
+									ifTrue: [^ true]
+							]
+						]
+					].
+					#(#vararg #kwarg) do: [:fld |
+						| fldIdx v |
+						fldIdx := argsIvars indexOf: fld.
+						fldIdx > 0 ifTrue: [
+							v := argsNode instVarAt: fldIdx.
+							(v notNil and: [v name asSymbol == aSymbol asSymbol])
+								ifTrue: [^ true]
+						]
+					]
+				]
+			].
+		node := node parent.
+	].
+	^ false
 %
 
 category: 'other'

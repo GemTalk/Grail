@@ -64,9 +64,8 @@ testCallGreetViaInstance
 	"Box.greet = greet ; Box(7).greet('hi') → (7, 'hi').
 	The class-side assignment must bind the receiver at lookup time."
 
-	| result fn |
-	fn := testModule @env1:___pyAttrLoad___: #call_greet_via_instance.
-	result := fn @env1:___pyCallValue___: #() kw: nil.
+	| result |
+	result := testModule @env1:___pyAttrLoad___: #greet_via_instance.
 	self assert: (result @env0:at: 1) equals: 7.
 	self assert: (result @env0:at: 2) equals: 'hi'.
 %
@@ -77,9 +76,8 @@ testCallGreetViaClass
 	"Box.greet(b, 'hey') passes the explicit instance — no binding
 	magic, the function gets both args directly."
 
-	| result fn |
-	fn := testModule @env1:___pyAttrLoad___: #call_greet_via_class.
-	result := fn @env1:___pyCallValue___: #() kw: nil.
+	| result |
+	result := testModule @env1:___pyAttrLoad___: #greet_via_class.
 	self assert: (result @env0:at: 1) equals: 9.
 	self assert: (result @env0:at: 2) equals: 'hey'.
 %
@@ -88,13 +86,13 @@ category: 'Grail-Tests'
 method: ClassFunctionBindingTestCase
 testFunctionOnInstanceIsNotBound
 	"Storing a function on an INSTANCE does NOT trigger the descriptor
-	protocol.  ``b.adhoc(2)'' calls adhoc(2) with no self prepended —
-	TypeError because adhoc expects (self, n)."
+	protocol.  ``b.adhoc(99)'' calls adhoc(99) with no self prepended;
+	if the wrap incorrectly fired on the instance path, we'd see the
+	instance prepended (call would have 2 args, _adhoc expects 1)."
 
-	| result fn |
-	fn := testModule @env1:___pyAttrLoad___: #call_function_on_instance_unbound.
-	result := fn @env1:___pyCallValue___: #() kw: nil.
-	self assert: result equals: 'caught'.
+	self
+		assert: (testModule @env1:___pyAttrLoad___: #function_on_instance_outcome)
+		equals: 'got:99'.
 %
 
 category: 'Grail-Tests'
@@ -102,10 +100,9 @@ method: ClassFunctionBindingTestCase
 testLastAssignmentWins
 	"After two writes to Box.method, the last one is what binds."
 
-	| result fn |
-	fn := testModule @env1:___pyAttrLoad___: #call_last_assignment.
-	result := fn @env1:___pyCallValue___: #() kw: nil.
-	self assert: result equals: 'second'.
+	self
+		assert: (testModule @env1:___pyAttrLoad___: #last_assignment_result)
+		equals: 'second'.
 %
 
 category: 'Grail-Tests'
@@ -113,10 +110,9 @@ method: ClassFunctionBindingTestCase
 testLambdaOnClass
 	"Lambdas stored as class attributes bind the same as functions."
 
-	| result fn |
-	fn := testModule @env1:___pyAttrLoad___: #call_lambda_on_instance.
-	result := fn @env1:___pyCallValue___: #() kw: nil.
-	self assert: result equals: 16.
+	self
+		assert: (testModule @env1:___pyAttrLoad___: #lambda_on_instance)
+		equals: 16.
 %
 
 category: 'Grail-Tests'
@@ -125,9 +121,8 @@ testClassReadReturnsFunction
 	"Box.greet (not via instance) returns the callable itself —
 	calling it requires the explicit instance arg."
 
-	| result fn |
-	fn := testModule @env1:___pyAttrLoad___: #class_read_returns_function.
-	result := fn @env1:___pyCallValue___: #() kw: nil.
+	| result |
+	result := testModule @env1:___pyAttrLoad___: #class_read_returns_function_result.
 	self assert: (result @env0:at: 1) equals: 3.
 	self assert: (result @env0:at: 2) equals: 'direct'.
 %
@@ -138,8 +133,7 @@ testInClassMethodStillWorks
 	"In-class def regression check: the rewrite must not break the
 	existing in-class instance method path."
 
-	| result fn |
-	fn := testModule @env1:___pyAttrLoad___: #in_class_method_still_works.
-	result := fn @env1:___pyCallValue___: #() kw: nil.
-	self assert: result equals: 12.
+	self
+		assert: (testModule @env1:___pyAttrLoad___: #in_class_method_result)
+		equals: 12.
 %

@@ -274,6 +274,28 @@ ___pyAnd___: alternativeBlock
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
+___isDescriptorCallable___: aValue
+	"True if aValue is a callable that should bind via Python's
+	descriptor protocol when accessed through an instance via the
+	class chain.  Currently wraps:
+	  * BoundMethod — a top-level def referenced as a value (the
+	    typical ``Cls.method = some_func'' case).
+	  * ExecBlock — a lambda or nested-def closure stored as a class
+	    attribute (``Cls.helper = lambda self: ...'').
+
+	MethodBinding itself is excluded (don't re-bind an already-bound
+	method).  Classes and other callables (instances with __call__,
+	primitives) return false — Python doesn't apply descriptor
+	binding to them either."
+
+	(aValue @env0:isKindOf: MethodBinding) ifTrue: [^ false].
+	(aValue @env0:isKindOf: BoundMethod) ifTrue: [^ true].
+	(aValue @env0:isKindOf: ExecBlock) ifTrue: [^ true].
+	^ false
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
 ___unboundMethodClosure___: aSym
 	"Return a 2-arg closure that runs ``self''-class env-1 method
 	`aSym' on the first positional argument, with the remaining
@@ -623,7 +645,21 @@ ___pyAttrLoad___: aSym
 				holder := walker @env0:perform: #dynInstVars env: 1.
 				holder @env0:== nil ifFalse: [
 					dynValue := holder @env0:dynamicInstVarAt: aSym.
-					dynValue @env0:== nil ifFalse: [^ dynValue]
+					dynValue @env0:== nil ifFalse: [
+						"Python descriptor protocol: a callable stored as a
+						class attribute and accessed THROUGH AN INSTANCE
+						binds the instance as ``self''.  Wrap in a
+						MethodBinding that prepends self to the call args
+						and forwards.  Class-side access (self is a
+						Behavior) returns the raw callable — matches
+						CPython's ``Cls.method'' yielding the function
+						unchanged.  Non-callable class attributes (ints,
+						strings, classes) return raw on both paths."
+						((self @env0:isKindOf: Behavior) not
+							and: [self @env1:___isDescriptorCallable___: dynValue])
+							ifTrue: [^ MethodBinding @env1:instance: self callable: dynValue].
+						^ dynValue
+					]
 				]
 			].
 		walker := walker @env0:superClass

@@ -106,24 +106,33 @@ printSmalltalkOn: aStream
 	    x __add__: y]
 
 	Only simple positional args are handled; *args, **kwargs, defaults,
-	keyword-only args, and positional-only args are not yet supported."
+	keyword-only args, and positional-only args are not yet supported.
 
-	| argList |
+	Reserved-name params (``self'', ``super'', ...) are transported as
+	``_<name>'' — Smalltalk pseudo-variables can't be temps or
+	assignment targets.  NameAst's reserved-param rename makes body
+	references read the transport identifier."
+
+	| argList transport |
 	argList := args args.
+	transport := argList collect: [:each |
+		(NameAst isReservedSmalltalkIdentifier: each name)
+			ifTrue: ['_' , each name asString]
+			ifFalse: [each name asString]].
 	aStream nextPutAll: '[:positional :keywords |'.
 
 	"Declare locals for all parameter names"
 	argList isEmpty ifFalse: [
 		aStream nextPutAll: ' | '.
-		argList do: [:each | aStream nextPutAll: each name; space].
+		transport do: [:n | aStream nextPutAll: n; space].
 		aStream nextPut: $|.
 	].
 	aStream lf.
 
 	"Unpack positional args into locals"
-	argList doWithIndex: [:each :i |
+	transport doWithIndex: [:n :i |
 		aStream
-			nextPutAll: each name;
+			nextPutAll: n;
 			nextPutAll: ' := positional @env0:at: ';
 			nextPutAll: i printString;
 			nextPut: $.;
