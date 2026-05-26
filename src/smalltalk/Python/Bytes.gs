@@ -597,6 +597,38 @@ decode
 
 category: 'Grail-Encoding/Decoding'
 method: bytes
+decode: encoding _: errors
+	"``bytes.decode(encoding, errors)`` 2-arg form.  ``errors''
+	is accepted for CPython parity but ignored — Grail's decoders
+	either succeed (ASCII / UTF-8 / latin1) or raise; there is no
+	intermediate ``replace''/``ignore'' policy yet."
+
+	^ self @env1:decode: encoding
+%
+
+category: 'Grail-Encoding/Decoding'
+method: bytes
+_decode: positional kw: kwargs
+	"Varargs form — handles ``bytes.decode()'' / ``bytes.decode(enc)''
+	/ ``bytes.decode(enc, errors)'' / ``bytes.decode(errors='replace')''
+	and the kwarg-only ``bytes.decode(encoding='latin1')''.  Werkzeug
+	calls the kwarg-only form ``encode().decode(errors='replace')''
+	for its WSGI encoding dance, which the fixed-arity selectors above
+	don't catch."
+
+	| encoding |
+	encoding := (positional @env0:size @env0:>= 1)
+		@env0:ifTrue: [positional @env0:at: 1]
+		@env0:ifFalse: [
+			(kwargs @env0:isNil @env0:not
+				and: [kwargs @env0:includesKey: 'encoding'])
+				@env0:ifTrue: [kwargs @env0:at: 'encoding']
+				@env0:ifFalse: ['utf-8']].
+	^ self @env1:decode: encoding
+%
+
+category: 'Grail-Encoding/Decoding'
+method: bytes
 decode: encoding
 	"Decode bytes to string using specified encoding"
 

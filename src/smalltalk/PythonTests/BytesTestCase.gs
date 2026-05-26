@@ -398,6 +398,25 @@ test_decode_ascii
 
 category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
+test_decode_with_errors_kwarg
+	"Werkzeug's WSGI encoding dance does ``s.encode('latin1').decode(
+	errors='replace')'' — a kwarg-only decode call.  Pre-fix bytes
+	had no ``_decode:kw:'' varargs method so the dispatch raised
+	MessageNotUnderstood.  ``errors'' is accepted for parity and
+	ignored (no replace/ignore policy yet — Grail's decoders either
+	succeed or raise)."
+
+	| b |
+	b := bytes @env1:__new__: 'hello' _: 'latin1'.
+	"Kwarg-only call via varargs selector."
+	self assert: (b @env1:_decode: #() kw: (Dictionary new
+		at: 'errors' put: 'replace'; yourself)) equals: 'hello'.
+	"Two-arg fixed form (encoding + errors)."
+	self assert: (b @env1:decode: 'latin1' _: 'replace') equals: 'hello'
+%
+
+category: 'Grail-Tests - Bytes Methods'
+method: BytesTestCase
 test_decode_unicode_escape
 	"bytes.decode('unicode-escape') interprets Python-source backslash
 	escapes.  Required by jinja2's lexer, which round-trips every

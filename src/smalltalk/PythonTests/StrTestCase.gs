@@ -994,3 +994,44 @@ testZfill
 	result := s @env1:zfill: 5.
 	self assert: result equals: '-0042'.
 %
+
+category: 'Grail-String Methods'
+method: StrTestCase
+testEncodeLatin1
+	"``s.encode('latin1')'' is the WSGI byte-smuggling standard
+	required by werkzeug._internal's encoding dance.  Pre-fix, the
+	latin1 path hit a broken ``LookupError ___isKindOf___:
+	NotImplementedError'' check (sending an env-1 dunder to a class
+	object, MNU) — the test demonstrates the latin1 codec produces
+	ASCII-equivalent bytes for codepoints 0..127."
+
+	| result |
+	result := 'hello' @env1:encode: 'latin1'.
+	self assert: result class equals: ByteArray.
+	self assert: result size equals: 5.
+	self assert: (result at: 1) equals: $h asInteger
+%
+
+category: 'Grail-String Methods'
+method: StrTestCase
+testEncodeLatin1RoundTrip
+	"latin1 encode then decode round-trips ASCII strings — the WSGI
+	idiom used by werkzeug._internal._wsgi_decoding_dance."
+
+	| encoded decoded |
+	encoded := 'hello world' @env1:encode: 'latin1'.
+	decoded := encoded @env1:decode: 'latin1'.
+	self assert: decoded equals: 'hello world'
+%
+
+category: 'Grail-String Methods'
+method: StrTestCase
+testEncodeUnknownEncodingRaisesLookupError
+	"An unsupported encoding name raises LookupError (CPython
+	matches; Grail previously raised ValueError or hit the broken
+	isKindOf dispatch).  ``codepage1252'' is not in the supported set."
+
+	self should: [
+		'hello' @env1:encode: 'codepage1252'
+	] raise: LookupError
+%

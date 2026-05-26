@@ -532,11 +532,20 @@ encode: encoding
 	| enc size result |
 	enc := encoding @env0:asLowercase.
 	size := self @env0:size.
-	((enc @env0:= 'ascii') or: [enc @env0:= 'utf-8' or: [enc @env0:= 'utf8']]) ifFalse: [
-		(LookupError ___isKindOf___: NotImplementedError) ifTrue: [
-			NotImplementedError ___signal___: 'encoding not supported: ' , encoding
-		].
-		ValueError ___signal___: 'encoding not supported: ' , encoding
+	"ASCII / UTF-8 / latin1 share the same byte representation for
+	codepoints 0..127 (Grail's Unicode7 string type only stores those
+	directly).  latin1 is the WSGI standard for byte→str smuggling
+	and is required by werkzeug._internal's encoding dance.
+	Codepoints 128..255 in latin1 (and any non-ASCII byte in UTF-8)
+	land in the encoder loop below, which raises UnicodeEncodeError
+	for now — a real multi-byte encoder is left for whichever caller
+	actually needs it."
+	((enc @env0:= 'ascii')
+		or: [enc @env0:= 'utf-8'
+		or: [enc @env0:= 'utf8'
+		or: [enc @env0:= 'latin1'
+		or: [enc @env0:= 'latin-1' or: [enc @env0:= 'iso-8859-1']]]]]) ifFalse: [
+		LookupError ___signal___: ('unknown encoding: ' @env0:, encoding)
 	].
 	result := ByteArray @env0:new: size.
 	1 @env0:to: size do: [:i |
