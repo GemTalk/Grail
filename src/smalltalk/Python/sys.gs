@@ -133,6 +133,32 @@ __stderr__
 
 category: 'Grail-Accessors'
 method: sys
+stderr
+	"Current standard error stream.  Falls back to ``__stderr__''.
+	Returns the Python None singleton (not Smalltalk nil) so
+	downstream local-assignment ``errors_stream = sys.stderr''
+	doesn't fall foul of UnboundLocalError on subsequent reads —
+	the ___checkLocal: invariant treats nil as ``unbound''."
+	^ self @env0:at: #stderr ifAbsent: [self @env0:at: #__stderr__ ifAbsent: [None]]
+%
+
+
+category: 'Grail-Accessors'
+method: sys
+stdout
+	^ self @env0:at: #stdout ifAbsent: [self @env0:at: #__stdout__ ifAbsent: [None]]
+%
+
+
+category: 'Grail-Accessors'
+method: sys
+stdin
+	^ self @env0:at: #stdin ifAbsent: [self @env0:at: #__stdin__ ifAbsent: [None]]
+%
+
+
+category: 'Grail-Accessors'
+method: sys
 __stdin__
 	^ self @env0:at: #__stdin__
 %

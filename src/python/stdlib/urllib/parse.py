@@ -155,6 +155,70 @@ class _SplitResult:
             self.scheme, self.netloc, self.path, self.query, self.fragment
         )
 
+    def _split_netloc(self):
+        """Return (userinfo, hostinfo) — userinfo before '@', hostinfo after."""
+        netloc = self.netloc
+        if '@' in netloc:
+            userinfo, _, hostinfo = netloc.rpartition('@')
+        else:
+            userinfo, hostinfo = '', netloc
+        return userinfo, hostinfo
+
+    @property
+    def username(self):
+        """Username portion of the netloc (before the ':')."""
+        userinfo, _ = self._split_netloc()
+        if not userinfo:
+            return None
+        user = userinfo.split(':', 1)[0]
+        return user or None
+
+    @property
+    def password(self):
+        """Password portion of the netloc (after the ':' in userinfo)."""
+        userinfo, _ = self._split_netloc()
+        if ':' not in userinfo:
+            return None
+        return userinfo.split(':', 1)[1] or None
+
+    @property
+    def hostname(self):
+        """Host portion of the netloc, lowercased, without port.
+        Handles IPv6 brackets."""
+        _, hostinfo = self._split_netloc()
+        if not hostinfo:
+            return None
+        if hostinfo.startswith('['):
+            # IPv6 — closing ']' marks end of host.
+            end = hostinfo.find(']')
+            if end == -1:
+                return hostinfo.lower()
+            return hostinfo[1:end].lower()
+        host = hostinfo.split(':', 1)[0]
+        return host.lower() or None
+
+    @property
+    def port(self):
+        """Port portion as int, or None."""
+        _, hostinfo = self._split_netloc()
+        if not hostinfo:
+            return None
+        if hostinfo.startswith('['):
+            end = hostinfo.find(']')
+            if end == -1 or end + 1 >= len(hostinfo) or hostinfo[end + 1] != ':':
+                return None
+            port_str = hostinfo[end + 2:]
+        else:
+            if ':' not in hostinfo:
+                return None
+            port_str = hostinfo.split(':', 1)[1]
+        if not port_str:
+            return None
+        try:
+            return int(port_str)
+        except ValueError:
+            return None
+
 
 def urlsplit(url, scheme="", allow_fragments=True):
     rest = url

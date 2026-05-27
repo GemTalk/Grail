@@ -95,18 +95,36 @@ class RequestEntityTooLarge(HTTPException):
         self.response = None
 
 
-class BadRequestKeyError(BadRequest):
+class BadRequestKeyError(KeyError):
     """Raised when a Headers / MultiDict key lookup misses.
-    werkzeug.datastructures uses this for dict-like KeyError reporting
-    that surfaces as an HTTP 400 in the wrapping app.  Stub takes the
-    missing key for parity with upstream's KeyError-inheriting form."""
+    werkzeug.datastructures uses this for dict-like KeyError
+    reporting that surfaces as an HTTP 400 in the wrapping app.
+
+    Upstream Werkzeug inherits from ``(BadRequest, KeyError)'' for
+    multi-inheritance — Grail's class machinery doesn't yet support
+    that shape, so the shim inherits from KeyError alone and adds
+    the BadRequest-shaped attributes manually.  ``except KeyError''
+    in werkzeug.datastructures (.pop / .__getitem__) catches this
+    correctly; ``isinstance(e, BadRequest)'' returns False until
+    multi-inheritance lands, but no current Flask demo path checks
+    that."""
+
+    code = 400
+    name = 'Bad Request'
 
     def __init__(self, key=None):
+        KeyError.__init__(self, key)
         self.code = 400
         self.name = 'Bad Request'
         self.description = 'KeyError: ' + repr(key)
         self.response = None
         self.key = key
+
+    def get_response(self, environ=None):
+        from werkzeug.wrappers import Response
+        body = str(self.code) + ' ' + self.name + ': ' + self.description
+        headers = [('Content-Type', 'text/plain; charset=utf-8')]
+        return Response(body, status=self.code, headers=headers)
 
 
 class SecurityError(BadRequest):

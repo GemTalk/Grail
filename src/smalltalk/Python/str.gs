@@ -1148,6 +1148,18 @@ lstrip
 
 category: 'Grail-String Methods'
 method: CharacterCollection
+lstrip: chars
+	"Return a copy with leading occurrences of any character in
+	``chars'' removed.  None / nil means whitespace, matching
+	Python's str.lstrip()."
+
+	(chars @env0:== nil or: [chars @env0:== None])
+		ifTrue: [^ self @env0:trimLeft].
+	^ self @env0:___lstripChars___: chars
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
 partition: sep
 	"Split the string at the first occurrence of sep, return (before, sep, after)."
 
@@ -1282,6 +1294,18 @@ rstrip
 	"Return a copy of the string with trailing whitespace removed."
 
 	^ self @env0:trimRight
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+rstrip: chars
+	"Return a copy with trailing occurrences of any character in
+	``chars'' removed.  None / nil means whitespace, matching
+	Python's str.rstrip()."
+
+	(chars @env0:== nil or: [chars @env0:== None])
+		ifTrue: [^ self @env0:trimRight].
+	^ self @env0:___rstripChars___: chars
 %
 
 category: 'Grail-String Methods'
