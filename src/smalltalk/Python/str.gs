@@ -594,11 +594,19 @@ encode: encoding
 	land in the encoder loop below, which raises UnicodeEncodeError
 	for now — a real multi-byte encoder is left for whichever caller
 	actually needs it."
+	"``idna'' is RFC 3490 internationalized domain name encoding —
+	ASCII names pass through unchanged, non-ASCII would need real
+	punycode.  Werkzeug uses ``hostname.encode('idna')'' on every
+	request URL build; for the M7 Flask demo path (defaults to
+	``localhost'') ASCII passthrough is sufficient.  Real punycode
+	can land on top of this when a downstream test depends on it."
 	((enc @env0:= 'ascii')
 		or: [enc @env0:= 'utf-8'
 		or: [enc @env0:= 'utf8'
 		or: [enc @env0:= 'latin1'
-		or: [enc @env0:= 'latin-1' or: [enc @env0:= 'iso-8859-1']]]]]) ifFalse: [
+		or: [enc @env0:= 'latin-1'
+		or: [enc @env0:= 'iso-8859-1'
+		or: [enc @env0:= 'idna']]]]]]) ifFalse: [
 		LookupError ___signal___: ('unknown encoding: ' @env0:, encoding)
 	].
 	result := ByteArray @env0:new: size.

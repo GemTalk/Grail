@@ -700,6 +700,27 @@ decode: encoding
 		^ self @env0:___decodeUnicodeEscape___
 	].
 
+	"``idna'' is RFC 3490 internationalized-domain decoding —
+	ASCII names pass through unchanged, full punycode handling is
+	left for a downstream test that needs it.  Werkzeug.urls
+	(_decode_idna) calls ``data.decode('idna')'' on every host
+	parse; ASCII passthrough is sufficient for the M7 Flask demo."
+	(encodingStr @env0:= 'idna') ifTrue: [
+		| result size |
+		size := self @env0:size.
+		result := Unicode7 ___new___: size.
+		1 @env0:to: size do: [:i |
+			| byte char |
+			byte := self @env0:at: i.
+			(byte @env0:> 127) ifTrue: [
+				UnicodeDecodeError ___signal___: 'idna decode of non-ASCII byte not yet supported'
+			].
+			char := Character @env0:codePoint: byte.
+			result @env0:at: i put: char
+		].
+		^ result
+	].
+
 	"Unsupported encoding"
 	LookupError ___signal___: ('unknown encoding: ' @env0:, encodingStr)
 %
