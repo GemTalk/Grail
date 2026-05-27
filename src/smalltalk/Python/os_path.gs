@@ -42,7 +42,23 @@ set compile_env: 1
 category: 'Grail-Initialization'
 method: os_path
 initialize
-	"No-op — all methods are real env-1 fast-path methods."
+	"Module-level constants matching CPython's posixpath:
+	  altsep — alternative separator (None on POSIX, '/' on Windows
+	    when sep is '\\'); Grail assumes posix so this is None.
+	  sep — primary separator '/'.
+	  pathsep — list-separator ':' for PATH-style env vars.
+	  extsep — file extension delimiter '.'.
+	  defpath — default search path for execvpe.
+	  devnull — '/dev/null' on POSIX.
+	Werkzeug.utils.secure_filename iterates ``os.sep, os.path.altsep''
+	to strip path separators from uploaded filenames."
+
+	self @env0:dynamicInstVarAt: #altsep put: None.
+	self @env0:dynamicInstVarAt: #sep put: '/'.
+	self @env0:dynamicInstVarAt: #pathsep put: ':'.
+	self @env0:dynamicInstVarAt: #extsep put: '.'.
+	self @env0:dynamicInstVarAt: #defpath put: '/bin:/usr/bin'.
+	self @env0:dynamicInstVarAt: #devnull put: '/dev/null'
 %
 
 ! ===============================================================================

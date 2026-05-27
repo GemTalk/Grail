@@ -217,3 +217,86 @@ def parse(source, filename='<unknown>', mode='exec'):
     if not isinstance(source, (str, bytes, bytearray)):
         raise TypeError('parse() expected a string')
     return _ParsedExpr(source, mode)
+
+
+# AST node classes — minimal stubs so werkzeug.routing's converter
+# parser can reference ast.AST / ast.Expr / ast.Name / etc. as type
+# tags.  Actual ast.parse() returns _ParsedExpr (above) which isn't
+# one of these; routing's runtime walks will fail until ast.parse
+# is implemented.
+
+class AST:
+    pass
+
+
+class Expression(AST):
+    pass
+
+
+class Module(AST):
+    pass
+
+
+class Expr(AST):
+    pass
+
+
+class Call(AST):
+    pass
+
+
+class Name(AST):
+    pass
+
+
+class Constant(AST):
+    pass
+
+
+class Attribute(AST):
+    pass
+
+
+class keyword(AST):
+    pass
+
+
+class Load(AST):
+    pass
+
+
+class Store(AST):
+    pass
+
+
+class If(AST):
+    pass
+
+
+class For(AST):
+    pass
+
+
+class FunctionDef(AST):
+    pass
+
+
+def walk(node):
+    """Recursively yield every node descendant.  Empty for the stub."""
+    return iter([])
+
+
+def iter_child_nodes(node):
+    return iter([])
+
+
+class NodeVisitor:
+    def visit(self, node):
+        return self.generic_visit(node)
+
+    def generic_visit(self, node):
+        return None
+
+
+class NodeTransformer(NodeVisitor):
+    pass

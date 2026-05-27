@@ -5048,3 +5048,26 @@ testWerkzeugDatastructuresFullExports
 	mod := self loadFixture: 'use_werkzeug_wrappers'.
 	self assert: mod @env1:import_succeeded equals: true
 %
+
+category: 'Grail-Tests - werkzeug'
+method: FlaskScaffoldingTestCase
+testWerkzeugRoutingImports
+	"werkzeug.routing — Map / Rule / Converters / MapAdapter +
+	exceptions.  Step 7 lands the upstream source-drop with two
+	in-place patches in rules.py (ast.parse-dependent module-init
+	bindings set to None — runtime URL building won't work but the
+	import surface is clean).  Map() instantiation still hits a
+	separate ImmutableDict.__iter__ gap; the probe asserts only
+	the import + Rule construction."
+
+	| mod mods keys |
+	mods := importlib @env1:modules.
+	keys := mods @env0:keys @env0:select: [:k |
+		(k @env0:asString @env0:= 'werkzeug')
+			@env0:or: [(k @env0:asString @env0:indexOfSubCollection: 'werkzeug.') @env0:> 0]].
+	keys @env0:do: [:k | mods @env0:removeKey: k ifAbsent: []].
+	mods @env0:removeKey: #'use_werkzeug_routing' ifAbsent: [].
+	mod := self loadFixture: 'use_werkzeug_routing'.
+	self assert: mod @env1:import_succeeded equals: true.
+	self assert: mod @env1:rule_constructs equals: '/hello'
+%

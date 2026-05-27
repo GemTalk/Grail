@@ -118,6 +118,27 @@ class SecurityError(BadRequest):
         self.description = 'Untrusted host rejected.'
 
 
+class BadHost(BadRequest):
+    """Raised when the Host header is unrecognized or untrusted —
+    werkzeug.routing.exceptions uses this."""
+
+    def __init__(self):
+        self.code = 400
+        self.name = 'Bad Host'
+        self.description = 'Bad Host.'
+        self.response = None
+
+
+class RequestedRangeNotSatisfiable(HTTPException):
+    """416 — requested byte range outside the resource size."""
+
+    def __init__(self):
+        self.code = 416
+        self.name = 'Requested Range Not Satisfiable'
+        self.description = 'The Range header is not satisfiable.'
+        self.response = None
+
+
 class InternalServerError(HTTPException):
     def __init__(self):
         self.code = 500
