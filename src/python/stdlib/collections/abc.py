@@ -71,6 +71,15 @@ class MutableSet(_ABCStub): pass
 class Container(_ABCStub): pass
 class Sized(_ABCStub): pass
 class Collection(_ABCStub): pass
+class AsyncIterable(_ABCStub): pass
+class AsyncIterator(_ABCStub): pass
+class AsyncGenerator(_ABCStub): pass
+class Reversible(_ABCStub): pass
+class ByteString(_ABCStub): pass
+class ItemsView(_ABCStub): pass
+class KeysView(_ABCStub): pass
+class ValuesView(_ABCStub): pass
+class MappingView(_ABCStub): pass
 
 
 __all__ = [
@@ -78,4 +87,7 @@ __all__ = [
     'Coroutine', 'Awaitable', 'Sequence', 'MutableSequence',
     'Mapping', 'MutableMapping', 'Set', 'MutableSet', 'Container',
     'Sized', 'Collection',
+    'AsyncIterable', 'AsyncIterator', 'AsyncGenerator',
+    'Reversible', 'ByteString',
+    'ItemsView', 'KeysView', 'ValuesView', 'MappingView',
 ]

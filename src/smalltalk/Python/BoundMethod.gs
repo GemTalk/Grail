@@ -90,14 +90,24 @@ selector
 category: 'Grail-Private'
 method: BoundMethod
 _selectorForArgCount: nargs
-	"Return the precomputed selector for the given arity, or nil if
-	nargs > 3 (caller should use the varargs form)."
+	"Return the selector for the given arity.  0..3 are precomputed
+	at construction time (sel0/sel1/sel2/sel3 — the hot path).
+	4..16 are built lazily here; higher arities are rare enough that
+	the per-call string concatenation cost is fine — and the lookup
+	path tries the varargs form first when defaults are present, so
+	this only fires for true fixed-arity calls (Python ``def f(a, b,
+	c, d, e, f, g, h, i):'' compiles to ``f:_:_:_:_:_:_:_:_:'')."
 
+	| s |
 	nargs == 0 ifTrue: [^ sel0].
 	nargs == 1 ifTrue: [^ sel1].
 	nargs == 2 ifTrue: [^ sel2].
 	nargs == 3 ifTrue: [^ sel3].
-	^ nil
+	nargs @env0:< 0 ifTrue: [^ nil].
+	"Build ``name:'' followed by ``_:'' repeated (nargs - 1) times."
+	s := selector @env0:asString @env0:, ':'.
+	2 to: nargs do: [:_ | s := s @env0:, '_:'].
+	^ s @env0:asSymbol
 %
 
 category: 'Grail-Private'

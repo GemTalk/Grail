@@ -191,3 +191,38 @@ default_exceptions = {
     415: UnsupportedMediaType,
     500: InternalServerError,
 }
+
+
+def abort(status, *args, **kwargs):
+    """Raise an HTTPException for the given status code.  ``status''
+    can be an int (looked up in ``default_exceptions'') or a Response
+    instance (raised wrapped in an HTTPException).
+
+    Stub: only the int form is implemented; the optional description /
+    response payload args / kwargs are ignored."""
+    if isinstance(status, int):
+        cls = default_exceptions.get(status)
+        if cls is None:
+            raise LookupError('no exception for status ' + str(status))
+        raise cls()
+    raise TypeError('abort(status) expects an int; Response form not supported')
+
+
+class Aborter:
+    """Stub ``werkzeug.exceptions.Aborter'' — callable equivalent of
+    the module-level ``abort'' function.  Used by Flask's
+    ``app.aborter''."""
+
+    def __init__(self, mapping=None, extra=None):
+        self.mapping = dict(default_exceptions if mapping is None else mapping)
+        if extra is not None:
+            for code, cls in extra.items():
+                self.mapping[code] = cls
+
+    def __call__(self, code, *args, **kwargs):
+        if isinstance(code, int):
+            cls = self.mapping.get(code)
+            if cls is None:
+                raise LookupError('no exception for status ' + str(code))
+            raise cls()
+        raise TypeError('Aborter(status) expects an int')

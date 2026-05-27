@@ -98,6 +98,18 @@ _lru_cache: positional kw: kwargs
 
 category: 'Grail-Built-in Functions'
 method: functools
+cache: aFunction
+	"``@cache'' (Python 3.9+) — shorthand for ``@lru_cache(maxsize=None)''
+	with unbounded cache.  Grail wraps the function in a LruCacheWrapper
+	the same way ``lru_cache(...)'' does — no caching today (every call
+	re-invokes), but the wrapper is callable and exposes
+	``cache_clear'' / ``cache_info''."
+
+	^ LruCacheWrapper @env1:___wrap___: aFunction
+%
+
+category: 'Grail-Built-in Functions'
+method: functools
 cached_property: aFunction
 	"cached_property(fn) — CPython decorator that turns a unary
 	method into a lazily-computed, per-instance cached attribute.

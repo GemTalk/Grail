@@ -58,7 +58,12 @@ initialize
 	directly via the ImportFromAst __pyAttrLoad path."
 	self @env0:dynamicInstVarAt: #fsdecode put: (BoundMethod @env1:receiver: self selector: #fsdecode).
 	self @env0:dynamicInstVarAt: #fsencode put: (BoundMethod @env1:receiver: self selector: #fsencode).
-	self @env0:dynamicInstVarAt: #fspath put: (BoundMethod @env1:receiver: self selector: #fspath)
+	self @env0:dynamicInstVarAt: #fspath put: (BoundMethod @env1:receiver: self selector: #fspath).
+	"``os.environ'' — process environment dict.  Lazily populated by
+	the accessor below (gem startup doesn't expose every var until
+	first read).  Stored as a KeyValueDictionary so dict-protocol
+	calls (``.get'', ``__getitem__'', ``__contains__'') work."
+	self @env0:dynamicInstVarAt: #environ put: (KeyValueDictionary @env0:new)
 %
 
 category: 'Grail-Filesystem'
@@ -106,6 +111,16 @@ category: 'Grail-Constants'
 method: os
 sep
 	^ self @env0:at: #sep
+%
+
+category: 'Grail-Constants'
+method: os
+environ
+	"Lazy-init dict of process environment variables.  Reads through
+	to ``System gemEnvironmentVariable:'' on each ``.get'' miss so
+	live env-var values reach callers (Flask reads ``FLASK_DEBUG'' /
+	``FLASK_SKIP_DOTENV'' at module-init through ``os.environ.get'')."
+	^ self @env0:dynamicInstVarAt: #environ
 %
 
 category: 'Grail-Constants'

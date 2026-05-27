@@ -278,8 +278,13 @@ printSmalltalkRuntimeOn: aStream
 	keep the read/write path working for class-side attrs."
 	aStream nextPutAll: name; nextPutAll: ' := ('.
 	self printSuperclassOn: aStream.
+	"``___subclass___:'' is an env-1 method on Class (see Class.gs).
+	The bare send used to work for built-in classes whose metaclass
+	chain reached Class via env-0 dispatch, but Grail-built parents
+	(e.g. ``click.UsageError'') have a metaclass chain that requires
+	env-1 dispatch to find the inherited method."
 	aStream
-		nextPutAll: ') ___subclass___: #''';
+		nextPutAll: ') @env1:___subclass___: #''';
 		nextPutAll: (importlib @env0:___asSmalltalkClassName___: name) asString;
 		nextPutAll: ''' instVarNames: #() classInstVarNames: '.
 	self printSymbolArray: allClassInstVars on: aStream.

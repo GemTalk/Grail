@@ -314,6 +314,14 @@ ___moduleAttrLoad___: aSym
 	((cls @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil) ifTrue: [
 		^ BoundMethod @env1:receiver: self selector: aSym
 	].
+	"Try the fast-path fixed-arity selectors first (1..3 args), then
+	walk to higher arities until we either find one or exhaust the
+	candidate range.  Without the > 3 check, a top-level def with
+	four or more simple-positional params (e.g. flask.cli's
+	``def run_command(info, host, port, reload, debugger, ...)'' —
+	9 args) wasn't picked up, leaving the module read to fall
+	through to the NameError branch even though the method exists.
+	Cap at 16 args — beyond that we'd hit the varargs form anyway."
 	sym1 := (s @env0:, ':') @env0:asSymbol.
 	sym2 := (s @env0:, ':_:') @env0:asSymbol.
 	sym3 := (s @env0:, ':_:_:') @env0:asSymbol.
@@ -321,6 +329,16 @@ ___moduleAttrLoad___: aSym
 		or: [(cls @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil
 		or: [(cls @env0:whichClassIncludesSelector: sym3 environmentId: 1) notNil]]) ifTrue: [
 		^ BoundMethod @env1:receiver: self selector: aSym
+	].
+	"Higher-arity fixed selectors (4..16 args).  Selector shape is
+	``name:'' followed by ``_:'' repeated (arity - 1) times."
+	4 to: 16 do: [:arity |
+		| candidate |
+		candidate := s @env0:asString @env0:, ':'.
+		2 to: arity do: [:_ | candidate := candidate @env0:, '_:'].
+		(cls @env0:whichClassIncludesSelector: candidate @env0:asSymbol environmentId: 1) notNil ifTrue: [
+			^ BoundMethod @env1:receiver: self selector: aSym
+		].
 	].
 	"Unary class method.  Two sub-cases:
 	  * Defined on the ``module'' superclass — a dunder accessor like
