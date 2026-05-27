@@ -272,15 +272,17 @@ emitTupleElementStoreOn: aStream target: aTarget holder: holder indexExpr: index
 	| rhs |
 	rhs := directRhs ifNil: [holder , ' __getitem__: ' , indexExpr].
 	(aTarget isKindOf: AttributeAst) ifTrue: [
-		"obj.attr = rhs (per-element store inside a tuple unpack) — write
-		straight to dynamicInstVarAt:put: for both self and foreign
-		receivers, matching the single-target attribute-store path."
+		"obj.attr = rhs (per-element store inside a tuple unpack) —
+		route through ``__setattr__:_:'' (both self and foreign receivers)
+		so @property setters fire.  Object>>__setattr__:_: detects the
+		paired getter+setter at runtime and dispatches to the setter;
+		otherwise falls through to dynamic-instVar storage."
 		((aTarget value isKindOf: NameAst)
 			and: [CallAst isSelfReference: aTarget value id]) ifTrue: [
 			aStream
-				nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+				nextPutAll: 'self @env1:__setattr__: ''';
 				nextPutAll: aTarget attr;
-				nextPutAll: ''' put: (';
+				nextPutAll: ''' _: (';
 				nextPutAll: rhs;
 				nextPutAll: '). '.
 			^ self
@@ -353,9 +355,22 @@ printSmalltalkAttributeStoreOn: aStream target: tgt
 	``obj attr: x'' directly via Smalltalk-style keyword)."
 
 	((tgt value isKindOf: NameAst) and: [CallAst isSelfReference: tgt value id]) ifTrue: [
-		aStream nextPutAll: 'self @env0:dynamicInstVarAt: #'''.
+		"Route through ``__setattr__:_:`` so @property setters fire when
+		the class has a paired getter+setter (data-descriptor) for this
+		attribute name.  Object>>__setattr__:_: detects the pair at
+		runtime via ``whichClassIncludesSelector:'' and dispatches to the
+		setter; otherwise falls through to the polymorphic
+		``___pyAttrStore___:put:'' helper that writes to dynamic-instVar
+		storage.  Foreign-receiver stores already use this entry point
+		(see printSmalltalkAttributeStoreOn: foreign branch + the
+		tuple-unpack path); aligning the self branch removes the
+		asymmetric ``self.attr = x'' bypass.  Pre-fix, werkzeug.test
+		EnvironBuilder's ``self.base_url = base_url'' silently skipped
+		the @base_url.setter, leaving script_root / host / url_scheme
+		unset."
+		aStream nextPutAll: 'self @env1:__setattr__: '''.
 		aStream nextPutAll: tgt attr.
-		aStream nextPutAll: ''' put: '.
+		aStream nextPutAll: ''' _: '.
 		value printSmalltalkWithParenthesisOn: aStream.
 		aStream nextPut: $..
 		^self
