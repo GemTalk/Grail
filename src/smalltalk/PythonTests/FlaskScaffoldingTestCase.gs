@@ -5096,3 +5096,28 @@ testWerkzeugLocalImports
 	self assert: mod @env1:local_constructs equals: true.
 	self assert: mod @env1:local_stack_constructs equals: true
 %
+
+category: 'Grail-Tests - werkzeug'
+method: FlaskScaffoldingTestCase
+testWerkzeugUtilsImports
+	"werkzeug.utils — hand-rolled minimal shim (cached_property,
+	redirect, header_property, environ_property, import_string,
+	find_modules).  Upstream source-drop blocked on ``**kwargs''
+	call-site unpacking + full descriptor protocol; saved as
+	``utils_upstream.py.bak'' beside the shim for the rewrite."
+
+	| mod mods keys |
+	mods := importlib @env1:modules.
+	keys := mods @env0:keys @env0:select: [:k |
+		(k @env0:asString @env0:= 'werkzeug')
+			@env0:or: [(k @env0:asString @env0:indexOfSubCollection: 'werkzeug.') @env0:> 0]].
+	keys @env0:do: [:k | mods @env0:removeKey: k ifAbsent: []].
+	mods @env0:removeKey: #'use_werkzeug_utils' ifAbsent: [].
+	mods @env0:removeKey: #'pkg_scaffolding.use_werkzeug_utils' ifAbsent: [].
+	mod := self loadFixture: 'use_werkzeug_utils'.
+	self assert: mod @env1:import_succeeded equals: true.
+	self assert: mod @env1:public_surface_present equals: true.
+	self assert: mod @env1:cached_property_constructs equals: true.
+	self assert: mod @env1:import_string_finds_module equals: true.
+	self assert: mod @env1:find_modules_is_empty equals: true
+%
