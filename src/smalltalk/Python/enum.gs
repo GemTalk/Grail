@@ -57,6 +57,11 @@ initialize
 	self @env0:at: #IntEnum put: int.
 	self @env0:at: #StrEnum put: Unicode7.
 	self @env0:at: #Flag put: PythonInstance.
+	"Pre-store ``auto'' as a BoundMethod so ``from enum import auto''
+	binds to the callable rather than invoking the unary method
+	immediately and binding its result (an integer).  Werkzeug's
+	sansio.multipart hits this via ``State(Enum): PREAMBLE = auto()''."
+	self @env0:dynamicInstVarAt: #auto put: (BoundMethod @env1:receiver: self selector: #auto)
 %
 
 ! ===============================================================================

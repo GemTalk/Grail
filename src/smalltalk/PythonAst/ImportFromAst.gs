@@ -203,14 +203,22 @@ printSmalltalkOn: aStream
 				nextPutAll: attrName;
 				nextPutAll: ')'.
 		] ifFalse: [
-			"Stored attribute or unconverted module — use bare unary send."
+			"Stored attribute or unconverted module — go through
+			___pyAttrLoad___ so dynamicInstVar entries (the
+			canonical home for module attributes assigned at init
+			time) are read directly without invoking a same-named
+			unary method.  ``from enum import auto'' depends on
+			this: ``auto'' is pre-stored as a BoundMethod and a
+			bare unary send would dispatch the env-1 ``auto''
+			method, returning an integer."
 			aStream
-				nextPutAll: '(((Python @env0:at: #builtins) instance) ___import__: { ''';
+				nextPutAll: '((((Python @env0:at: #builtins) instance) ___import__: { ''';
 				nextPutAll: absoluteName;
 				nextPutAll: '''. nil. nil. { ''';
 				nextPutAll: attrName;
-				nextPutAll: ''' }. 0 } kw: nil) ';
-				nextPutAll: attrName.
+				nextPutAll: ''' }. 0 } kw: nil) @env1:___pyAttrLoad___: #''';
+				nextPutAll: attrName;
+				nextPutAll: ''')'.
 		].
 		isModuleStore ifTrue: [aStream nextPut: $)].
 		aStream nextPut: $..

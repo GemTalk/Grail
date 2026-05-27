@@ -64,8 +64,13 @@ set compile_env: 1
 category: 'Grail-Initialization'
 method: time
 initialize
-	"No module-level Python attributes to expose; constants are
-	accessed through their accessors."
+	"Pre-store ``struct_time'' as a marker class.  CPython has a
+	real namedtuple-like class for this; Grail aliases it to
+	``tuple'' so ``isinstance(t, struct_time)'' returns false for
+	plain tuples (matching CPython for non-struct_time tuples) and
+	the import path can find the name.  Werkzeug.http hits this via
+	``from time import struct_time''."
+	self @env0:dynamicInstVarAt: #struct_time put: tuple
 %
 
 category: 'Grail-Wall clock'

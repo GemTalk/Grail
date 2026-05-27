@@ -111,7 +111,17 @@ printSmalltalkOn: aStream
 		^ self.
 	].
 	"Splat path: ``(a, *b, c)'' → concatenate run-arrays around each
-	starred expression's asArray, then wrap as a tuple."
+	starred expression's asArray, then wrap as a tuple.
+
+	The opening string ``(tuple perform: ... withArguments: {(({}''
+	balances as: one outer paren around ``tuple perform:'', one
+	array brace, and TWO inner parens around the concat chain.  The
+	closing must therefore emit ``))})'' (close the two inner
+	parens, the array brace, then the outer paren) — earlier
+	revisions emitted only ``)})'' which left the outer paren
+	unclosed, generating syntactically invalid Smalltalk for
+	``(a, *b)'' expressions.  Werkzeug.datastructures.headers'
+	``__eq__'' surfaced this via ``return item[0].lower(), *item[1:]''."
 	aStream nextPutAll: '(tuple perform: #withAll: env: 0 withArguments: {(({}'.
 	elts do: [:each |
 		aStream nextPutAll: ' @env0:, '.
@@ -126,7 +136,7 @@ printSmalltalkOn: aStream
 				aStream nextPutAll: '. }'.
 			].
 	].
-	aStream nextPutAll: ')})'.
+	aStream nextPutAll: '))})'.
 %
 
 category: 'Grail-other'

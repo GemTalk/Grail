@@ -95,6 +95,20 @@ class RequestEntityTooLarge(HTTPException):
         self.response = None
 
 
+class BadRequestKeyError(BadRequest):
+    """Raised when a Headers / MultiDict key lookup misses.
+    werkzeug.datastructures uses this for dict-like KeyError reporting
+    that surfaces as an HTTP 400 in the wrapping app.  Stub takes the
+    missing key for parity with upstream's KeyError-inheriting form."""
+
+    def __init__(self, key=None):
+        self.code = 400
+        self.name = 'Bad Request'
+        self.description = 'KeyError: ' + repr(key)
+        self.response = None
+        self.key = key
+
+
 class SecurityError(BadRequest):
     """Raised by host validation when an untrusted host is
     rejected — werkzeug.sansio.utils imports this."""

@@ -53,6 +53,49 @@ initialize
 	self @env0:at: #pathsep put: ':'.
 	self @env0:at: #linesep put: ((Character @env0:lf) @env0:asString).
 	self @env0:at: #path put: (os_path instance).
+	"Pre-store fsdecode as a BoundMethod so ``from os import
+	fsdecode'' (werkzeug's file_storage) reads the callable
+	directly via the ImportFromAst __pyAttrLoad path."
+	self @env0:dynamicInstVarAt: #fsdecode put: (BoundMethod @env1:receiver: self selector: #fsdecode).
+	self @env0:dynamicInstVarAt: #fsencode put: (BoundMethod @env1:receiver: self selector: #fsencode).
+	self @env0:dynamicInstVarAt: #fspath put: (BoundMethod @env1:receiver: self selector: #fspath)
+%
+
+category: 'Grail-Filesystem'
+method: os
+fspath: path
+	"``os.fspath(path)'' — accept either a string-like or an object
+	with ``__fspath__'' and return a string/bytes path.  Grail
+	short-circuits: strings and bytes pass through; user objects
+	delegate to __fspath__ if defined."
+
+	(path @env0:isKindOf: CharacterCollection) ifTrue: [^ path].
+	(path @env0:isKindOf: ByteArray) ifTrue: [^ path].
+	((path @env0:class @env0:methodDictForEnv: 1) @env0:includesKey: #'__fspath__')
+		ifTrue: [^ path @env1:__fspath__].
+	TypeError @env1:___signal___: 'expected str, bytes, or os.PathLike'
+%
+
+category: 'Grail-Filesystem'
+method: os
+fsdecode: filename
+	"``os.fsdecode(filename)'' — decode a bytes filename to str using
+	the filesystem encoding.  Grail uses UTF-8 throughout.  Bytes
+	input decodes; str input passes through."
+
+	(filename @env0:isKindOf: ByteArray)
+		ifTrue: [^ filename @env1:decode: 'utf-8'].
+	^ filename
+%
+
+category: 'Grail-Filesystem'
+method: os
+fsencode: filename
+	"``os.fsencode(filename)'' — inverse of fsdecode."
+
+	(filename @env0:isKindOf: CharacterCollection)
+		ifTrue: [^ filename @env1:encode: 'utf-8'].
+	^ filename
 %
 
 ! ===============================================================================
