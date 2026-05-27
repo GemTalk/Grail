@@ -44,14 +44,21 @@ def _make_unquote_part(name: str, chars: str) -> t.Callable[[str], str]:
 
         return "".join(out)
 
-    _unquote_partial.__name__ = f"_unquote_{name}"
+    # Grail-patched: ExecBlock doesn't support dynamic-instVar
+    # storage, so setattr on a closure (``fn.__name__ = ...'')
+    # raises ImproperOperation.  The __name__ tag is only for
+    # introspection / repr; safe to skip in this shim.
+    # _unquote_partial.__name__ = f"_unquote_{name}"
     return _unquote_partial
 
 
 # characters that should remain quoted in URL parts
 # based on https://url.spec.whatwg.org/#percent-encoded-bytes
 # always keep all controls, space, and % quoted
-_always_unsafe = bytes((*range(0x21), 0x25, 0x7F)).decode()
+# Grail-patched: PEP 448 starred unpacking inside a tuple/list
+# literal (``(*range(0x21), 0x25, 0x7F)'') isn't yet supported by
+# Grail's parser.  Expanded to an explicit list construction.
+_always_unsafe = bytes(list(range(0x21)) + [0x25, 0x7F]).decode()
 _unquote_fragment = _make_unquote_part("fragment", _always_unsafe)
 _unquote_query = _make_unquote_part("query", _always_unsafe + "&=+#")
 _unquote_path = _make_unquote_part("path", _always_unsafe + "/?#")

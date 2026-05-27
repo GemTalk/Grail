@@ -14,6 +14,27 @@ _ALWAYS_SAFE = frozenset(
 )
 
 
+# Module-level scheme registries — CPython exposes these so apps
+# can declare custom schemes that participate in netloc / relative-
+# URL / fragment handling.  Werkzeug.urls appends ``itms-services''
+# to ``uses_netloc'' at import time to make iOS install links round-
+# trip through urlsplit.  Grail's lightweight urlsplit doesn't
+# consult these lists for behavior, but the read/append surface
+# needs to exist for downstream imports.
+uses_relative = [
+    'ftp', 'http', 'gopher', 'nntp', 'imap', 'wais', 'file',
+    'https', 'shttp', 'mms', 'prospero', 'rtsp', 'rtspu', 'sftp',
+    'svn', 'svn+ssh', 'ws', 'wss',
+]
+uses_netloc = [
+    'ftp', 'http', 'gopher', 'nntp', 'telnet', 'imap', 'wais',
+    'file', 'mms', 'https', 'shttp', 'snews', 'prospero', 'rtsp',
+    'rtspu', 'rsync', 'svn', 'svn+ssh', 'sftp', 'nfs', 'git',
+    'git+ssh', 'ws', 'wss',
+]
+uses_fragment = list(uses_relative)
+
+
 def _safe_set(safe):
     if isinstance(safe, bytes):
         safe = safe.decode("ascii", "replace")
