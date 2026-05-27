@@ -845,9 +845,15 @@ body
 category: 'Grail-Class Compilation'
 method: ClassDefAst
 instanceMethodDefs
-	"Return all InstanceFunctionDefAst nodes from the class body."
+	"Return all InstanceFunctionDefAst nodes from the class body.
+	Skip ``@typing.overload''-decorated stubs — those are type-checker
+	annotations only and should not be compiled into the class method
+	dict (they would otherwise overwrite the real implementation's
+	fixed-arity entries; see FunctionDefAst >> isOverloadStub)."
 
-	^ body body select: [:stmt | stmt isKindOf: InstanceFunctionDefAst]
+	^ body body select: [:stmt |
+		(stmt isKindOf: InstanceFunctionDefAst)
+			and: [stmt isOverloadStub not]]
 %
 
 category: 'Grail-Class Compilation'
@@ -856,9 +862,12 @@ classMethodDefs
 	"Return all ClassFunctionDefAst nodes from the class body.
 	These are ``@classmethod``-decorated functions that the parser
 	re-classed at parse time (see PythonParser >>
-	parseFunctionDefWithDecorators:)."
+	parseFunctionDefWithDecorators:).  ``@overload''-decorated stubs
+	skipped — see instanceMethodDefs."
 
-	^ body body select: [:stmt | stmt isKindOf: ClassFunctionDefAst]
+	^ body body select: [:stmt |
+		(stmt isKindOf: ClassFunctionDefAst)
+			and: [stmt isOverloadStub not]]
 %
 
 category: 'Grail-Class Compilation'
@@ -868,9 +877,12 @@ staticMethodDefs
 	@staticmethod-decorated functions take no implicit first arg
 	(no ``self`` or ``cls``); they're compiled onto the metaclass
 	exactly as written so a Python ``Cls.X(args)`` send dispatches
-	to a class-side Smalltalk method with the same arity."
+	to a class-side Smalltalk method with the same arity.
+	``@overload''-decorated stubs skipped — see instanceMethodDefs."
 
-	^ body body select: [:stmt | stmt isKindOf: StaticFunctionDefAst]
+	^ body body select: [:stmt |
+		(stmt isKindOf: StaticFunctionDefAst)
+			and: [stmt isOverloadStub not]]
 %
 
 category: 'Grail-Class Compilation'

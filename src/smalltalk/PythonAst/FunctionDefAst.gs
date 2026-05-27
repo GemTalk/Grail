@@ -52,6 +52,39 @@ decoratorList
 
 category: 'Grail-other'
 method: FunctionDefAst
+isOverloadStub
+	"True if this def is decorated with ``@typing.overload'' or bare
+	``@overload''.  Those defs are type-checker stubs only — at
+	runtime they're meant to be inert; CPython's typing.overload
+	returns a stub that raises NotImplementedError if called.  Grail
+	skips compiling them as real methods so the LAST def (the
+	real implementation) is the only thing in the class method
+	dict.
+
+	Without this, Grail compiles each @overload-decorated stub to a
+	fixed-arity method (``name'', ``name:'', ``name:_:''), and the
+	last def — which usually has defaults and therefore compiles
+	only to the varargs ``_name:kw:'' — fails to overwrite them.
+	Symptom: ``headers.pop'' returns None because the unary ``pop''
+	method is the stub body (``...; return None''), not the real
+	dispatch entry that the unary form's defaults should hit.
+
+	Recognises three shapes:
+	  - bare ``@overload''                (NameAst id = 'overload')
+	  - ``@typing.overload''              (AttributeAst attr 'overload')
+	  - ``@t.overload'' (aliased typing)  (same shape)
+	"
+
+	decorator_list isNil ifTrue: [^ false].
+	^ decorator_list anySatisfy: [:deco |
+		((deco isKindOf: NameAst) and: [deco id asString = 'overload'])
+			or: [(deco isKindOf: AttributeAst)
+				and: [deco attr asString = 'overload']]
+	]
+%
+
+category: 'Grail-other'
+method: FunctionDefAst
 name
 
 	^name
