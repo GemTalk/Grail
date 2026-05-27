@@ -1,8 +1,8 @@
-# Grail's werkzeug __init__.py — staging placeholder.
-#
-# Upstream's __init__.py re-exports from .serving / .test / .wrappers.
-# Those modules land in later staging steps; until then this file
-# stays empty so the package imports cleanly with whichever submodules
-# happen to have been dropped.
-#
-# Final shape (after Step 10) is the upstream four-line re-export.
+# Upstream werkzeug __init__.py minus ``run_simple''.
+# Grail doesn't ship ``werkzeug.serving'' (the dev-server is
+# socket / threading heavy and out of scope for the M7 demo).
+# When that lands the missing line is:
+#   from .serving import run_simple as run_simple
+from .test import Client as Client
+from .wrappers import Request as Request
+from .wrappers import Response as Response

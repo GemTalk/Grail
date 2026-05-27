@@ -25,12 +25,7 @@ def responder(f: t.Callable[..., WSGIApplication]) -> WSGIApplication:
         def application(environ, start_response):
             return Response('Hello World!')
     """
-    # Grail-patched: ``lambda *a: ...'' (starred lambda param) isn't
-    # supported by Grail's parser yet.  Replaced with a closure
-    # using *args.
-    def _responder_wrapper(*args):
-        return f(*args)(*args[-2:])
-    return update_wrapper(_responder_wrapper, f)
+    return update_wrapper(lambda *a: f(*a)(*a[-2:]), f)
 
 
 def get_current_url(

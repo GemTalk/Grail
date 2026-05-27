@@ -12,12 +12,6 @@ runtime gaps that surface independently of the Flask push.
 
 These break programs that look ordinary in CPython.
 
-- [ ] **`*args` / `**kwargs` not bound in `LambdaAst`** — the
-  `FunctionDefAst` closure-emit and varargs-selector-emit paths now bind
-  both (the recent varargs prologue overhaul), but `LambdaAst` was not
-  updated.  `lambda *xs: xs` still emits a bare `xs` read.  Mirror the
-  FunctionDefAst code paths.
-
 - [ ] **Explicit `super(Cls, self)` rejected** — the zero-arg form
   `super()` works end-to-end (codegen rewrite + `Super` proxy).  The
   explicit form trips the class-name reference inside the class body.
@@ -54,6 +48,13 @@ These break programs that look ordinary in CPython.
 
 Real Python class semantics that the current Smalltalk-class translation
 doesn't preserve.
+
+- [ ] **No multiple inheritance** — `class C(A, B):` picks the first
+  base only.  Blocks `werkzeug.utils.cached_property(property,
+  t.Generic[_T])` and the `BadRequestKeyError(BadRequest, KeyError)`
+  pattern in `werkzeug.exceptions` (worked around by inheriting from
+  `KeyError` alone in the shim).  Fix would need C3 MRO + per-method
+  resolution walking multiple parent chains.
 
 - [ ] **No single inheritance** — `class Foo(Bar):` ignores `bases`
   for non-built-in `Bar`.  Generated user classes are always direct
@@ -141,6 +142,47 @@ env-1 audit.  Most are documented deviations rather than fixable bugs.
   not given".  Intentional (distinguishes absent from explicit `None`)
   and stays as nil; documented here so a future blanket nil-sweep
   doesn't break the varargs unpacking logic.
+
+## Werkzeug Shims Still in Place
+
+The Werkzeug 3.1.5 source-drop is ~95% upstream verbatim.  These few
+files / sites remain as Grail-specific shims or in-place patches.
+Each has a tracked root cause elsewhere in this file or in
+``docs/Support_Flask.md``.
+
+- [ ] **`werkzeug/utils.py`** — hand-rolled shim, NOT upstream source.
+  Upstream's ``cached_property(property, t.Generic[_T])`` blocks on
+  multi-inheritance (see Class System Limitations above).  Shim
+  exposes the same public surface (cached_property, redirect,
+  header_property, environ_property, import_string, find_modules,
+  get_content_type) with reduced semantics.  Replace once multi-
+  inheritance lands.
+
+- [ ] **`werkzeug/exceptions.py`** — hand-rolled shim, NOT upstream.
+  Upstream runs ``_find_exceptions()`` at module-init time which
+  walks ``globals().values()`` + calls ``issubclass(obj, HTTPException)``
+  on each — the introspection loop fails before exceptions register
+  themselves.  ``BadRequestKeyError`` also inherits from ``KeyError''
+  alone (upstream is ``(BadRequest, KeyError)`` — see multi-
+  inheritance entry).  Replace by fixing both the
+  globals()/values() / issubclass introspection AND multi-inheritance.
+
+- [ ] **`werkzeug/urls.py:47-51`** — one commented-out line:
+  ``_unquote_partial.__name__ = f"_unquote_{name}"``.  Blocked on
+  ExecBlock not supporting dynamic instVar storage (so ``fn.__name__
+  = ...`` raises ImproperOperation).  Low impact — only loses a
+  debug tag.
+
+- [ ] **`werkzeug/wsgi.py:430`** — `LimitedStream` does not inherit
+  from `io.RawIOBase`.  Blocked on Grail's `io` module shimming
+  out `RawIOBase`; downstream code that does
+  ``isinstance(stream, io.RawIOBase)`` would miss.
+
+- [ ] **`werkzeug/routing/rules.py:323`** — `_IF_KWARGS_URL_ENCODE_AST`
+  / `_URL_ENCODE_AST_NAMES` set to ``None`` because Python `ast.parse`
+  isn't implemented in Grail.  Routes match correctly but
+  ``url_for()`` / ``Rule.build()`` raise on first use.  Blocks Flask
+  reverse-routing.
 
 ## Architectural Cleanup (Non-blocking)
 
