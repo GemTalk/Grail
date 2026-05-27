@@ -363,15 +363,37 @@ printSmalltalkRuntimeOn: aStream
 			classSide: true
 			onStream: aStream.
 	].
-	classAttrs do: [:pair |
-		"pair value is nil for bare annotations (``x: int'' with no
-		assignment) — skip the init emit; the slot stays nil until
-		some later assignment fills it."
-		pair value ifNotNil: [
-			aStream nextPutAll: name; nextPutAll: ' '; nextPutAll: pair key; nextPutAll: ': '.
-			pair value printSmalltalkWithParenthesisOn: aStream.
-			aStream nextPutAll: '.'; lf
+	"Re-push the class compile context around the class-attribute
+	value emit so NameAst can resolve in-body references like
+	``def get_data(...); data = property(get_data)'' or
+	``def first(); pair = (first,)'' to a BoundMethod whose receiver
+	will be supplied as positional[1] at call time.  Without this
+	push, ``first'' falls through to module-scope lookup and raises
+	NameError at class-init time."
+	CallAst classBeingCompiled: name asSymbol.
+	CallAst classFunctionNames: funcNames.
+	CallAst classVarargsFunctionNames: varargsFuncNames.
+	CallAst classAttrNames: (IdentitySet withAll: (classAttrs collect: [:p | p key])).
+	CallAst selfParameterName: selfParam.
+	CallAst inClassBodyValueEmit: true.
+	[
+		classAttrs do: [:pair |
+			"pair value is nil for bare annotations (``x: int'' with no
+			assignment) — skip the init emit; the slot stays nil until
+			some later assignment fills it."
+			pair value ifNotNil: [
+				aStream nextPutAll: name; nextPutAll: ' '; nextPutAll: pair key; nextPutAll: ': '.
+				pair value printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPutAll: '.'; lf
+			].
 		].
+	] ensure: [
+		CallAst classBeingCompiled: savedClass.
+		CallAst classFunctionNames: savedFuncNames.
+		CallAst classVarargsFunctionNames: savedVarargsFuncNames.
+		CallAst classAttrNames: savedClassAttrNames.
+		CallAst selfParameterName: savedSelfParam.
+		CallAst inClassBodyValueEmit: false.
 	].
 	"NamedTuple-style classes get a ``_fields'' accessor/setter pair
 	on the metaclass, initialised to a tuple of declaration-order

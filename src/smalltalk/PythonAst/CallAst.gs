@@ -14,7 +14,7 @@ ExpressionAst subclass: 'CallAst'
                     'classBeingCompiled'
                     'classFunctionNames' 'classVarargsFunctionNames'
                     'classAttrNames' 'selfParameterName'
-                    'returnEmitMode')
+                    'returnEmitMode' 'inClassBodyValueEmit')
   poolDictionaries: #()
   inDictionary: PythonAst
   options: #()
@@ -1047,6 +1047,26 @@ category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classFunctionNames: aSetOrNil
 	classFunctionNames := aSetOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+inClassBodyValueEmit
+	"Boolean — true while ClassDefAst is emitting the class
+	attribute value expressions, false otherwise (including while
+	emitting method bodies that share the same classBeingCompiled
+	context).  NameAst uses this flag to decide whether a bare
+	reference to a sibling method should resolve to an unbound
+	BoundMethod (class body — yes) or fall through to module-scope
+	lookup (method body — no, matching Python's LEGB-skips-class)."
+
+	^ inClassBodyValueEmit == true
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+inClassBodyValueEmit: aBoolean
+	inClassBodyValueEmit := aBoolean
 %
 
 category: 'Grail-Class Compile Context'

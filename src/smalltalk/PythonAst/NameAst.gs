@@ -236,6 +236,28 @@ printSmalltalkOn: aStream
 		and: [CallAst classBeingCompiled notNil
 			and: [CallAst moduleClassBeingCompiled notNil]])
 		ifTrue: [
+			"Class-body reference to a sibling method (``def f();
+			pair = (f,)'' or ``data = property(get_data, set_data)'').
+			Emit a receiver-less BoundMethod — its call protocol pops
+			positional[1] as the receiver at invocation time, matching
+			CPython's unbound-function-from-class-dict semantics.
+
+			Guard: only fires while ClassDefAst is emitting the class-
+			attribute value expressions (CallAst inClassBodyValueEmit
+			is true).  Method bodies share the same classBeingCompiled
+			context but their bare-name references must follow Python's
+			LEGB rule (skipping the class scope) — falling through to
+			the existing module-scope / declared-local branches below."
+			(CallAst inClassBodyValueEmit
+				and: [CallAst classFunctionNames notNil
+				and: [CallAst classFunctionNames includes: id asSymbol]])
+				ifTrue: [
+					aStream
+						nextPutAll: '(BoundMethod receiver: nil selector: #';
+						nextPutAll: id;
+						nextPutAll: ')'.
+					^self
+				].
 			(CallAst moduleFunctionNames notNil
 				and: [CallAst moduleFunctionNames includes: id asSymbol])
 				ifTrue: [
@@ -338,14 +360,23 @@ printSmalltalkOn: aStream
 	Python NameError, matching CPython semantics."
 	((ctx isKindOf: LoadAst)
 		and: [CallAst moduleClassBeingCompiled notNil
-		and: [CallAst classBeingCompiled isNil
+		and: [(CallAst classBeingCompiled isNil
+				or: [CallAst inClassBodyValueEmit])
 		and: [(self class isResolvableSymbol: id asSymbol) not]]]) ifTrue: [
 		"Builtins (``type``, ``len``, ...) are methods on the
 		builtins class — emit a BoundMethod so direct call sites
 		dispatch through env-1 arity resolution rather than a
 		failing ``at:`` lookup.  Suppressed when this NameAst is
 		the base of an enclosing ClassDefAst (a class needs the
-		actual class object, not a callable wrapper)."
+		actual class object, not a callable wrapper).
+
+		Class-body value-emit (inClassBodyValueEmit) takes the same
+		fallback: a bare name that isn't a sibling method, module
+		function, or static Smalltalk global still wants the
+		``self at: #name'' lookup, otherwise it CompileErrors as
+		``undefined symbol''.  This covers references like
+		``__doc__'' at class body level (the module attribute, since
+		Grail doesn't bind class-body locals to a class namespace)."
 		(self isFastPathBuiltinName) ifTrue: [
 			aStream
 				nextPutAll: '(BoundMethod receiver: ((Python @env0:at: #builtins) instance) selector: #';
@@ -353,8 +384,20 @@ printSmalltalkOn: aStream
 				nextPutAll: ')'.
 			^self
 		].
-		"Phase A: module attribute load goes through dynamicInstVarAt:."
-		self emitModuleAttrLoad: id receiverExpr: 'self' on: aStream.
+		"Phase A: module attribute load goes through dynamicInstVarAt:.
+		The receiver expression is ``self'' (module body / top-level
+		def) or ``<ModuleClass> @env0:___instance___'' (class-body
+		value-emit, where ``self'' is the class being built and lacks
+		the module dynamic-instVar storage)."
+		CallAst inClassBodyValueEmit
+			ifTrue: [
+				self emitModuleAttrLoad: id
+					receiverExpr: CallAst moduleClassBeingCompiled name , ' @env0:___instance___'
+					on: aStream.
+			]
+			ifFalse: [
+				self emitModuleAttrLoad: id receiverExpr: 'self' on: aStream.
+			].
 		^ self
 	].
 	"Phase A: module-body load of a name declared in the module body

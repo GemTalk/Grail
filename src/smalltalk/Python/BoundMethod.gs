@@ -143,19 +143,37 @@ value: positional value: kwargs
 	  1. No kwargs and positional count is 0..3: use the precomputed
 	     fixed-arity selector (sel0/sel1/sel2/sel3) if the receiver has it.
 	  2. Otherwise fall back to the precomputed varargs `_name:kw:`.
-	  3. If neither exists, raise via the receiver''s normal DNU path."
+	  3. If neither exists, raise via the receiver''s normal DNU path.
 
-	| nargs fixedSel |
+	Unbound form (receiver isNil): the BoundMethod represents a bare
+	class-body function reference (``class C: def f(self): ...; pair =
+	(f,)'') where the eventual call must supply the receiver as the
+	first positional arg.  Pop positional[1] as the receiver and
+	dispatch with the remaining args.  Matches CPython's unbound-
+	function semantics: ``C.__dict__['f'](instance, ...)''."
+
+	| actualReceiver actualArgs nargs fixedSel |
+	receiver @env0:isNil
+		ifTrue: [
+			actualReceiver := positional @env0:at: 1.
+			actualArgs := positional @env0:size @env0:> 1
+				ifTrue: [positional @env0:copyFrom: 2 to: positional @env0:size]
+				ifFalse: [Array @env0:new].
+		]
+		ifFalse: [
+			actualReceiver := receiver.
+			actualArgs := positional.
+		].
 	(kwargs == nil or: [kwargs @env0:isEmpty]) ifTrue: [
-		nargs := positional @env0:size.
+		nargs := actualArgs @env0:size.
 		fixedSel := self @env0:_selectorForArgCount: nargs.
 		fixedSel ifNotNil: [
-			(self @env0:_receiverHasSelector: fixedSel) ifTrue: [
-				^ receiver perform: fixedSel env: 1 withArguments: positional
+			((actualReceiver @env0:class) @env0:whichClassIncludesSelector: fixedSel environmentId: 1) @env0:notNil ifTrue: [
+				^ actualReceiver perform: fixedSel env: 1 withArguments: actualArgs
 			].
 		].
 	].
-	^ receiver perform: selVarargs env: 1 withArguments: { positional. kwargs }
+	^ actualReceiver perform: selVarargs env: 1 withArguments: { actualArgs. kwargs }
 %
 
 category: 'Grail-Callable'
