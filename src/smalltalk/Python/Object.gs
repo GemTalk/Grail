@@ -129,6 +129,37 @@ ___new___
 	^ self @env0:new
 %
 
+category: 'Grail-Attribute Access'
+classmethod: object
+___setattr__: args kw: kwargs
+	"Unbound-method form of ``object.__setattr__'' — Python source
+	``object.__setattr__(instance, name, value)'' compiles to this
+	varargs class-side send.  Werkzeug.local uses this pattern to
+	bypass a class's overriding ``__setattr__'' and store directly
+	into the instance dict (e.g. ``_Local__storage'' on Local,
+	``_LocalProxy__wrapped'' on LocalProxy).
+
+	Args: { instance. attrName. attrValue } — pop instance, delegate
+	to the instance-side default ``object.__setattr__''."
+
+	| instance attrName attrValue |
+	instance := args @env0:at: 1.
+	attrName := args @env0:at: 2.
+	attrValue := args @env0:at: 3.
+	^ instance @env1:___pyAttrStore___: attrName put: attrValue
+%
+
+category: 'Grail-Attribute Access'
+classmethod: object
+___setattr__: instance _: attrName _: attrValue
+	"Fixed-arity form of the same unbound-method dispatch — handles
+	codegen paths that emit the ``_:_:_:'' positional selector
+	instead of the ``:kw:'' varargs form.  Matches the dispatch in
+	``___setattr__:kw:''."
+
+	^ instance @env1:___pyAttrStore___: attrName put: attrValue
+%
+
 category: 'Grail-Convenience Methods'
 classmethod: object
 __class_getitem__: item

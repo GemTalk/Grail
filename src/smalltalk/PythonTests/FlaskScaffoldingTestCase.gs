@@ -5071,3 +5071,28 @@ testWerkzeugRoutingImports
 	self assert: mod @env1:import_succeeded equals: true.
 	self assert: mod @env1:rule_constructs equals: '/hello'
 %
+
+category: 'Grail-Tests - werkzeug'
+method: FlaskScaffoldingTestCase
+testWerkzeugLocalImports
+	"werkzeug.local — Local / LocalStack / LocalManager / LocalProxy +
+	release_local.  Step 8 lands the upstream source-drop with two
+	in-place patches noted in the probe header (_ProxyDescriptor.__call__
+	and the lambda forwarding the proxied __call__ both simplified
+	around Grail's *args/**kwargs codegen limits).  Module-init depends
+	on the new contextvars stub and the imatmul/ilshift/etc. additions
+	to the operator stdlib stub."
+
+	| mod mods keys |
+	mods := importlib @env1:modules.
+	keys := mods @env0:keys @env0:select: [:k |
+		(k @env0:asString @env0:= 'werkzeug')
+			@env0:or: [(k @env0:asString @env0:indexOfSubCollection: 'werkzeug.') @env0:> 0]].
+	keys @env0:do: [:k | mods @env0:removeKey: k ifAbsent: []].
+	mods @env0:removeKey: #'use_werkzeug_local' ifAbsent: [].
+	mod := self loadFixture: 'use_werkzeug_local'.
+	self assert: mod @env1:import_succeeded equals: true.
+	self assert: mod @env1:public_surface_present equals: true.
+	self assert: mod @env1:local_constructs equals: true.
+	self assert: mod @env1:local_stack_constructs equals: true
+%
