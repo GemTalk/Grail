@@ -4985,3 +4985,25 @@ testWerkzeugDatastructuresImports
 	self assert: mod @env1:immutable_dict_rejects_set equals: 'caught'.
 	self assert: mod @env1:iter_multi_items_runs equals: true
 %
+
+category: 'Grail-Tests - werkzeug'
+method: FlaskScaffoldingTestCase
+testWerkzeugHttpImports
+	"werkzeug.http — RFC date / cookie / Accept / Authorization /
+	ETag parsing.  Step 3 lands the full ~1400 LOC upstream file.
+	Probe smoke-tests the import + two simple helpers
+	(quote_header_value and dump_header) that don't pull in the
+	deeper sansio / multipart paths."
+
+	| mod mods keys |
+	mods := importlib @env1:modules.
+	keys := mods @env0:keys @env0:select: [:k |
+		(k @env0:asString @env0:= 'werkzeug')
+			@env0:or: [(k @env0:asString @env0:indexOfSubCollection: 'werkzeug.') @env0:> 0]].
+	keys @env0:do: [:k | mods @env0:removeKey: k ifAbsent: []].
+	mods @env0:removeKey: #'use_werkzeug_http' ifAbsent: [].
+	mod := self loadFixture: 'use_werkzeug_http'.
+	self assert: mod @env1:import_succeeded equals: true.
+	self assert: mod @env1:quote_header_value_basic equals: '"text/html"'.
+	self assert: mod @env1:dump_header_simple equals: 'charset="UTF-8"'
+%

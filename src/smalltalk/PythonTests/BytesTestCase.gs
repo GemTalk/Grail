@@ -1186,3 +1186,24 @@ testEvalEmptyBytes
 	self assert: (result isKindOf: ByteArray).
 	self assert: result size equals: 0.
 %
+
+category: 'Grail-Tests - Bytes Methods'
+method: BytesTestCase
+test__mod__formatting
+	"``bytes % args'' — printf-style on bytes (Python 3.5+).
+	Werkzeug.http's cookie quoting builds the escape table via
+	``b'\\%03o' % v'' for each octet 0..31.  Grail delegates to
+	the str formatter (latin1 round-trip) — sufficient for ASCII
+	format specs."
+
+	| b r |
+	"%o (octal) — width-spec handling like %03o is a separate
+	str.__mod__ gap, so this test uses unpadded forms."
+	b := bytes @env1:__new__: '\\%o' _: 'latin1'.
+	r := b @env1:__mod__: 7.
+	self assert: r equals: (bytes @env1:__new__: '\\7' _: 'latin1').
+	"Multiple args via tuple."
+	b := bytes @env1:__new__: '%d-%d' _: 'latin1'.
+	r := b @env1:__mod__: (tuple @env1:__new__: { 1. 2 }).
+	self assert: r equals: (bytes @env1:__new__: '1-2' _: 'latin1')
+%

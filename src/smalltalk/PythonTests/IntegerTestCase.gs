@@ -680,3 +680,24 @@ testEvalNegation
 	self assert: (self eval: '--5') equals: 5.
 	self assert: (self eval: '+5') equals: 5.
 %
+
+category: 'Grail-Tests'
+method: IntegerTestCase
+testToBytesTwoArgForm
+	"``int.to_bytes(length, byteorder)'' 2-arg form previously
+	dispatched to ``to_bytes:byteorder:signed:'' which doesn't
+	exist (the inner call accidentally used Python-keyword syntax
+	instead of Grail's ``_:'' convention).  Werkzeug.http's cookie
+	encoder hits this via ``v.to_bytes(1, 'big')''.  Now delegates
+	to the 3-arg form with signed=False."
+
+	| r1 r2 |
+	r1 := 1 @env1:to_bytes: 1 _: 'big'.
+	r2 := 256 @env1:to_bytes: 2 _: 'big'.
+	"to_bytes currently returns a tuple, not bytes — separate gap."
+	self assert: r1 size equals: 1.
+	self assert: (r1 @env0:at: 1) equals: 1.
+	self assert: r2 size equals: 2.
+	self assert: (r2 @env0:at: 1) equals: 1.
+	self assert: (r2 @env0:at: 2) equals: 0
+%

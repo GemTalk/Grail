@@ -68,6 +68,60 @@ __new__: obj
 	^ result
 %
 
+category: 'Grail-Initialization'
+classmethod: CharacterCollection
+__new__: obj _: encoding
+	"Create a str from a bytes-like ``obj'' by decoding under
+	``encoding'' — the 2-arg form of Python's str() constructor.
+	Werkzeug.http uses ``str(value, 'utf-8')'' to turn header
+	bytes into text.  Delegates to bytes.decode for the actual
+	conversion."
+
+	(obj @env0:isKindOf: ByteArray) ifTrue: [
+		^ obj @env1:decode: encoding
+	].
+	(obj @env0:isKindOf: CharacterCollection) ifTrue: [
+		"CPython rejects str(str, encoding) with TypeError —
+		``decoding str is not supported''.  Match the shape."
+		TypeError @env1:___signal___: 'decoding str is not supported'
+	].
+	^ self @env1:__new__: obj
+%
+
+category: 'Grail-Initialization'
+classmethod: CharacterCollection
+__new__: obj _: encoding _: errors
+	"3-arg form: ``str(bytes_obj, encoding, errors)''.  Errors policy
+	is honored by bytes.decode (currently ignored — Grail's decoders
+	either succeed or raise) — accepted for parity."
+
+	^ self @env1:__new__: obj _: encoding
+%
+
+category: 'Grail-Initialization'
+classmethod: CharacterCollection
+_str: positional kw: kwargs
+	"Varargs entry for ``str(*args, **kwargs)'' so the Python call
+	site dispatches through a single selector regardless of arity.
+	Routes by positional count + optional encoding kwarg."
+
+	| nargs encoding errors obj |
+	nargs := positional @env0:size.
+	nargs @env0:= 0 ifTrue: [^ self @env1:__new__].
+	obj := positional @env0:at: 1.
+	nargs @env0:= 1 ifTrue: [
+		(kwargs @env0:isNil @env0:not
+			and: [kwargs @env0:includesKey: 'encoding']) ifTrue: [
+			^ self @env1:__new__: obj _: (kwargs @env0:at: 'encoding')
+		].
+		^ self @env1:__new__: obj
+	].
+	encoding := positional @env0:at: 2.
+	nargs @env0:= 2 ifTrue: [^ self @env1:__new__: obj _: encoding].
+	errors := positional @env0:at: 3.
+	^ self @env1:__new__: obj _: encoding _: errors
+%
+
 category: 'Grail-String Methods'
 classmethod: CharacterCollection
 maketrans

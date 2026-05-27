@@ -821,9 +821,13 @@ real
 category: 'Grail-Integer Methods'
 method: int
 to_bytes: length _: byteorder
-	"int.to_bytes(length, byteorder='big', *, signed=False)"
+	"int.to_bytes(length, byteorder='big', *, signed=False) —
+	2-arg form, delegates to the 3-arg form with signed=false.
+	The selector was previously ``to_bytes:byteorder:signed:'' which
+	doesn't exist (Python-keyword style accidentally used instead
+	of Grail's ``_:'' convention)."
 
-	^ self to_bytes: length byteorder: byteorder signed: false
+	^ self @env1:to_bytes: length _: byteorder _: false
 %
 
 category: 'Grail-Integer Methods'

@@ -242,6 +242,22 @@ maketrans: frm _: to
 	^ table
 %
 
+category: 'Grail-String Operations'
+method: bytes
+__mod__: args
+	"``bytes % args'' printf-style formatting (CPython 3.5+).  Grail
+	delegates to the str formatter: decode the format spec as
+	latin1 (round-trips arbitrary bytes), format using args, then
+	re-encode the result.  Lossy for non-latin1 args but covers
+	Werkzeug.http's cookie escape table (``b'\\%03o' % v'')
+	which only uses ASCII format specs."
+
+	| fmt formatted |
+	fmt := self @env1:decode: 'latin1'.
+	formatted := fmt @env1:__mod__: args.
+	^ formatted @env1:encode: 'latin1'
+%
+
 category: 'Grail-Concatenation'
 method: bytes
 __add__: other

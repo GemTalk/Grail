@@ -1035,3 +1035,31 @@ testEncodeUnknownEncodingRaisesLookupError
 		'hello' @env1:encode: 'codepage1252'
 	] raise: LookupError
 %
+
+category: 'Grail-Initialization'
+method: StrTestCase
+testStrFromBytesWithEncoding
+	"``str(bytes_obj, 'utf-8')'' — 2-arg constructor form used by
+	werkzeug.http for header decoding.  Before the fix,
+	CharacterCollection class had ``__new__:'' only (single arg);
+	the 2-arg call hit MNU.  Now delegates to ByteArray>>decode:."
+
+	| b s |
+	b := bytes @env1:__new__: 'hello' _: 'ascii'.
+	s := str @env1:__new__: b _: 'utf-8'.
+	self assert: s equals: 'hello'.
+	"latin1 round-trip — WSGI's standard byte-smuggling encoding."
+	s := str @env1:__new__: b _: 'latin1'.
+	self assert: s equals: 'hello'
+%
+
+category: 'Grail-Initialization'
+method: StrTestCase
+testStrFromStrWithEncodingRaisesTypeError
+	"CPython rejects ``str(some_str, encoding)'' with TypeError
+	(``decoding str is not supported'').  Grail matches the shape."
+
+	self should: [
+		str @env1:__new__: 'hello' _: 'utf-8'
+	] raise: TypeError
+%

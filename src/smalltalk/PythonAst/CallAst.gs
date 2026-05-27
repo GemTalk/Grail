@@ -184,6 +184,17 @@ printSmalltalkOn: aStream
 		^ self printBareCallVarargsOn: aStream selector: varargsSel
 	].
 
+	"Class-call fast path runs BEFORE the knownBuiltinName arity-
+	mismatch check below.  Without this, ``str(b, encoding)'' — which
+	matches a 2-arg ``__new__:_:'' on Unicode7's metaclass — would
+	get caught by the ``builtins has str:'' arity check and emit a
+	bogus TypeError instead of dispatching to the class constructor.
+	Names that ARE valid class calls take precedence over their
+	builtin-shorthand counterpart."
+	(self bareCallClassNewSelector) ifNotNil: [:newSel |
+		^ self printBareCallClassNewOn: aStream selector: newSel
+	].
+
 	"Both fast paths missed. If the name is a known builtin (some method
 	on builtins matches the base name), the call has wrong arity or kwarg
 	shape — emit a clean TypeError instead of falling through to the
