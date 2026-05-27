@@ -184,6 +184,46 @@ Each has a tracked root cause elsewhere in this file or in
   ``url_for()`` / ``Rule.build()`` raise on first use.  Blocks Flask
   reverse-routing.
 
+## Flask Source-Drop — Remaining Blockers
+
+Flask 3.1 source is dropped under ``src/python/stdlib/flask/`` and
+``import flask`` succeeds end-to-end.  Outstanding work to get
+``Flask(__name__).test_client().get('/')`` working:
+
+- [ ] **`flask/cli.py`** — hand-rolled minimal shim, NOT upstream.
+  Upstream applies ``@click.command'' / ``@click.option'' decorator
+  chains to module-level defs; Grail's codegen for module-scope
+  ``def'' compiles the body as a class method on the module class
+  without applying the decorator chain.  Module-init reads like
+  ``run_command.params.insert(...)'' then fail on a raw BoundMethod.
+  Replace the shim once module-level decorator chains land.
+  Upstream parked at ``cli_upstream.py.bak''.
+
+- [ ] **`werkzeug/datastructures/structures.py:961`** — ImmutableDict
+  base-order flipped + explicit ``__init__'' / ``__setitem__'' /
+  ``__delitem__''.  Upstream is ``ImmutableDict(ImmutableDictMixin[K,
+  V], dict[K, V])''; Grail's class machinery picks the first base
+  only, so dict has to be first.  The mixin's TypeError-on-setitem
+  semantics are then re-asserted via explicit overrides on the
+  subclass.  Resolve when multi-inheritance lands.
+
+- [ ] **`Flask(name)` constructor trips ``Boolean does not understand
+  value:value:''**.  Surfaced after the ImmutableDict fix unblocked
+  default_config.  Somewhere in the App.__init__ chain a bool value
+  is being invoked as a callable — needs further bisection.
+
+- [ ] **Class-call protocol for built-in-derived subclasses**.
+  ClassDefAst's synthesized ``value:value:'' does ``instance :=
+  self new'' then dispatches ``__init__''.  For user classes that
+  subclass ``dict'' / ``list'' / etc., the ``new'' produces an
+  empty Smalltalk-side instance and the inherited Python-level
+  ``__new__: source'' (which would populate from source) is
+  skipped.  Worked around per-class with explicit ``__init__''
+  overrides (see ImmutableDict above and ``dict.__init__:'' in
+  dict.gs).  Proper fix: when the receiver's class chain includes
+  a built-in mapped type, dispatch through the chain's
+  ``__new__:'' before falling through to ``__init__''.
+
 ## Architectural Cleanup (Non-blocking)
 
 - [ ] **`module` still inherits from `SymbolDictionary`** — deferred

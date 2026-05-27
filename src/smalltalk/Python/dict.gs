@@ -169,6 +169,43 @@ __class__
 	^ dict
 %
 
+category: 'Grail-Initialization'
+method: dict
+__init__
+	"0-arg dict initializer — receiver is already empty; nothing
+	to do.  Provided so user subclasses calling ``super().__init__()''
+	via the ``Super'' proxy find a parent method on dict's chain."
+	^ None
+%
+
+category: 'Grail-Initialization'
+method: dict
+__init__: source
+	"1-arg dict initializer — populate self from ``source''.
+	Mirrors CPython ``dict.__init__(other)'' which copies entries
+	from a mapping (anything with ``items()'') or an iterable of
+	(key, value) pairs.  Provided so user subclasses that call
+	``super().__init__(defaults)'' (e.g. flask.config.Config) get
+	the source-copy behaviour instead of bouncing off the
+	``no parent method __init__'' miss."
+
+	source @env0:== nil ifTrue: [^ None].
+	source @env0:== None ifTrue: [^ None].
+	(source @env0:isKindOf: KeyValueDictionary) ifTrue: [
+		source @env0:keysAndValuesDo: [:_k :_v |
+			self @env0:at: _k put: _v].
+		^ None].
+	"Mapping protocol: iterate keys + index by [k]."
+	((source @env0:class @env0:whichClassIncludesSelector: #'keys' environmentId: 1) notNil) ifTrue: [
+		(source @env1:keys) @env0:do: [:k |
+			self @env0:at: k put: (source @env1:__getitem__: k)].
+		^ None].
+	"Iterable of (k, v) pairs — fall back to plain do."
+	source @env0:do: [:pair |
+		self @env0:at: (pair @env0:at: 1) put: (pair @env0:at: 2)].
+	^ None
+%
+
 category: 'Grail-Collection Protocol'
 method: dict
 __contains__: key

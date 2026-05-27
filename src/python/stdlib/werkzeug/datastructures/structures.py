@@ -958,11 +958,45 @@ class CombinedMultiDict(ImmutableMultiDictMixin[K, V], MultiDict[K, V]):  # type
         return f"{type(self).__name__}({self.dicts!r})"
 
 
-class ImmutableDict(ImmutableDictMixin[K, V], dict[K, V]):  # type: ignore[misc]
+class ImmutableDict(dict[K, V], ImmutableDictMixin[K, V]):  # type: ignore[misc]
     """An immutable :class:`dict`.
 
     .. versionadded:: 0.5
+
+    Grail-patched (two changes):
+      1. Base order flipped — upstream is
+         ``(ImmutableDictMixin[K, V], dict[K, V])``.  Grail's class
+         machinery picks the FIRST base only; with ``dict'' first
+         the instance inherits KeyValueDictionary's __iter__ /
+         __getitem__ / __contains__ / __len__.  Mixin immutability
+         is partial — direct ``setitem'' on the underlying KVDict
+         still mutates; user code that abides by the contract
+         treats the instance as immutable anyway.
+      2. Explicit ``__init__'' that copies from source.  Grail's
+         synthesized class-call protocol creates a fresh empty
+         instance via ``new'' and then invokes ``__init__'' — it
+         doesn't walk the parent's ``__new__'' chain that would
+         otherwise populate the dict.  Subclasses of ``dict'' in
+         the upstream source rely on the inherited ``__new__'';
+         Grail needs an explicit init to wire the source copy.
     """
+
+    def __init__(self, source=None, **kwargs):
+        if source is not None:
+            if hasattr(source, 'items'):
+                for k, v in source.items():
+                    dict.__setitem__(self, k, v)
+            else:
+                for k, v in source:
+                    dict.__setitem__(self, k, v)
+        for k, v in kwargs.items():
+            dict.__setitem__(self, k, v)
+
+    def __setitem__(self, key, value):
+        raise TypeError(repr(type(self).__name__) + ' objects are immutable')
+
+    def __delitem__(self, key):
+        raise TypeError(repr(type(self).__name__) + ' objects are immutable')
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({dict.__repr__(self)})"

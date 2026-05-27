@@ -68,7 +68,43 @@ initialize
 category: 'Grail-Path Manipulation'
 method: os_path
 join: paths
-	"os.path.join(paths) — join path components. Takes a collection."
+	"os.path.join(path) — 1-arg form.  Python's os.path.join is
+	variadic; this entry matches the ``join(arg)'' call shape and
+	just returns the arg if it's a single path string, or joins
+	the elements when called with a list/tuple.  Variadic calls
+	``join(a, b, c)'' go through ``_join:kw:'' (2+ positional args)."
+
+	((paths @env0:isKindOf: CharacterCollection)) ifTrue: [^ paths].
+	^ self ___joinComponents___: paths
+%
+
+category: 'Grail-Path Manipulation'
+method: os_path
+join: aPath _: anotherPath
+	"os.path.join(a, b) — 2-arg fast path.  Joins two path strings
+	with the standard separator semantics: if ``anotherPath''
+	starts with ``/'' it replaces ``aPath''; if ``aPath'' ends with
+	``/'' the separator isn't doubled."
+
+	^ self ___joinComponents___: (Array @env0:with: aPath with: anotherPath)
+%
+
+category: 'Grail-Path Manipulation'
+method: os_path
+_join: positional kw: kwargs
+	"os.path.join(a, b, c, ...) — varargs form.  Python's join
+	walks the positional args left-to-right.  Empty call is the
+	empty string."
+
+	^ self ___joinComponents___: positional
+%
+
+category: 'Grail-Path Manipulation'
+method: os_path
+___joinComponents___: paths
+	"Internal helper — apply Python's os.path.join semantics over
+	an indexable collection of path strings.  Empty → ''; absolute
+	component restarts; trailing separator avoids doubling."
 
 	| result sep size |
 	(paths @env0:isEmpty) ifTrue: [^ ''].
