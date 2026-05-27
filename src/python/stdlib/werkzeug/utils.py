@@ -55,24 +55,52 @@ def redirect(location, code=302, Response=None):
     return cls(body, status=code, headers=[('Location', location)])
 
 
-def header_property(name, default=None, load_func=None, dump_func=None,
-                    doc=None, read_only=False):
-    """Stub for header_property factory.  Returns a sentinel that the
-    PropertyDescriptor shim consumes when assigned at class scope.
-    Werkzeug routing doesn't use this; placed here so other modules
-    that import it find the name."""
-    return PropertyDescriptor(name)
+class header_property:
+    """Stub class — upstream is ``class header_property(_DictAccessorProperty[T])''.
+    Grail keeps the name as a callable class (not a function) so that
+    upstream class-body subscript patterns like
+    ``header_property[str](...)'' don't blow up on
+    ``__getitem__:'' over a BoundMethod-wrapped function.
+
+    Real descriptor behaviour is not implemented — instances just
+    carry the bound name."""
+
+    def __init__(self, name, default=None, load_func=None, dump_func=None,
+                 doc=None, read_only=False):
+        self.name = name
+        self.default = default
+        self.load_func = load_func
+        self.dump_func = dump_func
+        self.__doc__ = doc
+        self.read_only = read_only
+
+    def __class_getitem__(cls, item):
+        """PEP 560 subscript — ``header_property[str]'' returns the
+        class itself so the result is still callable for the
+        constructor invocation that follows."""
+        return cls
 
 
-def environ_property(name, default=None, load_func=None, dump_func=None,
-                     read_only=False, doc=None):
-    """Stub for environ_property factory."""
-    return PropertyDescriptor(name)
+class environ_property:
+    """Stub class — mirror of ``header_property'' for WSGI environ."""
+
+    def __init__(self, name, default=None, load_func=None, dump_func=None,
+                 read_only=True, doc=None):
+        self.name = name
+        self.default = default
+        self.load_func = load_func
+        self.dump_func = dump_func
+        self.read_only = read_only
+        self.__doc__ = doc
+
+    def __class_getitem__(cls, item):
+        return cls
 
 
 class PropertyDescriptor:
-    """Sentinel class used by header_property / environ_property
-    factories when the full descriptor protocol isn't available."""
+    """Legacy sentinel kept for callers that imported it from the
+    old function-based shim — header_property / environ_property
+    are now real classes."""
 
     def __init__(self, name=None):
         self.name = name

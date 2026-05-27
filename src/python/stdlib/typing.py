@@ -71,6 +71,11 @@ AsyncGenerator = _StubGeneric('AsyncGenerator')
 AsyncIterable = _StubGeneric('AsyncIterable')
 AsyncIterator = _StubGeneric('AsyncIterator')
 ContextManager = _StubGeneric('ContextManager')
+IO = _StubGeneric('IO')
+TextIO = _StubGeneric('TextIO')
+BinaryIO = _StubGeneric('BinaryIO')
+Pattern = _StubGeneric('Pattern')
+Match = _StubGeneric('Match')
 
 
 # TypeVar / Generic / Protocol ------------------------------------------------

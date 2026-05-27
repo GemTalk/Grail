@@ -192,6 +192,7 @@ run
 	at: #'ModuleNotFoundError' put: nil;
 	at: #'NameError' put: nil;
 	at: #'None' put: nil;
+	at: #'Ellipsis' put: nil;
 	at: #'NoneType' put: nil;
 	at: #'NotADirectoryError' put: nil;
 	at: #'NotImplementedError' put: nil;
@@ -635,6 +636,7 @@ run
 	at: #'True'                       put: true;
 	at: #'False'                      put: false;
 	at: #'__debug__'                  put: true;
+	at: #'Ellipsis'                   put: #'...' asSymbol;
   "Python names that map to existing GemStone classes"
 	at: #'bool'                       put: Boolean;
 	at: #'builtin_function_or_method' put: GsNMethod;
