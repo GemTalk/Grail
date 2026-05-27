@@ -9,7 +9,7 @@ doit
 module subclass: 'importlib'
   instVarNames: #()
   classVars: #()
-  classInstVars: #('grailDir')
+  classInstVars: #('grailDir' 'codegenTraceDir' 'codegenTraceDirChecked')
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -311,9 +311,9 @@ loadModuleFromPath: pathString name: moduleName
 	CallAst moduleFunctionNames: functionNames.
 	CallAst moduleVariableNames: variables.
 	[
-		| debugStream debugClassName tpzPath irPath |
+		| debugStream debugClassName tpzPath irPath traceDir |
 		"Accumulate every method source we hand to compileMethod: into a
-		Topaz-style input file under /tmp/grail/.  One file per module
+		Topaz-style input file under <traceDir>/.  One file per module
 		(``__main__'' for the script under runPath:, plus every
 		transitively imported module), keyed by Python name, so a
 		reader can see all the generated Smalltalk in one place.
@@ -323,36 +323,44 @@ loadModuleFromPath: pathString name: moduleName
 		``module subclass: ...'', not via a topaz ``doit''.  The
 		``category:'' / ``method:'' / ``%'' framing is a debugging aid
 		that mirrors what GemStone would see if you compiled the
-		methods by hand."
-		self ___ensureDebugDirectory___.
-		tpzPath := '/tmp/grail/' , moduleName , '.tpz'.
-		irPath := '/tmp/grail/' , moduleName , '.ir'.
-		debugStream := PrettyWriteStream on: Unicode7 new.
-		debugClassName := moduleClassName asString.
-		debugStream
-			nextPutAll: '! '; nextPutAll: tpzPath;
-			nextPutAll: ' — methods compiled by loadModuleFromPath:'; lf;
-			nextPutAll: '! Module: '; nextPutAll: moduleName;
-			nextPutAll: '   Class: '; nextPutAll: debugClassName; lf; lf;
-			"The subclass: call that loadModuleFromPath: makes to create
-			the module class.  Phase A: instVarNames is empty — module
-			globals live in dynamicInstVarAt: storage.  The parser-seen
-			names are emitted as a header comment for reference."
-			nextPutAll: '! Phase A module-scope names ('.
-		variableNames do: [:n |
-			debugStream space; nextPutAll: n asString].
-		debugStream
-			nextPutAll: ' ) — stored via dynamicInstVarAt:put:'; lf;
-			nextPutAll: 'doit'; lf;
-			nextPutAll: 'module subclass: '''; nextPutAll: debugClassName; nextPutAll: ''''; lf;
-			nextPutAll: '  instVarNames: #()'; lf;
-			nextPutAll: '  classVars: #()'; lf;
-			nextPutAll: '  classInstVars: #()'; lf;
-			nextPutAll: '  poolDictionaries: #()'; lf;
-			nextPutAll: '  inDictionary: PythonModules'; lf;
-			nextPutAll: '  options: #()'; lf;
-			nextPutAll: '%'; lf; lf;
-			nextPutAll: 'set compile_env: 1'; lf; lf.
+		methods by hand.
+
+		Tracing is OPT-IN: ``___codegenTraceDir___'' returns the value
+		of the ``GRAIL_CODEGEN_TRACE_DIR'' env var, or nil if unset.
+		When nil, every ``traceDir ifNotNil:'' block below is skipped —
+		no debug-stream writes, no file I/O, no IR snapshot.  The
+		compile path is unaffected."
+		traceDir := self ___codegenTraceDir___.
+		traceDir ifNotNil: [
+			tpzPath := traceDir , '/' , moduleName , '.tpz'.
+			irPath := traceDir , '/' , moduleName , '.ir'.
+			debugStream := PrettyWriteStream on: Unicode7 new.
+			debugClassName := moduleClassName asString.
+			debugStream
+				nextPutAll: '! '; nextPutAll: tpzPath;
+				nextPutAll: ' — methods compiled by loadModuleFromPath:'; lf;
+				nextPutAll: '! Module: '; nextPutAll: moduleName;
+				nextPutAll: '   Class: '; nextPutAll: debugClassName; lf; lf;
+				"The subclass: call that loadModuleFromPath: makes to create
+				the module class.  Phase A: instVarNames is empty — module
+				globals live in dynamicInstVarAt: storage.  The parser-seen
+				names are emitted as a header comment for reference."
+				nextPutAll: '! Phase A module-scope names ('.
+			variableNames do: [:n |
+				debugStream space; nextPutAll: n asString].
+			debugStream
+				nextPutAll: ' ) — stored via dynamicInstVarAt:put:'; lf;
+				nextPutAll: 'doit'; lf;
+				nextPutAll: 'module subclass: '''; nextPutAll: debugClassName; nextPutAll: ''''; lf;
+				nextPutAll: '  instVarNames: #()'; lf;
+				nextPutAll: '  classVars: #()'; lf;
+				nextPutAll: '  classInstVars: #()'; lf;
+				nextPutAll: '  poolDictionaries: #()'; lf;
+				nextPutAll: '  inDictionary: PythonModules'; lf;
+				nextPutAll: '  options: #()'; lf;
+				nextPutAll: '%'; lf; lf;
+				nextPutAll: 'set compile_env: 1'; lf; lf.
+		].
 
 		"Compile real methods for each top-level def.
 		Resume CompileWarning because function params may shadow module-
@@ -363,11 +371,13 @@ loadModuleFromPath: pathString name: moduleName
 			methodStream := PrettyWriteStream on: Unicode7 new.
 			stmt generateModuleMethodSourceOn: methodStream.
 			methodSource2 := methodStream contents.
-			debugStream
-				nextPutAll: 'category: ''Grail-Methods'''; lf;
-				nextPutAll: 'method: '; nextPutAll: debugClassName; lf.
-			self ___writeMethodSource: methodSource2 on: debugStream.
-			debugStream nextPutAll: '%'; lf; lf.
+			traceDir ifNotNil: [
+				debugStream
+					nextPutAll: 'category: ''Grail-Methods'''; lf;
+					nextPutAll: 'method: '; nextPutAll: debugClassName; lf.
+				self ___writeMethodSource: methodSource2 on: debugStream.
+				debugStream nextPutAll: '%'; lf; lf.
+			].
 			[moduleClass compileMethod: methodSource2
 				dictionaries: sl
 				category: 'Grail-Methods'
@@ -387,16 +397,18 @@ loadModuleFromPath: pathString name: moduleName
 		are valid Python (Python evaluates the expression and discards
 		the result)."
 		methodSource := 'initialize' , lf , stream contents.
-		debugStream
-			nextPutAll: 'category: ''Grail-Module Body'''; lf;
-			nextPutAll: 'method: '; nextPutAll: debugClassName; lf.
-		self ___writeMethodSource: methodSource on: debugStream.
-		debugStream nextPutAll: '%'; lf.
-		"Write as UTF-8 bytes so editors that don't auto-detect
-		UTF-16 (most of them) render the file correctly."
-		(GsFile open: tpzPath mode: 'wb' onClient: false)
-			nextPutAll: debugStream contents encodeAsUTF8;
-			close.
+		traceDir ifNotNil: [
+			debugStream
+				nextPutAll: 'category: ''Grail-Module Body'''; lf;
+				nextPutAll: 'method: '; nextPutAll: debugClassName; lf.
+			self ___writeMethodSource: methodSource on: debugStream.
+			debugStream nextPutAll: '%'; lf.
+			"Write as UTF-8 bytes so editors that don't auto-detect
+			UTF-16 (most of them) render the file correctly."
+			(GsFile open: tpzPath mode: 'wb' onClient: false)
+				nextPutAll: debugStream contents encodeAsUTF8;
+				close.
+		].
 		[moduleClass compileMethod: methodSource
 			dictionaries: sl
 			category: 'Grail-Module Body'
@@ -406,10 +418,12 @@ loadModuleFromPath: pathString name: moduleName
 		"Debug aid: capture the IR tree for the body's initialize method
 		(the last thing compiled here, before the accessor sweep below).
 		Snapshot now so subsequent compileMethod: calls don't overwrite
-		__sessionStateAt: 19.  One IR file per module under /tmp/grail/."
-		(GsFile open: irPath mode: 'w' onClient: false)
-			nextPutAll: (System __sessionStateAt: 19) printString;
-			close.
+		__sessionStateAt: 19.  One IR file per module under <traceDir>/."
+		traceDir ifNotNil: [
+			(GsFile open: irPath mode: 'w' onClient: false)
+				nextPutAll: (System __sessionStateAt: 19) printString;
+				close.
+		].
 	] ensure: [
 		CallAst moduleClassBeingCompiled: nil.
 		CallAst moduleFunctionNames: nil.
@@ -535,13 +549,20 @@ runPath: pathString
 	"Execute a Python file as __main__ (like running 'python3 file.py').
 
 	Routes through loadModuleFromPath: so class definitions, top-level
-	`def`s, and module body share one codegen path.  As a side effect,
-	loadModuleFromPath: captures every method source it compiles to
-	/tmp/grail/<module>.tpz (Topaz-style framing with ``category:'' /
-	``method:'' / ``%'') and the body initialize IR tree to
-	/tmp/grail/<module>.ir.  ``runPath:'' itself sees a file at
-	/tmp/grail/__main__.tpz; transitively imported modules show up
-	beside it (itertools.tpz, urllib.parse.tpz, ...).
+	`def`s, and module body share one codegen path.
+
+	OPT-IN codegen tracing: when the ``GRAIL_CODEGEN_TRACE_DIR'' env
+	var is set, loadModuleFromPath: captures every method source it
+	compiles to ``<dir>/<module>.tpz'' (Topaz-style framing with
+	``category:'' / ``method:'' / ``%'') and the body initialize IR
+	tree to ``<dir>/<module>.ir''.  ``runPath:'' itself sees a file
+	at ``<dir>/__main__.tpz''; transitively imported modules show up
+	beside it (itertools.tpz, urllib.parse.tpz, ...).  When the env
+	var is unset (default), no debug capture happens — saves
+	O(generated-source-size) per module load.
+
+	Example:
+	    GRAIL_CODEGEN_TRACE_DIR=/tmp/grail topaz -l < session.tpz
 
 	importlib runPath: '/path/to/script.py'.
 	"
@@ -603,15 +624,43 @@ irForPath: pathString
 
 category: 'Grail-Class Compilation'
 classmethod: importlib
-___ensureDebugDirectory___
-	"Create /tmp/grail/ if it doesn't already exist.  Called once
-	per loadModuleFromPath: to make the debug-file write safe even
-	on a fresh /tmp.  Idempotent: createServerDirectory: is skipped
-	when the directory already exists."
+___codegenTraceDir___
+	"Return the codegen-trace output directory, or nil if tracing is
+	off.  Reads ``GRAIL_CODEGEN_TRACE_DIR'' from the gem environment
+	the first time it's asked and caches the result on the class so
+	repeated calls don't re-poll the OS.
 
-	(GsFile existsOnServer: '/tmp/grail') ifFalse: [
-		GsFile createServerDirectory: '/tmp/grail'
+	When set, loadModuleFromPath: writes:
+	  <dir>/<module>.tpz  — Topaz-style source dump
+	  <dir>/<module>.ir   — initialize method IR snapshot
+
+	When unset (default), no debug capture happens — saves O(generated-
+	source-size) PrettyWriteStream work per module load.  Repeat the
+	first call by ``importlib ___codegenTraceDirInvalidate___'' after
+	changing the env var mid-session."
+
+	codegenTraceDirChecked == true ifTrue: [^ codegenTraceDir].
+	codegenTraceDir := System @env0:gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR'.
+	(codegenTraceDir notNil and: [codegenTraceDir isEmpty])
+		ifTrue: [codegenTraceDir := nil].
+	codegenTraceDirChecked := true.
+	codegenTraceDir ifNotNil: [
+		(GsFile existsOnServer: codegenTraceDir) ifFalse: [
+			GsFile createServerDirectory: codegenTraceDir
+		].
 	].
+	^ codegenTraceDir
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___codegenTraceDirInvalidate___
+	"Clear the cached trace-dir value so the next ``___codegenTraceDir___''
+	re-reads the env variable.  Useful when toggling the variable from
+	a topaz session for ad-hoc debugging."
+
+	codegenTraceDir := nil.
+	codegenTraceDirChecked := false.
 %
 
 category: 'Grail-Class Compilation'
@@ -625,7 +674,8 @@ ___writeMethodSource: aSource on: aStream
 	  (blank)
 	  <indented body>
 
-	Called by the /tmp/grail.tpz debug capture in loadModuleFromPath:
+	Called by the codegen-trace capture in loadModuleFromPath: (opt-in
+	via the ``GRAIL_CODEGEN_TRACE_DIR'' env var; see ``runPath:'' header)
 	so each method written to that file reads like a hand-written
 	Topaz method definition rather than a flat source dump.
 
@@ -894,16 +944,28 @@ ___import__: positional kw: kwargs
 	that is an as-yet-unloaded submodule is loaded so the subsequent
 	attribute access in the importer finds something.  Once
 	loadModuleFromPath: returns, the parent-binding has already
-	happened via registerModule:."
+	happened via registerModule:.
+
+	Guard: if the parent module already exposes ``fromName'' as an
+	attribute (re-exported class / function / value), do NOT attempt
+	to load a sibling submodule with the same name.  Case-insensitive
+	filesystems (macOS HFS+) otherwise resolve ``parent.Headers'' to
+	a sibling ``headers.py'' submodule and clobber the re-exported
+	class with the submodule object."
 	fromlist __len__ @env0:> 0 ifTrue: [
 		fromlist @env0:do: [:fromName |
-			| subName subPath |
-			subName := (absoluteName @env0:, '.') @env0:, fromName @env0:asString.
-			(self @env0:class lookupModule: subName) ifNil: [
-				subPath := self @env0:class ___moduleNameToPath___: subName.
-				subPath notNil ifTrue: [
-					self @env0:class
-						@env0:loadModuleFromPath: subPath name: subName.
+			| subName subPath alreadyBound |
+			alreadyBound := (result @env0:isKindOf: module)
+				ifTrue: [(result @env0:dynamicInstVarAt: fromName @env0:asSymbol) notNil]
+				ifFalse: [false].
+			alreadyBound ifFalse: [
+				subName := (absoluteName @env0:, '.') @env0:, fromName @env0:asString.
+				(self @env0:class lookupModule: subName) ifNil: [
+					subPath := self @env0:class ___moduleNameToPath___: subName.
+					subPath notNil ifTrue: [
+						self @env0:class
+							@env0:loadModuleFromPath: subPath name: subName.
+					]
 				]
 			]
 		]

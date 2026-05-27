@@ -37,8 +37,17 @@ set compile_env: 0
 category: 'Grail-Setup'
 method: ImportlibTestCase
 setUp
-	"Initialize the builtin modules before each test"
-	importlib @env1:modules
+	"Initialize the builtin modules + enable codegen tracing.
+
+	Several ImportlibTestCase tests assert on the contents of
+	``/tmp/grail/<module>.tpz'' (the Topaz-style codegen capture);
+	the capture is OPT-IN as of the ``GRAIL_CODEGEN_TRACE_DIR'' env
+	var.  Set the var and invalidate the cached value so subsequent
+	``loadModuleFromPath:'' calls write the trace files."
+
+	importlib @env1:modules.
+	System @env0:gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR' put: '/tmp/grail'.
+	importlib ___codegenTraceDirInvalidate___
 %
 
 category: 'Grail-Tests - AST Generation'
