@@ -31,17 +31,16 @@ def public_surface_present():
 
 
 def cached_property_constructs():
-    """cached_property(func, name, doc) returns a descriptor that
-    stashes the wrapped function on .func.  Positional form used —
-    kwargs on user-class ctors aren't yet wired through the
-    fast-path dispatch."""
+    """cached_property(func, name=, doc=) returns a descriptor that
+    stashes the wrapped function on .func.  Kwargs reach __init__
+    so .__name__ ends up as ``'producer'''."""
     import werkzeug.utils as wu
 
     def producer(self):
         return 'cached'
 
-    cp = wu.cached_property(producer, 'producer', 'd')
-    return cp.func is producer
+    cp = wu.cached_property(producer, name='producer', doc='d')
+    return cp.func is producer and cp.__name__ == 'producer'
 
 
 def import_string_finds_module():
