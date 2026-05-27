@@ -139,6 +139,17 @@ class RequestedRangeNotSatisfiable(HTTPException):
         self.response = None
 
 
+class UnsupportedMediaType(HTTPException):
+    """415 — request entity has a media type the server can't process.
+    werkzeug.wrappers.Request.json raises this on bad Content-Type."""
+
+    def __init__(self, description=None):
+        self.code = 415
+        self.name = 'Unsupported Media Type'
+        self.description = description or 'Unsupported media type.'
+        self.response = None
+
+
 class InternalServerError(HTTPException):
     def __init__(self):
         self.code = 500
@@ -159,5 +170,6 @@ default_exceptions = {
     404: NotFound,
     405: MethodNotAllowed,
     413: RequestEntityTooLarge,
+    415: UnsupportedMediaType,
     500: InternalServerError,
 }

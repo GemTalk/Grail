@@ -105,3 +105,24 @@ def find_modules(import_path, include_packages=False, recursive=False):
     an empty iterator so callers that auto-discover via this still
     iterate safely (just over nothing)."""
     return iter([])
+
+
+_charset_mimetypes = {
+    'application/ecmascript',
+    'application/javascript',
+    'application/sql',
+    'application/xml',
+    'application/xml-dtd',
+    'application/xml-external-parsed-entity',
+}
+
+
+def get_content_type(mimetype, charset):
+    """Return the full Content-Type string with charset appended for
+    text mimetypes.  werkzeug.test uses this when synthesizing the
+    multipart Content-Type header for EnvironBuilder POSTs."""
+    if (mimetype.startswith('text/')
+            or mimetype in _charset_mimetypes
+            or mimetype.endswith('+xml')):
+        return mimetype + '; charset=' + charset
+    return mimetype

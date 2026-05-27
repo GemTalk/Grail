@@ -31,3 +31,18 @@ def TemporaryFile(*args, **kwargs):
     raise NotImplementedError(
         "tempfile.TemporaryFile is not supported under Grail"
     )
+
+
+class SpooledTemporaryFile:
+    """Stub class — exposed so werkzeug.formparser's ``try: from
+    tempfile import SpooledTemporaryFile'' resolves the name.  Real
+    file-backed spooling is not supported under Grail.  Constructing
+    raises NotImplementedError so callers that try to actually use
+    it see the same fail loudly as TemporaryFile."""
+
+    def __init__(self, max_size=0, mode='w+b', buffering=-1,
+                 encoding=None, newline=None, suffix=None, prefix=None,
+                 dir=None, errors=None):
+        raise NotImplementedError(
+            "tempfile.SpooledTemporaryFile is not supported under Grail"
+        )

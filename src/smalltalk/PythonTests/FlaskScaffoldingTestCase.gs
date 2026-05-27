@@ -5121,3 +5121,29 @@ testWerkzeugUtilsImports
 	self assert: mod @env1:import_string_finds_module equals: true.
 	self assert: mod @env1:find_modules_is_empty equals: true
 %
+
+category: 'Grail-Tests - werkzeug'
+method: FlaskScaffoldingTestCase
+testWerkzeugTestImports
+	"werkzeug.test — hand-rolled minimal shim (EnvironBuilder,
+	Client, TestResponse, ClientRedirectError, Cookie,
+	create_environ, run_wsgi_app, encode_multipart).  Upstream
+	source-drop blocked on ``__getitem__:'' BoundMethod codegen at
+	transitive import time (werkzeug.wrappers.request annotations).
+	Saved as ``test_upstream.py.bak'' beside the shim for the rewrite."
+
+	| mod mods keys |
+	mods := importlib @env1:modules.
+	keys := mods @env0:keys @env0:select: [:k |
+		(k @env0:asString @env0:= 'werkzeug')
+			@env0:or: [(k @env0:asString @env0:indexOfSubCollection: 'werkzeug.') @env0:> 0]].
+	keys @env0:do: [:k | mods @env0:removeKey: k ifAbsent: []].
+	mods @env0:removeKey: #'use_werkzeug_test' ifAbsent: [].
+	mods @env0:removeKey: #'pkg_scaffolding.use_werkzeug_test' ifAbsent: [].
+	mod := self loadFixture: 'use_werkzeug_test'.
+	self assert: mod @env1:import_succeeded equals: true.
+	self assert: mod @env1:public_surface_present equals: true.
+	self assert: mod @env1:environ_builder_constructs equals: true.
+	self assert: mod @env1:environ_builder_get_environ equals: true.
+	self assert: mod @env1:client_calls_app equals: true
+%
