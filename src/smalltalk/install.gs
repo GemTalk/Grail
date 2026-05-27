@@ -477,6 +477,7 @@ run
 	at: #'Pep448StarredLiteralsTestCase' put: nil;
 	at: #'LambdaStarargsTestCase' put: nil;
 	at: #'ClassBodyMethodRefsTestCase' put: nil;
+	at: #'NonlocalClosureTestCase' put: nil;
 	at: #'FunctionRebindingTestCase' put: nil;
 	at: #'LiveDictTestCase' put: nil;
 	at: #'KwargsSplatTestCase' put: nil;
@@ -1063,6 +1064,7 @@ input src/smalltalk/PythonTests/EnumAutoImportTestCase.gs
 input src/smalltalk/PythonTests/Pep448StarredLiteralsTestCase.gs
 input src/smalltalk/PythonTests/LambdaStarargsTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyMethodRefsTestCase.gs
+input src/smalltalk/PythonTests/NonlocalClosureTestCase.gs
 input src/smalltalk/PythonTests/FunctionRebindingTestCase.gs
 input src/smalltalk/PythonTests/KwargsSplatTestCase.gs
 input src/smalltalk/PythonTests/SubclassNameAttrTestCase.gs

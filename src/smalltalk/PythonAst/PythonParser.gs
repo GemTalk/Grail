@@ -8,7 +8,7 @@ expectvalue /Class
 doit
 Object subclass: 'PythonParser'
   instVarNames: #( source tokens position variableStack classNesting writeStack
-                    blockingStack)
+                    blockingStack nonlocalStack)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -1656,7 +1656,15 @@ parseModule
 category: 'Grail-parsing - simple statements'
 method: PythonParser
 parseNonlocal
-	"Parse: nonlocal name, ..."
+	"Parse: nonlocal name, ...
+
+	Each declared name is also registered in the current scope's
+	nonlocalStack so popScope strips it from the variable + write
+	sets at scope exit.  Without that strip, an inner ``x = expr''
+	would declare a fresh Smalltalk temp for ``x'' that shadows the
+	outer scope's binding — Python's nonlocal contract is exactly
+	the opposite (assignments should reach the enclosing scope's
+	location)."
 
 	| tok names |
 	tok := self advance. "consume 'nonlocal'"
@@ -1665,6 +1673,7 @@ parseNonlocal
 	[self matchOp: ','] whileTrue: [
 		names add: self advance value asSymbol.
 	].
+	names do: [:n | nonlocalStack last add: n].
 	^self buildNode: NonlocalAst fields: (IdentityKeyValueDictionary new
 		at: #names put: names;
 		yourself) from: tok to: self lastToken
@@ -2747,23 +2756,37 @@ popScope
 	{variables. writes. hasReturnBlocking.}.  Callers that only care
 	about the variable set can ``first'' the result; callers that
 	build a BlockAst pass all three onto the node so codegen can
-	read body writes and the return-blocking flag directly."
+	read body writes and the return-blocking flag directly.
 
-	^ Array
-		with: variableStack removeLast
-		with: writeStack removeLast
-		with: blockingStack removeLast
+	The parallel nonlocal-names scope is popped at the same time;
+	its names are removed from the returned variable and write sets
+	so the enclosing FunctionDefAst codegen doesn't declare them as
+	Smalltalk temps for this block — letting writes propagate to
+	the outer scope's closure-captured location instead of binding
+	a fresh shadow."
+
+	| vars writes blocking nonlocals |
+	vars := variableStack removeLast.
+	writes := writeStack removeLast.
+	blocking := blockingStack removeLast.
+	nonlocals := nonlocalStack removeLast.
+	nonlocals do: [:n |
+		vars remove: n ifAbsent: [].
+		writes remove: n ifAbsent: [].
+	].
+	^ Array with: vars with: writes with: blocking
 %
 
 category: 'Grail-node construction'
 method: PythonParser
 pushScope
-	"Push a new variable scope (and the parallel write and
-	return-blocking scopes)."
+	"Push a new variable scope (and the parallel write,
+	return-blocking, and nonlocal-name scopes)."
 
 	variableStack add: IdentitySet new.
 	writeStack add: IdentitySet new.
 	blockingStack add: false.
+	nonlocalStack add: IdentitySet new.
 %
 
 category: 'Grail-node construction'
@@ -2848,6 +2871,8 @@ source: aString
 	writeStack add: IdentitySet new.
 	blockingStack := Array new.
 	blockingStack add: false.
+	nonlocalStack := Array new.
+	nonlocalStack add: IdentitySet new.
 	classNesting := 0.
 %
 
