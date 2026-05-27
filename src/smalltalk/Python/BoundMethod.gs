@@ -185,6 +185,21 @@ __call__: positional
 	^ self value: positional value: nil
 %
 
+category: 'Grail-Subscript'
+method: BoundMethod
+__getitem__: item
+	"PEP 585 generic alias support — ``type[X]'', ``list[int]'',
+	``Callable[..., T]'' etc. subscript a callable to record a
+	generic parameterisation that runtime doesn't enforce.  Grail
+	returns self so the subscript is a no-op pass-through; downstream
+	calls still dispatch through the underlying bound receiver/
+	selector.  Without this, code like
+	``t.cast(type[''Response''], response_wrapper)'' fails with
+	``__getitem__: not understood by BoundMethod''."
+
+	^ self
+%
+
 category: 'Grail-Callable'
 method: BoundMethod
 ___pyCallValue___: positional kw: kwargs

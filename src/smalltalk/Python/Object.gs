@@ -600,8 +600,14 @@ ___pyAttrLoad___: aSym
 	+ setter).  If no, ``attr:`` is just a method that happens to take
 	one arg — fall through to the ``BoundMethod`` wrap below."
 	isGenerated := self @env0:isKindOf: PythonInstance.
+	"Walk the full class chain for both the unary getter and the
+	1-arg setter — TestResponse(Response) inherits ``status'' /
+	``status:'' through two parent classes; checking only the
+	receiver's own ``methodDictForEnv:'' dict misses inherited
+	pairs and wraps the unary as a BoundMethod instead of treating
+	it as a property read."
 	(isGenerated
-		and: [(md @env0:includesKey: sym1)
+		and: [(self @env0:class @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil
 			and: [(self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil]])
 		ifTrue: [
 			| instVal metaclass |

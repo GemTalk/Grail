@@ -198,17 +198,29 @@ ___pyAttrLoad___: aSym
 	symVA := ('_' @env0:, s @env0:, ':kw:') @env0:asSymbol.
 	pickMethod := [:nargs :kwOk |
 		| candidate |
-		(kwOk and: [nargs @env0:= 0])
+		kwOk
 			ifTrue: [
-				candidate := self @env0:_lookupMethod: aSym.
-				candidate ifNotNil: [candidate]
-				ifNil: [self @env0:_lookupMethod: symVA]
-			] ifFalse: [
+				"No kwargs: try fixed-arity first, fall back to varargs."
 				nargs @env0:= 0 ifTrue: [candidate := self @env0:_lookupMethod: aSym].
 				nargs @env0:= 1 ifTrue: [candidate := self @env0:_lookupMethod: sym1].
 				nargs @env0:= 2 ifTrue: [candidate := self @env0:_lookupMethod: sym2].
 				nargs @env0:= 3 ifTrue: [candidate := self @env0:_lookupMethod: sym3].
 				candidate ifNil: [candidate := self @env0:_lookupMethod: symVA].
+				candidate
+			] ifFalse: [
+				"Kwargs present: ONLY varargs ``_<name>:kw:'' can accept
+				them.  A fixed-arity unary/keyword method on a superclass
+				(typically Object>>__init__ — the env-1 default no-op)
+				silently drops kwargs and the parent's real intent is
+				lost.  Try varargs first; only fall back to fixed-arity
+				if the parent class chain has no varargs entry."
+				candidate := self @env0:_lookupMethod: symVA.
+				candidate ifNil: [
+					nargs @env0:= 0 ifTrue: [candidate := self @env0:_lookupMethod: aSym].
+					nargs @env0:= 1 ifTrue: [candidate := self @env0:_lookupMethod: sym1].
+					nargs @env0:= 2 ifTrue: [candidate := self @env0:_lookupMethod: sym2].
+					nargs @env0:= 3 ifTrue: [candidate := self @env0:_lookupMethod: sym3].
+				].
 				candidate
 			]].
 	"Wrap (obj, pickMethod) in a callable proxy that resolves the
