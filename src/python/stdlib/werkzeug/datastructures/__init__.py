@@ -2,13 +2,10 @@
 #
 # Upstream re-exports ~30 names from accept / auth / cache_control /
 # csp / etag / file_storage / headers / mixins / range / structures.
-# Several of those submodules pull in werkzeug.http, werkzeug.urls,
-# werkzeug.exceptions, etc. — not all dropped yet.
-#
-# Current scope: re-export the names that fit Step 2's footprint
-# (structures + mixins).  As later steps land (http, exceptions, ...),
-# the re-exports below grow back toward the upstream surface.  Final
-# shape (after Step 10) matches the unmodified upstream file.
+# Headers / cache_control compile-fail today (in-class method bodies
+# trip Grail's parser); accept / file_storage pull in werkzeug.http
+# which works.  Current scope: mixins + structures, plus auth/range
+# additions as they become available.
 
 from .mixins import ImmutableDictMixin as ImmutableDictMixin
 from .mixins import ImmutableHeadersMixin as ImmutableHeadersMixin

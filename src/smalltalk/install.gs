@@ -237,6 +237,7 @@ run
 	at: #'_sre' put: nil;
 	at: #'BoundMethod' put: nil;
 	at: #'MethodBinding' put: nil;
+	at: #'PropertyDescriptor' put: nil;
 	at: #'LruCacheWrapper' put: nil;
 	at: #'Super' put: nil;
 	at: #'SuperBoundMethod' put: nil;
@@ -673,6 +674,15 @@ input src/smalltalk/Python/PyInstanceDict.gs
 input src/smalltalk/Python/NamedIntConstant.gs
 input src/smalltalk/Python/BoundMethod.gs
 input src/smalltalk/Python/MethodBinding.gs
+input src/smalltalk/Python/PropertyDescriptor.gs
+
+! Register ``property'' → PropertyDescriptor AFTER the class file is
+! loaded — the Step 3 type-mapping block runs before the class
+! definition itself.
+run
+Python at: #'property' put: PropertyDescriptor.
+Transcript show: 'Registered: property -> PropertyDescriptor'.
+%
 input src/smalltalk/Python/SuperBoundMethod.gs
 input src/smalltalk/Python/Super.gs
 input src/smalltalk/Python/PythonGenerator.gs

@@ -200,10 +200,25 @@ printSmalltalkOn: aStream
 	shape — emit a clean TypeError instead of falling through to the
 	legacy form. Without this branch, calls like `abs(1, 2)` would
 	produce a confusing `undefined symbol` compile error from the
-	bare-name fallback (since `builtins` is no longer in the symbol list)."
+	bare-name fallback (since `builtins` is no longer in the symbol list).
+
+	BUT: if the name ALSO resolves to a class with a varargs ``_new:kw:''
+	(or ``___new__:kw:'') entry, defer to the legacy ``value:value:''
+	form so kwargs-bearing class calls reach the constructor.  Without
+	this, ``property(fget, fset, doc=...)'' would trip the builtin arity
+	error even though PropertyDescriptor has a varargs constructor."
 	knownBuiltinName := self knownBuiltinName.
 	knownBuiltinName ifNotNil: [
-		^ self printArityMismatchErrorOn: aStream forName: knownBuiltinName
+		"If the name ALSO resolves to a class with a varargs
+		``_new:kw:'' / ``___new__:kw:'' constructor, skip the arity
+		error and fall through to the legacy ``value:value:'' form so
+		the class's varargs entry receives the call.  knownClassName
+		returns nil in this case (it defers to the legacy form
+		exactly when kwargs are present and a varargs entry exists);
+		check the class lookup directly."
+		(self ___hasVarargsClassConstructor___) ifFalse: [
+			^ self printArityMismatchErrorOn: aStream forName: knownBuiltinName
+		].
 	].
 
 	"Module self-send: `name(args)` → `(self name: args)` when
@@ -830,6 +845,27 @@ knownClassName
 	(metacls whichClassIncludesSelector: #'__new__:_:_:' environmentId: 1)
 		ifNotNil: [^funcName].
 	^ nil
+%
+
+category: 'Grail-Class-Call Fast Path'
+method: CallAst
+___hasVarargsClassConstructor___
+	"True if the call's bare-name receiver resolves to a class with
+	a varargs ``_new:kw:'' or ``___new__:kw:'' entry on its metaclass.
+	Used by the knownBuiltinName deferral path: if the name is BOTH a
+	builtin (with a fixed-arity selector that doesn't match the call's
+	arity) AND a class with a varargs constructor, defer to the legacy
+	``value:value:'' form so the call reaches the constructor."
+
+	| funcName cls metacls |
+	(function isKindOf: NameAst) ifFalse: [^ false].
+	funcName := function id.
+	cls := self class resolveClassForName: funcName.
+	cls ifNil: [^ false].
+	metacls := cls class.
+	^ (metacls whichClassIncludesSelector: #'_new:kw:' environmentId: 1) notNil
+		or: [(metacls whichClassIncludesSelector: #'___new__:kw:' environmentId: 1) notNil
+		or: [(metacls whichClassIncludesSelector: #'value:value:' environmentId: 1) notNil]]
 %
 
 category: 'Grail-Class-Call Fast Path'
