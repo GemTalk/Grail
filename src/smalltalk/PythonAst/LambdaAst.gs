@@ -105,28 +105,42 @@ printSmalltalkOn: aStream
 	    y := positional @env0:at: 2.
 	    x __add__: y]
 
-	Only simple positional args are handled; *args, **kwargs, defaults,
-	keyword-only args, and positional-only args are not yet supported.
+	`lambda self, *args, **kwargs: self(*args, **kwargs)` compiles to:
+	  [:positional :keywords |
+	    | _self args kwargs |
+	    _self := positional @env0:at: 1.
+	    args := positional @env0:copyFrom: 2 to: positional @env0:size.
+	    kwargs := keywords.
+	    _self _call: args kw: kwargs]
+
+	Defaults, keyword-only args, and positional-only args are not yet
+	supported; ``*args'' and ``**kwargs'' ARE supported because the
+	werkzeug.local upstream uses them in proxy-forwarding lambdas.
 
 	Reserved-name params (``self'', ``super'', ...) are transported as
 	``_<name>'' — Smalltalk pseudo-variables can't be temps or
 	assignment targets.  NameAst's reserved-param rename makes body
 	references read the transport identifier."
 
-	| argList transport |
+	| argList transport varargName kwargName |
 	argList := args args.
 	transport := argList collect: [:each |
 		(NameAst isReservedSmalltalkIdentifier: each name)
 			ifTrue: ['_' , each name asString]
 			ifFalse: [each name asString]].
+	varargName := args vararg ifNotNil: [:v | v name asString].
+	kwargName := args kwarg ifNotNil: [:k | k name asString].
 	aStream nextPutAll: '[:positional :keywords |'.
 
-	"Declare locals for all parameter names"
-	argList isEmpty ifFalse: [
-		aStream nextPutAll: ' | '.
-		transport do: [:n | aStream nextPutAll: n; space].
-		aStream nextPut: $|.
-	].
+	"Declare locals for all parameter names (positional + *args + **kwargs)"
+	(transport isEmpty and: [varargName isNil and: [kwargName isNil]])
+		ifFalse: [
+			aStream nextPutAll: ' | '.
+			transport do: [:n | aStream nextPutAll: n; space].
+			varargName ifNotNil: [aStream nextPutAll: varargName; space].
+			kwargName ifNotNil: [aStream nextPutAll: kwargName; space].
+			aStream nextPut: $|.
+		].
 	aStream lf.
 
 	"Unpack positional args into locals"
@@ -136,6 +150,26 @@ printSmalltalkOn: aStream
 			nextPutAll: ' := positional @env0:at: ';
 			nextPutAll: i printString;
 			nextPut: $.;
+			lf.
+	].
+
+	"Bind *args to the remaining positional tail (empty Array if none)."
+	varargName ifNotNil: [
+		aStream
+			nextPutAll: varargName;
+			nextPutAll: ' := positional @env0:size @env0:> ';
+			nextPutAll: transport size printString;
+			nextPutAll: ' ifTrue: [positional @env0:copyFrom: ';
+			nextPutAll: (transport size + 1) printString;
+			nextPutAll: ' to: positional @env0:size] ifFalse: [Array @env0:new].';
+			lf.
+	].
+
+	"Bind **kwargs — empty dict if no kwargs."
+	kwargName ifNotNil: [
+		aStream
+			nextPutAll: kwargName;
+			nextPutAll: ' := keywords @env0:isNil ifTrue: [KeyValueDictionary @env0:new] ifFalse: [keywords].';
 			lf.
 	].
 

@@ -337,19 +337,9 @@ class _ProxyLookup:
     def __repr__(self) -> str:
         return f"proxy {self.name}"
 
-    def __call__(self, instance):
-        """Support calling unbound methods from the class.
-
-        Grail-patched: the upstream signature was ``def __call__(
-        self, instance, *args, **kwargs)'' with a body that
-        re-dispatches via ``*args, **kwargs'' unpack at the call
-        site.  Grail's codegen for that combination produces
-        undefined-symbol errors at module compile time.  Simplified
-        signature works for the imports' shape (covering the
-        ``type(x).__copy__(x)'' idiom).  Re-implement properly when
-        codegen supports the full ``def f(self, x, *args, **kwargs)''
-        + ``g(*args, **kwargs)'' pair."""
-        return self.__get__(instance, type(instance))()
+    def __call__(self, instance, *args, **kwargs):
+        """Support calling unbound methods from the class."""
+        return self.__get__(instance, type(instance))(*args, **kwargs)
 
 
 class _ProxyIOp(_ProxyLookup):
@@ -576,8 +566,7 @@ class LocalProxy(t.Generic[T]):
     __instancecheck__ = _ProxyLookup(lambda self, other: isinstance(other, self))
     __subclasscheck__ = _ProxyLookup(lambda self, other: issubclass(other, self))
     # __class_getitem__ triggered through __getitem__
-    # Grail-patched: lambda *args/**kwargs forwarding simplified.
-    __call__ = _ProxyLookup(lambda self: self())
+    __call__ = _ProxyLookup(lambda self, *args, **kwargs: self(*args, **kwargs))
     __len__ = _ProxyLookup(len)
     __length_hint__ = _ProxyLookup(operator.length_hint)
     __getitem__ = _ProxyLookup(operator.getitem)
