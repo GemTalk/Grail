@@ -480,7 +480,7 @@ ___pyAttrLoad___: aSym
 	  - Otherwise dispatch the unary message anyway and let DNU
 	    produce the appropriate error or fallback."
 
-	| md sym1 sym2 sym3 symVA s isModule isGenerated dynValue walker |
+	| md sym1 sym2 sym3 symVA s isModule isGenerated dynValue walker owner |
 	"Phase B: probe the receiver's dynamic-instVar storage first.
 	After Phase A + Phase B this is the canonical home for module
 	globals (any receiver of class module), instance attributes (any
@@ -533,8 +533,24 @@ ___pyAttrLoad___: aSym
 		needed."
 		dynValue := self @env0:dynamicInstVarAt: aSym.
 		dynValue == nil ifFalse: [^ dynValue].
-		((self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil) ifTrue: [
-			^ self @env0:perform: aSym env: 1
+		"Unary selector resolution.  Sub-cases:
+		  * Defined on ``module'' itself, or a hand-written getter/
+		    accessor on a module subclass (categories like
+		    ``Grail-Accessors'', ``Grail-Module Body'') — perform and
+		    return the value.  Covers dunder accessors (``__name__''),
+		    C-extension constants (``_sre.MAGIC''), and the module body's
+		    ``initialize''.
+		  * 0-arg Python ``def foo()'' compiled by loadModuleFromPath:
+		    into the ``Grail-Methods'' category — wrap as BoundMethod so
+		    the bare-name read returns a first-class function reference
+		    (not an auto-invocation).  Without this branch ``from m
+		    import f'' would assign f := m.f() — the return value —
+		    losing the function handle."
+		owner := self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
+		owner notNil ifTrue: [
+			(owner @env0:categoryOfSelector: aSym environmentId: 1) @env0:= #'Grail-Methods'
+				ifTrue: [^ BoundMethod @env1:receiver: self selector: aSym]
+				ifFalse: [^ self @env0:perform: aSym env: 1]
 		].
 		(((self @env0:class @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil)
 			or: [(self @env0:class @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil

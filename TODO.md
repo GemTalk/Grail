@@ -207,10 +207,50 @@ Flask 3.1 source is dropped under ``src/python/stdlib/flask/`` and
   semantics are then re-asserted via explicit overrides on the
   subclass.  Resolve when multi-inheritance lands.
 
-- [ ] **`Flask(name)` constructor trips ``Boolean does not understand
-  value:value:''**.  Surfaced after the ImmutableDict fix unblocked
-  default_config.  Somewhere in the App.__init__ chain a bool value
-  is being invoked as a callable — needs further bisection.
+- [x] **`Flask(name)` constructor trips ``Boolean does not understand
+  value:value:''**.  Fixed: ``___pyAttrLoad___'' on a module receiver
+  was unconditionally performing any unary selector defined on a
+  subclass of ``module'' — so ``from .helpers import get_debug_flag''
+  bound ``get_debug_flag'' to the return value (False) rather than
+  the BoundMethod.  Discriminate by method ``category:'': only
+  ``Grail-Methods'' (Python defs from ``loadModuleFromPath:'') wrap
+  as BoundMethod; everything else still performs.  Past that, four
+  more gaps surfaced before ``Flask('myapp')'' constructs cleanly:
+
+  * Set comprehensions emitted ``Set new'' (GemStone primitive, no
+    env-1 ``add:'') instead of ``set new'' (Grail wrapper).  Fixed
+    in SetCompAst.
+
+  * ``SrePattern'' had no ``finditer'' method.  Added env-1 wrappers
+    that walk ``search:'' from the previous match end (1-char
+    advance on zero-width).  Returns a ``list'' of ``SreMatch'',
+    which is iterable.
+
+  * ``Rule.compile'' unconditionally called ``_compile_builder(...)''
+    which uses ``ast.parse(...).body[0]''; ``ast.parse'' isn't
+    implemented.  Stubbed ``Rule._build'' / ``Rule._build_unknown''
+    to raise ``NotImplementedError'' on first use, matching the
+    earlier note that routes still MATCH but ``url_for'' / ``build''
+    fail.
+
+  * ``StateMachineMatcher.State'' is a ``@dataclass'' with all
+    fields declared as ``= field(default_factory=...)''.  Grail's
+    decorator codegen runs the decorator and ``_collect_fields''
+    walks the metaclass ``_fields'' slot, but ClassDefAst only
+    populates ``_fields'' from BARE annotations (NamedTuple
+    semantics); ``= field(...)'' annotations land in the
+    assigned-value branch and don't reach ``_fields''.  The synth
+    ``__init__'' therefore initialises nothing, ``state.static''
+    resolves to the class-level ``Field'' descriptor, and
+    ``state.static.setdefault(...)'' in ``matcher.add'' raises
+    ``AttributeError: Field object has no attribute 'setdefault'``.
+    Worked around by dropping ``@dataclass'' from ``State'' and
+    writing an explicit ``__init__'' that pins the per-instance
+    list/dict.  Proper fix is a generalised dataclass-with-
+    default-factory path in ``_collect_fields'' + ClassDefAst's
+    ``_fields'' emit — both attempts blew up on Grail's
+    definite-assignment check (``UnboundLocalError'' when an
+    accessor returns Smalltalk nil for an unset slot).
 
 - [ ] **Class-call protocol for built-in-derived subclasses**.
   ClassDefAst's synthesized ``value:value:'' does ``instance :=

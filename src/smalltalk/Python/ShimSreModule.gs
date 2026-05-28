@@ -329,6 +329,59 @@ _findall: positional kw: keywords
 	TypeError ___signal___: 'findall() takes 1 to 3 arguments'
 %
 
+! --------- finditer --------------------------------------------------------
+
+category: 'Grail-Methods'
+method: SrePattern
+finditer: aString
+	"finditer(string) -> iterator of SreMatch.  Returns a list (list is
+	iterable in Python; werkzeug.routing uses ``for m in p.finditer(s)'').
+	Walks the string by repeated ``search'' from the end of the previous
+	match.  A zero-width match advances the cursor by 1 to avoid
+	infinite loops, matching CPython's Scanner_search semantics."
+	^ self @env1:finditer: aString _: 0 _: aString @env0:size
+%
+
+category: 'Grail-Methods'
+method: SrePattern
+finditer: aString _: pos
+	"finditer(string, pos) -> iterator of SreMatch."
+	^ self @env1:finditer: aString _: pos _: aString @env0:size
+%
+
+category: 'Grail-Methods'
+method: SrePattern
+finditer: aString _: pos _: endpos
+	"finditer(string, pos, endpos) -> iterator of SreMatch."
+	| matches cursor m matchEnd |
+	matches := OrderedCollection @env0:new.
+	cursor := pos.
+	[cursor @env0:<= endpos] @env0:whileTrue: [
+		m := self @env1:search: aString _: cursor _: endpos.
+		(m @env0:== None) ifTrue: [^ matches].
+		matches @env0:add: m.
+		matchEnd := m @env1:end.
+		"Zero-width match: advance past the current cursor to avoid
+		an infinite loop on patterns like ``a*''."
+		cursor := (matchEnd @env0:= cursor)
+			ifTrue: [cursor @env0:+ 1]
+			ifFalse: [matchEnd]
+	].
+	^ matches
+%
+
+category: 'Grail-Methods'
+method: SrePattern
+_finditer: positional kw: keywords
+	"Varargs dispatcher for finditer()."
+	| nargs |
+	nargs := positional @env0:size.
+	(nargs == 1) ifTrue: [^ self finditer: (positional @env0:at: 1)].
+	(nargs == 2) ifTrue: [^ self finditer: (positional @env0:at: 1) _: (positional @env0:at: 2)].
+	(nargs == 3) ifTrue: [^ self finditer: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
+	TypeError ___signal___: 'finditer() takes 1 to 3 arguments'
+%
+
 ! --------- sub -------------------------------------------------------------
 
 category: 'Grail-Methods'

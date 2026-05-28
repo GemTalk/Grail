@@ -17,7 +17,15 @@ class SlashRequired(Exception):
     pass
 
 
-@dataclass
+# Grail-patched: dropped @dataclass — Grail's _collect_fields walks
+# the metaclass `_fields` slot, which ClassDefAst populates only from
+# BARE annotations (NamedTuple semantics).  State's annotations all
+# carry `= field(default_factory=...)` suffixes, so _collect_fields
+# would return empty and the synth-init would not initialise the
+# per-instance attrs, leaving `state.static` resolving to the
+# class-level Field descriptor and breaking `state.static.setdefault`
+# inside StateMachineMatcher.add().  Hand-written __init__ pins the
+# per-instance lists/dict at construction.
 class State:
     """A representation of a rule state.
 
@@ -25,9 +33,14 @@ class State:
     possible *static* and *dynamic* transitions to the next state.
     """
 
-    dynamic: list[tuple[RulePart, State]] = field(default_factory=list)
-    rules: list[Rule] = field(default_factory=list)
-    static: dict[str, State] = field(default_factory=dict)
+    dynamic: list[tuple[RulePart, State]]
+    rules: list[Rule]
+    static: dict[str, State]
+
+    def __init__(self):
+        self.dynamic = []
+        self.rules = []
+        self.static = {}
 
 
 class StateMachineMatcher:

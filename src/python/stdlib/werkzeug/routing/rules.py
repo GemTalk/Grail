@@ -727,10 +727,18 @@ class Rule(RuleFactory):
             rule = re.sub("/{2,}?", "/", self.rule)
         self._parts.extend(self._parse_rule(rule))
 
-        self._build: t.Callable[..., tuple[str, str]]
-        self._build = self._compile_builder(False).__get__(self, None)
-        self._build_unknown: t.Callable[..., tuple[str, str]]
-        self._build_unknown = self._compile_builder(True).__get__(self, None)
+        # Grail-patched: ast.parse() isn't implemented yet, so
+        # _compile_builder (which generates a builder function via AST)
+        # can't run.  Stub _build / _build_unknown so route MATCHING
+        # still works (which doesn't use them); url_for() / build()
+        # raise on first use.  See TODO.md "url_for() / Rule.build()".
+        def _builder_unavailable(*args, **kwargs):
+            raise NotImplementedError(
+                "Rule.build() / url_for() require ast.parse(),"
+                " which isn't implemented in Grail yet"
+            )
+        self._build: t.Callable[..., tuple[str, str]] = _builder_unavailable
+        self._build_unknown: t.Callable[..., tuple[str, str]] = _builder_unavailable
 
     @staticmethod
     def _get_func_code(code: CodeType, name: str) -> t.Callable[..., tuple[str, str]]:
