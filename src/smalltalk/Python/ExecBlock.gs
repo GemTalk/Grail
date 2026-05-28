@@ -59,6 +59,45 @@ __getattr__: name
 	^ value
 %
 
+category: 'Grail-Attribute Access'
+method: ExecBlock
+__name__
+	"Default ``func.__name__'' for a closure-shaped callable.  No
+	lexical name is recoverable from a plain block, so return a
+	generic placeholder that decorator consumers (Flask's
+	``@app.route'' reading ``view_func.__name__'' to pick the
+	rule's endpoint, functools.wraps copying the stamp) can store
+	without crashing.  A prior ``__setattr__: '__name__''' write
+	wins — the side-table read in ``__getattr__'' fires first via
+	the Python attribute protocol, and this fallback only runs
+	when the slot is unset.
+
+	Phrased as a normal env-1 method (not a __getattr__ branch) so
+	``hasattr(block, '__name__')'' is always true."
+
+	^ (ExecBlockAttrs @env0:at: self attr: '__name__')
+		ifNil: ['<closure>']
+%
+
+category: 'Grail-Attribute Access'
+method: ExecBlock
+__qualname__
+	"Mirror __name__ — Grail closures don't track lexical nesting."
+
+	^ self @env1:__name__
+%
+
+category: 'Grail-Attribute Access'
+method: ExecBlock
+__module__
+	"Default ``func.__module__'' for a closure-shaped callable.
+	Same side-table-first semantics as __name__; falls back to the
+	placeholder string when no decorator has stamped a value."
+
+	^ (ExecBlockAttrs @env0:at: self attr: '__module__')
+		ifNil: ['<closure>']
+%
+
 category: 'Grail-Callable'
 method: ExecBlock
 ___pyCallValue___: positional kw: kwargs

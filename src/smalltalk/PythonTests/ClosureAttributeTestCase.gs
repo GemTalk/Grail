@@ -101,3 +101,28 @@ testAttributesAreIdentityScoped
 	self assert: raised.
 	self assert: (blockA @env1:__getattr__: 'tag') equals: 'A'
 %
+
+category: 'Grail-Tests - ExecBlock Attributes'
+method: ClosureAttributeTestCase
+testNameFallsBackToPlaceholder
+	"``block.__name__'' returns ``<closure>'' when no decorator
+	has stamped a name.  Required so ``@app.route'' / functools.wraps
+	can read the attribute without crashing on a bare closure."
+
+	self assert: ([] @env1:__name__) equals: '<closure>'.
+	self assert: ([] @env1:__qualname__) equals: '<closure>'.
+	self assert: ([] @env1:__module__) equals: '<closure>'
+%
+
+category: 'Grail-Tests - ExecBlock Attributes'
+method: ClosureAttributeTestCase
+testNameRespectsExplicitStamp
+	"A ``__setattr__: '__name__''' write wins over the placeholder
+	fallback — decorators that copy the wrapped function's name
+	(functools.wraps) round-trip the stamp."
+
+	| block |
+	block := [].
+	block @env1:__setattr__: '__name__' _: 'view_func'.
+	self assert: (block @env1:__name__) equals: 'view_func'
+%
