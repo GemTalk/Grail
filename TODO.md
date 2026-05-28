@@ -199,6 +199,29 @@ Flask 3.1 source is dropped under ``src/python/stdlib/flask/`` and
   Replace the shim once module-level decorator chains land.
   Upstream parked at ``cli_upstream.py.bak''.
 
+  * Attempted a generalised codegen extension (drop the pass-X
+    whitelist in ``FunctionDefAst >> printSmalltalkOn:'' /
+    ``printPassXDecoratorsOn:'' so every module-level decorator
+    fires through the same ``decorator(modAttrLoad)'' →
+    ``dynamicInstVarAt:put:'' emit).  The simple cases work
+    (validated by a focused fixture exercising identity, register-
+    and-return, decorator-factory-with-call, and stacked
+    decorators).  The cascade through Jinja2 didn't: jinja2's
+    ``@async_variant(sync_do_unique) def do_unique:'' actually runs
+    its nested decorator, which inside calls
+    ``functools.wraps(...)'' with kwargs (needs a ``_wraps:kw:''
+    varargs entry on ``functools'') and then writes
+    ``wrapper.jinja_async_variant = True'' on the closure (needs
+    side-table attribute storage on ExecBlock — GemStone's
+    primitive closures have no varying instVars).  Plus
+    ``@app.route('/path')'' wants ``view_func.__name__'' (needs
+    ``__name__'' on BoundMethod).  Each fix exposes the next layer.
+    Tracked separately — pin those four prerequisites (functools
+    varargs entry, ExecBlock attr side-table, BoundMethod __name__
+    / __qualname__ / __module__, and downstream LocalProxy
+    constructor-shape regressions) before reviving the codegen
+    change.
+
 - [ ] **`werkzeug/datastructures/structures.py:961`** — ImmutableDict
   base-order flipped + explicit ``__init__'' / ``__setitem__'' /
   ``__delitem__''.  Upstream is ``ImmutableDict(ImmutableDictMixin[K,
