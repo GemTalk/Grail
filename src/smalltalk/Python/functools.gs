@@ -132,6 +132,20 @@ wraps: wrapped
 
 category: 'Grail-Built-in Functions'
 method: functools
+_wraps: positional kw: kwargs
+	"Varargs form of wraps for the ``assigned=...'' / ``updated=...''
+	keyword variants used by jinja2.async_utils and CPython
+	decorator chains.  Same identity-decorator stub — the kwargs
+	carry attribute-list tuples that the real implementation would
+	copy through; Grail's BoundMethod / closure shapes don't honour
+	user-stamped ``__name__'' / ``__doc__'' anyway, so dropping them
+	matches the behaviour of the 1-arg form."
+
+	^ [:positional2 :keywords2 | positional2 @env0:at: 1]
+%
+
+category: 'Grail-Built-in Functions'
+method: functools
 update_wrapper: wrapper _: wrapped
 	"functools.update_wrapper(wrapper, wrapped[, ...]) — copy
 	identifying metadata (``__module__``, ``__name__``, ``__doc__``,

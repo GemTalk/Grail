@@ -27,6 +27,38 @@ __call__: args
 	^ self @env0:valueWithArguments: args
 %
 
+category: 'Grail-Attribute Access'
+method: ExecBlock
+__setattr__: name _: value
+	"Store ``name -> value'' in the ExecBlockAttrs side-table.
+	GemStone's primitive ExecBlock has no varying instVars, so the
+	default Object>>__setattr__ path (dynamicInstVarAt:put: on the
+	receiver) raises ImproperOperation.  Routes through the helper
+	class so Python code that legitimately tags closures with
+	metadata (jinja2.async_utils stamps ``wrapper.jinja_async_variant
+	= True'' on the nested decorator-output closure) round-trips
+	through a subsequent ``__getattr__'' read."
+
+	^ ExecBlockAttrs @env0:at: self attr: name put: value
+%
+
+category: 'Grail-Attribute Access'
+method: ExecBlock
+__getattr__: name
+	"Look up ``name'' in the ExecBlockAttrs side-table.  Raises
+	AttributeError on miss, matching CPython's object.__getattr__
+	fallback semantics so ``hasattr(block, name)'' returns the
+	expected truth value."
+
+	| value |
+	value := ExecBlockAttrs @env0:at: self attr: name.
+	value @env0:== nil ifTrue: [
+		^ AttributeError @env1:___signal___:
+			('ExecBlock object has no attribute ''' @env0:, name @env0:asString @env0:, '''')
+	].
+	^ value
+%
+
 category: 'Grail-Callable'
 method: ExecBlock
 ___pyCallValue___: positional kw: kwargs

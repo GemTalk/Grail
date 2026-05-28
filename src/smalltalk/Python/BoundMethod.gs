@@ -221,4 +221,40 @@ ___pyCallValue___: positional kw: kwargs
 	^ self @env1:value: positional value: kwargs
 %
 
+category: 'Grail-Attribute Access'
+method: BoundMethod
+__name__
+	"Python's ``func.__name__'' — bind to the selector name so
+	decorators that inspect ``view_func.__name__'' (Flask's
+	``@app.route'', any functools.wraps consumer) get a sensible
+	identifier matching the Python ``def'' name.  Falls back to the
+	receiver class name for an unbound class-method handle."
+
+	selector @env0:== nil ifTrue: [^ receiver @env0:class @env0:name @env0:asString].
+	^ selector @env0:asString
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+__qualname__
+	"Python's ``func.__qualname__'' — return the same string as
+	__name__ for now.  Real qualname encodes lexical nesting
+	(``OuterClass.method'') which Grail doesn't track on
+	BoundMethods, so the simpler name suffices for inspection
+	consumers that just want a printable identifier."
+
+	^ self @env1:__name__
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+__module__
+	"Python's ``func.__module__'' — best-effort identifier so
+	decorators that stamp ``__module__'' (functools.wraps') have
+	something to read.  Returns the receiver's class name; the real
+	value would need to walk back to the defining module class."
+
+	^ receiver @env0:class @env0:name @env0:asString
+%
+
 set compile_env: 0

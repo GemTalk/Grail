@@ -237,6 +237,7 @@ run
 	at: #'_shimtest' put: nil;
 	at: #'_sre' put: nil;
 	at: #'BoundMethod' put: nil;
+	at: #'ExecBlockAttrs' put: nil;
 	at: #'MethodBinding' put: nil;
 	at: #'PropertyDescriptor' put: nil;
 	at: #'LruCacheWrapper' put: nil;
@@ -450,6 +451,7 @@ run
 	at: #'BaseExceptionTestCase' put: nil;
 	at: #'BlockingIOErrorTestCase' put: nil;
 	at: #'BooleanTestCase' put: nil;
+	at: #'BoundMethodNameTestCase' put: nil;
 	at: #'BrokenPipeErrorTestCase' put: nil;
 	at: #'BufferErrorTestCase' put: nil;
 	at: #'BuiltinsTestCase' put: nil;
@@ -464,6 +466,7 @@ run
 	at: #'ClassDecoratorTestCase' put: nil;
 	at: #'ClassScopeTestCase' put: nil;
 	at: #'ClassTestCase' put: nil;
+	at: #'ClosureAttributeTestCase' put: nil;
 	at: #'ComplexTestCase' put: nil;
 	at: #'ComprehensionTestCase' put: nil;
 	at: #'DefaultsAndAttrsTestCase' put: nil;
@@ -512,6 +515,7 @@ run
 	at: #'FloatingPointErrorTestCase' put: nil;
 	at: #'FractionTestCase' put: nil;
 	at: #'FunctoolsTestCase' put: nil;
+	at: #'FunctoolsWrapsVarargsTestCase' put: nil;
 	at: #'FrozensetTestCase' put: nil;
 	at: #'FutureWarningTestCase' put: nil;
 	at: #'GemStoneTestCase' put: nil;
@@ -863,6 +867,7 @@ input src/smalltalk/Python/Bytes.gs
 input src/smalltalk/Python/Decimal.gs
 input src/smalltalk/Python/Fraction.gs
 input src/smalltalk/Python/dict.gs
+input src/smalltalk/Python/ExecBlockAttrs.gs
 input src/smalltalk/Python/ExecBlock.gs
 input src/smalltalk/Python/Float.gs
 input src/smalltalk/Python/SetProtocol.gs
@@ -1047,6 +1052,7 @@ set compile_env: 0
 
 input src/smalltalk/PythonTests/PythonTestCase.gs
 input src/smalltalk/PythonTests/BooleanTestCase.gs
+input src/smalltalk/PythonTests/BoundMethodNameTestCase.gs
 input src/smalltalk/PythonTests/BuiltinsTestCase.gs
 input src/smalltalk/PythonTests/BytearrayTestCase.gs
 input src/smalltalk/PythonTests/BytesTestCase.gs
@@ -1055,6 +1061,7 @@ input src/smalltalk/PythonTests/ClassDecoratorTestCase.gs
 input src/smalltalk/PythonTests/ClassCallFastPathTestCase.gs
 input src/smalltalk/PythonTests/ClassScopeTestCase.gs
 input src/smalltalk/PythonTests/ClassTestCase.gs
+input src/smalltalk/PythonTests/ClosureAttributeTestCase.gs
 input src/smalltalk/PythonTests/CMathTestCase.gs
 input src/smalltalk/PythonTests/ComplexTestCase.gs
 input src/smalltalk/PythonTests/ComprehensionTestCase.gs
@@ -1098,6 +1105,7 @@ input src/smalltalk/PythonTests/FloatTestCase.gs
 input src/smalltalk/PythonTests/FractionTestCase.gs
 input src/smalltalk/PythonTests/FrozensetTestCase.gs
 input src/smalltalk/PythonTests/FunctoolsTestCase.gs
+input src/smalltalk/PythonTests/FunctoolsWrapsVarargsTestCase.gs
 input src/smalltalk/PythonTests/GemStoneTestCase.gs
 input src/smalltalk/PythonTests/HtmlTestCase.gs
 input src/smalltalk/PythonTests/CPythonShimTestCase.gs
