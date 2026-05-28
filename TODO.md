@@ -199,28 +199,28 @@ Flask 3.1 source is dropped under ``src/python/stdlib/flask/`` and
   Replace the shim once module-level decorator chains land.
   Upstream parked at ``cli_upstream.py.bak''.
 
-  * Attempted a generalised codegen extension (drop the pass-X
-    whitelist in ``FunctionDefAst >> printSmalltalkOn:'' /
-    ``printPassXDecoratorsOn:'' so every module-level decorator
-    fires through the same ``decorator(modAttrLoad)'' →
-    ``dynamicInstVarAt:put:'' emit).  The simple cases work
-    (validated by a focused fixture exercising identity, register-
-    and-return, decorator-factory-with-call, and stacked
-    decorators).  The cascade through Jinja2 didn't: jinja2's
-    ``@async_variant(sync_do_unique) def do_unique:'' actually runs
-    its nested decorator, which inside calls
-    ``functools.wraps(...)'' with kwargs (needs a ``_wraps:kw:''
-    varargs entry on ``functools'') and then writes
-    ``wrapper.jinja_async_variant = True'' on the closure (needs
-    side-table attribute storage on ExecBlock — GemStone's
-    primitive closures have no varying instVars).  Plus
-    ``@app.route('/path')'' wants ``view_func.__name__'' (needs
-    ``__name__'' on BoundMethod).  Each fix exposes the next layer.
-    Tracked separately — pin those four prerequisites (functools
-    varargs entry, ExecBlock attr side-table, BoundMethod __name__
-    / __qualname__ / __module__, and downstream LocalProxy
-    constructor-shape regressions) before reviving the codegen
-    change.
+  * Three of the four prerequisites identified in commit 0406fee
+    have landed (see dd16202 + 7b4147e):
+      - ``functools _wraps:kw:'' for the kwargs decorator-factory
+        path.
+      - ``ExecBlockAttrs'' side-table + ExecBlock __setattr__ /
+        __getattr__ so closures can carry dynamic attributes.
+      - ``BoundMethod >> __name__ / __qualname__ / __module__''
+        and matching ExecBlock fallbacks (``<closure>'' for an
+        unstamped block).
+    Reviving the ``FunctionDefAst >> printSmalltalkOn:'' codegen
+    change on top of these gets ``Flask('myapp')'' through to
+    ``@app.route('/')'' running, but the test session takes a
+    HostCoreDump during a later code path (kernel-level crash, no
+    clean stack to bisect from) — and a re-load of
+    ``flask.sansio.app'' surfaces ``LocalProxy class object is not
+    callable'' that doesn't reproduce when LocalProxy is invoked
+    directly.  The crash repros with the codegen change but not
+    without it, so the next attempt needs to (a) trace the
+    specific decorator chain whose evaluation lands in the
+    HostCoreDump path (probably a recursion through an attribute
+    accessor we haven't covered) and (b) bisect the LocalProxy
+    constructor regression with the prereqs already in place.
 
 - [ ] **`werkzeug/datastructures/structures.py:961`** — ImmutableDict
   base-order flipped + explicit ``__init__'' / ``__setitem__'' /
