@@ -1566,11 +1566,12 @@ static int64 fetch_string(OopType oop, char *buf, int bufSize) {
 
 static void raise_error(const char *message) {
     GciErrSType err;
-    err.number = 2101;
+    err.number = ERR_Error;
     err.argCount = 1;
     err.args[0] = GciNewString(message);
     strncpy(err.message, message, GCI_ERR_STR_SIZE);
     err.message[GCI_ERR_STR_SIZE] = '\0';
+    // printf("cpython.cc: raise_error %s\n", message); // uncomment for debugging
     GciRaiseException(&err);
 }
 
