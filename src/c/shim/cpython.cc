@@ -455,7 +455,7 @@ extern "C" double PyFloat_AsDouble(PyObject *obj) {
 }
 
 extern "C" int PyFloat_Check(PyObject *obj) {
-    return Py_TYPE(obj) == &PyFloat_Type;
+    return obj != NULL && Py_TYPE(obj) == &PyFloat_Type;
 }
 
 /* ====================================================================
@@ -504,7 +504,7 @@ extern "C" long PyLong_AsLong(PyObject *obj) {
 }
 
 extern "C" int PyLong_Check(PyObject *obj) {
-    return Py_TYPE(obj) == &PyLong_Type;
+    return obj != NULL && Py_TYPE(obj) == &PyLong_Type;
 }
 
 /* ====================================================================
@@ -543,7 +543,7 @@ extern "C" const char *PyUnicode_AsUTF8(PyObject *obj) {
 }
 
 extern "C" int PyUnicode_Check(PyObject *obj) {
-    return Py_TYPE(obj) == &PyUnicode_Type;
+    return obj != NULL && Py_TYPE(obj) == &PyUnicode_Type;
 }
 
 /* ====================================================================
@@ -575,7 +575,7 @@ extern "C" Py_ssize_t PyBytes_Size(PyObject *obj) {
 }
 
 extern "C" int PyBytes_Check(PyObject *obj) {
-    return Py_TYPE(obj) == &PyBytes_Type;
+    return obj != NULL && Py_TYPE(obj) == &PyBytes_Type;
 }
 
 /* ====================================================================
@@ -629,7 +629,7 @@ extern "C" Py_ssize_t PyList_Size(PyObject *list) {
 }
 
 extern "C" int PyList_Check(PyObject *obj) {
-    return Py_TYPE(obj) == &PyList_Type;
+    return obj != NULL && Py_TYPE(obj) == &PyList_Type;
 }
 
 /* ====================================================================
@@ -685,7 +685,7 @@ extern "C" Py_ssize_t PyDict_Size(PyObject *dict) {
 }
 
 extern "C" int PyDict_Check(PyObject *obj) {
-    return Py_TYPE(obj) == &PyDict_Type;
+    return obj != NULL && Py_TYPE(obj) == &PyDict_Type;
 }
 
 /* ====================================================================
@@ -716,7 +716,7 @@ extern "C" Py_ssize_t PyTuple_Size(PyObject *tuple) {
 }
 
 extern "C" int PyTuple_Check(PyObject *obj) {
-    return Py_TYPE(obj) == &PyTuple_Type;
+    return obj != NULL && Py_TYPE(obj) == &PyTuple_Type;
 }
 
 /* ====================================================================
@@ -960,7 +960,7 @@ extern "C" PyObject *PyNumber_Index(PyObject *obj) {
         return obj;
     }
     PyErr_Format(PyExc_TypeError, "'%.200s' object cannot be interpreted as an integer",
-                 Py_TYPE(obj)->tp_name);
+                 obj ? Py_TYPE(obj)->tp_name : "NULL");
     return NULL;
 }
 
@@ -1300,7 +1300,7 @@ extern "C" int PyObject_GetBuffer(PyObject *obj, Py_buffer *view, int flags) {
         return 0;
     }
     PyErr_Format(PyExc_TypeError, "a bytes-like object is required, not '%.200s'",
-                 Py_TYPE(obj)->tp_name);
+                 obj ? Py_TYPE(obj)->tp_name : "NULL");
     return -1;
 }
 
@@ -1554,10 +1554,10 @@ static PyObject *get_or_load_module(const char *name) {
  * Helper: fetch a GemStone String OOP into a C buffer
  * ==================================================================== */
 
-static int fetch_string(OopType oop, char *buf, int bufSize) {
+static int64 fetch_string(OopType oop, char *buf, int bufSize) {
     int64 len = GciFetchBytes_(oop, 1, (ByteType *)buf, bufSize - 1);
     buf[len] = '\0';
-    return (int)len;
+    return len;
 }
 
 /* ====================================================================
@@ -2411,7 +2411,7 @@ PyObject *PyBytes_FromObject(PyObject *obj) {
         return result;
     }
     PyErr_Format(PyExc_TypeError, "cannot convert '%.200s' to bytes",
-                 Py_TYPE(obj)->tp_name);
+                 obj ? Py_TYPE(obj)->tp_name : "NULL");
     return NULL;
 }
 
