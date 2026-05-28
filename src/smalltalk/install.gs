@@ -309,6 +309,13 @@ run
 	at: #'sys' put: nil;
 	at: #'tuple' put: nil;
 	at: #'tuple_iterator' put: nil;
+	at: #'_weakref' put: nil;
+	at: #'WeakReference' put: nil;
+	at: #'WeakProxy' put: nil;
+	at: #'WeakValueDictionary' put: nil;
+	at: #'WeakKeyDictionary' put: nil;
+	at: #'WeakSet' put: nil;
+	at: #'Finalizer' put: nil;
 	yourself.
 Transcript show: 'Forward references created for Python dictionary'.
 %
@@ -592,6 +599,9 @@ run
 	at: #'VarargsAndImportsTestCase' put: nil;
 	at: #'ValueErrorTestCase' put: nil;
 	at: #'WarningTestCase' put: nil;
+	at: #'WeakReferenceTestCase' put: nil;
+	at: #'WeakReferenceTestSubject' put: nil;
+	at: #'WeakrefModuleTestCase' put: nil;
 	at: #'ZeroDivisionErrorTestCase' put: nil;
 	yourself.
 Transcript show: 'Forward references created for PythonTests dictionary'.
@@ -733,6 +743,7 @@ input src/smalltalk/Python/ShimCrc32cModule.gs
 input src/smalltalk/Python/ShimTestModule.gs
 input src/smalltalk/Python/ShimSreModule.gs
 input src/smalltalk/Python/importlib.gs
+input src/weakref/WeakReference.gs
 input src/smalltalk/Python/hashlib.gs
 input src/smalltalk/Python/time.gs
 input src/smalltalk/Python/secrets.gs
@@ -1197,6 +1208,8 @@ input src/smalltalk/PythonTests/UserWarningTestCase.gs
 input src/smalltalk/PythonTests/VarargsAndImportsTestCase.gs
 input src/smalltalk/PythonTests/ValueErrorTestCase.gs
 input src/smalltalk/PythonTests/WarningTestCase.gs
+input src/weakref/WeakReferenceTestCase.gs
+input src/smalltalk/PythonTests/WeakrefModuleTestCase.gs
 input src/smalltalk/PythonTests/ZeroDivisionErrorTestCase.gs
 
 run
@@ -1303,6 +1316,8 @@ Transcript show: 'No-overlap assertion: OK'.
 run
 | libPath pyPath |
 importlib grailDir: (System gemEnvironmentVariable: 'GRAIL_DIR').
+"Pure-Smalltalk modules — registered unconditionally."
+importlib registerModule: '_weakref' with: _weakref ___instance___.
 libPath := System gemEnvironmentVariable:'SHIM_LIB_PATH'.
 (libPath notNil and: [libPath notEmpty]) ifTrue: [
 	CPythonShim libraryPath: libPath .
