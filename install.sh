@@ -2,8 +2,21 @@
 
 # This script assumes a stone is already running per the stone name defined in .topazini
 
+# Auto-source .setenv when $GEMSTONE isn't in the environment.  Lets
+# ``./install.sh`` succeed from a fresh shell without remembering to
+# ``source .setenv`` first — a missing $SHIM_LIB_PATH at topaz time
+# silently skips _sre / _statistics / _bisect / _crc32c / _shimtest
+# registration, producing a half-installed Grail whose test suite then
+# breaks in obscure ways downstream.
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+if [ -z "$GEMSTONE" ] && [ -f "$SCRIPT_DIR/.setenv" ]; then
+    # shellcheck disable=SC1091
+    source "$SCRIPT_DIR/.setenv"
+fi
+
 if [ -z "$GEMSTONE" ]; then
     echo "Error: \$GEMSTONE is not set. Set it to your GemStone installation directory (e.g., /path/to/GemStone64Bit3.7.x-arch.Darwin)."
+    echo "  Tip: 'source .setenv' (if present at the project root) configures \$GEMSTONE + \$PATH."
     exit 1
 fi
 if [ -d /opt/gemstone/locks ]; then
