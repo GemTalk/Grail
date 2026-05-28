@@ -64,10 +64,14 @@ testListSubclassCompiles
 	resolve at class-creation time.  Populating the list from an
 	iterable arg is a separate gap (Grail's class instantiation
 	does ``self new'' without forwarding the iterable to list's
-	constructor); this regression covers only the subscription."
+	constructor); this regression covers only the subscription.
+
+	``module.func'' returns a BoundMethod (Python attribute-load
+	semantics); call it explicitly to read the function's result."
 
 	self
-		assert: (testModule @env1:___pyAttrLoad___: #list_subclass_compiles)
+		assert: ((testModule @env1:___pyAttrLoad___: #list_subclass_compiles)
+			@env1:value: { } value: nil)
 		equals: true
 %
 
@@ -77,7 +81,8 @@ testMapSubclassWorks
 	"``class GenericMap(dict[K, V]):'' — two-parameter generic base."
 
 	| result |
-	result := testModule @env1:___pyAttrLoad___: #map_subclass_works.
+	result := (testModule @env1:___pyAttrLoad___: #map_subclass_works)
+		@env1:value: { } value: nil.
 	self assert: (result @env0:at: 1) equals: 1.
 	self assert: (result @env0:at: 2) equals: 'missing'
 %
@@ -90,7 +95,8 @@ testSubscriptionReturnsSelfForAlias
 	a GenericAlias here; Grail simplifies."
 
 	| result |
-	result := testModule @env1:___pyAttrLoad___: #subscription_returns_self_for_use_as_alias.
+	result := (testModule @env1:___pyAttrLoad___: #subscription_returns_self_for_use_as_alias)
+		@env1:value: { } value: nil.
 	self assert: (result @env0:at: 1) equals: true.
 	self assert: (result @env0:at: 2) equals: true
 %
