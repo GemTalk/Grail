@@ -86,24 +86,64 @@ Smalltalk frames (from the gemnetobject log, oldest first ↓):
 `cPtr` points at a `PatternObject` whose `codesize` field is 0 — see
 `src/c/shim/_sre/sre.c:1094` for the assertion that fires.
 
-## Hypothesis
+## Confirmed: the `code` list is NOT empty at compile time
 
-The codegen extension changes how a module-level `def` body's
-captured locals (specifically `pattern = re.compile(...)` inside
-`_make_unquote_part`) are routed back through the module's
-dynamic-instVar storage and re-read by the inner closure.  Pre-fix,
-nested defs at module scope went through the
-`isModuleScopeNestedDefTarget` path with no decorator emit on top;
-post-fix the parent function's body is also re-emitted (via
-`printPassXDecoratorsOn:` on the now-unfiltered `decorator_list`),
-and the inner closure ends up reading a stale `pattern` reference
-whose backing C `PatternObject` was freed or never finished
-compiling.  Confirming that requires either:
+Followed up the obvious "maybe `_sre_compile_impl` is being handed an
+empty list" hypothesis by instrumenting `_sre callCompile:flags:code:...`
+to log every compile's `code size` into `SessionTemps current at:
+#'___SreCompileTrace___'`.  Re-ran the repro with the codegen change
+active and dumped the trace before invoking `uri_to_iri`:
 
-* Adding a Smalltalk-level assertion to `SrePattern >> split:` that
-  checks `cPtr asOop ~= 0` and the C-side pattern's codesize, or
-* Single-stepping the module-init for `werkzeug.urls` with the
-  codegen change toggled.
+```
+Compile trace count: 23
+#20 code-size=246 isColl=true pattern='((?:%(?:127|31|30|29|28|27|...
+#21 code-size=274 isColl=true pattern='((?:%(?:127|31|30|29|28|27|...
+#22 code-size=267 isColl=true pattern='((?:%(?:127|31|30|29|28|27|...
+#23 code-size=281 isColl=true pattern='((?:%(?:127|31|30|29|28|27|...
+```
+
+All 23 compile calls reach `_sre.compile` with a non-empty
+OrderedCollection.  The four `_make_unquote_part` patterns at the
+end carry between 246 and 281 codewords — well above zero.  At
+compile time `self->codesize` is set correctly from
+`PyList_GET_SIZE(code)`.
+
+So `codesize == 0` *at split time* isn't a "we were handed an empty
+list" bug.  Something between the moment the Pattern is created
+(line 1637–1649 in `_sre/sre.c`) and the moment Werkzeug's closure
+re-reads it during `pattern.split(value)` either:
+
+1. **Frees the PatternObject** (Python refcount drops to zero, the
+   shim's `free(op)` runs, the memory is later reallocated for a
+   different object whose first eight bytes after the
+   `PyObject_VAR_HEAD` happen to land on `codesize`), or
+2. **Re-uses the cPtr slot for a different live object** (the
+   captured `pattern` reference in the closure ends up pointing to
+   a freshly-allocated Pattern that hasn't had its codebuffer
+   filled in yet).
+
+Both shapes are stale-pointer / lifetime-mismatch bugs at the
+Smalltalk-side `SrePattern` ↔ C-side `PatternObject` boundary.
+With the codegen change there's much more decorator-driven
+allocation traffic during module init, which gives Python's
+refcount machinery more chances to drop a Pattern Smalltalk still
+thinks it's holding.
+
+## Next-step probes
+
+* Add a Smalltalk-callable user action `peekCodesize: cPtr` in the
+  shim (reads the `Py_ssize_t` at `cPtr + 80`) — call it both right
+  after `_sre.compile` returns and right before `SrePattern >>
+  split:` invokes the C side.  Equal non-zero values → stale-free
+  during split.  Different values → the cPtr slot was reused.
+* Instrument the shim's `_PyObject_NewVar` / `PyObject_GC_Del` to
+  log every PatternObject alloc/free with its address.  Cross-
+  reference with the saved cPtr from compile time.
+* On the Smalltalk side, pin every returned `SrePattern` in a
+  per-session collection so the Smalltalk wrapper at least lives
+  the whole session — see whether the crash goes away.  If it does,
+  the gap is "Python refcount isn't tracking Smalltalk-held
+  references on the cPtr".
 
 ## Files
 
