@@ -208,19 +208,15 @@ Flask 3.1 source is dropped under ``src/python/stdlib/flask/`` and
       - ``BoundMethod >> __name__ / __qualname__ / __module__''
         and matching ExecBlock fallbacks (``<closure>'' for an
         unstamped block).
-    Reviving the ``FunctionDefAst >> printSmalltalkOn:'' codegen
-    change on top of these gets ``Flask('myapp')'' through to
-    ``@app.route('/')'' running, but the test session takes a
-    HostCoreDump during a later code path (kernel-level crash, no
-    clean stack to bisect from) — and a re-load of
-    ``flask.sansio.app'' surfaces ``LocalProxy class object is not
-    callable'' that doesn't reproduce when LocalProxy is invoked
-    directly.  The crash repros with the codegen change but not
-    without it, so the next attempt needs to (a) trace the
-    specific decorator chain whose evaluation lands in the
-    HostCoreDump path (probably a recursion through an attribute
-    accessor we haven't covered) and (b) bisect the LocalProxy
-    constructor regression with the prereqs already in place.
+    With all three prereqs in place, the HostCoreDump that the
+    revived codegen change previously tripped at
+    ``werkzeug.urls.uri_to_iri'' no longer reproduces — every
+    split-time ``SrePattern'' cPtr matches the compile-time cPtr
+    cleanly.  Remaining gap: re-applying the codegen change still
+    surfaces ``TypeError: 'LocalProxy class' object is not
+    callable'' on ``flask.Flask('myapp')'' + ``@app.route('/')''
+    via Python module import (doesn't reproduce when LocalProxy
+    is invoked directly).  Separate bisection task.
 
 - [ ] **`werkzeug/datastructures/structures.py:961`** — ImmutableDict
   base-order flipped + explicit ``__init__'' / ``__setitem__'' /
