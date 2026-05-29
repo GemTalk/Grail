@@ -86,7 +86,68 @@ Smalltalk frames (from the gemnetobject log, oldest first ↓):
 `cPtr` points at a `PatternObject` whose `codesize` field is 0 — see
 `src/c/shim/_sre/sre.c:1094` for the assertion that fires.
 
-## Confirmed: the `code` list is NOT empty at compile time
+## UPDATE: repro no longer reproduces
+
+After the three prereqs landed (`dd16202`: ExecBlockAttrs + BoundMethod
+`__name__` / `__qualname__` / `__module__` + functools `_wraps:kw:`;
+`7b4147e`: ExecBlock fallback `__name__` / `__qualname__` /
+`__module__`), reviving the `FunctionDefAst` codegen change and
+running `repro.gs` now completes cleanly:
+
+```
+'Cleared cached modules.'
+'werkzeug.urls load: OK'
+'uri_to_iri returned: ''http://example.com/påth'''
+```
+
+Three back-to-back invocations all returned without a SIGABRT.  The
+suite stays at 2348 / 2348 + 103 / 103 with the codegen change
+ACTIVE.
+
+So whatever the original bug was at the SrePattern ↔ PatternObject
+boundary, one or more of the prereqs closed it.  The most likely
+candidate is the ExecBlock side-table: with `setattr` on a closure
+no longer raising `ImproperOperation` mid-decoration, the chain
+through jinja2 / werkzeug doesn't leave a half-initialized object
+behind that would later mis-cast as a Pattern.
+
+A different unrelated codegen failure is still active downstream —
+`flask.Flask('myapp')` then `@app.route('/')` from a Python module
+import still fails with `TypeError: 'LocalProxy class' object is not
+callable`.  That's a separate bisection task; the **HostCoreDump
+case documented in this directory is closed**.
+
+The instrumentation that ruled out the empty-list hypothesis (below)
+is preserved as a record of the investigation.
+
+## Reproducing the cPtr-stable observation
+
+Direct test of "is the cPtr that compile returned identical to the
+cPtr split sees?": instrumented `_sre callCompile:flags:code:...` to
+record `(cPtr, codesize, pattern)` into SessionTemps and
+`SrePattern >> split:` to record `cPtr`, then re-ran
+`uri_to_iri('http://example.com/p%C3%A5th')` end-to-end:
+
+```
+Compile trace count: 23
+  #20 cPtr=4340069424 size=246
+  #21 cPtr=4340070704 size=274
+  #22 cPtr=4340026960 size=267
+  #23 cPtr=4340028240 size=281
+uri_to_iri returned: 'http://example.com/påth'
+Split trace count: 3
+  #1 cPtr=4340026960
+  #2 cPtr=4340070704
+  #3 cPtr=4340069424
+```
+
+Three of the four `_make_unquote_part` patterns get used (the
+`fragment` one isn't reached by an http://example.com URL).  Every
+split-time cPtr matches the cPtr that `_sre.compile` returned for
+its pattern, with the PatternObject's `codesize` intact.  The
+boundary is clean.
+
+## Confirmed (during the earlier failing state): the `code` list is NOT empty at compile time
 
 Followed up the obvious "maybe `_sre_compile_impl` is being handed an
 empty list" hypothesis by instrumenting `_sre callCompile:flags:code:...`
@@ -108,42 +169,36 @@ end carry between 246 and 281 codewords — well above zero.  At
 compile time `self->codesize` is set correctly from
 `PyList_GET_SIZE(code)`.
 
-So `codesize == 0` *at split time* isn't a "we were handed an empty
-list" bug.  Something between the moment the Pattern is created
-(line 1637–1649 in `_sre/sre.c`) and the moment Werkzeug's closure
-re-reads it during `pattern.split(value)` either:
+## Why an empty list wouldn't have been the right hypothesis anyway
 
-1. **Frees the PatternObject** (Python refcount drops to zero, the
-   shim's `free(op)` runs, the memory is later reallocated for a
-   different object whose first eight bytes after the
-   `PyObject_VAR_HEAD` happen to land on `codesize`), or
-2. **Re-uses the cPtr slot for a different live object** (the
-   captured `pattern` reference in the closure ends up pointing to
-   a freshly-allocated Pattern that hasn't had its codebuffer
-   filled in yet).
+Original framing called this a "Python refcount freed the Pattern"
+shape, but Grail runs on GemStone's mark-sweep GC — there is no
+Python refcount that ever frees C memory in this shim:
 
-Both shapes are stale-pointer / lifetime-mismatch bugs at the
-Smalltalk-side `SrePattern` ↔ C-side `PatternObject` boundary.
-With the codegen change there's much more decorator-driven
-allocation traffic during module init, which gives Python's
-refcount machinery more chances to drop a Pattern Smalltalk still
-thinks it's holding.
+* `cpython.h` defines `Py_DECREF(op)` as the macro that decrements
+  `ob_refcnt` and calls `_Py_Dealloc(op)` when it hits zero.
+* `cpython.cc:200` defines `_Py_Dealloc` as `(void)op;` — a no-op.
+  So `Py_DECREF` is bookkeeping only; nothing is freed.
+* `_PyObject_NewVar` (`cpython.cc:927`) `calloc`'s the PatternObject;
+  the matching `PyObject_GC_Del` would `free()` it but nothing ever
+  reaches `pattern_dealloc` (which is wired to `Py_tp_dealloc`)
+  because no one invokes `_Py_Dealloc`.
 
-## Next-step probes
+So PatternObject memory lives forever inside the shim — the cPtr
+returned by `_sre.compile` will *always* point at the original
+PatternObject with the right codesize.  The cPtr-trace test above
+confirms it experimentally.
 
-* Add a Smalltalk-callable user action `peekCodesize: cPtr` in the
-  shim (reads the `Py_ssize_t` at `cPtr + 80`) — call it both right
-  after `_sre.compile` returns and right before `SrePattern >>
-  split:` invokes the C side.  Equal non-zero values → stale-free
-  during split.  Different values → the cPtr slot was reused.
-* Instrument the shim's `_PyObject_NewVar` / `PyObject_GC_Del` to
-  log every PatternObject alloc/free with its address.  Cross-
-  reference with the saved cPtr from compile time.
-* On the Smalltalk side, pin every returned `SrePattern` in a
-  per-session collection so the Smalltalk wrapper at least lives
-  the whole session — see whether the crash goes away.  If it does,
-  the gap is "Python refcount isn't tracking Smalltalk-held
-  references on the cPtr".
+Where the original failure mode actually was — given that all three
+prereqs are now needed for the codegen change not to crash, and
+that adding any of them is enough to expose the rest — the most
+likely shape was: the codegen change drove some closure to be
+`setattr`'d during decoration, the `ImproperOperation` for "no
+dynamic instVar on ExecBlock" surfaced as a Smalltalk exception
+mid-call, that exception aborted the in-progress C-side allocation
+path, and a subsequent split saw whatever happened to land at the
+cPtr offset.  Now that the side-table catches the setattr cleanly,
+the chain runs to completion.
 
 ## Files
 
