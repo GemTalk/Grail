@@ -1063,3 +1063,69 @@ testStrFromStrWithEncodingRaisesTypeError
 		str @env1:__new__: 'hello' _: 'utf-8'
 	] raise: TypeError
 %
+
+category: 'Grail-String Methods'
+method: StrTestCase
+testFindWithStartArg
+	"``s.find(sub, start)'' searches from ``start'' (0-based) onward
+	and returns an absolute index, or -1 on miss."
+
+	self assert: ('a/b/c' @env1:find: '/' _: 0) equals: 1.
+	self assert: ('a/b/c' @env1:find: '/' _: 2) equals: 3.
+	self assert: ('a/b/c' @env1:find: '/' _: 4) equals: -1.
+	"A start at the match still finds it."
+	self assert: ('a/b/c' @env1:find: '/' _: 3) equals: 3
+%
+
+category: 'Grail-String Methods'
+method: StrTestCase
+testFindWithStartAndStopArgs
+	"``s.find(sub, start, stop)'' restricts the search to [start, stop)."
+
+	self assert: ('hello world' @env1:find: 'o' _: 0 _: 5) equals: 4.
+	"'o' at index 4 is outside [0, 4)."
+	self assert: ('hello world' @env1:find: 'o' _: 0 _: 4) equals: -1.
+	"Second 'o' (index 7) found when the window reaches it."
+	self assert: ('hello world' @env1:find: 'o' _: 5 _: 11) equals: 7
+%
+
+category: 'Grail-String Methods'
+method: StrTestCase
+testFindNegativeIndices
+	"Negative start / stop count from the end, like CPython slices."
+
+	self assert: ('hello' @env1:find: 'l' _: -2) equals: 3.
+	"start clamps to 0 when very negative."
+	self assert: ('hello' @env1:find: 'l' _: -100) equals: 2.
+	"Negative stop: search [0, len-1)."
+	self assert: ('hello' @env1:find: 'o' _: 0 _: -1) equals: -1.
+	self assert: ('hello' @env1:find: 'l' _: 0 _: -1) equals: 2
+%
+
+category: 'Grail-String Methods'
+method: StrTestCase
+testFindEdgeCases
+	"Out-of-range start, and the empty-substring rule."
+
+	"start past the end → miss for a non-empty needle."
+	self assert: ('hello' @env1:find: 'h' _: 99) equals: -1.
+	"Empty substring matches at the (clamped) start position."
+	self assert: ('hello' @env1:find: '' _: 2) equals: 2.
+	self assert: ('hello' @env1:find: '' _: 5) equals: 5.
+	"Empty substring past the end → -1 (CPython)."
+	self assert: ('hello' @env1:find: '' _: 6) equals: -1
+%
+
+category: 'Grail-String Methods'
+method: StrTestCase
+testFindKwargsDispatch
+	"``_find:kw:'' varargs entry routes by positional arity so a
+	statically-unresolved call still reaches the right form."
+
+	self assert: ('a/b/c' @env1:_find: #('/') kw: nil) equals: 1.
+	self assert: ('a/b/c' @env1:_find: #('/' 2) kw: nil) equals: 3.
+	self assert: ('hello world' @env1:_find: #('o' 0 5) kw: nil) equals: 4.
+	self should: [
+		'abc' @env1:_find: #('a' 0 1 9) kw: nil
+	] raise: TypeError
+%

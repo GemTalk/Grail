@@ -653,6 +653,81 @@ find: sub
 
 category: 'Grail-String Methods'
 method: CharacterCollection
+find: sub _: start
+	"Python ``s.find(sub, start)'' — lowest 0-based index of sub at or
+	after ``start'', else -1.  ``start'' follows CPython slice rules:
+	negative counts from the end, out-of-range clamps."
+
+	^ self @env1:find: sub _: start _: self @env0:size
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+find: sub _: start _: stop
+	"Python ``s.find(sub, start, stop)'' — lowest 0-based index of sub
+	within the ``[start, stop)'' slice, else -1.  ``start'' / ``stop''
+	follow CPython slice rules (negative counts from the end,
+	out-of-range clamps).  The returned index is absolute, not relative
+	to ``start''."
+
+	| len rawStart normStart normStop subLen slice index |
+	len := self @env0:size.
+	"Normalize start: negatives count from the end; keep rawStart for
+	the empty-substring decision (a start past the end never matches)."
+	rawStart := start @env0:< 0 ifTrue: [start @env0:+ len] ifFalse: [start].
+	normStart := (rawStart @env0:max: 0) @env0:min: len.
+	normStop := self @env1:___clampSliceIndex: stop len: len.
+	subLen := sub @env0:size.
+	"Empty substring matches at the start position when that position
+	is within both the string and the [start, stop) window."
+	subLen @env0:= 0 ifTrue: [
+		^ ((rawStart @env0:<= len) and: [normStart @env0:<= normStop])
+			ifTrue: [normStart]
+			ifFalse: [-1]].
+	"Window too small to contain sub → miss (also guards the slice
+	bounds: normStop > normStart whenever this passes)."
+	(normStop @env0:- normStart) @env0:< subLen ifTrue: [^ -1].
+	slice := self @env0:copyFrom: normStart @env0:+ 1 to: normStop.
+	index := slice @env0:findString: sub startingAt: 1.
+	index @env0:= 0 ifTrue: [^ -1].
+	^ normStart @env0:+ (index @env0:- 1)
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___clampSliceIndex: idx len: len
+	"CPython slice-bound normalization for a single index against
+	``len'': negatives count from the end, the result clamps to
+	[0, len]."
+
+	| i |
+	i := idx @env0:< 0 ifTrue: [idx @env0:+ len] ifFalse: [idx].
+	i @env0:< 0 ifTrue: [^ 0].
+	i @env0:> len ifTrue: [^ len].
+	^ i
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+_find: positional kw: kwargs
+	"Varargs entry for ``s.find(sub[, start[, stop]])'' — routes by
+	positional arity so a call site that can't resolve the arity
+	statically still reaches the right fixed-arity method."
+
+	| nargs |
+	nargs := positional @env0:size.
+	nargs @env0:= 1 ifTrue: [^ self @env1:find: (positional @env0:at: 1)].
+	nargs @env0:= 2 ifTrue: [
+		^ self @env1:find: (positional @env0:at: 1) _: (positional @env0:at: 2)].
+	nargs @env0:= 3 ifTrue: [
+		^ self @env1:find: (positional @env0:at: 1)
+			_: (positional @env0:at: 2) _: (positional @env0:at: 3)].
+	TypeError @env1:___signal___:
+		'find() takes 1 to 3 arguments but ' @env0:, nargs @env0:printString @env0:, ' were given'
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
 format
 	"Python ``str.format()'' with no arguments — placeholders are
 	rendered as literal text only if no ``{'' / ``}'' appears.
