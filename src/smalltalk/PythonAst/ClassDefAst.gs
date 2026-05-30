@@ -549,13 +549,24 @@ printSmalltalkRuntimeOn: aStream
 		onStream: aStream.
 	aStream nextPutAll: name; nextPutAll: ' dynInstVars: (Object @env0:new).'; lf.
 
-	"For each @property method, compile a 1-arg setter that signals
-	AttributeError.  Pairing the @property getter with a setter makes
-	it look like an instVar to ``___pyAttrLoad___:`` so attribute
-	reads INVOKE the property method (returning its value) instead of
+	"For each @property (and @cached_property) method, compile a 1-arg
+	setter that signals AttributeError.  Pairing the getter with a
+	setter makes it look like an instVar to ``___pyAttrLoad___:`` so
+	attribute reads INVOKE the method (returning its value) instead of
 	being wrapped in a BoundMethod.  Python @property without an
 	explicit @setter is read-only; signalling AttributeError on
 	assignment matches that.
+
+	``cached_property'' is realized via the same getter+setter pairing
+	(detected as the bare-name ``@cached_property'' from ``from
+	functools import cached_property'' / ``from werkzeug.utils import
+	cached_property'').  Functional parity for reads; it does NOT yet
+	cache (the getter recomputes on each access) — fine for the
+	idempotent reads (``.args'' / ``.headers'' / ``.cookies'') that
+	unblock the Werkzeug request path, but stream-consuming
+	cached_properties (``.form'' / ``.data'') would need real caching.
+	The attribute-access form ``@functools.cached_property'' (an
+	AttributeAst decorator) is not detected.
 
 	Skip the stub when ``@<name>.setter'' supplied an explicit setter
 	method def — the explicit setter compiles to the same ``name:''
@@ -576,7 +587,8 @@ printSmalltalkRuntimeOn: aStream
 	].
 	methodDefs do: [:def |
 		((def decoratorList notNil
-			and: [def decoratorList includes: #'property'])
+			and: [(def decoratorList includes: #'property')
+				or: [def decoratorList includes: #'cached_property']])
 			and: [(settersByName includes: def name asSymbol) not]) ifTrue: [
 			| propSetterSrc lf2 |
 			lf2 := Character lf asString.
