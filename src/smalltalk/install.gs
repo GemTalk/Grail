@@ -501,6 +501,7 @@ run
 	at: #'ConnectionRefusedErrorTestCase' put: nil;
 	at: #'ConnectionResetErrorTestCase' put: nil;
 	at: #'CopyregTestCase' put: nil;
+	at: #'DataclassesTestCase' put: nil;
 	at: #'DecimalTestCase' put: nil;
 	at: #'DeprecationWarningTestCase' put: nil;
 	at: #'DictTestCase' put: nil;
@@ -1099,6 +1100,7 @@ input src/smalltalk/PythonTests/NextIterTestCase.gs
 input src/smalltalk/PythonTests/PkgRelativeInitTestCase.gs
 input src/smalltalk/PythonTests/ReConstantsTestCase.gs
 input src/smalltalk/PythonTests/CopyregTestCase.gs
+input src/smalltalk/PythonTests/DataclassesTestCase.gs
 input src/smalltalk/PythonTests/DecimalTestCase.gs
 input src/smalltalk/PythonTests/DictTestCase.gs
 input src/smalltalk/PythonTests/FloatTestCase.gs

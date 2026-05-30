@@ -4394,6 +4394,24 @@ testSuperZeroArgInit
 	self assert: (inst @env1:flag) equals: true.
 %
 
+category: 'Grail-Tests - SuperCall'
+method: FlaskScaffoldingTestCase
+testSuperExplicitForm
+	"Explicit ``super(Cls, self)`` (not the zero-arg sugar).  CallAst
+	rewrites the 2-arg form to the same Super proxy as ``super()'',
+	resolving the class argument through the module instance's class
+	accessor.  Exercised on __init__ (delegating to the parent's
+	1-arg init) and on a regular method (``greet'')."
+
+	| mod Explicit inst |
+	mod := self loadFixture: 'super_calls'.
+	Explicit := mod @env1:ExplicitDerived.
+	inst := Explicit @env1:value: { 10. 20 } value: nil.
+	self assert: (inst @env1:x) equals: 10.
+	self assert: (inst @env1:y) equals: 20.
+	self assert: mod @env1:explicit_super_method_call equals: 'child+base'
+%
+
 ! --- SubscriptAst: class-subscript as base ---------------------------------
 
 category: 'Grail-Tests - SubscriptAst'
@@ -5125,12 +5143,12 @@ testWerkzeugUtilsImports
 category: 'Grail-Tests - werkzeug'
 method: FlaskScaffoldingTestCase
 testWerkzeugTestImports
-	"werkzeug.test — hand-rolled minimal shim (EnvironBuilder,
-	Client, TestResponse, ClientRedirectError, Cookie,
-	create_environ, run_wsgi_app, encode_multipart).  Upstream
-	source-drop blocked on ``__getitem__:'' BoundMethod codegen at
-	transitive import time (werkzeug.wrappers.request annotations).
-	Saved as ``test_upstream.py.bak'' beside the shim for the rewrite."
+	"werkzeug.test — real upstream source-drop (commit 4cf5424
+	replaced the earlier hand-rolled shim).  Imports the real
+	wrappers Request/Response, so client_calls_app is a genuine WSGI
+	round-trip on the output direction (raw app output ->
+	TestResponse(Response)).  The request-in / Response-serialization
+	directions are measured by testWerkzeugWrappersRoundTrip."
 
 	| mod mods keys |
 	mods := importlib @env1:modules.
@@ -5146,4 +5164,43 @@ testWerkzeugTestImports
 	self assert: mod @env1:environ_builder_constructs equals: true.
 	self assert: mod @env1:environ_builder_get_environ equals: true.
 	self assert: mod @env1:client_calls_app equals: true
+%
+
+category: 'Grail-Tests - werkzeug'
+method: FlaskScaffoldingTestCase
+testWerkzeugWrappersRoundTrip
+	"M6 acceptance gate — the *functional* round-trip, not just imports.
+	The existing testWerkzeugWrappersImports only proves the package
+	imports; docs/Support_Flask.md defines M6 as Request/Response
+	round-tripping a WSGI environ.  This drives the real wrappers in
+	both directions:
+
+	Request side — construct werkzeug.wrappers.Request from an environ
+	(built with the already-green EnvironBuilder) and read method /
+	path / args (query parsing) / headers.  Those attrs are
+	@cached_property backed by the reduced werkzeug.utils shim.
+
+	Response side — drive a real Response as a WSGI app and assert it
+	calls start_response with status + headers and returns body bytes,
+	plus a get_wsgi_response (app_iter, status, headers) tuple with a
+	custom header preserved.
+
+	Expected to fail until the wrappers genuinely round-trip; these
+	are the failing tests M6 must turn green."
+
+	| mod mods keys |
+	mods := importlib @env1:modules.
+	keys := mods @env0:keys @env0:select: [:k |
+		(k @env0:asString @env0:= 'werkzeug')
+			@env0:or: [(k @env0:asString @env0:indexOfSubCollection: 'werkzeug.') @env0:> 0]].
+	keys @env0:do: [:k | mods @env0:removeKey: k ifAbsent: []].
+	mods @env0:removeKey: #'use_werkzeug_roundtrip' ifAbsent: [].
+	mods @env0:removeKey: #'pkg_scaffolding.use_werkzeug_roundtrip' ifAbsent: [].
+	mod := self loadFixture: 'use_werkzeug_roundtrip'.
+	self assert: mod @env1:import_succeeded equals: true.
+	self assert: mod @env1:request_reads_method_and_path equals: true.
+	self assert: mod @env1:request_reads_query_args equals: true.
+	self assert: mod @env1:request_reads_headers equals: true.
+	self assert: mod @env1:response_wsgi_serialization equals: true.
+	self assert: mod @env1:response_emits_custom_header equals: true
 %

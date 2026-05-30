@@ -190,8 +190,18 @@ Existing stub modules that need extending later: `typing`,
 
 **Direct deps (Tier 3):**
 * `itsdangerous`, `MarkupSafe` already imported and exercised.
-* `dataclasses` — **not yet started.**  Pure-Python in CPython;
-  required by Werkzeug 3.x.
+* `dataclasses` — **working** (`DataclassesTestCase`, 6 tests).
+  `@dataclass` synthesizes `__init__` / `__repr__` / `__eq__` /
+  `__ne__`; `fields` / `asdict` / `astuple` / `replace` /
+  `is_dataclass` work; fields with defaults and
+  `field(default_factory=...)` are supported (ClassDefAst now exposes
+  the full annotated-field layout via `___annotatedFields___`, and
+  the synthesized dunders are reached through the
+  `object>>__repr__`/`__eq__`/`__ne__` dynamic-dunder probe).
+  Not yet: `frozen` enforcement, `order=True` comparisons,
+  `make_dataclass` (no `type(name, bases, ns)`), cross-class field
+  merging for dataclass inheritance, and `@dataclass` recognised only
+  by name (not via an import alias).
 
 **Jinja2 (Tier 4):**
 * `urllib.parse` — done.  `pprint`, `decimal`, `ast` — stubs in
@@ -396,10 +406,45 @@ Existing stub modules that need extending later: `typing`,
   [Weakref.md] for the ephemeron-based path forward and why
   it's deferred.
 - **M6 — `werkzeug.wrappers.Request/Response` round-trip a WSGI
-  environ.**  Long pole.  Pre-requisite stdlib gaps and Werkzeug
-  source-drop order detailed in the *Werkzeug (Tier 6)* section
-  above.  `dataclasses` (Tier 3) is the first sub-blocker:
-  Werkzeug 3.x's typed wrappers require it.
+  environ.**  Long pole; ~70% there.  Pre-requisite stdlib gaps and
+  Werkzeug source-drop order detailed in the *Werkzeug (Tier 6)*
+  section above.
+
+  *Done:* the whole Werkzeug package source-drops and imports
+  (~95% verbatim upstream).  `werkzeug.test` is the real upstream
+  source (not the old shim), and the **output** direction
+  round-trips end-to-end: `Client.get()` builds an environ, invokes
+  a WSGI app, and wraps the result in a real `TestResponse(Response)`
+  (`use_werkzeug_test.py::client_calls_app`, green).
+
+  *Acceptance gate (was the relaxed "imports cleanly" bar, now
+  measured directly):* `use_werkzeug_roundtrip.py` /
+  `testWerkzeugWrappersRoundTrip` drive the real wrappers in both
+  directions — a `Request(environ)` reading `.method` / `.path` /
+  `.args` / `.headers`, and a `Response(...)` serialized to a
+  `(start_response, app_iter)` pair.  These are the failing tests
+  M6 must turn green.
+
+  *Remaining blockers:*
+  * **Request `@cached_property` attrs** (`.args` / `.form` /
+    `.headers` / …) are backed by the reduced hand-rolled
+    `werkzeug.utils` shim — blocked on **multiple inheritance**
+    (`cached_property(property, Generic[_T])`).
+  * **`werkzeug.exceptions`** is still a hand-rolled shim — blocked
+    on the `_find_exceptions()` `globals().values()` + `issubclass`
+    introspection loop *and* multiple inheritance
+    (`BadRequestKeyError(BadRequest, KeyError)`).  The Response /
+    abort error paths lean on its `HTTPException` hierarchy.
+  * **`.form` / `.files`** (urlencoded + multipart body parsing via
+    `formparser` + `sansio.multipart`) imported but never exercised.
+  * `dataclasses` (Tier 3) now works (defaults + default_factory
+    included), so Werkzeug 3.x's typed wrappers are no longer
+    blocked on it; the routing `State` `@dataclass` workaround can be
+    revisited.
+
+  Multiple inheritance (C3 MRO + per-method resolution) is the
+  single gate behind both remaining shims — see *Class System
+  Limitations* in `TODO.md`.
 - **M7 — Flask hello-world responds via `werkzeug.test.Client`.**
   Flask "working" without a live socket.  Source under
   `src/python/stdlib/flask/`; bring up `app`, `blueprints`,

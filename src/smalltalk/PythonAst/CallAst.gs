@@ -175,6 +175,32 @@ printSmalltalkOn: aStream
 				nextPutAll: ') obj: self)'.
 			^self].
 
+	"Explicit ``super(Cls, obj)`` inside a class method.  Mirror the
+	zero-arg rewrite but take the class + bound object from the call's
+	own arguments.  The class name resolves through the module
+	instance's class accessor (the same path the zero-arg form uses) —
+	a bare class-name reference isn't reliably bound inside the class's
+	own compilation scope.  Only the common ``NameAst-class,
+	positional-2'' form is rewritten; anything else falls through (and
+	``super'' raises NameError as it did before)."
+	((function isKindOf: NameAst)
+		and: [function id = #'super'
+			and: [arguments size = 2
+				and: [keywords isEmpty
+					and: [((arguments at: 1) isKindOf: NameAst)
+						and: [CallAst classBeingCompiled notNil
+							and: [CallAst moduleClassBeingCompiled notNil]]]]]])
+		ifTrue: [
+			aStream
+				nextPutAll: '(Super @env1:cls: ((';
+				nextPutAll: CallAst moduleClassBeingCompiled name;
+				nextPutAll: ' @env0:___instance___) @env1:';
+				nextPutAll: (arguments at: 1) id asString;
+				nextPutAll: ') obj: '.
+			(arguments at: 2) printSmalltalkWithParenthesisOn: aStream.
+			aStream nextPutAll: ')'.
+			^self].
+
 	fastSelector := self bareCallFastPathSelector.
 	fastSelector ifNotNil: [
 		^ self printBareCallFastPathOn: aStream selector: fastSelector

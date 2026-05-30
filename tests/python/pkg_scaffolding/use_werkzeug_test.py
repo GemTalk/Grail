@@ -1,16 +1,20 @@
 # Probe for Werkzeug Step 10 — werkzeug.test.
 #
-# werkzeug.test ships as a hand-rolled minimal shim, not a
-# source-drop of upstream.  Upstream test.py runs a transitive
-# import chain that bottoms out in werkzeug.wrappers.request which
-# hits a ``__getitem__:'' on BoundMethod codegen gap at module-init
-# time (annotations / class body subscripts that resolve to
-# imported BoundMethods).  Once that lands the upstream source-drop
-# becomes viable; ``test_upstream.py.bak'' kept alongside.
+# werkzeug.test is now the real upstream source-drop (commit
+# 4cf5424 replaced the earlier hand-rolled shim).  It imports the
+# real werkzeug.wrappers Request/Response, so client_calls_app
+# below exercises a genuine WSGI round-trip: Client.get() builds an
+# environ, invokes the app, and wraps the output in a real
+# TestResponse(Response).
 #
-# Shim public surface: EnvironBuilder, Client, TestResponse,
+# Public surface: EnvironBuilder, Client, TestResponse,
 # ClientRedirectError, Cookie, create_environ, run_wsgi_app,
 # encode_multipart, stream_encode_multipart.
+#
+# Note: this probe proves the *output* direction (raw app output ->
+# TestResponse).  The request-in / Response-serialization directions
+# of the real wrappers are measured by use_werkzeug_roundtrip.py
+# (the M6 acceptance gate).
 
 
 def import_succeeded():

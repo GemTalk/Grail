@@ -36,6 +36,9 @@
 #     with explicit __init__.
 
 
+from collections import OrderedDict
+
+
 class _MissingType:
     """Sentinel singleton — has its own type so ``is MISSING''
     pattern matches CPython."""
@@ -250,14 +253,44 @@ def replace(*args, **changes):
 
 
 def _collect_fields(cls):
-    """Build the ``{name: Field}'' ordered dict from the class's
-    bare-annotation ``_fields'' attribute (Grail's ClassDefAst
-    populates this from annotation lines)."""
-    result = {}
-    bare = list(getattr(cls, '_fields', ()) or ())
-    for name in bare:
-        f = Field()
-        f.name = name
+    """Build the ``{name: Field}'' ordered dict for the class.
+
+    Field order + the full name set come from ClassDefAst's
+    ``___annotatedFields___'' (every annotated line, including those
+    with a default), falling back to ``_fields'' (bare annotations
+    only) for classes compiled before that accessor existed.
+
+    ``_fields'' separately tells us which names are BARE annotations
+    (``x: int'' — required, no default).  For every other annotated
+    name the class attribute holds the default: a ``Field'' descriptor
+    (from ``field(...)'') is used directly, anything else is the plain
+    default value.  Splitting on ``_fields'' membership sidesteps the
+    Smalltalk-nil-vs-Python-None ambiguity for unset bare slots."""
+    order = getattr(cls, '___annotatedFields___', None)
+    if order is None:
+        order = getattr(cls, '_fields', None)
+    if order is None:
+        return OrderedDict()
+
+    bare = set(getattr(cls, '_fields', ()) or ())
+    # OrderedDict, not {} — Grail's plain dict is hash-ordered, but
+    # dataclass field layout (and thus positional __init__ binding,
+    # fields(), asdict, ...) must follow declaration order.
+    result = OrderedDict()
+    for name in order:
+        if name in bare:
+            # Bare annotation — required positional, no default.
+            f = Field()
+            f.name = name
+        else:
+            raw = getattr(cls, name, MISSING)
+            if isinstance(raw, Field):
+                f = raw
+                f.name = name
+            else:
+                f = Field()
+                f.name = name
+                f.default = raw
         result[name] = f
     return result
 
@@ -313,8 +346,11 @@ def _make_synthesized_repr(cls_name, field_dict):
 
 def _make_synthesized_eq(field_dict):
     """Structural equality across all fields, gated on identical
-    class.  Returns NotImplemented when types differ (matches
-    CPython's dataclass __eq__)."""
+    class.  CPython returns NotImplemented when types differ so the
+    reflected __eq__ gets a chance; Grail has no NotImplemented
+    singleton, and object>>__eq__ has no reflected-call fallback, so
+    we return False directly on a type mismatch (correct for the
+    equality result, only loses the reflected-dispatch nicety)."""
 
     field_names = []
     for name in field_dict:
@@ -322,7 +358,7 @@ def _make_synthesized_eq(field_dict):
 
     def __eq__(self, other):
         if type(self) is not type(other):
-            return NotImplemented
+            return False
         for name in field_names:
             if getattr(self, name, None) != getattr(other, name, None):
                 return False

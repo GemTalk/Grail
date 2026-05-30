@@ -880,8 +880,20 @@ instance that has no instance attributes and cannot be given any.
 category: 'Grail-Comparison'
 method: object
 __eq__: other
-	"Return self == other"
+	"Return self == other.
 
+	Probe for a setattr-installed ``__eq__'' on the class chain
+	(``cls.__eq__ = synth_fn'' lands in the per-class dynInstVars
+	store — the dataclass decorator does this).  When present, bind
+	self + other and forward, mirroring the instantiation path that
+	consults a dynamic ``__init__''.  When absent (the common case),
+	fall through to identity.  Only generic PythonInstances reach
+	here — Int / Float / str / etc. carry their own ``__eq__:''
+	override, so the class-chain walk is not on those hot paths."
+
+	| fn |
+	fn := self @env1:___dynamicClassAttr___: #'__eq__'.
+	fn @env0:== nil ifFalse: [^ fn @env1:___pyCallValue___: { self. other } kw: nil].
 	^ self @env0:= other
 %
 
@@ -968,8 +980,18 @@ __lt__: other
 category: 'Grail-Comparison'
 method: object
 __ne__: other
-	"Return self != other"
+	"Return self != other.
 
+	Honor a setattr-installed ``__ne__'' if present; otherwise derive
+	from a setattr-installed ``__eq__'' (CPython's default __ne__
+	delegates to __eq__ and negates — dataclasses synthesize only
+	__eq__).  Fall through to identity when neither is installed."
+
+	| fn |
+	fn := self @env1:___dynamicClassAttr___: #'__ne__'.
+	fn @env0:== nil ifFalse: [^ fn @env1:___pyCallValue___: { self. other } kw: nil].
+	fn := self @env1:___dynamicClassAttr___: #'__eq__'.
+	fn @env0:== nil ifFalse: [^ (fn @env1:___pyCallValue___: { self. other } kw: nil) @env0:not].
 	^ (self @env0:= other) @env0:not
 %
 
@@ -992,9 +1014,17 @@ __reduce_ex__: protocol
 category: 'Grail-String Representation'
 method: object
 __repr__
-	"Return a string representation for debugging"
+	"Return a string representation for debugging.
 
-	| myClass className stream |
+	Probe for a setattr-installed ``__repr__'' on the class chain
+	(the dataclass decorator installs one via ``cls.__repr__ =
+	synth_fn'').  When present, bind self and forward; the synthesized
+	closure renders ``ClassName(field=value, ...)''.  When absent,
+	fall through to the default ``<ClassName object>''."
+
+	| myClass className stream fn |
+	fn := self @env1:___dynamicClassAttr___: #'__repr__'.
+	fn @env0:== nil ifFalse: [^ fn @env1:___pyCallValue___: { self } kw: nil].
 	myClass := self @env0:class.
 	className := myClass @env0:name.
 	stream := WriteStream @env0:on: (Unicode7 ___new___).
@@ -1133,10 +1163,21 @@ ___pyAttrStore___: aName put: aValue
 	(e.g. inside a tuple unpack or chained assignment)."
 
 	(self @env0:isKindOf: Behavior) ifTrue: [
-		| setterSym metaclass |
+		| setterSym getterSym metaclass |
 		setterSym := (aName @env0:asString @env0:, ':') @env0:asSymbol.
+		getterSym := aName @env0:asString @env0:asSymbol.
 		metaclass := self @env0:class.
-		(metaclass @env0:whichClassIncludesSelector: setterSym environmentId: 1) notNil
+		"Dispatch to a static setter ONLY when a PAIRED unary getter
+		also exists — real class attributes / @property are always a
+		getter+setter pair.  Probing the setter alone mis-fires for
+		binary dunders: the metaclass chain bottoms out at Object, so
+		``__eq__:'' / ``__ne__:'' / ``__lt__:'' (comparison methods, no
+		unary getter) look like setters and ``setattr(cls, '__eq__',
+		fn)'' would dispatch ``cls __eq__: fn'' instead of storing fn.
+		The dataclass decorator relies on this store landing in
+		dynInstVars so object>>__eq__ can find it."
+		((metaclass @env0:whichClassIncludesSelector: setterSym environmentId: 1) notNil
+			and: [(metaclass @env0:whichClassIncludesSelector: getterSym environmentId: 1) notNil])
 			ifTrue: [^ self @env0:perform: setterSym env: 1 withArguments: { aValue }].
 		"Python user class — store in the per-class dynInstVars dict."
 		(metaclass @env0:whichClassIncludesSelector: #dynInstVars environmentId: 1) notNil

@@ -12,28 +12,32 @@ runtime gaps that surface independently of the Flask push.
 
 These break programs that look ordinary in CPython.
 
-- [ ] **Explicit `super(Cls, self)` rejected** — the zero-arg form
-  `super()` works end-to-end (codegen rewrite + `Super` proxy).  The
-  explicit form trips the class-name reference inside the class body.
-  Fix: when emitting an explicit `super(...)` call, resolve the first
-  argument lazily (e.g., `___cls___` from the enclosing class-compile
-  scope) instead of as a bare name.
+- [x] **Explicit `super(Cls, self)` rejected** — RESOLVED
+  (overnight/dataclasses-and-codegen).  CallAst now rewrites the 2-arg
+  form to the same `Super` proxy as the zero-arg `super()`, resolving
+  the class argument through the module instance's class accessor
+  (`(ModuleClass ___instance___) @env1:<Cls>`) rather than a bare name.
+  Works on `__init__` and on regular methods; see
+  `FlaskScaffoldingTestCase >> testSuperExplicitForm`.  Only the
+  common `NameAst`-class, positional-2 form is rewritten; other shapes
+  still fall through (and `super` raises NameError).
 
-- [ ] **`del` statement panics codegen** — Grail's parser accepts
-  `del x[-2:]` but there is no `printSmalltalkOn:` on the relevant AST
-  node, so codegen hits `AbstractNode is abstract …`.  Implement for the
-  three common targets: name (`del x`), subscript (`del xs[i]`),
-  attribute (`del obj.x`).
+- [x] **`del` statement** — already implemented and working (the
+  "panics codegen" note was stale).  `DeleteAst >> printSmalltalkOn:`
+  handles name (module-scope removeDynamicInstVar / local nil),
+  subscript (`__delitem__:`, incl. slices like `del xs[-2:]`), and
+  attribute (`__delattr__:`).  Verified across all four target shapes.
 
-- [ ] **Module-level dunders (`__name__`, `__file__`, …) not bound at
-  module scope** — `if __name__ == "__main__":` emits `__name__` as a
-  bare Smalltalk identifier and fails with
-  `CompileError 1001, undefined symbol __name__`.  The attribute exists
-  (`module >> __name__` is set during import); `NameAst` codegen needs
-  to resolve module-scope dunder reads to
-  `((thisModule instance) @env1:__name__)` (or special-case the small
-  dunder set).  Same area as the `(builtins instance)` rewrite that
-  already lives in `NameAst`.
+- [x] **Module-level dunder VALUE at module-body scope** — RESOLVED
+  (commit 02ee3fa).  A bare `__name__` read resolved to a BoundMethod
+  (the `__name__:` setter shadowed the accessor in
+  `___moduleAttrLoad___`), so `__name__ == '<modname>'` was always
+  False.  Now value accessors in the `Grail-Accessors` category are
+  performed before the fixed-arity setter probes; `__doc__` /
+  `__loader__` / `__package__` / `__spec__` were also hardened to
+  None-as-absent so a bare read never raises.  See
+  `ModuleHigherArityDefTestCase >> testModuleNameDunder` +
+  `testOptionalDundersDoNotRaise`.
 
 - [ ] **Module-level unbound names compile-error instead of NameError**
   — `print(undefined_var)` at module scope produces a GemStone
@@ -81,12 +85,14 @@ doesn't preserve.
 through Semaphores; `__iter__`, `__next__`, `send`, `throw`, `close`
 all work.  Outstanding:
 
-- [ ] **`yield from` is still a TypeError stub** — `YieldFromAst >>
-  printSmalltalkOn:` emits the same TypeError as the old `YieldAst`.
-  Real PEP 380 delegation needs forwarding the inner iterator's
-  `send`/`throw`/`close` through the outer generator, plus capturing
-  the inner's StopIteration value as the `yield from` expression's
-  value.
+- [~] **`yield from`** — basic delegation works (the "TypeError stub"
+  note is stale): `yield from inner()` interleaves the inner
+  generator's values into the outer one (verified `list(outer())` →
+  flattened sequence).  Still unverified / possibly incomplete: full
+  PEP 380 forwarding of `send`/`throw`/`close` into the inner
+  iterator, and capturing the inner's StopIteration value as the
+  `yield from` expression's result.  Add targeted tests before
+  claiming complete.
 
 - [ ] **Cross-process exception forwarding** — when the body raises
   an unhandled exception inside the forked producer, the consumer
@@ -265,11 +271,18 @@ Flask 3.1 source is dropped under ``src/python/stdlib/flask/`` and
     ``AttributeError: Field object has no attribute 'setdefault'``.
     Worked around by dropping ``@dataclass'' from ``State'' and
     writing an explicit ``__init__'' that pins the per-instance
-    list/dict.  Proper fix is a generalised dataclass-with-
-    default-factory path in ``_collect_fields'' + ClassDefAst's
-    ``_fields'' emit — both attempts blew up on Grail's
-    definite-assignment check (``UnboundLocalError'' when an
-    accessor returns Smalltalk nil for an unset slot).
+    list/dict.
+
+    RESOLVED (overnight/dataclasses-and-codegen): the proper fix
+    landed.  ClassDefAst now emits ``___annotatedFields___'' (the
+    full annotated-field layout incl. ``= field(...)'' lines, gated
+    to ``@dataclass''-decorated classes), and ``_collect_fields''
+    consults it + reads each default from the class attribute,
+    returning an OrderedDict so positional/field order is preserved.
+    ``field(default_factory=...)'' and plain defaults both work; see
+    ``DataclassesTestCase >> testDefaults''.  The ``State''
+    ``@dataclass'' workaround can now be reverted (left as-is for
+    a focused follow-up + an M6-roundtrip re-test).
 
 - [ ] **Class-call protocol for built-in-derived subclasses**.
   ClassDefAst's synthesized ``value:value:'' does ``instance :=

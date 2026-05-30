@@ -251,38 +251,45 @@ method: ModuleAst
 executeWithScope: aSymbolList as: aKind
 	"Compile and execute this module, returning the raw execution
 	result.  aKind is a Symbol (#exec / #eval / #doit) that
-	identifies the entry point — used to name the debug capture
-	files under /tmp/grail/ as ___<kind>_<N>___.tpz and matching
-	.ir.  Each call gets its own sequence number so successive
-	exec/eval/doit calls accumulate instead of overwriting (the
-	previous behaviour wrote /tmp/grail/<name>.gs and clobbered
-	earlier executions sharing the same module name)."
+	identifies the entry point.
 
-	| code tmpPath seq tpzPath irPath compiledMethod result tpzSource |
+	Codegen debug capture is OPT-IN, gated by the same
+	``GRAIL_CODEGEN_TRACE_DIR'' env var as importlib's module-load
+	capture — ``importlib ___codegenTraceDir___'' is the single
+	source of truth (it returns nil when the var is unset and creates
+	the directory when it is set).  When tracing is on, the generated
+	Smalltalk source and the post-compile IR snapshot are written to
+	that directory as ___<kind>_<N>___.tpz and matching .ir; each call
+	gets its own sequence number so successive exec/eval/doit calls
+	accumulate instead of overwriting.  When tracing is off (default),
+	no sequence number is consumed and no file I/O happens — this is
+	what keeps ``run_tests.sh'' from flooding /tmp/grail with a
+	___doit_<N>___ pair per executed statement."
+
+	| code traceDir seq tpzPath irPath compiledMethod result tpzSource |
 	code := self smalltalkSource.
-	tmpPath := '/tmp/grail'.
-	(GsFile isServerDirectory: tmpPath) ifNil: [
-		GsFile createServerDirectory: tmpPath].
-	seq := ModuleAst nextSeqFor: aKind.
-	tpzPath := tmpPath , '/___' , aKind asString , '_' , seq printString , '___.tpz'.
-	irPath := tmpPath , '/___' , aKind asString , '_' , seq printString , '___.ir'.
-	"Topaz-style wrapping: the doit framing matches what topaz
-	would see if you fed the file through it.  Caveat: the symbol
-	list passed to _compileInContext: isn't reproduced here, so
-	free-name resolution may differ in a true topaz run; the file
-	is for inspection rather than literal replay."
-	tpzSource := (WriteStream on: Unicode7 new)
-		nextPutAll: '! '; nextPutAll: tpzPath;
-		nextPutAll: '   (Module: '; nextPutAll: name;
-		nextPut: $); lf; lf;
-		nextPutAll: 'doit'; lf;
-		nextPutAll: code; lf;
-		nextPutAll: '%'; lf;
-		yourself.
-	tpzSource := tpzSource contents.
-	(GsFile open: tpzPath mode: 'wb' onClient: false)
-		nextPutAll: tpzSource encodeAsUTF8;
-		close.
+	traceDir := importlib ___codegenTraceDir___.
+	traceDir ifNotNil: [
+		seq := ModuleAst nextSeqFor: aKind.
+		tpzPath := traceDir , '/___' , aKind asString , '_' , seq printString , '___.tpz'.
+		irPath := traceDir , '/___' , aKind asString , '_' , seq printString , '___.ir'.
+		"Topaz-style wrapping: the doit framing matches what topaz
+		would see if you fed the file through it.  Caveat: the symbol
+		list passed to _compileInContext: isn't reproduced here, so
+		free-name resolution may differ in a true topaz run; the file
+		is for inspection rather than literal replay."
+		tpzSource := (WriteStream on: Unicode7 new)
+			nextPutAll: '! '; nextPutAll: tpzPath;
+			nextPutAll: '   (Module: '; nextPutAll: name;
+			nextPut: $); lf; lf;
+			nextPutAll: 'doit'; lf;
+			nextPutAll: code; lf;
+			nextPutAll: '%'; lf;
+			yourself.
+		(GsFile open: tpzPath mode: 'wb' onClient: false)
+			nextPutAll: tpzSource contents encodeAsUTF8;
+			close.
+	].
 	[compiledMethod := code
 		_compileInContext: nil
 		symbolList: aSymbolList
@@ -293,9 +300,11 @@ executeWithScope: aSymbolList as: aKind
 		ex pass. "Code is here to allow a breakpoint"].
 	"Snapshot IR for the freshly-compiled doit before any later
 	compile overwrites __sessionStateAt: 19."
-	(GsFile open: irPath mode: 'w' onClient: false)
-		nextPutAll: (System __sessionStateAt: 19) printString;
-		close.
+	traceDir ifNotNil: [
+		(GsFile open: irPath mode: 'w' onClient: false)
+			nextPutAll: (System __sessionStateAt: 19) printString;
+			close.
+	].
 	[result := compiledMethod _executeInContext: nil
 	] on: AbstractException do: [:ex |
 		ex pass. "Code is here to allow a breakpoint"].

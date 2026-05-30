@@ -245,6 +245,17 @@ printSmalltalkRuntimeOn: aStream
 	((classAttrs anySatisfy: [:p | p value isNil])
 		and: [(classAttrs anySatisfy: [:p | p key == #'_fields']) not])
 			ifTrue: [allClassInstVars add: #'_fields'].
+	"Add ``___annotatedFields___`` slot holding EVERY annotated field
+	name in declaration order — bare ``x: int'' AND ``x: int = default''.
+	``_fields'' above carries only the BARE annotations (annotated-with-
+	value lines route to class-attribute storage), so it can't drive
+	dataclass __init__ for defaulted fields.  dataclasses._collect_fields
+	consults this slot to recover the full field layout + each default.
+	Skipped when the user already declared the name."
+	((self isDataclassDecorated)
+		and: [self dataclassAnnotatedNames notEmpty
+		and: [(classAttrs anySatisfy: [:p | p key == #'___annotatedFields___']) not]])
+			ifTrue: [allClassInstVars add: #'___annotatedFields___'].
 	"Emit a single send to the ``___subclass___:...'' helper on Class.
 	The helper filters the instVar and classInstVar name arrays
 	against the parent's hierarchy before calling subclass:..., so the
@@ -435,15 +446,57 @@ printSmalltalkRuntimeOn: aStream
 			aStream space; nextPutAll: ''''; nextPutAll: n asString; nextPutAll: '''' ].
 		aStream nextPutAll: ' )).'; lf.
 	].
+	"``___annotatedFields___`` accessor/setter + init — every annotated
+	field name in declaration order (see the slot registration above).
+	Mirrors the ``_fields'' emission but includes annotated-with-value
+	lines, so dataclasses can recover defaulted fields."
+	((self isDataclassDecorated)
+		and: [self dataclassAnnotatedNames notEmpty
+		and: [(classAttrs anySatisfy: [:p | p key == #'___annotatedFields___']) not]])
+			ifTrue: [
+		| lf accessorSrc setterSrc |
+		lf := Character lf asString.
+		accessorSrc := '___annotatedFields___' , lf , '	^ ___annotatedFields___'.
+		self
+			emitCompileMethodOn: name
+			source: accessorSrc
+			category: 'Grail-Dataclass'
+			env: 1
+			classSide: true
+			onStream: aStream.
+		setterSrc := '___annotatedFields___: ___1' , lf , '	___annotatedFields___ := ___1.'.
+		self
+			emitCompileMethodOn: name
+			source: setterSrc
+			category: 'Grail-Dataclass'
+			env: 1
+			classSide: true
+			onStream: aStream.
+		aStream
+			nextPutAll: name;
+			nextPutAll: ' ___annotatedFields___: (tuple @env0:withAll: #('.
+		self dataclassAnnotatedNames do: [:n |
+			aStream space; nextPutAll: ''''; nextPutAll: n asString; nextPutAll: '''' ].
+		aStream nextPutAll: ' )).'; lf.
+	].
 	"Inherit parent class-attr values into our slot.  Smalltalk
 	class-side instVars are per-class storage; without this the
 	subclass's inherited slot stays nil."
 	bases isEmpty ifFalse: [
+		| excludeNames |
+		"Exclude this class's own class-attr names from the parent-value
+		copy.  Also exclude ``___annotatedFields___'' for a dataclass so
+		the just-emitted per-class field list isn't overwritten by the
+		parent's (the init runs before this copy).  Cross-class field
+		merging for dataclass inheritance is a separate, unimplemented
+		concern."
+		excludeNames := (classAttrs collect: [:p | p key]) asOrderedCollection.
+		self isDataclassDecorated ifTrue: [excludeNames add: #'___annotatedFields___'].
 		aStream
 			nextPutAll: '(Python @env0:at: #importlib) @env0:___inheritClassAttrs___: ';
 			nextPutAll: name;
 			nextPutAll: ' exclude: '.
-		self printSymbolArray: (classAttrs collect: [:p | p key]) on: aStream.
+		self printSymbolArray: excludeNames on: aStream.
 		aStream nextPutAll: '.'; lf
 	].
 
@@ -845,6 +898,52 @@ method: ClassDefAst
 body
 
 	^ body
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+dataclassAnnotatedNames
+	"Ordered names of every annotated assignment in the class body —
+	bare ``x: int'' AND ``x: int = default'' alike.  ClassDefAst's
+	``_fields'' captures only the bare ones (annotated-with-value lines
+	route to class-attribute storage), so this is what
+	dataclasses._collect_fields needs to recover the full field layout
+	and each field's default.  Plain (un-annotated) assignments such as
+	``x = 1'' are excluded — they are not dataclass fields."
+
+	| names |
+	names := OrderedCollection new.
+	body body do: [:stmt |
+		((stmt isKindOf: AnnAssignAst) and: [stmt target isKindOf: NameAst])
+			ifTrue: [names add: stmt target id asString]].
+	^ names
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+isDataclassDecorated
+	"True when one of this class's decorators is ``@dataclass'' —
+	``@dataclass'', ``@dataclass(...)'', ``@dataclasses.dataclass'' or
+	``@dataclasses.dataclass(...)''.  Gates emission of the
+	``___annotatedFields___'' accessor so ONLY dataclasses pay for it
+	(most classes carry annotations but are not dataclasses).
+	Limitation: an import alias (``from dataclasses import dataclass as
+	dc'') is not recognised."
+
+	decorator_list isNil ifTrue: [^ false].
+	^ decorator_list anySatisfy: [:deco | self decoratorRefersToDataclass: deco]
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+decoratorRefersToDataclass: deco
+	"Recurse through a CallAst (``@dataclass(frozen=True)'') to its
+	function, and recognise both the bare name and the attribute form."
+
+	(deco isKindOf: NameAst) ifTrue: [^ deco id asString = 'dataclass'].
+	(deco isKindOf: AttributeAst) ifTrue: [^ deco attr asString = 'dataclass'].
+	(deco isKindOf: CallAst) ifTrue: [^ self decoratorRefersToDataclass: deco function].
+	^ false
 %
 
 category: 'Grail-Class Compilation'

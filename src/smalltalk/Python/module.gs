@@ -135,12 +135,13 @@ category: 'Grail-Accessors'
 method: module
 __doc__
 	"Return the module docstring, falling back to the base object docstring
-	if unset."
+	if unset.  Guard the dict read with includesKey: — an unguarded
+	``at:'' raises LookupError for a module with no docstring (now that
+	bare ``__doc__'' reads actually perform this accessor instead of
+	being mis-wrapped as a BoundMethod)."
 
-	| doc |
-	doc := self @env0:at: #__doc__.
-	doc == nil ifTrue: [^ super __doc__].
-	^ doc
+	(self @env0:includesKey: #__doc__) ifTrue: [^ self @env0:at: #__doc__].
+	^ super __doc__
 %
 
 category: 'Grail-Accessors'
@@ -152,7 +153,12 @@ __doc__: aValue
 category: 'Grail-Accessors'
 method: module
 __loader__
-	^ self @env0:at: #__loader__
+	"None-as-absent (cf. __path__) — a bare read must not raise when
+	the slot is unset."
+
+	^ (self @env0:includesKey: #__loader__)
+		ifTrue: [self @env0:at: #__loader__]
+		ifFalse: [None]
 %
 
 category: 'Grail-Accessors'
@@ -176,7 +182,11 @@ __name__: aValue
 category: 'Grail-Accessors'
 method: module
 __package__
-	^ self @env0:at: #__package__
+	"None-as-absent (cf. __path__) — top-level modules have no package."
+
+	^ (self @env0:includesKey: #__package__)
+		ifTrue: [self @env0:at: #__package__]
+		ifFalse: [None]
 %
 
 category: 'Grail-Accessors'
@@ -207,7 +217,12 @@ __path__: aValue
 category: 'Grail-Accessors'
 method: module
 __spec__
-	^ self @env0:at: #__spec__
+	"None-as-absent (cf. __path__) — a bare read must not raise when
+	the slot is unset."
+
+	^ (self @env0:includesKey: #__spec__)
+		ifTrue: [self @env0:at: #__spec__]
+		ifFalse: [None]
 %
 
 category: 'Grail-Accessors'
@@ -305,11 +320,25 @@ ___moduleAttrLoad___: aSym
 	| val s sym1 sym2 sym3 symVA cls owner |
 	val := self @env0:dynamicInstVarAt: aSym.
 	val == nil ifFalse: [^ val].
+	cls := self @env0:class.
+	s := aSym @env0:asString.
+	"Value-attribute accessors (the ``__name__'' / ``__doc__'' / …
+	dunders — getter+setter pairs) must be PERFORMED to yield their
+	value BEFORE the fixed-arity probes below.  Otherwise the ``sym1''
+	(``<name>:'') probe matches the paired SETTER and wraps it as a
+	BoundMethod, shadowing the real value — so a bare module-scope
+	``__name__'' read returned a BoundMethod instead of the module's
+	name string.  Discriminate by category: ``Grail-Accessors'' is a
+	value attribute; top-level Python defs live in ``Grail-Methods''
+	and are still wrapped (as first-class functions) by the unary
+	branch further down."
+	owner := cls @env0:whichClassIncludesSelector: aSym environmentId: 1.
+	(owner notNil
+		and: [(owner @env0:categoryOfSelector: aSym environmentId: 1) @env0:== #'Grail-Accessors'])
+			ifTrue: [^ self @env0:perform: aSym env: 1].
 	"Lazy-wrap a top-level def as BoundMethod.  The def itself
 	compiled as a real env-1 method on the module class; this is
 	the first read that turns it into a first-class function value."
-	cls := self @env0:class.
-	s := aSym @env0:asString.
 	symVA := ('_' @env0:, s @env0:, ':kw:') @env0:asSymbol.
 	((cls @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil) ifTrue: [
 		^ BoundMethod @env1:receiver: self selector: aSym

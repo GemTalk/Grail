@@ -637,3 +637,87 @@ testGeneratedModuleClassInPythonModules
 	self assert: (UserGlobals at: #'Python_hello' ifAbsent: [nil]) isNil.
 	self assert: (UserGlobals at: #'py_python_hello' ifAbsent: [nil]) isNil
 %
+
+! ===============================================================================
+! Tests - executeWithScope:as: codegen capture is opt-in
+! ===============================================================================
+
+category: 'Grail-Tests - Codegen Capture'
+method: ImportlibTestCase
+___captureCountIn: dir
+	"Number of directory entries in dir (0 if dir is absent or
+	unreadable).  Used to measure whether executeWithScope:as:
+	produced any capture files."
+
+	| contents |
+	(GsFile existsOnServer: dir) ifFalse: [^ 0].
+	contents := GsFile contentsOfDirectory: dir onClient: false.
+	(contents isKindOf: Array) ifFalse: [^ 0].
+	^ contents size
+%
+
+category: 'Grail-Tests - Codegen Capture'
+method: ImportlibTestCase
+___emptyDir: dir
+	"Remove every file in dir.  ``contentsOfDirectory:onClient:''
+	returns full paths, so each entry can be handed straight to
+	``removeServerFile:''.  Needed before a capture-count delta is
+	meaningful: the per-session sequence counters reset on install, so
+	capture filenames (___doit_1___.tpz, ...) are reused and would be
+	overwritten — not added — across repeated runs."
+
+	| contents |
+	(GsFile existsOnServer: dir) ifFalse: [^ self].
+	contents := GsFile contentsOfDirectory: dir onClient: false.
+	(contents isKindOf: Array) ifFalse: [^ self].
+	contents do: [:each | GsFile removeServerFile: each]
+%
+
+category: 'Grail-Tests - Codegen Capture'
+method: ImportlibTestCase
+testExecuteWithScopeCaptureIsOptIn
+	"ModuleAst >> executeWithScope:as: used to write a
+	___<kind>_<N>___.tpz/.ir pair to a hardcoded /tmp/grail on EVERY
+	exec/eval/doit, ignoring GRAIL_CODEGEN_TRACE_DIR — which flooded
+	/tmp/grail during run_tests.sh.  Capture must now be gated by the
+	same env var as importlib's module-load capture and must honor the
+	configured directory rather than a hardcoded path."
+
+	| dir before after |
+	dir := '/tmp/grail_optin_test'.
+
+	"--- Tracing ON: a doit writes capture files into the CONFIGURED
+	dir (proving the path is not hardcoded to /tmp/grail).  Empty the
+	dir first: sequence counters reset on install, so capture filenames
+	are reused and a leftover ___doit_1___ would be overwritten rather
+	than added, hiding the write. ---"
+	System @env0:gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR' put: dir.
+	importlib ___codegenTraceDirInvalidate___.
+	self assert: importlib ___codegenTraceDir___ equals: dir.
+	self ___emptyDir: dir.
+	before := self ___captureCountIn: dir.
+	ModuleAst
+		evaluateSource: 'x = 21 + 21'
+		usingModuleScope: SymbolDictionary new
+		as: #doit.
+	after := self ___captureCountIn: dir.
+	self assert: after > before.
+
+	"--- Tracing OFF: a doit writes NOTHING.  Only this synchronous
+	doit runs between the two counts, so the /tmp/grail delta is 0
+	with the fix and would be +2 (.tpz + .ir) with the old bug. ---"
+	System @env0:gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR' put: ''.
+	importlib ___codegenTraceDirInvalidate___.
+	self assert: importlib ___codegenTraceDir___ isNil.
+	before := self ___captureCountIn: '/tmp/grail'.
+	ModuleAst
+		evaluateSource: 'y = 1 + 2'
+		usingModuleScope: SymbolDictionary new
+		as: #doit.
+	after := self ___captureCountIn: '/tmp/grail'.
+	self assert: after equals: before.
+
+	"Restore the tracing dir the rest of the suite's setUp expects."
+	System @env0:gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR' put: '/tmp/grail'.
+	importlib ___codegenTraceDirInvalidate___
+%
