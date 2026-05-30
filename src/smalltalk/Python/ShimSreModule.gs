@@ -42,7 +42,7 @@ _sre category: 'Grail-Modules'
 expectvalue /Class
 doit
 Object subclass: 'SrePattern'
-  instVarNames: #(cPtr)
+  instVarNames: #(cPointer)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -54,14 +54,20 @@ expectvalue /Class
 doit
 SrePattern comment:
 'Wrapper for a C-allocated PatternObject* from _sre.compile().
-cPtr holds the raw C memory address as a SmallInteger.'
+
+cPointer holds the C PatternObject* as a CPointer.  A CPointer keeps its
+address in non-persistent storage, so an SrePattern that is committed (the
+re / jinja2 regex caches retain compiled patterns) and later faulted into a
+fresh session comes back with a NULL cPointer instead of a stale integer
+address.  cPtrAddress refuses to hand a NULL/stale address to the C shim,
+turning what used to be a SEGV into a clean Smalltalk error.'
 %
 
 ! ------- SreMatch class (wraps C MatchObject*)
 expectvalue /Class
 doit
 Object subclass: 'SreMatch'
-  instVarNames: #(cPtr)
+  instVarNames: #(cPointer)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -73,7 +79,11 @@ expectvalue /Class
 doit
 SreMatch comment:
 'Wrapper for a C-allocated MatchObject* from pattern.match()/search().
-cPtr holds the raw C memory address as a SmallInteger.'
+
+cPointer holds the C MatchObject* as a CPointer.  As with SrePattern, the
+CPointer keeps its address in non-persistent storage, so a committed match
+faults into a fresh session as NULL rather than a stale integer address;
+cPtrAddress then signals instead of dereferencing it in C.'
 %
 
 expectvalue /Metaclass3
@@ -96,11 +106,19 @@ set compile_env: 0
 
 category: 'Grail-Instance Creation'
 classmethod: SrePattern
-newFromCPtr: aCPtr
-	"Create a pattern wrapper from a C pointer. Returns nil if pointer is 0."
+newFromCPtr: anAddress
+	"Create a pattern wrapper for the C PatternObject* at anAddress (a
+	SmallInteger returned by the shim). Returns nil for a NULL address.
 
-	aCPtr = 0 ifTrue: [^ nil].
-	^ self basicNew initCPtr: aCPtr
+	The address is boxed in a CPointer rather than stored as a raw integer:
+	a CPointer keeps its address in non-persistent storage, so a wrapper
+	that is committed and later faulted into a fresh session comes back
+	NULL instead of carrying a stale address.  Dereferencing such a stale
+	address in C was the cause of the SEGV when the re / jinja2 regex caches
+	were committed and reused in a later session."
+
+	anAddress = 0 ifTrue: [^ nil].
+	^ self basicNew initCPointer: (CPointer forAddress: anAddress)
 %
 
 category: 'Grail-Python Attribute Hook'
@@ -124,14 +142,28 @@ ___pythonValueAttrs___
 
 category: 'Grail-Private'
 method: SrePattern
-initCPtr: aCPtr
-	cPtr := aCPtr
+initCPointer: aCPointer
+	cPointer := aCPointer
 %
 
 category: 'Grail-Accessing'
 method: SrePattern
-cPtr
-	^ cPtr
+cPointer
+	"The CPointer wrapping the C PatternObject* (NULL across a session boundary)."
+	^ cPointer
+%
+
+category: 'Grail-Private'
+method: SrePattern
+cPtrAddress
+	"The raw C address to hand to the shim. Signal rather than pass a
+	NULL/stale address into C: a pattern that was committed and faulted into
+	a new session has a NULL cPointer because the C PatternObject no longer
+	exists, and dereferencing it would crash the gem."
+
+	(cPointer isNil or: [cPointer isNull]) ifTrue: [
+		^ self error: 'SrePattern is not valid in this session: a compiled regular expression does not persist across a commit/session boundary (recompile the pattern).'].
+	^ cPointer memoryAddress
 %
 
 ! ===============================================================================
@@ -155,7 +187,7 @@ match: aString
 	"match(string) -> SreMatch or None"
 	| result |
 	result := (CPythonShim @env0:current)
-		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'match' selfPtr: cPtr
+		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'match' selfPtr: (self @env0:cPtrAddress)
 		with: aString.
 	^ (result == 0) ifTrue: [None] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
@@ -166,7 +198,7 @@ match: aString _: pos
 	"match(string, pos) -> SreMatch or None"
 	| result |
 	result := (CPythonShim @env0:current)
-		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'match' selfPtr: cPtr
+		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'match' selfPtr: (self @env0:cPtrAddress)
 		with: aString with: pos.
 	^ (result == 0) ifTrue: [None] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
@@ -177,7 +209,7 @@ match: aString _: pos _: endpos
 	"match(string, pos, endpos) -> SreMatch or None"
 	| result |
 	result := (CPythonShim @env0:current)
-		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'match' selfPtr: cPtr
+		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'match' selfPtr: (self @env0:cPtrAddress)
 		with: aString with: pos with: endpos.
 	^ (result == 0) ifTrue: [None] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
@@ -202,7 +234,7 @@ search: aString
 	"search(string) -> SreMatch or None"
 	| result |
 	result := (CPythonShim @env0:current)
-		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'search' selfPtr: cPtr
+		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'search' selfPtr: (self @env0:cPtrAddress)
 		with: aString.
 	^ (result == 0) ifTrue: [None] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
@@ -213,7 +245,7 @@ search: aString _: pos
 	"search(string, pos) -> SreMatch or None"
 	| result |
 	result := (CPythonShim @env0:current)
-		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'search' selfPtr: cPtr
+		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'search' selfPtr: (self @env0:cPtrAddress)
 		with: aString with: pos.
 	^ (result == 0) ifTrue: [None] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
@@ -224,7 +256,7 @@ search: aString _: pos _: endpos
 	"search(string, pos, endpos) -> SreMatch or None"
 	| result |
 	result := (CPythonShim @env0:current)
-		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'search' selfPtr: cPtr
+		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'search' selfPtr: (self @env0:cPtrAddress)
 		with: aString with: pos with: endpos.
 	^ (result == 0) ifTrue: [None] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
@@ -249,7 +281,7 @@ fullmatch: aString
 	"fullmatch(string) -> SreMatch or None"
 	| result |
 	result := (CPythonShim @env0:current)
-		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'fullmatch' selfPtr: cPtr
+		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'fullmatch' selfPtr: (self @env0:cPtrAddress)
 		with: aString.
 	^ (result == 0) ifTrue: [None] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
@@ -260,7 +292,7 @@ fullmatch: aString _: pos
 	"fullmatch(string, pos) -> SreMatch or None"
 	| result |
 	result := (CPythonShim @env0:current)
-		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'fullmatch' selfPtr: cPtr
+		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'fullmatch' selfPtr: (self @env0:cPtrAddress)
 		with: aString with: pos.
 	^ (result == 0) ifTrue: [None] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
@@ -271,7 +303,7 @@ fullmatch: aString _: pos _: endpos
 	"fullmatch(string, pos, endpos) -> SreMatch or None"
 	| result |
 	result := (CPythonShim @env0:current)
-		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'fullmatch' selfPtr: cPtr
+		@env0:callTypedReturnCPtr: '_sre' type: 'Pattern' method: 'fullmatch' selfPtr: (self @env0:cPtrAddress)
 		with: aString with: pos with: endpos.
 	^ (result == 0) ifTrue: [None] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
@@ -295,7 +327,7 @@ method: SrePattern
 findall: aString
 	"findall(string) -> list"
 	^ (CPythonShim @env0:current)
-		@env0:callTyped: '_sre' type: 'Pattern' method: 'findall' selfPtr: cPtr
+		@env0:callTyped: '_sre' type: 'Pattern' method: 'findall' selfPtr: (self @env0:cPtrAddress)
 		with: aString
 %
 
@@ -304,7 +336,7 @@ method: SrePattern
 findall: aString _: pos
 	"findall(string, pos) -> list"
 	^ (CPythonShim @env0:current)
-		@env0:callTyped: '_sre' type: 'Pattern' method: 'findall' selfPtr: cPtr
+		@env0:callTyped: '_sre' type: 'Pattern' method: 'findall' selfPtr: (self @env0:cPtrAddress)
 		with: aString with: pos
 %
 
@@ -313,7 +345,7 @@ method: SrePattern
 findall: aString _: pos _: endpos
 	"findall(string, pos, endpos) -> list"
 	^ (CPythonShim @env0:current)
-		@env0:callTyped: '_sre' type: 'Pattern' method: 'findall' selfPtr: cPtr
+		@env0:callTyped: '_sre' type: 'Pattern' method: 'findall' selfPtr: (self @env0:cPtrAddress)
 		with: aString with: pos with: endpos
 %
 
@@ -406,7 +438,7 @@ sub: repl _: aString _: count
 
 	(self @env1:___isLiteralRepl___: repl) ifTrue: [
 		^ (CPythonShim @env0:current)
-			@env0:callTyped: '_sre' type: 'Pattern' method: 'sub' selfPtr: cPtr
+			@env0:callTyped: '_sre' type: 'Pattern' method: 'sub' selfPtr: (self @env0:cPtrAddress)
 			with: repl with: aString with: count
 	].
 	^ (self @env1:___subWithExpansion___: repl in: aString count: count subn: false)
@@ -440,7 +472,7 @@ subn: repl _: aString _: count
 
 	(self @env1:___isLiteralRepl___: repl) ifTrue: [
 		^ (CPythonShim @env0:current)
-			@env0:callTyped: '_sre' type: 'Pattern' method: 'subn' selfPtr: cPtr
+			@env0:callTyped: '_sre' type: 'Pattern' method: 'subn' selfPtr: (self @env0:cPtrAddress)
 			with: repl with: aString with: count
 	].
 	^ (self @env1:___subWithExpansion___: repl in: aString count: count subn: true)
@@ -583,7 +615,7 @@ method: SrePattern
 split: aString
 	"split(string) -> list"
 	^ (CPythonShim @env0:current)
-		@env0:callTyped: '_sre' type: 'Pattern' method: 'split' selfPtr: cPtr
+		@env0:callTyped: '_sre' type: 'Pattern' method: 'split' selfPtr: (self @env0:cPtrAddress)
 		with: aString
 %
 
@@ -592,7 +624,7 @@ method: SrePattern
 split: aString _: maxsplit
 	"split(string, maxsplit) -> list"
 	^ (CPythonShim @env0:current)
-		@env0:callTyped: '_sre' type: 'Pattern' method: 'split' selfPtr: cPtr
+		@env0:callTyped: '_sre' type: 'Pattern' method: 'split' selfPtr: (self @env0:cPtrAddress)
 		with: aString with: maxsplit
 %
 
@@ -611,28 +643,28 @@ category: 'Grail-Properties'
 method: SrePattern
 pattern
 	"The pattern string from which the RE object was compiled."
-	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'pattern' selfPtr: cPtr
+	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'pattern' selfPtr: (self @env0:cPtrAddress)
 %
 
 category: 'Grail-Properties'
 method: SrePattern
 flags
 	"The regex matching flags."
-	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'flags' selfPtr: cPtr
+	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'flags' selfPtr: (self @env0:cPtrAddress)
 %
 
 category: 'Grail-Properties'
 method: SrePattern
 groups
 	"The number of capturing groups in the pattern."
-	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'groups' selfPtr: cPtr
+	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'groups' selfPtr: (self @env0:cPtrAddress)
 %
 
 category: 'Grail-Properties'
 method: SrePattern
 groupindex
 	"A dictionary mapping group names to group numbers."
-	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'groupindex' selfPtr: cPtr
+	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'groupindex' selfPtr: (self @env0:cPtrAddress)
 %
 
 ! ===============================================================================
@@ -643,11 +675,16 @@ set compile_env: 0
 
 category: 'Grail-Instance Creation'
 classmethod: SreMatch
-newFromCPtr: aCPtr
-	"Create a match wrapper from a C pointer. Returns nil if pointer is 0."
+newFromCPtr: anAddress
+	"Create a match wrapper for the C MatchObject* at anAddress (a
+	SmallInteger returned by the shim). Returns nil for a NULL address.
 
-	aCPtr = 0 ifTrue: [^ nil].
-	^ self basicNew initCPtr: aCPtr
+	As with SrePattern, the address is boxed in a CPointer so a committed
+	match faults into a fresh session as NULL rather than a stale integer
+	address that would SEGV when dereferenced in C."
+
+	anAddress = 0 ifTrue: [^ nil].
+	^ self basicNew initCPointer: (CPointer forAddress: anAddress)
 %
 
 category: 'Grail-Python Attribute Hook'
@@ -671,14 +708,28 @@ ___pythonValueAttrs___
 
 category: 'Grail-Private'
 method: SreMatch
-initCPtr: aCPtr
-	cPtr := aCPtr
+initCPointer: aCPointer
+	cPointer := aCPointer
 %
 
 category: 'Grail-Accessing'
 method: SreMatch
-cPtr
-	^ cPtr
+cPointer
+	"The CPointer wrapping the C MatchObject* (NULL across a session boundary)."
+	^ cPointer
+%
+
+category: 'Grail-Private'
+method: SreMatch
+cPtrAddress
+	"The raw C address to hand to the shim. Signal rather than pass a
+	NULL/stale address into C: a match that was committed and faulted into a
+	new session has a NULL cPointer because the C MatchObject no longer
+	exists, and dereferencing it would crash the gem."
+
+	(cPointer isNil or: [cPointer isNull]) ifTrue: [
+		^ self error: 'SreMatch is not valid in this session: a match object does not persist across a commit/session boundary (recompute the match).'].
+	^ cPointer memoryAddress
 %
 
 ! ===============================================================================
@@ -694,7 +745,7 @@ method: SreMatch
 group
 	"group() -> str (whole match, equivalent to group(0))"
 	^ (CPythonShim @env0:current)
-		@env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: cPtr
+		@env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: (self @env0:cPtrAddress)
 %
 
 category: 'Grail-Methods'
@@ -702,7 +753,7 @@ method: SreMatch
 group: groupArg
 	"group(groupN) -> str"
 	^ (CPythonShim @env0:current)
-		@env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: cPtr
+		@env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: (self @env0:cPtrAddress)
 		with: groupArg
 %
 
@@ -711,7 +762,7 @@ method: SreMatch
 group: g1 _: g2
 	"group(g1, g2) -> tuple"
 	^ (CPythonShim @env0:current)
-		@env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: cPtr
+		@env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: (self @env0:cPtrAddress)
 		with: g1 with: g2
 %
 
@@ -720,7 +771,7 @@ method: SreMatch
 group: g1 _: g2 _: g3
 	"group(g1, g2, g3) -> tuple"
 	^ (CPythonShim @env0:current)
-		@env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: cPtr
+		@env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: (self @env0:cPtrAddress)
 		with: g1 with: g2 with: g3
 %
 
@@ -744,7 +795,7 @@ method: SreMatch
 groups
 	"groups() -> tuple"
 	^ (CPythonShim @env0:current)
-		@env0:callTyped: '_sre' type: 'Match' method: 'groups' selfPtr: cPtr
+		@env0:callTyped: '_sre' type: 'Match' method: 'groups' selfPtr: (self @env0:cPtrAddress)
 %
 
 category: 'Grail-Methods'
@@ -752,7 +803,7 @@ method: SreMatch
 groups: defaultValue
 	"groups(default) -> tuple"
 	^ (CPythonShim @env0:current)
-		@env0:callTyped: '_sre' type: 'Match' method: 'groups' selfPtr: cPtr
+		@env0:callTyped: '_sre' type: 'Match' method: 'groups' selfPtr: (self @env0:cPtrAddress)
 		with: defaultValue
 %
 
@@ -774,7 +825,7 @@ method: SreMatch
 groupdict
 	"groupdict() -> dict"
 	^ (CPythonShim @env0:current)
-		@env0:callTyped: '_sre' type: 'Match' method: 'groupdict' selfPtr: cPtr
+		@env0:callTyped: '_sre' type: 'Match' method: 'groupdict' selfPtr: (self @env0:cPtrAddress)
 %
 
 category: 'Grail-Methods'
@@ -782,7 +833,7 @@ method: SreMatch
 groupdict: defaultValue
 	"groupdict(default) -> dict"
 	^ (CPythonShim @env0:current)
-		@env0:callTyped: '_sre' type: 'Match' method: 'groupdict' selfPtr: cPtr
+		@env0:callTyped: '_sre' type: 'Match' method: 'groupdict' selfPtr: (self @env0:cPtrAddress)
 		with: defaultValue
 %
 
@@ -804,7 +855,7 @@ method: SreMatch
 start
 	"start() -> int"
 	^ (CPythonShim @env0:current)
-		@env0:callTyped: '_sre' type: 'Match' method: 'start' selfPtr: cPtr
+		@env0:callTyped: '_sre' type: 'Match' method: 'start' selfPtr: (self @env0:cPtrAddress)
 %
 
 category: 'Grail-Methods'
@@ -812,7 +863,7 @@ method: SreMatch
 start: groupArg
 	"start(group) -> int"
 	^ (CPythonShim @env0:current)
-		@env0:callTyped: '_sre' type: 'Match' method: 'start' selfPtr: cPtr
+		@env0:callTyped: '_sre' type: 'Match' method: 'start' selfPtr: (self @env0:cPtrAddress)
 		with: groupArg
 %
 
@@ -834,7 +885,7 @@ method: SreMatch
 end
 	"end() -> int"
 	^ (CPythonShim @env0:current)
-		@env0:callTyped: '_sre' type: 'Match' method: 'end' selfPtr: cPtr
+		@env0:callTyped: '_sre' type: 'Match' method: 'end' selfPtr: (self @env0:cPtrAddress)
 %
 
 category: 'Grail-Methods'
@@ -842,7 +893,7 @@ method: SreMatch
 end: groupArg
 	"end(group) -> int"
 	^ (CPythonShim @env0:current)
-		@env0:callTyped: '_sre' type: 'Match' method: 'end' selfPtr: cPtr
+		@env0:callTyped: '_sre' type: 'Match' method: 'end' selfPtr: (self @env0:cPtrAddress)
 		with: groupArg
 %
 
@@ -864,7 +915,7 @@ method: SreMatch
 span
 	"span() -> (int, int)"
 	^ (CPythonShim @env0:current)
-		@env0:callTyped: '_sre' type: 'Match' method: 'span' selfPtr: cPtr
+		@env0:callTyped: '_sre' type: 'Match' method: 'span' selfPtr: (self @env0:cPtrAddress)
 %
 
 category: 'Grail-Methods'
@@ -872,7 +923,7 @@ method: SreMatch
 span: groupArg
 	"span(group) -> (int, int)"
 	^ (CPythonShim @env0:current)
-		@env0:callTyped: '_sre' type: 'Match' method: 'span' selfPtr: cPtr
+		@env0:callTyped: '_sre' type: 'Match' method: 'span' selfPtr: (self @env0:cPtrAddress)
 		with: groupArg
 %
 
@@ -894,7 +945,7 @@ method: SreMatch
 expand: template
 	"expand(template) -> str"
 	^ (CPythonShim @env0:current)
-		@env0:callTyped: '_sre' type: 'Match' method: 'expand' selfPtr: cPtr
+		@env0:callTyped: '_sre' type: 'Match' method: 'expand' selfPtr: (self @env0:cPtrAddress)
 		with: template
 %
 
@@ -909,7 +960,7 @@ category: 'Grail-Properties'
 method: SreMatch
 string
 	"The string passed to match() or search()."
-	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'string' selfPtr: cPtr
+	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'string' selfPtr: (self @env0:cPtrAddress)
 %
 
 category: 'Grail-Properties'
@@ -918,7 +969,7 @@ re
 	"The regular expression object."
 	"Returns the C pointer for the pattern object, wrapped as SrePattern."
 	| patCPtr |
-	patCPtr := (CPythonShim @env0:current) @env0:callTypedReturnCPtr: '_sre' type: 'Match' method: 're' selfPtr: cPtr.
+	patCPtr := (CPythonShim @env0:current) @env0:callTypedReturnCPtr: '_sre' type: 'Match' method: 're' selfPtr: (self @env0:cPtrAddress).
 	^ SrePattern @env0:newFromCPtr: patCPtr
 %
 
@@ -926,35 +977,35 @@ category: 'Grail-Properties'
 method: SreMatch
 pos
 	"The value of pos passed to search() or match()."
-	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'pos' selfPtr: cPtr
+	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'pos' selfPtr: (self @env0:cPtrAddress)
 %
 
 category: 'Grail-Properties'
 method: SreMatch
 endpos
 	"The value of endpos passed to search() or match()."
-	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'endpos' selfPtr: cPtr
+	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'endpos' selfPtr: (self @env0:cPtrAddress)
 %
 
 category: 'Grail-Properties'
 method: SreMatch
 lastindex
 	"The integer index of the last matched capturing group."
-	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'lastindex' selfPtr: cPtr
+	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'lastindex' selfPtr: (self @env0:cPtrAddress)
 %
 
 category: 'Grail-Properties'
 method: SreMatch
 lastgroup
 	"The name of the last matched capturing group."
-	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'lastgroup' selfPtr: cPtr
+	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'lastgroup' selfPtr: (self @env0:cPtrAddress)
 %
 
 category: 'Grail-Properties'
 method: SreMatch
 regs
 	"A tuple of (start, end) for each group."
-	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'regs' selfPtr: cPtr
+	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'regs' selfPtr: (self @env0:cPtrAddress)
 %
 
 ! ===============================================================================
