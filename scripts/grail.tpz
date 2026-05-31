@@ -1,7 +1,7 @@
 login
 run
-| args dashDashOfs haveDashD |
-" Search for  --  in command line, expect args before that to be topaz config, etc 
+| args dashDashOfs haveDashD priorTranscript |
+" Search for  --  in command line, expect args before that to be topaz config, etc
 
   If -D is on command line after -- and script is interactive, pass errors to topaz for debugging.
   If GEM_LISTEN_FOR_DEBUG is in the gem configuration, pass errors to interactive topaz for debugging,
@@ -9,80 +9,92 @@ run
 "
 args := System commandLineArguments.
 1 to: args size do:[:j | (args at: j) = '--' ifTrue:[ dashDashOfs := j ]].
-Transcript := GsFile stdout.
-haveDashD := false .
-dashDashOfs ifNil:[ ExitClientError signal: ' "--"   not found on topaz command line ' ].
-dashDashOfs < args size ifTrue:[  
-    " after '--'  we expect optional -D  and a filename " 
-    | anArg path |
-    anArg := args at: dashDashOfs + 1 .
-    anArg = '-D' ifTrue:[
-      haveDashD := true .
-      anArg := args at: dashDashOfs + 2 .
-    ].
-    path := anArg .
-    (GsFile exists: path) ifFalse: [
-        GsFile stderr nextPutAll: path printString , ' not found!'; lf; flush.
-        Error signal: 'Path not found!'.
-    ].
-    [
-        importlib runPath: path.
-    ] on: Error do: [:ex |
-        | msg |
-        msg := ex messageText.
-        GsFile stdout flush .
-        GsFile stderr flush .
-        (haveDashD or:[ (System gemConfigurationAt: 'GEM_LISTEN_FOR_DEBUG') == true]) ifTrue:[
-          GsFile stdinServer isTerminal ifTrue:[
-             ex pass "pass to topaz for interactive debugging"
-          ].
-          GsFile stderr nextPutAll: msg; lf ; flush.
-          System waitForDebug .  "wait for a topaz to attach"
+" Python print() output only reaches the terminal when the global Transcript is
+  a GsFile stdout (a TranscriptStreamPortable does not route to stdout here), so
+  we must set it.  But a GsFile committed as Transcript is poison for every later
+  session: its transient OS handle dies (ImproperOperation, error 2364) and it
+  does not understand show:.  Save the prior Transcript and restore it via the
+  ensure: below, so this run leaves the global exactly as it found it.  importlib
+  and the REPL never commit, so in normal use the GsFile is never persisted.  (A
+  script that explicitly commits mid-run -- e.g. gemstone.commit() -- could still
+  persist it; install.gs self-heals the committed Transcript on every install.) "
+priorTranscript := Transcript.
+[
+    Transcript := GsFile stdout.
+    haveDashD := false .
+    dashDashOfs ifNil:[ ExitClientError signal: ' "--"   not found on topaz command line ' ].
+    dashDashOfs < args size ifTrue:[  
+        " after '--'  we expect optional -D  and a filename " 
+        | anArg path |
+        anArg := args at: dashDashOfs + 1 .
+        anArg = '-D' ifTrue:[
+        haveDashD := true .
+        anArg := args at: dashDashOfs + 2 .
         ].
-        GsFile stderr nextPutAll: msg; lf ; flush.
-        ExitClientError signal: msg status: 1.
-    ].
-] ifFalse: [
-    | bufferStream inContinuation moduleScope lfCodepoint |
-    moduleScope := SymbolDictionary new.
-    bufferStream := WriteStream on: Unicode7 new.
-    inContinuation := false.
-    lfCodepoint := Character lf codePoint .
-    [true] whileTrue: [
-        | prompt line |
-        prompt := inContinuation ifTrue: ['... '] ifFalse: ['>>> '].
-        line := GsFile stdin 
-            nextLineTo: lfCodepoint 
-            prompt: prompt.
-        line ifNil: [Error signal: 'EOF from stdin!'].
-        bufferStream nextPutAll: line.
-        line := line trimTrailingSeparators.
-        inContinuation := line isEmpty not and: [inContinuation or: [line endsWith: ':']].
-        inContinuation ifFalse: [
-            [
-                | module result |
-                result := ModuleAst
-                    evaluateSource: bufferStream contents
-                    usingModuleScope: moduleScope.
-                result == None ifFalse: [
-                    GsFile stdout 
-                        nextPut: Character cr;
-                        nextPutAll: result @env1:__repr__;
-                        nextPut: Character cr;
-                        nextPut: Character lf;
-                        yourself.
+        path := anArg .
+        (GsFile exists: path) ifFalse: [
+            GsFile stderr nextPutAll: path printString , ' not found!'; lf; flush.
+            Error signal: 'Path not found!'.
+        ].
+        [
+            importlib runPath: path.
+        ] on: Error do: [:ex |
+            | msg |
+            msg := ex messageText.
+            GsFile stdout flush .
+            GsFile stderr flush .
+            (haveDashD or:[ (System gemConfigurationAt: 'GEM_LISTEN_FOR_DEBUG') == true]) ifTrue:[
+            GsFile stdinServer isTerminal ifTrue:[
+                ex pass "pass to topaz for interactive debugging"
+            ].
+            GsFile stderr nextPutAll: msg; lf ; flush.
+            System waitForDebug .  "wait for a topaz to attach"
+            ].
+            GsFile stderr nextPutAll: msg; lf ; flush.
+            ExitClientError signal: msg status: 1.
+        ].
+    ] ifFalse: [
+        | bufferStream inContinuation moduleScope lfCodepoint |
+        moduleScope := SymbolDictionary new.
+        bufferStream := WriteStream on: Unicode7 new.
+        inContinuation := false.
+        lfCodepoint := Character lf codePoint .
+        [true] whileTrue: [
+            | prompt line |
+            prompt := inContinuation ifTrue: ['... '] ifFalse: ['>>> '].
+            line := GsFile stdin 
+                nextLineTo: lfCodepoint 
+                prompt: prompt.
+            line ifNil: [Error signal: 'EOF from stdin!'].
+            bufferStream nextPutAll: line.
+            line := line trimTrailingSeparators.
+            inContinuation := line isEmpty not and: [inContinuation or: [line endsWith: ':']].
+            inContinuation ifFalse: [
+                [
+                    | module result |
+                    result := ModuleAst
+                        evaluateSource: bufferStream contents
+                        usingModuleScope: moduleScope.
+                    result == None ifFalse: [
+                        GsFile stdout 
+                            nextPut: Character cr;
+                            nextPutAll: result @env1:__repr__;
+                            nextPut: Character cr;
+                            nextPut: Character lf;
+                            yourself.
+                    ].
+                    bufferStream := WriteStream on: Unicode7 new.
+                ] on: Error do: [:ex |
+                    | msg |
+                    (ex isKindOf: ExitClientError) ifTrue: [ex pass].
+                    (ex isKindOf: Break) ifTrue: [ExitClientError signal: 'Soft Break' status: 1].
+                    msg := ex messageText.
+                    GsFile stdout flush .
+                    GsFile stderr nextPutAll: msg; lf; flush.
+                    bufferStream := WriteStream on: Unicode7 new.
                 ].
-                bufferStream := WriteStream on: Unicode7 new.
-            ] on: Error do: [:ex |
-                | msg |
-                (ex isKindOf: ExitClientError) ifTrue: [ex pass].
-                (ex isKindOf: Break) ifTrue: [ExitClientError signal: 'Soft Break' status: 1].
-                msg := ex messageText.
-                GsFile stdout flush .
-                GsFile stderr nextPutAll: msg; lf; flush.
-                bufferStream := WriteStream on: Unicode7 new.
             ].
         ].
-    ].
-].
+    ]
+] ensure: [ Transcript := priorTranscript ].
 %

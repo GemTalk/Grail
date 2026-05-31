@@ -34,6 +34,23 @@ send String enableUnicodeComparisonMode
 send Stream installPortableStreamImplementation
 
 ! ===============================================================================
+! Reset the committed Transcript to a commit-safe TranscriptStreamPortable.
+! ===============================================================================
+! The global Transcript lives in Globals (owned by SystemUser).  If an earlier
+! session left it as a `GsFile stdout` (e.g. a REPL/run via scripts/grail.tpz
+! that later committed), that GsFile is doubly broken for every later session:
+! its transient OS handle is dead (writing raises ImproperOperation, error 2364)
+! and a GsFile does not understand show: (TranscriptStream protocol used here and
+! throughout).  Reassign a fresh TranscriptStreamPortable -- it understands
+! show:/cr/nextPutAll:, routes to the session's stdout, and carries no transient
+! state, so it survives the commit below cleanly.  Doing it here (as SystemUser,
+! before this segment's commit and before the first Transcript show: at Step 0)
+! self-heals the image on every install, independent of how it was left.
+run
+Transcript := TranscriptStreamPortable new.
+%
+
+! ===============================================================================
 ! Step 0: Hygiene — scrub Grail-tagged env-0 methods from every class
 ! ===============================================================================
 ! Per-file ``Foo removeAllMethods: 1`` directives at the top of each
@@ -583,6 +600,7 @@ run
 	at: #'RuntimeClassCreationTestCase' put: nil;
 	at: #'RuntimeErrorTestCase' put: nil;
 	at: #'RuntimeWarningTestCase' put: nil;
+	at: #'SecretsTestCase' put: nil;
 	at: #'SetTestCase' put: nil;
 	at: #'SliceAndLoopsTestCase' put: nil;
 	at: #'SreTestCase' put: nil;
@@ -1160,6 +1178,7 @@ input src/smalltalk/PythonTests/RandomTestCase.gs
 input src/smalltalk/PythonTests/RangeTestCase.gs
 input src/smalltalk/PythonTests/ReturnTestCase.gs
 input src/smalltalk/PythonTests/RuntimeClassCreationTestCase.gs
+input src/smalltalk/PythonTests/SecretsTestCase.gs
 input src/smalltalk/PythonTests/SetTestCase.gs
 input src/smalltalk/PythonTests/SliceAndLoopsTestCase.gs
 input src/smalltalk/PythonTests/SreTestCase.gs

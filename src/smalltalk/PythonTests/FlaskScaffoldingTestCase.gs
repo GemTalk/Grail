@@ -4023,6 +4023,52 @@ testSecretsCompareDigestDiffers
 	self assert: (mod @env1:compare_equal: 'hello' _: 'helloo') equals: false
 %
 
+! --- _grail_session.SessionDict (commit 3a8f2e9) ---------------------------
+! SessionDict is the dict-like proxy over a per-session SessionTemps dict that
+! backs the session-local caches (jinja2 lexer cache).  These exercise the dict
+! protocol it implements through a Python fixture.
+
+category: 'Grail-Tests - SessionDict'
+method: FlaskScaffoldingTestCase
+testSessionDictRoundtrip
+	"setitem/getitem/len/contains/get all behave like a dict."
+
+	| mod |
+	mod := self loadFixture: 'use_session_dict'.
+	self assert: mod @env1:roundtrip_ok equals: true
+%
+
+category: 'Grail-Tests - SessionDict'
+method: FlaskScaffoldingTestCase
+testSessionDictPopAndDelete
+	"pop(key, default) and del behave like a dict."
+
+	| mod |
+	mod := self loadFixture: 'use_session_dict'.
+	self assert: mod @env1:pop_delete_ok equals: true
+%
+
+category: 'Grail-Tests - SessionDict'
+method: FlaskScaffoldingTestCase
+testSessionDictKeysValuesItems
+	"keys/values/items/iter expose the backing dict's contents."
+
+	| mod |
+	mod := self loadFixture: 'use_session_dict'.
+	self assert: mod @env1:keys_values_items_ok equals: true
+%
+
+category: 'Grail-Tests - SessionDict'
+method: FlaskScaffoldingTestCase
+testSessionDictSharesBackingWithinSession
+	"Two SessionDict views with the same name resolve to the one per-session
+	store, so a write through one is visible through the other."
+
+	| mod |
+	mod := self loadFixture: 'use_session_dict'.
+	self assert: mod @env1:shares_backing equals: 'set-via-a'
+%
+
 ! --- contextlib + with-statement ------------------------------------------
 
 category: 'Grail-Tests - contextlib'

@@ -498,6 +498,38 @@ testEvalSorted
 	self assert: (result @env1:__getitem__: 4) equals: 5.
 %
 
+category: 'Grail-Tests - Eval - Sequence Functions'
+method: BuiltinsTestCase
+testSortedReturnsList
+	"Regression: sorted() must return a Python list, not a Smalltalk Array.
+	builtins>>sorted: builds a list but returned `lst sort:`, and GemStone's
+	OrderedCollection>>sort: yields a FRESH Array, so the list was discarded.
+	An Array is not a list: isinstance/type checks fail, value equality against
+	a list literal is False (Python sequence equality is type-aware), and
+	list-only methods like append are unavailable."
+
+	self assert: (self eval: 'type(sorted([3, 1, 2])) is list') equals: true.
+	self assert: (self eval: 'isinstance(sorted([3, 1, 2]), list)') equals: true.
+	self assert: (self eval: 'sorted([3, 1, 2]) == [1, 2, 3]') equals: true.
+	"list-only behaviour must work on the result"
+	self assert: (self eval: '
+x = sorted([3, 1, 2])
+x.append(4)
+x == [1, 2, 3, 4]
+') equals: true.
+%
+
+category: 'Grail-Tests - Eval - Sequence Functions'
+method: BuiltinsTestCase
+testSortedWithKwargsReturnsList
+	"Same regression for the varargs path builtins>>_sorted:kw: (key=/reverse=),
+	which Jinja2's compiler exercises via sorted(..., key=...)."
+
+	self assert: (self eval: 'type(sorted([3, 1, 2], reverse=True)) is list') equals: true.
+	self assert: (self eval: 'sorted([3, 1, 2], reverse=True) == [3, 2, 1]') equals: true.
+	self assert: (self eval: 'sorted([-2, 1, -3], key=abs) == [1, -2, -3]') equals: true.
+%
+
 category: 'Grail-Tests - Eval - String Functions'
 method: BuiltinsTestCase
 testEvalStr

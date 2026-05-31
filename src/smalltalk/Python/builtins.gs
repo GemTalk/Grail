@@ -644,7 +644,7 @@ method: builtins
 sorted: anIterable
 	"Python builtin sorted(iterable) — fixed-arity fast path."
 
-	| lst iter done |
+	| lst iter done sortedArray |
 	lst := list ___new___.
 	iter := anIterable __iter__.
 	done := false.
@@ -655,7 +655,12 @@ sorted: anIterable
 			lst append: item
 		] @env0:on: StopIteration do: [:ex | done := true]
 	].
-	^ lst @env0:sort: [:a :b | a __lt__: b]
+	"GemStone's sort: returns a fresh sorted Array, not the receiver; copy it
+	back over the list's slots so sorted() returns a Python list (not an Array,
+	which is not a list: isinstance/== against a list literal would fail)."
+	sortedArray := lst @env0:sort: [:a :b | a __lt__: b].
+	lst @env0:replaceFrom: 1 to: lst @env0:size with: sortedArray startingAt: 1.
+	^ lst
 %
 
 category: 'Python-Built-in Functions'
@@ -667,7 +672,7 @@ _sorted: positional kw: kwargs
 	``sorted(self.extensions.values(), key=lambda x: x.priority)``
 	at template-load time."
 
-	| iterable keyFn reverse lst iter done sortBlock |
+	| iterable keyFn reverse lst iter done sortBlock sortedArray |
 	iterable := positional @env0:at: 1.
 	keyFn := kwargs isNil
 		ifTrue: [nil]
@@ -698,7 +703,11 @@ _sorted: positional kw: kwargs
 				ifFalse: [[:a :b |
 					(keyFn @env1:value: { a } value: nil)
 						__lt__: (keyFn @env1:value: { b } value: nil)]]].
-	^ lst @env0:sort: sortBlock
+	"GemStone's sort: returns a fresh sorted Array, not the receiver; copy it
+	back over the list's slots so sorted() returns a Python list (not an Array)."
+	sortedArray := lst @env0:sort: sortBlock.
+	lst @env0:replaceFrom: 1 to: lst @env0:size with: sortedArray startingAt: 1.
+	^ lst
 %
 
 category: 'Grail-Built-in Functions'

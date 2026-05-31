@@ -459,6 +459,26 @@ testSeed
 	self assert: val1 equals: val2.
 %
 
+category: 'Grail-Tests - Session-Local State'
+method: RandomTestCase
+testGeneratorIsSessionLocalNotCommitted
+	"Regression for commit 3a8f2e9: the RNG must live in SessionTemps, NOT in the
+	committed module singleton.  The old code did `self at: #_generator put:`, so
+	any session that used random and then committed application data dragged the
+	RNG into the repository (write-write conflicts between sessions, committed
+	C-backed state).  Assert that after using random the generator is absent from
+	the module's persistent slots and held in SessionTemps instead."
+
+	| r |
+	r := random ___instance___.
+	r @env1:seed: 42.
+	r @env1:random.
+	"Not parked on the committed module singleton..."
+	self assert: (r @env0:at: #_generator ifAbsent: [#GrailAbsent]) == #GrailAbsent.
+	"...held in this session's SessionTemps instead."
+	self assert: (SessionTemps current includesKey: #'___GrailRandomGenerator___').
+%
+
 category: 'Grail-Tests - State'
 method: RandomTestCase
 testSetstate

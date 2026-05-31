@@ -174,3 +174,45 @@ v
 	"Verify deletion: the key should no longer exist"
 	self deny: (UserGlobals @env0:includesKey: #'_grail_p4d_key')
 %
+
+category: 'Grail-Tests - Session-Local State'
+method: GemStoneTestCase
+testSessionDictSameNameReturnsSameDict
+	"Regression for commit 3a8f2e9: sessionDict(name) must return the one
+	per-session dict for that name, so a module-level cache built on it (jinja2's
+	lexer cache) keeps working within a session."
+
+	| gs |
+	gs := gemstone ___instance___.
+	self assert: (gs @env1:sessionDict: 'grail_test_sd_same')
+		== (gs @env1:sessionDict: 'grail_test_sd_same')
+%
+
+category: 'Grail-Tests - Session-Local State'
+method: GemStoneTestCase
+testSessionDictDistinctNamesDistinctDicts
+	"Different names get independent session dicts."
+
+	| gs |
+	gs := gemstone ___instance___.
+	self deny: (gs @env1:sessionDict: 'grail_test_sd_a')
+		== (gs @env1:sessionDict: 'grail_test_sd_b')
+%
+
+category: 'Grail-Tests - Session-Local State'
+method: GemStoneTestCase
+testSessionDictLivesInSessionTempsNotCommitted
+	"Regression for commit 3a8f2e9: sessionDict storage must live in SessionTemps
+	(per-process, never committed) so caches built on it don't leak into the
+	commit set.  The backing key is namespaced by the dict's name."
+
+	| gs d |
+	gs := gemstone ___instance___.
+	d := gs @env1:sessionDict: 'grail_test_sd_temps'.
+	d @env1:__setitem__: 'k' _: 'v'.
+	self assert: (SessionTemps current
+		includesKey: #'___GrailSessionDict___grail_test_sd_temps').
+	"Re-fetching the same name yields the same store we just mutated."
+	self assert: ((gs @env1:sessionDict: 'grail_test_sd_temps') @env1:__getitem__: 'k')
+		equals: 'v'
+%
