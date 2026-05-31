@@ -45,13 +45,25 @@ category: 'Grail-Setup'
 method: ReConstantsTestCase
 setUp
 
-	| mods |
-	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'re._constants' ifAbsent: [].
-	mods @env0:removeKey: #'re' ifAbsent: [].
+	"Load re._constants in isolation.  Fully unload the re package first
+	(removeModule: removes re + every re.* submodule AND clears their
+	SessionTemps caches) so _constants compiles from source rather than
+	resolving against a stale parent, and so no half-unloaded re state
+	leaks into the tests that follow this class."
+
+	importlib removeModule: 're'.
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/src/python/stdlib/re/_constants.py')
 		name: 're._constants'.
+%
+
+category: 'Grail-Setup'
+method: ReConstantsTestCase
+tearDown
+	"Unload the standalone re._constants (and any partial re state) so the
+	next test re-imports a pristine re package from source."
+
+	importlib removeModule: 're'.
 %
 
 category: 'Grail-Tests - re._constants'

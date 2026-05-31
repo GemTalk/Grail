@@ -43,7 +43,7 @@ fi
 # CACHE_SIZE bumped to 100MB (default 50MB) so the suite finishes without
 # spurious markSweep-exhaustion errors in late ReModule / VarargsAndImports
 # tests once the cumulative ~1988-test working set crosses ~37MB old gen.
-TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=150000;GEM_TEMPOBJ_CACHE_SIZE=100000;"
+TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=200000;"
 
 EXIT=0
 

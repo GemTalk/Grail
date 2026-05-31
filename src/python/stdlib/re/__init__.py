@@ -124,8 +124,8 @@ backward compatibility.
 
 import enum
 from . import _compiler, _parser
-import functools
 import _sre
+from _grail_session import SessionDict
 
 
 # public symbols
@@ -327,7 +327,7 @@ def purge():
     "Clear the regular expression caches"
     _cache.clear()
     _cache2.clear()
-    _compile_template.cache_clear()
+    _template_cache.clear()
 
 
 # SPECIAL_CHARS
@@ -356,8 +356,10 @@ Match = type(_compiler.compile('', 0).match(''))
 # Use the fact that dict keeps the insertion order.
 # _cache2 uses the simple FIFO policy which has better latency.
 # _cache uses the LRU policy which has better hit rate.
-_cache = {}  # LRU
-_cache2 = {}  # FIFO
+# Session-local (see _grail_session): compiled patterns are C-backed
+# (SrePattern) and must never be committed or shared between sessions.
+_cache = SessionDict("re._cache")  # LRU
+_cache2 = SessionDict("re._cache2")  # FIFO
 _MAXCACHE = 512
 _MAXCACHE2 = 256
 assert _MAXCACHE2 < _MAXCACHE
@@ -406,10 +408,18 @@ def _compile(pattern, flags):
     _cache2[key] = p
     return p
 
-@functools.lru_cache(_MAXCACHE)
+# Session-local (see _grail_session): the template object is C-backed and
+# must not commit, so this is a manual cache rather than functools.lru_cache.
+_template_cache = SessionDict("re._compile_template")
+
 def _compile_template(pattern, repl):
     # internal: compile replacement pattern
-    return _sre.template(pattern, _parser.parse_template(repl, pattern))
+    key = (pattern, repl)
+    t = _template_cache.get(key)
+    if t is None:
+        t = _sre.template(pattern, _parser.parse_template(repl, pattern))
+        _template_cache[key] = t
+    return t
 
 # register myself for pickling
 

@@ -462,8 +462,16 @@ loadModuleFromPath: pathString name: moduleName
 	].
 	"Register BEFORE execution so circular imports resolve"
 	self registerModule: moduleName with: moduleInstance.
-	"Execute the module body"
-	moduleInstance @env1:initialize.
+	"Execute the module body.  Registration happens BEFORE the body runs (so
+	circular imports see a module object), which means a body that raises
+	would otherwise leave a half-built module stuck in sys.modules — its
+	top-level globals (e.g. re's ``RegexFlag'') never got assigned.  A later
+	``import'' would then no-op and hand back that corrupt instance.  Unload
+	it (whole subtree + session caches) on failure so the next import
+	rebuilds cleanly from source, then re-signal."
+	[moduleInstance @env1:initialize] @env0:on: AbstractException do: [:ex |
+		self removeModule: moduleName.
+		ex @env0:signal].
 	^ moduleInstance
 %
 
@@ -541,6 +549,74 @@ ___bind: aChildModule onParent: aParent as: anAttrName
 	sym := anAttrName @env0:asSymbol.
 	aParent @env0:at: sym put: aChildModule.
 	aParent @env0:dynamicInstVarAt: sym put: aChildModule.
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
+removeModule: aName
+	"Unload ``aName`` and every submodule ``aName.*`` from sys.modules,
+	clearing each one's session-local caches (SessionTemps) on the way out.
+
+	Use this instead of a raw ``modules removeKey:'' when a caller wants a
+	module gone so the next import rebuilds it from source.  CPython relies
+	on process death to discard a module's transient state; a long-lived Gem
+	has no such reset, so two things must be swept here that a bare
+	removeKey: leaves behind and which otherwise break a later re-import:
+
+	  * Submodules.  Removing ``re'' but leaving ``re._parser'',
+	    ``re._compiler'', ``re._constants'', ... cached yields an
+	    inconsistent package — the stale children still point at the old
+	    parent/_constants.  A clean unload removes the whole subtree.
+
+	  * Session caches.  A module-level cache backed by ``SessionDict''
+	    (see gemstone>>sessionDict:) lives in SessionTemps keyed by the
+	    cache name, NOT on the module instance.  It therefore survives a
+	    removeKey: and a fresh import would re-bind ``_cache'' to the SAME
+	    stale dict (e.g. re's pattern cache holding dead SrePattern
+	    wrappers).  Clearing them here makes the rebuilt module truly fresh.
+
+	Returns the number of registry entries removed."
+
+	| mods prefix toRemove |
+	mods := self @env1:modules.
+	prefix := aName @env0:, '.'.
+	toRemove := OrderedCollection @env0:new.
+	mods @env0:keysDo: [:key |
+		| k |
+		k := key @env0:asString.
+		((k @env0:= aName)
+			or: [(k @env0:size @env0:> prefix @env0:size)
+				and: [(k @env0:copyFrom: 1 to: prefix @env0:size) @env0:= prefix]])
+			ifTrue: [toRemove @env0:add: key]].
+	toRemove @env0:do: [:key |
+		mods @env0:removeKey: key ifAbsent: [].
+		self ___clearSessionCachesFor___: key @env0:asString].
+	^ toRemove @env0:size
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
+___clearSessionCachesFor___: aName
+	"Remove every SessionTemps entry that backs a ``SessionDict'' belonging
+	to module ``aName'' — both the exact name and any ``aName.<cache>''
+	sub-name.  Keys follow gemstone>>sessionDict:'s convention:
+	``___GrailSessionDict___'' , <cacheName>.  A module ``re'' owns caches
+	named ``re._cache'', ``re._cache2'', ``re._compile_template'', so the
+	dotted-prefix match sweeps all three when aName is ``re''."
+
+	| temps exact dotPrefix toRemove |
+	temps := SessionTemps @env0:current.
+	exact := ('___GrailSessionDict___' @env0:, aName) @env0:asSymbol.
+	dotPrefix := ('___GrailSessionDict___' @env0:, aName) @env0:, '.'.
+	toRemove := OrderedCollection @env0:new.
+	temps @env0:keysDo: [:key |
+		| k |
+		k := key @env0:asString.
+		((key @env0:== exact)
+			or: [(k @env0:size @env0:> dotPrefix @env0:size)
+				and: [(k @env0:copyFrom: 1 to: dotPrefix @env0:size) @env0:= dotPrefix]])
+			ifTrue: [toRemove @env0:add: key]].
+	toRemove @env0:do: [:key | temps @env0:removeKey: key ifAbsent: []].
 %
 
 category: 'Grail-Module Loading'

@@ -16,3 +16,4 @@ test_driver
 gemstone
 .gemstone
 Google_Drive
+scheduled_tasks.lock

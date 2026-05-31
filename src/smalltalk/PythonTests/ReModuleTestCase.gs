@@ -51,10 +51,10 @@ category: 'Grail-Setup'
 method: ReModuleTestCase
 setUp
 
-	| mods |
-	mods := importlib @env1:modules.
-	#( 're' 're._constants' 're._casefix' 're._parser' 're._compiler' ) do: [:n |
-		mods @env0:removeKey: n @env0:asSymbol ifAbsent: []].
+	"Fully unload re (removeModule: drops re + every re.* submodule AND
+	clears their SessionTemps caches) so each test rebuilds re from source
+	rather than against a half-unloaded mix of stale submodules / cache."
+	importlib removeModule: 're'.
 	re := importlib
 		loadModuleFromPath: (importlib grailDir , '/src/python/stdlib/re/__init__.py')
 		name: 're'.
