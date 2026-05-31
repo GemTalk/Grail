@@ -20,8 +20,15 @@ if t.TYPE_CHECKING:
     from .environment import Environment
 
 # cache for the lexers. Exists in order to be able to have multiple
-# environments with the same lexer
-_lexer_cache: t.MutableMapping[t.Tuple, "Lexer"] = LRUCache(50)  # type: ignore
+# environments with the same lexer.
+#
+# Grail: a Lexer holds compiled (C-backed) regex patterns, so the cache is
+# kept session-local via SessionDict (see _grail_session) — a committed
+# module-level cache would leak those patterns into the commit set and fault
+# back into the next session as dangling references.
+from _grail_session import SessionDict
+
+_lexer_cache: t.MutableMapping[t.Tuple, "Lexer"] = SessionDict("jinja2._lexer_cache")  # type: ignore
 
 # static regular expressions
 whitespace_re = re.compile(r"\s+")

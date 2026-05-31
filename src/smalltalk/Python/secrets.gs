@@ -51,13 +51,24 @@ initialize
 category: 'Grail-Private'
 method: secrets
 _generator
-	"Return the underlying Random instance, creating on first use."
+	"Return this session's underlying CSPRNG, creating it on first use.
 
-	| gen |
-	gen := self @env0:at: #_generator ifAbsent: [nil].
-	gen @env0:== nil ifTrue: [
-		gen := Random @env0:new.
-		self @env0:at: #_generator put: gen
+	Backed by HostRandom, which draws from the OS CSPRNG — the correct
+	source for the `secrets` module (cf. CPython's secrets, which is backed
+	by os.urandom).  `Random` is a seedable Mersenne-Twister PRNG and is
+	NOT cryptographically secure; it backs the `random` module instead.
+
+	Stored in SessionTemps (not the committed module slot) so each Gem
+	session gets its own generator and using `secrets` never commits RNG
+	state — see the `random` module's `_generator`.  HostRandom also wraps a
+	closable OS resource, so re-create it if a prior one was closed."
+
+	| temps gen |
+	temps := SessionTemps @env0:current.
+	gen := temps @env0:at: #'___GrailSecretsGenerator___' ifAbsent: [nil].
+	(gen @env0:== nil or: [(gen @env0:respondsTo: #isOpen) and: [(gen @env0:isOpen) not]]) ifTrue: [
+		gen := HostRandom @env0:new.
+		temps @env0:at: #'___GrailSecretsGenerator___' put: gen
 	].
 	^ gen
 %

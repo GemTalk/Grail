@@ -131,6 +131,28 @@ commit
 %
 
 ! ===============================================================================
+! Session-local storage
+! ===============================================================================
+
+category: 'Grail-Session State'
+method: gemstone
+sessionDict: name
+	"Return a session-local Python dict registered under `name`.
+
+	The dict lives in SessionTemps, so it is created fresh for each Gem
+	process and is NEVER committed.  Grail uses it for caches that hold
+	process-bound objects — compiled regex patterns (SrePattern) and jinja2
+	lexers — which must not leak into the commit set or collide between
+	concurrent sessions.  Python callers go through the `SessionDict` proxy
+	in stdlib `_grail_session.py`, which forwards every dict operation here."
+
+	| temps key |
+	temps := SessionTemps @env0:current.
+	key := ('___GrailSessionDict___' @env0:, name @env0:asString) @env0:asSymbol.
+	^ temps @env0:at: key ifAbsentPut: [dict ___new___]
+%
+
+! ===============================================================================
 ! Metadata
 ! ===============================================================================
 

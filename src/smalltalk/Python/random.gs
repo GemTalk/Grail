@@ -51,14 +51,33 @@ _sequenceLength: seq
 category: 'Grail-Private'
 method: random
 _generator
-	"Return the internal random generator, re-creating it if needed."
-	| gen |
-	gen := self @env0:at: #_generator.
+	"Return this session's random generator, creating it on first use.
+
+	Stored in SessionTemps — NOT in a committed module slot — so each Gem
+	process gets its own RNG stream and merely *using* `random` never dirties
+	committable state.  The old `self at: #_generator put:` wrote the
+	generator into the persistent module singleton, so any session that
+	touched `random` and then committed application data also committed the
+	RNG, colliding with concurrent sessions."
+
+	| temps gen |
+	temps := SessionTemps @env0:current.
+	gen := temps @env0:at: #'___GrailRandomGenerator___' ifAbsent: [nil].
 	(gen == nil or: [(gen @env0:respondsTo: #isOpen) and: [(gen @env0:isOpen) not]]) ifTrue: [
 		gen := Random ___new___.
-		self @env0:at: #_generator put: gen.
+		temps @env0:at: #'___GrailRandomGenerator___' put: gen.
 	].
 	^ gen
+%
+
+category: 'Grail-Private'
+method: random
+_generator: aGenerator
+	"Install this session's RNG (used by seed()).  Session-local; never
+	committed — see `_generator`."
+
+	SessionTemps @env0:current
+		@env0:at: #'___GrailRandomGenerator___' put: aGenerator
 %
 
 ! ===============================================================================
@@ -68,8 +87,9 @@ _generator
 category: 'Grail-Initialization'
 method: random
 initialize
-	"Initialize the internal random generator."
-	self @env0:at: #_generator put: (Random ___new___)
+	"No-op.  The generator is created lazily per session in `_generator`
+	(backed by SessionTemps), so there is nothing to install on the
+	committed module singleton."
 %
 
 ! ===============================================================================
@@ -309,9 +329,9 @@ _seed: positional kw: kwargs
 	| a |
 	a := (positional @env0:size @env0:>= 1) ifTrue: [positional @env0:at: 1] ifFalse: [nil].
 	(a == nil or: [a == None]) ifTrue: [
-		self @env0:at: #_generator put: (Random ___new___)
+		self _generator: (Random ___new___)
 	] ifFalse: [
-		self @env0:at: #_generator put: (Random @env0:seed: a @env0:asInteger)
+		self _generator: (Random @env0:seed: a @env0:asInteger)
 	].
 	^ None
 %
