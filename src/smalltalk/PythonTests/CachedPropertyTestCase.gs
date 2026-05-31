@@ -76,3 +76,18 @@ testPlainMethodUnaffected
 	mod := self loadFixture.
 	self assert: mod @env1:plain_method_still_callable equals: true
 %
+
+category: 'Grail-Tests-cached_property'
+method: CachedPropertyTestCase
+testSetThenReadOverridesGetter
+	"@cached_property is a non-data descriptor: assigning to it stores
+	an instance attribute that shadows the getter on later reads, and
+	the getter never runs.  flask's create_url_adapter assigns
+	``request.host = get_host(...)'' on a @cached_property."
+
+	| mod r |
+	r := self loadFixture @env1:set_then_read_overrides_getter.
+	self assert: (r @env1:__getitem__: 0) equals: 'override'.
+	"Getter never ran — calls stayed 0."
+	self assert: (r @env1:__getitem__: 1) equals: 0
+%

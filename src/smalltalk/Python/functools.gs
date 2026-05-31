@@ -172,11 +172,46 @@ category: 'Grail-Built-in Functions'
 method: functools
 partial: aFunction
 	"partial(fn, *args, **kwargs) — bind some arguments now and
-	return a callable that fills the rest in later.  Stub: 1-arg
-	form (no pre-bound args) returns the function untouched.
-	Expand on demand."
+	return a callable that fills the rest in later.  The 1-arg form
+	(no pre-bound args) returns the function untouched; the
+	``_partial:kw:'' varargs form handles pre-bound positional /
+	keyword arguments."
 
 	^ aFunction
+%
+
+category: 'Grail-Built-in Functions'
+method: functools
+_partial: positional kw: kwargs
+	"functools.partial(fn, *bound, **boundKw) — return a callable that,
+	when later invoked with ``(*more, **moreKw)'', calls
+	``fn(*bound, *more, **boundKw, **moreKw)''.  Pre-bound positional
+	args come first; later kwargs override earlier ones.  Used e.g. by
+	werkzeug.wsgi's ``partial(next, iterator)''."
+
+	| fn boundArgs boundKw |
+	(positional @env0:isNil or: [positional @env0:isEmpty]) ifTrue: [
+		TypeError @env1:___signal___: 'partial expected at least 1 argument, got 0'
+	].
+	fn := positional @env0:at: 1.
+	boundArgs := positional @env0:size @env0:> 1
+		ifTrue: [positional @env0:copyFrom: 2 to: positional @env0:size]
+		ifFalse: [#()].
+	boundKw := kwargs.
+	^ [:morePositional :moreKwargs |
+		| allArgs allKw |
+		allArgs := boundArgs @env0:, (morePositional @env0:ifNil: [#()]).
+		allKw := (boundKw @env0:isNil or: [boundKw @env0:isEmpty])
+			ifTrue: [moreKwargs]
+			ifFalse: [
+				(moreKwargs @env0:isNil or: [moreKwargs @env0:isEmpty])
+					ifTrue: [boundKw]
+					ifFalse: [
+						| merged |
+						merged := boundKw @env0:copy.
+						moreKwargs @env0:keysAndValuesDo: [:k :v | merged @env0:at: k put: v].
+						merged]].
+		fn @env1:___pyCallValue___: allArgs kw: allKw]
 %
 
 category: 'Grail-Built-in Functions'

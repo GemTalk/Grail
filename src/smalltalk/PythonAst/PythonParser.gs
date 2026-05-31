@@ -8,7 +8,7 @@ expectvalue /Class
 doit
 Object subclass: 'PythonParser'
   instVarNames: #( source tokens position variableStack classNesting writeStack
-                    blockingStack nonlocalStack)
+                    blockingStack nonlocalStack globalStack)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -1373,7 +1373,16 @@ parseFunctionParametersUntil: endOp
 category: 'Grail-parsing - simple statements'
 method: PythonParser
 parseGlobal
-	"Parse: global name, ..."
+	"Parse: global name, ...
+
+	Each declared name is registered in the current scope's
+	globalStack (so popScope strips it from the local variable + write
+	sets — an inner ``x = expr'' must not declare a fresh Smalltalk
+	temp) AND in the module scope (``variableStack first'') so NameAst
+	codegen recognises it as a module-scope name and routes reads /
+	writes through the module instance's dynamicInstVarAt: storage.
+	The latter also makes ``global x; x = 1'' create a brand-new module
+	binding even when no module-level assignment to ``x'' exists."
 
 	| tok names |
 	tok := self advance. "consume 'global'"
@@ -1381,6 +1390,10 @@ parseGlobal
 	names add: self advance value asSymbol.
 	[self matchOp: ','] whileTrue: [
 		names add: self advance value asSymbol.
+	].
+	names do: [:n |
+		globalStack last add: n.
+		variableStack first add: n.
 	].
 	^self buildNode: GlobalAst fields: (IdentityKeyValueDictionary new
 		at: #names put: names;
@@ -2765,12 +2778,22 @@ popScope
 	the outer scope's closure-captured location instead of binding
 	a fresh shadow."
 
-	| vars writes blocking nonlocals |
+	| vars writes blocking nonlocals globals |
 	vars := variableStack removeLast.
 	writes := writeStack removeLast.
 	blocking := blockingStack removeLast.
 	nonlocals := nonlocalStack removeLast.
+	globals := globalStack removeLast.
 	nonlocals do: [:n |
+		vars remove: n ifAbsent: [].
+		writes remove: n ifAbsent: [].
+	].
+	"``global x'' names are likewise stripped from this scope's local
+	sets so an inner ``x = expr'' doesn't declare a fresh Smalltalk
+	temp.  parseGlobal additionally registered each name in the module
+	scope (variableStack first), so NameAst codegen resolves it through
+	the module instance's dynamicInstVarAt: storage instead."
+	globals do: [:n |
 		vars remove: n ifAbsent: [].
 		writes remove: n ifAbsent: [].
 	].
@@ -2787,6 +2810,7 @@ pushScope
 	writeStack add: IdentitySet new.
 	blockingStack add: false.
 	nonlocalStack add: IdentitySet new.
+	globalStack add: IdentitySet new.
 %
 
 category: 'Grail-node construction'
@@ -2873,6 +2897,8 @@ source: aString
 	blockingStack add: false.
 	nonlocalStack := Array new.
 	nonlocalStack add: IdentitySet new.
+	globalStack := Array new.
+	globalStack add: IdentitySet new.
 	classNesting := 0.
 %
 

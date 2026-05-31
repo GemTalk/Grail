@@ -977,6 +977,35 @@ setattr: anObject _: aName _: aValue
 	^ None
 %
 
+category: 'Grail-Built-in Functions'
+method: builtins
+type: className _: bases _: namespace
+	"Python builtin type(name, bases, namespace) — the 3-argument
+	metaclass form that builds a class dynamically.  Mirrors the
+	compile-time path in ClassDefAst: pick the storage base from
+	``bases'' as the Smalltalk superclass, create an anonymous subclass,
+	then merge the other Python bases' methods (importlib
+	___selectStorageBase___ / ___mergeSecondaryBases___).  An EMPTY
+	namespace is supported — e.g. werkzeug's
+	``type('WrapperTestResponse', (TestResponse, wrapper), {})''.  A
+	non-empty namespace would need runtime method / attribute
+	compilation (re-running ClassDefAst's body emit) and is not modeled
+	yet, so it raises rather than silently dropping the bindings."
+
+	| il baseArray storageBase nameSym newClass |
+	il := Python @env0:at: #importlib.
+	baseArray := Array @env0:withAll: bases.
+	baseArray @env0:isEmpty ifTrue: [ baseArray := { PythonInstance } ].
+	(namespace @env0:isNil @env0:not and: [namespace @env0:isEmpty @env0:not])
+		ifTrue: [ ^ NotImplementedError ___signal___:
+			'type(name, bases, namespace) with a non-empty namespace is not yet supported' ].
+	storageBase := il @env0:___selectStorageBase___: baseArray.
+	nameSym := (il @env0:___asSmalltalkClassName___: className @env0:asString) @env0:asSymbol.
+	newClass := storageBase @env1:___subclass___: nameSym instVarNames: #() classInstVarNames: #().
+	il @env0:___mergeSecondaryBases___: newClass bases: baseArray.
+	^ newClass
+%
+
 ! ===============================================================================
 ! Varargs fast-path methods (`_name:kw:` shape)
 ! ===============================================================================

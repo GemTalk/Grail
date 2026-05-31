@@ -397,10 +397,12 @@ testInstanceMethodUnderscoreParamNames
 	traceably, and the copy line below reads
 	``x := _x.'' instead of ``x := ___1.''.
 
-	Verified on Point's ``__init__(self, x, y)'' — both ``x'' and
-	``y'' are instVars (assigned via ``self.x = x'' in the body),
-	so both need temps; both pick the ``_<name>'' transport because
-	no conflicting param/local/instVar would shadow it."
+	Verified on Point's ``move(self, x, y)'' — both ``x'' and ``y''
+	are instVars (assigned via ``self.x = x'' in the body), so both
+	need temps; both pick the ``_<name>'' transport because no
+	conflicting param/local/instVar would shadow it.  (``__init__'' is
+	now forced to the varargs form for keyword binding, so a regular
+	fixed-arity method is used here to exercise the transport.)"
 
 	| testFilePath tpzPath tpzContents |
 	testFilePath := importlib grailDir , '/tests/python/module_with_classes.py'.
@@ -413,13 +415,13 @@ testInstanceMethodUnderscoreParamNames
 	tpzContents := (GsFile open: tpzPath mode: 'rb' onClient: false)
 		contentsAsUtf8 decodeToUnicode.
 
-	"New shape: ``__init__: _x _: _y'' (underscore-prefixed transport)
+	"New shape: ``move: _x _: _y'' (underscore-prefixed transport)
 	plus block-temp copies that mention the same ``_x'' / ``_y'' names.
 	Old shape used ``___1'' / ``___2'' positional placeholders."
-	self assert: (tpzContents includesString: '__init__: _x _: _y').
+	self assert: (tpzContents includesString: 'move: _x _: _y').
 	self assert: (tpzContents includesString: '	x := _x.').
 	self assert: (tpzContents includesString: '	y := _y.').
-	self deny: (tpzContents includesString: '__init__: ___1 _: ___2')
+	self deny: (tpzContents includesString: 'move: ___1 _: ___2')
 %
 
 category: 'Grail-Tests - Module Loading'

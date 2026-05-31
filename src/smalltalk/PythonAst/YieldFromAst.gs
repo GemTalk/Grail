@@ -59,10 +59,20 @@ printSmalltalkOn: aStream
 	printSmalltalkOn:); inside a regular def the surrounding codegen
 	never binds ``___gen___`` so a top-level ``yield from`` falls
 	through to a Smalltalk compile error, mirroring Python's
-	``SyntaxError: 'yield' outside function``."
+	``SyntaxError: 'yield' outside function``.
 
-	aStream nextPutAll: '(['.
+	Drive the iterable through the Python ``__iter__`` / ``__next__``
+	protocol (mirroring ForAst) rather than a Smalltalk ``do:`` — the
+	source may be any Python iterable (e.g. a werkzeug ``Headers``)
+	that has no ``do:``.  ``yield from`` still evaluates to None; the
+	inner generator's StopIteration return value is not yet captured."
+
+	aStream nextPutAll: '([ | ___it___ ___done___ | ___it___ := '.
 	value printSmalltalkWithParenthesisOn: aStream.
 	aStream
-		nextPutAll: ' @env0:do: [:___each___ | ___gen___ @env1:___yield___: ___each___]. None] @env0:value)'
+		nextPutAll: ' @env1:__iter__. ___done___ := false. ';
+		nextPutAll: '[___done___] @env0:whileFalse: [';
+		nextPutAll: '[___gen___ @env1:___yield___: (___it___ @env1:__next__)] ';
+		nextPutAll: '@env0:on: StopIteration do: [:___ex___ | ___done___ := true]]. ';
+		nextPutAll: 'None] @env0:value)'
 %

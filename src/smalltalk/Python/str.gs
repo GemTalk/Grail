@@ -1394,11 +1394,12 @@ rstrip: chars
 category: 'Grail-String Methods'
 method: CharacterCollection
 split
-	"Return a list of words in the string, using whitespace as the delimiter."
+	"Return a list of words in the string, using whitespace as the
+	delimiter.  ``subStrings'' yields plain GemStone String substrings;
+	rebuild each as the receiver's str class (Unicode7) so they satisfy
+	``isinstance(x, str)'' downstream (see split: sep)."
 
-	| parts |
-	parts := self @env0:subStrings.
-	^ parts
+	^ (self @env0:subStrings) @env0:collect: [:p | (self @env0:copyEmpty) @env0:, p]
 %
 
 category: 'Grail-String Methods'
@@ -1414,7 +1415,12 @@ split: sep
 	sepSize @env0:= 0 ifTrue: [
 		ValueError @env1:___signal___: 'empty separator'
 	].
-	text := self @env0:asString.
+	"Keep ``self'' (don't ``asString'' it) so the ``copyFrom:to:''
+	substrings preserve the receiver's str class (Unicode7) rather than
+	degrading to a plain GemStone String.  A plain String fails
+	``isinstance(x, str)'' downstream (str == Unicode7), which broke
+	e.g. urllib.parse.unquote_to_bytes on split results."
+	text := self.
 	n := text @env0:size.
 	result := OrderedCollection @env0:new.
 	start := 1.

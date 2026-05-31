@@ -363,6 +363,13 @@ printSmalltalkOn: aStream
 	(args defaults notNil and: [args defaults @env0:notEmpty]) ifTrue: [
 		aStream nextPutAll: '] value'.
 	].
+	"Stamp the closure's ``__name__'' from the def's lexical name so
+	``func.__name__'' answers 'name', not the ``<closure>'' placeholder.
+	``___pyNamed___:'' returns self, so it sits transparently in front of
+	the assignment / decorator pipeline.  flask's ``@app.route'' reads
+	``view_func.__name__'' to key ``view_functions'' and the rule
+	endpoint; without a real name the lookup KeyErrors."
+	aStream nextPutAll: ' @env0:___pyNamed___: '''; nextPutAll: name; nextPutAll: ''''.
 	"Phase A: close the dynamicInstVarAt:put: paren opened above when
 	this is a module-scope nested def; otherwise just emit the
 	statement-terminating period."
@@ -640,6 +647,30 @@ isSimplePositionalArgs
 	args kwonlyargs isEmpty ifFalse: [^false].
 	args kw_defaults isEmpty ifFalse: [^false].
 	^ true
+%
+
+category: 'Grail-Class Method Compilation'
+method: FunctionDefAst
+compilesAsVarargs
+	"True when this def must compile to the varargs ``_name:kw:'' form
+	(positional array + keyword dict) rather than a fixed-arity
+	selector.  Always for complex signatures (the inverse of
+	isSimplePositionalArgs), AND forced for ``__init__'' even when it
+	is simple-positional: a fixed-arity selector encodes only arity,
+	not parameter names, so it can't bind keyword arguments.  Routing
+	``__init__'' through the varargs form (whose prologue already binds
+	positional-then-keyword by name, via printPositionalUnpackingOn:)
+	makes construction ``Foo(1, 2)'', keyword construction
+	``Foo(a=1, b=2)'', and ``super().__init__(a=1, b=2)'' all work
+	uniformly — and sidesteps the Super dispatch's positional-arity
+	cap, since the varargs form takes any number of arguments.
+
+	Scoped to ``__init__'' for now (the super-call hot spot); other
+	simple-positional methods still use fixed-arity selectors and do
+	not yet accept keyword calls."
+
+	self isSimplePositionalArgs ifFalse: [^ true].
+	^ name asSymbol == #'__init__'
 %
 
 category: 'Grail-Module Method Compilation'
@@ -1151,14 +1182,27 @@ generateModuleMethodSourceOn: aStream
 			].
 			aStream nextPutAll: ']].'; lf.
 		].
-		"Bind **kwarg to the user-visible dict — pass-through (kwargs
-		keys are already String per the codegen convention)."
+		"Bind **kwarg to the user-visible dict.  Python's ``**kwargs''
+		collects only the keyword args that DON'T match a named
+		parameter, so copy the incoming kwargs (never mutate the
+		caller's dict) and drop the keyword-only parameter names that
+		were already bound above.  Without the drop they leak into
+		**kwargs — e.g. werkzeug's ``open(*a, buffered=False,
+		follow_redirects=False, **kw)'' saw both kw-only names in kw,
+		so its ``if not kwargs'' guard wrongly failed.  Keys are String
+		per the codegen convention."
 		args kwarg ifNotNil: [
 			aStream
 				nextPutAll: args kwarg name;
-				nextPutAll: ' := '; nextPutAll: kwMethodParam;
-				nextPutAll: ' ifNil: [(KeyValueDictionary perform: #new env: 0)].';
+				nextPutAll: ' := ('; nextPutAll: kwMethodParam;
+				nextPutAll: ' ifNil: [(KeyValueDictionary perform: #new env: 0)]) @env0:copy.';
 				lf.
+			args kwonlyargs do: [:each |
+				aStream
+					nextPutAll: args kwarg name;
+					nextPutAll: ' @env0:removeKey: '''; nextPutAll: each name;
+					nextPutAll: ''' ifAbsent: []. '; lf.
+			].
 		].
 	].
 
@@ -1365,10 +1409,10 @@ instanceMethodSelector
 	  def foo(self, a, b): → #foo:_: (2 real args)
 	For complex signatures → #_foo:kw: (varargs)."
 
-	self isSimplePositionalArgs ifTrue: [
-		^ CallAst fastPathSelectorForAttr: name arity: self instanceMethodArity
+	self compilesAsVarargs ifTrue: [
+		^ CallAst varargsSelectorForName: name
 	].
-	^ CallAst varargsSelectorForName: name
+	^ CallAst fastPathSelectorForAttr: name arity: self instanceMethodArity
 %
 
 category: 'Grail-Class Method Compilation'
@@ -1379,7 +1423,9 @@ generateMethodStubSource
 
 	| stream paramNames |
 	stream := WriteStream on: Unicode7 new.
-	self isSimplePositionalArgs ifTrue: [
+	self compilesAsVarargs ifTrue: [
+		stream nextPut: $_; nextPutAll: name; nextPutAll: ': positional kw: kwargs'.
+	] ifFalse: [
 		paramNames := self instanceMethodParameterNames.
 		stream nextPutAll: name.
 		paramNames isEmpty ifFalse: [
@@ -1388,8 +1434,6 @@ generateMethodStubSource
 				stream nextPutAll: ' _: ___'; nextPutAll: i printString.
 			].
 		].
-	] ifFalse: [
-		stream nextPut: $_; nextPutAll: name; nextPutAll: ': positional kw: kwargs'.
 	].
 	stream nextPut: Character lf; nextPutAll: '^ nil'.
 	^ stream contents
@@ -1424,7 +1468,7 @@ generateMethodSourceOn: aStream
 	paramNames := self instanceMethodParameterNames.
 	bodyVars := body variables.
 
-	self isSimplePositionalArgs ifTrue: [
+	self compilesAsVarargs ifFalse: [
 		| transportNames |
 		"Pick a per-parameter transport name (the Smalltalk method-arg
 		identifier that carries the value into the block temp).  Prefer
@@ -1502,7 +1546,7 @@ generateMethodSourceOn: aStream
 					lf.
 			].
 		].
-	] ifFalse: [
+	] ifTrue: [
 		"Varargs selector.  Rename method params to internal sentinels
 		when the user's *vararg / **kwarg name would collide — same
 		rationale as the module-method varargs branch."
@@ -1596,14 +1640,27 @@ generateMethodSourceOn: aStream
 			].
 			aStream nextPutAll: ']].'; lf.
 		].
-		"Bind **kwarg to the user-visible dict — pass-through (kwargs
-		keys are already String per the codegen convention)."
+		"Bind **kwarg to the user-visible dict.  Python's ``**kwargs''
+		collects only the keyword args that DON'T match a named
+		parameter, so copy the incoming kwargs (never mutate the
+		caller's dict) and drop the keyword-only parameter names that
+		were already bound above.  Without the drop they leak into
+		**kwargs — e.g. werkzeug's ``open(*a, buffered=False,
+		follow_redirects=False, **kw)'' saw both kw-only names in kw,
+		so its ``if not kwargs'' guard wrongly failed.  Keys are String
+		per the codegen convention."
 		args kwarg ifNotNil: [
 			aStream
 				nextPutAll: args kwarg name;
-				nextPutAll: ' := '; nextPutAll: kwMethodParam;
-				nextPutAll: ' ifNil: [(KeyValueDictionary perform: #new env: 0)].';
+				nextPutAll: ' := ('; nextPutAll: kwMethodParam;
+				nextPutAll: ' ifNil: [(KeyValueDictionary perform: #new env: 0)]) @env0:copy.';
 				lf.
+			args kwonlyargs do: [:each |
+				aStream
+					nextPutAll: args kwarg name;
+					nextPutAll: ' @env0:removeKey: '''; nextPutAll: each name;
+					nextPutAll: ''' ifAbsent: []. '; lf.
+			].
 		].
 	].
 

@@ -417,9 +417,50 @@ reverse
 category: 'Grail-List Methods'
 method: list
 sort
-	"Sort the list in place using Python's __lt__ for comparison."
+	"Sort the list IN PLACE using Python's __lt__ for comparison.
+	GemStone's ``sort:'' returns a fresh sorted Array rather than
+	reordering the receiver, so copy the result back over the
+	receiver's slots to get true in-place semantics."
 
-	self @env0:sort: [:a :b | a @env1:__lt__: b].
+	| sorted |
+	sorted := self @env0:sort: [:a :b | a @env1:__lt__: b].
+	self @env0:replaceFrom: 1 to: self @env0:size with: sorted startingAt: 1.
+	^ None
+%
+
+category: 'Grail-List Methods'
+method: list
+_sort: positional kw: kwargs
+	"Python list.sort(*, key=None, reverse=False) — in-place sort with
+	the keyword-only ``key'' and ``reverse'' args.  Mirrors the
+	builtins ``_sorted:kw:'' comparison logic but sorts the receiver in
+	place (and returns None).  flask's routing sorts the rule list with
+	a key at request time."
+
+	| keyFn reverse sortBlock sorted |
+	keyFn := kwargs @env0:isNil
+		ifTrue: [nil]
+		ifFalse: [kwargs @env0:at: 'key' ifAbsent: [nil]].
+	reverse := kwargs @env0:isNil
+		ifTrue: [false]
+		ifFalse: [kwargs @env0:at: 'reverse' ifAbsent: [false]].
+	sortBlock := keyFn @env0:isNil
+		ifTrue: [
+			reverse ___isTruthy___
+				ifTrue: [[:a :b | b @env1:__lt__: a]]
+				ifFalse: [[:a :b | a @env1:__lt__: b]]]
+		ifFalse: [
+			reverse ___isTruthy___
+				ifTrue: [[:a :b |
+					(keyFn @env1:value: { b } value: nil)
+						@env1:__lt__: (keyFn @env1:value: { a } value: nil)]]
+				ifFalse: [[:a :b |
+					(keyFn @env1:value: { a } value: nil)
+						@env1:__lt__: (keyFn @env1:value: { b } value: nil)]]].
+	"GemStone's ``sort:'' returns a fresh sorted Array; copy it back
+	over the receiver's slots for true in-place semantics."
+	sorted := self @env0:sort: sortBlock.
+	self @env0:replaceFrom: 1 to: self @env0:size with: sorted startingAt: 1.
 	^ None
 %
 

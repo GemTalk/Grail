@@ -806,6 +806,21 @@ testSplit
 
 category: 'Grail-String Methods'
 method: StrTestCase
+testSplitReturnsStrClass
+	"Regression: split / split(sep) substrings must be the Python str
+	class (Unicode7), not a plain GemStone String — a plain String
+	fails ``isinstance(x, str)'' downstream (broke
+	urllib.parse.unquote on query-string parsing / req.args)."
+
+	self assert: (('a&b&c' @env1:split: '&') @env0:first @env0:class) equals: Unicode7.
+	self assert: (('a&b&c' @env1:split: '&') @env0:last @env0:class) equals: Unicode7.
+	self assert: (('one two' @env1:split) @env0:first @env0:class) equals: Unicode7.
+	"Content is still correct."
+	self assert: ('a&b&c' @env1:split: '&') equals: #('a' 'b' 'c') @env0:asOrderedCollection
+%
+
+category: 'Grail-String Methods'
+method: StrTestCase
 testSplitlines
 	"Test splitlines() method"
 

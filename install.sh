@@ -84,6 +84,8 @@ echo "PYTHON_PREFIX = $PYTHON_PREFIX"
 export PYTHON_PACKAGE_PATH="$GRAIL_DIR/src/python"
 echo "PYTHON_PACKAGE_PATH = $PYTHON_PACKAGE_PATH"
 
+./scripts/setUnicodeMode.sh
+
 LC_ALL=C topaz -lq -S src/smalltalk/install.gs
 
 if [ $? -ne 0 ]; then

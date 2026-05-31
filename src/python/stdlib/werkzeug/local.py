@@ -525,123 +525,104 @@ class LocalProxy(t.Generic[T]):
         object.__setattr__(self, "_LocalProxy__wrapped", local)
         object.__setattr__(self, "_get_current_object", _get_current_object)
 
-    __doc__ = _ProxyLookup(
-        class_value=__doc__, fallback=lambda self: type(self).__doc__, is_attr=True
-    )
-    __wrapped__ = _ProxyLookup(
-        fallback=lambda self: self._LocalProxy__wrapped,  # type: ignore[attr-defined]
-        is_attr=True,
-    )
-    # __del__ should only delete the proxy
-    __repr__ = _ProxyLookup(
-        repr, fallback=lambda self: f"<{type(self).__name__} unbound>"
-    )
-    __str__ = _ProxyLookup(str)
-    __bytes__ = _ProxyLookup(bytes)
-    __format__ = _ProxyLookup()
-    __lt__ = _ProxyLookup(operator.lt)
-    __le__ = _ProxyLookup(operator.le)
-    __eq__ = _ProxyLookup(operator.eq)
-    __ne__ = _ProxyLookup(operator.ne)
-    __gt__ = _ProxyLookup(operator.gt)
-    __ge__ = _ProxyLookup(operator.ge)
-    __hash__ = _ProxyLookup(hash)
-    __bool__ = _ProxyLookup(bool, fallback=lambda self: False)
-    __getattr__ = _ProxyLookup(getattr)
-    # __getattribute__ triggered through __getattr__
-    __setattr__ = _ProxyLookup(setattr)
-    __delattr__ = _ProxyLookup(delattr)
-    __dir__ = _ProxyLookup(dir, fallback=lambda self: [])
-    # __get__ (proxying descriptor not supported)
-    # __set__ (descriptor)
-    # __delete__ (descriptor)
-    # __set_name__ (descriptor)
-    # __objclass__ (descriptor)
-    # __slots__ used by proxy itself
-    # __dict__ (__getattr__)
-    # __weakref__ (__getattr__)
-    # __init_subclass__ (proxying metaclass not supported)
-    # __prepare__ (metaclass)
-    __class__ = _ProxyLookup(fallback=lambda self: type(self), is_attr=True)
-    __instancecheck__ = _ProxyLookup(lambda self, other: isinstance(other, self))
-    __subclasscheck__ = _ProxyLookup(lambda self, other: issubclass(other, self))
-    # __class_getitem__ triggered through __getitem__
-    __call__ = _ProxyLookup(lambda self, *args, **kwargs: self(*args, **kwargs))
-    __len__ = _ProxyLookup(len)
-    __length_hint__ = _ProxyLookup(operator.length_hint)
-    __getitem__ = _ProxyLookup(operator.getitem)
-    __setitem__ = _ProxyLookup(operator.setitem)
-    __delitem__ = _ProxyLookup(operator.delitem)
-    # __missing__ triggered through __getitem__
-    __iter__ = _ProxyLookup(iter)
-    __next__ = _ProxyLookup(next)
-    __reversed__ = _ProxyLookup(reversed)
-    __contains__ = _ProxyLookup(operator.contains)
-    __add__ = _ProxyLookup(operator.add)
-    __sub__ = _ProxyLookup(operator.sub)
-    __mul__ = _ProxyLookup(operator.mul)
-    __matmul__ = _ProxyLookup(operator.matmul)
-    __truediv__ = _ProxyLookup(operator.truediv)
-    __floordiv__ = _ProxyLookup(operator.floordiv)
-    __mod__ = _ProxyLookup(operator.mod)
-    __divmod__ = _ProxyLookup(divmod)
-    __pow__ = _ProxyLookup(pow)
-    __lshift__ = _ProxyLookup(operator.lshift)
-    __rshift__ = _ProxyLookup(operator.rshift)
-    __and__ = _ProxyLookup(operator.and_)
-    __xor__ = _ProxyLookup(operator.xor)
-    __or__ = _ProxyLookup(operator.or_)
-    __radd__ = _ProxyLookup(_l_to_r_op(operator.add))
-    __rsub__ = _ProxyLookup(_l_to_r_op(operator.sub))
-    __rmul__ = _ProxyLookup(_l_to_r_op(operator.mul))
-    __rmatmul__ = _ProxyLookup(_l_to_r_op(operator.matmul))
-    __rtruediv__ = _ProxyLookup(_l_to_r_op(operator.truediv))
-    __rfloordiv__ = _ProxyLookup(_l_to_r_op(operator.floordiv))
-    __rmod__ = _ProxyLookup(_l_to_r_op(operator.mod))
-    __rdivmod__ = _ProxyLookup(_l_to_r_op(divmod))
-    __rpow__ = _ProxyLookup(_l_to_r_op(pow))
-    __rlshift__ = _ProxyLookup(_l_to_r_op(operator.lshift))
-    __rrshift__ = _ProxyLookup(_l_to_r_op(operator.rshift))
-    __rand__ = _ProxyLookup(_l_to_r_op(operator.and_))
-    __rxor__ = _ProxyLookup(_l_to_r_op(operator.xor))
-    __ror__ = _ProxyLookup(_l_to_r_op(operator.or_))
-    __iadd__ = _ProxyIOp(operator.iadd)
-    __isub__ = _ProxyIOp(operator.isub)
-    __imul__ = _ProxyIOp(operator.imul)
-    __imatmul__ = _ProxyIOp(operator.imatmul)
-    __itruediv__ = _ProxyIOp(operator.itruediv)
-    __ifloordiv__ = _ProxyIOp(operator.ifloordiv)
-    __imod__ = _ProxyIOp(operator.imod)
-    __ipow__ = _ProxyIOp(operator.ipow)
-    __ilshift__ = _ProxyIOp(operator.ilshift)
-    __irshift__ = _ProxyIOp(operator.irshift)
-    __iand__ = _ProxyIOp(operator.iand)
-    __ixor__ = _ProxyIOp(operator.ixor)
-    __ior__ = _ProxyIOp(operator.ior)
-    __neg__ = _ProxyLookup(operator.neg)
-    __pos__ = _ProxyLookup(operator.pos)
-    __abs__ = _ProxyLookup(abs)
-    __invert__ = _ProxyLookup(operator.invert)
-    __complex__ = _ProxyLookup(complex)
-    __int__ = _ProxyLookup(int)
-    __float__ = _ProxyLookup(float)
-    __index__ = _ProxyLookup(operator.index)
-    __round__ = _ProxyLookup(round)
-    __trunc__ = _ProxyLookup(math.trunc)
-    __floor__ = _ProxyLookup(math.floor)
-    __ceil__ = _ProxyLookup(math.ceil)
-    __enter__ = _ProxyLookup()
-    __exit__ = _ProxyLookup()
-    __await__ = _ProxyLookup()
-    __aiter__ = _ProxyLookup()
-    __anext__ = _ProxyLookup()
-    __aenter__ = _ProxyLookup()
-    __aexit__ = _ProxyLookup()
-    __copy__ = _ProxyLookup(copy.copy)
-    __deepcopy__ = _ProxyLookup(copy.deepcopy)
-    # __getnewargs_ex__ (pickle through proxy not supported)
-    # __getnewargs__ (pickle)
-    # __getstate__ (pickle)
-    # __setstate__ (pickle)
-    # __reduce__ (pickle)
-    # __reduce_ex__ (pickle)
+    # --- Grail-specific forwarding -------------------------------------
+    #
+    # Upstream werkzeug forwards every operation through ``_ProxyLookup``
+    # *descriptor* class attributes (e.g. ``__eq__ = _ProxyLookup(...)``).
+    # Grail dispatches dunders as methods and runs ``__getattr__`` as a
+    # method (not the descriptor protocol), so this build replaces the
+    # descriptor table with equivalent forwarding methods.
+    # ``_get_current_object`` (set in ``__init__``) returns the bound
+    # object; every operation delegates to it.
+
+    def __getattr__(self, name):
+        # Guard the internal slots so a miss can never recurse back into
+        # __getattr__ (which would blow the stack): they are set in
+        # __init__ via object.__setattr__ and read directly below.
+        if name == "_get_current_object" or name == "_LocalProxy__wrapped":
+            raise AttributeError(name)
+        if name == "__wrapped__":
+            return self._LocalProxy__wrapped
+        return getattr(self._get_current_object(), name)
+
+    def __setattr__(self, name, value):
+        if name == "_get_current_object" or name == "_LocalProxy__wrapped":
+            object.__setattr__(self, name, value)
+        else:
+            setattr(self._get_current_object(), name, value)
+
+    def __delattr__(self, name):
+        delattr(self._get_current_object(), name)
+
+    def __repr__(self):
+        try:
+            obj = self._get_current_object()
+        except RuntimeError:
+            return "<%s unbound>" % type(self).__name__
+        return repr(obj)
+
+    def __str__(self):
+        return str(self._get_current_object())
+
+    def __bool__(self):
+        try:
+            return bool(self._get_current_object())
+        except RuntimeError:
+            return False
+
+    def __dir__(self):
+        try:
+            return dir(self._get_current_object())
+        except RuntimeError:
+            return []
+
+    def __call__(self, *args, **kwargs):
+        return self._get_current_object()(*args, **kwargs)
+
+    def __eq__(self, other):
+        return self._get_current_object() == other
+
+    def __ne__(self, other):
+        return self._get_current_object() != other
+
+    def __lt__(self, other):
+        return self._get_current_object() < other
+
+    def __le__(self, other):
+        return self._get_current_object() <= other
+
+    def __gt__(self, other):
+        return self._get_current_object() > other
+
+    def __ge__(self, other):
+        return self._get_current_object() >= other
+
+    def __hash__(self):
+        return hash(self._get_current_object())
+
+    def __len__(self):
+        return len(self._get_current_object())
+
+    def __iter__(self):
+        return iter(self._get_current_object())
+
+    def __next__(self):
+        return next(self._get_current_object())
+
+    def __contains__(self, item):
+        return item in self._get_current_object()
+
+    def __getitem__(self, key):
+        return self._get_current_object()[key]
+
+    def __setitem__(self, key, value):
+        self._get_current_object()[key] = value
+
+    def __delitem__(self, key):
+        del self._get_current_object()[key]
+
+    def __enter__(self):
+        return self._get_current_object().__enter__()
+
+    def __exit__(self, *args):
+        return self._get_current_object().__exit__(*args)

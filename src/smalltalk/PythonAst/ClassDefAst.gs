@@ -87,10 +87,11 @@ printSmalltalkRuntimeOn: aStream
 	varargsFuncNames := IdentitySet new.
 	methodDefs do: [:def |
 		funcNames add: def name asSymbol.
-		"A def with *args / **kwargs / defaults compiles to ``_name:kw:``
-		only - mark it so classSelfSendSelector doesn't emit a unary
-		send into thin air."
-		def isSimplePositionalArgs ifFalse: [
+		"A def that compiles to the varargs ``_name:kw:`` form (complex
+		signature, or __init__ which is forced to varargs so it can bind
+		keyword args) is marked so classSelfSendSelector dispatches via
+		the varargs selector rather than a fixed-arity send into thin air."
+		def compilesAsVarargs ifTrue: [
 			varargsFuncNames add: def name asSymbol
 		].
 	].
@@ -590,19 +591,56 @@ printSmalltalkRuntimeOn: aStream
 			and: [(def decoratorList includes: #'property')
 				or: [def decoratorList includes: #'cached_property']])
 			and: [(settersByName includes: def name asSymbol) not]) ifTrue: [
-			| propSetterSrc lf2 |
+			| propSetterSrc lf2 isCached |
 			lf2 := Character lf asString.
-			propSetterSrc := def name , ': ___1' , lf2 ,
-				'	AttributeError @env0:signal: ''property ''''',
-				def name , ''''' has no setter''.'.
+			isCached := def decoratorList includes: #'cached_property'.
+			isCached
+				ifTrue: [
+					"@cached_property is a NON-DATA descriptor in CPython:
+					assigning ``obj.attr = v'' writes the instance __dict__,
+					which then shadows the descriptor on every later read.
+					Grail's ___pyAttrLoad___ probes dynamic-instVar storage
+					BEFORE any getter (Object >> ___pyAttrLoad___:), so a
+					storing setter reproduces that set-then-read behaviour —
+					and doubles as the cache slot.  flask's
+					``create_url_adapter'' relies on this: it does
+					``request.host = get_host(...)'' on a @cached_property."
+					propSetterSrc := def name , ': ___1' , lf2 ,
+						'	self @env0:dynamicInstVarAt: #''' , def name , ''' put: ___1.' , lf2 ,
+						'	^ ___1' ]
+				ifFalse: [
+					"Plain @property with no explicit @x.setter is read-only —
+					match CPython by signalling AttributeError on assignment."
+					propSetterSrc := def name , ': ___1' , lf2 ,
+						'	AttributeError @env0:signal: ''property ''''',
+						def name , ''''' has no setter''.' ].
 			self
 				emitCompileMethodOn: name
 				source: propSetterSrc
-				category: 'Grail-Property-ReadOnly'
+				category: (isCached ifTrue: ['Grail-CachedProperty-Setter'] ifFalse: ['Grail-Property-ReadOnly'])
 				env: 1
 				classSide: false
 				onStream: aStream.
 		].
+	].
+
+	"Multiple inheritance: aClass inherits whichever base
+	printSuperclassOn: selected as the Smalltalk superclass (the
+	storage base, else the first base); merge in the env-1 methods of
+	the OTHER bases that aClass's chain doesn't already provide.  ALL
+	bases are passed — the one that became the superclass dedups out
+	(its methods are inherited, so ___primaryChainProvides___ sees
+	them).  Emitted after the class's own methods are compiled so they
+	take precedence.  See importlib >> ___mergeSecondaryBases___:bases:."
+	bases size > 1 ifTrue: [
+		aStream
+			nextPutAll: '(Python @env0:at: #importlib) @env0:___mergeSecondaryBases___: ';
+			nextPutAll: name;
+			nextPutAll: ' bases: { '.
+		1 to: bases size do: [:i |
+			i > 1 ifTrue: [aStream nextPutAll: '. '].
+			(bases at: i) printSmalltalkWithParenthesisOn: aStream].
+		aStream nextPutAll: ' }.'; lf
 	].
 
 	"Compile the class-side value:value: method used for Python
@@ -673,12 +711,24 @@ printSuperclassOn: aStream
 	"Emit a runtime expression for this class's superclass.  No
 	bases → PythonInstance (the Grail-only base class that provides
 	the __dict__ fallback for dynamic Python attributes that aren't
-	pre-discovered from __init__).  Otherwise emit the first base's
-	expression (multi-inheritance is not modeled yet — first base
-	wins, and the base is expected to chain back to PythonInstance)."
+	pre-discovered from __init__).
+
+	Single base → that base.  Multiple bases → pick the one whose
+	Smalltalk class chain reaches a built-in storage collection
+	(dict / list / set) so the new class keeps that storage; e.g.
+	``ImmutableMultiDict(ImmutableMultiDictMixin, MultiDict)'' subclasses
+	``MultiDict'' (dict-backed) rather than the storage-less mixin.  The
+	other bases' methods are merged in by ___mergeSecondaryBases___.
+	When no base has built-in storage the first base wins (unchanged) —
+	see importlib >> ___selectStorageBase___:."
 
 	bases isEmpty ifTrue: [^ aStream nextPutAll: 'PythonInstance'].
-	bases first printSmalltalkOn: aStream.
+	bases size = 1 ifTrue: [^ bases first printSmalltalkOn: aStream].
+	aStream nextPutAll: '((Python @env0:at: #importlib) @env0:___selectStorageBase___: { '.
+	1 to: bases size do: [:i |
+		i > 1 ifTrue: [aStream nextPutAll: '. '].
+		(bases at: i) printSmalltalkWithParenthesisOn: aStream].
+	aStream nextPutAll: ' })'
 %
 
 category: 'Grail-code generation'

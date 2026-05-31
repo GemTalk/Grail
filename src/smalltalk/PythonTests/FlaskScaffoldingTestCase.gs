@@ -5170,21 +5170,29 @@ testWerkzeugTestImports
 category: 'Grail-Tests - werkzeug'
 method: FlaskScaffoldingTestCase
 testWerkzeugWrappersConstructAndClient
-	"M6 progress — the green subset of the Request/Response round-trip
-	(Tier 1 in use_werkzeug_roundtrip.py): the wrappers package
-	imports, a real Request and Response *construct* from a WSGI
-	environ, and the Client drives a WSGI app and reads the response
-	back (output direction).
+	"M6 — the FULL werkzeug Request/Response round-trip over a WSGI
+	environ (use_werkzeug_roundtrip.py).  Tier 1: the wrappers package
+	imports, a real Request and Response *construct*, and the Client
+	drives a WSGI app and reads the response back.  Tier 2 (the
+	acceptance gate): a Request reads ``method`` / ``path`` /
+	``args`` / ``headers`` back OUT of the environ, and a Response
+	serialises back to WSGI (status line, body, and a custom header).
 
-	The FULL round-trip M6 calls for — reading Request attributes out
-	of an environ and serializing a Response back to WSGI — is NOT
-	asserted here: it needs language features that aren't in yet (the
-	descriptor protocol for ``req.args'', kwarg/arity handling in the
-	Super dispatch for ``Request.__init__'', and assorted Response/
-	Headers gaps; see docs/Support_Flask.md M6).  Those live as the
-	Tier-2 ``request_reads_* / response_*'' functions in the fixture
-	and are run by hand as the acceptance probe until the blockers
-	land — at which point they fold back into this test."
+	Every facet that previously needed language features Grail lacked
+	is now green:
+	  * ``request_reads_method_and_path`` / kwarg-bound super().__init__
+	    (varargs __init__, commit 5a34f71).
+	  * ``request_reads_headers`` — multiple-inheritance method merge
+	    (commit a1e07c6) + built-in storage-base selection (commit
+	    d498e8b) for the datastructures mixins.
+	  * ``request_reads_query_args`` — ImmutableMultiDict/MultiDict are
+	    dict-backed (storage-base selection) AND ``MultiDict.get'' (a
+	    varargs override) now beats the inherited fixed-arity
+	    ``dict.get'' (BoundMethod most-derived-override resolution).
+	  * ``response_wsgi_serialization`` / ``response_emits_custom_header''
+	    — yield-from via __iter__/__next__ (commit 6ebabe1),
+	    functools.partial, and bytes.join over any iterable (commit
+	    5497c9c)."
 
 	| mod mods keys |
 	mods := importlib @env1:modules.
@@ -5195,8 +5203,43 @@ testWerkzeugWrappersConstructAndClient
 	mods @env0:removeKey: #'use_werkzeug_roundtrip' ifAbsent: [].
 	mods @env0:removeKey: #'pkg_scaffolding.use_werkzeug_roundtrip' ifAbsent: [].
 	mod := self loadFixture: 'use_werkzeug_roundtrip'.
+	"Tier 1 — import, construct, output-direction client round-trip."
 	self assert: mod @env1:import_succeeded equals: true.
 	self assert: mod @env1:request_constructs equals: true.
 	self assert: mod @env1:response_constructs equals: true.
-	self assert: mod @env1:client_app_roundtrip equals: true
+	self assert: mod @env1:client_app_roundtrip equals: true.
+	"Tier 2 — read Request attributes back out of the environ."
+	self assert: mod @env1:request_reads_method_and_path equals: true.
+	self assert: mod @env1:request_reads_query_args equals: true.
+	self assert: mod @env1:request_reads_headers equals: true.
+	"Tier 2 — serialise a Response back to WSGI."
+	self assert: mod @env1:response_wsgi_serialization equals: true.
+	self assert: mod @env1:response_emits_custom_header equals: true
+%
+
+category: 'Grail-Tests - flask'
+method: FlaskScaffoldingTestCase
+testFlaskHelloWorldWsgiRoundTrip
+	"M7 milestone — a Flask hello-world that responds 200 OK with
+	``Hello, Grail!`` through the full WSGI application entry point
+	``app(environ, start_response)``, exactly as ``werkzeug.test.Client``
+	invokes it.  Exercises the entire request path: route matching (the
+	``Rule(rule, methods=methods, **options)`` endpoint binds — kwarg/**splat
+	merge), the request context, ``full_dispatch_request``, the view, and
+	Response materialisation (``session.accessed`` on the SecureCookieSession
+	dict subclass).  Flask and werkzeug are heavy imports; drop their cached
+	modules first so a re-run recompiles cleanly without OOMing the suite."
+
+	| mod mods keys result |
+	mods := importlib @env1:modules.
+	keys := mods @env0:keys @env0:select: [:k |
+		(k @env0:asString @env0:= 'flask')
+			@env0:or: [(k @env0:asString @env0:indexOfSubCollection: 'flask.') @env0:> 0]].
+	keys @env0:do: [:k | mods @env0:removeKey: k ifAbsent: []].
+	mods @env0:removeKey: #'use_flask_wsgi' ifAbsent: [].
+	mods @env0:removeKey: #'pkg_scaffolding.use_flask_wsgi' ifAbsent: [].
+	mod := self loadFixture: 'use_flask_wsgi'.
+	result := mod @env1:hello_wsgi.
+	self assert: ((result @env1:__getitem__: 0) @env0:indexOfSubCollection: '200') @env0:> 0.
+	self assert: (result @env1:__getitem__: 1) equals: 'Hello, Grail!'
 %

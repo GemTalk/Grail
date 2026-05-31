@@ -140,6 +140,25 @@ receiver: aReceiver selector: aSymbol
 
 set compile_env: 0
 
+category: 'Grail-Python Attribute Hook'
+classmethod: BoundMethod
+___pythonValueAttrs___
+	"``__name__'' / ``__qualname__'' / ``__module__'' are Python
+	identifying-metadata *value* attributes: ``f.__name__'' is the name
+	STRING, not a callable.  Decorators (functools.wraps) and flask's
+	``_endpoint_from_view_func'' read ``view_func.__name__'' and key
+	``view_functions'' by it.  Without this hook ``___pyAttrLoad___''
+	wraps the dunder as a BoundMethod, so the lookup key becomes a
+	BoundMethod instead of 'hello' and dispatch KeyErrors.  These
+	selectors are answered by the env-1 accessors below."
+
+	^ IdentitySet new
+		add: #'__name__';
+		add: #'__qualname__';
+		add: #'__module__';
+		yourself
+%
+
 ! ------------------- Instance methods (env 1 — call protocol)
 
 set compile_env: 1
@@ -162,7 +181,7 @@ value: positional value: kwargs
 	dispatch with the remaining args.  Matches CPython's unbound-
 	function semantics: ``C.__dict__['f'](instance, ...)''."
 
-	| actualReceiver actualArgs nargs fixedSel |
+	| actualReceiver actualArgs nargs fixedSel rcvrClass fixedClass varargsClass |
 	receiver @env0:isNil
 		ifTrue: [
 			actualReceiver := positional @env0:at: 1.
@@ -178,8 +197,20 @@ value: positional value: kwargs
 		nargs := actualArgs @env0:size.
 		fixedSel := self @env0:_selectorForArgCount: nargs.
 		fixedSel ifNotNil: [
-			((actualReceiver @env0:class) @env0:whichClassIncludesSelector: fixedSel environmentId: 1) @env0:notNil ifTrue: [
-				^ actualReceiver perform: fixedSel env: 1 withArguments: actualArgs
+			rcvrClass := actualReceiver @env0:class.
+			fixedClass := rcvrClass @env0:whichClassIncludesSelector: fixedSel environmentId: 1.
+			fixedClass @env0:notNil ifTrue: [
+				"Most-derived definition wins.  A Python override whose
+				signature took defaults / *args compiles to the varargs
+				`_name:kw:` form; when it lives on a MORE-derived class than
+				an inherited fixed-arity selector, it must beat that inherited
+				method — otherwise a built-in superclass's fixed-arity method
+				(e.g. dict>>get:) shadows the subclass's override (e.g.
+				MultiDict>>get).  Same-class or less-derived varargs defers to
+				the fixed-arity fast path."
+				varargsClass := rcvrClass @env0:whichClassIncludesSelector: selVarargs environmentId: 1.
+				(varargsClass @env0:notNil and: [varargsClass @env0:inheritsFrom: fixedClass])
+					ifFalse: [^ actualReceiver perform: fixedSel env: 1 withArguments: actualArgs].
 			].
 		].
 	].

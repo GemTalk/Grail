@@ -1246,14 +1246,16 @@ join: iterable
 	| iterClass parts totalSize result offset |
 	iterClass := iterable @env0:class.
 
-	"iterable must be list or tuple"
-		((iterClass == list) or: [
-		iterClass == tuple
-	]) ifFalse: [
-		TypeError ___signal___: 'can only join an iterable'
-	].
-
-	parts := iterable.
+	"list / tuple are used by index directly; any other Python iterable
+	(generator, ClosingIterator, map, …) is materialized into a list via
+	the __iter__/__next__ protocol so it can be indexed.  Only a truly
+	non-iterable raises."
+	parts := ((iterClass == list) or: [iterClass == tuple])
+		ifTrue: [iterable]
+		ifFalse: [
+			(iterClass @env0:whichClassIncludesSelector: #'__iter__' environmentId: 1) notNil
+				ifTrue: [list @env1:__new__: iterable]
+				ifFalse: [TypeError @env1:___signal___: 'can only join an iterable']].
 
 	"Empty iterable"
 	((parts @env0:size) == 0) ifTrue: [

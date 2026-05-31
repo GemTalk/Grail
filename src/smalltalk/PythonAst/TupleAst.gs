@@ -129,7 +129,7 @@ printSmalltalkOn: aStream
 			ifTrue: [
 				aStream nextPut: $(.
 				each value printSmalltalkWithParenthesisOn: aStream.
-				aStream nextPutAll: ' @env0:asArray)'.
+				aStream nextPutAll: ' @env0:___pyStarToArray___)'.
 			] ifFalse: [
 				aStream nextPutAll: '{ '.
 				each printSmalltalkWithParenthesisOn: aStream.

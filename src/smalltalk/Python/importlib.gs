@@ -761,6 +761,109 @@ ___inheritClassAttrs___: aClass exclude: ownAttrs
 	]
 %
 
+category: 'Grail-Module Loading'
+classmethod: importlib
+___selectStorageBase___: bases
+	"Pick the Smalltalk superclass for a multi-base Python class.
+	Return the LEFTMOST base whose class chain reaches a built-in
+	storage collection (Grail ``dict'' / ``list'' / ``set'' are
+	Dictionary / SequenceableCollection / Set subclasses, all under
+	``Collection''), so the new class keeps that primitive storage —
+	e.g. ``ImmutableMultiDict(ImmutableMultiDictMixin, MultiDict)''
+	selects ``MultiDict'' (dict-backed) over the storage-less mixin.
+	Plain mixins / user classes are rooted at ``PythonInstance'' (not a
+	Collection), so they're skipped.  Falls back to the first base when
+	none has built-in storage — the common diamond-free Python-only
+	case (unchanged behaviour).  ___mergeSecondaryBases___ then folds in
+	the other bases' methods."
+
+	bases do: [:b |
+		((b @env0:isKindOf: Behavior) and: [b @env0:inheritsFrom: Collection])
+			ifTrue: [^ b]
+	].
+	^ bases @env0:first
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___mergeSecondaryBases___: aClass bases: secondaryBases
+	"Multiple-inheritance method resolution.  ``aClass`` already
+	inherits its PRIMARY base (the storage base selected by
+	___selectStorageBase___, else ``bases first'') through Smalltalk
+	single inheritance; this brings in the env-1 instance methods of
+	the OTHER bases (and their Python ancestors) that the primary chain
+	doesn't already provide.  The base that became the superclass dedups
+	out (its methods are inherited, so ___primaryChainProvides___ sees
+	them).
+
+	Precedence honors left-to-right base order and Python override
+	semantics: a selector defined by ``aClass`` itself or anywhere in
+	its primary Python chain (down to, but excluding, the universal
+	roots PythonInstance / Object) is NOT overridden; a selector from
+	a secondary base DOES override the universal-root default (so a
+	mixin/base ``__repr__`` beats ``object.__repr__``).  Because
+	copied methods land on ``aClass`` first, an earlier secondary base
+	wins over a later one.
+
+	Methods are recompiled from source onto ``aClass``.  Grail stores
+	instance attributes dynamically (no fixed slots), so a method
+	written for the base runs correctly on ``aClass``.  Limitations:
+	the walk stops at the first non-Python (built-in) ancestor, so a
+	secondary base whose storage IS a built-in (e.g. a MultiDict over
+	``dict``) is not fully reproduced; and ``super`` in a copied method
+	resolves against ``aClass``'s primary superclass (cooperative
+	mixins that chain via ``super`` may misbehave)."
+
+	secondaryBases do: [:base |
+		| walker |
+		walker := base.
+		[(walker ~~ nil)
+			and: [(walker ~~ PythonInstance)
+			and: [(walker ~~ Object)
+			and: [(walker class whichClassIncludesSelector: #'dynInstVars' environmentId: 1) ~~ nil]]]]
+			whileTrue: [
+			| md |
+			md := walker methodDictForEnv: 1.
+			md ~~ nil ifTrue: [
+				md keys do: [:sel |
+					(self ___primaryChainProvides___: sel forClass: aClass) ifFalse: [
+						| src |
+						src := [walker sourceCodeAt: sel environmentId: 1]
+							on: Error do: [:e | nil].
+						src ~~ nil ifTrue: [
+							[aClass perform: #'___compileMethod:category:'
+								env: 1
+								withArguments: { src. 'Grail-MI-Inherited' }]
+							on: Error do: [:e | nil]
+						]
+					]
+				]
+			].
+			walker := walker superClass
+		]
+	]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___primaryChainProvides___: aSelector forClass: aClass
+	"True if aSelector is defined on aClass or any superclass in its
+	primary chain, EXCLUDING the universal roots (PythonInstance /
+	Object) — those defaults must be overridable by a secondary base.
+	Used by ___mergeSecondaryBases___ to decide what to inherit."
+
+	| walker |
+	walker := aClass.
+	[(walker ~~ nil) and: [(walker ~~ PythonInstance) and: [walker ~~ Object]]]
+		whileTrue: [
+		| md |
+		md := walker methodDictForEnv: 1.
+		(md ~~ nil and: [md includesKey: aSelector]) ifTrue: [^ true].
+		walker := walker superClass
+	].
+	^ false
+%
+
 set compile_env: 1
 
 category: 'Grail-Module Loading'

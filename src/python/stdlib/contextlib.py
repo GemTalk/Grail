@@ -157,6 +157,20 @@ class ExitStack:
     def push(self, cm):
         return self.enter_context(cm)
 
+    def close(self):
+        # Unwind all registered callbacks immediately, outside the
+        # ``with`` protocol.  flask's test client holds an ExitStack of
+        # pushed request/app contexts and calls close() between requests.
+        self.__exit__(None, None, None)
+
+    def pop_all(self):
+        # Transfer the registered callbacks to a fresh stack and clear
+        # self, so the caller can own/defer the cleanup (CPython parity).
+        new = ExitStack()
+        new._callbacks = self._callbacks
+        self._callbacks = []
+        return new
+
 
 class _ExitStackCmCloser:
     def __init__(self, cm):

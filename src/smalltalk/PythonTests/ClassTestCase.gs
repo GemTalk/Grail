@@ -128,12 +128,38 @@ testPointSumIsRealMethod
 category: 'Grail-Tests - Real Methods'
 method: ClassTestCase
 testPointInitIsRealMethod
-	"Test that __init__ is a real env-1 method on Point."
+	"Test that __init__ is a real env-1 method on Point.  __init__ is
+	now compiled to the varargs ``___init__:kw:'' form (rather than a
+	fixed-arity ``__init__:_:'') so it can bind keyword arguments — see
+	FunctionDefAst >> compilesAsVarargs."
 
 	| cls md |
 	cls := testModule @env1:Point.
 	md := cls methodDictForEnv: 1.
-	self assert: (md includesKey: #'__init__:_:').
+	self assert: (md includesKey: #'___init__:kw:').
+%
+
+category: 'Grail-Tests - Real Methods'
+method: ClassTestCase
+testInitBindsKeywordArguments
+	"__init__ binds positional, keyword, and mixed arguments by name —
+	Point(x=10, y=20) and Point(3, y=4) — and raises TypeError on a
+	missing required argument."
+
+	self assert: testModule @env1:init_by_keyword equals: true.
+	self assert: testModule @env1:init_mixed_positional_keyword equals: true.
+	self assert: testModule @env1:init_missing_arg_raises equals: true
+%
+
+category: 'Grail-Tests - Real Methods'
+method: ClassTestCase
+testSuperInitBindsArguments
+	"super().__init__(...) into a parent's __init__ binds both
+	positional (Point3D(1, 2, 3)) and keyword (Point3D(x=4, y=5, z=6))
+	arguments — the werkzeug Request(environ) construction pattern."
+
+	self assert: testModule @env1:super_init_positional equals: true.
+	self assert: testModule @env1:super_init_keyword equals: true
 %
 
 category: 'Grail-Tests - Direct Call'

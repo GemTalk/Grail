@@ -46,3 +46,13 @@ def plain_method_still_callable():
     """A regular (undecorated) method is unaffected — still a callable
     that returns its value when invoked."""
     return Counter().plain_method() == 'method'
+
+
+def set_then_read_overrides_getter():
+    """Assigning to a @cached_property writes the instance attribute,
+    which shadows the getter on the next read (CPython non-data
+    descriptor semantics).  The getter never runs, so ``calls'' stays 0.
+    flask's create_url_adapter sets ``request.host = ...'' this way."""
+    c = Counter()
+    c.value = 'override'
+    return [c.value, c.calls]

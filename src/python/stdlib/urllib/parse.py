@@ -150,6 +150,17 @@ class _SplitResult:
     def __iter__(self):
         yield from (self.scheme, self.netloc, self.path, self.query, self.fragment)
 
+    def __getitem__(self, i):
+        # CPython's SplitResult is a namedtuple, so it is indexable and
+        # tuple-unpackable by position.  Grail's unpacking codegen drives
+        # tuple targets through __getitem__, so provide it explicitly
+        # (without it, ``scheme, netloc, ... = urlsplit(u)`` binds the
+        # positions [0..4] instead of the components).
+        return (self.scheme, self.netloc, self.path, self.query, self.fragment)[i]
+
+    def __len__(self):
+        return 5
+
     def __repr__(self):
         return "SplitResult({!r}, {!r}, {!r}, {!r}, {!r})".format(
             self.scheme, self.netloc, self.path, self.query, self.fragment

@@ -480,7 +480,7 @@ ___pyAttrLoad___: aSym
 	  - Otherwise dispatch the unary message anyway and let DNU
 	    produce the appropriate error or fallback."
 
-	| md sym1 sym2 sym3 symVA s isModule isGenerated dynValue walker owner |
+	| md sym1 sym2 sym3 sym4 symVA s isModule isGenerated dynValue walker owner |
 	"Phase B: probe the receiver's dynamic-instVar storage first.
 	After Phase A + Phase B this is the canonical home for module
 	globals (any receiver of class module), instance attributes (any
@@ -497,6 +497,7 @@ ___pyAttrLoad___: aSym
 	sym1 := (s @env0:, ':') @env0:asSymbol.
 	sym2 := (s @env0:, ':_:') @env0:asSymbol.
 	sym3 := (s @env0:, ':_:_:') @env0:asSymbol.
+	sym4 := (s @env0:, ':_:_:_:') @env0:asSymbol.
 	symVA := ('_' @env0:, s @env0:, ':kw:') @env0:asSymbol.
 	"Module instances (pre-installed Python modules like html/math, plus
 	loaded module classes derived from `module`) always treat unary
@@ -604,6 +605,17 @@ ___pyAttrLoad___: aSym
 			ifTrue: [
 				^ self @env0:perform: aSym env: 1
 		].
+		"Class-body data attribute on a Grail class that subclasses a
+		built-in (e.g. a ``dict'' subclass) — not a PythonInstance, so
+		the setter-paired branch above is skipped.  ClassDefAst
+		synthesises ``X''/``X:'' accessors in the ``Grail-Class Attrs''
+		category on the metaclass for every ``X = expr'' class-body
+		assignment; consult that getter directly so ``Cls.attr'' returns
+		the value rather than wrapping it as a BoundMethod.  Covers
+		flask's ``SecureCookieSession(CallbackDict, SessionMixin)''."
+		owner := self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
+		(owner notNil and: [(owner @env0:categoryOfSelector: aSym environmentId: 1) @env0:= #'Grail-Class Attrs'])
+			ifTrue: [^ self @env0:perform: aSym env: 1].
 	].
 	"Python user classes (PythonInstance subclasses) have synthesized
 	``attr:`` setters that pair with attribute getters.  If the class
@@ -675,7 +687,8 @@ ___pyAttrLoad___: aSym
 		((metaclass @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil
 			or: [(metaclass @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil
 				or: [(metaclass @env0:whichClassIncludesSelector: sym3 environmentId: 1) notNil
-					or: [(metaclass @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil]]])
+					or: [(metaclass @env0:whichClassIncludesSelector: sym4 environmentId: 1) notNil
+						or: [(metaclass @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil]]]])
 			ifTrue: [^ BoundMethod @env1:receiver: self @env0:class selector: aSym].
 	].
 	"Shim wrapper classes (SrePattern, SreMatch, ...) advertise the
@@ -690,6 +703,23 @@ ___pyAttrLoad___: aSym
 	((self @env0:class @env0:respondsTo: #'___pythonValueAttrs___')
 		and: [(self @env0:class @env0:___pythonValueAttrs___) @env0:includes: aSym])
 		ifTrue: [^ self @env0:perform: aSym env: 1].
+	"Instance of a Grail class that subclasses a built-in (dict, list,
+	...).  Such an instance is NOT a PythonInstance, so the
+	PythonInstance branch above was skipped — yet its class can still
+	declare class-body data attributes (``accessed = False''),
+	synthesised as ``X''/``X:'' accessors in the ``Grail-Class Attrs''
+	category on the metaclass.  Consult the getter so ``inst.attr
+	returns the class-level default (Python's instance-then-class
+	lookup; the instance store already missed at the
+	``dynamicInstVarAt:'' probe above).  flask's SecureCookieSession
+	(a ``dict'' subclass) reads ``session.accessed'' / ``modified''
+	through here."
+	(self @env0:isKindOf: Behavior) ifFalse: [
+		| attrOwner |
+		attrOwner := self @env0:class @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
+		(attrOwner notNil and: [(attrOwner @env0:categoryOfSelector: aSym environmentId: 1) @env0:= #'Grail-Class Attrs'])
+			ifTrue: [^ self @env0:class @env0:perform: aSym env: 1].
+	].
 	"Other classes (built-in collections, strings, ...): if any class
 	in the receiver's class chain implements a same-named callable
 	selector, return a BoundMethod handle for `f = obj.method`
@@ -706,7 +736,8 @@ ___pyAttrLoad___: aSym
 		or: [(self @env0:class @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil
 			or: [(self @env0:class @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil
 				or: [(self @env0:class @env0:whichClassIncludesSelector: sym3 environmentId: 1) notNil
-					or: [(self @env0:class @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil]]]])
+					or: [(self @env0:class @env0:whichClassIncludesSelector: sym4 environmentId: 1) notNil
+						or: [(self @env0:class @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil]]]]])
 		ifTrue: [^ BoundMethod @env1:receiver: self selector: aSym].
 	"Unbound class-method lookup: ``Cls.method'' where ``method'' is
 	an instance method defined on Cls itself (env 1).  Python returns
@@ -725,7 +756,8 @@ ___pyAttrLoad___: aSym
 			or: [(self @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil
 				or: [(self @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil
 					or: [(self @env0:whichClassIncludesSelector: sym3 environmentId: 1) notNil
-						or: [(self @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil]]]]])
+						or: [(self @env0:whichClassIncludesSelector: sym4 environmentId: 1) notNil
+							or: [(self @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil]]]]]])
 		ifTrue: [
 			^ self ___unboundMethodClosure___: aSym
 		].
@@ -1276,6 +1308,37 @@ sel := aSelectorSymbol @env0:asSymbol.
 %
 
 set compile_env: 0
+
+category: 'Grail-Callable'
+method: object
+___pyNamed___: aString
+	"No-op fallback for the nested-def name stamp emitted by
+	FunctionDefAst (``<block> @env0:___pyNamed___: 'name''').  ExecBlock
+	overrides this to record ``__name__'' in its side-table; for any
+	other value a nested def can evaluate to (e.g. a generator wrapper)
+	the name simply isn't recorded.  Always returns self so the stamp is
+	transparent in the assignment / decorator pipeline."
+
+	^ self
+%
+
+category: 'Grail-Iteration'
+method: object
+___pyStarToArray___
+	"Materialize the receiver — the source of a ``*''-unpack in a tuple /
+	list literal or in call arguments — into a Smalltalk Array.  ``list''
+	(OrderedCollection) and ``tuple'' (Array) are already
+	SequenceableCollections and convert directly; any OTHER Python
+	iterable (an iterator such as ``reversed(x)'' or ``dict.keys()'' ->
+	list_iterator, a generator, map, range, …) is materialized through
+	``list''s __iter__/__next__ constructor.  Replaces a bare ``asArray''
+	in the splat codegen, which a Python iterator does not understand —
+	the crash flask's ``preprocess_request'' hit via
+	``(None, *reversed(request.blueprints))''."
+
+	(self @env0:isKindOf: SequenceableCollection) ifTrue: [^ self @env0:asArray].
+	^ (list @env1:__new__: self) @env0:asArray
+%
 
 category: 'Grail-Attribute Access'
 method: object

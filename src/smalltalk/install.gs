@@ -454,6 +454,7 @@ run
 	at: #'BoundMethodNameTestCase' put: nil;
 	at: #'BrokenPipeErrorTestCase' put: nil;
 	at: #'BufferErrorTestCase' put: nil;
+	at: #'BuiltinSubclassOverrideTestCase' put: nil;
 	at: #'BuiltinsTestCase' put: nil;
 	at: #'BytearrayTestCase' put: nil;
 	at: #'BytesTestCase' put: nil;
@@ -490,6 +491,7 @@ run
 	at: #'ClassBodyMethodRefsTestCase' put: nil;
 	at: #'NonlocalClosureTestCase' put: nil;
 	at: #'ModuleHigherArityDefTestCase' put: nil;
+	at: #'MultipleInheritanceTestCase' put: nil;
 	at: #'FunctionRebindingTestCase' put: nil;
 	at: #'LiveDictTestCase' put: nil;
 	at: #'KwargsSplatTestCase' put: nil;
@@ -506,7 +508,10 @@ run
 	at: #'DecimalTestCase' put: nil;
 	at: #'DeprecationWarningTestCase' put: nil;
 	at: #'DictTestCase' put: nil;
+	at: #'DictUnpackingTestCase' put: nil;
+	at: #'DynamicTypeTestCase' put: nil;
 	at: #'EOFErrorTestCase' put: nil;
+	at: #'ExitStackUsageTestCase' put: nil;
 	at: #'EncodingWarningTestCase' put: nil;
 	at: #'EnumGlobalInjectTestCase' put: nil;
 	at: #'ExceptionGroupTestCase' put: nil;
@@ -514,6 +519,7 @@ run
 	at: #'FileExistsErrorTestCase' put: nil;
 	at: #'FileNotFoundErrorTestCase' put: nil;
 	at: #'FloatTestCase' put: nil;
+	at: #'FourArgAttrCallTestCase' put: nil;
 	at: #'FloatingPointErrorTestCase' put: nil;
 	at: #'FractionTestCase' put: nil;
 	at: #'FunctoolsTestCase' put: nil;
@@ -521,6 +527,7 @@ run
 	at: #'FrozensetTestCase' put: nil;
 	at: #'FutureWarningTestCase' put: nil;
 	at: #'GemStoneTestCase' put: nil;
+	at: #'GlobalStatementTestCase' put: nil;
 	at: #'GeneratorExitTestCase' put: nil;
 	at: #'ImportErrorTestCase' put: nil;
 	at: #'ImportWarningTestCase' put: nil;
@@ -534,6 +541,8 @@ run
 	at: #'IteratorTestCase' put: nil;
 	at: #'KeyErrorTestCase' put: nil;
 	at: #'KeyboardInterruptTestCase' put: nil;
+	at: #'KeywordOnlyParamsTestCase' put: nil;
+	at: #'ListSortKwargsTestCase' put: nil;
 	at: #'ListTestCase' put: nil;
 	at: #'LookupErrorTestCase' put: nil;
 	at: #'MakecodesPatternTestCase' put: nil;
@@ -568,6 +577,7 @@ run
 	at: #'ReturnTestCase' put: nil;
 	at: #'RecursionErrorTestCase' put: nil;
 	at: #'ReferenceErrorTestCase' put: nil;
+	at: #'ReSubCallableTestCase' put: nil;
 	at: #'ResourceWarningTestCase' put: nil;
 	at: #'RuntimeClassCreationTestCase' put: nil;
 	at: #'RuntimeErrorTestCase' put: nil;
@@ -577,6 +587,10 @@ run
 	at: #'SreTestCase' put: nil;
 	at: #'StatisticsTestCase' put: nil;
 	at: #'StopAsyncIterationTestCase' put: nil;
+	at: #'StarUnpackIteratorTestCase' put: nil;
+	at: #'KwargSplatMergeTestCase' put: nil;
+	at: #'ClassAttrDictSubclassTestCase' put: nil;
+	at: #'NestedDefNameTestCase' put: nil;
 	at: #'StopIterationTestCase' put: nil;
 	at: #'StrTestCase' put: nil;
 	at: #'ClassMethodGlobalFallbackTestCase' put: nil;
@@ -596,6 +610,7 @@ run
 	at: #'TupleTestCase' put: nil;
 	at: #'TypeErrorTestCase' put: nil;
 	at: #'UnboundLocalErrorTestCase' put: nil;
+	at: #'UrlsplitIndexingTestCase' put: nil;
 	at: #'UnicodeDecodeErrorTestCase' put: nil;
 	at: #'UnicodeEncodeErrorTestCase' put: nil;
 	at: #'UnicodeErrorTestCase' put: nil;
@@ -1056,6 +1071,7 @@ input src/smalltalk/PythonTests/PythonTestCase.gs
 input src/smalltalk/PythonTests/BooleanTestCase.gs
 input src/smalltalk/PythonTests/BoundMethodNameTestCase.gs
 input src/smalltalk/PythonTests/BuiltinsTestCase.gs
+input src/smalltalk/PythonTests/BuiltinSubclassOverrideTestCase.gs
 input src/smalltalk/PythonTests/BytearrayTestCase.gs
 input src/smalltalk/PythonTests/CachedPropertyTestCase.gs
 input src/smalltalk/PythonTests/BytesTestCase.gs
@@ -1088,6 +1104,7 @@ input src/smalltalk/PythonTests/LambdaStarargsTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyMethodRefsTestCase.gs
 input src/smalltalk/PythonTests/NonlocalClosureTestCase.gs
 input src/smalltalk/PythonTests/ModuleHigherArityDefTestCase.gs
+input src/smalltalk/PythonTests/MultipleInheritanceTestCase.gs
 input src/smalltalk/PythonTests/FunctionRebindingTestCase.gs
 input src/smalltalk/PythonTests/KwargsSplatTestCase.gs
 input src/smalltalk/PythonTests/SubclassNameAttrTestCase.gs
@@ -1105,12 +1122,16 @@ input src/smalltalk/PythonTests/CopyregTestCase.gs
 input src/smalltalk/PythonTests/DataclassesTestCase.gs
 input src/smalltalk/PythonTests/DecimalTestCase.gs
 input src/smalltalk/PythonTests/DictTestCase.gs
+input src/smalltalk/PythonTests/DictUnpackingTestCase.gs
+input src/smalltalk/PythonTests/DynamicTypeTestCase.gs
 input src/smalltalk/PythonTests/FloatTestCase.gs
+input src/smalltalk/PythonTests/FourArgAttrCallTestCase.gs
 input src/smalltalk/PythonTests/FractionTestCase.gs
 input src/smalltalk/PythonTests/FrozensetTestCase.gs
 input src/smalltalk/PythonTests/FunctoolsTestCase.gs
 input src/smalltalk/PythonTests/FunctoolsWrapsVarargsTestCase.gs
 input src/smalltalk/PythonTests/GemStoneTestCase.gs
+input src/smalltalk/PythonTests/GlobalStatementTestCase.gs
 input src/smalltalk/PythonTests/HtmlTestCase.gs
 input src/smalltalk/PythonTests/CPythonShimTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/CPythonTestCase.gs
@@ -1121,6 +1142,7 @@ input src/smalltalk/PythonTests/ImportlibTestCase.gs
 input src/smalltalk/PythonTests/PackageImportTestCase.gs
 input src/smalltalk/PythonTests/IntegerTestCase.gs
 input src/smalltalk/PythonTests/IteratorTestCase.gs
+input src/smalltalk/PythonTests/ListSortKwargsTestCase.gs
 input src/smalltalk/PythonTests/ListTestCase.gs
 input src/smalltalk/PythonTests/MathTestCase.gs
 input src/smalltalk/PythonTests/ModuleFunctionTestCase.gs
@@ -1140,11 +1162,16 @@ input src/smalltalk/PythonTests/RuntimeClassCreationTestCase.gs
 input src/smalltalk/PythonTests/SetTestCase.gs
 input src/smalltalk/PythonTests/SliceAndLoopsTestCase.gs
 input src/smalltalk/PythonTests/SreTestCase.gs
+input src/smalltalk/PythonTests/StarUnpackIteratorTestCase.gs
 input src/smalltalk/PythonTests/StatisticsTestCase.gs
 input src/smalltalk/PythonTests/StrTestCase.gs
 input src/smalltalk/PythonTests/ClassMethodGlobalFallbackTestCase.gs
 input src/smalltalk/PythonTests/FlaskScaffoldingTestCase.gs
 input src/smalltalk/PythonTests/ReModuleTestCase.gs
+input src/smalltalk/PythonTests/ReSubCallableTestCase.gs
+input src/smalltalk/PythonTests/KwargSplatMergeTestCase.gs
+input src/smalltalk/PythonTests/ClassAttrDictSubclassTestCase.gs
+input src/smalltalk/PythonTests/NestedDefNameTestCase.gs
 input src/smalltalk/PythonTests/StarImportDynamicNamesTestCase.gs
 input src/smalltalk/PythonTests/StringModuleTestCase.gs
 input src/smalltalk/PythonTests/SubmoduleAutoBindTestCase.gs
@@ -1169,6 +1196,7 @@ input src/smalltalk/PythonTests/ConnectionRefusedErrorTestCase.gs
 input src/smalltalk/PythonTests/ConnectionResetErrorTestCase.gs
 input src/smalltalk/PythonTests/DeprecationWarningTestCase.gs
 input src/smalltalk/PythonTests/EOFErrorTestCase.gs
+input src/smalltalk/PythonTests/ExitStackUsageTestCase.gs
 input src/smalltalk/PythonTests/EncodingWarningTestCase.gs
 input src/smalltalk/PythonTests/ExceptionGroupTestCase.gs
 input src/smalltalk/PythonTests/ExceptionTestCase.gs
@@ -1185,6 +1213,7 @@ input src/smalltalk/PythonTests/InterruptedErrorTestCase.gs
 input src/smalltalk/PythonTests/IsADirectoryErrorTestCase.gs
 input src/smalltalk/PythonTests/KeyErrorTestCase.gs
 input src/smalltalk/PythonTests/KeyboardInterruptTestCase.gs
+input src/smalltalk/PythonTests/KeywordOnlyParamsTestCase.gs
 input src/smalltalk/PythonTests/LookupErrorTestCase.gs
 input src/smalltalk/PythonTests/MemoryErrorTestCase.gs
 input src/smalltalk/PythonTests/ModuleNotFoundErrorTestCase.gs
@@ -1211,6 +1240,7 @@ input src/smalltalk/PythonTests/TabErrorTestCase.gs
 input src/smalltalk/PythonTests/TimeoutErrorTestCase.gs
 input src/smalltalk/PythonTests/TypeErrorTestCase.gs
 input src/smalltalk/PythonTests/UnboundLocalErrorTestCase.gs
+input src/smalltalk/PythonTests/UrlsplitIndexingTestCase.gs
 input src/smalltalk/PythonTests/UnicodeDecodeErrorTestCase.gs
 input src/smalltalk/PythonTests/UnicodeEncodeErrorTestCase.gs
 input src/smalltalk/PythonTests/UnicodeErrorTestCase.gs

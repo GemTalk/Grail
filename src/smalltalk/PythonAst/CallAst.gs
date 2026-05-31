@@ -700,11 +700,21 @@ printKeywordsDictOn: aStream
 	``=''-keyed KeyValueDictionary instead."
 	aStream nextPutAll: '((KeyValueDictionary @env0:new)'.
 	keywords do: [:kwAst |
-		kwAst name ifNotNil: [
-			aStream nextPutAll: ' @env0:at: '''; nextPutAll: kwAst name asString; nextPutAll: ''' put: '.
-			kwAst value printSmalltalkWithParenthesisOn: aStream.
-			aStream nextPut: $;.
-		].
+		kwAst name
+			ifNotNil: [
+				aStream nextPutAll: ' @env0:at: '''; nextPutAll: kwAst name asString; nextPutAll: ''' put: '.
+				kwAst value printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPut: $;.
+			]
+			ifNil: [
+				"``**splat'' mixed with named kwargs — merge the mapping's
+				items via update: (source order, later entries win).
+				flask's ``Rule(rule, methods=methods, **options)'' dropped
+				the ``**options'' here, so the rule endpoint came back nil."
+				aStream nextPutAll: ' @env1:update: '.
+				kwAst value printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPut: $;.
+			].
 	].
 	aStream nextPutAll: ' yourself)'.
 %
@@ -744,7 +754,7 @@ printArgumentsArrayOn: aStream
 			ifTrue: [
 				aStream nextPut: $(.
 				each value printSmalltalkWithParenthesisOn: aStream.
-				aStream nextPutAll: ' @env0:asArray) '.
+				aStream nextPutAll: ' @env0:___pyStarToArray___) '.
 			] ifFalse: [
 				aStream nextPutAll: '{ '.
 				each printSmalltalkWithParenthesisOn: aStream.

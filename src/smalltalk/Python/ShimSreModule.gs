@@ -563,11 +563,19 @@ ___subWithExpansion___: repl in: aString count: count subn: returnTuple
 		"Expand the replacement."
 		template @env0:== nil
 			ifTrue: [
-				"Callable repl: call with match, expect a string back.
-				BoundMethod uses value:value:; plain ExecBlocks (Smalltalk
-				blocks) use value:; both shapes show up in practice."
+				"Callable repl: call with the match, expect a string back.
+				A Grail Python callable (lambda / def) compiles to a 2-arg
+				block ``[:___positional___ :___kwargs___ | ...]'', so it must
+				be invoked with the Grail calling convention (positional
+				array + kwargs), NOT ``value: m'' — that raises ``block
+				evaluated with 1 argument when 2 were expected''.  A
+				BoundMethod uses its env-1 value:value:; a raw 1-arg
+				Smalltalk block (rare) is called directly."
 				expanded := (repl @env0:isKindOf: ExecBlock)
-					ifTrue: [repl @env0:value: m]
+					ifTrue: [
+						repl @env0:numArgs @env0:= 2
+							ifTrue: [repl @env0:value: { m } value: nil]
+							ifFalse: [repl @env0:value: m]]
 					ifFalse: [repl @env1:value: { m } value: nil]
 			]
 			ifFalse: [

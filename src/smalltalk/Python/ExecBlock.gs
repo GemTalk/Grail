@@ -180,3 +180,36 @@ valueWithArguments: anArray
 %
 
 set compile_env: 0
+
+category: 'Grail-Python Attribute Hook'
+classmethod: ExecBlock
+___pythonValueAttrs___
+	"``__name__'' / ``__qualname__'' / ``__module__'' are Python
+	identifying-metadata *value* attributes (the name STRING), not
+	callables — so ``___pyAttrLoad___'' invokes them and returns the
+	value instead of wrapping them as BoundMethods.  flask's
+	``_endpoint_from_view_func'' reads ``view_func.__name__'' and keys
+	``view_functions'' by it; without this a nested-def closure's
+	``__name__'' came back as a BoundMethod and the endpoint mapping
+	broke."
+
+	^ IdentitySet new
+		add: #'__name__';
+		add: #'__qualname__';
+		add: #'__module__';
+		yourself
+%
+
+category: 'Grail-Attribute Access'
+method: ExecBlock
+___pyNamed___: aString
+	"Stamp this closure's ``__name__'' from the def's lexical name.
+	FunctionDefAst's nested-def emit chains this onto the block
+	expression (``[...] @env0:___pyNamed___: 'hello''') so
+	``func.__name__'' returns the real name rather than the
+	``<closure>'' placeholder.  Returns self so it sits transparently in
+	the ``name := <block>'' assignment / decorator pipeline."
+
+	ExecBlockAttrs @env0:at: self attr: '__name__' put: aString.
+	^ self
+%

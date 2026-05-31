@@ -56,18 +56,15 @@ method: GlobalAst
 printSmalltalkOn: aStream
 	"Python ``global x'' is a declaration, not a statement that
 	produces runtime code — it tells the parser that assignments to
-	``x'' inside the function should update the module global rather
-	than create a local.
+	``x'' inside the function update the module global rather than
+	create a local.
 
-	Grail's parser currently records every assignment as a body-
-	local; the ``global'' declaration is dropped on the floor at
-	parse time.  Functions that ``global x; x = ...; return x'' will
-	read the local (UnboundLocalError before assignment) rather than
-	the module slot — but the def itself compiles cleanly, which is
-	what import probes need.  Wiring full ``global'' semantics is a
-	parser change (skip declareWrite for global-declared names and
-	route their NameAst stores through dynamicInstVarAt:put: on the
-	module instance) — left for a follow-up branch."
+	The semantics are realised entirely at parse time (PythonParser >>
+	parseGlobal + popScope): each declared name is stripped from the
+	enclosing function's local variable / write sets and registered in
+	the module scope, so NameAst codegen resolves its reads and writes
+	through the module instance's dynamicInstVarAt: storage.  The
+	declaration statement itself therefore emits nothing."
 
 	"Emit nothing — the statement is a parse-time declaration only."
 %

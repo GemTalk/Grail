@@ -406,39 +406,42 @@ Existing stub modules that need extending later: `typing`,
   [Weakref.md] for the ephemeron-based path forward and why
   it's deferred.
 - **M6 — `werkzeug.wrappers.Request/Response` round-trip a WSGI
-  environ.**  Long pole; ~70% there.  Pre-requisite stdlib gaps and
+  environ.**  **COMPLETE (2026-05-30).**  The full Request/Response
+  round-trip is green and registered.  Pre-requisite stdlib gaps and
   Werkzeug source-drop order detailed in the *Werkzeug (Tier 6)*
   section above.
 
   *Done:* the whole Werkzeug package source-drops and imports
   (~95% verbatim upstream).  `werkzeug.test` is the real upstream
-  source (not the old shim), and the **output** direction
-  round-trips end-to-end: `Client.get()` builds an environ, invokes
-  a WSGI app, and wraps the result in a real `TestResponse(Response)`
-  (`use_werkzeug_test.py::client_calls_app`, green).
+  source (not the old shim).  Both directions round-trip end-to-end:
+  `Client.get()` builds an environ, invokes a WSGI app, and wraps the
+  result in a real `TestResponse(Response)`; a `Request(environ)`
+  reads `.method` / `.path` / `.args` / `.headers` back out; and a
+  `Response(...)` serialises to a `(status, headers, app_iter)` WSGI
+  triple including a custom header.
 
-  *Measured in two tiers* (`use_werkzeug_roundtrip.py`):
-  * **Tier 1 — registered, green** (`testWerkzeugWrappersConstruct-
-    AndClient`): the wrappers import, a real `Request` and `Response`
-    *construct* from a WSGI environ, and the `Client` drives a WSGI
-    app and reads the response back.
-  * **Tier 2 — manual acceptance probe, NOT registered**: the full
-    round-trip — a `Request(environ)` reading `.method` / `.path` /
-    `.args` / `.headers`, and a `Response(...)` serialized to a
-    `(start_response, app_iter)` pair.  Run by hand until the blockers
-    below land, then fold back into the Tier-1 test.  (Kept out of the
-    suite because there's no expected-failure marker — a registered
-    red would just be noise.)
+  *Acceptance gate (`use_werkzeug_roundtrip.py`, all 9 facets green,
+  registered in `testWerkzeugWrappersConstructAndClient`):*
+  * **Tier 1** — wrappers import; `Request`/`Response` *construct*
+    from a WSGI environ; the `Client` drives a WSGI app and reads the
+    response back.
+  * **Tier 2** — `request_reads_method_and_path`,
+    `request_reads_query_args`, `request_reads_headers`,
+    `response_wsgi_serialization`, `response_emits_custom_header`.
 
-  *Remaining blockers (probed 2026-05-29 by walking the round-trip
+  *Blockers that landed to get here (probed by walking the round-trip
   past each failure):*
   * **A. Request construction — `super().__init__(method=…, …)`.**
-    The `Super` dispatch (i) doesn't bind keyword args to a
-    fixed-arity parent's named params, and (ii) caps at 3 positional
-    args while sansio `Request.__init__` takes 8 (`super(): no parent
-    method '__init__'`).  Blocks `.method` / `.path` / `.scheme` /
-    `.headers` / `.query_string` / `.remote_addr` (all set in the
-    parent `__init__`).
+    RESOLVED (commit 5a34f71).  A fixed-arity selector encodes only
+    arity, not parameter names, so the keyword args were dropped (and
+    the Super dispatch additionally capped at 3 positional args).
+    `__init__` is now compiled to the varargs `___init__:kw:` form
+    even when simple-positional (FunctionDefAst >> compilesAsVarargs),
+    so the varargs prologue binds positional / keyword / mixed by name
+    and `super().__init__(...)` works for any arity.  `Request(environ)`
+    now constructs; `req.method` / `req.path` read correctly.  General
+    win beyond Werkzeug: `Foo(a=1, b=2)` keyword construction now works
+    for any class.
   * **B. `req.args` / `.headers` / `.cookies` — @cached_property
     read.**  RESOLVED (commit 688ddf7) for the read mechanism: a bare
     `instance.attr` on an @cached_property used to return a
@@ -449,25 +452,226 @@ Existing stub modules that need extending later: `typing`,
     no caching yet (recomputes each read — fine for the idempotent
     `.args`/`.headers`/`.cookies`, but stream-consuming `.form`/
     `.data` need real caching), and the `@functools.cached_property`
-    attribute form isn't detected.  With B done, the request-read path
-    now bottlenecks on **A** (the underlying `.query_string` etc. that
-    the getters read aren't set until construction works).
-  * **C. Response → WSGI / `Headers` serialization.**  Assorted
-    concrete API gaps past construction (e.g. `Headers` lacks `do:`
-    iteration).  Smaller fill-in work, enumerable once A/B clear.
+    attribute form isn't detected.
+  * **C. datastructures (multiple inheritance + a str-class bug).**
+    Both partly resolved:
+    * **Multiple inheritance** (commit a1e07c6): `class C(A, B)` used
+      only the first base; werkzeug's `(Mixin, DataClass)` pattern lost
+      the data class.  `C` now keeps Smalltalk single inheritance from
+      the first base and merges the secondary Python bases' methods
+      (importlib `___mergeSecondaryBases___`).  **Unblocks
+      `req.headers.get(...)`** (`EnvironHeaders` inherits `Headers.get`).
+    * **`str.split` class** (commit 3b4303d): `split` degraded
+      `Unicode7` → plain `String`, failing `isinstance(x, str)` in
+      `urllib.parse.unquote_to_bytes`.  Fixed — `parse_qsl` round-trips.
+    * **Response → WSGI.**  RESOLVED — three independent fixes on the
+      `get_wsgi_headers` → `get_wsgi_response` path, each a general win:
+      * `yield from <iterable>` (YieldFromAst, commit 6ebabe1) drove the
+        delegate with a Smalltalk `do:`, which a non-`do:` Python
+        iterable (e.g. a `Headers`) doesn't answer.  Rewritten to the
+        `__iter__`/`__next__` + `StopIteration` protocol.
+      * `functools.partial` (commit 5497c9c) wasn't callable as a
+        function — `_partial:kw:` now returns a closure that prepends
+        the bound args and forwards via `___pyCallValue___:kw:`.
+      * `bytes.join` (commit 5497c9c) only accepted a `list`/`tuple`;
+        now materialises any Python iterable through `list(...)`.
+      `response_wsgi_serialization` and `emits_custom_header` both pass.
+
+    * **`req.args`.**  RESOLVED — two layers:
+      * **Storage-base MRO selection** (commit d498e8b).
+        `parameter_storage_class` is `ImmutableMultiDict(Immutable-
+        MultiDictMixin, MultiDict)`; the merge-based MI cut always kept
+        Smalltalk inheritance from the *first* base (the storage-less
+        mixin), so the class lacked `dict` backing and died on a missing
+        `keysAndValuesDo:`.  `ClassDefAst >> printSuperclassOn:` now
+        emits `importlib ___selectStorageBase___`, which picks the
+        leftmost base whose chain reaches a `Collection` (Grail dict/
+        list/set), so a `(mixin, dict-subclass)` base list subclasses
+        the dict-backed base.  (`MultipleInheritanceTestCase >>
+        testStorageBaseSelectedAsSuperclass`.)
+      * **Most-derived override resolution** (BoundMethod).
+        `MultiDict.get(self, key, default=None, type=None)` has defaults,
+        so it compiles to the varargs `_get:kw:` selector, while the
+        inherited built-in `dict.get` is fixed-arity `get:`.  An indirect
+        call `req.args.get('q')` routes through `BoundMethod >>
+        value:value:`, which used to pick *any* fixed-arity selector in
+        the hierarchy first — so the superclass built-in `get:` shadowed
+        the subclass override.  It now compares the defining classes and
+        prefers the varargs override when it is strictly more derived.
+        (`BuiltinSubclassOverrideTestCase`.)
 
   `werkzeug.utils` / `werkzeug.exceptions` remain reduced shims
-  (blocked on multiple inheritance for `cached_property(property,
-  Generic[_T])` / `BadRequestKeyError(BadRequest, KeyError)`), but
-  the **functional** gate is the A/B/C list above — descriptor `__get__`
-  (B) is the planned first target.  `dataclasses` (Tier 3) now works
-  (defaults + default_factory), so the routing `State` `@dataclass`
-  was restored to upstream.
+  (the exceptions one also wants the MI built-in/C3 extension for
+  `BadRequestKeyError(BadRequest, KeyError)`).  `dataclasses` (Tier 3)
+  works; the routing `State` `@dataclass` was restored to upstream.
+
+  *M6 acceptance gate: all 9 facets green and registered* in
+  `testWerkzeugWrappersConstructAndClient`.
 - **M7 — Flask hello-world responds via `werkzeug.test.Client`.**
   Flask "working" without a live socket.  Source under
-  `src/python/stdlib/flask/`; bring up `app`, `blueprints`,
-  `config`, `helpers`, `json`, `sessions`, `templating`,
-  `wrappers`.
+  `src/python/stdlib/flask/`.  **DONE (2026-05-30).**  A Flask
+  hello-world now responds **`200 OK` + `Hello, Grail!`** through the
+  full WSGI application entry point `app(environ, start_response)` —
+  exactly what `werkzeug.test.Client` invokes.  Regression:
+  `FlaskScaffoldingTestCase >> testFlaskHelloWorldWsgiRoundTrip`
+  (fixture `pkg_scaffolding/use_flask_wsgi.py`).
+
+  *Working:* `import flask` succeeds; `app = Flask(__name__)` constructs;
+  `@app.route('/')` registers a view (the decorator + rule machinery
+  runs).  Probing `app.test_client().get('/')` walked the request path
+  past a chain of blockers, each fixed:
+  * **`{**mapping}` dict-literal unpacking** — DictAst codegen crashed
+    on the parser's nil unpack key (commit 63d9a9c).
+  * **3-arg `type(name, bases, ns)`** — werkzeug builds
+    `WrapperTestResponse` dynamically; added `builtins >> type:_:_:`
+    reusing the storage-base / merge machinery (DynamicTypeTestCase).
+  * **`global` statement** — `flask.testing._get_werkzeug_version`
+    lazy-inits a module global; the declaration was a no-op, so the
+    assigned name was treated as a function local (UnboundLocalError).
+    Now honored in the parser (GlobalStatementTestCase).
+  * **`urlsplit(...)` unpacking** — `_SplitResult` defined `__iter__`
+    but not `__getitem__`; Grail unpacks tuple targets via
+    `__getitem__`, and the missing method fell through to a
+    `doesNotUnderstand` *setter* that returned the index, so
+    `scheme, netloc, ... = urlsplit(u)` bound `[0,1,2,3,4]`.  Added
+    `__getitem__`/`__len__` to the shim (UrlsplitIndexingTestCase).
+  * **`contextlib.ExitStack.close()` / `pop_all()`** — flask's test
+    client unwinds pushed contexts via `close()`; the shim lacked it
+    (ExitStackUsageTestCase).
+
+  * **Keyword-only parameters.**  RESOLVED.  werkzeug's
+    `Client.open(self, *args, buffered=False, follow_redirects=False,
+    **kwargs)` is called by flask as `super().open(request,
+    buffered=…, follow_redirects=…)`.  Grail bound the kw-only values
+    correctly but did NOT remove them from the trailing `**kwargs`
+    (the varargs prologue passed the kwargs dict straight through), so
+    `buffered` / `follow_redirects` leaked into `kwargs`, the
+    `if not kwargs and len(args) == 1` fast path was skipped, and the
+    already-built `Request` was wrongly re-fed to
+    `EnvironBuilder(request)` → `urlsplit(<Request>)`.  Both varargs
+    prologue generators now build `**kwargs` as a *copy* with the bound
+    kw-only names dropped (`KeywordOnlyParamsTestCase`).  *Closure form
+    not yet fixed:* a nested `def f(*a, kw=…, **kw2)` still leaks (the
+    `___positional___`/`___kwargs___` block path is separate); werkzeug
+    uses methods, so the request path is unblocked.
+
+  * **`request.host = …` on a `@cached_property`.**  RESOLVED.
+    `Flask.create_url_adapter` assigns `request.host` (a werkzeug
+    `@cached_property`).  ClassDefAst paired @cached_property with the
+    same read-only raising setter as @property, but CPython's
+    cached_property is a NON-data descriptor: assignment writes the
+    instance dict and shadows the getter.  @cached_property now gets a
+    storing setter; `___pyAttrLoad___` already probes dynamic storage
+    before the getter (commit 973c6fe, CachedPropertyTestCase).
+  * **`list.sort(key=…, reverse=…)`, and in-place sort.**  RESOLVED.
+    Flask routing sorts its rule list with a key; only the 0-arg
+    `sort` existed, and GemStone's `OrderedCollection >> sort:` returns
+    a *new* Array rather than reordering the receiver (so even
+    `xs.sort()` was a no-op).  Added `_sort:kw:` and made both forms
+    copy the sorted result back in place (commit 3ff3b4b,
+    ListSortKwargsTestCase).
+  * **4-arg method via attribute-load.**  RESOLVED.  Routing's
+    `StateMachineMatcher.match(domain, path, method, websocket)` is
+    reached as `self.map._matcher.match(...)` (chained receiver →
+    load-then-call).  `___pyAttrLoad___` enumerated only 1–3 fixed-arity
+    selectors + varargs to recognise a callable attr, so the 4-arg
+    `match:_:_:_:` was missed → AttributeError.  Added `sym4` to the
+    BoundMethod-wrap chains (commit dc86a8d, FourArgAttrCallTestCase).
+
+  * **werkzeug `LocalProxy`.**  RESOLVED (method-based shim).
+    `current_app` / `request` / `g` / `session` are `LocalProxy`
+    instances that forward *every* operation to the wrapped context
+    object.  Upstream does this through `_ProxyLookup` **descriptor**
+    class attributes (`__getattr__ = _ProxyLookup(getattr)`,
+    `__eq__ = _ProxyLookup(operator.eq)`, …).  Grail dispatches dunders
+    as methods and resolves `__getattr__` as a method (not the
+    descriptor protocol), and even operators go through method dispatch
+    — so honouring the upstream descriptor table would require hooking
+    both attribute lookup AND operator dispatch through `__get__`, a
+    huge change to two hot paths.  Instead the `LocalProxy` class body
+    in `werkzeug/local.py` was rewritten to forward through real
+    `__getattr__` / `__call__` / comparison / container *methods*
+    (delegating to `_get_current_object()`), with an internal-slot guard
+    so a miss can't recurse.  Verified in isolation (attribute, method,
+    and `==` forwarding all work) and it advances dispatch past
+    `current_app.blueprints` into routing/response.  *Limitation:*
+    `isinstance(proxy, X)` is not forwarded (Grail isinstance uses the
+    Smalltalk class), and the upstream `_ProxyLookup`/`_ProxyIOp`
+    classes are now dead code.
+
+  * **`re.sub` with a callable replacement.**  RESOLVED (commit
+    ef2c4cb).  `Client.get('/')` reaches cookie quoting on the response
+    — `_cookie_slash_re.sub(lambda m: _cookie_slash_map[m.group()],
+    value.encode())`.  Non-literal/callable replacements are expanded in
+    Smalltalk (`SrePattern >> ___subWithExpansion___`); it called the
+    Grail lambda with `value: m` (1 arg), but a Grail Python callable is
+    a 2-arg block `[:positional :kwargs | …]` → "block evaluated with 1
+    argument when 2 were expected".  Now dispatched by block arity.
+    (The crash first presented as a `SIGSEGV` in C `pattern_subx`; that
+    was the `-O2` stack unwinder *misattributing* this Smalltalk-side
+    error.  To debug shim crashes, rebuild `_sre.o` with
+    `-g -fno-omit-frame-pointer`, relink, and reproduce in isolated
+    `topaz -l -S`, never the MCP session.)  Tests: `ReSubCallableTestCase`.
+
+  * **Cross-session stale `SrePattern` C pointer.**  RESOLVED (commit
+    4a46289).  `SrePattern` / `SreMatch` wrapped a raw `cPtr` (C
+    address, gem-process lifetime) that got persisted via `re._cache`
+    and module-level patterns (`_cookie_slash_re`); a fresh gem
+    dereferenced the dead pointer → SIGSEGV.  The `cPtr` is now boxed in
+    a `CPointer` that goes NULL across sessions so a stale pattern is
+    detected and recompiled rather than crashing.
+
+  * **`*expr` splat over a Python iterator.**  RESOLVED (commit
+    481f16e).  flask's `preprocess_request` builds
+    `(None, *reversed(request.blueprints))`; the splat codegen used a
+    bare `asArray`, which a `list_iterator` / generator doesn't answer.
+    Now materialised via `___pyStarToArray___` (StarUnpackIteratorTestCase).
+
+  * **Nested-`def` `__name__`.**  RESOLVED.  flask's `_endpoint_from_view_func`
+    keys `view_functions` by `view_func.__name__`, but the hello view is
+    a nested `def` → a bare ExecBlock with no lexical name, so
+    `__name__` came back as a BoundMethod and the endpoint mapping broke.
+    FunctionDefAst now stamps the def name onto the block via
+    `___pyNamed___:`, and ExecBlock exposes `__name__` / `__qualname__`
+    as value attributes (NestedDefNameTestCase).
+
+  * **`f(a, kw=v, **mapping)` — named kwarg mixed with `**` splat.**
+    RESOLVED.  flask's `Rule(rule, methods=methods, **options)` carries
+    its `endpoint` in `**options`; CallAst's `printKeywordsDictOn:`
+    DROPPED the splat whenever explicit kwargs were also present, so the
+    rule endpoint came back nil and routing raised KeyError.  The splat
+    is now merged into the kwargs dict via `@env1:update:`
+    (KwargSplatMergeTestCase).
+
+  * **Class-body data attribute on a built-in subclass.**  RESOLVED.
+    flask's `SecureCookieSession(CallbackDict, SessionMixin)` is a
+    `dict` subclass that reads `session.accessed` / `session.modified`
+    (class-body `= False` defaults).  `object >> ___pyAttrLoad___`
+    consulted the synthesised metaclass-side `Grail-Class Attrs`
+    accessors only for `PythonInstance` receivers, but a `dict` subclass
+    instance is a `KeyValueDictionary` (and a `list` subclass an
+    `OrderedCollection`) → the read fell through to `AttributeError`.
+    Both the class-receiver and instance-receiver branches now consult
+    the `Grail-Class Attrs` accessor for any receiver
+    (ClassAttrDictSubclassTestCase).
+
+  *Known general gap surfaced (deferred, not blocking hello-world):*
+  class attributes inherited from a **non-first / non-`dict`** base in
+  multiple inheritance are not copied into the subclass metaclass
+  (`class C(D, Mix): ...` can't see `Mix.attr` from an instance).
+  SecureCookieSession redeclares `accessed`/`modified` on its own body,
+  so the hello-world path is unaffected.
+
+  *Known general gaps surfaced (not yet fixed):* tuple-unpacking drives
+  `__getitem__` rather than the iterator protocol, so a class with only
+  `__iter__` won't unpack; `PythonInstance >> doesNotUnderstand:` treats
+  any unknown `name:` (including dunders like `__getitem__:`) as an
+  attribute *setter* that returns the value, masking real errors; the
+  closure form of keyword-only params still leaks into `**kwargs`; and
+  werkzeug's full WSGI error path turns an app exception into an
+  `UncontinuableError` ("exception already signaled") that hides the
+  underlying error — drive dispatch via `app.full_dispatch_request()`
+  (a request context) to see the real exception.
 - **M8 — `flask run` serves a real HTTP request.**  Requires
   `socket` / `socketserver` / `signal` on top of M7.  Probably
   also forces a real `weakref` implementation (see Weakref.md
