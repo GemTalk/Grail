@@ -616,6 +616,26 @@ ___pyAttrLoad___: aSym
 		owner := self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
 		(owner notNil and: [(owner @env0:categoryOfSelector: aSym environmentId: 1) @env0:= #'Grail-Class Attrs'])
 			ifTrue: [^ self @env0:perform: aSym env: 1].
+		"Instance method accessed via the class object — an *unbound* method
+		(a plain function in Python 3).  ``ParentClass.__init__(self, **opts)''
+		(explicit super-init, e.g. flask's ``Environment'' subclass calling
+		``BaseEnvironment.__init__(self, **options)'') must run ParentClass's
+		*instance* method on the explicitly-passed receiver.  Without this it
+		falls through to the class-side BoundMethod wrap below and dispatches
+		``ParentClass class >> ___init__:kw:'' (the metaclass) ->
+		MessageNotUnderstood.  Probe the class's own *instance*-side env-1
+		method dict (any arity variant); @classmethod / @staticmethod live on
+		the metaclass (class side) and so don't match here, keeping their
+		existing BoundMethod handling.  The UnboundMethod binds the receiver
+		from the first call argument and runs the named class's own method
+		non-virtually (via ``performMethod:'')."
+		((self @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
+			@env0:or: [(self @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil
+			@env0:or: [(self @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil
+			@env0:or: [(self @env0:whichClassIncludesSelector: sym3 environmentId: 1) notNil
+			@env0:or: [(self @env0:whichClassIncludesSelector: sym4 environmentId: 1) notNil
+			@env0:or: [(self @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil]]]]])
+			ifTrue: [^ UnboundMethod @env1:definingClass: self selector: aSym].
 	].
 	"Python user classes (PythonInstance subclasses) have synthesized
 	``attr:`` setters that pair with attribute getters.  If the class

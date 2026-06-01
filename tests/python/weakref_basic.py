@@ -99,3 +99,32 @@ _explicit_log = []
 _explicit = weakref.finalize([1, 2, 3], lambda: 17)
 finalize_explicit_call_returns = _explicit() == 17
 finalize_inert_after_explicit_call = not _explicit.alive
+
+
+# --- proxy: attribute / method / item forwarding -------------------------
+# weakref.proxy delegates every operation to the live referent.  Its
+# internal ``_Proxy.__get`` reads the mangled slot ``_Proxy__ref`` that
+# ``__init__`` set; Grail doesn't implement ``__name`` name mangling, so a
+# bare ``self.__ref`` read missed and recursed into ``__getattr__`` ->
+# ``__get`` forever (a stack overflow that surfaced via flask.jsonify ->
+# current_app proxying).  These must round-trip without blowing the stack.
+
+
+class _ProxyTarget:
+    def __init__(self):
+        self.value = 42
+
+    def greet(self):
+        return "hi"
+
+
+def proxy_forwards_attr_and_method():
+    t = _ProxyTarget()
+    p = weakref.proxy(t)
+    return [p.value, p.greet()]
+
+
+def proxy_forwards_container_ops():
+    d = {"a": 1, "b": 2}
+    p = weakref.proxy(d)
+    return [p["a"], len(p), "b" in p]

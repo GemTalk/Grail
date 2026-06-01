@@ -16,13 +16,20 @@
 
 
 class HTTPException(Exception):
-    """Base class for werkzeug HTTP error responses."""
+    """Base class for werkzeug HTTP error responses.
 
-    def __init__(self):
-        self.code = 500
-        self.name = 'HTTPException'
-        self.description = ''
-        self.response = None
+    ``code`` / ``name`` / ``description`` are **class** attributes (as in
+    upstream Werkzeug), so they resolve both on the class
+    (``NotFound.code`` — Flask's ``_get_exc_class_and_code`` reads this)
+    and on an instance (``e.code`` — ``handle_http_exception`` reads this),
+    independent of whether ``__init__`` ran.  A raise via the Smalltalk
+    exception machinery can construct the instance without running Python
+    ``__init__``; class attributes survive that path."""
+
+    code = 500
+    name = 'HTTPException'
+    description = ''
+    response = None
 
     def get_response(self, environ=None):
         from werkzeug.wrappers import Response
@@ -35,64 +42,52 @@ class HTTPException(Exception):
 
 
 class BadRequest(HTTPException):
-    def __init__(self):
-        self.code = 400
-        self.name = 'Bad Request'
-        self.description = (
-            'The browser sent a request that this server could not '
-            'understand.')
-        self.response = None
+    code = 400
+    name = 'Bad Request'
+    description = (
+        'The browser sent a request that this server could not '
+        'understand.')
 
 
 class ClientDisconnected(BadRequest):
     """Raised when the client disconnects mid-request."""
 
-    def __init__(self):
-        BadRequest.__init__(self)
-        self.description = 'Client disconnected before request finished.'
+    description = 'Client disconnected before request finished.'
 
 
 class Unauthorized(HTTPException):
-    def __init__(self):
-        self.code = 401
-        self.name = 'Unauthorized'
-        self.description = 'Authentication is required.'
-        self.response = None
+    code = 401
+    name = 'Unauthorized'
+    description = 'Authentication is required.'
 
 
 class Forbidden(HTTPException):
-    def __init__(self):
-        self.code = 403
-        self.name = 'Forbidden'
-        self.description = 'You do not have permission to access this resource.'
-        self.response = None
+    code = 403
+    name = 'Forbidden'
+    description = 'You do not have permission to access this resource.'
 
 
 class NotFound(HTTPException):
-    def __init__(self):
-        self.code = 404
-        self.name = 'Not Found'
-        self.description = 'The requested URL was not found on the server.'
-        self.response = None
+    code = 404
+    name = 'Not Found'
+    description = 'The requested URL was not found on the server.'
 
 
 class MethodNotAllowed(HTTPException):
+    code = 405
+    name = 'Method Not Allowed'
+    description = 'The method is not allowed for the requested URL.'
+
     def __init__(self, valid_methods=None):
-        self.code = 405
-        self.name = 'Method Not Allowed'
-        self.description = 'The method is not allowed for the requested URL.'
-        self.response = None
         self.valid_methods = valid_methods or []
 
 
 class RequestEntityTooLarge(HTTPException):
     """Raised when the request body exceeds the configured max size."""
 
-    def __init__(self):
-        self.code = 413
-        self.name = 'Request Entity Too Large'
-        self.description = 'The request body is too large.'
-        self.response = None
+    code = 413
+    name = 'Request Entity Too Large'
+    description = 'The request body is too large.'
 
 
 class BadRequestKeyError(KeyError):
@@ -131,51 +126,40 @@ class SecurityError(BadRequest):
     """Raised by host validation when an untrusted host is
     rejected — werkzeug.sansio.utils imports this."""
 
-    def __init__(self):
-        BadRequest.__init__(self)
-        self.description = 'Untrusted host rejected.'
+    description = 'Untrusted host rejected.'
 
 
 class BadHost(BadRequest):
     """Raised when the Host header is unrecognized or untrusted —
     werkzeug.routing.exceptions uses this."""
 
-    def __init__(self):
-        self.code = 400
-        self.name = 'Bad Host'
-        self.description = 'Bad Host.'
-        self.response = None
+    name = 'Bad Host'
+    description = 'Bad Host.'
 
 
 class RequestedRangeNotSatisfiable(HTTPException):
     """416 — requested byte range outside the resource size."""
 
-    def __init__(self):
-        self.code = 416
-        self.name = 'Requested Range Not Satisfiable'
-        self.description = 'The Range header is not satisfiable.'
-        self.response = None
+    code = 416
+    name = 'Requested Range Not Satisfiable'
+    description = 'The Range header is not satisfiable.'
 
 
 class UnsupportedMediaType(HTTPException):
     """415 — request entity has a media type the server can't process.
     werkzeug.wrappers.Request.json raises this on bad Content-Type."""
 
-    def __init__(self, description=None):
-        self.code = 415
-        self.name = 'Unsupported Media Type'
-        self.description = description or 'Unsupported media type.'
-        self.response = None
+    code = 415
+    name = 'Unsupported Media Type'
+    description = 'Unsupported media type.'
 
 
 class InternalServerError(HTTPException):
-    def __init__(self):
-        self.code = 500
-        self.name = 'Internal Server Error'
-        self.description = (
-            'The server encountered an internal error and was unable to '
-            'complete your request.')
-        self.response = None
+    code = 500
+    name = 'Internal Server Error'
+    description = (
+        'The server encountered an internal error and was unable to '
+        'complete your request.')
 
 
 # Default-exceptions mapping — code → exception class — provided

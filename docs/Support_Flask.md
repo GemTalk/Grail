@@ -516,6 +516,75 @@ Existing stub modules that need extending later: `typing`,
   `FlaskScaffoldingTestCase >> testFlaskHelloWorldWsgiRoundTrip`
   (fixture `pkg_scaffolding/use_flask_wsgi.py`).
 
+  *Beyond hello-world (2026-05-31):* dynamic routing and the HTTP error
+  path now work through `app.test_client()`.  Regression:
+  `testFlaskRoutingAndErrorPath` (fixture `pkg_scaffolding/use_flask_routing.py`).
+  * **Variable routes / converters / query args** (`/<name>`, `/<int:a>`,
+    `request.args`) — a view returning a *computed* string used to fail in
+    the test client with `RuntimeError: the response object required the
+    iterable to be a sequence`.  Root cause: `test_client` wraps the
+    response in `WrapperTestResponse`, built via the 3-arg `type()`, which
+    didn't inherit `Response.implicit_sequence_conversion` (a class-body
+    attribute).  `builtins.type(name, bases, ns)` now runs the same
+    `___inheritClassAttrs___` copy ClassDefAst does (DynamicTypeTestCase).
+  * **`abort(404)` and unmatched-URL 404** — both produce a proper `404`
+    now.  Three pieces: the hand-rolled `werkzeug.exceptions` shim declares
+    `code`/`name`/`description` as **class** attributes (so `cls.code` and
+    `e.code` both resolve, independent of whether `__init__` ran via the
+    Smalltalk exception path); `Flask.make_response` renders an
+    `HTTPException` return via `get_response()` (Grail's shim isn't a WSGI
+    callable like upstream); and routing constructs `NoMatch` into a local
+    before raising so its `__init__` runs (`raise Cls(args)` lowers to
+    `Cls ___signal___: arg`, which skips `__init__`).
+  * **Known general gap (deferred):** `raise CustomException(args)` lowers
+    to `Cls ___signal___: arg` and skips `__init__`, so per-instance state
+    set there is lost.  Switching the args case to construct-then-signal
+    breaks *built-in* exceptions (`str(ValueError('x'))` → `___new___ not
+    understood by Unicode7`), so the codegen change was reverted; affected
+    raise sites (e.g. routing's `NoMatch`) construct-then-raise instead.
+    The general fix needs built-in exception construction-with-message
+    repaired first.
+  * **`jsonify` (2026-05-31).**  Works now — returns `200` + a JSON body.
+    It overflowed the Smalltalk stack because `jsonify` reaches `current_app`
+    (a `LocalProxy`) which is wrapped in a `weakref.proxy`, and `_Proxy.__get`
+    read its *name-mangled* internal slot `_Proxy__ref` (set in `__init__`
+    via the explicit string) through a bare `self.__ref`.  **Grail doesn't
+    implement Python name mangling** (`self.__name` inside class `C` →
+    `self._C__name`), so the read missed `_Proxy__ref`, fell into
+    `__getattr__`, and recursed into `__get` forever.  Fixed `_Proxy` to use
+    the explicit `self._Proxy__ref` plus a `__getattr__` guard
+    (WeakrefModuleTestCase proxy tests; jsonify covered in
+    `testFlaskRoutingAndErrorPath`).
+  * **General gap surfaced — no name mangling.**  `self.__private` inside a
+    class is read/written verbatim as `__private`, not mangled to
+    `_Class__private`.  Self-consistent code works, but any class that mixes
+    an explicit mangled name (e.g. `object.__setattr__(self, "_C__x", …)` —
+    common with `__slots__`) and an implicit `self.__x` breaks.  The proper
+    fix is a parser/codegen transform; until then, affected library classes
+    are patched to use one consistent name.
+  * **Tier 4 — jinja2 templates via flask.**  DONE (2026-05-31).
+    `render_template_string("Hello {{ who }}!", who="Grail")` renders through
+    flask.  flask's `Environment(jinja2.Environment)` calls the parent init
+    *explicitly* — `BaseEnvironment.__init__(self, **options)`
+    (templating.py:48).  Grail dispatched `ParentClass.__init__(self, …)` as a
+    **class-side** (metaclass) send → `MessageNotUnderstood`.  Fix: a new
+    `UnboundMethod` class ([UnboundMethod.gs](src/smalltalk/Python/UnboundMethod.gs))
+    returned by `object >> ___pyAttrLoad___` when a Behavior (class) receiver
+    loads an *instance*-method name; calling it with `(instance, *args,
+    **kwargs)` runs that class's own method on the instance NON-virtually via
+    the env-0 `performMethod:` primitives.  Its resolver walks the chain
+    class-by-class so an inherited no-op (the env-1 default `object.__init__`)
+    doesn't shadow a subclass's real varargs `___init__:kw:`.  A second
+    blocker after the env constructed: flask does
+    `rv.globals.update(url_for=…, …)` — added the varargs `dict._update:kw:`
+    (`dict.update([E], **F)`).  Tests: `UnboundMethodTestCase` (varargs/fixed
+    parent init + a non-`__init__` unbound call) and jinja2 render in
+    `FlaskScaffoldingTestCase >> testFlaskRoutingAndErrorPath`.
+    *Note:* `super().__init__()` (the `Super` proxy) still has the same
+    inherited-`object.__init__` shadowing bug in its own resolver — flask uses
+    the explicit form, so it's unblocked, but `Super.gs` could borrow this
+    closest-class resolver in a follow-up.
+
   *Working:* `import flask` succeeds; `app = Flask(__name__)` constructs;
   `@app.route('/')` registers a view (the decorator + rule machinery
   runs).  Probing `app.test_client().get('/')` walked the request path

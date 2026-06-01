@@ -1012,6 +1012,18 @@ type: className _: bases _: namespace
 	nameSym := (il @env0:___asSmalltalkClassName___: className @env0:asString) @env0:asSymbol.
 	newClass := storageBase @env1:___subclass___: nameSym instVarNames: #() classInstVarNames: #().
 	il @env0:___mergeSecondaryBases___: newClass bases: baseArray.
+	"Copy inherited class-body data attributes (``X = v'') from the storage
+	base into newClass's per-class slots — the same step ClassDefAst runs at
+	compile time.  Smalltalk class-side instVars are per-class storage, so
+	without this an unredeclared inherited Python class attr stays nil on the
+	dynamically built class.  werkzeug's ``type('WrapperTestResponse',
+	(TestResponse, Response), {})'' otherwise lost ``Response.
+	implicit_sequence_conversion = True'', so ``test_client'' responses read
+	it as nil and ``get_data()'' raised ``RuntimeError: the response object
+	required the iterable to be a sequence''.  Namespace is empty here (the
+	non-empty case is rejected above), so nothing of newClass's own to
+	exclude."
+	il @env0:___inheritClassAttrs___: newClass exclude: #().
 	^ newClass
 %
 

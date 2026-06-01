@@ -5314,3 +5314,51 @@ testFlaskHelloWorldOverRealSocket
 	self assert: ((result @env1:__getitem__: 0) @env0:indexOfSubCollection: '200 OK') @env0:> 0.
 	self assert: (result @env1:__getitem__: 1) equals: 'Hello, Grail!'
 %
+category: 'Grail-Tests - flask'
+method: FlaskScaffoldingTestCase
+testFlaskRoutingAndErrorPath
+	"Post-hello-world routing + the HTTP error path (Tier 1 + Tier 2).
+	Tier 1: views returning *computed* strings render through the test
+	client's dynamically-built WrapperTestResponse (3-arg ``type()`` must
+	inherit ``Response.implicit_sequence_conversion``).  Tier 2: ``abort(404)``
+	and an unmatched URL both produce a 404 (HTTPException ``code`` is a class
+	attribute, ``make_response`` renders it via ``get_response()``, routing
+	constructs ``NoMatch`` so its ``__init__`` runs).  Heavy imports; drop the
+	cached flask/werkzeug modules first so a re-run recompiles cleanly."
+
+	| mod mods keys r |
+	mods := importlib @env1:modules.
+	keys := mods @env0:keys @env0:select: [:k |
+		(k @env0:asString @env0:= 'flask')
+			@env0:or: [(k @env0:asString @env0:indexOfSubCollection: 'flask.') @env0:> 0]].
+	keys @env0:do: [:k | mods @env0:removeKey: k ifAbsent: []].
+	mods @env0:removeKey: #'use_flask_routing' ifAbsent: [].
+	mods @env0:removeKey: #'pkg_scaffolding.use_flask_routing' ifAbsent: [].
+	mod := self loadFixture: 'use_flask_routing'.
+	"Tier 1 — dynamic responses via the test client."
+	r := mod @env1:variable_route.
+	self assert: (r @env1:__getitem__: 0) equals: 200.
+	self assert: (r @env1:__getitem__: 1) equals: 'Hi alice'.
+	r := mod @env1:int_converter.
+	self assert: (r @env1:__getitem__: 0) equals: 200.
+	self assert: (r @env1:__getitem__: 1) equals: '7'.
+	r := mod @env1:query_args.
+	self assert: (r @env1:__getitem__: 0) equals: 200.
+	self assert: (r @env1:__getitem__: 1) equals: 'hi'.
+	"Tier 3 — jsonify (delegates through current_app, a LocalProxy, and a
+	weakref proxy whose name-mangled internal slot used to recurse)."
+	r := mod @env1:json_response.
+	self assert: (r @env1:__getitem__: 0) equals: 200.
+	self assert: ((r @env1:__getitem__: 1) @env0:indexOfSubCollection: '"ok":true') @env0:> 0.
+	"Tier 4 — jinja2 ``render_template_string'' (flask's Environment subclass
+	calls the parent jinja2.Environment.__init__ explicitly — UnboundMethod)."
+	r := mod @env1:template_response.
+	self assert: (r @env1:__getitem__: 0) equals: 200.
+	self assert: (r @env1:__getitem__: 1) equals: 'Hello Grail!'.
+	"Tier 2 — the HTTP error path returns 404."
+	r := mod @env1:abort_404.
+	self assert: (r @env1:__getitem__: 0) equals: 404.
+	self assert: ((r @env1:__getitem__: 1) @env0:indexOfSubCollection: 'Not Found') @env0:> 0.
+	r := mod @env1:unknown_route_404.
+	self assert: (r @env1:__getitem__: 0) equals: 404
+%

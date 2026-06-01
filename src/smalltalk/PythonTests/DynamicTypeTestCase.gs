@@ -80,3 +80,31 @@ testDynamicSingleBase
 	self assert: (r @env1:__getitem__: 0) equals: 'Solo'.
 	self assert: (r @env1:__getitem__: 1) equals: 'generic'
 %
+
+category: 'Grail-Tests-DynamicType'
+method: DynamicTypeTestCase
+testDynamicInheritsClassAttr
+	"A class built via ``type('Dyn', (Flagged,), {})`` inherits Flagged's
+	class-body data attributes (``enabled = True``, ``label = 'base'``) on
+	both the class and its instances.  Regression for werkzeug's
+	WrapperTestResponse losing ``implicit_sequence_conversion``."
+
+	| r |
+	r := self loadFixture @env1:dynamic_inherits_class_attr.
+	self assert: (r @env1:__getitem__: 0) equals: true.
+	self assert: (r @env1:__getitem__: 1) equals: true.
+	self assert: (r @env1:__getitem__: 2) equals: 'base'.
+	self assert: (r @env1:__getitem__: 3) equals: 'base'
+%
+
+category: 'Grail-Tests-DynamicType'
+method: DynamicTypeTestCase
+testDynamicInheritsThroughTwoLevels
+	"``type('Dyn2', (Sub,), {})`` where the attrs live on Sub's parent
+	Flagged — mirrors WrapperTestResponse(flask.Response -> werkzeug.Response)."
+
+	| r |
+	r := self loadFixture @env1:dynamic_inherits_through_two_levels.
+	self assert: (r @env1:__getitem__: 0) equals: true.
+	self assert: (r @env1:__getitem__: 1) equals: 'base'
+%

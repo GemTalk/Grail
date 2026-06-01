@@ -183,3 +183,32 @@ testFinalizeInertAfterExplicitCall
 
 	self assert: (testModule @env1:finalize_inert_after_explicit_call) equals: true.
 %
+
+! ------------------------------------------------------------------------------
+! proxy
+! ------------------------------------------------------------------------------
+
+category: 'Grail-Tests-weakref-proxy'
+method: WeakrefModuleTestCase
+testProxyForwardsAttrAndMethod
+	"weakref.proxy delegates attribute reads and method calls to the live
+	referent without recursing in ``_Proxy.__get`` (the name-mangling stack
+	overflow that broke flask.jsonify)."
+
+	| r |
+	r := testModule @env1:proxy_forwards_attr_and_method.
+	self assert: (r @env1:__getitem__: 0) equals: 42.
+	self assert: (r @env1:__getitem__: 1) equals: 'hi'
+%
+
+category: 'Grail-Tests-weakref-proxy'
+method: WeakrefModuleTestCase
+testProxyForwardsContainerOps
+	"weakref.proxy delegates __getitem__ / __len__ / __contains__."
+
+	| r |
+	r := testModule @env1:proxy_forwards_container_ops.
+	self assert: (r @env1:__getitem__: 0) equals: 1.
+	self assert: (r @env1:__getitem__: 1) equals: 2.
+	self assert: (r @env1:__getitem__: 2) equals: true
+%

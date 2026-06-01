@@ -518,6 +518,25 @@ update: other
 	]
 %
 
+category: 'Grail-Mutation Methods'
+method: dict
+_update: positional kw: kwargs
+	"Python ``dict.update([E], **F)'' varargs form — merge a positional
+	mapping/iterable E (if given) and the keyword args F into self.  flask's
+	``create_jinja_environment'' does ``rv.globals.update(url_for=...,
+	get_flashed_messages=..., config=...)''."
+
+	positional @env0:isEmpty ifFalse: [
+		self @env1:update: (positional @env0:at: 1)
+	].
+	(kwargs @env0:isNil not and: [kwargs @env0:isEmpty not]) ifTrue: [
+		kwargs @env0:keysAndValuesDo: [:key :value |
+			self @env0:at: key put: value
+		]
+	].
+	^ None
+%
+
 category: 'Grail-View Methods'
 method: dict
 values

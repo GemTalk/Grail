@@ -74,12 +74,21 @@ class _Proxy:
         object.__setattr__(self, "_Proxy__ref", ref(obj, callback))
 
     def __get(self):
-        v = self.__ref()
+        # Use the explicit mangled name to match ``__init__``'s
+        # ``object.__setattr__(self, "_Proxy__ref", ...)``.  Grail does not
+        # implement Python's ``__name`` -> ``_Class__name`` name mangling, so
+        # a bare ``self.__ref`` would read ``__ref`` (a miss), fall through to
+        # ``__getattr__``, and recurse back into ``__get`` forever (blowing the
+        # stack — surfaced via ``flask.jsonify`` -> ``current_app`` proxying).
+        v = self._Proxy__ref()
         if v is None:
             raise ReferenceError("weakly-referenced object no longer exists")
         return v
 
     def __getattr__(self, name):
+        # Guard the internal slot so a miss can never recurse into __get.
+        if name == "_Proxy__ref" or name == "__ref":
+            raise AttributeError(name)
         return getattr(self.__get(), name)
 
     def __setattr__(self, name, value):

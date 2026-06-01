@@ -184,7 +184,13 @@ class StateMachineMatcher:
             except SlashRequired:
                 raise RequestPath(f"{path}/") from None
             if rv is None or rv[0].merge_slashes is False:
-                raise NoMatch(have_match_for, websocket_mismatch)
+                # Construct the NoMatch instance first so its __init__ runs and
+                # ``have_match_for`` / ``websocket_mismatch`` are set.  Grail
+                # lowers ``raise Cls(args)`` to ``Cls ___signal___: arg`` which
+                # skips __init__, leaving the attributes unset so
+                # ``MapAdapter.match`` crashes reading ``e.have_match_for``.
+                match_error = NoMatch(have_match_for, websocket_mismatch)
+                raise match_error
             else:
                 raise RequestPath(f"{path}")
         elif rv is not None:
@@ -195,7 +201,9 @@ class StateMachineMatcher:
                 try:
                     value = rule._converters[name].to_python(value)
                 except ValidationError:
-                    raise NoMatch(have_match_for, websocket_mismatch) from None
+                    # Construct first so __init__ runs (see note above).
+                    match_error = NoMatch(have_match_for, websocket_mismatch)
+                    raise match_error from None
                 result[str(name)] = value
             if rule.defaults:
                 result.update(rule.defaults)
@@ -205,4 +213,6 @@ class StateMachineMatcher:
 
             return rule, result
 
-        raise NoMatch(have_match_for, websocket_mismatch)
+        # Construct first so __init__ runs (see note above).
+        match_error = NoMatch(have_match_for, websocket_mismatch)
+        raise match_error

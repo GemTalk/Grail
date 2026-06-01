@@ -260,6 +260,7 @@ run
 	at: #'LruCacheWrapper' put: nil;
 	at: #'Super' put: nil;
 	at: #'SuperBoundMethod' put: nil;
+	at: #'UnboundMethod' put: nil;
 	at: #'PythonGenerator' put: nil;
 	at: #'builtins' put: nil;
 	at: #'bytearray' put: nil;
@@ -613,6 +614,7 @@ run
 	at: #'ClassAttrDictSubclassTestCase' put: nil;
 	at: #'NestedDefNameTestCase' put: nil;
 	at: #'SocketModuleTestCase' put: nil;
+	at: #'UnboundMethodTestCase' put: nil;
 	at: #'StopIterationTestCase' put: nil;
 	at: #'StrTestCase' put: nil;
 	at: #'ClassMethodGlobalFallbackTestCase' put: nil;
@@ -746,6 +748,7 @@ Transcript show: 'Registered: property -> PropertyDescriptor'.
 %
 input src/smalltalk/Python/SuperBoundMethod.gs
 input src/smalltalk/Python/Super.gs
+input src/smalltalk/Python/UnboundMethod.gs
 input src/smalltalk/Python/PythonGenerator.gs
 input src/smalltalk/Python/string_Formatter.gs
 input src/smalltalk/Python/BaseExceptionGroup.gs
@@ -1198,6 +1201,7 @@ input src/smalltalk/PythonTests/KwargSplatMergeTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrDictSubclassTestCase.gs
 input src/smalltalk/PythonTests/NestedDefNameTestCase.gs
 input src/smalltalk/PythonTests/SocketModuleTestCase.gs
+input src/smalltalk/PythonTests/UnboundMethodTestCase.gs
 input src/smalltalk/PythonTests/StarImportDynamicNamesTestCase.gs
 input src/smalltalk/PythonTests/StringModuleTestCase.gs
 input src/smalltalk/PythonTests/SubmoduleAutoBindTestCase.gs
