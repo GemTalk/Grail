@@ -672,11 +672,41 @@ Existing stub modules that need extending later: `typing`,
   `UncontinuableError` ("exception already signaled") that hides the
   underlying error — drive dispatch via `app.full_dispatch_request()`
   (a request context) to see the real exception.
-- **M8 — `flask run` serves a real HTTP request.**  Requires
-  `socket` / `socketserver` / `signal` on top of M7.  Probably
-  also forces a real `weakref` implementation (see Weakref.md
-  triggers).
+- **M8 — `flask run` serves a real HTTP request.**  **Thin path DONE
+  (2026-05-31).**  A Flask hello-world now answers a real HTTP/1.1 `GET`
+  over a TCP socket with `200 OK` + `Hello, Grail!` — verified end to end
+  (`FlaskScaffoldingTestCase >> testFlaskHelloWorldOverRealSocket`,
+  fixture `pkg_scaffolding/use_flask_serving.py`).
+
+  * **Native `socket` module.**  No libpython / CPython `_socket`, so
+    `socket` is a Smalltalk wrapper (`PySocket`) over GemStone's
+    `GsSocket` (`src/smalltalk/Python/socket_module.gs`): `socket()` /
+    `bind` / `listen` / `accept` / `connect` / `recv` / `send` /
+    `sendall` / `close` / `shutdown` / `setsockopt` (no-op) /
+    `settimeout` / `getsockname` / `gethostname`, plus `AF_INET` /
+    `SOCK_STREAM` / … constants.  `bind((host, 0))` → OS-ephemeral port
+    read back via `getsockname`.  `GsSocket` integrates with the
+    `GsProcess` scheduler, so a blocking `accept` / `recv` suspends the
+    green thread and yields — a single session can run both ends
+    sequentially (the client `connect`+`sendall` buffer in the listen
+    backlog before the server `accept`), which is how the tests avoid a
+    fork.  Tests: `SocketModuleTestCase`.
+  * **Thin `werkzeug.serving`.**  The `NotImplementedError` stub became a
+    real (compact) `run_simple` / `make_server` / `WSGIServer` built on
+    the socket: accept → read the request line + headers (+ body by
+    `Content-Length`) → build the WSGI `environ` → call the app → write
+    the HTTP response.  `wsgi.input` is an `io.BytesIO`.  Registration:
+    `socket` must be post-bound into `sys.modules` (install.gs), like the
+    other native modules.
+
+  *Not yet done (deferred past the thin demo):* the stdlib `socketserver`
+  / `http.server` stack (so unmodified third-party WSGI servers run); the
+  auto-reloader; HTTPS / `ssl_context`; HTTP keep-alive (every response
+  sends `Connection: close`); chunked transfer-encoding;
+  threading/multiprocessing (`app.run()` blocks the serving gem — green
+  threads are cooperative, not parallel).  `signal` is not needed for the
+  thin path; `weakref` was already real (never an M8 blocker).
 
 Calendar balance: M6 is the bulk (Werkzeug is the largest single
 dep, ~50k LOC of which the test-client path touches maybe 8k);
-M8 is comparatively small once everything else is in.
+M8's thin path is small now that the socket layer exists.

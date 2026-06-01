@@ -5289,3 +5289,28 @@ testFlaskHelloWorldWsgiRoundTrip
 	self assert: ((result @env1:__getitem__: 0) @env0:indexOfSubCollection: '200') @env0:> 0.
 	self assert: (result @env1:__getitem__: 1) equals: 'Hello, Grail!'
 %
+
+category: 'Grail-Tests - flask'
+method: FlaskScaffoldingTestCase
+testFlaskHelloWorldOverRealSocket
+	"M8 milestone — the Flask hello-world served over a REAL TCP socket via
+	``werkzeug.serving.make_server`` (the native ``socket`` module backed by
+	``GsSocket``), not just the in-process WSGI callable.  Drives the full dev
+	-server path end to end: bind/listen, accept, parse raw HTTP/1.1 off the
+	wire, build the WSGI environ, run the app, write the HTTP response.  Heavy
+	imports; drop cached flask/werkzeug modules first so a re-run recompiles
+	cleanly without OOMing the suite."
+
+	| mod mods keys result |
+	mods := importlib @env1:modules.
+	keys := mods @env0:keys @env0:select: [:k |
+		(k @env0:asString @env0:= 'flask')
+			@env0:or: [(k @env0:asString @env0:indexOfSubCollection: 'flask.') @env0:> 0]].
+	keys @env0:do: [:k | mods @env0:removeKey: k ifAbsent: []].
+	mods @env0:removeKey: #'use_flask_serving' ifAbsent: [].
+	mods @env0:removeKey: #'pkg_scaffolding.use_flask_serving' ifAbsent: [].
+	mod := self loadFixture: 'use_flask_serving'.
+	result := mod @env1:serve_one_request.
+	self assert: ((result @env1:__getitem__: 0) @env0:indexOfSubCollection: '200 OK') @env0:> 0.
+	self assert: (result @env1:__getitem__: 1) equals: 'Hello, Grail!'
+%

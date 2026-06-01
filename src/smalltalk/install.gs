@@ -280,6 +280,8 @@ run
 	at: #'iterator' put: nil;
 	at: #'list_iterator' put: nil;
 	at: #'hashlib' put: nil;
+	at: #'socket' put: nil;
+	at: #'PySocket' put: nil;
 	at: #'Hash' put: nil;
 	at: #'time' put: nil;
 	at: #'secrets' put: nil;
@@ -610,6 +612,7 @@ run
 	at: #'KwargSplatMergeTestCase' put: nil;
 	at: #'ClassAttrDictSubclassTestCase' put: nil;
 	at: #'NestedDefNameTestCase' put: nil;
+	at: #'SocketModuleTestCase' put: nil;
 	at: #'StopIterationTestCase' put: nil;
 	at: #'StrTestCase' put: nil;
 	at: #'ClassMethodGlobalFallbackTestCase' put: nil;
@@ -785,6 +788,7 @@ input src/smalltalk/Python/ShimSreModule.gs
 input src/smalltalk/Python/importlib.gs
 input src/weakref/WeakReference.gs
 input src/smalltalk/Python/hashlib.gs
+input src/smalltalk/Python/socket_module.gs
 input src/smalltalk/Python/time.gs
 input src/smalltalk/Python/secrets.gs
 input src/smalltalk/Python/warnings.gs
@@ -1193,6 +1197,7 @@ input src/smalltalk/PythonTests/ImportlibUnloadTestCase.gs
 input src/smalltalk/PythonTests/KwargSplatMergeTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrDictSubclassTestCase.gs
 input src/smalltalk/PythonTests/NestedDefNameTestCase.gs
+input src/smalltalk/PythonTests/SocketModuleTestCase.gs
 input src/smalltalk/PythonTests/StarImportDynamicNamesTestCase.gs
 input src/smalltalk/PythonTests/StringModuleTestCase.gs
 input src/smalltalk/PythonTests/SubmoduleAutoBindTestCase.gs
@@ -1345,6 +1350,7 @@ Transcript show: '==============================================='.
 ! (won't drop transient registrations from earlier in the session).
 run
 (sys @env1:modules) @env0:at: #'hashlib' put: hashlib @env1:instance.
+(sys @env1:modules) @env0:at: #'socket' put: socket @env1:instance.
 (sys @env1:modules) @env0:at: #'time' put: time @env1:instance.
 (sys @env1:modules) @env0:at: #'secrets' put: secrets @env1:instance.
 (sys @env1:modules) @env0:at: #'warnings' put: warnings @env1:instance.
