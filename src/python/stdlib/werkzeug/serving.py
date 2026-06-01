@@ -1,23 +1,23 @@
-# Thin real ``werkzeug.serving'' for Grail (M8).
+# Grail ``werkzeug.serving'' — the development WSGI server, built on the
+# stdlib ``http.server'' / ``socketserver'' stack (which Grail now provides
+# over the native GsSocket-backed ``socket'' module).  This replaces the M8
+# hand-rolled ``run_simple'' with the faithful path: a ``WSGIRequestHandler``
+# subclassing ``BaseHTTPRequestHandler`` parses the request and runs the WSGI
+# app; ``BaseWSGIServer`` is an ``HTTPServer`` holding the application.
 #
-# Upstream werkzeug.serving wraps the stdlib ``http.server'' /
-# ``socketserver'' / ``ssl'' modules into a development WSGI server.  Grail
-# has neither, but it does have a native ``socket'' module backed by
-# GemStone ``GsSocket'' (see src/smalltalk/Python/socket_module.gs).  This
-# module implements just enough of ``run_simple'' / ``make_server'' on top of
-# that socket to serve real HTTP/1.1 requests to a WSGI ``application``:
-# accept a connection, read the request line + headers (+ body), build a
-# WSGI ``environ``, call the app, and write the response back.
+# Persistent HTTP/1.1 connections (keep-alive) and chunked transfer-encoding
+# are supported: a connection is reused for further requests unless the client
+# or response asks to close it, and a response with no Content-Length is framed
+# with ``Transfer-Encoding: chunked`` (on HTTP/1.1) so the connection can stay
+# open.
 #
-# Not implemented (out of scope for the dev-server demo): the auto-reloader,
-# HTTPS/``ssl_context``, keep-alive (every response sends ``Connection:
-# close``), chunked transfer-encoding, threading/multiprocessing.
+# Still out of scope: the auto-reloader, HTTPS / ``ssl_context``.
+# ``threaded=True`` uses ``ThreadingMixIn`` (GsProcess green threads —
+# cooperative, not parallel).
 
-import socket
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import socketserver
 from io import BytesIO
-
-#: Default chunk size for socket reads.
-_RECV = 8192
 
 
 def is_running_from_reloader():
@@ -26,188 +26,218 @@ def is_running_from_reloader():
     return False
 
 
-def _read_request(conn):
-    """Read one HTTP request off ``conn``.  Returns
-    ``(method, target, http_version, headers, body)`` where ``headers`` is a
-    list of ``(name, value)`` string pairs and ``body`` is ``bytes``.
-    Returns ``None`` if the peer closed before sending a full header block."""
-    buf = b""
-    while b"\r\n\r\n" not in buf:
-        chunk = conn.recv(_RECV)
-        if not chunk:
-            if not buf:
-                return None
-            break
-        buf = buf + chunk
+class WSGIRequestHandler(BaseHTTPRequestHandler):
+    """Parse the HTTP request and run the server's WSGI application."""
 
-    head, _, rest = buf.partition(b"\r\n\r\n")
-    lines = head.split(b"\r\n")
-    request_line = lines[0].decode("latin-1")
-    parts = request_line.split(" ")
-    method = parts[0]
-    target = parts[1] if len(parts) > 1 else "/"
-    http_version = parts[2] if len(parts) > 2 else "HTTP/1.0"
+    # Speak HTTP/1.1 so persistent connections are the default; the base
+    # ``parse_request`` then keeps the connection alive unless the client
+    # sends ``Connection: close``.
+    protocol_version = "HTTP/1.1"
 
-    headers = []
-    content_length = 0
-    for raw in lines[1:]:
-        if not raw:
-            continue
-        name, _, value = raw.decode("latin-1").partition(":")
-        name = name.strip()
-        value = value.strip()
-        headers.append((name, value))
-        if name.lower() == "content-length":
-            content_length = int(value or "0")
-
-    body = rest
-    while len(body) < content_length:
-        chunk = conn.recv(_RECV)
-        if not chunk:
-            break
-        body = body + chunk
-
-    return method, target, http_version, headers, body
-
-
-def _build_environ(method, target, http_version, headers, body, server_name,
-                   server_port):
-    """Construct a minimal-but-complete WSGI ``environ`` dict."""
-    if "?" in target:
-        path, _, query = target.partition("?")
-    else:
-        path, query = target, ""
-
-    environ = {
-        "REQUEST_METHOD": method,
-        "SCRIPT_NAME": "",
-        "PATH_INFO": path,
-        "QUERY_STRING": query,
-        "SERVER_NAME": server_name,
-        "SERVER_PORT": str(server_port),
-        "SERVER_PROTOCOL": http_version,
-        "REMOTE_ADDR": "127.0.0.1",
-        "wsgi.version": (1, 0),
-        "wsgi.url_scheme": "http",
-        "wsgi.input": BytesIO(body),
-        "wsgi.errors": BytesIO(),
-        "wsgi.multithread": False,
-        "wsgi.multiprocess": False,
-        "wsgi.run_once": False,
-    }
-    for name, value in headers:
-        if name.lower() == "content-type":
-            environ["CONTENT_TYPE"] = value
-        elif name.lower() == "content-length":
-            environ["CONTENT_LENGTH"] = value
+    def make_environ(self):
+        path = self.path
+        if "?" in path:
+            path_info, _, query = path.partition("?")
         else:
-            key = "HTTP_" + name.upper().replace("-", "_")
-            if key in environ:
-                environ[key] = environ[key] + "," + value
-            else:
+            path_info, query = path, ""
+
+        scheme = "https" if getattr(self.server, "ssl_context", None) else "http"
+        environ = {
+            "REQUEST_METHOD": self.command,
+            "SCRIPT_NAME": "",
+            "PATH_INFO": path_info,
+            "QUERY_STRING": query,
+            "SERVER_NAME": self.server.server_name,
+            "SERVER_PORT": str(self.server.server_port),
+            "SERVER_PROTOCOL": self.request_version,
+            "REMOTE_ADDR": self.client_address[0] if self.client_address else "127.0.0.1",
+            "wsgi.version": (1, 0),
+            "wsgi.url_scheme": scheme,
+            "wsgi.input": self.rfile,
+            "wsgi.errors": BytesIO(),
+            "wsgi.multithread": False,
+            "wsgi.multiprocess": False,
+            "wsgi.run_once": False,
+        }
+        for name, value in self.headers.items():
+            key = name.upper().replace("-", "_")
+            if key in ("CONTENT_TYPE", "CONTENT_LENGTH"):
                 environ[key] = value
-    return environ
+            else:
+                key = "HTTP_" + key
+                if key in environ:
+                    environ[key] = environ[key] + "," + value
+                else:
+                    environ[key] = value
+        return environ
 
+    def run_wsgi(self):
+        environ = self.make_environ()
+        status_set = []
+        headers_set = []
+        headers_sent = []
+        use_chunked = []  # non-empty once we commit to chunked framing
 
-def _handle_connection(conn, app, server_name, server_port):
-    """Read one request from ``conn``, run ``app``, write the response."""
-    parsed = _read_request(conn)
-    if parsed is None:
-        return
-    method, target, http_version, headers, body = parsed
-    environ = _build_environ(method, target, http_version, headers, body,
-                             server_name, server_port)
+        def write(data):
+            if isinstance(data, str):
+                data = data.encode("utf-8")
+            if not status_set:
+                raise AssertionError("write() before start_response()")
+            if not headers_sent:
+                status = status_set[0]
+                code_str, _, msg = status.partition(" ")
+                code = int(code_str)
+                self.send_response_only(code, msg)
+                header_keys = set()
+                for key, value in headers_set:
+                    self.send_header(key, value)
+                    header_keys.add(key.lower())
 
-    captured = {}
+                # Decide how the response body is framed.  A "bodyless" status
+                # carries no body at all; otherwise the client needs either a
+                # Content-Length or chunked framing to know where it ends.
+                bodyless = (environ["REQUEST_METHOD"] == "HEAD"
+                            or code < 200 or code in (204, 304))
+                already_framed = ("content-length" in header_keys
+                                  or "transfer-encoding" in header_keys)
+                if not bodyless and not already_framed:
+                    if (self.protocol_version >= "HTTP/1.1"
+                            and not self.close_connection):
+                        # Keep the connection alive by framing with chunks.
+                        use_chunked.append(True)
+                        self.send_header("Transfer-Encoding", "chunked")
+                    else:
+                        # No length and can't chunk: the only frame left is to
+                        # close the connection at end of body.
+                        self.close_connection = True
 
-    def start_response(status, response_headers, exc_info=None):
-        captured["status"] = status
-        captured["headers"] = response_headers
-        return lambda data: None
+                if self.close_connection:
+                    self.send_header("Connection", "close")
+                elif self.request_version == "HTTP/1.0":
+                    # An HTTP/1.0 client only keeps the connection alive if we
+                    # say so explicitly.
+                    self.send_header("Connection", "keep-alive")
+                self.end_headers()
+                headers_sent.append(True)
 
-    app_iter = app(environ, start_response)
-    chunks = []
-    for chunk in app_iter:
-        if isinstance(chunk, str):
-            chunk = chunk.encode("utf-8")
-        chunks.append(chunk)
-    payload = b"".join(chunks)
-    if hasattr(app_iter, "close"):
-        app_iter.close()
+            if not data:
+                return
+            if use_chunked:
+                self.wfile.write(("%x\r\n" % len(data)).encode("latin-1"))
+                self.wfile.write(data)
+                self.wfile.write(b"\r\n")
+            else:
+                self.wfile.write(data)
 
-    status = captured.get("status", "200 OK")
-    out_headers = list(captured.get("headers", []))
-    have_cl = any(n.lower() == "content-length" for n, _ in out_headers)
-    if not have_cl:
-        out_headers.append(("Content-Length", str(len(payload))))
-    out_headers.append(("Connection", "close"))
+        def start_response(status, response_headers, exc_info=None):
+            if exc_info:
+                try:
+                    if headers_sent:
+                        raise exc_info[1]
+                finally:
+                    exc_info = None
+            status_set.append(status)
+            headers_set.extend(response_headers)
+            return write
 
-    head = "HTTP/1.1 " + status + "\r\n"
-    for name, value in out_headers:
-        head = head + name + ": " + value + "\r\n"
-    head = head + "\r\n"
-
-    conn.sendall(head.encode("latin-1") + payload)
-
-
-class WSGIServer:
-    """A blocking single-threaded WSGI server over a ``socket``.  ``port=0``
-    asks the OS for an ephemeral port (read back from ``server_port``)."""
-
-    def __init__(self, host, port, app):
-        self.host = host
-        self.app = app
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind((host, port))
-        sock.listen(128)
-        self.socket = sock
-        self.server_port = sock.getsockname()[1]
-        self.server_name = host
-
-    def handle_request(self):
-        """Accept and serve exactly one connection."""
-        conn, _addr = self.socket.accept()
+        app_rv = self.server.app(environ, start_response)
         try:
-            _handle_connection(conn, self.app, self.server_name,
-                               self.server_port)
+            for data in app_rv:
+                write(data)
+            if not headers_sent:
+                write(b"")
+            if use_chunked:
+                self.wfile.write(b"0\r\n\r\n")
         finally:
-            conn.close()
+            if hasattr(app_rv, "close"):
+                app_rv.close()
+        self.wfile.flush()
 
-    def serve_forever(self):
-        while True:
-            self.handle_request()
+    def handle_one_request(self):
+        """Read one request off the (possibly persistent) connection and run
+        the WSGI app.  The base ``handle`` loops on this while the connection
+        stays open."""
+        try:
+            self.raw_requestline = self.rfile.readline(65537)
+        except OSError:
+            self.close_connection = True
+            return
+        if not self.raw_requestline:
+            self.close_connection = True
+            return
+        if not self.parse_request():
+            return
+        self.run_wsgi()
 
-    def server_close(self):
-        self.socket.close()
+    def log_request(self, code="-", size="-"):
+        pass
 
 
-def make_server(host, port, app, threaded=False, processes=1,
-                request_handler=None, passthrough_errors=False,
+def _normalize_ssl_context(ssl_context):
+    """Accept what werkzeug's ``ssl_context`` allows and return an
+    ``ssl.SSLContext`` (or None).  Supports an already-built ``SSLContext`` and a
+    ``(certfile, keyfile)`` / ``(certfile, keyfile, password)`` tuple; ``'adhoc'``
+    is unsupported (no on-the-fly cert generation)."""
+    if ssl_context is None:
+        return None
+    if hasattr(ssl_context, "wrap_socket"):
+        return ssl_context
+    if isinstance(ssl_context, tuple):
+        import ssl as _ssl
+        ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_SERVER)
+        certfile = ssl_context[0]
+        keyfile = ssl_context[1] if len(ssl_context) > 1 else None
+        password = ssl_context[2] if len(ssl_context) > 2 else None
+        ctx.load_cert_chain(certfile, keyfile, password)
+        return ctx
+    raise TypeError("unsupported ssl_context: %r" % (ssl_context,))
+
+
+class BaseWSGIServer(HTTPServer):
+    """An HTTP(S) server bound to a WSGI ``app``."""
+
+    def __init__(self, host, port, app, handler=None, ssl_context=None):
+        if handler is None:
+            handler = WSGIRequestHandler
+        self.app = app
+        HTTPServer.__init__(self, (host, int(port)), handler)
+        self.ssl_context = _normalize_ssl_context(ssl_context)
+        if self.ssl_context is not None:
+            # Wrap the bound listening socket; each accept() now returns a TLS
+            # connection (the handshake runs in SSLSocket.accept()).
+            self.socket = self.ssl_context.wrap_socket(self.socket,
+                                                       server_side=True)
+
+
+class ThreadedWSGIServer(socketserver.ThreadingMixIn, BaseWSGIServer):
+    """Each request handled in its own (cooperative GsProcess) thread."""
+
+
+def make_server(host="127.0.0.1", port=0, app=None, threaded=False,
+                processes=1, request_handler=None, passthrough_errors=False,
                 ssl_context=None, fd=None):
-    return WSGIServer(host, port, app)
+    """Create a WSGI server.  ``ssl_context`` enables HTTPS (an ``ssl.SSLContext``
+    or a ``(certfile, keyfile[, password])`` tuple); ``processes`` is accepted but
+    ignored (no multiprocessing)."""
+    if app is None:
+        raise TypeError("make_server() requires an app")
+    if threaded:
+        return ThreadedWSGIServer(host, port, app, request_handler, ssl_context)
+    return BaseWSGIServer(host, port, app, request_handler, ssl_context)
 
 
 def run_simple(hostname, port, application, use_reloader=False,
                use_debugger=False, use_evalex=True,
                extra_files=None, exclude_patterns=None,
-               reloader_interval=1, reloader_type='auto',
+               reloader_interval=1, reloader_type="auto",
                threaded=False, processes=1, request_handler=None,
                static_files=None, passthrough_errors=False,
                ssl_context=None):
-    """Serve ``application`` on ``hostname:port`` until interrupted.  This
-    blocks the calling GemStone session (the gem becomes the server)."""
-    server = make_server(hostname, port, application)
+    """Serve ``application`` on ``hostname:port`` until interrupted.  Blocks the
+    calling GemStone session (the gem becomes the server)."""
+    server = make_server(hostname, port, application, threaded, processes,
+                         request_handler, passthrough_errors, ssl_context)
     try:
         server.serve_forever()
     finally:
         server.server_close()
-
-
-# Kept for isinstance / subclass resolution by code that imports them.
-BaseWSGIServer = WSGIServer
-
-
-class WSGIRequestHandler:
-    """Stub — Grail's server doesn't use a per-request handler class."""
-    pass

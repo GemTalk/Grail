@@ -520,6 +520,30 @@ class LimitedStream:
 
         return b""
 
+    def read(self, size=-1):
+        """Read up to ``size`` bytes (or to the limit if ``size`` is negative),
+        not past ``self.limit``.
+
+        Grail's ``io`` has no ``RawIOBase``, so this ``LimitedStream`` isn't a
+        subclass that provides ``read`` in terms of ``readinto`` — and
+        ``readinto`` itself relies on ``bytearray`` slice assignment.  So read
+        directly from the wrapped stream (its ``read``), which is all
+        ``request.get_data()`` (``self.stream.read()``) needs."""
+        remaining = self.limit - self._pos
+        if remaining <= 0:
+            self.on_exhausted()
+            return b""
+        if size is None or size < 0:
+            size = remaining
+        else:
+            size = min(size, remaining)
+        data = self._stream.read(size)
+        if not data:
+            self.on_disconnect()
+            return b""
+        self._pos += len(data)
+        return data
+
     def readinto(self, b: bytearray) -> int | None:  # type: ignore[override]
         size = len(b)
         remaining = self.limit - self._pos

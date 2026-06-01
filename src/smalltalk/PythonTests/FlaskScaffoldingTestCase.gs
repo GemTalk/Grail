@@ -5362,3 +5362,125 @@ testFlaskRoutingAndErrorPath
 	r := mod @env1:unknown_route_404.
 	self assert: (r @env1:__getitem__: 0) equals: 404
 %
+category: 'Grail-Tests - flask'
+method: FlaskScaffoldingTestCase
+testFlaskServeGetQueryPost
+	"M8 faithful serving stack across multiple requests: a plain GET, a GET
+	with a query string, and a POST whose body is read back through
+	werkzeug's LimitedStream over wsgi.input (the socket.makefile()).  Drop the
+	cached flask/werkzeug modules first so a re-run recompiles cleanly."
+
+	| mod mods keys r |
+	mods := importlib @env1:modules.
+	keys := mods @env0:keys @env0:select: [:k |
+		(k @env0:asString @env0:= 'flask')
+			@env0:or: [(k @env0:asString @env0:indexOfSubCollection: 'flask.') @env0:> 0]].
+	keys @env0:do: [:k | mods @env0:removeKey: k ifAbsent: []].
+	mods @env0:removeKey: #'use_flask_serving' ifAbsent: [].
+	mods @env0:removeKey: #'pkg_scaffolding.use_flask_serving' ifAbsent: [].
+	mod := self loadFixture: 'use_flask_serving'.
+	r := mod @env1:serve_get_query_post.
+	self assert: (r @env1:__getitem__: 0) equals: 'home'.
+	self assert: (r @env1:__getitem__: 1) equals: 'q=hi'.
+	self assert: (r @env1:__getitem__: 2) equals: 'echo:payload'
+%
+category: 'Grail-Tests - flask'
+method: FlaskScaffoldingTestCase
+_dropServingModules
+	"Drop cached flask/werkzeug + the fixture so each serving test recompiles
+	cleanly from source."
+
+	| mods keys |
+	mods := importlib @env1:modules.
+	keys := mods @env0:keys @env0:select: [:k |
+		(k @env0:asString @env0:= 'flask')
+			@env0:or: [(k @env0:asString @env0:indexOfSubCollection: 'flask.') @env0:> 0]].
+	keys @env0:do: [:k | mods @env0:removeKey: k ifAbsent: []].
+	mods @env0:removeKey: #'use_flask_serving' ifAbsent: [].
+	mods @env0:removeKey: #'pkg_scaffolding.use_flask_serving' ifAbsent: []
+%
+category: 'Grail-Tests - flask'
+method: FlaskScaffoldingTestCase
+testFlaskServeKeepAlive
+	"Persistent HTTP/1.1 connection: two requests pipelined onto ONE socket are
+	served by a SINGLE accept (handle_request).  Both response bodies coming
+	back proves the connection was reused for the second request rather than
+	closed after the first."
+
+	| mod r |
+	self _dropServingModules.
+	mod := self loadFixture: 'use_flask_serving'.
+	r := mod @env1:serve_keep_alive_two_requests.
+	self assert: (r @env1:__getitem__: 0) equals: 2.
+	self assert: (r @env1:__getitem__: 1) equals: 'AAA'.
+	self assert: (r @env1:__getitem__: 2) equals: 'BBB'
+%
+category: 'Grail-Tests - flask'
+method: FlaskScaffoldingTestCase
+testFlaskServeChunked
+	"A response with no Content-Length on a persistent HTTP/1.1 connection is
+	framed with Transfer-Encoding: chunked; dechunking reconstructs the body."
+
+	| mod r |
+	self _dropServingModules.
+	mod := self loadFixture: 'use_flask_serving'.
+	r := mod @env1:serve_chunked_response.
+	self assert: (r @env1:__getitem__: 0) equals: true.
+	self assert: (r @env1:__getitem__: 1) equals: 'one;two;three'
+%
+category: 'Grail-Tests - flask'
+method: FlaskScaffoldingTestCase
+testFlaskServeHttps
+	"Flask served over TLS: make_server(ssl_context=...) wraps the listener so
+	each accepted connection is TLS.  A forked client does a real HTTPS GET
+	(handshake + encrypted request/response) while the server runs
+	handle_request() on the main thread.  Also checks request.scheme == https."
+
+	| mod res server port sem holder gemstone certFile keyFile pw result status body schemeRes |
+	self _dropServingModules.
+	gemstone := System gemEnvironmentVariable: 'GEMSTONE'.
+	certFile := gemstone, '/examples/openssl/certs/server_1_servercert.pem'.
+	keyFile := gemstone, '/examples/openssl/private/server_1_serverkey.pem'.
+	pw := GsSecureSocket getPasswordFromFile:
+		gemstone, '/examples/openssl/private/server_1_server_passwd.txt'.
+	mod := self loadFixture: 'use_flask_serving'.
+
+	"Request 1: GET / over HTTPS."
+	res := mod @env1:make_https_flask_server: certFile _: keyFile _: pw.
+	server := res at: 1.
+	port := res at: 2.
+	sem := Semaphore new.
+	holder := Array new: 1.
+	[
+		[holder at: 1 put: (mod @env1:https_get: port _: '/')]
+			on: Error do: [:e | holder at: 1 put: e].
+		sem signal
+	] fork.
+	mod @env1:serve_one: server.
+	sem wait.
+	result := holder at: 1.
+	self assert: (result isKindOf: OrderedCollection)
+		description: 'https client raised: ', result printString.
+	status := result at: 1.
+	body := result at: 2.
+	self assert: (status indexOfSubCollection: '200') > 0.
+	self assert: body equals: 'Hello, TLS!'.
+
+	"Request 2: GET /scheme — the WSGI environ url_scheme must be https."
+	res := mod @env1:make_https_flask_server: certFile _: keyFile _: pw.
+	server := res at: 1.
+	port := res at: 2.
+	sem := Semaphore new.
+	holder := Array new: 1.
+	[
+		[holder at: 1 put: (mod @env1:https_get: port _: '/scheme')]
+			on: Error do: [:e | holder at: 1 put: e].
+		sem signal
+	] fork.
+	mod @env1:serve_one: server.
+	sem wait.
+	schemeRes := holder at: 1.
+	self assert: (schemeRes isKindOf: OrderedCollection)
+		description: 'https client raised: ', schemeRes printString.
+	self assert: (schemeRes at: 2) equals: 'https'
+%

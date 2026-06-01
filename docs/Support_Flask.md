@@ -768,13 +768,37 @@ Existing stub modules that need extending later: `typing`,
     `socket` must be post-bound into `sys.modules` (install.gs), like the
     other native modules.
 
-  *Not yet done (deferred past the thin demo):* the stdlib `socketserver`
-  / `http.server` stack (so unmodified third-party WSGI servers run); the
-  auto-reloader; HTTPS / `ssl_context`; HTTP keep-alive (every response
-  sends `Connection: close`); chunked transfer-encoding;
-  threading/multiprocessing (`app.run()` blocks the serving gem — green
-  threads are cooperative, not parallel).  `signal` is not needed for the
-  thin path; `weakref` was already real (never an M8 blocker).
+  * **Faithful serving stack (2026-05-31, ``socket`` branch).**  The thin
+    hand-rolled `run_simple` was replaced by the real stdlib path, all built
+    on the GsSocket-backed `socket` module:
+    - `socket.makefile()` → `PySocketIO`, a buffered binary file object
+      (readline / read(n) / write / flush) — what `http.server` reads/writes
+      through.
+    - `select` + `selectors` — over `GsSocket`'s readiness primitives
+      (`readWillNotBlock` / `readWillNotBlockWithin:`), operating on socket
+      OBJECTS (GsSocket has the real OS fd via `id`, but Grail has no
+      `select(2)` binding; the GsProcess scheduler suspends the green thread
+      while a single socket waits).
+    - `socketserver` — `BaseServer` / `TCPServer` / `StreamRequestHandler` /
+      `ThreadingMixIn` (no ForkingMixIn / UDP / Unix).  `PySocket.bind()`
+      now does the real OS bind (so `getsockname` works between bind and
+      activate, as socketserver expects).
+    - `http.server` — `HTTPServer` + `BaseHTTPRequestHandler` (request-line +
+      header parsing, `do_<METHOD>` dispatch, `send_response` /
+      `send_header` / `end_headers`).  Header parsing is a line split, not
+      `email`; `date_time_string` is a fixed valid HTTP date.
+    - `werkzeug.serving` — `make_server` / `run_simple` /
+      `BaseWSGIServer(HTTPServer)` / `WSGIRequestHandler(BaseHTTPRequestHandler)`.
+    Verified: a flask app served over a real socket through the full stack
+    returns `200 OK` + `Hello, Grail!`.  Tests: `SocketModuleTestCase`
+    (makefile / select / selectors / socketserver / http.server) +
+    `testFlaskHelloWorldOverRealSocket`.
+
+  *Still deferred:* the auto-reloader (needs `subprocess` + file watching);
+  HTTPS / `ssl_context`; HTTP keep-alive (every response sends `Connection:
+  close`); chunked transfer-encoding; `email`-based header parsing.
+  `threaded=True` uses `ThreadingMixIn` but GsProcess threads are
+  cooperative, not parallel.  `signal` not needed; `weakref` was always real.
 
 Calendar balance: M6 is the bulk (Werkzeug is the largest single
 dep, ~50k LOC of which the test-client path touches maybe 8k);

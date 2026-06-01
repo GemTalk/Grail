@@ -95,3 +95,64 @@ testGethostnameNonEmpty
 
 	self assert: (self loadFixture @env1:gethostname_nonempty) equals: true
 %
+
+category: 'Grail-Tests-Socket'
+method: SocketModuleTestCase
+testMakefileRoundTrip
+	"socket.makefile('rb'/'wb') — a buffered file object over the socket:
+	readline() for the request line + headers, read(n) for the body,
+	write()/flush() for the response.  Foundation for http.server."
+
+	| r |
+	r := self loadFixture @env1:makefile_roundtrip.
+	self assert: (r @env1:__getitem__: 0) equals: 'GET /x HTTP/1.1'.
+	self assert: (r @env1:__getitem__: 1) equals: 'Host: y'.
+	self assert: (r @env1:__getitem__: 2) equals: true.
+	self assert: (r @env1:__getitem__: 3) equals: 'BODY'.
+	self assert: (r @env1:__getitem__: 4) equals: true
+%
+
+category: 'Grail-Tests-Socket'
+method: SocketModuleTestCase
+testSelectDetectsConnection
+	"select.select reports the listening socket readable once a client
+	connects (not before)."
+
+	| r |
+	r := self loadFixture @env1:select_detects_connection.
+	self assert: (r @env1:__getitem__: 0) equals: 0.
+	self assert: (r @env1:__getitem__: 1) equals: 1.
+	self assert: (r @env1:__getitem__: 2) equals: true
+%
+
+category: 'Grail-Tests-Socket'
+method: SocketModuleTestCase
+testSelectorsDetectsConnection
+	"selectors.DefaultSelector (over select) detects an incoming connection."
+
+	| r |
+	r := self loadFixture @env1:selectors_detects_connection.
+	self assert: (r @env1:__getitem__: 0) equals: 1.
+	self assert: (r @env1:__getitem__: 1) equals: true
+%
+
+category: 'Grail-Tests-Socket'
+method: SocketModuleTestCase
+testSocketServerEcho
+	"socketserver.TCPServer + StreamRequestHandler: handle_request() accepts
+	one connection; the handler reads a line and writes a reply."
+
+	self assert: (self loadFixture @env1:socketserver_echo) equals: 'echo:hello'
+%
+
+category: 'Grail-Tests-Socket'
+method: SocketModuleTestCase
+testHttpServerGet
+	"http.server.BaseHTTPRequestHandler parses a GET, dispatches do_GET, and
+	send_response/send_header/end_headers write the HTTP response."
+
+	| r |
+	r := self loadFixture @env1:http_server_get.
+	self assert: ((r @env1:__getitem__: 0) @env0:indexOfSubCollection: '200 OK') @env0:> 0.
+	self assert: (r @env1:__getitem__: 1) equals: 'hello from http.server'
+%

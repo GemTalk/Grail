@@ -283,6 +283,7 @@ run
 	at: #'hashlib' put: nil;
 	at: #'socket' put: nil;
 	at: #'PySocket' put: nil;
+	at: #'PySocketIO' put: nil;
 	at: #'Hash' put: nil;
 	at: #'time' put: nil;
 	at: #'secrets' put: nil;
@@ -614,6 +615,7 @@ run
 	at: #'ClassAttrDictSubclassTestCase' put: nil;
 	at: #'NestedDefNameTestCase' put: nil;
 	at: #'SocketModuleTestCase' put: nil;
+	at: #'SslModuleTestCase' put: nil;
 	at: #'UnboundMethodTestCase' put: nil;
 	at: #'StopIterationTestCase' put: nil;
 	at: #'StrTestCase' put: nil;
@@ -1201,6 +1203,7 @@ input src/smalltalk/PythonTests/KwargSplatMergeTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrDictSubclassTestCase.gs
 input src/smalltalk/PythonTests/NestedDefNameTestCase.gs
 input src/smalltalk/PythonTests/SocketModuleTestCase.gs
+input src/smalltalk/PythonTests/SslModuleTestCase.gs
 input src/smalltalk/PythonTests/UnboundMethodTestCase.gs
 input src/smalltalk/PythonTests/StarImportDynamicNamesTestCase.gs
 input src/smalltalk/PythonTests/StringModuleTestCase.gs
