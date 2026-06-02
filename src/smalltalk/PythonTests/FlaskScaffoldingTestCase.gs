@@ -5484,3 +5484,39 @@ testFlaskServeHttps
 		description: 'https client raised: ', schemeRes printString.
 	self assert: (schemeRes at: 2) equals: 'https'
 %
+category: 'Grail-Tests - flask'
+method: FlaskScaffoldingTestCase
+testFlaskServeThreaded
+	"make_server(threaded=True): each request is handled in its OWN (GsProcess)
+	worker thread via ThreadingMixIn, not by the acceptor.  A forked client
+	makes a request while the server runs handle_request() on the main thread;
+	blocking on the semaphore lets the worker thread run.  The view embeds the
+	handling thread id in the body, so we confirm the response is correct AND
+	that it ran off the main thread."
+
+	| mod res server port mainTid sem holder result body |
+	self _dropServingModules.
+	mod := self loadFixture: 'use_flask_serving'.
+	res := mod @env1:make_threaded_server.
+	server := res at: 1.
+	port := res at: 2.
+	mainTid := res at: 3.
+	sem := Semaphore new.
+	holder := Array new: 1.
+	[
+		[holder at: 1 put: (mod @env1:plain_get: port _: '/')]
+			on: Error do: [:e | holder at: 1 put: e].
+		sem signal
+	] fork.
+	mod @env1:serve_one: server.
+	sem wait.
+	result := holder at: 1.
+	self assert: (result isKindOf: OrderedCollection)
+		description: 'threaded client raised: ', result printString.
+	self assert: ((result at: 1) indexOfSubCollection: '200') > 0.
+	body := result at: 2.
+	self assert: (body indexOfSubCollection: 'Hello, threaded!') > 0.
+	"The handling thread id is in the body; it must NOT be the main thread id."
+	self deny: (body indexOfSubCollection: ('tid=', mainTid printString)) > 0
+		description: 'request ran on the main thread, not a worker'
+%

@@ -103,22 +103,23 @@ the script -- leaving the repository pristine in every case."
 
   "The wrappers survived the commit as the same classes..."
   check value: 'pattern is still an SrePattern' value: (pat isKindOf: SrePattern).
-  check value: 'match is still an SreMatch' value: (match isKindOf: SreMatch).
+  check value: 'match is still an SreMatch'     value: (match isKindOf: SreMatch).
 
   "...but their C pointers faulted in NULL (the heart of the bug)."
-  check value: 'pattern cPointer is non-nil' value: (pat @env0:cPointer notNil).
+  check value: 'pattern cPointer is non-nil'      value: (pat @env0:cPointer notNil).
   check value: 'pattern cPointer faulted in NULL' value: (pat @env0:cPointer isNull).
-  check value: 'match cPointer faulted in NULL' value: (match @env0:cPointer isNull).
+  check value: 'match cPointer faulted in NULL'   value: (match @env0:cPointer isNull).
 
   "Every C-pointer call must signal cleanly rather than SEGV on the dead address."
-  raises value: 'SrePattern>>search: signals on stale pointer' value: [pat @env1:search: 'xyzabc'].
-  raises value: 'SrePattern>>match: signals on stale pointer'  value: [pat @env1:match: 'abcxyz'].
+  raises value: 'SrePattern>>search: signals on stale pointer'  value: [pat @env1:search: 'xyzabc'].
+  raises value: 'SrePattern>>match: signals on stale pointer'   value: [pat @env1:match: 'abcxyz'].
   raises value: 'SrePattern>>findall: signals on stale pointer' value: [pat @env1:findall: 'abc'].
   raises value: 'SreMatch>>group: signals on stale pointer'     value: [match @env1:group: 0].
-  raises value: 'SreMatch>>span: signals on stale pointer'       value: [match @env1:span: 0].
+  raises value: 'SreMatch>>span: signals on stale pointer'      value: [match @env1:span: 0].
 ] ensure: [
   UserGlobals removeKey: #'Grail_issue_2' ifAbsent: [].
-  System commitTransaction].
+  System commitTransaction
+].
 
 out cr; cr.
 failures isEmpty

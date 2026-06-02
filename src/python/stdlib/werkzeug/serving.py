@@ -16,6 +16,7 @@
 # cooperative, not parallel).
 
 from http.server import BaseHTTPRequestHandler, HTTPServer
+import socket
 import socketserver
 from io import BytesIO
 
@@ -211,6 +212,18 @@ class BaseWSGIServer(HTTPServer):
 
 class ThreadedWSGIServer(socketserver.ThreadingMixIn, BaseWSGIServer):
     """Each request handled in its own (cooperative GsProcess) thread."""
+
+    # Re-declare the class attributes TCPServer.__init__/server_bind/activate
+    # read via ``self``.  Grail's class-attribute lookup does not yet walk to a
+    # base inherited only through the SECOND parent of a multiple-inheritance
+    # class, so without these the MI server can't see TCPServer.address_family
+    # etc. and construction fails with AttributeError.
+    address_family = socket.AF_INET
+    socket_type = socket.SOCK_STREAM
+    request_queue_size = 5
+    allow_reuse_address = True
+    timeout = None
+    daemon_threads = True
 
 
 def make_server(host="127.0.0.1", port=0, app=None, threaded=False,

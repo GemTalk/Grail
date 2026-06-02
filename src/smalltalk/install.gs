@@ -284,6 +284,8 @@ run
 	at: #'socket' put: nil;
 	at: #'PySocket' put: nil;
 	at: #'PySocketIO' put: nil;
+	at: #'_thread' put: nil;
+	at: #'PyThreadLock' put: nil;
 	at: #'Hash' put: nil;
 	at: #'time' put: nil;
 	at: #'secrets' put: nil;
@@ -617,6 +619,7 @@ run
 	at: #'SocketModuleTestCase' put: nil;
 	at: #'ImportlibReloadTestCase' put: nil;
 	at: #'SslModuleTestCase' put: nil;
+	at: #'ThreadingModuleTestCase' put: nil;
 	at: #'UnboundMethodTestCase' put: nil;
 	at: #'StopIterationTestCase' put: nil;
 	at: #'StrTestCase' put: nil;
@@ -795,6 +798,7 @@ input src/smalltalk/Python/importlib.gs
 input src/weakref/WeakReference.gs
 input src/smalltalk/Python/hashlib.gs
 input src/smalltalk/Python/socket_module.gs
+input src/smalltalk/Python/thread_module.gs
 input src/smalltalk/Python/time.gs
 input src/smalltalk/Python/secrets.gs
 input src/smalltalk/Python/warnings.gs
@@ -1206,6 +1210,7 @@ input src/smalltalk/PythonTests/NestedDefNameTestCase.gs
 input src/smalltalk/PythonTests/SocketModuleTestCase.gs
 input src/smalltalk/PythonTests/ImportlibReloadTestCase.gs
 input src/smalltalk/PythonTests/SslModuleTestCase.gs
+input src/smalltalk/PythonTests/ThreadingModuleTestCase.gs
 input src/smalltalk/PythonTests/UnboundMethodTestCase.gs
 input src/smalltalk/PythonTests/StarImportDynamicNamesTestCase.gs
 input src/smalltalk/PythonTests/StringModuleTestCase.gs
@@ -1360,6 +1365,7 @@ Transcript show: '==============================================='.
 run
 (sys @env1:modules) @env0:at: #'hashlib' put: hashlib @env1:instance.
 (sys @env1:modules) @env0:at: #'socket' put: socket @env1:instance.
+(sys @env1:modules) @env0:at: #'_thread' put: _thread @env1:instance.
 (sys @env1:modules) @env0:at: #'time' put: time @env1:instance.
 (sys @env1:modules) @env0:at: #'secrets' put: secrets @env1:instance.
 (sys @env1:modules) @env0:at: #'warnings' put: warnings @env1:instance.

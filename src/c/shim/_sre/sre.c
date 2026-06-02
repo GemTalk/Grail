@@ -3289,6 +3289,14 @@ _sre_compile(PyObject *module, PyObject *const *args, Py_ssize_t nargs,
         return NULL;
     }
     PyObject *pattern = args[0];
+    if (args[1] == NULL) {
+        PyErr_Format(PyExc_TypeError, "compile got args[1]==NULL");
+        return NULL;
+    }
+    if (args[3] == NULL) {
+        PyErr_Format(PyExc_TypeError, "compile got args[3]==NULL");
+        return NULL;
+    }
     int flags = (int)PyLong_AsLong(args[1]);
     if (flags == -1 && PyErr_Occurred()) return NULL;
     PyObject *code = args[2];
@@ -3515,6 +3523,7 @@ _sre_SRE_Pattern__fail_after(PyObject *self, PyObject *const *args, Py_ssize_t n
 {
     if (nargs != 2) return NULL;
     int count = (int)PyLong_AsLong(args[0]);
+    if (count < 0) return NULL;
     return _sre_SRE_Pattern__fail_after_impl(_PatternObject_CAST(self),
                                               count, args[1]);
 }

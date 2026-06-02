@@ -51,6 +51,7 @@ static OopType false_oop;
  * ==================================================================== */
 
 static inline OopType pyobj_oop(PyObject *obj) {
+    if (obj == NULL)     return none_oop;
     if (obj == Py_None)  return none_oop;
     if (obj == Py_True)  return true_oop;
     if (obj == Py_False) return false_oop;
@@ -496,10 +497,12 @@ static int64 oopToLongWithIndex(OopType oop) {
 }
 
 extern "C" Py_ssize_t PyLong_AsSsize_t(PyObject *obj) {
+    if (obj == NULL) return 0;
     return (Py_ssize_t)oopToLongWithIndex(pyobj_oop(obj));
 }
 
 extern "C" long PyLong_AsLong(PyObject *obj) {
+    if (obj == NULL) return -1;
     return (long)oopToLongWithIndex(pyobj_oop(obj));
 }
 
@@ -512,6 +515,7 @@ extern "C" int PyLong_Check(PyObject *obj) {
  * ==================================================================== */
 
 extern "C" int PyObject_IsTrue(PyObject *obj) {
+    if (obj == NULL) return 0;
     OopType oop = pyobj_oop(obj);
     if (oop == OOP_NIL || oop == OOP_FALSE)
         return 0;
@@ -535,6 +539,7 @@ extern "C" PyObject *PyUnicode_FromString(const char *str) {
 }
 
 extern "C" const char *PyUnicode_AsUTF8(PyObject *obj) {
+    if (obj == NULL) return NULL;
     OopType oop = pyobj_oop(obj);
     char *cached = buffer_cache_get(oop);
     if (cached) return cached;
@@ -563,6 +568,7 @@ extern "C" PyObject *PyBytes_FromStringAndSize(const char *data, Py_ssize_t len)
 }
 
 extern "C" char *PyBytes_AsString(PyObject *obj) {
+    if (obj == NULL) return NULL;
     OopType oop = pyobj_oop(obj);
     char *cached = buffer_cache_get(oop);
     if (cached) return cached;
@@ -571,6 +577,7 @@ extern "C" char *PyBytes_AsString(PyObject *obj) {
 }
 
 extern "C" Py_ssize_t PyBytes_Size(PyObject *obj) {
+    if (obj == NULL) return  0;
     return (Py_ssize_t)GciFetchSize_(pyobj_oop(obj));
 }
 
@@ -587,24 +594,39 @@ extern "C" PyObject *PyList_New(Py_ssize_t len) {
     return addr_to_pyobj(GciPerform(server, "PyList_New:", &arg, 1));
 }
 
+static void raise_error(const char *message);
+
+#define CHECK_pyObj(anObj, msg ) \
+    if (anObj == NULL) { \
+      raise_error( msg " arg is NULL"); \
+      return 0; \
+    }
+
 extern "C" int PyList_Append(PyObject *list, PyObject *item) {
+    CHECK_pyObj(list, "PyList_Append list");
+    CHECK_pyObj(item, "PyList_Append item");
     OopType args[2] = { pyobj_oop(list), pyobj_oop(item) };
     GciPerform(server, "PyList_Append:item:", args, 2);
     return 0;
 }
 
 extern "C" PyObject *PyList_GetItem(PyObject *list, Py_ssize_t index) {
+    CHECK_pyObj(list, "PyList_GetItem list");
     OopType args[2] = { pyobj_oop(list), GciI64ToOop(index) };
     return addr_to_pyobj(GciPerform(server, "PyList_GetItem:at:", args, 2));
 }
 
 extern "C" int PyList_SetItem(PyObject *list, Py_ssize_t index, PyObject *item) {
+    CHECK_pyObj(list, "PyList_SetItem list");
+    CHECK_pyObj(item, "PyList_SetItem item");
     OopType args[3] = { pyobj_oop(list), GciI64ToOop(index), pyobj_oop(item) };
     GciPerform(server, "PyList_SetItem:at:put:", args, 3);
     return 0;
 }
 
 extern "C" int PyList_Insert(PyObject *list, Py_ssize_t index, PyObject *item) {
+    CHECK_pyObj(list, "PyList_Insert list");
+    CHECK_pyObj(item, "PyList_Insert item");
     OopType args[3] = { pyobj_oop(list), GciI64ToOop(index), pyobj_oop(item) };
     GciPerform(server, "PyList_Insert:at:item:", args, 3);
     return 0;
@@ -612,6 +634,7 @@ extern "C" int PyList_Insert(PyObject *list, Py_ssize_t index, PyObject *item) {
 
 extern "C" int PyList_SetSlice(PyObject *list, Py_ssize_t lo, Py_ssize_t hi,
                                PyObject *itemlist) {
+    CHECK_pyObj(list, "PyList_SetSlice list");
     OopType args[4] = {
         pyobj_oop(list),
         GciI64ToOop(lo),
@@ -624,6 +647,7 @@ extern "C" int PyList_SetSlice(PyObject *list, Py_ssize_t lo, Py_ssize_t hi,
 }
 
 extern "C" Py_ssize_t PyList_Size(PyObject *list) {
+    CHECK_pyObj(list, "PyList_Size list");
     OopType arg = pyobj_oop(list);
     return (Py_ssize_t)GciOopToI64(GciPerform(server, "PyList_Size:", &arg, 1));
 }
@@ -641,18 +665,25 @@ extern "C" PyObject *PyDict_New(void) {
 }
 
 extern "C" int PyDict_SetItem(PyObject *dict, PyObject *key, PyObject *value) {
+    CHECK_pyObj(dict, "PyDict_SetItem dict");
+    CHECK_pyObj(key, "PyDict_SetItem key");
+    CHECK_pyObj(value, "PyDict_SetItem value");
     OopType args[3] = { pyobj_oop(dict), pyobj_oop(key), pyobj_oop(value) };
     GciPerform(server, "PyDict_SetItem:key:value:", args, 3);
     return 0;
 }
 
 extern "C" int PyDict_SetItemString(PyObject *dict, const char *key, PyObject *value) {
+    CHECK_pyObj(dict, "PyDict_SetItemString dict");
+    CHECK_pyObj(value, "PyDict_SetItemString value");
     OopType args[3] = { pyobj_oop(dict), GciNewString(key), pyobj_oop(value) };
     GciPerform(server, "PyDict_SetItemString:key:value:", args, 3);
     return 0;
 }
 
 extern "C" PyObject *PyDict_GetItem(PyObject *dict, PyObject *key) {
+    CHECK_pyObj(dict, "PyDict_GetItem dict");
+    CHECK_pyObj(key, "PyDict_GetItem key");
     OopType args[2] = { pyobj_oop(dict), pyobj_oop(key) };
     OopType addrOop = GciPerform(server, "PyDict_GetItem:key:", args, 2);
     int64 addr = GciOopToI64(addrOop);
@@ -661,6 +692,7 @@ extern "C" PyObject *PyDict_GetItem(PyObject *dict, PyObject *key) {
 }
 
 extern "C" PyObject *PyDict_GetItemString(PyObject *dict, const char *key) {
+    CHECK_pyObj(dict, "PyDict_GetItemString dict");
     OopType args[2] = { pyobj_oop(dict), GciNewString(key) };
     OopType addrOop = GciPerform(server, "PyDict_GetItemString:key:", args, 2);
     int64 addr = GciOopToI64(addrOop);
@@ -669,17 +701,22 @@ extern "C" PyObject *PyDict_GetItemString(PyObject *dict, const char *key) {
 }
 
 extern "C" int PyDict_Contains(PyObject *dict, PyObject *key) {
+    CHECK_pyObj(dict, "PyDict_Contains dict");
+    CHECK_pyObj(key, "PyDict_Contains key");
     OopType args[2] = { pyobj_oop(dict), pyobj_oop(key) };
     return GciPerform(server, "PyDict_Contains:key:", args, 2) == OOP_TRUE ? 1 : 0;
 }
 
 extern "C" int PyDict_DelItem(PyObject *dict, PyObject *key) {
+    CHECK_pyObj(dict, "PyDict_DelItem dict");
+    CHECK_pyObj(key, "PyDict_DelItem key");
     OopType args[2] = { pyobj_oop(dict), pyobj_oop(key) };
     GciPerform(server, "PyDict_DelItem:key:", args, 2);
     return 0;
 }
 
 extern "C" Py_ssize_t PyDict_Size(PyObject *dict) {
+    CHECK_pyObj(dict, "PyDict_Size dict");
     OopType arg = pyobj_oop(dict);
     return (Py_ssize_t)GciOopToI64(GciPerform(server, "PyDict_Size:", &arg, 1));
 }
@@ -701,17 +738,21 @@ extern "C" PyObject *PyTuple_New(Py_ssize_t len) {
 }
 
 extern "C" int PyTuple_SetItem(PyObject *tuple, Py_ssize_t pos, PyObject *value) {
+    CHECK_pyObj(tuple, "PyTuple_SetItem tuple");
+    CHECK_pyObj(value, "PyTuple_SetItem value");
     OopType args[3] = { pyobj_oop(tuple), GciI64ToOop(pos), pyobj_oop(value) };
     GciPerform(server, "PyTuple_SetItem:at:put:", args, 3);
     return 0;
 }
 
 extern "C" PyObject *PyTuple_GetItem(PyObject *tuple, Py_ssize_t pos) {
+    CHECK_pyObj(tuple, "PyTuple_GetItem tuple");
     OopType args[2] = { pyobj_oop(tuple), GciI64ToOop(pos) };
     return addr_to_pyobj(GciPerform(server, "PyTuple_GetItem:at:", args, 2));
 }
 
 extern "C" Py_ssize_t PyTuple_Size(PyObject *tuple) {
+    CHECK_pyObj(tuple, "PyTuple_Size tuple");
     return (Py_ssize_t)GciFetchSize_(pyobj_oop(tuple));
 }
 
@@ -727,6 +768,7 @@ extern "C" int PyTuple_Check(PyObject *obj) {
  * ==================================================================== */
 
 extern "C" PyObject *PyObject_GetAttrString(PyObject *obj, const char *name) {
+    CHECK_pyObj(obj, "PyObject_GetAttrString obj");
     OopType args[2] = { pyobj_oop(obj), GciNewString(name) };
     OopType addrOop = GciPerform(server, "PyObject_GetAttrString:name:", args, 2);
     if (check_gci_error()) return NULL;
@@ -734,6 +776,7 @@ extern "C" PyObject *PyObject_GetAttrString(PyObject *obj, const char *name) {
 }
 
 extern "C" int PyObject_HasAttrString(PyObject *obj, const char *name) {
+    CHECK_pyObj(obj, "PyObject_HasAttrString obj");
     OopType args[2] = { pyobj_oop(obj), GciNewString(name) };
     OopType result = GciPerform(server, "PyObject_HasAttrString:name:", args, 2);
     if (check_gci_error()) return 0;
@@ -741,6 +784,7 @@ extern "C" int PyObject_HasAttrString(PyObject *obj, const char *name) {
 }
 
 extern "C" PyObject *PyObject_Repr(PyObject *obj) {
+    CHECK_pyObj(obj, "PyObject_Repr obj");
     OopType arg = pyobj_oop(obj);
     OopType addrOop = GciPerform(server, "PyObject_Repr:", &arg, 1);
     if (check_gci_error()) return NULL;
@@ -748,6 +792,7 @@ extern "C" PyObject *PyObject_Repr(PyObject *obj) {
 }
 
 extern "C" PyObject *PyObject_Str(PyObject *obj) {
+    CHECK_pyObj(obj, "PyObject_Str obj");
     OopType arg = pyobj_oop(obj);
     OopType addrOop = GciPerform(server, "PyObject_Str:", &arg, 1);
     if (check_gci_error()) return NULL;
@@ -755,6 +800,7 @@ extern "C" PyObject *PyObject_Str(PyObject *obj) {
 }
 
 extern "C" Py_ssize_t PyObject_Length(PyObject *obj) {
+    CHECK_pyObj(obj, "PyObject_Length obj");
     OopType arg = pyobj_oop(obj);
     OopType result = GciPerform(server, "PyObject_Length:", &arg, 1);
     if (check_gci_error()) return -1;
@@ -766,6 +812,8 @@ extern "C" Py_ssize_t PyObject_Length(PyObject *obj) {
  * ==================================================================== */
 
 extern "C" int PyObject_RichCompareBool(PyObject *v, PyObject *w, int op) {
+    CHECK_pyObj(v, "PyObject_RichCompareBool v");
+    CHECK_pyObj(w, "PyObject_RichCompareBool w");
     OopType args[3] = { pyobj_oop(v), pyobj_oop(w), GciI64ToOop(op) };
     OopType result = GciPerform(server,
         "PyObject_RichCompareBool:with:op:", args, 3);
@@ -947,6 +995,7 @@ extern "C" PyObject *PyLong_FromUnsignedLong(unsigned long v) {
 }
 
 extern "C" unsigned long PyLong_AsUnsignedLong(PyObject *obj) {
+    if (obj == NULL) return 0;
     return (unsigned long)oopToLongWithIndex(pyobj_oop(obj));
 }
 
@@ -1055,6 +1104,7 @@ static Py_ssize_t utf8_to_ucs4(const char *utf8, Py_ssize_t byte_len,
 /* Get or create cached UCS-4 data for a GemStone string. */
 static int get_ucs4_for_string(PyObject *op, Py_UCS4 **data_out,
                                 Py_ssize_t *length_out) {
+    if (op == NULL) return -1;
     OopType oop = pyobj_oop(op);
 
     /* Check cache */
@@ -1128,6 +1178,9 @@ extern "C" PyObject *PyUnicode_FromStringAndSize(const char *str, Py_ssize_t len
 extern "C" PyObject *PyUnicode_Substring(PyObject *str, Py_ssize_t start,
                                          Py_ssize_t end) {
     /* Extract a substring. For simplicity, delegate to Smalltalk. */
+    if (str == NULL) {
+      return addr_to_pyobj(OOP_NIL);
+    }
     OopType args[3] = {
         pyobj_oop(str),
         GciI64ToOop(start),
@@ -1158,6 +1211,9 @@ extern "C" PyObject *PyTuple_Pack(Py_ssize_t n, ...) {
  * ==================================================================== */
 
 extern "C" PyObject *PySequence_GetItem(PyObject *seq, Py_ssize_t i) {
+    if (seq == NULL) {
+      return addr_to_pyobj(OOP_NIL);
+    }
     if (PyList_Check(seq)) return PyList_GetItem(seq, i);
     if (PyTuple_Check(seq)) return PyTuple_GetItem(seq, i);
     OopType args[2] = { pyobj_oop(seq), GciI64ToOop(i) };
@@ -1173,6 +1229,9 @@ extern "C" Py_ssize_t PySequence_Length(PyObject *seq) {
  * ==================================================================== */
 
 extern "C" PyObject *PyObject_GetItem(PyObject *obj, PyObject *key) {
+    if (obj == NULL || key == NULL) {
+      return NULL;
+    }
     OopType args[2] = { pyobj_oop(obj), pyobj_oop(key) };
     OopType result = GciPerform(server, "PyObject_GetItem:key:", args, 2);
     if (check_gci_error()) return NULL;
@@ -1180,6 +1239,9 @@ extern "C" PyObject *PyObject_GetItem(PyObject *obj, PyObject *key) {
 }
 
 extern "C" int PyObject_SetItem(PyObject *obj, PyObject *key, PyObject *value) {
+    if (obj == NULL || key == NULL || value == NULL) {
+      return -1;
+    }
     OopType args[3] = { pyobj_oop(obj), pyobj_oop(key), pyobj_oop(value) };
     GciPerform(server, "PyObject_SetItem:key:value:", args, 3);
     if (check_gci_error()) return -1;
@@ -1190,6 +1252,9 @@ extern "C" PyObject *PyObject_Call(PyObject *callable, PyObject *args,
                                     PyObject *kwargs) {
     /* Minimal: call with tuple args, ignore kwargs for now */
     (void)kwargs;
+    if (callable == NULL || args == NULL) {
+      return NULL;
+    }
     OopType cargs[2] = { pyobj_oop(callable), args ? pyobj_oop(args) : OOP_NIL };
     OopType result = GciPerform(server, "PyObject_Call:args:", cargs, 2);
     if (check_gci_error()) return NULL;
@@ -1204,6 +1269,9 @@ extern "C" PyObject *PyObject_CallOneArg(PyObject *callable, PyObject *arg) {
 
 extern "C" int PyObject_SetAttrString(PyObject *obj, const char *name,
                                        PyObject *value) {
+    if (obj == NULL || value == NULL) {
+      return -1;
+    }
     OopType args[3] = { pyobj_oop(obj), GciNewString(name), pyobj_oop(value) };
     GciPerform(server, "PyObject_SetAttrString:name:value:", args, 3);
     if (check_gci_error()) return -1;
@@ -1236,6 +1304,7 @@ extern "C" int PyCallable_Check(PyObject *obj) {
 }
 
 extern "C" PyObject *PyObject_RichCompare(PyObject *v, PyObject *w, int op) {
+    if (v == NULL || w == NULL) return NULL;
     OopType args[3] = { pyobj_oop(v), pyobj_oop(w), GciI64ToOop(op) };
     OopType result = GciPerform(server, "PyObject_RichCompare:with:op:", args, 3);
     if (check_gci_error()) return NULL;
@@ -1317,6 +1386,7 @@ extern "C" int PyDict_Next(PyObject *dict, Py_ssize_t *ppos, PyObject **pkey,
                             PyObject **pvalue) {
     /* Iterate over a GemStone-backed dictionary.
        Delegate to server — it returns an Array { key, value } or nil. */
+    if (dict == NULL) return 0;
     OopType args[2] = { pyobj_oop(dict), GciI64ToOop(*ppos) };
     OopType result = GciPerform(server, "PyDict_Next:pos:", args, 2);
     if (check_gci_error()) return 0;
@@ -1370,6 +1440,10 @@ extern "C" int PyArg_ParseTuple(PyObject *args, const char *format, ...) {
         }
 
         PyObject *item = PyTuple_GetItem(args, i);
+        if (item == NULL) {
+          PyErr_Format(PyExc_RuntimeError, "PyArg_ParseTuple: item == NULL");
+          return 0;
+        }
         switch (*f) {
             case 'O': {
                 PyObject **out = va_arg(vargs, PyObject **);
@@ -2502,6 +2576,7 @@ Py_ssize_t PyNumber_AsSsize_t(PyObject *obj, PyObject *exc) {
 /* --- Object protocol (hash) --- */
 
 Py_hash_t PyObject_Hash(PyObject *obj) {
+    if (obj == NULL) return -1;
     OopType oop = pyobj_oop(obj);
     OopType result = GciPerform(oop, "hash", NULL, 0);
     if (has_error()) {

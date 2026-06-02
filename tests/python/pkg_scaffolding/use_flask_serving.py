@@ -233,6 +233,44 @@ def serve_one(server):
     return True
 
 
+# --- threaded serving: each request handled in its own (GsProcess) thread -----
+# make_server(threaded=True) builds a ThreadedWSGIServer (ThreadingMixIn).
+# handle_request() accepts the connection and spawns a worker THREAD to run the
+# WSGI app, then returns.  The Smalltalk test forks the client and then blocks
+# on a semaphore; that block lets the worker thread (and the client) run, so the
+# request is actually served by a different green thread than the acceptor.
+
+def make_threaded_server():
+    from flask import Flask
+    from werkzeug.serving import make_server
+    import threading
+
+    app = Flask(__name__)
+
+    @app.route("/")
+    def hello():
+        # Surface the handling thread id so the test can confirm the request ran
+        # off the main thread.
+        return "Hello, threaded! tid=" + str(threading.get_ident())
+
+    server = make_server("127.0.0.1", 0, app, threaded=True)
+    return [server, server.server_port, threading.get_ident()]
+
+
+def plain_get(port, path):
+    import socket
+
+    c = socket.socket()
+    c.connect(("127.0.0.1", port))
+    req = "GET " + path + " HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n"
+    c.sendall(req.encode("latin-1"))
+    raw = _recv_all(c).decode("latin-1")
+    c.close()
+    status = raw.split("\r\n", 1)[0]
+    body = raw.split("\r\n\r\n", 1)[1] if "\r\n\r\n" in raw else ""
+    return [status, body]
+
+
 def https_get(port, path):
     import ssl
     import socket

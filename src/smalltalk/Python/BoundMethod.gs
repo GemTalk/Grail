@@ -193,6 +193,14 @@ value: positional value: kwargs
 			actualReceiver := receiver.
 			actualArgs := positional.
 		].
+		"perform:env:withArguments: (primitive 2015, used below) needs an EXACT
+		Array; a Python tuple is an Array SUBCLASS and is rejected (it surfaces as
+		a spurious selector-not-understood). Normal calls pass a plain-Array arg
+		list; when positional is itself a tuple -- e.g. threading
+		start_new_thread(fn, ()) re-invokes the target with the () args tuple --
+		coerce to an exact Array."
+		(actualArgs @env0:class @env0:== Array)
+			@env0:ifFalse: [actualArgs := Array @env0:withAll: actualArgs].
 	(kwargs == nil or: [kwargs @env0:isEmpty]) ifTrue: [
 		nargs := actualArgs @env0:size.
 		fixedSel := self @env0:_selectorForArgCount: nargs.
