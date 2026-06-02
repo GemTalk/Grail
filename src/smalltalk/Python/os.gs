@@ -350,6 +350,23 @@ stat: path
 
 category: 'Grail-File and Directory Operations'
 method: os
+getmtime: path
+	"os.path.getmtime(path) backing — modification time in seconds since the
+	epoch.  GsFileStat exposes whole-second resolution (mtimeUtcSeconds), so
+	this is coarser than CPython's float on high-resolution filesystems; it is
+	enough for the auto-reloader (which only needs to notice that an edit
+	happened)."
+
+	| st |
+	st := GsFile @env0:stat: path @env0:asString isLstat: false.
+	st == nil ifTrue: [
+		^ OSError ___signal___: ('Cannot stat: ' @env0:, (path @env0:printString))
+	].
+	^ st @env0:mtimeUtcSeconds
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
 lstat: path
 	"os.lstat(path) — like stat but does not follow symlinks."
 

@@ -615,6 +615,7 @@ run
 	at: #'ClassAttrDictSubclassTestCase' put: nil;
 	at: #'NestedDefNameTestCase' put: nil;
 	at: #'SocketModuleTestCase' put: nil;
+	at: #'ImportlibReloadTestCase' put: nil;
 	at: #'SslModuleTestCase' put: nil;
 	at: #'UnboundMethodTestCase' put: nil;
 	at: #'StopIterationTestCase' put: nil;
@@ -1203,6 +1204,7 @@ input src/smalltalk/PythonTests/KwargSplatMergeTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrDictSubclassTestCase.gs
 input src/smalltalk/PythonTests/NestedDefNameTestCase.gs
 input src/smalltalk/PythonTests/SocketModuleTestCase.gs
+input src/smalltalk/PythonTests/ImportlibReloadTestCase.gs
 input src/smalltalk/PythonTests/SslModuleTestCase.gs
 input src/smalltalk/PythonTests/UnboundMethodTestCase.gs
 input src/smalltalk/PythonTests/StarImportDynamicNamesTestCase.gs

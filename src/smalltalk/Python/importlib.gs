@@ -212,41 +212,14 @@ expandStarImports: aModuleAst
 
 category: 'Grail-Module Loading'
 classmethod: importlib
-loadModuleFromPath: pathString name: moduleName
-	"Load a module from a file path and register it.
-	Returns the module instance.
+___buildModuleClass: moduleAst name: moduleName
+	"Compile a Python module's parsed AST into its Smalltalk class and return
+	the class.  Creating the class via ``module subclass:`` re-parents (reuses)
+	an existing class of the same name, so calling this again on reload
+	recompiles the SAME class in place -- preserving the module instance's
+	identity.  Shared by loadModuleFromPath: and reload:."
 
-	Creates a real Smalltalk class per Python module.  Module-level
-	globals become instance variables on the generated class.  Top-level
-	`def` statements compile as real env-1 methods with arity-specialized
-	selectors.  The remaining module body compiles as an `initialize`
-	method on the class.
-
-	The generated class lives in the ``PythonModules`` SymbolDictionary,
-	keyed by an encoded form of the Python name (``moduleName
-	asSmalltalkClassName``).  Re-import returns the cached instance from
-	sys.modules; the Smalltalk class is only consulted to allocate
-	new instances when the cache is missed."
-
-	| moduleAst moduleClass moduleClassName moduleInstance nameParts packageName
-	  variables variableNames stream methodSource sl
-	  topLevelDefs functionNames lf |
-	moduleAst := self astForPath: pathString.
-	moduleAst name: moduleName.
-	moduleAst useTempsForBlock: false.
-
-	"Parent linkage must happen before star-import expansion so the
-	ImportFromAst nodes can find their enclosing ModuleAst (for relative
-	import resolution)."
-	moduleAst setParent: nil.
-
-	"Expand `from X import *` into explicit `from X import a, b, c`.
-	Done by parsing the target module's source, collecting its top-level
-	names, and rewriting the star AliasAst into one AliasAst per name.
-	Each name is also declared on the body so it shows up in body.variables
-	below (and therefore in the generated class's inst vars)."
-	self expandStarImports: moduleAst.
-
+	| moduleClass moduleClassName variables variableNames stream methodSource sl topLevelDefs functionNames lf |
 	"Collect declared variable names from the module body"
 	variables := moduleAst body variables.
 	variableNames := variables asArray.
@@ -429,6 +402,45 @@ loadModuleFromPath: pathString name: moduleName
 		CallAst moduleFunctionNames: nil.
 		CallAst moduleVariableNames: nil.
 	].
+	^ moduleClass
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+loadModuleFromPath: pathString name: moduleName
+	"Load a module from a file path and register it.
+	Returns the module instance.
+
+	Creates a real Smalltalk class per Python module.  Module-level
+	globals become instance variables on the generated class.  Top-level
+	`def` statements compile as real env-1 methods with arity-specialized
+	selectors.  The remaining module body compiles as an `initialize`
+	method on the class.
+
+	The generated class lives in the ``PythonModules`` SymbolDictionary,
+	keyed by an encoded form of the Python name (``moduleName
+	asSmalltalkClassName``).  Re-import returns the cached instance from
+	sys.modules; the Smalltalk class is only consulted to allocate
+	new instances when the cache is missed."
+
+	| moduleAst moduleClass moduleInstance nameParts packageName |
+	moduleAst := self astForPath: pathString.
+	moduleAst name: moduleName.
+	moduleAst useTempsForBlock: false.
+
+	"Parent linkage must happen before star-import expansion so the
+	ImportFromAst nodes can find their enclosing ModuleAst (for relative
+	import resolution)."
+	moduleAst setParent: nil.
+
+	"Expand `from X import *` into explicit `from X import a, b, c`.
+	Done by parsing the target module's source, collecting its top-level
+	names, and rewriting the star AliasAst into one AliasAst per name.
+	Each name is also declared on the body so it shows up in body.variables
+	below (and therefore in the generated class's inst vars)."
+	self expandStarImports: moduleAst.
+
+	moduleClass := self ___buildModuleClass: moduleAst name: moduleName.
 
 	"Phase A: no per-variable accessor methods are generated.  Module
 	globals live in dynamicInstVarAt: storage and are read/written
@@ -454,6 +466,10 @@ loadModuleFromPath: pathString name: moduleName
 	moduleInstance
 		@env1:__name__: moduleName;
 		@env1:__package__: packageName.
+	"Record the source path so importlib.reload(module) can re-read it.  Stored
+	in the Phase-A dynamic-instVar store, so Python ``module.__file__'' reads it
+	through ___pyAttrLoad___ like any other module attribute."
+	moduleInstance @env0:dynamicInstVarAt: #'__file__' put: pathString.
 	(pathString endsWith: '__init__.py') ifTrue: [
 		| dirPath |
 		dirPath := pathString copyFrom: 1 to: pathString size - '/__init__.py' size.
@@ -1197,11 +1213,34 @@ invalidate_caches
 category: 'Grail-Built-in Functions'
 method: importlib
 reload: aModule
-	"reload(module) -> module. Clears and reinitializes the module."
-	| moduleClass |
-	moduleClass := aModule @env0:class.
-	moduleClass clearInstance.
-	^ moduleClass instance
+	"``importlib.reload(module)`` — re-read the module's source from its
+	``__file__'' and re-compile it IN PLACE, then re-run the module body on the
+	SAME instance.  Matches CPython: the module object's identity is preserved
+	(so held references and ``sys.modules'' see the new code), and globals
+	removed from the source persist (the body re-executes over the existing
+	namespace rather than clearing it).
+
+	Recompilation reuses ``___buildModuleClass:name:'' (the same path the
+	initial load takes); because ``module subclass:'' re-parents the existing
+	class, this updates the SAME class the live instance points at.  A module
+	with no source path (a native/C-extension or built-in module) is returned
+	unchanged."
+
+	| path name moduleAst |
+	path := aModule @env0:dynamicInstVarAt: #'__file__'.
+	path @env0:isNil ifTrue: [^ aModule].
+	name := (aModule @env1:__name__) @env0:asString.
+	moduleAst := importlib @env0:astForPath: path @env0:asString.
+	moduleAst @env0:name: name.
+	moduleAst @env0:useTempsForBlock: false.
+	moduleAst @env0:setParent: nil.
+	importlib @env0:expandStarImports: moduleAst.
+	importlib @env0:___buildModuleClass: moduleAst name: name.
+	"Re-parenting the class can reset its adopted singleton; re-adopt the live
+	instance so it stays the module's canonical object before re-running body."
+	(aModule @env0:class) @env0:___adoptInstance___: aModule.
+	aModule @env1:initialize.
+	^ aModule
 %
 
 set compile_env: 0

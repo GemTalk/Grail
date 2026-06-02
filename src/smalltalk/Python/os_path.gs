@@ -222,6 +222,15 @@ isabs: path
 
 category: 'Grail-Path Manipulation'
 method: os_path
+getmtime: path
+	"os.path.getmtime(path) — last-modification time in seconds since the epoch.
+	Delegates to os, like the other filesystem queries here."
+
+	^ (os instance) getmtime: path
+%
+
+category: 'Grail-Path Manipulation'
+method: os_path
 normpath: path
 	"os.path.normpath(path) — normalize a pathname."
 

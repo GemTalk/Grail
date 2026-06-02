@@ -1048,6 +1048,19 @@ ___import__: positional kw: kwargs
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___reload__: positional kw: kwargs
+	"Helper builtin behind ``importlib.reload(module)``.  Delegates to the
+	Smalltalk importlib loader's ``reload:'', which re-reads the module's
+	source (``__file__'') and re-compiles it in place.  Named ``__reload__''
+	(two leading + two trailing underscores) so the Python facade's
+	``importlib.reload'' can call it the way ``import_module'' calls
+	``__import__''."
+
+	^ (importlib instance) reload: (positional @env0:at: 1)
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 _input: positional kw: kwargs
 	"Python builtin input([prompt]) — varargs fast path. 0-arg form reads
 	from stdin; 1-arg form writes the prompt to stdout first."

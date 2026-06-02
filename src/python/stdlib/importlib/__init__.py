@@ -28,14 +28,21 @@ def import_module(name, package=None):
     while name and name.startswith('.'):
         name = name[1:]
     parts = name.split('.')
-    mod = __import__(name, globals(), locals(), [parts[-1]])
+    # __import__ ignores the globals/locals args for an absolute import, and
+    # Grail has no locals() builtin, so pass None rather than globals()/locals().
+    mod = __import__(name, None, None, [parts[-1]])
     return mod
 
 
 def reload(module):
-    """``importlib.reload(module)`` — stub: returns the module
-    unchanged.  Grail caches imports forever in this build."""
-    return module
+    """``importlib.reload(module)`` — re-read the module's source and re-compile
+    it in place, preserving the module object's identity (CPython semantics).
+
+    GRAIL: delegates through the ``__reload__`` builtin, which routes to the
+    Smalltalk loader's ``reload:`` (re-parse ``module.__file__`` + recompile the
+    module's class + re-run its body on the same instance).  A module with no
+    ``__file__`` (native/built-in) is returned unchanged."""
+    return __reload__(module)
 
 
 # importlib.util submodule attribute hook
