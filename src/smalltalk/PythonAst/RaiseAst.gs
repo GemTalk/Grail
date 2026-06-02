@@ -78,15 +78,16 @@ printSmalltalkOn: aStream
 	].
 	exc ifNotNil: [
 		(exc isKindOf: CallAst) ifTrue: [
-			"raise ExceptionClass(msg) → ExceptionClass ___signal___: msg"
+			"raise ExceptionClass(*args, **kw) → ExceptionClass ___signalNew___:
+			{args} kw: kwDict — construct with the full arg list, RUNNING any
+			user-defined __init__ (a plain message-only signal skipped __init__
+			and dropped all args past the first), then signal."
 			exc function printSmalltalkWithParenthesisOn: aStream.
-			exc arguments notEmpty ifTrue: [
-				aStream nextPutAll: ' ___signal___: '.
-				exc arguments first printSmalltalkWithParenthesisOn: aStream.
-				aStream nextPut: $..
-			] ifFalse: [
-				aStream nextPutAll: ' @env0:signal.'.
-			].
+			aStream nextPutAll: ' ___signalNew___: '.
+			exc printArgumentsArrayOn: aStream.
+			aStream nextPutAll: ' kw: '.
+			exc printKeywordsDictOn: aStream.
+			aStream nextPut: $..
 		] ifFalse: [
 			"raise expr → expr @env0:signal"
 			exc printSmalltalkWithParenthesisOn: aStream.

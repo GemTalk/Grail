@@ -5520,3 +5520,222 @@ testFlaskServeThreaded
 	self deny: (body indexOfSubCollection: ('tid=', mainTid printString)) > 0
 		description: 'request ran on the main thread, not a worker'
 %
+
+! ===========================================================================
+! Flask-demo round of fixes (errorhandler / url_for / __mro__ / raise-init /
+! collections.abc isinstance / NamedTuple ordering) and the grail_rest_demo
+! REST API that ties them together.  See src/python/grail_rest_demo/.
+! ===========================================================================
+
+category: 'Grail-Tests - flask fixes'
+method: FlaskScaffoldingTestCase
+testErrorHandlerInvoked
+	"@app.errorhandler(404) replaces the default 404 page.  Regression:
+	handler lookup walks ``exc_class.__mro__``, which was unimplemented on
+	class objects -- the resulting AttributeError got re-signalled and
+	masked as UncontinuableError 6011.  Implementing ``Behavior>>__mro__``
+	(read as a value, not a BoundMethod) fixed it."
+
+	| mod r |
+	mod := self loadFixture: 'use_flask_fixes'.
+	r := mod @env1:errorhandler_invoked.
+	self assert: (r @env1:__getitem__: 0) equals: 404.
+	self assert: (r @env1:__getitem__: 1) equals: 'custom-404'
+%
+
+category: 'Grail-Tests - flask fixes'
+method: FlaskScaffoldingTestCase
+testUrlForBuilds
+	"url_for() / Rule.build() build URLs (path segments, the int
+	converter, and a query string from extra kwargs).  Werkzeug's stock
+	builder generates a function via ast.parse()+exec(); Grail replaces it
+	with an interpreted builder that walks the rule trace directly."
+
+	| mod r |
+	mod := self loadFixture: 'use_flask_fixes'.
+	r := mod @env1:url_for_builds.
+	self assert: (r @env1:__getitem__: 0) equals: '/u/bob'.
+	self assert: (r @env1:__getitem__: 1) equals: '/items/42'.
+	self assert: (r @env1:__getitem__: 2) equals: '/'.
+	self assert: (r @env1:__getitem__: 3) equals: '/u/bob?page=2'
+%
+
+category: 'Grail-Tests - flask fixes'
+method: FlaskScaffoldingTestCase
+testClassMroChain
+	"``cls.__mro__`` returns the method resolution order as a tuple
+	beginning with the class itself, then its superclasses."
+
+	| mod r |
+	mod := self loadFixture: 'use_flask_fixes'.
+	r := mod @env1:mro_chain.
+	self assert: (r @env1:__getitem__: 0) equals: 'B'.
+	self assert: (r @env1:__getitem__: 1) equals: 'A'
+%
+
+category: 'Grail-Tests - flask fixes'
+method: FlaskScaffoldingTestCase
+testRaiseRunsInit
+	"``raise Cls(a, b)`` constructs through __init__ (it used to skip
+	__init__ and keep only the first arg).  Both attributes set by the
+	exception's __init__ must be readable on the caught instance."
+
+	| mod r |
+	mod := self loadFixture: 'use_flask_fixes'.
+	r := mod @env1:raise_runs_init.
+	self assert: (r @env1:__getitem__: 0) equals: 42.
+	self assert: (r @env1:__getitem__: 1) equals: 'boom'
+%
+
+category: 'Grail-Tests - flask fixes'
+method: FlaskScaffoldingTestCase
+testAbcIsinstanceRecognizesBuiltins
+	"isinstance against the collections.abc ABCs recognises the builtin
+	concrete types CPython registers as virtual subclasses (dict ->
+	Mapping, list/tuple -> Sequence, ... ; and NOT a false positive like
+	int -> Mapping).  isinstance walks the metaclass chain to reach the
+	inherited ``__instancecheck__`` hook."
+
+	| mod r |
+	mod := self loadFixture: 'use_flask_fixes'.
+	r := mod @env1:abc_isinstance.
+	self assert: (r @env1:__getitem__: 0) equals: true.
+	self assert: (r @env1:__getitem__: 1) equals: true.
+	self assert: (r @env1:__getitem__: 2) equals: true.
+	self assert: (r @env1:__getitem__: 3) equals: true.
+	self assert: (r @env1:__getitem__: 4) equals: false
+%
+
+category: 'Grail-Tests - flask fixes'
+method: FlaskScaffoldingTestCase
+testNamedTupleOrdering
+	"typing.NamedTuple instances compare as the tuple of their values
+	(lexicographic), so they can be sorted -- werkzeug's routing matcher
+	sorts rules by a ``Weighting`` NamedTuple."
+
+	| mod r |
+	mod := self loadFixture: 'use_flask_fixes'.
+	r := mod @env1:namedtuple_ordering.
+	"Point(1,2) < Point(1,3); not Point(1,3) < Point(1,2); (1,2)<=(1,2); ="
+	self assert: (r @env1:__getitem__: 0) equals: true.
+	self assert: (r @env1:__getitem__: 1) equals: false.
+	self assert: (r @env1:__getitem__: 2) equals: true.
+	self assert: (r @env1:__getitem__: 3) equals: true
+%
+
+category: 'Grail-Tests - flask fixes'
+method: FlaskScaffoldingTestCase
+testRestDemoCrudLifecycle
+	"End-to-end CRUD against the grail_rest_demo REST API
+	(src/python/grail_rest_demo) through Flask's in-process test client.
+	Exercises, in one realistic app: routing + the int converter, JSON
+	request bodies (request.get_json) and responses (jsonify), the tuple
+	``(body, status, headers)`` return shape (201 + Location), abort() with
+	@app.errorhandler returning JSON (404 + 400), and url_for (the index's
+	tasks_url).  This is the integration proof for the whole fix round."
+
+	| mod r |
+	mod := self loadFixture: 'use_rest_demo'.
+	r := mod @env1:crud_lifecycle.
+	"create -> 201 with body + Location header built by url_for"
+	self assert: (r @env1:__getitem__: 'create_status') equals: 201.
+	self assert: (r @env1:__getitem__: 'create_id') equals: 1.
+	self assert: (r @env1:__getitem__: 'create_title') equals: 'write demo'.
+	self assert: (r @env1:__getitem__: 'create_location') equals: '/api/tasks/1'.
+	"list / read / update"
+	self assert: (r @env1:__getitem__: 'list_status') equals: 200.
+	self assert: (r @env1:__getitem__: 'list_count') equals: 1.
+	self assert: (r @env1:__getitem__: 'get_status') equals: 200.
+	self assert: (r @env1:__getitem__: 'get_title') equals: 'write demo'.
+	self assert: (r @env1:__getitem__: 'put_status') equals: 200.
+	self assert: (r @env1:__getitem__: 'put_done') equals: true.
+	"error paths via @app.errorhandler -> JSON"
+	self assert: (r @env1:__getitem__: 'missing_status') equals: 404.
+	self assert: (r @env1:__getitem__: 'missing_error') equals: 'not found'.
+	self assert: (r @env1:__getitem__: 'bad_status') equals: 400.
+	self assert: (r @env1:__getitem__: 'bad_error') equals: 'bad request'.
+	"delete -> 204, then gone -> 404"
+	self assert: (r @env1:__getitem__: 'delete_status') equals: 204.
+	self assert: (r @env1:__getitem__: 'after_delete_status') equals: 404.
+	"index links to the collection via url_for"
+	self assert: (r @env1:__getitem__: 'index_tasks_url') equals: '/api/tasks'
+%
+
+category: 'Grail-Tests - flask fixes'
+method: FlaskScaffoldingTestCase
+testReprEscapesControlChars
+	"``repr(str)`` escapes newline/tab/carriage-return like CPython.
+	jinja2's compiler embeds template literals via repr(), so a multi-line
+	template only compiles to valid Python when the embedded newlines are
+	escaped -- otherwise the generated ``yield 'line1<NL>line2''' is an
+	unterminated string literal the tokenizer rejects.  This is what makes
+	the multi-line HTML templates in the demo's UI renderable."
+
+	| mod r |
+	mod := self loadFixture: 'use_flask_fixes'.
+	r := mod @env1:repr_escapes_control_chars.
+	self assert: (r @env1:__getitem__: 0) equals: true.
+	self assert: (r @env1:__getitem__: 1) equals: true.
+	self assert: (r @env1:__getitem__: 2) equals: true.
+	self assert: (r @env1:__getitem__: 3) equals: true
+%
+
+category: 'Grail-Tests - flask'
+method: FlaskScaffoldingTestCase
+testRestDemoHtmlUi
+	"The grail_rest_demo also serves a server-rendered HTML UI with plain
+	HTML forms (create/toggle/edit/delete), over the SAME store as the REST
+	API.  Drives it like a browser through the test client: GET the list
+	page, POST forms, follow the POST/redirect/GET pattern, and read results
+	back through /api/tasks to prove both views share one store.  Exercises
+	multi-line Jinja templates (render_template_string), request.form, Jinja
+	auto-escaping of titles, and url_for inside templates."
+
+	| mod r |
+	mod := self loadFixture: 'use_rest_demo'.
+	r := mod @env1:html_ui_flow.
+	"empty list page renders with the prompt"
+	self assert: (r @env1:__getitem__: 'empty_status') equals: 200.
+	self assert: (r @env1:__getitem__: 'empty_prompt') equals: true.
+	"create via form POST redirects, and the task then shows on the page"
+	self assert: (r @env1:__getitem__: 'create_status') equals: 302.
+	self assert: (r @env1:__getitem__: 'create_redirects') equals: true.
+	self assert: (r @env1:__getitem__: 'list_shows_task') equals: true.
+	"a title with HTML metacharacters is escaped, not injected"
+	self assert: (r @env1:__getitem__: 'title_escaped') equals: true.
+	"the UI and the JSON API see the same two tasks"
+	self assert: (r @env1:__getitem__: 'api_count') equals: 2.
+	"toggle done via form POST"
+	self assert: (r @env1:__getitem__: 'toggled_done') equals: true.
+	"edit form is pre-filled (GET) and applies on POST"
+	self assert: (r @env1:__getitem__: 'edit_status') equals: 200.
+	self assert: (r @env1:__getitem__: 'edit_prefilled') equals: true.
+	self assert: (r @env1:__getitem__: 'edited_title') equals: 'buy oat milk'.
+	"delete via form POST removes it (one of the two remains)"
+	self assert: (r @env1:__getitem__: 'after_delete_count') equals: 1
+%
+
+category: 'Grail-Tests - flask'
+method: FlaskScaffoldingTestCase
+testRestDemoServingOverSocket
+	"Serve the demo over a REAL TCP socket the way ``main()`` does -- the
+	single-threaded dev server with CloseAfterResponseHandler -- and drive
+	the browser path over actual HTTP: GET / renders the multi-line Jinja
+	list page (with url_for), a form POST to /tasks creates a task and
+	redirects (302), and GET / then shows it.  The requests carry NO
+	``Connection: close'' (browser-style HTTP/1.1 keep-alive); the handler
+	serves one request per connection and closes, so the client's read
+	completing -- and the GET / response advertising ``Connection: close'' --
+	proves a kept-alive connection can't park the single-threaded server.
+	Served single-threaded on purpose: Grail runs Jinja templates in forked
+	green threads the threaded server's per-request context can't span."
+
+	| mod r |
+	mod := self loadFixture: 'use_rest_demo'.
+	r := mod @env1:serving_over_socket.
+	self assert: ((r @env1:__getitem__: 'get_status') @env0:indexOfSubCollection: '200 OK') @env0:> 0.
+	self assert: (r @env1:__getitem__: 'empty_prompt') equals: true.
+	self assert: (r @env1:__getitem__: 'closes_connection') equals: true.
+	self assert: ((r @env1:__getitem__: 'post_status') @env0:indexOfSubCollection: '302') @env0:> 0.
+	self assert: (r @env1:__getitem__: 'shows_after_post') equals: true
+%

@@ -831,7 +831,16 @@ ___isInstanceSingle___: anObject of: aClass
 	result := anObject @env0:isKindOf: aClass.
 	result ifFalse: [
 		theMetaclass := aClass @env0:class.
-		(theMetaclass @env0:includesSelector: #'__instancecheck__:' environmentId: 1) ifTrue: [
+		"Walk the metaclass chain (not just the own method dict) for
+		``__instancecheck__:'' — ABCs define it once on a base
+		(``numbers.Number'', ``collections.abc._ABCStub'') and the
+		concrete ABC names inherit it.  An own-dict-only check
+		(``includesSelector:'') misses ``isinstance(x, numbers.Integral)''
+		and every ``isinstance(x, collections.abc.Mapping/Sequence/...)''
+		because those classes carry the method only by inheritance.
+		Matches CPython, where the hook lives on the (shared) metaclass
+		``type(cls).__instancecheck__''."
+		((theMetaclass @env0:whichClassIncludesSelector: #'__instancecheck__:' environmentId: 1) notNil) ifTrue: [
 			result := aClass __instancecheck__: anObject
 		]
 	].

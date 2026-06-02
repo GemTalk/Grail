@@ -1,3 +1,4 @@
+iferr 1 stk
 login
 run
 | args dashDashOfs haveDashD priorTranscript |

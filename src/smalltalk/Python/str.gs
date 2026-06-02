@@ -444,16 +444,31 @@ __repr__
 	self @env0:do: [:char |
 		| cp |
 		cp := char @env0:codePoint.
-		(cp == 39) ifTrue: [  "apostrophe"
+		(cp == 39) ifTrue: [  "apostrophe -> \'"
 			stream @env0:nextPutAll: '\'.
 			stream @env0:nextPut: $'.
+		] ifFalse: [ (cp == 92) ifTrue: [  "backslash -> \\"
+			stream @env0:nextPutAll: '\\'.
+		] ifFalse: [ (cp == 10) ifTrue: [  "newline -> \n"
+			stream @env0:nextPutAll: '\n'.
+		] ifFalse: [ (cp == 13) ifTrue: [  "carriage return -> \r"
+			stream @env0:nextPutAll: '\r'.
+		] ifFalse: [ (cp == 9) ifTrue: [  "tab -> \t"
+			stream @env0:nextPutAll: '\t'.
+		] ifFalse: [ ((cp @env0:< 32) or: [cp == 127]) ifTrue: [
+			"other non-printable control char -> \xNN (CPython does the
+			same).  Load-bearing: jinja2's compiler embeds template
+			literals via repr(); without escaping the embedded newlines a
+			multi-line template compiles to ``yield 'line1<NL>line2''' --
+			an unterminated string literal that the tokenizer rejects."
+			| hex |
+			hex := (cp @env0:printString: 16) @env0:asLowercase.
+			stream @env0:nextPutAll: '\x'.
+			((hex @env0:size) @env0:< 2) ifTrue: [ stream @env0:nextPut: $0 ].
+			stream @env0:nextPutAll: hex.
 		] ifFalse: [
-			(cp == 92) ifTrue: [  "backslash"
-				stream @env0:nextPutAll: '\\'.
-			] ifFalse: [
-				stream @env0:nextPut: char.
-			]
-		]
+			stream @env0:nextPut: char.
+		]]]]]]
 	].
 	stream @env0:nextPut: $'.
 	^ stream @env0:contents

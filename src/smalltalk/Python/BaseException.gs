@@ -106,6 +106,59 @@ ___signal___: message
 	instance ___signal___: message.
 %
 
+set compile_env: 0
+category: 'Grail-Initialization'
+classmethod: BaseException
+___hasUserInit___
+	"True if this class defines its OWN Python __init__ (any arity) somewhere
+	below BaseException — i.e. a user-defined exception (or a library one like
+	werkzeug's HTTPException/BuildError) that must run __init__ when raised.
+	Built-in exceptions inherit BaseException's __init__ and return false."
+
+	| c |
+	c := self.
+	[c notNil and: [c ~~ BaseException]] whileTrue: [
+		| md |
+		md := c methodDictForEnv: 1.
+		((md includesKey: #'__init__')
+			or: [(md includesKey: #'__init__:')
+			or: [(md includesKey: #'__init__:_:')
+			or: [(md includesKey: #'__init__:_:_:')
+			or: [md includesKey: #'___init__:kw:']]]])
+				ifTrue: [^ true].
+		c := c superclass.
+	].
+	^ false
+%
+set compile_env: 1
+
+category: 'Grail-Initialization'
+classmethod: BaseException
+___signalNew___: positional kw: kwargs
+	"``raise Cls(*positional, **kwargs)`` — construct with the FULL args tuple,
+	run any user-defined __init__ (the plain ___signal___: path skips __init__
+	and keeps only the first arg), then signal.  Built-in exceptions inherit
+	BaseException's __init__ so they skip the __init__ call but still receive
+	the complete args tuple."
+
+	| instance |
+	instance := self ___new___.
+	instance ___args___: positional.
+	(self @env0:___hasUserInit___) ifTrue: [
+		(instance ___pyAttrLoad___: #'__init__') value: positional value: kwargs
+	].
+	"Signal WITH a message so GemStone's ``messageText'' / ``description''
+	carry it -- the old ___signal___: path set this, and a bare ``signal''
+	would leave it nil (``ValueError(''x'') description'' would drop the
+	''x'').  Use the first positional argument, exactly as the old path
+	did: it's the conventional exception message and avoids invoking the
+	exception's ``__str__'', which can touch attributes a user __init__
+	hasn't set (e.g. itsdangerous BadData.__str__ reading self.message)
+	and would raise the WRONG exception out of a raise."
+	^ instance ___signal___:
+		((positional @env0:isEmpty) ifTrue: [''] ifFalse: [positional @env0:at: 1])
+%
+
 category: 'Grail-Private'
 method: BaseException
 ___args___: anArray

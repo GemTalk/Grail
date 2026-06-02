@@ -86,6 +86,37 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 		options: #()
 %
 
+category: 'Grail-Reflection'
+method: Behavior
+__mro__
+	"Python ``cls.__mro__'': the method resolution order, as a tuple
+	beginning with the receiver class and walking up the superclass
+	chain.  Single inheritance is the simple chain — correct for the
+	exception hierarchy, which is where flask consults
+	``exc_class.__mro__'' during error-handler lookup
+	(``for cls in exc_class.__mro__: handler_map.get(cls)'').
+
+	The chain runs up through the GemStone-internal ancestors to
+	Object; that's harmless for identity-keyed handler maps because
+	those internal classes are never registered as handler keys.  It is
+	NOT a full C3 linearization — multiple inheritance would need the
+	merge — but no exception class uses MI, and the only consumers
+	today walk the chain looking for an identity match.
+
+	Read as a *value* (not wrapped as a BoundMethod) because
+	``___pyAttrLoad___:'' lists ``__mro__'' among the class-level
+	dunders that always resolve to their value."
+
+	| result c |
+	result := OrderedCollection @env0:new.
+	c := self.
+	[c @env0:== nil] whileFalse: [
+		result @env0:add: c.
+		c := c @env0:superclass.
+	].
+	^ Array @env0:withAll: result
+%
+
 category: 'Grail-Class Compilation'
 method: Behavior
 ___compileMethod: aSource category: aCategory

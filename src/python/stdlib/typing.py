@@ -176,6 +176,36 @@ class NamedTuple:
     def __len__(self):
         return len(self._values)
 
+    # Rich comparison: a NamedTuple compares as the tuple of its values
+    # (CPython inherits tuple's lexicographic ordering).  Grail's base
+    # Object only stubs these, so without delegating here a sort of
+    # NamedTuple instances raises "Not yet implemented: __lt__".  This is
+    # load-bearing for werkzeug's routing matcher, which sorts rules by a
+    # ``Weighting`` NamedTuple.
+    def _cmp_other(self, other):
+        # Compare against another NamedTuple's values, or a raw sequence.
+        if isinstance(other, NamedTuple):
+            return other._values
+        return other
+
+    def __eq__(self, other):
+        return self._values == self._cmp_other(other)
+
+    def __ne__(self, other):
+        return self._values != self._cmp_other(other)
+
+    def __lt__(self, other):
+        return self._values < self._cmp_other(other)
+
+    def __le__(self, other):
+        return self._values <= self._cmp_other(other)
+
+    def __gt__(self, other):
+        return self._values > self._cmp_other(other)
+
+    def __ge__(self, other):
+        return self._values >= self._cmp_other(other)
+
 
 class TypedDict:
     """Stand-in TypedDict — same shape as NamedTuple above."""

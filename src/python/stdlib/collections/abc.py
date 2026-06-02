@@ -47,6 +47,36 @@ class _ABCStub:
     def __subclasshook__(self, cls):
         return NotImplemented
 
+    @classmethod
+    def __instancecheck__(cls, instance):
+        """Recognise the builtin concrete types CPython registers as
+        virtual subclasses of these ABCs.  Grail keeps no ABC registry,
+        so ``isinstance(x, collections.abc.Mapping)`` (and friends) would
+        otherwise always be False -- which silently breaks any library
+        that branches on it (e.g. Werkzeug's ``iter_multi_items``, which
+        treats a dict as a mapping of items rather than iterating its
+        keys and losing the values).  ``isinstance`` in builtins.gs walks
+        the metaclass chain to reach this inherited hook.  Keyed off the
+        ABC's own name so one method covers every exported stub; unlisted
+        ABCs keep the old "always False" behaviour."""
+        name = cls.__name__
+        if name == "Mapping" or name == "MutableMapping":
+            return isinstance(instance, dict)
+        if name == "Sequence" or name == "MutableSequence" or name == "Reversible":
+            return isinstance(instance, (list, tuple, str, bytes, bytearray))
+        if name == "Set" or name == "MutableSet":
+            return isinstance(instance, (set, frozenset))
+        if (
+            name == "Iterable"
+            or name == "Container"
+            or name == "Collection"
+            or name == "Sized"
+        ):
+            return isinstance(
+                instance, (list, tuple, dict, set, frozenset, str, bytes, bytearray)
+            )
+        return False
+
 
 # Each ABC is exposed as a CLASS (not an instance) so user code can
 # both isinstance-check against it AND subclass it.  Werkzeug's

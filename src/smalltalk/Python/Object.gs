@@ -594,7 +594,7 @@ ___pyAttrLoad___: aSym
 		on any class would wrap the inherited Behavior-side getter
 		and break visitor dispatch
 		(``getattr(self, 'visit_' + type(node).__name__)``)."
-		((s @env0:= '__name__' or: [s @env0:= '__module__' or: [s @env0:= '__qualname__']])
+		((s @env0:= '__name__' or: [s @env0:= '__module__' or: [s @env0:= '__qualname__' or: [s @env0:= '__mro__']]])
 			and: [(self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil])
 				ifTrue: [^ self @env0:perform: aSym env: 1].
 		"Setter-paired class-level accessor on a Python user class —

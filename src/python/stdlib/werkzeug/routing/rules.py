@@ -727,18 +727,68 @@ class Rule(RuleFactory):
             rule = re.sub("/{2,}?", "/", self.rule)
         self._parts.extend(self._parse_rule(rule))
 
-        # Grail-patched: ast.parse() isn't implemented yet, so
-        # _compile_builder (which generates a builder function via AST)
-        # can't run.  Stub _build / _build_unknown so route MATCHING
-        # still works (which doesn't use them); url_for() / build()
-        # raise on first use.  See TODO.md "url_for() / Rule.build()".
-        def _builder_unavailable(*args, **kwargs):
-            raise NotImplementedError(
-                "Rule.build() / url_for() require ast.parse(),"
-                " which isn't implemented in Grail yet"
-            )
-        self._build: t.Callable[..., tuple[str, str]] = _builder_unavailable
-        self._build_unknown: t.Callable[..., tuple[str, str]] = _builder_unavailable
+        # Grail-patched: werkzeug's stock _compile_builder generates a
+        # builder *function* via ast.parse()+exec() (turning self._trace
+        # into Python source, then compiling it).  Grail doesn't support
+        # that codegen path, so instead of stubbing url_for() out we
+        # supply an INTERPRETED builder that walks self._trace at call
+        # time and produces the same (domain, url) pair the generated
+        # function would.  Route matching never used these; now building
+        # works too.  See TODO.md "url_for() / Rule.build()".
+        #
+        # Semantics mirrored from _compile_builder:
+        #   * "|" in the trace separates the domain ops from the path ops.
+        #   * static segments are percent-quoted with the path-safe set.
+        #   * dynamic segments resolve their value from the supplied
+        #     mapping, falling back to a configured default; the matching
+        #     converter's to_url() renders it.  A missing required value
+        #     raises ValidationError so Rule.build() returns None (and
+        #     url_for() reports a BuildError), matching upstream.
+        #   * when append_unknown is set, leftover keys (neither a path
+        #     variable nor a default) are encoded onto the query string.
+        defaults = self.defaults or {}
+
+        def _grail_build(append_unknown, values):
+            domain_parts = []
+            url_parts = []
+            target = domain_parts
+            for is_dynamic, data in self._trace:
+                if data == "|" and target is domain_parts:
+                    target = url_parts
+                    continue
+                if not is_dynamic:
+                    target.append(quote(data, safe="!$&'()*+,/:;=@"))
+                    continue
+                if data in values and values[data] is not None:
+                    value = values[data]
+                elif data in defaults:
+                    value = defaults[data]
+                else:
+                    raise ValidationError()
+                target.append(self._converters[data].to_url(value))
+            domain = "".join(domain_parts)
+            url = "".join(url_parts)
+            if append_unknown:
+                # Leftover keys (neither a path variable nor a default)
+                # become the query string, via werkzeug's own encoder --
+                # the same call the generated builder made.
+                leftover = {}
+                for key in values:
+                    if key not in self._converters and key not in defaults:
+                        leftover[key] = values[key]
+                params = self._encode_query_vars(leftover)
+                if params:
+                    url = url + "?" + params
+            return (domain, url)
+
+        def _build(**kwargs):
+            return _grail_build(False, kwargs)
+
+        def _build_unknown(**kwargs):
+            return _grail_build(True, kwargs)
+
+        self._build: t.Callable[..., tuple[str, str]] = _build
+        self._build_unknown: t.Callable[..., tuple[str, str]] = _build_unknown
 
     @staticmethod
     def _get_func_code(code: CodeType, name: str) -> t.Callable[..., tuple[str, str]]:
