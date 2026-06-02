@@ -661,10 +661,12 @@ Transcript show: 'Forward references created for PythonTests dictionary'.
 ! ------------------- Forward references for EmbeddedPython dictionary
 run
 (System myUserProfile symbolList objectNamed: #'EmbeddedPython')
+	at: #'CPythonObjectForwarder' put: nil;
 	at: #'CPythonException' put: nil;
 	at: #'CPythonLibrary' put: nil;
 	at: #'CPythonObject' put: nil;
 	at: #'CPythonRepl' put: nil;
+	at: #'EmbeddedExtensionModule' put: nil;
 	at: #'PythonReplicator' put: nil;
 	at: #'PythonStore' put: nil;
 	yourself.
@@ -676,7 +678,9 @@ run
 (System myUserProfile symbolList objectNamed: #'EmbeddedPythonTests')
 	at: #'CPythonTestCase' put: nil;
 	at: #'CPythonLibraryTestCase' put: nil;
+	at: #'CPythonObjectForwarderTestCase' put: nil;
 	at: #'CPythonReplTestCase' put: nil;
+	at: #'EmbeddedExtensionModuleTestCase' put: nil;
 	at: #'PythonStoreTestCase' put: nil;
 	yourself.
 Transcript show: 'Forward references created for EmbeddedPythonTests dictionary'.
@@ -789,6 +793,8 @@ input src/smalltalk/EmbeddedPython/CPythonObject.gs
 input src/smalltalk/EmbeddedPython/CPythonRepl.gs
 input src/smalltalk/EmbeddedPython/PythonReplicator.gs
 input src/smalltalk/EmbeddedPython/PythonStore.gs
+input src/smalltalk/EmbeddedPython/CPythonObjectForwarder.gs
+input src/smalltalk/EmbeddedPython/EmbeddedExtensionModule.gs
 input src/smalltalk/Python/ShimStatisticsModule.gs
 input src/smalltalk/Python/ShimBisectModule.gs
 input src/smalltalk/Python/ShimCrc32cModule.gs
@@ -1169,7 +1175,9 @@ input src/smalltalk/PythonTests/HtmlTestCase.gs
 input src/smalltalk/PythonTests/CPythonShimTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/CPythonTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/CPythonLibraryTestCase.gs
+input src/smalltalk/EmbeddedPythonTests/CPythonObjectForwarderTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/CPythonReplTestCase.gs
+input src/smalltalk/EmbeddedPythonTests/EmbeddedExtensionModuleTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/PythonStoreTestCase.gs
 input src/smalltalk/PythonTests/ImportlibTestCase.gs
 input src/smalltalk/PythonTests/PackageImportTestCase.gs
@@ -1404,13 +1412,11 @@ importlib grailDir: (System gemEnvironmentVariable: 'GRAIL_DIR').
 importlib registerModule: '_weakref' with: _weakref ___instance___.
 libPath := System gemEnvironmentVariable:'SHIM_LIB_PATH'.
 (libPath notNil and: [libPath notEmpty]) ifTrue: [
+	"Only record the path (CPythonShim isConfigured then holds).  The shim
+	and embedded backend coexist in one image, chosen per gem; registering
+	the shim's built-ins here would force it image-wide, so they resolve
+	lazily instead (see CPythonShim>>builtinModuleNamed:)."
 	CPythonShim libraryPath: libPath .
-	System loadUserActionLibrary: libPath .
-	importlib registerModule: '_statistics' with: _statistics ___instance___.
-	importlib registerModule: '_bisect' with: _bisect ___instance___.
-	importlib registerModule: '_crc32c' with: _crc32c ___instance___.
-	importlib registerModule: '_shimtest' with: _shimtest ___instance___.
-	importlib registerModule: '_sre' with: _sre ___instance___.
 ].
 pyPath := System gemEnvironmentVariable:'PYTHON_LIB_PATH' .
 (pyPath notNil and: [pyPath notEmpty]) ifTrue: [

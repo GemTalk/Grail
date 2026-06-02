@@ -26,6 +26,25 @@ PythonReplicator category: 'CPython'
 removeallmethods PythonReplicator
 removeallclassmethods PythonReplicator
 ! ------------------- Class methods for PythonReplicator
+category: 'Forwarder Cache'
+classmethod: PythonReplicator
+forwarderCache
+
+	^ SessionTemps current
+		at: #PythonReplicatorForwarderCache
+		ifAbsentPut: [Dictionary new]
+%
+category: 'Forwarder Cache'
+classmethod: PythonReplicator
+forwarderFor: aCPythonObject
+	"Per-session cache keyed on PyObject* memoryAddress."
+
+	^ self forwarderCache
+		at: aCPythonObject pointer memoryAddress
+		ifAbsentPut: [
+			CPythonObjectForwarder forCpythonObject:
+				(CPythonObject fromBorrowedReference: aCPythonObject pointer)]
+%
 ! ------------------- Instance methods for PythonReplicator
 category: 'Private'
 method: PythonReplicator
@@ -35,6 +54,15 @@ gemStoneScalarToPython: anObject ifNotScalar: aBlock
 	(anObject isKindOf: Integer) ifTrue: [ ^ CPythonObject fromInteger: anObject ].
 	(anObject isKindOf: Float) ifTrue: [ ^ CPythonObject fromFloat: anObject ].
 	(anObject isKindOf: CharacterCollection) ifTrue: [ ^ CPythonObject fromString: anObject ].
+	(anObject isKindOf: CPythonObjectForwarder) ifTrue: [
+		"Re-wrap as a new reference so the caller's release walk
+		doesn't DecRef the cache's canonical handle."
+		^ CPythonObject fromBorrowedReference: anObject cpythonObject pointer
+	].
+	"PEP 357: unbox via env-1 __index__."
+	((anObject class methodDictForEnv: 1) includesKey: #'__index__') ifTrue: [
+		^ CPythonObject fromInteger: (anObject @env1:__index__)
+	].
 	^ aBlock value
 %
 category: 'GemStone to Python'
@@ -43,6 +71,7 @@ gemStoneToPython: anObject
 
 	| localMap rootPyObj rootPointer |
 	anObject ifNil: [ ^ CPythonObject none ].
+	(anObject isKindOf: NoneType) ifTrue: [ ^ CPythonObject none ].
 
 	localMap := IdentityDictionary new. " GemStone object -> CPythonObject "
 	self gemStoneToPython: anObject map: localMap.
@@ -62,9 +91,10 @@ method: PythonReplicator
 gemStoneToPython: anObject map: pyObjectsByGsObject
 
 	anObject ifNil: [ ^ CPythonObject none ].
+	(anObject isKindOf: NoneType) ifTrue: [ ^ CPythonObject none ].
 	pyObjectsByGsObject at: anObject ifPresent: [ :pyObj | ^ pyObj ].
 
-	(anObject isKindOf: Dictionary) ifTrue: [
+	(anObject isKindOf: AbstractDictionary) ifTrue: [
 		^ self gemStoneToPythonDict: anObject map: pyObjectsByGsObject
 	].
 	(anObject isKindOf: OrderedCollection) ifTrue: [
@@ -125,7 +155,7 @@ category: 'Private'
 method: PythonReplicator
 pythonScalarToGemStone: aCPythonObject typeName: typeName ifNotScalar: aBlock
 
-	typeName = 'NoneType' ifTrue: [ ^ nil ].
+	typeName = 'NoneType' ifTrue: [ ^ NoneType ___instance___ ].
 	typeName = 'bool' ifTrue: [ ^ aCPythonObject asBool ].
 	typeName = 'int' ifTrue: [ ^ aCPythonObject asInteger ].
 	typeName = 'float' ifTrue: [ ^ aCPythonObject asFloat ].
@@ -159,7 +189,7 @@ pythonToGemStone: aCPythonObject map: gsObjectsByPyAddress
 
 	^ gsObjectsByPyAddress at: address put:
 		(self pythonScalarToGemStone: aCPythonObject typeName: typeName
-			ifNotScalar: [ Error signal: 'Cannot replicate Python type ' , typeName ])
+			ifNotScalar: [ PythonReplicator forwarderFor: aCPythonObject ])
 %
 category: 'Private'
 method: PythonReplicator
@@ -167,7 +197,7 @@ pythonToGemStoneDict: aCPythonObject map: aMap
 
 	| address gsDict pyKeys |
 	address := aCPythonObject pointer memoryAddress.
-	gsDict := Dictionary new.
+	gsDict := KeyValueDictionary new.
 	aMap at: address put: gsDict.
 	pyKeys := aCPythonObject dictKeys.
 	[

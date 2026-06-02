@@ -9,7 +9,7 @@ Object subclass: 'CPythonLibrary'
   classInstVars: #( libraryPath pythonHomePath pythonPackagePath)
   poolDictionaries: #()
   inDictionary: EmbeddedPython
-  options: #()
+  options: #( instancesNonPersistent )
 
 %
 expectvalue /Class
@@ -49,6 +49,13 @@ classmethod: CPythonLibrary
 isActive
 
 	^ (SessionTemps current at: #CPythonLibrary ifAbsent: [ nil ]) notNil
+%
+category: 'Grail-Testing'
+classmethod: CPythonLibrary
+isConfigured
+	"True if libpython was located at install time (PYTHON_LIB_PATH set)."
+
+	^ libraryPath notNil
 %
 category: 'Grail-Private'
 classmethod: CPythonLibrary
@@ -215,6 +222,13 @@ category: 'Grail-Initialization'
 method: CPythonLibrary
 initialize
 
+	"The embedded interpreter and the shim cannot coexist in one gem:
+	initializing CPython while the shim's C state is already live crashes
+	the process. Fail with a catchable Smalltalk error instead.
+	CPythonShim >> ensureLoaded is the guard in the other direction."
+	CPythonShim isActive ifTrue: [
+		self error: 'Cannot use CPythonLibrary: CPythonShim is already active in this session.'.
+	].
 	library := CLibrary named: self class libraryPath.
 	callouts := KeyValueDictionary new.
 	self initializePython.

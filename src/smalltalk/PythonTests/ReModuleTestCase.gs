@@ -85,7 +85,10 @@ testCompileReturnsPattern
 	| pat |
 	pat := re @env1:compile: 'abc'.
 	self assert: pat notNil.
-	self assert: pat class name equals: #'SrePattern'.
+	self assert: (pat @env1:groups) equals: 0.
+	CPythonShim isConfigured ifTrue: [
+		self assert: pat class name equals: #'SrePattern'
+	]
 %
 
 category: 'Grail-Tests - Match'
@@ -299,9 +302,11 @@ category: 'Grail-Tests - sub with templates'
 method: ReModuleTestCase
 testSubCallableRepl
 	"Replacement can be any callable that takes a Match and returns
-	a string.  Grail blocks (ExecBlock) and BoundMethods both qualify."
+	a string.  Grail blocks (ExecBlock) and BoundMethods both qualify.
+	Skipped under embedded: needs Python-to-Grail callback support."
 
 	| result |
+	CPythonShim isConfigured ifFalse: [^ self].
 	result := re @env1:sub: '\d+'
 		_: [:m | (m @env1:group: 0) , '!']
 		_: 'a1 b22'.

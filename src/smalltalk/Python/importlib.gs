@@ -1124,7 +1124,21 @@ ___import__: positional kw: kwargs
 			filePath := self @env0:class ___moduleNameToSoPath___: absoluteName.
 			filePath notNil ifTrue: [
 				result := self @env0:class @env0:loadDynamicModuleNamed: absoluteName fromPath: filePath.
-			] ifFalse: [
+			].
+			"Shim's built-in C-extension stand-ins (_sre, _statistics, ...),
+			resolved lazily and only when the shim is this session's backend."
+			(result @env0:isNil and: [CPythonShim @env0:isImportBackend]) ifTrue: [
+				result := CPythonShim @env0:builtinModuleNamed: absoluteName.
+				result @env0:notNil ifTrue: [
+					self @env0:class @env0:registerModule: absoluteName with: result.
+				].
+			].
+			"Embedded interpreter, when it is this session's backend."
+			(result @env0:isNil and: [EmbeddedExtensionModule @env0:isImportBackend]) ifTrue: [
+				result := EmbeddedExtensionModule @env0:importByName: absoluteName.
+				self @env0:class @env0:registerModule: absoluteName with: result.
+			].
+			result ifNil: [
 				"Module not found in filesystem either"
 				ModuleNotFoundError ___signal___: (('No module named ''' @env0:, absoluteName) @env0:, '''')
 			]

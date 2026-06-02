@@ -312,7 +312,7 @@ testNoneRoundTrip
 	obj := self pyNone.
 	pythonStore at: 'x' put: obj.
 
-	self assert: (pythonStore rawAt: 'x') isNil.
+	self assert: (pythonStore rawAt: 'x') == None.
 	result := self track: (pythonStore at: 'x').
 	self assert: result typeName equals: 'NoneType'.
 %

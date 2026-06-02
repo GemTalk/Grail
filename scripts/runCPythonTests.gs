@@ -19,6 +19,9 @@ libPath := [CPythonLibrary libraryPath] on: Error do: [:ex |
     Transcript show: 'CPythonTestCase: skipped (library not found at ', libPath printString, ')'.
     ExitClientError signal: 'Skipped' status: 0.
 ].
+"Select the embedded CPython backend for this session, before any C
+extension is imported."
+EmbeddedExtensionModule useAsImportBackend.
 result := CPythonTestCase suite run.
 result hasPassed ifTrue: [
     Transcript show: result printString; cr.

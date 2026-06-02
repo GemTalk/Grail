@@ -116,6 +116,53 @@ isActive
 
 	^ current notNil
 %
+category: 'Grail-Testing'
+classmethod: CPythonShim
+isConfigured
+	"True if the shim was built at install time (SHIM_LIB_PATH set)."
+
+	^ libraryPath notNil
+%
+
+category: 'Grail-Testing'
+classmethod: CPythonShim
+isImportBackend
+	"True when the shim is configured and the embedded backend has not been
+	selected for this gem (see EmbeddedExtensionModule>>isImportBackend)."
+
+	^ self isConfigured and: [EmbeddedExtensionModule isImportBackend not]
+%
+
+category: 'Grail-Backend Selection'
+classmethod: CPythonShim
+useAsImportBackend
+	"Select the CPython shim as this session's import backend.  This is the
+	default when the shim is configured, so it is only needed to override a
+	prior #useAsImportBackend choice within the same gem."
+
+	SessionTemps current at: #'grailImportBackend' put: #'shim'.
+%
+
+category: 'Grail-Loading'
+classmethod: CPythonShim
+builtinModuleNames
+	"Names of the shim's pure-Smalltalk stand-ins for CPython C extensions."
+
+	^ #( #'_sre' #'_statistics' #'_bisect' #'_crc32c' #'_shimtest' )
+%
+
+category: 'Grail-Loading'
+classmethod: CPythonShim
+builtinModuleNamed: aName
+	"Return the shim built-in module singleton for aName, or nil for any
+	other name.  importlib resolves these lazily on first import, only when
+	the shim is this session's backend."
+
+	| sym |
+	sym := aName asSymbol.
+	(self builtinModuleNames includes: sym) ifFalse: [^ nil].
+	^ (Python at: sym) ___instance___
+%
 
 category: 'Grail-Loading'
 classmethod: CPythonShim

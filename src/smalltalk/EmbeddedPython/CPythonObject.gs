@@ -9,7 +9,7 @@ Object subclass: 'CPythonObject'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: EmbeddedPython
-  options: #()
+  options: #( instancesNonPersistent )
 
 %
 expectvalue /Class
