@@ -1,28 +1,35 @@
 ! ===============================================================================
 ! WeakReference.gs — Smalltalk-native weak-reference layer for Grail, built on
-! GemStone ephemerons.
+! GemStone ephemerons, made commit-safe with a dbTransient holder split.
 !
-! Each "weak holder" sets `beEphemeron: true`; its first instVar is the key
-! (referent). When mark-sweep finds the key is reachable only through
-! ephemerons, the GC fires the ephemeron — synchronously clearing the bit and
-! queueing the object for #mourn on a high-priority finalization process.
-! Liveness is reported through an explicit `dead` flag (so the answer is
-! correct even when the first instVar is an immediate, where the bit is a
-! no-op). The Python `weakref` module will delegate to these:
+! Two-class structure to keep the ephemeron off the commit path:
 !
-!     weakref.ref                 -> WeakReference
-!     weakref.proxy               -> WeakProxy
-!     weakref.WeakValueDictionary -> WeakValueDictionary
-!     weakref.WeakKeyDictionary   -> WeakKeyDictionary
-!     weakref.WeakSet             -> WeakSet
-!     weakref.finalize            -> Finalizer
+!   WeakReference         — regular class, persists normally. Holds
+!                           (holder, hashCache). hashCache is a SmallInteger
+!                           frozen from the referent's hash at creation, so a
+!                           ref keeps a stable hash even after its referent
+!                           dies (matching CPython).
+!
+!   WeakReferenceHolder   — dbTransient. Holds the ephemeron state
+!                           (referent, callback, dead). `beEphemeron: true`
+!                           is set on the holder, not the WeakReference. When
+!                           a WeakReference is committed, the *reference* to
+!                           the holder persists by identity but the holder's
+!                           own instVars are not written; after read-back the
+!                           ref reports dead (referent == nil) while keeping
+!                           its frozen hash — the same semantics CPython gives
+!                           weakrefs across pickle.
+!
+! Ephemeron firing: GC fires the holder, the bit clears synchronously and
+! the holder is queued for #mourn. #mourn flips dead first (so a callback
+! observes ref() == None), then runs the user callback wrapped to receive
+! the *outer* WeakReference, then nils referent + callback.
 !
 ! Constraints inherited from ephemerons (kernel docs on Object>>beEphemeron:):
-!   - Transient only — the bit silently clears on commit.
-!   - The bit has no effect if the first instVar is a special (immediate) or
-!     committed object. The Python layer rejects such referents with TypeError
-!     up front; here we still construct the holder and treat it as permanently
-!     alive (degenerate but harmless at the Smalltalk level).
+!   - Has no effect if the holder's first instVar is a special (immediate)
+!     or committed object. The Python layer rejects such referents with
+!     TypeError up front; here we still construct the holder and treat it as
+!     permanently alive (degenerate but harmless at the Smalltalk level).
 ! ===============================================================================
 
 ! ------------------- Superclass / dictionary check
@@ -36,21 +43,114 @@ Object ifNil: [self error: 'Object is not defined.'].
 run
 | dict |
 dict := System myUserProfile symbolList objectNamed: #'Python'.
-#( #'WeakReference' #'WeakProxy' #'WeakValueDictionary'
-   #'WeakKeyDictionary' #'WeakSet' #'Finalizer' )
+#( #'WeakReference' #'WeakReferenceHolder' #'WeakValueDictionary'
+   #'WeakKeyDictionary' #'WeakSet' )
 	do: [:nm | (dict includesKey: nm) ifFalse: [dict at: nm put: nil]].
 true
 %
 
 ! ===============================================================================
-! WeakReference — weak reference to a single object, optional callback.
-!   Subclass of Object whose first instVar is the ephemeron key.
+! WeakReferenceHolder — dbTransient inner class holding the ephemeron state.
+!   First instVar `referent` is the ephemeron key. Instances are dbTransient
+!   so they can be committed (the surrounding WeakReference is a normal
+!   persistent object) without the ephemeron tripping commit. After commit
+!   read-back the holder's instVars are nil and the WeakReference reports
+!   dead.
+! ===============================================================================
+
+expectvalue /Class
+doit
+Object subclass: 'WeakReferenceHolder'
+  instVarNames: #( referent callback dead )
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #( #dbTransient )
+%
+
+expectvalue /Class
+doit
+WeakReferenceHolder category: 'Grail-Weak'
+%
+
+set compile_env: 0
+
+expectvalue /Metaclass3
+doit
+WeakReferenceHolder removeAllMethods.
+WeakReferenceHolder class removeAllMethods.
+%
+
+set compile_env: 0
+
+category: 'Grail-Weak-private'
+method: WeakReferenceHolder
+_setReferent: anObject callback: aBlock
+	"Initialise an unfired holder. The caller wires #beEphemeron: true
+	 separately so it can fall back gracefully when anObject is ineligible
+	 (immediate / committed)."
+
+	referent := anObject.
+	callback := aBlock.
+	dead := false.
+	^self
+%
+
+category: 'Grail-Weak-accessing'
+method: WeakReferenceHolder
+value
+	"Answer the referent if still alive, or nil if reclaimed or post-commit.
+	 nil-tolerant: after commit + read-back, `dead` is nil rather than
+	 false; we treat nil-dead-with-nil-referent as dead. (Returning
+	 referent directly would yield nil in that case anyway, so the
+	 explicit `dead == true` check is mostly for the in-callback window
+	 where referent has not yet been nilled.)"
+
+	dead == true ifTrue: [^nil].
+	^referent
+%
+
+category: 'Grail-Weak-testing'
+method: WeakReferenceHolder
+isAlive
+	dead == true ifTrue: [^false].
+	^referent ~~ nil
+%
+
+category: 'Grail-Weak-testing'
+method: WeakReferenceHolder
+isDead
+	^self isAlive not
+%
+
+category: 'Grail-Weak-finalization'
+method: WeakReferenceHolder
+mourn
+	"Sent by the finalization process after GC fires this ephemeron. Mark
+	 dead first so the callback observes #value == nil (Python's 'referent
+	 is None inside the callback'), then run the callback, then release
+	 internal references. The callback was wrapped at construction time to
+	 substitute the outer WeakReference for its argument, so passing self
+	 (the holder) here is intentional and the arg is ignored by the wrap."
+
+	dead == true ifTrue: [^self].
+	dead := true.
+	callback ifNotNil: [callback value: self].
+	referent := nil.
+	callback := nil
+%
+
+! ===============================================================================
+! WeakReference — public commit-safe weak-reference object. Delegates the
+!   ephemeron behavior to a WeakReferenceHolder; persists hashCache directly
+!   so a once-alive ref keeps a stable dict-key hash across commit / death.
 ! ===============================================================================
 
 expectvalue /Class
 doit
 Object subclass: 'WeakReference'
-  instVarNames: #( referent callback dead hashCache )
+  instVarNames: #( holder hashCache )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -78,55 +178,71 @@ classmethod: WeakReference
 on: anObject
 	"Answer a weak reference to anObject (no callback)."
 
-	^self new _initReferent: anObject callback: nil
+	^self _on: anObject callback: nil
 %
 
 category: 'Grail-Weak-constructors'
 classmethod: WeakReference
 on: anObject callback: aBlock
 	"Answer a weak reference to anObject. When anObject is reclaimed, evaluate
-	 aBlock with this WeakReference as its argument. By then `value` already
-	 answers nil. aBlock is sent #value: from #mourn — a Smalltalk block or a
-	 Python callable (responding to #value:) both work."
+	 aBlock with the resulting WeakReference as its argument. By then `value`
+	 already answers nil. aBlock receives the WeakReference itself (not the
+	 holder) — the holder wraps it at construction so #mourn's invocation
+	 routes correctly."
 
-	^self new _initReferent: anObject callback: aBlock
+	^self _on: anObject callback: aBlock
+%
+
+category: 'Grail-Weak-private'
+classmethod: WeakReference
+_on: anObject callback: aBlockOrNil
+	"Build a WeakReference + WeakReferenceHolder pair. The holder is the
+	 ephemeron; the WeakReference is a normal object holding (holder,
+	 hashCache). The user callback, if any, is wrapped to substitute the
+	 outer WeakReference for its argument so callers can write
+	 `[:r | log add: r]` and receive the ref, not the holder."
+
+	| wr h wrap |
+	wr := self new.
+	wrap := aBlockOrNil
+		ifNil: [nil]
+		ifNotNil: [[:_ | aBlockOrNil value: wr]].
+	h := WeakReferenceHolder new _setReferent: anObject callback: wrap.
+	[h beEphemeron: true] on: Error do: [:ex |
+		"target ineligible (e.g. byte object); leave as a permanent strong ref"].
+	wr _setHolder: h hashCache: anObject hash.
+	^wr
 %
 
 category: 'Grail-Weak-private'
 method: WeakReference
-_initReferent: anObject callback: aBlockOrNil
-	"Wire up the referent as the ephemeron key, freeze a hash drawn from the
-	 referent, then arm the ephemeron. beEphemeron: silently has no effect if
-	 anObject is an immediate or committed object — that case is reported via
-	 #isAlive remaining true."
+_setHolder: aHolder hashCache: aHash
 
-	referent := anObject.
-	callback := aBlockOrNil.
-	dead := false.
-	hashCache := anObject hash.
-	[self beEphemeron: true] on: Error do: [:ex |
-		"target ineligible (e.g. byte object); leave as a permanent strong ref"].
+	holder := aHolder.
+	hashCache := aHash.
 	^self
 %
 
 category: 'Grail-Weak-accessing'
 method: WeakReference
 value
-	"Answer the referent if alive, nil if reclaimed."
+	"Answer the referent if alive, nil if reclaimed or post-commit."
 
-	^dead ifTrue: [nil] ifFalse: [referent]
+	holder == nil ifTrue: [^nil].
+	^holder value
 %
 
 category: 'Grail-Weak-testing'
 method: WeakReference
 isAlive
-	^dead not
+	holder == nil ifTrue: [^false].
+	^holder isAlive
 %
 
 category: 'Grail-Weak-testing'
 method: WeakReference
 isDead
-	^dead
+	^self isAlive not
 %
 
 category: 'Grail-Weak-comparing'
@@ -137,32 +253,17 @@ method: WeakReference
 
 	self == aWeakReference ifTrue: [^true].
 	(aWeakReference isKindOf: WeakReference) ifFalse: [^false].
-	(dead or: [aWeakReference isDead]) ifTrue: [^false].
-	^referent = aWeakReference value
+	(self isDead or: [aWeakReference isDead]) ifTrue: [^false].
+	^self value = aWeakReference value
 %
 
 category: 'Grail-Weak-comparing'
 method: WeakReference
 hash
 	"Hash frozen at creation so the reference remains usable as a dict key
-	 after its referent dies."
+	 after its referent dies or after a commit + read-back."
 
 	^hashCache
-%
-
-category: 'Grail-Weak-finalization'
-method: WeakReference
-mourn
-	"Sent on the finalization process after the GC fires this ephemeron. Mark
-	 dead first so the callback observes value == nil (matching Python's
-	 'referent is None inside the callback'), then run the callback, then
-	 release internal references."
-
-	dead ifTrue: [^self].
-	dead := true.
-	callback ifNotNil: [callback value: self].
-	referent := nil.
-	callback := nil
 %
 
 ! ------------------- Python protocol (env 1) — re-exported as weakref.ref
@@ -243,70 +344,6 @@ _collect
 %
 
 set compile_env: 0
-
-! ===============================================================================
-! WeakProxy — transparent proxy that forwards messages to a weak referent. Uses
-!   a WeakReference internally; after the referent is reclaimed, any forwarded
-!   message raises ReferenceError. Transparent only for selectors that Object
-!   does not already implement.
-! ===============================================================================
-
-expectvalue /Class
-doit
-Object subclass: 'WeakProxy'
-  instVarNames: #( reference )
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-%
-
-expectvalue /Class
-doit
-WeakProxy category: 'Grail-Weak'
-%
-
-set compile_env: 0
-
-expectvalue /Metaclass3
-doit
-WeakProxy removeAllMethods.
-WeakProxy class removeAllMethods.
-%
-
-set compile_env: 0
-
-category: 'Grail-Weak-constructors'
-classmethod: WeakProxy
-on: anObject
-	^self new _setReference: (WeakReference on: anObject)
-%
-
-category: 'Grail-Weak-constructors'
-classmethod: WeakProxy
-on: anObject callback: aBlock
-	^self new _setReference: (WeakReference on: anObject callback: aBlock)
-%
-
-category: 'Grail-Weak-private'
-method: WeakProxy
-_setReference: aWeakReference
-	reference := aWeakReference.
-	^self
-%
-
-category: 'Grail-Weak-forwarding'
-method: WeakProxy
-doesNotUnderstand: aMessage
-	"Forward to the live referent; if reclaimed, raise ReferenceError."
-
-	| target |
-	target := reference value.
-	target ifNil: [
-		^ReferenceError signal: 'weakly-referenced object no longer exists'].
-	^target perform: aMessage selector withArguments: aMessage arguments
-%
 
 ! ===============================================================================
 ! WeakValueDictionary — mapping whose values are held weakly. Each entry is a
@@ -578,113 +615,6 @@ size
 	n := 0.
 	refs do: [:r | r isAlive ifTrue: [n := n + 1]].
 	^n
-%
-
-! ===============================================================================
-! Finalizer — ephemeron that runs a registered block when its referent is
-!   reclaimed (or earlier, on #value). Replacement for ref-with-callback when
-!   you want the callback-ordering-safe semantics.
-! ===============================================================================
-
-expectvalue /Class
-doit
-Object subclass: 'Finalizer'
-  instVarNames: #( referent action alive )
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-%
-
-expectvalue /Class
-doit
-Finalizer category: 'Grail-Weak'
-%
-
-set compile_env: 0
-
-expectvalue /Metaclass3
-doit
-Finalizer removeAllMethods.
-Finalizer class removeAllMethods.
-%
-
-set compile_env: 0
-
-category: 'Grail-Weak-constructors'
-classmethod: Finalizer
-on: anObject block: aBlock
-	^self new _initReferent: anObject action: aBlock
-%
-
-category: 'Grail-Weak-private'
-method: Finalizer
-_initReferent: anObject action: aBlock
-	referent := anObject.
-	action := aBlock.
-	alive := true.
-	[self beEphemeron: true] on: Error do: [:ex | "ineligible target; permanent strong ref"].
-	^self
-%
-
-category: 'Grail-Weak-evaluating'
-method: Finalizer
-value
-	"Run the block immediately (if alive), mark dead, return the block's
-	 result. A second send is a no-op and answers nil."
-
-	| a result |
-	alive ifFalse: [^nil].
-	alive := false.
-	[self beEphemeron: false] on: Error do: [:ex | ].
-	a := action.
-	action := nil.
-	referent := nil.
-	a ifNil: [^nil].
-	result := a value.
-	^result
-%
-
-category: 'Grail-Weak-testing'
-method: Finalizer
-isAlive
-	^alive
-%
-
-category: 'Grail-Weak-accessing'
-method: Finalizer
-peek
-	"Snapshot the registered action without running it; nil if not alive."
-
-	^alive ifTrue: [action] ifFalse: [nil]
-%
-
-category: 'Grail-Weak-removing'
-method: Finalizer
-detach
-	"Disable the finalizer without running it; answer the registered action."
-
-	| a |
-	alive ifFalse: [^nil].
-	alive := false.
-	[self beEphemeron: false] on: Error do: [:ex | ].
-	a := action.
-	action := nil.
-	referent := nil.
-	^a
-%
-
-category: 'Grail-Weak-finalization'
-method: Finalizer
-mourn
-	"Sent by the finalization process after the GC fires this ephemeron."
-
-	alive ifFalse: [^self].
-	alive := false.
-	action ifNotNil: [action value].
-	referent := nil.
-	action := nil
 %
 
 ! ===============================================================================

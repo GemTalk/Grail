@@ -335,11 +335,10 @@ run
 	at: #'tuple_iterator' put: nil;
 	at: #'_weakref' put: nil;
 	at: #'WeakReference' put: nil;
-	at: #'WeakProxy' put: nil;
+	at: #'WeakReferenceHolder' put: nil;
 	at: #'WeakValueDictionary' put: nil;
 	at: #'WeakKeyDictionary' put: nil;
 	at: #'WeakSet' put: nil;
-	at: #'Finalizer' put: nil;
 	yourself.
 Transcript show: 'Forward references created for Python dictionary'.
 %

@@ -234,34 +234,6 @@ testReferentNilInsideCallback
 %
 
 ! ------------------------------------------------------------------------------
-! WeakProxy
-! ------------------------------------------------------------------------------
-
-category: 'Grail-Tests-proxy'
-method: WeakReferenceTestCase
-testProxyForwardsMessage
-	"A live proxy forwards messages to its referent."
-
-	| subject proxy |
-	subject := WeakReferenceTestSubject new tag: 21.
-	proxy := WeakProxy on: subject.
-	self assert: proxy doubled = 42.
-%
-
-category: 'Grail-Tests-proxy'
-method: WeakReferenceTestCase
-testProxyRaisesAfterCollection
-	"Using a proxy after its referent is collected raises ReferenceError."
-
-	| subject proxy |
-	subject := WeakReferenceTestSubject new tag: 21.
-	proxy := WeakProxy on: subject.
-	subject := nil.
-	self collectGarbage.
-	self should: [proxy doubled] raise: ReferenceError.
-%
-
-! ------------------------------------------------------------------------------
 ! WeakValueDictionary
 ! ------------------------------------------------------------------------------
 
@@ -367,59 +339,3 @@ testWeakSetMemberVanishesWhenCollected
 	self assert: s size = 0.
 %
 
-! ------------------------------------------------------------------------------
-! Finalizer
-! ------------------------------------------------------------------------------
-
-category: 'Grail-Tests-finalize'
-method: WeakReferenceTestCase
-testFinalizerAliveInitially
-	"A freshly registered finalizer is alive."
-
-	| subject f |
-	subject := WeakReferenceTestSubject new tag: 1.
-	f := Finalizer on: subject block: [nil].
-	self assert: f isAlive.
-%
-
-category: 'Grail-Tests-finalize'
-method: WeakReferenceTestCase
-testFinalizerFiresOnCollection
-	"The finalizer's block runs when the referent is collected."
-
-	| subject f log |
-	log := OrderedCollection new.
-	subject := WeakReferenceTestSubject new tag: 1.
-	f := Finalizer on: subject block: [log add: #done].
-	subject := nil.
-	self collectGarbage.
-	self assert: log size = 1.
-	self assert: log first = #done.
-	self deny: f isAlive.
-%
-
-category: 'Grail-Tests-finalize'
-method: WeakReferenceTestCase
-testFinalizerValueRunsEarlyAndReturns
-	"Sending #value runs the block immediately and answers its result."
-
-	| subject f |
-	subject := WeakReferenceTestSubject new tag: 1.
-	f := Finalizer on: subject block: [17].
-	self assert: f value = 17.
-%
-
-category: 'Grail-Tests-finalize'
-method: WeakReferenceTestCase
-testFinalizerInertAfterValue
-	"After being run once, the finalizer is dead and a second #value is a no-op."
-
-	| subject f log |
-	log := OrderedCollection new.
-	subject := WeakReferenceTestSubject new tag: 1.
-	f := Finalizer on: subject block: [log add: 1].
-	f value.
-	f value.
-	self deny: f isAlive.
-	self assert: log size = 1.
-%
