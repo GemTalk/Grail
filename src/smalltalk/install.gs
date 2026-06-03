@@ -336,6 +336,7 @@ run
 	at: #'_weakref' put: nil;
 	at: #'WeakReference' put: nil;
 	at: #'WeakReferenceHolder' put: nil;
+	at: #'WeakReferenceEphemeron' put: nil;
 	at: #'WeakValueDictionary' put: nil;
 	at: #'WeakKeyDictionary' put: nil;
 	at: #'WeakSet' put: nil;

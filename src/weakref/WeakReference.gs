@@ -1,34 +1,47 @@
 ! ===============================================================================
 ! WeakReference.gs — Smalltalk-native weak-reference layer for Grail, built on
-! GemStone ephemerons, made commit-safe with a dbTransient holder split.
+! GemStone ephemerons, made commit-safe with a three-class split.
 !
-! Two-class structure to keep the ephemeron off the commit path:
+! The dbTransient + ephemeron commit contract is: a dbTransient wrapper hides
+! its slot contents from commit, so an ephemeron *held in* a dbTransient slot
+! does not trip commit's ephemeron check. A dbTransient instance that *is
+! itself* an ephemeron still trips it. This file uses the first pattern:
 !
-!   WeakReference         — regular class, persists normally. Holds
-!                           (holder, hashCache). hashCache is a SmallInteger
-!                           frozen from the referent's hash at creation, so a
-!                           ref keeps a stable hash even after its referent
-!                           dies (matching CPython).
+!   WeakReference          — regular class, persists normally. Holds
+!                            (holder, hashCache). hashCache is a SmallInteger
+!                            frozen from the referent's hash at creation, so
+!                            a ref keeps a stable hash even after its referent
+!                            dies (matching CPython).
 !
-!   WeakReferenceHolder   — dbTransient. Holds the ephemeron state
-!                           (referent, callback, dead). `beEphemeron: true`
-!                           is set on the holder, not the WeakReference. When
-!                           a WeakReference is committed, the *reference* to
-!                           the holder persists by identity but the holder's
-!                           own instVars are not written; after read-back the
-!                           ref reports dead (referent == nil) while keeping
-!                           its frozen hash — the same semantics CPython gives
-!                           weakrefs across pickle.
+!   WeakReferenceHolder    — dbTransient. Holds (ephemeron, callback, dead).
+!                            Is NOT itself an ephemeron — it just holds one
+!                            in its first slot. When the WeakReference is
+!                            committed, the reference to the holder persists
+!                            by identity, but the holder's slots (including
+!                            the link to the inner ephemeron) are not written;
+!                            so commit never reaches the ephemeron at all.
 !
-! Ephemeron firing: GC fires the holder, the bit clears synchronously and
-! the holder is queued for #mourn. #mourn flips dead first (so a callback
-! observes ref() == None), then runs the user callback wrapped to receive
-! the *outer* WeakReference, then nils referent + callback.
+!   WeakReferenceEphemeron — regular class with `beEphemeron: true` set on
+!                            instances. First instVar `referent` is the
+!                            ephemeron key; second instVar `holder` is a
+!                            back-pointer so #mourn can dispatch to the
+!                            holder's _ephemeronFired hook.
+!
+! Ephemeron firing: GC fires the inner ephemeron, the bit clears
+! synchronously, the ephemeron is queued for #mourn. #mourn dispatches to
+! the holder's _ephemeronFired which flips dead first (so a callback
+! observes ref() == None), runs the user callback wrapped to receive the
+! *outer* WeakReference, then nils its references. The ephemeron's own
+! #mourn then nils its referent and back-pointer.
+!
+! After commit + read-back: holder.ephemeron is nil (dbTransient erased it),
+! so the ref reports dead while keeping its frozen hash — the same semantics
+! CPython gives weakrefs across pickle.
 !
 ! Constraints inherited from ephemerons (kernel docs on Object>>beEphemeron:):
-!   - Has no effect if the holder's first instVar is a special (immediate)
+!   - Has no effect if the ephemeron's first instVar is a special (immediate)
 !     or committed object. The Python layer rejects such referents with
-!     TypeError up front; here we still construct the holder and treat it as
+!     TypeError up front; here we still construct the chain and treat it as
 !     permanently alive (degenerate but harmless at the Smalltalk level).
 ! ===============================================================================
 
@@ -43,25 +56,93 @@ Object ifNil: [self error: 'Object is not defined.'].
 run
 | dict |
 dict := System myUserProfile symbolList objectNamed: #'Python'.
-#( #'WeakReference' #'WeakReferenceHolder' #'WeakValueDictionary'
-   #'WeakKeyDictionary' #'WeakSet' )
+#( #'WeakReference' #'WeakReferenceHolder' #'WeakReferenceEphemeron'
+   #'WeakValueDictionary' #'WeakKeyDictionary' #'WeakSet' )
 	do: [:nm | (dict includesKey: nm) ifFalse: [dict at: nm put: nil]].
 true
 %
 
 ! ===============================================================================
-! WeakReferenceHolder — dbTransient inner class holding the ephemeron state.
-!   First instVar `referent` is the ephemeron key. Instances are dbTransient
-!   so they can be committed (the surrounding WeakReference is a normal
-!   persistent object) without the ephemeron tripping commit. After commit
-!   read-back the holder's instVars are nil and the WeakReference reports
-!   dead.
+! WeakReferenceEphemeron — the inner ephemeron object. Regular class (not
+!   dbTransient); `beEphemeron: true` is set on its instances. First instVar
+!   `referent` is the ephemeron key; second instVar `holder` is a back-pointer
+!   the #mourn handler uses to dispatch to the holder's _ephemeronFired hook.
+!
+!   Reachable from a persistent graph only via WeakReferenceHolder's first
+!   slot. Since WeakReferenceHolder is dbTransient, commit's walk never
+!   crosses into it, so the ephemeron is never visited during commit and
+!   never trips commit's ephemeron check.
+! ===============================================================================
+
+expectvalue /Class
+doit
+Object subclass: 'WeakReferenceEphemeron'
+  instVarNames: #( referent holder )
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+WeakReferenceEphemeron category: 'Grail-Weak'
+%
+
+set compile_env: 0
+
+expectvalue /Metaclass3
+doit
+WeakReferenceEphemeron removeAllMethods.
+WeakReferenceEphemeron class removeAllMethods.
+%
+
+set compile_env: 0
+
+category: 'Grail-Weak-private'
+method: WeakReferenceEphemeron
+_setReferent: anObject holder: aHolder
+
+	referent := anObject.
+	holder := aHolder.
+	^self
+%
+
+category: 'Grail-Weak-accessing'
+method: WeakReferenceEphemeron
+referent
+	"Answer the weakly-held referent (nil once mourned)."
+
+	^referent
+%
+
+category: 'Grail-Weak-finalization'
+method: WeakReferenceEphemeron
+mourn
+	"Sent by the finalization process after GC fires this ephemeron.
+	 Dispatch to the holder's hook (which marks dead, runs the callback,
+	 and releases its references), then nil our own slots so the
+	 ephemeron is fully released for GC."
+
+	holder ifNotNil: [holder _ephemeronFired].
+	holder := nil.
+	referent := nil
+%
+
+! ===============================================================================
+! WeakReferenceHolder — dbTransient wrapper that holds the inner ephemeron
+!   in its first slot. Instances commit cleanly: the dbTransient option means
+!   none of (ephemeron, callback, dead) are written to disk, and since commit
+!   does not walk a dbTransient instance's slots, the inner ephemeron is
+!   never visited. After commit + read-back the holder's slots are nil and
+!   the WeakReference reports dead.
 ! ===============================================================================
 
 expectvalue /Class
 doit
 Object subclass: 'WeakReferenceHolder'
-  instVarNames: #( referent callback dead )
+  instVarNames: #( ephemeron callback dead )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -86,12 +167,12 @@ set compile_env: 0
 
 category: 'Grail-Weak-private'
 method: WeakReferenceHolder
-_setReferent: anObject callback: aBlock
-	"Initialise an unfired holder. The caller wires #beEphemeron: true
-	 separately so it can fall back gracefully when anObject is ineligible
-	 (immediate / committed)."
+_setEphemeron: anEphemeron callback: aBlock
+	"Initialise an unfired holder. The caller wires #beEphemeron: true on
+	 the inner ephemeron separately so it can fall back gracefully when the
+	 referent is ineligible (immediate / committed)."
 
-	referent := anObject.
+	ephemeron := anEphemeron.
 	callback := aBlock.
 	dead := false.
 	^self
@@ -102,20 +183,19 @@ method: WeakReferenceHolder
 value
 	"Answer the referent if still alive, or nil if reclaimed or post-commit.
 	 nil-tolerant: after commit + read-back, `dead` is nil rather than
-	 false; we treat nil-dead-with-nil-referent as dead. (Returning
-	 referent directly would yield nil in that case anyway, so the
-	 explicit `dead == true` check is mostly for the in-callback window
-	 where referent has not yet been nilled.)"
+	 false; treating nil-dead-with-nil-ephemeron as dead handles that path."
 
 	dead == true ifTrue: [^nil].
-	^referent
+	ephemeron ifNil: [^nil].
+	^ephemeron referent
 %
 
 category: 'Grail-Weak-testing'
 method: WeakReferenceHolder
 isAlive
 	dead == true ifTrue: [^false].
-	^referent ~~ nil
+	ephemeron ifNil: [^false].
+	^ephemeron referent ~~ nil
 %
 
 category: 'Grail-Weak-testing'
@@ -126,19 +206,18 @@ isDead
 
 category: 'Grail-Weak-finalization'
 method: WeakReferenceHolder
-mourn
-	"Sent by the finalization process after GC fires this ephemeron. Mark
-	 dead first so the callback observes #value == nil (Python's 'referent
-	 is None inside the callback'), then run the callback, then release
-	 internal references. The callback was wrapped at construction time to
-	 substitute the outer WeakReference for its argument, so passing self
-	 (the holder) here is intentional and the arg is ignored by the wrap."
+_ephemeronFired
+	"Dispatched by the inner ephemeron's #mourn. Mark dead first so the
+	 callback observes #value == nil (Python's 'referent is None inside the
+	 callback'), then run the user callback (wrapped at construction time to
+	 substitute the outer WeakReference for its argument), then release
+	 internal references."
 
 	dead == true ifTrue: [^self].
 	dead := true.
 	callback ifNotNil: [callback value: self].
-	referent := nil.
-	callback := nil
+	callback := nil.
+	ephemeron := nil
 %
 
 ! ===============================================================================
@@ -196,19 +275,21 @@ on: anObject callback: aBlock
 category: 'Grail-Weak-private'
 classmethod: WeakReference
 _on: anObject callback: aBlockOrNil
-	"Build a WeakReference + WeakReferenceHolder pair. The holder is the
-	 ephemeron; the WeakReference is a normal object holding (holder,
-	 hashCache). The user callback, if any, is wrapped to substitute the
-	 outer WeakReference for its argument so callers can write
-	 `[:r | log add: r]` and receive the ref, not the holder."
+	"Build the three-object chain: WeakReference -> WeakReferenceHolder
+	 (dbTransient) -> WeakReferenceEphemeron (`beEphemeron: true`). The
+	 user callback, if any, is wrapped to substitute the outer
+	 WeakReference for its argument so callers can write `[:r | log add: r]`
+	 and receive the ref, not the holder."
 
-	| wr h wrap |
+	| wr h ep wrap |
 	wr := self new.
 	wrap := aBlockOrNil
 		ifNil: [nil]
 		ifNotNil: [[:_ | aBlockOrNil value: wr]].
-	h := WeakReferenceHolder new _setReferent: anObject callback: wrap.
-	[h beEphemeron: true] on: Error do: [:ex |
+	ep := WeakReferenceEphemeron new.
+	h := WeakReferenceHolder new _setEphemeron: ep callback: wrap.
+	ep _setReferent: anObject holder: h.
+	[ep beEphemeron: true] on: Error do: [:ex |
 		"target ineligible (e.g. byte object); leave as a permanent strong ref"].
 	wr _setHolder: h hashCache: anObject hash.
 	^wr

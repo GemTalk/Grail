@@ -1,5 +1,5 @@
 output pushnew runTests.out
-! file scripts/runTests.gs
+! file tests/scripts/runTests.gs
 iferr 1 where
 iferr 2 output pop
 iferr 3 where

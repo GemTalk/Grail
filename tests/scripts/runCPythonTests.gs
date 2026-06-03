@@ -1,5 +1,5 @@
 output pushnew  runCPythonTests.gs.out
-! file scripts/runCPythonTests.gs
+! file tests/scripts/runCPythonTests.gs
 login
 run
 | dir |

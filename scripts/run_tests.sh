@@ -47,16 +47,24 @@ TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=200000;"
 
 EXIT=0
 
-LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S scripts/runTests.gs < /dev/null || EXIT=$?
+LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runTests.gs < /dev/null || EXIT=$?
 
 # Run embedded CPython tests in a separate session (can't coexist with shim)
-LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S scripts/runCPythonTests.gs < /dev/null || EXIT=$?
+LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runCPythonTests.gs < /dev/null || EXIT=$?
 
 # Regression for commit 4a46289 (boxed SrePattern/SreMatch C pointers). The
 # bug only manifests across a commit + session boundary, so it can't live in
 # the in-session SUnit suite -- this script commits a pattern/match, re-logs
 # in to fault them with a NULL CPointer, asserts the guards signal instead of
 # SEGVing, then removes the key and commits to leave the repository clean.
-LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S scripts/runIssue2Test.gs < /dev/null || EXIT=$?
+LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runIssue2Test.gs < /dev/null || EXIT=$?
+
+# Grail-side WeakReference commit-safety regression. Builds a Grail
+# WeakReference, commits the UserGlobals graph that holds it, re-logs in,
+# and verifies the post-commit contract: outer ref persists, the dbTransient
+# holder reference persists by identity, the holder's slots come back nil
+# (including the link to the inner ephemeron), the ref reports dead, and
+# the frozen hashCache survives so the ref stays usable as a dict key.
+LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runEphemeronCommitTest.gs < /dev/null || EXIT=$?
 
 exit $EXIT

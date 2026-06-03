@@ -1,5 +1,5 @@
 output pushnew runIssue2Test.out
-! file scripts/runIssue2Test.gs
+! file tests/scripts/runIssue2Test.gs
 !
 ! Regression for commit 4a46289 ("Box SrePattern/SreMatch C pointers in
 ! CPointer to survive commits").
