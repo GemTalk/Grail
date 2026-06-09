@@ -1,199 +1,207 @@
-# Supporting `weakref` in Grail
+# Weak References in Grail
 
 ## Status
 
-**Stubbed.** `src/python/stdlib/weakref.py` ships strong-ref
-stand-ins for every public name (`ref`, `proxy`, `WeakValueDictionary`,
-`WeakKeyDictionary`, `WeakSet`, `WeakMethod`, `getweakrefcount`,
-`getweakrefs`).  All operations behave as if reference counts were
-infinite — nothing is ever collected early, callbacks never fire.
-
-The stub is adequate for:
-
-* **`import` paths** — blinker / jinja2 / Werkzeug all import
-  `weakref` at module load time; the stub satisfies the name
-  lookup.
-* **Short-run paths** — Flask hello-world via `werkzeug.test.Client`
-  builds a request, runs a handler, returns a response, drops the
-  request.  No long-lived state accumulates.
-
-It is **not** adequate for:
-
-* **`flask run` (long-running)** — blinker's signal registry grows
-  monotonically (dead receivers never auto-unregister), and any
-  Werkzeug request-local pattern that depends on weakref-driven
-  cleanup leaks per request.
-* **Cache-as-WeakValueDictionary** — entries that should expire when
-  the value goes out of scope persist forever.
+**Implemented**, backed by GemStone ephemerons. The Smalltalk layer
+lives in [`src/weakref/WeakReference.gs`](../src/weakref/WeakReference.gs);
+the Python `weakref` module is re-implemented on top of it in
+[`src/python/stdlib/weakref.py`](../src/python/stdlib/weakref.py),
+exposed to Python through the Smalltalk-backed `_weakref` module
+(also in `WeakReference.gs`). The replacement is API-compatible with
+CPython for the surface Grail's bundled stdlib uses: `ref`, `proxy`,
+`WeakValueDictionary`, `WeakKeyDictionary`, `WeakSet`, `WeakMethod`,
+`finalize` (plus stubs for the rarely-used `getweakrefcount` /
+`getweakrefs`).
 
 ## What CPython's `weakref` does
 
-In CPython, every object carries a refcount.  When `weakref.ref(obj,
-callback)` is created, the ref does NOT bump `obj`'s refcount; instead
-it registers in `obj`'s internal weakref list.  When `obj`'s refcount
-drops to zero, the deallocator iterates the weakref list, sets each
-ref's referent to `None`, and schedules each callback to fire.
+In CPython every object carries a refcount. `weakref.ref(obj, callback)`
+does **not** bump `obj`'s refcount; it registers in `obj`'s internal
+weakref list. When `obj`'s refcount drops to zero the deallocator
+iterates the weakref list, sets each ref's referent to `None`, and
+fires each callback synchronously on the deallocating thread.
+`WeakValueDictionary`, `WeakKeyDictionary` and `WeakSet` are built on
+top, with the callback set to "remove this entry."
 
-`WeakValueDictionary` / `WeakKeyDictionary` are built on top: they
-store weak refs to the values (or keys), with the callback set to
-"remove this entry from me."  Result: when the last strong ref to a
-value disappears, the dict entry is gone the next time you look.
-
-Callback timing is **synchronous with deallocation**.  The moment
-`obj` is freed, every weakref-callback runs (still on the calling
-thread, in deterministic order).
+Callback timing is **synchronous with deallocation**: the moment `obj`
+is freed, every callback has already run.
 
 ## What GemStone provides
 
-`Object >> beEphemeron:` / `isEphemeron` / `mourn`, and an existing
-internal user (`FsFileDescriptorEphemeron` in the GemStone Smalltalk
-library):
+`Object >> beEphemeron:` / `isEphemeron` / `mourn`. An *ephemeron* is
+an object whose first instVar is treated as the **key**: when the GC
+finds the key reachable *only* through ephemerons (i.e., if every
+ephemeron-slot referencing it were nilled, the key would be
+unreachable), the GC fires the ephemeron. Firing synchronously clears
+the `isEphemeron` bit and queues the object for `#mourn` on a dedicated
+high-priority finalization process (`GcFinalizeNotification`).
 
-```smalltalk
-fileDescriptor: aFileDescriptor
-    fileDescriptor := aFileDescriptor.
-    self beEphemeron: true.
-    fileDescriptor _ephemeron: self
+Conceptually the same as CPython's `ref(obj, callback)`, with one
+timing difference: `mourn` is *post-GC asynchronous* rather than
+synchronous-with-deallocation. In practice, in a single-threaded topaz
+session, the finalization signal is delivered before the next statement
+after the scavenge — but a test that wants determinism drains the queue
+explicitly (see `WeakReferenceTestCase>>collectGarbage`).
+
+## Architecture: three-class chain
+
+The naive "make `WeakReference` itself an ephemeron" design fails as
+soon as a `WeakReference` ends up in any committed graph — committing
+an ephemeron signals `TransactionError 2407 "attempt to commit an
+ephemeron"`. The fix uses GemStone's `dbTransient` class option to
+hide the ephemeron from commit's graph walk:
+
+```
+WeakReference          (regular, persistent)
+  instVarNames: #( holder hashCache )
+
+WeakReferenceHolder    (dbTransient wrapper)
+  instVarNames: #( ephemeron callback dead )
+
+WeakReferenceEphemeron (regular, beEphemeron: true on instances)
+  instVarNames: #( referent holder )
 ```
 
-Semantics: an *ephemeron* is a holder object whose first instVar is
-the *trigger*.  When the trigger has no other strong references, GC
-puts the ephemeron on a finalization queue and asynchronously sends
-it `mourn` (a method the holder class defines for cleanup).
+- **`WeakReference`** is a plain persistent object. `holder` points at
+  the inner wrapper; `hashCache` is the SmallInteger hash frozen from
+  the referent at construction, so a ref remains a stable dict key
+  even after the referent dies or after a commit / read-back cycle
+  (matching CPython).
 
-Conceptually equivalent to CPython's `ref(obj, callback)`:
+- **`WeakReferenceHolder`** is `dbTransient`. The dbTransient option
+  means commit does not walk a wrapper instance's slots — so the
+  inner ephemeron, sitting in slot 1, is never visited during commit
+  and never trips commit's ephemeron check. After commit + read-back
+  all three slots come back nil; the `WeakReference` then reports
+  dead (matching CPython's "weakrefs do not survive pickle"
+  contract).
 
-| CPython                    | GemStone                                   |
-|----------------------------|--------------------------------------------|
-| `r = ref(obj, cb)`         | `r := Holder new`; `r instVar1: obj`;      |
-|                            | `r beEphemeron: true`                      |
-| `obj` refcount → 0         | GC sees `obj` is otherwise unreachable     |
-| `cb(r)` fires synchronously| `r mourn` fires asynchronously in finalizer|
+- **`WeakReferenceEphemeron`** is the actual ephemeron. `referent` in
+  slot 1 is the ephemeron key; `holder` is a back-pointer so `mourn`
+  can dispatch to the holder's `_ephemeronFired` hook. When the
+  ephemeron fires, `_ephemeronFired` flips `dead` first (so the user
+  callback observes `value == nil`, matching CPython's "referent is
+  None inside the callback"), runs the callback wrapped to substitute
+  the outer `WeakReference` for its argument, then nils internal
+  references.
 
-## Why we haven't wired it up
+Public API on `WeakReference`: `value`, `isAlive`, `isDead`, `=`,
+`hash`, plus the env-1 Python protocol methods `__new__:`, `__call__`,
+`__eq__:`, `__hash__`.
 
-Four sharp edges, ranked by severity:
+### The dbTransient + ephemeron contract
 
-1. **Async finalization timing.**  CPython callbacks run on the
-   deallocating thread, immediately.  GemStone's `mourn` runs in a
-   dedicated finalization GsProcess after GC.  Code that depends on
-   "after the last reference drops, the cache entry is gone before
-   my next lookup" silently behaves differently.  Realistic for
-   long-running servers (eventually consistent), wrong for unit
-   tests that `del x` and immediately check the dict.
+The structural choice is forced by what `dbTransient` does and doesn't
+suppress:
 
-2. **Committed-object semantics.**  Per the `beEphemeron:` doc:
+| Pattern | Commit |
+|---|---|
+| Plain ephemeron reachable from a committed graph | ❌ `TransactionError 2407` — expected. |
+| dbTransient instance that **is itself** an ephemeron (`beEphemeron: true` on the dbTransient instance) | ❌ `TransactionError 2407` — the bit-check fires on the instance regardless of dbTransient. |
+| dbTransient instance **holding** a separate ephemeron in a slot | ✓ succeeds — dbTransient hides the slot from commit's walk, so the inner ephemeron is never visited. |
 
-   > the isEphemeron bit is silently cleared if an attempt is made
-   > to commit the object, the isEphemeron bit remains cleared if
-   > the commit fails due to concurrency conflicts.
+Hence the wrapper holds the ephemeron rather than being one. The
+cross-session regression in
+[`tests/scripts/runEphemeronCommitTest.gs`](../tests/scripts/runEphemeronCommitTest.gs)
+verifies the end-to-end contract.
 
-   Caches that survive `System commit` would silently degrade to
-   strong refs.  This is an unusual failure mode that user code
-   wouldn't reasonably anticipate.  A "real" WeakValueDictionary
-   that loses its weak semantics after `commit` is arguably worse
-   than the strong-ref stub (which is at least predictably leaky).
+## Alternative we considered: OOP-based storage
 
-3. **Eligibility restrictions.**  `beEphemeron:` raises
-   `ArgumentError` for byte-format / Nsc / large (>2034 instVars) /
-   committed / Behavior / GsProcess / ExecBlock / SoftReference
-   receivers.  So we can't make the ephemeron directly *be* the
-   callable / class / module / etc.  Need a `WeakRefHolder` wrapper
-   class whose instVar #1 is the actual target.  That's an extra
-   indirection on every read (`r()` becomes `r.instVarAt: 1`).
+Before adopting ephemerons we considered building weak references on
+GemStone's `Object class >> _objectForOop:`. The brilliance of that
+proposal was that an OOP is a SmallInteger — holding it doesn't keep
+the object alive, and `_objectForOop:` returns `nil` once the object
+is collected, so weakness falls out for free. The design works
+uniformly on transient and persistent objects.
 
-4. **Finalization process context.**  `mourn` fires inside the
-   finalization GsProcess, which has no per-session Python module
-   context, no user's symbol list, no transaction view.  The Python
-   callback typically wants to e.g. remove a key from a dict that
-   lives in user code.  Wiring the cross-process callback through
-   safely (and not double-firing across transactions) is real work.
+Two known holes the proposal also identified up front:
 
-## Implementation sketch (when we decide it's worth it)
+1. **Lazy callbacks.** A dead object's `WeakReference` only notices
+   the death on the next `value` call, so a callback never fires
+   unless someone happens to read. Mitigation: a class-level registry
+   of all callback-bearing refs, scanned periodically.
 
-```smalltalk
-Object subclass: 'WeakRefHolder'
-    instVarNames: #( trigger callback registered )
-    ...
+2. **OOP reuse.** GemStone may recycle a dead object's OOP for a
+   fresh object, giving `_objectForOop:` an ABA result. Mitigation:
+   stamp the target with a dynamic instVar carrying a unique token;
+   the ref stores the same token; on lookup, the OOP must resolve
+   *and* the token must match. The `WeakReference`'s own OOP makes a
+   reasonable token because it can't be recycled while the ref is
+   alive.
 
-method: WeakRefHolder
-    _setTrigger: target callback: cb
-        trigger := target.
-        callback := cb.
-        registered := true.
-        self beEphemeron: true
+### Comparison
 
-method: WeakRefHolder
-    mourn
-        "GC fired us — trigger is no longer reachable.  Fire the
-        Python callback (if any) and clear our slot so future reads
-        return None."
-        | cb |
-        cb := callback.
-        trigger := nil.
-        callback := nil.
-        registered := false.
-        cb ifNotNil: [
-            "Defer the callback to user code via a queue rather than
-            running it in the finalization GsProcess — that process
-            has no Python session context.  Concrete mechanism TBD."
-            self _queuePythonCallback: cb arg: self]
-```
+| Dimension | OOP + token | Ephemeron + dbTransient wrapper (chosen) |
+|---|---|---|
+| **Eager callbacks** | No — fires only on scan; lazy. | Yes — GC queues `mourn` automatically. |
+| **OOP-reuse safety** | Solved by the token, but it's a hand-rolled invariant; token discipline must be perfect. | N/A — the ephemeron holds an actual identity reference, not an integer. |
+| **Per-ref overhead** | Integer + token in the ref; a dynamic instVar slot stamped on every weakly-referenced target. | Three small Smalltalk objects per `WeakReference`. No mutation of the target. |
+| **Per-target overhead** | Target gains a `__weakref_token__` dynamic instVar — pollutes object state across the whole image. | Target is untouched. |
+| **Multiple refs to same target** | Awkward — the dynamic instVar slot has to hold a shared token, and the WeakReference whose OOP serves as the token can't die before the others. | Trivial — each `WeakReference` builds its own ephemeron; the target is just a key in N independent ephemerons. |
+| **Persistence / commit** | Works naturally — the OOP is just an integer and the token is value data. | Required the three-class split, but commit-safety is now built in. |
+| **Registry need** | Mandatory for callbacks; secondary leak from accumulated registered refs unless we prune. | None at runtime — GC drives `mourn`. |
+| **Implementation complexity** | One Smalltalk class plus registry plumbing, token-stamping discipline, and scan-trigger machinery. | Three small Smalltalk classes; GC does the hard work. |
+| **Failure mode** | A bug in the token discipline or registry scan silently leaks or misidentifies an object. | A bug in the structure (e.g., wrapper *is* the ephemeron instead of *holding* one) trips a hard `TransactionError 2407` at commit — visible immediately. |
 
-Plus on the Python side:
+### Why ephemerons won
 
-```python
-class ref:
-    def __init__(self, obj, callback=None):
-        self._holder = _make_holder(obj, callback)
+The decisive fact was that GemStone *does* expose a real weak-reference
+primitive — `beEphemeron:` / `mourn` / the finalization queue. Once
+that was on the table the comparison stopped being "polling vs
+ephemerons" and started being "polling vs free." Ephemerons give us
+the eager-callback property the registry would have had to simulate,
+and they sidestep the ABA problem entirely (no integer, no token, no
+stamping). The dbTransient + commit interaction was the only real
+wrinkle; once the wrapper-holds-ephemeron pattern was understood, the
+ephemeron approach won on every axis: simpler runtime structure, no
+per-target pollution, GC-driven finalization, and a clean public API.
 
-    def __call__(self):
-        v = self._holder.trigger
-        return v  # is `None' (Python) when collected
-```
+The OOP scheme would still be the right answer if ephemerons didn't
+exist — but they do.
 
-`WeakValueDictionary` then becomes a normal dict whose stored values
-are `WeakRefHolder` instances, with a synthesized callback that
-removes the corresponding key.  Same for `WeakKeyDictionary` /
-`WeakSet`.
+## Python module
 
-## Triggers for revisiting
+`src/python/stdlib/weakref.py` is mostly pure Python on top of `ref`,
+which is a thin function delegating to `_weakref.ref(obj, callback)`.
+The Smalltalk-backed `_weakref` module exposes `ref:` / `ref:_:` and a
+`_collect` Grail extension that triggers GC + drains the finalization
+queue (the equivalent of CPython's `gc.collect()` for weakref tests).
 
-Concrete signals it's time to do the real work:
+The `proxy`, `WeakValueDictionary`, `WeakKeyDictionary`, `WeakSet`,
+`WeakMethod` and `finalize` classes are pure-Python wrappers around
+`ref` callbacks for auto-pruning. Two compile-shape gotchas surfaced
+during the Python-side work and are documented in the code:
 
-1. **A test fails because of leaked state.**  E.g. blinker's signal
-   registry grows across test cases and a test assertion depends on
-   the receiver count.
+1. Python lambdas in Grail compile to 2-arg `ExecBlock`s
+   (`positional, kwargs`), so `_weakref.ref:_:` wraps the Python
+   callback in a 1-arg Smalltalk block before storing.
+2. A nested `def` inside `__init__` captures the parent frame's
+   parameter slots — `finalize`'s ref callback is built in a separate
+   helper (`_make_finalize_callback`) so its closure doesn't pin the
+   referent through `__init__`'s `obj` parameter.
 
-2. **`flask run` development server is reachable** (M8 milestone)
-   and memory growth becomes observable.
+`getweakrefcount` / `getweakrefs` raise `NotImplementedError`. GemStone
+doesn't track reference counts, and a per-target registry just to
+support these introspection helpers would cost continuous overhead for
+APIs almost nobody calls.
 
-3. **A Werkzeug test client run depends on weakref cleanup
-   timing** — surprising but possible.
+## Tests
 
-4. **A user reports** that their Python code that worked on CPython
-   silently behaves differently on Grail in a weakref-shaped way.
+- **Smalltalk layer:** [`src/weakref/WeakReferenceTestCase.gs`](../src/weakref/WeakReferenceTestCase.gs)
+  exercises `WeakReference`, `WeakValueDictionary`, `WeakKeyDictionary`
+  and `WeakSet` directly. Auto-discovered via `PythonTestCase suite`.
+  Death tests use the `collectGarbage` helper, which scavenges then
+  explicitly drains the ephemeron finalization queue.
 
-Until then, the stub stays.  This file is the bookmark.
+- **Python layer:** [`src/smalltalk/PythonTests/WeakrefModuleTestCase.gs`](../src/smalltalk/PythonTests/WeakrefModuleTestCase.gs)
+  exercises `weakref.ref` / `proxy` / collections / `finalize` from the
+  Python surface, loaded via `importlib.loadModuleFromPath:` against
+  [`tests/python/weakref_basic.py`](../tests/python/weakref_basic.py).
 
-## Open questions for the eventual implementation
-
-* **Callback context.**  Where does the Python callback actually
-  run?  Options: (a) cross-process queue + per-session drain on
-  next user call, (b) synchronously inside any user call that
-  reads / writes the dict (turn the lazy collection into eager-on-
-  access), (c) require explicit `weakref.poll_finalizers()` calls
-  (would diverge from CPython).
-* **Committed-object workaround.**  Reject `beEphemeron:` on
-  committed targets and fall through to the strong-ref behavior,
-  documenting the divergence?  Or override `commit` on
-  `WeakRefHolder` to deny / warn?
-* **Identity vs equality.**  CPython's `ref(a) == ref(a)` is True
-  even after both refs go dead (refs of the same target compare
-  equal).  Our wrapper has the same data — store an identity hash
-  at construction so equality survives the clear.
-* **`__class__` / `__name__`.**  `ref` instances expose them
-  matching CPython — straightforward but easy to forget.
-
-These all become real questions once a downstream consumer needs
-real weakref semantics.  Doc, then defer.
+- **Commit safety (cross-session):** [`tests/scripts/runEphemeronCommitTest.gs`](../tests/scripts/runEphemeronCommitTest.gs)
+  builds a Grail `WeakReference`, commits the UserGlobals graph that
+  holds it, re-logs in, and verifies the post-commit contract: outer
+  ref persists, holder's instVars come back nil (dbTransient erased
+  the link to the inner ephemeron), ref reports dead, hashCache
+  survives so the ref is still usable as a dict key. Wired into
+  `scripts/run_tests.sh`.
