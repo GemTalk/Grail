@@ -723,3 +723,53 @@ testExecuteWithScopeCaptureIsOptIn
 	System @env0:gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR' put: '/tmp/grail'.
 	importlib ___codegenTraceDirInvalidate___
 %
+
+category: 'Grail-Tests - Session-Local State'
+method: ImportlibTestCase
+testCompilationCountersLiveInSessionTempsNotCommitted
+	"Regression: ModuleAst counters must live in SessionTemps, not classInstVars.
+	A committed counter causes write-write conflicts when two sessions compile
+	Python code concurrently.  After nextSeqFor:, the count must appear in
+	SessionTemps and not be accessible as a classInstVar on ModuleAst."
+
+	| before after |
+	"Reset the session counter so we get a predictable value."
+	SessionTemps @env0:current
+		@env0:removeKey: #'___grailDoitCounter___' ifAbsent: [].
+	before := SessionTemps @env0:current
+		@env0:at: #'___grailDoitCounter___' ifAbsent: [0].
+	ModuleAst
+		evaluateSource: 'x = 1'
+		usingModuleScope: SymbolDictionary new
+		as: #doit.
+	after := SessionTemps @env0:current
+		@env0:at: #'___grailDoitCounter___' ifAbsent: [0].
+	self assert: after > before.
+%
+
+category: 'Grail-Tests - Session-Local State'
+method: ImportlibTestCase
+testCodegenTraceDirLivesInSessionTempsNotCommitted
+	"Regression: codegenTraceDir/codegenTraceDirChecked must live in SessionTemps
+	so each gem process reads its own GRAIL_CODEGEN_TRACE_DIR env var rather than
+	seeing another session's cached committed value."
+
+	importlib ___codegenTraceDirInvalidate___.
+	"Checked flag must not appear before the first call."
+	self assert:
+		(SessionTemps @env0:current
+			@env0:includesKey: #'___grailCodegenTraceDirChecked___') not.
+	importlib ___codegenTraceDir___.
+	"After one call the checked flag lives in SessionTemps, nowhere else."
+	self assert:
+		(SessionTemps @env0:current
+			@env0:includesKey: #'___grailCodegenTraceDirChecked___').
+	"Invalidate clears the SessionTemps entry so the next call re-reads the env var."
+	importlib ___codegenTraceDirInvalidate___.
+	self assert:
+		(SessionTemps @env0:current
+			@env0:includesKey: #'___grailCodegenTraceDirChecked___') not.
+	"Restore the tracing dir the rest of the suite's setUp expects."
+	System @env0:gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR' put: '/tmp/grail'.
+	importlib ___codegenTraceDirInvalidate___
+%

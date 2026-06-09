@@ -9,7 +9,7 @@ doit
 module subclass: 'importlib'
   instVarNames: #()
   classVars: #()
-  classInstVars: #('grailDir' 'codegenTraceDir' 'codegenTraceDirChecked')
+  classInstVars: #('grailDir')
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -719,29 +719,35 @@ classmethod: importlib
 ___codegenTraceDir___
 	"Return the codegen-trace output directory, or nil if tracing is
 	off.  Reads ``GRAIL_CODEGEN_TRACE_DIR'' from the gem environment
-	the first time it's asked and caches the result on the class so
-	repeated calls don't re-poll the OS.
+	the first time it's asked per session and caches the result in
+	SessionTemps so repeated calls don't re-poll the OS.  Storing in
+	SessionTemps (not a classInstVar) means each gem process reads
+	its own env var and two sessions never conflict on the same
+	committed slot.
 
 	When set, loadModuleFromPath: writes:
 	  <dir>/<module>.tpz  — Topaz-style source dump
 	  <dir>/<module>.ir   — initialize method IR snapshot
 
 	When unset (default), no debug capture happens — saves O(generated-
-	source-size) PrettyWriteStream work per module load.  Repeat the
-	first call by ``importlib ___codegenTraceDirInvalidate___'' after
+	source-size) PrettyWriteStream work per module load.  Reset the
+	cache with ``importlib ___codegenTraceDirInvalidate___'' after
 	changing the env var mid-session."
 
-	codegenTraceDirChecked == true ifTrue: [^ codegenTraceDir].
-	codegenTraceDir := System @env0:gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR'.
-	(codegenTraceDir notNil and: [codegenTraceDir isEmpty])
-		ifTrue: [codegenTraceDir := nil].
-	codegenTraceDirChecked := true.
-	codegenTraceDir ifNotNil: [
-		(GsFile existsOnServer: codegenTraceDir) ifFalse: [
-			GsFile createServerDirectory: codegenTraceDir
+	| temps dir |
+	temps := SessionTemps @env0:current.
+	(temps @env0:includesKey: #'___grailCodegenTraceDirChecked___')
+		ifTrue: [^ temps @env0:at: #'___grailCodegenTraceDir___' ifAbsent: [nil]].
+	dir := System @env0:gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR'.
+	(dir notNil and: [dir isEmpty]) ifTrue: [dir := nil].
+	dir ifNotNil: [
+		(GsFile existsOnServer: dir) ifFalse: [
+			GsFile createServerDirectory: dir
 		].
+		temps @env0:at: #'___grailCodegenTraceDir___' put: dir.
 	].
-	^ codegenTraceDir
+	temps @env0:at: #'___grailCodegenTraceDirChecked___' put: true.
+	^ dir
 %
 
 category: 'Grail-Class Compilation'
@@ -751,8 +757,10 @@ ___codegenTraceDirInvalidate___
 	re-reads the env variable.  Useful when toggling the variable from
 	a topaz session for ad-hoc debugging."
 
-	codegenTraceDir := nil.
-	codegenTraceDirChecked := false.
+	| temps |
+	temps := SessionTemps @env0:current.
+	temps @env0:removeKey: #'___grailCodegenTraceDir___' ifAbsent: [].
+	temps @env0:removeKey: #'___grailCodegenTraceDirChecked___' ifAbsent: [].
 %
 
 category: 'Grail-Class Compilation'

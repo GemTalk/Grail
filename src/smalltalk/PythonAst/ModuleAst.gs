@@ -10,7 +10,7 @@ AbstractNode subclass: 'ModuleAst'
   instVarNames: #(body name path
                     source type_ignore useTempsForBlock)
   classVars: #()
-  classInstVars: #(execCounter evalCounter doitCounter)
+  classInstVars: #()
   poolDictionaries: #()
   inDictionary: PythonAst
   options: #()
@@ -139,18 +139,17 @@ category: 'Grail-evaluation'
 classmethod: ModuleAst
 nextSeqFor: aKind
 	"Bump and return the per-session counter for aKind (#exec /
-	#eval / #doit).  Counters reset on install (classInstVars are
-	cleared when the class is re-subclassed) so each install gets a
-	fresh sequence."
+	#eval / #doit).  Counters live in SessionTemps so each gem
+	process gets its own independent sequence and no two sessions
+	can conflict on the same committed slot."
 
-	aKind == #exec ifTrue: [
-		execCounter := (execCounter ifNil: [0]) + 1.
-		^ execCounter].
-	aKind == #eval ifTrue: [
-		evalCounter := (evalCounter ifNil: [0]) + 1.
-		^ evalCounter].
-	doitCounter := (doitCounter ifNil: [0]) + 1.
-	^ doitCounter
+	| key temps |
+	key := aKind == #exec ifTrue: [#'___grailExecCounter___']
+		ifFalse: [aKind == #eval ifTrue: [#'___grailEvalCounter___']
+		ifFalse: [#'___grailDoitCounter___']].
+	temps := SessionTemps @env0:current.
+	temps @env0:at: key put: (temps @env0:at: key ifAbsent: [0]) + 1.
+	^ temps @env0:at: key
 %
 
 category: 'Grail-parsing'

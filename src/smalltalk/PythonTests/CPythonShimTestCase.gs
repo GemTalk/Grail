@@ -1875,3 +1875,21 @@ testNoneWrapperEmbedsSingletonOop
 	self assert: oop equals: None asOop.
 %
 
+category: 'Grail-Tests - Session-Local State'
+method: CPythonShimTestCase
+testShimSingletonLivesInSessionTempsNotCommitted
+	"Regression: CPythonShim current must live in SessionTemps, not a classInstVar.
+	A committed singleton holds stale C-backed CByteArray wrappers after a session
+	restart, and two concurrent sessions writing the same slot cause a conflict.
+	After CPythonShim current, the instance must be in SessionTemps."
+
+	| shim |
+	shim := CPythonShim current.
+	self assert: (SessionTemps current at: #CPythonShim ifAbsent: [nil]) == shim.
+	"reset clears the SessionTemps entry."
+	CPythonShim reset.
+	self assert: (SessionTemps current at: #CPythonShim ifAbsent: [nil]) isNil.
+	"setUp will reinitialize via the next test's setUp call; restore now."
+	CPythonShim current.
+%
+

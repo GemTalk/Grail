@@ -9,7 +9,7 @@ doit
 Object subclass: 'CPythonShim'
   instVarNames: #(valueToPyObject noneWrapper typeAddresses wrapsSinceSweep)
   classVars: #()
-  classInstVars: #( current libraryPath)
+  classInstVars: #( libraryPath)
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -66,27 +66,33 @@ category: 'Grail-Instance Creation'
 classmethod: CPythonShim
 current
 	"Ensure the user action library is loaded and return the singleton.
-	The cached singleton holds CByteArray wrappers backed by malloc'd C
-	memory. Those wrappers are dead pointers after a session restart, so
-	if the user action library isn't yet bound in this gem, drop the
-	singleton before re-initializing."
+	The singleton lives in SessionTemps so each gem process holds its
+	own CByteArray wrappers (backed by malloc'd C memory that is
+	local to the OS process).  A committed classInstVar would cause
+	two problems: stale C pointers after a session restart, and
+	write-write conflicts between concurrent sessions."
 
-	(current notNil and: [(System hasUserAction: #shimCall) not]) ifTrue: [
-		current := nil
+	| temps shim |
+	temps := SessionTemps current.
+	shim := temps at: #CPythonShim ifAbsent: [nil].
+	(shim notNil and: [(System hasUserAction: #shimCall) not]) ifTrue: [
+		temps removeKey: #CPythonShim ifAbsent: [].
+		shim := nil.
 	].
-	current ifNil: [
-		current := self basicNew.
-		self ensureLoaded.
+	shim ifNil: [
+		shim := self basicNew.
+		temps at: #CPythonShim put: shim.
+		self ensureLoaded: shim.
 	].
-	^ current
+	^ shim
 %
 
 category: 'Grail-Instance Creation'
 classmethod: CPythonShim
 reset
-	"Release the singleton."
+	"Release the singleton for this session."
 
-	current := nil.
+	SessionTemps current removeKey: #CPythonShim ifAbsent: [].
 %
 
 category: 'Grail-Configuration'
@@ -106,15 +112,15 @@ libraryPath: aString
 	"Set the path to the shim user action library."
 
 	libraryPath := aString.
-	current := nil.
+	SessionTemps current removeKey: #CPythonShim ifAbsent: [].
 %
 
 category: 'Grail-Testing'
 classmethod: CPythonShim
 isActive
-	"Return true if the shim singleton has been initialized."
+	"Return true if the shim singleton has been initialized in this session."
 
-	^ current notNil
+	^ (SessionTemps current at: #CPythonShim ifAbsent: [nil]) notNil
 %
 category: 'Grail-Testing'
 classmethod: CPythonShim
@@ -166,8 +172,10 @@ builtinModuleNamed: aName
 
 category: 'Grail-Loading'
 classmethod: CPythonShim
-ensureLoaded
-	"Load the user action library if needed, then init the server and types."
+ensureLoaded: aShim
+	"Load the user action library if needed, then init aShim and its types.
+	Takes the shim instance as a parameter rather than reading a classInstVar
+	so that callers can manage the singleton's lifecycle independently."
 
 	CPythonLibrary isActive ifTrue: [
 		self error: 'Cannot use CPythonShim: CPythonLibrary is already active in this session.'.
@@ -180,12 +188,12 @@ ensureLoaded
 	].
 	"Always init for the current instance (idempotent on the C side)"
 	System userAction: #shimInit withArgs: {
-		current .
-		(current wrap: None) memoryAddress .
-		(current wrap: true) memoryAddress .
-		(current wrap: false) memoryAddress
+		aShim .
+		(aShim wrap: None) memoryAddress .
+		(aShim wrap: true) memoryAddress .
+		(aShim wrap: false) memoryAddress
 	}.
-	current initTypeAddresses.
+	aShim initTypeAddresses.
 %
 
 ! ===============================================================================

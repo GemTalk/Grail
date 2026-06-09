@@ -225,7 +225,7 @@ initialize
 	"The embedded interpreter and the shim cannot coexist in one gem:
 	initializing CPython while the shim's C state is already live crashes
 	the process. Fail with a catchable Smalltalk error instead.
-	CPythonShim >> ensureLoaded is the guard in the other direction."
+	CPythonShim >> ensureLoaded: is the guard in the other direction."
 	CPythonShim isActive ifTrue: [
 		self error: 'Cannot use CPythonLibrary: CPythonShim is already active in this session.'.
 	].
