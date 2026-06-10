@@ -227,6 +227,22 @@ __init_subclass__
 
 category: 'Grail-Initialization'
 classmethod: object
+___pyClassDefined___: attrNames
+	"Metaclass post-population hook.  ClassDefAst sends this (class-side)
+	to every Python class right after its body is compiled, passing the
+	class-body attribute names in declaration order.  Dispatched through
+	the class's metaclass, so a metaclass such as ``Enum class`` can
+	override it to transform the body (e.g. build enum members from the
+	named class attributes).  The default returns the class unchanged.
+
+	Timing mirrors Python's metaclass ``__init__`` / ``__init_subclass__``
+	(after the namespace is populated), not ``__new__``."
+
+	^ self
+%
+
+category: 'Grail-Initialization'
+classmethod: object
 __new__
 	"Create a new instance of this class.
 	This is a class method that takes the class as the receiver.

@@ -715,6 +715,22 @@ printSmalltalkRuntimeOn: aStream
 		initSelector: initSelector
 		onStream: aStream.
 
+	"Metaclass post-population hook.  Send a class-side
+	``___pyClassDefined___:`` to the freshly-populated class with its
+	class-body attribute names (declaration order).  Dispatched through
+	the class's metaclass: the default (object class) returns the class
+	unchanged, but a metaclass such as ``Enum class`` overrides it to
+	transform the body into members.  Emitted BEFORE decorators, so the
+	metaclass runs first — mirroring Python's metaclass-then-decorator
+	order."
+	aStream nextPutAll: name; nextPutAll: ' := '; nextPutAll: name;
+		nextPutAll: ' @env1:___pyClassDefined___: { '.
+	self classBodyAttributes
+		do: [:pair |
+			aStream nextPutAll: '#'''; nextPutAll: pair key asString; nextPut: $']
+		separatedBy: [aStream nextPutAll: '. '].
+	aStream nextPutAll: ' }.'; lf.
+
 	"Apply class decorators bottom-up.  Python's ``@A @B class C:``
 	rebinds C to ``A(B(C))`` — the decorator closest to the class
 	(B, last in source order) runs first, then its result is passed

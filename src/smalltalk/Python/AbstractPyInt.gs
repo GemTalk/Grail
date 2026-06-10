@@ -181,14 +181,21 @@ hash
 category: 'Grail-Python Protocol'
 method: AbstractPyInt
 doesNotUnderstand: aSelector args: anArray envId: envId
-	"Forward unknown env-1 messages (__add__, __sub__, __and__, ...) to
-	the wrapped SmallInteger.  The result strips the wrapper — a
-	documented, intentional limitation for arithmetic."
+	"Forward unknown env-1 messages (__add__, __sub__, __or__, ...) to
+	the wrapped SmallInteger.  Arguments that are themselves AbstractPyInt
+	wrappers are unwrapped to their value first — arithmetic (+, -, *) is
+	coerced via _generality, but bitwise ops (bitOr:/bitAnd:) have no
+	coercing retry, so e.g. ``IntFlag.A | IntFlag.B`` needs the right
+	operand unwrapped here.  The result strips the wrapper (a documented,
+	intentional limitation for arithmetic)."
 
+	| unwrapped |
 	envId = 1 ifFalse: [
 		^ super doesNotUnderstand: aSelector args: anArray envId: envId
 	].
-	^ self @env0:value perform: aSelector env: 1 withArguments: anArray
+	unwrapped := anArray @env0:collect: [:a |
+		(a @env0:isKindOf: AbstractPyInt) ifTrue: [a @env0:value] ifFalse: [a]].
+	^ self @env0:value perform: aSelector env: 1 withArguments: unwrapped
 %
 
 category: 'Grail-Python Protocol'

@@ -44,17 +44,14 @@ category: 'Grail-Initialization'
 method: enum
 initialize
 	"Initialize stored attributes."
-	self @env0:at: #IntFlag put: int.
 	self @env0:at: #KEEP put: #KEEP.
-	"Enum / IntEnum / StrEnum / Flag — Jinja2 uses ``enum.Enum`` as
-	a marker base class for module-private states like
-	``_PassArg(enum.Enum): context = enum.auto()``.  Grail has no
-	enum machinery yet; alias them to ``PythonInstance`` so user
-	classes can subclass without erroring at import time.  The
-	per-member ``auto()`` calls just produce unique integers (see
-	``auto`` below) — sufficient for membership-style dispatch."
-	self @env0:at: #Enum put: PythonInstance.
-	self @env0:at: #IntEnum put: int.
+	"Enum / IntEnum / IntFlag are real classes now (see PyEnumTypes.gs):
+	``class X(IntEnum): A = 1`` builds real members via the metaclass
+	hook ``___pyClassDefined___:``.  StrEnum / Flag remain simple
+	aliases (out of scope): StrEnum -> str, Flag -> PythonInstance."
+	self @env0:at: #Enum put: Enum.
+	self @env0:at: #IntEnum put: IntEnum.
+	self @env0:at: #IntFlag put: IntFlag.
 	self @env0:at: #StrEnum put: Unicode7.
 	self @env0:at: #Flag put: PythonInstance.
 	"Pre-store ``auto'' as a BoundMethod so ``from enum import auto''
@@ -178,3 +175,10 @@ __simple_enum: positional kw: kwargs
 %
 
 set compile_env: 0
+
+! The module singleton is committed and lazily initialized; clear it so
+! the updated ``initialize`` above (real Enum/IntEnum/IntFlag classes)
+! re-runs on next access instead of returning a stale cached instance.
+run
+enum @env1:clearInstance.
+%

@@ -314,6 +314,9 @@ run
 	at: #'PythonInstance' put: nil;
 	at: #'PyInstanceDict' put: nil;
 	at: #'AbstractPyInt' put: nil;
+	at: #'Enum' put: nil;
+	at: #'IntEnum' put: nil;
+	at: #'IntFlag' put: nil;
 	at: #'NamedIntConstant' put: nil;
 	at: #'numbers' put: nil;
 	at: #'numbers_Complex' put: nil;
@@ -496,6 +499,7 @@ run
 	at: #'HttpClientTestCase' put: nil;
 	at: #'HttpStatusTestCase' put: nil;
 	at: #'HttpCookiesTestCase' put: nil;
+	at: #'EnumTestCase' put: nil;
 	at: #'GrailSTestTarget' put: nil;
 	at: #'ClassTestCase' put: nil;
 	at: #'ClosureAttributeTestCase' put: nil;
@@ -790,6 +794,7 @@ input src/smalltalk/Python/tuple_iterator.gs
 input src/smalltalk/Python/builtins.gs
 input src/smalltalk/Python/copyreg.gs
 input src/smalltalk/Python/cmath.gs
+input src/smalltalk/Python/PyEnumTypes.gs
 input src/smalltalk/Python/enum.gs
 input src/smalltalk/Python/fractions.gs
 ! LruCacheWrapper must load before functools — functools.lru_cache
@@ -1191,6 +1196,7 @@ input src/smalltalk/PythonTests/HtmlTestCase.gs
 input src/smalltalk/PythonTests/HttpClientTestCase.gs
 input src/smalltalk/PythonTests/HttpStatusTestCase.gs
 input src/smalltalk/PythonTests/HttpCookiesTestCase.gs
+input src/smalltalk/PythonTests/EnumTestCase.gs
 input src/smalltalk/PythonTests/CPythonShimTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/CPythonTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/CPythonLibraryTestCase.gs
