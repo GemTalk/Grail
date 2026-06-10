@@ -64,6 +64,16 @@ __new__: iterable
 		].
 		^ self @env0:withAll: items
 	].
+	"Dictionaries iterate their KEYS in Python (``set(d)`` ==
+	``set(d.keys())``); Smalltalk's ``do:`` on a dictionary walks the
+	VALUES, so the generic Collection fast path below would build the
+	wrong set (twilio.request_validator's ``sorted(set(params))``
+	KeyError'd using a value as a key)."
+	(iterable @env0:isKindOf: AbstractDictionary) ifTrue: [
+		items := OrderedCollection @env0:new.
+		iterable @env0:keysDo: [:k | items @env0:add: k].
+		^ self @env0:withAll: items
+	].
 	(iterable @env0:isKindOf: Collection) ifTrue: [
 		^ self @env0:withAll: iterable
 	].

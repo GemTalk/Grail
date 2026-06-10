@@ -14,9 +14,14 @@
 class Decimal:
     """Stub — real arithmetic is on Grail's built-in ScaledDecimal
     (mapped to the bare ``Decimal'' Python name in install.gs).
-    Subclass when full IEEE 754-2008 semantics are needed."""
+    Subclass when full IEEE 754-2008 semantics are needed.
 
-    def __init__(self, value=0):
+    The optional ``context`` argument matches CPython's
+    Decimal(value, context) form — twilio.base.deserialize calls
+    ``Decimal(d, BasicContext)``.  The context is accepted and
+    ignored (this stub doesn't round)."""
+
+    def __init__(self, value=0, context=None):
         self._value = value
 
     def __repr__(self):
@@ -42,6 +47,11 @@ class Context:
 
 
 _default_context = Context()
+
+# Named contexts from CPython's decimal — config-only placeholders.
+BasicContext = Context(prec=9)
+ExtendedContext = Context(prec=9)
+DefaultContext = _default_context
 
 
 def getcontext():

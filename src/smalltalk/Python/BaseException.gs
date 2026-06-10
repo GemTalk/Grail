@@ -74,24 +74,68 @@ set compile_env: 1
 
 category: 'Grail-Initialization'
 classmethod: BaseException
-__new__: cls
-	"Create a new BaseException instance with no arguments."
-	
+__new__
+	"``ExceptionClass()`` as an expression — the class-call fast path
+	(CallAst >> printBareCallClassNewOn:) emits ``(cls @env1:__new__)``
+	with the exception class as the RECEIVER and the constructor
+	arguments as the keyword arguments.  Construct without signaling:
+	``e = ValueError(); raise e`` signals later via RaiseAst's
+	``@env0:signal`` form.
+
+	NOTE: the previous ``__new__: cls`` / ``__new__: cls _: anArray``
+	forms here followed the explicit-cls convention of a dispatcher
+	that prepended the class argument; through the fast path that
+	bound the FIRST CONSTRUCTOR ARGUMENT as ``cls`` and sent
+	``___new___`` to a string.  No senders of the old forms remain."
+
 	| instance |
-	instance := cls ___new___.
+	instance := self ___new___.
 	instance ___args___: #().
 	^ instance
 %
 
 category: 'Grail-Initialization'
 classmethod: BaseException
-__new__: cls _: anArray
-	"Create a new BaseException instance with arguments.
-	anArray should be a tuple (Array) of arguments."
-	
+__new__: arg1
+	"``ExceptionClass(arg)`` as an expression — one constructor argument."
+
 	| instance |
-	instance := cls ___new___.
-	instance ___args___: { anArray ifNil: [ #() ] }.
+	instance := self ___new___.
+	instance ___args___: { arg1 }.
+	^ instance
+%
+
+category: 'Grail-Initialization'
+classmethod: BaseException
+__new__: arg1 _: arg2
+	"``ExceptionClass(a, b)`` as an expression."
+
+	| instance |
+	instance := self ___new___.
+	instance ___args___: { arg1. arg2 }.
+	^ instance
+%
+
+category: 'Grail-Initialization'
+classmethod: BaseException
+__new__: arg1 _: arg2 _: arg3
+	"``ExceptionClass(a, b, c)`` as an expression."
+
+	| instance |
+	instance := self ___new___.
+	instance ___args___: { arg1. arg2. arg3 }.
+	^ instance
+%
+
+category: 'Grail-Initialization'
+classmethod: BaseException
+__new__: arg1 _: arg2 _: arg3 _: arg4 _: arg5
+	"``ExceptionClass(a, b, c, d, e)`` as an expression —
+	UnicodeDecodeError / UnicodeEncodeError take five arguments."
+
+	| instance |
+	instance := self ___new___.
+	instance ___args___: { arg1. arg2. arg3. arg4. arg5 }.
 	^ instance
 %
 

@@ -230,6 +230,21 @@ class _SplitResult:
         except ValueError:
             return None
 
+    def _replace(self, scheme=None, netloc=None, path=None,
+                 query=None, fragment=None):
+        """namedtuple-style _replace — CPython's SplitResult is a
+        namedtuple and consumers (twilio.request_validator's
+        add_port/remove_port) rebuild URLs via
+        ``parsed._replace(netloc=...).geturl()``.  Components are
+        always strings, so None serves as the not-replaced sentinel."""
+        return _SplitResult(
+            self.scheme if scheme is None else scheme,
+            self.netloc if netloc is None else netloc,
+            self.path if path is None else path,
+            self.query if query is None else query,
+            self.fragment if fragment is None else fragment,
+        )
+
 
 def urlsplit(url, scheme="", allow_fragments=True):
     rest = url

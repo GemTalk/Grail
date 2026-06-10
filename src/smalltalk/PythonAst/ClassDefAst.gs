@@ -782,7 +782,19 @@ printSuperclassOn: aStream
 	see importlib >> ___selectStorageBase___:."
 
 	bases isEmpty ifTrue: [^ aStream nextPutAll: 'PythonInstance'].
-	bases size = 1 ifTrue: [^ bases first printSmalltalkOn: aStream].
+	bases size = 1 ifTrue: [
+		| only |
+		only := bases first.
+		"``class C(object):`` is identical to ``class C:`` in Python 3.
+		The bare name would resolve to GemStone Object, silently
+		dropping the class out of the PythonInstance chain — every
+		``isKindOf: PythonInstance`` gate in ___pyAttrLoad___ (property
+		pair-reads, class-attr fallbacks) then misfires (twilio's
+		``ClientBase(object)`` wrapped its @property getters as
+		BoundMethods instead of invoking them)."
+		((only isKindOf: NameAst) and: [only id asString = 'object'])
+			ifTrue: [^ aStream nextPutAll: 'PythonInstance'].
+		^ only printSmalltalkOn: aStream].
 	aStream nextPutAll: '((Python @env0:at: #importlib) @env0:___selectStorageBase___: { '.
 	1 to: bases size do: [:i |
 		i > 1 ifTrue: [aStream nextPutAll: '. '].

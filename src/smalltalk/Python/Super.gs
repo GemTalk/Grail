@@ -98,6 +98,34 @@ _lookupMethod: aSym
 	^ nil
 %
 
+category: 'Grail-Private'
+method: Super
+_lookupMethodFirstOf: selectors
+	"Walk the superClass chain starting from cls's parent; at EACH
+	class probe the env-1 methodDict for each selector in order
+	(nil entries skipped).  The first class defining ANY of the
+	forms wins — Python MRO semantics: the NEAREST parent supplies
+	the method, regardless of which arity-form it compiled to.
+
+	Probing one form across the whole chain first (the previous
+	strategy) let a distant default — object's 0-arg ``__init__``
+	no-op — shadow a direct parent's varargs ``___init__:kw:`` when
+	``super().__init__(**kwargs)`` was called with an EMPTY splat
+	(twilio.twiml: MessagingResponse() left TwiML.__init__ unrun,
+	so ``verbs`` / ``attrs`` never materialized)."
+
+	| walker |
+	walker := cls @env0:superClass.
+	[walker notNil] whileTrue: [
+		| md |
+		md := walker @env0:methodDictForEnv: 1.
+		selectors @env0:do: [:sel |
+			sel ifNotNil: [
+				(md @env0:includesKey: sel) ifTrue: [^ md @env0:at: sel]]].
+		walker := walker @env0:superClass].
+	^ nil
+%
+
 category: 'Python-Dispatch'
 method: Super
 doesNotUnderstand: aSelector args: anArray envId: envId
@@ -120,8 +148,16 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	envId = 1 ifFalse: [
 		^ super doesNotUnderstand: aSelector args: anArray envId: envId
 	].
-	method := self _lookupMethod: aSelector.
+	"Per-class probe of BOTH arity forms (fixed first, then the
+	varargs ``_<base>:kw:`` fallback) so the nearest parent wins —
+	see _lookupMethodFirstOf: for why chain-at-a-time probing was
+	wrong."
+	varargsSel := self _varargsSelectorFor: aSelector.
+	method := self _lookupMethodFirstOf: { aSelector. varargsSel }.
 	method ifNotNil: [
+		(method selector asString endsWith: ':kw:') ifTrue: [
+			^ obj with: anArray with: nil performMethod: method
+		].
 		nargs := anArray size.
 		nargs = 0 ifTrue: [^ obj performMethod: method].
 		nargs = 1 ifTrue: [^ obj with: (anArray at: 1) performMethod: method].
@@ -147,19 +183,6 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 		``perform:env:withArguments:`` which re-enters dispatch — works
 		when the parent method doesn't itself call super()."
 		^ obj perform: aSelector env: 1 withArguments: anArray
-	].
-	"Fixed-arity miss — fall back to the varargs ``_<base>:kw:`` form
-	the parent might publish instead.  Signal.__init__ (with a default
-	value) compiles to ``___init__:kw:``, so ``super().__init__(x)``
-	from NamedSignal lands here.  ``with:with:performMethod:`` (2-arg)
-	bypasses obj's class dispatch so the parent runs without re-firing
-	the override."
-	varargsSel := self _varargsSelectorFor: aSelector.
-	varargsSel ifNotNil: [
-		method := self _lookupMethod: varargsSel.
-		method ifNotNil: [
-			^ obj with: anArray with: nil performMethod: method
-		]
 	].
 	^ super doesNotUnderstand: aSelector args: anArray envId: envId
 %
@@ -197,32 +220,23 @@ ___pyAttrLoad___: aSym
 	sym3 := (s @env0:, ':_:_:') @env0:asSymbol.
 	symVA := ('_' @env0:, s @env0:, ':kw:') @env0:asSymbol.
 	pickMethod := [:nargs :kwOk |
-		| candidate |
+		| fixedSel |
+		"Resolve the fixed-arity selector for the call-site arity
+		(nil for 4+ positional args — only varargs can carry those)."
+		fixedSel := nil.
+		nargs @env0:= 0 ifTrue: [fixedSel := aSym].
+		nargs @env0:= 1 ifTrue: [fixedSel := sym1].
+		nargs @env0:= 2 ifTrue: [fixedSel := sym2].
+		nargs @env0:= 3 ifTrue: [fixedSel := sym3].
+		"Per-class probe of both forms — the NEAREST parent class
+		defining either form wins (Python MRO semantics; see
+		_lookupMethodFirstOf:).  With no kwargs prefer the fixed
+		form at each class; with kwargs present prefer varargs
+		``_<name>:kw:`` (a fixed-arity method would silently drop
+		them — typically Object>>__init__, the env-1 default no-op)."
 		kwOk
-			ifTrue: [
-				"No kwargs: try fixed-arity first, fall back to varargs."
-				nargs @env0:= 0 ifTrue: [candidate := self @env0:_lookupMethod: aSym].
-				nargs @env0:= 1 ifTrue: [candidate := self @env0:_lookupMethod: sym1].
-				nargs @env0:= 2 ifTrue: [candidate := self @env0:_lookupMethod: sym2].
-				nargs @env0:= 3 ifTrue: [candidate := self @env0:_lookupMethod: sym3].
-				candidate ifNil: [candidate := self @env0:_lookupMethod: symVA].
-				candidate
-			] ifFalse: [
-				"Kwargs present: ONLY varargs ``_<name>:kw:'' can accept
-				them.  A fixed-arity unary/keyword method on a superclass
-				(typically Object>>__init__ — the env-1 default no-op)
-				silently drops kwargs and the parent's real intent is
-				lost.  Try varargs first; only fall back to fixed-arity
-				if the parent class chain has no varargs entry."
-				candidate := self @env0:_lookupMethod: symVA.
-				candidate ifNil: [
-					nargs @env0:= 0 ifTrue: [candidate := self @env0:_lookupMethod: aSym].
-					nargs @env0:= 1 ifTrue: [candidate := self @env0:_lookupMethod: sym1].
-					nargs @env0:= 2 ifTrue: [candidate := self @env0:_lookupMethod: sym2].
-					nargs @env0:= 3 ifTrue: [candidate := self @env0:_lookupMethod: sym3].
-				].
-				candidate
-			]].
+			ifTrue: [self @env0:_lookupMethodFirstOf: { fixedSel. symVA }]
+			ifFalse: [self @env0:_lookupMethodFirstOf: { symVA. fixedSel }]].
 	"Wrap (obj, pickMethod) in a callable proxy that resolves the
 	method at call time once arity is known."
 	^ SuperBoundMethod @env1:obj: obj resolver: pickMethod selector: aSym

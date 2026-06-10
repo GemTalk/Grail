@@ -452,8 +452,16 @@ __add__: other
 category: 'Grail-Bitwise'
 method: bool
 __and__: other
-	"Bitwise AND of bool (as int) with other."
+	"Bitwise AND.  ``bool & bool`` returns a BOOL in CPython (bool is
+	an int subclass whose __and__ narrows the result); mixing with an
+	int degrades to int semantics.  A Boolean argument must be coerced
+	before bitAnd: — GemStone's integer primitive retry would
+	otherwise forward #bitAnd: to the Boolean argument and DNU
+	(twilio.request_validator's ``result &= c1 == c2``)."
 
+	(other @env0:isKindOf: Boolean) ifTrue: [
+		^ self @env0:and: [other]
+	].
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:bitAnd: other
 %
 
@@ -630,8 +638,12 @@ __neg__
 category: 'Grail-Bitwise'
 method: bool
 __or__: other
-	"Bitwise OR of bool (as int) with other."
+	"Bitwise OR.  bool | bool stays bool (see __and__: for the
+	coercion rationale); bool | int degrades to int semantics."
 
+	(other @env0:isKindOf: Boolean) ifTrue: [
+		^ self @env0:or: [other]
+	].
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:bitOr: other
 %
 
@@ -686,8 +698,12 @@ __truediv__: other
 category: 'Grail-Bitwise'
 method: bool
 __xor__: other
-	"Bitwise XOR of bool (as int) with other."
+	"Bitwise XOR.  bool ^ bool stays bool (see __and__: for the
+	coercion rationale); bool ^ int degrades to int semantics."
 
+	(other @env0:isKindOf: Boolean) ifTrue: [
+		^ self @env0:xor: other
+	].
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:bitXor: other
 %
 

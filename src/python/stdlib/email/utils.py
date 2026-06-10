@@ -60,6 +60,22 @@ def parsedate_to_datetime(date_str):
                     tzinfo=timezone.utc)
 
 
+def parsedate(date_str):
+    """RFC 2822 date string -> 9-tuple (time.struct_time shape), or
+    None if unparseable — including non-string input (twilio passes
+    payload fields that are often None straight through).
+    twilio.base.deserialize feeds the first six elements to
+    datetime(*tuple[:6])."""
+    if not isinstance(date_str, str):
+        return None
+    try:
+        dt = parsedate_to_datetime(date_str)
+    except (ValueError, KeyError, IndexError):
+        return None
+    return (dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second,
+            0, 1, -1)
+
+
 def format_datetime(dt, usegmt=False):
     """Format a datetime as an RFC 7231 HTTP date string.
 

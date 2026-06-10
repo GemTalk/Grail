@@ -96,7 +96,25 @@ printSmalltalkOn: aStream
 			ifFalse: [aStream nextPutAll: ']] @env0:on: '].
 		handler type
 			ifNil: [aStream nextPutAll: 'BaseException']
-			ifNotNil: [handler type printSmalltalkOn: aStream].
+			ifNotNil: [
+				(handler type isKindOf: TupleAst)
+					ifTrue: [
+						"``except (A, B):`` — emit a GemStone ExceptionSet
+						(classes joined with #,) rather than a Python tuple;
+						``on:do:`` dispatches ``handles:`` on its argument,
+						which a tuple/Array doesn't implement."
+						aStream nextPut: $(.
+						handler type elts doWithIndex: [:each :i |
+							i > 1 ifTrue: [aStream nextPutAll: ' @env0:, '].
+							each printSmalltalkWithParenthesisOn: aStream].
+						aStream nextPut: $)]
+					ifFalse: [
+						"Parenthesize — a dotted class expression
+						(``except http.client.HTTPException:``) prints as a
+						keyword send (``x ___pyAttrLoad___: #...``); unparenthesized
+						it merges with the surrounding ``on:...do:`` into one
+						mashed selector."
+						handler type printSmalltalkWithParenthesisOn: aStream]].
 		aStream nextPutAll: ' do: [:___ex |'; increaseIndent; lf.
 		"Always re-raise Grail's control-flow signals so a Python
 		``except Exception`` doesn't swallow a pending ``return`` /

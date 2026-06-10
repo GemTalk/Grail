@@ -145,6 +145,18 @@ path
 ! Fast-path callables — directory operations
 ! ===============================================================================
 
+category: 'Grail-Process Information'
+method: os
+cpu_count
+	"os.cpu_count() — logical CPU count.  GemStone has no portable
+	host-CPU primitive exposed to gems; consumers use this for pool
+	or worker sizing only (twilio's TwilioHttpClient computes
+	``min(32, os.cpu_count() + 4)`` for its adapter pool), so a
+	fixed nominal value is sufficient."
+
+	^ 4
+%
+
 category: 'Grail-File and Directory Operations'
 method: os
 getcwd

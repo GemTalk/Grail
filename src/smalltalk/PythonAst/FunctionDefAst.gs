@@ -1101,9 +1101,22 @@ generateModuleMethodSourceOn: aStream
 		``kwargs := kwargs ifNil: [...]'' reads nil), rename the method
 		params to internal sentinels that body code never names."
 		| posMethodParam kwMethodParam |
-		posMethodParam := (args vararg notNil and: [args vararg name @env0:asString @env0:= 'positional'])
+		"The collision isn't limited to *vararg/**kwarg names: ANY
+		parameter or body local named ``positional''/``kwargs''
+		shadows the method param as a block temp, so the kw-binding
+		preamble reads nil and every keyword-passed argument binds
+		None.  twilio's TwilioHttpClient.request builds a LOCAL dict
+		named ``kwargs'' — data/auth silently vanished."
+		"asString both sides: paramNames/bodyVars carry Symbols, and
+		GemStone Symbol equality is identity — a bare includes: with a
+		String probe never matches."
+		posMethodParam := ((args vararg notNil and: [args vararg name @env0:asString @env0:= 'positional'])
+			or: [(paramNames detect: [:p | p @env0:asString @env0:= 'positional'] ifNone: [nil]) notNil
+			or: [(bodyVars detect: [:v | v @env0:asString @env0:= 'positional'] ifNone: [nil]) notNil]])
 			ifTrue: ['___pos___'] ifFalse: ['positional'].
-		kwMethodParam := (args kwarg notNil and: [args kwarg name @env0:asString @env0:= 'kwargs'])
+		kwMethodParam := ((args kwarg notNil and: [args kwarg name @env0:asString @env0:= 'kwargs'])
+			or: [(paramNames detect: [:p | p @env0:asString @env0:= 'kwargs'] ifNone: [nil]) notNil
+			or: [(bodyVars detect: [:v | v @env0:asString @env0:= 'kwargs'] ifNone: [nil]) notNil]])
 			ifTrue: ['___kw___'] ifFalse: ['kwargs'].
 		aStream nextPut: $_; nextPutAll: name;
 			nextPutAll: ': '; nextPutAll: posMethodParam;
@@ -1198,6 +1211,18 @@ generateModuleMethodSourceOn: aStream
 				nextPutAll: ' ifNil: [(KeyValueDictionary perform: #new env: 0)]) @env0:copy.';
 				lf.
 			args kwonlyargs do: [:each |
+				aStream
+					nextPutAll: args kwarg name;
+					nextPutAll: ' @env0:removeKey: '''; nextPutAll: each name;
+					nextPutAll: ''' ifAbsent: []. '; lf.
+			].
+			"Regular named params bind from the kw dict too (``def
+			f(body=None, **kw)`` called as ``f(body=x, voice=y)``), so
+			they must be dropped the same way — without this, twilio's
+			TwiML verbs saw every declared param duplicated into the
+			attrs dict.  posonlyargs stay: a keyword spelled like a
+			positional-only param legitimately lands in **kwargs."
+			args args do: [:each |
 				aStream
 					nextPutAll: args kwarg name;
 					nextPutAll: ' @env0:removeKey: '''; nextPutAll: each name;
@@ -1551,9 +1576,22 @@ generateMethodSourceOn: aStream
 		when the user's *vararg / **kwarg name would collide — same
 		rationale as the module-method varargs branch."
 		| posMethodParam kwMethodParam |
-		posMethodParam := (args vararg notNil and: [args vararg name @env0:asString @env0:= 'positional'])
+		"The collision isn't limited to *vararg/**kwarg names: ANY
+		parameter or body local named ``positional''/``kwargs''
+		shadows the method param as a block temp, so the kw-binding
+		preamble reads nil and every keyword-passed argument binds
+		None.  twilio's TwilioHttpClient.request builds a LOCAL dict
+		named ``kwargs'' — data/auth silently vanished."
+		"asString both sides: paramNames/bodyVars carry Symbols, and
+		GemStone Symbol equality is identity — a bare includes: with a
+		String probe never matches."
+		posMethodParam := ((args vararg notNil and: [args vararg name @env0:asString @env0:= 'positional'])
+			or: [(paramNames detect: [:p | p @env0:asString @env0:= 'positional'] ifNone: [nil]) notNil
+			or: [(bodyVars detect: [:v | v @env0:asString @env0:= 'positional'] ifNone: [nil]) notNil]])
 			ifTrue: ['___pos___'] ifFalse: ['positional'].
-		kwMethodParam := (args kwarg notNil and: [args kwarg name @env0:asString @env0:= 'kwargs'])
+		kwMethodParam := ((args kwarg notNil and: [args kwarg name @env0:asString @env0:= 'kwargs'])
+			or: [(paramNames detect: [:p | p @env0:asString @env0:= 'kwargs'] ifNone: [nil]) notNil
+			or: [(bodyVars detect: [:v | v @env0:asString @env0:= 'kwargs'] ifNone: [nil]) notNil]])
 			ifTrue: ['___kw___'] ifFalse: ['kwargs'].
 		aStream nextPut: $_; nextPutAll: name;
 			nextPutAll: ': '; nextPutAll: posMethodParam;
@@ -1656,6 +1694,18 @@ generateMethodSourceOn: aStream
 				nextPutAll: ' ifNil: [(KeyValueDictionary perform: #new env: 0)]) @env0:copy.';
 				lf.
 			args kwonlyargs do: [:each |
+				aStream
+					nextPutAll: args kwarg name;
+					nextPutAll: ' @env0:removeKey: '''; nextPutAll: each name;
+					nextPutAll: ''' ifAbsent: []. '; lf.
+			].
+			"Regular named params bind from the kw dict too (``def
+			f(body=None, **kw)`` called as ``f(body=x, voice=y)``), so
+			they must be dropped the same way — without this, twilio's
+			TwiML verbs saw every declared param duplicated into the
+			attrs dict.  posonlyargs stay: a keyword spelled like a
+			positional-only param legitimately lands in **kwargs."
+			args args do: [:each |
 				aStream
 					nextPutAll: args kwarg name;
 					nextPutAll: ' @env0:removeKey: '''; nextPutAll: each name;

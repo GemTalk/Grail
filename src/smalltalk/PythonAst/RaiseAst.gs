@@ -77,11 +77,20 @@ printSmalltalkOn: aStream
 		^ self
 	].
 	exc ifNotNil: [
-		(exc isKindOf: CallAst) ifTrue: [
+		((exc isKindOf: CallAst) and: [exc function isKindOf: NameAst]) ifTrue: [
 			"raise ExceptionClass(*args, **kw) → ExceptionClass ___signalNew___:
 			{args} kw: kwDict — construct with the full arg list, RUNNING any
 			user-defined __init__ (a plain message-only signal skipped __init__
-			and dropped all args past the first), then signal."
+			and dropped all args past the first), then signal.
+
+			Gated to BARE-NAME callees: only those reliably denote an
+			exception class.  ``raise self.exception(...)`` (twilio) /
+			``raise pkg.Cls(...)`` resolve through attribute loads —
+			the callee there can be a BoundMethod (which DNU'd on
+			___signalNew___); those fall through to the expression
+			path below, which evaluates the CALL (running the class's
+			synthesized value:value: + __init__, or the method body)
+			and signals the resulting exception instance."
 			exc function printSmalltalkWithParenthesisOn: aStream.
 			aStream nextPutAll: ' ___signalNew___: '.
 			exc printArgumentsArrayOn: aStream.

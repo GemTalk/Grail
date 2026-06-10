@@ -60,24 +60,41 @@ doesn't preserve.
   `KeyError` alone in the shim).  Fix would need C3 MRO + per-method
   resolution walking multiple parent chains.
 
-- [ ] **No single inheritance** — `class Foo(Bar):` ignores `bases`
-  for non-built-in `Bar`.  Generated user classes are always direct
-  `PythonInstance` subclasses.  Built-in bases (`dict`, `list`, etc.) and
-  their subscripted aliases (`dict[K, V]`) now do extend the
-  corresponding Smalltalk class (KeyValueDictionary, OrderedCollection),
-  so the gap is only for *user-defined* parent classes.  A fix would
-  make the generated class a subclass of the named parent and inherit
-  instVars/methods.
+- [x] **Single inheritance** — works, including cross-module parents
+  and `super().__init__` chains (verified by `TwilioShapeTestCase`:
+  `Domain -> Api`, `Version -> V2010`, `InstanceResource ->
+  MessageInstance`, and the full vendored twilio Client/ClientBase).
+  The old "ignores bases" note was stale.  `class C(object):` now also
+  maps to PythonInstance instead of GemStone Object (ClassDefAst >>
+  printSuperclassOn:) — an explicit-object base used to silently drop
+  the class out of the PythonInstance attribute machinery.
 
-- [ ] **No `@classmethod` / `@staticmethod`** — only instance methods
-  (`InstanceFunctionDefAst`) are compiled as real methods.  The
-  decorators are recognized by the parser but ignored by codegen.
+- [~] **`@classmethod` / `@staticmethod`** — @classmethod now compiles
+  to the metaclass (category `Grail-Class Methods`) and works through
+  BOTH access paths: attribute load (`obj.cls_method` /
+  `Cls.cls_method` wrap a class-receiver BoundMethod) and direct
+  sends (`self.cls_method(args)` forwards via the PythonInstance DNU
+  backstop — added for twilio's ``raise self.exception(...)``).
+  Remaining: `Cls.cls_method(...)` through the CallAst bare-name
+  class-call fast path emits `__new__`-style dispatch and misses the
+  metaclass method; @staticmethod still unverified.
 
 - [ ] **No dynamic attribute access** — `setattr()` / `getattr()` /
   `delattr()` don't work on user-class instances.  Attributes are
   instVars, so dynamic access would need reflection (`instVarAt:put:`
   via name lookup) plus a fallback for names that don't have an instVar
   slot.
+
+## Twilio Trajectory
+
+The twilio REST core + TwiML + request validation run on Grail —
+see [docs/Support_Twilio.md](docs/Support_Twilio.md) for what's
+vendored, the 13 runtime/codegen fixes that fell out, and the test
+inventory.  Open items tracked there: PyJWT-HS256 shim for
+`twilio.jwt`, vendor-on-demand for further REST domains, live-network
+TLS verification, and the pre-existing `Fraction(...)` constructor
+convention bug (same explicit-cls shape the BaseException `__new__`
+family had).
 
 ## Generator Protocol — Remaining Pieces
 

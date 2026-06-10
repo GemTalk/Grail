@@ -171,9 +171,36 @@ __format__: formatSpec
 
 category: 'Grail-Comparison'
 method: CharacterCollection
-__ge__: other
-	"Return self >= other"
+___codePointCompare___: other
+	"Three-way lexicographic comparison by Unicode CODEPOINT — Python's
+	string ordering.  GemStone's <, <=, >, >= use the Unicode collation
+	(case-insensitive: 'Caller' sorts before 'CallSid'), which breaks
+	order-sensitive Python output — twilio.request_validator's HMAC
+	input is the params concatenated in sorted() order, so collation
+	ordering produced a wrong signature.  Returns -1, 0, or 1."
 
+	| n1 n2 lim c1 c2 |
+	n1 := self @env0:size.
+	n2 := other @env0:size.
+	lim := n1 @env0:min: n2.
+	1 @env0:to: lim do: [:i |
+		c1 := (self @env0:at: i) @env0:codePoint.
+		c2 := (other @env0:at: i) @env0:codePoint.
+		c1 @env0:< c2 ifTrue: [^ -1].
+		c1 @env0:> c2 ifTrue: [^ 1]].
+	n1 @env0:< n2 ifTrue: [^ -1].
+	n1 @env0:> n2 ifTrue: [^ 1].
+	^ 0
+%
+
+category: 'Grail-Comparison'
+method: CharacterCollection
+__ge__: other
+	"Return self >= other (codepoint order for strings)"
+
+	(other @env0:isKindOf: CharacterCollection) ifTrue: [
+		^ (self ___codePointCompare___: other) @env0:>= 0
+	].
 	^ self @env0:>= other
 %
 
@@ -218,8 +245,11 @@ __getitem__: index
 category: 'Grail-Comparison'
 method: CharacterCollection
 __gt__: other
-	"Return self > other"
+	"Return self > other (codepoint order for strings)"
 
+	(other @env0:isKindOf: CharacterCollection) ifTrue: [
+		^ (self ___codePointCompare___: other) @env0:> 0
+	].
 	^ self @env0:> other
 %
 
@@ -251,8 +281,11 @@ __iter__
 category: 'Grail-Comparison'
 method: CharacterCollection
 __le__: other
-	"Return self <= other"
+	"Return self <= other (codepoint order for strings)"
 
+	(other @env0:isKindOf: CharacterCollection) ifTrue: [
+		^ (self ___codePointCompare___: other) @env0:<= 0
+	].
 	^ self @env0:<= other
 %
 
@@ -267,8 +300,11 @@ __len__
 category: 'Grail-Comparison'
 method: CharacterCollection
 __lt__: other
-	"Return self < other"
+	"Return self < other (codepoint order for strings)"
 
+	(other @env0:isKindOf: CharacterCollection) ifTrue: [
+		^ (self ___codePointCompare___: other) @env0:< 0
+	].
 	^ self @env0:< other
 %
 

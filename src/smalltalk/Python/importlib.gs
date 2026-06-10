@@ -1174,14 +1174,40 @@ ___import__: positional kw: kwargs
 			| subName subPath alreadyBound |
 			alreadyBound := (result @env0:isKindOf: module)
 				ifTrue: [
-					"Check dynamic instVars first (fast path), then fall back
-					to ___pyAttrLoad___ to cover env1 methods (varargs _name:kw:,
-					unary name, fixed-arity name:) so that 'from mod import fn'
-					does not try to load mod.fn as a submodule file when fn is
-					already a callable method on the module class."
+					"Check dynamic instVars first (fast path), then env-1
+					methods (varargs _name:kw:, unary name, fixed-arity
+					name:) so that 'from mod import fn' does not try to
+					load mod.fn as a submodule file when fn is already a
+					callable method on the module class.
+
+					The method probe must only count selectors the MODULE
+					ITSELF owns (its concrete class, or anything below
+					``module`` in the chain).  Modules inherit the whole
+					dict protocol through SymbolDictionary, so a blanket
+					___pyAttrLoad___ probe reports names like ``values'' /
+					``keys'' / ``items'' as bound and skips loading a real
+					sibling submodule — ``from twilio.base import values''
+					bound KeyValueDictionary>>values' OrderedCollection
+					instead of values.py."
 					(result @env0:dynamicInstVarAt: fromName @env0:asSymbol) notNil or: [
-						[result @env1:___pyAttrLoad___: fromName @env0:asSymbol. true]
-							@env0:on: AttributeError do: [:_ | false]
+						| mcls s owned |
+						mcls := result @env0:class.
+						s := fromName @env0:asString.
+						owned := false.
+						{ s @env0:asSymbol.
+						  (s @env0:, ':') @env0:asSymbol.
+						  (s @env0:, ':_:') @env0:asSymbol.
+						  (s @env0:, ':_:_:') @env0:asSymbol.
+						  ('_' @env0:, s @env0:, ':kw:') @env0:asSymbol } @env0:do: [:sel |
+							| owner |
+							owner := mcls @env0:whichClassIncludesSelector: sel environmentId: 1.
+							(owner notNil and: [owner == module or: [owner @env0:inheritsFrom: module]])
+								ifTrue: [owned := true]].
+						owned or: [
+							"Legacy SymbolDictionary at: storage (built-in
+							modules still keep some constants there)."
+							(result @env0:at: fromName @env0:asSymbol
+								ifAbsent: [nil]) notNil]
 					]
 				]
 				ifFalse: [false].

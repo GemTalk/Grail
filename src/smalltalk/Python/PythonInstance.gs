@@ -62,7 +62,7 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	signature compiles to `_foo:kw:``).  Without this redirect, every
 	such call would be misinterpreted as a setter."
 
-	| s |
+	| s metaOwner |
 	envId = 1 ifFalse: [
 		^ super doesNotUnderstand: aSelector args: anArray envId: envId
 	].
@@ -76,6 +76,31 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 				^ self @env0:perform: varargSel
 					env: 1
 					withArguments: { anArray @env0:asArray. nil }
+			].
+			"@classmethod called through the instance — codegen emits a
+			direct send for ``self.cls_method(args)`` but the def lives
+			on the METACLASS (category Grail-Class Methods).  Forward
+			with the class as the receiver, matching Python's
+			classmethod-via-instance binding (twilio:
+			``raise self.exception(method, uri, response, msg)`` in
+			Version._parse_create).  Probed BEFORE the setter
+			interpretation; the category gate keeps synthesized
+			class-attr accessors and real setters out of this branch."
+			metaOwner := (self @env0:class @env0:class)
+				@env0:whichClassIncludesSelector: aSelector environmentId: 1.
+			(metaOwner notNil and: [
+				(metaOwner @env0:categoryOfSelector: aSelector environmentId: 1)
+					@env0:= #'Grail-Class Methods']) ifTrue: [
+				^ self @env0:class @env0:perform: aSelector
+					env: 1 withArguments: anArray @env0:asArray
+			].
+			metaOwner := (self @env0:class @env0:class)
+				@env0:whichClassIncludesSelector: varargSel environmentId: 1.
+			(metaOwner notNil and: [
+				(metaOwner @env0:categoryOfSelector: varargSel environmentId: 1)
+					@env0:= #'Grail-Class Methods']) ifTrue: [
+				^ self @env0:class @env0:perform: varargSel
+					env: 1 withArguments: { anArray @env0:asArray. nil }
 			].
 			"Setter — single trailing colon, no other colons.  Phase B:
 			write into the instance's dynamic-instVar storage so the

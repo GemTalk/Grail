@@ -480,7 +480,7 @@ ___pyAttrLoad___: aSym
 	  - Otherwise dispatch the unary message anyway and let DNU
 	    produce the appropriate error or fallback."
 
-	| md sym1 sym2 sym3 sym4 symVA s isModule isGenerated dynValue walker owner |
+	| md sym1 sym2 sym3 sym4 sym5 sym6 symVA s isModule isGenerated dynValue walker owner |
 	"Phase B: probe the receiver's dynamic-instVar storage first.
 	After Phase A + Phase B this is the canonical home for module
 	globals (any receiver of class module), instance attributes (any
@@ -519,6 +519,14 @@ ___pyAttrLoad___: aSym
 	sym2 := (s @env0:, ':_:') @env0:asSymbol.
 	sym3 := (s @env0:, ':_:_:') @env0:asSymbol.
 	sym4 := (s @env0:, ':_:_:_:') @env0:asSymbol.
+	"5- and 6-arg fixed selectors: generated/library code does declare
+	methods this wide with no defaults (twilio's
+	``Session.merge_environment_settings(self, url, proxies, stream,
+	verify, cert)``), and without the probe the attribute load
+	AttributeErrors even though the method exists.  BoundMethod's
+	_selectorForArgCount: already builds any arity at call time."
+	sym5 := (s @env0:, ':_:_:_:_:') @env0:asSymbol.
+	sym6 := (s @env0:, ':_:_:_:_:_:') @env0:asSymbol.
 	symVA := ('_' @env0:, s @env0:, ':kw:') @env0:asSymbol.
 	"Module instances (pre-installed Python modules like html/math, plus
 	loaded module classes derived from `module`) always treat unary
@@ -655,7 +663,9 @@ ___pyAttrLoad___: aSym
 			@env0:or: [(self @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil
 			@env0:or: [(self @env0:whichClassIncludesSelector: sym3 environmentId: 1) notNil
 			@env0:or: [(self @env0:whichClassIncludesSelector: sym4 environmentId: 1) notNil
-			@env0:or: [(self @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil]]]]])
+			@env0:or: [(self @env0:whichClassIncludesSelector: sym5 environmentId: 1) notNil
+			@env0:or: [(self @env0:whichClassIncludesSelector: sym6 environmentId: 1) notNil
+			@env0:or: [(self @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil]]]]]]])
 			ifTrue: [^ UnboundMethod @env1:definingClass: self selector: aSym].
 	].
 	"Python user classes (PythonInstance subclasses) have synthesized
@@ -729,7 +739,9 @@ ___pyAttrLoad___: aSym
 			or: [(metaclass @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil
 				or: [(metaclass @env0:whichClassIncludesSelector: sym3 environmentId: 1) notNil
 					or: [(metaclass @env0:whichClassIncludesSelector: sym4 environmentId: 1) notNil
-						or: [(metaclass @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil]]]])
+						or: [(metaclass @env0:whichClassIncludesSelector: sym5 environmentId: 1) notNil
+							or: [(metaclass @env0:whichClassIncludesSelector: sym6 environmentId: 1) notNil
+								or: [(metaclass @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil]]]]]])
 			ifTrue: [^ BoundMethod @env1:receiver: self @env0:class selector: aSym].
 	].
 	"Shim wrapper classes (SrePattern, SreMatch, ...) advertise the
@@ -778,7 +790,9 @@ ___pyAttrLoad___: aSym
 			or: [(self @env0:class @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil
 				or: [(self @env0:class @env0:whichClassIncludesSelector: sym3 environmentId: 1) notNil
 					or: [(self @env0:class @env0:whichClassIncludesSelector: sym4 environmentId: 1) notNil
-						or: [(self @env0:class @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil]]]]])
+						or: [(self @env0:class @env0:whichClassIncludesSelector: sym5 environmentId: 1) notNil
+							or: [(self @env0:class @env0:whichClassIncludesSelector: sym6 environmentId: 1) notNil
+								or: [(self @env0:class @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil]]]]]]])
 		ifTrue: [^ BoundMethod @env1:receiver: self selector: aSym].
 	"Unbound class-method lookup: ``Cls.method'' where ``method'' is
 	an instance method defined on Cls itself (env 1).  Python returns

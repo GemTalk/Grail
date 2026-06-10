@@ -492,6 +492,7 @@ run
 	at: #'ClassDecoratorTestCase' put: nil;
 	at: #'ClassScopeTestCase' put: nil;
 	at: #'GrailModuleTestCase' put: nil;
+	at: #'HttpClientTestCase' put: nil;
 	at: #'GrailSTestTarget' put: nil;
 	at: #'ClassTestCase' put: nil;
 	at: #'ClosureAttributeTestCase' put: nil;
@@ -642,6 +643,9 @@ run
 	at: #'TimeoutErrorTestCase' put: nil;
 	at: #'TryTestCase' put: nil;
 	at: #'TupleTestCase' put: nil;
+	at: #'TwilioClientTestCase' put: nil;
+	at: #'TwilioShapeTestCase' put: nil;
+	at: #'TwilioTier1TestCase' put: nil;
 	at: #'TypeErrorTestCase' put: nil;
 	at: #'UnboundLocalErrorTestCase' put: nil;
 	at: #'UrlsplitIndexingTestCase' put: nil;
@@ -1179,6 +1183,7 @@ input src/smalltalk/PythonTests/FunctoolsWrapsVarargsTestCase.gs
 input src/smalltalk/PythonTests/GemStoneTestCase.gs
 input src/smalltalk/PythonTests/GlobalStatementTestCase.gs
 input src/smalltalk/PythonTests/HtmlTestCase.gs
+input src/smalltalk/PythonTests/HttpClientTestCase.gs
 input src/smalltalk/PythonTests/CPythonShimTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/CPythonTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/CPythonLibraryTestCase.gs
@@ -1293,6 +1298,9 @@ input src/smalltalk/PythonTests/SystemErrorTestCase.gs
 input src/smalltalk/PythonTests/SystemExitTestCase.gs
 input src/smalltalk/PythonTests/TabErrorTestCase.gs
 input src/smalltalk/PythonTests/TimeoutErrorTestCase.gs
+input src/smalltalk/PythonTests/TwilioClientTestCase.gs
+input src/smalltalk/PythonTests/TwilioShapeTestCase.gs
+input src/smalltalk/PythonTests/TwilioTier1TestCase.gs
 input src/smalltalk/PythonTests/TypeErrorTestCase.gs
 input src/smalltalk/PythonTests/UnboundLocalErrorTestCase.gs
 input src/smalltalk/PythonTests/UrlsplitIndexingTestCase.gs
