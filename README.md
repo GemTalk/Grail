@@ -37,6 +37,20 @@ A REPL (read-eval-print loop) is a convenient way to experiment with a programmi
 
 To exit the REPL, enter `exit()` or `quit()`. If you get an error and end up with a `topaz 1>` prompt, then enter `exit` to exit.
 
+## GemStone Interoperability
+
+Python code can work with existing GemStone data and operations through the built-in `gemstone` module:
+
+```python
+import gemstone
+
+gemstone["greeting"] = "Hello, Grail!"   # named globals (UserGlobals / symbol list)
+gemstone.system.commit()                 # transaction control via the System class
+symbol_dictionaries = gemstone.mySymbolList   # the session's SymbolDictionary instances
+```
+
+See [The gemstone Module](docs/Gemstone_Module.md) for the full API.
+
 ## Embedded CPython (Two-Object-Space)
 
 Grail includes an optional embedded CPython integration that loads `libpython` as a dynamic library

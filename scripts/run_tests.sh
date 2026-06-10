@@ -59,6 +59,14 @@ LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runCPythonTests.gs < /dev/nu
 # SEGVing, then removes the key and commits to leave the repository clean.
 LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runIssue2Test.gs < /dev/null || EXIT=$?
 
+# Functional test for gemstone.system.commit()/abort() (env-1 class-side
+# methods on System reached via the gemstone module). Commit/abort cannot
+# run inside the in-session SUnit suite -- this script commits a value via
+# gemstone.system.commit(), re-logs in to verify persistence, discards an
+# uncommitted overwrite via gemstone.system.abort(), then removes the key
+# and commits to leave the repository clean.
+LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runGemstoneSystemTest.gs < /dev/null || EXIT=$?
+
 # Grail-side WeakReference commit-safety regression. Builds a Grail
 # WeakReference, commits the UserGlobals graph that holds it, re-logs in,
 # and verifies the post-commit contract: outer ref persists, the dbTransient

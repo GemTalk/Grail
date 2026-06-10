@@ -141,6 +141,130 @@ testGemstoneModuleIsAvailable
 	self assert: result class equals: gemstone
 %
 
+category: 'Grail-Tests - GemStone Interop'
+method: GemStoneTestCase
+test_mySymbolList
+	"gemstone.mySymbolList returns a Python list whose elements are the
+	session's SymbolDictionary instances, in symbolList order."
+
+	| gs result expected |
+	gs := gemstone @env1:instance.
+	result := gs @env1:mySymbolList.
+	expected := GsCurrentSession currentSession symbolList.
+	self assert: (result isKindOf: list).
+	self assert: result size equals: expected size.
+	1 to: expected size do: [:i |
+		self assert: (result at: i) identical: (expected at: i)]
+%
+
+category: 'Grail-Tests - GemStone Interop'
+method: GemStoneTestCase
+test_mySymbolListIsFreshCopy
+	"Each read builds a fresh list, so Python-side mutation cannot
+	disturb the session's real symbol list."
+
+	| gs a sizeBefore |
+	gs := gemstone @env1:instance.
+	sizeBefore := GsCurrentSession currentSession symbolList size.
+	a := gs @env1:mySymbolList.
+	self deny: a == (gs @env1:mySymbolList).
+	a removeFirst.
+	self assert: GsCurrentSession currentSession symbolList size
+		equals: sizeBefore
+%
+
+category: 'Grail-Tests - GemStone Interop'
+method: GemStoneTestCase
+test_system
+	"gemstone.system is the GemStone System class itself."
+
+	| gs |
+	gs := gemstone @env1:instance.
+	self assert: (gs @env1:system) identical: System
+%
+
+category: 'Grail-Tests - GemStone Interop'
+method: GemStoneTestCase
+testEvalMySymbolList
+	"Attribute read from Python source: gemstone.mySymbolList[0] is the
+	first SymbolDictionary in the session's symbol list."
+
+	| result |
+	result := self eval: '
+import gemstone
+gemstone.mySymbolList[0]
+'.
+	self assert: result
+		identical: (GsCurrentSession currentSession symbolList at: 1)
+%
+
+category: 'Grail-Tests - GemStone Interop'
+method: GemStoneTestCase
+testEvalSystemIsSystemClass
+	"Attribute read from Python source: gemstone.system is System."
+
+	| result |
+	result := self eval: '
+import gemstone
+gemstone.system
+'.
+	self assert: result identical: System
+%
+
+category: 'Grail-Tests - GemStone Interop'
+method: GemStoneTestCase
+testEvalSystemAbortResolvesToBoundMethod
+	"gemstone.system.abort resolves to a BoundMethod wrapping
+	(System, #abort) — i.e. System carries the env-1 class-side method
+	from System.gs.  Invoking it mid-suite would discard the session's
+	uncommitted state (cf. the xtest precedent in CPythonReplTestCase),
+	so the functional behavior is exercised by the standalone script
+	tests/scripts/runGemstoneSystemTest.gs instead."
+
+	| result |
+	result := self eval: '
+import gemstone
+gemstone.system.abort
+'.
+	self assert: (result isKindOf: BoundMethod).
+	self assert: result receiver identical: System.
+	self assert: result selector equals: #abort
+%
+
+category: 'Grail-Tests - GemStone Interop'
+method: GemStoneTestCase
+testEvalSystemCommitResolvesToBoundMethod
+	"gemstone.system.commit resolves to a BoundMethod wrapping
+	(System, #commit).  See testEvalSystemAbortResolvesToBoundMethod
+	for why the suite must not invoke it."
+
+	| result |
+	result := self eval: '
+import gemstone
+gemstone.system.commit
+'.
+	self assert: (result isKindOf: BoundMethod).
+	self assert: result receiver identical: System.
+	self assert: result selector equals: #commit
+%
+
+category: 'Grail-Tests - GemStone Interop'
+method: GemStoneTestCase
+testEvalModuleLevelCommitAbortRemoved
+	"The module-level gemstone.commit()/gemstone.abort() fast paths were
+	replaced by gemstone.system.commit()/gemstone.system.abort(); the old
+	attribute names must now raise AttributeError."
+
+	self should: [self eval: '
+import gemstone
+gemstone.commit
+'] raise: AttributeError.
+	self should: [self eval: '
+import gemstone
+gemstone.abort
+'] raise: AttributeError
+%
+
 category: 'Grail-Tests - Phase 4d Attribute Calls'
 method: GemStoneTestCase
 testEvalGemstoneVersion

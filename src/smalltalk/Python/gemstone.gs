@@ -20,12 +20,21 @@ doit
 gemstone comment:
 'Python gemstone module.
 
-Provides basic metadata about the Grail runtime and convenience access
-to GemStone session features (commit/abort, namespace lookup).
+Provides basic metadata about the Grail runtime and interoperability
+with existing GemStone data and operations:
+
+  * gemstone.system — the GemStone System class.  Transaction control
+    goes through it: gemstone.system.commit() / gemstone.system.abort()
+    (env-1 class-side methods on System, installed by System.gs).
+  * gemstone.mySymbolList — a list of the session''s SymbolDictionary
+    instances (GsCurrentSession currentSession symbolList).
+  * gemstone[name] — namespace lookup via the subscript protocol.
 
 Methods on this class are real env-1 fast-path methods, dispatched
 directly via `gemstone.method(args)` Python calls compiled to
-`((gemstone instance) method: args)` Smalltalk sends.
+`((gemstone instance) method: args)` Smalltalk sends.  Value attributes
+(system, mySymbolList, version) live in the Grail-Accessors category so
+attribute reads perform them instead of wrapping a BoundMethod.
 '
 %
 
@@ -109,25 +118,38 @@ __setitem__: key _: value
 %
 
 ! ===============================================================================
-! Fast-path methods
+! GemStone interoperability — value attributes
 ! ===============================================================================
 
-category: 'Grail-Built-in Functions'
+category: 'Grail-Accessors'
 method: gemstone
-abort
-	"Python builtin gemstone.abort() — fast path. Aborts the current
-	GemStone session, discarding uncommitted changes."
+mySymbolList
+	"Python gemstone.mySymbolList — a Python list of the current session's
+	SymbolDictionary instances, from GsCurrentSession currentSession
+	symbolList.  A fresh list is built per read so Python-side
+	mutation of the list cannot disturb the session's real symbol list
+	(the SymbolDictionary elements themselves are the live objects).
 
-	^ System @env0:abort
+	Compiled in the Grail-Accessors category so a bare attribute read
+	performs this method and returns the value (see ___pyAttrLoad___'s
+	module branch) rather than wrapping it as a BoundMethod."
+
+	^ list @env0:withAll: (GsCurrentSession @env0:currentSession @env0:symbolList)
 %
 
-category: 'Grail-Built-in Functions'
+category: 'Grail-Accessors'
 method: gemstone
-commit
-	"Python builtin gemstone.commit() — fast path. Commits the current
-	GemStone session."
+system
+	"Python gemstone.system — the GemStone System class.  Transaction
+	control is dispatched through it: gemstone.system.commit() and
+	gemstone.system.abort() resolve to env-1 class-side methods compiled
+	on System by System.gs (replacing the former module-level
+	gemstone.commit()/gemstone.abort()).
 
-	^ System @env0:commit
+	Compiled in the Grail-Accessors category so a bare attribute read
+	performs this method and returns the class."
+
+	^ System
 %
 
 ! ===============================================================================
