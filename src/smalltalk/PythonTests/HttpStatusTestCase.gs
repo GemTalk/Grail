@@ -118,6 +118,19 @@ testReprAndStr
 
 category: 'Grail-Tests'
 method: HttpStatusTestCase
+testIsIntAndArithmetic
+	"Now a real AbstractPyInt: isinstance(member, int) is True and
+	arithmetic (both operand orders) coerces to a plain int."
+
+	self assert: (self resultAt: 'is_int').
+	self assert: (self resultAt: 'plain_is_int').
+	self deny: (self resultAt: 'str_not_int').
+	self assert: (self resultAt: 'plus_one') equals: 201.
+	self assert: (self resultAt: 'hundred_plus') equals: 300.
+%
+
+category: 'Grail-Tests'
+method: HttpStatusTestCase
 testNameEdgeCases
 	"Apostrophe and hyphen are stripped/normalized to underscores."
 

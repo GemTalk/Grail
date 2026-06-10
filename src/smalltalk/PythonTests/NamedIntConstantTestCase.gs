@@ -119,3 +119,37 @@ testArithmeticForwarding
 	self assert: (testModule @env1:maxrepeat_minus_one) equals: 4294967294.
 	self assert: (testModule @env1:greater_than_zero) equals: true.
 %
+
+category: 'Grail-Tests - NamedIntConstant'
+method: NamedIntConstantTestCase
+testIsInstanceOfInt
+	"Now an AbstractPyInt (a real Number), so isinstance(op, int) is
+	True — matching CPython's _NamedIntConstant(int).  Real ints still
+	pass and non-ints still fail."
+
+	self assert: (testModule @env1:is_int) equals: true.
+	self assert: (testModule @env1:plain_is_int) equals: true.
+	self assert: (testModule @env1:str_not_int) equals: false.
+%
+
+category: 'Grail-Tests - NamedIntConstant'
+method: NamedIntConstantTestCase
+testReverseComparison
+	"int-on-the-left comparison works via the kernel's Number
+	coercion now that the wrapper is a real Number."
+
+	self assert: (testModule @env1:reverse_lt_true) equals: true.
+	self assert: (testModule @env1:reverse_lt_false) equals: false.
+	self assert: (testModule @env1:forward_lt) equals: true.
+%
+
+category: 'Grail-Tests - NamedIntConstant'
+method: NamedIntConstantTestCase
+testArithmeticBothOperandOrders
+	"Mixed arithmetic coerces the wrapper to its plain value in both
+	operand orders, yielding a plain SmallInteger."
+
+	self assert: (testModule @env1:plus_one) equals: 17.
+	self assert: (testModule @env1:one_plus) equals: 17.
+	self assert: (testModule @env1:hundred_minus) equals: 84.
+%

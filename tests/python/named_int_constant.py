@@ -38,3 +38,19 @@ maxrepeat_in_set = (MAXREPEAT in ops_set)
 # 7. Arithmetic via DNU forwarding — the one MAXREPEAT-style use.
 maxrepeat_minus_one = MAXREPEAT - 1
 greater_than_zero = (MAXREPEAT > 0)
+
+# 8. Now a real Number (AbstractPyInt subclass): isinstance(op, int).
+is_int = isinstance(LITERAL, int)
+plain_is_int = isinstance(16, int)        # sanity: real ints still pass
+str_not_int = isinstance('x', int)        # sanity: non-ints still fail
+
+# 9. Reverse comparison (int on the left) — exercises the kernel's
+# Number coercion path now that the wrapper is a real Number.
+reverse_lt_true = (5 < LITERAL)           # 5 < 16
+reverse_lt_false = (20 < LITERAL)         # 20 < 16
+forward_lt = (LITERAL < 20)               # 16 < 20
+
+# 10. Arithmetic in both operand orders coerces to a plain int.
+plus_one = LITERAL + 1                     # 17
+one_plus = 1 + LITERAL                     # 17 (reverse operand)
+hundred_minus = 100 - LITERAL              # 84 (reverse operand)

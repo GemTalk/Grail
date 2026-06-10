@@ -66,6 +66,13 @@ except ValueError:
 r['repr'] = repr(HTTPStatus.NOT_FOUND)
 r['str'] = str(HTTPStatus.OK)
 
+# --- now a real int (AbstractPyInt subclass) ------------------------
+r['is_int'] = isinstance(HTTPStatus.OK, int)
+r['plain_is_int'] = isinstance(200, int)        # sanity: real ints still pass
+r['str_not_int'] = isinstance('x', int)         # sanity: non-ints still fail
+r['plus_one'] = HTTPStatus.OK + 1               # 201 (arithmetic -> plain int)
+r['hundred_plus'] = 100 + HTTPStatus.OK         # 300 (reverse operand)
+
 # --- name-derivation edge cases -------------------------------------
 r['teapot_value'] = HTTPStatus.IM_A_TEAPOT.value
 r['teapot_phrase'] = HTTPStatus.IM_A_TEAPOT.phrase

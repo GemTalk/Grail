@@ -59,8 +59,11 @@ gemStoneScalarToPython: anObject ifNotScalar: aBlock
 		doesn't DecRef the cache's canonical handle."
 		^ CPythonObject fromBorrowedReference: anObject cpythonObject pointer
 	].
-	"PEP 357: unbox via env-1 __index__."
-	((anObject class methodDictForEnv: 1) includesKey: #'__index__') ifTrue: [
+	"PEP 357: unbox via env-1 __index__.  Walk the class chain (not just
+	the immediate method dict) so an inherited __index__ — e.g.
+	AbstractPyInt's, inherited by NamedIntConstant / HTTPStatus — is
+	found too."
+	((anObject class whichClassIncludesSelector: #'__index__' environmentId: 1) notNil) ifTrue: [
 		^ CPythonObject fromInteger: (anObject @env1:__index__)
 	].
 	^ aBlock value

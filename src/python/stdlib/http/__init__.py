@@ -5,25 +5,20 @@
 # ``HTTPStatus.NOT_FOUND``, ...).  Each member is simultaneously an int
 # (its numeric value) and carries ``.phrase`` / ``.description`` / ``.name``.
 #
-# # Why HTTPStatus is a wrapper, not a real int subclass
-# Grail represents Python ``int`` as Smalltalk ``SmallInteger`` (a
-# tagged immediate with no room for per-instance attributes) and
-# ``LargeInteger`` (byte-format, no named ivars), so a status code
-# cannot *be* an int while also carrying a ``.phrase`` slot.  A real
-# heap-object subclass of the abstract ``Integer`` class is possible
-# but would need a hand-written numeric coercion protocol; the project
-# made the same call for ``NamedIntConstant`` (see its class comment).
-# So ``HTTPStatus`` is a plain wrapper that *behaves* like an int via
-# the dunder protocol: ``__int__`` / ``__index__`` / ``__hash__`` plus
-# the comparison operators.  Reverse-operand comparisons such as
-# ``200 == HTTPStatus.OK`` work because Grail's ``Integer`` dunders
-# fall back to ``__index__`` on a non-Number operand.
+# # HTTPStatus is a real int-like number
+# GemStone forbids subclassing ``Integer`` (Python ``int``), but
+# ``Number`` is subclassable.  Grail's ``AbstractPyInt`` (a ``Number``
+# subclass) implements the kernel coercion protocol so it behaves as a
+# plain integer by value while carrying per-instance attributes.
+# ``HTTPStatus`` subclasses it, so members ARE ints:
+# ``isinstance(HTTPStatus.OK, int)`` is True, comparisons/arithmetic/
+# hashing all work (inherited), and ``200 == HTTPStatus.OK`` works in
+# both operand orders.  See ``src/smalltalk/Python/AbstractPyInt.gs``.
 #
-# Known gap vs CPython: ``isinstance(HTTPStatus.OK, int)`` is False
-# (the member is a wrapper, not an ``Integer``).  ``HTTPStatus(404)``
-# value-lookup returns an equal member but not the *same* object as
-# ``HTTPStatus.NOT_FOUND`` (no ``is`` identity), because Grail does not
-# dispatch a user-defined ``__new__`` on construction.
+# Remaining nuance: ``HTTPStatus(404)`` value-lookup returns an equal
+# member but not the *same* object as ``HTTPStatus.NOT_FOUND`` (no
+# ``is`` identity), because Grail does not dispatch a user-defined
+# ``__new__`` on construction.
 
 __all__ = ['HTTPStatus']
 
@@ -31,13 +26,18 @@ __all__ = ['HTTPStatus']
 _value_map = {}
 
 
-class HTTPStatus:
-    """An HTTP status code.
+class HTTPStatus(AbstractPyInt):
+    """An HTTP status code — a real int-like value (subclass of the
+    Grail ``AbstractPyInt`` Number base) carrying extra ``.phrase`` /
+    ``.description`` / ``.name`` attributes.
 
-    Behaves like an int with extra ``.phrase`` / ``.description`` /
-    ``.name`` attributes.  Construct-by-value (``HTTPStatus(404)``)
-    looks the code up in the registry; the four-argument form builds
-    and registers a new member."""
+    Because it is an ``AbstractPyInt``, ``isinstance(HTTPStatus.OK, int)``
+    is True and all comparison/arithmetic/hashing behave like an int
+    (inherited from the base; arithmetic coerces to a plain int, so
+    ``HTTPStatus.OK + 1`` is ``201``, matching CPython's IntEnum).
+
+    Construct-by-value (``HTTPStatus(404)``) looks the code up in the
+    registry; the four-argument form builds and registers a member."""
 
     def __init__(self, value, phrase=None, description=''):
         if phrase is None:
@@ -50,59 +50,19 @@ class HTTPStatus:
             self.description = member.description
             self.name = member.name
         else:
-            # Build form: create + register a new member.
+            # Build form: create + register a new member.  self.value is
+            # stored as a dynamic instVar that the AbstractPyInt numeric
+            # protocol (truncated/_generality/comparison) reads.
             self.value = value
             self.phrase = phrase
             self.description = description
             self.name = phrase.upper().replace(' ', '_').replace('-', '_').replace("'", '')
             _value_map[value] = self
 
-    def __int__(self):
-        return self.value
-
-    def __index__(self):
-        return self.value
-
-    def __hash__(self):
-        return hash(self.value)
-
-    def _other_value(self, other):
-        if isinstance(other, HTTPStatus):
-            return other.value
-        return other
-
-    def __eq__(self, other):
-        if isinstance(other, HTTPStatus):
-            return self.value == other.value
-        if isinstance(other, int):
-            return self.value == other
-        return False
-
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
-    def __lt__(self, other):
-        return self.value < self._other_value(other)
-
-    def __le__(self, other):
-        return self.value <= self._other_value(other)
-
-    def __gt__(self, other):
-        return self.value > self._other_value(other)
-
-    def __ge__(self, other):
-        return self.value >= self._other_value(other)
-
-    def __str__(self):
-        # Python 3.11+ IntEnum.__str__ is int.__str__ -> the number.
-        return str(self.value)
-
-    def __format__(self, format_spec):
-        if not format_spec:
-            return str(self.value)
-        return format(self.value, format_spec)
-
     def __repr__(self):
+        # Overrides AbstractPyInt's value-based repr to show the symbolic
+        # name.  (__int__/__index__/__hash__/__str__/comparisons and
+        # arithmetic are all inherited from AbstractPyInt.)
         return '<HTTPStatus.' + self.name + ': ' + str(self.value) + '>'
 
 

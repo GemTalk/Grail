@@ -43,10 +43,11 @@ __new__: obj
 	].
 
 	"Try to call __int__ on the object if it has one.  ``respondsTo:``
-	is env-0 only and would miss env-1 ``__int__`` implementations
-	(like the one on NamedIntConstant) — check the env-1 method
-	dict explicitly."
-	((obj @env0:class @env0:methodDictForEnv: 1) @env0:includesKey: #__int__) ifTrue: [
+	is env-0 only and would miss env-1 ``__int__`` implementations.
+	Walk the env-1 class chain (not just the immediate method dict) so
+	an inherited ``__int__`` — e.g. AbstractPyInt's, inherited by
+	NamedIntConstant / HTTPStatus — is found too."
+	((obj @env0:class @env0:whichClassIncludesSelector: #__int__ environmentId: 1) @env0:notNil) ifTrue: [
 		result := obj @env1:__int__.
 		^ result
 	].
@@ -178,6 +179,18 @@ from_bytes: bytes _: byteorder
 	"int.from_bytes(bytes, byteorder='big', *, signed=False)"
 
 	^ self from_bytes: bytes byteorder: byteorder signed: false
+%
+
+category: 'Grail-Class Methods'
+classmethod: int
+__instancecheck__: anObject
+	"isinstance(x, int) — Grail's isinstance tries ``isKindOf: Integer``
+	first (real ints short-circuit) and consults this hook only on
+	failure.  Recognize AbstractPyInt-based wrappers (NamedIntConstant,
+	HTTPStatus, ...) so they report as ints, matching CPython where
+	those types subclass int."
+
+	^ anObject @env0:isKindOf: AbstractPyInt
 %
 
 category: 'Grail-Class Methods'
