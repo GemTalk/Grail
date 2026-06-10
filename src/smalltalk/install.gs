@@ -493,6 +493,8 @@ run
 	at: #'ClassScopeTestCase' put: nil;
 	at: #'GrailModuleTestCase' put: nil;
 	at: #'HttpClientTestCase' put: nil;
+	at: #'HttpStatusTestCase' put: nil;
+	at: #'HttpCookiesTestCase' put: nil;
 	at: #'GrailSTestTarget' put: nil;
 	at: #'ClassTestCase' put: nil;
 	at: #'ClosureAttributeTestCase' put: nil;
@@ -1185,6 +1187,8 @@ input src/smalltalk/PythonTests/GemStoneTestCase.gs
 input src/smalltalk/PythonTests/GlobalStatementTestCase.gs
 input src/smalltalk/PythonTests/HtmlTestCase.gs
 input src/smalltalk/PythonTests/HttpClientTestCase.gs
+input src/smalltalk/PythonTests/HttpStatusTestCase.gs
+input src/smalltalk/PythonTests/HttpCookiesTestCase.gs
 input src/smalltalk/PythonTests/CPythonShimTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/CPythonTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/CPythonLibraryTestCase.gs
