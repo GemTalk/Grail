@@ -487,7 +487,7 @@ loadModuleFromPath: pathString name: moduleName
 	rebuilds cleanly from source, then re-signal."
 	[moduleInstance @env1:initialize] @env0:on: AbstractException do: [:ex |
 		self removeModule: moduleName.
-		ex @env0:signal].
+		ex @env0:outer].
 	^ moduleInstance
 %
 
@@ -1173,7 +1173,17 @@ ___import__: positional kw: kwargs
 		fromlist @env0:do: [:fromName |
 			| subName subPath alreadyBound |
 			alreadyBound := (result @env0:isKindOf: module)
-				ifTrue: [(result @env0:dynamicInstVarAt: fromName @env0:asSymbol) notNil]
+				ifTrue: [
+					"Check dynamic instVars first (fast path), then fall back
+					to ___pyAttrLoad___ to cover env1 methods (varargs _name:kw:,
+					unary name, fixed-arity name:) so that 'from mod import fn'
+					does not try to load mod.fn as a submodule file when fn is
+					already a callable method on the module class."
+					(result @env0:dynamicInstVarAt: fromName @env0:asSymbol) notNil or: [
+						[result @env1:___pyAttrLoad___: fromName @env0:asSymbol. true]
+							@env0:on: AttributeError do: [:_ | false]
+					]
+				]
 				ifFalse: [false].
 			alreadyBound ifFalse: [
 				subName := (absoluteName @env0:, '.') @env0:, fromName @env0:asString.

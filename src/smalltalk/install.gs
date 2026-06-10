@@ -275,6 +275,7 @@ run
 	at: #'dict_keyiterator' put: nil;
 	at: #'dict_valueiterator' put: nil;
 	at: #'gemstone' put: nil;
+	at: #'grail' put: nil;
 	at: #'html' put: nil;
 	at: #'html_entities' put: nil;
 	at: #'importlib' put: nil;
@@ -490,6 +491,8 @@ run
 	at: #'ClassAttrsTestCase' put: nil;
 	at: #'ClassDecoratorTestCase' put: nil;
 	at: #'ClassScopeTestCase' put: nil;
+	at: #'GrailModuleTestCase' put: nil;
+	at: #'GrailSTestTarget' put: nil;
 	at: #'ClassTestCase' put: nil;
 	at: #'ClosureAttributeTestCase' put: nil;
 	at: #'ComplexTestCase' put: nil;
@@ -786,6 +789,7 @@ input src/smalltalk/Python/fractions.gs
 input src/smalltalk/Python/LruCacheWrapper.gs
 input src/smalltalk/Python/functools.gs
 input src/smalltalk/Python/gemstone.gs
+input src/smalltalk/Python/grail.gs
 input src/smalltalk/Python/PyObject.gs
 input src/smalltalk/Python/CPythonShim.gs
 input src/smalltalk/EmbeddedPython/CPythonException.gs
@@ -1117,6 +1121,7 @@ input src/smalltalk/PythonTests/CachedPropertyTestCase.gs
 input src/smalltalk/PythonTests/BytesTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrsTestCase.gs
 input src/smalltalk/PythonTests/ClassDecoratorTestCase.gs
+input src/smalltalk/PythonTests/GrailModuleTestCase.gs
 input src/smalltalk/PythonTests/ClassCallFastPathTestCase.gs
 input src/smalltalk/PythonTests/ClassScopeTestCase.gs
 input src/smalltalk/PythonTests/ClassTestCase.gs
@@ -1411,6 +1416,7 @@ run
 | libPath pyPath |
 importlib grailDir: (System gemEnvironmentVariable: 'GRAIL_DIR').
 "Pure-Smalltalk modules — registered unconditionally."
+importlib registerModule: 'grail' with: grail ___instance___.
 importlib registerModule: '_weakref' with: _weakref ___instance___.
 libPath := System gemEnvironmentVariable:'SHIM_LIB_PATH'.
 (libPath notNil and: [libPath notEmpty]) ifTrue: [
