@@ -140,6 +140,29 @@ printSmalltalkAttributeAugAssignOn: aStream
 	Otherwise: `obj @env0:at: #'attr' put: (obj attr op value).`"
 
 	((target value isKindOf: NameAst) and: [CallAst isSelfReference: target value id]) ifTrue: [
+		"Slot attribute (Python __slots__ → GemStone named instVar):
+		load+store the named instVar directly.  Without this branch the
+		store below would write the dynamic-instVar dict for a slot name,
+		diverging from the named-instVar the slot read returns (and
+		bypassing strict enforcement)."
+		((CallAst classSlotNames notNil)
+			and: [CallAst classSlotNames includes: target attr asSymbol]) ifTrue: [
+			"``<slot> := (<slot> ifNil: [...]) op value'' — bare mangled
+			instVar (this method compiles on the slotted class); the single
+			wrapping paren makes ``ifNil:'' bind before the ``op'' send."
+			aStream
+				nextPutAll: '___slot_';
+				nextPutAll: target attr;
+				nextPutAll: '___ := (___slot_';
+				nextPutAll: target attr;
+				nextPutAll: '___ ifNil: [self @env1:___pyAttrLoad___: #''';
+				nextPutAll: target attr;
+				nextPutAll: '''])'.
+			op printSmalltalkOn: aStream.
+			value printSmalltalkWithParenthesisOn: aStream.
+			aStream nextPutAll: '.'.
+			^self
+		].
 		"Phase B: ``self.attr op= value'' loads and stores through the
 		instance's dynamic-instVar storage.  Emit shape:
 		  self @env0:dynamicInstVarAt: #'attr'

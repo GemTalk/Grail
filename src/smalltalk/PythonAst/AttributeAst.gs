@@ -123,6 +123,25 @@ printSmalltalkOn: aStream
 	((value isKindOf: NameAst)
 		and: [(CallAst isSelfReference: value id)
 			and: [CallAst selfParameterName == #self]]) ifTrue: [
+		"``self.<slot>'' where <slot> is one of this class's own __slots__
+		(Python __slots__ → GemStone named instVar): read the mangled
+		instVar directly by bare name — this method is compiled ON the
+		slotted class, so the Smalltalk compiler resolves ``___slot_x___''
+		to the instVar (no reflection).  Mangling keeps it distinct from a
+		Python parameter / local of the same name (``def __init__(self, x):
+		self.x = x'').  A set slot returns immediately; an unset slot (nil)
+		falls through to ___pyAttrLoad___ so __getattr__ / AttributeError
+		still apply."
+		((CallAst classSlotNames notNil)
+			and: [CallAst classSlotNames includes: attr asSymbol]) ifTrue: [
+			aStream
+				nextPutAll: '(___slot_';
+				nextPutAll: attr;
+				nextPutAll: '___ ifNil: [self @env1:___pyAttrLoad___: #''';
+				nextPutAll: attr;
+				nextPutAll: '''])'.
+			^self
+		].
 		"Phase B: ``self.attr'' inside an instance method is a Python
 		attribute load.  The new model collapses all the old
 		discriminators (classAttrNames / classInstVarNames /

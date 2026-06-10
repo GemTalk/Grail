@@ -7,7 +7,7 @@ PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file or
 expectvalue /Class
 doit
 PythonTestCase subclass: 'ImportlibTestCase'
-  instVarNames: #()
+  instVarNames: #( savedCodegenTraceDir )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -42,11 +42,29 @@ setUp
 	Several ImportlibTestCase tests assert on the contents of
 	``/tmp/grail/<module>.tpz'' (the Topaz-style codegen capture);
 	the capture is OPT-IN as of the ``GRAIL_CODEGEN_TRACE_DIR'' env
-	var.  Set the var and invalidate the cached value so subsequent
-	``loadModuleFromPath:'' calls write the trace files."
+	var.  Save the var's incoming value (restored in tearDown so a test
+	run that started with it unset doesn't leave it pinned), then set it
+	and invalidate the cached value so subsequent ``loadModuleFromPath:''
+	calls write the trace files."
 
 	importlib @env1:modules.
+	savedCodegenTraceDir := System @env0:gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR'.
 	System @env0:gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR' put: '/tmp/grail'.
+	importlib ___codegenTraceDirInvalidate___
+%
+
+category: 'Grail-Setup'
+method: ImportlibTestCase
+tearDown
+	"Restore GRAIL_CODEGEN_TRACE_DIR to whatever it was before this test
+	(often unset), so the suite doesn't leave the session env var pinned
+	to ``/tmp/grail''.  An unset incoming value (nil) restores to the empty
+	string — Grail treats that as ``tracing off'', and there is no gem API
+	to truly unset a session env var.  Invalidate the cached value so the
+	next reader re-reads the env var."
+
+	System @env0:gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR'
+		put: (savedCodegenTraceDir ifNil: ['']).
 	importlib ___codegenTraceDirInvalidate___
 %
 
@@ -718,10 +736,7 @@ testExecuteWithScopeCaptureIsOptIn
 		as: #doit.
 	after := self ___captureCountIn: '/tmp/grail'.
 	self assert: after equals: before.
-
-	"Restore the tracing dir the rest of the suite's setUp expects."
-	System @env0:gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR' put: '/tmp/grail'.
-	importlib ___codegenTraceDirInvalidate___
+	"GRAIL_CODEGEN_TRACE_DIR is restored to its incoming value in tearDown."
 %
 
 category: 'Grail-Tests - Session-Local State'
@@ -769,7 +784,5 @@ testCodegenTraceDirLivesInSessionTempsNotCommitted
 	self assert:
 		(SessionTemps @env0:current
 			@env0:includesKey: #'___grailCodegenTraceDirChecked___') not.
-	"Restore the tracing dir the rest of the suite's setUp expects."
-	System @env0:gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR' put: '/tmp/grail'.
-	importlib ___codegenTraceDirInvalidate___
+	"GRAIL_CODEGEN_TRACE_DIR is restored to its incoming value in tearDown."
 %

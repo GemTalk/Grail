@@ -78,7 +78,8 @@ printSmalltalkRuntimeOn: aStream
 	  methodSources classMethodSources staticMethodSources
 	  initMethod initSelector classAttrs allClassInstVars
 	  savedClass savedFuncNames savedVarargsFuncNames
-	  savedSelfParam savedClassAttrNames settersByName |
+	  savedSelfParam savedClassAttrNames settersByName
+	  slotNamesOrdered slotNameSet savedSlotNames mangledSlotNames |
 	methodDefs := self instanceMethodDefs.
 	classMethodDefs := self classMethodDefs.
 	staticMethodDefs := self staticMethodDefs.
@@ -111,6 +112,19 @@ printSmalltalkRuntimeOn: aStream
 	setter)."
 	classAttrs := self classBodyAttributes.
 
+	"Python ``__slots__'' → GemStone named instance variables on the
+	backing class.  ``slotNamesOrdered'' is the declaration-order slot
+	list; ``slotNameSet'' is the identity set the per-method codegen
+	consults to emit direct slot access (see CallAst classSlotNames).
+	The instVars themselves are NAME-MANGLED (``x'' → ``___slot_x___'')
+	so they never collide with a Python method parameter / local of the
+	same name: Grail emits such locals as Smalltalk method temps, and a
+	temp that shadows an instVar is a GemStone CompileError — which would
+	otherwise break the ubiquitous ``def __init__(self, x): self.x = x''."
+	slotNamesOrdered := self slotNames.
+	slotNameSet := IdentitySet withAll: slotNamesOrdered.
+	mangledSlotNames := slotNamesOrdered collect: [:n | '___slot_' , n asString , '___'].
+
 	"Push the class-compile context that the per-method codegen reads
 	(CallAst consults these to decide how to dispatch self-sends,
 	etc.).  Save outer values so a class nested in another class
@@ -120,6 +134,7 @@ printSmalltalkRuntimeOn: aStream
 	savedVarargsFuncNames := CallAst classVarargsFunctionNames.
 	savedClassAttrNames := CallAst classAttrNames.
 	savedSelfParam := CallAst selfParameterName.
+	savedSlotNames := CallAst classSlotNames.
 
 	"classBeingCompiled is only used as a non-nil marker here; the
 	actual class doesn't exist until the emitted code runs."
@@ -128,6 +143,7 @@ printSmalltalkRuntimeOn: aStream
 	CallAst classVarargsFunctionNames: varargsFuncNames.
 	CallAst classAttrNames: (IdentitySet withAll: (classAttrs collect: [:p | p key])).
 	CallAst selfParameterName: selfParam.
+	CallAst classSlotNames: slotNameSet.
 
 	methodSources := OrderedCollection new.
 	classMethodSources := OrderedCollection new.
@@ -192,6 +208,7 @@ printSmalltalkRuntimeOn: aStream
 		CallAst classVarargsFunctionNames: savedVarargsFuncNames.
 		CallAst classAttrNames: savedClassAttrNames.
 		CallAst selfParameterName: savedSelfParam.
+		CallAst classSlotNames: savedSlotNames.
 	].
 
 	"Emit the GemStone subclass: call inline.  The encoded class
@@ -298,9 +315,49 @@ printSmalltalkRuntimeOn: aStream
 	aStream
 		nextPutAll: ') @env1:___subclass___: #''';
 		nextPutAll: (importlib @env0:___asSmalltalkClassName___: name) asString;
-		nextPutAll: ''' instVarNames: #() classInstVarNames: '.
+		nextPutAll: ''' instVarNames: '.
+	"Python ``__slots__'' names become real GemStone named instance
+	variables (name-mangled — see above).  ___subclass___: filters any the
+	parent already declares, so an inherited / re-declared slot reuses the
+	parent's slot rather than duplicating it (matches Python inheritance)."
+	self printSymbolArray: mangledSlotNames on: aStream.
+	aStream nextPutAll: ' classInstVarNames: '.
 	self printSymbolArray: allClassInstVars on: aStream.
 	aStream nextPutAll: '.'; lf.
+
+	"Every class that declares __slots__ (in any form, even ``()'') gets an
+	instance-side ``___pyHasSlots___'' marker.  The runtime attribute probes
+	gate on it — by selector, so it works from any receiver including
+	subclasses of built-ins (Exception, dict, ...) that are NOT
+	PythonInstances, and is inherited so a subclass of a slotted class is
+	covered too."
+	(self slotsValueAst notNil) ifTrue: [
+		self
+			emitCompileMethodOn: name
+			source: '___pyHasSlots___
+	^ true'
+			category: 'Grail-Slots'
+			env: 1
+			classSide: false
+			onStream: aStream.
+	].
+
+	"Strict __slots__: when the class declares __slots__ as a recognized
+	literal without a ``__dict__'' member, instances forbid any non-slot
+	attribute and have no __dict__ (CPython semantics).  Emit an
+	instance-side marker the runtime store / __dict__ paths consult via
+	``self class whichClassIncludesSelector:'' (self is the instance there);
+	subclasses inherit it so strictness propagates down a slotted chain."
+	self slotsDeclaredStrict ifTrue: [
+		self
+			emitCompileMethodOn: name
+			source: '___pySlotsStrict___
+	^ true'
+			category: 'Grail-Slots'
+			env: 1
+			classSide: false
+			onStream: aStream.
+	].
 
 	"Compile each instance method as a real env-1 method on the new
 	class.  The source is embedded as a Smalltalk string literal."
@@ -392,6 +449,7 @@ printSmalltalkRuntimeOn: aStream
 	CallAst classVarargsFunctionNames: varargsFuncNames.
 	CallAst classAttrNames: (IdentitySet withAll: (classAttrs collect: [:p | p key])).
 	CallAst selfParameterName: selfParam.
+	CallAst classSlotNames: slotNameSet.
 	CallAst inClassBodyValueEmit: true.
 	[
 		classAttrs do: [:pair |
@@ -410,6 +468,7 @@ printSmalltalkRuntimeOn: aStream
 		CallAst classVarargsFunctionNames: savedVarargsFuncNames.
 		CallAst classAttrNames: savedClassAttrNames.
 		CallAst selfParameterName: savedSelfParam.
+		CallAst classSlotNames: savedSlotNames.
 		CallAst inClassBodyValueEmit: false.
 	].
 	"NamedTuple-style classes get a ``_fields'' accessor/setter pair
@@ -916,6 +975,123 @@ classBodyAttributes
 		].
 	].
 	^ pairs
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___mangleSlotName___: aName
+	"CPython private-name mangling for a __slots__ entry: a name with at
+	least two leading underscores and at most one trailing underscore
+	(``__x'', ``__x_'' — but NOT ``__x__'') becomes ``_<class>__x'', where
+	<class> is this class's name with leading underscores stripped.  Names
+	that don't qualify — and the case where the class name is entirely
+	underscores — are returned unchanged.  Mirrors the transform CPython
+	applies to BOTH the slot descriptor and ``self.__x'' access; Grail
+	doesn't mangle access, so stdlib code uses the explicit mangled name
+	and the slot must be created under that same name to match."
+
+	| s stripped i |
+	s := aName asString.
+	((s @env0:beginsWith: '__') and: [(s @env0:endsWith: '__') not]) ifFalse: [^ s].
+	stripped := name asString.
+	i := 1.
+	[i <= stripped size and: [(stripped at: i) = $_]] whileTrue: [i := i + 1].
+	i > stripped size ifTrue: [^ s].
+	^ '_' , (stripped copyFrom: i to: stripped size) , s
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+slotsValueAst
+	"Return the value-expression AST of the class body's ``__slots__''
+	assignment — plain ``__slots__ = ...'' or annotated
+	``__slots__: T = ...'' — or nil when the class declares no __slots__.
+	A later assignment wins if (unusually) __slots__ is assigned twice."
+
+	| result |
+	result := nil.
+	body body do: [:stmt |
+		((stmt isKindOf: AssignAst)
+			and: [stmt targets size = 1
+			and: [(stmt targets first isKindOf: NameAst)
+			and: [stmt targets first id asString = '__slots__']]])
+				ifTrue: [result := stmt value].
+		((stmt isKindOf: AnnAssignAst)
+			and: [(stmt target isKindOf: NameAst)
+			and: [stmt target id asString = '__slots__'
+			and: [stmt value notNil]]])
+				ifTrue: [result := stmt value].
+	].
+	^ result
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+slotNames
+	"Python ``__slots__'' declared attribute names, as an ordered,
+	de-duplicated OrderedCollection of Symbols — the names that become
+	GemStone named instance variables on the backing class.
+
+	Accepts the common literal forms:
+	  __slots__ = 'x'            single string  → (x)
+	  __slots__ = ('x', 'y')     tuple of strs
+	  __slots__ = ['x', 'y']     list of strs
+	  __slots__ = ()             empty (no instance attrs, still no __dict__)
+
+	``__dict__'' and ``__weakref__'' are Python directives (they request a
+	dict / weakref slot), not real attribute slots, so they are dropped
+	from the instVar set.  A non-constant or non-string element (a
+	computed __slots__) can't map to a static instVar and is skipped.
+	Returns an empty collection when the class declares no __slots__."
+
+	| valueAst names addName |
+	valueAst := self slotsValueAst.
+	valueAst ifNil: [^ OrderedCollection new].
+	names := OrderedCollection new.
+	addName := [:s |
+		| sym |
+		"Apply CPython private-name mangling (``__x'' → ``_<class>__x'').
+		Grail does not auto-mangle attribute access, so stdlib code that
+		declares such a slot reaches it via the explicit mangled name
+		(e.g. weakref's _Proxy declares ``__slots__ = ('__ref',)'' and uses
+		``_Proxy__ref''); mangling the slot to match keeps it findable."
+		sym := (self ___mangleSlotName___: s) asSymbol.
+		((sym == #'__dict__') or: [sym == #'__weakref__']) ifFalse: [
+			(names includes: sym) ifFalse: [names add: sym]]].
+	(valueAst isKindOf: ConstantAst)
+		ifTrue: [
+			(valueAst value isKindOf: String) ifTrue: [addName value: valueAst value]]
+		ifFalse: [
+			((valueAst isKindOf: TupleAst) or: [valueAst isKindOf: ListAst]) ifTrue: [
+				valueAst elts do: [:elt |
+					((elt isKindOf: ConstantAst) and: [elt value isKindOf: String])
+						ifTrue: [addName value: elt value]]]].
+	^ names
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+slotsDeclaredStrict
+	"True when the class declares __slots__ as a recognized literal
+	(string, or tuple/list of constant strings) that does NOT include a
+	``__dict__'' member.  Such a class forbids non-slot attributes and
+	has no per-instance __dict__ (strict CPython __slots__).  A computed /
+	unrecognized __slots__ value returns false — a lenient fallback, since
+	Grail can't enforce a slot set it can't read at compile time."
+
+	| valueAst hasDict |
+	valueAst := self slotsValueAst.
+	valueAst ifNil: [^ false].
+	(valueAst isKindOf: ConstantAst) ifTrue: [
+		^ valueAst value isKindOf: String].
+	((valueAst isKindOf: TupleAst) or: [valueAst isKindOf: ListAst]) ifFalse: [
+		^ false].
+	hasDict := false.
+	valueAst elts do: [:elt |
+		((elt isKindOf: ConstantAst) and: [elt value isKindOf: String])
+			ifTrue: [elt value = '__dict__' ifTrue: [hasDict := true]]
+			ifFalse: [^ false]].
+	^ hasDict not
 %
 
 category: 'Grail-code generation'

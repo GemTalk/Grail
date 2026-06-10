@@ -494,6 +494,27 @@ ___pyAttrLoad___: aSym
 	dynValue == nil ifFalse: [^ dynValue].
 	md := self @env0:class @env0:methodDictForEnv: 1.
 	s := aSym @env0:asString.
+	"Python __slots__ → GemStone named instance variables, name-mangled
+	(``x'' → ``___slot_x___'').  A slotted class carries an instance-side
+	``___pyHasSlots___'' marker (emitted by ClassDefAst); gating on it fires
+	the probe only for classes that declare __slots__ — including subclasses
+	of built-ins like Exception, NOT just PythonInstance.  The ``___slot_*___''
+	instVar prefix keeps ``indexOf:'' specific to real slots even when the
+	receiver also has built-in named instVars.  A set slot returns its value;
+	an unset slot (nil) falls through to the resolution chain below (class
+	attrs / __getattr__ / AttributeError)."
+	((self @env0:class @env0:whichClassIncludesSelector: #'___pyHasSlots___' environmentId: 1) notNil) ifTrue: [
+		| slotIdx slotVal |
+		"allInstVarNames returns Symbols; indexOf: gives the instVarAt:
+		index (0 when absent).  This image's kernel has no instVarNamed:,
+		so the runtime path reaches slots by index."
+		slotIdx := self @env0:class @env0:allInstVarNames
+			@env0:indexOf: (('___slot_' @env0:, s @env0:, '___') @env0:asSymbol).
+		slotIdx @env0:~= 0 ifTrue: [
+			slotVal := self @env0:instVarAt: slotIdx.
+			slotVal == nil ifFalse: [^ slotVal]
+		]
+	].
 	sym1 := (s @env0:, ':') @env0:asSymbol.
 	sym2 := (s @env0:, ':_:') @env0:asSymbol.
 	sym3 := (s @env0:, ':_:_:') @env0:asSymbol.
@@ -1181,6 +1202,22 @@ ___pyAttrDelete___: aName
 			'type object ''' @env0:, self @env0:name @env0:asString @env0:,
 				''' has no attribute ''' @env0:, aName @env0:asString @env0:, ''''
 	].
+	"del obj.<slot> — a __slots__ instVar resets to unset (nil); raise if
+	already unset, matching ``del'' of an unbound slot.  (instVars can't
+	be removed, only nilled — the nil-as-absent convention makes a nilled
+	slot indistinguishable from never-set, which is the desired result.)"
+	((self @env0:class @env0:whichClassIncludesSelector: #'___pyHasSlots___' environmentId: 1) notNil) ifTrue: [
+		| slotIdx |
+		slotIdx := self @env0:class @env0:allInstVarNames
+			@env0:indexOf: (('___slot_' @env0:, sym @env0:asString @env0:, '___') @env0:asSymbol).
+		slotIdx @env0:~= 0 ifTrue: [
+			(self @env0:instVarAt: slotIdx) @env0:== nil ifTrue: [
+				^ AttributeError @env1:___signal___:
+					'''' @env0:, aName @env0:asString @env0:, ''''
+			].
+			^ self @env0:instVarAt: slotIdx put: nil
+		]
+	].
 	(self @env0:dynamicInstVarAt: sym) @env0:== nil ifTrue: [
 		AttributeError @env1:___signal___:
 			'''' @env0:, aName @env0:asString @env0:, ''''
@@ -1247,6 +1284,27 @@ ___pyAttrStore___: aName put: aValue
 		^ AttributeError @env1:___signal___:
 			'''' @env0:, self @env0:name @env0:asString @env0:,
 				''' object has no attribute ''' @env0:, aName @env0:asString @env0:, ''''
+	].
+	"Python __slots__ → GemStone named instance variables.  For a
+	PythonInstance receiver: a name declared in __slots__ (i.e. a named
+	instVar) is written directly; otherwise, a strict slotted class
+	(declares __slots__ without a __dict__) rejects the name with
+	AttributeError (CPython semantics).  Any other instance — including a
+	non-strict slotted class (it has a __dict__) — falls back to
+	dynamic-instVar storage."
+	((self @env0:class @env0:whichClassIncludesSelector: #'___pyHasSlots___' environmentId: 1) notNil) ifTrue: [
+		| slotIdx |
+		slotIdx := self @env0:class @env0:allInstVarNames
+			@env0:indexOf: (('___slot_' @env0:, aName @env0:asString @env0:, '___') @env0:asSymbol).
+		slotIdx @env0:~= 0 ifTrue: [
+			self @env0:instVarAt: slotIdx put: aValue.
+			^ aValue
+		].
+		(self @env0:class @env0:whichClassIncludesSelector: #'___pySlotsStrict___' environmentId: 1) notNil ifTrue: [
+			^ AttributeError @env1:___signal___:
+				'''' @env0:, self @env0:class @env0:name @env0:asString @env0:,
+					''' object has no attribute ''' @env0:, aName @env0:asString @env0:, ''''
+		].
 	].
 	self @env0:dynamicInstVarAt: aName @env0:asSymbol put: aValue.
 	^ aValue

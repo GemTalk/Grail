@@ -169,6 +169,15 @@ __dict__
 	left rv empty, which broke ``{% if %}'' template compilation
 	through Frame's require_output_check accessor."
 
+	"Strict __slots__ classes have no per-instance __dict__ — match
+	CPython by raising AttributeError instead of handing back an (always
+	empty) dynamic-instVar view.  The marker is emitted by ClassDefAst
+	when the class declares __slots__ without a ``__dict__'' member."
+	(self @env0:class @env0:whichClassIncludesSelector: #'___pySlotsStrict___' environmentId: 1) notNil ifTrue: [
+		^ AttributeError @env1:___signal___:
+			'''' @env0:, self @env0:class @env0:name @env0:asString @env0:,
+				''' object has no attribute ''__dict__'''
+	].
 	^ PyInstanceDict @env0:on: self
 %
 

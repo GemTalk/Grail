@@ -13,7 +13,7 @@ ExpressionAst subclass: 'CallAst'
                     'moduleVariableNames'
                     'classBeingCompiled'
                     'classFunctionNames' 'classVarargsFunctionNames'
-                    'classAttrNames' 'selfParameterName'
+                    'classAttrNames' 'classSlotNames' 'selfParameterName'
                     'returnEmitMode' 'inClassBodyValueEmit')
   poolDictionaries: #()
   inDictionary: PythonAst
@@ -1150,6 +1150,25 @@ category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classAttrNames: aSetOrNil
 	classAttrNames := aSetOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classSlotNames
+	"IdentitySet of the slot names (Symbols) declared by the class
+	currently being compiled — its own ``__slots__'', not inherited
+	slots.  AttributeAst / AssignAst / AugAssignAst consult this set so a
+	``self.<slot>'' load or store compiles to a direct named-instVar
+	access (Python __slots__ → GemStone instVar), bypassing the generic
+	attribute-resolution chain.  nil outside a class-body compile."
+
+	^ classSlotNames
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classSlotNames: aSetOrNil
+	classSlotNames := aSetOrNil
 %
 
 category: 'Grail-Class Compile Context'

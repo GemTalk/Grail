@@ -111,10 +111,21 @@ printSmalltalkOn: aStream
 			((eachTgt value isKindOf: NameAst)
 				and: [CallAst isSelfReference: eachTgt value id])
 				ifTrue: [
-					aStream
-						nextPutAll: 'self @env0:dynamicInstVarAt: #''';
-						nextPutAll: eachTgt attr;
-						nextPutAll: ''' put: ___chain___. '
+					"Slot attribute -> direct named-instVar write; else the
+					instances dynamic-instVar storage (as before)."
+					((CallAst classSlotNames notNil)
+						and: [CallAst classSlotNames includes: eachTgt attr asSymbol])
+						ifTrue: [
+							aStream
+								nextPutAll: '___slot_';
+								nextPutAll: eachTgt attr;
+								nextPutAll: '___ := ___chain___. '
+						] ifFalse: [
+							aStream
+								nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+								nextPutAll: eachTgt attr;
+								nextPutAll: ''' put: ___chain___. '
+						]
 				]
 				ifFalse: [
 					eachTgt value printSmalltalkWithParenthesisOn: aStream.
@@ -279,6 +290,17 @@ emitTupleElementStoreOn: aStream target: aTarget holder: holder indexExpr: index
 		otherwise falls through to dynamic-instVar storage."
 		((aTarget value isKindOf: NameAst)
 			and: [CallAst isSelfReference: aTarget value id]) ifTrue: [
+			"Slot attribute → assign the mangled instVar directly by bare name."
+			((CallAst classSlotNames notNil)
+				and: [CallAst classSlotNames includes: aTarget attr asSymbol]) ifTrue: [
+				aStream
+					nextPutAll: '___slot_';
+					nextPutAll: aTarget attr;
+					nextPutAll: '___ := (';
+					nextPutAll: rhs;
+					nextPutAll: '). '.
+				^ self
+			].
 			aStream
 				nextPutAll: 'self @env1:__setattr__: ''';
 				nextPutAll: aTarget attr;
@@ -355,6 +377,18 @@ printSmalltalkAttributeStoreOn: aStream target: tgt
 	``obj attr: x'' directly via Smalltalk-style keyword)."
 
 	((tgt value isKindOf: NameAst) and: [CallAst isSelfReference: tgt value id]) ifTrue: [
+		"Slot attribute (Python __slots__ → GemStone named instVar): assign
+		the mangled instVar directly by bare name (this method compiles on
+		the slotted class), bypassing the generic store path."
+		((CallAst classSlotNames notNil)
+			and: [CallAst classSlotNames includes: tgt attr asSymbol]) ifTrue: [
+			aStream nextPutAll: '___slot_'.
+			aStream nextPutAll: tgt attr.
+			aStream nextPutAll: '___ := '.
+			value printSmalltalkWithParenthesisOn: aStream.
+			aStream nextPut: $..
+			^self
+		].
 		"Route through ``__setattr__:_:`` so @property setters fire when
 		the class has a paired getter+setter (data-descriptor) for this
 		attribute name.  Object>>__setattr__:_: detects the pair at

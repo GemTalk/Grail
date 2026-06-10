@@ -503,6 +503,7 @@ run
 	at: #'ClassAttributeTestCase' put: nil;
 	at: #'AttributeProtocolTestCase' put: nil;
 	at: #'AttributeStoreTestCase' put: nil;
+	at: #'SlotsTestCase' put: nil;
 	at: #'DictKwargsTestCase' put: nil;
 	at: #'DunderClassTestCase' put: nil;
 	at: #'ClassFunctionBindingTestCase' put: nil;
@@ -1132,6 +1133,7 @@ input src/smalltalk/PythonTests/AttributePropertyTestCase.gs
 input src/smalltalk/PythonTests/ClassAttributeTestCase.gs
 input src/smalltalk/PythonTests/AttributeProtocolTestCase.gs
 input src/smalltalk/PythonTests/AttributeStoreTestCase.gs
+input src/smalltalk/PythonTests/SlotsTestCase.gs
 input src/smalltalk/PythonTests/DictKwargsTestCase.gs
 input src/smalltalk/PythonTests/DunderClassTestCase.gs
 input src/smalltalk/PythonTests/ClassFunctionBindingTestCase.gs
