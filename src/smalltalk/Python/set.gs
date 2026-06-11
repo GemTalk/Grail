@@ -204,7 +204,10 @@ pop
 
 	item := nil.
 	self @env0:do: [:each |
-		item isNil ifTrue: [
+		"@env0: required — isNil is a configurable optimized selector and
+		compiles as a real (unimplemented) env-1 send on a host extent
+		that deoptimized it."
+		item @env0:isNil ifTrue: [
 			item := each
 		]
 	].

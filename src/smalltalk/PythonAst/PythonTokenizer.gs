@@ -675,12 +675,14 @@ tokenizeString
 			ifFalse: [escaped == $x ifTrue: [
 				| hex |
 				hex := (self advance asString , self advance asString).
-				writeStream nextPut: (Character codePoint: ('16r' , hex) asInteger).
+				"integerFrom:radix: instead of ('16r',hex) asInteger — a host
+				 extent may override asInteger with Squeak semantics."
+				writeStream nextPut: (Character codePoint: (PythonParser integerFrom: hex radix: 16)).
 			]
 			ifFalse: [escaped == $u ifTrue: [
 				| hex |
 				hex := (self advance asString , self advance asString , self advance asString , self advance asString).
-				writeStream nextPut: (Character codePoint: ('16r' , hex) asInteger).
+				writeStream nextPut: (Character codePoint: (PythonParser integerFrom: hex radix: 16)).
 			]
 			ifFalse: [escaped == Character lf ifTrue: ["line continuation in string - skip"]
 			ifFalse: [

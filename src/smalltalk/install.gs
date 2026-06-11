@@ -108,6 +108,14 @@ logout
 set user DataCurator pass swordfish
 login
 
+! ------------------- Repair known-broken host-extent kernel patches
+! No-op on a stock extent; idempotent on a patched one.  Runs here —
+! as DataCurator, not SystemUser — because the known patches are
+! GsPackagePolicy session methods living in the GsPackage held by the
+! application's UserGlobals; recompiling under the same user + policy
+! replaces the override in that package.  Commits on success.
+input src/smalltalk/RepairHostExtent.gs
+
 ! ===============================================================================
 ! Step 1: Remove and recreate SymbolDictionaries
 ! ===============================================================================

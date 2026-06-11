@@ -66,6 +66,32 @@ parse: aString
 		parseModule
 %
 
+category: 'Grail-parsing'
+classmethod: PythonParser
+integerFrom: digits radix: radix
+	"Convert digits (no prefix, no underscores) to an Integer in radix.
+	Hand-rolled instead of ('16r' , digits) asInteger because a host
+	extent (e.g. a GLASS image) may override CharacterCollection>>
+	asInteger with Squeak semantics — 'first run of decimal digits in
+	the string' — which returns the RADIX (16) for '16r3F'.  Pure
+	codePoint arithmetic depends on no overridable String/Number
+	protocol.  Used for 0x/0o/0b literals, \x and \u string escapes,
+	and html's &#x...; entities."
+
+	| value |
+	value := 0.
+	digits do: [:c |
+		| cp dv |
+		cp := c codePoint.
+		dv := (cp >= 48 and: [cp <= 57]) ifTrue: [cp - 48] ifFalse: [
+			(cp >= 65 and: [cp <= 90]) ifTrue: [cp - 55] ifFalse: [
+			(cp >= 97 and: [cp <= 122]) ifTrue: [cp - 87] ifFalse: [-1]]].
+		(dv < 0 or: [dv >= radix]) ifTrue: [
+			SyntaxError signal: 'invalid digit ' , c asString , ' for radix ' , radix printString].
+		value := value * radix + dv].
+	^ value
+%
+
 category: 'Grail-token access'
 method: PythonParser
 advance
@@ -1707,19 +1733,21 @@ parseNumberValue: aString
 		^complex @env1:__new__: 0.0 _: realPart
 	].
 
-	"Hex"
+	"Hex / octal / binary — via integerFrom:radix: rather than the
+	('16r' , digits) asInteger idiom, which breaks on host extents
+	that override CharacterCollection>>asInteger (see the helper)."
 	(str size > 2 and: [(str copyFrom: 1 to: 2) = '0x' or: [(str copyFrom: 1 to: 2) = '0X']]) ifTrue: [
-		^('16r' , (str copyFrom: 3 to: str size)) asInteger
+		^PythonParser integerFrom: (str copyFrom: 3 to: str size) radix: 16
 	].
 
 	"Octal"
 	(str size > 2 and: [(str copyFrom: 1 to: 2) = '0o' or: [(str copyFrom: 1 to: 2) = '0O']]) ifTrue: [
-		^('8r' , (str copyFrom: 3 to: str size)) asInteger
+		^PythonParser integerFrom: (str copyFrom: 3 to: str size) radix: 8
 	].
 
 	"Binary"
 	(str size > 2 and: [(str copyFrom: 1 to: 2) = '0b' or: [(str copyFrom: 1 to: 2) = '0B']]) ifTrue: [
-		^('2r' , (str copyFrom: 3 to: str size)) asInteger
+		^PythonParser integerFrom: (str copyFrom: 3 to: str size) radix: 2
 	].
 
 	"Float or integer"

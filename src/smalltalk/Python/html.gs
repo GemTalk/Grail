@@ -146,10 +146,12 @@ unescape: s
 					[
 						(((numStr @env0:at: 1) == $x) or:
 						 [((numStr @env0:at: 1) == $X)]) ifTrue: [
-							"Hex: &#xHHH; - prepend 16r for Smalltalk hex literal parsing"
+							"Hex: &#xHHH; — via PythonParser integerFrom:radix:
+							rather than ('16r',digits) asInteger, which breaks on
+							host extents overriding asInteger with Squeak semantics"
 							| hexDigits |
 							hexDigits := numStr @env0:copyFrom: 2 to: (numStr @env0:size).
-							codepoint := ('16r' @env0:, hexDigits) @env0:asInteger.
+							codepoint := PythonParser @env0:integerFrom: hexDigits radix: 16.
 						] ifFalse: [
 							"Decimal: &#NNN;"
 							codepoint := numStr @env0:asInteger.

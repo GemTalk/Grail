@@ -132,4 +132,6 @@ failures isEmpty
     ExitClientError signal: 'Issue 2 regression failed!' status: 1].
 %
 logout
-exit
+! Reachable only when the run aborted before its ExitClientError status
+! report (e.g. an error escaped SUnit) -- fail loudly instead of exit 0.
+exit 1

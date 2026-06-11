@@ -1674,3 +1674,39 @@ test_with_statement
 	self assert: items size equals: 1.
 	self assert: (self fieldOf: items first named: #optional_vars) notNil.
 %
+
+category: 'Grail-tests - literals'
+method: PythonParserTestCase
+test_integerFromRadix
+	"Focused regression for PythonParser class >> integerFrom:radix: —
+	the override-proof radix converter.  Grail used to convert 0x/0o/0b
+	literals via ('16r' , digits) asInteger, which returns the RADIX
+	(16) on host extents that override CharacterCollection>>asInteger
+	with Squeak semantics (first run of decimal digits in the string).
+	The helper must not depend on any overridable String/Number
+	protocol."
+
+	self assert: (PythonParser integerFrom: '3F' radix: 16) equals: 63.
+	self assert: (PythonParser integerFrom: '3f' radix: 16) equals: 63.
+	self assert: (PythonParser integerFrom: 'FF' radix: 16) equals: 255.
+	self assert: (PythonParser integerFrom: '0' radix: 16) equals: 0.
+	self assert: (PythonParser integerFrom: '17' radix: 8) equals: 15.
+	self assert: (PythonParser integerFrom: '101' radix: 2) equals: 5.
+	self assert: (PythonParser integerFrom: 'deadBEEF' radix: 16) equals: 3735928559.
+	self should: [PythonParser integerFrom: '3G' radix: 16] raise: SyntaxError.
+	self should: [PythonParser integerFrom: '8' radix: 8] raise: SyntaxError.
+%
+
+category: 'Grail-tests - literals'
+method: PythonParserTestCase
+test_radix_literal_values
+	"0x / 0o / 0b literals must parse to their VALUES, not their radix.
+	(Regression: on a GLASS host extent every such literal evaluated to
+	16 / 8 / 2 — see test_integerFromRadix.)"
+
+	{ { '0x3F'. 63 }. { '0xff'. 255 }. { '0o17'. 15 }. { '0b101'. 5 } } do: [:pair |
+		| expr |
+		expr := self firstExprValue: (pair at: 1).
+		self assert: (expr isKindOf: ConstantAst).
+		self assert: (self fieldOf: expr named: #value) equals: (pair at: 2)].
+%

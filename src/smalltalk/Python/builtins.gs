@@ -672,12 +672,16 @@ _sorted: positional kw: kwargs
 	``sorted(self.extensions.values(), key=lambda x: x.priority)``
 	at template-load time."
 
+	"isNil must be @env0:-annotated here: isNil is a configurable
+	optimized selector, and a host extent that removed it from
+	GsNMethod optimizedSelectors compiles a bare isNil as a real
+	send — which nothing implements in env 1."
 	| iterable keyFn reverse lst iter done sortBlock sortedArray |
 	iterable := positional @env0:at: 1.
-	keyFn := kwargs isNil
+	keyFn := kwargs @env0:isNil
 		ifTrue: [nil]
 		ifFalse: [kwargs @env0:at: 'key' ifAbsent: [nil]].
-	reverse := kwargs isNil
+	reverse := kwargs @env0:isNil
 		ifTrue: [false]
 		ifFalse: [kwargs @env0:at: 'reverse' ifAbsent: [false]].
 	lst := list ___new___.
@@ -690,7 +694,7 @@ _sorted: positional kw: kwargs
 			lst append: item
 		] @env0:on: StopIteration do: [:ex | done := true]
 	].
-	sortBlock := keyFn isNil
+	sortBlock := keyFn @env0:isNil
 		ifTrue: [
 			reverse ___isTruthy___
 				ifTrue: [[:a :b | b __lt__: a]]

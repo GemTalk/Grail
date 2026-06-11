@@ -527,8 +527,17 @@ ___subWithExpansion___: repl in: aString count: count subn: returnTuple
 	support.  Returns a String when ``returnTuple`` is false, or a
 	(String, count) tuple when true (the subn return shape)."
 
-	| parser template parts pos m mEnd mStart expanded numSubs result tail |
+	| parser template parts pos m mEnd mStart expanded numSubs result tail emptySep |
 	parser := importlib @env1:modules @env0:at: #'re._parser'.
+	"A bytes pattern substituting over a bytes subject must return
+	bytes (CPython semantics) — join with an empty ByteArray so the
+	result class follows the subject.  The old unconditional '' join
+	returned a str whose ByteArray-equality only held under the
+	kernel's lenient CharacterCollection>>= (a GLASS host extent's
+	Squeak-style override answers false)."
+	emptySep := (aString @env0:isKindOf: ByteArray)
+		ifTrue: [ByteArray @env0:new]
+		ifFalse: [''].
 	"For callable repl we use template=nil as the marker; otherwise
 	parse the replacement string once."
 	((repl @env0:isKindOf: BoundMethod)
@@ -544,15 +553,15 @@ ___subWithExpansion___: repl in: aString count: count subn: returnTuple
 			"Reached count limit; break with tail kept."
 			parts @env0:add: (aString @env0:copyFrom: pos @env0:+ 1 to: aString @env0:size).
 			^ returnTuple
-				ifTrue: [(tuple @env0:withAll: { ('' @env1:join: parts). numSubs })]
-				ifFalse: ['' @env1:join: parts]
+				ifTrue: [(tuple @env0:withAll: { (emptySep @env1:join: parts). numSubs })]
+				ifFalse: [emptySep @env1:join: parts]
 		].
 		m := self @env1:search: aString _: pos.
 		(m @env0:== nil or: [m @env0:== None]) ifTrue: [
 			parts @env0:add: (aString @env0:copyFrom: pos @env0:+ 1 to: aString @env0:size).
 			^ returnTuple
-				ifTrue: [(tuple @env0:withAll: { ('' @env1:join: parts). numSubs })]
-				ifFalse: ['' @env1:join: parts]
+				ifTrue: [(tuple @env0:withAll: { (emptySep @env1:join: parts). numSubs })]
+				ifFalse: [emptySep @env1:join: parts]
 		].
 		mStart := m @env1:start.
 		mEnd := m @env1:end.
@@ -613,7 +622,11 @@ ___expandTemplate___: aTemplate withMatch: m
 			]
 			ifFalse: [parts @env0:add: item]
 	].
-	^ '' @env1:join: parts
+	"Bytes templates must expand to bytes — join with an empty
+	ByteArray when the parts are bytes (see ___subWithExpansion___)."
+	^ (parts @env0:notEmpty and: [(parts @env0:at: 1) @env0:isKindOf: ByteArray])
+		ifTrue: [(ByteArray @env0:new) @env1:join: parts]
+		ifFalse: ['' @env1:join: parts]
 %
 
 ! --------- split -----------------------------------------------------------

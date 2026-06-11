@@ -41,7 +41,9 @@ priorTranscript := Transcript.
             importlib runPath: path.
         ] on: Error do: [:ex |
             | msg |
-            msg := ex messageText.
+            "messageText can be nil (e.g. MessageNotUnderstood) and GsFile
+             write methods silently no-op on nil -- the error would vanish."
+            msg := ex messageText ifNil: [ex description].
             GsFile stdout flush .
             GsFile stderr flush .
             (haveDashD or:[ (System gemConfigurationAt: 'GEM_LISTEN_FOR_DEBUG') == true]) ifTrue:[
@@ -89,7 +91,7 @@ priorTranscript := Transcript.
                     | msg |
                     (ex isKindOf: ExitClientError) ifTrue: [ex pass].
                     (ex isKindOf: Break) ifTrue: [ExitClientError signal: 'Soft Break' status: 1].
-                    msg := ex messageText.
+                    msg := ex messageText ifNil: [ex description].
                     GsFile stdout flush .
                     GsFile stderr nextPutAll: msg; lf; flush.
                     bufferStream := WriteStream on: Unicode7 new.

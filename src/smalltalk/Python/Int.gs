@@ -57,9 +57,12 @@ __new__: obj
 		^ obj @env0:truncated
 	].
 
-	"Try to convert from string"
+	"Try to convert from string.  trimBoth first: the kernel asNumber
+	tolerates surrounding whitespace, but a host extent may override
+	CharacterCollection>>asNumber with Squeak semantics that raise on
+	leading spaces — int('  100  ') must work either way."
 	(obj @env0:isKindOf: Unicode7) ifTrue: [
-		^ [ (obj @env0:asNumber) @env0:truncated ]
+		^ [ (obj @env0:trimBoth @env0:asNumber) @env0:truncated ]
 			@env0:on: Error
 			do: [:ex | ValueError @env0:signal: 'invalid literal for int()']
 	].

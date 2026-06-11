@@ -121,7 +121,15 @@ ___grailBuildMembers: cls names: attrNames
 	``value:value:``) so calling the class — Color(value) — reaches the
 	inherited enum value-lookup instead of trying to build an instance."
 	((cls @env0:class @env0:methodDictForEnv: 1) @env0:includesKey: #'value:value:')
-		ifTrue: [cls @env0:class @env0:removeSelector: #'value:value:' environmentId: 1].
+		ifTrue: [
+			[cls @env0:class @env0:removeSelector: #'value:value:' environmentId: 1]
+				@env0:on: Error do: [:ex |
+					"A host extent may hook method removal (e.g. a change-
+					notification framework patched into Behavior) and fail
+					AFTER the selector is already gone.  Swallow the hook's
+					failure when the removal took; anything else passes."
+					((cls @env0:class @env0:methodDictForEnv: 1) @env0:includesKey: #'value:value:')
+						ifTrue: [ex @env0:pass]]].
 	^ cls
 %
 
