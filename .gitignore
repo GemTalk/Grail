@@ -6,6 +6,9 @@ stdout.txt
 .setenv
 pyperf*
 .claude/settings.local.json
+.DS_Store
+twilio_env.py
+
 
 # Build artifacts
 lib/
