@@ -77,7 +77,9 @@ GemStone-resident business logic), (c) feasibility on the GemStone VM.
 9. **queue** — DONE 2026-06-12 (`QueueTestCase`; poll-based blocking
    under the cooperative scheduler — no Condition; PriorityQueue over
    heapq; SimpleQueue = unbounded Queue).
-10. **reprlib** — tiny; referenced by collections/functools idioms.
+10. **reprlib** — DONE 2026-06-12 (`ReprlibTestCase`; Repr/aRepr/
+    repr/recursive_repr; note: apply recursive_repr explicitly —
+    method @-decorators are dropped).
 11. **shlex** — DONE 2026-06-12 (`ShlexTestCase`; split/quote/join,
     no lexer class).
 12. **configparser** — DONE 2026-06-12 (`ConfigparserTestCase`;
@@ -86,7 +88,8 @@ GemStone-resident business logic), (c) feasibility on the GemStone VM.
 13. **tomllib** — pure parser, read-only; modern config standard.
 14. **calendar** — DONE 2026-06-12 (`CalendarTestCase`; computational
     core + timegm; no TextCalendar formatting classes).
-15. **getpass / getopt** — trivial stubs over input()/argv.
+15. **getpass / getopt** — DONE 2026-06-12 (`GetpassTestCase` /
+    `GetoptTestCase`; getpass() echoes — no termios layer).
 
 ### P2 — bigger efforts, high leverage
 
