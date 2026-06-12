@@ -308,7 +308,12 @@ _listdir: positional kw: kwargs
 			lastSlashIndex := ((decoded @env0:size) @env0:- (index)) @env0:+ 1.
 			decoded := decoded @env0:copyFrom: (lastSlashIndex @env0:+ 1) to: decoded @env0:size
 		].
-		result append: decoded
+		"CPython never reports the '.' / '..' entries; GsFile does.
+		Leaving them in sends naive recursive walkers (shutil.rmtree,
+		copytree) into 'dir/././…' infinite recursion."
+		((decoded @env0:= '.') @env0:or: [decoded @env0:= '..']) ifFalse: [
+			result append: decoded
+		]
 	].
 	^ result
 %

@@ -55,6 +55,20 @@ testChdir
 
 category: 'Grail-Tests - File and Directory Operations'
 method: OsTestCase
+testListdirExcludesDotEntries
+	"Regression: GsFile contentsOfDirectory: reports '.' and '..';
+	CPython's os.listdir never does.  Leaving them in sent recursive
+	walkers (shutil.rmtree/copytree) into infinite recursion."
+
+	| result |
+	result := self eval: 'import os
+names = os.listdir("/tmp")
+"." not in names and ".." not in names'.
+	self assert: result
+%
+
+category: 'Grail-Tests - File and Directory Operations'
+method: OsTestCase
 testExists
 	"Test os.exists()"
 

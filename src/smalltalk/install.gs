@@ -575,6 +575,7 @@ run
 	at: #'BisectTestCase' put: nil;
 	at: #'FnmatchTestCase' put: nil;
 	at: #'HeapqTestCase' put: nil;
+	at: #'ShutilTestCase' put: nil;
 	at: #'TextwrapTestCase' put: nil;
 	at: #'GlobTestCase' put: nil;
 	at: #'GemStoneTestCase' put: nil;
@@ -1212,6 +1213,7 @@ input src/smalltalk/PythonTests/FnmatchTestCase.gs
 input src/smalltalk/PythonTests/HeapqTestCase.gs
 input src/smalltalk/PythonTests/TextwrapTestCase.gs
 input src/smalltalk/PythonTests/GlobTestCase.gs
+input src/smalltalk/PythonTests/ShutilTestCase.gs
 input src/smalltalk/PythonTests/GemStoneTestCase.gs
 input src/smalltalk/PythonTests/GlobalStatementTestCase.gs
 input src/smalltalk/PythonTests/HtmlTestCase.gs
