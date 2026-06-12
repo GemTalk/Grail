@@ -69,16 +69,23 @@ GemStone-resident business logic), (c) feasibility on the GemStone VM.
 6. **shutil (subset)** — DONE 2026-06-12 (`ShutilTestCase`;
    copyfile/copy/copytree/move/rmtree, no metadata/symlinks). Exposed
    and fixed an os bug: listdir reported '.'/'..'.
-7. **csv** — pure Python; reader/writer/DictReader/DictWriter over any
-   iterable of lines (file objects now exist).
+7. **csv** — DONE 2026-06-12 (`CsvTestCase`; reader/writer/Dict*,
+   multi-line quoted fields, QUOTE_* policies; kwargs-only dialects,
+   no Sniffer).
 8. **bisect** — DONE 2026-06-12 (`BisectTestCase`; pure Python, no
    key= param yet).
-9. **queue** — pure Python over existing threading.Lock/Condition.
+9. **queue** — DONE 2026-06-12 (`QueueTestCase`; poll-based blocking
+   under the cooperative scheduler — no Condition; PriorityQueue over
+   heapq; SimpleQueue = unbounded Queue).
 10. **reprlib** — tiny; referenced by collections/functools idioms.
-11. **shlex** — pure; used by config/CLI-ish code.
-12. **configparser** — pure; very common for app config (needs open()).
+11. **shlex** — DONE 2026-06-12 (`ShlexTestCase`; split/quote/join,
+    no lexer class).
+12. **configparser** — DONE 2026-06-12 (`ConfigparserTestCase`;
+    sections/DEFAULT/interpolation/getters/mapping access/write; no
+    ExtendedInterpolation).
 13. **tomllib** — pure parser, read-only; modern config standard.
-14. **calendar** — pure, builds on datetime.
+14. **calendar** — DONE 2026-06-12 (`CalendarTestCase`; computational
+    core + timegm; no TextCalendar formatting classes).
 15. **getpass / getopt** — trivial stubs over input()/argv.
 
 ### P2 — bigger efforts, high leverage
