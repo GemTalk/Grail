@@ -85,7 +85,10 @@ GemStone-resident business logic), (c) feasibility on the GemStone VM.
 12. **configparser** — DONE 2026-06-12 (`ConfigparserTestCase`;
     sections/DEFAULT/interpolation/getters/mapping access/write; no
     ExtendedInterpolation).
-13. **tomllib** — pure parser, read-only; modern config standard.
+13. **tomllib** — DONE 2026-06-12 (`TomllibTestCase`; hand-rolled
+    recursive descent, full TOML 1.0 value surface incl. RFC 3339
+    datetimes; inline tables not frozen, dotted keys don't close
+    tables). **P1 is complete.**
 14. **calendar** — DONE 2026-06-12 (`CalendarTestCase`; computational
     core + timegm; no TextCalendar formatting classes).
 15. **getpass / getopt** — DONE 2026-06-12 (`GetpassTestCase` /
