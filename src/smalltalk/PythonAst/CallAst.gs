@@ -14,7 +14,8 @@ ExpressionAst subclass: 'CallAst'
                     'classBeingCompiled'
                     'classFunctionNames' 'classVarargsFunctionNames'
                     'classAttrNames' 'classSlotNames' 'selfParameterName'
-                    'returnEmitMode' 'inClassBodyValueEmit')
+                    'returnEmitMode' 'inClassBodyValueEmit'
+                    'functionBeingCompiled')
   poolDictionaries: #()
   inDictionary: PythonAst
   options: #()
@@ -151,6 +152,19 @@ printSmalltalkOn: aStream
 		and: [function id = #'globals'
 			and: [arguments isEmpty and: [keywords isEmpty]]])
 				ifTrue: [aStream nextPutAll: 'self'. ^self].
+
+	"0b. `locals()` — compile-time rewrite.  Inside a function body
+	(CallAst functionBeingCompiled is set by FunctionDefAst >>
+	printBodyOn:), emit a pair-array of every name in the function
+	scope; builtins ___buildLocals___: filters the still-unbound ones
+	(Smalltalk nil ≡ unbound — Python None is the None singleton) and
+	answers a dict.  At module body scope locals() IS globals(), so
+	emit `self` like the globals() case above.  Same caveat as
+	globals(): only the bare-name 0-arg call shape is rewritten."
+	((function isKindOf: NameAst)
+		and: [function id = #'locals'
+			and: [arguments isEmpty and: [keywords isEmpty]]])
+				ifTrue: [^ self printLocalsCallOn: aStream].
 
 	"Bare zero-arg ``super()`` inside a class method.  Rewrite to a
 	Super proxy bound to (lexical class, first-arg-of-method).  The
@@ -622,6 +636,63 @@ builtinsHasFastPathSelector: aSymbol
 
 category: 'Grail-other'
 method: CallAst
+printLocalsCallOn: aStream
+	"Emit the compile-time rewrite of a bare 0-arg ``locals()`` call.
+
+	Function scope: emit a pair-array of every name the parser recorded
+	for the enclosing function (parameters land in body.variables via
+	declareVariable:, assignments via declareWrite: — both sets feed
+	BlockAst variables), and let builtins ___buildLocals___: drop the
+	entries whose value is still Smalltalk nil (unbound so far).  The
+	`self`/`cls` parameter of a class method emits as Smalltalk `self`
+	(mirroring NameAst).  Other Smalltalk pseudo-variable names can't
+	be read back by their Python name (codegen renames those temps),
+	so they are omitted.
+
+	Module scope (functionBeingCompiled is nil): locals() IS globals()
+	— emit `self`, exactly like the globals() rewrite.
+
+	Known V1 gaps: a class-body locals() answers the module namespace
+	(not the class namespace); free variables of enclosing closures
+	are not included."
+
+	| fn names paramNames |
+	fn := CallAst functionBeingCompiled.
+	fn isNil ifTrue: [aStream nextPutAll: 'self'. ^self].
+	names := fn body variables asSortedCollection: [:a :b | a asString <= b asString].
+	paramNames := fn allParameterNames.
+	aStream nextPutAll: '(((Python @env0:at: #builtins) instance) ___buildLocals___: { '.
+	names do: [:each |
+		(CallAst isSelfReference: each)
+			ifTrue: [
+				"Real-method compile: the self/cls parameter IS Smalltalk self."
+				aStream nextPutAll: '{ '''; nextPutAll: each asString; nextPutAll: '''. self }. ']
+			ifFalse: [
+				(#(#'self' #'super' #'thisContext' #'nil' #'true' #'false') includes: each)
+					ifTrue: [
+						"Closure-form compile: a reserved-named PARAMETER is
+						transported to the `_<name>` temp; read it from there.
+						Reserved-named non-parameter locals stay omitted (their
+						temps are renamed by NameAst codegen)."
+						(paramNames detect: [:p | p asString = each asString] ifNone: [nil]) ~~ nil ifTrue: [
+							aStream
+								nextPutAll: '{ ''';
+								nextPutAll: each asString;
+								nextPutAll: '''. ';
+								nextPutAll: (fn transportParamName: each);
+								nextPutAll: ' }. ']]
+					ifFalse: [
+						aStream
+							nextPutAll: '{ ''';
+							nextPutAll: each asString;
+							nextPutAll: '''. ';
+							nextPutAll: each asString;
+							nextPutAll: ' }. ']]].
+	aStream nextPutAll: '})'
+%
+
+category: 'Grail-other'
+method: CallAst
 printBareCallFastPathOn: aStream selector: aSelector
 	"Emit a fixed-arity keyword send to the builtins instance:
 		((builtins instance) funcName: arg1 _: arg2 _: arg3 ...)
@@ -991,6 +1062,22 @@ category: 'Grail-Module Compile Context'
 classmethod: CallAst
 moduleClassBeingCompiled: aClassOrNil
 	moduleClassBeingCompiled := aClassOrNil
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
+functionBeingCompiled
+	"The FunctionDefAst whose body is currently being emitted (nil at
+	module body scope).  Set/restored by FunctionDefAst >> printBodyOn:
+	so nested defs see their own scope.  Used by the locals() rewrite."
+
+	^ functionBeingCompiled
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
+functionBeingCompiled: aFunctionDefAstOrNil
+	functionBeingCompiled := aFunctionDefAstOrNil
 %
 
 category: 'Grail-Module Compile Context'

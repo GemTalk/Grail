@@ -145,7 +145,7 @@ printSmalltalkOn: aStream
 	assignment so the instVar holds a callable reference for first-class use
 	(e.g. `f = add; f(1, 2)`). Nested defs still use the block form."
 
-	| fixedCount paramNames savedReturnMode passXDecorators |
+	| fixedCount paramNames savedReturnMode savedFunction passXDecorators |
 	(CallAst moduleClassBeingCompiled notNil and: [self isModuleLevelDef]) ifTrue: [
 		"Top-level def: the real env-1 method has already been
 		compiled on the module class (by importlib's topLevelDefs
@@ -332,13 +332,20 @@ printSmalltalkOn: aStream
 	and yields the value as the block's result, which is what the
 	caller of the nested function sees."
 	savedReturnMode := CallAst returnEmitMode.
+	savedFunction := CallAst functionBeingCompiled.
 	[
 		CallAst returnEmitMode: #exception.
+		"Expose this def as the current function scope for the body
+		emit — the locals() rewrite reads it (same save/restore as
+		printBodyOn:, which this closure path bypasses)."
+		CallAst functionBeingCompiled: self.
 		body body do: [:stmt |
 			stmt printSmalltalkOn: aStream.
 			aStream lf.
 		].
-	] ensure: [CallAst returnEmitMode: savedReturnMode].
+	] ensure: [
+		CallAst returnEmitMode: savedReturnMode.
+		CallAst functionBeingCompiled: savedFunction].
 	aStream
 		decreaseIndent;
 		nextPutAll: '] value.';
@@ -1357,7 +1364,7 @@ printBodyOn: aStream
 	``None.'' is the implicit fall-through return value when no
 	Python ``return'' fires."
 
-	| mode useDirect useMethod lastIsReturn |
+	| mode useDirect useMethod lastIsReturn savedFunction |
 	mode := CallAst returnEmitMode.
 	useDirect := mode == #direct.
 	useMethod := mode == #directMethod.
@@ -1380,10 +1387,18 @@ printBodyOn: aStream
 	(useDirect or: [useMethod]) ifFalse: [
 		aStream nextPutAll: '['; lf.
 	].
-	body body do: [:each |
-		each printSmalltalkOn: aStream.
-		aStream lf.
-	].
+	"Expose this def as the current function scope while its body
+	statements emit, so the locals() rewrite in CallAst sees the right
+	variable set.  Save/restore (not set/nil) so a nested def's body
+	hands the enclosing def back on exit."
+	savedFunction := CallAst functionBeingCompiled.
+	CallAst functionBeingCompiled: self.
+	[
+		body body do: [:each |
+			each printSmalltalkOn: aStream.
+			aStream lf.
+		].
+	] ensure: [CallAst functionBeingCompiled: savedFunction].
 	lastIsReturn ifFalse: [
 		useMethod
 			ifTrue: [aStream nextPutAll: '^ None.'; lf]

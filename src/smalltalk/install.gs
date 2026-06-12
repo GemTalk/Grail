@@ -590,6 +590,7 @@ run
 	at: #'KeywordOnlyParamsTestCase' put: nil;
 	at: #'ListSortKwargsTestCase' put: nil;
 	at: #'ListTestCase' put: nil;
+	at: #'LocalsTestCase' put: nil;
 	at: #'LookupErrorTestCase' put: nil;
 	at: #'MakecodesPatternTestCase' put: nil;
 	at: #'NamedIntConstantTestCase' put: nil;
@@ -1299,6 +1300,7 @@ input src/smalltalk/PythonTests/IsADirectoryErrorTestCase.gs
 input src/smalltalk/PythonTests/KeyErrorTestCase.gs
 input src/smalltalk/PythonTests/KeyboardInterruptTestCase.gs
 input src/smalltalk/PythonTests/KeywordOnlyParamsTestCase.gs
+input src/smalltalk/PythonTests/LocalsTestCase.gs
 input src/smalltalk/PythonTests/LookupErrorTestCase.gs
 input src/smalltalk/PythonTests/MemoryErrorTestCase.gs
 input src/smalltalk/PythonTests/ModuleNotFoundErrorTestCase.gs

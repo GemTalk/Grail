@@ -535,6 +535,25 @@ oct: aNumber
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___buildLocals___: pairsArray
+	"Backing for the compile-time locals() rewrite (CallAst >>
+	printLocalsCallOn:).  pairsArray holds {nameString. value} pairs
+	for every name in the enclosing function scope; entries whose
+	value is Smalltalk nil are locals that are unbound at the call
+	moment and are omitted (nil ≡ absent — Python None is the None
+	singleton, never nil).  Answers a fresh dict, like CPython's
+	function-scope locals() snapshot."
+
+	| d |
+	d := dict @env1:___new___.
+	pairsArray @env0:do: [:pair |
+		(pair @env0:at: 2) @env0:== nil ifFalse: [
+			d @env1:__setitem__: ((pair @env0:at: 1) @env0:asUnicodeString) _: (pair @env0:at: 2)]].
+	^ d
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 open: file
 	"Python builtin open(file) — fixed-arity fast path; text read mode.
 	Implementation lives in FileIO class >> ___open___:mode:encoding:."
