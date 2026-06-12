@@ -116,8 +116,11 @@ GemStone-resident business logic), (c) feasibility on the GemStone VM.
     sentinel/call/ANY as top-level `mock`, aliased to unittest.mock;
     no spec/autospec; direct-send call sites bypass patched module
     attrs — documented).
-19. **email (full message model)** — only utils today; smtplib later.
-    THE remaining P2 item.
+19. **email (full message model)** — DONE 2026-06-12
+    (`EmailMessageTestCase`; Message/EmailMessage + Parser with
+    multipart, base64 decode, round-trip serialization; no RFC 2047 /
+    quoted-printable / policies). **P2 is complete** except the
+    sqlite3-vs-GemStone-DB-API question (21) and stub tiers (22-23).
 20. **wsgiref** — DONE 2026-06-12 (`WsgirefTestCase`; headers.Headers
     + util; simple_server intentionally absent — werkzeug serves).
 21. **sqlite3** — CCallout to libsqlite3; big, but the killer demo is
