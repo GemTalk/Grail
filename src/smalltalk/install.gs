@@ -532,6 +532,7 @@ run
 	at: #'ClassFunctionBindingTestCase' put: nil;
 	at: #'GenericClassSubscriptTestCase' put: nil;
 	at: #'GlobalStatementCodegenTestCase' put: nil;
+	at: #'EmailMessageTestCase' put: nil;
 	at: #'EnumAutoImportTestCase' put: nil;
 	at: #'Pep448StarredLiteralsTestCase' put: nil;
 	at: #'LambdaStarargsTestCase' put: nil;
@@ -1244,6 +1245,7 @@ input src/smalltalk/PythonTests/ShutilTestCase.gs
 input src/smalltalk/PythonTests/TomllibTestCase.gs
 input src/smalltalk/PythonTests/UnittestTestCase.gs
 input src/smalltalk/PythonTests/ZlibTestCase.gs
+input src/smalltalk/PythonTests/EmailMessageTestCase.gs
 input src/smalltalk/PythonTests/GzipTestCase.gs
 input src/smalltalk/PythonTests/MockTestCase.gs
 input src/smalltalk/PythonTests/WsgirefTestCase.gs
