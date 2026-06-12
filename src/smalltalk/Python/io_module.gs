@@ -716,6 +716,42 @@ ___open___: fileArg mode: modeArg encoding: encodingArg
 	^ inst
 %
 
+category: 'Grail-Opening'
+classmethod: FileIO
+___openCompressedPath___: fileArg mode: modeArg
+	"Backing for gzip.open / gzip.compress / gzip.decompress: a file
+	object whose GsFile transparently reads/writes gzip framing
+	(GsFile openOnServerCompressed:mode:).  Python modes rb/wb/ab
+	(binary) and rt/wt/at (text, utf-8).  The instance is flagged
+	#_streamOnly: fileSize reports the COMPRESSED size, so full reads
+	must chunk to EOF and seek/tell are unreliable."
+
+	| file mode reading binary base gsfile inst |
+	file := fileArg.
+	(file @env0:isKindOf: CharacterCollection) ifFalse: [file := file @env1:__str__].
+	mode := (modeArg @env0:== nil @env0:or: [modeArg @env0:== None]) ifTrue: ['rb'] ifFalse: [modeArg].
+	binary := (mode @env0:includes: $t) @env0:not.
+	reading := mode @env0:includes: $r.
+	base := reading
+		ifTrue: ['rb']
+		ifFalse: [(mode @env0:includes: $a) ifTrue: ['ab'] ifFalse: ['wb']].
+	((GsFile @env0:existsOnServer: file) @env0:not @env0:and: [reading]) ifTrue: [
+		FileNotFoundError @env1:___signal___: ('[Errno 2] No such file or directory: ''' @env0:, file @env0:, '''')].
+	gsfile := GsFile @env0:openOnServerCompressed: file mode: base.
+	gsfile @env0:== nil ifTrue: [
+		OSError @env1:___signal___: ('could not open compressed file: ''' @env0:, file @env0:, '''')].
+	inst := (binary ifTrue: [FileIO] ifFalse: [TextIOWrapper]) @env0:new.
+	inst @env0:dynamicInstVarAt: #_gsfile put: gsfile.
+	inst @env0:dynamicInstVarAt: #_name put: file.
+	inst @env0:dynamicInstVarAt: #_mode put: mode.
+	inst @env0:dynamicInstVarAt: #_closed put: false.
+	inst @env0:dynamicInstVarAt: #_readable put: reading.
+	inst @env0:dynamicInstVarAt: #_writable put: reading @env0:not.
+	inst @env0:dynamicInstVarAt: #_streamOnly put: true.
+	binary ifFalse: [inst @env0:dynamicInstVarAt: #_encoding put: 'utf-8'].
+	^ inst
+%
+
 category: 'Grail-Private'
 method: FileIO
 _checkOpen
@@ -780,6 +816,24 @@ _remaining
 	^ (f @env0:fileSize @env0:- f @env0:position) @env0:max: 0
 %
 
+category: 'Grail-Private'
+method: FileIO
+_readToEnd
+	"Read everything from the current position.  Plain files size the
+	read from fileSize; gzip-compressed GsFiles report the COMPRESSED
+	size there, so streams flagged #_streamOnly chunk-read until EOF."
+
+	| out chunk |
+	(self @env0:dynamicInstVarAt: #_streamOnly) @env0:== true ifFalse: [
+		^ self @env1:_rawRead: (self @env1:_remaining)].
+	out := String @env0:new.
+	[
+		chunk := (self @env0:dynamicInstVarAt: #_gsfile) @env0:next: 65536.
+		chunk @env0:== nil
+	] @env0:whileFalse: [out := out @env0:, chunk].
+	^ out
+%
+
 category: 'Grail-Reading'
 method: FileIO
 read
@@ -791,12 +845,10 @@ method: FileIO
 read: n
 	"read(size=-1) - read up to size bytes; -1 / None means to EOF."
 
-	| size |
 	self @env1:_checkReadable.
-	size := (n @env0:== nil @env0:or: [n @env0:== None @env0:or: [n @env0:< 0]])
-		ifTrue: [self @env1:_remaining]
-		ifFalse: [n].
-	^ (self @env1:_rawRead: size) @env0:asByteArray
+	(n @env0:== nil @env0:or: [n @env0:== None @env0:or: [n @env0:< 0]]) ifTrue: [
+		^ (self @env1:_readToEnd) @env0:asByteArray].
+	^ (self @env1:_rawRead: n) @env0:asByteArray
 %
 
 category: 'Grail-Reading'
@@ -1053,7 +1105,7 @@ read: n
 	| raw |
 	self @env1:_checkReadable.
 	(n @env0:== nil @env0:or: [n @env0:== None @env0:or: [n @env0:< 0]]) ifTrue: [
-		^ self @env1:_decode: (self @env1:_rawRead: (self @env1:_remaining))].
+		^ self @env1:_decode: (self @env1:_readToEnd)].
 	raw := self @env1:_rawRead: n.
 	raw := self @env1:_completeUtf8Tail: raw.
 	^ self @env1:_decode: raw
@@ -1188,6 +1240,15 @@ _open: positional kw: kwargs
 	the argument parsing lives in exactly one place."
 
 	^ (builtins @env1:instance) @env1:_open: positional kw: kwargs
+%
+
+category: 'Grail-Opening'
+method: io
+_gzip_open: path _: mode
+	"Private hook for the pure-Python gzip module: a file object over
+	a gzip-compressed GsFile."
+
+	^ FileIO @env1:___openCompressedPath___: path mode: mode
 %
 
 set compile_env: 0

@@ -593,6 +593,9 @@ run
 	at: #'TextwrapTestCase' put: nil;
 	at: #'GlobTestCase' put: nil;
 	at: #'GemStoneTestCase' put: nil;
+	at: #'GzipTestCase' put: nil;
+	at: #'MockTestCase' put: nil;
+	at: #'WsgirefTestCase' put: nil;
 	at: #'GlobalStatementTestCase' put: nil;
 	at: #'GeneratorExitTestCase' put: nil;
 	at: #'ImportErrorTestCase' put: nil;
@@ -1241,6 +1244,9 @@ input src/smalltalk/PythonTests/ShutilTestCase.gs
 input src/smalltalk/PythonTests/TomllibTestCase.gs
 input src/smalltalk/PythonTests/UnittestTestCase.gs
 input src/smalltalk/PythonTests/ZlibTestCase.gs
+input src/smalltalk/PythonTests/GzipTestCase.gs
+input src/smalltalk/PythonTests/MockTestCase.gs
+input src/smalltalk/PythonTests/WsgirefTestCase.gs
 input src/smalltalk/PythonTests/GemStoneTestCase.gs
 input src/smalltalk/PythonTests/GlobalStatementTestCase.gs
 input src/smalltalk/PythonTests/HtmlTestCase.gs
