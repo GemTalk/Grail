@@ -141,7 +141,11 @@ handleStepRequestFrom: stepResult
 	| stRequest |
 	stRequest := [ stepResult asSmalltalk ] ensure: [ stepResult release ].
 	[ self resolveWith: (self processRequest: stRequest) ]
-		on: Error do: [ :e | self rejectWith: e messageText ]
+		on: Error do: [ :e |
+			"messageText is nil for many kernel-raised errors (e.g. the
+			ZeroDivide from python_eval('1/0')); rejecting with nil used
+			to reach PyUnicode_FromString(NULL) and SEGV the gem."
+			self rejectWith: (e messageText ifNil: [ e description ]) ]
 %
 category: 'Initialization'
 method: CPythonRepl

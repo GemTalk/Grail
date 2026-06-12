@@ -55,6 +55,20 @@ initializePythonTypeName: aTypeName message: aMessage
 %
 category: 'Accessing'
 method: CPythonException
+messageText
+	"Answer the messageText instVar directly.  A GLASS host extent
+	carries a session-method override of Exception>>messageText (the
+	Grease issue #111 shim, 'restore pre-3.6.0 behavior') that answers
+	the gsDetails instVar instead — which this class never sets — so
+	inherited lookup returned nil there even though initialize had
+	stored the text.  A persistent accessor here outranks the inherited
+	session override on every extent and is identical to the kernel
+	behavior on a stock one."
+
+	^ messageText
+%
+category: 'Accessing'
+method: CPythonException
 pythonMessage
 
 	^ pythonMessage

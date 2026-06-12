@@ -538,6 +538,17 @@ testStringFromString
 
 	self assert: obj asString equals: 'hello'.
 %
+category: 'Tests - String Conversion'
+method: CPythonLibraryTestCase
+testStringFromNilRaisesCleanError
+	"fromString: nil must raise a Smalltalk error, never reach C.  A
+	CCallout #'const char*' arg maps nil to NULL, and
+	PyUnicode_FromString(NULL) SEGVs the gem — this was how a nil
+	exception messageText (rejectWith: of the kernel ZeroDivide from
+	python_eval('1/0')) crashed the whole embedded test run."
+
+	self should: [ CPythonObject fromString: nil ] raise: ArgumentError.
+%
 category: 'Tests - Type Inspection'
 method: CPythonLibraryTestCase
 testStrReturnsStringRepresentation

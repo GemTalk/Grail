@@ -104,6 +104,11 @@ category: 'Grail-Instance Creation'
 classmethod: CPythonObject
 fromString: aString
 
+	"Refuse nil here: a CCallout #'const char*' arg maps nil to C NULL,
+	and PyUnicode_FromString(NULL) is undefined behavior — it SEGVs the
+	gem.  Fail as a clean Smalltalk error instead."
+	aString ifNil: [
+		^ ArgumentError signal: 'CPythonObject fromString: requires a String, got nil' ].
 	^ self fromNewReference: (CPythonLibrary current PyUnicode_FromString: aString)
 %
 category: 'Grail-Instance Creation'
