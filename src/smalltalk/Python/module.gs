@@ -144,6 +144,34 @@ __doc__
 	^ super __doc__
 %
 
+category: 'Grail-Attribute Access'
+method: module
+__dir__
+	"Module attribute names ONLY: dict entries (module-level value
+	bindings), dynamic instVars, and the module class's OWN env-1
+	methods (top-level defs + accessors).  Object's generic __dir__
+	walks allSelectorsForEnvironment:, which for modules drags in the
+	inherited SymbolDictionary/dict protocol — and a later
+	getattr(module, name) EXECUTES unary methods, so dir()+getattr
+	over that list would run popitem / clear / __getstate__ with
+	their side effects.  unittest.TestLoader.loadTestsFromModule was
+	the first caller to trip over this."
+
+	| names |
+	names := Set @env0:new.
+	self @env0:keysDo: [:k | names @env0:add: k @env0:asString].
+	(self @env0:dynamicInstanceVariables) @env0:do: [:k | names @env0:add: k @env0:asString].
+	(self @env0:class @env0:selectorsForEnvironment: 1) @env0:do: [:sel |
+		| s index skip |
+		s := sel @env0:asString.
+		skip := (s @env0:size @env0:>= 3) @env0:and: [(s @env0:copyFrom: 1 to: 3) @env0:= '___'].
+		skip ifFalse: [
+			index := s @env0:indexOf: $:.
+			(index @env0:== 0) ifFalse: [s := s @env0:copyFrom: 1 to: (index @env0:- 1)].
+			names @env0:add: s]].
+	^ (names @env0:asSortedCollection: [:a :b | a @env0:<= b]) @env0:asArray
+%
+
 category: 'Grail-Accessors'
 method: module
 __doc__: aValue
