@@ -572,6 +572,11 @@ run
 	at: #'FunctoolsWrapsVarargsTestCase' put: nil;
 	at: #'FrozensetTestCase' put: nil;
 	at: #'FutureWarningTestCase' put: nil;
+	at: #'BisectTestCase' put: nil;
+	at: #'FnmatchTestCase' put: nil;
+	at: #'HeapqTestCase' put: nil;
+	at: #'TextwrapTestCase' put: nil;
+	at: #'GlobTestCase' put: nil;
 	at: #'GemStoneTestCase' put: nil;
 	at: #'GlobalStatementTestCase' put: nil;
 	at: #'GeneratorExitTestCase' put: nil;
@@ -1202,6 +1207,11 @@ input src/smalltalk/PythonTests/FractionTestCase.gs
 input src/smalltalk/PythonTests/FrozensetTestCase.gs
 input src/smalltalk/PythonTests/FunctoolsTestCase.gs
 input src/smalltalk/PythonTests/FunctoolsWrapsVarargsTestCase.gs
+input src/smalltalk/PythonTests/BisectTestCase.gs
+input src/smalltalk/PythonTests/FnmatchTestCase.gs
+input src/smalltalk/PythonTests/HeapqTestCase.gs
+input src/smalltalk/PythonTests/TextwrapTestCase.gs
+input src/smalltalk/PythonTests/GlobTestCase.gs
 input src/smalltalk/PythonTests/GemStoneTestCase.gs
 input src/smalltalk/PythonTests/GlobalStatementTestCase.gs
 input src/smalltalk/PythonTests/HtmlTestCase.gs
