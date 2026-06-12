@@ -96,9 +96,14 @@ GemStone-resident business logic), (c) feasibility on the GemStone VM.
 
 ### P2 — bigger efforts, high leverage
 
-16. **unittest (+mock)** — would let Grail execute CPython-style test
-    suites directly; large but mostly pure Python.
-17. **argparse** — pure but big; click already covers some CLI needs.
+16. **unittest** — DONE 2026-06-12 (`UnittestTestCase`; TestCase with
+    the standard assertion set, loader/suite/result/runner,
+    main(module=...)). No mock or subTest; skip decorators only work
+    applied explicitly. Side fix: `module` now has a safe `__dir__`
+    (the inherited one let dir+getattr execute popitem/clear).
+17. **argparse** — DONE 2026-06-12 (`ArgparseTestCase`; actions,
+    nargs, type/choices/required, option-value forms, clusters, '--',
+    set_defaults, minimal help; no subparsers/groups/abbreviation).
 18. **zlib (real)** — current module raises on use. CCallout to system
     libz is the plausible path (same pattern as CPython shim). Unlocks
     gzip → zipfile → wheel handling.
