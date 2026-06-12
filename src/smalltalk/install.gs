@@ -584,6 +584,7 @@ run
 	at: #'ReprlibTestCase' put: nil;
 	at: #'ShlexTestCase' put: nil;
 	at: #'ShutilTestCase' put: nil;
+	at: #'TomllibTestCase' put: nil;
 	at: #'TextwrapTestCase' put: nil;
 	at: #'GlobTestCase' put: nil;
 	at: #'GemStoneTestCase' put: nil;
@@ -1230,6 +1231,7 @@ input src/smalltalk/PythonTests/ShlexTestCase.gs
 input src/smalltalk/PythonTests/TextwrapTestCase.gs
 input src/smalltalk/PythonTests/GlobTestCase.gs
 input src/smalltalk/PythonTests/ShutilTestCase.gs
+input src/smalltalk/PythonTests/TomllibTestCase.gs
 input src/smalltalk/PythonTests/GemStoneTestCase.gs
 input src/smalltalk/PythonTests/GlobalStatementTestCase.gs
 input src/smalltalk/PythonTests/HtmlTestCase.gs
